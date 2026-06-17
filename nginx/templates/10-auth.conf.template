@@ -1,0 +1,18 @@
+# Authentik identity provider.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name auth.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    # Variable + resolver re-resolves the container IP after restarts.
+    resolver 127.0.0.11 valid=30s;
+
+    location / {
+        set $authentik_backend http://authentik-server:9000;
+        proxy_pass $authentik_backend;
+        include /etc/nginx/snippets/proxy-common.conf;
+        # Authentik's UI uses WebSockets.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+    }
+}

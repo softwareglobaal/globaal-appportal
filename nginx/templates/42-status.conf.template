@@ -1,0 +1,8 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name status.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    set $app_upstream http://uptime-kuma:3001;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

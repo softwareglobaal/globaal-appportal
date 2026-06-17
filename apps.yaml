@@ -1,0 +1,14 @@
+# Application catalog. Echte applicaties; toegang via één groep per app.
+apps:
+  - id: omv
+    name: OMV Pipeline
+    description: Omgevingsloket scrape, PDF-merge en AI-extractie
+    subdomain: omv
+    roles: [admin, manager]
+    status: active
+  - id: schuldentracker
+    name: Schuldentracker
+    description: Schuldbeheer en dossiers (finance)
+    subdomain: schuldentracker
+    roles: [schuldentracker]
+    status: active

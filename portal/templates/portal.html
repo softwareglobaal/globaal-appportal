@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Your applications</h1>
+{% if tiles %}
+<div class="grid">
+    {% for tile in tiles %}
+    <a class="tile" href="{{ url_for('go', app_id=tile.id) }}">
+        <h2>{{ tile.name }}
+            {% if tile.status == 'in_development' %}
+            <span class="badge">in development</span>
+            {% endif %}
+        </h2>
+        <p>{{ tile.description }}</p>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<p>No applications are assigned to your role. Contact your administrator.</p>
+{% endif %}
+{% endblock %}

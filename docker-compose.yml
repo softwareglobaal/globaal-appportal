@@ -1,0 +1,286 @@
+name: appportal
+
+networks:
+  appnet:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  authentik-data:
+  authentik-certs:
+
+services:
+  # One-shot init container: generates a local CA + wildcard TLS cert into ./certs.
+  # Idempotent — exits immediately if certs for the current BASE_DOMAIN already exist.
+  certgen:
+    image: alpine:3.20
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN:?Set BASE_DOMAIN in .env}
+      # Hostnames included in the certificate; extend when adding apps.
+      CERT_SUBDOMAINS: ${CERT_SUBDOMAINS:-}
+      # Set to 1 in production (Let's Encrypt) so this container leaves the
+      # real certs alone. Default 0 = generate self-signed for local dev.
+      CERTGEN_DISABLE: ${CERTGEN_DISABLE:-0}
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./certs:/certs
+    entrypoint: ["/bin/sh", "/scripts/generate-certs.sh"]
+    restart: "no"
+    networks: [appnet]
+
+  postgresql:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authentik
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: ${PG_PASS:?Set PG_PASS in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [appnet]
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2026.5.3
+    restart: unless-stopped
+    command: server
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?Set AUTHENTIK_SECRET_KEY in .env}
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:?Set AUTHENTIK_BOOTSTRAP_PASSWORD in .env}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+    volumes:
+      - authentik-data:/data
+      - authentik-certs:/certs
+      - ./authentik/custom-templates:/templates
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 6
+      # First boot runs database migrations, which can take several minutes;
+      # start_period holds off failure counting until they finish.
+      start_period: 300s
+    networks: [appnet]
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2026.5.3
+    restart: unless-stopped
+    command: worker
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+    volumes:
+      - authentik-data:/data
+      - authentik-certs:/certs
+      - ./authentik/custom-templates:/templates
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 6
+      # First boot runs database migrations, which can take several minutes;
+      # start_period holds off failure counting until they finish.
+      start_period: 300s
+    networks: [appnet]
+
+  portal:
+    build: ./portal
+    image: appportal-portal
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      PORTAL_SECRET_KEY: ${PORTAL_SECRET_KEY:?Set PORTAL_SECRET_KEY in .env}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-not-configured-yet}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-not-configured-yet}
+      # Trust the locally generated CA when talking to https://auth.<BASE_DOMAIN>.
+      # Remove this line once real (Let's Encrypt) certificates are in place.
+    volumes:
+      - ./apps.yaml:/app/apps.yaml:ro
+      - ./logs/portal:/var/log/portal
+      - ./certs:/certs:ro
+    depends_on:
+      certgen:
+        condition: service_completed_successfully
+      authentik-server:
+        # Wait for first-boot migrations so OIDC discovery never runs early.
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
+  app-factorydocs:
+    build: ./stubapp
+    image: appportal-stubapp
+    restart: unless-stopped
+    environment:
+      APP_NAME: FactoryDocs
+      APP_DESCRIPTION: Document management for factory floor
+      PORT: "3001"
+      BASE_DOMAIN: ${BASE_DOMAIN}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3001/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
+  app-inventory:
+    # Image is built once by app-factorydocs; the other stubs reuse it.
+    image: appportal-stubapp
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      APP_NAME: InventoryTracker
+      APP_DESCRIPTION: Real-time inventory monitoring
+      PORT: "3002"
+      BASE_DOMAIN: ${BASE_DOMAIN}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3002/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
+  app-finance:
+    image: appportal-stubapp
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      APP_NAME: FinanceDashboard
+      APP_DESCRIPTION: Financial reporting and budgets
+      PORT: "3003"
+      BASE_DOMAIN: ${BASE_DOMAIN}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3003/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
+  app-maintenance:
+    image: appportal-stubapp
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      APP_NAME: MaintenanceLog
+      APP_DESCRIPTION: Equipment maintenance records
+      APP_STATUS: in_development
+      PORT: "3004"
+      BASE_DOMAIN: ${BASE_DOMAIN}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3004/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
+  # OMV Pipeline — small REAL test slice of the dashboard (./omv-demo), behind
+  # portal SSO via the sso_auth.py bridge. It has the same login gate as the
+  # production app (v1/app.py) minus the heavy pipeline. To go fully live,
+  # build the real app here (or point nginx's $app_upstream at the Linux
+  # server) and drop the sso_auth.py bridge into the real app.py.
+  # Flip AUTH_MODE to "local" to see the app's own login appear instead.
+  app-omv:
+    build: ./omv-demo
+    image: appportal-omv-demo
+    restart: unless-stopped
+    environment:
+      AUTH_MODE: sso
+      PORT: "3005"
+      BASE_DOMAIN: ${BASE_DOMAIN}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3005/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
+  # The single public entry point. Only this service publishes host ports.
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      # Where omv.<domain> proxies to. Default = the local demo container;
+      # on the VM set OMV_UPSTREAM=http://host.docker.internal:5000 (real app).
+      OMV_UPSTREAM: ${OMV_UPSTREAM:-http://app-omv:3005}
+    # Lets the nginx container reach host services (the real OMV app on :5000).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ./certs:/etc/nginx/certs:ro
+      # Let's Encrypt HTTP-01 challenge files (certbot writes here on the host).
+      - ./certbot-webroot:/var/www/certbot:ro
+    depends_on:
+      certgen:
+        condition: service_completed_successfully
+      authentik-server:
+        condition: service_started
+      portal:
+        condition: service_started
+      app-factorydocs:
+        condition: service_started
+      app-inventory:
+        condition: service_started
+      app-finance:
+        condition: service_started
+      app-maintenance:
+        condition: service_started
+      app-omv:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      appnet:
+        aliases:
+          # Lets containers reach the public hostnames from inside the
+          # Docker network (the portal needs auth.* so the OIDC issuer
+          # matches; the rest enable in-network smoke tests).
+          - auth.${BASE_DOMAIN}
+          - portal.${BASE_DOMAIN}
+          - factorydocs.${BASE_DOMAIN}
+          - inventory.${BASE_DOMAIN}
+          - finance.${BASE_DOMAIN}
+          - maintenance.${BASE_DOMAIN}
+          - omv.${BASE_DOMAIN}

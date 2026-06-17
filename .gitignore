@@ -1,0 +1,13 @@
+# Secrets — NOOIT in git
+.env*
+!.env.example
+# Certificaten & sleutels
+certs/
+certbot-webroot/
+# Logs & runtime-data
+logs/
+*.log
+*.db
+**/__pycache__/
+*.pyc
+.DS_Store

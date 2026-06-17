@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ app_name }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+            background: #f3f5f7;
+            color: #1d2733;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.9rem 2rem;
+            background: #27435e;
+            color: #fff;
+        }
+        header a { color: #9fc3ff; text-decoration: none; font-size: 0.9rem; }
+        header a:hover { text-decoration: underline; }
+        main { max-width: 640px; margin: 3rem auto; padding: 0 1.5rem; }
+        .card {
+            background: #fff;
+            border: 1px solid #dde3ea;
+            border-radius: 10px;
+            padding: 1.6rem 2rem;
+        }
+        .badge {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            background: #fff3cd;
+            color: #8a6d1a;
+            border-radius: 999px;
+            padding: 0.2rem 0.6rem;
+            margin-left: 0.5rem;
+            vertical-align: middle;
+        }
+        dt { font-weight: 600; margin-top: 0.8rem; }
+        dd { margin: 0.1rem 0 0; color: #5b6b7d; }
+        .note {
+            background: #eef4ff;
+            border-left: 3px solid #4071c0;
+            padding: 0.6rem 0.9rem;
+            border-radius: 4px;
+            color: #2b4a72;
+            font-size: 0.92rem;
+        }
+    </style>
+</head>
+<body>
+<header>
+    <strong>{{ app_name }}</strong>
+    <a href="{{ portal_url }}">&larr; Back to portal</a>
+</header>
+<main>
+    <div class="card">
+        <h1>{{ app_name }}
+            {% if app_status %}<span class="badge">{{ app_status.replace('_', ' ') }}</span>{% endif %}
+        </h1>
+        {% if app_description %}<p>{{ app_description }}</p>{% endif %}
+        {% if app_note %}<p class="note">{{ app_note }}</p>{% endif %}
+        <p>You are signed in via Authentik single sign-on — this app never
+           showed you a login form.</p>
+        <dl>
+            <dt>User</dt><dd>{{ username }}</dd>
+            {% if email %}<dt>Email</dt><dd>{{ email }}</dd>{% endif %}
+            {% if groups %}<dt>Groups</dt><dd>{{ groups }}</dd>{% endif %}
+        </dl>
+    </div>
+</main>
+</body>
+</html>
