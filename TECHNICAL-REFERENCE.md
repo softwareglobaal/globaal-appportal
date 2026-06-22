@@ -250,9 +250,11 @@ en een Merged-PDF-statustabel met regenerate/validate-acties.
 
 ### 6.3 Data & secrets (gevoelig — blijft VM-only, nooit in git)
 - **Secrets:** `.env` (`FLASK_SECRET_KEY`, **Dropbox `APP_KEY`/`APP_SECRET`**,
-  `OPENAI_API_KEY`, dashboard-credentials), **`dropbox_tokens.json`** (OAuth-refresh,
-  meerdere kopieën) en een **VPN-config** `ubuntu_server-NL-FREE-15.conf` (bevat
-  vrijwel zeker een private key — de scraper draait via een VPN).
+  `OPENAI_API_KEY`, dashboard-credentials, **`OMV_PROXY`** — zie §6.5),
+  **`dropbox_tokens.json`** (OAuth-refresh, meerdere kopieën). De **VPN-config**
+  `ubuntu_server-NL-FREE-15.conf` is een **verlaten poging** (wordt níét gebruikt —
+  de scraper gaat via een SOCKS-proxy, zie §6.5; bevat wel een private key →
+  behandelen als secret).
 - **Data/state:** `scraper.db` + `omv_dossiers.db`, de gescrapte **PDF's** en
   Excel-exports (`output/` / Dropbox) en caches (geocode, pagecount, fingerprint)
   + manifests. ⚠️ Niets hiervan hoort in GitHub; back-up van de DB's is wenselijk.
@@ -282,6 +284,56 @@ en een Merged-PDF-statustabel met regenerate/validate-acties.
 > n8n is op vergelijkbare wijze gekoppeld, maar **zonder** SSO-shim: het
 > `n8n.globaal.be`-blok is een gewone doorsturing en n8n houdt z'n eigen login.
 > SSO voor n8n kan later op dezelfde manier als OMV.
+
+### 6.5 ⚠️ Anti-blokkering: hoe de scraper de geblokkeerde API bereikt
+
+**Lees dit eerst bij scraper-problemen.** De Vlaamse Omgevingsloket-API blokkeert
+het AWS-datacenter-IP op **twee lagen**; beide moeten omzeild worden, anders krijg
+je eindeloze `RetryError` op élke gemeente. Dit kostte een lange zoektocht — hier
+de oplossing én de valkuilen.
+
+**Laag 1 — IP-blok (TCP-timeout).** Het datacenter-IP `54.80.98.233` wordt **stil
+gedropt** (time-out, geen weigering). Fix: OMV-verkeer via een **residentiële
+SOCKS5h-proxy** — `OMV_PROXY=socks5h://localhost:1080` in `v1/.env`. Dat is een
+**SSH-tunnel naar een fysiek Ubuntu-kastje bij de gebruiker thuis** (dezelfde proxy
+als de DOV/barsten-scheuren-scraper). Alleen de OMV-host gaat via de proxy.
+
+**Laag 2 — anti-bot (Anubis proof-of-work).** De site serveert een JS-challenge
+("Making sure you're not a bot" / `.within.website`). Een **Playwright
+headless-Chromium lost de PoW op** en oogst de `techaro.lol-anubis-auth`-cookie, die
+in de echte API-call meegaat (`requests` + **pysocks** via dezelfde proxy).
+
+**De drie valkuilen die ons vastzetten:**
+1. **Playwright sync-API crasht in een achtergrond-thread** ("Execution context
+   destroyed"). De Flask-SocketIO-service (`async_mode='threading'`) draait de
+   pijplijn in een thread. → Los Anubis op in een **apart subprocess**
+   (`omv_anubis_worker.py`), niet in-process.
+2. **Headers (de gemeenste).** Stuur naar de OMV-host **alléén een schone
+   Chrome-headerset** (`BROWSER_HEADERS` + `Content-Type`, geforceerde `User-Agent`).
+   De eigen `Host`/`Origin`/`Referer` van de scraper lieten Anubis **opnieuw
+   challengen — zelfs mét geldige auth-cookie**.
+3. **`curl_cffi` doet SOCKS onbetrouwbaar** → voor de proxy-call `requests`+`pysocks`
+   (SOCKS5h) gebruiken.
+
+**Implementatie:** `v1/omv_http.py` (`wrap_curl_session` leest `OMV_PROXY` **per
+request** + doet de Anubis-bootstrap/cookie-injectie); `v1/scraper.py` monkeypatcht
+bovenaan `requests.get/post` zodat OMV-URLs door die gewrapte sessie lopen. Vereist
+`pysocks` én de Playwright-browser (`playwright install chromium`). Repo:
+`globaal-omv-pipeline`.
+
+**Troubleshooting-volgorde bij `RetryError`:**
+1. **Tunnel op?** `ss -tlnp | grep 1080` — leeg = de SSH-tunnel naar het thuiskastje
+   ligt eruit (**dé #1-oorzaak**); herstart 'm.
+2. **Proxy-test:** `curl -x socks5h://localhost:1080 https://omgevingsloketinzage.omgeving.vlaanderen.be/`
+   → HTTP 200 = IP-blok omzeild. (HTML met "bot" = enkel Anubis nog, dat doet de code.)
+3. **Playwright-browser aanwezig?** `ls ~/.cache/ms-playwright/` — leeg →
+   `…/.venv/bin/python -m playwright install chromium`.
+4. **Dropbox-token** kan los verlopen zijn (`invalid_access_token`) → raakt de
+   downloader/merge-stap, niet de scraper.
+
+> Dit is een **kwetsbare keten** (gratis residentiële tunnel + anti-bot dat kan
+> wijzigen). Aanrader: een healthcheck + auto-herstart op de SSH-tunnel — dat is nu
+> het enige single-point-of-failure van de scraper.
 
 ---
 
@@ -862,7 +914,9 @@ de auto-deploy herstart **beide** services (`factuurrouter.service` +
 ---
 
 *Laatst bijgewerkt: 2026-06-22 — **§6 (OMV-pipeline)** uitgebreid met de volledige
-scrape→download→merge→extract-keten (scraper/Dropbox/OpenAI-extractie, §6.1–6.4).
+scrape→download→merge→extract-keten (§6.1–6.5), inclusief **§6.5 anti-blokkering**
+(residentiële SOCKS-proxy + Anubis-bootstrap + troubleshooting — voorkomt herhaling
+van de "RetryError"-zoektocht).
 **Schuldentracker** kreeg een eigen sectie §6C
 (Flask-schuldendossier-tracker, eigen login + SSO-shim met lezen/bewerken; nog in
 git/CI te brengen). Eerder (2026-06-19): het **git-fundament** (GitHub-org `softwareglobaal`, VM = bron
