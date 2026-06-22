@@ -218,8 +218,46 @@ Map: `portal/`. Draait onder gunicorn op poort 8000 (intern).
 ## 6. De OMV Pipeline-integratie
 
 De echte OMV-app (Flask + SocketIO dashboard van de datapijplijn) draait **op de
-host**, niet in de stack.
+host**, niet in de stack. Het is de **OMV-scraper/-pipeline**: een end-to-end keten
+die de Vlaamse **Omgevingsvergunning**-data (OMV) scrapet, verrijkt en ontsluit.
 
+### 6.1 Wat de pipeline doet (scrape → download → merge → extract)
+1. **Scrapen** — `scraper.py` haalt per **gemeente** dossiers uit de **Vlaamse
+   Omgevingsloket-API** (`omgevingsloketinzage.omgeving.vlaanderen.be`) en schrijft
+   ze naar SQLite (`scraper.db`). Gebruikt `curl_cffi` (browser-impersonatie) +
+   `tenacity`-retries; optioneel beperkt tot gemeenten via
+   `SCRAPER_GEMEENTE_WHITELIST`. Draait via een **VPN** (zie §6.3).
+2. **PDF's downloaden** — `PDF_Downloader.py` haalt de dossier-/beroep-PDF's op en
+   zet ze in **Dropbox** (week-mappen `YYYY_weekW_to_current`). Lookback via
+   `DOWNLOADER_LOOKBACK_HOURS/DAYS` (default: vorige week).
+3. **Mergen** — `new_merger.py`/`merger.py` voegen de PDF's per project samen in
+   Dropbox, met **paginatelling-validatie** (verwachte vs. gemergede pagina's uit
+   de `nota`/`plannen`-submappen → bij mismatch `ERROR_MERGE_MISMATCH`, publicatie
+   geblokkeerd). Schrijft een `merged_manifest.jsonl`.
+4. **Extraheren** — `part_1_v3_omv_db_fixed24_evidence_map.py` haalt met **OpenAI
+   `gpt-5-mini` + regels + evidence-mapping** velden uit de gemergede PDF's
+   (kolomdefinities in `field_spec.json`, sjabloon `4OMV_Master_Template_v3.xlsx`)
+   → SQLite (`omv_dossiers.db`) + Excel (`OMV_Database_..._FILLED.xlsx`), inclusief
+   geocoding (`pyproj`, lat/lon uit `scraper.db`).
+
+### 6.2 Dashboard (`app.py`)
+**Flask + SocketIO**, met **eigen login + TOTP** (`pyotp`/`qrcode`) en live-logs.
+Start/monitort de pijplijn; de **Merger-modus** is de bron van waarheid (niet
+`.env`): **Merge** (merge + extract), **MergeOnly**, **ExtractOnly** (uit manifest)
+en **Manifest** (alleen manifest bouwen). Plus een gemeente-selector, een
+**Data-tab** (query op `omv_dossiers.db` met kolomkiezer, export en edit-overrides)
+en een Merged-PDF-statustabel met regenerate/validate-acties.
+
+### 6.3 Data & secrets (gevoelig — blijft VM-only, nooit in git)
+- **Secrets:** `.env` (`FLASK_SECRET_KEY`, **Dropbox `APP_KEY`/`APP_SECRET`**,
+  `OPENAI_API_KEY`, dashboard-credentials), **`dropbox_tokens.json`** (OAuth-refresh,
+  meerdere kopieën) en een **VPN-config** `ubuntu_server-NL-FREE-15.conf` (bevat
+  vrijwel zeker een private key — de scraper draait via een VPN).
+- **Data/state:** `scraper.db` + `omv_dossiers.db`, de gescrapte **PDF's** en
+  Excel-exports (`output/` / Dropbox) en caches (geocode, pagecount, fingerprint)
+  + manifests. ⚠️ Niets hiervan hoort in GitHub; back-up van de DB's is wenselijk.
+
+### 6.4 Host, service & SSO-koppeling
 - **Code:** `/home/ubuntu/omv_pipeline/v1/app.py`. Luistert op `0.0.0.0:5000`.
 - **Draait als systemd-service** `omv.service` (auto-start na reboot, herstart
   bij crash):
@@ -823,7 +861,9 @@ de auto-deploy herstart **beide** services (`factuurrouter.service` +
 
 ---
 
-*Laatst bijgewerkt: 2026-06-22 — **Schuldentracker** kreeg een eigen sectie §6C
+*Laatst bijgewerkt: 2026-06-22 — **§6 (OMV-pipeline)** uitgebreid met de volledige
+scrape→download→merge→extract-keten (scraper/Dropbox/OpenAI-extractie, §6.1–6.4).
+**Schuldentracker** kreeg een eigen sectie §6C
 (Flask-schuldendossier-tracker, eigen login + SSO-shim met lezen/bewerken; nog in
 git/CI te brengen). Eerder (2026-06-19): het **git-fundament** (GitHub-org `softwareglobaal`, VM = bron
 van waarheid) met **Claude Code on the web** + **CI/CD** (auto-check → auto-merge →
