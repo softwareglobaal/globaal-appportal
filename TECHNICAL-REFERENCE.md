@@ -367,6 +367,55 @@ wildcard `*.globaal.be`. ⚠️ **De SQLite-DB hoort in de back-uproutine.**
 
 ---
 
+## 6C. Schuldentracker — schuldendossier-tracker
+
+**Schuldentracker** (`schuldentracker.globaal.be`) volgt een portefeuille
+**schuldendossiers** (deurwaarders/schuldeisers) over meerdere Belgische firma's;
+het vervangt een Excel-deurwaarderstracker. Draait **op de host** als Flask-app
+(systemd-service `schuldentracker`, `FINANCE_HOST=0.0.0.0`, `FINANCE_PORT=5050`).
+
+### 6C.1 Werking
+- **Flask + SQLite** (stdlib `sqlite3`), server-rendered Jinja + inline SVG-charts,
+  geen frontend-framework/buildstap. Eén groot `app.py` + `db.py` (schema +
+  idempotente migraties) + `importers.py` (imports/matching) + `letter_extraction.py`
+  (OpenAI).
+- **Databronnen:** (a) een Excel-**werkmap** (dossiers), (b) **KBC-bankafschriften**
+  (CSV + getekende betaalopdracht-PDF's) met automatische matching op
+  referentie/IBAN, (c) **schuldeiserbrieven** die **OpenAI `gpt-5-mini`** naar
+  gestructureerde JSON ontleedt (review vóór toepassen). Een reductiepad-grafiek
+  toont of men op schema ligt om schuldenvrij te worden.
+- **Per-firma scope** via `ALLOWED_COMPANY_PREFIXES` in `importers.py`.
+
+### 6C.2 Data & secrets (gevoelig — financieel)
+- **`data/finance.db`** (SQLite) = álle dossier-/betaaldata → **blijft VM-only**,
+  nooit in git. ⚠️ **Back-up ontbreekt nog** — net als bij de andere apps het
+  grootste risico.
+- **`.env`**: `OPENAI_API_KEY` (+ `OPENAI_LETTER_MODEL=gpt-5-mini`,
+  `FINANCE_HOST/PORT`, optioneel `FINANCE_WORKBOOK_PATH`). **`data/.secret_key`** =
+  de Flask-sessiesleutel (gepersisteerd zodat sessies een herstart overleven).
+- De **Excel-werkmap** met echte schulddata staat buiten de app-map en wordt
+  read-only ingelezen.
+
+### 6C.3 Auth — eigen login + SSO-shim, lezen vs. bewerken
+- De app heeft een **eigen login + 2FA** (`auth.py`, `pyotp`/`qrcode`), maar achter
+  AppPortal draait hij met **`AUTH_MODE=sso`**: de shim `sso_auth.py` leest
+  `X-authentik-username`, zoekt de bijhorende DB-gebruiker
+  (`auth.get_user_by_username`) en logt die in zonder de eigen login/2FA.
+- **Lezen vs. bewerken** (zoals Stagebeoordeling): `can_edit` = lidmaatschap van de
+  groep **`schuldentracker-bewerken`**. Niet-bewerkers krijgen **403** op elke
+  schrijf-methode (POST/PUT/PATCH/DELETE); de UI verbergt de bewerkknoppen.
+
+### 6C.4 Nginx / SSO / openstaand
+- Nginx-blok `41-schuldentracker.conf.template` (forward auth), upstream
+  `http://172.17.0.1:5050`; `sudo ufw allow 5050/tcp`. Authentik: proxy-provider +
+  app + groepen **`schuldentracker`** (zien) en **`schuldentracker-bewerken`**
+  (Mehdi, Angela). DNS via de wildcard.
+- **Nog open:** (a) back-up van `data/finance.db`, (b) in git/CI/auto-deploy brengen
+  (repo `globaal-schuldentracker`), (c) **de OpenAI-key in `.env` roteren** (stond in
+  platte tekst, ook in de OneDrive-kopie).
+
+---
+
 ## 7. Configuratie & scripts
 
 | Bestand/map | Functie |
@@ -628,12 +677,12 @@ twee kiezen (Authentik's launcher is de eenvoudigste, onderhoudsvrije optie).
   `stage.globaal.be`, centrale SQLite-opslag, Raisha bewerkt / rest leest. **Nog
   open:** SQLite-DB (`~/stagebeoordeling/stagebeoordeling.db`) in de back-uproutine
   opnemen.
-- **Schuldentracker:** ✅ gekoppeld — systemd-service (`schuldentracker`, poort
-  5050, `FINANCE_HOST=0.0.0.0`) + SSO-shim (`sso_auth.py` naast `app.py`, match
-  `X-authentik-username` op de DB-username) + nginx-blok
-  `41-schuldentracker.conf.template` + Authentik proxy-provider/applicatie +
-  groep `schuldentracker` (leden `mehdi`, `angela`). Bereikbaar op
-  `schuldentracker.globaal.be`.
+- **Schuldentracker:** ✅ gekoppeld — **nu met eigen sectie §6C**. Flask-schulden-
+  dossier-tracker op `schuldentracker.globaal.be` (systemd `schuldentracker`, poort
+  5050), SSO-shim met lezen/bewerken (`schuldentracker` / `schuldentracker-bewerken`,
+  leden Mehdi/Angela). **Nog open:** (a) back-up van `data/finance.db`, (b) in
+  git/CI/auto-deploy brengen (`globaal-schuldentracker`), (c) **OpenAI-key in `.env`
+  roteren** (stond in platte tekst).
 - **Tegels opgeschoond (fase 8):** de 4 placeholder-apps zijn uit `apps.yaml`
   verwijderd. De bijbehorende **stub-containers, nginx-blokken en
   Authentik-providers draaien nog** (onzichtbaar) — volledige opruiming staat
@@ -774,8 +823,9 @@ de auto-deploy herstart **beide** services (`factuurrouter.service` +
 
 ---
 
-*Laatst bijgewerkt: 2026-06-19 — weerspiegelt de live opzet op `54.80.98.233` /
-`globaal.be`. Recent: het **git-fundament** (GitHub-org `softwareglobaal`, VM = bron
+*Laatst bijgewerkt: 2026-06-22 — **Schuldentracker** kreeg een eigen sectie §6C
+(Flask-schuldendossier-tracker, eigen login + SSO-shim met lezen/bewerken; nog in
+git/CI te brengen). Eerder (2026-06-19): het **git-fundament** (GitHub-org `softwareglobaal`, VM = bron
 van waarheid) met **Claude Code on the web** + **CI/CD** (auto-check → auto-merge →
 auto-deploy) live op **Stagebeoordeling, Kosten én Factuurrouter**; het
 **Kosten-dashboard** (`kosten.globaal.be`); het **HR-/DeskTime-dashboard** (in opzet);
