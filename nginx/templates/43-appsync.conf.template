@@ -1,0 +1,23 @@
+# appsync — GitHub webhook receiver for auto-onboarding.
+# Deliberately NOT behind forward-auth: GitHub cannot complete an SSO login.
+# The endpoint is protected by HMAC (X-Hub-Signature-256 / APPSYNC_WEBHOOK_SECRET)
+# inside the appsync service. Only /webhook and /healthz are exposed.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name sync.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Nothing else on this host is reachable.
+    location = /webhook {
+        proxy_pass http://appsync:8000/webhook;
+        include /etc/nginx/snippets/proxy-common.conf;
+    }
+    location = /healthz {
+        proxy_pass http://appsync:8000/healthz;
+        include /etc/nginx/snippets/proxy-common.conf;
+    }
+    location / {
+        return 404;
+    }
+}

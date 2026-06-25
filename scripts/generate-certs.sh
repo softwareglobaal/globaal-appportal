@@ -18,7 +18,14 @@ DOMAIN="${BASE_DOMAIN:?BASE_DOMAIN is not set}"
 # base domains (*.localhost never matches auth.localhost). When adding a new
 # subdomain (fifth app), extend CERT_SUBDOMAINS in .env — certs regenerate
 # automatically on the next docker compose up.
-SUBDOMAINS="${CERT_SUBDOMAINS:-auth portal factorydocs inventory finance maintenance omv}"
+SUBDOMAINS="${CERT_SUBDOMAINS:-auth portal sync factorydocs inventory finance maintenance omv}"
+# Auto-onboarded apps (appsync) append their subdomain here, one per line.
+# Folding them into the SAN means a synced app gets a valid cert with no manual
+# CERT_SUBDOMAINS edit; the cert reissues automatically when the set changes.
+if [ -f "$CERT_DIR/extra-subdomains" ]; then
+    EXTRA="$(tr '\n' ' ' < "$CERT_DIR/extra-subdomains")"
+    SUBDOMAINS="$SUBDOMAINS $EXTRA"
+fi
 MARKER="$CERT_DIR/.domain"
 WANT="$DOMAIN $SUBDOMAINS"
 

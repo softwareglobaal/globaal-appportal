@@ -4,6 +4,7 @@ Authenticates users against Authentik via OIDC (Authlib) and shows the
 application tiles the user's role (Authentik group) permits. All identity
 management — passwords, TOTP, sessions, users — lives in Authentik.
 """
+import glob
 import logging
 import os
 from datetime import timedelta
@@ -17,6 +18,9 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 BASE_DOMAIN = os.environ["BASE_DOMAIN"]
 AUTH_BASE = f"https://auth.{BASE_DOMAIN}"
 APPS_FILE = os.environ.get("APPS_FILE", "/app/apps.yaml")
+# Auto-onboarded apps land here as one file per app (written by the appsync
+# service). They are merged with apps.yaml on every request — no restart.
+APPS_DIR = os.environ.get("APPS_DIR", "/app/apps.d")
 LOG_FILE = os.environ.get("PORTAL_LOG_FILE", "/var/log/portal/portal.log")
 
 app = Flask(__name__)
@@ -54,8 +58,24 @@ oauth.register(
 
 
 def load_apps():
+    """Hand-maintained apps.yaml plus every auto-onboarded apps.d/*.yaml.
+
+    Read fresh each request so new tiles appear without a restart. apps.d
+    entries override apps.yaml entries with the same id (last write wins).
+    """
     with open(APPS_FILE, encoding="utf-8") as fh:
-        return yaml.safe_load(fh)["apps"]
+        apps = list((yaml.safe_load(fh) or {}).get("apps", []))
+
+    for path in sorted(glob.glob(os.path.join(APPS_DIR, "*.yaml"))):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                apps.extend((yaml.safe_load(fh) or {}).get("apps", []))
+        except (OSError, yaml.YAMLError):
+            # A half-written file during sync must never break the portal.
+            continue
+
+    by_id = {a["id"]: a for a in apps if "id" in a}
+    return list(by_id.values())
 
 
 def current_user():

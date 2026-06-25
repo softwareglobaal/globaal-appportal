@@ -63,6 +63,9 @@ services:
       - authentik-data:/data
       - authentik-certs:/certs
       - ./authentik/custom-templates:/templates
+      # Declarative app provisioning: appsync drops one blueprint per app here;
+      # Authentik discovers and applies *.yaml under /blueprints automatically.
+      - ./authentik/blueprints:/blueprints/appsync
     depends_on:
       postgresql:
         condition: service_healthy
@@ -94,6 +97,9 @@ services:
       - authentik-data:/data
       - authentik-certs:/certs
       - ./authentik/custom-templates:/templates
+      # Declarative app provisioning: appsync drops one blueprint per app here;
+      # Authentik discovers and applies *.yaml under /blueprints automatically.
+      - ./authentik/blueprints:/blueprints/appsync
     depends_on:
       postgresql:
         condition: service_healthy
@@ -120,6 +126,8 @@ services:
       # Remove this line once real (Let's Encrypt) certificates are in place.
     volumes:
       - ./apps.yaml:/app/apps.yaml:ro
+      # Auto-onboarded tiles (written by appsync), merged live with apps.yaml.
+      - ./apps.d:/app/apps.d:ro
       - ./logs/portal:/var/log/portal
       - ./certs:/certs:ro
     depends_on:
@@ -128,6 +136,35 @@ services:
       authentik-server:
         # Wait for first-boot migrations so OIDC discovery never runs early.
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
+  # Auto-onboarding sync motor: receives GitHub push webhooks and registers
+  # apps into AppPortal (tile + nginx block + cert SAN + Authentik blueprint).
+  # Single worker; jobs are serialized (shared-account mitigation). The live
+  # apply step only runs when APPSYNC_MODE=vm (otherwise it logs intent).
+  appsync:
+    build: ./appsync
+    image: appportal-appsync
+    restart: unless-stopped
+    environment:
+      APPSYNC_WEBHOOK_SECRET: ${APPSYNC_WEBHOOK_SECRET:?Set APPSYNC_WEBHOOK_SECRET in .env}
+      APPSYNC_REPO_ROOT: /app/portal-repo
+      APPSYNC_BASE_DOMAIN: ${BASE_DOMAIN}
+      APPSYNC_WATCH_PREFIXES: ${APPSYNC_WATCH_PREFIXES:-refs/heads/claude/,refs/heads/main}
+      # Leave unset for safe (log-only) mode; set to "vm" on the VM to apply live.
+      APPSYNC_MODE: ${APPSYNC_MODE:-}
+    volumes:
+      # Read-write: appsync regenerates these from apps.d on every sync.
+      - ./apps.d:/app/portal-repo/apps.d
+      - ./nginx/templates:/app/portal-repo/nginx/templates
+      - ./certs:/app/portal-repo/certs
+      - ./authentik/blueprints:/app/portal-repo/authentik/blueprints
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
       interval: 30s
@@ -256,6 +293,8 @@ services:
         condition: service_started
       portal:
         condition: service_started
+      appsync:
+        condition: service_started
       app-factorydocs:
         condition: service_started
       app-inventory:
@@ -279,6 +318,7 @@ services:
           # matches; the rest enable in-network smoke tests).
           - auth.${BASE_DOMAIN}
           - portal.${BASE_DOMAIN}
+          - sync.${BASE_DOMAIN}
           - factorydocs.${BASE_DOMAIN}
           - inventory.${BASE_DOMAIN}
           - finance.${BASE_DOMAIN}

@@ -1,0 +1,10 @@
+# appportal.yaml — drop this in an app repo's root to control how it onboards.
+# Non-technical makers never write this by hand: the repo template (phase 2)
+# seeds it. If it's absent, appsync infers safe defaults from the repo name.
+id: stagebeoordeling            # stable; becomes the subdomain; [a-z0-9-]
+name: Stagebeoordeling          # tile title shown in the portal
+description: Beoordeling van stagedossiers
+subdomain: stagebeoordeling     # optional, defaults to id
+port: 8080                      # the internal port the app listens on
+roles: [stagebeoordeling, admin]  # optional; default = [<id>, admin] (maker + admins)
+maker: angela                   # optional; Authentik username granted access
