@@ -18,7 +18,7 @@ import os
 from flask import Flask, abort, request
 
 import manifest as manifest_mod
-from deployer import Deployer, LoggingDeployer, ShellDeployer
+from deployer import Deployer, GitHubDeployer, LoggingDeployer
 from jobqueue import SerialWorker
 from register import Registry
 
@@ -43,9 +43,11 @@ worker.start()
 
 
 def _make_deployer() -> Deployer:
-    checkout = os.environ.get("APPSYNC_CHECKOUT_ROOT")
-    if os.environ.get("APPSYNC_MODE") == "vm" and checkout:
-        return ShellDeployer(REPO_ROOT, checkout)
+    token = os.environ.get("APPSYNC_GITHUB_TOKEN")
+    if os.environ.get("APPSYNC_MODE") == "vm" and token:
+        return GitHubDeployer(token)
+    if os.environ.get("APPSYNC_MODE") == "vm":
+        log.warning("APPSYNC_MODE=vm but APPSYNC_GITHUB_TOKEN unset; log-only mode")
     return LoggingDeployer()
 
 

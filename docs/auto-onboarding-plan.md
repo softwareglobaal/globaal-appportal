@@ -109,11 +109,28 @@ Rollback = het bestand `apps.d/<id>.yaml` verwijderen en regenereren.
 - **Fase 3:** Routines voor 0-touch/geplande taken; Authentik-Blueprints als enige
   identity-config (volledige GitOps).
 
-## 8. Wat in Fase 1 nog niet leeft (eerlijk)
-- De daadwerkelijke `git clone/pull` + `docker compose up` + `nginx -s reload` +
-  blueprint-apply draaien op de **VM**, niet in de CI-sandbox — `deployer.py` is de
-  interface daarvoor en wordt op de VM gevalideerd.
-- Preview-runner en de `[Publiceren]`-tegel zijn Fase 2.
-- Authentik-blueprint-discovery vereist de blueprints-mount (toegevoegd in compose,
-  te valideren op een live Authentik).
+## 8. Live maken op de VM (host-watcher i.p.v. Docker-socket)
+appsync (een container) **schrijft enkel bestanden** en leest manifesten via de
+GitHub-API (`APPSYNC_GITHUB_TOKEN`). Het *toepassen* — cert heruitgeven + nginx
+herladen — draait op de **host** via een systemd path-watcher, zodat de
+Docker-socket nooit in appsync hoeft:
+
+```
+appsync schrijft 50-autoapps.conf.template + certs/extra-subdomains
+        │  (systemd PathChanged)
+        ▼
+vm/appsync-apply.path ──► vm/appsync-apply.service ──► scripts/appsync-apply.sh
+        → docker compose up -d certgen   (cert reissue, idempotent)
+        → nginx -t && nginx -s reload     (nieuwe server-block actief)
+Authentik watcht /blueprints → past authentik/blueprints/<id>.yaml vanzelf toe
+portal merget apps.d/*.yaml per request → tegel verschijnt
+```
+
+## 9. Wat in Fase 1 nog niet leeft (eerlijk)
+- De **app-container zelf** draait nog niet: de nginx-upstream `app-<id>` bestaat
+  pas in Fase 2 (preview-runner bouwt/start de app). Tot dan geeft de route 502 —
+  verwacht. Tegel, cert, proxy-route en Authentik-binding zijn wél live.
+- Preview-subdomein en de `[Publiceren]`-tegel zijn Fase 2.
+- De webhook-endpoint heeft een publiek vertrouwd cert nodig (Let's Encrypt);
+  GitHub vertrouwt de lokale self-signed CA niet.
 ```

@@ -159,6 +159,9 @@ services:
       APPSYNC_WATCH_PREFIXES: ${APPSYNC_WATCH_PREFIXES:-refs/heads/claude/,refs/heads/main}
       # Leave unset for safe (log-only) mode; set to "vm" on the VM to apply live.
       APPSYNC_MODE: ${APPSYNC_MODE:-}
+      # Token used to read each repo's appportal.yaml (contents:read). Required
+      # when APPSYNC_MODE=vm; otherwise manifests are inferred from the repo name.
+      APPSYNC_GITHUB_TOKEN: ${APPSYNC_GITHUB_TOKEN:-}
     volumes:
       # Read-write: appsync regenerates these from apps.d on every sync.
       - ./apps.d:/app/portal-repo/apps.d

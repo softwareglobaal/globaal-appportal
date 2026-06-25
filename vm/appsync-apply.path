@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch appsync output and apply it (cert reissue + nginx reload)
+
+[Path]
+# Fire the .service whenever appsync regenerates the nginx blocks or the cert
+# SAN list. PathChanged covers writes; the systemd path unit debounces bursts.
+# >>> VERIFIEER de paden: ze moeten matchen met WorkingDirectory in de .service.
+PathChanged=/home/ubuntu/globaal-appportal/nginx/templates/50-autoapps.conf.template
+PathChanged=/home/ubuntu/globaal-appportal/certs/extra-subdomains
+
+[Install]
+WantedBy=multi-user.target

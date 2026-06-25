@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply appsync registrations (reissue TLS cert + reload nginx)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# >>> VERIFIEER: User en WorkingDirectory moeten matchen met waar je de
+# >>> AppPortal-stack draait (de map met docker-compose.yml en .env).
+User=ubuntu
+WorkingDirectory=/home/ubuntu/globaal-appportal
+ExecStart=/bin/sh scripts/appsync-apply.sh
