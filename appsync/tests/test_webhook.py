@@ -60,6 +60,18 @@ def test_queues_watched_push(client):
     assert r.get_json()["status"] == "queued"
 
 
+def test_ignores_portal_repo(client):
+    # A webhook accidentally added to the portal repo must never onboard it.
+    body = json.dumps(
+        {"ref": "refs/heads/main", "repository": {"full_name": "me/globaal-appportal"}}
+    ).encode()
+    r = client.post("/webhook", data=body,
+                    headers={"X-Hub-Signature-256": _sign(body),
+                             "X-GitHub-Event": "push"})
+    assert r.get_json()["status"] == "ignored"
+    assert r.get_json()["reason"] == "not-an-app"
+
+
 def test_healthz(client):
     r = client.get("/healthz")
     assert r.status_code == 200 and r.get_json()["status"] == "ok"

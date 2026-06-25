@@ -157,6 +157,8 @@ services:
       APPSYNC_REPO_ROOT: /app/portal-repo
       APPSYNC_BASE_DOMAIN: ${BASE_DOMAIN}
       APPSYNC_WATCH_PREFIXES: ${APPSYNC_WATCH_PREFIXES:-refs/heads/claude/,refs/heads/main}
+      # Non-app repos to ignore (the portal repo by default).
+      APPSYNC_IGNORE_REPOS: ${APPSYNC_IGNORE_REPOS:-globaal-appportal}
       # Leave unset for safe (log-only) mode; set to "vm" on the VM to apply live.
       APPSYNC_MODE: ${APPSYNC_MODE:-}
       # Token used to read each repo's appportal.yaml (contents:read). Required

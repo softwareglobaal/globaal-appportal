@@ -36,6 +36,14 @@ WATCH_PREFIXES = tuple(
     for p in os.environ.get("APPSYNC_WATCH_PREFIXES", "refs/heads/claude/,refs/heads/main").split(",")
     if p.strip()
 )
+# Repos that are NOT apps and must never be onboarded (matched on the short
+# name). The portal repo itself is ignored by default: a webhook accidentally
+# added there would otherwise register the whole stack as a bogus "app".
+IGNORE_REPOS = set(
+    r.strip().split("/")[-1]
+    for r in os.environ.get("APPSYNC_IGNORE_REPOS", "globaal-appportal").split(",")
+    if r.strip()
+)
 
 app = Flask(__name__)
 worker = SerialWorker()
@@ -107,6 +115,9 @@ def webhook():
     repo_full_name = (payload.get("repository") or {}).get("full_name")
     if not repo_full_name or not ref.startswith(WATCH_PREFIXES):
         return {"status": "ignored", "ref": ref}
+    if repo_full_name.split("/")[-1] in IGNORE_REPOS:
+        log.info("ignoring push to non-app repo %s", repo_full_name)
+        return {"status": "ignored", "repo": repo_full_name, "reason": "not-an-app"}
 
     worker.submit(lambda: _onboard(repo_full_name, ref))
     return {"status": "queued", "repo": repo_full_name, "ref": ref, "depth": worker.depth()}
