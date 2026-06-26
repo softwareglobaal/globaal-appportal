@@ -116,8 +116,13 @@ services:
       PORTAL_SECRET_KEY: ${PORTAL_SECRET_KEY:?Set PORTAL_SECRET_KEY in .env}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-not-configured-yet}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-not-configured-yet}
-      # Trust the locally generated CA when talking to https://auth.<BASE_DOMAIN>.
+      # Read-only Authentik API token for the admin "Access overview" page.
+      # Empty = the page shows a "not configured" notice. See README §"Access overview".
+      AUTHENTIK_API_TOKEN: ${AUTHENTIK_API_TOKEN:-}
+      # Trust the locally generated CA when talking to https://auth.<BASE_DOMAIN>
+      # (OIDC discovery + the Access overview API calls).
       # Remove this line once real (Let's Encrypt) certificates are in place.
+      REQUESTS_CA_BUNDLE: /certs/ca.crt
     volumes:
       - ./apps.yaml:/app/apps.yaml:ro
       - ./logs/portal:/var/log/portal
