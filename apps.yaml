@@ -12,3 +12,21 @@ apps:
     subdomain: schuldentracker
     roles: [schuldentracker]
     status: active
+  - id: chaos
+    name: Chaos Taskforce
+    description: Planning en openstaande facturen (UNABO)
+    subdomain: chaos
+    roles: [chaos]
+    status: active
+  - id: agenda
+    name: Beschikbaarheid Mehdi
+    description: Agenda en beschikbaarheid van Mehdi
+    subdomain: agenda
+    roles: [agenda-bekijken]
+    status: active
+  - id: telefoonregister
+    name: Telefoonregister
+    description: Centraal telefoonregister (single source of truth)
+    subdomain: telefoonregister
+    roles: [telefoonregister]
+    status: active

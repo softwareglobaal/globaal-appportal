@@ -128,6 +128,7 @@ Projectmap op de VM: `~/appportal`. Compose-projectnaam: **`appportal`**
 | `portal` | (build ./portal) | intern | Flask OIDC-portal |
 | `app-factorydocs/-inventory/-finance/-maintenance` | (build ./stubapp) | intern | demo-stub-apps (poorten 3001–3004) |
 | `app-omv` | (build ./omv-demo) | intern | demo-stub (ongebruikt op de VM, zie §3.5) |
+| `app-telefoonregister` | (build ./telefoonregister) | intern | **echte** app — Telefoonregister (Node.js, poort 3006; via `docker-compose.override.yml`, zie §6D) |
 | `certgen` | alpine:3.20 | — | eenmalig: zelf-ondertekend cert (lokaal/dev) |
 
 Netwerk: één bridge `appnet`. Volumes: `appportal_postgres-data`,
@@ -145,6 +146,19 @@ cutover niet geraakt:
   (`factuurrouter-dashboard.service`, `0.0.0.0:8787`).
 - **Stagebeoordeling** — stagiaire-beoordelingsdashboard op de host (zie §6B),
   `~/stagebeoordeling`, `0.0.0.0:8088`, SQLite, systemd-service.
+- **Schuldentracker** — schuldendossier-tracker op de host (zie §6C),
+  Flask-app, `0.0.0.0:5050`, systemd `schuldentracker.service`.
+- **Kosten** — software-kostendashboard op de host (zie §13.4), `~/kosten`,
+  `0.0.0.0:8090`, systemd `kosten.service`.
+- **CHAOS Taskforce** — UNABO-werkstroomdashboard (zie §6E), `~/chaos`,
+  `0.0.0.0:8095`, systemd `chaos.service`.
+- **Beschikbaarheid Mehdi (agenda)** — Google-Calendar-beschikbaarheid (zie §6F),
+  `~/globaal-calendar-mehdi`, `0.0.0.0:5060`, systemd `agenda.service`.
+- **RenoVision AI** — analyse van bouwtekeningen (zie §6G), eigen docker-compose
+  onder `~/globaal-renovision` (8100) + sandbox `~/globaal-renovision-mehdi` (8101),
+  MongoDB-backend.
+- **HR-/urendashboard (DeskTime)** — zie §13.5, `~/hr-dashboard`, `0.0.0.0:8089`
+  (service actief; nog niet achter SSO).
 - **cloudflared-tunnel** — routeert alleen `ha-customgpt.globaal.be` (ongebruikt).
 - **Host-PostgreSQL** — `127.0.0.1:5432` (los van de Authentik-DB in Docker).
 - Overige projecten in `/home/ubuntu` (barsten_en_scheuren, Finance/Schuldentracker,
@@ -162,7 +176,13 @@ cutover niet geraakt:
 | `factuurrouter.globaal.be` | Factuurrouter-dashboard op de host, `http://172.17.0.1:8787` | forward auth (oude `remy.globaal.be` → 301 hierheen) |
 | `stage.globaal.be` | Stagebeoordeling op de host, `http://172.17.0.1:8088` | forward auth (Raisha = bewerken, rest = lezen) |
 | `kosten.globaal.be` | Kosten-dashboard op de host, `http://172.17.0.1:8090` | forward auth (groep `kosten`) |
-| `factorydocs/inventory/finance/maintenance.globaal.be` | `app-*:300x` (stubs) | forward auth |
+| `telefoonregister.globaal.be` | `app-telefoonregister:3006` (container in de stack) | forward auth (`telefoonregister` zien, `-editors` bewerken) |
+| `chaos.globaal.be` | CHAOS-dashboard op de host, `http://172.17.0.1:8095` | forward auth (groep `chaos`) |
+| `agenda.globaal.be` | Beschikbaarheid Mehdi op de host, `http://172.17.0.1:5060` | forward auth (`agenda-bekijken`/`-volledig`/`-architect`) |
+| `renovision.globaal.be` | RenoVision (gedeeld) op de host, `http://172.17.0.1:8100` | forward auth (`renovision`/`-bewerken`) |
+| `renovision-mehdi.globaal.be` | RenoVision (Mehdi-sandbox), `http://172.17.0.1:8101` | forward auth (`renovision-mehdi`/`-bewerken`) |
+| `status.globaal.be` | Uptime Kuma, `http://uptime-kuma:3001` | forward auth (`admin`/`manager`) |
+| `factorydocs/inventory/finance/maintenance.globaal.be` | `app-*:300x` (demo-stubs; Authentik-providers verwijderd, containers draaien nog) | forward auth |
 | `n8n.globaal.be` | `n8n-n8n-1:5678` | gewone doorsturing (n8n's eigen login) |
 | `data.globaal.be` | *(geen server-blok)* | n.v.t. — vervangen door `omv.globaal.be` |
 
@@ -181,12 +201,15 @@ cutover niet geraakt:
   grant types authorization_code + refresh_token, **invalidation flow =
   `default-invalidation-flow`** (nodig voor single logout).
 - **Proxy-providers** (forward auth, "single application") per app:
-  `factorydocs-proxy`, `inventory-proxy`, `finance-proxy`, `maintenance-proxy`,
   `omv-proxy`, `schuldentracker-proxy`, `factuurrouter-proxy` (voorheen `remy-proxy`),
-  `stage-proxy` (= Stagebeoordeling), `kosten-proxy`, `status-proxy`. External host
-  = `https://<sub>.globaal.be`. Eigen toegangsgroepen per app naast
+  `stage-proxy` (= Stagebeoordeling), `kosten-proxy`, `status-proxy` (Uptime Kuma),
+  `Telefoonregister`, `chaos-proxy`, `agenda-proxy`, `renovision-proxy` en
+  `renovision-mehdi-proxy`. External host = `https://<sub>.globaal.be`. *(De oude
+  stub-providers `factorydocs/inventory/finance/maintenance-proxy` zijn verwijderd;
+  de stub-containers draaien nog — zie §12.4.)* Eigen toegangsgroepen per app naast
   `admin`/`manager`: o.a. `schuldentracker`, `factuurrouter`, `stagebeoordeling`,
-  `kosten` (+ `-bewerken` voor schrijfrechten) — zie §12.1.
+  `kosten`, `chaos`, `telefoonregister`, `agenda-bekijken`, `renovision`
+  (+ `-bewerken`/`-editors`/`-volledig` voor schrijf-/detailrechten) — zie §12.1.
 - **Embedded outpost:** alle proxy-providers zijn toegewezen; `authentik_host =
   https://auth.globaal.be`.
 - **Toegangscontrole:** group-bindings per applicatie (FinanceDashboard alleen
@@ -383,7 +406,7 @@ Google-product). Die is **volledig vervangen** door Google's eigen Gmail API in
   8787 mag bereiken (zie §9.12). Extern blijft 8787 dicht via de AWS-security-group.
 - **Authentik:** proxy-provider `factuurrouter-proxy` + applicatie
   **"Factuurrouter"** (slug `factuurrouter`) + groep **`factuurrouter`**, toegewezen
-  aan de embedded outpost. Toegang: Mehdi + Angela + akadmin. *(Bij het hernoemen
+  aan de embedded outpost. Toegang (as-built): akadmin + Mehdi. *(Bij het hernoemen
   van `external_host` via de ORM moet je `provider.set_oauth_defaults()` draaien,
   anders blijven de OAuth-`redirect_uris` op de oude host staan — zie §9.14.)*
 - DNS: gedekt door de bestaande wildcard `*.globaal.be` — geen apart record nodig.
@@ -498,11 +521,131 @@ het vervangt een Excel-deurwaarderstracker. Draait **op de host** als Flask-app
 ### 6C.4 Nginx / SSO / openstaand
 - Nginx-blok `41-schuldentracker.conf.template` (forward auth), upstream
   `http://172.17.0.1:5050`; `sudo ufw allow 5050/tcp`. Authentik: proxy-provider +
-  app + groepen **`schuldentracker`** (zien) en **`schuldentracker-bewerken`**
-  (Mehdi, Angela). DNS via de wildcard.
+  app + groepen **`schuldentracker`** (zien: akadmin, Angela, Mehdi) en
+  **`schuldentracker-bewerken`** (bewerken: **alleen Angela**). DNS via de wildcard.
 - **Nog open:** (a) back-up van `data/finance.db`, (b) in git/CI/auto-deploy brengen
   (repo `globaal-schuldentracker`), (c) **de OpenAI-key in `.env` roteren** (stond in
   platte tekst, ook in de OneDrive-kopie).
+
+---
+
+## 6D. Telefoonregister — centraal telefoonnummer-register
+
+**Telefoonregister** (`telefoonregister.globaal.be`) is de centrale **single source
+of truth** voor alle telefoonnummers van de bedrijvengroep (België & Suriname):
+een database-app met live sync die meerdere collega's tegelijk gebruiken en
+bijwerken. De Excel is enkel de startdata; de waarheid leeft in de database.
+**Draait — anders dan de meeste host-apps — als container ín de stack**
+(`app-telefoonregister`, intern poort 3006), gedefinieerd in
+`docker-compose.override.yml`. Repo: `softwareglobaal/telefoonregister`.
+
+### 6D.1 Werking
+- **Node.js** (**Express** + **Knex**), standaard **SQLite** (`better-sqlite3`);
+  kan zonder codewijziging naar PostgreSQL (Knex is db-agnostisch). Data in het
+  Docker-volume `appportal_telefoonregister-data` (`/app/data`).
+- **Voorkant**: lijst met 4 velden (Telefoonnummer, Toegewezen aan, Functie,
+  Status); detail achter de klik. **Live sync** via Server-Sent Events —
+  wijzigingen verschijnen vrijwel meteen bij iedereen.
+- **Datamodel**: `numbers` (voor- en achterkantvelden), `secrets` (afgeschermd:
+  kaartnummer, PIN/PUK — 1-op-1 bij een nummer), `lists` (bewerkbare
+  dropdown-waarden). Status Actief/Niet-actief/Onbekend (niet-actief behoudt
+  historiek, verwijdert niets).
+- **Excel-export** (`GET /api/export`) met dezelfde structuur als de import —
+  geen vendor-lock-in. Eenmalige seed-import uit `seed/…import.xlsx` bij een lege
+  tabel (herstart dupliceert niets).
+
+### 6D.2 Auth — lezen vs. bewerken
+- **Geen eigen login.** De app leest de gebruiker uit de forward-auth-header
+  (`X-Authentik-Username`, met fallbacks). Iedereen die de proxy passeert mag
+  **lezen**; **schrijven** is beperkt tot de groep **`telefoonregister-editors`**
+  (commit "Schrijfrechten beperken tot editors-groep"). Hetzelfde lezen/bewerken-
+  patroon als Schuldentracker/Stagebeoordeling.
+- Twee Authentik-groepen: **`telefoonregister`** (zien) en
+  **`telefoonregister-editors`** (bewerken).
+
+### 6D.3 Nginx / SSO / data
+- Nginx-blok `35-telefoonregister.conf.template` (forward auth), upstream
+  `http://app-telefoonregister:3006` — **in-netwerk, géén host-gateway-IP**, want
+  het is een container in de stack. Authentik proxy-provider + app
+  **"Telefoonregister"**. DNS via de wildcard.
+- ⚠️ De SQLite in het volume `appportal_telefoonregister-data` hoort in de
+  back-uproutine.
+
+---
+
+## 6E. CHAOS Taskforce — UNABO-werkstroomdashboard
+
+**CHAOS Taskforce** (`chaos.globaal.be`) is een intern dashboard voor de
+**UNABO-werkstroom**: een **Planning**-tab (juridische harmonisatie + facturatie;
+taken met eigenaar/status/deadline, tijdlijn en voortgang) en een **Openstaande
+facturen**-tab (tellers, matrix per firma/type, aging-overzicht, sorteerbare
+tabel). Iedereen werkt op dezelfde gedeelde versie; wijzigingen syncen
+automatisch (~30 s). Draait **op de host** onder `~/chaos` (systemd
+`chaos.service`, poort 8095). Repo: `softwareglobaal/chaos-taskforce`
+(**privé** — bevat klant-persoonsgegevens).
+
+### 6E.1 Opzet (bewust simpel)
+- **Eén `server.py`** op pure standaardbibliotheek (geen dependencies, geen venv)
+  + **één `index.html`** (volledig dashboard, geen buildstap).
+- **Gedeelde opslag** `data/state.json` (live planning-data) — **gitignored**,
+  hoort niet in git. De factuurgegevens zitten in het dashboard ingebakken; een
+  nieuwe maandexport laad je per browser in ("Excel opnieuw inladen", lokaal).
+- **Eigen sync-mechanisme** (`server-sync.sh`/`auto-push.sh`) i.p.v. de standaard
+  `deploy-<app>.sh`-cron: automatische pull vanaf GitHub naar de server.
+- Auth: forward auth, groep **`chaos`**. ⚠️ Repo privé houden; GitHub Pages uit
+  (persoonsgegevens). Back-up van `data/state.json` is wenselijk.
+
+---
+
+## 6F. Beschikbaarheid Mehdi (agenda) — Google-Calendar-beschikbaarheid
+
+**Beschikbaarheid Mehdi** (`agenda.globaal.be`) is een **read-only** dashboard dat
+meerdere Google Calendars van Mehdi samenvoegt tot één beschikbaarheidsoverzicht
+(dag/week), zodat collega's zien wanneer hij vrij of bezet is. Draait **op de
+host** onder `~/globaal-calendar-mehdi` (Flask, systemd `agenda.service`, poort
+5060). Repo: `softwareglobaal/globaal-calendar-mehdi`; in CI/CD via
+`deploy-agenda.sh` (met `pip install` bij wijzigingen).
+
+### 6F.1 Werking & auth
+- **Flask** + **Google Calendar API** (read-only, OAuth-refresh-token, eenmalig
+  consent via `get_refresh_token.py`). `calendar_service.py` merget de kalenders
+  naar vrij/bezet met cache.
+- **Geen eigen login** — identiteit uit de `X-authentik-*`-headers (`sso_auth.py`).
+- **Toegang per kalender** via `calendars.yaml` (`full_detail_groups`): wie in zo'n
+  groep zit ziet **details** (titel/locatie), anders enkel een **"Bezet"**-blok.
+  Drie Authentik-groepen: **`agenda-bekijken`** (toegang/tegel-rol),
+  **`agenda-volledig`** (ziet overal details — Mehdi), **`agenda-architect`**
+  (optioneel, details van specifieke architect-kalenders; route `/calendars`).
+- Secrets in `.env` (Google client-id/secret + refresh-token) — VM-only.
+
+---
+
+## 6G. RenoVision AI — analyse van bouwtekeningen
+
+**RenoVision AI** (`renovision.globaal.be`) is een **AI-platform voor het
+analyseren van architecturale tekeningpakketten** (PDF/DWG/DXF) bij renovatie-,
+uitbreidings- en vergunningsprojecten. Het classificeert tekeningpagina's
+(Bestaande/Nieuwe/Vergunde toestand; plannen, snedes, geveltekeningen), vergelijkt
+toestanden, detecteert wijzigingen (toegevoegde/verwijderde ruimtes, muur-/dak-/
+trapaanpassingen, uitbreidingen) en genereert gestructureerde rapporten.
+Combineert computer vision, OCR en **AI-vision-modellen (Claude/OpenAI)**;
+meertalig (NL/FR/EN/DE). Repo: `softwareglobaal/globaal-renovision`.
+
+### 6G.1 Opzet & twee instanties
+- **Stack**: frontend (yarn/React) + backend + **MongoDB**, als **eigen
+  docker-compose** op de host onder `~/globaal-renovision` (containers
+  `renovision-web`/`-backend`/`-mongo`). **Auto-deploy**: de VM pollt `origin/main`
+  en herbouwt de containers bij wijziging.
+- **Twee geïsoleerde instanties**:
+  - **renovision** — de gedeelde instantie, poort 8100, groepen **`renovision`**
+    (zien) + **`renovision-bewerken`**.
+  - **renovision-mehdi** — een aparte **sandbox** voor Mehdi,
+    `~/globaal-renovision-mehdi`, poort 8101, groepen **`renovision-mehdi`**
+    (+`-bewerken`); image-namen per compose-project ge-namespaced zodat de twee
+    elkaar niet raken.
+- Nginx-blokken in `30-apps.conf.template` met **`client_max_body_size 200m`**
+  (grote tekening-uploads). Forward auth; aparte Authentik proxy-providers
+  `renovision-proxy` en `renovision-mehdi-proxy`.
 
 ---
 
@@ -512,14 +655,16 @@ het vervangt een Excel-deurwaarderstracker. Draait **op de host** als Flask-app
 |---|---|
 | `.env` | alle secrets + `BASE_DOMAIN`, `OMV_UPSTREAM`, `CERTGEN_DISABLE` (gitignored) |
 | `.env.production` | sjabloon voor de VM (BASE_DOMAIN=globaal.be) |
-| `apps.yaml` | app-catalogus + rol-mapping voor de tegels |
+| `apps.yaml` | app-catalogus + rol-mapping voor de tegels (omv, schuldentracker, chaos, agenda, telefoonregister) |
 | `docker-compose.yml` | de hele stack |
+| `docker-compose.override.yml` | extra in-stack service `app-telefoonregister` + volume (zie §6D) |
 | `nginx/templates/*.template` | nginx-serverblokken (envsubst met `${BASE_DOMAIN}`) |
 | `nginx/snippets/forward-auth.conf` | het forward-auth-blok (gedeeld door de apps) |
 | `nginx/templates/40-n8n.conf.template` | n8n-doorsturing (VM-specifiek) |
 | `scripts/configure-authentik.sh` | groepen, OIDC, proxy-providers, TOTP, sessies |
 | `scripts/setup-authentik.py` | de daadwerkelijke Authentik-config (via `ak shell`) |
 | `scripts/add-omv-app.py` | registreert de OMV-provider apart |
+| `scripts/add-*-app.py` | per-app Authentik-registratie (o.a. `add-kosten-app.py`, `add-agenda-app.py`, `add-stage-app.py`, `add-schuldentracker.py`, `add-monitoring.py`) |
 | `scripts/fix-domains.py` | corrigeert providers/redirect/host naar het echte domein (zie §9.6) |
 | `scripts/ak-exec.sh` | helper om een python-bestand in de authentik-container te draaien |
 | `vm/omv.service` | het systemd-servicebestand voor OMV |
@@ -622,8 +767,10 @@ toegevoegd aan de `socketio.run(...)`-regel (acceptabel voor een intern dashboar
 **9.9 OMV gaf 502 via de portal** — nginx kon `host.docker.internal` niet
 opzoeken (die naam staat in `/etc/hosts`, niet in de Docker-DNS die de resolver
 gebruikt). *Fix:* `OMV_UPSTREAM` op het **host-gateway-IP** gezet
-(`http://172.20.0.1:5000`, het IP dat de nginx-container voor de host ziet) i.p.v.
-de hostnaam.
+(`http://172.17.0.1:5000`, het docker0-IP dat de nginx-container voor de host
+ziet) i.p.v. de hostnaam. Dit is hetzelfde host-gateway-IP dat álle host-apps
+gebruiken (Factuurrouter 8787, Stage 8088, Schuldentracker 5050, Kosten 8090,
+CHAOS 8095, Agenda 5060, RenoVision 8100/8101).
 
 **9.10 AWS-VM kan z'n eigen publieke IP niet bereiken** — `curl` vanaf de VM naar
 `https://portal.globaal.be` faalde, terwijl het van buitenaf wél werkt. Dit is
@@ -719,15 +866,23 @@ gebruiken. Zo kan iemand wel bij app X maar niet bij app Y, ongeacht z'n
 afdeling. (Voorbeeld: Siyan zit organisatorisch bij management, maar niet in de
 groep `schuldentracker`, dus ziet die app niet.)
 
-| Groep | Geeft toegang tot | Leden |
+| Groep | Geeft toegang tot | Leden (as-built 2026-06-26) |
 |---|---|---|
-| `schuldentracker` | Schuldentracker | Mehdi, Angela |
-| `omv` | OMV Pipeline | (in te vullen) |
-| `factuurrouter` | Factuurrouter | Mehdi, Angela, akadmin |
-| `kosten` | Kosten-dashboard | Mehdi, Angela, Siyan, akadmin |
-| `stagebeoordeling` | Stagebeoordeling (zien) | Raisha, Mehdi, akadmin |
-| `stagebeoordeling-bewerken` | Stagebeoordeling (bewerken) | **alleen Raisha** |
+| `schuldentracker` / `-bewerken` | Schuldentracker (zien / bewerken) | akadmin, Angela, Mehdi · **bewerken: alleen Angela** |
+| `factuurrouter` | Factuurrouter | akadmin, Mehdi |
+| `kosten` | Kosten-dashboard | akadmin, Angela, Mehdi |
+| `stagebeoordeling` / `-bewerken` | Stagebeoordeling (zien / bewerken) | akadmin, Mehdi, Raisha · **bewerken: alleen Raisha** |
+| `telefoonregister` / `-editors` | Telefoonregister (zien / bewerken) | akadmin, Angela, Mehdi, Siyan · **bewerken: akadmin, Siyan** |
+| `chaos` | CHAOS Taskforce | Angela, Mehdi, Siyan |
+| `agenda-bekijken` / `-volledig` / `-architect` | Beschikbaarheid Mehdi (toegang / details overal / architect-kalenders) | bekijken: Angela, Matthew, Mehdi, Siyan · volledig: Angela, Mehdi, Siyan · architect: — |
+| `renovision` / `-bewerken` | RenoVision (gedeeld) | akadmin, Mehdi, Samad · **bewerken: akadmin, Samad** |
+| `renovision-mehdi` / `-bewerken` | RenoVision (Mehdi-sandbox) | akadmin, Mehdi |
 | `admin` *(optioneel)* | alle apps | beheerders |
+
+> **OMV** gebruikt `admin`/`manager` (er is géén aparte `omv`-groep).
+> **`status.globaal.be`** (Uptime Kuma) is gebonden aan **`admin`/`manager`**.
+> De groep `manager` = akadmin, Mehdi. Er bestaat daarnaast een meta-groep
+> **`toegangsbeheerders`** (lid: Siyan).
 
 > **Patroon lezen vs. bewerken:** een app kan een tweede groep `<app>-bewerken`
 > hebben. De app bindt aan de zien-groep; schrijfacties controleren server-side op
@@ -744,17 +899,20 @@ gebouwd omdat de oorspronkelijke opdracht dat voorschreef. Op termijn één van 
 twee kiezen (Authentik's launcher is de eenvoudigste, onderhoudsvrije optie).
 
 ### 12.3 Roadmap — geplande volgende stappen (in volgorde)
-1. **Uptime Kuma** opzetten (app-monitoring): online/offline + responstijd per
-   app (OMV, Schuldentracker, n8n, portal, auth), bereikbaar op
-   `status.globaal.be` achter SSO.
-2. **Opruimstap — drift wegwerken + git.** We hebben op twee plekken bewerkt
-   (Windows-map én rechtstreeks op de VM), waardoor ze uit elkaar zijn gegroeid.
-   Plan: (a) de Windows-map een getrouwe weergave van de VM maken (o.a. het
-   ontbrekende `nginx/templates/41-schuldentracker.conf.template`), (b) een
-   **git-repo** opzetten als single source of truth — géén code meer in
-   OneDrive/Dropbox; de VM haalt updates voortaan via `git pull`.
-   ⚠️ Tot dat klaar is: kopieer de Windows-map NIET blind over `~/appportal` op
-   de VM — dat zou de werkende VM-config overschrijven.
+1. **Uptime Kuma** — ✅ **opgezet en live** op `status.globaal.be` achter SSO
+   (container `uptime-kuma`, intern poort 3001, nginx-blok
+   `42-status.conf.template`). De monitoring per app (OMV, Schuldentracker, n8n,
+   portal, auth, …) verder uitbreiden/finetunen.
+2. **Opruimstap — drift wegwerken + git.** ⏳ Grotendeels gedaan: de app-repo's
+   staan op GitHub (org `softwareglobaal`) en de meeste apps deployen via
+   `git pull`. **Nog open voor de appportal-stack zélf:** er is **geen
+   `deploy-appportal.sh`-cron**, dus directe VM-edits aan `~/appportal` (nginx,
+   `apps.yaml`, compose) vloeien niet automatisch terug naar git en kunnen
+   ongemerkt afwijken. Houd `~/appportal` voortaan strikt via branch → PR → `main`
+   in sync. *(Deze as-built is op 2026-06-26 bijgewerkt vanaf de drift-branch
+   `vm-as-built-2026-06-26`, die de niet-gecommitte VM-config ving:
+   kosten/status-nginxblokken, `remy`→`factuurrouter` 301-redirect, de
+   telefoonregister-service en de chaos/agenda/renovision-blokken.)*
 
 ### 12.4 Overige openstaande punten
 - **Factuurrouter:** ✅ gekoppeld — zie §6A. AI-factuurrouter op de host, achter
@@ -769,13 +927,21 @@ twee kiezen (Authentik's launcher is de eenvoudigste, onderhoudsvrije optie).
   opnemen.
 - **Schuldentracker:** ✅ gekoppeld — **nu met eigen sectie §6C**. Flask-schulden-
   dossier-tracker op `schuldentracker.globaal.be` (systemd `schuldentracker`, poort
-  5050), SSO-shim met lezen/bewerken (`schuldentracker` / `schuldentracker-bewerken`,
-  leden Mehdi/Angela). **Nog open:** (a) back-up van `data/finance.db`, (b) in
+  5050), SSO-shim met lezen/bewerken (`schuldentracker`: akadmin/Angela/Mehdi /
+  `schuldentracker-bewerken`: alleen Angela). **Nog open:** (a) back-up van
+  `data/finance.db`, (b) in
   git/CI/auto-deploy brengen (`globaal-schuldentracker`), (c) **OpenAI-key in `.env`
   roteren** (stond in platte tekst).
+- **Nieuwe apps gedocumenteerd (2026-06-26):** Telefoonregister (§6D), CHAOS
+  Taskforce (§6E), Beschikbaarheid Mehdi/agenda (§6F) en RenoVision AI (§6G) zijn
+  toegevoegd aan de as-built. **Nog open:** back-ups van hun data
+  (Telefoonregister-volume, `chaos/data/state.json`, RenoVision-MongoDB) en — voor
+  chaos/renovision — opname in het standaard `deploy-<app>.sh`-CI/CD-patroon (ze
+  hebben nu een eigen sync-/rebuild-mechanisme).
 - **Tegels opgeschoond (fase 8):** de 4 placeholder-apps zijn uit `apps.yaml`
-  verwijderd. De bijbehorende **stub-containers, nginx-blokken en
-  Authentik-providers draaien nog** (onzichtbaar) — volledige opruiming staat
+  verwijderd en hun **Authentik-providers zijn intussen verwijderd**. De
+  **stub-containers en hun nginx-blokken draaien nog** (onzichtbaar, zonder
+  forward-auth-provider) — volledige opruiming (containers + nginx-blokken) staat
   nog open.
 - **Certificaten:** ✅ **Let's Encrypt wildcard** `*.globaal.be` (DNS-01 via een
   Cloudflare API-token), automatische verlenging — geen browser-waarschuwing meer.
@@ -855,11 +1021,15 @@ herstarten. Deploy-log: `~/deploy-<app>.log`.
 > **Resultaat:** tekst in claude.ai/code → PR → check ✅ → auto-merge → binnen 2
 > min live. **Risicogestuurd uitrollen:** laag-risico apps (Stagebeoordeling)
 > mogen volledig automatisch; voor **financiële apps (Kosten)** blijft de check
-> staan als poort. **Live op alle drie de apps** (✅ end-to-end bevestigd
-> 2026-06-19): **Stagebeoordeling** en **Kosten** (beide volledig automatisch) en
-> **Factuurrouter**. De smoke-test verschilt per app: Stage/Kosten starten de app
-> op + `curl` (`/` resp. `/health`); Factuurrouter doet alleen `py_compile` (een
-> echte start vereist Gmail-credentials, die niet in CI staan).
+> staan als poort. **Live via `deploy-<app>.sh`-cron (elke 2 min) op zes apps**
+> (✅ end-to-end bevestigd): **Stagebeoordeling**, **Kosten**, **Factuurrouter**,
+> **Schuldentracker**, **OMV** en **Agenda**. De smoke-test verschilt per app:
+> Stage/Kosten starten de app op + `curl` (`/` resp. `/health`); Factuurrouter doet
+> alleen `py_compile` (een echte start vereist Gmail-credentials, die niet in CI
+> staan); Agenda draait extra `pip install` bij wijzigingen. **CHAOS** en
+> **RenoVision** deployen via een **eigen mechanisme** (resp. `server-sync.sh`
+> pull-sync en docker-rebuild-bij-pull), nog niet via het cron-patroon. De
+> **appportal-stack zelf** heeft nog géén auto-deploy (zie §12.3).
 
 **Geleerde valkuilen bij de opzet (Stagebeoordeling):**
 - De `permissions:`-blok in `ci.yml` (`contents: write` + `pull-requests: write`)
@@ -877,8 +1047,8 @@ herstarten. Deploy-log: `~/deploy-<app>.log`.
 ### 13.4 Kosten-dashboard (software-uitgaven) — `kosten.globaal.be`
 Interactief overzicht van software-/abonnementskosten uit **KBC/VISA
 kredietkaart-afschriften**. Repo `globaal-kosten`, VM-map `~/kosten`, systemd
-`kosten.service` op **poort 8090**, achter SSO (groep `kosten`: Mehdi, Angela,
-Siyan, akadmin). De **volledige pipeline draait server-side** ("alles op de
+`kosten.service` op **poort 8090**, achter SSO (groep `kosten`: akadmin, Angela,
+Mehdi). De **volledige pipeline draait server-side** ("alles op de
 server"):
 - `extract_cc.py` — PyMuPDF leest de PDF-afschriften in `statements/`, classificeert
   per firma/leverancier → `cc_transactions_clean.csv`.
@@ -913,7 +1083,19 @@ de auto-deploy herstart **beide** services (`factuurrouter.service` +
 
 ---
 
-*Laatst bijgewerkt: 2026-06-22 — **§6 (OMV-pipeline)** uitgebreid met de volledige
+*Laatst bijgewerkt: 2026-06-26 — **as-built gesynchroniseerd met de live VM**.
+Niet-gecommitte VM-config gevangen (kosten/status-nginxblokken,
+`remy`→`factuurrouter` 301-redirect, telefoonregister-service,
+chaos/agenda/renovision) en als git-bron verzoend. Vier nieuwe app-secties
+toegevoegd: **§6D Telefoonregister**, **§6E CHAOS Taskforce**, **§6F
+Beschikbaarheid Mehdi (agenda)** en **§6G RenoVision AI**. Tabellen §3.3–§3.5
+(stack, mede-bewoners, hostname-routing), §4 (Authentik-providers/groepen) en
+§12.1 (toegangsmodel) bijgewerkt; §12.3 (Uptime Kuma live), §12.4 (stub-providers
+verwijderd) en §13.3 (zes auto-deploy-apps) gecorrigeerd. Geconstateerd dat de
+appportal-stack zelf nog géén auto-deploy heeft — de #1 bron van toekomstige
+drift.*
+
+*Eerder, 2026-06-22 — **§6 (OMV-pipeline)** uitgebreid met de volledige
 scrape→download→merge→extract-keten (§6.1–6.5), inclusief **§6.5 anti-blokkering**
 (residentiële SOCKS-proxy + Anubis-bootstrap + troubleshooting — voorkomt herhaling
 van de "RetryError"-zoektocht).

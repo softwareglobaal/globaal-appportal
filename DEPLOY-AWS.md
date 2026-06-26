@@ -142,6 +142,14 @@ geeft nog een waarschuwing — die lossen we in stap 7 definitief op.
 
 ## 7. Echte certificaten met Let's Encrypt (gratis, auto-vernieuwend)  **(VM)**
 
+> ⚠️ **As-built wijkt af.** Dit hoofdstuk beschrijft de **webroot-methode** als
+> generiek draaiboek (per-host certs). De **echte productie-VM `globaal.be`**
+> draait op een **wildcard `*.globaal.be` via Let's Encrypt DNS-01 met de
+> Cloudflare-plugin** (één cert dekt álle subdomeinen, ook toekomstige). Zie
+> `TECHNICAL-REFERENCE.md` §8 en §11. Volg de wildcard-aanpak hieronder als je de
+> bestaande opzet reproduceert; de webroot-stappen zijn alleen relevant voor een
+> nieuwe omgeving zónder Cloudflare-DNS.
+
 We gebruiken de **webroot-methode**. Die werkt bij élke DNS-provider (geen
 plugins nodig), vernieuwt automatisch en veroorzaakt geen downtime. nginx is
 al voorbereid: het ACME-pad wordt over HTTP geserveerd, de rest gaat naar HTTPS.
