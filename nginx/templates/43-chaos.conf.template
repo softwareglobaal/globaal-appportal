@@ -1,0 +1,8 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name chaos.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    set $app_upstream http://172.17.0.1:8095;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
