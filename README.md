@@ -25,6 +25,14 @@ Browser ──HTTPS──> Nginx (only public entry, TLS)
 Hostnames: `auth.`, `portal.`, `factorydocs.`, `inventory.`, `finance.`,
 `maintenance.` under `BASE_DOMAIN` (default `localhost`).
 
+> **Note — this README is the local-dev quickstart.** `factorydocs`, `inventory`,
+> `finance` and `maintenance` are **demo stubs** used to illustrate the pattern.
+> The **real production deployment** (`globaal.be`) runs a different, growing set
+> of apps — OMV, Schuldentracker, Factuurrouter, Stagebeoordeling, Kosten,
+> Telefoonregister, CHAOS Taskforce, Beschikbaarheid Mehdi (agenda), RenoVision AI
+> and Uptime Kuma. For the authoritative as-built (architecture, hosts, apps,
+> Authentik groups, CI/CD), see **[TECHNICAL-REFERENCE.md](TECHNICAL-REFERENCE.md)**.
+
 ---
 
 ## 1. First-time startup

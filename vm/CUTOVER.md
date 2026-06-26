@@ -15,13 +15,18 @@ oude host-nginx in seconden terug.
 
 ---
 
-## 1. DNS (one.com)
+## 1. DNS (Cloudflare)
+
+> ⚠️ **Correctie t.o.v. de oorspronkelijke tekst.** De DNS van `globaal.be` wordt
+> beheerd bij **Cloudflare** (one.com is enkel registrar/mailhost). Alle
+> wijzigingen hieronder doe je dus in het **Cloudflare-dashboard**. De
+> AppPortal-hostnames staan op **DNS only** (grijs wolkje) zodat verkeer
+> rechtstreeks naar de VM gaat. Zie `TECHNICAL-REFERENCE.md` §3.2.
 
 | Actie | Record |
 |---|---|
 | **UIT** | `AAAA *.globaal.be` (de IPv6-val) |
-| **UIT** | standaard `A *.globaal.be` |
-| **Toevoegen** (Personal DNS) | `A` · `*.globaal.be` · `54.80.98.233` |
+| **Aanpassen** | `A` · `*.globaal.be` · `54.80.98.233` · **DNS only** |
 | Laten staan | `data`, `n8n`, en e-mail (`MX`, `TXT`, `SRV`) |
 
 Optioneel opschonen (niet gebruikt): het `ha-customgpt`-record + de
