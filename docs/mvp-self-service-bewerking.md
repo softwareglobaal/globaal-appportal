@@ -2,6 +2,15 @@
 
 *Laatst bijgewerkt: 2026-06-18*
 
+> ℹ️ **Status (per 2026-06-26): origineel ontwerpvoorstel — deels achterhaald.**
+> Dit document beschrijft een *zelf te bouwen* orchestrator (Agent SDK + preview +
+> publiceer-paneel). In de praktijk is gekozen voor de **kant-en-klare route via
+> Claude Code on the web** (claude.ai/code) met **GitHub-PR's + CI/CD-auto-deploy**
+> — zie `TECHNICAL-REFERENCE.md` §13.2–§13.3. De *doelen* (niet-technisch bewerken,
+> alles via `main`, rollback, audit) zijn daarmee gerealiseerd; de custom
+> orchestrator/preview-instantie uit §4 hieronder is **niet gebouwd**. Bewaard als
+> referentie voor de oorspronkelijke afwegingen (o.a. de model-cascade).
+
 ## In één zin
 Een niet-technische app-beheerder past z'n app aan door in een **tekstvak** te typen wat hij wil; een AI-agent maakt de wijziging op een aparte versie, toont een **preview**, en pas na **[Publiceren]** gaat het live — met volledige versiegeschiedenis op GitHub en altijd een weg terug.
 

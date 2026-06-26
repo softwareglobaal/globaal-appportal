@@ -540,8 +540,8 @@ bijwerken. De Excel is enkel de startdata; de waarheid leeft in de database.
 `docker-compose.override.yml`. Repo: `softwareglobaal/telefoonregister`.
 
 ### 6D.1 Werking
-- **Node.js** (Express + **Knex**), standaard **SQLite** (`better-sqlite3`); kan
-  zonder codewijziging naar PostgreSQL (Knex is db-agnostisch). Data in het
+- **Node.js** met **Knex** (query-laag), standaard **SQLite** (`better-sqlite3`);
+  kan zonder codewijziging naar PostgreSQL (Knex is db-agnostisch). Data in het
   Docker-volume `appportal_telefoonregister-data` (`/app/data`).
 - **Voorkant**: lijst met 4 velden (Telefoonnummer, Toegewezen aan, Functie,
   Status); detail achter de klik. **Live sync** via Server-Sent Events —
@@ -655,14 +655,16 @@ meertalig (NL/FR/EN/DE). Repo: `softwareglobaal/globaal-renovision`.
 |---|---|
 | `.env` | alle secrets + `BASE_DOMAIN`, `OMV_UPSTREAM`, `CERTGEN_DISABLE` (gitignored) |
 | `.env.production` | sjabloon voor de VM (BASE_DOMAIN=globaal.be) |
-| `apps.yaml` | app-catalogus + rol-mapping voor de tegels |
+| `apps.yaml` | app-catalogus + rol-mapping voor de tegels (omv, schuldentracker, chaos, agenda, telefoonregister) |
 | `docker-compose.yml` | de hele stack |
+| `docker-compose.override.yml` | extra in-stack service `app-telefoonregister` + volume (zie §6D) |
 | `nginx/templates/*.template` | nginx-serverblokken (envsubst met `${BASE_DOMAIN}`) |
 | `nginx/snippets/forward-auth.conf` | het forward-auth-blok (gedeeld door de apps) |
 | `nginx/templates/40-n8n.conf.template` | n8n-doorsturing (VM-specifiek) |
 | `scripts/configure-authentik.sh` | groepen, OIDC, proxy-providers, TOTP, sessies |
 | `scripts/setup-authentik.py` | de daadwerkelijke Authentik-config (via `ak shell`) |
 | `scripts/add-omv-app.py` | registreert de OMV-provider apart |
+| `scripts/add-*-app.py` | per-app Authentik-registratie (o.a. `add-kosten-app.py`, `add-agenda-app.py`, `add-stage-app.py`, `add-schuldentracker.py`, `add-monitoring.py`) |
 | `scripts/fix-domains.py` | corrigeert providers/redirect/host naar het echte domein (zie §9.6) |
 | `scripts/ak-exec.sh` | helper om een python-bestand in de authentik-container te draaien |
 | `vm/omv.service` | het systemd-servicebestand voor OMV |
@@ -765,8 +767,10 @@ toegevoegd aan de `socketio.run(...)`-regel (acceptabel voor een intern dashboar
 **9.9 OMV gaf 502 via de portal** — nginx kon `host.docker.internal` niet
 opzoeken (die naam staat in `/etc/hosts`, niet in de Docker-DNS die de resolver
 gebruikt). *Fix:* `OMV_UPSTREAM` op het **host-gateway-IP** gezet
-(`http://172.20.0.1:5000`, het IP dat de nginx-container voor de host ziet) i.p.v.
-de hostnaam.
+(`http://172.17.0.1:5000`, het docker0-IP dat de nginx-container voor de host
+ziet) i.p.v. de hostnaam. Dit is hetzelfde host-gateway-IP dat álle host-apps
+gebruiken (Factuurrouter 8787, Stage 8088, Schuldentracker 5050, Kosten 8090,
+CHAOS 8095, Agenda 5060, RenoVision 8100/8101).
 
 **9.10 AWS-VM kan z'n eigen publieke IP niet bereiken** — `curl` vanaf de VM naar
 `https://portal.globaal.be` faalde, terwijl het van buitenaf wél werkt. Dit is
