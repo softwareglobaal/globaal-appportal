@@ -30,3 +30,15 @@ apps:
     subdomain: telefoonregister
     roles: [telefoonregister]
     status: active
+  - id: facturatie
+    name: Uitgaande Facturatie
+    description: Octopus-facturen, betalingen en schijven (H-Architects)
+    subdomain: facturatie
+    roles: [facturatie]
+    status: active
+  - id: barstenscheuren
+    name: Barsten & Scheuren
+    description: Stabiliteitsverslagen — barsten en scheuren
+    subdomain: barstenscheuren
+    roles: [admin, manager, barstenscheuren]
+    status: active
