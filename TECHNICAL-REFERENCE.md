@@ -181,7 +181,7 @@ cutover niet geraakt:
 | `agenda.globaal.be` | Beschikbaarheid Mehdi op de host, `http://172.17.0.1:5060` | forward auth (`agenda-bekijken`/`-volledig`/`-architect`) |
 | `renovision.globaal.be` | RenoVision (gedeeld) op de host, `http://172.17.0.1:8100` | forward auth (`renovision`/`-bewerken`) |
 | `renovision-mehdi.globaal.be` | RenoVision (Mehdi-sandbox), `http://172.17.0.1:8101` | forward auth (`renovision-mehdi`/`-bewerken`) |
-| `status.globaal.be` | Uptime Kuma, `http://uptime-kuma:3001` | forward auth (beheerders) |
+| `status.globaal.be` | Uptime Kuma, `http://uptime-kuma:3001` | forward auth (`admin`/`manager`) |
 | `factorydocs/inventory/finance/maintenance.globaal.be` | `app-*:300x` (demo-stubs; Authentik-providers verwijderd, containers draaien nog) | forward auth |
 | `n8n.globaal.be` | `n8n-n8n-1:5678` | gewone doorsturing (n8n's eigen login) |
 | `data.globaal.be` | *(geen server-blok)* | n.v.t. — vervangen door `omv.globaal.be` |
@@ -406,7 +406,7 @@ Google-product). Die is **volledig vervangen** door Google's eigen Gmail API in
   8787 mag bereiken (zie §9.12). Extern blijft 8787 dicht via de AWS-security-group.
 - **Authentik:** proxy-provider `factuurrouter-proxy` + applicatie
   **"Factuurrouter"** (slug `factuurrouter`) + groep **`factuurrouter`**, toegewezen
-  aan de embedded outpost. Toegang: Mehdi + Angela + akadmin. *(Bij het hernoemen
+  aan de embedded outpost. Toegang (as-built): akadmin + Mehdi. *(Bij het hernoemen
   van `external_host` via de ORM moet je `provider.set_oauth_defaults()` draaien,
   anders blijven de OAuth-`redirect_uris` op de oude host staan — zie §9.14.)*
 - DNS: gedekt door de bestaande wildcard `*.globaal.be` — geen apart record nodig.
@@ -521,8 +521,8 @@ het vervangt een Excel-deurwaarderstracker. Draait **op de host** als Flask-app
 ### 6C.4 Nginx / SSO / openstaand
 - Nginx-blok `41-schuldentracker.conf.template` (forward auth), upstream
   `http://172.17.0.1:5050`; `sudo ufw allow 5050/tcp`. Authentik: proxy-provider +
-  app + groepen **`schuldentracker`** (zien) en **`schuldentracker-bewerken`**
-  (Mehdi, Angela). DNS via de wildcard.
+  app + groepen **`schuldentracker`** (zien: akadmin, Angela, Mehdi) en
+  **`schuldentracker-bewerken`** (bewerken: **alleen Angela**). DNS via de wildcard.
 - **Nog open:** (a) back-up van `data/finance.db`, (b) in git/CI/auto-deploy brengen
   (repo `globaal-schuldentracker`), (c) **de OpenAI-key in `.env` roteren** (stond in
   platte tekst, ook in de OneDrive-kopie).
@@ -540,7 +540,7 @@ bijwerken. De Excel is enkel de startdata; de waarheid leeft in de database.
 `docker-compose.override.yml`. Repo: `softwareglobaal/telefoonregister`.
 
 ### 6D.1 Werking
-- **Node.js** met **Knex** (query-laag), standaard **SQLite** (`better-sqlite3`);
+- **Node.js** (**Express** + **Knex**), standaard **SQLite** (`better-sqlite3`);
   kan zonder codewijziging naar PostgreSQL (Knex is db-agnostisch). Data in het
   Docker-volume `appportal_telefoonregister-data` (`/app/data`).
 - **Voorkant**: lijst met 4 velden (Telefoonnummer, Toegewezen aan, Functie,
@@ -866,22 +866,23 @@ gebruiken. Zo kan iemand wel bij app X maar niet bij app Y, ongeacht z'n
 afdeling. (Voorbeeld: Siyan zit organisatorisch bij management, maar niet in de
 groep `schuldentracker`, dus ziet die app niet.)
 
-| Groep | Geeft toegang tot | Leden |
+| Groep | Geeft toegang tot | Leden (as-built 2026-06-26) |
 |---|---|---|
-| `schuldentracker` / `-bewerken` | Schuldentracker (zien / bewerken) | Mehdi, Angela |
-| `factuurrouter` | Factuurrouter | Mehdi, Angela, akadmin |
-| `kosten` | Kosten-dashboard | Mehdi, Angela, Siyan, akadmin |
-| `stagebeoordeling` / `-bewerken` | Stagebeoordeling (zien / **alleen Raisha** bewerkt) | Raisha, Mehdi, akadmin |
-| `telefoonregister` / `-editors` | Telefoonregister (zien / bewerken) | (in te vullen) |
-| `chaos` | CHAOS Taskforce | (in te vullen) |
-| `agenda-bekijken` / `-volledig` / `-architect` | Beschikbaarheid Mehdi (toegang / details overal / architect-kalenders) | Mehdi (volledig) |
-| `renovision` / `-bewerken` | RenoVision (gedeeld) | (in te vullen) |
-| `renovision-mehdi` / `-bewerken` | RenoVision (Mehdi-sandbox) | Mehdi |
+| `schuldentracker` / `-bewerken` | Schuldentracker (zien / bewerken) | akadmin, Angela, Mehdi · **bewerken: alleen Angela** |
+| `factuurrouter` | Factuurrouter | akadmin, Mehdi |
+| `kosten` | Kosten-dashboard | akadmin, Angela, Mehdi |
+| `stagebeoordeling` / `-bewerken` | Stagebeoordeling (zien / bewerken) | akadmin, Mehdi, Raisha · **bewerken: alleen Raisha** |
+| `telefoonregister` / `-editors` | Telefoonregister (zien / bewerken) | akadmin, Angela, Mehdi, Siyan · **bewerken: akadmin, Siyan** |
+| `chaos` | CHAOS Taskforce | Angela, Mehdi, Siyan |
+| `agenda-bekijken` / `-volledig` / `-architect` | Beschikbaarheid Mehdi (toegang / details overal / architect-kalenders) | bekijken: Angela, Matthew, Mehdi, Siyan · volledig: Angela, Mehdi, Siyan · architect: — |
+| `renovision` / `-bewerken` | RenoVision (gedeeld) | akadmin, Mehdi, Samad · **bewerken: akadmin, Samad** |
+| `renovision-mehdi` / `-bewerken` | RenoVision (Mehdi-sandbox) | akadmin, Mehdi |
 | `admin` *(optioneel)* | alle apps | beheerders |
 
 > **OMV** gebruikt `admin`/`manager` (er is géén aparte `omv`-groep).
-> **`status.globaal.be`** (Uptime Kuma) staat achter forward auth voor beheerders.
-> Er bestaat daarnaast een meta-groep **`toegangsbeheerders`**.
+> **`status.globaal.be`** (Uptime Kuma) is gebonden aan **`admin`/`manager`**.
+> De groep `manager` = akadmin, Mehdi. Er bestaat daarnaast een meta-groep
+> **`toegangsbeheerders`** (lid: Siyan).
 
 > **Patroon lezen vs. bewerken:** een app kan een tweede groep `<app>-bewerken`
 > hebben. De app bindt aan de zien-groep; schrijfacties controleren server-side op
@@ -926,8 +927,9 @@ twee kiezen (Authentik's launcher is de eenvoudigste, onderhoudsvrije optie).
   opnemen.
 - **Schuldentracker:** ✅ gekoppeld — **nu met eigen sectie §6C**. Flask-schulden-
   dossier-tracker op `schuldentracker.globaal.be` (systemd `schuldentracker`, poort
-  5050), SSO-shim met lezen/bewerken (`schuldentracker` / `schuldentracker-bewerken`,
-  leden Mehdi/Angela). **Nog open:** (a) back-up van `data/finance.db`, (b) in
+  5050), SSO-shim met lezen/bewerken (`schuldentracker`: akadmin/Angela/Mehdi /
+  `schuldentracker-bewerken`: alleen Angela). **Nog open:** (a) back-up van
+  `data/finance.db`, (b) in
   git/CI/auto-deploy brengen (`globaal-schuldentracker`), (c) **OpenAI-key in `.env`
   roteren** (stond in platte tekst).
 - **Nieuwe apps gedocumenteerd (2026-06-26):** Telefoonregister (§6D), CHAOS
@@ -1045,8 +1047,8 @@ herstarten. Deploy-log: `~/deploy-<app>.log`.
 ### 13.4 Kosten-dashboard (software-uitgaven) — `kosten.globaal.be`
 Interactief overzicht van software-/abonnementskosten uit **KBC/VISA
 kredietkaart-afschriften**. Repo `globaal-kosten`, VM-map `~/kosten`, systemd
-`kosten.service` op **poort 8090**, achter SSO (groep `kosten`: Mehdi, Angela,
-Siyan, akadmin). De **volledige pipeline draait server-side** ("alles op de
+`kosten.service` op **poort 8090**, achter SSO (groep `kosten`: akadmin, Angela,
+Mehdi). De **volledige pipeline draait server-side** ("alles op de
 server"):
 - `extract_cc.py` — PyMuPDF leest de PDF-afschriften in `statements/`, classificeert
   per firma/leverancier → `cc_transactions_clean.csv`.
