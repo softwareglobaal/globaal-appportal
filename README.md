@@ -179,15 +179,21 @@ the Authentik group(s) bound to that app — something Authentik's own admin UI
 does not show as a single screen. It reflects **access only**; in-app roles
 stay each application's own concern.
 
-It needs a read-only Authentik API token:
+It needs a read-only Authentik API token. **Scripted (recommended)** — creates
+a `portal-readonly` service account with only `view_user` + `view_group` and a
+non-expiring API token, then prints the key (idempotent, re-runnable):
 
-1. *Directory → Users → Create a service account* (e.g. `portal-readonly`).
-   Add it to a group, or grant it the *Can view Group* / *Can view User*
-   permissions (read-only is enough — it never writes).
-2. *Directory → Tokens and App passwords → Create* → assign it to that service
-   account, intent **API**. Copy the token key.
-3. Put it in `.env` as `AUTHENTIK_API_TOKEN=...` and reload:
-   `docker compose up -d portal`.
+```bash
+sh scripts/ak-exec.sh scripts/add-portal-readonly-token.py
+```
+
+Copy the printed `AUTHENTIK_API_TOKEN=...` line into `.env`, then reload:
+`docker compose up -d portal`.
+
+**Manual alternative** — *Directory → Users → Create a service account*
+(`portal-readonly`); grant it *Can view Group* / *Can view User*; then
+*Directory → Tokens and App passwords → Create* assigned to that account with
+intent **API**; copy the key into `AUTHENTIK_API_TOKEN`.
 
 Leave `AUTHENTIK_API_TOKEN` empty to keep the page disabled (it then shows a
 "not configured" notice instead of querying Authentik).
