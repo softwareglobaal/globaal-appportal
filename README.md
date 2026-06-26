@@ -170,6 +170,34 @@ Policy / Group / User Bindings → Bind existing Group*:
    logging in again (single logout).
 6. Auth events and app redirects are in `logs/portal/portal.log`.
 
+### 2.9 Access overview (who can use which app) — optional
+
+The portal has an admin-only **Access overview** page (`/access`, linked from
+the top of the portal for `admin` users). For every app in
+[apps.yaml](apps.yaml) it lists the users who can open it, reconstructed from
+the Authentik group(s) bound to that app — something Authentik's own admin UI
+does not show as a single screen. It reflects **access only**; in-app roles
+stay each application's own concern.
+
+It needs a read-only Authentik API token. **Scripted (recommended)** — creates
+a `portal-readonly` service account with only `view_user` + `view_group` and a
+non-expiring API token, then prints the key (idempotent, re-runnable):
+
+```bash
+sh scripts/ak-exec.sh scripts/add-portal-readonly-token.py
+```
+
+Copy the printed `AUTHENTIK_API_TOKEN=...` line into `.env`, then reload:
+`docker compose up -d portal`.
+
+**Manual alternative** — *Directory → Users → Create a service account*
+(`portal-readonly`); grant it *Can view Group* / *Can view User*; then
+*Directory → Tokens and App passwords → Create* assigned to that account with
+intent **API**; copy the key into `AUTHENTIK_API_TOKEN`.
+
+Leave `AUTHENTIK_API_TOKEN` empty to keep the page disabled (it then shows a
+"not configured" notice instead of querying Authentik).
+
 ---
 
 ## 3. Add a fifth application later

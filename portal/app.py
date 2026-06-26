@@ -9,6 +9,7 @@ import os
 from datetime import timedelta
 from logging.handlers import RotatingFileHandler
 
+import requests
 import yaml
 from authlib.integrations.flask_client import OAuth
 from flask import Flask, abort, redirect, render_template, session, url_for
@@ -16,8 +17,14 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 BASE_DOMAIN = os.environ["BASE_DOMAIN"]
 AUTH_BASE = f"https://auth.{BASE_DOMAIN}"
+AUTH_API = f"{AUTH_BASE}/api/v3"
 APPS_FILE = os.environ.get("APPS_FILE", "/app/apps.yaml")
 LOG_FILE = os.environ.get("PORTAL_LOG_FILE", "/var/log/portal/portal.log")
+# Read-only Authentik API token (service account) used by the access overview.
+# Empty = feature disabled (the page shows a "not configured" notice instead).
+AUTHENTIK_API_TOKEN = os.environ.get("AUTHENTIK_API_TOKEN", "").strip()
+# Only members of this Authentik group may open the access overview.
+ADMIN_GROUP = os.environ.get("PORTAL_ADMIN_GROUP", "admin")
 
 app = Flask(__name__)
 app.config.update(
@@ -62,6 +69,46 @@ def current_user():
     return session.get("user")
 
 
+def is_admin(user):
+    return ADMIN_GROUP in set((user or {}).get("groups", []))
+
+
+def fetch_group_members():
+    """Map every Authentik group name to its member users.
+
+    Returns {group_name: [{username, name, email, is_active}, ...]}.
+    Raises requests.RequestException on transport/HTTP errors so the caller
+    can show a clear message instead of a half-empty table.
+    """
+    headers = {"Authorization": f"Bearer {AUTHENTIK_API_TOKEN}"}
+    members = {}
+    page = 1
+    while True:
+        resp = requests.get(
+            f"{AUTH_API}/core/groups/",
+            headers=headers,
+            params={"include_users": "true", "page": page, "page_size": 100},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        for group in data.get("results", []):
+            members[group["name"]] = [
+                {
+                    "username": u.get("username"),
+                    "name": u.get("name", ""),
+                    "email": u.get("email", ""),
+                    "is_active": u.get("is_active", True),
+                }
+                for u in group.get("users_obj", [])
+            ]
+        # Authentik paginates with a numeric next-page index (0 = last page).
+        nxt = (data.get("pagination") or {}).get("next") or 0
+        if not nxt:
+            return members
+        page = nxt
+
+
 @app.route("/")
 def index():
     user = current_user()
@@ -73,7 +120,7 @@ def index():
         for a in load_apps()
         if groups & set(a.get("roles", []))
     ]
-    return render_template("portal.html", user=user, tiles=tiles)
+    return render_template("portal.html", user=user, tiles=tiles, is_admin=is_admin(user))
 
 
 @app.route("/login")
@@ -116,6 +163,57 @@ def go(app_id):
     # Plain redirect — SSO continuity comes from the Authentik session cookie
     # checked by forward auth on the app's subdomain. No tokens in URLs.
     return redirect(f"https://{target['subdomain']}.{BASE_DOMAIN}/")
+
+
+@app.route("/access")
+def access_overview():
+    """Admin-only: per application, which users can access it.
+
+    Authentik has no native "all effective users for app X" screen — access is
+    expressed as group/user bindings. We reconstruct it from apps.yaml (the
+    group(s) bound to each app) plus the live group membership from the
+    Authentik API, and union the members per app.
+    """
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+    if not is_admin(user):
+        events.info("ACCESS_DENIED user=%s app=access-overview", user["username"])
+        abort(403)
+
+    rows, error = [], None
+    if not AUTHENTIK_API_TOKEN:
+        error = (
+            "AUTHENTIK_API_TOKEN is not set, so the portal cannot query "
+            "Authentik. See the README (\"Access overview\") to create a "
+            "read-only service-account token."
+        )
+    else:
+        try:
+            group_members = fetch_group_members()
+        except requests.RequestException as exc:
+            events.info("ACCESS_OVERVIEW_ERROR user=%s err=%s", user["username"], exc)
+            error = f"Could not reach the Authentik API: {exc}"
+        else:
+            for a in load_apps():
+                seen = {}
+                for role in a.get("roles", []):
+                    for member in group_members.get(role, []):
+                        # Dedup across groups; a user in two bound groups counts once.
+                        seen.setdefault(member["username"], member)
+                rows.append(
+                    {
+                        "app": a,
+                        "groups": a.get("roles", []),
+                        "users": sorted(
+                            seen.values(),
+                            key=lambda m: (m["username"] or "").lower(),
+                        ),
+                    }
+                )
+        events.info("ACCESS_OVERVIEW_VIEW user=%s", user["username"])
+
+    return render_template("access.html", user=user, rows=rows, error=error)
 
 
 @app.route("/logout")
