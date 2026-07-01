@@ -736,12 +736,20 @@ groep `schuldentracker`, dus ziet die app niet.)
 `apps.yaml` bepaalt de **tegel-zichtbaarheid**; de Authentik group-bindings per
 applicatie zijn de **handhaving**. Houd beide in sync.
 
-### 12.2 Twee app-overzichten (ontwerpkeuze, open)
-Er bestaan momenteel twee "applicaties"-pagina's: onze **eigen Flask-portal**
-(`portal.globaal.be`, eenvoudig, custom) én **Authentik's ingebouwde launcher**
-(`auth.globaal.be/if/user/`, gepolijst, onderhoudsvrij). De eigen portal is
-gebouwd omdat de oorspronkelijke opdracht dat voorschreef. Op termijn één van de
-twee kiezen (Authentik's launcher is de eenvoudigste, onderhoudsvrije optie).
+### 12.2 App-overzicht: Authentik-launcher is de home (Flask-portal afgedankt)
+**Besloten en uitgevoerd** (dit was eerder een open keuze): **Authentik's ingebouwde
+launcher** (`auth.globaal.be/if/user/`) is hét startdashboard. De oude custom
+**Flask-portal** (`portal.globaal.be`) is **afgedankt**:
+- nginx stuurt `portal.globaal.be` met een catch-all `return 302` door naar de
+  launcher (`nginx/templates/20-portal.conf.template`);
+- `scripts/consolidate-launcher.py` heeft de placeholder-apps opgeruimd én de
+  **Portal-applicatie + de `portal-oidc`-provider uit Authentik verwijderd**
+  (geverifieerd: beide bestaan niet meer).
+
+Gevolg voor nieuwe features: **niet in de Flask-portal bouwen** (die is onbereikbaar
+en heeft geen OIDC-provider meer). Een nieuw dashboard is een **forward-auth-app** op
+een eigen subdomein dat als **tegel** in de launcher verschijnt — zie §14 voor het
+eerste voorbeeld (Medewerkers).
 
 ### 12.3 Roadmap — geplande volgende stappen (in volgorde)
 1. **Uptime Kuma** opzetten (app-monitoring): online/offline + responstijd per
@@ -913,7 +921,65 @@ de auto-deploy herstart **beide** services (`factuurrouter.service` +
 
 ---
 
-*Laatst bijgewerkt: 2026-06-22 — **§6 (OMV-pipeline)** uitgebreid met de volledige
+## 14. Centrale gebruikersdatabase & Medewerkers-app
+
+De **centrale gebruikersdatabase** is de bron van waarheid voor "wie is een persoon";
+van daaruit worden mensen aan dashboards gekoppeld. De **Medewerkers-app** is het eerste
+dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
+
+> Deze sectie beschrijft de **as-built**-realiteit. De bestanden staan sinds 2026-07-01
+> op `main`: de branch `vm-as-built-2026-06-26` is verzoend met `main` en opgeruimd
+> (drift-opruiming §12.3 afgerond) — VM-realiteit + docs op één branch.
+
+### 14.1 Database `appportal` (in dezelfde Postgres als Authentik)
+- Naast de `authentik`-database draait een **tweede database `appportal`** in dezelfde
+  `postgresql`-container. Cross-grens (appportal ↔ authentik) loopt via de Authentik-**API**,
+  nooit via SQL.
+- Schema `kern`: **`persoon`** (de hub) + **`afdeling`** (gecontroleerde lookup). Elke
+  persoon heeft een onveranderlijke `id` (UUID) — dé FK voor alle dashboards — plus o.a.
+  `voornaam`/`achternaam`, `email` (citext, uniek), `afdeling_id`, `rol`
+  (Lid/Hoofd/Partner/Management), `hr_nummer`, `locatie`, `in_dienst`, en de
+  loginkoppeling `authentik_sub` + `authentik_username` (leeg = geen login).
+- Spoke-schema's (bv. `schuldentracker`, `omv`) verwijzen met `persoon_id` (UUID,
+  `ON DELETE RESTRICT`) naar `kern.persoon`, zodat een 360°-profiel een gewone join is.
+- **Per-app DB-rollen** (governance): elke app krijgt een eigen rol met **alleen-lezen**
+  op `kern` en rechten op enkel het eigen schema. De Medewerkers-app gebruikt de
+  read-only rol **`portal`** (zie `appportal-portal-role.sql`).
+- SQL-bestanden: `DDL-appportal.sql` (schema), `SEED-kern-persoon.sql` (34 medewerkers),
+  `appportal-portal-role.sql` (rol + grants).
+
+### 14.2 Medewerkers-app (`medewerkers.globaal.be`)
+- **Forward-auth-app** (Flask), map `medewerkers/`, compose-service **`app-medewerkers`**
+  in `docker-compose.override.yml` (poort 3007), nginx-blok
+  `nginx/templates/44-medewerkers.conf.template`. Registratie in Authentik
+  (proxy-provider + applicatie + group-binding + embedded outpost) via
+  `scripts/add-medewerkers-app.py`.
+- Toont de **medewerkerslijst** (zoeken op naam, filter per afdeling, lijst/kaart-weergave,
+  gegroepeerd per afdeling) en per persoon een **360°-profiel**. Identiteit + RBAC komen uit
+  de `X-authentik-*`-headers; alleen **admin/manager** hebben toegang (Authentik
+  group-binding + check in de app). Leest `kern.persoon` via de `portal`-rol; de
+  connectiestring staat in `.env` als `APPPORTAL_DB_URL`.
+
+### 14.3 Authentik-koppeling & openstaand
+- Bestaande Authentik-accounts zijn **handmatig gekoppeld** aan hun persoon door
+  `authentik_username` + `authentik_sub` (de Authentik-`uuid`) te zetten. Gekoppelde
+  profielen tonen "gekoppeld via Authentik". `akadmin` is bewust **niet** gekoppeld
+  (break-glass admin, geen persoon; z'n e-mail is losgekoppeld van `mch@h-architects.be`).
+- **Nog open:** (a) het profiel-blok "Toegang (Authentik)" vullen met de echte groepen/apps
+  van een persoon (read-only Authentik-API-token); (b) automatische koppeling bij eerste
+  login bestaat niet meer (liep via de afgedankte OIDC-portal) — koppelen gebeurt nu
+  bewust/admin; (c) ontbrekende HR-nummers/familienamen/e-mails aanvullen.
+
+> **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
+> `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
+
+---
+
+*Laatst bijgewerkt: 2026-07-01 — **drift-opruiming afgerond**: branch
+`vm-as-built-2026-06-26` verzoend met `main` en opgeruimd (VM-realiteit + docs op één
+branch; §12.3). Eerder (2026-06-30): **§14 (centrale gebruikersdatabase + Medewerkers-app)**
+toegevoegd en **§12.2** rechtgezet (Authentik-launcher is de home, Flask-portal afgedankt).
+Eerder (2026-06-22): **§6 (OMV-pipeline)** uitgebreid met de volledige
 scrape→download→merge→extract-keten (§6.1–6.5), inclusief **§6.5 anti-blokkering**
 (residentiële SOCKS-proxy + Anubis-bootstrap + troubleshooting — voorkomt herhaling
 van de "RetryError"-zoektocht).
