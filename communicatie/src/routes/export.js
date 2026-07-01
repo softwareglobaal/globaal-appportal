@@ -6,7 +6,7 @@ const knex = require('../db');
 
 const router = express.Router();
 
-const persoonNaam = "concat(p.voornaam, ' (', coalesce(pa.naam, '?'), ')')";
+const persoonNaam = "concat(p.voornaam, ' (', coalesce(pa.naam, ''), ')')";
 
 /**
  * Exporteer de volledige dataset naar .xlsx (tabbladen Nummers, E-mailadressen,

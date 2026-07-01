@@ -58,7 +58,7 @@ function fkFout(e, res) {
 }
 
 // Display-naam in Zoom-formaat: Voornaam (Afdeling) — vereist join kern.afdeling as pa.
-const persoonNaam = "concat(p.voornaam, ' (', coalesce(pa.naam, '?'), ')')";
+const persoonNaam = "concat(p.voornaam, ' (', coalesce(pa.naam, ''), ')')";
 
 // ---- Wie ben ik (uit Authentik-proxy) -------------------------------------
 router.get('/me', (req, res) => {
