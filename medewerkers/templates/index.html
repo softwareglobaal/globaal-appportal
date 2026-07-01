@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block content %}
+{% if error %}
+<p class="notice">{{ error }}</p>
+{% else %}
+<div class="staff-head">
+    <h1>Medewerkers</h1>
+    <span class="staff-count">{{ total }} personen, {{ groepen|length }} afdelingen</span>
+</div>
+
+<div class="staff-toolbar">
+    <input type="search" id="q" class="t-search" placeholder="Zoek op naam" autocomplete="off">
+    <select id="afd" class="t-select">
+        <option value="">Alle afdelingen</option>
+        {% for g in groepen %}<option value="{{ g.naam }}">{{ g.naam }}</option>{% endfor %}
+    </select>
+    <div class="t-views" role="group" aria-label="Weergave">
+        <button type="button" id="btn-list" class="t-view is-active">Lijst</button>
+        <button type="button" id="btn-cards" class="t-view">Kaarten</button>
+    </div>
+</div>
+
+<p id="empty-msg" class="empty" hidden>Geen medewerkers gevonden.</p>
+
+<div id="view-list">
+<table class="staff-table">
+    <thead>
+        <tr><th class="naam">Naam</th><th class="rol">Rol</th><th class="loc">Locatie</th><th class="hr">HR-nummer</th></tr>
+    </thead>
+    {% for groep in groepen %}
+    <tbody data-afdeling="{{ groep.naam }}">
+        <tr class="staff-group"><td colspan="4">{{ groep.naam }} <span>{{ groep.leden|length }}</span></td></tr>
+        {% for p in groep.leden %}
+        <tr class="person-row" data-naam="{{ p.volledige_naam|lower }}" data-afdeling="{{ groep.naam }}">
+            <td class="naam"><a href="{{ url_for('persoon', pid=p.id) }}">{{ p.volledige_naam }}</a></td>
+            <td class="rol"><span class="role role-{{ p.rol|lower }}">{{ p.rol }}</span></td>
+            <td class="loc">{{ p.locatie }}</td>
+            <td class="hr">{{ p.hr_nummer or '' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    {% endfor %}
+</table>
+</div>
+
+<div id="view-cards" hidden>
+    {% for groep in groepen %}
+    <section class="afd-group" data-afdeling="{{ groep.naam }}">
+        <h2 class="afd-title">{{ groep.naam }} <span>{{ groep.leden|length }}</span></h2>
+        <div class="card-grid">
+            {% for p in groep.leden %}
+            <a class="person-card" href="{{ url_for('persoon', pid=p.id) }}"
+               data-naam="{{ p.volledige_naam|lower }}" data-afdeling="{{ groep.naam }}">
+                <span class="pc-naam">{{ p.volledige_naam }}</span>
+                <span class="pc-meta"><span class="role role-{{ p.rol|lower }}">{{ p.rol }}</span> <span class="pc-loc">{{ p.locatie }}</span>{% if p.hr_nummer %} <span class="pc-hr">HR {{ p.hr_nummer }}</span>{% endif %}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+</div>
+
+<script>
+(function () {
+    var q = document.getElementById('q');
+    var afd = document.getElementById('afd');
+    var list = document.getElementById('view-list');
+    var cards = document.getElementById('view-cards');
+    var emptyMsg = document.getElementById('empty-msg');
+    var btnList = document.getElementById('btn-list');
+    var btnCards = document.getElementById('btn-cards');
+
+    function matches(el, term, dep) {
+        return (!term || el.dataset.naam.indexOf(term) !== -1)
+            && (!dep || el.dataset.afdeling === dep);
+    }
+
+    function filter() {
+        var term = q.value.trim().toLowerCase();
+        var dep = afd.value;
+        var anyVisible = false;
+        list.querySelectorAll('tbody[data-afdeling]').forEach(function (tb) {
+            var vis = 0;
+            tb.querySelectorAll('tr.person-row').forEach(function (tr) {
+                var ok = matches(tr, term, dep);
+                tr.style.display = ok ? '' : 'none';
+                if (ok) { vis++; anyVisible = true; }
+            });
+            tb.style.display = vis ? '' : 'none';
+        });
+        cards.querySelectorAll('section.afd-group').forEach(function (sec) {
+            var vis = 0;
+            sec.querySelectorAll('.person-card').forEach(function (c) {
+                var ok = matches(c, term, dep);
+                c.style.display = ok ? '' : 'none';
+                if (ok) vis++;
+            });
+            sec.style.display = vis ? '' : 'none';
+        });
+        emptyMsg.hidden = anyVisible;
+    }
+
+    function setView(isList) {
+        list.hidden = !isList;
+        cards.hidden = isList;
+        btnList.classList.toggle('is-active', isList);
+        btnCards.classList.toggle('is-active', !isList);
+    }
+
+    q.addEventListener('input', filter);
+    afd.addEventListener('change', filter);
+    btnList.addEventListener('click', function () { setView(true); });
+    btnCards.addEventListener('click', function () { setView(false); });
+    filter();
+})();
+</script>
+{% endif %}
+{% endblock %}
