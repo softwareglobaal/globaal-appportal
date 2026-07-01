@@ -935,14 +935,16 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
 - Naast de `authentik`-database draait een **tweede database `appportal`** in dezelfde
   `postgresql`-container. Cross-grens (appportal ↔ authentik) loopt via de Authentik-**API**,
   nooit via SQL.
-- Schema `kern`: **`persoon`** (de hub), **`afdeling`** + **`firma`** (gecontroleerde lookups). Elke
+- Schema `kern`: **`persoon`** (de hub), **`afdeling`**, **`firma`** + **`leverancier`**
+  (gecontroleerde lookups). Elke
   persoon heeft een onveranderlijke `id` (UUID) — dé FK voor alle dashboards — plus o.a.
   `voornaam`/`achternaam`, `email` (citext, uniek), `afdeling_id`, `rol`
   (Lid/Hoofd/Partner/Management), `hr_nummer`, `locatie`, `in_dienst`, en de
   loginkoppeling `authentik_sub` + `authentik_username` (leeg = geen login).
-- Spoke-schema's (bv. `schuldentracker`, `omv`, **`kosten`** — het kosten-dashboard)
-  verwijzen met `persoon_id` (UUID, `ON DELETE RESTRICT`) naar `kern.persoon`, zodat een
-  360°-profiel een gewone join is. ⚠ Aandachtspunt: `kosten.firma` is een **eigen, tweede
+- Spoke-schema's (bv. `schuldentracker`, `omv`, **`kosten`** — het kosten-dashboard —
+  en **`communicatie`** — het Communicatie-dashboard, §14.5) verwijzen met `persoon_id`
+  (UUID, `ON DELETE RESTRICT`) naar `kern.persoon`, zodat een 360°-profiel een gewone
+  join is. ⚠ Aandachtspunt: `kosten.firma` is een **eigen, tweede
   firmalijst** (text-id's) naast `kern.firma` — later te verzoenen (definitieboek-principe:
   één lijst per begrip).
 - **`kern.firma`** — centrale firmalijst (13 bedrijven van de groep): `id` (uuid), `naam`,
@@ -973,11 +975,17 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   `nginx/templates/44-medewerkers.conf.template`. Registratie in Authentik
   (proxy-provider + applicatie + group-binding + embedded outpost) via
   `scripts/add-medewerkers-app.py`.
-- Toont de **medewerkerslijst** (zoeken op naam, filter per afdeling, lijst/kaart-weergave,
-  gegroepeerd per afdeling) en per persoon een **360°-profiel**. Identiteit + RBAC komen uit
+- Toont de **medewerkerslijst**: platte lijst op volledige naam met kolommen
+  Naam/Afdeling/Rol/In dienst/Diensten voor/Locatie/HR-nummer; zoeken, filters op
+  **afdeling en rol**, en een **groepeer-knop** (Geen / Afdeling / Rol) die in lijst- én
+  kaartweergave werkt. Per persoon een **360°-profiel**. Identiteit + RBAC komen uit
   de `X-authentik-*`-headers; alleen **admin/manager** hebben toegang (Authentik
   group-binding + check in de app). Leest `kern.persoon` via de `portal`-rol; de
   connectiestring staat in `.env` als `APPPORTAL_DB_URL`.
+- **Naamconventie (display vs full):** de medewerkersdatabase toont de **volledige naam**
+  (voor- + familienaam — dit is de identiteitsbron); alle *andere* apps tonen personen in
+  het **Zoom-formaat `Voornaam (Afdeling)`**, live opgebouwd uit `kern.persoon` +
+  `kern.afdeling` (wijzigt iemand van afdeling, dan klopt de weergave overal vanzelf).
 - Het **360°-profiel** toont per persoon: **Toegang (Authentik)** — groepen + afgeleide
   apps (§14.3) — en **Telefoonnummers** uit het telefoonregister (§14.4). Beide via
   read-only API-calls, best-effort (ontbreekt de bron → nette fallback, app blijft werken).
@@ -1031,12 +1039,51 @@ De eerste échte spoke die naar `kern.persoon(id)` verwijst — het 360°-model 
 - **Los eindje:** de telefoonregister-repo draait op branch `claude/ecstatic-feynman-wctpk1`
   (niet `main`) — zelfde drift-patroon als appportal had; nog te verzoenen.
 
+### 14.5 Communicatie-dashboard (`communicatie.globaal.be`)
+De opvolger-in-opbouw van het telefoonregister: telefoonnummers **en** e-mailadressen,
+volledig gelinkt aan de centrale lijsten. De app van de collega
+(`telefoonregister.globaal.be`) blijft er **ongemoeid naast draaien** tot hij akkoord is.
+- **Stack:** kopie van de telefoonregister-codebase (Node/Express/Knex, map
+  `communicatie/`, service **`app-communicatie`**:3008, nginx-template
+  `45-communicatie.conf.template`), maar op **Postgres** — schema **`communicatie`** in de
+  appportal-DB met **échte FK's** naar `kern.persoon`/`kern.firma`/`kern.afdeling`/
+  `kern.leverancier`. DB-rol **`communicatie`** (leest kern, schrijft eigen schema,
+  beheert `kern.leverancier`); connectiestring `COMMUNICATIE_DB_URL` in `.env`
+  (Node-formaat `postgres://…`). Schema: migraties **002–004**.
+- **Datamodel** (terminologie volgt `DEFINITIEBOEK.md`): `nummer` met **doel** (niet
+  "functie"), **leverancier**, **factuur-firma** (wie betaalt), **doorfactuur-firma**,
+  afdeling en **verantwoordelijke** (één) — allemaal dropdowns uit kern, geen vrije
+  tekst; `nummer_gebruiker` = de **gebruikers** met **belvolgorde** (queue van de
+  telefooncentrale: `volgorde`-kolom, 1 neemt eerst op, in de UI herschikbaar);
+  `geheim` (PIN/PUK/kaartnummer, afgeschermd, 1-op-1); `emailadres` met firma +
+  verantwoordelijke (leeg = **"OPEN"**-markering, het open eindje) +
+  `emailadres_gebruiker` (wie op de mailbox ingelogd zijn, multi); `lijst`
+  (app-eigen keuzewaarden Land/Platform/Type).
+- **UI:** AppPortal-huisstijl (zelfde visuele taal als Medewerkers — bewust ontdaan van
+  "AI-tells": geen emoji/icoonkaarten/taglines). Personen overal in **Zoom-formaat** en
+  klikbaar → medewerkersprofiel; firma's als volledige naam; **firma-filter is
+  multi-select**; KPI-cijfers als filters; live-sync (SSE), dubbelcheck op genormaliseerd
+  nummer, Excel-export.
+- **Toegang:** forward-auth; tegel voor groepen **admin/manager/communicatie**
+  (`scripts/add-communicatie-app.py`); bewerken alleen **`communicatie-editors`** + admin
+  (env `EDITOR_GROUPS`; server dwingt af met 403).
+- **Data:** eenmalig geïmporteerd uit de telefoonregister-SQLite
+  (`communicatie/scripts/import.js`, JSON via stdin): leveranciers ge-upsert uit de
+  provider-waarden, firma's op naam gematcht, verantwoordelijke uit de bestaande
+  `persoon_id`-links; de rest is **curatiewerk in de nieuwe UI** (Siyan). Zelfde uuid's
+  behouden, dus her-draaien is idempotent.
+
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
 
 ---
 
-*Laatst bijgewerkt: 2026-07-01 (avond) — **firma-koppeling op personen** (werkgever uni +
+*Laatst bijgewerkt: 2026-07-01 (nacht) — **Communicatie-dashboard live** (§14.5:
+telefonie + e-mail op schema `communicatie`, belvolgorde-queue, firma-multiselect,
+AppPortal-huisstijl; migraties 002–004, nieuwe centrale lijst `kern.leverancier`) en
+**medewerkerslijst v3** (platte lijst, afdeling-kolom, rol-filter, groepeer-knop;
+naamconventie display `Voornaam (Afdeling)` vs full name in de bron; §14.2). Eerder
+(avond) — **firma-koppeling op personen** (werkgever uni +
 diensten-voor multi, admin-bewerking via smalle schrijfrol `medewerker_writer`;
 §14.1/§14.2) en **schemabeheer in git** (`db/` met baseline + migratie-runner; regel:
 geen ad-hoc DDL; §14.1). Ook `DEFINITIEBOEK.md` (draft terminologie) toegevoegd en
