@@ -191,7 +191,7 @@ function renderFilters() {
     f.status, (v) => { f.status = v; f.duplicates = false; f.attention = false; rerun(); });
 
   chipRow($('#firmaChips'),
-    [{ value: '', label: 'Alles' }, ...state.refs.firmas.map((x) => ({ value: x.id, label: x.code, title: x.naam }))],
+    [{ value: '', label: 'Alles' }, ...state.refs.firmas.map((x) => ({ value: x.id, label: x.naam }))],
     f.firma, (v) => { f.firma = v; rerun(); });
 
   chipRow($('#leverancierChips'),
@@ -223,9 +223,7 @@ function renderTable() {
       ),
       el('td', {}, persoonLink(n.verantwoordelijke_persoon_id, n.verantwoordelijke_naam)),
       el('td', {}, n.doel || el('span', { class: 'muted' }, '—')),
-      el('td', {}, n.factuur_firma_code
-        ? el('span', { title: n.factuur_firma_naam }, n.factuur_firma_code)
-        : el('span', { class: 'muted' }, '—')),
+      el('td', {}, n.factuur_firma_naam || el('span', { class: 'muted' }, '—')),
       el('td', {}, n.leverancier_naam || el('span', { class: 'muted' }, '—')),
       el('td', {}, statusBadge(n.status))
     );
@@ -363,9 +361,9 @@ function renderDetail() {
     { refOptions: refOpties(state.refs.personen, (p) => p.naam), after: profielLink }));
   const grid0 = el('div', { class: 'field-grid' });
   grid0.append(detailField('Factuur-firma (wie betaalt)', 'factuur_firma_id',
-    { refOptions: refOpties(state.refs.firmas, (x) => `${x.naam} (${x.code})`) }));
+    { refOptions: refOpties(state.refs.firmas, (x) => x.naam) }));
   grid0.append(detailField('Doorfactuur-firma', 'doorfactuur_firma_id',
-    { refOptions: refOpties(state.refs.firmas, (x) => `${x.naam} (${x.code})`) }));
+    { refOptions: refOpties(state.refs.firmas, (x) => x.naam) }));
   grid0.append(detailField('Leverancier', 'leverancier_id',
     { refOptions: refOpties(state.refs.leveranciers.filter((l) => l.actief || l.id === d.leverancier_id), (x) => x.naam) }));
   grid0.append(detailField('Afdeling', 'afdeling_id',
@@ -568,9 +566,9 @@ function openAdd() {
     { refOptions: refOpties(state.refs.personen, (p) => p.naam) }));
   const grid2 = el('div', { class: 'field-grid' });
   grid2.append(addField('Factuur-firma', 'factuur_firma_id',
-    { refOptions: refOpties(state.refs.firmas, (x) => `${x.naam} (${x.code})`) }));
+    { refOptions: refOpties(state.refs.firmas, (x) => x.naam) }));
   grid2.append(addField('Doorfactuur-firma', 'doorfactuur_firma_id',
-    { refOptions: refOpties(state.refs.firmas, (x) => `${x.naam} (${x.code})`) }));
+    { refOptions: refOpties(state.refs.firmas, (x) => x.naam) }));
   grid2.append(addField('Leverancier', 'leverancier_id',
     { refOptions: refOpties(state.refs.leveranciers.filter((l) => l.actief), (x) => x.naam) }));
   grid2.append(addField('Afdeling', 'afdeling_id',
@@ -810,9 +808,7 @@ function renderEmails() {
     const tr = el('tr', { onclick: () => openEmailModal(m) });
     tr.append(
       el('td', { class: 'mono' }, m.adres),
-      el('td', {}, m.firma_code
-        ? el('span', { title: m.firma_naam }, m.firma_code)
-        : el('span', { class: 'muted' }, '—')),
+      el('td', {}, m.firma_naam || el('span', { class: 'muted' }, '—')),
       el('td', {}, m.verantwoordelijke_persoon_id
         ? persoonLink(m.verantwoordelijke_persoon_id, m.verantwoordelijke_naam)
         : el('span', { class: 'open-badge', title: 'Geen verantwoordelijke — open eindje' }, 'OPEN')),
@@ -859,7 +855,7 @@ function openEmailModal(record) {
 
   body.append(f('E-mailadres', 'adres', { req: true, placeholder: 'bv. info@unabo.be' }));
   const grid = el('div', { class: 'field-grid' });
-  grid.append(f('Firma', 'firma_id', { refOptions: refOpties(state.refs.firmas, (x) => `${x.naam} (${x.code})`) }));
+  grid.append(f('Firma', 'firma_id', { refOptions: refOpties(state.refs.firmas, (x) => x.naam) }));
   grid.append(f('Verantwoordelijke', 'verantwoordelijke_persoon_id', { refOptions: refOpties(state.refs.personen, (p) => p.naam) }));
   body.append(grid);
   body.append(f('Omschrijving', 'omschrijving', { textarea: true }));

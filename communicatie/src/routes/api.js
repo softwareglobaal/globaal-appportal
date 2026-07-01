@@ -57,7 +57,8 @@ function fkFout(e, res) {
   return false;
 }
 
-const persoonNaam = "trim(concat(p.voornaam, ' ', coalesce(p.achternaam, '')))";
+// Display-naam in Zoom-formaat: Voornaam (Afdeling) — vereist join kern.afdeling as pa.
+const persoonNaam = "concat(p.voornaam, ' (', coalesce(pa.naam, '?'), ')')";
 
 // ---- Wie ben ik (uit Authentik-proxy) -------------------------------------
 router.get('/me', (req, res) => {
@@ -82,6 +83,7 @@ router.get('/refs', async (req, res, next) => {
   try {
     const [personen, firmas, afdelingen, leveranciers, lijstRows] = await Promise.all([
       knex('kern.persoon as p').where('p.in_dienst', true)
+        .leftJoin('kern.afdeling as pa', 'pa.id', 'p.afdeling_id')
         .select('p.id', knex.raw(`${persoonNaam} as naam`)).orderBy('naam'),
       knex('kern.firma').where({ actief: true })
         .select('id', 'naam', 'code').orderBy('naam'),
@@ -241,6 +243,7 @@ router.get('/stats', async (req, res, next) => {
 function nummerQuery() {
   return knex('nummer as n')
     .leftJoin('kern.persoon as p', 'p.id', 'n.verantwoordelijke_persoon_id')
+    .leftJoin('kern.afdeling as pa', 'pa.id', 'p.afdeling_id')
     .leftJoin('kern.firma as ff', 'ff.id', 'n.factuur_firma_id')
     .leftJoin('kern.firma as df', 'df.id', 'n.doorfactuur_firma_id')
     .leftJoin('kern.leverancier as lev', 'lev.id', 'n.leverancier_id')
@@ -260,6 +263,7 @@ async function gebruikersVoor(ids) {
   if (!ids.length) return {};
   const rows = await knex('nummer_gebruiker as ng')
     .join('kern.persoon as p', 'p.id', 'ng.persoon_id')
+    .leftJoin('kern.afdeling as pa', 'pa.id', 'p.afdeling_id')
     .whereIn('ng.nummer_id', ids)
     .select('ng.nummer_id', 'ng.persoon_id', knex.raw(`${persoonNaam} as naam`))
     .orderBy('naam');
@@ -492,6 +496,7 @@ function emailQuery() {
   return knex('emailadres as e')
     .leftJoin('kern.firma as f', 'f.id', 'e.firma_id')
     .leftJoin('kern.persoon as p', 'p.id', 'e.verantwoordelijke_persoon_id')
+    .leftJoin('kern.afdeling as pa', 'pa.id', 'p.afdeling_id')
     .select('e.*', 'f.naam as firma_naam', 'f.code as firma_code',
       knex.raw(`${persoonNaam} as verantwoordelijke_naam`));
 }

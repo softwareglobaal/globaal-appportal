@@ -82,21 +82,16 @@ def healthz():
 def index():
     _require_staff()
     if models.Session is None:
-        return render_template("index.html", username=_username(), groepen=[],
-                               total=0, error="DATABASE_URL ontbreekt.")
-    rolorder = {"Hoofd": 0, "Management": 1, "Lid": 2, "Partner": 3}
+        return render_template("index.html", username=_username(), personen=[],
+                               afdelingen=[], total=0, error="DATABASE_URL ontbreekt.")
     with models.Session() as db:
+        # Platte lijst op naam; filteren en groeperen (afdeling/rol) doet de client.
         personen = list(db.scalars(select(models.Persoon)))
-        personen.sort(key=lambda p: (p.afdeling.naam.lower(),
-                                     rolorder.get(p.rol, 9), p.voornaam.lower()))
-        groepen, huidige = [], None
-        for p in personen:
-            if huidige is None or huidige["naam"] != p.afdeling.naam:
-                huidige = {"naam": p.afdeling.naam, "leden": []}
-                groepen.append(huidige)
-            huidige["leden"].append(p)
+        personen.sort(key=lambda p: p.volledige_naam.lower())
+        afdelingen = sorted({p.afdeling.naam for p in personen})
         return render_template("index.html", username=_username(), error=None,
-                               groepen=groepen, total=len(personen))
+                               personen=personen, afdelingen=afdelingen,
+                               total=len(personen))
 
 
 @app.route("/<uuid:pid>")

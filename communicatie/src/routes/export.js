@@ -6,7 +6,7 @@ const knex = require('../db');
 
 const router = express.Router();
 
-const persoonNaam = "trim(concat(p.voornaam, ' ', coalesce(p.achternaam, '')))";
+const persoonNaam = "concat(p.voornaam, ' (', coalesce(pa.naam, '?'), ')')";
 
 /**
  * Exporteer de volledige dataset naar .xlsx (tabbladen Nummers, E-mailadressen,
@@ -22,6 +22,7 @@ router.get('/export', async (req, res, next) => {
     // --- Nummers ---
     const numbers = await knex('nummer as n')
       .leftJoin('kern.persoon as p', 'p.id', 'n.verantwoordelijke_persoon_id')
+      .leftJoin('kern.afdeling as pa', 'pa.id', 'p.afdeling_id')
       .leftJoin('kern.firma as ff', 'ff.id', 'n.factuur_firma_id')
       .leftJoin('kern.firma as df', 'df.id', 'n.doorfactuur_firma_id')
       .leftJoin('kern.leverancier as lev', 'lev.id', 'n.leverancier_id')
@@ -57,6 +58,7 @@ router.get('/export', async (req, res, next) => {
     const emails = await knex('emailadres as e')
       .leftJoin('kern.firma as f', 'f.id', 'e.firma_id')
       .leftJoin('kern.persoon as p', 'p.id', 'e.verantwoordelijke_persoon_id')
+      .leftJoin('kern.afdeling as pa', 'pa.id', 'p.afdeling_id')
       .select('e.adres', 'f.naam as firma',
         knex.raw(`${persoonNaam} as verantwoordelijke`),
         'e.omschrijving', 'e.actief')
