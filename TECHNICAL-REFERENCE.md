@@ -935,13 +935,17 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
 - Naast de `authentik`-database draait een **tweede database `appportal`** in dezelfde
   `postgresql`-container. Cross-grens (appportal ↔ authentik) loopt via de Authentik-**API**,
   nooit via SQL.
-- Schema `kern`: **`persoon`** (de hub) + **`afdeling`** (gecontroleerde lookup). Elke
+- Schema `kern`: **`persoon`** (de hub), **`afdeling`** + **`firma`** (gecontroleerde lookups). Elke
   persoon heeft een onveranderlijke `id` (UUID) — dé FK voor alle dashboards — plus o.a.
   `voornaam`/`achternaam`, `email` (citext, uniek), `afdeling_id`, `rol`
   (Lid/Hoofd/Partner/Management), `hr_nummer`, `locatie`, `in_dienst`, en de
   loginkoppeling `authentik_sub` + `authentik_username` (leeg = geen login).
 - Spoke-schema's (bv. `schuldentracker`, `omv`) verwijzen met `persoon_id` (UUID,
   `ON DELETE RESTRICT`) naar `kern.persoon`, zodat een 360°-profiel een gewone join is.
+- **`kern.firma`** — centrale firmalijst (13 bedrijven van de groep): `id` (uuid), `naam`,
+  `code` (uniek, 4 hoofdletters), `land`, `actief` (zacht uitzetten). Bedoeld als bron van
+  waarheid + dropdown overal; nu **standalone** (nog geen koppeling aan `persoon`/dashboards).
+  Bestand: `DDL-SEED-kern-firma.sql`.
 - **Per-app DB-rollen** (governance): elke app krijgt een eigen rol met **alleen-lezen**
   op `kern` en rechten op enkel het eigen schema. De Medewerkers-app gebruikt de
   read-only rol **`portal`** (zie `appportal-portal-role.sql`).
@@ -1007,8 +1011,9 @@ De eerste échte spoke die naar `kern.persoon(id)` verwijst — het 360°-model 
 ---
 
 *Laatst bijgewerkt: 2026-07-01 — **Toegang-panel** (Authentik-groepen + afgeleide apps,
-§14.3) en **koppeling Telefoonregister ↔ persoon** (§14.4 — eerste spoke met `persoon_id`)
-live. Diezelfde dag de **drift-opruiming afgerond**: branch `vm-as-built-2026-06-26`
+§14.3), **koppeling Telefoonregister ↔ persoon** (§14.4 — eerste spoke met `persoon_id`)
+en de **centrale firmalijst `kern.firma`** (13 bedrijven, §14.1) live. Diezelfde dag de
+**drift-opruiming afgerond**: branch `vm-as-built-2026-06-26`
 verzoend met `main` en opgeruimd (VM-realiteit + docs op één branch; §12.3). Eerder (2026-06-30): **§14 (centrale gebruikersdatabase + Medewerkers-app)**
 toegevoegd en **§12.2** rechtgezet (Authentik-launcher is de home, Flask-portal afgedankt).
 Eerder (2026-06-22): **§6 (OMV-pipeline)** uitgebreid met de volledige
