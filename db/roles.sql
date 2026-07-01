@@ -20,4 +20,10 @@ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'medewerker_writer') THEN
     CREATE ROLE medewerker_writer LOGIN PASSWORD 'CHANGE_ME';
   END IF;
+
+  -- Communicatie-dashboard: leest kern (dropdowns), schrijft schema communicatie,
+  -- beheert kern.leverancier. Grants staan in db/migrations/002-communicatie.sql.
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'communicatie') THEN
+    CREATE ROLE communicatie LOGIN PASSWORD 'CHANGE_ME';
+  END IF;
 END $$;
