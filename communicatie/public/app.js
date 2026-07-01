@@ -1215,6 +1215,9 @@ function applyEditMode(isEditor) {
 }
 
 async function init() {
+  // Hash vastleggen VOOR bind(): setTab() normaliseert de URL en zou de
+  // deep-link (#nummer=<uuid>) anders wissen voordat we hem gelezen hebben.
+  const startHash = location.hash;
   bind();
   try {
     const me = await api('/api/me');
@@ -1222,12 +1225,9 @@ async function init() {
     applyEditMode(me.isEditor);
   } catch (_) { $('#userName').textContent = 'onbekend'; }
   await refreshAll();
-  // Deep-link vanuit het medewerkersprofiel: #nummer=<uuid> opent het nummerdetail.
-  const dl = location.hash.match(/^#nummer=([0-9a-f-]{36})$/i);
-  if (dl) {
-    history.replaceState(null, '', location.pathname);
-    openDetail(dl[1]);
-  }
+  // Deep-link vanuit het medewerkersprofiel: open het nummerdetail.
+  const dl = startHash.match(/^#nummer=([0-9a-f-]{36})$/i);
+  if (dl) openDetail(dl[1]);
   connectEvents();
 }
 
