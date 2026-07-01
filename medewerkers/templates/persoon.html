@@ -19,6 +19,35 @@
     <tr><td>Login</td><td>{% if p.authentik_sub %}gekoppeld via Authentik{% else %}<span class="muted">nog geen portaaltoegang</span>{% endif %}</td></tr>
 </table>
 
+<div class="section-label">Firma</div>
+{% if kan_bewerken %}
+<form method="post" action="{{ url_for('firmas_opslaan', pid=p.id) }}" class="firma-form">
+    <div class="fld">
+        <label for="werkgever">In dienst bij</label>
+        <select name="werkgever_firma_id" id="werkgever" class="t-select">
+            <option value="">&mdash; geen &mdash;</option>
+            {% for f in firmas %}
+            <option value="{{ f.id }}"{% if p.werkgever_firma_id == f.id %} selected{% endif %}>{{ f.naam }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="fld">
+        <label for="diensten">Diensten voor <span class="muted">(meerdere: Ctrl/Cmd-klik)</span></label>
+        <select name="dienst_firma_ids" id="diensten" class="t-multi" multiple size="7">
+            {% for f in firmas %}
+            <option value="{{ f.id }}"{% if f.id in dienst_ids %} selected{% endif %}>{{ f.naam }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <button type="submit" class="btn-save">Opslaan</button>
+</form>
+{% else %}
+<table class="person-meta">
+    <tr><td>In dienst bij</td><td>{% if p.werkgever %}{{ p.werkgever.naam }}{% else %}<span class="muted">niet ingesteld</span>{% endif %}</td></tr>
+    <tr><td>Diensten voor</td><td>{% if p.dienst_firmas %}{% for f in p.dienst_firmas %}<span class="tag">{{ f.naam }}</span>{% endfor %}{% else %}<span class="muted">geen</span>{% endif %}</td></tr>
+</table>
+{% endif %}
+
 <div class="section-label">360&deg;-overzicht</div>
 <table class="person-meta">
     <tr><td>Toegang (Authentik)</td><td>

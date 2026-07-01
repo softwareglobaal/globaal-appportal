@@ -25,15 +25,17 @@
 <div id="view-list">
 <table class="staff-table">
     <thead>
-        <tr><th class="naam">Naam</th><th class="rol">Rol</th><th class="loc">Locatie</th><th class="hr">HR-nummer</th></tr>
+        <tr><th class="naam">Naam</th><th class="rol">Rol</th><th class="firma">In dienst</th><th class="firma-multi">Diensten voor</th><th class="loc">Locatie</th><th class="hr">HR-nummer</th></tr>
     </thead>
     {% for groep in groepen %}
     <tbody data-afdeling="{{ groep.naam }}">
-        <tr class="staff-group"><td colspan="4">{{ groep.naam }} <span>{{ groep.leden|length }}</span></td></tr>
+        <tr class="staff-group"><td colspan="6">{{ groep.naam }} <span>{{ groep.leden|length }}</span></td></tr>
         {% for p in groep.leden %}
         <tr class="person-row" data-naam="{{ p.volledige_naam|lower }}" data-afdeling="{{ groep.naam }}">
             <td class="naam"><a href="{{ url_for('persoon', pid=p.id) }}">{{ p.volledige_naam }}</a></td>
             <td class="rol"><span class="role role-{{ p.rol|lower }}">{{ p.rol }}</span></td>
+            <td class="firma">{% if p.werkgever %}<span title="{{ p.werkgever.naam }}">{{ p.werkgever.code }}</span>{% endif %}</td>
+            <td class="firma-multi">{% for f in p.dienst_firmas %}<span class="tag" title="{{ f.naam }}">{{ f.code }}</span>{% endfor %}</td>
             <td class="loc">{{ p.locatie }}</td>
             <td class="hr">{{ p.hr_nummer or '' }}</td>
         </tr>
@@ -52,7 +54,7 @@
             <a class="person-card" href="{{ url_for('persoon', pid=p.id) }}"
                data-naam="{{ p.volledige_naam|lower }}" data-afdeling="{{ groep.naam }}">
                 <span class="pc-naam">{{ p.volledige_naam }}</span>
-                <span class="pc-meta"><span class="role role-{{ p.rol|lower }}">{{ p.rol }}</span> <span class="pc-loc">{{ p.locatie }}</span>{% if p.hr_nummer %} <span class="pc-hr">HR {{ p.hr_nummer }}</span>{% endif %}</span>
+                <span class="pc-meta"><span class="role role-{{ p.rol|lower }}">{{ p.rol }}</span> <span class="pc-loc">{{ p.locatie }}</span>{% if p.werkgever %} <span class="pc-firma" title="{{ p.werkgever.naam }}">{{ p.werkgever.code }}</span>{% endif %}{% if p.hr_nummer %} <span class="pc-hr">HR {{ p.hr_nummer }}</span>{% endif %}</span>
             </a>
             {% endfor %}
         </div>

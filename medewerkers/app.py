@@ -2,14 +2,15 @@
 
 Toont de centrale medewerkerslijst (kern.persoon) en per persoon een 360-profiel.
 Draait achter AppPortal's nginx forward-auth: identiteit + groepen komen uit de
-`X-authentik-*`-headers (zoals het sso_auth.py-patroon). De Authentik group-binding
-op de applicatie zorgt dat alleen 'admin'/'manager' de app überhaupt bereiken; deze
-app dubbelcheckt dat nog eens uit de headers.
+`X-authentik-*`-headers. Alleen 'admin'/'manager' bereiken de app (Authentik
+group-binding + check hier). Wijzigen (firma-koppeling) mag alleen 'admin', via de
+smalle schrijf-engine.
 """
 import os
+import uuid
 
-from flask import Flask, abort, render_template, request
-from sqlalchemy import select
+from flask import Flask, abort, redirect, render_template, request, url_for
+from sqlalchemy import delete, insert, select, update
 
 import authentik
 import models
@@ -44,6 +45,10 @@ def _require_staff():
     groups = _groups()
     if not (ADMIN_GROUP in groups or MANAGER_GROUP in groups):
         abort(403)
+
+
+def _is_admin():
+    return ADMIN_GROUP in _groups()
 
 
 @app.route("/healthz")
@@ -86,7 +91,50 @@ def persoon(pid):
         ak_apps = authentik.apps_voor(ak_groepen)
         # Telefoonnummers: via de interne telefoonregister-API (best-effort).
         tel_nummers = telefoon.nummers_van(p.id)
-        return render_template("persoon.html", username=_username(), p=p,
-                               ak_groepen=ak_groepen, ak_apps=ak_apps,
-                               ak_enabled=authentik.enabled,
-                               tel_nummers=tel_nummers, tel_enabled=telefoon.enabled)
+        # Firma's: hele actieve lijst voor de dropdowns + de huidige selectie.
+        firmas = list(db.scalars(
+            select(models.Firma).where(models.Firma.actief).order_by(models.Firma.naam)))
+        dienst_ids = {f.id for f in p.dienst_firmas}
+        return render_template(
+            "persoon.html", username=_username(), p=p,
+            ak_groepen=ak_groepen, ak_apps=ak_apps, ak_enabled=authentik.enabled,
+            tel_nummers=tel_nummers, tel_enabled=telefoon.enabled,
+            firmas=firmas, dienst_ids=dienst_ids,
+            kan_bewerken=_is_admin() and models.WriteSession is not None)
+
+
+@app.route("/<uuid:pid>/firmas", methods=["POST"])
+def firmas_opslaan(pid):
+    """Werkgever (uni) + diensten-voor (multi) opslaan — alleen admin."""
+    _require_staff()
+    if not _is_admin():
+        abort(403)
+    if models.WriteSession is None:
+        abort(503)
+
+    def _as_uuids(values):
+        out = []
+        for v in values:
+            try:
+                out.append(uuid.UUID(v))
+            except (ValueError, TypeError, AttributeError):
+                pass
+        return out
+
+    werkgever = _as_uuids([request.form.get("werkgever_firma_id") or ""])
+    werkgever_id = werkgever[0] if werkgever else None
+    diensten = _as_uuids(request.form.getlist("dienst_firma_ids"))
+
+    with models.WriteSession() as db:
+        # Gerichte kolom-update (schrijfrol heeft enkel UPDATE op werkgever_firma_id).
+        db.execute(update(models.Persoon)
+                   .where(models.Persoon.id == pid)
+                   .values(werkgever_firma_id=werkgever_id))
+        # Diensten resetten en opnieuw zetten.
+        db.execute(delete(models.persoon_dienstfirma)
+                   .where(models.persoon_dienstfirma.c.persoon_id == pid))
+        for fid in diensten:
+            db.execute(insert(models.persoon_dienstfirma)
+                       .values(persoon_id=pid, firma_id=fid))
+        db.commit()
+    return redirect(url_for("persoon", pid=pid))

@@ -26,6 +26,8 @@ services:
       BASE_DOMAIN: ${BASE_DOMAIN}
       # Hergebruikt de read-only 'portal'-rol op de appportal-database.
       DATABASE_URL: ${APPPORTAL_DB_URL:-}
+      # Smalle schrijfrol (medewerker_writer): enkel werkgever + diensten-koppeling.
+      APPPORTAL_WRITE_URL: ${APPPORTAL_WRITE_URL:-}
       PORT: "3007"
       # Read-only Authentik-API voor het "Toegang"-panel (leeg = feature uit).
       # auth.<domein> resolvet intern naar nginx (netwerk-alias), dus geen hairpin.
