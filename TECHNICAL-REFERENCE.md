@@ -983,7 +983,11 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   beide dropdowns komen uit `kern.firma` (alleen actieve firma's). Opslaan loopt via de
   aparte schrijf-engine (`APPPORTAL_WRITE_URL` in `.env` → rol `medewerker_writer`);
   zonder die env blijft de app volledig read-only. De **lijst** toont beide als kolommen
-  ("In dienst" = firmacode, "Diensten voor" = code-chips).
+  ("In dienst" = firmacode, "Diensten voor" = code-chips). Het schrijf-endpoint is
+  **gehard**: same-origin-check (Origin/Referer moet deze host zijn — CSRF-bescherming,
+  ook tegen andere *.<domein>-subdomeinen) en een **audit-log** naar stdout
+  (`FIRMA_UPDATE user=… persoon=… werkgever=… diensten=…`, plus `WRITE_DENIED`/
+  `CSRF_REJECT`), zichtbaar via `docker compose logs app-medewerkers`.
 
 ### 14.3 Authentik-koppeling (Toegang-panel)
 - Bestaande Authentik-accounts zijn **handmatig gekoppeld** aan hun persoon door
@@ -991,7 +995,8 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   profielen tonen "gekoppeld via Authentik". `akadmin` is bewust **niet** gekoppeld
   (break-glass admin, geen persoon; z'n e-mail is losgekoppeld van `mch@h-architects.be`).
 - Het profiel-blok **"Toegang (Authentik)"** toont de echte **groepen** van de persoon
-  (live uit de Authentik-API op `authentik_username`) en de **apps** die die groepen geven
+  (live uit de Authentik-API, opgezocht op **`authentik_sub`**/uuid — blijft werken als
+  een account hernoemd wordt; username is enkel fallback) en de **apps** die die groepen geven
   (afgeleid uit `apps.yaml`: groep ∩ `roles`). Read-only via een eigen service-account
   **`medewerkers-readonly`** (RBAC-rol met `view_user` + `view_group`), aangemaakt met
   `scripts/add-medewerkers-readonly-token.py`. Het token staat in `.env` als

@@ -4,10 +4,12 @@ Toont de centrale medewerkerslijst (kern.persoon) en per persoon een 360-profiel
 Draait achter AppPortal's nginx forward-auth: identiteit + groepen komen uit de
 `X-authentik-*`-headers. Alleen 'admin'/'manager' bereiken de app (Authentik
 group-binding + check hier). Wijzigen (firma-koppeling) mag alleen 'admin', via de
-smalle schrijf-engine.
+smalle schrijf-engine; elke schrijfactie wordt gelogd (audit).
 """
+import logging
 import os
 import uuid
+from urllib.parse import urlparse
 
 from flask import Flask, abort, redirect, render_template, request, url_for
 from sqlalchemy import delete, insert, select, update
@@ -22,6 +24,10 @@ ADMIN_GROUP = os.environ.get("ADMIN_GROUP", "admin")
 MANAGER_GROUP = os.environ.get("MANAGER_GROUP", "manager")
 
 app = Flask(__name__)
+
+# Audit-log naar stdout (komt in `docker compose logs`): wie deed wat wanneer.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+events = logging.getLogger("medewerkers.events")
 
 
 @app.context_processor
@@ -44,11 +50,27 @@ def _require_staff():
         abort(403)
     groups = _groups()
     if not (ADMIN_GROUP in groups or MANAGER_GROUP in groups):
+        events.warning("ACCESS_DENIED user=%s path=%s", _username(), request.path)
         abort(403)
 
 
 def _is_admin():
     return ADMIN_GROUP in _groups()
+
+
+def _require_same_origin():
+    """CSRF-bescherming op schrijfacties: de POST moet van onze eigen pagina komen.
+
+    Alle *.<domein>-apps zijn same-site, dus SameSite-cookies alleen beschermen niet
+    tegen een kwaadwillende POST vanaf een ander subdomein. Browsers sturen bij een
+    POST altijd een Origin (of minstens Referer) mee; ontbreken beide, of wijst de
+    herkomst niet naar deze host, dan weigeren we.
+    """
+    herkomst = request.headers.get("Origin") or request.headers.get("Referer") or ""
+    if not herkomst or urlparse(herkomst).netloc != request.host:
+        events.warning("CSRF_REJECT user=%s path=%s herkomst=%s",
+                       _username(), request.path, herkomst or "-")
+        abort(403)
 
 
 @app.route("/healthz")
@@ -86,8 +108,9 @@ def persoon(pid):
         p = db.get(models.Persoon, pid)
         if p is None:
             abort(404)
-        # Toegang: groepen uit Authentik (read-only API) + daaruit afgeleide apps.
-        ak_groepen = authentik.groepen_van(p.authentik_username) if p.authentik_sub else []
+        # Toegang: groepen uit Authentik (read-only API, lookup op sub) + afgeleide apps.
+        ak_groepen = (authentik.groepen_van(p.authentik_sub, p.authentik_username)
+                      if p.authentik_sub else [])
         ak_apps = authentik.apps_voor(ak_groepen)
         # Telefoonnummers: via de interne telefoonregister-API (best-effort).
         tel_nummers = telefoon.nummers_van(p.id)
@@ -105,10 +128,12 @@ def persoon(pid):
 
 @app.route("/<uuid:pid>/firmas", methods=["POST"])
 def firmas_opslaan(pid):
-    """Werkgever (uni) + diensten-voor (multi) opslaan — alleen admin."""
+    """Werkgever (uni) + diensten-voor (multi) opslaan — alleen admin, same-origin."""
     _require_staff()
     if not _is_admin():
+        events.warning("WRITE_DENIED user=%s persoon=%s", _username(), pid)
         abort(403)
+    _require_same_origin()
     if models.WriteSession is None:
         abort(503)
 
@@ -137,4 +162,7 @@ def firmas_opslaan(pid):
             db.execute(insert(models.persoon_dienstfirma)
                        .values(persoon_id=pid, firma_id=fid))
         db.commit()
+    events.info("FIRMA_UPDATE user=%s persoon=%s werkgever=%s diensten=%s",
+                _username(), pid, werkgever_id,
+                ",".join(str(f) for f in diensten) or "-")
     return redirect(url_for("persoon", pid=pid))

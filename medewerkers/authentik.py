@@ -23,11 +23,9 @@ TIMEOUT = 4
 enabled = bool(API_URL and API_TOKEN)
 
 
-def groepen_van(username):
-    """Gesorteerde groepsnamen van de Authentik-gebruiker; [] bij fout/onbekend."""
-    if not (enabled and username):
-        return []
-    url = f"{API_URL}/core/users/?username=" + urllib.parse.quote(username)
+def _zoek_user(param, value):
+    """Eén /core/users/-query; het eerste resultaat of None (best-effort)."""
+    url = f"{API_URL}/core/users/?{param}=" + urllib.parse.quote(str(value))
     req = urllib.request.Request(url, headers={
         "Authorization": f"Bearer {API_TOKEN}",
         "Accept": "application/json",
@@ -36,11 +34,26 @@ def groepen_van(username):
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             data = json.load(resp)
     except (urllib.error.URLError, OSError, ValueError):
-        return []
+        return None
     results = data.get("results") or []
-    if not results:
+    return results[0] if results else None
+
+
+def groepen_van(sub, username=""):
+    """Gesorteerde groepsnamen van de Authentik-gebruiker; [] bij fout/onbekend.
+
+    Zoekt eerst op `uuid` (= onze authentik_sub): die blijft geldig als een account
+    hernoemd wordt. Username is enkel de fallback voor records waar de sub geen
+    Authentik-uuid blijkt te zijn.
+    """
+    if not (enabled and (sub or username)):
         return []
-    groups = results[0].get("groups_obj") or []
+    user = _zoek_user("uuid", sub) if sub else None
+    if user is None and username:
+        user = _zoek_user("username", username)
+    if user is None:
+        return []
+    groups = user.get("groups_obj") or []
     return sorted(g["name"] for g in groups if g.get("name"))
 
 
