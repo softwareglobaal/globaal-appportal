@@ -1,0 +1,9 @@
+# Normaliseer regeleindes: alles LF in de repo (voorkomt CRLF-vervuiling via
+# Windows-overdrachten zoals de WinSCP Text-mode-incidenten).
+* text=auto eol=lf
+
+# Binaire bestanden nooit aanraken.
+*.png binary
+*.jpg binary
+*.ico binary
+*.xlsx binary
