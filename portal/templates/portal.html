@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
+{% if is_admin %}
+<p class="adminbar"><a href="{{ url_for('access_overview') }}">Access overview →</a></p>
+{% endif %}
 <h1>Your applications</h1>
 {% if tiles %}
 <div class="grid">

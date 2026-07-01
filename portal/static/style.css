@@ -57,3 +57,63 @@ h1 { font-size: 1.4rem; }
     margin-left: 0.4rem;
     vertical-align: middle;
 }
+
+/* --- access overview --- */
+.adminbar { margin: 0 0 0.5rem; }
+.adminbar a { color: #2a6df4; text-decoration: none; font-size: 0.9rem; }
+.adminbar a:hover { text-decoration: underline; }
+.subtitle { color: #5b6b7d; font-size: 0.9rem; max-width: 620px; }
+.notice {
+    background: #fff3cd;
+    color: #8a6d1a;
+    border: 1px solid #f0e0a8;
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    font-size: 0.9rem;
+}
+.access-app { margin-top: 2rem; }
+.access-app h2 {
+    font-size: 1.05rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    border-bottom: 1px solid #dde3ea;
+    padding-bottom: 0.4rem;
+}
+.access-app .groups {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: #e6eefc;
+    color: #2a4d8f;
+    border-radius: 999px;
+    padding: 0.15rem 0.55rem;
+}
+.access-app .count { font-size: 0.8rem; font-weight: 400; color: #5b6b7d; margin-left: auto; }
+.access-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.8rem;
+    background: #fff;
+    border: 1px solid #dde3ea;
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 0.9rem;
+}
+.access-table th, .access-table td {
+    text-align: left;
+    padding: 0.55rem 0.9rem;
+    border-bottom: 1px solid #eef1f5;
+}
+.access-table th {
+    background: #f7f9fb;
+    font-weight: 600;
+    color: #5b6b7d;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.access-table tr:last-child td { border-bottom: none; }
+.access-table tr.inactive td { color: #9aa7b4; }
+.empty { color: #5b6b7d; font-size: 0.9rem; margin-top: 0.6rem; }
