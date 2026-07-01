@@ -107,7 +107,8 @@ h1 { font-size: 1.3rem; font-weight: 500; margin: 0; }
     padding: 7px 14px; border-bottom: 1px solid #e1e5e9;
 }
 .tbl td { padding: 8px 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tbl tbody tr { border-top: 1px solid #eceff1; cursor: pointer; }
+.tbl tbody tr { border-top: 1px solid #eceff1; }
+#emailRows tr { cursor: pointer; }  /* e-mail opent nog via de rij */
 .tbl tbody tr:hover { background: #f8fafb; }
 .tbl tbody tr.flagged { background: #fdf8ef; }
 .phone-line { font-weight: 500; }

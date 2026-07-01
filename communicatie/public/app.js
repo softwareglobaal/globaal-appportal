@@ -213,13 +213,16 @@ function renderTable() {
 
   rows.forEach((n) => {
     const flag = rowFlag(n);
-    const tr = el('tr', {
-      class: flag ? 'flagged' : '',
-      onclick: () => openDetail(n.id),
-    });
+    const tr = el('tr', { class: flag ? 'flagged' : '' });
     tr.append(
       el('td', { class: 'phone-cell' },
-        el('div', { class: 'phone-line' }, n.telefoonnummer || '—'),
+        el('div', { class: 'phone-line' },
+          el('a', {
+            class: 'person-link',
+            href: '#',
+            title: 'Alle informatie van dit nummer',
+            onclick: (e) => { e.preventDefault(); openDetail(n.id); },
+          }, n.telefoonnummer || '(geen nummer)')),
         flag
           ? el('span', { class: 'warn-badge' + (flag.amber ? ' amber' : ''), title: flag.tip }, flag.label)
           : null
