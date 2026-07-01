@@ -843,6 +843,10 @@ function renderEmails() {
       el('td', {}, m.verantwoordelijke_persoon_id
         ? persoonLink(m.verantwoordelijke_persoon_id, m.verantwoordelijke_naam)
         : el('span', { class: 'open-badge', title: 'Geen verantwoordelijke — open eindje' }, 'OPEN')),
+      el('td', { title: (m.gebruikers || []).map((g) => g.naam).join(', ') },
+        (m.gebruikers || []).length
+          ? (m.gebruikers || []).map((g) => g.naam).join(', ')
+          : el('span', { class: 'muted' }, '—')),
       el('td', {}, m.omschrijving || el('span', { class: 'muted' }, '—')),
       el('td', {}, statusBadge(m.actief ? 'Actief' : 'Niet-actief'))
     );
@@ -855,8 +859,43 @@ function renderEmails() {
 }
 
 let emailRecord = null;
+let emailGebruikers = [];  // wie op de mailbox ingelogd zijn (multi)
+
+function renderEmailGebruikers() {
+  const wrap = el('div', { class: 'queue-box', id: 'emailGebruikersBox' });
+  if (!emailGebruikers.length) {
+    wrap.append(el('div', { class: 'hint' }, 'Nog geen gebruikers op dit adres.'));
+  }
+  emailGebruikers.forEach((g, i) => {
+    wrap.append(el('div', { class: 'queue-item' },
+      el('span', { class: 'queue-naam' }, g.naam),
+      el('span', { class: 'queue-btns' },
+        el('button', { class: 'icon-btn', title: 'Verwijderen', onclick: () => {
+          emailGebruikers.splice(i, 1); refreshEmailGebruikers();
+        } }, '×')
+      )));
+  });
+  const beschikbaar = state.refs.personen.filter((p) => !emailGebruikers.some((g) => g.persoon_id === p.id));
+  if (beschikbaar.length) {
+    const sel = el('select', { class: 'queue-add' },
+      el('option', { value: '' }, '+ gebruiker toevoegen'),
+      ...beschikbaar.map((p) => el('option', { value: p.id }, p.naam)));
+    sel.addEventListener('change', () => {
+      const p = state.refs.personen.find((x) => x.id === sel.value);
+      if (p) { emailGebruikers.push({ persoon_id: p.id, naam: p.naam }); refreshEmailGebruikers(); }
+    });
+    wrap.append(sel);
+  }
+  return wrap;
+}
+function refreshEmailGebruikers() {
+  const oud = document.getElementById('emailGebruikersBox');
+  if (oud) oud.replaceWith(renderEmailGebruikers());
+}
 function openEmailModal(record) {
   emailRecord = record || null;
+  emailGebruikers = (record && record.gebruikers ? record.gebruikers : [])
+    .map((g) => ({ persoon_id: g.persoon_id, naam: g.naam }));
   const body = $('#emailBody');
   body.innerHTML = '';
   $('#emailError').textContent = '';
@@ -889,6 +928,9 @@ function openEmailModal(record) {
   grid.append(f('Firma', 'firma_id', { refOptions: refOpties(state.refs.firmas, (x) => x.naam) }));
   grid.append(f('Verantwoordelijke', 'verantwoordelijke_persoon_id', { refOptions: refOpties(state.refs.personen, (p) => p.naam) }));
   body.append(grid);
+  body.append(el('div', { class: 'field' },
+    el('label', {}, 'Gebruikers (ingelogd op dit adres)'),
+    renderEmailGebruikers()));
   body.append(f('Omschrijving', 'omschrijving', { textarea: true }));
   body.append(f('Actief', 'actief', { checkbox: true }));
 
@@ -906,6 +948,7 @@ async function saveEmail() {
     else if (['firma_id', 'verantwoordelijke_persoon_id'].includes(inp.dataset.ekey)) payload[inp.dataset.ekey] = inp.value || null;
     else payload[inp.dataset.ekey] = inp.value;
   });
+  payload.gebruiker_ids = emailGebruikers.map((g) => g.persoon_id);
   const errEl = $('#emailError');
   errEl.textContent = '';
   if (!payload.adres || !payload.adres.includes('@')) { errEl.textContent = 'Een geldig e-mailadres is verplicht.'; return; }

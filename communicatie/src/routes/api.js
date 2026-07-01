@@ -496,6 +496,32 @@ router.put('/numbers/:id/secret', async (req, res, next) => {
 const EMAIL_TEKST = ['omschrijving'];
 const EMAIL_REFS = ['firma_id', 'verantwoordelijke_persoon_id'];
 
+// Gebruikers (multi, ingelogd op de mailbox) per adres, in één query.
+async function emailGebruikersVoor(ids) {
+  if (!ids.length) return {};
+  const rows = await knex('emailadres_gebruiker as eg')
+    .join('kern.persoon as p', 'p.id', 'eg.persoon_id')
+    .leftJoin('kern.afdeling as pa', 'pa.id', 'p.afdeling_id')
+    .whereIn('eg.emailadres_id', ids)
+    .select('eg.emailadres_id', 'eg.persoon_id', knex.raw(`${persoonNaam} as naam`))
+    .orderBy('naam');
+  const map = {};
+  for (const r of rows) {
+    (map[r.emailadres_id] ||= []).push({ persoon_id: r.persoon_id, naam: r.naam });
+  }
+  return map;
+}
+
+async function syncEmailGebruikers(emailId, persoonIds) {
+  const gewenst = [...new Set((persoonIds || []).map(uuidOrNull).filter(Boolean))];
+  await knex('emailadres_gebruiker').where({ emailadres_id: emailId }).del();
+  if (gewenst.length) {
+    await knex('emailadres_gebruiker').insert(
+      gewenst.map((pid) => ({ emailadres_id: emailId, persoon_id: pid }))
+    );
+  }
+}
+
 function emailQuery() {
   return knex('emailadres as e')
     .leftJoin('kern.firma as f', 'f.id', 'e.firma_id')
@@ -521,7 +547,8 @@ router.get('/emails', async (req, res, next) => {
       });
     }
     const rows = await query.orderBy([{ column: 'f.naam' }, { column: 'e.adres' }]);
-    res.json(rows);
+    const gebruikers = await emailGebruikersVoor(rows.map((r) => r.id));
+    res.json(rows.map((r) => ({ ...r, gebruikers: gebruikers[r.id] || [] })));
   } catch (e) {
     next(e);
   }
@@ -543,6 +570,7 @@ router.post('/emails', async (req, res, next) => {
       bijgewerkt_door: req.user,
     };
     await knex('emailadres').insert(row);
+    await syncEmailGebruikers(row.id, req.body.gebruiker_ids);
     broadcast('emails', { action: 'create', id: row.id });
     res.status(201).json(row);
   } catch (e) {
@@ -568,6 +596,9 @@ router.put('/emails/:id', async (req, res, next) => {
     patch.bijgewerkt_door = req.user;
     patch.bijgewerkt_op = knex.fn.now();
     await knex('emailadres').where({ id: cur.id }).update(patch);
+    if (req.body.gebruiker_ids !== undefined) {
+      await syncEmailGebruikers(cur.id, req.body.gebruiker_ids);
+    }
     const updated = await knex('emailadres').where({ id: cur.id }).first();
     broadcast('emails', { action: 'update', id: cur.id });
     res.json(updated);
