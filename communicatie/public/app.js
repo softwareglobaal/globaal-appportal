@@ -229,7 +229,12 @@ function renderTable() {
       ),
       el('td', {}, persoonLink(n.verantwoordelijke_persoon_id, n.verantwoordelijke_naam)),
       el('td', {}, n.doel || el('span', { class: 'muted' }, '—')),
-      el('td', {}, n.factuur_firma_naam || el('span', { class: 'muted' }, '—')),
+      el('td', {}, n.factuur_firma_id
+        ? el('a', {
+            class: 'person-link', href: '#', title: 'Alle details van deze firma',
+            onclick: (e) => { e.preventDefault(); openFirma(n.factuur_firma_id); },
+          }, n.factuur_firma_naam)
+        : el('span', { class: 'muted' }, '—')),
       el('td', {}, n.leverancier_naam || el('span', { class: 'muted' }, '—')),
       el('td', {}, statusBadge(n.status))
     );
@@ -556,6 +561,83 @@ async function deleteNumber() {
 }
 
 // ====================================================================
+// Firma-detail (alles wat aan een firma hangt, duidelijk benoemd)
+// ====================================================================
+async function openFirma(id) {
+  try {
+    const d = await api(`/api/firmas/${id}`);
+    renderFirmaDetail(d);
+    $('#overlay').classList.add('open');
+    $('#drawer').classList.add('open');
+    $('#drawer').setAttribute('aria-hidden', 'false');
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function firmaSectie(body, titel, items, renderItem) {
+  body.append(el('div', { class: 'section-title' }, titel,
+    el('span', { class: 'muted', style: 'font-weight:400;letter-spacing:0;text-transform:none' },
+      String(items.length))));
+  if (!items.length) {
+    body.append(el('div', { class: 'hint' }, 'Geen.'));
+    return;
+  }
+  const box = el('div', { class: 'queue-box' });
+  items.forEach((it) => box.append(renderItem(it)));
+  body.append(box);
+}
+
+function renderFirmaDetail(d) {
+  const drawer = $('#drawer');
+  drawer.innerHTML = '';
+
+  drawer.append(
+    el('div', { class: 'drawer-head' },
+      el('div', { style: 'flex:1' },
+        el('div', { class: 'phone' }, d.firma.naam),
+        el('div', { class: 'sub-line' }, [d.firma.code, d.firma.land].filter(Boolean).join(' · '))
+      ),
+      statusBadge(d.firma.actief ? 'Actief' : 'Niet-actief'),
+      el('button', { class: 'icon-btn', onclick: closeDetail, title: 'Sluiten' }, '×')
+    )
+  );
+
+  const body = el('div', { class: 'drawer-body' });
+
+  const nummerRij = (n) => el('div', { class: 'queue-item' },
+    el('a', {
+      class: 'person-link', href: '#',
+      onclick: (e) => { e.preventDefault(); openDetail(n.id); },
+    }, n.telefoonnummer || '(geen nummer)'),
+    el('span', { class: 'muted', style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, n.doel || ''),
+    statusBadge(n.status));
+
+  firmaSectie(body, 'Telefoonnummers — gefactureerd aan deze firma', d.nummers_factuur, nummerRij);
+  firmaSectie(body, 'Telefoonnummers — doorgefactureerd aan deze firma', d.nummers_doorfactuur, nummerRij);
+  firmaSectie(body, 'E-mailadressen van deze firma', d.emails, (m) =>
+    el('div', { class: 'queue-item' },
+      el('span', { class: 'mono' }, m.adres),
+      el('span', { class: 'muted', style: 'flex:1' },
+        m.verantwoordelijke_naam ? 'verantwoordelijke: ' + m.verantwoordelijke_naam : ''),
+      m.verantwoordelijke_naam ? null : el('span', { class: 'open-badge' }, 'OPEN')));
+  firmaSectie(body, 'Medewerkers — in dienst bij deze firma', d.in_dienst, (p) =>
+    el('div', { class: 'queue-item' }, persoonLink(p.id, p.naam)));
+  firmaSectie(body, 'Medewerkers — verrichten diensten voor deze firma', d.diensten, (p) =>
+    el('div', { class: 'queue-item' }, persoonLink(p.id, p.naam)));
+
+  body.append(el('div', { class: 'hint', style: 'margin-top:14px' },
+    'Firma-gegevens (naam, code, land) beheer je centraal; wat hier hangt volgt de koppelingen op nummers, adressen en personen.'));
+
+  drawer.append(body);
+  drawer.append(
+    el('div', { class: 'drawer-foot' },
+      el('button', { class: 'btn', onclick: closeDetail }, 'Sluiten')
+    )
+  );
+}
+
+// ====================================================================
 // Nummer toevoegen
 // ====================================================================
 let dupTimer;
@@ -842,7 +924,12 @@ function renderEmails() {
     const tr = el('tr', { onclick: () => openEmailModal(m) });
     tr.append(
       el('td', { class: 'mono' }, m.adres),
-      el('td', {}, m.firma_naam || el('span', { class: 'muted' }, '—')),
+      el('td', {}, m.firma_id
+        ? el('a', {
+            class: 'person-link', href: '#', title: 'Alle details van deze firma',
+            onclick: (e) => { e.preventDefault(); e.stopPropagation(); openFirma(m.firma_id); },
+          }, m.firma_naam)
+        : el('span', { class: 'muted' }, '—')),
       el('td', {}, m.verantwoordelijke_persoon_id
         ? persoonLink(m.verantwoordelijke_persoon_id, m.verantwoordelijke_naam)
         : el('span', { class: 'open-badge', title: 'Geen verantwoordelijke — open eindje' }, 'OPEN')),

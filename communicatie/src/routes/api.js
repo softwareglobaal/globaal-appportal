@@ -137,6 +137,46 @@ router.put('/leveranciers/:id', async (req, res, next) => {
   }
 });
 
+// ---- Firma-detail: alles wat aan een firma hangt ----------------------------
+router.get('/firmas/:id', async (req, res, next) => {
+  try {
+    const firma = await knex('kern.firma').where({ id: req.params.id }).first();
+    if (!firma) return res.status(404).json({ error: 'Niet gevonden.' });
+    const persoonSel = (q) => q
+      .leftJoin('kern.afdeling as pa', 'pa.id', 'p.afdeling_id')
+      .select('p.id', knex.raw(`${persoonNaam} as naam`))
+      .orderBy('naam');
+    const [inDienst, diensten, factuur, doorfactuur, emails] = await Promise.all([
+      persoonSel(knex('kern.persoon as p')
+        .where('p.werkgever_firma_id', firma.id).andWhere('p.in_dienst', true)),
+      persoonSel(knex('kern.persoon as p')
+        .join('kern.persoon_dienstfirma as pd', 'pd.persoon_id', 'p.id')
+        .where('pd.firma_id', firma.id).andWhere('p.in_dienst', true)),
+      knex('nummer').where({ factuur_firma_id: firma.id })
+        .select('id', 'telefoonnummer', 'doel', 'status').orderBy('doel'),
+      knex('nummer').where({ doorfactuur_firma_id: firma.id })
+        .select('id', 'telefoonnummer', 'doel', 'status').orderBy('doel'),
+      knex('emailadres as e')
+        .leftJoin('kern.persoon as p', 'p.id', 'e.verantwoordelijke_persoon_id')
+        .leftJoin('kern.afdeling as pa', 'pa.id', 'p.afdeling_id')
+        .where('e.firma_id', firma.id)
+        .select('e.id', 'e.adres', 'e.actief',
+          knex.raw(`${persoonNaam} as verantwoordelijke_naam`))
+        .orderBy('e.adres'),
+    ]);
+    res.json({
+      firma,
+      in_dienst: inDienst,
+      diensten,
+      nummers_factuur: factuur,
+      nummers_doorfactuur: doorfactuur,
+      emails,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // ---- App-eigen keuzewaarden (Land / Platform / Type) ------------------------
 router.get('/lists', async (req, res, next) => {
   try {
