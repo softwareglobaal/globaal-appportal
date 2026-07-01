@@ -963,6 +963,9 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   veilig). **Regel: geen ad-hoc `psql`-DDL meer** — elke wijziging is een genummerd,
   gecommit bestand. Verse-deploy-procedure: `db/README.md`. De persoon-seed (34
   namen/e-mails) blijft bewust buiten de repo (lokale ontwerpmap).
+- **Backups:** `scripts/db-backup.sh` dumpt nachtelijk (cron, 03:15) `authentik` én
+  `appportal` in custom formaat naar `~/backups/` met 14 dagen retentie; terugzetten
+  met `pg_restore` (voorbeeld in de scriptkop). Off-site kopie (S3) is een open punt.
 
 ### 14.2 Medewerkers-app (`medewerkers.globaal.be`)
 - **Forward-auth-app** (Flask), map `medewerkers/`, compose-service **`app-medewerkers`**
