@@ -27,6 +27,13 @@ services:
       # Hergebruikt de read-only 'portal'-rol op de appportal-database.
       DATABASE_URL: ${APPPORTAL_DB_URL:-}
       PORT: "3007"
+      # Read-only Authentik-API voor het "Toegang"-panel (leeg = feature uit).
+      # auth.<domein> resolvet intern naar nginx (netwerk-alias), dus geen hairpin.
+      AUTHENTIK_API_URL: https://auth.${BASE_DOMAIN}/api/v3
+      AUTHENTIK_API_TOKEN: ${MEDEWERKERS_AUTHENTIK_TOKEN:-}
+      APPS_FILE: /app/apps.yaml
+    volumes:
+      - ./apps.yaml:/app/apps.yaml:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3007/healthz')"]
       interval: 30s

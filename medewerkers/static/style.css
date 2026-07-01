@@ -114,3 +114,8 @@ h1 { font-size: 1.3rem; font-weight: 500; margin: 0; }
 .person-meta a { color: #1c5d9c; text-decoration: none; }
 .section-label { font-size: 0.66rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #8893a0; margin: 1.6rem 0 0.2rem; }
 .rbac-note { font-size: 0.78rem; color: #98a3ae; margin-top: 1.2rem; padding-top: 0.8rem; border-top: 1px solid #eceff1; }
+.person-meta .tag {
+    display: inline-block; background: #eef1f4; color: #56636f;
+    border: 1px solid #e1e5e9; border-radius: 4px;
+    padding: 1px 8px; font-size: 0.76rem; margin: 0 4px 3px 0;
+}

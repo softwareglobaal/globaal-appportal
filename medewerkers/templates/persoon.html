@@ -21,7 +21,17 @@
 
 <div class="section-label">360&deg;-overzicht</div>
 <table class="person-meta">
-    <tr><td>Toegang (Authentik)</td><td><span class="muted">koppelen in vervolgstap</span></td></tr>
+    <tr><td>Toegang (Authentik)</td><td>
+        {% if not p.authentik_sub %}<span class="muted">geen portaaltoegang</span>
+        {%- elif ak_groepen %}{% for g in ak_groepen %}<span class="tag">{{ g }}</span>{% endfor %}
+        {%- elif not ak_enabled %}<span class="muted">koppeling niet geconfigureerd</span>
+        {%- else %}<span class="muted">geen groepen</span>{% endif %}
+    </td></tr>
+    <tr><td>Apps</td><td>
+        {% if ak_apps %}{{ ak_apps|join(', ') }}
+        {%- elif p.authentik_sub and ak_groepen %}<span class="muted">geen app-toegang</span>
+        {%- else %}<span class="muted">n.v.t.</span>{% endif %}
+    </td></tr>
     <tr><td>Dashboards</td><td><span class="muted">vullen zich zodra een dashboard naar persoon_id verwijst</span></td></tr>
 </table>
 

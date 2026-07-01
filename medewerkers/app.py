@@ -11,6 +11,7 @@ import os
 from flask import Flask, abort, render_template, request
 from sqlalchemy import select
 
+import authentik
 import models
 
 USER_HEADER = "X-Authentik-Username"
@@ -79,4 +80,9 @@ def persoon(pid):
         p = db.get(models.Persoon, pid)
         if p is None:
             abort(404)
-        return render_template("persoon.html", username=_username(), p=p)
+        # Toegang: groepen uit Authentik (read-only API) + daaruit afgeleide apps.
+        ak_groepen = authentik.groepen_van(p.authentik_username) if p.authentik_sub else []
+        ak_apps = authentik.apps_voor(ak_groepen)
+        return render_template("persoon.html", username=_username(), p=p,
+                               ak_groepen=ak_groepen, ak_apps=ak_apps,
+                               ak_enabled=authentik.enabled)

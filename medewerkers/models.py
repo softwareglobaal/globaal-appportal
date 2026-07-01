@@ -47,6 +47,7 @@ class Persoon(Base):
     functie: Mapped[str | None] = mapped_column(String(120))
     locatie: Mapped[str] = mapped_column(String(60))
     authentik_sub: Mapped[str | None] = mapped_column(String(64))
+    authentik_username: Mapped[str | None] = mapped_column(String(150))
     in_dienst: Mapped[bool] = mapped_column()
 
     afdeling: Mapped["Afdeling"] = relationship(lazy="joined")
