@@ -12,7 +12,7 @@ import uuid
 from urllib.parse import urlparse
 
 from flask import Flask, abort, redirect, render_template, request, url_for
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import delete, func, insert, select, update
 
 import authentik
 import models
@@ -83,7 +83,8 @@ def index():
     _require_staff()
     if models.Session is None:
         return render_template("index.html", username=_username(), personen=[],
-                               afdelingen=[], total=0, error="DATABASE_URL ontbreekt.")
+                               afdelingen=[], total=0, tab="medewerkers",
+                               error="DATABASE_URL ontbreekt.")
     with models.Session() as db:
         # Platte lijst op naam; filteren en groeperen (afdeling/rol) doet de client.
         personen = list(db.scalars(select(models.Persoon)))
@@ -91,7 +92,7 @@ def index():
         afdelingen = sorted({p.afdeling.naam for p in personen})
         return render_template("index.html", username=_username(), error=None,
                                personen=personen, afdelingen=afdelingen,
-                               total=len(personen))
+                               total=len(personen), tab="medewerkers")
 
 
 @app.route("/<uuid:pid>")
@@ -114,7 +115,7 @@ def persoon(pid):
             select(models.Firma).where(models.Firma.actief).order_by(models.Firma.naam)))
         dienst_ids = {f.id for f in p.dienst_firmas}
         return render_template(
-            "persoon.html", username=_username(), p=p,
+            "persoon.html", username=_username(), p=p, tab="medewerkers",
             ak_groepen=ak_groepen, ak_apps=ak_apps, ak_enabled=authentik.enabled,
             tel_nummers=tel_nummers, tel_enabled=telefoon.enabled,
             firmas=firmas, dienst_ids=dienst_ids,
@@ -161,3 +162,115 @@ def firmas_opslaan(pid):
                 _username(), pid, werkgever_id,
                 ",".join(str(f) for f in diensten) or "-")
     return redirect(url_for("persoon", pid=pid))
+
+
+# ---------------------------------------------------------------------------
+# Firma's-tab (Organisatie): lijst, profiel en admin-beheer.
+# ---------------------------------------------------------------------------
+
+@app.route("/firmas")
+def firmas_lijst():
+    _require_staff()
+    if models.Session is None:
+        abort(503)
+    with models.Session() as db:
+        firmas = list(db.scalars(select(models.Firma).order_by(models.Firma.naam)))
+        wg = dict(db.execute(
+            select(models.Persoon.werkgever_firma_id, func.count())
+            .where(models.Persoon.in_dienst,
+                   models.Persoon.werkgever_firma_id.is_not(None))
+            .group_by(models.Persoon.werkgever_firma_id)).all())
+        dn = dict(db.execute(
+            select(models.persoon_dienstfirma.c.firma_id, func.count())
+            .group_by(models.persoon_dienstfirma.c.firma_id)).all())
+    comm = telefoon.tellingen_per_firma()
+    return render_template("firmas.html", username=_username(), tab="firmas",
+                           firmas=firmas, wg=wg, dn=dn, comm=comm,
+                           fout=request.args.get("fout", ""),
+                           kan_beheren=_is_admin() and models.WriteSession is not None)
+
+
+@app.route("/firmas/<uuid:fid>")
+def firma_detail(fid):
+    _require_staff()
+    if models.Session is None:
+        abort(404)
+    with models.Session() as db:
+        f = db.get(models.Firma, fid)
+        if f is None:
+            abort(404)
+        in_dienst = list(db.scalars(
+            select(models.Persoon)
+            .where(models.Persoon.werkgever_firma_id == fid, models.Persoon.in_dienst)))
+        in_dienst.sort(key=lambda p: p.voornaam.lower())
+        diensten = list(db.scalars(
+            select(models.Persoon)
+            .join(models.persoon_dienstfirma,
+                  models.persoon_dienstfirma.c.persoon_id == models.Persoon.id)
+            .where(models.persoon_dienstfirma.c.firma_id == fid,
+                   models.Persoon.in_dienst)))
+        diensten.sort(key=lambda p: p.voornaam.lower())
+        kop = telefoon.firma_koppelingen(fid)
+        return render_template("firma.html", username=_username(), tab="firmas",
+                               f=f, in_dienst=in_dienst, diensten=diensten,
+                               nummers_factuur=kop["factuur"],
+                               nummers_doorfactuur=kop["doorfactuur"],
+                               emails=kop["emails"],
+                               fout=request.args.get("fout", ""),
+                               kan_beheren=_is_admin() and models.WriteSession is not None)
+
+
+@app.route("/firmas/nieuw", methods=["POST"])
+def firma_nieuw():
+    """Firma toevoegen — alleen admin, same-origin."""
+    _require_staff()
+    if not _is_admin():
+        abort(403)
+    _require_same_origin()
+    if models.WriteSession is None:
+        abort(503)
+    naam = (request.form.get("naam") or "").strip()
+    code = (request.form.get("code") or "").strip().upper()
+    land = (request.form.get("land") or "").strip()
+    if not (naam and code and land):
+        return redirect(url_for("firmas_lijst", fout="Naam, code en land zijn verplicht."))
+    try:
+        with models.WriteSession() as db:
+            db.execute(insert(models.Firma).values(
+                naam=naam, code=code, land=land, actief=True))
+            db.commit()
+    except Exception:
+        return redirect(url_for("firmas_lijst",
+                                fout=f"Naam of code '{code}' bestaat al."))
+    events.info("FIRMA_NIEUW user=%s naam=%s code=%s land=%s",
+                _username(), naam, code, land)
+    return redirect(url_for("firmas_lijst"))
+
+
+@app.route("/firmas/<uuid:fid>/bewerken", methods=["POST"])
+def firma_bewerken(fid):
+    """Naam/code/land/actief bijwerken — alleen admin, same-origin."""
+    _require_staff()
+    if not _is_admin():
+        abort(403)
+    _require_same_origin()
+    if models.WriteSession is None:
+        abort(503)
+    naam = (request.form.get("naam") or "").strip()
+    code = (request.form.get("code") or "").strip().upper()
+    land = (request.form.get("land") or "").strip()
+    actief = request.form.get("actief") == "on"
+    if not (naam and code and land):
+        return redirect(url_for("firma_detail", fid=fid,
+                                fout="Naam, code en land zijn verplicht."))
+    try:
+        with models.WriteSession() as db:
+            db.execute(update(models.Firma).where(models.Firma.id == fid)
+                       .values(naam=naam, code=code, land=land, actief=actief))
+            db.commit()
+    except Exception:
+        return redirect(url_for("firma_detail", fid=fid,
+                                fout="Naam of code botst met een andere firma."))
+    events.info("FIRMA_BEHEER user=%s firma=%s naam=%s code=%s land=%s actief=%s",
+                _username(), fid, naam, code, land, actief)
+    return redirect(url_for("firma_detail", fid=fid))

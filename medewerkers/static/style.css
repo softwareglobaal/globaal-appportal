@@ -161,3 +161,34 @@ main { max-width: 960px; }
     font-size: 0.68rem; font-weight: 600; letter-spacing: 0.07em;
     text-transform: uppercase; color: #8893a0;
 }
+
+
+/* --- Organisatie: topnav-tabs + firma's --- */
+.topnav { display: flex; gap: 2px; }
+.tnav {
+    color: #9fb0c3; text-decoration: none; font-size: 0.85rem;
+    padding: 5px 12px; border-radius: 4px;
+}
+.tnav:hover { color: #fff; }
+.tnav.is-active { background: #2a3542; color: #fff; }
+
+.tag {
+    display: inline-block; background: #eef1f4; color: #56636f;
+    border: 1px solid #e1e5e9; border-radius: 4px;
+    padding: 1px 8px; font-size: 0.72rem;
+}
+.tag-groen { background: #e7f3ec; color: #2e7d4f; border-color: #d3e8db; }
+.staff-table th.num, .staff-table td.num { width: 86px; text-align: right; color: #56636f; }
+.firma-nieuw { display: flex; gap: 8px; margin: 0 0 1rem; }
+.firma-nieuw .fn-code { width: 90px; }
+.firma-nieuw .fn-land { width: 130px; }
+.firma-form .chk {
+    font-size: 0.8rem; color: #56636f;
+    display: flex; align-items: center; gap: 6px;
+}
+.open-badge {
+    display: inline-block; background: #fdf3dd; color: #9a6a12;
+    border: 1px solid #f0e0a8; border-radius: 4px;
+    padding: 1px 8px; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.05em;
+}
+.sec-count { color: #b6bec8; font-weight: 400; margin-left: 0.3rem; }

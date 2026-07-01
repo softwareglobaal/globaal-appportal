@@ -969,7 +969,7 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   `appportal` in custom formaat naar `~/backups/` met 14 dagen retentie; terugzetten
   met `pg_restore` (voorbeeld in de scriptkop). Off-site kopie (S3) is een open punt.
 
-### 14.2 Medewerkers-app (`medewerkers.globaal.be`)
+### 14.2 Organisatie-dashboard (`medewerkers.globaal.be`) — medewerkers + firma's
 - **Forward-auth-app** (Flask), map `medewerkers/`, compose-service **`app-medewerkers`**
   in `docker-compose.override.yml` (poort 3007), nginx-blok
   `nginx/templates/44-medewerkers.conf.template`. Registratie in Authentik
@@ -982,6 +982,15 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   de `X-authentik-*`-headers; alleen **admin/manager** hebben toegang (Authentik
   group-binding + check in de app). Leest `kern.persoon` via de `portal`-rol; de
   connectiestring staat in `.env` als `APPPORTAL_DB_URL`.
+- **Firma's-tab:** het dashboard heet **Organisatie** en heeft tabs *Medewerkers* |
+  *Firma's*. De Firma's-tab toont de centrale lijst met tellingen (medewerkers in
+  dienst, dienstverbanden, nummers, e-mailadressen — de laatste twee via SQL op het
+  `communicatie`-schema) en per firma een **profiel** met alles wat eraan hangt
+  (personen → profiel-links; nummers → deep-links naar Communicatie). **Beheer**
+  (toevoegen, hernoemen, land, zacht uitzetten via `actief`) kan alleen als admin, via
+  de schrijfrol (migratie 006: INSERT/UPDATE op `kern.firma` voor `medewerker_writer`),
+  met same-origin-check en audit-log (`FIRMA_NIEUW`/`FIRMA_BEHEER`). Firma's toevoegen
+  is daarmee een UI-handeling i.p.v. SQL.
 - **Naamconventie (display vs full):** de medewerkersdatabase toont de **volledige naam**
   (voor- + familienaam — dit is de identiteitsbron); alle *andere* apps tonen personen in
   het **Zoom-formaat `Voornaam (Afdeling)`**, live opgebouwd uit `kern.persoon` +
@@ -1081,7 +1090,10 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
 
 ---
 
-*Laatst bijgewerkt: 2026-07-01 (nacht) — **Communicatie-dashboard live** (§14.5:
+*Laatst bijgewerkt: 2026-07-01 (nacht) — **Organisatie-dashboard**: het
+medewerkersdashboard heet nu Organisatie en kreeg een **Firma's-tab** (lijst met
+tellingen, firmaprofiel met alles wat eraan hangt, admin-beheer; migratie 006;
+§14.2). Daarnaast **Communicatie-dashboard live** (§14.5:
 telefonie + e-mail op schema `communicatie`, belvolgorde-queue, firma-multiselect,
 AppPortal-huisstijl; migraties 002–004, nieuwe centrale lijst `kern.leverancier`) en
 **medewerkerslijst v3** (platte lijst, afdeling-kolom, rol-filter, groepeer-knop;

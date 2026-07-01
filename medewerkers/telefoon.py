@@ -31,3 +31,63 @@ def nummers_van(persoon_id):
         return [dict(r) for r in rows]
     except Exception:  # best-effort: profiel blijft werken zonder deze sectie
         return []
+
+
+_TELLINGEN = text("""
+    SELECT f.id::text AS id,
+           (SELECT count(*) FROM communicatie.nummer n WHERE n.factuur_firma_id = f.id) AS nummers,
+           (SELECT count(*) FROM communicatie.emailadres e WHERE e.firma_id = f.id) AS emails
+      FROM kern.firma f
+""")
+
+_FIRMA_NUMMERS = text("""
+    SELECT id, telefoonnummer, doel, status,
+           (factuur_firma_id = :fid)     AS factuur,
+           (doorfactuur_firma_id = :fid) AS doorfactuur
+      FROM communicatie.nummer
+     WHERE factuur_firma_id = :fid OR doorfactuur_firma_id = :fid
+     ORDER BY telefoonnummer
+""")
+
+_FIRMA_EMAILS = text("""
+    SELECT e.id, e.adres::text AS adres, e.actief,
+           CASE WHEN p.id IS NULL THEN ''
+                ELSE p.voornaam || ' (' || coalesce(a.naam, '') || ')' END AS verantwoordelijke
+      FROM communicatie.emailadres e
+      LEFT JOIN kern.persoon p ON p.id = e.verantwoordelijke_persoon_id
+      LEFT JOIN kern.afdeling a ON a.id = p.afdeling_id
+     WHERE e.firma_id = :fid
+     ORDER BY e.adres
+""")
+
+
+def tellingen_per_firma():
+    """{firma_id(str): {nummers, emails}} — voor de Firma's-tab; {} bij fout."""
+    if not enabled:
+        return {}
+    try:
+        with models.engine.connect() as conn:
+            rows = conn.execute(_TELLINGEN).mappings().all()
+        return {r["id"]: {"nummers": r["nummers"], "emails": r["emails"]} for r in rows}
+    except Exception:
+        return {}
+
+
+def firma_koppelingen(firma_id):
+    """Nummers (factuur/doorfactuur) en e-mailadressen van een firma; leeg bij fout."""
+    leeg = {"factuur": [], "doorfactuur": [], "emails": []}
+    if not (enabled and firma_id):
+        return leeg
+    try:
+        with models.engine.connect() as conn:
+            nums = [dict(r) for r in conn.execute(
+                _FIRMA_NUMMERS, {"fid": str(firma_id)}).mappings().all()]
+            mails = [dict(r) for r in conn.execute(
+                _FIRMA_EMAILS, {"fid": str(firma_id)}).mappings().all()]
+        return {
+            "factuur": [n for n in nums if n["factuur"]],
+            "doorfactuur": [n for n in nums if n["doorfactuur"]],
+            "emails": mails,
+        }
+    except Exception:
+        return leeg

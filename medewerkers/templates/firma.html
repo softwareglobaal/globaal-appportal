@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="adminbar"><a href="{{ url_for('firmas_lijst') }}">&lsaquo; Firma's</a></p>
+
+<div class="person-head">
+    <span class="person-naam">{{ f.naam }}</span>
+    <span class="person-afdeling">{{ f.code }} &middot; {{ f.land }}</span>
+</div>
+<div class="person-status {{ '' if f.actief else 'uit' }}">
+    <span class="dot"></span> {{ 'Actief' if f.actief else 'Niet actief' }}
+</div>
+
+{% if fout %}<p class="notice">{{ fout }}</p>{% endif %}
+
+{% if kan_beheren %}
+<div class="section-label">Beheer</div>
+<form method="post" action="{{ url_for('firma_bewerken', fid=f.id) }}" class="firma-form">
+    <div class="fld"><label for="fb-naam">Naam</label><input id="fb-naam" name="naam" class="t-search" value="{{ f.naam }}" required></div>
+    <div class="fld"><label for="fb-code">Code</label><input id="fb-code" name="code" class="t-select" value="{{ f.code }}" maxlength="8" required></div>
+    <div class="fld"><label for="fb-land">Land</label><input id="fb-land" name="land" class="t-select" value="{{ f.land }}" required></div>
+    <label class="chk"><input type="checkbox" name="actief" {% if f.actief %}checked{% endif %}> Actief <span class="muted">(uitzetten verwijdert niets — verwijzingen blijven geldig)</span></label>
+    <button type="submit" class="btn-save">Opslaan</button>
+</form>
+{% endif %}
+
+<div class="section-label">Medewerkers &mdash; in dienst bij deze firma <span class="sec-count">{{ in_dienst|length }}</span></div>
+{% if in_dienst %}
+<table class="person-meta">
+    {% for p in in_dienst %}
+    <tr><td><a href="{{ url_for('persoon', pid=p.id) }}">{{ p.volledige_naam }}</a></td><td>{{ p.afdeling.naam }}</td></tr>
+    {% endfor %}
+</table>
+{% else %}<p class="empty">Geen.</p>{% endif %}
+
+<div class="section-label">Medewerkers &mdash; verrichten diensten voor deze firma <span class="sec-count">{{ diensten|length }}</span></div>
+{% if diensten %}
+<table class="person-meta">
+    {% for p in diensten %}
+    <tr><td><a href="{{ url_for('persoon', pid=p.id) }}">{{ p.volledige_naam }}</a></td><td>{{ p.afdeling.naam }}</td></tr>
+    {% endfor %}
+</table>
+{% else %}<p class="empty">Geen.</p>{% endif %}
+
+<div class="section-label">Telefoonnummers &mdash; gefactureerd aan deze firma <span class="sec-count">{{ nummers_factuur|length }}</span></div>
+{% if nummers_factuur %}
+<table class="person-meta">
+    {% for n in nummers_factuur %}
+    <tr>
+        <td><a href="https://communicatie.{{ base_domain }}/#nummer={{ n.id }}" target="_blank" rel="noopener">{{ n.telefoonnummer or '(geen nummer)' }}</a></td>
+        <td>{{ n.doel }}{% if n.status != 'Actief' %} <span class="tag">{{ n.status }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}<p class="empty">Geen.</p>{% endif %}
+
+<div class="section-label">Telefoonnummers &mdash; doorgefactureerd aan deze firma <span class="sec-count">{{ nummers_doorfactuur|length }}</span></div>
+{% if nummers_doorfactuur %}
+<table class="person-meta">
+    {% for n in nummers_doorfactuur %}
+    <tr>
+        <td><a href="https://communicatie.{{ base_domain }}/#nummer={{ n.id }}" target="_blank" rel="noopener">{{ n.telefoonnummer or '(geen nummer)' }}</a></td>
+        <td>{{ n.doel }}{% if n.status != 'Actief' %} <span class="tag">{{ n.status }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}<p class="empty">Geen.</p>{% endif %}
+
+<div class="section-label">E-mailadressen van deze firma <span class="sec-count">{{ emails|length }}</span></div>
+{% if emails %}
+<table class="person-meta">
+    {% for m in emails %}
+    <tr>
+        <td>{{ m.adres }}</td>
+        <td>{% if m.verantwoordelijke %}{{ m.verantwoordelijke }}{% else %}<span class="open-badge" title="Geen verantwoordelijke — open eindje">OPEN</span>{% endif %}{% if not m.actief %} <span class="tag">Niet-actief</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}<p class="empty">Geen.</p>{% endif %}
+
+<p class="rbac-note">Nummers en adressen beheer je in Communicatie; personen-koppelingen op het profiel. Deze pagina toont alles wat aan de firma hangt.</p>
+{% endblock %}
