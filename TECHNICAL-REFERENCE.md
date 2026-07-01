@@ -959,25 +959,57 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   de `X-authentik-*`-headers; alleen **admin/manager** hebben toegang (Authentik
   group-binding + check in de app). Leest `kern.persoon` via de `portal`-rol; de
   connectiestring staat in `.env` als `APPPORTAL_DB_URL`.
+- Het **360°-profiel** toont per persoon: **Toegang (Authentik)** — groepen + afgeleide
+  apps (§14.3) — en **Telefoonnummers** uit het telefoonregister (§14.4). Beide via
+  read-only API-calls, best-effort (ontbreekt de bron → nette fallback, app blijft werken).
 
-### 14.3 Authentik-koppeling & openstaand
+### 14.3 Authentik-koppeling (Toegang-panel)
 - Bestaande Authentik-accounts zijn **handmatig gekoppeld** aan hun persoon door
   `authentik_username` + `authentik_sub` (de Authentik-`uuid`) te zetten. Gekoppelde
   profielen tonen "gekoppeld via Authentik". `akadmin` is bewust **niet** gekoppeld
   (break-glass admin, geen persoon; z'n e-mail is losgekoppeld van `mch@h-architects.be`).
-- **Nog open:** (a) het profiel-blok "Toegang (Authentik)" vullen met de echte groepen/apps
-  van een persoon (read-only Authentik-API-token); (b) automatische koppeling bij eerste
-  login bestaat niet meer (liep via de afgedankte OIDC-portal) — koppelen gebeurt nu
-  bewust/admin; (c) ontbrekende HR-nummers/familienamen/e-mails aanvullen.
+- Het profiel-blok **"Toegang (Authentik)"** toont de echte **groepen** van de persoon
+  (live uit de Authentik-API op `authentik_username`) en de **apps** die die groepen geven
+  (afgeleid uit `apps.yaml`: groep ∩ `roles`). Read-only via een eigen service-account
+  **`medewerkers-readonly`** (RBAC-rol met `view_user` + `view_group`), aangemaakt met
+  `scripts/add-medewerkers-readonly-token.py`. Het token staat in `.env` als
+  `MEDEWERKERS_AUTHENTIK_TOKEN`; de app leest het als `AUTHENTIK_API_TOKEN` met
+  `AUTHENTIK_API_URL=https://auth.<domein>/api/v3` (intern via de nginx-netwerkalias, dus
+  geen hairpin). Best-effort: geen token/API → "koppeling niet geconfigureerd".
+- **Nog open:** (a) automatische koppeling bij eerste login bestaat niet meer (liep via de
+  afgedankte OIDC-portal) — koppelen gebeurt nu bewust/admin; (b) ontbrekende
+  HR-nummers/familienamen/e-mails aanvullen.
+
+### 14.4 Koppeling Telefoonregister ↔ persoon
+De eerste échte spoke die naar `kern.persoon(id)` verwijst — het 360°-model in de praktijk.
+- **Telefoonregister** (`telefoonregister.globaal.be`, eigen repo
+  `softwareglobaal/telefoonregister`, SQLite, service `app-telefoonregister`:3006) kreeg een
+  kolom **`numbers.persoon_id`** (uuid, nullable) — een **zachte** verwijzing naar
+  `kern.persoon(id)`. Geen echte FK: SQLite ↔ Postgres, integriteit door proces. Migratie
+  `20260701_000002_add_persoon_id.js`.
+- **Matching:** de bestaande vrije-tekst `assigned_to` is eenmalig, gecureerd gekoppeld
+  (8 waarden → 7 personen). Teamlijnen, externen, andere groepsbedrijven en niet-toegewezen
+  nummers blijven leeg — koppelen is **opt-in per record**; de dekking groeit mee als
+  `kern.persoon` groeit.
+- **Profiel → nummers:** het medewerkersprofiel toont een sectie **Telefoonnummers**
+  (telefoon/functie/status, **nooit** de secrets/PIN/PUK). Helper `medewerkers/telefoon.py`
+  roept de **interne** telefoonregister-API aan (`GET /api/numbers?persoon_id=…` via
+  `TELEFOON_API_URL=http://app-telefoonregister:3006`, buiten nginx om). Best-effort.
+- **Telefoon → profiel:** in het telefoonregister is **"Toegewezen aan"** een link naar
+  `medewerkers.<domein>/<persoon_id>` waar `persoon_id` gezet is (frontend leidt de host af
+  uit `location.hostname`). API-uitbreiding: een `?persoon_id=`-filter op `GET /api/numbers`.
+- **Los eindje:** de telefoonregister-repo draait op branch `claude/ecstatic-feynman-wctpk1`
+  (niet `main`) — zelfde drift-patroon als appportal had; nog te verzoenen.
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
 
 ---
 
-*Laatst bijgewerkt: 2026-07-01 — **drift-opruiming afgerond**: branch
-`vm-as-built-2026-06-26` verzoend met `main` en opgeruimd (VM-realiteit + docs op één
-branch; §12.3). Eerder (2026-06-30): **§14 (centrale gebruikersdatabase + Medewerkers-app)**
+*Laatst bijgewerkt: 2026-07-01 — **Toegang-panel** (Authentik-groepen + afgeleide apps,
+§14.3) en **koppeling Telefoonregister ↔ persoon** (§14.4 — eerste spoke met `persoon_id`)
+live. Diezelfde dag de **drift-opruiming afgerond**: branch `vm-as-built-2026-06-26`
+verzoend met `main` en opgeruimd (VM-realiteit + docs op één branch; §12.3). Eerder (2026-06-30): **§14 (centrale gebruikersdatabase + Medewerkers-app)**
 toegevoegd en **§12.2** rechtgezet (Authentik-launcher is de home, Flask-portal afgedankt).
 Eerder (2026-06-22): **§6 (OMV-pipeline)** uitgebreid met de volledige
 scrape→download→merge→extract-keten (§6.1–6.5), inclusief **§6.5 anti-blokkering**
