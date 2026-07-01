@@ -76,7 +76,7 @@ function lijstWaarden(cat) {
 // Link naar het medewerkersprofiel (medewerkers.<domein>/<persoon_id>).
 function profileUrl(persoonId) {
   const parts = location.hostname.split('.');
-  parts[0] = 'medewerkers';
+  parts[0] = 'organisatie';
   return `${location.protocol}//${parts.join('.')}/${persoonId}`;
 }
 function persoonLink(persoonId, naam) {

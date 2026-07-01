@@ -1,0 +1,11 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name organisatie.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Forward-auth (embedded outpost) beschermt de hele app; identiteit + groepen
+    # gaan als X-authentik-* headers naar de Flask-app (Organisatie-dashboard).
+    set $app_upstream http://app-medewerkers:3007;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

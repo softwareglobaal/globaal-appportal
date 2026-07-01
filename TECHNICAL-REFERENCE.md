@@ -969,7 +969,13 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   `appportal` in custom formaat naar `~/backups/` met 14 dagen retentie; terugzetten
   met `pg_restore` (voorbeeld in de scriptkop). Off-site kopie (S3) is een open punt.
 
-### 14.2 Organisatie-dashboard (`medewerkers.globaal.be`) — medewerkers + firma's
+### 14.2 Organisatie-dashboard (`organisatie.globaal.be`) — medewerkers + firma's
+> Het oude adres `medewerkers.globaal.be` blijft werken via een nginx-**301** naar
+> het nieuwe domein (wildcard-DNS + wildcard-cert, dus geen extra stappen). In
+> Authentik is alleen de `external_host` van de proxy-provider en de tegel
+> aangepast (`scripts/hernoem-medewerkers-naar-organisatie.py`); de slug blijft
+> `medewerkers`, net als de compose-service `app-medewerkers` en de map
+> `medewerkers/` (interne namen, geen buitenkant).
 - **Forward-auth-app** (Flask), map `medewerkers/`, compose-service **`app-medewerkers`**
   in `docker-compose.override.yml` (poort 3007), nginx-blok
   `nginx/templates/44-medewerkers.conf.template`. Registratie in Authentik
