@@ -35,5 +35,21 @@
     <tr><td>Dashboards</td><td><span class="muted">vullen zich zodra een dashboard naar persoon_id verwijst</span></td></tr>
 </table>
 
+<div class="section-label">Telefoonnummers</div>
+{% if tel_nummers %}
+<table class="person-meta">
+    {% for n in tel_nummers %}
+    <tr>
+        <td>{% if n.phone %}{{ n.phone }}{% else %}<span class="muted">geen nummer</span>{% endif %}</td>
+        <td>{{ n.functie }}{% if n.status and n.status != 'Actief' %} <span class="tag">{{ n.status }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% elif not tel_enabled %}
+<p class="empty">Telefoonregister-koppeling niet geconfigureerd.</p>
+{% else %}
+<p class="empty">Geen nummers gekoppeld.</p>
+{% endif %}
+
 <p class="rbac-note">Zichtbaar voor admin en (binnen de eigen afdeling) manager; een gewone gebruiker ziet enkel zichzelf.</p>
 {% endblock %}

@@ -13,6 +13,7 @@ from sqlalchemy import select
 
 import authentik
 import models
+import telefoon
 
 USER_HEADER = "X-Authentik-Username"
 GROUPS_HEADER = "X-Authentik-Groups"
@@ -83,6 +84,9 @@ def persoon(pid):
         # Toegang: groepen uit Authentik (read-only API) + daaruit afgeleide apps.
         ak_groepen = authentik.groepen_van(p.authentik_username) if p.authentik_sub else []
         ak_apps = authentik.apps_voor(ak_groepen)
+        # Telefoonnummers: via de interne telefoonregister-API (best-effort).
+        tel_nummers = telefoon.nummers_van(p.id)
         return render_template("persoon.html", username=_username(), p=p,
                                ak_groepen=ak_groepen, ak_apps=ak_apps,
-                               ak_enabled=authentik.enabled)
+                               ak_enabled=authentik.enabled,
+                               tel_nummers=tel_nummers, tel_enabled=telefoon.enabled)

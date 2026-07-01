@@ -32,6 +32,8 @@ services:
       AUTHENTIK_API_URL: https://auth.${BASE_DOMAIN}/api/v3
       AUTHENTIK_API_TOKEN: ${MEDEWERKERS_AUTHENTIK_TOKEN:-}
       APPS_FILE: /app/apps.yaml
+      # Interne telefoonregister-API voor de profielsectie "Telefoonnummers".
+      TELEFOON_API_URL: http://app-telefoonregister:3006
     volumes:
       - ./apps.yaml:/app/apps.yaml:ro
     healthcheck:
