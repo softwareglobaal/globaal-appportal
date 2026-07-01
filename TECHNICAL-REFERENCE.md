@@ -940,17 +940,29 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   `voornaam`/`achternaam`, `email` (citext, uniek), `afdeling_id`, `rol`
   (Lid/Hoofd/Partner/Management), `hr_nummer`, `locatie`, `in_dienst`, en de
   loginkoppeling `authentik_sub` + `authentik_username` (leeg = geen login).
-- Spoke-schema's (bv. `schuldentracker`, `omv`) verwijzen met `persoon_id` (UUID,
-  `ON DELETE RESTRICT`) naar `kern.persoon`, zodat een 360°-profiel een gewone join is.
+- Spoke-schema's (bv. `schuldentracker`, `omv`, **`kosten`** — het kosten-dashboard)
+  verwijzen met `persoon_id` (UUID, `ON DELETE RESTRICT`) naar `kern.persoon`, zodat een
+  360°-profiel een gewone join is. ⚠ Aandachtspunt: `kosten.firma` is een **eigen, tweede
+  firmalijst** (text-id's) naast `kern.firma` — later te verzoenen (definitieboek-principe:
+  één lijst per begrip).
 - **`kern.firma`** — centrale firmalijst (13 bedrijven van de groep): `id` (uuid), `naam`,
-  `code` (uniek, 4 hoofdletters), `land`, `actief` (zacht uitzetten). Bedoeld als bron van
-  waarheid + dropdown overal; nu **standalone** (nog geen koppeling aan `persoon`/dashboards).
-  Bestand: `DDL-SEED-kern-firma.sql`.
+  `code` (uniek, 4 hoofdletters), `land`, `actief` (zacht uitzetten). Gekoppeld aan
+  personen via **`persoon.werkgever_firma_id`** ("in dienst bij" — uniselect, FK) en de
+  koppeltabel **`kern.persoon_dienstfirma`** ("diensten voor" — multiselect,
+  veel-op-veel). Seed: `db/seed-afdeling-firma.sql`.
 - **Per-app DB-rollen** (governance): elke app krijgt een eigen rol met **alleen-lezen**
-  op `kern` en rechten op enkel het eigen schema. De Medewerkers-app gebruikt de
-  read-only rol **`portal`** (zie `appportal-portal-role.sql`).
-- SQL-bestanden: `DDL-appportal.sql` (schema), `SEED-kern-persoon.sql` (34 medewerkers),
-  `appportal-portal-role.sql` (rol + grants).
+  op `kern` en rechten op enkel het eigen schema. De Medewerkers-app leest via
+  **`portal`** en schrijft via de **smalle schrijfrol `medewerker_writer`** (enkel
+  `UPDATE(werkgever_firma_id)` op `persoon` + `INSERT`/`DELETE` op de koppeltabel — meer
+  niet). Het kosten-dashboard gebruikt de rol **`kosten`**. Alle rollen staan in
+  `db/roles.sql` (placeholders; echte wachtwoorden alleen in `.env` op de VM).
+- **Schemabeheer (sinds 2026-07-01):** het schema staat in git onder **`db/`** —
+  `000-baseline.sql` (volledige schema-dump als nulpunt), `roles.sql`,
+  `seed-afdeling-firma.sql`, en `migrations/NNN-*.sql` voor alles daarna, toegepast met
+  `scripts/db-migrate.sh` (tracking in `public.schema_migrations`; dubbel draaien is
+  veilig). **Regel: geen ad-hoc `psql`-DDL meer** — elke wijziging is een genummerd,
+  gecommit bestand. Verse-deploy-procedure: `db/README.md`. De persoon-seed (34
+  namen/e-mails) blijft bewust buiten de repo (lokale ontwerpmap).
 
 ### 14.2 Medewerkers-app (`medewerkers.globaal.be`)
 - **Forward-auth-app** (Flask), map `medewerkers/`, compose-service **`app-medewerkers`**
@@ -966,6 +978,12 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
 - Het **360°-profiel** toont per persoon: **Toegang (Authentik)** — groepen + afgeleide
   apps (§14.3) — en **Telefoonnummers** uit het telefoonregister (§14.4). Beide via
   read-only API-calls, best-effort (ontbreekt de bron → nette fallback, app blijft werken).
+- **Firma-koppeling (bewerken):** op het profiel kiest een **admin** de werkgever
+  ("In dienst bij", uniselect) en de dienstverbanden ("Diensten voor", multiselect);
+  beide dropdowns komen uit `kern.firma` (alleen actieve firma's). Opslaan loopt via de
+  aparte schrijf-engine (`APPPORTAL_WRITE_URL` in `.env` → rol `medewerker_writer`);
+  zonder die env blijft de app volledig read-only. De **lijst** toont beide als kolommen
+  ("In dienst" = firmacode, "Diensten voor" = code-chips).
 
 ### 14.3 Authentik-koppeling (Toegang-panel)
 - Bestaande Authentik-accounts zijn **handmatig gekoppeld** aan hun persoon door
@@ -1010,9 +1028,14 @@ De eerste échte spoke die naar `kern.persoon(id)` verwijst — het 360°-model 
 
 ---
 
-*Laatst bijgewerkt: 2026-07-01 — **Toegang-panel** (Authentik-groepen + afgeleide apps,
+*Laatst bijgewerkt: 2026-07-01 (avond) — **firma-koppeling op personen** (werkgever uni +
+diensten-voor multi, admin-bewerking via smalle schrijfrol `medewerker_writer`;
+§14.1/§14.2) en **schemabeheer in git** (`db/` met baseline + migratie-runner; regel:
+geen ad-hoc DDL; §14.1). Ook `DEFINITIEBOEK.md` (draft terminologie) toegevoegd en
+`.gitattributes` (LF-normalisatie). Eerder die dag: **Toegang-panel** (Authentik-groepen
++ afgeleide apps,
 §14.3), **koppeling Telefoonregister ↔ persoon** (§14.4 — eerste spoke met `persoon_id`)
-en de **centrale firmalijst `kern.firma`** (13 bedrijven, §14.1) live. Diezelfde dag de
+en de **centrale firmalijst `kern.firma`** (13 bedrijven, §14.1) live, en de
 **drift-opruiming afgerond**: branch `vm-as-built-2026-06-26`
 verzoend met `main` en opgeruimd (VM-realiteit + docs op één branch; §12.3). Eerder (2026-06-30): **§14 (centrale gebruikersdatabase + Medewerkers-app)**
 toegevoegd en **§12.2** rechtgezet (Authentik-launcher is de home, Flask-portal afgedankt).
