@@ -265,8 +265,8 @@ async function gebruikersVoor(ids) {
     .join('kern.persoon as p', 'p.id', 'ng.persoon_id')
     .leftJoin('kern.afdeling as pa', 'pa.id', 'p.afdeling_id')
     .whereIn('ng.nummer_id', ids)
-    .select('ng.nummer_id', 'ng.persoon_id', knex.raw(`${persoonNaam} as naam`))
-    .orderBy('naam');
+    .select('ng.nummer_id', 'ng.persoon_id', 'ng.volgorde', knex.raw(`${persoonNaam} as naam`))
+    .orderBy([{ column: 'ng.volgorde' }, { column: 'naam' }]);
   const map = {};
   for (const r of rows) {
     (map[r.nummer_id] ||= []).push({ persoon_id: r.persoon_id, naam: r.naam });
@@ -275,11 +275,12 @@ async function gebruikersVoor(ids) {
 }
 
 async function syncGebruikers(nummerId, persoonIds) {
+  // Volgorde in de array = belvolgorde (queue): index 0 neemt eerst op.
   const gewenst = [...new Set((persoonIds || []).map(uuidOrNull).filter(Boolean))];
   await knex('nummer_gebruiker').where({ nummer_id: nummerId }).del();
   if (gewenst.length) {
     await knex('nummer_gebruiker').insert(
-      gewenst.map((pid) => ({ nummer_id: nummerId, persoon_id: pid }))
+      gewenst.map((pid, i) => ({ nummer_id: nummerId, persoon_id: pid, volgorde: i + 1 }))
     );
   }
 }
@@ -290,7 +291,10 @@ router.get('/numbers', async (req, res, next) => {
     let query = nummerQuery();
     if (land) query = query.where('n.land', land);
     if (status) query = query.where('n.status', status);
-    if (firma) query = query.where('n.factuur_firma_id', firma);
+    if (firma) {
+      const firmaIds = String(firma).split(',').filter(Boolean);
+      query = query.whereIn('n.factuur_firma_id', firmaIds);
+    }
     if (leverancier) query = query.where('n.leverancier_id', leverancier);
     if (afdeling) query = query.where('n.afdeling_id', afdeling);
     if (attention === '1') query = query.andWhere('n.aandacht', '<>', '');

@@ -11,7 +11,7 @@ const state = {
   numbers: [],
   emails: [],
   stats: { total: 0, actief: 0, niet_actief: 0, onbekend: 0, dubbel: 0, probleem: 0 },
-  filters: { land: '', status: '', firma: '', leverancier: '', q: '', duplicates: false, attention: false },
+  filters: { land: '', status: '', firma: [], leverancier: '', q: '', duplicates: false, attention: false },
   emailFilters: { q: '', open: false },
   selectedId: null,
 };
@@ -106,22 +106,15 @@ function rowFlag(n) {
 // ====================================================================
 // KPI-kaarten
 // ====================================================================
-const KPI_ICONS = {
-  phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
-  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
-  warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-  question: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-};
-
 function resetFilters(f) {
   f.status = ''; f.duplicates = false; f.attention = false;
-  f.land = ''; f.firma = ''; f.leverancier = ''; f.q = '';
+  f.land = ''; f.firma = []; f.leverancier = ''; f.q = '';
 }
 
 const KPI_DEFS = [
   { key: 'total', cls: 'k-total', icon: 'phone', label: 'Totaal nummers', sub: 'Alle geregistreerde nummers',
     value: (s) => s.total,
-    active: (f) => !f.status && !f.duplicates && !f.attention && !f.land && !f.firma && !f.leverancier,
+    active: (f) => !f.status && !f.duplicates && !f.attention && !f.land && !f.firma.length && !f.leverancier,
     apply: (f) => { resetFilters(f); } },
   { key: 'actief', cls: 'k-actief', icon: 'check', label: 'Actief', sub: 'Momenteel in gebruik',
     value: (s) => s.actief,
@@ -151,12 +144,8 @@ function renderKpis() {
           load();
         },
       },
-        el('div', { class: 'kpi-top' },
-          el('div', { class: 'kpi-icon', html: KPI_ICONS[def.icon] }),
-          el('div', { class: 'kpi-label' }, def.label)
-        ),
-        el('div', { class: 'kpi-value' }, String(def.value(state.stats))),
-        el('div', { class: 'kpi-sub' }, def.sub)
+        el('div', { class: 'kpi-label' }, def.label),
+        el('div', { class: 'kpi-value' }, String(def.value(state.stats)))
       )
     );
   });
@@ -190,9 +179,23 @@ function renderFilters() {
     [{ value: '', label: 'Alles' }, ...STATUSES.map((s) => ({ value: s, label: s }))],
     f.status, (v) => { f.status = v; f.duplicates = false; f.attention = false; rerun(); });
 
-  chipRow($('#firmaChips'),
-    [{ value: '', label: 'Alles' }, ...state.refs.firmas.map((x) => ({ value: x.id, label: x.naam }))],
-    f.firma, (v) => { f.firma = v; rerun(); });
+  // Firma: multi-select — meerdere chips tegelijk aan te zetten.
+  const fc = $('#firmaChips');
+  fc.innerHTML = '';
+  fc.append(el('button', {
+    class: 'chip' + (f.firma.length === 0 ? ' active' : ''),
+    onclick: () => { f.firma = []; rerun(); },
+  }, 'Alles'));
+  state.refs.firmas.forEach((x) => {
+    const aan = f.firma.includes(x.id);
+    fc.append(el('button', {
+      class: 'chip' + (aan ? ' active' : ''),
+      onclick: () => {
+        f.firma = aan ? f.firma.filter((id) => id !== x.id) : [...f.firma, x.id];
+        rerun();
+      },
+    }, x.naam));
+  });
 
   chipRow($('#leverancierChips'),
     [{ value: '', label: 'Alles' }, ...state.refs.leveranciers.filter((l) => l.actief).map((x) => ({ value: x.id, label: x.naam }))],
@@ -218,7 +221,7 @@ function renderTable() {
       el('td', { class: 'phone-cell' },
         el('div', { class: 'phone-line' }, n.telefoonnummer || '—'),
         flag
-          ? el('span', { class: 'warn-badge' + (flag.amber ? ' amber' : ''), title: flag.tip }, '⚠ ' + flag.label)
+          ? el('span', { class: 'warn-badge' + (flag.amber ? ' amber' : ''), title: flag.tip }, flag.label)
           : null
       ),
       el('td', {}, persoonLink(n.verantwoordelijke_persoon_id, n.verantwoordelijke_naam)),
@@ -239,11 +242,13 @@ function renderTable() {
 // Detailweergave (slide-over)
 // ====================================================================
 let detailRecord = null;
+let detailQueue = [];  // gebruikers in belvolgorde (index 0 neemt eerst op)
 const REF_KEYS = ['leverancier_id', 'factuur_firma_id', 'doorfactuur_firma_id', 'afdeling_id', 'verantwoordelijke_persoon_id'];
 
 async function openDetail(id) {
   try {
     detailRecord = await api(`/api/numbers/${id}`);
+    detailQueue = (detailRecord.gebruikers || []).map((g) => ({ persoon_id: g.persoon_id, naam: g.naam }));
     state.selectedId = id;
     renderDetail();
     $('#overlay').classList.add('open');
@@ -303,7 +308,7 @@ function renderDetail() {
         el('div', { class: 'sub-line' }, [d.land, d.factuur_firma_naam, d.leverancier_naam].filter(Boolean).join(' · ') || '—')
       ),
       statusBadge(d.status),
-      el('button', { class: 'icon-btn', onclick: closeDetail, title: 'Sluiten' }, '✕')
+      el('button', { class: 'icon-btn', onclick: closeDetail, title: 'Sluiten' }, '×')
     )
   );
 
@@ -312,7 +317,6 @@ function renderDetail() {
   if (d.is_duplicate) {
     body.append(
       el('div', { class: 'attention-banner' },
-        el('span', {}, '⚠'),
         el('div', { style: 'flex:1' },
           el('div', { html: '<b>Duplicaat nummer:</b> dit nummer komt meermaals voor in het register — controleer of dit terecht is.' })
         )
@@ -322,7 +326,6 @@ function renderDetail() {
   if ((d.aandacht || '').trim()) {
     body.append(
       el('div', { class: 'attention-banner' },
-        el('span', {}, '⚠'),
         el('div', { style: 'flex:1' },
           el('div', { html: `<b>Aandacht:</b> ${esc(d.aandacht)}` }),
           el('button', { class: 'btn btn-sm', style: 'margin-top:8px', onclick: clearAttention }, 'Markering opgelost — wissen')
@@ -370,18 +373,10 @@ function renderDetail() {
     { refOptions: refOpties(state.refs.afdelingen, (x) => x.naam) }));
   body.append(grid0);
 
-  // Gebruikers (multi)
-  body.append(el('div', { class: 'section-title' }, 'Gebruikers',
-    el('span', { class: 'muted', style: 'font-weight:400;font-size:12px;margin-left:8px' }, 'wie werkt op dit nummer')));
-  const huidige = new Set((d.gebruikers || []).map((g) => g.persoon_id));
-  const box = el('div', { class: 'gebruikers-box' });
-  state.refs.personen.forEach((p) => {
-    const cb = el('input', { type: 'checkbox', ...(huidige.has(p.id) ? { checked: '' } : {}) });
-    cb.dataset.pid = p.id;
-    cb.classList.add('gebruiker-cb');
-    box.append(el('label', { class: 'gebruiker-item' }, cb, ' ', p.naam));
-  });
-  body.append(box);
+  // Gebruikers in belvolgorde (queue van de telefooncentrale).
+  body.append(el('div', { class: 'section-title' }, 'Gebruikers — belvolgorde',
+    el('span', { class: 'muted', style: 'font-weight:400;font-size:12px;margin-left:8px' }, '1 neemt eerst op')));
+  body.append(renderQueue());
 
   // Details
   body.append(el('div', { class: 'section-title' }, 'Details'));
@@ -396,7 +391,7 @@ function renderDetail() {
   // Afgeschermde inloggegevens
   body.append(
     el('div', { class: 'section-title' }, 'Inloggegevens',
-      el('button', { class: 'btn btn-sm', id: 'revealBtn', onclick: toggleSecret }, '👁 Toon')
+      el('button', { class: 'btn btn-sm', id: 'revealBtn', onclick: toggleSecret }, 'Toon')
     )
   );
   body.append(renderSecret());
@@ -412,6 +407,45 @@ function renderDetail() {
   );
 }
 
+function renderQueue() {
+  const wrap = el('div', { class: 'queue-box' });
+  if (!detailQueue.length) {
+    wrap.append(el('div', { class: 'hint' }, 'Nog geen gebruikers op dit nummer.'));
+  }
+  detailQueue.forEach((g, i) => {
+    wrap.append(el('div', { class: 'queue-item' },
+      el('span', { class: 'queue-num' }, String(i + 1)),
+      el('span', { class: 'queue-naam' }, g.naam),
+      el('span', { class: 'queue-btns' },
+        el('button', { class: 'icon-btn', title: 'Eerder in de queue', onclick: () => moveQueue(i, -1) }, '↑'),
+        el('button', { class: 'icon-btn', title: 'Later in de queue', onclick: () => moveQueue(i, 1) }, '↓'),
+        el('button', { class: 'icon-btn', title: 'Uit de queue halen', onclick: () => { detailQueue.splice(i, 1); refreshQueue(); } }, '×')
+      )));
+  });
+  const beschikbaar = state.refs.personen.filter((p) => !detailQueue.some((g) => g.persoon_id === p.id));
+  if (beschikbaar.length) {
+    const sel = el('select', { class: 'queue-add' },
+      el('option', { value: '' }, '+ gebruiker toevoegen'),
+      ...beschikbaar.map((p) => el('option', { value: p.id }, p.naam)));
+    sel.addEventListener('change', () => {
+      const p = state.refs.personen.find((x) => x.id === sel.value);
+      if (p) { detailQueue.push({ persoon_id: p.id, naam: p.naam }); refreshQueue(); }
+    });
+    wrap.append(sel);
+  }
+  return wrap;
+}
+function moveQueue(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= detailQueue.length) return;
+  [detailQueue[i], detailQueue[j]] = [detailQueue[j], detailQueue[i]];
+  refreshQueue();
+}
+function refreshQueue() {
+  const oud = document.querySelector('.queue-box');
+  if (oud) oud.replaceWith(renderQueue());
+}
+
 let secretRevealed = false;
 function renderSecret() {
   const s = detailRecord.geheim || { kaartnummer: '', pin1: '', puk1: '', pin2: '', puk2: '', notitie: '' };
@@ -419,7 +453,6 @@ function renderSecret() {
   if (!secretRevealed) {
     box.append(
       el('div', { class: 'secret-locked' },
-        el('div', { class: 'lock' }, '🔒'),
         el('div', {}, 'PIN, PUK en kaartnummer zijn verborgen.'),
         el('div', { class: 'hint' }, 'Klik op “Toon” bovenaan deze sectie om ze te bekijken of te bewerken.')
       )
@@ -445,7 +478,7 @@ function renderSecret() {
 function toggleSecret() {
   secretRevealed = !secretRevealed;
   const btn = $('#revealBtn');
-  if (btn) btn.textContent = secretRevealed ? '🙈 Verberg' : '👁 Toon';
+  if (btn) btn.textContent = secretRevealed ? 'Verberg' : 'Toon';
   const old = $('.secret-box');
   if (old) old.replaceWith(renderSecret());
 }
@@ -457,9 +490,7 @@ async function saveDetail() {
       ? (inp.value || null)
       : inp.value;
   });
-  payload.gebruiker_ids = [...document.querySelectorAll('.gebruiker-cb')]
-    .filter((cb) => cb.checked)
-    .map((cb) => cb.dataset.pid);
+  payload.gebruiker_ids = detailQueue.map((g) => g.persoon_id);
   try {
     await api(`/api/numbers/${detailRecord.id}`, { method: 'PUT', body: payload });
     toast('Opgeslagen.');
@@ -609,7 +640,7 @@ async function checkDuplicate(phone) {
     if (r.duplicate && r.matches.length) {
       const m = r.matches[0];
       dupBox.innerHTML =
-        `<div class="dup-warning">⚠ <b>Dit nummer bestaat al</b> — ${esc(m.telefoonnummer)} ` +
+        `<div class="dup-warning"><b>Dit nummer bestaat al</b> — ${esc(m.telefoonnummer)} ` +
         `(${esc(m.doel || '')}, status ${esc(m.status)}). ` +
         `Toevoegen wordt geblokkeerd om dubbele abonnementen te vermijden.</div>`;
     } else {
@@ -641,7 +672,7 @@ async function saveAdd() {
       const x = e.data.existing;
       errEl.innerHTML = '';
       $('#dupBox').innerHTML =
-        `<div class="dup-warning">⚠ <b>Geblokkeerd: nummer bestaat al</b> — ${esc(x.telefoonnummer)} ` +
+        `<div class="dup-warning"><b>Geblokkeerd: nummer bestaat al</b> — ${esc(x.telefoonnummer)} ` +
         `(${esc(x.doel || '')}${x.status ? ', status ' + esc(x.status) : ''}).</div>`;
     } else {
       errEl.textContent = e.message;
@@ -708,7 +739,7 @@ function renderListsModal() {
             try { await api(`/api/lists/${v.id}`, { method: 'DELETE' }); toast('Verwijderd.'); }
             catch (e) { toast(e.message, true); }
           },
-        }, '🗑')
+        }, '×')
       )
     );
   });
@@ -926,7 +957,7 @@ async function load() {
   const p = new URLSearchParams();
   if (f.land) p.set('land', f.land);
   if (f.status) p.set('status', f.status);
-  if (f.firma) p.set('firma', f.firma);
+  if (f.firma.length) p.set('firma', f.firma.join(','));
   if (f.leverancier) p.set('leverancier', f.leverancier);
   if (f.q) p.set('q', f.q);
   if (f.duplicates) p.set('duplicates', '1');
