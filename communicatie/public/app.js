@@ -1222,6 +1222,12 @@ async function init() {
     applyEditMode(me.isEditor);
   } catch (_) { $('#userName').textContent = 'onbekend'; }
   await refreshAll();
+  // Deep-link vanuit het medewerkersprofiel: #nummer=<uuid> opent het nummerdetail.
+  const dl = location.hash.match(/^#nummer=([0-9a-f-]{36})$/i);
+  if (dl) {
+    history.replaceState(null, '', location.pathname);
+    openDetail(dl[1]);
+  }
   connectEvents();
 }
 

@@ -1030,9 +1030,12 @@ De eerste échte spoke die naar `kern.persoon(id)` verwijst — het 360°-model 
   nummers blijven leeg — koppelen is **opt-in per record**; de dekking groeit mee als
   `kern.persoon` groeit.
 - **Profiel → nummers:** het medewerkersprofiel toont een sectie **Telefoonnummers**
-  (telefoon/functie/status, **nooit** de secrets/PIN/PUK). Helper `medewerkers/telefoon.py`
-  roept de **interne** telefoonregister-API aan (`GET /api/numbers?persoon_id=…` via
-  `TELEFOON_API_URL=http://app-telefoonregister:3006`, buiten nginx om). Best-effort.
+  (nummer/doel/status, **nooit** de secrets/PIN/PUK). Sinds het Communicatie-dashboard
+  (§14.5) leest `medewerkers/telefoon.py` **rechtstreeks het `communicatie`-schema**
+  (portal-rol, SQL): nummers waar de persoon verantwoordelijke óf gebruiker (queue) van
+  is. Elk nummer is een **link terug** naar het nummerdetail in Communicatie
+  (deep-link `https://communicatie.<domein>/#nummer=<id>`). De oude route via de
+  telefoonregister-API is daarmee vervallen. Best-effort.
 - **Telefoon → profiel:** in het telefoonregister is **"Toegewezen aan"** een link naar
   `medewerkers.<domein>/<persoon_id>` waar `persoon_id` gezet is (frontend leidt de host af
   uit `location.hostname`). API-uitbreiding: een `?persoon_id=`-filter op `GET /api/numbers`.

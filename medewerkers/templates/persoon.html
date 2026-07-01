@@ -69,13 +69,13 @@
 <table class="person-meta">
     {% for n in tel_nummers %}
     <tr>
-        <td>{% if n.phone %}{{ n.phone }}{% else %}<span class="muted">geen nummer</span>{% endif %}</td>
-        <td>{{ n.functie }}{% if n.status and n.status != 'Actief' %} <span class="tag">{{ n.status }}</span>{% endif %}</td>
+        <td><a href="https://communicatie.{{ base_domain }}/#nummer={{ n.id }}" target="_blank" rel="noopener" title="Open in Communicatie">{% if n.telefoonnummer %}{{ n.telefoonnummer }}{% else %}(geen nummer){% endif %}</a></td>
+        <td>{{ n.doel }}{% if not n.verantwoordelijk %} <span class="tag">gebruiker</span>{% endif %}{% if n.status and n.status != 'Actief' %} <span class="tag">{{ n.status }}</span>{% endif %}</td>
     </tr>
     {% endfor %}
 </table>
 {% elif not tel_enabled %}
-<p class="empty">Telefoonregister-koppeling niet geconfigureerd.</p>
+<p class="empty">Communicatie-koppeling niet geconfigureerd.</p>
 {% else %}
 <p class="empty">Geen nummers gekoppeld.</p>
 {% endif %}
