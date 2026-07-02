@@ -77,14 +77,18 @@
 - [ ] **RBAC verfijnen**: wie ziet welk deel van het dashboard (nu: admin/manager alles).
 
 ## Second Brain (meeting 2026-07-02, Mehdi)
-- [ ] **Finalisatie-status + kleurcodering** in de Second Brain: blauw = gefinaliseerd,
-      rood = nog niet — met vastlegging *wie* finaliseerde (Mehdi/Angela/Sian) en
-      *wanneer* (rollen wijzigen; historie telt).
+- [x] **Finalisatie-status + kleurcodering** — GEBOUWD (migratie 018): toggle
+      "Finalisatie" in de Second Brain (blauw = gefinaliseerd, rood = nog niet),
+      markeer/terugdraai-knop op de knoopkaart, append-only historie met wie +
+      wanneer. Rest: team laten finaliseren (curatie).
 - [ ] **17-disciplines-structuur** (hybride model uit de deep-research; document van
       Mehdi) als laag in de Second Brain — per firma, afwijkingen expliciet, lege
       disciplines onzichtbaar.
-- [ ] **KBO-koppeling + jaarrekeningen** aan de firma's (door Mehdi als eerstvolgende
-      databron genoemd; daarna één-voor-één verder).
+- [x] **KBO-koppeling + jaarrekeningen** v1 — GEBOUWD (migratie 018):
+      `kern.firma.kbo_nummer` + op het firma-detail directe links naar KBO Public
+      Search en de NBB-jaarrekeningen (Balanscentrale). Rest: (a) KBO-nummers van
+      de 13 firma's invullen (beheer-formulier), (b) later API-verrijking
+      (NBB CBSO-API voor jaarrekening-data in het dashboard zelf).
 - [ ] **E-mail- en telefonie-statistieken via API's** (aantallen, spam, gemiste calls,
       wie neemt op) — voorwaarde voor de communicatie-coach-rol; principe: levende
       data, nooit handmatig.
