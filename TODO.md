@@ -8,9 +8,10 @@
       (migratie 015): `kern.definitie` is de machinebron; kolomkoppen, tooltips,
       kolomkiezer, Woordenboek-knop en Excel-export lezen eruit. Terminologie
       doorgevoerd: "Intern gefactureerd aan" / "Interne doorfacturatie naar".
-      Rest: (a) zelfde tooltips/woordenboek in het **Organisatie-dashboard**,
-      (b) beheer-UI voor definities (nu: UPDATE op kern.definitie + DEFINITIEBOEK.md
-      in sync houden).
+      Ook in het **Organisatie-dashboard** (migratie 017): ⓘ Woordenboek-pagina,
+      tooltips op kolomkoppen en op de Second Brain-typefilters.
+      Rest: beheer-UI voor definities (nu: UPDATE op kern.definitie +
+      DEFINITIEBOEK.md in sync houden).
 - [ ] **Verbruik op het kosten-dashboard** (actiepunt): usage per software naast
       prijs/seats, zodat houden-of-schrappen en jaarlijks-vs-maandelijks
       **datagedreven** wordt (jaarcontract voor zekere zaken zoals Zoom, maandelijks
