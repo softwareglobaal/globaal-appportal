@@ -3,11 +3,45 @@
 > Parkeerlijst van afgesproken maar nog niet gebouwde zaken. Bron: Zoom-meetings
 > 2026-07-01 en 2026-07-02 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
 
+## Meeting 2026-07-02 (avond) — woordenboek, vermogens, agenda
+- [ ] **DEFINITIEBOEK zichtbaar op de dashboards** (Mehdi: "iedereen moet die term
+      goed kunnen zien"): DEFINITIEBOEK.md in de stack-repo is het masterdocument
+      (wijzig op één plek → overal). Bouw: definities-endpoint + ⓘ-tooltip op
+      kolomkoppen + woordenboek-pagina. Terminologie-wijziging uit de meeting:
+      "Gefactureerd aan" → **"Intern gefactureerd aan"** (zonder "intern" kan het
+      ook extern klinken — extern houden we hier niet bij); doorfactureren =
+      **interne doorfacturatie naar**. Kolomkoppen + DEFINITIEBOEK samen aanpassen.
+- [ ] **Verbruik op het kosten-dashboard** (actiepunt): usage per software naast
+      prijs/seats, zodat houden-of-schrappen en jaarlijks-vs-maandelijks
+      **datagedreven** wordt (jaarcontract voor zekere zaken zoals Zoom, maandelijks
+      voor onzekere). AI bewaakt continu de kostenstructuur ("dat kun je schrappen").
+      Facturatiecyclus per software verschillend — veld `billing_cycle` bestaat al.
+- [ ] **Vermogens-dashboard (skelet)** — bank vraagt overzicht, Mehdi levert data:
+      umbrella-app met tabs **Panden** (type, lening, aankoopbedrag/-datum, rente,
+      maandaflossing, huurcontract, huurder, maandhuur, deel van groter gebouw,
+      syndicus j/n), **Verzekeringen** (aparte tab, bredere waaier: BA, ABR, auto's;
+      start/einde/opzegtermijn; linkbaar aan pand/auto/…), **Leningen & leasingen**,
+      **Syndicus** (naam, telefoon, jaarvergadering, documenten; gelinkt aan gebouw).
+      Elke tab eigen skelet, wel één applicatie. Mehdi wil het skelet zelf kunnen
+      bijstellen via Claude Code-toegang.
+- [ ] **Firma-agenda** (actiepunt): centrale agenda met alle vervaldatums (contracten,
+      opzegtermijnen, verzekeringen, syndicus-jaarvergadering), eigenaar per event,
+      reminders; rolverduidelijking (wie is verantwoordelijk voor leningen/leasingen/…).
+      Sluit aan op het bestaande TODO-punt contract-entiteiten + briefing-signalen.
+- [ ] **Klantdossier & templates** (actiepunt, later): tab per klant (documenten,
+      contract, getekende offerte, communicatie) + AI-opvolging; project-templates
+      (bv. "EPB renovatie") i.p.v. telkens opnieuw; e-mailkoppeling (info@ →
+      systeem stelt acties voor); uiteindelijk **klantenportaal** op eigen subdomein
+      (Proximus-model: verbruik/contract/vragen). Monday blijft voor specifieke doelen.
+- [x] ~~Screen-monitoring collega's~~ — afgewezen voor nu: eerst waarde uit
+      applicatiedata halen, geen extra kosten.
+
 ## Organisatie-dashboard & AI (vervolg op graph v1)
 - [ ] **Facturatie-terminologie** vastleggen (DEFINITIEBOEK-aanvulling): gefactureerd-aan
       (= Unabo) / doorfactureren-naar / **gebruikt-voor** (gebouwd, migratie 013);
       nog: betaald-door, **doorfactureerbaar ja/nee + basis** (maandelijks / vast bedrag /
-      percentage / effectief); leverancier ≠ platform.
+      percentage / effectief); leverancier ≠ platform. Let op: naamgeving wijzigt naar
+      "intern gefactureerd" (zie meeting-blok hierboven).
 - [ ] **Xelion-belstatistieken** (meeting 2026-07-02, prioriteit): dagelijkse sync
       (einde van de dag) via de Xelion-API — per nummer inkomend/uitgaand,
       opgenomen/gemist, belminuten, wie opnam → kolommen + statistiek in Communicatie
