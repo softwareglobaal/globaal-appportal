@@ -1,8 +1,14 @@
 # Definitieboek — softwareglobaal / H-groep
 
-> **Status: DRAFT** — werkdocument, nog niet leidend. Bedoeld om op een Zoom af te
-> stemmen en dan vast te leggen. Doel: **één term per begrip, overal identiek**, zodat
-> een wijziging op één plek overal klopt en niks dubbel of dubbelzinnig is.
+> **Status: LEIDEND** (bekrachtigd in de Zoom-meetings van 2026-07-02). Doel: **één
+> term per begrip, overal identiek**, zodat een wijziging op één plek overal klopt en
+> niks dubbel of dubbelzinnig is.
+>
+> **Machinebron: `kern.definitie`** (migratie 015). De dashboards lezen term +
+> definitie daaruit — kolomkoppen, ⓘ-tooltips, de Woordenboek-knop en de
+> Excel-export. **Een term wijzigen = één `UPDATE` op die tabel**, en overal is hij
+> juist. Dit document is de leesbare uitwerking; houd beide in sync (sleutels in
+> `kern.definitie` zijn stabiel en hernoem je nooit — alleen `term`/`definitie`).
 
 ## Kernprincipes
 1. **Uniek** — één begrip = één term. Geen synoniemen (bv. "sales" ≠ "sales team" ≠
@@ -60,10 +66,16 @@ is.
 ### Leverancier
 De **externe partij die je een dienst/product levert en die je betaalt** (*supplier/vendor*):
 upstream, levert aan jou; jij factureert niet aan hen.
-- **Bij ons:** bv. Proximus (abonnementen), Excellion (platform). Klikbaar → alle
-  nummers/kosten van die leverancier.
+- **Bij ons:** bv. Close Call BV, Mega, Proximus. Klikbaar → alle nummers/kosten van
+  die leverancier. Let op: op de factuur staat vaak een andere naam dan het platform
+  (Close Call BV factureert, Xelion is het platform).
 - Gebruik **"leverancier"** consistent — niet afwisselend "provider"/"platform" voor
   hetzelfde.
+
+### Platform
+De **software of dienst waarop iets draait** (bv. Xelion, Zoom). De leverancier
+factureert; het platform is wat je gebruikt — twee verschillende dingen die elk hun
+eigen veld hebben.
 
 ### Gebruiker
 De **persoon/personen die een resource gebruiken** (telefoonnummer, softwarelicentie).
@@ -72,14 +84,39 @@ De **persoon/personen die een resource gebruiken** (telefoonnummer, softwarelice
 ### Verantwoordelijke
 De **ene persoon die aanspreekbaar/eigenaar is** voor een resource — *accountable* (RACI).
 Precies één, zodat niks "open" (eigenaarloos) blijft.
-- **Bij ons:** link naar `kern.persoon`.
+- **Bij ons:** link naar `kern.persoon`; altijd de **1e in de belvolgorde**.
 
-### Facturatie-firma (factuur)
-De firma **aan wie een resource gefactureerd wordt** (wie de rekening betaalt).
+### Backup
+De **2e persoon in de belvolgorde** — neemt over als de verantwoordelijke niet kan.
 
-### Doorfacturatie-firma (doorfactuur)
-De firma **aan wie de kost wordt doorgerekend** — kan verschillen van wie de factuur
-ontvangt.
+### Intern gefactureerd aan
+De firma van de groep **die de factuur van de leverancier ontvangt en betaalt** (in de
+praktijk UnaBo). "Intern" staat er bewust: zonder dat woord kan het ook over externe
+facturatie aan klanten lijken te gaan, en die houden we hier niet bij (meeting
+2026-07-02 — verving de oude term "gefactureerd aan").
+
+### Interne doorfacturatie naar
+De firma van de groep **aan wie de kost intern wordt doorgerekend** — kan verschillen
+van wie de leveranciersfactuur ontvangt (verving "doorfactureren naar").
+
+### Gebruikt voor
+De firma (later ook klant of dossier) **waarvoor de resource feitelijk gebruikt
+wordt**, los van hoe er gefactureerd wordt — het Contacts-scenario: gefactureerd aan
+UnaBo, doorgerekend aan Contrax, gebruikt voor een klant van Contrax.
+
+### Vaste prijs
+Het **vaste maandbedrag in euro excl. BTW** voor de resource zelf. Leeg = onbekend of
+variabel. Verbruik valt hier niet onder.
+
+### Verbruik
+De **variabele kosten** van een resource (belminuten, data, gebruik) — apart van de
+vaste prijs. Nodig om houden-of-schrappen **datagedreven** te beslissen.
+
+### Facturatiecyclus
+**Hoe vaak er gefactureerd wordt**: wekelijks, maandelijks, per kwartaal of jaarlijks —
+kan per software/platform verschillen. Afspraak (meeting 2026-07-02): jaarcontract
+voor zekere zaken (bv. Zoom), maandelijks voor onzekere; de keuze wordt datagedreven
+op basis van verbruik.
 
 ## Vermijden / opletten
 | Niet doen | Wel |
@@ -92,4 +129,5 @@ ontvangt.
 ---
 *Grondslag: standaard org-design- en HR-terminologie (legal entity / department / team;
 job function / role / title) en inkoop-terminologie (supplier / vendor / provider).
-Dit is een **draft** — aanpassen op de Zoom, dan vastleggen en pas daarna leidend maken.*
+Bekrachtigd op de Zoom-meetings van 2026-07-02 en sindsdien **leidend**; de
+machineleesbare bron is `kern.definitie` (migratie 015).*
