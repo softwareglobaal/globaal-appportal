@@ -976,7 +976,12 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
 > aangepast (`scripts/hernoem-medewerkers-naar-organisatie.py`); de slug blijft
 > `medewerkers`, net als de compose-service `app-medewerkers` en de map
 > `medewerkers/` (interne namen, geen buitenkant).
-- **Forward-auth-app** (Flask), map `medewerkers/`, compose-service **`app-medewerkers`**
+- **Forward-auth-app** (Flask), **eigen repo `softwareglobaal/globaal-organisatie`**
+  (subtree-split uit deze stack-repo, historie behouden), op de VM uitgecheckt als
+  `~/appportal/medewerkers/` (pad is historisch; hier gitignored — zelfde patroon als
+  telefoonregister). **Auto-deploy:** `deploy.sh` in die repo draait via cron (elke
+  2 min): nieuwe commits op main → pull + rebuild, geen handmatige stappen.
+  Compose-service **`app-medewerkers`**
   in `docker-compose.override.yml` (poort 3007), nginx-blok
   `nginx/templates/44-medewerkers.conf.template`. Registratie in Authentik
   (proxy-provider + applicatie + group-binding + embedded outpost) via

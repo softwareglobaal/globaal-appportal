@@ -12,3 +12,5 @@ logs/
 *.pyc
 .DS_Store
 /telefoonregister/
+# Eigen repo (softwareglobaal/globaal-organisatie), uitgecheckt op de VM.
+/medewerkers/
