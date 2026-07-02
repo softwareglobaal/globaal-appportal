@@ -945,8 +945,21 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   en **`communicatie`** — het Communicatie-dashboard, §14.5) verwijzen met `persoon_id`
   (UUID, `ON DELETE RESTRICT`) naar `kern.persoon`, zodat een 360°-profiel een gewone
   join is. ⚠ Aandachtspunt: `kosten.firma` is een **eigen, tweede
-  firmalijst** (text-id's) naast `kern.firma` — later te verzoenen (definitieboek-principe:
-  één lijst per begrip).
+  firmalijst** (text-id's) naast `kern.firma` — sinds migratie 012 overbrugd via
+  `kosten.firma.kern_firma_id` (naam-match-backfill; NULL = verzoen-signaal in de
+  Second Brain). Volledige verzoening (text-id's weg) kan pas samen met de
+  kosten-host-app (repo `globaal-kosten`).
+- **Kosten ↔ kern (migratie 012, "de blauwe draad")**: alle `vendor`-teksten uit
+  `kosten.software` zijn gebackfilld naar **`kern.leverancier`** (case-insensitief
+  samengesmolten met bestaande rijen als Zoom/Microsoft; "Close Call (Xelion)" is
+  genormaliseerd naar "Close Call BV"). `kosten.software` en `kosten.charge_actual`
+  hebben nu **`leverancier_id`**; een `BEFORE INSERT/UPDATE OF vendor`-trigger
+  (`kosten.link_leverancier()`, SECURITY DEFINER) houdt die link automatisch in
+  stand — de host-app blijft gewoon vendor-tekst schrijven en maakt via de trigger
+  zo nodig zelf een nieuwe leverancier aan. Weergave-afspraak: **per nummer →
+  Communicatie (`vaste_prijs`), per gebruiker/licentie → Kosten** (geen dubbeltelling);
+  verwacht (`seats × unit_price`) vs. werkelijk (`charge_actual`) is de beoogde
+  vergelijking voor signalen.
 - **`kern.firma`** — centrale firmalijst (13 bedrijven van de groep): `id` (uuid), `naam`,
   `code` (uniek, 4 hoofdletters), `land`, `actief` (zacht uitzetten). Gekoppeld aan
   personen via **`persoon.werkgever_firma_id`** ("in dienst bij" — uniselect, FK) en de
@@ -1026,8 +1039,9 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   ±15 regels in `graaf.py` → één kleurregel; invoer via dashboards met dropdowns.
   Eerste verrijking langs die lijn: het **kosten-schema** — software als knopen met
   seat-/account-eigenaar-relaties naar personen, "kosten bij" naar `kern.firma` en
-  "geleverd door" naar `kern.leverancier` via naam-matching; **mismatches worden
-  signalen** ("kosten-firma X ontbreekt in kern", "vendor Y is geen leverancier") —
+  "geleverd door" naar `kern.leverancier`. Sinds migratie 012 lopen die edges via de
+  **echte FK's** (`leverancier_id`, `kosten.firma.kern_firma_id`); naam-matching is
+  het vangnet en **mismatches blijven signalen** ("kosten-firma X ontbreekt in kern") —
   de graph spoort zo oude vrije tekst op. Volledige app-documentatie: **README van
   `globaal-organisatie`**. Vervolgstappen: `TODO.md`.
 - **Naamconventie (display vs full):** de medewerkersdatabase toont de **volledige naam**

@@ -62,7 +62,12 @@
       Proximus/Telesur. Nummerbijlage bij Close Call opvragen en vergelijken. (Mega is
       wél sluitend: 5 op factuur 1126002031 = 5 in register, à € 3,31 excl.)
 - [ ] **Verantwoordelijken toewijzen** op nummers en e-mailadressen (team).
-- [ ] **kosten.firma → kern.firma** verzoenen (dubbele firmalijst weg; migratie).
+- [ ] **kosten.firma → kern.firma** verzoenen — brug ligt er (migratie 012:
+      `kern_firma_id` + leverancier-links + trigger); rest: (a) niet-gematchte
+      firma's handmatig koppelen (Second Brain meldt ze), (b) prijzen/seats van de
+      66 vendors vullen (factuur voor factuur), (c) creditcard-afschriften →
+      `charge_actual` voor verwacht-vs-werkelijk, (d) uiteindelijk text-id's weg
+      samen met de host-app (`globaal-kosten`).
 - [ ] Ontbrekende HR-nummers/familienamen/e-mails in kern.persoon aanvullen.
 
 ## Techniek / hygiëne
