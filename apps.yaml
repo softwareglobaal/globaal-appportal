@@ -42,3 +42,9 @@ apps:
     subdomain: barstenscheuren
     roles: [admin, manager, barstenscheuren]
     status: active
+  - id: vermogen
+    name: Vermogen
+    description: Panden, verzekeringen, leningen & leasingen, syndicus
+    subdomain: vermogen
+    roles: [admin, manager, vermogen]
+    status: active

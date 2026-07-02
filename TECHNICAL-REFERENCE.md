@@ -1153,6 +1153,25 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
 
+### 14.6 Vermogens-dashboard (`vermogen.globaal.be`)
+Skelet-app (meeting 2026-07-02; bank vraagt panden-overzicht, Mehdi levert de data):
+tabs **Panden / Verzekeringen / Leningen & leasingen / Syndicus**, elk met een eigen
+veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
+- **Repo `softwareglobaal/globaal-vermogen`** (VM: `~/appportal/vermogen`,
+  auto-deploy via cron zoals organisatie/communicatie, log `~/deploy-vermogen.log`).
+  Flask/gunicorn, compose-service **`app-vermogen`**:3009, nginx-template
+  `46-vermogen.conf.template`, Authentik via `scripts/add-vermogen-app.py`
+  (tegel voor admin/manager/vermogen; schrijven = groep `vermogen-editors`).
+- **Schema `vermogen`** (migratie 016): `pand` (eigenaar → kern.firma, aankoop,
+  huurcontract, syndicus-link), `verzekering` (soort/opzegtermijn/jaarpremie,
+  linkbaar aan pand; `object` = tekst voor bv. auto's zolang die geen entiteit zijn),
+  `lening` (Lening/Leasing, hoofdsom/rente/maandaflossing, linkbaar aan pand),
+  `syndicus` (contact + jaarvergadering). DB-rol **`vermogen`** (roles.sql;
+  `VERMOGEN_DB_URL` in `.env`); `portal` leest mee — de Second Brain kan hier later
+  vervaldatum-signalen uit halen ("verzekering vervalt < 90 dagen", laag 3).
+- Verwijderen is zacht (actief/niet-actief); huurders/verzekeraars/banken zijn nog
+  tekstvelden tot de klant-/externe-partij-entiteit bestaat. App-docs: README aldaar.
+
 ---
 
 *Laatst bijgewerkt: 2026-07-02 — **Graph-tab + proactieve AI-laag** op het

@@ -72,5 +72,25 @@ services:
       start_period: 20s
     networks: [appnet]
 
+  # Vermogen — panden / verzekeringen / leningen & leasingen / syndicus (skelet).
+  app-vermogen:
+    build: ./vermogen
+    image: appportal-vermogen
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      # Rol 'vermogen': leest kern, schrijft schema vermogen (db/roles.sql).
+      DATABASE_URL: ${VERMOGEN_DB_URL:-}
+      PORT: "3009"
+      # Wie mag bewerken (komma-gescheiden Authentik-groepen).
+      EDITOR_GROUPS: vermogen-editors,admin
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3009/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
 volumes:
   telefoonregister-data:

@@ -16,14 +16,12 @@
       **datagedreven** wordt (jaarcontract voor zekere zaken zoals Zoom, maandelijks
       voor onzekere). AI bewaakt continu de kostenstructuur ("dat kun je schrappen").
       Facturatiecyclus per software verschillend — veld `billing_cycle` bestaat al.
-- [ ] **Vermogens-dashboard (skelet)** — bank vraagt overzicht, Mehdi levert data:
-      umbrella-app met tabs **Panden** (type, lening, aankoopbedrag/-datum, rente,
-      maandaflossing, huurcontract, huurder, maandhuur, deel van groter gebouw,
-      syndicus j/n), **Verzekeringen** (aparte tab, bredere waaier: BA, ABR, auto's;
-      start/einde/opzegtermijn; linkbaar aan pand/auto/…), **Leningen & leasingen**,
-      **Syndicus** (naam, telefoon, jaarvergadering, documenten; gelinkt aan gebouw).
-      Elke tab eigen skelet, wel één applicatie. Mehdi wil het skelet zelf kunnen
-      bijstellen via Claude Code-toegang.
+- [x] **Vermogens-dashboard (skelet)** — GEBOUWD (repo `globaal-vermogen`, §14.6;
+      migratie 016): vier tabs met elk hun eigen aanpasbaar skelet, alles gelinkt
+      aan kern.firma en onderling (pand ↔ lening/verzekering/syndicus). Rest:
+      (a) VM-installatie (rol, .env, tegel, cron), (b) Mehdi in `vermogen-editors`
+      + Claude Code-toegang voor skelet-aanpassingen, (c) data laden (Mehdi),
+      (d) vervaldatum-signalen (verzekering/huurcontract) in de Second Brain.
 - [ ] **Firma-agenda** (actiepunt): centrale agenda met alle vervaldatums (contracten,
       opzegtermijnen, verzekeringen, syndicus-jaarvergadering), eigenaar per event,
       reminders; rolverduidelijking (wie is verantwoordelijk voor leningen/leasingen/…).

@@ -26,4 +26,10 @@ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'communicatie') THEN
     CREATE ROLE communicatie LOGIN PASSWORD 'CHANGE_ME';
   END IF;
+
+  -- Vermogens-dashboard: leest kern (dropdowns), schrijft schema vermogen.
+  -- Grants staan in db/migrations/016-vermogen.sql.
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'vermogen') THEN
+    CREATE ROLE vermogen LOGIN PASSWORD 'CHANGE_ME';
+  END IF;
 END $$;
