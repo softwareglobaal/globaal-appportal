@@ -4,13 +4,13 @@
 > 2026-07-01 en 2026-07-02 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
 
 ## Meeting 2026-07-02 (avond) — woordenboek, vermogens, agenda
-- [ ] **DEFINITIEBOEK zichtbaar op de dashboards** (Mehdi: "iedereen moet die term
-      goed kunnen zien"): DEFINITIEBOEK.md in de stack-repo is het masterdocument
-      (wijzig op één plek → overal). Bouw: definities-endpoint + ⓘ-tooltip op
-      kolomkoppen + woordenboek-pagina. Terminologie-wijziging uit de meeting:
-      "Gefactureerd aan" → **"Intern gefactureerd aan"** (zonder "intern" kan het
-      ook extern klinken — extern houden we hier niet bij); doorfactureren =
-      **interne doorfacturatie naar**. Kolomkoppen + DEFINITIEBOEK samen aanpassen.
+- [x] **DEFINITIEBOEK zichtbaar op de dashboards** — GEBOUWD voor Communicatie
+      (migratie 015): `kern.definitie` is de machinebron; kolomkoppen, tooltips,
+      kolomkiezer, Woordenboek-knop en Excel-export lezen eruit. Terminologie
+      doorgevoerd: "Intern gefactureerd aan" / "Interne doorfacturatie naar".
+      Rest: (a) zelfde tooltips/woordenboek in het **Organisatie-dashboard**,
+      (b) beheer-UI voor definities (nu: UPDATE op kern.definitie + DEFINITIEBOEK.md
+      in sync houden).
 - [ ] **Verbruik op het kosten-dashboard** (actiepunt): usage per software naast
       prijs/seats, zodat houden-of-schrappen en jaarlijks-vs-maandelijks
       **datagedreven** wordt (jaarcontract voor zekere zaken zoals Zoom, maandelijks
