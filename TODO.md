@@ -21,6 +21,26 @@
       toekomst, expliciet geparkeerd).
 - [ ] **RBAC verfijnen**: wie ziet welk deel van het dashboard (nu: admin/manager alles).
 
+## Second Brain (meeting 2026-07-02, Mehdi)
+- [ ] **Finalisatie-status + kleurcodering** in de Second Brain: blauw = gefinaliseerd,
+      rood = nog niet — met vastlegging *wie* finaliseerde (Mehdi/Angela/Sian) en
+      *wanneer* (rollen wijzigen; historie telt).
+- [ ] **17-disciplines-structuur** (hybride model uit de deep-research; document van
+      Mehdi) als laag in de Second Brain — per firma, afwijkingen expliciet, lege
+      disciplines onzichtbaar.
+- [ ] **KBO-koppeling + jaarrekeningen** aan de firma's (door Mehdi als eerstvolgende
+      databron genoemd; daarna één-voor-één verder).
+- [ ] **E-mail- en telefonie-statistieken via API's** (aantallen, spam, gemiste calls,
+      wie neemt op) — voorwaarde voor de communicatie-coach-rol; principe: levende
+      data, nooit handmatig.
+- [ ] **Onderzoek beste bestaande tools per discipline** (marketing/sales/HR… met AI)
+      — wij bouwen ze niet, wij verbinden ze (integrator-rol).
+- [ ] **Structuurskelet + invoerinstructies** voor Mehdi/Angela/Sian zodat het team
+      zelf data invult, parallel aan het bouwen.
+- [ ] **Governance-signalering**: systeem merkt als binnengekomen data over een
+      collega gedeeld hoort te worden met betrokkenen; RBAC verder verfijnen.
+- [x] **Naamgeving**: organisatiegraaf heet voortaan **Second Brain** (2026-07-02).
+
 ## Onderzoek (vóór bouwen)
 - [ ] **Movetex.com** onderzoeken: planning-algoritme (Fati gebruikt het). Doel: 4
       planningen (Matthias/Mathieu/Shilton/Luc) → 1 planningtool. Géén eigen bouw —
