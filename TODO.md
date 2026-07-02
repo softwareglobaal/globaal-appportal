@@ -57,6 +57,10 @@
 ## Data & beheer
 - [ ] **Data-curatie Communicatie** (Siyan): doorfactuur-firma's, afdelingen, doelen en
       belvolgorde-queues invullen; oude records actief/niet-actief zetten.
+- [ ] **Close Call afletteren**: factuur 2025-0119 telt 41 telefoonnummers, het register
+      heeft er 40 onder Close Call BV — één Xelion-nummer ontbreekt of zit fout onder
+      Proximus/Telesur. Nummerbijlage bij Close Call opvragen en vergelijken. (Mega is
+      wél sluitend: 5 op factuur 1126002031 = 5 in register, à € 3,31 excl.)
 - [ ] **Verantwoordelijken toewijzen** op nummers en e-mailadressen (team).
 - [ ] **kosten.firma → kern.firma** verzoenen (dubbele firmalijst weg; migratie).
 - [ ] Ontbrekende HR-nummers/familienamen/e-mails in kern.persoon aanvullen.
