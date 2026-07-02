@@ -981,7 +981,12 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   gecommit bestand. Verse-deploy-procedure: `db/README.md`. De persoon-seed (34
   namen/e-mails) blijft bewust buiten de repo (lokale ontwerpmap).
 - **Backups:** `scripts/db-backup.sh` dumpt nachtelijk (cron, 03:15) `authentik` én
-  `appportal` in custom formaat naar `~/backups/` met 14 dagen retentie; terugzetten
+  `appportal` in custom formaat naar `~/backups/` met 14 dagen retentie. **Off-site:**
+  staat `S3_BACKUP_BUCKET` in `.env`, dan gaat elke dump **GPG-versleuteld** (AES256,
+  passphrase in `~/.backup-passphrase`, chmod 600 + kopie in de wachtwoordkluis) naar
+  die S3-bucket; de upload-sleutel mag **alleen PutObject** (gekaapte VM kan off-site
+  niets lezen/wissen) en de bucket ruimt zelf op (lifecycle 30 dagen). Vereist awscli +
+  gnupg + `aws configure`; terugzetten
   met `pg_restore` (voorbeeld in de scriptkop). Off-site kopie (S3) is een open punt.
 
 ### 14.2 Organisatie-dashboard (`organisatie.globaal.be`) — medewerkers + firma's
