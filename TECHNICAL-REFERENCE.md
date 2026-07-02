@@ -1002,6 +1002,14 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   de schrijfrol (migratie 006: INSERT/UPDATE op `kern.firma` voor `medewerker_writer`),
   met same-origin-check en audit-log (`FIRMA_NIEUW`/`FIRMA_BEHEER`). Firma's toevoegen
   is daarmee een UI-handeling i.p.v. SQL.
+- **Graph-tab + AI-lezer** (2026-07-02): interactieve **knowledge-graph** van de hele
+  organisatie (personen/afdelingen/firma's/leveranciers/nummers/e-mailadressen met
+  benoemde relaties; vis-network, gevendord; dubbelklik = detailpagina). Zijpaneel met
+  **aandachtspunten** (deterministische open-eindjes-checks) en de **AI-vraagbaak**:
+  elke vraag gaat mét de actuele graaf als context naar de Claude API
+  (`ANTHROPIC_API_KEY` in `.env`, model via `AI_MODEL`, default `claude-sonnet-5`) —
+  antwoorden komen uit de data, geheimen (PIN/PUK) zitten nooit in de graaf, audit-log
+  `AI_VRAAG`. Zonder key blijft de graph gewoon werken. Vervolgstappen: `TODO.md`.
 - **Naamconventie (display vs full):** de medewerkersdatabase toont de **volledige naam**
   (voor- + familienaam — dit is de identiteitsbron); alle *andere* apps tonen personen in
   het **Zoom-formaat `Voornaam (Afdeling)`**, live opgebouwd uit `kern.persoon` +
@@ -1101,7 +1109,12 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
 
 ---
 
-*Laatst bijgewerkt: 2026-07-01 (nacht) — **Organisatie-dashboard**: het
+*Laatst bijgewerkt: 2026-07-02 — **Graph-tab + AI-lezer** op het
+Organisatie-dashboard (knowledge-graph van de hele organisatie, aandachtspunten,
+AI-vraagbaak op de Claude API; §14.2), de app verhuisd naar **eigen repo
+`globaal-organisatie` met auto-deploy** (cron, 2 min) en domein
+**organisatie.globaal.be** (oud adres = 301). Parkeerlijst: `TODO.md`.
+Eerder (2026-07-01, nacht) — **Organisatie-dashboard**: het
 medewerkersdashboard heet nu Organisatie en kreeg een **Firma's-tab** (lijst met
 tellingen, firmaprofiel met alles wat eraan hangt, admin-beheer; migratie 006;
 §14.2). Daarnaast **Communicatie-dashboard live** (§14.5:

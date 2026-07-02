@@ -36,6 +36,9 @@ services:
       APPS_FILE: /app/apps.yaml
       # Interne telefoonregister-API voor de profielsectie "Telefoonnummers".
       TELEFOON_API_URL: http://app-telefoonregister:3006
+      # AI-lezer op de organisatie-graph (leeg = AI-paneel uit).
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-claude-sonnet-5}
     volumes:
       - ./apps.yaml:/app/apps.yaml:ro
     healthcheck:
