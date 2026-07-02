@@ -47,10 +47,15 @@
       ("welke nummers zijn hun geld waard"). Eerst uitzoeken: API-toegang via
       Close Call BV. Daarna doorkoppeling van communicatiestatistiek per project
       naar **Monday** (projectverantwoordelijke ziet de communicatie).
-- [ ] **AI-factuurgoedkeuring** (meeting 2026-07-02): elke inkomende factuur langs de
-      AI ("goed om te betalen?" — check tegen verwacht: seats × prijs + vaste prijzen);
-      niet goedgekeurd → handmatig naar Mehdi of Angela; goedgekeurd → prijzen
-      automatisch bijwerken. Bouwt op kosten.charge_actual (verwacht vs. werkelijk).
+- [ ] **AI-factuurgoedkeuring = Factuurrouter 2.0** (meeting 2026-07-02): GEEN nieuwe
+      app — de bestaande Factuurrouter (§6A: scanfacturen@gmail.com → OCR → AI
+      herkent firma → routeert; review-dashboard voor twijfel) uitbreiden met de
+      goedkeuringstoets "goed om te betalen?" tegen verwacht (kosten seats × prijs +
+      communicatie vaste_prijs + charge_actual-historiek); niet goedgekeurd →
+      escalatie Mehdi/Angela via het bestaande review-patroon; goedgekeurd →
+      charge_actual-rij + prijs-updatevoorstel. Nodig: db-koppeling voor de router
+      (leesrol + smalle schrijfrol) ; beslispunt bij bouw: gpt-5-mini houden of
+      migreren naar de Claude API (één AI-lijn in het platform).
 - [ ] **Gespreksopname-transcriptie** (meeting 2026-07-02): opnames uit Xelion
       downloaden → transcriberen → aan het dossier/de communicatie hangen (het
       gemeente-Leuven-ideaal). GDPR eerst regelen: opnamemelding in de wachtrij
