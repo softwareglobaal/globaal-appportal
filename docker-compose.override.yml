@@ -39,6 +39,8 @@ services:
       # AI-lezer op de organisatie-graph (leeg = AI-paneel uit).
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-claude-sonnet-5}
+      # Fathom-sync: komma-gescheiden API-keys van de opnemer-accounts (leeg = uit).
+      FATHOM_API_KEYS: ${FATHOM_API_KEYS:-}
     volumes:
       - ./apps.yaml:/app/apps.yaml:ro
     healthcheck:
