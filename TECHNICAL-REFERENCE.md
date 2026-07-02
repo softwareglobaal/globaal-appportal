@@ -1087,8 +1087,11 @@ De eerste échte spoke die naar `kern.persoon(id)` verwijst — het 360°-model 
 De opvolger-in-opbouw van het telefoonregister: telefoonnummers **en** e-mailadressen,
 volledig gelinkt aan de centrale lijsten. De app van de collega
 (`telefoonregister.globaal.be`) blijft er **ongemoeid naast draaien** tot hij akkoord is.
-- **Stack:** kopie van de telefoonregister-codebase (Node/Express/Knex, map
-  `communicatie/`, service **`app-communicatie`**:3008, nginx-template
+- **Stack:** kopie van de telefoonregister-codebase (Node/Express/Knex), sinds
+  2026-07-02 in een **eigen repo `softwareglobaal/globaal-communicatie`** (subtree-split,
+  historie behouden; hier gitignored) — de VM checkt die uit op `~/appportal/communicatie`
+  met **auto-deploy** via `deploy.sh` (cron, elke 2 min, log `~/deploy-communicatie.log`).
+  App-documentatie: de README in die repo. Service **`app-communicatie`**:3008, nginx-template
   `45-communicatie.conf.template`), maar op **Postgres** — schema **`communicatie`** in de
   appportal-DB met **échte FK's** naar `kern.persoon`/`kern.firma`/`kern.afdeling`/
   `kern.leverancier`. DB-rol **`communicatie`** (leest kern, schrijft eigen schema,

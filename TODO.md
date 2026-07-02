@@ -38,6 +38,6 @@
 ## Techniek / hygiëne
 - [ ] **Telefoonregister-repo**: branch `claude/ecstatic-feynman-wctpk1` → `main`
       verzoenen (zelfde recept als appportal-drift).
-- [ ] **Communicatie eigen repo + auto-deploy** (zelfde pad als globaal-organisatie),
-      als dat bevalt.
+- [x] **Communicatie eigen repo + auto-deploy** — gedaan 2026-07-02
+      (`softwareglobaal/globaal-communicatie`, subtree-split + cron).
 - [ ] Off-site kopie van de nachtelijke DB-backups (S3).

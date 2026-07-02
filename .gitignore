@@ -14,3 +14,5 @@ logs/
 /telefoonregister/
 # Eigen repo (softwareglobaal/globaal-organisatie), uitgecheckt op de VM.
 /medewerkers/
+# Eigen repo (softwareglobaal/globaal-communicatie), uitgecheckt op de VM.
+/communicatie/
