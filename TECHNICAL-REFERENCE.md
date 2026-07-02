@@ -1128,8 +1128,10 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   als eerste facturatie-veld; `nummer_gebruiker` = de **gebruikers** met **belvolgorde** (queue van de
   telefooncentrale: `volgorde`-kolom, 1 neemt eerst op, in de UI herschikbaar);
   **`view_instelling`** = kolomkeuze per Authentik-gebruiker (migratie 013): alles zit
-  in het dashboard, de **Kolommen**-knop bepaalt per persoon wat zichtbaar is
-  ("view van Mehdi" ≠ "view van Siyan"; ook alleen-lezen-gebruikers);
+  in het dashboard, de **Mijn view**-knop bepaalt per persoon wat zichtbaar is — elke
+  wijziging wordt direct bewaard, geen aparte opslaan-knop ("view van Mehdi" ≠
+  "view van Siyan"; ook alleen-lezen-gebruikers). De knop **Keuzelijsten** (voorheen
+  "Lijsten") is iets anders: beheer van de dropdown-waarden Land/Platform/Type;
   `geheim` (PIN/PUK/kaartnummer, afgeschermd, 1-op-1); `emailadres` met firma +
   verantwoordelijke (leeg = **"OPEN"**-markering, het open eindje) +
   `emailadres_gebruiker` (wie op de mailbox ingelogd zijn, multi); `lijst`
