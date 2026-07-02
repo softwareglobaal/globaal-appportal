@@ -1117,12 +1117,19 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   appportal-DB met **échte FK's** naar `kern.persoon`/`kern.firma`/`kern.afdeling`/
   `kern.leverancier`. DB-rol **`communicatie`** (leest kern, schrijft eigen schema,
   beheert `kern.leverancier`); connectiestring `COMMUNICATIE_DB_URL` in `.env`
-  (Node-formaat `postgres://…`). Schema: migraties **002–004**.
+  (Node-formaat `postgres://…`). Schema: migraties **002–004, 011, 013**.
 - **Datamodel** (terminologie volgt `DEFINITIEBOEK.md`): `nummer` met **doel** (niet
-  "functie"), **leverancier**, **factuur-firma** (wie betaalt), **doorfactuur-firma**,
-  afdeling en **verantwoordelijke** (één) — allemaal dropdowns uit kern, geen vrije
-  tekst; **vaste prijs** (€, migratie 011; leeg = onbekend/variabel) als eerste facturatie-veld; `nummer_gebruiker` = de **gebruikers** met **belvolgorde** (queue van de
+  "functie"), **leverancier**, **factuur-firma** (wie de leveranciersfactuur krijgt —
+  in de praktijk Unabo), **doorfactuur-firma** (aan wie wij doorrekenen),
+  **gebruikt-voor-firma** (voor welk bedrijf/dossier het nummer feitelijk werkt;
+  migratie 013 — het Contacts-scenario van Mehdi), afdeling en **verantwoordelijke**
+  (één; = 1e in belvolgorde, de 2e is de **backup**) — allemaal dropdowns uit kern,
+  geen vrije tekst; **vaste prijs** (€ excl. BTW, migratie 011; leeg = onbekend/variabel)
+  als eerste facturatie-veld; `nummer_gebruiker` = de **gebruikers** met **belvolgorde** (queue van de
   telefooncentrale: `volgorde`-kolom, 1 neemt eerst op, in de UI herschikbaar);
+  **`view_instelling`** = kolomkeuze per Authentik-gebruiker (migratie 013): alles zit
+  in het dashboard, de **Kolommen**-knop bepaalt per persoon wat zichtbaar is
+  ("view van Mehdi" ≠ "view van Siyan"; ook alleen-lezen-gebruikers);
   `geheim` (PIN/PUK/kaartnummer, afgeschermd, 1-op-1); `emailadres` met firma +
   verantwoordelijke (leeg = **"OPEN"**-markering, het open eindje) +
   `emailadres_gebruiker` (wie op de mailbox ingelogd zijn, multi); `lijst`

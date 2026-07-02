@@ -4,10 +4,26 @@
 > 2026-07-01 en 2026-07-02 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
 
 ## Organisatie-dashboard & AI (vervolg op graph v1)
-- [ ] **Facturatie-terminologie** vastleggen (DEFINITIEBOEK-aanvulling): gefactureerd-naar
-      vs betaald-door; **doorfactureerbaar ja/nee + basis** (maandelijks / vast bedrag /
-      percentage / effectief); leverancier ≠ platform. Daarná de telefonie-kolommen in
-      Communicatie uitbreiden.
+- [ ] **Facturatie-terminologie** vastleggen (DEFINITIEBOEK-aanvulling): gefactureerd-aan
+      (= Unabo) / doorfactureren-naar / **gebruikt-voor** (gebouwd, migratie 013);
+      nog: betaald-door, **doorfactureerbaar ja/nee + basis** (maandelijks / vast bedrag /
+      percentage / effectief); leverancier ≠ platform.
+- [ ] **Xelion-belstatistieken** (meeting 2026-07-02, prioriteit): dagelijkse sync
+      (einde van de dag) via de Xelion-API — per nummer inkomend/uitgaand,
+      opgenomen/gemist, belminuten, wie opnam → kolommen + statistiek in Communicatie
+      ("welke nummers zijn hun geld waard"). Eerst uitzoeken: API-toegang via
+      Close Call BV. Daarna doorkoppeling van communicatiestatistiek per project
+      naar **Monday** (projectverantwoordelijke ziet de communicatie).
+- [ ] **AI-factuurgoedkeuring** (meeting 2026-07-02): elke inkomende factuur langs de
+      AI ("goed om te betalen?" — check tegen verwacht: seats × prijs + vaste prijzen);
+      niet goedgekeurd → handmatig naar Mehdi of Angela; goedgekeurd → prijzen
+      automatisch bijwerken. Bouwt op kosten.charge_actual (verwacht vs. werkelijk).
+- [ ] **Gespreksopname-transcriptie** (meeting 2026-07-02): opnames uit Xelion
+      downloaden → transcriberen → aan het dossier/de communicatie hangen (het
+      gemeente-Leuven-ideaal). GDPR eerst regelen: opnamemelding in de wachtrij
+      (Siyans punt).
+- [ ] **Contactenlijst → projecten → firma's**: wacht op de Excel van de leverancier
+      (bij Siyan belegd); elke contact linken, dan projecten, dan Monday.
 - [ ] **Gebruikersabonnement-kost telefonie** (Close Call-factuur 2025-0119): naast
       € 2,00/nummer (in `vaste_prijs`) rekent Close Call € 9/8/7 per *gebruiker*
       (staffel 1-10 / 11-20 / 21-35) — dat is € 212 van de € 292 vaste maandkost en
