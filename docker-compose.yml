@@ -245,6 +245,7 @@ services:
       # Where omv.<domain> proxies to. Default = the local demo container;
       # on the VM set OMV_UPSTREAM=http://host.docker.internal:5000 (real app).
       OMV_UPSTREAM: ${OMV_UPSTREAM:-http://app-omv:3005}
+      SSO_SHARED_SECRET: ${SSO_SHARED_SECRET:-}
     # Lets the nginx container reach host services (the real OMV app on :5000).
     extra_hosts:
       - "host.docker.internal:host-gateway"
