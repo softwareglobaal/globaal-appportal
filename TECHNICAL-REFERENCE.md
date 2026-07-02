@@ -1018,16 +1018,18 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   (PIN/PUK) zitten nooit in de graaf; opmaak beperkt tot vet/cursief; audit-logs
   `AI_VRAAG`/`BRIEFING`. Config: `ANTHROPIC_API_KEY` in `.env` (leeg = AI uit, graph
   blijft werken), model via `AI_MODEL` (default `claude-sonnet-5`).
-- **Nieuw organisatie-aspect toevoegen** — twee routes. (a) **Vrije elementen-laag**
-  (migratie 008, zelfbediening zonder code): admins maken via "+ Element" nieuwe
-  soorten knopen (eigen kleur = eigen filter-chip) en koppelen ze met gelabelde,
-  zachte relaties aan elke bestaande knoop; opslag `kern.element_soort`/`element`/
-  `element_relatie`. (b) **Getypeerd schema** (het recept: migratie met FK's →
-  ±15 regels in `graaf.py` → één kleurregel) voor alles met afdwingbare structuur —
-  vervaldatums, verplichte velden, signalen. Vrije soorten die belangrijk worden,
-  promoveren naar een echt schema. Zoeker, filters, chat en briefing pakken beide
-  routes vanzelf op. Volledige app-documentatie: **README van `globaal-organisatie`**.
-  Vervolgstappen (laag 3: vervaldatums; WhatsApp-bezorging): `TODO.md`.
+- **Principe: de graph is een weergave van de database, geen invoerkanaal.** Een knoop
+  bestaat omdat hij in een echt schema bestaat. De kortstondige "vrije elementen-laag"
+  (zelfbediening met vrije tekst) is bewust **teruggedraaid** — botste met de
+  terminologie-discipline; de tabellen van migratie 008 blijven ongebruikt liggen.
+  Nieuwe organisatie-aspecten volgen het **recept**: migratie met FK's naar kern →
+  ±15 regels in `graaf.py` → één kleurregel; invoer via dashboards met dropdowns.
+  Eerste verrijking langs die lijn: het **kosten-schema** — software als knopen met
+  seat-/account-eigenaar-relaties naar personen, "kosten bij" naar `kern.firma` en
+  "geleverd door" naar `kern.leverancier` via naam-matching; **mismatches worden
+  signalen** ("kosten-firma X ontbreekt in kern", "vendor Y is geen leverancier") —
+  de graph spoort zo oude vrije tekst op. Volledige app-documentatie: **README van
+  `globaal-organisatie`**. Vervolgstappen: `TODO.md`.
 - **Naamconventie (display vs full):** de medewerkersdatabase toont de **volledige naam**
   (voor- + familienaam — dit is de identiteitsbron); alle *andere* apps tonen personen in
   het **Zoom-formaat `Voornaam (Afdeling)`**, live opgebouwd uit `kern.persoon` +
