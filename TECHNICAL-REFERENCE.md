@@ -1002,14 +1002,27 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   de schrijfrol (migratie 006: INSERT/UPDATE op `kern.firma` voor `medewerker_writer`),
   met same-origin-check en audit-log (`FIRMA_NIEUW`/`FIRMA_BEHEER`). Firma's toevoegen
   is daarmee een UI-handeling i.p.v. SQL.
-- **Graph-tab + AI-lezer** (2026-07-02): interactieve **knowledge-graph** van de hele
+- **Graph-tab + AI-laag** (2026-07-02): interactieve **knowledge-graph** van de hele
   organisatie (personen/afdelingen/firma's/leveranciers/nummers/e-mailadressen met
-  benoemde relaties; vis-network, gevendord; dubbelklik = detailpagina). Zijpaneel met
-  **aandachtspunten** (deterministische open-eindjes-checks) en de **AI-vraagbaak**:
-  elke vraag gaat mét de actuele graaf als context naar de Claude API
-  (`ANTHROPIC_API_KEY` in `.env`, model via `AI_MODEL`, default `claude-sonnet-5`) —
-  antwoorden komen uit de data, geheimen (PIN/PUK) zitten nooit in de graaf, audit-log
-  `AI_VRAAG`. Zonder key blijft de graph gewoon werken. Vervolgstappen: `TODO.md`.
+  benoemde relaties; vis-network gevendord; dubbelklik = detailpagina), met **zoekbalk**
+  (live-suggesties → zoom naar knoop) en **type-filters** (klikbare legenda-chips met
+  tellers; onbekende nieuwe types renderen automatisch grijs mét eigen chip). De graaf
+  wordt bij elke load vers uit de DB gebouwd — wijzigingen elders zijn na een F5 zichtbaar.
+- **Signalen + dagbriefing (proactieve AI):** `graaf.py` berekent per load de signalen
+  (open eindjes) met **ernst** hoog/middel/laag — puur regels, geen AI. Daarbovenop de
+  **dagbriefing**: één AI-samenvatting per dag ("wat verdient vandaag aandacht + actie"),
+  gegenereerd bij het eerste bezoek, opgeslagen in **`organisatie.briefing`** (migratie
+  007, upsert met historie), ververs-knop = admin. De **AI-chat** ("Vraag het de
+  organisatie") heeft gespreksgeschiedenis (laatste 12 beurten mee) en krijgt bij elke
+  beurt de actuele graaf als systeemcontext — antwoorden komen uit de data; geheimen
+  (PIN/PUK) zitten nooit in de graaf; opmaak beperkt tot vet/cursief; audit-logs
+  `AI_VRAAG`/`BRIEFING`. Config: `ANTHROPIC_API_KEY` in `.env` (leeg = AI uit, graph
+  blijft werken), model via `AI_MODEL` (default `claude-sonnet-5`).
+- **Nieuw organisatie-aspect toevoegen** (klanten/contracten/diensten/…): migratie met
+  FK's naar kern → blokje in `graaf.py` (±15 regels: knopen/relaties/signalen) → één
+  kleurregel in de frontend. Zoeker, filters, chat en briefing pakken het vanzelf op.
+  Volledige app-documentatie: **README van `globaal-organisatie`**. Vervolgstappen
+  (laag 3: vervaldatums; WhatsApp-bezorging): `TODO.md`.
 - **Naamconventie (display vs full):** de medewerkersdatabase toont de **volledige naam**
   (voor- + familienaam — dit is de identiteitsbron); alle *andere* apps tonen personen in
   het **Zoom-formaat `Voornaam (Afdeling)`**, live opgebouwd uit `kern.persoon` +
@@ -1109,11 +1122,13 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
 
 ---
 
-*Laatst bijgewerkt: 2026-07-02 — **Graph-tab + AI-lezer** op het
-Organisatie-dashboard (knowledge-graph van de hele organisatie, aandachtspunten,
-AI-vraagbaak op de Claude API; §14.2), de app verhuisd naar **eigen repo
-`globaal-organisatie` met auto-deploy** (cron, 2 min) en domein
-**organisatie.globaal.be** (oud adres = 301). Parkeerlijst: `TODO.md`.
+*Laatst bijgewerkt: 2026-07-02 — **Graph-tab + proactieve AI-laag** op het
+Organisatie-dashboard: knowledge-graph met zoekbalk en type-filters, signalen met
+ernst, **dagbriefing** (organisatie.briefing, migratie 007) en AI-chat met
+gespreksgeschiedenis op de Claude API (§14.2; app-docs in de README van
+`globaal-organisatie`). De app verhuisd naar **eigen repo `globaal-organisatie` met
+auto-deploy** (cron, 2 min) en domein **organisatie.globaal.be** (oud adres = 301).
+Parkeerlijst: `TODO.md`.
 Eerder (2026-07-01, nacht) — **Organisatie-dashboard**: het
 medewerkersdashboard heet nu Organisatie en kreeg een **Firma's-tab** (lijst met
 tellingen, firmaprofiel met alles wat eraan hangt, admin-beheer; migratie 006;
