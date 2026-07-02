@@ -1107,7 +1107,7 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
 - **Datamodel** (terminologie volgt `DEFINITIEBOEK.md`): `nummer` met **doel** (niet
   "functie"), **leverancier**, **factuur-firma** (wie betaalt), **doorfactuur-firma**,
   afdeling en **verantwoordelijke** (één) — allemaal dropdowns uit kern, geen vrije
-  tekst; `nummer_gebruiker` = de **gebruikers** met **belvolgorde** (queue van de
+  tekst; **vaste prijs** (€, migratie 011; leeg = onbekend/variabel) als eerste facturatie-veld; `nummer_gebruiker` = de **gebruikers** met **belvolgorde** (queue van de
   telefooncentrale: `volgorde`-kolom, 1 neemt eerst op, in de UI herschikbaar);
   `geheim` (PIN/PUK/kaartnummer, afgeschermd, 1-op-1); `emailadres` met firma +
   verantwoordelijke (leeg = **"OPEN"**-markering, het open eindje) +
