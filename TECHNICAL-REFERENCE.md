@@ -961,7 +961,9 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   verwacht (`seats × unit_price`) vs. werkelijk (`charge_actual`) is de beoogde
   vergelijking voor signalen.
 - **`kern.firma`** — centrale firmalijst (13 bedrijven van de groep): `id` (uuid), `naam`,
-  `code` (uniek, 4 hoofdletters), `land`, `actief` (zacht uitzetten). Gekoppeld aan
+  `code` (uniek, 4 hoofdletters), `land`, `actief` (zacht uitzetten), `kbo_nummer`
+  (migratie 018 — het firma-detail linkt ermee naar KBO Public Search en de
+  NBB-jaarrekeningen; API-verrijking later). Gekoppeld aan
   personen via **`persoon.werkgever_firma_id`** ("in dienst bij" — uniselect, FK) en de
   koppeltabel **`kern.persoon_dienstfirma`** ("diensten voor" — multiselect,
   veel-op-veel). Seed: `db/seed-afdeling-firma.sql`.
@@ -1042,7 +1044,14 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   "geleverd door" naar `kern.leverancier`. Sinds migratie 012 lopen die edges via de
   **echte FK's** (`leverancier_id`, `kosten.firma.kern_firma_id`); naam-matching is
   het vangnet en **mismatches blijven signalen** ("kosten-firma X ontbreekt in kern") —
-  de graph spoort zo oude vrije tekst op. Volledige app-documentatie: **README van
+  de graph spoort zo oude vrije tekst op.
+- **Finalisatie** (migratie 018, `organisatie.finalisatie`): het kwaliteitsstempel op
+  een knoop — een collega controleert en klikt "Markeer gefinaliseerd" op de
+  detailkaart; vastgelegd met **wie + wanneer, append-only** (terugdraaien = nieuwe
+  rij; de writer-rol heeft alleen INSERT). Toolbar-knop "Finalisatie" kleurt de graph
+  **blauw = gefinaliseerd / rood = nog niet** — voortgangsmeter én curatie-werklijst.
+  Geen slot: data blijft bewerkbaar ("wijziging → terug naar rood" is een bewuste v2).
+  Finaliseren mag alle staff (admin + manager); audit-event `FINALISEER`. Volledige app-documentatie: **README van
   `globaal-organisatie`**. Vervolgstappen: `TODO.md`.
 - **Naamconventie (display vs full):** de medewerkersdatabase toont de **volledige naam**
   (voor- + familienaam — dit is de identiteitsbron); alle *andere* apps tonen personen in

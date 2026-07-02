@@ -118,6 +118,18 @@ kan per software/platform verschillen. Afspraak (meeting 2026-07-02): jaarcontra
 voor zekere zaken (bv. Zoom), maandelijks voor onzekere; de keuze wordt datagedreven
 op basis van verbruik.
 
+### Finalisatie
+Het **kwaliteitsstempel op data**: een collega heeft de knoop (nummer, persoon,
+firma, …) gecontroleerd en goedgekeurd. Vastgelegd met **wie + wanneer**,
+**append-only** — terugdraaien is een nieuwe registratie, historie telt (rollen
+wijzigen). In de Second Brain: **blauw = gefinaliseerd, rood = nog niet**. Géén slot:
+gefinaliseerde data blijft gewoon bewerkbaar.
+
+### KBO-nummer
+Het **ondernemingsnummer** van een firma in de Kruispuntbank van Ondernemingen —
+de sleutel naar officiële bronnen (KBO Public Search, NBB-jaarrekeningen). Staat op
+`kern.firma`; invullen via het firma-beheer in het Organisatie-dashboard.
+
 ## Vermijden / opletten
 | Niet doen | Wel |
 |---|---|
