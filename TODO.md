@@ -134,7 +134,8 @@
       verzoenen (zelfde recept als appportal-drift).
 - [x] **Communicatie eigen repo + auto-deploy** — gedaan 2026-07-02
       (`softwareglobaal/globaal-communicatie`, subtree-split + cron).
-- [x] **Off-site backups naar S3** — script gebouwd (`db-backup.sh`: GPG-versleuteld,
-      upload-only sleutel, lifecycle 30 dagen). Rest: eenmalige AWS-console-setup
-      (bucket + IAM-user) en VM-configuratie (awscli/gnupg, passphrase, .env) — zie
-      checklist in de sessie / TECHNICAL-REFERENCE.
+- [ ] **Off-site backups naar S3 — setup MORGENOCHTEND (2026-07-03, Shaniel)**:
+      script is gebouwd en gepusht (`db-backup.sh`); rest is de eenmalige setup
+      (±10 min) volgens **`docs/offsite-backup-setup.md`** — AWS-console (bucket,
+      lifecycle 30 dgn, upload-only IAM-sleutel) + VM (awscli/gnupg, passphrase
+      → óók in de kluis, `S3_BACKUP_BUCKET` in .env, testrun).
