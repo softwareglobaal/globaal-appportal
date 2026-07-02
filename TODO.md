@@ -8,6 +8,12 @@
       vs betaald-door; **doorfactureerbaar ja/nee + basis** (maandelijks / vast bedrag /
       percentage / effectief); leverancier ≠ platform. Daarná de telefonie-kolommen in
       Communicatie uitbreiden.
+- [ ] **Gebruikersabonnement-kost telefonie** (Close Call-factuur 2025-0119): naast
+      € 2,00/nummer (in `vaste_prijs`) rekent Close Call € 9/8/7 per *gebruiker*
+      (staffel 1-10 / 11-20 / 21-35) — dat is € 212 van de € 292 vaste maandkost en
+      hangt aan personen, niet aan nummers. Aparte registratie nodig (per persoon of
+      als firmakost) vóór de doorfacturering per firma kan kloppen. Belminuten
+      (± € 23/maand) zijn variabel en blijven buiten `vaste_prijs`.
 - [ ] **Documenten koppelen aan de graph** (bv. testresultaten per collega over meerdere
       jaren) → AI-vragen als "wie is het meest geschikt voor deze taak", trends
       (groei/demotivatie).
