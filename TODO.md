@@ -14,8 +14,11 @@
 - [ ] **Fathom-integratie**: meeting-transcripts als AI-bron ("lezen of we goed bezig
       zijn"); Gullok toegang tot Fathom geven.
 - [ ] **Nieuwe entiteiten** in kern + graph: klanten, diensten, contracten (leveranciers
-      bestaan al) — met vervaldatums, zodat de AI proactief kan signaleren (het
-      verzekerings-voorbeeld van Mehdi).
+      bestaan al) — met vervaldatums + opzegtermijnen. Zodra aanwezig: regel
+      "vervalt < 90 dagen" → signaal → de **dagbriefing** adviseert (laag 3 van de
+      proactieve AI; het verzekerings-voorbeeld van Mehdi).
+- [ ] **Briefing per WhatsApp** versturen (laag 2½ — het duwtje dat je opzoekt;
+      toekomst, expliciet geparkeerd).
 - [ ] **RBAC verfijnen**: wie ziet welk deel van het dashboard (nu: admin/manager alles).
 
 ## Onderzoek (vóór bouwen)
