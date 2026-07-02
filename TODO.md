@@ -9,9 +9,10 @@
       kolomkiezer, Woordenboek-knop en Excel-export lezen eruit. Terminologie
       doorgevoerd: "Intern gefactureerd aan" / "Interne doorfacturatie naar".
       Ook in het **Organisatie-dashboard** (migratie 017): ⓘ Woordenboek-pagina,
-      tooltips op kolomkoppen en op de Second Brain-typefilters.
-      Rest: beheer-UI voor definities (nu: UPDATE op kern.definitie +
-      DEFINITIEBOEK.md in sync houden).
+      tooltips op kolomkoppen en op de Second Brain-typefilters. **Beheer-UI
+      gebouwd** (migratie 020): bewerken/toevoegen op de woordenboek-pagina,
+      alleen voor `WOORDENBOEK_EDITORS` (mehdi + akadmin). Rest: DEFINITIEBOEK.md
+      handmatig in sync houden bij wijzigingen.
 - [ ] **Verbruik op het kosten-dashboard** (actiepunt): usage per software naast
       prijs/seats, zodat houden-of-schrappen en jaarlijks-vs-maandelijks
       **datagedreven** wordt (jaarcontract voor zekere zaken zoals Zoom, maandelijks
