@@ -130,6 +130,31 @@ Het **ondernemingsnummer** van een firma in de Kruispuntbank van Ondernemingen �
 de sleutel naar officiële bronnen (KBO Public Search, NBB-jaarrekeningen). Staat op
 `kern.firma`; invullen via het firma-beheer in het Organisatie-dashboard.
 
+### Draaiboek
+Het **protocol (playbook) van één proces**: alle fases en deeltaken van A tot Z, in
+volgorde en zonder fouten (meeting 2026-07-03, Mehdi). Een draaiboek legt het proces
+vast → maakt **automatisering** mogelijk → levert **data** op. Het micromanagement
+(bv. een EPB-proces met ~200 stappen) hoort hiér, niet in projectmanagement.
+
+### Projectmanagement
+**Veel projecten tegelijk op grove lijnen bewaken** (bv. Monday). Werkt pas als elk
+project een draaiboek volgt — "projectmanagement zonder draaiboek heeft geen zin".
+Monday blijft voor het overzicht; het draaiboek is van ons.
+
+### Fase
+Een **hoofdstuk van een draaiboek**: een geordende groep stappen (ontwerpfase,
+uitvoeringsfase, …). Maakt de voortgang van een run in één blik leesbaar.
+
+### Stap
+De **kleinste eenheid van een draaiboek**: één (deel)taak, met volgorde, eventueel
+een afhankelijkheid ("pas na stap X") en een op te leveren resultaat (bv. een
+verslag).
+
+### Run
+Een **draaiboek toegepast op één concreet dossier/project**: dezelfde stappen, mét
+status, wie en wanneer per stap. De run is het *sequentiële geheugen* — "verslag 2
+is klaar, dus nu verslag 3" — en daarmee de projectvoortgang-bron die AI nu mist.
+
 ## Vermijden / opletten
 | Niet doen | Wel |
 |---|---|
