@@ -52,11 +52,12 @@
 
 > Draaiboek-einddoel door Mehdi **bevestigd** ("Dat is het"). Nieuwe punten:
 
-- [ ] **Platform + leverancier klikbaar maken** in Communicatie (ACTION ITEM): net als
-      de firma-links nu — de kolommen **platform** en **leverancier** "blauw"/klikbaar,
-      uniform met verantwoordelijke / intern gefactureerd / doorfacturatie. Klein,
-      direct te bouwen. (Leverancier heeft al een detail; platform nog niet — beslissen
-      waar de platform-klik naartoe gaat.)
+- [x] **Platform + leverancier klikbaar maken** in Communicatie — GEBOUWD
+      (2026-07-03): beide kolommen blauwe links; klik = **filtert de lijst** op die
+      waarde (toggle: nogmaals = uit). Platform kreeg dezelfde filter-infra als
+      leverancier (distinct platforms via `/api/refs`, chip-rij, serverfilter). Een
+      rijker leverancier-kostenoverzicht bij de klik = natuurlijke vervolgstap
+      (koppelt aan "verbruik op kosten-dashboard").
 - [ ] **ARCHITECTUUR — één dashboard, niet 17** (Mehdi, beslist): NIET 17 losse
       dashboards. Eén dashboard, **15 bedrijven**, met tabs + subtabs; **per firma
       filteren** (zoals boekhouding: één dashboard, kies de firma). **RBAC per tab via
