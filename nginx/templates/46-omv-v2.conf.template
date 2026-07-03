@@ -1,0 +1,11 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name omv-v2.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Forward-auth (embedded outpost) beschermt de hele app; identiteit + groepen
+    # gaan als X-authentik-* headers naar de Node-app.
+    set $app_upstream http://app-omv-v2:3008;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

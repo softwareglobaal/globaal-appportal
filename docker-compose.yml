@@ -10,6 +10,17 @@ volumes:
   authentik-certs:
 
 services:
+  app-omv-v2:
+    build: ./omv-v2
+    container_name: app-omv-v2
+    restart: unless-stopped
+    env_file: ./omv-v2-data/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./omv-v2-data:/data
+    ports:
+      - "127.0.0.1:5001:5001"
   # One-shot init container: generates a local CA + wildcard TLS cert into ./certs.
   # Idempotent — exits immediately if certs for the current BASE_DOMAIN already exist.
   certgen:
