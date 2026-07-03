@@ -1212,7 +1212,23 @@ UPDATE) — historie telt én event-bron voor latere automatisering.
 
 ---
 
-*Laatst bijgewerkt: 2026-07-02 — **Graph-tab + proactieve AI-laag** op het
+*Laatst bijgewerkt: 2026-07-03 — **Draaiboek-platform prototype live** (§14.7:
+migratie 022, veiligheidscoördinatie-draaiboek, repo `globaal-draaiboek`; ontwerp
+`docs/ontwerp-draaiboek-datamodel.md` op basis van de deep-research). Daarnaast:
+**woordenboek** overal (kern.definitie, migraties 015/017/019/021 + beheer-UI 020,
+alleen mehdi/akadmin), **finalisatie** (blauw/rood, append-only, migratie 018),
+**KBO-links** op firma's, **Vermogens-dashboard** (§14.6, migratie 016),
+**kosten↔kern blauwe draad** (migratie 012), **Communicatie**: persoonlijke views
+met kolomkiezer/volgorde/sortering (migraties 013/014), terminologie "intern
+gefactureerd aan", **off-site backups** naar S3 (GPG, upload-only,
+`docs/offsite-backup-setup.md`), **CLAUDE.md-dekking** in alle 9 repo's, en het
+**adres-autocomplete-patroon** (eigen `/api/adres`-proxy → Photon/OSM + eigen
+dropdown, géén datalist en géén externe scripts — in vermogen en draaiboek; zie
+hun README's). Beheer-les: shell-scripts vanaf Windows committen met
+`git update-index --chmod=+x`, anders faalt de deploy-cron stil op Permission
+denied (overkwam draaiboek/vermogen).*
+
+*Eerder (2026-07-02) — **Graph-tab + proactieve AI-laag** op het
 Organisatie-dashboard: knowledge-graph met zoekbalk en type-filters, signalen met
 ernst, **dagbriefing** (organisatie.briefing, migratie 007) en AI-chat met
 gespreksgeschiedenis op de Claude API (§14.2; app-docs in de README van

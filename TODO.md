@@ -30,12 +30,13 @@
       migratie 022 + MVP-skelet (repo `globaal-draaiboek`). NB uit de research:
       Toolmaster-€70-claim ONBEVESTIGD (enige €70 = support-uurtarief) → echte
       offerte vragen; documentgeneratie VGP/PID = fase 2 (dé vervanger).
-- [x] **MVP: veiligheidscoördinatie** — PROTOTYPE GEBOUWD (2026-07-03, §14.7):
-      migratie 022 (schema + VC-draaiboek geseed: 5 fases / 26 stappen /
-      kickoff + condities) + app-repo `globaal-draaiboek` (motor: snapshot-runs,
-      blokkades, append-only log, herhaal-stappen; 18 e2e-tests groen).
-      Rest: (a) GitHub-repo aanmaken + push, (b) VM-installatie, (c) demo aan
-      Mehdi + validatie van de VC-flow met Ashwent, (d) fase 2-lijst in README.
+- [x] **MVP: veiligheidscoördinatie** — PROTOTYPE LIVE op draaiboek.globaal.be
+      (2026-07-03, §14.7): migratie 022 (schema + VC-draaiboek geseed: 5 fases /
+      26 stappen / kickoff + condities), app-repo `globaal-draaiboek` (snapshot-
+      runs, blokkades, append-only log, herhaal-stappen; 18 e2e-tests groen),
+      UI ont-AI'd, adres-autocomplete op dossiers. Rest: (a) **demo aan Mehdi**,
+      (b) VC-flow valideren met Ashwent, (c) fase 2-lijst in de README
+      (documentgeneratie VGP/PID, sjabloon-beheer-UI, automatisering, Fathom).
 - [ ] **Sequentieel geheugen ("waar staan we")** — lost het verslagen-probleem op:
       het draaiboek houdt bij welke fase/verslag af is, zodat mens én AI weten
       "verslag 2 klaar → volgende is 3". Het draaiboek wordt de projectvoortgang-bron

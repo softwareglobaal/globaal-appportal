@@ -66,3 +66,12 @@ auto-merge** — in beide gevallen deployt de VM daarna automatisch via cron (2 
    VM (nano) of `read -s`; in repos alleen `CHANGE_ME`-placeholders.
 6. **Commits in het Nederlands**, kort en beschrijvend (`feat:`/`fix:`/`docs:`/
    `TODO:`-stijl zoals de historie); `.gitattributes` normaliseert naar LF.
+7. **Shell-scripts committen mét execute-bit**: vanaf Windows krijgt een script
+   mode 100644 en dan faalt de deploy-cron stil op "Permission denied". Vóór de
+   commit: `git update-index --chmod=+x <script>`; check met
+   `git ls-files -s <script>` (moet 100755 zijn). Na een verse VM-clone eenmalig
+   `chmod +x` als bootstrap.
+8. **Adresvelden krijgen het autocomplete-patroon**: eigen proxy-route
+   `/api/adres` (→ Photon/OSM, geen key) + `static/adres.js` + `data-adres` op de
+   input, met een eigen dropdown — géén `<datalist>` (browsers filteren die stuk)
+   en géén externe scripts in de pagina. Voorbeeld: globaal-draaiboek/-vermogen.
