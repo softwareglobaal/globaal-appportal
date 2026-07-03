@@ -48,6 +48,29 @@
       → dan samen met Shaniel de veiligheidscoördinatie-playbook opzetten om van te
       leren; (b) dashboard-review met Ivor inplannen.
 
+## Meeting 2026-07-03 (dashboard-review + architectuur)
+
+> Draaiboek-einddoel door Mehdi **bevestigd** ("Dat is het"). Nieuwe punten:
+
+- [ ] **Platform + leverancier klikbaar maken** in Communicatie (ACTION ITEM): net als
+      de firma-links nu — de kolommen **platform** en **leverancier** "blauw"/klikbaar,
+      uniform met verantwoordelijke / intern gefactureerd / doorfacturatie. Klein,
+      direct te bouwen. (Leverancier heeft al een detail; platform nog niet — beslissen
+      waar de platform-klik naartoe gaat.)
+- [ ] **ARCHITECTUUR — één dashboard, niet 17** (Mehdi, beslist): NIET 17 losse
+      dashboards. Eén dashboard, **15 bedrijven**, met tabs + subtabs; **per firma
+      filteren** (zoals boekhouding: één dashboard, kies de firma). **RBAC per tab via
+      login** — wie iets niet hoeft te zien, ziet het niet. **Cross-firma rollup**:
+      "alle firma's" → geld binnen/uit per maand, welke firma bracht het meeste op /
+      kostte het meeste. (Structureel principe voor álle toekomstige dashboards.)
+- [ ] **Xelion-data via screenshots** (ACTION ITEM — workaround voor de ontbrekende
+      API): Shaniel maakt screenshots van álle Xelion-tabs → Claude extraheert de data
+      → in het dashboard, zodat we up-to-date data hebben om beslissingen op te nemen.
+      Overbrugt de geparkeerde Xelion-API-blocker tot die er eventueel komt.
+- [ ] **Woordenboek-definities samen aanscherpen** (Mehdi + Shaniel, als er tijd is):
+      de AI-gegenereerde definities nalopen en verscherpen via de beheer-UI. (Definitie
+      "vaste prijs" al bevestigd: vast maandbedrag, excl. BTW, per resource.)
+
 ## Meeting 2026-07-02 (avond) — woordenboek, vermogens, agenda
 - [x] **DEFINITIEBOEK zichtbaar op de dashboards** — GEBOUWD voor Communicatie
       (migratie 015): `kern.definitie` is de machinebron; kolomkoppen, tooltips,
@@ -93,14 +116,19 @@
       ("welke nummers zijn hun geld waard"). Eerst uitzoeken: API-toegang via
       Close Call BV. Daarna doorkoppeling van communicatiestatistiek per project
       naar **Monday** (projectverantwoordelijke ziet de communicatie).
-- [ ] **AI-factuurgoedkeuring = Factuurrouter 2.0** (meeting 2026-07-02): GEEN nieuwe
-      app — de bestaande Factuurrouter (§6A: scanfacturen@gmail.com → OCR → AI
-      herkent firma → routeert; review-dashboard voor twijfel) uitbreiden met de
-      goedkeuringstoets "goed om te betalen?" tegen verwacht (kosten seats × prijs +
-      communicatie vaste_prijs + charge_actual-historiek); niet goedgekeurd →
-      escalatie Mehdi/Angela via het bestaande review-patroon; goedgekeurd →
-      charge_actual-rij + prijs-updatevoorstel. Nodig: db-koppeling voor de router
-      (leesrol + smalle schrijfrol) ; beslispunt bij bouw: gpt-5-mini houden of
+- [ ] **AI-factuurgoedkeuring = Factuurrouter 2.0** (meeting 2026-07-02, bevestigd
+      2026-07-03): GEEN nieuwe app — de bestaande Factuurrouter (§6A:
+      scanfacturen@gmail.com → OCR → AI herkent firma → routeert; review-dashboard
+      voor twijfel) uitbreiden ("paar extra lagen", Mehdi) met:
+      (1) **goedkeuringstoets** "goed om te betalen?" tegen verwacht (kosten
+      seats × prijs + communicatie vaste_prijs + charge_actual-historiek);
+      (2) **contract-check**: hebben we een contract, matcht de factuur dat contract?;
+      (3) **prijswijziging-detectie** → ons op de hoogte stellen bij veranderde prijzen;
+      (4) **dashboards automatisch bijwerken** met de nieuwe prijzen zodat we
+      beslissingen kunnen nemen; niet goedgekeurd → escalatie Mehdi/Angela via het
+      bestaande review-patroon; goedgekeurd → charge_actual-rij + prijs-update.
+      Nodig: db-koppeling voor de router (leesrol + smalle schrijfrol); contract-
+      entiteit (zie kern-uitbreiding); beslispunt bij bouw: gpt-5-mini houden of
       migreren naar de Claude API (één AI-lijn in het platform).
 - [ ] **Gespreksopname-transcriptie** (meeting 2026-07-02): opnames uit Xelion
       downloaden → transcriberen → aan het dossier/de communicatie hangen (het
@@ -155,8 +183,10 @@
 - [ ] **Movetex.com** onderzoeken: planning-algoritme (Fati gebruikt het). Doel: 4
       planningen (Matthias/Mathieu/Shilton/Luc) → 1 planningtool. Géén eigen bouw —
       bestaand pakket koppelen via API; Monday blijft alleen visueel.
-- [ ] **17 disciplines** deep-research → daarna beslissen: één dashboard met onderdelen
-      of meerdere dashboards.
+- [ ] **17 disciplines** deep-research (via Claude) — **BESLIST 2026-07-03: ÉÉN
+      dashboard, geen 17 losse** ("anders is onze brain verspreid"). Rest: per thema/tab
+      een eigen deep-search → tab/subtab-structuur die op alle 15 firma's toepasbaar is.
+      De 17 = referentiekader (auto-analogie: je ziet wat je mist), niet in beton.
 
 ## Data & beheer
 - [ ] **Data-curatie Communicatie** (Siyan): doorfactuur-firma's, afdelingen, doelen en
