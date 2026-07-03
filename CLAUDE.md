@@ -75,3 +75,8 @@ auto-merge** — in beide gevallen deployt de VM daarna automatisch via cron (2 
    `/api/adres` (→ Photon/OSM, geen key) + `static/adres.js` + `data-adres` op de
    input, met een eigen dropdown — géén `<datalist>` (browsers filteren die stuk)
    en géén externe scripts in de pagina. Voorbeeld: globaal-draaiboek/-vermogen.
+9. **Nieuwe relatie in de database = zelfde sessie ook in de Second Brain**:
+   elke migratie die een FK of koppeltabel toevoegt, wordt in dezelfde werksessie
+   verwerkt in `graaf.py` (globaal-organisatie) — knoop/edge + kleur/definitie —
+   én in de relevante detailpagina's/profielen. "Alles blauw" geldt ook voor de
+   graaf; de gebruiker hoort koppelingen nooit zelf te hoeven controleren.
