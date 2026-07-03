@@ -69,7 +69,9 @@ services:
       # Xelion-koppeling (migratie 028): poller spiegelt de belvolgorde.
       # Credentials in .env op de VM (nooit in git); zonder waarden blijft
       # de Xelion-kolom leeg. XELION_DEBUG mag uit na de eerste verificatie.
-      XELION_ENABLED: "true"
+      # Aan/uit via .env — bij foute creds elke 5 min blijven proberen jaagt
+      # de loginFailures-teller in Xelion op (accountvergrendeling).
+      XELION_ENABLED: ${XELION_ENABLED:-false}
       XELION_DEBUG: "true"
       XELION_BASE_URL: ${XELION_BASE_URL:-}
       XELION_USERSPACE: ${XELION_USERSPACE:-}
