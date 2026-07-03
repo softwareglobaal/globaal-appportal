@@ -82,12 +82,16 @@
 
 ## Meeting 2026-07-03 (communicatie-review, met Siyan/Angela)
 
-- [ ] **Leverancier/platform: échte detailpagina's** i.p.v. alleen filteren (Mehdi:
-      de klik is nu "gewoon nog een filter"): per leverancier/platform één pagina met
-      alles wat erbij hoort (nummers, kosten, facturen, contracten later) waar overal
-      naartoe gelinkt wordt. ⚠ RBAC: "toont niet alles aan iedereen" (Mehdi) — rechten
-      per sectie. De Second Brain-knopen (Xelion, Close Call BV) bestaan al; dit geeft
-      ze een landingspagina.
+- [x] **Leverancier/platform: échte detailpagina's** i.p.v. alleen filteren — GEBOUWD
+      (2026-07-03): klik op leverancier/platform opent nu een detailpaneel (zelfde
+      drawer als nummer/firma). Leverancier: alle nummers + totale vaste maandprijs +
+      software-abonnementen en werkelijke facturen uit het kosten-schema (migratie 027
+      geeft de communicatie-rol read-only op kosten). Platform: nummers + leveranciers
+      die het leveren. Filteren blijft kunnen via de knop ín het paneel; deep-links
+      `#leverancier=`/`#platform=`. ⚠ Open verfijning — RBAC: "toont niet alles aan
+      iedereen" (Mehdi) — rechten per sectie, oppakken zodra het RBAC-per-tab-principe
+      (architectuurpunt hierboven) vorm krijgt. Facturen/contracten in het paneel
+      volgen met Factuurrouter 2.0.
 - [ ] **Definitie "verantwoordelijke" generiek maken** (Mehdi, woordenboek-principe):
       de huidige definitie is telefoonlijn-specifiek ("altijd de 1e in de
       belvolgorde") terwijl de term over álle dashboards hetzelfde moet betekenen.
