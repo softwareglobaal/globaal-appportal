@@ -80,6 +80,21 @@
       de AI-gegenereerde definities nalopen en verscherpen via de beheer-UI. (Definitie
       "vaste prijs" al bevestigd: vast maandbedrag, excl. BTW, per resource.)
 
+## Second Brain & Xelion (2026-07-03, avond)
+
+- [x] **Xelion-API gekoppeld** — belvolgorde live gespiegeld (migratie 028; login
+      via userName/password/userSpace, paginering, allowedNumbers, kanonieke
+      nummer-match). Kolom in Communicatie + persoonsprofielen + graaf.
+      Open: appKey aanvragen (wordt verplicht); XELION_DEBUG uitzetten na een
+      week stabiel draaien; fase 2 = belvolgorde schrijven (PATCH phonelines).
+- [x] **Second Brain schema-gedreven** (migratie 029) — besluit: geen afhankelijkheid
+      van Claude/mensen om de graaf bij te houden. Auto-laag uit de Postgres-
+      catalogus + curatie als data (kern.graaf_regel) + signalen voor onbenoemde
+      relaties + versiebeheer met vastpinnen (paneel "Graaf-versies", wb-editors).
+- [ ] **Graaf-curatie eerste ronde**: na migratie 029 de nieuw verschenen
+      relaties (draaiboek, vermogen, definitie-verwijzingen) benoemen of
+      verbergen via de signalen-lijst.
+
 ## Meeting 2026-07-03 (communicatie-review, met Siyan/Angela)
 
 - [x] **Leverancier/platform: échte detailpagina's** i.p.v. alleen filteren — GEBOUWD

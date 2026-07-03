@@ -1224,7 +1224,18 @@ UPDATE) — historie telt én event-bron voor latere automatisering.
 
 ---
 
-*Laatst bijgewerkt: 2026-07-03 — **Draaiboek-platform prototype live** (§14.7:
+*Laatst bijgewerkt (avond): 2026-07-03 — **Second Brain schema-gedreven +
+versiebeheer** (migratie 029): de graaf leest FK's live uit de Postgres-catalogus
+(auto-laag met blacklist en 500-rijen-cap), curatie is data (`kern.graaf_regel`,
+geauditeerd, beheer via graph-pagina door wb-editors), onbenoemde relaties worden
+signalen, en elke gewijzigde opbouw is een snapshot in `organisatie.graaf_versie`
+(vastpinnen/terugrollen via `organisatie.graaf_instelling`, paneel "Graaf-versies").
+Ook: **Xelion-integratie live** (migratie 028: gespiegelde belvolgorde; poller in
+globaal-communicatie met paginering + allowedNumbers + kanonieke nummer-match),
+leverancier/platform-**detailpanelen** in Communicatie (migratie 027) en
+Xelion-queue op de persoonsprofielen. Eerder die dag:*
+
+*— **Draaiboek-platform prototype live** (§14.7:
 migratie 022, veiligheidscoördinatie-draaiboek, repo `globaal-draaiboek`; ontwerp
 `docs/ontwerp-draaiboek-datamodel.md` op basis van de deep-research). Daarnaast:
 **woordenboek** overal (kern.definitie, migraties 015/017/019/021 + beheer-UI 020,
