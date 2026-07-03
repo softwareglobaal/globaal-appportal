@@ -81,6 +81,37 @@
       de AI-gegenereerde definities nalopen en verscherpen via de beheer-UI. (Definitie
       "vaste prijs" al bevestigd: vast maandbedrag, excl. BTW, per resource.)
 
+## Meeting 2026-07-03 (communicatie-review, met Siyan/Angela)
+
+- [ ] **Leverancier/platform: échte detailpagina's** i.p.v. alleen filteren (Mehdi:
+      de klik is nu "gewoon nog een filter"): per leverancier/platform één pagina met
+      alles wat erbij hoort (nummers, kosten, facturen, contracten later) waar overal
+      naartoe gelinkt wordt. ⚠ RBAC: "toont niet alles aan iedereen" (Mehdi) — rechten
+      per sectie. De Second Brain-knopen (Xelion, Close Call BV) bestaan al; dit geeft
+      ze een landingspagina.
+- [ ] **Definitie "verantwoordelijke" generiek maken** (Mehdi, woordenboek-principe):
+      de huidige definitie is telefoonlijn-specifiek ("altijd de 1e in de
+      belvolgorde") terwijl de term over álle dashboards hetzelfde moet betekenen.
+      Fix: generieke definitie (aanspreekbaar/eigenaar, accountable, precies één);
+      de belvolgorde-uitleg verhuist naar een eigen sleutel voor de telefonie-kolom
+      (bv. "verantwoordelijke van de telefoonlijn" of kolom hernoemen naar "eerste
+      in de rij" — met team kortsluiten welke van de twee).
+- [ ] **Filter op persoon + positie in de belvolgorde** (ACTION ITEM): "toon alle
+      nummers waar Mehdi 3e of 4e staat" / "waar Joey 2e lijn is" — persoonsfilter +
+      positiefilter in het Communicatie-dashboard.
+- [ ] **"Behouden"-kolom + nummer-validatie** (ACTION ITEM): dashboard telt ~92
+      nummers, Xelion maar 41 → valideren. Tijdelijke aanvink-kolom "behouden"
+      (behouden / verifiëren / elimineren) zodat het team kan markeren; Proximus-lijst
+      bestaat al als referentie. Siyans waarschuwing: niet zomaar elimineren.
+- [ ] **Toolmaster-opname → transcript** (Shaniel): de demo-opname downloaden en
+      transcriberen — input voor het draaiboek-spoor.
+- Team (geen bouwwerk van Shaniel): **Pipedrive-sanering** (Siyan + Fable):
+      velden/labels fout opgezet; eerst deep-search naar Pipedrive-mogelijkheden,
+      dan aanpassen in een **sandbox** (advies van Claude zelf), UNABO + TKN;
+      deadline di (TKN-meeting). **Sales-dashboard** (Siyan, Pipedrive-MCP) loopt.
+      **Curatie vóór agents** (Mehdi): eerst 2-3 mensen met kennis de data goed
+      laten zetten; agents pas als er genoeg inzicht/data is.
+
 ## Meeting 2026-07-03 (vermogen-walkthrough) — adressen, kostenplaats, kennisbank
 
 > Adres-autocomplete uit deze meeting is GEBOUWD (Photon, vermogen + draaiboek).
@@ -154,12 +185,15 @@
       nog: betaald-door, **doorfactureerbaar ja/nee + basis** (maandelijks / vast bedrag /
       percentage / effectief); leverancier ≠ platform. Let op: naamgeving wijzigt naar
       "intern gefactureerd" (zie meeting-blok hierboven).
-- [ ] **Xelion-belstatistieken** (meeting 2026-07-02, prioriteit): dagelijkse sync
-      (einde van de dag) via de Xelion-API — per nummer inkomend/uitgaand,
-      opgenomen/gemist, belminuten, wie opnam → kolommen + statistiek in Communicatie
-      ("welke nummers zijn hun geld waard"). Eerst uitzoeken: API-toegang via
-      Close Call BV. Daarna doorkoppeling van communicatiestatistiek per project
-      naar **Monday** (projectverantwoordelijke ziet de communicatie).
+- [ ] **Xelion-API — TOEGANG BINNEN (2026-07-03, via Siyan)**: Siyan stuurt de
+      inlog + documentatie-link naar Shaniel. Acties: (a) documentatie downloaden
+      en doornemen — let op: de API oogt write-heavy (change/create/set, "nergens
+      import"), dus eerst uitzoeken wat er te LEZEN valt; (b) verbinden en zo veel
+      mogelijk data binnenhalen (belstatistieken per nummer: in/uit, gemist,
+      minuten, wie opnam); (c) **hele belvolgorde-queue (persoon 1/2/3…) op het
+      dashboard** én via de API kunnen AANPASSEN ("Joey is ziek → wie neemt over"
+      zonder via Siyan te gaan); (d) daarna Monday-doorkoppeling per project.
+      De screenshots-workaround vervalt zodra dit loopt.
 - [ ] **AI-factuurgoedkeuring = Factuurrouter 2.0** (meeting 2026-07-02, bevestigd
       2026-07-03): GEEN nieuwe app — de bestaande Factuurrouter (§6A:
       scanfacturen@gmail.com → OCR → AI herkent firma → routeert; review-dashboard
