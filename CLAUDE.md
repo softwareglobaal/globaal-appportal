@@ -8,20 +8,23 @@ zodat elke sessie op dezelfde manier werkt. Volledige platformdocumentatie:
 
 ## Repo-landschap (GitHub-org `softwareglobaal`)
 
-Stand 2026-07-03; kolom **CLAUDE.md** = heeft de repo een eigen
-werkafspraken-bestand (sessies in een repo zónder ⚠-vinkje: lees déze).
+Stand 2026-07-03 — **elke repo heeft een eigen CLAUDE.md** met de lokale regels;
+deze tabel is het overzicht. Let op het verschil in workflow: de
+**dashboard-repo's** (bovenste blok) krijgen directe pushes naar `main`; de
+**host-app-repo's** (onderste blok) werken via **branch → PR → CI smoke-test →
+auto-merge** — in beide gevallen deployt de VM daarna automatisch via cron (2 min).
 
-| Repo | Wat | VM-checkout | Deploy | CLAUDE.md |
+| Repo | Wat | VM-checkout | Naar main | Deploy |
 |---|---|---|---|---|
-| **globaal-appportal** (deze) | stack: compose, nginx, db-migraties, docs | `~/appportal` | **handmatig** (zie onder) | ✓ |
-| globaal-organisatie | Organisatie-dashboard + Second Brain | `~/appportal/medewerkers` | **auto** (cron 2 min) | ✓ |
-| globaal-communicatie | Communicatie-dashboard | `~/appportal/communicatie` | **auto** (cron 2 min) | ✓ |
-| globaal-vermogen | Vermogens-dashboard | `~/appportal/vermogen` | **auto** (cron 2 min) | ✓ |
-| globaal-kosten | Kosten-dashboard (host-app, systemd :8090) | `~/kosten` | eigen deploy-script/cron | ⚠ nog niet |
-| globaal-factuurrouter | AI-factuurrouteringsagent (host-app, §6A) | `~/factuurrouter` | eigen deploy + CI/CD | ⚠ nog niet |
-| globaal-stagebeoordeling | Stagebeoordeling (host-app) | `~/stagebeoordeling` | eigen deploy + CI/CD | ⚠ nog niet |
-| globaal-schuldentracker | Schuldentracker (host-app) | — | — | ⚠ nog niet |
-| telefoonregister | telefoonregister van de collega — **ongemoeid laten** | eigen checkout | — | bewust niet |
+| **globaal-appportal** (deze) | stack: compose, nginx, db-migraties, docs | `~/appportal` | directe push | **handmatig** (zie onder) |
+| globaal-organisatie | Organisatie-dashboard + Second Brain | `~/appportal/medewerkers` | directe push | auto (cron 2 min) |
+| globaal-communicatie | Communicatie-dashboard | `~/appportal/communicatie` | directe push | auto (cron 2 min) |
+| globaal-vermogen | Vermogens-dashboard | `~/appportal/vermogen` | directe push | auto (cron 2 min) |
+| globaal-kosten | Kosten-dashboard (host-app :8090) | `~/kosten` | PR → auto-merge | auto (`~/deploy-kosten.sh`) |
+| globaal-factuurrouter | AI-factuurrouteringsagent (§6A, :8787) | `~/factuurrouter` | PR → auto-merge | auto (`~/deploy-factuurrouter.sh`) |
+| globaal-stagebeoordeling | Stagebeoordeling (host-app :8088) | `~/stagebeoordeling` | PR → auto-merge | auto (`~/deploy-stagebeoordeling.sh`) |
+| globaal-schuldentracker | Schuldentracker (host-app :5050) | `~/Finance/Schuldentracker` | PR → auto-merge | auto (`~/deploy-schuldentracker.sh`) |
+| telefoonregister | telefoonregister van de collega — **ongemoeid laten** | eigen checkout | — | — |
 
 ## Git-workflow: hoe Claude pullt en pusht
 
