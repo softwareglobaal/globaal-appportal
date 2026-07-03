@@ -94,5 +94,25 @@ services:
       start_period: 15s
     networks: [appnet]
 
+  # Draaiboek — playbook-management: sjabloon -> run, kickoff, condities.
+  app-draaiboek:
+    build: ./draaiboek
+    image: appportal-draaiboek
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      # Rol 'draaiboek': leest kern, schrijft schema draaiboek (db/roles.sql).
+      DATABASE_URL: ${DRAAIBOEK_DB_URL:-}
+      PORT: "3010"
+      # Wie de app mag gebruiken (komma-gescheiden Authentik-groepen).
+      TOEGANG_GROEPEN: admin,manager,draaiboek
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3010/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
 volumes:
   telefoonregister-data:

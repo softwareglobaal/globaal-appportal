@@ -48,3 +48,9 @@ apps:
     subdomain: vermogen
     roles: [admin, manager, vermogen]
     status: active
+  - id: draaiboek
+    name: Draaiboek
+    description: Playbook-management — draaiboeken, dossiers en runs
+    subdomain: draaiboek
+    roles: [admin, manager, draaiboek]
+    status: active

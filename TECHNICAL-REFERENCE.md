@@ -1186,6 +1186,30 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
 - Verwijderen is zacht (actief/niet-actief); huurders/verzekeraars/banken zijn nog
   tekstvelden tot de klant-/externe-partij-entiteit bestaat. App-docs: README aldaar.
 
+### 14.7 Draaiboek-platform (`draaiboek.globaal.be`)
+Playbook-management (het ★-einddoel; prototype 2026-07-03): een **draaiboek**
+(sjabloon: fases → stappen met soorten, afhankelijkheden, condities, termijnen)
+wordt per **dossier** als **run** uitgevoerd. Kern van de motor: het
+**kickoff-formulier** → `conditie_regel`-evaluatie → labels (bv. `groot_project`
+bij ≥ 500 m²) → alleen passende stappen worden als **snapshot** gekopieerd
+(sjabloon-wijzigingen raken lopende runs nooit). Afvinken met harde
+afhankelijkheids-blokkades, ► eerstvolgende-marker (het sequentiële geheugen),
+toewijzen, deadlines, overslaan-met-reden, herhaal-stappen (dupliceren) en
+handmatige stappen per run. **`run_stap_log`** is append-only (rol heeft geen
+UPDATE) — historie telt én event-bron voor latere automatisering.
+- **Repo `softwareglobaal/globaal-draaiboek`** (VM `~/appportal/draaiboek`,
+  auto-deploy cron zoals de andere dashboard-repo's). Flask, service
+  **`app-draaiboek`**:3010, nginx `47-draaiboek.conf.template`, Authentik via
+  `scripts/add-draaiboek-app.py` (groepen admin/manager/draaiboek). Rol
+  **`draaiboek`** (roles.sql; `DRAAIBOEK_DB_URL` in `.env`).
+- **Schema `draaiboek`** (migratie 022): draaiboek/fase/stap/veld/conditie_regel
+  (sjabloon) + dossier/run/run_stap/veldwaarde/run_stap_log (uitvoering); seed:
+  het draaiboek **Veiligheidscoördinatie** (KB 25/01/2001, 5 fases / 26 stappen,
+  klein-vs-groot-pad). Ontwerp + onderbouwing: `docs/ontwerp-draaiboek-datamodel.md`
+  (deep-research 2026-07-03). E2E-tests: `test_e2e.py` in de app-repo.
+- Fase 2 (TODO): documentgeneratie VGP/PID (Toolmaster-vervanger),
+  sjabloon-beheer-UI, automatisering, Fathom→run-stappen, Second Brain-signalen.
+
 ---
 
 *Laatst bijgewerkt: 2026-07-02 — **Graph-tab + proactieve AI-laag** op het

@@ -32,4 +32,10 @@ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'vermogen') THEN
     CREATE ROLE vermogen LOGIN PASSWORD 'CHANGE_ME';
   END IF;
+
+  -- Draaiboek-platform: leest kern, schrijft schema draaiboek (log = append-only).
+  -- Grants staan in db/migrations/022-draaiboek.sql.
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'draaiboek') THEN
+    CREATE ROLE draaiboek LOGIN PASSWORD 'CHANGE_ME';
+  END IF;
 END $$;
