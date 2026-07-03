@@ -1,152 +1,157 @@
-# Ontwerp — datamodel draaiboek-platform (concept v1)
+# Ontwerp — datamodel draaiboek-platform (v2, verfijnd met deep-research)
 
-> **Status: CONCEPT** — ter review door Shaniel/Mehdi en te verfijnen met de
-> deep-research (Toolmaster/Monday/referentieklasse/veiligheidscoördinatie).
-> Terminologie: DEFINITIEBOEK + `kern.definitie` (migratie 021): draaiboek,
-> projectmanagement, fase, stap, run. Pas na review wordt dit een migratie.
+> **Status: TER REVIEW** (Shaniel/Mehdi) — v1-concept getoetst aan de deep-research
+> van 2026-07-03 (Toolmaster, Monday, referentieklasse Process Street/Tallyfy/
+> Pipefy, wettelijk kader veiligheidscoördinatie). Na akkoord: migratie + MVP
+> volgens het vermogen-recept. Terminologie: `kern.definitie` (migratie 021).
 
-## Het model in één zin
+## Wat de research bevestigde en veranderde
 
-Een **draaiboek** is een sjabloon (fases → stappen); een **run** is dat sjabloon
-toegepast op één dossier — de stappen worden bij de start **gekopieerd** naar de
-run en krijgen daar status, wie en wanneer.
+**Bevestigd (bouwen zoals gedacht):**
+- **Sjabloon ↔ run-splitsing met bescherming tegen sjabloon-wijzigingen** — bij
+  álle referentiespelers expliciet ("runs protected from template changes").
+  Ons snapshot-model is precies dat.
+- **Append-only audit-trail** per stap (wie/wanneer) — overal de kern van de waarde.
+- **Fase-laag** — matcht bovendien exact de wettelijke structuur van
+  veiligheidscoördinatie (ontwerpfase / verwezenlijkingsfase).
+- **Relatieve deadlines per stap** (`termijn_dagen`) — standaardpatroon.
+
+**Veranderd t.o.v. v1 (de research was hier beter):**
+1. **Kickoff-formulier i.p.v. losse kenmerk-labels.** De referentieklasse stuurt
+   adaptiviteit via een startformulier (bij VC: oppervlakte m², aantal aannemers,
+   verhoogd risico art. 26…), waaruit régels de conditie-labels afleiden
+   (≥ 500 m² → `groot_project`). Dat is objectiever dan handmatig labels
+   aanvinken én de antwoorden zijn straks herbruikbaar voor documentgeneratie.
+2. **Dossier als bovenliggende entiteit.** In v1 bewust weggelaten, maar de
+   research toont dat één VC-dossier standaard twéé runs draagt (VC-ontwerp en
+   VC-verwezenlijking) — het Toolmaster-dossiermodel + de twee wettelijke fases.
+   Dus: een lícht `dossier` in het draaiboek-schema (naam, adres, firma), dat
+   later opgaat in de kern-projectentiteit (TODO) zonder breuk.
+3. **Stap-soorten**: taak / goedkeuring / document / mijlpaal. Goedkeuringsstappen
+   zijn native bij alle referentiespelers en nodig voor VC (overdrachten,
+   advies aan opdrachtgever).
+4. **Statusset verruimd** naar open / bezig / klaar / overgeslagen ('geblokkeerd'
+   is afgeleid uit afhankelijkheden, geen aparte status).
+5. **Velden/waarden generiek (EAV-licht)**: velddefinities bij het sjabloon
+   (kickoff) of bij een stap, waarden bij de run — het Pipefy-patroon
+   (definitie op phase, waarde op card). Valkuil 3 uit de research: dit vanaf
+   dag één, anders zit je vast bij het tweede draaiboek (EPB, keuring…).
+
+**Bewust fase 2 (research zegt "beter doen", maar niet in het MVP-model):**
+documentgeneratie (VGP/PID met conditionele blokken — dé Toolmaster-vervanger),
+referentietabellen (standaard risicoanalyses), klantenportaal, dynamische
+toewijzingsregels. De hooks zitten in het model (resultaat-verwijzing,
+veld/waarde), de tabellen komen als het MVP staat.
+
+## Het model
 
 ```
-SJABLOON (beheer)                      UITVOERING (dagelijks werk)
-draaiboek ─┬─ fase ─┬─ stap            run ─┬─ run_stap  (kopie van stap + status)
-           │        └─ stap                 ├─ run_stap
-           └─ fase ─── stap                 └─ run_stap_log (append-only historie)
-                │                            │
-                └── kern: —                  └── kern: firma, personen
+dossier ──┬─ run (VC-ontwerp) ────┬─ run_stap ─── run_stap_log (append-only)
+          └─ run (VC-verwezenl.)  └─ veldwaarde (kickoff-antwoorden)
+
+draaiboek ─┬─ fase ─┬─ stap (soort, volgorde, afhankelijkheid, conditie, termijn)
+           ├─ veld (kickoff- en stapvelden)
+           └─ conditie_regel (veld + operator + waarde → conditie-label)
 ```
 
-## Ontwerpbeslissingen (met waarom)
-
-1. **Runs kopiëren de stappen (snapshot), geen live verwijzing.** Dé klassieke
-   valkuil van playbook-systemen: iemand past het sjabloon aan terwijl er tien
-   runs lopen, en ineens klopt de voortgang van lopende dossiers niet meer of
-   liegt de historie. Door stappen bij run-start te kopiëren (mét een
-   `stap_id`-verwijzing voor afkomst) blijven lopende en afgeronde runs altijd
-   waar; sjabloon-verbeteringen gelden vanaf de vólgende run.
-2. **Historie is append-only**, net als finalisatie: elke statuswijziging van een
-   run-stap is een nieuwe logrij (wie, wanneer, wat). Afvinken terugdraaien =
-   nieuwe rij, nooit wissen ("rollen wijzigen; historie telt").
-3. **Adaptief zonder AI-afhankelijkheid**: een stap kan een `conditie` dragen
-   (bv. `torenkraan`, `groot_project`). Bij het starten van een run kies je welke
-   kenmerken gelden; stappen waarvan de conditie niet geldt worden niet
-   meegekopieerd. Dat is het "kleine gezinswoning ≠ torenkraan-stap"-gedrag uit
-   de meeting — de AI-laag (document lezen → kenmerken voorstellen) komt hier
-   later bovenop, het model hoeft er niet voor te veranderen.
-4. **Volgorde + afhankelijkheid gescheiden.** `volgorde` bepaalt de weergave;
-   `hangt_af_van` (nullable, zelfde tabel) bepaalt wat er pas kán na iets anders.
-   De meeste stappen hebben genoeg aan volgorde; afhankelijkheid is voor de echte
-   blokkades ("verslag 3 pas na verslag 2" — het sequentiële geheugen).
-5. **Eén afhankelijkheid per stap in v1** (nullable kolom, geen koppeltabel).
-   Meerdere afhankelijkheden kan later zonder breuk (koppeltabel erbij); starten
-   met het simpelste dat het EPB-/verslagen-scenario dekt.
-6. **Geen project-entiteit verzinnen.** Projecten/klanten bestaan nog niet in
-   `kern` (staat op de TODO). De run krijgt een eigen `dossier`-naam + firma-link;
-   zodra de project-entiteit er is, komt er een nullable FK bij — geen breuk.
-7. **Resultaten als verwijzing, niet als opslag.** Een stap kan een op te leveren
-   resultaat benoemen (bv. "werfverslag"); de run-stap krijgt een tekstverwijzing
-   naar wáár dat staat. Documentbeheer/-generatie is een apart spoor (meeting
-   2026-07-03); het model moet er alleen naar kunnen wijzen.
-8. **Zelfde spoke-patroon als altijd**: schema `draaiboek` in de appportal-DB,
-   eigen DB-rol (leest kern, schrijft eigen schema), FK's naar `kern.firma` en
-   `kern.persoon`, zichtbaar in de Second Brain, terminologie uit `kern.definitie`.
+Run-aanmaak = kickoff invullen → regels evalueren → labels bepalen → stappen
+zonder matchende conditie worden niet meegekopieerd → run_stappen zijn snapshots.
 
 ## Tabellen (schema `draaiboek`)
 
-### Sjabloon-kant (beheer — groep `draaiboek-editors`)
+### Sjabloon-kant (groep `draaiboek-editors`)
 
-**`draaiboek`** — het sjabloon/playbook
-| kolom | type | betekenis |
+**`draaiboek`** — id, naam, omschrijving, proces_eigenaar_persoon_id → kern.persoon,
+actief, bijgewerkt_op/door.
+
+**`fase`** — id, draaiboek_id FK, naam, volgorde.
+
+**`stap`** — id, fase_id FK, naam, omschrijving (de instructie), volgorde,
+soort (`taak`/`goedkeuring`/`document`/`mijlpaal`), hangt_af_van_stap_id (nullable,
+zelfverwijzend — één afhankelijkheid in v1), conditie (text, leeg = altijd),
+resultaat (op te leveren, bv. "werfverslag"), rol_hint, termijn_dagen (nullable,
+t.o.v. run-start), verplicht (boolean — overslaan vraagt notitie).
+
+**`veld`** — id, draaiboek_id FK, stap_id (nullable: leeg = kickoff-veld), naam,
+label, type (`tekst`/`getal`/`ja_nee`/`keuze`/`datum`), opties (text[], voor keuze),
+verplicht, volgorde.
+
+**`conditie_regel`** — id, draaiboek_id FK, veld_id FK, operator
+(`>=`/`<=`/`=`/`bevat`), waarde (text), label (het conditie-label dat waar wordt,
+bv. `groot_project`). Bij run-start geëvalueerd; labels sturen welke stappen meegaan.
+
+### Run-kant (alle gebruikers)
+
+**`dossier`** — id, naam, adres, firma_id → kern.firma, actief, aangemaakt_op/door.
+*(Licht; gaat later op in de kern-projectentiteit — run krijgt dan een extra FK,
+geen breuk.)*
+
+**`run`** — id, dossier_id FK, draaiboek_id FK (afkomst), verantwoordelijke_persoon_id
+→ kern.persoon, labels (text[] — de geëvalueerde condities, vastgelegd), status
+(`lopend`/`afgerond`/`gestopt`), gestart_op, afgerond_op, aangemaakt_door.
+
+**`run_stap`** — id, run_id FK, stap_id (nullable — afkomst/lineage),
+fase_naam / naam / omschrijving / soort / resultaat (snapshot), volgorde,
+hangt_af_van_run_stap_id (nullable), toegewezen_aan_persoon_id (nullable),
+deadline (date, uit termijn_dagen of handmatig), status
+(`open`/`bezig`/`klaar`/`overgeslagen`), resultaat_verwijzing (waar het opgeleverde
+staat), notitie.
+
+**`veldwaarde`** — id, run_id FK, veld_id FK, run_stap_id (nullable), waarde (text).
+*(Kickoff-antwoorden + latere stap-invoer; brandstof voor condities nu en
+documentgeneratie in fase 2.)*
+
+**`run_stap_log`** — id, run_stap_id FK, status, door, op (default now()), notitie.
+*(Append-only; alleen INSERT voor de schrijfrol — het finalisatie-patroon. Ook de
+event-bron voor automatisering later.)*
+
+## Rechten & integratie (bestaand patroon)
+
+- DB-rol `draaiboek`: leest kern (+ definitie), schrijft eigen schema;
+  `run_stap_log` alleen INSERT. `portal` leest mee.
+- App: eigen repo `globaal-draaiboek`, subdomein, vermogen-recept (compose,
+  nginx, Authentik-tegel, auto-deploy). Sjabloonbeheer = groep `draaiboek-editors`.
+- Second Brain: dossiers/runs als knopen aan firma + verantwoordelijke; signalen
+  "run X dagen stil", "stap over deadline", "run zonder verantwoordelijke".
+- Fathom-koppeling later: kolom `run_stap_id` op `organisatie.meeting_actiepunt`.
+
+## MVP-inhoud: veiligheidscoördinatie (uit de research, wettelijk kader KB 25/01/2001)
+
+Kickoff-velden: oppervlakte (m²), aantal aannemers, verhoogd risico (art. 26 §1),
+duur + aantal werknemers, mandagen, architect betrokken, bestemming.
+Kern-regel: `oppervlakte >= 500` → label `groot_project` (afdeling III).
+
+| Fase | Kern-stappen (samengevat) | Op te leveren |
 |---|---|---|
-| id | uuid PK | |
-| naam | text | bv. "Veiligheidscoördinatie — verwezenlijking" |
-| omschrijving | text | waarvoor dit proces dient |
-| proces_eigenaar_persoon_id | uuid → kern.persoon | wie het sjabloon inhoudelijk beheert |
-| actief | boolean | zacht uitzetten |
-| bijgewerkt_op/door | timestamptz/text | |
+| 0. Intake & aanstelling | overeenkomst; aanstelling VC-ontwerp (< 500 m² door architect, ≥ 500 m² door opdrachtgever); dossier openen | overeenkomst |
+| 1. Ontwerp (VC-ontwerp) | plananalyse; risicoanalyse; VGP opstellen (volledig ↔ vereenvoudigd = conditie); PID openen; coördinatiedagboek openen (alleen `groot_project`); VGP in bestek; advies offertes; overdracht (= goedkeuringsstap) | VGP, geopend PID, (groot) dagboek |
+| 2. Aanbesteding | aannemersdocumenten + prijsberekening preventie nazien; werfmelding (≥ 15 dagen vooraf, conditie grote werf) | werfmelding |
+| 3. Verwezenlijking | aanstelling VC-verwezenlijking (vóór start werken!); VGP aanpassen; periodieke werfbezoeken → werfverslagen (herhalende stap); dagboek bijhouden; tekortkomingen melden; PID aanvullen; coördinatiestructuur (conditie: > 5000 mandagen / > €2,5 mln + ≥ 3 aannemers) | werfverslagen |
+| 4. Oplevering | geactualiseerd VGP + dagboek + PID overdragen tegen ontvangstbewijs (goedkeuringsstap) | overdrachtsbewijs |
 
-**`fase`** — hoofdstuk van een draaiboek
-| kolom | type | betekenis |
-|---|---|---|
-| id | uuid PK; draaiboek_id FK | |
-| naam | text | bv. "Ontwerpfase" |
-| volgorde | integer | |
+**Openstaand modelpunt** (bewust v2 van de app, niet van het schema): *herhalende
+stappen* ("werfbezoek + verslag, telkens opnieuw"). MVP-aanpak: de stap dupliceren
+in de run ("verslag 2 klaar → maak verslag 3 aan") — past in het model; een
+nette herhaal-definitie op de sjabloon-stap kan later als kolom erbij.
 
-**`stap`** — de kleinste eenheid
-| kolom | type | betekenis |
-|---|---|---|
-| id | uuid PK; fase_id FK | |
-| naam | text | bv. "Werfverslag opstellen" |
-| omschrijving | text | hoe/waarmee (de instructie) |
-| volgorde | integer | binnen de fase |
-| hangt_af_van_stap_id | uuid → stap, nullable | harde blokkade ("pas na X") |
-| conditie | text, default '' | leeg = altijd; anders kenmerk-label (bv. `torenkraan`) |
-| resultaat | text, default '' | op te leveren (bv. "werfverslag") — leeg = geen |
-| rol_hint | text, default '' | wie dit typisch doet (vrije hint; toewijzing gebeurt per run) |
-| termijn_dagen | integer, nullable | richtdeadline: dagen na start van de run |
+## Valkuilen uit de research → hoe dit ontwerp ze vermijdt
 
-### Run-kant (uitvoering — alle gebruikers van de app)
+1. *Slecht proces automatiseren* → het MVP-draaiboek wordt eerst met de echte
+   coördinator (Ashwent) gevalideerd vóór de bouw van de app-flows.
+2. *Te rigide sjablonen* → per run stappen kunnen toevoegen/overslaan (run_stap
+   zonder stap_id = handmatig toegevoegd; overslaan = status + notitie), zonder
+   het sjabloon te raken.
+3. *Inflexibel datamodel* → veld/veldwaarde-patroon vanaf dag één; snapshots.
+4. *Adoptie* → één proces als MVP, meetbare winst (VGP-tijd, geen gemiste stappen).
+5. *Lock-in* → eigen Postgres is de bron; export is een SELECT. Monday hooguit
+   als weergavelaag, nooit als engine (geen two-way sync, automation-caps).
 
-**`run`** — een draaiboek toegepast op één dossier
-| kolom | type | betekenis |
-|---|---|---|
-| id | uuid PK; draaiboek_id FK | afkomst (sjabloon) |
-| dossier | text | naam van het project/dossier (later + project-FK) |
-| firma_id | uuid → kern.firma | voor wie |
-| verantwoordelijke_persoon_id | uuid → kern.persoon | eigenaar van de run |
-| kenmerken | text[] of jsonb | gekozen condities bij de start (bv. `{groot_project}`) |
-| status | 'lopend' / 'afgerond' / 'gestopt' | |
-| gestart_op / afgerond_op | timestamptz | |
-| aangemaakt_door | text | |
+## Beslispunten voor de review (Mehdi/Shaniel)
 
-**`run_stap`** — kopie van een stap, mét status (het sequentiële geheugen)
-| kolom | type | betekenis |
-|---|---|---|
-| id | uuid PK; run_id FK | |
-| stap_id | uuid → stap, nullable | afkomst (lineage; sjabloon kan later wijzigen) |
-| fase_naam / naam / omschrijving / resultaat | text | **snapshot** bij run-start |
-| volgorde | integer | globale volgorde in de run |
-| hangt_af_van_run_stap_id | uuid → run_stap, nullable | |
-| toegewezen_aan_persoon_id | uuid → kern.persoon, nullable | |
-| deadline | date, nullable | berekend uit termijn_dagen of handmatig |
-| status | 'open' / 'klaar' / 'overgeslagen' | huidige stand (afgeleid v.d. log) |
-| resultaat_verwijzing | text | waar het opgeleverde staat (URL/pad/omschrijving) |
-| notitie | text | |
-
-**`run_stap_log`** — append-only historie (patroon van organisatie.finalisatie)
-| kolom | type | betekenis |
-|---|---|---|
-| id | uuid PK; run_stap_id FK | |
-| status | text | nieuwe status |
-| door | text | Authentik-username |
-| op | timestamptz default now() | |
-| notitie | text | bv. reden van overslaan |
-
-## Wat dit model meteen mogelijk maakt
-
-- **"Waar staan we?"** per run: eerstvolgende open stap, per fase de voortgang —
-  het verslagen-probleem ("2 is klaar dus nu 3") is een simpele query.
-- **Second Brain**: runs als knopen aan firma + verantwoordelijke; signalen als
-  "run al X dagen geen activiteit", "stap over deadline", "run zonder
-  verantwoordelijke" — zelfde regels-patroon als bestaande signalen.
-- **Automatisering later**: de log is de event-bron ("stap X werd klaar") waar
-  triggers op kunnen reageren — het model hoeft daarvoor niet te wijzigen.
-- **Fathom-koppeling later**: meeting-actiepunten kunnen naar een run_stap
-  verwijzen (kolom erbij op organisatie.meeting_actiepunt, geen breuk).
-
-## Open vragen (voor de deep-research / Mehdi)
-
-1. Bevestigt de referentieklasse het snapshot-model, of werken zij met
-   sjabloon-versies? (Beslissing 1 — belangrijkste om te toetsen.)
-2. Welke stap-statussen zijn in de praktijk nodig? (Nu bewust minimaal:
-   open/klaar/overgeslagen — geen "bezig".)
-3. Hoe doen zij goedkeuringsstappen (stap die een tweede persoon moet aftekenen)?
-   Zit niet in v1 — nodig voor veiligheidscoördinatie?
-4. De echte veiligheidscoördinatie-flow (spoor 4): hoeveel fases/stappen, welke
-   verplichte documenten — bepaalt of `resultaat` als tekst volstaat.
-5. Deadline-logica: volstaat `termijn_dagen` vanaf run-start, of moet het
-   "X dagen na stap Y" zijn?
+1. Akkoord met **dossier → meerdere runs** (VC-ontwerp + VC-verwezenlijking apart)?
+2. Goedkeuringsstap-gedrag: volstaat "andere persoon dan de uitvoerder vinkt af"?
+3. Documentgeneratie (VGP/PID — de Toolmaster-vervanger) bevestigen als **fase 2**?
+4. Toolmaster-kostenclaim (~€70/gebruiker) is **onbevestigd** — vóór een
+   vervangingsbeslissing een echte offerte vragen (met prijs p.g., setup,
+   data-export). De businesscase voor zelf bouwen staat los daarvan sterk
+   (30+ gebruikers, meerdere processen: EPB, keuring…).

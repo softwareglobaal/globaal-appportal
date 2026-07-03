@@ -21,10 +21,15 @@
       feature-matrix + wat we naboetsen en waar we verder gaan.
 - [x] **Terminologie in het DEFINITIEBOEK** — GEDAAN (migratie 021): draaiboek,
       projectmanagement, fase, stap, run in `kern.definitie` + DEFINITIEBOEK.md.
-- [ ] **Datamodel: draaiboek-schema** — CONCEPT v1 KLAAR ter review:
-      **`docs/ontwerp-draaiboek-datamodel.md`** (snapshot-model, append-only
-      historie, condities voor adaptieve draaiboeken, 6 tabellen). Deep-research
-      loopt (Shaniel, aparte chat) → verfijnen → review Mehdi → migratie + MVP.
+- [ ] **Datamodel: draaiboek-schema** — **v2 TER REVIEW** (Mehdi/Shaniel):
+      **`docs/ontwerp-draaiboek-datamodel.md`**, verfijnd met de deep-research
+      van 2026-07-03. 10 tabellen: dossier→runs (VC-ontwerp + -verwezenlijking),
+      kickoff-formulier + conditie-regels (adaptief klein/groot), snapshots,
+      append-only log, stap-soorten incl. goedkeuring. MVP-inhoud (VC-flow,
+      KB 25/01/2001) staat erin. 4 beslispunten onderaan het doc; daarna
+      migratie 022 + MVP-skelet (repo `globaal-draaiboek`). NB uit de research:
+      Toolmaster-€70-claim ONBEVESTIGD (enige €70 = support-uurtarief) → echte
+      offerte vragen; documentgeneratie VGP/PID = fase 2 (dé vervanger).
 - [ ] **MVP: veiligheidscoördinatie** — start klein (eenvoudige, kleine projecten):
       één draaiboek volledig end-to-end uitwerken als bewijs van concept.
 - [ ] **Sequentieel geheugen ("waar staan we")** — lost het verslagen-probleem op:
