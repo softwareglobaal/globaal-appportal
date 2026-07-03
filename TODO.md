@@ -81,6 +81,38 @@
       de AI-gegenereerde definities nalopen en verscherpen via de beheer-UI. (Definitie
       "vaste prijs" al bevestigd: vast maandbedrag, excl. BTW, per resource.)
 
+## Meeting 2026-07-03 (vermogen-walkthrough) — adressen, kostenplaats, kennisbank
+
+> Adres-autocomplete uit deze meeting is GEBOUWD (Photon, vermogen + draaiboek).
+> Nieuwe punten:
+
+- [ ] **Adres als gelinkte entiteit ("blauw")** — Mehdi: een adres mag geen losse
+      tekst blijven maar wordt een echte, klikbare entiteit die al zijn relaties
+      toont en in de Second Brain-graph verschijnt. Substantieel: adres wordt
+      (waarschijnlijk) een kern-entiteit met FK's vanuit pand/firma/dossier. Volgt
+      het bestaande recept (migratie → graaf.py → kleurregel).
+- [ ] **Adres → kostenplaats automatisch koppelen**: de maandelijkse kost van een
+      pand vloeit automatisch naar de kostenplaats van de vennootschap ("hoeveel cash
+      per maand nodig"). Koppelt aan het kosten-schema + de verwacht-vs-werkelijk-lijn.
+- [ ] **Firma-adressen ↔ panden integreren** (Mehdi, "één centraal dashboard"): bijna
+      alle firma-adressen zijn eigen panden/eigendommen (op één contract na). De
+      firma-adressen moeten linken naar het vermogen-dashboard i.p.v. los te staan.
+      Sluit aan op de ARCHITECTUUR-beslissing (één dashboard) hierboven.
+- [ ] **Privé-eigendom-sectie + HR-koppeling**: een privé-pand (bv. van Mehdi) hoort
+      onder de persoon te verschijnen, gelinkt aan HR ("over HR wil je alles weten").
+      Wacht op de HR-laag; privacy/RBAC goed regelen (privé ≠ voor iedereen zichtbaar).
+- [ ] **GitHub-repos → organisatieportaal / Second Brain-kennisbank**: alle repos
+      zichtbaar maken in het portaal zodat collega's weten waar dingen staan en wat er
+      te doen is — continuïteit als iemand uitvalt (Shaniel: "worst case, ik val een
+      week weg"). Rechten: niet iedereen ziet alles. (De TODO/CLAUDE.md zijn al
+      AI-leesbaar via GitHub; dit maakt het ook mens-leesbaar in het portaal.)
+- Team/persoonlijk (geen bouwwerk): **Fathom-accounts voor de collega's** aanmaken;
+  Mehdi's **persoonlijke** Fathom bewust NIET linken (privé-gesprekken); **naam-meeting**
+  met de andere leden inplannen; Mehdi levert de definitieve **pand-kolommenlijst**.
+- ⚠ **Attentie — aantal disciplines/bedrijven wisselt** (17 ↔ 14 ↔ "15 bedrijven" in
+  verschillende meetings): Mehdi moet dit één keer vastpinnen vóór de 17-disciplines-
+  structuur gebouwd wordt.
+
 ## Meeting 2026-07-02 (avond) — woordenboek, vermogens, agenda
 - [x] **DEFINITIEBOEK zichtbaar op de dashboards** — GEBOUWD voor Communicatie
       (migratie 015): `kern.definitie` is de machinebron; kolomkoppen, tooltips,
