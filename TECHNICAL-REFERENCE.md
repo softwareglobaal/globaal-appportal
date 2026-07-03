@@ -960,6 +960,13 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   Communicatie (`vaste_prijs`), per gebruiker/licentie → Kosten** (geen dubbeltelling);
   verwacht (`seats × unit_price`) vs. werkelijk (`charge_actual`) is de beoogde
   vergelijking voor signalen.
+- **`kern.adres`** (migratie 025) — adres als **gelinkte entiteit** i.p.v. losse tekst
+  ("alles moet blauw"): `weergave` + `genormaliseerd` (dedup-sleutel; zelfde adres twee
+  keer = één rij). `kern.firma`, `vermogen.pand` en `draaiboek.dossier` verwijzen met
+  `adres_id`. Schrijven via `kern.adres_vind_of_maak(weergave, door)` (SECURITY DEFINER,
+  vind-of-maak; app-rollen hebben alleen EXECUTE). In de Second Brain één adres-knoop met
+  al zijn relaties (firma "gevestigd op", pand "op adres"). Invoer via de
+  adres-autocomplete; bestaande pand/dossier-teksten zijn gebackfilld.
 - **`kern.firma`** — centrale firmalijst (13 bedrijven van de groep): `id` (uuid), `naam`,
   `code` (uniek, 4 hoofdletters), `land`, `actief` (zacht uitzetten), `kbo_nummer`
   (migratie 018 — het firma-detail linkt ermee naar KBO Public Search en de

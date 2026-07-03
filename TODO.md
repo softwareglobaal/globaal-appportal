@@ -86,11 +86,13 @@
 > Adres-autocomplete uit deze meeting is GEBOUWD (Photon, vermogen + draaiboek).
 > Nieuwe punten:
 
-- [ ] **Adres als gelinkte entiteit ("blauw")** — Mehdi: een adres mag geen losse
-      tekst blijven maar wordt een echte, klikbare entiteit die al zijn relaties
-      toont en in de Second Brain-graph verschijnt. Substantieel: adres wordt
-      (waarschijnlijk) een kern-entiteit met FK's vanuit pand/firma/dossier. Volgt
-      het bestaande recept (migratie → graaf.py → kleurregel).
+- [x] **Adres als gelinkte entiteit ("blauw")** — GEBOUWD (migratie 025):
+      `kern.adres` met dedup + vind-of-maak-functie; firma/pand/dossier gekoppeld
+      (adres_id); adres- én pand-knopen in de Second Brain met relaties ("gevestigd
+      op", "op adres", "eigendom van"); firma-adresveld in het Organisatie-dashboard
+      met autocomplete; bestaande adressen gebackfilld. Rest: (a) adres klikbaar in
+      de lijstweergaven (nu alleen in de graph + detail), (b) gestructureerde delen
+      (postcode/gemeente) uit Photon opslaan i.p.v. alleen de weergavetekst.
 - [ ] **Adres → kostenplaats automatisch koppelen**: de maandelijkse kost van een
       pand vloeit automatisch naar de kostenplaats van de vennootschap ("hoeveel cash
       per maand nodig"). Koppelt aan het kosten-schema + de verwacht-vs-werkelijk-lijn.
