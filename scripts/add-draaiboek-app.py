@@ -58,4 +58,4 @@ outpost = Outpost.objects.filter(managed="goauthentik.io/outposts/embedded").fir
 outpost.providers.add(proxy)
 outpost.save()
 print("embedded outpost: draaiboek-proxy toegevoegd")
-print("VERMOGEN_APP_DONE")
+print("DRAAIBOEK_APP_DONE")
