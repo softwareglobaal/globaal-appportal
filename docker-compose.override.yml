@@ -66,6 +66,15 @@ services:
       PORT: "3008"
       # Wie mag bewerken (komma-gescheiden Authentik-groepen).
       EDITOR_GROUPS: communicatie-editors,admin
+      # Xelion-koppeling (migratie 028): poller spiegelt de belvolgorde.
+      # Credentials in .env op de VM (nooit in git); zonder waarden blijft
+      # de Xelion-kolom leeg. XELION_DEBUG mag uit na de eerste verificatie.
+      XELION_ENABLED: "true"
+      XELION_DEBUG: "true"
+      XELION_BASE_URL: ${XELION_BASE_URL:-}
+      XELION_USERSPACE: ${XELION_USERSPACE:-}
+      XELION_USERNAME: ${XELION_USERNAME:-}
+      XELION_PASSWORD: ${XELION_PASSWORD:-}
     healthcheck:
       test: node -e "require('http').get('http://127.0.0.1:3008/api/me',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
       interval: 30s
