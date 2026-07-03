@@ -73,10 +73,9 @@
       login** — wie iets niet hoeft te zien, ziet het niet. **Cross-firma rollup**:
       "alle firma's" → geld binnen/uit per maand, welke firma bracht het meeste op /
       kostte het meeste. (Structureel principe voor álle toekomstige dashboards.)
-- [ ] **Xelion-data via screenshots** (ACTION ITEM — workaround voor de ontbrekende
-      API): Shaniel maakt screenshots van álle Xelion-tabs → Claude extraheert de data
-      → in het dashboard, zodat we up-to-date data hebben om beslissingen op te nemen.
-      Overbrugt de geparkeerde Xelion-API-blocker tot die er eventueel komt.
+- [x] ~~Xelion-data via screenshots~~ — VERVALLEN (2026-07-03, latere meeting):
+      Siyan heeft API-toegang tot Xelion gekregen; de echte API-koppeling vervangt
+      deze workaround. Zie "Xelion-API — TOEGANG BINNEN" hieronder.
 - [ ] **Woordenboek-definities samen aanscherpen** (Mehdi + Shaniel, als er tijd is):
       de AI-gegenereerde definities nalopen en verscherpen via de beheer-UI. (Definitie
       "vaste prijs" al bevestigd: vast maandbedrag, excl. BTW, per resource.)
