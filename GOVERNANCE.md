@@ -34,22 +34,26 @@ database-triggers vastgelegd in **`kern.audit`**: wanneer, welke db-rol (= welke
 app), welke rij, en de volledige oude én nieuwe waarden. De app-rollen kunnen
 de audit zelf niet schrijven of wijzigen; alleen `portal` mag lezen.
 
-**"Wie heeft dit veranderd en wat stond er eerst?"** is nu één query:
+**"Wie heeft dit veranderd en wat is er precies veranderd?"** is één query op
+de leesbare view (migratie 024) — `wijzigingen` toont per veld van → naar:
 ```sql
-SELECT op, rol, app_gebruiker, actie, oud, nieuw
-  FROM kern.audit
+SELECT op, app_gebruiker, rol, actie, wijzigingen
+  FROM kern.audit_overzicht
  WHERE tabel = 'communicatie.nummer' AND rij_id = '<uuid>'
  ORDER BY op DESC;
 ```
-Een foute wijziging herstel je gericht met de `oud`-waarden — geen volledige
-restore nodig.
+Een foute wijziging herstel je gericht met de `oud`-waarden uit `kern.audit` —
+geen volledige restore nodig.
+
+**De mens in de audit** (`app_gebruiker`): de Flask-apps (organisatie, vermogen,
+draaiboek) geven de ingelogde Authentik-gebruiker per transactie door
+(`set_config('app.gebruiker', …)` — sinds 2026-07-03). Communicatie (Node) zet de
+gebruiker in de `bijgewerkt_door`-kolom, die in `nieuw` zichtbaar is; de nette
+`app.gebruiker`-doorgifte daar is een verfijning (vergt transactie-wrapping in Knex).
 
 Bewuste keuzes: `communicatie.geheim` wordt alleen als metadata geauditeerd
 (nooit PIN/PUK-waarden); machine-geschreven tabellen (fathom-meetings,
-briefings, run-logs) niet — die hebben eigen herkomst. **Vervolgstap:** apps
-laten per transactie `SET LOCAL app.gebruiker = '<username>'` zetten zodat ook
-de mens (niet alleen de app-rol) in de audit staat; tot dan geven de
-`bijgewerkt_door`-kolommen in `oud`/`nieuw` dat houvast.
+briefings, run-logs) niet — die hebben eigen herkomst.
 
 ## Eigenaarschap (in te vullen met de collega's)
 

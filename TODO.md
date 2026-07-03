@@ -204,8 +204,9 @@
       geheim = metadata-only) + kern.data_domein (8 domeinen). Rest:
       (a) **eigenaars toewijzen** (Shaniel + Mehdi/collega's), (b) kwaliteitsmetriek
       per domein in de dagbriefing, (c) restore-test inplannen (kwartaalritme),
-      (d) `SET LOCAL app.gebruiker` per app zodat de mens in de audit staat,
-      (e) toegangsreview Authentik-groepen (periodiek).
+      (d) toegangsreview Authentik-groepen (periodiek), (e) app.gebruiker-doorgifte
+      in communicatie (Node/Knex; Flask-apps + audit_overzicht-view GEDAAN,
+      migratie 024).
 - [ ] **Data-curatie Communicatie** (Siyan): doorfactuur-firma's, afdelingen, doelen en
       belvolgorde-queues invullen; oude records actief/niet-actief zetten.
 - [ ] **Close Call afletteren**: factuur 2025-0119 telt 41 telefoonnummers, het register
