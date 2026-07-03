@@ -199,6 +199,13 @@
       De 17 = referentiekader (auto-analogie: je ziet wat je mist), niet in beton.
 
 ## Data & beheer
+- [x] **Governance laag 1** — GEBOUWD (2026-07-03, migratie 023 + GOVERNANCE.md):
+      audit-trail via triggers (kern.audit: wie/wanneer/oud/nieuw, append-only,
+      geheim = metadata-only) + kern.data_domein (8 domeinen). Rest:
+      (a) **eigenaars toewijzen** (Shaniel + Mehdi/collega's), (b) kwaliteitsmetriek
+      per domein in de dagbriefing, (c) restore-test inplannen (kwartaalritme),
+      (d) `SET LOCAL app.gebruiker` per app zodat de mens in de audit staat,
+      (e) toegangsreview Authentik-groepen (periodiek).
 - [ ] **Data-curatie Communicatie** (Siyan): doorfactuur-firma's, afdelingen, doelen en
       belvolgorde-queues invullen; oude records actief/niet-actief zetten.
 - [ ] **Close Call afletteren**: factuur 2025-0119 telt 41 telefoonnummers, het register

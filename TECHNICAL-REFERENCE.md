@@ -973,6 +973,11 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   `UPDATE(werkgever_firma_id)` op `persoon` + `INSERT`/`DELETE` op de koppeltabel — meer
   niet). Het kosten-dashboard gebruikt de rol **`kosten`**. Alle rollen staan in
   `db/roles.sql` (placeholders; echte wachtwoorden alleen in `.env` op de VM).
+- **Governance (sinds 2026-07-03, migratie 023):** volledige **audit-trail** op de
+  menselijk beheerde tabellen — triggers schrijven wie/wanneer/oud/nieuw naar
+  **`kern.audit`** (append-only; alleen `portal` leest; geheim-tabel alleen
+  metadata). Plus **`kern.data_domein`**: acht datadomeinen met elk een
+  eigenaar (in te vullen). Regels + herstelprocedure: **GOVERNANCE.md**.
 - **Schemabeheer (sinds 2026-07-01):** het schema staat in git onder **`db/`** —
   `000-baseline.sql` (volledige schema-dump als nulpunt), `roles.sql`,
   `seed-afdeling-firma.sql`, en `migrations/NNN-*.sql` voor alles daarna, toegepast met
