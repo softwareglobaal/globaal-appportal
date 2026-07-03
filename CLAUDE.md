@@ -8,13 +8,20 @@ zodat elke sessie op dezelfde manier werkt. Volledige platformdocumentatie:
 
 ## Repo-landschap (GitHub-org `softwareglobaal`)
 
-| Repo | Wat | VM-checkout | Deploy |
-|---|---|---|---|
-| **globaal-appportal** (deze) | stack: compose, nginx, db-migraties, docs | `~/appportal` | **handmatig** (zie onder) |
-| globaal-organisatie | Organisatie-dashboard + Second Brain | `~/appportal/medewerkers` | **auto** (cron 2 min) |
-| globaal-communicatie | Communicatie-dashboard | `~/appportal/communicatie` | **auto** (cron 2 min) |
-| globaal-vermogen | Vermogens-dashboard | `~/appportal/vermogen` | **auto** (cron 2 min) |
-| globaal-kosten, globaal-factuurrouter, … | host-apps (buiten de compose-stack) | `~/kosten`, `~/factuurrouter`, … | eigen deploy-scripts/cron |
+Stand 2026-07-03; kolom **CLAUDE.md** = heeft de repo een eigen
+werkafspraken-bestand (sessies in een repo zónder ⚠-vinkje: lees déze).
+
+| Repo | Wat | VM-checkout | Deploy | CLAUDE.md |
+|---|---|---|---|---|
+| **globaal-appportal** (deze) | stack: compose, nginx, db-migraties, docs | `~/appportal` | **handmatig** (zie onder) | ✓ |
+| globaal-organisatie | Organisatie-dashboard + Second Brain | `~/appportal/medewerkers` | **auto** (cron 2 min) | ✓ |
+| globaal-communicatie | Communicatie-dashboard | `~/appportal/communicatie` | **auto** (cron 2 min) | ✓ |
+| globaal-vermogen | Vermogens-dashboard | `~/appportal/vermogen` | **auto** (cron 2 min) | ✓ |
+| globaal-kosten | Kosten-dashboard (host-app, systemd :8090) | `~/kosten` | eigen deploy-script/cron | ⚠ nog niet |
+| globaal-factuurrouter | AI-factuurrouteringsagent (host-app, §6A) | `~/factuurrouter` | eigen deploy + CI/CD | ⚠ nog niet |
+| globaal-stagebeoordeling | Stagebeoordeling (host-app) | `~/stagebeoordeling` | eigen deploy + CI/CD | ⚠ nog niet |
+| globaal-schuldentracker | Schuldentracker (host-app) | — | — | ⚠ nog niet |
+| telefoonregister | telefoonregister van de collega — **ongemoeid laten** | eigen checkout | — | bewust niet |
 
 ## Git-workflow: hoe Claude pullt en pusht
 

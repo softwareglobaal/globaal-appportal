@@ -206,6 +206,12 @@
 - [ ] Ontbrekende HR-nummers/familienamen/e-mails in kern.persoon aanvullen.
 
 ## Techniek / hygiëne
+- [ ] **CLAUDE.md voor de host-app-repo's** (globaal-kosten, globaal-factuurrouter,
+      globaal-stagebeoordeling, globaal-schuldentracker): eerst per repo de eigen
+      deploy-flow nalezen (systemd + eigen scripts, deels CI/CD auto-merge), dán een
+      korte CLAUDE.md in dezelfde stijl als organisatie/communicatie/vermogen.
+      Niet blind kopiëren — de deploy verschilt per repo. Dekking bijhouden in de
+      tabel in CLAUDE.md van deze repo. (telefoonregister: bewust géén — collega.)
 - [ ] **Telefoonregister-repo**: branch `claude/ecstatic-feynman-wctpk1` → `main`
       verzoenen (zelfde recept als appportal-drift).
 - [x] **Communicatie eigen repo + auto-deploy** — gedaan 2026-07-02
