@@ -16,3 +16,12 @@ logs/
 /medewerkers/
 # Eigen repo (softwareglobaal/globaal-communicatie), uitgecheckt op de VM.
 /communicatie/
+# Eigen repo (softwareglobaal/globaal-vermogen), uitgecheckt op de VM.
+/vermogen/
+# Eigen repo (softwareglobaal/globaal-draaiboek), uitgecheckt op de VM.
+/draaiboek/
+# Installatie-restanten en lokale data op de VM
+/aws/
+awscliv2.zip
+/omv-v2-data/
+*.bak-*
