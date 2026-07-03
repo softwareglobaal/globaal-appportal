@@ -95,13 +95,13 @@
       de belvolgorde-uitleg verhuist naar een eigen sleutel voor de telefonie-kolom
       (bv. "verantwoordelijke van de telefoonlijn" of kolom hernoemen naar "eerste
       in de rij" — met team kortsluiten welke van de twee).
-- [ ] **Filter op persoon + positie in de belvolgorde** (ACTION ITEM): "toon alle
-      nummers waar Mehdi 3e of 4e staat" / "waar Joey 2e lijn is" — persoonsfilter +
-      positiefilter in het Communicatie-dashboard.
-- [ ] **"Behouden"-kolom + nummer-validatie** (ACTION ITEM): dashboard telt ~92
-      nummers, Xelion maar 41 → valideren. Tijdelijke aanvink-kolom "behouden"
-      (behouden / verifiëren / elimineren) zodat het team kan markeren; Proximus-lijst
-      bestaat al als referentie. Siyans waarschuwing: niet zomaar elimineren.
+- [x] **Filter op persoon + positie in de belvolgorde** — GEBOUWD (2026-07-03):
+      "In belvolgorde"-filter (persoon-dropdown + positie 1e t/m 6e) in Communicatie.
+- [x] **"Behouden"-kolom + nummer-validatie** — GEBOUWD (migratie 026): kolom
+      Behouden (behouden/verifiëren/elimineren, inline te zetten door editors,
+      database-constraint bewaakt de waarden) + Validatie-filter; in de
+      standaardview. Rest: het team laten valideren (92 → 41; Proximus-lijst als
+      referentie; elimineren pas ná verificatie).
 - [ ] **Toolmaster-opname → transcript** (Shaniel): de demo-opname downloaden en
       transcriberen — input voor het draaiboek-spoor.
 - Team (geen bouwwerk van Shaniel): **Pipedrive-sanering** (Siyan + Fable):
