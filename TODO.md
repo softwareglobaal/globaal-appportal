@@ -19,13 +19,12 @@
       waar zitten de limieten (Monday: geen deeltaken/playbook; Toolmaster: duur +
       je betaalt voor maatwerk dat ze daarna gratis aan iedereen aanbieden). →
       feature-matrix + wat we naboetsen en waar we verder gaan.
-- [ ] **Terminologie in het DEFINITIEBOEK**: draaiboek (protocol/playbook, taakgericht,
-      één proces A→Z) vs. projectmanagement (veel projecten met hetzelfde draaiboek).
-      Eerst helder, dan bouwen — past bij de terminologie-discipline.
-- [ ] **Datamodel: draaiboek-schema** (het hart) — een draaiboek = sjabloon van
-      fases/stappen met **deeltaken, volgorde en afhankelijkheden** ("als stap X af →
-      dan Y"); een *run* = draaiboek toegepast op een project, met status per stap.
-      Gelinkt aan kern (project, persoon, firma) — nog een spoke in de centrale DB.
+- [x] **Terminologie in het DEFINITIEBOEK** — GEDAAN (migratie 021): draaiboek,
+      projectmanagement, fase, stap, run in `kern.definitie` + DEFINITIEBOEK.md.
+- [ ] **Datamodel: draaiboek-schema** — CONCEPT v1 KLAAR ter review:
+      **`docs/ontwerp-draaiboek-datamodel.md`** (snapshot-model, append-only
+      historie, condities voor adaptieve draaiboeken, 6 tabellen). Deep-research
+      loopt (Shaniel, aparte chat) → verfijnen → review Mehdi → migratie + MVP.
 - [ ] **MVP: veiligheidscoördinatie** — start klein (eenvoudige, kleine projecten):
       één draaiboek volledig end-to-end uitwerken als bewijs van concept.
 - [ ] **Sequentieel geheugen ("waar staan we")** — lost het verslagen-probleem op:
