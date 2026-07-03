@@ -1,7 +1,52 @@
 # To-do — AppPortal / Organisatie / Communicatie
 
 > Parkeerlijst van afgesproken maar nog niet gebouwde zaken. Bron: Zoom-meetings
-> 2026-07-01 en 2026-07-02 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
+> 2026-07-01 t/m 2026-07-03 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
+
+## ★ EINDDOEL — Eigen draaiboek-platform (meeting 2026-07-03, Mehdi)
+
+> **Noordster, niet nu bouwen.** Visie: een eigen **draaiboek-(playbook-)management**
+> in onze eigen dashboards, zodat die dé *source of truth* worden — als vervanging
+> van **Toolmaster** (~€70/gebruiker/maand ≈ €3.000/mnd bij 20-30 mensen) en als
+> aanvulling waar **Monday** tekortschiet. Kernonderscheid dat Mehdi maakt:
+> **projectmanagement** (Monday: 100 projecten op grove lijnen; kan géén deeltaken/
+> micromanagement — een EPB-proces met ~200 stappen blokkeert) vs. **draaiboek**
+> (het *protocol/playbook* van één proces: alle fases + deeltaken, van A→Z zonder
+> fouten). Een draaiboek legt het proces vast → maakt automatisering mogelijk →
+> levert data op. Uiteindelijk óók verkoopbaar aan partners (€70/gebruiker-model).
+
+- [ ] **Deep-research Toolmaster + Monday** (Mehdi vraagt dit expliciet): wat doen ze,
+      waar zitten de limieten (Monday: geen deeltaken/playbook; Toolmaster: duur +
+      je betaalt voor maatwerk dat ze daarna gratis aan iedereen aanbieden). →
+      feature-matrix + wat we naboetsen en waar we verder gaan.
+- [ ] **Terminologie in het DEFINITIEBOEK**: draaiboek (protocol/playbook, taakgericht,
+      één proces A→Z) vs. projectmanagement (veel projecten met hetzelfde draaiboek).
+      Eerst helder, dan bouwen — past bij de terminologie-discipline.
+- [ ] **Datamodel: draaiboek-schema** (het hart) — een draaiboek = sjabloon van
+      fases/stappen met **deeltaken, volgorde en afhankelijkheden** ("als stap X af →
+      dan Y"); een *run* = draaiboek toegepast op een project, met status per stap.
+      Gelinkt aan kern (project, persoon, firma) — nog een spoke in de centrale DB.
+- [ ] **MVP: veiligheidscoördinatie** — start klein (eenvoudige, kleine projecten):
+      één draaiboek volledig end-to-end uitwerken als bewijs van concept.
+- [ ] **Sequentieel geheugen ("waar staan we")** — lost het verslagen-probleem op:
+      het draaiboek houdt bij welke fase/verslag af is, zodat mens én AI weten
+      "verslag 2 klaar → volgende is 3". Het draaiboek wordt de projectvoortgang-bron
+      die AI nu mist.
+- [ ] **Fathom → deeltaken** (Shaniel): nu Fathom gelinkt is, kleine taken uit meetings
+      automatisch in kaart brengen en aan draaiboek-stappen koppelen.
+- [ ] **Automatisering op het draaiboek**: zodra het proces vastligt — trigger-acties
+      ("stap af → mail → bij antwoord → volgende stap"). Precies wat Monday niet kan.
+- [ ] **Document-gedreven / adaptief draaiboek**: AI leest een plan/document met de
+      logica van (bv.) veiligheidscoördinatie en genereert/past het draaiboek aan —
+      kleine gezinswoning = weinig stappen, groot project = meer. (Document-generatie
+      zelf is een apart spoor.)
+- [ ] **Adoptievoorwaarde**: iedereen (20-30) moet het gebruiken, anders geen data —
+      UX + toegang op orde; kostenbesparing t.o.v. Toolmaster expliciet maken.
+- [ ] **Commercialisering (lange termijn)**: draaiboek-product aan partners aanbieden —
+      pas ná intern bewezen.
+- [ ] **Directe actie-items uit de meeting**: (a) Ashwent's Toolmaster-account upgraden
+      → dan samen met Shaniel de veiligheidscoördinatie-playbook opzetten om van te
+      leren; (b) dashboard-review met Ivor inplannen.
 
 ## Meeting 2026-07-02 (avond) — woordenboek, vermogens, agenda
 - [x] **DEFINITIEBOEK zichtbaar op de dashboards** — GEBOUWD voor Communicatie
