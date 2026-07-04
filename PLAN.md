@@ -14,10 +14,16 @@
 
 ## STATUS
 
-- **Eerstvolgende stap: 1** (disciplines-entiteit)
-- Blokkades: stap 3+ heeft Octopus-API-credentials nodig (gate G1, bij Mehdi).
+- **Eerstvolgende stap: 2** (tool→discipline-mapping; 2a = migratie 031)
+- Blokkades: stap 3+ heeft Octopus-API-credentials nodig (gate G1, bij Mehdi);
+  stap 2b wil gate G2 (toollijst) maar kan alvast met kosten.software beginnen.
 - Log:
   - 2026-07-04 — plan opgesteld (Fable 5); nog geen stap gestart.
+  - 2026-07-04 — stap 1 GEBOUWD (Fable 5): migratie 030 (kern.discipline, 17
+    rijen + audit-trigger + 18 definities incl. 'discipline'), DEFINITIEBOEK-
+    sectie, gecureerde discipline-knopen in de Second Brain (graaf.py, prefix
+    disc: klaar voor de auto-edges van stap 2). Lokaal getest incl. rollen.
+    Wacht op VM: `git pull && sh scripts/db-migrate.sh` (APPLY 030).
 
 ## Gates (input van buiten, parallel aan te vragen)
 
@@ -29,13 +35,15 @@
 
 ## De stappen
 
-### Stap 1 — Disciplines als centrale entiteit (klein, fundament)
-- [ ] Migratie 030: `kern.discipline` met de **17 vaste disciplines** (namen
+### Stap 1 — Disciplines als centrale entiteit (klein, fundament) — ✔ 2026-07-04
+- [x] Migratie 030: `kern.discipline` met de **17 vaste disciplines** (namen
       uit docs/prompt-dashboard-ontwerp.md, exact die lijst; sleutel stabiel,
       naam wijzigbaar — zelfde patroon als kern.definitie).
-- [ ] Definities voor de 17 in `kern.definitie` (+ DEFINITIEBOEK.md).
-- [ ] Verschijnt automatisch in de Second Brain (migratie 029-autolaag); via
-      kern.graaf_regel meteen netjes benoemen.
+- [x] Definities voor de 17 in `kern.definitie` (+ DEFINITIEBOEK.md).
+- [x] Zichtbaar in de Second Brain — gecureerde knopen in graaf.py (type
+      'discipline', hover toont de definitie) i.p.v. de auto-laag: zonder
+      FK's zou de tabel anders pas in stap 2 verschijnen. Prefix `disc:`
+      geregistreerd zodat de auto-edges van stap 2 eraan vasthaken.
 - Klaar wanneer: 17 rijen in kern.discipline, zichtbaar in de graaf, definities
   live. Geen UI nodig in deze stap.
 

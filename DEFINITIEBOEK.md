@@ -19,6 +19,24 @@
 
 ## De termen
 
+### Discipline
+Een **vast bedrijfsdomein** uit het 17-disciplines-raamwerk (Unified Dashboard,
+Mehdi 2026-07-04). Niet de firma's zijn de vaste structuur, maar deze 17
+disciplines die elke servicefirma nodig heeft — een firma zonder invulling laat
+de discipline leeg, maar het raamwerk verandert nooit (ziekenhuis-model: je
+ziet meteen wat ontbreekt).
+- **Bij ons:** de 17 rijen in `kern.discipline` (migratie 030), volgorde 1-17:
+  HR & rekrutering, Sales & business development, Marketing & communicatie,
+  Finance & accounting, Operations & projectmanagement, Legal & compliance,
+  Customer service & support, IT & systemen, Procurement & vendor management,
+  Quality assurance, Risk management, Strategische planning, Data & analytics,
+  Facilities & administratie, Research & development, Supply chain management,
+  Partnerships & vendor relations. Elke discipline heeft zijn eigen definitie
+  in `kern.definitie` (zelfde sleutel).
+- Tools/software worden aan een discipline gekoppeld (tool→discipline-mapping,
+  PLAN.md stap 2) — zo worden dubbele software en gaten zichtbaar.
+
+
 ### Firma
 De **juridische entiteit** (rechtspersoon) die contracten sluit, factureert en een
 BTW-/ondernemingsnummer heeft. In grotere organisaties heet dit een *legal entity* — de
