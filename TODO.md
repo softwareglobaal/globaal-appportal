@@ -143,11 +143,13 @@
 > nachtelijke S3-backup. 90 dagen = trend-bril en backfill-diepte, geen
 > bewaartermijn. Hieronder wat er nog op staat:
 
-- [ ] **Laag 2a - kolommen in het nummerregister**: oproepen 30d, gemist-
-      percentage, laatste oproep. Maakt de behouden-validatie datagedreven
-      (nummer 60 dagen stil = elimineer-kandidaat met bewijs).
-- [ ] **Laag 2b - Statistieken-tab** in Communicatie: volume per dag/lijn,
-      gemist-percentage, piekuren, wie neemt op. Sober: vier vragen goed.
+- [x] **Laag 2a - kolommen in het nummerregister** - GEBOUWD (2026-07-04):
+      "Oproepen (30 d)" in de standaardview (0 = rood) en "Laatste oproep"
+      via Mijn view. Gemist-percentage wacht op 2c (semantiek).
+- [x] **Laag 2b - Statistieken-tab** - GEBOUWD (2026-07-04): oproepen per
+      dag (30 d), drukste nummers, stil-lijst (60+ d, met validatiestatus).
+      Nog open: gemist-percentage en piekuren (na 2c), wie neemt op (na het
+      privacy-besluit).
 - [ ] **Laag 2c - veldsemantiek verfijnen**: na de eerste echte sync de
       debug-output (veldstructuur communications + participants) gebruiken om
       "gemist" exact te bepalen en de nummer-matching aan te scherpen.
