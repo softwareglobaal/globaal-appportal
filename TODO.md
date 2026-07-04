@@ -312,6 +312,14 @@
 - [x] **Naamgeving**: organisatiegraaf heet voortaan **Second Brain** (2026-07-02).
 
 ## Onderzoek (vóór bouwen)
+- [ ] **Streamlit als labo/view-laag** — VOORONDERZOEK GEDAAN (2026-07-04):
+      geschikt als snelle, read-only view-laag (past op het principe "views
+      slaan nooit op"): labo-app op de portal-rol achter forward-auth
+      (websocket-proxying in nginx-template; username uit X-Authentik-header
+      via st.context.headers). NIET voor de CRUD-dashboards of de pijplijn.
+      Concreet inzetten bij PLAN.md stap 6 als prototype van de finance-views;
+      bewezen views promoveren naar het echte dashboard. PoC: container +
+      nginx-template + één spend-view.
 - [ ] **Movetex.com** onderzoeken: planning-algoritme (Fati gebruikt het). Doel: 4
       planningen (Matthias/Mathieu/Shilton/Luc) → 1 planningtool. Géén eigen bouw —
       bestaand pakket koppelen via API; Monday blijft alleen visueel.
