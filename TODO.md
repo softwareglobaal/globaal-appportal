@@ -136,6 +136,31 @@
       relaties (draaiboek, vermogen, definitie-verwijzingen) benoemen of
       verbergen via de signalen-lijst.
 
+## Xelion-communicatielog (2026-07-04) - laag 2 en 3, bewust geparkeerd
+
+> Laag 1 (archief) is GEBOUWD: migratie 034 + incrementele poller-sync,
+> append-only met ruwe API-records (her-afleidbaar), rijdt mee in de
+> nachtelijke S3-backup. 90 dagen = trend-bril en backfill-diepte, geen
+> bewaartermijn. Hieronder wat er nog op staat:
+
+- [ ] **Laag 2a - kolommen in het nummerregister**: oproepen 30d, gemist-
+      percentage, laatste oproep. Maakt de behouden-validatie datagedreven
+      (nummer 60 dagen stil = elimineer-kandidaat met bewijs).
+- [ ] **Laag 2b - Statistieken-tab** in Communicatie: volume per dag/lijn,
+      gemist-percentage, piekuren, wie neemt op. Sober: vier vragen goed.
+- [ ] **Laag 2c - veldsemantiek verfijnen**: na de eerste echte sync de
+      debug-output (veldstructuur communications + participants) gebruiken om
+      "gemist" exact te bepalen en de nummer-matching aan te scherpen.
+- [ ] **PRIVACY-BESLISPUNT (team, voor laag 2 live gaat)**: belregister is
+      personeelsgevoelig. Voorstel: aggregaten voor iedereen met toegang,
+      details per persoon alleen admin/manager, contentSummary niet tonen.
+- [ ] **Laag 3 - analyse**: eerst regels-signalen (nummer X dagen stil,
+      gemist-percentage verdubbeld, voicemail vol), daarna AI-duiding op
+      dagaggregaten (nooit ruwe logs): communicatie-coach in de briefing.
+- [ ] **Optioneel archief-export**: maandelijkse JSONL-dump van de spiegel
+      naar S3 naast de databasebackup (alleen als het team losse bestanden
+      wil; de tabel zelf is al het archief).
+
 ## Meeting 2026-07-03 (communicatie-review, met Siyan/Angela)
 
 - [x] **Leverancier/platform: échte detailpagina's** i.p.v. alleen filteren - GEBOUWD
