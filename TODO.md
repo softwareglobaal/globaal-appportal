@@ -57,6 +57,42 @@
       → dan samen met Shaniel de veiligheidscoördinatie-playbook opzetten om van te
       leren; (b) dashboard-review met Ivor inplannen.
 
+## Unified Dashboard — instructies Mehdi (2026-07-04)
+
+> Bron: schriftelijke visie + feedback van Mehdi. Vaste architectuur = **17
+> disciplines** (nu definitief, mét namen: HR/recruitment, sales/bizdev,
+> marketing/communicatie, finance/accounting, operations/PM, legal/compliance,
+> customer service, IT/systemen, procurement/vendor mgmt, QA, risk mgmt,
+> strategische planning, data/analytics, facilities/administratie, R&D, supply
+> chain, partnerships). Bedrijven (±15) zijn de variabele laag. Meta-laag óver
+> bestaande tools (API, realtime), niet vervangen. Herbruikbare ontwerp-prompt:
+> **`docs/prompt-dashboard-ontwerp.md`** — gebruiken bij elk nieuw tab-ontwerp.
+
+- [ ] **17 disciplines als centrale entiteit** in kern + DEFINITIEBOEK (met de
+      vaste namen); lege discipline blijft zichtbaar als leeg (ziekenhuis-model).
+- [ ] **Tool→discipline-mapping**: elke tool (Monday, Octopus, Pipedrive,
+      DeskTime, Google Calendar, Toolmaster, …) aan zijn discipline koppelen →
+      dubbele software, ongebruikte licenties, prijsverschillen en gaten
+      zichtbaar. Sluit aan op kosten-dashboard + kern.leverancier.
+- [ ] **Entiteit/relatie/view-audit**: bestaande schema's nalopen op het
+      principe entiteit (bestaat één keer) / relatie (aparte record, daar leeft
+      de context: zelfde pand = kost voor A, opbrengst voor B) / view (slaat
+      nooit data op). Overtredingen → migratie.
+- [ ] **Master data layer aanvullen**: elk entiteitstype één canoniek record met
+      stabiel id (personen/firma's/adressen/leveranciers zijn er; tools,
+      abonnementen, panden-verrijking volgen).
+- [ ] **Finance end-to-end als template-discipline** (Mehdi's aanrader: Octopus
+      heeft schone spend-data): API-pull → centrale opslag → entiteit/relatie-
+      model → views. Patroon documenteren tíjdens het bouwen — dat document ís
+      het verkoopbare product.
+- [ ] **Pijplijn boven visuals**: sync-betrouwbaarheid en versheid als expliciete
+      kwaliteitseis bij elke API-koppeling (staleness zichtbaar maken, zoals de
+      xelion_sync-status).
+- [ ] **Interne rollout = case study**: meetbare resultaten bijhouden (minder
+      handmatige coördinatie, schonere spend) voor de latere reselling.
+- [ ] **Agent-ready (later)**: één agent per discipline + COO-agent; rapportage-
+      structuur standaard, agent-logica per bedrijfstype gespecialiseerd.
+
 ## Meeting 2026-07-03 (dashboard-review + architectuur)
 
 > Draaiboek-einddoel door Mehdi **bevestigd** ("Dat is het"). Nieuwe punten:
@@ -160,9 +196,9 @@
 - Team/persoonlijk (geen bouwwerk): **Fathom-accounts voor de collega's** aanmaken;
   Mehdi's **persoonlijke** Fathom bewust NIET linken (privé-gesprekken); **naam-meeting**
   met de andere leden inplannen; Mehdi levert de definitieve **pand-kolommenlijst**.
-- ⚠ **Attentie — aantal disciplines/bedrijven wisselt** (17 ↔ 14 ↔ "15 bedrijven" in
-  verschillende meetings): Mehdi moet dit één keer vastpinnen vóór de 17-disciplines-
-  structuur gebouwd wordt.
+- ~~⚠ Attentie — aantal disciplines wisselt~~ — **OPGELOST (2026-07-04)**: Mehdi
+  heeft de lijst vastgepind op **17 disciplines mét namen** (zie "Unified Dashboard
+  — instructies Mehdi" bovenaan). Bedrijven blijven de variabele laag (±15).
 
 ## Meeting 2026-07-02 (avond) — woordenboek, vermogens, agenda
 - [x] **DEFINITIEBOEK zichtbaar op de dashboards** — GEBOUWD voor Communicatie
