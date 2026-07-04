@@ -23,6 +23,8 @@ services:
     image: appportal-medewerkers
     restart: unless-stopped
     environment:
+      # DeskTime-spiegel (migratie 033): API-key in .env; leeg = sync uit.
+      DESKTIME_API_KEY: ${DESKTIME_API_KEY:-}
       BASE_DOMAIN: ${BASE_DOMAIN}
       # Hergebruikt de read-only 'portal'-rol op de appportal-database.
       DATABASE_URL: ${APPPORTAL_DB_URL:-}

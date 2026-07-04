@@ -85,6 +85,11 @@
       zie PLAN.md** (8 stappen, één per keer; stap 1 = disciplines-entiteit,
       gate G1 = Octopus-credentials). Patroon documenteren tíjdens het bouwen -
       dat document ís het verkoopbare product.
+- [x] **DeskTime-API gekoppeld** (2026-07-04): tweede tool-API na Xelion.
+      Spiegel kosten.desktime_medewerker (migratie 033) met e-mail/voornaam-
+      match naar kern.persoon; de gebruik-relatie firma-discipline leest de
+      spiegel mee, dus DeskTime-seats hoeven niet handmatig. Sync in de
+      Organisatie-app (interval, best-effort); DESKTIME_API_KEY in .env.
 - [ ] **Pijplijn boven visuals**: sync-betrouwbaarheid en versheid als expliciete
       kwaliteitseis bij elke API-koppeling (staleness zichtbaar maken, zoals de
       xelion_sync-status).
