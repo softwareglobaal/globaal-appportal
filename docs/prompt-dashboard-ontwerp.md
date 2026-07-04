@@ -1,7 +1,7 @@
 # Ontwerp-prompt: Unified Cluster Dashboard
 
 > Bron: instructies Mehdi, 2026-07-04. Dit is de herbruikbare prompt voor élk
-> nieuw dashboard-, tab- of discipline-ontwerp — plak hem in een Claude-project
+> nieuw dashboard-, tab- of discipline-ontwerp - plak hem in een Claude-project
 > of nieuwe sessie zodat elk ontwerp dezelfde principes volgt. De Engelse tekst
 > hieronder is bewust letterlijk overgenomen (dit is het afgesproken origineel);
 > de checklist onderaan is de dagelijkse samenvatting.
@@ -88,4 +88,4 @@ following:**
 Hoe dit op onze stack landt: entiteiten = `kern.*` (master data layer),
 relaties = FK's/koppeltabellen (verschijnen automatisch in de Second Brain via
 migratie 029), views = dashboard-queries en graph-filters, terminologie =
-`kern.definitie`. Zie ook TODO.md § "Unified Dashboard — instructies Mehdi".
+`kern.definitie`. Zie ook TODO.md § "Unified Dashboard - instructies Mehdi".

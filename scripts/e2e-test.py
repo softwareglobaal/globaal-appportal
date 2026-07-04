@@ -8,7 +8,7 @@ direct-access denial -> single logout. Requires the test users from
 scripts/create-test-users.py and the nginx hostname aliases.
 
 NOTE: once TOTP enforcement is active (setup-authentik.py applies it), fresh
-logins hit the TOTP enrollment stage, which this script does not automate —
+logins hit the TOTP enrollment stage, which this script does not automate -
 the login steps will then stop there. Use scripts/totp-probe.py to verify
 that enforcement instead.
 """

@@ -39,7 +39,7 @@ for uname in ("mehdi", "angela"):
         pw = secrets.token_urlsafe(12)
         u.set_password(pw)
         u.save()
-        print(f"USER {uname} aangemaakt — tijdelijk wachtwoord: {pw}")
+        print(f"USER {uname} aangemaakt - tijdelijk wachtwoord: {pw}")
     else:
         print(f"USER {uname} bestond al")
     u.groups.add(grp)

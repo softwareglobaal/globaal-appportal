@@ -6,7 +6,7 @@ Draaien (vanuit ~/appportal):
 
 Idempotent: veilig om opnieuw te draaien. Maakt de tegel 'Vermogen' in de
 launcher, toegankelijk voor de groepen admin/manager/vermogen. Maakt ook de
-groep 'vermogen-editors' aan (bewerken; leden voeg je toe in Authentik —
+groep 'vermogen-editors' aan (bewerken; leden voeg je toe in Authentik -
 Mehdi hoort daarin, hij levert de data).
 """
 import os

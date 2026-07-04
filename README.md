@@ -36,7 +36,7 @@ cd AppPortal
 cp .env.example .env
 # Edit .env: set every CHANGE_ME (generate with: openssl rand -base64 48)
 # Pick BASE_DOMAIN: localhost for local use, or <ip-with-dashes>.sslip.io
-# for an AWS VM (e.g. 52-1-2-3.sslip.io — resolves automatically, no DNS).
+# for an AWS VM (e.g. 52-1-2-3.sslip.io - resolves automatically, no DNS).
 
 docker compose up -d
 docker compose ps          # wait until everything is healthy (first boot ~2 min)
@@ -59,12 +59,12 @@ nginx on the internal Docker network.
 Do these once, in this order. Authentik UI: `https://auth.<BASE_DOMAIN>`,
 user `akadmin`, password = `AUTHENTIK_BOOTSTRAP_PASSWORD` from `.env`.
 
-> **Scripted alternative** — `sh scripts/configure-authentik.sh` (run inside
+> **Scripted alternative** - `sh scripts/configure-authentik.sh` (run inside
 > WSL/Linux from this directory) applies steps 2.1 and 2.3–2.7 automatically
 > and prints the `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` values for `.env`.
 > Creating real users (2.2) is always manual.
 > `sh scripts/ak-exec.sh scripts/create-test-users.py` creates two demo
-> users (`testadmin`/`testmanager`) — delete them before real use.
+> users (`testadmin`/`testmanager`) - delete them before real use.
 
 ### 2.1 Create the groups
 
@@ -73,7 +73,7 @@ user `akadmin`, password = `AUTHENTIK_BOOTSTRAP_PASSWORD` from `.env`.
 
 ### 2.2 Create the users
 
-*Directory → Users → Create* for each employee (no self-registration exists —
+*Directory → Users → Create* for each employee (no self-registration exists -
 verify under *System → Brands → default* that no enrollment flow is set,
 which is the default). After creating a user:
 
@@ -102,7 +102,7 @@ This matches the portal's own 8-hour session so neither outlives the other.
 1. *Applications → Providers → Create* → **OAuth2/OpenID Provider**:
    - Name: `portal-oidc`
    - Authorization flow: `default-provider-authorization-implicit-consent`
-   - **Invalidation flow: `default-invalidation-flow`** — this is what makes
+   - **Invalidation flow: `default-invalidation-flow`** - this is what makes
      portal logout end the whole Authentik session (single logout). The
      preselected `default-provider-invalidation-flow` only ends the portal's
      own OAuth session.
@@ -110,7 +110,7 @@ This matches the portal's own 8-hour session so neither outlives the other.
    - Redirect URI (strict): `https://portal.<BASE_DOMAIN>/auth/callback`
    - Note the **Client ID** and **Client Secret**.
 2. *Applications → Applications → Create*:
-   - Name: `Portal`, **Slug: `portal`** (must be exactly `portal` — it is part
+   - Name: `Portal`, **Slug: `portal`** (must be exactly `portal` - it is part
      of the OIDC discovery and logout URLs), Provider: `portal-oidc`.
 3. Put the credentials in `.env` (`OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`) and
    reload the portal:
@@ -134,7 +134,7 @@ FinanceDashboard, MaintenanceLog):
 
 Repeat with `inventory`, `finance`, `maintenance` and ports/hosts to match.
 
-Then — **easy to forget** — assign all four providers to the embedded outpost:
+Then - **easy to forget** - assign all four providers to the embedded outpost:
 
 *Applications → Outposts → `authentik Embedded Outpost` (edit)*:
 - Add all four applications to **Applications**.
@@ -170,16 +170,16 @@ Policy / Group / User Bindings → Bind existing Group*:
    logging in again (single logout).
 6. Auth events and app redirects are in `logs/portal/portal.log`.
 
-### 2.9 Access overview (who can use which app) — optional
+### 2.9 Access overview (who can use which app) - optional
 
 The portal has an admin-only **Access overview** page (`/access`, linked from
 the top of the portal for `admin` users). For every app in
 [apps.yaml](apps.yaml) it lists the users who can open it, reconstructed from
-the Authentik group(s) bound to that app — something Authentik's own admin UI
+the Authentik group(s) bound to that app - something Authentik's own admin UI
 does not show as a single screen. It reflects **access only**; in-app roles
 stay each application's own concern.
 
-It needs a read-only Authentik API token. **Scripted (recommended)** — creates
+It needs a read-only Authentik API token. **Scripted (recommended)** - creates
 a `portal-readonly` service account with only `view_user` + `view_group` and a
 non-expiring API token, then prints the key (idempotent, re-runnable):
 
@@ -190,7 +190,7 @@ sh scripts/ak-exec.sh scripts/add-portal-readonly-token.py
 Copy the printed `AUTHENTIK_API_TOKEN=...` line into `.env`, then reload:
 `docker compose up -d portal`.
 
-**Manual alternative** — *Directory → Users → Create a service account*
+**Manual alternative** - *Directory → Users → Create a service account*
 (`portal-readonly`); grant it *Can view Group* / *Can view User*; then
 *Directory → Tokens and App passwords → Create* assigned to that account with
 intent **API**; copy the key into `AUTHENTIK_API_TOKEN`.
@@ -205,7 +205,7 @@ Leave `AUTHENTIK_API_TOKEN` empty to keep the page disabled (it then shows a
 Example: `TimeTracker` on internal port 3006, managers only.
 (Ports 3001–3005 are in use: factorydocs/inventory/finance/maintenance/omv.)
 
-1. **docker-compose.yml** — add a service (copy `app-maintenance`, reuse the
+1. **docker-compose.yml** - add a service (copy `app-maintenance`, reuse the
    stub image or point `build:` at the real app):
 
    ```yaml
@@ -220,15 +220,15 @@ Example: `TimeTracker` on internal port 3006, managers only.
      networks: [appnet]
    ```
 
-2. **nginx/templates/30-apps.conf.template** — copy a server block; set
+2. **nginx/templates/30-apps.conf.template** - copy a server block; set
    `server_name timetracker.${BASE_DOMAIN};` and
    `set $app_upstream http://app-timetracker:3006;`.
 3. **certs**: add the new subdomain to the cert by extending the default
    `SUBDOMAINS` list in `scripts/generate-certs.sh` (or set `CERT_SUBDOMAINS`
    in `.env`); the existing CA is reused, so no browser re-import is needed.
-4. **apps.yaml** — add an entry with `id`, `name`, `subdomain: timetracker`
+4. **apps.yaml** - add an entry with `id`, `name`, `subdomain: timetracker`
    and `roles: [manager]`. (Picked up automatically, no restart needed.)
-5. **Authentik** — repeat §2.6 (proxy provider + application + add to the
+5. **Authentik** - repeat §2.6 (proxy provider + application + add to the
    embedded outpost) and §2.7 (group binding) for the new app. (You can copy
    `scripts/add-omv-app.py` as a template for scripting this.)
 6. Apply: `docker compose up -d certgen app-timetracker && docker compose restart nginx`
@@ -238,7 +238,7 @@ No portal code changes are required.
 ## 3a. OMV Pipeline (placeholder → real app)
 
 The **OMV Pipeline** tile is already wired as the fifth app, but its upstream
-is a placeholder stub (`app-omv`) — the real Flask/SocketIO dashboard runs on
+is a placeholder stub (`app-omv`) - the real Flask/SocketIO dashboard runs on
 the Linux data server. Everything around it is done: the `omv` subdomain,
 TLS SAN, forward-auth server block, Authentik proxy provider/application,
 group binding (admin + manager), and outpost assignment.
@@ -247,7 +247,7 @@ To make the tile open the **real** OMV dashboard:
 
 1. **Network**: ensure the OMV server is reachable from wherever the portal
    runs (the AWS VM in production). Note its `host:port`.
-2. **nginx/templates/30-apps.conf.template** — in the `omv` server block,
+2. **nginx/templates/30-apps.conf.template** - in the `omv` server block,
    change `set $app_upstream http://app-omv:3005;` to
    `set $app_upstream http://<omv-server-ip>:<port>;`, then
    `docker compose restart nginx`.
@@ -262,12 +262,12 @@ To make the tile open the **real** OMV dashboard:
 ## 4. Operations notes
 
 - **Logs**: `logs/portal/portal.log` (AUTH_LOGIN, AUTH_LOGOUT, APP_REDIRECT,
-  ACCESS_DENIED) — also visible via `docker compose logs portal`.
+  ACCESS_DENIED) - also visible via `docker compose logs portal`.
 - **Verification scripts** (run from this directory, inside WSL/Linux):
   `sh scripts/smoke-test.sh` (endpoints + TLS), `sh scripts/flow-test.sh`
   (OIDC and forward-auth redirect chains),
   `docker compose exec -T portal python < scripts/e2e-test.py` (full login
-  journey — only works before TOTP enforcement; afterwards use
+  journey - only works before TOTP enforcement; afterwards use
   `docker compose exec -T portal python < scripts/totp-probe.py`).
 - **Secrets** live only in `.env` (gitignored). Never commit it.
 - **Sessions**: portal cookie is Secure + HttpOnly, capped at 8h; Authentik

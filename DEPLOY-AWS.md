@@ -1,4 +1,4 @@
-# AppPortal deployen naar de AWS-VM — domein: globaal.be
+# AppPortal deployen naar de AWS-VM - domein: globaal.be
 
 Een volledig uitgeschreven draaiboek. Je hoeft de blokken alleen van boven naar
 beneden te kopiëren en uit te voeren. Het domein `globaal.be` is overal al
@@ -7,7 +7,7 @@ server (dat krijg je in stap 1).
 
 > **Twee machines, twee shells.** Commando's gemarkeerd met **(VM)** voer je uit
 > in de SSH-sessie op de Ubuntu-server. Commando's met **(Windows)** in
-> PowerShell op je eigen pc. Op de VM is er géén `wsl ...`-voorvoegsel —
+> PowerShell op je eigen pc. Op de VM is er géén `wsl ...`-voorvoegsel -
 > daar is `docker` rechtstreeks beschikbaar.
 
 ---
@@ -51,7 +51,7 @@ sudo usermod -aG docker $USER
 newgrp docker
 docker version && docker compose version
 ```
-Op Ubuntu start de Docker-daemon automatisch bij elke reboot — geen handmatig
+Op Ubuntu start de Docker-daemon automatisch bij elke reboot - geen handmatig
 starten nodig (anders dan lokaal in WSL).
 
 ---
@@ -60,20 +60,20 @@ starten nodig (anders dan lokaal in WSL).
 
 Kies één methode.
 
-**Methode A — rechtstreeks kopiëren met scp (aanrader nu).**
-**(Windows)** — voer dit uit op je eigen pc; zorg dat `~/appportal` op de VM
+**Methode A - rechtstreeks kopiëren met scp (aanrader nu).**
+**(Windows)** - voer dit uit op je eigen pc; zorg dat `~/appportal` op de VM
 nog niet bestaat:
 ```powershell
 scp -r "C:\Users\shani\OneDrive - Unabo VOF\Mehdi Chegini's files - 000 AI opzet\21. Algemene Dashboard" ubuntu@<VM-IP>:~/appportal
 ```
 
-**Methode B — via een privé git-repository (netter op termijn).** **(VM)**:
+**Methode B - via een privé git-repository (netter op termijn).** **(VM)**:
 ```bash
 git clone <jouw-repo-url> ~/appportal
 ```
 
 **(VM)** Ga in de map staan en ruim lokale runtime-resten op die met scp zijn
-meegekomen (op een verse server zijn deze leeg of afwezig — dit commando kan
+meegekomen (op een verse server zijn deze leeg of afwezig - dit commando kan
 geen kwaad):
 ```bash
 cd ~/appportal
@@ -102,7 +102,7 @@ Daarmee wijzen `portal.globaal.be`, `auth.globaal.be`, `omv.globaal.be`,
 ```bash
 getent hosts portal.globaal.be
 ```
-Wacht zo nodig een paar minuten tot DNS actief is voordat je verder gaat —
+Wacht zo nodig een paar minuten tot DNS actief is voordat je verder gaat -
 stap 7 (certificaten) heeft werkende DNS nodig.
 
 ---
@@ -136,7 +136,7 @@ docker compose ps          # wacht tot authentik-server (healthy) toont (~2 min)
 docker ps                  # check: alleen nginx publiceert 0.0.0.0:80 en :443
 ```
 De stack draait nu met een tijdelijk zelf-ondertekend certificaat. Je browser
-geeft nog een waarschuwing — die lossen we in stap 7 definitief op.
+geeft nog een waarschuwing - die lossen we in stap 7 definitief op.
 
 ---
 
@@ -228,7 +228,7 @@ groep (`admin` of `manager`) aan. Zie `README.md` §2.2. Elke gebruiker stelt bi
 de eerste login zelf TOTP-2FA in.
 
 > De demo-gebruikers (`testadmin`/`testmanager`) bestaan niet op deze verse
-> server — die waren alleen lokaal. Op productie staat TOTP gewoon aan.
+> server - die waren alleen lokaal. Op productie staat TOTP gewoon aan.
 
 ---
 
@@ -252,7 +252,7 @@ In de browser (`https://portal.globaal.be`):
 - **Herstarten:** `docker compose up -d` (of `docker compose restart <service>`)
 - **Updaten:** pas de image-tag in `docker-compose.yml` aan, dan
   `docker compose pull && docker compose up -d`
-- **Back-up** (het belangrijkst — bevat alle gebruikers, groepen, 2FA):
+- **Back-up** (het belangrijkst - bevat alle gebruikers, groepen, 2FA):
   ```bash
   docker run --rm -v appportal_postgres-data:/data -v $PWD:/backup alpine \
     tar czf /backup/postgres-backup-$(date +%F).tar.gz -C /data .
@@ -262,7 +262,7 @@ In de browser (`https://portal.globaal.be`):
 
 ---
 
-## Bijlage A — een extra app toevoegen op productie
+## Bijlage A - een extra app toevoegen op productie
 
 Zie `README.md` §3. Kort: service in `docker-compose.yml`, server-blok in
 `nginx/templates/30-apps.conf.template`, entry in `apps.yaml`, en de
@@ -270,7 +270,7 @@ Authentik-provider (kopieer `scripts/add-omv-app.py` als sjabloon). Voor het
 nieuwe subdomein vraag je het certificaat opnieuw aan met een extra `-d`-regel
 in het commando van stap 7b (en draai je daarna 7c).
 
-## Bijlage B — als iets niet werkt
+## Bijlage B - als iets niet werkt
 
 - **Certbot faalt bij stap 7b** → DNS wijst nog niet (test met
   `getent hosts portal.globaal.be`) of poort 80 staat niet open in de Security

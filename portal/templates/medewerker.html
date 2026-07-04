@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="adminbar"><a href="{{ url_for('medewerkers') }}">&lsaquo; Medewerkers</a></p>
+
+<div class="person-head">
+    <span class="person-naam">{{ p.volledige_naam }}</span>
+    <span class="person-afdeling">{{ p.afdeling.naam }}</span>
+</div>
+<div class="person-status {{ 'uit' if not p.in_dienst else '' }}">
+    <span class="dot"></span> {{ 'In dienst' if p.in_dienst else 'Uit dienst' }}
+</div>
+
+<table class="person-meta">
+    <tr><td>E-mail</td><td>{% if p.email %}<a href="mailto:{{ p.email }}">{{ p.email }}</a>{% else %}<span class="muted">nog in te vullen</span>{% endif %}</td></tr>
+    <tr><td>HR-nummer</td><td>{% if p.hr_nummer %}{{ p.hr_nummer }}{% else %}<span class="muted">nog in te vullen</span>{% endif %}</td></tr>
+    <tr><td>Afdeling</td><td>{{ p.afdeling.naam }}</td></tr>
+    <tr><td>Rol</td><td>{{ p.rol }}{% if p.functie %} &middot; {{ p.functie }}{% endif %}</td></tr>
+    <tr><td>Login</td><td>{% if p.authentik_sub %}gekoppeld via Authentik{% else %}<span class="muted">nog geen portaaltoegang</span>{% endif %}</td></tr>
+</table>
+
+<div class="section-label">360&deg;-overzicht</div>
+<table class="person-meta">
+    <tr><td>Toegang (Authentik)</td><td><span class="muted">koppelen in vervolgstap</span></td></tr>
+    <tr><td>Dashboards</td><td><span class="muted">vullen zich zodra een dashboard naar persoon_id verwijst</span></td></tr>
+</table>
+
+<p class="rbac-note">Zichtbaar voor admin en (binnen de eigen afdeling) manager; een gewone gebruiker ziet enkel zichzelf.</p>
+{% endblock %}

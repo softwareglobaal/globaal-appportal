@@ -1,4 +1,4 @@
-# CLAUDE.md — werkafspraken voor Claude-sessies in dit platform
+# CLAUDE.md - werkafspraken voor Claude-sessies in dit platform
 
 Dit bestand wordt door elke Claude-sessie (lokaal én Claude Code in de cloud)
 automatisch ingelezen. Het beschrijft hoe de git-workflow en deployment werken,
@@ -8,11 +8,11 @@ zodat elke sessie op dezelfde manier werkt. Volledige platformdocumentatie:
 
 ## Repo-landschap (GitHub-org `softwareglobaal`)
 
-Stand 2026-07-03 — **elke repo heeft een eigen CLAUDE.md** met de lokale regels;
+Stand 2026-07-03 - **elke repo heeft een eigen CLAUDE.md** met de lokale regels;
 deze tabel is het overzicht. Let op het verschil in workflow: de
 **dashboard-repo's** (bovenste blok) krijgen directe pushes naar `main`; de
 **host-app-repo's** (onderste blok) werken via **branch → PR → CI smoke-test →
-auto-merge** — in beide gevallen deployt de VM daarna automatisch via cron (2 min).
+auto-merge** - in beide gevallen deployt de VM daarna automatisch via cron (2 min).
 
 | Repo | Wat | VM-checkout | Naar main | Deploy |
 |---|---|---|---|---|
@@ -24,18 +24,18 @@ auto-merge** — in beide gevallen deployt de VM daarna automatisch via cron (2 
 | globaal-factuurrouter | AI-factuurrouteringsagent (§6A, :8787) | `~/factuurrouter` | PR → auto-merge | auto (`~/deploy-factuurrouter.sh`) |
 | globaal-stagebeoordeling | Stagebeoordeling (host-app :8088) | `~/stagebeoordeling` | PR → auto-merge | auto (`~/deploy-stagebeoordeling.sh`) |
 | globaal-schuldentracker | Schuldentracker (host-app :5050) | `~/Finance/Schuldentracker` | PR → auto-merge | auto (`~/deploy-schuldentracker.sh`) |
-| telefoonregister | telefoonregister van de collega — **ongemoeid laten** | eigen checkout | — | — |
+| telefoonregister | telefoonregister van de collega - **ongemoeid laten** | eigen checkout | - | - |
 
 ## Git-workflow: hoe Claude pullt en pusht
 
 - **Claude commit en pusht rechtstreeks naar `main`** vanaf een lokale kloon
   (credentials via Git Credential Manager op de werkmachine; cloud-sessies via de
   GitHub-koppeling van Claude Code). Er is geen PR-flow voor dit dagelijkse werk.
-- **Altijd eerst `git pull --rebase origin main`** vóór het pushen — de VM en
+- **Altijd eerst `git pull --rebase origin main`** vóór het pushen - de VM en
   andere sessies pushen ook naar dezelfde branch; een geweigerde push betekent
   vrijwel altijd: eerst rebasen, dan opnieuw.
 - **Push naar main = productie** bij de app-repos: op de VM draait per app-repo
-  een cron (elke 2 min) die `deploy.sh` uitvoert — nieuwe commits worden gepulld
+  een cron (elke 2 min) die `deploy.sh` uitvoert - nieuwe commits worden gepulld
   en de compose-service wordt herbouwd. Logs: `~/deploy-organisatie.log`,
   `~/deploy-communicatie.log`, `~/deploy-vermogen.log`. Commit dus geen
   half werk naar main.
@@ -56,7 +56,7 @@ eerstvolgende staat, en werk STATUS + log bij in dezelfde push.
 
 ## Vaste regels
 
-1. **Geen ad-hoc DDL** — elk schemawijziging is een genummerde migratie in
+1. **Geen ad-hoc DDL** - elk schemawijziging is een genummerde migratie in
    `db/migrations/NNN-*.sql`, toegepast met `scripts/db-migrate.sh` (tracking in
    `public.schema_migrations`). Eenmalige data-fixes mogen als los SQL-blok voor
    de gebruiker, mét preview-query vooraf.
@@ -64,9 +64,9 @@ eerstvolgende staat, en werk STATUS + log bij in dezelfde push.
    README van de app-repo, TODO.md (afvinken/parkeren), DEFINITIEBOEK.md +
    `kern.definitie` bij terminologie.
 3. **Frontend-code eerst écht parsen vóór de push** (V8, bv. py-mini-racer;
-   Jinja-templates eerst renderen en dan de inline scripts parsen) — auto-deploy
+   Jinja-templates eerst renderen en dan de inline scripts parsen) - auto-deploy
    zet elke push vrijwel direct live, een syntaxfout = productie stuk.
-4. **Code patchen via bestands-tools, nooit via shell-heredocs** — heredocs
+4. **Code patchen via bestands-tools, nooit via shell-heredocs** - heredocs
    kunnen backslash-escapes verminken (heeft al eens productie gebroken).
 5. **Secrets nooit in git of chat**: wachtwoorden/API-keys gaan via `.env` op de
    VM (nano) of `read -s`; in repos alleen `CHANGE_ME`-placeholders.
@@ -79,10 +79,17 @@ eerstvolgende staat, en werk STATUS + log bij in dezelfde push.
    `chmod +x` als bootstrap.
 8. **Adresvelden krijgen het autocomplete-patroon**: eigen proxy-route
    `/api/adres` (→ Photon/OSM, geen key) + `static/adres.js` + `data-adres` op de
-   input, met een eigen dropdown — géén `<datalist>` (browsers filteren die stuk)
+   input, met een eigen dropdown - géén `<datalist>` (browsers filteren die stuk)
    en géén externe scripts in de pagina. Voorbeeld: globaal-draaiboek/-vermogen.
 9. **Nieuwe relatie in de database = zelfde sessie ook in de Second Brain**:
    elke migratie die een FK of koppeltabel toevoegt, wordt in dezelfde werksessie
-   verwerkt in `graaf.py` (globaal-organisatie) — knoop/edge + kleur/definitie —
+   verwerkt in `graaf.py` (globaal-organisatie) - knoop/edge + kleur/definitie -
    én in de relevante detailpagina's/profielen. "Alles blauw" geldt ook voor de
    graaf; de gebruiker hoort koppelingen nooit zelf te hoeven controleren.
+10. **Geen gedachtestreepjes (em dashes) en geen emoji's** - nergens: niet in
+    UI-teksten, definities, signalen, documentatie of commit-berichten. Gebruik
+    gewone streepjes, komma's of dubbele punten. Functionele UI-symbolen
+    (pijltjes, kruisje, info-teken) mogen wel. Teksten horen menselijk te
+    lezen, niet AI-gegenereerd (afspraak 2026-07-04; migratie 032 ruimde de
+    bestaande data op, de stijlregel staat ook in docs/prompt-dashboard-
+    ontwerp.md).

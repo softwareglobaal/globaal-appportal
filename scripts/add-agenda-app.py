@@ -39,7 +39,7 @@ u, new = User.objects.get_or_create(username="mehdi", defaults=dict(name="Mehdi"
 if new:
     pw = secrets.token_urlsafe(12)
     u.set_password(pw); u.save()
-    print(f"USER mehdi aangemaakt — tijdelijk wachtwoord: {pw}")
+    print(f"USER mehdi aangemaakt - tijdelijk wachtwoord: {pw}")
 else:
     print("USER mehdi bestond al")
 u.groups.add(access_grp)

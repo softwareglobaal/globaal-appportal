@@ -6,7 +6,7 @@ Draaien (vanuit ~/appportal):
 
 Idempotent: veilig om opnieuw te draaien. Maakt de tegel 'Draaiboek' in de
 launcher, toegankelijk voor de groepen admin/manager/draaiboek. Maakt ook de
-groep 'draaiboek-editors' aan (bewerken; leden voeg je toe in Authentik —
+groep 'draaiboek-editors' aan (bewerken; leden voeg je toe in Authentik -
 Mehdi hoort daarin, hij levert de data).
 """
 import os

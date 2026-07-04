@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="adminbar"><a href="{{ url_for('index') }}">&lsaquo; Portal</a></p>
+
+{% if error %}
+<p class="notice">{{ error }}</p>
+{% else %}
+<div class="staff-head">
+    <h1>Medewerkers</h1>
+    <span class="staff-count">{{ total }} personen, {{ groepen|length }} afdelingen</span>
+</div>
+
+<div class="staff-toolbar">
+    <span class="staff-search">Zoek op naam</span>
+    <span class="staff-filter">Alle afdelingen &#9662;</span>
+</div>
+
+<table class="staff-table">
+    {% for groep in groepen %}
+    <tr class="staff-group"><td colspan="3">{{ groep.naam }} <span>{{ groep.leden|length }}</span></td></tr>
+        {% for p in groep.leden %}
+        <tr>
+            <td class="naam"><a href="{{ url_for('medewerker', pid=p.id) }}">{{ p.volledige_naam }}</a></td>
+            <td class="rol">{% if p.rol != 'Lid' %}<span class="role role-{{ p.rol|lower }}">{{ p.rol }}</span>{% endif %}</td>
+            <td class="hr">{{ p.hr_nummer or '—' }}</td>
+        </tr>
+        {% endfor %}
+    {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

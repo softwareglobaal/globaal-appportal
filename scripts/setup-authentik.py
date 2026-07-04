@@ -33,7 +33,7 @@ APPS = [
 auth_flow = Flow.objects.get(slug="default-provider-authorization-implicit-consent")
 inval_flow = Flow.objects.filter(slug="default-provider-invalidation-flow").first()
 # The portal's end-session must end the WHOLE authentik session (single
-# logout), not just the portal's own OAuth session — hence the global
+# logout), not just the portal's own OAuth session - hence the global
 # invalidation flow, not the provider one.
 global_inval_flow = Flow.objects.filter(slug="default-invalidation-flow").first()
 signing_key = CertificateKeyPair.objects.filter(

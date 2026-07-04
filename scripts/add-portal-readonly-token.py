@@ -3,7 +3,7 @@ Access overview page, and print the key to put in .env as AUTHENTIK_API_TOKEN.
 
 Surgical and idempotent: re-running reuses the same service account and token
 (and prints the existing key), and touches nothing else. The account gets only
-view_user + view_group — enough to list groups and their members; the portal
+view_user + view_group - enough to list groups and their members; the portal
 never writes to Authentik.
 
 Run:  sh scripts/ak-exec.sh scripts/add-portal-readonly-token.py

@@ -1,10 +1,10 @@
-# Deploy — medewerkerspagina (route A, op de VM-branch)
+# Deploy - medewerkerspagina (route A, op de VM-branch)
 
 Deze bestanden zijn gebaseerd op de **vm-as-built-2026-06-26**-branch (wat de VM
 draait), niet op main. Overschrijven via WinSCP is daarom veilig: elk bestand
 matcht de VM, op de bedoelde wijziging na.
 
-## 1. WinSCP — kopieer naar ~/appportal (paden 1-op-1)
+## 1. WinSCP - kopieer naar ~/appportal (paden 1-op-1)
 | Lokaal (deze map) | Op de VM |
 |---|---|
 | docker-compose.yml | ~/appportal/docker-compose.yml |
@@ -17,7 +17,7 @@ matcht de VM, op de bedoelde wijziging na.
 | portal/templates/medewerkers.html | ~/appportal/portal/templates/medewerkers.html  (nieuw) |
 | portal/templates/medewerker.html | ~/appportal/portal/templates/medewerker.html  (nieuw) |
 
-## 2. Op de VM (SSH) — committen op de branch
+## 2. Op de VM (SSH) - committen op de branch
 ```bash
 cd ~/appportal
 git status --short          # moet EXACT deze 9 bestanden tonen (M/??), niets anders
@@ -29,7 +29,7 @@ git commit -m "feat(portal): medewerkerspagina + centrale gebruikersdatabase (re
 # optioneel (backup naar GitHub): git push origin vm-as-built-2026-06-26
 ```
 
-## 3. Portal herbouwen — feature staat nog UIT (geen APPPORTAL_DB_URL)
+## 3. Portal herbouwen - feature staat nog UIT (geen APPPORTAL_DB_URL)
 ```bash
 docker compose up -d --build portal
 docker compose ps portal          # healthy? portal werkt als vanouds, tegel nog niet zichtbaar
