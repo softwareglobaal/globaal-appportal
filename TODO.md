@@ -150,9 +150,12 @@
       dag (30 d), drukste nummers, stil-lijst (60+ d, met validatiestatus).
       Nog open: gemist-percentage en piekuren (na 2c), wie neemt op (na het
       privacy-besluit).
-- [ ] **Laag 2c - veldsemantiek verfijnen**: na de eerste echte sync de
-      debug-output (veldstructuur communications + participants) gebruiken om
-      "gemist" exact te bepalen en de nummer-matching aan te scherpen.
+- [x] **Laag 2c - veldsemantiek verfijnd** - GEBOUWD (2026-07-04, migratie
+      035): detail-call per record (gedoseerd), beantwoord = callAnswerTime
+      aanwezig, lijn-match via phoneLine.oid naar de belvolgorde-spiegel,
+      deelnemer-adressen als vangnet. Gemist-kolommen in register en tab.
+      Bonus in het ruwe detail voor later: wachttijd, doorverbindingen,
+      audiokwaliteit (mos-scores), WhatsApp-categorie.
 - [ ] **PRIVACY-BESLISPUNT (team, voor laag 2 live gaat)**: belregister is
       personeelsgevoelig. Voorstel: aggregaten voor iedereen met toegang,
       details per persoon alleen admin/manager, contentSummary niet tonen.
