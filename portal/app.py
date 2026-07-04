@@ -1,8 +1,8 @@
-"""AppPortal — the landing portal.
+"""AppPortal - the landing portal.
 
 Authenticates users against Authentik via OIDC (Authlib) and shows the
 application tiles the user's role (Authentik group) permits. All identity
-management — passwords, TOTP, sessions, users — lives in Authentik.
+management - passwords, TOTP, sessions, users - lives in Authentik.
 """
 import logging
 import os
@@ -160,7 +160,7 @@ def go(app_id):
         events.info("ACCESS_DENIED user=%s app=%s", user["username"], app_id)
         abort(403)
     events.info("APP_REDIRECT user=%s app=%s", user["username"], app_id)
-    # Plain redirect — SSO continuity comes from the Authentik session cookie
+    # Plain redirect - SSO continuity comes from the Authentik session cookie
     # checked by forward auth on the app's subdomain. No tokens in URLs.
     return redirect(f"https://{target['subdomain']}.{BASE_DOMAIN}/")
 
@@ -169,7 +169,7 @@ def go(app_id):
 def access_overview():
     """Admin-only: per application, which users can access it.
 
-    Authentik has no native "all effective users for app X" screen — access is
+    Authentik has no native "all effective users for app X" screen - access is
     expressed as group/user bindings. We reconstruct it from apps.yaml (the
     group(s) bound to each app) plus the live group membership from the
     Authentik API, and union the members per app.
