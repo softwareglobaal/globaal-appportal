@@ -104,10 +104,10 @@ De **ene persoon die aanspreekbaar en eigenaar is** van een resource
 (accountable) - precies een, zodat niets eigenaarloos blijft. Generiek begrip:
 wat de verantwoordelijkheid concreet inhoudt verschilt per resource.
 
-### Verantwoordelijke voor nummer
+### Verantwoordelijke voor het nummer
 De verantwoordelijke van een **telefoonnummer**: aanspreekbaar en eigenaar,
 precies een. In de telefonie is dit **altijd de 1e in de belvolgorde**. Eigen
-term (migratie 036) zodat de algemene term "verantwoordelijke" overal dezelfde
+term (migraties 036/037) zodat de algemene term "verantwoordelijke" overal dezelfde
 generieke betekenis houdt.
 
 
