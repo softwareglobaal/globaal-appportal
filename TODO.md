@@ -81,10 +81,10 @@
 - [ ] **Master data layer aanvullen**: elk entiteitstype één canoniek record met
       stabiel id (personen/firma's/adressen/leveranciers zijn er; tools,
       abonnementen, panden-verrijking volgen).
-- [ ] **Finance end-to-end als template-discipline** (Mehdi's aanrader: Octopus
-      heeft schone spend-data): API-pull → centrale opslag → entiteit/relatie-
-      model → views. Patroon documenteren tíjdens het bouwen — dat document ís
-      het verkoopbare product.
+- [ ] **Finance end-to-end als template-discipline** — **PLAN LIGT KLAAR:
+      zie PLAN.md** (8 stappen, één per keer; stap 1 = disciplines-entiteit,
+      gate G1 = Octopus-credentials). Patroon documenteren tíjdens het bouwen —
+      dat document ís het verkoopbare product.
 - [ ] **Pijplijn boven visuals**: sync-betrouwbaarheid en versheid als expliciete
       kwaliteitseis bij elke API-koppeling (staleness zichtbaar maken, zoals de
       xelion_sync-status).

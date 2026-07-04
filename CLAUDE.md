@@ -48,6 +48,12 @@ auto-merge** — in beide gevallen deployt de VM daarna automatisch via cron (2 
   gebruiker gegeven, die output terugplakt. Repos aanmaken op GitHub doet de
   gebruiker (web-UI); daarna kloont/pusht Claude zelf.
 
+## Lopend meerstappenwerk
+
+Actief plan: **PLAN.md** (Finance als template-discipline, sinds 2026-07-04).
+Werk je hieraan? Lees PLAN.md, doe alléén de stap die bij STATUS als
+eerstvolgende staat, en werk STATUS + log bij in dezelfde push.
+
 ## Vaste regels
 
 1. **Geen ad-hoc DDL** — elk schemawijziging is een genummerde migratie in
