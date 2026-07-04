@@ -14,9 +14,10 @@
 
 ## STATUS
 
-- **Eerstvolgende stap: 2** (tool→discipline-mapping; 2a = migratie 031)
-- Blokkades: stap 3+ heeft Octopus-API-credentials nodig (gate G1, bij Mehdi);
-  stap 2b wil gate G2 (toollijst) maar kan alvast met kosten.software beginnen.
+- **Eerstvolgende stap: 3** (Octopus-verkenning) — **GEBLOKKEERD op gate G1**
+  (credentials). Zolang G1 open staat: restant-mapping van stap 2b afwerken via
+  de Disciplines-pagina zodra het team (G2) de twijfelgevallen bevestigt.
+- Blokkades: G1 (Octopus-credentials, bij Mehdi) blokkeert stap 3.
 - Log:
   - 2026-07-04 — plan opgesteld (Fable 5); nog geen stap gestart.
   - 2026-07-04 — stap 1 GEBOUWD (Fable 5): migratie 030 (kern.discipline, 17
@@ -24,6 +25,14 @@
     sectie, gecureerde discipline-knopen in de Second Brain (graaf.py, prefix
     disc: klaar voor de auto-edges van stap 2). Lokaal getest incl. rollen.
     Wacht op VM: `git pull && sh scripts/db-migrate.sh` (APPLY 030).
+  - 2026-07-04 — stap 2 GEBOUWD (Fable 5): migratie 031 (discipline_sleutel op
+    kosten.software + evidente seed-mappings Monday/Octopus/Pipedrive/DeskTime/
+    Microsoft/Zoom/Close Call; kolom-level UPDATE-grant voor medewerker_writer —
+    ontdekt en gefixt: die rol miste USAGE op schema kosten), Disciplines-pagina
+    op het Organisatie-dashboard (per discipline: tools/abonnementen/firma's;
+    lege disciplines gemarkeerd; "nog niet gemapt"-lijst), software→discipline-
+    edges + verzamelsignaal in de Second Brain. Restant 2b = teamwerk (G2).
+    Wacht op VM: db-migrate (APPLY 030 + 031).
 
 ## Gates (input van buiten, parallel aan te vragen)
 
@@ -47,15 +56,17 @@
 - Klaar wanneer: 17 rijen in kern.discipline, zichtbaar in de graaf, definities
   live. Geen UI nodig in deze stap.
 
-### Stap 2 — Tool→discipline-mapping (maakt dubbels/gaten zichtbaar)
-- [ ] 2a. Migratie 031: `discipline_id` op `kosten.software` (+ trigger-vrij,
-      handmatig te vullen; NULL = nog niet gemapt = signaal in de graaf).
-- [ ] 2b. Bestaande tools mappen (Monday→operations/PM, Octopus→finance,
-      Pipedrive→sales, DeskTime→HR, Zoom/Xelion→IT of communicatie — bij
-      twijfel met team kortsluiten, niet gokken).
-- [ ] 2c. Kosten-dashboard of Organisatie: eenvoudige weergave "per discipline:
-      welke tools, wat kosten ze, waar zitten dubbels/gaten" (view = query,
-      geen opslag).
+### Stap 2 — Tool→discipline-mapping (maakt dubbels/gaten zichtbaar) — ✔ 2026-07-04
+- [x] 2a. Migratie 031: `discipline_sleutel` op `kosten.software` (nullable,
+      FK naar kern.discipline; NULL = nog niet gemapt = verzamelsignaal in de
+      graaf; alleen medewerker_writer mag de kolom bijwerken).
+- [x] 2b. Evidente tools gemapt in de migratie (Monday→operations, Octopus→
+      finance, Pipedrive→sales, DeskTime→HR, Microsoft/Zoom/Close Call→IT);
+      **restant staat op de Disciplines-pagina onder "nog niet gemapt" en
+      wacht op het team (gate G2) — niet gegokt.**
+- [x] 2c. Disciplines-pagina op het Organisatie-dashboard: per discipline de
+      tools (abonnementen, firma's, seats), lege disciplines gemarkeerd
+      ("leeg" = ziekenhuis-model), ongemapte lijst onderaan. View = query.
 - Klaar wanneer: elke rij in kosten.software heeft een discipline of een
   bewust-open signaal; de gaten-lijst bestaat als view.
 
