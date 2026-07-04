@@ -156,9 +156,11 @@
       deelnemer-adressen als vangnet. Gemist-kolommen in register en tab.
       Bonus in het ruwe detail voor later: wachttijd, doorverbindingen,
       audiokwaliteit (mos-scores), WhatsApp-categorie.
-- [ ] **PRIVACY-BESLISPUNT (team, voor laag 2 live gaat)**: belregister is
-      personeelsgevoelig. Voorstel: aggregaten voor iedereen met toegang,
-      details per persoon alleen admin/manager, contentSummary niet tonen.
+- [x] **PRIVACY-BESLISPUNT - BESLIST (Shaniel, 2026-07-04)**: belminuten per
+      persoon mogen; dit is bewuste personeelsmonitoring. Gebouwd via de
+      Xelion-gebruikers-spiegel (migratie 038). contentSummary blijft
+      voorlopig ongetoond; RBAC-verfijning kan later meeliften op het
+      RBAC-per-tab-architectuurpunt van Mehdi.
 - [ ] **Laag 3 - analyse**: eerst regels-signalen (nummer X dagen stil,
       gemist-percentage verdubbeld, voicemail vol), daarna AI-duiding op
       dagaggregaten (nooit ruwe logs): communicatie-coach in de briefing.
