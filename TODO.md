@@ -136,6 +136,26 @@
       relaties (draaiboek, vermogen, definitie-verwijzingen) benoemen of
       verbergen via de signalen-lijst.
 
+## Meeting Mehdi 2026-07-04 (dashboard-feedback, avond)
+
+> Punten 1-11 GEBOUWD dezelfde avond (migratie 039 + communicatie-app):
+> "Gefactureerd aan" zonder intern, belvolgorde-definitie, statistiek-kolommen
+> uit het register naar de Xelion-statistieken, gebruikt-voor met vrije tekst,
+> contracttype/opzegtermijn-velden, statistieken v2 met filters (periode,
+> dag/week/maand/weekdag, nummer, persoon) en kerncijfers. Rest hieronder:
+
+- [ ] **Platform centraliseren** (Mehdi: definitie van platform mag niet per
+      dashboard verschillen): platforms van de app-eigen keuzelijst naar een
+      centrale kern-lijst tillen, zoals leveranciers. Apart klusje (migratie +
+      verzoening bestaande waarden).
+- [ ] **VERRE TOEKOMST - gesprekstranscripten** automatisch in een map
+      (opnames bestaan al in het archief via recordingStatus); privacy- en
+      opslagvragen eerst.
+- [ ] **VERRE TOEKOMST - e-mailstatistieken** met labeling (junk/reclame/
+      klant) en reactietijden.
+- [ ] **VERRE TOEKOMST - OMV-scraper naar een agent** die zelfstandig draait
+      en bericht stuurt bij fouten.
+
 ## Xelion-communicatielog (2026-07-04) - laag 2 en 3, bewust geparkeerd
 
 > Laag 1 (archief) is GEBOUWD: migratie 034 + incrementele poller-sync,
