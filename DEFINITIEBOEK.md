@@ -100,9 +100,16 @@ De **persoon/personen die een resource gebruiken** (telefoonnummer, softwarelice
 - **Bij ons:** link(s) naar `kern.persoon` (multi).
 
 ### Verantwoordelijke
-De **ene persoon die aanspreekbaar/eigenaar is** voor een resource - *accountable* (RACI).
-Precies één, zodat niks "open" (eigenaarloos) blijft.
-- **Bij ons:** link naar `kern.persoon`; altijd de **1e in de belvolgorde**.
+De **ene persoon die aanspreekbaar en eigenaar is** van een resource
+(accountable) - precies een, zodat niets eigenaarloos blijft. Generiek begrip:
+wat de verantwoordelijkheid concreet inhoudt verschilt per resource.
+
+### Verantwoordelijke voor nummer
+De verantwoordelijke van een **telefoonnummer**: aanspreekbaar en eigenaar,
+precies een. In de telefonie is dit **altijd de 1e in de belvolgorde**. Eigen
+term (migratie 036) zodat de algemene term "verantwoordelijke" overal dezelfde
+generieke betekenis houdt.
+
 
 ### Backup
 De **2e persoon in de belvolgorde** - neemt over als de verantwoordelijke niet kan.

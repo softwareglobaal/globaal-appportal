@@ -178,7 +178,11 @@
       iedereen" (Mehdi) - rechten per sectie, oppakken zodra het RBAC-per-tab-principe
       (architectuurpunt hierboven) vorm krijgt. Facturen/contracten in het paneel
       volgen met Factuurrouter 2.0.
-- [ ] **Definitie "verantwoordelijke" generiek maken** (Mehdi, woordenboek-principe):
+- [x] **Definitie "verantwoordelijke" generiek gemaakt** - GEBOUWD (2026-07-04,
+      migratie 036): nieuwe sleutel verantwoordelijke_nummer ("Verantwoordelijke
+      voor nummer", met de belvolgorde-uitleg) voor de telefonie-kolom; de
+      algemene term is nu generiek (accountable, precies een, per resource
+      anders ingevuld). Was ook het verzoek "hernoem de kolom". Origineel punt:
       de huidige definitie is telefoonlijn-specifiek ("altijd de 1e in de
       belvolgorde") terwijl de term over álle dashboards hetzelfde moet betekenen.
       Fix: generieke definitie (aanspreekbaar/eigenaar, accountable, precies één);
