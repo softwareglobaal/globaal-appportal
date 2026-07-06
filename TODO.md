@@ -256,6 +256,27 @@
       een per firma.
 - UNABO-spelling blijft zoals hij is (United + Bouw), geen actie.
 
+## Meeting Mehdi 2026-07-06 (tweede, Mega/Proximus-opschoning)
+
+> Bron: Fathom-transcript 2 + Proximus-factuurscreenshot (Shaniel).
+> Regel: per provider alleen de genoemde nummers Actief; de rest Niet-actief.
+> Telesur BLIJFT zoals hij staat (expliciete uitzondering).
+
+- [ ] **Mega: 5 actieve nummers**, de rest bestaat niet meer:
+      0491 94 68 78 (WhatsApp Contrax), 0491 94 68 8x (WhatsApp H-Architects,
+      nummer afgekapt in transcript, verifieren in register),
+      0472 95 88 54 (spoofing sales), 0491 94 68 80 (WhatsApp
+      Energie-efficient), 0472 01 66 56 (cold calling / spoofing
+      sales-campagne Unabo).
+- [ ] **Proximus: 5 actieve nummers** (factuur 2026-07-06): 0465 54 41 25,
+      0467 66 73 07, 0471 54 50 77, 0486 33 35 21, 0496 18 82 55; elk
+      kostprijs 21,04 euro per maand excl. BTW (peildatum 2026-07-06).
+      Plus vast adres-abonnement Herfstlaan 65 Leuven op 0 euro.
+      Mehdi schaft de inactieve lijnen op het Proximus-portaal af.
+- [ ] **Xelion: houden-of-schrappen-ronde** met Mehdi ("de rest gaan we
+      schrappen, dat we onze tijd niet onnodig zitten") - voorbereiden met
+      de stil-lijst en belstatistieken per nummer.
+
 ## Meeting 2026-07-03 (communicatie-review, met Siyan/Angela)
 
 - [x] **Leverancier/platform: échte detailpagina's** i.p.v. alleen filteren - GEBOUWD
