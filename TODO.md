@@ -270,12 +270,13 @@
       Actief met kostprijs 21,04/mnd en peildatum 2026-07-06 (Catalin,
       Mehdi, Stefan); 30 overige op Niet-actief; Telesur ongemoeid.
       Mehdi schaft de inactieve lijnen op het Proximus-portaal af.
-- [ ] **OPEN - twee factuurnummers zonder sluitende registerrij**:
-      (a) factuur zegt 0465 54 41 25, register zegt 0467 54 41 25 (Vlad),
-      een cijfer verschil: bij Vlad of in de portal verifieren, dan
-      corrigeren en Actief zetten met prijs; (b) 0471 54 50 77 staat op de
-      factuur maar bestaat niet in het register: uitzoeken van wie, dan
-      toevoegen met kostprijs 21,04/mnd, peildatum 2026-07-06.
+- [x] **Factuur 7604078875 (9 jun 2026) volledig verzoend met het register**
+      (2026-07-06): 5 actieve Proximus-nummers, elk 21,04/mnd excl. BTW,
+      peildatum 2026-06-09. Vlad-rij gecorrigeerd (0467 54 41 25 bestond
+      niet bij Proximus, is 0465 54 41 25); 0471 54 50 77 toegevoegd als
+      vermoedelijke datasim (67 GB, geen gesprekken). Twee kleine
+      verificaties staan als aandacht-notitie op de nummers zelf:
+      naam Vlad bevestigen en uitzoeken welk apparaat de datasim voedt.
 - [ ] **Xelion: houden-of-schrappen-ronde** met Mehdi ("de rest gaan we
       schrappen, dat we onze tijd niet onnodig zitten") - voorbereiden met
       de stil-lijst en belstatistieken per nummer.
