@@ -74,7 +74,7 @@ services:
       # Aan/uit via .env — bij foute creds elke 5 min blijven proberen jaagt
       # de loginFailures-teller in Xelion op (accountvergrendeling).
       XELION_ENABLED: ${XELION_ENABLED:-false}
-      XELION_DEBUG: "true"
+      XELION_DEBUG: "${XELION_DEBUG:-false}"
       XELION_BASE_URL: ${XELION_BASE_URL:-}
       XELION_USERSPACE: ${XELION_USERSPACE:-}
       XELION_USERNAME: ${XELION_USERNAME:-}
