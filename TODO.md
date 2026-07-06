@@ -224,6 +224,38 @@
       beslissen waar de klant vandaag echt leeft (CRM/Excel/facturatie) en
       of we spiegelen of zelf bronhouder worden. Nog niets bouwen.
 
+## Meeting Mehdi 2026-07-06 (communicatie-register, Fathom-transcript)
+
+- [x] **"Vaste prijs" wordt "Kostprijs"** (migratie 044): "vast" is fout want
+      elke prijs kan veranderen; excl. BTW, van de laatste factuur. Sleutel
+      blijft vaste_prijs.
+- [x] **"Interne doorfacturatie naar" wordt "Kosten aanrekenen aan"**
+      (migratie 044): er wordt niets echt gefactureerd. Leeg laten wanneer de
+      betalende firma zelf gebruikt. Sleutel blijft doorfactureren_naar.
+- [x] **Prijs-metadata** (migratie 044 + register): prijstype (per maand of
+      per minuut, alleen maandbedragen in maandtotalen), peildatum van de
+      laatste factuur, en een rood uitroepteken in het register wanneer de
+      prijs 2+ maanden oud is of geen peildatum heeft.
+- [x] **Sticky kolomkoppen** in het register bij verticaal scrollen.
+- [ ] **Doel wordt een vaste, unieke woordenlijst** i.p.v. vrije tekst
+      (het grote structuurpunt): office/algemeen, sales, finance, spoofing,
+      cold calling, B2B, standaardprojecten, klantnummer, prive. Doel:
+      kunnen tellen ("hoeveel finance-nummers hebben we"). Daarna alle
+      bestaande doelen hermappen (energie-efficient hoort bij gebruikt-voor,
+      dubbele sales-varianten samenvoegen).
+- [ ] **"Gebruikt voor" alleen bij afwijking**: uitzonderingen zoals Contrax,
+      TKN-tekenwerk, klantnummers (Verbraeken en Co, Yannick Technics),
+      Cataline, sales-campagnes. Niet herhalen wanneer gebruiker = betaler
+      (het "Shaniel is de voornaam van Shaniel"-argument).
+- [ ] **Ontbrekende kostprijzen aanvullen**: o.a. de Proximus-nummers
+      (Cataline). Datawerk met de facturen ernaast; peildatum meteen zetten.
+- [ ] **Actief vs niet-actief uit de statistieken**: welke nummers zijn echt
+      nog in gebruik (kiem: de stil-lijst). Gesprek brak hier af; precieze
+      wens eerst afmaken met Mehdi.
+- [ ] **Overleg finance (actie Shaniel)**: een centraal finance-nummer i.p.v.
+      een per firma.
+- UNABO-spelling blijft zoals hij is (United + Bouw), geen actie.
+
 ## Meeting 2026-07-03 (communicatie-review, met Siyan/Angela)
 
 - [x] **Leverancier/platform: échte detailpagina's** i.p.v. alleen filteren - GEBOUWD

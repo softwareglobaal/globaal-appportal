@@ -131,18 +131,34 @@ praktijk UnaBo). "Intern" staat er bewust: zonder dat woord kan het ook over ext
 facturatie aan klanten lijken te gaan, en die houden we hier niet bij (meeting
 2026-07-02 - verving de oude term "gefactureerd aan").
 
-### Interne doorfacturatie naar
-De firma van de groep **aan wie de kost intern wordt doorgerekend** - kan verschillen
-van wie de leveranciersfactuur ontvangt (verving "doorfactureren naar").
+### Kosten aanrekenen aan
+De firma van de groep **aan wie de kosten intern worden aangerekend** - kan verschillen
+van wie de leveranciersfactuur ontvangt en betaalt. **Leeg wanneer de betalende firma
+de kosten zelf draagt**: aan jezelf reken je niets aan. Verving "Interne doorfacturatie
+naar" (meeting 2026-07-06): er wordt niets echt gefactureerd. Sleutel blijft
+`doorfactureren_naar`.
 
 ### Gebruikt voor
 De firma (later ook klant of dossier) **waarvoor de resource feitelijk gebruikt
 wordt**, los van hoe er gefactureerd wordt - het Contacts-scenario: gefactureerd aan
 UnaBo, doorgerekend aan Contrax, gebruikt voor een klant van Contrax.
 
-### Vaste prijs
-Het **vaste maandbedrag in euro excl. BTW** voor de resource zelf. Leeg = onbekend of
-variabel. Verbruik valt hier niet onder.
+### Kostprijs
+De **kostprijs van het abonnement in euro exclusief BTW**, overgenomen van de laatste
+factuur van de leverancier. Niet "vast": elke prijs kan veranderen (meeting
+2026-07-06, verving "Vaste prijs"; sleutel blijft `vaste_prijs`). Maandbedrag of
+tarief per minuut: zie het prijstype. Leeg = onbekend. Kortingen en acties staan
+alleen op de factuur; **de factuur blijft de bron** (de Xelion-API heeft geen
+kosteninformatie, bewezen 2026-07-06).
+
+### Prijstype
+Of de kostprijs een **maandbedrag** is of een **tarief per minuut**. Alleen
+maandbedragen tellen mee in maandtotalen.
+
+### Prijs bijgewerkt op
+De **datum van de laatste factuur** waarvan de kostprijs is overgenomen. Ouder dan
+**2 maanden** geeft een waarschuwing in het register: mogelijk is er een factuur
+gemist of is er iets veranderd.
 
 ### Verbruik
 De **variabele kosten** van een resource (belminuten, data, gebruik) - apart van de
