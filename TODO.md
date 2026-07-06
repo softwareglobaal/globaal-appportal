@@ -209,6 +209,14 @@
       bouwen de graaf zonder de externe laag (extern=False).
 - [ ] **Veelbellers en verkeer op onbekende nummers** als lijsten in het
       communicatie-dashboard - de kolom maakt dit een goedkope query.
+- [x] **Xelion-kosten via de API: onderzocht, bestaat niet** (2026-07-06):
+      0 kostvelden in 720 archiefrecords, alle facturatie-endpoints 404.
+      Gesprekskosten dus via Businesscom (factuur/portaal). Wel gebouwd:
+      licentie-spiegel (migratie 043, licenses-endpoint) met twee Second
+      Brain-signalen: gebruikerslicenties vol (12/12 = onboarding-blokker,
+      eerst bijkopen) en betaald-maar-ongebruikt (nu: exchange 1/0,
+      navragen bij Businesscom). Bijvangst voor later: reports-endpoint
+      heeft een AutomatedReport "missed call" in de centrale.
 - [ ] **KLANTENDATABASE (theorie eerst, afspraak 2026-07-06)**: brainstorm
       loopt; kern van het idee: klant als kern-entiteit met telefoonnummers
       en e-mailadressen als koppelvlak (kanonieke vorm), zodat externe
