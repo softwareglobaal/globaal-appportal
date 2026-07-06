@@ -114,6 +114,17 @@ generieke betekenis houdt.
 ### Backup
 De **2e persoon in de belvolgorde** - neemt over als de verantwoordelijke niet kan.
 
+### Extern contact
+Een **externe partij** (klant, leverancier of andere beller) waarmee via een van
+onze telefoonnummers contact is geweest, afgeleid uit het **Xelion-oproeparchief**
+van de laatste 90 dagen. Zelfde partij met meerdere nummernotaties telt als een
+contact (kanonieke nummervorm); anonieme bellers staan er niet in.
+- **Bij ons:** `extern_nummer`/`extern_naam` op `communicatie.xelion_communicatie`
+  (migratie 041) + eigen laag in de Second Brain (migratie 042, standaard uit).
+- **Toekomst:** zodra de klantendatabase bestaat wordt het kanonieke nummer het
+  koppelvlak naar de klant - dan wordt een extern contact een gelinkte klant in
+  plaats van een los nummer.
+
 ### Intern gefactureerd aan
 De firma van de groep **die de factuur van de leverancier ontvangt en betaalt** (in de
 praktijk UnaBo). "Intern" staat er bewust: zonder dat woord kan het ook over externe

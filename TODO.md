@@ -188,6 +188,34 @@
       naar S3 naast de databasebackup (alleen als het team losse bestanden
       wil; de tabel zelf is al het archief).
 
+## Externe contacten & lagen-model (2026-07-06)
+
+- [x] **Lagen-model Second Brain** (organisatie-app): graaf opent met de kern
+      (persoon, firma, afdeling, telefoonnummer); overige typen zijn
+      legenda-chips die per laag aan/uit gaan, gerenderd in porties van 80.
+      Keuze per browser onthouden (localStorage, geen serverlast); zoeken
+      werkt over alle lagen en zet een uitgeschakelde laag zelf aan.
+- [x] **Externe partij als kolom** (migratie 041): `extern_nummer`/
+      `extern_naam` op het oproep-archief + `communicatie.canoniek_nummer()`
+      als SQL-functie; backfill over bestaande records (deelnemers,
+      terugbelnummer, pijl-patroon); poller vult nieuwe records; drill-down
+      leest de kolom met de oude parse-keten als vangnet.
+- [x] **Extern contact als graaf-laag** (migratie 042 + organisatie-app):
+      knopen per kanoniek nummer met kanten naar de register-nummers;
+      standaard uit (lagen-model); drukste 300, rest wordt een signaal.
+- [ ] **AI-context ontkoppelen van de weergave-payload**: aggregaten +
+      relevante deelgraaf i.p.v. de volledige graaf, met eerlijke disclaimer
+      dat de AI niet alles ziet. Tussenmaatregel actief: de AI-aanroepen
+      bouwen de graaf zonder de externe laag (extern=False).
+- [ ] **Veelbellers en verkeer op onbekende nummers** als lijsten in het
+      communicatie-dashboard - de kolom maakt dit een goedkope query.
+- [ ] **KLANTENDATABASE (theorie eerst, afspraak 2026-07-06)**: brainstorm
+      loopt; kern van het idee: klant als kern-entiteit met telefoonnummers
+      en e-mailadressen als koppelvlak (kanonieke vorm), zodat externe
+      contacten, facturatie en dossiers aan dezelfde klant linken. Eerst
+      beslissen waar de klant vandaag echt leeft (CRM/Excel/facturatie) en
+      of we spiegelen of zelf bronhouder worden. Nog niets bouwen.
+
 ## Meeting 2026-07-03 (communicatie-review, met Siyan/Angela)
 
 - [x] **Leverancier/platform: échte detailpagina's** i.p.v. alleen filteren - GEBOUWD
