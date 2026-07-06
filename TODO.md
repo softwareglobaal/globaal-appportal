@@ -262,17 +262,20 @@
 > Regel: per provider alleen de genoemde nummers Actief; de rest Niet-actief.
 > Telesur BLIJFT zoals hij staat (expliciete uitzondering).
 
-- [ ] **Mega: 5 actieve nummers**, de rest bestaat niet meer:
-      0491 94 68 78 (WhatsApp Contrax), 0491 94 68 8x (WhatsApp H-Architects,
-      nummer afgekapt in transcript, verifieren in register),
-      0472 95 88 54 (spoofing sales), 0491 94 68 80 (WhatsApp
-      Energie-efficient), 0472 01 66 56 (cold calling / spoofing
-      sales-campagne Unabo).
-- [ ] **Proximus: 5 actieve nummers** (factuur 2026-07-06): 0465 54 41 25,
-      0467 66 73 07, 0471 54 50 77, 0486 33 35 21, 0496 18 82 55; elk
-      kostprijs 21,04 euro per maand excl. BTW (peildatum 2026-07-06).
-      Plus vast adres-abonnement Herfstlaan 65 Leuven op 0 euro.
+- [x] **Mega: 5 actieve nummers** - VERWERKT (2026-07-06): register had ze
+      alle vijf al Actief; doelen aangevuld (0491 94 68 78 = Whatsapp
+      Contrax, 0491 94 68 79 = Whatsapp H-Architects) en prijstype per
+      maand gezet. Peildatum nog leeg tot er een Mega-factuur naast ligt.
+- [x] **Proximus-opschoning** - VERWERKT (2026-07-06): 3 factuurnummers
+      Actief met kostprijs 21,04/mnd en peildatum 2026-07-06 (Catalin,
+      Mehdi, Stefan); 30 overige op Niet-actief; Telesur ongemoeid.
       Mehdi schaft de inactieve lijnen op het Proximus-portaal af.
+- [ ] **OPEN - twee factuurnummers zonder sluitende registerrij**:
+      (a) factuur zegt 0465 54 41 25, register zegt 0467 54 41 25 (Vlad),
+      een cijfer verschil: bij Vlad of in de portal verifieren, dan
+      corrigeren en Actief zetten met prijs; (b) 0471 54 50 77 staat op de
+      factuur maar bestaat niet in het register: uitzoeken van wie, dan
+      toevoegen met kostprijs 21,04/mnd, peildatum 2026-07-06.
 - [ ] **Xelion: houden-of-schrappen-ronde** met Mehdi ("de rest gaan we
       schrappen, dat we onze tijd niet onnodig zitten") - voorbereiden met
       de stil-lijst en belstatistieken per nummer.
