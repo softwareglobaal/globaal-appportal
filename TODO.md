@@ -243,10 +243,13 @@
       kunnen tellen ("hoeveel finance-nummers hebben we"). Daarna alle
       bestaande doelen hermappen (energie-efficient hoort bij gebruikt-voor,
       dubbele sales-varianten samenvoegen).
-- [ ] **"Gebruikt voor" alleen bij afwijking**: uitzonderingen zoals Contrax,
-      TKN-tekenwerk, klantnummers (Verbraeken en Co, Yannick Technics),
-      Cataline, sales-campagnes. Niet herhalen wanneer gebruiker = betaler
-      (het "Shaniel is de voornaam van Shaniel"-argument).
+- [x] **"Gebruikt voor" als vaste keuzelijst** - GEBOUWD (2026-07-06,
+      migratie 045+046): opties uit het transcript (Contrax, Tekenwerk,
+      Energie-efficiënt, sales-campagnes, Verbraeken en Co, Yannick
+      Technics, Cataline) in communicatie.lijst; detailpaneel en
+      toevoegformulier tonen een dropdown; redundante zelf-verwijzingen
+      opgeschoond (niet herhalen wanneer gebruiker = betaler). Rest:
+      bestaande rijen hermappen naar de opties (datascript klaar).
 - [ ] **Ontbrekende kostprijzen aanvullen**: o.a. de Proximus-nummers
       (Cataline). Datawerk met de facturen ernaast; peildatum meteen zetten.
 - [ ] **Actief vs niet-actief uit de statistieken**: welke nummers zijn echt
