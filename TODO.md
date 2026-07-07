@@ -262,6 +262,61 @@
       een per firma.
 - UNABO-spelling blijft zoals hij is (United + Bouw), geen actie.
 
+## Meeting Mehdi + Joan 2026-07-07 (register-verfijning + Octopus-spoor)
+
+> Bron: Fathom-transcript 69 min. Quick wins zijn gebouwd (migratie 051 +
+> communicatie-app + datascript); de rest staat hieronder open.
+
+- [x] **Spoofing-nummers tellen niet als Xelion** - GEBOUWD (migratie 051):
+      kolom xelion_uitgesloten; vlag telt door in register, statistieken,
+      stil-lijst en belvolgorde-spiegel; schakelaar in het detailpaneel.
+      Sleutel-analogie Mehdi: een sleutel hebben is niet met de auto rijden.
+- [x] **Status "Vervallen"** - GEBOUWD (migratie 051): derde status naast
+      Actief en Niet-actief; definitief weg, niet te heractiveren. Eigen
+      badge-kleur; datascript zet de vervallen Proximus-reeks om.
+- [x] **Abonnementstype per nummer** - GEBOUWD (migratie 051): veld naast de
+      kostprijs (bv. Business Mobile Smart), kolom via Mijn view,
+      detailpaneel-veld; datascript vult de actieve Proximus-nummers.
+- [x] **WhatsApp-datawerk Mega** (datascript): platform WhatsApp op de drie
+      WhatsApp-nummers; verantwoordelijken Siyan (Contrax), Shelton (H-A),
+      Ashvand (EE); Vlad-verificatie afgerond (aandacht-notitie weg);
+      datasim-context (Mehdi's auto + It's me Zohreh) vastgelegd.
+- [ ] **Meerdere doelen per nummer** (structuurpunt): Mehdi's 0486 is
+      tegelijk prive, WhatsApp en It's me; Zohreh's datasim auto-data en
+      It's me. Ontwerpkeuze nodig (koppeltabel of meerdere regels) voor het
+      invoerwerk van Ian verder gaat. Brainstorm met Shaniel.
+- [ ] **Ian vragen de Xelion-nummers na te lopen** (actie Shaniel):
+      gebruikt-voor en verantwoordelijken per nummer; Mega en Proximus zijn
+      door Mehdi zelf gedaan.
+- [ ] **Octopus bellen over API-toegang** (actie Shaniel, "vandaag"): het is
+      een API, geen MCP; zonder toegang stappen we over. Daarna eigen
+      MCP-server op hun API bouwen. Dit is gate G1 uit PLAN.md.
+- [ ] **Joan levert aan**: (a) Octopus-terminologie (dagboeken, relatie
+      K/L/KL, relatie-ID vs grootboekrekening, grootboeknummers per firma);
+      (b) leveranciersinfo Mega/Proximus/Close Call zoals in Octopus, met
+      printscreens; (c) relaties-export met ID's (alles; wij filteren
+      intern/extern); (d) voorbeeld-facturatievoorstellen (Delivery Notes)
+      als PDF met nummer. Joan past ook de Delivery Note-nummering aan
+      zodat die niet gelijk loopt met factuurnummers.
+- [ ] **Leveranciers-entiteit uitbouwen met Octopus-velden**: ons
+      klantnummer bij de leverancier (nodig om te bellen), grootboek per
+      firma, dagboek, relatie-ID; leverancier-record voor alles wat we
+      betalen. Bouwen zodra Joan's aanlevering binnen is.
+- [ ] **Validatie-beeld per leverancier**: contract + aantal nummers +
+      verwachte maandbetaling, zodat een binnenkomende factuur in een blik
+      te valideren is.
+- [ ] **Facturatievoorstel-workflow** (na de Octopus-koppeling): geen
+      facturen vooraf of proforma (BTW); voorstellen klaarzetten per
+      projectdeel, dupliceren per fase, delivery-note-nummer als unieke
+      link naar dashboard/Monday met activeer-knop; test met
+      1-cent-voorstellen intercompany.
+- [ ] **WhatsApp-nummer voor Angela** regelen en registreren.
+- [ ] **VERRE TOEKOMST**: domiciliering terug zodra het validatie-framework
+      staat (betaalwerk Angela vervalt); AI-verificatie van facturen buiten
+      Peppel (fraudegevoelig); KBC-koppeling onderzoeken; MacMini/VM-opzet
+      voor meerdere WhatsApp-nummers (expliciet geparkeerd tot dit stuk af
+      is).
+
 ## Meeting Mehdi 2026-07-06 (tweede, Mega/Proximus-opschoning)
 
 > Bron: Fathom-transcript 2 + Proximus-factuurscreenshot (Shaniel).
