@@ -289,15 +289,29 @@ edit-onderscheid vandaag zijn als edit overgenomen):
 | status | mehdi | - |
 | renovision | mehdi | samad |
 | renovision-mehdi | - | mehdi |
-| omv-v2 | (binden of verwijderen) | |
+| omv-v2 | (voorlopig alleen `admin`, zie hieronder) | |
 
 In-app-verfijning die blijft bestaan naast het read/edit-model (nested):
 agenda-volledig en agenda-architect (kijk-tiers van de agenda-app). Het
 validatiescript moet zulke gedocumenteerde in-app-groepen toestaan.
 
-Open vragen bij dit voorstel: (a) omv-v2 binden of weg, (b) doel van
-`toegangsbeheerders`, (c) telefoonregister meenemen of uitzonderen,
-(d) klopt de edit-inschatting voor chaos/kosten/barstenscheuren (apps zonder
-edit-onderscheid vandaag), (e) appnaam per app bevestigen (slug `stage` vs
-naam `stagebeoordeling`, `medewerkers` vs `organisatie`, `status` vs
-`monitoring`).
+Besluiten 2026-07-07 (tweede ronde, Mehdi):
+
+- **Tabel goedgekeurd**, inclusief de edit-inschatting voor chaos, kosten en
+  barstenscheuren.
+- **omv-v2**: voorlopig alleen de groep `admin`; interim-fix via
+  `sh scripts/ak-exec.sh scripts/fix-omv-v2-binding.py`, definitieve plek
+  volgt in de migratie.
+- **Appnamen = de duidelijke naam; de app-slug wordt ernaar omgezet**:
+  `stage` wordt `stagebeoordeling`, `medewerkers` wordt `organisatie`,
+  `status` wordt `monitoring`. Slug-hernoeming is voor forward-auth-apps
+  goedkoop (de slug is een interne id: bindings en outpost hangen aan de
+  provider, tegels aan `meta_launch_url`; alleen setup-scripts en docs
+  noemen de slug). De **subdomeinen blijven ongewijzigd**
+  (stage.<domein>, organisatie.<domein>, status.<domein>); hernoemen daarvan
+  raakt certs, nginx en bookmarks en is bewust uitgesteld. De mapping
+  appnaam - subdomein komt in `docs/nieuwe-app-toevoegen.md`.
+
+Nog open: (b) doel van `toegangsbeheerders` (onderzoekscript klaar:
+`sh scripts/ak-exec.sh scripts/onderzoek-toegangsbeheerders.py`),
+(c) telefoonregister meenemen of uitzonderen (overleg met de collega).
