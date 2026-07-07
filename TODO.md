@@ -270,11 +270,13 @@
 - [ ] **0486 33 35 21 bijwerken** (script geleverd): doel-bullet Spoofing
       erbij, xelion_uitgesloten aan (roaming-spoofing vanuit buitenland),
       aandacht-notitie.
-- [ ] **Meerdere kostregels per nummer** - BLUEPRINT LIGT KLAAR:
-      docs/ontwerp-kostregels-en-kostenadviseur.md (tabel nummer_kost,
-      migratiepad-opties, UI met plus-patroon, 4 beslispunten). Een nummer
-      kan bij meerdere partijen tegelijk kosten (Proximus-abonnement +
-      Xelion-spoofing). Bouwen na akkoord op de beslispunten.
+- [x] **Meerdere kostregels per nummer** - GEBOUWD (migratie 053, blueprint
+      goedgekeurd: optie B nu / A later, per-minuut-regels volwaardig
+      zichtbaar): kostenblok met plus-patroon in het detailpaneel,
+      register-kolom toont maandtotaal plus per-minuut-tarieven met
+      opbouw-hover, leverancier-totaal telt kostregels mee. Adviseur:
+      on-demand lijst, opzegtermijn/contract mag harde blokkade zijn
+      (fase 2, na het vullen van de spoofing-kosten).
 - [ ] **Xelion-spoofingkosten achterhalen** (datawerk, na de kostregels):
       wat rekent Close Call per spoofing-nummer; regels vullen bij de drie
       spoofing-nummers (factuur ernaast, peildatum zetten).
