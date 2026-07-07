@@ -277,9 +277,15 @@
       opbouw-hover, leverancier-totaal telt kostregels mee. Adviseur:
       on-demand lijst, opzegtermijn/contract mag harde blokkade zijn
       (fase 2, na het vullen van de spoofing-kosten).
-- [ ] **Xelion-spoofingkosten achterhalen** (datawerk, na de kostregels):
-      wat rekent Close Call per spoofing-nummer; regels vullen bij de drie
-      spoofing-nummers (factuur ernaast, peildatum zetten).
+- [ ] **Xelion-spoofingkosten achterhalen** (datawerk): het kostenblok is
+      klaar maar de juiste factuur ontbreekt nog (aangeleverde PDF 2026-141
+      bleek een omvormer-factuur van Patrickshop, geen Close Call). Zodra
+      de echte factuur er is: regels vullen bij de drie spoofing-nummers.
+- [x] **Mega-factuur 1126002490 verwerkt** (2026-07-02): 5 nummers elk
+      3,31/mnd excl. BTW, abonnementstype Mega Mobile 5 GB, contract
+      onbepaalde duur, peildatum gezet (script geleverd). Juni-verbruik:
+      nul belminuten op alle vijf; alleen de WhatsApp-nummers gebruiken
+      data.
 - [ ] **AI-kostenadviseur** (fase 2 van de blueprint): usage + kosten +
       registercontext -> regels-signalen -> AI-advies afbouwen/behouden/
       navragen met redenering en besparing; accepteer/afwijs-knoppen met
@@ -376,9 +382,11 @@
       vermoedelijke datasim (67 GB, geen gesprekken). Twee kleine
       verificaties staan als aandacht-notitie op de nummers zelf:
       naam Vlad bevestigen en uitzoeken welk apparaat de datasim voedt.
-- [ ] **Xelion: houden-of-schrappen-ronde** met Mehdi ("de rest gaan we
-      schrappen, dat we onze tijd niet onnodig zitten") - voorbereiden met
-      de stil-lijst en belstatistieken per nummer.
+- [ ] **Xelion: houden-of-schrappen-ronde** met Mehdi - VOORBEREIDING
+      GEBOUWD (2026-07-07): kandidatenlijst op de statistieken-tab met
+      maandkost, 90-dagen-gebruik, factoren (WhatsApp/ItsMe/datasim) en
+      de validatie-knoppen direct in de lijst. Rest: de ronde zelf met
+      Mehdi doorlopen en beslissingen zetten.
 
 ## Meeting 2026-07-03 (communicatie-review, met Siyan/Angela)
 
