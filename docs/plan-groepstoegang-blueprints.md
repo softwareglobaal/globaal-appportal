@@ -245,3 +245,59 @@ testgebruikers in de nieuwe groepen; docs (README, TECHNICAL-REFERENCE §4 en
    versienummer per spoke-repo (aanbeveling; drift wordt door `sync-check.py`
    gesignaleerd) of pip-install uit een private repo (vereist credentials in
    elke Docker-build).
+
+## 7. Bijlage: inventarisatie 2026-07-07 en hertoewijzingsvoorstel
+
+Inventarisatie gedraaid op de VM (output in de sessie van 2026-07-07).
+Kernfeiten:
+
+- `manager` en `admin` bevatten allebei alleen akadmin en mehdi. Niemand
+  anders is van die groepen afhankelijk; opheffen kost geen enkele collega
+  toegang.
+- **omv-v2 heeft geen enkele binding** en is daardoor toegankelijk voor elke
+  ingelogde gebruiker. Direct beslissen: binden of verwijderen.
+- Er bestaan apps/groepen die niet in de repo-docs staan: renovision,
+  renovision-mehdi (beide met -bewerken), agenda-architect/-volledig,
+  toegangsbeheerders (alleen siyan; doel onbekend). §12.1 van
+  TECHNICAL-REFERENCE is verouderd.
+- draaiboek en draaiboek-editors zijn leeg; alleen admin/manager (= mehdi)
+  kan er nu in.
+- telefoonregister is de repo van de collega (ongemoeid laten): de groepen
+  `telefoonregister`/`telefoonregister-editors` migreren vereist wijzigingen
+  in die app. Mogelijk uitzonderen of pas na overleg.
+
+Voorstel (ter goedkeuring; akadmin staat bewust nergens, superuser =
+break-glass; uitgangspunt is de huidige effectieve toegang, apps zonder
+edit-onderscheid vandaag zijn als edit overgenomen):
+
+| App | app-{naam}-read | app-{naam}-edit |
+|---|---|---|
+| omv | - | mehdi |
+| schuldentracker | mehdi | angela |
+| chaos | - | angela, mehdi, siyan |
+| agenda | angela, matthew, siyan | mehdi |
+| telefoonregister | (uitzonderen? zie boven) | |
+| facturatie | - | mehdi |
+| barstenscheuren | - | matthew, mehdi |
+| vermogen | - | mehdi |
+| draaiboek | - | mehdi |
+| communicatie | mehdi | siyan |
+| kosten | angela | mehdi |
+| factuurrouter | - | mehdi |
+| stagebeoordeling | mehdi | raisha |
+| medewerkers | - | mehdi |
+| status | mehdi | - |
+| renovision | mehdi | samad |
+| renovision-mehdi | - | mehdi |
+| omv-v2 | (binden of verwijderen) | |
+
+In-app-verfijning die blijft bestaan naast het read/edit-model (nested):
+agenda-volledig en agenda-architect (kijk-tiers van de agenda-app). Het
+validatiescript moet zulke gedocumenteerde in-app-groepen toestaan.
+
+Open vragen bij dit voorstel: (a) omv-v2 binden of weg, (b) doel van
+`toegangsbeheerders`, (c) telefoonregister meenemen of uitzonderen,
+(d) klopt de edit-inschatting voor chaos/kosten/barstenscheuren (apps zonder
+edit-onderscheid vandaag), (e) appnaam per app bevestigen (slug `stage` vs
+naam `stagebeoordeling`, `medewerkers` vs `organisatie`, `status` vs
+`monitoring`).
