@@ -253,8 +253,9 @@
       Yannick Technics op doel "Klantnummer [firmanaam]" met gebruikt-voor
       Contrax; TKN-cluster op Tekenwerk; EE-cluster op Energie-efficiënt.
       De doel-teksten zelf normaliseren volgt in de taxonomie-ronde.
-- [ ] **Ontbrekende kostprijzen aanvullen**: o.a. de Proximus-nummers
-      (Cataline). Datawerk met de facturen ernaast; peildatum meteen zetten.
+- [x] **Ontbrekende kostprijzen aanvullen** - Proximus GEDAAN (factuur
+      7604078875 verwerkt, 21,04/mnd + peildatum). Nog open: peildatum van
+      de Mega-nummers (factuur Mega ernaast leggen; prijs 3,31 staat er al).
 - [ ] **Actief vs niet-actief uit de statistieken**: welke nummers zijn echt
       nog in gebruik (kiem: de stil-lijst). Gesprek brak hier af; precieze
       wens eerst afmaken met Mehdi.
