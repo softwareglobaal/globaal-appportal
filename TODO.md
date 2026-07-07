@@ -553,6 +553,12 @@
       (d) toegangsreview Authentik-groepen (periodiek), (e) app.gebruiker-doorgifte
       in communicatie (Node/Knex; Flask-apps + audit_overzicht-view GEDAAN,
       migratie 024).
+- [ ] **Group-based toegang via Authentik Blueprints** - plan vastgesteld
+      2026-07-07, zie `docs/plan-groepstoegang-blueprints.md`. Per app
+      `app-{naam}-read`/`-edit`; groep `manager` verdwijnt, `admin` op termijn
+      ook; akadmin = break-glass. Eerste stap: inventarisatie draaien
+      (`sh scripts/ak-exec.sh scripts/inventariseer-groepen.py`) en de
+      hertoewijzing per persoon laten goedkeuren. Uitvoering pas na akkoord.
 - [ ] **Data-curatie Communicatie** (Siyan): doorfactuur-firma's, afdelingen, doelen en
       belvolgorde-queues invullen; oude records actief/niet-actief zetten.
 - [ ] **Close Call afletteren**: factuur 2025-0119 telt 41 telefoonnummers, het register
