@@ -243,13 +243,16 @@
       kunnen tellen ("hoeveel finance-nummers hebben we"). Daarna alle
       bestaande doelen hermappen (energie-efficient hoort bij gebruikt-voor,
       dubbele sales-varianten samenvoegen).
-- [x] **"Gebruikt voor" als vaste keuzelijst** - GEBOUWD (2026-07-06,
-      migratie 045+046): opties uit het transcript (Contrax, Tekenwerk,
-      Energie-efficiënt, sales-campagnes, Verbraeken en Co, Yannick
-      Technics, Cataline) in communicatie.lijst; detailpaneel en
-      toevoegformulier tonen een dropdown; redundante zelf-verwijzingen
-      opgeschoond (niet herhalen wanneer gebruiker = betaler). Rest:
-      bestaande rijen hermappen naar de opties (datascript klaar).
+- [x] **"Gebruikt voor" als vaste keuzelijst + data hermapte** - KLAAR
+      (2026-07-06, migraties 045-048): opties Contrax, Tekenwerk,
+      Energie-efficiënt, Sales-campagne Unabo, Sales Unabo inbound en
+      Privé in communicatie.lijst; dropdown in detailpaneel en
+      toevoegformulier; redundante zelf-verwijzingen opgeschoond. Alle 34
+      afwijkende nummers hermapte: persoonlijke nummers (doel = naam
+      collega) op Privé incl. Telesur; klantnummers Verbraeken & Co en
+      Yannick Technics op doel "Klantnummer [firmanaam]" met gebruikt-voor
+      Contrax; TKN-cluster op Tekenwerk; EE-cluster op Energie-efficiënt.
+      De doel-teksten zelf normaliseren volgt in de taxonomie-ronde.
 - [ ] **Ontbrekende kostprijzen aanvullen**: o.a. de Proximus-nummers
       (Cataline). Datawerk met de facturen ernaast; peildatum meteen zetten.
 - [ ] **Actief vs niet-actief uit de statistieken**: welke nummers zijn echt
