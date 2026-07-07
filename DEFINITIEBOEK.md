@@ -151,6 +151,17 @@ hoef je niets uit te leggen (meeting 2026-07-06, het "Shaniel is de voornaam
 van Shaniel"-argument). Zodra de klantendatabase bestaat worden klanten hier
 echte verwijzingen.
 
+### Doel
+Waarvoor het nummer dient, als **uniek en telbaar begrip op categorie-niveau**
+(meeting 2026-07-06, de scheidsrechter-analogie): **Algemeen** (kantoor- of
+hoofdnummer; wint van "office" en "main number"), **Sales**, **Finance**,
+**Spoofing**, **Cold calling**, **B2B**, **Standaardprojecten** (wint van
+"Light Projects", zonder HA-prefix) of **WhatsApp** (migratie 049; beheer in
+`communicatie.lijst`, categorie "Doel"). Twee patroon-vormen daarnaast: bij
+privé-nummers is het doel de **naam van de collega**, bij klantnummers
+**"Klantnummer [firmanaam]"**. Wie het nummer gebruikt hoort níét in het doel:
+dat staat in gebruikt-voor. Niet "functie", dat woord is voor personen.
+
 ### Kostprijs
 De **kostprijs van het abonnement in euro exclusief BTW**, overgenomen van de laatste
 factuur van de leverancier. Niet "vast": elke prijs kan veranderen (meeting
