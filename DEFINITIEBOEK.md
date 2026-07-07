@@ -141,9 +141,11 @@ naar" (meeting 2026-07-06): er wordt niets echt gefactureerd. Sleutel blijft
 ### Gebruikt voor
 Waarvoor de resource **feitelijk gebruikt wordt**, gekozen uit een **vaste
 keuzelijst** (migratie 046; beheer in `communicatie.lijst`, categorie "Gebruikt
-voor"): Contrax, Tekenwerk, Energie-efficiënt, de sales-campagnes, klanten
-(Verbraeken en Co, Yannick Technics) en **Privé** voor persoonlijke nummers
-(het doel is dan de naam van de collega, migratie 047).
+voor"): Contrax, Tekenwerk, Energie-efficiënt, de sales-campagnes en **Privé**.
+Bij persoonlijke nummers is het doel de naam van de collega en gebruikt-voor
+Privé (migratie 047); bij **klantnummers** is het doel "Klantnummer
+[firmanaam]" en gebruikt-voor de firma van de groep die de klant bedient,
+bv. Contrax voor Verbraeken & Co en Yannick Technics (migratie 048).
 **Alleen invullen wanneer dat afwijkt van wie betaalt**: aan jezelf
 hoef je niets uit te leggen (meeting 2026-07-06, het "Shaniel is de voornaam
 van Shaniel"-argument). Zodra de klantendatabase bestaat worden klanten hier
