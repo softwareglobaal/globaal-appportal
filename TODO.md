@@ -282,10 +282,12 @@
       WhatsApp-nummers; verantwoordelijken Siyan (Contrax), Shelton (H-A),
       Ashvand (EE); Vlad-verificatie afgerond (aandacht-notitie weg);
       datasim-context (Mehdi's auto + It's me Zohreh) vastgelegd.
-- [ ] **Meerdere doelen per nummer** (structuurpunt): Mehdi's 0486 is
-      tegelijk prive, WhatsApp en It's me; Zohreh's datasim auto-data en
-      It's me. Ontwerpkeuze nodig (koppeltabel of meerdere regels) voor het
-      invoerwerk van Ian verder gaat. Brainstorm met Shaniel.
+- [x] **Meerdere doelen per nummer** - GROUNDWORK GEBOUWD (2026-07-07,
+      ontwerp Shaniel): plus-knop in detailpaneel en register-cel, elk doel
+      een eigen bullet, klik op een bullet bewerkt dat ene doel (leegmaken
+      = weg). Opslag in het bestaande doel-veld met "; " als scheiding:
+      geen migratie, zoeken/statistieken blijven werken, tellen per doel =
+      splitsen. Bij de dropdown-only-slag later evt. naar een koppeltabel.
 - [ ] **Ian vragen de Xelion-nummers na te lopen** (actie Shaniel):
       gebruikt-voor en verantwoordelijken per nummer; Mega en Proximus zijn
       door Mehdi zelf gedaan.
