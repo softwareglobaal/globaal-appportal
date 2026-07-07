@@ -263,6 +263,39 @@
       een per firma.
 - UNABO-spelling blijft zoals hij is (United + Bouw), geen actie.
 
+## Meeting Mehdi 2026-07-07 (avond: spoofing, dubbele kosten, afbouw)
+
+> Bron: Fathom-transcript 19 min. Taken bevestigd door Shaniel 2026-07-07.
+
+- [ ] **0486 33 35 21 bijwerken** (script geleverd): doel-bullet Spoofing
+      erbij, xelion_uitgesloten aan (roaming-spoofing vanuit buitenland),
+      aandacht-notitie.
+- [ ] **Meerdere kostregels per nummer** - BLUEPRINT LIGT KLAAR:
+      docs/ontwerp-kostregels-en-kostenadviseur.md (tabel nummer_kost,
+      migratiepad-opties, UI met plus-patroon, 4 beslispunten). Een nummer
+      kan bij meerdere partijen tegelijk kosten (Proximus-abonnement +
+      Xelion-spoofing). Bouwen na akkoord op de beslispunten.
+- [ ] **Xelion-spoofingkosten achterhalen** (datawerk, na de kostregels):
+      wat rekent Close Call per spoofing-nummer; regels vullen bij de drie
+      spoofing-nummers (factuur ernaast, peildatum zetten).
+- [ ] **AI-kostenadviseur** (fase 2 van de blueprint): usage + kosten +
+      registercontext -> regels-signalen -> AI-advies afbouwen/behouden/
+      navragen met redenering en besparing; accepteer/afwijs-knoppen met
+      logging. Geen usage is niet automatisch opzeggen: andere factoren
+      (doelen, buitenland, opzegtermijn) wegen mee.
+- [ ] **Afbouw-kandidatenlijst** (beleidslijn Mehdi, 99-auto's-analogie):
+      ongebruikte (persoonlijke) nummers met belstatistieken als
+      opzeg-kandidaten voor de houden-of-schrappen-ronde.
+- [ ] **GEPARKEERD - transcripts als beslicontext**: Mehdi's
+      nummer-gesprekken structureel verzamelen (Plaud-connector nog
+      autoriseren) zodat de adviseur leert hoe Mehdi redeneert. Besluit
+      volgt achteraf.
+- [ ] **Proximus afronden in het dashboard**: openstaande datascripts
+      draaien (quick wins + ItsMe + 0486); klantnummer 624745262 bij de
+      leverancier vastleggen zodra de leverancier-velden er zijn (wacht op
+      Joan's Octopus-aanlevering); Mega-peildatum bij de eerstvolgende
+      Mega-factuur.
+
 ## Meeting Mehdi + Joan 2026-07-07 (register-verfijning + Octopus-spoor)
 
 > Bron: Fathom-transcript 69 min. Quick wins zijn gebouwd (migratie 051 +
