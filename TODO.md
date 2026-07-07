@@ -281,7 +281,7 @@
 - [x] **WhatsApp-datawerk Mega** (datascript): platform WhatsApp op de drie
       WhatsApp-nummers; verantwoordelijken Siyan (Contrax), Shelton (H-A),
       Ashvand (EE); Vlad-verificatie afgerond (aandacht-notitie weg);
-      datasim-context (Mehdi's auto + It's me Zohreh) vastgelegd.
+      datasim-context (Mehdi's auto + ItsMe Zohreh) vastgelegd.
 - [x] **Meerdere doelen per nummer** - GROUNDWORK GEBOUWD (2026-07-07,
       ontwerp Shaniel): plus-knop in detailpaneel en register-cel, elk doel
       een eigen bullet, klik op een bullet bewerkt dat ene doel (leegmaken
