@@ -63,6 +63,45 @@
    Excel-export waar dat zinvol is; tabellen met veel kolommen krijgen een
    instelbare kolomkeuze.
 
+### De AI-tells: vermijdlijst
+
+AI-tools produceren herkenbare standaardkeuzes die elke gegenereerde
+website op elkaar doen lijken. **Loop deze lijst vóór oplevering na en
+haal alles weg wat erop staat** - ook (juist) als Claude het uit zichzelf
+toevoegde. Instrueer je AI-sessie er vooraf mee: "vermijd de AI-tells uit
+het template-document".
+
+**Visueel:**
+- Emoji in koppen, knoppen, labels of lijstjes
+- Rijen icoonkaarten (drie of vier kaarten naast elkaar met icoon, titel
+  en één zin eronder)
+- Paars/indigo/violet als hoofdkleur en kleurverlopen (gradients) in
+  knoppen, koppen of achtergronden
+- Hero-secties met een grote tagline en een "Get started"-knop - dit zijn
+  interne werkinstrumenten, geen landingspagina's
+- Glassmorphism, zware slagschaduwen, overal extra grote afgeronde hoeken
+- Sparkle- en robot-iconen, "AI-powered"-badges, glow-effecten
+- Typanimaties, confetti, fade-ins bij het scrollen
+- Donkere modus als blikvanger terwijl niemand erom vroeg
+- Voorbeeld- of placeholderdata die nog zichtbaar is bij oplevering
+
+**Tekstueel:**
+- Em-dashes (het lange gedachtestreepje)
+- Marketingwoorden: "naadloos", "krachtig", "moeiteloos", "slim",
+  "geavanceerd", "revolutionair", "alles-in-een"
+- Drieslagen als "Snel. Simpel. Veilig."
+- Titels met dubbele punt ("Inzicht: uw data in beeld")
+- Uitroeptekens en juichende microcopy ("Gelukt! Je bent er bijna!")
+- Engels-Nederlandse mix ("Save", "Dashboard overview" tussen
+  Nederlandse labels) - alles in één taal, bij ons Nederlands
+- Uitleg die niemand nodig heeft ("Dit dashboard geeft u een overzicht
+  van...") - de app moet zichzelf uitleggen
+
+De toets is simpel: als een schermafdruk van je app ook de demo van een
+willekeurige AI-tool zou kunnen zijn, is het niet af. Kijk naar wat een
+degelijke boekhoud- of bankapplicatie doet: rustig, dicht op de data,
+geen versiering.
+
 ## 4. Oplevering: de checklist
 
 - [ ] Repo met `Dockerfile`; de app start met alleen omgevingsvariabelen
@@ -73,7 +112,7 @@
 - [ ] Weergavenamen ongemoeid gelaten
 - [ ] Terminologie consequent, afwijkingen gemeld
 - [ ] Elk getal heeft een drill-down
-- [ ] Geen emoji, geen em-dash, geen AI-opsmuk
+- [ ] De AI-tells-vermijdlijst nagelopen, alles wat matcht verwijderd
 - [ ] Opgeslagen data in één datamap
 
 Twijfel je ergens over, vraag het vóór je bouwt - een vraag kost vijf
