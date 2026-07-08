@@ -278,11 +278,15 @@
       diagnose toonde nul niet-gematchte queue-leden; het was de afgeleide
       Xelion-queue die het lege register-veld opvulde. Verzamelscript zet
       de echte verantwoordelijken; geen code-bug.
-- [ ] **Octopus-pakket van Joan verwerken** (ontvangen 2026-07-08):
-      relatie-exports per firma, grootboekrekeningen per firma, dagboeken,
-      voorbeeld-facturatievoorstel. Volgende bouwblok: leverancier-velden
-      (klantnummer, grootboek per firma, dagboek, relatie-ID) + relaties
-      importeren met intern/extern-filter.
+- [x] **Octopus-pakket van Joan verwerkt** - GEBOUWD (2026-07-08,
+      migratie 056 + seed): 2313 relaties uit 8 boekhoudingen en 52
+      grootboekregels geimporteerd (idempotent); Proximus/Mega/Close Call
+      gekoppeld op BTW-nummer; interne relaties gevlagd; leverancier-paneel
+      toont per firma relatie-ID, grootboek en ons klantnummer. Open:
+      (a) overige leveranciers verzoenen met kern.leverancier,
+      (b) relatie-verkenner met intern/extern-filter (kiem klantendatabase:
+      684 HA-klanten zitten er al in), (c) dagboek-screenshots en
+      facturatievoorstel-flow verwerken zodra de Octopus-API er is.
 - [x] **Sim-foto's** - GEBOUWD (migratie 055): upload in de geheim-sectie
       (achter de Toon-knop, want PIN/PUK staan op de kaartfoto), client
       verkleint, thumbnails met verwijderknop, opslag in de database dus
