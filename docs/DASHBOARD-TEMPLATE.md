@@ -1,81 +1,80 @@
-# Dashboard-template - bindend referentiedocument
+# Dashboard-template - bouwgids voor apps op het Globaal-platform
 
-> **Status: BINDEND** (besloten in de meeting van 2026-07-08, Mehdi + Siyan:
-> "geen knowledge-document maar een template-document, voor iedereen, in een
-> keer opgelost - anders is dat broeie broeie"). Voor **iedereen** die een
-> dashboard voor de groep bouwt, met Claude of anders.
+> **Voor wie:** iedereen die een applicatie of dashboard bouwt dat op ons
+> platform komt te draaien - ook als je verder geen toegang hebt tot onze
+> systemen. Dit document is **zelfstandig**: alles wat je nodig hebt staat
+> erin, en het is het enige dat je nodig hebt.
 >
-> **Zo gebruik je het:** geef dit bestand aan het begin van elke
-> Claude Code-sessie als referentie mee ("volg DASHBOARD-TEMPLATE.md uit de
-> stack-repo") en lever je dashboard af volgens dit document. Vrij
-> experimenteren mag: een blueprint die hiervan afwijkt wordt niet
-> weggegooid maar omgezet naar dit template (voorbeeld: het sales-dashboard
-> van Siyan). Hoe eerder je het template volgt, hoe minder omzetwerk.
+> **Zo gebruik je het:** geef dit document aan het begin van elke
+> Claude-sessie mee als referentie ("volg dit document") en lever je app op
+> volgens de checklist onderaan. Vrij experimenteren mag: een blueprint die
+> hiervan afwijkt wordt niet weggegooid maar omgezet. Hoe eerder je dit
+> volgt, hoe sneller je app live staat.
+>
+> De **integratie** op het platform (eigen subdomein, single sign-on,
+> database-koppeling, deployment) doen wij. Jouw oplevering hoeft daar
+> niets van te weten; hij moet er alleen klaar voor zijn.
 
-## 1. Data: alles gelinkt, niets los
+## 1. Stack-eisen: zo draait je app bij ons
 
-1. **Personen, firma's, afdelingen en leveranciers komen uit `kern.*`** - de
-   centrale gebruikersdatabase. Nooit vrije tekst: "Joey" of "Shilton" als
-   losse string in je data is fout; het is een verwijzing naar de persoon of
-   de firma, of hij bestaat (nog) niet.
-2. **Displaynaam-regel**: personen heten overal `Voornaam (Afdeling)`
-   (Zoom-formaat), live opgebouwd uit kern; uitzondering is
-   `afdeling_in_naam = false` (dan de kale voornaam). Zelf namen knippen of
-   formatteren mag niet.
-3. **Terminologie uit het DEFINITIEBOEK** (`DEFINITIEBOEK.md`, machinebron
-   `kern.definitie`): een begrip heeft in het hele platform precies een
-   naam. Nieuwe term nodig? Eerst daar toevoegen, dan gebruiken.
-4. **Nieuwe entiteit of relatie?** Eerst een genummerde migratie in de
-   stack-repo (`db/migrations/`), met FK's naar kern. En in dezelfde sessie:
-   de Second Brain (graaf.py) en de profielen bijwerken, anders bestaat de
-   relatie alleen in jouw app.
+1. **Eén container.** Je app draait als één service met een `Dockerfile`
+   in de repo-root. De poort komt uit de omgevingsvariabele `PORT`.
+2. **Geen eigen login.** Ons platform zet een login-laag (single sign-on)
+   vóór elke app. Bouw dus geen loginpagina, wachtwoorden of sessies: je
+   app mag ervan uitgaan dat elke bezoeker al ingelogd en vertrouwd is.
+   Heeft je app rollen nodig (bv. alleen-lezen versus beheer), maak die
+   instelbaar via omgevingsvariabelen; de details stemmen we af bij
+   integratie.
+3. **Alle configuratie via omgevingsvariabelen.** API-sleutels, tokens en
+   instellingen staan nooit in de code, nooit in git en nooit in
+   screenshots - ook niet tijdelijk. De README somt elke variabele op met
+   een regel uitleg.
+4. **Data in één map.** Slaat je app iets op, doe dat in één datamap
+   (bv. `/app/data`), zodat wij die als volume kunnen koppelen. Koppeling
+   aan onze centrale database is mogelijk maar gebeurt in overleg.
+5. **Geen aannames over het adres.** Geen hardgecodeerde domeinen of
+   poorten in links; gebruik relatieve paden of een instelbare basis-URL.
 
-## 2. UX-regels
+## 2. Data-regels: alles gelinkt, niets los
 
-1. **Elk getal is doorklikbaar** naar de records erachter. Een KPI of teller
-   zonder drill-down is niet af.
-2. **AppPortal-huisstijl**, bewust ontdaan van AI-tells: geen emoji, geen
-   em-dash, geen icoonkaarten of taglines. Kijk naar het Medewerkers- of
-   Communicatie-dashboard voor de visuele taal.
-3. Firma's als volledige naam, personen klikbaar naar hun profiel,
-   KPI-cijfers werken als filter, Excel-export waar dat zinvol is.
-4. Kolomkoppen en tooltips komen uit `kern.definitie` waar een term bestaat.
+1. **Personen en firma's zijn verwijzingen, geen losse tekst.** Bij ons
+   bestaat elke persoon en elke firma precies één keer, centraal; apps
+   verwijzen daarnaar. Hardgecodeerde namen verspreid door je code of data
+   ("Joey", "Shilton") betekenen omzetwerk. Houd namen en entiteiten dus
+   bij elkaar in één datalaag of configuratie, zodat ze bij integratie in
+   één beweging aan onze centrale lijsten te koppelen zijn.
+2. **Namen niet zelf bewerken.** De weergavenaam van een persoon wordt
+   centraal bepaald. Toon wat je aangeleverd krijgt; knip geen voornamen
+   af en verzin geen eigen formaat.
+3. **Eén begrip, één woord.** Gebruik de terminologie die je bij de
+   opdracht krijgt en houd die overal exact gelijk (dus niet "office",
+   "bureau" en "kantoor" door elkaar voor hetzelfde). Ontbreekt er een
+   term, kies er één, gebruik die consequent en meld het - verzin geen
+   synoniemen.
 
-## 3. Architectuur
+## 3. Stijl en UX
 
-1. De app draait als **compose-service** in de appportal-stack achter
-   **nginx forward-auth (Authentik)**: eigen subdomein, eigen
-   nginx-template, tegel via een `scripts/add-*-app.py`-script. Geen eigen
-   loginsysteem.
-2. **Eigen repo** onder `softwareglobaal` met een CLAUDE.md; de VM checkt
-   uit en deployt automatisch (cron). Compose-wijzigingen alleen via git in
-   de stack-repo; machine-specifiek gaat in `.env`.
-3. **Secrets alleen in `.env` op de VM** - nooit in code, git of chat.
-4. **Database**: een eigen schema in de appportal-Postgres met echte FK's
-   naar kern, en een eigen DB-rol met minimale grants (lezen op kern,
-   schrijven op het eigen schema). Logs die een audit-spoor zijn, zijn
-   append-only (geen UPDATE/DELETE-grants).
+1. **Elk getal is doorklikbaar.** Elke KPI, teller of totaal leidt naar de
+   records erachter. Een cijfer zonder drill-down is niet af.
+2. **Rustige, zakelijke huisstijl.** Geen emoji, geen em-dash
+   (gedachtestreepje), geen icoonkaarten, geen marketing-taglines of
+   AI-achtige opsmuk. Functioneel en strak.
+3. Firma's voluit geschreven; KPI-cijfers werken als filter op de lijst;
+   Excel-export waar dat zinvol is; tabellen met veel kolommen krijgen een
+   instelbare kolomkeuze.
 
-## 4. Werkwijze
+## 4. Oplevering: de checklist
 
-1. Schemawijzigingen zijn **genummerde migraties** in de stack-repo, lokaal
-   getest voor de push; herhaalbare data-imports zijn idempotente seeds in
-   `db/seeds/`.
-2. **Frontend-code eerst parsen** (V8, bv. py-mini-racer) voor elke push:
-   auto-deploy zet elke push vrijwel direct live.
-3. **Documentatie in dezelfde push**: README van de app-repo, TODO.md,
-   DEFINITIEBOEK.md + `kern.definitie` bij nieuwe terminologie.
-4. Secrets, PIN/PUK en ander afgeschermd materiaal worden nooit door andere
-   apps of de AI gelezen.
-
-## Checklist voor livegang
-
-- [ ] Alle namen zijn verwijzingen naar kern (geen losse strings)
-- [ ] Displaynaam-regel gevolgd, nergens zelf geknipt
-- [ ] Termen bestaan in DEFINITIEBOEK/kern.definitie
+- [ ] Repo met `Dockerfile`; de app start met alleen omgevingsvariabelen
+- [ ] README: wat de app doet, elke omgevingsvariabele, de poort
+- [ ] Geen sleutels of tokens in code, git-historie of screenshots
+- [ ] Geen eigen loginpagina of gebruikersbeheer
+- [ ] Namen en entiteiten in één koppelbare laag, niet hardgecodeerd
+- [ ] Weergavenamen ongemoeid gelaten
+- [ ] Terminologie consequent, afwijkingen gemeld
 - [ ] Elk getal heeft een drill-down
-- [ ] Geen emoji, geen em-dash, geen AI-tells
-- [ ] Achter forward-auth, tegel geregeld, secrets in .env
-- [ ] Migraties genummerd en lokaal getest, frontend geparst
-- [ ] README + TODO + DEFINITIEBOEK in dezelfde push bijgewerkt
-- [ ] Second Brain en profielen kennen de nieuwe entiteiten/relaties
+- [ ] Geen emoji, geen em-dash, geen AI-opsmuk
+- [ ] Opgeslagen data in één datamap
+
+Twijfel je ergens over, vraag het vóór je bouwt - een vraag kost vijf
+minuten, omzetwerk kost dagen.
