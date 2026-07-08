@@ -20,6 +20,8 @@ logs/
 /vermogen/
 # Eigen repo (softwareglobaal/globaal-draaiboek), uitgecheckt op de VM.
 /draaiboek/
+# Eigen repo (softwareglobaal/sales-dashboard), uitgecheckt op de VM.
+/sales/
 # Installatie-restanten en lokale data op de VM
 /aws/
 awscliv2.zip

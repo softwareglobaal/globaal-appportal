@@ -17,10 +17,11 @@ services:
       start_period: 20s
     networks: [appnet]
 
-  # Sales — Pipedrive-dashboard (sales.globaal.be); stond eerder alleen als
-  # lokale drift op de VM, nu versiebeheerd (2026-07-08).
+  # Sales — Pipedrive-dashboard (sales.globaal.be). Eigen repo
+  # (softwareglobaal/sales-dashboard), uitgecheckt op de VM in ./sales met
+  # auto-deploy via deploy.sh + cron (2026-07-08), zoals de andere dashboards.
   app-sales:
-    build: https://github.com/softwareglobaal/sales-dashboard.git#main
+    build: ./sales
     image: appportal-sales
     restart: unless-stopped
     environment:
