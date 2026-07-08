@@ -4,8 +4,9 @@
 > (1) optie B nu, A later; (2) per-minuut-kostregels volwaardig zichtbaar,
 > inclusief bedrag; (3) advieslijst on-demand in het dashboard; (4) de
 > adviseur mag opzegtermijn en contracttype als harde blokkade gebruiken.
-> Fase 1 (kostregels) gebouwd via migratie 053; fase 2 (adviseur) volgt na
-> het vullen van de spoofing-kosten.
+> Fase 1 (kostregels) gebouwd via migratie 053; fase 2a (regels-adviseur +
+> advies_log, migratie 060) en fase 2b (AI-gewogen advies met één advies per
+> nummer, exacte kostopbouw en regels-terugval) gebouwd op 2026-07-08.
 > Bron: meeting Mehdi 2026-07-07 ("een nummer wordt twee keer berekend,
 > een keer bij Proximus en een keer voor spoofing") en de beleidslijn
 > kanalen afbouwen (de 99-auto's-analogie).

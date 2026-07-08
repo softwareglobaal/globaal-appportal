@@ -14,9 +14,12 @@
 
 ## STATUS
 
-- **Eerstvolgende stap: 3** (Octopus-verkenning) - **GEBLOKKEERD op gate G1**
-  (credentials). Zolang G1 open staat: restant-mapping van stap 2b afwerken via
-  de Disciplines-pagina zodra het team (G2) de twijfelgevallen bevestigt.
+- **Eerstvolgende stap: 3** (Octopus-verkenning) - het **API-spoor is
+  GEBLOKKEERD op gate G1** (credentials; belletje uitgesteld), maar het
+  **data-spoor is gestart**: Joan's export is geïmporteerd en het
+  entiteit/relatie-model (partij-laag) staat - zie de log van 2026-07-08.
+  Zolang G1 open staat: restant-mapping van stap 2b afwerken via de
+  Disciplines-pagina zodra het team (G2) de twijfelgevallen bevestigt.
 - Blokkades: G1 (Octopus-credentials, bij Mehdi) blokkeert stap 3.
 - Log:
   - 2026-07-04 - plan opgesteld (Fable 5); nog geen stap gestart.
@@ -33,6 +36,15 @@
     lege disciplines gemarkeerd; "nog niet gemapt"-lijst), software→discipline-
     edges + verzamelsignaal in de Second Brain. Restant 2b = teamwerk (G2).
     Wacht op VM: db-migrate (APPLY 030 + 031).
+  - 2026-07-08 - stap 3 DATA-SPOOR GESTART (Fable 5); API-spoor wacht op G1:
+    Joan's Octopus-export geïmporteerd (migraties 056-059 + seeds
+    octopus-import en partijen-opbouw: 2313 relaties, grootboek per firma,
+    expliciete boekhouding→firma-mapping) en het entiteit/relatie-model
+    staat als kern.partij (migratie 058, 1828 partijen, 0 wezen;
+    klant/leverancier zijn rollen van dezelfde partij, BTW groepeert).
+    Views erbovenop: Relaties-verkenner (organisatie), leverancier-paneel
+    met relatie-ID/grootboek/klantnummer (communicatie), interne
+    firma-relaties als kanten in de Second Brain.
 
 ## Gates (input van buiten, parallel aan te vragen)
 

@@ -1074,6 +1074,14 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   (voor- + familienaam - dit is de identiteitsbron); alle *andere* apps tonen personen in
   het **Zoom-formaat `Voornaam (Afdeling)`**, live opgebouwd uit `kern.persoon` +
   `kern.afdeling` (wijzigt iemand van afdeling, dan klopt de weergave overal vanzelf).
+  Uitzondering: staat `afdeling_in_naam` uit (migratie 054, bv. Mehdi, Angela,
+  Siyan), dan is de displaynaam de kale voornaam - en die displaynaam-regel
+  geldt platformbreed, dus ook in communicatie en de belvolgorde.
+- **Relaties-verkenner** (tab Relaties): alle partijen uit de Octopus-import
+  op partij-niveau (DEFINITIEBOEK: Partij) met filters op firma, soort en
+  koppeling; interne firma-relaties zijn ook kanten in de Second Brain. De
+  AI-chat krijgt een **ontkoppelde context**: externe contacten alleen als
+  aggregaat, met een eerlijke opsomming van wat niet is meegegeven.
 - Het **360°-profiel** toont per persoon: **Toegang (Authentik)** - groepen + afgeleide
   apps (§14.3) - en **Telefoonnummers** uit het telefoonregister (§14.4). Beide via
   read-only API-calls, best-effort (ontbreekt de bron → nette fallback, app blijft werken).
@@ -1175,6 +1183,23 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   provider-waarden, firma's op naam gematcht, verantwoordelijke uit de bestaande
   `persoon_id`-links; de rest is **curatiewerk in de nieuwe UI** (Siyan). Zelfde uuid's
   behouden, dus her-draaien is idempotent.
+- **Uitbreidingen 2026-07-07/08 (migraties 041-060):** **extern contact** als
+  entiteit met eigen kolom en graaf-laag; het kostenbeeld per nummer -
+  kostprijs excl. BTW van de laatste factuur, prijstype (maand/per minuut),
+  peildatum met 2-maanden-waarschuwing, abonnementstype en **kostregels**
+  voor dubbele kosten (Close Call-spoofing op Proximus-nummers, blueprint
+  `docs/ontwerp-kostregels-en-kostenadviseur.md`); doel-taxonomie en
+  gebruikt-voor als keuzelijsten; status **Vervallen** en vlag
+  **telt-niet-als-Xelion**; sim-foto's (`nummer_bijlage`, bytea, canvas-
+  verkleind); belstatistieken met **drill-down op elk getal** (zwevend
+  kaartje) plus veelbellers- en onbekende-nummers-lijsten; de
+  **kostenadviseur** (AI-gewogen via `ANTHROPIC_API_KEY`, effort low,
+  regels-terugval met bron-badge, beslissingen append-only in `advies_log`
+  met 60 dagen onderdrukking); de **Octopus-import en partij-laag**
+  (`kern.partij` + `kosten.octopus_relatie`/`octopus_grootboek`/
+  `octopus_boekhouding`, seeds in `db/seeds/`) met het leverancier-paneel
+  (relatie-ID, grootboek, ons klantnummer); personen overal als
+  **displaynaam** (Zoom-formaat, of kaal bij `afdeling_in_naam = false`).
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).

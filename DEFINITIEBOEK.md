@@ -90,6 +90,29 @@ upstream, levert aan jou; jij factureert niet aan hen.
 - Gebruik **"leverancier"** consistent - niet afwisselend "provider"/"platform" voor
   hetzelfde.
 
+### Partij
+Een **klant, leverancier of eigen firma als één entiteit met een eigen uniek
+nummer** (`kern.partij`, migratie 058), ongeacht in hoeveel Octopus-boekhoudingen
+hij voorkomt of onder welk relatienummer. **Klant en leverancier zijn rollen van
+dezelfde partij**, geen aparte dingen. Groepering: **BTW-nummer**, of exact
+dezelfde naam wanneer een BTW-nummer ontbreekt. De Relaties-verkenner op het
+Organisatie-dashboard toont deze laag; de boekhoudingen eronder zijn de
+Octopus-relaties.
+
+### Octopus-relatie
+Een klant of leverancier **zoals hij in de Octopus-boekhouding van één van onze
+firma's staat**, met zijn relatie-ID en grootboekrekening
+(`kosten.octopus_relatie`, migratie 056; boekhouding→firma-mapping in migratie
+059 - expliciet, nooit op naam raden). Elke firma heeft een eigen boekhouding
+met eigen nummers; het BTW-nummer groepeert dezelfde partij over boekhoudingen
+heen. **Octopus is hiervoor de source of truth**: wij linken, wij beheren het
+niet.
+
+### Klantnummer bij leverancier
+**Ons klantnummer in de administratie van de leverancier** (in Octopus het
+externe relatienummer). Nodig aan de telefoon: de leverancier vraagt er altijd
+naar. Zichtbaar op het leverancier-paneel in het Communicatie-dashboard.
+
 ### Platform
 De **software of dienst waarop iets draait** (bv. Xelion, Zoom). De leverancier
 factureert; het platform is wat je gebruikt - twee verschillende dingen die elk hun
@@ -178,6 +201,43 @@ maandbedragen tellen mee in maandtotalen.
 De **datum van de laatste factuur** waarvan de kostprijs is overgenomen. Ouder dan
 **2 maanden** geeft een waarschuwing in het register: mogelijk is er een factuur
 gemist of is er iets veranderd.
+
+### Abonnementstype
+Het **type abonnement zoals het op de factuur van de leverancier staat**, bv.
+Business Mobile Smart (Proximus) of Mega Mobile 5 GB. Naast de kostprijs de
+tweede helft van het contractbeeld (migratie 051).
+
+### Kostregel
+Een **extra kost die op een nummer drukt naast het hoofdabonnement**, bv. de
+spoofing-dienst bij Close Call op een Proximus-nummer (migratie 053). Elke regel
+heeft een leverancier, omschrijving, bedrag excl. BTW (per maand of per minuut)
+en de peildatum van de factuur. Zo klopt de totale kost per nummer én per
+leverancier: "een nummer wordt twee keer berekend" (meeting 2026-07-07). Beheer
+in het detailpaneel; de kolom Kostprijs toont het maandtotaal met de opbouw als
+hover, en het leverancier-totaal telt kostregels mee.
+
+### Kostenadviseur
+De **advieslijst op de Xelion-statistieken** die kosten naast gebruik legt en
+per nummer **één voorstel** doet: afbouwen of navragen, met de redenering, de
+**exacte kostopbouw** en de besparing per maand erbij. **AI-gewogen** (Claude,
+`ANTHROPIC_API_KEY`); zonder sleutel of bij een AI-storing valt hij terug op
+vaste regels en de bron-badge zegt welke van de twee je ziet. Geen gebruik is
+nooit automatisch opzeggen: doelen als WhatsApp, ItsMe of een datasim en de
+opzegtermijn wegen mee. Een mens accepteert of wijst af; elke beslissing gaat
+**append-only** in `communicatie.advies_log` (migratie 060) en onderdrukt
+hetzelfde advies 60 dagen.
+
+### Telt niet als Xelion
+Het nummer **komt op het Xelion-platform voor** (bv. als afzender bij spoofing
+of als doorschakelnummer) **maar er wordt nooit op opgenomen of mee uitgebeld**.
+Het telt daarom niet mee als Xelion-nummer in statistieken en belvolgorde
+(`xelion_uitgesloten`, migratie 051). De sleutel-analogie van Mehdi: een sleutel
+hebben is niet met de auto rijden.
+
+### Vervallen
+Statuswaarde: het nummer is **definitief weg bij de provider** en kan niet meer
+geheractiveerd worden. **Niet-actief** betekent daarentegen: kan nog geactiveerd
+worden (migraties 051/052).
 
 ### Verbruik
 De **variabele kosten** van een resource (belminuten, data, gebruik) - apart van de

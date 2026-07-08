@@ -59,7 +59,9 @@ eerstvolgende staat, en werk STATUS + log bij in dezelfde push.
 1. **Geen ad-hoc DDL** - elk schemawijziging is een genummerde migratie in
    `db/migrations/NNN-*.sql`, toegepast met `scripts/db-migrate.sh` (tracking in
    `public.schema_migrations`). Eenmalige data-fixes mogen als los SQL-blok voor
-   de gebruiker, mét preview-query vooraf.
+   de gebruiker, mét preview-query vooraf. Herhaalbare data-imports zijn
+   idempotente seeds in `db/seeds/` (bv. octopus-import en partijen-opbouw;
+   draaien met `psql -f`, altijd de import vóór de opbouw).
 2. **Documentatie in sync in dezelfde push**: TECHNICAL-REFERENCE.md (stack),
    README van de app-repo, TODO.md (afvinken/parkeren), DEFINITIEBOEK.md +
    `kern.definitie` bij terminologie.

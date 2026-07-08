@@ -344,7 +344,14 @@
       dubbele persoonlijke nummers = navragen) met redenering, besparing
       per maand, accepteer/afwijs en append-only log (60 dagen
       onderdrukking). Accepteren van afbouwen zet validatie op Elimineren.
-      Fase 2b (AI-duiding bovenop de regels) volgt later.
+      Fase 2b GEBOUWD (2026-07-08): het advies is **AI-gewogen** (Claude via
+      ANTHROPIC_API_KEY in compose), één advies per nummer met de exacte
+      kostopbouw (bv. 0486: 21,04 + 2,00 = 23,04); de regels blijven de
+      terugval en de bron-badge in de kop zegt welke van de twee je ziet.
+      Stille-terugval-bug opgelost met [adviseur]-warnings in de logs; de
+      wortel bleek de eigen 60s-timeout terwijl het model op volle
+      denkkracht stond (fix: output_config effort low + 120s timeout,
+      zelfde patroon als organisatie/ai.py).
 - [ ] **Afbouw-kandidatenlijst** (beleidslijn Mehdi, 99-auto's-analogie):
       ongebruikte (persoonlijke) nummers met belstatistieken als
       opzeg-kandidaten voor de houden-of-schrappen-ronde.
@@ -396,10 +403,16 @@
       intern/extern); (d) voorbeeld-facturatievoorstellen (Delivery Notes)
       als PDF met nummer. Joan past ook de Delivery Note-nummering aan
       zodat die niet gelijk loopt met factuurnummers.
-- [ ] **Leveranciers-entiteit uitbouwen met Octopus-velden**: ons
-      klantnummer bij de leverancier (nodig om te bellen), grootboek per
-      firma, dagboek, relatie-ID; leverancier-record voor alles wat we
-      betalen. Bouwen zodra Joan's aanlevering binnen is.
+      Stand 2026-07-08: (c) binnen en verwerkt (Octopus.zip: 2313 relaties +
+      grootboek per firma; seeds octopus-import en partijen-opbouw) en (b)
+      grotendeels mee binnen via die export; (a) terminologie en (d)
+      voorbeeld-Delivery-Notes nog open.
+- [x] **Leveranciers-entiteit uitbouwen met Octopus-velden** - GEBOUWD
+      (2026-07-08): het leverancier-paneel in communicatie toont per
+      firma-boekhouding het Octopus-relatie-ID, de grootboekrekening en ons
+      klantnummer bij de leverancier (kosten.octopus_relatie + de expliciete
+      boekhouding-mapping van migratie 059). Dagboeken volgen met de
+      Octopus-API (gate G1).
 - [ ] **Validatie-beeld per leverancier**: contract + aantal nummers +
       verwachte maandbetaling, zodat een binnenkomende factuur in een blik
       te valideren is.
