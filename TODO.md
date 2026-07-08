@@ -207,8 +207,9 @@
       relevante deelgraaf i.p.v. de volledige graaf, met eerlijke disclaimer
       dat de AI niet alles ziet. Tussenmaatregel actief: de AI-aanroepen
       bouwen de graaf zonder de externe laag (extern=False).
-- [ ] **Veelbellers en verkeer op onbekende nummers** als lijsten in het
-      communicatie-dashboard - de kolom maakt dit een goedkope query.
+- [x] **Veelbellers en verkeer op onbekende nummers** - GEBOUWD
+      (2026-07-08): twee secties op de Xelion-statistieken met drill-down
+      per beller (extern-filter) en per onbekend nummer (genorm-filter).
 - [x] **Xelion-kosten via de API: onderzocht, bestaat niet** (2026-07-06):
       0 kostvelden in 720 archiefrecords, alle facturatie-endpoints 404.
       Gesprekskosten dus via Businesscom (factuur/portaal). Wel gebouwd:
@@ -336,11 +337,13 @@
       onbepaalde duur, peildatum gezet (script geleverd). Juni-verbruik:
       nul belminuten op alle vijf; alleen de WhatsApp-nummers gebruiken
       data.
-- [ ] **AI-kostenadviseur** (fase 2 van de blueprint): usage + kosten +
-      registercontext -> regels-signalen -> AI-advies afbouwen/behouden/
-      navragen met redenering en besparing; accepteer/afwijs-knoppen met
-      logging. Geen usage is niet automatisch opzeggen: andere factoren
-      (doelen, buitenland, opzegtermijn) wegen mee.
+- [x] **Kostenadviseur fase 2a** - GEBOUWD (2026-07-08, migratie 060):
+      deterministische advieslijst op de statistieken-tab (kost zonder
+      gebruik = afbouwen, verkeer buiten belarchief of spoofing = navragen,
+      dubbele persoonlijke nummers = navragen) met redenering, besparing
+      per maand, accepteer/afwijs en append-only log (60 dagen
+      onderdrukking). Accepteren van afbouwen zet validatie op Elimineren.
+      Fase 2b (AI-duiding bovenop de regels) volgt later.
 - [ ] **Afbouw-kandidatenlijst** (beleidslijn Mehdi, 99-auto's-analogie):
       ongebruikte (persoonlijke) nummers met belstatistieken als
       opzeg-kandidaten voor de houden-of-schrappen-ronde.
