@@ -163,8 +163,11 @@ naar" (meeting 2026-07-06): er wordt niets echt gefactureerd. Sleutel blijft
 
 ### Gebruikt voor
 Waarvoor de resource **feitelijk gebruikt wordt**, gekozen uit een **vaste
-keuzelijst** (migratie 046; beheer in `communicatie.lijst`, categorie "Gebruikt
-voor"): Contrax, Tekenwerk, Energie-efficiënt, de sales-campagnes en **Privé**.
+keuzelijst** (migraties 046/061; beheer in `communicatie.lijst`, categorie
+"Gebruikt voor"): **Algemene communicatie** (algemene klantcommunicatie, bv.
+de WhatsApp-nummers - meeting 2026-07-08, einde van de wildgroei
+office/bureau/kantoor), Contrax, Tekenwerk, Energie-efficiënt, de
+sales-campagnes en **Privé**.
 Bij persoonlijke nummers is het doel de naam van de collega en gebruikt-voor
 Privé (migratie 047); bij **klantnummers** is het doel "Klantnummer
 [firmanaam]" en gebruikt-voor de firma van de groep die de klant bedient,
@@ -179,8 +182,13 @@ Waarvoor het nummer dient, als **uniek en telbaar begrip op categorie-niveau**
 (meeting 2026-07-06, de scheidsrechter-analogie): **Algemeen** (kantoor- of
 hoofdnummer; wint van "office" en "main number"), **Sales**, **Finance**,
 **Spoofing**, **Cold calling**, **B2B**, **Standaardprojecten** (wint van
-"Light Projects", zonder HA-prefix) of **WhatsApp** (migratie 049; beheer in
-`communicatie.lijst`, categorie "Doel"). Twee patroon-vormen daarnaast: bij
+"Light Projects", zonder HA-prefix) of **Klantencommunicatie** (verving
+"WhatsApp"; migraties 049/061, beheer in `communicatie.lijst`, categorie
+"Doel"). Vaste regel (meeting 2026-07-08): **het doel mag nooit herhalen wat
+platform of gebruikt-voor al zegt** - het beschrijft in mensentaal wat een
+buitenstaander anders niet zou snappen. "WhatsApp" is daarom geen doel (staat
+al bij platform); "Spoofing" is er juist het schoolvoorbeeld van, want zonder
+dat woord begrijpt niemand het nummer. Twee patroon-vormen daarnaast: bij
 privé-nummers is het doel de **naam van de collega**, bij klantnummers
 **"Klantnummer [firmanaam]"**. Wie het nummer gebruikt hoort níét in het doel:
 dat staat in gebruikt-voor. Niet "functie", dat woord is voor personen.

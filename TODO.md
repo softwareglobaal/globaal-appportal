@@ -265,6 +265,43 @@
       een per firma.
 - UNABO-spelling blijft zoals hij is (United + Bouw), geen actie.
 
+## Meeting Mehdi + Siyan + Joan 2026-07-08 (impromptu: labels + Octopus)
+
+> Bron: Fathom-transcript (19 min). Rode draad: labels standaardiseren
+> ("office/bureau/kantoor is broeie broeie") en het Unabo-duplicaat op het
+> Mega-leverancierpaneel.
+
+- [x] **Gebruikt-voor gestandaardiseerd** - GEBOUWD (migratie 061):
+      "Algemene communicatie" als vaste waarde voor algemene
+      klantcommunicatie (de WhatsApp-nummers); de data-omzetting van de
+      betrokken nummers draait via een SQL-blok met preview.
+- [x] **Doel-regel vastgelegd** - GEBOUWD (migratie 061): het doel mag
+      nooit herhalen wat platform of gebruikt-voor al zegt. Categorie
+      "WhatsApp" heet voortaan "Klantencommunicatie"; "Spoofing" blijft
+      juist (Mehdi: wie spoofing nergens ziet staan begrijpt het nummer
+      niet). Doel-veld blijft bestaan - besloten na de AI-adviesvraag.
+- [x] **Inactieve Octopus-relaties zichtbaar** - GEBOUWD: de actief-vlag
+      zat al in Joan's export (migratie 056); het leverancier-paneel toont
+      inactieve relaties nu grijs met label "inactief (historiek)" i.p.v.
+      als verwarrend duplicaat (het Unabo-geval bij Mega: Octopus maakt
+      bewust een nieuwe relatie aan bij bv. een bankrekeningwijziging).
+- [ ] **Joan levert de lijst duplicate/inactieve relatie-ID's** - deels al
+      afgedekt door de actief-vlag in de export; de lijst is de dubbelcheck.
+- [x] **Rest van Joan's Octopus-pakket verwerkt** - GEBOUWD (2026-07-08):
+      dagboek-structuur per firma (8 screenshots), grootboek-analyses en
+      het voorbeeld-facturatievoorstel (eigen nummerreeks, percentage-
+      facturatie, dossiernummer als koppelsleutel, L-dagboeken bij EE)
+      samengevat in docs/octopus-dossier.md. Transactie-dagboeken (32
+      PDF's) bewust geparkeerd tot de Octopus-API er is.
+- [x] **Dashboard-template-document** - GEBOUWD: docs/DASHBOARD-TEMPLATE.md,
+      bindend voor iedereen die een dashboard bouwt (besluit Mehdi + Siyan:
+      template-document i.p.v. knowledge-document); als referentie mee te
+      geven aan elke Claude Code-sessie.
+- [ ] **Siyan's sales-blueprint omzetten** naar het template en koppelen
+      aan de organisatiedata (naam-matching: Joey, Shilton, ...); zijn werk
+      wordt niet weggegooid, de blueprint is het vertrekpunt.
+- [ ] **Inkt-levering natrekken** (actie Shaniel; volgens de mail geleverd).
+
 ## Meeting Mehdi 2026-07-08 (dashboard-review)
 
 > Bron: Fathom-transcript 15 min. Bevestigd door Shaniel 2026-07-08.
@@ -403,10 +440,12 @@
       intern/extern); (d) voorbeeld-facturatievoorstellen (Delivery Notes)
       als PDF met nummer. Joan past ook de Delivery Note-nummering aan
       zodat die niet gelijk loopt met factuurnummers.
-      Stand 2026-07-08: (c) binnen en verwerkt (Octopus.zip: 2313 relaties +
-      grootboek per firma; seeds octopus-import en partijen-opbouw) en (b)
-      grotendeels mee binnen via die export; (a) terminologie en (d)
-      voorbeeld-Delivery-Notes nog open.
+      Stand 2026-07-08 (avond): alles uit de zip is verwerkt of bewust
+      geparkeerd - (c) relaties + grootboek in de database, (a) dagboeken
+      en grootboek-analyses en (d) het voorbeeld-facturatievoorstel
+      samengevat in docs/octopus-dossier.md; de transactie-dagboeken
+      (PDF's) wachten op de API. Alleen de aangepaste Delivery-Note-
+      nummering moet Joan nog doorvoeren.
 - [x] **Leveranciers-entiteit uitbouwen met Octopus-velden** - GEBOUWD
       (2026-07-08): het leverancier-paneel in communicatie toont per
       firma-boekhouding het Octopus-relatie-ID, de grootboekrekening en ons
