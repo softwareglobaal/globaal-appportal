@@ -289,11 +289,16 @@
       (684 HA-klanten in de verkenner), (c) dagboek-screenshots en
       facturatievoorstel-flow zodra de Octopus-API er is (belletje
       uitgesteld).
-- [x] **Relatie-verkenner** - GEBOUWD (2026-07-08): Relaties-tab in het
-      organisatie-dashboard met zoeken (naam/BTW/zoekveld) en filters op
-      boekhouding, klant/leverancier, intern/extern en koppeling; toont
-      relatie-ID, ons klantnummer bij de leverancier en de centrale
-      koppeling.
+- [x] **Relatie-verkenner op partij-niveau (XX1-laag)** - GEBOUWD
+      (2026-07-08, migratie 058 + partijen-opbouw): kern.partij als
+      entiteit met eigen volgnummer (2313 vlakken -> 1829 partijen, 0
+      wezen); klant/leverancier zijn rollen; groepering op BTW-nummer,
+      zonder BTW op exacte naam (gedocumenteerde aanname). Verkenner
+      toont per partij de boekhoud-vlakken met relatie-ID's en ons
+      klantnummer; interne partijen linken naar de firma-pagina; de
+      interne klant/leverancier-relaties tussen eigen firma's zijn kanten
+      in de Second Brain. Herimport-flow: octopus-import-seed en daarna
+      partijen-opbouw-seed.
 - [x] **Sim-foto's** - GEBOUWD (migratie 055): upload in de geheim-sectie
       (achter de Toon-knop, want PIN/PUK staan op de kaartfoto), client
       verkleint, thumbnails met verwijderknop, opslag in de database dus
