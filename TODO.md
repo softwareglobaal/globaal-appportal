@@ -324,10 +324,13 @@
       opbouw-hover, leverancier-totaal telt kostregels mee. Adviseur:
       on-demand lijst, opzegtermijn/contract mag harde blokkade zijn
       (fase 2, na het vullen van de spoofing-kosten).
-- [ ] **Xelion-spoofingkosten achterhalen** (datawerk): het kostenblok is
-      klaar maar de juiste factuur ontbreekt nog (aangeleverde PDF 2026-141
-      bleek een omvormer-factuur van Patrickshop, geen Close Call). Zodra
-      de echte factuur er is: regels vullen bij de drie spoofing-nummers.
+- [x] **Xelion-spoofingkosten** - KLAAR (factuur Close Call 2025-0119):
+      2 euro per nummer per maand bevestigd; kostregels op alle drie de
+      spoofing-nummers, peildatum 2025-09-01 (duplicaat; recente factuur
+      ververst de peildatum). Bijvangst: de factuur telt 41 betaalde
+      nummers tegenover 26 actieve in het register plus 26 users a 9 euro:
+      munitie voor de houden-of-schrappen-ronde (elk geschrapt nummer =
+      2/mnd, elke geschrapte user = 9/mnd).
 - [x] **Mega-factuur 1126002490 verwerkt** (2026-07-02): 5 nummers elk
       3,31/mnd excl. BTW, abonnementstype Mega Mobile 5 GB, contract
       onbepaalde duur, peildatum gezet (script geleverd). Juni-verbruik:
