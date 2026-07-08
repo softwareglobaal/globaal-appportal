@@ -17,6 +17,31 @@ services:
       start_period: 20s
     networks: [appnet]
 
+  # Sales — Pipedrive-dashboard (sales.globaal.be); stond eerder alleen als
+  # lokale drift op de VM, nu versiebeheerd (2026-07-08).
+  app-sales:
+    build: https://github.com/softwareglobaal/sales-dashboard.git#main
+    image: appportal-sales
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      PORT: "3008"
+      HOSTNAME: 0.0.0.0
+      PIPEDRIVE_TOKEN_HARCHITECTS: ${PIPEDRIVE_TOKEN_HARCHITECTS:-}
+      PIPEDRIVE_TOKEN_UNABO: ${PIPEDRIVE_TOKEN_UNABO:-}
+      PIPEDRIVE_TOKEN_TKNBURO: ${PIPEDRIVE_TOKEN_TKNBURO:-}
+      PIPEDRIVE_TOKEN_ENERGIEEFFICIENT: ${PIPEDRIVE_TOKEN_ENERGIEEFFICIENT:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - sales-data:/app/data
+    healthcheck:
+      test: node -e "require('http').get('http://127.0.0.1:3008/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks: [appnet]
+
   # Medewerkers — forward-auth dashboard op de centrale gebruikersdatabase.
   app-medewerkers:
     build: ./medewerkers
@@ -135,3 +160,4 @@ services:
 
 volumes:
   telefoonregister-data:
+  sales-data:
