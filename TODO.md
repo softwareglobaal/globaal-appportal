@@ -203,10 +203,11 @@
 - [x] **Extern contact als graaf-laag** (migratie 042 + organisatie-app):
       knopen per kanoniek nummer met kanten naar de register-nummers;
       standaard uit (lagen-model); drukste 300, rest wordt een signaal.
-- [ ] **AI-context ontkoppelen van de weergave-payload**: aggregaten +
-      relevante deelgraaf i.p.v. de volledige graaf, met eerlijke disclaimer
-      dat de AI niet alles ziet. Tussenmaatregel actief: de AI-aanroepen
-      bouwen de graaf zonder de externe laag (extern=False).
+- [x] **AI-context ontkoppeld** - GEBOUWD (2026-07-08): bouw_ai() levert
+      de kern-waarheid zonder bulk-lagen, met top-10-veelbellers-aggregaat
+      en een niet_meegegeven-blok (met aantallen); de systeemprompt
+      verplicht de AI eerlijk te benoemen wat hij niet ziet en naar het
+      dashboard te verwijzen voor detail.
 - [x] **Veelbellers en verkeer op onbekende nummers** - GEBOUWD
       (2026-07-08): twee secties op de Xelion-statistieken met drill-down
       per beller (extern-filter) en per onbekend nummer (genorm-filter).
