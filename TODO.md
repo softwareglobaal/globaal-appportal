@@ -283,10 +283,17 @@
       grootboekregels geimporteerd (idempotent); Proximus/Mega/Close Call
       gekoppeld op BTW-nummer; interne relaties gevlagd; leverancier-paneel
       toont per firma relatie-ID, grootboek en ons klantnummer. Open:
-      (a) overige leveranciers verzoenen met kern.leverancier,
-      (b) relatie-verkenner met intern/extern-filter (kiem klantendatabase:
-      684 HA-klanten zitten er al in), (c) dagboek-screenshots en
-      facturatievoorstel-flow verwerken zodra de Octopus-API er is.
+      (a) overige leveranciers verzoenen met kern.leverancier (werkbank:
+      de verkenner-filter "leveranciers zonder koppeling"),
+      (b) klantendatabase-gesprek met Mehdi nu de kiem zichtbaar is
+      (684 HA-klanten in de verkenner), (c) dagboek-screenshots en
+      facturatievoorstel-flow zodra de Octopus-API er is (belletje
+      uitgesteld).
+- [x] **Relatie-verkenner** - GEBOUWD (2026-07-08): Relaties-tab in het
+      organisatie-dashboard met zoeken (naam/BTW/zoekveld) en filters op
+      boekhouding, klant/leverancier, intern/extern en koppeling; toont
+      relatie-ID, ons klantnummer bij de leverancier en de centrale
+      koppeling.
 - [x] **Sim-foto's** - GEBOUWD (migratie 055): upload in de geheim-sectie
       (achter de Toon-knop, want PIN/PUK staan op de kaartfoto), client
       verkleint, thumbnails met verwijderknop, opslag in de database dus
