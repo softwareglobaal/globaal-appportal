@@ -274,20 +274,25 @@
       spoofing-vlaggen, 0486-doelen, WhatsApp-verantwoordelijken,
       Mega-factuurgegevens, Mega = fysieke sim. Daarna toont het register
       wat Mehdi in de review miste.
-- [ ] **Bug-onderzoek verantwoordelijke-namen**: diagnose-query geleverd;
-      afwachten output (vermoeden: rauwe Xelion-namen bij niet-gematchte
-      queue-leden en/of het register-veld nog leeg voor de Mega-nummers).
+- [x] **Bug-onderzoek verantwoordelijke-namen** - GESLOTEN (2026-07-08):
+      diagnose toonde nul niet-gematchte queue-leden; het was de afgeleide
+      Xelion-queue die het lege register-veld opvulde. Verzamelscript zet
+      de echte verantwoordelijken; geen code-bug.
 - [ ] **Octopus-pakket van Joan verwerken** (ontvangen 2026-07-08):
       relatie-exports per firma, grootboekrekeningen per firma, dagboeken,
       voorbeeld-facturatievoorstel. Volgende bouwblok: leverancier-velden
       (klantnummer, grootboek per firma, dagboek, relatie-ID) + relaties
       importeren met intern/extern-filter.
-- [ ] **Sim-gegevens Mega**: PIN/PUK invullen via de bestaande
-      geheim-sectie zodra de sims fysiek nagelopen zijn; sim-FOTO's
-      vereisen bestandsopslag = nieuw bouwwerk, bevestiging nodig.
-- [ ] **Zoom-naam Mehdi corrigeren** volgens de naamconventie (afspraak is
-      afspraak) + AI-bewaking op afwijkende Zoom-namen (signaal in de
-      Second Brain zodra meeting-deelnemers niet aan de conventie voldoen).
+- [x] **Sim-foto's** - GEBOUWD (migratie 055): upload in de geheim-sectie
+      (achter de Toon-knop, want PIN/PUK staan op de kaartfoto), client
+      verkleint, thumbnails met verwijderknop, opslag in de database dus
+      mee in de S3-backup. Rest datawerk: sims fysiek nalopen en PIN/PUK
+      plus foto's invullen.
+- [ ] **Zoom-naam Mehdi corrigeren** (actie mens: Zoom-profiel hernoemen
+      naar "Mehdi", conform de kale-naam-uitzondering van migratie 054).
+- [x] **AI-bewaking Zoom-naamconventie** - GEBOUWD (2026-07-08): de Second
+      Brain vlagt sprekers in recente transcripts die niet Voornaam
+      (Afdeling) of een toegestane kale voornaam zijn, als aandachtspunt.
 
 ## Meeting Mehdi 2026-07-07 (avond: spoofing, dubbele kosten, afbouw)
 
