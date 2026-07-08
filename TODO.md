@@ -263,6 +263,32 @@
       een per firma.
 - UNABO-spelling blijft zoals hij is (United + Bouw), geen actie.
 
+## Meeting Mehdi 2026-07-08 (dashboard-review)
+
+> Bron: Fathom-transcript 15 min. Bevestigd door Shaniel 2026-07-08.
+
+- [x] **Naamweergave zonder afdeling** - GEBOUWD (migratie 054): Mehdi,
+      Angela en Siyan heten op het medewerkers-dashboard alleen bij hun
+      voornaam (data-vlag afdeling_in_naam; graaf en taken-pagina volgen).
+- [ ] **Achterstallige datascripts draaien** (verzamelscript geleverd):
+      spoofing-vlaggen, 0486-doelen, WhatsApp-verantwoordelijken,
+      Mega-factuurgegevens, Mega = fysieke sim. Daarna toont het register
+      wat Mehdi in de review miste.
+- [ ] **Bug-onderzoek verantwoordelijke-namen**: diagnose-query geleverd;
+      afwachten output (vermoeden: rauwe Xelion-namen bij niet-gematchte
+      queue-leden en/of het register-veld nog leeg voor de Mega-nummers).
+- [ ] **Octopus-pakket van Joan verwerken** (ontvangen 2026-07-08):
+      relatie-exports per firma, grootboekrekeningen per firma, dagboeken,
+      voorbeeld-facturatievoorstel. Volgende bouwblok: leverancier-velden
+      (klantnummer, grootboek per firma, dagboek, relatie-ID) + relaties
+      importeren met intern/extern-filter.
+- [ ] **Sim-gegevens Mega**: PIN/PUK invullen via de bestaande
+      geheim-sectie zodra de sims fysiek nagelopen zijn; sim-FOTO's
+      vereisen bestandsopslag = nieuw bouwwerk, bevestiging nodig.
+- [ ] **Zoom-naam Mehdi corrigeren** volgens de naamconventie (afspraak is
+      afspraak) + AI-bewaking op afwijkende Zoom-namen (signaal in de
+      Second Brain zodra meeting-deelnemers niet aan de conventie voldoen).
+
 ## Meeting Mehdi 2026-07-07 (avond: spoofing, dubbele kosten, afbouw)
 
 > Bron: Fathom-transcript 19 min. Taken bevestigd door Shaniel 2026-07-07.
