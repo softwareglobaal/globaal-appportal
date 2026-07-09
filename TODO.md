@@ -301,6 +301,22 @@
       aan de organisatiedata (naam-matching: Joey, Shilton, ...); zijn werk
       wordt niet weggegooid, de blueprint is het vertrekpunt.
 - [ ] **Inkt-levering natrekken** (actie Shaniel; volgens de mail geleverd).
+- [x] **Leveranciers-inventaris telefonie afgerond** (2026-07-08, avond):
+      Mega digitaal af (5 nummers compleet incl. spoofing-firma's), Proximus
+      af (5 actief volgens prive-patroon; 29 vervallen correct leeg),
+      Close Call sluit op de euro op de factuur aan (38 unieke actieve
+      nummers a 2 euro + 3 spoofing-kostregels = 41; duplicaat-record
+      053 89 53 75 samengevoegd; 26 users a 9 euro zit in de
+      licentie-spiegel, niet in het nummer-register). Fysiek restwerk:
+      sim-foto's + PIN/PUK voor de 5 Mega- en 5 Proximus-sims.
+- [ ] **Vragen voor Mehdi (Close Call-restjes)**: (a) zijn Enstaco (3
+      nummers), HDS, MEDIAN en Techpoint eigen handelsnamen die als firma
+      in kern.firma horen, of externe partijen? (b) horen "Coldcalling -
+      Energy" en "EPB & VENT - Tech" bij Energie Efficient? (geen
+      naam-gokken, expliciet bevestigen). (c) op de eerstvolgende
+      Close Call-factuur checken of 03 375 62 81 (Unused/Archive Anjeza,
+      Niet-actief) nog gefactureerd wordt - zo ja: 2 euro/mnd voor een
+      archiefnummer, opzeggen.
 
 ## Meeting Mehdi 2026-07-08 (dashboard-review)
 
