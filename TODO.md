@@ -452,9 +452,11 @@
       klantnummer bij de leverancier (kosten.octopus_relatie + de expliciete
       boekhouding-mapping van migratie 059). Dagboeken volgen met de
       Octopus-API (gate G1).
-- [ ] **Validatie-beeld per leverancier**: contract + aantal nummers +
-      verwachte maandbetaling, zodat een binnenkomende factuur in een blik
-      te valideren is.
+- [x] **Validatie-beeld per leverancier** - GEBOUWD (2026-07-08): het
+      leverancier-paneel opent met de verwachte maandfactuur (excl. BTW):
+      samenstelling N x abonnementstype a prijs plus kostregels, totaal,
+      per-minuut apart als variabel, waarschuwingen bij nummers zonder
+      kostprijs en bij een peildatum ouder dan 2 maanden.
 - [ ] **Facturatievoorstel-workflow** (na de Octopus-koppeling): geen
       facturen vooraf of proforma (BTW); voorstellen klaarzetten per
       projectdeel, dupliceren per fase, delivery-note-nummer als unieke
