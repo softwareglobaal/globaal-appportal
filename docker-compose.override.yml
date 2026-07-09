@@ -17,6 +17,28 @@ services:
       start_period: 20s
     networks: [appnet]
 
+  # Contactsync — Google Contacts -> Xelion-adresboek (one-way, Google is
+  # de bron). Eigen repo (softwareglobaal/google-xelion-sync), uitgecheckt
+  # op de VM in ./contactsync met auto-deploy via deploy.sh + cron.
+  # Geheime bestanden in ./contactsync-data (bind-mount /data, buiten git);
+  # de env_file is required:false zodat de stack blijft werken zolang de
+  # bestanden nog niet overgezet zijn.
+  app-contactsync:
+    build: ./contactsync
+    image: appportal-contactsync
+    restart: unless-stopped
+    env_file:
+      - path: ./contactsync-data/.env
+        required: false
+    volumes:
+      - ./contactsync-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    networks: [appnet]
+
   # Sales — Pipedrive-dashboard (sales.globaal.be). Eigen repo
   # (softwareglobaal/sales-dashboard), uitgecheckt op de VM in ./sales met
   # auto-deploy via deploy.sh + cron (2026-07-08), zoals de andere dashboards.

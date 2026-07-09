@@ -22,6 +22,10 @@ logs/
 /draaiboek/
 # Eigen repo (softwareglobaal/sales-dashboard), uitgecheckt op de VM.
 /sales/
+# Eigen repo (softwareglobaal/google-xelion-sync), uitgecheckt op de VM.
+/contactsync/
+# Geheime bestanden van de contactsync (.env, tokens, sync.db) — nooit in git.
+/contactsync-data/
 # Installatie-restanten en lokale data op de VM
 /aws/
 awscliv2.zip

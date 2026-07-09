@@ -1,0 +1,11 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name contactsync.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Forward-auth (embedded outpost) beschermt de statuspagina van de
+    # Google->Xelion contactsync.
+    set $app_upstream http://app-contactsync:8080;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
