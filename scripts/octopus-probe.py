@@ -38,10 +38,27 @@ def vraag(pad, headers=None, body=None, methode=None):
 uuid = os.environ.get("OCTOPUS_SOFTWAREHOUSE_UUID", "").strip()
 gebruiker = os.environ.get("OCTOPUS_USER", "").strip()
 wachtwoord = os.environ.get("OCTOPUS_PASSWORD", "").strip()
-if not (uuid and gebruiker and wachtwoord):
-    print("OCTOPUS_SOFTWAREHOUSE_UUID, OCTOPUS_USER en OCTOPUS_PASSWORD "
-          "moeten in de omgeving staan (zet ze in ~/appportal/.env).")
+if not uuid or uuid.startswith("VUL-HIER"):
+    print("OCTOPUS_SOFTWAREHOUSE_UUID moet in de omgeving staan.")
     sys.exit(1)
+
+if not (gebruiker and wachtwoord):
+    # ID-check zonder API-gebruiker: log in met bewust foute credentials.
+    # Een geldige Software House ID geeft dan een credentials-fout terug;
+    # een ongeldige ID geeft een softwarehouse-fout. Zo testen we de ID
+    # zonder dat er een gebruiker bestaat.
+    status, antwoord = vraag("/authentication",
+                             headers={"softwareHouseUuid": uuid},
+                             body={"user": "id-check", "password": "id-check"})
+    print(f"ID-check (zonder API-gebruiker): HTTP {status}")
+    print(f"antwoord: {json.dumps(antwoord)[:300]}")
+    if status == 200:
+        print("onverwacht: login lukte met dummy-credentials?!")
+    print("Interpretatie: wijst de fout naar user/wachtwoord, dan is de "
+          "Software House ID geaccepteerd; wijst hij naar de softwarehouse "
+          "zelf, dan klopt de ID niet. Vul OCTOPUS_USER en OCTOPUS_PASSWORD "
+          "in voor de volledige probe.")
+    sys.exit(0)
 
 status, antwoord = vraag("/authentication",
                          headers={"softwareHouseUuid": uuid},
