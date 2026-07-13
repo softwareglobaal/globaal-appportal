@@ -446,9 +446,12 @@
 - [ ] **Ian vragen de Xelion-nummers na te lopen** (actie Shaniel):
       gebruikt-voor en verantwoordelijken per nummer; Mega en Proximus zijn
       door Mehdi zelf gedaan.
-- [ ] **Octopus bellen over API-toegang** (actie Shaniel, "vandaag"): het is
-      een API, geen MCP; zonder toegang stappen we over. Daarna eigen
-      MCP-server op hun API bouwen. Dit is gate G1 uit PLAN.md.
+- [x] **Octopus API-toegang** - GROTENDEELS BINNEN (2026-07-09/13, verving
+      het belletje): Software House ID ontvangen en werkend, keten
+      end-to-end bewezen op het testaccount (incl. schrijfrecht), pijplijn
+      + verzoening + Financiën-tab live (PLAN stappen 3-6). Rest van G1:
+      een productie-gebruiker gekoppeld aan de acht echte dossiers
+      (aanvragen bij Octopus of via Joan).
 - [ ] **Joan levert aan**: (a) Octopus-terminologie (dagboeken, relatie
       K/L/KL, relatie-ID vs grootboekrekening, grootboeknummers per firma);
       (b) leveranciersinfo Mega/Proximus/Close Call zoals in Octopus, met

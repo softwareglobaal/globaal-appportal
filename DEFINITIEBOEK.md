@@ -108,6 +108,16 @@ met eigen nummers; het BTW-nummer groepeert dezelfde partij over boekhoudingen
 heen. **Octopus is hiervoor de source of truth**: wij linken, wij beheren het
 niet.
 
+### Octopus-spiegel
+De **automatische kopie van de Octopus-boekhouddata** (boekjaren, boekingen
+en relaties per dossier) in het finance-schema (migraties 062/063), ververst
+door de poller in de organisatie-app. **Octopus blijft de bron van
+waarheid**: de spiegel is alleen-lezen richting Octopus en de sync-status
+toont per dossier hoe vers de data is. Dossiers koppelen aan firma's via
+BTW/KBO, relaties aan partijen via BTW met exacte naam als vangnet; wat niet
+koppelt blijft zichtbaar als los. Een dag stilstand is een signaal, geen
+stilte. Zichtbaar op de tab Financiën en als laag in de Second Brain.
+
 ### Klantnummer bij leverancier
 **Ons klantnummer in de administratie van de leverancier** (in Octopus het
 externe relatienummer). Nodig aan de telefoon: de leverancier vraagt er altijd

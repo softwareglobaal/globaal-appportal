@@ -14,13 +14,17 @@
 
 ## STATUS
 
-- **Eerstvolgende stap: 3** (Octopus-verkenning) - het **API-spoor is
-  GEBLOKKEERD op gate G1** (credentials; belletje uitgesteld), maar het
-  **data-spoor is gestart**: Joan's export is geïmporteerd en het
-  entiteit/relatie-model (partij-laag) staat - zie de log van 2026-07-08.
-  Zolang G1 open staat: restant-mapping van stap 2b afwerken via de
-  Disciplines-pagina zodra het team (G2) de twijfelgevallen bevestigt.
-- Blokkades: G1 (Octopus-credentials, bij Mehdi) blokkeert stap 3.
+- **Eerstvolgende stap: 7** (het template-discipline-document). Stappen
+  3 t/m 6 zijn AF (2026-07-09/13): onderzoek + probe, de pijplijn
+  (poller, migraties 062/063), de verzoening en de Financiën-tab - alles
+  end-to-end bewezen tegen het Octopus-testdossier (35493, geseed met
+  herkenbare testdata die onze echte facturen nabootst).
+- Blokkades: geen voor stap 7/8. Voor **productie-data** rest van G1:
+  een Octopus-gebruiker gekoppeld aan de acht echte dossiers (de
+  Software House ID is binnen en werkend; het testaccount bewees de
+  keten incl. schrijfrecht). Restant stap 2b wacht op G2; restpunt
+  stap 6: spend per discipline wacht op een
+  grootboek-naar-discipline-mapping.
 - Log:
   - 2026-07-04 - plan opgesteld (Fable 5); nog geen stap gestart.
   - 2026-07-04 - stap 1 GEBOUWD (Fable 5): migratie 030 (kern.discipline, 17

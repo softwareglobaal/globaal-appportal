@@ -1223,6 +1223,42 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
 - Verwijderen is zacht (actief/niet-actief); huurders/verzekeraars/banken zijn nog
   tekstvelden tot de klant-/externe-partij-entiteit bestaat. App-docs: README aldaar.
 
+### 14.7A Finance-pijplijn (Octopus-spiegel, PLAN.md stappen 3-6)
+De eerste tool-API van het Unified Dashboard-spoor die geld ontsluit.
+**Octopus is de source of truth**; wij spiegelen read-only en tonen versheid.
+- **API**: `service.inaras.be/octopus-rest-api/v1`; auth = header
+  `softwareHouseUuid` + user/wachtwoord -> token (10 min) -> dossiertoken per
+  boekhouding. Empirische lessen (alle drie gedocumenteerd in
+  `docs/onderzoek-octopus-api.md`): per-dossier-calls willen de header
+  `dossierToken`; de modified-endpoints geven **404 bij geen wijzigingen**;
+  relations/modified verpakt zijn lijst in `{"modified": [...]}`.
+- **Schema `finance`** (migraties 062/063): `octopus_sync`
+  (versheid/status per dossier), `octopus_bookyear`, `octopus_boeking`
+  (getypte kern + regels/ruw jsonb), `octopus_relatie` (met `partij_id`).
+  Schrijven alleen via `medewerker_writer`; lezen voor de dashboards.
+- **Poller**: `finance_sync.py` in de **organisatie-app** (beslissing:
+  datavolume klein, DeskTime-precedent). Standaard UIT; aan met
+  `OCTOPUS_ENABLED=true` + `OCTOPUS_SOFTWAREHOUSE_UUID/USER/PASSWORD` in
+  `.env` (drempel `OCTOPUS_SYNC_MIN`, default 360 min). Incrementeel via
+  de modified-endpoints (`bookyearId=-1`, since met een uur overlap,
+  idempotente upserts; lege relatie-spiegel = volledige eerste lading).
+- **Verzoening** (stap 5): relatie -> `kern.partij` via BTW-cijfers met
+  exacte-naam-vangnet; dossier -> firma via BTW/KBO (`dossier_id` op
+  `kosten.octopus_boekhouding`) - expliciet, nooit naam-raden. Wat niet
+  koppelt blijft zichtbaar als los (curatiesignaal).
+- **Zichtbaar**: tab **Financiën** op het Organisatie-dashboard (geld
+  in/uit per maand, per tegenpartij, alle-firma's-rollup, elk getal
+  doorklikbaar, vergelijk met kosten.software als signaal); de
+  **Second Brain** heeft een finance-laag (boekingen van 90 dagen als
+  knopen, tegenpartij-kanten naar bestaande firma-/leverancier-knopen);
+  sync-status op `GET /api/octopus-sync` (verouderd-vlag na een dag).
+- **Schrijfrecht** is op het testaccount bevestigd (no-op PUT) maar de
+  poller gebruikt uitsluitend GET; schrijven (facturatievoorstellen) is
+  een aparte latere beslissing. Testdossier 35493 is geseed met
+  herkenbare testdata (`scripts/octopus-seed-testdata.py`, idempotent).
+- **Wacht op**: productie-toegang (gebruiker gekoppeld aan de acht echte
+  dossiers); daarna stroomt alles zonder nieuwe code.
+
 ### 14.7 Draaiboek-platform (`draaiboek.globaal.be`)
 Playbook-management (het ★-einddoel; prototype 2026-07-03): een **draaiboek**
 (sjabloon: fases → stappen met soorten, afhankelijkheden, condities, termijnen)
