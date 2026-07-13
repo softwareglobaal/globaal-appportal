@@ -45,11 +45,17 @@
     Views erbovenop: Relaties-verkenner (organisatie), leverancier-paneel
     met relatie-ID/grootboek/klantnummer (communicatie), interne
     firma-relaties als kanten in de Second Brain.
+  - 2026-07-09 - stap 3 ONDERZOEK AF (Fable 5): Software House ID
+    ontvangen; docs/onderzoek-octopus-api.md geschreven op basis van de
+    officiele OpenAPI-spec (78 endpoints); read-only probe klaar
+    (scripts/octopus-probe.py). Rest van G1: API-gebruiker via Joan.
 
 ## Gates (input van buiten, parallel aan te vragen)
 
-- [ ] **G1 - Octopus-API-toegang**: wie beheert Octopus? API-key/credentials
-      aanvragen (zie stap 3). Zonder G1 kan t/m stap 2 gewoon door.
+- [ ] **G1 - Octopus-API-toegang**: de Software House ID is binnen
+      (2026-07-09, in .env op de VM). Rest: een Octopus-gebruiker
+      (user + wachtwoord, liefst leesbeperkt, gekoppeld aan alle acht
+      dossiers) - vraag aan Joan. Dan kan de probe draaien.
 - [ ] **G2 - lijst actieve tools**: Mehdi/Angela bevestigen welke tools het
       cluster vandaag betaalt/gebruikt (voor stap 2b); kosten.software is het
       vertrekpunt maar is alleen software.
@@ -83,12 +89,18 @@
   bewust-open signaal; de gaten-lijst bestaat als view.
 
 ### Stap 3 - Octopus-verkenning (onderzoek, géén bouw)
-- [ ] Gate G1 binnen (credentials).
-- [ ] API-docs doornemen; noteer in **docs/onderzoek-octopus-api.md**:
-      auth-model, endpoints (facturen in/uit, kosten, grootboek, relaties,
-      BTW), rate limits, per-dossier of per-firma, en wat NIET kan.
-- [ ] Probe zoals bij Xelion: eerst read-only calls testen (nooit schrijven),
-      foutcodes documenteren. Secrets alleen in .env op de VM.
+- [ ] Gate G1 binnen (Software House ID ontvangen 2026-07-09; de
+      API-gebruiker via Joan is het laatste stuk).
+- [x] API-docs doorgenomen (2026-07-09): **docs/onderzoek-octopus-api.md**
+      - auth-model (softwareHouseUuid-header + user/password -> token 10
+      min -> dossiertoken per boekhouding), alle 78 endpoints gemapt op
+      onze behoeften (relations/accounts/journals/bookings incl.
+      modified-varianten voor incrementele sync; deliverynotes voor de
+      facturatievoorstel-flow), aandachtspunten (rate limits onbekend,
+      alles per dossier, alleen-GET-poller).
+- [ ] Probe draaien (script staat klaar: **scripts/octopus-probe.py**,
+      read-only, secrets uit .env): dossiers oplijsten + relations-check
+      tegen de import van 2026-07-08 -> go/no-go voor stap 4.
 - Klaar wanneer: het onderzoek-document beantwoordt "welke data, hoe vers, hoe
   betrouwbaar" en een go/no-go voor stap 4.
 
