@@ -73,6 +73,13 @@ services:
     environment:
       # DeskTime-spiegel (migratie 033): API-key in .env; leeg = sync uit.
       DESKTIME_API_KEY: ${DESKTIME_API_KEY:-}
+      # Octopus-spiegel (stap 4, migratie 062): standaard uit; credentials
+      # in .env, OCTOPUS_ENABLED=true om de poller te starten.
+      OCTOPUS_ENABLED: ${OCTOPUS_ENABLED:-false}
+      OCTOPUS_SOFTWAREHOUSE_UUID: ${OCTOPUS_SOFTWAREHOUSE_UUID:-}
+      OCTOPUS_USER: ${OCTOPUS_USER:-}
+      OCTOPUS_PASSWORD: ${OCTOPUS_PASSWORD:-}
+      OCTOPUS_SYNC_MIN: ${OCTOPUS_SYNC_MIN:-360}
       BASE_DOMAIN: ${BASE_DOMAIN}
       # Hergebruikt de read-only 'portal'-rol op de appportal-database.
       DATABASE_URL: ${APPPORTAL_DB_URL:-}

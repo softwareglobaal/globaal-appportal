@@ -49,6 +49,14 @@
     ontvangen; docs/onderzoek-octopus-api.md geschreven op basis van de
     officiele OpenAPI-spec (78 endpoints); read-only probe klaar
     (scripts/octopus-probe.py). Rest van G1: API-gebruiker via Joan.
+  - 2026-07-09 - stap 3 PROBE OK (lokaal, testaccount): keten bewezen
+    (auth, dossier Globaal 35493, dossiertoken, 14 relations, 1 bookyear);
+    header-les dossierToken gedocumenteerd. G1-rest = productie-toegang.
+  - 2026-07-09 - stap 4 GEBOUWD (Fable 5): migratie 062 (finance-schema,
+    lokaal getest), poller in de organisatie-app (finance_sync.py,
+    standaard uit), compose-env, status-endpoint /api/octopus-sync.
+    Wacht op VM: db-migrate 062 + OCTOPUS_* in .env + OCTOPUS_ENABLED=true;
+    eerste run tegen het testdossier, productie zodra G1 helemaal dicht is.
 
 ## Gates (input van buiten, parallel aan te vragen)
 
@@ -105,14 +113,19 @@
   betrouwbaar" en een go/no-go voor stap 4.
 
 ### Stap 4 - Octopus-pijplijn (het echte werk; patroon = Xelion-poller)
-- [ ] Migratie 032: `finance`-schema - spiegeltabellen + `finance.octopus_sync`
-      (status/versheid, zelfde patroon als communicatie.xelion_sync).
-- [ ] Poller (standaard UIT via env-vlag, net als XELION_ENABLED), best-effort
-      degradatie, paginering vanaf dag één (les van Xelion: default-pagina's
-      zijn klein), sync-status zichtbaar.
-- [ ] Waar draait hij: eigen host-app of in een bestaand dashboard - beslissen
-      in stap 3 op basis van datavolume (voorkeur: aparte repo globaal-finance
-      volgens het bestaande dashboard-repo-patroon).
+- [x] Migratie **062** (was 032 in het oorspronkelijke plan): `finance`-schema
+      met octopus_sync (status/versheid per dossier), octopus_bookyear en
+      octopus_boeking (getypte kern + regels/ruw als jsonb); grants expliciet,
+      schrijven alleen via medewerker_writer. Lokaal getest 2026-07-09.
+- [x] Poller GEBOUWD (organisatie-app, finance_sync.py): standaard UIT
+      (OCTOPUS_ENABLED), best-effort, re-auth per run (token 10 min),
+      incrementeel via de modified-endpoints (bookyearId=-1 +
+      modifiedTimeStamp met een uur overlap; upserts idempotent),
+      sync-status zichtbaar via GET /api/octopus-sync (incl.
+      verouderd-vlag bij een dag stilstand).
+- [x] Waar draait hij: **in de organisatie-app** (beslissing conform stap 3:
+      datavolume is klein, DeskTime-poller-precedent, schrijfrol bestaat al);
+      een aparte repo globaal-finance kan later alsnog als het volume groeit.
 - Klaar wanneer: spend-data van minstens één firma stroomt automatisch binnen,
   sync-status toont versheid, en een dag stilstand is zichtbaar als signaal.
 

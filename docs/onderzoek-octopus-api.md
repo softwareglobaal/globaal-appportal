@@ -66,7 +66,13 @@ active, client, defaultBookingAccountClient/Supplier, ...) en
 **bookyears: 1**. Twee empirische correcties op de spec-lezing:
 de dossierlijst gebruikt `dossierDescription` + `dossierKey.id`, en
 per-dossier-calls willen de header **`dossierToken`** (met `Token`
-antwoordt de API 401, errorCode -79 "Empty access token").
+antwoordt de API 401, errorCode -79 "Empty access token"). Derde
+empirische les: de modified-endpoints antwoorden **404 "No modified
+bookings found"** wanneer er niets gewijzigd is - dat is "geen
+wijzigingen", geen fout (de poller behandelt het zo). De pijplijn van
+stap 4 is op 2026-07-09 lokaal end-to-end bewezen tegen het testdossier:
+eerste run 15 boekingen (A1/V1/D/F met relatie, bedrag, BTW-regels),
+tweede run incrementeel schoon (0 bijgewerkt, status ok).
 
 ## Wat we nog nodig hebben (rest van gate G1)
 
