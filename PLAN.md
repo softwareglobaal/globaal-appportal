@@ -57,6 +57,11 @@
     standaard uit), compose-env, status-endpoint /api/octopus-sync.
     Wacht op VM: db-migrate 062 + OCTOPUS_* in .env + OCTOPUS_ENABLED=true;
     eerste run tegen het testdossier, productie zodra G1 helemaal dicht is.
+  - 2026-07-13 - stap 5 GEBOUWD (Fable 5): migratie 063 (verzoening:
+    finance.octopus_relatie + dossier_id op de boekhouding-mapping),
+    relaties-sync met partij-koppeling in finance_sync, finance-laag in
+    de graaf. Lokaal end-to-end bewezen op het testdossier. Wacht op VM:
+    db-migrate 063; de eerstvolgende sync-run laadt de relaties vanzelf.
   - 2026-07-09 - schrijfrecht BEVESTIGD (no-op PUT, HTTP 204, data
     ongewijzigd) en het testdossier geseed met relevante testdata
     (scripts/octopus-seed-testdata.py, idempotent: 5 relaties waarvan 3
@@ -137,13 +142,19 @@
   sync-status toont versheid, en een dag stilstand is zichtbaar als signaal.
 
 ### Stap 5 - Entiteit/relatie-model finance (de blauwe draad)
-- [ ] Octopus-relaties (klanten/leveranciers) verzoenen met `kern.firma` en
-      `kern.leverancier` (zelfde verzoen-patroon als migratie 012:
-      echte FK's + naam-match als vangnet + mismatches worden signalen).
-- [ ] Context in de relatie, nooit in de entiteit: zelfde factuur = kost voor
-      firma A, opbrengst voor firma B → aparte relatierecords.
-- [ ] Relaties verschijnen automatisch in de Second Brain (029); benoemen via
-      graaf-regels.
+- [x] Octopus-relaties verzoend (migratie 063 + finance_sync): relaties per
+      dossier gespiegeld naar finance.octopus_relatie met partij_id via
+      BTW-cijfers en exacte-naam-vangnet; dossiers aan firma's via BTW/KBO
+      (dossier_id op kosten.octopus_boekhouding, expliciet - geen
+      naam-raden). Wat niet koppelt blijft zichtbaar als los.
+- [x] Context in de relatie: boekingen leven per dossier (kost voor A en
+      opbrengst voor B zijn twee records in twee dossiers), tegenpartij is
+      een verwijzing naar de partij-entiteit.
+- [x] Second Brain: finance-laag met dossier-ankers (gelinkt dossier = de
+      firma-knoop zelf), boeking-knopen (cap: 90 dagen, 400 stuks) en
+      tegenpartij-kanten naar bestaande firma-/leverancier-knopen waar de
+      partij dat toelaat. Lokaal bewezen: leverancier -> factuur -> dossier
+      is te volgen (Proximus-testfactuur naar de Proximus-knoop).
 - Klaar wanneer: een factuur in Octopus is in de graaf te volgen van leverancier
   → factuur → firma, zonder handwerk.
 
