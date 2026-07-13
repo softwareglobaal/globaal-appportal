@@ -57,6 +57,11 @@
     standaard uit), compose-env, status-endpoint /api/octopus-sync.
     Wacht op VM: db-migrate 062 + OCTOPUS_* in .env + OCTOPUS_ENABLED=true;
     eerste run tegen het testdossier, productie zodra G1 helemaal dicht is.
+  - 2026-07-13 - stap 6 GEBOUWD (Fable 5): Financien-tab (organisatie),
+    getest met de Flask-testclient tegen de lokale spiegel incl.
+    drill-down-verificatie. Geen migratie nodig; deployt vanzelf.
+    Restpunt: spend per discipline wacht op een
+    grootboek-naar-discipline-mapping.
   - 2026-07-13 - stap 5 GEBOUWD (Fable 5): migratie 063 (verzoening:
     finance.octopus_relatie + dossier_id op de boekhouding-mapping),
     relaties-sync met partij-koppeling in finance_sync, finance-laag in
@@ -159,11 +164,16 @@
   → factuur → firma, zonder handwerk.
 
 ### Stap 6 - Views (pas nu de visuals)
-- [ ] Per firma: spend per maand, per leverancier, per discipline.
-- [ ] Cross-firma rollup ("alle firma's": geld in/uit per maand - het
-      architectuurpunt van Mehdi uit TODO.md).
-- [ ] Vergelijk met de handmatige kosten-data (kosten.software): verschillen
-      = curatiesignalen, geen stille overschrijving.
+- [x] Financien-tab op het Organisatie-dashboard (2026-07-13): geld in/uit
+      per maand met saldo, spend per tegenpartij (partij-naam via de
+      verzoening), per firma filterbaar; elk getal doorklikbaar naar de
+      boekingen erachter. Spend per discipline volgt zodra de
+      grootboek-naar-discipline-mapping bestaat (klein vervolgwerk, kan
+      met Joan's grootboek-analyse als startpunt).
+- [x] Cross-firma rollup: het "alle firma's"-filter is de standaardstand.
+- [x] Vergelijk met kosten.software: eigen sectie "Naast het
+      kosten-dashboard" per gedeelde leverancier; verschillen zijn
+      zichtbare curatiesignalen, niets wordt overschreven.
 - Klaar wanneer: de views beantwoorden Mehdi's standaardvragen zonder export
   of handwerk; views slaan niets op.
 
