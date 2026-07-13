@@ -53,6 +53,6 @@ GRANT UPDATE (weergavenaam) ON kern.persoon TO medewerker_writer;
 
 INSERT INTO kern.definitie (sleutel, term, definitie) VALUES
     ('weergavenaam', 'Weergavenaam',
-     'De naam waarmee een collega overal in het platform wordt getoond, exact gelijk aan de Zoom-naam. Handmatig beheerde kolom op kern.persoon - geen automatische opbouw uit voornaam of afdeling: een mens vult hem in en overal klopt het. Conventie: Voornaam (Afdeling); afdelingshoofden krijgen H- voor de afdeling; Mehdi, Angela en Siyan staan kaal.')
+     'De naam waarmee een collega overal in het platform wordt getoond, exact gelijk aan de Zoom-naam. Handmatig beheerde kolom op kern.persoon - geen automatische opbouw uit voornaam of afdeling: een mens vult hem in en overal klopt het. Conventie: Voornaam (Afdeling); afdelingshoofden krijgen H- voor de afdeling, partners P-; Mehdi, Angela en Siyan staan kaal. De volledige naam staat alleen op het persoonsprofiel.')
 ON CONFLICT (sleutel) DO UPDATE
    SET term = EXCLUDED.term, definitie = EXCLUDED.definitie;

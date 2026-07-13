@@ -108,6 +108,17 @@ met eigen nummers; het BTW-nummer groepeert dezelfde partij over boekhoudingen
 heen. **Octopus is hiervoor de source of truth**: wij linken, wij beheren het
 niet.
 
+### Weergavenaam
+De naam waarmee een collega **overal in het platform** wordt getoond, exact
+gelijk aan de **Zoom-naam**. Sinds migratie 064 een **handmatig beheerde
+kolom** (`kern.persoon.weergavenaam`) - géén automatische opbouw uit voornaam
+of afdeling: een mens vult hem in en overal klopt het (naam wijzigen = één
+UPDATE). Conventie in de waarden: `Voornaam (Afdeling)`; **afdelingshoofden
+H-** voor de afdeling (Shaniel, Ashvand, Matthew), **partners P-** (Tom, Luc,
+Matthias, Catalin); **Mehdi, Angela en Siyan kaal**; vrije uitzonderingen
+kunnen gewoon (Joan (Finance + Office)). De volledige naam (identiteitsbron)
+staat alleen nog als kop op het persoonsprofiel.
+
 ### Octopus-spiegel
 De **automatische kopie van de Octopus-boekhouddata** (boekjaren, boekingen
 en relaties per dossier) in het finance-schema (migraties 062/063), ververst
