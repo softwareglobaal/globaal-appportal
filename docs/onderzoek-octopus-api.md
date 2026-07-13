@@ -74,6 +74,20 @@ stap 4 is op 2026-07-09 lokaal end-to-end bewezen tegen het testdossier:
 eerste run 15 boekingen (A1/V1/D/F met relatie, bedrag, BTW-regels),
 tweede run incrementeel schoon (0 bijgewerkt, status ok).
 
+## Leesrechten en de productie-aanvraag
+
+De API kent **geen eigen scopes**: een token is zo machtig als de
+Octopus-gebruiker erachter. Alleen-lezen afdwingen gebeurt daarom in twee
+lagen: (1) vraag bij de productie-toegang expliciet om een gebruiker met
+een **leesprofiel** (alleen raadplegen) op alle dossiers, en (2) de poller
+heeft een **harde leesvergrendeling** (finance_sync._vraag weigert elke
+call met een body behalve de twee login-stappen). Verificatie zodra de
+productie-gebruiker er is: de no-op-schrijftest (een relatie identiek
+terugschrijven) hoort dan een 401/403 te geven - dan zit het slot
+bewijsbaar dicht. NB: schrijvend werk (facturatievoorstellen) krijgt
+later zijn eigen gebruiker met precies de rechten die daarvoor nodig
+zijn; nooit de leesgebruiker verbreden.
+
 ## Wat we nog nodig hebben (rest van gate G1)
 
 - [x] Software House ID - ontvangen en werkend bevonden (2026-07-09).
