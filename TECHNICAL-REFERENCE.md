@@ -1071,12 +1071,16 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   Finaliseren mag alle staff (admin + manager); audit-event `FINALISEER`. Volledige app-documentatie: **README van
   `globaal-organisatie`**. Vervolgstappen: `TODO.md`.
 - **Naamconventie (display vs full):** de medewerkersdatabase toont de **volledige naam**
-  (voor- + familienaam - dit is de identiteitsbron); alle *andere* apps tonen personen in
-  het **Zoom-formaat `Voornaam (Afdeling)`**, live opgebouwd uit `kern.persoon` +
-  `kern.afdeling` (wijzigt iemand van afdeling, dan klopt de weergave overal vanzelf).
-  Uitzondering: staat `afdeling_in_naam` uit (migratie 054, bv. Mehdi, Angela,
-  Siyan), dan is de displaynaam de kale voornaam - en die displaynaam-regel
-  geldt platformbreed, dus ook in communicatie en de belvolgorde.
+  (voor- + familienaam - de identiteitsbron); alle *andere* apps tonen de
+  **weergavenaam** - sinds migratie 064 een **handmatig beheerde kolom**
+  (`kern.persoon.weergavenaam`, gevuld vanuit de Zoom-lijst van 2026-07-13),
+  géén automatische opbouw meer. Conventie in de waarden zelf: `Voornaam
+  (Afdeling)`, afdelingshoofden met `H-` voor de afdeling (Shaniel, Ashvand,
+  Matthew), Mehdi/Angela/Siyan kaal, en vrije uitzonderingen kunnen gewoon
+  (Joan (Finance + Office)). Naam wijzigen = de kolom bijwerken, overal
+  klopt het. De oude opbouw-formule (en `afdeling_in_naam`, migratie 054)
+  bestaat alleen nog als deploy-terugval; opruimen kan zodra 064 overal
+  bewezen draait.
 - **Relaties-verkenner** (tab Relaties): alle partijen uit de Octopus-import
   op partij-niveau (DEFINITIEBOEK: Partij) met filters op firma, soort en
   koppeling; interne firma-relaties zijn ook kanten in de Second Brain. De
