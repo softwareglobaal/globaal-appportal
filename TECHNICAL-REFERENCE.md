@@ -1070,8 +1070,10 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   Geen slot: data blijft bewerkbaar ("wijziging → terug naar rood" is een bewuste v2).
   Finaliseren mag alle staff (admin + manager); audit-event `FINALISEER`. Volledige app-documentatie: **README van
   `globaal-organisatie`**. Vervolgstappen: `TODO.md`.
-- **Naamconventie (display vs full):** de medewerkersdatabase toont de **volledige naam**
-  (voor- + familienaam - de identiteitsbron); alle *andere* apps tonen de
+- **Naamconventie (display vs full):** overal - ook de medewerkerslijst en
+  de firma-profielen - staat de **weergavenaam**; de **volledige naam**
+  (voor- + familienaam, de identiteitsbron) staat alleen nog als kop op het
+  persoonsprofiel, met de weergavenaam ernaast. Alle apps tonen de
   **weergavenaam** - sinds migratie 064 een **handmatig beheerde kolom**
   (`kern.persoon.weergavenaam`, gevuld vanuit de Zoom-lijst van 2026-07-13),
   géén automatische opbouw meer. Conventie in de waarden zelf: `Voornaam
