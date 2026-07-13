@@ -77,8 +77,9 @@ lijst = dossiers if isinstance(dossiers, list) else dossiers.get("dossiers", dos
 print(f"dossiers: {len(lijst)}")
 for d in lijst if isinstance(lijst, list) else []:
     if isinstance(d, dict):
-        naam = d.get("name") or d.get("naam") or d.get("description") or "?"
-        print(f"  - {d.get('id') or d.get('dossierId') or '?'}: {naam}")
+        naam = d.get("dossierDescription") or "?"
+        did = (d.get("dossierKey") or {}).get("id", "?")
+        print(f"  - {did}: {naam} ({d.get('vatNr', '')})")
     else:
         print(f"  - {d}")
 
@@ -90,8 +91,11 @@ if probe_dossier:
     if status != 200 or not sleutel:
         print(f"dossiertoken FAALT (HTTP {status}): {dt}")
         sys.exit(1)
+    # Per-dossier-calls willen de header 'dossierToken' (empirisch
+    # geverifieerd 2026-07-09: met 'Token' antwoordt de API 401
+    # "Empty access token", errorCode -79).
     status, rel = vraag(f"/dossiers/{probe_dossier}/relations",
-                        headers={"Token": sleutel})
+                        headers={"dossierToken": sleutel})
     aantal = len(rel) if isinstance(rel, list) else "?"
     print(f"relations dossier {probe_dossier}: HTTP {status}, {aantal} rijen")
 print("PROBE KLAAR - alleen gelezen, niets geschreven")

@@ -57,13 +57,24 @@ Secrets in `~/appportal/.env` (nooit in git of chat):
    bookyear sluiten). Onze poller gebruikt uitsluitend GET; schrijven
    (facturatievoorstellen aanmaken) is een aparte, latere beslissing.
 
+## Probe-resultaat (2026-07-09, lokaal vanaf de werkplek)
+
+De volledige keten is **empirisch bewezen** tegen het testaccount:
+authenticatie OK, 1 dossier ("Globaal", id 35493), dossiertoken OK,
+**relations: 14 rijen** (velden matchen kosten.octopus_relatie:
+active, client, defaultBookingAccountClient/Supplier, ...) en
+**bookyears: 1**. Twee empirische correcties op de spec-lezing:
+de dossierlijst gebruikt `dossierDescription` + `dossierKey.id`, en
+per-dossier-calls willen de header **`dossierToken`** (met `Token`
+antwoordt de API 401, errorCode -79 "Empty access token").
+
 ## Wat we nog nodig hebben (rest van gate G1)
 
-- [x] Software House ID - ontvangen (2026-07-09), gaat in `.env`.
-- [ ] Een **Octopus-gebruiker (user + wachtwoord)** voor de API: vraag
-      Joan of er een aparte, liefst leesbeperkte gebruiker kan worden
-      aangemaakt (niet Joan's eigen login). Die gebruiker moet aan alle
-      acht dossiers gekoppeld zijn.
+- [x] Software House ID - ontvangen en werkend bevonden (2026-07-09).
+- [x] Testaccount-credentials werken; de keten is technisch bewezen.
+- [ ] **Productie-toegang**: een gebruiker (liefst leesbeperkt, niet
+      Joan's eigen login) gekoppeld aan de acht echte dossiers - dat is
+      het laatste stuk voor de go van stap 4.
 
 ## De probe (klaar om te draaien)
 
