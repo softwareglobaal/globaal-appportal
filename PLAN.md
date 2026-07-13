@@ -57,6 +57,13 @@
     standaard uit), compose-env, status-endpoint /api/octopus-sync.
     Wacht op VM: db-migrate 062 + OCTOPUS_* in .env + OCTOPUS_ENABLED=true;
     eerste run tegen het testdossier, productie zodra G1 helemaal dicht is.
+  - 2026-07-09 - schrijfrecht BEVESTIGD (no-op PUT, HTTP 204, data
+    ongewijzigd) en het testdossier geseed met relevante testdata
+    (scripts/octopus-seed-testdata.py, idempotent: 5 relaties waarvan 3
+    telefonie-leveranciers met echte BTW-nummers, 5 boekingen die onze
+    echte maandfacturen nabootsen op rekening 616200). De pijplijn pikte
+    ze incrementeel op (5 bijgewerkt) en de spend-per-leverancier-query
+    klopt op de cent: Proximus 105,20 / Mega 16,55 / Close Call 316,00.
 
 ## Gates (input van buiten, parallel aan te vragen)
 
