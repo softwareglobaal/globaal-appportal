@@ -301,6 +301,15 @@
       aan de organisatiedata (naam-matching: Joey, Shilton, ...); zijn werk
       wordt niet weggegooid, de blueprint is het vertrekpunt.
 - [ ] **Inkt-levering natrekken** (actie Shaniel; volgens de mail geleverd).
+- [x] **Weergavenaam als handmatige kolom** - GEBOUWD (2026-07-13, migratie
+      064): kern.persoon.weergavenaam gevuld vanuit de Zoom-lijst (H- voor
+      hoofden, Joan (Finance + Office), Ramsinio hernoemd naar Alexander);
+      organisatie (graaf, taken, firma-e-mails) en communicatie
+      (persoonNaam) lezen de kolom, oude opbouw is alleen deploy-terugval.
+- [ ] **Opschonen na 064**: zodra de weergavenaam overal bewezen draait de
+      oude opbouw-terugval en afdeling_in_naam (054) verwijderen, en een
+      bewerkveld voor de weergavenaam op het medewerkersprofiel (nu alleen
+      via SQL; kolom-grant voor medewerker_writer staat al).
 - [x] **Leveranciers-inventaris telefonie afgerond** (2026-07-08, avond):
       Mega digitaal af (5 nummers compleet incl. spoofing-firma's), Proximus
       af (5 actief volgens prive-patroon; 29 vervallen correct leeg),
