@@ -265,6 +265,33 @@
       een per firma.
 - UNABO-spelling blijft zoals hij is (United + Bouw), geen actie.
 
+## Meeting Mehdi + Raisha + Chilton 2026-07-14 (Thomas Berg-dashboard)
+
+> Bron: Fathom-transcript (10 min). Eerste testcase van een
+> project-dashboard in uitvoeringsfase; Mehdi + Raisha bouwen/organiseren,
+> Chilton bewaakt de datavolledigheid, verbonden met het platform (geen
+> los eilandje).
+
+- [x] **Projecten-app opgezet** - GEBOUWD (2026-07-14): repo
+      softwareglobaal/projecten (skelet: documenten met labels, logboek,
+      RBAC kijken/bewerken), tegel op projecten.globaal.be
+      (admin/projecten-editors/projecten), auto-deploy via cron. De repo
+      draagt CLAUDE.md-vangrails voor Raisha's Claude Code (main is
+      productie, geen secrets, consultant-taal voor niet-technische
+      gebruikers) plus het dashboard-template.
+- [x] **Raisha's GitHub-toegang**: apart account, outside collaborator op
+      alleen deze repo (gedaan door Shaniel, 2026-07-14).
+- [ ] **Toegang activeren**: /tmp/projecten-toegang.py draaien (Mehdi +
+      Raisha in projecten-editors, Chilton in projecten) + recovery-links
+      voor raisha en chilton.
+- [ ] **Claude-toegang voor Raisha**: claude.ai/code koppelen aan haar
+      GitHub-account; beslissen welk Claude-abonnement/seat (kostenpunt).
+- [ ] **Dropbox Thomas Berg herstructureren** (Mehdi + Raisha, Chilton
+      bewaakt volledigheid): alle documenten erop, gelabeld voor AI.
+- [ ] **Mail/Fathom/WhatsApp-ingest**: Mehdi/Chilton mailen de lijst
+      mailboxen en contacten (klant + aannemers) voor leestoegang; scope
+      bewust en alleen-lezen - gevoeligste stap, apart ontwerpen.
+
 ## Meeting Mehdi + Siyan + Joan 2026-07-08 (impromptu: labels + Octopus)
 
 > Bron: Fathom-transcript (19 min). Rode draad: labels standaardiseren
