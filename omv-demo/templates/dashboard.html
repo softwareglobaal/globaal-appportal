@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="nl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OMV Pipeline</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif;
+               background: #f3f5f7; color: #1d2733; }
+        header { display: flex; justify-content: space-between; align-items: center;
+                 padding: 0.9rem 2rem; background: #1f3a2e; color: #fff; }
+        header a { color: #9fe0c0; text-decoration: none; font-size: 0.9rem; }
+        main { max-width: 720px; margin: 2.5rem auto; padding: 0 1.5rem; }
+        .card { background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
+                padding: 1.6rem 2rem; margin-bottom: 1.2rem; }
+        .sso { background: #e7f6ec; border-left: 4px solid #2e9e5b; padding: 0.8rem 1rem;
+               border-radius: 6px; color: #1f5135; }
+        .local { background: #fff3cd; border-left: 4px solid #c8a21a; padding: 0.8rem 1rem;
+                 border-radius: 6px; color: #715c11; }
+        .btn { display: inline-block; background: #2e9e5b; color: #fff; border: none;
+               border-radius: 6px; padding: 0.6rem 1.1rem; font-size: 0.95rem;
+               opacity: 0.55; cursor: not-allowed; }
+        dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1rem; }
+        dt { font-weight: 600; } dd { margin: 0; color: #5b6b7d; }
+        code { background: #eef1f4; padding: 0.1rem 0.35rem; border-radius: 4px; }
+    </style>
+</head>
+<body>
+<header>
+    <strong>OMV Pipeline — dashboard (testversie)</strong>
+    <a href="{{ portal_url }}">&larr; Terug naar portal</a>
+</header>
+<main>
+    {% if sso_user %}
+    <div class="card sso">
+        🔓 <strong>Single sign-on actief.</strong> Je bent automatisch ingelogd via
+        de portal (Authentik) als <strong>{{ sso_user }}</strong>. De eigen
+        login + 2FA van deze app zijn overgeslagen door <code>sso_auth.py</code> —
+        precies wat er in de echte OMV-app gebeurt.
+    </div>
+    {% else %}
+    <div class="card local">
+        ⚠️ Geen SSO-identiteit ontvangen — je bent via de eigen login van de app
+        binnengekomen (<code>AUTH_MODE={{ auth_mode }}</code>).
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <h1 style="margin-top:0;">Pipeline-status</h1>
+        <p>Dit is een kleine, echte testversie van het OMV-dashboard — dezelfde
+           login-structuur als de productie-app, zonder de zware pijplijn
+           (scraper, Dropbox, OpenAI, VPN). Het bewijst dat de échte app in één
+           klik vanuit de portal opent, beveiligd via SSO.</p>
+        <button class="btn" disabled title="Uitgeschakeld in de testversie">
+            ▶ Start pipeline
+        </button>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top:0;">Wie ben je (volgens de portal)?</h2>
+        <dl>
+            <dt>Gebruiker</dt><dd>{{ sso_user or "—" }}</dd>
+            <dt>E-mail</dt><dd>{{ sso_email or "—" }}</dd>
+            <dt>Groepen</dt><dd>{{ sso_groups or "—" }}</dd>
+        </dl>
+    </div>
+</main>
+</body>
+</html>

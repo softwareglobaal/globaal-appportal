@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="adminbar"><a href="{{ url_for('index') }}">← Back to applications</a></p>
+<h1>Access overview</h1>
+<p class="subtitle">Who can open each application, based on the Authentik
+group(s) bound to it. This reflects access only - in-app roles are managed
+separately by each application's admin.</p>
+
+{% if error %}
+<p class="notice">{{ error }}</p>
+{% else %}
+{% for row in rows %}
+<section class="access-app">
+    <h2>{{ row.app.name }}
+        <span class="groups">{{ row.groups | join(', ') }}</span>
+        <span class="count">{{ row.users | length }} user{{ '' if row.users|length == 1 else 's' }}</span>
+    </h2>
+    {% if row.users %}
+    <table class="access-table">
+        <thead>
+            <tr><th>Username</th><th>Name</th><th>Email</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+            {% for u in row.users %}
+            <tr class="{{ '' if u.is_active else 'inactive' }}">
+                <td>{{ u.username }}</td>
+                <td>{{ u.name }}</td>
+                <td>{{ u.email }}</td>
+                <td>{{ 'active' if u.is_active else 'disabled' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No users - no one in the bound group(s), or the group does not exist in Authentik.</p>
+    {% endif %}
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

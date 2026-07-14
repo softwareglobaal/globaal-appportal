@@ -1,0 +1,11 @@
+# Oud domein van het Organisatie-dashboard (v/h Medewerkers) — permanente
+# doorverwijzing zodat bestaande links (o.a. vanuit het telefoonregister)
+# blijven werken.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name medewerkers.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    return 301 https://organisatie.${BASE_DOMAIN}$request_uri;
+}
