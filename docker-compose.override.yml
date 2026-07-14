@@ -76,9 +76,10 @@ services:
       PIPEDRIVE_TOKEN_TKNBURO: ${PIPEDRIVE_TOKEN_TKNBURO:-}
       PIPEDRIVE_TOKEN_ENERGIEEFFICIENT: ${PIPEDRIVE_TOKEN_ENERGIEEFFICIENT:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      # Wie mag schrijven (notities/sync/analyse); kijkers zoals joey en
-      # shelton vallen erbuiten (middleware, 2026-07-14).
-      EDITOR_USERS: ${SALES_EDITOR_USERS:-akadmin,mehdi,siyan}
+      # Wie mag schrijven (notities/sync/analyse); besluit 2026-07-14:
+      # joey en shelton volledige toegang. De middleware blijft staan
+      # voor toekomstige kijk-accounts.
+      EDITOR_USERS: ${SALES_EDITOR_USERS:-akadmin,mehdi,siyan,joey,shelton}
     volumes:
       - sales-data:/app/data
     healthcheck:
