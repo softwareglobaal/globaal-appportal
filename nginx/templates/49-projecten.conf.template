@@ -1,0 +1,14 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name projecten.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Forward-auth (embedded outpost) beschermt het Projecten-dashboard;
+    # de app zelf onderscheidt bewerken (projecten-editors) en kijken
+    # (projecten) via de X-Authentik-Groups-header.
+    set $app_upstream http://app-projecten:3011;
+    include /etc/nginx/snippets/forward-auth.conf;
+
+    client_max_body_size 30m;
+}

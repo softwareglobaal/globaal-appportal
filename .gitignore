@@ -26,6 +26,8 @@ logs/
 /contactsync/
 # Geheime bestanden van de contactsync (.env, tokens, sync.db) — nooit in git.
 /contactsync-data/
+# Eigen repo (softwareglobaal/projecten), uitgecheckt op de VM.
+/projecten/
 # Installatie-restanten en lokale data op de VM
 /aws/
 awscliv2.zip

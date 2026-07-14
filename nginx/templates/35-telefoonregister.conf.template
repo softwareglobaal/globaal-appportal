@@ -1,8 +1,0 @@
-server {
-    listen 443 ssl;
-    http2 on;
-    server_name telefoonregister.${BASE_DOMAIN};
-    include /etc/nginx/snippets/ssl.conf;
-    set $app_upstream http://app-telefoonregister:3006;
-    include /etc/nginx/snippets/forward-auth.conf;
-}
