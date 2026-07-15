@@ -1345,6 +1345,15 @@ Besluit Shaniel: verwacht (kosten-registratie) naast werkelijk
 - Alles best-effort: zonder `KOSTEN_DB_URL` verandert het dashboard niet.
   De data wordt bij "Ververs nu" meegebakken (`DATA.octopus`) en is ook
   live opvraagbaar op `GET /api/octopus`.
+- **Verzamelpost-reconciliatie** (migratie 070, tab Reconciliatie in het
+  herbouwde dashboard): kaartuitgaven volgens de afschriften naast de
+  geboekte verzamelposten op de kaartuitgevers
+  (`kern.partij.is_kaartuitgever`: KBC Brussels, KBC Bank, de
+  Mastercard-kaartnummers; KBC Verzekeringen bewust niet). Kaart-SaaS
+  heeft geen eigen aankoopfactuur in Octopus - het detail leeft in de
+  afschriften, de verzamelpost is het boekhoudkundige spoor. Detector
+  kaart_reconciliatie (signalen-agent) bewaakt maand t-2 met een drempel
+  van 10 procent en 100 euro.
 
 ### 14.7 Draaiboek-platform (`draaiboek.globaal.be`)
 Playbook-management (het ★-einddoel; prototype 2026-07-03): een **draaiboek**
