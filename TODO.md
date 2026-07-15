@@ -845,3 +845,22 @@
       koppelingen, hoe completer de kolom.
 - [ ] **Prijzen en seats vullen** op de softwarekaarten (bestaand punt):
       de prijsafwijking-detector doet pas iets bij ingevulde registratie.
+
+## ★ Herbouw kosten-dashboard (besluit Shaniel 2026-07-15, op de planning)
+- [ ] **Herbouw als gewone stack-app** volgens DASHBOARD-TEMPLATE.md, ter
+      vervanging van de statische generator op de host. Lost structureel op:
+      (1) drie waarheden (bankdata in HTML, localStorage, database) wordt
+      een waarheid in de database; (2) statisch bakken wordt live rendering
+      (Octopus-spiegel elke 6 uur zichtbaar zonder Ververs-klik); (3)
+      tekst-sleutels (firma|vendor) worden entiteitverwijzingen naar
+      kern.leverancier/kern.firma; (4) same-origin-check op schrijfroutes;
+      (5) de loopback-poort 5433 kan daarna weer dicht (app draait in de
+      stack, de stille uitval van 2026-07-14/15 kan niet meer); (6) huisstijl
+      en huisregels 1-8. PDF-afschriften-verwerking (extract_cc) blijft als
+      aparte invoerpijplijn bestaan en schrijft naar de database.
+      De Octopus-kolom, het niet-geregistreerd-paneel en het vangnet
+      verhuizen mee. Geschat: een tot twee dagdelen.
+- [x] **Curatieronde 1 partij-leverancier** (migratie 068): de 20 bevestigde
+      naam-matches (Microsoft, Dropbox, Zoom, Pipedrive, ...). Volgende
+      rondes: de matchvoorstellen-query opnieuw draaien na elke
+      Octopus-relatie-import.
