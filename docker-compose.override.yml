@@ -1,4 +1,13 @@
 services:
+  # De appportal-Postgres op loopback voor host-services (kosten-dashboard):
+  # gedocumenteerd contract in globaal-kosten/deploy/appportal. Stond eerder
+  # alleen als handmatige wijziging op de VM en verdween daardoor bij het
+  # incident-herstel van 2026-07-14; vanaf nu in git (de omv-v2-les).
+  # 5432 op de host is bezet door de losse native Postgres, daarom 5433.
+  postgresql:
+    ports:
+      - "127.0.0.1:5433:5432"
+
   app-telefoonregister:
     build: ./telefoonregister
     image: appportal-telefoonregister
