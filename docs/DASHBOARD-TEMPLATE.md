@@ -62,6 +62,11 @@
 3. Firma's voluit geschreven; KPI-cijfers werken als filter op de lijst;
    Excel-export waar dat zinvol is; tabellen met veel kolommen krijgen een
    instelbare kolomkeuze.
+4. **Secties zijn inklapbaar** (details/summary): de kop draagt de
+   samenvatting (tellers, totalen) zodat een dichte sectie nog informatie
+   geeft, de belangrijkste sectie staat standaard open en de browser
+   onthoudt per gebruiker wat open stond. Zo blijft een pagina met veel
+   secties navigeerbaar zonder scroll-mars.
 
 ### De AI-tells: vermijdlijst
 
