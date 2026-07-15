@@ -66,6 +66,13 @@
     drill-down-verificatie. Geen migratie nodig; deployt vanzelf.
     Restpunt: spend per discipline wacht op een
     grootboek-naar-discipline-mapping.
+  - 2026-07-14 - PRODUCTIE LIVE: echte Software House ID + leesgebruiker
+    (minimale vinkjes: webservice, dossier manager, basis- en
+    geavanceerde lijsten), 13 echte dossiers gesynct (~30k boekingen,
+    alles ok) na drie robuustheid-fixes (timeout vangen, per boekjaar
+    chunken, continue i.p.v. return). Migratie 065: KBO's gevuld,
+    Corenbo + ENSTACO als firma erbij, elk dossier expliciet aan zijn
+    firma (HDS aan de Suriname-variant). G1 DICHT.
   - 2026-07-13 - stap 5 GEBOUWD (Fable 5): migratie 063 (verzoening:
     finance.octopus_relatie + dossier_id op de boekhouding-mapping),
     relaties-sync met partij-koppeling in finance_sync, finance-laag in
