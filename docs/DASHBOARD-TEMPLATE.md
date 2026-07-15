@@ -67,6 +67,20 @@
    geeft, de belangrijkste sectie staat standaard open en de browser
    onthoudt per gebruiker wat open stond. Zo blijft een pagina met veel
    secties navigeerbaar zonder scroll-mars.
+5. **Belgische getalnotatie.** Bedragen als 6.418,10 (punt voor
+   duizendtallen, komma als decimaalteken), maanden voluit ("november
+   2025", niet "2025-11"). Overal dezelfde schrijfwijze.
+6. **Een klik op een getal geeft zichtbaar resultaat.** Verschijnt de
+   drill-down lager op de pagina, spring er dan naartoe (anker in de
+   link). De gebruiker mag nooit hoeven zoeken waar het resultaat staat.
+7. **De hoofdcijfers dragen de pagina.** KPI's staan groot en duidelijk
+   bovenaan, niet als klein grijs tekstje; negatieve saldi kleuren rustig
+   rood.
+8. **Leesbaar en bedienbaar voor iedereen.** Hulptekst-grijs haalt de
+   4,5:1-contrastrichtlijn, geen letters kleiner dan ongeveer 11px,
+   toetsenbord-focus zichtbaar (nooit `outline: none` zonder vervanging),
+   en op een smal scherm scrollen brede tabellen in hun eigen kader in
+   plaats van de pagina te breken.
 
 ### De AI-tells: vermijdlijst
 
@@ -116,7 +130,9 @@ geen versiering.
 - [ ] Namen en entiteiten in één koppelbare laag, niet hardgecodeerd
 - [ ] Weergavenamen ongemoeid gelaten
 - [ ] Terminologie consequent, afwijkingen gemeld
-- [ ] Elk getal heeft een drill-down
+- [ ] Elk getal heeft een drill-down en de klik springt naar het resultaat
+- [ ] Bedragen en maanden in Belgische notatie
+- [ ] Contrast, focus-zichtbaarheid en smal-scherm-gedrag nagelopen
 - [ ] De AI-tells-vermijdlijst nagelopen, alles wat matcht verwijderd
 - [ ] Opgeslagen data in één datamap
 

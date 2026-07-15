@@ -801,3 +801,27 @@
       (chmod 600, kopie in wachtwoordkluis), `S3_BACKUP_BUCKET` in .env. Testrun OK:
       beide dumps GPG-versleuteld naar S3. Loopt automatisch mee in de 03:15-cron.
       Setup-checklist: `docs/offsite-backup-setup.md`.
+
+## Signalen-agent & organisatie-UI (2026-07-15)
+- [x] **Signalen-agent v1 GEBOUWD** (migratie 066 + `signalen.py`, §14.7B +
+      `docs/signalen-agent.md`): vier detectoren elk uur (octopus_sync,
+      dossier_leeg, grote_boeking, maand_uitschieter) + AI-duiding 1x/dag
+      met escalatie bij een nieuw hoog signaal; ~1 euro per maand.
+      Kandidaat-detectoren voor later: vervallen facturen (verval_datum),
+      contactsync-stilte, DeskTime-afwijkingen.
+- [ ] **Archetype 1 - platform-assistent met leestools** (MCP op de
+      appportal-database): de afgesproken volgende bouwstap uit de
+      AI-agent-brainstorm van 2026-07-15; upgrade van de graaf-chat van
+      context-dump naar gerichte queries.
+- [x] **Taken-sectie voorlopig uitgesloten** (`TAKEN_ACTIEF`, default uit;
+      besluit Shaniel 2026-07-15). Fathom blijft actiepunten inlezen;
+      heraanzetten is een env-regel + herstart. Beslispunt voor later:
+      wanneer pakt het team taakbeheer weer op.
+- [x] **UI-ronde organisatie-dashboard**: KPI-kaarten, drill-down-anker,
+      Belgische notatie (filters `euro`/`maand_nl`), contrast op 4.5:1,
+      focus-visible, mobiel, sorteerbare kolommen + sticky koppen,
+      inklapbaar persoonsprofiel, diensten-aanvinklijst, interne taal weg
+      uit meldingen. Huisregels 5-8 toegevoegd aan DASHBOARD-TEMPLATE.md.
+- [ ] **Zelfde UI-conventies nalopen op de andere dashboards**
+      (communicatie, kosten, draaiboek, sales): de template-regels gelden
+      platformbreed; de organisatie-app is nu de referentie.

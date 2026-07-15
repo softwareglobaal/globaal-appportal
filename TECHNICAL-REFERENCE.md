@@ -1085,9 +1085,23 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   bewezen draait.
 - **Relaties-verkenner** (tab Relaties): alle partijen uit de Octopus-import
   op partij-niveau (DEFINITIEBOEK: Partij) met filters op firma, soort en
-  koppeling; interne firma-relaties zijn ook kanten in de Second Brain. De
-  AI-chat krijgt een **ontkoppelde context**: externe contacten alleen als
-  aggregaat, met een eerlijke opsomming van wat niet is meegegeven.
+  koppeling, en per partij een **detailpagina** met boekhoud-vlakken en
+  cijfers uit de Octopus-spiegel; interne firma-relaties zijn ook kanten in
+  de Second Brain. De AI-chat krijgt een **ontkoppelde context**: externe
+  contacten alleen als aggregaat, met een eerlijke opsomming van wat niet
+  is meegegeven.
+- **Taken achter een vlag** (2026-07-15): de Taken-tab, het actiepunten-blok
+  op het profiel, de actiepunt-kanten in de Second Brain en
+  `actiepunten_open` in de AI-context staan samen achter `TAKEN_ACTIEF`
+  (default uit - niemand gebruikte de sectie). Niets verwijderd; Fathom
+  blijft actiepunten inlezen, heraanzetten is een env-regel + herstart.
+- **UI-conventies** (ronde 2026-07-15): Belgische getalnotatie via de
+  Jinja-filters `euro`/`maand_nl`, KPI-kaarten op Financiën, drill-down via
+  het boekingen-anker, sorteerbare kolommen (`static/sorteer.js`), sticky
+  tabelkoppen, inklapbare secties met localStorage-geheugen, contrast op de
+  4.5:1-richtlijn, `:focus-visible` op alles wat bedienbaar is, media
+  queries voor mobiel, filters die direct toepassen. Detail: README van
+  `globaal-organisatie`, sectie UI-conventies.
 - Het **360°-profiel** toont per persoon: **Toegang (Authentik)** - groepen + afgeleide
   apps (§14.3) - en **Telefoonnummers** uit het telefoonregister (§14.4). Beide via
   read-only API-calls, best-effort (ontbreekt de bron → nette fallback, app blijft werken).
@@ -1252,18 +1266,55 @@ De eerste tool-API van het Unified Dashboard-spoor die geld ontsluit.
   exacte-naam-vangnet; dossier -> firma via BTW/KBO (`dossier_id` op
   `kosten.octopus_boekhouding`) - expliciet, nooit naam-raden. Wat niet
   koppelt blijft zichtbaar als los (curatiesignaal).
-- **Zichtbaar**: tab **Financiën** op het Organisatie-dashboard (geld
-  in/uit per maand, per tegenpartij, alle-firma's-rollup, elk getal
-  doorklikbaar, vergelijk met kosten.software als signaal); de
-  **Second Brain** heeft een finance-laag (boekingen van 90 dagen als
-  knopen, tegenpartij-kanten naar bestaande firma-/leverancier-knopen);
-  sync-status op `GET /api/octopus-sync` (verouderd-vlag na een dag).
-- **Schrijfrecht** is op het testaccount bevestigd (no-op PUT) maar de
-  poller gebruikt uitsluitend GET; schrijven (facturatievoorstellen) is
-  een aparte latere beslissing. Testdossier 35493 is geseed met
-  herkenbare testdata (`scripts/octopus-seed-testdata.py`, idempotent).
-- **Wacht op**: productie-toegang (gebruiker gekoppeld aan de acht echte
-  dossiers); daarna stroomt alles zonder nieuwe code.
+- **Zichtbaar**: tab **Financiën** op het Organisatie-dashboard
+  (KPI-kaarten geld in/uit/saldo, per maand met Nederlandse maandnamen,
+  per tegenpartij, alle-firma's-rollup; elk getal springt via het
+  boekingen-anker direct naar de drill-down; vergelijk met
+  kosten.software als signaal); partijen zijn klikbaar naar een
+  **detailpagina** (`/relaties/<volgnr>`: kerngegevens, boekhoud-vlakken,
+  cijfers per firma). De **Second Brain** heeft een finance-laag
+  (30 recentste boekingen per firma binnen 90 dagen documentdatum) en
+  een gecureerde **partij-laag** (top-150 naar factuurvolume, 12
+  maanden); sync-status op `GET /api/octopus-sync`.
+- **PRODUCTIE LIVE sinds 2026-07-14**: 13 echte dossiers, ~30.000
+  boekingen, alle dossiers expliciet aan firma's gekoppeld (migratie
+  065: KBO's gevuld, Corenbo + ENSTACO aangemaakt, dossier-ID's op de
+  boekhouding-mapping; HDS aan de Suriname-variant). Robuustheid uit de
+  eerste lading: boekingen per boekjaar chunken, timeouts per dossier
+  afvangen (status 'fout', volgende dossier gaat door),
+  `OCTOPUS_TIMEOUT_SEC` default 180.
+- **Leesbeperking in twee lagen**: de productie-gebruiker heeft een
+  Octopus-leesprofiel (webservice + dossier manager + lijsten, geen
+  schrijf-vinkjes) en `finance_sync.py` heeft een **harde
+  leesvergrendeling** in code (alleen de authenticatie-POSTs zijn
+  toegestaan; elke andere schrijvende call gooit een RuntimeError).
+  Schrijven (facturatievoorstellen) is een aparte latere beslissing met
+  een eigen gebruiker. Testdossier 35493 blijft geseed met herkenbare
+  testdata (`scripts/octopus-seed-testdata.py`, idempotent).
+- **In de gaten houden**: dossier High Design Studio heeft 0 boekingen
+  in de spiegel (de dossier_leeg-detector van de signalen-agent bewaakt
+  dit); aanname dat Corenbo een eigen firma is nog expliciet bevestigen.
+
+### 14.7B Signalen-agent (migratie 066, archetype 2)
+Automatische bewaking van de bedrijfsdata in de **organisatie-app**
+(`signalen.py`, tab Signalen). Twee lagen, conform het gangbare patroon
+(regels detecteren, het model duidt) - ontwerp en kostenafweging:
+`docs/signalen-agent.md`.
+- **Detectoren**: vaste SQL-regels elk uur (`SIGNALEN_MIN`), gratis. V1:
+  octopus_sync (faalt/ouder dan 24 uur), dossier_leeg, grote_boeking
+  (>= `SIGNALEN_GROTE_BOEKING_EUR`, default 25.000, laatste 7 dagen),
+  maand_uitschieter (aankopen >= 2x maandgemiddelde). Bevindingen in
+  `organisatie.signaal` met vingerafdruk-dedupe; signalen sluiten
+  vanzelf (opgelost_op) en blijven als historie (geen DELETE-recht).
+- **AI-duiding**: 1x per dag (na `SIGNALEN_DUIDING_UUR` UTC, default 6)
+  vat Claude de open signalen samen in `organisatie.signaal_duiding`;
+  bij een nieuw signaal met ernst hoog volgt direct een escalatie-duiding
+  (max 1 per uur). Zelfde `ANTHROPIC_API_KEY`/`AI_MODEL` als de
+  dagbriefing; ~1 euro per maand. Status: `GET /api/signalen`;
+  handmatige duiding: `POST /api/signalen/duiding` (admin).
+- **Nieuwe detector** = functie + regel in `DETECTOREN`. Vangrails:
+  alleen-lezen op de bedrijfsdata, eigen tabellen als enige schrijfdoel,
+  geheim-tabel nooit, duiding is tekst (een mens beslist).
 
 ### 14.7 Draaiboek-platform (`draaiboek.globaal.be`)
 Playbook-management (het ★-einddoel; prototype 2026-07-03): een **draaiboek**
