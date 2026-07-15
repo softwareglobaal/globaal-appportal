@@ -74,7 +74,9 @@ server {
     http2 on;
     server_name kosten.${BASE_DOMAIN};
     include /etc/nginx/snippets/ssl.conf;
-    set $app_upstream http://172.17.0.1:8090;
+    # Herbouw 2026-07-15: de stack-app vervangt de host-service; de oude
+    # pijplijn op de host (8090) blijft alleen als PDF-importer bestaan.
+    set $app_upstream http://app-kosten:3012;
     include /etc/nginx/snippets/forward-auth.conf;
 }
 

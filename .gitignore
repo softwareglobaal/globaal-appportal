@@ -33,3 +33,7 @@ logs/
 awscliv2.zip
 /omv-v2-data/
 *.bak-*
+
+# Eigen repo (softwareglobaal/globaal-kosten), uitgecheckt op de VM voor de
+# stack-app (herbouw 2026-07-15); de host-pijplijn blijft in ~/kosten.
+/kosten/

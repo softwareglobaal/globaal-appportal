@@ -8,6 +8,30 @@ services:
     ports:
       - "127.0.0.1:5433:5432"
 
+  # Kosten-dashboard, herbouw als stack-app (besluit Shaniel 2026-07-15):
+  # leest alles uit de database (kosten.bank_transactie + Octopus-spiegel);
+  # de PDF-pijplijn blijft als host-service draaien en is via hostmachine
+  # bereikbaar voor de ververs-knop. Checkout: ~/appportal/kosten.
+  app-kosten:
+    build:
+      context: ./kosten
+      dockerfile: app/Dockerfile
+    image: appportal-kosten
+    restart: unless-stopped
+    environment:
+      PORT: "3012"
+      KOSTEN_DB_URL: ${KOSTEN_STACK_DB_URL:-}
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+      VERVERS_URL: ${KOSTEN_VERVERS_URL:-http://hostmachine:8090/ververs}
+    extra_hosts:
+      - "hostmachine:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3012/healthz', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    networks: [appnet]
+
   app-telefoonregister:
     build: ./telefoonregister
     image: appportal-telefoonregister
