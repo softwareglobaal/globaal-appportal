@@ -1315,6 +1315,36 @@ Automatische bewaking van de bedrijfsdata in de **organisatie-app**
 - **Nieuwe detector** = functie + regel in `DETECTOREN`. Vangrails:
   alleen-lezen op de bedrijfsdata, eigen tabellen als enige schrijfdoel,
   geheim-tabel nooit, duiding is tekst (een mens beslist).
+- **Kosten-detectoren** (2026-07-15, bij de Octopus-kosten-koppeling):
+  software_zonder_betaling (geregistreerde software, 120+ dagen geen
+  aankoopfactuur), prijsafwijking (werkelijk 12m tegenover seats maal
+  prijs; minstens 25 procent en 250 euro) en vangnet_software
+  (uitgaven op een aangewezen software-rekening zonder registratie).
+
+### 14.7C Octopus x kosten-dashboard: werkelijk betaald (2026-07-15)
+Besluit Shaniel: verwacht (kosten-registratie) naast werkelijk
+(boekhouding), 100 procent in het kosten-dashboard.
+- **Kolom "Werkelijk betaald"** per softwarekaart op kosten.globaal.be:
+  aankoopfacturen uit de Octopus-spiegel (12 maanden, excl. BTW), via de
+  keten `kosten.software.leverancier_id` -> `kern.partij.leverancier_id`
+  -> `finance.octopus_relatie` -> `finance.octopus_boeking`. Bedrag voor
+  de eigen firma waar de dossier-firma-mapping dat toelaat, anders het
+  groepstotaal met (groep)-marker. Drill-down naar de Financien-tab van
+  het organisatie-dashboard: `?lev=<leverancier-uuid>&richting=uit`
+  plus het boekingen-anker.
+- **Paneel "niet geregistreerd"**: terugkerende leveranciers in de
+  aankoopdagboeken (3+ maanden) zonder softwarekaart; dit is meteen de
+  **creditcard-diagnose** (staat een kaartmaatschappij er groot in, dan
+  boekt de boekhouding verzamelposten en blijven de afschriften de bron
+  voor het kaart-detail). Plus een grootboek-hulplijst per dossier.
+- **Grootboek-vangnet** (migratie 067, `kosten.software_rekening`): een
+  mens wijst per dossier de software-rekeningen (accountKey) aan; alles
+  daarop telt als software-uitgave, ook zonder leverancier-koppeling.
+  Beheer is nu nog SQL (kosten-rol heeft schrijfrecht); de hulplijst in
+  het dashboard toont de kandidaten.
+- Alles best-effort: zonder `KOSTEN_DB_URL` verandert het dashboard niet.
+  De data wordt bij "Ververs nu" meegebakken (`DATA.octopus`) en is ook
+  live opvraagbaar op `GET /api/octopus`.
 
 ### 14.7 Draaiboek-platform (`draaiboek.globaal.be`)
 Playbook-management (het ★-einddoel; prototype 2026-07-03): een **draaiboek**

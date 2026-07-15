@@ -825,3 +825,23 @@
 - [ ] **Zelfde UI-conventies nalopen op de andere dashboards**
       (communicatie, kosten, draaiboek, sales): de template-regels gelden
       platformbreed; de organisatie-app is nu de referentie.
+
+## Octopus x kosten-dashboard (2026-07-15)
+- [x] **Kolom "Werkelijk betaald" GEBOUWD** (globaal-kosten PR #7 +
+      migratie 067 + lev-filter op Financien, §14.7C): boekhouding naast
+      registratie per softwarekaart, drill-down naar de Financien-tab,
+      paneel met terugkerende leveranciers zonder registratie (tevens
+      creditcard-diagnose), drie nieuwe signalen-detectoren.
+- [ ] **Creditcard-kanttekening beoordelen** zodra de productie-data in
+      het paneel staat: verschijnen kaartmaatschappijen als grote
+      verzamelposten, dan blijven de afschriften de bron voor het
+      kaart-detail en beslissen we of charge_actual alsnog nodig is.
+- [ ] **Software-rekeningen aanwijzen** (het grootboek-vangnet,
+      kosten.software_rekening): de hulplijst in het kosten-dashboard
+      toont per dossier de rekeningen met de meeste aankopen; Joan of
+      Mehdi wijst de software-rekeningen aan, wij zetten ze erin.
+- [ ] **Partij-leverancier-curatie**: matchvoorstellen (naam/BTW) voor
+      partijen zonder leverancier-koppeling, ter bevestiging; hoe meer
+      koppelingen, hoe completer de kolom.
+- [ ] **Prijzen en seats vullen** op de softwarekaarten (bestaand punt):
+      de prijsafwijking-detector doet pas iets bij ingevulde registratie.
