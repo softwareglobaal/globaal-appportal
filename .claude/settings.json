@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/ontwikkeling-event.sh\" start"}]}
+    ],
+    "UserPromptSubmit": [
+      {"hooks": [{"type": "command", "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/ontwikkeling-event.sh\" prompt"}]}
+    ],
+    "SessionEnd": [
+      {"hooks": [{"type": "command", "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/ontwikkeling-event.sh\" einde"}]}
+    ]
+  }
+}

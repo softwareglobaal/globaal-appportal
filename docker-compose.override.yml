@@ -131,6 +131,9 @@ services:
     environment:
       # Toegangsgroepen naast admin/manager (bv. hr, besluit 2026-07-13).
       STAFF_GROUPS: ${ORGANISATIE_STAFF_GROUPS:-hr}
+      # Ontwikkel-statistieken (migratie 074): gedeeld token voor de
+      # Claude Code-hook-ingest; leeg = endpoint uit.
+      ONTWIKKELING_TOKEN: ${ONTWIKKELING_TOKEN:-}
       # DeskTime-spiegel (migratie 033): API-key in .env; leeg = sync uit.
       DESKTIME_API_KEY: ${DESKTIME_API_KEY:-}
       # Octopus-spiegel (stap 4, migratie 062): standaard uit; credentials

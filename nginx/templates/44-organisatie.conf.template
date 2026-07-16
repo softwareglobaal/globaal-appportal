@@ -7,5 +7,18 @@ server {
     # Forward-auth (embedded outpost) beschermt de hele app; identiteit + groepen
     # gaan als X-authentik-* headers naar de Flask-app (Organisatie-dashboard).
     set $app_upstream http://app-medewerkers:3007;
+
+    # Ontwikkel-events uit Claude Code-hooks (migratie 074): een hook heeft
+    # geen browser-sessie, dus deze ene route passeert de forward-auth en de
+    # app controleert zelf een gedeeld token (ONTWIKKELING_TOKEN). Alleen
+    # POST met een kleine body; de identiteitsheaders worden hard geleegd.
+    location = /ontwikkeling/event {
+        client_max_body_size 4k;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass http://app-medewerkers:3007;
+    }
+
     include /etc/nginx/snippets/forward-auth.conf;
 }
