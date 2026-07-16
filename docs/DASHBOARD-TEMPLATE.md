@@ -55,7 +55,17 @@
 ## 3. Stijl en UX
 
 1. **Elk getal is doorklikbaar.** Elke KPI, teller of totaal leidt naar de
-   records erachter. Een cijfer zonder drill-down is niet af.
+   records erachter; ook elke datum en elke entiteitsnaam (persoon, firma,
+   leverancier) is een link naar zijn eigen plek. Een cijfer zonder
+   drill-down is niet af. Bewust platte tekst (bijvoorbeeld een ruwe
+   omschrijving van een bankafschrift, die geen entiteit is) markeer je
+   met `class="plat"` zodat de uitzondering zichtbaar in de code staat.
+   Bouw links via een linkmacro-bestand (`templates/links.html`) zodat het
+   "waar klikt dit heen"-denkwerk een keer per soort waarde gebeurt, en
+   dwing de regel af met een klikbaarheids-check in de CI die elke
+   datum- of getalcel zonder link laat falen. Referentie-implementatie:
+   `app/check_klikbaar.py` en `app/templates/links.html` in de
+   globaal-kosten-repo.
 2. **Rustige, zakelijke huisstijl.** Geen emoji, geen em-dash
    (gedachtestreepje), geen icoonkaarten, geen marketing-taglines of
    AI-achtige opsmuk. Functioneel en strak.
@@ -131,6 +141,8 @@ geen versiering.
 - [ ] Weergavenamen ongemoeid gelaten
 - [ ] Terminologie consequent, afwijkingen gemeld
 - [ ] Elk getal heeft een drill-down en de klik springt naar het resultaat
+- [ ] Klikbaarheids-check in de CI (datum-/getalcellen zonder link falen;
+      bewuste uitzonderingen dragen `class="plat"`)
 - [ ] Bedragen en maanden in Belgische notatie
 - [ ] Contrast, focus-zichtbaarheid en smal-scherm-gedrag nagelopen
 - [ ] De AI-tells-vermijdlijst nagelopen, alles wat matcht verwijderd

@@ -161,7 +161,7 @@ cutover niet geraakt:
 | `omv.globaal.be` | de echte OMV-app op de host, `http://<host-gateway-ip>:5000` | forward auth + SSO-shim |
 | `factuurrouter.globaal.be` | Factuurrouter-dashboard op de host, `http://172.17.0.1:8787` | forward auth (oude `remy.globaal.be` → 301 hierheen) |
 | `stage.globaal.be` | Stagebeoordeling op de host, `http://172.17.0.1:8088` | forward auth (Raisha = bewerken, rest = lezen) |
-| `kosten.globaal.be` | Kosten-dashboard op de host, `http://172.17.0.1:8090` | forward auth (groep `kosten`) |
+| `kosten.globaal.be` | Kosten-dashboard, stack-app `app-kosten:3012` (oude host-app op 8090 is alleen nog invoerpijplijn) | forward auth (groep `kosten`) |
 | `factorydocs/inventory/finance/maintenance.globaal.be` | `app-*:300x` (stubs) | forward auth |
 | `n8n.globaal.be` | `n8n-n8n-1:5678` | gewone doorsturing (n8n's eigen login) |
 | `data.globaal.be` | *(geen server-blok)* | n.v.t. - vervangen door `omv.globaal.be` |
@@ -883,22 +883,35 @@ herstarten. Deploy-log: `~/deploy-<app>.log`.
   vult zich pas bij de eerstvolgende cron-run ná een merge.
 
 ### 13.4 Kosten-dashboard (software-uitgaven) - `kosten.globaal.be`
-Interactief overzicht van software-/abonnementskosten uit **KBC/VISA
-kredietkaart-afschriften**. Repo `globaal-kosten`, VM-map `~/kosten`, systemd
-`kosten.service` op **poort 8090**, achter SSO (groep `kosten`: Mehdi, Angela,
-Siyan, akadmin). De **volledige pipeline draait server-side** ("alles op de
-server"):
-- `extract_cc.py` - PyMuPDF leest de PDF-afschriften in `statements/`, classificeert
-  per firma/leverancier → `cc_transactions_clean.csv`.
-- `recon.py` - reconciliatie (vorig saldo + Σ regels == afrekening) als bewijs dat
-  elke transactie precies één keer geteld is.
-- `build_dashboard.py` - genereert `Software_overzicht.html`.
-- `server.py` - serveert het dashboard met een **"Ververs nu"-knop**; die POST
-  `/ververs` draait `extract_cc.py` + `build_dashboard.py` opnieuw via subprocess
-  (`sys.executable`) - geen laptop nodig. Padkeuze via env
-  `CC_STATEMENTS_DIR` (default `./statements`).
-- **Data blijft VM-only** (zie `.gitignore`, §13.1): de afschriften, CSV's en de
-  gegenereerde HTML staan níét in GitHub.
+Sinds de herbouw van 2026-07-15 een **stack-app**: Flask in `app/` van repo
+`globaal-kosten`, compose-service `app-kosten` op **poort 3012** (checkout
+`~/appportal/kosten`, auto-deploy `deploy-stack.sh` via cron), achter SSO
+(groep `kosten`: Mehdi, Angela, Siyan, akadmin). De **database is de ene
+waarheid**: `kosten.bank_transactie` (migratie 069, import = volledige
+vervanging), `kosten.software` (registratie: plan/seats/prijs/beslissing/
+beheerder), en de Octopus-spiegel (`finance`-schema) voor wat er werkelijk
+geboekt is.
+- **Software-tab**: per tool drie kolommen voor dezelfde gekozen periode -
+  Verwacht (seats x prijs x betaalritme uit de registratie), Via kaart
+  (afschriften) en Via factuur (aankoopdagboeken, excl. BTW). Kaart en
+  factuur niet optellen: dezelfde kaartbetaling kan ook als factuur
+  ingeboekt zijn.
+- **Reconciliatie-tab**: factuurspoor-dekking per firma/leverancier (meting
+  2026-07-16: echte verzamelposten bestaan nauwelijks; een kaartuitgave
+  bereikt de boekhouding alleen via een aangeleverde aankoopfactuur). De
+  gaten-lijst is de werkvoorraad voor de boekhouder.
+- **Beheerder** op de softwarekaart is een koppeling naar `kern.persoon`
+  (migratie 072), klikbaar naar het persoonsprofiel; zichtbaar in de graaf
+  en op het profiel in het organisatie-dashboard.
+- **Klikbaarheids-poort**: `app/check_klikbaar.py` draait in de CI en laat
+  elke datum- of getalcel zonder link falen (opt-out `class="plat"`);
+  linkmacro's in `app/templates/links.html`. Zie docs/DASHBOARD-TEMPLATE.md
+  §3.1 - dit is de referentie-implementatie.
+- De **oude generator** (`server.py`/`extract_cc.py`, host-service op poort
+  8090) bestaat alleen nog als **invoerpijplijn**: PDF-afschriften ->
+  extract_cc -> `db.import_bank` -> database. De ververs-knop in de app
+  POST naar `hostmachine:8090/ververs`. Afschriften-PDF's blijven VM-only
+  (`statements/`, zie `.gitignore`, §13.1).
 
 ### 13.5 HR-/urendashboard (DeskTime) - `hr.globaal.be` *(in opzet)*
 Leesbaar urenoverzicht uit de **DeskTime-API**. VM-map `~/hr-dashboard`,
