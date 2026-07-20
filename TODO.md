@@ -57,6 +57,86 @@
       → dan samen met Shaniel de veiligheidscoördinatie-playbook opzetten om van te
       leren; (b) dashboard-review met Ivor inplannen.
 
+## HR-dashboard + de persoon als kern (meeting Mehdi/Ishara/Shaniel 2026-07-20)
+
+> Bron: Fathom-transcript 17 min. Kernvraag van Mehdi: **"waar zetten we Abby?"**
+> Staat een medewerker IN het HR-dashboard, dan is dat een beschermde discipline
+> en kan Finance of Projectmanagement niet meer naar die persoon linken; dan is
+> Shaniel elke keer nodig om koppelingen te leggen. Zijn eis: de persoon moet
+> **uit de HR-map**, net zoals het woordenboek voor iedereen toegankelijk is,
+> ook al is het maar de naam. De rest komt in lagen daaronder.
+> Vergelijking die hij maakt: het pand "Herfstland 65" is voor iedereen
+> linkbaar, maar aankoopprijs, eigenaar en leningen hoeven niet zichtbaar.
+
+- [x] **De persoon staat al buiten HR** - `kern.persoon` is sinds het begin de
+      centrale entiteit waar communicatie (nummers), kosten (seats), de graaf en
+      sinds 2026-07-20 het HR-dashboard naar verwijzen. De architectuur die
+      Mehdi vraagt ligt er dus al; wat ontbreekt is de **gelaagde toegang** en
+      de presentatie.
+- [ ] **Lagen op het persoonsprofiel met eigen toegang** (het echte bouwwerk):
+      (a) **publiek/linkbaar** voor iedereen: naam, foto, afdeling, firma;
+      (b) **HR**: verlof, ziekte, rooster, contract;
+      (c) **finance**: salaris, dertiende maand, betaald/niet betaald;
+      (d) **eigen laag**: de medewerker ziet zijn eigen gegevens ("sinds
+          wanneer werk ik, dat is mijn salaris, zoveel ziektedagen");
+      (e) **afdelingshoofd**: de eigen mensen, en vergelijking of som over een
+          paar collega's.
+- [ ] **Toegang op ROL, niet op persoon**: "Ishara is een keer Ishara en een
+      keer HR-verantwoordelijke; doet iemand anders die job, dan mag die het
+      zien." Sluit aan op het bestaande punt "RBAC verfijnen" en het
+      groepstoegang-plan. Eerste stap is gezet (2026-07-20: `_require_beheer`
+      scheidt personeelskant van bedrijfsvoering in het organisatie-dashboard).
+- [ ] **Alleen relevante disciplines op een persoon**, niet alle 17. Nu alleen
+      HR en Finance (waar de betaling vandaan komt); projectmanagement en
+      technologie bewust nog niet.
+- [ ] **Foto als bron van waarheid**: een officiële foto per medewerker in het
+      platform, van waaruit Zoom, Monday en de rest volgen. Nu heeft iedereen
+      overal een andere foto en dat oogt onprofessioneel (voorbeeld Mehdi: een
+      camera die in een pot staat).
+- [ ] **Zelfbediening tegen herhaalvragen**: veelgestelde HR-vragen
+      (verlofsaldo, rechten, regelingen) zelf opzoekbaar maken. Mehdi's punt is
+      niet de vraag zelf maar **de hoeveelheid**: iedereen belt Mehdi of Ishara
+      voor hetzelfde. Later hetzelfde principe voor klanten.
+- [ ] **Connectiviteit van een persoon zichtbaar maken** (op de Second Brain):
+      hoeveel en waaraan hangt iemand vast in de hele organisatie. Nut volgens
+      Mehdi: laat zien wie werkelijk betrokken is, los van zelfbeeld
+      ("sommigen zijn overgewaardeerd, sommigen ondergewaardeerd").
+- [ ] **Risicoanalyse (bus-factor)** bovenop die connectiviteit: wie is zo'n
+      knooppunt dat het stilvalt als die persoon wegvalt, en een stapsgewijs
+      plan om die afhankelijkheid te verlagen. Mehdi noemt zichzelf expliciet
+      als voorbeeld: "als ik doodval mag het niet stilvallen."
+- [ ] **Subdisciplines tonen onder een discipline** (HR heeft eigen
+      sub-dashboards: DeskTime, salaris, medewerkers).
+- [ ] **Voortgang per discipline meten**, en het onderscheid vasthouden tussen
+      *de discipline die vooruitgang boekt* en *de persoon die daarvoor zorgt*.
+      Mehdi wil kunnen zien welke discipline het verst geautomatiseerd is, waar
+      de knelpunten zitten, en welke impact iemands werk werkelijk heeft
+      ("Ishara zegt dat er 110 zijn, maar ik zie de impact niet").
+- [ ] **Twee assen vasthouden**: 17 disciplines horizontaal x de firma's, die
+      elkaar kruisen in plaats van los te staan. Er is maar een keer Abby en
+      een keer H-Invest. In het organisatie-dashboard zijn dat nu de tabs
+      Medewerkers en Firma's.
+- [ ] **Tools & accounts**: blijft die naam, of gaat het onder de disciplines
+      hangen? Mehdi neigt naar koppelen aan de disciplines. Ook openstaand:
+      wat mag een medewerker daar zelf zien, wijzigen en verwijderen?
+- [ ] **Ishara moet zelfstandig verder kunnen**: Shaniel maakt de techniek
+      klaar, Ishara vult de inhoud. Zij mag niet op hem hoeven wachten.
+      (Eerste stap gezet 2026-07-20: zij kan de DeskTime-data zelf verversen.)
+
+**Beslissingen die eerst moeten vallen:**
+- Welk gegeven leeft waar: in `kern` (platformbreed) of in het HR-schema?
+- **Salaris in het platform, ja of nee?** Het HR-dashboard houdt salarisdata er
+  nu bewust buiten, maar Mehdi beschrijft een eigen laag en een finance-laag
+  waar salaris juist wel in zit. Dit is de zwaarste privacy-keuze van de lijst.
+- Per laag uitschrijven wie hem mag zien, in rollen (niet in namen).
+- Wat wordt de bron van waarheid per gegeven, nu er meerdere HR-bronnen zijn
+  (DeskTime, salarisadministratie, het register zelf)?
+
+**Actiepunten uit Fathom:** medewerkers-datamodellen van grotere bedrijven
+onderzoeken en een voorstel voor structuur en toegang aan Ishara voorleggen;
+daarna de bouw inplannen met Ishara, inclusief voortgangs- en
+subdiscipline-statistieken.
+
 ## Unified Dashboard - instructies Mehdi (2026-07-04)
 
 > Bron: schriftelijke visie + feedback van Mehdi. Vaste architectuur = **17
