@@ -1,0 +1,17 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name hr.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # HR-dashboard (HDS, DeskTime). Vertrouwelijke personeelsdata: alleen
+    # achter forward-auth, en de app controleert zelf nog eens op de groepen
+    # hr/manager/admin. Het gegenereerde bestand is enkele megabytes, dus
+    # ruimere buffers en compressie.
+    set $app_upstream http://app-hr:3013;
+    gzip on;
+    gzip_types text/html;
+    gzip_min_length 4096;
+    proxy_buffering off;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

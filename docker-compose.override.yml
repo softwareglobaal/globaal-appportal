@@ -32,6 +32,32 @@ services:
       retries: 3
     networks: [appnet]
 
+  app-hr:
+    build:
+      context: ./hr
+      dockerfile: app/Dockerfile
+    image: appportal-hr
+    restart: unless-stopped
+    environment:
+      PORT: "3013"
+      # Eigen rol (migratie 075); leeg = app toont een nette melding.
+      HR_DB_URL: ${HR_DB_URL:-}
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+      # Zelfde sleutel als de DeskTime-spiegel van de organisatie-app.
+      DESKTIME_API_KEY: ${DESKTIME_API_KEY:-}
+      HR_GROUPS: ${HR_GROUPS:-hr,manager}
+      HR_VANAF: ${HR_VANAF:-2025-01-01}
+      HR_HANDMATIG_VANAF: ${HR_HANDMATIG_VANAF:-2026-01-01}
+    volumes:
+      # Het gegenereerde dashboard: VM-only, nooit in git.
+      - hr-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3013/healthz', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    networks: [appnet]
+
   app-telefoonregister:
     build: ./telefoonregister
     image: appportal-telefoonregister
@@ -255,3 +281,4 @@ volumes:
   telefoonregister-data:
   sales-data:
   projecten-data:
+  hr-data:
