@@ -15,28 +15,30 @@ set -eu
 VANAF="${1:-14 days ago}"
 PSQL="docker compose exec -T postgresql psql -U authentik -d appportal -v ON_ERROR_STOP=1 -q"
 
-# repo-map + repo-naam; de checkouts op de VM zijn de bron.
-REPOS="
-$HOME/appportal|globaal-appportal
-$HOME/appportal/medewerkers|globaal-organisatie
-$HOME/appportal/kosten|globaal-kosten
-$HOME/appportal/communicatie|globaal-communicatie
-$HOME/appportal/sales|globaal-sales
-$HOME/appportal/projecten|globaal-projecten
-$HOME/appportal/vermogen|globaal-vermogen
-$HOME/appportal/draaiboek|globaal-draaiboek
-$HOME/kosten|globaal-kosten-pijplijn
-$HOME/factuurrouter|globaal-factuurrouter
-$HOME/stagebeoordeling|globaal-stagebeoordeling
-$HOME/schuldentracker|globaal-schuldentracker
-"
+# De checkouts op de VM zijn de bron. Bewust GEEN vaste lijst meer: die raakt
+# achter zodra er een repo bijkomt (globaal-hr stond er daardoor niet in). We
+# zoeken de git-checkouts en leiden de repo-naam af uit de remote-URL, zodat
+# een nieuwe app vanzelf meetelt.
+vind_repos() {
+  for map in "$HOME"/* "$HOME"/appportal/*; do
+    [ -d "$map/.git" ] || continue
+    url=$(git -C "$map" config --get remote.origin.url 2>/dev/null) || continue
+    [ -n "$url" ] || continue
+    naam=$(basename "$url" .git)
+    printf '%s|%s\n' "$map" "$naam"
+  done | sort -u -t'|' -k2,2   # één checkout per repo (de eerste die we zien)
+}
 
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
 
-echo "$REPOS" | while IFS='|' read -r map repo; do
+vind_repos | while IFS='|' read -r map repo; do
   [ -n "$map" ] || continue
   [ -d "$map/.git" ] || continue
+  # Onbekende repo? Meteen als applicatie registreren, dan hoeft niemand
+  # daaraan te denken bij een nieuwe app.
+  printf "INSERT INTO ontwikkeling.app (repo, naam) VALUES ('%s', '%s') ON CONFLICT (repo) DO NOTHING;\n" \
+         "$repo" "$repo" >> "$TMP"
   # Per commit een kopregel C|datum|email, daarna numstat-regels (plus TAB min
   # TAB pad). awk aggregeert naar dag+auteur.
   git -C "$map" log --since="$VANAF" --no-merges \
