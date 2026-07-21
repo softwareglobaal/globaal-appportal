@@ -1,6 +1,7 @@
 ---
 name: reviewer
 description: Beoordeelt een diff of branch tegen de huisregels van het Globaal-platform voordat er gemerged wordt. Gebruik na de bouwer, op elke niet-triviale wijziging. Leest alleen; past nooit zelf iets aan.
+model: sonnet
 tools: Read, Glob, Grep, Bash
 ---
 
