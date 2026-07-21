@@ -73,19 +73,23 @@
       sinds 2026-07-20 het HR-dashboard naar verwijzen. De architectuur die
       Mehdi vraagt ligt er dus al; wat ontbreekt is de **gelaagde toegang** en
       de presentatie.
-- [ ] **Lagen op het persoonsprofiel met eigen toegang** (het echte bouwwerk):
-      (a) **publiek/linkbaar** voor iedereen: naam, foto, afdeling, firma;
-      (b) **HR**: verlof, ziekte, rooster, contract;
-      (c) **finance**: salaris, dertiende maand, betaald/niet betaald;
-      (d) **eigen laag**: de medewerker ziet zijn eigen gegevens ("sinds
-          wanneer werk ik, dat is mijn salaris, zoveel ziektedagen");
-      (e) **afdelingshoofd**: de eigen mensen, en vergelijking of som over een
-          paar collega's.
-- [ ] **Toegang op ROL, niet op persoon**: "Ishara is een keer Ishara en een
-      keer HR-verantwoordelijke; doet iemand anders die job, dan mag die het
-      zien." Sluit aan op het bestaande punt "RBAC verfijnen" en het
-      groepstoegang-plan. Eerste stap is gezet (2026-07-20: `_require_beheer`
-      scheidt personeelskant van bedrijfsvoering in het organisatie-dashboard).
+- [x] **Lagen op het persoonsprofiel met eigen toegang** - GEBOUWD EN LIVE
+      (2026-07-20, migratie 076 + organisatie-app; ontwerp in
+      docs/PERSOONSLAGEN.md): laag 0 publiek (kern.persoon + foto-tabel),
+      laag 1 HR (contract/rooster/verlof/verzuim, alleen portal + hr_app),
+      laag 2 beloning (salaris met historie en inzage-log, alleen portal).
+      De laaggrens is een database-grant, geen afspraak. Invoer voor HR en
+      management werkt op het profiel. Rest, als aparte punten hieronder:
+      (d) eigen laag werkt technisch maar gewone medewerkers hebben nog geen
+      toegang tot het dashboard (besluit Mehdi/Shaniel nodig);
+      (e) afdelingshoofd-rol bestaat nog niet (wacht op VOOR-HR vraag 3);
+      foto-upload nog te bouwen.
+- [x] **Toegang op ROL, niet op persoon** - PRINCIPE LIVE (2026-07-20): de
+      persoonslagen kennen een rolmatrix (hr, manager, admin, zichzelf via
+      het Authentik-account), `_require_beheer` scheidt personeelskant van
+      bedrijfsvoering, en Ishara is teruggebracht tot alleen de hr-groep.
+      Rest: afdelingshoofd-rol en het afbouwen van de brede manager-groep,
+      onder "Group-based toegang via Authentik Blueprints".
 - [ ] **Alleen relevante disciplines op een persoon**, niet alle 17. Nu alleen
       HR en Finance (waar de betaling vandaan komt); projectmanagement en
       technologie bewust nog niet.
@@ -119,23 +123,73 @@
 - [ ] **Tools & accounts**: blijft die naam, of gaat het onder de disciplines
       hangen? Mehdi neigt naar koppelen aan de disciplines. Ook openstaand:
       wat mag een medewerker daar zelf zien, wijzigen en verwijderen?
-- [ ] **Ishara moet zelfstandig verder kunnen**: Shaniel maakt de techniek
-      klaar, Ishara vult de inhoud. Zij mag niet op hem hoeven wachten.
-      (Eerste stap gezet 2026-07-20: zij kan de DeskTime-data zelf verversen.)
+- [x] **Ishara moet zelfstandig verder kunnen** - GEBOUWD (2026-07-20): zij
+      kan de DeskTime-data zelf verversen (knop, geen admin nodig), de HR- en
+      beloningslaag zelf invullen op het profiel, en heeft een eigen
+      handleiding (globaal-hr/docs/VOOR-HR.md) met de vijf inhoudelijke
+      vragen die alleen HR kan beantwoorden. De bal ligt nu bij haar.
 
-**Beslissingen die eerst moeten vallen:**
-- Welk gegeven leeft waar: in `kern` (platformbreed) of in het HR-schema?
-- **Salaris in het platform, ja of nee?** Het HR-dashboard houdt salarisdata er
-  nu bewust buiten, maar Mehdi beschrijft een eigen laag en een finance-laag
-  waar salaris juist wel in zit. Dit is de zwaarste privacy-keuze van de lijst.
-- Per laag uitschrijven wie hem mag zien, in rollen (niet in namen).
-- Wat wordt de bron van waarheid per gegeven, nu er meerdere HR-bronnen zijn
-  (DeskTime, salarisadministratie, het register zelf)?
+**Beslissingen - drie van de vier BESLIST (Shaniel, 2026-07-20):**
+- [x] Welk gegeven leeft waar: **alles in `kern`**, het HR-schema leidt eraf.
+- [x] **Salaris in het platform: JA**, maar alleen zichtbaar voor HR en
+      management (plus de persoon zelf). Gebouwd als kern.persoon_beloning
+      met inzage-log; nooit in graaf, AI of export.
+- [x] Toegang per laag **in rollen, niet in namen** (namen = tijdverlies bij
+      elke wissel). Gebouwd als rolmatrix.
+- [ ] **Bron van waarheid per gegeven** - bewust UITGESTELD: eerst moet
+      vaststaan wélke gegevens we willen (VOOR-HR vraag 1), dan pas per
+      gegeven de leidende bron kiezen (DeskTime, loonadministratie, register).
 
 **Actiepunten uit Fathom:** medewerkers-datamodellen van grotere bedrijven
 onderzoeken en een voorstel voor structuur en toegang aan Ishara voorleggen;
 daarna de bouw inplannen met Ishara, inclusief voortgangs- en
 subdiscipline-statistieken.
+
+## Agentic AI voor het platform (meeting + onderzoek 2026-07-17, tempo-wens Mehdi)
+
+> Mehdi wil georkestreerde agent-GROEPEN, geen losse agents: een voor
+> software/dashboards bouwen (rollen architect/front/back/review), later een
+> voor marketing/sales. Motief: dashboardbouw duurt te lang en "twee
+> agent-groepen zijn twee collega's erbij die niet opstappen". Geverifieerd
+> onderzoek (deep-research 2026-07-17, 24 claims bevestigd) wees uit:
+> Anthropic-native is de bewezen route; agent teams zijn experimenteel met
+> lineaire tokenkosten per teamlid (alleen zinvol als parallelle werkers
+> moeten overleggen); de Claude Code GitHub Action is volwassen maar de
+> veilige-defaults-claim is ONTKRACHT (0-3) en Microsoft toonde een
+> prompt-injectie die CI-secrets kon lekken; claims over frameworks
+> (CrewAI/LangGraph/claude-flow), goedkope werkmodellen (Kimi/GLM/DeepSeek)
+> en marketing-agent-teams overleefden verificatie NIET. GDPR-route: eigen
+> runner + Bedrock/Vertex EU-regio's.
+>
+> Waarom wij snel kunnen: DASHBOARD-TEMPLATE.md is al geschreven als
+> agent-instructie, de CI keurt machinaal (incl. klikbaarheids-poort), de
+> PR-flow en auto-deploy bestaan, en de Ontwikkeling-tab (migratie 074) meet
+> agent-werk per app per dag.
+
+- [ ] **Fase 1 - rollen-bibliotheek** in de platform-repos: `.claude/agents`
+      met architect, bouwer, reviewer (dwingt DASHBOARD-TEMPLATE af) en
+      verifier (draait de app echt). Subagents als standaard-werkeenheid;
+      het experimentele team-mechanisme alleen voor een pilot. Pilot: een
+      echte dashboard-taak er volledig doorheen, eindigend in een PR die
+      een MENS beoordeelt. Kosten binnen het bestaande abonnement, meetbaar
+      in de Ontwikkeling-tab.
+- [ ] **Fase 2 - opdrachtkanaal voor collega's**: Claude Code GitHub Action
+      (@claude op issues) op een pilot-repo met expliciet geharde
+      permissies (defaults NIET vertrouwen; least-privilege tokens; alle
+      repo-content als onbetrouwbaar behandelen). Beslispunt Mehdi/Shaniel:
+      agent-PRs altijd door een mens laten mergen - de bestaande
+      auto-merge-bij-groene-CI is daarvoor niet genoeg.
+- [ ] **Fase 3 - marketing/sales-groep** op hetzelfde skelet (Agent
+      SDK-terrein: software stuurt de agent); model-tiering en EU/offline-
+      hosting pas op basis van GEMETEN kosten, niet op gevoel.
+- [ ] **Vervolgonderzoek terughalen**: de vier open vragen zijn uitbesteed
+      (handover-prompt aan ChatGPT geleverd 2026-07-17): (1) werkelijke
+      defaults + hardening-checklist van claude-code-action, (2) economie
+      van gemengde teams (Claude-lead + goedkope werkers) vs een
+      Max-abonnement, (3) serieuze productie-cases van derde-partij-
+      frameworks, (4) Managed Agents en GDPR. Resultaten wegen en in de
+      fases verwerken; conceptbestanden voor de vijf agent-rollen komen
+      daar ook uit.
 
 ## Unified Dashboard - instructies Mehdi (2026-07-04)
 
@@ -628,8 +682,14 @@ subdiscipline-statistieken.
 - [ ] **Xelion: houden-of-schrappen-ronde** met Mehdi - VOORBEREIDING
       GEBOUWD (2026-07-07): kandidatenlijst op de statistieken-tab met
       maandkost, 90-dagen-gebruik, factoren (WhatsApp/ItsMe/datasim) en
-      de validatie-knoppen direct in de lijst. Rest: de ronde zelf met
-      Mehdi doorlopen en beslissingen zetten.
+      de validatie-knoppen direct in de lijst. Nieuwe munitie (2026-07-16,
+      cross-check tenant-admin): NEGEN actieve Close Call-nummers hebben
+      geen enkele Xelion-lijn meer (Enstaco-cluster, Tom, IT, Legal,
+      053 89 35 75, 053 89 61 63, ZIDI) en vrijwel geen verkeer - wij
+      betalen ervoor terwijl Xelion ze niet kent; en Sales Yannick is één
+      lijn met twee betaalde nummers. Rest: de ronde zelf met Mehdi
+      doorlopen en beslissingen zetten (Behouden-kolom, elimineren pas
+      ná verificatie).
 
 ## Meeting 2026-07-03 (communicatie-review, met Siyan/Angela)
 
@@ -789,7 +849,13 @@ subdiscipline-statistieken.
       proactieve AI; het verzekerings-voorbeeld van Mehdi).
 - [ ] **Briefing per WhatsApp** versturen (laag 2½ - het duwtje dat je opzoekt;
       toekomst, expliciet geparkeerd).
-- [ ] **RBAC verfijnen**: wie ziet welk deel van het dashboard (nu: admin/manager alles).
+- [x] **RBAC verfijnen** - EERSTE ECHTE SCHEIDING LIVE (2026-07-20): het
+      organisatie-dashboard kent nu staf (medewerkers/firma's/disciplines/
+      woordenboek) en beheer (financien/relaties/signalen/ontwikkeling/graaf,
+      alleen admin+manager) via `_require_beheer()`; de persoonslagen
+      (migratie 076) hebben een eigen rolmatrix incl. "zichzelf". Vervolg
+      (afdelingshoofd-rol, manager afbouwen) valt onder "Group-based toegang
+      via Authentik Blueprints" hieronder.
 
 ## Second Brain (meeting 2026-07-02, Mehdi)
 - [x] **Finalisatie-status + kleurcodering** - GEBOUWD (migratie 018): toggle
@@ -853,13 +919,20 @@ subdiscipline-statistieken.
       heeft er 40 onder Close Call BV - één Xelion-nummer ontbreekt of zit fout onder
       Proximus/Telesur. Nummerbijlage bij Close Call opvragen en vergelijken. (Mega is
       wél sluitend: 5 op factuur 1126002031 = 5 in register, à € 3,31 excl.)
-- [ ] **Verantwoordelijken toewijzen** op nummers en e-mailadressen (team).
-- [ ] **kosten.firma → kern.firma** verzoenen - brug ligt er (migratie 012:
-      `kern_firma_id` + leverancier-links + trigger); rest: (a) niet-gematchte
-      firma's handmatig koppelen (Second Brain meldt ze), (b) prijzen/seats van de
-      66 vendors vullen (factuur voor factuur), (c) creditcard-afschriften →
-      `charge_actual` voor verwacht-vs-werkelijk, (d) uiteindelijk text-id's weg
-      samen met de host-app (`globaal-kosten`).
+- [x] **Verantwoordelijken toewijzen** - GROTENDEELS GEDAAN (2026-07-16,
+      bulk met akkoord Shaniel): 27 verantwoordelijken + 43 afdelingen gezet
+      uit de Xelion-belvolgorde (43 van 60 actieve nummers gevuld, audit-spoor
+      in bijgewerkt_door). Rest: 17 nummers zonder afleidbare eigenaar =
+      grotendeels de afbouw-/beslislijst (Enstaco-cluster, HDS, Vlad/Stefan);
+      e-mailadressen wachten op de seed van de lege e-mailtab.
+- [ ] **kosten.firma → kern.firma** verzoenen - brug ligt er (migratie 012);
+      (a) niet-gematchte firma's koppelen GEDAAN (migratie 071, 2026-07-16:
+      Energie Efficient/HDS/Zidi); (c) is ANDERS OPGELOST: geen charge_actual
+      maar kosten.bank_transactie (migratie 069) + de drie kolommen
+      Verwacht|Via kaart|Via factuur in de herbouwde stack-app. Rest:
+      (b) prijzen/seats van de vendors vullen (staat ook onder "Octopus x
+      kosten-dashboard") en (d) uiteindelijk de text-id's weg zodra de oude
+      host-pijplijn vervangen is.
 - [ ] Ontbrekende HR-nummers/familienamen/e-mails in kern.persoon aanvullen.
 
 ## Techniek / hygiëne
@@ -903,8 +976,12 @@ subdiscipline-statistieken.
       inklapbaar persoonsprofiel, diensten-aanvinklijst, interne taal weg
       uit meldingen. Huisregels 5-8 toegevoegd aan DASHBOARD-TEMPLATE.md.
 - [ ] **Zelfde UI-conventies nalopen op de andere dashboards**
-      (communicatie, kosten, draaiboek, sales): de template-regels gelden
-      platformbreed; de organisatie-app is nu de referentie.
+      (communicatie, draaiboek, sales): de template-regels gelden
+      platformbreed. Sinds 2026-07-16 is er ook een AFDWINGBARE referentie:
+      globaal-kosten heeft check_klikbaar.py in de CI (datum-/getalcellen
+      zonder link falen, opt-out class="plat") plus linkmacro's in
+      templates/links.html; DASHBOARD-TEMPLATE 3.1 beschrijft het patroon.
+      Rest = de poort en macro's kopiëren naar de overige repos.
 
 ## Octopus x kosten-dashboard (2026-07-15)
 - [x] **Kolom "Werkelijk betaald" GEBOUWD** (globaal-kosten PR #7 +
@@ -912,10 +989,13 @@ subdiscipline-statistieken.
       registratie per softwarekaart, drill-down naar de Financien-tab,
       paneel met terugkerende leveranciers zonder registratie (tevens
       creditcard-diagnose), drie nieuwe signalen-detectoren.
-- [ ] **Creditcard-kanttekening beoordelen** zodra de productie-data in
-      het paneel staat: verschijnen kaartmaatschappijen als grote
-      verzamelposten, dan blijven de afschriften de bron voor het
-      kaart-detail en beslissen we of charge_actual alsnog nodig is.
+- [x] **Creditcard-kanttekening beoordeeld** - AFGEROND (2026-07-16, meting
+      op productie): echte verzamelposten bestaan nauwelijks (de vaste
+      KBC-maandposten zijn aflossingen); een kaartuitgave bereikt de
+      boekhouding alleen via een aangeleverde aankoopfactuur (~36% dekking).
+      De Reconciliatie-tab meet nu het factuurspoor per firma/leverancier
+      met de gaten als werkvoorraad voor Joan; afschriften blijven de bron
+      voor het kaart-detail, charge_actual is niet nodig.
 - [ ] **Software-rekeningen aanwijzen** (het grootboek-vangnet,
       kosten.software_rekening): de hulplijst in het kosten-dashboard
       toont per dossier de rekeningen met de meeste aankopen; Joan of
@@ -927,7 +1007,14 @@ subdiscipline-statistieken.
       de prijsafwijking-detector doet pas iets bij ingevulde registratie.
 
 ## ★ Herbouw kosten-dashboard (besluit Shaniel 2026-07-15, op de planning)
-- [ ] **Herbouw als gewone stack-app** volgens DASHBOARD-TEMPLATE.md, ter
+- [x] **Herbouw als gewone stack-app** - GEBOUWD EN LIVE (2026-07-15/16,
+      globaal-kosten PR #9 t/m #15 + migraties 069-071): Flask-app in `app/`,
+      compose-service app-kosten op 3012, database als ene waarheid
+      (kosten.bank_transactie), oude generator alleen nog invoerpijplijn met
+      ververs-knop via hostmachine:8090. Daarna doorontwikkeld: drie kolommen
+      Verwacht|Via kaart|Via factuur, reconciliatie op factuurspoor,
+      beheerder-koppeling en de klikbaarheids-poort in de CI. Origineel punt
+      hieronder als context. Volgens DASHBOARD-TEMPLATE.md, ter
       vervanging van de statische generator op de host. Lost structureel op:
       (1) drie waarheden (bankdata in HTML, localStorage, database) wordt
       een waarheid in de database; (2) statisch bakken wordt live rendering
