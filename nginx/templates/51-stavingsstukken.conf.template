@@ -1,0 +1,12 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name stavingsstukken.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Stavingsstukken-cockpit (EPB-validatiepipeline, leesdashboard).
+    # Host-app via systemd op poort 8091; alleen leden van de groep
+    # "stavingsstukken" (plus admin) zien de tegel en komen erbij.
+    set $app_upstream http://172.17.0.1:8091;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
