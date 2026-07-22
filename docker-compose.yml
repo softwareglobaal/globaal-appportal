@@ -22,6 +22,22 @@ services:
     ports:
       - "127.0.0.1:5001:5001"
     networks: [appnet]
+  app-agents:
+    build: ./agents
+    container_name: app-agents
+    restart: unless-stopped
+    environment:
+      APP_NAME: Agents
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      AGENTS_DB: /data/agents.db
+      AGENTS_TOKEN: ${AGENTS_TOKEN:-}
+      PORT: "3020"
+    volumes:
+      - ./agents-data:/data
+    ports:
+      - "127.0.0.1:3020:3020"
+    networks: [appnet]
+
   # One-shot init container: generates a local CA + wildcard TLS cert into ./certs.
   # Idempotent — exits immediately if certs for the current BASE_DOMAIN already exist.
   certgen:

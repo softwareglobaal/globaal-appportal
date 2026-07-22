@@ -54,3 +54,9 @@ apps:
     subdomain: draaiboek
     roles: [admin, manager, draaiboek]
     status: active
+  - id: agents
+    name: Agents
+    description: Besturingscentrum van het agent-team
+    subdomain: agents
+    roles: [admin, manager, agents]
+    status: active

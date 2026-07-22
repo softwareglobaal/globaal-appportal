@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents</title>
+<style>
+  :root {
+    --rust: #9aa3ab; --actief: #2e7d4f; --klaar: #2f6fb0; --fout: #a33a3a;
+    --kaart: #ffffff; --lijn: #e4e7ea; --tekst: #24303a; --muted: #6b7680;
+    --bg: #f4f5f7;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+         color: var(--tekst); background: var(--bg); }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 1.6rem; }
+  .sub { color: var(--muted); font-size: 0.95rem; }
+  .hint { color: var(--muted); font-size: 0.85rem; margin: 6px 0 18px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 20px;
+            font-size: 0.8rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.rust { background: var(--rust); } .dot.actief { background: var(--actief); }
+  .dot.klaar { background: var(--klaar); } .dot.fout { background: var(--fout); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+          gap: 16px; }
+  .kaart { background: var(--kaart); border: 1px solid var(--lijn); border-radius: 12px;
+           padding: 18px 16px; display: flex; flex-direction: column; align-items: center;
+           text-align: center; }
+  .fig { width: 64px; height: 64px; margin-bottom: 8px; }
+  .fig .lijf { transition: fill 0.4s ease; }
+  .kaart[data-status="rust"]   .fig .lijf { fill: var(--rust); }
+  .kaart[data-status="actief"] .fig .lijf { fill: var(--actief); }
+  .kaart[data-status="klaar"]  .fig .lijf { fill: var(--klaar); }
+  .kaart[data-status="fout"]   .fig .lijf { fill: var(--fout); }
+  .kaart[data-status="actief"] .fig { animation: adem 1.6s ease-in-out infinite; }
+  @keyframes adem { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+  .naam { font-weight: 600; font-size: 0.98rem; }
+  .rol { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+  .status { margin-top: 10px; font-size: 0.85rem; font-weight: 600; text-transform: capitalize; }
+  .kaart[data-status="rust"]   .status { color: var(--rust); }
+  .kaart[data-status="actief"] .status { color: var(--actief); }
+  .kaart[data-status="klaar"]  .status { color: var(--klaar); }
+  .kaart[data-status="fout"]   .status { color: var(--fout); }
+  .detail { color: var(--muted); font-size: 0.76rem; margin-top: 6px; min-height: 1.1em; }
+  .sinds { color: var(--muted); font-size: 0.72rem; margin-top: 4px; }
+  footer { margin-top: 30px; color: var(--muted); font-size: 0.78rem; }
+  a { color: #2f6fb0; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Agents</h1>
+    <span class="sub">het team in een oogopslag</span>
+  </header>
+  <p class="hint">Elke agent is een oproepkracht: rust is de normale toestand.
+    Actief betekent dat hij nu aan het werk is. De weergave ververst zichzelf.</p>
+
+  <div class="legend">
+    <span><i class="dot rust"></i> rust</span>
+    <span><i class="dot actief"></i> actief</span>
+    <span><i class="dot klaar"></i> klaar</span>
+    <span><i class="dot fout"></i> fout</span>
+  </div>
+
+  <div class="grid" id="grid">
+    {% for a in agents %}
+    <div class="kaart" data-naam="{{ a.naam }}" data-status="{{ a.status }}">
+      <svg class="fig" viewBox="0 0 64 64" aria-hidden="true">
+        <g class="lijf">
+          <circle cx="32" cy="20" r="11"/>
+          <path d="M12 56c0-11 9-20 20-20s20 9 20 20z"/>
+        </g>
+      </svg>
+      <div class="naam">{{ a.label }}</div>
+      <div class="rol">{{ a.rol }}</div>
+      <div class="status">{{ a.status }}</div>
+      <div class="detail">{% if a.taak %}{{ a.taak }}{% elif a.detail %}{{ a.detail }}{% endif %}</div>
+      <div class="sinds">{% if a.sinds %}sinds {{ a.sinds }}{% else %}nog geen meldingen{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <footer>
+    Aangemeld als {{ username }}. Terug naar het <a href="{{ portal_url }}">portaal</a>.
+  </footer>
+</div>
+
+<script>
+  async function ververs() {
+    try {
+      const r = await fetch("/api/status", {cache: "no-store"});
+      if (!r.ok) return;
+      const data = await r.json();
+      for (const a of data.agents) {
+        const k = document.querySelector('.kaart[data-naam="' + a.naam + '"]');
+        if (!k) continue;
+        k.dataset.status = a.status;
+        k.querySelector(".status").textContent = a.status;
+        k.querySelector(".detail").textContent = a.taak || a.detail || "";
+        k.querySelector(".sinds").textContent = a.sinds ? "sinds " + a.sinds : "nog geen meldingen";
+      }
+    } catch (e) { /* stil: de volgende ronde probeert opnieuw */ }
+  }
+  setInterval(ververs, 10000);
+</script>
+</body>
+</html>

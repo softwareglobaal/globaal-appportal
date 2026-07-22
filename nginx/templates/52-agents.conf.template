@@ -1,0 +1,24 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name agents.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Forward-auth (embedded outpost) beschermt de hele tegel; identiteit +
+    # groepen gaan als X-authentik-* headers naar de Flask-app.
+    set $app_upstream http://app-agents:3020;
+
+    # Statusmeldingen van de agents: een agent heeft geen browsersessie, dus
+    # deze ene POST passeert de forward-auth en de app controleert zelf een
+    # gedeeld token (AGENTS_TOKEN). Alleen een kleine body; de
+    # identiteitsheaders worden hard geleegd.
+    location = /agent-status {
+        client_max_body_size 4k;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass http://app-agents:3020;
+    }
+
+    include /etc/nginx/snippets/forward-auth.conf;
+}
