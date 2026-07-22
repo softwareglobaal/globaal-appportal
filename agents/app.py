@@ -112,6 +112,12 @@ def db():
     _kolom(conn, "voorstel", "uitvoer_detail", "TEXT DEFAULT ''")
     _kolom(conn, "voorstel", "uitvoer_ts", "TEXT DEFAULT ''")
     _kolom(conn, "voorstel", "bewijs", "TEXT DEFAULT ''")
+    # Handelingen herleid uit de systemd-journal (bron van waarheid); de
+    # uitvoerder synct deze elke minuut. Alleen een weergave-spiegel.
+    conn.execute("""CREATE TABLE IF NOT EXISTS handeling (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent     TEXT, tijd TEXT, modus TEXT, container TEXT, actie TEXT,
+        waarom    TEXT, uitkomst TEXT, detail TEXT, bewijs TEXT)""")
     return conn
 
 
@@ -314,30 +320,26 @@ def uitvoer_resultaat():
 
 
 def handelingen(naam):
-    """De tijdlijn van wat deze agent deed: voorgesteld, besloten, uitgevoerd."""
+    """De handelingen van de agent, herleid uit de systemd-journal (via de sync)."""
     conn = db()
     rows = conn.execute(
-        """SELECT id, actie, reden, runbook, doel, besluit, besluit_door,
-                  besluit_ts, uitvoering, uitvoer_detail, uitvoer_ts, bewijs, aangemaakt
-           FROM voorstel WHERE naam=? ORDER BY id DESC LIMIT 25""", (naam,)).fetchall()
+        "SELECT * FROM handeling WHERE agent=? ORDER BY id DESC LIMIT 30", (naam,)).fetchall()
     conn.close()
     uit = []
     for r in rows:
-        door = r["besluit_door"] or ""
-        if "autonoom" in door:
-            modus = "autonoom"
-        elif r["besluit"] == "geweigerd":
-            modus = "geweigerd"
-        elif door:
-            modus = f"goedgekeurd door {door}"
+        actie = r["actie"] or ""
+        container = r["container"] or ""
+        if actie == "herstart_container" and container:
+            actie_txt = "Herstart container " + container
+        elif container:
+            actie_txt = (actie + " " + container).strip()
         else:
-            modus = "voorgesteld"
+            actie_txt = actie
         uit.append({
-            "id": r["id"], "actie": r["actie"], "waarom": r["reden"] or "",
-            "besluit": r["besluit"], "modus": modus,
-            "uitvoering": r["uitvoering"] or "", "detail": r["uitvoer_detail"] or "",
-            "bewijs": r["bewijs"] or "",
-            "wanneer": _fmt(r["uitvoer_ts"] or r["besluit_ts"] or r["aangemaakt"]),
+            "actie": actie_txt, "modus": r["modus"] or "",
+            "uitvoering": r["uitkomst"] or "", "waarom": r["waarom"] or "",
+            "detail": r["detail"] or "", "bewijs": r["bewijs"] or "",
+            "wanneer": _fmt(r["tijd"]),
         })
     return uit
 
@@ -357,6 +359,34 @@ def api_agent(naam):
         "grenzen": detail["grenzen"], "cadans": detail["cadans"],
         "handelingen": handelingen(naam),
     })
+
+
+@app.route("/handelingen-sync", methods=["POST"])
+def handelingen_sync():
+    """De host-uitvoerder herleidt de handelingen uit de journal en zet ze hier;
+    de tegel spiegelt zo de journal. Token-auth, over localhost."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    d = request.get_json(silent=True) or {}
+    agent = str(d.get("agent", "")).strip().lower()[:40]
+    lijst = d.get("handelingen")
+    if not agent or not isinstance(lijst, list):
+        abort(400)
+    conn = db()
+    conn.execute("DELETE FROM handeling WHERE agent=?", (agent,))
+    for e in lijst[-50:]:
+        if not isinstance(e, dict):
+            continue
+        conn.execute(
+            """INSERT INTO handeling (agent, tijd, modus, container, actie, waarom,
+               uitkomst, detail, bewijs) VALUES (?,?,?,?,?,?,?,?,?)""",
+            (agent, str(e.get("tijd", ""))[:40], str(e.get("modus", ""))[:80],
+             str(e.get("container", ""))[:120], str(e.get("actie", ""))[:80],
+             str(e.get("waarom", ""))[:400], str(e.get("uitkomst", ""))[:40],
+             str(e.get("detail", ""))[:400], str(e.get("bewijs", ""))[:4000]))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
 
 @app.route("/healthz")
