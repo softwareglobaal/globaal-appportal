@@ -8,7 +8,7 @@
   :root {
     --rust: #9aa3ab; --actief: #2e7d4f; --klaar: #2f6fb0; --fout: #a33a3a;
     --kaart: #ffffff; --lijn: #e4e7ea; --tekst: #24303a; --muted: #6b7680;
-    --bg: #f4f5f7;
+    --bg: #f4f5f7; --ja: #2e7d4f; --nee: #a33a3a; --attent: #b06f00;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -16,9 +16,10 @@
   .wrap { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
   header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   h1 { margin: 0; font-size: 1.6rem; }
+  h2 { font-size: 1.05rem; margin: 30px 0 4px; }
   .sub { color: var(--muted); font-size: 0.95rem; }
-  .hint { color: var(--muted); font-size: 0.85rem; margin: 6px 0 18px; }
-  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 20px;
+  .hint { color: var(--muted); font-size: 0.85rem; margin: 6px 0 16px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 8px;
             font-size: 0.8rem; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
@@ -46,6 +47,20 @@
   .kaart[data-status="fout"]   .status { color: var(--fout); }
   .detail { color: var(--muted); font-size: 0.76rem; margin-top: 6px; min-height: 1.1em; }
   .sinds { color: var(--muted); font-size: 0.72rem; margin-top: 4px; }
+
+  .voorstel { background: var(--kaart); border: 1px solid var(--lijn);
+              border-left: 4px solid var(--attent); border-radius: 10px;
+              padding: 14px 16px; margin-bottom: 10px; }
+  .v-kop { font-size: 0.95rem; }
+  .v-reden { color: var(--muted); font-size: 0.83rem; margin: 4px 0 10px; }
+  .v-knoppen { display: flex; gap: 8px; }
+  .v-knoppen button { border: 0; border-radius: 8px; padding: 7px 14px; cursor: pointer;
+                      font-size: 0.85rem; font-weight: 600; color: #fff; }
+  .v-knoppen .ja { background: var(--ja); } .v-knoppen .nee { background: var(--nee); }
+  .v-knoppen button:disabled { opacity: 0.5; cursor: default; }
+  .leeg { color: var(--muted); font-size: 0.85rem; }
+  .besluit-rij { font-size: 0.8rem; color: var(--muted); padding: 3px 0; }
+  .besluit-rij .ja-t { color: var(--ja); } .besluit-rij .nee-t { color: var(--nee); }
   footer { margin-top: 30px; color: var(--muted); font-size: 0.78rem; }
   a { color: #2f6fb0; text-decoration: none; }
 </style>
@@ -84,12 +99,61 @@
     {% endfor %}
   </div>
 
+  <h2>Voorstellen</h2>
+  <p class="hint">Wat een agent voorstelt. Jij beslist. In deze fase wordt er nog
+    niets uitgevoerd: alleen je beslissing wordt vastgelegd.</p>
+  <div id="voorstellen">
+    {% for v in voorstellen %}
+    <div class="voorstel" data-id="{{ v.id }}">
+      <div class="v-kop"><strong>{{ v.label }}</strong> stelt voor: {{ v.actie }}</div>
+      {% if v.reden %}<div class="v-reden">{{ v.reden }}</div>{% endif %}
+      <div class="v-knoppen">
+        <button class="ja" onclick="beslis({{ v.id }}, 'goedgekeurd', this)">Goedkeuren</button>
+        <button class="nee" onclick="beslis({{ v.id }}, 'geweigerd', this)">Weigeren</button>
+      </div>
+    </div>
+    {% else %}
+    <p class="leeg" id="geen-voorstellen">Geen openstaande voorstellen. Een agent
+      stelt iets voor zodra er iets aandacht vraagt.</p>
+    {% endfor %}
+  </div>
+
+  {% if besluiten %}
+  <h2>Recente beslissingen</h2>
+  <div>
+    {% for b in besluiten %}
+    <div class="besluit-rij">
+      <span class="{{ 'ja-t' if b.besluit == 'goedgekeurd' else 'nee-t' }}">{{ b.besluit }}</span>
+      · {{ b.label }}: {{ b.actie }} · door {{ b.door }} op {{ b.wanneer }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <footer>
     Aangemeld als {{ username }}. Terug naar het <a href="{{ portal_url }}">portaal</a>.
   </footer>
 </div>
 
 <script>
+  async function beslis(id, besluit, knop) {
+    knop.parentNode.querySelectorAll("button").forEach(b => b.disabled = true);
+    try {
+      const r = await fetch("/voorstel/" + id + "/besluit", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({besluit: besluit}),
+      });
+      if (r.ok) { location.reload(); return; }
+    } catch (e) { /* val terug op opnieuw inschakelen */ }
+    knop.parentNode.querySelectorAll("button").forEach(b => b.disabled = false);
+  }
+
+  function huidigeIds() {
+    return Array.from(document.querySelectorAll(".voorstel"))
+      .map(el => el.dataset.id).sort().join(",");
+  }
+
   async function ververs() {
     try {
       const r = await fetch("/api/status", {cache: "no-store"});
@@ -103,6 +167,9 @@
         k.querySelector(".detail").textContent = a.taak || a.detail || "";
         k.querySelector(".sinds").textContent = a.sinds ? "sinds " + a.sinds : "nog geen meldingen";
       }
+      // Nieuw of verdwenen voorstel? Herlaad zodat de knoppen kloppen.
+      const nieuw = (data.voorstellen || []).map(v => String(v.id)).sort().join(",");
+      if (nieuw !== huidigeIds()) location.reload();
     } catch (e) { /* stil: de volgende ronde probeert opnieuw */ }
   }
   setInterval(ververs, 10000);

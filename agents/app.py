@@ -6,8 +6,10 @@ SQLite in het datavolume, geen database-credential nodig. Agents melden hun
 status via de token-route /agent-status (nginx laat die ene route langs de
 SSO); de rest van de app zit achter Authentik forward-auth.
 
-v1 is read-only: kijken, niet besturen. Knoppen om agents te starten of te
-stoppen komen later.
+Voorstellen (mens-in-de-lus): een agent kan bij een probleem een actie
+VOORSTELLEN. De gebruiker keurt goed of weigert op de tegel. In deze fase wordt
+er nog NIETS uitgevoerd: alleen de beslissing wordt vastgelegd (wie, wanneer).
+Zo zie je eerst welke voorstellen komen voordat de agent iets mag doen.
 """
 import os
 import sqlite3
@@ -37,10 +39,18 @@ TEAM = [
     {"naam": "verifier", "label": "Verifier", "type": "bouw",
      "rol": "test en verifieert"},
 ]
+LABELS = {a["naam"]: a["label"] for a in TEAM}
 
 
 def _nu():
     return datetime.now(timezone.utc)
+
+
+def _fmt(iso):
+    try:
+        return datetime.fromisoformat(iso).strftime("%d-%m %H:%M")
+    except Exception:
+        return ""
 
 
 def db():
@@ -53,13 +63,21 @@ def db():
         detail TEXT DEFAULT '',
         tokens INTEGER,
         ts     TEXT NOT NULL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS voorstel (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        naam         TEXT NOT NULL,
+        actie        TEXT NOT NULL,
+        reden        TEXT DEFAULT '',
+        aangemaakt   TEXT NOT NULL,
+        besluit      TEXT NOT NULL DEFAULT 'open',
+        besluit_door TEXT DEFAULT '',
+        besluit_ts   TEXT DEFAULT '')""")
     return conn
 
 
 def roster():
     """Het team met live status. 'actief' zonder afronding vervalt na een uur
-    naar rust (vrijwel zeker een afgebroken sessie); klaar en fout doven na
-    een dag uit naar rust."""
+    naar rust; klaar en fout doven na een dag uit naar rust."""
     conn = db()
     rows = {r["naam"]: r for r in conn.execute("SELECT * FROM status")}
     conn.close()
@@ -86,11 +104,35 @@ def roster():
     return uit
 
 
+def open_voorstellen():
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM voorstel WHERE besluit='open' ORDER BY aangemaakt DESC").fetchall()
+    conn.close()
+    return [{"id": r["id"], "naam": r["naam"], "label": LABELS.get(r["naam"], r["naam"]),
+             "actie": r["actie"], "reden": r["reden"], "wanneer": _fmt(r["aangemaakt"])}
+            for r in rows]
+
+
+def recente_besluiten(limit=6):
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM voorstel WHERE besluit!='open' ORDER BY besluit_ts DESC LIMIT ?",
+        (limit,)).fetchall()
+    conn.close()
+    return [{"id": r["id"], "label": LABELS.get(r["naam"], r["naam"]),
+             "actie": r["actie"], "besluit": r["besluit"],
+             "door": r["besluit_door"], "wanneer": _fmt(r["besluit_ts"])}
+            for r in rows]
+
+
 @app.route("/")
 def index():
     return render_template(
         "agents.html",
         agents=roster(),
+        voorstellen=open_voorstellen(),
+        besluiten=recente_besluiten(),
         portal_url=f"https://portal.{BASE_DOMAIN}/",
         username=request.headers.get("X-authentik-username", "onbekend"),
     )
@@ -99,13 +141,13 @@ def index():
 @app.route("/api/status")
 def api_status():
     """Voor de zelfverversing van de tegel."""
-    return jsonify({"agents": roster()})
+    return jsonify({"agents": roster(), "voorstellen": open_voorstellen()})
 
 
 @app.route("/agent-status", methods=["POST"])
 def agent_status():
-    """Een agent meldt zijn huidige toestand. Token-auth (gedeeld geheim),
-    net als de ontwikkel-hooks; nginx laat alleen deze POST langs de SSO."""
+    """Een agent meldt zijn toestand en kan een actie voorstellen. Token-auth
+    (gedeeld geheim); nginx laat alleen deze POST langs de SSO."""
     if not TOKEN:
         abort(404)
     if request.headers.get("X-Agents-Token", "") != TOKEN:
@@ -130,6 +172,39 @@ def agent_status():
          "taak": str(data.get("taak", "")).strip()[:200],
          "detail": str(data.get("detail", "")).strip()[:400],
          "t": tokens, "ts": _nu().isoformat()})
+
+    # Optioneel voorstel. Dedup: geen tweede open voorstel met dezelfde actie.
+    v = data.get("voorstel")
+    if isinstance(v, dict):
+        actie = str(v.get("actie", "")).strip()[:200]
+        reden = str(v.get("reden", "")).strip()[:400]
+        if actie and actie.lower() != "geen":
+            bestaat = conn.execute(
+                "SELECT 1 FROM voorstel WHERE naam=? AND actie=? AND besluit='open'",
+                (naam, actie)).fetchone()
+            if not bestaat:
+                conn.execute(
+                    """INSERT INTO voorstel (naam, actie, reden, aangemaakt, besluit)
+                       VALUES (?, ?, ?, ?, 'open')""",
+                    (naam, actie, reden, _nu().isoformat()))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/voorstel/<int:vid>/besluit", methods=["POST"])
+def voorstel_besluit(vid):
+    """De gebruiker keurt goed of weigert. Zit achter forward-auth, dus de
+    identiteit komt uit de X-authentik-header. In deze fase wordt er niets
+    uitgevoerd: alleen de beslissing wordt vastgelegd."""
+    besluit = str((request.get_json(silent=True) or {}).get("besluit", "")).strip()
+    if besluit not in ("goedgekeurd", "geweigerd"):
+        abort(400)
+    wie = request.headers.get("X-authentik-username", "onbekend")[:120]
+    conn = db()
+    conn.execute(
+        "UPDATE voorstel SET besluit=?, besluit_door=?, besluit_ts=? WHERE id=? AND besluit='open'",
+        (besluit, wie, _nu().isoformat(), vid))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
