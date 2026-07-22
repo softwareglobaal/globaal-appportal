@@ -21,6 +21,7 @@ services:
       - ./omv-v2-data:/data
     ports:
       - "127.0.0.1:5001:5001"
+    networks: [appnet]
   # One-shot init container: generates a local CA + wildcard TLS cert into ./certs.
   # Idempotent — exits immediately if certs for the current BASE_DOMAIN already exist.
   certgen:
