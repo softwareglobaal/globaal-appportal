@@ -68,9 +68,8 @@ DB_CHECKS = [
     {"app": "kosten", "naam": "desktime-sync leeftijd", "soort": "leeftijd_uur",
      "sql": "SELECT max(laatste_run) FROM kosten.desktime_sync",
      "drempel": 12},
-    {"app": "kosten", "naam": "laatste banktransactie", "soort": "leeftijd_uur",
-     "sql": "SELECT max(datum)::timestamptz FROM kosten.bank_transactie",
-     "drempel": 24 * 45},
+    # Banktransacties worden met de hand ingevoerd en liggen bewust stil; er is
+    # geen automatische feed om vers te houden, dus niets om te bewaken.
     {"app": "ontwikkeling", "naam": "git-collector leeftijd", "soort": "leeftijd_uur",
      "sql": "SELECT max(datum)::timestamptz FROM ontwikkeling.dag",
      "drempel": 24 * 3},
