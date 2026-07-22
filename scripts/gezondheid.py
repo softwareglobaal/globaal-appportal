@@ -22,6 +22,7 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.request
 from datetime import datetime, timezone
 
 PG = "appportal-postgresql-1"          # postgres-container van de stack
@@ -31,6 +32,12 @@ FOUT_PATROON = "error|traceback|exception|critical|timeout|worker timeout"
 # Waar de ruwe bevindingen heen gaan. De vorige uitvoer is tevens de bron voor
 # de schijf-trend, dus lezen en schrijven gaan naar hetzelfde pad.
 UITVOER = os.environ.get("GEZONDHEID_UITVOER", "/home/ubuntu/gezondheid-laatste.json")
+
+# Hartslag naar de Agents-tegel: elk uur even melden dat de agent keek en alles
+# gezond is, zonder het AI-model. Zo blijft de kaart vers. Bij aandacht meldt de
+# duiding zelf (die wordt dan getriggerd), dus dan slaan we de hartslag over.
+AGENTS_URL = os.environ.get("AGENTS_URL", "http://127.0.0.1:3020/agent-status")
+AGENTS_ENV = os.environ.get("AGENTS_ENV", "/home/ubuntu/agents/.env")
 
 # VM-drempels. De sonde vlagt alleen; de agent oordeelt. Bewust ruim gekozen
 # zodat we alleen echte problemen melden en geen dagelijkse ruis.
@@ -126,6 +133,33 @@ def _lees_vorige(pad):
             return json.load(f)
     except Exception:
         return {}
+
+
+def _agents_token():
+    try:
+        with open(AGENTS_ENV) as f:
+            for regel in f:
+                if regel.startswith("AGENTS_TOKEN="):
+                    return regel.split("=", 1)[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
+    return ""
+
+
+def meld_hartslag(detail):
+    """Kort statusbericht naar de Agents-tegel (geen AI). Best-effort: stil
+    falen mag, de sonde zelf gaat altijd door."""
+    token = _agents_token()
+    if not token:
+        return
+    body = json.dumps({"naam": "onderhoud", "status": "rust", "detail": detail}).encode()
+    req = urllib.request.Request(
+        AGENTS_URL, data=body, method="POST",
+        headers={"Content-Type": "application/json", "X-Agents-Token": token})
+    try:
+        urllib.request.urlopen(req, timeout=4).read()
+    except Exception:
+        pass
 
 
 def _meminfo():
@@ -289,6 +323,10 @@ def main():
                "db_checks": checks, "processen": processen, "aandacht": aandacht}
     with open(UITVOER, "w") as f:
         json.dump(rapport, f, indent=2, default=str)
+
+    # Hartslag: alleen als alles gezond is (bij aandacht meldt de duiding zelf).
+    if not aandacht:
+        meld_hartslag("alles gezond")
 
     print("=== Gezondheid AppPortal ===")
     print(f"{len(conts)} containers, {len(checks)} dataverse-checks,"
