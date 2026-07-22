@@ -41,6 +41,31 @@ TEAM = [
 ]
 LABELS = {a["naam"]: a["label"] for a in TEAM}
 
+# Mandaat per agent: wat hij doet, wat hij mag, en zijn grenzen. Voor de
+# detailweergave als je op een kaart klikt.
+DETAILS = {
+    "onderhoud": {
+        "mandaat": ("Waakt over de VM en de AppPortal-apps. Meet elk uur, "
+                    "oordeelt over de gezondheid, en herstelt binnen een "
+                    "veilige grens."),
+        "mag": ["Een container herstarten die down of unhealthy is"],
+        "grenzen": [
+            "Nooit de kern: postgres, authentik of nginx",
+            "Alleen als de container echt stuk is (niet als hij gezond is)",
+            "Maximaal 3 herstarts per container per dag, daarna escaleren",
+            "Verifieert achteraf; lukt het niet, dan naar een mens",
+        ],
+        "cadans": "Sonde elk uur; duiding dagelijks en direct bij een storing.",
+    },
+}
+DETAIL_STANDAARD = {
+    "mandaat": ("Onderdeel van het bouw-team (fase 1). Nog niet aan deze tegel "
+                "gekoppeld; verschijnt hier zodra hij meldt."),
+    "mag": [],
+    "grenzen": [],
+    "cadans": "Op afroep.",
+}
+
 
 def _nu():
     return datetime.now(timezone.utc)
@@ -86,6 +111,7 @@ def db():
     _kolom(conn, "voorstel", "uitvoering", "TEXT DEFAULT ''")
     _kolom(conn, "voorstel", "uitvoer_detail", "TEXT DEFAULT ''")
     _kolom(conn, "voorstel", "uitvoer_ts", "TEXT DEFAULT ''")
+    _kolom(conn, "voorstel", "bewijs", "TEXT DEFAULT ''")
     return conn
 
 
@@ -278,11 +304,59 @@ def uitvoer_resultaat():
         abort(400)
     conn = db()
     conn.execute(
-        "UPDATE voorstel SET uitvoering=?, uitvoer_detail=?, uitvoer_ts=? WHERE id=?",
-        (uitvoering, str(d.get("detail", ""))[:400], _nu().isoformat(), vid))
+        """UPDATE voorstel SET uitvoering=?, uitvoer_detail=?, uitvoer_ts=?, bewijs=?
+           WHERE id=?""",
+        (uitvoering, str(d.get("detail", ""))[:400], _nu().isoformat(),
+         str(d.get("bewijs", ""))[:4000], vid))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
+
+
+def handelingen(naam):
+    """De tijdlijn van wat deze agent deed: voorgesteld, besloten, uitgevoerd."""
+    conn = db()
+    rows = conn.execute(
+        """SELECT id, actie, reden, runbook, doel, besluit, besluit_door,
+                  besluit_ts, uitvoering, uitvoer_detail, uitvoer_ts, bewijs, aangemaakt
+           FROM voorstel WHERE naam=? ORDER BY id DESC LIMIT 25""", (naam,)).fetchall()
+    conn.close()
+    uit = []
+    for r in rows:
+        door = r["besluit_door"] or ""
+        if "autonoom" in door:
+            modus = "autonoom"
+        elif r["besluit"] == "geweigerd":
+            modus = "geweigerd"
+        elif door:
+            modus = f"goedgekeurd door {door}"
+        else:
+            modus = "voorgesteld"
+        uit.append({
+            "id": r["id"], "actie": r["actie"], "waarom": r["reden"] or "",
+            "besluit": r["besluit"], "modus": modus,
+            "uitvoering": r["uitvoering"] or "", "detail": r["uitvoer_detail"] or "",
+            "bewijs": r["bewijs"] or "",
+            "wanneer": _fmt(r["uitvoer_ts"] or r["besluit_ts"] or r["aangemaakt"]),
+        })
+    return uit
+
+
+@app.route("/api/agent/<naam>")
+def api_agent(naam):
+    naam = naam.strip().lower()[:40]
+    kaart = next((a for a in roster() if a["naam"] == naam), None)
+    if not kaart:
+        abort(404)
+    detail = DETAILS.get(naam, DETAIL_STANDAARD)
+    return jsonify({
+        "naam": naam, "label": kaart["label"], "rol": kaart["rol"],
+        "status": kaart["status"], "taak": kaart["taak"], "detail": kaart["detail"],
+        "sinds": kaart["sinds"], "tokens": kaart["tokens"],
+        "mandaat": detail["mandaat"], "mag": detail["mag"],
+        "grenzen": detail["grenzen"], "cadans": detail["cadans"],
+        "handelingen": handelingen(naam),
+    })
 
 
 @app.route("/healthz")

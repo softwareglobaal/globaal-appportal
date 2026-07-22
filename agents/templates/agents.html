@@ -29,7 +29,10 @@
           gap: 16px; }
   .kaart { background: var(--kaart); border: 1px solid var(--lijn); border-radius: 12px;
            padding: 18px 16px; display: flex; flex-direction: column; align-items: center;
-           text-align: center; }
+           text-align: center; cursor: pointer;
+           transition: box-shadow .15s ease, transform .15s ease; }
+  .kaart:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.09); transform: translateY(-2px); }
+  .kaart .meer { margin-top: 8px; font-size: 0.72rem; color: var(--klaar); }
   .fig { width: 64px; height: 64px; margin-bottom: 8px; }
   .fig .lijf { transition: fill 0.4s ease; }
   .kaart[data-status="rust"]   .fig .lijf { fill: var(--rust); }
@@ -63,6 +66,36 @@
   .besluit-rij .ja-t { color: var(--ja); } .besluit-rij .nee-t { color: var(--nee); }
   footer { margin-top: 30px; color: var(--muted); font-size: 0.78rem; }
   a { color: #2f6fb0; text-decoration: none; }
+
+  /* Detailvenster */
+  .overlay { position: fixed; inset: 0; background: rgba(20,28,36,0.45);
+             display: none; align-items: flex-start; justify-content: center;
+             padding: 40px 16px; overflow-y: auto; z-index: 50; }
+  .overlay.open { display: flex; }
+  .venster { background: var(--kaart); border-radius: 14px; width: 100%;
+             max-width: 640px; padding: 22px 24px 26px; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
+  .venster-kop { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .venster-kop h2 { margin: 0; font-size: 1.25rem; }
+  .sluit { border: 0; background: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--muted); }
+  .v-status { font-size: 0.82rem; font-weight: 600; text-transform: capitalize; margin-top: 2px; }
+  .v-sectie { margin-top: 16px; }
+  .v-sectie h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em;
+                 color: var(--muted); margin: 0 0 6px; }
+  .v-sectie p { margin: 0 0 6px; font-size: 0.9rem; }
+  .v-lijst { margin: 0; padding-left: 18px; font-size: 0.86rem; }
+  .v-lijst li { margin: 2px 0; }
+  .h-rij { border-left: 3px solid var(--lijn); padding: 8px 0 8px 12px; margin: 8px 0; }
+  .h-rij .h-kop { font-size: 0.9rem; font-weight: 600; }
+  .h-rij .h-meta { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
+  .h-rij .h-waarom { font-size: 0.82rem; margin-top: 4px; }
+  .h-uit { font-weight: 600; }
+  .h-uit.gelukt { color: var(--ja); }
+  .h-uit.mislukt, .h-uit.overgeslagen { color: var(--nee); }
+  .h-bewijs { margin-top: 6px; }
+  .h-bewijs summary { cursor: pointer; font-size: 0.78rem; color: var(--klaar); }
+  .h-bewijs pre { background: #f2f3f5; border-radius: 8px; padding: 8px 10px; margin: 6px 0 0;
+                  font-size: 0.74rem; white-space: pre-wrap; overflow-x: auto; max-height: 220px; }
+  .leeg-h { color: var(--muted); font-size: 0.86rem; }
 </style>
 </head>
 <body>
@@ -83,7 +116,8 @@
 
   <div class="grid" id="grid">
     {% for a in agents %}
-    <div class="kaart" data-naam="{{ a.naam }}" data-status="{{ a.status }}">
+    <div class="kaart" data-naam="{{ a.naam }}" data-status="{{ a.status }}"
+         onclick="openAgent('{{ a.naam }}')" title="Klik voor details">
       <svg class="fig" viewBox="0 0 64 64" aria-hidden="true">
         <g class="lijf">
           <circle cx="32" cy="20" r="11"/>
@@ -95,6 +129,7 @@
       <div class="status">{{ a.status }}</div>
       <div class="detail">{% if a.taak %}{{ a.taak }}{% elif a.detail %}{{ a.detail }}{% endif %}</div>
       <div class="sinds">{% if a.sinds %}sinds {{ a.sinds }}{% else %}nog geen meldingen{% endif %}</div>
+      <div class="meer">details bekijken</div>
     </div>
     {% endfor %}
   </div>
@@ -139,7 +174,73 @@
   </footer>
 </div>
 
+<div class="overlay" id="overlay" onclick="if (event.target === this) sluitAgent()">
+  <div class="venster" id="venster"></div>
+</div>
+
 <script>
+  function esc(s) {
+    return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  async function openAgent(naam) {
+    const venster = document.getElementById("venster");
+    venster.innerHTML = "<p class='leeg-h'>Laden...</p>";
+    document.getElementById("overlay").classList.add("open");
+    try {
+      const r = await fetch("/api/agent/" + encodeURIComponent(naam), {cache: "no-store"});
+      venster.innerHTML = r.ok ? renderAgent(await r.json())
+                               : "<p class='leeg-h'>Kon details niet laden.</p>";
+    } catch (e) {
+      venster.innerHTML = "<p class='leeg-h'>Kon details niet laden.</p>";
+    }
+  }
+
+  function sluitAgent() { document.getElementById("overlay").classList.remove("open"); }
+  document.addEventListener("keydown", e => { if (e.key === "Escape") sluitAgent(); });
+
+  function renderAgent(a) {
+    let h = "<div class='venster-kop'><h2>" + esc(a.label) + "</h2>";
+    h += "<button class='sluit' onclick='sluitAgent()' aria-label='Sluiten'>&times;</button></div>";
+    h += "<div class='v-status' style='color:var(--" + esc(a.status) + ")'>" + esc(a.status);
+    if (a.detail) h += " <span style='font-weight:400;color:var(--muted)'>&middot; " + esc(a.detail) + "</span>";
+    h += "</div>";
+
+    h += "<div class='v-sectie'><h3>Wat deze agent doet</h3><p>" + esc(a.mandaat) + "</p>";
+    if (a.cadans) h += "<p style='color:var(--muted);font-size:0.82rem'>" + esc(a.cadans) + "</p>";
+    h += "</div>";
+
+    if (a.mag && a.mag.length) {
+      h += "<div class='v-sectie'><h3>Mag zelfstandig</h3><ul class='v-lijst'>";
+      a.mag.forEach(m => h += "<li>" + esc(m) + "</li>");
+      h += "</ul></div>";
+    }
+    if (a.grenzen && a.grenzen.length) {
+      h += "<div class='v-sectie'><h3>Grenzen</h3><ul class='v-lijst'>";
+      a.grenzen.forEach(g => h += "<li>" + esc(g) + "</li>");
+      h += "</ul></div>";
+    }
+
+    h += "<div class='v-sectie'><h3>Handelingen</h3>";
+    if (!a.handelingen || !a.handelingen.length) {
+      h += "<p class='leeg-h'>Nog geen handelingen.</p>";
+    } else {
+      a.handelingen.forEach(x => {
+        h += "<div class='h-rij'><div class='h-kop'>" + esc(x.actie) + "</div>";
+        let meta = esc(x.modus);
+        if (x.wanneer) meta += " &middot; " + esc(x.wanneer);
+        h += "<div class='h-meta'>" + meta;
+        if (x.uitvoering) h += " &middot; <span class='h-uit " + esc(x.uitvoering) + "'>" + esc(x.uitvoering) + "</span>";
+        h += "</div>";
+        if (x.waarom) h += "<div class='h-waarom'>" + esc(x.waarom) + "</div>";
+        if (x.detail) h += "<div class='h-meta'>" + esc(x.detail) + "</div>";
+        if (x.bewijs) h += "<details class='h-bewijs'><summary>bewijs (logregels)</summary><pre>" + esc(x.bewijs) + "</pre></details>";
+        h += "</div>";
+      });
+    }
+    return h + "</div>";
+  }
+
   async function beslis(id, besluit, knop) {
     knop.parentNode.querySelectorAll("button").forEach(b => b.disabled = true);
     try {
