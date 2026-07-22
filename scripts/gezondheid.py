@@ -36,7 +36,9 @@ UITVOER = os.environ.get("GEZONDHEID_UITVOER", "/home/ubuntu/gezondheid-laatste.
 # zodat we alleen echte problemen melden en geen dagelijkse ruis.
 SCHIJF_WAARSCHUW = 75       # % gebruikt op /
 SCHIJF_ALARM = 90
-SCHIJF_SNELLE_GROEI = 5     # procentpunt per uur: verdachte klim (tempdir-lek)
+SCHIJF_SNELLE_GROEI = 5     # procentpunt per uur; pas vlaggen bij TWEE metingen
+                            # op rij boven deze drempel (een losse piek is meestal
+                            # docker-bouwruis, geen lek; twee op rij is een klim)
 RAM_WAARSCHUW_MB = 800      # vrij geheugen (MemAvailable)
 RAM_ALARM_MB = 400
 LOAD_FACTOR = 1.5           # load1 boven cores * factor = overbelast
@@ -246,8 +248,15 @@ def main():
             aandacht.append(f"schijf: {vm['schijf_pct']}% gebruikt (alarm boven {SCHIJF_ALARM})")
         elif vm["schijf_pct"] >= SCHIJF_WAARSCHUW:
             aandacht.append(f"schijf: {vm['schijf_pct']}% gebruikt (waarschuwing boven {SCHIJF_WAARSCHUW})")
-    if vm.get("schijf_stijging_ppu") is not None and vm["schijf_stijging_ppu"] >= SCHIJF_SNELLE_GROEI:
-        aandacht.append(f"schijf groeit snel: +{vm['schijf_stijging_ppu']} procentpunt/uur")
+    # Alleen vlaggen bij een aanhoudende klim: deze meting EN de vorige beide
+    # boven de drempel. Zo vangt een losse docker-bouwpiek geen vals alarm.
+    vorige_stijging = (vorige.get("vm") or {}).get("schijf_stijging_ppu")
+    if (vm.get("schijf_stijging_ppu") is not None
+            and vm["schijf_stijging_ppu"] >= SCHIJF_SNELLE_GROEI
+            and isinstance(vorige_stijging, (int, float))
+            and vorige_stijging >= SCHIJF_SNELLE_GROEI):
+        aandacht.append(f"schijf groeit aanhoudend: +{vm['schijf_stijging_ppu']}"
+                        f" procentpunt/uur (tweede meting op rij boven {SCHIJF_SNELLE_GROEI})")
     if vm.get("ram_vrij_mb") is not None:
         geen_swap = " en geen swap" if vm.get("swap_afwezig") else ""
         if vm["ram_vrij_mb"] <= RAM_ALARM_MB:
