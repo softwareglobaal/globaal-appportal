@@ -120,11 +120,15 @@
 
   {% if besluiten %}
   <h2>Recente beslissingen</h2>
-  <div>
+  <div id="besluiten">
     {% for b in besluiten %}
-    <div class="besluit-rij">
+    <div class="besluit-rij" data-id="{{ b.id }}" data-uitv="{{ b.uitvoering }}">
       <span class="{{ 'ja-t' if b.besluit == 'goedgekeurd' else 'nee-t' }}">{{ b.besluit }}</span>
       · {{ b.label }}: {{ b.actie }} · door {{ b.door }} op {{ b.wanneer }}
+      {%- if b.uitvoering %} · uitvoering:
+        <span class="{{ 'ja-t' if b.uitvoering == 'gelukt' else ('nee-t' if b.uitvoering in ['mislukt','overgeslagen'] else '') }}">{{ b.uitvoering }}</span>
+        {%- if b.uitvoer_detail %} <span class="muted-x">({{ b.uitvoer_detail }})</span>{% endif -%}
+      {% endif %}
     </div>
     {% endfor %}
   </div>
@@ -154,6 +158,11 @@
       .map(el => el.dataset.id).sort().join(",");
   }
 
+  function huidigeBesluiten() {
+    return Array.from(document.querySelectorAll(".besluit-rij"))
+      .map(el => el.dataset.id + ":" + (el.dataset.uitv || "")).sort().join(",");
+  }
+
   async function ververs() {
     try {
       const r = await fetch("/api/status", {cache: "no-store"});
@@ -167,9 +176,10 @@
         k.querySelector(".detail").textContent = a.taak || a.detail || "";
         k.querySelector(".sinds").textContent = a.sinds ? "sinds " + a.sinds : "nog geen meldingen";
       }
-      // Nieuw of verdwenen voorstel? Herlaad zodat de knoppen kloppen.
-      const nieuw = (data.voorstellen || []).map(v => String(v.id)).sort().join(",");
-      if (nieuw !== huidigeIds()) location.reload();
+      // Nieuw/verdwenen voorstel of gewijzigde uitvoer-status? Herlaad.
+      const nieuwV = (data.voorstellen || []).map(v => String(v.id)).sort().join(",");
+      const nieuwB = (data.besluiten || []).map(b => b.id + ":" + (b.uitvoering || "")).sort().join(",");
+      if (nieuwV !== huidigeIds() || nieuwB !== huidigeBesluiten()) location.reload();
     } catch (e) { /* stil: de volgende ronde probeert opnieuw */ }
   }
   setInterval(ververs, 10000);
