@@ -6,163 +6,167 @@
 <title>Agents</title>
 <style>
   :root {
-    --rust: #9aa3ab; --actief: #2e7d4f; --klaar: #2f6fb0; --fout: #a33a3a;
-    --kaart: #ffffff; --lijn: #e4e7ea; --tekst: #24303a; --muted: #6b7680;
-    --bg: #f4f5f7; --ja: #2e7d4f; --nee: #a33a3a; --attent: #b06f00;
+    --bg: #f5f6f7; --paneel: #ffffff; --lijn: #e4e7ea; --lijn-sterk: #d5dade;
+    --tekst: #1e2830; --tekst-2: #5c6771; --tekst-3: #8d959d;
+    --accent: #2f4a63;
+    --rust: #98a0a8; --actief: #2f7d5a; --klaar: #3663a0; --fout: #a63d3d;
+    --ja: #2f7d5a; --nee: #a63d3d; --amber: #916312;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-         color: var(--tekst); background: var(--bg); }
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
-  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  h1 { margin: 0; font-size: 1.6rem; }
-  h2 { font-size: 1.05rem; margin: 30px 0 4px; }
-  .sub { color: var(--muted); font-size: 0.95rem; }
-  .hint { color: var(--muted); font-size: 0.85rem; margin: 6px 0 16px; }
-  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 8px;
-            font-size: 0.8rem; color: var(--muted); }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  .dot.rust { background: var(--rust); } .dot.actief { background: var(--actief); }
-  .dot.klaar { background: var(--klaar); } .dot.fout { background: var(--fout); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-          gap: 16px; }
-  .kaart { background: var(--kaart); border: 1px solid var(--lijn); border-radius: 12px;
-           padding: 18px 16px; display: flex; flex-direction: column; align-items: center;
-           text-align: center; cursor: pointer;
-           transition: box-shadow .15s ease, transform .15s ease; }
-  .kaart:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.09); transform: translateY(-2px); }
-  .kaart .meer { margin-top: 8px; font-size: 0.72rem; color: var(--klaar); }
-  .fig { width: 64px; height: 64px; margin-bottom: 8px; }
-  .fig .lijf { transition: fill 0.4s ease; }
-  .kaart[data-status="rust"]   .fig .lijf { fill: var(--rust); }
-  .kaart[data-status="actief"] .fig .lijf { fill: var(--actief); }
-  .kaart[data-status="klaar"]  .fig .lijf { fill: var(--klaar); }
-  .kaart[data-status="fout"]   .fig .lijf { fill: var(--fout); }
-  .kaart[data-status="actief"] .fig { animation: adem 1.6s ease-in-out infinite; }
-  @keyframes adem { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-  .naam { font-weight: 600; font-size: 0.98rem; }
-  .rol { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
-  .status { margin-top: 10px; font-size: 0.85rem; font-weight: 600; text-transform: capitalize; }
-  .kaart[data-status="rust"]   .status { color: var(--rust); }
-  .kaart[data-status="actief"] .status { color: var(--actief); }
-  .kaart[data-status="klaar"]  .status { color: var(--klaar); }
-  .kaart[data-status="fout"]   .status { color: var(--fout); }
-  .detail { color: var(--muted); font-size: 0.76rem; margin-top: 6px; min-height: 1.1em; }
-  .sinds { color: var(--muted); font-size: 0.72rem; margin-top: 4px; }
+  body { margin: 0; background: var(--bg); color: var(--tekst);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         font-size: 14px; line-height: 1.5; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 26px 22px 60px; }
+  .kop { border-bottom: 1px solid var(--lijn); padding-bottom: 14px; margin-bottom: 22px; }
+  .kop h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .kop .sub { color: var(--tekst-2); font-size: 12.5px; margin-top: 2px; }
 
-  .voorstel { background: var(--kaart); border: 1px solid var(--lijn);
-              border-left: 4px solid var(--attent); border-radius: 10px;
-              padding: 14px 16px; margin-bottom: 10px; }
-  .v-kop { font-size: 0.95rem; }
-  .v-reden { color: var(--muted); font-size: 0.83rem; margin: 4px 0 10px; }
-  .v-knoppen { display: flex; gap: 8px; }
-  .v-knoppen button { border: 0; border-radius: 8px; padding: 7px 14px; cursor: pointer;
-                      font-size: 0.85rem; font-weight: 600; color: #fff; }
-  .v-knoppen .ja { background: var(--ja); } .v-knoppen .nee { background: var(--nee); }
+  h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+       color: var(--tekst-2); margin: 26px 0 8px; }
+  .hint { color: var(--tekst-3); font-size: 12px; margin: 0 0 12px; }
+
+  .paneel { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px; overflow: hidden; }
+  table.roster { width: 100%; border-collapse: collapse; }
+  .roster th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase;
+               letter-spacing: 0.04em; color: var(--tekst-3); padding: 9px 14px;
+               border-bottom: 1px solid var(--lijn); background: #fafbfb; }
+  .roster td { padding: 11px 14px; border-bottom: 1px solid var(--lijn); vertical-align: middle; }
+  .roster tbody tr:last-child td { border-bottom: 0; }
+  .roster tbody tr { cursor: pointer; }
+  .roster tbody tr:hover { background: #f7f9fa; }
+  .r-agent { white-space: nowrap; }
+  .avatar { display: inline-flex; width: 26px; height: 26px; border-radius: 5px;
+            background: #eceef0; color: #58626b; font-size: 10.5px; font-weight: 600;
+            align-items: center; justify-content: center; margin-right: 10px; vertical-align: middle; }
+  .r-naam { font-weight: 500; }
+  .r-rol { color: var(--tekst-2); font-size: 13px; }
+  .r-status { white-space: nowrap; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+         background: var(--rust); margin-right: 7px; vertical-align: middle; }
+  tr.r[data-status="actief"] .dot { background: var(--actief); }
+  tr.r[data-status="klaar"]  .dot { background: var(--klaar); }
+  tr.r[data-status="fout"]   .dot { background: var(--fout); }
+  .s-txt { font-size: 13px; color: var(--tekst-2); text-transform: capitalize; }
+  .r-act { color: var(--tekst-2); font-size: 13px; }
+  .r-act .r-sinds { color: var(--tekst-3); font-size: 12px; margin-left: 6px; }
+
+  .voorstel { display: flex; align-items: flex-start; gap: 14px; padding: 12px 14px;
+              border-bottom: 1px solid var(--lijn); }
+  .voorstel:last-child { border-bottom: 0; }
+  .v-flag { width: 3px; align-self: stretch; background: var(--amber); border-radius: 2px; flex: 0 0 3px; }
+  .v-body { flex: 1; }
+  .v-kop { font-size: 13.5px; }
+  .v-kop strong { font-weight: 600; }
+  .v-reden { color: var(--tekst-2); font-size: 12.5px; margin-top: 3px; }
+  .v-knoppen { display: flex; gap: 8px; margin-top: 10px; }
+  .v-knoppen button { border: 1px solid var(--lijn-sterk); background: var(--paneel); color: var(--tekst);
+                      border-radius: 5px; padding: 5px 12px; cursor: pointer; font-size: 12.5px; font-weight: 500; }
+  .v-knoppen button:hover { background: #f2f4f5; }
+  .v-knoppen .ja:hover { border-color: var(--ja); color: var(--ja); }
+  .v-knoppen .nee:hover { border-color: var(--nee); color: var(--nee); }
   .v-knoppen button:disabled { opacity: 0.5; cursor: default; }
-  .leeg { color: var(--muted); font-size: 0.85rem; }
-  .besluit-rij { font-size: 0.8rem; color: var(--muted); padding: 3px 0; }
-  .besluit-rij .ja-t { color: var(--ja); } .besluit-rij .nee-t { color: var(--nee); }
-  footer { margin-top: 30px; color: var(--muted); font-size: 0.78rem; }
-  a { color: #2f6fb0; text-decoration: none; }
+  .leeg { color: var(--tekst-3); font-size: 12.5px; padding: 12px 14px; }
 
-  /* Detailvenster */
-  .overlay { position: fixed; inset: 0; background: rgba(20,28,36,0.45);
+  .besluit-rij { font-size: 12.5px; color: var(--tekst-2); padding: 8px 14px; border-bottom: 1px solid var(--lijn); }
+  .besluit-rij:last-child { border-bottom: 0; }
+  .tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .tag.ja-t { color: var(--ja); } .tag.nee-t { color: var(--nee); }
+  .muted-x { color: var(--tekst-3); }
+
+  footer { margin-top: 30px; color: var(--tekst-3); font-size: 12px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(24,32,40,0.4);
              display: none; align-items: flex-start; justify-content: center;
-             padding: 40px 16px; overflow-y: auto; z-index: 50; }
+             padding: 44px 16px; overflow-y: auto; z-index: 50; }
   .overlay.open { display: flex; }
-  .venster { background: var(--kaart); border-radius: 14px; width: 100%;
-             max-width: 640px; padding: 22px 24px 26px; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
-  .venster-kop { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-  .venster-kop h2 { margin: 0; font-size: 1.25rem; }
-  .sluit { border: 0; background: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--muted); }
-  .v-status { font-size: 0.82rem; font-weight: 600; text-transform: capitalize; margin-top: 2px; }
+  .venster { background: var(--paneel); border: 1px solid var(--lijn-sterk); border-radius: 8px;
+             width: 100%; max-width: 600px; box-shadow: 0 12px 40px rgba(20,28,36,0.18); }
+  .venster-kop { display: flex; align-items: center; gap: 12px; padding: 16px 20px;
+                 border-bottom: 1px solid var(--lijn); }
+  .venster-kop h2 { margin: 0; font-size: 15px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--tekst); flex: 1; }
+  .venster-kop .avatar { width: 30px; height: 30px; font-size: 11px; margin: 0; }
+  .sluit { border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--tekst-3); padding: 0; }
+  .venster-body { padding: 6px 20px 20px; }
+  .v-status2 { font-size: 12.5px; margin-top: 12px; }
   .v-sectie { margin-top: 16px; }
-  .v-sectie h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em;
-                 color: var(--muted); margin: 0 0 6px; }
-  .v-sectie p { margin: 0 0 6px; font-size: 0.9rem; }
-  .v-lijst { margin: 0; padding-left: 18px; font-size: 0.86rem; }
+  .v-sectie h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+                 color: var(--tekst-3); margin: 0 0 6px; font-weight: 600; }
+  .v-sectie p { margin: 0 0 4px; font-size: 13.5px; }
+  .v-lijst { margin: 0; padding-left: 16px; font-size: 13px; color: var(--tekst); }
   .v-lijst li { margin: 2px 0; }
-  .h-rij { border-left: 3px solid var(--lijn); padding: 8px 0 8px 12px; margin: 8px 0; }
-  .h-rij .h-kop { font-size: 0.9rem; font-weight: 600; }
-  .h-rij .h-meta { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
-  .h-rij .h-waarom { font-size: 0.82rem; margin-top: 4px; }
-  .h-uit { font-weight: 600; }
+  .h-rij { border-top: 1px solid var(--lijn); padding: 10px 0; }
+  .h-rij:first-child { border-top: 0; }
+  .h-rij .h-kop { font-size: 13.5px; font-weight: 500; }
+  .h-rij .h-meta { font-size: 12px; color: var(--tekst-3); margin-top: 2px; }
+  .h-rij .h-waarom { font-size: 12.5px; color: var(--tekst-2); margin-top: 4px; }
+  .h-uit { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
   .h-uit.gelukt { color: var(--ja); }
   .h-uit.mislukt, .h-uit.overgeslagen { color: var(--nee); }
   .h-bewijs { margin-top: 6px; }
-  .h-bewijs summary { cursor: pointer; font-size: 0.78rem; color: var(--klaar); }
-  .h-bewijs pre { background: #f2f3f5; border-radius: 8px; padding: 8px 10px; margin: 6px 0 0;
-                  font-size: 0.74rem; white-space: pre-wrap; overflow-x: auto; max-height: 220px; }
-  .leeg-h { color: var(--muted); font-size: 0.86rem; }
+  .h-bewijs summary { cursor: pointer; font-size: 12px; color: var(--accent); }
+  .h-bewijs pre { background: #f4f5f6; border: 1px solid var(--lijn); border-radius: 6px; padding: 8px 10px;
+                  margin: 6px 0 0; font-size: 11.5px; white-space: pre-wrap; overflow-x: auto;
+                  max-height: 220px; font-family: var(--mono); color: var(--tekst); }
+  .leeg-h { color: var(--tekst-3); font-size: 13px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
+  <div class="kop">
     <h1>Agents</h1>
-    <span class="sub">het team in een oogopslag</span>
-  </header>
-  <p class="hint">Elke agent is een oproepkracht: rust is de normale toestand.
-    Actief betekent dat hij nu aan het werk is. De weergave ververst zichzelf.</p>
-
-  <div class="legend">
-    <span><i class="dot rust"></i> rust</span>
-    <span><i class="dot actief"></i> actief</span>
-    <span><i class="dot klaar"></i> klaar</span>
-    <span><i class="dot fout"></i> fout</span>
+    <div class="sub">Onderhoud en operations. Klik een agent voor mandaat en handelingen.</div>
   </div>
 
-  <div class="grid" id="grid">
-    {% for a in agents %}
-    <div class="kaart" data-naam="{{ a.naam }}" data-status="{{ a.status }}"
-         onclick="openAgent('{{ a.naam }}')" title="Klik voor details">
-      <svg class="fig" viewBox="0 0 64 64" aria-hidden="true">
-        <g class="lijf">
-          <circle cx="32" cy="20" r="11"/>
-          <path d="M12 56c0-11 9-20 20-20s20 9 20 20z"/>
-        </g>
-      </svg>
-      <div class="naam">{{ a.label }}</div>
-      <div class="rol">{{ a.rol }}</div>
-      <div class="status">{{ a.status }}</div>
-      <div class="detail">{% if a.taak %}{{ a.taak }}{% elif a.detail %}{{ a.detail }}{% endif %}</div>
-      <div class="sinds">{% if a.sinds %}sinds {{ a.sinds }}{% else %}nog geen meldingen{% endif %}</div>
-      <div class="meer">details bekijken</div>
-    </div>
-    {% endfor %}
+  <h2>Team</h2>
+  <div class="paneel">
+    <table class="roster">
+      <thead>
+        <tr><th>Agent</th><th>Rol</th><th>Status</th><th>Laatste activiteit</th></tr>
+      </thead>
+      <tbody>
+        {% for a in agents %}
+        <tr class="r" data-naam="{{ a.naam }}" data-status="{{ a.status }}" onclick="openAgent('{{ a.naam }}')">
+          <td class="r-agent"><span class="avatar">{{ a.label[:2]|upper }}</span><span class="r-naam">{{ a.label }}</span></td>
+          <td class="r-rol">{{ a.rol }}</td>
+          <td class="r-status"><span class="dot"></span><span class="s-txt">{{ a.status }}</span></td>
+          <td class="r-act"><span class="a-txt">{% if a.taak %}{{ a.taak }}{% elif a.detail %}{{ a.detail }}{% endif %}</span><span class="r-sinds">{% if a.sinds %}{{ a.sinds }}{% endif %}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 
-  <h2>Voorstellen</h2>
-  <p class="hint">Wat een agent voorstelt. Jij beslist. In deze fase wordt er nog
-    niets uitgevoerd: alleen je beslissing wordt vastgelegd.</p>
-  <div id="voorstellen">
+  <h2>Openstaande voorstellen</h2>
+  <div class="paneel" id="voorstellen">
     {% for v in voorstellen %}
     <div class="voorstel" data-id="{{ v.id }}">
-      <div class="v-kop"><strong>{{ v.label }}</strong> stelt voor: {{ v.actie }}</div>
-      {% if v.reden %}<div class="v-reden">{{ v.reden }}</div>{% endif %}
-      <div class="v-knoppen">
-        <button class="ja" onclick="beslis({{ v.id }}, 'goedgekeurd', this)">Goedkeuren</button>
-        <button class="nee" onclick="beslis({{ v.id }}, 'geweigerd', this)">Weigeren</button>
+      <span class="v-flag"></span>
+      <div class="v-body">
+        <div class="v-kop"><strong>{{ v.label }}</strong> stelt voor: {{ v.actie }}</div>
+        {% if v.reden %}<div class="v-reden">{{ v.reden }}</div>{% endif %}
+        <div class="v-knoppen">
+          <button class="ja" onclick="beslis({{ v.id }}, 'goedgekeurd', this)">Goedkeuren</button>
+          <button class="nee" onclick="beslis({{ v.id }}, 'geweigerd', this)">Weigeren</button>
+        </div>
       </div>
     </div>
     {% else %}
-    <p class="leeg" id="geen-voorstellen">Geen openstaande voorstellen. Een agent
-      stelt iets voor zodra er iets aandacht vraagt.</p>
+    <p class="leeg" id="geen-voorstellen">Geen openstaande voorstellen.</p>
     {% endfor %}
   </div>
 
   {% if besluiten %}
   <h2>Recente beslissingen</h2>
-  <div id="besluiten">
+  <div class="paneel" id="besluiten">
     {% for b in besluiten %}
     <div class="besluit-rij" data-id="{{ b.id }}" data-uitv="{{ b.uitvoering }}">
-      <span class="{{ 'ja-t' if b.besluit == 'goedgekeurd' else 'nee-t' }}">{{ b.besluit }}</span>
-      · {{ b.label }}: {{ b.actie }} · door {{ b.door }} op {{ b.wanneer }}
-      {%- if b.uitvoering %} · uitvoering:
-        <span class="{{ 'ja-t' if b.uitvoering == 'gelukt' else ('nee-t' if b.uitvoering in ['mislukt','overgeslagen'] else '') }}">{{ b.uitvoering }}</span>
-        {%- if b.uitvoer_detail %} <span class="muted-x">({{ b.uitvoer_detail }})</span>{% endif -%}
+      <span class="tag {{ 'ja-t' if b.besluit == 'goedgekeurd' else 'nee-t' }}">{{ b.besluit }}</span>
+      &nbsp; {{ b.label }}: {{ b.actie }} · {{ b.door }} · {{ b.wanneer }}
+      {%- if b.uitvoering %} · <span class="h-uit {{ b.uitvoering }}">{{ b.uitvoering }}</span>
+        {%- if b.uitvoer_detail %} <span class="muted-x">{{ b.uitvoer_detail }}</span>{% endif -%}
       {% endif %}
     </div>
     {% endfor %}
@@ -182,32 +186,36 @@
   function esc(s) {
     return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
+  function initialen(label) { return (label || "").slice(0, 2).toUpperCase(); }
 
   async function openAgent(naam) {
     const venster = document.getElementById("venster");
-    venster.innerHTML = "<p class='leeg-h'>Laden...</p>";
+    venster.innerHTML = "<div class='venster-body'><p class='leeg-h'>Laden...</p></div>";
     document.getElementById("overlay").classList.add("open");
     try {
       const r = await fetch("/api/agent/" + encodeURIComponent(naam), {cache: "no-store"});
       venster.innerHTML = r.ok ? renderAgent(await r.json())
-                               : "<p class='leeg-h'>Kon details niet laden.</p>";
+                               : "<div class='venster-body'><p class='leeg-h'>Kon details niet laden.</p></div>";
     } catch (e) {
-      venster.innerHTML = "<p class='leeg-h'>Kon details niet laden.</p>";
+      venster.innerHTML = "<div class='venster-body'><p class='leeg-h'>Kon details niet laden.</p></div>";
     }
   }
-
   function sluitAgent() { document.getElementById("overlay").classList.remove("open"); }
   document.addEventListener("keydown", e => { if (e.key === "Escape") sluitAgent(); });
 
   function renderAgent(a) {
-    let h = "<div class='venster-kop'><h2>" + esc(a.label) + "</h2>";
+    const kleur = {rust: "var(--rust)", actief: "var(--actief)", klaar: "var(--klaar)", fout: "var(--fout)"}[a.status] || "var(--rust)";
+    let h = "<div class='venster-kop'><span class='avatar'>" + esc(initialen(a.label)) + "</span>";
+    h += "<h2>" + esc(a.label) + "</h2>";
     h += "<button class='sluit' onclick='sluitAgent()' aria-label='Sluiten'>&times;</button></div>";
-    h += "<div class='v-status' style='color:var(--" + esc(a.status) + ")'>" + esc(a.status);
-    if (a.detail) h += " <span style='font-weight:400;color:var(--muted)'>&middot; " + esc(a.detail) + "</span>";
+    h += "<div class='venster-body'>";
+    h += "<div class='v-status2'><span class='dot' style='background:" + kleur + "'></span>";
+    h += "<span style='text-transform:capitalize;color:var(--tekst-2)'>" + esc(a.status) + "</span>";
+    if (a.detail) h += " <span style='color:var(--tekst-3)'>· " + esc(a.detail) + "</span>";
     h += "</div>";
 
-    h += "<div class='v-sectie'><h3>Wat deze agent doet</h3><p>" + esc(a.mandaat) + "</p>";
-    if (a.cadans) h += "<p style='color:var(--muted);font-size:0.82rem'>" + esc(a.cadans) + "</p>";
+    h += "<div class='v-sectie'><h3>Mandaat</h3><p>" + esc(a.mandaat) + "</p>";
+    if (a.cadans) h += "<p style='color:var(--tekst-2);font-size:12.5px'>" + esc(a.cadans) + "</p>";
     h += "</div>";
 
     if (a.mag && a.mag.length) {
@@ -228,9 +236,9 @@
       a.handelingen.forEach(x => {
         h += "<div class='h-rij'><div class='h-kop'>" + esc(x.actie) + "</div>";
         let meta = esc(x.modus);
-        if (x.wanneer) meta += " &middot; " + esc(x.wanneer);
+        if (x.wanneer) meta += " · " + esc(x.wanneer);
         h += "<div class='h-meta'>" + meta;
-        if (x.uitvoering) h += " &middot; <span class='h-uit " + esc(x.uitvoering) + "'>" + esc(x.uitvoering) + "</span>";
+        if (x.uitvoering) h += " · <span class='h-uit " + esc(x.uitvoering) + "'>" + esc(x.uitvoering) + "</span>";
         h += "</div>";
         if (x.waarom) h += "<div class='h-waarom'>" + esc(x.waarom) + "</div>";
         if (x.detail) h += "<div class='h-meta'>" + esc(x.detail) + "</div>";
@@ -238,7 +246,7 @@
         h += "</div>";
       });
     }
-    return h + "</div>";
+    return h + "</div></div>";
   }
 
   async function beslis(id, besluit, knop) {
@@ -258,7 +266,6 @@
     return Array.from(document.querySelectorAll(".voorstel"))
       .map(el => el.dataset.id).sort().join(",");
   }
-
   function huidigeBesluiten() {
     return Array.from(document.querySelectorAll(".besluit-rij"))
       .map(el => el.dataset.id + ":" + (el.dataset.uitv || "")).sort().join(",");
@@ -270,18 +277,17 @@
       if (!r.ok) return;
       const data = await r.json();
       for (const a of data.agents) {
-        const k = document.querySelector('.kaart[data-naam="' + a.naam + '"]');
-        if (!k) continue;
-        k.dataset.status = a.status;
-        k.querySelector(".status").textContent = a.status;
-        k.querySelector(".detail").textContent = a.taak || a.detail || "";
-        k.querySelector(".sinds").textContent = a.sinds ? "sinds " + a.sinds : "nog geen meldingen";
+        const row = document.querySelector('tr.r[data-naam="' + a.naam + '"]');
+        if (!row) continue;
+        row.dataset.status = a.status;
+        row.querySelector(".s-txt").textContent = a.status;
+        row.querySelector(".a-txt").textContent = a.taak || a.detail || "";
+        row.querySelector(".r-sinds").textContent = a.sinds || "";
       }
-      // Nieuw/verdwenen voorstel of gewijzigde uitvoer-status? Herlaad.
       const nieuwV = (data.voorstellen || []).map(v => String(v.id)).sort().join(",");
       const nieuwB = (data.besluiten || []).map(b => b.id + ":" + (b.uitvoering || "")).sort().join(",");
       if (nieuwV !== huidigeIds() || nieuwB !== huidigeBesluiten()) location.reload();
-    } catch (e) { /* stil: de volgende ronde probeert opnieuw */ }
+    } catch (e) { /* stil */ }
   }
   setInterval(ververs, 10000);
 </script>
