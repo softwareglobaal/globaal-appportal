@@ -190,11 +190,24 @@ def agent_status():
         runbook = str(v.get("runbook", "")).strip()[:60]
         doel = str(v.get("doel", "")).strip()[:120]
         reden = str(v.get("reden", "")).strip()[:400]
+        autonoom = bool(v.get("autonoom"))
         if actie and runbook and runbook.lower() != "geen":
+            # Dedup: geen tweede openstaand of nog-uit-te-voeren voorstel voor
+            # dezelfde container.
             bestaat = conn.execute(
-                "SELECT 1 FROM voorstel WHERE naam=? AND runbook=? AND doel=? AND besluit='open'",
+                """SELECT 1 FROM voorstel WHERE naam=? AND runbook=? AND doel=?
+                   AND (besluit='open' OR uitvoering IN ('wacht', 'bezig'))""",
                 (naam, runbook, doel)).fetchone()
-            if not bestaat:
+            if not bestaat and autonoom:
+                # Veilige klasse: de agent handelt zelf. Meteen goedgekeurd door
+                # de agent, klaar voor de uitvoerder (die opnieuw valideert).
+                now = _nu().isoformat()
+                conn.execute(
+                    """INSERT INTO voorstel (naam, actie, reden, runbook, doel, aangemaakt,
+                       besluit, besluit_door, besluit_ts, uitvoering)
+                       VALUES (?,?,?,?,?,?, 'goedgekeurd', 'agent (autonoom)', ?, 'wacht')""",
+                    (naam, actie, reden, runbook, doel, now, now))
+            elif not bestaat:
                 conn.execute(
                     """INSERT INTO voorstel (naam, actie, reden, runbook, doel, aangemaakt, besluit)
                        VALUES (?, ?, ?, ?, ?, ?, 'open')""",
@@ -233,7 +246,8 @@ def uitvoer_wacht():
         abort(403)
     conn = db()
     rows = conn.execute(
-        "SELECT id, runbook, doel FROM voorstel WHERE besluit='goedgekeurd' AND uitvoering='wacht'"
+        """SELECT id, runbook, doel, reden, besluit_door FROM voorstel
+           WHERE besluit='goedgekeurd' AND uitvoering='wacht'"""
     ).fetchall()
     geclaimd = []
     for r in rows:
@@ -242,7 +256,8 @@ def uitvoer_wacht():
             (_nu().isoformat(), r["id"]))
         if cur.rowcount:
             geclaimd.append({"id": r["id"], "runbook": r["runbook"] or "",
-                             "doel": r["doel"] or ""})
+                             "doel": r["doel"] or "", "reden": r["reden"] or "",
+                             "door": r["besluit_door"] or ""})
     conn.commit()
     conn.close()
     return jsonify({"wacht": geclaimd})
