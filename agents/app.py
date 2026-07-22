@@ -224,6 +224,52 @@ def voorstel_besluit(vid):
     return jsonify({"ok": True})
 
 
+@app.route("/api/uitvoer-wacht")
+def uitvoer_wacht():
+    """De host-uitvoerder haalt goedgekeurde, nog niet uitgevoerde acties op.
+    Token-auth; alleen bereikbaar op localhost of via de SSO. Claimt elke rij
+    atomair (wacht -> bezig) zodat twee uitvoer-runs elkaar niet dubbel doen."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    conn = db()
+    rows = conn.execute(
+        "SELECT id, runbook, doel FROM voorstel WHERE besluit='goedgekeurd' AND uitvoering='wacht'"
+    ).fetchall()
+    geclaimd = []
+    for r in rows:
+        cur = conn.execute(
+            "UPDATE voorstel SET uitvoering='bezig', uitvoer_ts=? WHERE id=? AND uitvoering='wacht'",
+            (_nu().isoformat(), r["id"]))
+        if cur.rowcount:
+            geclaimd.append({"id": r["id"], "runbook": r["runbook"] or "",
+                             "doel": r["doel"] or ""})
+    conn.commit()
+    conn.close()
+    return jsonify({"wacht": geclaimd})
+
+
+@app.route("/uitvoer-resultaat", methods=["POST"])
+def uitvoer_resultaat():
+    """De host-uitvoerder meldt de uitkomst van een actie terug."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    d = request.get_json(silent=True) or {}
+    try:
+        vid = int(d.get("id"))
+    except (TypeError, ValueError):
+        abort(400)
+    uitvoering = str(d.get("uitvoering", "")).strip()
+    if uitvoering not in ("gelukt", "mislukt", "overgeslagen"):
+        abort(400)
+    conn = db()
+    conn.execute(
+        "UPDATE voorstel SET uitvoering=?, uitvoer_detail=?, uitvoer_ts=? WHERE id=?",
+        (uitvoering, str(d.get("detail", ""))[:400], _nu().isoformat(), vid))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
 @app.route("/healthz")
 def healthz():
     return {"status": "ok"}
