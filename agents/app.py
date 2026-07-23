@@ -1,7 +1,9 @@
 """Agents: het besturingscentrum van het Globaal-agentplatform.
 
-Toont het agent-team in een oogopslag: elk lid als figuurtje met een status
-(rust / actief / klaar / fout). Bewust zelfstandig gehouden: een eigen kleine
+Toont het agent-team in een oogopslag: elk lid als kaart met een status. Een
+gewired-en-levende agent staat op "waakt" (op wacht) of "actief" (bezig); valt
+hij stil dan wordt dat "stil" (geen recente hartslag). Een nog niet gekoppelde
+rol staat op "niet gekoppeld". Bewust zelfstandig gehouden: een eigen kleine
 SQLite in het datavolume, geen database-credential nodig. Agents melden hun
 status via de token-route /agent-status (nginx laat die ene route langs de
 SSO); de rest van de app zit achter Authentik forward-auth.
@@ -25,7 +27,7 @@ DB = os.environ.get("AGENTS_DB", "/data/agents.db")
 TOKEN = os.environ.get("AGENTS_TOKEN", "").strip()
 BASE_DOMAIN = os.environ.get("BASE_DOMAIN", "localhost")
 
-STATUSSEN = ("rust", "actief", "klaar", "fout")
+STATUSSEN = ("rust", "waakt", "actief", "klaar", "fout")
 
 TEAM = [
     {"naam": "onderhoud", "label": "Onderhoudsagent", "type": "onderhoud",
@@ -127,7 +129,7 @@ def roster():
     conn.close()
     uit = []
     for a in TEAM:
-        kaart = {**a, "status": "rust", "taak": "", "detail": "",
+        kaart = {**a, "status": "niet gekoppeld", "taak": "", "detail": "",
                  "sinds": None, "minuten": None, "tokens": None}
         r = rows.get(a["naam"])
         if r:
@@ -137,10 +139,15 @@ def roster():
             except Exception:
                 ts, minuten = None, None
             status = r["status"]
+            # Verval: geen recente melding -> "stil" (mogelijk down), zodat een
+            # gestopte agent niet vals als levend blijft tonen. De hartslag komt
+            # uurlijks; ruim twee gemiste beats maakt "waakt" stil.
             if status == "actief" and minuten is not None and minuten >= 60:
-                status = "rust"
+                status = "stil"
+            elif status == "waakt" and minuten is not None and minuten >= 150:
+                status = "stil"
             elif status in ("klaar", "fout") and minuten is not None and minuten >= 24 * 60:
-                status = "rust"
+                status = "stil"
             kaart.update(status=status, taak=r["taak"] or "", detail=r["detail"] or "",
                          tokens=r["tokens"], minuten=minuten,
                          sinds=ts.strftime("%d-%m %H:%M") if ts else None)

@@ -158,7 +158,7 @@ def meld_hartslag(detail):
     token = _agents_token()
     if not token:
         return
-    body = json.dumps({"naam": "onderhoud", "status": "rust", "detail": detail}).encode()
+    body = json.dumps({"naam": "onderhoud", "status": "waakt", "detail": detail}).encode()
     req = urllib.request.Request(
         AGENTS_URL, data=body, method="POST",
         headers={"Content-Type": "application/json", "X-Agents-Token": token})
