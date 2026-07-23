@@ -497,79 +497,87 @@ BASE = """
 <title>{{ titel or winkel_naam }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Zilla+Slab:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
- :root{--bg:#ffffff;--surface:#ffffff;--soft:#f4f2ee;--ink:#15171b;--mut:#5b626d;--line:#e6e3dc;--accent:#12855a;--accent-ink:#ffffff;--nav:#14171c;--nav-ink:#f2f3f4;--nav-mut:#a7adb6}
- @media(prefers-color-scheme:dark){:root{--bg:#0f1113;--surface:#15181d;--soft:#1a1e24;--ink:#e9eaec;--mut:#98a0ab;--line:#282d34;--accent:#25a874;--accent-ink:#04130c;--nav:#0b0d10;--nav-ink:#f2f3f4;--nav-mut:#98a0ab}}
+ :root{--bg:#ffffff;--page:#eef1f5;--surface:#ffffff;--soft:#f1f4f8;--ink:#16202e;--mut:#586274;--line:#d9dfe8;--navy:#13233c;--navy2:#1c3157;--navy-ink:#eaf0f7;--navy-mut:#9fb2c9;--accent:#1c5fa8;--accent-ink:#ffffff}
+ @media(prefers-color-scheme:dark){:root{--bg:#0e131a;--page:#0b1017;--surface:#141b25;--soft:#182130;--ink:#e6ecf3;--mut:#93a1b5;--line:#26313f;--navy:#0b1626;--navy2:#13233c;--navy-ink:#e6ecf3;--navy-mut:#93a1b5;--accent:#4f92d6;--accent-ink:#06121f}}
  *{box-sizing:border-box}html,body{margin:0}
- body{background:var(--bg);color:var(--ink);font:15px/1.6 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+ body{background:var(--page);color:var(--ink);font:15px/1.65 'Public Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
  a{color:inherit;text-decoration:none}
  .wrap{max-width:1180px;margin:0 auto;padding:0 22px}
- .nav{position:sticky;top:0;z-index:20;background:var(--nav);color:var(--nav-ink)}
- .nav .wrap{display:flex;align-items:center;gap:30px;height:60px}
- .brand{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:19px;letter-spacing:-.01em;color:var(--nav-ink);display:flex;align-items:center;gap:10px;white-space:nowrap}
- .brand .mark{width:19px;height:19px;border-radius:5px;background:var(--accent)}
- .brand .tag{font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:500;color:var(--nav-mut);border:1px solid var(--nav-mut);padding:1px 6px;border-radius:5px}
- .menu{display:flex;gap:22px;flex-wrap:wrap}
- .menu a{color:var(--nav-mut);font-weight:500;font-size:14px;padding:19px 0;border-bottom:2px solid transparent}
- .menu a:hover{color:var(--nav-ink)}
- .menu a.actief{color:var(--nav-ink);border-bottom-color:var(--accent)}
- main{padding:32px 0 60px;min-height:60vh}
- .paginatitel{font-family:'Space Grotesk',sans-serif;font-size:25px;font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
- .sub{color:var(--mut);margin:0 0 26px}
+ .topbar{background:var(--navy);color:var(--navy-mut);font-size:12.5px}
+ .topbar .wrap{display:flex;justify-content:space-between;align-items:center;min-height:34px;gap:16px;flex-wrap:wrap}
+ .topbar a{color:var(--navy-ink)}
+ .kop-nav{background:var(--surface);border-bottom:1px solid var(--line)}
+ .kop-nav .wrap{display:flex;align-items:center;gap:30px;min-height:70px;flex-wrap:wrap}
+ .brand{display:flex;align-items:center;gap:12px;white-space:nowrap}
+ .brand .mark{width:34px;height:34px;border-radius:6px;background:var(--navy);color:#fff;font-family:'Zilla Slab',serif;font-weight:700;font-size:20px;display:flex;align-items:center;justify-content:center}
+ .brand .btxt{display:flex;flex-direction:column}
+ .brand .naam{font-family:'Zilla Slab',serif;font-weight:700;font-size:22px;color:var(--ink);line-height:1.05}
+ .brand .onder{font-size:11px;color:var(--mut);letter-spacing:.02em}
+ .menu{display:flex;gap:24px;flex-wrap:wrap;margin-left:auto}
+ .menu a{color:var(--mut);font-weight:600;font-size:14px;padding:6px 0;border-bottom:2px solid transparent}
+ .menu a:hover{color:var(--ink)}
+ .menu a.actief{color:var(--accent);border-bottom-color:var(--accent)}
+ .beheerkop{background:var(--navy);color:var(--navy-ink)}
+ .beheerkop .wrap{display:flex;align-items:center;min-height:60px}
+ main{padding:30px 0 58px;min-height:56vh}
+ .paginatitel{font-family:'Zilla Slab',serif;font-size:27px;font-weight:600;margin:0 0 4px;color:var(--ink)}
+ .sub{color:var(--mut);margin:0 0 24px}
  .mut{color:var(--mut);font-size:14px}
- .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px}
- .kaart{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .12s ease}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:18px}
+ .kaart{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .12s ease}
  .kaart:hover{border-color:var(--accent)}
  .kaart .thumb{aspect-ratio:4/3;background:var(--soft);display:flex;align-items:center;justify-content:center;padding:16px}
  .kaart .thumb img{max-width:100%;max-height:100%;object-fit:contain}
- .kaart .info{padding:13px 14px 15px;display:flex;flex-direction:column;gap:5px;flex:1;border-top:1px solid var(--line)}
- .kaart .cat{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
- .kaart .naam{font-weight:500;line-height:1.35}
- .kaart .prijs{font-family:'Space Grotesk',sans-serif;margin-top:auto;font-weight:600;font-size:17px}
+ .kaart .info{padding:12px 14px 14px;display:flex;flex-direction:column;gap:4px;flex:1;border-top:1px solid var(--line)}
+ .kaart .cat{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+ .kaart .naam{font-weight:600;line-height:1.35;color:var(--ink)}
+ .kaart .prijs{font-family:'Zilla Slab',serif;margin-top:auto;font-weight:700;font-size:19px;color:var(--accent)}
  .leeg{color:var(--mut);padding:44px 0}
- .kruimels{color:var(--mut);font-size:13px;margin:0 0 20px}
- .kruimels a:hover{color:var(--ink)}
- .product{display:grid;grid-template-columns:1.05fr 1fr;gap:44px;align-items:start}
- @media(max-width:820px){.product{grid-template-columns:1fr}}
- .galerij .hoofd{aspect-ratio:4/3;background:var(--soft);border:1px solid var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;padding:22px}
+ .kruimels{color:var(--mut);font-size:13px;margin:0 0 18px}
+ .kruimels a:hover{color:var(--accent)}
+ .product{display:grid;grid-template-columns:1.05fr 1fr;gap:44px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:26px}
+ @media(max-width:820px){.product{grid-template-columns:1fr;padding:18px}}
+ .galerij .hoofd{aspect-ratio:4/3;background:var(--soft);border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center;padding:22px}
  .galerij .hoofd img{max-width:100%;max-height:100%;object-fit:contain}
  .galerij .strip{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
- .galerij .strip img{width:66px;height:66px;object-fit:contain;background:var(--soft);border-radius:7px;border:1px solid var(--line);cursor:pointer;padding:6px}
+ .galerij .strip img{width:64px;height:64px;object-fit:contain;background:var(--soft);border-radius:5px;border:1px solid var(--line);cursor:pointer;padding:6px}
  .galerij .strip img:hover,.galerij .strip img.actief{border-color:var(--accent)}
- .pkop{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:600;letter-spacing:-.01em;margin:0 0 10px}
- .pmeta{color:var(--mut);font-size:14px;margin:0 0 20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
- .badge{display:inline-block;font-size:12px;font-weight:500;padding:3px 10px;border-radius:6px;background:var(--soft);border:1px solid var(--line);color:var(--ink)}
- .pprijs{font-family:'Space Grotesk',sans-serif;font-size:30px;font-weight:600;margin:0 0 22px}
- .pomschrijving{margin:0 0 24px}
- .cta{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:600;padding:12px 22px;border-radius:8px}
- .cta:hover{filter:brightness(1.05)}
- .specs{margin-top:40px;border-top:1px solid var(--line);padding-top:26px}
- .specs h3{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:600;margin:0 0 14px}
- .specs table{max-width:660px}
- .specs th{color:var(--mut);width:210px;font-weight:500}
- footer{background:var(--nav);color:var(--nav-ink);margin-top:24px}
- footer .wrap{padding:38px 22px;display:flex;justify-content:space-between;gap:28px;flex-wrap:wrap}
- footer a{color:var(--nav-ink);opacity:.82}footer a:hover{opacity:1}
- footer .kop{font-family:'Space Grotesk',sans-serif;font-weight:600;margin-bottom:10px}
- footer .klein{color:var(--nav-mut);font-size:13px}
- .flash{background:var(--soft);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;padding:10px 14px;margin-bottom:16px}
- .btn{display:inline-block;background:var(--accent);color:var(--accent-ink);padding:9px 16px;border-radius:8px;border:0;cursor:pointer;font:inherit;font-weight:600}
+ .pkop{font-family:'Zilla Slab',serif;font-size:25px;font-weight:600;margin:0 0 10px;color:var(--ink)}
+ .pmeta{color:var(--mut);font-size:14px;margin:0 0 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+ .badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:4px;background:var(--soft);border:1px solid var(--line);color:var(--ink)}
+ .pprijs{font-family:'Zilla Slab',serif;font-size:32px;font-weight:700;color:var(--accent);margin:0 0 20px}
+ .pomschrijving{margin:0 0 22px}
+ .cta{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:600;padding:12px 24px;border-radius:6px}
+ .cta:hover{background:var(--navy2)}
+ .specs{margin-top:34px;border-top:1px solid var(--line);padding-top:24px}
+ .specs h3{font-family:'Zilla Slab',serif;font-size:17px;font-weight:600;margin:0 0 14px}
+ .specs table{max-width:680px}
+ .specs th{color:var(--mut);width:210px;font-weight:600}
+ footer{background:var(--navy);color:var(--navy-ink);margin-top:36px}
+ footer .wrap{padding:40px 22px;display:flex;justify-content:space-between;gap:32px;flex-wrap:wrap}
+ footer a{color:var(--navy-ink)}footer a:hover{color:#fff}
+ footer .kop{font-family:'Zilla Slab',serif;font-weight:600;margin-bottom:12px;font-size:16px}
+ footer .klein{color:var(--navy-mut);font-size:13px;line-height:1.7;max-width:300px}
+ .flash{background:var(--soft);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:4px;padding:10px 14px;margin-bottom:16px}
+ .btn{display:inline-block;background:var(--accent);color:var(--accent-ink);padding:9px 16px;border-radius:6px;border:0;cursor:pointer;font:inherit;font-weight:600}
  .btn.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
  table{border-collapse:collapse;width:100%}
  td,th{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
- input,select,textarea{font:inherit;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);width:100%}
+ input,select,textarea{font:inherit;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);width:100%}
  label{display:block;margin:10px 0 4px;font-size:14px;color:var(--mut)}
  .row{display:flex;gap:16px;flex-wrap:wrap}.row>*{flex:1;min-width:220px}
- .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:6px;border:1px solid var(--line);color:var(--mut)}
- .gal{display:flex;gap:10px;flex-wrap:wrap}.gal img{width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+ .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:4px;border:1px solid var(--line);color:var(--mut)}
+ .gal{display:flex;gap:10px;flex-wrap:wrap}.gal img{width:120px;height:90px;object-fit:cover;border-radius:4px;border:1px solid var(--line)}
  .spinner{width:44px;height:44px;border:4px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;margin:20px auto}@keyframes sp{to{transform:rotate(360deg)}}
 </style></head><body>
 {% if IS_BEHEER %}
-<div class="nav"><div class="wrap"><a class="brand" href="{{ url_for('beheer') }}"><span class="mark"></span>{{ winkel_naam }}<span class="tag">beheer</span></a></div></div>
+<div class="beheerkop"><div class="wrap"><a class="brand" href="{{ url_for('beheer') }}"><span class="mark">T</span><span class="naam" style="color:var(--navy-ink)">{{ winkel_naam }}</span></a><span style="margin-left:12px;color:var(--navy-mut);font-size:13px">beheer</span></div></div>
 {% else %}
-<div class="nav"><div class="wrap">
-  <a class="brand" href="{{ url_for('etalage') }}"><span class="mark"></span>{{ winkel_naam }}</a>
+<div class="topbar"><div class="wrap"><span>Tweedehands ICT, getest en klaar voor gebruik</span><span>Contact: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a></span></div></div>
+<div class="kop-nav"><div class="wrap">
+  <a class="brand" href="{{ url_for('etalage') }}"><span class="mark">T</span><span class="btxt"><span class="naam">{{ winkel_naam }}</span><span class="onder">ICT-hardware</span></span></a>
   <nav class="menu">
     <a href="{{ url_for('etalage') }}" class="{{ 'actief' if actief=='home' else '' }}">Home</a>
     {% for c in categorieen %}<a href="{{ url_for('categorie', slug=c.slug) }}" class="{{ 'actief' if actief==c.slug else '' }}">{{ c.label }}</a>{% endfor %}
@@ -582,9 +590,9 @@ BASE = """
 </div></main>
 {% if not IS_BEHEER %}
 <footer><div class="wrap">
-  <div style="max-width:320px"><div class="kop">{{ winkel_naam }}</div><div class="klein">Tweedehands ICT, getest voor verkoop.</div></div>
-  <div><div class="kop">Categorie&euml;n</div>{% for c in categorieen %}<div style="margin:5px 0"><a href="{{ url_for('categorie', slug=c.slug) }}">{{ c.label }}</a></div>{% endfor %}</div>
-  <div><div class="kop">Contact</div><div style="margin:5px 0"><a href="mailto:{{ contact_email }}">{{ contact_email }}</a></div></div>
+  <div><div class="kop">{{ winkel_naam }}</div><div class="klein">Tweedehands ICT-hardware, getest en klaar voor gebruik. Laptops, pc's, tablets en toebehoren.</div></div>
+  <div><div class="kop">Categorie&euml;n</div>{% for c in categorieen %}<div style="margin:6px 0"><a href="{{ url_for('categorie', slug=c.slug) }}">{{ c.label }}</a></div>{% endfor %}</div>
+  <div><div class="kop">Contact</div><div class="klein"><a href="mailto:{{ contact_email }}">{{ contact_email }}</a></div></div>
 </div></footer>
 {% endif %}
 </body></html>
