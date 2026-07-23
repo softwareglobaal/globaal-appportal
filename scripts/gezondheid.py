@@ -86,12 +86,100 @@ DB_CHECKS = [
 ]
 
 
+# Levering: draait de JUISTE versie? (aanvulling na incident 2026-07-23: een
+# container draaide gezond door op oude code omdat de deploy stil vastliep. Alle
+# runtime-checks stonden groen; healthy betekent niet up-to-date). Twee
+# oorzaak-onafhankelijke signalen naast de runtime-dimensie:
+#  A) git-drift: staat een gedeployde checkout achter op zijn eigen origin-branch,
+#     dan hapert de git-stap van de deploy (permission, conflict, cron dood). Dit
+#     is de kerncheck: goedkoop (alleen lokale refs) en oorzaak-onafhankelijk.
+#  B) deploy-fout: eindigde de laatste, RECENTE deploy op een fout, dan lukte git
+#     mogelijk wel maar mislukte build of herstart. Recency is nodig: een oude,
+#     sindsdien herstelde fout in een log is geen huidig probleem.
+CHECKOUT_WORTELS = os.environ.get(
+    "LEVERING_WORTELS", "/home/ubuntu:/home/ubuntu/appportal").split(":")
+DEPLOY_LOG_GLOB = os.environ.get("LEVERING_LOGGLOB", "/home/ubuntu/deploy-*.log")
+DEPLOY_FOUT_MARKERS = ("FOUT", "Permission denied", "fatal:")
+DEPLOY_OK_MARKERS = ("deployed", "gedeployed")
+DEPLOY_RECENT_MIN = 180     # een deploy-fout telt alleen als de log recent schreef
+
+
 def sh(args, timeout=30):
     try:
         r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
         return r.stdout.strip()
     except Exception as e:
         return f"__fout__ {e}"
+
+
+def git_checkouts():
+    """Gedeployde git-checkouts onder de wortels (de wortel zelf en een niveau
+    diep), ontdubbeld: zo dekken we de monorepo-subapps en de losse repos."""
+    uit = set()
+    for wortel in CHECKOUT_WORTELS:
+        if os.path.isdir(os.path.join(wortel, ".git")):
+            uit.add(wortel)
+        try:
+            for naam in os.listdir(wortel):
+                pad = os.path.join(wortel, naam)
+                if os.path.isdir(os.path.join(pad, ".git")):
+                    uit.add(pad)
+        except OSError:
+            pass
+    return sorted(uit)
+
+
+def git_drift():
+    """Checkouts die ACHTERLOPEN op hun eigen origin-branch: de git-stap van de
+    deploy is vastgelopen, dus draait er mogelijk oude code. Alleen lokale refs
+    (geen netwerk); de deploy-cron ververst origin elke twee minuten."""
+    uit = []
+    for d in git_checkouts():
+        tak = sh(["git", "-C", d, "symbolic-ref", "--short", "-q", "HEAD"])
+        if not tak or tak.startswith("__fout__"):
+            continue  # detached HEAD of geen branch: geen leveringsoordeel
+        lokaal = sh(["git", "-C", d, "rev-parse", "HEAD"])
+        remote = sh(["git", "-C", d, "rev-parse", "origin/" + tak])
+        if (not lokaal or not remote or lokaal.startswith("__fout__")
+                or remote.startswith("__fout__") or lokaal == remote):
+            continue
+        # Alleen ACHTER (HEAD is voorouder van origin) telt als haperende deploy;
+        # vooruit of uiteengelopen is een ander, zeldzaam geval.
+        anc = subprocess.run(["git", "-C", d, "merge-base", "--is-ancestor",
+                              "HEAD", "origin/" + tak], capture_output=True)
+        if anc.returncode == 0:
+            uit.append({"app": os.path.basename(d), "pad": d, "soort": "git-drift",
+                        "detail": f"{lokaal[:7]} loopt achter op origin/{tak} {remote[:7]}"})
+    return uit
+
+
+def deploy_log_fouten():
+    """Deploy-logs waarvan de LAATSTE uitkomst een fout is EN die recent nog
+    schreven: de deploy hapert nu (git lukte mogelijk, maar build of herstart
+    mislukte). Een oude, sindsdien herstelde fout (mtime niet recent) negeren we."""
+    import glob
+    nu_epoch = datetime.now(timezone.utc).timestamp()
+    uit = []
+    for log in sorted(glob.glob(DEPLOY_LOG_GLOB)):
+        try:
+            if (nu_epoch - os.path.getmtime(log)) / 60 > DEPLOY_RECENT_MIN:
+                continue
+            with open(log, errors="replace") as f:
+                staart = f.readlines()[-60:]
+        except OSError:
+            continue
+        laatste = None
+        for regel in staart:
+            if any(m in regel for m in DEPLOY_FOUT_MARKERS):
+                laatste = ("fout", regel.strip())
+            elif any(m in regel for m in DEPLOY_OK_MARKERS):
+                laatste = ("ok", regel.strip())
+        if laatste and laatste[0] == "fout":
+            naam = os.path.basename(log)
+            app = naam[7:-4] if naam.startswith("deploy-") and naam.endswith(".log") else naam
+            uit.append({"app": app, "pad": log, "soort": "deploy-fout",
+                        "detail": laatste[1][:200]})
+    return uit
 
 
 def psql(sql):
@@ -325,8 +413,17 @@ def main():
             det = f"{p['leeftijd_uur']}u geleden" if p.get("leeftijd_uur") is not None else p["oordeel"]
             aandacht.append(f"proces {p['naam']}: {p['oordeel']} ({det})")
 
+    # Levering: draait de juiste versie? (git-drift + recente deploy-fouten)
+    levering = git_drift() + deploy_log_fouten()
+    for L in levering:
+        if L["soort"] == "git-drift":
+            aandacht.append(f"levering {L['app']}: checkout loopt achter, deploy hapert ({L['detail']})")
+        else:
+            aandacht.append(f"levering {L['app']}: laatste deploy mislukte ({L['detail']})")
+
     rapport = {"tijd": nu.isoformat(), "vm": vm, "containers": conts,
-               "db_checks": checks, "processen": processen, "aandacht": aandacht}
+               "db_checks": checks, "processen": processen, "levering": levering,
+               "aandacht": aandacht}
     with open(UITVOER, "w") as f:
         json.dump(rapport, f, indent=2, default=str)
 
@@ -361,6 +458,12 @@ def main():
     for p in processen:
         print(f"  {p['naam']:34} {p['oordeel']:9} leeftijd={p.get('leeftijd_uur')}u"
               f" (max {p.get('max_uur')}u)")
+    print("\nLevering (juiste versie draait?):")
+    if levering:
+        for L in levering:
+            print(f"  {L['app']:20} {L['soort']:11} {L['detail']}")
+    else:
+        print("  alle gedeployde checkouts up-to-date, geen recente deploy-fouten")
     return 0 if not aandacht else 1
 
 
