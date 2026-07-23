@@ -20,6 +20,7 @@ import secrets
 import threading
 import mimetypes
 from functools import wraps
+from urllib.parse import quote
 
 import psycopg
 from psycopg.rows import dict_row
@@ -40,6 +41,8 @@ UPLOAD_DIR = os.environ.get("ITEMS_UPLOAD_DIR", "/data/fotos")
 MODEL      = os.environ.get("VALUATION_MODEL", "claude-sonnet-5")
 VALUATION_EFFORT = os.environ.get("VALUATION_EFFORT", "medium")
 MUNT_SYMBOOL = "€"
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "mch@h-architects.be")
+WINKEL_NAAM = os.environ.get("WINKEL_NAAM", "H-Architects ICT")
 
 # Authentik-groepen die mogen bewerken (leeg = iedereen die door forward-auth komt).
 EDITOR_GROUPS = {g_.strip() for g_ in os.environ.get("EDITOR_GROUPS", "").split(",") if g_.strip()}
@@ -57,6 +60,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(16))
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 app.jinja_env.globals["IS_BEHEER"] = IS_BEHEER
+app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
+app.jinja_env.globals["winkel_naam"] = WINKEL_NAAM
 
 CONDITIES = ["nieuw", "als_nieuw", "goed", "gebruikt", "defect_onderdelen"]
 STATUSSEN = ["concept", "onderzoek", "te_controleren", "live",
@@ -156,6 +161,30 @@ def netjes_label(s):
         else:
             uit.append(w)
     return " ".join(uit)
+
+
+# Hardware-categorieen voor de navigatie. Een product hoort bij een categorie als
+# zijn (vrije-tekst) categorie-veld een van de sleutels bevat.
+CATEGORIEEN = [
+    {"slug": "laptops", "label": "Laptops",
+     "sleutels": ["laptop", "notebook", "ultrabook", "macbook"]},
+    {"slug": "tablets", "label": "Tablets",
+     "sleutels": ["tablet", "ipad"]},
+    {"slug": "pcs", "label": "PC's",
+     "sleutels": ["pc", "desktop", "computer", "workstation", "mini-pc",
+                  "all-in-one", "toren", "sff"]},
+    {"slug": "kabels", "label": "Kabels",
+     "sleutels": ["kabel", "cable", "adapter", "snoer", "cord", "dock"]},
+]
+app.jinja_env.globals["categorieen"] = CATEGORIEEN
+
+
+def categorie_van(cat):
+    t = (cat or "").lower()
+    for c in CATEGORIEEN:
+        if any(s in t for s in c["sleutels"]):
+            return c["slug"]
+    return None
 
 
 def usd_eur(usd):
@@ -465,41 +494,96 @@ def _taxatie_worker(pid, modus):
 BASE = """
 <!doctype html><html lang="nl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ titel or 'Items te koop' }}</title>
+<title>{{ titel or winkel_naam }}</title>
 <style>
- :root{--bg:#f6f5f2;--card:#fff;--ink:#1c1b19;--mut:#6b6862;--acc:#b45c3a;--lijn:#e4e1db}
- @media(prefers-color-scheme:dark){:root{--bg:#191817;--card:#242220;--ink:#ece9e3;--mut:#9a958c;--acc:#d8895f;--lijn:#33302c}}
- *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
- a{color:var(--acc);text-decoration:none}
- header{border-bottom:1px solid var(--lijn);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
- header h1{font-size:20px;margin:0}
- main{max-width:1100px;margin:0 auto;padding:20px}
- .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px}
- .card{background:var(--card);border:1px solid var(--lijn);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
- .card img{width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--lijn)}
- .card .body{padding:12px;display:flex;flex-direction:column;gap:6px;flex:1}
- .card .prijs{font-weight:700;font-size:18px}
+ :root{--bg:#f7f8fa;--surface:#ffffff;--ink:#14171c;--mut:#6b7280;--line:#e6e8ec;--accent:#1f5fd6;--accent-ink:#ffffff;--head:#10141b;--head-ink:#eef1f5;--pill:#eef1f5}
+ @media(prefers-color-scheme:dark){:root{--bg:#0e1116;--surface:#161a21;--ink:#e7eaee;--mut:#98a1ad;--line:#242a33;--accent:#4a86f7;--accent-ink:#ffffff;--head:#090b0f;--head-ink:#e7eaee;--pill:#1c222b}}
+ *{box-sizing:border-box}html,body{margin:0}
+ body{background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+ a{color:inherit;text-decoration:none}
+ .wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+ .nav{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
+ .nav .wrap{display:flex;align-items:center;gap:26px;height:62px}
+ .brand{font-weight:800;font-size:18px;letter-spacing:-.02em;white-space:nowrap}
+ .brand b{color:var(--accent)}
+ .menu{display:flex;gap:20px;flex-wrap:wrap}
+ .menu a{color:var(--mut);font-weight:600;font-size:14px;padding:20px 0;border-bottom:2px solid transparent}
+ .menu a:hover{color:var(--ink)}
+ .menu a.actief{color:var(--ink);border-bottom-color:var(--accent)}
+ main{padding:28px 0 56px;min-height:62vh}
+ .paginatitel{font-size:26px;letter-spacing:-.02em;margin:0 0 4px}
+ .sub{color:var(--mut);margin:0 0 24px}
  .mut{color:var(--mut);font-size:14px}
- .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--lijn);color:var(--mut)}
- .btn{display:inline-block;background:var(--acc);color:#fff;padding:9px 16px;border-radius:8px;border:0;cursor:pointer;font:inherit}
- .btn.sec{background:transparent;color:var(--ink);border:1px solid var(--lijn)}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(238px,1fr));gap:22px}
+ .kaart{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .15s ease,transform .15s ease}
+ .kaart:hover{box-shadow:0 10px 26px rgba(20,23,28,.10);transform:translateY(-2px)}
+ .kaart .thumb{aspect-ratio:1/1;background:var(--pill);display:flex;align-items:center;justify-content:center;overflow:hidden}
+ .kaart .thumb img{width:100%;height:100%;object-fit:cover}
+ .kaart .info{padding:14px;display:flex;flex-direction:column;gap:5px;flex:1}
+ .kaart .cat{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+ .kaart .naam{font-weight:650;line-height:1.35}
+ .kaart .prijs{margin-top:auto;font-weight:800;font-size:18px}
+ .leeg{color:var(--mut);padding:40px 0}
+ .kruimels{color:var(--mut);font-size:13px;margin:0 0 18px}
+ .kruimels a:hover{color:var(--ink)}
+ .product{display:grid;grid-template-columns:1.1fr 1fr;gap:40px;align-items:start}
+ @media(max-width:820px){.product{grid-template-columns:1fr}}
+ .galerij .hoofd{aspect-ratio:1/1;background:var(--pill);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+ .galerij .hoofd img{width:100%;height:100%;object-fit:cover}
+ .galerij .strip{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+ .galerij .strip img{width:70px;height:70px;object-fit:cover;border-radius:10px;border:1px solid var(--line);cursor:pointer;opacity:.65}
+ .galerij .strip img:hover,.galerij .strip img.actief{opacity:1;border-color:var(--accent)}
+ .pkop{font-size:24px;letter-spacing:-.02em;margin:0 0 8px}
+ .pmeta{color:var(--mut);font-size:14px;margin:0 0 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+ .badge{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--pill);color:var(--ink)}
+ .pprijs{font-size:30px;font-weight:800;margin:0 0 18px}
+ .pomschrijving{margin:0 0 22px}
+ .cta{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:12px 22px;border-radius:10px}
+ .cta:hover{filter:brightness(1.06)}
+ .specs{margin-top:38px;border-top:1px solid var(--line);padding-top:24px}
+ .specs h3{font-size:16px;margin:0 0 12px}
+ .specs table{max-width:640px}
+ .specs th{color:var(--mut);width:200px}
+ footer{background:var(--head);color:var(--head-ink);margin-top:20px}
+ footer .wrap{padding:34px 20px;display:flex;justify-content:space-between;gap:28px;flex-wrap:wrap}
+ footer a{color:var(--head-ink);opacity:.82}footer a:hover{opacity:1}
+ footer .kop{font-weight:700;margin-bottom:10px}
+ footer .klein{opacity:.6;font-size:13px}
+ .flash{background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-bottom:16px}
+ .btn{display:inline-block;background:var(--accent);color:#fff;padding:9px 16px;border-radius:9px;border:0;cursor:pointer;font:inherit;font-weight:600}
+ .btn.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
  table{border-collapse:collapse;width:100%}
- td,th{padding:7px 10px;border-bottom:1px solid var(--lijn);text-align:left;vertical-align:top}
- input,select,textarea{font:inherit;padding:9px;border:1px solid var(--lijn);border-radius:8px;background:var(--card);color:var(--ink);width:100%}
+ td,th{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+ input,select,textarea{font:inherit;padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);width:100%}
  label{display:block;margin:10px 0 4px;font-size:14px;color:var(--mut)}
- .flash{background:var(--card);border:1px solid var(--acc);border-radius:8px;padding:10px 14px;margin-bottom:14px}
  .row{display:flex;gap:16px;flex-wrap:wrap}.row>*{flex:1;min-width:220px}
- .gal{display:flex;gap:10px;flex-wrap:wrap}.gal img{width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--lijn)}
- .spinner{width:44px;height:44px;border:5px solid var(--lijn);border-top-color:var(--acc);border-radius:50%;animation:sp 1s linear infinite;margin:20px auto}
- @keyframes sp{to{transform:rotate(360deg)}}
+ .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
+ .gal{display:flex;gap:10px;flex-wrap:wrap}.gal img{width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+ .spinner{width:44px;height:44px;border:5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;margin:20px auto}@keyframes sp{to{transform:rotate(360deg)}}
 </style></head><body>
-<header>
- <h1><a href="{{ url_for('beheer') if IS_BEHEER else url_for('etalage') }}">Items te koop</a></h1>
-</header>
-<main>
+{% if IS_BEHEER %}
+<div class="nav"><div class="wrap"><a class="brand" href="{{ url_for('beheer') }}">Items <b>beheer</b></a></div></div>
+{% else %}
+<div class="nav"><div class="wrap">
+  <a class="brand" href="{{ url_for('etalage') }}">{{ winkel_naam.split(' ')[0] }} <b>{{ winkel_naam.split(' ')[1:] | join(' ') }}</b></a>
+  <nav class="menu">
+    <a href="{{ url_for('etalage') }}" class="{{ 'actief' if actief=='home' else '' }}">Home</a>
+    {% for c in categorieen %}<a href="{{ url_for('categorie', slug=c.slug) }}" class="{{ 'actief' if actief==c.slug else '' }}">{{ c.label }}</a>{% endfor %}
+  </nav>
+</div></div>
+{% endif %}
+<main><div class="wrap">
  {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
  {{ body|safe }}
-</main></body></html>
+</div></main>
+{% if not IS_BEHEER %}
+<footer><div class="wrap">
+  <div style="max-width:300px"><div class="kop">{{ winkel_naam }}</div><div class="klein">Tweedehands ICT-hardware, nagekeken en klaar voor gebruik.</div></div>
+  <div><div class="kop">Categorie&euml;n</div>{% for c in categorieen %}<div style="margin:4px 0"><a href="{{ url_for('categorie', slug=c.slug) }}">{{ c.label }}</a></div>{% endfor %}</div>
+  <div><div class="kop">Contact</div><div style="margin:4px 0"><a href="mailto:{{ contact_email }}">{{ contact_email }}</a></div></div>
+</div></footer>
+{% endif %}
+</body></html>
 """
 
 
@@ -515,27 +599,57 @@ def healthz():
     return "ok", 200
 
 
+def _kaart(r):
+    imgs = prod_images(r["id"])
+    foto = url_for("upload", naam=imgs[0]["bestand"]) if imgs else ""
+    naam = r["titel"] or ((r["merk"] or "") + " " + (r["model"] or "")).strip() or "Item"
+    prijs = euro(r["prijs_definitief_cents"]) or "Prijs op aanvraag"
+    catlabel = netjes_label(r["categorie"]) if r["categorie"] else ""
+    thumb = (f'<img src="{foto}" alt="" loading="lazy">' if foto
+             else '<span class="mut">geen foto</span>')
+    return (f'<a class="kaart" href="{url_for("detail", pid=r["id"])}">'
+            f'<div class="thumb">{thumb}</div>'
+            f'<div class="info"><div class="cat">{catlabel}</div>'
+            f'<div class="naam">{naam}</div><div class="prijs">{prijs}</div></div></a>')
+
+
+def _etalage_html(slug, titel, sub):
+    rows = db().execute("SELECT * FROM products WHERE status='live' "
+                        "ORDER BY gepubliceerd_op DESC, id DESC").fetchall()
+    if slug:
+        rows = [r for r in rows if categorie_van(r["categorie"]) == slug]
+    kaarten = "".join(_kaart(r) for r in rows)
+    inner = (f'<div class="grid">{kaarten}</div>' if rows
+             else '<p class="leeg">Nog geen items in deze categorie.</p>')
+    return f'<h1 class="paginatitel">{titel}</h1><p class="sub">{sub}</p>{inner}'
+
+
 @app.route("/")
 def etalage():
-    rows = db().execute(
-        "SELECT * FROM products WHERE status='live' "
-        "ORDER BY gepubliceerd_op DESC, id DESC").fetchall()
-    kaarten = []
-    for r in rows:
-        imgs = prod_images(r["id"])
-        foto = url_for("upload", naam=imgs[0]["bestand"]) if imgs else ""
-        prijs = euro(r["prijs_definitief_cents"]) or "Prijs op aanvraag"
-        kaarten.append(f"""
-        <a class="card" href="{url_for('detail', pid=r['id'])}">
-          <img src="{foto}" alt="" loading="lazy">
-          <div class="body">
-            <div>{(r['titel'] or (r['merk'] or '') + ' ' + (r['model'] or '')).strip()}</div>
-            <div class="mut">{r['merk'] or ''} {r['model'] or ''}</div>
-            <div class="prijs">{prijs}</div>
-          </div>
-        </a>""")
-    inner = "".join(kaarten) or "<p class='mut'>Nog geen items online.</p>"
-    return page(f'<div class="grid">{inner}</div>')
+    return page(_etalage_html(None, "Aanbod",
+                              "Tweedehands ICT-hardware, nagekeken en klaar voor gebruik."),
+                actief="home")
+
+
+@app.route("/categorie/<slug>")
+def categorie(slug):
+    c = next((x for x in CATEGORIEEN if x["slug"] == slug), None)
+    if not c:
+        abort(404)
+    return page(_etalage_html(slug, c["label"], "Ons aanbod " + c["label"].lower() + "."),
+                actief=slug, titel=c["label"])
+
+
+_GALERIJ_JS = """
+<script>
+document.querySelectorAll('.galerij .strip img').forEach(function(t){
+  t.addEventListener('click', function(){
+    document.getElementById('hoofdfoto').src = t.src;
+    document.querySelectorAll('.galerij .strip img').forEach(function(x){ x.classList.remove('actief'); });
+    t.classList.add('actief');
+  });
+});
+</script>"""
 
 
 @app.route("/item/<int:pid>")
@@ -544,25 +658,57 @@ def detail(pid):
     if not r:
         abort(404)
     imgs = prod_images(pid)
-    gal = "".join(f'<img src="{url_for("upload", naam=i["bestand"])}" alt="">' for i in imgs)
+    hoofd = url_for("upload", naam=imgs[0]["bestand"]) if imgs else ""
+    hoofd_html = (f'<img id="hoofdfoto" src="{hoofd}" alt="">' if hoofd
+                  else '<span class="mut">geen foto</span>')
+    strip = ""
+    if len(imgs) > 1:
+        thumbs = "".join(
+            f'<img src="{url_for("upload", naam=i["bestand"])}" class="{"actief" if k == 0 else ""}">'
+            for k, i in enumerate(imgs))
+        strip = f'<div class="strip">{thumbs}</div>'
+
     specs = specs_dict(r["specs"])
-    spec_rows = "".join(f"<tr><th>{netjes_label(k)}</th><td>{v}</td></tr>" for k, v in specs.items())
+    spec_rows = "".join(f"<tr><th>{netjes_label(k)}</th><td>{v}</td></tr>"
+                        for k, v in specs.items())
+    specs_html = (f'<div class="specs"><h3>Specificaties</h3><table>{spec_rows}</table></div>'
+                  if spec_rows else "")
+
+    titel = r["titel"] or ((r["merk"] or "") + " " + (r["model"] or "")).strip() or "Item"
     prijs = euro(r["prijs_definitief_cents"]) or "Prijs op aanvraag"
-    cat = f" &middot; {netjes_label(r['categorie'])}" if r["categorie"] else ""
-    conditie = netjes_label(r["conditie"]) if r["conditie"] else "-"
+    catobj = next((x for x in CATEGORIEEN if x["slug"] == categorie_van(r["categorie"])), None)
+    kruimel_cat = ""
+    if catobj:
+        kruimel_cat = (f'<a href="{url_for("categorie", slug=catobj["slug"])}">'
+                       f'{catobj["label"]}</a> &rsaquo; ')
+
+    meta = []
+    mm = ((r["merk"] or "") + " " + (r["model"] or "")).strip()
+    if mm:
+        meta.append(mm)
+    if r["conditie"]:
+        meta.append(f'<span class="badge">{netjes_label(r["conditie"])}</span>')
+    meta_html = " &middot; ".join(meta)
+
+    onderwerp = quote("Interesse in " + titel)
+    cta = (f'<a class="cta" href="mailto:{CONTACT_EMAIL}?subject={onderwerp}">'
+           f'Interesse? Neem contact op</a>')
+    oms = (r["omschrijving"] or "").replace(chr(10), "<br>")
+
     body = f"""
-    <p><a href="{url_for('etalage')}">&larr; terug</a></p>
-    <div class="row">
-      <div><div class="gal">{gal or '<span class="mut">geen foto</span>'}</div></div>
+    <div class="kruimels"><a href="{url_for('etalage')}">Home</a> &rsaquo; {kruimel_cat}{titel}</div>
+    <div class="product">
+      <div class="galerij"><div class="hoofd">{hoofd_html}</div>{strip}</div>
       <div>
-        <h2>{r['titel'] or (r['merk'] or '') + ' ' + (r['model'] or '')}</h2>
-        <p class="mut">{r['merk'] or ''} {r['model'] or ''}{cat} &middot; conditie: {conditie}</p>
-        <p class="prijs" style="font-size:26px">{prijs}</p>
-        <p>{(r['omschrijving'] or '').replace(chr(10), '<br>')}</p>
-        <table>{spec_rows}</table>
+        <h1 class="pkop">{titel}</h1>
+        <p class="pmeta">{meta_html}</p>
+        <p class="pprijs">{prijs}</p>
+        <div class="pomschrijving">{oms}</div>
+        {cta}
       </div>
-    </div>"""
-    return page(body, titel=r["titel"] or "Item")
+    </div>
+    {specs_html}""" + _GALERIJ_JS
+    return page(body, titel=titel)
 
 
 @app.route("/uploads/<path:naam>")
