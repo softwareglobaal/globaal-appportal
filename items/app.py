@@ -658,10 +658,11 @@ def bewerk(pid):
     if v:
         bronnen = d.execute("SELECT * FROM valuation_sources WHERE valuation_id=%s",
                             (v["id"],)).fetchall()
-        brows = "".join(
-            f"<tr><td>{b['bron']}</td><td>{euro(b['prijs_cents']) or '-'}</td>"
-            f"<td>{b['type']}</td><td>{('<a href=\"'+b['url']+'\">link</a>') if b['url'] else ''}</td></tr>"
-            for b in bronnen)
+        brows = ""
+        for b in bronnen:
+            link = f'<a href="{b["url"]}">link</a>' if b["url"] else ""
+            brows += (f"<tr><td>{b['bron']}</td><td>{euro(b['prijs_cents']) or '-'}</td>"
+                      f"<td>{b['type']}</td><td>{link}</td></tr>")
         tax_html = f"""
           <p><b>Voorstel:</b> {euro(v['prijs_voorstel_cents']) or '-'}
              (band {euro(v['prijs_min_cents']) or '?'} - {euro(v['prijs_max_cents']) or '?'})
