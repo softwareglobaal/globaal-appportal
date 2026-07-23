@@ -27,29 +27,29 @@
   .hint { color: var(--tekst-3); font-size: 12px; margin: 0 0 12px; }
 
   .paneel { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px; overflow: hidden; }
-  table.roster { width: 100%; border-collapse: collapse; }
-  .roster th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase;
-               letter-spacing: 0.04em; color: var(--tekst-3); padding: 9px 14px;
-               border-bottom: 1px solid var(--lijn); background: #fafbfb; }
-  .roster td { padding: 11px 14px; border-bottom: 1px solid var(--lijn); vertical-align: middle; }
-  .roster tbody tr:last-child td { border-bottom: 0; }
-  .roster tbody tr { cursor: pointer; }
-  .roster tbody tr:hover { background: #f7f9fa; }
-  .r-agent { white-space: nowrap; }
+
+  .agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 12px; }
+  .agent-kaart { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px;
+                 padding: 14px 15px; cursor: pointer; }
+  .agent-kaart:hover { border-color: var(--lijn-sterk); background: #fbfcfc; }
+  .agent-kaart:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .k-top { display: flex; align-items: center; gap: 10px; }
+  .k-id { min-width: 0; }
+  .k-naam { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .k-rol { color: var(--tekst-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .avatar { display: inline-flex; width: 26px; height: 26px; border-radius: 5px;
             background: #eceef0; color: #58626b; font-size: 10.5px; font-weight: 600;
-            align-items: center; justify-content: center; margin-right: 10px; vertical-align: middle; }
-  .r-naam { font-weight: 500; }
-  .r-rol { color: var(--tekst-2); font-size: 13px; }
-  .r-status { white-space: nowrap; }
-  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+            align-items: center; justify-content: center; vertical-align: middle; }
+  .k-top .avatar { width: 34px; height: 34px; font-size: 12px; border-radius: 6px; flex: 0 0 34px; }
+  .k-status { display: flex; align-items: center; margin-top: 13px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
          background: var(--rust); margin-right: 7px; vertical-align: middle; }
-  tr.r[data-status="actief"] .dot { background: var(--actief); }
-  tr.r[data-status="klaar"]  .dot { background: var(--klaar); }
-  tr.r[data-status="fout"]   .dot { background: var(--fout); }
-  .s-txt { font-size: 13px; color: var(--tekst-2); text-transform: capitalize; }
-  .r-act { color: var(--tekst-2); font-size: 13px; }
-  .r-act .r-sinds { color: var(--tekst-3); font-size: 12px; margin-left: 6px; }
+  .agent-kaart[data-status="actief"] .dot { background: var(--actief); }
+  .agent-kaart[data-status="klaar"]  .dot { background: var(--klaar); }
+  .agent-kaart[data-status="fout"]   .dot { background: var(--fout); }
+  .s-txt { font-size: 12.5px; color: var(--tekst-2); text-transform: capitalize; }
+  .k-act { margin-top: 6px; font-size: 12.5px; color: var(--tekst-2); min-height: 18px; }
+  .k-act .r-sinds { color: var(--tekst-3); font-size: 11.5px; margin-left: 6px; }
 
   .voorstel { display: flex; align-items: flex-start; gap: 14px; padding: 12px 14px;
               border-bottom: 1px solid var(--lijn); }
@@ -125,22 +125,21 @@
   </div>
 
   <h2>Team</h2>
-  <div class="paneel">
-    <table class="roster">
-      <thead>
-        <tr><th>Agent</th><th>Rol</th><th>Status</th><th>Laatste activiteit</th></tr>
-      </thead>
-      <tbody>
-        {% for a in agents %}
-        <tr class="r" data-naam="{{ a.naam }}" data-status="{{ a.status }}" onclick="openAgent('{{ a.naam }}')">
-          <td class="r-agent"><span class="avatar">{{ a.label[:2]|upper }}</span><span class="r-naam">{{ a.label }}</span></td>
-          <td class="r-rol">{{ a.rol }}</td>
-          <td class="r-status"><span class="dot"></span><span class="s-txt">{{ a.status }}</span></td>
-          <td class="r-act"><span class="a-txt">{% if a.taak %}{{ a.taak }}{% elif a.detail %}{{ a.detail }}{% endif %}</span><span class="r-sinds">{% if a.sinds %}{{ a.sinds }}{% endif %}</span></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div class="agents-grid">
+    {% for a in agents %}
+    <div class="agent-kaart" data-naam="{{ a.naam }}" data-status="{{ a.status }}" tabindex="0"
+         onclick="openAgent('{{ a.naam }}')" onkeydown="if(event.key==='Enter')openAgent('{{ a.naam }}')">
+      <div class="k-top">
+        <span class="avatar">{{ a.label[:2]|upper }}</span>
+        <div class="k-id">
+          <div class="k-naam">{{ a.label }}</div>
+          <div class="k-rol">{{ a.rol }}</div>
+        </div>
+      </div>
+      <div class="k-status"><span class="dot"></span><span class="s-txt">{{ a.status }}</span></div>
+      <div class="k-act"><span class="a-txt">{% if a.taak %}{{ a.taak }}{% elif a.detail %}{{ a.detail }}{% endif %}</span><span class="r-sinds">{% if a.sinds %}{{ a.sinds }}{% endif %}</span></div>
+    </div>
+    {% endfor %}
   </div>
 
   <h2>Openstaande voorstellen</h2>
@@ -282,12 +281,12 @@
       if (!r.ok) return;
       const data = await r.json();
       for (const a of data.agents) {
-        const row = document.querySelector('tr.r[data-naam="' + a.naam + '"]');
-        if (!row) continue;
-        row.dataset.status = a.status;
-        row.querySelector(".s-txt").textContent = a.status;
-        row.querySelector(".a-txt").textContent = a.taak || a.detail || "";
-        row.querySelector(".r-sinds").textContent = a.sinds || "";
+        const kaart = document.querySelector('.agent-kaart[data-naam="' + a.naam + '"]');
+        if (!kaart) continue;
+        kaart.dataset.status = a.status;
+        const st = kaart.querySelector(".s-txt"); if (st) st.textContent = a.status;
+        const at = kaart.querySelector(".a-txt"); if (at) at.textContent = a.taak || a.detail || "";
+        const si = kaart.querySelector(".r-sinds"); if (si) si.textContent = a.sinds || "";
       }
       const nieuwV = (data.voorstellen || []).map(v => String(v.id)).sort().join(",");
       const nieuwB = (data.besluiten || []).map(b => b.id + ":" + (b.uitvoering || "")).sort().join(",");
