@@ -58,6 +58,9 @@
   .v-body { flex: 1; }
   .v-kop { font-size: 13.5px; }
   .v-kop strong { font-weight: 600; }
+  .v-doel { font-family: var(--mono); font-size: 12px; color: var(--tekst-2); margin-top: 3px; }
+  .v-doel b { color: var(--tekst); font-weight: 600; }
+  .b-doel { font-family: var(--mono); color: var(--tekst-2); }
   .v-reden { color: var(--tekst-2); font-size: 12.5px; margin-top: 3px; }
   .v-knoppen { display: flex; gap: 8px; margin-top: 10px; }
   .v-knoppen button { border: 1px solid var(--lijn-sterk); background: var(--paneel); color: var(--tekst);
@@ -146,6 +149,7 @@
       <span class="v-flag"></span>
       <div class="v-body">
         <div class="v-kop"><strong>{{ v.label }}</strong> stelt voor: {{ v.actie }}</div>
+        {% if v.doel %}<div class="v-doel">container <b>{{ v.doel }}</b></div>{% endif %}
         {% if v.reden %}<div class="v-reden">{{ v.reden }}</div>{% endif %}
         <div class="v-knoppen">
           <button class="ja" onclick="beslis({{ v.id }}, 'goedgekeurd', this)">Goedkeuren</button>
@@ -164,7 +168,7 @@
     {% for b in besluiten %}
     <div class="besluit-rij" data-id="{{ b.id }}" data-uitv="{{ b.uitvoering }}">
       <span class="tag {{ 'ja-t' if b.besluit == 'goedgekeurd' else 'nee-t' }}">{{ b.besluit }}</span>
-      &nbsp; {{ b.label }}: {{ b.actie }} · {{ b.door }} · {{ b.wanneer }}
+      &nbsp; {{ b.label }}: {{ b.actie }}{% if b.doel %} · <span class="b-doel">{{ b.doel }}</span>{% endif %} · {{ b.door }} · {{ b.wanneer }}
       {%- if b.uitvoering %} · <span class="h-uit {{ b.uitvoering }}">{{ b.uitvoering }}</span>
         {%- if b.uitvoer_detail %} <span class="muted-x">{{ b.uitvoer_detail }}</span>{% endif -%}
       {% endif %}

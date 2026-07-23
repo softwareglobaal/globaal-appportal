@@ -154,7 +154,8 @@ def open_voorstellen():
         "SELECT * FROM voorstel WHERE besluit='open' ORDER BY aangemaakt DESC").fetchall()
     conn.close()
     return [{"id": r["id"], "naam": r["naam"], "label": LABELS.get(r["naam"], r["naam"]),
-             "actie": r["actie"], "reden": r["reden"], "wanneer": _fmt(r["aangemaakt"])}
+             "actie": r["actie"], "reden": r["reden"], "doel": r["doel"] or "",
+             "wanneer": _fmt(r["aangemaakt"])}
             for r in rows]
 
 
@@ -165,7 +166,7 @@ def recente_besluiten(limit=8):
         (limit,)).fetchall()
     conn.close()
     return [{"id": r["id"], "label": LABELS.get(r["naam"], r["naam"]),
-             "actie": r["actie"], "besluit": r["besluit"],
+             "actie": r["actie"], "besluit": r["besluit"], "doel": r["doel"] or "",
              "door": r["besluit_door"], "wanneer": _fmt(r["besluit_ts"]),
              "uitvoering": r["uitvoering"] or "", "uitvoer_detail": r["uitvoer_detail"] or ""}
             for r in rows]
