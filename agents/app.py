@@ -332,6 +332,8 @@ def handelingen(naam):
         container = r["container"] or ""
         if actie == "herstart_container" and container:
             actie_txt = "Herstart container " + container
+        elif actie == "escaleren":
+            actie_txt = "Escalatie" + (" · " + container if container else "")
         elif container:
             actie_txt = (actie + " " + container).strip()
         else:
