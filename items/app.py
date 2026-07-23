@@ -130,6 +130,34 @@ def tekst_naar_specs(t):
     return out
 
 
+ACRONIEMEN = {
+    "cpu", "gpu", "apu", "ram", "vram", "rom", "ssd", "hdd", "nvme", "emmc",
+    "usb", "usbc", "hdmi", "vga", "dvi", "dp", "lan", "wlan", "wan", "wifi",
+    "nfc", "os", "bios", "uefi", "ean", "sku", "upc", "ip", "mac", "pc", "ips",
+    "tn", "va", "oled", "led", "lcd", "qled", "sd", "sdhc", "microsd", "poe",
+    "nic", "mp", "fhd", "hd", "uhd", "qhd", "wqhd", "rj45", "ddr", "ddr3",
+    "ddr4", "ddr5", "lpddr", "tb", "gb", "mb", "kb", "ghz", "mhz", "tpm",
+    "ecc", "sata", "m2", "pcie", "id",
+}
+
+
+def netjes_label(s):
+    """Eerste letter hoofdletter; acroniemen volledig in hoofdletters."""
+    s = str(s or "").replace("_", " ").strip()
+    if not s:
+        return s
+    woorden = s.split()
+    uit = []
+    for i, w in enumerate(woorden):
+        if w.lower() in ACRONIEMEN:
+            uit.append(w.upper())
+        elif i == 0:
+            uit.append(w[:1].upper() + w[1:])
+        else:
+            uit.append(w)
+    return " ".join(uit)
+
+
 def usd_eur(usd):
     if not usd:
         return "$ 0,0000"
@@ -466,8 +494,7 @@ BASE = """
  @keyframes sp{to{transform:rotate(360deg)}}
 </style></head><body>
 <header>
- <h1><a href="{{ url_for('etalage') }}">Items te koop</a></h1>
- {% if IS_BEHEER %}<nav class="mut"><a href="{{ url_for('beheer') }}">Beheer</a></nav>{% endif %}
+ <h1><a href="{{ url_for('beheer') if IS_BEHEER else url_for('etalage') }}">Items te koop</a></h1>
 </header>
 <main>
  {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
@@ -519,15 +546,17 @@ def detail(pid):
     imgs = prod_images(pid)
     gal = "".join(f'<img src="{url_for("upload", naam=i["bestand"])}" alt="">' for i in imgs)
     specs = specs_dict(r["specs"])
-    spec_rows = "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in specs.items())
+    spec_rows = "".join(f"<tr><th>{netjes_label(k)}</th><td>{v}</td></tr>" for k, v in specs.items())
     prijs = euro(r["prijs_definitief_cents"]) or "Prijs op aanvraag"
+    cat = f" &middot; {netjes_label(r['categorie'])}" if r["categorie"] else ""
+    conditie = netjes_label(r["conditie"]) if r["conditie"] else "-"
     body = f"""
     <p><a href="{url_for('etalage')}">&larr; terug</a></p>
     <div class="row">
       <div><div class="gal">{gal or '<span class="mut">geen foto</span>'}</div></div>
       <div>
         <h2>{r['titel'] or (r['merk'] or '') + ' ' + (r['model'] or '')}</h2>
-        <p class="mut">{r['merk'] or ''} {r['model'] or ''} &middot; conditie: {r['conditie'] or '-'}</p>
+        <p class="mut">{r['merk'] or ''} {r['model'] or ''}{cat} &middot; conditie: {conditie}</p>
         <p class="prijs" style="font-size:26px">{prijs}</p>
         <p>{(r['omschrijving'] or '').replace(chr(10), '<br>')}</p>
         <table>{spec_rows}</table>
