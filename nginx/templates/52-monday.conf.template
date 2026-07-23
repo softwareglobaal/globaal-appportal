@@ -1,0 +1,11 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name monday.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Monday-zandbak-dashboard. Achter forward-auth; de app controleert zelf
+    # nog eens op de groepen monday/admin.
+    set $app_upstream http://app-monday:3014;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
