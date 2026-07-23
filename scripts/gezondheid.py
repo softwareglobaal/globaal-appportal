@@ -115,8 +115,14 @@ def container_beeld(naam):
         for regel in laag.splitlines():
             if any(w in regel for w in FOUT_PATROON.split("|")):
                 fouten += 1
+    # Bij een probleem-container de laatste logregels meesturen, zodat de
+    # duiding over de echte oorzaak kan redeneren (niet alleen "unhealthy").
+    probleem = status != "running" or health == "unhealthy" or fouten >= 20
+    log_staart = ""
+    if probleem and not logs.startswith("__fout__"):
+        log_staart = "\n".join(logs.splitlines()[-25:])[-2000:]
     return {"container": naam, "herstarts": _int(herstart), "status": status,
-            "health": health or "-", "fouten_24h": fouten}
+            "health": health or "-", "fouten_24h": fouten, "log_staart": log_staart}
 
 
 def _int(s):
