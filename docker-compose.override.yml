@@ -302,8 +302,60 @@ services:
       start_period: 15s
     networks: [appnet]
 
+  # Items — verkoop-etalage tweedehands ICT met AI-taxatie.
+  # Beheer-tegel achter forward-auth (items.globaal.be); gebruiker via X-authentik-* headers.
+  app-items:
+    build: ./items
+    image: appportal-items
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      ITEMS_ROLE: beheer
+      PORT: "3015"
+      # Rol 'items_writer': schrijft schema items (db/migrations/079-items.sql).
+      ITEMS_DB_URL: ${ITEMS_DB_URL:-}
+      ITEMS_UPLOAD_DIR: /data/fotos
+      # Leeg = iedereen die door forward-auth komt mag bewerken.
+      EDITOR_GROUPS: ${ITEMS_EDITOR_GROUPS:-}
+      # Nodig voor de AI-taxatie (Claude Sonnet).
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      VALUATION_EFFORT: ${VALUATION_EFFORT:-medium}
+    volumes:
+      - items-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3015/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
+  # Publieke verkoop-etalage (read-only, eigen poort 8770, GEEN SSO, geen beheerknop).
+  items-verkoop:
+    build: ./items
+    image: appportal-items
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      ITEMS_ROLE: verkoop
+      PORT: "8770"
+      ITEMS_DB_URL: ${ITEMS_DB_URL:-}
+      ITEMS_UPLOAD_DIR: /data/fotos
+    ports:
+      - "8770:8770"
+    volumes:
+      - items-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8770/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
 volumes:
   telefoonregister-data:
   sales-data:
   projecten-data:
   hr-data:
+  items-data:

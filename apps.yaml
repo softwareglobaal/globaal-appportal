@@ -60,3 +60,9 @@ apps:
     subdomain: agents
     roles: [admin, manager, agents]
     status: active
+  - id: items
+    name: Items
+    description: Verkoop-etalage tweedehands ICT met AI-taxatie
+    subdomain: items
+    roles: [admin, manager, items]
+    status: active

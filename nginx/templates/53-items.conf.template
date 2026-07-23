@@ -1,0 +1,12 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name items.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Itembeheer (tweedehands ICT). Achter forward-auth; de app leest de
+    # gebruiker uit de X-authentik-* headers. Foto-uploads kunnen groot zijn.
+    set $app_upstream http://app-items:3015;
+    client_max_body_size 50m;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
