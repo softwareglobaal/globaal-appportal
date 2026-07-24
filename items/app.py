@@ -187,6 +187,22 @@ def categorie_van(cat):
     return None
 
 
+CATEGORIE_ICONEN = {
+    "laptops": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="10" rx="1"/><path d="M2 19h20"/></svg>',
+    "tablets": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 18h2"/></svg>',
+    "pcs": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/></svg>',
+    "kabels": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v5M15 2v5M7 7h10v3a5 5 0 0 1-10 0zM12 15v7"/></svg>',
+}
+
+
+def categorie_iconen_html():
+    tegels = "".join(
+        f'<a class="cattegel" href="{url_for("categorie", slug=c["slug"])}">'
+        f'{CATEGORIE_ICONEN.get(c["slug"], "")}<span class="lab">{c["label"]}</span></a>'
+        for c in CATEGORIEEN)
+    return f'<div class="cats">{tegels}</div>'
+
+
 def usd_eur(usd):
     if not usd:
         return "$ 0,0000"
@@ -497,71 +513,76 @@ BASE = """
 <title>{{ titel or winkel_naam }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Zilla+Slab:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
 <style>
- :root{--bg:#ffffff;--page:#eef1f5;--surface:#ffffff;--soft:#f1f4f8;--ink:#16202e;--mut:#586274;--line:#d9dfe8;--navy:#13233c;--navy2:#1c3157;--navy-ink:#eaf0f7;--navy-mut:#9fb2c9;--accent:#1c5fa8;--accent-ink:#ffffff}
- @media(prefers-color-scheme:dark){:root{--bg:#0e131a;--page:#0b1017;--surface:#141b25;--soft:#182130;--ink:#e6ecf3;--mut:#93a1b5;--line:#26313f;--navy:#0b1626;--navy2:#13233c;--navy-ink:#e6ecf3;--navy-mut:#93a1b5;--accent:#4f92d6;--accent-ink:#06121f}}
+ :root{--bg:#ffffff;--page:#f5f4f5;--surface:#ffffff;--soft:#f2f0f2;--ink:#1a1c1f;--mut:#5f636b;--line:#e5e3e6;--navy:#1c1e24;--navy2:#6e1f37;--navy-ink:#f3f2f4;--navy-mut:#a9adb4;--accent:#8a2846;--accent-ink:#ffffff;--accent-soft:#f6ecef}
+ @media(prefers-color-scheme:dark){:root{--bg:#0f1012;--page:#0c0d0f;--surface:#16171a;--soft:#1b1c20;--ink:#e9e8ea;--mut:#9a9ea6;--line:#282a2e;--navy:#0a0b0d;--navy2:#8a3552;--navy-ink:#e9e8ea;--navy-mut:#9a9ea6;--accent:#c65878;--accent-ink:#1a0a10;--accent-soft:#241419}}
  *{box-sizing:border-box}html,body{margin:0}
- body{background:var(--page);color:var(--ink);font:15px/1.65 'Public Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+ body{background:var(--page);color:var(--ink);font:15px/1.6 'Lato',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
  a{color:inherit;text-decoration:none}
  .wrap{max-width:1180px;margin:0 auto;padding:0 22px}
  .topbar{background:var(--navy);color:var(--navy-mut);font-size:12.5px}
  .topbar .wrap{display:flex;justify-content:space-between;align-items:center;min-height:34px;gap:16px;flex-wrap:wrap}
  .topbar a{color:var(--navy-ink)}
  .kop-nav{background:var(--surface);border-bottom:1px solid var(--line)}
- .kop-nav .wrap{display:flex;align-items:center;gap:30px;min-height:70px;flex-wrap:wrap}
+ .kop-nav .wrap{display:flex;align-items:center;gap:30px;min-height:72px;flex-wrap:wrap}
  .brand{display:flex;align-items:center;gap:12px;white-space:nowrap}
- .brand .mark{width:34px;height:34px;border-radius:6px;background:var(--navy);color:#fff;font-family:'Zilla Slab',serif;font-weight:700;font-size:20px;display:flex;align-items:center;justify-content:center}
+ .brand .mark{width:38px;height:38px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:19px;display:flex;align-items:center;justify-content:center}
  .brand .btxt{display:flex;flex-direction:column}
- .brand .naam{font-family:'Zilla Slab',serif;font-weight:700;font-size:22px;color:var(--ink);line-height:1.05}
+ .brand .naam{font-weight:700;font-size:21px;color:var(--ink);line-height:1.05;letter-spacing:-.01em}
  .brand .onder{font-size:11px;color:var(--mut);letter-spacing:.02em}
  .menu{display:flex;gap:24px;flex-wrap:wrap;margin-left:auto}
- .menu a{color:var(--mut);font-weight:600;font-size:14px;padding:6px 0;border-bottom:2px solid transparent}
+ .menu a{color:var(--mut);font-weight:700;font-size:14px;padding:6px 0;border-bottom:2px solid transparent}
  .menu a:hover{color:var(--ink)}
  .menu a.actief{color:var(--accent);border-bottom-color:var(--accent)}
  .beheerkop{background:var(--navy);color:var(--navy-ink)}
  .beheerkop .wrap{display:flex;align-items:center;min-height:60px}
  main{padding:30px 0 58px;min-height:56vh}
- .paginatitel{font-family:'Zilla Slab',serif;font-size:27px;font-weight:600;margin:0 0 4px;color:var(--ink)}
- .sub{color:var(--mut);margin:0 0 24px}
+ .cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:0 0 36px}
+ .cattegel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:22px 14px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;transition:border-color .12s,background .12s}
+ .cattegel:hover{border-color:var(--accent);background:var(--accent-soft)}
+ .cattegel svg{width:32px;height:32px;color:var(--accent)}
+ .cattegel .lab{font-weight:700;font-size:14px;color:var(--ink)}
+ .paginatitel{font-size:24px;font-weight:700;margin:0 0 4px;color:var(--ink);letter-spacing:-.01em}
+ .sub{color:var(--mut);margin:0 0 22px}
  .mut{color:var(--mut);font-size:14px}
- .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:18px}
- .kaart{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .12s ease}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(224px,1fr));gap:18px}
+ .kaart{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .12s ease}
  .kaart:hover{border-color:var(--accent)}
- .kaart .thumb{aspect-ratio:4/3;background:var(--soft);display:flex;align-items:center;justify-content:center;padding:16px}
+ .kaart .thumb{aspect-ratio:1/1;background:#fff;display:flex;align-items:center;justify-content:center;padding:18px}
  .kaart .thumb img{max-width:100%;max-height:100%;object-fit:contain}
- .kaart .info{padding:12px 14px 14px;display:flex;flex-direction:column;gap:4px;flex:1;border-top:1px solid var(--line)}
+ .kaart .info{padding:12px 14px 15px;display:flex;flex-direction:column;gap:5px;flex:1;border-top:1px solid var(--line)}
  .kaart .cat{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
- .kaart .naam{font-weight:600;line-height:1.35;color:var(--ink)}
- .kaart .prijs{font-family:'Zilla Slab',serif;margin-top:auto;font-weight:700;font-size:19px;color:var(--accent)}
+ .kaart .naam{font-weight:400;line-height:1.4;color:var(--ink)}
+ .kaart .prijs{margin-top:auto;font-weight:700;font-size:18px;color:var(--ink)}
  .leeg{color:var(--mut);padding:44px 0}
  .kruimels{color:var(--mut);font-size:13px;margin:0 0 18px}
  .kruimels a:hover{color:var(--accent)}
- .product{display:grid;grid-template-columns:1.05fr 1fr;gap:44px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:26px}
+ .product{display:grid;grid-template-columns:1.05fr 1fr;gap:44px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:26px}
  @media(max-width:820px){.product{grid-template-columns:1fr;padding:18px}}
- .galerij .hoofd{aspect-ratio:4/3;background:var(--soft);border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center;padding:22px}
+ .galerij .hoofd{aspect-ratio:1/1;background:#fff;border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;padding:24px}
  .galerij .hoofd img{max-width:100%;max-height:100%;object-fit:contain}
  .galerij .strip{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
- .galerij .strip img{width:64px;height:64px;object-fit:contain;background:var(--soft);border-radius:5px;border:1px solid var(--line);cursor:pointer;padding:6px}
+ .galerij .strip img{width:64px;height:64px;object-fit:contain;background:#fff;border-radius:6px;border:1px solid var(--line);cursor:pointer;padding:6px}
  .galerij .strip img:hover,.galerij .strip img.actief{border-color:var(--accent)}
- .pkop{font-family:'Zilla Slab',serif;font-size:25px;font-weight:600;margin:0 0 10px;color:var(--ink)}
+ .pkop{font-size:24px;font-weight:700;margin:0 0 10px;color:var(--ink);letter-spacing:-.01em}
  .pmeta{color:var(--mut);font-size:14px;margin:0 0 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
- .badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:4px;background:var(--soft);border:1px solid var(--line);color:var(--ink)}
- .pprijs{font-family:'Zilla Slab',serif;font-size:32px;font-weight:700;color:var(--accent);margin:0 0 20px}
+ .badge{display:inline-block;font-size:12px;font-weight:700;padding:2px 10px;border-radius:4px;background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent)}
+ .pprijs{font-size:30px;font-weight:700;color:var(--ink);margin:0 0 20px}
  .pomschrijving{margin:0 0 22px}
- .cta{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:600;padding:12px 24px;border-radius:6px}
+ .cta{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:12px 24px;border-radius:6px}
  .cta:hover{background:var(--navy2)}
  .specs{margin-top:34px;border-top:1px solid var(--line);padding-top:24px}
- .specs h3{font-family:'Zilla Slab',serif;font-size:17px;font-weight:600;margin:0 0 14px}
+ .specs h3{font-size:17px;font-weight:700;margin:0 0 14px}
  .specs table{max-width:680px}
- .specs th{color:var(--mut);width:210px;font-weight:600}
+ .specs th{color:var(--mut);width:210px;font-weight:700}
  footer{background:var(--navy);color:var(--navy-ink);margin-top:36px}
  footer .wrap{padding:40px 22px;display:flex;justify-content:space-between;gap:32px;flex-wrap:wrap}
  footer a{color:var(--navy-ink)}footer a:hover{color:#fff}
- footer .kop{font-family:'Zilla Slab',serif;font-weight:600;margin-bottom:12px;font-size:16px}
+ footer .kop{font-weight:700;margin-bottom:12px;font-size:15px}
  footer .klein{color:var(--navy-mut);font-size:13px;line-height:1.7;max-width:300px}
  .flash{background:var(--soft);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:4px;padding:10px 14px;margin-bottom:16px}
- .btn{display:inline-block;background:var(--accent);color:var(--accent-ink);padding:9px 16px;border-radius:6px;border:0;cursor:pointer;font:inherit;font-weight:600}
+ .btn{display:inline-block;background:var(--accent);color:var(--accent-ink);padding:9px 16px;border-radius:6px;border:0;cursor:pointer;font:inherit;font-weight:700}
  .btn.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
  table{border-collapse:collapse;width:100%}
  td,th{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
@@ -638,9 +659,9 @@ def _etalage_html(slug, titel, sub):
 
 @app.route("/")
 def etalage():
-    return page(_etalage_html(None, "Aanbod",
-                              "Tweedehands ICT-hardware, nagekeken en klaar voor gebruik."),
-                actief="home")
+    body = categorie_iconen_html() + _etalage_html(
+        None, "Nieuw binnen", "Tweedehands ICT, getest en klaar voor gebruik.")
+    return page(body, actief="home")
 
 
 @app.route("/categorie/<slug>")
