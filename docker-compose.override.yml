@@ -294,6 +294,9 @@ services:
     volumes:
       # Graphify-graaf over de memory, gebouwd door monday/scripts/build-graaf.sh.
       - ./monday-graaf:/graaf:ro
+    # De tegel proxyt vragen naar de host-side LightRAG-query-service (8791).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3014/healthz')"]
       interval: 30s
