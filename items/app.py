@@ -463,6 +463,14 @@ def taxeer(product, image_paden, voortgang=None, met_marktonderzoek=True):
     raise RuntimeError("Model rondde de taxatie niet af met dien_taxatie_in.")
 
 
+def _aantal_uit(waarde, standaard=1):
+    """Aantal uit een formulierveld; nooit negatief, leeg valt terug op de standaard."""
+    try:
+        return max(0, int(str(waarde).strip()))
+    except (TypeError, ValueError):
+        return standaard
+
+
 def _eur_to_cents(x):
     try:
         return round(float(x) * 100)
@@ -1045,9 +1053,15 @@ def beheer():
             fotocel = '<span style="color:var(--accent);font-weight:700">geen foto</span>'
         else:
             fotocel = f"{n}"
+        aantal = r["aantal"]
+        if aantal == 0:
+            aantalcel = '<span style="color:var(--accent);font-weight:700">uitverkocht</span>'
+        else:
+            aantalcel = f"{aantal}"
         trs += (f"<tr><td>#{r['id']}</td>"
                 f"<td><a href=\"{url_for('bewerk', pid=r['id'])}\">{naam}</a></td>"
                 f"<td><span class=\"pill\">{r['status']}</span></td>"
+                f"<td>{aantalcel}</td>"
                 f"<td>{fotocel}</td><td>{prijs}</td></tr>")
     waarschuwing = ""
     if zonder:
@@ -1059,7 +1073,7 @@ def beheer():
     </div>
     <p class="mut">Aangemeld als {_auth_gebruiker()}</p>
     {waarschuwing}
-    <table><tr><th>Id</th><th>Titel</th><th>Status</th><th>Foto's</th><th>Prijs</th></tr>{trs}</table>"""
+    <table><tr><th>Id</th><th>Titel</th><th>Status</th><th>Aantal</th><th>Foto's</th><th>Prijs</th></tr>{trs}</table>"""
     return page(body)
 
 
@@ -1071,10 +1085,11 @@ def nieuw():
         d = db()
         pid = d.execute(
             """INSERT INTO products (merk, model, serienummer, ean, categorie,
-                 conditie, conditie_notities, status)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,'concept') RETURNING id""",
+                 conditie, conditie_notities, aantal, status)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'concept') RETURNING id""",
             (f.get("merk"), f.get("model"), f.get("serienummer"), f.get("ean"),
-             f.get("categorie"), f.get("conditie"), f.get("conditie_notities")),
+             f.get("categorie"), f.get("conditie"), f.get("conditie_notities"),
+             _aantal_uit(f.get("aantal"))),
         ).fetchone()["id"]
         _bewaar_uploads(pid, request.files.getlist("fotos"))
         d.commit()
@@ -1096,6 +1111,7 @@ def nieuw():
       <div class="row">
         <div><label>Categorie</label><input name="categorie" placeholder="laptop, server, monitor..."></div>
         <div><label>Conditie</label><select name="conditie">{cond}</select></div>
+        <div><label>Aantal</label><input name="aantal" type="number" min="0" step="1" value="1"></div>
       </div>
       <label>Conditie-notities</label>
       <textarea name="conditie_notities" rows="2" placeholder="krasje op deksel, accu 85%..."></textarea>
@@ -1134,10 +1150,11 @@ def bewerk(pid):
         d.execute(
             """UPDATE products SET merk=%s, model=%s, serienummer=%s, ean=%s, categorie=%s,
                  conditie=%s, conditie_notities=%s, titel=%s, omschrijving=%s, specs=%s,
-                 bijgewerkt_op=now() WHERE id=%s""",
+                 aantal=%s, bijgewerkt_op=now() WHERE id=%s""",
             (f.get("merk"), f.get("model"), f.get("serienummer"), f.get("ean"),
              f.get("categorie"), f.get("conditie"), f.get("conditie_notities"),
-             f.get("titel"), f.get("omschrijving"), Json(tekst_naar_specs(f.get("specs"))), pid),
+             f.get("titel"), f.get("omschrijving"), Json(tekst_naar_specs(f.get("specs"))),
+             _aantal_uit(f.get("aantal"), standaard=r["aantal"]), pid),
         )
         _bewaar_uploads(pid, request.files.getlist("fotos"))
         d.commit()
@@ -1203,6 +1220,7 @@ def bewerk(pid):
       </div>
       <div class="row">
         <div><label>Categorie</label><input name="categorie" value="{r['categorie'] or ''}"></div>
+        <div><label>Aantal</label><input name="aantal" type="number" min="0" step="1" value="{r['aantal']}"></div>
         <div><label>Conditie</label><select name="conditie">{cond}</select></div>
       </div>
       <label>Conditie-notities</label>
