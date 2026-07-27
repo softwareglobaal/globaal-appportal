@@ -550,6 +550,22 @@ BASE = """
  .cattegel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:22px 14px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;transition:border-color .12s,background .12s}
  .cattegel:hover{border-color:var(--accent);background:var(--accent-soft)}
  .cattegel svg{width:32px;height:32px;color:var(--accent)}
+ .hero{position:relative;border-radius:12px;overflow:hidden;margin:0 0 34px;background:var(--navy);min-height:300px;display:flex;align-items:center}
+ .hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.42}
+ .hero .htxt{position:relative;padding:44px 40px;max-width:620px;color:#fff}
+ .hero h1{font-size:34px;font-weight:700;line-height:1.2;margin:0 0 12px;letter-spacing:-.02em}
+ .hero p{font-size:16px;line-height:1.6;margin:0 0 22px;color:#e8e6e8}
+ .hero .cta{background:var(--accent);color:#fff}
+ .hero .cta:hover{background:#fff;color:var(--navy)}
+ @media(max-width:640px){.hero h1{font-size:26px}.hero .htxt{padding:30px 24px}}
+ .sfeer{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:40px 0 0}
+ .sfeer img{width:100%;height:100%;min-height:260px;object-fit:cover;display:block}
+ .sfeer .stxt{padding:32px 34px 32px 0}
+ .sfeer h2{font-size:21px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+ .sfeer p{color:var(--mut);margin:0 0 16px}
+ .sfeer ul{margin:0;padding-left:18px;color:var(--mut)}
+ .sfeer li{margin:5px 0}
+ @media(max-width:760px){.sfeer{grid-template-columns:1fr}.sfeer .stxt{padding:24px}}
  .geenfoto{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--line)}
  .geenfoto svg{width:100%;height:100%;stroke-width:1.2}
  .geenfoto .lbl{font-size:12px;color:var(--mut);letter-spacing:.02em}
@@ -668,10 +684,42 @@ def _etalage_html(slug, titel, sub):
     return f'<h1 class="paginatitel">{titel}</h1><p class="sub">{sub}</p>{inner}'
 
 
+HERO = """
+<section class="hero">
+  <img src="{hero}" alt="Laptop wordt nagekeken op de werkbank">
+  <div class="htxt">
+    <h1>Tweedehands ICT die eerst door onze handen ging</h1>
+    <p>Elk toestel wordt nagekeken, getest en eerlijk beschreven. Je ziet de echte
+       staat op de foto's en betaalt een prijs die klopt met de markt.</p>
+    <a class="cta" href="#aanbod">Bekijk het aanbod</a>
+  </div>
+</section>"""
+
+SFEER = """
+<section class="sfeer">
+  <img src="{sfeer}" alt="Collega test een laptop voor verkoop">
+  <div class="stxt">
+    <h2>Waarom bij ons kopen</h2>
+    <p>Wij verkopen wat we zelf gebruikt hebben. Geen dozen uit een magazijn,
+       maar toestellen die we kennen.</p>
+    <ul>
+      <li>Nagekeken en getest voor het online komt</li>
+      <li>Foto's van het echte toestel, inclusief gebruikssporen</li>
+      <li>Specificaties tot op het serienummer gecontroleerd</li>
+      <li>Vragen? Je krijgt een mens aan de lijn</li>
+    </ul>
+  </div>
+</section>"""
+
+
 @app.route("/")
 def etalage():
-    body = categorie_iconen_html() + _etalage_html(
-        None, "Nieuw binnen", "Tweedehands ICT, getest en klaar voor gebruik.")
+    hero = HERO.format(hero=url_for("static", filename="hero-werkbank.jpg"))
+    sfeer = SFEER.format(sfeer=url_for("static", filename="sfeer-nakijken.jpg"))
+    body = (hero + categorie_iconen_html() + '<a id="aanbod"></a>'
+            + _etalage_html(None, "Nieuw binnen",
+                            "Tweedehands ICT, getest en klaar voor gebruik.")
+            + sfeer)
     return page(body, actief="home")
 
 
