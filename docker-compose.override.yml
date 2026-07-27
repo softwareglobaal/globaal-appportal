@@ -344,6 +344,7 @@ services:
       PORT: "8770"
       ITEMS_DB_URL: ${ITEMS_DB_URL:-}
       ITEMS_UPLOAD_DIR: /data/fotos
+      CONTACT_TELEFOON: ${CONTACT_TELEFOON:-}
     ports:
       - "8770:8770"
     volumes:
