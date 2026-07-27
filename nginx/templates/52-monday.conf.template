@@ -4,6 +4,19 @@ server {
     server_name monday.${BASE_DOMAIN};
     include /etc/nginx/snippets/ssl.conf;
 
+    # MCP-connector voor een Claude-account (read-only). Deze ene route gaat
+    # BUITEN de forward-auth om, want een connector kan niet interactief
+    # inloggen; de geheime token in het pad is de toegang. De app weigert alles
+    # zonder de juiste token met een 404.
+    location /mcp/ {
+        client_max_body_size 256k;
+        proxy_read_timeout 180s;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass http://app-monday:3014;
+    }
+
     # Monday-zandbak-dashboard. Achter forward-auth; de app controleert zelf
     # nog eens op de groepen monday/admin.
     set $app_upstream http://app-monday:3014;

@@ -291,6 +291,8 @@ services:
       # Alleen het lege zandbak-account "Open". Nooit een echte-account-token.
       MONDAY_SANDBOX_TOKEN: ${MONDAY_SANDBOX_TOKEN:-}
       MONDAY_GROUPS: ${MONDAY_GROUPS:-monday}
+      # Geheime token voor de MCP-connector (/mcp/<token>); leeg = endpoint uit.
+      MONDAY_MCP_TOKEN: ${MONDAY_MCP_TOKEN:-}
     volumes:
       # Graphify-graaf over de memory, gebouwd door monday/scripts/build-graaf.sh.
       - ./monday-graaf:/graaf:ro
