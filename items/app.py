@@ -203,12 +203,9 @@ def foto_placeholder(categorie, klein=False):
             f'{icoon}</span><span class="lbl">Foto volgt</span></div>')
 
 
-def categorie_iconen_html():
-    tegels = "".join(
-        f'<a class="cattegel k{(i % 4) + 1}" href="{url_for("categorie", slug=c["slug"])}">'
-        f'{CATEGORIE_ICONEN.get(c["slug"], "")}<span class="lab">{c["label"]}</span></a>'
-        for i, c in enumerate(CATEGORIEEN))
-    return f'<div class="cats">{tegels}</div>'
+# Het icoon hangt bij de categorie zodat het uitklapmenu het kan tonen.
+for _c in CATEGORIEEN:
+    _c["icoon"] = CATEGORIE_ICONEN.get(_c["slug"], "")
 
 
 CONDITIE_BADGE = {
@@ -564,10 +561,6 @@ BASE = """
  .wrap{max-width:1660px;margin:0 auto;padding:0 32px}
  @media(max-width:700px){.wrap{padding:0 16px}}
  .kop{position:sticky;top:0;z-index:40;box-shadow:0 1px 0 var(--line)}
- .topbar{background:var(--navy);color:var(--navy-mut);font-size:12.5px}
- .topbar .wrap{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:16px;flex-wrap:wrap}
- .topbar a{color:var(--navy-ink)}
- .topbar .rechts{display:flex;gap:20px;flex-wrap:wrap}
  .kop-nav{background:var(--surface);border-bottom:1px solid var(--line)}
  .kop-nav .wrap{display:flex;align-items:center;gap:26px;min-height:74px;flex-wrap:wrap}
  .zoek{flex:1;min-width:220px;max-width:640px;display:flex}
@@ -576,15 +569,17 @@ BASE = """
  .zoek button{border:0;background:var(--accent);color:#fff;height:44px;padding:0 20px;border-radius:0 8px 8px 0;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:8px}
  .zoek button:hover{background:var(--accent-donker)}
  .zoek svg{width:18px;height:18px}
- .kopcontact{display:flex;align-items:center;gap:10px;color:var(--mut);font-size:13px;white-space:nowrap}
- .kopcontact svg{width:22px;height:22px;color:var(--accent)}
- .kopcontact b{display:block;color:var(--ink);font-size:14px}
  .menubalk{background:var(--navy2)}
  .menubalk .wrap{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
  @media(max-width:820px){
-   .topbar{display:none}
-   .kopcontact{display:none}
    .kop-nav .wrap{min-height:0;padding-top:12px;padding-bottom:12px;gap:12px}
+   .dropdown{position:static;display:contents}
+   .dropdown .trigger{display:none}
+   .dropmenu{display:flex;position:static;min-width:0;background:none;border:0;
+     box-shadow:none;padding:0;border-radius:0}
+   .dropmenu a{color:#d7dcea;padding:11px 13px;font-weight:700;background:none}
+   .dropmenu a svg{display:none}
+   .dropmenu a.actief{background:var(--accent);color:#fff}
    .brand .mark{width:32px;height:32px;font-size:17px}
    .brand .naam{font-size:18px}
    .zoek{max-width:none}
@@ -606,17 +601,21 @@ BASE = """
  .menu a svg{width:16px;height:16px}
  .menu a:hover{background:rgba(255,255,255,.09);color:#fff}
  .menu a.actief{background:var(--accent);color:#fff}
+ .dropdown{position:relative;display:flex}
+ .dropdown .pijl{width:14px;height:14px;transition:transform .12s ease}
+ .dropdown:hover .pijl{transform:rotate(180deg)}
+ .dropmenu{position:absolute;top:100%;left:0;min-width:236px;background:var(--surface);
+   border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:0 0 10px 10px;
+   box-shadow:0 14px 34px rgba(20,23,28,.18);padding:7px;display:none;z-index:60}
+ .dropdown:hover .dropmenu,.dropdown:focus-within .dropmenu{display:block}
+ .dropmenu a{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:7px;
+   color:var(--ink);font-weight:700;font-size:14px}
+ .dropmenu a svg{width:20px;height:20px;color:var(--accent)}
+ .dropmenu a:hover{background:var(--soft);color:var(--accent)}
+ .dropmenu a.actief{background:var(--accent-soft);color:var(--accent)}
  .beheerkop{background:var(--navy);color:var(--navy-ink)}
  .beheerkop .wrap{display:flex;align-items:center;min-height:60px}
  main{padding:30px 0 58px;min-height:56vh}
- .cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:0 0 36px}
- .cattegel{border:0;border-radius:12px;padding:24px 14px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;transition:transform .12s ease,filter .12s ease}
- .cattegel:hover{transform:translateY(-3px);filter:brightness(.96)}
- .cattegel svg{width:34px;height:34px}
- .cattegel.k1{background:var(--blauw-zacht);color:var(--blauw)}
- .cattegel.k2{background:var(--groen-zacht);color:var(--groen)}
- .cattegel.k3{background:var(--paars-zacht);color:var(--paars)}
- .cattegel.k4{background:var(--amber-zacht);color:var(--amber)}
  .usps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:2px;background:var(--accent-donker);border-radius:12px;overflow:hidden;margin:0 0 34px}
  .usp{background:var(--accent);color:#fff;padding:17px 20px;display:flex;align-items:center;gap:13px}
  .usp svg{width:25px;height:25px;flex:none}
@@ -641,7 +640,6 @@ BASE = """
  .geenfoto{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--line)}
  .geenfoto svg{width:100%;height:100%;stroke-width:1.2}
  .geenfoto .lbl{font-size:12px;color:var(--mut);letter-spacing:.02em}
- .cattegel .lab{font-weight:700;font-size:15px}
  .paginatitel{font-size:24px;font-weight:700;margin:0 0 4px;color:var(--ink);letter-spacing:-.01em}
  .sub{color:var(--mut);margin:0 0 22px}
  .mut{color:var(--mut);font-size:14px}
@@ -732,29 +730,24 @@ BASE = """
 <div class="beheerkop"><div class="wrap"><a class="brand" href="{{ url_for('beheer') }}"><span class="mark">T</span><span class="naam" style="color:var(--navy-ink)">{{ winkel_naam }}</span></a><span style="margin-left:12px;color:var(--navy-mut);font-size:13px">beheer</span></div></div>
 {% else %}
 <div class="kop">
- <div class="topbar"><div class="wrap">
-   <span>Tweedehands ICT, nagekeken en getest voor verkoop</span>
-   <span class="rechts">
-     <span>Afhalen op afspraak</span>
-     <span><a href="mailto:{{ contact_email }}">{{ contact_email }}</a></span>
-   </span>
- </div></div>
  <div class="kop-nav"><div class="wrap">
    <a class="brand" href="{{ url_for('etalage') }}"><span class="mark">T</span><span class="btxt"><span class="naam">{{ winkel_naam }}</span><span class="onder">ICT-hardware</span></span></a>
    <form class="zoek" action="{{ url_for('zoeken') }}" method="get" role="search">
      <input name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of specificatie" aria-label="Zoeken">
      <button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Zoeken</span></button>
    </form>
-   <span class="kopcontact">
-     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
-     <span>Vragen over een toestel?<b>{{ contact_email }}</b></span>
-   </span>
  </div></div>
  <div class="menubalk"><div class="wrap">
    <nav class="menu">
      <a href="{{ url_for('etalage') }}" class="{{ 'actief' if actief=='home' else '' }}">
        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
-     {% for c in categorieen %}<a href="{{ url_for('categorie', slug=c.slug) }}" class="{{ 'actief' if actief==c.slug else '' }}">{{ c.label }}</a>{% endfor %}
+     <span class="dropdown">
+       <a href="{{ url_for('etalage') }}#aanbod" class="trigger {{ 'actief' if actief not in ['home',''] else '' }}">Categorie&euml;n
+         <svg class="pijl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></a>
+       <span class="dropmenu">
+         {% for c in categorieen %}<a href="{{ url_for('categorie', slug=c.slug) }}" class="{{ 'actief' if actief==c.slug else '' }}">{{ c.icoon|safe }}{{ c.label }}</a>{% endfor %}
+       </span>
+     </span>
      <a href="mailto:{{ contact_email }}">Contact</a>
    </nav>
  </div></div>
@@ -915,7 +908,7 @@ SFEER = """
 def etalage():
     hero = HERO.format(hero=url_for("static", filename="hero-werkbank.jpg"))
     sfeer = SFEER.format(sfeer=url_for("static", filename="sfeer-nakijken.jpg"))
-    body = (hero + usps_html() + categorie_iconen_html() + '<a id="aanbod"></a>'
+    body = (hero + usps_html() + '<a id="aanbod"></a>'
             + _etalage_html(None, "Nieuw binnen",
                             "Tweedehands ICT, getest en klaar voor gebruik.")
             + sfeer)
