@@ -170,9 +170,11 @@ def netjes_label(s):
     return " ".join(uit)
 
 
-# Hardware-categorieen voor de navigatie. Een product hoort bij een categorie als
-# zijn (vrije-tekst) categorie-veld een van de sleutels bevat.
-CATEGORIEEN = [
+# Vaste hardware-categorieen: die staan altijd in het menu, ook als er even niets
+# in ligt. Een product hoort erbij als zijn (vrije-tekst) categorie een sleutel bevat.
+# Alles wat hier niet in past krijgt automatisch een eigen categorie, zie
+# actieve_categorieen(); zo valt een nieuw soort product nooit buiten het menu.
+BASIS_CATEGORIEEN = [
     {"slug": "laptops", "label": "Laptops",
      "sleutels": ["laptop", "notebook", "ultrabook", "macbook"]},
     {"slug": "tablets", "label": "Tablets",
@@ -183,15 +185,50 @@ CATEGORIEEN = [
     {"slug": "kabels", "label": "Kabels",
      "sleutels": ["kabel", "cable", "adapter", "snoer", "cord", "dock"]},
 ]
-app.jinja_env.globals["categorieen"] = CATEGORIEEN
+
+
+def _slug(tekst):
+    s = re.sub(r"[^a-z0-9]+", "-", (tekst or "").lower().strip()).strip("-")
+    return s or "overig"
 
 
 def categorie_van(cat):
-    t = (cat or "").lower()
-    for c in CATEGORIEEN:
+    """Slug van de categorie waar dit item bij hoort, of None als het veld leeg is."""
+    t = (cat or "").strip().lower()
+    if not t:
+        return None
+    for c in BASIS_CATEGORIEEN:
         if any(s in t for s in c["sleutels"]):
             return c["slug"]
-    return None
+    return _slug(t)
+
+
+def actieve_categorieen():
+    """De vaste categorieen plus alles wat verder in de etalage voorkomt.
+
+    Zet iemand (of de taxatie) een nieuw soort product neer, bijvoorbeeld een
+    toetsenbord, dan verschijnt dat vanzelf in het menu met een eigen pagina.
+    """
+    uit = {c["slug"]: dict(c, icoon=CATEGORIE_ICONEN.get(c["slug"], STANDAARD_ICOON))
+           for c in BASIS_CATEGORIEEN}
+    try:
+        rijen = db().execute(
+            "SELECT DISTINCT categorie FROM products "
+            "WHERE status='live' AND categorie IS NOT NULL AND btrim(categorie) <> ''"
+        ).fetchall()
+    except Exception:  # noqa: BLE001 - zonder database tonen we gewoon de vaste lijst
+        return list(uit.values())
+    for rij in rijen:
+        slug = categorie_van(rij["categorie"])
+        if slug and slug not in uit:
+            uit[slug] = {"slug": slug, "label": netjes_label(rij["categorie"]),
+                         "sleutels": [], "icoon": STANDAARD_ICOON}
+    return list(uit.values())
+
+
+@app.context_processor
+def _categorieen_in_sjabloon():
+    return {"categorieen": actieve_categorieen()}
 
 
 CATEGORIE_ICONEN = {
@@ -201,18 +238,21 @@ CATEGORIE_ICONEN = {
     "kabels": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v5M15 2v5M7 7h10v3a5 5 0 0 1-10 0zM12 15v7"/></svg>',
 }
 
+# Voor categorieen die vanzelf ontstaan en dus geen eigen tekening hebben.
+STANDAARD_ICOON = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+                   'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
+                   '<rect x="3" y="3" width="18" height="18" rx="2"/>'
+                   '<path d="M3 9h18M9 21V9"/></svg>')
+
 
 def foto_placeholder(categorie, klein=False):
     """Nette plaatshouder als een item nog geen eigen foto heeft."""
-    icoon = CATEGORIE_ICONEN.get(categorie_van(categorie), CATEGORIE_ICONEN["pcs"])
+    icoon = CATEGORIE_ICONEN.get(categorie_van(categorie), STANDAARD_ICOON)
     maat = "38px" if klein else "64px"
     return (f'<div class="geenfoto"><span style="width:{maat};height:{maat};display:block">'
             f'{icoon}</span><span class="lbl">Foto volgt</span></div>')
 
 
-# Het icoon hangt bij de categorie zodat het uitklapmenu het kan tonen.
-for _c in CATEGORIEEN:
-    _c["icoon"] = CATEGORIE_ICONEN.get(_c["slug"], "")
 
 
 CONDITIE_LABEL = {
@@ -412,18 +452,27 @@ def _kosten_usd(tot):
             + tot["web"] / 1000 * PRIJS_WEBSEARCH)
 
 
-def taxeer(product, image_paden, voortgang=None, met_marktonderzoek=True):
+def taxeer(product, image_paden, voortgang=None, met_marktonderzoek=True,
+           bekende_categorieen=None):
     import anthropic
 
     client = anthropic.Anthropic()
     tot = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "web": 0}
 
+    # Bestaande categorieen meegeven zodat er geen varianten ontstaan
+    # (toetsenbord naast toetsenborden naast keyboard).
+    lijst = ", ".join(bekende_categorieen or []) or "laptop, tablet, pc, kabel"
+    categorie_regel = (
+        f"\nGebruik voor categorie bij voorkeur een van deze bestaande waarden: {lijst}. "
+        f"Past het item daar echt niet bij, kies dan zelf een korte categorienaam "
+        f"in het enkelvoud en in het Nederlands.\n")
+
     if met_marktonderzoek:
-        system = SYSTEM_PROMPT_BASE + SYSTEM_PROMPT_MARKT
+        system = SYSTEM_PROMPT_BASE + categorie_regel + SYSTEM_PROMPT_MARKT
         tools = [WEB_SEARCH, TAXATIE_TOOL]
         max_rondes = 6
     else:
-        system = SYSTEM_PROMPT_BASE + SYSTEM_PROMPT_SPECS
+        system = SYSTEM_PROMPT_BASE + categorie_regel + SYSTEM_PROMPT_SPECS
         tools = [TAXATIE_TOOL]
         max_rondes = 2
 
@@ -539,9 +588,16 @@ def _taxatie_worker(pid, modus):
     try:
         r = con.execute("SELECT * FROM products WHERE id=%s", (pid,)).fetchone()
         paden = [os.path.join(UPLOAD_DIR, i["bestand"]) for i in prod_images_con(con, pid)]
+        # Wat er al aan categorieen bestaat, zodat het model hergebruikt in plaats
+        # van varianten te verzinnen. Deze thread heeft een eigen verbinding.
+        bekend = sorted({c["label"] for c in BASIS_CATEGORIEEN} | {
+            rij["categorie"].strip() for rij in con.execute(
+                "SELECT DISTINCT categorie FROM products "
+                "WHERE categorie IS NOT NULL AND btrim(categorie) <> ''").fetchall()})
         _job(pid, fase="Foto's en gegevens naar Claude sturen...")
         resultaat, kosten = taxeer(dict(r), paden, voortgang=lambda f: _job(pid, fase=f),
-                                   met_marktonderzoek=(modus == "prijs"))
+                                   met_marktonderzoek=(modus == "prijs"),
+                                   bekende_categorieen=bekend)
         _job(pid, fase="Resultaat opslaan...")
         verwerk_taxatie(con, pid, resultaat, kosten)
         _job(pid, status="klaar", fase="Klaar")
@@ -950,7 +1006,7 @@ def zoeken():
 
 @app.route("/categorie/<slug>")
 def categorie(slug):
-    c = next((x for x in CATEGORIEEN if x["slug"] == slug), None)
+    c = next((x for x in actieve_categorieen() if x["slug"] == slug), None)
     if not c:
         abort(404)
     return page(_etalage_html(slug, c["label"]),
@@ -993,7 +1049,8 @@ def detail(pid):
 
     titel = r["titel"] or ((r["merk"] or "") + " " + (r["model"] or "")).strip() or "Item"
     prijs = euro(r["prijs_definitief_cents"]) or "Prijs op aanvraag"
-    catobj = next((x for x in CATEGORIEEN if x["slug"] == categorie_van(r["categorie"])), None)
+    catobj = next((x for x in actieve_categorieen()
+                   if x["slug"] == categorie_van(r["categorie"])), None)
     kruimel_cat = ""
     if catobj:
         kruimel_cat = (f'<a href="{url_for("categorie", slug=catobj["slug"])}">'
