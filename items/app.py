@@ -195,6 +195,14 @@ CATEGORIE_ICONEN = {
 }
 
 
+def foto_placeholder(categorie, klein=False):
+    """Nette plaatshouder als een item nog geen eigen foto heeft."""
+    icoon = CATEGORIE_ICONEN.get(categorie_van(categorie), CATEGORIE_ICONEN["pcs"])
+    maat = "38px" if klein else "64px"
+    return (f'<div class="geenfoto"><span style="width:{maat};height:{maat};display:block">'
+            f'{icoon}</span><span class="lbl">Foto volgt</span></div>')
+
+
 def categorie_iconen_html():
     tegels = "".join(
         f'<a class="cattegel" href="{url_for("categorie", slug=c["slug"])}">'
@@ -542,6 +550,9 @@ BASE = """
  .cattegel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:22px 14px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;transition:border-color .12s,background .12s}
  .cattegel:hover{border-color:var(--accent);background:var(--accent-soft)}
  .cattegel svg{width:32px;height:32px;color:var(--accent)}
+ .geenfoto{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--line)}
+ .geenfoto svg{width:100%;height:100%;stroke-width:1.2}
+ .geenfoto .lbl{font-size:12px;color:var(--mut);letter-spacing:.02em}
  .cattegel .lab{font-weight:700;font-size:14px;color:var(--ink)}
  .paginatitel{font-size:24px;font-weight:700;margin:0 0 4px;color:var(--ink);letter-spacing:-.01em}
  .sub{color:var(--mut);margin:0 0 22px}
@@ -638,8 +649,8 @@ def _kaart(r):
     naam = r["titel"] or ((r["merk"] or "") + " " + (r["model"] or "")).strip() or "Item"
     prijs = euro(r["prijs_definitief_cents"]) or "Prijs op aanvraag"
     catlabel = netjes_label(r["categorie"]) if r["categorie"] else ""
-    thumb = (f'<img src="{foto}" alt="" loading="lazy">' if foto
-             else '<span class="mut">geen foto</span>')
+    thumb = (f'<img src="{foto}" alt="{naam}" loading="lazy">' if foto
+             else foto_placeholder(r["categorie"], klein=True))
     return (f'<a class="kaart" href="{url_for("detail", pid=r["id"])}">'
             f'<div class="thumb">{thumb}</div>'
             f'<div class="info"><div class="cat">{catlabel}</div>'
@@ -693,7 +704,7 @@ def detail(pid):
     imgs = prod_images(pid)
     hoofd = url_for("upload", naam=imgs[0]["bestand"]) if imgs else ""
     hoofd_html = (f'<img id="hoofdfoto" src="{hoofd}" alt="">' if hoofd
-                  else '<span class="mut">geen foto</span>')
+                  else foto_placeholder(r["categorie"]))
     strip = ""
     if len(imgs) > 1:
         thumbs = "".join(
@@ -755,21 +766,36 @@ def upload(naam):
 @app.route("/beheer")
 @beheer_route
 def beheer():
-    rows = db().execute("SELECT * FROM products ORDER BY id DESC").fetchall()
+    rows = db().execute(
+        """SELECT p.*, (SELECT COUNT(*) FROM product_images i WHERE i.product_id=p.id) AS fotos
+           FROM products p ORDER BY p.id DESC""").fetchall()
     trs = ""
+    zonder = 0
     for r in rows:
         prijs = euro(r["prijs_definitief_cents"]) or euro(r["prijs_voorstel_cents"]) or "-"
         naam = r['titel'] or (r['merk'] or '') + ' ' + (r['model'] or '') or 'zonder titel'
+        n = r["fotos"]
+        if n == 0:
+            zonder += 1
+            fotocel = '<span style="color:var(--accent);font-weight:700">geen foto</span>'
+        else:
+            fotocel = f"{n}"
         trs += (f"<tr><td>#{r['id']}</td>"
                 f"<td><a href=\"{url_for('bewerk', pid=r['id'])}\">{naam}</a></td>"
-                f"<td><span class=\"pill\">{r['status']}</span></td><td>{prijs}</td></tr>")
+                f"<td><span class=\"pill\">{r['status']}</span></td>"
+                f"<td>{fotocel}</td><td>{prijs}</td></tr>")
+    waarschuwing = ""
+    if zonder:
+        waarschuwing = (f'<div class="flash">{zonder} item(s) zonder foto. Items met eigen '
+                        f'foto\'s verkopen merkbaar beter, zeker tweedehands.</div>')
     body = f"""
     <div class="row" style="align-items:center">
       <h2 style="flex:2">Beheer</h2>
       <div style="text-align:right"><a class="btn" href="{url_for('nieuw')}">+ Nieuw item</a></div>
     </div>
     <p class="mut">Aangemeld als {_auth_gebruiker()}</p>
-    <table><tr><th>Id</th><th>Titel</th><th>Status</th><th>Prijs</th></tr>{trs}</table>"""
+    {waarschuwing}
+    <table><tr><th>Id</th><th>Titel</th><th>Status</th><th>Foto's</th><th>Prijs</th></tr>{trs}</table>"""
     return page(body)
 
 
