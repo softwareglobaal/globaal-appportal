@@ -21,6 +21,10 @@
   .kop { border-bottom: 1px solid var(--lijn); padding-bottom: 14px; margin-bottom: 22px; }
   .kop h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
   .kop .sub { color: var(--tekst-2); font-size: 12.5px; margin-top: 2px; }
+  .kop-link { display: inline-block; margin-top: 10px; border: 1px solid var(--lijn-sterk);
+              background: var(--paneel); color: var(--tekst); border-radius: 5px;
+              padding: 5px 12px; font-size: 12.5px; font-weight: 500; }
+  .kop-link:hover { background: #f2f4f5; }
 
   h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
        color: var(--tekst-2); margin: 26px 0 8px; }
@@ -124,7 +128,7 @@
   <div class="kop">
     <h1>Agents</h1>
     <div class="sub">Onderhoud en operations. Klik een agent voor mandaat en handelingen.</div>
-    <div class="sub"><a href="/seo-team">SEO-teambord</a>: overzicht van het SEO-agentteam.</div>
+    <a class="kop-link" href="/seo-team">SEO-teambord bekijken</a>
   </div>
 
   <h2>Team</h2>
