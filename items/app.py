@@ -581,6 +581,21 @@ BASE = """
  .kopcontact b{display:block;color:var(--ink);font-size:14px}
  .menubalk{background:var(--navy2)}
  .menubalk .wrap{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+ @media(max-width:820px){
+   .topbar{display:none}
+   .kopcontact{display:none}
+   .kop-nav .wrap{min-height:0;padding-top:12px;padding-bottom:12px;gap:12px}
+   .brand .mark{width:32px;height:32px;font-size:17px}
+   .brand .naam{font-size:18px}
+   .zoek{max-width:none}
+   .zoek input,.zoek button{height:40px}
+   .zoek button{padding:0 14px}
+   .zoek button span{display:none}
+   .menubalk .wrap{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+   .menubalk .wrap::-webkit-scrollbar{display:none}
+   .menu{flex-wrap:nowrap}
+   .menu a{white-space:nowrap;padding:11px 13px}
+ }
  .brand{display:flex;align-items:center;gap:12px;white-space:nowrap}
  .brand .mark{width:38px;height:38px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:19px;display:flex;align-items:center;justify-content:center}
  .brand .btxt{display:flex;flex-direction:column}
@@ -728,7 +743,7 @@ BASE = """
    <a class="brand" href="{{ url_for('etalage') }}"><span class="mark">T</span><span class="btxt"><span class="naam">{{ winkel_naam }}</span><span class="onder">ICT-hardware</span></span></a>
    <form class="zoek" action="{{ url_for('zoeken') }}" method="get" role="search">
      <input name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of specificatie" aria-label="Zoeken">
-     <button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Zoeken</button>
+     <button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Zoeken</span></button>
    </form>
    <span class="kopcontact">
      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
