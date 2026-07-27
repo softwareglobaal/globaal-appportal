@@ -962,6 +962,16 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   `kosten.firma.kern_firma_id` (naam-match-backfill; NULL = verzoen-signaal in de
   Second Brain). Volledige verzoening (text-id's weg) kan pas samen met de
   kosten-host-app (repo `globaal-kosten`).
+- **Elevait (migratie 083)**: eigen spoke-schema `elevait` voor het bedrijf van
+  Shaniel en Mehdi in Paramaribo (elevaitnv.com): `beslissing`, `definitie`,
+  `project`, `agent`, `vacature`, `kandidaat`. Elevait NV staat als firma in
+  `kern.firma` (code `ELEV`, land `SR`); de oprichters hangen eraan via
+  `kern.persoon_dienstfirma`. Rol `elevait_app` (LOGIN, wachtwoord via ALTER
+  ROLE op de VM); `portal` leest mee. De hele laag is zichtbaar in de Second
+  Brain en filterbaar op firma; `kandidaat` is gemarkeerd `vertrouwelijk`
+  (persoonsgegevens gaan nooit via migraties of seeds in git, alleen
+  rechtstreeks de database in). Afscherming volgens het persoonslagen-patroon
+  volgt zodra er ooit een derde persoon in admin/manager komt.
 - **Kosten ↔ kern (migratie 012, "de blauwe draad")**: alle `vendor`-teksten uit
   `kosten.software` zijn gebackfilld naar **`kern.leverancier`** (case-insensitief
   samengesmolten met bestaande rijen als Zoom/Microsoft; "Close Call (Xelion)" is

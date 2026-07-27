@@ -1031,3 +1031,9 @@ subdiscipline-statistieken.
       naam-matches (Microsoft, Dropbox, Zoom, Pipedrive, ...). Volgende
       rondes: de matchvoorstellen-query opnieuw draaien na elke
       Octopus-relatie-import.
+- [ ] **Firma-filter Second Brain verbreden**: de filter (migratie 083 /
+      graph.html) kent nu firma-toewijzing op firma's, personen en de
+      Elevait-laag. Nummers, e-mailadressen, software en panden hebben in de
+      data al firma-relaties maar dragen het firma-veld nog niet; toevoegen
+      in graaf.py maakt de filter voor de Globaal-firma's even compleet als
+      voor Elevait.
