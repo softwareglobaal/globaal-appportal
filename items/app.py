@@ -13,6 +13,7 @@ X-authentik-* headers binnen (geen eigen wachtwoord meer).
 
 import os
 import io
+import re
 import json
 import time
 import base64
@@ -42,6 +43,8 @@ MODEL      = os.environ.get("VALUATION_MODEL", "claude-sonnet-5")
 VALUATION_EFFORT = os.environ.get("VALUATION_EFFORT", "medium")
 MUNT_SYMBOOL = "€"
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "mch@h-architects.be")
+# Placeholder tot het echte nummer bekend is; zet CONTACT_TELEFOON in .env.
+CONTACT_TELEFOON = os.environ.get("CONTACT_TELEFOON", "+32 000 00 00 00")
 WINKEL_NAAM = os.environ.get("WINKEL_NAAM", "Techpoint")
 
 # Authentik-groepen die mogen bewerken (leeg = iedereen die door forward-auth komt).
@@ -61,6 +64,8 @@ app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(16))
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 app.jinja_env.globals["IS_BEHEER"] = IS_BEHEER
 app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
+app.jinja_env.globals["contact_telefoon"] = CONTACT_TELEFOON
+app.jinja_env.globals["telefoon_link"] = "tel:" + re.sub(r"[^\d+]", "", CONTACT_TELEFOON)
 app.jinja_env.globals["winkel_naam"] = WINKEL_NAAM
 
 CONDITIES = ["nieuw", "als_nieuw", "goed", "gebruikt", "defect_onderdelen"]
@@ -226,8 +231,8 @@ USP_ICONEN = [
      "Getest voor het online gaat", "We zetten het toestel aan en kijken het na"),
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
      "Eigen foto's", "Krassen en deuken zie je vooraf"),
-    ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-     "Prijs uit marktonderzoek", "We vergelijken met wat soortgelijke toestellen opbrengen"),
+    ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>',
+     "Afhalen op afspraak", "Bel of mail, dan spreken we iets af"),
 ]
 
 
@@ -566,10 +571,15 @@ BASE = """
  .zoek button{border:0;background:var(--accent);color:#fff;height:44px;padding:0 20px;border-radius:0 8px 8px 0;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:8px}
  .zoek button:hover{background:var(--accent-donker)}
  .zoek svg{width:18px;height:18px}
+ .koptel{display:flex;align-items:center;gap:11px;color:var(--mut);font-size:12.5px;white-space:nowrap}
+ .koptel svg{width:26px;height:26px;color:var(--accent)}
+ .koptel b{display:block;color:var(--ink);font-size:16px;font-weight:700;letter-spacing:-.01em}
+ .koptel:hover b{color:var(--accent)}
  .menubalk{background:var(--navy2)}
  .menubalk .wrap{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
  @media(max-width:820px){
    .kop-nav .wrap{min-height:0;padding-top:12px;padding-bottom:12px;gap:12px}
+   .koptel{display:none}
    .dropdown{position:static;display:contents}
    .dropdown .trigger{display:none}
    .dropmenu{display:flex;position:static;min-width:0;background:none;border:0;
@@ -727,6 +737,10 @@ BASE = """
      <input name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of specificatie" aria-label="Zoeken">
      <button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Zoeken</span></button>
    </form>
+   <a class="koptel" href="{{ telefoon_link }}">
+     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
+     <span>Afhalen op afspraak<b>{{ contact_telefoon }}</b></span>
+   </a>
  </div></div>
  <div class="menubalk"><div class="wrap">
    <nav class="menu">
@@ -753,8 +767,8 @@ BASE = """
  <div class="wrap"><div class="kolommen">
   <div>
     <div class="fmerk"><span class="mark">T</span><span>{{ winkel_naam }}</span></div>
-    <div class="klein">Tweedehands ICT uit onze eigen werking. Bij elk toestel staat
-      wat we ervan weten en hoe het erbij ligt.</div>
+    <div class="klein">Sinds een jaar verkopen we hier de laptops, pc's en tablets die
+      bij ons uit dienst gaan. Bij elk toestel staat wat we ervan weten.</div>
   </div>
   <div>
     <div class="kop">Aanbod</div>
@@ -771,13 +785,17 @@ BASE = """
     </div>
     <div class="fcontact">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
-      <span class="klein">Iets willen weten over een toestel? Stuur ons een bericht.</span>
+      <span><a href="{{ telefoon_link }}">{{ contact_telefoon }}</a></span>
+    </div>
+    <div class="fcontact">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>
+      <span class="klein">Afhalen op afspraak. Bel of mail om langs te komen.</span>
     </div>
   </div>
  </div></div>
  <div class="fbalk"><div class="wrap">
    <span>{{ winkel_naam }}</span>
-   <span>Prijzen in euro. Tweedehands toestellen worden verkocht in de staat zoals beschreven.</span>
+   <span>Prijzen in euro. Tweedehands toestellen worden verkocht zonder garantie, in de staat zoals beschreven.</span>
  </div></div>
 </footer>
 {% endif %}
@@ -870,8 +888,8 @@ HERO = """
   <img src="{hero}" alt="Laptop wordt nagekeken op de werkbank">
   <div class="htxt">
     <h1>Tweedehands ICT uit eigen gebruik</h1>
-    <p>Wat hier staat, hebben we zelf gebruikt. Op de foto's zie je hoe het
-       toestel er nu bij ligt.</p>
+    <p>Sinds een jaar verkopen we hier de laptops en pc's die bij ons uit dienst
+       gaan. Op de foto's zie je hoe een toestel er nu bij ligt.</p>
     <a class="cta" href="#aanbod">Bekijk het aanbod</a>
   </div>
 </section>"""
@@ -883,8 +901,9 @@ SFEER = """
     <h2>Waar dit vandaan komt</h2>
     <p>Wij vervangen zelf regelmatig laptops en pc's. Het materiaal dat nog
        prima meekan, zetten we hier online.</p>
-    <p>Tweedehands betekent gebruikssporen. Bij elk toestel schrijven we op wat
-       we ervan weten, zodat je achteraf niet voor verrassingen staat.</p>
+    <p>Tweedehands betekent gebruikssporen. Bij elk toestel schrijven we op wat we
+       ervan weten. Er zit geen garantie op, dus je koopt het zoals het erbij ligt.
+       Kom het gerust eerst bekijken voor je beslist.</p>
   </div>
 </section>"""
 
