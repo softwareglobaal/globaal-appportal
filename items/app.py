@@ -208,29 +208,26 @@ for _c in CATEGORIEEN:
     _c["icoon"] = CATEGORIE_ICONEN.get(_c["slug"], "")
 
 
-CONDITIE_BADGE = {
-    "nieuw": ("b-groen", "Nieuw"),
-    "als_nieuw": ("b-groen", "Als nieuw"),
-    "goed": ("b-blauw", "Goede staat"),
-    "gebruikt": ("b-amber", "Gebruikt"),
-    "defect_onderdelen": ("b-rood", "Voor onderdelen"),
+CONDITIE_LABEL = {
+    "nieuw": "Nieuw",
+    "als_nieuw": "Als nieuw",
+    "goed": "Goede staat",
+    "gebruikt": "Gebruikt",
+    "defect_onderdelen": "Voor onderdelen",
 }
 
 
-def conditie_badge(conditie):
-    kl, tekst = CONDITIE_BADGE.get(conditie or "", ("b-blauw", ""))
-    if not tekst:
-        return ""
-    return f'<span class="cbadge {kl}">{tekst}</span>'
+def conditie_label(conditie):
+    return CONDITIE_LABEL.get(conditie or "", "")
 
 
 USP_ICONEN = [
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
-     "Getest voor verkoop", "Elk toestel doorloopt een controle"),
+     "Getest voor het online gaat", "We zetten het toestel aan en kijken het na"),
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
-     "Foto's van het echte toestel", "Geen catalogusbeeld, wel de echte staat"),
+     "Eigen foto's", "Krassen en deuken zie je vooraf"),
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-     "Marktconforme prijs", "Onderbouwd met echt marktonderzoek"),
+     "Prijs uit marktonderzoek", "We vergelijken met wat soortgelijke toestellen opbrengen"),
 ]
 
 
@@ -653,12 +650,6 @@ BASE = """
  .kaart .naam{font-weight:400;line-height:1.4;color:var(--ink)}
  .kaart .prijs{margin-top:auto;font-weight:700;font-size:21px;color:var(--accent);letter-spacing:-.01em}
  .kaart .thumb{position:relative}
- .cbadge{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.01em}
- .cbadge.b-groen{background:var(--groen-zacht);color:var(--groen)}
- .cbadge.b-blauw{background:var(--blauw-zacht);color:var(--blauw)}
- .cbadge.b-amber{background:var(--amber-zacht);color:var(--amber)}
- .cbadge.b-rood{background:#fdeceb;color:var(--rood)}
- .kaart .hoek{position:absolute;top:10px;left:10px;z-index:2}
  .lijstkop{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
  .lijst{display:flex;flex-direction:column;gap:12px}
  .rij{display:grid;grid-template-columns:150px minmax(0,1fr) 230px;gap:24px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 20px;transition:border-color .12s,box-shadow .12s}
@@ -699,7 +690,7 @@ BASE = """
  .specs table{max-width:680px}
  .specs th{color:var(--mut);width:210px;font-weight:700}
  footer{background:var(--navy);color:var(--navy-ink);margin-top:44px}
- footer .kolommen{padding:46px 0 34px;display:grid;grid-template-columns:1.6fr 1fr 1fr 1.3fr;gap:40px}
+ footer .kolommen{padding:46px 0 34px;display:grid;grid-template-columns:1.7fr 1fr 1.4fr;gap:46px}
  @media(max-width:900px){footer .kolommen{grid-template-columns:1fr 1fr;gap:28px}}
  @media(max-width:560px){footer .kolommen{grid-template-columns:1fr}}
  footer a{color:var(--navy-mut)}footer a:hover{color:#fff}
@@ -762,8 +753,8 @@ BASE = """
  <div class="wrap"><div class="kolommen">
   <div>
     <div class="fmerk"><span class="mark">T</span><span>{{ winkel_naam }}</span></div>
-    <div class="klein">Wij verkopen tweedehands ICT die we zelf gebruikt en nagekeken hebben.
-      Elk toestel wordt getest, eerlijk beschreven en gefotografeerd zoals het is.</div>
+    <div class="klein">Tweedehands ICT uit onze eigen werking. Bij elk toestel staat
+      wat we ervan weten en hoe het erbij ligt.</div>
   </div>
   <div>
     <div class="kop">Aanbod</div>
@@ -773,23 +764,14 @@ BASE = """
     </ul>
   </div>
   <div>
-    <div class="kop">Zo werkt het</div>
-    <ul>
-      <li>Nagekeken en getest</li>
-      <li>Foto's van het echte toestel</li>
-      <li>Marktconforme prijs</li>
-      <li>Afhalen op afspraak</li>
-    </ul>
-  </div>
-  <div>
     <div class="kop">Contact</div>
     <div class="fcontact">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
       <span><a href="mailto:{{ contact_email }}">{{ contact_email }}</a></span>
     </div>
     <div class="fcontact">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>
-      <span class="klein">Afhalen op afspraak, stuur ons gerust een bericht.</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
+      <span class="klein">Iets willen weten over een toestel? Stuur ons een bericht.</span>
     </div>
   </div>
  </div></div>
@@ -822,9 +804,16 @@ TOON_SPECS = [("cpu", "Processor"), ("ram", "Geheugen"), ("opslag", "Opslag"),
               ("besturingssysteem", "Besturingssysteem"), ("bouwjaar", "Bouwjaar")]
 
 
-def _spec_chips(specs, maximaal=5):
-    """Toont de belangrijkste specs als losse blokjes in de lijstweergave."""
+def _spec_chips(specs, maximaal=5, conditie=None):
+    """Toont de belangrijkste specs als losse blokjes in de lijstweergave.
+
+    De staat staat hier gewoon tussen, als gegeven naast de andere gegevens.
+    Dat leest als een advertentie in plaats van als een gekleurd statuslabel.
+    """
     uit = []
+    staat = conditie_label(conditie)
+    if staat:
+        uit.append(f'<span class="spec">Staat: <b>{staat}</b></span>')
     for sleutel, label in TOON_SPECS:
         waarde = specs.get(sleutel)
         if waarde:
@@ -845,23 +834,23 @@ def _rij(r):
     catlabel = netjes_label(r["categorie"]) if r["categorie"] else ""
     beeld = (f'<img src="{foto}" alt="{naam}" loading="lazy">' if foto
              else foto_placeholder(r["categorie"], klein=True))
-    badge = conditie_badge(r["conditie"])
     return (f'<a class="rij" href="{url_for("detail", pid=r["id"])}">'
             f'<div class="rfoto">{beeld}</div>'
             f'<div class="rmid"><div class="rcat">{catlabel}</div>'
-            f'<div class="rnaam">{naam}</div>{badge}'
-            f'{_spec_chips(specs_dict(r["specs"]))}</div>'
+            f'<div class="rnaam">{naam}</div>'
+            f'{_spec_chips(specs_dict(r["specs"]), conditie=r["conditie"])}</div>'
             f'<div class="rrechts"><div class="rprijs">{prijs}</div>'
             f'<span class="rknop">Bekijk toestel</span></div></a>')
 
 
-def _lijst_html(rows, titel, sub, leegtekst="Nog geen toestellen in deze categorie."):
+def _lijst_html(rows, titel, sub="", leegtekst="Hier staat op dit moment niets."):
     aantal = len(rows)
     telling = f'<span class="mut">{aantal} toestel{"len" if aantal != 1 else ""}</span>' if aantal else ""
     inner = (f'<div class="lijst">{"".join(_rij(r) for r in rows)}</div>' if rows
              else f'<p class="leeg">{leegtekst}</p>')
+    subregel = f'<p class="sub">{sub}</p>' if sub else ""
     return (f'<div class="lijstkop"><div><h1 class="paginatitel">{titel}</h1>'
-            f'<p class="sub">{sub}</p></div>{telling}</div>{inner}')
+            f'{subregel}</div>{telling}</div>{inner}')
 
 
 def _live_rows(slug=None):
@@ -872,7 +861,7 @@ def _live_rows(slug=None):
     return rows
 
 
-def _etalage_html(slug, titel, sub):
+def _etalage_html(slug, titel, sub=""):
     return _lijst_html(_live_rows(slug), titel, sub)
 
 
@@ -880,9 +869,9 @@ HERO = """
 <section class="hero">
   <img src="{hero}" alt="Laptop wordt nagekeken op de werkbank">
   <div class="htxt">
-    <h1>Tweedehands ICT die eerst door onze handen ging</h1>
-    <p>Elk toestel wordt nagekeken, getest en eerlijk beschreven. Je ziet de echte
-       staat op de foto's en betaalt een prijs die klopt met de markt.</p>
+    <h1>Tweedehands ICT uit eigen gebruik</h1>
+    <p>Wat hier staat, hebben we zelf gebruikt. Op de foto's zie je hoe het
+       toestel er nu bij ligt.</p>
     <a class="cta" href="#aanbod">Bekijk het aanbod</a>
   </div>
 </section>"""
@@ -891,15 +880,11 @@ SFEER = """
 <section class="sfeer">
   <img src="{sfeer}" alt="Collega test een laptop voor verkoop">
   <div class="stxt">
-    <h2>Waarom bij ons kopen</h2>
-    <p>Wij verkopen wat we zelf gebruikt hebben. Geen dozen uit een magazijn,
-       maar toestellen die we kennen.</p>
-    <ul>
-      <li>Nagekeken en getest voor het online komt</li>
-      <li>Foto's van het echte toestel, inclusief gebruikssporen</li>
-      <li>Specificaties tot op het serienummer gecontroleerd</li>
-      <li>Vragen? Je krijgt een mens aan de lijn</li>
-    </ul>
+    <h2>Waar dit vandaan komt</h2>
+    <p>Wij vervangen zelf regelmatig laptops en pc's. Het materiaal dat nog
+       prima meekan, zetten we hier online.</p>
+    <p>Tweedehands betekent gebruikssporen. Bij elk toestel schrijven we op wat
+       we ervan weten, zodat je achteraf niet voor verrassingen staat.</p>
   </div>
 </section>"""
 
@@ -909,8 +894,7 @@ def etalage():
     hero = HERO.format(hero=url_for("static", filename="hero-werkbank.jpg"))
     sfeer = SFEER.format(sfeer=url_for("static", filename="sfeer-nakijken.jpg"))
     body = (hero + usps_html() + '<a id="aanbod"></a>'
-            + _etalage_html(None, "Nieuw binnen",
-                            "Tweedehands ICT, getest en klaar voor gebruik.")
+            + _etalage_html(None, "Nieuw binnen")
             + sfeer)
     return page(body, actief="home")
 
@@ -930,9 +914,8 @@ def zoeken():
            ORDER BY gepubliceerd_op DESC, id DESC""",
         (like, like, like, like, like, like, like)).fetchall()
     body = _lijst_html(rows, f'Zoeken naar "{q}"',
-                       "Resultaten uit ons volledige aanbod.",
-                       leegtekst=f'Geen toestellen gevonden voor "{q}". '
-                                 f'Probeer een merk of modelnummer.')
+                       leegtekst=f'Niets gevonden voor "{q}". '
+                                 f'Probeer een merk of een modelnummer.')
     return page(body, titel=f"Zoeken: {q}", zoekterm=q)
 
 
@@ -941,7 +924,7 @@ def categorie(slug):
     c = next((x for x in CATEGORIEEN if x["slug"] == slug), None)
     if not c:
         abort(404)
-    return page(_etalage_html(slug, c["label"], "Ons aanbod " + c["label"].lower() + "."),
+    return page(_etalage_html(slug, c["label"]),
                 actief=slug, titel=c["label"])
 
 
@@ -992,7 +975,7 @@ def detail(pid):
     if mm:
         meta.append(mm)
     if r["conditie"]:
-        meta.append(conditie_badge(r["conditie"]))
+        meta.append(f'Staat: <b>{conditie_label(r["conditie"])}</b>')
     meta_html = " &middot; ".join(meta)
 
     onderwerp = quote("Interesse in " + titel)
@@ -1047,8 +1030,7 @@ def beheer():
                 f"<td>{fotocel}</td><td>{prijs}</td></tr>")
     waarschuwing = ""
     if zonder:
-        waarschuwing = (f'<div class="flash">{zonder} item(s) zonder foto. Items met eigen '
-                        f'foto\'s verkopen merkbaar beter, zeker tweedehands.</div>')
+        waarschuwing = (f'<div class="flash">{zonder} item(s) staan nog zonder foto.</div>')
     body = f"""
     <div class="row" style="align-items:center">
       <h2 style="flex:2">Beheer</h2>
