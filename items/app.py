@@ -20,8 +20,9 @@ import base64
 import secrets
 import threading
 import mimetypes
+import urllib.request
 from functools import wraps
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import psycopg
 from psycopg.rows import dict_row
@@ -313,9 +314,10 @@ def beheer_route(f):
 
 
 def prod_images_con(con, pid):
+    # Eigen foto's van het echte toestel altijd eerst, dan pas fabrikantsbeeld.
     return con.execute(
         "SELECT * FROM product_images WHERE product_id=%s "
-        "ORDER BY is_primair DESC, volgorde, id", (pid,)).fetchall()
+        "ORDER BY (bron = 'fabrikant'), is_primair DESC, volgorde, id", (pid,)).fetchall()
 
 
 def prod_images(pid):
@@ -518,6 +520,109 @@ def _aantal_uit(waarde, standaard=1):
         return max(0, int(str(waarde).strip()))
     except (TypeError, ValueError):
         return standaard
+
+
+# ---------------------------------------------------------------------------
+# Fabrikantsfoto's via de productcatalogus van Icecat
+# ---------------------------------------------------------------------------
+# Zonder eigen account werkt de gedeelde demo-gebruiker; zet ICECAT_USER in .env
+# zodra er een eigen Open Icecat-account is (dat hoort bij hun voorwaarden).
+ICECAT_USER = os.environ.get("ICECAT_USER") or "openIcecat-live"
+ICECAT_API = "https://live.icecat.biz/api"
+MAX_FABRIKANTSFOTOS = int(os.environ.get("MAX_FABRIKANTSFOTOS") or "4")
+
+
+def _mpn_kandidaten(product, specs):
+    """Mogelijke fabrikantsnummers, van meest naar minst betrouwbaar.
+
+    Het model bevat vaak iets als "ProBook 450 G7 (ProdID 8VU80EA#ABH)"; het
+    stuk achter het hekje is de landvariant en die kent de catalogus niet.
+    """
+    uit = []
+
+    def voeg_toe(waarde):
+        waarde = (waarde or "").split("#")[0].strip()
+        if waarde and any(t.isdigit() for t in waarde) and waarde not in uit:
+            uit.append(waarde)
+
+    for ruw in (specs.get("product_id"), specs.get("productid"), specs.get("mpn"),
+                specs.get("partnummer"), product.get("model")):
+        if not ruw:
+            continue
+        tekst = str(ruw).strip()
+        # Eerst de hele waarde: fabrikantsnummers bevatten vaak streepjes (920-007931).
+        if len(tekst) <= 20 and " " not in tekst:
+            voeg_toe(tekst.upper())
+        for kandidaat in re.findall(r"\b[0-9A-Z]{3,}(?:-[0-9A-Z]{2,})*(?:#[A-Z0-9]{2,4})?\b",
+                                    tekst.upper()):
+            voeg_toe(kandidaat)
+    model = (product.get("model") or "").split("(")[0].strip()
+    if model and model not in uit:
+        uit.append(model)
+    return uit
+
+
+def _icecat_vraag(params):
+    q = dict(params)
+    q.update({"UserName": ICECAT_USER, "Language": "nl",
+              "Content": "Gallery,Image,GeneralInfo"})
+    url = ICECAT_API + "?" + urlencode(q)
+    req = urllib.request.Request(url, headers={"User-Agent": "Techpoint/1.0"})
+    with urllib.request.urlopen(req, timeout=25) as resp:
+        data = json.loads(resp.read().decode())
+    if data.get("msg") != "OK" or not data.get("data"):
+        return None
+    d = data["data"]
+    beelden = [g.get("Pic") for g in (d.get("Gallery") or []) if g.get("Pic")]
+    hoofd = (d.get("Image") or {}).get("HighPic")
+    if hoofd and hoofd not in beelden:
+        beelden.insert(0, hoofd)
+    if not beelden:
+        return None
+    return {"titel": (d.get("GeneralInfo") or {}).get("Title") or "",
+            "beelden": beelden, "bron_url": url}
+
+
+def zoek_fabrikantsfotos(product, specs):
+    """Zoekt de officiele productfoto's; None als er niets gevonden wordt."""
+    ean = (product.get("ean") or "").strip()
+    if ean:
+        try:
+            gevonden = _icecat_vraag({"GTIN": ean})
+            if gevonden:
+                return gevonden
+        except Exception:  # noqa: BLE001 - onbekende EAN geeft gewoon een foutcode
+            pass
+    merk = (product.get("merk") or "").strip()
+    for mpn in _mpn_kandidaten(product, specs)[:4]:
+        try:
+            gevonden = _icecat_vraag({"Brand": merk, "ProductCode": mpn})
+            if gevonden:
+                return gevonden
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def _bewaar_fabrikantsfoto(pid, url, volgnr):
+    """Haalt een afbeelding op, verkleint hem en zet hem bij het item."""
+    req = urllib.request.Request(url, headers={"User-Agent": "Techpoint/1.0"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        ruw = resp.read()
+    naam = f"p{pid}_fab_{secrets.token_hex(5)}.jpg"
+    pad = os.path.join(UPLOAD_DIR, naam)
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(ruw)).convert("RGB")
+        img.thumbnail((1400, 1400))
+        img.save(pad, "JPEG", quality=82, optimize=True)
+    except Exception:  # noqa: BLE001 - dan maar het origineel
+        with open(pad, "wb") as fh:
+            fh.write(ruw)
+    db().execute(
+        "INSERT INTO product_images (product_id, bestand, is_primair, volgorde, bron, bron_url) "
+        "VALUES (%s,%s,false,%s,'fabrikant',%s)", (pid, naam, 100 + volgnr, url))
+    return naam
 
 
 def _eur_to_cents(x):
@@ -790,7 +895,12 @@ BASE = """
  label{display:block;margin:10px 0 4px;font-size:14px;color:var(--mut)}
  .row{display:flex;gap:16px;flex-wrap:wrap}.row>*{flex:1;min-width:220px}
  .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:4px;border:1px solid var(--line);color:var(--mut)}
- .gal{display:flex;gap:10px;flex-wrap:wrap}.gal img{width:120px;height:90px;object-fit:cover;border-radius:4px;border:1px solid var(--line)}
+ .gal{display:flex;gap:12px;flex-wrap:wrap}
+ .fotokaart{margin:0;display:flex;flex-direction:column;gap:5px;align-items:center}
+ .fotokaart img{width:120px;height:90px;object-fit:contain;background:#fff;border-radius:4px;border:1px solid var(--line)}
+ .fotokaart figcaption{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+ .fotokaart button{font:inherit;font-size:11px;background:none;border:0;color:var(--accent);cursor:pointer;padding:0}
+ .fotobron{font-size:12px;color:var(--mut);margin-top:8px}
  .spinner{width:44px;height:44px;border:4px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;margin:20px auto}@keyframes sp{to{transform:rotate(360deg)}}
 </style></head><body>
 {% if IS_BEHEER %}
@@ -1040,6 +1150,10 @@ def detail(pid):
             f'<img src="{url_for("upload", naam=i["bestand"])}" class="{"actief" if k == 0 else ""}">'
             for k, i in enumerate(imgs))
         strip = f'<div class="strip">{thumbs}</div>'
+    if any(i["bron"] == "fabrikant" for i in imgs):
+        strip += ('<p class="fotobron">Enkele beelden zijn officiele productfoto\'s van de '
+                  'fabrikant en tonen het model, niet dit exemplaar. De staat van dit toestel '
+                  'staat bij de gegevens.</p>')
 
     specs = specs_dict(r["specs"])
     spec_rows = "".join(f"<tr><th>{netjes_label(k)}</th><td>{v}</td></tr>"
@@ -1291,7 +1405,22 @@ def bewerk(pid):
         return redirect(url_for("bewerk", pid=pid))
 
     imgs = prod_images(pid)
-    gal = "".join(f'<img src="{url_for("upload", naam=i["bestand"])}" alt="">' for i in imgs)
+    gal = ""
+    for i in imgs:
+        label = ("fabrikant" if i["bron"] == "fabrikant" else "eigen foto")
+        gal += (
+            f'<figure class="fotokaart">'
+            f'<img src="{url_for("upload", naam=i["bestand"])}" alt="">'
+            f'<figcaption>{label}</figcaption>'
+            f'<form method="post" action="{url_for("foto_verwijderen", pid=pid, iid=i["id"])}" '
+            f'onsubmit="return confirm(\'Deze foto verwijderen?\')">'
+            f'<button title="Foto verwijderen">verwijderen</button></form></figure>')
+    eigen = sum(1 for i in imgs if i["bron"] != "fabrikant")
+    fotohint = ""
+    if imgs and not eigen:
+        fotohint = ('<div class="flash">Dit item heeft alleen fabrikantsfoto\'s. '
+                    'Voeg een foto van het echte toestel toe, zeker als er '
+                    'gebruikssporen zijn.</div>')
     cond = "".join(f'<option value="{c}" {"selected" if c == r["conditie"] else ""}>{c}</option>'
                    for c in CONDITIES)
     specs_tekst = specs_naar_tekst(specs_dict(r["specs"]))
@@ -1323,7 +1452,13 @@ def bewerk(pid):
     body = f"""
     <p><a href="{url_for('beheer')}">&larr; beheer</a> &middot; status <span class="pill">{r['status']}</span></p>
     <h2>Item #{pid} bewerken</h2>
+    {fotohint}
     <div class="gal">{gal or '<span class="mut">geen foto</span>'}</div>
+    <form method="post" action="{url_for('fabrikantsfotos', pid=pid)}" style="margin:12px 0">
+      <button class="btn sec">Fabrikantsfoto's ophalen</button>
+      <span class="mut">&nbsp;Zoekt op EAN of fabrikantsnummer en haalt maximaal
+        {MAX_FABRIKANTSFOTOS} officiele productfoto's op.</span>
+    </form>
 
     <form method="post" enctype="multipart/form-data">
       <div class="row">
@@ -1461,6 +1596,60 @@ def taxeer_status(pid):
     if j.get("start"):
         j["verstreken"] = round(time.time() - j["start"])
     return app.response_class(json.dumps(j), mimetype="application/json")
+
+
+@app.route("/beheer/<int:pid>/fabrikantsfotos", methods=["POST"])
+@beheer_route
+def fabrikantsfotos(pid):
+    r = db().execute("SELECT * FROM products WHERE id=%s", (pid,)).fetchone()
+    if not r:
+        abort(404)
+    al = db().execute("SELECT COUNT(*) AS n FROM product_images "
+                      "WHERE product_id=%s AND bron='fabrikant'", (pid,)).fetchone()["n"]
+    if al:
+        flash(f"Er staan al {al} fabrikantsfoto's bij dit item. "
+              f"Verwijder die eerst als je opnieuw wil ophalen.")
+        return redirect(url_for("bewerk", pid=pid))
+
+    gevonden = zoek_fabrikantsfotos(dict(r), specs_dict(r["specs"]))
+    if not gevonden:
+        flash("Geen fabrikantsfoto's gevonden. Vul het EAN of het juiste "
+              "fabrikantsnummer in bij het model en probeer opnieuw.")
+        return redirect(url_for("bewerk", pid=pid))
+
+    aantal = 0
+    for url in gevonden["beelden"][:MAX_FABRIKANTSFOTOS]:
+        try:
+            _bewaar_fabrikantsfoto(pid, url, aantal)
+            aantal += 1
+        except Exception:  # noqa: BLE001 - een enkel beeld mag mislukken
+            continue
+    db().commit()
+    if aantal:
+        flash(f"{aantal} fabrikantsfoto's toegevoegd voor {gevonden['titel'][:70]}. "
+              f"Voeg zelf nog een foto van het echte toestel toe.")
+    else:
+        flash("Beelden gevonden, maar geen enkele kon opgehaald worden.")
+    return redirect(url_for("bewerk", pid=pid))
+
+
+@app.route("/beheer/<int:pid>/foto/<int:iid>/verwijderen", methods=["POST"])
+@beheer_route
+def foto_verwijderen(pid, iid):
+    rij = db().execute("SELECT bestand FROM product_images WHERE id=%s AND product_id=%s",
+                       (iid, pid)).fetchone()
+    if not rij:
+        abort(404)
+    db().execute("DELETE FROM product_images WHERE id=%s", (iid,))
+    db().commit()
+    pad = os.path.join(UPLOAD_DIR, os.path.basename(rij["bestand"]))
+    if os.path.commonpath([os.path.abspath(pad), UPLOAD_DIR]) == UPLOAD_DIR:
+        try:
+            os.remove(pad)
+        except OSError:
+            pass
+    flash("Foto verwijderd.")
+    return redirect(url_for("bewerk", pid=pid))
 
 
 @app.route("/beheer/<int:pid>/goedkeuren", methods=["POST"])
