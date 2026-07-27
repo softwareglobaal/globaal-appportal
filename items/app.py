@@ -555,12 +555,12 @@ BASE = """
 <title>{{ titel or winkel_naam }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400..700&display=swap" rel="stylesheet">
 <style>
  :root{--bg:#ffffff;--page:#f4f5f7;--surface:#ffffff;--soft:#f0f2f5;--ink:#15171c;--mut:#5a6068;--line:#e2e5ea;--navy:#151a2e;--navy2:#232a45;--navy-ink:#f4f5f7;--navy-mut:#a6adc2;--accent:#f05a1e;--accent-donker:#d2470f;--accent-ink:#ffffff;--accent-soft:#fff0e9;--blauw:#1f6feb;--blauw-zacht:#e8f0fe;--groen:#12a150;--groen-zacht:#e6f6ed;--paars:#7b3fe4;--paars-zacht:#f1eafe;--amber:#e8930c;--amber-zacht:#fdf3e0;--rood:#d92d20}
  @media(prefers-color-scheme:dark){:root{--bg:#0f1116;--page:#0b0d11;--surface:#161920;--soft:#1c2029;--ink:#e9ebef;--mut:#98a0ad;--line:#272c36;--navy:#0a0c12;--navy2:#1b2133;--navy-ink:#e9ebef;--navy-mut:#98a0ad;--accent:#ff7038;--accent-donker:#f05a1e;--accent-ink:#1a0c05;--accent-soft:#2a1a12;--blauw:#5b9bff;--blauw-zacht:#152238;--groen:#35c977;--groen-zacht:#122a1e;--paars:#a476f5;--paars-zacht:#211a35;--amber:#f5ad33;--amber-zacht:#2c2211;--rood:#f2635a}}
  *{box-sizing:border-box}html,body{margin:0}
- body{background:var(--page);color:var(--ink);font:15px/1.6 'Lato',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+ body{background:var(--page);color:var(--ink);font:15px/1.6 'Archivo',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
  a{color:inherit;text-decoration:none}
  .wrap{max-width:1660px;margin:0 auto;padding:0 32px}
  @media(max-width:700px){.wrap{padding:0 16px}}
