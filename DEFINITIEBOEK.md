@@ -315,6 +315,13 @@ Een **draaiboek toegepast op één concreet dossier/project**: dezelfde stappen,
 status, wie en wanneer per stap. De run is het *sequentiële geheugen* - "verslag 2
 is klaar, dus nu verslag 3" - en daarmee de projectvoortgang-bron die AI nu mist.
 
+### Elevait
+**Elevait NV**, het AI-automatiseringsbedrijf van Shaniel en Mehdi in Paramaribo,
+Suriname (elevaitnv.com). Leeft in de Second Brain als eigen spoke-schema
+`elevait` (beslissingen, definities, projecten, agents, vacatures, kandidaten),
+in de graaf filterbaar op firma. Machineleesbaar in `kern.definitie` (sleutel
+`elevait`) en het eigen definitieboek `elevait.definitie`.
+
 ## Vermijden / opletten
 | Niet doen | Wel |
 |---|---|
