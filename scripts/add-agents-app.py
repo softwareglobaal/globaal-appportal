@@ -9,7 +9,7 @@ BASE = os.environ.get("BASE_DOMAIN", "globaal.be")
 SLUG, NAME, SUB = "agents", "Agents", "agents"
 ROLES = ["admin", "manager", "agents"]
 # Wie expliciet toegang moet hebben (naast admin/manager).
-EXTRA_USERS = ["akadmin", "mehdi"]
+EXTRA_USERS = ["akadmin", "mehdi", "siyan"]
 
 auth_flow = Flow.objects.get(slug="default-provider-authorization-implicit-consent")
 inval_flow = Flow.objects.filter(slug="default-provider-invalidation-flow").first()

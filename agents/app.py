@@ -191,6 +191,18 @@ def index():
     )
 
 
+@app.route("/seo-team")
+def seo_team():
+    # Statisch teambord van het SEO-agentteam (bron: repo globaal-agents,
+    # docs/team-board.html). Toont wat het team onderzocht heeft en welke
+    # experts nog inzetbaar zijn; geen live data.
+    return render_template(
+        "seo-team.html",
+        portal_url=f"https://portal.{BASE_DOMAIN}/",
+        username=request.headers.get("X-authentik-username", "onbekend"),
+    )
+
+
 @app.route("/api/status")
 def api_status():
     return jsonify({"agents": roster(), "voorstellen": open_voorstellen(),
