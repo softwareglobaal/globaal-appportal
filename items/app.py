@@ -1058,7 +1058,9 @@ def beheer():
             aantalcel = '<span style="color:var(--accent);font-weight:700">uitverkocht</span>'
         else:
             aantalcel = f"{aantal}"
-        trs += (f"<tr><td>#{r['id']}</td>"
+        trs += (f"<tr><td><input type=\"checkbox\" name=\"ids\" value=\"{r['id']}\" "
+                f"style=\"width:auto\" aria-label=\"Selecteer item {r['id']}\"></td>"
+                f"<td>#{r['id']}</td>"
                 f"<td><a href=\"{url_for('bewerk', pid=r['id'])}\">{naam}</a></td>"
                 f"<td><span class=\"pill\">{r['status']}</span></td>"
                 f"<td>{aantalcel}</td>"
@@ -1073,8 +1075,72 @@ def beheer():
     </div>
     <p class="mut">Aangemeld als {_auth_gebruiker()}</p>
     {waarschuwing}
-    <table><tr><th>Id</th><th>Titel</th><th>Status</th><th>Aantal</th><th>Foto's</th><th>Prijs</th></tr>{trs}</table>"""
+    <form method="post" action="{url_for('verwijderen')}" onsubmit="return bevestigVerwijderen(this)">
+      <table>
+        <tr><th style="width:34px"></th><th>Id</th><th>Titel</th><th>Status</th>
+            <th>Aantal</th><th>Foto's</th><th>Prijs</th></tr>
+        {trs}
+      </table>
+      <p style="margin-top:14px">
+        <button class="btn sec" style="border-color:var(--accent);color:var(--accent)">
+          Verwijder geselecteerde items</button>
+        <span class="mut">&nbsp;Definitief, inclusief foto's en taxatiegeschiedenis.</span>
+      </p>
+    </form>
+    <script>
+    function bevestigVerwijderen(f) {{
+      var n = f.querySelectorAll('input[name=ids]:checked').length;
+      if (n === 0) {{ alert('Vink eerst een of meer items aan.'); return false; }}
+      return confirm(n + ' item(s) definitief verwijderen? Dit kan niet ongedaan gemaakt worden.');
+    }}
+    </script>"""
     return page(body)
+
+
+def _verwijder_items(ids):
+    """Verwijdert items definitief, inclusief de fotobestanden op de schijf.
+
+    De database ruimt afbeeldingen, taxaties en bronnen zelf op via ON DELETE
+    CASCADE; de bestanden op het volume blijven anders als wezen achter.
+    """
+    d = db()
+    bestanden = [x["bestand"] for x in d.execute(
+        "SELECT bestand FROM product_images WHERE product_id = ANY(%s)", (ids,)).fetchall()]
+    verwijderd = d.execute(
+        "DELETE FROM products WHERE id = ANY(%s) RETURNING id", (ids,)).fetchall()
+    d.commit()
+
+    for naam in bestanden:
+        pad = os.path.join(UPLOAD_DIR, os.path.basename(naam))
+        if os.path.commonpath([os.path.abspath(pad), UPLOAD_DIR]) != UPLOAD_DIR:
+            continue
+        try:
+            os.remove(pad)
+        except OSError:
+            pass
+    return len(verwijderd)
+
+
+@app.route("/beheer/verwijderen", methods=["POST"])
+@beheer_route
+def verwijderen():
+    ids = [int(i) for i in request.form.getlist("ids") if i.isdigit()]
+    if not ids:
+        flash("Geen items geselecteerd.")
+        return redirect(url_for("beheer"))
+    aantal = _verwijder_items(ids)
+    flash(f"{aantal} item(s) verwijderd.")
+    return redirect(url_for("beheer"))
+
+
+@app.route("/beheer/<int:pid>/verwijderen", methods=["POST"])
+@beheer_route
+def verwijder_item(pid):
+    if not db().execute("SELECT id FROM products WHERE id=%s", (pid,)).fetchone():
+        abort(404)
+    _verwijder_items([pid])
+    flash(f"Item #{pid} verwijderd.")
+    return redirect(url_for("beheer"))
 
 
 @app.route("/beheer/nieuw", methods=["GET", "POST"])
@@ -1158,6 +1224,12 @@ def bewerk(pid):
         )
         _bewaar_uploads(pid, request.files.getlist("fotos"))
         d.commit()
+        # De taxatieknoppen zitten in dit formulier, zodat wat je net intypte
+        # (bijvoorbeeld het model) eerst wordt opgeslagen en het onderzoek er
+        # daadwerkelijk mee vertrekt.
+        actie = f.get("actie") or ""
+        if actie.startswith("taxeer:"):
+            return _start_taxatie(pid, actie.split(":", 1)[1])
         flash("Opgeslagen.")
         return redirect(url_for("bewerk", pid=pid))
 
@@ -1196,19 +1268,6 @@ def bewerk(pid):
     <h2>Item #{pid} bewerken</h2>
     <div class="gal">{gal or '<span class="mut">geen foto</span>'}</div>
 
-    <div class="row" style="margin:14px 0;align-items:center">
-      <form method="post" action="{url_for('taxeer_route', pid=pid)}" style="flex:0">
-        <input type="hidden" name="modus" value="specs">
-        <button class="btn sec">Specs invullen (snel &amp; goedkoop)</button>
-      </form>
-      <form method="post" action="{url_for('taxeer_route', pid=pid)}" style="flex:0">
-        <input type="hidden" name="modus" value="prijs">
-        <button class="btn">Marktprijs bepalen (marktonderzoek, duurder)</button>
-      </form>
-    </div>
-    <p class="mut">Specs invullen = identificatie + technische gegevens zonder web, kost centen
-       en duurt seconden. Marktprijs = met marktonderzoek, duurt enkele minuten en is duurder.</p>
-
     <form method="post" enctype="multipart/form-data">
       <div class="row">
         <div><label>Merk</label><input name="merk" value="{r['merk'] or ''}"></div>
@@ -1232,7 +1291,15 @@ def bewerk(pid):
       <textarea name="specs" rows="8">{specs_tekst}</textarea>
       <label>Extra foto's toevoegen</label>
       <input type="file" name="fotos" accept="image/*" multiple>
-      <p><button class="btn">Opslaan</button></p>
+      <div class="row" style="margin-top:16px;align-items:center">
+        <div style="flex:0"><button class="btn" name="actie" value="opslaan">Opslaan</button></div>
+        <div style="flex:0"><button class="btn sec" name="actie" value="taxeer:specs">Opslaan en specs laten opzoeken</button></div>
+        <div style="flex:0"><button class="btn sec" name="actie" value="taxeer:prijs">Opslaan en marktprijs bepalen</button></div>
+      </div>
+      <p class="mut">De twee onderzoeksknoppen slaan eerst je invoer op, zodat het onderzoek
+         vertrekt met wat je zelf hebt ingevuld. Vul je bijvoorbeeld het model aan, dan worden
+         de specificaties daarmee opnieuw opgezocht. Specs opzoeken kost centen en duurt seconden;
+         marktprijs doet marktonderzoek en duurt enkele minuten.</p>
     </form>
 
     <hr style="border:0;border-top:1px solid var(--lijn);margin:24px 0">
@@ -1256,6 +1323,14 @@ def bewerk(pid):
         </select></div>
         <div style="max-width:160px"><button class="btn sec">Zet status</button></div>
       </div>
+    </form>
+
+    <hr style="border:0;border-top:1px solid var(--line);margin:24px 0">
+    <form method="post" action="{url_for('verwijder_item', pid=pid)}"
+          onsubmit="return confirm('Item #{pid} definitief verwijderen? Dit kan niet ongedaan gemaakt worden.')">
+      <button class="btn sec" style="border-color:var(--accent);color:var(--accent)">
+        Dit item verwijderen</button>
+      <span class="mut">&nbsp;Definitief, inclusief foto's en taxatiegeschiedenis.</span>
     </form>"""
     return page(body, titel=f"Item #{pid}")
 
@@ -1292,9 +1367,8 @@ poll();
 """
 
 
-@app.route("/beheer/<int:pid>/taxeer", methods=["POST"])
-@beheer_route
-def taxeer_route(pid):
+def _start_taxatie(pid, modus):
+    """Zet het onderzoek in gang; leest altijd de opgeslagen gegevens uit de database."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
         flash("ANTHROPIC_API_KEY ontbreekt in de omgeving; taxatie niet mogelijk.")
         return redirect(url_for("bewerk", pid=pid))
@@ -1302,12 +1376,19 @@ def taxeer_route(pid):
         abort(404)
     if _job_get(pid).get("status") == "bezig":
         return redirect(url_for("voortgang", pid=pid))
-    modus = request.form.get("modus", "prijs")
+    if modus not in ("specs", "prijs"):
+        modus = "prijs"
     db().execute("UPDATE products SET status='onderzoek' WHERE id=%s", (pid,))
     db().commit()
     _job(pid, status="bezig", fase="Starten...", start=time.time(), error=None)
     threading.Thread(target=_taxatie_worker, args=(pid, modus), daemon=True).start()
     return redirect(url_for("voortgang", pid=pid))
+
+
+@app.route("/beheer/<int:pid>/taxeer", methods=["POST"])
+@beheer_route
+def taxeer_route(pid):
+    return _start_taxatie(pid, request.form.get("modus", "prijs"))
 
 
 @app.route("/beheer/<int:pid>/taxeer/voortgang")
