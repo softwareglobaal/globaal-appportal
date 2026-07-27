@@ -205,10 +205,43 @@ def foto_placeholder(categorie, klein=False):
 
 def categorie_iconen_html():
     tegels = "".join(
-        f'<a class="cattegel" href="{url_for("categorie", slug=c["slug"])}">'
+        f'<a class="cattegel k{(i % 4) + 1}" href="{url_for("categorie", slug=c["slug"])}">'
         f'{CATEGORIE_ICONEN.get(c["slug"], "")}<span class="lab">{c["label"]}</span></a>'
-        for c in CATEGORIEEN)
+        for i, c in enumerate(CATEGORIEEN))
     return f'<div class="cats">{tegels}</div>'
+
+
+CONDITIE_BADGE = {
+    "nieuw": ("b-groen", "Nieuw"),
+    "als_nieuw": ("b-groen", "Als nieuw"),
+    "goed": ("b-blauw", "Goede staat"),
+    "gebruikt": ("b-amber", "Gebruikt"),
+    "defect_onderdelen": ("b-rood", "Voor onderdelen"),
+}
+
+
+def conditie_badge(conditie):
+    kl, tekst = CONDITIE_BADGE.get(conditie or "", ("b-blauw", ""))
+    if not tekst:
+        return ""
+    return f'<span class="cbadge {kl}">{tekst}</span>'
+
+
+USP_ICONEN = [
+    ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+     "Getest voor verkoop", "Elk toestel doorloopt een controle"),
+    ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
+     "Foto's van het echte toestel", "Geen catalogusbeeld, wel de echte staat"),
+    ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+     "Marktconforme prijs", "Onderbouwd met echt marktonderzoek"),
+]
+
+
+def usps_html():
+    items = "".join(
+        f'<div class="usp">{svg}<div><b>{kop}</b><span>{tekst}</span></div></div>'
+        for svg, kop, tekst in USP_ICONEN)
+    return f'<div class="usps">{items}</div>'
 
 
 def usd_eur(usd):
@@ -523,8 +556,8 @@ BASE = """
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
 <style>
- :root{--bg:#ffffff;--page:#f5f4f5;--surface:#ffffff;--soft:#f2f0f2;--ink:#1a1c1f;--mut:#5f636b;--line:#e5e3e6;--navy:#1c1e24;--navy2:#6e1f37;--navy-ink:#f3f2f4;--navy-mut:#a9adb4;--accent:#8a2846;--accent-ink:#ffffff;--accent-soft:#f6ecef}
- @media(prefers-color-scheme:dark){:root{--bg:#0f1012;--page:#0c0d0f;--surface:#16171a;--soft:#1b1c20;--ink:#e9e8ea;--mut:#9a9ea6;--line:#282a2e;--navy:#0a0b0d;--navy2:#8a3552;--navy-ink:#e9e8ea;--navy-mut:#9a9ea6;--accent:#c65878;--accent-ink:#1a0a10;--accent-soft:#241419}}
+ :root{--bg:#ffffff;--page:#f4f5f7;--surface:#ffffff;--soft:#f0f2f5;--ink:#15171c;--mut:#5a6068;--line:#e2e5ea;--navy:#151a2e;--navy2:#232a45;--navy-ink:#f4f5f7;--navy-mut:#a6adc2;--accent:#f05a1e;--accent-donker:#d2470f;--accent-ink:#ffffff;--accent-soft:#fff0e9;--blauw:#1f6feb;--blauw-zacht:#e8f0fe;--groen:#12a150;--groen-zacht:#e6f6ed;--paars:#7b3fe4;--paars-zacht:#f1eafe;--amber:#e8930c;--amber-zacht:#fdf3e0;--rood:#d92d20}
+ @media(prefers-color-scheme:dark){:root{--bg:#0f1116;--page:#0b0d11;--surface:#161920;--soft:#1c2029;--ink:#e9ebef;--mut:#98a0ad;--line:#272c36;--navy:#0a0c12;--navy2:#1b2133;--navy-ink:#e9ebef;--navy-mut:#98a0ad;--accent:#ff7038;--accent-donker:#f05a1e;--accent-ink:#1a0c05;--accent-soft:#2a1a12;--blauw:#5b9bff;--blauw-zacht:#152238;--groen:#35c977;--groen-zacht:#122a1e;--paars:#a476f5;--paars-zacht:#211a35;--amber:#f5ad33;--amber-zacht:#2c2211;--rood:#f2635a}}
  *{box-sizing:border-box}html,body{margin:0}
  body{background:var(--page);color:var(--ink);font:15px/1.6 'Lato',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
  a{color:inherit;text-decoration:none}
@@ -547,9 +580,18 @@ BASE = """
  .beheerkop .wrap{display:flex;align-items:center;min-height:60px}
  main{padding:30px 0 58px;min-height:56vh}
  .cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:0 0 36px}
- .cattegel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:22px 14px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;transition:border-color .12s,background .12s}
- .cattegel:hover{border-color:var(--accent);background:var(--accent-soft)}
- .cattegel svg{width:32px;height:32px;color:var(--accent)}
+ .cattegel{border:0;border-radius:12px;padding:24px 14px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;transition:transform .12s ease,filter .12s ease}
+ .cattegel:hover{transform:translateY(-3px);filter:brightness(.96)}
+ .cattegel svg{width:34px;height:34px}
+ .cattegel.k1{background:var(--blauw-zacht);color:var(--blauw)}
+ .cattegel.k2{background:var(--groen-zacht);color:var(--groen)}
+ .cattegel.k3{background:var(--paars-zacht);color:var(--paars)}
+ .cattegel.k4{background:var(--amber-zacht);color:var(--amber)}
+ .usps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:2px;background:var(--accent-donker);border-radius:12px;overflow:hidden;margin:0 0 34px}
+ .usp{background:var(--accent);color:#fff;padding:17px 20px;display:flex;align-items:center;gap:13px}
+ .usp svg{width:25px;height:25px;flex:none}
+ .usp b{display:block;font-size:15px;line-height:1.25}
+ .usp span{font-size:13px;opacity:.92}
  .hero{position:relative;border-radius:12px;overflow:hidden;margin:0 0 34px;background:var(--navy);min-height:300px;display:flex;align-items:center}
  .hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.42}
  .hero .htxt{position:relative;padding:44px 40px;max-width:620px;color:#fff}
@@ -569,7 +611,7 @@ BASE = """
  .geenfoto{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--line)}
  .geenfoto svg{width:100%;height:100%;stroke-width:1.2}
  .geenfoto .lbl{font-size:12px;color:var(--mut);letter-spacing:.02em}
- .cattegel .lab{font-weight:700;font-size:14px;color:var(--ink)}
+ .cattegel .lab{font-weight:700;font-size:15px}
  .paginatitel{font-size:24px;font-weight:700;margin:0 0 4px;color:var(--ink);letter-spacing:-.01em}
  .sub{color:var(--mut);margin:0 0 22px}
  .mut{color:var(--mut);font-size:14px}
@@ -581,7 +623,14 @@ BASE = """
  .kaart .info{padding:12px 14px 15px;display:flex;flex-direction:column;gap:5px;flex:1;border-top:1px solid var(--line)}
  .kaart .cat{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
  .kaart .naam{font-weight:400;line-height:1.4;color:var(--ink)}
- .kaart .prijs{margin-top:auto;font-weight:700;font-size:18px;color:var(--ink)}
+ .kaart .prijs{margin-top:auto;font-weight:700;font-size:21px;color:var(--accent);letter-spacing:-.01em}
+ .kaart .thumb{position:relative}
+ .cbadge{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.01em}
+ .cbadge.b-groen{background:var(--groen-zacht);color:var(--groen)}
+ .cbadge.b-blauw{background:var(--blauw-zacht);color:var(--blauw)}
+ .cbadge.b-amber{background:var(--amber-zacht);color:var(--amber)}
+ .cbadge.b-rood{background:#fdeceb;color:var(--rood)}
+ .kaart .hoek{position:absolute;top:10px;left:10px;z-index:2}
  .leeg{color:var(--mut);padding:44px 0}
  .kruimels{color:var(--mut);font-size:13px;margin:0 0 18px}
  .kruimels a:hover{color:var(--accent)}
@@ -595,7 +644,7 @@ BASE = """
  .pkop{font-size:24px;font-weight:700;margin:0 0 10px;color:var(--ink);letter-spacing:-.01em}
  .pmeta{color:var(--mut);font-size:14px;margin:0 0 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
  .badge{display:inline-block;font-size:12px;font-weight:700;padding:2px 10px;border-radius:4px;background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent)}
- .pprijs{font-size:30px;font-weight:700;color:var(--ink);margin:0 0 20px}
+ .pprijs{font-size:34px;font-weight:700;color:var(--accent);margin:0 0 20px;letter-spacing:-.02em}
  .pomschrijving{margin:0 0 22px}
  .cta{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:12px 24px;border-radius:6px}
  .cta:hover{background:var(--navy2)}
@@ -667,8 +716,10 @@ def _kaart(r):
     catlabel = netjes_label(r["categorie"]) if r["categorie"] else ""
     thumb = (f'<img src="{foto}" alt="{naam}" loading="lazy">' if foto
              else foto_placeholder(r["categorie"], klein=True))
+    badge = conditie_badge(r["conditie"])
+    hoek = f'<span class="hoek">{badge}</span>' if badge else ""
     return (f'<a class="kaart" href="{url_for("detail", pid=r["id"])}">'
-            f'<div class="thumb">{thumb}</div>'
+            f'<div class="thumb">{hoek}{thumb}</div>'
             f'<div class="info"><div class="cat">{catlabel}</div>'
             f'<div class="naam">{naam}</div><div class="prijs">{prijs}</div></div></a>')
 
@@ -716,7 +767,7 @@ SFEER = """
 def etalage():
     hero = HERO.format(hero=url_for("static", filename="hero-werkbank.jpg"))
     sfeer = SFEER.format(sfeer=url_for("static", filename="sfeer-nakijken.jpg"))
-    body = (hero + categorie_iconen_html() + '<a id="aanbod"></a>'
+    body = (hero + usps_html() + categorie_iconen_html() + '<a id="aanbod"></a>'
             + _etalage_html(None, "Nieuw binnen",
                             "Tweedehands ICT, getest en klaar voor gebruik.")
             + sfeer)
@@ -779,7 +830,7 @@ def detail(pid):
     if mm:
         meta.append(mm)
     if r["conditie"]:
-        meta.append(f'<span class="badge">{netjes_label(r["conditie"])}</span>')
+        meta.append(conditie_badge(r["conditie"]))
     meta_html = " &middot; ".join(meta)
 
     onderwerp = quote("Interesse in " + titel)
