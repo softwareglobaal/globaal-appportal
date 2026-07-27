@@ -293,6 +293,9 @@ services:
       MONDAY_GROUPS: ${MONDAY_GROUPS:-monday}
       # Geheime token voor de MCP-connector (/mcp/<token>); leeg = endpoint uit.
       MONDAY_MCP_TOKEN: ${MONDAY_MCP_TOKEN:-}
+      # Aparte token voor de zandbak-connector (/mcp-zandbak/<token>), die wel
+      # mag schrijven maar uitsluitend in het lege account.
+      MONDAY_MCP_ZANDBAK_TOKEN: ${MONDAY_MCP_ZANDBAK_TOKEN:-}
     volumes:
       # Graphify-graaf over de memory, gebouwd door monday/scripts/build-graaf.sh.
       - ./monday-graaf:/graaf:ro

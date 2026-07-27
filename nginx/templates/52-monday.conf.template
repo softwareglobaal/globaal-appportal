@@ -17,6 +17,15 @@ server {
     # BUITEN de forward-auth om, want een connector kan niet interactief
     # inloggen; de geheime token in het pad is de toegang. De app weigert alles
     # zonder de juiste token met een 404.
+    location /mcp-zandbak/ {
+        client_max_body_size 256k;
+        proxy_read_timeout 180s;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass http://app-monday:3014;
+    }
+
     location /mcp/ {
         client_max_body_size 256k;
         proxy_read_timeout 180s;
