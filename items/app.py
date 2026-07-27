@@ -42,10 +42,12 @@ UPLOAD_DIR = os.environ.get("ITEMS_UPLOAD_DIR", "/data/fotos")
 MODEL      = os.environ.get("VALUATION_MODEL", "claude-sonnet-5")
 VALUATION_EFFORT = os.environ.get("VALUATION_EFFORT", "medium")
 MUNT_SYMBOOL = "€"
-CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "mch@h-architects.be")
+# Let op: compose geeft niet-ingevulde variabelen door als lege string, dus hier
+# `or` gebruiken en niet de default van os.environ.get; die slaat dan niet aan.
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL") or "mch@h-architects.be"
 # Placeholder tot het echte nummer bekend is; zet CONTACT_TELEFOON in .env.
-CONTACT_TELEFOON = os.environ.get("CONTACT_TELEFOON", "+32 000 00 00 00")
-WINKEL_NAAM = os.environ.get("WINKEL_NAAM", "Techpoint")
+CONTACT_TELEFOON = os.environ.get("CONTACT_TELEFOON") or "+32 000 00 00 00"
+WINKEL_NAAM = os.environ.get("WINKEL_NAAM") or "Techpoint"
 
 # Authentik-groepen die mogen bewerken (leeg = iedereen die door forward-auth komt).
 EDITOR_GROUPS = {g_.strip() for g_ in os.environ.get("EDITOR_GROUPS", "").split(",") if g_.strip()}
