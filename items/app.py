@@ -561,21 +561,36 @@ BASE = """
  *{box-sizing:border-box}html,body{margin:0}
  body{background:var(--page);color:var(--ink);font:15px/1.6 'Lato',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
  a{color:inherit;text-decoration:none}
- .wrap{max-width:1180px;margin:0 auto;padding:0 22px}
+ .wrap{max-width:1660px;margin:0 auto;padding:0 32px}
+ @media(max-width:700px){.wrap{padding:0 16px}}
+ .kop{position:sticky;top:0;z-index:40;box-shadow:0 1px 0 var(--line)}
  .topbar{background:var(--navy);color:var(--navy-mut);font-size:12.5px}
- .topbar .wrap{display:flex;justify-content:space-between;align-items:center;min-height:34px;gap:16px;flex-wrap:wrap}
+ .topbar .wrap{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:16px;flex-wrap:wrap}
  .topbar a{color:var(--navy-ink)}
+ .topbar .rechts{display:flex;gap:20px;flex-wrap:wrap}
  .kop-nav{background:var(--surface);border-bottom:1px solid var(--line)}
- .kop-nav .wrap{display:flex;align-items:center;gap:30px;min-height:72px;flex-wrap:wrap}
+ .kop-nav .wrap{display:flex;align-items:center;gap:26px;min-height:74px;flex-wrap:wrap}
+ .zoek{flex:1;min-width:220px;max-width:640px;display:flex}
+ .zoek input{border:2px solid var(--accent);border-right:0;border-radius:8px 0 0 8px;height:44px;padding:0 14px;font-size:15px}
+ .zoek input:focus{outline:0}
+ .zoek button{border:0;background:var(--accent);color:#fff;height:44px;padding:0 20px;border-radius:0 8px 8px 0;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:8px}
+ .zoek button:hover{background:var(--accent-donker)}
+ .zoek svg{width:18px;height:18px}
+ .kopcontact{display:flex;align-items:center;gap:10px;color:var(--mut);font-size:13px;white-space:nowrap}
+ .kopcontact svg{width:22px;height:22px;color:var(--accent)}
+ .kopcontact b{display:block;color:var(--ink);font-size:14px}
+ .menubalk{background:var(--navy2)}
+ .menubalk .wrap{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
  .brand{display:flex;align-items:center;gap:12px;white-space:nowrap}
  .brand .mark{width:38px;height:38px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:19px;display:flex;align-items:center;justify-content:center}
  .brand .btxt{display:flex;flex-direction:column}
  .brand .naam{font-weight:700;font-size:21px;color:var(--ink);line-height:1.05;letter-spacing:-.01em}
  .brand .onder{font-size:11px;color:var(--mut);letter-spacing:.02em}
- .menu{display:flex;gap:24px;flex-wrap:wrap;margin-left:auto}
- .menu a{color:var(--mut);font-weight:700;font-size:14px;padding:6px 0;border-bottom:2px solid transparent}
- .menu a:hover{color:var(--ink)}
- .menu a.actief{color:var(--accent);border-bottom-color:var(--accent)}
+ .menu{display:flex;gap:2px;flex-wrap:wrap}
+ .menu a{color:#d7dcea;font-weight:700;font-size:14px;padding:13px 16px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:7px}
+ .menu a svg{width:16px;height:16px}
+ .menu a:hover{background:rgba(255,255,255,.09);color:#fff}
+ .menu a.actief{background:var(--accent);color:#fff}
  .beheerkop{background:var(--navy);color:var(--navy-ink)}
  .beheerkop .wrap{display:flex;align-items:center;min-height:60px}
  main{padding:30px 0 58px;min-height:56vh}
@@ -631,6 +646,24 @@ BASE = """
  .cbadge.b-amber{background:var(--amber-zacht);color:var(--amber)}
  .cbadge.b-rood{background:#fdeceb;color:var(--rood)}
  .kaart .hoek{position:absolute;top:10px;left:10px;z-index:2}
+ .lijstkop{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+ .lijst{display:flex;flex-direction:column;gap:12px}
+ .rij{display:grid;grid-template-columns:150px minmax(0,1fr) 230px;gap:24px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 20px;transition:border-color .12s,box-shadow .12s}
+ .rij:hover{border-color:var(--accent);box-shadow:0 2px 14px rgba(240,90,30,.10)}
+ .rij .rfoto{width:150px;height:118px;background:#fff;border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;padding:8px;position:relative}
+ .rij .rfoto img{max-width:100%;max-height:100%;object-fit:contain}
+ .rij .rcat{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+ .rij .rnaam{font-size:18px;font-weight:700;line-height:1.3;color:var(--ink);margin-bottom:8px}
+ .rij .rspecs{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+ .rij .spec{background:var(--soft);border-radius:5px;padding:3px 9px;font-size:12.5px;color:var(--mut)}
+ .rij .spec b{color:var(--ink);font-weight:700}
+ .rij .rrechts{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+ .rij .rprijs{font-size:26px;font-weight:700;color:var(--accent);letter-spacing:-.02em;line-height:1}
+ .rij .rknop{background:var(--accent);color:#fff;font-weight:700;padding:10px 20px;border-radius:7px;font-size:14px}
+ .rij:hover .rknop{background:var(--accent-donker)}
+ @media(max-width:900px){.rij{grid-template-columns:110px minmax(0,1fr);gap:16px}
+   .rij .rfoto{width:110px;height:88px}
+   .rij .rrechts{grid-column:1/-1;flex-direction:row;justify-content:space-between;align-items:center;text-align:left;border-top:1px solid var(--line);padding-top:12px}}
  .leeg{color:var(--mut);padding:44px 0}
  .kruimels{color:var(--mut);font-size:13px;margin:0 0 18px}
  .kruimels a:hover{color:var(--accent)}
@@ -652,11 +685,22 @@ BASE = """
  .specs h3{font-size:17px;font-weight:700;margin:0 0 14px}
  .specs table{max-width:680px}
  .specs th{color:var(--mut);width:210px;font-weight:700}
- footer{background:var(--navy);color:var(--navy-ink);margin-top:36px}
- footer .wrap{padding:40px 22px;display:flex;justify-content:space-between;gap:32px;flex-wrap:wrap}
- footer a{color:var(--navy-ink)}footer a:hover{color:#fff}
- footer .kop{font-weight:700;margin-bottom:12px;font-size:15px}
- footer .klein{color:var(--navy-mut);font-size:13px;line-height:1.7;max-width:300px}
+ footer{background:var(--navy);color:var(--navy-ink);margin-top:44px}
+ footer .kolommen{padding:46px 0 34px;display:grid;grid-template-columns:1.6fr 1fr 1fr 1.3fr;gap:40px}
+ @media(max-width:900px){footer .kolommen{grid-template-columns:1fr 1fr;gap:28px}}
+ @media(max-width:560px){footer .kolommen{grid-template-columns:1fr}}
+ footer a{color:var(--navy-mut)}footer a:hover{color:#fff}
+ footer .kop{font-weight:700;margin-bottom:14px;font-size:15px;color:#fff}
+ footer .klein{color:var(--navy-mut);font-size:13.5px;line-height:1.75}
+ footer li{list-style:none;margin:7px 0}
+ footer ul{margin:0;padding:0}
+ footer .fmerk{display:flex;align-items:center;gap:11px;margin-bottom:14px}
+ footer .fmerk .mark{width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:18px}
+ footer .fmerk span{font-weight:700;font-size:19px;color:#fff}
+ footer .fcontact{display:flex;align-items:flex-start;gap:10px;margin:9px 0;font-size:13.5px}
+ footer .fcontact svg{width:17px;height:17px;color:var(--accent);flex:none;margin-top:3px}
+ .fbalk{border-top:1px solid rgba(255,255,255,.11)}
+ .fbalk .wrap{padding:16px 32px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--navy-mut)}
  .flash{background:var(--soft);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:4px;padding:10px 14px;margin-bottom:16px}
  .btn{display:inline-block;background:var(--accent);color:var(--accent-ink);padding:9px 16px;border-radius:6px;border:0;cursor:pointer;font:inherit;font-weight:700}
  .btn.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
@@ -672,31 +716,88 @@ BASE = """
 {% if IS_BEHEER %}
 <div class="beheerkop"><div class="wrap"><a class="brand" href="{{ url_for('beheer') }}"><span class="mark">T</span><span class="naam" style="color:var(--navy-ink)">{{ winkel_naam }}</span></a><span style="margin-left:12px;color:var(--navy-mut);font-size:13px">beheer</span></div></div>
 {% else %}
-<div class="topbar"><div class="wrap"><span>Tweedehands ICT, getest en klaar voor gebruik</span><span>Contact: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a></span></div></div>
-<div class="kop-nav"><div class="wrap">
-  <a class="brand" href="{{ url_for('etalage') }}"><span class="mark">T</span><span class="btxt"><span class="naam">{{ winkel_naam }}</span><span class="onder">ICT-hardware</span></span></a>
-  <nav class="menu">
-    <a href="{{ url_for('etalage') }}" class="{{ 'actief' if actief=='home' else '' }}">Home</a>
-    {% for c in categorieen %}<a href="{{ url_for('categorie', slug=c.slug) }}" class="{{ 'actief' if actief==c.slug else '' }}">{{ c.label }}</a>{% endfor %}
-  </nav>
-</div></div>
+<div class="kop">
+ <div class="topbar"><div class="wrap">
+   <span>Tweedehands ICT, nagekeken en getest voor verkoop</span>
+   <span class="rechts">
+     <span>Afhalen op afspraak</span>
+     <span><a href="mailto:{{ contact_email }}">{{ contact_email }}</a></span>
+   </span>
+ </div></div>
+ <div class="kop-nav"><div class="wrap">
+   <a class="brand" href="{{ url_for('etalage') }}"><span class="mark">T</span><span class="btxt"><span class="naam">{{ winkel_naam }}</span><span class="onder">ICT-hardware</span></span></a>
+   <form class="zoek" action="{{ url_for('zoeken') }}" method="get" role="search">
+     <input name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of specificatie" aria-label="Zoeken">
+     <button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Zoeken</button>
+   </form>
+   <span class="kopcontact">
+     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
+     <span>Vragen over een toestel?<b>{{ contact_email }}</b></span>
+   </span>
+ </div></div>
+ <div class="menubalk"><div class="wrap">
+   <nav class="menu">
+     <a href="{{ url_for('etalage') }}" class="{{ 'actief' if actief=='home' else '' }}">
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+     {% for c in categorieen %}<a href="{{ url_for('categorie', slug=c.slug) }}" class="{{ 'actief' if actief==c.slug else '' }}">{{ c.label }}</a>{% endfor %}
+     <a href="mailto:{{ contact_email }}">Contact</a>
+   </nav>
+ </div></div>
+</div>
 {% endif %}
 <main><div class="wrap">
  {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
  {{ body|safe }}
 </div></main>
 {% if not IS_BEHEER %}
-<footer><div class="wrap">
-  <div><div class="kop">{{ winkel_naam }}</div><div class="klein">Tweedehands ICT-hardware, getest en klaar voor gebruik. Laptops, pc's, tablets en toebehoren.</div></div>
-  <div><div class="kop">Categorie&euml;n</div>{% for c in categorieen %}<div style="margin:6px 0"><a href="{{ url_for('categorie', slug=c.slug) }}">{{ c.label }}</a></div>{% endfor %}</div>
-  <div><div class="kop">Contact</div><div class="klein"><a href="mailto:{{ contact_email }}">{{ contact_email }}</a></div></div>
-</div></footer>
+<footer>
+ <div class="wrap"><div class="kolommen">
+  <div>
+    <div class="fmerk"><span class="mark">T</span><span>{{ winkel_naam }}</span></div>
+    <div class="klein">Wij verkopen tweedehands ICT die we zelf gebruikt en nagekeken hebben.
+      Elk toestel wordt getest, eerlijk beschreven en gefotografeerd zoals het is.</div>
+  </div>
+  <div>
+    <div class="kop">Aanbod</div>
+    <ul>
+      <li><a href="{{ url_for('etalage') }}">Alle toestellen</a></li>
+      {% for c in categorieen %}<li><a href="{{ url_for('categorie', slug=c.slug) }}">{{ c.label }}</a></li>{% endfor %}
+    </ul>
+  </div>
+  <div>
+    <div class="kop">Zo werkt het</div>
+    <ul>
+      <li>Nagekeken en getest</li>
+      <li>Foto's van het echte toestel</li>
+      <li>Marktconforme prijs</li>
+      <li>Afhalen op afspraak</li>
+    </ul>
+  </div>
+  <div>
+    <div class="kop">Contact</div>
+    <div class="fcontact">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
+      <span><a href="mailto:{{ contact_email }}">{{ contact_email }}</a></span>
+    </div>
+    <div class="fcontact">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>
+      <span class="klein">Afhalen op afspraak, stuur ons gerust een bericht.</span>
+    </div>
+  </div>
+ </div></div>
+ <div class="fbalk"><div class="wrap">
+   <span>{{ winkel_naam }}</span>
+   <span>Prijzen in euro. Tweedehands toestellen worden verkocht in de staat zoals beschreven.</span>
+ </div></div>
+</footer>
 {% endif %}
 </body></html>
 """
 
 
 def page(body, **kw):
+    kw.setdefault("zoekterm", "")
+    kw.setdefault("actief", "")
     return render_template_string(BASE, body=body, **kw)
 
 
@@ -708,31 +809,63 @@ def healthz():
     return "ok", 200
 
 
-def _kaart(r):
+TOON_SPECS = [("cpu", "Processor"), ("ram", "Geheugen"), ("opslag", "Opslag"),
+              ("scherm", "Scherm"), ("resolutie", "Resolutie"), ("gpu", "Videokaart"),
+              ("besturingssysteem", "Besturingssysteem"), ("bouwjaar", "Bouwjaar")]
+
+
+def _spec_chips(specs, maximaal=5):
+    """Toont de belangrijkste specs als losse blokjes in de lijstweergave."""
+    uit = []
+    for sleutel, label in TOON_SPECS:
+        waarde = specs.get(sleutel)
+        if waarde:
+            waarde = str(waarde)
+            if len(waarde) > 46:
+                waarde = waarde[:44].rstrip() + "..."
+            uit.append(f'<span class="spec">{label}: <b>{waarde}</b></span>')
+        if len(uit) >= maximaal:
+            break
+    return f'<div class="rspecs">{"".join(uit)}</div>' if uit else ""
+
+
+def _rij(r):
     imgs = prod_images(r["id"])
     foto = url_for("upload", naam=imgs[0]["bestand"]) if imgs else ""
     naam = r["titel"] or ((r["merk"] or "") + " " + (r["model"] or "")).strip() or "Item"
     prijs = euro(r["prijs_definitief_cents"]) or "Prijs op aanvraag"
     catlabel = netjes_label(r["categorie"]) if r["categorie"] else ""
-    thumb = (f'<img src="{foto}" alt="{naam}" loading="lazy">' if foto
+    beeld = (f'<img src="{foto}" alt="{naam}" loading="lazy">' if foto
              else foto_placeholder(r["categorie"], klein=True))
     badge = conditie_badge(r["conditie"])
-    hoek = f'<span class="hoek">{badge}</span>' if badge else ""
-    return (f'<a class="kaart" href="{url_for("detail", pid=r["id"])}">'
-            f'<div class="thumb">{hoek}{thumb}</div>'
-            f'<div class="info"><div class="cat">{catlabel}</div>'
-            f'<div class="naam">{naam}</div><div class="prijs">{prijs}</div></div></a>')
+    return (f'<a class="rij" href="{url_for("detail", pid=r["id"])}">'
+            f'<div class="rfoto">{beeld}</div>'
+            f'<div class="rmid"><div class="rcat">{catlabel}</div>'
+            f'<div class="rnaam">{naam}</div>{badge}'
+            f'{_spec_chips(specs_dict(r["specs"]))}</div>'
+            f'<div class="rrechts"><div class="rprijs">{prijs}</div>'
+            f'<span class="rknop">Bekijk toestel</span></div></a>')
 
 
-def _etalage_html(slug, titel, sub):
+def _lijst_html(rows, titel, sub, leegtekst="Nog geen toestellen in deze categorie."):
+    aantal = len(rows)
+    telling = f'<span class="mut">{aantal} toestel{"len" if aantal != 1 else ""}</span>' if aantal else ""
+    inner = (f'<div class="lijst">{"".join(_rij(r) for r in rows)}</div>' if rows
+             else f'<p class="leeg">{leegtekst}</p>')
+    return (f'<div class="lijstkop"><div><h1 class="paginatitel">{titel}</h1>'
+            f'<p class="sub">{sub}</p></div>{telling}</div>{inner}')
+
+
+def _live_rows(slug=None):
     rows = db().execute("SELECT * FROM products WHERE status='live' "
                         "ORDER BY gepubliceerd_op DESC, id DESC").fetchall()
     if slug:
         rows = [r for r in rows if categorie_van(r["categorie"]) == slug]
-    kaarten = "".join(_kaart(r) for r in rows)
-    inner = (f'<div class="grid">{kaarten}</div>' if rows
-             else '<p class="leeg">Nog geen items in deze categorie.</p>')
-    return f'<h1 class="paginatitel">{titel}</h1><p class="sub">{sub}</p>{inner}'
+    return rows
+
+
+def _etalage_html(slug, titel, sub):
+    return _lijst_html(_live_rows(slug), titel, sub)
 
 
 HERO = """
@@ -772,6 +905,27 @@ def etalage():
                             "Tweedehands ICT, getest en klaar voor gebruik.")
             + sfeer)
     return page(body, actief="home")
+
+
+@app.route("/zoeken")
+def zoeken():
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return redirect(url_for("etalage"))
+    like = f"%{q}%"
+    rows = db().execute(
+        """SELECT * FROM products WHERE status='live' AND (
+             coalesce(titel,'') ILIKE %s OR coalesce(merk,'') ILIKE %s
+             OR coalesce(model,'') ILIKE %s OR coalesce(categorie,'') ILIKE %s
+             OR coalesce(omschrijving,'') ILIKE %s OR specs::text ILIKE %s
+             OR coalesce(serienummer,'') ILIKE %s)
+           ORDER BY gepubliceerd_op DESC, id DESC""",
+        (like, like, like, like, like, like, like)).fetchall()
+    body = _lijst_html(rows, f'Zoeken naar "{q}"',
+                       "Resultaten uit ons volledige aanbod.",
+                       leegtekst=f'Geen toestellen gevonden voor "{q}". '
+                                 f'Probeer een merk of modelnummer.')
+    return page(body, titel=f"Zoeken: {q}", zoekterm=q)
 
 
 @app.route("/categorie/<slug>")
