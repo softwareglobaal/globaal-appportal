@@ -1311,7 +1311,7 @@ def bewerk(pid):
     <form method="post" action="{url_for('goedkeuren', pid=pid)}">
       <div class="row" style="align-items:end">
         <div><label>Definitieve prijs (EUR)</label>
-          <input name="prijs" type="number" step="0.01" value="{prijs_def}"></div>
+          <input name="prijs" type="number" step="0.01" min="0.01" required value="{prijs_def}"></div>
         <div><label>Door</label><input name="door" value="{_auth_gebruiker()}"></div>
         <div style="max-width:220px"><button class="btn">Goedkeuren &amp; live</button></div>
       </div>
@@ -1411,7 +1411,10 @@ def taxeer_status(pid):
 def goedkeuren(pid):
     cents = _eur_to_cents(request.form.get("prijs"))
     if cents is None:
-        flash("Geen geldige prijs.")
+        flash("Geen geldige prijs ingevuld.")
+        return redirect(url_for("bewerk", pid=pid))
+    if cents <= 0:
+        flash("Een item kan niet live gaan met prijs nul. Vul een bedrag in.")
         return redirect(url_for("bewerk", pid=pid))
     db().execute(
         """UPDATE products SET prijs_definitief_cents=%s, goedgekeurd_door=%s,
@@ -1427,10 +1430,18 @@ def goedkeuren(pid):
 @beheer_route
 def status_route(pid):
     s = request.form.get("status")
-    if s in STATUSSEN:
-        db().execute("UPDATE products SET status=%s, bijgewerkt_op=now() WHERE id=%s", (s, pid))
-        db().commit()
-        flash(f"Status gezet op {s}.")
+    if s not in STATUSSEN:
+        return redirect(url_for("bewerk", pid=pid))
+    if s == "live":
+        r = db().execute("SELECT prijs_definitief_cents AS p FROM products WHERE id=%s",
+                         (pid,)).fetchone()
+        if not r or not r["p"] or r["p"] <= 0:
+            flash("Dit item heeft nog geen prijs. Keur eerst een prijs goed, "
+                  "dan gaat het meteen live.")
+            return redirect(url_for("bewerk", pid=pid))
+    db().execute("UPDATE products SET status=%s, bijgewerkt_op=now() WHERE id=%s", (s, pid))
+    db().commit()
+    flash(f"Status gezet op {s}.")
     return redirect(url_for("bewerk", pid=pid))
 
 
