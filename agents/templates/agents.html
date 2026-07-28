@@ -229,6 +229,11 @@
     if (a.cadans) h += "<p style='color:var(--tekst-2);font-size:12.5px'>" + esc(a.cadans) + "</p>";
     h += "</div>";
 
+    if (a.tools && a.tools.length) {
+      h += "<div class='v-sectie'><h3>Gereedschap</h3><ul class='v-lijst'>";
+      a.tools.forEach(t => h += "<li>" + esc(t) + "</li>");
+      h += "</ul></div>";
+    }
     if (a.mag && a.mag.length) {
       h += "<div class='v-sectie'><h3>Mag zelfstandig</h3><ul class='v-lijst'>";
       a.mag.forEach(m => h += "<li>" + esc(m) + "</li>");

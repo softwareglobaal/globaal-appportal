@@ -60,6 +60,53 @@ DETAILS = {
             "Verifieert achteraf; lukt het niet, dan naar een mens",
         ],
         "cadans": "Sonde elk uur; duiding dagelijks en direct bij een storing.",
+        "tools": [
+            "Containerstatus meten (docker-sonde)",
+            "Containerlogs lezen voor de duiding",
+            "Taalmodel-duiding (claude-sonnet-5)",
+            "Runbook voorstellen; uitvoering loopt via de aparte "
+            "host-uitvoerder met allowlist (alleen docker restart)",
+        ],
+    },
+    "architect": {
+        "mandaat": ("Plant de aanpak van een dashboard- of platformtaak "
+                    "voordat er gebouwd wordt. Leest alleen en levert een "
+                    "plan; bouwt nooit zelf."),
+        "mag": ["Een aanpakplan opleveren"],
+        "grenzen": ["Bouwt nooit zelf; het plan is het enige product"],
+        "cadans": "Op afroep, bij elke niet-triviale taak.",
+        "tools": ["Repo lezen en doorzoeken (Read, Glob, Grep)",
+                  "Shell voor inspectie (Bash)"],
+    },
+    "bouwer": {
+        "mandaat": ("Voert een aanpakplan uit volgens de huisregels. Wijkt "
+                    "niet stilzwijgend af: kan iets niet zoals gepland, dan "
+                    "meldt hij dat in het eindverslag."),
+        "mag": ["Code schrijven en wijzigen volgens het plan"],
+        "grenzen": ["Geen stilzwijgende koerswijzigingen"],
+        "cadans": "Op afroep, na de architect.",
+        "tools": ["Volledige gereedschapsset: bestanden bewerken, "
+                  "shell, git (Claude Code)"],
+    },
+    "reviewer": {
+        "mandaat": ("Beoordeelt een diff of branch tegen de huisregels "
+                    "voordat er gemerged wordt. Leest alleen; past nooit "
+                    "zelf iets aan."),
+        "mag": ["Een oordeel met bevindingen opleveren"],
+        "grenzen": ["Past nooit zelf code aan", "Een mens merget"],
+        "cadans": "Op afroep, na de bouwer.",
+        "tools": ["Repo en diff lezen (Read, Glob, Grep)",
+                  "Shell voor inspectie (Bash)"],
+    },
+    "verifier": {
+        "mandaat": ("Bewijst dat een wijziging echt werkt door de controles "
+                    "en de app zelf te draaien. Rapporteert bewijs, geen "
+                    "aannames."),
+        "mag": ["Controles en de app draaien om bewijs te verzamelen"],
+        "grenzen": ["Verandert de code niet; rapporteert alleen"],
+        "cadans": "Op afroep, naast de reviewer.",
+        "tools": ["Volledige gereedschapsset: shell, tests draaien, "
+                  "app starten (Claude Code)"],
     },
     "elevait-hr": {
         "mandaat": ("Toetst nieuwe sollicitaties bij Elevait aan de "
@@ -74,6 +121,14 @@ DETAILS = {
             "Deze tegel toont alleen werkstatus, nooit kandidaatgegevens",
         ],
         "cadans": "Controleert elk uur op nieuwe sollicitaties.",
+        "tools": [
+            "Sollicitatiemappen lezen op het elevait-datavolume",
+            "Tekst uit CV-PDF's halen (pypdf)",
+            "Taalmodel voor de scorekaart (claude-sonnet-5)",
+            "Schrijven naar elevait.kandidaat en elevait.beoordeling",
+            "Hartslag melden op deze tegel",
+            "Bewust geen mailgereedschap: versturen kan technisch niet",
+        ],
     },
 }
 DETAIL_STANDAARD = {
@@ -82,6 +137,7 @@ DETAIL_STANDAARD = {
     "mag": [],
     "grenzen": [],
     "cadans": "Op afroep.",
+    "tools": [],
 }
 
 
@@ -395,6 +451,7 @@ def api_agent(naam):
         "sinds": kaart["sinds"], "tokens": kaart["tokens"],
         "mandaat": detail["mandaat"], "mag": detail["mag"],
         "grenzen": detail["grenzen"], "cadans": detail["cadans"],
+        "tools": detail.get("tools", []),
         "handelingen": handelingen(naam),
     })
 
