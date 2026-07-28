@@ -120,7 +120,9 @@ DETAILS = {
             "Weegt naam, geslacht, leeftijd, afkomst of school nooit mee",
             "Deze tegel toont alleen werkstatus, nooit kandidaatgegevens",
         ],
-        "cadans": "Controleert elk uur op nieuwe sollicitaties.",
+        "cadans": ("Reageert direct op nieuwe sollicitaties "
+                   "(bestandswaarneming); volledige ronde elk uur "
+                   "als vangnet."),
         "tools": [
             "Sollicitatiemappen lezen op het elevait-datavolume",
             "Tekst uit CV-PDF's halen (pypdf)",
