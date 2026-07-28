@@ -73,7 +73,7 @@ DETAILS = {
             "Weegt naam, geslacht, leeftijd, afkomst of school nooit mee",
             "Deze tegel toont alleen werkstatus, nooit kandidaatgegevens",
         ],
-        "cadans": "Controleert elke vijf minuten op nieuwe sollicitaties.",
+        "cadans": "Controleert elk uur op nieuwe sollicitaties.",
     },
 }
 DETAIL_STANDAARD = {
