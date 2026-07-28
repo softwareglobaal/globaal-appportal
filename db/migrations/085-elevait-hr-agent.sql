@@ -1,4 +1,4 @@
--- 084: HR-agent fase 1 (Elevait)
+-- 085: HR-agent fase 1 (Elevait)
 -- Aanleiding: ontwerp HR-agent, besluit Shaniel 2026-07-28. De agent toetst
 -- sollicitaties aan opgeschreven criteria en vult een scorekaart; mensen
 -- (akadmin, mehdi) leggen hun eigen oordeel vast op de interne
