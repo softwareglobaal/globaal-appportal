@@ -40,6 +40,8 @@ TEAM = [
      "rol": "beoordeelt het werk"},
     {"naam": "verifier", "label": "Verifier", "type": "bouw",
      "rol": "test en verifieert"},
+    {"naam": "elevait-hr", "label": "HR-agent (Elevait)", "type": "elevait",
+     "rol": "toetst sollicitaties aan de criteria"},
 ]
 LABELS = {a["naam"]: a["label"] for a in TEAM}
 
@@ -58,6 +60,20 @@ DETAILS = {
             "Verifieert achteraf; lukt het niet, dan naar een mens",
         ],
         "cadans": "Sonde elk uur; duiding dagelijks en direct bij een storing.",
+    },
+    "elevait-hr": {
+        "mandaat": ("Toetst nieuwe sollicitaties bij Elevait aan de "
+                    "opgeschreven criteria per vacature en vult de "
+                    "scorekaart op de interne wervingspagina. Adviseert; "
+                    "de mens beslist."),
+        "mag": ["Een scorekaart en conceptbrieven klaarzetten"],
+        "grenzen": [
+            "Beslist nooit over een mens; alle uitvoer is advies",
+            "Verstuurt nooit zelf een bericht naar een kandidaat",
+            "Weegt naam, geslacht, leeftijd, afkomst of school nooit mee",
+            "Deze tegel toont alleen werkstatus, nooit kandidaatgegevens",
+        ],
+        "cadans": "Controleert elke vijf minuten op nieuwe sollicitaties.",
     },
 }
 DETAIL_STANDAARD = {
