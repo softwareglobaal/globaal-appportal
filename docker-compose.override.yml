@@ -156,7 +156,11 @@ services:
     restart: unless-stopped
     environment:
       # Toegangsgroepen naast admin/manager (bv. hr, besluit 2026-07-13).
-      STAFF_GROUPS: ${ORGANISATIE_STAFF_GROUPS:-hr}
+      # Staf-groepen: mogen de medewerkerskant zien (medewerkers, firma's,
+      # disciplines, woordenboek). De beheerkant (financien, relaties,
+      # signalen, ontwikkeling, graaf) blijft admin en manager. 'organisatie'
+      # is voor wie het dashboard nodig heeft zonder HR-dashboard erbij.
+      STAFF_GROUPS: ${ORGANISATIE_STAFF_GROUPS:-hr,organisatie}
       # Ontwikkel-statistieken (migratie 074): gedeeld token voor de
       # Claude Code-hook-ingest; leeg = endpoint uit.
       ONTWIKKELING_TOKEN: ${ONTWIKKELING_TOKEN:-}
