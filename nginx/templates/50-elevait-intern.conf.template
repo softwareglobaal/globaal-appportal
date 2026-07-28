@@ -1,0 +1,31 @@
+# Interne wervingspagina van Elevait (HR-agent fase 1). Forward-auth via
+# Authentik, binding beperkt tot akadmin en mehdi (script
+# add-elevait-intern-app.py). Gebruikt het elevaitnv-certificaat; na het
+# toevoegen van het DNS-record moet dat cert eenmalig worden uitgebreid met
+# intern.elevaitnv.com (certbot --expand, zie deploy-notities in de
+# elevaitnv-website-repo).
+
+server {
+    listen 80;
+    server_name intern.elevaitnv.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://intern.elevaitnv.com$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name intern.elevaitnv.com;
+    ssl_certificate /etc/nginx/certs/elevaitnv/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/elevaitnv/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    set $app_upstream http://elevait-intern:8091;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

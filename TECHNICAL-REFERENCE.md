@@ -972,7 +972,15 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   Brain en filterbaar op firma; `kandidaat` is gemarkeerd `vertrouwelijk`
   (persoonsgegevens gaan nooit via migraties of seeds in git, alleen
   rechtstreeks de database in). Afscherming volgens het persoonslagen-patroon
-  volgt zodra er ooit een derde persoon in admin/manager komt.
+  volgt zodra er ooit een derde persoon in admin/manager komt. Migratie 084
+  voegt de HR-agent-tabellen toe: `beoordeling` (scorekaart van de agent,
+  advies zonder eindcijfer) en `oordeel` (menselijk oordeel per beoordelaar),
+  plus `kandidaat.bron_map` (pad naar de bronmap op het elevait-data-volume).
+  Beoordeling en oordeel staan bewust NIET als knopen in de graaf. De interne
+  wervingspagina draait op intern.elevaitnv.com (nginx-template 50,
+  forward-auth via Authentik-app `elevait-intern`, groep `elevait` = akadmin
+  en mehdi; script `scripts/add-elevait-intern-app.py`); de app zelf leeft in
+  de repo `elevaitnv-website` (map `intern/`, VM-checkout `~/elevait`).
 - **Kosten ↔ kern (migratie 012, "de blauwe draad")**: alle `vendor`-teksten uit
   `kosten.software` zijn gebackfilld naar **`kern.leverancier`** (case-insensitief
   samengesmolten met bestaande rijen als Zoom/Microsoft; "Close Call (Xelion)" is
