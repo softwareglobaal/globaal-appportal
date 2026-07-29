@@ -19,7 +19,8 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
-from flask import Flask, render_template, request, jsonify, abort
+from flask import (Flask, render_template, request, jsonify, abort,
+                   redirect, send_file)
 
 app = Flask(__name__)
 
@@ -36,6 +37,8 @@ TEAM = [
      "rol": "toetst sollicitaties aan de criteria"},
     {"naam": "elevait-finance", "label": "Finance-agent (Elevait)",
      "type": "elevait", "rol": "bewaakt het uitgavenregister"},
+    {"naam": "ingestie", "label": "Ingestie-agent", "type": "ingestie",
+     "rol": "maakt van documenten doorzoekbare kennisbanken"},
 ]
 LABELS = {a["naam"]: a["label"] for a in TEAM}
 
@@ -114,6 +117,32 @@ DETAILS = {
             "verzoek van een mens; dat verbruik telt apart als elevait-intake",
         ],
     },
+    "ingestie": {
+        "mandaat": ("Neemt aangeleverde documenten aan en maakt er een "
+                    "doorzoekbare kennisbank van: extraheren, chunken, "
+                    "embedden, laden en controleren."),
+        "mag": [
+            "Een nieuw corpus aanleggen en publiceren in de database kennis",
+            "Zelf bepalen hoe een onbekend document gechunkt wordt",
+            "Afbeeldingen laten beschrijven en doorzoekbaar maken",
+        ],
+        "grenzen": [
+            "Nooit een bestaand corpus wijzigen of overschrijven",
+            "Publiceert alleen als de keuring en de rookproef slagen",
+            "Stopt boven het kostenplafond in het profiel; dat is een escalatie",
+            "Het model kiest de aanpak, maar knipt en rekent nooit zelf",
+        ],
+        "cadans": "Kijkt elke minuut of er een document klaarstaat.",
+        "tools": [
+            "Extractie uit pdf: tekst, inhoudsopgave, tabellen, afbeeldingen",
+            "Chunk-strategieen: inhoudsopgave-gestuurd, kop-bewust, "
+            "pagina-lokaal, plat met overlap",
+            "Taalmodel voor het profielvoorstel en de beeldbeschrijvingen "
+            "(claude-sonnet-5)",
+            "Embeddings via text-embedding-3-small",
+            "Hybride ophalen (vector naast full-text) voor de rookproef",
+        ],
+    },
 }
 DETAIL_STANDAARD = {
     "mandaat": ("Nog geen mandaat vastgelegd voor deze agent; vul een blok in "
@@ -172,6 +201,22 @@ def db():
     _kolom(conn, "voorstel", "bewijs", "TEXT DEFAULT ''")
     # Handelingen herleid uit de systemd-journal (bron van waarheid); de
     # uitvoerder synct deze elke minuut. Alleen een weergave-spiegel.
+    # Aangeleverde documenten. De app bezit de opslag (het volume is van de
+    # container); de host-lus claimt werk via de tokenroutes, net als de
+    # uitvoerder van de onderhoudsagent.
+    conn.execute("""CREATE TABLE IF NOT EXISTS ingestie (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        bestandsnaam  TEXT NOT NULL,
+        pad           TEXT NOT NULL,
+        bytes         INTEGER,
+        door          TEXT DEFAULT '',
+        aangeleverd   TEXT NOT NULL,
+        status        TEXT NOT NULL DEFAULT 'wacht',
+        fase          TEXT DEFAULT '',
+        detail        TEXT DEFAULT '',
+        corpus        TEXT DEFAULT '',
+        rapport       TEXT DEFAULT '',
+        bijgewerkt    TEXT DEFAULT '')""")
     conn.execute("""CREATE TABLE IF NOT EXISTS handeling (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         agent     TEXT, tijd TEXT, modus TEXT, container TEXT, actie TEXT,
@@ -463,6 +508,129 @@ def handelingen_sync():
              str(e.get("container", ""))[:120], str(e.get("actie", ""))[:80],
              str(e.get("waarom", ""))[:400], str(e.get("uitkomst", ""))[:40],
              str(e.get("detail", ""))[:400], str(e.get("bewijs", ""))[:4000]))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+INGESTIE_MAP = os.environ.get("INGESTIE_MAP", "/data/ingestie")
+TOEGESTAAN = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm"}
+MAX_BYTES = 60 * 1024 * 1024
+
+
+def ingestie_rijen(limit=25):
+    conn = db()
+    rows = conn.execute(
+        """SELECT id, bestandsnaam, bytes, door, aangeleverd, status, fase,
+                  detail, corpus, bijgewerkt FROM ingestie
+           ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
+    conn.close()
+    return [dict(r) | {"aangeleverd_kort": _fmt(r["aangeleverd"]),
+                       "bijgewerkt_kort": _fmt(r["bijgewerkt"] or ""),
+                       "kb": round((r["bytes"] or 0) / 1024)} for r in rows]
+
+
+@app.route("/ingestie")
+def ingestie():
+    """Achter de SSO: documenten aanleveren en de voortgang volgen."""
+    return render_template(
+        "ingestie.html",
+        rijen=ingestie_rijen(),
+        melding=request.args.get("m", ""),
+        portal_url=f"https://portal.{BASE_DOMAIN}/",
+        username=request.headers.get("X-authentik-username", "onbekend"),
+    )
+
+
+@app.route("/ingestie/aanleveren", methods=["POST"])
+def ingestie_aanleveren():
+    """Neemt een document aan en zet het in de wachtrij. Achter de SSO, dus de
+    aanleveraar is bekend uit de forward-auth-header."""
+    bestand = request.files.get("bestand")
+    if not bestand or not bestand.filename:
+        return redirect("/ingestie?m=geen-bestand")
+    naam = os.path.basename(bestand.filename)[:200]
+    if os.path.splitext(naam)[1].lower() not in TOEGESTAAN:
+        return redirect("/ingestie?m=soort")
+
+    os.makedirs(INGESTIE_MAP, exist_ok=True)
+    conn = db()
+    cur = conn.execute(
+        """INSERT INTO ingestie (bestandsnaam, pad, bytes, door, aangeleverd, status)
+           VALUES (?,?,?,?,?,'wacht')""",
+        (naam, "", 0, request.headers.get("X-authentik-username", "onbekend"),
+         _nu().isoformat()))
+    rij_id = cur.lastrowid
+    pad = os.path.join(INGESTIE_MAP, f"{rij_id}-{naam}")
+    bestand.save(pad)
+    grootte = os.path.getsize(pad)
+    if grootte > MAX_BYTES:
+        os.remove(pad)
+        conn.execute("DELETE FROM ingestie WHERE id=?", (rij_id,))
+        conn.commit()
+        conn.close()
+        return redirect("/ingestie?m=te-groot")
+    conn.execute("UPDATE ingestie SET pad=?, bytes=? WHERE id=?", (pad, grootte, rij_id))
+    conn.commit()
+    conn.close()
+    return redirect("/ingestie?m=aangenomen")
+
+
+@app.route("/api/ingestie-wacht")
+def ingestie_wacht():
+    """De host-lus haalt wachtend werk op. Claimt atomair (wacht -> bezig) zodat
+    twee runs hetzelfde document niet dubbel verwerken."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    conn = db()
+    rows = conn.execute(
+        "SELECT id, bestandsnaam FROM ingestie WHERE status='wacht' ORDER BY id").fetchall()
+    geclaimd = []
+    for r in rows:
+        cur = conn.execute(
+            "UPDATE ingestie SET status='bezig', bijgewerkt=? WHERE id=? AND status='wacht'",
+            (_nu().isoformat(), r["id"]))
+        if cur.rowcount:
+            geclaimd.append({"id": r["id"], "bestandsnaam": r["bestandsnaam"]})
+    conn.commit()
+    conn.close()
+    return jsonify({"wacht": geclaimd})
+
+
+@app.route("/api/ingestie-bestand/<int:rij_id>")
+def ingestie_bestand(rij_id):
+    """Het bestand zelf, voor de host-lus. De opslag is van de container, dus de
+    host komt er alleen via deze route bij."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    conn = db()
+    r = conn.execute("SELECT pad FROM ingestie WHERE id=?", (rij_id,)).fetchone()
+    conn.close()
+    if not r or not r["pad"] or not os.path.exists(r["pad"]):
+        abort(404)
+    return send_file(r["pad"], as_attachment=True)
+
+
+@app.route("/ingestie-resultaat", methods=["POST"])
+def ingestie_resultaat():
+    """De host-lus meldt de uitkomst terug."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    d = request.get_json(silent=True) or {}
+    try:
+        rij_id = int(d.get("id"))
+    except (TypeError, ValueError):
+        abort(400)
+    status = str(d.get("status", "")).strip()
+    if status not in ("live", "afgekeurd", "wacht"):
+        abort(400)
+    conn = db()
+    conn.execute(
+        """UPDATE ingestie SET status=?, fase=?, detail=?, corpus=?, rapport=?, bijgewerkt=?
+           WHERE id=?""",
+        (status, str(d.get("fase", ""))[:60], str(d.get("detail", ""))[:600],
+         str(d.get("corpus", ""))[:120], str(d.get("rapport", ""))[:8000],
+         _nu().isoformat(), rij_id))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
