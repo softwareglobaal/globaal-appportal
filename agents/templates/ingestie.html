@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kennisbank aanleveren</title>
+<style>
+  :root {
+    --bg: #f5f6f7; --paneel: #ffffff; --lijn: #e4e7ea; --lijn-sterk: #d5dade;
+    --tekst: #1e2830; --tekst-2: #5c6771; --tekst-3: #8d959d;
+    --accent: #2f4a63;
+    --wacht: #98a0a8; --bezig: #2f7d5a; --live: #3663a0; --afgekeurd: #a63d3d;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--tekst);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         font-size: 14px; line-height: 1.5; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 26px 22px 60px; }
+  .kop { border-bottom: 1px solid var(--lijn); padding-bottom: 14px; margin-bottom: 22px; }
+  .kop h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .kop .sub { color: var(--tekst-2); font-size: 12.5px; margin-top: 2px; }
+  .kop-link { display: inline-block; margin-top: 10px; border: 1px solid var(--lijn-sterk);
+              background: var(--paneel); color: var(--tekst); border-radius: 5px;
+              padding: 5px 12px; font-size: 12.5px; font-weight: 500; }
+  .kop-link:hover { background: #f2f4f5; }
+
+  h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+       color: var(--tekst-2); margin: 26px 0 8px; }
+  .hint { color: var(--tekst-3); font-size: 12px; margin: 0 0 12px; }
+  .paneel { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px; }
+
+  form.aanleveren { padding: 16px 18px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  input[type=file] { font-size: 13px; color: var(--tekst-2); max-width: 100%; }
+  button { border: 1px solid var(--accent); background: var(--accent); color: #fff;
+           border-radius: 5px; padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  button:hover { background: #263c51; }
+
+  .melding { border: 1px solid var(--lijn-sterk); background: var(--paneel);
+             border-left: 3px solid var(--accent); border-radius: 5px;
+             padding: 9px 13px; font-size: 13px; margin-bottom: 16px; }
+  .melding.fout { border-left-color: var(--afgekeurd); }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+       color: var(--tekst-3); font-weight: 600; padding: 9px 14px; border-bottom: 1px solid var(--lijn); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--lijn); vertical-align: top; font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  .naam { font-weight: 500; }
+  .meta { color: var(--tekst-3); font-size: 12px; }
+  .mono { font-family: var(--mono); font-size: 12px; }
+  .detail { color: var(--tekst-2); font-size: 12.5px; max-width: 420px; }
+
+  .stip { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+  .s-wacht { background: var(--wacht); }
+  .s-bezig { background: var(--bezig); }
+  .s-live { background: var(--live); }
+  .s-afgekeurd { background: var(--afgekeurd); }
+  .leeg { padding: 20px 14px; color: var(--tekst-3); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kop">
+    <h1>Kennisbank aanleveren</h1>
+    <div class="sub">
+      De ingestie-agent maakt van een document een doorzoekbare kennisbank.
+      Aangemeld als {{ username }}.
+    </div>
+    <a class="kop-link" href="/">Terug naar Agents</a>
+  </div>
+
+  {% if melding == 'aangenomen' %}
+    <div class="melding">Aangenomen. De agent pikt het document binnen een minuut op.</div>
+  {% elif melding == 'soort' %}
+    <div class="melding fout">Dit bestandstype wordt nog niet ondersteund. Wel: pdf, md, txt, html.</div>
+  {% elif melding == 'te-groot' %}
+    <div class="melding fout">Bestand te groot (maximaal 60 MB).</div>
+  {% elif melding == 'geen-bestand' %}
+    <div class="melding fout">Geen bestand gekozen.</div>
+  {% endif %}
+
+  <h2>Document aanleveren</h2>
+  <p class="hint">
+    De agent bepaalt zelf hoe het document gechunkt wordt, beschrijft de
+    afbeeldingen en controleert achteraf of de kennisbank echt antwoorden geeft.
+    Haalt hij die controle niet, dan publiceert hij niet en meldt hij waarom.
+  </p>
+  <div class="paneel">
+    <form class="aanleveren" method="post" action="/ingestie/aanleveren" enctype="multipart/form-data">
+      <input type="file" name="bestand" accept=".pdf,.md,.markdown,.txt,.html,.htm" required>
+      <button type="submit">Aanleveren</button>
+    </form>
+  </div>
+
+  <h2>Aangeleverd</h2>
+  <div class="paneel">
+    {% if rijen %}
+    <table>
+      <thead>
+        <tr>
+          <th>Document</th><th>Status</th><th>Wat er gebeurde</th><th>Aangeleverd</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rijen %}
+        <tr>
+          <td>
+            <div class="naam">{{ r.bestandsnaam }}</div>
+            <div class="meta">{{ r.kb }} KB{% if r.corpus %} &middot; <span class="mono">{{ r.corpus }}</span>{% endif %}</div>
+          </td>
+          <td>
+            <span class="stip s-{{ r.status }}"></span>{{ r.status }}
+            {% if r.fase %}<div class="meta">{{ r.fase }}</div>{% endif %}
+          </td>
+          <td class="detail">{{ r.detail or '—' }}</td>
+          <td class="meta">
+            {{ r.aangeleverd_kort }}<br>door {{ r.door }}
+            {% if r.bijgewerkt_kort %}<br>bijgewerkt {{ r.bijgewerkt_kort }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="leeg">Nog niets aangeleverd.</div>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>
