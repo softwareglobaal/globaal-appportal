@@ -39,12 +39,25 @@ vind_repos | while IFS='|' read -r map repo; do
   # daaraan te denken bij een nieuwe app.
   printf "INSERT INTO ontwikkeling.app (repo, naam) VALUES ('%s', '%s') ON CONFLICT (repo) DO NOTHING;\n" \
          "$repo" "$repo" >> "$TMP"
-  # Per commit een kopregel C|datum|email, daarna numstat-regels (plus TAB min
-  # TAB pad). awk aggregeert naar dag+auteur.
+  # Per commit een kopregel C|datum|tijdstip|email, daarna numstat-regels
+  # (plus TAB min TAB pad). awk aggregeert naar dag+auteur.
+  #
+  # Het tijdstip dient voor het commit-venster (migratie 096): de BOVENGRENS
+  # van de bouwtijd, naast de gemeten sessietijd als ondergrens. git log komt
+  # van nieuw naar oud, dus het verschil met de vorige commit van dezelfde dag
+  # en auteur is het gat ertussen; gaten boven het uur zijn pauze.
   git -C "$map" log --since="$VANAF" --no-merges \
-      --pretty="C|%ad|%ae" --date=short --numstat 2>/dev/null |
+      --pretty="C|%ad|%at|%ae" --date=short --numstat 2>/dev/null |
   awk -F'|' -v repo="$repo" '
-    /^C\|/ { datum = $2; email = tolower($3); c[datum "|" email]++; next }
+    /^C\|/ {
+      datum = $2; ts = $3 + 0; email = tolower($4);
+      s = datum "|" email;
+      if (s in vorige) {
+        gat = vorige[s] - ts;
+        if (gat > 0 && gat <= 3600) venster[s] += gat;
+      }
+      vorige[s] = ts;
+      c[s]++; next }
     NF && datum {
       split($0, kol, "\t");
       if (kol[1] ~ /^[0-9]+$/) plus[datum "|" email] += kol[1];
@@ -56,8 +69,8 @@ vind_repos | while IFS='|' read -r map repo; do
         # e-mail als SQL-string: quotes verdubbelen kan awk lastig; auteurs
         # zijn eigen teamleden, maar we weren aanhalingstekens voor de zekerheid.
         gsub(/\x27/, "", d[2]);
-        printf "INSERT INTO ontwikkeling.git_dag (datum, repo, gebruiker, commits, regels_plus, regels_min) VALUES (\x27%s\x27, \x27%s\x27, \x27%s\x27, %d, %d, %d) ON CONFLICT (datum, repo, gebruiker) DO UPDATE SET commits = EXCLUDED.commits, regels_plus = EXCLUDED.regels_plus, regels_min = EXCLUDED.regels_min, bijgewerkt_op = now();\n",
-               d[1], repo, d[2], c[k], plus[k] + 0, min[k] + 0;
+        printf "INSERT INTO ontwikkeling.git_dag (datum, repo, gebruiker, commits, regels_plus, regels_min, commit_venster_sec) VALUES (\x27%s\x27, \x27%s\x27, \x27%s\x27, %d, %d, %d, %d) ON CONFLICT (datum, repo, gebruiker) DO UPDATE SET commits = EXCLUDED.commits, regels_plus = EXCLUDED.regels_plus, regels_min = EXCLUDED.regels_min, commit_venster_sec = EXCLUDED.commit_venster_sec, bijgewerkt_op = now();\n",
+               d[1], repo, d[2], c[k], plus[k] + 0, min[k] + 0, venster[k] + 0;
       }
     }' >> "$TMP"
 done
