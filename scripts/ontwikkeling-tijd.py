@@ -172,12 +172,20 @@ def meet(paden, pauze=PAUZE):
 
 
 def _wie():
-    try:
-        r = subprocess.run(["git", "config", "user.email"],
-                           capture_output=True, text=True, timeout=5)
-        wie = (r.stdout or "").strip()
-    except Exception:
-        wie = ""
+    """De identiteit moet STABIEL zijn, ongeacht waar de verzamelaar draait.
+
+    Eerst gebruikte dit `git config user.email` zonder --global: vanuit een
+    repo gaf dat het e-mailadres, vanuit een gewone map niets, en dan viel hij
+    terug op de Windows-gebruikersnaam. Dezelfde persoon kwam zo onder twee
+    namen in de tabel en al zijn tijd telde dubbel."""
+    wie = os.environ.get("ONTWIKKELING_GEBRUIKER", "").strip()
+    if not wie:
+        try:
+            r = subprocess.run(["git", "config", "--global", "user.email"],
+                               capture_output=True, text=True, timeout=5)
+            wie = (r.stdout or "").strip()
+        except Exception:
+            wie = ""
     return (wie or os.environ.get("USERNAME") or "onbekend").lower()
 
 
