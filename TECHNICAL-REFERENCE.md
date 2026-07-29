@@ -981,6 +981,15 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   forward-auth via Authentik-app `elevait-intern`, groep `elevait` = akadmin
   en mehdi; script `scripts/add-elevait-intern-app.py`); de app zelf leeft in
   de repo `elevaitnv-website` (map `intern/`, VM-checkout `~/elevait`).
+  Migratie 092 voegt het uitgavenregister toe (finance-agent fase 1):
+  `abonnement` (bedrag NULL = PM), `uitgave` en `llm_verbruik` (een rij per
+  dag per agent per model; de agents tellen er zelf bij op, kostprijs via
+  `intern/tarieven.py`). Weergave en beheer op het tabblad Kosten van
+  intern.elevaitnv.com; de container `elevait-finance-agent` draait de
+  dagcontrole (kostensprong plus mail naar het vaste interne adres,
+  verlengingen binnen 30 dagen) en meldt op de agents-tegel. Bedragen
+  blijven op de interne pagina; in de graaf staan alleen de abonnementen,
+  zonder bedrag.
 - **Kosten ↔ kern (migratie 012, "de blauwe draad")**: alle `vendor`-teksten uit
   `kosten.software` zijn gebackfilld naar **`kern.leverancier`** (case-insensitief
   samengesmolten met bestaande rijen als Zoom/Microsoft; "Close Call (Xelion)" is

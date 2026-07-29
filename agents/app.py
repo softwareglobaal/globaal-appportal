@@ -42,6 +42,8 @@ TEAM = [
      "rol": "test en verifieert"},
     {"naam": "elevait-hr", "label": "HR-agent (Elevait)", "type": "elevait",
      "rol": "toetst sollicitaties aan de criteria"},
+    {"naam": "elevait-finance", "label": "Finance-agent (Elevait)",
+     "type": "elevait", "rol": "bewaakt het uitgavenregister"},
 ]
 LABELS = {a["naam"]: a["label"] for a in TEAM}
 
@@ -130,6 +132,32 @@ DETAILS = {
             "Schrijven naar elevait.kandidaat en elevait.beoordeling",
             "Hartslag melden op deze tegel",
             "Bewust geen mailgereedschap: versturen kan technisch niet",
+        ],
+    },
+    "elevait-finance": {
+        "mandaat": ("Registreert en bewaakt alle uitgaven van Elevait: "
+                    "abonnementen, eenmalige uitgaven en het LLM-verbruik "
+                    "van de agents. Signaleert; betalen en beslissen is "
+                    "mensenwerk."),
+        "mag": [
+            "Dagelijkse controle draaien (kostensprong, verlengingen)",
+            "Het kostensprong-signaal per mail naar het vaste interne adres",
+        ],
+        "grenzen": [
+            "Betaalt niets, zegt niets op, wijzigt geen abonnement",
+            "Nooit een bankkoppeling",
+            "Mail kan technisch alleen naar het vaste interne adres",
+            "Deze tegel toont alleen werkstatus en tellingen, nooit bedragen",
+        ],
+        "cadans": ("Dagelijkse controle; het tokenverbruik komt live binnen "
+                   "van de agents zelf."),
+        "tools": [
+            "Uitgavenregister lezen in het elevait-schema "
+            "(abonnement, uitgave, llm_verbruik)",
+            "Kostprijs berekenen met de tarieventabel in de repo",
+            "Mail naar het vaste interne adres (technisch enige ontvanger)",
+            "Hartslag melden op deze tegel",
+            "Bewust geen taalmodel in fase 1: signaleren is rekenwerk",
         ],
     },
 }

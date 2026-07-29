@@ -93,6 +93,7 @@ een allowlist valideert. Deze app legt alleen beslissing en uitkomst vast.
    inhoud op de pagina.
 
 Huidige bezetting: onderhoudsagent (gezondheidsketen), het bouwteam
-(architect, bouwer, reviewer, verifier; rollenbibliotheek `.claude/agents`)
-en de HR-agent van Elevait (werving, zie de repo elevaitnv-website, map
-`intern/`).
+(architect, bouwer, reviewer, verifier; rollenbibliotheek `.claude/agents`),
+de HR-agent van Elevait (werving) en de finance-agent van Elevait
+(uitgavenregister); beide Elevait-agents leven in de repo elevaitnv-website,
+map `intern/`.
