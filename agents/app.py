@@ -32,14 +32,6 @@ STATUSSEN = ("rust", "waakt", "actief", "klaar", "fout")
 TEAM = [
     {"naam": "onderhoud", "label": "Onderhoudsagent", "type": "onderhoud",
      "rol": "waakt over de VM en de apps"},
-    {"naam": "architect", "label": "Architect", "type": "bouw",
-     "rol": "ontwerpt de aanpak"},
-    {"naam": "bouwer", "label": "Bouwer", "type": "bouw",
-     "rol": "schrijft de code"},
-    {"naam": "reviewer", "label": "Reviewer", "type": "bouw",
-     "rol": "beoordeelt het werk"},
-    {"naam": "verifier", "label": "Verifier", "type": "bouw",
-     "rol": "test en verifieert"},
     {"naam": "elevait-hr", "label": "HR-agent (Elevait)", "type": "elevait",
      "rol": "toetst sollicitaties aan de criteria"},
     {"naam": "elevait-finance", "label": "Finance-agent (Elevait)",
@@ -69,46 +61,6 @@ DETAILS = {
             "Runbook voorstellen; uitvoering loopt via de aparte "
             "host-uitvoerder met allowlist (alleen docker restart)",
         ],
-    },
-    "architect": {
-        "mandaat": ("Plant de aanpak van een dashboard- of platformtaak "
-                    "voordat er gebouwd wordt. Leest alleen en levert een "
-                    "plan; bouwt nooit zelf."),
-        "mag": ["Een aanpakplan opleveren"],
-        "grenzen": ["Bouwt nooit zelf; het plan is het enige product"],
-        "cadans": "Op afroep, bij elke niet-triviale taak.",
-        "tools": ["Repo lezen en doorzoeken (Read, Glob, Grep)",
-                  "Shell voor inspectie (Bash)"],
-    },
-    "bouwer": {
-        "mandaat": ("Voert een aanpakplan uit volgens de huisregels. Wijkt "
-                    "niet stilzwijgend af: kan iets niet zoals gepland, dan "
-                    "meldt hij dat in het eindverslag."),
-        "mag": ["Code schrijven en wijzigen volgens het plan"],
-        "grenzen": ["Geen stilzwijgende koerswijzigingen"],
-        "cadans": "Op afroep, na de architect.",
-        "tools": ["Volledige gereedschapsset: bestanden bewerken, "
-                  "shell, git (Claude Code)"],
-    },
-    "reviewer": {
-        "mandaat": ("Beoordeelt een diff of branch tegen de huisregels "
-                    "voordat er gemerged wordt. Leest alleen; past nooit "
-                    "zelf iets aan."),
-        "mag": ["Een oordeel met bevindingen opleveren"],
-        "grenzen": ["Past nooit zelf code aan", "Een mens merget"],
-        "cadans": "Op afroep, na de bouwer.",
-        "tools": ["Repo en diff lezen (Read, Glob, Grep)",
-                  "Shell voor inspectie (Bash)"],
-    },
-    "verifier": {
-        "mandaat": ("Bewijst dat een wijziging echt werkt door de controles "
-                    "en de app zelf te draaien. Rapporteert bewijs, geen "
-                    "aannames."),
-        "mag": ["Controles en de app draaien om bewijs te verzamelen"],
-        "grenzen": ["Verandert de code niet; rapporteert alleen"],
-        "cadans": "Op afroep, naast de reviewer.",
-        "tools": ["Volledige gereedschapsset: shell, tests draaien, "
-                  "app starten (Claude Code)"],
     },
     "elevait-hr": {
         "mandaat": ("Toetst nieuwe sollicitaties bij Elevait aan de "
@@ -162,8 +114,8 @@ DETAILS = {
     },
 }
 DETAIL_STANDAARD = {
-    "mandaat": ("Onderdeel van het bouw-team (fase 1). Nog niet aan deze tegel "
-                "gekoppeld; verschijnt hier zodra hij meldt."),
+    "mandaat": ("Nog geen mandaat vastgelegd voor deze agent; vul een blok in "
+                "DETAILS aan volgens de kaart-checklist in agents/README.md."),
     "mag": [],
     "grenzen": [],
     "cadans": "Op afroep.",

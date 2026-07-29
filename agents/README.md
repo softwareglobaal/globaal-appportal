@@ -92,8 +92,14 @@ een allowlist valideert. Deze app legt alleen beslissing en uitkomst vast.
 5. Verifieren: kaart zichtbaar, hartslag komt binnen, en geen gevoelige
    inhoud op de pagina.
 
-Huidige bezetting: onderhoudsagent (gezondheidsketen), het bouwteam
-(architect, bouwer, reviewer, verifier; rollenbibliotheek `.claude/agents`),
-de HR-agent van Elevait (werving) en de finance-agent van Elevait
-(uitgavenregister); beide Elevait-agents leven in de repo elevaitnv-website,
-map `intern/`.
+Huidige bezetting: onderhoudsagent (gezondheidsketen), de HR-agent van
+Elevait (werving) en de finance-agent van Elevait (uitgavenregister); beide
+Elevait-agents leven in de repo elevaitnv-website, map `intern/`.
+
+**Alleen levende agents horen op de tegel.** De rollen uit de
+rollenbibliotheek (`.claude/agents`: architect, bouwer, reviewer, verifier)
+stonden hier tot 2026-07-29 als kaart, maar melden geen hartslag: ze worden
+door een Claude Code-sessie aangeroepen en bestaan niet als draaiend proces.
+Vier kaarten die permanent op "niet gekoppeld" staan maken de tegel
+onleesbaar. Zet een rol pas op de tegel als hij zelf `POST /agent-status`
+kan aanroepen.
