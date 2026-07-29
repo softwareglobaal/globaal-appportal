@@ -109,7 +109,9 @@ DETAILS = {
             "Kostprijs berekenen met de tarieventabel in de repo",
             "Mail naar het vaste interne adres (technisch enige ontvanger)",
             "Hartslag melden op deze tegel",
-            "Bewust geen taalmodel in fase 1: signaleren is rekenwerk",
+            "Bewust geen taalmodel in de dagcontrole: signaleren is rekenwerk",
+            "Wel een taalmodel bij de plak-intake op het Kosten-tabblad, op "
+            "verzoek van een mens; dat verbruik telt apart als elevait-intake",
         ],
     },
 }
