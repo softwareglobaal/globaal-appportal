@@ -15,6 +15,7 @@ exitcode is altijd 0.
 """
 import json
 import os
+import platform
 import subprocess
 import sys
 import urllib.request
@@ -46,8 +47,13 @@ def main():
     repo = os.path.basename(top.rstrip("/\\")) or "onbekend"
     wie = (_stil(["git", "-C", cwd, "config", "user.email"])
            or os.environ.get("USERNAME") or "onbekend")
-    body = json.dumps({"event": event, "repo": repo,
-                       "gebruiker": wie, "sessie": sessie}).encode()
+    # Machinenaam erbij (migratie 095): Shaniel werkt op meer dan een machine en
+    # zonder dit veld zijn die niet te scheiden. Alleen de naam, geen adres.
+    machine = (os.environ.get("COMPUTERNAME")
+               or os.environ.get("HOSTNAME")
+               or platform.node() or "")[:60]
+    body = json.dumps({"event": event, "repo": repo, "gebruiker": wie,
+                       "sessie": sessie, "machine": machine}).encode()
     req = urllib.request.Request(
         URL, data=body,
         headers={"Content-Type": "application/json",
