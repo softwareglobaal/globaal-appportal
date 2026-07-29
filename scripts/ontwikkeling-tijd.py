@@ -13,10 +13,10 @@ inbegrepen. Hier gebeurt het andersom:
   - toedeling volgt de BESTANDEN die worden aangeraakt, niet de werkmap;
   - de tijd tussen twee gebeurtenissen telt mee tot een pauzegrens
     (standaard 5 minuten); langere gaten zijn pauze en tellen niet;
-  - een interval krijgt de applicatie van het laatste herkende signaal
-    ervoor. Zonder signaal telt het als "onbekend" en wordt het niet
-    verstuurd (wel getoond bij --droog, zodat zichtbaar blijft hoeveel er
-    buiten de toedeling valt).
+  - een interval gaat naar het DICHTSTBIJZIJNDE signaal binnen tien minuten,
+    voor of na. Is er geen signaal in de buurt, dan komt de tijd onder
+    "(niet toegedeeld)" te staan in plaats van bij de applicatie waar
+    toevallig het laatst aan gewerkt werd.
 
 Gebruik:
     python ontwikkeling-tijd.py --droog        alleen tonen
@@ -40,16 +40,28 @@ TRANSCRIPTS = os.environ.get(
     "CLAUDE_TRANSCRIPTS", os.path.expanduser("~/.claude/projects/*/*.jsonl"))
 STAND = os.path.expanduser("~/.claude/ontwikkeling-tijd-stand.json")
 PAUZE = int(os.environ.get("ONTWIKKELING_PAUZE", "300"))
+# Hoelang een signaal (een aangeraakt bestand) hoogstens iets zegt over de
+# tijd eromheen.
+GELDIG = int(os.environ.get("ONTWIKKELING_GELDIG", "600"))
+# Tijd zonder signaal in de buurt: wel meegeteld, maar onder een eigen naam,
+# zodat zichtbaar blijft hoeveel er niet is toegedeeld.
+NIET_TOEGEDEELD = "(niet toegedeeld)"
 
 # Toedeling: welke sporen horen bij welke applicatie. Van specifiek naar
 # algemeen; het eerste patroon dat past wint. Nieuwe app erbij? Regel hier.
+#
+# Trefwoorden moeten SMAL zijn. "desktime" stond hier eerst bij globaal-hr en
+# trok al het werk aan desktime.py (organisatie) en kosten.desktime_medewerker
+# naar het HR-dashboard: 3,1 uur werd zo 8,7 uur. Een trefwoord dat in meer
+# dan een repo voorkomt hoort hier niet thuis.
 APPS = [
     ("globaal-hr", ("globaal-hr", "appportal/hr", "appportal\\hr",
                     "hr.globaal.be", "hds-hr-dashboard", "hr.medewerker",
-                    "hr.app_gebruik", "dashboard-template.html", "desktime")),
+                    "hr.app_gebruik", "hr.handmatig", "hr.dag",
+                    "dashboard-template.html")),
     ("globaal-stavingsstukken", ("stavingsstukken", "epb-pedia", "epbpedia")),
     ("globaal-organisatie", ("globaal-organisatie", "organisatie.globaal.be",
-                             "graaf.py", "signalen.py")),
+                             "graaf.py", "signalen.py", "desktime.py")),
     ("globaal-appportal", ("globaal-appportal", "appportal/scripts",
                            "db/migrations")),
     ("globaal-kosten", ("globaal-kosten", "kosten.globaal.be")),
@@ -129,16 +141,28 @@ def meet(paden, pauze=PAUZE):
             continue
         rijen.sort(key=lambda x: x[0])
         sessie = os.path.basename(pad)
-        huidig = None
+        # Toedelen op het DICHTSTBIJZIJNDE signaal binnen het geldigheidsvenster,
+        # voor of na. Eerder gold het laatste signaal onbeperkt door: een uur
+        # overleg zonder bestanden bleef dan op de vorige applicatie staan.
+        # Tijd zonder signaal in de buurt is eerlijker als "niet toegedeeld"
+        # dan als een cijfer bij een applicatie die er niets mee te maken had.
+        signalen = [(t, a) for t, a, _ in rijen if a]
+        j = 0
         for i in range(1, len(rijen)):
-            vorig_t, vorige_app, _ = rijen[i - 1]
+            vorig_t = rijen[i - 1][0]
             t, _, is_prompt = rijen[i]
-            if vorige_app:
-                huidig = vorige_app
             gat = (t - vorig_t).total_seconds()
-            if not huidig:
-                continue
-            sleutel = (huidig, t.astimezone().date().isoformat())
+            # Signalen staan op tijd gesorteerd: schuif mee in plaats van
+            # telkens de hele lijst af te lopen.
+            while j + 1 < len(signalen) and signalen[j + 1][0] <= vorig_t:
+                j += 1
+            app, beste = None, None
+            for k in (j - 1, j, j + 1):
+                if 0 <= k < len(signalen):
+                    afstand = abs((signalen[k][0] - vorig_t).total_seconds())
+                    if afstand <= GELDIG and (beste is None or afstand < beste):
+                        beste, app = afstand, signalen[k][1]
+            sleutel = (app or NIET_TOEGEDEELD, t.astimezone().date().isoformat())
             if 0 < gat <= pauze:
                 per[sleutel]["sec"] += gat
                 per[sleutel]["sessies"].add(sessie)
@@ -161,8 +185,12 @@ def _verstuur(regels, gebruiker, machine):
     token = os.environ.get("ONTWIKKELING_TOKEN", "").strip()
     if not token:
         raise SystemExit("ONTWIKKELING_TOKEN ontbreekt; niets verstuurd")
+    # De dagen erbij: de ontvanger vervangt die dagen volledig. Zonder dat
+    # blijft een oude, verkeerd toegedeelde regel staan zodra een applicatie
+    # op zo'n dag helemaal wegvalt.
     body = json.dumps({"gebruiker": gebruiker, "machine": machine,
-                       "pauzegrens": PAUZE, "regels": regels}).encode()
+                       "pauzegrens": PAUZE, "regels": regels,
+                       "dagen": sorted({r["datum"] for r in regels})}).encode()
     req = urllib.request.Request(
         URL, data=body, headers={"Content-Type": "application/json",
                                  "X-Ontwikkeling-Token": token})
