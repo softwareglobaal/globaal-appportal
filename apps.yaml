@@ -66,3 +66,9 @@ apps:
     subdomain: items
     roles: [admin, manager, items]
     status: active
+  - id: angela
+    name: Angela
+    description: Werkdashboard initiatief Suriname - merk, webshop, inkoop, NGO
+    subdomain: angela
+    roles: [admin, manager, angela]
+    status: active

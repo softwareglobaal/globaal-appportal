@@ -1420,9 +1420,46 @@ UPDATE) - historie telt én event-bron voor latere automatisering.
 - Fase 2 (TODO): documentgeneratie VGP/PID (Toolmaster-vervanger),
   sjabloon-beheer-UI, automatisering, Fathom→run-stappen, Second Brain-signalen.
 
+### 14.8 Angela - werkdashboard initiatief Suriname (`angela.globaal.be`)
+Vangbak voor een lopend initiatief: merk en branding rond Angela, een website
+met verkoopsectie, een Shopify-webshop, inkoop via veilingen van gesloten
+bedrijven, de fiscale en juridische vorm (import, belastingnummer, stichting of
+NGO), social media en dataverzameling. Discipline: strategic planning, met
+marketing/communications, procurement en legal/compliance eronder. Het doel is
+lage drempel: tijdens of vlak na een overleg iets kunnen neerleggen, en er
+daarna pas structuur in aanbrengen.
+- **App in deze repo** (`angela/`, niet in een eigen repo omdat de stack-repo
+  ook de compose en nginx draagt). Flask, service **`app-angela`**:3016,
+  nginx `54-angela.conf.template` (`client_max_body_size 50m` voor foto's van
+  de gsm), Authentik via `scripts/add-angela-app.py` (groepen
+  admin/manager/angela). Rol **`angela_writer`** (`ANGELA_DB_URL` in `.env`),
+  bijlagen op volume `angela-data` (`/data/bijlagen`).
+- **Schema `angela`** (migratie 097): `werkstroom` (de vaste indeling: merk,
+  website, webshop, inkoop, fiscaal, social, data), `betrokkene` (koppelbare
+  personenlaag met `persoon_id` → `kern.persoon`), `item` (alles wat gedropt
+  wordt, met `soort` notitie/link/bestand/taak/beslissing, status, deadline,
+  herkomst), `bijlage` (bestanden op schijf, metadata in de db) en `verband`
+  (item-item relatie als eigen record).
+- **Herkomst blijft zichtbaar**: `bron_soort`/`bron_ref`/`bron_titel` op een
+  item, bijvoorbeeld `plaud` met het opname-id van het overleg waar het
+  vandaan komt.
+- **Second Brain**: schema `angela` staat in `_GRAAF_SCHEMAS` van `graaf.py`
+  (globaal-organisatie); `angela.bijlage` staat op de blacklist. De
+  betrokkene→persoon-FK hangt het initiatief aan de bestaande persoon-knopen.
+- Bewuste keuze: **één `item`-tabel met een soort-kolom** in plaats van vijf
+  tabellen. De soorten delen dezelfde velden en de bedieningsvraag is "gooi
+  het ergens neer"; splitsen zou het droppen trager maken. Nadeel: taak- en
+  beslissingsvelden staan leeg bij de andere soorten, en een soort erbij is
+  een CHECK-wijziging.
+
 ---
 
-*Laatst bijgewerkt (avond): 2026-07-03 - **Second Brain schema-gedreven +
+*Laatst bijgewerkt: 2026-07-29 - **Angela-tegel** (§14.8, migratie 097):
+werkdashboard voor het initiatief in Suriname, met werkstromen, items van vijf
+soorten, bijlagen en item-item verbanden; schema `angela` mee in de Second
+Brain-graaf.*
+
+*Eerder (avond): 2026-07-03 - **Second Brain schema-gedreven +
 versiebeheer** (migratie 029): de graaf leest FK's live uit de Postgres-catalogus
 (auto-laag met blacklist en 500-rijen-cap), curatie is data (`kern.graaf_regel`,
 geauditeerd, beheer via graph-pagina door wb-editors), onbenoemde relaties worden

@@ -1,0 +1,13 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name angela.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Werkdashboard initiatief Suriname. Achter forward-auth; de app leest de
+    # gebruiker uit de X-authentik-* headers. Foto's komen vaak van een gsm,
+    # dus de body-limiet staat gelijk aan ANGELA_MAX_UPLOAD_MB in compose.
+    set $app_upstream http://app-angela:3016;
+    client_max_body_size 50m;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

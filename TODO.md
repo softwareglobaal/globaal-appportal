@@ -1037,3 +1037,24 @@ subdiscipline-statistieken.
       data al firma-relaties maar dragen het firma-veld nog niet; toevoegen
       in graaf.py maakt de filter voor de Globaal-firma's even compleet als
       voor Elevait.
+
+## Angela - initiatief Suriname (2026-07-29)
+
+> Tegel `angela.globaal.be` staat (§14.8, migratie 097). Wat er nu nog aan hangt.
+
+- [ ] **Betrokkenen koppelen aan `kern.persoon`**: `angela.betrokkene.persoon_id`
+      is aangelegd maar leeg. Mehdi en Shaniel staan al in kern; Angela en Siam
+      niet. Zodra ze daar bestaan, de vier rijen koppelen zodat de Second
+      Brain-graaf het initiatief aan de juiste persoon-knopen hangt.
+- [ ] **Klikbaarheids-check in CI**: de tegel volgt de regel "elk getal en elke
+      datum is een link", maar er is nog geen geautomatiseerde controle zoals
+      `app/check_klikbaar.py` in globaal-kosten. Overnemen als de tegel groeit.
+- [ ] **Herkomst automatisch vullen**: items dragen `bron_soort`/`bron_ref`, nu
+      alleen handmatig. Een import vanuit de Plaud-opnames (samenvatting en
+      actiepunten per overleg) zou de vangbak zonder overtikwerk vullen.
+- [ ] **Terminologie in `kern.definitie`**: werkstroom, item, drop en verband
+      staan nog niet in het woordenboek. Toevoegen als de tegel blijft.
+- [ ] **Beslissen over `items`-tegel versus webshop**: de bestaande tegel Items
+      (verkoop-etalage tweedehands ICT) en de webshop-werkstroom hier raken
+      elkaar. Als de Shopify-webshop doorgaat, uitzoeken of Items daar de
+      productbron van wordt of dat het twee losse sporen blijven.
