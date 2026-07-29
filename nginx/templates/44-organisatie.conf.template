@@ -31,5 +31,16 @@ server {
         proxy_pass http://app-medewerkers:3007;
     }
 
+    # En voor de gemeten Claude Code-tijd (migratie 094): een optelsom per
+    # dag en per applicatie vanaf de ontwikkelmachine. Grotere body dan de
+    # events hierboven, want het is een lijst met dagen.
+    location = /ontwikkeling/tijd {
+        client_max_body_size 512k;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass http://app-medewerkers:3007;
+    }
+
     include /etc/nginx/snippets/forward-auth.conf;
 }
