@@ -102,6 +102,12 @@ def _tijd(o):
         return None
 
 
+def meet_bestand(pad, pauze=PAUZE):
+    """De bijdrage van een enkel transcript: per (applicatie, dag) seconden,
+    prompts en het aantal sessies (hier altijd 0 of 1)."""
+    return meet([pad], pauze)
+
+
 def meet(paden, pauze=PAUZE):
     """Per (applicatie, dag): actieve seconden, sessies en prompts."""
     per = defaultdict(lambda: {"sec": 0.0, "prompts": 0, "sessies": set()})
@@ -181,19 +187,41 @@ def main():
             stand = {}
 
     paden = sorted(glob.glob(TRANSCRIPTS))
-    # Een transcript dat sinds de vorige ronde niet veranderde, kan de
-    # uitkomst niet veranderen: overslaan scheelt het meeste werk.
-    nieuw = [p_ for p_ in paden
-             if str(os.path.getmtime(p_)) != stand.get("mtimes", {}).get(p_)]
-    if not nieuw and not a.alles:
+    # Een transcript dat sinds de vorige ronde niet veranderde levert dezelfde
+    # bijdrage: die bewaren we, zodat een ronde seconden duurt in plaats van
+    # de hele geschiedenis opnieuw te lezen. Dat maakt automatisch draaien na
+    # elke sessie haalbaar.
+    cache = {} if a.alles else (stand.get("cache") or {})
+    bijdragen, gewijzigd = {}, []
+    for pad in paden:
+        stempel = str(os.path.getmtime(pad))
+        oud = cache.get(pad)
+        if oud and oud.get("mtime") == stempel:
+            bijdragen[pad] = oud
+            continue
+        gewijzigd.append(pad)
+        per_bestand = meet_bestand(pad)
+        bijdragen[pad] = {"mtime": stempel, "regels": [
+            {"repo": app, "datum": dag, "sec": round(w["sec"], 1),
+             "prompts": w["prompts"], "sessies": len(w["sessies"])}
+            for (app, dag), w in per_bestand.items()]}
+    if not gewijzigd and not a.alles:
         print("geen gewijzigde transcripts")
         return
-    # Alle dagen die de gewijzigde transcripts raken opnieuw optellen: een
-    # sessie kan over meerdere dagen lopen, dus per dag is de optelsom pas
-    # juist als alle transcripts van die dag meetellen.
-    per = meet(paden)
 
-    dagen_nieuw = {d for (app, d) in meet(nieuw).keys()} if not a.alles else None
+    # Optellen over alle transcripts: een dag is pas juist als elke sessie van
+    # die dag meetelt.
+    per = defaultdict(lambda: {"sec": 0.0, "prompts": 0, "sessies": 0})
+    for b in bijdragen.values():
+        for r in b["regels"]:
+            w = per[(r["repo"], r["datum"])]
+            w["sec"] += r["sec"]
+            w["prompts"] += r["prompts"]
+            w["sessies"] += r["sessies"]
+    dagen_nieuw = None
+    if not a.alles:
+        dagen_nieuw = {r["datum"] for p_ in gewijzigd
+                       for r in bijdragen[p_]["regels"]}
     regels = []
     for (app, dag), w in sorted(per.items()):
         if a.vanaf and dag < a.vanaf:
@@ -202,7 +230,7 @@ def main():
             continue
         regels.append({"datum": dag, "repo": app,
                        "actieve_sec": int(round(w["sec"])),
-                       "sessies": len(w["sessies"]),
+                       "sessies": int(w["sessies"]),
                        "prompts": int(w["prompts"])})
 
     gebruiker, machine = _wie(), os.environ.get("COMPUTERNAME", "")[:60]
@@ -211,7 +239,7 @@ def main():
         for (app, dag), w in per.items():
             totaal[app] += w["sec"]
         print(f"gebruiker={gebruiker} machine={machine} pauzegrens={PAUZE}s")
-        print(f"transcripts: {len(paden)} ({len(nieuw)} gewijzigd)")
+        print(f"transcripts: {len(paden)} ({len(gewijzigd)} opnieuw gelezen)")
         for app, sec in sorted(totaal.items(), key=lambda x: -x[1]):
             print(f"  {sec / 3600:6.1f} u  {app}")
         print(f"te versturen regels: {len(regels)}")
@@ -220,7 +248,7 @@ def main():
     antwoord = _verstuur(regels, gebruiker, machine) if regels else {"ok": True,
                                                                     "rijen": 0}
     os.makedirs(os.path.dirname(STAND), exist_ok=True)
-    json.dump({"mtimes": {p_: str(os.path.getmtime(p_)) for p_ in paden},
+    json.dump({"cache": bijdragen,
                "laatste": datetime.now(timezone.utc).isoformat()},
               open(STAND, "w", encoding="utf-8"))
     print(f"verstuurd: {len(regels)} regels, antwoord: {antwoord}")
