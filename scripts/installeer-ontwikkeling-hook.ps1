@@ -37,64 +37,19 @@ if (-not $py) {
 }
 Write-Host ("Python gevonden: " + $py.Source)
 
-# 2. De hook zelf wegschrijven.
+# 2. De hook uit de repo kopieren. Bewust NIET meer inline in dit script: die
+#    kopie liep achter op scripts/ontwikkeling-event.py en stuurde de
+#    machinenaam niet mee, waardoor het vangnet machine-naar-mens niets kon
+#    oplossen. Een bron, geen tweede versie.
 $hookDir = Join-Path $HOME ".claude\hooks"
 New-Item -ItemType Directory -Force -Path $hookDir | Out-Null
+$hookBron = Join-Path $PSScriptRoot "ontwikkeling-event.py"
 $hookPad = Join-Path $hookDir "ontwikkeling-event.py"
-$hook = @'
-"""Claude Code-hook: meldt sessie-metadata aan het organisatie-dashboard
-(ontwikkel-statistieken, tab Ontwikkeling). Alleen metadata, nooit inhoud.
-De hook mag een sessie nooit blokkeren: fouten worden ingeslikt, exitcode 0."""
-import json
-import os
-import subprocess
-import sys
-import urllib.request
-
-URL = os.environ.get("ONTWIKKELING_URL",
-                     "https://organisatie.globaal.be/ontwikkeling/event")
-
-
-def _stil(args):
-    try:
-        r = subprocess.run(args, capture_output=True, text=True, timeout=5)
-        return (r.stdout or "").strip()
-    except Exception:
-        return ""
-
-
-def main():
-    token = os.environ.get("ONTWIKKELING_TOKEN", "").strip()
-    if not token:
-        return
-    event = sys.argv[1] if len(sys.argv) > 1 else "prompt"
-    try:
-        invoer = json.loads(sys.stdin.read() or "{}")
-    except Exception:
-        invoer = {}
-    sessie = str(invoer.get("session_id", ""))[:120]
-    cwd = invoer.get("cwd") or os.getcwd()
-    top = _stil(["git", "-C", cwd, "rev-parse", "--show-toplevel"]) or cwd
-    repo = os.path.basename(top.rstrip("/\\")) or "onbekend"
-    wie = (_stil(["git", "-C", cwd, "config", "user.email"])
-           or os.environ.get("USERNAME") or "onbekend")
-    body = json.dumps({"event": event, "repo": repo,
-                       "gebruiker": wie, "sessie": sessie}).encode()
-    req = urllib.request.Request(
-        URL, data=body,
-        headers={"Content-Type": "application/json",
-                 "X-Ontwikkeling-Token": token})
-    urllib.request.urlopen(req, timeout=4).read()
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
-'@
-Set-Content -Path $hookPad -Value $hook -Encoding utf8
+if (-not (Test-Path $hookBron)) {
+    Write-Host "FOUT: ontwikkeling-event.py staat niet naast dit script." -ForegroundColor Red
+    exit 1
+}
+Copy-Item $hookBron $hookPad -Force
 Write-Host ("Hook geschreven: " + $hookPad)
 
 # 2b. De tijdmeter erbij (migratie 094). Dit is de bron die tijd PER APPLICATIE
