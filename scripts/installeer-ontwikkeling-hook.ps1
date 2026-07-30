@@ -5,15 +5,28 @@
 # nooit bestandsnamen.
 #
 # Draaien (PowerShell, in de map waar dit script staat):
-#     .\installeer-ontwikkeling-hook.ps1 -Token "<het gedeelde token>"
+#     .\installeer-ontwikkeling-hook.ps1 -Token "<het gedeelde token>" `
+#         -Email "jouw.naam@globaal.be" -Naam "Jouw Naam"
 #
 # Het script is idempotent: nog eens draaien werkt gewoon en overschrijft
 # alleen onze eigen hook-regels. Bestaande hooks van iets anders blijven staan.
+#
+# Waarom het e-mailadres erbij (2026-07-30): een gedeeld GitHub-account is geen
+# probleem, want de auteur staat PER COMMIT in git. Maar dan moet elke machine
+# wel een eigen git-identiteit hebben. Zonder die stap belandt het werk op
+# software@globaal.be en valt het op niemand.
 param(
-    [Parameter(Mandatory = $true)][string]$Token
+    [Parameter(Mandatory = $true)][string]$Token,
+    [Parameter(Mandatory = $true)][string]$Email,
+    [string]$Naam = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Email -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') {
+    Write-Host "FOUT: '$Email' ziet er niet uit als een e-mailadres." -ForegroundColor Red
+    exit 1
+}
 
 # 1. Python moet aanroepbaar zijn; de vorige hook draaide op node en dat stond
 #    op de betrokken machine niet op het PATH, waardoor hij stil faalde.
@@ -84,11 +97,33 @@ if __name__ == "__main__":
 Set-Content -Path $hookPad -Value $hook -Encoding utf8
 Write-Host ("Hook geschreven: " + $hookPad)
 
-# 3. Token als gebruikers-omgevingsvariabele. setx knipt lange waarden af en
+# 2b. De tijdmeter erbij (migratie 094). Dit is de bron die tijd PER APPLICATIE
+#     geeft; de hook hierboven meet alleen wandkloktijd per werkmap. Zonder deze
+#     stap staat een machine wel in de lijst maar levert hij geen uren per app.
+$tijdBron = Join-Path $PSScriptRoot "ontwikkeling-tijd.py"
+$tijdPad = Join-Path $hookDir "ontwikkeling-tijd.py"
+if (Test-Path $tijdBron) {
+    Copy-Item $tijdBron $tijdPad -Force
+    Write-Host ("Tijdmeter geschreven: " + $tijdPad)
+} else {
+    Write-Host "LET OP: ontwikkeling-tijd.py niet gevonden naast dit script; tijd per applicatie wordt niet gemeten." -ForegroundColor Yellow
+    $tijdPad = $null
+}
+
+# 3. Token, identiteit en git-configuratie. setx knipt lange waarden af en
 #    meldt toch succes, daarom deze weg.
 [Environment]::SetEnvironmentVariable("ONTWIKKELING_TOKEN", $Token, "User")
 $env:ONTWIKKELING_TOKEN = $Token
-Write-Host "Token gezet als gebruikers-omgevingsvariabele."
+[Environment]::SetEnvironmentVariable("ONTWIKKELING_GEBRUIKER", $Email, "User")
+$env:ONTWIKKELING_GEBRUIKER = $Email
+Write-Host "Token en identiteit gezet als gebruikers-omgevingsvariabelen."
+
+# De globale git-identiteit is de hoofdsleutel: die reist mee met elke commit,
+# ook als er via een gedeeld GitHub-account gepusht wordt.
+& git config --global user.email $Email
+if ($Naam) { & git config --global user.name $Naam }
+$gitMail = (& git config --global user.email)
+Write-Host ("Git-identiteit: " + $gitMail + $(if ($Naam) { " (" + $Naam + ")" } else { "" }))
 
 # 4. De hook koppelen in settings.json, zonder andere hooks weg te gooien.
 $settingsPad = Join-Path $HOME ".claude\settings.json"
@@ -107,19 +142,29 @@ $koppeling = @{ "SessionStart" = "start"; "UserPromptSubmit" = "prompt";
                 "Stop" = "einde"; "SessionEnd" = "einde" }
 
 foreach ($slot in $koppeling.Keys) {
-    $regel = [PSCustomObject]@{
-        matcher = ""
-        hooks   = @([PSCustomObject]@{
+    $stappen = @([PSCustomObject]@{
+        type    = "command"
+        command = ($cmd + " " + $koppeling[$slot])
+        timeout = 10
+    })
+    # Bij het einde van een sessie ook de tijdmeter: die leest de transcripts en
+    # stuurt alleen een optelsom per applicatie per dag.
+    if ($tijdPad -and $slot -eq "SessionEnd") {
+        $stappen += [PSCustomObject]@{
             type    = "command"
-            command = ($cmd + " " + $koppeling[$slot])
-            timeout = 10
-        })
+            command = ('python "' + $tijdPad + '"')
+            timeout = 120
+        }
     }
-    # Bestaande regels van ONZE hook eruit, andere hooks laten staan.
+    $regel = [PSCustomObject]@{ matcher = ""; hooks = $stappen }
+    # Bestaande regels van ONZE hooks eruit, andere hooks laten staan.
     $bestaand = @()
     if ($settings.hooks.PSObject.Properties.Name -contains $slot) {
         $bestaand = @($settings.hooks.$slot | Where-Object {
-            -not ($_.hooks | Where-Object { $_.command -like "*ontwikkeling-event*" })
+            -not ($_.hooks | Where-Object {
+                $_.command -like "*ontwikkeling-event*" -or
+                $_.command -like "*ontwikkeling-tijd*"
+            })
         })
     }
     $nieuw = @($bestaand) + @($regel)
@@ -135,11 +180,14 @@ Write-Host ("Hooks gekoppeld in: " + $settingsPad)
 # 5. Proefmelding, zodat we meteen weten of het werkt en onder welke naam.
 #    Via cmd en niet via een PowerShell-pipe: PowerShell levert de invoer niet
 #    door aan een extern programma, waardoor de proef leeg zou aankomen.
-$identiteit = (& git config user.email) 2>$null
-if (-not $identiteit) { $identiteit = $env:USERNAME }
 & cmd /c ('echo {"session_id":"installatietest"} | python "' + $hookPad + '" start')
 Write-Host ""
-Write-Host "Klaar. Meld dit door aan AI en ICT:" -ForegroundColor Green
-Write-Host ("  identiteit die gemeten wordt: " + $identiteit)
+Write-Host "Klaar. Meld deze twee regels door aan AI en ICT:" -ForegroundColor Green
+Write-Host ("  identiteit: " + $gitMail)
+Write-Host ("  machine:    " + $env:COMPUTERNAME)
+Write-Host ""
+Write-Host "Die twee worden gekoppeld aan jouw persoon (ontwikkeling.gebruiker_koppeling"
+Write-Host "en machine_koppeling); tot dan staat je werk op de tab Ontwikkeling onder"
+Write-Host "'Nog te koppelen'."
 Write-Host ""
 Write-Host "Herstart Claude Code; de instellingen worden bij het opstarten gelezen."

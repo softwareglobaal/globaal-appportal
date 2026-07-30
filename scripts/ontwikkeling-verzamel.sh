@@ -46,17 +46,28 @@ vind_repos | while IFS='|' read -r map repo; do
   # van de bouwtijd, naast de gemeten sessietijd als ondergrens. git log komt
   # van nieuw naar oud, dus het verschil met de vorige commit van dezelfde dag
   # en auteur is het gat ertussen; gaten boven het uur zijn pauze.
+  # Het onderwerp (%s) staat erbij voor het onderscheid bouw/onderhoud
+  # (migratie 099): prefix feat = nieuwbouw, fix/docs/chore/refactor/test/
+  # style/perf = onderhoud. Wie geen prefix gebruikt telt alleen in het totaal;
+  # dat is eerlijker dan gokken.
   git -C "$map" log --since="$VANAF" --no-merges \
-      --pretty="C|%ad|%at|%ae" --date=short --numstat 2>/dev/null |
+      --pretty="C|%ad|%at|%ae|%s" --date=short --numstat 2>/dev/null |
   awk -F'|' -v repo="$repo" '
     /^C\|/ {
       datum = $2; ts = $3 + 0; email = tolower($4);
+      # Het onderwerp kan zelf een | bevatten; alles vanaf veld 5 hoort erbij.
+      onderwerp = $5;
+      for (i = 6; i <= NF; i++) onderwerp = onderwerp "|" $i;
       s = datum "|" email;
       if (s in vorige) {
         gat = vorige[s] - ts;
         if (gat > 0 && gat <= 3600) venster[s] += gat;
       }
       vorige[s] = ts;
+      soort = tolower(onderwerp);
+      sub(/^[^a-z]*/, "", soort);
+      if (soort ~ /^feat/) bouw[s]++;
+      else if (soort ~ /^(fix|docs|chore|refactor|test|style|perf)/) onderhoud[s]++;
       c[s]++; next }
     NF && datum {
       split($0, kol, "\t");
@@ -69,8 +80,9 @@ vind_repos | while IFS='|' read -r map repo; do
         # e-mail als SQL-string: quotes verdubbelen kan awk lastig; auteurs
         # zijn eigen teamleden, maar we weren aanhalingstekens voor de zekerheid.
         gsub(/\x27/, "", d[2]);
-        printf "INSERT INTO ontwikkeling.git_dag (datum, repo, gebruiker, commits, regels_plus, regels_min, commit_venster_sec) VALUES (\x27%s\x27, \x27%s\x27, \x27%s\x27, %d, %d, %d, %d) ON CONFLICT (datum, repo, gebruiker) DO UPDATE SET commits = EXCLUDED.commits, regels_plus = EXCLUDED.regels_plus, regels_min = EXCLUDED.regels_min, commit_venster_sec = EXCLUDED.commit_venster_sec, bijgewerkt_op = now();\n",
-               d[1], repo, d[2], c[k], plus[k] + 0, min[k] + 0, venster[k] + 0;
+        printf "INSERT INTO ontwikkeling.git_dag (datum, repo, gebruiker, commits, commits_bouw, commits_onderhoud, regels_plus, regels_min, commit_venster_sec) VALUES (\x27%s\x27, \x27%s\x27, \x27%s\x27, %d, %d, %d, %d, %d, %d) ON CONFLICT (datum, repo, gebruiker) DO UPDATE SET commits = EXCLUDED.commits, commits_bouw = EXCLUDED.commits_bouw, commits_onderhoud = EXCLUDED.commits_onderhoud, regels_plus = EXCLUDED.regels_plus, regels_min = EXCLUDED.regels_min, commit_venster_sec = EXCLUDED.commit_venster_sec, bijgewerkt_op = now();\n",
+               d[1], repo, d[2], c[k], bouw[k] + 0, onderhoud[k] + 0,
+               plus[k] + 0, min[k] + 0, venster[k] + 0;
       }
     }' >> "$TMP"
 done

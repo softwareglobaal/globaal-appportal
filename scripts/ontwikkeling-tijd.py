@@ -29,6 +29,7 @@ import argparse
 import glob
 import json
 import os
+import platform
 import subprocess
 import urllib.request
 from collections import defaultdict
@@ -186,7 +187,16 @@ def _wie():
             wie = (r.stdout or "").strip()
         except Exception:
             wie = ""
-    return (wie or os.environ.get("USERNAME") or "onbekend").lower()
+    return (wie or os.environ.get("USERNAME") or os.environ.get("USER")
+            or "onbekend").lower()
+
+
+def _machine():
+    """COMPUTERNAME bestaat alleen op Windows; op macOS en Linux is de
+    hostnaam de bron. Zonder dit blijft de machine leeg en kan het vangnet
+    machine-naar-mens (migratie 099) niets oplossen."""
+    return (os.environ.get("COMPUTERNAME")
+            or platform.node() or "")[:60]
 
 
 def _verstuur(regels, gebruiker, machine):
@@ -269,7 +279,7 @@ def main():
                        "sessies": int(w["sessies"]),
                        "prompts": int(w["prompts"])})
 
-    gebruiker, machine = _wie(), os.environ.get("COMPUTERNAME", "")[:60]
+    gebruiker, machine = _wie(), _machine()
     if a.droog:
         totaal = defaultdict(float)
         for (app, dag), w in per.items():

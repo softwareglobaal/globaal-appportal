@@ -1174,6 +1174,23 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   CASCADE** gekregen. Rollen staan bewust niet in de graaf: classificatie, geen
   organogram. Detail: README van `globaal-organisatie`.
 
+- **Bouwtijd per medewerker per applicatie (schema `ontwikkeling`, migraties
+  074/094/096/099).** Drie bronnen naast elkaar in de weergave
+  `ontwikkeling.dag`, nooit opgeteld: `git_dag` (commits, regels en het
+  commit-venster, gevuld door `scripts/ontwikkeling-verzamel.sh` via cron op de
+  host), `cc_event` (sessies en prompts uit de Claude Code-hooks) en `cc_tijd`
+  (gemeten tijd per app, toegedeeld op aangeraakte bestanden door
+  `ontwikkeling-tijd.py` op de dev-machine; alleen een optelsom verlaat de
+  machine). Attributie: **de identiteit per commit is de hoofdsleutel**, een
+  gedeeld GitHub-account is dus geen bezwaar; `gebruiker_koppeling.soort`
+  scheidt `mens` van `agent` en `gedeeld`, en `machine_koppeling` is het vangnet
+  voor werk zonder herkenbare identiteit (migratie 099). Wat op niemand valt is
+  een signaal (`bouwwerk_zonder_mens`). `git_dag.commits_bouw` en
+  `commits_onderhoud` splitsen nieuwbouw van onderhoud op de commit-prefix.
+  Uitrol op een nieuwe machine: `scripts/installeer-ontwikkeling-hook.ps1
+  -Token ... -Email ... -Naam ...` (zet git-identiteit, token, beide hooks).
+  Nooit sessie-detail of gespreksinhoud, alleen per persoon per dag.
+
 ### 14.3 Authentik-koppeling (Toegang-panel)
 - Bestaande Authentik-accounts zijn **handmatig gekoppeld** aan hun persoon door
   `authentik_username` + `authentik_sub` (de Authentik-`uuid`) te zetten. Gekoppelde
