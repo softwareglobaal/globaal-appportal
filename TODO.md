@@ -110,7 +110,7 @@
       plan om die afhankelijkheid te verlagen. Mehdi noemt zichzelf expliciet
       als voorbeeld: "als ik doodval mag het niet stilvallen."
 - [x] **Organisatieregister, bronkeuze en bouw** - GEBOUWD (2026-07-30,
-      migratie 097). Het STOP-besluit van 28-07 (eerst een bron, dan bouwen) is
+      migratie 098). Het STOP-besluit van 28-07 (eerst een bron, dan bouwen) is
       afgerond: **APQC PCF v7.4** als skelet, **ESCO** voor de rollen, **EN ISO
       9001:2015** als keurmerk. Structuur v1.0 staat bevroren in de database (17
       pijlers, 57 subpijlers, 199 taken, 121 rollen in 127 plaatsingen), met het
@@ -1052,7 +1052,7 @@ subdiscipline-statistieken.
 
 ## Angela - initiatief Suriname (2026-07-29)
 
-> Tegel `angela.globaal.be` staat (§14.8, migratie 097). Wat er nu nog aan hangt.
+> Tegel `angela.globaal.be` staat (§14.8, migratie 098). Wat er nu nog aan hangt.
 
 - [ ] **Betrokkenen koppelen aan `kern.persoon`**: `angela.betrokkene.persoon_id`
       is aangelegd maar leeg. Mehdi en Shaniel staan al in kern; Angela en Siam

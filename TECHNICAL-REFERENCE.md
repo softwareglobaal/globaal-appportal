@@ -1156,7 +1156,7 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   ook tegen andere *.<domein>-subdomeinen) en een **audit-log** naar stdout
   (`FIRMA_UPDATE user=… persoon=… werkgever=… diensten=…`, plus `WRITE_DENIED`/
   `CSRF_REJECT`), zichtbaar via `docker compose logs app-medewerkers`.
-- **Organisatieregister op de Disciplines-tab (structuur v1.0, migratie 097,
+- **Organisatieregister op de Disciplines-tab (structuur v1.0, migratie 098,
   2026-07-30).** Vier lagen in `kern`: `discipline` (17 pijlers, met `groep` A-D,
   `bron` en de vlag `kern` voor de kernpijler), `subdiscipline` (57 subpijlers met
   `pcf_code` en `iso_clausules`), `subelement` (199 taken) en `functie` (121
@@ -1451,7 +1451,7 @@ daarna pas structuur in aanbrengen.
   de gsm), Authentik via `scripts/add-angela-app.py` (groepen
   admin/manager/angela). Rol **`angela_writer`** (`ANGELA_DB_URL` in `.env`),
   bijlagen op volume `angela-data` (`/data/bijlagen`).
-- **Schema `angela`** (migratie 097): `werkstroom` (de vaste indeling: merk,
+- **Schema `angela`** (migratie 098): `werkstroom` (de vaste indeling: merk,
   website, webshop, inkoop, fiscaal, social, data), `betrokkene` (koppelbare
   personenlaag met `persoon_id` → `kern.persoon`), `item` (alles wat gedropt
   wordt, met `soort` notitie/link/bestand/taak/beslissing, status, deadline,
@@ -1471,7 +1471,7 @@ daarna pas structuur in aanbrengen.
 
 ---
 
-*Laatst bijgewerkt: 2026-07-29 - **Angela-tegel** (§14.8, migratie 097):
+*Laatst bijgewerkt: 2026-07-29 - **Angela-tegel** (§14.8, migratie 098):
 werkdashboard voor het initiatief in Suriname, met werkstromen, items van vijf
 soorten, bijlagen en item-item verbanden; schema `angela` mee in de Second
 Brain-graaf.*

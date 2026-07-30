@@ -26,7 +26,7 @@ pijlers die elke servicefirma nodig heeft - een firma zonder invulling laat
 de pijler leeg, maar het raamwerk verandert nooit (ziekenhuis-model: je
 ziet meteen wat ontbreekt).
 - **Bij ons:** de 17 rijen in `kern.discipline`, sinds **structuur v1.0**
-  (migratie 097, 2026-07-30) in vier groepen: **A Market & clients** (Sales &
+  (migratie 098, 2026-07-30) in vier groepen: **A Market & clients** (Sales &
   Business Development, Marketing & Communications, Customer Service &
   Aftercare, Partnerships & External Relations), **B Value creation &
   delivery** (Client Work - Service Lines, Projects Programme & Change, Quality

@@ -1,4 +1,4 @@
--- 097: het organisatieregister schakelt om naar APQC PCF v7.4 als skelet,
+-- 098: het organisatieregister schakelt om naar APQC PCF v7.4 als skelet,
 -- ESCO als rollenbron en ISO 9001 als keurmerk. Dit is de uitvoering van het
 -- STOP-besluit van 28-07 (eerst een bron kiezen, dan bouwen); de VN-
 -- verankering van 088-091 vervalt daarmee als actieve laag.
@@ -32,7 +32,7 @@ ALTER INDEX kern.ix_subdiscipline_discipline RENAME TO ix_subdiscipline_vn_disci
 ALTER INDEX kern.subelement_pkey           RENAME TO subelement_vn_pkey;
 ALTER INDEX kern.functie_pkey              RENAME TO functie_vn_pkey;
 COMMENT ON TABLE kern.subdiscipline_vn IS
-  'Archief: subdisciplineregister v3.0 (VN-verankerd, migraties 079-088). Vervangen door het PCF-register in 097.';
+  'Archief: subdisciplineregister v3.0 (VN-verankerd, migraties 079-088). Vervangen door het PCF-register in 098.';
 COMMENT ON TABLE kern.subelement_vn IS
   'Archief: sub-elementen bij het VN-register (migratie 090).';
 COMMENT ON TABLE kern.functie_vn IS
@@ -65,55 +65,55 @@ UPDATE kern.discipline SET sleutel = 'strategie_duurzaamheid' WHERE sleutel = 's
 UPDATE kern.discipline SET sleutel = 'risk_continuiteit' WHERE sleutel = 'risk_management';
 
 UPDATE kern.discipline SET code = 'A1', naam_en = 'Sales & Business Development', naam = 'Verkoop en business development', groep = 'A',
-       bron = 'structuur: register v2 (bevroren) · APQC PCF v7.4 - cat. 3 · ESCO · wet van 17 juni 2016', kern = false, volgorde = 1, bijgewerkt_door = 'migratie 097'
+       bron = 'structuur: register v2 (bevroren) · APQC PCF v7.4 - cat. 3 · ESCO · wet van 17 juni 2016', kern = false, volgorde = 1, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'sales_bizdev';
 UPDATE kern.discipline SET code = 'A2', naam_en = 'Marketing & Communications', naam = 'Marketing en communicatie', groep = 'A',
-       bron = 'APQC PCF v7.4 - cat. 3, 12, 7 · ESCO · Verordening (EU) 2016/679', kern = false, volgorde = 2, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 3, 12, 7 · ESCO · Verordening (EU) 2016/679', kern = false, volgorde = 2, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'marketing_communicatie';
 UPDATE kern.discipline SET code = 'A3', naam_en = 'Customer Service & Aftercare', naam = 'Klantenservice en nazorg', groep = 'A',
-       bron = 'APQC PCF v7.4 - cat. 6 · ESCO', kern = false, volgorde = 3, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 6 · ESCO', kern = false, volgorde = 3, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'customer_service';
 UPDATE kern.discipline SET code = 'A4', naam_en = 'Partnerships & External Relations', naam = 'Partners en externe relaties', groep = 'A',
-       bron = 'APQC PCF v7.4 - cat. 12, 5', kern = false, volgorde = 4, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 12, 5', kern = false, volgorde = 4, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'partnerships_relaties';
 UPDATE kern.discipline SET code = 'B1', naam_en = 'Client Work - Service Lines', naam = 'Klantwerk: onze dienstenlijnen', groep = 'B',
-       bron = 'APQC PCF v7.4 - cat. 5 (zie kamer 5.0) · wetten 20/2/1939 & 26/6/1963 · gewestelijke EPB-regelgeving · oud BW 1792/2270', kern = true, volgorde = 5, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 5 (zie kamer 5.0) · wetten 20/2/1939 & 26/6/1963 · gewestelijke EPB-regelgeving · oud BW 1792/2270', kern = true, volgorde = 5, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'client_work';
 UPDATE kern.discipline SET code = 'B2', naam_en = 'Projects, Programme & Change', naam = 'Projecten, programma en verandering', groep = 'B',
-       bron = 'APQC PCF v7.4 - cat. 13 · ESCO · Andersen, Grude & Haug - GDPM', kern = false, volgorde = 6, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 13 · ESCO · Andersen, Grude & Haug - GDPM', kern = false, volgorde = 6, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'projecten_programma';
 UPDATE kern.discipline SET code = 'B3', naam_en = 'Quality Management', naam = 'Kwaliteitsmanagement', groep = 'B',
-       bron = 'APQC PCF v7.4 - cat. 13, 5, 11 · ESCO · EN ISO 9001:2015', kern = false, volgorde = 7, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 13, 5, 11 · ESCO · EN ISO 9001:2015', kern = false, volgorde = 7, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'quality_assurance';
 UPDATE kern.discipline SET code = 'B4', naam_en = 'Innovation & New Services', naam = 'Innovatie en nieuwe diensten', groep = 'B',
-       bron = 'APQC PCF v7.4 - cat. 2 · ESCO', kern = false, volgorde = 8, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 2 · ESCO', kern = false, volgorde = 8, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'innovatie_diensten';
 UPDATE kern.discipline SET code = 'B5', naam_en = 'Procurement & Logistics', naam = 'Inkoop en logistiek', groep = 'B',
-       bron = 'APQC PCF v7.4 - cat. 4 · ESCO', kern = false, volgorde = 9, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 4 · ESCO', kern = false, volgorde = 9, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'inkoop_logistiek';
 UPDATE kern.discipline SET code = 'C1', naam_en = 'HR & Well-being', naam = 'HR en welzijn', groep = 'C',
-       bron = 'APQC PCF v7.4 - cat. 7, 13, 9 · ESCO · welzijnswet van 4 augustus 1996', kern = false, volgorde = 10, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 7, 13, 9 · ESCO · welzijnswet van 4 augustus 1996', kern = false, volgorde = 10, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'hr_welzijn';
 UPDATE kern.discipline SET code = 'C2', naam_en = 'Finance & Accounting', naam = 'Financien en boekhouding', groep = 'C',
-       bron = 'APQC PCF v7.4 - cat. 9 · ESCO · richtlijn 2013/34/EU', kern = false, volgorde = 11, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 9 · ESCO · richtlijn 2013/34/EU', kern = false, volgorde = 11, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'finance_accounting';
 UPDATE kern.discipline SET code = 'C3', naam_en = 'IT & Digital Security', naam = 'IT en digitale beveiliging', groep = 'C',
-       bron = 'APQC PCF v7.4 - cat. 8 · ESCO · GDPR · NIS2 · AI-verordening', kern = false, volgorde = 12, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 8 · ESCO · GDPR · NIS2 · AI-verordening', kern = false, volgorde = 12, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'it_security';
 UPDATE kern.discipline SET code = 'C4', naam_en = 'Data, Analytics & Knowledge', naam = 'Data, analyse en kennis', groep = 'C',
-       bron = 'APQC PCF v7.4 - cat. 8, 13 · ESCO · bewust vollediger: hier is de kennis vandaag het kleinst', kern = false, volgorde = 13, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 8, 13 · ESCO · bewust vollediger: hier is de kennis vandaag het kleinst', kern = false, volgorde = 13, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'data_kennis';
 UPDATE kern.discipline SET code = 'C5', naam_en = 'Office & Facilities', naam = 'Kantoor en facilities', groep = 'C',
-       bron = 'APQC PCF v7.4 - cat. 10 · ESCO', kern = false, volgorde = 14, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 10 · ESCO', kern = false, volgorde = 14, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'office_facilities';
 UPDATE kern.discipline SET code = 'D1', naam_en = 'Strategy & Sustainability', naam = 'Strategie en duurzaamheid', groep = 'D',
-       bron = 'APQC PCF v7.4 - cat. 1, 13 · ESCO · Ged. Verordening (EU) 2023/2772', kern = false, volgorde = 15, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 1, 13 · ESCO · Ged. Verordening (EU) 2023/2772', kern = false, volgorde = 15, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'strategie_duurzaamheid';
 UPDATE kern.discipline SET code = 'D2', naam_en = 'Legal & Compliance', naam = 'Juridisch en compliance', groep = 'D',
-       bron = 'APQC PCF v7.4 - cat. 12, 11 · ESCO · WVV · wet van 28 november 2022', kern = false, volgorde = 16, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 12, 11 · ESCO · WVV · wet van 28 november 2022', kern = false, volgorde = 16, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'legal_compliance';
 UPDATE kern.discipline SET code = 'D3', naam_en = 'Risk & Continuity', naam = 'Risico en continuiteit', groep = 'D',
-       bron = 'APQC PCF v7.4 - cat. 11, 8 · ESCO · achtergrond: EN ISO 31000 (bijlage deel 6)', kern = false, volgorde = 17, bijgewerkt_door = 'migratie 097'
+       bron = 'APQC PCF v7.4 - cat. 11, 8 · ESCO · achtergrond: EN ISO 31000 (bijlage deel 6)', kern = false, volgorde = 17, bijgewerkt_door = 'migratie 098'
    WHERE sleutel = 'risk_continuiteit';
 
 -- 2b. Woordenboek: dezelfde sleutels, nieuwe termen en definities ---------
@@ -171,7 +171,7 @@ CREATE TABLE kern.functie_status (
     volgorde integer NOT NULL
 );
 COMMENT ON TABLE kern.functie_status IS
-  'De drie statussen van een rol in het register (migratie 097).';
+  'De drie statussen van een rol in het register (migratie 098).';
 INSERT INTO kern.functie_status (code, naam, uitleg, volgorde) VALUES
 ('MUST',  'must',  'Moet vandaag belegd zijn: een pet, een collega of een externe partij.', 1),
 ('OPT',   'opt',   'Optioneel: nuttig, niet noodzakelijk.', 2),
@@ -188,7 +188,7 @@ CREATE TABLE kern.subdiscipline (
 );
 CREATE INDEX ix_subdiscipline_discipline ON kern.subdiscipline (discipline_sleutel, volgorde);
 COMMENT ON TABLE kern.subdiscipline IS
-  'Subpijlers van het organisatieregister v1.0, geindexeerd op APQC PCF v7.4 met de ISO 9001-clausules erbij (migratie 097).';
+  'Subpijlers van het organisatieregister v1.0, geindexeerd op APQC PCF v7.4 met de ISO 9001-clausules erbij (migratie 098).';
 COMMENT ON COLUMN kern.subdiscipline.pcf_code IS 'Nummer(s) uit APQC PCF v7.4, het skelet van de structuur.';
 COMMENT ON COLUMN kern.subdiscipline.iso_clausules IS 'ISO 9001:2015-clausules die op deze subpijler landen; leeg = geen.';
 
@@ -199,7 +199,7 @@ CREATE TABLE kern.subelement (
     PRIMARY KEY (subdiscipline_code, volgorde)
 );
 COMMENT ON TABLE kern.subelement IS
-  'Taken per subpijler: de sub-elementen zoals het register ze opsomt (migratie 097).';
+  'Taken per subpijler: de sub-elementen zoals het register ze opsomt (migratie 098).';
 
 CREATE TABLE kern.functie (
     code            text    NOT NULL PRIMARY KEY,
@@ -211,7 +211,7 @@ CREATE TABLE kern.functie (
     volgorde        integer NOT NULL
 );
 COMMENT ON TABLE kern.functie IS
-  'Rollenbibliotheek: elke rol een keer, met status, agent-kandidatuur en de ESCO-vlag (migratie 097).';
+  'Rollenbibliotheek: elke rol een keer, met status, agent-kandidatuur en de ESCO-vlag (migratie 098).';
 COMMENT ON COLUMN kern.functie.status IS 'MUST = moet vandaag belegd zijn, OPT = optioneel, TOETS = ESCO-ontdekking, beoordelen en schrappen.';
 COMMENT ON COLUMN kern.functie.agent_kandidaat IS 'Sterretje in het register: kandidaat om (deels) door een agent gedaan te worden.';
 COMMENT ON COLUMN kern.functie.esco IS 'Beroep gedefinieerd in ESCO. Voorkeurslabel en URI zijn nog niet geverifieerd.';
@@ -224,7 +224,7 @@ CREATE TABLE kern.subdiscipline_functie (
 );
 CREATE INDEX ix_subdiscipline_functie_functie ON kern.subdiscipline_functie (functie_code);
 COMMENT ON TABLE kern.subdiscipline_functie IS
-  'Waar een rol woont: veel-op-veel tussen subpijler en rol (migratie 097). Een rol kan in meer dan een subpijler wonen.';
+  'Waar een rol woont: veel-op-veel tussen subpijler en rol (migratie 098). Een rol kan in meer dan een subpijler wonen.';
 
 CREATE TABLE kern.register_wijziging (
     volgorde integer NOT NULL PRIMARY KEY,
@@ -234,7 +234,7 @@ CREATE TABLE kern.register_wijziging (
     tekst    text    NOT NULL
 );
 COMMENT ON TABLE kern.register_wijziging IS
-  'Wijzigingslogboek van het register: de bevriezingsregels en elke wijziging met datum en reden (migratie 097).';
+  'Wijzigingslogboek van het register: de bevriezingsregels en elke wijziging met datum en reden (migratie 098).';
 
 -- 4. Inhoud ---------------------------------------------------------------
 INSERT INTO kern.subdiscipline (code, discipline_sleutel, naam, definitie, pcf_code, iso_clausules, volgorde) VALUES
