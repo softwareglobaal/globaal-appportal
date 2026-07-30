@@ -16,6 +16,7 @@ korte allowlist en voert alleen dan de veilige actie uit, met verificatie
 achteraf. Deze app legt alleen de beslissing en de uitkomst vast.
 """
 import os
+import json
 import sqlite3
 from datetime import datetime, timezone
 
