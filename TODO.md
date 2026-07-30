@@ -109,6 +109,18 @@
       knooppunt dat het stilvalt als die persoon wegvalt, en een stapsgewijs
       plan om die afhankelijkheid te verlagen. Mehdi noemt zichzelf expliciet
       als voorbeeld: "als ik doodval mag het niet stilvallen."
+- [x] **Organisatieregister, bronkeuze en bouw** - GEBOUWD (2026-07-30,
+      migratie 097). Het STOP-besluit van 28-07 (eerst een bron, dan bouwen) is
+      afgerond: **APQC PCF v7.4** als skelet, **ESCO** voor de rollen, **EN ISO
+      9001:2015** als keurmerk. Structuur v1.0 staat bevroren in de database (17
+      pijlers, 57 subpijlers, 199 taken, 121 rollen in 127 plaatsingen), met het
+      wijzigingslogboek in `kern.register_wijziging`. Het VN-register is
+      gearchiveerd, niet verwijderd.
+- [ ] **ESCO-labels en URI's verifieren** per rol tegen de ESCO-portal. Nu draagt
+      een rol alleen de vlag "in ESCO gedefinieerd"; het openstaande
+      validatiepunt uit het aangeleverde register.
+- [ ] **Rollen schrappen die niet van toepassing zijn**: 70 van de 121 rollen
+      staan op TOETS. Dat is teamwerk met Mehdi, geen bouwwerk.
 - [ ] **Subdisciplines tonen onder een discipline** (HR heeft eigen
       sub-dashboards: DeskTime, salaris, medewerkers).
 - [ ] **Voortgang per discipline meten**, en het onderscheid vasthouden tussen

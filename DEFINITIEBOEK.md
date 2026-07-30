@@ -19,22 +19,54 @@
 
 ## De termen
 
-### Discipline
-Een **vast bedrijfsdomein** uit het 17-disciplines-raamwerk (Unified Dashboard,
+### Discipline (pijler)
+Een **vast bedrijfsdomein** uit het 17-pijlerraamwerk (Unified Dashboard,
 Mehdi 2026-07-04). Niet de firma's zijn de vaste structuur, maar deze 17
-disciplines die elke servicefirma nodig heeft - een firma zonder invulling laat
-de discipline leeg, maar het raamwerk verandert nooit (ziekenhuis-model: je
+pijlers die elke servicefirma nodig heeft - een firma zonder invulling laat
+de pijler leeg, maar het raamwerk verandert nooit (ziekenhuis-model: je
 ziet meteen wat ontbreekt).
-- **Bij ons:** de 17 rijen in `kern.discipline` (migratie 030), volgorde 1-17:
-  HR & rekrutering, Sales & business development, Marketing & communicatie,
-  Finance & accounting, Operations & projectmanagement, Legal & compliance,
-  Customer service & support, IT & systemen, Procurement & vendor management,
-  Quality assurance, Risk management, Strategische planning, Data & analytics,
-  Facilities & administratie, Research & development, Supply chain management,
-  Partnerships & vendor relations. Elke discipline heeft zijn eigen definitie
-  in `kern.definitie` (zelfde sleutel).
-- Tools/software worden aan een discipline gekoppeld (tool→discipline-mapping,
+- **Bij ons:** de 17 rijen in `kern.discipline`, sinds **structuur v1.0**
+  (migratie 097, 2026-07-30) in vier groepen: **A Market & clients** (Sales &
+  Business Development, Marketing & Communications, Customer Service &
+  Aftercare, Partnerships & External Relations), **B Value creation &
+  delivery** (Client Work - Service Lines, Projects Programme & Change, Quality
+  Management, Innovation & New Services, Procurement & Logistics), **C Enabling
+  functions** (HR & Well-being, Finance & Accounting, IT & Digital Security,
+  Data Analytics & Knowledge, Office & Facilities) en **D Steering & control**
+  (Strategy & Sustainability, Legal & Compliance, Risk & Continuity). Elke
+  pijler heeft zijn eigen Nederlandse definitie in `kern.definitie` (zelfde
+  sleutel).
+- **Kernpijler:** Client Work is ons eigen vak (`kern.discipline.kern`) en
+  heeft bewust geen rollencatalogus.
+- Tools/software worden aan een pijler gekoppeld (tool→discipline-mapping,
   PLAN.md stap 2) - zo worden dubbele software en gaten zichtbaar.
+
+### Subpijler
+De **onderverdeling van een pijler**: waar het werk echt gebeurt (`kern.subdiscipline`,
+57 stuks). Elke subpijler draagt haar **PCF-nummer** (APQC Process Classification
+Framework v7.4, het skelet van het register) en de **ISO 9001-clausules** die op
+haar landen. Daaronder hangen de **taken** (`kern.subelement`, de sub-elementen
+die het register opsomt) en de **rollen** die er wonen.
+- Eerdere naam: subdiscipline. Het VN-verankerde register v3.0 staat
+  gearchiveerd in `kern.subdiscipline_vn`.
+
+### Rol in het register
+Een **beroep of pet die in een subpijler woont** (`kern.functie`, 121 stuks, elke
+titel een keer). Niet te verwarren met **Rol** hieronder (de
+verantwoordelijkheidslaag van een persoon in `kern.persoon.rol`) of met
+**Functie** (de taken van een concrete persoon).
+- Een rol kan in **meer dan een subpijler** wonen (`kern.subdiscipline_functie`,
+  127 plaatsingen); de uitleg bestaat daarom een keer, in de rollenbibliotheek.
+- **Status** (`kern.functie_status`): **MUST** = moet vandaag belegd zijn, een
+  pet of een externe partij telt mee; **OPT** = optioneel; **TOETS** =
+  ESCO-ontdekking, nog te beoordelen en te schrappen. De statussen zijn een
+  voorzet ter toetsing door het team, geen vaststelling.
+- **E-merk** = het beroep is gedefinieerd in **ESCO**, de Europese classificatie
+  van beroepen. Geen E betekent: bureau-pet of controle-rol die wij zelf
+  definieren. De Nederlandse voorkeurslabels en de ESCO-URI's zijn nog niet
+  geverifieerd (openstaand validatiepunt).
+- **Agent-kandidaat** (sterretje, 47 stuks): rol die geheel of gedeeltelijk door
+  een agent gedaan kan worden. Een kandidatuur, geen beslissing.
 
 
 ### Firma

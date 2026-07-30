@@ -1156,6 +1156,23 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   ook tegen andere *.<domein>-subdomeinen) en een **audit-log** naar stdout
   (`FIRMA_UPDATE user=… persoon=… werkgever=… diensten=…`, plus `WRITE_DENIED`/
   `CSRF_REJECT`), zichtbaar via `docker compose logs app-medewerkers`.
+- **Organisatieregister op de Disciplines-tab (structuur v1.0, migratie 097,
+  2026-07-30).** Vier lagen in `kern`: `discipline` (17 pijlers, met `groep` A-D,
+  `bron` en de vlag `kern` voor de kernpijler), `subdiscipline` (57 subpijlers met
+  `pcf_code` en `iso_clausules`), `subelement` (199 taken) en `functie` (121
+  rollen met `status`, `agent_kandidaat`, `esco`) gekoppeld via
+  `subdiscipline_functie` (127 plaatsingen, veel-op-veel). Plus
+  `functie_status` (MUST/OPT/TOETS met uitleg) en `register_wijziging` (de
+  bevriezingsregels en elke wijziging met datum en reden). Bronnen: **APQC PCF
+  v7.4** als skelet en nummering, **ESCO** voor de rollen, **EN ISO 9001:2015**
+  als keurmerk (clausules 4-10 gemapt). Twee weergaven op dezelfde tab:
+  `/disciplines` (boom) en `/disciplines/rollen` (rollenbibliotheek). De vorige
+  VN-verankering (migraties 079-091) is **gearchiveerd** als `subdiscipline_vn`,
+  `subelement_vn` en `functie_vn`; `kern.rol` blijft als ISCO-referentietabel
+  liggen. De zeventien sleutels van `kern.discipline` zijn hergebruikt en
+  hernoemd; `kosten.software.discipline_sleutel` heeft daarvoor **ON UPDATE
+  CASCADE** gekregen. Rollen staan bewust niet in de graaf: classificatie, geen
+  organogram. Detail: README van `globaal-organisatie`.
 
 ### 14.3 Authentik-koppeling (Toegang-panel)
 - Bestaande Authentik-accounts zijn **handmatig gekoppeld** aan hun persoon door
