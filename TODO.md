@@ -121,6 +121,17 @@
       validatiepunt uit het aangeleverde register.
 - [ ] **Rollen schrappen die niet van toepassing zijn**: 70 van de 121 rollen
       staan op TOETS. Dat is teamwerk met Mehdi, geen bouwwerk.
+- [x] **Bouwtijd per medewerker per applicatie** - GEBOUWD (2026-07-30,
+      migratie 099). Tab Ontwikkeling opent met het blok per medewerker;
+      gedeelde accounts en agents hebben hun eigen emmer; machine naar mens is
+      het vangnet; bouw tegenover onderhoud uit de commit-prefix.
+- [ ] **Installer draaien op de machines van de collega's**
+      (`scripts/installeer-ontwikkeling-hook.ps1 -Token ... -Email ... -Naam ...`).
+      Nu meet alleen DESKTOP-72T7K5R uren per applicatie; de rest levert enkel
+      commits. Daarna de gemelde identiteit en machine koppelen.
+- [ ] **Cloudwerk toewijzen of niet**: 67 commits staan op
+      `noreply@anthropic.com`. Beslissing Mehdi: eigen accounts voor cloudwerk,
+      of het als eerlijke emmer "agent" laten staan (nu het laatste).
 - [ ] **Subdisciplines tonen onder een discipline** (HR heeft eigen
       sub-dashboards: DeskTime, salaris, medewerkers).
 - [ ] **Voortgang per discipline meten**, en het onderscheid vasthouden tussen
