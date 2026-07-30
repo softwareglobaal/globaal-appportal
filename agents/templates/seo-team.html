@@ -3,299 +3,235 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SEO-team</title>
+<title>Agentteams — organogram</title>
 <style>
   :root {
-    --paper: #eef1f5;
-    --card: #f8fafc;
-    --card-edge: #dfe4ec;
-    --ink: #1a2432;
-    --ink-soft: #55606f;
-    --ink-faint: #8b95a4;
-    --accent: #38618c;
-    --good: #3d8b58;
-    --good-soft: #e0efe5;
-    --busy: #bf861f;
-    --busy-soft: #f6ecd6;
-    --idle: #97a1b0;
-    --idle-soft: #e7ebf1;
-    --grid-line: rgba(56, 97, 140, 0.06);
-    --shadow: 0 1px 2px rgba(26, 36, 50, 0.05), 0 6px 20px rgba(26, 36, 50, 0.05);
-    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    --bg:#ffffff; --panel:#f6f8fa; --text:#17202b; --muted:#5a6472;
+    --line:#cfd5dd; --line-strong:#9aa2ad;
+    --leiding:#22303f; --mkt:#0f766e; --sales:#b45309; --open:#98a1ad;
+    --bezig:#8a5d10; --bezig-bg:#fbf1dc; --bezig-line:#e6c983;
+    --font:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --paper: #10141b; --card: #1a212c; --card-edge: #2a3340;
-      --ink: #e7ecf3; --ink-soft: #a9b3c1; --ink-faint: #6f7b8b;
-      --accent: #7fa8d4;
-      --good: #63b47f; --good-soft: #1e3226; --busy: #d9a446; --busy-soft: #33290f;
-      --idle: #7c8798; --idle-soft: #232c38; --grid-line: rgba(127, 168, 212, 0.07);
-      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
-    }
-  }
-  :root[data-theme="light"] {
-    --paper: #eef1f5; --card: #f8fafc; --card-edge: #dfe4ec;
-    --ink: #1a2432; --ink-soft: #55606f; --ink-faint: #8b95a4;
-    --accent: #38618c;
-    --good: #3d8b58; --good-soft: #e0efe5; --busy: #bf861f; --busy-soft: #f6ecd6;
-    --idle: #97a1b0; --idle-soft: #e7ebf1; --grid-line: rgba(56,97,140,0.06);
-    --shadow: 0 1px 2px rgba(26,36,50,0.05), 0 6px 20px rgba(26,36,50,0.05);
-  }
-  :root[data-theme="dark"] {
-    --paper: #10141b; --card: #1a212c; --card-edge: #2a3340;
-    --ink: #e7ecf3; --ink-soft: #a9b3c1; --ink-faint: #6f7b8b;
-    --accent: #7fa8d4;
-    --good: #63b47f; --good-soft: #1e3226; --busy: #d9a446; --busy-soft: #33290f;
-    --idle: #7c8798; --idle-soft: #232c38; --grid-line: rgba(127,168,212,0.07);
-    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.28);
-  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:15px;line-height:1.5;}
+  .wrap{max-width:1120px;margin:0 auto;padding:24px 18px 46px;}
+  header{border-bottom:2px solid var(--line-strong);padding-bottom:12px;}
+  h1{font-size:21px;font-weight:600;margin:0;}
+  .sub{color:var(--muted);font-size:13.5px;margin:4px 0 0;}
+  h2{font-size:16px;font-weight:600;margin:26px 0 2px;}
+  .h2note{color:var(--muted);font-size:12.5px;margin:0 0 12px;}
+  a{color:inherit;text-decoration:none;}
+  a:focus-visible{outline:2px solid var(--mkt);outline-offset:2px;border-radius:4px;}
 
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--paper); color: var(--ink);
-    font-family: var(--font-sans); line-height: 1.6; -webkit-font-smoothing: antialiased;
-  }
-  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 56px; }
+  /* Nu bezig-balk */
+  .active{display:flex;align-items:center;gap:12px;margin:16px 0 4px;padding:12px 14px;
+    border:1px solid var(--bezig-line);background:var(--bezig-bg);border-radius:10px;border-left:4px solid var(--bezig);}
+  .active .ava{width:40px;height:40px;flex:none;}
+  .active .txt{font-size:13.5px;line-height:1.35;}
+  .active .txt b{font-weight:600;}
+  .active .nu{display:inline-flex;align-items:center;gap:6px;color:var(--bezig);font-weight:600;font-size:12px;}
 
-  header {
-    position: relative; border: 1px solid var(--card-edge); border-radius: 14px;
-    background:
-      linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 100% 26px,
-      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 26px 100%,
-      var(--card);
-    padding: 26px 26px 22px; box-shadow: var(--shadow); overflow: hidden;
-  }
-  header::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--accent); }
-  .eyebrow {
-    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--accent); margin: 0 0 8px;
-  }
-  h1 { font-size: clamp(26px, 5vw, 34px); font-weight: 600; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
-  .lede { color: var(--ink-soft); margin: 8px 0 0; max-width: 62ch; font-size: 15px; }
+  .legende{display:flex;flex-wrap:wrap;gap:8px 18px;margin:14px 0 2px;font-size:12.5px;color:var(--muted);}
+  .legende span{display:inline-flex;align-items:center;gap:6px;}
+  .badge{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+  .b-actief{background:#e2f2ef;color:#0f766e;} .b-klaar{background:#e4f2e8;color:#1f7a43;}
+  .b-bezig{background:var(--bezig-bg);color:var(--bezig);} .b-open{background:#f1f3f6;color:#8a94a1;border:1px dashed #c2c9d2;}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .dot.ok{background:#1f7a43;} .dot.vrij{background:#98a1ad;}
+  .spin{width:11px;height:11px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  @media (prefers-reduced-motion:reduce){.spin{animation:none;}}
 
-  .meta { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--card-edge); }
-  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; }
-  .legend span { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-soft); }
-  .counts { margin-left: auto; display: flex; gap: 16px; font-size: 13px; }
-  .counts b { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+  .subkop{font-size:14.5px;font-weight:600;margin:24px 0 2px;display:flex;align-items:center;gap:8px;}
+  .subkop .strook{width:11px;height:11px;border-radius:3px;}
+  .subkop .strook.mkt{background:var(--mkt);} .subkop .strook.sales{background:var(--sales);}
+  .subnote{color:var(--muted);font-size:12.5px;margin:1px 0 10px;}
 
-  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-  .dot.busy { background: var(--busy); box-shadow: 0 0 0 3px var(--busy-soft); animation: pulse 1.6s ease-in-out infinite; }
-  .dot.done { background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
-  .dot.idle { background: var(--idle); box-shadow: 0 0 0 3px var(--idle-soft); }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
-  @media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
+  .scroll{overflow-x:auto;padding:6px 2px 8px;}
+  .tree{display:inline-block;min-width:100%;}
+  .tree ul{position:relative;padding-top:20px;display:flex;justify-content:center;margin:0;}
+  .tree li{list-style:none;position:relative;padding:20px 6px 0;text-align:center;}
+  .tree li::before,.tree li::after{content:"";position:absolute;top:0;right:50%;border-top:2px solid var(--line-strong);width:50%;height:20px;}
+  .tree li::after{right:auto;left:50%;border-left:2px solid var(--line-strong);}
+  .tree li:only-child::before,.tree li:only-child::after{display:none;}
+  .tree li:only-child{padding-top:0;}
+  .tree li:first-child::before,.tree li:last-child::after{border:0 none;}
+  .tree li:last-child::before{border-right:2px solid var(--line-strong);border-radius:0 6px 0 0;}
+  .tree li:first-child::after{border-radius:6px 0 0 0;}
+  .tree ul ul::before{content:"";position:absolute;top:0;left:50%;border-left:2px solid var(--line-strong);width:0;height:20px;}
+  .tree>ul{padding-top:0;}
 
-  section { margin-top: 34px; }
-  .sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
-  .sec-head h2 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-  .sec-head .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-faint); text-transform: uppercase; }
-  .sec-rule { flex: 1; height: 1px; background: var(--card-edge); }
+  .node{display:inline-flex;flex-direction:column;align-items:center;gap:4px;border:1px solid var(--line-strong);
+    border-radius:8px;background:var(--bg);padding:10px 9px 9px;width:126px;vertical-align:top;}
+  .node .nm{font-weight:600;font-size:12.5px;line-height:1.2;}
+  .node .nick{font-size:10.5px;color:var(--muted);font-style:italic;}
+  .node .ttl{font-size:10.5px;color:var(--muted);}
+  .node.lead{width:150px;}
+  .node.leiding{border-color:var(--leiding);box-shadow:inset 0 3px 0 var(--leiding);}
+  .node.mkt{box-shadow:inset 0 3px 0 var(--mkt);} .node.sales{box-shadow:inset 0 3px 0 var(--sales);}
+  .node.open{border-style:dashed;border-color:var(--open);background:repeating-linear-gradient(45deg,#fff,#fff 7px,#fafbfc 7px,#fafbfc 14px);}
+  .node.open .nm{color:var(--muted);}
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .ava{width:44px;height:44px;border-radius:50%;overflow:hidden;display:block;background:#e2e8f0;}
+  .ava svg{width:100%;height:100%;display:block;}
+  .ava-open{width:44px;height:44px;border-radius:50%;border:2px dashed var(--open);display:grid;place-items:center;color:var(--open);font-size:23px;line-height:1;}
 
-  .card { position: relative; background: var(--card); border: 1px solid var(--card-edge); border-radius: 12px; padding: 16px 16px 16px 19px; box-shadow: var(--shadow); }
-  .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 12px 0 0 12px; }
-  .card.done::before { background: var(--good); }
-  .card.busy::before { background: var(--busy); }
-  .card.idle::before { background: var(--idle); }
+  .rooster{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:10px;}
+  .agent{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:10px 11px;background:var(--bg);}
+  .agent.bezig{border-color:var(--bezig-line);background:var(--bezig-bg);}
+  .agent .ava{width:40px;height:40px;flex:none;}
+  .agent .info{min-width:0;}
+  .agent .nm{font-weight:600;font-size:13px;}
+  .agent .nick{font-weight:400;font-style:italic;color:var(--muted);font-size:11.5px;}
+  .agent .ttl{font-family:var(--mono);font-size:11px;color:var(--muted);display:block;}
+  .agent .st{font-size:11.5px;margin-top:5px;display:inline-flex;align-items:center;gap:5px;}
+  .agent .st.klaar{color:#1f7a43;} .agent .st.vrij{color:var(--muted);} .agent .st.bezig{color:var(--bezig);}
+  .agent .taak{font-style:italic;}
 
-  .card-head { display: flex; align-items: center; gap: 12px; }
-  .avatar {
-    flex: none; width: 44px; height: 44px; border-radius: 12px;
-    display: grid; place-items: center; line-height: 1;
-    font-size: 14px; font-weight: 600; letter-spacing: 0.04em; color: var(--c);
-    background: color-mix(in srgb, var(--c) 15%, var(--card));
-    border: 1px solid color-mix(in srgb, var(--c) 34%, transparent);
-  }
-  .id { min-width: 0; flex: 1; }
-  .name { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-  .codename { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.02em; display: block; margin-top: 1px; }
-  .status { flex: none; font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
-  .done .status { background: var(--good-soft); color: var(--good); }
-  .busy .status { background: var(--busy-soft); color: var(--busy); }
-  .idle .status { background: var(--idle-soft); color: var(--ink-faint); }
-
-  .desc { font-size: 13.5px; color: var(--ink-soft); margin: 12px 0 0; }
-  .activity { font-size: 13px; margin: 12px 0 0; padding-top: 11px; border-top: 1px dashed var(--card-edge); color: var(--ink); }
-  .act-label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); display: block; margin-bottom: 2px; }
-
-  footer { margin-top: 38px; padding-top: 18px; border-top: 1px solid var(--card-edge); font-size: 13px; color: var(--ink-soft); display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
-  footer .stamp { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); }
-  footer .note { max-width: 60ch; }
-  footer a { color: var(--accent); }
+  footer{margin-top:26px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;display:flex;flex-wrap:wrap;gap:4px 18px;}
+  footer .code{font-family:var(--mono);}
+  .plat{color:var(--muted);}
 </style>
 </head>
 <body>
+
+
 <div class="wrap">
   <header>
-    <p class="eyebrow">Jouw AI-team &middot; overzicht</p>
-    <h1>Mijn AI-team</h1>
-    <p class="lede">Elke "agent" is een AI-specialist die ik voor je kan inzetten. Hier zie je wie er in je team zit, wat elk doet, en waar ze mee bezig zijn. Dit bord is een momentopname die ik bijwerk telkens er iets verandert.</p>
-    <div class="meta">
-      <div class="legend">
-        <span><i class="dot busy"></i> Bezig</span>
-        <span><i class="dot done"></i> Klaar</span>
-        <span><i class="dot idle"></i> Beschikbaar</span>
-      </div>
-      <div class="counts">
-        <span><b>5</b> klaar</span>
-        <span><b>0</b> bezig</span>
-        <span><b>8+</b> beschikbaar</span>
-      </div>
-    </div>
+    <h1>Agentteams — organogram</h1>
+    <p class="sub">Elk teamlid heeft een eigen character en bijnaam. De algemene leiding verdeelt het werk; gestreepte kaders zijn nog op te richten.</p>
   </header>
 
-  <section>
-    <div class="sec-head">
-      <h2>Dit team onderzocht je website</h2>
-      <span class="tag">audit h-architects.be</span>
-      <span class="sec-rule"></span>
+  <!-- LAATSTE TAAK -->
+  <div class="active" style="border-color:#a8d3ba;background:#eaf5ee;border-left-color:#1f7a43;">
+    <span class="ava" data-seed="seo-onderzoek" data-bg="#0f766e"></span>
+    <div class="txt">
+      <div><b>Onderzoek</b> · "De Verkenner" <span class="ttl" style="font-family:var(--mono);color:var(--muted)">seo-onderzoek</span></div>
+      <div class="nu" style="color:#1f7a43;"><i class="dot ok"></i> Laatst afgerond — <b>UNABO · stabiliteitsstudies</b>: blueprint klaar, wacht op jouw akkoord</div>
     </div>
-    <div class="grid">
+  </div>
 
-      <article class="card done">
-        <div class="card-head">
-          <span class="avatar" style="--c:#38618c">TC</span>
-          <div class="id"><h3 class="name">Techniek-expert</h3><span class="codename">seo-technical</span></div>
-          <span class="status">Klaar</span>
-        </div>
-        <p class="desc">Controleert snelheid, beveiliging en of Google je site vlot kan lezen.</p>
-        <p class="activity"><span class="act-label">Wat gevonden</span> Beveiligingsinstellingen ontbreken en er draaien verouderde onderdelen uit 2015.</p>
-      </article>
+  <div class="legende">
+    <span><i class="spin" style="color:#8a5d10"></i> Bezig</span>
+    <span><i class="dot ok"></i> Klaar</span>
+    <span><i class="dot vrij"></i> Beschikbaar</span>
+    <span><span class="badge b-open">open plek</span> Nog op te richten</span>
+  </div>
 
-      <article class="card done">
-        <div class="card-head">
-          <span class="avatar" style="--c:#8a5cc0">TK</span>
-          <div class="id"><h3 class="name">Tekst-expert</h3><span class="codename">seo-content</span></div>
-          <span class="status">Klaar</span>
-        </div>
-        <p class="desc">Beoordeelt de kwaliteit van je teksten en of je betrouwbaar overkomt.</p>
-        <p class="activity"><span class="act-label">Wat gevonden</span> 8 pagina's over "regularisatie" beconcurreren elkaar; homepagina is te dun.</p>
-      </article>
+  <!-- OVERZICHT -->
+  <div class="scroll"><div class="tree"><ul>
+    <li>
+      <div class="node lead leiding"><span class="ava" data-seed="leiding" data-bg="#22303f"></span>
+        <span class="nm">Algemene leiding</span><span class="nick">"De Dirigent"</span><span class="badge b-actief">actief</span></div>
+      <ul>
+        <li><div class="node lead mkt"><span class="ava" data-seed="marketing" data-bg="#0f766e"></span>
+          <span class="nm">Marketingteam</span><span class="nick">"De Marketeer"</span><span class="badge b-actief">actief</span></div></li>
+        <li><div class="node lead sales"><span class="ava" data-seed="sales" data-bg="#b45309"></span>
+          <span class="nm">Salesteam</span><span class="nick">"De Dealmaker"</span><span class="badge b-open">op te richten</span></div></li>
+      </ul>
+    </li>
+  </ul></div></div>
 
-      <article class="card done">
-        <div class="card-head">
-          <span class="avatar" style="--c:#2f8f8a">DA</span>
-          <div class="id"><h3 class="name">Data-expert</h3><span class="codename">seo-schema</span></div>
-          <span class="status">Klaar</span>
-        </div>
-        <p class="desc">De onzichtbare labels die Google helpen je bedrijf te begrijpen.</p>
-        <p class="activity"><span class="act-label">Wat gevonden</span> Alleen basisgegevens aanwezig; het label "lokaal bedrijf" ontbreekt volledig.</p>
-      </article>
+  <!-- MARKETING -->
+  <div class="subkop"><span class="strook mkt"></span>Marketingteam — deelteams</div>
+  <p class="subnote">SEO is actief; de overige deelteams zijn nog op te richten.</p>
+  <div class="scroll"><div class="tree"><ul><li>
+    <div class="node lead mkt"><span class="ava" data-seed="marketing" data-bg="#0f766e"></span>
+      <span class="nm">Marketingteam</span><span class="nick">"De Marketeer"</span><span class="badge b-actief">actief</span></div>
+    <ul>
+      <li><a class="node mkt" href="#seo"><span class="ava" data-seed="seo-team" data-bg="#0f766e"></span>
+        <span class="nm">SEO-team</span><span class="nick">21 agents</span><span class="badge b-actief">actief</span></a></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">Advertenties / SEA</span><span class="ttl">Google Ads</span><span class="badge b-open">open plek</span></div></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">Content</span><span class="ttl">briefs, redactie</span><span class="badge b-open">open plek</span></div></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">Social media</span><span class="ttl">planning</span><span class="badge b-open">open plek</span></div></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">E-mail / lifecycle</span><span class="ttl">flows</span><span class="badge b-open">open plek</span></div></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">Merk & creatie</span><span class="ttl">tone-of-voice</span><span class="badge b-open">open plek</span></div></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">Analytics</span><span class="ttl">rapportage</span><span class="badge b-open">open plek</span></div></li>
+    </ul>
+  </li></ul></div></div>
 
-      <article class="card done">
-        <div class="card-head">
-          <span class="avatar" style="--c:#c0568f">AI</span>
-          <div class="id"><h3 class="name">AI-zoek-expert</h3><span class="codename">seo-geo</span></div>
-          <span class="status">Klaar</span>
-        </div>
-        <p class="desc">Je vindbaarheid in ChatGPT, Google AI en Perplexity.</p>
-        <p class="activity"><span class="act-label">Wat gevonden</span> De opbouw van je pagina's is te zwak om door AI geciteerd te worden.</p>
-      </article>
+  <!-- SALES -->
+  <div class="subkop"><span class="strook sales"></span>Salesteam — deelteams</div>
+  <p class="subnote">Volledig nog op te richten; deelteams volgens het onderzoek, gekoppeld aan Pipedrive.</p>
+  <div class="scroll"><div class="tree"><ul><li>
+    <div class="node lead sales"><span class="ava" data-seed="sales" data-bg="#b45309"></span>
+      <span class="nm">Salesteam</span><span class="nick">"De Dealmaker"</span><span class="badge b-open">op te richten</span></div>
+    <ul>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">Leadgeneratie</span><span class="ttl">prospectie</span><span class="badge b-open">open plek</span></div></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">Kwalificatie</span><span class="ttl">scoring</span><span class="badge b-open">open plek</span></div></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">Outreach</span><span class="ttl">sequenties</span><span class="badge b-open">open plek</span></div></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">Offertes</span><span class="ttl">facturatie</span><span class="badge b-open">open plek</span></div></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">CRM-hygiëne</span><span class="ttl">Pipedrive</span><span class="badge b-open">open plek</span></div></li>
+      <li><div class="node open"><span class="ava-open">+</span><span class="nm">Pipeline & rapportering</span><span class="ttl">forecast</span><span class="badge b-open">open plek</span></div></li>
+    </ul>
+  </li></ul></div></div>
 
-      <article class="card done">
-        <div class="card-head">
-          <span class="avatar" style="--c:#cf6a3a">LO</span>
-          <div class="id"><h3 class="name">Lokaal-expert</h3><span class="codename">seo-local</span></div>
-          <span class="status">Klaar</span>
-        </div>
-        <p class="desc">Google Maps, je adres, telefoon en klantenreviews.</p>
-        <p class="activity"><span class="act-label">Wat gevonden</span> Adres en reviews ontbreken; de vermelde steden kloppen niet overal met elkaar.</p>
-      </article>
+  <!-- SEO ROOSTER -->
+  <h2 id="seo">SEO-team</h2>
+  <p class="h2note">Drie uitvoerende agents (onderzoek → schrijven → controle) plus achttien analyse-specialisten. Namen tussen aanhalingstekens zijn hun bijnaam.</p>
 
-    </div>
-  </section>
+  <div class="subkop"><span class="strook mkt"></span>Uitvoering — schrijft en onderzoekt live</div>
+  <div class="rooster" style="margin-bottom:6px">
+    <div class="agent"><span class="ava" data-seed="seo-onderzoek" data-bg="#0f766e"></span><span class="info"><span class="nm">Onderzoek <span class="nick">"De Verkenner"</span></span><span class="ttl">seo-onderzoek</span><span class="st klaar"><i class="dot ok"></i>klaar · <span class="taak">UNABO stabiliteitsstudies (blueprint)</span></span></span></div>
+    <div class="agent"><span class="ava" data-seed="seo-schrijver" data-bg="#2563eb"></span><span class="info"><span class="nm">Schrijver <span class="nick">"De Pen"</span></span><span class="ttl">seo-schrijver</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></div>
+    <div class="agent"><span class="ava" data-seed="seo-qc" data-bg="#be123c"></span><span class="info"><span class="nm">Controle <span class="nick">"De Keurmeester"</span></span><span class="ttl">seo-qc</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></div>
+  </div>
 
-  <section>
-    <div class="sec-head">
-      <h2>Extra experts, klaar om in te zetten</h2>
-      <span class="tag">op aanvraag</span>
-      <span class="sec-rule"></span>
-    </div>
-    <div class="grid">
-
-      <article class="card idle">
-        <div class="card-head">
-          <span class="avatar" style="--c:#c99a1e">SN</span>
-          <div class="id"><h3 class="name">Snelheid-meter</h3><span class="codename">seo-performance</span></div>
-          <span class="status">Beschikbaar</span>
-        </div>
-        <p class="desc">Meet exact hoe snel je pagina's laden op gsm en computer.</p>
-      </article>
-
-      <article class="card idle">
-        <div class="card-head">
-          <span class="avatar" style="--c:#4a7bd0">BL</span>
-          <div class="id"><h3 class="name">Backlink-expert</h3><span class="codename">seo-backlinks</span></div>
-          <span class="status">Beschikbaar</span>
-        </div>
-        <p class="desc">Wie linkt naar je site en hoeveel gezag dat je geeft.</p>
-      </article>
-
-      <article class="card idle">
-        <div class="card-head">
-          <span class="avatar" style="--c:#3f9a63">AF</span>
-          <div class="id"><h3 class="name">Afbeeldingen-expert</h3><span class="codename">seo-image-gen</span></div>
-          <span class="status">Beschikbaar</span>
-        </div>
-        <p class="desc">Je foto's optimaliseren voor snelheid en vindbaarheid in Google.</p>
-      </article>
-
-      <article class="card idle">
-        <div class="card-head">
-          <span class="avatar" style="--c:#6d7a8c">ZG</span>
-          <div class="id"><h3 class="name">Zoekgedrag-expert</h3><span class="codename">seo-sxo</span></div>
-          <span class="status">Beschikbaar</span>
-        </div>
-        <p class="desc">Waarom bezoekers wel of niet klikken en blijven op je pagina's.</p>
-      </article>
-
-      <article class="card idle">
-        <div class="card-head">
-          <span class="avatar" style="--c:#a15fb0">CP</span>
-          <div class="id"><h3 class="name">Content-plan-expert</h3><span class="codename">seo-cluster</span></div>
-          <span class="status">Beschikbaar</span>
-        </div>
-        <p class="desc">Een slim thema-plan zodat nieuwe teksten elkaar versterken.</p>
-      </article>
-
-      <article class="card idle">
-        <div class="card-head">
-          <span class="avatar" style="--c:#c04f4f">CU</span>
-          <div class="id"><h3 class="name">Concurrentie-expert</h3><span class="codename">seo-competitor-pages</span></div>
-          <span class="status">Beschikbaar</span>
-        </div>
-        <p class="desc">Vergelijkingspagina's tegenover andere architectenbureaus.</p>
-      </article>
-
-      <article class="card idle">
-        <div class="card-head">
-          <span class="avatar" style="--c:#5566b5">ST</span>
-          <div class="id"><h3 class="name">Strateeg</h3><span class="codename">seo-plan</span></div>
-          <span class="status">Beschikbaar</span>
-        </div>
-        <p class="desc">Een stappenplan voor je vindbaarheid op de langere termijn.</p>
-      </article>
-
-      <article class="card idle">
-        <div class="card-head">
-          <span class="avatar" style="--c:#2f8f8a">SM</span>
-          <div class="id"><h3 class="name">Sitemap-expert</h3><span class="codename">seo-sitemap</span></div>
-          <span class="status">Beschikbaar</span>
-        </div>
-        <p class="desc">De inhoudsopgave die Google gebruikt om je site te vinden.</p>
-      </article>
-
-    </div>
-  </section>
+  <div class="subkop"><span class="strook mkt"></span>Analyse & specialisten</div>
+  <div class="rooster">
+    <a class="agent" style="color:#0f766e" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-technical.md"><span class="ava" data-seed="seo-technical" data-bg="#0f766e"></span><span class="info"><span class="nm">Techniek <span class="nick">"De Technicus"</span></span><span class="ttl">seo-technical</span><span class="st klaar"><i class="dot ok"></i>klaar · <span class="taak">h-architects.be</span></span></span></a>
+    <a class="agent" style="color:#2563eb" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-content.md"><span class="ava" data-seed="seo-content" data-bg="#2563eb"></span><span class="info"><span class="nm">Teksten <span class="nick">"De Redacteur"</span></span><span class="ttl">seo-content</span><span class="st klaar"><i class="dot ok"></i>klaar · <span class="taak">h-architects.be</span></span></span></a>
+    <a class="agent" style="color:#0891b2" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-schema.md"><span class="ava" data-seed="seo-schema" data-bg="#0891b2"></span><span class="info"><span class="nm">Data <span class="nick">"De Labelaar"</span></span><span class="ttl">seo-schema</span><span class="st klaar"><i class="dot ok"></i>klaar · <span class="taak">h-architects.be</span></span></span></a>
+    <a class="agent" style="color:#be123c" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-geo.md"><span class="ava" data-seed="seo-geo" data-bg="#be123c"></span><span class="info"><span class="nm">AI-zoeken <span class="nick">"De AI-fluisteraar"</span></span><span class="ttl">seo-geo</span><span class="st klaar"><i class="dot ok"></i>klaar · <span class="taak">h-architects.be</span></span></span></a>
+    <a class="agent" style="color:#b45309" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-local.md"><span class="ava" data-seed="seo-local" data-bg="#b45309"></span><span class="info"><span class="nm">Lokaal <span class="nick">"De Buurtkenner"</span></span><span class="ttl">seo-local</span><span class="st klaar"><i class="dot ok"></i>klaar · <span class="taak">h-architects.be</span></span></span></a>
+    <a class="agent" style="color:#15803d" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-performance.md"><span class="ava" data-seed="seo-performance" data-bg="#15803d"></span><span class="info"><span class="nm">Snelheid <span class="nick">"De Sprinter"</span></span><span class="ttl">seo-performance</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#1d4ed8" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-backlinks.md"><span class="ava" data-seed="seo-backlinks" data-bg="#1d4ed8"></span><span class="info"><span class="nm">Backlinks <span class="nick">"De Netwerker"</span></span><span class="ttl">seo-backlinks</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#0e7490" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-sitemap.md"><span class="ava" data-seed="seo-sitemap" data-bg="#0e7490"></span><span class="info"><span class="nm">Sitemap <span class="nick">"De Cartograaf"</span></span><span class="ttl">seo-sitemap</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#a16207" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-visual.md"><span class="ava" data-seed="seo-visual" data-bg="#a16207"></span><span class="info"><span class="nm">Visueel <span class="nick">"Het Oog"</span></span><span class="ttl">seo-visual</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#9d174d" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-sxo.md"><span class="ava" data-seed="seo-sxo" data-bg="#9d174d"></span><span class="info"><span class="nm">Zoekgedrag <span class="nick">"De Psycholoog"</span></span><span class="ttl">seo-sxo</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#4d7c0f" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-cluster.md"><span class="ava" data-seed="seo-cluster" data-bg="#4d7c0f"></span><span class="info"><span class="nm">Content-plan <span class="nick">"De Planner"</span></span><span class="ttl">seo-cluster</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#1e40af" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-google.md"><span class="ava" data-seed="seo-google" data-bg="#1e40af"></span><span class="info"><span class="nm">Google-data <span class="nick">"De Analist"</span></span><span class="ttl">seo-google</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#c2410c" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-maps.md"><span class="ava" data-seed="seo-maps" data-bg="#c2410c"></span><span class="info"><span class="nm">Kaarten <span class="nick">"De Navigator"</span></span><span class="ttl">seo-maps</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#0f766e" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-ecommerce.md"><span class="ava" data-seed="seo-ecommerce" data-bg="#0f766e"></span><span class="info"><span class="nm">Webshop <span class="nick">"De Verkoper"</span></span><span class="ttl">seo-ecommerce</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#0891b2" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-drift.md"><span class="ava" data-seed="seo-drift" data-bg="#0891b2"></span><span class="info"><span class="nm">Bewaking <span class="nick">"De Waker"</span></span><span class="ttl">seo-drift</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#15803d" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-dataforseo.md"><span class="ava" data-seed="seo-dataforseo" data-bg="#15803d"></span><span class="info"><span class="nm">Live-data <span class="nick">"De Speurder"</span></span><span class="ttl">seo-dataforseo</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#a16207" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-flow.md"><span class="ava" data-seed="seo-flow" data-bg="#a16207"></span><span class="info"><span class="nm">FLOW <span class="nick">"De Gids"</span></span><span class="ttl">seo-flow</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+    <a class="agent" style="color:#b45309" href="https://github.com/softwareglobaal/globaal-agents/blob/main/agents/seo/seo-image-gen.md"><span class="ava" data-seed="seo-image-gen" data-bg="#b45309"></span><span class="info"><span class="nm">Beeld maken <span class="nick">"De Ontwerper"</span></span><span class="ttl">seo-image-gen</span><span class="st vrij"><i class="dot vrij"></i>beschikbaar</span></span></a>
+  </div>
 
   <footer>
-    <span class="stamp">Bijgewerkt: 27 jul 2026</span>
-    <span class="note">Dit team is gespecialiseerd in websites en vindbaarheid. Er zijn ook andere teams inzetbaar, bijvoorbeeld voor documenten, research of een dashboard.</span>
-    <span>Aangemeld als {{ username }}. Terug naar <a href="/">Agents</a> of het <a href="{{ portal_url }}">portaal</a>.</span>
+    <span>Bron: <span class="code">globaal-agents/agents/seo</span> + <span class="code">marketing/seo/agents</span></span>
+    <span>6 klaar · rest beschikbaar</span>
+    <span>Bijgewerkt <span class="plat">28 juli 2026</span></span>
+      <span>Aangemeld als {{ username }}. Terug naar <a href="/">Agents</a> of het <a href="{{ portal_url }}">portaal</a>.</span>
   </footer>
 </div>
+
+<script>
+  (function(){
+    var skins=["#f2c9a0","#e7b48c","#d29a6a","#b07a48","#8a5a34"];
+    var hairs=["#2b2b2b","#43301c","#6b4a2b","#9a9ea6","#caa96a","#a8503a"];
+    function hash(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=(h*16777619)>>>0;}return h;}
+    function avatar(bg,skin,hair,glasses){
+      var shirt="#3a4658";
+      var g=glasses?'<g fill="none" stroke="#2c2c2c" stroke-width="1.2"><circle cx="20" cy="21.5" r="3"/><circle cx="28" cy="21.5" r="3"/><line x1="23" y1="21.5" x2="25" y2="21.5"/></g>':'';
+      return '<svg viewBox="0 0 48 48">'
+        +'<circle cx="24" cy="24" r="24" fill="'+bg+'"/>'
+        +'<path d="M7 47c0-9.4 7.6-15.6 17-15.6S41 37.6 41 47z" fill="'+shirt+'"/>'
+        +'<circle cx="24" cy="21" r="8.6" fill="'+skin+'"/>'
+        +'<path d="M15.4 20.6c0-6.7 3.9-10.6 8.6-10.6s8.6 3.9 8.6 10.6c-1.9-3.7-4.5-4.9-8.6-4.9s-6.7 1.2-8.6 4.9z" fill="'+hair+'"/>'
+        +g+'</svg>';
+    }
+    document.querySelectorAll('.ava[data-seed]').forEach(function(el){
+      var seed=el.getAttribute('data-seed'), bg=el.getAttribute('data-bg')||"#64748b";
+      var h=hash(seed);
+      var skin=skins[h%skins.length];
+      var hair=hairs[(h>>3)%hairs.length];
+      var glasses=((h>>6)%3===0);
+      el.innerHTML=avatar(bg,skin,hair,glasses);
+    });
+  })();
+</script>
 </body>
 </html>
