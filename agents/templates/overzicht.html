@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block titel %}Overzicht{% endblock %}
+{% block body %}
+<div class="kop">
+  <h1>Overzicht &amp; status</h1>
+  <div class="sub">Alle agents en hun status. Filter of zoek om snel te zien wie bezig of klaar is.</div>
+</div>
+
+<div class="chips" id="chips">
+  <button class="chip actief" data-f="alle" aria-pressed="true">Alle <b>{{ totaal }}</b></button>
+  <button class="chip" data-f="bezig">Bezig <b>{{ counts.get('actief',0) + counts.get('waakt',0) }}</b></button>
+  <button class="chip" data-f="klaar">Klaar <b>{{ counts.get('klaar',0) }}</b></button>
+  <button class="chip" data-f="rust">Beschikbaar <b>{{ counts.get('rust',0) }}</b></button>
+  <button class="chip" data-f="stil">Stil <b>{{ counts.get('stil',0) }}</b></button>
+  <button class="chip" data-f="fout">Fout <b>{{ counts.get('fout',0) }}</b></button>
+  <button class="chip" data-f="niet gekoppeld">Niet gekoppeld <b>{{ counts.get('niet gekoppeld',0) }}</b></button>
+</div>
+
+<div class="filters">
+  <input id="zoek" type="search" placeholder="Zoek op naam, bijnaam of taak…" autocomplete="off">
+  <select id="team">
+    <option value="alle">Alle teams</option>
+    <option value="Operations">Operations</option>
+    <option value="SEO">SEO</option>
+  </select>
+</div>
+
+<div class="agents-grid" id="grid">
+  {% for a in agents %}
+  {% set groep = 'bezig' if a.status in ['actief','waakt'] else a.status %}
+  <div class="agent-kaart" data-groep="{{ groep }}" data-team="{{ a.team }}"
+       data-zoek="{{ (a.naam ~ ' ' ~ a.label ~ ' ' ~ (a.bijnaam or '') ~ ' ' ~ a.rol ~ ' ' ~ a.taak)|lower }}">
+    <div class="k-top">
+      <span class="avatar">{{ a.label[:2]|upper }}</span>
+      <div class="k-id">
+        <div class="k-naam">{{ a.label }}{% if a.bijnaam %} <span class="nick">"{{ a.bijnaam }}"</span>{% endif %}</div>
+        <div class="k-rol">{{ a.rol }}</div>
+      </div>
+      <span class="team-tag">{{ a.team }}</span>
+    </div>
+    <div class="k-status"><span class="dot"></span><span class="s-txt">{{ a.status }}</span></div>
+    <div class="k-act">{% if a.taak %}{{ a.taak }}{% elif a.detail %}{{ a.detail }}{% endif %}{% if a.sinds %} · <span class="code">{{ a.sinds }}</span>{% endif %}</div>
+  </div>
+  {% endfor %}
+</div>
+<p class="leeg" id="geen" style="display:none">Geen agents die aan deze filter voldoen.</p>
+
+<script>
+  var chips=[].slice.call(document.querySelectorAll('#chips .chip'));
+  var cards=[].slice.call(document.querySelectorAll('#grid .agent-kaart'));
+  var team=document.getElementById('team'), zoek=document.getElementById('zoek'), geen=document.getElementById('geen');
+  var f='alle';
+  function pas(){
+    var q=(zoek.value||'').toLowerCase().trim(), t=team.value, zichtbaar=0;
+    cards.forEach(function(c){
+      var okS=(f==='alle')||c.dataset.groep===f;
+      var okT=(t==='alle')||c.dataset.team===t;
+      var okQ=!q||(c.dataset.zoek||'').indexOf(q)>-1;
+      var toon=okS&&okT&&okQ; c.style.display=toon?'':'none'; if(toon)zichtbaar++;
+    });
+    geen.style.display=zichtbaar?'none':'';
+  }
+  chips.forEach(function(ch){ch.onclick=function(){chips.forEach(function(x){x.classList.remove('actief');x.setAttribute('aria-pressed','false');});ch.classList.add('actief');ch.setAttribute('aria-pressed','true');f=ch.dataset.f;pas();};});
+  team.onchange=pas; zoek.oninput=pas;
+</script>
+{% endblock %}

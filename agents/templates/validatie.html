@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block titel %}Validatie{% endblock %}
+{% block body %}
+<div class="kop">
+  <h1>Validatie</h1>
+  <div class="sub">Werk dat wacht op jouw oordeel. Open een item om het te lezen en goed te keuren, wijzigingen te vragen of af te wijzen.</div>
+</div>
+
+{% if items %}
+<div class="paneel">
+  <table class="lijst">
+    <thead><tr><th>Deliverable</th><th>Firma · thema</th><th>Van</th><th>Status</th><th>Sinds</th></tr></thead>
+    <tbody>
+      {% for i in items %}
+      <tr>
+        <td><a href="/oplevering/{{ i.id }}"><strong>{{ i.titel }}</strong></a><div class="code">{{ i.soort }} · {{ i.versie }}</div></td>
+        <td>{{ i.firma }}{% if i.thema %} · {{ i.thema }}{% endif %}</td>
+        <td>{{ i.label }}</td>
+        <td><span class="sb {{ i.status }}">{{ i.status_label }}</span></td>
+        <td class="code">{{ i.aangemaakt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="paneel"><p class="leeg">Niets te valideren. Zodra een agent werk oplevert, verschijnt het hier.</p></div>
+{% endif %}
+{% endblock %}

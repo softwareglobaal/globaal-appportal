@@ -19,6 +19,8 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
+import markdown
+
 from flask import (Flask, render_template, request, jsonify, abort,
                    redirect, send_file)
 
@@ -221,6 +223,23 @@ def db():
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         agent     TEXT, tijd TEXT, modus TEXT, container TEXT, actie TEXT,
         waarom    TEXT, uitkomst TEXT, detail TEXT, bewijs TEXT)""")
+    # Opleveringen: deliverables van de agents (rapport, blueprint, tekst) die
+    # jij valideert. Fase 1 van het besturingscentrum.
+    conn.execute("""CREATE TABLE IF NOT EXISTS oplevering (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        firma         TEXT DEFAULT '',
+        thema         TEXT DEFAULT '',
+        agent         TEXT DEFAULT '',
+        soort         TEXT DEFAULT '',
+        titel         TEXT NOT NULL,
+        inhoud        TEXT DEFAULT '',
+        versie        TEXT DEFAULT 'v1',
+        status        TEXT NOT NULL DEFAULT 'in_review',
+        opmerking     TEXT DEFAULT '',
+        aangemaakt    TEXT NOT NULL,
+        besloten_door TEXT DEFAULT '',
+        besluit_ts    TEXT DEFAULT '')""")
+    _seed(conn)
     return conn
 
 
@@ -639,3 +658,204 @@ def ingestie_resultaat():
 @app.route("/healthz")
 def healthz():
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Fase 1 besturingscentrum: statusoverzicht, validatie en opleveringen.
+# ---------------------------------------------------------------------------
+
+SEO_TEAM = [
+    {"naam": "seo-onderzoek", "label": "Onderzoek", "bijnaam": "De Verkenner",
+     "team": "SEO", "rol": "live SEO-onderzoek → blueprint"},
+    {"naam": "seo-schrijver", "label": "Schrijver", "bijnaam": "De Pen",
+     "team": "SEO", "rol": "schrijft de pagina vanaf de blueprint"},
+    {"naam": "seo-qc", "label": "Controle", "bijnaam": "De Keurmeester",
+     "team": "SEO", "rol": "onafhankelijke kwaliteitscontrole"},
+]
+SEO_LABELS = {a["naam"]: a["label"] for a in SEO_TEAM}
+
+OPLEVERING_STATUS = {
+    "in_review": "In review",
+    "wijziging_gevraagd": "Wijziging gevraagd",
+    "goedgekeurd": "Goedgekeurd",
+    "afgewezen": "Afgewezen",
+    "gepubliceerd": "Gepubliceerd",
+}
+
+
+def roster_all():
+    """Statuskaarten voor het volledige team: operationeel + SEO-uitvoerders."""
+    conn = db()
+    rows = {r["naam"]: r for r in conn.execute("SELECT * FROM status")}
+    conn.close()
+    kataloog = [{**a, "team": "Operations"} for a in TEAM] + SEO_TEAM
+    uit = []
+    for a in kataloog:
+        kaart = {**a, "status": "niet gekoppeld", "taak": "", "detail": "",
+                 "sinds": None, "minuten": None, "tokens": None}
+        r = rows.get(a["naam"])
+        if r:
+            try:
+                ts = datetime.fromisoformat(r["ts"])
+                minuten = int((_nu() - ts).total_seconds() // 60)
+            except Exception:
+                ts, minuten = None, None
+            status = r["status"]
+            if status == "actief" and minuten is not None and minuten >= 60:
+                status = "stil"
+            elif status == "waakt" and minuten is not None and minuten >= 150:
+                status = "stil"
+            elif status in ("klaar", "fout") and minuten is not None and minuten >= 24 * 60:
+                status = "stil"
+            kaart.update(status=status, taak=r["taak"] or "", detail=r["detail"] or "",
+                         tokens=r["tokens"], minuten=minuten,
+                         sinds=ts.strftime("%d-%m %H:%M") if ts else None)
+        uit.append(kaart)
+    return uit
+
+
+def _opl_label(agent):
+    return LABELS.get(agent) or SEO_LABELS.get(agent) or agent
+
+
+def _opl_row(r):
+    return {"id": r["id"], "firma": r["firma"], "thema": r["thema"],
+            "agent": r["agent"], "label": _opl_label(r["agent"]),
+            "soort": r["soort"], "titel": r["titel"], "versie": r["versie"],
+            "status": r["status"],
+            "status_label": OPLEVERING_STATUS.get(r["status"], r["status"]),
+            "opmerking": r["opmerking"], "aangemaakt": _fmt(r["aangemaakt"]),
+            "besloten_door": r["besloten_door"], "besluit_ts": _fmt(r["besluit_ts"])}
+
+
+def _seed(conn):
+    """Zet eenmalig een echte demo-oplevering + SEO-status klaar (idempotent)."""
+    try:
+        n = conn.execute("SELECT COUNT(*) c FROM oplevering").fetchone()["c"]
+    except sqlite3.OperationalError:
+        return
+    if n:
+        return
+    pad = os.path.join(app.root_path, "seed", "unabo-stabiliteitsstudies.md")
+    try:
+        with open(pad, encoding="utf-8") as f:
+            inhoud = f.read()
+    except OSError:
+        return
+    nu = _nu().isoformat()
+    conn.execute(
+        """INSERT INTO oplevering (firma, thema, agent, soort, titel, inhoud, versie, status, aangemaakt)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        ("UNABO", "Stabiliteitsstudies", "seo-onderzoek", "Onderzoek + blueprint",
+         "Onderzoek + blueprint — Barsten en scheuren", inhoud, "v1", "in_review", nu))
+    conn.execute(
+        "INSERT OR REPLACE INTO status (naam, status, taak, detail, tokens, ts) VALUES (?,?,?,?,?,?)",
+        ("seo-onderzoek", "klaar", "UNABO · stabiliteitsstudies",
+         "blueprint klaar, wacht op validatie", None, nu))
+    for naam in ("seo-schrijver", "seo-qc"):
+        conn.execute(
+            "INSERT OR REPLACE INTO status (naam, status, taak, detail, tokens, ts) VALUES (?,?,?,?,?,?)",
+            (naam, "rust", "", "", None, nu))
+    conn.commit()
+
+
+@app.context_processor
+def _nav_context():
+    try:
+        conn = db()
+        n = conn.execute(
+            "SELECT COUNT(*) c FROM oplevering WHERE status='in_review'").fetchone()["c"]
+        conn.close()
+    except Exception:
+        n = 0
+    return {"nav_te_valideren": n,
+            "portal_url": f"https://portal.{BASE_DOMAIN}/",
+            "nav_user": request.headers.get("X-authentik-username", "onbekend")}
+
+
+@app.route("/overzicht")
+def overzicht():
+    ags = roster_all()
+    counts = {}
+    for a in ags:
+        counts[a["status"]] = counts.get(a["status"], 0) + 1
+    return render_template("overzicht.html", agents=ags, counts=counts, totaal=len(ags))
+
+
+@app.route("/validatie")
+def validatie():
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM oplevering WHERE status IN ('in_review','wijziging_gevraagd') "
+        "ORDER BY aangemaakt DESC").fetchall()
+    conn.close()
+    return render_template("validatie.html", items=[_opl_row(r) for r in rows])
+
+
+@app.route("/opleveringen")
+def opleveringen():
+    conn = db()
+    rows = conn.execute("SELECT * FROM oplevering ORDER BY aangemaakt DESC").fetchall()
+    conn.close()
+    items = [_opl_row(r) for r in rows]
+    counts = {}
+    for i in items:
+        counts[i["status"]] = counts.get(i["status"], 0) + 1
+    return render_template("opleveringen.html", items=items, counts=counts, totaal=len(items))
+
+
+@app.route("/oplevering/<int:oid>")
+def oplevering(oid):
+    conn = db()
+    r = conn.execute("SELECT * FROM oplevering WHERE id=?", (oid,)).fetchone()
+    conn.close()
+    if not r:
+        abort(404)
+    html = markdown.markdown(r["inhoud"] or "",
+                             extensions=["tables", "fenced_code", "sane_lists"])
+    return render_template("oplevering.html", o=_opl_row(r), inhoud_html=html)
+
+
+@app.route("/oplevering/<int:oid>/besluit", methods=["POST"])
+def oplevering_besluit(oid):
+    d = request.get_json(silent=True) or {}
+    besluit = str(d.get("besluit", "")).strip()
+    if besluit not in ("goedgekeurd", "wijziging_gevraagd", "afgewezen", "gepubliceerd"):
+        abort(400)
+    wie = request.headers.get("X-authentik-username", "onbekend")[:120]
+    opm = str(d.get("opmerking", ""))[:2000]
+    conn = db()
+    conn.execute(
+        "UPDATE oplevering SET status=?, opmerking=?, besloten_door=?, besluit_ts=? WHERE id=?",
+        (besluit, opm, wie, _nu().isoformat(), oid))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/oplevering", methods=["POST"])
+def oplevering_indienen():
+    """Token-route waarmee een agent een deliverable indient ter validatie."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    d = request.get_json(silent=True) or {}
+    titel = str(d.get("titel", "")).strip()[:200]
+    if not titel:
+        abort(400)
+    conn = db()
+    conn.execute(
+        """INSERT INTO oplevering (firma, thema, agent, soort, titel, inhoud, versie, status, aangemaakt)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        (str(d.get("firma", ""))[:80], str(d.get("thema", ""))[:120],
+         str(d.get("agent", ""))[:60], str(d.get("soort", ""))[:60], titel,
+         str(d.get("inhoud", ""))[:200000], str(d.get("versie", "v1"))[:20],
+         "in_review", _nu().isoformat()))
+    oid = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "id": oid})
+
+
+@app.route("/api/overzicht")
+def api_overzicht():
+    return jsonify({"agents": roster_all()})

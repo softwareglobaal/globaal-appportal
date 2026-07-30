@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titel %}{{ o.titel }}{% endblock %}
+{% block body %}
+<div class="kop">
+  <h1>{{ o.titel }}</h1>
+  <div class="meta-rij">
+    <span class="sb {{ o.status }}">{{ o.status_label }}</span>
+    <span>{{ o.firma }}{% if o.thema %} · {{ o.thema }}{% endif %}</span>
+    <span>Van <strong>{{ o.label }}</strong></span>
+    <span class="code">{{ o.soort }} · {{ o.versie }}</span>
+    <span class="code">{{ o.aangemaakt }}</span>
+  </div>
+</div>
+
+{% if o.opmerking %}
+<div class="paneel" style="padding:12px 16px;margin-bottom:14px;">
+  <strong>Jouw opmerking</strong> {% if o.besloten_door %}<span class="code">({{ o.besloten_door }}, {{ o.besluit_ts }})</span>{% endif %}<br>
+  {{ o.opmerking }}
+</div>
+{% endif %}
+
+<div class="prose">{{ inhoud_html|safe }}</div>
+
+<div class="acties">
+  <h2 style="margin-top:0">Jouw oordeel</h2>
+  <textarea id="opm" placeholder="Optionele opmerking (bv. wat er moet wijzigen)…"></textarea>
+  <div class="acties-knoppen">
+    <button class="knop ja" onclick="beslis('goedgekeurd')">Goedkeuren</button>
+    <button class="knop" onclick="beslis('wijziging_gevraagd')">Wijziging vragen</button>
+    <button class="knop nee" onclick="beslis('afgewezen')">Afwijzen</button>
+    <button class="knop pub" onclick="beslis('gepubliceerd')">Markeer als gepubliceerd</button>
+  </div>
+  <p class="sub" style="margin-top:8px;color:var(--tekst-3)">Publiceren zelf doe jij; hier leg je enkel het oordeel vast.</p>
+</div>
+
+<script>
+  function beslis(besluit){
+    var opm=document.getElementById('opm').value;
+    var knoppen=document.querySelectorAll('.acties-knoppen .knop');
+    knoppen.forEach(function(k){k.disabled=true;});
+    fetch('/oplevering/{{ o.id }}/besluit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({besluit:besluit,opmerking:opm})})
+      .then(function(r){return r.json();}).then(function(){location.reload();})
+      .catch(function(){knoppen.forEach(function(k){k.disabled=false;});alert('Kon het oordeel niet opslaan. Probeer opnieuw.');});
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block titel %}Opleveringen{% endblock %}
+{% block body %}
+<div class="kop">
+  <h1>Opleveringen</h1>
+  <div class="sub">Archief van al het geleverde werk: onderzoek, blueprints en teksten, met versie en status.</div>
+</div>
+
+<div class="chips" id="chips">
+  <button class="chip actief" data-f="alle">Alle <b>{{ totaal }}</b></button>
+  <button class="chip" data-f="in_review">In review <b>{{ counts.get('in_review',0) }}</b></button>
+  <button class="chip" data-f="wijziging_gevraagd">Wijziging <b>{{ counts.get('wijziging_gevraagd',0) }}</b></button>
+  <button class="chip" data-f="goedgekeurd">Goedgekeurd <b>{{ counts.get('goedgekeurd',0) }}</b></button>
+  <button class="chip" data-f="gepubliceerd">Gepubliceerd <b>{{ counts.get('gepubliceerd',0) }}</b></button>
+  <button class="chip" data-f="afgewezen">Afgewezen <b>{{ counts.get('afgewezen',0) }}</b></button>
+</div>
+
+{% if items %}
+<div class="paneel">
+  <table class="lijst">
+    <thead><tr><th>Deliverable</th><th>Firma · thema</th><th>Van</th><th>Status</th><th>Datum</th></tr></thead>
+    <tbody>
+      {% for i in items %}
+      <tr data-status="{{ i.status }}">
+        <td><a href="/oplevering/{{ i.id }}"><strong>{{ i.titel }}</strong></a><div class="code">{{ i.soort }} · {{ i.versie }}</div></td>
+        <td>{{ i.firma }}{% if i.thema %} · {{ i.thema }}{% endif %}</td>
+        <td>{{ i.label }}</td>
+        <td><span class="sb {{ i.status }}">{{ i.status_label }}</span></td>
+        <td class="code">{{ i.aangemaakt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="leeg" id="geen" style="display:none">Geen opleveringen met deze status.</p>
+{% else %}
+<div class="paneel"><p class="leeg">Nog geen opleveringen.</p></div>
+{% endif %}
+
+<script>
+  var chips=[].slice.call(document.querySelectorAll('#chips .chip'));
+  var rijen=[].slice.call(document.querySelectorAll('table.lijst tbody tr'));
+  var geen=document.getElementById('geen');
+  chips.forEach(function(ch){ch.onclick=function(){
+    chips.forEach(function(x){x.classList.remove('actief');}); ch.classList.add('actief');
+    var f=ch.dataset.f, z=0;
+    rijen.forEach(function(r){var toon=(f==='alle')||r.dataset.status===f;r.style.display=toon?'':'none';if(toon)z++;});
+    if(geen)geen.style.display=z?'none':'';
+  };});
+</script>
+{% endblock %}
