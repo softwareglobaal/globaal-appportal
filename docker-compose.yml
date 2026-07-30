@@ -32,6 +32,9 @@ services:
       AGENTS_DB: /data/agents.db
       AGENTS_TOKEN: ${AGENTS_TOKEN:-}
       PORT: "3020"
+      UNABO_WP_URL: ${UNABO_WP_URL:-}
+      UNABO_WP_USER: ${UNABO_WP_USER:-}
+      UNABO_WP_APP_PASSWORD: ${UNABO_WP_APP_PASSWORD:-}
     volumes:
       - ./agents-data:/data
     ports:

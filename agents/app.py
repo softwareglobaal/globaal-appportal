@@ -239,6 +239,10 @@ def db():
         aangemaakt    TEXT NOT NULL,
         besloten_door TEXT DEFAULT '',
         besluit_ts    TEXT DEFAULT '')""")
+    _kolom(conn, "oplevering", "wp_post_id", "INTEGER")
+    _kolom(conn, "oplevering", "wp_status", "TEXT DEFAULT ''")
+    _kolom(conn, "oplevering", "wp_link", "TEXT DEFAULT ''")
+    _kolom(conn, "oplevering", "wp_preview", "TEXT DEFAULT ''")
     _seed(conn)
     return conn
 
@@ -725,7 +729,9 @@ def _opl_row(r):
             "status": r["status"],
             "status_label": OPLEVERING_STATUS.get(r["status"], r["status"]),
             "opmerking": r["opmerking"], "aangemaakt": _fmt(r["aangemaakt"]),
-            "besloten_door": r["besloten_door"], "besluit_ts": _fmt(r["besluit_ts"])}
+            "besloten_door": r["besloten_door"], "besluit_ts": _fmt(r["besluit_ts"]),
+            "wp_post_id": r["wp_post_id"], "wp_status": r["wp_status"],
+            "wp_link": r["wp_link"], "wp_preview": r["wp_preview"]}
 
 
 def _seed(conn):
@@ -859,3 +865,101 @@ def oplevering_indienen():
 @app.route("/api/overzicht")
 def api_overzicht():
     return jsonify({"agents": roster_all()})
+
+
+# ---------------------------------------------------------------------------
+# WordPress-publicatie per firma. Secret uit de omgeving, nooit in code/git.
+# ---------------------------------------------------------------------------
+import base64 as _b64
+import urllib.request as _urlreq
+import urllib.error as _urlerr
+
+WP_SITES = {
+    "UNABO": {
+        "url": os.environ.get("UNABO_WP_URL", "").rstrip("/"),
+        "user": os.environ.get("UNABO_WP_USER", ""),
+        "app_password": os.environ.get("UNABO_WP_APP_PASSWORD", ""),
+    },
+}
+
+
+def _wp_conf(firma):
+    conf = WP_SITES.get((firma or "").strip().upper())
+    if conf and conf["url"] and conf["app_password"]:
+        return conf
+    return None
+
+
+def _wp_call(conf, method, path, payload=None):
+    url = conf["url"] + "/wp-json/wp/v2" + path
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = _urlreq.Request(url, data=data, method=method)
+    tok = _b64.b64encode(f"{conf['user']}:{conf['app_password']}".encode()).decode()
+    req.add_header("Authorization", "Basic " + tok)
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    with _urlreq.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode())
+
+
+def _wp_preview_url(page):
+    link = page.get("link") or (page.get("guid", {}) or {}).get("raw", "")
+    if not link:
+        return ""
+    return link + ("&" if "?" in link else "?") + "preview=true"
+
+
+@app.route("/oplevering/<int:oid>/naar-wordpress", methods=["POST"])
+def oplevering_naar_wp(oid):
+    """Maakt (of werkt bij) een CONCEPT-pagina in WordPress vanuit de oplevering."""
+    conn = db()
+    r = conn.execute("SELECT * FROM oplevering WHERE id=?", (oid,)).fetchone()
+    if not r:
+        conn.close(); abort(404)
+    conf = _wp_conf(r["firma"])
+    if not conf:
+        conn.close()
+        return jsonify({"ok": False, "fout": f"Geen WordPress-koppeling voor firma '{r['firma']}'."}), 400
+    html = markdown.markdown(r["inhoud"] or "", extensions=["tables", "fenced_code", "sane_lists"])
+    payload = {"title": r["titel"], "content": html, "status": "draft"}
+    try:
+        pad = f"/pages/{r['wp_post_id']}" if r["wp_post_id"] else "/pages"
+        page = _wp_call(conf, "POST", pad, payload)
+    except _urlerr.HTTPError as e:
+        conn.close()
+        return jsonify({"ok": False, "fout": f"WordPress weigerde het concept (HTTP {e.code})."}), 502
+    except Exception:
+        conn.close()
+        return jsonify({"ok": False, "fout": "Kon WordPress niet bereiken."}), 502
+    conn.execute(
+        "UPDATE oplevering SET wp_post_id=?, wp_status=?, wp_preview=?, wp_link=? WHERE id=?",
+        (page.get("id"), page.get("status", "draft"), _wp_preview_url(page), page.get("link", ""), oid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True, "wp_post_id": page.get("id"), "preview": _wp_preview_url(page)})
+
+
+@app.route("/oplevering/<int:oid>/publiceer", methods=["POST"])
+def oplevering_publiceer(oid):
+    """Zet het WordPress-concept LIVE. Alleen na jouw expliciete klik."""
+    conn = db()
+    r = conn.execute("SELECT * FROM oplevering WHERE id=?", (oid,)).fetchone()
+    if not r:
+        conn.close(); abort(404)
+    if not r["wp_post_id"]:
+        conn.close()
+        return jsonify({"ok": False, "fout": "Nog geen concept in WordPress. Klik eerst 'Naar WordPress'."}), 400
+    conf = _wp_conf(r["firma"])
+    if not conf:
+        conn.close()
+        return jsonify({"ok": False, "fout": "Geen WordPress-koppeling."}), 400
+    try:
+        page = _wp_call(conf, "POST", f"/pages/{r['wp_post_id']}", {"status": "publish"})
+    except Exception:
+        conn.close()
+        return jsonify({"ok": False, "fout": "Publiceren mislukt."}), 502
+    wie = request.headers.get("X-authentik-username", "onbekend")[:120]
+    conn.execute(
+        "UPDATE oplevering SET wp_status=?, wp_link=?, status='gepubliceerd', besloten_door=?, besluit_ts=? WHERE id=?",
+        (page.get("status", "publish"), page.get("link", ""), wie, _nu().isoformat(), oid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True, "link": page.get("link", "")})

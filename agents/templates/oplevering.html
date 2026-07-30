@@ -43,4 +43,32 @@
       .catch(function(){knoppen.forEach(function(k){k.disabled=false;});alert('Kon het oordeel niet opslaan. Probeer opnieuw.');});
   }
 </script>
+
+  <div class="acties" id="wp">
+    <h2 style="margin-top:0">Publicatie naar WordPress</h2>
+    <div style="font-size:13px;margin-bottom:10px;">
+      {% if o.wp_status == 'publish' %}
+        <span class="sb gepubliceerd">Live</span>{% if o.wp_link %} &nbsp;<a href="{{ o.wp_link }}" target="_blank" rel="noopener">Bekijk live pagina ↗</a>{% endif %}
+      {% elif o.wp_post_id %}
+        <span class="sb in_review">Concept in WordPress</span>{% if o.wp_preview %} &nbsp;<a href="{{ o.wp_preview }}" target="_blank" rel="noopener">Bekijk preview op WordPress ↗</a>{% endif %}
+      {% else %}
+        <span style="color:var(--tekst-3)">Nog niet in WordPress.</span>
+      {% endif %}
+    </div>
+    <div class="acties-knoppen">
+      <button class="knop" onclick="naarWp(this)">{% if o.wp_post_id %}Concept bijwerken{% else %}Naar WordPress (concept){% endif %}</button>
+      {% if o.wp_post_id and o.wp_status != 'publish' %}<button class="knop pub" onclick="publiceerWp(this)">Publiceer live</button>{% endif %}
+    </div>
+    <p class="sub" style="margin-top:8px;color:var(--tekst-3)">De agent maakt een concept-pagina in WordPress. Klik op de preview-link (opent in een nieuw tabblad) voor de echte opmaak; daarna zet "Publiceer live" de pagina live.</p>
+  </div>
+  <script>
+    function naarWp(btn){btn.disabled=true;var t=btn.textContent;btn.textContent='Bezig…';
+      fetch('/oplevering/{{ o.id }}/naar-wordpress',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+        if(d.ok){location.reload();}else{alert(d.fout||'Mislukt');btn.disabled=false;btn.textContent=t;}
+      }).catch(function(){alert('Kon niet verbinden.');btn.disabled=false;btn.textContent=t;});}
+    function publiceerWp(btn){if(!confirm('Deze pagina nu LIVE publiceren op de website van UNABO?'))return;btn.disabled=true;btn.textContent='Publiceren…';
+      fetch('/oplevering/{{ o.id }}/publiceer',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+        if(d.ok){location.reload();}else{alert(d.fout||'Mislukt');btn.disabled=false;btn.textContent='Publiceer live';}
+      }).catch(function(){alert('Kon niet verbinden.');btn.disabled=false;btn.textContent='Publiceer live';});}
+  </script>
 {% endblock %}
