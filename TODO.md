@@ -116,6 +116,22 @@
       pijlers, 57 subpijlers, 199 taken, 121 rollen in 127 plaatsingen), met het
       wijzigingslogboek in `kern.register_wijziging`. Het VN-register is
       gearchiveerd, niet verwijderd.
+- [x] **Register als werkblad** - GEBOUWD (2026-07-30, migratie 100): status,
+      namen (doorgerold naar de pijler), agents en software per subpijler, plus
+      het percentage belegd met doorklik naar wat open staat.
+- [ ] **Rol doorklikken naar de ESCO-pagina** in plaats van alleen de hover.
+      Mehdi's woorden: linken, niet uitleggen. Vraagt de ESCO-URI per rol, dus
+      hangt aan de verificatie hieronder.
+- [ ] **Per collega een overzicht van zijn subpijlers** op het profiel, om de
+      spreiding te zien ("Angela zit in heel veel branches").
+- [ ] **Wagenpark een eigen plaats geven** in plaats van als taak onder Premises
+      & equipment. Wacht op Mehdi: eigen pijler of eigen subpijler. Structuur is
+      bevroren, dus dit krijgt een regel in het wijzigingslogboek.
+- [ ] **Register linken met de Second Brain**: groepen en pijlers als knopen in
+      de graaf.
+- [ ] **Onze diensten en producten in de kernpijler** (scanning, drafting,
+      architectuur, regularisatie, energie-efficientie), zodat zichtbaar wordt
+      hoeveel producten we echt verkopen.
 - [ ] **ESCO-labels en URI's verifieren** per rol tegen de ESCO-portal. Nu draagt
       een rol alleen de vlag "in ESCO gedefinieerd"; het openstaande
       validatiepunt uit het aangeleverde register.

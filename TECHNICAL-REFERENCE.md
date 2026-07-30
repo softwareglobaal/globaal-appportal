@@ -1172,7 +1172,16 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   liggen. De zeventien sleutels van `kern.discipline` zijn hergebruikt en
   hernoemd; `kosten.software.discipline_sleutel` heeft daarvoor **ON UPDATE
   CASCADE** gekregen. Rollen staan bewust niet in de graaf: classificatie, geen
-  organogram. Detail: README van `globaal-organisatie`.
+  organogram.
+  **Werkblad (migratie 100):** per subpijler een status uit vijf vaste waarden
+  (`subdiscipline_status`, met `vraagt_persoon`), toegewezen personen
+  (`subdiscipline_toewijzing`, doorgerold naar de pijler), agents
+  (`agent` + `subdiscipline_agent`) en software op subpijlerniveau
+  (`kosten.software.subdiscipline_code`; de subpijler zet ook de pijler).
+  Vooruitgang = aandeel BELEGDE subpijlers: status aanwezig en, bij een status
+  die werk betekent, minstens een naam. Toekennen is beheer, same-origin, met
+  audit-regels `REGISTER_*`. Gewicht of uren per subpijler is bewust niet
+  gebouwd. Detail: README van `globaal-organisatie`.
 
 - **Bouwtijd per medewerker per applicatie (schema `ontwikkeling`, migraties
   074/094/096/099).** Drie bronnen naast elkaar in de weergave
