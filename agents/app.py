@@ -1069,6 +1069,45 @@ def taak_rapport(tid):
     return jsonify({"ok": True})
 
 
+MERKEN = [
+    {"naam": "H-Architects", "sector": "Architectuur", "web": "https://h-architects.be",
+     "kleuren": ["#555659", "#ffffff"], "pos": "Betaalbaar (ver)bouwen: nieuwbouw, renovatie, interieur, regularisatie.",
+     "tone": "Toegankelijk, geruststellend, budgetbewust."},
+    {"naam": "HDS-India", "sector": "Architectuur / 3D", "web": "https://highdesignstudio.in",
+     "kleuren": ["#111111", "#ffffff"], "pos": "Branch van H-Architects; ontwerp & uitvoering (Leuven/Rotterdam/Delhi).",
+     "tone": "Visiegedreven, internationaal."},
+    {"naam": "HDS-Suriname", "sector": "Architectuur / 3D", "web": "https://www.hdssr.com",
+     "kleuren": ["#1a1a1a", "#ffffff"], "pos": "Architectuur concept-tot-realisatie, 3D-scanning (Paramaribo).",
+     "tone": "Inspirerend, mensgericht, duurzaam."},
+    {"naam": "UnaBo", "sector": "Bouw — coördinatieplatform", "web": "https://unabo.be",
+     "kleuren": ["#2ea3f2", "#7272ff"], "pos": "Alle bouwdiensten onder één dak.",
+     "tone": "Professioneel, toegankelijk; één aanspreekpunt."},
+    {"naam": "Corenbo", "sector": "Bouw — expertsplatform", "web": "https://corenbo.be",
+     "kleuren": ["#008a20", "#c2a990"], "pos": "Erkende bouwexperts: veiligheidscoörd., EPC, renovatiecoaching.",
+     "tone": "Zakelijk, vertrouwen; 'Samen sterk in bouwexpertise'."},
+    {"naam": "Contrax", "sector": "Back-office voor de bouw", "web": "https://www.contrax.be",
+     "kleuren": ["#5479f7", "#184341"], "pos": "Administratieve ondersteuning voor bouwondernemers.",
+     "tone": "Praktisch, ondernemend; 'time is money'."},
+    {"naam": "Energie Efficiënt", "sector": "Energie / EPB", "web": "https://energie-efficient.be",
+     "kleuren": ["#43b191", "#dc3232"], "pos": "Ondersteuning voor EPB- en ventilatieverslaggevers.",
+     "tone": "Zakelijk-toegankelijk, klantgericht."},
+    {"naam": "Harmoniebouw", "sector": "Bouw — ruwbouw", "web": "https://www.harmoniebouw.be",
+     "kleuren": ["#414141", "#de4528"], "pos": "Ruwbouwaannemer (regio Leuven).",
+     "tone": "Zakelijk-benaderbaar, betrouwbaar."},
+    {"naam": "TKN-Buro", "sector": "Ingenieurs-/tekenbureau", "web": "https://www.tkn-buro.be",
+     "kleuren": ["#1f2a44", "#ffcc00"], "pos": "Tekenbureau stabiliteit; onderaannemer voor ingenieurs/architecten.",
+     "tone": "Direct, discreet, hyper-specialist."},
+    {"naam": "Elevait NV", "sector": "AI / administratie (Suriname)", "web": "https://elevaitnv.com",
+     "kleuren": ["#059669", "#e6e3db"], "pos": "AI-automatisering van administratie voor bedrijven/overheden in Suriname.",
+     "tone": "Modern, tech-gedreven; 'administratie die zichzelf doet'."},
+]
+
+
+@app.route("/branding")
+def branding():
+    return render_template("branding.html", merken=MERKEN)
+
+
 @app.route("/api/oplevering/<int:oid>")
 def api_oplevering(oid):
     """De runner leest een oplevering (bv. de goedgekeurde blueprint)."""

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block titel %}Branding{% endblock %}
+{% block body %}
+<div class="kop">
+  <h1>Branding</h1>
+  <div class="sub">De huisstijl en tone-of-voice per firma. De agents gebruiken dit om on-brand te schrijven; het volledige brandbook staat in <span class="code">marketing/seo/firmas/&lt;firma&gt;/branding.md</span>.</div>
+</div>
+
+<div class="agents-grid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">
+  {% for m in merken %}
+  <div class="agent-kaart">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="display:flex;gap:4px;">
+        {% for k in m.kleuren %}<span title="{{ k }}" style="width:20px;height:20px;border-radius:4px;border:1px solid var(--lijn);background:{{ k }};display:inline-block"></span>{% endfor %}
+      </div>
+      <div style="min-width:0">
+        <div class="k-naam">{{ m.naam }}</div>
+        <div class="k-rol">{{ m.sector }}</div>
+      </div>
+    </div>
+    <p style="font-size:12.5px;color:var(--tekst);margin:12px 0 6px;">{{ m.pos }}</p>
+    <p style="font-size:12.5px;color:var(--tekst-2);margin:0 0 10px;font-style:italic;">{{ m.tone }}</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <a href="{{ m.web }}" target="_blank" rel="noopener" style="font-size:12px;">{{ m.web.split('//')[-1] }} ↗</a>
+      <span class="code" style="font-size:11px;color:var(--tekst-3)">{{ m.kleuren|join(' · ') }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<p class="hint" style="margin-top:16px">Ontbrekende firma's zonder website (H-Invest, Zidi Construct, Orvantis, Melodie) staan hier nog niet — daar kan eerst een site + brandbook voor gemaakt worden.</p>
+{% endblock %}
