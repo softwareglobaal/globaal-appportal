@@ -44,6 +44,22 @@
   }
 </script>
 
+
+  {% if o.taak_id %}
+  <div class="acties" id="aanvullen" style="border-color:var(--amber)">
+    <h2 style="margin-top:0">Extra info geven of antwoorden</h2>
+    <p class="sub" style="margin:0 0 10px;color:var(--tekst-2)">Vraagt het team om meer informatie, of wil je iets bijsturen? Antwoord hier — de opdracht gaat terug naar het team, dat voortbouwt op dit resultaat.</p>
+    <form method="post" action="/oplevering/{{ o.id }}/aanvullen" enctype="multipart/form-data">
+      <textarea name="aanvulling" rows="4" placeholder="Bijvoorbeeld: de tekst staat hieronder / het gaat om een update van de bestaande pagina / het conversiedoel is een offerteaanvraag…"
+        style="width:100%;border:1px solid var(--lijn-sterk);border-radius:6px;padding:9px 11px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:10px">
+        <input type="file" name="bijlagen" multiple accept=".pdf,.docx,.md,.txt,.html,.csv,.png,.jpg,.jpeg,.webp,.gif" style="font-size:12.5px">
+        <button class="knop" type="submit">Versturen naar het team</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
   <div class="acties" id="wp">
     <h2 style="margin-top:0">Publicatie naar WordPress</h2>
     <div style="font-size:13px;margin-bottom:10px;">

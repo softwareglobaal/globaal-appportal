@@ -263,6 +263,7 @@ def db():
     # Vrije opdracht: je typt gewoon wat je wil; de agents bepalen de aanpak.
     _kolom(conn, "taak", "opdracht", "TEXT DEFAULT ''")
     _kolom(conn, "taak", "soort", "TEXT DEFAULT ''")
+    _kolom(conn, "taak", "aanvulling", "TEXT DEFAULT ''")
     # Bijlagen bij een opdracht (briefing, foto, bestaand document).
     conn.execute("""CREATE TABLE IF NOT EXISTS bijlage (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -767,7 +768,8 @@ def _opl_row(r):
             "opmerking": r["opmerking"], "aangemaakt": _fmt(r["aangemaakt"]),
             "besloten_door": r["besloten_door"], "besluit_ts": _fmt(r["besluit_ts"]),
             "wp_post_id": r["wp_post_id"], "wp_status": r["wp_status"],
-            "wp_link": r["wp_link"], "wp_preview": r["wp_preview"]}
+            "wp_link": r["wp_link"], "wp_preview": r["wp_preview"],
+            "taak_id": r["taak_id"]}
 
 
 def _seed(conn):
@@ -1125,9 +1127,13 @@ def taak_wacht():
         if cur.rowcount:
             geclaimd.append({"id": r["id"], "firma": r["firma"], "thema": r["thema"],
                              "opdracht": r["opdracht"] or "", "soort": r["soort"] or "",
+                             "aanvulling": r["aanvulling"] or "",
                              "paginatype": r["paginatype"], "doel": r["doel"],
                              "regio": r["regio"], "fase": r["fase"],
-                             "oplevering_id": r["oplevering_id"]})
+                             "oplevering_id": r["oplevering_id"],
+                             "vorige": (conn.execute(
+                                 "SELECT inhoud FROM oplevering WHERE taak_id=? ORDER BY id DESC LIMIT 1",
+                                 (r["id"],)).fetchone() or {"inhoud": ""})["inhoud"] or ""})
     conn.commit(); conn.close()
     return jsonify({"taken": geclaimd})
 
@@ -1231,6 +1237,48 @@ def _gem_duur_min(conn):
         except Exception:
             pass
     return int(sum(duren) / len(duren)) if duren else None
+
+
+
+
+@app.route("/oplevering/<int:oid>/aanvullen", methods=["POST"])
+def oplevering_aanvullen(oid):
+    """Je beantwoordt een vraag van het team of geeft extra info. De opdracht
+    gaat terug in de wachtrij; het team bouwt voort op het vorige resultaat."""
+    conn = db()
+    r = conn.execute("SELECT taak_id FROM oplevering WHERE id=?", (oid,)).fetchone()
+    if not r or not r["taak_id"]:
+        conn.close()
+        return jsonify({"ok": False, "fout": "Deze oplevering hoort niet bij een opdracht."}), 400
+    tekst = (request.form.get("aanvulling") or
+             (request.get_json(silent=True) or {}).get("aanvulling") or "").strip()[:8000]
+    if not tekst and not request.files.getlist("bijlagen"):
+        conn.close()
+        return redirect(f"/oplevering/{oid}") if request.form else (
+            jsonify({"ok": False, "fout": "geen aanvulling"}), 400)
+    tid = r["taak_id"]
+    os.makedirs(BIJLAGE_MAP, exist_ok=True)
+    for best in request.files.getlist("bijlagen"):
+        if not best or not best.filename:
+            continue
+        naam = os.path.basename(best.filename)[:200]
+        if os.path.splitext(naam)[1].lower() not in BIJLAGE_TYPES:
+            continue
+        pad = os.path.join(BIJLAGE_MAP, f"{tid}-a{len(naam)}-{naam}")
+        best.save(pad)
+        if os.path.getsize(pad) > MAX_BYTES:
+            os.remove(pad); continue
+        conn.execute("""INSERT INTO bijlage (taak_id, bestandsnaam, pad, bytes, mime, aangeleverd)
+                        VALUES (?,?,?,?,?,?)""",
+                     (tid, naam, pad, os.path.getsize(pad), best.mimetype or "", _nu().isoformat()))
+    conn.execute("UPDATE taak SET aanvulling=?, fase='nieuw', runner='', bijgewerkt=? WHERE id=?",
+                 (tekst, _nu().isoformat(), tid))
+    conn.execute("UPDATE oplevering SET status='wijziging_gevraagd', opmerking=? WHERE id=?",
+                 (tekst[:2000], oid))
+    conn.commit(); conn.close()
+    if request.form:
+        return redirect("/taken")
+    return jsonify({"ok": True})
 
 
 @app.route("/taak/<int:tid>/verwijder", methods=["POST"])
