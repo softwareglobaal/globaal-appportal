@@ -27,6 +27,7 @@ auto-merge** - in beide gevallen deployt de VM daarna automatisch via cron (2 mi
 | globaal-factuurrouter | AI-factuurrouteringsagent (§6A, :8787) | `~/factuurrouter` | PR → auto-merge | auto (`~/deploy-factuurrouter.sh`) |
 | globaal-stagebeoordeling | Stagebeoordeling (host-app :8088) | `~/stagebeoordeling` | PR → auto-merge | auto (`~/deploy-stagebeoordeling.sh`) |
 | globaal-schuldentracker | Schuldentracker (host-app :5050) | `~/Finance/Schuldentracker` | PR → auto-merge | auto (`~/deploy-schuldentracker.sh`) |
+| globaal-boekhouding | Boekhouding: factureren Monday→Octopus + openstaande posten (§13.7, :3014) | `~/appportal/boekhouding` | directe push | auto (`deploy-stack.sh`, cron 2 min) |
 | telefoonregister | telefoonregister van de collega - **ongemoeid laten** | eigen checkout | - | - |
 
 ## Git-workflow: hoe Claude pullt en pusht

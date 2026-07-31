@@ -933,6 +933,46 @@ De Factuurrouter (§6A) zit sinds de hernoeming ook in het fundament: repo
 de auto-deploy herstart **beide** services (`factuurrouter.service` +
 `factuurrouter-dashboard.service`).
 
+### 13.7 Boekhouding - `boekhouding.globaal.be`
+Twee finance-werkstromen van Joan, overgenomen van haar lokale scripts
+(aanlevering 2026-07-30) en herbouwd als stack-app. Repo `globaal-boekhouding`,
+checkout `~/appportal/boekhouding`, compose-service `app-boekhouding` op **poort
+3014**, schema `boekhouding` (migratie 102), groep `boekhouding` naast
+admin/manager.
+
+- **Factureren**: scant de vier Monday Finance-boards (EE, TKN, UNABO,
+  H-A Light) op items met Payment Status "Not Paid" waarvan het gekoppelde
+  project een schijf- of meerwerkveld op "X% Factureren" heeft, en maakt na
+  bevestiging in het scherm de verkoopfactuur aan in Octopus. **Scannen leest
+  alleen; aanmaken gebeurt nooit ongezien en nooit door een cron.** Facturen
+  worden in Octopus bewaard, niet verstuurd. Een advisory lock per dossier
+  (`pg_try_advisory_lock`) houdt twee gelijktijdige gebruikers uit elkaars
+  documentnummers.
+- **Openstaand**: de drie Octopus-rapporten per firma (open leveranciers, open
+  klanten, historiek wachtrekening 599999) naar `boekhouding.post`, met de
+  opmerkingen en actiehouders in `boekhouding.markering` zodat een verversing
+  ze niet wist. Verversen is een knop: Octopus staat 24 rapportaanroepen per
+  dossier per dag toe en een verversing kost er drie.
+
+Twee dingen die uit Joan's werk komen en niet vanzelfsprekend zijn: Octopus
+kent zelf **geen documentnummer** toe (laatst geboekte plus een, vlak voor het
+aanmaken opgehaald), en Octopus genereert de **gestructureerde mededeling** pas
+wanneer iemand de factuur handmatig heropent en bewaart in de webinterface,
+dus die wordt zelf gegenereerd (mod 97, reeks vanaf 9 miljard om niet met
+Octopus' eigen nummering te botsen).
+
+Credentials: hergebruikt `OCTOPUS_SOFTWAREHOUSE_UUID/USER/PASSWORD` van de
+Octopus-spiegel; het Monday-token valt terug op `MONDAY_VOL_TOKEN` zolang er
+geen eigen `MONDAY_BOEKHOUDING_TOKEN` staat. **Let op:** met dat token
+verschijnen de updates op Monday-items op naam van het admin-account, niet op
+naam van wie in de app op de knop drukte. De app logt de echte gebruiker wel in
+`boekhouding.factuur.aangemaakt_door`.
+
+**Nog open:** Joan heeft nog geen Authentik-account, dus de groep `boekhouding`
+is nog leeg. De twee geplande rapporten uit haar OV-analyse (wekelijks verkopen,
+maandelijks openstaande betalingen als xlsx) zijn nog niet overgenomen; van die
+scripts zat alleen de gecompileerde versie in de aanlevering.
+
 ---
 
 ## 14. Centrale gebruikersdatabase & Medewerkers-app
