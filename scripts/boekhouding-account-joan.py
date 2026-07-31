@@ -3,10 +3,11 @@
 Draaien (vanuit ~/appportal):
   sh scripts/ak-exec.sh scripts/boekhouding-account-joan.py
 
-Bewust geen wachtwoord: het account krijgt een onbruikbaar wachtwoord en een
-eenmalige herstellink, zodat Joan haar eigen wachtwoord zet en niemand anders
-het ooit gezien heeft. De link wordt naar /tmp/joan-herstellink.txt op de VM
-geschreven en niet afgedrukt.
+Bewust geen wachtwoord in de code of in chat. Is er een self-service
+herstelflow, dan krijgt Joan een eenmalige herstellink en zet ze haar eigen
+wachtwoord. Is die er niet, dan wordt hier een startwachtwoord gegenereerd. In
+beide gevallen landt het resultaat in een bestand op de VM met rechten 600 en
+wordt het niet afgedrukt.
 
 Idempotent: opnieuw draaien maakt geen tweede account, maar wel een verse link.
 """
@@ -20,6 +21,7 @@ USERNAME = "joan"
 NAAM = "Joan Cabenda"
 GROEPEN = ("boekhouding",)
 LINKBESTAND = "/tmp/joan-herstellink.txt"
+WACHTWOORDBESTAND = "/tmp/joan-startwachtwoord.txt"
 
 gebruiker, gemaakt = User.objects.get_or_create(
     username=USERNAME, defaults=dict(name=NAAM))
@@ -40,8 +42,22 @@ print("groepen:", ", ".join(g.name for g in gebruiker.ak_groups.all()) or "geen"
 herstel = (Flow.objects.filter(slug="default-recovery-flow").first()
            or Flow.objects.filter(designation="recovery").first())
 if not herstel:
-    print("LET OP: geen herstelflow gevonden, geen link gemaakt. "
-          "Zet het wachtwoord dan via de Authentik-beheerpagina.")
+    # Deze Authentik heeft geen self-service herstelflow. Dan een gegenereerd
+    # startwachtwoord dat de VM niet verlaat: het staat in een bestand dat
+    # alleen de beheerder kan lezen, en Joan wijzigt het na de eerste keer.
+    import secrets
+    import string
+
+    tekens = string.ascii_letters + string.digits
+    wachtwoord = "".join(secrets.choice(tekens) for _ in range(20))
+    gebruiker.set_password(wachtwoord)
+    gebruiker.save()
+    with open(WACHTWOORDBESTAND, "w", encoding="utf-8") as f:
+        f.write(f"startwachtwoord voor {USERNAME} ({NAAM}): {wachtwoord}\n"
+                f"aanmelden op https://{BASE_DOMAIN} en meteen wijzigen.\n")
+    os.chmod(WACHTWOORDBESTAND, 0o600)
+    print(f"geen herstelflow op deze Authentik; startwachtwoord gezet en "
+          f"geschreven naar {WACHTWOORDBESTAND}")
 else:
     token = Token.objects.create(
         user=gebruiker, intent=TokenIntents.INTENT_RECOVERY,
