@@ -1,32 +1,44 @@
 {% extends "base.html" %}
-{% block titel %}Taken{% endblock %}
+{% block titel %}Opdrachten{% endblock %}
 {% block body %}
 <div class="kop">
-  <h1>Taken</h1>
-  <div class="sub">Opdrachten (firma + thema) door de pijplijn. De runner pikt <b>nieuw</b> en <b>schrijven</b> op; jij beslist bij <b>blueprint-review</b> en <b>review</b>.</div>
+  <h1>Opdrachten</h1>
+  <div class="sub">Leg in je eigen woorden uit wat je wil. Het team bepaalt zelf welke agents nodig zijn en levert het resultaat ter validatie.</div>
 </div>
 
 <div class="acties" style="margin-bottom:18px">
-  <h2 style="margin-top:0">Nieuwe taak starten</h2>
-  <form method="post" action="/taak" class="filters" style="align-items:flex-end">
-    <div><label style="display:block;font-size:11px;color:var(--tekst-3);margin-bottom:3px">Firma</label><input name="firma" placeholder="UNABO" required></div>
-    <div><label style="display:block;font-size:11px;color:var(--tekst-3);margin-bottom:3px">Thema / dienst</label><input name="thema" placeholder="Barsten en scheuren" required></div>
-    <div><label style="display:block;font-size:11px;color:var(--tekst-3);margin-bottom:3px">Paginatype</label><select name="paginatype"><option>subpagina</option><option>landingpagina</option></select></div>
-    <div><label style="display:block;font-size:11px;color:var(--tekst-3);margin-bottom:3px">Conversiedoel</label><input name="doel" placeholder="Offerteaanvraag"></div>
-    <button class="knop" type="submit">Taak aanmaken</button>
+  <form method="post" action="/taak">
+    <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--tekst-3);margin-bottom:5px">Wat wil je dat we doen?</label>
+    <textarea name="opdracht" required rows="4"
+      placeholder="Bijvoorbeeld: &#10;· Schrijf een SEO-pagina voor UNABO over funderingsonderzoek&#10;· Onderzoek waarom onze pagina over regularisatie niet scoort&#10;· Analyseer de huisstijl van Corenbo en stel verbeteringen voor&#10;· Maak een contentplan voor H-Architects voor het najaar"
+      style="width:100%;border:1px solid var(--lijn-sterk);border-radius:6px;padding:10px 12px;font-size:13.5px;font-family:inherit;resize:vertical;line-height:1.55"></textarea>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:10px">
+      <div>
+        <label style="display:block;font-size:11px;color:var(--tekst-3);margin-bottom:3px">Firma <span style="text-transform:none;letter-spacing:0">(optioneel, helpt het team)</span></label>
+        <input name="firma" list="firmalijst" placeholder="bv. UNABO" style="border:1px solid var(--lijn-sterk);border-radius:5px;padding:6px 10px;font-size:12.5px;min-width:180px">
+        <datalist id="firmalijst">
+          {% for m in merken %}<option value="{{ m.naam }}">{% endfor %}
+        </datalist>
+      </div>
+      <button class="knop" type="submit">Opdracht geven</button>
+    </div>
   </form>
-  <p class="sub" style="margin-top:8px;color:var(--tekst-3)">Een nieuwe taak start op fase <b>nieuw</b>; de runner doet dan het onderzoek en levert een blueprint ter validatie.</p>
+  <p class="sub" style="margin-top:10px;color:var(--tekst-3)">Het team leest je opdracht, bepaalt de aanpak en zet het resultaat klaar in <a href="/validatie">Validatie</a>. Er wordt niets gepubliceerd zonder jouw akkoord.</p>
 </div>
 
 {% if taken %}
 <div class="paneel">
   <table class="lijst">
-    <thead><tr><th>Firma · thema</th><th>Type</th><th>Fase</th><th>Runner</th><th>Aangemaakt</th></tr></thead>
+    <thead><tr><th>Opdracht</th><th>Firma</th><th>Fase</th><th>Bezig</th><th>Gegeven</th></tr></thead>
     <tbody>
       {% for t in taken %}
       <tr>
-        <td><strong>{{ t.firma }}</strong> · {{ t.thema }}{% if t.oplevering_id %} · <a href="/oplevering/{{ t.oplevering_id }}">oplevering</a>{% endif %}</td>
-        <td>{{ t.paginatype }}</td>
+        <td>
+          {% if t.opdracht %}{{ t.opdracht[:160] }}{% if t.opdracht|length > 160 %}…{% endif %}
+          {% else %}<span class="muted-x">{{ t.thema }}</span>{% endif %}
+          {% if t.oplevering_id %}<div style="margin-top:3px"><a href="/oplevering/{{ t.oplevering_id }}">→ resultaat bekijken</a></div>{% endif %}
+        </td>
+        <td>{{ t.firma or '—' }}</td>
         <td><span class="sb {{ 'in_review' if t.fase in ['blueprint_review','review'] else ('gepubliceerd' if t.fase=='gepubliceerd' else 'goedgekeurd') }}">{{ t.fase }}</span></td>
         <td class="code">{{ t.runner or '—' }}</td>
         <td class="code">{{ (t.aangemaakt or '')[:16]|replace('T',' ') }}</td>
@@ -36,6 +48,6 @@
   </table>
 </div>
 {% else %}
-<div class="paneel"><p class="leeg">Nog geen taken. Maak er hierboven één aan.</p></div>
+<div class="paneel"><p class="leeg">Nog geen opdrachten. Beschrijf hierboven wat je wil en het team gaat aan de slag.</p></div>
 {% endif %}
 {% endblock %}

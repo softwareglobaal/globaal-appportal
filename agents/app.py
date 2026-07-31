@@ -260,6 +260,9 @@ def db():
         aangemaakt     TEXT NOT NULL,
         aangemaakt_door TEXT DEFAULT '',
         bijgewerkt     TEXT DEFAULT '')""")
+    # Vrije opdracht: je typt gewoon wat je wil; de agents bepalen de aanpak.
+    _kolom(conn, "taak", "opdracht", "TEXT DEFAULT ''")
+    _kolom(conn, "taak", "soort", "TEXT DEFAULT ''")
     _seed(conn)
     return conn
 
@@ -1004,24 +1007,25 @@ def taken():
     conn = db()
     rows = [dict(r) for r in conn.execute("SELECT * FROM taak ORDER BY aangemaakt DESC")]
     conn.close()
-    return render_template("taken.html", taken=rows)
+    return render_template("taken.html", taken=rows, merken=MERKEN)
 
 
 @app.route("/taak", methods=["POST"])
 def taak_nieuw():
+    """Vrije opdracht: je typt wat je wil, de agents bepalen zelf de aanpak.
+    Firma is optioneel maar helpt (de governance werkt met één firma-context)."""
     d = request.form if request.form else (request.get_json(silent=True) or {})
-    firma = (d.get("firma") or "").strip()[:80]
-    thema = (d.get("thema") or "").strip()[:120]
-    if not firma or not thema:
+    opdracht = (d.get("opdracht") or "").strip()[:4000]
+    if not opdracht:
         if request.form:
             return redirect("/taken")
-        return jsonify({"ok": False, "fout": "firma en thema zijn verplicht"}), 400
+        return jsonify({"ok": False, "fout": "opdracht is verplicht"}), 400
     wie = request.headers.get("X-authentik-username", "onbekend")[:120]
     conn = db()
     conn.execute(
-        """INSERT INTO taak (firma, thema, paginatype, doel, regio, fase, aangemaakt, aangemaakt_door)
-           VALUES (?,?,?,?,?, 'nieuw', ?, ?)""",
-        (firma, thema, (d.get("paginatype") or "")[:40], (d.get("doel") or "")[:120],
+        """INSERT INTO taak (firma, opdracht, regio, fase, aangemaakt, aangemaakt_door)
+           VALUES (?,?,?, 'nieuw', ?, ?)""",
+        ((d.get("firma") or "").strip()[:80], opdracht,
          (d.get("regio") or "Vlaanderen")[:60], _nu().isoformat(), wie))
     conn.commit(); conn.close()
     if request.form:
@@ -1045,6 +1049,7 @@ def taak_wacht():
             (_nu().isoformat(), r["id"]))
         if cur.rowcount:
             geclaimd.append({"id": r["id"], "firma": r["firma"], "thema": r["thema"],
+                             "opdracht": r["opdracht"] or "", "soort": r["soort"] or "",
                              "paginatype": r["paginatype"], "doel": r["doel"],
                              "regio": r["regio"], "fase": r["fase"],
                              "oplevering_id": r["oplevering_id"]})
