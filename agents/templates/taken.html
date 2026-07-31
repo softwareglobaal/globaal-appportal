@@ -7,7 +7,7 @@
 </div>
 
 <div class="acties" style="margin-bottom:18px">
-  <form method="post" action="/taak">
+  <form method="post" action="/taak" enctype="multipart/form-data">
     <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--tekst-3);margin-bottom:5px">Wat wil je dat we doen?</label>
     <textarea name="opdracht" required rows="4"
       placeholder="Bijvoorbeeld: &#10;· Schrijf een SEO-pagina voor UNABO over funderingsonderzoek&#10;· Onderzoek waarom onze pagina over regularisatie niet scoort&#10;· Analyseer de huisstijl van Corenbo en stel verbeteringen voor&#10;· Maak een contentplan voor H-Architects voor het najaar"
@@ -20,10 +20,15 @@
           {% for m in merken %}<option value="{{ m.naam }}">{% endfor %}
         </datalist>
       </div>
+      <div>
+        <label style="display:block;font-size:11px;color:var(--tekst-3);margin-bottom:3px">Bijlagen <span style="text-transform:none;letter-spacing:0">(optioneel: document of afbeelding)</span></label>
+        <input type="file" name="bijlagen" multiple accept=".pdf,.docx,.md,.txt,.html,.csv,.png,.jpg,.jpeg,.webp,.gif"
+               style="font-size:12.5px;max-width:290px">
+      </div>
       <button class="knop" type="submit">Opdracht geven</button>
     </div>
   </form>
-  <p class="sub" style="margin-top:10px;color:var(--tekst-3)">Het team leest je opdracht, bepaalt de aanpak en zet het resultaat klaar in <a href="/validatie">Validatie</a>. Er wordt niets gepubliceerd zonder jouw akkoord.</p>
+  <p class="sub" style="margin-top:10px;color:var(--tekst-3)">Je mag documenten of afbeeldingen meesturen. Het team leest je opdracht en de bijlagen, bepaalt de aanpak en zet het resultaat klaar in <a href="/validatie">Validatie</a>. Er wordt niets gepubliceerd zonder jouw akkoord.</p>
 </div>
 
 {% if taken %}
@@ -36,6 +41,9 @@
         <td>
           {% if t.opdracht %}{{ t.opdracht[:160] }}{% if t.opdracht|length > 160 %}…{% endif %}
           {% else %}<span class="muted-x">{{ t.thema }}</span>{% endif %}
+          {% if t.bijlagen %}<div style="margin-top:4px;font-size:11.5px;color:var(--tekst-3)">
+            📎 {% for b in t.bijlagen %}<a href="/bijlage/{{ b.id }}" target="_blank" rel="noopener">{{ b.bestandsnaam }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+          </div>{% endif %}
           {% if t.oplevering_id %}<div style="margin-top:3px"><a href="/oplevering/{{ t.oplevering_id }}">→ resultaat bekijken</a></div>{% endif %}
         </td>
         <td>{{ t.firma or '—' }}</td>

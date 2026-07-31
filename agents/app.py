@@ -263,6 +263,15 @@ def db():
     # Vrije opdracht: je typt gewoon wat je wil; de agents bepalen de aanpak.
     _kolom(conn, "taak", "opdracht", "TEXT DEFAULT ''")
     _kolom(conn, "taak", "soort", "TEXT DEFAULT ''")
+    # Bijlagen bij een opdracht (briefing, foto, bestaand document).
+    conn.execute("""CREATE TABLE IF NOT EXISTS bijlage (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        taak_id      INTEGER NOT NULL,
+        bestandsnaam TEXT NOT NULL,
+        pad          TEXT NOT NULL,
+        bytes        INTEGER,
+        mime         TEXT DEFAULT '',
+        aangeleverd  TEXT NOT NULL)""")
     _seed(conn)
     return conn
 
@@ -559,6 +568,11 @@ def handelingen_sync():
 INGESTIE_MAP = os.environ.get("INGESTIE_MAP", "/data/ingestie")
 TOEGESTAAN = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm"}
 MAX_BYTES = 60 * 1024 * 1024
+# Bijlagen bij een opdracht: documenten en afbeeldingen.
+BIJLAGE_MAP = os.environ.get("BIJLAGE_MAP", "/data/opdracht-bijlagen")
+BIJLAGE_TYPES = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm", ".docx", ".csv",
+                 ".png", ".jpg", ".jpeg", ".webp", ".gif"}
+BIJLAGE_BEELD = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
 def ingestie_rijen(limit=25):
@@ -1006,8 +1020,38 @@ TAAK_RUNBAAR = ("nieuw", "schrijven")
 def taken():
     conn = db()
     rows = [dict(r) for r in conn.execute("SELECT * FROM taak ORDER BY aangemaakt DESC")]
+    for t in rows:
+        t["bijlagen"] = [dict(b) for b in conn.execute(
+            "SELECT id, bestandsnaam, bytes FROM bijlage WHERE taak_id=?", (t["id"],))]
     conn.close()
-    return render_template("taken.html", taken=rows, merken=MERKEN)
+    return render_template("taken.html", taken=rows, merken=MERKEN,
+                           types=sorted(BIJLAGE_TYPES))
+
+
+@app.route("/bijlage/<int:bid>")
+def bijlage(bid):
+    """Bekijk/download een bijlage (achter de SSO)."""
+    conn = db()
+    r = conn.execute("SELECT * FROM bijlage WHERE id=?", (bid,)).fetchone()
+    conn.close()
+    if not r or not os.path.exists(r["pad"]):
+        abort(404)
+    return send_file(r["pad"], download_name=r["bestandsnaam"])
+
+
+@app.route("/api/taak/<int:tid>/bijlagen")
+def api_bijlagen(tid):
+    """De runner haalt de bijlagen van een opdracht op (paden + soort)."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    conn = db()
+    rows = conn.execute("SELECT * FROM bijlage WHERE taak_id=?", (tid,)).fetchall()
+    conn.close()
+    return jsonify({"bijlagen": [
+        {"id": r["id"], "bestandsnaam": r["bestandsnaam"], "pad": r["pad"],
+         "bytes": r["bytes"], "mime": r["mime"],
+         "beeld": os.path.splitext(r["bestandsnaam"])[1].lower() in BIJLAGE_BEELD}
+        for r in rows]})
 
 
 @app.route("/taak", methods=["POST"])
@@ -1022,15 +1066,34 @@ def taak_nieuw():
         return jsonify({"ok": False, "fout": "opdracht is verplicht"}), 400
     wie = request.headers.get("X-authentik-username", "onbekend")[:120]
     conn = db()
-    conn.execute(
+    cur = conn.execute(
         """INSERT INTO taak (firma, opdracht, regio, fase, aangemaakt, aangemaakt_door)
            VALUES (?,?,?, 'nieuw', ?, ?)""",
         ((d.get("firma") or "").strip()[:80], opdracht,
          (d.get("regio") or "Vlaanderen")[:60], _nu().isoformat(), wie))
+    tid = cur.lastrowid
+    # Bijlagen (documenten/afbeeldingen) bij deze opdracht.
+    os.makedirs(BIJLAGE_MAP, exist_ok=True)
+    for best in request.files.getlist("bijlagen"):
+        if not best or not best.filename:
+            continue
+        naam = os.path.basename(best.filename)[:200]
+        if os.path.splitext(naam)[1].lower() not in BIJLAGE_TYPES:
+            continue
+        pad = os.path.join(BIJLAGE_MAP, f"{tid}-{len(naam)}-{naam}")
+        best.save(pad)
+        grootte = os.path.getsize(pad)
+        if grootte > MAX_BYTES:
+            os.remove(pad)
+            continue
+        conn.execute(
+            """INSERT INTO bijlage (taak_id, bestandsnaam, pad, bytes, mime, aangeleverd)
+               VALUES (?,?,?,?,?,?)""",
+            (tid, naam, pad, grootte, best.mimetype or "", _nu().isoformat()))
     conn.commit(); conn.close()
     if request.form:
         return redirect("/taken")
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "id": tid})
 
 
 @app.route("/api/taak-wacht")
