@@ -1366,6 +1366,14 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
   vervaldatum-signalen uit halen ("verzekering vervalt < 90 dagen", laag 3).
 - Verwijderen is zacht (actief/niet-actief); huurders/verzekeraars/banken zijn nog
   tekstvelden tot de klant-/externe-partij-entiteit bestaat. App-docs: README aldaar.
+- **MCP-endpoint voor Claude**: `https://vermogen.globaal.be/mcp` (streamable
+  HTTP, `mcp_server.py` in de app-repo; tools overzicht/detail/referenties/
+  aanmaken/bijwerken/actief_zetten). Auth = bearer-token: `VERMOGEN_MCP_TOKEN`
+  in `.env` -> env `MCP_TOKEN` van `app-vermogen`; leeg token = endpoint uit
+  (404). De nginx-template heeft een `location = /mcp` die buiten de
+  forward-auth om proxyt; audit-triggers zien `claude-mcp` als gebruiker.
+  Koppelen: `claude mcp add --transport http vermogen
+  https://vermogen.globaal.be/mcp --header "Authorization: Bearer <token>"`.
 
 ### 14.7A Finance-pijplijn (Octopus-spiegel, PLAN.md stappen 3-6)
 De eerste tool-API van het Unified Dashboard-spoor die geld ontsluit.

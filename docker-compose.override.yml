@@ -284,6 +284,8 @@ services:
       PORT: "3009"
       # Wie mag bewerken (komma-gescheiden Authentik-groepen).
       EDITOR_GROUPS: vermogen-editors,admin
+      # Bearer-token voor het MCP-endpoint (/mcp, Claude); leeg = endpoint uit.
+      MCP_TOKEN: ${VERMOGEN_MCP_TOKEN:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3009/healthz')"]
       interval: 30s

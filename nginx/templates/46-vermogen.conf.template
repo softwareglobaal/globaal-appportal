@@ -8,4 +8,14 @@ server {
     # gaan als X-authentik-* headers naar de Flask-app.
     set $app_upstream http://app-vermogen:3009;
     include /etc/nginx/snippets/forward-auth.conf;
+
+    # MCP-endpoint voor Claude: buiten de forward-auth om (MCP-clients hebben
+    # geen Authentik-sessie); de app checkt zelf het bearer-token (MCP_TOKEN).
+    # Zolang VERMOGEN_MCP_TOKEN niet in .env staat, geeft de app hier 404.
+    location = /mcp {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
 }
