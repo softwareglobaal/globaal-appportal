@@ -104,6 +104,7 @@
   <nav class="nav">
     <span class="area">Sales/Marketing agents</span>
     <a href="/seo-team" class="{{ 'actief' if p=='/seo-team' else '' }}">Organogram</a>
+    <a href="/taken" class="{{ 'actief' if p=='/taken' else '' }}">Taken</a>
     <a href="/overzicht" class="{{ 'actief' if p=='/overzicht' else '' }}">Overzicht &amp; status</a>
     <a href="/validatie" class="{{ 'actief' if p=='/validatie' else '' }}">Validatie{% if nav_te_valideren %} <span class="badge-n">{{ nav_te_valideren }}</span>{% endif %}</a>
     <a href="/opleveringen" class="{{ 'actief' if p.startswith('/opleveringen') or p.startswith('/oplevering/') else '' }}">Opleveringen</a>

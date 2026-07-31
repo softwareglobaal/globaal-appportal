@@ -244,6 +244,21 @@ def db():
     _kolom(conn, "oplevering", "wp_status", "TEXT DEFAULT ''")
     _kolom(conn, "oplevering", "wp_link", "TEXT DEFAULT ''")
     _kolom(conn, "oplevering", "wp_preview", "TEXT DEFAULT ''")
+    # Taken: opdrachten (firma + thema) door de pijplijn. De runner pikt
+    # 'nieuw' en 'schrijven' op; de mens beslist bij 'blueprint_review'/'review'.
+    conn.execute("""CREATE TABLE IF NOT EXISTS taak (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        firma          TEXT DEFAULT '',
+        thema          TEXT DEFAULT '',
+        paginatype     TEXT DEFAULT '',
+        doel           TEXT DEFAULT '',
+        regio          TEXT DEFAULT 'Vlaanderen',
+        fase           TEXT NOT NULL DEFAULT 'nieuw',
+        runner         TEXT DEFAULT '',
+        oplevering_id  INTEGER,
+        aangemaakt     TEXT NOT NULL,
+        aangemaakt_door TEXT DEFAULT '',
+        bijgewerkt     TEXT DEFAULT '')""")
     _seed(conn)
     return conn
 
@@ -964,3 +979,82 @@ def oplevering_publiceer(oid):
         (page.get("status", "publish"), page.get("link", ""), wie, _nu().isoformat(), oid))
     conn.commit(); conn.close()
     return jsonify({"ok": True, "link": page.get("link", "")})
+
+
+# ---------------------------------------------------------------------------
+# Takenwachtrij: de ruggengraat die de server-side runner pollt.
+# Fases: nieuw -> onderzoek -> blueprint_review -> schrijven -> qc -> review -> gepubliceerd
+# De runner pakt 'nieuw' (doet onderzoek) en 'schrijven' (schrijft + qc).
+# ---------------------------------------------------------------------------
+TAAK_FASEN = ["nieuw", "onderzoek", "blueprint_review", "schrijven", "qc", "review", "gepubliceerd"]
+TAAK_RUNBAAR = ("nieuw", "schrijven")
+
+
+@app.route("/taken")
+def taken():
+    conn = db()
+    rows = [dict(r) for r in conn.execute("SELECT * FROM taak ORDER BY aangemaakt DESC")]
+    conn.close()
+    return render_template("taken.html", taken=rows)
+
+
+@app.route("/taak", methods=["POST"])
+def taak_nieuw():
+    d = request.form if request.form else (request.get_json(silent=True) or {})
+    firma = (d.get("firma") or "").strip()[:80]
+    thema = (d.get("thema") or "").strip()[:120]
+    if not firma or not thema:
+        if request.form:
+            return redirect("/taken")
+        return jsonify({"ok": False, "fout": "firma en thema zijn verplicht"}), 400
+    wie = request.headers.get("X-authentik-username", "onbekend")[:120]
+    conn = db()
+    conn.execute(
+        """INSERT INTO taak (firma, thema, paginatype, doel, regio, fase, aangemaakt, aangemaakt_door)
+           VALUES (?,?,?,?,?, 'nieuw', ?, ?)""",
+        (firma, thema, (d.get("paginatype") or "")[:40], (d.get("doel") or "")[:120],
+         (d.get("regio") or "Vlaanderen")[:60], _nu().isoformat(), wie))
+    conn.commit(); conn.close()
+    if request.form:
+        return redirect("/taken")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/taak-wacht")
+def taak_wacht():
+    """De runner claimt de volgende te-doen taken (atomair: '' -> 'bezig')."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM taak WHERE fase IN ('nieuw','schrijven') AND (runner IS NULL OR runner='')"
+    ).fetchall()
+    geclaimd = []
+    for r in rows:
+        cur = conn.execute(
+            "UPDATE taak SET runner='bezig', bijgewerkt=? WHERE id=? AND (runner IS NULL OR runner='')",
+            (_nu().isoformat(), r["id"]))
+        if cur.rowcount:
+            geclaimd.append({"id": r["id"], "firma": r["firma"], "thema": r["thema"],
+                             "paginatype": r["paginatype"], "doel": r["doel"],
+                             "regio": r["regio"], "fase": r["fase"],
+                             "oplevering_id": r["oplevering_id"]})
+    conn.commit(); conn.close()
+    return jsonify({"taken": geclaimd})
+
+
+@app.route("/taak/<int:tid>/rapport", methods=["POST"])
+def taak_rapport(tid):
+    """De runner meldt het resultaat: nieuwe fase + eventueel de oplevering-id."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    d = request.get_json(silent=True) or {}
+    fase = str(d.get("fase", "")).strip()
+    if fase not in TAAK_FASEN:
+        abort(400)
+    conn = db()
+    conn.execute(
+        "UPDATE taak SET fase=?, runner='', oplevering_id=COALESCE(?, oplevering_id), bijgewerkt=? WHERE id=?",
+        (fase, d.get("oplevering_id"), _nu().isoformat(), tid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
