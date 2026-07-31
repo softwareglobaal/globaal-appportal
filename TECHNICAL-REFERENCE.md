@@ -1373,6 +1373,13 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
   Veldtypes beperkt (tekst/bedrag/pct/datum/keuze/lang, geen refs naar kern,
   dus geen graaf-werk); de webapp toont ze automatisch en de generieke
   MCP-datatools accepteren de slug als tab.
+- **Layout en eigen tools via MCP** (migratie 106): `vermogen.instelling`
+  (titel, tab_volgorde, lijst_kolommen, css; de webapp leest ze per request)
+  en `vermogen.mcp_tool` (door Claude gedefinieerde raadpleeg-tools:
+  opgeslagen SELECT-queries met parameters, dynamisch in tools/list).
+  Grenzen bewust: css gevalideerd (geen @import/script-ontsnapping), eigen
+  tools alleen SELECT en afgedwongen READ ONLY + timeout + max 200 rijen;
+  geen code-uitvoering via MCP, schrijven alleen via de vaste tools.
 - **MCP-endpoint voor Claude**: `https://vermogen.globaal.be/mcp` (streamable
   HTTP, `mcp_server.py` in de app-repo; tools overzicht/detail/referenties/
   aanmaken/bijwerken/actief_zetten). Twee auth-vormen, beide uit (404) zolang
