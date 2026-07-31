@@ -1370,10 +1370,17 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
   Claude aan te maken via MCP (`sectie_aanmaken`/`sectie_bijwerken`/
   `sectie_actief_zetten`). Definitie in `vermogen.sectie` (slug, naam, velden
   jsonb), rijen als jsonb in `vermogen.sectie_rij`; audit-triggers zoals 023.
-  Veldtypes: tekst/bedrag/pct/datum/keuze/lang/ref (bron firma/pand/syndicus;
-  zachte links als jsonb-id met validatie bij schrijven, géén FK - dus geen
-  migratie en geen graaf-werk per sectie); de webapp toont ze automatisch en
-  de generieke MCP-datatools accepteren de slug als tab.
+  Veldtypes: tekst/bedrag/pct/datum/keuze/lang/ref (bron firma/pand/syndicus
+  of `sectie:<slug>` voor sectie-naar-sectie-links, weergavenaam = eerste
+  veld; zachte links als jsonb-id met validatie bij schrijven, géén FK - dus
+  geen migratie en geen graaf-werk per sectie); de webapp toont ze
+  automatisch en de generieke MCP-datatools accepteren de slug als tab.
+- **Planner** (migratie 108): `vermogen.plan` + planner-thread in de app
+  (elk uur; FOR UPDATE SKIP LOCKED tegen worker-races, zie ook §poller-
+  patroon): terugkerende rijen ("elke maand een betaalrij") met veldensjabloon,
+  interval, optioneel datumveld dat de rundatum krijgt; achterstand haalt
+  zichzelf in, audit ziet `vermogen-planner`. MCP-tools plannen/plan_aanmaken/
+  plan_bijwerken/plan_actief_zetten.
 - **Vaste tabs via MCP herstructureerbaar** (migratie 107): jsonb-kolom
   `extra` op pand/verzekering/lening/syndicus + `vermogen.tab_schema` per tab
   (extra velddefinities, aanpassingen op kernvelden: label/opties/verborgen/
