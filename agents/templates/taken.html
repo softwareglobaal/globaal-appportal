@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block titel %}Opdrachten{% endblock %}
 {% block body %}
+<style>.spin{width:10px;height:10px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:sp .8s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.spin{animation:none}}</style>
 <div class="kop">
   <h1>Opdrachten</h1>
   <div class="sub">Leg in je eigen woorden uit wat je wil. Het team bepaalt zelf welke agents nodig zijn en levert het resultaat ter validatie.</div>
@@ -34,7 +35,7 @@
 {% if taken %}
 <div class="paneel">
   <table class="lijst">
-    <thead><tr><th>Opdracht</th><th>Firma</th><th>Fase</th><th>Bezig</th><th>Gegeven</th></tr></thead>
+    <thead><tr><th>Opdracht</th><th>Firma</th><th>Fase</th><th>Status</th><th>Gegeven</th><th></th></tr></thead>
     <tbody>
       {% for t in taken %}
       <tr>
@@ -48,8 +49,28 @@
         </td>
         <td>{{ t.firma or '—' }}</td>
         <td><span class="sb {{ 'in_review' if t.fase in ['blueprint_review','review'] else ('gepubliceerd' if t.fase=='gepubliceerd' else 'goedgekeurd') }}">{{ t.fase }}</span></td>
-        <td class="code">{{ t.runner or '—' }}</td>
+        <td>
+          {% if t.runner == 'bezig' %}
+            <span style="display:inline-flex;align-items:center;gap:6px;color:var(--amber);font-size:12.5px">
+              <i class="spin"></i> het team werkt eraan
+            </span>
+            <div class="code" style="font-size:11px;margin-top:2px">
+              al {{ t.bezig_min or 0 }} min{% if gem_duur %} · meestal ~{{ gem_duur }} min{% endif %}
+            </div>
+          {% elif t.fase in ['blueprint_review','review'] %}
+            <span style="color:var(--ja);font-size:12.5px">klaar — wacht op jou</span>
+          {% elif t.fase == 'gepubliceerd' %}
+            <span style="color:var(--klaar);font-size:12.5px">afgerond</span>
+          {% else %}
+            <span class="muted-x" style="font-size:12.5px">in wachtrij</span>
+          {% endif %}
+        </td>
         <td class="code">{{ (t.aangemaakt or '')[:16]|replace('T',' ') }}</td>
+        <td style="text-align:right">
+          <form method="post" action="/taak/{{ t.id }}/verwijder" onsubmit="return confirm('Deze opdracht en het bijhorende resultaat verwijderen?')" style="display:inline">
+            <button class="knop" type="submit" style="padding:3px 9px;font-size:11.5px;color:var(--nee)">Verwijderen</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

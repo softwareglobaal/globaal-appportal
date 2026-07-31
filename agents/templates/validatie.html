@@ -9,7 +9,7 @@
 {% if items %}
 <div class="paneel">
   <table class="lijst">
-    <thead><tr><th>Deliverable</th><th>Firma · thema</th><th>Van</th><th>Status</th><th>Sinds</th></tr></thead>
+    <thead><tr><th>Deliverable</th><th>Firma · thema</th><th>Van</th><th>Status</th><th>Sinds</th><th></th></tr></thead>
     <tbody>
       {% for i in items %}
       <tr>
@@ -18,6 +18,11 @@
         <td>{{ i.label }}</td>
         <td><span class="sb {{ i.status }}">{{ i.status_label }}</span></td>
         <td class="code">{{ i.aangemaakt }}</td>
+        <td style="text-align:right">
+          <form method="post" action="/oplevering/{{ i.id }}/verwijder" onsubmit="return confirm('Deze validatie verwijderen?')" style="display:inline">
+            <button class="knop" type="submit" style="padding:3px 9px;font-size:11.5px;color:var(--nee)">Verwijderen</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

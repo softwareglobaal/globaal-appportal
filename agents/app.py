@@ -18,7 +18,7 @@ achteraf. Deze app legt alleen de beslissing en de uitkomst vast.
 import os
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import markdown
 
@@ -703,6 +703,8 @@ def healthz():
 # ---------------------------------------------------------------------------
 
 SEO_TEAM = [
+    {"naam": "team", "label": "Team (vrije opdracht)", "bijnaam": "De Ploeg",
+     "team": "SEO", "rol": "leest je opdracht en kiest zelf de aanpak"},
     {"naam": "seo-onderzoek", "label": "Onderzoek", "bijnaam": "De Verkenner",
      "team": "SEO", "rol": "live SEO-onderzoek → blueprint"},
     {"naam": "seo-schrijver", "label": "Schrijver", "bijnaam": "De Pen",
@@ -1020,12 +1022,14 @@ TAAK_RUNBAAR = ("nieuw", "schrijven")
 def taken():
     conn = db()
     rows = [dict(r) for r in conn.execute("SELECT * FROM taak ORDER BY aangemaakt DESC")]
+    gem = _gem_duur_min(conn)
     for t in rows:
         t["bijlagen"] = [dict(b) for b in conn.execute(
             "SELECT id, bestandsnaam, bytes FROM bijlage WHERE taak_id=?", (t["id"],))]
+        t["bezig_min"] = _verstreken_min(t["aangemaakt"]) if t["runner"] == "bezig" else None
     conn.close()
     return render_template("taken.html", taken=rows, merken=MERKEN,
-                           types=sorted(BIJLAGE_TYPES))
+                           types=sorted(BIJLAGE_TYPES), gem_duur=gem)
 
 
 @app.route("/bijlage/<int:bid>")
@@ -1096,12 +1100,20 @@ def taak_nieuw():
     return jsonify({"ok": True, "id": tid})
 
 
+VASTGELOPEN_MIN = 20   # een claim die zo lang 'bezig' staat, is vastgelopen
+
+
 @app.route("/api/taak-wacht")
 def taak_wacht():
-    """De runner claimt de volgende te-doen taken (atomair: '' -> 'bezig')."""
+    """De runner claimt de volgende te-doen taken (atomair: '' -> 'bezig').
+    Claims die te lang blijven hangen (crash/timeout) worden weer vrijgegeven."""
     if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
         abort(403)
     conn = db()
+    grens = (_nu() - timedelta(minutes=VASTGELOPEN_MIN)).isoformat()
+    conn.execute("UPDATE taak SET runner='' WHERE runner='bezig' AND COALESCE(bijgewerkt,'') < ?",
+                 (grens,))
+    conn.commit()
     rows = conn.execute(
         "SELECT * FROM taak WHERE fase IN ('nieuw','schrijven') AND (runner IS NULL OR runner='')"
     ).fetchall()
@@ -1194,6 +1206,60 @@ MERKEN = [
 @app.route("/branding")
 def branding():
     return render_template("branding.html", merken=MERKEN)
+
+
+
+
+def _verstreken_min(iso):
+    try:
+        return int((_nu() - datetime.fromisoformat(iso)).total_seconds() // 60)
+    except Exception:
+        return None
+
+
+def _gem_duur_min(conn):
+    """Gemiddelde doorlooptijd van eerder afgeronde opdrachten (nieuw -> review)."""
+    rows = conn.execute(
+        "SELECT aangemaakt, bijgewerkt FROM taak WHERE fase IN ('review','blueprint_review','gepubliceerd') "
+        "AND bijgewerkt != '' ORDER BY id DESC LIMIT 10").fetchall()
+    duren = []
+    for r in rows:
+        try:
+            d = (datetime.fromisoformat(r["bijgewerkt"]) - datetime.fromisoformat(r["aangemaakt"])).total_seconds() / 60
+            if 0 < d < 240:
+                duren.append(d)
+        except Exception:
+            pass
+    return int(sum(duren) / len(duren)) if duren else None
+
+
+@app.route("/taak/<int:tid>/verwijder", methods=["POST"])
+def taak_verwijder(tid):
+    """Verwijdert een opdracht met bijlagen en bijhorende opleveringen."""
+    conn = db()
+    for b in conn.execute("SELECT pad FROM bijlage WHERE taak_id=?", (tid,)).fetchall():
+        try:
+            os.remove(b["pad"])
+        except OSError:
+            pass
+    conn.execute("DELETE FROM bijlage WHERE taak_id=?", (tid,))
+    conn.execute("DELETE FROM oplevering WHERE taak_id=?", (tid,))
+    conn.execute("DELETE FROM taak WHERE id=?", (tid,))
+    conn.commit(); conn.close()
+    if request.form:
+        return redirect("/taken")
+    return jsonify({"ok": True})
+
+
+@app.route("/oplevering/<int:oid>/verwijder", methods=["POST"])
+def oplevering_verwijder(oid):
+    """Verwijdert een oplevering (het WordPress-concept blijft staan)."""
+    conn = db()
+    conn.execute("DELETE FROM oplevering WHERE id=?", (oid,))
+    conn.commit(); conn.close()
+    if request.form:
+        return redirect("/opleveringen")
+    return jsonify({"ok": True})
 
 
 @app.route("/api/oplevering/<int:oid>")
