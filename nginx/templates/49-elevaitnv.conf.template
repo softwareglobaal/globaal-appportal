@@ -1,0 +1,54 @@
+# Productie: elevaitnv.com. Eigen Let's Encrypt-certificaat, want het
+# wildcard-cert van *.globaal.be dekt dit domein niet. Eerst het
+# certificaat aanvragen (zie DEPLOY-ELEVAIT.md in de repo elevaitnv-website),
+# daarna pas deze template plaatsen: nginx start niet met een verwijzing
+# naar een certificaat dat nog niet bestaat.
+#
+# Deze vhost hoort in de stack-repo en nergens anders. Hij stond tot
+# 31-07-2026 als handmatig gekopieerd, niet-getrackt bestand op de VM en is
+# daar spoorloos verdwenen; het gevolg was dat nginx terugviel op het
+# standaardblok en bezoekers van elevaitnv.com het certificaat van
+# globaal.be kregen, met een browserwaarschuwing.
+
+server {
+    listen 80;
+    server_name elevaitnv.com www.elevaitnv.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://elevaitnv.com$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name www.elevaitnv.com;
+    ssl_certificate /etc/nginx/certs/elevaitnv/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/elevaitnv/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    return 301 https://elevaitnv.com$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name elevaitnv.com;
+    ssl_certificate /etc/nginx/certs/elevaitnv/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/elevaitnv/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # Sollicitaties met CV-upload mogen tot 10 MB groot zijn.
+    client_max_body_size 10m;
+
+    location / {
+        proxy_pass http://elevait-web:8090;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

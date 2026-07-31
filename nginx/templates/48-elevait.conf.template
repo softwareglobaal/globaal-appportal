@@ -1,0 +1,9 @@
+# Testfase voorbij: elevait.globaal.be verwijst permanent door naar het
+# echte domein, zodat er geen twee vindbare kopieen van de site bestaan.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name elevait.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    return 301 https://elevaitnv.com$request_uri;
+}
