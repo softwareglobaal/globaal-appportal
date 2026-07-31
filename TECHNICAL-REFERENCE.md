@@ -1374,6 +1374,13 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
   zachte links als jsonb-id met validatie bij schrijven, géén FK - dus geen
   migratie en geen graaf-werk per sectie); de webapp toont ze automatisch en
   de generieke MCP-datatools accepteren de slug als tab.
+- **Vaste tabs via MCP herstructureerbaar** (migratie 107): jsonb-kolom
+  `extra` op pand/verzekering/lening/syndicus + `vermogen.tab_schema` per tab
+  (extra velddefinities, aanpassingen op kernvelden: label/opties/verborgen/
+  verplicht, veldvolgorde). Tools `tab_schema`/`tab_bijwerken`; kernkolommen
+  blijven bestaan (verbergen is omkeerbaar, verplichte velden niet
+  verbergbaar, opties op `leningen.soort` vragen een migratie wegens de
+  check-constraint).
 - **Layout en eigen tools via MCP** (migratie 106): `vermogen.instelling`
   (titel, tab_volgorde, lijst_kolommen, css; de webapp leest ze per request)
   en `vermogen.mcp_tool` (door Claude gedefinieerde raadpleeg-tools:
