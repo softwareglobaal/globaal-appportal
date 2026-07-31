@@ -1366,6 +1366,13 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
   vervaldatum-signalen uit halen ("verzekering vervalt < 90 dagen", laag 3).
 - Verwijderen is zacht (actief/niet-actief); huurders/verzekeraars/banken zijn nog
   tekstvelden tot de klant-/externe-partij-entiteit bestaat. App-docs: README aldaar.
+- **Dynamische secties** (migratie 105): extra tabs naast de vaste vier, door
+  Claude aan te maken via MCP (`sectie_aanmaken`/`sectie_bijwerken`/
+  `sectie_actief_zetten`). Definitie in `vermogen.sectie` (slug, naam, velden
+  jsonb), rijen als jsonb in `vermogen.sectie_rij`; audit-triggers zoals 023.
+  Veldtypes beperkt (tekst/bedrag/pct/datum/keuze/lang, geen refs naar kern,
+  dus geen graaf-werk); de webapp toont ze automatisch en de generieke
+  MCP-datatools accepteren de slug als tab.
 - **MCP-endpoint voor Claude**: `https://vermogen.globaal.be/mcp` (streamable
   HTTP, `mcp_server.py` in de app-repo; tools overzicht/detail/referenties/
   aanmaken/bijwerken/actief_zetten). Twee auth-vormen, beide uit (404) zolang
