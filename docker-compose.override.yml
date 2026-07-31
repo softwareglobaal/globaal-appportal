@@ -79,7 +79,9 @@ services:
       OCTOPUS_SOFTWAREHOUSE_UUID: ${OCTOPUS_SOFTWAREHOUSE_UUID:-}
       OCTOPUS_USER: ${OCTOPUS_USER:-}
       OCTOPUS_PASSWORD: ${OCTOPUS_PASSWORD:-}
-      MONDAY_API_TOKEN: ${MONDAY_BOEKHOUDING_TOKEN:-}
+      # Eigen token als die er is, anders het bestaande volledige-account-token.
+      # Nooit MONDAY_SANDBOX_TOKEN: dat is het lege zandbak-account.
+      MONDAY_API_TOKEN: ${MONDAY_BOEKHOUDING_TOKEN:-${MONDAY_VOL_TOKEN:-}}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3014/healthz', timeout=5)"]
       interval: 60s
