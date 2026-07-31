@@ -66,6 +66,12 @@ apps:
     subdomain: items
     roles: [admin, manager, items]
     status: active
+  - id: boekhouding
+    name: Boekhouding
+    description: Factureren vanuit Monday naar Octopus, en openstaande posten
+    subdomain: boekhouding
+    roles: [admin, manager, boekhouding]
+    status: active
   - id: angela
     name: Angela
     description: Werkdashboard initiatief Suriname - merk, webshop, inkoop, NGO

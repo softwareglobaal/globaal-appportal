@@ -58,6 +58,34 @@ services:
       retries: 3
     networks: [appnet]
 
+  # Boekhouding - factureren vanuit Monday naar Octopus, plus de opvolging van
+  # openstaande posten en de wachtrekening. Overgenomen van Joan's lokale
+  # scripts (aanlevering 2026-07-30). Eigen repo softwareglobaal/globaal-
+  # boekhouding, uitgecheckt op de VM in ./boekhouding met auto-deploy via
+  # deploy-stack.sh en cron.
+  app-boekhouding:
+    build:
+      context: ./boekhouding
+      dockerfile: app/Dockerfile
+    image: appportal-boekhouding
+    restart: unless-stopped
+    environment:
+      PORT: "3014"
+      # Eigen rol boekhouding_writer (migratie 102); leeg = nette melding.
+      BOEKHOUDING_DB_URL: ${BOEKHOUDING_DB_URL:-}
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+      BOEKHOUDING_GROUPS: ${BOEKHOUDING_GROUPS:-boekhouding,manager}
+      OCTOPUS_SOFTWARE_HOUSE_UUID: ${OCTOPUS_SOFTWARE_HOUSE_UUID:-}
+      OCTOPUS_USER: ${OCTOPUS_USER:-}
+      OCTOPUS_PASSWORD: ${OCTOPUS_PASSWORD:-}
+      MONDAY_API_TOKEN: ${MONDAY_BOEKHOUDING_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3014/healthz', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    networks: [appnet]
+
   app-telefoonregister:
     build: ./telefoonregister
     image: appportal-telefoonregister

@@ -1,0 +1,15 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name boekhouding.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Boekhouding: factureren vanuit Monday naar Octopus, en de opvolging van
+    # openstaande posten. Alleen achter forward-auth; de app controleert zelf
+    # nog eens op de groepen boekhouding/manager/admin. De scan praat met
+    # Monday en Octopus en duurt tientallen seconden, vandaar de ruime
+    # lees-timeout op de proxy.
+    set $app_upstream http://app-boekhouding:3014;
+    proxy_read_timeout 300s;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
