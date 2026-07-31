@@ -1067,3 +1067,16 @@ def taak_rapport(tid):
         (fase, d.get("oplevering_id"), _nu().isoformat(), tid))
     conn.commit(); conn.close()
     return jsonify({"ok": True})
+
+
+@app.route("/api/oplevering/<int:oid>")
+def api_oplevering(oid):
+    """De runner leest een oplevering (bv. de goedgekeurde blueprint)."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    conn = db()
+    r = conn.execute("SELECT * FROM oplevering WHERE id=?", (oid,)).fetchone()
+    conn.close()
+    if not r:
+        abort(404)
+    return jsonify(dict(r))
