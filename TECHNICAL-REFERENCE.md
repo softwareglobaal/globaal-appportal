@@ -1368,12 +1368,20 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
   tekstvelden tot de klant-/externe-partij-entiteit bestaat. App-docs: README aldaar.
 - **MCP-endpoint voor Claude**: `https://vermogen.globaal.be/mcp` (streamable
   HTTP, `mcp_server.py` in de app-repo; tools overzicht/detail/referenties/
-  aanmaken/bijwerken/actief_zetten). Auth = bearer-token: `VERMOGEN_MCP_TOKEN`
-  in `.env` -> env `MCP_TOKEN` van `app-vermogen`; leeg token = endpoint uit
-  (404). De nginx-template heeft een `location = /mcp` die buiten de
-  forward-auth om proxyt; audit-triggers zien `claude-mcp` als gebruiker.
-  Koppelen: `claude mcp add --transport http vermogen
-  https://vermogen.globaal.be/mcp --header "Authorization: Bearer <token>"`.
+  aanmaken/bijwerken/actief_zetten). Twee auth-vormen, beide uit (404) zolang
+  de env leeg is:
+  - Claude Code/desktop: statisch bearer-token `VERMOGEN_MCP_TOKEN` in `.env`
+    -> env `MCP_TOKEN`; audit ziet `claude-mcp`. Koppelen: `claude mcp add
+    --transport http vermogen https://vermogen.globaal.be/mcp --header
+    "Authorization: Bearer <token>"`.
+  - claude.ai (web-connector): de app is zelf een minimale OAuth-server
+    (RFC 7591 DCR + 8414/9728 discovery + PKCE); stateless HMAC-tokens via
+    `VERMOGEN_MCP_SECRET` -> env `MCP_SECRET`. `/oauth/authorize` valt bewust
+    ONDER de forward-auth (Authentik-SSO is de login; alleen wie de tegel mag
+    zien kan koppelen), `/mcp*` en `/.well-known/oauth-*` erbuiten
+    (nginx-template). Schrijven vereist groep `vermogen-editors`/`admin`
+    (claim in het token); audit ziet `<gebruiker> (mcp)`. Redirects alleen
+    naar claude.ai/claude.com/anthropic.com.
 
 ### 14.7A Finance-pijplijn (Octopus-spiegel, PLAN.md stappen 3-6)
 De eerste tool-API van het Unified Dashboard-spoor die geld ontsluit.

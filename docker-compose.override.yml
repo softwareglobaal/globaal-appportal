@@ -286,6 +286,8 @@ services:
       EDITOR_GROUPS: vermogen-editors,admin
       # Bearer-token voor het MCP-endpoint (/mcp, Claude); leeg = endpoint uit.
       MCP_TOKEN: ${VERMOGEN_MCP_TOKEN:-}
+      # HMAC-secret voor de OAuth-tokens van claude.ai-connectors; leeg = uit.
+      MCP_SECRET: ${VERMOGEN_MCP_SECRET:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3009/healthz')"]
       interval: 30s

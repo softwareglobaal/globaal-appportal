@@ -10,12 +10,27 @@ server {
     include /etc/nginx/snippets/forward-auth.conf;
 
     # MCP-endpoint voor Claude: buiten de forward-auth om (MCP-clients hebben
-    # geen Authentik-sessie); de app checkt zelf het bearer-token (MCP_TOKEN).
-    # Zolang VERMOGEN_MCP_TOKEN niet in .env staat, geeft de app hier 404.
-    location = /mcp {
+    # geen Authentik-sessie); de app checkt zelf het token. Dekt ook de
+    # OAuth-endpoints voor claude.ai-connectors: /mcp/token en /mcp/register.
+    # De loginstap (/oauth/authorize) valt bewust WEL onder de forward-auth
+    # hierboven: Authentik-SSO is daar de authenticatie. Zolang
+    # VERMOGEN_MCP_TOKEN/VERMOGEN_MCP_SECRET niet in .env staan: 404.
+    location ^~ /mcp {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
+    # OAuth-discovery (RFC 8414/9728), publiek leesbaar.
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
         proxy_pass $app_upstream;
     }
 }
