@@ -1370,9 +1370,10 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
   Claude aan te maken via MCP (`sectie_aanmaken`/`sectie_bijwerken`/
   `sectie_actief_zetten`). Definitie in `vermogen.sectie` (slug, naam, velden
   jsonb), rijen als jsonb in `vermogen.sectie_rij`; audit-triggers zoals 023.
-  Veldtypes beperkt (tekst/bedrag/pct/datum/keuze/lang, geen refs naar kern,
-  dus geen graaf-werk); de webapp toont ze automatisch en de generieke
-  MCP-datatools accepteren de slug als tab.
+  Veldtypes: tekst/bedrag/pct/datum/keuze/lang/ref (bron firma/pand/syndicus;
+  zachte links als jsonb-id met validatie bij schrijven, géén FK - dus geen
+  migratie en geen graaf-werk per sectie); de webapp toont ze automatisch en
+  de generieke MCP-datatools accepteren de slug als tab.
 - **Layout en eigen tools via MCP** (migratie 106): `vermogen.instelling`
   (titel, tab_volgorde, lijst_kolommen, css; de webapp leest ze per request)
   en `vermogen.mcp_tool` (door Claude gedefinieerde raadpleeg-tools:
