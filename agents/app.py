@@ -244,6 +244,7 @@ def db():
     _kolom(conn, "oplevering", "wp_status", "TEXT DEFAULT ''")
     _kolom(conn, "oplevering", "wp_link", "TEXT DEFAULT ''")
     _kolom(conn, "oplevering", "wp_preview", "TEXT DEFAULT ''")
+    _kolom(conn, "oplevering", "taak_id", "INTEGER")
     # Taken: opdrachten (firma + thema) door de pijplijn. De runner pikt
     # 'nieuw' en 'schrijven' op; de mens beslist bij 'blueprint_review'/'review'.
     conn.execute("""CREATE TABLE IF NOT EXISTS taak (
@@ -847,9 +848,14 @@ def oplevering_besluit(oid):
     wie = request.headers.get("X-authentik-username", "onbekend")[:120]
     opm = str(d.get("opmerking", ""))[:2000]
     conn = db()
+    r = conn.execute("SELECT soort, taak_id FROM oplevering WHERE id=?", (oid,)).fetchone()
     conn.execute(
         "UPDATE oplevering SET status=?, opmerking=?, besloten_door=?, besluit_ts=? WHERE id=?",
         (besluit, opm, wie, _nu().isoformat(), oid))
+    # Poort: een goedgekeurde blueprint zet de taak door naar 'schrijven'.
+    if besluit == "goedgekeurd" and r and r["taak_id"] and "blueprint" in (r["soort"] or "").lower():
+        conn.execute("UPDATE taak SET fase='schrijven', runner='', bijgewerkt=? WHERE id=?",
+                     (_nu().isoformat(), r["taak_id"]))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
@@ -866,12 +872,12 @@ def oplevering_indienen():
         abort(400)
     conn = db()
     conn.execute(
-        """INSERT INTO oplevering (firma, thema, agent, soort, titel, inhoud, versie, status, aangemaakt)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
+        """INSERT INTO oplevering (firma, thema, agent, soort, titel, inhoud, versie, status, aangemaakt, taak_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
         (str(d.get("firma", ""))[:80], str(d.get("thema", ""))[:120],
          str(d.get("agent", ""))[:60], str(d.get("soort", ""))[:60], titel,
          str(d.get("inhoud", ""))[:200000], str(d.get("versie", "v1"))[:20],
-         "in_review", _nu().isoformat()))
+         "in_review", _nu().isoformat(), d.get("taak_id")))
     oid = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
     conn.commit()
     conn.close()
@@ -977,6 +983,9 @@ def oplevering_publiceer(oid):
     conn.execute(
         "UPDATE oplevering SET wp_status=?, wp_link=?, status='gepubliceerd', besloten_door=?, besluit_ts=? WHERE id=?",
         (page.get("status", "publish"), page.get("link", ""), wie, _nu().isoformat(), oid))
+    if r["taak_id"]:
+        conn.execute("UPDATE taak SET fase='gepubliceerd', runner='', bijgewerkt=? WHERE id=?",
+                     (_nu().isoformat(), r["taak_id"]))
     conn.commit(); conn.close()
     return jsonify({"ok": True, "link": page.get("link", "")})
 
