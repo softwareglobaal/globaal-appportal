@@ -246,6 +246,8 @@ def db():
     _kolom(conn, "oplevering", "wp_preview", "TEXT DEFAULT ''")
     _kolom(conn, "oplevering", "taak_id", "INTEGER")
     _kolom(conn, "oplevering", "preview_html", "TEXT DEFAULT ''")
+    _kolom(conn, "oplevering", "wp_content", "TEXT DEFAULT ''")
+    _kolom(conn, "oplevering", "wp_titel", "TEXT DEFAULT ''")
     # Taken: opdrachten (firma + thema) door de pijplijn. De runner pikt
     # 'nieuw' en 'schrijven' op; de mens beslist bij 'blueprint_review'/'review'.
     conn.execute("""CREATE TABLE IF NOT EXISTS taak (
@@ -713,6 +715,8 @@ SEO_TEAM = [
      "team": "SEO", "rol": "schrijft de pagina vanaf de blueprint"},
     {"naam": "seo-qc", "label": "Controle", "bijnaam": "De Keurmeester",
      "team": "SEO", "rol": "onafhankelijke kwaliteitscontrole"},
+    {"naam": "eindcontrole", "label": "Eindcontrole", "bijnaam": "De Poortwachter",
+     "team": "SEO", "rol": "laatste check: klopt het formaat, werkt alles, is de opdracht echt af"},
 ]
 SEO_LABELS = {a["naam"]: a["label"] for a in SEO_TEAM}
 
@@ -860,6 +864,20 @@ def oplevering(oid):
     html = markdown.markdown(r["inhoud"] or "",
                              extensions=["tables", "fenced_code", "sane_lists"])
     return render_template("oplevering.html", o=_opl_row(r), inhoud_html=html)
+
+
+@app.route("/oplevering/<int:oid>/wp-content", methods=["POST"])
+def oplevering_wp_content(oid):
+    """De agent zet de exacte inhoud klaar die bij publicatie naar WordPress gaat."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    d = request.get_json(silent=True) or {}
+    conn = db()
+    conn.execute("UPDATE oplevering SET wp_content=?, wp_titel=?, wp_post_id=COALESCE(?, wp_post_id), wp_link=COALESCE(?, wp_link) WHERE id=?",
+                 (str(d.get("content", ""))[:400000], str(d.get("titel", ""))[:200],
+                  d.get("wp_post_id"), d.get("wp_link"), oid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
 
 
 @app.route("/oplevering/<int:oid>/preview")
@@ -1035,8 +1053,13 @@ def oplevering_publiceer(oid):
     if not conf:
         conn.close()
         return jsonify({"ok": False, "fout": "Geen WordPress-koppeling."}), 400
+    payload = {"status": "publish"}
+    if (r["wp_content"] or "").strip():
+        payload["content"] = r["wp_content"]          # de echte pagina-inhoud
+    if (r["wp_titel"] or "").strip():
+        payload["title"] = r["wp_titel"]
     try:
-        page = _wp_call(conf, "POST", f"/pages/{r['wp_post_id']}", {"status": "publish"})
+        page = _wp_call(conf, "POST", f"/pages/{r['wp_post_id']}", payload)
     except Exception:
         conn.close()
         return jsonify({"ok": False, "fout": "Publiceren mislukt."}), 502

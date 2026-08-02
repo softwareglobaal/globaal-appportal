@@ -80,7 +80,7 @@
     </div>
     <div class="acties-knoppen">
       <button class="knop" onclick="naarWp(this)">{% if o.wp_post_id %}Concept bijwerken{% else %}Naar WordPress (concept){% endif %}</button>
-      {% if o.wp_post_id and o.wp_status != 'publish' %}<button class="knop pub" onclick="publiceerWp(this)">Publiceer live</button>{% endif %}
+      {% if o.wp_post_id %}<button class="knop pub" onclick="publiceerWp(this)">Publiceer live op de website</button>{% endif %}
     </div>
     <p class="sub" style="margin-top:8px;color:var(--tekst-3)">De agent maakt een concept-pagina in WordPress. Klik op de preview-link (opent in een nieuw tabblad) voor de echte opmaak; daarna zet "Publiceer live" de pagina live.</p>
   </div>
@@ -89,7 +89,7 @@
       fetch('/oplevering/{{ o.id }}/naar-wordpress',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
         if(d.ok){location.reload();}else{alert(d.fout||'Mislukt');btn.disabled=false;btn.textContent=t;}
       }).catch(function(){alert('Kon niet verbinden.');btn.disabled=false;btn.textContent=t;});}
-    function publiceerWp(btn){if(!confirm('Deze pagina nu LIVE publiceren op de website van UNABO?'))return;btn.disabled=true;btn.textContent='Publiceren…';
+    function publiceerWp(btn){if(!confirm('De nieuwe tekst nu LIVE zetten op de bestaande pagina? De huidige inhoud wordt vervangen.'))return;btn.disabled=true;btn.textContent='Publiceren…';
       fetch('/oplevering/{{ o.id }}/publiceer',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
         if(d.ok){location.reload();}else{alert(d.fout||'Mislukt');btn.disabled=false;btn.textContent='Publiceer live';}
       }).catch(function(){alert('Kon niet verbinden.');btn.disabled=false;btn.textContent='Publiceer live';});}
