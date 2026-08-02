@@ -66,7 +66,7 @@
       {% if o.wp_status == 'publish' %}
         <span class="sb gepubliceerd">Live</span>{% if o.wp_link %} &nbsp;<a href="{{ o.wp_link }}" target="_blank" rel="noopener">Bekijk live pagina ↗</a>{% endif %}
       {% elif o.wp_post_id %}
-        <span class="sb in_review">Concept in WordPress</span>{% if o.wp_preview %} &nbsp;<a href="{{ o.wp_preview }}" target="_blank" rel="noopener">Bekijk preview op WordPress ↗</a>{% endif %}
+        <span class="sb in_review">Concept in WordPress (privé)</span>{% if o.wp_preview %} &nbsp;<a href="{{ o.wp_preview }}" target="_blank" rel="noopener">Bekijk de pagina ↗</a>{% endif %}
       {% else %}
         <span style="color:var(--tekst-3)">Nog niet in WordPress.</span>
       {% endif %}

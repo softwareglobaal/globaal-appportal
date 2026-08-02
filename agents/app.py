@@ -946,9 +946,14 @@ def _wp_call(conf, method, path, payload=None):
 
 
 def _wp_preview_url(page):
+    """Een 'draft' is in WordPress alleen met een sleutel te previewen; een
+    'private' pagina opent gewoon voor ingelogde gebruikers. We maken concepten
+    daarom private, zodat de link uit het platform altijd werkt."""
     link = page.get("link") or (page.get("guid", {}) or {}).get("raw", "")
     if not link:
         return ""
+    if page.get("status") in ("private", "publish"):
+        return link
     return link + ("&" if "?" in link else "?") + "preview=true"
 
 
@@ -964,7 +969,7 @@ def oplevering_naar_wp(oid):
         conn.close()
         return jsonify({"ok": False, "fout": f"Geen WordPress-koppeling voor firma '{r['firma']}'."}), 400
     html = markdown.markdown(r["inhoud"] or "", extensions=["tables", "fenced_code", "sane_lists"])
-    payload = {"title": r["titel"], "content": html, "status": "draft"}
+    payload = {"title": r["titel"], "content": html, "status": "private"}
     try:
         pad = f"/pages/{r['wp_post_id']}" if r["wp_post_id"] else "/pages"
         page = _wp_call(conf, "POST", pad, payload)
@@ -976,7 +981,7 @@ def oplevering_naar_wp(oid):
         return jsonify({"ok": False, "fout": "Kon WordPress niet bereiken."}), 502
     conn.execute(
         "UPDATE oplevering SET wp_post_id=?, wp_status=?, wp_preview=?, wp_link=? WHERE id=?",
-        (page.get("id"), page.get("status", "draft"), _wp_preview_url(page), page.get("link", ""), oid))
+        (page.get("id"), page.get("status", "private"), _wp_preview_url(page), page.get("link", ""), oid))
     conn.commit(); conn.close()
     return jsonify({"ok": True, "wp_post_id": page.get("id"), "preview": _wp_preview_url(page)})
 
