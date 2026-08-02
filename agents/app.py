@@ -248,6 +248,9 @@ def db():
     _kolom(conn, "oplevering", "preview_html", "TEXT DEFAULT ''")
     _kolom(conn, "oplevering", "wp_content", "TEXT DEFAULT ''")
     _kolom(conn, "oplevering", "wp_titel", "TEXT DEFAULT ''")
+    _kolom(conn, "oplevering", "seo_titel", "TEXT DEFAULT ''")
+    _kolom(conn, "oplevering", "seo_desc", "TEXT DEFAULT ''")
+    _kolom(conn, "oplevering", "seo_keyword", "TEXT DEFAULT ''")
     # Taken: opdrachten (firma + thema) door de pijplijn. De runner pikt
     # 'nieuw' en 'schrijven' op; de mens beslist bij 'blueprint_review'/'review'.
     conn.execute("""CREATE TABLE IF NOT EXISTS taak (
@@ -775,6 +778,8 @@ def _opl_row(r):
             "wp_post_id": r["wp_post_id"], "wp_status": r["wp_status"],
             "wp_link": r["wp_link"], "wp_preview": r["wp_preview"],
             "taak_id": r["taak_id"],
+            "seo_titel": r["seo_titel"], "seo_desc": r["seo_desc"],
+            "seo_keyword": r["seo_keyword"],
             "heeft_preview": bool((r["preview_html"] or "").strip())}
 
 
@@ -873,8 +878,12 @@ def oplevering_wp_content(oid):
         abort(403)
     d = request.get_json(silent=True) or {}
     conn = db()
-    conn.execute("UPDATE oplevering SET wp_content=?, wp_titel=?, wp_post_id=COALESCE(?, wp_post_id), wp_link=COALESCE(?, wp_link) WHERE id=?",
+    conn.execute("""UPDATE oplevering SET wp_content=?, wp_titel=?, seo_titel=?, seo_desc=?,
+                    seo_keyword=?, wp_post_id=COALESCE(?, wp_post_id), wp_link=COALESCE(?, wp_link)
+                    WHERE id=?""",
                  (str(d.get("content", ""))[:400000], str(d.get("titel", ""))[:200],
+                  str(d.get("seo_titel", ""))[:200], str(d.get("seo_desc", ""))[:400],
+                  str(d.get("seo_keyword", ""))[:120],
                   d.get("wp_post_id"), d.get("wp_link"), oid))
     conn.commit(); conn.close()
     return jsonify({"ok": True})
@@ -1058,6 +1067,17 @@ def oplevering_publiceer(oid):
         payload["content"] = r["wp_content"]          # de echte pagina-inhoud
     if (r["wp_titel"] or "").strip():
         payload["title"] = r["wp_titel"]
+    # SEO-velden: focus-keyword kan altijd; titel/omschrijving zodra ze in WordPress
+    # zijn vrijgegeven (zie marketing/seo/wordpress-yoast-snippet.md).
+    meta = {}
+    if (r["seo_keyword"] or "").strip():
+        meta["_yoast_wpseo_focuskw"] = r["seo_keyword"]
+    if (r["seo_titel"] or "").strip():
+        meta["_yoast_wpseo_title"] = r["seo_titel"]
+    if (r["seo_desc"] or "").strip():
+        meta["_yoast_wpseo_metadesc"] = r["seo_desc"]
+    if meta:
+        payload["meta"] = meta
     try:
         page = _wp_call(conf, "POST", f"/pages/{r['wp_post_id']}", payload)
     except Exception:
@@ -1070,8 +1090,14 @@ def oplevering_publiceer(oid):
     if r["taak_id"]:
         conn.execute("UPDATE taak SET fase='gepubliceerd', runner='', bijgewerkt=? WHERE id=?",
                      (_nu().isoformat(), r["taak_id"]))
+    gezet = page.get("meta", {}) or {}
+    handmatig = []
+    if (r["seo_titel"] or "").strip() and not gezet.get("_yoast_wpseo_title"):
+        handmatig.append({"veld": "SEO-titel", "waarde": r["seo_titel"]})
+    if (r["seo_desc"] or "").strip() and not gezet.get("_yoast_wpseo_metadesc"):
+        handmatig.append({"veld": "Meta-omschrijving", "waarde": r["seo_desc"]})
     conn.commit(); conn.close()
-    return jsonify({"ok": True, "link": page.get("link", "")})
+    return jsonify({"ok": True, "link": page.get("link", ""), "handmatig": handmatig})
 
 
 # ---------------------------------------------------------------------------

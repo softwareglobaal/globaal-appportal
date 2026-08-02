@@ -82,6 +82,16 @@
       <button class="knop" onclick="naarWp(this)">{% if o.wp_post_id %}Concept bijwerken{% else %}Naar WordPress (concept){% endif %}</button>
       {% if o.wp_post_id %}<button class="knop pub" onclick="publiceerWp(this)">Publiceer live op de website</button>{% endif %}
     </div>
+    {% if o.seo_titel or o.seo_desc or o.seo_keyword %}
+    <div style="border-top:1px dashed var(--lijn);margin-top:12px;padding-top:10px;font-size:12.5px">
+      <strong>SEO-velden</strong> <span style="color:var(--tekst-3)">(gaan automatisch mee bij publiceren)</span>
+      <table style="width:100%;border-collapse:collapse;margin-top:6px">
+        {% if o.seo_titel %}<tr><td style="padding:2px 8px 2px 0;color:var(--tekst-2);white-space:nowrap">SEO-titel</td><td class="code">{{ o.seo_titel }}</td></tr>{% endif %}
+        {% if o.seo_desc %}<tr><td style="padding:2px 8px 2px 0;color:var(--tekst-2);vertical-align:top">Omschrijving</td><td class="code">{{ o.seo_desc }}</td></tr>{% endif %}
+        {% if o.seo_keyword %}<tr><td style="padding:2px 8px 2px 0;color:var(--tekst-2)">Focus-keyword</td><td class="code">{{ o.seo_keyword }}</td></tr>{% endif %}
+      </table>
+    </div>
+    {% endif %}
     <p class="sub" style="margin-top:8px;color:var(--tekst-3)">De agent maakt een concept-pagina in WordPress. Klik op de preview-link (opent in een nieuw tabblad) voor de echte opmaak; daarna zet "Publiceer live" de pagina live.</p>
   </div>
   <script>
@@ -91,7 +101,9 @@
       }).catch(function(){alert('Kon niet verbinden.');btn.disabled=false;btn.textContent=t;});}
     function publiceerWp(btn){if(!confirm('De nieuwe tekst nu LIVE zetten op de bestaande pagina? De huidige inhoud wordt vervangen.'))return;btn.disabled=true;btn.textContent='Publiceren…';
       fetch('/oplevering/{{ o.id }}/publiceer',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
-        if(d.ok){location.reload();}else{alert(d.fout||'Mislukt');btn.disabled=false;btn.textContent='Publiceer live';}
+        if(d.ok){ if(d.handmatig&&d.handmatig.length){ var t=d.handmatig.map(function(h){return h.veld+':\n'+h.waarde;}).join('\n\n');
+        alert('Gepubliceerd.\n\nDeze velden konden nog niet automatisch gezet worden (zie wordpress-yoast-snippet.md):\n\n'+t);}
+        location.reload();}else{alert(d.fout||'Mislukt');btn.disabled=false;btn.textContent='Publiceer live';}
       }).catch(function(){alert('Kon niet verbinden.');btn.disabled=false;btn.textContent='Publiceer live';});}
   </script>
 {% endblock %}
