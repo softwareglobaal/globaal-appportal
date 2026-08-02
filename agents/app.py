@@ -245,6 +245,7 @@ def db():
     _kolom(conn, "oplevering", "wp_link", "TEXT DEFAULT ''")
     _kolom(conn, "oplevering", "wp_preview", "TEXT DEFAULT ''")
     _kolom(conn, "oplevering", "taak_id", "INTEGER")
+    _kolom(conn, "oplevering", "preview_html", "TEXT DEFAULT ''")
     # Taken: opdrachten (firma + thema) door de pijplijn. De runner pikt
     # 'nieuw' en 'schrijven' op; de mens beslist bij 'blueprint_review'/'review'.
     conn.execute("""CREATE TABLE IF NOT EXISTS taak (
@@ -769,7 +770,8 @@ def _opl_row(r):
             "besloten_door": r["besloten_door"], "besluit_ts": _fmt(r["besluit_ts"]),
             "wp_post_id": r["wp_post_id"], "wp_status": r["wp_status"],
             "wp_link": r["wp_link"], "wp_preview": r["wp_preview"],
-            "taak_id": r["taak_id"]}
+            "taak_id": r["taak_id"],
+            "heeft_preview": bool((r["preview_html"] or "").strip())}
 
 
 def _seed(conn):
@@ -858,6 +860,39 @@ def oplevering(oid):
     html = markdown.markdown(r["inhoud"] or "",
                              extensions=["tables", "fenced_code", "sane_lists"])
     return render_template("oplevering.html", o=_opl_row(r), inhoud_html=html)
+
+
+@app.route("/oplevering/<int:oid>/preview")
+def oplevering_preview(oid):
+    """Toont de pagina zoals ze eruit komt te zien, binnen het platform zelf.
+    Niet afhankelijk van WordPress-preview-sleutels of caching."""
+    conn = db()
+    r = conn.execute("SELECT titel, preview_html FROM oplevering WHERE id=?", (oid,)).fetchone()
+    conn.close()
+    if not r or not (r["preview_html"] or "").strip():
+        abort(404)
+    return ("<!doctype html><html lang='nl'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+            f"<title>Preview — {r['titel']}</title>"
+            "<style>body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}"
+            ".pv-balk{position:sticky;top:0;z-index:99;background:#22303f;color:#fff;padding:9px 16px;font-size:13px;"
+            "display:flex;gap:14px;align-items:center}.pv-balk a{color:#9fd0ff}</style></head><body>"
+            f"<div class='pv-balk'>Preview — zo komt de pagina eruit te zien "
+            f"<a href='/oplevering/{oid}'>&larr; terug naar de validatie</a></div>"
+            f"{r['preview_html']}</body></html>")
+
+
+@app.route("/oplevering/<int:oid>/preview-html", methods=["POST"])
+def oplevering_preview_zetten(oid):
+    """De agent levert de HTML-weergave van de pagina aan."""
+    if not TOKEN or request.headers.get("X-Agents-Token", "") != TOKEN:
+        abort(403)
+    d = request.get_json(silent=True) or {}
+    conn = db()
+    conn.execute("UPDATE oplevering SET preview_html=? WHERE id=?",
+                 (str(d.get("html", ""))[:400000], oid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
 
 
 @app.route("/oplevering/<int:oid>/besluit", methods=["POST"])

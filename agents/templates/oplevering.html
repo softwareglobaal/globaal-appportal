@@ -19,6 +19,13 @@
 </div>
 {% endif %}
 
+{% if o.heeft_preview %}
+<div style="background:#eef2f6;border:1px solid #c9d6e2;border-left:4px solid var(--accent);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+  <strong>Bekijk hoe de pagina eruitziet</strong>
+  <p class="sub" style="margin:3px 0 10px;color:var(--tekst-2)">Volledige weergave binnen dit platform — zo komt de pagina op de website.</p>
+  <a class="knop" href="/oplevering/{{ o.id }}/preview" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">Preview openen ↗</a>
+</div>
+{% endif %}
 <div class="prose">{{ inhoud_html|safe }}</div>
 
 <div class="acties">
