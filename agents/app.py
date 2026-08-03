@@ -78,10 +78,12 @@ DETAILS = {
                     "opgeschreven criteria per vacature en vult de "
                     "scorekaart op de interne wervingspagina. Adviseert; "
                     "de mens beslist."),
-        "mag": ["Een scorekaart en conceptbrieven klaarzetten"],
+        "mag": ["Een scorekaart en conceptbrieven klaarzetten",
+                "De ontvangstbevestiging versturen"],
         "grenzen": [
             "Beslist nooit over een mens; alle uitvoer is advies",
-            "Verstuurt nooit zelf een bericht naar een kandidaat",
+            "Verstuurt alleen de ontvangstbevestiging, met vaste tekst; "
+            "uitnodigen en afwijzen blijft mensenwerk",
             "Weegt naam, geslacht, leeftijd, afkomst of school nooit mee",
             "Deze tegel toont alleen werkstatus, nooit kandidaatgegevens",
         ],
@@ -94,7 +96,8 @@ DETAILS = {
             "Taalmodel voor de scorekaart (claude-sonnet-5)",
             "Schrijven naar elevait.kandidaat en elevait.beoordeling",
             "Hartslag melden op deze tegel",
-            "Bewust geen mailgereedschap: versturen kan technisch niet",
+            "Mail naar de sollicitant, uitsluitend het adres uit zijn eigen "
+            "sollicitatie, met noodrem en dagplafond",
         ],
     },
     "elevait-finance": {
