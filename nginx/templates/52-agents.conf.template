@@ -20,5 +20,18 @@ server {
         proxy_pass http://app-agents:3020;
     }
 
+    # Contactformulieren van onze eigen websites: een bezoeker heeft geen login,
+    # dus deze ene POST passeert de forward-auth. De app valideert zelf en houdt
+    # spam tegen; identiteitsheaders worden hard geleegd.
+    location = /website-aanvraag {
+        client_max_body_size 16k;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Headers "Content-Type" always;
+        proxy_pass http://app-agents:3020;
+    }
+
     include /etc/nginx/snippets/forward-auth.conf;
 }

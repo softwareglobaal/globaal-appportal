@@ -303,6 +303,18 @@ def db():
     _kolom(conn, "taak", "soort", "TEXT DEFAULT ''")
     _kolom(conn, "taak", "aanvulling", "TEXT DEFAULT ''")
     # Bijlagen bij een opdracht (briefing, foto, bestaand document).
+    conn.execute("""CREATE TABLE IF NOT EXISTS lead (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        site        TEXT DEFAULT '',
+        naam        TEXT DEFAULT '',
+        email       TEXT DEFAULT '',
+        telefoon    TEXT DEFAULT '',
+        bericht     TEXT DEFAULT '',
+        extra       TEXT DEFAULT '',
+        herkomst    TEXT DEFAULT '',
+        status      TEXT NOT NULL DEFAULT 'nieuw',
+        ontvangen   TEXT NOT NULL,
+        opmerking   TEXT DEFAULT '')""")
     conn.execute("""CREATE TABLE IF NOT EXISTS bijlage (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         taak_id      INTEGER NOT NULL,
@@ -915,7 +927,13 @@ def _nav_context():
         conn.close()
     except Exception:
         n = 0
-    return {"nav_te_valideren": n,
+    try:
+        conn = db()
+        na = conn.execute("SELECT COUNT(*) c FROM lead WHERE status='nieuw'").fetchone()["c"]
+        conn.close()
+    except Exception:
+        na = 0
+    return {"nav_te_valideren": n, "nav_aanvragen": na,
             "portal_url": f"https://portal.{BASE_DOMAIN}/",
             "nav_user": request.headers.get("X-authentik-username", "onbekend")}
 
@@ -1388,6 +1406,61 @@ MERKEN = [
      "tone": "Formeel 'u', zelfverzekerd: 'Administratie die zichzelf doet'.",
      "look": 'Crème/beige basis met groen accent; clean, moderne en doelbewuste UI.'},
 ]
+
+
+# ---------------------------------------------------------------------------
+# Aanvragen vanaf onze eigen websites. Deze route is publiek bereikbaar (een
+# bezoeker heeft geen login), maar accepteert alleen een kleine, vaste body en
+# houdt eenvoudige spam tegen. De aanvragen komen binnen op het platform.
+# ---------------------------------------------------------------------------
+
+@app.route("/website-aanvraag", methods=["POST", "OPTIONS"])
+def website_aanvraag():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    d = request.form if request.form else (request.get_json(silent=True) or {})
+    # honeypot: een verborgen veld dat mensen niet invullen, bots wel
+    if (d.get("website") or "").strip():
+        return jsonify({"ok": True})          # stil negeren
+    naam = (d.get("naam") or "").strip()[:120]
+    email = (d.get("email") or "").strip()[:160]
+    bericht = (d.get("bericht") or "").strip()[:4000]
+    if not naam or not (email or (d.get("telefoon") or "").strip()):
+        return jsonify({"ok": False, "fout": "naam en een contactgegeven zijn verplicht"}), 400
+    conn = db()
+    conn.execute(
+        """INSERT INTO lead (site, naam, email, telefoon, bericht, extra, herkomst, ontvangen)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        ((d.get("site") or "")[:80], naam, email, (d.get("telefoon") or "").strip()[:60],
+         bericht, json.dumps({k: str(v)[:200] for k, v in d.items()
+                              if k not in ("naam", "email", "telefoon", "bericht", "site", "website")})[:2000],
+         (request.headers.get("Referer") or "")[:200], _nu().isoformat()))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/aanvragen")
+def aanvragen():
+    conn = db()
+    rows = [dict(r) for r in conn.execute("SELECT * FROM lead ORDER BY id DESC LIMIT 200")]
+    conn.close()
+    for r in rows:
+        r["ontvangen_kort"] = _fmt(r["ontvangen"])
+    return render_template("aanvragen.html", leads=rows,
+                           nieuw=sum(1 for r in rows if r["status"] == "nieuw"))
+
+
+@app.route("/aanvraag/<int:lid>/status", methods=["POST"])
+def aanvraag_status(lid):
+    d = request.form if request.form else (request.get_json(silent=True) or {})
+    st = (d.get("status") or "").strip()
+    if st not in ("nieuw", "opgevolgd", "afgehandeld", "spam"):
+        abort(400)
+    conn = db()
+    conn.execute("UPDATE lead SET status=?, opmerking=? WHERE id=?",
+                 (st, (d.get("opmerking") or "")[:1000], lid))
+    conn.commit(); conn.close()
+    return redirect("/aanvragen") if request.form else jsonify({"ok": True})
 
 
 @app.route("/branding")
