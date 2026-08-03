@@ -1,0 +1,38 @@
+# Publieke websites (statisch). Anders dan de apps hierboven: GEEN forward-auth,
+# want dit zijn openbare klantsites. Elke site is een map onder /srv/websites/<naam>.
+#
+# Een site toevoegen:
+#   1. map /srv/websites/<naam>/ vullen (index.html enz.)
+#   2. blok hieronder kopieren, server_name aanpassen
+#   3. subdomein toevoegen aan CERT_SUBDOMAINS in .env
+#   4. nginx herladen
+#
+# Voor een eigen domein (bv. h-invest.be) wijst de DNS naar deze server en komt er
+# een eigen certificaat via certbot; server_name wordt dan dat domein.
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ~^(?<sitenaam>[a-z0-9-]+)\.web\.${BASE_DOMAIN}$;
+    include /etc/nginx/snippets/ssl.conf;
+
+    root /srv/websites/$sitenaam;
+    index index.html;
+
+    # Beveiligingsheaders (publieke site: wel nodig, apps zitten achter SSO)
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # Statische bestanden lang cachen, HTML kort (zodat updates snel zichtbaar zijn)
+    location ~* \.(css|js|jpg|jpeg|png|gif|webp|svg|woff2?|ico)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+    location / {
+        try_files $uri $uri/ $uri.html /index.html;
+    }
+
+    access_log /var/log/nginx/websites.access.log;
+}

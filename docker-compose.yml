@@ -284,6 +284,8 @@ services:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro
       - ./certs:/etc/nginx/certs:ro
+      # Publieke statische websites (per firma een map)
+      - ./websites:/srv/websites:ro
       # Let's Encrypt HTTP-01 challenge files (certbot writes here on the host).
       - ./certbot-webroot:/var/www/certbot:ro
     depends_on:
