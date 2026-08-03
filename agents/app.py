@@ -164,8 +164,9 @@ DETAILS = {
             "Laat de leesstatus in de mailbox onaangeroerd",
             "Deze tegel toont alleen tellingen, nooit afzenders of inhoud",
         ],
-        "cadans": ("Reageert direct op nieuwe post (IMAP IDLE); volledige "
-                   "ronde elk uur als vangnet."),
+        "cadans": ("Reageert direct op nieuwe post (IMAP IDLE); daarnaast "
+                   "elk kwartier een controleronde, wanneer de "
+                   "IDLE-verbinding toch vernieuwd wordt."),
         "tools": [
             "Mailbox lezen via IMAP, read-only en met PEEK",
             "Taalmodel voor categorie en samenvatting (claude-sonnet-5)",
