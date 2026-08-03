@@ -1,11 +1,13 @@
 # Publieke websites (statisch). Anders dan de apps hierboven: GEEN forward-auth,
 # want dit zijn openbare klantsites. Elke site is een map onder /srv/websites/<naam>.
 #
+# Adresschema: web-<naam>.${BASE_DOMAIN} (valt onder het wildcard-certificaat
+# *.${BASE_DOMAIN}, dat maar een niveau diep werkt) en botst niet met de apps.
+#
 # Een site toevoegen:
 #   1. map /srv/websites/<naam>/ vullen (index.html enz.)
-#   2. blok hieronder kopieren, server_name aanpassen
-#   3. subdomein toevoegen aan CERT_SUBDOMAINS in .env
-#   4. nginx herladen
+#   2. de site is meteen bereikbaar op web-<naam>.${BASE_DOMAIN}
+#   3. nginx herladen (geen nieuw certificaat nodig)
 #
 # Voor een eigen domein (bv. h-invest.be) wijst de DNS naar deze server en komt er
 # een eigen certificaat via certbot; server_name wordt dan dat domein.
@@ -13,7 +15,7 @@
 server {
     listen 443 ssl;
     http2 on;
-    server_name ~^(?<sitenaam>[a-z0-9-]+)\.web\.${BASE_DOMAIN}$;
+    server_name ~^web-(?<sitenaam>[a-z0-9-]+)\.${BASE_DOMAIN}$;
     include /etc/nginx/snippets/ssl.conf;
 
     root /srv/websites/$sitenaam;
