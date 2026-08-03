@@ -172,6 +172,8 @@ DETAILS = {
             "Taalmodel voor categorie en samenvatting (claude-sonnet-5)",
             "Schrijven naar elevait.bericht: afzender, onderwerp, categorie "
             "en samenvatting, bewust zonder de berichttekst",
+            "Melding naar het Zoom-kanaal voor alle binnengekomen post, "
+            "met de links uit de mail eruit gefilterd",
             "Hartslag melden op deze tegel",
             "Geen SMTP in het proces: versturen kan technisch niet",
         ],
