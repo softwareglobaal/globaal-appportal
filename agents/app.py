@@ -808,6 +808,8 @@ SEO_TEAM = [
      "team": "SEO", "rol": "schrijft de pagina vanaf de blueprint"},
     {"naam": "seo-qc", "label": "Controle", "bijnaam": "De Keurmeester",
      "team": "SEO", "rol": "onafhankelijke kwaliteitscontrole"},
+    {"naam": "website-bouwer", "label": "Websitebouwer", "bijnaam": "De Bouwmeester",
+     "team": "SEO", "rol": "bouwt volledige websites en zet ze live op de server"},
     {"naam": "eindcontrole", "label": "Eindcontrole", "bijnaam": "De Poortwachter",
      "team": "SEO", "rol": "laatste check: klopt het formaat, werkt alles, is de opdracht echt af"},
 ]
