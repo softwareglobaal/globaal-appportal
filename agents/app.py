@@ -30,6 +30,9 @@ app = Flask(__name__)
 DB = os.environ.get("AGENTS_DB", "/data/agents.db")
 TOKEN = os.environ.get("AGENTS_TOKEN", "").strip()
 BASE_DOMAIN = os.environ.get("BASE_DOMAIN", "localhost")
+# De zoekdienst draait op de host, op het adres van het docker-netwerk.
+# De kennis-database blijft op loopback en is hier niet bereikbaar.
+ZOEKDIENST = os.environ.get("ZOEKDIENST", "http://172.20.0.1:3021")
 
 STATUSSEN = ("rust", "waakt", "actief", "klaar", "fout")
 
@@ -618,6 +621,64 @@ def ingestie_rijen(limit=25):
     return [dict(r) | {"aangeleverd_kort": _fmt(r["aangeleverd"]),
                        "bijgewerkt_kort": _fmt(r["bijgewerkt"] or ""),
                        "kb": round((r["bytes"] or 0) / 1024)} for r in rows]
+
+
+def zoekdienst_json(pad: str, velden: dict) -> dict:
+    """Vraagt iets aan de zoekdienst op de host.
+
+    Een zoekdienst die plat ligt mag geen stacktrace op de pagina zetten: de
+    gebruiker heeft aan "even niet bereikbaar" meer dan aan een traceback.
+    """
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    url = f"{ZOEKDIENST}{pad}"
+    if velden:
+        url += "?" + urllib.parse.urlencode(velden)
+    verzoek = urllib.request.Request(url, headers={"X-Agents-Token": TOKEN})
+    try:
+        with urllib.request.urlopen(verzoek, timeout=30) as antwoord:
+            return json.loads(antwoord.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            return json.loads(e.read().decode("utf-8"))
+        except Exception:                                     # noqa: BLE001
+            return {"fout": f"zoekdienst gaf {e.code}"}
+    except Exception as e:                                    # noqa: BLE001
+        return {"fout": f"zoekdienst niet bereikbaar: {type(e).__name__}"}
+
+
+@app.route("/zoeken")
+def zoeken_pagina():
+    """Achter de SSO: zoeken in de kennisbanken die de ingestie-agent maakte."""
+    corpus = (request.args.get("corpus") or "").strip()
+    vraag = (request.args.get("v") or "").strip()
+    banken = zoekdienst_json("/corpora", {}).get("corpora", [])
+    uitkomst = {}
+    if corpus and vraag:
+        uitkomst = zoekdienst_json("/zoek", {"corpus": corpus, "v": vraag, "k": 8})
+    return render_template(
+        "zoeken.html", banken=banken, corpus=corpus, vraag=vraag,
+        uitkomst=uitkomst,
+        portal_url=f"https://portal.{BASE_DOMAIN}/",
+        username=request.headers.get("X-authentik-username", "onbekend"),
+    )
+
+
+@app.route("/api/zoeken")
+def api_zoeken():
+    """Zelfde zoekopdracht als JSON, voor andere apps achter de SSO."""
+    corpus = (request.args.get("corpus") or "").strip()
+    vraag = (request.args.get("v") or "").strip()
+    if not corpus or not vraag:
+        return {"fout": "corpus en v zijn verplicht"}, 400
+    try:
+        k = min(20, max(1, int(request.args.get("k", 5))))
+    except ValueError:
+        k = 5
+    uit = zoekdienst_json("/zoek", {"corpus": corpus, "v": vraag, "k": k})
+    return uit, (400 if "fout" in uit else 200)
 
 
 @app.route("/ingestie")
