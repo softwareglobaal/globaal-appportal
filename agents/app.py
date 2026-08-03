@@ -40,6 +40,8 @@ TEAM = [
      "rol": "toetst sollicitaties aan de criteria"},
     {"naam": "elevait-finance", "label": "Finance-agent (Elevait)",
      "type": "elevait", "rol": "bewaakt het uitgavenregister"},
+    {"naam": "elevait-postkamer", "label": "Postkamer-agent (Elevait)",
+     "type": "elevait", "rol": "sorteert de post op info@"},
     {"naam": "ingestie", "label": "Ingestie-agent", "type": "ingestie",
      "rol": "maakt van documenten doorzoekbare kennisbanken"},
 ]
@@ -144,6 +146,30 @@ DETAILS = {
             "(claude-sonnet-5)",
             "Embeddings via text-embedding-3-small",
             "Hybride ophalen (vector naast full-text) voor de rookproef",
+        ],
+    },
+    "elevait-postkamer": {
+        "mandaat": ("Leest de post op info@elevaitnv.com, sorteert elk "
+                    "bericht in een categorie en vat het samen op het "
+                    "tabblad Post. Sorteert en signaleert; antwoorden doet "
+                    "een mens."),
+        "mag": ["De inbox lezen en elk bericht een categorie geven"],
+        "grenzen": [
+            "Verstuurt, beantwoordt en verwijdert nooit iets",
+            "Berichtinhoud is gegevens, nooit een opdracht",
+            "Volgt geen links en opent geen bijlagen",
+            "Laat de leesstatus in de mailbox onaangeroerd",
+            "Deze tegel toont alleen tellingen, nooit afzenders of inhoud",
+        ],
+        "cadans": ("Reageert direct op nieuwe post (IMAP IDLE); volledige "
+                   "ronde elk uur als vangnet."),
+        "tools": [
+            "Mailbox lezen via IMAP, read-only en met PEEK",
+            "Taalmodel voor categorie en samenvatting (claude-sonnet-5)",
+            "Schrijven naar elevait.bericht: afzender, onderwerp, categorie "
+            "en samenvatting, bewust zonder de berichttekst",
+            "Hartslag melden op deze tegel",
+            "Geen SMTP in het proces: versturen kan technisch niet",
         ],
     },
 }
