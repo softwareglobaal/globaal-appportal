@@ -8,5 +8,18 @@ server {
     # Host-app via systemd op poort 8091; alleen leden van de groep
     # "stavingsstukken" (plus admin) zien de tegel en komen erbij.
     set $app_upstream http://172.17.0.1:8091;
+
+    # MCP-eindpunt op de EPB-Pedia-kennisbank, zodat Claude erin kan zoeken. Buiten de
+    # forward-auth om, want een MCP-client heeft geen Authentik-sessie; de app controleert
+    # zelf het bearer-token. Zolang EPBPEDIA_MCP_TOKEN niet in de omgeving van de
+    # cockpit-dienst staat, geeft de route 404. Zelfde patroon als de Vermogen-MCP.
+    location ^~ /mcp {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+        proxy_pass $app_upstream;
+    }
+
     include /etc/nginx/snippets/forward-auth.conf;
 }
