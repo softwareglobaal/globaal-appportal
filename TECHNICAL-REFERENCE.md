@@ -987,8 +987,14 @@ lokaal te gebeuren. Dit raakte ook `beste_relatie` in de factureer-app, die juis
 op vereenvoudigde naamvarianten zocht en daardoor bestaande klanten niet vond en
 terugviel op een nieuwe klant aanmaken.
 
-**Nog open:** Joan heeft nog geen Authentik-account, dus de groep `boekhouding`
-is nog leeg. De twee geplande rapporten uit haar OV-analyse (wekelijks verkopen,
+Joan heeft een eigen account (`joan`, gekoppeld aan `kern.persoon`) in de groep
+`boekhouding`, en schrijfrechten op de repo via het GitHub-account `joanhds`.
+Omdat een push daar binnen twee minuten live staat en branch protection op dit
+plan niet kan, zit de bewaking in `deploy-stack.sh`: een versie komt er pas op
+als hij start en op `/healthz` antwoordt, anders draait de vorige door. Daarnaast
+een rooktest-workflow op elke push.
+
+**Nog open:** de twee geplande rapporten uit haar OV-analyse (wekelijks verkopen,
 maandelijks openstaande betalingen als xlsx) zijn nog niet overgenomen; van die
 scripts zat alleen de gecompileerde versie in de aanlevering.
 
