@@ -48,6 +48,12 @@ services:
       HR_GROUPS: ${HR_GROUPS:-hr,manager}
       HR_VANAF: ${HR_VANAF:-2025-01-01}
       HR_HANDMATIG_VANAF: ${HR_HANDMATIG_VANAF:-2026-01-01}
+      # Verlofdashboard (/verlof): leest een Google-agenda in een richting.
+      # De sleutel is een servicegebruiker en staat op het hr-data-volume, niet
+      # in git. Zonder deze drie draait de app gewoon door, alleen zonder sync.
+      GOOGLE_CALENDAR_KEY: ${GOOGLE_CALENDAR_KEY:-}
+      VERLOF_KALENDERS: ${VERLOF_KALENDERS:-}
+      VERLOF_JAAR: ${VERLOF_JAAR:-2026}
     volumes:
       # Het gegenereerde dashboard: VM-only, nooit in git.
       - hr-data:/data
