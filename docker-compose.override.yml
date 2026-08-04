@@ -88,6 +88,9 @@ services:
       # Eigen token als die er is, anders het bestaande volledige-account-token.
       # Nooit MONDAY_SANDBOX_TOKEN: dat is het lege zandbak-account.
       MONDAY_API_TOKEN: ${MONDAY_BOEKHOUDING_TOKEN:-${MONDAY_VOL_TOKEN:-}}
+      # MCP voor Claude: alleen lezen. Leeg = het endpoint bestaat niet (404).
+      MCP_TOKEN: ${BOEKHOUDING_MCP_TOKEN:-}
+      MCP_SECRET: ${BOEKHOUDING_MCP_SECRET:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3014/healthz', timeout=5)"]
       interval: 60s
