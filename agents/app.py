@@ -650,7 +650,10 @@ def handelingen_sync():
 
 INGESTIE_MAP = os.environ.get("INGESTIE_MAP", "/data/ingestie")
 TOEGESTAAN = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm"}
-MAX_BYTES = 60 * 1024 * 1024
+# Een gescand boek is al gauw een halve megabyte per pagina; het eerste dat we
+# aanleverden was 177 MB over 383 paginas. De OCR-post knipt zulke bestanden
+# zelf in delen, dus hier hoeft alleen het volume te passen.
+MAX_BYTES = 400 * 1024 * 1024
 # Bijlagen bij een opdracht: documenten en afbeeldingen.
 BIJLAGE_MAP = os.environ.get("BIJLAGE_MAP", "/data/opdracht-bijlagen")
 BIJLAGE_TYPES = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm", ".docx", ".csv",
