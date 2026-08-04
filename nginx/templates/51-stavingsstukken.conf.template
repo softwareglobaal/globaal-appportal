@@ -13,11 +13,27 @@ server {
     # forward-auth om, want een MCP-client heeft geen Authentik-sessie; de app controleert
     # zelf het bearer-token. Zolang EPBPEDIA_MCP_TOKEN niet in de omgeving van de
     # cockpit-dienst staat, geeft de route 404. Zelfde patroon als de Vermogen-MCP.
+    # Dekt ook /mcp/token en /mcp/register, de OAuth-stappen die claude.ai gebruikt.
+    # De aanmeldstap /oauth/authorize valt bewust WEL onder de forward-auth hieronder:
+    # Authentik is daar de authenticatie, en pas daarna geven we een code af.
     location ^~ /mcp {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_read_timeout 120s;
+        proxy_pass $app_upstream;
+    }
+
+    # OAuth-beschrijving (RFC 8414/9728), publiek leesbaar; een client moet die kunnen
+    # ophalen voordat hij weet waar hij moet aanmelden.
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
         proxy_pass $app_upstream;
     }
 
