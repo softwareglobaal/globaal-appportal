@@ -45,6 +45,8 @@ TEAM = [
      "type": "elevait", "rol": "bewaakt het uitgavenregister"},
     {"naam": "elevait-postkamer", "label": "Postkamer-agent (Elevait)",
      "type": "elevait", "rol": "sorteert de post op info@"},
+    {"naam": "elevait-manager", "label": "Manager-agent (Elevait)",
+     "type": "elevait", "rol": "houdt toezicht over de agents heen"},
     {"naam": "ingestie", "label": "Ingestie-agent", "type": "ingestie",
      "rol": "maakt van documenten doorzoekbare kennisbanken"},
 ]
@@ -179,6 +181,33 @@ DETAILS = {
             "met de links uit de mail eruit gefilterd",
             "Hartslag melden op deze tegel",
             "Geen SMTP in het proces: versturen kan technisch niet",
+        ],
+    },
+    "elevait-manager": {
+        "mandaat": ("Kijkt over de kokers van de andere agents heen: doen ze "
+                    "nog iets, worden de beloftes nagekomen, en wat blijft "
+                    "er liggen. Hij leidt de uitvoering; de oprichters "
+                    "houden het gezag."),
+        "mag": [
+            "Signaleren dat een agent stilstaat, fout meldt of niets doet",
+            "De beloftes bewaken (twee werkdagen, verlengdatums)",
+            "Open eindjes bijhouden met hun leeftijd",
+        ],
+        "grenzen": [
+            "Beslist niets over mensen en niets over geld",
+            "Stuurt geen andere agents aan en wijzigt hun regels niet",
+            "Communiceert nooit naar buiten; geen SMTP in het proces",
+            "Bepaalt nooit voorrang tussen de twee oprichters",
+            "Is nooit de enige die iets weet: elk signaal wijst naar een tabblad",
+            "Deze tegel toont alleen tellingen, nooit namen of bedragen",
+        ],
+        "cadans": "Rondgang elk uur.",
+        "tools": [
+            "Status van de andere agents opvragen bij deze tegel",
+            "Lezen in het elevait-schema: kandidaat, bericht, abonnement, "
+            "open_eindje",
+            "Hartslag melden op deze tegel",
+            "Bewust geen taalmodel: toezicht houden is rekenwerk",
         ],
     },
 }
