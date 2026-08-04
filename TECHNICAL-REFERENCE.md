@@ -968,6 +968,25 @@ verschijnen de updates op Monday-items op naam van het admin-account, niet op
 naam van wie in de app op de knop drukte. De app logt de echte gebruiker wel in
 `boekhouding.factuur.aangemaakt_door`.
 
+**MCP voor Claude** (2026-08-04): `https://boekhouding.globaal.be/mcp`, zelfde
+opzet als de Vermogen-MCP (statisch `MCP_TOKEN` voor Claude Code, plus een
+minimale OAuth-server met PKCE voor een claude.ai-connector; `/oauth/authorize`
+blijft achter de forward-auth). Zeven tools, **allemaal alleen lezen**:
+`dossiers`, `firmas`, `openstaande_posten`, `relatie_zoeken`, `dagboeken`,
+`verkopen_periode`, `onze_facturen`. Er zit bewust geen schrijf-tool in: het
+Octopus-account ziet dertien echte dossiers en de API kan facturen boeken, dus
+er mag geen pad bestaan waarlangs een gesprek iets aanmaakt. `openstaande_posten`
+leest uit onze spiegel en `verkopen_periode` heeft een dagbudget van 6 per
+dossier, omdat Octopus er 24 toestaat en de app die deelt.
+
+**Les over de relations-endpoint** (nagemeten 2026-08-04, dossier Contrax): het
+`name`-filter matcht alleen op de **exacte volledige naam**, hoofdletter-
+ongevoelig. Een deelnaam of jokerteken geeft stil een lege lijst; zonder
+zoekterm komen alle relaties terug. Zoeken op een deel van een naam hoort dus
+lokaal te gebeuren. Dit raakte ook `beste_relatie` in de factureer-app, die juist
+op vereenvoudigde naamvarianten zocht en daardoor bestaande klanten niet vond en
+terugviel op een nieuwe klant aanmaken.
+
 **Nog open:** Joan heeft nog geen Authentik-account, dus de groep `boekhouding`
 is nog leeg. De twee geplande rapporten uit haar OV-analyse (wekelijks verkopen,
 maandelijks openstaande betalingen als xlsx) zijn nog niet overgenomen; van die
