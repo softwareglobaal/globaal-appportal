@@ -23,6 +23,21 @@ server {
     # Contactformulieren van onze eigen websites: een bezoeker heeft geen login,
     # dus deze ene POST passeert de forward-auth. De app valideert zelf en houdt
     # spam tegen; identiteitsheaders worden hard geleegd.
+    # Documenten aanleveren voor de ingestie-agent. Achter de SSO, maar de
+    # standaardgrens van nginx is 1 MB en daar past geen enkel document in:
+    # zelfs een handleiding van 1,3 MB liep stuk. Een gescand boek is 169 MB.
+    # De OCR-post knipt te grote bestanden zelf in delen, dus hier hoeft alleen
+    # het volume en de tijd te passen.
+    location = /ingestie/aanleveren {
+        client_max_body_size 400m;
+        client_body_timeout 900s;
+        proxy_read_timeout 900s;
+        proxy_send_timeout 900s;
+        proxy_request_buffering off;
+        proxy_set_header Host $host;
+        proxy_pass http://app-agents:3020;
+    }
+
     location = /website-aanvraag {
         client_max_body_size 16k;
         proxy_set_header Host $host;
