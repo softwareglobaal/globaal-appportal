@@ -771,10 +771,17 @@ def _spoor_naar_beeld(sporen):
                       f"{detail.get('aantal_gaten', 0)} "
                       f"{'gat' if detail.get('aantal_gaten') == 1 else 'gaten'}")
         elif "herformuleerd" in detail:
-            cijfer = (f"eigen woorden {detail['letterlijk'] * 100:.0f}%, "
-                      f"andere woorden {detail['herformuleerd'] * 100:.0f}% "
-                      f"(marge {detail.get('marge_herformuleerd', 0) * 100:.0f}, "
-                      f"n={detail.get('bevraagd')})")
+            # Ook de sectie- en paginanauwkeurigheid tonen, de maat van Barsten &
+            # Scheuren: of je op de goede plek in het document belandt zegt een
+            # lezer meer dan of exact dat ene fragment bovenkwam.
+            cijfer = (f"fragment {detail['letterlijk'] * 100:.0f}% / "
+                      f"{detail['herformuleerd'] * 100:.0f}%")
+            if "sectie_herformuleerd" in detail:
+                cijfer += (f" | sectie {detail['sectie_letterlijk'] * 100:.0f}% / "
+                           f"{detail['sectie_herformuleerd'] * 100:.0f}%"
+                           f" | pagina {detail['pagina_letterlijk'] * 100:.0f}% / "
+                           f"{detail['pagina_herformuleerd'] * 100:.0f}%")
+            cijfer += (f" (eigen woorden / andere woorden, n={detail.get('bevraagd')})")
         elif "beantwoord" in detail:
             cijfer = f"{detail['beantwoord']} van {detail.get('vragen')} vragen beantwoord"
         elif "chunks" in detail or "corpus_id" in detail:
