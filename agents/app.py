@@ -699,6 +699,107 @@ def zoekdienst_json(pad: str, velden: dict) -> dict:
         return {"fout": f"zoekdienst niet bereikbaar: {type(e).__name__}"}
 
 
+# De keten zoals de lus hem afloopt. De volgorde en de merktekens komen uit
+# ingestie/lus.py; wat een post doet staat er in gewone taal bij, want deze
+# pagina is er voor wie wil controleren en niet voor wie de code al kent.
+KETEN = [
+    {"sleutel": "wachter_aanname", "naam": "Aanname", "wachter": True, "poort": True,
+     "wat": "Wat is dit voor bestand, en hoort het hier? Route bepalen: met tekstlaag "
+            "of gescand. Een document dat al is ingeladen wordt geweigerd."},
+    {"sleutel": "wachter_inventaris", "naam": "Inventaris", "wachter": True, "poort": False,
+     "wat": "Alles tellen voordat er iets wordt uitgepakt: pagina's, tabellen, "
+            "afbeeldingen, tekeningen. Dit wordt de meetlat voor de extractie."},
+    {"sleutel": "wachter_extractie", "naam": "Extractie", "wachter": True, "poort": True,
+     "wat": "Het document lezen met OCR, en de tekstlaag als tweede lezing ernaast. "
+            "Waar de OCR iets mist wordt de tekstlaag bijgeplakt."},
+    {"sleutel": "wachter_verkenning", "naam": "Verkenning", "wachter": True, "poort": True,
+     "wat": "Een model stelt het profiel voor: hoe er geknipt wordt en waarom. De "
+            "enige post waar een model iets maakt in plaats van beoordeelt."},
+    {"sleutel": "wachter_opschoning", "naam": "Opschoning", "wachter": True, "poort": True,
+     "wat": "Kop- en voetteksten en paginanummers eruit, op herhaling en niet op "
+            "betekenis."},
+    {"sleutel": "wachter_knippen", "naam": "Knippen", "wachter": True, "poort": True,
+     "wat": "Het document in fragmenten, volgens het profiel. Tabellen krijgen een "
+            "eigen soort, inhoudsopgave wordt buiten het zoeken gehouden."},
+    {"sleutel": "keuring", "naam": "Keuring", "wachter": False, "poort": True,
+     "meting": True,
+     "wat": "Zes harde controles op de fragmenten: lengte, doublures, lege stukken."},
+    {"sleutel": "dekking", "naam": "Dekking", "wachter": False, "poort": True,
+     "meting": True,
+     "wat": "Boekhouding, geen steekproef: zit elk stuk brontekst in een fragment, "
+            "of staat het op de verwijderlijst? Wat overblijft is verlies."},
+    {"sleutel": "wachter_verrijking", "naam": "Verrijking", "wachter": True, "poort": True,
+     "wat": "Afbeeldingen en tekeningen beschrijven, in de taal van het document, "
+            "en alleen als de beschrijving ergens op steunt."},
+    {"sleutel": "raming", "naam": "Raming", "wachter": False, "poort": True, "meting": True,
+     "wat": "Wat gaat het embedden kosten? Boven het plafond stopt de rit."},
+    {"sleutel": "laden", "naam": "Embedden en laden", "wachter": False, "poort": False,
+     "wat": "Vectoren maken en als nieuw corpus wegschrijven. Een bestaand corpus "
+            "wordt nooit overschreven."},
+    {"sleutel": "vindbaarheid", "naam": "Vindbaarheid", "wachter": False, "poort": True,
+     "meting": True,
+     "wat": "Vindt de kennisbank zijn eigen fragmenten terug, met de woorden van het "
+            "document en met andere woorden? Het verschil is wat telt."},
+    {"sleutel": "rookproef", "naam": "Rookproef", "wachter": False, "poort": True,
+     "meting": True,
+     "wat": "Vragen uit het document zelf, met het antwoord letterlijk in een "
+            "fragment teruggevonden. Haalt hij de drempel niet, dan blijft het "
+            "corpus op gekeurd staan."},
+]
+
+
+def _spoor_naar_beeld(sporen):
+    """Vertaalt het ruwe spoor naar wat er op de pagina hoort te staan."""
+    uit = {}
+    for spoor in sporen:
+        detail = spoor.get("detail") or {}
+        if isinstance(detail, str):
+            try:
+                detail = json.loads(detail)
+            except Exception:                                 # noqa: BLE001
+                detail = {}
+        uitkomst = spoor.get("uitkomst", "")
+        kleur = ("goed" if uitkomst in ("in orde", "gelukt")
+                 else "grijs" if uitkomst in ("overgeslagen", "kon niet oordelen")
+                 else "fout")
+        bezwaren = [f"{b.get('waarneming', '')} {chr(8594)} {b.get('gevolg', '')}"
+                    for b in (detail.get("bezwaren") or []) if isinstance(b, dict)]
+        cijfer = ""
+        if "onverklaard_aandeel" in detail:
+            cijfer = (f"{detail.get('dekking')}% gedekt, "
+                      f"{detail['onverklaard_aandeel']}% onverklaard, "
+                      f"{detail.get('aantal_gaten', 0)} gaten")
+        elif "herformuleerd" in detail:
+            cijfer = (f"eigen woorden {detail['letterlijk'] * 100:.0f}%, "
+                      f"andere woorden {detail['herformuleerd'] * 100:.0f}% "
+                      f"(marge {detail.get('marge_herformuleerd', 0) * 100:.0f}, "
+                      f"n={detail.get('bevraagd')})")
+        elif "beantwoord" in detail:
+            cijfer = f"{detail['beantwoord']} van {detail.get('vragen')} vragen beantwoord"
+        elif "chunks" in detail or "corpus_id" in detail:
+            cijfer = f"{detail.get('chunks', '')} fragmenten geladen".strip()
+        uit[spoor["stap"]] = {
+            "uitkomst": uitkomst, "kleur": kleur, "bezwaren": bezwaren[:3],
+            "opmerkingen": len(detail.get("opmerkingen") or []), "cijfer": cijfer,
+        }
+    return uit
+
+
+@app.route("/agent")
+def agent_keten():
+    """De keten van de ingestie-agent, desgewenst gevuld met een echte rit."""
+    banken = zoekdienst_json("/corpora", {}).get("corpora", [])
+    gekozen = (request.args.get("corpus") or "").strip()
+    resultaat = {}
+    if gekozen:
+        bank = zoekdienst_json("/corpus", {"naam": gekozen})
+        resultaat = _spoor_naar_beeld(bank.get("sporen", []))
+    return render_template(
+        "keten.html", keten=KETEN, banken=banken, gekozen=gekozen, resultaat=resultaat,
+        portal_url=f"https://portal.{BASE_DOMAIN}/",
+        username=request.headers.get("X-authentik-username", "onbekend"))
+
+
 @app.route("/kennisbanken")
 def kennisbanken():
     """Achter de SSO: welke kennisbanken er zijn."""
