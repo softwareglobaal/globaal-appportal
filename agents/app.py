@@ -768,7 +768,8 @@ def _spoor_naar_beeld(sporen):
         if "onverklaard_aandeel" in detail:
             cijfer = (f"{detail.get('dekking')}% gedekt, "
                       f"{detail['onverklaard_aandeel']}% onverklaard, "
-                      f"{detail.get('aantal_gaten', 0)} gaten")
+                      f"{detail.get('aantal_gaten', 0)} "
+                      f"{'gat' if detail.get('aantal_gaten') == 1 else 'gaten'}")
         elif "herformuleerd" in detail:
             cijfer = (f"eigen woorden {detail['letterlijk'] * 100:.0f}%, "
                       f"andere woorden {detail['herformuleerd'] * 100:.0f}% "
