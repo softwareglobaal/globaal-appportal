@@ -699,6 +699,66 @@ def zoekdienst_json(pad: str, velden: dict) -> dict:
         return {"fout": f"zoekdienst niet bereikbaar: {type(e).__name__}"}
 
 
+@app.route("/kennisbanken")
+def kennisbanken():
+    """Achter de SSO: welke kennisbanken er zijn."""
+    banken = zoekdienst_json("/corpora", {}).get("corpora", [])
+    return render_template("kennisbank.html", banken=banken, bank=None,
+                           portal_url=f"https://portal.{BASE_DOMAIN}/",
+                           username=request.headers.get("X-authentik-username", "onbekend"))
+
+
+@app.route("/kennisbank/<naam>")
+def kennisbank(naam):
+    """Door een kennisbank lopen: wat erin zit, wat de wachters vonden, en elk
+    fragment los na te lezen. Bedoeld om te kunnen controleren, niet om indruk te
+    maken: wat hier staat komt rechtstreeks uit de database."""
+    try:
+        van = max(0, int(request.args.get("van", 0)))
+    except ValueError:
+        van = 0
+    aantal = 40
+    bank = zoekdienst_json("/corpus", {"naam": naam})
+    if "fout" in bank:
+        return render_template("kennisbank.html", banken=[], bank=None,
+                               portal_url=f"https://portal.{BASE_DOMAIN}/",
+                               username=request.headers.get("X-authentik-username", "onbekend"))
+    lijst = zoekdienst_json("/fragmenten", {"corpus": naam, "van": van, "aantal": aantal})
+
+    # De dekking en de rookproef staan in het spoor van de rit; die twee cijfers
+    # zeggen het meest over de vraag of het document volledig is verwerkt.
+    dekking = rookproef = None
+    for spoor in bank.get("sporen", []):
+        detail = spoor.get("detail") or {}
+        if isinstance(detail, str):
+            try:
+                detail = json.loads(detail)
+            except Exception:                                 # noqa: BLE001
+                detail = {}
+        if spoor["stap"] == "rookproef" and "beantwoord" in detail:
+            rookproef = detail
+        if "onverklaard_aandeel" in detail:
+            dekking = detail
+
+    return render_template(
+        "kennisbank.html", bank=bank, banken=None,
+        fragmenten=lijst.get("fragmenten", []), totaal_fragmenten=lijst.get("totaal", 0),
+        van=van, aantal=aantal, dekking=dekking, rookproef=rookproef,
+        portal_url=f"https://portal.{BASE_DOMAIN}/",
+        username=request.headers.get("X-authentik-username", "onbekend"))
+
+
+@app.route("/kennisbank/<naam>/fragment/<int:chunk_id>")
+def kennisbank_fragment(naam, chunk_id):
+    """Een fragment woordelijk, om naast het oorspronkelijke document te leggen."""
+    f = zoekdienst_json("/fragment", {"id": chunk_id})
+    if "fout" in f:
+        return redirect(f"/kennisbank/{naam}")
+    return render_template("fragment.html", f=f,
+                           portal_url=f"https://portal.{BASE_DOMAIN}/",
+                           username=request.headers.get("X-authentik-username", "onbekend"))
+
+
 @app.route("/zoeken")
 def zoeken_pagina():
     """Achter de SSO: zoeken in de kennisbanken die de ingestie-agent maakte."""
