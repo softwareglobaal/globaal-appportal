@@ -1,0 +1,119 @@
+# Website High Design Studio N.V. — productie op hdssr.com
+#
+# Dit bestand hoort in /home/ubuntu/appportal/nginx/templates/.
+#
+# VOLGORDE IS BELANGRIJK: vraag eerst het certificaat aan, plaats daarna pas
+# deze template. Nginx start niet met een verwijzing naar een certificaat dat
+# er nog niet is, en dan liggen ook alle andere sites op deze server plat.
+#
+#   1. certbot certonly --manual --preferred-challenges dns \
+#          -d hdssr.com -d www.hdssr.com
+#      (TXT-records _acme-challenge.hdssr.com bij one.com zetten)
+#   2. sudo /etc/letsencrypt/renewal-hooks/deploy/appportal.sh
+#      (kopieert het cert naar ~/appportal/certs/hdssr/ en herlaadt nginx)
+#   3. DNS bij one.com: A-record hdssr.com en www.hdssr.com -> 54.80.98.233,
+#      het Squarespace-CNAME op www weghalen. MX- en TXT-records ongemoeid
+#      laten, anders stopt de e-mail op @hdssr.com.
+#   4. deze template plaatsen, nginx -t, nginx -s reload
+#
+# De proefversie op hdssr.${BASE_DOMAIN} blijft daarnaast bestaan via
+# 55-hdssr.conf.template. Die staat op noindex; deze niet.
+#
+# www is de canonieke versie, precies zoals bij Squarespace: hdssr.com stuurde
+# daar al door naar www.hdssr.com. Dat zo houden bewaart de zoekgeschiedenis.
+
+server {
+    listen 80;
+    server_name hdssr.com www.hdssr.com;
+
+    # Certbot vernieuwt straks via HTTP, want dan wijst het domein hierheen.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://www.hdssr.com$request_uri;
+    }
+}
+
+# Het kale domein stuurt door naar www.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name hdssr.com;
+    ssl_certificate     /etc/nginx/certs/hdssr/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/hdssr/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    return 301 https://www.hdssr.com$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name www.hdssr.com;
+    ssl_certificate     /etc/nginx/certs/hdssr/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/hdssr/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # Variabele upstream + de DNS van Docker, zodat een herstart van de
+    # container (nieuw IP) geen nginx-reload nodig heeft.
+    resolver 127.0.0.11 valid=30s;
+    set $hdssr_upstream http://hdssr-web:8096;
+
+    # Formulierinzendingen blijven klein.
+    client_max_body_size 2m;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # LET OP: een add_header binnen een locatieblok vervangt ALLE add_header-regels
+    # van het niveau erboven. Daarom staan ze in elk blok opnieuw.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # Afbeeldingen veranderen zelden en hebben een vaste naam.
+    location /images/ {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass $hdssr_upstream;
+        expires 180d;
+        add_header Cache-Control "public, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+    }
+
+    # Astro zet een hash in de naam van CSS en JS, dus een nieuwe versie krijgt
+    # automatisch een nieuwe naam en wordt direct opgepikt.
+    location /_astro/ {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass $hdssr_upstream;
+        expires 365d;
+        add_header Cache-Control "public, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+    }
+
+    location /video/ {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass $hdssr_upstream;
+        expires 180d;
+        add_header Cache-Control "public, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass $hdssr_upstream;
+    }
+
+    access_log /var/log/nginx/hdssr.access.log;
+}

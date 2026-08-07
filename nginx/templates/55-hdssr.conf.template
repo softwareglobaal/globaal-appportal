@@ -1,0 +1,62 @@
+# Website High Design Studio N.V. (hdssr.com)
+#
+# Plaatsen in /home/ubuntu/appportal/nginx/templates/ — de nginx-container zet
+# de bestanden uit die map bij het opstarten in /etc/nginx/conf.d/ en vult
+# ${BASE_DOMAIN} in.
+#
+# FASE 1 (dit bestand): proefversie op hdssr.${BASE_DOMAIN}, onder het bestaande
+#         wildcardcertificaat. Op noindex, want zolang de echte site nog bij
+#         Squarespace staat mag dezelfde inhoud niet op twee adressen in Google.
+# FASE 2 (55-hdssr-productie.conf.template, staat er nog niet): hdssr.com zelf.
+#         Pas plaatsen nadat het Let's Encrypt-certificaat is aangevraagd —
+#         nginx start niet met een verwijzing naar een certificaat dat er nog
+#         niet is.
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name hdssr.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Publieke site, geen forward-auth: iedereen mag meekijken naar de
+    # proefversie. Wel uit de zoekmachines houden tot de overstap rond is.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
+    # Variabele upstream + de DNS van Docker, zodat een herstart van de
+    # container (nieuw IP) geen nginx-reload nodig heeft. Zelfde aanpak als in
+    # snippets/forward-auth.conf.
+    resolver 127.0.0.11 valid=30s;
+    set $hdssr_upstream http://hdssr-web:8096;
+
+    # Formulierinzendingen blijven klein.
+    client_max_body_size 2m;
+
+    # text/html staat al in de globale gzip_types; nogmaals vermelden geeft
+    # alleen een waarschuwing bij "nginx -t".
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # Afbeeldingen veranderen zelden en hebben een vaste naam.
+    location /images/ {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass $hdssr_upstream;
+        expires 180d;
+        add_header Cache-Control "public, immutable";
+        add_header X-Robots-Tag "noindex, nofollow" always;
+    }
+
+    # Astro zet een hash in de naam van CSS en JS, dus een nieuwe versie krijgt
+    # automatisch een nieuwe naam en wordt direct opgepikt.
+    location /_astro/ {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass $hdssr_upstream;
+        expires 365d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass $hdssr_upstream;
+    }
+}

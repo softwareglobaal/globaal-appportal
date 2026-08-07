@@ -1,0 +1,83 @@
+# Productie: regulariseren.be. Eigen Let's Encrypt-certificaat, want het
+# wildcard-cert van *.${BASE_DOMAIN} dekt dit domein niet.
+#
+# VOLGORDE IS BELANGRIJK: vraag eerst het certificaat aan, plaats daarna pas deze
+# template. Nginx start niet met een verwijzing naar een certificaat dat er nog
+# niet is, en dan liggen ook alle andere sites plat.
+#
+#   1. DNS: A-record van regulariseren.be en www.regulariseren.be -> deze server
+#   2. sudo certbot certonly --webroot -w /var/www/certbot \
+#          -d regulariseren.be -d www.regulariseren.be
+#   3. sudo /etc/letsencrypt/renewal-hooks/deploy/appportal.sh   (kopieert het cert
+#      naar ~/appportal/certs/regulariseren/ en herlaadt nginx)
+#   4. deze template plaatsen, nginx -t, nginx -s reload
+#
+# De site blijft daarnaast bereikbaar op web-regulariseren.${BASE_DOMAIN} via het
+# algemene blok in 60-websites.conf.template. Dat is de testomgeving.
+
+server {
+    listen 80;
+    server_name regulariseren.be www.regulariseren.be;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://regulariseren.be$request_uri;
+    }
+}
+
+# www stuurt door naar het kale domein, zodat er één canonieke versie is en we
+# de zoekkracht niet over twee adressen versnipperen.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name www.regulariseren.be;
+    ssl_certificate     /etc/nginx/certs/regulariseren/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/regulariseren/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    return 301 https://regulariseren.be$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name regulariseren.be;
+    ssl_certificate     /etc/nginx/certs/regulariseren/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/regulariseren/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root /srv/websites/regulariseren;
+    index index.html;
+
+    # Publieke site: geen forward-auth, wel beveiligingsheaders.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    location ~* \.(css|js|jpg|jpeg|png|gif|webp|svg|woff2?|ico)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+    }
+
+    location / {
+        # LET OP: in nginx vervangt een add_header binnen een locatieblok ALLE
+        # add_header-regels van het niveau erboven. Daarom staan ze hier herhaald.
+        # Zonder die herhaling verdwenen op 05-08-2026 alle beveiligingsheaders en de
+        # noindex, puur doordat er een Cache-Control werd toegevoegd.
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        try_files $uri $uri/ $uri.html /index.html;
+    }
+
+    access_log /var/log/nginx/regulariseren.access.log;
+}
