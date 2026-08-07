@@ -355,6 +355,18 @@ def db():
         bytes        INTEGER,
         mime         TEXT DEFAULT '',
         aangeleverd  TEXT NOT NULL)""")
+    # Bijlagen bij een binnengekomen aanvraag. Bewust een eigen tabel en een eigen
+    # map, los van `bijlage`: die hoort bij opdrachten die wij zelf aanmaken, terwijl
+    # dit bestanden zijn die een onbekende bezoeker van het internet uploadt. Dat
+    # verdient strengere grenzen (zie LEAD_BIJLAGE_TYPES en LEAD_MAX_BYTES).
+    conn.execute("""CREATE TABLE IF NOT EXISTS lead_bijlage (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        lead_id      INTEGER NOT NULL,
+        bestandsnaam TEXT NOT NULL,
+        pad          TEXT NOT NULL,
+        bytes        INTEGER,
+        mime         TEXT DEFAULT '',
+        aangeleverd  TEXT NOT NULL)""")
     _seed(conn)
     return conn
 
@@ -659,6 +671,17 @@ BIJLAGE_MAP = os.environ.get("BIJLAGE_MAP", "/data/opdracht-bijlagen")
 BIJLAGE_TYPES = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm", ".docx", ".csv",
                  ".png", ".jpg", ".jpeg", ".webp", ".gif"}
 BIJLAGE_BEELD = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+# Grenzen voor bijlagen bij een PUBLIEKE aanvraag. Dit eindpunt zit niet achter de
+# SSO, dus iedereen op het internet kan hier bestanden naartoe sturen. Vandaar
+# strenger dan bij eigen opdrachten:
+#   - alleen foto's en pdf, geen html/markdown/docx. Een geuploade html die wij
+#     later openen zou anders scripts kunnen draaien op ons eigen portaaldomein.
+#   - kleine limiet per bestand en een plafond op het aantal bestanden.
+LEAD_BIJLAGE_MAP = os.environ.get("LEAD_BIJLAGE_MAP", "/data/aanvraag-bijlagen")
+LEAD_BIJLAGE_TYPES = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif"}
+LEAD_MAX_BYTES = 12 * 1024 * 1024
+LEAD_MAX_BESTANDEN = 6
 
 
 def ingestie_rijen(limit=25):
@@ -1632,24 +1655,89 @@ def website_aanvraag():
     if not naam or not (email or (d.get("telefoon") or "").strip()):
         return jsonify({"ok": False, "fout": "naam en een contactgegeven zijn verplicht"}), 400
     conn = db()
-    conn.execute(
+    cur = conn.execute(
         """INSERT INTO lead (site, naam, email, telefoon, bericht, extra, herkomst, ontvangen)
            VALUES (?,?,?,?,?,?,?,?)""",
         ((d.get("site") or "")[:80], naam, email, (d.get("telefoon") or "").strip()[:60],
          bericht, json.dumps({k: str(v)[:200] for k, v in d.items()
                               if k not in ("naam", "email", "telefoon", "bericht", "site", "website")})[:2000],
          (request.headers.get("Referer") or "")[:200], _nu().isoformat()))
+    lead_id = cur.lastrowid
+    geweigerd = _bewaar_aanvraag_bijlagen(conn, lead_id)
     conn.commit(); conn.close()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "geweigerd": geweigerd} if geweigerd else {"ok": True})
+
+
+def _bewaar_aanvraag_bijlagen(conn, lead_id):
+    """Slaat de meegestuurde foto's en plannen op. Geeft de geweigerde namen terug.
+
+    De bezoeker is onbekend, dus we vertrouwen niets uit het verzoek:
+      - de bestandsnaam wordt nooit gebruikt om het pad te bouwen; op schijf komt
+        een naam die wij zelf verzinnen, zodat paden niet gemanipuleerd kunnen worden
+      - alleen de extensies uit LEAD_BIJLAGE_TYPES komen erdoor
+      - de grootte wordt gecontroleerd nadat het bestand is weggeschreven, en te
+        grote bestanden worden meteen verwijderd
+    Een geweigerd bestand laat de aanvraag zelf gewoon doorgaan: liever een aanvraag
+    zonder bijlage dan een bezoeker die afhaakt op een foutmelding.
+    """
+    bestanden = request.files.getlist("bijlagen")[:LEAD_MAX_BESTANDEN]
+    if not bestanden:
+        return []
+    os.makedirs(LEAD_BIJLAGE_MAP, exist_ok=True)
+    geweigerd = []
+    for i, best in enumerate(bestanden):
+        if not best or not best.filename:
+            continue
+        toon_naam = os.path.basename(best.filename)[:150]
+        ext = os.path.splitext(toon_naam)[1].lower()
+        if ext not in LEAD_BIJLAGE_TYPES:
+            geweigerd.append(toon_naam)
+            continue
+        pad = os.path.join(LEAD_BIJLAGE_MAP, f"{lead_id}-{i}{ext}")
+        best.save(pad)
+        grootte = os.path.getsize(pad)
+        if grootte == 0 or grootte > LEAD_MAX_BYTES:
+            os.remove(pad)
+            geweigerd.append(toon_naam)
+            continue
+        conn.execute(
+            """INSERT INTO lead_bijlage (lead_id, bestandsnaam, pad, bytes, mime, aangeleverd)
+               VALUES (?,?,?,?,?,?)""",
+            (lead_id, toon_naam, pad, grootte, (best.mimetype or "")[:100], _nu().isoformat()))
+    return geweigerd
+
+
+@app.route("/aanvraag-bijlage/<int:bid>")
+def aanvraag_bijlage(bid):
+    """Bijlage bij een aanvraag downloaden (achter de SSO).
+
+    Altijd als download en nooit inline: het bestand komt van een onbekende
+    bezoeker, en iets wat de browser zelf rendert op ons portaaldomein willen we
+    niet. Daarom as_attachment plus een neutraal mimetype.
+    """
+    conn = db()
+    r = conn.execute("SELECT * FROM lead_bijlage WHERE id=?", (bid,)).fetchone()
+    conn.close()
+    if not r or not os.path.exists(r["pad"]):
+        abort(404)
+    resp = send_file(r["pad"], as_attachment=True, download_name=r["bestandsnaam"],
+                     mimetype="application/octet-stream")
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    return resp
 
 
 @app.route("/aanvragen")
 def aanvragen():
     conn = db()
     rows = [dict(r) for r in conn.execute("SELECT * FROM lead ORDER BY id DESC LIMIT 200")]
+    bijlagen = {}
+    for b in conn.execute("SELECT * FROM lead_bijlage ORDER BY id"):
+        bijlagen.setdefault(b["lead_id"], []).append(dict(b))
     conn.close()
     for r in rows:
         r["ontvangen_kort"] = _fmt(r["ontvangen"])
+        r["bijlagen"] = bijlagen.get(r["id"], [])
     return render_template("aanvragen.html", leads=rows,
                            nieuw=sum(1 for r in rows if r["status"] == "nieuw"))
 

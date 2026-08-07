@@ -19,6 +19,14 @@
           {% if l.telefoon %}<div><a href="tel:{{ l.telefoon }}">{{ l.telefoon }}</a></div>{% endif %}
         </td>
         <td style="max-width:340px">{{ l.bericht[:400] }}{% if l.bericht|length > 400 %}…{% endif %}
+          {% if l.bijlagen %}
+          <div style="margin-top:6px">
+            <div style="font-size:11.5px;color:var(--tekst-3)">Meegestuurd door de aanvrager:</div>
+            {% for b in l.bijlagen %}
+            <a href="/aanvraag-bijlage/{{ b.id }}" style="display:inline-block;margin:3px 6px 0 0;font-size:12px">{{ b.bestandsnaam }}</a><span style="font-size:11px;color:var(--tekst-3)">({{ (b.bytes / 1024)|round|int }} kB)</span>
+            {% endfor %}
+          </div>
+          {% endif %}
           {% if l.opmerking %}<div style="margin-top:4px;color:var(--tekst-3);font-size:12px">notitie: {{ l.opmerking }}</div>{% endif %}</td>
         <td class="code">{{ l.site or '—' }}</td>
         <td class="code">{{ l.ontvangen_kort }}</td>

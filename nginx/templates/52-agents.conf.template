@@ -39,7 +39,12 @@ server {
     }
 
     location = /website-aanvraag {
-        client_max_body_size 16k;
+        # Ruimer dan de rest: bezoekers sturen hier foto's van de bestaande toestand
+        # en pdf-plannen mee. De app bewaakt zelf het aantal (6) en de grootte per
+        # bestand (12 MB) en weigert alles behalve beeld en pdf. Deze waarde is
+        # bewust net iets ruimer dan 6 x 12 MB.
+        client_max_body_size 80m;
+        client_body_timeout 120s;
         proxy_set_header Host $host;
         proxy_set_header X-authentik-username "";
         proxy_set_header X-authentik-groups "";

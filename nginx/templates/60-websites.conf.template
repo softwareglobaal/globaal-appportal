@@ -21,6 +21,13 @@ server {
     root /srv/websites/$sitenaam;
     index index.html;
 
+    # Dit adres is de TESTOMGEVING, niet het echte klantdomein. Zoekmachines
+    # moeten hem daarom nooit opnemen: anders concurreert de proefversie met de
+    # echte site, of erger, hij wordt geindexeerd terwijl de canonical naar een
+    # domein wijst dat nog niet bestaat. Het echte domein krijgt een eigen
+    # server-block zonder deze regel.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
     # Beveiligingsheaders (publieke site: wel nodig, apps zitten achter SSO)
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
@@ -30,9 +37,24 @@ server {
     # Statische bestanden lang cachen, HTML kort (zodat updates snel zichtbaar zijn)
     location ~* \.(css|js|jpg|jpeg|png|gif|webp|svg|woff2?|ico)$ {
         expires 30d;
-        add_header Cache-Control "public, immutable";
+        add_header Cache-Control "public, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header X-Robots-Tag "noindex, nofollow" always;
     }
     location / {
+        # LET OP: in nginx vervangt een add_header binnen een locatieblok ALLE
+        # add_header-regels van het niveau erboven. Daarom staan ze hier herhaald.
+        # Zonder die herhaling verdwenen op 05-08-2026 alle beveiligingsheaders en de
+        # noindex, puur doordat er een Cache-Control werd toegevoegd.
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header X-Robots-Tag "noindex, nofollow" always;
         try_files $uri $uri/ $uri.html /index.html;
     }
 
