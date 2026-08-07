@@ -37,3 +37,13 @@ awscliv2.zip
 # Eigen repo (softwareglobaal/globaal-kosten), uitgecheckt op de VM voor de
 # stack-app (herbouw 2026-07-15); de host-pijplijn blijft in ~/kosten.
 /kosten/
+
+# Eigen app-repo's, uitgecheckt op de VM (deploy via eigen deploy-stack.sh in cron).
+/boekhouding/
+/hr/
+/monday/
+/omv-v2/
+# Runtime-data van de agents-app: agents.db + geuploade bijlagen (~1,9 GB). Nooit in git.
+/agents-data/
+# Gegenereerd door monday/scripts/build-graaf.sh (cron), geen bron.
+/monday-graaf/
