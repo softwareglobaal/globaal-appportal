@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block titel %}{{ o.titel }}{% endblock %}
+{% block body %}
+<div class="kop">
+  <h1>{{ o.titel }}</h1>
+  <div class="meta-rij">
+    <span class="sb {{ o.status }}">{{ o.status_label }}</span>
+    <span>{{ o.firma }}{% if o.thema %} · {{ o.thema }}{% endif %}</span>
+    <span>Van <strong>{{ o.label }}</strong></span>
+    <span class="code">{{ o.soort }} · {{ o.versie }}</span>
+    <span class="code">{{ o.aangemaakt }}</span>
+  </div>
+</div>
+
+{% if o.opmerking %}
+<div class="paneel" style="padding:12px 16px;margin-bottom:14px;">
+  <strong>Jouw opmerking</strong> {% if o.besloten_door %}<span class="code">({{ o.besloten_door }}, {{ o.besluit_ts }})</span>{% endif %}<br>
+  {{ o.opmerking }}
+</div>
+{% endif %}
+
+{% if o.heeft_preview %}
+<div style="background:#eef2f6;border:1px solid #c9d6e2;border-left:4px solid var(--accent);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+  <strong>Bekijk hoe de pagina eruitziet</strong>
+  <p class="sub" style="margin:3px 0 10px;color:var(--tekst-2)">Volledige weergave binnen dit platform — zo komt de pagina op de website.</p>
+  <a class="knop" href="/oplevering/{{ o.id }}/preview" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">Preview openen ↗</a>
+</div>
+{% endif %}
+<div class="prose">{{ inhoud_html|safe }}</div>
+
+<div class="acties">
+  <h2 style="margin-top:0">Jouw oordeel</h2>
+  <textarea id="opm" placeholder="Optionele opmerking (bv. wat er moet wijzigen)…"></textarea>
+  <div class="acties-knoppen">
+    <button class="knop ja" onclick="beslis('goedgekeurd')">Goedkeuren</button>
+    <button class="knop" onclick="beslis('wijziging_gevraagd')">Wijziging vragen</button>
+    <button class="knop nee" onclick="beslis('afgewezen')">Afwijzen</button>
+    <button class="knop pub" onclick="beslis('gepubliceerd')">Markeer als gepubliceerd</button>
+  </div>
+  <p class="sub" style="margin-top:8px;color:var(--tekst-3)">Publiceren zelf doe jij; hier leg je enkel het oordeel vast.</p>
+</div>
+
+<script>
+  function beslis(besluit){
+    var opm=document.getElementById('opm').value;
+    var knoppen=document.querySelectorAll('.acties-knoppen .knop');
+    knoppen.forEach(function(k){k.disabled=true;});
+    fetch('/oplevering/{{ o.id }}/besluit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({besluit:besluit,opmerking:opm})})
+      .then(function(r){return r.json();}).then(function(){location.reload();})
+      .catch(function(){knoppen.forEach(function(k){k.disabled=false;});alert('Kon het oordeel niet opslaan. Probeer opnieuw.');});
+  }
+</script>
+
+
+  {% if o.taak_id %}
+  <div class="acties" id="aanvullen" style="border-color:var(--amber)">
+    <h2 style="margin-top:0">Extra info geven of antwoorden</h2>
+    <p class="sub" style="margin:0 0 10px;color:var(--tekst-2)">Vraagt het team om meer informatie, of wil je iets bijsturen? Antwoord hier — de opdracht gaat terug naar het team, dat voortbouwt op dit resultaat.</p>
+    <form method="post" action="/oplevering/{{ o.id }}/aanvullen" enctype="multipart/form-data">
+      <textarea name="aanvulling" rows="4" placeholder="Bijvoorbeeld: de tekst staat hieronder / het gaat om een update van de bestaande pagina / het conversiedoel is een offerteaanvraag…"
+        style="width:100%;border:1px solid var(--lijn-sterk);border-radius:6px;padding:9px 11px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:10px">
+        <input type="file" name="bijlagen" multiple accept=".pdf,.docx,.md,.txt,.html,.csv,.png,.jpg,.jpeg,.webp,.gif" style="font-size:12.5px">
+        <button class="knop" type="submit">Versturen naar het team</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="acties" id="wp">
+    <h2 style="margin-top:0">Publicatie naar WordPress</h2>
+    <div style="font-size:13px;margin-bottom:10px;">
+      {% if o.wp_status == 'publish' %}
+        <span class="sb gepubliceerd">Live</span>{% if o.wp_link %} &nbsp;<a href="{{ o.wp_link }}" target="_blank" rel="noopener">Bekijk live pagina ↗</a>{% endif %}
+      {% elif o.wp_post_id %}
+        <span class="sb in_review">Concept in WordPress (privé)</span>{% if o.wp_preview %} &nbsp;<a href="{{ o.wp_preview }}" target="_blank" rel="noopener">Bekijk de pagina ↗</a>{% endif %}
+      {% else %}
+        <span style="color:var(--tekst-3)">Nog niet in WordPress.</span>
+      {% endif %}
+    </div>
+    <div class="acties-knoppen">
+      <button class="knop" onclick="naarWp(this)">{% if o.wp_post_id %}Concept bijwerken{% else %}Naar WordPress (concept){% endif %}</button>
+      {% if o.wp_post_id %}<button class="knop pub" onclick="publiceerWp(this)">Publiceer live op de website</button>{% endif %}
+    </div>
+    {% if o.seo_titel or o.seo_desc or o.seo_keyword %}
+    <div style="border-top:1px dashed var(--lijn);margin-top:12px;padding-top:10px;font-size:12.5px">
+      <strong>SEO-velden</strong> <span style="color:var(--tekst-3)">(gaan automatisch mee bij publiceren)</span>
+      <table style="width:100%;border-collapse:collapse;margin-top:6px">
+        {% if o.seo_titel %}<tr><td style="padding:2px 8px 2px 0;color:var(--tekst-2);white-space:nowrap">SEO-titel</td><td class="code">{{ o.seo_titel }}</td></tr>{% endif %}
+        {% if o.seo_desc %}<tr><td style="padding:2px 8px 2px 0;color:var(--tekst-2);vertical-align:top">Omschrijving</td><td class="code">{{ o.seo_desc }}</td></tr>{% endif %}
+        {% if o.seo_keyword %}<tr><td style="padding:2px 8px 2px 0;color:var(--tekst-2)">Focus-keyword</td><td class="code">{{ o.seo_keyword }}</td></tr>{% endif %}
+      </table>
+    </div>
+    {% endif %}
+    <p class="sub" style="margin-top:8px;color:var(--tekst-3)">De agent maakt een concept-pagina in WordPress. Klik op de preview-link (opent in een nieuw tabblad) voor de echte opmaak; daarna zet "Publiceer live" de pagina live.</p>
+  </div>
+  <script>
+    function naarWp(btn){btn.disabled=true;var t=btn.textContent;btn.textContent='Bezig…';
+      fetch('/oplevering/{{ o.id }}/naar-wordpress',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+        if(d.ok){location.reload();}else{alert(d.fout||'Mislukt');btn.disabled=false;btn.textContent=t;}
+      }).catch(function(){alert('Kon niet verbinden.');btn.disabled=false;btn.textContent=t;});}
+    function publiceerWp(btn){if(!confirm('De nieuwe tekst nu LIVE zetten op de bestaande pagina? De huidige inhoud wordt vervangen.'))return;btn.disabled=true;btn.textContent='Publiceren…';
+      fetch('/oplevering/{{ o.id }}/publiceer',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+        if(d.ok){ if(d.handmatig&&d.handmatig.length){ var t=d.handmatig.map(function(h){return h.veld+':\n'+h.waarde;}).join('\n\n');
+        alert('Gepubliceerd.\n\nDeze velden konden nog niet automatisch gezet worden (zie wordpress-yoast-snippet.md):\n\n'+t);}
+        location.reload();}else{alert(d.fout||'Mislukt');btn.disabled=false;btn.textContent='Publiceer live';}
+      }).catch(function(){alert('Kon niet verbinden.');btn.disabled=false;btn.textContent='Publiceer live';});}
+  </script>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titel %}Branding{% endblock %}
+{% block body %}
+<div class="kop">
+  <h1>Branding</h1>
+  <div class="sub">Huisstijl en tone-of-voice per firma. Kleuren zijn afgeleid uit de CSS-variabelen en logo's van de sites zelf. Volledig brandbook: <span class="code">marketing/seo/firmas/&lt;firma&gt;/branding.md</span>.</div>
+</div>
+
+<div class="agents-grid" style="grid-template-columns:repeat(auto-fill,minmax(330px,1fr))">
+  {% for m in merken %}
+  <div class="agent-kaart" style="padding:0;overflow:hidden">
+    <div style="display:flex;height:8px">
+      {% for k in m.kleuren %}<span style="flex:1;background:{{ k.hex }}"></span>{% endfor %}
+    </div>
+    <div style="padding:14px 15px">
+      <div class="k-naam">{{ m.naam }}</div>
+      <div class="k-rol">{{ m.sector }}</div>
+
+      <p style="font-size:12.5px;color:var(--tekst);margin:11px 0 6px;">{{ m.pos }}</p>
+      <p style="font-size:12.5px;color:var(--tekst-2);margin:0 0 10px;font-style:italic;">{{ m.tone }}</p>
+
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px">
+        {% for k in m.kleuren %}
+        <tr>
+          <td style="width:18px;padding:2px 0"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid var(--lijn);background:{{ k.hex }}"></span></td>
+          <td class="code" style="padding:2px 6px;color:var(--tekst)">{{ k.hex }}</td>
+          <td style="padding:2px 0;color:var(--tekst-2)">{{ k.rol }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+
+      <div style="font-size:11.5px;color:var(--tekst-2);margin-bottom:8px">
+        <b>Typografie:</b> {{ m.typo }}<br>
+        <b>Look &amp; feel:</b> {{ m.look }}
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--lijn);padding-top:8px">
+        <a href="{{ m.web }}" target="_blank" rel="noopener" style="font-size:12px;">{{ m.web.split('//')[-1] }} ↗</a>
+        <span style="font-size:10.5px;color:var(--tekst-3);text-align:right">bron: {{ m.bron }}</span>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<p class="hint" style="margin-top:16px">Firma's zonder website (H-Invest, Zidi Construct, Orvantis, Melodie) staan hier nog niet — daar is nog geen huisstijl om te analyseren.</p>
+{% endblock %}

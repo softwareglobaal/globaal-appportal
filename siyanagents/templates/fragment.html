@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fragment {{ f.volgnummer }} uit {{ f.corpus }}</title>
+<style>
+  :root {
+    --bg: #f5f6f7; --paneel: #ffffff; --lijn: #e4e7ea; --lijn-sterk: #d5dade;
+    --tekst: #1e2830; --tekst-2: #5c6771; --tekst-3: #8d959d; --accent: #2f4a63;
+    --tekstmod: #3663a0; --tabel: #2f7d5a; --beeld: #8a5a2f; --navigatie: #98a0a8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--tekst);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         font-size: 14px; line-height: 1.6; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 26px 22px 60px; }
+  .kop { border-bottom: 1px solid var(--lijn); padding-bottom: 14px; margin-bottom: 20px; }
+  .kop h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  .kop .sub { color: var(--tekst-2); font-size: 12.5px; margin-top: 3px; }
+  .kop-link { display: inline-block; margin-top: 10px; border: 1px solid var(--lijn-sterk);
+              background: var(--paneel); border-radius: 5px; padding: 5px 12px;
+              font-size: 12.5px; font-weight: 500; }
+  .mod { font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; font-size: 10.5px; }
+  .mod.tekst { color: var(--tekstmod); }
+  .mod.tabel { color: var(--tabel); }
+  .mod.afbeelding { color: var(--beeld); }
+  .mod.navigatie { color: var(--navigatie); }
+  .paneel { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px;
+            padding: 18px 20px; }
+  pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; font-family: inherit;
+        font-size: 14px; }
+  .kruimel { font-size: 12.5px; color: var(--tekst-2); margin-bottom: 14px; }
+  .voet { margin-top: 26px; color: var(--tekst-3); font-size: 12px;
+          border-top: 1px solid var(--lijn); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kop">
+    <h1>Fragment {{ f.volgnummer }}{% if f.pagina %}, pagina {{ f.pagina }}{% endif %}</h1>
+    <div class="sub">
+      <span class="mod {{ f.modaliteit }}">{{ f.modaliteit }}</span> &middot;
+      {{ f.tokens }} tokens &middot; uit {{ f.corpus }}
+    </div>
+    <a class="kop-link" href="/kennisbank/{{ f.corpus }}">Terug naar het document</a>
+  </div>
+
+  {% if f.kop_pad %}
+    <div class="kruimel">{{ f.kop_pad | join(' &rsaquo; ') | safe }}</div>
+  {% endif %}
+
+  <div class="paneel"><pre>{{ f.tekst }}</pre></div>
+
+  <div class="voet">
+    Dit is de tekst zoals hij in de kennisbank staat, woordelijk. Leg hem naast
+    {% if f.pagina %}pagina {{ f.pagina }} van {% endif %}het oorspronkelijke
+    document om te controleren of er niets is weggevallen of veranderd.
+  </div>
+</div>
+</body>
+</html>

@@ -47,3 +47,5 @@ awscliv2.zip
 /agents-data/
 # Gegenereerd door monday/scripts/build-graaf.sh (cron), geen bron.
 /monday-graaf/
+# Runtime-data van de siyanagents-app (eigen DB + bijlagen). Nooit in git.
+/siyanagents-data/

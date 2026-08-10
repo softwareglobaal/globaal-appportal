@@ -1,0 +1,41 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name siyanagents.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Sales/Marketing-agents, afgesplitst van app-agents. Forward-auth
+    # (embedded outpost) beschermt de hele tegel; identiteit + groepen gaan
+    # als X-authentik-* headers naar de Flask-app.
+    set $app_upstream http://app-siyanagents:3021;
+
+    # Statusmeldingen van de runner: een agent heeft geen browsersessie, dus
+    # deze ene POST passeert de forward-auth en de app controleert zelf een
+    # gedeeld token (AGENTS_TOKEN). Alleen een kleine body; de
+    # identiteitsheaders worden hard geleegd.
+    location = /agent-status {
+        client_max_body_size 4k;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass http://app-siyanagents:3021;
+    }
+
+    # Contactformulieren van onze eigen websites (bv. regulariseren.be): een
+    # bezoeker heeft geen login, dus deze ene POST passeert de forward-auth.
+    # Bezoekers sturen hier foto's van de bestaande toestand en pdf-plannen mee;
+    # de app bewaakt zelf het aantal (6) en de grootte per bestand (12 MB) en
+    # weigert alles behalve beeld en pdf. De grens is bewust iets ruimer dan 6x12 MB.
+    location = /website-aanvraag {
+        client_max_body_size 80m;
+        client_body_timeout 120s;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Headers "Content-Type" always;
+        proxy_pass http://app-siyanagents:3021;
+    }
+
+    include /etc/nginx/snippets/forward-auth.conf;
+}

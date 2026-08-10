@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block titel %}Aanvragen{% endblock %}
+{% block body %}
+<div class="kop">
+  <h1>Aanvragen</h1>
+  <div class="sub">Contactaanvragen van onze eigen websites. {% if nieuw %}<strong>{{ nieuw }} nieuw.</strong>{% else %}Geen nieuwe aanvragen.{% endif %}</div>
+</div>
+
+{% if leads %}
+<div class="paneel">
+  <table class="lijst">
+    <thead><tr><th>Van</th><th>Bericht</th><th>Site</th><th>Ontvangen</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for l in leads %}
+      <tr>
+        <td>
+          <strong>{{ l.naam }}</strong>
+          {% if l.email %}<div><a href="mailto:{{ l.email }}">{{ l.email }}</a></div>{% endif %}
+          {% if l.telefoon %}<div><a href="tel:{{ l.telefoon }}">{{ l.telefoon }}</a></div>{% endif %}
+        </td>
+        <td style="max-width:340px">{{ l.bericht[:400] }}{% if l.bericht|length > 400 %}…{% endif %}
+          {% if l.bijlagen %}
+          <div style="margin-top:6px">
+            <div style="font-size:11.5px;color:var(--tekst-3)">Meegestuurd door de aanvrager:</div>
+            {% for b in l.bijlagen %}
+            <a href="/aanvraag-bijlage/{{ b.id }}" style="display:inline-block;margin:3px 6px 0 0;font-size:12px">{{ b.bestandsnaam }}</a><span style="font-size:11px;color:var(--tekst-3)">({{ (b.bytes / 1024)|round|int }} kB)</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if l.opmerking %}<div style="margin-top:4px;color:var(--tekst-3);font-size:12px">notitie: {{ l.opmerking }}</div>{% endif %}</td>
+        <td class="code">{{ l.site or '—' }}</td>
+        <td class="code">{{ l.ontvangen_kort }}</td>
+        <td>
+          <form method="post" action="/aanvraag/{{ l.id }}/status" style="display:flex;gap:4px;align-items:center">
+            <select name="status" style="border:1px solid var(--lijn-sterk);border-radius:4px;padding:3px 6px;font-size:12px">
+              {% for s in ['nieuw','opgevolgd','afgehandeld','spam'] %}
+              <option value="{{ s }}" {% if l.status==s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+            <button class="knop" type="submit" style="padding:3px 8px;font-size:11.5px">Opslaan</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="paneel"><p class="leeg">Nog geen aanvragen. Zodra een bezoeker een formulier op een van onze websites invult, verschijnt het hier.</p></div>
+{% endif %}
+{% endblock %}

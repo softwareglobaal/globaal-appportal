@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zoeken in de kennisbanken</title>
+<style>
+  :root {
+    --bg: #f5f6f7; --paneel: #ffffff; --lijn: #e4e7ea; --lijn-sterk: #d5dade;
+    --tekst: #1e2830; --tekst-2: #5c6771; --tekst-3: #8d959d;
+    --accent: #2f4a63;
+    --tekstmod: #3663a0; --tabel: #2f7d5a; --beeld: #8a5a2f;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--tekst);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         font-size: 14px; line-height: 1.5; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 26px 22px 60px; }
+  .kop { border-bottom: 1px solid var(--lijn); padding-bottom: 14px; margin-bottom: 22px; }
+  .kop h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .kop .sub { color: var(--tekst-2); font-size: 12.5px; margin-top: 2px; }
+  .kop-link { display: inline-block; margin-top: 10px; border: 1px solid var(--lijn-sterk);
+              background: var(--paneel); color: var(--tekst); border-radius: 5px;
+              padding: 5px 12px; font-size: 12.5px; font-weight: 500; }
+  .kop-link:hover { background: #f2f4f5; }
+
+  h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+       color: var(--tekst-2); margin: 26px 0 8px; }
+
+  form.zoek { display: flex; gap: 8px; flex-wrap: wrap; background: var(--paneel);
+              border: 1px solid var(--lijn); border-radius: 6px; padding: 14px; }
+  select, input[type=search] { font: inherit; padding: 7px 10px; border-radius: 5px;
+              border: 1px solid var(--lijn-sterk); background: #fff; color: var(--tekst); }
+  input[type=search] { flex: 1 1 320px; min-width: 200px; }
+  button { font: inherit; font-weight: 500; padding: 7px 16px; border-radius: 5px;
+           border: 1px solid var(--accent); background: var(--accent); color: #fff;
+           cursor: pointer; }
+  button:hover { filter: brightness(1.08); }
+
+  .melding { margin-top: 18px; padding: 10px 12px; border-radius: 5px;
+             background: #fdf3f3; border: 1px solid #e8cfcf; color: #7d2f2f; font-size: 13px; }
+  .leeg { margin-top: 18px; color: var(--tekst-2); font-size: 13px; }
+
+  .treffer { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px;
+             padding: 13px 15px; margin-bottom: 9px; }
+  .treffer .meta { display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap;
+                   font-size: 12px; color: var(--tekst-2); margin-bottom: 6px; }
+  .mod { font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; font-size: 10.5px; }
+  .mod.tekst { color: var(--tekstmod); }
+  .mod.tabel { color: var(--tabel); }
+  .mod.afbeelding { color: var(--beeld); }
+  .score { margin-left: auto; font-family: var(--mono); color: var(--tekst-3); font-size: 11px; }
+  .treffer pre { margin: 0; white-space: pre-wrap; word-wrap: break-word;
+                 font-family: inherit; font-size: 13.5px; color: var(--tekst); }
+  .voet { margin-top: 30px; color: var(--tekst-3); font-size: 12px;
+          border-top: 1px solid var(--lijn); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kop">
+    <h1>Zoeken in de kennisbanken</h1>
+    <div class="sub">
+      Hybride ophalen over de corpora die de ingestie-agent live zette.
+      Aangemeld als {{ username }}.
+    </div>
+    <a class="kop-link" href="/ingestie">Documenten aanleveren</a>
+  </div>
+
+  <form class="zoek" method="get" action="/zoeken">
+    <select name="corpus" aria-label="Kennisbank">
+      {% for b in banken %}
+        <option value="{{ b.corpus }}" {% if b.corpus == corpus %}selected{% endif %}>
+          {{ b.corpus }} ({{ b.fragmenten }})
+        </option>
+      {% endfor %}
+    </select>
+    <input type="search" name="v" value="{{ vraag }}" placeholder="Waar zoek je naar?" autofocus>
+    <button type="submit">Zoek</button>
+  </form>
+
+  {% if not banken %}
+    <div class="melding">Geen live kennisbanken gevonden, of de zoekdienst is niet bereikbaar.</div>
+  {% elif uitkomst.get('fout') %}
+    <div class="melding">{{ uitkomst.fout }}</div>
+  {% elif uitkomst.get('fragmenten') %}
+    <h2>{{ uitkomst.aantal }} fragmenten</h2>
+    {% for f in uitkomst.fragmenten %}
+      <div class="treffer">
+        <div class="meta">
+          <span class="mod {{ f.modaliteit }}">{{ f.modaliteit }}</span>
+          {% if f.pagina %}<span>pagina {{ f.pagina }}</span>{% endif %}
+          {% if f.sectie %}<span>{{ f.sectie }}</span>{% endif %}
+          <span class="score">{{ f.score }}</span>
+        </div>
+        <pre>{{ f.tekst }}</pre>
+      </div>
+    {% endfor %}
+  {% elif vraag %}
+    <div class="leeg">Niets gevonden voor deze vraag.</div>
+  {% else %}
+    <div class="leeg">Kies een kennisbank en stel een vraag.</div>
+  {% endif %}
+
+  <div class="voet">
+    De volgorde komt van dezelfde module waarmee de agent zichzelf verifieert:
+    vectorafstand en tekstrang, samengevoegd met RRF, met slots per modaliteit
+    zodat een tabel of een beeldbeschrijving niet door lopende tekst wordt verdrongen.
+  </div>
+
+</div>
+</body>
+</html>

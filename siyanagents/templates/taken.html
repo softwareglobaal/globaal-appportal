@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block titel %}Opdrachten{% endblock %}
+{% block body %}
+<style>.spin{width:10px;height:10px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:sp .8s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.spin{animation:none}}</style>
+<div class="kop">
+  <h1>Opdrachten</h1>
+  <div class="sub">Leg in je eigen woorden uit wat je wil. Het team bepaalt zelf welke agents nodig zijn en levert het resultaat ter validatie.</div>
+</div>
+
+<div class="acties" style="margin-bottom:18px">
+  <form method="post" action="/taak" enctype="multipart/form-data">
+    <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--tekst-3);margin-bottom:5px">Wat wil je dat we doen?</label>
+    <textarea name="opdracht" required rows="4"
+      placeholder="Bijvoorbeeld: &#10;· Schrijf een SEO-pagina voor UNABO over funderingsonderzoek&#10;· Onderzoek waarom onze pagina over regularisatie niet scoort&#10;· Analyseer de huisstijl van Corenbo en stel verbeteringen voor&#10;· Maak een contentplan voor H-Architects voor het najaar"
+      style="width:100%;border:1px solid var(--lijn-sterk);border-radius:6px;padding:10px 12px;font-size:13.5px;font-family:inherit;resize:vertical;line-height:1.55"></textarea>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:10px">
+      <div>
+        <label style="display:block;font-size:11px;color:var(--tekst-3);margin-bottom:3px">Firma <span style="text-transform:none;letter-spacing:0">(optioneel, helpt het team)</span></label>
+        <input name="firma" list="firmalijst" placeholder="bv. UNABO" style="border:1px solid var(--lijn-sterk);border-radius:5px;padding:6px 10px;font-size:12.5px;min-width:180px">
+        <datalist id="firmalijst">
+          {% for m in merken %}<option value="{{ m.naam }}">{% endfor %}
+        </datalist>
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;color:var(--tekst-3);margin-bottom:3px">Bijlagen <span style="text-transform:none;letter-spacing:0">(optioneel: document of afbeelding)</span></label>
+        <input type="file" name="bijlagen" multiple accept=".pdf,.docx,.md,.txt,.html,.csv,.png,.jpg,.jpeg,.webp,.gif"
+               style="font-size:12.5px;max-width:290px">
+      </div>
+      <button class="knop" type="submit">Opdracht geven</button>
+    </div>
+  </form>
+  <p class="sub" style="margin-top:10px;color:var(--tekst-3)">Je mag documenten of afbeeldingen meesturen. Het team leest je opdracht en de bijlagen, bepaalt de aanpak en zet het resultaat klaar in <a href="/validatie">Validatie</a>. Er wordt niets gepubliceerd zonder jouw akkoord.</p>
+</div>
+
+{% if taken %}
+<div class="paneel">
+  <table class="lijst">
+    <thead><tr><th>Opdracht</th><th>Firma</th><th>Fase</th><th>Status</th><th>Gegeven</th><th></th></tr></thead>
+    <tbody>
+      {% for t in taken %}
+      <tr>
+        <td>
+          {% if t.opdracht %}{{ t.opdracht[:160] }}{% if t.opdracht|length > 160 %}…{% endif %}
+          {% else %}<span class="muted-x">{{ t.thema }}</span>{% endif %}
+          {% if t.bijlagen %}<div style="margin-top:4px;font-size:11.5px;color:var(--tekst-3)">
+            📎 {% for b in t.bijlagen %}<a href="/bijlage/{{ b.id }}" target="_blank" rel="noopener">{{ b.bestandsnaam }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+          </div>{% endif %}
+          {% if t.oplevering_id %}<div style="margin-top:3px"><a href="/oplevering/{{ t.oplevering_id }}">→ resultaat bekijken</a></div>{% endif %}
+        </td>
+        <td>{{ t.firma or '—' }}</td>
+        <td><span class="sb {{ 'in_review' if t.fase in ['blueprint_review','review'] else ('gepubliceerd' if t.fase=='gepubliceerd' else 'goedgekeurd') }}">{{ t.fase }}</span></td>
+        <td>
+          {% if t.runner == 'bezig' %}
+            <span style="display:inline-flex;align-items:center;gap:6px;color:var(--amber);font-size:12.5px">
+              <i class="spin"></i> het team werkt eraan
+            </span>
+            <div class="code" style="font-size:11px;margin-top:2px">
+              al {{ t.bezig_min or 0 }} min{% if gem_duur %} · meestal ~{{ gem_duur }} min{% endif %}
+            </div>
+          {% elif t.fase in ['blueprint_review','review'] %}
+            <span style="color:var(--ja);font-size:12.5px">klaar — wacht op jou</span>
+          {% elif t.fase == 'gepubliceerd' %}
+            <span style="color:var(--klaar);font-size:12.5px">afgerond</span>
+          {% else %}
+            <span class="muted-x" style="font-size:12.5px">in wachtrij</span>
+          {% endif %}
+        </td>
+        <td class="code">{{ (t.aangemaakt or '')[:16]|replace('T',' ') }}</td>
+        <td style="text-align:right">
+          <form method="post" action="/taak/{{ t.id }}/verwijder" onsubmit="return confirm('Deze opdracht en het bijhorende resultaat verwijderen?')" style="display:inline">
+            <button class="knop" type="submit" style="padding:3px 9px;font-size:11.5px;color:var(--nee)">Verwijderen</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="paneel"><p class="leeg">Nog geen opdrachten. Beschrijf hierboven wat je wil en het team gaat aan de slag.</p></div>
+{% endif %}
+{% endblock %}
