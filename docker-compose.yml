@@ -55,6 +55,11 @@ services:
       BASE_DOMAIN: ${BASE_DOMAIN}
       AGENTS_DB: /data/siyanagents.db
       PORT: "3021"
+      # WordPress-publicatie (UNABO): waarden komen bij naam uit de gedeelde .env,
+      # net als bij app-agents. Zo hoeven de secrets niet in siyanagents-data/.env.
+      UNABO_WP_URL: ${UNABO_WP_URL:-}
+      UNABO_WP_USER: ${UNABO_WP_USER:-}
+      UNABO_WP_APP_PASSWORD: ${UNABO_WP_APP_PASSWORD:-}
     volumes:
       - ./siyanagents-data:/data
     ports:
