@@ -266,6 +266,9 @@ def db():
     _kolom(conn, "voorstel", "uitvoer_detail", "TEXT DEFAULT ''")
     _kolom(conn, "voorstel", "uitvoer_ts", "TEXT DEFAULT ''")
     _kolom(conn, "voorstel", "bewijs", "TEXT DEFAULT ''")
+    # Parameters (JSON) van een muterende actie op een externe dienst
+    # (Pipedrive/Google Ads); leeg bij de operations-runbooks.
+    _kolom(conn, "voorstel", "parameters", "TEXT DEFAULT ''")
     # Handelingen herleid uit de systemd-journal (bron van waarheid); de
     # uitvoerder synct deze elke minuut. Alleen een weergave-spiegel.
     # Aangeleverde documenten. De app bezit de opslag (het volume is van de
@@ -485,10 +488,15 @@ def agent_status():
         runbook = str(v.get("runbook", "")).strip()[:60]
         doel = str(v.get("doel", "")).strip()[:120]
         reden = str(v.get("reden", "")).strip()[:400]
-        autonoom = bool(v.get("autonoom"))
+        params = v.get("parameters")
+        params = json.dumps(params) if params not in (None, "") else ""
+        # Veiligheidsgordel: een voorstel MET parameters is een muterende
+        # (gevoelige) actie op een externe dienst -> nooit autonoom, altijd
+        # eerst langs een mens (Sales/Marketing: alle schrijfacties gated).
+        autonoom = bool(v.get("autonoom")) and not params
         if actie and runbook and runbook.lower() != "geen":
             # Dedup: geen tweede openstaand of nog-uit-te-voeren voorstel voor
-            # dezelfde container.
+            # dezelfde actie.
             bestaat = conn.execute(
                 """SELECT 1 FROM voorstel WHERE naam=? AND runbook=? AND doel=?
                    AND (besluit='open' OR uitvoering IN ('wacht', 'bezig'))""",
@@ -498,15 +506,15 @@ def agent_status():
                 # de agent, klaar voor de uitvoerder (die opnieuw valideert).
                 now = _nu().isoformat()
                 conn.execute(
-                    """INSERT INTO voorstel (naam, actie, reden, runbook, doel, aangemaakt,
-                       besluit, besluit_door, besluit_ts, uitvoering)
-                       VALUES (?,?,?,?,?,?, 'goedgekeurd', 'agent (autonoom)', ?, 'wacht')""",
-                    (naam, actie, reden, runbook, doel, now, now))
+                    """INSERT INTO voorstel (naam, actie, reden, runbook, doel, parameters,
+                       aangemaakt, besluit, besluit_door, besluit_ts, uitvoering)
+                       VALUES (?,?,?,?,?,?,?, 'goedgekeurd', 'agent (autonoom)', ?, 'wacht')""",
+                    (naam, actie, reden, runbook, doel, params, now, now))
             elif not bestaat:
                 conn.execute(
-                    """INSERT INTO voorstel (naam, actie, reden, runbook, doel, aangemaakt, besluit)
-                       VALUES (?, ?, ?, ?, ?, ?, 'open')""",
-                    (naam, actie, reden, runbook, doel, _nu().isoformat()))
+                    """INSERT INTO voorstel (naam, actie, reden, runbook, doel, parameters, aangemaakt, besluit)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'open')""",
+                    (naam, actie, reden, runbook, doel, params, _nu().isoformat()))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
@@ -541,7 +549,7 @@ def uitvoer_wacht():
         abort(403)
     conn = db()
     rows = conn.execute(
-        """SELECT id, runbook, doel, reden, besluit_door FROM voorstel
+        """SELECT id, runbook, doel, reden, parameters, besluit_door FROM voorstel
            WHERE besluit='goedgekeurd' AND uitvoering='wacht'"""
     ).fetchall()
     geclaimd = []
@@ -552,6 +560,7 @@ def uitvoer_wacht():
         if cur.rowcount:
             geclaimd.append({"id": r["id"], "runbook": r["runbook"] or "",
                              "doel": r["doel"] or "", "reden": r["reden"] or "",
+                             "parameters": r["parameters"] or "",
                              "door": r["besluit_door"] or ""})
     conn.commit()
     conn.close()
