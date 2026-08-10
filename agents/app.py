@@ -427,6 +427,22 @@ def recente_besluiten(limit=8):
             for r in rows]
 
 
+# De Sales/Marketing-agents zijn verhuisd naar hun eigen app (siyanagents.globaal.be).
+# Oude board-URL's hier doorsturen zodat bookmarks werken en operations geen
+# verouderd SM-board meer toont. Alleen GET-pagina's die een mens bekijkt; de
+# POST/API/formulier-endpoints laten we ongemoeid (die worden apart afgehandeld).
+_SM_VERHUISD = ("/seo-team", "/taken", "/overzicht", "/validatie",
+                "/opleveringen", "/oplevering", "/branding", "/aanvragen", "/aanvraag")
+
+
+@app.before_request
+def _sm_naar_siyanagents():
+    if request.method == "GET":
+        p = request.path
+        if any(p == x or p.startswith(x + "/") for x in _SM_VERHUISD):
+            return redirect("https://siyanagents.globaal.be" + p, code=302)
+
+
 @app.route("/")
 def index():
     return render_template(
