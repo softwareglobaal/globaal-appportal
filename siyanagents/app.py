@@ -1080,6 +1080,8 @@ SEO_TEAM = [
      "team": "SEO", "rol": "bouwt volledige websites en zet ze live op de server"},
     {"naam": "eindcontrole", "label": "Eindcontrole", "bijnaam": "De Poortwachter",
      "team": "SEO", "rol": "laatste check: klopt het formaat, werkt alles, is de opdracht echt af"},
+    {"naam": "merkbewaker", "label": "Merk & creatie", "bijnaam": "De Merkbewaker",
+     "team": "SEO", "rol": "bewaakt de huisstijl en legt merken vast op het platform"},
 ]
 SEO_LABELS = {a["naam"]: a["label"] for a in SEO_TEAM}
 
@@ -1745,6 +1747,16 @@ MERKEN = [
      "pos": 'Automatiseert administratieve processen (facturatie, verwerking) voor bedrijven en overheden in Suriname met AI.',
      "tone": "Formeel 'u', zelfverzekerd: 'Administratie die zichzelf doet'.",
      "look": 'Crème/beige basis met groen accent; clean, moderne en doelbewuste UI.'},
+    {"naam": 'Regulariseren.be', "sector": 'Architectuur (regularisatie van bouwovertredingen)', "web": 'https://regulariseren.be', "typo": 'Public Sans (koppen Bold/ExtraBold 800, lopende tekst Regular 400)', "bron": 'Live site regulariseren.be: homepage, style.css en een full-page screenshot (1440px breed, Playwright). Pixelcontrole bevestigt dat de CTA-knop het petrolblauw #2E4A5C toont en de footer het antraciet #171617, dus de hex-codes uit branding.md zijn ook echt zichtbaar op het scherm, niet enkel in de CSS. Hoge zekerheid: het .be-domein is live en wordt bediend vanaf de eigen server.',
+     "kleuren": [{"hex": "#171617", "rol": "Antraciet-zwart — primair (logo, koppen, hoofdtekst, footer-achtergrond)"}, {"hex": "#2E4A5C", "rol": "Petrolblauw — enige kleuraccent (CTA-knoppen, cijfers stappenplan, iconen-accent, links)"}, {"hex": "#555659", "rol": "Leigrijs — secundair (subtekst, labels, metadata)"}, {"hex": "#FFFFFF", "rol": "Wit — basisachtergrond"}, {"hex": "#F4F3F1", "rol": "Mistgrijs — alternerende sectie-achtergrond, kaarten"}, {"hex": "#D8E3E7", "rol": "Lichtpetrol — lichte tint van het accent (hover, badges, icoonvlakken)"}],
+     "pos": 'Gespecialiseerde promotiesite voor de regularisatie van bouwovertredingen in Vlaanderen, uitgevoerd door een architectenbureau (H-Architects BV), gericht op eigenaars, kopers/verkopers, huurders, makelaars en notarissen.',
+     "tone": 'Rustig, deskundig en ordelijk in de u-vorm: feitelijke, geruststellende taal zonder angstretoriek, holle beloftes of absolute garanties op goedkeuring.',
+     "look": 'Sober, monochroom blauwgrijs en zakelijk: antraciet, wit en mistgrijs met petrolblauwe CTA-knoppen en genummerde stapcirkels, Public Sans-koppen, dunne lijniconen in ronde icoonvlakken en één rustige architectuurfoto in de hero.'},
+    {"naam": 'Mijnregularisatie.be', "sector": 'Legal tech / zelfcheck-tool (bouwregularisatie, geen tekstsite)', "web": 'https://mijnregularisatie.be', "typo": 'Lexend (koppen Bold 700, lopende tekst Regular 400)', "bron": 'Proefomgeving web-mijnregularisatie.globaal.be (nog niet het .be-domein zelf): homepage, style.css en een full-page screenshot (1440px breed, Playwright). Pixelcontrole bevestigt het mosgroen #2F6B4F op de primaire knop, het dennengroen #22312B in de footer, en de roomwit- en zandbeige-achtergronden. Hoge zekerheid over de huisstijl; matig dat dit al op mijnregularisatie.be zelf staat (dat domein wijst nu nog naar de one.com-parkeerpagina).',
+     "kleuren": [{"hex": "#22312B", "rol": "Dennengroen — primair (koppen, lopende tekst, wordmerk)"}, {"hex": "#2F6B4F", "rol": "Mosgroen — enige kleuraccent (CTA-knoppen, actieve stap/voortgangsbalk, links, geselecteerde antwoordkaart)"}, {"hex": "#6B665C", "rol": "Warmgrijs — secundair (subtekst, labels, disclaimers)"}, {"hex": "#FBF8F3", "rol": "Roomwit — basisachtergrond"}, {"hex": "#F3EDE3", "rol": "Zandbeige — alternerende sectie-achtergrond, kaarten"}, {"hex": "#DCEAE1", "rol": "Saliegroen — lichte tint van het accent (hover, icoonbadges, geselecteerde kaarten)"}],
+     "pos": 'Losstaande, gratis zelfcheck-tool (geen tweede tekstsite naast Regulariseren.be) waarmee een eigenaar die twijfelt of een bouwwerk vergund is, in een paar vragen een eerste inschatting en een concrete volgende stap krijgt, zonder juridisch oordeel.',
+     "tone": 'Toegankelijk en nuchter in de je-vorm: korte zinnen, eerlijk over onzekerheid, geen oordelende uitkomsten, geen stoplichtkleuren en geen gamification.',
+     "look": 'Warme, groene tool-uitstraling zonder fotografie of illustraties: roomwit en zandbeige vlakken, Lexend-typografie, een ronde vraagkaart met voortgangsbalk en zachte lijniconen in mosgroen/saliegroen icoonbadges.'},
 ]
 
 
