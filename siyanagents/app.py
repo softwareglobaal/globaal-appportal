@@ -460,11 +460,15 @@ def index():
 
 @app.route("/seo-team")
 def seo_team():
-    # Statisch teambord van het SEO-agentteam (bron: repo globaal-agents,
-    # docs/team-board.html). Toont wat het team onderzocht heeft en welke
-    # experts nog inzetbaar zijn; geen live data.
+    # Teambord met LIVE statussen uit de roster (status-tabel). Agents die niet
+    # in de roster staan tonen 'beschikbaar'.
+    conn = db()
+    roster = {r["naam"]: {"status": r["status"], "taak": r["taak"] or ""}
+              for r in conn.execute("SELECT naam, status, taak FROM status")}
+    conn.close()
     return render_template(
         "seo-team.html",
+        roster=roster,
         portal_url=f"https://portal.{BASE_DOMAIN}/",
         username=request.headers.get("X-authentik-username", "onbekend"),
     )
