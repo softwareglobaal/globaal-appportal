@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block titel %}Opdrachten{% endblock %}
+{% block body %}
+<style>
+  .opd{background:var(--paneel);border:1px solid var(--lijn);border-radius:8px;padding:16px 18px;margin-bottom:12px;}
+  .opd-kop{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .opd-kop h3{margin:0;font-size:15px;font-weight:600;letter-spacing:-0.01em;}
+  .opd-omschr{color:var(--tekst-2);font-size:13px;margin:4px 0 12px;line-height:1.5;}
+  .opd-voortgang{margin-left:auto;font-size:12px;color:var(--tekst-3);font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .stappen{display:flex;flex-direction:column;gap:1px;background:var(--lijn);border:1px solid var(--lijn);border-radius:6px;overflow:hidden;}
+  .stap{display:flex;align-items:center;gap:12px;padding:9px 12px;background:var(--paneel);}
+  .stap .nr{width:20px;height:20px;border-radius:50%;background:#eceef0;color:var(--tekst-3);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:0 0 20px;}
+  .stap .naam{font-weight:600;font-size:13px;}
+  .stap .rol{color:var(--tekst-2);font-size:12.5px;}
+  .stap .detail{color:var(--tekst-3);font-size:12px;}
+  .stap-st{margin-left:auto;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;}
+  .st-wacht{background:#eef0f2;color:var(--tekst-3);}
+  .st-bezig{background:#f6ecd6;color:var(--amber);}
+  .st-klaar{background:#e0efe6;color:var(--ja);}
+  .stap[data-st="wacht"]{opacity:.7;}
+  .spin{width:9px;height:9px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+  .log-rij{display:flex;align-items:baseline;gap:12px;padding:10px 2px;border-bottom:1px solid var(--lijn);}
+  .log-rij:last-child{border-bottom:0;}
+  .log-titel{font-weight:600;font-size:13.5px;}
+  .log-agents{color:var(--tekst-3);font-size:12px;}
+  .log-tijd{margin-left:auto;color:var(--tekst-3);font-size:12px;white-space:nowrap;}
+  details.log summary{cursor:pointer;font-size:12px;color:var(--tekst-2);}
+  .leeg{color:var(--tekst-3);font-size:13px;padding:14px 2px;}
+</style>
+
+<div class="kop">
+  <h1>Opdrachten</h1>
+  <div class="sub">Opdrachten geef je in de Claude Code-chat; hier zie je live wat er loopt en wat er al gedaan is.</div>
+</div>
+
+<h2>Lopend</h2>
+{% if not lopend %}
+  <div class="leeg">Geen lopende opdrachten. Geef er een in de chat.</div>
+{% endif %}
+{% for o in lopend %}
+<div class="opd">
+  <div class="opd-kop">
+    <h3>{{ o.titel }}</h3>
+    {% if o.totaal %}<span class="opd-voortgang">{{ o.klaar }}/{{ o.totaal }} klaar</span>{% endif %}
+  </div>
+  {% if o.omschrijving %}<div class="opd-omschr">{{ o.omschrijving }}</div>{% endif %}
+  {% if o.stappen %}
+  <div class="stappen">
+    {% for s in o.stappen %}
+    <div class="stap" data-st="{{ s.status }}">
+      <span class="nr">{{ loop.index }}</span>
+      <span class="naam">{{ s.agent }}</span>
+      {% if s.rol %}<span class="rol">· {{ s.rol }}</span>{% endif %}
+      {% if s.detail %}<span class="detail">— {{ s.detail }}</span>{% endif %}
+      <span class="stap-st st-{{ s.status }}">
+        {% if s.status == 'klaar' %}✓ klaar
+        {% elif s.status == 'bezig' %}<span class="spin"></span> bezig
+        {% else %}wacht{% endif %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+<h2 style="margin-top:28px">Logboek — afgerond</h2>
+<div class="paneel" style="padding:4px 16px">
+{% if not afgerond %}
+  <div class="leeg">Nog niets afgerond.</div>
+{% endif %}
+{% for o in afgerond %}
+  <div class="log-rij">
+    <span class="log-titel">{{ o.titel }}</span>
+    <span class="log-agents">{{ o.stappen | map(attribute='agent') | join(', ') }}</span>
+    <span class="log-tijd">{{ o.afgerond_ts[:16] | replace('T', ' ') }}</span>
+  </div>
+  {% if o.omschrijving %}
+  <details class="log" style="padding:0 0 10px 2px"><summary>details</summary>
+    <div class="opd-omschr" style="margin:6px 0 0">{{ o.omschrijving }}</div>
+  </details>
+  {% endif %}
+{% endfor %}
+</div>
+{% endblock %}

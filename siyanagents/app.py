@@ -291,6 +291,27 @@ def db():
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         agent     TEXT, tijd TEXT, modus TEXT, container TEXT, actie TEXT,
         waarom    TEXT, uitkomst TEXT, detail TEXT, bewijs TEXT)""")
+    # Opdrachten-dashboard. Claude Code (de dirigent) schrijft hier een opdracht
+    # weg en houdt per agent de status bij (wacht/bezig/klaar). Het board toont
+    # dit alleen; opdrachten worden in de Claude Code-chat gegeven, niet hier.
+    conn.execute("""CREATE TABLE IF NOT EXISTS opdracht (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        titel           TEXT NOT NULL,
+        omschrijving    TEXT DEFAULT '',
+        status          TEXT NOT NULL DEFAULT 'lopend',
+        aangemaakt      TEXT NOT NULL,
+        aangemaakt_door TEXT DEFAULT '',
+        afgerond_ts     TEXT DEFAULT '',
+        bijgewerkt      TEXT DEFAULT '')""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS opdracht_stap (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        opdracht_id INTEGER NOT NULL,
+        agent       TEXT NOT NULL,
+        rol         TEXT DEFAULT '',
+        status      TEXT NOT NULL DEFAULT 'wacht',
+        volgorde    INTEGER DEFAULT 0,
+        detail      TEXT DEFAULT '',
+        bijgewerkt  TEXT DEFAULT '')""")
     # Opleveringen: deliverables van de agents (rapport, blueprint, tekst) die
     # jij valideert. Fase 1 van het besturingscentrum.
     conn.execute("""CREATE TABLE IF NOT EXISTS oplevering (
@@ -1450,18 +1471,102 @@ TAAK_FASEN = ["nieuw", "onderzoek", "blueprint_review", "schrijven", "qc", "revi
 TAAK_RUNBAAR = ("nieuw", "schrijven")
 
 
+def _opdracht_met_stappen(conn, o):
+    o = dict(o)
+    o["stappen"] = [dict(s) for s in conn.execute(
+        "SELECT * FROM opdracht_stap WHERE opdracht_id=? ORDER BY volgorde, id", (o["id"],))]
+    o["klaar"] = sum(1 for s in o["stappen"] if s["status"] == "klaar")
+    o["totaal"] = len(o["stappen"])
+    return o
+
+
 @app.route("/taken")
 def taken():
+    """Dashboard: lopende opdrachten (met status per agent) + logboek van
+    afgeronde opdrachten. Opdrachten komen via de Claude Code-chat binnen; hier
+    kijk je alleen mee."""
     conn = db()
-    rows = [dict(r) for r in conn.execute("SELECT * FROM taak ORDER BY aangemaakt DESC")]
-    gem = _gem_duur_min(conn)
-    for t in rows:
-        t["bijlagen"] = [dict(b) for b in conn.execute(
-            "SELECT id, bestandsnaam, bytes FROM bijlage WHERE taak_id=?", (t["id"],))]
-        t["bezig_min"] = _verstreken_min(t["aangemaakt"]) if t["runner"] == "bezig" else None
+    lopend = [_opdracht_met_stappen(conn, o) for o in conn.execute(
+        "SELECT * FROM opdracht WHERE status='lopend' ORDER BY aangemaakt DESC")]
+    afgerond = [_opdracht_met_stappen(conn, o) for o in conn.execute(
+        "SELECT * FROM opdracht WHERE status='afgerond' ORDER BY afgerond_ts DESC LIMIT 100")]
     conn.close()
-    return render_template("taken.html", taken=rows, merken=MERKEN,
-                           types=sorted(BIJLAGE_TYPES), gem_duur=gem)
+    return render_template("opdrachten.html", lopend=lopend, afgerond=afgerond)
+
+
+# --- API: de dirigent (Claude Code) schrijft opdrachten + per-agent status ----
+
+def _token_ok():
+    return TOKEN and request.headers.get("X-Agents-Token", "") == TOKEN
+
+
+@app.route("/api/opdracht", methods=["POST"])
+def api_opdracht_nieuw():
+    if not _token_ok():
+        abort(403)
+    d = request.get_json(silent=True) or {}
+    titel = str(d.get("titel", "")).strip()[:200]
+    if not titel:
+        abort(400)
+    now = _nu().isoformat()
+    conn = db()
+    cur = conn.execute(
+        """INSERT INTO opdracht (titel, omschrijving, status, aangemaakt, aangemaakt_door, bijgewerkt)
+           VALUES (?, ?, 'lopend', ?, ?, ?)""",
+        (titel, str(d.get("omschrijving", "")).strip()[:2000],
+         now, str(d.get("door", "Claude Code"))[:120], now))
+    oid = cur.lastrowid
+    for i, s in enumerate(d.get("stappen", []) or []):
+        conn.execute(
+            """INSERT INTO opdracht_stap (opdracht_id, agent, rol, status, volgorde, bijgewerkt)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (oid, str(s.get("agent", "")).strip()[:60], str(s.get("rol", "")).strip()[:200],
+             str(s.get("status", "wacht")).strip() or "wacht", i, now))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "id": oid})
+
+
+@app.route("/api/opdracht/<int:oid>/stap", methods=["POST"])
+def api_opdracht_stap(oid):
+    if not _token_ok():
+        abort(403)
+    d = request.get_json(silent=True) or {}
+    agent = str(d.get("agent", "")).strip()[:60]
+    status = str(d.get("status", "")).strip()
+    if not agent or status not in ("wacht", "bezig", "klaar"):
+        abort(400)
+    now = _nu().isoformat()
+    conn = db()
+    cur = conn.execute(
+        """UPDATE opdracht_stap SET status=?, detail=?, bijgewerkt=?
+           WHERE opdracht_id=? AND agent=?""",
+        (status, str(d.get("detail", "")).strip()[:400], now, oid, agent))
+    if not cur.rowcount:
+        vol = conn.execute("SELECT COALESCE(MAX(volgorde),-1)+1 FROM opdracht_stap WHERE opdracht_id=?",
+                           (oid,)).fetchone()[0]
+        conn.execute(
+            """INSERT INTO opdracht_stap (opdracht_id, agent, rol, status, volgorde, detail, bijgewerkt)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (oid, agent, str(d.get("rol", "")).strip()[:200], status, vol,
+             str(d.get("detail", "")).strip()[:400], now))
+    conn.execute("UPDATE opdracht SET bijgewerkt=? WHERE id=?", (now, oid))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/opdracht/<int:oid>/afronden", methods=["POST"])
+def api_opdracht_afronden(oid):
+    if not _token_ok():
+        abort(403)
+    now = _nu().isoformat()
+    conn = db()
+    conn.execute("UPDATE opdracht SET status='afgerond', afgerond_ts=?, bijgewerkt=? WHERE id=?",
+                 (now, now, oid))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
 
 @app.route("/bijlage/<int:bid>")
