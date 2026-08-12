@@ -72,6 +72,12 @@ apps:
     subdomain: boekhouding
     roles: [admin, manager, boekhouding]
     status: active
+  - id: quickbooks
+    name: QuickBooks
+    description: Boekhouding HDS via QuickBooks Online
+    subdomain: quickbooks
+    roles: [admin, manager, boekhouding]
+    status: active
   - id: angela
     name: Angela
     description: Werkdashboard initiatief Suriname - merk, webshop, inkoop, NGO
