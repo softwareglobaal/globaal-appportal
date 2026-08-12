@@ -45,7 +45,7 @@ VALUATION_EFFORT = os.environ.get("VALUATION_EFFORT", "medium")
 MUNT_SYMBOOL = "€"
 # Let op: compose geeft niet-ingevulde variabelen door als lege string, dus hier
 # `or` gebruiken en niet de default van os.environ.get; die slaat dan niet aan.
-CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL") or "mch@h-architects.be"
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL") or "info@angela.sr"
 # Placeholder tot het echte nummer bekend is; zet CONTACT_TELEFOON in .env.
 CONTACT_TELEFOON = os.environ.get("CONTACT_TELEFOON") or "+32 000 00 00 00"
 WINKEL_NAAM = os.environ.get("WINKEL_NAAM") or "angela.sr"
