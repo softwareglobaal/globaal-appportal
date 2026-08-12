@@ -1,15 +1,25 @@
-# quickbooks.${BASE_DOMAIN}: voorlopig alleen de twee juridische pagina's die
-# Intuit vraagt bij het aanvragen van production keys (privacyverklaring en
-# gebruiksvoorwaarden), plus een korte uitleg op de startpagina.
+# quickbooks.${BASE_DOMAIN}: de QuickBooks-connector (repo globaal-quickbooks,
+# compose-service app-quickbooks op 3015) plus de twee juridische pagina's die
+# Intuit eist voor production keys.
 #
-# Bewust PUBLIEK, dus geen forward-auth: de beoordelaar van Intuit moet die
-# pagina's kunnen lezen zonder een account bij ons te hebben. Er staat niets
-# vertrouwelijks op; het zijn de teksten die we zelf aan Intuit opgeven.
+# Drie soorten paden, bewust verschillend afgeschermd:
 #
-# Zodra de MCP-connector zelf gebouwd is komt die achter dezelfde naam te staan.
-# De statische pagina's blijven dan publiek, de rest gaat achter de SSO. Het
-# certificaat is het wildcard van *.${BASE_DOMAIN}, dus er is geen aparte
-# certbot-stap nodig zoals bij regulariseren.be.
+#   /privacy en /terms   statisch en PUBLIEK. De beoordelaar van Intuit moet ze
+#                        kunnen lezen zonder account bij ons. Er staat niets
+#                        vertrouwelijks op.
+#   /oauth/callback      buiten de forward-auth. Intuit stuurt de gebruiker hier
+#                        terug met code, realmId en state in de querystring. De
+#                        forward-auth-snippet bouwt zijn terugkeer-URL zonder
+#                        encodering, dus zou bij een verlopen sessie alles na de
+#                        eerste ampersand wegvallen (dat gebeurde eerder bij de
+#                        boekhouding-MCP). De app controleert zelf de state, die
+#                        achter de SSO is aangemaakt.
+#   /oauth/disconnect    ook buiten, want Intuit kan dit adres zelf aanroepen.
+#                        De app weigert daar te ontkoppelen zonder aangemelde
+#                        gebruiker.
+#   al het overige       achter de forward-auth, dus alleen wie de tegel mag zien.
+#
+# Certificaat: het wildcard van *.${BASE_DOMAIN}, geen certbot-stap nodig.
 
 server {
     listen 443 ssl;
@@ -17,26 +27,46 @@ server {
     server_name quickbooks.${BASE_DOMAIN};
     include /etc/nginx/snippets/ssl.conf;
 
-    root /srv/websites/quickbooks;
-    index index.html;
+    set $app_upstream http://app-quickbooks:3015;
 
+    # LET OP: een add_header binnen een locatieblok vervangt in nginx ALLE
+    # add_header-regels van het niveau erboven, dus ze staan per blok herhaald.
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Strict-Transport-Security "max-age=31536000" always;
 
-    location / {
-        # LET OP: een add_header binnen een locatieblok vervangt in nginx ALLE
-        # add_header-regels van het niveau erboven, dus ze staan hier herhaald.
-        # Zonder die herhaling verdwenen op 05-08-2026 bij regulariseren.be alle
-        # beveiligingsheaders puur doordat er een Cache-Control bijkwam.
-        add_header Cache-Control "no-cache" always;
+    location = /privacy {
+        root /srv/websites/quickbooks;
+        try_files /privacy.html =404;
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-Frame-Options "SAMEORIGIN" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Strict-Transport-Security "max-age=31536000" always;
-        try_files $uri $uri.html $uri/ =404;
     }
 
-    access_log /var/log/nginx/quickbooks.access.log;
+    location = /terms {
+        root /srv/websites/quickbooks;
+        try_files /terms.html =404;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+    }
+
+    location ^~ /oauth/callback {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
+    location ^~ /oauth/disconnect {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
+    include /etc/nginx/snippets/forward-auth.conf;
 }

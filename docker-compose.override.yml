@@ -98,6 +98,35 @@ services:
       retries: 3
     networks: [appnet]
 
+  # QuickBooks-connector voor HDS (Suriname). Tweede boekhoudsysteem naast
+  # Octopus; MCP-server zodat Claude die boekhouding kan lezen en beperkt
+  # bijwerken. Eigen repo softwareglobaal/globaal-quickbooks, uitgecheckt in
+  # ./quickbooks met auto-deploy via deploy-stack.sh en cron.
+  app-quickbooks:
+    build:
+      context: ./quickbooks
+      dockerfile: app/Dockerfile
+    image: appportal-quickbooks
+    restart: unless-stopped
+    environment:
+      PORT: "3015"
+      # Eigen rol quickbooks_writer (migratie 115); leeg = nette melding.
+      QUICKBOOKS_DB_URL: ${QUICKBOOKS_DB_URL:-}
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+      QUICKBOOKS_GROUPS: ${QUICKBOOKS_GROUPS:-boekhouding,manager}
+      # Production keys van de Intuit-app MCP (workspace HDS).
+      QUICKBOOKS_CLIENT_ID: ${QUICKBOOKS_CLIENT_ID:-}
+      QUICKBOOKS_CLIENT_SECRET: ${QUICKBOOKS_CLIENT_SECRET:-}
+      # MCP voor Claude; leeg = het endpoint bestaat niet.
+      MCP_TOKEN: ${QUICKBOOKS_MCP_TOKEN:-}
+      MCP_SECRET: ${QUICKBOOKS_MCP_SECRET:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3015/healthz', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    networks: [appnet]
+
   app-telefoonregister:
     build: ./telefoonregister
     image: appportal-telefoonregister
