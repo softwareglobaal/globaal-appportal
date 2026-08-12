@@ -1599,6 +1599,14 @@ daarna pas structuur in aanbrengen.
 - **Second Brain**: schema `angela` staat in `_GRAAF_SCHEMAS` van `graaf.py`
   (globaal-organisatie); `angela.bijlage` staat op de blacklist. De
   betrokkene→persoon-FK hangt het initiatief aan de bestaande persoon-knopen.
+- **Publieke website `angela.sr`** (sinds 2026-08-12): het eigen domein van het
+  initiatief, geregistreerd in Suriname (nameservers `cpc5.datasurcloud.sr`,
+  DNS-beheer bij Datasur). Nginx `57-angela-sr.conf.template` proxy't naar de
+  bestaande verkoop-etalage **`items-verkoop`**:8770 (read-only, geen SSO);
+  `www` redirect naar de apex. Eigen Let's Encrypt-certificaat in
+  `certs/angela-sr/` (webroot-methode, zoals DEPLOY-AWS.md), want het
+  wildcard-cert van *.globaal.be dekt dit domein niet. Dit volgt de beslissing
+  in het dashboard: de website start met de verkoopsectie, de bio-pagina volgt.
 - Bewuste keuze: **één `item`-tabel met een soort-kolom** in plaats van vijf
   tabellen. De soorten delen dezelfde velden en de bedieningsvraag is "gooi
   het ergens neer"; splitsen zou het droppen trager maken. Nadeel: taak- en
@@ -1607,7 +1615,12 @@ daarna pas structuur in aanbrengen.
 
 ---
 
-*Laatst bijgewerkt: 2026-07-29 - **Angela-tegel** (§14.8, migratie 098):
+*Laatst bijgewerkt: 2026-08-12 - **angela.sr** (§14.8): eigen publiek domein
+voor het initiatief Angela; vhost `57-angela-sr.conf.template` naar de
+verkoop-etalage `items-verkoop`:8770, eigen Let's Encrypt-cert in
+`certs/angela-sr/`.*
+
+*Eerder: 2026-07-29 - **Angela-tegel** (§14.8, migratie 098):
 werkdashboard voor het initiatief in Suriname, met werkstromen, items van vijf
 soorten, bijlagen en item-item verbanden; schema `angela` mee in de Second
 Brain-graaf.*

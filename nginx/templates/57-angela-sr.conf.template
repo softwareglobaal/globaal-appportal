@@ -1,0 +1,49 @@
+# Publieke verkoop-etalage op het eigen domein angela.sr (initiatief Angela,
+# Suriname). Zelfde container als de etalage op poort 8770 (items-verkoop,
+# read-only, geen SSO); dit blok geeft er een echte hostnaam en TLS voor.
+#
+# Eigen Let's Encrypt-certificaat, want het wildcard-cert van *.globaal.be
+# dekt dit domein niet. Volgorde bij ingebruikname: eerst DNS naar de VM,
+# dan het certificaat aanvragen (webroot-methode, zie DEPLOY-AWS.md), pas
+# daarna nginx herstarten: nginx start niet met een verwijzing naar een
+# certificaat dat nog niet bestaat.
+
+server {
+    listen 80;
+    server_name angela.sr www.angela.sr;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://angela.sr$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name www.angela.sr;
+    ssl_certificate /etc/nginx/certs/angela-sr/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/angela-sr/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    return 301 https://angela.sr$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name angela.sr;
+    ssl_certificate /etc/nginx/certs/angela-sr/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/angela-sr/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://items-verkoop:8770;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
