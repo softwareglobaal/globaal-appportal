@@ -54,6 +54,40 @@ server {
         add_header Strict-Transport-Security "max-age=31536000" always;
     }
 
+    # MCP-endpoint voor Claude: buiten de forward-auth, want een MCP-client
+    # heeft geen Authentik-sessie. De app checkt zelf het token. Dekt ook
+    # /mcp/token en /mcp/register voor de claude.ai-connector; de loginstap
+    # /oauth/inloggen valt wel onder de forward-auth hieronder.
+    location ^~ /mcp {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+        proxy_pass $app_upstream;
+    }
+
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+
+    # De aanvraag van Claude komt met meerdere queryparameters binnen en de
+    # forward-auth-snippet kapt zijn terugkeer-URL af op de eerste ampersand.
+    # Daarom vangt de app hem hier zelf op en gaat de login via
+    # /oauth/inloggen met een enkele parameter.
+    location = /oauth/authorize {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
     location ^~ /oauth/callback {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
