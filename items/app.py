@@ -48,7 +48,7 @@ MUNT_SYMBOOL = "€"
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL") or "mch@h-architects.be"
 # Placeholder tot het echte nummer bekend is; zet CONTACT_TELEFOON in .env.
 CONTACT_TELEFOON = os.environ.get("CONTACT_TELEFOON") or "+32 000 00 00 00"
-WINKEL_NAAM = os.environ.get("WINKEL_NAAM") or "Techpoint"
+WINKEL_NAAM = os.environ.get("WINKEL_NAAM") or "angela.sr"
 
 # Authentik-groepen die mogen bewerken (leeg = iedereen die door forward-auth komt).
 EDITOR_GROUPS = {g_.strip() for g_ in os.environ.get("EDITOR_GROUPS", "").split(",") if g_.strip()}
@@ -70,6 +70,8 @@ app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
 app.jinja_env.globals["contact_telefoon"] = CONTACT_TELEFOON
 app.jinja_env.globals["telefoon_link"] = "tel:" + re.sub(r"[^\d+]", "", CONTACT_TELEFOON)
 app.jinja_env.globals["winkel_naam"] = WINKEL_NAAM
+# Logo-letter in de ronde merk-tegel volgt de winkelnaam.
+app.jinja_env.globals["winkel_letter"] = WINKEL_NAAM[:1].upper()
 
 CONDITIES = ["nieuw", "als_nieuw", "goed", "gebruikt", "defect_onderdelen"]
 STATUSSEN = ["concept", "onderzoek", "te_controleren", "live",
@@ -567,7 +569,7 @@ def _icecat_vraag(params):
     q.update({"UserName": ICECAT_USER, "Language": "nl",
               "Content": "Gallery,Image,GeneralInfo"})
     url = ICECAT_API + "?" + urlencode(q)
-    req = urllib.request.Request(url, headers={"User-Agent": "Techpoint/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "angela.sr/1.0"})
     with urllib.request.urlopen(req, timeout=25) as resp:
         data = json.loads(resp.read().decode())
     if data.get("msg") != "OK" or not data.get("data"):
@@ -606,7 +608,7 @@ def zoek_fabrikantsfotos(product, specs):
 
 def _bewaar_fabrikantsfoto(pid, url, volgnr):
     """Haalt een afbeelding op, verkleint hem en zet hem bij het item."""
-    req = urllib.request.Request(url, headers={"User-Agent": "Techpoint/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "angela.sr/1.0"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         ruw = resp.read()
     naam = f"p{pid}_fab_{secrets.token_hex(5)}.jpg"
@@ -904,11 +906,11 @@ BASE = """
  .spinner{width:44px;height:44px;border:4px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;margin:20px auto}@keyframes sp{to{transform:rotate(360deg)}}
 </style></head><body>
 {% if IS_BEHEER %}
-<div class="beheerkop"><div class="wrap"><a class="brand" href="{{ url_for('beheer') }}"><span class="mark">T</span><span class="naam" style="color:var(--navy-ink)">{{ winkel_naam }}</span></a><span style="margin-left:12px;color:var(--navy-mut);font-size:13px">beheer</span></div></div>
+<div class="beheerkop"><div class="wrap"><a class="brand" href="{{ url_for('beheer') }}"><span class="mark">{{ winkel_letter }}</span><span class="naam" style="color:var(--navy-ink)">{{ winkel_naam }}</span></a><span style="margin-left:12px;color:var(--navy-mut);font-size:13px">beheer</span></div></div>
 {% else %}
 <div class="kop">
  <div class="kop-nav"><div class="wrap">
-   <a class="brand" href="{{ url_for('etalage') }}"><span class="mark">T</span><span class="btxt"><span class="naam">{{ winkel_naam }}</span><span class="onder">ICT-hardware</span></span></a>
+   <a class="brand" href="{{ url_for('etalage') }}"><span class="mark">{{ winkel_letter }}</span><span class="btxt"><span class="naam">{{ winkel_naam }}</span><span class="onder">ICT-hardware</span></span></a>
    <form class="zoek" action="{{ url_for('zoeken') }}" method="get" role="search">
      <input name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of specificatie" aria-label="Zoeken">
      <button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Zoeken</span></button>
@@ -942,7 +944,7 @@ BASE = """
 <footer>
  <div class="wrap"><div class="kolommen">
   <div>
-    <div class="fmerk"><span class="mark">T</span><span>{{ winkel_naam }}</span></div>
+    <div class="fmerk"><span class="mark">{{ winkel_letter }}</span><span>{{ winkel_naam }}</span></div>
     <div class="klein">Sinds een jaar verkopen we hier de laptops, pc's en tablets die
       bij ons uit dienst gaan. Bij elk toestel staat wat we ervan weten.</div>
   </div>

@@ -1,6 +1,6 @@
 # Herkomst van de sfeerbeelden
 
-Deze foto's staan op de publieke verkoopsite (Techpoint) als sfeerbeeld. Het zijn
+Deze foto's staan op de publieke verkoopsite (angela.sr) als sfeerbeeld. Het zijn
 geen productfoto's: producten krijgen altijd eigen foto's van het echte toestel.
 
 | Bestand | Bron | Licentie |
