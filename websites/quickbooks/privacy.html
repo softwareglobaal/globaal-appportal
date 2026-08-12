@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Privacy statement - QuickBooks connector</title>
+<style>
+  :root { --tekst: #16181c; --gedempt: #565b63; --lijn: #c9ccd1; --accent: #1f4e79;
+          --let-op: #fbf6e3; }
+  body { font: 15px/1.6 "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+         color: var(--tekst); margin: 0; padding: 48px 20px; }
+  main { max-width: 68ch; margin: 0 auto; }
+  h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; }
+  h2 { font-size: 16px; font-weight: 600; margin: 30px 0 8px; }
+  p.datum { color: var(--gedempt); margin-top: 0; font-size: 13px; }
+  ul { padding-left: 20px; }
+  a { color: var(--accent); }
+  .invullen { background: var(--let-op); padding: 12px 14px; border: 1px solid var(--lijn); }
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--lijn);
+           color: var(--gedempt); font-size: 13px; }
+</style>
+<main>
+  <h1>Privacy statement</h1>
+  <p class="datum">QuickBooks connector. Last updated 5 August 2026.</p>
+
+  <div class="invullen">
+    <strong>To be completed before this page is submitted to Intuit:</strong> the full
+    legal name of the company and its registered address. Everything else on this page
+    describes how the connector actually works and has been checked against the
+    implementation.
+  </div>
+
+  <h2>Who we are</h2>
+  <p>This connector is operated by HDS (contact:
+     <a href="mailto:info@hdssr.com">info@hdssr.com</a>), for its own internal use. We
+     are the controller of the data described below.</p>
+
+  <h2>What this connector is</h2>
+  <p>It is a private integration with QuickBooks Online. It is used only by our own
+     employees. It is not offered to customers, not published in any app store, and
+     no one outside our organisation can connect to it or use it.</p>
+
+  <h2>What data it accesses</h2>
+  <p>Once an authorised employee connects our QuickBooks Online company, the connector
+     can read and, for a limited set of operations, update accounting data in that
+     company. In practice this concerns:</p>
+  <ul>
+    <li>customer and supplier records, including name, address, email, telephone and
+        tax registration number;</li>
+    <li>invoices, bills and payment status;</li>
+    <li>accounts, journals and standard financial reports.</li>
+  </ul>
+  <p>The connector does not access bank credentials, card numbers, or payroll data,
+     and it does not initiate any payment.</p>
+
+  <h2>What we store, and for how long</h2>
+  <p>We deliberately keep storage minimal:</p>
+  <ul>
+    <li><strong>Access tokens</strong> for the QuickBooks connection, on our server, so
+        the connection does not have to be re-authorised for every request. Removed
+        when the connection is disconnected.</li>
+    <li><strong>An audit log</strong> recording which operation was performed, on which
+        record, by which employee, and when. This is a control measure: it lets us
+        answer who changed what. It contains identifiers and the type of operation,
+        not full copies of accounting records.</li>
+    <li><strong>Technical logs</strong> of errors, including the identifier that Intuit
+        returns with a response, so that problems can be traced. Retained for a limited
+        period for troubleshooting.</li>
+  </ul>
+  <p>We do not keep a standing copy of the QuickBooks accounting records on our own
+     systems. Data retrieved for a request is used to answer that request.</p>
+
+  <h2>Who the data is shared with</h2>
+  <p>Two parties are involved, and no others:</p>
+  <ul>
+    <li><strong>Anthropic.</strong> The connector exposes its operations to Claude, an
+        AI assistant made by Anthropic. When an employee asks a question, the data
+        returned by the connector is processed by Anthropic in order to answer within
+        that conversation. We do not use QuickBooks data to train any model.</li>
+    <li><strong>Amazon Web Services.</strong> Our server runs in the AWS region
+        us-east-1, in the United States. AWS hosts the infrastructure; it does not
+        process the content on our behalf for any other purpose.</li>
+  </ul>
+  <p>We do not sell data, we do not share it with advertisers, and we do not disclose
+     it to any other third party except where we are legally required to.</p>
+
+  <h2>How access is controlled</h2>
+  <p>The connector sits behind our company single sign-on. Only employees who are
+     members of a dedicated group can reach it. Every action is attributed to the
+     individual who performed it. Client credentials for the QuickBooks connection are
+     stored as environment variables on the server and never appear in source code or
+     in a code repository.</p>
+
+  <h2>Your choices</h2>
+  <p>The QuickBooks connection can be disconnected at any time from within QuickBooks
+     Online or via the connector itself. Disconnecting removes our access tokens and
+     ends any further access. If you are an employee and you want to know what is
+     recorded about your use of the connector, or want it corrected or removed, write
+     to <a href="mailto:info@hdssr.com">info@hdssr.com</a>.</p>
+
+  <h2>Changes</h2>
+  <p>If the way the connector handles data changes, this page changes with it, and the
+     date at the top is updated.</p>
+
+  <footer>
+    <a href="/">Back</a> &middot; <a href="/terms">Terms of use</a>
+  </footer>
+</main>
+</html>
