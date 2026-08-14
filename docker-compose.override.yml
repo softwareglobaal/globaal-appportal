@@ -466,6 +466,39 @@ services:
       start_period: 15s
     networks: [appnet]
 
+  # Postbus - leestoegang tot zakelijke mailboxen voor Claude (MCP over IMAP).
+  # De pagina staat achter forward-auth; het MCP-endpoint checkt zelf het token
+  # en leidt de toegang af uit de Authentik-groepen in dat token.
+  # Uitsluitend lezen: geen SMTP, geen STORE, geen verwijderen.
+  app-post:
+    build: ./post
+    image: appportal-post
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      PORT: "3017"
+      POSTBUS_CONFIG: /config/mailboxen.yaml
+      # Wie de beheersectie en de verbindingstest ziet.
+      POSTBUS_BEHEER_GROEPEN: ${POSTBUS_BEHEER_GROEPEN:-admin}
+      # claude.ai-connector (OAuth via Authentik-SSO); leeg = endpoint uit.
+      MCP_SECRET: ${POSTBUS_MCP_SECRET:-}
+      # Statisch token voor Claude Code; leeg = uit. Dit token hoort bij geen
+      # enkele Authentik-gebruiker en krijgt daarom alleen de groepen die
+      # hieronder staan. Leeg gelaten = geen enkele mailbox leesbaar.
+      MCP_TOKEN: ${POSTBUS_MCP_TOKEN:-}
+      POSTBUS_TOKEN_GROEPEN: ${POSTBUS_TOKEN_GROEPEN:-}
+    volumes:
+      # De mailboxen met hun wachtwoorden: één bestand op de VM, buiten git,
+      # read-only aangekoppeld. Bewerken met: nano ~/post-config/mailboxen.yaml
+      - ${POSTBUS_CONFIG_DIR:-/home/ubuntu/post-config}:/config:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3017/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
 volumes:
   telefoonregister-data:
   sales-data:

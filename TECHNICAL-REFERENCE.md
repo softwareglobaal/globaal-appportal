@@ -1613,9 +1613,53 @@ daarna pas structuur in aanbrengen.
   beslissingsvelden staan leeg bij de andere soorten, en een soort erbij is
   een CHECK-wijziging.
 
+### 14.9 Postbus - leestoegang tot mailboxen voor Claude (`post.globaal.be`)
+Eén plek waar zakelijke mailboxen leesbaar worden gemaakt voor Claude, via MCP
+over IMAP. **Uitsluitend lezen**: er is geen tool die verstuurt, beantwoordt,
+verplaatst of verwijdert, er zit geen SMTP-code in de app, elke SELECT gebeurt
+met `readonly=True` en elke FETCH met `BODY.PEEK` (de leesstatus in de webmail
+blijft dus onaangeroerd, dezelfde keuze als de postkamer-agent van Elevait).
+- **App in deze repo** (`post/`, zoals `angela/`). Flask, service
+  **`app-post`**:3017, nginx `58-post.conf.template`, Authentik via
+  `scripts/add-post-app.py` (tegel-groepen admin/manager/postbus). Geen
+  database: de app heeft geen eigen staat.
+- **Toegang volgt de Authentik-login.** De tegel-groep bepaalt alleen wie de
+  pagina ziet en wie een connector mag koppelen. Welke mailboxen daarna
+  leesbaar zijn staat per mailbox in `~/post-config/mailboxen.yaml` op de VM
+  (read-only bind-mount op `/config`, buiten git want er staan wachtwoorden
+  in): per mailbox een lijst `groepen` (Authentik) en optioneel `personen`.
+  Bij `/oauth/authorize` gaan de groepen uit de SSO-login mee in het
+  HMAC-getekende token, en bij elke tool-aanroep wordt daar opnieuw op
+  gefilterd. **Dicht tenzij opengezet**: een mailbox zonder groepen en zonder
+  personen is voor niemand zichtbaar. Het bestand wordt elke vijf seconden
+  opnieuw ingelezen, dus wijzigen vraagt geen herstart.
+- **MCP-mantel is die van §14.6** (vermogen): streamable HTTP op `/mcp`,
+  minimale OAuth-server met DCR + PKCE voor claude.ai-connectors,
+  `POSTBUS_MCP_SECRET`/`POSTBUS_MCP_TOKEN` in de stack-`.env` (beide leeg =
+  endpoint 404). Het statische token hoort bij geen enkele Authentik-gebruiker
+  en krijgt alleen de groepen uit `POSTBUS_TOKEN_GROEPEN`; leeg gelaten leest
+  het dus niets.
+- **Vier tools**: `mailboxen`, `mappen`, `zoek` (IMAP SEARCH op de server, niet
+  hier filteren) en `bericht`. Twee harde regels in de antwoorden: elke lijst
+  meldt het totaal aantal treffers plus `volgende_vanaf`, en een lange
+  berichttekst komt in genummerde delen met `aantal_delen`/`tekens_totaal`.
+  Niets wordt stil afgekapt (de les van de Missive-previews). Bijlagen worden
+  benoemd maar niet ingelezen, bewuste grens voor versie 1.
+- **Injectie is hier het echte risico**: een mailbox is invoer van buiten, en
+  Claude heeft elders schrijfrechten. Daarom read-only tools, een `instructions`
+  bij `initialize` die zegt dat berichtinhoud gegevens is en geen opdracht, en
+  een leesspoor in de containerlog (wie, welke mailbox, welk bericht).
+- Beheerderspagina toont alle mailboxen, de fouten in het bestand (nooit een
+  wachtwoord) en een knop die per mailbox echt inlogt op IMAP.
+
 ---
 
-*Laatst bijgewerkt: 2026-08-12 - **angela.sr** (§14.8): eigen publiek domein
+*Laatst bijgewerkt: 2026-08-14 - **Postbus** (§14.9): read-only IMAP-toegang
+voor Claude op `post.globaal.be`, service `app-post`:3017, mailboxen en hun
+toegangsregels in `~/post-config/mailboxen.yaml`, toegang bepaald door de
+Authentik-groepen uit de SSO-login.*
+
+*Eerder: 2026-08-12 - **angela.sr** (§14.8): eigen publiek domein
 voor het initiatief Angela; vhost `57-angela-sr.conf.template` naar de
 verkoop-etalage `items-verkoop`:8770, eigen Let's Encrypt-cert in
 `certs/angela-sr/`.*

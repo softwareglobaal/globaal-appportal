@@ -1,0 +1,38 @@
+# Postbus - de enige plek waar mailboxen en hun toegang staan.
+#
+# Dit is het VOORBEELD (staat in git, zonder wachtwoorden). Het echte bestand
+# staat op de VM in ~/post-config/mailboxen.yaml en komt nooit in git.
+#
+#   nano ~/post-config/mailboxen.yaml
+#
+# Na opslaan is de wijziging binnen vijf seconden actief; herstarten hoeft niet.
+# Klopt er iets niet, dan staat dat op https://post.globaal.be onder Beheer.
+
+# Waarden die voor elke mailbox gelden, tenzij de mailbox zelf iets anders zegt.
+standaard:
+  imap_host: imap.one.com
+  imap_poort: 993
+  # Welke mappen leesbaar zijn. Laat de lijst weg om alle mappen open te zetten.
+  # Let op de punt in de mapnamen van one.com: INBOX.Sent, niet INBOX/Sent.
+  mappen: [INBOX, INBOX.Sent]
+
+mailboxen:
+  - adres: info@elevaitnv.com
+    naam: Elevait info
+    # gebruiker: alleen nodig als de IMAP-gebruikersnaam afwijkt van het adres.
+    gebruiker: info@elevaitnv.com
+    wachtwoord: CHANGE_ME
+    # Wie mag lezen: Authentik-groepen. Dit is de hele toegangsregel.
+    groepen: [admin]
+    # Losse Authentik-gebruikers, voor een uitzondering zonder eigen groep.
+    personen: []
+
+  - adres: boekhouding@h-architects.be
+    naam: Boekhouding H-Architects
+    wachtwoord: CHANGE_ME
+    groepen: [admin, finance]
+    # Deze mailbox mag alleen in de INBOX gelezen worden.
+    mappen: [INBOX]
+
+# Een mailbox zonder groepen en zonder personen is voor niemand zichtbaar.
+# Dat is met opzet: toegang staat dicht tot ze expliciet wordt opengezet.

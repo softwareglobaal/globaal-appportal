@@ -84,3 +84,9 @@ apps:
     subdomain: angela
     roles: [admin, manager, angela]
     status: active
+  - id: post
+    name: Postbus
+    description: Leestoegang tot zakelijke mailboxen voor Claude (MCP over IMAP)
+    subdomain: post
+    roles: [admin, manager, postbus]
+    status: active

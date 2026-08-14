@@ -1,0 +1,40 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name post.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Forward-auth (embedded outpost) beschermt de pagina; identiteit + groepen
+    # gaan als X-authentik-* headers naar de Flask-app en bepalen daar welke
+    # mailboxen zichtbaar zijn.
+    set $app_upstream http://app-post:3017;
+    include /etc/nginx/snippets/forward-auth.conf;
+
+    # MCP-endpoint voor Claude: buiten de forward-auth om (MCP-clients hebben
+    # geen Authentik-sessie); de app checkt zelf het token. Dekt ook de
+    # OAuth-endpoints voor claude.ai-connectors: /mcp/token en /mcp/register.
+    # De loginstap (/oauth/authorize) valt bewust WEL onder de forward-auth
+    # hierboven: Authentik-SSO is daar de authenticatie, en de groepen uit die
+    # login gaan mee in het token. Zolang POSTBUS_MCP_TOKEN/POSTBUS_MCP_SECRET
+    # niet in .env staan: 404.
+    location ^~ /mcp {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Een IMAP-zoekopdracht over een volle mailbox mag even duren.
+        proxy_read_timeout 120s;
+        proxy_pass $app_upstream;
+    }
+
+    # OAuth-discovery (RFC 8414/9728), publiek leesbaar.
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+}
