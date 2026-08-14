@@ -121,3 +121,46 @@ server {
     client_max_body_size 200m;
     include /etc/nginx/snippets/forward-auth.conf;
 }
+
+# Eigen exemplaar per collega (06-08-2026), gebouwd naar het voorbeeld van de
+# admin-kopie: elk met een eigen mongo en een eigen kopie van de gegevens, zodat
+# hun werk elkaar niet raakt. Poorten 8103 tot en met 8106.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name renovision-zjafhira.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    set $app_upstream http://172.17.0.1:8103;
+    client_max_body_size 200m;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name renovision-marise.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    set $app_upstream http://172.17.0.1:8104;
+    client_max_body_size 200m;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name renovision-jean-charles.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    set $app_upstream http://172.17.0.1:8105;
+    client_max_body_size 200m;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name renovision-mukesh.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    set $app_upstream http://172.17.0.1:8106;
+    client_max_body_size 200m;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
