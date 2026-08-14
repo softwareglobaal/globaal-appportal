@@ -308,6 +308,11 @@ services:
     volumes:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro
+      # Eigen hoofdconfiguratie: alleen om de njs-module te laden, die het
+      # terugkeeradres van de forward-auth codeert (zie nginx/njs/sso.js).
+      # load_module kan niet vanuit conf.d, vandaar dat dit bestand meemoet.
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/njs:/etc/nginx/njs:ro
       - ./certs:/etc/nginx/certs:ro
       # Publieke statische websites (per firma een map)
       - ./websites:/srv/websites:ro
