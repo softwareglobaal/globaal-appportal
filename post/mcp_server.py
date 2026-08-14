@@ -36,6 +36,8 @@ SERVER_INFO = {"name": "postbus",
                "title": "Postbus (IMAP: lezen en opruimen)",
                "version": "1.1.0"}
 
+AANVRAAG_TTL = 600        # de koppelaanvraag tijdens het inloggen: 10 minuten
+AANVRAAG_KOEK = "postbus_aanvraag"
 CODE_TTL = 120            # autorisatiecode: 2 minuten
 ACCESS_TTL = 12 * 3600    # access token: 12 uur
 REFRESH_TTL = 60 * 86400  # refresh token: 60 dagen
@@ -401,7 +403,18 @@ def registreer(app, gebruiker, groepen_van_verzoek):
                 "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"]}, 201
 
-    # ---- OAuth: authorize (ACHTER de forward-auth: SSO is de login) --
+    # ---- OAuth: authorize in twee stappen ----------------------------
+    # Stap 1 (/oauth/authorize) staat BUITEN de forward-auth en zet alleen de
+    # aanvraag in een kortlevende, getekende cookie. Stap 2
+    # (/oauth/inloggen) staat er WEL achter: daar is de SSO-login de
+    # authenticatie en pas daar wordt de code uitgegeven.
+    #
+    # Waarom die omweg: de forward-auth stuurt een niet-ingelogde bezoeker naar
+    # /outpost.goauthentik.io/start?rd=<hele url>, en die rd-waarde wordt niet
+    # gecodeerd. Authentik leest hem dan tot aan de eerste &, waardoor alles na
+    # de eerste parameter wegvalt en de bezoeker terugkomt zonder redirect_uri
+    # en zonder PKCE. Door na stap 1 door te sturen naar een adres ZONDER
+    # query kan er niets meer afgeknipt worden (waargenomen 2026-08-14).
     @app.get("/oauth/authorize")
     def oauth_authorize():
         if not _secret():
@@ -414,22 +427,41 @@ def registreer(app, gebruiker, groepen_van_verzoek):
         challenge = request.args.get("code_challenge", "")
         if not challenge or request.args.get("code_challenge_method") != "S256":
             return "PKCE (S256) is verplicht", 400
-        # Wie hier komt is al door Authentik: identiteit EN groepen komen uit
-        # de proxy-headers en gaan mee in het token. Vanaf dat moment bepaalt
-        # de Authentik-login welke mailboxen deze koppeling kan lezen.
+        bon = _teken({"t": "aanvraag", "ch": challenge, "r": redirect_uri,
+                      "s": request.args.get("state", ""),
+                      "exp": int(time.time()) + AANVRAAG_TTL})
+        antwoord = redirect("/oauth/inloggen")
+        antwoord.set_cookie(AANVRAAG_KOEK, bon, max_age=AANVRAAG_TTL,
+                            secure=True, httponly=True, samesite="Lax",
+                            path="/oauth")
+        return antwoord
+
+    @app.get("/oauth/inloggen")
+    def oauth_inloggen():
+        if not _secret():
+            return {"fout": "OAuth staat uit"}, 404
+        p = _lees(request.cookies.get(AANVRAAG_KOEK, ""), "aanvraag")
+        if not p:
+            return ("De koppeling is verlopen of het venster stond te lang "
+                    "open. Begin opnieuw vanuit Claude."), 400
+        # Wie hier komt is door Authentik: identiteit EN groepen komen uit de
+        # proxy-headers en gaan mee in het token. Vanaf dat moment bepaalt de
+        # Authentik-login welke mailboxen deze koppeling kan lezen.
         naam = gebruiker()
         groepen = groepen_van_verzoek()
         if not naam:
             return ("Geen Authentik-identiteit gevonden. Log eerst in op "
                     f"{_basis()} en probeer opnieuw."), 403
         code = _teken({"t": "code", "u": naam, "g": groepen,
-                       "ch": challenge, "r": redirect_uri,
+                       "ch": p["ch"], "r": p["r"],
                        "exp": int(time.time()) + CODE_TTL})
         _log({"gebruiker": naam}, "koppelt een connector "
                                   f"({len(groepen)} groepen)")
-        sep = "&" if "?" in redirect_uri else "?"
-        return redirect(redirect_uri + sep + urlencode(
-            {"code": code, "state": request.args.get("state", "")}))
+        sep = "&" if "?" in p["r"] else "?"
+        antwoord = redirect(p["r"] + sep + urlencode(
+            {"code": code, "state": p.get("s", "")}))
+        antwoord.delete_cookie(AANVRAAG_KOEK, path="/oauth")
+        return antwoord
 
     # ---- OAuth: token ------------------------------------------------
     def _tokens_voor(payload):

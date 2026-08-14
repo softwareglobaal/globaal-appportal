@@ -10,13 +10,30 @@ server {
     set $app_upstream http://app-post:3017;
     include /etc/nginx/snippets/forward-auth.conf;
 
+    # Eerste stap van de OAuth-koppeling: buiten de forward-auth om. Deze stap
+    # geeft nog geen code uit, hij zet de aanvraag alleen in een getekende
+    # cookie en stuurt door naar /oauth/inloggen, dat WEL achter de
+    # forward-auth staat (location / hierboven) en waar de SSO-login dus de
+    # authenticatie is.
+    #
+    # Reden voor die splitsing: de forward-auth stuurt een niet-ingelogde
+    # bezoeker naar /outpost.goauthentik.io/start?rd=<hele url> zonder die
+    # rd-waarde te coderen. Authentik leest hem tot aan de eerste &, dus bij
+    # meer dan een parameter komt de bezoeker terug op een afgeknotte URL. Door
+    # na deze stap door te sturen naar een adres zonder query valt er niets
+    # meer af te knippen. Waargenomen 2026-08-14; dit raakt in principe elke
+    # app in deze stack met meerdere parameters in de URL.
+    location = /oauth/authorize {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
     # MCP-endpoint voor Claude: buiten de forward-auth om (MCP-clients hebben
     # geen Authentik-sessie); de app checkt zelf het token. Dekt ook de
     # OAuth-endpoints voor claude.ai-connectors: /mcp/token en /mcp/register.
-    # De loginstap (/oauth/authorize) valt bewust WEL onder de forward-auth
-    # hierboven: Authentik-SSO is daar de authenticatie, en de groepen uit die
-    # login gaan mee in het token. Zolang POSTBUS_MCP_TOKEN/POSTBUS_MCP_SECRET
-    # niet in .env staan: 404.
+    # Zolang POSTBUS_MCP_TOKEN/POSTBUS_MCP_SECRET niet in .env staan: 404.
     location ^~ /mcp {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
