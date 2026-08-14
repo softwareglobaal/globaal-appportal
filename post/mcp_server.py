@@ -32,8 +32,9 @@ import config
 import imapbron
 
 PROTOCOL_VERSIES = ("2025-06-18", "2025-03-26", "2024-11-05")
-SERVER_INFO = {"name": "postbus", "title": "Postbus (IMAP, alleen lezen)",
-               "version": "1.0.0"}
+SERVER_INFO = {"name": "postbus",
+               "title": "Postbus (IMAP: lezen en opruimen)",
+               "version": "1.1.0"}
 
 CODE_TTL = 120            # autorisatiecode: 2 minuten
 ACCESS_TTL = 12 * 3600    # access token: 12 uur
