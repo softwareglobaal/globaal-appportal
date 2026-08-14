@@ -107,3 +107,17 @@ server {
     client_max_body_size 200m;
     include /etc/nginx/snippets/forward-auth.conf;
 }
+
+# Admin-kopie van Renovision (06-08-2026). Los exemplaar met een eigen mongo en
+# een kopie van de gegevens, bedoeld om de reparatie te beproeven zonder de
+# draaiende versies aan te raken: in renovision en renovision-mehdi ontbreekt de
+# mongo-container, waardoor de backend zijn database niet kan bereiken.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name renovision-admin.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    set $app_upstream http://172.17.0.1:8102;
+    client_max_body_size 200m;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
