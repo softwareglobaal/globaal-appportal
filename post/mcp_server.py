@@ -112,9 +112,16 @@ def _redirect_ok(uri):
 
 
 def _log(wie, boodschap):
-    """Leesspoor naar de containerlog: wie las wat, wanneer."""
+    """Leesspoor naar de containerlog: wie las wat, wanneer.
+
+    De herkomst staat apart van de naam. Die naam wordt namelijk ook gebruikt
+    om te vergelijken met de lijst 'personen' in mailboxen.yaml, en een naam
+    met een label erachter matcht daar nooit mee.
+    """
     stempel = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    print(f"{stempel} postbus {wie.get('gebruiker', '?')}: {boodschap}",
+    bron = wie.get("bron")
+    wie_tekst = wie.get("gebruiker", "?") + (f" ({bron})" if bron else "")
+    print(f"{stempel} postbus {wie_tekst}: {boodschap}",
           file=sys.stdout, flush=True)
 
 
@@ -190,12 +197,14 @@ def registreer(app, gebruiker, groepen_van_verzoek):
         _log(wie, f"mailboxen ({len(rijen)} zichtbaar)")
         return {
             "gebruiker": wie["gebruiker"],
+            "via": wie.get("bron"),
             "groepen": sorted(wie["groepen"]),
             "aantal": len(rijen),
             "mailboxen": [{"mailbox": m["adres"], "naam": m["naam"],
                            "mappen": m["mappen"] or "alle"} for m in rijen],
             "let_op": ("Je hebt nog geen enkele mailbox. Vraag de beheerder om "
-                       "je Authentik-groep bij de mailbox te zetten in "
+                       f"gebruiker '{wie['gebruiker']}' bij 'personen' te "
+                       "zetten, of een van je groepen bij 'groepen', in "
                        "mailboxen.yaml.") if not rijen else None,
         }
 
@@ -354,7 +363,12 @@ def registreer(app, gebruiker, groepen_van_verzoek):
 
     # ---- MCP: JSON-RPC over HTTP (stateless streamable http) ---------
     def _auth():
-        """-> {"gebruiker","groepen"} of None bij ontbrekend/fout token."""
+        """-> {"gebruiker","bron","groepen"} of None bij fout/ontbrekend token.
+
+        'gebruiker' is de kale Authentik-gebruikersnaam en niets anders: die
+        wordt vergeleken met de lijst 'personen' in mailboxen.yaml. De
+        herkomst hoort in 'bron', niet als achtervoegsel aan de naam.
+        """
         kop = request.headers.get("Authorization", "")
         if not kop.startswith("Bearer "):
             return None
@@ -364,11 +378,11 @@ def registreer(app, gebruiker, groepen_van_verzoek):
             # Het statische token hoort bij geen enkele Authentik-gebruiker en
             # krijgt daarom alleen de groepen die expliciet in de omgeving
             # staan. Niets ingesteld = geen enkele mailbox.
-            return {"gebruiker": "claude-mcp (token)",
+            return {"gebruiker": "claude-mcp", "bron": "token",
                     "groepen": _token_groepen()}
         p = _lees(token, "acc")
         if p:
-            return {"gebruiker": p["u"] + " (mcp)",
+            return {"gebruiker": p["u"], "bron": "mcp",
                     "groepen": [str(g).lower() for g in (p.get("g") or [])]}
         return None
 
