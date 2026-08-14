@@ -19,7 +19,11 @@ PAD = os.environ.get("POSTBUS_CONFIG", "/config/mailboxen.yaml")
 # Alleen deze sleutels mogen per mailbox voorkomen; een typefout in het
 # bestand is anders een stille beperking (of erger, een stille verruiming).
 SLEUTELS = {"adres", "naam", "imap_host", "imap_poort", "gebruiker",
-            "wachtwoord", "groepen", "personen", "mappen"}
+            "wachtwoord", "groepen", "personen", "mappen", "schrijven"}
+
+# Wat als "ja" telt bij schrijven. Staat het er niet, dan is de mailbox
+# alleen-lezen: schrijven is een bewuste keuze per mailbox, geen standaard.
+JA = {"ja", "yes", "waar", "true", "aan"}
 STANDAARD_SLEUTELS = {"imap_host", "imap_poort", "mappen"}
 
 _slot = threading.Lock()
@@ -107,6 +111,14 @@ def _ontleed(ruw):
                           "niemand zichtbaar")
         mappen = _lijst(rij.get("mappen"), "mappen", fouten, waar) or st_mappen
 
+        ruw_schrijven = rij.get("schrijven")
+        if isinstance(ruw_schrijven, bool):
+            schrijven = ruw_schrijven
+        elif ruw_schrijven is None:
+            schrijven = False
+        else:
+            schrijven = str(ruw_schrijven).strip().lower() in JA
+
         gezien.add(adres.lower())
         uit.append({
             "adres": adres,
@@ -118,6 +130,7 @@ def _ontleed(ruw):
             "groepen": [g.lower() for g in groepen],
             "personen": [p.lower() for p in personen],
             "mappen": mappen,
+            "schrijven": schrijven,
         })
     return uit, fouten
 
@@ -179,6 +192,15 @@ def zoek(adres, wie):
             return m
     raise ValueError(f"Geen toegang tot '{adres}' of de mailbox bestaat niet. "
                      "De tool mailboxen toont wat je wel mag lezen.")
+
+
+def vereis_schrijven(mailbox, wat):
+    """Blokkeert een wijziging als de mailbox alleen-lezen is."""
+    if not mailbox.get("schrijven"):
+        raise ValueError(
+            f"{wat} kan niet: mailbox {mailbox['adres']} staat op alleen-lezen. "
+            "De beheerder zet 'schrijven: ja' bij deze mailbox in "
+            "mailboxen.yaml als dat de bedoeling is.")
 
 
 def map_toegestaan(mailbox, naam):

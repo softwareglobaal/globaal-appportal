@@ -1613,12 +1613,17 @@ daarna pas structuur in aanbrengen.
   beslissingsvelden staan leeg bij de andere soorten, en een soort erbij is
   een CHECK-wijziging.
 
-### 14.9 Postbus - leestoegang tot mailboxen voor Claude (`post.globaal.be`)
-Eén plek waar zakelijke mailboxen leesbaar worden gemaakt voor Claude, via MCP
-over IMAP. **Uitsluitend lezen**: er is geen tool die verstuurt, beantwoordt,
-verplaatst of verwijdert, er zit geen SMTP-code in de app, elke SELECT gebeurt
-met `readonly=True` en elke FETCH met `BODY.PEEK` (de leesstatus in de webmail
-blijft dus onaangeroerd, dezelfde keuze als de postkamer-agent van Elevait).
+### 14.9 Postbus - mailboxtoegang voor Claude (`post.globaal.be`)
+Eén plek waar zakelijke mailboxen bereikbaar worden voor Claude, via MCP over
+IMAP: lezen, zoeken en opruimen. **Verwijderen en verzenden kunnen niet**, en
+dat is een eigenschap van de code, geen afspraak: geen EXPUNGE, de vlag
+`\Deleted` wordt nergens gezet, `smtplib` wordt niet geimporteerd, en
+verplaatsen naar een prullenbak- of spammap wordt geweigerd omdat die vanzelf
+worden leeggemaakt. De testset toetst dat op de uitvoerbare code (docstrings
+eruit via `ast`), zodat het ook zo blijft. Lezen gebeurt met `readonly=True` en
+`BODY.PEEK`, dus wie alleen leest raakt de leesstatus niet aan (dezelfde keuze
+als de postkamer-agent van Elevait); alleen de wijzigfuncties openen een map
+schrijfbaar.
 - **App in deze repo** (`post/`, zoals `angela/`). Flask, service
   **`app-post`**:3017, nginx `58-post.conf.template`, Authentik via
   `scripts/add-post-app.py` (tegel-groepen admin/manager/postbus). Geen
@@ -1639,8 +1644,15 @@ blijft dus onaangeroerd, dezelfde keuze als de postkamer-agent van Elevait).
   endpoint 404). Het statische token hoort bij geen enkele Authentik-gebruiker
   en krijgt alleen de groepen uit `POSTBUS_TOKEN_GROEPEN`; leeg gelaten leest
   het dus niets.
-- **Vier tools**: `mailboxen`, `mappen`, `zoek` (IMAP SEARCH op de server, niet
-  hier filteren) en `bericht`. Twee harde regels in de antwoorden: elke lijst
+- **Acht tools**: lezend `mailboxen`, `mappen`, `zoek` (IMAP SEARCH op de
+  server, niet hier filteren) en `bericht`; wijzigend `markeren`,
+  `verplaatsen`, `map_aanmaken` en `concept_opslaan`. Die laatste vier werken
+  alleen op een mailbox met `schrijven: ja` in `mailboxen.yaml`, anders is de
+  mailbox alleen-lezen. Elke wijziging is omkeerbaar (vlag terugzetten, bericht
+  terugverplaatsen), en `concept_opslaan` legt een concept met de vlag
+  `\Draft` in de conceptenmap: de gebruiker verstuurt zelf. Verplaatsen gaat
+  via IMAP MOVE; kan de server dat niet, dan weigert de app in plaats van het
+  na te bootsen met kopieren en wissen. Twee harde regels in de antwoorden: elke lijst
   meldt het totaal aantal treffers plus `volgende_vanaf`, en een lange
   berichttekst komt in genummerde delen met `aantal_delen`/`tekens_totaal`.
   Niets wordt stil afgekapt (de les van de Missive-previews). Bijlagen worden

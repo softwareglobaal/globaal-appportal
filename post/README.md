@@ -1,8 +1,12 @@
-# Postbus - leestoegang tot mailboxen voor Claude
+# Postbus - mailboxtoegang voor Claude
 
-`post.globaal.be` geeft Claude leestoegang tot een aantal zakelijke mailboxen
-via MCP. Uitsluitend lezen: er is geen tool die verstuurt, beantwoordt,
-verplaatst of verwijdert, en er zit geen SMTP-code in de app.
+`post.globaal.be` geeft Claude toegang tot een aantal zakelijke mailboxen via
+MCP: lezen, zoeken en opruimen. **Verwijderen en verzenden kunnen niet**, en
+dat is geen afspraak maar een eigenschap van de code: er staat geen EXPUNGE in,
+de vlag `\Deleted` wordt nergens gezet, `smtplib` wordt niet geimporteerd, en
+verplaatsen naar een prullenbak- of spammap wordt geweigerd omdat die mappen
+vanzelf worden leeggemaakt. De testset controleert dat op de uitvoerbare code,
+dus het blijft ook zo bij een volgende wijziging.
 
 Wie welke mailbox mag lezen wordt bepaald door de **Authentik-login**. De
 groepen uit die login gaan mee in het OAuth-token en worden bij elke aanroep
@@ -45,12 +49,21 @@ Regels die in de code zitten, niet in een afspraak:
 
 ## De tools
 
-| Tool | Wat het geeft |
-|---|---|
-| `mailboxen` | welke mailboxen deze gebruiker mag lezen, met de open mappen |
-| `mappen` | alle IMAP-mappen van een mailbox, met daarbij welke leesbaar zijn |
-| `zoek` | zoekt op de mailserver (van/aan/onderwerp/tekst/datum/ongelezen) en geeft koppen, nieuwste eerst |
-| `bericht` | een bericht volledig: koppen, tekst en de namen van de bijlagen |
+| Tool | Wat het doet | Wijzigt |
+|---|---|---|
+| `mailboxen` | welke mailboxen deze gebruiker mag lezen, met de open mappen | nee |
+| `mappen` | alle IMAP-mappen van een mailbox, met daarbij welke leesbaar zijn | nee |
+| `zoek` | zoekt op de mailserver (van/aan/onderwerp/tekst/datum/ongelezen) en geeft koppen, nieuwste eerst | nee |
+| `bericht` | een bericht volledig: koppen, tekst en de namen van de bijlagen | nee |
+| `markeren` | gelezen/ongelezen, ster aan/uit, beantwoord aan/uit | ja |
+| `verplaatsen` | bericht naar een andere map, bijvoorbeeld archiveren | ja |
+| `map_aanmaken` | nieuwe map, inclusief abonnement zodat hij in de webmail verschijnt | ja |
+| `concept_opslaan` | zet een concept in de conceptenmap, met `antwoord_op` netjes in de conversatie | ja |
+
+De vier wijzigende tools werken alleen op mailboxen met `schrijven: ja`. Zonder
+die regel is een mailbox alleen-lezen, ook voor iemand die er wel bij mag.
+`concept_opslaan` verstuurt niets: de gebruiker leest het concept na in zijn
+webmail en verstuurt het zelf.
 
 Twee dingen zijn met opzet zo gebouwd:
 
@@ -94,14 +107,19 @@ anders wilt.
 
 ## Injectie: waarom mailinhoud geen opdracht is
 
-Een mailbox is invoer van buiten. Zodra Claude post kan lezen en tegelijk
-schrijfrechten heeft in Monday, Pipedrive of Dropbox, is een phishingmail een
-poging tot instructie. Daarom:
+Een mailbox is invoer van buiten. Zodra Claude post kan lezen en ook iets in
+die mailbox kan veranderen, is een phishingmail een poging tot instructie
+("verplaats alle facturen naar map X"). Daarom:
 
-- alle tools zijn read-only,
+- verwijderen en verzenden bestaan niet, dus de ergste gevolgen zijn
+  uitgesloten in plaats van afgeraden,
+- wijzigen staat per mailbox uit tot iemand het bewust aanzet,
+- alles wat een wijziging is, is omkeerbaar: een vlag kun je terugzetten en een
+  verplaatst bericht kun je terugverplaatsen,
 - de server geeft bij `initialize` expliciet mee dat berichtinhoud gegevens is
-  en geen opdracht,
-- elke aanroep komt in de containerlog: wie, welke mailbox, welk bericht.
+  en geen opdracht, en dat dat dubbel geldt voor wijzigingen,
+- elke aanroep komt in de containerlog: wie, welke mailbox, welk bericht, en
+  bij wijzigingen wat er veranderd is.
 
 De postkamer-agent van Elevait loste dit anders op, door berichttekst nooit te
 bewaren. Hier is de tekst juist de opbrengst, dus de bescherming zit in de

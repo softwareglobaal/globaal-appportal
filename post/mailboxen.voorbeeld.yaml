@@ -26,6 +26,10 @@ mailboxen:
     groepen: [admin]
     # Losse Authentik-gebruikers, voor een uitzondering zonder eigen groep.
     personen: []
+    # Mag er ook iets gewijzigd worden in deze mailbox: markeren, verplaatsen,
+    # mappen aanmaken en concepten klaarzetten. Zonder deze regel is de
+    # mailbox alleen-lezen. Verwijderen en verzenden kan sowieso nooit.
+    schrijven: ja
 
   - adres: boekhouding@h-architects.be
     naam: Boekhouding H-Architects
