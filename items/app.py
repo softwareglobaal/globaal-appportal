@@ -46,8 +46,8 @@ MUNT_SYMBOOL = "€"
 # Let op: compose geeft niet-ingevulde variabelen door als lege string, dus hier
 # `or` gebruiken en niet de default van os.environ.get; die slaat dan niet aan.
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL") or "info@angela.sr"
-# Placeholder tot het echte nummer bekend is; zet CONTACT_TELEFOON in .env.
-CONTACT_TELEFOON = os.environ.get("CONTACT_TELEFOON") or "+32 000 00 00 00"
+# Leeg = geen telefoonnummer tonen (er is er nog geen); zet CONTACT_TELEFOON in .env.
+CONTACT_TELEFOON = os.environ.get("CONTACT_TELEFOON") or ""
 WINKEL_NAAM = os.environ.get("WINKEL_NAAM") or "Angela"
 
 # Authentik-groepen die mogen bewerken (leeg = iedereen die door forward-auth komt).
@@ -309,7 +309,7 @@ USP_ICONEN = [
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
      "Eigen foto's", "Gebruikssporen zie je vooraf"),
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>',
-     "Afhalen op afspraak", "Bel of mail, dan spreken we iets af"),
+     "Afhalen op afspraak", "Mail, dan spreken we iets af"),
 ]
 
 
@@ -1091,10 +1091,13 @@ BASE = """
        <button class="btn btn-accent d-flex align-items-center gap-2" type="submit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="d-none d-sm-inline">Zoeken</span></button>
      </div>
    </form>
-   <a class="d-none d-lg-flex align-items-center gap-2 text-decoration-none ms-auto" href="{{ telefoon_link }}">
+   {% if contact_telefoon %}<a class="d-none d-lg-flex align-items-center gap-2 text-decoration-none ms-auto" href="{{ telefoon_link }}">
      <svg width="26" height="26" class="text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
      <span class="small text-body-secondary lh-sm">Afhalen op afspraak<b class="d-block text-body fs-6">{{ contact_telefoon }}</b></span>
-   </a>
+   </a>{% else %}<a class="d-none d-lg-flex align-items-center gap-2 text-decoration-none ms-auto" href="mailto:{{ contact_email }}">
+     <svg width="26" height="26" class="text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
+     <span class="small text-body-secondary lh-sm">Afhalen op afspraak<b class="d-block text-body fs-6">{{ contact_email }}</b></span>
+   </a>{% endif %}
   </div>
  </nav>
  <nav class="navbar navbar-expand bg-navy2 py-0" data-bs-theme="dark">
@@ -1126,7 +1129,7 @@ BASE = """
   <div class="row g-4">
    <div class="col-md-5">
      <div class="d-flex align-items-center gap-2 mb-3"><span class="merk" style="width:36px;height:36px;font-size:18px">{{ winkel_letter }}</span><span class="fw-bold fs-5">{{ winkel_naam }}</span></div>
-     <div class="footer-body small lh-lg">Het merk van Angela, in Suriname. Onder Verkoop staat wat er op dit moment te koop is.</div>
+     <div class="footer-body small lh-lg">Het merk van Angela, in Suriname. Onder Verkoop staat alles wat te koop is.</div>
    </div>
    <div class="col-md-3">
      <div class="fw-bold mb-3">Verkoop</div>
@@ -1142,13 +1145,13 @@ BASE = """
        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
        <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
      </div>
-     <div class="d-flex align-items-start gap-2 mb-2 small">
+     {% if contact_telefoon %}<div class="d-flex align-items-start gap-2 mb-2 small">
        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
        <a href="{{ telefoon_link }}">{{ contact_telefoon }}</a>
-     </div>
+     </div>{% endif %}
      <div class="d-flex align-items-start gap-2 small footer-body">
        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>
-       <span>Afhalen op afspraak.</span>
+       <span>Afhalen op afspraak, in Suriname.</span>
      </div>
    </div>
   </div>
@@ -1263,9 +1266,8 @@ SFEER = """
     <div class="col-md-6"><img class="w-100 h-100 object-fit-cover" style="min-height:260px" src="{sfeer}" alt="Collega test een laptop voor verkoop"></div>
     <div class="col-md-6"><div class="card-body p-4 p-lg-5">
       <h2 class="h4 fw-bold mb-3">Hoe dit werkt</h2>
-      <p class="text-body-secondary">Het aanbod wisselt. Nu staat er vooral computerapparatuur, andere
-         spullen komen erbij zodra ze er zijn. Elke sectie in het menu heeft
-         zijn eigen pagina.</p>
+      <p class="text-body-secondary">Het aanbod wisselt. Per sectie in het menu zie je wat er is, en
+         elke sectie heeft zijn eigen pagina.</p>
       <p class="text-body-secondary mb-0">Het is allemaal gebruikt, dus reken op gebruikssporen. Die staan in de
          omschrijving en op de foto's. Garantie geven we niet. Wil je iets eerst
          zien, kom dan langs op afspraak.</p>
@@ -1279,9 +1281,8 @@ MERK_HOME = """
   <div class="col-lg-8 py-md-4">
     <div class="text-accent text-uppercase fw-bold small mb-2" style="letter-spacing:.08em">Suriname</div>
     <h1 class="display-4 fw-bold mb-3">{naam}</h1>
-    <p class="lead mb-4">Ze verkoopt hier tweedehands spullen, op dit moment vooral computers
-       en toebehoren. Alles is nagekeken en de foto's zijn van het artikel zelf.
-       De rest van de site is nog in aanbouw.</p>
+    <p class="lead mb-4">Tweedehands spullen, nagekeken en met eigen foto's van elk artikel.
+       Kopen gaat per mail, afhalen op afspraak.</p>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-accent btn-lg" href="{verkoop}">Naar de verkoop</a>
       <a class="btn btn-outline-light btn-lg" href="mailto:{email}">Mail ons</a>
@@ -1293,8 +1294,8 @@ MERK_HOME = """
     <a class="card h-100 text-decoration-none text-body rij" href="{verkoop}">
       <div class="card-body p-4 d-flex flex-column">
         <h2 class="h5 fw-bold card-title">Verkoop</h2>
-        <p class="card-text text-body-secondary">Wat er nu te koop is, per sectie, met prijs, omschrijving en staat.
-           Afhalen op afspraak.</p>
+        <p class="card-text text-body-secondary">Alles wat te koop is, per sectie, met prijs, omschrijving en de staat
+           waarin het verkeert.</p>
         <span class="mt-auto pt-2 fw-bold text-accent">Bekijk het aanbod &rsaquo;</span>
       </div>
     </a>
@@ -1303,16 +1304,18 @@ MERK_HOME = """
     <div class="card h-100">
       <div class="card-body p-4">
         <h2 class="h5 fw-bold card-title">Over Angela</h2>
-        <p class="card-text text-body-secondary mb-0">Wie Angela is en wat ze met dit merk wil, komt hier later. Die pagina is
-           nog niet af.</p>
+        <p class="card-text text-body-secondary mb-0">Angela is ondernemer in Suriname. Met dit merk wil ze Surinamers
+           vooruithelpen, en dat begint met goede tweedehands spullen die betaalbaar
+           zijn. Wat hier staat, heeft ze zelf gezien en nagekeken.</p>
       </div>
     </div>
   </div>
   <div class="col-md-4">
     <div class="card h-100">
       <div class="card-body p-4 d-flex flex-column">
-        <h2 class="h5 fw-bold card-title">Contact</h2>
-        <p class="card-text text-body-secondary">Mail als je een vraag hebt over een artikel of iets wilt komen bekijken.</p>
+        <h2 class="h5 fw-bold card-title">Zo werkt kopen</h2>
+        <p class="card-text text-body-secondary">Mail over het artikel dat je wilt. We maken een afspraak, je komt
+           kijken en beslist ter plekke. Afhalen in Suriname.</p>
         <a class="mt-auto pt-2 fw-bold text-accent text-decoration-none" href="mailto:{email}">{email}</a>
       </div>
     </div>
