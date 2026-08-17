@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Items te koop - verkoop-etalage tweedehands ICT met AI-taxatie.
+Items te koop - verkoop-etalage tweedehands (secties, nu vooral ICT) met AI-taxatie.
 
 Eén codebase, twee rollen via ITEMS_ROLE:
   - beheer  : volledige beheerkant (achter Authentik forward-auth op de portal)
@@ -190,6 +190,37 @@ BASIS_CATEGORIEEN = [
 ]
 
 
+# Secties: de laag boven de categorieen. Verkoop is algemeen (tweedehands van
+# alles); ICT is daarbinnen een sectie. Een categorie die bij geen enkele sectie
+# hoort, valt onder "Overig" tot ze een eigen sectie krijgt.
+SECTIES = [
+    {"slug": "ict", "label": "ICT en elektronica",
+     "categorieen": ["laptops", "tablets", "pcs", "kabels"]},
+]
+SECTIE_OVERIG = {"slug": "overig", "label": "Overig", "categorieen": []}
+
+
+def sectie_van(cat_slug):
+    for s in SECTIES:
+        if cat_slug in s["categorieen"]:
+            return s["slug"]
+    return SECTIE_OVERIG["slug"]
+
+
+def secties_met_categorieen():
+    """Secties in menuvolgorde, elk met de categorieen die er nu in zitten.
+
+    Overig verschijnt alleen als er echt een categorie in valt.
+    """
+    cats = actieve_categorieen()
+    uit = []
+    for s in SECTIES + [SECTIE_OVERIG]:
+        erin = [c for c in cats if sectie_van(c["slug"]) == s["slug"]]
+        if erin or s is not SECTIE_OVERIG:
+            uit.append(dict(s, categorieen=erin))
+    return uit
+
+
 def _slug(tekst):
     s = re.sub(r"[^a-z0-9]+", "-", (tekst or "").lower().strip()).strip("-")
     return s or "overig"
@@ -231,7 +262,8 @@ def actieve_categorieen():
 
 @app.context_processor
 def _categorieen_in_sjabloon():
-    return {"categorieen": actieve_categorieen()}
+    return {"categorieen": actieve_categorieen(),
+            "secties": secties_met_categorieen()}
 
 
 CATEGORIE_ICONEN = {
@@ -273,9 +305,9 @@ def conditie_label(conditie):
 
 USP_ICONEN = [
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
-     "Getest voor het online gaat", "We zetten het toestel aan en kijken het na"),
+     "Nagekeken voor het online gaat", "Elk artikel gaat door onze handen"),
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
-     "Eigen foto's", "Krassen en deuken zie je vooraf"),
+     "Eigen foto's", "Gebruikssporen zie je vooraf"),
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>',
      "Afhalen op afspraak", "Bel of mail, dan spreken we iets af"),
 ]
@@ -996,7 +1028,7 @@ BASE = """
    <a class="navbar-brand d-flex align-items-center gap-2 m-0" href="{{ url_for('home') }}"><span class="merk">{{ winkel_letter }}</span><span class="fw-bold fs-4 lh-1">{{ winkel_naam }}</span></a>
    <form class="zoek d-flex flex-grow-1" style="max-width:640px;min-width:220px" action="{{ url_for('zoeken') }}" method="get" role="search">
      <div class="input-group">
-       <input class="form-control" name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of specificatie" aria-label="Zoeken">
+       <input class="form-control" name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of trefwoord" aria-label="Zoeken">
        <button class="btn btn-accent d-flex align-items-center gap-2" type="submit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="d-none d-sm-inline">Zoeken</span></button>
      </div>
    </form>
@@ -1013,8 +1045,12 @@ BASE = """
      <li class="nav-item dropdown">
        <a class="nav-link dropdown-toggle {{ 'active' if actief not in ['home',''] else '' }}" href="{{ url_for('etalage') }}" role="button" data-bs-toggle="dropdown" aria-expanded="false">Verkoop</a>
        <ul class="dropdown-menu">
-         <li><a class="dropdown-item {{ 'active' if actief=='verkoop' else '' }}" href="{{ url_for('etalage') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v4H3z"/><path d="M5 9v10h14V9"/><path d="M10 13h4"/></svg>Alle toestellen</a></li>
-         {% for c in categorieen %}<li><a class="dropdown-item {{ 'active' if actief==c.slug else '' }}" href="{{ url_for('categorie', slug=c.slug) }}">{{ c.icoon|safe }}{{ c.label }}</a></li>{% endfor %}
+         <li><a class="dropdown-item {{ 'active' if actief=='verkoop' else '' }}" href="{{ url_for('etalage') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v4H3z"/><path d="M5 9v10h14V9"/><path d="M10 13h4"/></svg>Alle artikelen</a></li>
+         {% for s in secties %}
+         <li><hr class="dropdown-divider"></li>
+         <li><a class="dropdown-item {{ 'active' if actief=='sectie-'+s.slug else '' }}" href="{{ url_for('sectie', slug=s.slug) }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>{{ s.label }}</a></li>
+         {% for c in s.categorieen %}<li><a class="dropdown-item ps-4 fw-normal {{ 'active' if actief==c.slug else '' }}" href="{{ url_for('categorie', slug=c.slug) }}">{{ c.icoon|safe }}{{ c.label }}</a></li>{% endfor %}
+         {% endfor %}
        </ul>
      </li>
      <li class="nav-item"><a class="nav-link" href="mailto:{{ contact_email }}">Contact</a></li>
@@ -1036,8 +1072,9 @@ BASE = """
    <div class="col-md-3">
      <div class="fw-bold mb-3">Verkoop</div>
      <ul class="list-unstyled mb-0 lh-lg">
-       <li><a href="{{ url_for('etalage') }}">Alle toestellen</a></li>
-       {% for c in categorieen %}<li><a href="{{ url_for('categorie', slug=c.slug) }}">{{ c.label }}</a></li>{% endfor %}
+       <li><a href="{{ url_for('etalage') }}">Alle artikelen</a></li>
+       {% for s in secties %}<li><a href="{{ url_for('sectie', slug=s.slug) }}">{{ s.label }}</a>
+         {% if s.categorieen %}<span class="footer-body small">({% for c in s.categorieen %}<a href="{{ url_for('categorie', slug=c.slug) }}">{{ c.label }}</a>{{ ", " if not loop.last }}{% endfor %})</span>{% endif %}</li>{% endfor %}
      </ul>
    </div>
    <div class="col-md-4">
@@ -1060,7 +1097,7 @@ BASE = """
  <div class="border-top border-white border-opacity-10">
   <div class="container-xxl py-3 d-flex justify-content-between flex-wrap gap-2 small footer-body">
    <span>{{ winkel_naam }}</span>
-   <span>Prijzen in euro. Tweedehands toestellen worden verkocht zonder garantie, in de staat zoals beschreven.</span>
+   <span>Prijzen in euro. Tweedehands artikelen worden verkocht zonder garantie, in de staat zoals beschreven.</span>
   </div>
  </div>
 </footer>
@@ -1127,12 +1164,12 @@ def _rij(r):
             f'{_spec_chips(specs_dict(r["specs"]), conditie=r["conditie"])}</div>'
             f'<div class="d-flex flex-md-column justify-content-between align-items-center align-items-md-end gap-2 flex-shrink-0 border-top border-md-0 pt-3 pt-md-0">'
             f'<div class="fs-3 fw-bold text-accent lh-1">{prijs}</div>'
-            f'<span class="btn btn-accent btn-sm">Bekijk toestel</span></div></div></a>')
+            f'<span class="btn btn-accent btn-sm">Bekijk artikel</span></div></div></a>')
 
 
 def _lijst_html(rows, titel, sub="", leegtekst="Hier staat op dit moment niets."):
     aantal = len(rows)
-    telling = (f'<span class="text-body-secondary">{aantal} toestel{"len" if aantal != 1 else ""}</span>'
+    telling = (f'<span class="text-body-secondary">{aantal} artikel{"en" if aantal != 1 else ""}</span>'
                if aantal else "")
     inner = (f'<div class="d-flex flex-column gap-3">{"".join(_rij(r) for r in rows)}</div>' if rows
              else f'<p class="text-body-secondary py-5">{leegtekst}</p>')
@@ -1141,11 +1178,13 @@ def _lijst_html(rows, titel, sub="", leegtekst="Hier staat op dit moment niets."
             f'<div><h1 class="h3 fw-bold mb-1">{titel}</h1>{subregel}</div>{telling}</div>{inner}')
 
 
-def _live_rows(slug=None):
+def _live_rows(slug=None, sectie=None):
     rows = db().execute("SELECT * FROM products WHERE status='live' "
                         "ORDER BY gepubliceerd_op DESC, id DESC").fetchall()
     if slug:
         rows = [r for r in rows if categorie_van(r["categorie"]) == slug]
+    if sectie:
+        rows = [r for r in rows if sectie_van(categorie_van(r["categorie"])) == sectie]
     return rows
 
 
@@ -1157,9 +1196,9 @@ HERO = """
 <section class="position-relative rounded-3 overflow-hidden bg-navy text-white mb-4 d-flex align-items-center" style="min-height:300px">
   <img class="hero-img" src="{hero}" alt="Laptop wordt nagekeken op de werkbank">
   <div class="position-relative p-4 p-md-5 col-lg-7">
-    <h1 class="fw-bold mb-3">Tweedehands ICT uit eigen gebruik</h1>
-    <p class="lead mb-4">We verkopen hier de laptops en pc's die bij ons uit dienst gaan. Op de
-       foto's zie je hoe een toestel er nu bij ligt.</p>
+    <h1 class="fw-bold mb-3">Tweedehands, nagekeken door ons</h1>
+    <p class="lead mb-4">Alles wat hier staat is gebruikt en door ons nagekeken. Op de foto's
+       zie je hoe een artikel er nu bij ligt.</p>
     <a class="btn btn-accent btn-lg" href="#aanbod">Bekijk het aanbod</a>
   </div>
 </section>"""
@@ -1169,11 +1208,12 @@ SFEER = """
   <div class="row g-0">
     <div class="col-md-6"><img class="w-100 h-100 object-fit-cover" style="min-height:260px" src="{sfeer}" alt="Collega test een laptop voor verkoop"></div>
     <div class="col-md-6"><div class="card-body p-4 p-lg-5">
-      <h2 class="h4 fw-bold mb-3">Waar dit vandaan komt</h2>
-      <p class="text-body-secondary">Wij vervangen zelf regelmatig laptops en pc's. Het materiaal dat nog
-         prima meekan, zetten we hier online.</p>
-      <p class="text-body-secondary mb-0">Het zijn gebruikte toestellen, dus reken op gebruikssporen. Die staan in de
-         omschrijving en op de foto's. Garantie geven we niet. Wil je het eerst
+      <h2 class="h4 fw-bold mb-3">Hoe dit werkt</h2>
+      <p class="text-body-secondary">Het aanbod wisselt. Nu staat er vooral computerapparatuur, andere
+         spullen komen erbij zodra ze er zijn. Elke sectie in het menu heeft
+         zijn eigen pagina.</p>
+      <p class="text-body-secondary mb-0">Het is allemaal gebruikt, dus reken op gebruikssporen. Die staan in de
+         omschrijving en op de foto's. Garantie geven we niet. Wil je iets eerst
          zien, kom dan langs op afspraak.</p>
     </div></div>
   </div>
@@ -1185,9 +1225,9 @@ MERK_HOME = """
   <div class="col-lg-8 py-md-4">
     <div class="text-accent text-uppercase fw-bold small mb-2" style="letter-spacing:.08em">Suriname</div>
     <h1 class="display-4 fw-bold mb-3">{naam}</h1>
-    <p class="lead mb-4">Angela verkoopt hier tweedehands laptops, pc's en tablets. Elk toestel is
-       aangezet en nagekeken, en de foto's zijn van het toestel zelf. De rest van
-       de site is nog in aanbouw.</p>
+    <p class="lead mb-4">Angela verkoopt hier tweedehands spullen, op dit moment vooral computers
+       en toebehoren. Alles is nagekeken en de foto's zijn van het artikel zelf.
+       De rest van de site is nog in aanbouw.</p>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-accent btn-lg" href="{verkoop}">Naar de verkoop</a>
       <a class="btn btn-outline-light btn-lg" href="mailto:{email}">Mail ons</a>
@@ -1199,8 +1239,8 @@ MERK_HOME = """
     <a class="card h-100 text-decoration-none text-body rij" href="{verkoop}">
       <div class="card-body p-4 d-flex flex-column">
         <h2 class="h5 fw-bold card-title">Verkoop</h2>
-        <p class="card-text text-body-secondary">Wat er nu te koop is, met prijs, specificaties en de staat waarin het
-           verkeert. Afhalen op afspraak.</p>
+        <p class="card-text text-body-secondary">Wat er nu te koop is, per sectie, met prijs, omschrijving en staat.
+           Afhalen op afspraak.</p>
         <span class="mt-auto pt-2 fw-bold text-accent">Bekijk het aanbod &rsaquo;</span>
       </div>
     </a>
@@ -1218,7 +1258,7 @@ MERK_HOME = """
     <div class="card h-100">
       <div class="card-body p-4 d-flex flex-column">
         <h2 class="h5 fw-bold card-title">Contact</h2>
-        <p class="card-text text-body-secondary">Mail als je een vraag hebt over een toestel of iets wilt komen bekijken.</p>
+        <p class="card-text text-body-secondary">Mail als je een vraag hebt over een artikel of iets wilt komen bekijken.</p>
         <a class="mt-auto pt-2 fw-bold text-accent text-decoration-none" href="mailto:{email}">{email}</a>
       </div>
     </div>
@@ -1264,6 +1304,21 @@ def zoeken():
     return page(body, titel=f"Zoeken: {q}", zoekterm=q, actief="zoeken")
 
 
+@app.route("/verkoop/<slug>")
+def sectie(slug):
+    s = next((x for x in secties_met_categorieen() if x["slug"] == slug), None)
+    if not s:
+        abort(404)
+    knoppen = "".join(
+        f'<a class="btn btn-outline-secondary btn-sm" href="{url_for("categorie", slug=c["slug"])}">{c["label"]}</a>'
+        for c in s["categorieen"])
+    filters = f'<div class="d-flex flex-wrap gap-2 mb-4">{knoppen}</div>' if knoppen else ""
+    body = _lijst_html(_live_rows(sectie=slug), s["label"])
+    # Categorieknoppen tussen de kop en de lijst.
+    body = body.replace('<div class="d-flex flex-column gap-3">', filters + '<div class="d-flex flex-column gap-3">', 1)
+    return page(body, actief="sectie-" + slug, titel=s["label"])
+
+
 @app.route("/categorie/<slug>")
 def categorie(slug):
     c = next((x for x in actieve_categorieen() if x["slug"] == slug), None)
@@ -1302,7 +1357,7 @@ def detail(pid):
         strip = f'<div class="strip d-flex flex-wrap gap-2 mt-3">{thumbs}</div>'
     if any(i["bron"] == "fabrikant" for i in imgs):
         strip += ('<p class="small text-body-secondary mt-2 mb-0">Enkele beelden zijn officiele productfoto\'s van de '
-                  'fabrikant en tonen het model, niet dit exemplaar. De staat van dit toestel '
+                  'fabrikant en tonen het model, niet dit exemplaar. De staat van dit artikel '
                   'staat bij de gegevens.</p>')
 
     specs = specs_dict(r["specs"])
@@ -1318,8 +1373,13 @@ def detail(pid):
                    if x["slug"] == categorie_van(r["categorie"])), None)
     kruimel_cat = ""
     if catobj:
-        kruimel_cat = (f'<li class="breadcrumb-item"><a href="{url_for("categorie", slug=catobj["slug"])}">'
-                       f'{catobj["label"]}</a></li>')
+        sobj = next((x for x in secties_met_categorieen()
+                     if x["slug"] == sectie_van(catobj["slug"])), None)
+        if sobj:
+            kruimel_cat = (f'<li class="breadcrumb-item"><a href="{url_for("sectie", slug=sobj["slug"])}">'
+                           f'{sobj["label"]}</a></li>')
+        kruimel_cat += (f'<li class="breadcrumb-item"><a href="{url_for("categorie", slug=catobj["slug"])}">'
+                        f'{catobj["label"]}</a></li>')
 
     meta = []
     mm = ((r["merk"] or "") + " " + (r["model"] or "")).strip()
@@ -1331,7 +1391,7 @@ def detail(pid):
 
     onderwerp = quote("Interesse in " + titel)
     cta = (f'<a class="btn btn-accent btn-lg" href="mailto:{CONTACT_EMAIL}?subject={onderwerp}">'
-           f'Mail over dit toestel</a>')
+           f'Mail over dit artikel</a>')
     oms = (r["omschrijving"] or "").replace(chr(10), "<br>")
 
     body = f"""
