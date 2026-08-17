@@ -1020,9 +1020,9 @@ BOOTSTRAP_JS = ("https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.
 PUBLIEK_CSS = """
  :root{--acc:#b40a2d;--acc-d:#8f0823;--groen:#377e3f;--groen-d:#2c6633;--geel:#ffd200;--navy:#151a2e;--navy2:#232a45;--bs-body-font-family:'Archivo',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;--bs-body-bg:#f4f5f7}
  [data-bs-theme=dark]{--acc:#d8203f;--acc-d:#b40a2d;--groen:#3f8f48;--groen-d:#377e3f;--navy:#0a0c12;--navy2:#1b2133;--bs-body-bg:#0b0d11}
- .logo{display:inline-block;position:relative;padding-bottom:11px;text-decoration:none;color:inherit;line-height:1}
+ .logo{display:inline-block;position:relative;padding-bottom:14px;text-decoration:none;color:inherit;line-height:1}
  .logo .naam{display:block;font-weight:700;font-size:26px;line-height:1;letter-spacing:-.02em;color:var(--bs-body-color)}
- .logo img{position:absolute;left:0;bottom:0;width:100%;height:auto;display:block}
+ .logo img{position:absolute;left:0;bottom:0;width:100%;height:11px;display:block}
  .logo.op-donker .naam{color:#fff}
  .ster{width:16px;height:16px;color:var(--geel)}
  .container-xxl{max-width:1660px}
