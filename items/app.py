@@ -1018,8 +1018,13 @@ BOOTSTRAP_JS = ("https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.
                 "sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz")
 
 PUBLIEK_CSS = """
- :root{--acc:#f05a1e;--acc-d:#d2470f;--navy:#151a2e;--navy2:#232a45;--bs-body-font-family:'Archivo',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;--bs-body-bg:#f4f5f7}
- [data-bs-theme=dark]{--acc:#ff7038;--acc-d:#f05a1e;--navy:#0a0c12;--navy2:#1b2133;--bs-body-bg:#0b0d11}
+ :root{--acc:#b40a2d;--acc-d:#8f0823;--groen:#377e3f;--groen-d:#2c6633;--geel:#ffd200;--navy:#151a2e;--navy2:#232a45;--bs-body-font-family:'Archivo',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;--bs-body-bg:#f4f5f7}
+ [data-bs-theme=dark]{--acc:#d8203f;--acc-d:#b40a2d;--groen:#3f8f48;--groen-d:#377e3f;--navy:#0a0c12;--navy2:#1b2133;--bs-body-bg:#0b0d11}
+ .logo{display:inline-flex;flex-direction:column;align-items:stretch;gap:3px;text-decoration:none;color:inherit}
+ .logo .naam{font-weight:700;font-size:26px;line-height:1;letter-spacing:-.02em;color:var(--bs-body-color)}
+ .logo img{width:100%;height:auto;display:block}
+ .logo.op-donker .naam{color:#fff}
+ .ster{width:16px;height:16px;color:var(--geel)}
  .container-xxl{max-width:1660px}
  .bg-navy{background:var(--navy)!important}.bg-navy2{background:var(--navy2)!important}
  .text-accent{color:var(--acc)!important}.border-accent{border-color:var(--acc)!important}
@@ -1037,10 +1042,10 @@ PUBLIEK_CSS = """
  .zoek .form-control{border:2px solid var(--acc);border-right:0}
  .zoek .form-control:focus{box-shadow:none;border-color:var(--acc)}
  .hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.42}
- .usp{background:var(--acc);color:#fff}
+ .usp{background:var(--groen);color:#fff}
  .usp svg{width:25px;height:25px;flex:none}
  .rij{transition:border-color .12s,box-shadow .12s}
- .rij:hover{border-color:var(--acc)!important;box-shadow:0 2px 14px rgba(240,90,30,.10)}
+ .rij:hover{border-color:var(--acc)!important;box-shadow:0 2px 14px rgba(180,10,45,.10)}
  .rfoto{width:150px;height:118px;background:#fff}
  .rfoto img{max-width:100%;max-height:100%;object-fit:contain}
  @media(max-width:767px){.rfoto{width:110px;height:88px}}
@@ -1063,6 +1068,9 @@ BASE = """
 <!doctype html><html lang="nl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ titel or winkel_naam }}</title>
+<link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="32x32">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400..700&display=swap" rel="stylesheet">
@@ -1084,7 +1092,7 @@ BASE = """
 <header class="sticky-top shadow-sm">
  <nav class="navbar bg-body border-bottom py-3">
   <div class="container-xxl d-flex align-items-center gap-3 gap-lg-4 flex-wrap">
-   <a class="navbar-brand d-flex align-items-center gap-2 m-0" href="{{ url_for('home') }}"><span class="merk">{{ winkel_letter }}</span><span class="fw-bold fs-4 lh-1">{{ winkel_naam }}</span></a>
+   <a class="logo m-0" href="{{ url_for('home') }}"><span class="naam">{{ winkel_naam }}</span><img src="{{ url_for('static', filename='vlagbalk.svg') }}" alt=""></a>
    <form class="zoek d-flex flex-grow-1" style="max-width:640px;min-width:220px" action="{{ url_for('zoeken') }}" method="get" role="search">
      <div class="input-group">
        <input class="form-control" name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of trefwoord" aria-label="Zoeken">
@@ -1128,7 +1136,7 @@ BASE = """
  <div class="container-xxl py-5">
   <div class="row g-4">
    <div class="col-md-5">
-     <div class="d-flex align-items-center gap-2 mb-3"><span class="merk" style="width:36px;height:36px;font-size:18px">{{ winkel_letter }}</span><span class="fw-bold fs-5">{{ winkel_naam }}</span></div>
+     <a class="logo op-donker mb-3" href="{{ url_for('home') }}"><span class="naam">{{ winkel_naam }}</span><img src="{{ url_for('static', filename='vlagbalk.svg') }}" alt=""></a>
      <div class="footer-body small lh-lg">Het merk van Angela, in Suriname. Onder Verkoop staat alles wat te koop is.</div>
    </div>
    <div class="col-md-3">
@@ -1279,7 +1287,7 @@ SFEER = """
 MERK_HOME = """
 <section class="bg-navy text-white rounded-3 p-4 p-md-5 mb-4">
   <div class="col-lg-8 py-md-4">
-    <div class="text-accent text-uppercase fw-bold small mb-2" style="letter-spacing:.08em">Suriname</div>
+    <div class="d-flex align-items-center gap-2 text-uppercase fw-bold small mb-2" style="letter-spacing:.08em"><svg class="ster" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.2l-6.1 3.4 1.4-6.8L2.2 9.1l6.9-.8z"/></svg>Suriname</div>
     <h1 class="display-4 fw-bold mb-3">{naam}</h1>
     <p class="lead mb-4">Tweedehands spullen, nagekeken en met eigen foto's van elk artikel.
        Kopen gaat per mail, afhalen op afspraak.</p>

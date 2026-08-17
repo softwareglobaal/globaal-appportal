@@ -1,5 +1,11 @@
 # Herkomst van de sfeerbeelden
 
+Logo en favicon (`logo.svg`, `logo-donker.svg`, `vlagbalk.svg`, `favicon.*`,
+`apple-touch-icon.png`) zijn eigen werk (2026-08-17, concept 3: woordmerk met
+vlagbalk, gele ster op rood als beeldmerk); bron en generator staan in
+`C:\Users\shaniel\Claude\angela-logo\`. Kleuren van de Surinaamse vlag:
+groen #377e3f, rood #b40a2d, geel #ffd200.
+
 Deze foto's staan op de publieke verkoopsite (angela.sr) als sfeerbeeld. Het zijn
 geen productfoto's: producten krijgen altijd eigen foto's van het echte toestel.
 
