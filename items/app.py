@@ -868,6 +868,21 @@ BASE = """
  .pomschrijving{margin:0 0 22px}
  .cta{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:12px 24px;border-radius:6px}
  .cta:hover{background:var(--navy2)}
+ .cta.sec{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.55)}
+ .cta.sec:hover{background:#fff;color:var(--navy)}
+ .merkhero{background:var(--navy);color:#fff;border-radius:12px;padding:72px 48px;margin:0 0 28px}
+ .merkhero .mtxt{max-width:720px}
+ .merkhero .mkicker{color:var(--accent);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:13px;margin-bottom:12px}
+ .merkhero h1{font-size:48px;font-weight:700;line-height:1.1;margin:0 0 16px;letter-spacing:-.02em}
+ .merkhero p{font-size:18px;line-height:1.6;color:#e8e6e8;margin:0 0 26px}
+ .merkhero .mknoppen{display:flex;gap:12px;flex-wrap:wrap}
+ @media(max-width:640px){.merkhero{padding:44px 24px}.merkhero h1{font-size:34px}}
+ .merkblokken{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+ .mblok{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:26px 28px;display:flex;flex-direction:column;gap:8px}
+ a.mblok:hover{border-color:var(--accent)}
+ .mblok .mkop{font-size:19px;font-weight:700;letter-spacing:-.01em}
+ .mblok p{color:var(--mut);margin:0}
+ .mblok .mlink{margin-top:auto;padding-top:8px;color:var(--accent);font-weight:700}
  .specs{margin-top:34px;border-top:1px solid var(--line);padding-top:24px}
  .specs h3{font-size:17px;font-weight:700;margin:0 0 14px}
  .specs table{max-width:680px}
@@ -910,7 +925,7 @@ BASE = """
 {% else %}
 <div class="kop">
  <div class="kop-nav"><div class="wrap">
-   <a class="brand" href="{{ url_for('etalage') }}"><span class="mark">{{ winkel_letter }}</span><span class="btxt"><span class="naam">{{ winkel_naam }}</span><span class="onder">ICT-hardware</span></span></a>
+   <a class="brand" href="{{ url_for('home') }}"><span class="mark">{{ winkel_letter }}</span><span class="btxt"><span class="naam">{{ winkel_naam }}</span></span></a>
    <form class="zoek" action="{{ url_for('zoeken') }}" method="get" role="search">
      <input name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of specificatie" aria-label="Zoeken">
      <button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Zoeken</span></button>
@@ -922,12 +937,13 @@ BASE = """
  </div></div>
  <div class="menubalk"><div class="wrap">
    <nav class="menu">
-     <a href="{{ url_for('etalage') }}" class="{{ 'actief' if actief=='home' else '' }}">
+     <a href="{{ url_for('home') }}" class="{{ 'actief' if actief=='home' else '' }}">
        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
      <span class="dropdown">
-       <a href="{{ url_for('etalage') }}#aanbod" class="trigger {{ 'actief' if actief not in ['home',''] else '' }}">Categorie&euml;n
+       <a href="{{ url_for('etalage') }}" class="trigger {{ 'actief' if actief not in ['home',''] else '' }}">Verkoop
          <svg class="pijl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></a>
        <span class="dropmenu">
+         <a href="{{ url_for('etalage') }}" class="{{ 'actief' if actief=='verkoop' else '' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v4H3z"/><path d="M5 9v10h14V9"/><path d="M10 13h4"/></svg>Alle toestellen</a>
          {% for c in categorieen %}<a href="{{ url_for('categorie', slug=c.slug) }}" class="{{ 'actief' if actief==c.slug else '' }}">{{ c.icoon|safe }}{{ c.label }}</a>{% endfor %}
        </span>
      </span>
@@ -945,11 +961,11 @@ BASE = """
  <div class="wrap"><div class="kolommen">
   <div>
     <div class="fmerk"><span class="mark">{{ winkel_letter }}</span><span>{{ winkel_naam }}</span></div>
-    <div class="klein">Sinds een jaar verkopen we hier de laptops, pc's en tablets die
-      bij ons uit dienst gaan. Bij elk toestel staat wat we ervan weten.</div>
+    <div class="klein">Een merk uit Suriname. Onder Verkoop staat wat we op dit moment
+      aanbieden; bij elk toestel staat wat we ervan weten.</div>
   </div>
   <div>
-    <div class="kop">Aanbod</div>
+    <div class="kop">Verkoop</div>
     <ul>
       <li><a href="{{ url_for('etalage') }}">Alle toestellen</a></li>
       {% for c in categorieen %}<li><a href="{{ url_for('categorie', slug=c.slug) }}">{{ c.label }}</a></li>{% endfor %}
@@ -1086,14 +1102,56 @@ SFEER = """
 </section>"""
 
 
+MERK_HOME = """
+<section class="merkhero">
+  <div class="mtxt">
+    <div class="mkicker">Suriname</div>
+    <h1>{naam}</h1>
+    <p>Een merk uit Suriname, gemaakt voor de mensen hier. We beginnen met
+       verkoop; de rest van het verhaal volgt hier stap voor stap.</p>
+    <div class="mknoppen">
+      <a class="cta" href="{verkoop}">Naar de verkoop</a>
+      <a class="cta sec" href="mailto:{email}">Neem contact op</a>
+    </div>
+  </div>
+</section>
+<section class="merkblokken">
+  <a class="mblok" href="{verkoop}">
+    <div class="mkop">Verkoop</div>
+    <p>Laptops, pc's, tablets en toebehoren die wij nakijken en aanbieden.
+       Bij elk toestel staat wat we ervan weten, met foto's van het echte exemplaar.</p>
+    <span class="mlink">Bekijk het aanbod &rsaquo;</span>
+  </a>
+  <div class="mblok">
+    <div class="mkop">Over {naam}</div>
+    <p>Wie Angela is en waar dit merk voor staat, lees je binnenkort op deze plek.
+       Aan die pagina wordt gewerkt.</p>
+  </div>
+  <div class="mblok">
+    <div class="mkop">Contact</div>
+    <p>Vragen over een toestel, of over het merk? Mail ons, of bel om een
+       afspraak te maken.</p>
+    <span class="mlink"><a href="mailto:{email}">{email}</a></span>
+  </div>
+</section>
+"""
+
+
 @app.route("/")
+def home():
+    body = MERK_HOME.format(naam=WINKEL_NAAM, verkoop=url_for("etalage"),
+                            email=CONTACT_EMAIL)
+    return page(body, actief="home", titel=WINKEL_NAAM)
+
+
+@app.route("/verkoop")
 def etalage():
     hero = HERO.format(hero=url_for("static", filename="hero-werkbank.jpg"))
     sfeer = SFEER.format(sfeer=url_for("static", filename="sfeer-nakijken.jpg"))
     body = (hero + usps_html() + '<a id="aanbod"></a>'
             + _etalage_html(None, "Nieuw binnen")
             + sfeer)
-    return page(body, actief="home")
+    return page(body, actief="verkoop", titel="Verkoop")
 
 
 @app.route("/zoeken")
@@ -1113,7 +1171,7 @@ def zoeken():
     body = _lijst_html(rows, f'Zoeken naar "{q}"',
                        leegtekst=f'Niets gevonden voor "{q}". '
                                  f'Probeer een merk of een modelnummer.')
-    return page(body, titel=f"Zoeken: {q}", zoekterm=q)
+    return page(body, titel=f"Zoeken: {q}", zoekterm=q, actief="zoeken")
 
 
 @app.route("/categorie/<slug>")
@@ -1186,7 +1244,7 @@ def detail(pid):
     oms = (r["omschrijving"] or "").replace(chr(10), "<br>")
 
     body = f"""
-    <div class="kruimels"><a href="{url_for('etalage')}">Home</a> &rsaquo; {kruimel_cat}{titel}</div>
+    <div class="kruimels"><a href="{url_for('home')}">Home</a> &rsaquo; <a href="{url_for('etalage')}">Verkoop</a> &rsaquo; {kruimel_cat}{titel}</div>
     <div class="product">
       <div class="galerij"><div class="hoofd">{hoofd_html}</div>{strip}</div>
       <div>
@@ -1198,7 +1256,7 @@ def detail(pid):
       </div>
     </div>
     {specs_html}""" + _GALERIJ_JS
-    return page(body, titel=titel)
+    return page(body, titel=titel, actief="item")
 
 
 @app.route("/uploads/<path:naam>")

@@ -1607,6 +1607,11 @@ daarna pas structuur in aanbrengen.
   `certs/angela-sr/` (webroot-methode, zoals DEPLOY-AWS.md), want het
   wildcard-cert van *.globaal.be dekt dit domein niet. Dit volgt de beslissing
   in het dashboard: de website start met de verkoopsectie, de bio-pagina volgt.
+  Sinds 2026-08-17 is de site een **merk-site**: `/` is de merkpagina (hero,
+  blokken Verkoop / Over / Contact), de winkel hangt als één tab **Verkoop**
+  onder `/verkoop` met de categorieën in het uitklapmenu. Winkelnaam
+  `WINKEL_NAAM` (default `angela.sr`), contact `CONTACT_EMAIL` (default
+  `info@angela.sr`); de "Over"-tekst is een placeholder tot de bio er is.
 - Bewuste keuze: **één `item`-tabel met een soort-kolom** in plaats van vijf
   tabellen. De soorten delen dezelfde velden en de bedieningsvraag is "gooi
   het ergens neer"; splitsen zou het droppen trager maken. Nadeel: taak- en
