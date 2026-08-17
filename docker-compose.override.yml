@@ -387,7 +387,7 @@ services:
       start_period: 15s
     networks: [appnet]
 
-  # Items — verkoop-etalage tweedehands ICT met AI-taxatie.
+  # Items - verkoop-etalage Angela (angela.sr): tweedehands per sectie, met AI-taxatie.
   # Beheer-tegel achter forward-auth (items.globaal.be); gebruiker via X-authentik-* headers.
   app-items:
     build: ./items
@@ -405,6 +405,8 @@ services:
       # Nodig voor de AI-taxatie (Claude Sonnet).
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       VALUATION_EFFORT: ${VALUATION_EFFORT:-medium}
+      CONTACT_TELEFOON: ${CONTACT_TELEFOON:-}
+      WHATSAPP_NUMMER: ${WHATSAPP_NUMMER:-}
     volumes:
       - items-data:/data
     healthcheck:
@@ -427,6 +429,7 @@ services:
       ITEMS_DB_URL: ${ITEMS_DB_URL:-}
       ITEMS_UPLOAD_DIR: /data/fotos
       CONTACT_TELEFOON: ${CONTACT_TELEFOON:-}
+      WHATSAPP_NUMMER: ${WHATSAPP_NUMMER:-}
     ports:
       - "8770:8770"
     volumes:
