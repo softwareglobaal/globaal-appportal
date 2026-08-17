@@ -30,6 +30,15 @@
        color: var(--tekst-2); margin: 26px 0 8px; }
   .hint { color: var(--tekst-3); font-size: 12px; margin: 0 0 12px; }
 
+  /* Tabrij: alle agents, of die van een bedrijf apart. */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--lijn); margin: 0 0 4px; }
+  .tab { padding: 7px 14px; font-size: 12.5px; color: var(--tekst-2); text-decoration: none;
+         border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0;
+         margin-bottom: -1px; }
+  .tab:hover { color: var(--tekst); background: #f4f5f6; }
+  .tab.nu { background: var(--paneel); border-color: var(--lijn); border-bottom-color: var(--paneel);
+            color: var(--tekst); font-weight: 600; }
+
   /* Sectiekop per bedrijf: naam links, hoe het ervoor staat rechts, zodat je
      niet eerst alle kaarten hoeft af te gaan om te zien of er iets speelt. */
   .sectie-kop { display: flex; align-items: baseline; justify-content: space-between;
@@ -132,7 +141,7 @@
   .leeg-h { color: var(--tekst-3); font-size: 13px; }
 </style>
 </head>
-<body>
+<body data-sectie="{{ actieve_sectie }}">
 <div class="wrap">
   <div class="kop">
     <h1>Agents</h1>
@@ -140,6 +149,13 @@
     <a class="kop-link" href="/ingestie">Kennisbank aanleveren</a>
     <a class="kop-link" href="https://siyanagents.globaal.be">Sales/Marketing agents ↗</a>
   </div>
+
+  <nav class="tabs">
+    {% for t in tabbladen %}
+    <a class="tab{{ ' nu' if t.actief }}" href="{{ t.url }}"
+       {% if t.actief %}aria-current="page"{% endif %}>{{ t.titel }}</a>
+    {% endfor %}
+  </nav>
 
   {% for s in secties %}
   <h2 class="sectie-kop">{{ s.titel }}
@@ -304,7 +320,11 @@
 
   async function ververs() {
     try {
-      const r = await fetch("/api/status", {cache: "no-store"});
+      // Met dezelfde sectie als de pagina toont: anders telt de verversing
+      // voorstellen mee die hier niet staan en herlaadt hij eindeloos.
+      const sectie = document.body.dataset.sectie || "";
+      const r = await fetch("/api/status" + (sectie ? "?sectie=" + encodeURIComponent(sectie) : ""),
+                            {cache: "no-store"});
       if (!r.ok) return;
       const data = await r.json();
       for (const a of data.agents) {

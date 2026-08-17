@@ -60,10 +60,27 @@ en klaar: dus stil, fout en niet gekoppeld. Die kop wordt door de
 verversing elke tien seconden meegenomen, anders blijft er "allemaal in
 orde" staan terwijl een kaart eronder al op stil is gesprongen.
 
-Een nieuwe sectie is een regel in `SECTIES`. Een agent met een onbekende
-of ontbrekende `sectie` valt terug op de laatste sectie in de lijst; dat
-is bewust, want een vergeten veld mag nooit een agent van de pagina laten
-verdwijnen.
+Boven de kaarten staat een tabrij: **Alle agents** op `/`, en per sectie
+een eigen tabblad op `/sectie/<sleutel>` (dus `/sectie/elevait`). Zo'n
+tabblad toont alleen die kaarten, en ook alleen de voorstellen en
+beslissingen van die agents; het is een echte URL, dus je kunt hem
+bookmarken. Een onbekende sleutel stuurt terug naar `/` in plaats van een
+404 te geven.
+
+Twee dingen die bij dat filter horen en makkelijk misgaan:
+
+- De verversing haalt `/api/status?sectie=<sleutel>`, met dezelfde
+  afbakening als de pagina. Vraagt hij de volledige lijst op terwijl de
+  pagina gefilterd is, dan ziet hij voorstellen die er niet staan en
+  roept hij elke tien seconden `location.reload()` aan.
+- Beslissingen worden eerst gefilterd en dan pas afgekapt op acht. Andersom
+  staat het tabblad van een bedrijf leeg zodra een ander bedrijf de laatste
+  acht vult.
+
+Een nieuwe sectie is een regel in `SECTIES`; de tab verschijnt vanzelf.
+Een agent met een onbekende of ontbrekende `sectie` valt terug op de
+laatste sectie in de lijst; dat is bewust, want een vergeten veld mag
+nooit een agent van de pagina laten verdwijnen.
 
 ## Hartslag-contract
 

@@ -429,16 +429,25 @@ def roster():
 _IN_ORDE = ("rust", "waakt", "actief", "klaar")
 
 
-def roster_secties():
-    """De kaarten gegroepeerd per bedrijf, met per sectie hoe het ervoor staat."""
-    kaarten = roster()
+def _sectie_van(kaart):
+    """De sectie waar een kaart onder valt; onbekend valt op de laatste terug."""
     bekend = {s["sleutel"] for s in SECTIES}
-    laatste = SECTIES[-1]["sleutel"]
+    sleutel = kaart.get("sectie")
+    return sleutel if sleutel in bekend else SECTIES[-1]["sleutel"]
+
+
+def roster_secties(alleen=None):
+    """De kaarten gegroepeerd per bedrijf, met per sectie hoe het ervoor staat.
+
+    alleen: een sectiesleutel om op te filteren, voor het eigen tabblad van
+    een bedrijf. None geeft ze allemaal.
+    """
+    kaarten = roster()
     uit = []
     for s in SECTIES:
-        eigen = [k for k in kaarten
-                 if (k.get("sectie") if k.get("sectie") in bekend else laatste)
-                 == s["sleutel"]]
+        if alleen and s["sleutel"] != alleen:
+            continue
+        eigen = [k for k in kaarten if _sectie_van(k) == s["sleutel"]]
         if not eigen:
             continue
         aandacht = [k for k in eigen if k["status"] not in _IN_ORDE]
@@ -455,7 +464,15 @@ def roster_secties():
     return uit
 
 
-def open_voorstellen():
+def _namen_van_sectie(sleutel):
+    """De agentnamen die bij een sectie horen; None betekent geen filter."""
+    if not sleutel:
+        return None
+    return {a["naam"] for a in TEAM if _sectie_van(a) == sleutel}
+
+
+def open_voorstellen(sectie=None):
+    namen = _namen_van_sectie(sectie)
     conn = db()
     rows = conn.execute(
         "SELECT * FROM voorstel WHERE besluit='open' ORDER BY aangemaakt DESC").fetchall()
@@ -463,14 +480,24 @@ def open_voorstellen():
     return [{"id": r["id"], "naam": r["naam"], "label": LABELS.get(r["naam"], r["naam"]),
              "actie": r["actie"], "reden": r["reden"], "doel": r["doel"] or "",
              "wanneer": _fmt(r["aangemaakt"])}
-            for r in rows]
+            for r in rows if namen is None or r["naam"] in namen]
 
 
-def recente_besluiten(limit=8):
+def recente_besluiten(limit=8, sectie=None):
+    namen = _namen_van_sectie(sectie)
     conn = db()
-    rows = conn.execute(
-        "SELECT * FROM voorstel WHERE besluit!='open' ORDER BY besluit_ts DESC LIMIT ?",
-        (limit,)).fetchall()
+    if namen is None:
+        rows = conn.execute(
+            "SELECT * FROM voorstel WHERE besluit!='open' "
+            "ORDER BY besluit_ts DESC LIMIT ?", (limit,)).fetchall()
+    else:
+        # Eerst filteren, dan pas afkappen; andersom levert het tabblad van een
+        # bedrijf een lege lijst zodra een ander bedrijf de laatste acht vult.
+        gaten = ",".join("?" * len(namen)) or "NULL"
+        rows = conn.execute(
+            f"SELECT * FROM voorstel WHERE besluit!='open' AND naam IN ({gaten}) "
+            "ORDER BY besluit_ts DESC LIMIT ?",
+            (*sorted(namen), limit)).fetchall()
     conn.close()
     return [{"id": r["id"], "label": LABELS.get(r["naam"], r["naam"]),
              "actie": r["actie"], "besluit": r["besluit"], "doel": r["doel"] or "",
@@ -495,16 +522,41 @@ def _sm_naar_siyanagents():
             return redirect("https://siyanagents.globaal.be" + p, code=302)
 
 
-@app.route("/")
-def index():
+def _tabbladen(actief):
+    """De tabrij: alles, en daarna een tab per sectie. Volgt SECTIES vanzelf."""
+    return [{"sleutel": "", "titel": "Alle agents", "url": "/",
+             "actief": not actief}] + [
+        {"sleutel": s["sleutel"], "titel": s["titel"],
+         "url": "/sectie/" + s["sleutel"], "actief": s["sleutel"] == actief}
+        for s in SECTIES]
+
+
+def _pagina(sectie=None):
+    secties = roster_secties(sectie)
     return render_template(
         "agents.html",
-        secties=roster_secties(),
-        voorstellen=open_voorstellen(),
-        besluiten=recente_besluiten(),
+        secties=secties,
+        tabbladen=_tabbladen(sectie),
+        actieve_sectie=sectie or "",
+        voorstellen=open_voorstellen(sectie),
+        besluiten=recente_besluiten(sectie=sectie),
         portal_url=f"https://portal.{BASE_DOMAIN}/",
         username=request.headers.get("X-authentik-username", "onbekend"),
     )
+
+
+@app.route("/")
+def index():
+    return _pagina()
+
+
+@app.route("/sectie/<sleutel>")
+def sectie(sleutel):
+    # Een onbekende sleutel stuurt terug naar het volledige overzicht in plaats
+    # van een 404: een oude bookmark hoort geen doodlopende weg te worden.
+    if sleutel not in {s["sleutel"] for s in SECTIES}:
+        return redirect("/", code=302)
+    return _pagina(sleutel)
 
 
 @app.route("/seo-team")
@@ -521,13 +573,19 @@ def seo_team():
 
 @app.route("/api/status")
 def api_status():
+    # Dezelfde afbakening als de pagina die vraagt, anders ziet de verversing
+    # voorstellen die daar niet staan en herlaadt hij zichzelf om de tien
+    # seconden.
+    sectie = request.args.get("sectie") or None
+    if sectie not in {s["sleutel"] for s in SECTIES}:
+        sectie = None
     # De secties gaan mee zonder hun kaarten: de pagina werkt die al bij via
     # "agents", en dit hoeft alleen de kop te voeden.
     secties = [{k: v for k, v in s.items() if k != "agents"}
-               for s in roster_secties()]
+               for s in roster_secties(sectie)]
     return jsonify({"agents": roster(), "secties": secties,
-                    "voorstellen": open_voorstellen(),
-                    "besluiten": recente_besluiten()})
+                    "voorstellen": open_voorstellen(sectie),
+                    "besluiten": recente_besluiten(sectie=sectie)})
 
 
 @app.route("/agent-status", methods=["POST"])
