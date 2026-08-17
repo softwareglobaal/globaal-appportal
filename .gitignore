@@ -38,6 +38,10 @@ awscliv2.zip
 # stack-app (herbouw 2026-07-15); de host-pijplijn blijft in ~/kosten.
 /kosten/
 
+# Eigen repo (softwareglobaal/angela-site), uitgecheckt op de VM; bouwt de
+# containers app-items (beheer) en items-verkoop (angela.sr).
+/angela-site/
+
 # Eigen app-repo's, uitgecheckt op de VM (deploy via eigen deploy-stack.sh in cron).
 /boekhouding/
 /hr/

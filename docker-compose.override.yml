@@ -389,8 +389,10 @@ services:
 
   # Items - verkoop-etalage Angela (angela.sr): tweedehands per sectie, met AI-taxatie.
   # Beheer-tegel achter forward-auth (items.globaal.be); gebruiker via X-authentik-* headers.
+  # Eigen repo softwareglobaal/angela-site, uitgecheckt op de VM in
+  # ./angela-site met auto-deploy via deploy-stack.sh en cron.
   app-items:
-    build: ./items
+    build: ./angela-site/app
     image: appportal-items
     restart: unless-stopped
     environment:
@@ -419,7 +421,7 @@ services:
 
   # Publieke verkoop-etalage (read-only, eigen poort 8770, GEEN SSO, geen beheerknop).
   items-verkoop:
-    build: ./items
+    build: ./angela-site/app
     image: appportal-items
     restart: unless-stopped
     environment:

@@ -1607,6 +1607,10 @@ daarna pas structuur in aanbrengen.
   `certs/angela-sr/` (webroot-methode, zoals DEPLOY-AWS.md), want het
   wildcard-cert van *.globaal.be dekt dit domein niet. Dit volgt de beslissing
   in het dashboard: de website start met de verkoopsectie, de bio-pagina volgt.
+  **Eigen repo `softwareglobaal/angela-site`** sinds 2026-08-17 (VM-checkout
+  `~/appportal/angela-site`, auto-deploy via `deploy-stack.sh` + cron): daar
+  staat de app (`app/`) en het merkmateriaal (`branding/`). Compose, vhost en
+  migraties blijven hier; build-context is `./angela-site/app`.
   Sinds 2026-08-17 is de site een **merk-site**: `/` is de merkpagina (hero,
   blokken Verkoop / Over / Contact), de winkel hangt als één tab **Verkoop**
   onder `/verkoop` met de categorieën in het uitklapmenu. Winkelnaam
