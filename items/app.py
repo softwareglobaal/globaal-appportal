@@ -283,9 +283,10 @@ USP_ICONEN = [
 
 def usps_html():
     items = "".join(
-        f'<div class="usp">{svg}<div><b>{kop}</b><span>{tekst}</span></div></div>'
+        f'<div class="col-md-4"><div class="usp rounded-2 p-3 h-100 d-flex align-items-center gap-3">'
+        f'{svg}<div><b class="d-block lh-sm">{kop}</b><span class="small opacity-75">{tekst}</span></div></div></div>'
         for svg, kop, tekst in USP_ICONEN)
-    return f'<div class="usps">{items}</div>'
+    return f'<div class="row g-1 mb-4">{items}</div>'
 
 
 def usd_eur(usd):
@@ -720,14 +721,10 @@ def _taxatie_worker(pid, modus):
 # ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------
-BASE = """
-<!doctype html><html lang="nl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ titel or winkel_naam }}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400..700&display=swap" rel="stylesheet">
-<style>
+# Stijl van de beheerkant (items.globaal.be). De publieke site draait sinds
+# 2026-08-17 op Bootstrap 5 (zie PUBLIEK_CSS en BASE hieronder); deze eigen
+# CSS blijft alleen voor de beheerpagina's, die zijn niet mee herbouwd.
+OUD_CSS = """
  :root{--bg:#ffffff;--page:#f4f5f7;--surface:#ffffff;--soft:#f0f2f5;--ink:#15171c;--mut:#5a6068;--line:#e2e5ea;--navy:#151a2e;--navy2:#232a45;--navy-ink:#f4f5f7;--navy-mut:#a6adc2;--accent:#f05a1e;--accent-donker:#d2470f;--accent-ink:#ffffff;--accent-soft:#fff0e9;--blauw:#1f6feb;--blauw-zacht:#e8f0fe;--groen:#12a150;--groen-zacht:#e6f6ed;--paars:#7b3fe4;--paars-zacht:#f1eafe;--amber:#e8930c;--amber-zacht:#fdf3e0;--rood:#d92d20}
  @media(prefers-color-scheme:dark){:root{--bg:#0f1116;--page:#0b0d11;--surface:#161920;--soft:#1c2029;--ink:#e9ebef;--mut:#98a0ad;--line:#272c36;--navy:#0a0c12;--navy2:#1b2133;--navy-ink:#e9ebef;--navy-mut:#98a0ad;--accent:#ff7038;--accent-donker:#f05a1e;--accent-ink:#1a0c05;--accent-soft:#2a1a12;--blauw:#5b9bff;--blauw-zacht:#152238;--groen:#35c977;--groen-zacht:#122a1e;--paars:#a476f5;--paars-zacht:#211a35;--amber:#f5ad33;--amber-zacht:#2c2211;--rood:#f2635a}}
  *{box-sizing:border-box}html,body{margin:0}
@@ -919,79 +916,155 @@ BASE = """
  .fotokaart button{font:inherit;font-size:11px;background:none;border:0;color:var(--accent);cursor:pointer;padding:0}
  .fotobron{font-size:12px;color:var(--mut);margin-top:8px}
  .spinner{width:44px;height:44px;border:4px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;margin:20px auto}@keyframes sp{to{transform:rotate(360deg)}}
-</style></head><body>
+"""
+
+# Publieke site: Bootstrap 5.3 (grid, navbar, cards, dropdown, formulieren)
+# met een dunne merklaag eroverheen: eigen oranje, Archivo als lettertype,
+# brede container, donkere menubalk. Geen pil-badges, geen zwevende kaarten.
+BOOTSTRAP_CSS = ("https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css",
+                 "sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH")
+BOOTSTRAP_JS = ("https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js",
+                "sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz")
+
+PUBLIEK_CSS = """
+ :root{--acc:#f05a1e;--acc-d:#d2470f;--navy:#151a2e;--navy2:#232a45;--bs-body-font-family:'Archivo',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;--bs-body-bg:#f4f5f7}
+ [data-bs-theme=dark]{--acc:#ff7038;--acc-d:#f05a1e;--navy:#0a0c12;--navy2:#1b2133;--bs-body-bg:#0b0d11}
+ .container-xxl{max-width:1660px}
+ .bg-navy{background:var(--navy)!important}.bg-navy2{background:var(--navy2)!important}
+ .text-accent{color:var(--acc)!important}.border-accent{border-color:var(--acc)!important}
+ .btn-accent{--bs-btn-bg:var(--acc);--bs-btn-border-color:var(--acc);--bs-btn-hover-bg:var(--acc-d);--bs-btn-hover-border-color:var(--acc-d);--bs-btn-active-bg:var(--acc-d);--bs-btn-active-border-color:var(--acc-d);--bs-btn-color:#fff;--bs-btn-hover-color:#fff;--bs-btn-active-color:#fff;font-weight:700}
+ .merk{width:38px;height:38px;border-radius:50%;background:var(--acc);color:#fff;font-weight:700;font-size:19px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+ .menu .nav-link{color:#d7dcea;font-weight:700;padding:.8rem 1rem;border-radius:6px 6px 0 0}
+ .menu .nav-link:hover,.menu .nav-link:focus{color:#fff;background:rgba(255,255,255,.09)}
+ .menu .nav-link.active{color:#fff;background:var(--acc)}
+ .menu .dropdown-menu{border-top:3px solid var(--acc);border-radius:0 0 10px 10px;min-width:236px;padding:.4rem}
+ .menu .dropdown-item{font-weight:700;border-radius:6px;display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem}
+ .menu .dropdown-item svg{width:20px;height:20px;color:var(--acc)}
+ .menu .dropdown-item.active,.menu .dropdown-item:active{background:var(--acc);color:#fff}
+ .menu .dropdown-item.active svg{color:#fff}
+ @media(min-width:768px){.menu .nav-item.dropdown:hover>.dropdown-menu{display:block;margin-top:0}}
+ .zoek .form-control{border:2px solid var(--acc);border-right:0}
+ .zoek .form-control:focus{box-shadow:none;border-color:var(--acc)}
+ .hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.42}
+ .usp{background:var(--acc);color:#fff}
+ .usp svg{width:25px;height:25px;flex:none}
+ .rij{transition:border-color .12s,box-shadow .12s}
+ .rij:hover{border-color:var(--acc)!important;box-shadow:0 2px 14px rgba(240,90,30,.10)}
+ .rfoto{width:150px;height:118px;background:#fff}
+ .rfoto img{max-width:100%;max-height:100%;object-fit:contain}
+ @media(max-width:767px){.rfoto{width:110px;height:88px}}
+ .chip{background:var(--bs-secondary-bg);color:var(--bs-secondary-color);border-radius:5px;padding:3px 9px;font-size:12.5px}
+ .chip b{color:var(--bs-body-color)}
+ .breadcrumb a{color:var(--bs-secondary-color);text-decoration:none}.breadcrumb a:hover{color:var(--acc)}
+ .hoofd{aspect-ratio:1/1;background:#fff}
+ .hoofd img{max-width:100%;max-height:100%;object-fit:contain}
+ .strip img{width:64px;height:64px;object-fit:contain;background:#fff;border:1px solid var(--bs-border-color);border-radius:6px;padding:6px;cursor:pointer}
+ .strip img:hover,.strip img.actief{border-color:var(--acc)}
+ .geenfoto{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--bs-border-color)}
+ .geenfoto svg{width:100%;height:100%;stroke-width:1.2}
+ .geenfoto .lbl{font-size:12px;color:var(--bs-secondary-color)}
+ footer a{color:rgba(255,255,255,.7);text-decoration:none}footer a:hover{color:#fff}
+ footer svg{width:17px;height:17px;color:var(--acc);flex:none;margin-top:3px}
+ .footer-body{color:rgba(255,255,255,.7)}
+"""
+
+BASE = """
+<!doctype html><html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ titel or winkel_naam }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400..700&display=swap" rel="stylesheet">
+{% if IS_BEHEER %}
+<style>""" + OUD_CSS + """</style>
+{% else %}
+<script>document.documentElement.setAttribute('data-bs-theme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');</script>
+<link href=\"""" + BOOTSTRAP_CSS[0] + """\" rel="stylesheet" integrity=\"""" + BOOTSTRAP_CSS[1] + """\" crossorigin="anonymous">
+<style>""" + PUBLIEK_CSS + """</style>
+{% endif %}
+</head><body>
 {% if IS_BEHEER %}
 <div class="beheerkop"><div class="wrap"><a class="brand" href="{{ url_for('beheer') }}"><span class="mark">{{ winkel_letter }}</span><span class="naam" style="color:var(--navy-ink)">{{ winkel_naam }}</span></a><span style="margin-left:12px;color:var(--navy-mut);font-size:13px">beheer</span></div></div>
-{% else %}
-<div class="kop">
- <div class="kop-nav"><div class="wrap">
-   <a class="brand" href="{{ url_for('home') }}"><span class="mark">{{ winkel_letter }}</span><span class="btxt"><span class="naam">{{ winkel_naam }}</span></span></a>
-   <form class="zoek" action="{{ url_for('zoeken') }}" method="get" role="search">
-     <input name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of specificatie" aria-label="Zoeken">
-     <button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Zoeken</span></button>
-   </form>
-   <a class="koptel" href="{{ telefoon_link }}">
-     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
-     <span>Afhalen op afspraak<b>{{ contact_telefoon }}</b></span>
-   </a>
- </div></div>
- <div class="menubalk"><div class="wrap">
-   <nav class="menu">
-     <a href="{{ url_for('home') }}" class="{{ 'actief' if actief=='home' else '' }}">
-       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
-     <span class="dropdown">
-       <a href="{{ url_for('etalage') }}" class="trigger {{ 'actief' if actief not in ['home',''] else '' }}">Verkoop
-         <svg class="pijl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></a>
-       <span class="dropmenu">
-         <a href="{{ url_for('etalage') }}" class="{{ 'actief' if actief=='verkoop' else '' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v4H3z"/><path d="M5 9v10h14V9"/><path d="M10 13h4"/></svg>Alle toestellen</a>
-         {% for c in categorieen %}<a href="{{ url_for('categorie', slug=c.slug) }}" class="{{ 'actief' if actief==c.slug else '' }}">{{ c.icoon|safe }}{{ c.label }}</a>{% endfor %}
-       </span>
-     </span>
-     <a href="mailto:{{ contact_email }}">Contact</a>
-   </nav>
- </div></div>
-</div>
-{% endif %}
 <main><div class="wrap">
  {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
  {{ body|safe }}
 </div></main>
-{% if not IS_BEHEER %}
-<footer>
- <div class="wrap"><div class="kolommen">
-  <div>
-    <div class="fmerk"><span class="mark">{{ winkel_letter }}</span><span>{{ winkel_naam }}</span></div>
-    <div class="klein">Het merk van Angela, in Suriname. Onder Verkoop staat wat er
-      op dit moment te koop is.</div>
+{% else %}
+<header class="sticky-top shadow-sm">
+ <nav class="navbar bg-body border-bottom py-3">
+  <div class="container-xxl d-flex align-items-center gap-3 gap-lg-4 flex-wrap">
+   <a class="navbar-brand d-flex align-items-center gap-2 m-0" href="{{ url_for('home') }}"><span class="merk">{{ winkel_letter }}</span><span class="fw-bold fs-4 lh-1">{{ winkel_naam }}</span></a>
+   <form class="zoek d-flex flex-grow-1" style="max-width:640px;min-width:220px" action="{{ url_for('zoeken') }}" method="get" role="search">
+     <div class="input-group">
+       <input class="form-control" name="q" value="{{ zoekterm or '' }}" placeholder="Zoek op merk, model of specificatie" aria-label="Zoeken">
+       <button class="btn btn-accent d-flex align-items-center gap-2" type="submit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="d-none d-sm-inline">Zoeken</span></button>
+     </div>
+   </form>
+   <a class="d-none d-lg-flex align-items-center gap-2 text-decoration-none ms-auto" href="{{ telefoon_link }}">
+     <svg width="26" height="26" class="text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
+     <span class="small text-body-secondary lh-sm">Afhalen op afspraak<b class="d-block text-body fs-6">{{ contact_telefoon }}</b></span>
+   </a>
   </div>
-  <div>
-    <div class="kop">Verkoop</div>
-    <ul>
-      <li><a href="{{ url_for('etalage') }}">Alle toestellen</a></li>
-      {% for c in categorieen %}<li><a href="{{ url_for('categorie', slug=c.slug) }}">{{ c.label }}</a></li>{% endfor %}
-    </ul>
+ </nav>
+ <nav class="navbar navbar-expand bg-navy2 py-0" data-bs-theme="dark">
+  <div class="container-xxl">
+   <ul class="navbar-nav menu">
+     <li class="nav-item"><a class="nav-link d-flex align-items-center gap-2 {{ 'active' if actief=='home' else '' }}" href="{{ url_for('home') }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a></li>
+     <li class="nav-item dropdown">
+       <a class="nav-link dropdown-toggle {{ 'active' if actief not in ['home',''] else '' }}" href="{{ url_for('etalage') }}" role="button" data-bs-toggle="dropdown" aria-expanded="false">Verkoop</a>
+       <ul class="dropdown-menu">
+         <li><a class="dropdown-item {{ 'active' if actief=='verkoop' else '' }}" href="{{ url_for('etalage') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v4H3z"/><path d="M5 9v10h14V9"/><path d="M10 13h4"/></svg>Alle toestellen</a></li>
+         {% for c in categorieen %}<li><a class="dropdown-item {{ 'active' if actief==c.slug else '' }}" href="{{ url_for('categorie', slug=c.slug) }}">{{ c.icoon|safe }}{{ c.label }}</a></li>{% endfor %}
+       </ul>
+     </li>
+     <li class="nav-item"><a class="nav-link" href="mailto:{{ contact_email }}">Contact</a></li>
+   </ul>
   </div>
-  <div>
-    <div class="kop">Contact</div>
-    <div class="fcontact">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
-      <span><a href="mailto:{{ contact_email }}">{{ contact_email }}</a></span>
-    </div>
-    <div class="fcontact">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
-      <span><a href="{{ telefoon_link }}">{{ contact_telefoon }}</a></span>
-    </div>
-    <div class="fcontact">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>
-      <span class="klein">Afhalen op afspraak.</span>
-    </div>
+ </nav>
+</header>
+<main class="py-4 py-md-5" style="min-height:56vh"><div class="container-xxl">
+ {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="alert alert-secondary border-start border-4 border-accent">{{ m }}</div>{% endfor %}{% endwith %}
+ {{ body|safe }}
+</div></main>
+<footer class="bg-navy text-white mt-5">
+ <div class="container-xxl py-5">
+  <div class="row g-4">
+   <div class="col-md-5">
+     <div class="d-flex align-items-center gap-2 mb-3"><span class="merk" style="width:36px;height:36px;font-size:18px">{{ winkel_letter }}</span><span class="fw-bold fs-5">{{ winkel_naam }}</span></div>
+     <div class="footer-body small lh-lg">Het merk van Angela, in Suriname. Onder Verkoop staat wat er op dit moment te koop is.</div>
+   </div>
+   <div class="col-md-3">
+     <div class="fw-bold mb-3">Verkoop</div>
+     <ul class="list-unstyled mb-0 lh-lg">
+       <li><a href="{{ url_for('etalage') }}">Alle toestellen</a></li>
+       {% for c in categorieen %}<li><a href="{{ url_for('categorie', slug=c.slug) }}">{{ c.label }}</a></li>{% endfor %}
+     </ul>
+   </div>
+   <div class="col-md-4">
+     <div class="fw-bold mb-3">Contact</div>
+     <div class="d-flex align-items-start gap-2 mb-2 small">
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
+       <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
+     </div>
+     <div class="d-flex align-items-start gap-2 mb-2 small">
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
+       <a href="{{ telefoon_link }}">{{ contact_telefoon }}</a>
+     </div>
+     <div class="d-flex align-items-start gap-2 small footer-body">
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>
+       <span>Afhalen op afspraak.</span>
+     </div>
+   </div>
   </div>
- </div></div>
- <div class="fbalk"><div class="wrap">
+ </div>
+ <div class="border-top border-white border-opacity-10">
+  <div class="container-xxl py-3 d-flex justify-content-between flex-wrap gap-2 small footer-body">
    <span>{{ winkel_naam }}</span>
    <span>Prijzen in euro. Tweedehands toestellen worden verkocht zonder garantie, in de staat zoals beschreven.</span>
- </div></div>
+  </div>
+ </div>
 </footer>
+<script src=\"""" + BOOTSTRAP_JS[0] + """\" integrity=\"""" + BOOTSTRAP_JS[1] + """\" crossorigin="anonymous"></script>
 {% endif %}
 </body></html>
 """
@@ -1025,17 +1098,17 @@ def _spec_chips(specs, maximaal=5, conditie=None):
     uit = []
     staat = conditie_label(conditie)
     if staat:
-        uit.append(f'<span class="spec">Staat: <b>{staat}</b></span>')
+        uit.append(f'<span class="chip">Staat: <b>{staat}</b></span>')
     for sleutel, label in TOON_SPECS:
         waarde = specs.get(sleutel)
         if waarde:
             waarde = str(waarde)
             if len(waarde) > 46:
                 waarde = waarde[:44].rstrip() + "..."
-            uit.append(f'<span class="spec">{label}: <b>{waarde}</b></span>')
+            uit.append(f'<span class="chip">{label}: <b>{waarde}</b></span>')
         if len(uit) >= maximaal:
             break
-    return f'<div class="rspecs">{"".join(uit)}</div>' if uit else ""
+    return f'<div class="d-flex flex-wrap gap-2 mt-2">{"".join(uit)}</div>' if uit else ""
 
 
 def _rij(r):
@@ -1046,23 +1119,26 @@ def _rij(r):
     catlabel = netjes_label(r["categorie"]) if r["categorie"] else ""
     beeld = (f'<img src="{foto}" alt="{naam}" loading="lazy">' if foto
              else foto_placeholder(r["categorie"], klein=True))
-    return (f'<a class="rij" href="{url_for("detail", pid=r["id"])}">'
-            f'<div class="rfoto">{beeld}</div>'
-            f'<div class="rmid"><div class="rcat">{catlabel}</div>'
-            f'<div class="rnaam">{naam}</div>'
+    return (f'<a class="rij card text-decoration-none text-body" href="{url_for("detail", pid=r["id"])}">'
+            f'<div class="card-body d-flex flex-column flex-md-row align-items-md-center gap-3 gap-md-4">'
+            f'<div class="rfoto flex-shrink-0 border rounded d-flex align-items-center justify-content-center p-2">{beeld}</div>'
+            f'<div class="flex-grow-1 min-w-0"><div class="small text-uppercase text-body-secondary" style="letter-spacing:.05em">{catlabel}</div>'
+            f'<div class="fs-5 fw-bold lh-sm">{naam}</div>'
             f'{_spec_chips(specs_dict(r["specs"]), conditie=r["conditie"])}</div>'
-            f'<div class="rrechts"><div class="rprijs">{prijs}</div>'
-            f'<span class="rknop">Bekijk toestel</span></div></a>')
+            f'<div class="d-flex flex-md-column justify-content-between align-items-center align-items-md-end gap-2 flex-shrink-0 border-top border-md-0 pt-3 pt-md-0">'
+            f'<div class="fs-3 fw-bold text-accent lh-1">{prijs}</div>'
+            f'<span class="btn btn-accent btn-sm">Bekijk toestel</span></div></div></a>')
 
 
 def _lijst_html(rows, titel, sub="", leegtekst="Hier staat op dit moment niets."):
     aantal = len(rows)
-    telling = f'<span class="mut">{aantal} toestel{"len" if aantal != 1 else ""}</span>' if aantal else ""
-    inner = (f'<div class="lijst">{"".join(_rij(r) for r in rows)}</div>' if rows
-             else f'<p class="leeg">{leegtekst}</p>')
-    subregel = f'<p class="sub">{sub}</p>' if sub else ""
-    return (f'<div class="lijstkop"><div><h1 class="paginatitel">{titel}</h1>'
-            f'{subregel}</div>{telling}</div>{inner}')
+    telling = (f'<span class="text-body-secondary">{aantal} toestel{"len" if aantal != 1 else ""}</span>'
+               if aantal else "")
+    inner = (f'<div class="d-flex flex-column gap-3">{"".join(_rij(r) for r in rows)}</div>' if rows
+             else f'<p class="text-body-secondary py-5">{leegtekst}</p>')
+    subregel = f'<p class="text-body-secondary mb-0">{sub}</p>' if sub else ""
+    return (f'<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">'
+            f'<div><h1 class="h3 fw-bold mb-1">{titel}</h1>{subregel}</div>{telling}</div>{inner}')
 
 
 def _live_rows(slug=None):
@@ -1078,62 +1154,76 @@ def _etalage_html(slug, titel, sub=""):
 
 
 HERO = """
-<section class="hero">
-  <img src="{hero}" alt="Laptop wordt nagekeken op de werkbank">
-  <div class="htxt">
-    <h1>Tweedehands ICT uit eigen gebruik</h1>
-    <p>We verkopen hier de laptops en pc's die bij ons uit dienst gaan. Op de
+<section class="position-relative rounded-3 overflow-hidden bg-navy text-white mb-4 d-flex align-items-center" style="min-height:300px">
+  <img class="hero-img" src="{hero}" alt="Laptop wordt nagekeken op de werkbank">
+  <div class="position-relative p-4 p-md-5 col-lg-7">
+    <h1 class="fw-bold mb-3">Tweedehands ICT uit eigen gebruik</h1>
+    <p class="lead mb-4">We verkopen hier de laptops en pc's die bij ons uit dienst gaan. Op de
        foto's zie je hoe een toestel er nu bij ligt.</p>
-    <a class="cta" href="#aanbod">Bekijk het aanbod</a>
+    <a class="btn btn-accent btn-lg" href="#aanbod">Bekijk het aanbod</a>
   </div>
 </section>"""
 
 SFEER = """
-<section class="sfeer">
-  <img src="{sfeer}" alt="Collega test een laptop voor verkoop">
-  <div class="stxt">
-    <h2>Waar dit vandaan komt</h2>
-    <p>Wij vervangen zelf regelmatig laptops en pc's. Het materiaal dat nog
-       prima meekan, zetten we hier online.</p>
-    <p>Het zijn gebruikte toestellen, dus reken op gebruikssporen. Die staan in de
-       omschrijving en op de foto's. Garantie geven we niet. Wil je het eerst
-       zien, kom dan langs op afspraak.</p>
+<section class="card overflow-hidden mt-5">
+  <div class="row g-0">
+    <div class="col-md-6"><img class="w-100 h-100 object-fit-cover" style="min-height:260px" src="{sfeer}" alt="Collega test een laptop voor verkoop"></div>
+    <div class="col-md-6"><div class="card-body p-4 p-lg-5">
+      <h2 class="h4 fw-bold mb-3">Waar dit vandaan komt</h2>
+      <p class="text-body-secondary">Wij vervangen zelf regelmatig laptops en pc's. Het materiaal dat nog
+         prima meekan, zetten we hier online.</p>
+      <p class="text-body-secondary mb-0">Het zijn gebruikte toestellen, dus reken op gebruikssporen. Die staan in de
+         omschrijving en op de foto's. Garantie geven we niet. Wil je het eerst
+         zien, kom dan langs op afspraak.</p>
+    </div></div>
   </div>
 </section>"""
 
 
 MERK_HOME = """
-<section class="merkhero">
-  <div class="mtxt">
-    <div class="mkicker">Suriname</div>
-    <h1>{naam}</h1>
-    <p>Angela verkoopt hier tweedehands laptops, pc's en tablets. Elk toestel is
+<section class="bg-navy text-white rounded-3 p-4 p-md-5 mb-4">
+  <div class="col-lg-8 py-md-4">
+    <div class="text-accent text-uppercase fw-bold small mb-2" style="letter-spacing:.08em">Suriname</div>
+    <h1 class="display-4 fw-bold mb-3">{naam}</h1>
+    <p class="lead mb-4">Angela verkoopt hier tweedehands laptops, pc's en tablets. Elk toestel is
        aangezet en nagekeken, en de foto's zijn van het toestel zelf. De rest van
        de site is nog in aanbouw.</p>
-    <div class="mknoppen">
-      <a class="cta" href="{verkoop}">Naar de verkoop</a>
-      <a class="cta sec" href="mailto:{email}">Mail ons</a>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-accent btn-lg" href="{verkoop}">Naar de verkoop</a>
+      <a class="btn btn-outline-light btn-lg" href="mailto:{email}">Mail ons</a>
     </div>
   </div>
 </section>
-<section class="merkblokken">
-  <a class="mblok" href="{verkoop}">
-    <div class="mkop">Verkoop</div>
-    <p>Wat er nu te koop is, met prijs, specificaties en de staat waarin het
-       verkeert. Afhalen op afspraak.</p>
-    <span class="mlink">Bekijk het aanbod &rsaquo;</span>
-  </a>
-  <div class="mblok">
-    <div class="mkop">Over Angela</div>
-    <p>Wie Angela is en wat ze met dit merk wil, komt hier later. Die pagina is
-       nog niet af.</p>
+<div class="row g-3">
+  <div class="col-md-4">
+    <a class="card h-100 text-decoration-none text-body rij" href="{verkoop}">
+      <div class="card-body p-4 d-flex flex-column">
+        <h2 class="h5 fw-bold card-title">Verkoop</h2>
+        <p class="card-text text-body-secondary">Wat er nu te koop is, met prijs, specificaties en de staat waarin het
+           verkeert. Afhalen op afspraak.</p>
+        <span class="mt-auto pt-2 fw-bold text-accent">Bekijk het aanbod &rsaquo;</span>
+      </div>
+    </a>
   </div>
-  <div class="mblok">
-    <div class="mkop">Contact</div>
-    <p>Mail als je een vraag hebt over een toestel of iets wilt komen bekijken.</p>
-    <span class="mlink"><a href="mailto:{email}">{email}</a></span>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body p-4">
+        <h2 class="h5 fw-bold card-title">Over Angela</h2>
+        <p class="card-text text-body-secondary mb-0">Wie Angela is en wat ze met dit merk wil, komt hier later. Die pagina is
+           nog niet af.</p>
+      </div>
+    </div>
   </div>
-</section>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body p-4 d-flex flex-column">
+        <h2 class="h5 fw-bold card-title">Contact</h2>
+        <p class="card-text text-body-secondary">Mail als je een vraag hebt over een toestel of iets wilt komen bekijken.</p>
+        <a class="mt-auto pt-2 fw-bold text-accent text-decoration-none" href="mailto:{email}">{email}</a>
+      </div>
+    </div>
+  </div>
+</div>
 """
 
 
@@ -1185,10 +1275,10 @@ def categorie(slug):
 
 _GALERIJ_JS = """
 <script>
-document.querySelectorAll('.galerij .strip img').forEach(function(t){
+document.querySelectorAll('.strip img').forEach(function(t){
   t.addEventListener('click', function(){
     document.getElementById('hoofdfoto').src = t.src;
-    document.querySelectorAll('.galerij .strip img').forEach(function(x){ x.classList.remove('actief'); });
+    document.querySelectorAll('.strip img').forEach(function(x){ x.classList.remove('actief'); });
     t.classList.add('actief');
   });
 });
@@ -1209,16 +1299,17 @@ def detail(pid):
         thumbs = "".join(
             f'<img src="{url_for("upload", naam=i["bestand"])}" class="{"actief" if k == 0 else ""}">'
             for k, i in enumerate(imgs))
-        strip = f'<div class="strip">{thumbs}</div>'
+        strip = f'<div class="strip d-flex flex-wrap gap-2 mt-3">{thumbs}</div>'
     if any(i["bron"] == "fabrikant" for i in imgs):
-        strip += ('<p class="fotobron">Enkele beelden zijn officiele productfoto\'s van de '
+        strip += ('<p class="small text-body-secondary mt-2 mb-0">Enkele beelden zijn officiele productfoto\'s van de '
                   'fabrikant en tonen het model, niet dit exemplaar. De staat van dit toestel '
                   'staat bij de gegevens.</p>')
 
     specs = specs_dict(r["specs"])
-    spec_rows = "".join(f"<tr><th>{netjes_label(k)}</th><td>{v}</td></tr>"
+    spec_rows = "".join(f'<tr><th class="text-body-secondary fw-bold" style="width:210px">{netjes_label(k)}</th><td>{v}</td></tr>'
                         for k, v in specs.items())
-    specs_html = (f'<div class="specs"><h3>Specificaties</h3><table>{spec_rows}</table></div>'
+    specs_html = (f'<div class="mt-4 pt-4 border-top"><h3 class="h5 fw-bold mb-3">Specificaties</h3>'
+                  f'<table class="table table-sm" style="max-width:680px"><tbody>{spec_rows}</tbody></table></div>'
                   if spec_rows else "")
 
     titel = r["titel"] or ((r["merk"] or "") + " " + (r["model"] or "")).strip() or "Item"
@@ -1227,8 +1318,8 @@ def detail(pid):
                    if x["slug"] == categorie_van(r["categorie"])), None)
     kruimel_cat = ""
     if catobj:
-        kruimel_cat = (f'<a href="{url_for("categorie", slug=catobj["slug"])}">'
-                       f'{catobj["label"]}</a> &rsaquo; ')
+        kruimel_cat = (f'<li class="breadcrumb-item"><a href="{url_for("categorie", slug=catobj["slug"])}">'
+                       f'{catobj["label"]}</a></li>')
 
     meta = []
     mm = ((r["merk"] or "") + " " + (r["model"] or "")).strip()
@@ -1239,23 +1330,31 @@ def detail(pid):
     meta_html = " &middot; ".join(meta)
 
     onderwerp = quote("Interesse in " + titel)
-    cta = (f'<a class="cta" href="mailto:{CONTACT_EMAIL}?subject={onderwerp}">'
+    cta = (f'<a class="btn btn-accent btn-lg" href="mailto:{CONTACT_EMAIL}?subject={onderwerp}">'
            f'Mail over dit toestel</a>')
     oms = (r["omschrijving"] or "").replace(chr(10), "<br>")
 
     body = f"""
-    <div class="kruimels"><a href="{url_for('home')}">Home</a> &rsaquo; <a href="{url_for('etalage')}">Verkoop</a> &rsaquo; {kruimel_cat}{titel}</div>
-    <div class="product">
-      <div class="galerij"><div class="hoofd">{hoofd_html}</div>{strip}</div>
-      <div>
-        <h1 class="pkop">{titel}</h1>
-        <p class="pmeta">{meta_html}</p>
-        <p class="pprijs">{prijs}</p>
-        <div class="pomschrijving">{oms}</div>
-        {cta}
+    <nav aria-label="breadcrumb"><ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{url_for('home')}">Home</a></li>
+      <li class="breadcrumb-item"><a href="{url_for('etalage')}">Verkoop</a></li>
+      {kruimel_cat}<li class="breadcrumb-item active" aria-current="page">{titel}</li>
+    </ol></nav>
+    <div class="card p-3 p-md-4">
+      <div class="row g-4 g-lg-5">
+        <div class="col-lg-6">
+          <div class="hoofd border rounded d-flex align-items-center justify-content-center p-4">{hoofd_html}</div>{strip}
+        </div>
+        <div class="col-lg-6">
+          <h1 class="h3 fw-bold mb-2">{titel}</h1>
+          <p class="text-body-secondary">{meta_html}</p>
+          <p class="display-6 fw-bold text-accent mb-4">{prijs}</p>
+          <div class="mb-4">{oms}</div>
+          {cta}
+        </div>
       </div>
-    </div>
-    {specs_html}""" + _GALERIJ_JS
+      {specs_html}
+    </div>""" + _GALERIJ_JS
     return page(body, titel=titel, actief="item")
 
 
