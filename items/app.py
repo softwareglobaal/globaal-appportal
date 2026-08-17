@@ -48,7 +48,7 @@ MUNT_SYMBOOL = "€"
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL") or "info@angela.sr"
 # Placeholder tot het echte nummer bekend is; zet CONTACT_TELEFOON in .env.
 CONTACT_TELEFOON = os.environ.get("CONTACT_TELEFOON") or "+32 000 00 00 00"
-WINKEL_NAAM = os.environ.get("WINKEL_NAAM") or "angela.sr"
+WINKEL_NAAM = os.environ.get("WINKEL_NAAM") or "Angela"
 
 # Authentik-groepen die mogen bewerken (leeg = iedereen die door forward-auth komt).
 EDITOR_GROUPS = {g_.strip() for g_ in os.environ.get("EDITOR_GROUPS", "").split(",") if g_.strip()}
@@ -1279,7 +1279,7 @@ MERK_HOME = """
   <div class="col-lg-8 py-md-4">
     <div class="text-accent text-uppercase fw-bold small mb-2" style="letter-spacing:.08em">Suriname</div>
     <h1 class="display-4 fw-bold mb-3">{naam}</h1>
-    <p class="lead mb-4">Angela verkoopt hier tweedehands spullen, op dit moment vooral computers
+    <p class="lead mb-4">Ze verkoopt hier tweedehands spullen, op dit moment vooral computers
        en toebehoren. Alles is nagekeken en de foto's zijn van het artikel zelf.
        De rest van de site is nog in aanbouw.</p>
     <div class="d-flex flex-wrap gap-2">
