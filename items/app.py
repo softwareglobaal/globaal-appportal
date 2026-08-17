@@ -961,8 +961,8 @@ BASE = """
  <div class="wrap"><div class="kolommen">
   <div>
     <div class="fmerk"><span class="mark">{{ winkel_letter }}</span><span>{{ winkel_naam }}</span></div>
-    <div class="klein">Een merk uit Suriname. Onder Verkoop staat wat we op dit moment
-      aanbieden; bij elk toestel staat wat we ervan weten.</div>
+    <div class="klein">Het merk van Angela, in Suriname. Onder Verkoop staat wat er
+      op dit moment te koop is.</div>
   </div>
   <div>
     <div class="kop">Verkoop</div>
@@ -983,7 +983,7 @@ BASE = """
     </div>
     <div class="fcontact">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>
-      <span class="klein">Afhalen op afspraak. Bel of mail om langs te komen.</span>
+      <span class="klein">Afhalen op afspraak.</span>
     </div>
   </div>
  </div></div>
@@ -1082,8 +1082,8 @@ HERO = """
   <img src="{hero}" alt="Laptop wordt nagekeken op de werkbank">
   <div class="htxt">
     <h1>Tweedehands ICT uit eigen gebruik</h1>
-    <p>Sinds een jaar verkopen we hier de laptops en pc's die bij ons uit dienst
-       gaan. Op de foto's zie je hoe een toestel er nu bij ligt.</p>
+    <p>We verkopen hier de laptops en pc's die bij ons uit dienst gaan. Op de
+       foto's zie je hoe een toestel er nu bij ligt.</p>
     <a class="cta" href="#aanbod">Bekijk het aanbod</a>
   </div>
 </section>"""
@@ -1095,9 +1095,9 @@ SFEER = """
     <h2>Waar dit vandaan komt</h2>
     <p>Wij vervangen zelf regelmatig laptops en pc's. Het materiaal dat nog
        prima meekan, zetten we hier online.</p>
-    <p>Tweedehands betekent gebruikssporen. Bij elk toestel schrijven we op wat we
-       ervan weten. Er zit geen garantie op, dus je koopt het zoals het erbij ligt.
-       Kom het gerust eerst bekijken voor je beslist.</p>
+    <p>Het zijn gebruikte toestellen, dus reken op gebruikssporen. Die staan in de
+       omschrijving en op de foto's. Garantie geven we niet. Wil je het eerst
+       zien, kom dan langs op afspraak.</p>
   </div>
 </section>"""
 
@@ -1107,30 +1107,30 @@ MERK_HOME = """
   <div class="mtxt">
     <div class="mkicker">Suriname</div>
     <h1>{naam}</h1>
-    <p>Een merk uit Suriname, gemaakt voor de mensen hier. We beginnen met
-       verkoop; de rest van het verhaal volgt hier stap voor stap.</p>
+    <p>Angela verkoopt hier tweedehands laptops, pc's en tablets. Elk toestel is
+       aangezet en nagekeken, en de foto's zijn van het toestel zelf. De rest van
+       de site is nog in aanbouw.</p>
     <div class="mknoppen">
       <a class="cta" href="{verkoop}">Naar de verkoop</a>
-      <a class="cta sec" href="mailto:{email}">Neem contact op</a>
+      <a class="cta sec" href="mailto:{email}">Mail ons</a>
     </div>
   </div>
 </section>
 <section class="merkblokken">
   <a class="mblok" href="{verkoop}">
     <div class="mkop">Verkoop</div>
-    <p>Laptops, pc's, tablets en toebehoren die wij nakijken en aanbieden.
-       Bij elk toestel staat wat we ervan weten, met foto's van het echte exemplaar.</p>
+    <p>Wat er nu te koop is, met prijs, specificaties en de staat waarin het
+       verkeert. Afhalen op afspraak.</p>
     <span class="mlink">Bekijk het aanbod &rsaquo;</span>
   </a>
   <div class="mblok">
-    <div class="mkop">Over {naam}</div>
-    <p>Wie Angela is en waar dit merk voor staat, lees je binnenkort op deze plek.
-       Aan die pagina wordt gewerkt.</p>
+    <div class="mkop">Over Angela</div>
+    <p>Wie Angela is en wat ze met dit merk wil, komt hier later. Die pagina is
+       nog niet af.</p>
   </div>
   <div class="mblok">
     <div class="mkop">Contact</div>
-    <p>Vragen over een toestel, of over het merk? Mail ons, of bel om een
-       afspraak te maken.</p>
+    <p>Mail als je een vraag hebt over een toestel of iets wilt komen bekijken.</p>
     <span class="mlink"><a href="mailto:{email}">{email}</a></span>
   </div>
 </section>
@@ -1240,7 +1240,7 @@ def detail(pid):
 
     onderwerp = quote("Interesse in " + titel)
     cta = (f'<a class="cta" href="mailto:{CONTACT_EMAIL}?subject={onderwerp}">'
-           f'Interesse? Neem contact op</a>')
+           f'Mail over dit toestel</a>')
     oms = (r["omschrijving"] or "").replace(chr(10), "<br>")
 
     body = f"""
