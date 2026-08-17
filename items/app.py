@@ -49,6 +49,10 @@ CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL") or "info@angela.sr"
 # Leeg = geen telefoonnummer tonen (er is er nog geen); zet CONTACT_TELEFOON in .env.
 CONTACT_TELEFOON = os.environ.get("CONTACT_TELEFOON") or ""
 WINKEL_NAAM = os.environ.get("WINKEL_NAAM") or "Angela"
+# WhatsApp-nummer in internationale vorm (bv. +597 ...). Leeg = alleen tekst
+# "mail of WhatsApp" zonder link; gezet = wa.me-knoppen op de site.
+WHATSAPP_NUMMER = os.environ.get("WHATSAPP_NUMMER") or ""
+WHATSAPP_LINK = ("https://wa.me/" + re.sub(r"\D", "", WHATSAPP_NUMMER)) if WHATSAPP_NUMMER else ""
 
 # Authentik-groepen die mogen bewerken (leeg = iedereen die door forward-auth komt).
 EDITOR_GROUPS = {g_.strip() for g_ in os.environ.get("EDITOR_GROUPS", "").split(",") if g_.strip()}
@@ -70,6 +74,8 @@ app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
 app.jinja_env.globals["contact_telefoon"] = CONTACT_TELEFOON
 app.jinja_env.globals["telefoon_link"] = "tel:" + re.sub(r"[^\d+]", "", CONTACT_TELEFOON)
 app.jinja_env.globals["winkel_naam"] = WINKEL_NAAM
+app.jinja_env.globals["whatsapp_nummer"] = WHATSAPP_NUMMER
+app.jinja_env.globals["whatsapp_link"] = WHATSAPP_LINK
 # Logo-letter in de ronde merk-tegel volgt de winkelnaam.
 app.jinja_env.globals["winkel_letter"] = WINKEL_NAAM[:1].upper()
 
@@ -309,7 +315,7 @@ USP_ICONEN = [
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
      "Eigen foto's", "Gebruikssporen zie je vooraf"),
     ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/></svg>',
-     "Afhalen op afspraak", "Mail, dan spreken we iets af"),
+     "Afhalen op afspraak", "Mail of app, dan spreken we iets af"),
 ]
 
 
@@ -1101,12 +1107,15 @@ BASE = """
        <button class="btn btn-accent d-flex align-items-center gap-2" type="submit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="d-none d-sm-inline">Zoeken</span></button>
      </div>
    </form>
-   {% if contact_telefoon %}<a class="d-none d-lg-flex align-items-center gap-2 text-decoration-none ms-auto" href="{{ telefoon_link }}">
+   {% if whatsapp_link %}<a class="d-none d-lg-flex align-items-center gap-2 text-decoration-none ms-auto" href="{{ whatsapp_link }}" target="_blank" rel="noopener">
+     <svg width="26" height="26" class="text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.1-5.5A8.4 8.4 0 1 1 21 11.5z"/></svg>
+     <span class="small text-body-secondary lh-sm">Mail of WhatsApp<b class="d-block text-body fs-6">{{ whatsapp_nummer }}</b></span>
+   </a>{% elif contact_telefoon %}<a class="d-none d-lg-flex align-items-center gap-2 text-decoration-none ms-auto" href="{{ telefoon_link }}">
      <svg width="26" height="26" class="text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
      <span class="small text-body-secondary lh-sm">Afhalen op afspraak<b class="d-block text-body fs-6">{{ contact_telefoon }}</b></span>
    </a>{% else %}<a class="d-none d-lg-flex align-items-center gap-2 text-decoration-none ms-auto" href="mailto:{{ contact_email }}">
      <svg width="26" height="26" class="text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
-     <span class="small text-body-secondary lh-sm">Afhalen op afspraak<b class="d-block text-body fs-6">{{ contact_email }}</b></span>
+     <span class="small text-body-secondary lh-sm">Mail of WhatsApp<b class="d-block text-body fs-6">{{ contact_email }}</b></span>
    </a>{% endif %}
   </div>
  </nav>
@@ -1155,6 +1164,10 @@ BASE = """
        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
        <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
      </div>
+     {% if whatsapp_link %}<div class="d-flex align-items-start gap-2 mb-2 small">
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.1-5.5A8.4 8.4 0 1 1 21 11.5z"/></svg>
+       <a href="{{ whatsapp_link }}" target="_blank" rel="noopener">WhatsApp {{ whatsapp_nummer }}</a>
+     </div>{% endif %}
      {% if contact_telefoon %}<div class="d-flex align-items-start gap-2 mb-2 small">
        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2h4l2 5-2.5 1.5a13 13 0 0 0 6 6L16 13z"/></svg>
        <a href="{{ telefoon_link }}">{{ contact_telefoon }}</a>
@@ -1295,10 +1308,10 @@ MERK_HOME = """
     <div class="d-flex align-items-center gap-2 text-uppercase fw-bold small mb-2" style="letter-spacing:.08em"><svg class="ster" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.2l-6.1 3.4 1.4-6.8L2.2 9.1l6.9-.8z"/></svg>Suriname</div>
     <h1 class="display-4 fw-bold mb-3">{naam}</h1>
     <p class="lead mb-4">Tweedehands spullen, nagekeken en met eigen foto's van elk artikel.
-       Kopen gaat per mail, afhalen op afspraak.</p>
+       Kopen gaat per mail of WhatsApp, afhalen op afspraak.</p>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-accent btn-lg" href="{verkoop}">Naar de verkoop</a>
-      <a class="btn btn-outline-light btn-lg" href="mailto:{email}">Mail ons</a>
+      <a class="btn btn-outline-light btn-lg" href="mailto:{email}">Mail ons</a>{whatsapp_knop}
     </div>
   </div>
 </section>
@@ -1327,9 +1340,11 @@ MERK_HOME = """
     <div class="card h-100">
       <div class="card-body p-4 d-flex flex-column">
         <h2 class="h5 fw-bold card-title">Zo werkt kopen</h2>
-        <p class="card-text text-body-secondary">Mail over het artikel dat je wilt. We maken een afspraak, je komt
+        <p class="card-text text-body-secondary">Mail of app over het artikel dat je wilt. We maken een afspraak, je komt
            kijken en beslist ter plekke. Afhalen in Suriname.</p>
-        <a class="mt-auto pt-2 fw-bold text-accent text-decoration-none" href="mailto:{email}">{email}</a>
+        <div class="mt-auto pt-2 d-flex flex-column gap-1">
+          <a class="fw-bold text-accent text-decoration-none" href="mailto:{email}">{email}</a>{whatsapp_regel}
+        </div>
       </div>
     </div>
   </div>
@@ -1339,8 +1354,14 @@ MERK_HOME = """
 
 @app.route("/")
 def home():
+    knop = regel = ""
+    if WHATSAPP_LINK:
+        knop = (f'<a class="btn btn-outline-light btn-lg" href="{WHATSAPP_LINK}" '
+                f'target="_blank" rel="noopener">WhatsApp</a>')
+        regel = (f'<a class="fw-bold text-accent text-decoration-none" href="{WHATSAPP_LINK}" '
+                 f'target="_blank" rel="noopener">WhatsApp {WHATSAPP_NUMMER}</a>')
     body = MERK_HOME.format(naam=WINKEL_NAAM, verkoop=url_for("etalage"),
-                            email=CONTACT_EMAIL,
+                            email=CONTACT_EMAIL, whatsapp_knop=knop, whatsapp_regel=regel,
                             foto=url_for("static", filename="hero-suriname.jpg"))
     return page(body, actief="home", titel=WINKEL_NAAM)
 
@@ -1463,6 +1484,9 @@ def detail(pid):
     onderwerp = quote("Interesse in " + titel)
     cta = (f'<a class="btn btn-accent btn-lg" href="mailto:{CONTACT_EMAIL}?subject={onderwerp}">'
            f'Mail over dit artikel</a>')
+    if WHATSAPP_LINK:
+        cta += (f' <a class="btn btn-outline-secondary btn-lg" href="{WHATSAPP_LINK}?text={onderwerp}" '
+                f'target="_blank" rel="noopener">WhatsApp</a>')
     oms = (r["omschrijving"] or "").replace(chr(10), "<br>")
 
     body = f"""
