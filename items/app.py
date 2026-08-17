@@ -372,25 +372,80 @@ def _job_get(pid):
 # ---------------------------------------------------------------------------
 # AI-taxatie via Claude Sonnet met web search
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT_BASE = """Je bent een taxateur van tweedehands ICT-apparatuur.
+# Taxatieprofiel per sectie. De sectie volgt uit de categorie van het item
+# (sectie_van); is die nog leeg, dan krijgt het model het algemene profiel dat
+# beide kanten beschrijft en zelf de sectie bepaalt. Nieuwe sectie = een
+# profiel hier plus een regel in SECTIES.
+TAXATIE_PROFIELEN = {
+    "ict": {
+        "rol": "tweedehands ICT-apparatuur",
+        "identificatie": (
+            "merk, model (typenummer), serienummer/service tag en categorie "
+            "(laptop, server, monitor, switch, ...). Voor Dell (service tag), Lenovo en HP "
+            "mapt het serienummer/product-ID vaak op de fabrieksconfiguratie; gebruik dat."),
+        "specs": ("cpu, ram, opslag, gpu, scherm, resolutie, bouwjaar, poorten, "
+                  "besturingssysteem, gewicht, webcam, enz."),
+        "afslag": "10 tot 25 procent",
+        "toon_specs": [("cpu", "Processor"), ("ram", "Geheugen"), ("opslag", "Opslag"),
+                       ("scherm", "Scherm"), ("resolutie", "Resolutie"), ("gpu", "Videokaart"),
+                       ("besturingssysteem", "Besturingssysteem"), ("bouwjaar", "Bouwjaar")],
+    },
+    "overig": {
+        "rol": "tweedehands goederen van alle soorten (meubilair, huisraad, kleding, "
+               "gereedschap, decoratie, sport, speelgoed)",
+        "identificatie": (
+            "merk of maker, model, productlijn of type, en categorie "
+            "(stoel, kast, jas, boormachine, ...). Een serienummer is er vaak niet; laat het dan leeg."),
+        "specs": ("materiaal, afmetingen (l x b x h in cm), kleur, maat, gewicht, bouwjaar, "
+                  "aantal stuks, compleetheid, enz."),
+        "afslag": "15 tot 35 procent",
+        "toon_specs": [("materiaal", "Materiaal"), ("afmetingen", "Afmetingen"),
+                       ("kleur", "Kleur"), ("maat", "Maat"), ("gewicht", "Gewicht"),
+                       ("bouwjaar", "Bouwjaar")],
+    },
+}
+
+
+def taxatie_profiel(categorie):
+    """Profiel voor een item: op basis van de categorie, of algemeen als die leeg is."""
+    slug = categorie_van(categorie)
+    if slug:
+        return TAXATIE_PROFIELEN.get(sectie_van(slug), TAXATIE_PROFIELEN["overig"])
+    ict, ov = TAXATIE_PROFIELEN["ict"], TAXATIE_PROFIELEN["overig"]
+    return {
+        "rol": "tweedehands goederen van alle soorten",
+        "identificatie": (
+            "bepaal eerst of dit ICT/elektronica is of iets anders, en vul dan in: "
+            f"voor ICT: {ict['identificatie']} Voor andere spullen: {ov['identificatie']}"),
+        "specs": (f"voor ICT: {ict['specs']} Voor andere spullen: {ov['specs']}"),
+        "afslag": f"{ict['afslag']} (ICT) of {ov['afslag']} (overig)",
+        "toon_specs": ict["toon_specs"] + ov["toon_specs"],
+    }
+
+
+def toon_specs_voor(categorie):
+    return taxatie_profiel(categorie)["toon_specs"]
+
+
+def _system_prompt_base(profiel):
+    return f"""Je bent een taxateur van {profiel['rol']}.
 Je krijgt foto's van een item plus merk, model/typenummer, serienummer en een
 handmatig conditielabel. Je taak:
 
 1. Identificeer het exacte product en vul de IDENTIFICATIEVELDEN in als losse
-   waarden: merk, model (typenummer), serienummer/service tag en categorie
-   (laptop, server, monitor, switch, ...). Voor Dell (service tag), Lenovo en HP
-   mapt het serienummer/product-ID vaak op de fabrieksconfiguratie; gebruik dat.
-2. Vul de TECHNISCHE specificaties (specs) volledig in: cpu, ram, opslag, gpu,
-   scherm, resolutie, bouwjaar, poorten, besturingssysteem, gewicht, webcam, enz.
+   waarden: {profiel['identificatie']}
+2. Vul de specificaties (specs) volledig in: {profiel['specs']}
    Zet merk, model of serienummer NIET in specs - die horen in de losse
    identificatievelden hierboven, niet in de specs.
 3. Schrijf een korte, verkoopklare titel en omschrijving.
 """
 
-SYSTEM_PROMPT_MARKT = """
+
+def _system_prompt_markt(profiel):
+    return f"""
 4. Doe marktonderzoek met web_search. Verkochte advertenties zijn de beste
    graadmeter. Zijn die schaars, gebruik dan vraagprijzen als basis, maar reken
-   ze realistisch terug: tweedehands ICT verkoopt doorgaans 10 tot 25 procent
+   ze realistisch terug: tweedehands verkoopt doorgaans {profiel['afslag']}
    ONDER de vraagprijs. Weeg de conditie mee (40 tot 60% van de prijs). Vermeld
    per bron of het een vraagprijs of verkoopprijs is. Zet vertrouwen alleen op
    "onvoldoende_data" als je echt geen enkele advertentie vindt; heb je wel
@@ -401,7 +456,7 @@ Rond ALTIJD af met dien_taxatie_in."""
 SYSTEM_PROMPT_SPECS = """
 4. Doe GEEN marktonderzoek en bepaal GEEN prijs. Zet prijs_voorstel_eur op 0,
    bronnen op een lege lijst en vertrouwen op "onvoldoende_data". Richt je volledig
-   op identificatie en technische specs.
+   op identificatie en specs.
 
 Rond ALTIJD af met dien_taxatie_in."""
 
@@ -415,12 +470,13 @@ TAXATIE_TOOL = {
             "model": {"type": "string", "description": "Model- of typenummer"},
             "serienummer": {"type": "string"},
             "categorie": {"type": "string",
-                          "description": "laptop, server, monitor, switch, ..."},
+                          "description": "laptop, monitor, stoel, jas, boormachine, ..."},
             "titel": {"type": "string"},
             "omschrijving": {"type": "string"},
             "specs": {"type": "object",
-                      "description": "ALLEEN technische specs (cpu, ram, opslag, gpu, "
-                                     "scherm, resolutie, os, ...). Geen merk/model/serienummer."},
+                      "description": "ALLEEN specs (ICT: cpu, ram, opslag, gpu, scherm, os, ...; "
+                                     "overig: materiaal, afmetingen, kleur, maat, ...). "
+                                     "Geen merk/model/serienummer."},
             "prijs_voorstel_eur": {"type": "number"},
             "prijs_min_eur": {"type": "number"},
             "prijs_max_eur": {"type": "number"},
@@ -504,12 +560,15 @@ def taxeer(product, image_paden, voortgang=None, met_marktonderzoek=True,
         f"Past het item daar echt niet bij, kies dan zelf een korte categorienaam "
         f"in het enkelvoud en in het Nederlands.\n")
 
+    # Profiel volgt de sectie van het item (categorie), of algemeen als die leeg is.
+    profiel = taxatie_profiel(product.get("categorie"))
+    basis = _system_prompt_base(profiel)
     if met_marktonderzoek:
-        system = SYSTEM_PROMPT_BASE + categorie_regel + SYSTEM_PROMPT_MARKT
+        system = basis + categorie_regel + _system_prompt_markt(profiel)
         tools = [WEB_SEARCH, TAXATIE_TOOL]
         max_rondes = 6
     else:
-        system = SYSTEM_PROMPT_BASE + categorie_regel + SYSTEM_PROMPT_SPECS
+        system = basis + categorie_regel + SYSTEM_PROMPT_SPECS
         tools = [TAXATIE_TOOL]
         max_rondes = 2
 
@@ -1121,12 +1180,7 @@ def healthz():
     return "ok", 200
 
 
-TOON_SPECS = [("cpu", "Processor"), ("ram", "Geheugen"), ("opslag", "Opslag"),
-              ("scherm", "Scherm"), ("resolutie", "Resolutie"), ("gpu", "Videokaart"),
-              ("besturingssysteem", "Besturingssysteem"), ("bouwjaar", "Bouwjaar")]
-
-
-def _spec_chips(specs, maximaal=5, conditie=None):
+def _spec_chips(specs, maximaal=5, conditie=None, categorie=None):
     """Toont de belangrijkste specs als losse blokjes in de lijstweergave.
 
     De staat staat hier gewoon tussen, als gegeven naast de andere gegevens.
@@ -1136,7 +1190,7 @@ def _spec_chips(specs, maximaal=5, conditie=None):
     staat = conditie_label(conditie)
     if staat:
         uit.append(f'<span class="chip">Staat: <b>{staat}</b></span>')
-    for sleutel, label in TOON_SPECS:
+    for sleutel, label in toon_specs_voor(categorie):
         waarde = specs.get(sleutel)
         if waarde:
             waarde = str(waarde)
@@ -1161,7 +1215,7 @@ def _rij(r):
             f'<div class="rfoto flex-shrink-0 border rounded d-flex align-items-center justify-content-center p-2">{beeld}</div>'
             f'<div class="flex-grow-1 min-w-0"><div class="small text-uppercase text-body-secondary" style="letter-spacing:.05em">{catlabel}</div>'
             f'<div class="fs-5 fw-bold lh-sm">{naam}</div>'
-            f'{_spec_chips(specs_dict(r["specs"]), conditie=r["conditie"])}</div>'
+            f'{_spec_chips(specs_dict(r["specs"]), conditie=r["conditie"], categorie=r["categorie"])}</div>'
             f'<div class="d-flex flex-md-column justify-content-between align-items-center align-items-md-end gap-2 flex-shrink-0 border-top border-md-0 pt-3 pt-md-0">'
             f'<div class="fs-3 fw-bold text-accent lh-1">{prijs}</div>'
             f'<span class="btn btn-accent btn-sm">Bekijk artikel</span></div></div></a>')
@@ -1643,6 +1697,16 @@ def bewerk(pid):
     cond = "".join(f'<option value="{c}" {"selected" if c == r["conditie"] else ""}>{c}</option>'
                    for c in CONDITIES)
     specs_tekst = specs_naar_tekst(specs_dict(r["specs"]))
+    # Welk taxatieprofiel de onderzoeksknoppen gaan gebruiken, zodat je dat ziet
+    # voor je klikt: leeg = algemeen (model bepaalt zelf de sectie).
+    cat_slug = categorie_van(r["categorie"])
+    if cat_slug:
+        sec = sectie_van(cat_slug)
+        sec_label = next((s["label"] for s in SECTIES + [SECTIE_OVERIG] if s["slug"] == sec), sec)
+        profiel_regel = f"Taxatieprofiel: <b>{sec_label}</b> (volgt de categorie)."
+    else:
+        profiel_regel = ("Taxatieprofiel: <b>algemeen</b>, het model bepaalt zelf of het "
+                         "ICT of iets anders is. Vul een categorie in voor een gerichter profiel.")
 
     v = d.execute("SELECT * FROM valuations WHERE product_id=%s ORDER BY id DESC LIMIT 1",
                   (pid,)).fetchone()
@@ -1707,6 +1771,7 @@ def bewerk(pid):
         <div style="flex:0"><button class="btn sec" name="actie" value="taxeer:specs">Opslaan en specs laten opzoeken</button></div>
         <div style="flex:0"><button class="btn sec" name="actie" value="taxeer:prijs">Opslaan en marktprijs bepalen</button></div>
       </div>
+      <p class="mut">{profiel_regel}</p>
       <p class="mut">De twee onderzoeksknoppen slaan eerst je invoer op, zodat het onderzoek
          vertrekt met wat je zelf hebt ingevuld. Vul je bijvoorbeeld het model aan, dan worden
          de specificaties daarmee opnieuw opgezocht. Specs opzoeken kost centen en duurt seconden;
