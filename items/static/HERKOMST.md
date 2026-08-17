@@ -6,14 +6,17 @@ vlagbalk, gele ster op rood als beeldmerk); bron en generator staan in
 `C:\Users\shaniel\Claude\angela-logo\`. Kleuren van de Surinaamse vlag:
 groen #377e3f, rood #b40a2d, geel #ffd200.
 
-Deze foto's staan op de publieke verkoopsite (angela.sr) als sfeerbeeld. Het zijn
-geen productfoto's: producten krijgen altijd eigen foto's van het echte toestel.
+Deze foto's staan op de publieke site (angela.sr) als sfeerbeeld. Het zijn
+geen productfoto's: artikelen krijgen altijd eigen foto's van het echte exemplaar.
+Gekozen op 2026-08-17 (spoor 2: nette stock tot de eigen foto's er zijn); de
+oude ICT-beelden (laptop op werkbank, laptop testen) zijn verwijderd.
 
-| Bestand | Bron | Licentie |
-|---|---|---|
-| `hero-werkbank.jpg` | Unsplash, foto-id `photo-1721333089073-215a56fd710c` | Unsplash-licentie: gratis te gebruiken, ook commercieel, geen toestemming nodig |
-| `sfeer-nakijken.jpg` | Unsplash, foto-id `photo-1654687790317-e0edff2e8196` | idem |
+| Bestand | Waar | Bron | Licentie |
+|---|---|---|---|
+| `hero-suriname.jpg` | homepage-hero | Unsplash `ROCJ3aEL0Wk`, Anoeskha B, rivier met korjaal in Suriname (`photo-1773249815795-99431b00b1c7`) | Unsplash-licentie: gratis te gebruiken, ook commercieel, geen toestemming nodig |
+| `hero-verkoop.jpg` | hero verkooppagina | Unsplash `bP9tygQuQZU`, Rineshkumar Ghirao, bladerdak boven bospad in Suriname (`photo-1695229902086-e10737b51e0e`) | idem |
+| `sfeer-klaarzetten.jpg` | blok "Hoe dit werkt" | Unsplash `MGaFENpDCsw`, Bench Accounting, pakje wordt klaargezet op tafel (`photo-1449247666642-264389f5f5b1`) | idem |
 
-Vervangen door eigen foto's van de werkplaats of het team mag altijd: zet een
-bestand met dezelfde naam in deze map en herbouw de container. Eigen beeld is
-sterker dan stockbeeld, zeker op de homepage.
+Vervangen door eigen foto's (Angela, de afhaalplek, het aanbod) mag altijd: zet
+een bestand met dezelfde naam in deze map en herbouw de container. Eigen beeld
+is sterker dan stockbeeld, zeker op de homepage.

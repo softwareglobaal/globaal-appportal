@@ -1041,7 +1041,9 @@ PUBLIEK_CSS = """
  @media(min-width:768px){.menu .nav-item.dropdown:hover>.dropdown-menu{display:block;margin-top:0}}
  .zoek .form-control{border:2px solid var(--acc);border-right:0}
  .zoek .form-control:focus{box-shadow:none;border-color:var(--acc)}
- .hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.42}
+ .hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+ .hero-schaduw{position:absolute;inset:0;background:linear-gradient(90deg,rgba(21,26,46,.94) 0%,rgba(21,26,46,.8) 45%,rgba(21,26,46,.3) 100%)}
+ @media(max-width:767px){.hero-schaduw{background:rgba(21,26,46,.82)}}
  .usp{background:var(--groen);color:#fff}
  .usp svg{width:25px;height:25px;flex:none}
  .rij{transition:border-color .12s,box-shadow .12s}
@@ -1259,7 +1261,8 @@ def _etalage_html(slug, titel, sub=""):
 
 HERO = """
 <section class="position-relative rounded-3 overflow-hidden bg-navy text-white mb-4 d-flex align-items-center" style="min-height:300px">
-  <img class="hero-img" src="{hero}" alt="Laptop wordt nagekeken op de werkbank">
+  <img class="hero-img" src="{hero}" alt="Bladerdak boven een bospad in Suriname">
+  <div class="hero-schaduw"></div>
   <div class="position-relative p-4 p-md-5 col-lg-7">
     <h1 class="fw-bold mb-3">Tweedehands, nagekeken door ons</h1>
     <p class="lead mb-4">Alles wat hier staat is gebruikt en door ons nagekeken. Op de foto's
@@ -1271,7 +1274,7 @@ HERO = """
 SFEER = """
 <section class="card overflow-hidden mt-5">
   <div class="row g-0">
-    <div class="col-md-6"><img class="w-100 h-100 object-fit-cover" style="min-height:260px" src="{sfeer}" alt="Collega test een laptop voor verkoop"></div>
+    <div class="col-md-6"><img class="w-100 h-100 object-fit-cover" style="min-height:260px;max-height:420px" src="{sfeer}" alt="Een pakje wordt klaargezet op tafel"></div>
     <div class="col-md-6"><div class="card-body p-4 p-lg-5">
       <h2 class="h4 fw-bold mb-3">Hoe dit werkt</h2>
       <p class="text-body-secondary">Het aanbod wisselt. Per sectie in het menu zie je wat er is, en
@@ -1285,8 +1288,10 @@ SFEER = """
 
 
 MERK_HOME = """
-<section class="bg-navy text-white rounded-3 p-4 p-md-5 mb-4">
-  <div class="col-lg-8 py-md-4">
+<section class="position-relative overflow-hidden bg-navy text-white rounded-3 p-4 p-md-5 mb-4">
+  <img class="hero-img" src="{foto}" alt="Rivier met korjaal in Suriname">
+  <div class="hero-schaduw"></div>
+  <div class="position-relative col-lg-8 py-md-4">
     <div class="d-flex align-items-center gap-2 text-uppercase fw-bold small mb-2" style="letter-spacing:.08em"><svg class="ster" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.2l-6.1 3.4 1.4-6.8L2.2 9.1l6.9-.8z"/></svg>Suriname</div>
     <h1 class="display-4 fw-bold mb-3">{naam}</h1>
     <p class="lead mb-4">Tweedehands spullen, nagekeken en met eigen foto's van elk artikel.
@@ -1335,14 +1340,15 @@ MERK_HOME = """
 @app.route("/")
 def home():
     body = MERK_HOME.format(naam=WINKEL_NAAM, verkoop=url_for("etalage"),
-                            email=CONTACT_EMAIL)
+                            email=CONTACT_EMAIL,
+                            foto=url_for("static", filename="hero-suriname.jpg"))
     return page(body, actief="home", titel=WINKEL_NAAM)
 
 
 @app.route("/verkoop")
 def etalage():
-    hero = HERO.format(hero=url_for("static", filename="hero-werkbank.jpg"))
-    sfeer = SFEER.format(sfeer=url_for("static", filename="sfeer-nakijken.jpg"))
+    hero = HERO.format(hero=url_for("static", filename="hero-verkoop.jpg"))
+    sfeer = SFEER.format(sfeer=url_for("static", filename="sfeer-klaarzetten.jpg"))
     body = (hero + usps_html() + '<a id="aanbod"></a>'
             + _etalage_html(None, "Nieuw binnen")
             + sfeer)
