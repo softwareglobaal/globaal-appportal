@@ -39,8 +39,13 @@ server {
     ssl_certificate_key /etc/nginx/certs/angela-sr/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
 
+    # Variabele + Docker-resolver: na een herbouw van items-verkoop krijgt de
+    # container een nieuw IP; zonder dit blijft nginx het oude vasthouden (502).
+    resolver 127.0.0.11 valid=30s;
+    set $verkoop_upstream http://items-verkoop:8770;
+
     location / {
-        proxy_pass http://items-verkoop:8770;
+        proxy_pass $verkoop_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
