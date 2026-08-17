@@ -21,8 +21,12 @@ volledig:
 
 1. **Een teamregel in `TEAM`**: `naam` (kort, kleine letters, met
    koppelteken), `label` (weergavenaam; bij een niet-Globaal-agent de
-   eigenaar erbij, zoals "HR-agent (Elevait)"), `type` (groepering) en
-   `rol` (een regel, wat hij doet).
+   eigenaar erbij, zoals "HR-agent (Elevait)"), `sectie` (welk bedrijf,
+   zie hieronder), `type` (groepering) en `rol` (een regel, wat hij doet).
+   Staat de eigenaar al in het label, geef dan ook `kort` mee ("HR-agent"):
+   dat is wat op de kaart komt, want binnen de sectie Elevait is
+   "(Elevait)" erachter alleen ruis. Buiten de grid, bij voorstellen en
+   beslissingen, blijft het volledige label staan.
 2. **Een blok in `DETAILS`** met alle vijf onderdelen:
    - `mandaat`: wat hij doet en voor wie, en dat de mens beslist waar dat
      zo is.
@@ -41,6 +45,25 @@ volledig:
 
 Zonder `DETAILS`-blok valt een kaart terug op `DETAIL_STANDAARD`
 ("nog niet gekoppeld"); dat is een tijdelijke staat, geen eindsituatie.
+
+## Secties: welke agent werkt voor wie
+
+De tegel toont meer dan een bedrijf. Sinds 2026-08-17 staan de kaarten
+daarom gegroepeerd per eigenaar (`SECTIES` in `app.py`): **Globaal** waakt
+over het platform zelf, **Elevait** draait het dagelijks werk van Elevait.
+Ze delen een VM en een inlog, meer niet, en wie hier kijkt hoort in een
+oogopslag te zien welke agent voor wie werkt.
+
+Elke sectiekop draagt een samenvatting ("4 agents, allemaal in orde", of
+hoeveel er aandacht vragen). Aandacht is alles buiten rust, waakt, actief
+en klaar: dus stil, fout en niet gekoppeld. Die kop wordt door de
+verversing elke tien seconden meegenomen, anders blijft er "allemaal in
+orde" staan terwijl een kaart eronder al op stil is gesprongen.
+
+Een nieuwe sectie is een regel in `SECTIES`. Een agent met een onbekende
+of ontbrekende `sectie` valt terug op de laatste sectie in de lijst; dat
+is bewust, want een vergeten veld mag nooit een agent van de pagina laten
+verdwijnen.
 
 ## Hartslag-contract
 

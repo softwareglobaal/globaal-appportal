@@ -30,6 +30,15 @@
        color: var(--tekst-2); margin: 26px 0 8px; }
   .hint { color: var(--tekst-3); font-size: 12px; margin: 0 0 12px; }
 
+  /* Sectiekop per bedrijf: naam links, hoe het ervoor staat rechts, zodat je
+     niet eerst alle kaarten hoeft af te gaan om te zien of er iets speelt. */
+  .sectie-kop { display: flex; align-items: baseline; justify-content: space-between;
+                gap: 12px; border-bottom: 1px solid var(--lijn); padding-bottom: 6px; }
+  .sectie-tel { text-transform: none; letter-spacing: 0; font-weight: 400;
+                font-size: 11.5px; color: var(--tekst-3); }
+  .sectie-tel.let-op { color: var(--amber); font-weight: 600; }
+  .sectie-uitleg { color: var(--tekst-3); font-size: 12px; margin: 0 0 12px; }
+
   .paneel { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px; overflow: hidden; }
 
   .agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 12px; }
@@ -132,15 +141,19 @@
     <a class="kop-link" href="https://siyanagents.globaal.be">Sales/Marketing agents ↗</a>
   </div>
 
-  <h2>Team</h2>
+  {% for s in secties %}
+  <h2 class="sectie-kop">{{ s.titel }}
+    <span class="sectie-tel{{ ' let-op' if s.aandacht }}"
+          data-sectie="{{ s.sleutel }}">{{ s.samenvatting }}</span></h2>
+  <div class="sectie-uitleg">{{ s.toelichting }}</div>
   <div class="agents-grid">
-    {% for a in agents %}
+    {% for a in s.agents %}
     <div class="agent-kaart" data-naam="{{ a.naam }}" data-status="{{ a.status }}" tabindex="0"
          onclick="openAgent('{{ a.naam }}')" onkeydown="if(event.key==='Enter')openAgent('{{ a.naam }}')">
       <div class="k-top">
-        <span class="avatar">{{ a.label[:2]|upper }}</span>
+        <span class="avatar">{{ (a.kort or a.label)[:2]|upper }}</span>
         <div class="k-id">
-          <div class="k-naam">{{ a.label }}</div>
+          <div class="k-naam">{{ a.kort or a.label }}</div>
           <div class="k-rol">{{ a.rol }}</div>
         </div>
       </div>
@@ -149,6 +162,7 @@
     </div>
     {% endfor %}
   </div>
+  {% endfor %}
 
   <h2>Openstaande voorstellen</h2>
   <div class="paneel" id="voorstellen">
@@ -300,6 +314,14 @@
         const st = kaart.querySelector(".s-txt"); if (st) st.textContent = a.status;
         const at = kaart.querySelector(".a-txt"); if (at) at.textContent = a.taak || a.detail || "";
         const si = kaart.querySelector(".r-sinds"); if (si) si.textContent = a.sinds || "";
+      }
+      // De sectiekop meebijwerken, anders blijft daar staan dat alles in orde
+      // is terwijl een kaart eronder al op stil is gesprongen.
+      for (const s of (data.secties || [])) {
+        const kop = document.querySelector('.sectie-tel[data-sectie="' + s.sleutel + '"]');
+        if (!kop) continue;
+        kop.textContent = s.samenvatting;
+        kop.classList.toggle("let-op", s.aandacht > 0);
       }
       const nieuwV = (data.voorstellen || []).map(v => String(v.id)).sort().join(",");
       const nieuwB = (data.besluiten || []).map(b => b.id + ":" + (b.uitvoering || "")).sort().join(",");

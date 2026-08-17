@@ -38,19 +38,39 @@ STATUSSEN = ("rust", "waakt", "actief", "klaar", "fout")
 
 TEAM = [
     {"naam": "onderhoud", "label": "Onderhoudsagent", "type": "onderhoud",
-     "rol": "waakt over de VM en de apps"},
-    {"naam": "elevait-hr", "label": "HR-agent (Elevait)", "type": "elevait",
+     "sectie": "globaal", "rol": "waakt over de VM en de apps"},
+    {"naam": "ingestie", "label": "Ingestie-agent", "type": "ingestie",
+     "sectie": "globaal",
+     "rol": "maakt van documenten doorzoekbare kennisbanken"},
+    {"naam": "elevait-hr", "label": "HR-agent (Elevait)", "kort": "HR-agent",
+     "type": "elevait", "sectie": "elevait",
      "rol": "toetst sollicitaties aan de criteria"},
     {"naam": "elevait-finance", "label": "Finance-agent (Elevait)",
-     "type": "elevait", "rol": "bewaakt het uitgavenregister"},
+     "kort": "Finance-agent", "type": "elevait", "sectie": "elevait",
+     "rol": "bewaakt het uitgavenregister"},
     {"naam": "elevait-postkamer", "label": "Postkamer-agent (Elevait)",
-     "type": "elevait", "rol": "sorteert de post op info@"},
+     "kort": "Postkamer-agent", "type": "elevait", "sectie": "elevait",
+     "rol": "sorteert de post op info@"},
     {"naam": "elevait-manager", "label": "Manager-agent (Elevait)",
-     "type": "elevait", "rol": "houdt toezicht over de agents heen"},
-    {"naam": "ingestie", "label": "Ingestie-agent", "type": "ingestie",
-     "rol": "maakt van documenten doorzoekbare kennisbanken"},
+     "kort": "Manager-agent", "type": "elevait", "sectie": "elevait",
+     "rol": "houdt toezicht over de agents heen"},
 ]
+# Buiten de sectie (voorstellen, beslissingen, kataloog) blijft de volledige
+# naam staan: daar valt de kop weg die vertelt van wie de agent is.
 LABELS = {a["naam"]: a["label"] for a in TEAM}
+
+# De tegel toont twee bedrijven. Ze delen een VM en een inlog maar niet meer
+# dan dat, en wie hier kijkt hoort in een oogopslag te zien welke agent voor
+# wie werkt. Volgorde is die van de lijst; een agent zonder bekende sectie
+# valt terug op de laatste, zodat een nieuwe agent nooit van de pagina valt.
+SECTIES = [
+    {"sleutel": "globaal", "titel": "Globaal",
+     "toelichting": "Waken over het platform zelf: de VM, de apps en de "
+                    "kennisbanken."},
+    {"sleutel": "elevait", "titel": "Elevait",
+     "toelichting": "Draaien het dagelijks werk van Elevait. Deze tegel toont "
+                    "alleen of ze hun werk doen, nooit waar het over ging."},
+]
 
 # Mandaat per agent: wat hij doet, wat hij mag, en zijn grenzen. Voor de
 # detailweergave als je op een kaart klikt.
@@ -403,6 +423,38 @@ def roster():
     return uit
 
 
+# Statussen waarbij er niets aan de hand is. De rest (stil, fout, niet
+# gekoppeld) telt als aandacht, want dat is precies wat je in een kop wilt
+# zien zonder eerst zes kaarten af te gaan.
+_IN_ORDE = ("rust", "waakt", "actief", "klaar")
+
+
+def roster_secties():
+    """De kaarten gegroepeerd per bedrijf, met per sectie hoe het ervoor staat."""
+    kaarten = roster()
+    bekend = {s["sleutel"] for s in SECTIES}
+    laatste = SECTIES[-1]["sleutel"]
+    uit = []
+    for s in SECTIES:
+        eigen = [k for k in kaarten
+                 if (k.get("sectie") if k.get("sectie") in bekend else laatste)
+                 == s["sleutel"]]
+        if not eigen:
+            continue
+        aandacht = [k for k in eigen if k["status"] not in _IN_ORDE]
+        uit.append({**s, "agents": eigen, "aantal": len(eigen),
+                    "aandacht": len(aandacht),
+                    "samenvatting": (
+                        f"{len(eigen)} agents, allemaal in orde"
+                        if not aandacht else
+                        f"{len(eigen)} agents, "
+                        f"{len(aandacht)} vraagt aandacht"
+                        if len(aandacht) == 1 else
+                        f"{len(eigen)} agents, "
+                        f"{len(aandacht)} vragen aandacht")})
+    return uit
+
+
 def open_voorstellen():
     conn = db()
     rows = conn.execute(
@@ -447,7 +499,7 @@ def _sm_naar_siyanagents():
 def index():
     return render_template(
         "agents.html",
-        agents=roster(),
+        secties=roster_secties(),
         voorstellen=open_voorstellen(),
         besluiten=recente_besluiten(),
         portal_url=f"https://portal.{BASE_DOMAIN}/",
@@ -469,7 +521,12 @@ def seo_team():
 
 @app.route("/api/status")
 def api_status():
-    return jsonify({"agents": roster(), "voorstellen": open_voorstellen(),
+    # De secties gaan mee zonder hun kaarten: de pagina werkt die al bij via
+    # "agents", en dit hoeft alleen de kop te voeden.
+    secties = [{k: v for k, v in s.items() if k != "agents"}
+               for s in roster_secties()]
+    return jsonify({"agents": roster(), "secties": secties,
+                    "voorstellen": open_voorstellen(),
                     "besluiten": recente_besluiten()})
 
 
