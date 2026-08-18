@@ -409,6 +409,8 @@ services:
       VALUATION_EFFORT: ${VALUATION_EFFORT:-medium}
       CONTACT_TELEFOON: ${CONTACT_TELEFOON:-}
       WHATSAPP_NUMMER: ${WHATSAPP_NUMMER:-}
+      MUNT_SYMBOOL: ${MUNT_SYMBOOL:-}
+      MUNT_CODE: ${MUNT_CODE:-}
     volumes:
       - items-data:/data
     healthcheck:
@@ -432,6 +434,8 @@ services:
       ITEMS_UPLOAD_DIR: /data/fotos
       CONTACT_TELEFOON: ${CONTACT_TELEFOON:-}
       WHATSAPP_NUMMER: ${WHATSAPP_NUMMER:-}
+      MUNT_SYMBOOL: ${MUNT_SYMBOOL:-}
+      MUNT_CODE: ${MUNT_CODE:-}
     ports:
       - "8770:8770"
     volumes:
