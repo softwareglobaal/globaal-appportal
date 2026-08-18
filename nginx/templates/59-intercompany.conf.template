@@ -1,0 +1,20 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name intercompany.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Intercompany: onderlinge facturatie tussen de eigen firma's. Toont wat
+    # High Design Studio aan de Belgische firma's factureerde en wat daarvan
+    # betaald is, gespiegeld uit Octopus. Alleen achter forward-auth; de app
+    # controleert zelf nog eens op de groepen boekhouding/manager/admin.
+    #
+    # Niet te verwarren met boekhouding.${BASE_DOMAIN}: dat is de app van Joan
+    # en gaat over facturatie aan klanten vanuit Monday.
+    #
+    # Ophalen kost een Octopus-rapportaanroep per relatiefiche en duurt daarmee
+    # tientallen seconden, vandaar de ruime lees-timeout op de proxy.
+    set $app_upstream http://app-intercompany:3016;
+    proxy_read_timeout 300s;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

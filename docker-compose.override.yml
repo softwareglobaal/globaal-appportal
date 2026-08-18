@@ -127,6 +127,35 @@ services:
       retries: 3
     networks: [appnet]
 
+  # Intercompany: onderlinge facturatie tussen de eigen firma's. High Design
+  # Studio (Suriname) factureert maandelijks aan de Belgische firma's; deze app
+  # spiegelt wat daarvan in Octopus staat. Leest alleen. Niet te verwarren met
+  # app-boekhouding, dat over facturatie aan KLANTEN gaat. Eigen repo
+  # softwareglobaal/globaal-intercompany, uitgecheckt in ./intercompany met
+  # auto-deploy via deploy-stack.sh en cron.
+  app-intercompany:
+    build:
+      context: ./intercompany
+      dockerfile: app/Dockerfile
+    image: appportal-intercompany
+    restart: unless-stopped
+    environment:
+      PORT: "3016"
+      # Eigen rol intercompany_writer (migratie 118); leeg = nette melding.
+      INTERCOMPANY_DB_URL: ${INTERCOMPANY_DB_URL:-}
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+      INTERCOMPANY_GROUPS: ${INTERCOMPANY_GROUPS:-boekhouding,manager}
+      # Zelfde set als de Octopus-spiegel van de organisatie-app.
+      OCTOPUS_SOFTWAREHOUSE_UUID: ${OCTOPUS_SOFTWAREHOUSE_UUID:-}
+      OCTOPUS_USER: ${OCTOPUS_USER:-}
+      OCTOPUS_PASSWORD: ${OCTOPUS_PASSWORD:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3016/healthz', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    networks: [appnet]
+
   app-telefoonregister:
     build: ./telefoonregister
     image: appportal-telefoonregister

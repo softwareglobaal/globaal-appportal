@@ -998,6 +998,64 @@ een rooktest-workflow op elke push.
 maandelijks openstaande betalingen als xlsx) zijn nog niet overgenomen; van die
 scripts zat alleen de gecompileerde versie in de aanlevering.
 
+### 13.8 QuickBooks-connector - `quickbooks.globaal.be`
+
+Tweede boekhoudsysteem naast Octopus, voor High Design Studio in Suriname. Repo
+`globaal-quickbooks`, compose-service `app-quickbooks` op poort 3015, migratie
+115. Eigen app op het Intuit Developer Portal (workspace HDS, app "MCP") met
+production keys in `.env`; de officiele MCP-server van Intuit laat alleen
+Amerikaanse bedrijven toe, vandaar een eigen server.
+
+OAuth 2.0 met roterende refresh-tokens: elke vernieuwing levert een nieuw
+refresh-token op en het oude vervalt, dus `_bewaar_tokens` moet het altijd
+wegschrijven. Een refresh-token verloopt na 100 dagen zonder gebruik. Elke
+API-aanroep logt de `intuit_tid`, ook bij een fout, want dat is het enige
+kenmerk waarmee Intuit-support een aanroep kan terugvinden.
+
+Twee valkuilen: `BillAddr` is bij `Customer` niet selecteerbaar in een veldlijst
+(fout 4001) maar bij `Vendor` wel, dus daar `select *`; en de munt staat in
+`Preferences`, niet in `CompanyInfo`.
+
+### 13.9 Intercompany - `intercompany.globaal.be`
+
+Onderlinge facturatie tussen de eigen firma's. High Design Studio in Suriname
+factureert maandelijks aan de Belgische firma's voor administratieve
+werkzaamheden. Dat gebeurde met de hand, in een Excel, door een medewerker die
+vertrekt, en het bedrag stond nergens opgeschreven. Repo `globaal-intercompany`,
+compose-service `app-intercompany` op poort 3016, migratie 118, nginx-template
+`59-intercompany.conf.template`, Authentik via
+`scripts/add-intercompany-app.py` (groepen admin/manager/boekhouding).
+
+**Niet te verwarren met 13.7.** Dat is facturatie aan **klanten** vanuit Monday
+en het is de app van Joan. Dit is facturatie tussen de eigen firma's
+**onderling**. De Octopus-client is bewust een aparte kopie, zodat een wijziging
+in de ene app de andere niet kan breken.
+
+De app **leest alleen**. Er wordt niets naar Octopus geschreven en geen bedrag
+geraden: waar het maandbedrag vandaan komt is een openstaande vraag (het staat
+niet in de Excel, niet in Octopus en niet in QuickBooks).
+
+Wat gemeten is (18-08-2026): HDS staat in de Belgische dossiers als
+**leverancier** op rekening 602000, dagboek A is de factuur en dagboek F de
+bankbetaling. Over de hele historie komt gefactureerd **exact** uit op betaald,
+per relatiefiche tot op de cent. Betalingen lopen wel over de maandgrens en
+komen in stukken, dus een kalendermaand die niet uitkomt zegt op zichzelf niets;
+het cijfer met betekenis is het saldo.
+
+Drie valkuilen in de Octopus-API, alle drie eerder tot een verkeerde conclusie
+geleid:
+
+- `relationId: -1` werkt bij het **open**-postenrapport maar geeft bij
+  **history** nul rijen terug, zonder foutmelding.
+- Periodenummers lopen niet van 1 tot 12. Boekjaar 2 van Energie Efficient loopt
+  op kwartalen met nummers als `202504` voor oktober tot december 2025.
+- Het relatienummer zit in `relationIdentificationServiceData.relationKey.id`.
+
+**Nog open:** elk dossier heeft twee HDS-relatiefiches naast elkaar (een
+Surinaamse N.V. en een "PVT. LTD."), allebei met echte boekingen. Twee
+entiteiten of een dubbele fiche is nog niet uitgeklaard; tot dan telt elke fiche
+mee en is dat per fiche omkeerbaar op het tabblad Relatiefiches.
+
 ---
 
 ## 14. Centrale gebruikersdatabase & Medewerkers-app
