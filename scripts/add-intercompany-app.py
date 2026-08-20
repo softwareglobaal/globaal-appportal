@@ -19,7 +19,7 @@ from authentik.providers.proxy.models import ProxyProvider
 BASE_DOMAIN = os.environ.get("BASE_DOMAIN", "globaal.be")
 SLUG = "intercompany"
 NAME = "Intercompany"
-ROLES = ("admin", "manager", "boekhouding")
+ROLES = ("admin", "manager", "boekhouding", "intercompany")
 
 auth_flow = Flow.objects.get(slug="default-provider-authorization-implicit-consent")
 inval_flow = Flow.objects.filter(slug="default-provider-invalidation-flow").first()
