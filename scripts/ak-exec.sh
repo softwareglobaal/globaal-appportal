@@ -1,35 +1,34 @@
 #!/bin/sh
 # Draait een python-bestand in de Django-shell van authentik:
 #   sh scripts/ak-exec.sh scripts/somefile.py
+#   cat iets.py | sh scripts/ak-exec.sh /dev/stdin
 #
-# Waarom `docker compose cp` en niet een pijp: een pijp lijkt eenvoudiger, maar
-# `docker compose exec -T` geeft de EOF van die pijp niet betrouwbaar door aan
-# het proces in de container. De `cat` daarbinnen blijft dan wachten en het
-# script hangt tot de timeout, met een achtergebleven proces per poging
-# (nagemeten 20-08-2026: vier stuks). Een cp heeft dat probleem niet.
+# Twee dingen die hier niet vrijblijvend zijn, allebei op 20-08-2026 kapot
+# gegaan en uitgezocht:
 #
-# De retry staat er omdat diezelfde cp op 20-08-2026 twee keer achter elkaar
-#   Error response from daemon: Could not find the file /proc/self/fd in container
-# gaf en daarna uit zichzelf weer werkte. Niet reproduceerbaar, oorzaak
-# onbekend, dus een tweede poging in plaats van een verklaring.
+# 1. De bron gaat ALTIJD eerst naar een echt bestand. Roep je dit script aan met
+#    /dev/stdin, dan is dat zelf een symlink naar /proc/self/fd/0, en `docker
+#    cp` kopieert die symlink in plaats van de inhoud. Het doelpad in de
+#    container werd daardoor een doodlopende symlink, en elke latere aanroep gaf
+#    "Could not find the file /proc/self/fd in container". Dat stond er sinds
+#    14 augustus en werkte al die tijd alleen bij toeval: `ak shell` las via die
+#    symlink zijn eigen stdin, en daar stond het script in als je het erin pijpte.
 #
-# De `< /dev/null` op de laatste regel houdt `ak shell` los van de stdin van de
-# aanroeper; over ssh blijft dat kanaal anders open en hangt het commando.
+# 2. Het doelbestand krijgt een unieke naam en wordt daarna opgeruimd, zodat een
+#    kapot achtergelaten pad niet elke volgende aanroep meesleept.
+#
+# `< /dev/null` houdt `ak shell` los van de stdin van de aanroeper; over ssh
+# blijft dat kanaal anders open en hangt het commando tot de timeout. Om
+# dezelfde reden geen pijp naar `docker compose exec -T`: die geeft de EOF niet
+# betrouwbaar door, en dan blijft er per poging een proces achter.
 set -eu
 
-n=0
-while :; do
-    if docker compose cp "$1" authentik-server:/tmp/ak-exec.py; then
-        break
-    fi
-    n=$((n + 1))
-    if [ "$n" -ge 3 ]; then
-        echo "ak-exec: kopieren naar de container lukt niet na $n pogingen" >&2
-        exit 1
-    fi
-    echo "ak-exec: kopieren mislukt, poging $((n + 1)) van 3" >&2
-    sleep 2
-done
+bron=$(mktemp)
+trap 'rm -f "$bron"' EXIT
+cat "$1" > "$bron"
 
+doel="/tmp/ak-exec-$$.py"
+docker compose cp "$bron" "authentik-server:$doel"
 docker compose exec -T authentik-server \
-    ak shell -c "exec(open('/tmp/ak-exec.py').read())" < /dev/null
+    ak shell -c "exec(open('$doel').read())" < /dev/null
+docker compose exec -T authentik-server rm -f "$doel" < /dev/null || true
