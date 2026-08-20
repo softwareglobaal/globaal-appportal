@@ -9,6 +9,11 @@
 # gelijktijdige deploy erdoorheen, dus de oorzaak is onbekend. Een pijp heeft
 # die stap simpelweg niet nodig, en dat is genoeg reden om hem niet te gebruiken
 # in een script dat anderen draaien.
+#
+# De `< /dev/null` op de tweede regel is niet vrijblijvend: zonder die
+# afsluiting erft `ak shell` de stdin van de aanroeper. Draai je dit over ssh,
+# dan blijft dat kanaal open en hangt het commando tot de timeout.
 set -eu
 cat "$1" | docker compose exec -T authentik-server sh -c 'cat > /tmp/ak-exec.py'
-docker compose exec -T authentik-server ak shell -c "exec(open('/tmp/ak-exec.py').read())"
+docker compose exec -T authentik-server \
+    ak shell -c "exec(open('/tmp/ak-exec.py').read())" < /dev/null
