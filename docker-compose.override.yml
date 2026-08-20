@@ -102,6 +102,37 @@ services:
   # Octopus; MCP-server zodat Claude die boekhouding kan lezen en beperkt
   # bijwerken. Eigen repo softwareglobaal/globaal-quickbooks, uitgecheckt in
   # ./quickbooks met auto-deploy via deploy-stack.sh en cron.
+  # Energie-Efficient: sales van die firma plus het SketchUp-kookboek van de
+  # EPB-tekenaars. Leest alleen, en allebei de bronnen read-only:
+  #  - sales-data is het volume van het sales-dashboard (SQLite-spiegel van
+  #    Pipedrive). Geen tweede token, geen tweede waarheid.
+  #  - ./sketchup-mcp is een checkout van globaal-sketchup-mcp, zodat het
+  #    kookboek zichtbaar is zonder dat iemand in GitHub hoeft te kunnen.
+  # Eigen repo softwareglobaal/globaal-energie-efficient, uitgecheckt in
+  # ./energie-efficient met auto-deploy via deploy-stack.sh en cron.
+  app-energie-efficient:
+    build:
+      context: ./energie-efficient
+      dockerfile: app/Dockerfile
+    image: appportal-energie-efficient
+    restart: unless-stopped
+    environment:
+      PORT: "3016"
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+      EE_GROUPS: ${EE_GROUPS:-epb,manager}
+      SALES_DB: /sales/dashboard.db
+      SALES_ACCOUNT: ${EE_SALES_ACCOUNT:-energieefficient}
+      KOOKBOEK_MAP: /kookboek
+    volumes:
+      - sales-data:/sales:ro
+      - ./sketchup-mcp:/kookboek:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3016/healthz', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    networks: [appnet]
+
   app-quickbooks:
     build:
       context: ./quickbooks

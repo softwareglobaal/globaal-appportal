@@ -1,0 +1,13 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name energie-efficient.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Energie-Efficient: de sales van die firma plus het SketchUp-kookboek van de
+    # EPB-tekenaars. De app leest alleen; beide bronnen zijn read-only
+    # aangekoppeld. Achter forward-auth, en de app controleert daarna zelf nog
+    # eens op de groepen uit EE_GROUPS (standaard epb en manager) plus admin.
+    set $app_upstream http://app-energie-efficient:3016;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
