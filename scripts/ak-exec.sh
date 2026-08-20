@@ -1,6 +1,14 @@
 #!/bin/sh
-# Runs a python file inside authentik's Django shell:
+# Draait een python-bestand in de Django-shell van authentik:
 #   sh scripts/ak-exec.sh scripts/somefile.py
+#
+# Het bestand gaat via een pijp naar binnen en niet via `docker compose cp`.
+# Reden: op 20-08-2026 gaf die cp twee keer achter elkaar
+#   Error response from daemon: Could not find the file /proc/self/fd in container
+# waarna hij uit zichzelf weer werkte. Niet reproduceerbaar, ook niet met een
+# gelijktijdige deploy erdoorheen, dus de oorzaak is onbekend. Een pijp heeft
+# die stap simpelweg niet nodig, en dat is genoeg reden om hem niet te gebruiken
+# in een script dat anderen draaien.
 set -eu
-docker compose cp "$1" authentik-server:/tmp/ak-exec.py
+cat "$1" | docker compose exec -T authentik-server sh -c 'cat > /tmp/ak-exec.py'
 docker compose exec -T authentik-server ak shell -c "exec(open('/tmp/ak-exec.py').read())"
