@@ -2,18 +2,34 @@
 # Draait een python-bestand in de Django-shell van authentik:
 #   sh scripts/ak-exec.sh scripts/somefile.py
 #
-# Het bestand gaat via een pijp naar binnen en niet via `docker compose cp`.
-# Reden: op 20-08-2026 gaf die cp twee keer achter elkaar
-#   Error response from daemon: Could not find the file /proc/self/fd in container
-# waarna hij uit zichzelf weer werkte. Niet reproduceerbaar, ook niet met een
-# gelijktijdige deploy erdoorheen, dus de oorzaak is onbekend. Een pijp heeft
-# die stap simpelweg niet nodig, en dat is genoeg reden om hem niet te gebruiken
-# in een script dat anderen draaien.
+# Waarom `docker compose cp` en niet een pijp: een pijp lijkt eenvoudiger, maar
+# `docker compose exec -T` geeft de EOF van die pijp niet betrouwbaar door aan
+# het proces in de container. De `cat` daarbinnen blijft dan wachten en het
+# script hangt tot de timeout, met een achtergebleven proces per poging
+# (nagemeten 20-08-2026: vier stuks). Een cp heeft dat probleem niet.
 #
-# De `< /dev/null` op de tweede regel is niet vrijblijvend: zonder die
-# afsluiting erft `ak shell` de stdin van de aanroeper. Draai je dit over ssh,
-# dan blijft dat kanaal open en hangt het commando tot de timeout.
+# De retry staat er omdat diezelfde cp op 20-08-2026 twee keer achter elkaar
+#   Error response from daemon: Could not find the file /proc/self/fd in container
+# gaf en daarna uit zichzelf weer werkte. Niet reproduceerbaar, oorzaak
+# onbekend, dus een tweede poging in plaats van een verklaring.
+#
+# De `< /dev/null` op de laatste regel houdt `ak shell` los van de stdin van de
+# aanroeper; over ssh blijft dat kanaal anders open en hangt het commando.
 set -eu
-cat "$1" | docker compose exec -T authentik-server sh -c 'cat > /tmp/ak-exec.py'
+
+n=0
+while :; do
+    if docker compose cp "$1" authentik-server:/tmp/ak-exec.py; then
+        break
+    fi
+    n=$((n + 1))
+    if [ "$n" -ge 3 ]; then
+        echo "ak-exec: kopieren naar de container lukt niet na $n pogingen" >&2
+        exit 1
+    fi
+    echo "ak-exec: kopieren mislukt, poging $((n + 1)) van 3" >&2
+    sleep 2
+done
+
 docker compose exec -T authentik-server \
     ak shell -c "exec(open('/tmp/ak-exec.py').read())" < /dev/null
