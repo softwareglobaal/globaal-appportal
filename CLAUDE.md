@@ -23,6 +23,7 @@ auto-merge** - in beide gevallen deployt de VM daarna automatisch via cron (2 mi
 | sales-dashboard | Sales-dashboard (Pipedrive, Next.js) | `~/appportal/sales` | directe push | auto (cron 2 min) |
 | google-xelion-sync | Contactsync Google -> Xelion (Python) | `~/appportal/contactsync` | directe push | auto (cron 2 min) |
 | projecten | Projecten-dashboard (Thomas Berg; Raisha bouwt mee via Claude Code) | `~/appportal/projecten` | directe push | auto (cron 2 min) |
+| globaal-namen | Namenlijst (namen.globaal.be; Sufa bouwt mee via Claude Code) - losgemaakt uit globaal-organisatie 2026-08-21 | `~/appportal/namen` | directe push | auto (cron 2 min) |
 | globaal-kosten | Kosten-dashboard (host-app :8090) | `~/kosten` | PR → auto-merge | auto (`~/deploy-kosten.sh`) |
 | globaal-factuurrouter | AI-factuurrouteringsagent (§6A, :8787) | `~/factuurrouter` | PR → auto-merge | auto (`~/deploy-factuurrouter.sh`) |
 | globaal-stagebeoordeling | Stagebeoordeling (host-app :8088) | `~/stagebeoordeling` | PR → auto-merge | auto (`~/deploy-stagebeoordeling.sh`) |

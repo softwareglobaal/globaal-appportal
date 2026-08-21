@@ -1,0 +1,13 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name namen.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Forward-auth (embedded outpost) beschermt de namenlijst; de app zelf
+    # controleert de groepen (NAMEN_GROUPS) via de X-Authentik-Groups-header.
+    set $app_upstream http://app-namen:3018;
+    include /etc/nginx/snippets/forward-auth.conf;
+
+    client_max_body_size 5m;
+}

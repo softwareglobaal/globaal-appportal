@@ -332,6 +332,32 @@ services:
       start_period: 15s
     networks: [appnet]
 
+  # Namenlijst — wie werkt hier, met eigen kolommen per gebruiker
+  # (namen.globaal.be). Losgemaakt uit het Organisatie-dashboard (2026-08-21)
+  # zodat het een eigen repo heeft (softwareglobaal/globaal-namen, met Sufa
+  # als outside collaborator), uitgecheckt op de VM in ./namen met
+  # auto-deploy via deploy.sh + cron, zoals projecten.
+  app-namen:
+    build: ./namen
+    image: appportal-namen
+    restart: unless-stopped
+    environment:
+      PORT: "3018"
+      # Zelfde rollen als het Organisatie-dashboard: read-only 'portal' voor
+      # de lijst, medewerker_writer voor de eigen kolommen (migratie 123).
+      DATABASE_URL: ${APPPORTAL_DB_URL:-}
+      APPPORTAL_WRITE_URL: ${APPPORTAL_WRITE_URL:-}
+      # Wie de lijst mag zien: de eigen groep plus wie het Organisatie-
+      # dashboard al mocht zien (daar stond de pagina eerst).
+      NAMEN_GROUPS: ${NAMEN_GROUPS:-namenlijst,hr,organisatie,admin,manager}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3018/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
   # Communicatie — telefoonnummers + e-mailadressen, gelinkt aan kern (Postgres).
   # Opvolger-in-opbouw van het telefoonregister; die app blijft ernaast draaien.
   app-communicatie:
