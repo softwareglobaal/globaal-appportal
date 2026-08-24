@@ -14,7 +14,10 @@ import urllib.parse
 import urllib.request
 
 ENV_PADEN = ("~/appportal/siyanagents-data/.env", "~/appportal/.env")
-VERSIE = os.environ.get("GOOGLE_ADS_API_VERSION", "v21")
+# Google trekt API-versies na ~1 jaar in; een ingetrokken versie geeft HTML
+# i.p.v. JSON. v21 is gestorven op 2026-08-12. Bij een volgende sunset hier
+# ophogen (of GOOGLE_ADS_API_VERSION zetten in ~/appportal/.env).
+VERSIE = os.environ.get("GOOGLE_ADS_API_VERSION", "v23")
 OAUTH = "https://oauth2.googleapis.com/token"
 API = "https://googleads.googleapis.com"
 

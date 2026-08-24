@@ -1,0 +1,21 @@
+# Sales-dashboard — sales.globaal.be
+# Forward-auth (Authentik) beschermt de hele app; de identiteit gaat als
+# X-authentik-* headers naar de Next.js-app (EDITOR_USERS bepaalt wie
+# mag schrijven). Hersteld 2026-08-24: deze vhost stond alleen als
+# VM-drift op de server en was verdwenen, waardoor sales.globaal.be op
+# het standaard-serverblok (Authentik) uitkwam.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name sales.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Privé dashboard: niet indexeren.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # Docker-DNS + variabele proxy_pass: een herbouw van de container
+    # (nieuw IP) vraagt dan geen nginx-herlading.
+    set $app_upstream http://app-sales:3008;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
