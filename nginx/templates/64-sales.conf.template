@@ -17,5 +17,22 @@ server {
     # Docker-DNS + variabele proxy_pass: een herbouw van de container
     # (nieuw IP) vraagt dan geen nginx-herlading.
     set $app_upstream http://app-sales:3008;
+
+    # Agent-API (zie docs/AGENT-API.md in de sales-repo). Een agent heeft geen
+    # browsersessie en kan dus niet door de Authentik-poort; deze routes gaan er
+    # daarom langs. De app bewaakt ze zelf met SALES_AGENT_TOKEN. De
+    # identiteitsheaders worden hard geleegd, zodat een agent zich niet als
+    # gebruiker kan voordoen.
+    location /api/v1/ {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups   "";
+        proxy_set_header X-authentik-email    "";
+        proxy_set_header X-authentik-name     "";
+        proxy_set_header X-authentik-uid      "";
+        proxy_pass $app_upstream;
+    }
     include /etc/nginx/snippets/forward-auth.conf;
 }

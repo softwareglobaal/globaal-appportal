@@ -272,6 +272,8 @@ services:
       GOOGLE_ADS_REFRESH_TOKEN: ${GOOGLE_ADS_REFRESH_TOKEN:-}
       GOOGLE_ADS_DEVELOPER_TOKEN: ${GOOGLE_ADS_DEVELOPER_TOKEN:-}
       GOOGLE_ADS_LOGIN_CUSTOMER_ID: ${GOOGLE_ADS_LOGIN_CUSTOMER_ID:-}
+      # Token voor de agent-API (/api/v1). Leeg = API uit.
+      SALES_AGENT_TOKEN: ${SALES_AGENT_TOKEN:-}
       # Wie mag schrijven (notities/sync/analyse); besluit 2026-07-14:
       # joey en shelton volledige toegang. De middleware blijft staan
       # voor toekomstige kijk-accounts.
