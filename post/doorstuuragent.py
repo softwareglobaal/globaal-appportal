@@ -73,17 +73,18 @@ def _schrijf_status(status):
     os.replace(tijdelijk, STATUSPAD)
 
 
-def _treffers(mailbox, alles=False):
-    """(uid, message_id, onderwerp) van berichten die aan de regel voldoen.
+def _treffers(mailbox):
+    """(uid, message_id, onderwerp) van alle berichten die aan de regel voldoen.
 
     Het zoeken gebeurt op de mailserver via imapbron.lijst; SUBJECT is daar
     hoofdletterongevoelig en op deeltekst. We controleren het onderwerp daarna
     zelf nog eens, want de serverzoekopdracht is ruimer dan we willen en we
     sturen liever te weinig dan te veel door.
 
-    Standaard halen we alleen de nieuwste pagina op: bij het gewone rondje zijn
-    er per keer maar een paar nieuwe. Met alles=True (de eerste start) lopen we
-    door tot de laatste, zodat de hele bestaande voorraad wordt afgedekt.
+    We bladeren altijd door de hele trefferlijst. Voor deze regel gaat het maar
+    om een handvol per dag (de Anthropic-facturen), dus dat zijn een paar
+    goedkope ophaalacties. Het maakt een inhaalslag betrouwbaar: een bericht dat
+    nog niet is doorgestuurd wordt gevonden, waar het ook in de reeks staat.
     """
     uit = []
     vanaf = 0
@@ -95,7 +96,7 @@ def _treffers(mailbox, alles=False):
             if ONDERWERP.lower() not in onderwerp.lower():
                 continue
             uit.append((b["uid"], b.get("message_id"), onderwerp))
-        if not alles or not blok.get("meer"):
+        if not blok.get("meer"):
             break
         vanaf = blok["volgende_vanaf"]
     return uit
@@ -107,7 +108,7 @@ def _ronde(mailbox):
     eerste_keer = "gestart" not in status
 
     try:
-        treffers = _treffers(mailbox, alles=eerste_keer)
+        treffers = _treffers(mailbox)
     except Exception as e:
         log(f"kon niet zoeken in {MAILBOX}: {type(e).__name__}: {e}")
         return
