@@ -17,7 +17,12 @@
     .hint { color: #6b7885; font-size: 12.5px; margin-top: 8px; }
     .kaart { background: #fff; border: 1px solid #e1e5e9; border-radius: 6px; padding: 18px 20px; margin-top: 20px; }
     .kaart h2 { font-size: 1rem; margin-bottom: 12px; }
+    /* De tabellen zijn breed geworden nu de rechten erbij staan; op een smal
+       scherm schuift de tabel zelf in plaats van de hele pagina. */
+    .schuif { overflow-x: auto; }
     .tbl { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    .tbl th, .tbl td { white-space: nowrap; }
+    .tbl td.leeg { white-space: normal; }
     .tbl thead th { text-align: left; padding: 9px 12px; background: #f8fafc; border-bottom: 1px solid #e1e5e9;
                     font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.4px; color: #5a6774; }
     .tbl td { padding: 8px 12px; vertical-align: top; }
@@ -38,33 +43,46 @@
 <body>
   <header class="topbar">
     <span class="brand">Postbus</span>
-    <span class="userbox">{{ wie.gebruiker or "onbekend" }} · alleen-lezen</span>
+    <span class="userbox">{{ wie.gebruiker or "onbekend" }}</span>
   </header>
   <main>
     <div class="page-head">
       <h1>Mailboxen die jij mag lezen</h1>
-      <span class="muted">via Claude, uitsluitend lezen</span>
+      <span class="muted">via Claude</span>
     </div>
 
     <div class="kaart">
+      <div class="schuif">
       <table class="tbl">
-        <thead><tr><th>Mailbox</th><th>Naam</th><th>Mappen</th></tr></thead>
+        <thead><tr><th>Mailbox</th><th>Naam</th><th>Mappen</th><th>Rechten</th><th>Doorsturen naar</th></tr></thead>
         <tbody>
           {% for m in mijn %}
           <tr>
             <td><code>{{ m.adres }}</code></td>
             <td>{{ m.naam }}</td>
             <td>{{ m.mappen | join(", ") if m.mappen else "alle" }}</td>
+            <td>{{ rechten(m) | join(", ") }}</td>
+            <td>{% if m.doorsturen %}{% for a in m.doorsturen %}<code>{{ a }}</code>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}<span class="muted">niet toegestaan</span>{% endif %}</td>
           </tr>
           {% else %}
-          <tr><td class="leeg" colspan="3">
+          <tr><td class="leeg" colspan="5">
             Jouw Authentik-login opent op dit moment geen enkele mailbox.
             Vraag de beheerder om je groep bij de mailbox te zetten.
           </td></tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
       <p class="hint">Toegang volgt je Authentik-groepen: {{ wie.groepen | join(", ") or "geen" }}.</p>
+      <p class="hint">
+        Wat de rechten betekenen. <strong>Lezen</strong>: zoeken en berichten
+        opvragen, zonder iets te veranderen. <strong>Ordenen</strong>:
+        markeren, verplaatsen, mappen aanmaken en concepten klaarzetten.
+        <strong>Doorsturen</strong>: een bericht dat al in de mailbox staat
+        versturen naar een van de adressen hiernaast, met het origineel als
+        bijlage. Verwijderen kan bij geen enkele mailbox, en een zelf opgesteld
+        bericht versturen evenmin.
+      </p>
     </div>
 
     <div class="kaart">
@@ -86,8 +104,9 @@
     {% if beheer %}
     <div class="kaart">
       <h2>Beheer: alle mailboxen in {{ pad }}</h2>
+      <div class="schuif">
       <table class="tbl">
-        <thead><tr><th>Mailbox</th><th>Server</th><th>Groepen</th><th>Personen</th><th>Mappen</th></tr></thead>
+        <thead><tr><th>Mailbox</th><th>Server</th><th>Groepen</th><th>Personen</th><th>Mappen</th><th>Rechten</th><th>Doorsturen naar</th></tr></thead>
         <tbody>
           {% for m in alle %}
           <tr>
@@ -96,12 +115,15 @@
             <td>{{ m.groepen | join(", ") or "-" }}</td>
             <td>{{ m.personen | join(", ") or "-" }}</td>
             <td>{{ m.mappen | join(", ") if m.mappen else "alle" }}</td>
+            <td>{{ rechten(m) | join(", ") }}</td>
+            <td>{% if m.doorsturen %}{% for a in m.doorsturen %}<code>{{ a }}</code>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}<span class="muted">-</span>{% endif %}</td>
           </tr>
           {% else %}
-          <tr><td class="leeg" colspan="5">Er staat nog geen enkele mailbox in het bestand.</td></tr>
+          <tr><td class="leeg" colspan="7">Er staat nog geen enkele mailbox in het bestand.</td></tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
       <p class="hint">Wachtwoorden staan alleen in dat bestand op de VM en worden hier nooit getoond.</p>
       <p style="margin-top:14px"><button class="btn" id="controleer">Verbinding testen</button>
          <span id="uitslag" class="muted"></span></p>

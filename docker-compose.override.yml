@@ -571,10 +571,11 @@ services:
       start_period: 15s
     networks: [appnet]
 
-  # Postbus - leestoegang tot zakelijke mailboxen voor Claude (MCP over IMAP).
+  # Postbus - mailboxtoegang voor Claude (MCP over IMAP).
   # De pagina staat achter forward-auth; het MCP-endpoint checkt zelf het token
   # en leidt de toegang af uit de Authentik-groepen in dat token.
-  # Uitsluitend lezen: geen SMTP, geen STORE, geen verwijderen.
+  # Verwijderen kan nooit. Wat per mailbox verder mag (ordenen, doorsturen)
+  # staat in mailboxen.yaml en is zichtbaar op de beheerpagina.
   app-post:
     build: ./post
     image: appportal-post
@@ -592,6 +593,12 @@ services:
       # hieronder staan. Leeg gelaten = geen enkele mailbox leesbaar.
       MCP_TOKEN: ${POSTBUS_MCP_TOKEN:-}
       POSTBUS_TOKEN_GROEPEN: ${POSTBUS_TOKEN_GROEPEN:-}
+      # Noodrem voor uitgaande post. Staat dit niet op 'ja', dan stuurt de
+      # server niets door, ook niet bij een mailbox die het volgens
+      # mailboxen.yaml mag. Zo zet je alles in een keer stil zonder aan de
+      # mailboxen te komen.
+      POSTBUS_DOORSTUREN: ${POSTBUS_DOORSTUREN:-}
+      POSTBUS_DOORSTUREN_DAGPLAFOND: ${POSTBUS_DOORSTUREN_DAGPLAFOND:-100}
     volumes:
       # De mailboxen met hun wachtwoorden: één bestand op de VM, buiten git,
       # read-only aangekoppeld. Bewerken met: nano ~/post-config/mailboxen.yaml
@@ -604,7 +611,41 @@ services:
       start_period: 15s
     networks: [appnet]
 
+  # Doorstuuragent - draait uit zichzelf, los van de connector. Kijkt met een
+  # vast ritme in een mailbox en stuurt door wat aan de regel voldoet (nu: de
+  # facturen van Anthropic naar de boekhouding). Zelfde image en zelfde
+  # mailboxen.yaml als app-post; het gebruikt dezelfde verzendcode, dus dezelfde
+  # noodrem (POSTBUS_DOORSTUREN) en dezelfde allowlist per mailbox gelden.
+  app-post-agent:
+    build: ./post
+    image: appportal-post
+    restart: unless-stopped
+    command: ["python", "doorstuuragent.py"]
+    environment:
+      POSTBUS_CONFIG: /config/mailboxen.yaml
+      POSTBUS_DOORSTUREN: ${POSTBUS_DOORSTUREN:-}
+      POSTBUS_DOORSTUREN_DAGPLAFOND: ${POSTBUS_DOORSTUREN_DAGPLAFOND:-100}
+      # De regel: welke mailbox, welk onderwerp, waarheen. De bestemming moet
+      # ook in 'doorsturen:' van die mailbox staan, anders weigert het versturen.
+      POSTBUS_AGENT_MAILBOX: ${POSTBUS_AGENT_MAILBOX:-}
+      POSTBUS_AGENT_ONDERWERP: ${POSTBUS_AGENT_ONDERWERP:-}
+      POSTBUS_AGENT_NAAR: ${POSTBUS_AGENT_NAAR:-}
+      POSTBUS_AGENT_MAP: ${POSTBUS_AGENT_MAP:-INBOX}
+      POSTBUS_AGENT_INTERVAL: ${POSTBUS_AGENT_INTERVAL:-300}
+      # Standaard leeg: bij de eerste start worden bestaande berichten NIET
+      # doorgestuurd, alleen onthouden. Zet op 'ja' om de geschiedenis alsnog
+      # in een keer door te sturen.
+      POSTBUS_AGENT_BACKFILL: ${POSTBUS_AGENT_BACKFILL:-}
+      POSTBUS_AGENT_STATE: /state/doorgestuurd.json
+    volumes:
+      - ${POSTBUS_CONFIG_DIR:-/home/ubuntu/post-config}:/config:ro
+      # Schrijfbaar: hier onthoudt de agent wat al doorgestuurd is, zodat een
+      # herstart niets herhaalt.
+      - post-agent-state:/state
+    networks: [appnet]
+
 volumes:
+  post-agent-state:
   telefoonregister-data:
   sales-data:
   projecten-data:

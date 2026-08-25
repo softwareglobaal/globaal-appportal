@@ -12,6 +12,10 @@
 standaard:
   imap_host: imap.one.com
   imap_poort: 993
+  # Alleen nodig bij mailboxen die mogen doorsturen; zonder verzendserver
+  # vervalt dat recht (de mailbox blijft dan gewoon leesbaar).
+  smtp_host: send.one.com
+  smtp_poort: 465
   # Welke mappen leesbaar zijn. Laat de lijst weg om alle mappen open te zetten.
   # Let op de punt in de mapnamen van one.com: INBOX.Sent, niet INBOX/Sent.
   mappen: [INBOX, INBOX.Sent]
@@ -28,7 +32,7 @@ mailboxen:
     personen: []
     # Mag er ook iets gewijzigd worden in deze mailbox: markeren, verplaatsen,
     # mappen aanmaken en concepten klaarzetten. Zonder deze regel is de
-    # mailbox alleen-lezen. Verwijderen en verzenden kan sowieso nooit.
+    # mailbox alleen-lezen. Verwijderen kan sowieso nooit.
     schrijven: ja
 
   - adres: boekhouding@h-architects.be
@@ -38,5 +42,23 @@ mailboxen:
     # Deze mailbox mag alleen in de INBOX gelezen worden.
     mappen: [INBOX]
 
+  - adres: mch@h-architects.be
+    naam: MCH H-Architects
+    wachtwoord: CHANGE_ME
+    # Een losse gebruiker in plaats van een groep: dit is een persoonlijke
+    # mailbox, daar hoort geen hele afdeling in te kunnen kijken.
+    personen: [mehdi]
+    schrijven: ja
+    # Waar deze mailbox naartoe mag doorsturen. Dit is de hele bevoegdheid:
+    # elk adres apart, geen jokertekens, geen "heel het domein". Wat hier niet
+    # staat wordt geweigerd. Laat de regel weg en er gaat niets naar buiten.
+    #
+    # Doorsturen stuurt een bericht dat AL in de mailbox staat, met het
+    # origineel als bijlage. Een zelf opgesteld bericht versturen kan niet.
+    # Let op: de server heeft daarnaast een noodrem (POSTBUS_DOORSTUREN in de
+    # stack-.env). Staat die uit, dan gaat er niets uit, ook niet hier.
+    doorsturen: [ap@unabo.be]
+
 # Een mailbox zonder groepen en zonder personen is voor niemand zichtbaar.
 # Dat is met opzet: toegang staat dicht tot ze expliciet wordt opengezet.
+# Hetzelfde geldt voor doorsturen: geen lijst betekent niets doorsturen.

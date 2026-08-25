@@ -7,6 +7,18 @@ toegangsregels staan. Het staat bewust NIET in git: er staan wachtwoorden in.
 Toegang is dicht tenzij ze open staat: een mailbox zonder groepen en zonder
 personen is voor niemand zichtbaar. Wie erbij mag wordt bepaald door de
 Authentik-login (groepen uit de forward-auth, meegegeven in het OAuth-token).
+
+Wat er per mailbox mag gebeuren staat los van wie erbij mag, en het staat er
+per mailbox bij:
+
+- lezen        altijd, dat is waar een mailbox voor opengezet wordt
+- schrijven    markeren, verplaatsen, mappen, concepten (schrijven: ja)
+- doorsturen   alleen naar de adressen die eronder staan (doorsturen: [...])
+
+Doorsturen is de enige vorm van uitgaande post die deze server kent. Er is
+geen tool die een vrij bericht opstelt en er is geen manier om een bestemming
+mee te geven die niet in het bestand staat: de lijst is de hele bevoegdheid.
+Staat er niets, dan gaat er uit die mailbox niets naar buiten.
 """
 import os
 import threading
@@ -19,12 +31,14 @@ PAD = os.environ.get("POSTBUS_CONFIG", "/config/mailboxen.yaml")
 # Alleen deze sleutels mogen per mailbox voorkomen; een typefout in het
 # bestand is anders een stille beperking (of erger, een stille verruiming).
 SLEUTELS = {"adres", "naam", "imap_host", "imap_poort", "gebruiker",
-            "wachtwoord", "groepen", "personen", "mappen", "schrijven"}
+            "wachtwoord", "groepen", "personen", "mappen", "schrijven",
+            "smtp_host", "smtp_poort", "doorsturen"}
 
 # Wat als "ja" telt bij schrijven. Staat het er niet, dan is de mailbox
 # alleen-lezen: schrijven is een bewuste keuze per mailbox, geen standaard.
 JA = {"ja", "yes", "waar", "true", "aan"}
-STANDAARD_SLEUTELS = {"imap_host", "imap_poort", "mappen"}
+STANDAARD_SLEUTELS = {"imap_host", "imap_poort", "mappen",
+                      "smtp_host", "smtp_poort"}
 
 _slot = threading.Lock()
 _cache = {"stempel": None, "gelezen_op": 0.0, "mailboxen": [], "fouten": []}
@@ -119,6 +133,33 @@ def _ontleed(ruw):
         else:
             schrijven = str(ruw_schrijven).strip().lower() in JA
 
+        smtp_host = str(rij.get("smtp_host")
+                        or standaard.get("smtp_host") or "").strip()
+        smtp_poort = rij.get("smtp_poort", standaard.get("smtp_poort", 465))
+        try:
+            smtp_poort = int(smtp_poort)
+        except (TypeError, ValueError):
+            fouten.append(f"{waar}: smtp_poort moet een getal zijn")
+            continue
+
+        # Doorsturen werkt als de mappenlijst: leeg betekent niet "alles mag"
+        # maar "niets mag". Een adres met witruimte, een komma of een
+        # regeleinde weigeren we hier al: zoiets hoort niet ongezien in een
+        # kopregel terecht te komen.
+        doorsturen = []
+        for best in _lijst(rij.get("doorsturen"), "doorsturen", fouten, waar):
+            if "@" not in best or any(t in best for t in " \t\r\n,;<>"):
+                fouten.append(
+                    f"{waar}: '{best}' is geen bruikbaar doorstuuradres")
+                continue
+            doorsturen.append(best.lower())
+        # Zonder verzendserver kan doorsturen niet werken. Dan valt alleen die
+        # bevoegdheid weg; de mailbox blijft gewoon leesbaar.
+        if doorsturen and not smtp_host:
+            fouten.append(f"{waar}: doorsturen staat aan, maar er is geen "
+                          "smtp_host (ook geen standaard)")
+            doorsturen = []
+
         gezien.add(adres.lower())
         uit.append({
             "adres": adres,
@@ -131,6 +172,9 @@ def _ontleed(ruw):
             "personen": [p.lower() for p in personen],
             "mappen": mappen,
             "schrijven": schrijven,
+            "smtp_host": smtp_host,
+            "smtp_poort": smtp_poort,
+            "doorsturen": doorsturen,
         })
     return uit, fouten
 
@@ -201,6 +245,45 @@ def vereis_schrijven(mailbox, wat):
             f"{wat} kan niet: mailbox {mailbox['adres']} staat op alleen-lezen. "
             "De beheerder zet 'schrijven: ja' bij deze mailbox in "
             "mailboxen.yaml als dat de bedoeling is.")
+
+
+def rechten(mailbox):
+    """De bevoegdheden van een mailbox als korte lijst.
+
+    Eén formulering voor de beheerpagina en voor het antwoord dat het model
+    krijgt, zodat wat Mehdi op de pagina ziet staan hetzelfde is als wat
+    Claude te horen krijgt. Lezen staat er altijd bij: daar zet je een mailbox
+    voor open.
+    """
+    uit = ["lezen"]
+    if mailbox.get("schrijven"):
+        uit.append("ordenen")
+    if mailbox.get("doorsturen"):
+        uit.append("doorsturen")
+    return uit
+
+
+def vereis_doorsturen(mailbox, bestemming):
+    """Toetst de bestemming aan de lijst van deze mailbox en geeft hem terug.
+
+    Er is met opzet geen patroon, geen jokerteken voor een heel domein en geen
+    stand waarin alles mag: alleen een adres dat letterlijk in mailboxen.yaml
+    staat komt hier doorheen. Een bestemming toevoegen is dus een bewuste
+    handeling van de beheerder, en ze is daarna ook zichtbaar op de
+    beheerpagina.
+    """
+    toegestaan = mailbox.get("doorsturen") or []
+    if not toegestaan:
+        raise ValueError(
+            f"Doorsturen kan niet: bij mailbox {mailbox['adres']} staat geen "
+            "enkele bestemming open. De beheerder zet die met "
+            "'doorsturen: [adres]' in mailboxen.yaml.")
+    gevraagd = str(bestemming or "").strip().lower()
+    if gevraagd not in toegestaan:
+        raise ValueError(
+            f"'{bestemming}' staat niet open als bestemming voor "
+            f"{mailbox['adres']}. Toegestaan: " + ", ".join(toegestaan))
+    return gevraagd
 
 
 def map_toegestaan(mailbox, naam):

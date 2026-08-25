@@ -1,16 +1,33 @@
 # Postbus - mailboxtoegang voor Claude
 
 `post.globaal.be` geeft Claude toegang tot een aantal zakelijke mailboxen via
-MCP: lezen, zoeken en opruimen. **Verwijderen en verzenden kunnen niet**, en
-dat is geen afspraak maar een eigenschap van de code: er staat geen EXPUNGE in,
-de vlag `\Deleted` wordt nergens gezet, `smtplib` wordt niet geimporteerd, en
-verplaatsen naar een prullenbak- of spammap wordt geweigerd omdat die mappen
-vanzelf worden leeggemaakt. De testset controleert dat op de uitvoerbare code,
-dus het blijft ook zo bij een volgende wijziging.
+MCP: lezen, zoeken, opruimen en bij sommige mailboxen doorsturen.
+
+**Verwijderen kan niet**, bij geen enkele mailbox, en dat is geen afspraak maar
+een eigenschap van de code: er staat geen EXPUNGE in, de vlag `\Deleted` wordt
+nergens gezet, en verplaatsen naar een prullenbak- of spammap wordt geweigerd
+omdat die mappen vanzelf worden leeggemaakt.
+
+**Uitgaande post bestaat in precies een vorm: doorsturen.** Een bericht dat al
+in de mailbox staat gaat naar een adres dat bij die mailbox is opgesomd, met
+het origineel als bijlage. Een zelf opgesteld bericht versturen kan niet, en
+een bestemming die niet in `mailboxen.yaml` staat wordt geweigerd. Alle
+SMTP-code staat in `verzenden.py`; `imapbron.py` is en blijft de leesmodule
+zonder SMTP. Wat er per mailbox mag staat op de beheerpagina en in het antwoord
+van de tool `mailboxen`, onder `rechten`.
+
+Bovenop het bestand ligt een noodrem: zonder `POSTBUS_DOORSTUREN=ja` in de
+stack-`.env` gaat er niets uit, ook niet bij een mailbox die het volgens het
+bestand mag. Daarnaast geldt een dagplafond.
+
+`post/test_rechten.py` controleert deze grenzen op de uitvoerbare code, zodat
+ze het bij een volgende wijziging ook blijven doen. Draaien met
+`python post/test_rechten.py`; er wordt niets verbonden en er gaat niets uit.
 
 Wie welke mailbox mag lezen wordt bepaald door de **Authentik-login**. De
 groepen uit die login gaan mee in het OAuth-token en worden bij elke aanroep
-opnieuw vergeleken met de toegangsregels per mailbox.
+opnieuw vergeleken met de toegangsregels per mailbox. Dat staat los van wat er
+in die mailbox mag gebeuren: toegang en rechten zijn twee dingen.
 
 ## Het mailboxenbestand
 
@@ -26,6 +43,8 @@ De opzet staat in `mailboxen.voorbeeld.yaml` (zonder wachtwoorden). Kort:
 standaard:
   imap_host: imap.one.com
   imap_poort: 993
+  smtp_host: send.one.com       # alleen nodig bij mailboxen die doorsturen
+  smtp_poort: 465
   mappen: [INBOX, INBOX.Sent]
 
 mailboxen:
@@ -35,12 +54,21 @@ mailboxen:
     groepen: [admin, elevait]     # Authentik-groepen die deze mailbox mogen lezen
     personen: []                  # losse Authentik-gebruikers, voor uitzonderingen
     mappen: [INBOX]               # weglaten = alle mappen
+    schrijven: ja                 # markeren, verplaatsen, mappen, concepten
+    doorsturen: [ap@unabo.be]     # de enige adressen waarheen post mag vertrekken
 ```
 
 Regels die in de code zitten, niet in een afspraak:
 
 - **Dicht tenzij opengezet.** Een mailbox zonder groepen en zonder personen is
-  voor niemand zichtbaar.
+  voor niemand zichtbaar. Zonder `schrijven` is ze alleen-lezen, en zonder
+  `doorsturen` gaat er niets naar buiten.
+- **Doorsturen kent geen jokertekens.** Elk adres staat er los in; hetzelfde
+  domein is nog geen toestemming. Een bestemming met een komma, een regeleinde
+  of zonder apenstaartje wordt bij het inlezen al geweigerd, zodat er niets
+  ongezien in een kopregel belandt.
+- **Zonder `smtp_host` vervalt het doorsturen**, en blijft de mailbox verder
+  gewoon leesbaar. Dat staat als fout op de beheerpagina.
 - **Wijzigingen zijn binnen vijf seconden actief**, herstarten hoeft niet. Wat
   er mis is met het bestand staat op de pagina onder Beheer.
 - **Mapnamen van one.com gebruiken een punt**: `INBOX.Sent`, niet `INBOX/Sent`.
@@ -51,7 +79,7 @@ Regels die in de code zitten, niet in een afspraak:
 
 | Tool | Wat het doet | Wijzigt |
 |---|---|---|
-| `mailboxen` | welke mailboxen deze gebruiker mag lezen, met de open mappen | nee |
+| `mailboxen` | welke mailboxen deze gebruiker mag lezen, met de open mappen en de rechten per mailbox | nee |
 | `mappen` | alle IMAP-mappen van een mailbox, met daarbij welke leesbaar zijn | nee |
 | `zoek` | zoekt op de mailserver (van/aan/onderwerp/tekst/datum/ongelezen) en geeft koppen, nieuwste eerst | nee |
 | `bericht` | een bericht volledig: koppen, tekst en de namen van de bijlagen | nee |
@@ -59,6 +87,14 @@ Regels die in de code zitten, niet in een afspraak:
 | `verplaatsen` | bericht naar een andere map, bijvoorbeeld archiveren | ja |
 | `map_aanmaken` | nieuwe map, inclusief abonnement zodat hij in de webmail verschijnt | ja |
 | `concept_opslaan` | zet een concept in de conceptenmap, met `antwoord_op` netjes in de conversatie | ja |
+| `doorsturen` | stuurt een bericht uit de mailbox naar een toegestaan adres, origineel als bijlage | verstuurt |
+
+`doorsturen` is de enige tool die iets de deur uit doet. Ze weigert een
+bestemming die niet bij de mailbox staat, een bericht dat zelf al een
+doorsturing van deze server was (anders ontstaat er een lus), en een bericht
+dat van de bestemming zelf afkomstig is. Van elke doorsturing komt een kopie in
+de map Verzonden van de mailbox, zodat de eigenaar in zijn eigen webmail ziet
+wat er namens hem vertrokken is.
 
 De vier wijzigende tools werken alleen op mailboxen met `schrijven: ja`. Zonder
 die regel is een mailbox alleen-lezen, ook voor iemand die er wel bij mag.
@@ -75,6 +111,31 @@ Twee dingen zijn met opzet zo gebouwd:
 
 Bijlagen worden benoemd (naam, type, grootte) maar niet ingelezen. Dat is een
 bewuste grens voor versie 1.
+
+## De doorstuuragent
+
+De MCP-tools wachten op een verzoek. Voor post die zonder tussenkomst moet
+vertrekken draait daarnaast `doorstuuragent.py` als eigen service
+(`app-post-agent`, zelfde image). Hij kijkt met een vast ritme in een mailbox
+en stuurt door wat aan een regel voldoet. De eerste regel: de facturen van
+Anthropic (`Your receipt from Anthropic, PBC`) uit `mch@h-architects.be` naar
+`ap@unabo.be`.
+
+Hij deelt alle rails met de tool, want hij roept dezelfde `verzenden.doorsturen`
+aan: de bestemming moet in `doorsturen:` van de mailbox staan, de noodrem
+`POSTBUS_DOORSTUREN` geldt ook hier, en het origineel gaat als bijlage mee met
+een kopie in Verzonden. Wat de agent er zelf bovenop zet:
+
+- **Alleen wat nieuw is.** Bij de eerste start onthoudt hij welke berichten er
+  al staan en stuurt die *niet* door, zodat het aanzetten niet in een klap de
+  hele geschiedenis naar de boekhouding jaagt. Wil je die geschiedenis wel, zet
+  dan eenmalig `POSTBUS_AGENT_BACKFILL=ja`.
+- **Nooit twee keer.** Elk doorgestuurd bericht wordt op Message-ID onthouden
+  in een klein statusbestand (`/state`, een schrijfbaar volume), zodat een
+  herstart niets herhaalt.
+
+De regel staat in omgevingsvariabelen (`POSTBUS_AGENT_*`, zie `.env.example`).
+Een tweede soort post erbij is een kwestie van die uitbreiden.
 
 ## Koppelen
 

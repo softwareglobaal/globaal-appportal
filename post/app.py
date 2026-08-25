@@ -20,6 +20,10 @@ import mcp_server
 
 app = Flask(__name__)
 
+# De rechten van een mailbox worden op één plek bepaald (config.rechten), zodat
+# de pagina en het antwoord aan Claude nooit uit elkaar kunnen lopen.
+app.jinja_env.globals["rechten"] = config.rechten
+
 BEHEER_GROEPEN = [g.strip().lower() for g in
                   os.environ.get("POSTBUS_BEHEER_GROEPEN", "admin").split(",")
                   if g.strip()]
