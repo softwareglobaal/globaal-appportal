@@ -1,4 +1,4 @@
--- 125: Een overgeslagen bevestiging mag opnieuw geprobeerd worden (Elevait)
+-- 129: Een overgeslagen bevestiging mag opnieuw geprobeerd worden (Elevait)
 -- Aanleiding: bevinding bij het nalezen van de HR-agent, 21-08-2026.
 --
 -- mailer.al_verstuurd() blokkeerde op ELKE rij in uitgaande_mail, ongeacht
