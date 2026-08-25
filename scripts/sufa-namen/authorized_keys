@@ -1,0 +1,1 @@
+restrict,command="/usr/local/bin/sufa-shell" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJmj0o241CkFU3FY73bO1lrvcGKev3wpbPJStoFj4Ilx sufa-namenlijst

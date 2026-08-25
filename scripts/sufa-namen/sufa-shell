@@ -1,0 +1,45 @@
+#!/bin/sh
+# ForceCommand-shell voor de user 'sufa', gezet via de command=-optie in zijn
+# authorized_keys (samen met 'restrict'). Wat sufa ook via SSH aanroept, dit
+# script is het enige dat draait: het vertaalt een whitelist van subcommando's
+# naar de sudo-helper /usr/local/sbin/namen-ctl. Al de rest geeft hulptekst.
+set -euf
+
+help() {
+  cat <<'EOF'
+Namenlijst-beheer (namen.globaal.be) - beschikbare commando's:
+
+  ssh sufa@server status         container-status en health
+  ssh sufa@server logs [n]       laatste n logregels (standaard 100, max 2000)
+  ssh sufa@server restart        herstart de namen-container
+  ssh sufa@server deploy         deploy nu meteen (i.p.v. wachten op de cron)
+
+Codewijzigingen gaan via git push naar main (repo globaal-namen);
+de server deployt zelf binnen 2 minuten.
+EOF
+}
+
+line="${SSH_ORIGINAL_COMMAND:-}"
+[ -n "$line" ] || { help; exit 0; }
+
+# Woordsplitsing van het aangevraagde commando (set -f staat al aan, dus geen
+# glob-expansie). Alleen exact gewhiteliste vormen gaan door naar sudo.
+set -- $line
+case "${1:-}" in
+  status|restart|deploy)
+    [ $# -eq 1 ] || { help; exit 1; }
+    exec sudo /usr/local/sbin/namen-ctl "$1"
+    ;;
+  logs)
+    [ $# -le 2 ] || { help; exit 1; }
+    exec sudo /usr/local/sbin/namen-ctl logs "${2:-100}"
+    ;;
+  help|-h|--help)
+    help; exit 0
+    ;;
+  *)
+    echo "Onbekend commando: ${1:-}" >&2
+    help
+    exit 1
+    ;;
+esac

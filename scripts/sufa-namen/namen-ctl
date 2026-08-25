@@ -1,0 +1,52 @@
+#!/bin/sh
+# Beheer-helper voor de user 'sufa' (Namenlijst-app, namen.globaal.be).
+# Wordt uitsluitend via sudo aangeroepen vanuit /usr/local/bin/sufa-shell
+# (het ForceCommand-account van sufa); zie /etc/sudoers.d/sufa-namen.
+#
+# Alles is hard vastgezet op de namen-container. Argumenten worden hier
+# streng gevalideerd; er is bewust geen enkele weg naar andere containers,
+# bestanden of een shell.
+set -eu
+
+CONTAINER=appportal-app-namen-1
+DEPLOY=/home/ubuntu/appportal/namen/deploy.sh
+LOGFILE=/var/log/sufa-namen.log
+
+audit() { echo "$(date -Is) $*" >> "$LOGFILE" 2>/dev/null || true; }
+
+cmd="${1:-help}"
+
+case "$cmd" in
+  status)
+    audit status
+    docker ps --all --filter "name=$CONTAINER" \
+      --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+    docker inspect "$CONTAINER" \
+      --format 'health: {{if .State.Health}}{{.State.Health.Status}}{{else}}n.v.t.{{end}}'
+    ;;
+  logs)
+    n="${2:-100}"
+    case "$n" in
+      ''|*[!0-9]*) echo "logs: aantal regels moet een getal zijn (1-2000)"; exit 1 ;;
+    esac
+    [ "$n" -ge 1 ] && [ "$n" -le 2000 ] || { echo "logs: aantal regels moet 1-2000 zijn"; exit 1; }
+    audit "logs $n"
+    docker logs --tail "$n" "$CONTAINER" 2>&1
+    ;;
+  restart)
+    audit restart
+    docker restart "$CONTAINER"
+    echo "Container herstart. Controleer met: status"
+    ;;
+  deploy)
+    audit deploy
+    # deploy.sh draait als ubuntu (git-checkout is van ubuntu); output gaat
+    # ook naar het cron-log zodat de historie compleet blijft.
+    runuser -u ubuntu -- "$DEPLOY" | tee -a /home/ubuntu/deploy-namen.log
+    echo "Deploy-run klaar (geen output hierboven = al up-to-date)."
+    ;;
+  *)
+    echo "Gebruik: status | logs [regels] | restart | deploy"
+    exit 1
+    ;;
+esac

@@ -1,0 +1,4 @@
+# Sufa (ForceCommand-account) mag uitsluitend de namen-helper als root draaien.
+# De helper valideert zelf alle argumenten en is hard vastgezet op de
+# namen-container; zie /usr/local/sbin/namen-ctl.
+sufa ALL=(root) NOPASSWD: /usr/local/sbin/namen-ctl
