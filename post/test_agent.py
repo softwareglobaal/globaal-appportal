@@ -30,6 +30,7 @@ def maak_agent(tmp, onderwerp="Your receipt from Anthropic, PBC",
     os.environ["POSTBUS_AGENT_NAAR"] = naar
     os.environ["POSTBUS_AGENT_STATE"] = str(Path(tmp) / "status.json")
     os.environ["POSTBUS_AGENT_BACKFILL"] = "ja" if backfill else ""
+    os.environ["POSTBUS_AGENT_PAUZE"] = "0"   # geen wachttijd in de test
     os.environ["POSTBUS_DOORSTUREN"] = "ja"   # noodrem aan voor de test
     for mod in ("doorstuuragent", "verzenden"):
         sys.modules.pop(mod, None)

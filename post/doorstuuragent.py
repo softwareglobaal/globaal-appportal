@@ -41,6 +41,11 @@ ONDERWERP = os.environ.get("POSTBUS_AGENT_ONDERWERP", "").strip()
 NAAR = os.environ.get("POSTBUS_AGENT_NAAR", "").strip()
 MAP = os.environ.get("POSTBUS_AGENT_MAP", "INBOX").strip() or "INBOX"
 INTERVAL = int(os.environ.get("POSTBUS_AGENT_INTERVAL", "300"))
+# Pauze tussen twee verzendingen. one.com knijpt af bij te veel mail binnen vijf
+# minuten (een 451 "Too many mails"), dus we blijven daar ruim onder: 20 seconden
+# is een stuk of vijftien per vijf minuten. Kost bij een grote inhaalslag wat
+# tijd, maar dan komt alles aan in plaats van de helft te stuiten.
+PAUZE = int(os.environ.get("POSTBUS_AGENT_PAUZE", "20"))
 BACKFILL = os.environ.get("POSTBUS_AGENT_BACKFILL", "").strip().lower() in \
     {"ja", "yes", "waar", "true", "aan"}
 STATUSPAD = os.environ.get("POSTBUS_AGENT_STATE",
@@ -131,21 +136,35 @@ def _ronde(mailbox):
     if not nieuw:
         return
 
-    for uid, mid, onderwerp in nieuw:
+    for i, (uid, mid, onderwerp) in enumerate(nieuw):
         try:
             resultaat = verzenden.doorsturen(mailbox, MAP, uid, NAAR)
         except Exception as e:
-            # Niet als gezien markeren: dan probeert hij het de volgende ronde
-            # opnieuw. Wel loggen, zodat een blijvend probleem opvalt.
+            # Het dagplafond is geen storing maar een grens: de rest gaat morgen
+            # vanzelf. Dan heeft doorgaan geen zin, dus we stoppen dit rondje.
+            if "plafond" in str(e).lower():
+                log("dagplafond bereikt; de resterende berichten volgen een "
+                    "volgende dag vanzelf.")
+                break
+            # Andere fouten (bijvoorbeeld tijdelijk afknijpen door de mailserver):
+            # niet als gezien markeren, zodat de volgende ronde het opnieuw
+            # probeert. Wel pauzeren, om de server niet verder te belasten.
             log(f"doorsturen mislukte voor uid {uid} ({onderwerp[:60]}): "
                 f"{type(e).__name__}: {e}")
+            if i < len(nieuw) - 1:
+                time.sleep(PAUZE)
             continue
         if mid:
             gezien.add(mid)
         status["gezien"] = sorted(gezien)
         _schrijf_status(status)
         log(f"doorgestuurd naar {NAAR}: {onderwerp[:70]} "
-            f"(kopie in Verzonden: {resultaat.get('kopie_in_verzonden')})")
+            f"({resultaat.get('vandaag_verstuurd')}/{resultaat.get('dagplafond')} "
+            f"vandaag, kopie in Verzonden: {resultaat.get('kopie_in_verzonden')})")
+        # Rustig aan blijven, ook als het net goed ging: het is juist het tempo
+        # dat de mailserver deed afknijpen.
+        if i < len(nieuw) - 1:
+            time.sleep(PAUZE)
 
 
 def _controleer_opzet():

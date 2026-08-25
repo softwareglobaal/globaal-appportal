@@ -108,6 +108,20 @@ def test_doorsturen_vraagt_een_verzendserver():
     print("  ok  de mailbox blijft wel gewoon leesbaar")
 
 
+def test_mislukte_verzending_eet_het_plafond_niet():
+    """Een mislukte poging (mailserver knijpt af) mag het dagplafond niet
+    opsouperen; anders legt een tijdelijke storing de rest van de dag stil."""
+    verzenden._teller.update(dag=None, aantal=0)
+    for _ in range(5):
+        verzenden._mag_nog()          # alleen kijken telt niet mee
+    gelijk(verzenden._huidige_dag()["aantal"], 0,
+           "kijken naar de ruimte verbruikt geen ruimte")
+    verzenden._tel_succes()
+    verzenden._tel_succes()
+    gelijk(verzenden._huidige_dag()["aantal"], 2,
+           "alleen geslaagde verzendingen tellen mee")
+
+
 def test_onbekende_sleutel_valt_op():
     _, fouten = ontleed(rij(doorstuur=["ap@unabo.be"]))
     if not any("onbekende sleutels" in f for f in fouten):

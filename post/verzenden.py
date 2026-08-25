@@ -49,16 +49,30 @@ _slot = threading.Lock()
 _teller = {"dag": None, "aantal": 0}
 
 
-def _tel_mee():
-    """Houdt bij hoeveel er vandaag uitging. Geeft False boven het plafond."""
+def _huidige_dag():
     vandaag = date.today().isoformat()
+    if _teller["dag"] != vandaag:
+        _teller.update(dag=vandaag, aantal=0)
+    return _teller
+
+
+def _mag_nog():
+    """True zolang het dagplafond nog niet bereikt is. Telt niets."""
     with _slot:
-        if _teller["dag"] != vandaag:
-            _teller.update(dag=vandaag, aantal=0)
-        if _teller["aantal"] >= DAGPLAFOND:
-            return False
-        _teller["aantal"] += 1
-        return True
+        return _huidige_dag()["aantal"] < DAGPLAFOND
+
+
+def _tel_succes():
+    """Telt een geslaagde verzending mee en geeft het aantal van vandaag.
+
+    Alleen successen tellen. Een mislukte poging (bijvoorbeeld omdat de
+    mailserver even afknijpt) mag het plafond niet opeten, anders stopt een
+    tijdelijke storing de rest van de dag.
+    """
+    with _slot:
+        dag = _huidige_dag()
+        dag["aantal"] += 1
+        return dag["aantal"]
 
 
 def _verzondenmap(M):
@@ -130,7 +144,7 @@ def doorsturen(mailbox, mapnaam, uid, naar, notitie=None):
                 "sturen levert heen en weer geschuif op. Overgeslagen.")
 
         onderwerp = imapbron._kop(bron.get("Subject")) or "(geen onderwerp)"
-        if not _tel_mee():
+        if not _mag_nog():
             raise ValueError(
                 f"Dagplafond van {DAGPLAFOND} doorsturingen bereikt. Er gaat "
                 "vandaag niets meer uit; morgen telt hij opnieuw.")
@@ -164,6 +178,9 @@ def doorsturen(mailbox, mapnaam, uid, naar, notitie=None):
                              f"({type(e).__name__}: {e}). Er is niets "
                              "vertrokken.")
 
+        # Nu is het echt de deur uit; pas hier telt het mee voor het dagplafond.
+        vandaag = _tel_succes()
+
         # SMTP levert alleen af; de map Verzonden vult je mailprogramma normaal
         # zelf. Zonder deze kopie zou een doorsturing door de server nergens in
         # de mailbox terug te zien zijn, en juist dat is hier het bewijsstuk.
@@ -184,7 +201,7 @@ def doorsturen(mailbox, mapnaam, uid, naar, notitie=None):
     uit = {"mailbox": mailbox["adres"], "map": bron_map, "uid": int(uid),
            "naar": bestemming, "onderwerp": bericht["Subject"],
            "verstuurd": True, "kopie_in_verzonden": bewaard,
-           "vandaag_verstuurd": _teller["aantal"], "dagplafond": DAGPLAFOND}
+           "vandaag_verstuurd": vandaag, "dagplafond": DAGPLAFOND}
     if not bewaard:
         uit["let_op"] = ("Het bericht is verstuurd, maar de kopie in Verzonden "
                          "lukte niet. In de mailbox is de doorsturing dus niet "
