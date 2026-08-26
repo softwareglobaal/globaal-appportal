@@ -40,6 +40,13 @@ ACTIEF = os.environ.get("POSTBUS_DOORSTUREN", "").strip().lower() in JA
 DAGPLAFOND = int(os.environ.get("POSTBUS_DOORSTUREN_DAGPLAFOND", "100"))
 TIMEOUT = 30
 
+# Aparte noodrem voor het echt versturen van een zelf opgesteld bericht. Dit is
+# ingrijpender dan doorsturen (een vrije bestemming in plaats van een lijst),
+# dus het heeft een eigen schakelaar. Staat die uit, dan verstuurt de server
+# niets, ook niet als een mailbox 'verzenden: ja' heeft. Het dagplafond wordt
+# gedeeld met doorsturen: het telt alle uitgaande post van de dag samen.
+ACTIEF_VERZENDEN = os.environ.get("POSTBUS_VERZENDEN", "").strip().lower() in JA
+
 # Deze kop zetten we op wat wij versturen. Komt hij op een binnengekomen
 # bericht voorbij, dan kijken we naar iets dat zelf al een doorsturing was en
 # stoppen we: anders stuurt een verkeerd gerichte regel post eindeloos rond.
@@ -206,4 +213,75 @@ def doorsturen(mailbox, mapnaam, uid, naar, notitie=None):
         uit["let_op"] = ("Het bericht is verstuurd, maar de kopie in Verzonden "
                          "lukte niet. In de mailbox is de doorsturing dus niet "
                          "terug te zien.")
+    return uit
+
+
+def verstuur(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
+             van_map="INBOX"):
+    """Stelt een bericht op en verstuurt het echt namens de mailbox.
+
+    Anders dan doorsturen mag de bestemming hier vrij zijn: dit is de enige
+    plek waar de server post naar een zelfgekozen adres stuurt. Het is daarom
+    dubbel begrensd: de mailbox moet 'verzenden: ja' hebben (config) en de
+    server-noodrem POSTBUS_VERZENDEN moet aanstaan. Een kopie gaat in de map
+    Verzonden en het dagplafond geldt samen met doorsturen.
+    """
+    config.vereis_verzenden(mailbox)
+
+    if not ACTIEF_VERZENDEN:
+        raise ValueError(
+            "Versturen staat uit op deze server (POSTBUS_VERZENDEN). De "
+            "mailbox staat het toe, de server niet. Vraag de beheerder de "
+            "schakelaar om te zetten, of zet een concept klaar.")
+    if not mailbox.get("smtp_host"):
+        raise ValueError(f"Voor {mailbox['adres']} staat geen smtp_host in "
+                         "mailboxen.yaml, dus er kan niets verstuurd worden.")
+    if not _mag_nog():
+        raise ValueError(
+            f"Dagplafond van {DAGPLAFOND} uitgaande berichten bereikt. Er gaat "
+            "vandaag niets meer uit; morgen telt hij opnieuw.")
+
+    van_map = config.map_toegestaan(mailbox, van_map)
+
+    with imapbron._Sessie(mailbox) as M:
+        bericht, ontvangers, kopie, verwijzing = imapbron.bouw_bericht(
+            M, mailbox, aan, onderwerp, tekst, cc=cc, antwoord_op=antwoord_op,
+            van_map=van_map)
+
+        try:
+            with smtplib.SMTP_SSL(mailbox["smtp_host"], mailbox["smtp_poort"],
+                                  timeout=TIMEOUT) as s:
+                s.login(mailbox["gebruiker"], mailbox["wachtwoord"])
+                s.send_message(bericht)
+        except Exception as e:
+            raise ValueError(f"Versturen mislukte ({type(e).__name__}: {e}). "
+                             "Er is niets vertrokken.")
+
+        # Pas nu het echt de deur uit is telt het mee voor het dagplafond.
+        vandaag = _tel_succes()
+
+        # Een kopie in Verzonden, zodat de eigenaar in zijn eigen webmail ziet
+        # wat er namens hem is vertrokken.
+        doelmap = _verzondenmap(M)
+        bewaard = False
+        if doelmap:
+            try:
+                ok, _ = M.append(f'"{doelmap}"', "(\\Seen)",
+                                 imaplib.Time2Internaldate(time.time()),
+                                 bericht.as_bytes())
+                bewaard = ok == "OK"
+            except Exception:
+                bewaard = False
+
+    print(f"[postbus] verstuurd {mailbox['adres']} naar "
+          f"{', '.join(ontvangers)}: {bericht['Subject'][:80]}", flush=True)
+
+    uit = {"mailbox": mailbox["adres"], "aan": ontvangers, "cc": kopie,
+           "onderwerp": bericht["Subject"], "antwoord_op": verwijzing,
+           "verstuurd": True, "kopie_in_verzonden": bewaard,
+           "vandaag_verstuurd": vandaag, "dagplafond": DAGPLAFOND}
+    if not bewaard:
+        uit["let_op"] = ("Het bericht is verstuurd, maar de kopie in Verzonden "
+                         "lukte niet. In de mailbox is het dus niet terug te "
+                         "zien.")
     return uit

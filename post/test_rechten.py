@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config          # noqa: E402
+import verwijderen     # noqa: E402
 import verzenden      # noqa: E402
 
 BASIS = {
@@ -120,6 +121,83 @@ def test_mislukte_verzending_eet_het_plafond_niet():
     verzenden._tel_succes()
     gelijk(verzenden._huidige_dag()["aantal"], 2,
            "alleen geslaagde verzendingen tellen mee")
+
+
+def test_verwijderen_en_verzenden_staan_standaard_uit():
+    boxen, _ = ontleed(rij())
+    m = boxen[0]
+    gelijk(m["verwijderen"], False, "verwijderen is standaard uit")
+    gelijk(m["verzenden"], False, "verzenden is standaard uit")
+    gelijk(config.rechten(m), ["lezen"], "zonder vlaggen alleen lezen")
+    weigert(lambda: config.vereis_verwijderen(m),
+            "staat daar niet op", "verwijderen wordt geweigerd zonder vlag")
+    weigert(lambda: config.vereis_verzenden(m),
+            "staat daar niet op", "versturen wordt geweigerd zonder vlag")
+
+
+def test_verwijderen_en_verzenden_als_ze_aanstaan():
+    boxen, _ = ontleed(rij(schrijven="ja", verwijderen="ja", verzenden="ja"))
+    m = boxen[0]
+    gelijk(m["verwijderen"], True, "verwijderen: ja wordt gelezen")
+    gelijk(m["verzenden"], True, "verzenden: ja wordt gelezen")
+    gelijk(config.rechten(m),
+           ["lezen", "ordenen", "verwijderen", "versturen"],
+           "de rechten staan er allemaal")
+    # De guards laten dit nu wel door (geen ValueError).
+    config.vereis_verwijderen(m)
+    config.vereis_verzenden(m)
+    print("  ok  de guards laten een opengezette mailbox door")
+
+
+def test_verzenden_vraagt_een_verzendserver():
+    ruw = {"standaard": {"imap_host": "imap.one.com", "imap_poort": 993},
+           "mailboxen": [rij(verzenden="ja")]}
+    boxen, fouten = config._ontleed(ruw)
+    gelijk(boxen[0]["verzenden"], False,
+           "zonder smtp_host vervalt het verzenden")
+    if not any("smtp_host" in f for f in fouten):
+        raise AssertionError("de beheerder wordt niet gewaarschuwd")
+    print("  ok  verzenden zonder smtp_host valt weg, mailbox blijft bruikbaar")
+
+
+def test_noodrem_verzenden_gaat_voor_het_bestand():
+    boxen, _ = ontleed(rij(verzenden="ja"))
+    if verzenden.ACTIEF_VERZENDEN:
+        print("  --  overgeslagen: POSTBUS_VERZENDEN staat aan in deze omgeving")
+        return
+    weigert(lambda: verzenden.verstuur(boxen[0], "iemand@elders.be", "hoi", "x"),
+            "staat uit", "noodrem blokkeert versturen ook bij 'verzenden: ja'")
+
+
+def test_noodrem_verwijderen_gaat_voor_het_bestand():
+    boxen, _ = ontleed(rij(verwijderen="ja"))
+    if verwijderen.ACTIEF:
+        print("  --  overgeslagen: POSTBUS_VERWIJDEREN staat aan in deze omgeving")
+        return
+    weigert(lambda: verwijderen.verwijderen(boxen[0], "INBOX", 1),
+            "staat uit", "noodrem blokkeert verwijderen ook bij 'verwijderen: ja'")
+
+
+def test_verwijdermodule_verwijdert_niet_onherstelbaar():
+    """De verwijdermodule mag naar de prullenbak verplaatsen (MOVE), maar zelf
+    geen \\Deleted zetten of expunge doen: dat zou onherstelbaar zijn."""
+    bron = (Path(__file__).resolve().parent / "verwijderen.py").read_text(
+        encoding="utf-8")
+    boom = ast.parse(bron)
+    for knoop in ast.walk(boom):
+        if isinstance(knoop, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                              ast.AsyncFunctionDef)):
+            eerste = knoop.body[0] if knoop.body else None
+            if (isinstance(eerste, ast.Expr)
+                    and isinstance(eerste.value, ast.Constant)
+                    and isinstance(eerste.value.value, str)):
+                knoop.body.pop(0)
+    code = ast.unparse(boom)
+    for verboden in ("EXPUNGE", "\\Deleted"):
+        if verboden in code:
+            raise AssertionError(
+                f"verwijderen.py bevat {verboden!r} in de uitvoerbare code")
+    print("  ok  verwijderen.py zet geen \\Deleted en doet geen expunge")
 
 
 def test_onbekende_sleutel_valt_op():

@@ -1,24 +1,30 @@
 # Postbus - mailboxtoegang voor Claude
 
 `post.globaal.be` geeft Claude toegang tot een aantal zakelijke mailboxen via
-MCP: lezen, zoeken, opruimen en bij sommige mailboxen doorsturen.
+MCP: lezen, zoeken, opruimen en, per mailbox instelbaar, doorsturen,
+verwijderen en versturen.
 
-**Verwijderen kan niet**, bij geen enkele mailbox, en dat is geen afspraak maar
-een eigenschap van de code: er staat geen EXPUNGE in, de vlag `\Deleted` wordt
-nergens gezet, en verplaatsen naar een prullenbak- of spammap wordt geweigerd
-omdat die mappen vanzelf worden leeggemaakt.
+**Verwijderen is zacht en per mailbox.** Alleen bij een mailbox met
+`verwijderen: ja` gaat een bericht naar de prullenbak van diezelfde mailbox,
+waar de eigenaar het nog kan terugzetten. De server zet zelf geen `\Deleted` en
+doet geen EXPUNGE, en leegt de prullenbak niet: onherstelbaar weggooien kan
+deze koppeling niet. Het zit in een eigen bestand `verwijderen.py`; `imapbron.py`
+blijft de leesmodule zonder EXPUNGE of `\Deleted`.
 
-**Uitgaande post bestaat in precies een vorm: doorsturen.** Een bericht dat al
-in de mailbox staat gaat naar een adres dat bij die mailbox is opgesomd, met
-het origineel als bijlage. Een zelf opgesteld bericht versturen kan niet, en
-een bestemming die niet in `mailboxen.yaml` staat wordt geweigerd. Alle
+**Uitgaande post bestaat in twee vormen: doorsturen en versturen.** Doorsturen
+stuurt een bericht dat al in de mailbox staat naar een adres uit de lijst van
+die mailbox, met het origineel als bijlage. Versturen (`verzenden: ja`) laat de
+agent een bericht opstellen en naar een vrij adres sturen; dat is de zwaarste
+bevoegdheid en staat daarom alleen open waar hij expliciet is aangezet. Alle
 SMTP-code staat in `verzenden.py`; `imapbron.py` is en blijft de leesmodule
 zonder SMTP. Wat er per mailbox mag staat op de beheerpagina en in het antwoord
 van de tool `mailboxen`, onder `rechten`.
 
-Bovenop het bestand ligt een noodrem: zonder `POSTBUS_DOORSTUREN=ja` in de
-stack-`.env` gaat er niets uit, ook niet bij een mailbox die het volgens het
-bestand mag. Daarnaast geldt een dagplafond.
+Bovenop het bestand liggen noodremmen in de stack-`.env`: zonder
+`POSTBUS_DOORSTUREN=ja` stuurt de server niets door, zonder `POSTBUS_VERZENDEN=ja`
+verstuurt hij niets, en zonder `POSTBUS_VERWIJDEREN=ja` verwijdert hij niets,
+ook niet bij een mailbox die het volgens het bestand mag. Voor de uitgaande
+post geldt daarnaast een gedeeld dagplafond.
 
 `post/test_rechten.py` controleert deze grenzen op de uitvoerbare code, zodat
 ze het bij een volgende wijziging ook blijven doen. Draaien met
@@ -164,6 +170,10 @@ anders wilt.
 | `POSTBUS_MCP_TOKEN` | statisch token voor Claude Code; leeg = uit |
 | `POSTBUS_TOKEN_GROEPEN` | groepen van dat statische token; leeg = geen mailbox |
 | `POSTBUS_BEHEER_GROEPEN` | wie de beheersectie ziet (standaard `admin`) |
+| `POSTBUS_DOORSTUREN` | noodrem doorsturen; alleen `ja` zet het aan |
+| `POSTBUS_VERWIJDEREN` | noodrem verwijderen (naar prullenbak); alleen `ja` zet het aan |
+| `POSTBUS_VERZENDEN` | noodrem versturen van een vrij bericht; alleen `ja` zet het aan |
+| `POSTBUS_DOORSTUREN_DAGPLAFOND` | gedeeld dagplafond uitgaande post (standaard 100) |
 | `POSTBUS_CONFIG_DIR` | map op de VM met `mailboxen.yaml` (standaard `/home/ubuntu/post-config`) |
 
 ## Injectie: waarom mailinhoud geen opdracht is
@@ -172,11 +182,14 @@ Een mailbox is invoer van buiten. Zodra Claude post kan lezen en ook iets in
 die mailbox kan veranderen, is een phishingmail een poging tot instructie
 ("verplaats alle facturen naar map X"). Daarom:
 
-- verwijderen en verzenden bestaan niet, dus de ergste gevolgen zijn
-  uitgesloten in plaats van afgeraden,
+- verwijderen, verzenden en doorsturen staan standaard uit: elk vraagt zowel
+  een expliciete keuze per mailbox als een server-noodrem, dus de ingrijpende
+  gevolgen zijn dicht tenzij een beheerder ze bewust openzet,
 - wijzigen staat per mailbox uit tot iemand het bewust aanzet,
-- alles wat een wijziging is, is omkeerbaar: een vlag kun je terugzetten en een
-  verplaatst bericht kun je terugverplaatsen,
+- wat wordt gewijzigd blijft zo omkeerbaar mogelijk: een vlag kun je
+  terugzetten, een verplaatst of verwijderd (naar de prullenbak) bericht kun je
+  terugzetten; alleen een verstuurd bericht is niet terug te nemen, en die
+  bevoegdheid staat daarom het strengst,
 - de server geeft bij `initialize` expliciet mee dat berichtinhoud gegevens is
   en geen opdracht, en dat dat dubbel geldt voor wijzigingen,
 - elke aanroep komt in de containerlog: wie, welke mailbox, welk bericht, en

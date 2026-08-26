@@ -32,8 +32,18 @@ mailboxen:
     personen: []
     # Mag er ook iets gewijzigd worden in deze mailbox: markeren, verplaatsen,
     # mappen aanmaken en concepten klaarzetten. Zonder deze regel is de
-    # mailbox alleen-lezen. Verwijderen kan sowieso nooit.
+    # mailbox alleen-lezen.
     schrijven: ja
+    # Twee ingrijpender rechten, allebei standaard uit en per mailbox:
+    #   verwijderen: ja  -> een bericht naar de prullenbak (terugzetbaar).
+    #   verzenden: ja    -> een zelf opgesteld bericht echt versturen naar een
+    #                       vrij adres (vraagt smtp_host). Dit is de zwaarste
+    #                       bevoegdheid; zet hem alleen waar het echt moet.
+    # Beide hebben daarnaast een server-noodrem (POSTBUS_VERWIJDEREN /
+    # POSTBUS_VERZENDEN in de stack-.env). Staat die uit, dan gebeurt het niet,
+    # ook niet als het hier aanstaat.
+    # verwijderen: ja
+    # verzenden: ja
 
   - adres: boekhouding@h-architects.be
     naam: Boekhouding H-Architects

@@ -1682,15 +1682,21 @@ daarna pas structuur in aanbrengen.
 
 ### 14.9 Postbus - mailboxtoegang voor Claude (`post.globaal.be`)
 Eén plek waar zakelijke mailboxen bereikbaar worden voor Claude, via MCP over
-IMAP: lezen, zoeken en opruimen. **Verwijderen en verzenden kunnen niet**, en
-dat is een eigenschap van de code, geen afspraak: geen EXPUNGE, de vlag
-`\Deleted` wordt nergens gezet, `smtplib` wordt niet geimporteerd, en
-verplaatsen naar een prullenbak- of spammap wordt geweigerd omdat die vanzelf
-worden leeggemaakt. De testset toetst dat op de uitvoerbare code (docstrings
-eruit via `ast`), zodat het ook zo blijft. Lezen gebeurt met `readonly=True` en
-`BODY.PEEK`, dus wie alleen leest raakt de leesstatus niet aan (dezelfde keuze
-als de postkamer-agent van Elevait); alleen de wijzigfuncties openen een map
-schrijfbaar.
+IMAP: lezen, zoeken, opruimen en, per mailbox instelbaar, doorsturen,
+verwijderen en versturen. **Alles wat ingrijpt staat standaard dicht en per
+mailbox** (`schrijven`/`verwijderen`/`verzenden`/`doorsturen`), en de drie
+zwaarste hebben daarnaast een server-noodrem (`POSTBUS_DOORSTUREN`,
+`POSTBUS_VERWIJDEREN`, `POSTBUS_VERZENDEN`): staat die uit, dan gebeurt het bij
+geen enkele mailbox. Verwijderen is zacht (het bericht gaat naar de prullenbak
+van de mailbox, terugzetbaar; de server zet zelf geen `\Deleted` en doet geen
+EXPUNGE en leegt de prullenbak niet). De code is opgesplitst zodat je aan één
+bestand ziet wat er kan: `imapbron.py` is de leesmodule zonder EXPUNGE,
+`\Deleted` of `smtplib`; verwijderen zit in `verwijderen.py`, uitgaande post in
+`verzenden.py`. De testset (`test_rechten.py`) toetst die grenzen op de
+uitvoerbare code (docstrings eruit via `ast`), zodat het zo blijft. Lezen
+gebeurt met `readonly=True` en `BODY.PEEK`, dus wie alleen leest raakt de
+leesstatus niet aan (dezelfde keuze als de postkamer-agent van Elevait); alleen
+de wijzigfuncties openen een map schrijfbaar.
 - **App in deze repo** (`post/`, zoals `angela/`). Flask, service
   **`app-post`**:3017, nginx `58-post.conf.template`, Authentik via
   `scripts/add-post-app.py` (tegel-groepen admin/manager/postbus). Geen
@@ -1711,29 +1717,45 @@ schrijfbaar.
   endpoint 404). Het statische token hoort bij geen enkele Authentik-gebruiker
   en krijgt alleen de groepen uit `POSTBUS_TOKEN_GROEPEN`; leeg gelaten leest
   het dus niets.
-- **Acht tools**: lezend `mailboxen`, `mappen`, `zoek` (IMAP SEARCH op de
+- **Elf tools**: lezend `mailboxen`, `mappen`, `zoek` (IMAP SEARCH op de
   server, niet hier filteren) en `bericht`; wijzigend `markeren`,
-  `verplaatsen`, `map_aanmaken` en `concept_opslaan`. Die laatste vier werken
-  alleen op een mailbox met `schrijven: ja` in `mailboxen.yaml`, anders is de
-  mailbox alleen-lezen. Elke wijziging is omkeerbaar (vlag terugzetten, bericht
-  terugverplaatsen), en `concept_opslaan` legt een concept met de vlag
-  `\Draft` in de conceptenmap: de gebruiker verstuurt zelf. Verplaatsen gaat
-  via IMAP MOVE; kan de server dat niet, dan weigert de app in plaats van het
-  na te bootsen met kopieren en wissen. Twee harde regels in de antwoorden: elke lijst
-  meldt het totaal aantal treffers plus `volgende_vanaf`, en een lange
-  berichttekst komt in genummerde delen met `aantal_delen`/`tekens_totaal`.
-  Niets wordt stil afgekapt (de les van de Missive-previews). Bijlagen worden
-  benoemd maar niet ingelezen, bewuste grens voor versie 1.
+  `verplaatsen`, `map_aanmaken` en `concept_opslaan` (op een mailbox met
+  `schrijven: ja`); en ingrijpend `doorsturen` (naar een adres uit de
+  `doorsturen`-lijst van die mailbox), `verwijderen` (naar de prullenbak, op
+  `verwijderen: ja`) en `versturen` (een zelf opgesteld bericht naar een vrij
+  adres, op `verzenden: ja` plus een `smtp_host`). Staat het recht er niet, dan
+  weigert de tool. Wat gewijzigd wordt blijft zo omkeerbaar mogelijk (vlag
+  terugzetten, bericht terugverplaatsen of uit de prullenbak halen); alleen
+  `versturen` is niet terug te nemen en staat daarom het strengst. `verplaatsen`
+  en `verwijderen` gaan via IMAP MOVE; kan de server dat niet, dan weigert de
+  app in plaats van het na te bootsen met kopieren en wissen. `concept_opslaan`
+  legt een concept met de vlag `\Draft` in de conceptenmap: dan verstuurt de
+  gebruiker zelf. Voor doorsturen en versturen geldt een gedeeld dagplafond
+  (`POSTBUS_DOORSTUREN_DAGPLAFOND`, standaard 100). Twee harde regels in de
+  antwoorden: elke lijst meldt het totaal aantal treffers plus `volgende_vanaf`,
+  en een lange berichttekst komt in genummerde delen met
+  `aantal_delen`/`tekens_totaal`. Niets wordt stil afgekapt (de les van de
+  Missive-previews). Bijlagen worden benoemd maar niet ingelezen, bewuste grens
+  voor versie 1.
 - **Injectie is hier het echte risico**: een mailbox is invoer van buiten, en
-  Claude heeft elders schrijfrechten. Daarom read-only tools, een `instructions`
-  bij `initialize` die zegt dat berichtinhoud gegevens is en geen opdracht, en
-  een leesspoor in de containerlog (wie, welke mailbox, welk bericht).
+  Claude heeft elders schrijfrechten. Daarom staat alles wat ingrijpt per
+  mailbox dicht (plus een noodrem voor de zwaarste drie), een `instructions`
+  bij `initialize` die zegt dat berichtinhoud gegevens is en geen opdracht en
+  dat dat dubbel geldt voor verwijderen en uitgaande post, en een leesspoor in
+  de containerlog (wie, welke mailbox, welk bericht, en bij wijzigingen wat er
+  veranderd is).
 - Beheerderspagina toont alle mailboxen, de fouten in het bestand (nooit een
   wachtwoord) en een knop die per mailbox echt inlogt op IMAP.
 
 ---
 
-*Laatst bijgewerkt: 2026-08-14 - **Postbus** (§14.9): read-only IMAP-toegang
+*Laatst bijgewerkt: 2026-08-26 - **Postbus** (§14.9): per-mailbox rechten
+uitgebreid met `verwijderen` (naar de prullenbak) en `verzenden` (vrij bericht
+via SMTP), elk met een server-noodrem (`POSTBUS_VERWIJDEREN`,
+`POSTBUS_VERZENDEN`); nu elf MCP-tools. Verwijderen in `verwijderen.py`,
+versturen in `verzenden.py`; `imapbron.py` blijft de leesmodule.*
+
+*Eerder: 2026-08-14 - **Postbus** (§14.9): read-only IMAP-toegang
 voor Claude op `post.globaal.be`, service `app-post`:3017, mailboxen en hun
 toegangsregels in `~/post-config/mailboxen.yaml`, toegang bepaald door de
 Authentik-groepen uit de SSO-login.*

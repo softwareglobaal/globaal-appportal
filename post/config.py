@@ -14,11 +14,20 @@ per mailbox bij:
 - lezen        altijd, dat is waar een mailbox voor opengezet wordt
 - schrijven    markeren, verplaatsen, mappen, concepten (schrijven: ja)
 - doorsturen   alleen naar de adressen die eronder staan (doorsturen: [...])
+- verwijderen  naar de prullenbak van de mailbox zelf (verwijderen: ja)
+- verzenden    een zelf opgesteld bericht echt versturen (verzenden: ja)
 
-Doorsturen is de enige vorm van uitgaande post die deze server kent. Er is
-geen tool die een vrij bericht opstelt en er is geen manier om een bestemming
-mee te geven die niet in het bestand staat: de lijst is de hele bevoegdheid.
-Staat er niets, dan gaat er uit die mailbox niets naar buiten.
+Verwijderen en verzenden staan standaard uit en zijn een bewuste keuze per
+mailbox, net als schrijven. Ze hebben daarnaast elk een server-noodrem
+(POSTBUS_VERWIJDEREN, POSTBUS_VERZENDEN): staat die uit, dan gebeurt het bij
+geen enkele mailbox, ook niet als het bestand het toestaat. Verzenden vraagt
+bovendien een smtp_host, anders vervalt het recht.
+
+Doorsturen en verzenden zijn de vormen van uitgaande post die deze server
+kent. Bij doorsturen gaat alleen post uit die al in de mailbox stond, naar een
+adres uit de lijst; bij verzenden mag de agent een bericht opstellen en naar
+een zelfgekozen adres sturen. Dat laatste is de meest ingrijpende bevoegdheid
+en staat daarom alleen open waar hij expliciet is aangezet.
 """
 import os
 import threading
@@ -32,7 +41,7 @@ PAD = os.environ.get("POSTBUS_CONFIG", "/config/mailboxen.yaml")
 # bestand is anders een stille beperking (of erger, een stille verruiming).
 SLEUTELS = {"adres", "naam", "imap_host", "imap_poort", "gebruiker",
             "wachtwoord", "groepen", "personen", "mappen", "schrijven",
-            "smtp_host", "smtp_poort", "doorsturen"}
+            "smtp_host", "smtp_poort", "doorsturen", "verwijderen", "verzenden"}
 
 # Wat als "ja" telt bij schrijven. Staat het er niet, dan is de mailbox
 # alleen-lezen: schrijven is een bewuste keuze per mailbox, geen standaard.
@@ -43,6 +52,15 @@ STANDAARD_SLEUTELS = {"imap_host", "imap_poort", "mappen",
 _slot = threading.Lock()
 _cache = {"stempel": None, "gelezen_op": 0.0, "mailboxen": [], "fouten": []}
 HERLEES_NA = 5.0  # seconden; bestand wijzigen werkt zonder herstart
+
+
+def _ja(waarde):
+    """Een ja/nee-veld uit het bestand: alleen een expliciete ja telt als ja."""
+    if isinstance(waarde, bool):
+        return waarde
+    if waarde is None:
+        return False
+    return str(waarde).strip().lower() in JA
 
 
 def _lijst(waarde, veld, fouten, waar):
@@ -125,13 +143,7 @@ def _ontleed(ruw):
                           "niemand zichtbaar")
         mappen = _lijst(rij.get("mappen"), "mappen", fouten, waar) or st_mappen
 
-        ruw_schrijven = rij.get("schrijven")
-        if isinstance(ruw_schrijven, bool):
-            schrijven = ruw_schrijven
-        elif ruw_schrijven is None:
-            schrijven = False
-        else:
-            schrijven = str(ruw_schrijven).strip().lower() in JA
+        schrijven = _ja(rij.get("schrijven"))
 
         smtp_host = str(rij.get("smtp_host")
                         or standaard.get("smtp_host") or "").strip()
@@ -141,6 +153,17 @@ def _ontleed(ruw):
         except (TypeError, ValueError):
             fouten.append(f"{waar}: smtp_poort moet een getal zijn")
             continue
+
+        # Verwijderen (naar de prullenbak) en verzenden (een vrij bericht de
+        # deur uit) zijn net als schrijven een bewuste ja/nee per mailbox.
+        verwijderen = _ja(rij.get("verwijderen"))
+        verzenden = _ja(rij.get("verzenden"))
+        # Zonder verzendserver kan verzenden niet werken. Dan valt alleen die
+        # bevoegdheid weg; de mailbox blijft verder gewoon bruikbaar.
+        if verzenden and not smtp_host:
+            fouten.append(f"{waar}: verzenden staat aan, maar er is geen "
+                          "smtp_host (ook geen standaard)")
+            verzenden = False
 
         # Doorsturen werkt als de mappenlijst: leeg betekent niet "alles mag"
         # maar "niets mag". Een adres met witruimte, een komma of een
@@ -175,6 +198,8 @@ def _ontleed(ruw):
             "smtp_host": smtp_host,
             "smtp_poort": smtp_poort,
             "doorsturen": doorsturen,
+            "verwijderen": verwijderen,
+            "verzenden": verzenden,
         })
     return uit, fouten
 
@@ -247,6 +272,25 @@ def vereis_schrijven(mailbox, wat):
             "mailboxen.yaml als dat de bedoeling is.")
 
 
+def vereis_verwijderen(mailbox):
+    """Blokkeert verwijderen als de mailbox daar niet op opengezet is."""
+    if not mailbox.get("verwijderen"):
+        raise ValueError(
+            f"Verwijderen kan niet: mailbox {mailbox['adres']} staat daar niet "
+            "op. De beheerder zet 'verwijderen: ja' bij deze mailbox in "
+            "mailboxen.yaml als dat de bedoeling is.")
+
+
+def vereis_verzenden(mailbox):
+    """Blokkeert een vrij verstuurd bericht als de mailbox daar niet op staat."""
+    if not mailbox.get("verzenden"):
+        raise ValueError(
+            f"Versturen kan niet: mailbox {mailbox['adres']} staat daar niet "
+            "op. De beheerder zet 'verzenden: ja' bij deze mailbox in "
+            "mailboxen.yaml als dat de bedoeling is. Je kunt wel een concept "
+            "klaarzetten dat de gebruiker zelf verstuurt.")
+
+
 def rechten(mailbox):
     """De bevoegdheden van een mailbox als korte lijst.
 
@@ -258,8 +302,12 @@ def rechten(mailbox):
     uit = ["lezen"]
     if mailbox.get("schrijven"):
         uit.append("ordenen")
+    if mailbox.get("verwijderen"):
+        uit.append("verwijderen")
     if mailbox.get("doorsturen"):
         uit.append("doorsturen")
+    if mailbox.get("verzenden"):
+        uit.append("versturen")
     return uit
 
 

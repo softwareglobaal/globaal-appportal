@@ -574,8 +574,10 @@ services:
   # Postbus - mailboxtoegang voor Claude (MCP over IMAP).
   # De pagina staat achter forward-auth; het MCP-endpoint checkt zelf het token
   # en leidt de toegang af uit de Authentik-groepen in dat token.
-  # Verwijderen kan nooit. Wat per mailbox verder mag (ordenen, doorsturen)
-  # staat in mailboxen.yaml en is zichtbaar op de beheerpagina.
+  # Wat per mailbox mag (ordenen, doorsturen, verwijderen, versturen) staat in
+  # mailboxen.yaml en is zichtbaar op de beheerpagina. Verwijderen en versturen
+  # hebben daarnaast elk een server-noodrem hieronder; staan die uit, dan
+  # gebeurt het bij geen enkele mailbox.
   app-post:
     build: ./post
     image: appportal-post
@@ -599,6 +601,13 @@ services:
       # mailboxen te komen.
       POSTBUS_DOORSTUREN: ${POSTBUS_DOORSTUREN:-}
       POSTBUS_DOORSTUREN_DAGPLAFOND: ${POSTBUS_DOORSTUREN_DAGPLAFOND:-100}
+      # Noodrem voor verwijderen (naar de prullenbak) en voor het echt
+      # versturen van een zelf opgesteld bericht. Beide standaard uit: staat
+      # dit niet op 'ja', dan gebeurt het bij geen enkele mailbox, ook niet als
+      # mailboxen.yaml het toestaat. Het dagplafond van versturen wordt gedeeld
+      # met doorsturen (POSTBUS_DOORSTUREN_DAGPLAFOND).
+      POSTBUS_VERWIJDEREN: ${POSTBUS_VERWIJDEREN:-}
+      POSTBUS_VERZENDEN: ${POSTBUS_VERZENDEN:-}
     volumes:
       # De mailboxen met hun wachtwoorden: één bestand op de VM, buiten git,
       # read-only aangekoppeld. Bewerken met: nano ~/post-config/mailboxen.yaml

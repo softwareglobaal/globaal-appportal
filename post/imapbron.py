@@ -574,6 +574,64 @@ def _conceptenmap(M):
                      "aan (bijvoorbeeld INBOX.Drafts) met de tool map_aanmaken.")
 
 
+def bouw_bericht(M, mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
+                 van_map="INBOX"):
+    """Bouwt een uitgaand bericht en geeft (bericht, ontvangers, cc, verwijzing).
+
+    Puur opstellen: er wordt niets opgeslagen en niets verstuurd. Zowel het
+    concept (hieronder) als het echte versturen (verzenden.py) gebruiken dit,
+    zodat een antwoord in beide gevallen op dezelfde manier in de conversatie
+    hangt. Met antwoord_op (een uid) worden de kopvelden van een antwoord
+    ingevuld: ontvanger, onderwerp met Re: en de verwijzing naar het
+    oorspronkelijke bericht. M is een open IMAP-sessie (voor de opzoeking van
+    dat bericht); versturen zit hier bewust niet in.
+    """
+    bericht = EmailMessage()
+    ontvangers = [a.strip() for a in str(aan or "").split(",") if a.strip()]
+    kopie = [c.strip() for c in str(cc or "").split(",") if c.strip()]
+    verwijzing = None
+
+    if antwoord_op is not None:
+        _selecteer(M, van_map)
+        ok, gegevens = M.uid(
+            "FETCH", str(int(antwoord_op)),
+            "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID REFERENCES "
+            "REPLY-TO)])")
+        ruw = next((el[1] for el in (gegevens or [])
+                    if isinstance(el, tuple)), None)
+        if not ruw:
+            raise ValueError(f"Geen bericht met uid {antwoord_op} in "
+                             f"{van_map} om op te antwoorden")
+        bron = email.message_from_bytes(ruw)
+        verwijzing = _kop(bron.get("Message-ID"))
+        if not ontvangers:
+            antwoord_naar = (_kop(bron.get("Reply-To"))
+                             or _kop(bron.get("From")))
+            ontvangers = [antwoord_naar] if antwoord_naar else []
+        if not onderwerp:
+            oud = _kop(bron.get("Subject"))
+            onderwerp = oud if oud.lower().startswith("re:") else "Re: " + oud
+        if verwijzing:
+            eerder = _kop(bron.get("References"))
+            bericht["In-Reply-To"] = verwijzing
+            bericht["References"] = (eerder + " " + verwijzing).strip()
+
+    if not ontvangers:
+        raise ValueError("Geef een ontvanger op in 'aan', of een uid in "
+                         "'antwoord_op' zodat de afzender daarvan wordt "
+                         "overgenomen")
+
+    bericht["From"] = mailbox["adres"]
+    bericht["To"] = ", ".join(ontvangers)
+    if kopie:
+        bericht["Cc"] = ", ".join(kopie)
+    bericht["Subject"] = onderwerp or "(geen onderwerp)"
+    bericht["Date"] = formatdate(localtime=True)
+    bericht["Message-ID"] = make_msgid()
+    bericht.set_content(str(tekst or ""))
+    return bericht, ontvangers, kopie, verwijzing
+
+
 def concept_opslaan(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
                     van_map="INBOX"):
     """Legt een concept in de conceptenmap. Verstuurt niets.
@@ -582,51 +640,10 @@ def concept_opslaan(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
     ontvanger, onderwerp met Re: en de verwijzing naar het oorspronkelijke
     bericht, zodat het in de webmail als antwoord in de conversatie hangt.
     """
-    bericht = EmailMessage()
-    ontvangers = [a.strip() for a in str(aan or "").split(",") if a.strip()]
-    kopie = [c.strip() for c in str(cc or "").split(",") if c.strip()]
-    verwijzing = None
-
     with _Sessie(mailbox) as M:
-        if antwoord_op is not None:
-            _selecteer(M, van_map)
-            ok, gegevens = M.uid(
-                "FETCH", str(int(antwoord_op)),
-                "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID REFERENCES "
-                "REPLY-TO)])")
-            ruw = next((el[1] for el in (gegevens or [])
-                        if isinstance(el, tuple)), None)
-            if not ruw:
-                raise ValueError(f"Geen bericht met uid {antwoord_op} in "
-                                 f"{van_map} om op te antwoorden")
-            bron = email.message_from_bytes(ruw)
-            verwijzing = _kop(bron.get("Message-ID"))
-            if not ontvangers:
-                antwoord_naar = (_kop(bron.get("Reply-To"))
-                                 or _kop(bron.get("From")))
-                ontvangers = [antwoord_naar] if antwoord_naar else []
-            if not onderwerp:
-                oud = _kop(bron.get("Subject"))
-                onderwerp = oud if oud.lower().startswith("re:") else "Re: " + oud
-            if verwijzing:
-                eerder = _kop(bron.get("References"))
-                bericht["In-Reply-To"] = verwijzing
-                bericht["References"] = (eerder + " " + verwijzing).strip()
-
-        if not ontvangers:
-            raise ValueError("Geef een ontvanger op in 'aan', of een uid in "
-                             "'antwoord_op' zodat de afzender daarvan wordt "
-                             "overgenomen")
-
-        bericht["From"] = mailbox["adres"]
-        bericht["To"] = ", ".join(ontvangers)
-        if kopie:
-            bericht["Cc"] = ", ".join(kopie)
-        bericht["Subject"] = onderwerp or "(geen onderwerp)"
-        bericht["Date"] = formatdate(localtime=True)
-        bericht["Message-ID"] = make_msgid()
-        bericht.set_content(str(tekst or ""))
-
+        bericht, ontvangers, kopie, verwijzing = bouw_bericht(
+            M, mailbox, aan, onderwerp, tekst, cc=cc, antwoord_op=antwoord_op,
+            van_map=van_map)
         doelmap = _conceptenmap(M)
         ok, gegevens = M.append(f'"{doelmap}"', "(\\Draft)",
                                 imaplib.Time2Internaldate(time.time()),
