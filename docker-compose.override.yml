@@ -272,6 +272,15 @@ services:
       GOOGLE_ADS_REFRESH_TOKEN: ${GOOGLE_ADS_REFRESH_TOKEN:-}
       GOOGLE_ADS_DEVELOPER_TOKEN: ${GOOGLE_ADS_DEVELOPER_TOKEN:-}
       GOOGLE_ADS_LOGIN_CUSTOMER_ID: ${GOOGLE_ADS_LOGIN_CUSTOMER_ID:-}
+      # Concurrentiemonitor Energie. Zelfde valkuil als hierboven: staat een
+      # variabele alleen in .env en niet hier, dan bereikt hij de app nooit
+      # en faalt de koppeling geruisloos.
+      GSC_CLIENT_ID: ${GSC_CLIENT_ID:-}
+      GSC_CLIENT_SECRET: ${GSC_CLIENT_SECRET:-}
+      GSC_REFRESH_TOKEN: ${GSC_REFRESH_TOKEN:-}
+      SERPAPI_KEY: ${SERPAPI_KEY:-}
+      DATAFORSEO_LOGIN: ${DATAFORSEO_LOGIN:-}
+      DATAFORSEO_PASSWORD: ${DATAFORSEO_PASSWORD:-}
       # Token voor de agent-API (/api/v1). Leeg = API uit.
       SALES_AGENT_TOKEN: ${SALES_AGENT_TOKEN:-}
       # Wie mag schrijven (notities/sync/analyse); besluit 2026-07-14:
