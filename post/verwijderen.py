@@ -69,9 +69,7 @@ def verwijderen(mailbox, mapnaam, uid):
         # MOVE (RFC 6851) verplaatst in een keer naar de prullenbak. Kan de
         # server het niet, dan stoppen we: kopieren, \\Deleted zetten en
         # expunge hoort hier niet, want dat zou onherstelbaar verwijderen zijn.
-        kan = [str(c, "ascii", "replace").upper() if isinstance(c, bytes)
-               else str(c).upper() for c in (M.capabilities or ())]
-        if "MOVE" not in kan:
+        if "MOVE" not in imapbron.capabilities(M):
             raise ValueError("Deze mailserver ondersteunt MOVE niet, dus naar "
                              "de prullenbak verplaatsen kan niet zonder "
                              "onherstelbaar te verwijderen. Overgeslagen.")

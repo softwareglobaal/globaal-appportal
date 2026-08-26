@@ -113,6 +113,23 @@ class _Sessie:
         return False
 
 
+def capabilities(M):
+    """De capabilities van de server NA het inloggen.
+
+    imaplib bewaart in M.capabilities de lijst van voor de login, en servers
+    (one.com bijvoorbeeld) adverteren MOVE pas daarna. Daarom hier vers
+    opvragen; lukt dat niet, dan vallen we terug op de bewaarde lijst.
+    """
+    try:
+        ok, gegevens = M.capability()
+        if ok == "OK" and gegevens and gegevens[0]:
+            return _leesbaar(gegevens).upper().split()
+    except Exception:
+        pass
+    return [str(c, "ascii", "replace").upper() if isinstance(c, bytes)
+            else str(c).upper() for c in (M.capabilities or ())]
+
+
 def _selecteer(M, mapnaam):
     ok, gegevens = M.select(f'"{mapnaam}"', readonly=True)
     if ok != "OK":
@@ -525,9 +542,7 @@ def verplaatsen(mailbox, van_map, uid, naar_map):
         # MOVE (RFC 6851) verplaatst in een keer. Kan de server het niet, dan
         # stoppen we: de klassieke omweg is kopieren, \Deleted zetten en
         # expunge, en die machinerie hoort hier niet thuis.
-        kan = [str(c, "ascii", "replace").upper() if isinstance(c, bytes)
-               else str(c).upper() for c in (M.capabilities or ())]
-        if "MOVE" not in kan:
+        if "MOVE" not in capabilities(M):
             raise ValueError("Deze mailserver ondersteunt MOVE niet. "
                              "Verplaatsen zou dan neerkomen op kopieren en "
                              "verwijderen, en verwijderen doet deze "
