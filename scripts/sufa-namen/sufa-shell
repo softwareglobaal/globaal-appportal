@@ -13,9 +13,12 @@ Namenlijst-beheer (namen.globaal.be) - beschikbare commando's:
   ssh sufa@server logs [n]       laatste n logregels (standaard 100, max 2000)
   ssh sufa@server restart        herstart de namen-container
   ssh sufa@server deploy         deploy nu meteen (i.p.v. wachten op de cron)
+  ssh sufa@server migrate        past migraties uit db/migrations/ toe
+                                 (alleen schema 'namen', eigen tracking)
 
 Codewijzigingen gaan via git push naar main (repo globaal-namen);
-de server deployt zelf binnen 2 minuten.
+de server deployt zelf binnen 2 minuten. Migraties zijn genummerde
+NNN-*.sql-bestanden in db/migrations/ van diezelfde repo.
 EOF
 }
 
@@ -26,7 +29,7 @@ line="${SSH_ORIGINAL_COMMAND:-}"
 # glob-expansie). Alleen exact gewhiteliste vormen gaan door naar sudo.
 set -- $line
 case "${1:-}" in
-  status|restart|deploy)
+  status|restart|deploy|migrate)
     [ $# -eq 1 ] || { help; exit 1; }
     exec sudo /usr/local/sbin/namen-ctl "$1"
     ;;

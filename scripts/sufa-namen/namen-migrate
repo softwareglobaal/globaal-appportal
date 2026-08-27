@@ -1,0 +1,61 @@
+#!/bin/sh
+# Migratierunner voor Sufa (aangeroepen als root via namen-ctl 'migrate').
+# Past UITSLUITEND migraties uit de namen-repo toe (~/appportal/namen/
+# db/migrations/NNN-*.sql), verbonden als de DB-rol namen_migratie. Die rol
+# is alleen eigenaar van het schema 'namen' en kan naar kern hooguit een
+# foreign key leggen; wat de rol niet kan, kan een migratie hier ook niet.
+# Dat is de grens, niet dit script (migratie 136 in de stack-repo).
+#
+# Het wachtwoord van de rol staat in /etc/sufa-namen/pg.env (root, 0600) als
+# regel PGPASSWORD=... en gaat via --env-file de container in, dus het staat
+# nooit in een proceslijst. Tracking in namen.schema_migrations; dubbel
+# draaien is veilig, net als bij scripts/db-migrate.sh.
+set -eu
+
+REPO=/home/ubuntu/appportal/namen
+ENVFILE=/etc/sufa-namen/pg.env
+CONTAINER=appportal-postgresql-1
+
+[ -f "$ENVFILE" ] || {
+  echo "Migreren kan nog niet: $ENVFILE ontbreekt. De beheerder zet daar het"
+  echo "wachtwoord van de DB-rol namen_migratie in (regel PGPASSWORD=...)."
+  exit 1
+}
+
+# Eerst de repo bij: dezelfde checkout die de deploy-cron gebruikt.
+runuser -u ubuntu -- git -C "$REPO" pull --ff-only --quiet
+echo "repo: $(runuser -u ubuntu -- git -C "$REPO" rev-parse --short HEAD)"
+
+PSQL="docker exec -i --env-file $ENVFILE $CONTAINER \
+  psql -U namen_migratie -d appportal -v ON_ERROR_STOP=1 -q"
+
+$PSQL -c "CREATE TABLE IF NOT EXISTS namen.schema_migrations (
+    naam text PRIMARY KEY,
+    toegepast_op timestamptz NOT NULL DEFAULT now()
+);"
+
+MAP="$REPO/db/migrations"
+[ -d "$MAP" ] || { echo "geen migratiemap ($MAP); niets te doen"; exit 0; }
+
+aantal=0
+for f in "$MAP"/[0-9]*.sql; do
+  [ -e "$f" ] || { echo "geen migraties gevonden; niets te doen"; exit 0; }
+  naam=$(basename "$f")
+  # Nooit stil overslaan, maar een rare bestandsnaam gaat ook niet zomaar
+  # een SQL-string in: alleen letters, cijfers, punt, streepje, underscore.
+  case "$naam" in
+    *[!A-Za-z0-9._-]*)
+      echo "WEIGER $naam (bestandsnaam bevat tekens die hier niet mogen)"
+      exit 1 ;;
+  esac
+  al=$($PSQL -tA -c "SELECT 1 FROM namen.schema_migrations WHERE naam = '$naam'")
+  if [ "$al" = "1" ]; then
+    echo "skip   $naam"
+    continue
+  fi
+  echo "APPLY  $naam"
+  $PSQL -f - < "$f"
+  $PSQL -c "INSERT INTO namen.schema_migrations (naam) VALUES ('$naam');"
+  aantal=$((aantal + 1))
+done
+echo "klaar: $aantal migratie(s) toegepast."

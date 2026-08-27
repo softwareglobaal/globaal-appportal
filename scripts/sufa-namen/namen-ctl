@@ -45,8 +45,15 @@ case "$cmd" in
     runuser -u ubuntu -- "$DEPLOY" | tee -a /home/ubuntu/deploy-namen.log
     echo "Deploy-run klaar (geen output hierboven = al up-to-date)."
     ;;
+  migrate)
+    audit migrate
+    # Past alleen migraties uit de namen-repo toe, als de ingeperkte DB-rol
+    # namen_migratie (eigenaar van uitsluitend het schema 'namen'). De
+    # begrenzing zit in die rol, zie migratie 136 in de stack-repo.
+    /usr/local/sbin/namen-migrate
+    ;;
   *)
-    echo "Gebruik: status | logs [regels] | restart | deploy"
+    echo "Gebruik: status | logs [regels] | restart | deploy | migrate"
     exit 1
     ;;
 esac
