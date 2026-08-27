@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% set actief = 'zoek' %}
+{% block inhoud %}
+
+<p class="klein"><a href="/">&larr; Terug naar zoeken</a></p>
+
+<p class="oogmerk">Fragment {{ f.volgnummer }}</p>
+<h2>{% if f.gedrukt %}Bladzijde {{ f.gedrukt }}{% else %}Scan {{ f.fysiek }}{% endif %}</h2>
+<p class="lead" style="margin-bottom:18px">
+  {{ f.soort }}{% if f.hoofdstuk %} · {{ f.hoofdstuk }}{% endif %}
+</p>
+
+<div class="kaart">
+  {% if f.sectie %}<strong>{{ f.sectie }}</strong>{% endif %}
+  <div class="fragment">{{ f.tekst }}</div>
+</div>
+
+{% endblock %}

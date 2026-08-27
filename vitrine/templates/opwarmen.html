@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block titel %}Even geduld — Kennisbank{% endblock %}
+{% block inhoud %}
+<meta http-equiv="refresh" content="3">
+
+<p class="oogmerk">Even geduld</p>
+<h2>De zoekmachine warmt op</h2>
+<p class="lead">
+  De kennisbank is net herstart en laadt het taalmodel. Dat duurt een paar
+  seconden; deze pagina ververst zichzelf en voert je vraag daarna gewoon uit.
+</p>
+<p class="klein stil">Je vraag: “{{ vraag }}”</p>
+
+{% endblock %}

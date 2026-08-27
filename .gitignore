@@ -32,6 +32,10 @@ logs/
 /aws/
 awscliv2.zip
 /omv-v2-data/
+
+# Runtime-data van de boek-vitrine: de kennisbank (auteursrechtelijk werk),
+# het rapport en het gaten-overzicht. Herleidbaar uit de bron; nooit in git.
+/vitrine-data/
 *.bak-*
 
 # Eigen repo (softwareglobaal/globaal-kosten), uitgecheckt op de VM voor de

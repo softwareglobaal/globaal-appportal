@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titel %}{{ code }} — Kennisbank{% endblock %}
+{% block inhoud %}
+
+<p class="oogmerk">{{ code }}</p>
+<h2>{% if code == 404 %}Niet gevonden{% else %}Even niet beschikbaar{% endif %}</h2>
+<p class="lead">{{ uitleg }}</p>
+<p><a class="knop" href="/">Terug naar zoeken</a></p>
+
+{% endblock %}

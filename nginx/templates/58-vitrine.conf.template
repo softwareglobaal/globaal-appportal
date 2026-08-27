@@ -1,0 +1,44 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name boek.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Read-only weergave van een verwerkt boek. Beschermd door de forward-auth
+    # van de portal, net als de andere tegels.
+    set $app_upstream http://app-vitrine:3025;
+
+    # De kale hostnaam is ook het MCP-adres: een MCP-client POST er JSON-RPC
+    # heen, een browser GET er de site. Alleen een POST op precies "/" wordt
+    # daarom omgeschreven naar /mcp; al het andere verkeer blijft onaangeroerd
+    # achter de SSO.
+    if ($request_method = POST) {
+        rewrite ^/$ /mcp last;
+    }
+
+    # MCP-koppelvlak. Een MCP-client kan niet door de browserlogin heen; de
+    # toegang loopt via OAuth op Authentik (de app introspecteert het token)
+    # of via het Bearer-token voor Claude Code. Identiteitsheaders worden hard
+    # geleegd zodat niemand zich via deze route kan voordoen als ingelogd.
+    location ^~ /mcp {
+        client_max_body_size 64k;
+        proxy_read_timeout 120s;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_set_header X-authentik-email "";
+        proxy_pass http://app-vitrine:3025;
+    }
+
+    # OAuth-discovery: hier leest een MCP-client waar de autorisatieserver
+    # woont. Publieke metadata, geen geheimen, dus zonder SSO bereikbaar.
+    location ^~ /.well-known/ {
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_set_header X-authentik-email "";
+        proxy_pass http://app-vitrine:3025;
+    }
+
+    include /etc/nginx/snippets/forward-auth.conf;
+}
