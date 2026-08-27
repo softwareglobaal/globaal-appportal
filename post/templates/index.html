@@ -61,7 +61,7 @@
             <td><code>{{ m.adres }}</code></td>
             <td>{{ m.naam }}</td>
             <td>{{ m.mappen | join(", ") if m.mappen else "alle" }}</td>
-            <td>{{ rechten(m) | join(", ") }}</td>
+            <td>{{ rechten(m, wie) | join(", ") }}</td>
             <td>{% if m.doorsturen %}{% for a in m.doorsturen %}<code>{{ a }}</code>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}<span class="muted">niet toegestaan</span>{% endif %}</td>
           </tr>
           {% else %}
@@ -78,10 +78,13 @@
         Wat de rechten betekenen. <strong>Lezen</strong>: zoeken en berichten
         opvragen, zonder iets te veranderen. <strong>Ordenen</strong>:
         markeren, verplaatsen, mappen aanmaken en concepten klaarzetten.
-        <strong>Doorsturen</strong>: een bericht dat al in de mailbox staat
-        versturen naar een van de adressen hiernaast, met het origineel als
-        bijlage. Verwijderen kan bij geen enkele mailbox, en een zelf opgesteld
-        bericht versturen evenmin.
+        <strong>Verwijderen</strong>: een bericht naar de prullenbak van de
+        mailbox zelf; daar is het nog terug te zetten, definitief legen kan
+        niet. <strong>Doorsturen</strong>: een bericht dat al in de mailbox
+        staat versturen naar een van de adressen hiernaast, met het origineel
+        als bijlage. <strong>Versturen</strong>: een zelf opgesteld bericht
+        echt verzenden. De kolom toont wat voor jouw login geldt; rechten
+        kunnen per persoon verschillen op dezelfde mailbox.
       </p>
     </div>
 

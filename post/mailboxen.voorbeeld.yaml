@@ -44,6 +44,14 @@ mailboxen:
     # ook niet als het hier aanstaat.
     # verwijderen: ja
     # verzenden: ja
+    #
+    # Elk van de drie rechten (schrijven, verwijderen, verzenden) mag in
+    # plaats van ja/nee ook een lijst namen zijn: Authentik-gebruikers of
+    # -groepen. Dan geldt het recht alleen voor hen; de rest leest alleen.
+    # Voorbeeld: ultischa mag opruimen en weggooien, joan leest mee.
+    #   personen: [ultischa, joan]
+    #   schrijven: [ultischa]
+    #   verwijderen: [ultischa]
 
   - adres: boekhouding@h-architects.be
     naam: Boekhouding H-Architects

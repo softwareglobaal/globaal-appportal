@@ -39,9 +39,9 @@ def _prullenbak(M):
     return None
 
 
-def verwijderen(mailbox, mapnaam, uid):
+def verwijderen(mailbox, mapnaam, uid, wie=None):
     """Verplaatst een bericht naar de prullenbak van dezelfde mailbox."""
-    config.vereis_verwijderen(mailbox)
+    config.vereis_verwijderen(mailbox, wie)
 
     if not ACTIEF:
         raise ValueError(

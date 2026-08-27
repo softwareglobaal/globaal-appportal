@@ -200,6 +200,59 @@ def test_verwijdermodule_verwijdert_niet_onherstelbaar():
     print("  ok  verwijderen.py zet geen \\Deleted en doet geen expunge")
 
 
+def test_rechten_per_persoon():
+    """Een rechtenveld als lijst geldt alleen voor wie erin staat."""
+    boxen, _ = ontleed(rij(personen=["ultischa", "joan"],
+                           schrijven=["ultischa"], verwijderen=["ultischa"]))
+    m = boxen[0]
+    ultischa = {"gebruiker": "ultischa", "groepen": []}
+    joan = {"gebruiker": "joan", "groepen": []}
+    gelijk(config.mag(m, "schrijven", ultischa), True,
+           "ultischa mag schrijven")
+    gelijk(config.mag(m, "verwijderen", ultischa), True,
+           "ultischa mag verwijderen")
+    gelijk(config.mag(m, "schrijven", joan), False, "joan mag niet schrijven")
+    gelijk(config.mag(m, "verwijderen", joan), False,
+           "joan mag niet verwijderen")
+    gelijk(config.rechten(m, joan), ["lezen"], "joan ziet alleen lezen")
+    gelijk(config.rechten(m, ultischa), ["lezen", "ordenen", "verwijderen"],
+           "ultischa ziet haar rechten")
+    gelijk(config.rechten(m), ["lezen", "ordenen (ultischa)",
+                               "verwijderen (ultischa)"],
+           "de beheerkolom toont de namen erbij")
+    config.vereis_schrijven(m, "Markeren", ultischa)
+    weigert(lambda: config.vereis_schrijven(m, "Markeren", joan),
+            "alleen voor", "de guard weigert joan met de namenlijst erbij")
+    print("  ok  de guards volgen de lijst")
+
+
+def test_recht_via_groep():
+    boxen, _ = ontleed(rij(groepen=["boekhouding"], personen=[],
+                           verwijderen=["finance"]))
+    m = boxen[0]
+    lid = {"gebruiker": "piet", "groepen": ["boekhouding", "finance"]}
+    geen_lid = {"gebruiker": "joan", "groepen": ["boekhouding"]}
+    gelijk(config.mag(m, "verwijderen", lid), True,
+           "een groep in de lijst geeft het recht")
+    gelijk(config.mag(m, "verwijderen", geen_lid), False,
+           "zonder die groep niet")
+
+
+def test_ja_blijft_voor_iedereen():
+    boxen, _ = ontleed(rij(personen=["ultischa", "joan"], schrijven="ja"))
+    m = boxen[0]
+    gelijk(config.mag(m, "schrijven", {"gebruiker": "joan", "groepen": []}),
+           True, "ja betekent iedereen met toegang, zoals altijd")
+
+
+def test_lege_rechtenlijst_valt_op():
+    boxen, fouten = ontleed(rij(verwijderen=[]))
+    gelijk(boxen[0]["verwijderen"], False, "een lege lijst wordt nee")
+    if not any("lege" in f for f in fouten):
+        raise AssertionError("de beheerder wordt niet gewaarschuwd")
+    print("  ok  een lege lijst geeft een melding")
+
+
 def test_onbekende_sleutel_valt_op():
     _, fouten = ontleed(rij(doorstuur=["ap@unabo.be"]))
     if not any("onbekende sleutels" in f for f in fouten):

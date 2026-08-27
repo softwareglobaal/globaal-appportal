@@ -14,8 +14,10 @@ Die groepen gaan mee in het token en bepalen bij elke tool-aanroep opnieuw
 welke mailboxen zichtbaar zijn (mailboxen.yaml op de VM). Wie geen enkele
 mailbox mag, krijgt een geldig token en een lege lijst.
 
-Alle tools zijn read-only: er is geen tool die schrijft, verplaatst, verwijdert
-of verstuurt, en de IMAP-laag opent alles met readonly=True en BODY.PEEK.
+Lezen opent alles met readonly=True en BODY.PEEK. Wat verder kan (ordenen,
+verwijderen, doorsturen, versturen) staat per mailbox in mailboxen.yaml, per
+recht als ja/nee of als lijst namen, en wordt bij elke aanroep opnieuw
+getoetst voor de ingelogde gebruiker (config.mag / config.vereis_*).
 """
 import base64
 import hashlib
@@ -344,10 +346,10 @@ def registreer(app, gebruiker, groepen_van_verzoek):
             "aantal": len(rijen),
             "mailboxen": [{"mailbox": m["adres"], "naam": m["naam"],
                            "mappen": m["mappen"] or "alle",
-                           "rechten": config.rechten(m),
-                           "wijzigen_mag": bool(m.get("schrijven")),
-                           "verwijderen_mag": bool(m.get("verwijderen")),
-                           "versturen_mag": bool(m.get("verzenden")),
+                           "rechten": config.rechten(m, wie),
+                           "wijzigen_mag": config.mag(m, "schrijven", wie),
+                           "verwijderen_mag": config.mag(m, "verwijderen", wie),
+                           "versturen_mag": config.mag(m, "verzenden", wie),
                            "doorsturen_naar": m.get("doorsturen") or []}
                           for m in rijen],
             "nooit_mogelijk": ["de prullenbak definitief legen",
@@ -391,7 +393,7 @@ def registreer(app, gebruiker, groepen_van_verzoek):
 
     def t_markeren(wie, args):
         mailbox = config.zoek(args.get("mailbox"), wie)
-        config.vereis_schrijven(mailbox, "Markeren")
+        config.vereis_schrijven(mailbox, "Markeren", wie)
         mapnaam = config.map_toegestaan(mailbox, args.get("map") or "INBOX")
         uit = imapbron.markeren(mailbox, mapnaam, args.get("uid"),
                                 gelezen=args.get("gelezen"),
@@ -403,7 +405,7 @@ def registreer(app, gebruiker, groepen_van_verzoek):
 
     def t_verplaatsen(wie, args):
         mailbox = config.zoek(args.get("mailbox"), wie)
-        config.vereis_schrijven(mailbox, "Verplaatsen")
+        config.vereis_schrijven(mailbox, "Verplaatsen", wie)
         van = config.map_toegestaan(mailbox, args.get("map") or "INBOX")
         naar = config.map_toegestaan(mailbox, args.get("naar"))
         uit = imapbron.verplaatsen(mailbox, van, args.get("uid"), naar)
@@ -413,7 +415,7 @@ def registreer(app, gebruiker, groepen_van_verzoek):
 
     def t_map_aanmaken(wie, args):
         mailbox = config.zoek(args.get("mailbox"), wie)
-        config.vereis_schrijven(mailbox, "Een map aanmaken")
+        config.vereis_schrijven(mailbox, "Een map aanmaken", wie)
         naam = config.map_toegestaan(mailbox, args.get("naam"))
         uit = imapbron.map_aanmaken(mailbox, naam)
         _log(wie, f"MAP {mailbox['adres']} '{naam}' "
@@ -422,7 +424,7 @@ def registreer(app, gebruiker, groepen_van_verzoek):
 
     def t_concept(wie, args):
         mailbox = config.zoek(args.get("mailbox"), wie)
-        config.vereis_schrijven(mailbox, "Een concept opslaan")
+        config.vereis_schrijven(mailbox, "Een concept opslaan", wie)
         van_map = config.map_toegestaan(mailbox, args.get("map") or "INBOX")
         uit = imapbron.concept_opslaan(
             mailbox, args.get("aan"), args.get("onderwerp"), args.get("tekst"),
@@ -445,7 +447,7 @@ def registreer(app, gebruiker, groepen_van_verzoek):
     def t_verwijderen(wie, args):
         mailbox = config.zoek(args.get("mailbox"), wie)
         uit = verwijderen.verwijderen(
-            mailbox, args.get("map") or "INBOX", args.get("uid"))
+            mailbox, args.get("map") or "INBOX", args.get("uid"), wie=wie)
         _log(wie, f"VERWIJDERD {mailbox['adres']} {uit['van']} "
                   f"uid {uit['uid']} -> {uit['prullenbak']}")
         return uit
@@ -455,7 +457,7 @@ def registreer(app, gebruiker, groepen_van_verzoek):
         uit = verzenden.verstuur(
             mailbox, args.get("aan"), args.get("onderwerp"), args.get("tekst"),
             cc=args.get("cc"), antwoord_op=args.get("antwoord_op"),
-            van_map=args.get("map") or "INBOX")
+            van_map=args.get("map") or "INBOX", wie=wie)
         _log(wie, f"VERSTUURD {mailbox['adres']} naar {', '.join(uit['aan'])} "
                   f"({uit['vandaag_verstuurd']}/{uit['dagplafond']} vandaag)")
         return uit

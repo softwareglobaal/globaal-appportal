@@ -17,6 +17,12 @@ per mailbox bij:
 - verwijderen  naar de prullenbak van de mailbox zelf (verwijderen: ja)
 - verzenden    een zelf opgesteld bericht echt versturen (verzenden: ja)
 
+schrijven, verwijderen en verzenden kunnen behalve ja/nee ook een lijst namen
+zijn (Authentik-gebruikers of -groepen): dan geldt het recht alleen voor wie
+in die lijst staat. Zo kan een mailbox voor de een alleen-lezen zijn en voor
+de ander bewerkbaar. ja = iedereen die de mailbox mag zien; nee of weggelaten
+= niemand.
+
 Verwijderen en verzenden staan standaard uit en zijn een bewuste keuze per
 mailbox, net als schrijven. Ze hebben daarnaast elk een server-noodrem
 (POSTBUS_VERWIJDEREN, POSTBUS_VERZENDEN): staat die uit, dan gebeurt het bij
@@ -61,6 +67,41 @@ def _ja(waarde):
     if waarde is None:
         return False
     return str(waarde).strip().lower() in JA
+
+
+def _recht(waarde, veld, fouten, waar):
+    """Een rechtenveld: ja/nee (geldt voor iedereen) of een lijst namen.
+
+    Geeft True, False of een lijst kleine-letters-namen terug. Een lijst
+    betekent: alleen deze Authentik-gebruikers of -groepen hebben het recht.
+    """
+    if isinstance(waarde, list):
+        namen = [str(n).strip().lower() for n in waarde
+                 if isinstance(n, str) and n.strip()]
+        if len(namen) != len(waarde):
+            fouten.append(f"{waar}: {veld} bevat lege of onbruikbare namen")
+        if not namen:
+            fouten.append(f"{waar}: {veld} is een lege lijst; gebruik "
+                          f"'{veld}: nee' of laat de regel weg")
+            return False
+        return namen
+    return _ja(waarde)
+
+
+def mag(mailbox, veld, wie):
+    """Heeft deze gebruiker dit recht op deze mailbox?
+
+    veld is schrijven, verwijderen of verzenden. True in het bestand = iedereen
+    die de mailbox ziet; een lijst = alleen wie er met naam of groep in staat.
+    """
+    v = mailbox.get(veld)
+    if v is True:
+        return True
+    if not v:
+        return False
+    naam = str(wie.get("gebruiker") or "").strip().lower()
+    groepen = {str(g).strip().lower() for g in (wie.get("groepen") or [])}
+    return (naam and naam in v) or bool(groepen & set(v))
 
 
 def _lijst(waarde, veld, fouten, waar):
@@ -143,7 +184,7 @@ def _ontleed(ruw):
                           "niemand zichtbaar")
         mappen = _lijst(rij.get("mappen"), "mappen", fouten, waar) or st_mappen
 
-        schrijven = _ja(rij.get("schrijven"))
+        schrijven = _recht(rij.get("schrijven"), "schrijven", fouten, waar)
 
         smtp_host = str(rij.get("smtp_host")
                         or standaard.get("smtp_host") or "").strip()
@@ -155,9 +196,10 @@ def _ontleed(ruw):
             continue
 
         # Verwijderen (naar de prullenbak) en verzenden (een vrij bericht de
-        # deur uit) zijn net als schrijven een bewuste ja/nee per mailbox.
-        verwijderen = _ja(rij.get("verwijderen"))
-        verzenden = _ja(rij.get("verzenden"))
+        # deur uit) zijn net als schrijven een bewuste keuze per mailbox:
+        # ja/nee, of een lijst namen voor wie het alleen geldt.
+        verwijderen = _recht(rij.get("verwijderen"), "verwijderen", fouten, waar)
+        verzenden = _recht(rij.get("verzenden"), "verzenden", fouten, waar)
         # Zonder verzendserver kan verzenden niet werken. Dan valt alleen die
         # bevoegdheid weg; de mailbox blijft verder gewoon bruikbaar.
         if verzenden and not smtp_host:
@@ -263,51 +305,76 @@ def zoek(adres, wie):
                      "De tool mailboxen toont wat je wel mag lezen.")
 
 
-def vereis_schrijven(mailbox, wat):
-    """Blokkeert een wijziging als de mailbox alleen-lezen is."""
-    if not mailbox.get("schrijven"):
+def _vereis(mailbox, veld, wie, weigering):
+    """Gedeelde controle voor de drie rechten, met een melding op maat.
+
+    Zonder wie (interne aanroepen, de doorstuuragent) telt alleen of het recht
+    op de mailbox aanstaat; met wie telt ook voor wie het geldt.
+    """
+    ok = bool(mailbox.get(veld)) if wie is None else mag(mailbox, veld, wie)
+    if ok:
+        return
+    v = mailbox.get(veld)
+    if isinstance(v, list) and wie is not None:
         raise ValueError(
-            f"{wat} kan niet: mailbox {mailbox['adres']} staat op alleen-lezen. "
-            "De beheerder zet 'schrijven: ja' bij deze mailbox in "
-            "mailboxen.yaml als dat de bedoeling is.")
+            f"{weigering}: bij mailbox {mailbox['adres']} geldt dit recht "
+            "alleen voor: " + ", ".join(v) + ". De beheerder breidt de lijst "
+            f"'{veld}:' in mailboxen.yaml uit als dat de bedoeling is.")
+    raise ValueError(
+        f"{weigering}: mailbox {mailbox['adres']} staat daar niet op. De "
+        f"beheerder zet '{veld}: ja' (of een lijst namen) bij deze mailbox "
+        "in mailboxen.yaml als dat de bedoeling is.")
 
 
-def vereis_verwijderen(mailbox):
-    """Blokkeert verwijderen als de mailbox daar niet op opengezet is."""
-    if not mailbox.get("verwijderen"):
-        raise ValueError(
-            f"Verwijderen kan niet: mailbox {mailbox['adres']} staat daar niet "
-            "op. De beheerder zet 'verwijderen: ja' bij deze mailbox in "
-            "mailboxen.yaml als dat de bedoeling is.")
+def vereis_schrijven(mailbox, wat, wie=None):
+    """Blokkeert een wijziging als deze gebruiker de mailbox niet mag bewerken."""
+    _vereis(mailbox, "schrijven", wie, f"{wat} kan niet")
 
 
-def vereis_verzenden(mailbox):
-    """Blokkeert een vrij verstuurd bericht als de mailbox daar niet op staat."""
-    if not mailbox.get("verzenden"):
-        raise ValueError(
-            f"Versturen kan niet: mailbox {mailbox['adres']} staat daar niet "
-            "op. De beheerder zet 'verzenden: ja' bij deze mailbox in "
-            "mailboxen.yaml als dat de bedoeling is. Je kunt wel een concept "
-            "klaarzetten dat de gebruiker zelf verstuurt.")
+def vereis_verwijderen(mailbox, wie=None):
+    """Blokkeert verwijderen als dit recht er voor deze gebruiker niet is."""
+    _vereis(mailbox, "verwijderen", wie, "Verwijderen kan niet")
 
 
-def rechten(mailbox):
+def vereis_verzenden(mailbox, wie=None):
+    """Blokkeert een vrij verstuurd bericht zonder dit recht.
+
+    De melding wijst op het alternatief: een concept klaarzetten kan altijd
+    binnen het gewone schrijfrecht.
+    """
+    _vereis(mailbox, "verzenden", wie, "Versturen kan niet")
+
+
+def rechten(mailbox, wie=None):
     """De bevoegdheden van een mailbox als korte lijst.
 
     Eén formulering voor de beheerpagina en voor het antwoord dat het model
-    krijgt, zodat wat Mehdi op de pagina ziet staan hetzelfde is als wat
-    Claude te horen krijgt. Lezen staat er altijd bij: daar zet je een mailbox
-    voor open.
+    krijgt, zodat wat op de pagina staat hetzelfde is als wat Claude te horen
+    krijgt. Lezen staat er altijd bij: daar zet je een mailbox voor open.
+
+    Met wie: de rechten zoals ze voor die gebruiker gelden. Zonder wie (de
+    beheerkolom): alles wat op de mailbox openstaat, met bij een namenlijst
+    de namen erachter.
     """
+    def zet(veld, etiket):
+        v = mailbox.get(veld)
+        if not v:
+            return None
+        if wie is not None:
+            return etiket if mag(mailbox, veld, wie) else None
+        return f"{etiket} ({', '.join(v)})" if isinstance(v, list) else etiket
+
     uit = ["lezen"]
-    if mailbox.get("schrijven"):
-        uit.append("ordenen")
-    if mailbox.get("verwijderen"):
-        uit.append("verwijderen")
+    for veld, etiket in (("schrijven", "ordenen"),
+                         ("verwijderen", "verwijderen")):
+        r = zet(veld, etiket)
+        if r:
+            uit.append(r)
     if mailbox.get("doorsturen"):
         uit.append("doorsturen")
-    if mailbox.get("verzenden"):
-        uit.append("versturen")
+    r = zet("verzenden", "versturen")
+    if r:
+        uit.append(r)
     return uit
 
 

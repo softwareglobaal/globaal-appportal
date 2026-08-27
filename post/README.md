@@ -4,6 +4,13 @@
 MCP: lezen, zoeken, opruimen en, per mailbox instelbaar, doorsturen,
 verwijderen en versturen.
 
+**Rechten kunnen per persoon verschillen.** `schrijven`, `verwijderen` en
+`verzenden` zijn ja/nee (geldt dan voor iedereen die de mailbox ziet) of een
+lijst namen van Authentik-gebruikers of -groepen: dan geldt het recht alleen
+voor hen en leest de rest alleen. De tool `mailboxen` en de webpagina tonen
+altijd de rechten zoals ze voor de ingelogde gebruiker gelden; de beheerkolom
+toont bij een namenlijst de namen erachter.
+
 **Verwijderen is zacht en per mailbox.** Alleen bij een mailbox met
 `verwijderen: ja` gaat een bericht naar de prullenbak van diezelfde mailbox,
 waar de eigenaar het nog kan terugzetten. De server zet zelf geen `\Deleted` en

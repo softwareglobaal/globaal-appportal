@@ -217,7 +217,7 @@ def doorsturen(mailbox, mapnaam, uid, naar, notitie=None):
 
 
 def verstuur(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
-             van_map="INBOX"):
+             van_map="INBOX", wie=None):
     """Stelt een bericht op en verstuurt het echt namens de mailbox.
 
     Anders dan doorsturen mag de bestemming hier vrij zijn: dit is de enige
@@ -226,7 +226,7 @@ def verstuur(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
     server-noodrem POSTBUS_VERZENDEN moet aanstaan. Een kopie gaat in de map
     Verzonden en het dagplafond geldt samen met doorsturen.
     """
-    config.vereis_verzenden(mailbox)
+    config.vereis_verzenden(mailbox, wie)
 
     if not ACTIEF_VERZENDEN:
         raise ValueError(

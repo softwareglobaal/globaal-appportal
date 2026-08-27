@@ -1700,7 +1700,10 @@ daarna pas structuur in aanbrengen.
 Eén plek waar zakelijke mailboxen bereikbaar worden voor Claude, via MCP over
 IMAP: lezen, zoeken, opruimen en, per mailbox instelbaar, doorsturen,
 verwijderen en versturen. **Alles wat ingrijpt staat standaard dicht en per
-mailbox** (`schrijven`/`verwijderen`/`verzenden`/`doorsturen`), en de drie
+mailbox** (`schrijven`/`verwijderen`/`verzenden`/`doorsturen`); de eerste drie
+zijn ja/nee of een lijst namen (Authentik-gebruikers of -groepen), zodat
+dezelfde mailbox voor de een bewerkbaar en voor de ander alleen-lezen kan zijn
+(`config.mag`, getoetst per aanroep). De drie
 zwaarste hebben daarnaast een server-noodrem (`POSTBUS_DOORSTUREN`,
 `POSTBUS_VERWIJDEREN`, `POSTBUS_VERZENDEN`): staat die uit, dan gebeurt het bij
 geen enkele mailbox. Verwijderen is zacht (het bericht gaat naar de prullenbak
@@ -1765,7 +1768,12 @@ de wijzigfuncties openen een map schrijfbaar.
 
 ---
 
-*Laatst bijgewerkt: 2026-08-26 - **Postbus** (§14.9): per-mailbox rechten
+*Laatst bijgewerkt: 2026-08-27 - **Postbus** (§14.9): rechten per persoon:
+`schrijven`/`verwijderen`/`verzenden` accepteren naast ja/nee ook een lijst
+Authentik-namen of -groepen; `config.mag` toetst per aanroep, pagina en tool
+tonen de effectieve rechten van de ingelogde gebruiker.*
+
+*Eerder: 2026-08-26 - **Postbus** (§14.9): per-mailbox rechten
 uitgebreid met `verwijderen` (naar de prullenbak) en `verzenden` (vrij bericht
 via SMTP), elk met een server-noodrem (`POSTBUS_VERWIJDEREN`,
 `POSTBUS_VERZENDEN`); nu elf MCP-tools. Verwijderen in `verwijderen.py`,
