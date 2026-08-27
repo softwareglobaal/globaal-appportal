@@ -43,6 +43,11 @@ server {
     # container een nieuw IP; zonder dit blijft nginx het oude vasthouden (502).
     resolver 127.0.0.11 valid=30s;
     set $verkoop_upstream http://items-verkoop:8770;
+    set $beheer_upstream http://app-items:3015;
+
+    # De outpost-antwoorden van Authentik dragen grote headers.
+    proxy_buffers 8 16k;
+    proxy_buffer_size 32k;
 
     location / {
         proxy_pass $verkoop_upstream;
@@ -50,5 +55,73 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ---- MCP: Angela beheert de site via Claude (angela-site/app/mcp_server.py).
+    # /mcp, /mcp/token, /mcp/register en de OAuth-metadata zijn vrij bereikbaar;
+    # de token-check gebeurt in de app. Alleen de loginstap /oauth/authorize
+    # staat achter de Authentik forward-auth (provider angela-sr-proxy,
+    # scripts/add-angela-sr-mcp.py; toegang: groepen angela en admin).
+    location /mcp {
+        proxy_pass $beheer_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /.well-known/oauth-authorization-server {
+        proxy_pass $beheer_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location /.well-known/oauth-protected-resource {
+        proxy_pass $beheer_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location /.well-known/openid-configuration {
+        proxy_pass $beheer_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location /oauth/authorize {
+        auth_request     /outpost.goauthentik.io/auth/nginx;
+        error_page       401 = @goauthentik_proxy_signin;
+        auth_request_set $auth_cookie $upstream_http_set_cookie;
+        add_header       Set-Cookie $auth_cookie;
+
+        auth_request_set $authentik_username $upstream_http_x_authentik_username;
+        auth_request_set $authentik_groups   $upstream_http_x_authentik_groups;
+        auth_request_set $authentik_name     $upstream_http_x_authentik_name;
+        proxy_set_header X-authentik-username $authentik_username;
+        proxy_set_header X-authentik-groups   $authentik_groups;
+        proxy_set_header X-authentik-name     $authentik_name;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $beheer_upstream;
+    }
+
+    location /outpost.goauthentik.io {
+        set                      $outpost_backend http://authentik-server:9000;
+        proxy_pass               $outpost_backend;
+        proxy_set_header         Host $host;
+        proxy_set_header         X-Original-URL $scheme://$http_host$request_uri;
+        proxy_set_header         X-Forwarded-Proto https;
+        add_header               Set-Cookie $auth_cookie;
+        auth_request_set         $auth_cookie $upstream_http_set_cookie;
+        proxy_pass_request_body  off;
+        proxy_set_header         Content-Length "";
+    }
+
+    location @goauthentik_proxy_signin {
+        internal;
+        add_header Set-Cookie $auth_cookie;
+        # $sso_terug: zie nginx/njs/sso.js en de uitleg in snippets/forward-auth.conf.
+        return 302 /outpost.goauthentik.io/start?rd=$sso_terug;
     }
 }

@@ -512,6 +512,10 @@ services:
       # Nodig voor de AI-taxatie (Claude Sonnet).
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       VALUATION_EFFORT: ${VALUATION_EFFORT:-medium}
+      # MCP-endpoint op https://angela.sr/mcp: Angela beheert de site via
+      # Claude (angela-site/app/mcp_server.py). Leeg = endpoint uit (404).
+      MCP_SECRET: ${ANGELA_MCP_SECRET:-}
+      MCP_TOKEN: ${ANGELA_MCP_TOKEN:-}
       CONTACT_TELEFOON: ${CONTACT_TELEFOON:-}
       WHATSAPP_NUMMER: ${WHATSAPP_NUMMER:-}
       MUNT_SYMBOOL: ${MUNT_SYMBOOL:-}

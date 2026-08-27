@@ -1674,6 +1674,22 @@ daarna pas structuur in aanbrengen.
   onder `/verkoop` met de categorieën in het uitklapmenu. Winkelnaam
   `WINKEL_NAAM` (default `angela.sr`), contact `CONTACT_EMAIL` (default
   `info@angela.sr`); de "Over"-tekst is een placeholder tot de bio er is.
+- **MCP-endpoint `https://angela.sr/mcp`** (sinds 2026-08-27): Angela beheert
+  de site via Claude Chat (custom connector), naar het patroon van het
+  Vermogens-dashboard (14.6). De platform-inhoud (verhalen, jobs, columns,
+  woord van de week, sterk/zwak, lopende band) staat daarvoor in
+  **`items.platform_inhoud`** (migratie 135, jsonb `velden` per `soort`;
+  de app zaait een lege tabel met de voorbeeldinhoud, advisory lock
+  421700135). Code: `angela-site/app/mcp_server.py` (alleen beheer-rol,
+  container `app-items`). De vhost routeert `/mcp`, `/mcp/token`,
+  `/mcp/register` en de OAuth-metadata vrij naar `app-items`:3015
+  (token-check in de app); alleen **`/oauth/authorize` staat achter
+  forward-auth** (provider `angela-sr-proxy`, `scripts/add-angela-sr-mcp.py`,
+  toegang groepen `angela` + `admin`; user `angela` zit in groep `angela`).
+  Secrets in `.env`: `ANGELA_MCP_SECRET` (HMAC, OAuth) en `ANGELA_MCP_TOKEN`
+  (statisch, Claude Code); leeg = endpoint uit (404). Artikel-tools volgen de
+  regels van het beheerscherm (live vereist prijs, migratie 081); foto's
+  kunnen niet via MCP.
 - Bewuste keuze: **één `item`-tabel met een soort-kolom** in plaats van vijf
   tabellen. De soorten delen dezelfde velden en de bedieningsvraag is "gooi
   het ergens neer"; splitsen zou het droppen trager maken. Nadeel: taak- en
