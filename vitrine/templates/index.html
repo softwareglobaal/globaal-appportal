@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set actief = 'zoek' %}
+{% block inhoud %}
+
+<p class="oogmerk">Resultaat ter beoordeling</p>
+<h2>{{ info.titel }}</h2>
+<p class="lead">
+  Een ingescand juridisch naslagwerk van {{ info.bladzijden }} bladzijden, zonder
+  tekstlaag, omgezet naar een doorzoekbare kennisbank. Stel hieronder een vraag in
+  gewone taal; je krijgt de passage terug met hoofdstuk en bladzijde.
+</p>
+
+<div class="kaart">
+  <div class="meting">
+    <div><span class="getal {{ 'goed' if info.trefkans >= 0.6 }}">{{ info.trefkans|procent }}</span>
+      <span class="naam">inhoudsopgave geverifieerd</span></div>
+    <div><span class="getal goed">{{ rapport.dekking.aandeel|procent if rapport.dekking else '-' }}</span>
+      <span class="naam">brontekst gedekt</span></div>
+    <div><span class="getal goed">{{ rapport.rookproef.geslaagd if rapport.rookproef }}/{{ rapport.rookproef.gevraagd if rapport.rookproef }}</span>
+      <span class="naam">rookproef</span></div>
+    <div><span class="getal">{{ '{:,}'.format(rapport.fragmenten).replace(',', '.') if rapport.fragmenten }}</span>
+      <span class="naam">fragmenten</span></div>
+  </div>
+  <p class="klein stil" style="margin:16px 0 0">
+    Wat deze cijfers betekenen en hoe ze tot stand kwamen, staat onder
+    <a href="/proces">Hoe dit tot stand kwam</a>.
+  </p>
+</div>
+
+<form method="get" action="/" style="margin:22px 0 10px">
+  <input type="search" name="v" value="{{ vraag }}" autofocus
+         placeholder="Stel een vraag over dit boek…">
+</form>
+
+{% if not vraag %}
+<div class="vlaggen" style="margin-bottom:10px">
+  <span class="stil klein">Probeer:</span>
+  {% for v in voorbeelden %}
+    <a class="merk" href="/?v={{ v|urlencode }}">{{ v }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if vraag %}
+  <h3>{{ treffers|length }} treffers voor “{{ vraag }}”</h3>
+  {% for t in treffers %}
+  <div class="kaart">
+    <div>
+      <span class="merk blauw">{% if t.gedrukt %}blz {{ t.gedrukt }}{% else %}scan {{ t.fysiek }}{% endif %}</span>
+      <span class="merk">{{ t.soort }}</span>
+      {% if t.woord_rang %}<span class="merk">woorden #{{ t.woord_rang }}</span>{% endif %}
+      {% if t.vector_rang %}<span class="merk oker">betekenis #{{ t.vector_rang }}</span>{% endif %}
+    </div>
+    <div style="margin-top:9px">
+      {% if t.hoofdstuk %}<div class="klein stil">{{ t.hoofdstuk }}</div>{% endif %}
+      <strong>{{ t.sectie or '—' }}</strong>
+    </div>
+    <div class="fragment">{{ t.tekst[:650] }}{% if t.tekst|length > 650 %}…{% endif %}</div>
+    <p class="klein" style="margin:9px 0 0">
+      <a href="/fragment/{{ t.fragment_id }}">Heel fragment</a>
+    </p>
+  </div>
+  {% else %}
+  <div class="kaart"><p class="stil">Niets gevonden.</p></div>
+  {% endfor %}
+{% endif %}
+
+<div class="voet">
+  Zoeken combineert woordelijke treffers (FTS5) en betekenis (vectoren) en voegt
+  beide ranglijsten samen. Het label “woorden #n” en “betekenis #n” laat zien via
+  welke van de twee een treffer boven kwam.
+</div>
+
+{% endblock %}

@@ -14,6 +14,11 @@ services:
     build: ./omv-v2
     container_name: app-omv-v2
     restart: unless-stopped
+    # De web-app was PID 1 en Playwright-Chromium laat bij het afbreken wezen
+    # achter; een app ruimt die niet op en dus stapelden ze zich op als zombies
+    # (967 stuks op 27-08-2026). Met init is tini PID 1 en worden wezen
+    # automatisch gereapt.
+    init: true
     env_file: ./omv-v2-data/.env
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -68,6 +73,25 @@ services:
 
   # One-shot init container: generates a local CA + wildcard TLS cert into ./certs.
   # Idempotent — exits immediately if certs for the current BASE_DOMAIN already exist.
+  app-vitrine:
+    image: vitrine:latest
+    build: ./vitrine
+    container_name: app-vitrine
+    restart: unless-stopped
+    environment:
+      EMBED_BACKEND: fastembed
+      MCP_TOKEN: ${BOEK_MCP_TOKEN:-}
+      OAUTH_CLIENT_ID: ${BOEK_OAUTH_CLIENT_ID:-}
+      OAUTH_CLIENT_SECRET: ${BOEK_OAUTH_CLIENT_SECRET:-}
+      KB_PAD: /data/kennisbank.db
+      RAPPORT_PAD: /data/rapport.json
+      PORT: "3025"
+    volumes:
+      - ./vitrine-data:/data:ro
+    ports:
+      - "127.0.0.1:3025:3025"
+    networks: [appnet]
+
   certgen:
     image: alpine:3.20
     environment:

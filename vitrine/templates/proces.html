@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% set actief = 'proces' %}
+{% block inhoud %}
+
+<p class="oogmerk">Verantwoording</p>
+<h2>Hoe deze resultaten tot stand kwamen</h2>
+<p class="lead">
+  Van een ingescand boek zonder tekstlaag naar een doorzoekbare kennisbank. Elke
+  stap hieronder is deterministisch, behalve waar een model iets moest lezen of
+  beoordelen. Dat onderscheid staat er telkens bij: <span class="model">blauw</span>
+  is modelwerk, <span class="deterministisch">groen</span> is code die bij dezelfde
+  invoer altijd hetzelfde oplevert.
+</p>
+
+<div class="kaart" style="margin-bottom:26px">
+  <div class="meting">
+    <div><span class="getal {{ 'goed' if info.trefkans >= 0.6 }}">{{ info.trefkans|procent }}</span>
+      <span class="naam">inhoudsopgave geverifieerd</span></div>
+    <div><span class="getal goed">{{ rapport.dekking.aandeel|procent if rapport.dekking }}</span>
+      <span class="naam">brontekst gedekt</span></div>
+    <div><span class="getal goed">{{ rapport.rookproef.geslaagd if rapport.rookproef }}/{{ rapport.rookproef.gevraagd if rapport.rookproef }}</span>
+      <span class="naam">rookproef</span></div>
+    <div><span class="getal">{{ '{:,}'.format(rapport.fragmenten).replace(',', '.') if rapport.fragmenten }}</span>
+      <span class="naam">fragmenten</span></div>
+  </div>
+</div>
+
+<div class="stap">
+  <div class="nr">1</div>
+  <div class="lijf">
+    <h4>Aanname <span class="deterministisch klein">· deterministisch</span></h4>
+    <p>Het bestand is een PDF van {{ info.bladzijden }} bladzijden met nul tekens
+      tekstlaag: een zuivere scan. Daarmee ligt de route vast op uitlezen met OCR,
+      zonder een tekstlaag om als tegenproef naast te leggen.</p>
+    <span class="cijfer">{{ info.bladzijden }} bladzijden</span>
+    <span class="cijfer">0 tekens tekstlaag</span>
+    <span class="cijfer">route: OCR</span>
+  </div>
+</div>
+
+<div class="stap">
+  <div class="nr">2</div>
+  <div class="lijf">
+    <h4>Uitlezen met OCR <span class="model klein">· model (claude-sonnet-5)</span></h4>
+    <p>Elke bladzijde is gelezen zoals hij eruitziet. Naast de platte tekst wees
+      het model per blok een soort aan: titel, koptekst, voettekst, lopende tekst
+      of tabel. Die typering is later goud waard, want daaraan is te zien wat een
+      hoofdstuktitel is, wat een herhaalde kop bovenaan de bladzijde, en waar het
+      gedrukte paginanummer staat.</p>
+    <p>Sonnet is gekozen boven een goedkoper model omdat het op een proefscan
+      100% woorddekking haalde tegen de grondwaarheid, waar het goedkoopste model
+      9% miste. In een kennisbank is wat er niet in staat het duurst: dat kun je
+      niet terugvinden en niemand merkt het.</p>
+    <span class="cijfer">20 delen van 20 bladzijden</span>
+    <span class="cijfer">bloktypering per bladzijde</span>
+  </div>
+</div>
+
+<div class="stap">
+  <div class="nr">3</div>
+  <div class="lijf">
+    <h4>Structuur uit de inhoudsopgave <span class="model klein">· meting + model</span></h4>
+    <p>Het boek vertelt zelf hoe het is ingedeeld. De inhoudsopgave levert titels
+      met hun <em>gedrukte</em> paginanummer; de voetteksten verraden welk gedrukt
+      nummer bij welke fysieke scan hoort. Uit die twee volgt de verschuiving: het
+      gedrukte nummer loopt <strong>{{ info.verschuiving }}</strong> achter op de
+      scan, omdat er romeins genummerd voorwerk aan voorafgaat.</p>
+    <p>Vervolgens is voor elke ingang uit de inhoudsopgave gecontroleerd of die
+      titel ook echt op de geijkte bladzijde staat. Dat leverde
+      <strong>{{ info.trefkans|procent }}</strong> op — geen oordeel van een model
+      over een ander model, maar een narekenbare meting. Boven de 60% geldt de
+      indeling als bruikbaar.</p>
+    <span class="cijfer">verschuiving +{{ info.verschuiving }}</span>
+    <span class="cijfer">{{ rapport.ingangen if rapport.ingangen }} ingangen gelezen</span>
+    <span class="cijfer">{{ info.trefkans|procent }} teruggevonden</span>
+    <span class="cijfer">{{ rapport.secties if rapport.secties }} secties</span>
+  </div>
+</div>
+
+<div class="stap">
+  <div class="nr">4</div>
+  <div class="lijf">
+    <h4>Menselijke controle <span class="klein stil">· bij het bouwen</span></h4>
+    <p>De gevonden hoofdstukindeling is bij het bouwen aan een mens voorgelegd:
+      klopt dit? Dat is het enige moment waarop een mens iets hoeft te doen. Wat
+      niet klopt kun je uitvinken; de rest van de keten is weer volledig
+      deterministisch.</p>
+  </div>
+</div>
+
+<div class="stap">
+  <div class="nr">5</div>
+  <div class="lijf">
+    <h4>Knippen in fragmenten <span class="deterministisch klein">· deterministisch</span></h4>
+    <p>Een fragment blijft altijd binnen één bladzijde, zodat elk antwoord een
+      vindplaats heeft. Kop- en voetteksten gaan eruit op grond van hun soort, niet
+      op grond van hoe vaak ze voorkomen. Voetnoten blijven staan — in een
+      juridisch werk staat daar de halve bewijsvoering — maar krijgen een eigen
+      soort, zodat het zoeken ze apart kan wegen.</p>
+    <span class="cijfer">{{ '{:,}'.format(rapport.fragmenten).replace(',', '.') if rapport.fragmenten }} fragmenten</span>
+    {% for soort, aantal in (rapport.per_soort or {}).items() %}
+      <span class="cijfer">{{ aantal }} {{ soort }}</span>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="stap">
+  <div class="nr">6</div>
+  <div class="lijf">
+    <h4>Dekking controleren <span class="deterministisch klein">· deterministisch</span></h4>
+    <p>Geen steekproef maar een telling: is elk stuk inhoudelijke brontekst in een
+      fragment beland? Wat hier wegvalt kan niemand ooit terugvinden, dus dat mag
+      geen verrassing zijn. Uitkomst: <strong>{{ rapport.dekking.aandeel|procent if rapport.dekking }}</strong>.</p>
+    <span class="cijfer">{{ rapport.dekking.aandeel|procent if rapport.dekking }} gedekt</span>
+    <span class="cijfer">{{ rapport.dekking.overgeslagen_bladzijden if rapport.dekking }} bladzijden overgeslagen (inhoudsopgave)</span>
+  </div>
+</div>
+
+<div class="stap">
+  <div class="nr">7</div>
+  <div class="lijf">
+    <h4>Embedden en doorzoekbaar maken <span class="deterministisch klein">· deterministisch</span></h4>
+    <p>Elk fragment krijgt een vector met <span class="mono">{{ info.embedmodel }}</span>,
+      zodat er niet alleen op woorden maar ook op betekenis gezocht kan worden.
+      Zoeken combineert beide: de woordelijke treffers uit een tekstindex en de
+      dichtstbijzijnde vectoren, samengevoegd tot één ranglijst.</p>
+    <span class="cijfer">{{ info.dim }} dimensies</span>
+    <span class="cijfer">hybride: woord + betekenis</span>
+  </div>
+</div>
+
+<div class="stap">
+  <div class="nr">8</div>
+  <div class="lijf">
+    <h4>Rookproef <span class="deterministisch klein">· meting, geen model</span></h4>
+    <p>De laatste toets: vindt de kennisbank zijn eigen inhoud terug? Uit een reeks
+      fragmenten is telkens een vraag gemaakt met precies de woorden die in dat
+      fragment zeldzaam zijn, en gecontroleerd of het fragment dan bovenkomt. Dat
+      is wat een mens ook zou intypen om die passage te zoeken.</p>
+    <p>Uitkomst: <strong>{{ rapport.rookproef.geslaagd if rapport.rookproef }} van
+      {{ rapport.rookproef.gevraagd if rapport.rookproef }}</strong> fragmenten
+      vonden zichzelf terug in de top vijf.</p>
+  </div>
+</div>
+
+{% if rapport.rookproef and rapport.rookproef.proeven %}
+<h3>De rookproef, proef voor proef</h3>
+<div class="kaart" style="padding:8px 24px">
+  <table>
+    <tr><th>Bladzijde</th><th>Zoekvraag uit het fragment zelf</th><th>Plek</th></tr>
+    {% for p in rapport.rookproef.proeven %}
+    <tr>
+      <td class="klein">{% if p.gedrukt %}blz {{ p.gedrukt }}{% elif p.fysiek %}<span class="stil">scan {{ p.fysiek }}</span>{% else %}{{ p.bladzijde }}{% endif %}</td>
+      <td class="klein mono">{{ p.vraag }}</td>
+      <td>{% if p.plek %}<span class="goed">#{{ p.plek }}</span>{% else %}<span class="stil">buiten top 5</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<div class="voet">
+  Deze kennisbank is opgebouwd op {{ info.aangemaakt[:10] if info.aangemaakt }}.
+  De verwerking is reproduceerbaar: dezelfde bron levert langs dezelfde stappen
+  dezelfde fragmenten op. <a href="/">Terug naar zoeken</a>.
+</div>
+
+{% endblock %}
