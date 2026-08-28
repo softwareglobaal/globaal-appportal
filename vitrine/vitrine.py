@@ -27,6 +27,7 @@ from kennisbank.opslag import Kennisbank
 
 KB_PAD = Path(os.environ.get("KB_PAD", "/data/kennisbank.db"))
 RAPPORT_PAD = Path(os.environ.get("RAPPORT_PAD", "/data/rapport.json"))
+VERSIES_PAD = Path(os.environ.get("VERSIES_PAD", "/data/versies.json"))
 
 VOORBEELDVRAGEN = [
     "Wanneer is een constructie hoofdzakelijk vergund?",
@@ -46,6 +47,12 @@ app.register_blueprint(_mcp_blueprint)
 def rapport() -> dict:
     if RAPPORT_PAD.exists():
         return json.loads(RAPPORT_PAD.read_text(encoding="utf-8"))
+    return {}
+
+
+def versies() -> dict:
+    if VERSIES_PAD.exists():
+        return json.loads(VERSIES_PAD.read_text(encoding="utf-8"))
     return {}
 
 
@@ -80,7 +87,8 @@ def proces():
     kb = bank()
     info = kb.info()
     kb.sluit()
-    return render_template("proces.html", info=info, rapport=rapport())
+    return render_template("proces.html", info=info, rapport=rapport(),
+                           versies=versies())
 
 
 @app.route("/fragment/<int:fid>")

@@ -4,6 +4,9 @@
 
 <p class="oogmerk">Resultaat ter beoordeling</p>
 <h2>{{ info.titel }}</h2>
+<p style="margin:0 0 10px">
+  <span class="merk oker">verwerking v{{ info.verwerking or 1 }} · {{ info.strategie or "bladzijde-blokken" }}</span>
+</p>
 <p class="lead">
   Een ingescand juridisch naslagwerk van {{ info.bladzijden }} bladzijden, zonder
   tekstlaag, omgezet naar een doorzoekbare kennisbank. Stel hieronder een vraag in
@@ -46,6 +49,7 @@
   {% for t in treffers %}
   <div class="kaart">
     <div>
+      {% if t.randnummer %}<span class="merk blauw">nr {{ t.randnummer }}</span>{% endif %}
       <span class="merk blauw">{% if t.gedrukt %}blz {{ t.gedrukt }}{% else %}scan {{ t.fysiek }}{% endif %}</span>
       <span class="merk">{{ t.soort }}</span>
       {% if t.woord_rang %}<span class="merk">woorden #{{ t.woord_rang }}</span>{% endif %}

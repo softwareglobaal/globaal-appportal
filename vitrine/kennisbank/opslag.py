@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS document (
     embedmodel    TEXT,
     dim           INTEGER,
     status        TEXT NOT NULL DEFAULT 'concept',
+    -- Welke verwerking dit is (1 = bladzijde-blokken, 2 = randnummer) en met
+    -- welke strategie. Versiebeheer van de verwerking, niet van het document.
+    verwerking    INTEGER NOT NULL DEFAULT 1,
+    strategie     TEXT NOT NULL DEFAULT 'bladzijde-blokken',
     meta          TEXT NOT NULL DEFAULT '{}'
 );
 
@@ -60,7 +64,8 @@ CREATE TABLE IF NOT EXISTS fragment (
     gedrukt    INTEGER,
     hoofdstuk  TEXT NOT NULL DEFAULT '',
     sectie     TEXT NOT NULL DEFAULT '',
-    kop_pad    TEXT NOT NULL DEFAULT '[]'
+    kop_pad    TEXT NOT NULL DEFAULT '[]',
+    randnummer INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS vector (
@@ -83,6 +88,7 @@ class Treffer:
     hoofdstuk: str
     sectie: str
     score: float
+    randnummer: int | None = None
     woord_rang: int | None = None
     vector_rang: int | None = None
 
@@ -101,15 +107,17 @@ class Kennisbank:
 
     def leg_vast(self, *, doc_id: str, titel: str, bestandsnaam: str,
                  bladzijden: int, aangemaakt: str, trefkans: float,
-                 verschuiving: int | None, dekking: float, meta: dict) -> None:
+                 verschuiving: int | None, dekking: float, meta: dict,
+                 verwerking: int = 1,
+                 strategie: str = "bladzijde-blokken") -> None:
         self.db.execute("DELETE FROM document")
         self.db.execute(
             "INSERT INTO document (id,titel,bestandsnaam,bladzijden,aangemaakt,"
-            "trefkans,verschuiving,dekking,embedmodel,dim,status,meta)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "trefkans,verschuiving,dekking,embedmodel,dim,status,verwerking,"
+            "strategie,meta) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (doc_id, titel, bestandsnaam, bladzijden, aangemaakt, trefkans,
              verschuiving, dekking, vectoren.MODEL, vectoren.DIM, 'live',
-             json.dumps(meta, ensure_ascii=False)))
+             verwerking, strategie, json.dumps(meta, ensure_ascii=False)))
         self.db.commit()
 
     def schrijf_secties(self, secties: list[Sectie]) -> None:
@@ -131,9 +139,10 @@ class Kennisbank:
         for f, v in zip(fragmenten, vecs):
             cur = self.db.execute(
                 "INSERT INTO fragment (volgnummer,tekst,soort,fysiek,gedrukt,"
-                "hoofdstuk,sectie,kop_pad) VALUES (?,?,?,?,?,?,?,?)",
+                "hoofdstuk,sectie,kop_pad,randnummer) VALUES (?,?,?,?,?,?,?,?,?)",
                 (f.volgnummer, f.tekst, f.soort, f.fysiek, f.gedrukt,
-                 f.hoofdstuk, f.sectie, json.dumps(f.kop_pad, ensure_ascii=False)))
+                 f.hoofdstuk, f.sectie, json.dumps(f.kop_pad, ensure_ascii=False),
+                 getattr(f, "randnummer", None)))
             fid = cur.lastrowid
             self.db.execute("INSERT INTO vector (fragment_id,waarden) VALUES (?,?)",
                             (fid, vectoren.naar_blob(v)))
@@ -236,6 +245,7 @@ class Kennisbank:
                 fragment_id=fid, tekst=f["tekst"], soort=f["soort"],
                 fysiek=f["fysiek"], gedrukt=f["gedrukt"],
                 hoofdstuk=f["hoofdstuk"], sectie=f["sectie"], score=score,
+                randnummer=f.get("randnummer"),
                 woord_rang=woord_rang.get(fid), vector_rang=vector_rang.get(fid)))
         return uit
 
