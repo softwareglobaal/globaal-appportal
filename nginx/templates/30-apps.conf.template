@@ -164,3 +164,13 @@ server {
     client_max_body_size 200m;
     include /etc/nginx/snippets/forward-auth.conf;
 }
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name renovision-raisha.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    set $app_upstream http://172.17.0.1:8107;
+    client_max_body_size 200m;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
