@@ -187,6 +187,8 @@ GEREEDSCHAP = [
 
 def _treffer_naar_tekst(t) -> str:
     plek = f"blz {t.gedrukt}" if t.gedrukt else f"scan {t.fysiek}"
+    if getattr(t, "randnummer", None):
+        plek = f"nr {t.randnummer}, {plek}"
     kop = " › ".join(x for x in (t.hoofdstuk, t.sectie) if x)
     via = []
     if t.woord_rang:
@@ -216,6 +218,8 @@ def _doe_fragment(bank, args: dict) -> dict:
     if not f:
         return _tekst("Dit fragment bestaat niet.")
     plek = f"blz {f['gedrukt']}" if f.get("gedrukt") else f"scan {f['fysiek']}"
+    if f.get("randnummer"):
+        plek = f"nr {f['randnummer']}, {plek}"
     kop = " › ".join(x for x in (f.get("hoofdstuk"), f.get("sectie")) if x)
     return _tekst(f"[{plek} | {f['soort']} | fragment {f['id']}]\n{kop}\n\n{f['tekst']}")
 
@@ -256,6 +260,14 @@ def _doe_ontbreekt() -> dict:
     ]
     for m in d["niet_geverifieerde_ingangen"]:
         regels.append(f"  - blz {m['gedrukt']:>3}: {m['titel']}")
+    if "randnummer_gaten" in d:
+        g = d["randnummer_gaten"]
+        regels += ["", f"Randnummer-reeks: {len(g)} gaten"
+                   + (": " + ", ".join(
+                       f"na nr {x['na']} (blz {x['bladzijde']})"
+                       for x in g[:10]) if g else
+                       " — de reeks is compleet, elke eenheid volgt op "
+                       "de vorige")]
     regels += ["", "Gedrukte bladzijden zonder fragmenten:"]
     if d["bladzijden_zonder_fragmenten"]:
         for z in d["bladzijden_zonder_fragmenten"]:
@@ -282,6 +294,9 @@ def _doe_info(bank, rapport: dict) -> dict:
         f"Titel: {info.get('titel')}",
         f"Bron: {info.get('bestandsnaam')} — gescand, {info.get('bladzijden')} "
         "bladzijden, geen tekstlaag",
+        f"Verwerking: v{info.get('verwerking') or 1} "
+        f"({info.get('strategie') or 'bladzijde-blokken'}); citeer met "
+        "randnummer en bladzijde.",
         f"Fragmenten: {rapport.get('fragmenten')} "
         f"({', '.join(f'{v} {k}' for k, v in (rapport.get('per_soort') or {}).items())})",
         "",

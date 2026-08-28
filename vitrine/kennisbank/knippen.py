@@ -39,6 +39,10 @@ class Fragment:
     hoofdstuk: str = ""
     sectie: str = ""
     kop_pad: list[str] = field(default_factory=list)
+    # Het randnummer waarmee dit fragment citeerbaar is (verwerking v2,
+    # randnummer-strategie). None bij voorwerk, tabellen zonder eenheid en de
+    # bladzijde-strategie van v1.
+    randnummer: int | None = None
     # Hoeveel tekens brontekst hier in zitten. Niet hetzelfde als len(tekst):
     # samenvoegen zet er lege regels tussen, en die zijn geen inhoud. Wie dat
     # verschil niet bijhoudt rapporteert een dekking van boven de honderd

@@ -5,7 +5,7 @@
 <p class="klein"><a href="/">&larr; Terug naar zoeken</a></p>
 
 <p class="oogmerk">Fragment {{ f.volgnummer }}</p>
-<h2>{% if f.gedrukt %}Bladzijde {{ f.gedrukt }}{% else %}Scan {{ f.fysiek }}{% endif %}</h2>
+<h2>{% if f.randnummer %}Nr. {{ f.randnummer }}, {% endif %}{% if f.gedrukt %}blz {{ f.gedrukt }}{% else %}scan {{ f.fysiek }}{% endif %}</h2>
 <p class="lead" style="margin-bottom:18px">
   {{ f.soort }}{% if f.hoofdstuk %} · {{ f.hoofdstuk }}{% endif %}
 </p>

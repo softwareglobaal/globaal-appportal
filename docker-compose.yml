@@ -83,8 +83,13 @@ services:
       MCP_TOKEN: ${BOEK_MCP_TOKEN:-}
       OAUTH_CLIENT_ID: ${BOEK_OAUTH_CLIENT_ID:-}
       OAUTH_CLIENT_SECRET: ${BOEK_OAUTH_CLIENT_SECRET:-}
-      KB_PAD: /data/kennisbank.db
-      RAPPORT_PAD: /data/rapport.json
+      # Verwerking v2: geknipt op randnummer, de citeereenheid van het vak.
+      # v1 (bladzijde-blokken) blijft ernaast staan; versies.json is het
+      # manifest van beide.
+      KB_PAD: /data/kennisbank-v2.db
+      RAPPORT_PAD: /data/rapport-v2.json
+      ONTBREEKT_PAD: /data/ontbreekt-v2.json
+      VERSIES_PAD: /data/versies.json
       PORT: "3025"
     volumes:
       - ./vitrine-data:/data:ro

@@ -25,6 +25,37 @@
   </div>
 </div>
 
+{% if versies.versies %}
+<h3 style="margin-top:0">Verwerkingsversies</h3>
+<div class="kaart" style="padding:8px 24px 16px;margin-bottom:26px">
+  <table>
+    <tr><th>Versie</th><th>Strategie</th><th>Fragmenten</th><th>Rookproef</th>
+        <th>Bijzonder</th></tr>
+    {% for v in versies.versies %}
+    <tr>
+      <td><strong>v{{ v.versie }}</strong>
+        {% if versies.actief == v.versie %}
+          <span class="merk oker">actief</span>{% endif %}</td>
+      <td>{{ v.strategie }}</td>
+      <td>{{ v.metingen.fragmenten }}</td>
+      <td>{{ v.metingen.rookproef }}</td>
+      <td class="klein stil">
+        {% if v.metingen.eenheden %}{{ v.metingen.eenheden }} randnummers,
+          {{ v.metingen.reeks_gaten }} gaten in de reeks,
+          {{ v.metingen.voetnoten_gekoppeld }} voetnoten aan hun alinea
+        {% else %}knippen op bladzijde en blokgrootte{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="klein stil" style="margin:12px 0 0">
+    De actieve verwerking knipt op het randnummer, de eenheid waarmee juristen
+    dit werk citeren. Een eenheid mag over een paginagrens doorlopen en houdt
+    zijn beginbladzijde als adres; voetnoten hangen aan hun alinea. De monotone
+    nummerreeks is een extra meetlat: elke sprong zou een zichtbaar gat zijn.
+  </p>
+</div>
+{% endif %}
+
 <div class="stap">
   <div class="nr">1</div>
   <div class="lijf">
