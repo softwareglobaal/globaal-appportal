@@ -129,12 +129,17 @@ def _lees(token, soort):
 
 
 def _redirect_ok(uri):
-    """Alleen terugsturen naar Claude zelf (claude.ai/claude.com/anthropic)."""
+    """Terugsturen mag naar Claude zelf (claude.ai/claude.com/anthropic) of
+    naar localhost: Claude Code op de eigen machine vangt de callback op een
+    lokale poort (RFC 8252). Veilig omdat PKCE S256 verplicht is en de code
+    maar 2 minuten leeft."""
     try:
         p = urlparse(uri)
     except Exception:
         return False
     host = (p.hostname or "").lower()
+    if p.scheme == "http" and host in ("localhost", "127.0.0.1"):
+        return True
     basis = ("claude.ai", "claude.com", "anthropic.com")
     return (p.scheme == "https"
             and (host in basis or host.endswith(tuple("." + b for b in basis))))
@@ -512,7 +517,8 @@ def registreer(app, gebruiker, groepen_van_verzoek):
         if not uris or not all(_redirect_ok(u) for u in uris):
             return {"error": "invalid_redirect_uri",
                     "error_description": "Alleen redirects naar Claude "
-                                         "(claude.ai/claude.com) zijn "
+                                         "(claude.ai/claude.com) of "
+                                         "localhost (Claude Code) zijn "
                                          "toegestaan"}, 400
         return {"client_id": "postbus-claude",
                 "client_name": body.get("client_name", "Claude"),
