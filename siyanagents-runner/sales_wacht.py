@@ -32,7 +32,8 @@ NAAM = "de-dealmaker"
 RUNBOOK = "sales-signaal"          # geen uitvoerbare runbook: altijd zonder parameters
 MIN_UITGAVEN = 100.0               # onder dit bedrag zegt kost-per-conversie te weinig
 FACTOR_DUURDER = 1.5               # 50% duurder dan het gemiddelde = melden
-FACTOR_MINDER = 0.6                # onder 60% van het gewone tempo = melden
+FACTOR_MINDER = 0.6                # onder 60% van het tempo van de laatste 3 maanden
+FACTOR_AFGLIJDING = 0.65           # onder 65% van het tempo van een half jaar terug
 KANAAL_DREMPEL = 5                 # zoveel aanvragen in de referentieperiode telt als "een kanaal"
 
 
@@ -131,6 +132,44 @@ def controle_tempo(signalen, afdeling):
         })
 
 
+def controle_afglijding(signalen, afdeling):
+    """Zakt de instroom al maanden gestaag weg?
+
+    De tempo-controle vergelijkt met de drie voorgaande maanden. Bij een
+    langzame afglijding zakt die maatstaf gewoon mee en slaat er nooit iets
+    aan - terwijl je juist dat wil zien aankomen. Deze controle kijkt daarom
+    naar het tempo van vier tot zes maanden geleden.
+    """
+    dagen = dagen_in_maand_tot_nu()
+    if dagen < 10:
+        return
+    ver = maanden_terug(6)[:3]          # de maanden 6, 5 en 4 terug
+    per_dag = []
+    for m in ver:
+        k = haal("/kpi", afdeling=afdeling, periode=m)
+        per_dag.append(k["aanvragen"] / dagen_in(m))
+    if not per_dag or sum(per_dag) == 0:
+        return
+    toen = sum(per_dag) / len(per_dag)
+
+    nu_maand = date.today().strftime("%Y-%m")
+    nu = haal("/kpi", afdeling=afdeling, periode=nu_maand)
+    tempo = nu["aanvragen"] / dagen
+    if tempo >= toen * FACTOR_AFGLIJDING:
+        return
+
+    signalen.append({
+        "doel": f"afglijding:{afdeling}",
+        "actie": f"Instroom {afdeling} zakt al maanden gestaag weg",
+        "reden": (
+            f"Op dit tempo rond de {round(tempo * 30)} aanvragen per maand, tegen ongeveer "
+            f"{round(toen * 30)} in {', '.join(ver)}: {round((1 - tempo / toen) * 100)}% minder "
+            "over een half jaar. Elke maand op zich lijkt maar iets slechter dan de vorige, "
+            "waardoor de gewone tempo-controle hier niet op aanslaat."
+        ),
+    })
+
+
 def controle_campagnes(signalen):
     """Is een campagne fors duurder geworden per conversie?"""
     ref = maanden_terug(3)
@@ -220,6 +259,8 @@ def main(argv):
         ("versheid", lambda: controle_versheid(signalen)),
         ("tempo engineering", lambda: controle_tempo(signalen, "engineering")),
         ("tempo energy", lambda: controle_tempo(signalen, "energy")),
+        ("afglijding engineering", lambda: controle_afglijding(signalen, "engineering")),
+        ("afglijding energy", lambda: controle_afglijding(signalen, "energy")),
         ("campagnes", lambda: controle_campagnes(signalen)),
         ("kanalen engineering", lambda: controle_kanalen(signalen, "engineering")),
         ("kanalen energy", lambda: controle_kanalen(signalen, "energy")),
