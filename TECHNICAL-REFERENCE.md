@@ -1440,6 +1440,13 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
   Flask/gunicorn, compose-service **`app-vermogen`**:3009, nginx-template
   `46-vermogen.conf.template`, Authentik via `scripts/add-vermogen-app.py`
   (tegel voor admin/manager/vermogen; schrijven = groep `vermogen-editors`).
+- **Panden dashboard** op `/panden-dashboard`: het berekende overzicht dat Mehdi
+  zelf opmaakte (DSCR, cashflow, kredieten, waarborgen, huur, verplichtingen,
+  werklijst, fiche per pand). Statische werkversie van 2 augustus 2026, cijfers in
+  `static/panden-dashboard.html` en niet in de database. Eigen launcher-tegel via
+  `scripts/add-panden-dashboard-app.py`: een applicatie zonder provider, want de
+  pagina valt al onder de vermogen-proxy. Openstaand: het overzicht uit de database
+  laten rekenen (nu geven DSCR, netto huur en vaste lasten NaN).
 - **Schema `vermogen`** (migratie 016): `pand` (eigenaar → kern.firma, aankoop,
   huurcontract, syndicus-link), `verzekering` (soort/opzegtermijn/jaarpremie,
   linkbaar aan pand; `object` = tekst voor bv. auto's zolang die geen entiteit zijn),
