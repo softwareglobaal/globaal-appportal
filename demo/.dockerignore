@@ -1,0 +1,5 @@
+.modelcache
+__pycache__
+*.pyc
+proef_demo.py
+kleine-scan.pdf
