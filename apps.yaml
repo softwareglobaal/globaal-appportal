@@ -90,3 +90,9 @@ apps:
     subdomain: post
     roles: [admin, manager, postbus]
     status: active
+  - id: contracten
+    name: Contracten
+    description: Contracten H-Architects, dossiercontrole en salesproces
+    subdomain: contracten
+    roles: [admin, manager, contracten]
+    status: active
