@@ -666,7 +666,41 @@ services:
       - post-agent-state:/state
     networks: [appnet]
 
+  # Contracten — contracten H-Architects, dossiercontrole en salesproces.
+  # De Word-masters zitten in de repo; LibreOffice in het image maakt de pdf.
+  app-contracten:
+    build: ./contracten
+    image: appportal-contracten
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      PORT: "3022"
+      TOEGANG_GROEPEN: admin,manager,contracten
+      PIPEDRIVE_API_TOKEN: ${CONTRACTEN_PIPEDRIVE_TOKEN:-}
+      PANDADOC_API_KEY: ${CONTRACTEN_PANDADOC_KEY:-}
+      # Dropbox wordt via de API bevraagd, niet via een gekoppelde map.
+      DROPBOX_TOKEN: ${CONTRACTEN_DROPBOX_TOKEN:-}
+      # Deze paden bestaan niet op de VM; leeg laten zorgt ervoor dat de
+      # bijhorende controles 'onbekend' melden in plaats van 'in orde'.
+      SALES_BASIS: ""
+      CONTRACT_BASIS: ""
+      OFFERTE_SCRIPT: ""
+      FOTOBIBLIOTHEEK: ""
+    volumes:
+      # Gegenereerde contracten en ingevulde dossiers overleven een herbouw.
+      - contracten-output:/app/Output
+      - contracten-input:/app/Input
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3022/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks: [appnet]
+
 volumes:
+  contracten-output:
+  contracten-input:
   post-agent-state:
   telefoonregister-data:
   sales-data:
