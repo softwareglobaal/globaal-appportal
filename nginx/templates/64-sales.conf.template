@@ -34,5 +34,39 @@ server {
         proxy_set_header X-authentik-uid      "";
         proxy_pass $app_upstream;
     }
+    # Contracten (H-Architects) draait onder deze tegel op /contracten/.
+    # Bewust géén eigen subdomein en géén eigen Authentik-app: Mehdi wil
+    # één tegel, niet twee. De forward-auth hieronder dekt ook dit pad, want
+    # auth_request geldt per locatie en staat hier expliciet herhaald.
+    # X-Forwarded-Prefix vertelt de Flask-app onder welk pad hij hangt, zodat
+    # zijn links kloppen.
+    location ^~ /contracten/ {
+        auth_request     /outpost.goauthentik.io/auth/nginx;
+        error_page       401 = @goauthentik_proxy_signin;
+        auth_request_set $auth_cookie $upstream_http_set_cookie;
+        add_header       Set-Cookie $auth_cookie;
+
+        auth_request_set $c_username $upstream_http_x_authentik_username;
+        auth_request_set $c_groups   $upstream_http_x_authentik_groups;
+        auth_request_set $c_email    $upstream_http_x_authentik_email;
+        proxy_set_header X-authentik-username $c_username;
+        proxy_set_header X-authentik-groups   $c_groups;
+        proxy_set_header X-authentik-email    $c_email;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Prefix /contracten;
+
+        # Een dossiercontrole bevraagt Pipedrive, Geopunt en de mailbox; het
+        # genereren van een contract met pdf-conversie duurt nog langer.
+        # De standaard van 60 seconden is daarvoor te kort.
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        client_max_body_size 64m;
+
+        proxy_pass http://app-contracten:3022;
+    }
+
     include /etc/nginx/snippets/forward-auth.conf;
 }
