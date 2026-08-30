@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{% block titel %}Demo · Elevait{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#faf9f6; --ink:#1c1b18; --subtle:#6b6960; --line:#e6e3db;
+    --accent:#059669; --accent-licht:#e7f4ef; --waarschuwing:#9a6700;
+    --display:'Fraunces',Georgia,serif;
+    --body:'Inter',-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 var(--body);
+       -webkit-font-smoothing:antialiased}
+  a{color:var(--accent)}
+  header{border-bottom:1px solid var(--line);background:var(--paper);
+         position:sticky;top:0;z-index:20}
+  header .in{max-width:64rem;margin:0 auto;padding:20px 24px;display:flex;
+             align-items:center;justify-content:space-between}
+  .merk{font-weight:500;text-transform:uppercase;letter-spacing:.3em;
+        font-size:16px;text-decoration:none;color:var(--ink)}
+  .merk i{font-style:normal;color:var(--accent)}
+  header nav{display:flex;gap:22px;font-size:14px}
+  header nav a{color:var(--ink);text-decoration:none}
+  header nav a:hover{color:var(--accent)}
+  main{max-width:48rem;margin:0 auto;padding:48px 24px 96px}
+  main.breed{max-width:64rem}
+  h1{font-family:var(--display);font-weight:500;font-size:44px;line-height:1.1;
+     letter-spacing:-.02em;margin:0 0 16px}
+  h2{font-family:var(--display);font-weight:500;font-size:26px;
+     letter-spacing:-.015em;margin:36px 0 12px}
+  h3{font-size:16px;font-weight:600;margin:26px 0 10px}
+  p.lead{font-size:18px;color:var(--subtle);margin:0 0 28px;max-width:34rem}
+  .kaart{background:#fff;border:1px solid var(--line);border-radius:14px;
+         padding:24px;margin-bottom:20px}
+  .knop{display:inline-block;background:var(--accent);color:#fff;border:0;
+        padding:13px 24px;border-radius:9px;font:600 15px var(--body);
+        cursor:pointer;text-decoration:none;transition:opacity .15s}
+  .knop:hover{opacity:.9}
+  .knop.stil{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .knop:disabled{opacity:.45;cursor:not-allowed}
+  .stil-tekst{color:var(--subtle)}
+  .klein{font-size:14px}
+  .mini{font-size:13px}
+  input[type=search]{width:100%;padding:14px 16px;font:16px var(--body);
+       border:1px solid var(--line);border-radius:10px;background:#fff}
+  input[type=file]{font:14px var(--body);width:100%}
+  .grenzen{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 0;padding:0;
+           list-style:none}
+  .grenzen li{background:var(--paper);border:1px solid var(--line);
+              border-radius:20px;padding:4px 12px;font-size:13px;
+              color:var(--subtle)}
+  .meting{display:flex;gap:28px;flex-wrap:wrap}
+  .meting b{font-family:var(--display);font-weight:500;font-size:30px;
+            display:block;line-height:1}
+  .meting span{color:var(--subtle);font-size:13px}
+  .merkje{display:inline-block;background:var(--accent-licht);
+          color:var(--accent);border-radius:20px;padding:2px 10px;
+          font-size:13px;font-weight:600;margin-right:6px}
+  .merkje.grijs{background:var(--paper);border:1px solid var(--line);
+                color:var(--subtle);font-weight:400}
+  .fragment{white-space:pre-wrap;background:var(--paper);
+            border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+            font-size:14.5px;margin-top:10px;line-height:1.6}
+  .opwaarderen{background:var(--accent-licht);border:1px solid #bfe3d5;
+               border-radius:14px;padding:22px 24px;margin:28px 0}
+  .opwaarderen h3{margin:0 0 8px;font-size:17px}
+  .opwaarderen p{margin:0 0 14px;font-size:15px}
+  .opwaarderen ul{margin:0 0 16px;padding-left:20px;font-size:14.5px}
+  .opwaarderen li{margin-bottom:5px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  .n2{padding-left:16px} .n3{padding-left:32px;color:var(--subtle)}
+  .n4{padding-left:48px;color:var(--subtle)}
+  .voet{border-top:1px solid var(--line);margin-top:56px;padding:24px 0;
+        color:var(--subtle);font-size:13px}
+  @media(max-width:640px){ h1{font-size:32px} main{padding:32px 20px 64px} }
+</style>
+</head>
+<body>
+<header><div class="in">
+  <a class="merk" href="https://elevaitnv.com/">ELEV<i>AI</i>T</a>
+  <nav>
+    <a href="https://elevaitnv.com/projecten">Projecten</a>
+    <a href="https://elevaitnv.com/#contact">Contact</a>
+  </nav>
+</div></header>
+{% block lijf %}{% endblock %}
+<div class="voet"><div style="max-width:48rem;margin:0 auto;padding:0 24px">
+  Demo van Elevait NV. Documenten en zoekindex worden na een uur automatisch
+  verwijderd; er wordt niets bewaard en niets gedeeld.
+</div></div>
+</body>
+</html>

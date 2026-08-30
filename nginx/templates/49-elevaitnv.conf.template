@@ -44,6 +44,26 @@ server {
     # Sollicitaties met CV-upload mogen tot 10 MB groot zijn.
     client_max_body_size 10m;
 
+    # Publieke demo van de kennisbank (elevaitnv.com/demo). Openbaar, dus geen
+    # SSO. De app bewaakt zelf zijn grenzen: 40 bladzijden, 15 MB, alleen een
+    # PDF met tekstlaag, vijf per dag per IP, een verwerking tegelijk.
+    #
+    # Ruimer dan de rest van de site, want hier komt een document binnen; het
+    # verwerken duurt seconden tot een halve minuut, vandaar de langere
+    # wachttijden. X-Forwarded-For moet kloppen, anders telt de daglimiet
+    # iedereen als dezelfde bezoeker.
+    location /demo {
+        client_max_body_size 16m;
+        client_body_timeout 120s;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+        proxy_pass http://demo-kennisbank:3030;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location / {
         proxy_pass http://elevait-web:8090;
         proxy_set_header Host $host;

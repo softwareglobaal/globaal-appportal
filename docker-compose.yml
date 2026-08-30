@@ -97,6 +97,22 @@ services:
       - "127.0.0.1:3025:3025"
     networks: [appnet]
 
+  demo-kennisbank:
+    build: ./demo
+    image: demo-kennisbank:latest
+    container_name: demo-kennisbank
+    restart: unless-stopped
+    environment:
+      URL_VOORVOEGSEL: /demo
+      EMBED_BACKEND: fastembed
+    # Alles is tijdelijk: documenten en zoekindex leven in /tmp en worden na
+    # een uur gewist. Geen volume, dus een herstart wist ook meteen alles.
+    tmpfs:
+      - /tmp:size=512m
+    ports:
+      - "127.0.0.1:3030:3030"
+    networks: [appnet]
+
   certgen:
     image: alpine:3.20
     environment:
