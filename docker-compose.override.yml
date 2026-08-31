@@ -257,6 +257,10 @@ services:
   app-aanvraag:
     build: ./aanvraag
     image: appportal-aanvraag
+    # Als ubuntu draaien, want de verwerker op de host schrijft in dezelfde
+    # wachtrij. Anders maakt de container root-bestanden die de cron niet kan
+    # aanpassen.
+    user: "1000:1000"
     restart: unless-stopped
     environment:
       PORT: "3031"
