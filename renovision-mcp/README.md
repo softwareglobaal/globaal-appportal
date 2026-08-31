@@ -99,15 +99,26 @@ werkruimtes.
 
 ## Koppelen in Claude
 
-claude.ai → Instellingen → Connectors → aangepaste connector op
-`https://renovision-mcp.globaal.be/mcp`. Er volgt een SSO-login; die bepaalt de
-werkruimte.
+Twee manieren, allebei met de eigen SSO-login. Wie inlogt bepaalt de
+werkruimte, dus iedereen doet dit op zijn eigen account.
 
-Voor Claude Code, met de vaste sleutel:
+**In de browser:** claude.ai → Instellingen → Connectors → aangepaste connector
+op `https://renovision-mcp.globaal.be/mcp`.
+
+**Lokaal, in Claude Code:**
 
 ```bash
-claude mcp add --transport http renovision https://renovision-mcp.globaal.be/mcp --header "Authorization: Bearer $MCP_TOKEN"
+claude mcp add --transport http renovision https://renovision-mcp.globaal.be/mcp
 ```
+
+Daarna in een sessie `/mcp` en kiezen voor authenticeren: de browser opent, je
+logt in via Authentik en de koppeling staat. Geen sleutel of token nodig.
+Claude Code luistert tijdens dat inloggen op een poort op localhost; die
+redirect is daarom toegestaan (RFC 8252, zie `test_koppeling.py`).
+
+De vaste sleutel `MCP_TOKEN` is er alleen voor beheer en komt altijd op de
+admin-kopie uit. Gebruik hem niet om iemand anders te koppelen: die persoon
+werkt dan in de verkeerde werkruimte.
 
 ## Tests
 
