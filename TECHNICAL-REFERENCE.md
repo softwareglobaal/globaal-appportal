@@ -879,6 +879,41 @@ maakt een **branch + Pull Request** met de wijziging → de PR wordt (zie §13.3
 gecontroleerd en gemerged → de VM rolt het uit. Geen technische kennis,
 terminal of `git` nodig aan de kant van de gebruiker.
 
+### 13.2a RenoVision via Claude - MCP op `renovision-mcp.globaal.be` (31-08-2026)
+Tweede manier waarop collega's zelf code wijzigen, voor RenoVision. Waar §13.2
+via GitHub en een PR loopt, werkt dit rechtstreeks op de **eigen kopie** van de
+app die elke collega al heeft (`renovision-<naam>.globaal.be`, aangemaakt met
+`renovision-kopie.sh`): eigen map, eigen containers, eigen mongo-volume.
+
+Eén dienst voor iedereen (systemd `renovision-mcp`, host `172.17.0.1:8110`,
+code in `renovision-mcp/`). **De ingelogde Authentik-gebruiker bepaalt de
+werkruimte** - `marise` → `~/globaal-renovision-marise` - en dat is niet in te
+stellen: er is geen parameter waarmee een andere kopie te kiezen is. Wie geen
+eigen kopie heeft krijgt geen toegang; er wordt nooit teruggevallen op de
+hoofdmap. OAuth-patroon en vhost-indeling gelijk aan angela.sr (§14.8) en het
+Vermogens-dashboard: `/mcp` en de metadata buiten de forward-auth,
+`/oauth/authorize` erachter.
+
+Dertien stuks gereedschap: `werkruimte`, `bestanden`, `lees`, `zoek`,
+`vervang`, `schrijf`, `verwijder`, `wijzigingen`, `vastleggen`, `geschiedenis`,
+`terugdraaien`, `uitrollen`, `logboek`.
+
+Grenzen die erin zitten, met de reden (uitgebreid in `renovision-mcp/README.md`):
+- **Alleen de eigen kopie**, getoetst via `realpath` zodat ook een symlink er
+  niet buiten komt. Getest in `renovision-mcp/test_werkruimte.py`.
+- **Schrijven alleen in `backend/`, `frontend/`, `tests/` en de documentatie.**
+  Niet in `docker-compose.yml` of `deploy/`: een compose-bestand kan een
+  host-map in een container hangen en `deploy/*.sh` draait als `ubuntu` op de
+  host - via allebei zou een tekstwijziging in Claude de VM kunnen overnemen.
+- **`.env` niet leesbaar** (bevat de `ANTHROPIC_API_KEY`); `.env.example` wel.
+- **Vastleggen op een eigen tak** `werk/<naam>`, nooit op `main`.
+  `terugdraaien` maakt een tegen-commit en wist nooit geschiedenis.
+- **Eén bouw tegelijk** over alle kopieën heen, en niet boven belasting 25
+  (2 vCPU, zie §9).
+- **Een kopie onder een auto-deploy-timer weigert wijzigingen**:
+  `deploy/autodeploy.sh` doet elke twee minuten `git reset --hard`, werk zou
+  verdampen. Raakt `~/globaal-renovision` en `~/globaal-renovision-mehdi`.
+
 ### 13.3 CI/CD - automatische check, merge & deploy
 Doel: de handmatige stap "PR op GitHub goedkeuren + op de VM `git pull` doen"
 wegnemen, zodat de lus van wens → live volledig automatisch verloopt.

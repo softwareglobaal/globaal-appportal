@@ -1110,3 +1110,35 @@ subdiscipline-statistieken.
       (verkoop-etalage tweedehands ICT) en de webshop-werkstroom hier raken
       elkaar. Als de Shopify-webshop doorgaat, uitzoeken of Items daar de
       productbron van wordt of dat het twee losse sporen blijven.
+
+## RenoVision via Claude - MCP (2026-08-31)
+
+> Gebouwd: `renovision-mcp.globaal.be`, zie §13.2a en `renovision-mcp/README.md`.
+> Collega's wijzigen hun eigen kopie van RenoVision via Claude. Wat er nog open
+> staat:
+
+- [ ] **RenoVision draait nergens meer op een database.** In geen van de acht
+      kopieen bestaat nog een mongo-container, terwijl `docker-compose.yml` die
+      wel beschrijft. De backends staan "Up" maar `/api/projects` geeft niets en
+      het log loopt vol ASGI-fouten. De volumes met de gegevens zijn er nog
+      (`renovision*_mongo-data`). `docker compose up -d` per kopie start hem
+      alsnog; eerst controleren of de gegevens er nog in zitten.
+- [ ] **Timer van Mehdi uitzetten voordat hij via Claude werkt.**
+      `renovision-mehdi-deploy.timer` zet zijn map elke twee minuten terug op
+      `origin/mehdi`; de MCP weigert daarom te schrijven in zijn kopie. Zelfde
+      geldt voor `~/globaal-renovision` (`renovision-deploy.timer`). Uitzetten
+      met `sudo systemctl disable --now renovision-mehdi-deploy.timer`, maar
+      dat betekent wel dat die kopie niet langer vanzelf GitHub volgt.
+- [ ] **Werk van een collega terug naar GitHub.** Wijzigingen landen nu op een
+      lokale tak `werk/<naam>` op de VM; de VM heeft geen push-rechten (bewust,
+      zie §13.1). Iemand moet die tak nog met de hand oppakken en er een PR van
+      maken. Als dit vaker gaat gebeuren: een `voorstellen`-gereedschap dat een
+      patch klaarzet, of push-rechten voor een aparte deploy-key.
+- [ ] **Tests kunnen draaien via de MCP.** De backend heeft een testsuite
+      (`backend/backend_test.py` en verder), maar er is geen gereedschap om die
+      te draaien - een codewijziging is nu alleen te toetsen door uit te rollen
+      en het log te lezen. Bewust weggelaten in v1 vanwege de belasting op 2 vCPU.
+- [ ] **De nutteloze kopie van de repo in elke werkmap opruimen.** In elke
+      `~/globaal-renovision*` staat een niet-getrackte map `globaal-renovision/`
+      met een tweede kopie van dezelfde bestanden (6,7 MB per stuk). De MCP
+      negeert hem, maar hij verwart iedereen die in de map kijkt.
