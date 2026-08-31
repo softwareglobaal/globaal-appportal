@@ -251,6 +251,29 @@ services:
   # Sales — Pipedrive-dashboard (sales.globaal.be). Eigen repo
   # (softwareglobaal/sales-dashboard), uitgecheckt op de VM in ./sales met
   # auto-deploy via deploy.sh + cron (2026-07-08), zoals de andere dashboards.
+  # Aanvraag-inname: vangt het formulier van unabo.be op en zet het in een
+  # wachtrij. Doet zelf niets met Pipedrive of Google - dat doet de host-cron
+  # aanvraag_verwerk.py, zodat een bezoeker nooit op een externe dienst wacht.
+  app-aanvraag:
+    build: ./aanvraag
+    image: appportal-aanvraag
+    restart: unless-stopped
+    environment:
+      PORT: "3031"
+      AANVRAAG_DB: /data/aanvragen.db
+      AANVRAAG_TOKEN: ${AANVRAAG_TOKEN:-}
+    volumes:
+      - aanvraag-data:/data
+    healthcheck:
+      # Lijstvorm: bij de tekstvorm haalde compose de aanhalingstekens rond de
+      # URL weg, waardoor python een kale URL zag en de check altijd faalde.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3031/health', timeout=5)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks: [appnet]
+
   app-sales:
     build: ./sales
     image: appportal-sales
@@ -719,6 +742,7 @@ services:
     networks: [appnet]
 
 volumes:
+  aanvraag-data:
   contracten-output:
   contracten-input:
   post-agent-state:

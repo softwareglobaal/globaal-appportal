@@ -1,0 +1,38 @@
+# Aanvraag-inname — aanvraag.globaal.be
+#
+# Bewust NIET achter de Authentik-poort: het aanvraagformulier op unabo.be moet
+# hier rechtstreeks bij kunnen. De beveiliging is het gedeelde geheim in de
+# header (X-Aanvraag-Token), dat de app zelf controleert.
+#
+# Snelheidsbegrenzing: een formulier levert hooguit een paar inzendingen per
+# minuut. Wie meer stuurt, is geen klant.
+
+limit_req_zone $binary_remote_addr zone=aanvraag_zone:1m rate=10r/m;
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name aanvraag.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # Alleen de inname-route en de statuscheck bestaan; de rest bestaat niet.
+    location = /wpforms {
+        limit_req zone=aanvraag_zone burst=5 nodelay;
+        limit_except POST { deny all; }
+        client_max_body_size 64k;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://app-aanvraag:3031;
+    }
+
+    location = /health {
+        proxy_set_header Host $host;
+        proxy_pass http://app-aanvraag:3031;
+    }
+
+    location / { return 404; }
+}
