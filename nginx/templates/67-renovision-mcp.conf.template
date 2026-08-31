@@ -1,0 +1,48 @@
+# RenoVision via Claude: collega's passen hun eigen kopie van de app aan.
+#
+# De dienst draait op de host (172.17.0.1:8110, systemd renovision-mcp), niet
+# in een container: het gereedschap moet bij de mappen van alle kopieen en bij
+# docker kunnen.
+#
+# Zelfde indeling als vermogen en de Schuldentracker: /mcp en de
+# OAuth-metadata staan buiten de forward-auth (MCP-clients hebben geen
+# Authentik-sessie; de dienst controleert zelf het bearer-token), en de
+# loginstap /oauth/authorize valt er juist WEL onder -- daar is SSO de
+# authenticatie, en daar wordt bepaald in welke kopie iemand terechtkomt.
+# Zonder MCP_SECRET/MCP_TOKEN in de omgeving geeft de dienst 404.
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name renovision-mcp.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    set $app_upstream http://172.17.0.1:8110;
+    include /etc/nginx/snippets/forward-auth.conf;
+
+    # De uitvoer van 'lees' en 'zoek' kan groot zijn.
+    proxy_buffers 8 16k;
+    proxy_buffer_size 32k;
+
+    location ^~ /mcp {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+        # Een uitrol loopt op de achtergrond, maar 'zoek' over de hele code
+        # mag rustig even duren.
+        proxy_read_timeout 180s;
+    }
+
+    # OAuth-discovery (RFC 8414/9728), publiek leesbaar.
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+}
