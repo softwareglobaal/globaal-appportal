@@ -1428,6 +1428,27 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   (relatie-ID, grootboek, ons klantnummer); personen overal als
   **displaynaam** (Zoom-formaat, of kaal bij `afdeling_in_naam = false`).
 
+- **Transcripties (migratie 138, 31-08-2026):** opgenomen Xelion-gesprekken
+  laten uitschrijven door **Plaud**. De poller
+  (`communicatie/src/transcriptie-sync.js`) haalt de mp3 op met
+  `GET communications/<oid>/audio`, zet hem via de voorgetekende S3-upload bij
+  Plaud neer (zo hoeven wij geen opnames publiek bereikbaar te maken) en dient
+  de opdracht in; navragen tot `SUCCESS`, want Plaud kent geen webhooks. Eén
+  rij per gesprek in **`communicatie.gesprek_transcript`**: tekst, taal, aantal
+  stemmen en `segmenten` (tijdstempel + spreker + tekst). Werk claimen gaat met
+  `FOR UPDATE SKIP LOCKED`, zodat twee exemplaren van de app nooit dezelfde
+  opname twee keer versturen - dat zou letterlijk dubbel betalen zijn. **Staat
+  standaard uit** (`PLAUD_ENABLED`); `PLAUD_MAX_UREN_PER_MAAND` is het
+  kostenplafond ($0,28 per uur audio, eerste 300 uur gratis). **Strengere
+  toegang dan de rest van de app:** ook het *lezen* van de tekst is beperkt tot
+  `EDITOR_GROUPS`, en het tabblad verschijnt alleen voor hen - dit is de
+  letterlijke inhoud van wat mensen gezegd hebben. Verwijderen wist de tekst en
+  laat de oproep in het archief staan (bewust anders dan migratie 034, waar
+  DELETE juist geweigerd wordt). Aandachtspunt vóór het aanzetten: Plaud
+  verwerkt standaard in de VS en bewaart API-transcripties 7 dagen;
+  EU-verwerking loopt via hun sales. Volledig onderzoek, endpoints en kosten:
+  **`docs/ONDERZOEK-PLAUD-API.md`**.
+
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
 
