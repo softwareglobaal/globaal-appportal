@@ -564,6 +564,7 @@ het vervangt een Excel-deurwaarderstracker. Draait **op de host** als Flask-app
 | `scripts/fix-domains.py` | corrigeert providers/redirect/host naar het echte domein (zie §9.6) |
 | `scripts/ak-exec.sh` | helper om een python-bestand in de authentik-container te draaien |
 | `vm/omv.service` | het systemd-servicebestand voor OMV |
+| `vm/monday-lightrag.service` | LightRAG-query-service Monday-zandbak (host, :8791); installeren met `enable --now`, anders komt hij na een reboot niet terug (les 31-08-2026) |
 
 ---
 
