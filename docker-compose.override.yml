@@ -735,10 +735,22 @@ services:
       CONTRACT_BASIS: ""
       OFFERTE_SCRIPT: ""
       FOTOBIBLIOTHEEK: ""
+      # Bronnen via de API in plaats van via de Mac: dezelfde sleutels als de
+      # andere diensten op deze VM (Dropbox-teamruimte, Fathom, de agenda-
+      # servicegebruiker), plus read-only IMAP naar offerte@.
+      DROPBOX_APP_KEY: ${DROPBOX_APP_KEY:-}
+      DROPBOX_APP_SECRET: ${DROPBOX_APP_SECRET:-}
+      DROPBOX_REFRESH_TOKEN: ${DROPBOX_REFRESH_TOKEN:-}
+      FATHOM_API_KEYS: ${FATHOM_API_KEYS:-}
+      GOOGLE_CALENDAR_KEY: ${GOOGLE_CALENDAR_KEY:-}
+      CONTRACTEN_KALENDERS: ${CONTRACTEN_KALENDERS:-}
+      OFFERTE_IMAP_WACHTWOORD: ${CONTRACTEN_OFFERTE_IMAP_PW:-}
     volumes:
       # Gegenereerde contracten en ingevulde dossiers overleven een herbouw.
       - contracten-output:/app/Output
       - contracten-input:/app/Input
+      # Alleen voor het sleutelbestand van de agenda-servicegebruiker.
+      - hr-data:/data:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3022/healthz')"]
       interval: 30s
