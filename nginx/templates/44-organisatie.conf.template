@@ -17,7 +17,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-authentik-username "";
         proxy_set_header X-authentik-groups "";
-        proxy_pass http://app-medewerkers:3007;
+        proxy_pass $app_upstream;
     }
 
     # Zelfde poort voor de agent-status-events (migratie 077): de
@@ -28,7 +28,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-authentik-username "";
         proxy_set_header X-authentik-groups "";
-        proxy_pass http://app-medewerkers:3007;
+        proxy_pass $app_upstream;
     }
 
     # En voor de gemeten Claude Code-tijd (migratie 094): een optelsom per
@@ -39,7 +39,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-authentik-username "";
         proxy_set_header X-authentik-groups "";
-        proxy_pass http://app-medewerkers:3007;
+        proxy_pass $app_upstream;
     }
 
     include /etc/nginx/snippets/forward-auth.conf;

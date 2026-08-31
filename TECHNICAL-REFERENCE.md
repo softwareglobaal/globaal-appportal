@@ -537,6 +537,26 @@ het vervangt een Excel-deurwaarderstracker. Draait **op de host** als Flask-app
 | `docker-compose.yml` | de hele stack |
 | `nginx/templates/*.template` | nginx-serverblokken (envsubst met `${BASE_DOMAIN}`) |
 | `nginx/snippets/forward-auth.conf` | het forward-auth-blok (gedeeld door de apps) |
+
+> **Regel voor elke vhost: nooit een letterlijke `proxy_pass http://container:poort;`.**
+> Altijd een variabele plus de Docker-resolver:
+> ```
+> resolver 127.0.0.11 valid=30s;          # zit al in snippets/forward-auth.conf
+> set $app_upstream http://app-x:3000;
+> proxy_pass $app_upstream;
+> ```
+> Bij een letterlijke waarde zoekt nginx de container op **bij het opstarten** en
+> weigert hij te starten als die niet bestaat (`[emerg] host not found in
+> upstream`). Dan ligt niet dat ene subdomein plat maar het **hele platform**,
+> want nginx bedient alle vhosts. Met een variabele zoekt hij pas op bij een
+> verzoek: een ontbrekende container geeft dan een 502 op dat ene subdomein.
+> Dit heeft op 31-08-2026 alles offline gehaald door een vhost die naar een
+> nooit gebouwde container `app-aanvraag` wees. De variabele mag geen pad
+> bevatten, anders verandert de doorgestuurde URI.
+>
+> Tweede helft van dezelfde les: **vhosts horen in deze repo**, niet als los
+> bestand op de VM. De vhost die het platform plat legde stond nergens in git,
+> dus niemand kon zien dat hij naar het niets wees.
 | `nginx/templates/40-n8n.conf.template` | n8n-doorsturing (VM-specifiek) |
 | `scripts/configure-authentik.sh` | groepen, OIDC, proxy-providers, TOTP, sessies |
 | `scripts/setup-authentik.py` | de daadwerkelijke Authentik-config (via `ak shell`) |

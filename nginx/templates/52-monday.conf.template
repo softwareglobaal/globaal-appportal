@@ -4,6 +4,11 @@ server {
     server_name monday.${BASE_DOMAIN};
     include /etc/nginx/snippets/ssl.conf;
 
+    # De upstream als variabele, zodat nginx hem pas opzoekt als er een
+    # verzoek komt (resolver staat in snippets/forward-auth.conf). Staat
+    # bovenaan omdat de locations hieronder hem ook gebruiken.
+    set $app_upstream http://app-monday:3014;
+
     # Een MCP-client vraagt bij het toevoegen van een connector eerst de
     # standaard OAuth-adressen op. Zonder deze regels belanden die in de
     # forward-auth en volgt de client de omleiding naar Authentik, die hij dan
@@ -23,7 +28,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-authentik-username "";
         proxy_set_header X-authentik-groups "";
-        proxy_pass http://app-monday:3014;
+        proxy_pass $app_upstream;
     }
 
     location /mcp/ {
@@ -32,11 +37,10 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-authentik-username "";
         proxy_set_header X-authentik-groups "";
-        proxy_pass http://app-monday:3014;
+        proxy_pass $app_upstream;
     }
 
     # Monday-zandbak-dashboard. Achter forward-auth; de app controleert zelf
-    # nog eens op de groepen monday/admin.
-    set $app_upstream http://app-monday:3014;
+    # nog eens op de groepen monday/admin. ($app_upstream staat bovenaan.)
     include /etc/nginx/snippets/forward-auth.conf;
 }

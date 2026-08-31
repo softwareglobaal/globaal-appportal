@@ -18,7 +18,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-authentik-username "";
         proxy_set_header X-authentik-groups "";
-        proxy_pass http://app-siyanagents:3021;
+        proxy_pass $app_upstream;
     }
 
     # Contactformulieren van onze eigen websites (bv. regulariseren.be): een
@@ -34,7 +34,7 @@ server {
         proxy_set_header X-authentik-groups "";
         add_header Access-Control-Allow-Origin "*" always;
         add_header Access-Control-Allow-Headers "Content-Type" always;
-        proxy_pass http://app-siyanagents:3021;
+        proxy_pass $app_upstream;
     }
 
     include /etc/nginx/snippets/forward-auth.conf;

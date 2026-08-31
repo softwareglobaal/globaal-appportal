@@ -27,7 +27,7 @@ server {
         proxy_set_header X-authentik-username "";
         proxy_set_header X-authentik-groups "";
         proxy_set_header X-authentik-email "";
-        proxy_pass http://app-vitrine:3025;
+        proxy_pass $app_upstream;
     }
 
     # OAuth-discovery: hier leest een MCP-client waar de autorisatieserver
@@ -37,7 +37,7 @@ server {
         proxy_set_header X-authentik-username "";
         proxy_set_header X-authentik-groups "";
         proxy_set_header X-authentik-email "";
-        proxy_pass http://app-vitrine:3025;
+        proxy_pass $app_upstream;
     }
 
     include /etc/nginx/snippets/forward-auth.conf;

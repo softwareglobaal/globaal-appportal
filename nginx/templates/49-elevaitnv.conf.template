@@ -44,6 +44,15 @@ server {
     # Sollicitaties met CV-upload mogen tot 10 MB groot zijn.
     client_max_body_size 10m;
 
+    # Variabele upstreams + de Docker-resolver. Zonder dit zoekt nginx beide
+    # containers op bij het opstarten, en weigert hij te starten als er een
+    # ontbreekt: dan ligt niet deze site plat maar het hele platform, want
+    # nginx bedient alle vhosts. Dit blok sluit geen forward-auth in (de site
+    # is openbaar), dus de resolver staat hier zelf.
+    resolver 127.0.0.11 valid=30s;
+    set $demo_upstream http://demo-kennisbank:3030;
+    set $site_upstream http://elevait-web:8090;
+
     # Publieke demo van de kennisbank (elevaitnv.com/demo). Openbaar, dus geen
     # SSO. De app bewaakt zelf zijn grenzen: 40 bladzijden, 15 MB, alleen een
     # PDF met tekstlaag, vijf per dag per IP, een verwerking tegelijk.
@@ -57,7 +66,7 @@ server {
         client_body_timeout 120s;
         proxy_read_timeout 180s;
         proxy_send_timeout 180s;
-        proxy_pass http://demo-kennisbank:3030;
+        proxy_pass $demo_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -65,7 +74,7 @@ server {
     }
 
     location / {
-        proxy_pass http://elevait-web:8090;
+        proxy_pass $site_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
