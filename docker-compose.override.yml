@@ -745,6 +745,11 @@ services:
       GOOGLE_CALENDAR_KEY: ${GOOGLE_CALENDAR_KEY:-}
       CONTRACTEN_KALENDERS: ${CONTRACTEN_KALENDERS:-}
       OFFERTE_IMAP_WACHTWOORD: ${CONTRACTEN_OFFERTE_IMAP_PW:-}
+      # Agenda via Mehdi's eigen account (read-only), zelfde toegang als
+      # globaal-calendar-mehdi; gaat voor op de servicegebruiker.
+      CONTRACTEN_GCAL_CLIENT_ID: ${CONTRACTEN_GCAL_CLIENT_ID:-}
+      CONTRACTEN_GCAL_CLIENT_SECRET: ${CONTRACTEN_GCAL_CLIENT_SECRET:-}
+      CONTRACTEN_GCAL_REFRESH_TOKEN: ${CONTRACTEN_GCAL_REFRESH_TOKEN:-}
     volumes:
       # Gegenereerde contracten en ingevulde dossiers overleven een herbouw.
       - contracten-output:/app/Output
