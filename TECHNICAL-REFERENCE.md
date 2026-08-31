@@ -501,9 +501,29 @@ het vervangt een Excel-deurwaarderstracker. Draait **op de host** als Flask-app
   `http://172.17.0.1:5050`; `sudo ufw allow 5050/tcp`. Authentik: proxy-provider +
   app + groepen **`schuldentracker`** (zien) en **`schuldentracker-bewerken`**
   (Mehdi, Angela). DNS via de wildcard.
-- **Nog open:** (a) back-up van `data/finance.db`, (b) in git/CI/auto-deploy brengen
-  (repo `globaal-schuldentracker`), (c) **de OpenAI-key in `.env` roteren** (stond in
-  platte tekst, ook in de OneDrive-kopie).
+- **Nog open:** (a) back-up van `data/finance.db`, (b) **de OpenAI-key in `.env`
+  roteren** (stond in platte tekst, ook in de OneDrive-kopie).
+
+### 6C.5 MCP-endpoint voor Claude (alleen lezen, 31-08-2026)
+- `https://schuldentracker.globaal.be/mcp` (streamable HTTP, `mcp_server.py` in
+  de app-repo). Tools: `overzicht`, `dossiers`, `dossier`, `betalingen`,
+  `bankregels`, `maandlast`, `achterstanden`, `logboek`, `schema`, `query`.
+- **Schrijven kan niet**, en dat is een constructie: de DB gaat open als
+  `file:...?mode=ro`, `query` accepteert enkel één `SELECT`/`WITH` (max 500
+  rijen, 5 s) en de tabel `users` (wachtwoord-hashes, TOTP-secrets) blijft
+  buiten beeld. Wijzigen blijft dus voorbehouden aan het dashboard, met de
+  audit-log erachter.
+- Auth zoals bij Vermogen (§13.x): claude.ai-connector via de eigen minimale
+  OAuth-server (DCR + PKCE, stateless HMAC-tokens uit `MCP_SECRET` in de
+  `.env` van de app); `/oauth/authorize` valt bewust ONDER de forward-auth,
+  `/mcp*` en `/.well-known/oauth-*` erbuiten (nginx-template
+  `41-schuldentracker.conf.template`). Optioneel `MCP_TOKEN` voor Claude
+  Code. Beide leeg = endpoint bestaat niet (404).
+- De saldo-regels worden niet nagebouwd: `compute_paid_outstanding`,
+  `_compute_arrears`, `compute_next_due` en `_apply_dossier_overrides` gaan
+  vanuit `app.py` mee naar binnen, zodat Claude dezelfde cijfers ziet als het
+  dashboard. Een eigen `SUM` over `payment_records` wijkt af (werkmap-waarde
+  is ondergrens, status 'Afbetaald' telt als volledig betaald).
 
 ---
 
