@@ -1,0 +1,29 @@
+# LightRAG-query-service voor de Monday-zandbak (host-proces, poort 8791).
+# De Monday-tegel (app-monday) proxyt vragen hiernaartoe via
+# host.docker.internal:8791; de service laadt de kennisgraaf en het
+# embeddings-model eenmalig en is alleen vanaf de docker-host bereikbaar.
+#
+# Installeren op de VM:
+#   sudo cp vm/monday-lightrag.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now monday-lightrag.service
+#
+# Het "enable" is het halve werk: zonder dat komt de service na een reboot
+# niet terug. Precies dat ging mis na de VM-herstart van 14-08-2026; de
+# storing viel pas op 31-08 op. EnvironmentFile draagt ANTHROPIC_API_KEY
+# en staat bewust buiten git (~/monday-lightrag/service.env).
+
+[Unit]
+Description=Monday LightRAG query service
+After=docker.service network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/appportal/monday/scripts
+EnvironmentFile=/home/ubuntu/monday-lightrag/service.env
+ExecStart=/home/ubuntu/lightrag-venv/bin/uvicorn query_service:app --host 0.0.0.0 --port 8791
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
