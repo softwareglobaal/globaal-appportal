@@ -20,9 +20,9 @@ server {
     set $app_upstream http://172.17.0.1:8110;
     include /etc/nginx/snippets/forward-auth.conf;
 
-    # De uitvoer van 'lees' en 'zoek' kan groot zijn.
-    proxy_buffers 8 16k;
-    proxy_buffer_size 32k;
+    # Let op: geen proxy_buffers hier. De forward-auth-snippet zet die al, en
+    # nginx weigert een dubbele directive -- dat legde op 31-08-2026 het hele
+    # platform plat tot de regels eruit waren.
 
     location ^~ /mcp {
         proxy_set_header Host $host;

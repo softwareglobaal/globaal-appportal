@@ -11,6 +11,7 @@ terug, niet als een protocolfout.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -38,6 +39,24 @@ def _belasting() -> float:
     return os.getloadavg()[0]
 
 
+def _docker(args: list[str], seconden: int, waarvoor: str) -> subprocess.CompletedProcess:
+    """Een docker-opdracht met een korte tijdslimiet.
+
+    De docker-daemon op deze VM reageert onder belasting soms minutenlang niet
+    (60+ containers op 2 vCPU). Wachten helpt dan niet en laat Claude in het
+    ongewisse; een duidelijke melding is bruikbaarder dan een verbinding die
+    doodbloedt.
+    """
+    try:
+        return subprocess.run(args, capture_output=True, text=True,
+                              timeout=seconden)
+    except subprocess.TimeoutExpired:
+        raise Geweigerd(
+            f"Docker reageerde niet binnen {seconden} seconden bij het "
+            f"{waarvoor}. De VM staat nu zwaar belast (belasting "
+            f"{_belasting():.1f}). Probeer het zo opnieuw.") from None
+
+
 # ---- Lezen ----------------------------------------------------------------
 def werkruimte_info(ws: Werkruimte) -> dict:
     """Waar ben ik, wat staat er open, en draait het."""
@@ -50,14 +69,25 @@ def werkruimte_info(ws: Werkruimte) -> dict:
     except Geweigerd:
         voor = "0"
 
-    diensten = []
-    r = subprocess.run(
-        ["docker", "compose", "ps", "--format", "{{.Service}}\t{{.State}}"],
-        cwd=ws.map, capture_output=True, text=True, timeout=60)
-    for regel in r.stdout.splitlines():
-        if "\t" in regel:
-            dienst, staat = regel.split("\t", 1)
-            diensten.append({"dienst": dienst, "staat": staat})
+    # De containerstand is bijzaak in dit overzicht: als docker traag is,
+    # melden we dat en gaan we door met de rest.
+    diensten, containerfout = [], ""
+    # Een exact patroon, geen losse voorvoegselfilter: de werkruimte 'hoofd'
+    # heet 'renovision' en zou anders de containers van alle kopieen opvegen.
+    patroon = f"^{re.escape(ws.project)}-(backend|web|mongo)-[0-9]+$"
+    try:
+        r = subprocess.run(
+            ["docker", "ps", "--filter", f"name={patroon}",
+             "--format", "{{.Names}}\t{{.State}}"],
+            capture_output=True, text=True, timeout=25)
+        for regel in r.stdout.splitlines():
+            if "\t" in regel:
+                naam, staat = regel.split("\t", 1)
+                diensten.append({"dienst": naam[len(ws.project) + 1:].rsplit("-", 1)[0],
+                                 "staat": staat})
+    except subprocess.TimeoutExpired:
+        containerfout = ("Docker reageerde niet binnen 25 seconden; de VM "
+                         "staat zwaar belast. De containerstand ontbreekt.")
 
     uit = {
         "werkruimte": ws.naam,
@@ -69,12 +99,14 @@ def werkruimte_info(ws: Werkruimte) -> dict:
         "uitrol": uitrol_stand(ws),
         "belasting_vm": round(_belasting(), 1),
     }
+    if containerfout:
+        uit["let_op_docker"] = containerfout
     if ws.autodeploy:
         uit["let_op"] = (
             f"Deze werkruimte staat onder {ws.autodeploy} en wordt elke twee "
             "minuten teruggezet op de versie uit GitHub. Wijzigen is daarom "
             "uitgeschakeld tot de beheerder die timer uitzet.")
-    if not any(d["dienst"] == "mongo" for d in diensten):
+    if not containerfout and not any(d["dienst"] == "mongo" for d in diensten):
         uit["let_op_database"] = (
             "Er draait geen mongo-container; de app kan zijn database niet "
             "bereiken en geeft fouten. 'uitrollen' start hem alsnog.")
@@ -346,15 +378,16 @@ def logboek(ws: Werkruimte, dienst: str = "backend", regels: int = 60) -> dict:
         raise Geweigerd("Kies backend, web of mongo.")
     n = max(1, min(int(regels or 60), MAX_LOG))
     naam = f"{ws.project}-{dienst}-1"
-    r = subprocess.run(["docker", "logs", "--tail", str(n), naam],
-                       capture_output=True, text=True, timeout=120)
+    r = _docker(["docker", "logs", "--since", "6h", "--tail", str(n), naam],
+                25, f"ophalen van het log van '{dienst}'")
     if r.returncode != 0:
         raise Geweigerd(
             f"Geen log voor '{dienst}': die container draait niet. "
             + ("De mongo-container ontbreekt in alle kopieen; 'uitrollen' "
                "start hem alsnog." if dienst == "mongo" else ""))
+    log = (r.stdout + r.stderr).splitlines()[-n:]
     return {"dienst": dienst, "container": naam,
-            "log": (r.stdout + r.stderr).splitlines()[-n:]}
+            "log": log or ["(geen regels in de afgelopen 6 uur)"]}
 
 
 def schijfruimte() -> str:

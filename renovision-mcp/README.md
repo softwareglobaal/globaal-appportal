@@ -114,3 +114,22 @@ claude mcp add --transport http renovision https://renovision-mcp.globaal.be/mcp
 ```bash
 cd ~/appportal/renovision-mcp && .venv/bin/python -m pytest -q
 ```
+
+## Valkuilen die dit al gekost heeft
+
+**Geen `proxy_buffers` in de vhost.** De forward-auth-snippet zet die al en
+nginx weigert een dubbele directive; op 31-08-2026 startte nginx daardoor niet
+meer en lag het hele platform plat. Controleer na elke vhost-wijziging
+`docker exec appportal-nginx-1 nginx -t`.
+
+**ufw moet poort 8110 doorlaten vanaf de docker-netwerken.** Zonder die regel
+loopt elk verzoek in een time-out in plaats van een nette 502:
+
+```bash
+sudo ufw allow from 172.16.0.0/12 to any port 8110 proto tcp comment 'docker -> renovision-mcp'
+```
+
+**Docker reageert onder belasting traag.** `docker logs` deed er op deze VM
+meer dan twee minuten over terwijl het logbestand 28 KB was. Alle
+docker-aanroepen hebben daarom een korte tijdslimiet en melden de vertraging in
+plaats van te blijven hangen.
