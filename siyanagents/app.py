@@ -1191,7 +1191,13 @@ def _nav_context():
         conn.close()
     except Exception:
         na = 0
-    return {"nav_te_valideren": n, "nav_aanvragen": na,
+    try:
+        conn = db()
+        nv = conn.execute("SELECT COUNT(*) c FROM voorstel WHERE besluit='open'").fetchone()["c"]
+        conn.close()
+    except Exception:
+        nv = 0
+    return {"nav_te_valideren": n, "nav_aanvragen": na, "nav_voorstellen": nv,
             "portal_url": f"https://portal.{BASE_DOMAIN}/",
             "nav_user": request.headers.get("X-authentik-username", "onbekend")}
 
@@ -1203,6 +1209,29 @@ def overzicht():
     for a in ags:
         counts[a["status"]] = counts.get(a["status"], 0) + 1
     return render_template("overzicht.html", agents=ags, counts=counts, totaal=len(ags))
+
+
+@app.route("/voorstellen")
+def voorstellen():
+    """Openstaande voorstellen van de agents, met goedkeuren en weigeren.
+
+    Ontbrak na de splitsing van de agents-app: voorstellen kwamen wel binnen,
+    maar er was geen scherm om ze te zien. De goedkeuringspoort had dus geen
+    voorkant, en dat viel pas op toen er iets in kwam te staan.
+    """
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM voorstel WHERE besluit='open' ORDER BY id DESC").fetchall()
+    conn.close()
+    items = [{
+        "id": r["id"],
+        "actie": r["actie"],
+        "doel": r["doel"] or "",
+        "reden": r["reden"] or "",
+        "label": LABELS.get(r["naam"], r["naam"]),
+        "uitvoerbaar": bool((r["parameters"] or "").strip()),
+    } for r in rows]
+    return render_template("voorstellen.html", items=items)
 
 
 @app.route("/validatie")

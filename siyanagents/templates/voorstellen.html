@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block titel %}Voorstellen{% endblock %}
+{% block body %}
+<div class="kop">
+  <h1>Voorstellen</h1>
+  <div class="sub">Wat de agents willen doen of gezien hebben. Keur goed en de uitvoerder voert het uit; weiger en er gebeurt niets.</div>
+</div>
+
+<div class="paneel" style="padding:0">
+  {% if items %}
+    {% for v in items %}
+    <div class="voorstel" data-id="{{ v.id }}" style="padding:16px 18px;{% if not loop.first %}border-top:1px solid var(--lijn);{% endif %}">
+      <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;">
+        <strong style="font-size:14.5px;">{{ v.actie }}</strong>
+        <span class="chip" style="cursor:default;">{{ v.label }}</span>
+        {% if v.uitvoerbaar %}<span class="chip" style="cursor:default;">voert iets uit</span>
+        {% else %}<span class="chip" style="cursor:default;">alleen een signaal</span>{% endif %}
+      </div>
+      <div style="color:var(--tekst-2);font-size:13px;margin-top:6px;">{{ v.doel }}</div>
+      {% if v.reden %}<div style="font-size:13.5px;line-height:1.6;margin-top:8px;">{{ v.reden }}</div>{% endif %}
+      <div class="acties-knoppen">
+        <button class="chip" data-besluit="goedgekeurd">Goedkeuren</button>
+        <button class="chip" data-besluit="geweigerd">Weigeren</button>
+        <span class="melding" style="font-size:12.5px;color:var(--tekst-2);"></span>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="leeg" style="padding:22px;color:var(--tekst-2);">Geen openstaande voorstellen.</p>
+  {% endif %}
+</div>
+
+<script>
+document.querySelectorAll('.voorstel').forEach(function (kaart) {
+  kaart.querySelectorAll('button[data-besluit]').forEach(function (knop) {
+    knop.addEventListener('click', function () {
+      var melding = kaart.querySelector('.melding');
+      kaart.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      melding.textContent = 'bezig…';
+      fetch('/voorstel/' + kaart.dataset.id + '/besluit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ besluit: knop.dataset.besluit })
+      }).then(function (r) {
+        if (!r.ok) { throw new Error('mislukt (' + r.status + ')'); }
+        melding.textContent = knop.dataset.besluit === 'goedgekeurd'
+          ? 'goedgekeurd — de uitvoerder pakt het op' : 'geweigerd';
+        kaart.style.opacity = '0.55';
+      }).catch(function (e) {
+        melding.textContent = e.message + ' — probeer opnieuw';
+        kaart.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+      });
+    });
+  });
+});
+</script>
+{% endblock %}
