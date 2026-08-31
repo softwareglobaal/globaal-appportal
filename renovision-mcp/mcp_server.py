@@ -5,10 +5,12 @@ kan die kopie hiermee vanuit Claude aanpassen: code lezen en doorzoeken,
 wijzigen, vastleggen in git en opnieuw uitrollen. Wie je bent bepaalt in welke
 kopie je terechtkomt -- dat is niet in te stellen en niet te omzeilen.
 
-Koppelen in claude.ai: aangepaste connector op
-https://renovision-mcp.globaal.be/mcp. Dat gaat via OAuth; deze module is
-daarvoor zelf een kleine OAuth-server (dynamic client registration + PKCE, RFC
-7591/8414/9728), overgenomen van angela.sr en het Vermogens-dashboard. De
+Koppelen kan op twee manieren, allebei via OAuth en dus allebei met de eigen
+SSO-login: als aangepaste connector in claude.ai, of lokaal met
+`claude mcp add --transport http renovision https://renovision-mcp.globaal.be/mcp`.
+Deze module is daarvoor zelf een kleine OAuth-server (dynamic client
+registration + PKCE, RFC 7591/8414/9728), overgenomen van angela.sr en het
+Vermogens-dashboard, met loopback-redirects erbij voor het lokale geval. De
 loginstap (/oauth/authorize) staat ACHTER de Authentik forward-auth in de
 vhost: wie koppelt logt in via SSO, en alleen de renovision-groepen komen
 erdoor (scripts/add-renovision-mcp.py). Tokens zijn stateless (HMAC-getekend
@@ -89,12 +91,22 @@ def _lees_token(token: str, soort: str):
 
 
 def _redirect_ok(uri: str) -> bool:
-    """Alleen terugsturen naar Claude zelf."""
+    """Waar mag de autorisatiecode naartoe: Claude zelf, of de eigen machine.
+
+    Twee gevallen, allebei nodig:
+    - claude.ai in de browser stuurt terug naar een adres van Claude;
+    - Claude Code op een werkplek luistert op een willekeurige poort op
+      localhost (RFC 8252, de gewone gang voor lokale programma's). Die
+      loopback-adressen komen het netwerk niet op, en PKCE plus de SSO-login
+      blijven ook daar gelden.
+    """
     try:
         p = urlparse(uri)
     except Exception:
         return False
     host = (p.hostname or "").lower()
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return p.scheme in ("http", "https")
     basis = ("claude.ai", "claude.com", "anthropic.com")
     return (p.scheme == "https"
             and (host in basis or host.endswith(tuple("." + b for b in basis))))
