@@ -360,6 +360,19 @@ subdiscipline-statistieken.
 - [ ] **Optioneel archief-export**: maandelijkse JSONL-dump van de spiegel
       naar S3 naast de databasebackup (alleen als het team losse bestanden
       wil; de tabel zelf is al het archief).
+- [x] **Transcripties van de opnames** - GEBOUWD (31-08-2026, migratie 138):
+      Xelion-opnames door Plaud laten uitschrijven, tabblad Transcripties,
+      alleen voor de editors-groepen. Onderzoek:
+      `docs/ONDERZOEK-PLAUD-API.md`.
+- [ ] **BESLISPUNT vóór het aanzetten (Shaniel/Mehdi)**: de pijplijn staat uit
+      tot twee dingen geregeld zijn. (1) Sleutels van portal.plaud.ai in de
+      `.env` (`PLAUD_CLIENT_ID`, `PLAUD_CLIENT_SECRET`, `PLAUD_API_KEY`,
+      `PLAUD_ENABLED=true`). (2) Het privacybesluit: dit gaat verder dan het
+      besluit van 2026-07-04, want daar bleef `contentSummary` bewust
+      ongetoond en hier komt de volledige tekst binnen. Plaud verwerkt
+      standaard in de VS en bewaart API-transcripties 7 dagen;
+      EU-verwerking loopt via hun sales. Kosten zijn geen argument: de hele
+      voorraad past in de gratis 300 uur, daarna orde $3 per maand.
 
 ## Externe contacten & lagen-model (2026-07-06)
 
