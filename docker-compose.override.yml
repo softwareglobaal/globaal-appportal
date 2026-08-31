@@ -407,6 +407,19 @@ services:
       XELION_PASSWORD: ${XELION_PASSWORD:-}
       # Optioneel; wordt volgens Xelion binnenkort verplicht (aanvragen bij Xelion).
       XELION_APP_KEY: ${XELION_APP_KEY:-}
+      # Transcripties (migratie 138): opnames door Plaud laten uitschrijven.
+      # Sleutels uit portal.plaud.ai, in .env op de VM (nooit in git). Let op:
+      # SECRET en API_KEY zijn twee verschillende dingen bij Plaud - het secret
+      # is voor de tokens, de api_key voor de transcriptie-API.
+      # Zonder PLAUD_ENABLED=true start de poller niet en kost dit niets.
+      PLAUD_ENABLED: ${PLAUD_ENABLED:-false}
+      PLAUD_CLIENT_ID: ${PLAUD_CLIENT_ID:-}
+      PLAUD_CLIENT_SECRET: ${PLAUD_CLIENT_SECRET:-}
+      PLAUD_API_KEY: ${PLAUD_API_KEY:-}
+      # VS is de standaardregio; platform-jp bestaat, EU loopt via hun sales.
+      PLAUD_BASE_URL: ${PLAUD_BASE_URL:-}
+      # Kostenplafond in uren audio per maand ($0,28/uur). 0 = geen plafond.
+      PLAUD_MAX_UREN_PER_MAAND: ${PLAUD_MAX_UREN_PER_MAAND:-100}
     healthcheck:
       test: node -e "require('http').get('http://127.0.0.1:3008/api/me',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
       interval: 30s
