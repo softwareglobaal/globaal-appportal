@@ -263,7 +263,9 @@ services:
       AANVRAAG_DB: /data/aanvragen.db
       AANVRAAG_TOKEN: ${AANVRAAG_TOKEN:-}
     volumes:
-      - aanvraag-data:/data
+      # Bind-mount i.p.v. een genoemd volume: de verwerker draait als cron op de
+      # host en moet dezelfde wachtrij kunnen lezen.
+      - ./aanvraag-data:/data
     healthcheck:
       # Lijstvorm: bij de tekstvorm haalde compose de aanhalingstekens rond de
       # URL weg, waardoor python een kale URL zag en de check altijd faalde.
@@ -742,7 +744,6 @@ services:
     networks: [appnet]
 
 volumes:
-  aanvraag-data:
   contracten-output:
   contracten-input:
   post-agent-state:
