@@ -714,6 +714,13 @@ services:
     build: ./contracten
     image: appportal-contracten
     restart: unless-stopped
+    env_file:
+      # De agendasleutels van globaal-calendar-mehdi worden ter plekke
+      # meegelezen (read-only toegang tot Mehdi's agenda's), zodat er geen
+      # sleutelwaarden gekopieerd hoeven te worden. De environment-sectie
+      # hieronder wint bij naamoverlap.
+      - path: /home/ubuntu/globaal-calendar-mehdi/.env
+        required: false
     environment:
       BASE_DOMAIN: ${BASE_DOMAIN}
       PORT: "3022"
