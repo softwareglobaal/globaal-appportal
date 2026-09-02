@@ -18,4 +18,29 @@ server {
 
     # Contracten en bijlagen mogen groot zijn.
     client_max_body_size 64m;
+
+    # MCP-endpoint voor Claude (alleen lezen): buiten de forward-auth om, want
+    # MCP-clients hebben geen Authentik-sessie; de app checkt zelf het token.
+    # Dekt ook de OAuth-endpoints voor claude.ai-connectors: /mcp/token en
+    # /mcp/register. De loginstap (/oauth/authorize) valt bewust WEL onder de
+    # forward-auth hierboven: Authentik-SSO is daar de authenticatie. Zolang
+    # MCP_SECRET/MCP_TOKEN niet in de omgeving van de app staan: 404.
+    location ^~ /mcp {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
+    # OAuth-discovery (RFC 8414/9728), publiek leesbaar.
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
 }

@@ -761,6 +761,9 @@ services:
       CONTRACTEN_GCAL_CLIENT_ID: ${CONTRACTEN_GCAL_CLIENT_ID:-}
       CONTRACTEN_GCAL_CLIENT_SECRET: ${CONTRACTEN_GCAL_CLIENT_SECRET:-}
       CONTRACTEN_GCAL_REFRESH_TOKEN: ${CONTRACTEN_GCAL_REFRESH_TOKEN:-}
+      # MCP voor Claude: alleen lezen. Leeg = het endpoint bestaat niet (404).
+      MCP_TOKEN: ${CONTRACTEN_MCP_TOKEN:-}
+      MCP_SECRET: ${CONTRACTEN_MCP_SECRET:-}
     volumes:
       # Gegenereerde contracten en ingevulde dossiers overleven een herbouw.
       - contracten-output:/app/Output
