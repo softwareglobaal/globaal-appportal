@@ -50,6 +50,7 @@ Twee wegen, ze doen hetzelfde:
 | barstenscheuren | `barstenscheuren` |
 | boekhouding | `boekhouding` |
 | communicatie | `communicatie` |
+| contracten | `contracten` |
 | draaiboek | `draaiboek` |
 | hr | `hr` |
 | items | `items` |
