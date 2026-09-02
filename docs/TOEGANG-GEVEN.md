@@ -56,6 +56,7 @@ Twee wegen, ze doen hetzelfde:
 | kosten | `kosten` |
 | medewerkers (organisatie) | `organisatie` of `hr` |
 | monday | `monday` |
+| post (Postbus) | `postbus` (en daarnaast per mailbox in `mailboxen.yaml`) |
 | projecten | `projecten` (kijken) of `projecten-editors` (bewerken) |
 | renovision | `renovision` |
 | sales | `sales` |
@@ -84,6 +85,7 @@ Authentik-koppeling maar krijgt hij binnen de app "geen toegang", dan zit het hi
 | communicatie | bewerken: `communicatie-editors` of `admin` |
 | vermogen | bewerken: `vermogen-editors` of `admin` |
 | monday | `monday` |
+| post (Postbus) | de groep opent alleen de tegel; welke mailboxen zichtbaar zijn staat per mailbox in `~/post-config/mailboxen.yaml` (`groepen` en `personen`), dicht tenzij opengezet. Koppelen: `docs/POSTBUS-KOPPELEN.md` |
 | sales | bewerken: per naam ingesteld, niet per groep |
 
 Die tweede laag staat in `docker-compose.override.yml` bij de betreffende service

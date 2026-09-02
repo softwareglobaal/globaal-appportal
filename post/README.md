@@ -205,3 +205,19 @@ die mailbox kan veranderen, is een phishingmail een poging tot instructie
 De postkamer-agent van Elevait loste dit anders op, door berichttekst nooit te
 bewaren. Hier is de tekst juist de opbrengst, dus de bescherming zit in de
 grenzen van de tools en in het leesspoor.
+
+## Koppelen
+
+Heeft de collega een eigen Claude-account, dan koppelt hij de Postbus als
+connector op claude.ai en is er verder niets te doen.
+
+Delen collega's een Claude-account, dan kan dat niet: een connector hangt aan
+het account, dus wat de een koppelt kan de ander lezen. Koppel dan lokaal per
+Windows-profiel via de brug `mcp-remote`. Het draaiboek staat in
+`docs/POSTBUS-KOPPELEN.md`, met het script
+`scripts/postbus-desktop-installeren.ps1` voor de werkplek.
+
+Twee dingen die daarbij het vaakst misgaan: de collega staat niet in de
+Authentik-groep `postbus` (403 bij het koppelen), en de browser heeft nog een
+sessie van iemand anders open (verkeerde mailboxen, zonder foutmelding).
+

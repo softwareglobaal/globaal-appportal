@@ -1840,6 +1840,16 @@ de wijzigfuncties openen een map schrijfbaar.
   endpoint 404). Het statische token hoort bij geen enkele Authentik-gebruiker
   en krijgt alleen de groepen uit `POSTBUS_TOKEN_GROEPEN`; leeg gelaten leest
   het dus niets.
+- **Koppelen kan ook lokaal, per Windows-profiel** (sinds 2026-08-28).
+  `_redirect_ok` accepteert naast claude.ai ook `localhost` en `127.0.0.1`
+  (RFC 8252), zodat Claude Code en de desktop-app via de brug `mcp-remote` de
+  OAuth-callback op een lokale poort kunnen opvangen. Nodig wanneer collega's
+  een Claude-account **delen**: een connector op claude.ai hangt aan het
+  account en is dus zichtbaar voor iedereen die dat account gebruikt, terwijl
+  `claude_desktop_config.json` in het Windows-profiel staat. PKCE S256 blijft
+  verplicht, de code leeft twee minuten. Draaiboek:
+  `docs/POSTBUS-KOPPELEN.md`, script
+  `scripts/postbus-desktop-installeren.ps1`.
 - **Elf tools**: lezend `mailboxen`, `mappen`, `zoek` (IMAP SEARCH op de
   server, niet hier filteren) en `bericht`; wijzigend `markeren`,
   `verplaatsen`, `map_aanmaken` en `concept_opslaan` (op een mailbox met
