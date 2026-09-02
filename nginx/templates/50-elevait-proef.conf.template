@@ -1,0 +1,67 @@
+# Proefomgeving van de Elevait-website: elevait-proef.${BASE_DOMAIN}.
+#
+# Dit bestand hoort in de stack-repo (globaal-appportal, map nginx/templates)
+# en staat hier alleen als bronkopie. Wijzig het nooit rechtstreeks op de VM:
+# de vhosts van elevaitnv.com stonden tot 31-07-2026 als niet-getrackte
+# bestanden op de VM, zijn daar verdwenen, en nginx serveerde toen het
+# verkeerde certificaat op de hele site.
+#
+# Draait onder het bestaande wildcardcertificaat van *.globaal.be, dus er is
+# geen eigen certificaataanvraag nodig. Wel op noindex: dezelfde inhoud mag
+# niet twee keer vindbaar zijn naast elevaitnv.com.
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name elevait-proef.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Openbaar bereikbaar (geen forward-auth), zodat Mehdi en Shaniel zonder
+    # account kunnen meekijken. Uit de zoekmachines houden is hier de enige
+    # afscherming die telt.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
+    # Sollicitaties met CV-upload mogen tot 10 MB groot zijn.
+    client_max_body_size 10m;
+
+    # Variabele upstream + de Docker-resolver: een herstart van de container
+    # geeft een nieuw IP, en zonder dit weigert nginx te starten zodra de
+    # proefcontainer ontbreekt. Dan ligt niet alleen deze proefsite plat maar
+    # het hele platform, want nginx bedient alle vhosts.
+    resolver 127.0.0.11 valid=30s;
+    set $proef_upstream http://elevait-proef-web:8090;
+    set $demo_upstream http://demo-kennisbank:3030;
+
+    # De kennisbank-demo draait maar een keer; de proefsite kijkt mee naar
+    # dezelfde container als de live site. Zo klopt de link in het menu.
+    location /demo {
+        client_max_body_size 16m;
+        client_body_timeout 120s;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+        proxy_pass $demo_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        add_header X-Robots-Tag "noindex, nofollow" always;
+    }
+
+    # Astro zet een hash in de naam van CSS en JS; een nieuwe versie krijgt
+    # vanzelf een nieuwe naam. Op de proefsite toch kort cachen, anders zie je
+    # je eigen wijziging niet terug.
+    location /_astro/ {
+        proxy_pass $proef_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        expires 5m;
+    }
+
+    location / {
+        proxy_pass $proef_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
