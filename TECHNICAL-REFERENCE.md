@@ -944,7 +944,7 @@ stellen, met de firma per antwoord erbij. Reden: een deal in de verkeerde
 administratie staat in de verkeerde omzet en bij de verkeerde eigenaar, en is
 niet met een ongedaan-knop terug te draaien.
 
-Drieentwintig stuks gereedschap: orienteren (`firmas`, `overzicht`, `velden`),
+Vierentwintig stuks gereedschap: orienteren (`firmas`, `overzicht`, `velden`),
 zoeken (`zoeken`, `deals`, `personen`, `organisaties`, `leads`), lezen (`deal`,
 `deal_geschiedenis`, `persoon`, `organisatie`, `activiteiten`, `notities`) en
 tien schrijvende (`*_aanmaken`, `*_bijwerken`). Maatwerkvelden werken op naam
