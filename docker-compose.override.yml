@@ -708,6 +708,54 @@ services:
       - post-agent-state:/state
     networks: [appnet]
 
+  # Xelion - de telefooncentrale lezen en wijzigen via MCP. Zelfde mantel als
+  # de Postbus, maar zwaarder: Xelion heeft GEEN prullenbak, dus een verwijderd
+  # contact is definitief weg. Vandaar 'verwijderen' als apart recht in
+  # rechten.yaml plus een eigen noodrem hieronder.
+  #
+  # Let op: de contactsync (app-contactsync) schrijft OOK naar Xelion. Twee
+  # schrijvers op dezelfde centrale kunnen elkaar overschrijven; een contact
+  # dat door de sync beheerd wordt hoor je in Google te wijzigen.
+  app-xelion:
+    build: ./xelion
+    image: appportal-xelion
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      PORT: "3019"
+      XELION_RECHTEN: /config/rechten.yaml
+      # Dezelfde Xelion-inloggegevens als app-communicatie en app-contracten.
+      XELION_BASE_URL: ${XELION_BASE_URL:-}
+      XELION_USERNAME: ${XELION_USERNAME:-}
+      XELION_PASSWORD: ${XELION_PASSWORD:-}
+      XELION_USERSPACE: ${XELION_USERSPACE:-}
+      XELION_APP_KEY: ${XELION_APP_KEY:-}
+      # claude.ai-connector (OAuth via Authentik-SSO); leeg = endpoint uit.
+      MCP_SECRET: ${XELION_MCP_SECRET:-}
+      # Statisch token voor Claude Code; leeg = uit. Hoort bij geen enkele
+      # Authentik-gebruiker en krijgt alleen de groepen hieronder. Leeg
+      # gelaten = geen enkele bevoegdheid.
+      MCP_TOKEN: ${XELION_MCP_TOKEN:-}
+      XELION_TOKEN_GROEPEN: ${XELION_TOKEN_GROEPEN:-}
+      # Drie noodremmen. Staat een van deze niet op 'ja', dan kan NIEMAND dat,
+      # ook niet wie het volgens rechten.yaml mag. Zo zet je het in een keer
+      # stil zonder aan de rechten te komen. Alle drie standaard uit; lezen
+      # kent geen noodrem.
+      XELION_MCP_AANMAKEN: ${XELION_MCP_AANMAKEN:-}
+      XELION_MCP_BIJWERKEN: ${XELION_MCP_BIJWERKEN:-}
+      XELION_MCP_VERWIJDEREN: ${XELION_MCP_VERWIJDEREN:-}
+    volumes:
+      # Wie wat mag: één bestand op de VM, buiten git, read-only aangekoppeld.
+      # Bewerken met: nano ~/xelion-config/rechten.yaml
+      - ${XELION_CONFIG_DIR:-/home/ubuntu/xelion-config}:/config:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3019/gezond')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [appnet]
+
   # Contracten — contracten H-Architects, dossiercontrole en salesproces.
   # De Word-masters zitten in de repo; LibreOffice in het image maakt de pdf.
   app-contracten:

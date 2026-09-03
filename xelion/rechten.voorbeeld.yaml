@@ -1,0 +1,46 @@
+# Xelion - wie mag wat met de telefooncentrale.
+#
+# Op de VM staat dit als ~/xelion-config/rechten.yaml, buiten git, read-only
+# gemount op /config. Wordt elke vijf seconden herlezen: wijzigen vraagt geen
+# herstart.
+#
+# DICHT TENZIJ OPENGEZET. Staat iemand hier niet in, dan mag hij niets, ook
+# niet lezen. Een leeg of kapot bestand geeft dus niemand rechten; dat is met
+# opzet, zodat een typefout nooit per ongeluk de centrale openzet.
+#
+# Persoon en groep tellen bij elkaar op: heeft een van beide het recht, dan
+# heeft de gebruiker het.
+#
+# De vier rechten:
+#   lezen         contacten zoeken en opvragen, lijsten, gesprekken
+#   aanmaken      een contact of lijst toevoegen
+#   bijwerken     een bestaand contact wijzigen, lijstleden toevoegen/afhalen
+#   verwijderen   een contact DEFINITIEF weggooien
+#
+# Verwijderen staat los van bijwerken omdat Xelion geen prullenbak heeft. Wat
+# weg is, is weg: de server kan niets terughalen. Geef dat recht dus spaarzaam.
+#
+# Bovenop dit bestand liggen drie noodremmen in de stack-.env:
+#   XELION_MCP_AANMAKEN, XELION_MCP_BIJWERKEN, XELION_MCP_VERWIJDEREN
+# Staat er een op iets anders dan ja, dan kan niemand dat, wat hier ook staat.
+
+personen:
+  - naam: mehdi
+    lezen: ja
+    aanmaken: ja
+    bijwerken: ja
+    verwijderen: nee
+
+  - naam: shaniel
+    lezen: ja
+    aanmaken: ja
+    bijwerken: ja
+    verwijderen: nee
+
+groepen:
+  # Iedereen in de Authentik-groep xelion mag kijken, verder niets.
+  - naam: xelion
+    lezen: ja
+    aanmaken: nee
+    bijwerken: nee
+    verwijderen: nee

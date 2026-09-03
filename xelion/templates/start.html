@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xelion</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.55 system-ui, sans-serif; margin: 0;
+         background: #f6f7f9; color: #1c1f23; }
+  main { max-width: 780px; margin: 0 auto; padding: 32px 20px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #5b6570; margin: 0 0 28px; }
+  .kaart { background: #fff; border: 1px solid #e3e6ea; border-radius: 10px;
+           padding: 18px 20px; margin-bottom: 18px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eef0f3; }
+  th { font-weight: 600; color: #5b6570; font-size: 13px; }
+  tr:last-child td { border-bottom: 0; }
+  .ja { color: #146c2e; font-weight: 600; }
+  .nee { color: #8a9099; }
+  .waarschuwing { background: #fff8e6; border-color: #f0dca8; }
+  button { font: inherit; padding: 8px 16px; border-radius: 7px;
+           border: 1px solid #c9ced5; background: #fff; cursor: pointer; }
+  button:hover { background: #f2f4f7; }
+  code { background: #f0f2f5; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  #uitslag { margin-top: 12px; font-size: 14px; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #14171a; color: #e6e8ea; }
+    .kaart { background: #1c2024; border-color: #2c3238; }
+    th { color: #98a1ab; } td, th { border-color: #262b30; }
+    .waarschuwing { background: #2a2413; border-color: #4a4020; }
+    button { background: #242a30; border-color: #39414a; color: inherit; }
+    code { background: #242a30; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Xelion</h1>
+  <p class="sub">De telefooncentrale, leesbaar en bewerkbaar voor Claude.</p>
+
+  {% if fout %}
+  <div class="kaart waarschuwing">
+    <strong>Let op:</strong> {{ fout }}<br>
+    Zolang dit niet klopt heeft niemand rechten. Dat is met opzet.
+  </div>
+  {% endif %}
+
+  <div class="kaart">
+    <h2 style="font-size:16px;margin:0 0 10px">Wat jij mag</h2>
+    <p class="sub" style="margin:0 0 12px">Ingelogd als <code>{{ gebruiker or 'onbekend' }}</code></p>
+    <table>
+      <tr><th>Recht</th><th>Jij</th><th>Wat het inhoudt</th></tr>
+      <tr><td>lezen</td>
+          <td class="{{ 'ja' if rechten.lezen else 'nee' }}">{{ 'ja' if rechten.lezen else 'nee' }}</td>
+          <td>contacten zoeken en opvragen, lijsten, gesprekken</td></tr>
+      <tr><td>aanmaken</td>
+          <td class="{{ 'ja' if rechten.aanmaken else 'nee' }}">{{ 'ja' if rechten.aanmaken else 'nee' }}</td>
+          <td>een contact of lijst toevoegen</td></tr>
+      <tr><td>bijwerken</td>
+          <td class="{{ 'ja' if rechten.bijwerken else 'nee' }}">{{ 'ja' if rechten.bijwerken else 'nee' }}</td>
+          <td>een contact wijzigen, lijstleden toevoegen of afhalen</td></tr>
+      <tr><td>verwijderen</td>
+          <td class="{{ 'ja' if rechten.verwijderen else 'nee' }}">{{ 'ja' if rechten.verwijderen else 'nee' }}</td>
+          <td>een contact <strong>definitief</strong> weggooien</td></tr>
+    </table>
+  </div>
+
+  <div class="kaart waarschuwing">
+    <strong>Verwijderen kan niet terug.</strong> Xelion heeft geen prullenbak.
+    Anders dan bij de Postbus, waar een verwijderd bericht in de prullenbakmap
+    belandt, is een verwijderd contact hier meteen weg. De tool vraagt daarom
+    eerst om een bevestiging, en het logboek legt vast wat er verdween.
+  </div>
+
+  <div class="kaart">
+    <h2 style="font-size:16px;margin:0 0 10px">Koppelen</h2>
+    <p style="margin:0 0 10px">Adres voor de MCP-koppeling:</p>
+    <p><code>{{ basis }}/mcp</code></p>
+    <p class="sub" style="margin:10px 0 0">
+      Deelt jouw team een Claude-account, koppel dan lokaal per Windows-profiel.
+      Zie <code>docs/POSTBUS-KOPPELEN.md</code>; die werkwijze geldt hier ook.
+    </p>
+  </div>
+
+  <div class="kaart">
+    <h2 style="font-size:16px;margin:0 0 10px">Verbinding</h2>
+    <button id="knop" type="button">Verbinding testen</button>
+    <div id="uitslag"></div>
+  </div>
+</main>
+<script>
+document.getElementById('knop').addEventListener('click', async function () {
+  var uit = document.getElementById('uitslag');
+  this.disabled = true;
+  uit.textContent = 'Bezig met inloggen op Xelion...';
+  try {
+    var r = await fetch('verbinding-testen', { method: 'POST' });
+    var d = await r.json();
+    uit.textContent = (d.ok ? 'OK: ' : 'Mislukt: ') + d.melding;
+    uit.className = d.ok ? 'ja' : 'nee';
+  } catch (e) {
+    uit.textContent = 'Mislukt: ' + e.message;
+    uit.className = 'nee';
+  }
+  this.disabled = false;
+});
+</script>
+</body>
+</html>

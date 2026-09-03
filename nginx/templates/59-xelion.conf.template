@@ -1,0 +1,48 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name xelion.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Forward-auth beschermt de beheerpagina; identiteit + groepen gaan als
+    # X-authentik-* headers naar de Flask-app en bepalen daar wat deze persoon
+    # met de centrale mag (rechten.yaml).
+    set $app_upstream http://app-xelion:3019;
+    include /etc/nginx/snippets/forward-auth.conf;
+
+    # Eerste stap van de OAuth-koppeling: buiten de forward-auth om. Zet de
+    # aanvraag in een getekende cookie en stuurt door naar /oauth/inloggen, dat
+    # WEL achter de forward-auth staat. Zie de uitleg in 58-post.conf.template:
+    # de forward-auth codeert rd= niet en knipt daardoor alles na de eerste &.
+    location = /oauth/authorize {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
+    # MCP-endpoint voor Claude: buiten de forward-auth om (MCP-clients hebben
+    # geen Authentik-sessie); de app checkt zelf het token. Dekt ook
+    # /mcp/token en /mcp/register. Zonder XELION_MCP_SECRET/XELION_MCP_TOKEN
+    # in .env geeft dit 404.
+    location ^~ /mcp {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Xelion kan traag antwoorden bij een brede zoekopdracht.
+        proxy_read_timeout 120s;
+        proxy_pass $app_upstream;
+    }
+
+    # OAuth-discovery (RFC 8414/9728), publiek leesbaar.
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+}
