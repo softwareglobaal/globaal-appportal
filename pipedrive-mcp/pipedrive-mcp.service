@@ -1,0 +1,14 @@
+[Unit]
+Description=Pipedrive via Claude (MCP-server, vijf firma's)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/appportal/pipedrive-mcp
+EnvironmentFile=/home/ubuntu/pipedrive-mcp.env
+ExecStart=/home/ubuntu/appportal/pipedrive-mcp/.venv/bin/python /home/ubuntu/appportal/pipedrive-mcp/mcp_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

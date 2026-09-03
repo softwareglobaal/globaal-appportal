@@ -1,0 +1,47 @@
+# Pipedrive via Claude: vijf firma-administraties achter een koppeling.
+#
+# De dienst draait op de host (172.17.0.1:8112, systemd pipedrive-mcp), niet in
+# een container: er hoort geen app bij, alleen deze koppeling, en de tokens
+# staan al in ~/appportal/.env.
+#
+# Zelfde indeling als renovision-mcp en vermogen: /mcp en de OAuth-metadata
+# staan buiten de forward-auth (MCP-clients hebben geen Authentik-sessie; de
+# dienst controleert zelf het bearer-token), en de loginstap /oauth/authorize
+# valt er juist WEL onder -- daar is SSO de authenticatie, en daar wordt
+# vastgesteld wie er koppelt en of diegene ook mag schrijven.
+# Zonder MCP_SECRET/MCP_TOKEN in de omgeving geeft de dienst 404.
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name pipedrive-mcp.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    set $app_upstream http://172.17.0.1:8112;
+    include /etc/nginx/snippets/forward-auth.conf;
+
+    # Let op: geen proxy_buffers hier. De forward-auth-snippet zet die al, en
+    # nginx weigert een dubbele directive -- dat legde op 31-08-2026 het hele
+    # platform plat tot de regels eruit waren.
+
+    location ^~ /mcp {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+        # Een lijst over meerdere pagina's van Pipedrive mag even duren.
+        proxy_read_timeout 120s;
+    }
+
+    # OAuth-discovery (RFC 8414/9728), publiek leesbaar.
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+}

@@ -914,6 +914,49 @@ Grenzen die erin zitten, met de reden (uitgebreid in `renovision-mcp/README.md`)
   `deploy/autodeploy.sh` doet elke twee minuten `git reset --hard`, werk zou
   verdampen. Raakt `~/globaal-renovision` en `~/globaal-renovision-mehdi`.
 
+### 13.2b Pipedrive via Claude - MCP op `pipedrive-mcp.globaal.be` (03-09-2026)
+De vijf verkoopadministraties van de groep bereikbaar vanuit Claude: deals,
+contacten, organisaties, activiteiten, notities en leads. Losse dienst op de
+host (systemd `pipedrive-mcp`, `172.17.0.1:8112`, code in `pipedrive-mcp/`,
+vhost `68-pipedrive-mcp.conf.template`); geen app en geen container, alleen de
+koppeling. OAuth-patroon en vhost-indeling gelijk aan §13.2a: `/mcp` en de
+metadata buiten de forward-auth, `/oauth/authorize` erachter.
+
+**Vijf gescheiden accounts, een token per firma**: `harchitects` (H-Architects),
+`unabo` (UNABO), `tknburo` (TKN-Buro, in Pipedrive TKN-Tekenwerk),
+`energieefficient` (Energie Efficient) en `harmoniebouw` (HarmonieBOUW). De
+tokens komen uit `~/appportal/.env` - dezelfde `PIPEDRIVE_TOKEN_*` die het
+sales-dashboard gebruikt (dat er vier van gebruikt; HarmonieBOUW komt hier
+bij), zodat een rotatie maar op een plek hoeft. Het token gaat als kopregel
+`x-api-token` mee, niet in de URL, zodat het niet in foutmeldingen of
+proxylogs belandt.
+
+**De firma wordt altijd gevraagd, nooit geraden.** Dat is de kern van deze
+koppeling, en het staat op drie plaatsen vast in plaats van alleen in een
+instructietekst: `firma` staat in `required` van elk schema met de vijf
+sleutels als `enum`; `gereedschap.voer_uit` roept eerst `firma_kiezen` aan en
+weigert met de vijf keuzes als die ontbreekt of onbekend is, zodat nieuw
+gereedschap er automatisch achter staat; en elke gereedschapsbeschrijving plus
+de `initialize`-instructies zeggen dat de gebruiker het moet aangeven en dat de
+firma van een vorige vraag niet doorwerkt. Elk antwoord begint met de firma. Er
+is bewust geen 'alle firma's tegelijk': vergelijken betekent de vraag vijf keer
+stellen, met de firma per antwoord erbij. Reden: een deal in de verkeerde
+administratie staat in de verkeerde omzet en bij de verkeerde eigenaar, en is
+niet met een ongedaan-knop terug te draaien.
+
+Drieentwintig stuks gereedschap: orienteren (`firmas`, `overzicht`, `velden`),
+zoeken (`zoeken`, `deals`, `personen`, `organisaties`, `leads`), lezen (`deal`,
+`deal_geschiedenis`, `persoon`, `organisatie`, `activiteiten`, `notities`) en
+tien schrijvende (`*_aanmaken`, `*_bijwerken`). Maatwerkvelden werken op naam
+via `velden: {veldnaam: waarde}`; keuzevelden nemen het label.
+
+**Rechten**: lezen mag `pipedrive`, `sales` en `admin`; schrijven vereist
+`pipedrive-editors` of `admin`. De groepen komen uit de Authentik-headers bij
+het inloggen en zitten in het OAuth-token. **Verwijderen kan niet** - er is geen
+gereedschap voor; een deal sluiten gaat via `deal_bijwerken` met status `lost`.
+Tests: `pipedrive-mcp/test_firma.py` (de poort) en `test_koppeling.py` (de
+OAuth-redirects en de rechten). Uitrollen en koppelen: `pipedrive-mcp/README.md`.
+
 ### 13.3 CI/CD - automatische check, merge & deploy
 Doel: de handmatige stap "PR op GitHub goedkeuren + op de VM `git pull` doen"
 wegnemen, zodat de lus van wens → live volledig automatisch verloopt.

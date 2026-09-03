@@ -57,6 +57,7 @@ Twee wegen, ze doen hetzelfde:
 | kosten | `kosten` |
 | medewerkers (organisatie) | `organisatie` of `hr` |
 | monday | `monday` |
+| pipedrive (MCP via Claude) | `pipedrive` (kijken), `sales` of `admin`; wijzigen: `pipedrive-editors` |
 | post (Postbus) | `postbus` (en daarnaast per mailbox in `mailboxen.yaml`) |
 | projecten | `projecten` (kijken) of `projecten-editors` (bewerken) |
 | renovision | `renovision` |
@@ -86,6 +87,7 @@ Authentik-koppeling maar krijgt hij binnen de app "geen toegang", dan zit het hi
 | communicatie | bewerken: `communicatie-editors` of `admin` |
 | vermogen | bewerken: `vermogen-editors` of `admin` |
 | monday | `monday` |
+| pipedrive (MCP) | schrijven: `pipedrive-editors` of `admin`; iedereen die binnenkomt mag lezen. Elke opdracht moet een firma noemen (H-Architects, UNABO, TKN-Buro, Energie Efficient, HarmonieBOUW); de server vraagt erom en kiest nooit zelf. Koppelen: `pipedrive-mcp/README.md` |
 | post (Postbus) | de groep opent alleen de tegel; welke mailboxen zichtbaar zijn staat per mailbox in `~/post-config/mailboxen.yaml` (`groepen` en `personen`), dicht tenzij opengezet. Koppelen: `docs/POSTBUS-KOPPELEN.md` |
 | sales | bewerken: per naam ingesteld, niet per groep |
 
