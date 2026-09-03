@@ -11,7 +11,7 @@ Draaien:  cd pipedrive-mcp && python -m pytest test_koppeling.py -q
 import pytest
 
 import gereedschap as gs
-from mcp_server import FIRMAS, TOOLS, _mag_schrijven, _redirect_ok
+from mcp_server import FIRMAS, TOOLS, _mag_binnen, _mag_schrijven, _redirect_ok
 
 
 @pytest.mark.parametrize("uri", [
@@ -49,8 +49,47 @@ def test_geweigerde_bestemmingen(uri):
     (["sales", "hr"], False),
     ([], False),
 ])
-def test_schrijfrecht(groepen, verwacht):
+def test_schrijfrecht_zonder_namenlijst(groepen, verwacht, monkeypatch):
+    """Geen MCP_GEBRUIKERS: dan beslissen de groepen, zoals eerst."""
+    monkeypatch.delenv("MCP_GEBRUIKERS", raising=False)
     assert _mag_schrijven(groepen) is verwacht
+
+
+# ---- De namenlijst: alleen Mehdi ----------------------------------------
+@pytest.fixture
+def alleen_mehdi(monkeypatch):
+    monkeypatch.setenv("MCP_GEBRUIKERS", "mehdi")
+
+
+def test_zonder_lijst_mag_iedereen_binnen(monkeypatch):
+    monkeypatch.delenv("MCP_GEBRUIKERS", raising=False)
+    assert _mag_binnen("wie-dan-ook")
+
+
+@pytest.mark.parametrize("naam", ["mehdi", "Mehdi", " mehdi "])
+def test_mehdi_komt_binnen(naam, alleen_mehdi):
+    assert _mag_binnen(naam)
+
+
+@pytest.mark.parametrize("naam", [
+    "akadmin", "shaniel", "angela", "siyan", "marise",
+    "mehdi2", "mehdiX", "", "   ", "admin",
+])
+def test_de_rest_komt_er_niet_in(naam, alleen_mehdi):
+    assert not _mag_binnen(naam)
+
+
+def test_wie_op_de_lijst_staat_mag_ook_schrijven(alleen_mehdi):
+    """Anders zou Mehdi ook nog in een schrijfgroep moeten zitten."""
+    assert _mag_schrijven([], "mehdi")
+    assert not _mag_schrijven(["admin"], "siyan")   # groep helpt niet meer
+
+
+def test_lijst_leest_meerdere_namen(monkeypatch):
+    monkeypatch.setenv("MCP_GEBRUIKERS", "mehdi, akadmin;Siyan")
+    for naam in ("mehdi", "akadmin", "siyan"):
+        assert _mag_binnen(naam)
+    assert not _mag_binnen("angela")
 
 
 # ---- Wat Claude te zien krijgt -------------------------------------------

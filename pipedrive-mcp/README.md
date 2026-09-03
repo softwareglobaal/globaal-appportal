@@ -68,10 +68,30 @@ mogelijke labels terug in plaats van een fout uit Pipedrive.
 
 ## Wie mag wat
 
-Lezen mag iedereen die door de forward-auth komt: groep `pipedrive`, `sales` of
-`admin`. **Schrijven vereist `pipedrive-editors` of `admin`.** De groepen komen
-uit de Authentik-headers bij het inloggen en worden in het OAuth-token gebakken;
-de server kijkt bij elk schrijvend stuk gereedschap of het recht erin zit.
+**Alleen Mehdi**, sinds 03-09-2026. Toegang gaat op naam en niet per groep: de
+verkoopadministratie van vijf firma's is niets voor een brede kijkgroep. Wie op
+de lijst staat mag ook schrijven.
+
+Twee poorten, allebei nodig om iemand toe te laten:
+
+1. **Authentik** - een binding op naam op de app `pipedrive-mcp`, gezet met
+   `scripts/set-pipedrive-mcp-toegang.py` (pas `TOEGANG` daar aan). Zonder
+   binding komt iemand niet eens bij de loginstap.
+2. **De server zelf** - `MCP_GEBRUIKERS` in `~/pipedrive-mcp.env`, een
+   komma-lijst met Authentik-gebruikersnamen. Die wordt getoetst bij het
+   inloggen **en bij elk verzoek daarna**: een access token is twaalf uur
+   geldig en een refresh token twee maanden, dus zonder die tweede toets zou
+   iemand die van de lijst af gaat gewoon doorwerken.
+
+Waarom twee: een verruiming in Authentik (iemand krijgt een groep erbij) hoort
+niet meteen vijf Pipedrive-administraties te openen. Laat je `MCP_GEBRUIKERS`
+leeg, dan valt de server terug op het groepsmodel: binnenkomen mag wie door de
+forward-auth komt, schrijven alleen `pipedrive-editors` of `admin`.
+
+De vaste sleutel `MCP_TOKEN` is de **beheerdeur** en valt buiten de namenlijst.
+Dat verruimt de kring niet: het bestand staat 0600 op de VM, en wie het kan
+lezen kan net zo goed de Pipedrive-tokens uit `~/appportal/.env` halen. Wil je
+ook die deur dicht, leeg dan `MCP_TOKEN` en herstart de dienst.
 
 Verwijderen kan niet. Er is geen gereedschap voor, in geen enkele firma. Een
 deal sluit je met `deal_bijwerken` (status `lost` met een verliesreden).
@@ -84,6 +104,7 @@ deal sluit je met `deal_bijwerken` (status `lost` met een verliesreden).
 MCP_SECRET=<lange willekeurige tekst>     # tekent de OAuth-tokens
 MCP_TOKEN=<lange willekeurige tekst>      # optioneel, vaste sleutel voor beheer
 MCP_BASIS=https://pipedrive-mcp.globaal.be
+MCP_GEBRUIKERS=mehdi                      # wie erbij mag; leeg = groepsmodel
 ```
 
 Zonder `MCP_SECRET` en `MCP_TOKEN` geeft `/mcp` een 404: de koppeling bestaat
@@ -105,11 +126,12 @@ sudo cp pipedrive-mcp/pipedrive-mcp.service /etc/systemd/system/
 sudo ufw allow from 172.16.0.0/12 to any port 8112 proto tcp comment 'docker -> pipedrive-mcp'
 sudo systemctl daemon-reload && sudo systemctl enable --now pipedrive-mcp
 sh scripts/ak-exec.sh scripts/add-pipedrive-mcp.py
+sh scripts/ak-exec.sh scripts/set-pipedrive-mcp-toegang.py
 docker compose up -d --force-recreate nginx
 ```
 
 Controle: `curl -s http://172.17.0.1:8112/gezond` toont welke van de vijf
-tokens gevonden zijn.
+tokens gevonden zijn en wie er toegang heeft.
 
 ## Koppelen in Claude
 
@@ -134,8 +156,9 @@ cd ~/appportal/pipedrive-mcp && .venv/bin/python -m pytest -q
 
 `test_firma.py` bewaakt de firma-poort (herkende schrijfwijzen, weigeringen, en
 dat geen enkel stuk gereedschap eromheen kan) en dat het token niet in de URL
-belandt. `test_koppeling.py` bewaakt waar de OAuth-code naartoe mag en dat elk
-stuk gereedschap de firma-regel uitdraagt.
+belandt. `test_koppeling.py` bewaakt waar de OAuth-code naartoe mag, dat de
+namenlijst niemand anders binnenlaat, en dat elk stuk gereedschap de
+firma-regel uitdraagt.
 
 ## Valkuilen die dit patroon al gekost heeft
 

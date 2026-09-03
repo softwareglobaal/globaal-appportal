@@ -950,9 +950,19 @@ zoeken (`zoeken`, `deals`, `personen`, `organisaties`, `leads`), lezen (`deal`,
 tien schrijvende (`*_aanmaken`, `*_bijwerken`). Maatwerkvelden werken op naam
 via `velden: {veldnaam: waarde}`; keuzevelden nemen het label.
 
-**Rechten**: lezen mag `pipedrive`, `sales` en `admin`; schrijven vereist
-`pipedrive-editors` of `admin`. De groepen komen uit de Authentik-headers bij
-het inloggen en zitten in het OAuth-token. **Verwijderen kan niet** - er is geen
+**Rechten**: toegang gaat op naam, niet per groep - sinds 03-09-2026 alleen
+`mehdi`, die dan ook mag schrijven. Twee poorten: een binding op naam in
+Authentik (`scripts/set-pipedrive-mcp-toegang.py`) en de namenlijst
+`MCP_GEBRUIKERS` in ~/pipedrive-mcp.env, die bij het inloggen en bij elk
+verzoek daarna wordt getoetst - een token blijft twaalf uur geldig, dus zonder
+die tweede toets zou iemand die van de lijst af gaat doorwerken. De eerste
+opzet bond de groepen sales en admin aan de app, waarmee elf mensen in de
+verkoopadministratie konden meelezen; dat is teruggedraaid en de lege groepen
+`pipedrive`/`pipedrive-editors` zijn opgeruimd. Is `MCP_GEBRUIKERS` leeg, dan
+geldt weer het groepsmodel (schrijven: `pipedrive-editors` of `admin`). De
+vaste sleutel `MCP_TOKEN` is de beheerdeur en valt buiten de namenlijst: hij
+staat 0600 in ~/pipedrive-mcp.env, en wie dat leest komt sowieso bij de
+Pipedrive-tokens in ~/appportal/.env. **Verwijderen kan niet** - er is geen
 gereedschap voor; een deal sluiten gaat via `deal_bijwerken` met status `lost`.
 Tests: `pipedrive-mcp/test_firma.py` (de poort) en `test_koppeling.py` (de
 OAuth-redirects en de rechten). Uitrollen en koppelen: `pipedrive-mcp/README.md`.

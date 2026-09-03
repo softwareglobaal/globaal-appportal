@@ -15,9 +15,16 @@ als aangepaste connector in claude.ai, of lokaal met
 De OAuth-laag (dynamic client registration + PKCE, RFC 7591/8414/9728) is
 overgenomen van renovision-mcp en het Vermogens-dashboard; de loginstap
 /oauth/authorize staat ACHTER de Authentik forward-auth, dus SSO is de
-authenticatie. De groepen van de ingelogde gebruiker gaan mee in het token en
-bepalen of er ook geschreven mag worden (pipedrive-editors of admin); lezen mag
-iedereen die door de forward-auth komt.
+authenticatie.
+
+Wie erbij mag staat in `MCP_GEBRUIKERS` (sinds 03-09-2026: alleen `mehdi`).
+Die namenlijst is de volledige kring en wordt twee keer getoetst: bij het
+inloggen, en bij elk verzoek daarna, zodat een al uitgegeven token vervalt
+zodra iemand van de lijst af gaat. Authentik laat dezelfde persoon door via een
+binding op naam; de lijst hier is de tweede poort, zodat een verruiming in
+Authentik niet meteen de Pipedrive-gegevens opent. Is `MCP_GEBRUIKERS` leeg,
+dan geldt het oude groepsmodel: binnenkomen mag wie door de forward-auth komt,
+schrijven alleen pipedrive-editors of admin.
 
 Draait als losse systemd-dienst op de host (172.17.0.1:8112), niet in een
 container: er hoort geen app bij, alleen deze koppeling. De tokens komen uit
@@ -50,6 +57,21 @@ REFRESH_TTL = 60 * 86400  # refresh token: 60 dagen
 SCHRIJFGROEPEN = ("pipedrive-editors", "admin")
 
 app = Flask(__name__)
+
+
+def _toegestaan() -> set[str]:
+    """De namenlijst uit `MCP_GEBRUIKERS`, of een lege verzameling.
+
+    Staat er een lijst, dan is dat de volledige kring: alleen deze mensen komen
+    binnen, ongeacht hun groepen, en zij mogen ook schrijven. Sinds 03-09-2026
+    staat er `mehdi` in - de verkoopadministratie van vijf firma's is niets voor
+    een brede kijkgroep.
+
+    Is de variabele leeg, dan geldt het groepsmodel: binnenkomen doet iedereen
+    die door de forward-auth komt, schrijven alleen SCHRIJFGROEPEN.
+    """
+    ruw = os.environ.get("MCP_GEBRUIKERS", "")
+    return {n.strip().lower() for n in ruw.replace(";", ",").split(",") if n.strip()}
 
 
 def _basis() -> str:
@@ -164,7 +186,15 @@ def oauth_register():
             "response_types": ["code"]}, 201
 
 
-def _mag_schrijven(groepen: list[str]) -> bool:
+def _mag_binnen(gebruiker: str) -> bool:
+    lijst = _toegestaan()
+    return (not lijst) or (gebruiker or "").strip().lower() in lijst
+
+
+def _mag_schrijven(groepen: list[str], gebruiker: str = "") -> bool:
+    """Wie op de namenlijst staat mag schrijven; anders beslissen de groepen."""
+    if _toegestaan():
+        return _mag_binnen(gebruiker)
     return any(g.strip().lower() in SCHRIJFGROEPEN for g in groepen)
 
 
@@ -189,8 +219,15 @@ def oauth_authorize():
     if not wie:
         return "Geen ingelogde gebruiker; log opnieuw in via het portaal.", 403
     groepen = [g for g in (request.headers.get("X-authentik-groups") or "").split("|") if g]
+    if not _mag_binnen(wie):
+        # Hier eindigt het al: zonder code komt er ook geen token. De controle
+        # staat daarnaast bij elk verzoek in /mcp, zodat een token dat eerder is
+        # uitgegeven vervalt zodra de lijst verandert.
+        return (f"Geen toegang tot de Pipedrive-koppeling voor '{wie}'. Deze "
+                "koppeling is voorbehouden aan een vaste lijst gebruikers; "
+                "vraag de beheerder als je erbij moet."), 403
 
-    code = _teken({"t": "code", "u": wie, "w": _mag_schrijven(groepen),
+    code = _teken({"t": "code", "u": wie, "w": _mag_schrijven(groepen, wie),
                    "ch": challenge, "r": redirect_uri,
                    "exp": int(time.time()) + CODE_TTL})
     sep = "&" if "?" in redirect_uri else "?"
@@ -434,17 +471,23 @@ TOOLS = [
 
 # ---- MCP: JSON-RPC over HTTP ---------------------------------------------
 def _wie():
-    """(gebruikersnaam, mag_schrijven) uit het bearer-token, of None."""
+    """(gebruikersnaam, mag_schrijven, is_beheersleutel) of None.
+
+    De vaste sleutel is de beheerdeur: hij staat alleen in ~/pipedrive-mcp.env
+    (rechten 0600) op de VM, en wie dat bestand kan lezen kan net zo goed de
+    Pipedrive-tokens uit ~/appportal/.env halen. Hij verruimt de kring dus niet
+    en valt daarom buiten de namenlijst. Wil je ook die deur dicht, dan leeg je
+    MCP_TOKEN in ~/pipedrive-mcp.env en herstart je de dienst.
+    """
     kop = request.headers.get("Authorization", "")
     if not kop.startswith("Bearer "):
         return None
     token = kop[7:].strip()
     statisch = _statisch_token()
     if statisch and hmac.compare_digest(token, statisch):
-        # Vaste sleutel voor beheer en voor Claude Code; volle rechten.
-        return "akadmin", True
+        return "beheer", True, True
     p = _lees_token(token, "acc")
-    return (p["u"], bool(p.get("w"))) if p else None
+    return (p["u"], bool(p.get("w")), False) if p else None
 
 
 def _resultaat(rid, result):
@@ -468,10 +511,14 @@ def mcp_get():
 
 @app.get("/gezond")
 def gezond():
+    """Alleen bereikbaar op de docker-brug; staat niet in de vhost."""
     beschikbaar = sorted(gs.tokens())
+    lijst = sorted(_toegestaan())
     return {"firmas": list(FIRMAS),
             "tokens_aanwezig": beschikbaar,
-            "tokens_ontbreken": sorted(set(FIRMAS) - set(beschikbaar))}
+            "tokens_ontbreken": sorted(set(FIRMAS) - set(beschikbaar)),
+            "toegang": lijst or "iedereen die door de forward-auth komt",
+            "beheersleutel": bool(_statisch_token())}
 
 
 @app.post("/mcp")
@@ -484,7 +531,13 @@ def mcp():
                f'"{_basis()}/.well-known/oauth-protected-resource/mcp"')
         return {"fout": "Ongeldig of ontbrekend token"}, 401, \
                {"WWW-Authenticate": kop}
-    gebruiker, mag_schrijven = wie
+    gebruiker, mag_schrijven, beheersleutel = wie
+    # Tweede controle, bij elk verzoek: een token blijft twaalf uur geldig en
+    # een refresh token twee maanden. Zonder deze regel zou iemand die van de
+    # lijst af gaat gewoon doorwerken tot zijn token verloopt.
+    if not beheersleutel and not _mag_binnen(gebruiker):
+        return {"fout": f"Geen toegang tot de Pipedrive-koppeling voor "
+                        f"'{gebruiker}'."}, 403
 
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
