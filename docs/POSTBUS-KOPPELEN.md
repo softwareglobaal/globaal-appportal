@@ -48,8 +48,8 @@ Op de VM, `~/post-config/mailboxen.yaml`. Bestaat de mailbox al, voeg dan alleen
 de naam toe aan `personen`.
 
 ```yaml
-  - adres: hr@globaal.be
-    naam: HR Globaal
+  - adres: test@globaal.be
+    naam: Test Globaal
     wachtwoord: 'wachtwoord-hier'
     groepen: []
     personen: [ishara]
