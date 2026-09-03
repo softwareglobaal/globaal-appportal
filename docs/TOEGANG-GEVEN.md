@@ -68,6 +68,7 @@ Twee wegen, ze doen hetzelfde:
 | status | admin of manager |
 | telefoonregister | `telefoonregister` |
 | vermogen | `vermogen` |
+| xelion (telefooncentrale) | `xelion` (en daarnaast per persoon in `rechten.yaml`) |
 
 Twijfel je? `Applications` > klik de app > `Policy / Group / User Bindings` laat
 precies zien wie erdoor mag.
@@ -90,6 +91,7 @@ Authentik-koppeling maar krijgt hij binnen de app "geen toegang", dan zit het hi
 | pipedrive (MCP) | de namenlijst `MCP_GEBRUIKERS` in ~/pipedrive-mcp.env (nu: mehdi) wordt bij het inloggen en bij elk verzoek getoetst; wie erop staat mag ook schrijven. Toegang uitbreiden = de naam in Authentik binden EN in die lijst zetten. Elke opdracht moet een firma noemen (H-Architects, UNABO, TKN-Buro, Energie Efficient, HarmonieBOUW); de server vraagt erom en kiest nooit zelf. Koppelen: `pipedrive-mcp/README.md` |
 | post (Postbus) | de groep opent alleen de tegel; welke mailboxen zichtbaar zijn staat per mailbox in `~/post-config/mailboxen.yaml` (`groepen` en `personen`), dicht tenzij opengezet. Koppelen: `docs/POSTBUS-KOPPELEN.md` |
 | sales | bewerken: per naam ingesteld, niet per groep |
+| xelion (telefooncentrale) | de groep opent alleen de tegel. Wat iemand met de centrale mag staat per persoon in `~/xelion-config/rechten.yaml` (lezen, aanmaken, bijwerken, verwijderen), dicht tenzij opengezet, met drie noodremmen in de stack-`.env`. Verwijderen is definitief: Xelion heeft geen prullenbak |
 
 Die tweede laag staat in `docker-compose.override.yml` bij de betreffende service
 (`HR_GROUPS`, `EDITOR_GROUPS`, `STAFF_GROUPS`). Wijzigen daarvan is een aanpassing in

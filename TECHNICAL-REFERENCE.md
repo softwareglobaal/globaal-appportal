@@ -1933,9 +1933,56 @@ de wijzigfuncties openen een map schrijfbaar.
 - Beheerderspagina toont alle mailboxen, de fouten in het bestand (nooit een
   wachtwoord) en een knop die per mailbox echt inlogt op IMAP.
 
+### 14.10 Xelion - de telefooncentrale voor Claude (`xelion.globaal.be`)
+
+MCP-server waarmee Claude contacten en lijsten in Xelion opzoekt, aanmaakt,
+wijzigt en verwijdert, plus de recente gesprekken leest. App in deze repo
+(`xelion/`), service **`app-xelion`**:3019, nginx `59-xelion.conf.template`,
+Authentik via `scripts/add-xelion-app.py` (tegelgroepen `xelion`, `admin`,
+`manager`). Geen database.
+
+- **De MCP-mantel is die van §14.9** en wordt bij het bouwen letterlijk uit
+  `post/mcp_server.py` overgenomen (`scratchpad/bouw_mcp.py`-patroon: helpers +
+  OAuth-blok, met de Postbus-namen omgezet), zodat er geen tweede variant van
+  die code ontstaat. Inclusief de localhost-redirect, dus koppelen kan als
+  connector en lokaal via `mcp-remote`.
+- **Zwaarder dan de Postbus, om één reden: Xelion heeft geen prullenbak.** Een
+  verwijderd contact is onmiddellijk en definitief weg, waar een verwijderd
+  bericht bij de Postbus nog in de prullenbakmap staat. Daarom is `verwijderen`
+  een apart recht, weigert `contact_verwijderen` zonder `bevestigd=true` (en
+  geeft eerst terug welk contact er weg zou gaan), en wordt het weggegooide
+  object eerst opgehaald zodat het logboek vastlegt wat er verdween.
+- **Vier rechten** (`lezen`, `aanmaken`, `bijwerken`, `verwijderen`) per persoon
+  of Authentik-groep in `~/xelion-config/rechten.yaml` (buiten git, read-only op
+  `/config`, elke vijf seconden herlezen). Dicht tenzij opengezet; een leeg of
+  kapot bestand geeft niemand rechten. Persoon en groep tellen op. Daarboven
+  drie noodremmen in de stack-`.env` (`XELION_MCP_AANMAKEN`, `_BIJWERKEN`,
+  `_VERWIJDEREN`): staat er een niet op `ja`, dan kan niemand dat. Lezen kent
+  geen noodrem. Stand bij oplevering: aanmaken en bijwerken aan, verwijderen uit.
+- **Elf tools**: lezend `ik`, `contact_zoeken`, `contact`, `lijsten`,
+  `gesprekken`; wijzigend `contact_aanmaken`, `contact_bijwerken`,
+  `lijst_aanmaken`, `lijst_toevoegen`, `lijst_afhalen`; ingrijpend
+  `contact_verwijderen`. Elke tool toetst zijn eigen recht met `config.eisen()`;
+  `test_rechten.py` doet daar een ast-toets op, zodat een tool die dat vergeet
+  de suite laat falen.
+- **Er is een tweede schrijver.** De contactsync (`app-contactsync`, repo
+  `google-xelion-sync`) schrijft sinds juli 2026 contacten vanuit Google naar
+  dezelfde centrale, met dezelfde endpoints. Twee schrijvers kunnen elkaar
+  overschrijven; de server-instructie zegt Claude dat een door de sync beheerd
+  contact in Google gewijzigd hoort te worden.
+- **Inloggegevens** komen uit dezelfde stack-`.env` als `app-communicatie` en
+  `app-contracten` (`XELION_BASE_URL`, `_USERNAME`, `_PASSWORD`, `_USERSPACE`).
+  De contactsync heeft een eigen set in `contactsync-data/.env` met andere
+  sleutelnamen (`XELION_HOST`/`XELION_TENANT`) en een ander wachtwoord.
+
 ---
 
-*Laatst bijgewerkt: 2026-08-27 - **Postbus** (§14.9): rechten per persoon:
+*Laatst bijgewerkt: 2026-09-03 - **Xelion** (§14.10) toegevoegd: MCP-server voor
+de telefooncentrale, lezen en wijzigen, met vier rechten per persoon en drie
+noodremmen. Verwijderen apart en standaard uit omdat Xelion geen prullenbak
+heeft.*
+
+*Eerder: 2026-08-27 - **Postbus** (§14.9): rechten per persoon:
 `schrijven`/`verwijderen`/`verzenden` accepteren naast ja/nee ook een lijst
 Authentik-namen of -groepen; `config.mag` toetst per aanroep, pagina en tool
 tonen de effectieve rechten van de ingelogde gebruiker.*
