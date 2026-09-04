@@ -25,19 +25,57 @@
 </div>
 
 {% if vraag %}
-  <h2 class="kop">{{ treffers|length }} treffers voor &lsquo;{{ vraag }}&rsquo;</h2>
-  {% if not treffers %}
+  <h2 class="kop">{{ regels|length }} treffers voor &lsquo;{{ vraag }}&rsquo;</h2>
+  {% if not regels %}
     <p class="uitlegtje">Hier staat niets over in dit document.</p>
+  {% else %}
+    {% set zonder = regels|rejectattr('1.letterlijk')|list|length %}
+    <p class="uitlegtje">
+      <mark class="letterlijk">Groen</mark> is een woord uit uw vraag dat er
+      letterlijk staat. Dat vindt ctrl-F ook.
+      {% if zonder == regels|length %}
+        Geen van deze treffers bevat een woord uit uw vraag; ze zijn allemaal
+        gevonden op de betekenis van de hele vraag. Dat is wat Vindplaats toevoegt.
+      {% elif zonder == 1 %}
+        Eén treffer bevat geen woord uit uw vraag en is gevonden op de betekenis
+        van de hele vraag. Dat is wat Vindplaats toevoegt.
+      {% elif zonder > 1 %}
+        {{ zonder }} van de {{ regels|length }} treffers bevatten geen woord uit
+        uw vraag en zijn gevonden op de betekenis van de hele vraag. Dat is wat
+        Vindplaats toevoegt.
+      {% else %}
+        Elke treffer bevat een woord uit uw vraag; de volgorde komt uit woorden
+        en betekenis samen.
+      {% endif %}
+    </p>
   {% endif %}
-  {% for t in treffers %}
+  {% for t, u in regels %}
   <div class="stuk">
     <div class="r1">
       <span class="chip">{% if t.gedrukt %}blz {{ t.gedrukt }}{% else %}blad {{ t.fysiek }}{% endif %}</span>
       {% if t.soort != 'tekst' %}<span class="chip grijs">{{ t.soort }}</span>{% endif %}
+      {% if u.manier == 'betekenis' %}<span class="chip manier">op betekenis</span>
+      {% elif u.manier == 'woorden' %}<span class="chip grijs">op woorden</span>
+      {% else %}<span class="chip grijs">woorden en betekenis</span>{% endif %}
       {% if t.sectie and '...' not in t.sectie %}<span class="waar">{{ t.sectie }}</span>
       {% elif t.hoofdstuk %}<span class="waar">{{ t.hoofdstuk }}</span>{% endif %}
     </div>
-    <p class="tekst">{{ t.tekst[:600] }}{% if t.tekst|length > 600 %}&hellip;{% endif %}</p>
+    <p class="tekst">{{ u.html }}</p>
+    <p class="waarom">
+      {% if u.letterlijk %}
+        Staat er letterlijk:
+        {% for vw, tw in u.letterlijk %}{% if vw == tw %}<mark class="letterlijk">{{ tw }}</mark>{% else %}&lsquo;{{ vw }}&rsquo; in <mark class="letterlijk">{{ tw }}</mark>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}.
+      {% endif %}
+      {% if u.manier == 'betekenis' %}
+        {% if u.letterlijk %}Op woorden niet hoog genoeg; wel op{% else %}Geen woord uit uw vraag staat hier; gevonden op{% endif %}
+        de betekenis van de hele vraag{% if u.vector_rang %} (plek {{ u.vector_rang }} op betekenis){% endif %}.
+      {% elif u.ontbreekt %}
+        Niet gevonden:
+        {% for w in u.ontbreekt %}&lsquo;{{ w }}&rsquo;{% if not loop.last %}, {% endif %}{% endfor %}{% if u.manier == 'beide' %}; de betekenis van de hele vraag telde mee{% if u.vector_rang %} (plek {{ u.vector_rang }}){% endif %}{% endif %}.
+      {% elif u.manier == 'beide' %}
+        Ook op de betekenis van de hele vraag{% if u.vector_rang %} (plek {{ u.vector_rang }}){% endif %}.
+      {% endif %}
+    </p>
     <p class="verder"><a href="{{ url_for('fragment', fid=t.fragment_id) }}">Hele passage &rarr;</a></p>
   </div>
   {% endfor %}
