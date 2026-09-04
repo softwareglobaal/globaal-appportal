@@ -1,0 +1,15 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name staving.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Staving: de nieuwe stavingsstukken-automation (04-09-2026, "bulk in, gesorteerd
+    # uit"). Bewust een eigen subdomein naast stavingsstukken.globaal.be (de oude
+    # cockpit), zodat de heropbouw zichtbaar en meetbaar los staat van de oude keten.
+    # Host-app via systemd op poort 8092; toegang via de groep "stavingsstukken" (plus
+    # admin), dezelfde groep als de oude cockpit, dus geen nieuwe accounts.
+    set $app_upstream http://172.17.0.1:8092;
+
+    include /etc/nginx/snippets/forward-auth.conf;
+}
