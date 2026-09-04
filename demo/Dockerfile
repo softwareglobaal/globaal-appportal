@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY kennisbank/ kennisbank/
-COPY demo.py ./
+COPY demo.py waarom.py ./
 COPY templates/ templates/
 
 ENV EMBED_BACKEND=fastembed \

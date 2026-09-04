@@ -35,6 +35,8 @@ from flask import (Flask, abort, redirect, render_template, request,
 
 from kennisbank.opslag import Kennisbank
 
+import waarom
+
 DB_PAD = Path(os.environ.get("DEMO_DB", "/app/data/demo.db"))
 # Waar de bezoeker terechtkomt als hij dit met zijn eigen stukken wil.
 CONTACT = os.environ.get("DEMO_CONTACT", "https://elevaitnv.com/#contact")
@@ -126,13 +128,16 @@ def start():
         return render_template("wachten.html"), 503
     vraag = (request.args.get("v") or "").strip()
     treffers = bank().zoek(vraag, k=8) if vraag else []
+    # Per treffer: waarom is hij gevonden? Zie waarom.py voor wat er wel en
+    # niet beweerd wordt.
+    regels = [(t, waarom.leg_uit(vraag, t)) for t in treffers]
     info = _info()
     # De inhoudsopgave-controle is onze sterkste maat, maar alleen bij een
     # document dat er een heeft. Een wettekst zonder inhoudsopgave levert een
     # laag getal op dat niets over de verwerking zegt; dan liever niets tonen
     # dan een cijfer dat de lezer verkeerd uitlegt.
     return render_template("demo.html", info=info, vraag=vraag,
-                           treffers=treffers,
+                           regels=regels,
                            aantal=bank().aantal_fragmenten(),
                            toon_trefkans=(info.get("trefkans") or 0) >= 0.5)
 
