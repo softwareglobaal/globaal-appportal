@@ -145,38 +145,49 @@ def fragment(fid: int):
     return render_template("fragment.html", f=f, info=_info())
 
 
-# De factuurrouter-demo is een vaste run: statische HTML met een afbeelding per
+# De Email Automation-demo (tot 1 september 2026 "Factuurrouter") is een vaste run: statische HTML met een afbeelding per
 # document, gebouwd op een andere machine en hier alleen neergezet. Geen model,
 # geen postbus, geen verzendcode. Hij hangt onder deze app omdat /demo al
 # geproxyd wordt; daarmee hoeft er aan nginx niets te veranderen.
-FACTUURROUTER = Path(os.environ.get("FACTUURROUTER_PAD", "/app/data/factuurrouter"))
+EMAIL_AUTOMATION = Path(os.environ.get("EMAIL_AUTOMATION_PAD", "/app/data/email-automation"))
+
+
+@app.route("/email-automation")
+def email_automation_zonder_slash():
+    # De pagina gebruikt relatieve paden (documenten/, fonts/). Zonder slash
+    # lost de browser die op tegen /demo/ en laadt er niets. Vandaar de 308.
+    return redirect(url_for("email_automation"), code=308)
+
+
+@app.route("/email-automation/")
+def email_automation():
+    if not (EMAIL_AUTOMATION / "index.html").exists():
+        abort(404)
+    return send_from_directory(EMAIL_AUTOMATION, "index.html")
+
+
+@app.route("/email-automation/<path:bestand>")
+def email_automation_bestand(bestand: str):
+    # send_from_directory weigert zelf alles buiten de map, dus een pad met ..
+    # komt hier niet doorheen.
+    return send_from_directory(EMAIL_AUTOMATION, bestand)
 
 
 @app.route("/factuurrouter")
-def factuurrouter_zonder_slash():
-    # De pagina gebruikt relatieve paden (documenten/, fonts/). Zonder slash
-    # lost de browser die op tegen /demo/ en laadt er niets. Vandaar de 308.
-    return redirect(url_for("factuurrouter"), code=308)
-
-
 @app.route("/factuurrouter/")
-def factuurrouter():
-    if not (FACTUURROUTER / "index.html").exists():
-        abort(404)
-    return send_from_directory(FACTUURROUTER, "index.html")
-
-
 @app.route("/factuurrouter/<path:bestand>")
-def factuurrouter_bestand(bestand: str):
-    # send_from_directory weigert zelf alles buiten de map, dus een pad met ..
-    # komt hier niet doorheen.
-    return send_from_directory(FACTUURROUTER, bestand)
+def factuurrouter_oud(bestand: str = ""):
+    # Oude naam, tot 1 september 2026 in gebruik. Links van buiten en de
+    # projectenpagina van de site verwezen hiernaar; 308 houdt ze werkend.
+    if bestand:
+        return redirect(url_for("email_automation_bestand", bestand=bestand), code=308)
+    return redirect(url_for("email_automation"), code=308)
 
 
 @app.route("/gezond")
 def gezond():
     return {"ok": _gereed.is_set(), "kennisbank": DB_PAD.exists(),
-            "factuurrouter": (FACTUURROUTER / "index.html").exists()}
+            "email_automation": (EMAIL_AUTOMATION / "index.html").exists()}
 
 
 @app.errorhandler(404)
