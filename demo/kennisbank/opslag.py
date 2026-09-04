@@ -194,16 +194,36 @@ class Kennisbank:
 
     # ---------------------------------------------------------------- zoeken
 
-    @staticmethod
-    def _fts_vraag(vraag: str) -> str:
-        """Een veilige FTS5-vraag: elk woord apart aangehaald.
+    # Functiewoorden dragen geen betekenis maar staan wel op bijna elke
+    # bladzijde. In een OR-vraag matchen ze daardoor het halve document, en via
+    # de RRF-fusie duwen ze ruis boven het juiste antwoord uit. Gemeten op de
+    # Personeelswet: "wat als ik ziek ben" vond artikel 54 helemaal niet, terwijl
+    # alleen "ziek" het meteen bovenaan zet.
+    STOPWOORDEN = frozenset("""
+        de het een en of maar want dus als dan die dat deze dit er is zijn was
+        waren wordt worden werd ben bent bene heb hebt heeft had hadden zal zult
+        zou zouden kan kunt kunnen kon konden mag mogen moet moeten wil willen
+        ik jij je u hij zij ze wij we jullie hem haar hen hun mij me mijn uw
+        van voor met bij aan op in uit om te ten ter door over naar tot per
+        wat wie waar wanneer hoe waarom welke welk niet geen ook nog al reeds
+        wel eens zo dat men zich hier daar
+    """.split())
+
+    @classmethod
+    def _fts_vraag(cls, vraag: str) -> str:
+        """Een veilige FTS5-vraag: de inhoudswoorden, elk apart aangehaald.
 
         Rechtstreeks doorgeven werkt niet. Een vraag met een apostrof of een
         koppelteken is voor FTS5 syntaxis, en dan krijg je geen resultaat maar een
         foutmelding.
+
+        Blijft er na het schrappen niets over, dan is de vraag louter
+        functiewoorden. Dan is geen trefwoordvraag beter dan een die alles
+        aanwijst: het zoeken leunt dan volledig op de betekenis.
         """
-        woorden = re.findall(r"\w+", vraag, re.UNICODE)
-        return " OR ".join(f'"{w}"' for w in woorden if len(w) > 1)
+        woorden = re.findall(r"\w+", vraag.lower(), re.UNICODE)
+        inhoud = [w for w in woorden if len(w) > 1 and w not in cls.STOPWOORDEN]
+        return " OR ".join(f'"{w}"' for w in inhoud)
 
     def zoek(self, vraag: str, k: int = 8, rrf_k: int = 60) -> list[Treffer]:
         """Hybride ophalen: woorden en betekenis, samengevoegd met RRF.
