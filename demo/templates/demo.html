@@ -1,86 +1,53 @@
 {% extends "basis.html" %}
-{% block titel %}Doorzoek je eigen document · Elevait{% endblock %}
+{% block titel %}{{ info.titel }} · Vindplaats{% endblock %}
 {% block lijf %}
-<main>
 
-<h1>Doorzoek je eigen document</h1>
-<p class="lead">
-  Laad een PDF en stel er meteen een vraag over in gewone taal. Je krijgt de
-  passage terug met hoofdstuk en bladzijde, zodat je weet waar het staat.
-</p>
+<div class="docbalk">
+  <span class="docnaam">{{ info.titel }}</span>
+  <span class="docmeta">{{ info.bladzijden }} blz · {{ aantal }} stukken ·
+    {{ info.dekking|procent }} gedekt{% if toon_trefkans %} ·
+    indeling {{ info.trefkans|procent }} nagerekend{% endif %}</span>
+</div>
 
-{% if melding == 'geen-bestand' %}
-  <div class="kaart"><p style="margin:0">Kies eerst een bestand.</p></div>
-{% elif melding == 'geen-pdf' %}
-  <div class="kaart"><p style="margin:0">Alleen PDF-bestanden.</p></div>
-{% endif %}
-
-<div class="kaart">
-  <form method="post" action="{{ url_for('verwerk') }}"
-        enctype="multipart/form-data" id="formulier">
-    <label for="bestand" style="display:block;font-weight:600;margin-bottom:8px">
-      Kies een PDF</label>
-    <input id="bestand" name="bestand" type="file" accept="application/pdf" required>
-    <p class="mini stil-tekst" style="margin:10px 0 18px">
-      Werkt met contracten, offertes, bestekken, handleidingen en rapporten:
-      documenten die hun tekst zelf meedragen.
-    </p>
-    <button class="knop" type="submit" id="knop"
-            {{ 'disabled' if not ruimte.mag }}>
-      Verwerk en doorzoek</button>
-    <span class="mini stil-tekst" id="bezig" style="display:none;margin-left:12px">
-      Bezig met lezen en indexeren…</span>
+<div class="paneel">
+  <form class="zoek" method="get" action="{{ url_for('start') }}">
+    <input type="search" name="v" value="{{ vraag }}" autofocus
+           placeholder="Stel een vraag in gewone taal">
+    <button class="zoekknop" type="submit">Zoeken</button>
   </form>
-
-  <ul class="grenzen">
-    <li>tot {{ g.MAX_BLADZIJDEN }} bladzijden</li>
-    <li>max {{ (g.MAX_BYTES / 1024 / 1024)|int }} MB</li>
-    <li>PDF met tekstlaag</li>
-    <li>{{ g.PER_DAG_PER_IP }} per dag
-      {%- if ruimte.gebruikt %} · {{ ruimte.over }} over vandaag{% endif %}</li>
-    <li>wordt na een uur gewist</li>
-  </ul>
-  {% if not vrij %}
-    <p class="mini stil-tekst" style="margin:14px 0 0">
-      Er wordt op dit moment een ander document verwerkt. Even geduld, of
-      probeer het zo opnieuw.</p>
+  {% if not vraag %}
+  <div class="proberen">Probeer:
+    <a href="{{ url_for('start', v='wat als ik ziek ben') }}">wat als ik ziek ben</a>
+    <a href="{{ url_for('start', v='wanneer krijg ik wachtgeld') }}">wanneer krijg ik wachtgeld</a>
+    <a href="{{ url_for('start', v='welke straf staat op plichtsverzuim') }}">straf op plichtsverzuim</a>
+  </div>
   {% endif %}
 </div>
 
-<div class="opwaarderen">
-  <h3>Dit is de demo. De echte versie kent deze grenzen niet.</h3>
-  <p>De limieten hierboven houden een publieke demo betaalbaar en veilig. In
-    een abonnement vervallen ze:</p>
-  <ul>
-    <li><strong>Geen paginalimiet.</strong> Naslagwerken van honderden
-      bladzijden, hele dossiers, complete lastenboeken.</li>
-    <li><strong>Gescande documenten.</strong> Oud archief zonder tekstlaag
-      wordt uitgelezen met OCR, inclusief structuur en paginanummering.</li>
-    <li><strong>Onbeperkt zoeken</strong>, voor iedereen op je kantoor.</li>
-    <li><strong>Je kennisbanken blijven staan</strong>, afgeschermd per klant,
-      in een eigen bestand dat je met één druk verwijdert.</li>
-    <li><strong>Koppeling met je eigen software</strong> of met Claude, zodat
-      je vanuit je gewone werkomgeving zoekt.</li>
-  </ul>
-  <a class="knop" href="https://elevaitnv.com/#contact">Vraag een demo op maat</a>
-</div>
+{% if vraag %}
+  <h2 class="kop">{{ treffers|length }} treffers voor &lsquo;{{ vraag }}&rsquo;</h2>
+  {% if not treffers %}
+    <p class="uitlegtje">Hier staat niets over in dit document.</p>
+  {% endif %}
+  {% for t in treffers %}
+  <div class="stuk">
+    <div class="r1">
+      <span class="chip">{% if t.gedrukt %}blz {{ t.gedrukt }}{% else %}blad {{ t.fysiek }}{% endif %}</span>
+      {% if t.soort != 'tekst' %}<span class="chip grijs">{{ t.soort }}</span>{% endif %}
+      {% if t.sectie and '...' not in t.sectie %}<span class="waar">{{ t.sectie }}</span>
+      {% elif t.hoofdstuk %}<span class="waar">{{ t.hoofdstuk }}</span>{% endif %}
+    </div>
+    <p class="tekst">{{ t.tekst[:600] }}{% if t.tekst|length > 600 %}&hellip;{% endif %}</p>
+    <p class="verder"><a href="{{ url_for('fragment', fid=t.fragment_id) }}">Hele passage &rarr;</a></p>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="uitlegtje">Elk antwoord komt terug met de bladzijde waar het staat,
+  zodat u het kunt nakijken. Dit proefdocument is gelezen, in {{ aantal }}
+  stukken geknipt en nageteld: {{ info.dekking|procent }} van de brontekst is
+  meegenomen.{% if not toon_trefkans %} Het heeft geen inhoudsopgave, dus de
+  indelingscontrole die we normaal narekenen ontbreekt hier; liever een leeg
+  vakje dan een verzonnen cijfer.{% endif %}</p>
+{% endif %}
 
-<h2>Wat er gebeurt met je bestand</h2>
-<p class="klein stil-tekst">
-  Het document wordt gelezen, ingedeeld en doorzoekbaar gemaakt op onze eigen
-  server in Suriname. Er gaat niets naar een externe dienst: het model dat de
-  betekenis van je tekst berekent draait lokaal. Na een uur worden het bestand
-  en de zoekindex automatisch verwijderd. We bewaren geen kopie, delen niets
-  met derden en gebruiken je document niet om iets te trainen.
-</p>
-
-</main>
-<script>
-  document.getElementById('formulier').addEventListener('submit', function () {
-    var k = document.getElementById('knop');
-    k.disabled = true;
-    k.textContent = 'Bezig…';
-    document.getElementById('bezig').style.display = 'inline';
-  });
-</script>
 {% endblock %}

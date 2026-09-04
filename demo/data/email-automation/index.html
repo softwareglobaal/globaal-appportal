@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Email Automation · Paranam Groep</title>
+<style>
+@font-face{font-family:'Plex';src:url('fonts/ibm-plex-sans-latin-400-normal.woff2')
+  format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Plex';src:url('fonts/ibm-plex-sans-latin-600-normal.woff2')
+  format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'PlexMono';src:url('fonts/ibm-plex-mono-latin-400-normal.woff2')
+  format('woff2');font-weight:400;font-display:swap}
+:root{--bg:#ececea;--zijbg:#f4f4f2;--vlak:#fcfcfb;--rand:#cfcfca;
+  --randlicht:#e1e1dd;--inkt:#20231f;--stil:#5d615c;
+  --groen:#156a4a;--groenz:#e3ece5;
+  --amber:#8f5a12;--amberz:#f3e8d3;--rood:#9e2b1e;--roodz:#f1dcd7;
+  --ui:'Plex','Segoe UI',system-ui,sans-serif;
+  --mono:'PlexMono',ui-monospace,Consolas,monospace}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--inkt);
+  font:13.5px/1.5 var(--ui)}
+.app{display:flex;flex-direction:column;height:100vh}
+.top{display:flex;align-items:center;gap:0;background:#20231f;color:#f2f2ef;
+  height:46px;flex:none;padding:0 14px}
+.top .product{font-weight:600;font-size:14px}
+.top .schei{width:1px;height:18px;background:#4a4d48;margin:0 14px}
+.top .werkruimte{font-size:13px;color:#b9bcb6}
+.top .envtag{margin-left:14px;font:400 11px var(--mono);color:#e8c98c;
+  border:1px solid #6a5a38;padding:2px 7px;border-radius:2px}
+.top .rek{flex:1}
+.top .account{font:12px var(--mono);color:#b9bcb6}
+.top .avatar{width:26px;height:26px;border-radius:2px;background:#3c403b;
+  color:#f2f2ef;font:600 11px/26px var(--ui);text-align:center;margin-left:10px}
+.romp{display:flex;flex:1;min-height:0}
+.zij{width:200px;flex:none;border-right:1px solid var(--rand);
+  background:var(--zijbg);padding:10px 6px;display:flex;flex-direction:column}
+.zij a{display:flex;align-items:center;gap:9px;padding:6px 9px;
+  border-radius:2px;color:var(--inkt);text-decoration:none;font-size:13px;
+  cursor:pointer;user-select:none;border-left:3px solid transparent}
+.zij a svg{width:15px;height:15px;flex:none;color:var(--stil)}
+.zij a:hover{background:#ebebe8}
+.zij a.actief{background:var(--groenz);border-left-color:var(--groen);
+  font-weight:600}
+.zij a.actief svg{color:var(--groen)}
+.zij a .n{margin-left:auto;font:12px var(--mono);color:var(--stil)}
+.zij a .n.tel{background:var(--amberz);color:var(--amber);padding:0 5px;
+  border-radius:2px;font-weight:400}
+.zij .kopje{font-size:12px;color:var(--stil);margin:16px 12px 4px}
+.zij a.uit{color:#9a9d97;cursor:default}
+.zij a.uit svg{color:#b5b8b2}
+.zij a.uit:hover{background:none}
+.zij .voetje{margin-top:auto;padding:10px 9px;font-size:11px;
+  color:var(--stil);border-top:1px solid var(--randlicht);line-height:1.45}
+.lijst{width:400px;flex:none;overflow-y:auto;
+  border-right:1px solid var(--rand);background:var(--vlak)}
+.lijstkop{position:sticky;top:0;background:var(--vlak);z-index:2;
+  padding:9px 14px;border-bottom:1px solid var(--rand);
+  display:flex;align-items:baseline;gap:8px}
+.lijstkop b{font-size:13px}
+.lijstkop span{font:11.5px var(--mono);color:var(--stil)}
+.rij{display:flex;gap:9px;width:100%;text-align:left;background:none;
+  border:0;border-bottom:1px solid var(--randlicht);border-left:3px solid
+  transparent;padding:8px 12px 8px 9px;cursor:pointer;font:inherit;
+  color:inherit;align-items:flex-start}
+.rij:hover{background:#f4f4f1}
+.rij.geselecteerd{background:var(--groenz);border-left-color:var(--groen)}
+.rij.verborgen{display:none}
+.rij .midden{flex:1;min-width:0}
+.rij .r1{display:flex;gap:8px;align-items:baseline}
+.rij .onderwerp{font-size:13px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;flex:1}
+.rij.wachtend .onderwerp{font-weight:600}
+.rij .tijd{font:11px var(--mono);color:var(--stil);flex:none}
+.rij .van{font-size:12px;color:var(--stil);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.rij .r3{margin-top:4px;display:flex;gap:6px;align-items:baseline;
+  flex-wrap:wrap}
+.rij .naar{font:11.5px var(--mono);color:var(--stil)}
+.tag{font:600 11px var(--ui);border-radius:2px;padding:1px 6px}
+.tag.wacht{background:var(--amberz);color:var(--amber)}
+.tag.hoog{background:var(--amberz);color:var(--amber);font-weight:400}
+.tag.krit{background:var(--roodz);color:var(--rood)}
+.tag.door{background:var(--groenz);color:var(--groen)}
+.detail{flex:1;overflow-y:auto;background:var(--vlak);min-width:0}
+.paneel{display:none;max-width:47rem;padding:18px 26px 40px}
+.paneel.actief{display:block}
+.paneel .kop1{display:flex;align-items:flex-start;gap:12px;
+  border-bottom:1px solid var(--rand);padding-bottom:12px}
+.paneel h2{font-size:16px;margin:0 0 3px;font-weight:600}
+.paneel .sub{font-size:12px;color:var(--stil)}
+.paneel .sub .m{font-family:var(--mono)}
+.paneel .status{margin-left:auto;flex:none}
+.sectie{padding:13px 0;border-bottom:1px solid var(--randlicht)}
+.sectie h3{font-size:12px;color:var(--stil);font-weight:400;margin:0 0 6px}
+.sectie p{margin:0 0 5px}
+.sectie ul{margin:0;padding-left:17px}
+.sectie li{margin-bottom:3px}
+.sectie.let{border-left:3px solid var(--amber);padding-left:12px;
+  background:#faf7f0}
+.sectie.let h3{color:var(--amber);font-weight:600;font-size:13px}
+.adres{font:12px var(--mono);background:var(--groenz);border-radius:2px;
+  padding:2px 6px;display:inline-block;margin:0 4px 4px 0;color:#174a36}
+.tweekolom{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+.tweekolom .l{flex:1 1 300px;min-width:0}
+.tweekolom .r{flex:0 0 165px}
+.tweekolom .r img{width:100%;border:1px solid var(--rand)}
+.tweekolom .r figcaption{font:11px var(--mono);color:var(--stil);
+  margin-top:4px;text-align:center}
+.spoor{font:11.5px var(--mono);color:var(--stil);line-height:1.65}
+.terug{display:none}
+@media(max-width:920px){
+  .zij{display:none}
+  .lijst{width:100%;border-right:0}
+  .detail{display:none;position:fixed;inset:46px 0 0 0;z-index:5}
+  body.toontdetail .detail{display:block}
+  body.toontdetail .lijst{display:none}
+  .terug{display:inline-block;margin-bottom:10px;font-size:13px;
+    color:var(--groen);cursor:pointer;font-weight:600}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <span class="product">Email Automation</span>
+    <span class="schei"></span>
+    <span class="werkruimte">Paranam Groep</span>
+    <span class="envtag">demo, verzonnen gegevens</span>
+    <span class="rek"></span>
+    <span class="account">administratie@paranamgroep.sr</span>
+    <span class="avatar">PG</span>
+  </header>
+  <div class="romp">
+    <nav class="zij">
+      <a data-f="alles" class="actief"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9.5 4.5 3.5h7L14 9.5V13H2Zm0 0h3.4l1 2h3.2l1-2H14"/></svg> Postvak IN
+        <span class="n">15</span></a>
+      <a data-f="door"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8H13M9.5 4.5 13.5 8l-4 3.5"/></svg> Doorgestuurd <span class="n">12</span></a>
+      <a data-f="ligt"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.6"/><path d="M8 5v3.2l2.3 1.4"/></svg> Wacht op u
+        <span class="n tel">3</span></a>
+      <div class="kopje">Beheer</div>
+      <a class="uit" title="In de demo alleen-lezen"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12M2 11h12"/><circle cx="6" cy="5" r="1.7"/><circle cx="10" cy="11" r="1.7"/></svg> Routingregels</a>
+      <a class="uit" title="In de demo alleen-lezen"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5V3h6v10.5m0-6.5h3v6.5M2 13.5h12M5.5 5.5h2m-2 2.5h2m-2 2.5h2"/></svg> Firma's
+        <span class="n">3</span></a>
+      <a class="uit" title="In de demo alleen-lezen"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M3 8h10M3 11.5h6.5"/></svg> Logboek</a>
+      <div class="voetje">Demo van Elevait NV. Alle firma's, afzenders en
+      bedragen zijn verzonnen. Deze omgeving kan niets versturen.</div>
+    </nav>
+    <div class="lijst">
+      <div class="lijstkop" id="lijstkopje"><b>Postvak IN</b>
+        <span>15 stukken</span></div>
+      
+<button class="rij" data-id="01"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Factuur EP-2026-114872</span>
+      <span class="tijd">07:41</span></span>
+    <span class="van">facturatie@stroomdienstkernkamp.sr</span>
+    <span class="r3"><span class="naar">&rarr; boekhouding@</span></span>
+  </span>
+</button>
+<button class="rij" data-id="02"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Waterfactuur WW-88213</span>
+      <span class="tijd">07:58</span></span>
+    <span class="van">admin@waterdienstlelydorp.sr</span>
+    <span class="r3"><span class="naar">&rarr; boekhouding@</span></span>
+  </span>
+</button>
+<button class="rij" data-id="03"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Maandafrekening brandstof augustus</span>
+      <span class="tijd">08:04</span></span>
+    <span class="van">klanten@devijfwegen.sr</span>
+    <span class="r3"><span class="naar">&rarr; boekhouding@</span></span>
+  </span>
+</button>
+<button class="rij" data-id="04"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Rekeningafschrift augustus 2026</span>
+      <span class="tijd">08:11</span></span>
+    <span class="van">noreply@kernkampspaarbank.sr</span>
+    <span class="r3"><span class="naar">&rarr; controller@</span></span>
+  </span>
+</button>
+<button class="rij" data-id="05"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Polisblad wagenpark OVS-WP-7741</span>
+      <span class="tijd">08:19</span></span>
+    <span class="van">polissen@ovsuriname.sr</span>
+    <span class="r3"><span class="naar">&rarr; transport@</span></span>
+  </span>
+</button>
+<button class="rij" data-id="06"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Uw kassabon</span>
+      <span class="tijd">08:23</span></span>
+    <span class="van">kassa@bouwmarktkernkamp.sr</span>
+    <span class="r3"><span class="naar">&rarr; boekhouding@</span></span>
+  </span>
+</button>
+<button class="rij" data-id="07"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Aanmaning premieachterstand PFZ/2026/PR-40118</span>
+      <span class="tijd">08:30</span></span>
+    <span class="van">invordering@premiefondszuid.sr</span>
+    <span class="r3"><span class="naar">&rarr; boekhouding@</span><span class="tag hoog">hoog</span></span>
+  </span>
+</button>
+<button class="rij wachtend" data-id="08"
+        data-status="ligt">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Factuur HN-2026-0912</span>
+      <span class="tijd">08:37</span></span>
+    <span class="van">verkoop@handelnickerie.sr</span>
+    <span class="r3"><span class="tag wacht">wacht op u</span></span>
+  </span>
+</button>
+<button class="rij wachtend" data-id="09"
+        data-status="ligt">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Gescand document</span>
+      <span class="tijd">08:44</span></span>
+    <span class="van">scanner@paranamgroep.sr</span>
+    <span class="r3"><span class="tag wacht">wacht op u</span></span>
+  </span>
+</button>
+<button class="rij wachtend" data-id="10"
+        data-status="ligt">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Abonnementsovereenkomst KHZ-2026-0034</span>
+      <span class="tijd">08:52</span></span>
+    <span class="van">contracten@kantoorhygienezuid.sr</span>
+    <span class="r3"><span class="tag wacht">wacht op u</span></span>
+  </span>
+</button>
+<button class="rij" data-id="11"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Opzegging huurovereenkomst loods 4</span>
+      <span class="tijd">09:01</span></span>
+    <span class="van">administratie@coroniehandel.sr</span>
+    <span class="r3"><span class="naar">&rarr; verhuur@</span></span>
+  </span>
+</button>
+<button class="rij" data-id="12"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Prijswijziging per 1 oktober</span>
+      <span class="tijd">09:07</span></span>
+    <span class="van">verkoop@betonkwatta.sr</span>
+    <span class="r3"><span class="naar">&rarr; bouw@</span></span>
+  </span>
+</button>
+<button class="rij" data-id="13"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Herinnering factuur TP-2026-55102</span>
+      <span class="tijd">09:15</span></span>
+    <span class="van">facturatie@telecomparanam.sr</span>
+    <span class="r3"><span class="naar">&rarr; boekhouding@</span></span>
+  </span>
+</button>
+<button class="rij" data-id="14"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Uw financieringsruimte</span>
+      <span class="tijd">09:24</span></span>
+    <span class="van">zakelijk@kernkampspaarbank.sr</span>
+    <span class="r3"><span class="naar">&rarr; controller@</span></span>
+  </span>
+</button>
+<button class="rij" data-id="15"
+        data-status="door">
+  <span class="midden">
+    <span class="r1"><span class="onderwerp">Exploot VDB-2026-0781</span>
+      <span class="tijd">09:31</span></span>
+    <span class="van">kantoor@vredenburgdeurwaarders.sr</span>
+    <span class="r3"><span class="naar">&rarr; directie@</span><span class="tag krit">kritiek</span></span>
+  </span>
+</button>
+    </div>
+    <div class="detail">
+      
+<div class="paneel" data-id="01">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Factuur EP-2026-114872</h2>
+      <div class="sub"><span class="m">facturatie@stroomdienstkernkamp.sr</span> · vandaag
+        07:41 · leverancier algemeen · urgentie normaal</div>
+      <div class="sub">herkend als: PARANAM BOUW NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">boekhouding@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Document expliciet geadresseerd aan &#x27;PARANAM BOUW NV&#x27;</li><li>Documenttype &#x27;FACTUUR&#x27; expliciet vermeld</li><li>Bedrag en vervaldatum expliciet aanwezig zonder dreiging of uitvoeringsmaatregel</li><li>Rekeningnummer 55.10.223 is van de leverancier (Stroomdienst Kernkamp NV), niet van Paranam, dus geen firmabewijs maar naam van PARANAM BOUW NV is voldoende expliciet firmabewijs volgens routingtabel</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/01-elektriciteit.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="02">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Waterfactuur WW-88213</h2>
+      <div class="sub"><span class="m">admin@waterdienstlelydorp.sr</span> · vandaag
+        07:58 · leverancier algemeen · urgentie normaal</div>
+      <div class="sub">herkend als: PARANAM VERHUUR NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">boekhouding@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Geadresseerd aan: PARANAM VERHUUR NV, Kernkampweg 88, Paramaribo</li><li>Expliciete NV-naam op document is voldoende firmabewijs volgens firmablok Paranam Verhuur NV</li><li>Documenttype: FACTUUR WATERVERBRUIK, factuurnummer WW-88213</li><li>Vervaldatum 20 september 2026, geen dreiging of aanmaning vermeld</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/02-water.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="03">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Maandafrekening brandstof augustus</h2>
+      <div class="sub"><span class="m">klanten@devijfwegen.sr</span> · vandaag
+        08:04 · leverancier algemeen · urgentie normaal</div>
+      <div class="sub">herkend als: PARANAM TRANSPORT NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">boekhouding@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Kenteken PN-4471, PN-4472, PN-5108 komen exact overeen met de kentekenlijst van PARANAM TRANSPORT NV in de routingtabel</li><li>Opmerking in routingtabel: &#x27;brandstof- en onderhoudsfacturen met een kenteken uit de lijst hierboven gelden als voldoende firmabewijs&#x27;</li><li>Documenttype &#x27;MAANDAFREKENING BRANDSTOF&#x27; is een factuur voor leverancier algemeen / brandstof</li><li>Bijzondere routing PARANAM TRANSPORT NV: factuur -&gt; boekhouding@paranamgroep.sr</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/03-brandstof.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="04">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Rekeningafschrift augustus 2026</h2>
+      <div class="sub"><span class="m">noreply@kernkampspaarbank.sr</span> · vandaag
+        08:11 · bank / financiering · urgentie laag</div>
+      <div class="sub">herkend als: PARANAM BOUW NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">controller@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Rekening : 12.34.567 komt exact overeen met geregistreerde bankrekening van PARANAM BOUW NV in de routingtabel (12.34.567, Kernkamp Spaarbank)</li><li>Geen saldotekort, geen actie, geen termijn vermeld op het afschrift -&gt; urgentie laag volgens urgentiematrix</li><li>Documenttype is een rekeningafschrift, valt onder categorie &#x27;bank / financiering&#x27; die routeert naar controller@paranamgroep.sr</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/04-afschrift.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="05">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Polisblad wagenpark OVS-WP-7741</h2>
+      <div class="sub"><span class="m">polissen@ovsuriname.sr</span> · vandaag
+        08:19 · verzekering · urgentie laag</div>
+      <div class="sub">herkend als: PARANAM TRANSPORT NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">transport@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Geadresseerd aan &#x27;PARANAM TRANSPORT NV&#x27; (naamsverschil &#x27;PARANAM&#x27; vs &#x27;PARANAM TRANSPORT NV&#x27; in tekst is een typo maar naam komt overeen met firmablok)</li><li>Documenttype: polisblad verzekering, categorie &#x27;verzekering&#x27; -&gt; transport@paranamgroep.sr per routingtabel</li><li>Geen actie vereist, geen betaaltermijn of dreiging -&gt; urgentie laag</li><li>Onderwerp bevestigt polisblad wagenpark OVS-WP-7741</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/05-verzekering.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="06">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Uw kassabon</h2>
+      <div class="sub"><span class="m">kassa@bouwmarktkernkamp.sr</span> · vandaag
+        08:23 · leverancier algemeen · urgentie laag</div>
+      <div class="sub">herkend als: PARANAM VERHUUR NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">boekhouding@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Afzender kassa@bouwmarktkernkamp.sr en bestandsnaam &#x27;06-terminalbon.pdf&#x27; duiden op een kassabon/terminalbon</li><li>PIN KAART **** **** **** 7715 komt exact overeen met de geregistreerde kaart (laatste 4 cijfers 7715) van PARANAM VERHUUR NV in de routingtabel</li><li>Geen andere firma in document 01 heeft dezelfde laatste 4 kaartcijfers, dus de match is uniek</li><li>Geen openstaande actie, termijn of dreiging vermeld op de bon, wat volgens de urgentiematrix &#x27;laag&#x27; rechtvaardigt</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/06-terminalbon.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="07">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Aanmaning premieachterstand PFZ/2026/PR-40118</h2>
+      <div class="sub"><span class="m">invordering@premiefondszuid.sr</span> · vandaag
+        08:30 · sociale premies · urgentie hoog</div>
+      <div class="sub">herkend als: PARANAM BOUW NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">boekhouding@paranamgroep.sr</span></p></div>
+      <div class="sectie"><h3>Ook gemeld aan</h3><p><span class="adres">directie@paranamgroep.sr</span><span class="adres">controller@paranamgroep.sr</span></p><p style="color:var(--stil)">De urgentie is hoog; zo staat het in de regels.</p></div>
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Firmanaam PARANAM BOUW NV expliciet vermeld</li><li>KKF-nummer 41.882 matcht exact met firmablok in document 01</li><li>Documenttype &#x27;AANMANING PREMIEACHTERSTAND&#x27; expliciet vermeld</li><li>Sociale premies categorie -&gt; routing naar boekhouding@paranamgroep.sr volgens firmablok</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/07-aanmaning-premies.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="08">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Factuur HN-2026-0912</h2>
+      <div class="sub"><span class="m">verkoop@handelnickerie.sr</span> · vandaag
+        08:37 · leverancier algemeen · urgentie normaal</div>
+      <div class="sub">herkend als: onbeslist</div>
+    </div>
+    <span class="tag wacht status">wacht op u</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie let"><h3>Welke NV is dit?</h3>
+        <p>Het adres op dit stuk wordt door twee NV&#x27;s gedeeld en er staat geen naam, KKF-nummer, rekening of kenteken op. De router gokt dan niet en legt het stuk hier neer.</p></div>
+      <div class="sectie"><h3>Wat de router zag</h3>
+        <p>Het document vermeldt alleen &#x27;De directie, Kernkampweg 88&#x27; zonder expliciete NV-naam, KKF-nummer, bankrekening of kenteken van Paranam Bouw NV of Paranam Verhuur NV. Omdat dit adres gedeeld wordt door beide firma&#x27;s en er geen ander firmabewijs aanwezig is, kan de ontvangende firma volgens de routingtabel niet worden vastgesteld. Dit vereist manuele</p></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/08-gedeeld-adres.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="09">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Gescand document</h2>
+      <div class="sub"><span class="m">scanner@paranamgroep.sr</span> · vandaag
+        08:44 · onbekend / gemengd · urgentie onzeker</div>
+      <div class="sub">herkend als: onbeslist</div>
+    </div>
+    <span class="tag wacht status">wacht op u</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie let"><h3>Scan onleesbaar</h3>
+        <p>Uit deze scan kwam geen bruikbare tekst. Het stuk is niet weggegooid; het wacht tot iemand ernaar kijkt.</p></div>
+      <div class="sectie"><h3>Wat de router zag</h3>
+        <p>geen bruikbare tekst uit het document</p></div><div class="sectie"><h3>Controlespoor</h3><div class="spoor">onleesbaar document blokkeert altijd</div></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/09-onleesbaar.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="10">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Abonnementsovereenkomst KHZ-2026-0034</h2>
+      <div class="sub"><span class="m">contracten@kantoorhygienezuid.sr</span> · vandaag
+        08:52 · contract / overeenkomst · urgentie normaal</div>
+      <div class="sub">herkend als: onbeslist</div>
+    </div>
+    <span class="tag wacht status">wacht op u</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie let"><h3>Geen routingregel</h3>
+        <p>De NV is duidelijk, maar voor dit documenttype staat nog geen bestemming in de routingtabel. Voorstel: tabel aanvullen in plaats van raden.</p></div>
+      <div class="sectie"><h3>Wat de router zag</h3>
+        <p>Het document is duidelijk gericht aan PARANAM BOUW NV (naam en KKF 41.882 expliciet vermeld, geen conflicterend signaal), dus de firma is voldoende zeker. Het documenttype is een abonnementsovereenkomst / contract met een leverancier (Kantoorhygiene Zuid NV). In het firmablok van PARANAM BOUW NV bestaat geen specifieke routingregel voor het documen</p></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/10-onbekende-categorie.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="11">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Opzegging huurovereenkomst loods 4</h2>
+      <div class="sub"><span class="m">administratie@coroniehandel.sr</span> · vandaag
+        09:01 · contract / overeenkomst · urgentie normaal</div>
+      <div class="sub">herkend als: PARANAM VERHUUR NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">verhuur@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Geadresseerd aan: PARANAM VERHUUR NV, Kernkampweg 88, Paramaribo</li><li>Onderwerp: OPZEGGING HUUROVEREENKOMST LOODS 4</li><li>Expliciete NV-naam vermeld, wat volgens routingtabel voldoende firmabewijs is ondanks gedeeld adres met Bouw</li><li>Geen bedrag, dreiging of termijnoverschrijding aanwezig; enkel opzegging met termijn van drie maanden -&gt; normaal urgentie</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/11-huuropzegging.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="12">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Prijswijziging per 1 oktober</h2>
+      <div class="sub"><span class="m">verkoop@betonkwatta.sr</span> · vandaag
+        09:07 · leverancier algemeen · urgentie laag</div>
+      <div class="sub">herkend als: PARANAM BOUW NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">bouw@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Document expliciet geadresseerd aan PARANAM BOUW NV, Kernkampweg 88</li><li>Ter kennisgeving. Er is geen actie vereist.</li><li>Geen bedrag, dreiging of termijn met actievereiste; enkel prijsinformatie voor de toekomst</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/12-prijswijziging.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="13">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Herinnering factuur TP-2026-55102</h2>
+      <div class="sub"><span class="m">facturatie@telecomparanam.sr</span> · vandaag
+        09:15 · betalingsherinnering · urgentie normaal</div>
+      <div class="sub">herkend als: PARANAM TRANSPORT NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">boekhouding@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Document is expliciet geadresseerd aan &#x27;PARANAM TRANSPORT NV, Kernkampweg 88, Paramaribo&#x27;</li><li>Afzender Telecom Paranam NV is een externe leverancier, niet een van de Paranam-firma&#x27;s zelf</li><li>Documenttype is een &#x27;VRIENDELIJKE HERINNERING&#x27; zonder dreiging, gerechtskosten of interesten</li><li>Routingtabel: firmablok PARANAM TRANSPORT NV, betalingsherinnering -&gt; boekhouding@paranamgroep.sr</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/13-herinnering.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="14">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Uw financieringsruimte</h2>
+      <div class="sub"><span class="m">zakelijk@kernkampspaarbank.sr</span> · vandaag
+        09:24 · bank / financiering · urgentie laag</div>
+      <div class="sub">herkend als: PARANAM VERHUUR NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">controller@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Firmanaam expliciet vermeld: PARANAM VERHUUR NV</li><li>Documenttype: informatief bankdocument over financieringsruimte, geen actie vereist</li><li>Routingregel firma PARANAM VERHUUR NV: bank / financiering -&gt; controller@paranamgroep.sr</li><li>Urgentie laag: informatief document zonder actie, termijn of dreiging conform urgentiematrix</li></ul></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/14-financiering.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+<div class="paneel" data-id="15">
+  <span class="terug">&larr; postvak</span>
+  <div class="kop1">
+    <div>
+      <h2>Exploot VDB-2026-0781</h2>
+      <div class="sub"><span class="m">kantoor@vredenburgdeurwaarders.sr</span> · vandaag
+        09:31 · deurwaarder · urgentie kritiek</div>
+      <div class="sub">herkend als: PARANAM TRANSPORT NV</div>
+    </div>
+    <span class="tag door status">doorgestuurd</span>
+  </div>
+  <div class="tweekolom" style="margin-top:2px">
+    <div class="l">
+      <div class="sectie"><h3>Doorgestuurd naar</h3><p><span class="adres">directie@paranamgroep.sr</span><span class="adres">controller@paranamgroep.sr</span></p></div>
+      
+      <div class="sectie"><h3>Waaraan herkend</h3><ul><li>Firmanaam PARANAM TRANSPORT NV expliciet vermeld op document</li><li>KKF-nummer 43.107 matcht exact met geregistreerde firma in document 01</li><li>Documenttype: deurwaarder met concrete uitvoeringsmaatregel (beslag roerende zaken) -&gt; volgens firmablok routing naar directie@paranamgroep.sr</li><li>Urgentie kritiek volgens urgentiematrix: deurwaarder met concrete uitvoeringsmaatregel is kritiek</li></ul></div><div class="sectie"><h3>Controlespoor</h3><div class="spoor">meldingsontvangers bijgezet: [&#x27;controller@paranamgroep.sr&#x27;, &#x27;directie@paranamgroep.sr&#x27;]</div></div></div>
+    <figure class="r" style="margin:13px 0 0">
+      <img src="documenten/15-deurwaarder.png" alt="het document">
+      <figcaption>bijlage, blz 1</figcaption>
+    </figure>
+  </div>
+</div>
+    </div>
+  </div>
+</div>
+<script>
+const rijen=[...document.querySelectorAll('.rij')];
+const panelen=[...document.querySelectorAll('.paneel')];
+const filters=[...document.querySelectorAll('.zij a[data-f]')];
+const lijstkop=document.getElementById('lijstkopje');
+const NAMEN={alles:'Postvak IN',door:'Doorgestuurd',ligt:'Wacht op u'};
+function kies(id){
+  rijen.forEach(r=>r.classList.toggle('geselecteerd',r.dataset.id===id));
+  panelen.forEach(p=>p.classList.toggle('actief',p.dataset.id===id));
+  document.body.classList.add('toontdetail');
+}
+function filter(f){
+  filters.forEach(a=>a.classList.toggle('actief',a.dataset.f===f));
+  let eerste=null,n=0;
+  rijen.forEach(r=>{
+    const zicht=f==='alles'||r.dataset.status===f;
+    r.classList.toggle('verborgen',!zicht);
+    if(zicht){n++;if(!eerste)eerste=r;}
+  });
+  lijstkop.innerHTML='<b>'+NAMEN[f]+'</b> <span>'+n+' stukken</span>';
+  if(eerste)kies(eerste.dataset.id);
+}
+rijen.forEach(r=>r.addEventListener('click',()=>kies(r.dataset.id)));
+filters.forEach(a=>a.addEventListener('click',e=>{e.preventDefault();filter(a.dataset.f)}));
+document.querySelectorAll('.terug').forEach(t=>t.addEventListener('click',
+  ()=>document.body.classList.remove('toontdetail')));
+filter('alles');kies('08');
+</script>
+</body>
+</html>

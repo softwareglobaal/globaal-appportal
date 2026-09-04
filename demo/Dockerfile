@@ -2,7 +2,10 @@
 #
 # Het embedmodel zit in de image, zodat de container bij de start niets hoeft
 # te downloaden en ook zonder internet werkt. Geen OCR-afhankelijkheden: de
-# demo weigert scans met opzet.
+# demo bouwt niets, hij doorzoekt een kennisbank die wij vooraf hebben gemaakt.
+#
+# De kennisbank zelf zit NIET in de image. Die wordt als volume aangekoppeld op
+# /app/data, zodat een ander demodocument geen herbouw vraagt.
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -11,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY kennisbank/ kennisbank/
-COPY demo.py grenzen.py ./
+COPY demo.py ./
 COPY templates/ templates/
 
 ENV EMBED_BACKEND=fastembed \
@@ -23,12 +26,9 @@ RUN python -c "from fastembed import TextEmbedding; \
 
 EXPOSE 3030
 
-# EEN worker, meerdere threads. Niet uit zuinigheid: de werkbank, de daglimiet
-# per IP en de lijst met verwerkte documenten leven in het geheugen van het
-# proces. Met twee workers zou "een verwerking tegelijk" er twee worden, "vijf
-# per dag" tien, en zou een bezoeker kunnen landen op de worker die zijn
-# document niet kent. De threads houden zoeken en lezen ondertussen snel; de
-# werkbank serialiseert alleen het verwerken zelf.
+# EEN worker, meerdere threads. Elke worker houdt zijn eigen kopie van het
+# embedmodel en van de vectormatrix in het geheugen; op deze VM is daar geen
+# ruimte voor twee. Zoeken is kort werk, dus threads volstaan.
 #
 # Geen --preload: de opwarmthread moet in de worker draaien, niet in de master
 # (die les kostte de vitrine veertien seconden 502 na elke herstart).

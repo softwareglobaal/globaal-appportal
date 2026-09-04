@@ -103,12 +103,15 @@ services:
     container_name: demo-kennisbank
     restart: unless-stopped
     environment:
-      URL_VOORVOEGSEL: /demo
+      VOORVOEGSEL: demo
       EMBED_BACKEND: fastembed
-    # Alles is tijdelijk: documenten en zoekindex leven in /tmp en worden na
-    # een uur gewist. Geen volume, dus een herstart wist ook meteen alles.
-    tmpfs:
-      - /tmp:size=512m
+      DEMO_DB: /app/data/demo.db
+      DEMO_CONTACT: https://elevaitnv.com/#contact
+    # De bezoeker levert niets meer aan; de demo doorzoekt een kennisbank die
+    # wij vooraf hebben gebouwd. Die staat als volume aangekoppeld, zodat een
+    # ander demodocument alleen een nieuw bestand vraagt en geen nieuwe image.
+    volumes:
+      - ./demo/data:/app/data:ro
     ports:
       - "127.0.0.1:3030:3030"
     networks: [appnet]

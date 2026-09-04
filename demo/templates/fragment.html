@@ -1,0 +1,23 @@
+{% extends "basis.html" %}
+{% block titel %}Blz {{ f.gedrukt or f.fysiek }} · Vindplaats{% endblock %}
+{% block lijf %}
+
+<div class="docbalk">
+  <a href="{{ url_for('start') }}" style="text-decoration:none;font-size:13px">&larr; zoeken</a>
+  <span class="docnaam">{{ info.titel }}</span>
+</div>
+
+<div class="stuk">
+  <div class="r1">
+    <span class="chip">{% if f.gedrukt %}blz {{ f.gedrukt }}{% else %}blad {{ f.fysiek }}{% endif %}</span>
+    {% if f.soort != 'tekst' %}<span class="chip grijs">{{ f.soort }}</span>{% endif %}
+    {% if f.sectie and '...' not in f.sectie %}<span class="waar">{{ f.sectie }}</span>
+    {% elif f.hoofdstuk %}<span class="waar">{{ f.hoofdstuk }}</span>{% endif %}
+  </div>
+  <p class="tekst">{{ f.tekst }}</p>
+</div>
+
+<p class="uitlegtje">De verwijzing is het gedrukte bladzijdenummer uit het
+document zelf, dus u kunt haar zo overnemen in een eigen stuk.</p>
+
+{% endblock %}
