@@ -32,6 +32,13 @@ server {
     set $proef_upstream http://elevait-proef-web:8090;
     set $demo_upstream http://demo-kennisbank:3030;
 
+    # De contractenpagina is opgegaan in de bredere dienstpagina
+    # administratie-automatisering. Vaste doorverwijzing, zodat wat al
+    # geindexeerd of gedeeld is niet op een foutmelding uitkomt.
+    location = /projecten/contracten {
+        return 301 https://$host/projecten/administratie-automatisering;
+    }
+
     # De kennisbank-demo draait maar een keer; de proefsite kijkt mee naar
     # dezelfde container als de live site. Zo klopt de link in het menu.
     location /demo {
