@@ -1,0 +1,14 @@
+[Unit]
+Description=Het portaal via Claude (MCP-server, alle applicaties alleen-lezen)
+After=network.target docker.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/appportal/portal-mcp
+EnvironmentFile=/home/ubuntu/portal-mcp.env
+ExecStart=/home/ubuntu/appportal/portal-mcp/.venv/bin/python /home/ubuntu/appportal/portal-mcp/mcp_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
