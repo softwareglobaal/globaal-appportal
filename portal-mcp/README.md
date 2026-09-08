@@ -15,14 +15,16 @@ rechten die de gebruiker op het portaal ook heeft.
 
 ## Koppelen
 
-In claude.ai als aangepaste connector op `https://portal-mcp.globaal.be/mcp`,
-of lokaal:
+Drie wegen naar dezelfde server, uitgeschreven in
+[docs/PORTAAL-KOPPELEN.md](../docs/PORTAAL-KOPPELEN.md):
 
-```bash
-claude mcp add --transport http portaal https://portal-mcp.globaal.be/mcp
-```
+1. **claude.ai**, als aangepaste connector op de link hierboven.
+2. **De desktop-app op een PC**, met `scripts/portaal-desktop-installeren.ps1`.
+   Dat is de weg voor collega's die een Claude-account delen: de koppeling en de
+   login staan dan in het Windows-profiel, en dat profiel is de grens.
+3. **Claude Code**: `claude mcp add --transport http portaal <link>`.
 
-Allebei openen een SSO-login. Wie erdoor mag, staat in de groep `portaal-mcp`,
+Alle drie openen een SSO-login. Wie erdoor mag, staat in de groep `portaal-mcp`,
 `admin` of `manager`; iemand toevoegen doe je door hem in die groep te zetten.
 Dat bepaalt alleen wie mág koppelen: wat hij daarna leest, komt bij elke aanroep
 uit Authentik.
