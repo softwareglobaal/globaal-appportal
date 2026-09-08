@@ -5,10 +5,33 @@ rechten die de gebruiker op het portaal ook heeft.
 
 | | |
 |---|---|
-| Adres | `https://portal-mcp.globaal.be/mcp` (nog niet live, de HTTP-laag ontbreekt) |
+| Adres | `https://portal-mcp.globaal.be/mcp` |
+| Draait als | systemd `portal-mcp` op de host, `172.17.0.1:8113` |
+| Omgeving | `/home/ubuntu/portal-mcp.env` (MCP_SECRET, MCP_LEZER_WACHTWOORD) |
 | Code | deze map (stack-repo), VM-checkout `~/appportal/portal-mcp` |
-| Leesrol | `mcp_lezer`, wachtwoord in `.env` als `MCP_LEZER_WACHTWOORD` |
+| Vhost | `nginx/templates/71-portal-mcp.conf.template` |
+| Toegang | `scripts/add-portal-mcp.py`, groep `portaal-mcp` plus admin en manager |
 | Rechten | `rol-authentik.sql` en `rol-appportal.sql` (gegenereerd) |
+
+## Koppelen
+
+In claude.ai als aangepaste connector op `https://portal-mcp.globaal.be/mcp`,
+of lokaal:
+
+```bash
+claude mcp add --transport http portaal https://portal-mcp.globaal.be/mcp
+```
+
+Allebei openen een SSO-login. Wie erdoor mag, staat in de groep `portaal-mcp`,
+`admin` of `manager`; iemand toevoegen doe je door hem in die groep te zetten.
+Dat bepaalt alleen wie mág koppelen: wat hij daarna leest, komt bij elke aanroep
+uit Authentik.
+
+**Geen vaste sleutel.** Vermogen en RenoVision kennen een `MCP_TOKEN` waarmee je
+buiten de SSO om binnenkomt op een vaste gebruiker. Die zit hier bewust niet in.
+Deze server ontsluit alle applicaties; een sleutel in een `.env` die als
+beheerder binnenkomt zou de hele belofte onderuithalen. Ook beheer gaat door de
+voordeur.
 
 ## De regel die boven alles staat
 
@@ -114,10 +137,10 @@ door Postgres wordt afgedwongen.
 Gemeten cataloog: 54 applicaties, 0 onzeker. Voor mehdi: 46 apps toegankelijk,
 waarvan 15 nu leesbaar, 10 die elders staan en 21 nog niet uitgezocht.
 
-**Wat nog ontbreekt voor een werkende koppeling:** de HTTP-laag zelf
-(`mcp_server.py`), met dezelfde OAuth-opzet als vermogen en renovision: de
-authorize-stap achter de Authentik forward-auth, stateless tokens, en de
-vhost plus een systemd-service.
+De HTTP-laag draait: OAuth met PKCE, JSON-RPC, en de drie stukken gereedschap.
+Getoetst door nginx heen met een echt token: sufa ziet haar twee apps, leest de
+namenlijst, en krijgt op `kern.persoon_beloning` een `permission denied` van
+Postgres; mehdi leest dezelfde tabel wel; een onzin-token geeft 401.
 
 **Fase 3:** adapters voor de apps die hun data elders hebben (RenoVision in
 Mongo, staving in de native Postgres op 5432, status in SQLite). Die staan nu in
@@ -126,3 +149,22 @@ de cataloog met de reden waarom ze nog niet leesbaar zijn.
 **De 21 onuitgezochte apps** krijgen `onbekend` mee. Een regel promoveren doe je
 op bewijs, niet op de naam: kijk in de broncode van de app welke schema's hij
 bevraagt en zet dat commando in het veld `bewijs`. Zie de kop van `bronnen.py`.
+
+## Valkuil bij het uitrollen: ufw
+
+De dienst luistert op `172.17.0.1:8113`, en de nginx-container moet daarbij
+kunnen. Op deze VM staat **ufw** aan, en zonder regel loopt dat stil dood: nginx
+geeft dan geen foutmelding maar een verbinding die wegvalt, terwijl `curl` vanaf
+de host wel gewoon werkt. De regel die erbij hoort:
+
+```bash
+sudo ufw allow from 172.16.0.0/12 to any port 8113 proto tcp comment "docker -> portal-mcp"
+```
+
+Elke host-app achter nginx heeft er zo een (`ufw status numbered` laat ze zien).
+Vergeet je hem, dan lijkt de dienst kapot terwijl hij prima draait.
+
+Tweede valkuil uit dezelfde uitrol: `docker exec appportal-nginx-1 nginx -t`
+vlak na een `--force-recreate` faalt op `unknown "connection_upgrade" variable`.
+Dat is een race, niet een fout: de templates waren nog niet gerenderd. Even
+wachten en opnieuw draaien.

@@ -109,6 +109,8 @@ BRONNEN = {
     "renovision-mcp": _elders("Is zelf een MCP-server, geen gegevensbron."),
     "pipedrive-mcp": _elders("Is zelf een MCP-server, geen gegevensbron."),
     "boek-mcp": _elders("Is zelf een MCP-server, geen gegevensbron."),
+    "portal-mcp": _elders("Deze server zelf. Geen gegevensbron; hij is de "
+                          "poortwachter voor de connector-koppeling."),
 }
 
 
