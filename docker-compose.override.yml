@@ -30,6 +30,8 @@ services:
       interval: 2m
       timeout: 10s
       retries: 3
+      start_period: 30s
+      start_interval: 5s
     networks: [appnet]
 
   app-hr:
@@ -62,6 +64,8 @@ services:
       interval: 2m
       timeout: 10s
       retries: 3
+      start_period: 30s
+      start_interval: 5s
     networks: [appnet]
 
   # Boekhouding - factureren vanuit Monday naar Octopus, plus de opvolging van
@@ -96,6 +100,8 @@ services:
       interval: 2m
       timeout: 10s
       retries: 3
+      start_period: 30s
+      start_interval: 5s
     networks: [appnet]
 
   # QuickBooks-connector voor HDS (Suriname). Tweede boekhoudsysteem naast
@@ -131,6 +137,8 @@ services:
       interval: 2m
       timeout: 10s
       retries: 3
+      start_period: 30s
+      start_interval: 5s
     networks: [appnet]
 
   app-quickbooks:
@@ -156,6 +164,8 @@ services:
       interval: 2m
       timeout: 10s
       retries: 3
+      start_period: 30s
+      start_interval: 5s
     networks: [appnet]
 
   # Intercompany: onderlinge facturatie tussen de eigen firma's. High Design
@@ -185,6 +195,8 @@ services:
       interval: 2m
       timeout: 10s
       retries: 3
+      start_period: 30s
+      start_interval: 5s
     networks: [appnet]
 
   app-telefoonregister:
@@ -203,6 +215,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+      start_interval: 5s
     networks: [appnet]
 
   # Projecten — projectdashboard (projecten.globaal.be); eerste project
@@ -224,6 +237,8 @@ services:
       interval: 2m
       timeout: 10s
       retries: 3
+      start_period: 30s
+      start_interval: 5s
     networks: [appnet]
 
   # Contactsync — Google Contacts -> Xelion-adresboek (one-way, Google is
@@ -246,6 +261,8 @@ services:
       interval: 2m
       timeout: 10s
       retries: 3
+      start_period: 30s
+      start_interval: 5s
     networks: [appnet]
 
   # Sales — Pipedrive-dashboard (sales.globaal.be). Eigen repo
@@ -278,6 +295,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+      start_interval: 5s
     networks: [appnet]
 
   app-sales:
@@ -324,6 +342,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+      start_interval: 5s
     networks: [appnet]
 
   # Medewerkers — forward-auth dashboard op de centrale gebruikersdatabase.
@@ -378,6 +397,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # Namenlijst — wie werkt hier, met eigen kolommen per gebruiker
@@ -404,6 +424,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # Communicatie — telefoonnummers + e-mailadressen, gelinkt aan kern (Postgres).
@@ -455,6 +476,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+      start_interval: 5s
     networks: [appnet]
 
   # Vermogen — panden / verzekeringen / leningen & leasingen / syndicus (skelet).
@@ -479,6 +501,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # Draaiboek — playbook-management: sjabloon -> run, kickoff, condities.
@@ -499,6 +522,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   app-monday:
@@ -532,6 +556,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # Items - verkoop-etalage Angela (angela.sr): tweedehands per sectie, met AI-taxatie.
@@ -570,6 +595,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # Publieke verkoop-etalage (read-only, eigen poort 8770, GEEN SSO, geen beheerknop).
@@ -597,6 +623,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # Angela - werkdashboard initiatief Suriname (angela.globaal.be).
@@ -624,6 +651,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # Postbus - mailboxtoegang voor Claude (MCP over IMAP).
@@ -673,6 +701,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # Doorstuuragent - draait uit zichzelf, los van de connector. Kijkt met een
@@ -756,6 +785,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # Contracten — contracten H-Architects, dossiercontrole en salesproces.
@@ -826,6 +856,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+      start_interval: 5s
     networks: [appnet]
 
 volumes:

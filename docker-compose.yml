@@ -147,6 +147,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+      start_interval: 5s
     networks: [appnet]
 
   authentik-server:
@@ -249,6 +250,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   app-factorydocs:
@@ -266,6 +268,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   app-inventory:
@@ -284,6 +287,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   app-finance:
@@ -301,6 +305,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   app-maintenance:
@@ -319,6 +324,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # OMV Pipeline — small REAL test slice of the dashboard (./omv-demo), behind
@@ -341,6 +347,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+      start_interval: 5s
     networks: [appnet]
 
   # The single public entry point. Only this service publishes host ports.
@@ -394,6 +401,8 @@ services:
       interval: 2m
       timeout: 5s
       retries: 3
+      start_period: 30s
+      start_interval: 5s
     networks:
       appnet:
         aliases:
