@@ -1,51 +1,55 @@
 """Tests voor de cataloog en de rechten.
 
-Het gaat hier om precies een ding: dat niemand een app te zien krijgt die hij
-op het portaal ook niet zou zien. De API wordt nagebootst, zodat de test geen
-Authentik nodig heeft.
+Het gaat hier om precies een ding: dat niemand een app te zien krijgt die hij op
+het portaal ook niet zou zien. De database wordt nagebootst, zodat de test geen
+Postgres nodig heeft.
+
+De vier gevallen die er echt toe doen staan onderaan: een uitgezette binding, een
+omgekeerde binding, een app die aan een expressie-policy hangt en een app zonder
+enkele binding. Bij die laatste twee weten we het niet, en dan is "niet leesbaar,
+met een reden erbij" het enige goede antwoord.
 """
 import pytest
 
-from catalogus import Authentik, Onbereikbaar
+from catalogus import (ONZEKER_GEEN_BINDING, ONZEKER_POLICY, Cataloog,
+                       Onbereikbaar)
 
-# Twee apps. 'hr' hangt aan een groep, 'boek' aan een persoon.
+# pk, slug, naam, url, omschrijving
 APPS = [
-    {"pk": "pk-hr", "slug": "hr", "name": "HR-dashboard",
-     "meta_launch_url": "https://hr.globaal.be", "meta_description": ""},
-    {"pk": "pk-boek", "slug": "boek", "name": "Boek",
-     "meta_launch_url": "", "meta_description": "Niet-vergunde constructies"},
+    ("pk-hr", "hr", "HR-dashboard", "https://hr.globaal.be", ""),
+    ("pk-boek", "boek", "Boek", "", "Niet-vergunde constructies"),
+    ("pk-slim", "slim", "Slimme app", "", ""),      # hangt aan een policy
+    ("pk-los", "los", "Losse app", "", ""),         # heeft geen binding
 ]
 
+# doel, groep, gebruiker, heeft_policy, enabled, negate
 BINDINGEN = [
-    {"target": "pk-hr", "enabled": True, "negate": False,
-     "group_obj": {"name": "hr"}, "user_obj": None},
-    {"target": "pk-boek", "enabled": True, "negate": False,
-     "group_obj": None, "user_obj": {"username": "mehdi"}},
-    # Uitgezet en omgekeerd: allebei tellen niet mee als toegang.
-    {"target": "pk-hr", "enabled": False, "negate": False,
-     "group_obj": {"name": "uitgezet"}, "user_obj": None},
-    {"target": "pk-hr", "enabled": True, "negate": True,
-     "group_obj": {"name": "omgekeerd"}, "user_obj": None},
+    ("pk-hr", "hr", None, False, True, False),
+    ("pk-boek", None, "mehdi", False, True, False),
+    ("pk-hr", "uitgezet", None, False, False, False),   # staat uit
+    ("pk-hr", "omgekeerd", None, False, True, True),    # sluit juist uit
+    ("pk-slim", None, None, True, True, False),         # expressie-policy
 ]
 
 
 def maak(groepen_per_gebruiker, superusers=(), teller=None):
-    """Een Authentik-client die uit deze vaste gegevens leest."""
-    def ophaler(pad):
+    """Een cataloog die uit deze vaste gegevens leest."""
+    def uitvoerder(sql, params):
         if teller is not None:
-            teller.append(pad)
-        if pad.startswith("core/applications/"):
+            teller.append(sql.split()[1])
+        if "authentik_core_application a\norder by" in sql:
             return list(APPS)
-        if pad.startswith("policies/bindings/"):
+        if "authentik_policies_policybinding b" in sql:
             return list(BINDINGEN)
-        if pad.startswith("core/groups/"):
-            naam = pad.split("member_by_username=")[1].split("&")[0]
-            if "is_superuser=true" in pad:
-                return [{"name": "authentik Admins"}] if naam in superusers else []
-            return [{"name": g} for g in groepen_per_gebruiker.get(naam, ())]
-        raise AssertionError(f"onverwacht pad: {pad}")
+        if "authentik_core_user_groups" in sql:
+            naam = params[0]
+            rijen = [(g, False) for g in groepen_per_gebruiker.get(naam, ())]
+            if naam in superusers:
+                rijen.append(("authentik Admins", True))
+            return rijen
+        raise AssertionError(f"onverwachte query: {sql[:60]}")
 
-    return Authentik("https://auth.test", "token", ophaler=ophaler)
+    return Cataloog(uitvoerder)
 
 
 def slugs(apps):
@@ -53,18 +57,15 @@ def slugs(apps):
 
 
 def test_groepslid_ziet_alleen_zijn_eigen_app():
-    ak = maak({"joan": ["hr"]})
-    assert slugs(ak.apps_voor("joan")) == ["hr"]
+    assert slugs(maak({"joan": ["hr"]}).apps_voor("joan")) == ["hr"]
 
 
 def test_binding_op_naam_telt_ook():
-    ak = maak({"mehdi": []})
-    assert slugs(ak.apps_voor("mehdi")) == ["boek"]
+    assert slugs(maak({"mehdi": []}).apps_voor("mehdi")) == ["boek"]
 
 
 def test_zonder_groep_geen_enkele_app():
-    ak = maak({"nieuw": []})
-    assert ak.apps_voor("nieuw") == []
+    assert maak({"nieuw": []}).apps_voor("nieuw") == []
 
 
 def test_onbekende_gebruiker_krijgt_niets():
@@ -73,14 +74,36 @@ def test_onbekende_gebruiker_krijgt_niets():
     assert ak.apps_voor("") == []
 
 
-def test_superuser_ziet_alles():
-    ak = maak({"akadmin": []}, superusers=("akadmin",))
-    assert slugs(ak.apps_voor("akadmin")) == ["boek", "hr"]
-
-
 def test_uitgezette_en_omgekeerde_binding_geven_geen_toegang():
-    ak = maak({"iemand": ["uitgezet", "omgekeerd"]})
-    assert ak.apps_voor("iemand") == []
+    assert maak({"iemand": ["uitgezet", "omgekeerd"]}).apps_voor("iemand") == []
+
+
+def test_superuser_ziet_alles_behalve_het_onzekere():
+    """Ook een beheerder krijgt geen app waarvan we de rechten niet kennen."""
+    apps = maak({"akadmin": []}, superusers=("akadmin",)).apps_voor("akadmin")
+    assert slugs(apps) == ["boek", "hr"]
+
+
+def test_app_met_expressie_policy_is_onzeker_en_niet_leesbaar():
+    ak = maak({"joan": ["hr"]})
+    slim = next(a for a in ak.applicaties() if a.slug == "slim")
+    assert slim.onzeker == ONZEKER_POLICY
+    assert "slim" not in slugs(ak.apps_voor("joan"))
+
+
+def test_app_zonder_binding_is_onzeker_en_niet_leesbaar():
+    """Geen binding is geen open deur, maar ook geen stilte."""
+    ak = maak({"joan": ["hr"]})
+    los = next(a for a in ak.applicaties() if a.slug == "los")
+    assert los.onzeker == ONZEKER_GEEN_BINDING
+    assert "los" not in slugs(ak.apps_voor("joan"))
+
+
+def test_onzekere_apps_staan_wel_in_de_cataloog():
+    """Stil overslaan leest als 'bestaat niet'; de reden hoort zichtbaar."""
+    alles = maak({"joan": ["hr"]}).applicaties()
+    assert slugs(alles) == ["boek", "hr", "los", "slim"]
+    assert all(a.onzeker or a.slug in ("hr", "boek") for a in alles)
 
 
 def test_cataloog_wordt_gebufferd_maar_rechten_niet():
@@ -92,29 +115,22 @@ def test_cataloog_wordt_gebufferd_maar_rechten_niet():
     ak = maak({"joan": ["hr"]}, teller=paden)
     ak.apps_voor("joan")
     ak.apps_voor("joan")
-    assert sum(1 for p in paden if p.startswith("core/applications/")) == 1
-    assert sum(1 for p in paden if p.startswith("policies/bindings/")) == 1
-    assert sum(1 for p in paden if "member_by_username=joan" in p) == 4
+    assert paden.count("a.policybindingmodel_ptr_id::text") == 1  # apps
+    assert paden.count("b.target_id::text") == 1                  # bindingen
+    assert paden.count("g.name,") == 2                            # per aanroep
 
 
-def test_authentik_stuk_geeft_een_fout_en_niet_stilzwijgend_alles():
-    def kapot(pad):
-        raise Onbereikbaar("Authentik ligt eruit")
+def test_database_stuk_geeft_een_fout_en_niet_stilzwijgend_alles():
+    def kapot(sql, params):
+        raise RuntimeError("verbinding geweigerd")
 
-    ak = Authentik("https://auth.test", "token", ophaler=kapot)
     with pytest.raises(Onbereikbaar):
-        ak.apps_voor("joan")
+        Cataloog(kapot).apps_voor("joan")
 
 
-def test_app_zonder_binding_is_voor_niemand():
-    """Een app die aan niets gebonden is, is geen open deur."""
-    def ophaler(pad):
-        if pad.startswith("core/applications/"):
-            return [{"pk": "pk-los", "slug": "los", "name": "Losse app",
-                     "meta_launch_url": "", "meta_description": ""}]
-        if pad.startswith("policies/bindings/"):
-            return []
-        return []
-
-    ak = Authentik("https://auth.test", "token", ophaler=ophaler)
-    assert ak.apps_voor("joan") == []
+def test_als_dict_toont_de_reden():
+    ak = maak({"joan": ["hr"]})
+    los = next(a for a in ak.applicaties() if a.slug == "los")
+    assert los.als_dict()["rechten_onzeker"] == ONZEKER_GEEN_BINDING
+    hr = next(a for a in ak.applicaties() if a.slug == "hr")
+    assert "rechten_onzeker" not in hr.als_dict()
