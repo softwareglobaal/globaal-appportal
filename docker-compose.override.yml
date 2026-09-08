@@ -701,6 +701,8 @@ services:
       # in een keer door te sturen.
       POSTBUS_AGENT_BACKFILL: ${POSTBUS_AGENT_BACKFILL:-}
       POSTBUS_AGENT_STATE: /state/doorgestuurd.json
+      # Meerdere doorstuurregels als JSON-lijst; zie post/doorstuuragent.py.
+      POSTBUS_AGENT_REGELS: ${POSTBUS_AGENT_REGELS:-}
     volumes:
       - ${POSTBUS_CONFIG_DIR:-/home/ubuntu/post-config}:/config:ro
       # Schrijfbaar: hier onthoudt de agent wat al doorgestuurd is, zodat een
