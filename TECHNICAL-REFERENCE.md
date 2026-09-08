@@ -705,25 +705,57 @@ doet normaal de API-laag), dus die wezen nog naar de oude host. *Fix:* in `ak sh
 `p.set_oauth_defaults(); p.save()` op de provider, daarna `docker compose restart
 authentik-server` zodat de embedded outpost de nieuwe host oppikt.
 
-**9.15 Healthchecks hielden dockerd bezig (08-09-2026)** - de VM liep met een
-load van 8 op 2 vCPU en een swap die tot de laatste MB vol stond. Niet een app
-was de oorzaak, maar de healthchecks: 34 containers prikten elke 30 seconden, 4
-elke 10 seconden, samen ongeveer **101 keer per minuut**. De meeste startten
-daarvoor een complete interpreter (`node -e ...` of `python -c ...`) voor een
-enkel HTTP-verzoek, en authentik-server en -worker draaiden `ak healthcheck`,
-wat een volledige Django-start is, vier keer per minuut samen. *Fix:* alle
-intervallen in `docker-compose.yml` en `docker-compose.override.yml` naar `2m`.
-`postgresql` blijft op 10s: `pg_isready` is een klein binair programma en andere
-services wachten er via `depends_on: service_healthy` op. Bij authentik staat er
-`start_interval: 5s` bij, zodat het opstarten niet twee minuten treuzelt.
+**9.15 Vastgelopen `docker logs` vrat 83% van een kern (08-09-2026)** - de VM
+liep dagenlang met een load van 8 op 2 vCPU. `dockerd` stond op 83% en had 11
+dagen CPU-tijd verstookt in 25 dagen draaien. Geen enkele app was de oorzaak.
+
+Zo is het gevonden, en die volgorde is het bewaren waard:
+
+1. `top -bn2 -d 5` (niet `-bn1`, zie onder) wees dockerd aan, niet een app.
+2. `sudo timeout 4 strace -c -f -p <pid dockerd>` gaf **71.496 `pread64` in 4
+   seconden**, ongeveer 18.000 reads per seconde.
+3. `strace -f -e trace=pread64` plus `readlink /proc/<pid>/fd/<fd>` wees die
+   reads toe aan één bestand: het json-logboek van `renovision-raisha-backend-1`,
+   dat 0 bytes groot was en dateerde van de laatste logrotatie.
+4. `ps -eo pid,etime,cmd | grep docker` vond de schuldige: een `docker logs
+   --tail=6` op die container die al **8 uur 47** hing, met zijn bash-regel
+   eromheen, allebei ouderloos (PPID 1) omdat de ssh-sessie er niet meer was.
+
+Wat er gebeurt: rotteert het logbestand terwijl er een lezer aan hangt, dan kan
+die lezer in een tolronde blijven en leest dockerd voor hem het lege bestand
+eindeloos opnieuw. *Fix:* `kill <pid van docker logs> <pid van de bash
+eromheen>`. Dockerd zakte meteen van 83% naar 1,5% en de syscall-tijd over
+hetzelfde venster van 4,19 naar 0,33 seconde. De container zelf hoefde niet
+herstart te worden.
+
+**Les:** een diagnose-eenregelaar die blijft hangen is niet onschuldig. Laat
+geen `docker logs` achter zonder `--tail` plus een `timeout` eromheen, en kijk
+bij een onverklaarde load eerst of er ouderloze `docker`-processen staan.
+
+Meten doe je met `top -bn2` en niet met `top -bn1`: de eerste meting van `top`
+geeft het gemiddelde sinds een proces startte, niet het verbruik van dat moment.
+Op `-bn1` leek dockerd 93% te doen, gemeten met `-bn2` was het 71%.
+
+**9.16 Healthchecks naar 2 minuten (08-09-2026)** - los van 9.15 opgeruimd, en
+niet de oorzaak van die load: 34 containers prikten elke 30 seconden, 4 elke 10
+seconden, samen ongeveer **101 keer per minuut**. De meeste startten daarvoor
+een complete interpreter (`node -e ...` of `python -c ...`) voor een enkel
+HTTP-verzoek, en authentik-server en -worker draaiden `ak healthcheck`, wat een
+volledige Django-start is. Alle intervallen staan nu op `2m`. `postgresql`
+blijft op 10s: `pg_isready` is een klein binair programma en andere services
+wachten er via `depends_on: service_healthy` op.
+
+Elke healthcheck heeft nu ook `start_period` plus `start_interval: 5s`. Zonder
+dat prikt docker de eerste keer pas na een heel interval en blijft een verse
+container twee minuten op "starting" staan, wat voor de auto-deploy een
+achteruitgang zou zijn: een kapotte deploy moet meteen opvallen.
 
 Wat je hiervoor inlevert: een container die stukgaat wordt na maximaal 2 minuten
 als unhealthy gezien in plaats van 30 seconden. Uptime-Kuma
 (`status.globaal.be`) doet zijn eigen TCP-controles en merkt het los hiervan.
 
-Meten doe je met `top -bn2` en niet met `top -bn1`: de eerste meting van `top`
-geeft het gemiddelde sinds een proces startte, niet het verbruik van dat moment.
-Op `-bn1` leek dockerd 93% te doen, gemeten met `-bn2` was het 71%.
+Het opgeruimde effect was zichtbaar in het geheugen, niet in de CPU: de swap
+liep terug van 4095 van de 4096 MB in gebruik naar ongeveer 2800.
 
 Overige ingebouwde fixes: wildcard-certificaten matchen geen single-label
 domeinen → expliciete SAN's per host; `certgen` overschreef echte certs →
