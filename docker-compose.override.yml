@@ -27,7 +27,7 @@ services:
       - "hostmachine:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3012/healthz', timeout=5)"]
-      interval: 60s
+      interval: 2m
       timeout: 10s
       retries: 3
     networks: [appnet]
@@ -59,7 +59,7 @@ services:
       - hr-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3013/healthz', timeout=5)"]
-      interval: 60s
+      interval: 2m
       timeout: 10s
       retries: 3
     networks: [appnet]
@@ -93,7 +93,7 @@ services:
       MCP_SECRET: ${BOEKHOUDING_MCP_SECRET:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3014/healthz', timeout=5)"]
-      interval: 60s
+      interval: 2m
       timeout: 10s
       retries: 3
     networks: [appnet]
@@ -128,7 +128,7 @@ services:
       - ./sketchup-mcp:/kookboek:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3016/healthz', timeout=5)"]
-      interval: 60s
+      interval: 2m
       timeout: 10s
       retries: 3
     networks: [appnet]
@@ -153,7 +153,7 @@ services:
       MCP_SECRET: ${QUICKBOOKS_MCP_SECRET:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3015/healthz', timeout=5)"]
-      interval: 60s
+      interval: 2m
       timeout: 10s
       retries: 3
     networks: [appnet]
@@ -182,7 +182,7 @@ services:
       OCTOPUS_PASSWORD: ${OCTOPUS_PASSWORD:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3016/healthz', timeout=5)"]
-      interval: 60s
+      interval: 2m
       timeout: 10s
       retries: 3
     networks: [appnet]
@@ -199,7 +199,7 @@ services:
       - telefoonregister-data:/app/data
     healthcheck:
       test: node -e "require('http').get('http://127.0.0.1:3006/api/me',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 20s
@@ -221,7 +221,7 @@ services:
       - projecten-data:/app/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3011/healthz', timeout=5)"]
-      interval: 60s
+      interval: 2m
       timeout: 10s
       retries: 3
     networks: [appnet]
@@ -243,7 +243,7 @@ services:
       - ./contactsync-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
-      interval: 60s
+      interval: 2m
       timeout: 10s
       retries: 3
     networks: [appnet]
@@ -274,7 +274,7 @@ services:
       # Lijstvorm: bij de tekstvorm haalde compose de aanhalingstekens rond de
       # URL weg, waardoor python een kale URL zag en de check altijd faalde.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3031/health', timeout=5)"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 20s
@@ -320,7 +320,7 @@ services:
       - sales-data:/app/data
     healthcheck:
       test: node -e "require('http').get('http://127.0.0.1:3008/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 40s
@@ -374,7 +374,7 @@ services:
       - ./apps.yaml:/app/apps.yaml:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3007/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -400,7 +400,7 @@ services:
       NAMEN_GROUPS: ${NAMEN_GROUPS:-namenlijst,hr,organisatie,admin,manager}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3018/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -451,7 +451,7 @@ services:
       PLAUD_MAX_UREN_PER_MAAND: ${PLAUD_MAX_UREN_PER_MAAND:-100}
     healthcheck:
       test: node -e "require('http').get('http://127.0.0.1:3008/api/me',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 20s
@@ -475,7 +475,7 @@ services:
       MCP_SECRET: ${VERMOGEN_MCP_SECRET:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3009/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -495,7 +495,7 @@ services:
       TOEGANG_GROEPEN: admin,manager,draaiboek
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3010/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -528,7 +528,7 @@ services:
       - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3014/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -566,7 +566,7 @@ services:
       - items-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3015/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -593,7 +593,7 @@ services:
       - items-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8770/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -620,7 +620,7 @@ services:
       - angela-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3016/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -669,7 +669,7 @@ services:
       - ${POSTBUS_CONFIG_DIR:-/home/ubuntu/post-config}:/config:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3017/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -752,7 +752,7 @@ services:
       - ${XELION_CONFIG_DIR:-/home/ubuntu/xelion-config}:/config:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3019/gezond')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -822,7 +822,7 @@ services:
       - hr-data:/data:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3022/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 20s

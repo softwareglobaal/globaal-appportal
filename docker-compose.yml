@@ -172,12 +172,15 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "ak", "healthcheck"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 6
       # First boot runs database migrations, which can take several minutes;
       # start_period holds off failure counting until they finish.
       start_period: 300s
+      # Tijdens het opstarten wel snel prikken: app-services wachten via
+      # depends_on op deze healthcheck en mogen niet twee minuten treuzelen.
+      start_interval: 5s
     networks: [appnet]
 
   authentik-worker:
@@ -203,12 +206,15 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "ak", "healthcheck"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 6
       # First boot runs database migrations, which can take several minutes;
       # start_period holds off failure counting until they finish.
       start_period: 300s
+      # Tijdens het opstarten wel snel prikken: app-services wachten via
+      # depends_on op deze healthcheck en mogen niet twee minuten treuzelen.
+      start_interval: 5s
     networks: [appnet]
 
   portal:
@@ -239,7 +245,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -256,7 +262,7 @@ services:
       BASE_DOMAIN: ${BASE_DOMAIN}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3001/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -274,7 +280,7 @@ services:
       BASE_DOMAIN: ${BASE_DOMAIN}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3002/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -291,7 +297,7 @@ services:
       BASE_DOMAIN: ${BASE_DOMAIN}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3003/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -309,7 +315,7 @@ services:
       BASE_DOMAIN: ${BASE_DOMAIN}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3004/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -331,7 +337,7 @@ services:
       BASE_DOMAIN: ${BASE_DOMAIN}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3005/healthz')"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -385,7 +391,7 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD", "nginx", "-t"]
-      interval: 30s
+      interval: 2m
       timeout: 5s
       retries: 3
     networks:

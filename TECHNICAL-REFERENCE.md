@@ -705,6 +705,26 @@ doet normaal de API-laag), dus die wezen nog naar de oude host. *Fix:* in `ak sh
 `p.set_oauth_defaults(); p.save()` op de provider, daarna `docker compose restart
 authentik-server` zodat de embedded outpost de nieuwe host oppikt.
 
+**9.15 Healthchecks hielden dockerd bezig (08-09-2026)** - de VM liep met een
+load van 8 op 2 vCPU en een swap die tot de laatste MB vol stond. Niet een app
+was de oorzaak, maar de healthchecks: 34 containers prikten elke 30 seconden, 4
+elke 10 seconden, samen ongeveer **101 keer per minuut**. De meeste startten
+daarvoor een complete interpreter (`node -e ...` of `python -c ...`) voor een
+enkel HTTP-verzoek, en authentik-server en -worker draaiden `ak healthcheck`,
+wat een volledige Django-start is, vier keer per minuut samen. *Fix:* alle
+intervallen in `docker-compose.yml` en `docker-compose.override.yml` naar `2m`.
+`postgresql` blijft op 10s: `pg_isready` is een klein binair programma en andere
+services wachten er via `depends_on: service_healthy` op. Bij authentik staat er
+`start_interval: 5s` bij, zodat het opstarten niet twee minuten treuzelt.
+
+Wat je hiervoor inlevert: een container die stukgaat wordt na maximaal 2 minuten
+als unhealthy gezien in plaats van 30 seconden. Uptime-Kuma
+(`status.globaal.be`) doet zijn eigen TCP-controles en merkt het los hiervan.
+
+Meten doe je met `top -bn2` en niet met `top -bn1`: de eerste meting van `top`
+geeft het gemiddelde sinds een proces startte, niet het verbruik van dat moment.
+Op `-bn1` leek dockerd 93% te doen, gemeten met `-bn2` was het 71%.
+
 Overige ingebouwde fixes: wildcard-certificaten matchen geen single-label
 domeinen → expliciete SAN's per host; `certgen` overschreef echte certs →
 `CERTGEN_DISABLE=1` in productie; single logout → globale invalidation-flow;
