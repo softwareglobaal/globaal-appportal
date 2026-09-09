@@ -113,6 +113,22 @@ def init_db():
             ts        TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS logboek_naam_ts ON logboek(naam, ts);
+        CREATE TABLE IF NOT EXISTS klaarzet (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            van       TEXT NOT NULL,        -- bron-agent (bv. agenda-wacht)
+            voor      TEXT NOT NULL,        -- afdeling of agent die het gebruikt (bv. h-architects, contracten-agent, mehdi)
+            soort     TEXT NOT NULL,        -- afspraak | transcript | opname | dagplan | signaal
+            sleutel   TEXT DEFAULT '',      -- koppeling: deal_id, projectnummer, datum
+            titel     TEXT NOT NULL,
+            inhoud    TEXT DEFAULT '',      -- tekst of json
+            verwijzing TEXT DEFAULT '',     -- pad in Dropbox, url
+            uniek     TEXT DEFAULT '',      -- idempotentiesleutel (bv. fathom:816732165)
+            status    TEXT DEFAULT 'klaar', -- klaar | opgepakt | vervallen
+            ts        TEXT NOT NULL,
+            opgepakt_door TEXT DEFAULT '',
+            opgepakt_ts   TEXT DEFAULT ''
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS klaarzet_uniek ON klaarzet(uniek) WHERE uniek<>'';
         CREATE TABLE IF NOT EXISTS afdeling (
             naam         TEXT PRIMARY KEY,   -- sleutel, gelijk aan agent.type
             label        TEXT NOT NULL,
@@ -152,7 +168,9 @@ def init_db():
                      (naam, label, oms, volg))
     bestaand = {r[1] for r in conn.execute("PRAGMA table_info(agent)")}
     for kolom, definitie in (("werkwijze", "TEXT DEFAULT ''"), ("kennis", "TEXT DEFAULT ''"),
-                             ("kennis_ts", "TEXT DEFAULT ''"), ("kennis_bron", "TEXT DEFAULT ''")):
+                             ("kennis_ts", "TEXT DEFAULT ''"), ("kennis_bron", "TEXT DEFAULT ''"),
+                             ("levert_aan", "TEXT DEFAULT '[]'"), ("draait_op", "TEXT DEFAULT 'VM'"),
+                             ("prive", "INTEGER DEFAULT 0")):  # 1 = alleen zichtbaar voor beheer (Mehdi)
         if kolom not in bestaand:
             conn.execute(f"ALTER TABLE agent ADD COLUMN {kolom} {definitie}")
     conn.commit()
@@ -206,9 +224,14 @@ def _lijst(val):
         return [s for s in (val or "").split("\n") if s.strip()]
 
 
+def zichtbaar_sql():
+    """Privé-agents (bv. het locatielogboek) bestaan alleen voor beheer."""
+    return "" if mag_beslissen() else " AND prive=0"
+
+
 def kaarten():
     conn = db()
-    rijen = conn.execute("SELECT * FROM agent WHERE actief=1 ORDER BY type, label").fetchall()
+    rijen = conn.execute(f"SELECT * FROM agent WHERE actief=1{zichtbaar_sql()} ORDER BY type, label").fetchall()
     st = {r["naam"]: r for r in conn.execute("SELECT * FROM status").fetchall()}
     open_per = {}
     for r in conn.execute(
@@ -267,6 +290,83 @@ def bord():
     )
 
 
+# --- klaargezet: bron-agents (Privé) zetten iets klaar; afdelingsagents pakken het op.
+@app.route("/api/klaarzet", methods=["POST"])
+def api_klaarzet():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    items = p.get("items") if isinstance(p.get("items"), list) else [p]
+    conn = db()
+    nieuw, bestaand = 0, 0
+    for it in items:
+        if not (it.get("van") and it.get("voor") and it.get("soort") and it.get("titel")):
+            continue
+        uniek = (it.get("uniek") or "")[:200]
+        if uniek and conn.execute("SELECT 1 FROM klaarzet WHERE uniek=?", (uniek,)).fetchone():
+            bestaand += 1
+            continue
+        inhoud = it.get("inhoud")
+        if not isinstance(inhoud, str):
+            inhoud = json.dumps(inhoud, ensure_ascii=False)
+        conn.execute(
+            "INSERT INTO klaarzet(van, voor, soort, sleutel, titel, inhoud, verwijzing, uniek, ts) VALUES(?,?,?,?,?,?,?,?,?)",
+            (it["van"], it["voor"], it["soort"][:40], str(it.get("sleutel") or "")[:120], it["titel"][:300],
+             inhoud[:60000], (it.get("verwijzing") or "")[:500], uniek, nu()))
+        nieuw += 1
+    conn.commit()
+    return jsonify(ok=True, nieuw=nieuw, bestaand=bestaand)
+
+
+@app.route("/api/klaarzet")
+def api_klaarzet_lezen():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    voor = request.args.get("voor")
+    sleutel = request.args.get("sleutel")
+    status = request.args.get("status", "klaar")
+    q, a = "SELECT * FROM klaarzet WHERE 1=1", []
+    if voor:
+        q += " AND (voor=? OR voor=?)"; a += [voor, request.args.get("afdeling") or voor]
+    if sleutel:
+        q += " AND sleutel=?"; a.append(sleutel)
+    if status != "alle":
+        q += " AND status=?"; a.append(status)
+    q += " ORDER BY id DESC LIMIT ?"; a.append(min(int(request.args.get("n", 100)), 500))
+    return jsonify(items=[dict(r) for r in db().execute(q, a).fetchall()])
+
+
+@app.route("/api/klaarzet/<int:kid>/opgepakt", methods=["POST"])
+def api_klaarzet_opgepakt(kid):
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    db().execute("UPDATE klaarzet SET status='opgepakt', opgepakt_door=?, opgepakt_ts=? WHERE id=?",
+                 ((p.get("door") or "")[:80], nu(), kid))
+    db().commit()
+    return jsonify(ok=True)
+
+
+# --- organogram: getekend uit de gegevens zelf (afdelingen, agents, levert_aan)
+@app.route("/organogram")
+def organogram():
+    conn = db()
+    afd = [dict(r) for r in conn.execute("SELECT * FROM afdeling ORDER BY volgorde, naam").fetchall()]
+    agents = [dict(r) for r in conn.execute(f"SELECT naam,label,type,rol,levert_aan,draait_op,cadans FROM agent WHERE actief=1{zichtbaar_sql()} ORDER BY label").fetchall()]
+    st = {r["naam"]: r for r in conn.execute("SELECT * FROM status").fetchall()}
+    for a in agents:
+        a["levert_aan"] = _lijst(a["levert_aan"])
+        s = st.get(a["naam"])
+        a["toestand"] = "onbekend"
+        if s:
+            leeftijd = leeftijd_min(s["ts"])
+            t = s["status"] if s["status"] in STILTE_MIN else "waakt"
+            a["toestand"] = "stil" if (leeftijd is not None and leeftijd > STILTE_MIN.get(t, 150)) else t
+    klaar = conn.execute("SELECT voor, COUNT(*) n FROM klaarzet WHERE status='klaar' GROUP BY voor").fetchall()
+    return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents,
+                           klaar={r["voor"]: r["n"] for r in klaar}, mag_beslissen=mag_beslissen())
+
+
 @app.route("/api/afdeling", methods=["POST"])
 def api_afdeling():
     if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
@@ -283,7 +383,7 @@ def api_afdeling():
 
 @app.route("/agent/<naam>")
 def detail(naam):
-    a = db().execute("SELECT * FROM agent WHERE naam=?", (naam,)).fetchone()
+    a = db().execute(f"SELECT * FROM agent WHERE naam=?{zichtbaar_sql()}", (naam,)).fetchone()
     if not a:
         abort(404)
     s = db().execute("SELECT * FROM status WHERE naam=?", (naam,)).fetchone()
@@ -455,16 +555,18 @@ def api_agent():
     conn = db()
     conn.execute(
         "INSERT INTO agent(naam,label,type,rol,mandaat,mag,grenzen,cadans,tools,"
-        "eigenaar,actief,aangemaakt) VALUES(?,?,?,?,?,?,?,?,?,?,1,?) "
+        "eigenaar,actief,aangemaakt,levert_aan,draait_op) VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?,?) "
         "ON CONFLICT(naam) DO UPDATE SET label=excluded.label, type=excluded.type, "
         "rol=excluded.rol, mandaat=excluded.mandaat, mag=excluded.mag, "
         "grenzen=excluded.grenzen, cadans=excluded.cadans, tools=excluded.tools, "
-        "eigenaar=excluded.eigenaar, actief=1",
+        "eigenaar=excluded.eigenaar, actief=1, levert_aan=excluded.levert_aan, draait_op=excluded.draait_op",
         (naam, p["label"], p.get("type", ""), p.get("rol", ""), p.get("mandaat", ""),
          json.dumps(p.get("mag", [])), json.dumps(p.get("grenzen", [])),
          p.get("cadans", ""), json.dumps(p.get("tools", [])),
-         p.get("eigenaar", "mehdi"), nu()),
+         p.get("eigenaar", "mehdi"), nu(), json.dumps(p.get("levert_aan", [])), p.get("draait_op", "VM")),
     )
+    if "prive" in p:
+        conn.execute("UPDATE agent SET prive=? WHERE naam=?", (1 if p.get("prive") else 0, naam))
     conn.commit()
     return jsonify(ok=True, naam=naam)
 

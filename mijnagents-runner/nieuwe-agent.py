@@ -97,6 +97,9 @@ def main():
     p.add_argument("--tool", action="append", default=[])
     p.add_argument("--cron", default="0 * * * *", help="cron-schema voor de runner")
     p.add_argument("--werkwijze", help="markdown-bestand met het volledige proces (komt op het bord, daar bewerkbaar)")
+    p.add_argument("--prive", action="store_true", help="alleen zichtbaar voor beheer (Mehdi), niet voor de groep agents")
+    p.add_argument("--levert-aan", action="append", default=[], help="agent of afdeling waaraan deze agent klaarzet")
+    p.add_argument("--draait-op", default="VM")
     a = p.parse_args()
 
     env("~/appportal/mijnagents-data/.env")
@@ -109,7 +112,8 @@ def main():
     if a.naam and a.label:
         agent = dict(naam=a.naam, label=a.label, type=a.type, rol=a.rol,
                      mandaat=a.mandaat, mag=a.mag, grenzen=a.grens, cadans=a.cadans,
-                     tools=a.tool, eigenaar=a.eigenaar)
+                     tools=a.tool, eigenaar=a.eigenaar, prive=a.prive,
+                     levert_aan=a.levert_aan, draait_op=a.draait_op)
         cron = a.cron
     else:
         print("== Nieuwe agent ==")

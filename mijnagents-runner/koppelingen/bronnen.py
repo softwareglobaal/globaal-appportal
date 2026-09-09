@@ -104,6 +104,39 @@ def download(pad, maximum=25_000_000):
         return r.read(maximum)
 
 
+def upload(pad, data):
+    """Nieuw bestand in Dropbox, nooit overschrijven (mode add: bij een bestaand pad
+    krijgt het een nummer). Geeft het definitieve pad terug."""
+    arg = json.dumps({"path": pad, "mode": "add", "autorename": True, "mute": True})
+    req = urllib.request.Request(f"{INHOUD}/2/files/upload", data=data, method="POST",
+                                 headers=_koppen({"Dropbox-API-Arg": arg, "Content-Type": "application/octet-stream"}))
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.load(r).get("path_display", pad)
+
+
+SALES_BASES = ["/Work All/o01. Sales/000. Offerte aanvraag informatie/01. Mehdi/01. H-Architects Offerte",
+               "/Work All/o01. Sales/000. Offerte aanvraag informatie/01. Mehdi/02. H-Architects B2B"]
+
+
+def zoek_salesmap(klantnaam="", nummer=""):
+    """De salesmap van een klant: eerst op projectnummer vooraan de mapnaam, anders op
+    de meeste gemeenschappelijke naamdelen (minstens twee, of één bij een enkel woord)."""
+    doel = {w for w in re.split(r"[^a-z0-9]+", (klantnaam or "").lower()) if len(w) > 1}
+    beste, score = None, 0
+    for basis in SALES_BASES:
+        for e in lijst(basis, recursief=False) or []:
+            if e.get(".tag") != "folder":
+                continue
+            naam = e.get("name", "")
+            if nummer and naam.startswith(str(nummer) + " "):
+                return e.get("path_display")
+            delen = {w for w in re.split(r"[^a-z0-9]+", naam.lower()) if len(w) > 1}
+            s = len(delen & doel)
+            if s > score:
+                beste, score = e.get("path_display"), s
+    return beste if score >= 2 or (score == 1 and len(doel) == 1) else None
+
+
 def pdf_tekst(data):
     try:
         from pypdf import PdfReader

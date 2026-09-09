@@ -451,6 +451,19 @@ def verwerk(deal, werkinstructie, staat):
     soort = (voorb or {}).get("soort") or "architectuur"
     lopend = soort in ("addendum", "regularisatie")
     bronnen = bronnen_mod.verzamel(salesmap_pad, (nummer or velden.get("project_nummer", "")) if lopend else "", klant_email)
+    # Wat de logboek-laag (Privé-agents) voor dit dossier klaarzette: afspraken,
+    # transcripten, dagbundels. Meegeven aan het model; daarna als opgepakt markeren.
+    try:
+        import bord as bord_mod
+        klaargezet = bord_mod.klaargezet_voor("h-architects", sleutel=str(deal_id), n=50)
+    except Exception as e:  # noqa: BLE001
+        klaargezet, bord_mod = [], None
+        print("klaargezet lezen mislukt:", e, file=sys.stderr)
+    bronnen["klaargezet"] = [{"van": k["van"], "soort": k["soort"], "titel": k["titel"], "verwijzing": k.get("verwijzing", ""),
+                              "inhoud": (k.get("inhoud") or "")[:6000]} for k in klaargezet]
+    if klaargezet:
+        log(ond, "bron", f"klaargezet door de logboek-laag: {len(klaargezet)} item(s) ({', '.join(sorted({k['van'] for k in klaargezet}))})",
+            "\n".join(f"{k['van']} · {k['soort']} · {k['titel']}" for k in klaargezet))
     bestanden = [t["bestand"] for m in (bronnen.get("salesmap"), bronnen.get("projectmap")) if m for t in m["teksten"]]
     log(ond, "bron", "gelezen: " + bronnen_mod.samenvatting(bronnen),
         "teksten: " + ", ".join(bestanden) + "\nmails: " + ", ".join(f"{m['datum'][:16]} {m['onderwerp']}" for m in bronnen.get("mails", [])))
@@ -525,6 +538,12 @@ def verwerk(deal, werkinstructie, staat):
     else:
         nummer_voorstel = None
 
+    if not DROOG and bord_mod:
+        for k in klaargezet:
+            try:
+                bord_mod.opgepakt(k["id"], NAAM)
+            except Exception:  # noqa: BLE001
+                pass
     tekst = melding_tekst(plan, proef, nummer_voorstel, geschreven, [f for f in fouten if not f.startswith("proef")])
     tekst += f"<br><i>Bronnen gelezen: {bronnen_mod.samenvatting(bronnen)}</i>"
     pipedrive.schrijf(FIRMA, "POST", "/notes", body={"deal_id": deal_id, "content": tekst})

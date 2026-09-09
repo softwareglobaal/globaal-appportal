@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Organogram — {{ app_naam }}</title>
+<style>
+  :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;
+        --rust:#6b7280;--waakt:#3b82f6;--actief:#22c55e;--klaar:#8b5cf6;--fout:#ef4444;--stil:#f59e0b;--onbekend:#4b5563}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tekst);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:22px 28px;border-bottom:1px solid var(--rand);display:flex;gap:14px;align-items:baseline}
+  header h1{margin:0;font-size:20px}
+  header a{color:var(--accent);text-decoration:none;font-size:13px}
+  main{padding:24px 28px;max-width:1200px;margin:0 auto}
+  .top{display:flex;flex-direction:column;align-items:center;gap:0}
+  .node{background:var(--paper);border:1px solid var(--rand);border-radius:12px;padding:12px 16px;text-align:center;min-width:220px}
+  .node b{display:block}
+  .node small{color:var(--zacht)}
+  .lijn{width:2px;height:22px;background:var(--rand)}
+  .rij{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;width:100%;margin-top:0}
+  .afd{background:var(--paper);border:1px solid var(--rand);border-radius:14px;padding:14px}
+  .afd h2{margin:0 0 4px;font-size:15px}
+  .afd p{margin:0 0 12px;color:var(--zacht);font-size:13px}
+  .agent{border:1px solid var(--rand);border-radius:10px;padding:10px 12px;margin:8px 0;background:#12151b;text-decoration:none;color:inherit;display:block}
+  .agent:hover{border-color:var(--accent)}
+  .stip{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px}
+  .agent .rol{color:var(--zacht);font-size:12px;margin-top:2px}
+  .agent .meta{color:var(--zacht);font-size:11px;margin-top:6px}
+  .pijl{color:var(--accent);font-size:12px;margin-top:6px}
+  .leeg{color:var(--zacht);font-size:13px;font-style:italic}
+  .brug{margin:26px 0 0;border-top:1px dashed var(--rand);padding-top:14px;color:var(--zacht);font-size:13px}
+  .bak{display:inline-block;background:#1b2333;border:1px solid var(--rand);border-radius:20px;padding:2px 10px;font-size:12px;margin:2px 4px 2px 0}
+</style>
+</head>
+<body>
+<header><h1>Organogram</h1><a href="{{ url_for('bord') }}">← terug naar het bord</a></header>
+<main>
+  <div class="top">
+    <div class="node"><b>Mehdi</b><small>beslist: goedkeuren, weigeren, werkwijzen bewerken</small></div>
+    <div class="lijn"></div>
+    {% for a in agents if a['type'] == 'regie' %}
+    <a class="node agent" style="min-width:280px" href="{{ url_for('detail', naam=a['naam']) }}">
+      <span class="stip" style="background:var(--{{ a['toestand'] }})"></span><b style="display:inline">{{ a['label'] }}</b>
+      <div class="rol">{{ a['rol'] }}</div>
+      <div class="meta">Regie · {{ a['draait_op'] }} · {{ a['cadans'] }}</div>
+    </a>
+    {% else %}<div class="node"><b>Regie</b><small>nog geen hoofdagent</small></div>{% endfor %}
+    <div class="lijn"></div>
+    <div class="rij">
+      {% for afd in afdelingen if afd['naam'] != 'regie' %}
+      <div class="afd">
+        <h2>{{ afd['label'] }}</h2>
+        <p>{{ afd['omschrijving'] }}</p>
+        {% if klaar.get(afd['naam']) %}<div style="margin-bottom:8px"><span class="bak">{{ klaar[afd['naam']] }} klaargezet, nog niet opgepakt</span></div>{% endif %}
+        {% set n = namespace(tel=0) %}
+        {% for a in agents if a['type'] == afd['naam'] %}
+        {% set n.tel = n.tel + 1 %}
+        <a class="agent" href="{{ url_for('detail', naam=a['naam']) }}">
+          <span class="stip" style="background:var(--{{ a['toestand'] }})"></span><b>{{ a['label'] }}</b>
+          <div class="rol">{{ a['rol'] }}</div>
+          <div class="meta">{{ a['draait_op'] }} · {{ a['cadans'] }}{% if klaar.get(a['naam']) %} · {{ klaar[a['naam']] }} klaargezet{% endif %}</div>
+          {% if a['levert_aan'] %}<div class="pijl">→ levert aan: {{ a['levert_aan']|join(', ') }}</div>{% endif %}
+        </a>
+        {% endfor %}
+        {% if n.tel == 0 %}<div class="leeg">Nog geen agent. Kandidaat: zie De Regisseur.</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="brug">
+    <b style="color:var(--tekst)">Hoe de clusters samenwerken.</b> De Privé-agents zijn bronnen-agents: ze halen op (agenda, opnames, transcripten) en zetten het klaar in de bak "klaargezet" op het bord, gericht aan een afdeling of een agent. De afdelingsagents (zoals De Contractmaker) lezen die bak bij elke ronde en nemen mee wat bij hun dossier hoort. De Regisseur ziet alles en is de enige die, via een voorstel, iets laat veranderen. Mehdi beslist.
+  </div>
+</main>
+</body>
+</html>
