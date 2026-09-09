@@ -76,8 +76,17 @@ def main():
         bundels.append({"voor": "mehdi", "soort": "dagbundel", "sleutel": DAG, "titel": f"Dagverslag {DAG}",
                         "uniek": f"dagverslag:{DAG}", "inhoud": verslag + "\n\n" + "\n\n".join(b["inhoud"] for b in bundels)})
         uit = ag.klaarzet(bundels)
+        # Wat in een bundel zit, is door de laag verwerkt: opgepakt markeren, zodat de bak
+        # niet blijft groeien. Een afdelingsagent leest de bundel (met sleutel) verder.
+        opgepakt = 0
+        for it in van_dag:
+            if it.get("status") == "klaar":
+                try:
+                    bord.opgepakt(it["id"], NAAM); opgepakt += 1
+                except Exception:  # noqa: BLE001
+                    pass
         ag.log(f"dag {DAG}", "bevinding", f"{len(van_dag)} klaargezette bronnen, {len(per_deal)} bundel(s), {len(vragen)} toe te wijzen", verslag)
-        ag.log(f"dag {DAG}", "schrijf", f"bundels klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend")
+        ag.log(f"dag {DAG}", "schrijf", f"bundels klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend; {opgepakt} bronnen als opgepakt gemarkeerd")
         ag.log_verstuur()
         ag.hartslag("klaar" if van_dag else "waakt", taak=f"dag {DAG} gebundeld", detail=f"{len(per_deal)} bundel(s), {len(vragen)} toe te wijzen")
     except Exception as e:  # noqa: BLE001

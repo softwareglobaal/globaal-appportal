@@ -205,9 +205,14 @@ def main():
             tekst, gedaan = antwoord(volledig["gesprek"], volledig.get("eerder") or [], werkwijze)
             bord(f"/api/gesprek/{gid}/status", {"status": "beantwoord", "antwoord": tekst,
                                                  "detail": "\n".join(gedaan) or "(alleen nagedacht, geen gereedschap)"})
+            bord("/api/logboek", {"regels": [
+                {"naam": NAAM, "onderwerp": f"bericht {gid} aan {g['aan']}", "stap": "bron", "tekst": f"vraag van {g['van']}: {g['tekst'][:160]}"},
+                {"naam": NAAM, "onderwerp": f"bericht {gid} aan {g['aan']}", "stap": "besluit", "tekst": f"gereedschap: {', '.join(x.split('(')[0] for x in gedaan) or 'geen'}", "detail": "\n".join(gedaan)},
+                {"naam": NAAM, "onderwerp": f"bericht {gid} aan {g['aan']}", "stap": "melding", "tekst": "beantwoord op het bord", "detail": tekst}]})
             print(f"bericht {gid} beantwoord ({len(gedaan)} stappen)")
         except Exception as e:  # noqa: BLE001
             bord(f"/api/gesprek/{gid}/status", {"status": "mislukt", "antwoord": f"Mislukt: {type(e).__name__}: {str(e)[:300]}"})
+            bord("/api/logboek", {"regels": [{"naam": NAAM, "onderwerp": f"bericht {gid} aan {g['aan']}", "stap": "fout", "tekst": f"{type(e).__name__}: {str(e)[:300]}"}]})
             print(f"bericht {gid} mislukt: {e}", file=sys.stderr)
     hartslag("waakt", taak="luistert", detail=f"laatste ronde: {len(open_)} bericht(en) beantwoord")
 
