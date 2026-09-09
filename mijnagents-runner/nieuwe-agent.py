@@ -96,6 +96,7 @@ def main():
     p.add_argument("--grens", action="append", default=[])
     p.add_argument("--tool", action="append", default=[])
     p.add_argument("--cron", default="0 * * * *", help="cron-schema voor de runner")
+    p.add_argument("--werkwijze", help="markdown-bestand met het volledige proces (komt op het bord, daar bewerkbaar)")
     a = p.parse_args()
 
     env("~/appportal/mijnagents-data/.env")
@@ -131,6 +132,16 @@ def main():
     uit = registreer(agent, token)
     naam = uit["naam"]
     print(f"\nGeregistreerd op het bord: {naam}")
+
+    if a.werkwijze:
+        tekst = open(os.path.expanduser(a.werkwijze), encoding="utf-8").read()
+        req = urllib.request.Request(f"{PLATFORM}/api/agent/{naam}/werkwijze",
+                                     data=json.dumps({"werkwijze": tekst}).encode(),
+                                     headers={"Content-Type": "application/json", "X-Agents-Token": token},
+                                     method="POST")
+        with urllib.request.urlopen(req, timeout=15) as r:
+            w = json.loads(r.read())
+        print("Werkwijze op het bord gezet." if w.get("ok") else f"Werkwijze niet gezet: {w.get('reden')}")
 
     runner = schrijf_runner(naam)
     print(f"Runner-skelet: {runner}")

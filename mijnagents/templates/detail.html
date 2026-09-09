@@ -33,6 +33,12 @@
   td,th{text-align:left;padding:6px 8px;border-top:1px solid var(--rand)}
   th{color:var(--zacht);font-weight:600}
   code{background:#0c0e12;padding:2px 6px;border-radius:6px;font-size:12px}
+  .md h1,.md h2,.md h3{color:var(--tekst);letter-spacing:0;text-transform:none;margin:18px 0 8px}
+  .md h1{font-size:20px}.md h2{font-size:16px}.md h3{font-size:14px}
+  .md p{margin:8px 0}.md ul,.md ol{margin:6px 0;padding-left:22px}
+  .md table{margin:8px 0}.md td,.md th{vertical-align:top}
+  .md pre{background:#0c0e12;padding:10px;border-radius:8px;overflow:auto;font-size:12px}
+  .md blockquote{border-left:3px solid var(--rand);margin:8px 0;padding:2px 12px;color:var(--zacht)}
 </style>
 </head>
 <body>
@@ -58,6 +64,40 @@
 
   {% if a['mandaat'] %}
   <div class="blok"><h2>Mandaat</h2><p style="margin:0">{{ a['mandaat'] }}</p></div>
+  {% endif %}
+
+  <div class="blok" id="werkwijze">
+    <h2>Werkwijze — het volledige proces dat hij volgt</h2>
+    {% if bewerken and mag_beslissen %}
+      <form method="post" action="{{ url_for('werkwijze_opslaan', naam=a['naam']) }}">
+        <p style="margin:0 0 8px;color:var(--zacht);font-size:13px">Markdown. Wat je hier bewaart leest de agent bij zijn volgende ronde en volgt hij. De vorige versie wordt bewaard.</p>
+        <textarea name="werkwijze" style="width:100%;min-height:520px;font:13px/1.5 ui-monospace,Menlo,monospace;background:#0c0e12;color:var(--tekst);border:1px solid var(--rand);border-radius:8px;padding:12px">{{ a['werkwijze'] }}</textarea>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button type="submit" style="font:inherit;border:1px solid #1f6f43;background:#123326;color:var(--tekst);padding:7px 16px;border-radius:8px;cursor:pointer">Bewaren</button>
+          <a href="{{ url_for('detail', naam=a['naam']) }}#werkwijze" style="font:inherit;border:1px solid var(--rand);background:#212734;color:var(--tekst);padding:7px 16px;border-radius:8px;text-decoration:none">Annuleren</a>
+        </div>
+      </form>
+    {% else %}
+      {% if a['werkwijze'] %}
+        <div class="md">{{ werkwijze_html|safe }}</div>
+      {% else %}
+        <p style="margin:0;color:var(--zacht)">Nog niet uitgeschreven. {% if mag_beslissen %}Schrijf hier wat hij eerst doet, dan, en wat hij ermee doet.{% endif %}</p>
+      {% endif %}
+      {% if mag_beslissen %}
+        <p style="margin:14px 0 0"><a href="{{ url_for('detail', naam=a['naam'], bewerken=1) }}#werkwijze" style="color:var(--accent);text-decoration:none">Werkwijze bewerken</a>
+        {% if versies %}<span style="color:var(--zacht);font-size:12px"> · {{ versies|length }} eerdere versie{{ 's' if versies|length != 1 else '' }}, laatste wijziging {{ versies[0]['ts'][:16].replace('T',' ') }}</span>{% endif %}</p>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {% if a['kennis'] %}
+  <div class="blok" id="kennis">
+    <h2>Wat hij weet — de instructie die hij bij zijn laatste ronde las</h2>
+    <p style="margin:0 0 8px;color:var(--zacht);font-size:13px">Gelezen op {{ a['kennis_ts'][:16].replace('T',' ') }}{% if a['kennis_bron'] %} uit {{ a['kennis_bron'] }}{% endif %}. Dit is de letterlijke tekst die hij als regelboek kreeg; verander je die bron, dan verandert dit mee.</p>
+    <details><summary style="cursor:pointer;color:var(--accent)">Volledige tekst tonen</summary>
+      <div class="md" style="margin-top:10px">{{ kennis_html|safe }}</div>
+    </details>
+  </div>
   {% endif %}
 
   <div class="blok">

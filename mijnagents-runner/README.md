@@ -28,6 +28,19 @@ python3 nieuwe-agent.py --naam post-wacht --label "Postwacht" --type post \
   --tool "gmail lezen" --tool "labels zetten" --cron "0 * * * *"
 ```
 
+## Werkwijze en kennis op het bord
+
+Elke agent heeft op zijn pagina een **werkwijze**: het volledige proces in
+gewone taal (wat hij weet, wat hij eerst doet, dan, wat hij ermee doet, wat hij
+nooit doet, wat Mehdi beslist). Beheer bewerkt die tekst op het bord; de agent
+haalt hem elke ronde op (`GET /api/agent/<naam>/werkwijze`, token) en volgt hem.
+De eerste versie zet je met de generator: `--werkwijze werkwijze/<naam>.md`.
+Het bestand in `werkwijze/` is alleen het zaad; het bord is daarna de waarheid.
+
+Daarnaast meldt een agent wat hij **weet**: de letterlijke instructie die hij
+in zijn laatste ronde als regelboek las (`POST /api/agent/<naam>/kennis`). Zo
+staat op het bord wat hij wist toen hij werkte.
+
 ## Het token
 
 De runners en de generator lezen `AGENTS_TOKEN` uit

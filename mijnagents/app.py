@@ -113,10 +113,36 @@ def init_db():
             ts        TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS logboek_naam_ts ON logboek(naam, ts);
+        CREATE TABLE IF NOT EXISTS werkwijze_versie (
+            id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            naam  TEXT NOT NULL,
+            tekst TEXT NOT NULL,
+            wie   TEXT DEFAULT '',
+            ts    TEXT NOT NULL
+        );
         """
     )
+    # Latere kolommen op agent: de werkwijze (het volledige proces, door Mehdi
+    # te bewerken op het bord; de agent leest het elke ronde) en de kennis
+    # (wat de agent in zijn laatste ronde als instructie las, door hem gemeld).
+    bestaand = {r[1] for r in conn.execute("PRAGMA table_info(agent)")}
+    for kolom, definitie in (("werkwijze", "TEXT DEFAULT ''"), ("kennis", "TEXT DEFAULT ''"),
+                             ("kennis_ts", "TEXT DEFAULT ''"), ("kennis_bron", "TEXT DEFAULT ''")):
+        if kolom not in bestaand:
+            conn.execute(f"ALTER TABLE agent ADD COLUMN {kolom} {definitie}")
     conn.commit()
     conn.close()
+
+
+def md(tekst):
+    """Markdown naar HTML voor de werkwijze en de kennis (tekst van beheer of
+    van het contract-dashboard, dus vertrouwd)."""
+    try:
+        import markdown
+        return markdown.markdown(tekst or "", extensions=["tables", "fenced_code"])
+    except Exception:  # noqa: BLE001
+        from html import escape
+        return "<pre style='white-space:pre-wrap'>" + escape(tekst or "") + "</pre>"
 
 
 # ------------------------------------------------------------------ helpers ---
@@ -229,12 +255,84 @@ def detail(naam):
             "SELECT onderwerp, MAX(ts) laatst, COUNT(*) n FROM logboek WHERE naam=? "
             "AND onderwerp<>'' GROUP BY onderwerp ORDER BY laatst DESC LIMIT 40", (naam,)
         ).fetchall()
+    versies = db().execute(
+        "SELECT id, wie, ts, length(tekst) n FROM werkwijze_versie WHERE naam=? ORDER BY id DESC LIMIT 10", (naam,)
+    ).fetchall()
     return render_template(
         "detail.html", app_naam=APP_NAAM, a=a, s=s, voorstellen=vs,
         mag=_lijst(a["mag"]), grenzen=_lijst(a["grenzen"]), tools=_lijst(a["tools"]),
         mag_beslissen=mag_beslissen(), verslag=verslag, onderwerpen=onderwerpen,
         gekozen=request.args.get("onderwerp", ""),
+        werkwijze_html=md(a["werkwijze"]), kennis_html=md(a["kennis"]), versies=versies,
+        bewerken=request.args.get("bewerken") == "1",
     )
+
+
+# --- werkwijze: het volledige proces van een agent, door beheer te bewerken
+#     op het bord. De agent haalt het elke ronde op (GET, token) en volgt het.
+@app.route("/agent/<naam>/werkwijze", methods=["POST"])
+def werkwijze_opslaan(naam):
+    if not mag_beslissen():
+        abort(403)
+    tekst = (request.form.get("werkwijze") or "").replace("\r\n", "\n").strip()
+    conn = db()
+    if not conn.execute("SELECT 1 FROM agent WHERE naam=?", (naam,)).fetchone():
+        abort(404)
+    oud = conn.execute("SELECT werkwijze FROM agent WHERE naam=?", (naam,)).fetchone()["werkwijze"] or ""
+    if oud.strip() != tekst:
+        conn.execute("INSERT INTO werkwijze_versie(naam, tekst, wie, ts) VALUES(?,?,?,?)",
+                     (naam, oud, "vorige versie", nu()))
+        conn.execute("UPDATE agent SET werkwijze=? WHERE naam=?", (tekst, naam))
+        conn.execute("INSERT INTO handeling(naam, wat, ts) VALUES(?,?,?)",
+                     (naam, f"werkwijze bijgewerkt door {gebruiker()}", nu()))
+        conn.commit()
+    return redirect(url_for("detail", naam=naam) + "#werkwijze")
+
+
+@app.route("/api/agent/<naam>/werkwijze")
+def api_werkwijze(naam):
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    a = db().execute("SELECT werkwijze FROM agent WHERE naam=?", (naam,)).fetchone()
+    if not a:
+        abort(404)
+    return jsonify(naam=naam, werkwijze=a["werkwijze"] or "")
+
+
+@app.route("/api/agent/<naam>/werkwijze", methods=["POST"])
+def api_werkwijze_zetten(naam):
+    """Voor de generator: de eerste werkwijze zetten. Overschrijft niet wat
+    beheer intussen op het bord bewerkte, tenzij 'overschrijf' waar is."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    conn = db()
+    a = conn.execute("SELECT werkwijze FROM agent WHERE naam=?", (naam,)).fetchone()
+    if not a:
+        abort(404)
+    if (a["werkwijze"] or "").strip() and not p.get("overschrijf"):
+        return jsonify(ok=False, reden="werkwijze bestaat al op het bord; niet overschreven")
+    conn.execute("INSERT INTO werkwijze_versie(naam, tekst, wie, ts) VALUES(?,?,?,?)",
+                 (naam, a["werkwijze"] or "", "vorige versie", nu()))
+    conn.execute("UPDATE agent SET werkwijze=? WHERE naam=?", ((p.get("werkwijze") or "").strip(), naam))
+    conn.commit()
+    return jsonify(ok=True)
+
+
+# --- kennis: de agent meldt wat hij in zijn laatste ronde als instructie las,
+#     zodat beheer op het bord ziet wat hij wist toen hij werkte.
+@app.route("/api/agent/<naam>/kennis", methods=["POST"])
+def api_kennis(naam):
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    conn = db()
+    if not conn.execute("SELECT 1 FROM agent WHERE naam=?", (naam,)).fetchone():
+        abort(404)
+    conn.execute("UPDATE agent SET kennis=?, kennis_ts=?, kennis_bron=? WHERE naam=?",
+                 (str(p.get("kennis") or "")[:200000], nu(), str(p.get("bron") or "")[:300], naam))
+    conn.commit()
+    return jsonify(ok=True)
 
 
 # --- werkverslag: een agent legt vast wat hij las, vond, besliste en schreef.

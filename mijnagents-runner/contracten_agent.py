@@ -249,14 +249,46 @@ def veldenschema_voor(soort):
     return _SCHEMA_CACHE[soort]
 
 
+def werkwijze_van_bord():
+    """Het volledige proces zoals Mehdi het op het agentbord bewerkt. Leeg als
+    het bord niets heeft; dan geldt alleen de Werkinstructie."""
+    req = urllib.request.Request(f"{PLATFORM}/api/agent/{NAAM}/werkwijze",
+                                 headers={"X-Agents-Token": TOKEN})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return (json.load(r).get("werkwijze") or "").strip()
+    except Exception as e:  # noqa: BLE001
+        print("werkwijze ophalen mislukt:", e, file=sys.stderr)
+        return ""
+
+
+def kennis_melden(tekst, bron):
+    """Meldt aan het bord welke instructie ik deze ronde als regelboek las."""
+    req = urllib.request.Request(f"{PLATFORM}/api/agent/{NAAM}/kennis",
+                                 data=json.dumps({"kennis": tekst, "bron": bron}).encode(),
+                                 headers={"Content-Type": "application/json", "X-Agents-Token": TOKEN},
+                                 method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=20)
+    except Exception as e:  # noqa: BLE001
+        print("kennis melden mislukt:", e, file=sys.stderr)
+
+
+WERKWIJZE = ""
+
+
 def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, vrij_nummer, bronnen=None):
     veldenschema = veldenschema_voor((voorbereiding or {}).get("soort") or "architectuur")
     from anthropic import Anthropic
     client = Anthropic()
-    system = ("Je bent de contracten-agent van H-Architects. Je werkt volgens de Werkinstructie "
-              "hieronder (het tabblad op contracten.globaal.be) en levert een plan dat een "
-              "deterministisch script uitvoert via de dashboard-tools.\n\n=== WERKINSTRUCTIE ===\n"
-              + werkinstructie + "\n\n=== UITVOERFORMAAT ===\n" + SCHEMA_UITLEG)
+    system = ("Je bent De Contractmaker, de contracten-agent van H-Architects. Je volgt de WERKWIJZE "
+              "hieronder (het proces zoals Mehdi het op het agentbord vastlegde) en de WERKINSTRUCTIE "
+              "(het regelboek voor het contract op contracten.globaal.be). Spreken ze elkaar tegen, dan "
+              "wint de werkwijze en zeg je dat in 'volgende_stap'. Je levert een plan dat een "
+              "deterministisch script uitvoert via de dashboard-tools.\n\n"
+              + ("=== WERKWIJZE (agentbord) ===\n" + WERKWIJZE + "\n\n" if WERKWIJZE else "")
+              + "=== WERKINSTRUCTIE (contract-dashboard) ===\n" + werkinstructie
+              + "\n\n=== UITVOERFORMAAT ===\n" + SCHEMA_UITLEG)
     user = json.dumps({
         "deal": {"id": deal.get("id"), "titel": deal.get("title"), "waarde": deal.get("value"),
                  "persoon": (deal.get("person_id") or {}).get("name") if isinstance(deal.get("person_id"), dict) else deal.get("person_name"),
@@ -485,6 +517,11 @@ def main():
     try:
         werk = mcp.call("dashboard_document", sleutel="werkinstructie")
         werkinstructie = werk.get("markdown", "") if isinstance(werk, dict) else str(werk)
+        versie = werk.get("versie", "") if isinstance(werk, dict) else ""
+        global WERKWIJZE
+        WERKWIJZE = werkwijze_van_bord()
+        # Wat ik weet, op het bord: de letterlijke Werkinstructie van deze ronde.
+        kennis_melden(werkinstructie, f"contracten.globaal.be, tabblad Werkinstructie AI {versie}".strip())
         deals = deals_in_startfase()
         if ALLEEN:
             deals = [d for d in deals if int(d["id"]) == ALLEEN] or [pipedrive.get(FIRMA, f"/deals/{ALLEEN}")]
