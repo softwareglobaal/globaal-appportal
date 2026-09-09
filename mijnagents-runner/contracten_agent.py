@@ -284,7 +284,8 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
     system = ("Je bent De Contractmaker, de contracten-agent van H-Architects. Je volgt de WERKWIJZE "
               "hieronder (het proces zoals Mehdi het op het agentbord vastlegde) en de WERKINSTRUCTIE "
               "(het regelboek voor het contract op contracten.globaal.be). Spreken ze elkaar tegen, dan "
-              "wint de werkwijze en zeg je dat in 'volgende_stap'. Je levert een plan dat een "
+              "wint de WERKINSTRUCTIE (het dashboard is de enige bron van waarheid): je handelt er niet "
+              "naar en je zegt het verschil in 'volgende_stap'. Je levert een plan dat een "
               "deterministisch script uitvoert via de dashboard-tools.\n\n"
               + ("=== WERKWIJZE (agentbord) ===\n" + WERKWIJZE + "\n\n" if WERKWIJZE else "")
               + "=== WERKINSTRUCTIE (contract-dashboard) ===\n" + werkinstructie
