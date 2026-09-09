@@ -33,8 +33,8 @@ DOEL = os.path.expanduser(
 # Bewust in Application Support en niet in ~/Documents: macOS weigert
 # achtergrondtaken (launchd) toegang tot Documents, Bureaublad en Downloads,
 # zonder dat de gebruiker daar iets van merkt behalve een PermissionError.
-ADRESCACHE = os.path.expanduser(
-    "~/Library/Application Support/Locatielogboek/adressen.json")
+ADRESCACHE = os.path.join(DOEL, "werkbestanden", "adressen.json")
+RUWE_KOPIE = os.path.join(DOEL, "ruwe-database")
 
 DAGEN_NL = ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag",
             "zaterdag", "zondag"]
@@ -115,6 +115,40 @@ def adres_van(lat, lon, cache):
     return cache[sleutel]
 
 
+def kopieer_database():
+    """Haalt een consistente kopie van de SQLite naar Dropbox.
+
+    Het bestand zelf kan niet in Dropbox staan: de container schrijft er live
+    in en synchronisatie tijdens een schrijfactie beschadigt een SQLite-bestand.
+    Daarom een kopie, en wel via `.backup` van sqlite3 zelf. Dat is de enige
+    manier die een lopende schrijfactie correct afhandelt; een gewone cp levert
+    bij WAL-journaling een halve database op.
+    """
+    os.makedirs(RUWE_KOPIE, exist_ok=True)
+    doel = os.path.join(RUWE_KOPIE, "locatie.db")
+    tijdelijk = "/tmp/locatie-kopie-%d.db" % os.getpid()
+    opdracht = (
+        "docker exec app-locatie python3 -c \"import sqlite3;"
+        "b=sqlite3.connect('%s');"
+        "sqlite3.connect('/data/locatie.db').backup(b);b.close()\" "
+        "&& docker cp app-locatie:%s %s "
+        "&& docker exec app-locatie rm -f %s"
+    ) % (tijdelijk, tijdelijk, tijdelijk, tijdelijk)
+    uit = subprocess.run(["ssh", VM, opdracht], capture_output=True, text=True,
+                         timeout=120)
+    if uit.returncode != 0:
+        print("   (kopie van de database mislukt: %s)" % uit.stderr.strip()[:200],
+              file=sys.stderr)
+        return None
+    haal = subprocess.run(["scp", "-q", "%s:%s" % (VM, tijdelijk), doel],
+                          capture_output=True, text=True, timeout=120)
+    subprocess.run(["ssh", VM, "rm -f %s" % tijdelijk], capture_output=True)
+    if haal.returncode != 0:
+        print("   (ophalen van de kopie mislukt)", file=sys.stderr)
+        return None
+    return doel
+
+
 # ------------------------------------------------------------------ opmaak
 
 def uur(iso_of_epoch):
@@ -144,8 +178,8 @@ def markdown(datum, gegevens, cache, adressen=True):
     r.append(f"{len(bezoeken)} bezoeken, {len(ritten)} verplaatsingen, "
              f"{km:.1f} km, {len(punten)} meetpunten")
     r.append("")
-    r.append("| van | tot | duur | wat | waar |")
-    r.append("|---|---|---|---|---|")
+    r.append("| van | tot | duur | wat | waar | wifi |")
+    r.append("|---|---|---|---|---|---|")
     for s in indeling:
         if s["soort"] == "bezoek":
             waar = f"{s['lat']:.5f}, {s['lon']:.5f}"
@@ -154,10 +188,12 @@ def markdown(datum, gegevens, cache, adressen=True):
                 if a and a["kort"]:
                     waar = f"{a['kort']} ([kaart](https://maps.google.com/?q={s['lat']},{s['lon']}))"
             r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} "
-                     f"| bezoek | {waar} |")
+                     f"| bezoek | {waar} | {s.get('wifi') or ''} |")
         else:
+            wijze = {"automotive": "auto", "cycling": "fiets", "walking": "te voet",
+                     "running": "lopend"}.get(s.get("wijze"), s.get("wijze") or "")
             r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} "
-                     f"| onderweg | {s['meter'] / 1000:.1f} km |")
+                     f"| onderweg {wijze} | {s['meter'] / 1000:.1f} km | |")
 
     if bezoeken and adressen:
         r += ["", "## Bezoeken op een rij", ""]
@@ -190,6 +226,7 @@ def main():
                   for i in range(a.dagen - 1, -1, -1)]
 
     os.makedirs(os.path.join(DOEL, "dagen"), exist_ok=True)
+    os.makedirs(os.path.join(DOEL, "werkbestanden"), exist_ok=True)
     cache = laad_cache()
     geschreven = leeg = 0
 
@@ -216,7 +253,12 @@ def main():
 
     bewaar_cache(cache)
     print(f"\n{geschreven} dagen weggeschreven, {leeg} leeg.")
-    print(f"Doel: {DOEL}/dagen")
+
+    kopie = kopieer_database()
+    if kopie:
+        mb = os.path.getsize(kopie) / 1024 / 1024
+        print(f"Kopie van de ruwe database: {mb:.1f} MB")
+    print(f"Doel: {DOEL}")
 
 
 if __name__ == "__main__":
