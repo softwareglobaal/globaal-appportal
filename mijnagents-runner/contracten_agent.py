@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """Contracten-agent (De Contractmaker) — Mehdi's eerste agent op mijnagents.globaal.be.
 
-Wat hij doet, precies zoals de Werkinstructie AI op het contract-dashboard het
-voorschrijft (tabblad `werkinstructie`, dat hij live leest):
-
-  1. Pipedrive H-Architects: deals in fase "Gegevens ontvangen" (stage 34).
-  2. Per deal: voorbereiding_starten -> voorbereiding lezen -> dossiercontrole.
-  3. Een taalmodel maakt op basis daarvan (plus de Pipedrive-notities) een plan:
-     welke gegevens met welke bron, welke keuzes, de projectbeschrijving, en de
-     melding voor Mehdi. Het model rekent niets zelf uit dat het systeem levert
-     (perceel, CaPaKey, rijksregister) en overschrijft niets wat bevestigd is.
-  4. Het plan wordt deterministisch toegepast: gegeven_invullen (met bron),
-     keuze_maken, dan proef_maken.
-  5. Melding als notitie op de Pipedrive-deal, in de vaste vijfdelige vorm.
-  6. Ontbreekt het projectnummer in de dealtitel, dan komt een voorstel op het
-     agentbord (runbook pipedrive-dealtitel); Mehdi keurt goed, de uitvoerder zet het.
+Het proces staat niet hier maar op het agentbord: de WERKWIJZE van de agent
+(werkwijze/contracten-agent.md is het zaad; het bord is de waarheid), die hij elke
+ronde ophaalt. Het regelboek voor het contract is de Werkinstructie AI op
+contracten.globaal.be, ook elke ronde gelezen; bij tegenspraak wint die.
+De stappen 1 tot 12 in de code volgen de nummering van de werkwijze v2:
+deals in fase Gegevens ontvangen -> herronde-regel -> projectnummer (drie bronnen)
+-> voorbereiding_starten -> lezen (voorbereiding, veldenschema, dossiercontrole)
+-> bronnen (salesmap, klantmails; projectmap alleen bij een lopend project)
+-> plan (gegevens en keuzes strikt gescheiden) -> invullen met bron -> proef
+-> melding op de deal (blok 0 uit de echte schrijfacties) -> verslag op het bord
+-> bij een fout één keer opnieuw, dan melden en doorgaan.
 
 Grenzen: nooit een definitief contract (Onderteken is Mehdi's klik), nooit
 versturen, nooit een bestand opladen. Op het agentbord alleen werkstatus.
@@ -163,8 +160,35 @@ def nummer_uit_titel(titel):
     return m.group(1) if m else ""
 
 
+def mcp_call(naam, **args):
+    """Werkwijze stap 12: bij een transportfout één keer opnieuw; een inhoudelijke
+    weigering (ToolFout) komt meteen terug, want opnieuw proberen verandert die niet."""
+    try:
+        return mcp.call(naam, **args)
+    except mcp.ToolFout:
+        raise
+    except Exception as e:  # noqa: BLE001
+        print(f"  {naam}: {type(e).__name__}, nog één keer", file=sys.stderr)
+        return mcp.call(naam, **args)
+
+
+CONTRACT_MAPPEN = ["/Work All/01. H-Architects ORG/0 H-A Contracts clients/2026 Design",
+                   "/Work All/01. H-Architects ORG/0 H-A Contracts clients/2026 Signed"]
+
+
 def volgend_vrij_nummer(reeks="26"):
+    """Werkwijze stap 3 (D9): het hoogste nummer uit drie bronnen samen, plus één:
+    de Pipedrive-dealtitels, de dossiers op het dashboard en de contractbestanden
+    in Dropbox (Design en Signed)."""
     gebruikt = set()
+    try:
+        for pad in CONTRACT_MAPPEN:
+            for e in bronnen_mod.lijst(pad, recursief=False) or []:
+                n = nummer_uit_titel(e.get("name", ""))
+                if n.startswith(reeks):
+                    gebruikt.add(n)
+    except Exception as e:  # noqa: BLE001
+        print("contractmappen niet gelezen:", e, file=sys.stderr)
     try:
         for d in (mcp.call("dossiers", limiet=500) or {}).get("dossiers", []):
             n = str(d.get("project_nummer") or d.get("nummer") or "")
@@ -194,15 +218,24 @@ SCHEMA_UITLEG = """Antwoord met UITSLUITEND een JSON-object met deze sleutels:
 {
  "gegevens": [ {"velden": {"veldnaam": "waarde", ...}, "bron": "bv. 'Pipedrive-notitie 14-10-2023' of 'mail van de klant 02-09-2026'"} ],
  "keuzes": {"veld": "waarde", ...},
+ "keuzes_bron": "waarop de keuzes steunen, bv. 'Fathom-transcript 06-07-2026'",
  "nummer_voorstel": "26xx of null",
  "melding": {
    "vastligt": ["... (met bron)"],
    "nakijken": ["... (afgeleid, waarom)"],
-   "keuzes_vastgelegd": ["..."],
+   "keuzes_vastgelegd": ["... (voorstellen met bron; Mehdi bevestigt met Keuzes)"],
    "ontbreekt": ["... en wie het moet leveren"],
+   "projectmap_voorstel": "alleen als het dossier volledig is: '<nummer> <straat huisnummer>, <postcode> <gemeente> (stan)(ww of volledig)' volgens A13, anders leeg",
    "volgende_stap": "één zin voor Mehdi"
  }
 }
+Strikte scheiding (werkwijze stap 7): 'gegevens' zijn velden zoals hoedanigheid_opdrachtgever_label,
+bestemming_bouwplaats_label, bouwproject_type_label, bouwproject_oppervlakte_m2, bouwbudget_bedrag_euro,
+ereloon_percentage_bouwproject, opdrachtgever_type, aantal_opdrachtgevers, gespecialiseerde_studies_benoeming.
+'keuzes' zijn UITSLUITEND de keuzevelden die 'voorbereiding' onder "keuzes" opsomt (soort, architectuur_scope,
+ereloon_scenario, budget_scenario, uitvoeringswijze_label, relatievorm_label, ereloon_minimum_keuze,
+voorontwerp_aanwezig, ...) plus de vrije teksten project_beschrijving en project_omvat_extra_vrije_toevoeging.
+Een gegeven onder 'keuzes' of een keuze onder 'gegevens' wordt geweigerd.
 Regels die je nooit breekt:
 - Gebruik UITSLUITEND veldnamen uit 'veldenschema' en 'voorbereiding' (exacte sleutels, bv. hoedanigheid_opdrachtgever_label, opdrachtgever_1_rijksregister, bouwproject_oppervlakte_m2). Een verzonnen veldnaam wordt geweigerd.
 - Bereken of schat NOOIT capa_key_code, project_capakey, oppervlakte_m2 of project_oppervlakte_terrein. Een rijksregisternummer vul je alleen in als het letterlijk in een klantmail van minder dan een jaar oud staat (bron: die mail met datum); anders leeg en bij 'ontbreekt'.
@@ -318,12 +351,14 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
                     "velden": {"type": "object"}, "bron": {"type": "string"}},
                     "required": ["velden", "bron"]}},
                 "keuzes": {"type": "object"},
+                "keuzes_bron": {"type": "string"},
                 "nummer_voorstel": {"type": ["string", "null"]},
                 "melding": {"type": "object", "properties": {
                     "vastligt": {"type": "array", "items": {"type": "string"}},
                     "nakijken": {"type": "array", "items": {"type": "string"}},
                     "keuzes_vastgelegd": {"type": "array", "items": {"type": "string"}},
                     "ontbreekt": {"type": "array", "items": {"type": "string"}},
+                    "projectmap_voorstel": {"type": "string"},
                     "volgende_stap": {"type": "string"}},
                     "required": ["vastligt", "nakijken", "keuzes_vastgelegd", "ontbreekt", "volgende_stap"]},
             },
@@ -369,6 +404,8 @@ def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None)
     uit += blok("4. Ontbreekt, en wie het levert", ontbreekt)
     proeftekst = f"Proef gemaakt: {proef}" if proef else "Nog geen proef: het dossier is niet volledig (zie 4)."
     uit += f"<b>5. Proef en volgende klik</b><br>- {proeftekst}<br>- {m.get('volgende_stap', '')}<br>"
+    if proef and not ontbreekt and (m.get("projectmap_voorstel") or "").strip():
+        uit += f"- Voorstel projectmapnaam bij ondertekening (A13): {m['projectmap_voorstel'].strip()}<br>"
     uit += "<br><i>Nakijken en ondertekenen op contracten.globaal.be (In voorbereiding).</i>"
     return uit
 
@@ -380,8 +417,11 @@ def verwerk(deal, werkinstructie, staat):
     nummer = nummer_uit_titel(titel)
     print(f"--- deal {deal_id} '{titel}'")
 
-    start = mcp.call("voorbereiding_starten", deal_id=deal_id) if not DROOG else {"droog": True}
-    voorb = mcp.call("voorbereiding", deal_id=deal_id) if not DROOG else None
+    start_args = {"deal_id": deal_id}
+    if nummer:
+        start_args["project_nummer"] = nummer
+    start = mcp_call("voorbereiding_starten", **start_args) if not DROOG else {"droog": True}
+    voorb = mcp_call("voorbereiding", deal_id=deal_id) if not DROOG else None
     if voorb is None:
         # droog: alleen lezen als hij al bestaat
         try:
@@ -406,12 +446,16 @@ def verwerk(deal, werkinstructie, staat):
             salesmap_pad = (c.get("bewijs") or "").strip()
     velden = (voorb or {}).get("velden") or {}
     klant_email = velden.get("opdrachtgever_1_email") or velden.get("opdrachtgever_email") or ""
-    bronnen = bronnen_mod.verzamel(salesmap_pad, nummer or velden.get("project_nummer", ""), klant_email)
+    # Werkwijze stap 6: de projectmap bestaat pas na de ondertekening (S15); alleen
+    # bij een lopend project (addendum, regularisatie) lees ik hem.
+    soort = (voorb or {}).get("soort") or "architectuur"
+    lopend = soort in ("addendum", "regularisatie")
+    bronnen = bronnen_mod.verzamel(salesmap_pad, (nummer or velden.get("project_nummer", "")) if lopend else "", klant_email)
     bestanden = [t["bestand"] for m in (bronnen.get("salesmap"), bronnen.get("projectmap")) if m for t in m["teksten"]]
     log(ond, "bron", "gelezen: " + bronnen_mod.samenvatting(bronnen),
         "teksten: " + ", ".join(bestanden) + "\nmails: " + ", ".join(f"{m['datum'][:16]} {m['onderwerp']}" for m in bronnen.get("mails", [])))
 
-    vrij = "" if nummer else volgend_vrij_nummer("26")
+    vrij = "" if nummer else volgend_vrij_nummer("56" if soort == "regularisatie" else "26")
     plan, tokens = plan_met_model(werkinstructie, deal, voorb, controle, notities(deal_id), vrij, bronnen)
     log(ond, "besluit", f"plan: {len(plan.get('gegevens') or [])} gegevensposten, {len(plan.get('keuzes') or {})} keuzes"
                         f"{', nummer-voorstel ' + str(plan.get('nummer_voorstel')) if plan.get('nummer_voorstel') and not nummer else ''}"
@@ -432,24 +476,38 @@ def verwerk(deal, werkinstructie, staat):
         if not velden or not bron:
             continue
         try:
-            mcp.call("gegeven_invullen", deal_id=deal_id, velden=velden, bron=bron)
+            mcp_call("gegeven_invullen", deal_id=deal_id, velden=velden, bron=bron)
             log(ond, "schrijf", f"gegeven_invullen {', '.join(velden)} (bron: {bron[:80]})", velden)
             geschreven += [f"{k} = {str(v)[:60]} (bron: {bron[:70]})" for k, v in velden.items()]
         except mcp.ToolFout as e:
             fouten.append(f"gegeven_invullen {list(velden)}: {str(e)[:160]}")
             log(ond, "fout", f"gegeven_invullen {', '.join(velden)} geweigerd: {str(e)[:160]}")
-    keuzes = {k: v for k, v in (plan.get("keuzes") or {}).items() if str(v).strip()}
+    # Werkwijze stap 7: keuzes zijn uitsluitend de keuzevelden van het dashboard
+    # plus de vrije teksten. Een gegeven dat het model onder 'keuzes' zette gaat
+    # niet mee (en staat in het verslag), want keuze_maken weigert het.
+    toegelaten = {k.get("veld") for k in ((voorb or {}).get("keuzes") or []) if isinstance(k, dict)}
+    toegelaten |= {"project_beschrijving", "project_omvat_extra_vrije_toevoeging", "ereloon_minimum_bedrag_euro",
+                   "datum_oorspronkelijke_overeenkomst", "vaststellingen_bullets", "opdracht_omschrijving",
+                   "doorlooptijd_werkdagen", "ereloon_bedrag_euro", "ereloon_percentage", "uurtarief_euro",
+                   "betaalschema_bullets", "addendum_aanleiding_omschrijving"}
+    ruwe = {k: v for k, v in (plan.get("keuzes") or {}).items() if str(v).strip()}
+    keuzes = {k: v for k, v in ruwe.items() if k in toegelaten}
+    verkeerd = [k for k in ruwe if k not in toegelaten]
+    if verkeerd:
+        fouten.append(f"onder 'keuzes' gezet maar geen keuzeveld, niet geschreven: {', '.join(verkeerd)}")
+        log(ond, "fout", f"geen keuzeveld, overgeslagen: {', '.join(verkeerd)}")
+    keuzes_bron = (plan.get("keuzes_bron") or "").strip() or "gesprekken en mails in het dossier"
     if keuzes:
         try:
-            mcp.call("keuze_maken", deal_id=deal_id, keuzes=keuzes)
-            log(ond, "schrijf", f"keuze_maken {', '.join(keuzes)}", keuzes)
-            geschreven += [f"keuze {k} = {str(v)[:60]}" for k, v in keuzes.items()]
+            mcp_call("keuze_maken", deal_id=deal_id, keuzes=keuzes, bron=keuzes_bron)
+            log(ond, "schrijf", f"keuze_maken {', '.join(keuzes)} (bron: {keuzes_bron[:80]})", keuzes)
+            geschreven += [f"keuze {k} = {str(v)[:60]} (voorstel, bron: {keuzes_bron[:60]})" for k, v in keuzes.items()]
         except mcp.ToolFout as e:
             fouten.append(f"keuze_maken: {str(e)[:200]}")
             log(ond, "fout", f"keuze_maken geweigerd: {str(e)[:200]}")
     proef = ""
     try:
-        p = mcp.call("proef_maken", deal_id=deal_id)
+        p = mcp_call("proef_maken", deal_id=deal_id)
         proef = p.get("docx", "") if isinstance(p, dict) else ""
         log(ond, "proef", f"proef gemaakt: {proef}")
     except mcp.ToolFout as e:
