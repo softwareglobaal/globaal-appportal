@@ -51,6 +51,9 @@ TEAM = [
     {"naam": "elevait-postkamer", "label": "Postkamer-agent (Elevait)",
      "kort": "Postkamer-agent", "type": "elevait", "sectie": "elevait",
      "rol": "sorteert de post op info@"},
+    {"naam": "elevait-brein", "label": "Brein-agent (Elevait)",
+     "kort": "Brein-agent", "type": "elevait", "sectie": "elevait",
+     "rol": "houdt de Second Brain bij"},
     {"naam": "elevait-manager", "label": "Manager-agent (Elevait)",
      "kort": "Manager-agent", "type": "elevait", "sectie": "elevait",
      "rol": "houdt toezicht over de agents heen"},
@@ -201,6 +204,29 @@ DETAILS = {
             "met de links uit de mail eruit gefilterd",
             "Hartslag melden op deze tegel",
             "Geen SMTP in het proces: versturen kan technisch niet",
+        ],
+    },
+    "elevait-brein": {
+        "mandaat": ("Houdt de Second Brain bij: haalt de gespreksverslagen "
+                    "op bij Fathom, bepaalt of een gesprek over Elevait gaat "
+                    "en destilleert wat er is afgesproken. Stelt voor; een "
+                    "mens bevestigt het oordeel."),
+        "mag": ["Gesprekken ophalen en een oordeel voorstellen",
+                "Een titel en een samenvatting voorstellen"],
+        "grenzen": [
+            "Verstuurt niets en communiceert niet naar buiten",
+            "Een oordeel blijft een voorstel tot een mens het bevestigt",
+            "Per ronde begrensd, zodat een achterstand nooit in een keer de "
+            "rekening opjaagt",
+            "Deze tegel toont alleen tellingen, nooit gespreksinhoud",
+        ],
+        "cadans": "Elk uur een ronde: ophalen, nabellen, verwerken.",
+        "tools": [
+            "Fathom-API voor gesprekken en samenvattingen",
+            "Taalmodel voor classificatie en destillatie (claude-haiku-4-5)",
+            "Schrijven naar elevait.gesprek en elevait.brein_run",
+            "Verbruik registreren in elevait.llm_verbruik",
+            "Hartslag melden op deze tegel",
         ],
     },
     "elevait-manager": {
@@ -566,6 +592,22 @@ def seo_team():
     # experts nog inzetbaar zijn; geen live data.
     return render_template(
         "seo-team.html",
+        portal_url=f"https://portal.{BASE_DOMAIN}/",
+        username=request.headers.get("X-authentik-username", "onbekend"),
+    )
+
+
+@app.route("/kantoor")
+def kantoor():
+    """Het virtuele kantoor: dezelfde hartslagen als de tegel, als plattegrond.
+
+    Bewust dezelfde bron (/api/status) en dezelfde afbakening als de kaarten.
+    Deze pagina toont werkstatus en de lopende taak, nooit de inhoud waar een
+    agent aan werkt; dat is dezelfde grens die op de tegel geldt.
+    """
+    return render_template(
+        "kantoor.html",
+        secties=roster_secties(),
         portal_url=f"https://portal.{BASE_DOMAIN}/",
         username=request.headers.get("X-authentik-username", "onbekend"),
     )
