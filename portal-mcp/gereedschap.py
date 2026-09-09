@@ -148,6 +148,10 @@ class Gereedschap:
                for a in toegestaan]
         telling = bronnen.overzicht(a.slug for a in toegestaan)
         return {
+            # Wie je bent hoort zichtbaar te zijn, niet af te leiden uit de
+            # lijst. Koppelt iemand per ongeluk als een collega, dan is dit het
+            # eerste dat opvalt.
+            "ingelogd_als": gebruiker,
             "apps": uit,
             "samenvatting": {
                 "toegang_tot": len(uit),
@@ -156,9 +160,10 @@ class Gereedschap:
                 "nog_niet_uitgezocht": telling[bronnen.ONBEKEND],
             },
             "toelichting": (
-                "Toegang volgt Authentik: dit zijn de apps waarvan je ook de "
-                "tegel op het portaal ziet. Wat niet leesbaar is, staat er met "
-                "de reden bij en is niet weggelaten."),
+                f"Je bent ingelogd als {gebruiker}. Toegang volgt Authentik: "
+                "dit zijn de apps waarvan je ook de tegel op het portaal ziet. "
+                "Wat niet leesbaar is, staat er met de reden bij en is niet "
+                "weggelaten."),
         }
 
     def schema(self, gebruiker, slug):

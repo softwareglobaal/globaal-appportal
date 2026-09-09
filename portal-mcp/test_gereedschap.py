@@ -192,6 +192,14 @@ def test_rijenlimiet_blijft_binnen_het_maximum():
 
 
 # ---- de lijst -----------------------------------------------------------
+def test_apps_noemt_wie_je_bent():
+    """Koppelt iemand per ongeluk als een collega, dan valt dit als eerste op."""
+    g, _ = maak()
+    uit = g.apps("joan")
+    assert uit["ingelogd_als"] == "joan"
+    assert "joan" in uit["toelichting"]
+
+
 def test_apps_toont_ook_wat_niet_leesbaar_is():
     """Stil weglaten leest als 'bestaat niet'."""
     g, _ = maak()

@@ -4,15 +4,16 @@
 # een container: hij praat met beide databases op de loopback (5433) en heeft
 # verder niets uit het compose-netwerk nodig.
 #
-# Zelfde indeling als vermogen, renovision en pipedrive: /mcp en de
-# OAuth-metadata staan buiten de forward-auth (MCP-clients hebben geen
-# Authentik-sessie; de dienst controleert zelf het bearer-token), en de
-# loginstap /oauth/authorize valt er juist WEL onder. Daar is SSO de
-# authenticatie, en daar wordt vastgesteld wie er koppelt. Zonder MCP_SECRET in
-# de omgeving geeft de dienst 404.
+# **Geen forward-auth, anders dan bij vermogen, renovision en pipedrive.** Die
+# zetten hun loginstap achter de forward-auth, en die neemt over wie er
+# toevallig in de browser is ingelogd. Op een gedeelde PC koppelt de tweede
+# collega dan als de eerste, zonder foutmelding. Deze dienst is zelf een
+# OIDC-client van Authentik en stuurt `prompt=login` mee, zodat er altijd
+# opnieuw ingelogd moet worden. Zie portal-mcp/mcp_server.py.
 #
-# Let op: geen proxy_buffers hier. De forward-auth-snippet zet die al, en nginx
-# weigert een dubbele directive; dat legde op 31-08-2026 het hele platform plat.
+# Daardoor is er hier ook geen `location /` met auth_request. Alles wat we niet
+# uitdrukkelijk openzetten geeft 404: er valt achter deze vhost niets te halen
+# behalve de endpoints hieronder.
 
 server {
     listen 443 ssl;
@@ -20,8 +21,15 @@ server {
     server_name portal-mcp.${BASE_DOMAIN};
     include /etc/nginx/snippets/ssl.conf;
 
+    # Variabele proxy_pass plus de docker-resolver, zodat een herstart van de
+    # dienst geen nginx-herlaad nodig heeft.
+    resolver 127.0.0.11 valid=30s;
     set $app_upstream http://172.17.0.1:8113;
-    include /etc/nginx/snippets/forward-auth.conf;
+
+    # De outpost-buffers uit de forward-auth-snippet zitten hier niet, maar de
+    # antwoorden van Authentik bij de OIDC-sprong kunnen ook groot zijn.
+    proxy_buffers 8 16k;
+    proxy_buffer_size 32k;
 
     location ^~ /mcp {
         proxy_set_header Host $host;
@@ -31,6 +39,15 @@ server {
         # Een query over een groot schema mag even duren; de dienst kapt zelf
         # af op 15 seconden (statement_timeout).
         proxy_read_timeout 60s;
+    }
+
+    # De koppelstap: /oauth/authorize stuurt door naar Authentik,
+    # /oauth/terug vangt hem daarna weer op.
+    location ^~ /oauth/ {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
     }
 
     # OAuth-discovery (RFC 8414/9728), publiek leesbaar.
@@ -51,5 +68,9 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
         proxy_pass $app_upstream;
+    }
+
+    location / {
+        return 404;
     }
 }

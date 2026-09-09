@@ -46,16 +46,19 @@ erop let.
 opgeslagen login staan in dat profiel. Collega's die hetzelfde Claude-account
 delen maar een eigen Windows-login hebben, komen elkaar dus niet tegen.
 
-### De valkuil bij de eenmalige login
+### Bij het koppelen wordt altijd opnieuw ingelogd
 
-Log eerst uit op `https://globaal.be`, of gebruik een privévenster. Staat er nog
-een sessie van iemand anders open, dan koppelt de brug aan **die** persoon en
-ziet de collega diens applicaties. Er komt geen foutmelding; het ziet er gewoon
-uit alsof het werkt.
+Er wordt **altijd** om een wachtwoord gevraagd, ook als er in die browser al
+iemand is ingelogd. Dat is met opzet en niet te omzeilen.
 
-Controle achteraf, in de chat: vraag *"welke applicaties mag ik lezen"*. Komt dat
-niet overeen met de tegels die hij op het portaal ziet, dan is de login met de
-verkeerde sessie gedaan. Opnieuw doen in een privévenster.
+Zonder die maatregel zou de koppeling overnemen wie er toevallig een sessie had
+openstaan. Op een gedeelde PC koppelt de tweede collega dan als de eerste en
+ziet hij diens applicaties, zonder enige foutmelding. Deze server stuurt daarom
+`prompt=login` mee naar Authentik, en dan authenticeert Authentik opnieuw
+ongeacht de sessie.
+
+Controle achteraf, in de chat: vraag *"welke applicaties mag ik lezen"*. Het
+antwoord begint met `ingelogd_als` en de naam waaronder je gekoppeld bent.
 
 ## 3. Claude Code
 
@@ -97,7 +100,8 @@ groep, net als in de applicaties zelf. Zie `portal-mcp/README.md`.
 | wat je ziet | wat het is |
 |---|---|
 | 403 bij het inloggen | niet in de groep `portaal-mcp` |
-| verkeerde applicaties | ingelogd met de browsersessie van een ander |
+| verkeerde applicaties | bij de login de gegevens van een ander gebruikt; koppel opnieuw |
+| toch geen wachtwoordvraag | melden, dat hoort niet te kunnen |
 | de app doet niets | Claude stond open tijdens het installeren; sluit hem en draai het script opnieuw |
 | `npx` niet gevonden | Node.js ontbreekt, installeer de LTS via nodejs.org |
 

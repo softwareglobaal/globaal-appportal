@@ -9,10 +9,24 @@ Authentik-login: als aangepaste connector in claude.ai, of lokaal met
 `claude mcp add --transport http portaal https://portal-mcp.globaal.be/mcp`.
 Deze module is daarvoor zelf een kleine OAuth-server (dynamic client
 registration + PKCE, RFC 7591/8414/9728), overgenomen van het Vermogens-dashboard
-en RenoVision. De loginstap (/oauth/authorize) staat ACHTER de Authentik
-forward-auth in de vhost; dat is het enige punt waar wordt vastgesteld wie je
-bent. Tokens zijn stateless (HMAC-getekend met MCP_SECRET), dus geen tabel en
-geen sessie-opslag.
+en RenoVision. Tokens zijn stateless (HMAC-getekend met MCP_SECRET), dus geen
+tabel en geen sessie-opslag.
+
+**Koppelen dwingt een verse login af, en dat is de reden dat deze server anders
+in elkaar zit dan zijn voorgangers.** Vermogen, RenoVision en Pipedrive zetten
+hun loginstap achter de Authentik forward-auth. Dat neemt over wie er toevallig
+in die browser is ingelogd. Op een gedeelde PC koppelt de tweede collega dan als
+de eerste, ziet hij diens applicaties, en er komt geen foutmelding: het ziet er
+precies uit alsof het werkt. Bij een server die alle applicaties van het platform
+ontsluit is dat te gevaarlijk.
+
+Daarom is deze server zelf een OIDC-client van Authentik. De loginstap stuurt
+`prompt=login` mee, en dan authenticeert Authentik opnieuw ongeacht de sessie
+(`/authentik/providers/oauth2/views/authorize.py`: "If prompt=login, we need to
+re-authenticate the user regardless"). Wie koppelt typt dus zelf zijn
+wachtwoord, en de identiteit komt uit de userinfo van dat verse token in plaats
+van uit een proxy-header. De vhost heeft daardoor helemaal geen forward-auth
+meer nodig.
 
 **Geen vaste sleutel.** Vermogen en RenoVision kennen een `MCP_TOKEN` waarmee je
 buiten de SSO om binnenkomt, uitkomend op een vaste gebruiker. Die zit hier
@@ -33,6 +47,7 @@ import hmac
 import json
 import os
 import time
+import urllib.request
 from urllib.parse import urlencode, urlparse
 
 import psycopg
@@ -48,12 +63,40 @@ SERVER_INFO = {"name": "portaal", "title": "Globaal portaal", "version": "1.0.0"
 CODE_TTL = 120            # autorisatiecode: 2 minuten
 ACCESS_TTL = 12 * 3600    # access token: 12 uur
 REFRESH_TTL = 60 * 86400  # refresh token: 60 dagen
+INLOG_TTL = 900           # 15 minuten om de login af te maken
 
 app = Flask(__name__)
 
 
 def _basis() -> str:
     return os.environ.get("MCP_BASIS") or "https://portal-mcp.globaal.be"
+
+
+# ---- Authentik als identiteitsbron ---------------------------------------
+def _ak() -> str:
+    return os.environ.get("AUTHENTIK_BASIS", "https://auth.globaal.be").rstrip("/")
+
+
+def _ak_authorize() -> str:
+    return _ak() + "/application/o/authorize/"
+
+
+def _ak_token() -> str:
+    return _ak() + "/application/o/token/"
+
+
+def _ak_userinfo() -> str:
+    return _ak() + "/application/o/userinfo/"
+
+
+def _terug_adres() -> str:
+    """Waar Authentik ons terugstuurt. Staat strikt in de provider vastgelegd."""
+    return _basis() + "/oauth/terug"
+
+
+def _client() -> tuple:
+    return (os.environ.get("PORTAL_MCP_CLIENT_ID", "").strip(),
+            os.environ.get("PORTAL_MCP_CLIENT_SECRET", "").strip())
 
 
 def _secret() -> bytes:
@@ -188,11 +231,18 @@ def oauth_register():
             "response_types": ["code"]}, 201
 
 
+def _s256(waarde: str) -> str:
+    return _b64(hashlib.sha256(waarde.encode()).digest())
+
+
 @app.get("/oauth/authorize")
 def oauth_authorize():
-    """De loginstap. Staat achter de Authentik forward-auth in de vhost."""
+    """De loginstap: doorsturen naar Authentik met een gedwongen herinlog."""
     if not _secret():
         return {"fout": "OAuth staat uit"}, 404
+    klant, geheim = _client()
+    if not klant or not geheim:
+        return {"fout": "Koppelen staat uit: geen client-gegevens ingesteld"}, 404
     redirect_uri = request.args.get("redirect_uri", "")
     if not _redirect_ok(redirect_uri):
         return "Ongeldige redirect_uri", 400
@@ -202,19 +252,94 @@ def oauth_authorize():
     if not challenge or request.args.get("code_challenge_method") != "S256":
         return "PKCE (S256) is verplicht", 400
 
-    # Wie hier komt is al door Authentik heen. Dit is het enige punt waar 'wie
-    # ben je' wordt vastgesteld; wat je daarna mag, wordt bij elke aanroep
-    # opnieuw opgezocht. In het token zit alleen de naam, geen rechten: een
-    # ingetrokken groep werkt binnen een minuut, niet pas na twaalf uur.
-    wie = (request.headers.get("X-authentik-username") or "").strip()
-    if not wie:
-        return "Geen ingelogde gebruiker; log opnieuw in via het portaal.", 403
+    # Alles wat Claude ons meegaf, getekend meenemen over de sprong naar
+    # Authentik. Zo hoeven we niets op te slaan, en kan er onderweg ook niets
+    # aan gesleuteld worden.
+    verifier = _b64(os.urandom(32))
+    staat = _teken({"t": "st", "r": redirect_uri, "ch": challenge,
+                    "s": request.args.get("state", ""), "v": verifier,
+                    "exp": int(time.time()) + INLOG_TTL})
 
-    code = _teken({"t": "code", "u": wie, "ch": challenge, "r": redirect_uri,
-                   "exp": int(time.time()) + CODE_TTL})
-    sep = "&" if "?" in redirect_uri else "?"
-    return redirect(redirect_uri + sep + urlencode(
-        {"code": code, "state": request.args.get("state", "")}))
+    # prompt=login is de kern van deze route: Authentik authenticeert opnieuw,
+    # ook als er in deze browser al iemand is ingelogd. Zonder die parameter
+    # zou een openstaande sessie van een collega stilzwijgend overgenomen
+    # worden en koppelt de een als de ander.
+    return redirect(_ak_authorize() + "?" + urlencode({
+        "client_id": klant,
+        "response_type": "code",
+        "redirect_uri": _terug_adres(),
+        "scope": "openid profile email",
+        "state": staat,
+        "prompt": "login",
+        "code_challenge": _s256(verifier),
+        "code_challenge_method": "S256",
+    }))
+
+
+def _post_formulier(url: str, velden: dict) -> dict:
+    data = urlencode(velden).encode()
+    verzoek = urllib.request.Request(
+        url, data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded",
+                 "Accept": "application/json"})
+    with urllib.request.urlopen(verzoek, timeout=20) as antwoord:
+        return json.loads(antwoord.read().decode("utf-8"))
+
+
+def _haal_json(url: str, token: str) -> dict:
+    verzoek = urllib.request.Request(
+        url, headers={"Authorization": "Bearer " + token,
+                      "Accept": "application/json"})
+    with urllib.request.urlopen(verzoek, timeout=20) as antwoord:
+        return json.loads(antwoord.read().decode("utf-8"))
+
+
+@app.get("/oauth/terug")
+def oauth_terug():
+    """Authentik stuurt hier terug na de verse login."""
+    if not _secret():
+        return {"fout": "OAuth staat uit"}, 404
+    if request.args.get("error"):
+        return (f"Inloggen afgebroken: {request.args.get('error')}. "
+                "Sluit dit venster en probeer opnieuw te koppelen."), 403
+    staat = _lees_token(request.args.get("state", ""), "st")
+    if not staat:
+        return ("Deze koppelpoging is verlopen of niet geldig. Begin opnieuw "
+                "vanuit Claude."), 400
+    code = request.args.get("code", "")
+    if not code:
+        return "Geen autorisatiecode ontvangen van Authentik.", 400
+
+    klant, geheim = _client()
+    try:
+        uit = _post_formulier(_ak_token(), {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": _terug_adres(),
+            "client_id": klant,
+            "client_secret": geheim,
+            "code_verifier": staat["v"],
+        })
+        wie_info = _haal_json(_ak_userinfo(), uit["access_token"])
+    except Exception as e:  # noqa: BLE001 - de gebruiker staat in de browser
+        app.logger.exception("token- of userinfo-stap faalde")
+        return (f"Inloggen lukte, maar het ophalen van je gegevens niet: "
+                f"{type(e).__name__}. Probeer opnieuw te koppelen."), 502
+
+    wie = (wie_info.get("preferred_username") or wie_info.get("nickname")
+           or "").strip()
+    if not wie:
+        return ("Authentik gaf geen gebruikersnaam terug. Neem contact op met "
+                "de beheerder."), 502
+
+    # Pas hier bestaat er een identiteit, en die hoort bij de inlog die zojuist
+    # is gedaan. Wat deze persoon mag lezen wordt niet hier bepaald maar bij
+    # elke aanroep opnieuw, dus in dit token zit alleen zijn naam.
+    onze_code = _teken({"t": "code", "u": wie, "ch": staat["ch"],
+                        "r": staat["r"], "exp": int(time.time()) + CODE_TTL})
+    sep = "&" if "?" in staat["r"] else "?"
+    return redirect(staat["r"] + sep + urlencode(
+        {"code": onze_code, "state": staat["s"]}))
 
 
 def _tokens_voor(payload: dict) -> dict:
