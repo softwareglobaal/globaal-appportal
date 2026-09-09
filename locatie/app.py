@@ -94,11 +94,42 @@ def _wachtwoord_klopt():
     return verschil == 0
 
 
+def _waarom_geweigerd():
+    """Zegt waarom een poging strandde, zonder het wachtwoord te verraden.
+
+    Bij het instellen van de telefoon is een kale 403 nutteloos: je weet niet of
+    het veld leeg bleef, of iOS er een hoofdletter van maakte, of er een spatie
+    is meegeplakt. Deze meldingen noemen alleen vorm en lengte, nooit inhoud.
+    """
+    kop = request.headers.get("Authorization", "")
+    if not kop.startswith("Basic "):
+        return "geen wachtwoord meegestuurd (Authentication staat uit in de app)"
+    try:
+        ontcijferd = base64.b64decode(kop[6:]).decode("utf-8", "replace")
+    except Exception:
+        return "onleesbare Authorization-kop"
+    gebruiker, _, gegeven = ontcijferd.partition(":")
+
+    if not gegeven:
+        return f"leeg wachtwoord (gebruiker '{gebruiker}')"
+    if gegeven != gegeven.strip():
+        return "wachtwoord heeft een spatie of regeleinde aan het begin of eind"
+    if len(gegeven) != len(WACHTWOORD):
+        return (f"wachtwoord is {len(gegeven)} tekens, verwacht {len(WACHTWOORD)}"
+                f" (gebruiker '{gebruiker}')")
+    if gegeven.lower() == WACHTWOORD.lower():
+        return "wachtwoord klopt op hoofdletters na; iOS heeft waarschijnlijk de eerste letter gekapitaliseerd"
+    gelijk = sum(1 for a, b in zip(gegeven, WACHTWOORD) if a == b)
+    return (f"wachtwoord heeft de juiste lengte maar {len(WACHTWOORD) - gelijk}"
+            f" tekens wijken af (gebruiker '{gebruiker}')")
+
+
 @app.route("/pub", methods=["POST"])
 def pub():
     if not WACHTWOORD:
         abort(404)          # niet ingesteld: doe alsof de route niet bestaat
     if not _wachtwoord_klopt():
+        app.logger.warning("pub geweigerd: %s", _waarom_geweigerd())
         abort(403)
 
     data = request.get_json(silent=True) or {}
