@@ -2161,6 +2161,7 @@ def agent_profiel(naam):
 # --- Kantoor: het team als figuurtjes aan hun bureau -------------------------
 # Isometrische weergave (2.5D) van dezelfde agents als het organogram. Werkt
 # een agent (status actief), dan typt hij met een wolkje; anders slaapt hij.
+# Coordinaten zijn gridunits op de vloer; _iso zet ze om naar schermpixels.
 
 ISO_TW, ISO_TH = 30, 15
 
@@ -2169,23 +2170,35 @@ def _iso(x, y):
     return round((x - y) * ISO_TW, 1), round((x + y) * ISO_TH, 1)
 
 
+def _rij(namen, x_start, y, stap=2.6):
+    return [(n, round(x_start + i * stap, 2), y) for i, n in enumerate(namen)]
+
+
 KANTOOR_KAMERS = [
-    {"naam": "Directie", "team": "leiding", "x0": 0, "y0": 0, "x1": 6, "y1": 4,
-     "zitplaatsen": [("dirigent", 1.6, 2.0), ("eindcontrole", 4.4, 2.0)]},
-    {"naam": "Sales, klantenservice en partners", "team": "sales", "x0": 6.6, "y0": 0, "x1": 19.6, "y1": 4,
-     "zitplaatsen": [(n, 7.8 + i * 2.6, 2.0) for i, n in enumerate(
-         ["verkoopstrateeg", "dealmaker", "offertemeester", "klantenzorg", "relatiebeheerder"])]},
-    {"naam": "Marketing", "team": "marketing", "x0": 0, "y0": 4.6, "x1": 19.6, "y1": 8.6,
-     "zitplaatsen": [(n, 1.2 + i * 2.6, 6.6) for i, n in enumerate(
-         ["marktverkenner", "branding", "contentregisseur", "beeld", "website_bouwer", "woordvoerder"])]},
-    {"naam": "SEO-afdeling", "team": "seo", "x0": 0, "y0": 9.2, "x1": 19.6, "y1": 21.2,
-     "zitplaatsen": [(n, 1.2 + (i % 7) * 2.6, 11.0 + (i // 7) * 3.9) for i, n in enumerate(
-         ["seo-onderzoek", "seo-schrijver", "seo-qc", "seo-technical", "seo-content", "seo-schema", "seo-geo",
-          "seo-local", "seo-performance", "seo-backlinks", "seo-sitemap", "seo-visual", "seo-sxo", "seo-cluster",
-          "seo-google", "seo-maps", "seo-ecommerce", "seo-drift", "seo-dataforseo", "seo-flow", "seo-image-gen"])]},
+    {"sleutel": "receptie", "naam": "Receptie", "team": "leiding", "soort": "receptie",
+     "x0": 0, "y0": 0, "x1": 5.6, "y1": 4, "zitplaatsen": []},
+    {"sleutel": "directie", "naam": "Directie", "team": "leiding", "soort": "bureau",
+     "x0": 6.2, "y0": 0, "x1": 12.4, "y1": 4,
+     "zitplaatsen": [("dirigent", 7.9, 2.0), ("eindcontrole", 10.7, 2.0)]},
+    {"sleutel": "vergader", "naam": "Vergaderruimte", "team": "leiding", "soort": "vergader",
+     "x0": 13.0, "y0": 0, "x1": 19.6, "y1": 4, "zitplaatsen": []},
+    {"sleutel": "sales", "naam": "Sales, klantenservice en partners", "team": "sales", "soort": "bureau",
+     "x0": 0, "y0": 4.6, "x1": 19.6, "y1": 8.6,
+     "zitplaatsen": _rij(["verkoopstrateeg", "dealmaker", "offertemeester", "klantenzorg", "relatiebeheerder"], 2.6, 6.6, 3.6)},
+    {"sleutel": "marketing", "naam": "Marketing", "team": "marketing", "soort": "bureau",
+     "x0": 0, "y0": 9.2, "x1": 19.6, "y1": 13.2,
+     "zitplaatsen": _rij(["marktverkenner", "branding", "contentregisseur", "beeld", "website_bouwer", "woordvoerder"], 2.3, 11.2, 3.0)},
+    {"sleutel": "seo", "naam": "SEO-afdeling", "team": "seo", "soort": "bureau",
+     "x0": 0, "y0": 13.8, "x1": 19.6, "y1": 25.8,
+     "zitplaatsen": _rij(["seo-onderzoek", "seo-schrijver", "seo-qc", "seo-technical", "seo-content", "seo-schema", "seo-geo"], 1.3, 15.6)
+                    + _rij(["seo-local", "seo-performance", "seo-backlinks", "seo-sitemap", "seo-visual", "seo-sxo", "seo-cluster"], 1.3, 19.5)
+                    + _rij(["seo-google", "seo-maps", "seo-ecommerce", "seo-drift", "seo-dataforseo", "seo-flow", "seo-image-gen"], 1.3, 23.4)},
 ]
 TEAM_KLEUR = {"sales": "#b45309", "service": "#9d174d", "partners": "#1d4ed8",
               "marketing": "#0f766e", "leiding": "#22303f", "seo": "#2563eb"}
+# Welke kamer toont welke cijfers op zijn wandscherm (zie _kantoor_cijfers).
+KAMER_TEAMS = {"sales": {"sales", "service", "partners"}, "marketing": {"marketing"},
+               "seo": {"seo-team"}, "directie": {"leiding"}, "vergader": {"alles"}}
 
 
 def _kantoor_indeling():
@@ -2196,36 +2209,41 @@ def _kantoor_indeling():
         # Alleen de buitenmuren van het gebouw zijn hoog; binnenwanden zijn
         # lage glazen scheidingen, anders staan ze voor de ruimte erachter.
         buiten_r, buiten_l = y0 == 0, x0 == 0
-        wh_r, wh_l = (58 if buiten_r else 18), (58 if buiten_l else 18)
+        wh_r, wh_l = (64 if buiten_r else 16), (64 if buiten_l else 16)
+        xs = [A[0], B[0], C[0], D[0]]
         kamers.append({
-            "naam": k["naam"], "team": k["team"], "kleur": TEAM_KLEUR[k["team"]],
+            "sleutel": k["sleutel"], "naam": k["naam"], "team": k["team"], "soort": k["soort"],
+            "kleur": TEAM_KLEUR[k["team"]],
+            "A": A, "B": B, "C": C, "D": D, "wh_r": wh_r, "wh_l": wh_l,
             "vloer": f"{A[0]},{A[1]} {B[0]},{B[1]} {C[0]},{C[1]} {D[0]},{D[1]}",
             "muur_l": f"{A[0]},{A[1]} {D[0]},{D[1]} {D[0]},{D[1]-wh_l} {A[0]},{A[1]-wh_l}",
             "muur_r": f"{A[0]},{A[1]} {B[0]},{B[1]} {B[0]},{B[1]-wh_r} {A[0]},{A[1]-wh_r}",
-            "glas_l": not buiten_l, "glas_r": not buiten_r, "wh_r": wh_r,
-            "label": (round((A[0] + B[0]) / 2, 1), round((A[1] + B[1]) / 2 - wh_r + 13, 1)),
+            "glas_l": not buiten_l, "glas_r": not buiten_r,
+            "midden": _iso((x0 + x1) / 2, (y0 + y1) / 2),
+            # kijkvenster voor de focusknop: x, y, breedte, hoogte
+            "focus": (min(xs) - 30, A[1] - wh_r - 40, (max(xs) - min(xs)) + 60, (C[1] - A[1]) + wh_r + 90),
             "diepte": x0 + y0,
         })
         for naam, gx, gy in k["zitplaatsen"]:
             if naam == "dirigent":
-                prof = {"naam": "dirigent", "label": "De Dirigent", "team": "leiding", "href": "/taken"}
+                prof = {"naam": "dirigent", "label": "De Dirigent", "team": "leiding", "href": "/taken", "kort": "Claude Code"}
             else:
                 p = PROFIELEN.get(naam, {"naam": naam, "label": naam, "team": k["team"]})
-                prof = {"naam": naam, "label": p["label"], "team": p["team"], "href": f"/agent/{naam}"}
+                prof = {"naam": naam, "label": p["label"], "team": p["team"], "href": f"/agent/{naam}",
+                        "kort": naam.replace("_", "-")}
             px, py = _iso(gx, gy)
-            zitplaatsen.append({**prof, "x": px, "y": py, "kleur": TEAM_KLEUR.get(prof["team"], "#64748b"),
-                                "diepte": gx + gy})
+            zitplaatsen.append({**prof, "x": px, "y": py, "kamer": k["sleutel"],
+                                "kleur": TEAM_KLEUR.get(prof["team"], "#64748b"), "diepte": gx + gy})
     kamers.sort(key=lambda r: r["diepte"])
     zitplaatsen.sort(key=lambda z: z["diepte"])
-    # Plint van het gebouw en het beeldvenster volgen de buitenmaten.
     X0 = min(k["x0"] for k in KANTOOR_KAMERS); Y0 = min(k["y0"] for k in KANTOOR_KAMERS)
     X1 = max(k["x1"] for k in KANTOOR_KAMERS); Y1 = max(k["y1"] for k in KANTOOR_KAMERS)
-    m = 0.35
+    m = 0.4
     A, B, C, D = _iso(X0 - m, Y0 - m), _iso(X1 + m, Y0 - m), _iso(X1 + m, Y1 + m), _iso(X0 - m, Y1 + m)
     plint = {"boven": f"{A[0]},{A[1]} {B[0]},{B[1]} {C[0]},{C[1]} {D[0]},{D[1]}",
-             "links": f"{D[0]},{D[1]} {C[0]},{C[1]} {C[0]},{C[1]+16} {D[0]},{D[1]+16}",
-             "rechts": f"{C[0]},{C[1]} {B[0]},{B[1]} {B[0]},{B[1]+16} {C[0]},{C[1]+16}"}
-    venster = (D[0] - 20, A[1] - 90, (B[0] - D[0]) + 40, (C[1] - A[1]) + 130)
+             "links": f"{D[0]},{D[1]} {C[0]},{C[1]} {C[0]},{C[1]+18} {D[0]},{D[1]+18}",
+             "rechts": f"{C[0]},{C[1]} {B[0]},{B[1]} {B[0]},{B[1]+18} {C[0]},{C[1]+18}"}
+    venster = (D[0] - 16, A[1] - 96, (B[0] - D[0]) + 32, (C[1] - A[1]) + 136)
     return kamers, zitplaatsen, plint, venster
 
 
@@ -2245,16 +2263,58 @@ def _kantoor_statussen():
     return uit
 
 
+def _kantoor_cijfers(statussen):
+    """Echte cijfers voor de wandschermen: per kamer twee getallen met label."""
+    conn = db()
+    def tel(sql, *args):
+        try:
+            return conn.execute(sql, args).fetchone()[0]
+        except Exception:
+            return 0
+    grens = (_nu() - timedelta(days=30)).isoformat()
+    lopend = tel("SELECT COUNT(*) FROM opdracht WHERE status='lopend'")
+    open_voorstel = tel("SELECT COUNT(*) FROM voorstel WHERE besluit='open'")
+    in_review = tel("SELECT COUNT(*) FROM oplevering WHERE status='in_review'")
+    gepubliceerd = tel("SELECT COUNT(*) FROM oplevering WHERE status='gepubliceerd'")
+    stappen = conn.execute(
+        """SELECT s.agent FROM opdracht_stap s JOIN opdracht o ON o.id=s.opdracht_id
+            WHERE COALESCE(NULLIF(o.afgerond_ts,''), o.aangemaakt) >= ?""", (grens,)).fetchall()
+    conn.close()
+    per_team = {"sales": 0, "marketing": 0, "seo": 0, "directie": 0}
+    seo_namen = {z for k in KANTOOR_KAMERS if k["sleutel"] == "seo" for z, _, _ in k["zitplaatsen"]}
+    for r in stappen:
+        naam = (r["agent"] or "").strip().lower()
+        naam = STATUS_ALIAS.get(naam, naam)
+        for k in KANTOOR_KAMERS:
+            if k["sleutel"] in per_team and any(_stap_hoort_bij(naam, PROFIELEN[z]) for z, _, _ in k["zitplaatsen"] if z in PROFIELEN):
+                per_team[k["sleutel"]] += 1
+                break
+        else:
+            if any(_stap_hoort_bij(naam, PROFIELEN[z]) for z in seo_namen if z in PROFIELEN):
+                per_team["seo"] += 1
+    werkt = sum(1 for v in statussen.values() if v["toestand"] == "werkt")
+    return {
+        "directie": [(lopend, "lopende opdrachten"), (per_team["directie"], "keuringen, 30 dagen")],
+        "vergader": [(sum(per_team.values()), "opdrachten, 30 dagen"), (werkt, "nu aan het werk")],
+        "sales": [(open_voorstel, "open voorstellen"), (per_team["sales"], "opdrachten, 30 dagen")],
+        "marketing": [(in_review, "in review"), (per_team["marketing"], "opdrachten, 30 dagen")],
+        "seo": [(gepubliceerd, "gepubliceerd"), (per_team["seo"], "opdrachten, 30 dagen")],
+    }
+
+
 @app.route("/kantoor")
 def kantoor():
     kamers, zitplaatsen, plint, venster = _kantoor_indeling()
+    statussen = _kantoor_statussen()
     return render_template("kantoor.html", kamers=kamers, zitplaatsen=zitplaatsen, plint=plint,
-                           venster=" ".join(str(round(v)) for v in venster), statussen=_kantoor_statussen())
+                           venster=" ".join(str(round(v)) for v in venster), statussen=statussen,
+                           cijfers=_kantoor_cijfers(statussen))
 
 
 @app.route("/api/kantoor")
 def api_kantoor():
-    return jsonify(_kantoor_statussen())
+    statussen = _kantoor_statussen()
+    return jsonify({"statussen": statussen, "cijfers": _kantoor_cijfers(statussen)})
 
 
 @app.route("/api/opdracht/import", methods=["POST"])

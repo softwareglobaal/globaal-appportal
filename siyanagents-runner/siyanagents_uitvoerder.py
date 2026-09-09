@@ -21,6 +21,7 @@ import urllib.request
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "koppelingen"))
 import pipedrive  # noqa: E402
 import googleads  # noqa: E402
+import inbox_verwerk  # noqa: E402
 
 
 def laad_env(pad):
@@ -89,6 +90,12 @@ def main():
     if not TOKEN:
         print("FOUT: geen AGENTS_TOKEN", file=sys.stderr)
         return
+    # Eerst de inbox van de agent-bewaker (statussen en afgeronde opdrachten
+    # uit de transcripten op de Mac), dan de goedgekeurde voorstellen.
+    try:
+        inbox_verwerk.verwerk(api)
+    except Exception as e:  # noqa: BLE001
+        print(f"inbox: onverwachte fout {type(e).__name__}: {e}", file=sys.stderr)
     acties = api("/api/uitvoer-wacht").get("wacht") or []
     for a in acties:
         vid = a.get("id")
