@@ -117,7 +117,7 @@ hier onderaan bij.
 
 | Stap | Wat ik deed | Waarom het fout was | Fix, en waar die zit |
 |---|---|---|---|
-| 4 (lezen) | Ik geloofde de dossiercontrole: "C4 geen salesmap", "C6 geen verslag", "C13 geen opname bij het plaatsbezoek". | Het dashboard zocht de salesmappen op verouderde namen (02. i.p.v. 01. H-Architects Offerte). De map "2611 Kim Venken" bestond gewoon, met het Fathom-transcript, het bouwplan en de foto's. Ik had geen eigen ogen, dus ik kon het niet weerleggen. | Mapnamen hersteld in het contract-dashboard (contract-systeem, 09-09-2026). En ik lees nu zelf de salesmap en de projectmap (stap 5), dus een fout in de dossiercontrole blokkeert mij niet meer; ik meld dan het verschil. |
+| 4 (lezen) | Ik geloofde de dossiercontrole: "C4 geen salesmap", "C6 geen verslag", "C13 geen opname bij het plaatsbezoek". | Het dashboard zocht de salesmappen op verouderde namen (02. i.p.v. 01. H-Architects Offerte). De salesmap van dossier 2611 bestond gewoon, met het Fathom-transcript, het bouwplan en de foto's. Ik had geen eigen ogen, dus ik kon het niet weerleggen. | Mapnamen hersteld in het contract-dashboard (contract-systeem, 09-09-2026). En ik lees nu zelf de salesmap en de projectmap (stap 5), dus een fout in de dossiercontrole blokkeert mij niet meer; ik meld dan het verschil. |
 | 4 (lezen) | Twee tools van het dashboard gaven een 401 (voorbereidingen, dossiercontrole). | Het Dropbox-token van de stack (Siyans account) mist de scope account_info.read; elke maplijst begon met een account-opvraag die faalde. | Team-namespace vast in de omgeving gezet (DROPBOX_PATH_ROOT_NS), zodat die opvraag overbodig is. Structureel: de Dropbox-app opnieuw autoriseren met die scope (Mehdi). |
 | 5 (bronnen) | Ik las alleen het dossier, de dossiercontrole en de Pipedrive-notities. Geen transcript, geen mails, geen foto's. | Ik had die bronnen niet; de Werkinstructie beschrijft ze wel, maar niemand had ze aan mij gekoppeld. | Eigen bronnenmodule: Dropbox (salesmap + projectmap, pdf en md als tekst) en offerte@ (mails van en naar de klant). Staat in stap 5 en in de tabel "Wat ik weet". |
 | 6 (plan) | Ik verzon veldnamen (opdrachtgever_1_rijksregisternummer, opdrachtgever_1_hoedanigheid). | Ik kende alleen de velden die al ingevuld waren, niet het volledige schema. Het dashboard weigerde ze terecht. | Ik krijg nu elke ronde het veldenschema mee en gebruik alleen die namen. |
@@ -129,7 +129,7 @@ hier onderaan bij.
 
 Nog open (kan ik zelf niet oplossen):
 
-- Van het plaatsbezoek van 22-08-2026 bij Kim Venken vind ik alleen een foto in
+- Van het plaatsbezoek van 22-08-2026 bij dossier 2611 vind ik alleen een foto in
   de projectmap, geen Plaud-transcript. Zolang dat er niet staat, zit de laatste
   bespreking niet in het contract. Mehdi weet of die opname bestaat.
 - De dossiercontrole koppelt een transcript niet aan de afspraak van dezelfde
