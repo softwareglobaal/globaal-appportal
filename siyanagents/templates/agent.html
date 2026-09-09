@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block titel %}{{ agent.label }}{% endblock %}
+{% block body %}
+<style>
+  :root{--t-sales:#b45309;--t-service:#9d174d;--t-partners:#1d4ed8;--t-marketing:#0f766e;--t-leiding:#22303f;}
+  .terug{font-size:12.5px;color:var(--tekst-3);margin:0 0 12px;display:block;}
+  .prof{display:flex;gap:18px;align-items:flex-start;background:var(--paneel);border:1px solid var(--lijn);border-radius:10px;padding:18px 20px;margin:0 0 18px;}
+  .prof .ava{width:72px;height:72px;border-radius:50%;overflow:hidden;flex:none;background:#e2e8f0;}
+  .prof .ava svg{width:100%;height:100%;display:block;}
+  .prof h1{font-size:21px;font-weight:600;margin:0;letter-spacing:-0.01em;}
+  .prof .cd{font-family:var(--mono);font-size:12px;color:var(--tekst-3);}
+  .prof .rol{font-size:13.5px;color:var(--tekst-2);margin:4px 0 8px;max-width:680px;}
+  .feiten{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--tekst-2);}
+  .feiten b{font-weight:600;color:var(--tekst);}
+  .teamtag{display:inline-block;font-size:11px;font-weight:600;color:#fff;padding:2px 8px;border-radius:999px;vertical-align:middle;margin-left:6px;}
+  .t-sales{background:var(--t-sales);} .t-service{background:var(--t-service);} .t-partners{background:var(--t-partners);} .t-marketing{background:var(--t-marketing);} .t-leiding{background:var(--t-leiding);}
+  .st{font-size:12.5px;display:inline-flex;align-items:center;gap:6px;color:var(--tekst-3);}
+  .st.bezig{color:#8a5d10;} .st.klaar{color:#1f7a43;} .st.fout{color:#be123c;}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:#98a1ad;} .dot.ok{background:#1f7a43;} .dot.fout{background:#be123c;}
+  .spin{width:11px;height:11px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;}
+  .chip{font-family:var(--mono);font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--lijn-sterk);background:#fff;color:var(--tekst-2);}
+
+  h2{font-size:16px;font-weight:600;margin:26px 0 4px;}
+  .h2note{color:var(--tekst-2);font-size:12.5px;margin:0 0 12px;}
+  .opd{background:var(--paneel);border:1px solid var(--lijn);border-radius:8px;padding:12px 16px;margin-bottom:10px;}
+  .opd-kop{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .opd-kop h3{margin:0;font-size:14px;font-weight:600;}
+  .opd-kop .wanneer{margin-left:auto;font-size:12px;color:var(--tekst-3);font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .opd .sb{font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;}
+  .sb.klaar{background:#e4f2e8;color:#1f7a43;} .sb.bezig{background:#fbf1dc;color:#8a5d10;} .sb.wacht{background:#f1f3f6;color:#8a94a1;}
+  .opd details{margin-top:8px;}
+  .opd summary{cursor:pointer;font-size:12.5px;color:var(--tekst-2);}
+  .opd pre{white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:12.5px;line-height:1.5;color:var(--tekst-2);background:var(--bg);border:1px solid var(--lijn);border-radius:6px;padding:10px 12px;margin:6px 0 0;max-height:420px;overflow:auto;}
+  .leeg{color:var(--tekst-3);font-size:13px;font-style:italic;}
+  .rolbestand{background:var(--paneel);border:1px solid var(--lijn);border-radius:10px;padding:18px 22px;}
+  .rolbestand .prose{max-width:760px;}
+  .rolbestand .prose h1,.rolbestand .prose h2{font-size:15px;margin:18px 0 6px;}
+  .rolbestand .prose h3{font-size:13.5px;margin:14px 0 4px;}
+  .rolbestand .prose p,.rolbestand .prose li{font-size:13.5px;line-height:1.55;}
+  .rolbestand .prose code{font-family:var(--mono);font-size:12px;background:var(--bg);padding:1px 4px;border-radius:3px;}
+  .rolbestand .prose pre{background:var(--bg);border:1px solid var(--lijn);border-radius:6px;padding:10px 12px;overflow:auto;font-size:12px;}
+  .rolbestand .prose table{border-collapse:collapse;font-size:12.5px;} .rolbestand .prose th,.rolbestand .prose td{border:1px solid var(--lijn);padding:4px 8px;text-align:left;}
+</style>
+
+{% set kleur = {'sales':'#b45309','service':'#9d174d','partners':'#1d4ed8','marketing':'#0f766e','leiding':'#22303f'}.get(agent.team, '#64748b') %}
+<a class="terug" href="/seo-team">&larr; Organogram</a>
+
+<div class="prof">
+  <span class="ava" data-seed="{{ agent.naam }}" data-bg="{{ kleur }}"></span>
+  <div>
+    <h1>{{ agent.label }} <span class="teamtag t-{{ agent.team }}">{{ {'sales':'sales','service':'klantenservice','partners':'partners','marketing':'marketing','leiding':'leiding'}.get(agent.team, agent.team) }}</span></h1>
+    <span class="cd">{{ agent.naam }}{% if rol and rol.bijgewerkt %} · rolbestand bijgewerkt {{ rol.bijgewerkt }}{% endif %}</span>
+    <p class="rol">{{ (rol.meta.description if rol and rol.meta.description else agent.rol) }}</p>
+    <div class="feiten">
+      <span><b>Pijlers</b> {{ agent.pijlers }}</span>
+      <span><b>Opdrachten</b> {{ totaal }}</span>
+      <span><b>Nu</b>
+        {%- if status and status.status == 'actief' %} <span class="st bezig"><i class="spin"></i>bezig{% if status.taak %} · {{ status.taak }}{% endif %}</span>
+        {%- elif status and status.status == 'klaar' %} <span class="st klaar"><i class="dot ok"></i>klaar{% if status.taak %} · {{ status.taak }}{% endif %}</span>
+        {%- elif status and status.status == 'fout' %} <span class="st fout"><i class="dot fout"></i>fout</span>
+        {%- elif status and status.status == 'waakt' %} <span class="st"><i class="dot"></i>waakt</span>
+        {%- else %} <span class="st"><i class="dot"></i>beschikbaar</span>{% endif %}</span>
+    </div>
+    {% if rol and rol.tools %}<div class="chips">{% for t in rol.tools %}<span class="chip">{{ t }}</span>{% endfor %}</div>{% endif %}
+  </div>
+</div>
+
+<h2>Laatste opdrachten</h2>
+<p class="h2note">De vijf recentste van {{ totaal }} op het bord, met de opdracht zoals de dirigent ze gaf en het rapport dat de agent terugstuurde.</p>
+{% if not opdrachten %}<p class="leeg">Nog geen opdrachten op het bord. Deze agent bestaat als rolbeschrijving, maar heeft nog niet gewerkt.</p>{% endif %}
+{% for o in opdrachten %}
+<div class="opd">
+  <div class="opd-kop">
+    <h3>{{ o.titel }}</h3>
+    <span class="sb {{ 'klaar' if o.stap_status == 'klaar' else ('bezig' if o.stap_status == 'bezig' else 'wacht') }}">{{ o.stap_status }}</span>
+    {% if o.aangemaakt_door %}<span style="font-size:12px;color:var(--tekst-3)">via {{ o.aangemaakt_door }}</span>{% endif %}
+    <span class="wanneer">{{ o.wanneer }}</span>
+  </div>
+  {% if o.omschrijving %}<details><summary>Opdracht</summary><pre>{{ o.omschrijving }}</pre></details>{% endif %}
+  {% if o.stap_detail %}<details><summary>Rapport van de agent</summary><pre>{{ o.stap_detail }}</pre></details>{% endif %}
+</div>
+{% endfor %}
+
+<h2>Instructies en werkwijze</h2>
+{% if rol %}
+<p class="h2note">Het volledige rolbestand van deze agent ({{ rol.regels }} regels), zoals de dirigent het meegeeft bij elke opdracht. Dit is wat de agent weet, mag en nooit doet.</p>
+<div class="rolbestand"><div class="prose">{{ rol.html|safe }}</div></div>
+{% else %}
+{% if agent.leden %}<p class="h2note">Dit is een ploeg, geen agent met een eigen rolbestand. De instructies staan bij de leden:
+  {% for l in agent.leden %}<a href="/agent/{{ l }}">{{ l }}</a>{% if not loop.last %} · {% endif %}{% endfor %}.</p>
+{% else %}<p class="leeg">Geen rolbestand gevonden voor {{ agent.bestand }}. Draai seed/agents-sync.sh en push.</p>{% endif %}
+{% endif %}
+
+<script>
+  (function(){
+    var skins=["#f2c9a0","#e7b48c","#d29a6a","#b07a48","#8a5a34"];
+    var hairs=["#2b2b2b","#43301c","#6b4a2b","#9a9ea6","#caa96a","#a8503a"];
+    function hash(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=(h*16777619)>>>0;}return h;}
+    function avatar(bg,skin,hair,glasses){
+      var g=glasses?'<g fill="none" stroke="#2c2c2c" stroke-width="1.2"><circle cx="20" cy="21.5" r="3"/><circle cx="28" cy="21.5" r="3"/><line x1="23" y1="21.5" x2="25" y2="21.5"/></g>':'';
+      return '<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" fill="'+bg+'"/><path d="M7 47c0-9.4 7.6-15.6 17-15.6S41 37.6 41 47z" fill="#3a4658"/><circle cx="24" cy="21" r="8.6" fill="'+skin+'"/><path d="M15.4 20.6c0-6.7 3.9-10.6 8.6-10.6s8.6 3.9 8.6 10.6c-1.9-3.7-4.5-4.9-8.6-4.9s-6.7 1.2-8.6 4.9z" fill="'+hair+'"/>'+g+'</svg>';
+    }
+    document.querySelectorAll('.ava[data-seed]').forEach(function(el){
+      var seed=el.getAttribute('data-seed'), bg=el.getAttribute('data-bg')||"#64748b", h=hash(seed);
+      el.innerHTML=avatar(bg,skins[h%skins.length],hairs[(h>>3)%hairs.length],((h>>6)%3===0));
+    });
+  })();
+</script>
+{% endblock %}

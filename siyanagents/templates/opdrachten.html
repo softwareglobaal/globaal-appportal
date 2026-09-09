@@ -53,7 +53,7 @@
       <span class="nr">{{ loop.index }}</span>
       <span class="naam">{{ s.agent }}</span>
       {% if s.rol %}<span class="rol">· {{ s.rol }}</span>{% endif %}
-      {% if s.detail %}<span class="detail">— {{ s.detail }}</span>{% endif %}
+      {% if s.detail %}<span class="detail">— {{ s.detail[:160] }}{% if s.detail|length > 160 %}…{% endif %}</span>{% endif %}
       <span class="stap-st st-{{ s.status }}">
         {% if s.status == 'klaar' %}✓ klaar
         {% elif s.status == 'bezig' %}<span class="spin"></span> bezig

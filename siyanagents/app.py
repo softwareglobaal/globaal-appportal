@@ -72,7 +72,8 @@ SM_AGENTS = [
      "pijlers": "A2.3", "statusnamen": ["beeld", "ontwerper"]},
     {"naam": "seo", "label": "Het SEO-team", "team": "marketing",
      "rol": "onderzoek, schrijven en kwaliteitscontrole van SEO-pagina's, met een blueprint-poort",
-     "pijlers": "A2.1 · A2.3 · A3.3", "statusnamen": ["seo-onderzoek", "seo-schrijver", "seo-qc"]},
+     "pijlers": "A2.1 · A2.3 · A3.3", "statusnamen": ["seo-onderzoek", "seo-schrijver", "seo-qc"],
+     "leden": ["seo-onderzoek", "seo-schrijver", "seo-qc"]},
     {"naam": "website_bouwer", "label": "De Bouwmeester", "team": "marketing",
      "rol": "bouwt volledige statische websites van merk tot live site; publiceert nooit zonder akkoord",
      "pijlers": "A2.3", "statusnamen": ["website-bouwer", "website_bouwer", "bouwmeester"]},
@@ -355,6 +356,12 @@ def db():
         volgorde    INTEGER DEFAULT 0,
         detail      TEXT DEFAULT '',
         bijgewerkt  TEXT DEFAULT '')""")
+    # Herkomst van een opdracht (bv. transcript:<sessie>:<tool_use_id>), zodat
+    # een import uit de Claude Code-transcripten idempotent kan draaien.
+    try:
+        conn.execute("ALTER TABLE opdracht ADD COLUMN bron TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
     # Opleveringen: deliverables van de agents (rapport, blueprint, tekst) die
     # jij valideert. Fase 1 van het besturingscentrum.
     conn.execute("""CREATE TABLE IF NOT EXISTS oplevering (
@@ -2034,6 +2041,155 @@ def disciplines():
         momentopname=data.get("momentopname", ""),
         register_url=f"https://organisatie.{BASE_DOMAIN}/disciplines",
     )
+
+
+# --- Collega-profiel per agent -----------------------------------------------
+# Het rolbestand (instructies, werkwijze, grenzen) is een kopie van
+# ~/.claude/agents op de Mac van Siyan, in siyanagents/agents/ (verversen met
+# seed/agents-sync.sh). De recente opdrachten komen uit het bord zelf.
+
+AGENT_DIR = os.path.join(app.root_path, "agents")
+
+# Analyse-specialisten van het SEO-team: geen eigen regel in SM_AGENTS, wel een
+# rolbestand en een profiel.
+SEO_SPECIALISTEN = {
+    "seo-technical": "Techniek", "seo-content": "Teksten", "seo-schema": "Data",
+    "seo-geo": "AI-zoeken", "seo-local": "Lokaal", "seo-performance": "Snelheid",
+    "seo-backlinks": "Backlinks", "seo-sitemap": "Sitemap", "seo-visual": "Visueel",
+    "seo-sxo": "Zoekgedrag", "seo-cluster": "Content-plan", "seo-google": "Google-data",
+    "seo-maps": "Kaarten", "seo-ecommerce": "Webshop", "seo-drift": "Bewaking",
+    "seo-dataforseo": "Live-data", "seo-flow": "FLOW", "seo-image-gen": "Beeld maken",
+}
+
+
+def _profielen():
+    uit = {}
+    for a in SM_AGENTS:
+        uit[a["naam"]] = {**a, "bestand": a["naam"].replace("_", "-")}
+    for a in SEO_TEAM:
+        if a["naam"] in uit or a["naam"] == "team":
+            continue
+        uit[a["naam"]] = {"naam": a["naam"], "label": a["bijnaam"], "team": "marketing",
+                          "rol": a["rol"], "pijlers": "SEO-team", "statusnamen": [a["naam"]],
+                          "bestand": a["naam"]}
+    for naam, label in SEO_SPECIALISTEN.items():
+        uit[naam] = {"naam": naam, "label": label, "team": "marketing", "rol": "",
+                     "pijlers": "SEO-team, analyse", "statusnamen": [naam], "bestand": naam}
+    return uit
+
+
+PROFIELEN = _profielen()
+
+
+def laad_rolbestand(bestand):
+    """Frontmatter + markdown-body van een rolbestand; None als het ontbreekt."""
+    pad = os.path.join(AGENT_DIR, f"{bestand}.md")
+    if not os.path.isfile(pad):
+        return None
+    with open(pad, encoding="utf-8") as f:
+        tekst = f.read()
+    meta, body = {}, tekst
+    if tekst.startswith("---"):
+        einde = tekst.find("\n---", 3)
+        if einde > 0:
+            for regel in tekst[3:einde].strip().splitlines():
+                if ":" in regel:
+                    k, v = regel.split(":", 1)
+                    meta[k.strip()] = v.strip()
+            body = tekst[einde + 4:].lstrip("\n")
+    tools = [t.strip() for t in meta.get("tools", "").split(",") if t.strip()]
+    try:
+        bijgewerkt = datetime.fromtimestamp(os.path.getmtime(pad)).strftime("%d-%m-%Y")
+    except OSError:
+        bijgewerkt = ""
+    return {"meta": meta, "tools": tools, "bijgewerkt": bijgewerkt,
+            "html": markdown.markdown(body, extensions=["tables", "fenced_code"]),
+            "regels": body.count("\n") + 1}
+
+
+def _stap_hoort_bij(stap_agent, agent):
+    """Hoort een opdrachtstap bij deze agent? De dirigent schreef de naam niet
+    altijd gelijk (code, label, alias, 'De Ontwerper (beeld)')."""
+    s = (stap_agent or "").strip().lower()
+    if not s:
+        return False
+    kandidaten = {agent["naam"], agent["naam"].replace("_", "-")} | set(agent.get("statusnamen", []))
+    label = agent["label"].lower()
+    kandidaten.add(label)
+    for lidwoord in ("de ", "het "):
+        if label.startswith(lidwoord):
+            kandidaten.add(label[len(lidwoord):])
+    if s in kandidaten:
+        return True
+    return any(k in s for k in kandidaten if len(k) > 4)
+
+
+def _opdrachten_van(agent, limiet=5):
+    conn = db()
+    rows = conn.execute(
+        """SELECT s.agent AS stap_agent, s.status AS stap_status, s.detail AS stap_detail,
+                  s.rol AS stap_rol, s.bijgewerkt AS stap_ts, o.*
+             FROM opdracht_stap s JOIN opdracht o ON o.id = s.opdracht_id
+            ORDER BY COALESCE(NULLIF(o.afgerond_ts, ''), NULLIF(o.bijgewerkt, ''), o.aangemaakt) DESC, s.id DESC"""
+    ).fetchall()
+    conn.close()
+    uit, gezien = [], set()
+    for r in rows:
+        if r["id"] in gezien or not _stap_hoort_bij(r["stap_agent"], agent):
+            continue
+        gezien.add(r["id"])
+        d = dict(r)
+        d["wanneer"] = _fmt(d.get("afgerond_ts") or d.get("bijgewerkt") or d.get("aangemaakt"))
+        uit.append(d)
+    return uit[:limiet], len(uit)
+
+
+@app.route("/agent/<naam>")
+def agent_profiel(naam):
+    naam = naam.strip().lower()[:40]
+    agent = PROFIELEN.get(naam)
+    if not agent:
+        abort(404)
+    rol = laad_rolbestand(agent["bestand"])
+    opdrachten, totaal = _opdrachten_van(agent)
+    return render_template(
+        "agent.html", agent=agent, rol=rol, opdrachten=opdrachten, totaal=totaal,
+        status=status_map().get(naam),
+    )
+
+
+@app.route("/api/opdracht/import", methods=["POST"])
+def api_opdracht_import():
+    """Historische opdrachten uit de Claude Code-transcripten op het bord zetten
+    (afgerond, een stap per agent). Idempotent op `bron`."""
+    if not _token_ok():
+        abort(403)
+    d = request.get_json(silent=True) or {}
+    nieuw = overgeslagen = 0
+    conn = db()
+    for it in d.get("opdrachten") or []:
+        bron = str(it.get("bron", "")).strip()[:160]
+        if not bron or conn.execute("SELECT 1 FROM opdracht WHERE bron=?", (bron,)).fetchone():
+            overgeslagen += 1
+            continue
+        titel = str(it.get("titel", "")).strip()[:200] or "(zonder titel)"
+        aangemaakt = str(it.get("aangemaakt") or _nu().isoformat())[:40]
+        afgerond = str(it.get("afgerond") or aangemaakt)[:40]
+        cur = conn.execute(
+            """INSERT INTO opdracht (titel, omschrijving, status, aangemaakt, aangemaakt_door,
+                                     afgerond_ts, bijgewerkt, bron)
+               VALUES (?, ?, 'afgerond', ?, ?, ?, ?, ?)""",
+            (titel, str(it.get("omschrijving", ""))[:4000], aangemaakt,
+             str(it.get("door", "Claude Code"))[:120], afgerond, afgerond, bron))
+        conn.execute(
+            """INSERT INTO opdracht_stap (opdracht_id, agent, rol, status, volgorde, detail, bijgewerkt)
+               VALUES (?, ?, ?, 'klaar', 0, ?, ?)""",
+            (cur.lastrowid, str(it.get("agent", "")).strip()[:60], str(it.get("rol", ""))[:200],
+             str(it.get("resultaat", ""))[:6000], afgerond))
+        nieuw += 1
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "nieuw": nieuw, "overgeslagen": overgeslagen})
 
 
 
