@@ -30,7 +30,8 @@ from authentik.core.models import Application, Group
 from authentik.flows.models import Flow
 from authentik.outposts.models import Outpost
 from authentik.policies.models import PolicyBinding
-from authentik.providers.oauth2.models import (ClientTypes, OAuth2Provider,
+from authentik.providers.oauth2.models import (ClientType, GrantType,
+                                               OAuth2Provider,
                                                RedirectURI,
                                                RedirectURIMatchingMode,
                                                ScopeMapping)
@@ -45,7 +46,13 @@ SCOPES = ("openid", "profile", "email")
 auth_flow = Flow.objects.get(slug="default-provider-authorization-implicit-consent")
 inval_flow = Flow.objects.filter(slug="default-provider-invalidation-flow").first()
 
-defaults = dict(authorization_flow=auth_flow, client_type=ClientTypes.CONFIDENTIAL)
+# Alleen de authorization code flow. client_credentials en password staan bij
+# andere providers wel aan, maar die hebben we niet nodig en een grant die je
+# niet gebruikt is een deur die je niet dicht hoeft te houden.
+GRANTS = [GrantType.AUTHORIZATION_CODE]
+
+defaults = dict(authorization_flow=auth_flow, client_type=ClientType.CONFIDENTIAL,
+                grant_types=GRANTS)
 if inval_flow:
     defaults["invalidation_flow"] = inval_flow
 
@@ -56,6 +63,9 @@ oidc, nieuw = OAuth2Provider.objects.get_or_create(
 # is de klassieke manier waarop een autorisatiecode bij een vreemde belandt.
 oidc.redirect_uris = [RedirectURI(RedirectURIMatchingMode.STRICT, TERUG)]
 oidc.authorization_flow = auth_flow
+# Zonder deze regel blijft grant_types leeg en weigert Authentik elk verzoek
+# met "invalid_request"; de foutmelding noemt de oorzaak niet.
+oidc.grant_types = GRANTS
 if inval_flow:
     oidc.invalidation_flow = inval_flow
 oidc.save()

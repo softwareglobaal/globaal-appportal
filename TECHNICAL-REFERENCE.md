@@ -757,6 +757,20 @@ als unhealthy gezien in plaats van 30 seconden. Uptime-Kuma
 Het opgeruimde effect was zichtbaar in het geheugen, niet in de CPU: de swap
 liep terug van 4095 van de 4096 MB in gebruik naar ongeveer 2800.
 
+**9.17 OAuth2-provider via de ORM gaf "invalid_request" (09-09-2026)** - een met
+`OAuth2Provider.objects.get_or_create()` aangemaakte provider heeft `grant_types`
+**leeg**; de UI-serializer vult dat wel, de ORM niet. Authentik weigert dan elk
+verzoek met `error=invalid_request` en "The request is otherwise malformed", en
+noemt de oorzaak nergens: niet in de melding, niet in het logboek. Regel 184 van
+`providers/oauth2/views/authorize.py` doet `if self.grant_type not in
+self.provider.grant_types`. *Fix:* `provider.grant_types =
+[GrantType.AUTHORIZATION_CODE]` expliciet zetten. Zelfde familie als 9.14
+(`set_oauth_defaults()` bij de proxy-provider): wat je via de ORM maakt, mist de
+standaardwaarden die de API-laag zou zetten.
+
+Let ook op de klassenamen in deze versie: het is `ClientType` en `GrantType`,
+enkelvoud, en `RedirectURI(matching_mode, url)` als dataclass.
+
 Overige ingebouwde fixes: wildcard-certificaten matchen geen single-label
 domeinen → expliciete SAN's per host; `certgen` overschreef echte certs →
 `CERTGEN_DISABLE=1` in productie; single logout → globale invalidation-flow;

@@ -9,7 +9,7 @@ rechten die de gebruiker op het portaal ook heeft.
 | Draait als | systemd `portal-mcp` op de host, `172.17.0.1:8113` |
 | Omgeving | `/home/ubuntu/portal-mcp.env` (MCP_SECRET, MCP_LEZER_WACHTWOORD) |
 | Code | deze map (stack-repo), VM-checkout `~/appportal/portal-mcp` |
-| Vhost | `nginx/templates/71-portal-mcp.conf.template` |
+| Vhost | `nginx/templates/71-portal-mcp.conf.template` (geen forward-auth) |
 | Toegang | `scripts/add-portal-mcp.py`, groep `portaal-mcp` plus admin en manager |
 | Rechten | `rol-authentik.sql` en `rol-appportal.sql` (gegenereerd) |
 
@@ -34,6 +34,34 @@ buiten de SSO om binnenkomt op een vaste gebruiker. Die zit hier bewust niet in.
 Deze server ontsluit alle applicaties; een sleutel in een `.env` die als
 beheerder binnenkomt zou de hele belofte onderuithalen. Ook beheer gaat door de
 voordeur.
+
+## Koppelen dwingt een verse login af
+
+Dit is de tweede fout die er bijna in was blijven zitten, en de gevaarlijkste.
+
+De eerste opzet zette `/oauth/authorize` achter de Authentik forward-auth, net
+als vermogen, renovision en pipedrive. Die neemt over wie er toevallig in de
+browser is ingelogd. Op een gedeelde PC koppelt de tweede collega dan als de
+eerste, ziet hij diens applicaties, en er komt geen enkele foutmelding. "Log
+eerst even uit" in een handleiding is geen maatregel: dat werkt precies zolang
+als iedereen eraan denkt.
+
+Daarom is deze server zelf een **OIDC-client** van Authentik en stuurt hij
+`prompt=login` mee. Authentik authenticeert dan opnieuw ongeacht de sessie
+(`/authentik/providers/oauth2/views/authorize.py`, "If prompt=login, we need to
+re-authenticate the user regardless"). De identiteit komt uit de userinfo van
+dat verse token, niet uit een proxy-header, en de vhost heeft daardoor helemaal
+geen forward-auth meer nodig.
+
+Wat er onderweg is afgevallen en waarom, zodat niemand het opnieuw probeert:
+
+- **Uitloggen en terugsturen.** `default-provider-invalidation-flow` heeft geen
+  enkele stage en beeindigt dus geen sessie. En de `next`-parameter van de
+  flow-executor accepteert alleen relatieve adressen, dus terugkomen op onze
+  eigen host kan er niet doorheen.
+- **Een bevestigingsscherm.** Dat maakt de identiteit zichtbaar maar dwingt
+  niets af. Het zit nu in de tool `apps`, die begint met `ingelogd_als`, als
+  vangnet en niet als maatregel.
 
 ## De regel die boven alles staat
 
