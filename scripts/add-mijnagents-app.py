@@ -6,7 +6,7 @@ from authentik.policies.models import PolicyBinding
 from authentik.providers.proxy.models import ProxyProvider
 
 BASE = os.environ.get("BASE_DOMAIN", "globaal.be")
-SLUG, NAME, SUB = "mijnagents", "Mijn agents", "mijnagents"
+SLUG, NAME, SUB = "mijnagents", "Mehdi Agents", "mijnagents"
 ROLES = ["admin", "manager", "agents"]
 
 auth_flow = Flow.objects.get(slug="default-provider-authorization-implicit-consent")

@@ -9,7 +9,7 @@ services:
     env_file:
       - ./mijnagents-data/.env
     environment:
-      APP_NAME: Mijn agents
+      APP_NAME: Mehdi Agents
       BASE_DOMAIN: ${BASE_DOMAIN}
       AGENTS_DB: /data/mijnagents.db
       PORT: "3022"
