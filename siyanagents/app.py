@@ -2158,10 +2158,11 @@ def agent_profiel(naam):
     )
 
 
-# --- Kantoor: het team als figuurtjes aan hun bureau -------------------------
-# Isometrische weergave (2.5D) van dezelfde agents als het organogram. Werkt
-# een agent (status actief), dan typt hij met een wolkje; anders slaapt hij.
-# Coordinaten zijn gridunits op de vloer; _iso zet ze om naar schermpixels.
+# --- Kantoor: virtuele kantooromgeving --------------------------------------
+# Isometrische weergave (2.5D) van dezelfde agents als het organogram, in een
+# echte kantooromgeving: donker tapijt, glazen scheidingswanden, zwevende
+# dashboardschermen, lounge en receptie. Werkt een agent (status actief), dan
+# typt hij en staat zijn scherm aan; anders slaapt hij en is het scherm uit.
 
 ISO_TW, ISO_TH = 30, 15
 
@@ -2170,81 +2171,106 @@ def _iso(x, y):
     return round((x - y) * ISO_TW, 1), round((x + y) * ISO_TH, 1)
 
 
-def _rij(namen, x_start, y, stap=2.6):
+def _rij(namen, x_start, y, stap):
     return [(n, round(x_start + i * stap, 2), y) for i, n in enumerate(namen)]
 
 
+BREED = 22.0
 KANTOOR_KAMERS = [
-    {"sleutel": "receptie", "naam": "Receptie", "team": "leiding", "soort": "receptie",
-     "x0": 0, "y0": 0, "x1": 5.6, "y1": 4, "zitplaatsen": []},
-    {"sleutel": "directie", "naam": "Directie", "team": "leiding", "soort": "bureau",
-     "x0": 6.2, "y0": 0, "x1": 12.4, "y1": 4,
-     "zitplaatsen": [("dirigent", 7.9, 2.0), ("eindcontrole", 10.7, 2.0)]},
-    {"sleutel": "vergader", "naam": "Vergaderruimte", "team": "leiding", "soort": "vergader",
-     "x0": 13.0, "y0": 0, "x1": 19.6, "y1": 4, "zitplaatsen": []},
-    {"sleutel": "sales", "naam": "Sales, klantenservice en partners", "team": "sales", "soort": "bureau",
-     "x0": 0, "y0": 4.6, "x1": 19.6, "y1": 8.6,
-     "zitplaatsen": _rij(["verkoopstrateeg", "dealmaker", "offertemeester", "klantenzorg", "relatiebeheerder"], 2.6, 6.6, 3.6)},
-    {"sleutel": "marketing", "naam": "Marketing", "team": "marketing", "soort": "bureau",
-     "x0": 0, "y0": 9.2, "x1": 19.6, "y1": 13.2,
-     "zitplaatsen": _rij(["marktverkenner", "branding", "contentregisseur", "beeld", "website_bouwer", "woordvoerder"], 2.3, 11.2, 3.0)},
-    {"sleutel": "seo", "naam": "SEO-afdeling", "team": "seo", "soort": "bureau",
-     "x0": 0, "y0": 13.8, "x1": 19.6, "y1": 25.8,
-     "zitplaatsen": _rij(["seo-onderzoek", "seo-schrijver", "seo-qc", "seo-technical", "seo-content", "seo-schema", "seo-geo"], 1.3, 15.6)
-                    + _rij(["seo-local", "seo-performance", "seo-backlinks", "seo-sitemap", "seo-visual", "seo-sxo", "seo-cluster"], 1.3, 19.5)
-                    + _rij(["seo-google", "seo-maps", "seo-ecommerce", "seo-drift", "seo-dataforseo", "seo-flow", "seo-image-gen"], 1.3, 23.4)},
+    {"sleutel": "directie", "naam": "Directie", "team": "leiding", "vloer": "tapijt",
+     "x0": 0, "y0": 0, "x1": 10.4, "y1": 4.4,
+     "zitplaatsen": [("dirigent", 3.0, 2.2), ("eindcontrole", 7.2, 2.2)],
+     "decor": [("kast", 9.6, 0.8), ("plant", 0.7, 3.6)]},
+    {"sleutel": "vergader", "naam": "Vergaderruimte", "team": "leiding", "vloer": "tapijt",
+     "x0": 11.0, "y0": 0, "x1": BREED, "y1": 4.4, "zitplaatsen": [],
+     "decor": [("vergadertafel", 16.5, 2.2), ("plant", 11.7, 3.6)]},
+    {"sleutel": "sales", "naam": "Sales, klantenservice en partners", "team": "sales", "vloer": "tapijt",
+     "x0": 0, "y0": 5.0, "x1": BREED, "y1": 9.0,
+     "zitplaatsen": _rij(["verkoopstrateeg", "dealmaker", "offertemeester", "klantenzorg", "relatiebeheerder"], 2.4, 7.0, 4.2),
+     "decor": [("plant", 0.7, 8.2), ("printer", 21.2, 5.6), ("plantenbak", 21.2, 8.2)]},
+    {"sleutel": "marketing", "naam": "Marketing", "team": "marketing", "vloer": "tapijt",
+     "x0": 0, "y0": 9.6, "x1": BREED, "y1": 13.6,
+     "zitplaatsen": _rij(["marktverkenner", "branding", "contentregisseur", "beeld", "website_bouwer", "woordvoerder"], 2.2, 11.6, 3.5),
+     "decor": [("plant", 0.7, 12.8), ("kast", 21.2, 10.2), ("plantenbak", 21.2, 12.8)]},
+    {"sleutel": "seo", "naam": "SEO-afdeling", "team": "seo", "vloer": "tapijt",
+     "x0": 0, "y0": 14.2, "x1": BREED, "y1": 26.4,
+     "zitplaatsen": (_rij(["seo-onderzoek", "seo-schrijver", "seo-qc", "seo-technical", "seo-content", "seo-schema", "seo-geo"], 1.9, 16.4, 3.1)
+                     + _rij(["seo-local", "seo-performance", "seo-backlinks", "seo-sitemap", "seo-visual", "seo-sxo", "seo-cluster"], 1.9, 20.2, 3.1)
+                     + _rij(["seo-google", "seo-maps", "seo-ecommerce", "seo-drift", "seo-dataforseo", "seo-flow", "seo-image-gen"], 1.9, 24.0, 3.1)),
+     "decor": [("plant", 0.7, 25.6), ("printer", 21.3, 14.8), ("plantenbak", 21.3, 19.0), ("plant", 21.3, 25.6)]},
+    {"sleutel": "lounge", "naam": "Onthaal en lounge", "team": "leiding", "vloer": "tegel",
+     "x0": 0, "y0": 27.0, "x1": BREED, "y1": 31.6, "zitplaatsen": [],
+     "decor": [("groenmuur", 2.6, 27.4), ("serverrack", 6.2, 27.4), ("kunst", 19.4, 27.4),
+               ("plant", 4.6, 29.4), ("balie", 9.8, 28.7), ("kleed", 16.8, 29.9),
+               ("bank", 16.6, 29.0), ("fauteuil", 14.4, 30.5), ("fauteuil", 18.8, 30.5),
+               ("tafeltje", 16.7, 30.2), ("plantenbak", 7.4, 30.6), ("plantenbak", 21.0, 28.8),
+               ("plant", 1.1, 30.2), ("plant", 12.2, 30.6), ("plant", 21.2, 30.8)]},
 ]
-TEAM_KLEUR = {"sales": "#b45309", "service": "#9d174d", "partners": "#1d4ed8",
-              "marketing": "#0f766e", "leiding": "#22303f", "seo": "#2563eb"}
-# Welke kamer toont welke cijfers op zijn wandscherm (zie _kantoor_cijfers).
-KAMER_TEAMS = {"sales": {"sales", "service", "partners"}, "marketing": {"marketing"},
-               "seo": {"seo-team"}, "directie": {"leiding"}, "vergader": {"alles"}}
+TEAM_KLEUR = {"sales": "#c2761c", "service": "#c0407a", "partners": "#3b7de0",
+              "marketing": "#129b8c", "leiding": "#7a8ca3", "seo": "#4f8ff5"}
 
 
 def _kantoor_indeling():
-    kamers, zitplaatsen = [], []
+    """Kamers (vloeren en wanden) en alle objecten, elk met zijn dieptewaarde
+    zodat de tekening van achter naar voor opgebouwd kan worden."""
+    kamers, objecten, zitplaatsen = [], [], []
     for k in KANTOOR_KAMERS:
         x0, y0, x1, y1 = k["x0"], k["y0"], k["x1"], k["y1"]
         A, B, C, D = _iso(x0, y0), _iso(x1, y0), _iso(x1, y1), _iso(x0, y1)
-        # Alleen de buitenmuren van het gebouw zijn hoog; binnenwanden zijn
-        # lage glazen scheidingen, anders staan ze voor de ruimte erachter.
+        # Alleen de buitenrand van het gebouw krijgt een hoge muur met ramen;
+        # binnenin staan lage glazen scheidingswanden.
         buiten_r, buiten_l = y0 == 0, x0 == 0
-        wh_r, wh_l = (64 if buiten_r else 16), (64 if buiten_l else 16)
+        wh_r, wh_l = (78 if buiten_r else 26), (78 if buiten_l else 26)
         xs = [A[0], B[0], C[0], D[0]]
         kamers.append({
-            "sleutel": k["sleutel"], "naam": k["naam"], "team": k["team"], "soort": k["soort"],
+            "sleutel": k["sleutel"], "naam": k["naam"], "team": k["team"], "vloersoort": k["vloer"],
             "kleur": TEAM_KLEUR[k["team"]],
             "A": A, "B": B, "C": C, "D": D, "wh_r": wh_r, "wh_l": wh_l,
+            "breedte_r": round(B[0] - A[0], 1), "breedte_l": round(A[0] - D[0], 1),
             "vloer": f"{A[0]},{A[1]} {B[0]},{B[1]} {C[0]},{C[1]} {D[0]},{D[1]}",
             "muur_l": f"{A[0]},{A[1]} {D[0]},{D[1]} {D[0]},{D[1]-wh_l} {A[0]},{A[1]-wh_l}",
             "muur_r": f"{A[0]},{A[1]} {B[0]},{B[1]} {B[0]},{B[1]-wh_r} {A[0]},{A[1]-wh_r}",
             "glas_l": not buiten_l, "glas_r": not buiten_r,
-            "midden": _iso((x0 + x1) / 2, (y0 + y1) / 2),
-            # kijkvenster voor de focusknop: x, y, breedte, hoogte
-            "focus": (min(xs) - 30, A[1] - wh_r - 40, (max(xs) - min(xs)) + 60, (C[1] - A[1]) + wh_r + 90),
+            "bord": _iso(x0 + 0.2, y1 - 0.2),
+            "focus": (min(xs) - 40, A[1] - wh_r - 60, (max(xs) - min(xs)) + 80, (C[1] - A[1]) + wh_r + 120),
             "diepte": x0 + y0,
         })
+        for soort, gx, gy in k.get("decor", []):
+            px, py = _iso(gx, gy)
+            # Een vloerkleed ligt plat op de grond en hoort dus altijd als
+            # eerste getekend te worden, anders bedekt het het meubilair.
+            diepte = -1000 if soort == "kleed" else gx + gy
+            objecten.append({"soort": soort, "x": px, "y": py, "kamer": k["sleutel"],
+                             "kleur": TEAM_KLEUR[k["team"]], "diepte": diepte})
+        # Cijferscherm: zweeft achteraan in de ruimte, boven de werkplekken.
+        if k["sleutel"] in ("directie", "vergader", "sales", "marketing", "seo"):
+            px, py = _iso(x1 - 1.4, y0 + 0.7)
+            objecten.append({"soort": "dashboard", "x": px, "y": py, "kamer": k["sleutel"],
+                             "kleur": TEAM_KLEUR[k["team"]], "diepte": (x1 - 1.4) + (y0 + 0.7)})
         for naam, gx, gy in k["zitplaatsen"]:
             if naam == "dirigent":
-                prof = {"naam": "dirigent", "label": "De Dirigent", "team": "leiding", "href": "/taken", "kort": "Claude Code"}
+                prof = {"naam": "dirigent", "label": "De Dirigent", "team": "leiding",
+                        "href": "/taken", "kort": "Claude Code"}
             else:
                 p = PROFIELEN.get(naam, {"naam": naam, "label": naam, "team": k["team"]})
-                prof = {"naam": naam, "label": p["label"], "team": p["team"], "href": f"/agent/{naam}",
-                        "kort": naam.replace("_", "-")}
+                prof = {"naam": naam, "label": p["label"], "team": p["team"],
+                        "href": f"/agent/{naam}", "kort": naam.replace("_", "-")}
             px, py = _iso(gx, gy)
-            zitplaatsen.append({**prof, "x": px, "y": py, "kamer": k["sleutel"],
-                                "kleur": TEAM_KLEUR.get(prof["team"], "#64748b"), "diepte": gx + gy})
+            z = {**prof, "soort": "zit", "x": px, "y": py, "kamer": k["sleutel"],
+                 "kleur": TEAM_KLEUR.get(prof["team"], "#7a8ca3"), "diepte": gx + gy}
+            zitplaatsen.append(z)
+            objecten.append(z)
     kamers.sort(key=lambda r: r["diepte"])
-    zitplaatsen.sort(key=lambda z: z["diepte"])
+    objecten.sort(key=lambda o: o["diepte"])
     X0 = min(k["x0"] for k in KANTOOR_KAMERS); Y0 = min(k["y0"] for k in KANTOOR_KAMERS)
     X1 = max(k["x1"] for k in KANTOOR_KAMERS); Y1 = max(k["y1"] for k in KANTOOR_KAMERS)
-    m = 0.4
+    m = 0.5
     A, B, C, D = _iso(X0 - m, Y0 - m), _iso(X1 + m, Y0 - m), _iso(X1 + m, Y1 + m), _iso(X0 - m, Y1 + m)
     plint = {"boven": f"{A[0]},{A[1]} {B[0]},{B[1]} {C[0]},{C[1]} {D[0]},{D[1]}",
-             "links": f"{D[0]},{D[1]} {C[0]},{C[1]} {C[0]},{C[1]+18} {D[0]},{D[1]+18}",
-             "rechts": f"{C[0]},{C[1]} {B[0]},{B[1]} {B[0]},{B[1]+18} {C[0]},{C[1]+18}"}
-    venster = (D[0] - 16, A[1] - 96, (B[0] - D[0]) + 32, (C[1] - A[1]) + 136)
-    return kamers, zitplaatsen, plint, venster
+             "links": f"{D[0]},{D[1]} {C[0]},{C[1]} {C[0]},{C[1]+22} {D[0]},{D[1]+22}",
+             "rechts": f"{C[0]},{C[1]} {B[0]},{B[1]} {B[0]},{B[1]+22} {C[0]},{C[1]+22}"}
+    venster = (D[0] - 20, A[1] - 118, (B[0] - D[0]) + 40, (C[1] - A[1]) + 170)
+    return kamers, objecten, zitplaatsen, plint, venster
 
 
 def _kantoor_statussen():
@@ -2264,13 +2290,15 @@ def _kantoor_statussen():
 
 
 def _kantoor_cijfers(statussen):
-    """Echte cijfers voor de wandschermen: per kamer twee getallen met label."""
+    """Echte cijfers voor de dashboards: per ruimte twee getallen met label."""
     conn = db()
+
     def tel(sql, *args):
         try:
             return conn.execute(sql, args).fetchone()[0]
         except Exception:
             return 0
+
     grens = (_nu() - timedelta(days=30)).isoformat()
     lopend = tel("SELECT COUNT(*) FROM opdracht WHERE status='lopend'")
     open_voorstel = tel("SELECT COUNT(*) FROM voorstel WHERE besluit='open'")
@@ -2280,35 +2308,36 @@ def _kantoor_cijfers(statussen):
         """SELECT s.agent FROM opdracht_stap s JOIN opdracht o ON o.id=s.opdracht_id
             WHERE COALESCE(NULLIF(o.afgerond_ts,''), o.aangemaakt) >= ?""", (grens,)).fetchall()
     conn.close()
-    per_team = {"sales": 0, "marketing": 0, "seo": 0, "directie": 0}
-    seo_namen = {z for k in KANTOOR_KAMERS if k["sleutel"] == "seo" for z, _, _ in k["zitplaatsen"]}
+    per_kamer = {"sales": 0, "marketing": 0, "seo": 0, "directie": 0}
+    kamer_van = {}
+    for k in KANTOOR_KAMERS:
+        for naam, _, _ in k["zitplaatsen"]:
+            if naam in PROFIELEN:
+                kamer_van[naam] = k["sleutel"]
     for r in stappen:
         naam = (r["agent"] or "").strip().lower()
         naam = STATUS_ALIAS.get(naam, naam)
-        for k in KANTOOR_KAMERS:
-            if k["sleutel"] in per_team and any(_stap_hoort_bij(naam, PROFIELEN[z]) for z, _, _ in k["zitplaatsen"] if z in PROFIELEN):
-                per_team[k["sleutel"]] += 1
+        for agentnaam, kamer in kamer_van.items():
+            if kamer in per_kamer and _stap_hoort_bij(naam, PROFIELEN[agentnaam]):
+                per_kamer[kamer] += 1
                 break
-        else:
-            if any(_stap_hoort_bij(naam, PROFIELEN[z]) for z in seo_namen if z in PROFIELEN):
-                per_team["seo"] += 1
     werkt = sum(1 for v in statussen.values() if v["toestand"] == "werkt")
     return {
-        "directie": [(lopend, "lopende opdrachten"), (per_team["directie"], "keuringen, 30 dagen")],
-        "vergader": [(sum(per_team.values()), "opdrachten, 30 dagen"), (werkt, "nu aan het werk")],
-        "sales": [(open_voorstel, "open voorstellen"), (per_team["sales"], "opdrachten, 30 dagen")],
-        "marketing": [(in_review, "in review"), (per_team["marketing"], "opdrachten, 30 dagen")],
-        "seo": [(gepubliceerd, "gepubliceerd"), (per_team["seo"], "opdrachten, 30 dagen")],
+        "directie": [(lopend, "lopende opdrachten"), (per_kamer["directie"], "keuringen, 30 dagen")],
+        "vergader": [(sum(per_kamer.values()), "opdrachten, 30 dagen"), (werkt, "nu aan het werk")],
+        "sales": [(open_voorstel, "open voorstellen"), (per_kamer["sales"], "opdrachten, 30 dagen")],
+        "marketing": [(in_review, "in review"), (per_kamer["marketing"], "opdrachten, 30 dagen")],
+        "seo": [(gepubliceerd, "gepubliceerd"), (per_kamer["seo"], "opdrachten, 30 dagen")],
     }
 
 
 @app.route("/kantoor")
 def kantoor():
-    kamers, zitplaatsen, plint, venster = _kantoor_indeling()
+    kamers, objecten, zitplaatsen, plint, venster = _kantoor_indeling()
     statussen = _kantoor_statussen()
-    return render_template("kantoor.html", kamers=kamers, zitplaatsen=zitplaatsen, plint=plint,
-                           venster=" ".join(str(round(v)) for v in venster), statussen=statussen,
-                           cijfers=_kantoor_cijfers(statussen))
+    return render_template("kantoor.html", kamers=kamers, objecten=objecten, zitplaatsen=zitplaatsen,
+                           plint=plint, venster=" ".join(str(round(v)) for v in venster),
+                           statussen=statussen, cijfers=_kantoor_cijfers(statussen))
 
 
 @app.route("/api/kantoor")

@@ -2,84 +2,87 @@
 {% block titel %}Kantoor{% endblock %}
 {% block body %}
 <style>
-  .wrap{max-width:1480px;}
+  .wrap{max-width:1520px;}
   .kop{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:0 0 10px;}
   .kop h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-0.01em;}
   .kop .sub{color:var(--tekst-2);font-size:13px;margin:0;}
   .telling{margin-left:auto;display:flex;gap:14px;font-size:12.5px;color:var(--tekst-2);}
   .telling b{font-weight:600;color:var(--tekst);font-variant-numeric:tabular-nums;}
-  .kantoor{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:14px;align-items:start;}
-  @media (max-width:900px){.kantoor{grid-template-columns:1fr;}}
+  .kantoor{display:grid;grid-template-columns:minmax(0,1fr) 252px;gap:14px;align-items:start;}
+  @media (max-width:940px){.kantoor{grid-template-columns:1fr;}}
   .werkbalk{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px;}
   .werkbalk button{font:inherit;font-size:12px;padding:5px 11px;border:1px solid var(--lijn-sterk);background:var(--paneel);color:var(--tekst-2);border-radius:999px;cursor:pointer;}
   .werkbalk button:hover{color:var(--tekst);border-color:#9aa6b4;}
   .werkbalk button.actief{background:var(--accent);border-color:var(--accent);color:#fff;}
   .werkbalk .hint{margin-left:auto;font-size:11.5px;color:var(--tekst-3);}
-  .scene{background:radial-gradient(1200px 600px at 50% 20%,#f3f6fa 0%,#e4eaf1 60%,#dbe2eb 100%);border:1px solid var(--lijn);border-radius:12px;overflow:hidden;position:relative;}
+  .scene{background:radial-gradient(1400px 700px at 50% 12%,#f4f7fa 0%,#e6ecf3 55%,#d9e1ea 100%);border:1px solid var(--lijn);border-radius:14px;overflow:hidden;}
   .scene svg{width:100%;height:auto;display:block;aspect-ratio:var(--ar);touch-action:none;cursor:grab;user-select:none;}
   .scene svg.sleept{cursor:grabbing;}
-  .zijbalk{background:var(--paneel);border:1px solid var(--lijn);border-radius:12px;padding:10px 12px;max-height:720px;overflow:auto;}
-  .zijbalk h3{font-size:12px;font-weight:600;margin:10px 0 4px;color:var(--tekst-2);display:flex;align-items:center;gap:6px;}
+  .zijbalk{background:var(--paneel);border:1px solid var(--lijn);border-radius:12px;padding:10px 12px;max-height:760px;overflow:auto;}
+  .zijbalk h3{font-size:12px;font-weight:600;margin:12px 0 4px;color:var(--tekst-2);display:flex;align-items:center;gap:6px;}
   .zijbalk h3:first-child{margin-top:0;}
   .zijbalk h3 i{width:9px;height:9px;border-radius:2px;display:inline-block;}
   .zijbalk ul{list-style:none;margin:0;padding:0;}
   .zijbalk li{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:3px 6px;border-radius:6px;cursor:pointer;}
   .zijbalk li:hover{background:var(--bg);}
-  .zijbalk li .dot{width:8px;height:8px;border-radius:50%;background:#98a1ad;flex:none;}
+  .zijbalk li .dot{width:8px;height:8px;border-radius:50%;background:#b3bcc7;flex:none;}
   .zijbalk li[data-toestand="werkt"] .dot{background:#e0a72c;box-shadow:0 0 0 3px #fbf1dc;}
   .zijbalk li[data-toestand="klaar"] .dot{background:#1f7a43;}
   .zijbalk li[data-toestand="wakker"] .dot{background:#3663a0;}
-  .zijbalk li .taak{margin-left:auto;font-size:11px;color:var(--tekst-3);max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .zijbalk li a{color:var(--tekst-3);font-size:11px;text-decoration:none;}
+  .zijbalk li .taak{margin-left:auto;font-size:11px;color:var(--tekst-3);max-width:104px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .legende{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--tekst-2);margin:10px 0 0;}
   .legende span{display:inline-flex;align-items:center;gap:6px;}
   .legende i{width:10px;height:10px;border-radius:2px;display:inline-block;}
 
-  /* figuren */
   .zit{cursor:pointer;}
-  .zit text,.paneel text,.kamer text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;pointer-events:none;}
+  .zit text,.deco text,.kamer text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;pointer-events:none;}
   .zit .wolk,.zit .zzz,.zit .oog-dicht,.zit .oog-open,.zit .vink,.zit .ring{display:none;}
-  .zit .scherm-in{fill:#2e3a48;}
-  .zit .balk{opacity:0;}
-  .zit[data-toestand="werkt"] .wolk{display:block;}
+  .zit .holo{opacity:.16;}
+  .zit .holo .grafiek{display:none;}
+  .zit .scherm-in{fill:#26333f;}
   .zit[data-toestand="werkt"] .oog-open{display:block;}
-  .zit[data-toestand="werkt"] .scherm-in{fill:#cfe6ff;animation:gloed 1.6s ease-in-out infinite alternate;}
-  .zit[data-toestand="werkt"] .balk{opacity:1;animation:balk 1.2s ease-in-out infinite alternate;}
+  .bubbel{display:none;}
+  .bubbel[data-toestand="werkt"]{display:block;}
+  .zit[data-toestand="werkt"] .holo{opacity:.95;}
+  .zit[data-toestand="werkt"] .holo .grafiek{display:block;}
+  .zit[data-toestand="werkt"] .scherm-in{fill:#8fd3ff;animation:gloed 1.7s ease-in-out infinite alternate;}
+  .zit[data-toestand="werkt"] .balk{animation:balk 1.3s ease-in-out infinite alternate;}
   .zit[data-toestand="werkt"] .hand-l{animation:typ .28s ease-in-out infinite alternate;}
   .zit[data-toestand="werkt"] .hand-r{animation:typ .28s ease-in-out infinite alternate-reverse;}
-  .zit[data-toestand="werkt"] .romp{animation:bob 1.4s ease-in-out infinite alternate;}
+  .zit[data-toestand="werkt"] .romp{animation:bob 1.5s ease-in-out infinite alternate;}
   .zit[data-toestand="klaar"] .oog-open,.zit[data-toestand="klaar"] .vink{display:block;}
-  .zit[data-toestand="klaar"] .scherm-in{fill:#d8ecff;}
-  .zit[data-toestand="klaar"] .balk{opacity:1;}
+  .zit[data-toestand="klaar"] .holo{opacity:.7;}
+  .zit[data-toestand="klaar"] .holo .grafiek{display:block;}
+  .zit[data-toestand="klaar"] .scherm-in{fill:#7ec4f0;}
   .zit[data-toestand="wakker"] .oog-open{display:block;}
-  .zit[data-toestand="wakker"] .scherm-in{fill:#d8ecff;}
-  .zit[data-toestand="wakker"] .balk{opacity:.7;}
-  .zit[data-toestand="slaapt"] .zzz{display:block;}
-  .zit[data-toestand="slaapt"] .oog-dicht{display:block;}
-  .zit[data-toestand="slaapt"] .hoofd{transform:rotate(-14deg);}
-  .zit[data-toestand="slaapt"] .romp{animation:adem 3.2s ease-in-out infinite alternate;}
-  .zit[data-toestand="slaapt"] .zzz text{animation:zzz 2.4s linear infinite;}
-  .zit[data-toestand="slaapt"] .zzz text:nth-child(2){animation-delay:.8s;}
-  .zit[data-toestand="slaapt"] .zzz text:nth-child(3){animation-delay:1.6s;}
-  .zit.uitgelicht .ring{display:block;animation:ring 1.1s ease-out infinite;}
+  .zit[data-toestand="wakker"] .holo{opacity:.55;}
+  .zit[data-toestand="wakker"] .holo .grafiek{display:block;}
+  .zit[data-toestand="wakker"] .scherm-in{fill:#6fb2dc;}
+  .zit[data-toestand="slaapt"] .zzz,.zit[data-toestand="slaapt"] .oog-dicht{display:block;}
+  .zit[data-toestand="slaapt"] .hoofd{transform:rotate(-15deg);}
+  .zit[data-toestand="slaapt"] .romp{animation:adem 3.4s ease-in-out infinite alternate;}
+  .zit[data-toestand="slaapt"] .zzz text{animation:zzz 2.6s linear infinite;}
+  .zit[data-toestand="slaapt"] .zzz text:nth-child(2){animation-delay:.85s;}
+  .zit[data-toestand="slaapt"] .zzz text:nth-child(3){animation-delay:1.7s;}
+  .zit.uitgelicht .ring{display:block;animation:ring 1.2s ease-out infinite;}
   .hoofd,.romp,.hand-l,.hand-r,.balk,.ring{transform-box:fill-box;transform-origin:50% 100%;}
   .ring{transform-origin:50% 50%;}
   @keyframes typ{from{transform:translateY(0)}to{transform:translateY(-2px)}}
-  @keyframes bob{from{transform:translateY(0)}to{transform:translateY(-1px)}}
+  @keyframes bob{from{transform:translateY(0)}to{transform:translateY(-1.2px)}}
   @keyframes adem{from{transform:scaleY(1)}to{transform:scaleY(1.04)}}
-  @keyframes gloed{from{fill:#cfe6ff}to{fill:#e6f3ff}}
-  @keyframes balk{from{transform:scaleY(.6)}to{transform:scaleY(1)}}
-  @keyframes zzz{0%{opacity:0;transform:translate(0,0)}20%{opacity:1}100%{opacity:0;transform:translate(10px,-22px)}}
+  @keyframes gloed{from{opacity:.85}to{opacity:1}}
+  @keyframes balk{from{transform:scaleY(.55)}to{transform:scaleY(1)}}
+  @keyframes zzz{0%{opacity:0;transform:translate(0,0)}20%{opacity:1}100%{opacity:0;transform:translate(11px,-24px)}}
   @keyframes ring{from{transform:scale(.7);opacity:.9}to{transform:scale(1.5);opacity:0}}
-  .paneel .wb{animation:balk 2.6s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:50% 100%;}
-  .paneel .wb:nth-child(odd){animation-duration:3.4s;}
-  @media (prefers-reduced-motion:reduce){.zit *,.paneel *{animation:none!important;}}
+  .dash .wb{animation:balk 2.8s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:50% 100%;}
+  .dash .wb:nth-child(odd){animation-duration:3.6s;}
+  @media (prefers-reduced-motion:reduce){.zit *,.dash *{animation:none!important;}}
 </style>
 
 {% set VB = venster.split(' ') %}
 <div class="kop">
   <h1>Kantoor</h1>
-  <p class="sub">Het team aan het werk. Wie een opdracht uitvoert typt en heeft een wolkje; wie niets te doen heeft, slaapt. Klik op iemand voor zijn profiel.</p>
+  <p class="sub">De agents op hun werkplek. Wie een opdracht uitvoert typt, zijn dashboard staat aan en er hangt een wolkje; wie niets te doen heeft slaapt met het scherm uit.</p>
   <div class="telling"><span><b id="t-werkt">0</b> aan het werk</span><span><b id="t-wakker">0</b> wakker</span><span><b id="t-slaapt">0</b> slapen</span></div>
 </div>
 
@@ -87,186 +90,366 @@
 <div>
   <div class="werkbalk">
     <button data-focus="alles" class="actief">Alles</button>
-    {% for k in kamers if k.soort == 'bureau' %}<button data-focus="{{ k.sleutel }}">{{ k.naam.split(',')[0] }}</button>{% endfor %}
+    {% for k in kamers if k.sleutel in ('directie','sales','marketing','seo','lounge') %}<button data-focus="{{ k.sleutel }}">{{ k.naam.split(',')[0].split(' en ')[0] }}</button>{% endfor %}
     <span class="hint">Scroll om te zoomen, sleep om te verschuiven</span>
   </div>
   <div class="scene">
-  <svg id="kantoor-svg" viewBox="{{ venster }}" style="--ar:{{ VB[2] }}/{{ VB[3] }}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Isometrisch kantoor met de agents aan hun bureau" data-venster="{{ venster }}">
+  <svg id="kantoor-svg" viewBox="{{ venster }}" style="--ar:{{ VB[2] }}/{{ VB[3] }}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Virtueel kantoor met de agents aan hun bureau" data-venster="{{ venster }}">
     <defs>
-      <linearGradient id="vloer-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9fafc"/><stop offset="1" stop-color="#eff2f6"/></linearGradient>
-      <linearGradient id="glas" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#cfe0f2" stop-opacity=".6"/><stop offset="1" stop-color="#eaf3fb" stop-opacity=".25"/></linearGradient>
-      <linearGradient id="raam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bcd8f3"/><stop offset="1" stop-color="#e2eef9"/></linearGradient>
-      <pattern id="tegels" patternUnits="userSpaceOnUse" width="60" height="30"><path d="M30 0L60 15 30 30 0 15Z" fill="none" stroke="#c9d2dc" stroke-width=".6"/></pattern>
-      <filter id="schaduw" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#1e2830" flood-opacity=".14"/></filter>
-      <filter id="zacht" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#1e2830" flood-opacity=".18"/></filter>
+      <linearGradient id="tapijt-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3c4757"/><stop offset="1" stop-color="#2f3947"/></linearGradient>
+      <linearGradient id="tegel-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef1f5"/><stop offset="1" stop-color="#dfe4ea"/></linearGradient>
+      <linearGradient id="glas-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b9d6ee" stop-opacity=".42"/><stop offset="1" stop-color="#e6f2fb" stop-opacity=".18"/></linearGradient>
+      <linearGradient id="lucht" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fc6e8"/><stop offset="1" stop-color="#dcecf8"/></linearGradient>
+      <linearGradient id="holo-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#63d6ff" stop-opacity=".42"/><stop offset="1" stop-color="#2f9fe0" stop-opacity=".14"/></linearGradient>
+      <linearGradient id="dash-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5ccfff" stop-opacity=".5"/><stop offset="1" stop-color="#2b7fc4" stop-opacity=".2"/></linearGradient>
+      <pattern id="tapijt-p" patternUnits="userSpaceOnUse" width="12" height="6"><rect width="12" height="6" fill="none"/><path d="M0 3h12" stroke="#000" stroke-opacity=".07" stroke-width="1"/></pattern>
+      <pattern id="tegel-p" patternUnits="userSpaceOnUse" width="60" height="30"><path d="M30 0L60 15 30 30 0 15Z" fill="none" stroke="#c6cfd9" stroke-width=".7"/></pattern>
+      <filter id="schaduw" x="-25%" y="-25%" width="150%" height="170%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#0d1520" flood-opacity=".26"/></filter>
+      <filter id="zacht" x="-15%" y="-15%" width="130%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.4" flood-color="#0d1520" flood-opacity=".22"/></filter>
+      <filter id="gloeifilter" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <symbol id="skyline" viewBox="0 0 120 44" preserveAspectRatio="xMidYMax slice">
+        <rect width="120" height="44" fill="url(#lucht)"/>
+        <g fill="#8fb2d0" opacity=".85">
+          <rect x="4" y="16" width="13" height="28"/><rect x="20" y="24" width="9" height="20"/>
+          <rect x="32" y="9" width="15" height="35"/><rect x="50" y="20" width="11" height="24"/>
+          <rect x="64" y="13" width="10" height="31"/><rect x="77" y="26" width="13" height="18"/>
+          <rect x="93" y="17" width="9" height="27"/><rect x="105" y="23" width="12" height="21"/>
+        </g>
+        <g fill="#ffffff" opacity=".5">
+          <rect x="7" y="20" width="2" height="3"/><rect x="12" y="26" width="2" height="3"/><rect x="35" y="14" width="2" height="3"/>
+          <rect x="41" y="22" width="2" height="3"/><rect x="67" y="18" width="2" height="3"/><rect x="96" y="24" width="2" height="3"/>
+        </g>
+      </symbol>
+      <g id="bureau">
+        <polygon points="-40.5,6.75 13.5,20.25 13.5,0.25 -40.5,-13.25" fill="#2c3d52"/>
+        <polygon points="13.5,20.25 40.5,6.75 40.5,-13.25 13.5,0.25" fill="#233245"/>
+        <polygon points="-13.5,-40.25 40.5,-13.25 13.5,0.25 -40.5,-13.25" fill="#f4f7fa"/>
+        <polygon points="-13.5,-40.25 40.5,-13.25 13.5,0.25 -40.5,-13.25" fill="none" stroke="#cdd6e0" stroke-width=".8"/>
+        <polygon points="-33,-6.5 -21,-0.5 -21,-13 -33,-19" fill="#8e9aa8"/>
+        <polygon points="-21,-0.5 -11,-5.5 -11,-18 -21,-13" fill="#76838f"/>
+        <polygon points="-33,-19 -21,-13 -11,-18 -23,-24" fill="#aab6c2"/>
+        <polygon points="5,-12.5 23,-21.5 29,-18.5 11,-9.5" fill="#dfe5ec" stroke="#c2cbd6" stroke-width=".5"/>
+        <ellipse cx="32" cy="-12.5" rx="2.5" ry="1.6" fill="#cfd7e0"/>
+      </g>
+      <g id="stoel">
+        <polygon points="-1.5,-6 1.5,-6 1.5,4 -1.5,4" fill="#3a424d"/>
+        <g stroke="#3a424d" stroke-width="2.2" stroke-linecap="round">
+          <line x1="0" y1="3" x2="-9" y2="8"/><line x1="0" y1="3" x2="9" y2="8"/>
+          <line x1="0" y1="3" x2="-8" y2="-1"/><line x1="0" y1="3" x2="8" y2="-1"/>
+        </g>
+        <ellipse cx="0" cy="-7" rx="12.5" ry="6" fill="#39424e"/>
+        <ellipse cx="0" cy="-8.5" rx="12" ry="5.5" fill="#4a5563"/>
+        <path d="M-10.5 -12 h21 a4 4 0 0 1 4 4 v-14 a5 5 0 0 0 -5 -5 h-19 a5 5 0 0 0 -5 5 v14 a4 4 0 0 1 4 -4z" fill="#39424e"/>
+        <rect x="-9.5" y="-30" width="19" height="18" rx="4" fill="#4a5563"/>
+        <rect x="-7.5" y="-27" width="15" height="12" rx="2.5" fill="#5b6675"/>
+      </g>
+      <g id="monitor">
+        <line x1="-3" y1="-27" x2="-3" y2="-34" stroke="#5d6a78" stroke-width="2.2"/>
+        <ellipse cx="-3" cy="-26" rx="6" ry="2.4" fill="#7b8794"/>
+        <polygon points="-18,-35 12,-50 12,-30 -18,-15" fill="#161d26"/>
+      </g>
     </defs>
 
-    <g><polygon points="{{ plint.boven }}" fill="#d3dae3"/><polygon points="{{ plint.links }}" fill="#c3ccd7"/><polygon points="{{ plint.rechts }}" fill="#b6c0cc"/></g>
+    <g><polygon points="{{ plint.boven }}" fill="#cdd5df"/><polygon points="{{ plint.links }}" fill="#b9c2ce"/><polygon points="{{ plint.rechts }}" fill="#aab4c1"/></g>
 
     {% for k in kamers %}
     <g class="kamer" data-kamer="{{ k.sleutel }}" data-focus="{{ k.focus|join(' ') }}">
-      <polygon points="{{ k.vloer }}" fill="url(#vloer-g)"/>
-      <polygon points="{{ k.vloer }}" fill="url(#tegels)"/>
-      <polygon points="{{ k.vloer }}" fill="{{ k.kleur }}" opacity=".05" stroke="#c9d2dc" stroke-width="1"/>
-      <polygon points="{{ k.muur_l }}" fill="{{ 'url(#glas)' if k.glas_l else '#fbfcfd' }}" stroke="{{ '#b9cde0' if k.glas_l else '#cfd6de' }}" stroke-width="1"/>
-      <polygon points="{{ k.muur_r }}" fill="{{ 'url(#glas)' if k.glas_r else '#f2f5f8' }}" stroke="{{ '#b9cde0' if k.glas_r else '#cfd6de' }}" stroke-width="1"/>
-      {% if not k.glas_r %}
-      {# ramen op de hoge achtermuur #}
-      {% set bw = (k.B[0]-k.A[0])/ (30*2) %}{# breedte van de muur in gridunits (x-richting) #}
+      <polygon points="{{ k.vloer }}" fill="url(#{{ k.vloersoort }}-g)"/>
+      <polygon points="{{ k.vloer }}" fill="url(#{{ k.vloersoort }}-p)" opacity="{{ '.5' if k.vloersoort == 'tapijt' else '1' }}"/>
+      <polygon points="{{ k.vloer }}" fill="{{ k.kleur }}" opacity=".07"/>
+      <polygon points="{{ k.vloer }}" fill="none" stroke="#9aa6b4" stroke-opacity=".5" stroke-width=".8"/>
+
+      {# rechterwand: buitenmuur met ramen, of lage glazen scheiding #}
       <g transform="translate({{ k.A[0] }},{{ k.A[1] }}) skewY(26.565)">
-        {% set mw = (k.B[0]-k.A[0]) %}{% set n = (mw / 70)|int %}{% set pw = (mw - 24 - (n-1)*10) / n %}
-        {% for i in range(n) %}<rect x="{{ 12 + i*(pw+10) }}" y="-{{ k.wh_r - 12 }}" width="{{ pw }}" height="30" rx="1.5" fill="url(#raam)" stroke="#aebfd1" stroke-width=".8"/>{% endfor %}
-        <rect x="0" y="-{{ k.wh_r }}" width="{{ mw }}" height="3.5" fill="{{ k.kleur }}" opacity=".85"/>
-      </g>
-      {% else %}
-      <g transform="translate({{ k.A[0] }},{{ k.A[1] }}) skewY(26.565)"><rect x="0" y="-{{ k.wh_r }}" width="{{ k.B[0]-k.A[0] }}" height="2.5" fill="{{ k.kleur }}" opacity=".8"/></g>
-      {% endif %}
-      {% if not k.glas_l %}<g transform="translate({{ k.A[0] }},{{ k.A[1] }}) skewY(-26.565)"><rect x="{{ k.D[0]-k.A[0] }}" y="-{{ k.wh_l }}" width="{{ k.A[0]-k.D[0] }}" height="3.5" fill="{{ k.kleur }}" opacity=".6"/></g>{% endif %}
-
-      {# naambordje van de ruimte, links vooraan op de vloer #}
-      <g transform="translate({{ k.D[0] + 74 }},{{ k.D[1] - 4 }})" filter="url(#zacht)">
-        <rect x="-56" y="-9" width="112" height="16" rx="4" fill="#fff" stroke="#d5dade" stroke-width=".8"/>
-        <rect x="-56" y="-9" width="4" height="16" rx="2" fill="{{ k.kleur }}"/>
-        <text x="2" y="2.8" font-size="8.5" font-weight="600" fill="#3b4756" text-anchor="middle">{{ k.naam }}</text>
-      </g>
-
-      {# vrijstaand cijferscherm in de rechterhoek van elke werkruimte, of aan de muur van de vergaderruimte #}
-      {% set cf = cijfers.get(k.sleutel) %}
-      {% if cf %}
-      {% set sx = k.B[0] - 58 %}{% set sy = k.B[1] + 26 %}
-      <g class="paneel" transform="translate({{ sx }},{{ sy }})">
-        <ellipse cx="0" cy="2" rx="14" ry="5" fill="#1e2830" opacity=".08"/>
-        <rect x="-1.5" y="-30" width="3" height="30" fill="#8b97a5"/>
-        <g transform="skewY(-26.565)">
-          <rect x="-30" y="-{{ 30 + 15 }}" width="60" height="42" rx="2" fill="#1e2a38" stroke="#0f1620" stroke-width="1"/>
-          <rect x="-28" y="-{{ 28 + 15 }}" width="56" height="38" rx="1.5" fill="#22344a"/>
-          <text data-cijfer="{{ k.sleutel }}-0" x="-16" y="-{{ 15 + 15 }}" font-size="12" font-weight="700" fill="#7fd0ff" text-anchor="middle">{{ cf[0][0] }}</text>
-          <text data-label="{{ k.sleutel }}-0" x="-16" y="-{{ 6 + 15 }}" font-size="4.6" fill="#b9cbe0" text-anchor="middle">{{ cf[0][1] }}</text>
-          <text data-cijfer="{{ k.sleutel }}-1" x="14" y="-{{ 15 + 15 }}" font-size="12" font-weight="700" fill="#8ff0b8" text-anchor="middle">{{ cf[1][0] }}</text>
-          <text data-label="{{ k.sleutel }}-1" x="14" y="-{{ 6 + 15 }}" font-size="4.6" fill="#b9cbe0" text-anchor="middle">{{ cf[1][1] }}</text>
-          {% for i in range(8) %}<rect class="wb" x="{{ -25 + i*6.6 }}" y="{{ -14 - (i*5) % 9 }}" width="3.6" height="{{ 8 + (i*5) % 9 }}" rx=".6" fill="{{ ['#4fc3f7','#66d9a8','#ffd166','#4fc3f7','#a78bfa','#66d9a8','#4fc3f7','#ffd166'][i] }}" opacity=".85"/>{% endfor %}
-        </g>
-      </g>
-      {% endif %}
-
-      {# plant in de linkerhoek #}
-      <g transform="translate({{ k.D[0] + 20 }},{{ k.D[1] - 10 }})">
-        <polygon points="-6,0 6,0 5,9 -5,9" fill="#e6e9ee" stroke="#c8cfd8" stroke-width=".8"/>
-        <circle cx="-4" cy="-6" r="5" fill="#4f9d69"/><circle cx="4" cy="-8" r="5.5" fill="#5fae78"/><circle cx="0" cy="-13" r="5" fill="#3f8a5a"/><circle cx="1" cy="-4" r="4" fill="#63b47f"/>
+        {% if not k.glas_r %}
+        <rect x="0" y="-{{ k.wh_r }}" width="{{ k.breedte_r }}" height="{{ k.wh_r }}" fill="#eef2f6"/>
+        {% set n = (k.breedte_r / 78)|round(0,'ceil')|int %}{% set pw = (k.breedte_r - 20 - (n-1)*9) / n %}
+        {% for i in range(n) %}
+        <g><rect x="{{ 10 + i*(pw+9) }}" y="-{{ k.wh_r - 12 }}" width="{{ pw }}" height="46" fill="#cddff0"/>
+        <use href="#skyline" x="{{ 10 + i*(pw+9) }}" y="-{{ k.wh_r - 12 }}" width="{{ pw }}" height="46"/>
+        <rect x="{{ 10 + i*(pw+9) }}" y="-{{ k.wh_r - 12 }}" width="{{ pw }}" height="46" fill="none" stroke="#8e9dad" stroke-width="1.6"/></g>
+        {% endfor %}
+        <rect x="0" y="-{{ k.wh_r }}" width="{{ k.breedte_r }}" height="4" fill="{{ k.kleur }}" opacity=".9"/>
+        {% else %}
+        <rect x="0" y="-{{ k.wh_r }}" width="{{ k.breedte_r }}" height="{{ k.wh_r }}" fill="url(#glas-g)"/>
+        <rect x="0" y="-{{ k.wh_r }}" width="{{ k.breedte_r }}" height="2.6" fill="#93a3b4"/>
+        <rect x="0" y="-2" width="{{ k.breedte_r }}" height="2" fill="#93a3b4"/>
+        {% for i in range(1, (k.breedte_r / 90)|int + 1) %}<rect x="{{ i * 90 }}" y="-{{ k.wh_r }}" width="1.6" height="{{ k.wh_r }}" fill="#93a3b4" opacity=".8"/>{% endfor %}
+        {% endif %}
       </g>
 
-      {% if k.soort == 'receptie' %}
-      {# balie, bank en tafeltje #}
-      {% set mx = k.midden[0] %}{% set my = k.midden[1] %}
-      <g transform="translate({{ mx + 10 }},{{ my - 6 }})" filter="url(#schaduw)">
-        <polygon points="-54,9 18,45 18,15 -54,-21" fill="#dfe4ea"/><polygon points="18,45 54,27 54,-3 18,15" fill="#c8d0da"/>
-        <polygon points="-18,-39 54,-3 18,15 -54,-21" fill="#ffffff" stroke="#d5dade" stroke-width=".8"/>
-        <polygon points="-40,-16 -4,2 -4,-4 -40,-22" fill="{{ k.kleur }}" opacity=".9"/>
-        <text x="-22" y="-12" font-size="4.8" font-weight="700" fill="#fff" transform="skewY(26.565)" text-anchor="middle">ONTHAAL</text>
+      {# linkerwand #}
+      <g transform="translate({{ k.A[0] }},{{ k.A[1] }}) skewY(-26.565)">
+        {% if not k.glas_l %}
+        <rect x="-{{ k.breedte_l }}" y="-{{ k.wh_l }}" width="{{ k.breedte_l }}" height="{{ k.wh_l }}" fill="#e7ecf2"/>
+        {% set n = (k.breedte_l / 78)|round(0,'ceil')|int %}{% set pw = (k.breedte_l - 20 - (n-1)*9) / n %}
+        {% for i in range(n) %}
+        <g><rect x="-{{ k.breedte_l - 10 - i*(pw+9) }}" y="-{{ k.wh_l - 12 }}" width="{{ pw }}" height="46" fill="#c6d9ec"/>
+        <use href="#skyline" x="-{{ k.breedte_l - 10 - i*(pw+9) }}" y="-{{ k.wh_l - 12 }}" width="{{ pw }}" height="46"/>
+        <rect x="-{{ k.breedte_l - 10 - i*(pw+9) }}" y="-{{ k.wh_l - 12 }}" width="{{ pw }}" height="46" fill="none" stroke="#8e9dad" stroke-width="1.6"/></g>
+        {% endfor %}
+        <rect x="-{{ k.breedte_l }}" y="-{{ k.wh_l }}" width="{{ k.breedte_l }}" height="4" fill="{{ k.kleur }}" opacity=".7"/>
+        {% else %}
+        <rect x="-{{ k.breedte_l }}" y="-{{ k.wh_l }}" width="{{ k.breedte_l }}" height="{{ k.wh_l }}" fill="url(#glas-g)"/>
+        <rect x="-{{ k.breedte_l }}" y="-{{ k.wh_l }}" width="{{ k.breedte_l }}" height="2.6" fill="#93a3b4"/>
+        {% endif %}
       </g>
-      <g transform="translate({{ mx - 60 }},{{ my + 22 }})">
-        <polygon points="-24,0 12,18 12,6 -24,-12" fill="#2f4a63"/><polygon points="12,18 30,9 30,-3 12,6" fill="#243a4f"/><polygon points="-12,-18 30,-3 12,6 -24,-12" fill="#3e5f7d"/>
-        <polygon points="-24,-12 -12,-18 -12,-30 -24,-24" fill="#345572"/><polygon points="-12,-18 30,-3 30,-15 -12,-30" fill="#42668a"/>
+
+      {# naambordje van de ruimte, links vooraan #}
+      <g transform="translate({{ k.bord[0] + 76 }},{{ k.bord[1] - 8 }})" filter="url(#zacht)">
+        <rect x="-58" y="-9" width="116" height="17" rx="4" fill="#ffffff" stroke="#c7d0da" stroke-width=".8"/>
+        <rect x="-58" y="-9" width="4.5" height="17" rx="2" fill="{{ k.kleur }}"/>
+        <text x="3" y="3" font-size="8.6" font-weight="600" fill="#2a3542" text-anchor="middle">{{ k.naam }}</text>
       </g>
-      <g transform="translate({{ mx - 10 }},{{ my + 42 }})"><polygon points="-14,0 6,10 6,4 -14,-6" fill="#d9dee5"/><polygon points="6,10 16,5 16,-1 6,4" fill="#c4ccd6"/><polygon points="-4,-11 16,-1 6,4 -14,-6" fill="#fff" stroke="#d5dade" stroke-width=".6"/><circle cx="1" cy="-6" r="3" fill="#5fae78"/></g>
-      {% elif k.soort == 'vergader' %}
-      {# vergadertafel met stoelen en een wandscherm #}
-      {% set mx = k.midden[0] %}{% set my = k.midden[1] + 8 %}
-      {% for cx, cy in [(-56,-10),(-30,-24),(-4,-38),(56,-10),(30,-24),(4,-38),(-30,8),(30,8)] %}
-      <g transform="translate({{ mx + cx }},{{ my + cy }})"><rect x="-6" y="-16" width="12" height="12" rx="3" fill="#3b5b8a"/><ellipse cx="0" cy="-2" rx="7" ry="3.5" fill="#4a6c9c"/></g>
-      {% endfor %}
-      <g transform="translate({{ mx }},{{ my }})" filter="url(#schaduw)">
-        <polygon points="-60,4 6,37 6,25 -60,-8" fill="#dfe4ea"/><polygon points="6,37 60,10 60,-2 6,25" fill="#c8d0da"/>
-        <polygon points="-6,-29 60,-2 6,25 -60,-8" fill="#ffffff" stroke="#d5dade" stroke-width=".8"/>
-        <ellipse cx="-4" cy="-2" rx="6" ry="3" fill="#e9edf2"/><rect x="-16" y="-14" width="9" height="6" rx="1" fill="#e2e8f0"/><rect x="14" y="-4" width="9" height="6" rx="1" fill="#e2e8f0"/>
-      </g>
-      {% endif %}
     </g>
     {% endfor %}
 
-    {% for z in zitplaatsen %}
-    {% set st = statussen.get(z.naam, {}) %}
-    {% set huid = ['#f2c9a0','#e7b48c','#d29a6a','#b07a48','#8a5a34'][loop.index % 5] %}
-    {% set haar = ['#2b2b2b','#43301c','#6b4a2b','#9a9ea6','#caa96a','#a8503a'][(loop.index * 7) % 6] %}
-    <a href="{{ z.href }}"><g class="zit" data-naam="{{ z.naam }}" data-kamer="{{ z.kamer }}" data-toestand="{{ st.toestand or 'slaapt' }}" transform="translate({{ z.x }},{{ z.y }})">
-      <title>{{ z.label }}{% if st.taak %} · {{ st.taak }}{% endif %}</title>
-      <ellipse cx="0" cy="4" rx="48" ry="15" fill="#1e2830" opacity=".07"/>
-      <ellipse class="ring" cx="0" cy="2" rx="52" ry="20" fill="none" stroke="{{ z.kleur }}" stroke-width="3"/>
-      <g transform="translate(28.5,-14)">
-        <rect x="-11" y="-32" width="22" height="20" rx="6" fill="#3b5b8a"/>
-        <ellipse cx="0" cy="-8" rx="12" ry="5.5" fill="#4a6c9c"/>
-      </g>
+    {% for o in objecten %}
+    {% if o.soort == 'zit' %}
+    {% set st = statussen.get(o.naam, {}) %}
+    {% set huid = ['#f0c6a0','#e5b189','#cf9668','#ac7646','#8a5a34'][loop.index % 5] %}
+    {% set haar = ['#26262a','#3f2d1b','#67462a','#98a0a8','#c3a468','#a04c38'][(loop.index * 7) % 6] %}
+    <a href="{{ o.href }}"><g class="zit" data-naam="{{ o.naam }}" data-kamer="{{ o.kamer }}" data-toestand="{{ st.toestand or 'slaapt' }}" transform="translate({{ o.x }},{{ o.y }})">
+      <title>{{ o.label }}{% if st.taak %} · {{ st.taak }}{% endif %}</title>
+      <ellipse cx="0" cy="4" rx="50" ry="16" fill="#0d1520" opacity=".16"/>
+      <ellipse class="ring" cx="0" cy="2" rx="54" ry="21" fill="none" stroke="{{ o.kleur }}" stroke-width="3"/>
+      <use href="#stoel" x="28.5" y="-14"/>
       <g transform="translate(28.5,-14)">
         <g class="romp">
-          <rect x="-10" y="-31" width="20" height="25" rx="6" fill="{{ z.kleur }}"/>
-          <rect x="-4.5" y="-31" width="9" height="11" rx="2" fill="#fff" opacity=".85"/>
-          <rect x="-14" y="-26" width="5" height="14" rx="2.5" fill="{{ z.kleur }}"/>
-          <rect x="9" y="-26" width="5" height="14" rx="2.5" fill="{{ z.kleur }}"/>
-          <circle class="hand-l" cx="-11.5" cy="-11" r="3.4" fill="{{ huid }}"/>
-          <circle class="hand-r" cx="11.5" cy="-11" r="3.4" fill="{{ huid }}"/>
+          <rect x="-10.5" y="-31" width="21" height="26" rx="6.5" fill="{{ o.kleur }}"/>
+          <path d="M-10.5 -24 h21 v-4 a6.5 6.5 0 0 0 -6.5 -3 h-8 a6.5 6.5 0 0 0 -6.5 3z" fill="#ffffff" opacity=".22"/>
+          <rect x="-4.5" y="-31" width="9" height="12" rx="2" fill="#f2f5f8"/>
+          <rect x="-1.4" y="-30" width="2.8" height="11" rx="1" fill="#2b3542"/>
+          <rect x="-14.5" y="-27" width="5" height="15" rx="2.5" fill="{{ o.kleur }}"/>
+          <rect x="9.5" y="-27" width="5" height="15" rx="2.5" fill="{{ o.kleur }}"/>
+          <circle class="hand-l" cx="-12" cy="-11" r="3.5" fill="{{ huid }}"/>
+          <circle class="hand-r" cx="12" cy="-11" r="3.5" fill="{{ huid }}"/>
         </g>
         <g class="hoofd">
-          <rect x="-3" y="-34" width="6" height="5" fill="{{ huid }}"/>
-          <circle cx="0" cy="-40" r="8.5" fill="{{ huid }}"/>
-          <path d="M-8.5 -41c0-6.4 3.7-10.6 8.5-10.6s8.5 4.2 8.5 10.6c-2.1-3.6-4.6-4.7-8.5-4.7S-6.4 -44.6 -8.5 -41z" fill="{{ haar }}"/>
-          <g class="oog-open"><circle cx="-3.2" cy="-39" r="1.1" fill="#2c2c2c"/><circle cx="3.2" cy="-39" r="1.1" fill="#2c2c2c"/></g>
-          <g class="oog-dicht" stroke="#2c2c2c" stroke-width="1" stroke-linecap="round"><line x1="-4.7" y1="-39" x2="-1.7" y2="-39"/><line x1="1.7" y1="-39" x2="4.7" y2="-39"/></g>
+          <rect x="-3.2" y="-35" width="6.4" height="6" fill="{{ huid }}"/>
+          <circle cx="0" cy="-41" r="8.8" fill="{{ huid }}"/>
+          <path d="M-8.8 -42.2c0-6.6 3.9-11 8.8-11s8.8 4.4 8.8 11c-2.2-3.7-4.8-4.9-8.8-4.9s-6.6 1.2-8.8 4.9z" fill="{{ haar }}"/>
+          <g class="oog-open"><circle cx="-3.3" cy="-40" r="1.15" fill="#26262a"/><circle cx="3.3" cy="-40" r="1.15" fill="#26262a"/></g>
+          <g class="oog-dicht" stroke="#26262a" stroke-width="1.05" stroke-linecap="round"><line x1="-4.8" y1="-40" x2="-1.8" y2="-40"/><line x1="1.8" y1="-40" x2="4.8" y2="-40"/></g>
         </g>
-        <g class="zzz" font-family="Georgia,serif" font-weight="700" fill="#5c6771">
-          <text x="9" y="-48" font-size="9">z</text><text x="13" y="-54" font-size="11">Z</text><text x="17" y="-60" font-size="13">Z</text>
+        <g class="zzz" font-family="Georgia,serif" font-weight="700" fill="#e8edf3" stroke="#3a4552" stroke-width=".7" paint-order="stroke">
+          <text x="9" y="-49" font-size="9">z</text><text x="13" y="-55" font-size="11">Z</text><text x="17" y="-61" font-size="13.5">Z</text>
         </g>
-        <g class="vink" transform="translate(15,-55)"><circle r="6.5" fill="#1f7a43"/><path d="M-3 0l2 2.2 4-4.6" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
-        <g class="wolk" filter="url(#zacht)">
-          <path d="M-48 -80h96a6 6 0 0 1 6 6v{{ 22 if st.taak else 12 }}a6 6 0 0 1-6 6h-40l-6 6-6-6h-44a6 6 0 0 1-6-6v-{{ 22 if st.taak else 12 }}a6 6 0 0 1 6-6z" fill="#fff" stroke="#c9d4e2" stroke-width=".8"/>
-          <text class="wolk-kop" x="0" y="{{ -71 if st.taak else -67 }}" font-size="8.5" font-weight="700" fill="#8a5d10" text-anchor="middle">aan het werk</text>
-          <text class="wolk-taak" x="0" y="-61" font-size="7.5" fill="#5c6771" text-anchor="middle">{{ st.taak[:34] }}{% if st.taak|length > 34 %}…{% endif %}</text>
+        <g class="vink" transform="translate(15,-56)"><circle r="6.8" fill="#1f7a43"/><path d="M-3 0l2 2.3 4.2-4.8" stroke="#fff" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+      </g>
+      <use href="#bureau"/>
+      <use href="#monitor"/>
+      <polygon class="scherm-in" points="-16.5,-35 10.5,-48.5 10.5,-31.5 -16.5,-18" opacity=".9"/>
+      <g transform="skewY(-26.565)" opacity=".85">
+        <rect class="balk" x="-12" y="-32" width="2.8" height="7" fill="#1d4e6e"/>
+        <rect class="balk" x="-7.6" y="-33" width="2.8" height="10" fill="#1d4e6e"/>
+        <rect class="balk" x="-3.2" y="-34" width="2.8" height="6" fill="#1d4e6e"/>
+        <rect class="balk" x="1.2" y="-35" width="2.8" height="9" fill="#1d4e6e"/>
+        <rect class="balk" x="5.6" y="-36" width="2.8" height="7" fill="#1d4e6e"/>
+      </g>
+      {# zwevend dashboard boven het bureau #}
+      <g class="holo" transform="translate(1,-76) skewY(-26.565)">
+        <rect x="-31" y="-36" width="74" height="40" rx="2" fill="url(#holo-g)" stroke="#7fdcff" stroke-width="1.6" filter="url(#gloeifilter)" opacity=".8"/>
+        <rect x="-31" y="-36" width="74" height="40" rx="2" fill="#0a2233" opacity=".9"/>
+        <rect x="-31" y="-36" width="74" height="40" rx="2" fill="url(#holo-g)" stroke="#7fdcff" stroke-width="1"/>
+        <rect x="-31" y="-36" width="74" height="8" fill="#7fdcff" opacity=".26"/>
+        <g class="grafiek">
+          <text class="holo-taak" x="6" y="-30.6" font-size="4.8" font-weight="600" fill="#eafaff" text-anchor="middle">{{ st.taak[:30] }}{% if st.taak|length > 30 %}…{% endif %}</text>
+          <g fill="#7fe9ff">
+            <rect x="-26" y="-13" width="4.4" height="11"/><rect x="-19.6" y="-19" width="4.4" height="17"/>
+            <rect x="-13.2" y="-10" width="4.4" height="8"/><rect x="-6.8" y="-22" width="4.4" height="20"/>
+            <rect x="-0.4" y="-16" width="4.4" height="14"/>
+          </g>
+          <circle cx="19" cy="-12" r="8.5" fill="none" stroke="#3ba7d8" stroke-width="4.5"/>
+          <path d="M19 -20.5a8.5 8.5 0 0 1 7.4 12.7z" fill="#9df3c4"/>
+          <polyline points="-26,-25 -17,-28.5 -8,-24 1,-29.5 10,-26" fill="none" stroke="#eafaff" stroke-width="1.2"/>
         </g>
       </g>
-      <g filter="url(#schaduw)">
-        <polygon points="-40.5,6.75 13.5,20.25 13.5,0.25 -40.5,-13.25" fill="#dde2e8"/>
-        <polygon points="13.5,20.25 40.5,6.75 40.5,-13.25 13.5,0.25" fill="#c6ced8"/>
-        <polygon points="-13.5,-40.25 40.5,-13.25 13.5,0.25 -40.5,-13.25" fill="#ffffff" stroke="#d5dade" stroke-width=".8"/>
-      </g>
-      <polygon points="-34,-6 -22,0 -22,-12 -34,-18" fill="#aab5c2"/><polygon points="-22,0 -12,-5 -12,-17 -22,-12" fill="#93a0af"/><polygon points="-34,-18 -22,-12 -12,-17 -24,-23" fill="#c8d1db"/>
-      <polygon points="6,-12 24,-21 30,-18 12,-9" fill="#e4e8ee" stroke="#c9d1db" stroke-width=".6"/>
-      <ellipse cx="33" cy="-12" rx="2.4" ry="1.6" fill="#d5dbe3"/>
-      <g>
-        <line x1="-3" y1="-27" x2="-3" y2="-33" stroke="#6b7785" stroke-width="2"/>
-        <ellipse cx="-3" cy="-26" rx="5.5" ry="2.2" fill="#8b97a5"/>
-        <polygon points="-18,-34 12,-49 12,-30 -18,-15" fill="#1f2a37"/>
-        <polygon class="scherm-in" points="-16.5,-34 10.5,-47.5 10.5,-31 -16.5,-17.5"/>
-        <g class="balken">
-          <rect class="balk" x="-12" y="-31" width="2.6" height="6" fill="#2f7d5a" transform="skewY(-26.57)"/>
-          <rect class="balk" x="-8" y="-32" width="2.6" height="9" fill="#3663a0" transform="skewY(-26.57)"/>
-          <rect class="balk" x="-4" y="-33" width="2.6" height="5" fill="#916312" transform="skewY(-26.57)"/>
-          <rect class="balk" x="0" y="-34" width="2.6" height="8" fill="#2f7d5a" transform="skewY(-26.57)"/>
-          <rect class="balk" x="4" y="-35" width="2.6" height="6" fill="#3663a0" transform="skewY(-26.57)"/>
-        </g>
-      </g>
-      <g transform="translate(-25,-31)"><ellipse cx="0" cy="0" rx="3" ry="1.6" fill="#f4f6f8" stroke="#c9d1db" stroke-width=".5"/><rect x="-3" y="-5" width="6" height="5" rx="1" fill="#f8fafc" stroke="#c9d1db" stroke-width=".5"/></g>
-      {# naambordje vooraan op het bureau #}
-      <g transform="translate(-4,22)" filter="url(#zacht)">
-        <rect x="-40" y="-8" width="80" height="15" rx="3.5" fill="#fff" stroke="#d5dade" stroke-width=".8"/>
-        <rect x="-40" y="-8" width="4" height="15" rx="2" fill="{{ z.kleur }}"/>
-        <text class="naam" x="2" y="3" font-size="8" font-weight="600" fill="#1e2830" text-anchor="middle">{{ z.label }}</text>
+      <g transform="translate(-4,25)" filter="url(#zacht)">
+        <rect x="-39" y="-8" width="78" height="15" rx="3.5" fill="#ffffff" stroke="#c3cedb" stroke-width=".8"/>
+        <rect x="-39" y="-8" width="4" height="15" rx="2" fill="{{ o.kleur }}"/>
+        <text class="naam" x="3" y="2.8" font-size="7.8" font-weight="600" fill="#1e2830" text-anchor="middle">{{ o.label }}</text>
       </g>
     </g></a>
+
+    {% elif o.soort == 'dashboard' %}
+    {% set cf = cijfers.get(o.kamer) %}
+    {% if cf %}
+    <g class="deco dash" transform="translate({{ o.x }},{{ o.y }})" data-kamer="{{ o.kamer }}">
+      <g transform="skewY(-26.565)">
+        <rect x="-46" y="-96" width="96" height="52" rx="2.5" fill="url(#dash-g)" stroke="#7fdcff" stroke-width="2" filter="url(#gloeifilter)" opacity=".8"/>
+        <rect x="-46" y="-96" width="96" height="52" rx="2.5" fill="#0a2233" opacity=".9"/>
+        <rect x="-46" y="-96" width="96" height="52" rx="2.5" fill="url(#dash-g)" stroke="#7fdcff" stroke-width="1.2"/>
+        <rect x="-46" y="-96" width="96" height="7" fill="#7fdcff" opacity=".3"/>
+        <text data-cijfer="{{ o.kamer }}-0" x="-22" y="-70" font-size="17" font-weight="700" fill="#eafaff" text-anchor="middle">{{ cf[0][0] }}</text>
+        <text x="-22" y="-61" font-size="5.2" fill="#c3e9fb" text-anchor="middle">{{ cf[0][1] }}</text>
+        <text data-cijfer="{{ o.kamer }}-1" x="24" y="-70" font-size="17" font-weight="700" fill="#c6ffe2" text-anchor="middle">{{ cf[1][0] }}</text>
+        <text x="24" y="-61" font-size="5.2" fill="#c3e9fb" text-anchor="middle">{{ cf[1][1] }}</text>
+        {% for i in range(11) %}<rect class="wb" x="{{ -42 + i*8.2 }}" y="{{ -56 - (i*5) % 9 }}" width="4.6" height="{{ 9 + (i*5) % 9 }}" rx=".6" fill="#8fe4ff" opacity=".8"/>{% endfor %}
+      </g>
+    </g>
+    {% endif %}
+
+    {% elif o.soort == 'plant' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})">
+      <ellipse cx="0" cy="10" rx="14" ry="5" fill="#0d1520" opacity=".18"/>
+      <polygon points="-8,0 8,0 6.5,12 -6.5,12" fill="#eceff3"/><polygon points="8,0 6.5,12 0,13.5 0,1.2" fill="#d7dce2"/>
+      <circle cx="-5" cy="-8" r="7" fill="#3f8a5a"/><circle cx="5" cy="-11" r="7.5" fill="#4f9d69"/>
+      <circle cx="0" cy="-18" r="6.5" fill="#357a4d"/><circle cx="1.5" cy="-4" r="5.5" fill="#5cae7a"/>
+    </g>
+
+    {% elif o.soort == 'plantenbak' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})">
+      <ellipse cx="0" cy="12" rx="30" ry="10" fill="#0d1520" opacity=".16"/>
+      <polygon points="-30,0 0,15 30,0 0,-15" fill="#e4e8ee"/>
+      <polygon points="-30,0 0,15 0,26 -30,11" fill="#cfd5dd"/><polygon points="0,15 30,0 30,11 0,26" fill="#bcc4ce"/>
+      {% for dx, dy, r in [(-16,-4,6.5),(-6,1,7),(5,-3,6),(14,2,6.5),(-10,-9,5.5),(6,-9,5.5)] %}
+      <circle cx="{{ dx }}" cy="{{ dy }}" r="{{ r }}" fill="{{ ['#3f8a5a','#4f9d69','#357a4d','#5cae7a'][loop.index0 % 4] }}"/>{% endfor %}
+    </g>
+
+    {% elif o.soort == 'groenmuur' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})">
+      <g transform="skewY(26.565)">
+        <rect x="-6" y="-72" width="128" height="72" fill="#2f6b45"/>
+        {% for i in range(11) %}{% for j in range(7) %}
+        <circle cx="{{ -1 + i*11.5 }}" cy="{{ -67 + j*10 }}" r="{{ 5.4 + ((i+j) % 3) * 0.7 }}" fill="{{ ['#3f8a5a','#4f9d69','#357a4d','#5cae7a','#68bd85'][(i*3+j) % 5] }}"/>
+        {% endfor %}{% endfor %}
+        <rect x="-6" y="-72" width="128" height="72" fill="none" stroke="#8e9dad" stroke-width="2"/>
+      </g>
+    </g>
+
+    {% elif o.soort == 'serverrack' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})">
+      <ellipse cx="0" cy="6" rx="20" ry="7" fill="#0d1520" opacity=".2"/>
+      <polygon points="-18,-4 0,5 0,-58 -18,-67" fill="#1b2129"/>
+      <polygon points="0,5 18,-4 18,-67 0,-58" fill="#141920"/>
+      <polygon points="-18,-67 0,-58 18,-67 0,-76" fill="#2a323c"/>
+      {% for i in range(9) %}
+      <polygon points="-15,{{ -10 - i*6 }} -1.5,{{ -3.2 - i*6 }} -1.5,{{ -7.2 - i*6 }} -15,{{ -14 - i*6 }}" fill="#232b35"/>
+      <circle cx="-4" cy="{{ -5.8 - i*6 }}" r="1" fill="{{ '#4fd08a' if i % 3 else '#4fb8f5' }}"/>
+      {% endfor %}
+    </g>
+
+    {% elif o.soort == 'kunst' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})">
+      <g transform="skewY(26.565)">
+        <rect x="0" y="-58" width="56" height="38" fill="#ffffff" stroke="#b9c2ce" stroke-width="1.6"/>
+        <rect x="4" y="-54" width="48" height="30" fill="#e8f0f7"/>
+        <circle cx="19" cy="-40" r="8" fill="#5b9bd5" opacity=".8"/><circle cx="33" cy="-35" r="10" fill="#2f6b8f" opacity=".65"/>
+        <path d="M6 -26l12-12 9 7 11-13 12 18z" fill="#9dc3e0" opacity=".7"/>
+      </g>
+    </g>
+
+    {% elif o.soort == 'kast' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})">
+      <ellipse cx="0" cy="8" rx="26" ry="9" fill="#0d1520" opacity=".16"/>
+      <polygon points="-26,-2 0,11 0,-19 -26,-32" fill="#e2e7ed"/>
+      <polygon points="0,11 26,-2 26,-32 0,-19" fill="#ccd3db"/>
+      <polygon points="-26,-32 0,-19 26,-32 0,-45" fill="#f2f5f8"/>
+      <polygon points="-22,-8 -2,2 -2,-8 -22,-18" fill="#cfd6de"/>
+      <rect x="-16" y="-46" width="8" height="4" rx="1" fill="#5b9bd5" opacity=".6"/>
+    </g>
+
+    {% elif o.soort == 'printer' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})">
+      <ellipse cx="0" cy="6" rx="18" ry="6" fill="#0d1520" opacity=".16"/>
+      <polygon points="-16,-2 0,6 0,-12 -16,-20" fill="#3c4654"/>
+      <polygon points="0,6 16,-2 16,-20 0,-12" fill="#2f3846"/>
+      <polygon points="-16,-20 0,-12 16,-20 0,-28" fill="#4d5867"/>
+      <polygon points="-10,-16 -2,-12 -2,-15 -10,-19" fill="#7fdcff" opacity=".7"/>
+    </g>
+
+    {% elif o.soort == 'balie' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})" filter="url(#schaduw)">
+      <polygon points="-66,10 12,49 12,25 -66,-14" fill="#2c3d52"/>
+      <polygon points="12,49 66,22 66,-2 12,25" fill="#233245"/>
+      <polygon points="-12,-29 66,-2 12,25 -66,-14" fill="#f4f7fa" stroke="#cdd6e0" stroke-width=".8"/>
+      <polygon points="-56,0 -6,25 -6,17 -56,-8" fill="#7a8ca3" opacity=".9"/>
+      <g transform="translate(-31,4) skewY(26.565)"><text x="0" y="0" font-size="7" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing=".6">ONTHAAL</text></g>
+      <ellipse cx="20" cy="8" rx="7" ry="3.5" fill="#e4e9ef"/>
+      <circle cx="34" cy="1" r="4.5" fill="#4f9d69"/>
+    </g>
+
+    {% elif o.soort == 'kleed' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})">
+      <polygon points="-96,0 0,48 96,0 0,-48" fill="#c9d4de" opacity=".85"/>
+      <polygon points="-84,0 0,42 84,0 0,-42" fill="#dde4ec" opacity=".9"/>
+      <polygon points="-96,0 0,48 96,0 0,-48" fill="none" stroke="#b3bfcb" stroke-width="1"/>
+    </g>
+
+    {% elif o.soort == 'bank' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})" filter="url(#zacht)">
+      <ellipse cx="0" cy="18" rx="52" ry="16" fill="#0d1520" opacity=".12"/>
+      <polygon points="-52,5 5,34 5,16 -52,-13" fill="#c8cfd8"/>
+      <polygon points="5,34 52,10 52,-8 5,16" fill="#b3bcc7"/>
+      <polygon points="-5,-23 52,-8 5,16 -52,-13" fill="#e2e7ed"/>
+      <polygon points="-5,-23 -52,-13 -52,-36 -5,-46" fill="#d5dbe3"/>
+      <polygon points="-5,-46 52,-31 52,-8 -5,-23" fill="#eceff3"/>
+      <polygon points="-34,-20 -11,-14 -11,-28 -34,-34" fill="#f4f7fa"/>
+      <polygon points="8,-14 31,-8 31,-22 8,-28" fill="#f4f7fa"/>
+    </g>
+
+    {% elif o.soort == 'fauteuil' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})" filter="url(#zacht)">
+      <ellipse cx="0" cy="12" rx="24" ry="8" fill="#0d1520" opacity=".12"/>
+      <polygon points="-21,3 3,15 3,4 -21,-8" fill="#2f5f96"/>
+      <polygon points="3,15 24,4 24,-7 3,4" fill="#274f7d"/>
+      <polygon points="0,-12 24,-7 3,4 -21,-8" fill="#3f78b8"/>
+      <polygon points="0,-12 -21,-8 -21,-26 0,-30" fill="#356a9f"/>
+      <polygon points="0,-30 24,-25 24,-7 0,-12" fill="#4685c8"/>
+    </g>
+
+    {% elif o.soort == 'tafeltje' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})">
+      <ellipse cx="0" cy="8" rx="18" ry="6" fill="#0d1520" opacity=".12"/>
+      <polygon points="-18,0 0,9 0,4 -18,-5" fill="#dfe4ea"/><polygon points="0,9 18,0 18,-5 0,4" fill="#c9d0d9"/>
+      <polygon points="0,-9 18,-5 0,4 -18,-5" fill="#f7f9fb" stroke="#d5dade" stroke-width=".6"/>
+      <circle cx="0" cy="-5" r="4" fill="#4f9d69"/><rect x="6" y="-6" width="7" height="3" rx="1" fill="#dbe2ea"/>
+    </g>
+
+    {% elif o.soort == 'vergadertafel' %}
+    <g class="deco" transform="translate({{ o.x }},{{ o.y }})">
+      {% for cx, cy in [(-66,-14),(-36,-29),(-6,-44),(66,-14),(36,-29),(6,-44),(-36,11),(36,11),(0,26)] %}
+      <g transform="translate({{ cx }},{{ cy }})"><rect x="-7" y="-19" width="14" height="14" rx="3.5" fill="#39424e"/><ellipse cx="0" cy="-3" rx="8.5" ry="4" fill="#4a5563"/></g>
+      {% endfor %}
+      <g filter="url(#schaduw)">
+        <polygon points="-72,5 6,44 6,31 -72,-8" fill="#c9d0d9"/><polygon points="6,44 72,11 72,-2 6,31" fill="#b6bec9"/>
+        <polygon points="-6,-34 72,-2 6,31 -72,-8" fill="#f7f9fb" stroke="#d5dade" stroke-width=".8"/>
+        <ellipse cx="-6" cy="0" rx="8" ry="4" fill="#e8edf3"/>
+        <rect x="-30" y="-14" width="11" height="7" rx="1.2" fill="#dfe5ec"/><rect x="18" y="-2" width="11" height="7" rx="1.2" fill="#dfe5ec"/>
+        <circle cx="34" cy="-12" r="4.5" fill="#4f9d69"/>
+      </g>
+    </g>
+    {% endif %}
     {% endfor %}
+
+    {# wolkjes bovenop: een aparte laag, zodat een werkende agent altijd zichtbaar meldt wat hij doet #}
+    <g class="bubbels">
+    {% for z in zitplaatsen %}{% set st = statussen.get(z.naam, {}) %}
+      <g class="bubbel" data-naam="{{ z.naam }}" data-toestand="{{ st.toestand or 'slaapt' }}" filter="url(#zacht)" transform="translate({{ z.x + 28.5 }},{{ z.y - 14 }})">
+        <path d="M-38 -86h76a6 6 0 0 1 6 6v13a6 6 0 0 1-6 6h-30l-6 7-5-7h-35a6 6 0 0 1-6-6v-13a6 6 0 0 1 6-6z" fill="#ffffff" stroke="#c3cedb" stroke-width=".9"/>
+        <circle cx="-24" cy="-73.5" r="2.1" fill="#e0a72c"><animate attributeName="opacity" values="1;.25;1" dur="1.1s" repeatCount="indefinite" begin="0s"/></circle>
+        <circle cx="-17" cy="-73.5" r="2.1" fill="#e0a72c"><animate attributeName="opacity" values="1;.25;1" dur="1.1s" repeatCount="indefinite" begin=".18s"/></circle>
+        <circle cx="-10" cy="-73.5" r="2.1" fill="#e0a72c"><animate attributeName="opacity" values="1;.25;1" dur="1.1s" repeatCount="indefinite" begin=".36s"/></circle>
+        <text x="10" y="-70.6" font-size="9" font-weight="700" fill="#a06a12" text-anchor="middle">aan het werk</text>
+      </g>
+    {% endfor %}
+    </g>
   </svg>
   </div>
   <div class="legende">
-    <span><i style="background:#22303f"></i>Directie</span>
-    <span><i style="background:#b45309"></i>Sales</span>
-    <span><i style="background:#9d174d"></i>Klantenservice</span>
-    <span><i style="background:#1d4ed8"></i>Partners</span>
-    <span><i style="background:#0f766e"></i>Marketing</span>
-    <span><i style="background:#2563eb"></i>SEO</span>
+    <span><i style="background:#7a8ca3"></i>Directie</span>
+    <span><i style="background:#c2761c"></i>Sales</span>
+    <span><i style="background:#c0407a"></i>Klantenservice</span>
+    <span><i style="background:#3b7de0"></i>Partners</span>
+    <span><i style="background:#129b8c"></i>Marketing</span>
+    <span><i style="background:#4f8ff5"></i>SEO</span>
     <span style="margin-left:auto">Ververst elke 20 seconden · <span id="laatst">zonet</span></span>
   </div>
 </div>
 
 <aside class="zijbalk" id="zijbalk">
-  {% for k in kamers if k.soort == 'bureau' %}
+  {% for k in kamers if k.sleutel in ('directie','sales','marketing','seo') %}
   <h3><i style="background:{{ k.kleur }}"></i>{{ k.naam }}</h3>
   <ul>
     {% for z in zitplaatsen if z.kamer == k.sleutel %}{% set st = statussen.get(z.naam, {}) %}
@@ -288,46 +471,41 @@
     function naar(doel,ms){
       if(anim)cancelAnimationFrame(anim);
       var van={x:view.x,y:view.y,w:view.w,h:view.h},t0=performance.now();
-      function stap(t){var p=Math.min(1,(t-t0)/(ms||380));var e=1-Math.pow(1-p,3);
+      function stap(t){var p=Math.min(1,(t-t0)/(ms||420));var e=1-Math.pow(1-p,3);
         zet({x:van.x+(doel.x-van.x)*e,y:van.y+(doel.y-van.y)*e,w:van.w+(doel.w-van.w)*e,h:van.h+(doel.h-van.h)*e});
         if(p<1)anim=requestAnimationFrame(stap);}
       anim=requestAnimationFrame(stap);
     }
-    function pas(x,y,w,h){ /* pas de doos aan de beeldverhouding aan */
-      if(w/h<ar){var nw=h*ar;x-=(nw-w)/2;w=nw;}else{var nh=w/ar;y-=(nh-h)/2;h=nh;}
-      return {x:x,y:y,w:w,h:h};
-    }
+    function pas(x,y,w,h){if(w/h<ar){var nw=h*ar;x-=(nw-w)/2;w=nw;}else{var nh=w/ar;y-=(nh-h)/2;h=nh;}return {x:x,y:y,w:w,h:h};}
     function focus(sleutel){
       document.querySelectorAll('.werkbalk button').forEach(function(b){b.classList.toggle('actief',b.getAttribute('data-focus')===sleutel);});
       if(sleutel==='alles'){naar(pas(basis[0],basis[1],basis[2],basis[3]));return;}
-      var k=document.querySelector('.kamer[data-kamer="'+sleutel+'"]'); if(!k)return;
-      var f=k.getAttribute('data-focus').split(' ').map(Number); naar(pas(f[0],f[1],f[2],f[3]));
+      var k=document.querySelector('.kamer[data-kamer="'+sleutel+'"]');if(!k)return;
+      var f=k.getAttribute('data-focus').split(' ').map(Number);naar(pas(f[0],f[1],f[2],f[3]));
     }
     document.querySelectorAll('.werkbalk button').forEach(function(b){b.addEventListener('click',function(){focus(b.getAttribute('data-focus'));});});
-    /* zoom met het wiel, rond de muisaanwijzer */
     svg.addEventListener('wheel',function(e){
       e.preventDefault();
       var r=svg.getBoundingClientRect();var px=(e.clientX-r.left)/r.width,py=(e.clientY-r.top)/r.height;
-      var f=e.deltaY>0?1.12:0.89;var nw=Math.min(basis[2]*1.4,Math.max(240,view.w*f));var nh=nw/ar;
+      var f=e.deltaY>0?1.12:0.89;var nw=Math.min(basis[2]*1.4,Math.max(260,view.w*f));var nh=nw/ar;
       zet({x:view.x+(view.w-nw)*px,y:view.y+(view.h-nh)*py,w:nw,h:nh});
       document.querySelectorAll('.werkbalk button').forEach(function(b){b.classList.remove('actief');});
     },{passive:false});
-    /* slepen */
     var sleep=null;
     svg.addEventListener('pointerdown',function(e){sleep={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y,bewogen:false};svg.setPointerCapture(e.pointerId);});
-    svg.addEventListener('pointermove',function(e){if(!sleep)return;var r=svg.getBoundingClientRect();var dx=(e.clientX-sleep.x)*view.w/r.width,dy=(e.clientY-sleep.y)*view.h/r.height;
+    svg.addEventListener('pointermove',function(e){if(!sleep)return;var r=svg.getBoundingClientRect();
+      var dx=(e.clientX-sleep.x)*view.w/r.width,dy=(e.clientY-sleep.y)*view.h/r.height;
       if(Math.abs(e.clientX-sleep.x)+Math.abs(e.clientY-sleep.y)>4){sleep.bewogen=true;svg.classList.add('sleept');}
       zet({x:sleep.vx-dx,y:sleep.vy-dy,w:view.w,h:view.h});});
-    function los(e){if(sleep&&sleep.bewogen){svg.addEventListener('click',function stop(ev){ev.preventDefault();svg.removeEventListener('click',stop,true);},true);}sleep=null;svg.classList.remove('sleept');}
+    function los(){if(sleep&&sleep.bewogen){svg.addEventListener('click',function stop(ev){ev.preventDefault();svg.removeEventListener('click',stop,true);},true);}sleep=null;svg.classList.remove('sleept');}
     svg.addEventListener('pointerup',los);svg.addEventListener('pointercancel',los);
-    /* zijbalk: klik = uitlichten en inzoomen */
     document.querySelectorAll('#zijbalk li').forEach(function(li){
       li.addEventListener('click',function(){
         var naam=li.getAttribute('data-naam');var z=document.querySelector('.zit[data-naam="'+naam+'"]');if(!z)return;
         var m=/translate\(([-\d.]+),([-\d.]+)\)/.exec(z.getAttribute('transform'));var x=+m[1],y=+m[2];
-        naar(pas(x-170,y-150,340,240));
+        naar(pas(x-180,y-170,360,260));
         document.querySelectorAll('.zit.uitgelicht').forEach(function(o){o.classList.remove('uitgelicht');});
-        z.classList.add('uitgelicht');setTimeout(function(){z.classList.remove('uitgelicht');},3200);
+        z.classList.add('uitgelicht');setTimeout(function(){z.classList.remove('uitgelicht');},3400);
         document.querySelectorAll('.werkbalk button').forEach(function(b){b.classList.remove('actief');});
       });
     });
@@ -341,8 +519,12 @@
       Object.keys(st).forEach(function(naam){
         var s=st[naam],taak=s.taak||'';
         var z=document.querySelector('.zit[data-naam="'+naam+'"]');
-        if(z){z.setAttribute('data-toestand',s.toestand||'slaapt');var t=z.querySelector('.wolk-taak');if(t)t.textContent=taak.length>34?taak.slice(0,34)+'…':taak;
-          var ti=z.querySelector('title');if(ti)ti.textContent=(z.querySelector('.naam')||{}).textContent+(taak?' · '+taak:'');}
+        if(z){z.setAttribute('data-toestand',s.toestand||'slaapt');
+          var t=z.querySelector('.holo-taak');if(t)t.textContent=taak.length>30?taak.slice(0,30)+'…':taak;
+          var nm=z.querySelector('.naam'),ti=z.querySelector('title');
+          if(ti&&nm)ti.textContent=nm.textContent+(taak?' · '+taak:'');}
+        var bb=document.querySelector('.bubbel[data-naam="'+naam+'"]');
+        if(bb)bb.setAttribute('data-toestand',s.toestand||'slaapt');
         var li=document.querySelector('#zijbalk li[data-naam="'+naam+'"]');
         if(li){li.setAttribute('data-toestand',s.toestand||'slaapt');li.querySelector('.taak').textContent=taak;}
       });
