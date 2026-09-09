@@ -46,6 +46,26 @@ services:
       - "127.0.0.1:3020:3020"
     networks: [appnet]
 
+  # Locatielogboek: vangt de OwnTracks-berichten van Mehdi's iPhone op
+  # (locatie.globaal.be/pub) en maakt er een dagboek van. Google Maps bewaart
+  # de tijdlijn sinds eind 2024 alleen nog op het toestel zelf, zonder
+  # koppeling, dus verzamelen we het zelf. Zie locatie/README.md.
+  app-locatie:
+    build: ./locatie
+    container_name: app-locatie
+    restart: unless-stopped
+    environment:
+      APP_NAME: Locatie
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      LOCATIE_DB: /data/locatie.db
+      LOCATIE_WACHTWOORD: ${LOCATIE_WACHTWOORD:-}
+      PORT: "3031"
+    volumes:
+      - ./locatie-data:/data
+    ports:
+      - "127.0.0.1:3031:3031"
+    networks: [appnet]
+
   # Sales/Marketing-agents, afgesplitst van app-agents (siyanagents.globaal.be).
   # Eigen code (./siyanagents), eigen database (siyanagents.db) en eigen
   # afgeschermde secrets (siyanagents-data/.env) — los van de operations-agents.

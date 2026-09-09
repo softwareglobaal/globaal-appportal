@@ -1,0 +1,31 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name locatie.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    set $app_upstream http://app-locatie:3031;
+
+    # De OwnTracks-app op de telefoon heeft geen browsersessie en kan dus niet
+    # door de forward-auth. Deze ene POST passeert hem; de app controleert zelf
+    # het wachtwoord (LOCATIE_WACHTWOORD) via HTTP Basic Auth. Zelfde patroon
+    # als /agent-status op de agents-tegel.
+    #
+    # De Authorization-header moet hier expliciet doorgegeven worden: hij draagt
+    # het wachtwoord, en zonder deze regel valt de authenticatie weg en krijgt
+    # de telefoon een 403. De identiteitsheaders worden hard geleegd, zodat een
+    # bezoeker zich niet als ingelogde gebruiker kan voordoen.
+    location = /pub {
+        client_max_body_size 64k;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_set_header X-authentik-email "";
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
+    include /etc/nginx/snippets/forward-auth.conf;
+}

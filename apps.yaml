@@ -96,3 +96,12 @@ apps:
     subdomain: contracten
     roles: [admin, manager, contracten]
     status: active
+  # Bewust alleen de rol 'locatie', niet admin of manager: dit is het
+  # persoonlijke bewegingslogboek van Mehdi en hoort niet in de tegellijst van
+  # collega's te verschijnen. Zelfde keuze als bij de agenda-tegel.
+  - id: locatie
+    name: Locatielogboek
+    description: Waar was ik wanneer - eigen tijdlijn via OwnTracks op de iPhone
+    subdomain: locatie
+    roles: [locatie]
+    status: active

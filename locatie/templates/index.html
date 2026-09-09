@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ datum }} · Locatielogboek</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --bg:#f5f6f7; --paneel:#ffffff; --lijn:#e4e7ea; --lijn-sterk:#d5dade;
+    --tekst:#1e2830; --tekst-2:#5c6771; --tekst-3:#8d959d; --accent:#2f4a63;
+    --bezoek:#2f7d5a; --rit:#3663a0; --amber:#916312;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--tekst);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px;line-height:1.5;}
+  .wrap{max-width:1040px;margin:0 auto;padding:20px 22px 60px;}
+  a{color:var(--accent);text-decoration:none;} a:hover{text-decoration:underline;}
+
+  .kop{margin-bottom:16px;}
+  .kop h1{margin:0;font-size:18px;font-weight:600;letter-spacing:-0.01em;}
+  .kop .sub{color:var(--tekst-2);font-size:12.5px;margin-top:2px;}
+
+  .dagen{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px;}
+  .dagen a{border:1px solid var(--lijn-sterk);background:var(--paneel);border-radius:999px;
+    padding:4px 11px;font-size:12.5px;color:var(--tekst-2);}
+  .dagen a.actief{border-color:var(--accent);color:var(--tekst);background:#eef2f6;font-weight:600;}
+
+  .cijfers{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 16px;}
+  .cijfer{background:var(--paneel);border:1px solid var(--lijn);border-radius:6px;
+    padding:10px 14px;min-width:110px;}
+  .cijfer .n{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;}
+  .cijfer .l{font-size:11.5px;color:var(--tekst-3);text-transform:uppercase;letter-spacing:0.04em;}
+
+  #kaart{height:340px;border:1px solid var(--lijn);border-radius:6px;margin-bottom:18px;
+    background:var(--paneel);}
+
+  h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;
+    color:var(--tekst-2);margin:24px 0 8px;}
+  .paneel{background:var(--paneel);border:1px solid var(--lijn);border-radius:6px;overflow:hidden;}
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;font-size:11.5px;font-weight:600;color:var(--tekst-3);
+    text-transform:uppercase;letter-spacing:0.04em;padding:9px 14px;border-bottom:1px solid var(--lijn);}
+  td{padding:9px 14px;border-bottom:1px solid var(--lijn);font-size:13px;vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  tr.rij:hover{background:#fafbfc;cursor:pointer;}
+  .tijd{font-family:var(--mono);font-size:12.5px;white-space:nowrap;color:var(--tekst-2);}
+  .merk{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:1px;}
+  .merk.bezoek{background:var(--bezoek);} .merk.rit{background:var(--rit);}
+  .duur{font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .leeg{color:var(--tekst-3);font-size:13px;padding:20px 14px;}
+  .voet{margin-top:26px;font-size:12px;color:var(--tekst-3);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kop">
+    <h1>Locatielogboek</h1>
+    <div class="sub">
+      {% if laatste_tijd %}
+        laatste bericht van de telefoon om {{ laatste_tijd }}{% if batterij %}, batterij {{ batterij }}%{% endif %}
+      {% else %}
+        nog geen berichten binnen
+      {% endif %}
+    </div>
+  </div>
+
+  {% if dagen %}
+  <div class="dagen">
+    {% for d in dagen[:14] %}
+      <a href="?dag={{ d }}" {% if d == datum %}class="actief"{% endif %}>{{ d }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="cijfers">
+    <div class="cijfer"><div class="n">{{ stukken | selectattr('soort','equalto','bezoek') | list | length }}</div><div class="l">bezoeken</div></div>
+    <div class="cijfer"><div class="n">{{ km }}</div><div class="l">kilometer</div></div>
+    <div class="cijfer"><div class="n">{{ aantal }}</div><div class="l">meetpunten</div></div>
+  </div>
+
+  <div id="kaart"></div>
+
+  <h2>{{ datum }}</h2>
+  <div class="paneel">
+    {% if stukken %}
+    <table>
+      <thead><tr><th>van</th><th>tot</th><th>duur</th><th>wat</th><th>plaats</th></tr></thead>
+      <tbody>
+      {% for s in stukken %}
+        <tr class="rij" data-lat="{{ s.lat if s.soort == 'bezoek' else s.spoor[0][0] }}"
+                        data-lon="{{ s.lon if s.soort == 'bezoek' else s.spoor[0][1] }}">
+          <td class="tijd">{{ s.van_tekst }}</td>
+          <td class="tijd">{{ s.tot_tekst }}</td>
+          <td class="duur">{{ s.minuten }} min</td>
+          <td>
+            <span class="merk {{ 'bezoek' if s.soort == 'bezoek' else 'rit' }}"></span>
+            {{ 'bezoek' if s.soort == 'bezoek' else 'onderweg' }}
+          </td>
+          <td>
+            {% if s.soort == 'bezoek' %}
+              <a href="https://maps.google.com/?q={{ s.lat }},{{ s.lon }}" target="_blank"
+                 rel="noopener">{{ '%.5f'|format(s.lat) }}, {{ '%.5f'|format(s.lon) }}</a>
+            {% else %}
+              {{ (s.meter / 1000) | round(1) }} km
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="leeg">Geen punten op deze dag. Staat OwnTracks aan en heeft de app
+      toestemming voor locatie "altijd"?</div>
+    {% endif %}
+  </div>
+
+  <div class="voet">
+    Een bezoek is: minstens 8 minuten binnen 120 meter. Ruwe gegevens via
+    <a href="/api/dag/{{ datum }}">/api/dag/{{ datum }}</a>.
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  var kaart = L.map('kaart');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap'
+  }).addTo(kaart);
+
+  var grenzen = [];
+
+  fetch('/api/dag/{{ datum }}')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      (d.indeling || []).forEach(function (s) {
+        if (s.soort === 'bezoek') {
+          var m = L.circleMarker([s.lat, s.lon], {
+            radius: 7, color: '#2f7d5a', fillColor: '#2f7d5a', fillOpacity: 0.75, weight: 2
+          }).addTo(kaart);
+          m.bindPopup(s.minuten + ' min stil');
+          grenzen.push([s.lat, s.lon]);
+        } else if (s.spoor && s.spoor.length > 1) {
+          L.polyline(s.spoor, { color: '#3663a0', weight: 3, opacity: 0.8 }).addTo(kaart);
+          s.spoor.forEach(function (p) { grenzen.push(p); });
+        }
+      });
+
+      if (grenzen.length) {
+        kaart.fitBounds(grenzen, { padding: [30, 30] });
+      } else {
+        kaart.setView([50.85, 4.35], 9);   // België, als er niets is
+      }
+    })
+    .catch(function () { kaart.setView([50.85, 4.35], 9); });
+
+  // Op een rij klikken zoomt de kaart naar dat moment.
+  document.querySelectorAll('tr.rij').forEach(function (rij) {
+    rij.addEventListener('click', function () {
+      var lat = parseFloat(rij.dataset.lat), lon = parseFloat(rij.dataset.lon);
+      if (!isNaN(lat) && !isNaN(lon)) kaart.setView([lat, lon], 16);
+    });
+  });
+})();
+</script>
+</body>
+</html>
