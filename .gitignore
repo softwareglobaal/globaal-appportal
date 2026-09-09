@@ -57,3 +57,6 @@ awscliv2.zip
 /monday-graaf/
 # Runtime-data van de siyanagents-app (eigen DB + bijlagen). Nooit in git.
 /siyanagents-data/
+
+# Runtime-data van de mijnagents-app (eigen DB). Nooit in git.
+/mijnagents-data/

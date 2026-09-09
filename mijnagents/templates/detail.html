@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ a['label'] }} — {{ app_naam }}</title>
+<style>
+  :root{
+    --bg:#0f1115; --paper:#171a21; --rand:#252a33; --tekst:#e7e9ee;
+    --zacht:#9aa3b2; --accent:#6ea8fe;
+    --rust:#6b7280; --waakt:#3b82f6; --actief:#22c55e; --klaar:#8b5cf6;
+    --fout:#ef4444; --stil:#f59e0b; --onbekend:#4b5563;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tekst);
+       font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:22px 28px;border-bottom:1px solid var(--rand)}
+  header a{color:var(--accent);text-decoration:none;font-size:13px}
+  header h1{margin:8px 0 2px;font-size:22px}
+  header .rol{color:var(--zacht)}
+  main{padding:24px 28px;max-width:820px;margin:0 auto}
+  .blok{background:var(--paper);border:1px solid var(--rand);border-radius:12px;
+        padding:18px 20px;margin-bottom:16px}
+  .blok h2{margin:0 0 10px;font-size:13px;letter-spacing:.06em;
+           text-transform:uppercase;color:var(--zacht)}
+  ul{margin:0;padding-left:20px}
+  li{margin:4px 0}
+  .grens li{color:#f3c9c9}
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 14px}
+  .kv dt{color:var(--zacht)}
+  .badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;border:1px solid}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{text-align:left;padding:6px 8px;border-top:1px solid var(--rand)}
+  th{color:var(--zacht);font-weight:600}
+  code{background:#0c0e12;padding:2px 6px;border-radius:6px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <a href="{{ url_for('bord') }}">← terug naar het bord</a>
+  <h1>{{ a['label'] }}</h1>
+  <div class="rol">{{ a['rol'] }}</div>
+</header>
+<main>
+
+  <div class="blok">
+    <h2>Huidige status</h2>
+    {% if s %}
+      <span class="badge" style="color:var(--{{ s['status'] }});border-color:var(--{{ s['status'] }})">
+        {{ s['status'] }}</span>
+      {% if s['taak'] %}<p style="margin:10px 0 2px"><b>{{ s['taak'] }}</b></p>{% endif %}
+      {% if s['detail'] %}<p style="margin:2px 0;color:var(--zacht)">{{ s['detail'] }}</p>{% endif %}
+      <p style="color:var(--zacht);font-size:12px;margin-top:10px">Laatste hartslag: {{ s['ts'] }}</p>
+    {% else %}
+      <p style="color:var(--zacht)">Nog geen hartslag ontvangen.</p>
+    {% endif %}
+  </div>
+
+  {% if a['mandaat'] %}
+  <div class="blok"><h2>Mandaat</h2><p style="margin:0">{{ a['mandaat'] }}</p></div>
+  {% endif %}
+
+  <div class="blok">
+    <h2>Mag zelfstandig</h2>
+    {% if mag %}<ul>{% for x in mag %}<li>{{ x }}</li>{% endfor %}</ul>
+    {% else %}<p style="margin:0;color:var(--zacht)">Niets: levert alleen voorstellen.</p>{% endif %}
+  </div>
+
+  <div class="blok">
+    <h2>Grenzen — doet nooit</h2>
+    {% if grenzen %}<ul class="grens">{% for x in grenzen %}<li>{{ x }}</li>{% endfor %}</ul>
+    {% else %}<p style="margin:0;color:var(--zacht)">Niet vastgelegd.</p>{% endif %}
+  </div>
+
+  <div class="blok">
+    <h2>Gereedschap</h2>
+    {% if tools %}<ul>{% for x in tools %}<li>{{ x }}</li>{% endfor %}</ul>
+    {% else %}<p style="margin:0;color:var(--zacht)">Niet vastgelegd.</p>{% endif %}
+  </div>
+
+  <div class="blok">
+    <h2>Cadans</h2>
+    <p style="margin:0">{{ a['cadans'] or 'Niet vastgelegd.' }}</p>
+  </div>
+
+  {% if voorstellen %}
+  <div class="blok">
+    <h2>Voorstellen</h2>
+    <table>
+      <tr><th>#</th><th>Actie</th><th>Status</th><th>Wanneer</th></tr>
+      {% for v in voorstellen %}
+      <tr>
+        <td>{{ v['id'] }}</td>
+        <td>{{ v['actie'] }}</td>
+        <td>{{ v['status'] }}</td>
+        <td>{{ v['ts'][:16] }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+</main>
+</body>
+</html>

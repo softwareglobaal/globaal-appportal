@@ -1,4 +1,24 @@
 services:
+  # Mehdi's eigen agent-omgeving (mijnagents.globaal.be). Zelfstandig, naar het
+  # patroon van app-agents/app-siyanagents: eigen code (./mijnagents), eigen
+  # database (mijnagents.db) en eigen secrets (mijnagents-data/.env).
+  app-mijnagents:
+    build: ./mijnagents
+    container_name: app-mijnagents
+    restart: unless-stopped
+    env_file:
+      - ./mijnagents-data/.env
+    environment:
+      APP_NAME: Mijn agents
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      AGENTS_DB: /data/mijnagents.db
+      PORT: "3022"
+    volumes:
+      - ./mijnagents-data:/data
+    ports:
+      - "127.0.0.1:3022:3022"
+    networks: [appnet]
+
   # De appportal-Postgres op loopback voor host-services (kosten-dashboard):
   # gedocumenteerd contract in globaal-kosten/deploy/appportal. Stond eerder
   # alleen als handmatige wijziging op de VM en verdween daardoor bij het

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ app_naam }}</title>
+<style>
+  :root{
+    --bg:#0f1115; --paper:#171a21; --rand:#252a33; --tekst:#e7e9ee;
+    --zacht:#9aa3b2; --accent:#6ea8fe;
+    --rust:#6b7280; --waakt:#3b82f6; --actief:#22c55e; --klaar:#8b5cf6;
+    --fout:#ef4444; --stil:#f59e0b; --onbekend:#4b5563;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tekst);
+       font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:22px 28px;border-bottom:1px solid var(--rand);
+         display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  header h1{margin:0;font-size:20px;font-weight:650}
+  header .telling{color:var(--zacht);font-size:14px}
+  header .wie{margin-left:auto;color:var(--zacht);font-size:13px}
+  main{padding:24px 28px;max-width:1180px;margin:0 auto}
+  .groep{margin:0 0 30px}
+  .groep h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+            color:var(--zacht);margin:0 0 12px;font-weight:600}
+  .rooster{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .kaart{background:var(--paper);border:1px solid var(--rand);border-radius:12px;
+         padding:16px;text-decoration:none;color:inherit;display:block;
+         transition:border-color .15s,transform .15s}
+  .kaart:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .kaart .kop{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+  .stip{width:9px;height:9px;border-radius:50%;flex:none}
+  .kaart .naam{font-weight:640}
+  .kaart .rol{color:var(--zacht);font-size:13px;margin:2px 0 12px;min-height:20px}
+  .kaart .status{display:flex;align-items:center;gap:8px;font-size:13px}
+  .badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;
+         border:1px solid transparent}
+  .kaart .taak{margin-top:10px;font-size:13px;color:var(--tekst)}
+  .kaart .detail{margin-top:3px;font-size:12px;color:var(--zacht)}
+  .kaart .tijd{margin-top:10px;font-size:11px;color:var(--zacht)}
+  .kaart .vlag{margin-top:10px;font-size:12px;color:var(--stil);font-weight:600}
+  .leeg{color:var(--zacht);padding:40px;text-align:center;
+        border:1px dashed var(--rand);border-radius:12px}
+  /* voorstellen */
+  .voorstellen{background:var(--paper);border:1px solid var(--rand);
+               border-radius:12px;padding:16px 18px;margin-bottom:26px}
+  .voorstellen h2{margin:0 0 12px;font-size:14px}
+  .vst{border-top:1px solid var(--rand);padding:12px 0;display:flex;
+       gap:14px;align-items:flex-start;flex-wrap:wrap}
+  .vst:first-of-type{border-top:0}
+  .vst .wat{flex:1;min-width:220px}
+  .vst .wat b{font-weight:640}
+  .vst .van{font-size:12px;color:var(--zacht)}
+  .vst .knoppen{display:flex;gap:8px}
+  .vst form{margin:0}
+  button{font:inherit;border:1px solid var(--rand);background:#212734;
+         color:var(--tekst);padding:6px 14px;border-radius:8px;cursor:pointer}
+  button.ja{border-color:#1f6f43;background:#123326}
+  button.nee{border-color:#7a2b2b;background:#361a1a}
+  button:hover{filter:brightness(1.15)}
+  .signaal{font-size:11px;color:var(--zacht)}
+  footer{color:var(--zacht);font-size:12px;text-align:center;padding:20px}
+</style>
+</head>
+<body>
+<header>
+  <h1>{{ app_naam }}</h1>
+  <span class="telling">{{ aantal }} agent{{ 's' if aantal != 1 else '' }}</span>
+  <span class="wie">{{ gebruiker }}</span>
+</header>
+<main>
+
+  {% if voorstellen %}
+  <section class="voorstellen">
+    <h2>Voorstellen die op je wachten ({{ voorstellen|length }})</h2>
+    {% for v in voorstellen %}
+    <div class="vst">
+      <div class="wat">
+        <b>{{ v['actie'] }}</b>
+        {% if not v['parameters'] %}<span class="signaal">— signaal, niet uitvoerbaar</span>{% endif %}
+        <div class="van">{{ v['label'] or v['naam'] }}{% if v['reden'] %} · {{ v['reden'] }}{% endif %}</div>
+      </div>
+      {% if mag_beslissen %}
+      <div class="knoppen">
+        <form method="post" action="{{ url_for('besluit', vid=v['id']) }}">
+          <input type="hidden" name="keuze" value="goedgekeurd">
+          <button class="ja" type="submit">Goedkeuren</button>
+        </form>
+        <form method="post" action="{{ url_for('besluit', vid=v['id']) }}">
+          <input type="hidden" name="keuze" value="geweigerd">
+          <button class="nee" type="submit">Weigeren</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if aantal == 0 %}
+    <div class="leeg">
+      Nog geen agents. Maak er een met de generator:<br><br>
+      <code>python3 mijnagents-runner/nieuwe-agent.py</code>
+    </div>
+  {% endif %}
+
+  {% for type, kaarten in groepen.items() %}
+  <section class="groep">
+    <h2>{{ type }}</h2>
+    <div class="rooster">
+      {% for k in kaarten %}
+      <a class="kaart" href="{{ url_for('detail', naam=k['naam']) }}">
+        <div class="kop">
+          <span class="stip" style="background:var(--{{ k['toestand'] }})"></span>
+          <span class="naam">{{ k['label'] }}</span>
+        </div>
+        <div class="rol">{{ k['rol'] }}</div>
+        <div class="status">
+          <span class="badge" style="color:var(--{{ k['toestand'] }});border-color:var(--{{ k['toestand'] }})">
+            {{ k['toestand_label'] }}
+          </span>
+          {% if k['open_voorstellen'] %}
+          <span class="badge" style="color:var(--stil);border-color:var(--stil)">
+            {{ k['open_voorstellen'] }} voorstel{{ 'len' if k['open_voorstellen'] != 1 else '' }}
+          </span>
+          {% endif %}
+        </div>
+        {% if k['taak'] %}<div class="taak">{{ k['taak'] }}</div>{% endif %}
+        {% if k['detail'] %}<div class="detail">{{ k['detail'] }}</div>{% endif %}
+        {% if k['toestand'] == 'stil' %}
+          <div class="vlag">Geen recente hartslag ({{ k['leeftijd_min'] }} min)</div>
+        {% elif k['toestand'] == 'onbekend' %}
+          <div class="tijd">Nog geen hartslag ontvangen</div>
+        {% elif k['leeftijd_min'] is not none %}
+          <div class="tijd">Laatste hartslag {{ k['leeftijd_min'] }} min geleden</div>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+</main>
+<footer>Op dit bord staat alleen werkstatus, nooit inhoud.</footer>
+</body>
+</html>
