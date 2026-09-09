@@ -31,7 +31,11 @@ MAX_RONDES = 10
 DASHBOARD_LEES = {"overzicht", "dossiers", "dossier", "openstaand", "dossiercontrole", "voorbereidingen",
                   "voorbereiding", "veldenschema", "masters", "documenten", "kantoorgegevens", "zoek",
                   "dashboard_documenten", "dashboard_document"}
-RUNNERS = {"contracten-agent": os.path.join(HIER, "contracten_agent.py")}
+RUNNERS = {n: os.path.join(HIER, s) for n, s in {
+    "contracten-agent": "contracten_agent.py", "agenda-wacht": "agenda_wacht.py", "fathom-wacht": "fathom_wacht.py",
+    "plaud-wacht": "plaud_wacht.py", "dagbundelaar": "dagbundelaar.py", "locatie-wacht": "locatie_wacht.py",
+    "ontwikkelaar": "ontwikkelaar.py"}.items()}
+# icloud-wacht draait op de Mac (launchd), niet hier.
 
 
 def laad_env(pad):
@@ -92,7 +96,7 @@ TOOLS = [
     {"name": "pipedrive_lees", "description": "GET op de Pipedrive-API van H-Architects, bv. pad '/deals/14474' of '/deals' met params {'status':'open','stage_id':34}. Alleen lezen.",
      "input_schema": {"type": "object", "properties": {"pad": {"type": "string"}, "params": {"type": "object"}}, "required": ["pad"]}},
     {"name": "agent_ronde", "description": "Laat een agent nu een ronde draaien, optioneel voor één deal (contracten-agent: deal_id). Duurt tot enkele minuten; geeft de laatste regels van zijn uitvoer terug.",
-     "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}, "deal_id": {"type": "integer"}, "droog": {"type": "boolean"}}, "required": ["naam"]}},
+     "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}, "deal_id": {"type": "integer"}, "dag": {"type": "string"}, "droog": {"type": "boolean"}}, "required": ["naam"]}},
     {"name": "voorstel", "description": "Zet een voorstel op het bord dat Mehdi moet goedkeuren vóór het uitgevoerd wordt. Runbooks: 'werkwijze-bijwerken' (parameters: agent, werkwijze = de volledige nieuwe tekst), 'pipedrive-dealtitel' (deal_id, titel), 'notitie' (tekst). Zonder runbook is het een signaal.",
      "input_schema": {"type": "object", "properties": {"actie": {"type": "string"}, "reden": {"type": "string"}, "runbook": {"type": "string"}, "parameters": {"type": "object"}}, "required": ["actie", "reden"]}},
 ]
@@ -122,6 +126,8 @@ def voer_tool_uit(naam, inp):
         cmd = [os.path.expanduser("~/agents/.venv/bin/python"), script]
         if inp.get("deal_id"):
             cmd += ["--deal", str(int(inp["deal_id"]))]
+        if inp.get("dag"):
+            cmd += ["--dag", str(inp["dag"])[:10]]
         if inp.get("droog"):
             cmd.append("--droog")
         uit = subprocess.run(cmd, capture_output=True, text=True, timeout=600)

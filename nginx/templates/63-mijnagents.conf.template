@@ -21,5 +21,22 @@ server {
         proxy_pass $app_upstream;
     }
 
+    # Runners buiten de VM (de iCloud-wacht op Mehdi's Mac) zetten klaar en
+    # schrijven hun werkverslag: zelfde tokenslot, zelfde geleegde identiteit.
+    location = /api/klaarzet {
+        client_max_body_size 2m;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass $app_upstream;
+    }
+    location = /api/logboek {
+        client_max_body_size 1m;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass $app_upstream;
+    }
+
     include /etc/nginx/snippets/forward-auth.conf;
 }
