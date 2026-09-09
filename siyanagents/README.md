@@ -1,4 +1,31 @@
-# Agents-besturingscentrum (agents.globaal.be)
+# Sales/Marketing-agents (siyanagents.globaal.be)
+
+Het bord van Siyans eigen vakagents: organogram, opdrachten, disciplines,
+validatie en branding. De agents van het operations-platform (signalen,
+gezondheid, ingestie, factuurrouter, Elevait) horen hier niet thuis; die
+staan op agents.globaal.be.
+
+## Vakagents en Disciplines
+
+De lijst vakagents staat in `SM_AGENTS` in `app.py`: agentcode (gelijk aan
+`kern.agent` in het organisatieregister en aan `~/.claude/agents`), label,
+team, rol en de `statusnamen` waaronder de dirigent de status ooit meldde op
+`/agent-status` (aliassen zoals `de-dealmaker` of `merkbewaker`). Een
+nieuwe agent van Siyan: eerst in het register via een migratie (zie
+`db/migrations/126-agents-blok-a.sql`), dan een regel in `SM_AGENTS`.
+
+De pagina `/disciplines` toont blok A van het organisatieregister (A1
+verkoop, A2 marketing, A3 klantenservice, A4 partners) met de agent per
+taak. Dat is een momentopname in `seed/blok-a.json`; verversen na een
+wijziging in het register:
+
+    sh siyanagents/seed/blok-a-export.sh   # op de server, vanuit ~/appportal
+    git add siyanagents/seed/blok-a.json && git commit && git push
+
+Toewijzen gebeurt in het register zelf (organisatie.globaal.be/disciplines),
+niet op dit bord.
+
+## Oorsprong (fork van agents.globaal.be)
 
 De tegel die het agent-team toont: elke agent als kaart met live status,
 mandaat, gereedschap en grenzen. Bewust zelfstandig gehouden: een eigen

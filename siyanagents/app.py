@@ -36,21 +36,64 @@ ZOEKDIENST = os.environ.get("ZOEKDIENST", "http://172.20.0.1:3021")
 
 STATUSSEN = ("rust", "waakt", "actief", "klaar", "fout")
 
-TEAM = [
-    {"naam": "onderhoud", "label": "Onderhoudsagent", "type": "onderhoud",
-     "rol": "waakt over de VM en de apps"},
-    {"naam": "elevait-hr", "label": "HR-agent (Elevait)", "type": "elevait",
-     "rol": "toetst sollicitaties aan de criteria"},
-    {"naam": "elevait-finance", "label": "Finance-agent (Elevait)",
-     "type": "elevait", "rol": "bewaakt het uitgavenregister"},
-    {"naam": "elevait-postkamer", "label": "Postkamer-agent (Elevait)",
-     "type": "elevait", "rol": "sorteert de post op info@"},
-    {"naam": "elevait-manager", "label": "Manager-agent (Elevait)",
-     "type": "elevait", "rol": "houdt toezicht over de agents heen"},
-    {"naam": "ingestie", "label": "Ingestie-agent", "type": "ingestie",
-     "rol": "maakt van documenten doorzoekbare kennisbanken"},
+# De Sales/Marketing-vakagents (blok A van het organisatieregister,
+# organisatie.globaal.be/disciplines). `naam` is de code in kern.agent en de
+# naam in ~/.claude/agents; `statusnamen` zijn de namen waaronder de dirigent
+# de status ooit meldde op /agent-status (historisch niet altijd gelijk aan de
+# code), zodat het bord die meldingen blijft herkennen. `team` bepaalt de
+# plaats in het organogram en de kleur.
+SM_AGENTS = [
+    {"naam": "verkoopstrateeg", "label": "De Verkoopstrateeg", "team": "sales",
+     "rol": "segmentatie, doelstellingen en quota, territoria, prijszetting en business development",
+     "pijlers": "A1.1 · A1.5 · A1.6", "statusnamen": ["verkoopstrateeg"]},
+    {"naam": "dealmaker", "label": "De Dealmaker", "team": "sales",
+     "rol": "Pipedrive en Google Ads: leads, accounts, CRM en advertenties; schrijft alleen via een goedgekeurd voorstel",
+     "pijlers": "A1.2 · A1.4 · A1.5", "statusnamen": ["dealmaker", "de-dealmaker"]},
+    {"naam": "offertemeester", "label": "De Offertemeester", "team": "sales",
+     "rol": "offertes, aanbestedingen, bid/no-bid, raamovereenkomsten en win/verlies-analyse",
+     "pijlers": "A1.3", "statusnamen": ["offertemeester"]},
+    {"naam": "klantenzorg", "label": "De Klantenzorg-agent", "team": "service",
+     "rol": "klantcontact en antwoordtermijnen, klachten met oorzaakanalyse, tevredenheid en reviews",
+     "pijlers": "A3", "statusnamen": ["klantenzorg"]},
+    {"naam": "relatiebeheerder", "label": "De Relatiebeheerder", "team": "partners",
+     "rol": "Orde en federaties, gemeenten, bankrelatie en waarborgen, partnernetwerk",
+     "pijlers": "A4", "statusnamen": ["relatiebeheerder"]},
+    {"naam": "marktverkenner", "label": "De Marktverkenner", "team": "marketing",
+     "rol": "marktonderzoek, klantinzichten, concurrentie-analyse, trends en regelgeving",
+     "pijlers": "A2.1 · A1.1", "statusnamen": ["marktverkenner"]},
+    {"naam": "branding", "label": "De Merkbewaker", "team": "marketing",
+     "rol": "legt de branding vast als brandbook en bewaakt dat alle output on-brand blijft",
+     "pijlers": "A2.2", "statusnamen": ["branding", "merkbewaker"]},
+    {"naam": "contentregisseur", "label": "De Contentregisseur", "team": "marketing",
+     "rol": "marketingjaarplan en budget, referentieprojecten, social media en nieuwsbrief",
+     "pijlers": "A2.2 · A2.3", "statusnamen": ["contentregisseur"]},
+    {"naam": "beeld", "label": "De Ontwerper", "team": "marketing",
+     "rol": "on-brand beeld: branded ontwerpen via Canva en AI-beelden",
+     "pijlers": "A2.3", "statusnamen": ["beeld", "ontwerper"]},
+    {"naam": "seo", "label": "Het SEO-team", "team": "marketing",
+     "rol": "onderzoek, schrijven en kwaliteitscontrole van SEO-pagina's, met een blueprint-poort",
+     "pijlers": "A2.1 · A2.3 · A3.3", "statusnamen": ["seo-onderzoek", "seo-schrijver", "seo-qc"]},
+    {"naam": "website_bouwer", "label": "De Bouwmeester", "team": "marketing",
+     "rol": "bouwt volledige statische websites van merk tot live site; publiceert nooit zonder akkoord",
+     "pijlers": "A2.3", "statusnamen": ["website-bouwer", "website_bouwer", "bouwmeester"]},
+    {"naam": "woordvoerder", "label": "De Woordvoerder", "team": "marketing",
+     "rol": "persrelaties, externe communicatie en de interne nieuwsbrief",
+     "pijlers": "A2.4", "statusnamen": ["woordvoerder"]},
+    {"naam": "eindcontrole", "label": "De Poortwachter", "team": "leiding",
+     "rol": "laatste controle voor iets bij Siyan komt: is de opdracht echt uitgevoerd en bruikbaar?",
+     "pijlers": "staf van de leiding", "statusnamen": ["eindcontrole", "poortwachter"]},
 ]
+TEAM = [{"naam": a["naam"], "label": a["label"], "type": a["team"], "rol": a["rol"]}
+        for a in SM_AGENTS]
 LABELS = {a["naam"]: a["label"] for a in TEAM}
+# Elke statusnaam (alias) wijst terug naar de agentcode.
+STATUS_ALIAS = {alias: a["naam"] for a in SM_AGENTS for alias in a["statusnamen"]}
+
+
+def label_van(naam):
+    """Weergavenaam voor een agentnaam, ook als die als alias gemeld is."""
+    naam = (naam or "").strip().lower()
+    return LABELS.get(naam) or LABELS.get(STATUS_ALIAS.get(naam, ""), None) or naam
 
 # Mandaat per agent: wat hij doet, wat hij mag, en zijn grenzen. Voor de
 # detailweergave als je op een kaart klikt.
@@ -395,34 +438,75 @@ def db():
     return conn
 
 
-def roster():
+def _vervallen(status, minuten):
+    """Verval: geen recente melding -> "stil" (mogelijk down), zodat een
+    gestopte agent niet vals als levend blijft tonen. De hartslag komt
+    uurlijks; ruim twee gemiste beats maakt "waakt" stil."""
+    if minuten is None:
+        return status
+    if status == "actief" and minuten >= 60:
+        return "stil"
+    if status == "waakt" and minuten >= 150:
+        return "stil"
+    if status in ("klaar", "fout") and minuten >= 24 * 60:
+        return "stil"
+    return status
+
+
+def _status_rijen():
+    """Alle statusmeldingen, met verval toegepast, op naam."""
     conn = db()
-    rows = {r["naam"]: r for r in conn.execute("SELECT * FROM status")}
+    rows = conn.execute("SELECT * FROM status").fetchall()
     conn.close()
-    uit = []
-    for a in TEAM:
-        kaart = {**a, "status": "niet gekoppeld", "taak": "", "detail": "",
-                 "sinds": None, "minuten": None, "tokens": None}
-        r = rows.get(a["naam"])
+    uit = {}
+    for r in rows:
+        try:
+            ts = datetime.fromisoformat(r["ts"])
+            minuten = int((_nu() - ts).total_seconds() // 60)
+        except Exception:
+            ts, minuten = None, None
+        uit[r["naam"]] = {"status": _vervallen(r["status"], minuten),
+                          "taak": r["taak"] or "", "detail": r["detail"] or "",
+                          "tokens": r["tokens"], "minuten": minuten, "ts": ts,
+                          "sinds": ts.strftime("%d-%m %H:%M") if ts else None}
+    return uit
+
+
+def _beste_rij(rijen, agent):
+    """De meest zeggende melding onder de aliassen van een vakagent: een
+    lopende melding wint, anders de recentste."""
+    kandidaten = [rijen[n] for n in agent["statusnamen"] if n in rijen]
+    if not kandidaten:
+        return None
+    bezig = [k for k in kandidaten if k["status"] == "actief"]
+    if bezig:
+        return bezig[0]
+    return max(kandidaten, key=lambda k: k["ts"] or datetime.min.replace(tzinfo=timezone.utc))
+
+
+def status_map():
+    """Status per naam voor de templates: alle ruwe meldingen plus, per
+    vakagent, de beste melding onder zijn agentcode."""
+    rijen = _status_rijen()
+    uit = {n: {"status": r["status"], "taak": r["taak"]} for n, r in rijen.items()}
+    for a in SM_AGENTS:
+        r = _beste_rij(rijen, a)
         if r:
-            try:
-                ts = datetime.fromisoformat(r["ts"])
-                minuten = int((_nu() - ts).total_seconds() // 60)
-            except Exception:
-                ts, minuten = None, None
-            status = r["status"]
-            # Verval: geen recente melding -> "stil" (mogelijk down), zodat een
-            # gestopte agent niet vals als levend blijft tonen. De hartslag komt
-            # uurlijks; ruim twee gemiste beats maakt "waakt" stil.
-            if status == "actief" and minuten is not None and minuten >= 60:
-                status = "stil"
-            elif status == "waakt" and minuten is not None and minuten >= 150:
-                status = "stil"
-            elif status in ("klaar", "fout") and minuten is not None and minuten >= 24 * 60:
-                status = "stil"
-            kaart.update(status=status, taak=r["taak"] or "", detail=r["detail"] or "",
-                         tokens=r["tokens"], minuten=minuten,
-                         sinds=ts.strftime("%d-%m %H:%M") if ts else None)
+            uit[a["naam"]] = {"status": r["status"], "taak": r["taak"]}
+    return uit
+
+
+def roster():
+    rijen = _status_rijen()
+    uit = []
+    for a in SM_AGENTS:
+        kaart = {"naam": a["naam"], "label": a["label"], "type": a["team"], "rol": a["rol"],
+                 "status": "niet gekoppeld", "taak": "", "detail": "",
+                 "sinds": None, "minuten": None, "tokens": None}
+        r = _beste_rij(rijen, a)
+        if r:
+            kaart.update(status=r["status"], taak=r["taak"], detail=r["detail"],
+                         tokens=r["tokens"], minuten=r["minuten"], sinds=r["sinds"])
         uit.append(kaart)
     return uit
 
@@ -432,7 +516,7 @@ def open_voorstellen():
     rows = conn.execute(
         "SELECT * FROM voorstel WHERE besluit='open' ORDER BY aangemaakt DESC").fetchall()
     conn.close()
-    return [{"id": r["id"], "naam": r["naam"], "label": LABELS.get(r["naam"], r["naam"]),
+    return [{"id": r["id"], "naam": r["naam"], "label": label_van(r["naam"]),
              "actie": r["actie"], "reden": r["reden"], "doel": r["doel"] or "",
              "wanneer": _fmt(r["aangemaakt"])}
             for r in rows]
@@ -444,7 +528,7 @@ def recente_besluiten(limit=8):
         "SELECT * FROM voorstel WHERE besluit!='open' ORDER BY besluit_ts DESC LIMIT ?",
         (limit,)).fetchall()
     conn.close()
-    return [{"id": r["id"], "label": LABELS.get(r["naam"], r["naam"]),
+    return [{"id": r["id"], "label": label_van(r["naam"]),
              "actie": r["actie"], "besluit": r["besluit"], "doel": r["doel"] or "",
              "door": r["besluit_door"], "wanneer": _fmt(r["besluit_ts"]),
              "uitvoering": r["uitvoering"] or "", "uitvoer_detail": r["uitvoer_detail"] or ""}
@@ -460,15 +544,12 @@ def index():
 
 @app.route("/seo-team")
 def seo_team():
-    # Teambord met LIVE statussen uit de roster (status-tabel). Agents die niet
-    # in de roster staan tonen 'beschikbaar'.
-    conn = db()
-    roster = {r["naam"]: {"status": r["status"], "taak": r["taak"] or ""}
-              for r in conn.execute("SELECT naam, status, taak FROM status")}
-    conn.close()
+    # Teambord met LIVE statussen uit de status-tabel, met verval en met de
+    # aliassen van de vakagents. Agents zonder melding tonen 'beschikbaar'.
     return render_template(
         "seo-team.html",
-        roster=roster,
+        roster=status_map(),
+        sm_agents=SM_AGENTS,
         portal_url=f"https://portal.{BASE_DOMAIN}/",
         username=request.headers.get("X-authentik-username", "onbekend"),
     )
@@ -1095,38 +1176,23 @@ OPLEVERING_STATUS = {
 
 
 def roster_all():
-    """Statuskaarten voor het volledige team: operationeel + SEO-uitvoerders."""
-    conn = db()
-    rows = {r["naam"]: r for r in conn.execute("SELECT * FROM status")}
-    conn.close()
-    kataloog = [{**a, "team": "Operations"} for a in TEAM] + SEO_TEAM
+    """Statuskaarten voor het volledige team: vakagents + SEO-uitvoerders."""
+    rijen = _status_rijen()
+    kataloog = [{**a, "team": a["type"]} for a in TEAM] + SEO_TEAM
     uit = []
     for a in kataloog:
         kaart = {**a, "status": "niet gekoppeld", "taak": "", "detail": "",
                  "sinds": None, "minuten": None, "tokens": None}
-        r = rows.get(a["naam"])
+        r = rijen.get(a["naam"])
         if r:
-            try:
-                ts = datetime.fromisoformat(r["ts"])
-                minuten = int((_nu() - ts).total_seconds() // 60)
-            except Exception:
-                ts, minuten = None, None
-            status = r["status"]
-            if status == "actief" and minuten is not None and minuten >= 60:
-                status = "stil"
-            elif status == "waakt" and minuten is not None and minuten >= 150:
-                status = "stil"
-            elif status in ("klaar", "fout") and minuten is not None and minuten >= 24 * 60:
-                status = "stil"
-            kaart.update(status=status, taak=r["taak"] or "", detail=r["detail"] or "",
-                         tokens=r["tokens"], minuten=minuten,
-                         sinds=ts.strftime("%d-%m %H:%M") if ts else None)
+            kaart.update(status=r["status"], taak=r["taak"], detail=r["detail"],
+                         tokens=r["tokens"], minuten=r["minuten"], sinds=r["sinds"])
         uit.append(kaart)
     return uit
 
 
 def _opl_label(agent):
-    return LABELS.get(agent) or SEO_LABELS.get(agent) or agent
+    return SEO_LABELS.get(agent) or label_van(agent)
 
 
 def _opl_row(r):
@@ -1228,7 +1294,7 @@ def voorstellen():
         "actie": r["actie"],
         "doel": r["doel"] or "",
         "reden": r["reden"] or "",
-        "label": LABELS.get(r["naam"], r["naam"]),
+        "label": label_van(r["naam"]),
         "uitvoerbaar": bool((r["parameters"] or "").strip()),
     } for r in rows]
     return render_template("voorstellen.html", items=items)
@@ -1912,6 +1978,62 @@ def aanvraag_status(lid):
 @app.route("/branding")
 def branding():
     return render_template("branding.html", merken=MERKEN)
+
+
+# --- Disciplines: blok A van het organisatieregister ------------------------
+# Momentopname uit seed/blok-a.json (verversen met seed/blok-a-export.sh). Het
+# register zelf (organisatie.globaal.be/disciplines) blijft de bron; hier
+# staat alleen wie welke taak draagt, gekoppeld aan de live status.
+
+_BLOK_A = None
+
+
+def blok_a():
+    global _BLOK_A
+    if _BLOK_A is None:
+        pad = os.path.join(app.root_path, "seed", "blok-a.json")
+        with open(pad, encoding="utf-8") as f:
+            _BLOK_A = json.load(f)
+    return _BLOK_A
+
+
+@app.route("/disciplines")
+def disciplines():
+    data = blok_a()
+    agents = {a["naam"]: a for a in SM_AGENTS}
+    pijlers = {}
+    per_agent = {a["naam"]: {"agent": a, "taken": 0, "pijlers": []} for a in SM_AGENTS}
+    for t in data["taken"]:
+        p = pijlers.setdefault(t["dcode"], {
+            "code": t["dcode"], "naam": t["discipline"], "sleutel": t["sleutel"],
+            "subpijlers": {}, "agents": [], "taken": 0})
+        s = p["subpijlers"].setdefault(t["scode"], {
+            "code": t["scode"], "naam": t["subpijler"], "definitie": t["definitie"] or "",
+            "pcf": t["pcf_code"] or "", "taken": [], "agents": []})
+        codes = [c for c in (t["agents"] or "").split(",") if c]
+        s["taken"].append({"code": t["ecode"], "naam": t["taak"],
+                           "agents": [agents.get(c, {"naam": c, "label": c, "team": ""}) for c in codes]})
+        p["taken"] += 1
+        for c in codes:
+            if c not in s["agents"]:
+                s["agents"].append(c)
+            if c not in p["agents"]:
+                p["agents"].append(c)
+            if c in per_agent:
+                per_agent[c]["taken"] += 1
+                if t["dcode"] not in per_agent[c]["pijlers"]:
+                    per_agent[c]["pijlers"].append(t["dcode"])
+    for p in pijlers.values():
+        p["subpijlers"] = list(p["subpijlers"].values())
+        p["agents"] = [agents[c] for c in p["agents"] if c in agents]
+    return render_template(
+        "disciplines.html",
+        pijlers=list(pijlers.values()),
+        per_agent=[v for v in per_agent.values() if v["taken"]],
+        roster=status_map(),
+        momentopname=data.get("momentopname", ""),
+        register_url=f"https://organisatie.{BASE_DOMAIN}/disciplines",
+    )
 
 
 
