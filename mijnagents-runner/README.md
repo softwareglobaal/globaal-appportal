@@ -48,6 +48,25 @@ De runners en de generator lezen `AGENTS_TOKEN` uit
   een louter signaal; met `parameters` wordt het na jouw goedkeuring op het
   bord door de uitvoerder uitgevoerd.
 
+## De uitvoerder (mens-in-de-lus)
+
+`mijnagents_uitvoerder.py` draait elke minuut via cron. Hij haalt voorstellen op
+die op het bord zijn **goedgekeurd** en parameters hebben, voert ze uit via een
+runbook uit de allowlist in `runbooks/__init__.py`, en meldt bewijs terug
+(status wordt `uitgevoerd` of `mislukt`). Een onbekend runbook wordt nooit
+uitgevoerd; een voorstel zonder parameters is een signaal en wordt overgeslagen.
+
+Een agent stelt zo'n actie voor met `stel_voor(actie, reden=..., runbook="notitie",
+parameters={"tekst": "..."})` uit het skelet.
+
+Beschikbare runbooks:
+- `notitie` — schrijft een regel in `~/agents/mijnagents-notities.log` (onschadelijk, bewijst de keten).
+- `docker-herstart` — herstart één `app-*`-container; nooit postgres, authentik, nginx of redis.
+
+Nieuw runbook: een module in `runbooks/` met `voer_uit(parameters) -> (detail, bewijs)`
+en een regel in `RUNBOEKEN`. Meer staat er niet tussen een agent en een handeling,
+dus houd de allowlist klein en elk runbook streng in zijn validatie.
+
 ## Stilte-detectie
 
 Geen recente hartslag maakt een kaart "stil": `actief` na 60 min, `waakt` na

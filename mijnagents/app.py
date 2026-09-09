@@ -294,6 +294,44 @@ def besluit(vid):
     return redirect(request.referrer or url_for("bord"))
 
 
+# --- uitvoerder: haalt goedgekeurde voorstellen MET parameters op en meldt de
+#     uitkomst terug. Token-gated. Uitvoeren gebeurt nooit hier maar in
+#     mijnagents-runner/mijnagents_uitvoerder.py (allowlist van runbooks). ---
+@app.route("/api/uitvoer-wacht")
+def uitvoer_wacht():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    rijen = db().execute(
+        "SELECT id, naam, actie, runbook, parameters FROM voorstel "
+        "WHERE status='goedgekeurd' AND parameters<>'' ORDER BY id"
+    ).fetchall()
+    return jsonify(wacht=[dict(r) for r in rijen])
+
+
+@app.route("/uitvoer-resultaat", methods=["POST"])
+def uitvoer_resultaat():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    vid = p.get("id")
+    uitvoering = p.get("uitvoering")
+    nieuw = {"gelukt": "uitgevoerd", "mislukt": "mislukt", "overgeslagen": "overgeslagen"}.get(uitvoering)
+    if not vid or not nieuw:
+        return jsonify(fout="id en uitvoering (gelukt|mislukt|overgeslagen) vereist"), 400
+    conn = db()
+    v = conn.execute("SELECT naam, actie FROM voorstel WHERE id=? AND status='goedgekeurd'", (vid,)).fetchone()
+    if not v:
+        return jsonify(fout="geen goedgekeurd voorstel met dit id"), 404
+    bewijs = (p.get("detail", "") or "")[:400]
+    if p.get("bewijs"):
+        bewijs += "\n" + str(p["bewijs"])[:4000]
+    conn.execute("UPDATE voorstel SET status=?, bewijs=? WHERE id=?", (nieuw, bewijs, vid))
+    conn.execute("INSERT INTO handeling(naam, wat, ts) VALUES(?,?,?)",
+                 (v["naam"], f"voorstel {vid} '{v['actie']}': {nieuw}", nu()))
+    conn.commit()
+    return jsonify(ok=True, status=nieuw)
+
+
 @app.route("/gezondheid")
 def gezondheid():
     n = db().execute("SELECT COUNT(*) c FROM agent WHERE actief=1").fetchone()["c"]

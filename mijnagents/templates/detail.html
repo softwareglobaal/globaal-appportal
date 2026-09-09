@@ -87,11 +87,12 @@
   <div class="blok">
     <h2>Voorstellen</h2>
     <table>
-      <tr><th>#</th><th>Actie</th><th>Status</th><th>Wanneer</th></tr>
+      <tr><th>#</th><th>Actie</th><th>Runbook</th><th>Status</th><th>Wanneer</th></tr>
       {% for v in voorstellen %}
       <tr>
         <td>{{ v['id'] }}</td>
-        <td>{{ v['actie'] }}</td>
+        <td>{{ v['actie'] }}{% if v['bewijs'] %}<div style="color:var(--zacht);font-size:12px;white-space:pre-wrap">{{ v['bewijs'][:300] }}</div>{% endif %}</td>
+        <td>{% if v['runbook'] %}<code>{{ v['runbook'] }}</code>{% elif not v['parameters'] %}<span style="color:var(--zacht)">signaal</span>{% endif %}</td>
         <td>{{ v['status'] }}</td>
         <td>{{ v['ts'][:16] }}</td>
       </tr>
