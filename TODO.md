@@ -1142,3 +1142,41 @@ subdiscipline-statistieken.
       `~/globaal-renovision*` staat een niet-getrackte map `globaal-renovision/`
       met een tweede kopie van dezelfde bestanden (6,7 MB per stuk). De MCP
       negeert hem, maar hij verwart iedereen die in de map kijkt.
+
+## Locatielogboek (locatie.globaal.be, gebouwd 2026-09-09)
+
+> Achtergrond: Google Maps bewaart de tijdlijn sinds eind 2024 alleen nog op het
+> toestel zelf, zonder koppeling en zonder cloudkopie. Wie een dagelijks logboek
+> wil, moet het zelf verzamelen. De tegel doet dat via OwnTracks op Mehdi's
+> iPhone. Werking en knoppen: `locatie/README.md`.
+
+- [ ] **Gevoeligheid afstellen na de eerste echte week.** Twee dingen zijn los
+      van elkaar gekozen en moeten op elkaar passen: de app staat op monitoring 1
+      (alleen bij echte verplaatsing, batterijzuinig), en `dagindeling()` noemt
+      iets een bezoek na 8 minuten binnen 120 meter (`STILSTAND_MINUTEN`,
+      `STILSTAND_METER` bovenaan `locatie/app.py`). Het risico is dat iOS in die
+      zuinige stand pas na enkele honderden meters een punt stuurt en korte
+      werfbezoeken onzichtbaar blijven. Toetsen aan echte dagen, dan bijstellen.
+- [ ] **Adressen in plaats van coordinaten.** Het dashboard toont nu
+      `51.21943, 4.40251`. Reverse geocoding is los getest en werkt (Nominatim
+      gaf correct "Herfstlaan 65, Kessel-Lo"), maar zit nog niet in de tegel.
+      Geopunt is nauwkeuriger voor Vlaanderen; Nominatim staat 1 bevraging per
+      seconde toe en eist een herkenbare user-agent.
+- [ ] **Back-up van `locatie-data/`.** De SQLite met het hele logboek staat op de
+      VM en het is niet nagekeken of die map in een back-upschema zit. Zonder
+      back-up is een VM-storing genoeg om alles kwijt te zijn.
+- [ ] **Waar het om begonnen was: de koppelingen.** Het logboek naast de agenda
+      leggen (welke afspraken zijn werkelijk doorgegaan), naast de metadata van
+      iPhone-foto's, naast werfbezoeken en facturatie. Zinvol zodra er twee weken
+      data ligt.
+- [ ] **`scripts/add-locatie-app.py` staat alleen op de VM, niet in git.**
+      Mehdi heeft het daar op 2026-09-09 zelf weggeschreven en uitgevoerd. Claude
+      kon het niet meenemen naar de repo: de beveiligingslaag blokkeert het
+      schrijven van scripts die rechten toekennen in een identity provider. Het
+      bestand staat in `~/appportal/scripts/` op de VM en hoort alsnog gecommit
+      te worden, anders is het weg bij een nieuwe checkout.
+- [ ] **`scripts/add-agenda-app.py` gebruikt een verouderde containernaam.**
+      Het script zegt `docker exec authentik-server`, maar de container heet
+      `appportal-authentik-server-1`. Gevonden op 2026-09-09 toen hetzelfde
+      patroon voor de locatietegel stukliep. Vermoedelijk geldt dit voor meer
+      `add-*-app.py`-scripts; een keer nalopen.

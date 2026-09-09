@@ -164,6 +164,7 @@ cutover niet geraakt:
 | `kosten.globaal.be` | Kosten-dashboard, stack-app `app-kosten:3012` (oude host-app op 8090 is alleen nog invoerpijplijn) | forward auth (groep `kosten`) |
 | `uitgaven.globaal.be` | AI-abonnementen-dashboard, stack-app `app-uitgaven:3013`; toont alleen AI-diensten (Claude, ChatGPT, ElevenLabs, Wispr). Twee lagen: verwachting (mail/boekhouding) naast realiteit (kaart) | forward auth (groep `uitgaven`) |
 | `agents.globaal.be` | Agents-besturingscentrum, stack-app `app-agents:3020`; `/seo-team` toont het statische SEO-teambord. Kaart-checklist en hartslag-contract: `agents/README.md` | forward auth (groepen `admin`, `manager`, `agents`); alleen `POST /agent-status` passeert met eigen token |
+| `locatie.globaal.be` | Locatielogboek, stack-app `app-locatie:3031`; OwnTracks op Mehdi's iPhone stuurt punten, de app maakt er bezoeken en verplaatsingen van. Achtergrond en knoppen: `locatie/README.md` | forward auth (groep `locatie`, bewust niet `admin`/`manager`); alleen `POST /pub` passeert, met eigen wachtwoord (`LOCATIE_WACHTWOORD`) |
 | `factorydocs/inventory/finance/maintenance.globaal.be` | `app-*:300x` (stubs) | forward auth |
 | `n8n.globaal.be` | `n8n-n8n-1:5678` | gewone doorsturing (n8n's eigen login) |
 | `data.globaal.be` | *(geen server-blok)* | n.v.t. - vervangen door `omv.globaal.be` |
