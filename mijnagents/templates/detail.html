@@ -83,6 +83,35 @@
     <p style="margin:0">{{ a['cadans'] or 'Niet vastgelegd.' }}</p>
   </div>
 
+  {% if mag_beslissen %}
+  <div class="blok" id="verslag">
+    <h2>Werkverslag — wat hij las, vond, besliste en schreef</h2>
+    {% if not verslag %}
+      <p style="margin:0;color:var(--zacht)">Nog geen verslag. Zodra de agent een ronde doet, verschijnt hier per dossier wat hij deed.</p>
+    {% else %}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+        <a href="{{ url_for('detail', naam=a['naam']) }}#verslag" class="badge" style="text-decoration:none;color:{{ 'var(--accent)' if not gekozen else 'var(--zacht)' }};border-color:{{ 'var(--accent)' if not gekozen else 'var(--rand)' }}">alles</a>
+        {% for o in onderwerpen %}
+        <a href="{{ url_for('detail', naam=a['naam'], onderwerp=o['onderwerp']) }}#verslag" class="badge" style="text-decoration:none;color:{{ 'var(--accent)' if gekozen == o['onderwerp'] else 'var(--zacht)' }};border-color:{{ 'var(--accent)' if gekozen == o['onderwerp'] else 'var(--rand)' }}">{{ o['onderwerp'] }} ({{ o['n'] }})</a>
+        {% endfor %}
+      </div>
+      <table>
+        <tr><th style="width:120px">Wanneer</th><th style="width:80px">Stap</th><th>Wat</th></tr>
+        {% for r in verslag if not gekozen or r['onderwerp'] == gekozen %}
+        <tr>
+          <td style="color:var(--zacht);white-space:nowrap">{{ r['ts'][5:16].replace('T',' ') }}</td>
+          <td><span class="badge" style="color:var(--{{ {'fout':'fout','schrijf':'actief','proef':'klaar','melding':'klaar','besluit':'waakt','bron':'rust','bevinding':'stil'}.get(r['stap'],'rust') }});border-color:currentColor">{{ r['stap'] }}</span></td>
+          <td>
+            {% if not gekozen and r['onderwerp'] %}<span style="color:var(--zacht)">{{ r['onderwerp'] }} · </span>{% endif %}{{ r['tekst'] }}
+            {% if r['detail'] %}<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--zacht);font-size:12px">detail</summary><pre style="white-space:pre-wrap;font-size:12px;background:#0c0e12;padding:8px;border-radius:6px;max-height:420px;overflow:auto">{{ r['detail'] }}</pre></details>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if voorstellen %}
   <div class="blok">
     <h2>Voorstellen</h2>

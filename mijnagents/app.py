@@ -103,6 +103,16 @@ def init_db():
             wat    TEXT NOT NULL,
             ts     TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS logboek (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            naam      TEXT NOT NULL,        -- agent
+            onderwerp TEXT DEFAULT '',      -- bv. 'deal 14474 · 2611 Kim Venken'
+            stap      TEXT NOT NULL,        -- bron | bevinding | besluit | schrijf | proef | melding | fout
+            tekst     TEXT NOT NULL,        -- leesbare regel
+            detail    TEXT DEFAULT '',      -- optioneel: langere tekst / json
+            ts        TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS logboek_naam_ts ON logboek(naam, ts);
         """
     )
     conn.commit()
@@ -207,11 +217,48 @@ def detail(naam):
     vs = db().execute(
         "SELECT * FROM voorstel WHERE naam=? ORDER BY id DESC LIMIT 20", (naam,)
     ).fetchall()
+    # Het werkverslag (wat de agent las, vond, besliste en schreef) is inhoud,
+    # geen werkstatus. Daarom alleen voor beheer (admin/manager); de groep
+    # agents ziet de kaart en de status, niet het verslag.
+    verslag, onderwerpen = [], []
+    if mag_beslissen():
+        verslag = db().execute(
+            "SELECT * FROM logboek WHERE naam=? ORDER BY id DESC LIMIT 300", (naam,)
+        ).fetchall()
+        onderwerpen = db().execute(
+            "SELECT onderwerp, MAX(ts) laatst, COUNT(*) n FROM logboek WHERE naam=? "
+            "AND onderwerp<>'' GROUP BY onderwerp ORDER BY laatst DESC LIMIT 40", (naam,)
+        ).fetchall()
     return render_template(
         "detail.html", app_naam=APP_NAAM, a=a, s=s, voorstellen=vs,
         mag=_lijst(a["mag"]), grenzen=_lijst(a["grenzen"]), tools=_lijst(a["tools"]),
-        mag_beslissen=mag_beslissen(),
+        mag_beslissen=mag_beslissen(), verslag=verslag, onderwerpen=onderwerpen,
+        gekozen=request.args.get("onderwerp", ""),
     )
+
+
+# --- werkverslag: een agent legt vast wat hij las, vond, besliste en schreef.
+#     Token-gated. Eén regel per stap; 'detail' mag langer zijn (bv. het plan).
+@app.route("/api/logboek", methods=["POST"])
+def api_logboek():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    regels = p.get("regels") if isinstance(p.get("regels"), list) else [p]
+    conn = db()
+    n = 0
+    for r in regels:
+        naam, stap, tekst = (r.get("naam") or "").strip(), (r.get("stap") or "").strip(), (r.get("tekst") or "").strip()
+        if not naam or not stap or not tekst:
+            continue
+        conn.execute(
+            "INSERT INTO logboek(naam, onderwerp, stap, tekst, detail, ts) VALUES(?,?,?,?,?,?)",
+            (naam, (r.get("onderwerp") or "")[:200], stap[:40], tekst[:1000],
+             str(r.get("detail") or "")[:20000], nu()),
+        )
+        n += 1
+    conn.commit()
+    return jsonify(ok=True, geschreven=n)
 
 
 # --- hartslag: de agent-runner meldt hier zijn status. Deze route passeert de

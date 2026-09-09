@@ -32,6 +32,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import contracten_mcp as mcp  # noqa: E402
 import pipedrive  # noqa: E402
+import bronnen as bronnen_mod  # noqa: E402
 
 NAAM = "contracten-agent"
 FIRMA = "harchitects"
@@ -90,6 +91,32 @@ def hartslag(status, taak="", detail="", voorstel=None):
         urllib.request.urlopen(req, timeout=15)
     except Exception as e:  # noqa: BLE001
         print("hartslag mislukt:", e, file=sys.stderr)
+
+
+_LOG = []
+
+
+def log(onderwerp, stap, tekst, detail=""):
+    """Werkverslag-regel voor het bord (alleen beheer ziet het). Wordt per deal
+    gebundeld verstuurd met log_verstuur()."""
+    _LOG.append({"naam": NAAM, "onderwerp": onderwerp, "stap": stap, "tekst": tekst,
+                 "detail": detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False, indent=1)})
+    print(f"  [{stap}] {tekst}")
+
+
+def log_verstuur():
+    global _LOG
+    if not _LOG or DROOG:
+        _LOG = []
+        return
+    req = urllib.request.Request(f"{PLATFORM}/api/logboek", data=json.dumps({"regels": _LOG}).encode(),
+                                 headers={"Content-Type": "application/json", "X-Agents-Token": TOKEN},
+                                 method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=20)
+    except Exception as e:  # noqa: BLE001
+        print("logboek mislukt:", e, file=sys.stderr)
+    _LOG = []
 
 
 # ----------------------------------------------------------------- staat ---
@@ -177,8 +204,9 @@ SCHEMA_UITLEG = """Antwoord met UITSLUITEND een JSON-object met deze sleutels:
  }
 }
 Regels die je nooit breekt:
-- Vul alleen velden in die in 'voorbereiding' bestaan (velden, vrije velden, keuzes met hun toegelaten waarden).
-- Bereken of schat NOOIT capa_key_code, project_capakey, oppervlakte_m2, project_oppervlakte_terrein of een rijksregisternummer; laat die leeg als ze ontbreken en zet ze bij 'ontbreekt'.
+- Gebruik UITSLUITEND veldnamen uit 'veldenschema' en 'voorbereiding' (exacte sleutels, bv. hoedanigheid_opdrachtgever_label, opdrachtgever_1_rijksregister, bouwproject_oppervlakte_m2). Een verzonnen veldnaam wordt geweigerd.
+- Bereken of schat NOOIT capa_key_code, project_capakey, oppervlakte_m2 of project_oppervlakte_terrein. Een rijksregisternummer vul je alleen in als het letterlijk in een klantmail van minder dan een jaar oud staat (bron: die mail met datum); anders leeg en bij 'ontbreekt'.
+- Het mandaat is: invullen en een proef maken. Zet daarom voor elke keuze die de proef blokkeert (architectuur_scope, uitvoeringswijze_label, hoedanigheid, bestemming, type bouwproject, bouwproject_oppervlakte_m2) de best onderbouwde waarde uit de gesprekken, transcripten en mails, en meld ze onder 'keuzes_vastgelegd' mét bron zodat Mehdi ze nakijkt. Laat een keuze alleen leeg als de bronnen er echt niets over zeggen; zeg dan bij 'ontbreekt' wat Mehdi moet beslissen.
 - Overschrijf nooit een veld dat als bevestigd door de klant of vastgelegd door Mehdi staat.
 - Elke 'gegevens'-post heeft een concrete bron met datum. Geen bron = niet invullen, wel melden.
 - Bedragen als '50.000,00'; percentages als getal ('14').
@@ -188,7 +216,41 @@ Regels die je nooit breekt:
 """
 
 
-def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, vrij_nummer):
+def _bronnen_compact(b, per_tekst=25000, totaal=140000):
+    """De bronnen voor het model: teksten ingekort, foto's alleen als namen."""
+    if not b:
+        return None
+    uit = {"fouten": b.get("fouten", [])}
+    for sleutel in ("salesmap", "projectmap"):
+        m = b.get(sleutel)
+        if m:
+            uit[sleutel] = {"map": m["map"], "fotos": m["fotos"], "overige": m["overige"],
+                            "teksten": [{"bestand": t["bestand"], "gewijzigd": t["gewijzigd"],
+                                         "tekst": t["tekst"][:per_tekst]} for t in m["teksten"]]}
+    uit["mails"] = [{k: (v[:4000] if isinstance(v, str) else v) for k, v in m.items()} for m in b.get("mails", [])]
+    # Totaalgrens: kort de langste teksten verder in tot het past.
+    while len(json.dumps(uit, ensure_ascii=False)) > totaal and per_tekst > 2000:
+        per_tekst = per_tekst // 2
+        for sleutel in ("salesmap", "projectmap"):
+            for t in (uit.get(sleutel) or {}).get("teksten", []):
+                t["tekst"] = t["tekst"][:per_tekst]
+    return uit
+
+
+_SCHEMA_CACHE = {}
+
+
+def veldenschema_voor(soort):
+    if soort not in _SCHEMA_CACHE:
+        try:
+            _SCHEMA_CACHE[soort] = mcp.call("veldenschema", soort=soort)
+        except Exception as e:  # noqa: BLE001
+            _SCHEMA_CACHE[soort] = {"fout": str(e)[:200]}
+    return _SCHEMA_CACHE[soort]
+
+
+def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, vrij_nummer, bronnen=None):
+    veldenschema = veldenschema_voor((voorbereiding or {}).get("soort") or "architectuur")
     from anthropic import Anthropic
     client = Anthropic()
     system = ("Je bent de contracten-agent van H-Architects. Je werkt volgens de Werkinstructie "
@@ -201,8 +263,15 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
                  "organisatie": (deal.get("org_id") or {}).get("name") if isinstance(deal.get("org_id"), dict) else deal.get("org_name")},
         "volgend_vrij_nummer": vrij_nummer,
         "voorbereiding": voorbereiding,
+        "veldenschema": veldenschema,
         "dossiercontrole": controle,
         "pipedrive_notities": notitielijst,
+        "bronnen": _bronnen_compact(bronnen),
+        "bronnen_uitleg": ("'bronnen' zijn de salesmap en projectmap in Dropbox (transcripten van Fathom/Plaud "
+                           "als tekst, plannen, foto's alleen als bestandsnaam) en de mails van/naar de klant in "
+                           "offerte@. Gebruik ze zoals de Werkinstructie zegt: transcript boven samenvatting, "
+                           "de laatste bespreking wint, klantmail als bron voor persoonsgegevens (jonger dan een jaar), "
+                           "en noem bij elk gegeven het bestand of de mail met datum als bron."),
     }, ensure_ascii=False)
     # Gedwongen tool-aanroep: het plan komt als gevalideerde JSON binnen, nooit
     # als vrije tekst (een lange projectbeschrijving brak het los parsen).
@@ -249,12 +318,15 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
 
 
 # -------------------------------------------------------------- melding ---
-def melding_tekst(plan, proef, nummer_voorstel):
+def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None):
     m = plan.get("melding") or {}
     def blok(kop, items):
         items = [str(x) for x in (items or []) if str(x).strip()]
         return f"<b>{kop}</b><br>" + ("<br>".join("- " + x for x in items) if items else "- (niets)") + "<br><br>"
     uit = "<b>Contracten-agent</b> — " + datetime.now().strftime("%d-%m-%Y %H:%M") + "<br><br>"
+    # Deterministisch, uit de echte schrijfacties: wat er in het dossier kwam en
+    # wat het dashboard weigerde. Het model beschrijft; dit blok bewijst.
+    uit += blok("0. In deze ronde in het dossier geschreven", (geschreven or []) + [f"GEWEIGERD: {g}" for g in (geweigerd or [])])
     uit += blok("1. Vastgelegd, met bron", m.get("vastligt"))
     uit += blok("2. Afgeleid, na te kijken", m.get("nakijken"))
     uit += blok("3. Keuzes die ik voor je vastlegde", m.get("keuzes_vastgelegd"))
@@ -285,37 +357,71 @@ def verwerk(deal, werkinstructie, staat):
             print("  (droog) niet in voorbereiding:", str(e)[:100])
             voorb = {"deal_id": deal_id, "let_op": "nog niet in voorbereiding"}
     controle = mcp.call("dossiercontrole", deal_id=deal_id)
+    ond = f"deal {deal_id} · {titel}"
+    if isinstance(start, dict) and not DROOG:
+        log(ond, "bron", f"dossier in voorbereiding gezet ({'bestond al' if start.get('bestond_al') else 'nieuw'}), "
+                         f"{len((voorb or {}).get('velden') or {})} velden, ontbreekt: {', '.join((voorb or {}).get('ontbreekt') or []) or 'niets'}")
+    tel = (controle or {}).get("telling") or {}
+    rood = [f"{c['nummer']} {c['titel']}: {c['bevinding'][:90]}" for c in (controle or {}).get("controles", []) if c.get("status") == "fout"]
+    log(ond, "bevinding", f"dossiercontrole: {tel.get('ok', 0)} ok, {tel.get('let_op', 0)} let op, {tel.get('fout', 0)} fout",
+        "\n".join(rood))
+
+    # bronnen: salesmap (uit C4), projectmap (op nummer), klantmails (offerte@)
+    salesmap_pad = ""
+    for c in (controle or {}).get("controles", []):
+        if c.get("nummer") == "C4" and c.get("status") == "ok":
+            salesmap_pad = (c.get("bewijs") or "").strip()
+    velden = (voorb or {}).get("velden") or {}
+    klant_email = velden.get("opdrachtgever_1_email") or velden.get("opdrachtgever_email") or ""
+    bronnen = bronnen_mod.verzamel(salesmap_pad, nummer or velden.get("project_nummer", ""), klant_email)
+    bestanden = [t["bestand"] for m in (bronnen.get("salesmap"), bronnen.get("projectmap")) if m for t in m["teksten"]]
+    log(ond, "bron", "gelezen: " + bronnen_mod.samenvatting(bronnen),
+        "teksten: " + ", ".join(bestanden) + "\nmails: " + ", ".join(f"{m['datum'][:16]} {m['onderwerp']}" for m in bronnen.get("mails", [])))
+
     vrij = "" if nummer else volgend_vrij_nummer("26")
-    plan, tokens = plan_met_model(werkinstructie, deal, voorb, controle, notities(deal_id), vrij)
-    print("  plan:", json.dumps(plan, ensure_ascii=False)[:1200])
+    plan, tokens = plan_met_model(werkinstructie, deal, voorb, controle, notities(deal_id), vrij, bronnen)
+    log(ond, "besluit", f"plan: {len(plan.get('gegevens') or [])} gegevensposten, {len(plan.get('keuzes') or {})} keuzes"
+                        f"{', nummer-voorstel ' + str(plan.get('nummer_voorstel')) if plan.get('nummer_voorstel') and not nummer else ''}"
+                        f" ({tokens} tokens)", plan)
     if DROOG:
+        log_verstuur()
         return {"droog": True, "plan": plan}
 
     # toepassen, deterministisch
-    fouten = []
+    fouten, geschreven = [], []
     for post in plan.get("gegevens") or []:
         velden, bron = post.get("velden") or {}, (post.get("bron") or "").strip()
-        verboden = {"capa_key_code", "project_capakey", "oppervlakte_m2", "project_oppervlakte_terrein",
-                    "opdrachtgever_1_rijksregister", "opdrachtgever_2_rijksregister", "vertegenwoordiger_rijksregister"}
+        verboden = {"capa_key_code", "project_capakey", "oppervlakte_m2", "project_oppervlakte_terrein"}
+        # Rijksregister alleen met een klantmail als bron (D18); anders nooit.
+        if "rijksregister" in " ".join(velden) and "mail" not in bron.lower():
+            velden = {k: v for k, v in velden.items() if "rijksregister" not in k}
         velden = {k: v for k, v in velden.items() if k not in verboden and str(v).strip()}
         if not velden or not bron:
             continue
         try:
             mcp.call("gegeven_invullen", deal_id=deal_id, velden=velden, bron=bron)
+            log(ond, "schrijf", f"gegeven_invullen {', '.join(velden)} (bron: {bron[:80]})", velden)
+            geschreven += [f"{k} = {str(v)[:60]} (bron: {bron[:70]})" for k, v in velden.items()]
         except mcp.ToolFout as e:
             fouten.append(f"gegeven_invullen {list(velden)}: {str(e)[:160]}")
+            log(ond, "fout", f"gegeven_invullen {', '.join(velden)} geweigerd: {str(e)[:160]}")
     keuzes = {k: v for k, v in (plan.get("keuzes") or {}).items() if str(v).strip()}
     if keuzes:
         try:
             mcp.call("keuze_maken", deal_id=deal_id, keuzes=keuzes)
+            log(ond, "schrijf", f"keuze_maken {', '.join(keuzes)}", keuzes)
+            geschreven += [f"keuze {k} = {str(v)[:60]}" for k, v in keuzes.items()]
         except mcp.ToolFout as e:
             fouten.append(f"keuze_maken: {str(e)[:200]}")
+            log(ond, "fout", f"keuze_maken geweigerd: {str(e)[:200]}")
     proef = ""
     try:
         p = mcp.call("proef_maken", deal_id=deal_id)
         proef = p.get("docx", "") if isinstance(p, dict) else ""
+        log(ond, "proef", f"proef gemaakt: {proef}")
     except mcp.ToolFout as e:
         fouten.append(f"proef: {str(e)[:200]}")
+        log(ond, "proef", f"nog geen proef: {str(e)[:200]}")
 
     nummer_voorstel = plan.get("nummer_voorstel") if not nummer else None
     if nummer_voorstel and str(nummer_voorstel).lower() != "null":
@@ -328,11 +434,11 @@ def verwerk(deal, werkinstructie, staat):
     else:
         nummer_voorstel = None
 
-    if fouten:
-        m = plan.setdefault("melding", {})
-        m.setdefault("ontbreekt", []).extend(fouten)
-    tekst = melding_tekst(plan, proef, nummer_voorstel)
+    tekst = melding_tekst(plan, proef, nummer_voorstel, geschreven, [f for f in fouten if not f.startswith("proef")])
+    tekst += f"<br><i>Bronnen gelezen: {bronnen_mod.samenvatting(bronnen)}</i>"
     pipedrive.schrijf(FIRMA, "POST", "/notes", body={"deal_id": deal_id, "content": tekst})
+    log(ond, "melding", "notitie op de Pipedrive-deal gezet", re.sub(r"<[^>]+>", "", tekst.replace("<br>", "\n")))
+    log_verstuur()
 
     # Stempel van het dossier ná onze eigen schrijfacties: wijzigt Mehdi daarna
     # iets op het dashboard (bv. de scope kiezen), dan verschilt de stempel en
@@ -400,6 +506,8 @@ def main():
                  detail=f"laatste ronde: {len(deals)} in fase, {gedaan} verwerkt, {proeven} proef/proeven, {overgeslagen} recent al gedaan")
         print(f"klaar: {gedaan} verwerkt, {proeven} proeven, {overgeslagen} overgeslagen")
     except Exception as e:  # noqa: BLE001
+        log("", "fout", f"ronde mislukt: {type(e).__name__}: {str(e)[:300]}")
+        log_verstuur()
         hartslag("fout", taak="ronde mislukt", detail=f"{type(e).__name__}: {str(e)[:150]}")
         raise
 
