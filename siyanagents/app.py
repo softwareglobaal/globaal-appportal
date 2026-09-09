@@ -2158,6 +2158,105 @@ def agent_profiel(naam):
     )
 
 
+# --- Kantoor: het team als figuurtjes aan hun bureau -------------------------
+# Isometrische weergave (2.5D) van dezelfde agents als het organogram. Werkt
+# een agent (status actief), dan typt hij met een wolkje; anders slaapt hij.
+
+ISO_TW, ISO_TH = 30, 15
+
+
+def _iso(x, y):
+    return round((x - y) * ISO_TW, 1), round((x + y) * ISO_TH, 1)
+
+
+KANTOOR_KAMERS = [
+    {"naam": "Directie", "team": "leiding", "x0": 0, "y0": 0, "x1": 6, "y1": 4,
+     "zitplaatsen": [("dirigent", 1.6, 2.0), ("eindcontrole", 4.4, 2.0)]},
+    {"naam": "Sales, klantenservice en partners", "team": "sales", "x0": 6.6, "y0": 0, "x1": 19.6, "y1": 4,
+     "zitplaatsen": [(n, 7.8 + i * 2.6, 2.0) for i, n in enumerate(
+         ["verkoopstrateeg", "dealmaker", "offertemeester", "klantenzorg", "relatiebeheerder"])]},
+    {"naam": "Marketing", "team": "marketing", "x0": 0, "y0": 4.6, "x1": 19.6, "y1": 8.6,
+     "zitplaatsen": [(n, 1.2 + i * 2.6, 6.6) for i, n in enumerate(
+         ["marktverkenner", "branding", "contentregisseur", "beeld", "website_bouwer", "woordvoerder"])]},
+    {"naam": "SEO-afdeling", "team": "seo", "x0": 0, "y0": 9.2, "x1": 19.6, "y1": 21.2,
+     "zitplaatsen": [(n, 1.2 + (i % 7) * 2.6, 11.0 + (i // 7) * 3.9) for i, n in enumerate(
+         ["seo-onderzoek", "seo-schrijver", "seo-qc", "seo-technical", "seo-content", "seo-schema", "seo-geo",
+          "seo-local", "seo-performance", "seo-backlinks", "seo-sitemap", "seo-visual", "seo-sxo", "seo-cluster",
+          "seo-google", "seo-maps", "seo-ecommerce", "seo-drift", "seo-dataforseo", "seo-flow", "seo-image-gen"])]},
+]
+TEAM_KLEUR = {"sales": "#b45309", "service": "#9d174d", "partners": "#1d4ed8",
+              "marketing": "#0f766e", "leiding": "#22303f", "seo": "#2563eb"}
+
+
+def _kantoor_indeling():
+    kamers, zitplaatsen = [], []
+    for k in KANTOOR_KAMERS:
+        x0, y0, x1, y1 = k["x0"], k["y0"], k["x1"], k["y1"]
+        A, B, C, D = _iso(x0, y0), _iso(x1, y0), _iso(x1, y1), _iso(x0, y1)
+        # Alleen de buitenmuren van het gebouw zijn hoog; binnenwanden zijn
+        # lage glazen scheidingen, anders staan ze voor de ruimte erachter.
+        buiten_r, buiten_l = y0 == 0, x0 == 0
+        wh_r, wh_l = (58 if buiten_r else 18), (58 if buiten_l else 18)
+        kamers.append({
+            "naam": k["naam"], "team": k["team"], "kleur": TEAM_KLEUR[k["team"]],
+            "vloer": f"{A[0]},{A[1]} {B[0]},{B[1]} {C[0]},{C[1]} {D[0]},{D[1]}",
+            "muur_l": f"{A[0]},{A[1]} {D[0]},{D[1]} {D[0]},{D[1]-wh_l} {A[0]},{A[1]-wh_l}",
+            "muur_r": f"{A[0]},{A[1]} {B[0]},{B[1]} {B[0]},{B[1]-wh_r} {A[0]},{A[1]-wh_r}",
+            "glas_l": not buiten_l, "glas_r": not buiten_r, "wh_r": wh_r,
+            "label": (round((A[0] + B[0]) / 2, 1), round((A[1] + B[1]) / 2 - wh_r + 13, 1)),
+            "diepte": x0 + y0,
+        })
+        for naam, gx, gy in k["zitplaatsen"]:
+            if naam == "dirigent":
+                prof = {"naam": "dirigent", "label": "De Dirigent", "team": "leiding", "href": "/taken"}
+            else:
+                p = PROFIELEN.get(naam, {"naam": naam, "label": naam, "team": k["team"]})
+                prof = {"naam": naam, "label": p["label"], "team": p["team"], "href": f"/agent/{naam}"}
+            px, py = _iso(gx, gy)
+            zitplaatsen.append({**prof, "x": px, "y": py, "kleur": TEAM_KLEUR.get(prof["team"], "#64748b"),
+                                "diepte": gx + gy})
+    kamers.sort(key=lambda r: r["diepte"])
+    zitplaatsen.sort(key=lambda z: z["diepte"])
+    # Plint van het gebouw en het beeldvenster volgen de buitenmaten.
+    X0 = min(k["x0"] for k in KANTOOR_KAMERS); Y0 = min(k["y0"] for k in KANTOOR_KAMERS)
+    X1 = max(k["x1"] for k in KANTOOR_KAMERS); Y1 = max(k["y1"] for k in KANTOOR_KAMERS)
+    m = 0.35
+    A, B, C, D = _iso(X0 - m, Y0 - m), _iso(X1 + m, Y0 - m), _iso(X1 + m, Y1 + m), _iso(X0 - m, Y1 + m)
+    plint = {"boven": f"{A[0]},{A[1]} {B[0]},{B[1]} {C[0]},{C[1]} {D[0]},{D[1]}",
+             "links": f"{D[0]},{D[1]} {C[0]},{C[1]} {C[0]},{C[1]+16} {D[0]},{D[1]+16}",
+             "rechts": f"{C[0]},{C[1]} {B[0]},{B[1]} {B[0]},{B[1]+16} {C[0]},{C[1]+16}"}
+    venster = (D[0] - 20, A[1] - 90, (B[0] - D[0]) + 40, (C[1] - A[1]) + 130)
+    return kamers, zitplaatsen, plint, venster
+
+
+def _kantoor_statussen():
+    """Toestand per zitplaats: werkt / klaar / wakker / slaapt, plus de taak."""
+    sm = status_map()
+    uit = {"dirigent": {"toestand": "wakker", "taak": "verdeelt het werk vanuit de chat"}}
+    for k in KANTOOR_KAMERS:
+        for naam, _, _ in k["zitplaatsen"]:
+            if naam == "dirigent":
+                continue
+            r = sm.get(naam) or {}
+            s = r.get("status", "")
+            toestand = ("werkt" if s == "actief" else "klaar" if s == "klaar"
+                        else "wakker" if s == "waakt" else "slaapt")
+            uit[naam] = {"toestand": toestand, "taak": (r.get("taak") or "")[:60]}
+    return uit
+
+
+@app.route("/kantoor")
+def kantoor():
+    kamers, zitplaatsen, plint, venster = _kantoor_indeling()
+    return render_template("kantoor.html", kamers=kamers, zitplaatsen=zitplaatsen, plint=plint,
+                           venster=" ".join(str(round(v)) for v in venster), statussen=_kantoor_statussen())
+
+
+@app.route("/api/kantoor")
+def api_kantoor():
+    return jsonify(_kantoor_statussen())
+
+
 @app.route("/api/opdracht/import", methods=["POST"])
 def api_opdracht_import():
     """Historische opdrachten uit de Claude Code-transcripten op het bord zetten
