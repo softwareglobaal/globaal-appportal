@@ -162,6 +162,7 @@ cutover niet geraakt:
 | `factuurrouter.globaal.be` | Factuurrouter-dashboard op de host, `http://172.17.0.1:8787` | forward auth (oude `remy.globaal.be` → 301 hierheen) |
 | `stage.globaal.be` | Stagebeoordeling op de host, `http://172.17.0.1:8088` | forward auth (Raisha = bewerken, rest = lezen) |
 | `kosten.globaal.be` | Kosten-dashboard, stack-app `app-kosten:3012` (oude host-app op 8090 is alleen nog invoerpijplijn) | forward auth (groep `kosten`) |
+| `uitgaven.globaal.be` | AI-abonnementen-dashboard, stack-app `app-uitgaven:3013`; toont alleen AI-diensten (Claude, ChatGPT, ElevenLabs, Wispr). Twee lagen: verwachting (mail/boekhouding) naast realiteit (kaart) | forward auth (groep `uitgaven`) |
 | `agents.globaal.be` | Agents-besturingscentrum, stack-app `app-agents:3020`; `/seo-team` toont het statische SEO-teambord. Kaart-checklist en hartslag-contract: `agents/README.md` | forward auth (groepen `admin`, `manager`, `agents`); alleen `POST /agent-status` passeert met eigen token |
 | `factorydocs/inventory/finance/maintenance.globaal.be` | `app-*:300x` (stubs) | forward auth |
 | `n8n.globaal.be` | `n8n-n8n-1:5678` | gewone doorsturing (n8n's eigen login) |
