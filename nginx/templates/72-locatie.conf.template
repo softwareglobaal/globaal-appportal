@@ -27,5 +27,22 @@ server {
         proxy_pass $app_upstream;
     }
 
+    # Zelfde verhaal voor de twee routes die de Opdrachten-app van de iPhone
+    # gebruikt: /gebeurtenis meldt een moment (auto-wifi verbonden, werkdag
+    # begonnen), /gezondheid levert de metingen uit de Health-app. Ook die
+    # verzoeken komen van een telefoon zonder browsersessie en dragen hun eigen
+    # wachtwoord; de app controleert dat zelf.
+    location ~ ^/(gebeurtenis|gezondheid)$ {
+        client_max_body_size 256k;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_set_header X-authentik-email "";
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
     include /etc/nginx/snippets/forward-auth.conf;
 }

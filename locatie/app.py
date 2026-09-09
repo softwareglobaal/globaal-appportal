@@ -16,7 +16,7 @@ import json
 import os
 import sqlite3
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from math import radians, sin, cos, asin, sqrt
 
 from flask import Flask, abort, jsonify, render_template, request
@@ -44,6 +44,8 @@ LATERE_KOLOMMEN = {
     "vac": "INTEGER",       # verticale nauwkeurigheid
     "trigger": "TEXT",      # waarom dit punt verstuurd is (t=timer, u=handmatig, c=zone)
     "regios": "TEXT",       # geofences waar de telefoon op dat moment in zat
+    "gebeurtenis": "TEXT",  # enter of leave, bij een zone-overgang
+    "zone": "TEXT",         # naam van de zone die betreden of verlaten werd
 }
 
 
@@ -186,9 +188,11 @@ def pub():
     conn = db()
     conn.execute(
         """INSERT INTO punt (tst, lat, lon, acc, alt, vel, batt, conn, tid, soort, ruw,
-                             bs, ssid, bssid, motion, druk, vac, trigger, regios)
+                             bs, ssid, bssid, motion, druk, vac, trigger, regios,
+                             gebeurtenis, zone)
            VALUES (:tst, :lat, :lon, :acc, :alt, :vel, :batt, :conn, :tid, :soort, :ruw,
-                   :bs, :ssid, :bssid, :motion, :druk, :vac, :trigger, :regios)
+                   :bs, :ssid, :bssid, :motion, :druk, :vac, :trigger, :regios,
+                   :gebeurtenis, :zone)
            ON CONFLICT(tst) DO NOTHING""",
         {"bs": heel("bs"),
          "ssid": str(data.get("ssid", ""))[:64] or None,
@@ -198,6 +202,11 @@ def pub():
          "vac": heel("vac"),
          "trigger": str(data.get("t", ""))[:4] or None,
          "regios": komma("inregions"),
+         # Bij _type=transition meldt de telefoon exact wanneer je een zone
+         # binnenkwam of verliet. Dat is een gemeten moment, geen afleiding uit
+         # afstanden, en het werkt ook in de zuinige stand van iOS.
+         "gebeurtenis": str(data.get("event", ""))[:8] or None,
+         "zone": str(data.get("desc", ""))[:80] or None,
          "tst": tst, "lat": lat, "lon": lon, "acc": heel("acc"), "alt": heel("alt"),
          "vel": heel("vel"), "batt": heel("batt"),
          "conn": str(data.get("conn", ""))[:4], "tid": str(data.get("tid", ""))[:8],
@@ -205,6 +214,158 @@ def pub():
     conn.commit()
     conn.close()
     return jsonify([])      # OwnTracks verwacht een (eventueel lege) lijst terug
+
+
+# ------------------------------------------- gebeurtenissen en gezondheid
+
+def gezondheid_db(conn):
+    """Losse metingen, elk op een eigen rij.
+
+    Bewust niet een kolom per soort meting: dan vraagt elke nieuwe meting een
+    schemawijziging. Zo kan de telefoon morgen slaapduur of hartritmevariatie
+    gaan sturen zonder dat hier iets verandert.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gezondheid (
+            datum   TEXT NOT NULL,      -- JJJJ-MM-DD, de dag waarop het geldt
+            soort   TEXT NOT NULL,      -- stappen, hartslag_rust, slaap_uren, ...
+            waarde  REAL NOT NULL,
+            eenheid TEXT,
+            bron    TEXT,               -- iphone, watch, handmatig
+            gezet   INTEGER NOT NULL,   -- wanneer binnengekomen (epoch)
+            PRIMARY KEY (datum, soort, bron)
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gebeurtenis (
+            tst     INTEGER NOT NULL,
+            soort   TEXT NOT NULL,      -- rit-start, rit-eind, werkdag-start, ...
+            detail  TEXT,
+            bron    TEXT,
+            PRIMARY KEY (tst, soort)
+        )""")
+    conn.commit()
+
+
+@app.route("/gebeurtenis", methods=["POST"])
+def gebeurtenis():
+    """Een gemeld moment, bijvoorbeeld uit een Opdrachten-automatisering.
+
+    De telefoon weet exact wanneer hij met de auto-router verbindt. Dat is een
+    beter ritbegin dan wat uit losse GPS-punten valt af te leiden, en het kost
+    geen batterij. Verwacht {"soort": "rit-start"} en eventueel "detail" en
+    "tijd" (ISO of epoch; standaard nu).
+    """
+    if not WACHTWOORD:
+        abort(404)
+    if not _wachtwoord_klopt():
+        app.logger.warning("gebeurtenis geweigerd: %s", _waarom_geweigerd())
+        abort(403)
+
+    data = request.get_json(silent=True) or {}
+    soort = str(data.get("soort", "")).strip()[:40]
+    if not soort:
+        abort(400)
+
+    tijd = data.get("tijd")
+    if tijd is None:
+        tst = int(time.time())
+    else:
+        try:
+            tst = int(float(tijd))
+        except (TypeError, ValueError):
+            try:
+                tst = int(datetime.fromisoformat(str(tijd)).timestamp())
+            except ValueError:
+                tst = int(time.time())
+
+    conn = db()
+    gezondheid_db(conn)
+    conn.execute("""INSERT INTO gebeurtenis (tst, soort, detail, bron)
+                    VALUES (?,?,?,?) ON CONFLICT(tst, soort) DO NOTHING""",
+                 (tst, soort, str(data.get("detail", ""))[:200] or None,
+                  str(data.get("bron", "iphone"))[:40]))
+    conn.commit()
+    conn.close()
+    app.logger.info("gebeurtenis: %s om %s", soort, _lokaal(tst).strftime("%H:%M"))
+    return jsonify({"ok": True, "soort": soort, "tijd": _lokaal(tst).isoformat()})
+
+
+@app.route("/gezondheid", methods=["POST"])
+def gezondheid():
+    """Metingen uit de Health-app, gestuurd door een Opdrachten-automatisering.
+
+    De Health-app heeft geen koppeling, maar Opdrachten kan er wel in lezen en
+    een webverzoek doen. Zo komen stappen, hartslag en slaap hier binnen zonder
+    dat er elke keer met de hand geexporteerd moet worden.
+
+    Verwacht {"datum": "2026-09-09", "metingen": {"stappen": 8234, ...}} of het
+    kortere {"datum": ..., "stappen": 8234, "hartslag_rust": 58}.
+    """
+    if not WACHTWOORD:
+        abort(404)
+    if not _wachtwoord_klopt():
+        app.logger.warning("gezondheid geweigerd: %s", _waarom_geweigerd())
+        abort(403)
+
+    data = request.get_json(silent=True) or {}
+    datum = str(data.get("datum", "")).strip()[:10] or date.today().isoformat()
+    try:
+        date.fromisoformat(datum)
+    except ValueError:
+        abort(400)
+
+    metingen = data.get("metingen")
+    if not isinstance(metingen, dict):
+        # Alles wat geen bekende sleutel is telt als meting, zodat een
+        # eenvoudige Opdracht plat {"datum":..., "stappen":...} mag sturen.
+        metingen = {k: v for k, v in data.items()
+                    if k not in ("datum", "bron", "eenheden")}
+
+    eenheden = data.get("eenheden") if isinstance(data.get("eenheden"), dict) else {}
+    bron = str(data.get("bron", "iphone"))[:40]
+
+    conn = db()
+    gezondheid_db(conn)
+    n = 0
+    nu = int(time.time())
+    for soort, waarde in metingen.items():
+        try:
+            getal = float(waarde)
+        except (TypeError, ValueError):
+            continue        # tekst en lege waarden overslaan, niet struikelen
+        conn.execute("""INSERT INTO gezondheid (datum, soort, waarde, eenheid, bron, gezet)
+                        VALUES (?,?,?,?,?,?)
+                        ON CONFLICT(datum, soort, bron) DO UPDATE SET
+                          waarde=excluded.waarde, eenheid=excluded.eenheid,
+                          gezet=excluded.gezet""",
+                     (datum, str(soort)[:40], getal,
+                      str(eenheden.get(soort, ""))[:20] or None, bron, nu))
+        n += 1
+    conn.commit()
+    conn.close()
+    app.logger.info("gezondheid %s: %d metingen van %s", datum, n, bron)
+    return jsonify({"ok": True, "datum": datum, "bewaard": n})
+
+
+@app.route("/api/gezondheid/<datum>")
+def api_gezondheid(datum):
+    conn = db()
+    gezondheid_db(conn)
+    rijen = conn.execute(
+        "SELECT soort, waarde, eenheid, bron FROM gezondheid WHERE datum=? ORDER BY soort",
+        (datum,)).fetchall()
+    geb = conn.execute(
+        "SELECT tst, soort, detail FROM gebeurtenis WHERE tst >= ? AND tst < ? ORDER BY tst",
+        (int(datetime.fromisoformat(datum).astimezone().timestamp()),
+         int((datetime.fromisoformat(datum).astimezone() + timedelta(days=1)).timestamp()))
+    ).fetchall()
+    conn.close()
+    return jsonify({
+        "datum": datum,
+        "metingen": [dict(r) for r in rijen],
+        "gebeurtenissen": [{"tijd": _lokaal(r["tst"]).isoformat(),
+                            "soort": r["soort"], "detail": r["detail"]} for r in geb],
+    })
 
 
 # ------------------------------------------------------------ dagindeling
