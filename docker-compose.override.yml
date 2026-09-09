@@ -12,6 +12,29 @@ services:
   # leest alles uit de database (kosten.bank_transactie + Octopus-spiegel);
   # de PDF-pijplijn blijft als host-service draaien en is via hostmachine
   # bereikbaar voor de ververs-knop. Checkout: ~/appportal/kosten.
+  # AI-abonnementen-dashboard (uitgaven.globaal.be). Toont alleen AI-diensten
+  # (Claude, ChatGPT, ElevenLabs, Wispr, ...). Repo softwareglobaal/globaal-
+  # uitgaven, checkout ./uitgaven, auto-deploy via ~/deploy-uitgaven.sh.
+  app-uitgaven:
+    build:
+      context: ./uitgaven
+      dockerfile: app/Dockerfile
+    image: appportal-uitgaven
+    restart: unless-stopped
+    environment:
+      PORT: "3013"
+      UITGAVEN_DB_URL: ${UITGAVEN_DB_URL:-}
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+      ADMIN_GROUP: ${UITGAVEN_ADMIN_GROUP:-admin}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3013/healthz', timeout=5)"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    networks: [appnet]
+
   app-kosten:
     build:
       context: ./kosten

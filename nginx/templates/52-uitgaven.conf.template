@@ -1,0 +1,11 @@
+# AI-abonnementen-dashboard (uitgaven.globaal.be).
+# Repo softwareglobaal/globaal-uitgaven, checkout ~/appportal/uitgaven,
+# compose-service app-uitgaven op poort 3013. Achter forward-auth SSO.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name uitgaven.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+    set $app_upstream http://app-uitgaven:3013;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
