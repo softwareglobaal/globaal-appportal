@@ -25,6 +25,24 @@ wijziging in het register:
 Toewijzen gebeurt in het register zelf (organisatie.globaal.be/disciplines),
 niet op dit bord.
 
+## Collega-profiel per agent (/agent/<code>)
+
+Klik op een agent in het organogram: je ziet zijn rolbestand (instructies,
+werkwijze, grenzen, gereedschap) en de vijf recentste opdrachten met de
+opdracht van de dirigent en het rapport van de agent. De rolbestanden in
+`agents/` zijn een kopie van `~/.claude/agents` op de Mac van Siyan; na een
+wijziging aan een agent:
+
+    sh siyanagents/seed/agents-sync.sh    # op de Mac
+    git add siyanagents/agents && git commit && git push
+
+De opdrachten komen uit de tabellen `opdracht` en `opdracht_stap`. De
+dirigent schrijft ze live via `/api/opdracht`; de geschiedenis van voor
+september 2026 is eenmalig geimporteerd uit de Claude Code-transcripten via
+`POST /api/opdracht/import` (token, idempotent op de kolom `bron`,
+waarde `transcript:<sessie>:<tool_use_id>`). Wie de stapnaam schrijft mag
+code, label of alias gebruiken; het profiel herkent ze allemaal.
+
 ## Oorsprong (fork van agents.globaal.be)
 
 De tegel die het agent-team toont: elke agent als kaart met live status,
