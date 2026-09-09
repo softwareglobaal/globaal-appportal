@@ -59,6 +59,10 @@ services:
       BASE_DOMAIN: ${BASE_DOMAIN}
       LOCATIE_DB: /data/locatie.db
       LOCATIE_WACHTWOORD: ${LOCATIE_WACHTWOORD:-}
+      # Wifi-netwerken die meerijden: de router in Mehdi's auto. Zonder deze
+      # lijst leest de dagindeling een autorit als een bezoek, want de telefoon
+      # blijft onderweg aan hetzelfde netwerk hangen.
+      LOCATIE_VOERTUIG_WIFI: ${LOCATIE_VOERTUIG_WIFI:-}
       PORT: "3031"
     volumes:
       - ./locatie-data:/data

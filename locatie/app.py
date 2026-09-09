@@ -211,6 +211,16 @@ def pub():
 
 ONDERWEG_WOORDEN = ("automotive", "cycling", "walking", "running")
 
+# Wifi-netwerken die meerijden in plaats van stil te staan. Mehdi's auto heeft
+# een eigen router met externe antenne (Teltonika RUT), dus tijdens het rijden
+# blijft de telefoon aan hetzelfde netwerk hangen. Zonder deze lijst leest de
+# regel "zelfde wifi als het vorige punt betekent hetzelfde gebouw" een autorit
+# als een bezoek: op 9-9-2026 werd zo een stuk rit het begin van een bezoek van
+# 55 minuten. Kommagescheiden in LOCATIE_VOERTUIG_WIFI.
+VOERTUIG_WIFI = {n.strip().lower()
+                 for n in os.environ.get("LOCATIE_VOERTUIG_WIFI", "").split(",")
+                 if n.strip()}
+
 
 def _toestand(punt, vorige):
     """Stond de telefoon stil of was hij onderweg, op dit punt?
@@ -229,14 +239,21 @@ def _toestand(punt, vorige):
        gebouw. Zekerder dan elke coordinaat.
     3. de afstand - alleen als de eerste twee niets zeggen.
     """
+    ssid = punt.get("ssid")
+    in_voertuig = bool(ssid) and ssid.lower() in VOERTUIG_WIFI
+
     motion = (punt.get("motion") or "").lower()
     if motion:
-        if "stationary" in motion:
+        # Stilstaan in een rijdende auto bestaat niet: dan sta je stil in een
+        # file of voor een licht, en dat is nog steeds onderweg.
+        if "stationary" in motion and not in_voertuig:
             return "stil"
         if any(w in motion for w in ONDERWEG_WOORDEN):
             return "onderweg"
 
-    ssid = punt.get("ssid")
+    if in_voertuig:
+        return "onderweg"
+
     if ssid and vorige and vorige.get("ssid") == ssid:
         return "stil"
 
