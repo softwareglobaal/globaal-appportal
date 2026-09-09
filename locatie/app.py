@@ -32,6 +32,21 @@ STILSTAND_MINUTEN = 8
 
 # --------------------------------------------------------------- database
 
+# Velden die er later bij zijn gekomen. SQLite kan kolommen toevoegen aan een
+# bestaande tabel, dus dit hoeft niet in een migratie: bij het eerste verzoek na
+# een uitrol worden ze stil aangemaakt en blijven de bestaande rijen staan.
+LATERE_KOLOMMEN = {
+    "bs": "INTEGER",        # 1 = niet aan de lader, 2 = laadt, 3 = vol
+    "ssid": "TEXT",         # naam van het wifi-netwerk
+    "bssid": "TEXT",        # hardware-adres van het toegangspunt
+    "motion": "TEXT",       # wat de telefoon zelf zegt: stationary, walking, automotive
+    "druk": "REAL",         # luchtdruk in kPa, onderscheidt verdiepingen
+    "vac": "INTEGER",       # verticale nauwkeurigheid
+    "trigger": "TEXT",      # waarom dit punt verstuurd is (t=timer, u=handmatig, c=zone)
+    "regios": "TEXT",       # geofences waar de telefoon op dat moment in zat
+}
+
+
 def db():
     conn = sqlite3.connect(DB_PAD)
     conn.row_factory = sqlite3.Row
@@ -51,6 +66,11 @@ def db():
             ruw     TEXT
         )""")
     conn.execute("CREATE INDEX IF NOT EXISTS punt_tst ON punt(tst)")
+
+    bestaand = {r["name"] for r in conn.execute("PRAGMA table_info(punt)")}
+    for kolom, soort in LATERE_KOLOMMEN.items():
+        if kolom not in bestaand:
+            conn.execute(f"ALTER TABLE punt ADD COLUMN {kolom} {soort}")
     conn.commit()
     return conn
 
@@ -150,12 +170,35 @@ def pub():
         except (KeyError, TypeError, ValueError):
             return None
 
+    def komma(sleutel):
+        """Lijstjes uit OwnTracks als tekst bewaren, bv. ['stationary']."""
+        w = data.get(sleutel)
+        if isinstance(w, list):
+            return ",".join(str(x) for x in w) or None
+        return str(w)[:80] if w else None
+
+    def kommagetal(sleutel):
+        try:
+            return float(data[sleutel])
+        except (KeyError, TypeError, ValueError):
+            return None
+
     conn = db()
     conn.execute(
-        """INSERT INTO punt (tst, lat, lon, acc, alt, vel, batt, conn, tid, soort, ruw)
-           VALUES (:tst, :lat, :lon, :acc, :alt, :vel, :batt, :conn, :tid, :soort, :ruw)
+        """INSERT INTO punt (tst, lat, lon, acc, alt, vel, batt, conn, tid, soort, ruw,
+                             bs, ssid, bssid, motion, druk, vac, trigger, regios)
+           VALUES (:tst, :lat, :lon, :acc, :alt, :vel, :batt, :conn, :tid, :soort, :ruw,
+                   :bs, :ssid, :bssid, :motion, :druk, :vac, :trigger, :regios)
            ON CONFLICT(tst) DO NOTHING""",
-        {"tst": tst, "lat": lat, "lon": lon, "acc": heel("acc"), "alt": heel("alt"),
+        {"bs": heel("bs"),
+         "ssid": str(data.get("ssid", ""))[:64] or None,
+         "bssid": str(data.get("bssid", ""))[:32] or None,
+         "motion": komma("motionactivities"),
+         "druk": kommagetal("p"),
+         "vac": heel("vac"),
+         "trigger": str(data.get("t", ""))[:4] or None,
+         "regios": komma("inregions"),
+         "tst": tst, "lat": lat, "lon": lon, "acc": heel("acc"), "alt": heel("alt"),
          "vel": heel("vel"), "batt": heel("batt"),
          "conn": str(data.get("conn", ""))[:4], "tid": str(data.get("tid", ""))[:8],
          "soort": soort, "ruw": json.dumps(data, ensure_ascii=False)[:4000]})
@@ -166,60 +209,108 @@ def pub():
 
 # ------------------------------------------------------------ dagindeling
 
+ONDERWEG_WOORDEN = ("automotive", "cycling", "walking", "running")
+
+
+def _toestand(punt, vorige):
+    """Stond de telefoon stil of was hij onderweg, op dit punt?
+
+    De eerste versie leidde dat af uit de afstand tot het vorige punt. Dat gaat
+    stuk in de zuinige stand van iOS: die meldt pas na enkele honderden meters,
+    dus twee punten van dezelfde plek liggen 600 meter uit elkaar en elk bezoek
+    verdwijnt. Op 9-9-2026 werd een avond van anderhalf uur zo een rit van
+    7,8 km.
+
+    De telefoon weet het zelf en stuurt het mee. We geloven in deze volgorde:
+
+    1. `motion` - de bewegingssensor van iOS zegt stationary, walking, cycling
+       of automotive. Dit is een meting, geen gok, en kost geen batterij.
+    2. `ssid` - hetzelfde wifi-netwerk als het vorige punt betekent hetzelfde
+       gebouw. Zekerder dan elke coordinaat.
+    3. de afstand - alleen als de eerste twee niets zeggen.
+    """
+    motion = (punt.get("motion") or "").lower()
+    if motion:
+        if "stationary" in motion:
+            return "stil"
+        if any(w in motion for w in ONDERWEG_WOORDEN):
+            return "onderweg"
+
+    ssid = punt.get("ssid")
+    if ssid and vorige and vorige.get("ssid") == ssid:
+        return "stil"
+
+    if vorige is None:
+        return "stil"
+    meter = afstand(vorige["lat"], vorige["lon"], punt["lat"], punt["lon"])
+    # Ruime marge: de onzekerheid van beide metingen telt mee.
+    speling = STILSTAND_METER + (punt.get("acc") or 0) + (vorige.get("acc") or 0)
+    return "stil" if meter <= speling else "onderweg"
+
+
 def dagindeling(punten):
     """Losse punten omzetten naar bezoeken en verplaatsingen.
 
-    Werkwijze: loop de punten af en begin een tros zolang elk volgend punt
-    binnen STILSTAND_METER van het begin van die tros valt. Duurt een tros
-    lang genoeg, dan was dat een bezoek; wat ertussen zit is onderweg.
+    Bepaalt per punt of de telefoon stilstond of onderweg was, plakt
+    opeenvolgende gelijke toestanden aan elkaar, en houdt alleen stiltes over
+    die lang genoeg duurden om een bezoek te heten.
     """
-    resultaat = []
-    i = 0
-    n = len(punten)
-    while i < n:
-        anker = punten[i]
-        j = i + 1
-        while j < n and afstand(anker["lat"], anker["lon"],
-                                punten[j]["lat"], punten[j]["lon"]) <= STILSTAND_METER:
-            j += 1
-        minuten = (punten[j - 1]["tst"] - anker["tst"]) / 60
+    if not punten:
+        return []
 
-        if minuten >= STILSTAND_MINUTEN:
-            groep = punten[i:j]
+    toestanden = []
+    for i, p in enumerate(punten):
+        toestanden.append(_toestand(p, punten[i - 1] if i else None))
+
+    # Opeenvolgende gelijke toestanden samenvoegen tot blokken.
+    blokken = []
+    start = 0
+    for i in range(1, len(punten) + 1):
+        if i == len(punten) or toestanden[i] != toestanden[start]:
+            blokken.append((toestanden[start], punten[start:i]))
+            start = i
+
+    resultaat = []
+    for b, (soort, groep) in enumerate(blokken):
+        if soort == "stil":
+            minuten = (groep[-1]["tst"] - groep[0]["tst"]) / 60
+            if minuten < STILSTAND_MINUTEN:
+                continue        # te kort om een bezoek te heten
             resultaat.append({
                 "soort": "bezoek",
-                "van": anker["tst"], "tot": punten[j - 1]["tst"],
+                "van": groep[0]["tst"], "tot": groep[-1]["tst"],
                 "minuten": round(minuten),
                 "lat": round(sum(p["lat"] for p in groep) / len(groep), 6),
                 "lon": round(sum(p["lon"] for p in groep) / len(groep), 6),
                 "punten": len(groep),
+                "wifi": next((p.get("ssid") for p in groep if p.get("ssid")), None),
             })
-            i = j
         else:
-            # Geen stilstand: verzamel tot de eerstvolgende echte stop.
-            start = i
-            while i < n:
-                anker2 = punten[i]
-                k = i + 1
-                while k < n and afstand(anker2["lat"], anker2["lon"],
-                                        punten[k]["lat"], punten[k]["lon"]) <= STILSTAND_METER:
-                    k += 1
-                if (punten[k - 1]["tst"] - anker2["tst"]) / 60 >= STILSTAND_MINUTEN:
-                    break
-                i = k if k > i else i + 1
-            eind = max(i, start + 1)
-            rit = punten[start:eind]
-            meter = sum(afstand(rit[x]["lat"], rit[x]["lon"],
-                                rit[x + 1]["lat"], rit[x + 1]["lon"])
-                        for x in range(len(rit) - 1))
-            if len(rit) >= 2:
-                resultaat.append({
-                    "soort": "verplaatsing",
-                    "van": rit[0]["tst"], "tot": rit[-1]["tst"],
-                    "minuten": round((rit[-1]["tst"] - rit[0]["tst"]) / 60),
-                    "meter": round(meter),
-                    "spoor": [[p["lat"], p["lon"]] for p in rit],
-                })
+            # Een rit loopt van waar je vertrok tot waar je aankwam, dus het
+            # laatste punt van het vorige blok en het eerste van het volgende
+            # tellen mee. Anders mist de afstand precies de twee stukken waar
+            # het meeste verplaatsing in zit, en verdwijnt een rit die maar
+            # een enkel onderweg-punt opleverde volledig.
+            spoor = list(groep)
+            if b > 0:
+                spoor.insert(0, blokken[b - 1][1][-1])
+            if b + 1 < len(blokken):
+                spoor.append(blokken[b + 1][1][0])
+            if len(spoor) < 2:
+                continue
+            meter = sum(afstand(spoor[x]["lat"], spoor[x]["lon"],
+                                spoor[x + 1]["lat"], spoor[x + 1]["lon"])
+                        for x in range(len(spoor) - 1))
+            wijzen = {w for p in groep for w in (p.get("motion") or "").split(",")
+                      if w in ONDERWEG_WOORDEN}
+            resultaat.append({
+                "soort": "verplaatsing",
+                "van": spoor[0]["tst"], "tot": spoor[-1]["tst"],
+                "minuten": round((spoor[-1]["tst"] - spoor[0]["tst"]) / 60),
+                "meter": round(meter),
+                "wijze": ", ".join(sorted(wijzen)) or None,
+                "spoor": [[p["lat"], p["lon"]] for p in spoor],
+            })
     return resultaat
 
 
@@ -281,8 +372,16 @@ def api_dag(datum):
     punten = punten_van_dag(datum)
     return jsonify({
         "datum": datum,
+        # Alles wat de telefoon meestuurde gaat mee naar buiten, zodat het
+        # dagboek in Dropbox de volledige meting bevat en er later aan de
+        # agenda, foto's of facturatie gekoppeld kan worden.
         "punten": [{"tijd": _lokaal(p["tst"]).isoformat(), "lat": p["lat"],
-                    "lon": p["lon"], "acc": p["acc"], "batt": p["batt"]}
+                    "lon": p["lon"], "acc": p["acc"], "batt": p["batt"],
+                    "laadt": p["bs"] == 2 if p["bs"] is not None else None,
+                    "wifi": p["ssid"], "beweging": p["motion"],
+                    "verbinding": p["conn"], "hoogte": p["alt"],
+                    "luchtdruk": p["druk"], "aanleiding": p["trigger"],
+                    "zones": p["regios"]}
                    for p in punten],
         "indeling": dagindeling(punten),
     })
