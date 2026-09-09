@@ -47,6 +47,22 @@ streng en een kort werfbezoek verdwijnt in de rit ernaartoe; te los en een file
 op de ring wordt een bezoek. Ze staan bovenaan `app.py` en mogen bijgesteld
 worden zodra er echte dagen in zitten om tegen te toetsen.
 
+## Het andere spoor: de Google Maps-export
+
+`tijdlijn.py` in deze map verwerkt de handmatige export uit Google Maps
+(`Timeline.json` op iOS, `location-history.json` op Android). Dat spoor loopt
+naast deze tegel: Google herkent plaatsen en vervoerswijze, wat OwnTracks niet
+doet, maar de export vereist elke keer een mens die op een knop drukt. Draait op
+de Mac, niet in de container:
+
+    python3 tijdlijn.py ~/Downloads/Timeline.json
+    python3 tijdlijn.py ~/Downloads/Timeline.json --dag 2026-09-09
+    python3 tijdlijn.py ~/Downloads/Timeline.json --schrijf ~/Documents/Locatielogboek/dagen
+
+Valkuil die het script opvangt: de export mengt tijdzones binnen een bestand.
+Bezoeken dragen de lokale offset (`+02:00`), sporen staan in UTC (`Z`). Wie dat
+niet omrekent ziet een spoor twee uur voor het bezoek dat erin zit.
+
 ## Wat er nog niet is
 
 - Adressen. De database houdt coördinaten; reverse geocoding (Geopunt voor
