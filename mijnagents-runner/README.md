@@ -28,6 +28,20 @@ python3 nieuwe-agent.py --naam post-wacht --label "Postwacht" --type post \
   --tool "gmail lezen" --tool "labels zetten" --cron "0 * * * *"
 ```
 
+## Afdelingen en De Regisseur
+
+Elke agent hoort bij één afdeling (het veld `type`): `regie`, `h-architects`,
+`prive`; nieuwe via `POST /api/afdeling`. Het bord groepeert erop.
+
+**De Regisseur** (`regisseur.py`, cron elke minuut) is de hoofdagent. Beheer
+zegt iets tegen hem of tegen een agent in het gespreksvak op het bord; hij
+haalt open berichten op (`/api/gesprek/open`), antwoordt met een
+gereedschapslus die alleen leest (bord, contracten-MCP-leestools, Pipedrive)
+of voorstelt (runbooks `werkwijze-bijwerken`, `pipedrive-dealtitel`, `notitie`),
+kan een agent een ronde laten draaien (`agent_ronde`), en zet het antwoord terug
+(`/api/gesprek/<id>/status`). Spreekt Mehdi een agent aan, dan antwoordt de
+Regisseur in de rol van die agent, uit diens werkwijze en werkverslag.
+
 ## Werkwijze en kennis op het bord
 
 Elke agent heeft op zijn pagina een **werkwijze**: het volledige proces in

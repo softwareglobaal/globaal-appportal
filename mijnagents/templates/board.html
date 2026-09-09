@@ -59,6 +59,10 @@
   button.nee{border-color:#7a2b2b;background:#361a1a}
   button:hover{filter:brightness(1.15)}
   .signaal{font-size:11px;color:var(--zacht)}
+  .blok{background:var(--paper);border:1px solid var(--rand);border-radius:12px;padding:16px 18px;margin-bottom:26px}
+  .blok h2{margin:0 0 12px;font-size:14px}
+  .md p{margin:6px 0}.md ul,.md ol{margin:4px 0;padding-left:22px}.md code{background:#0c0e12;padding:1px 5px;border-radius:5px;font-size:12px}
+  .md table{border-collapse:collapse;font-size:13px}.md td,.md th{padding:4px 8px;border-top:1px solid var(--rand);text-align:left}
   footer{color:var(--zacht);font-size:12px;text-align:center;padding:20px}
 </style>
 </head>
@@ -97,6 +101,10 @@
   </section>
   {% endif %}
 
+  {% if mag_beslissen %}
+    {% with aan='regisseur', titel='Zeg iets tegen De Regisseur, je hoofdagent', gesprekken=gesprekken, mdf=regisseur_html %}{% include '_gesprek.html' %}{% endwith %}
+  {% endif %}
+
   {% if aantal == 0 %}
     <div class="leeg">
       Nog geen agents. Maak er een met de generator:<br><br>
@@ -106,7 +114,8 @@
 
   {% for type, kaarten in groepen.items() %}
   <section class="groep">
-    <h2>{{ type }}</h2>
+    <h2>{{ afdelingen[type]['label'] }}{% if afdelingen[type]['omschrijving'] %} <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--zacht)"> · {{ afdelingen[type]['omschrijving'] }}</span>{% endif %}</h2>
+    {% if not kaarten %}<p style="color:var(--zacht);font-size:13px;margin:0 0 6px">Nog geen agent in deze afdeling.</p>{% endif %}
     <div class="rooster">
       {% for k in kaarten %}
       <a class="kaart" href="{{ url_for('detail', naam=k['naam']) }}">

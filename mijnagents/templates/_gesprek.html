@@ -1,0 +1,24 @@
+{# Gespreksvak: beheer zegt iets tegen een agent of tegen De Regisseur.
+   Verwacht: aan (agentnaam of 'regisseur'), titel, gesprekken (rijen), mdf (markdown-functie). #}
+<div class="blok" id="gesprek">
+  <h2>{{ titel }}</h2>
+  <form method="post" action="{{ url_for('gesprek_sturen') }}">
+    <input type="hidden" name="aan" value="{{ aan }}">
+    <textarea name="tekst" required placeholder="Stel een vraag of geef een opdracht. Antwoord binnen een minuut, hier op het bord." style="width:100%;min-height:84px;font:inherit;background:#0c0e12;color:var(--tekst);border:1px solid var(--rand);border-radius:8px;padding:10px"></textarea>
+    <div style="margin-top:8px"><button type="submit" style="font:inherit;border:1px solid #1f6f43;background:#123326;color:var(--tekst);padding:7px 16px;border-radius:8px;cursor:pointer">Versturen</button>
+    <span style="color:var(--zacht);font-size:12px;margin-left:8px">Alles wat iets verandert komt als voorstel op het bord; hij voert niets uit zonder je goedkeuring.</span></div>
+  </form>
+  {% for g in gesprekken %}
+  <div style="border-top:1px solid var(--rand);padding:12px 0">
+    <div style="color:var(--zacht);font-size:12px">{{ g['van'] }} · {{ g['ts'][5:16].replace('T',' ') }}
+      {% if g['status'] == 'open' %}<span class="badge" style="color:var(--stil);border-color:var(--stil);margin-left:6px">wacht op antwoord</span>
+      {% elif g['status'] == 'bezig' %}<span class="badge" style="color:var(--actief);border-color:var(--actief);margin-left:6px">bezig</span>
+      {% elif g['status'] == 'mislukt' %}<span class="badge" style="color:var(--fout);border-color:var(--fout);margin-left:6px">mislukt</span>{% endif %}</div>
+    <div style="margin:4px 0 8px;white-space:pre-wrap">{{ g['tekst'] }}</div>
+    {% if g['antwoord'] %}
+    <div style="border-left:3px solid var(--accent);padding:2px 12px" class="md">{{ mdf(g['antwoord'])|safe }}</div>
+    {% if g['detail'] %}<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--zacht);font-size:12px">wat hij deed</summary><pre style="white-space:pre-wrap;font-size:12px;background:#0c0e12;padding:8px;border-radius:6px;max-height:300px;overflow:auto">{{ g['detail'] }}</pre></details>{% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>

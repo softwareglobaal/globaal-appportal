@@ -124,6 +124,10 @@
   </div>
 
   {% if mag_beslissen %}
+    {% with aan=a['naam'], titel='Zeg iets tegen ' ~ a['label'], gesprekken=gesprekken, mdf=mdf %}{% include '_gesprek.html' %}{% endwith %}
+  {% endif %}
+
+  {% if mag_beslissen %}
   <div class="blok" id="verslag">
     <h2>Werkverslag — wat hij las, vond, besliste en schreef</h2>
     {% if not verslag %}

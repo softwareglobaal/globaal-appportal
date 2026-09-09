@@ -113,6 +113,23 @@ def init_db():
             ts        TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS logboek_naam_ts ON logboek(naam, ts);
+        CREATE TABLE IF NOT EXISTS afdeling (
+            naam         TEXT PRIMARY KEY,   -- sleutel, gelijk aan agent.type
+            label        TEXT NOT NULL,
+            omschrijving TEXT DEFAULT '',
+            volgorde     INTEGER DEFAULT 100
+        );
+        CREATE TABLE IF NOT EXISTS gesprek (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            aan        TEXT NOT NULL,          -- agentnaam, of 'regisseur' voor de hoofdagent
+            van        TEXT NOT NULL,          -- wie het vroeg (gebruikersnaam)
+            tekst      TEXT NOT NULL,          -- de vraag of opdracht
+            antwoord   TEXT DEFAULT '',        -- het antwoord van de agent
+            status     TEXT DEFAULT 'open',    -- open | bezig | beantwoord | mislukt
+            detail     TEXT DEFAULT '',        -- wat de agent deed om te antwoorden
+            ts         TEXT NOT NULL,
+            beantwoord_ts TEXT DEFAULT ''
+        );
         CREATE TABLE IF NOT EXISTS werkwijze_versie (
             id    INTEGER PRIMARY KEY AUTOINCREMENT,
             naam  TEXT NOT NULL,
@@ -125,6 +142,14 @@ def init_db():
     # Latere kolommen op agent: de werkwijze (het volledige proces, door Mehdi
     # te bewerken op het bord; de agent leest het elke ronde) en de kennis
     # (wat de agent in zijn laatste ronde als instructie las, door hem gemeld).
+    # Vaste afdelingen (idempotent). Nieuwe afdelingen via POST /api/afdeling.
+    for naam, label, oms, volg in (
+        ("regie", "Regie", "Het overzicht, het gesprek met Mehdi en de voorstellen.", 10),
+        ("h-architects", "H-Architects", "Het kantoor: contracten, dossiers, klanten.", 20),
+        ("prive", "Privé", "Mehdi zelf: agenda, gegevens van de Mac, persoonlijke dossiers.", 30),
+    ):
+        conn.execute("INSERT OR IGNORE INTO afdeling(naam, label, omschrijving, volgorde) VALUES(?,?,?,?)",
+                     (naam, label, oms, volg))
     bestaand = {r[1] for r in conn.execute("PRAGMA table_info(agent)")}
     for kolom, definitie in (("werkwijze", "TEXT DEFAULT ''"), ("kennis", "TEXT DEFAULT ''"),
                              ("kennis_ts", "TEXT DEFAULT ''"), ("kennis_bron", "TEXT DEFAULT ''")):
@@ -220,9 +245,15 @@ def kaarten():
 @app.route("/")
 def bord():
     ks = kaarten()
+    afd = {r["naam"]: dict(r) for r in db().execute("SELECT * FROM afdeling").fetchall()}
     groepering = {}
     for k in ks:
         groepering.setdefault(k["type"], []).append(k)
+    # Afdelingen in vaste volgorde, ook als ze (nog) geen agent hebben; onbekende types achteraan.
+    volgorde = sorted(set(list(afd) + list(groepering)),
+                      key=lambda n: (afd.get(n, {}).get("volgorde", 999), n))
+    groepering = {n: groepering.get(n, []) for n in volgorde}
+    afdelingen = {n: afd.get(n, {"naam": n, "label": n, "omschrijving": ""}) for n in volgorde}
     open_voorstellen = db().execute(
         "SELECT v.*, a.label FROM voorstel v LEFT JOIN agent a ON a.naam=v.naam "
         "WHERE v.status='open' ORDER BY v.id DESC"
@@ -231,7 +262,23 @@ def bord():
         "board.html", app_naam=APP_NAAM, groepen=groepering, aantal=len(ks),
         voorstellen=open_voorstellen, mag_beslissen=mag_beslissen(),
         gebruiker=gebruiker(),
+        gesprekken=gesprekken_voor("regisseur", 12) if mag_beslissen() else [],
+        regisseur_html=md, afdelingen=afdelingen,
     )
+
+
+@app.route("/api/afdeling", methods=["POST"])
+def api_afdeling():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    if not p.get("naam") or not p.get("label"):
+        return jsonify(fout="naam en label vereist"), 400
+    db().execute("INSERT INTO afdeling(naam, label, omschrijving, volgorde) VALUES(?,?,?,?) "
+                 "ON CONFLICT(naam) DO UPDATE SET label=excluded.label, omschrijving=excluded.omschrijving, volgorde=excluded.volgorde",
+                 (p["naam"], p["label"], p.get("omschrijving", ""), int(p.get("volgorde") or 100)))
+    db().commit()
+    return jsonify(ok=True)
 
 
 @app.route("/agent/<naam>")
@@ -265,7 +312,12 @@ def detail(naam):
         gekozen=request.args.get("onderwerp", ""),
         werkwijze_html=md(a["werkwijze"]), kennis_html=md(a["kennis"]), versies=versies,
         bewerken=request.args.get("bewerken") == "1",
+        gesprekken=gesprekken_for_detail(naam) if mag_beslissen() else [], mdf=md,
     )
+
+
+def gesprekken_for_detail(naam):
+    return gesprekken_voor(naam, 20)
 
 
 # --- werkwijze: het volledige proces van een agent, door beheer te bewerken
@@ -475,6 +527,98 @@ def uitvoer_resultaat():
                  (v["naam"], f"voorstel {vid} '{v['actie']}': {nieuw}", nu()))
     conn.commit()
     return jsonify(ok=True, status=nieuw)
+
+
+# --- gesprek: beheer zegt iets tegen een agent (of tegen de hoofdagent);
+#     de hoofdagent-runner haalt open berichten op en antwoordt op het bord.
+def gesprekken_voor(aan, limiet=30):
+    return db().execute(
+        "SELECT * FROM gesprek WHERE aan=? ORDER BY id DESC LIMIT ?", (aan, limiet)
+    ).fetchall()
+
+
+@app.route("/gesprek", methods=["POST"])
+def gesprek_sturen():
+    if not mag_beslissen():
+        abort(403)
+    aan = (request.form.get("aan") or "regisseur").strip()
+    tekst = (request.form.get("tekst") or "").strip()
+    if not tekst:
+        abort(400)
+    if aan != "regisseur" and not db().execute("SELECT 1 FROM agent WHERE naam=?", (aan,)).fetchone():
+        abort(404)
+    db().execute("INSERT INTO gesprek(aan, van, tekst, ts) VALUES(?,?,?,?)", (aan, gebruiker(), tekst[:8000], nu()))
+    db().commit()
+    doel = url_for("bord") if aan == "regisseur" else url_for("detail", naam=aan)
+    return redirect(doel + "#gesprek")
+
+
+@app.route("/api/gesprek/open")
+def api_gesprek_open():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    rijen = db().execute("SELECT id, aan, van, tekst, ts FROM gesprek WHERE status='open' ORDER BY id").fetchall()
+    return jsonify(open=[dict(r) for r in rijen])
+
+
+@app.route("/api/gesprek/<int:gid>/status", methods=["POST"])
+def api_gesprek_status(gid):
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    status = p.get("status")
+    if status not in ("bezig", "beantwoord", "mislukt"):
+        return jsonify(fout="status bezig|beantwoord|mislukt"), 400
+    conn = db()
+    conn.execute(
+        "UPDATE gesprek SET status=?, antwoord=COALESCE(?, antwoord), detail=COALESCE(?, detail), "
+        "beantwoord_ts=CASE WHEN ? IN ('beantwoord','mislukt') THEN ? ELSE beantwoord_ts END WHERE id=?",
+        (status, p.get("antwoord"), p.get("detail"), status, nu(), gid),
+    )
+    conn.commit()
+    return jsonify(ok=True)
+
+
+@app.route("/api/gesprek/<int:gid>")
+def api_gesprek(gid):
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    r = db().execute("SELECT * FROM gesprek WHERE id=?", (gid,)).fetchone()
+    if not r:
+        abort(404)
+    # eerdere wisselingen in dezelfde draad (zelfde 'aan'), voor context
+    eerder = db().execute(
+        "SELECT van, tekst, antwoord, ts FROM gesprek WHERE aan=? AND id<? AND status='beantwoord' "
+        "ORDER BY id DESC LIMIT 6", (r["aan"], gid)
+    ).fetchall()
+    return jsonify(gesprek=dict(r), eerder=[dict(x) for x in eerder][::-1])
+
+
+# --- overzicht voor de hoofdagent: alle agents met werkwijze, status en recent verslag
+@app.route("/api/overzicht")
+def api_overzicht():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    conn = db()
+    agents = [dict(r) for r in conn.execute("SELECT naam,label,type,rol,mandaat,mag,grenzen,cadans,tools,werkwijze,kennis_ts,kennis_bron FROM agent WHERE actief=1").fetchall()]
+    status = {r["naam"]: dict(r) for r in conn.execute("SELECT * FROM status").fetchall()}
+    for a in agents:
+        a["status"] = status.get(a["naam"])
+        a["open_voorstellen"] = conn.execute("SELECT COUNT(*) c FROM voorstel WHERE naam=? AND status='open'", (a["naam"],)).fetchone()["c"]
+    return jsonify(agents=agents)
+
+
+@app.route("/api/logboek/<naam>")
+def api_logboek_lezen(naam):
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    n = min(int(request.args.get("n", 60)), 300)
+    onderwerp = request.args.get("onderwerp")
+    if onderwerp:
+        rijen = db().execute("SELECT onderwerp, stap, tekst, detail, ts FROM logboek WHERE naam=? AND onderwerp LIKE ? ORDER BY id DESC LIMIT ?", (naam, f"%{onderwerp}%", n)).fetchall()
+    else:
+        rijen = db().execute("SELECT onderwerp, stap, tekst, detail, ts FROM logboek WHERE naam=? ORDER BY id DESC LIMIT ?", (naam, n)).fetchall()
+    return jsonify(regels=[dict(r) for r in rijen][::-1])
 
 
 @app.route("/gezondheid")
