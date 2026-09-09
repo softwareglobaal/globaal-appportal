@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kantoor · Agents</title>
+<style>
+  /* Dezelfde tekens als de kaartweergave; dit is een andere blik op dezelfde
+     hartslagen, geen tweede huisstijl. */
+  :root {
+    --bg:#f5f6f7; --paneel:#ffffff; --lijn:#e4e7ea; --lijn-sterk:#d5dade;
+    --tekst:#1e2830; --tekst-2:#5c6771; --tekst-3:#8d959d; --accent:#2f4a63;
+    --rust:#98a0a8; --actief:#2f7d5a; --klaar:#3663a0; --fout:#a63d3d;
+    --amber:#916312;
+    --vloer:#eceef0; --vloerlijn:#e2e5e8;
+    --blad:#dfe3e6; --blad-rand:#cbd1d6;
+    --scherm:#26313a; --scherm-uit:#aeb6bc;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--tekst);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px;line-height:1.5;}
+  .wrap{max-width:1040px;margin:0 auto;padding:26px 22px 60px;}
+  a{color:var(--accent);text-decoration:none;} a:hover{text-decoration:underline;}
+
+  .kop{border-bottom:1px solid var(--lijn);padding-bottom:14px;margin-bottom:18px;}
+  .kop h1{margin:0;font-size:18px;font-weight:600;letter-spacing:-0.01em;}
+  .kop .sub{color:var(--tekst-2);font-size:12.5px;margin-top:2px;}
+  .kop-link{display:inline-block;margin-top:10px;margin-right:6px;border:1px solid var(--lijn-sterk);
+    background:var(--paneel);color:var(--tekst);border-radius:5px;padding:5px 12px;
+    font-size:12.5px;font-weight:500;}
+  .kop-link:hover{background:#f2f4f5;text-decoration:none;}
+
+  /* ---------------------------------------------------------- legenda */
+  .legenda{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;
+    color:var(--tekst-2);font-size:12px;margin:0 0 18px;}
+  .legenda span{display:inline-flex;align-items:center;gap:6px;}
+  .lg{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .lg.actief{background:var(--actief);} .lg.waakt{background:var(--accent);}
+  .lg.rust{background:var(--rust);} .lg.klaar{background:var(--klaar);}
+  .lg.stil{background:var(--amber);} .lg.fout{background:var(--fout);}
+
+  /* ---------------------------------------------------------- vertrek */
+  .vertrek{margin:0 0 22px;}
+  .naamplaat{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
+    border:1px solid var(--lijn);border-bottom:0;border-radius:8px 8px 0 0;
+    background:var(--paneel);padding:10px 16px;}
+  .vertrek-titel{font-size:12px;font-weight:600;text-transform:uppercase;
+    letter-spacing:0.06em;color:var(--tekst);}
+  .vertrek-tel{font-size:12px;color:var(--tekst-3);font-variant-numeric:tabular-nums;}
+  .vertrek-tel.let-op{color:var(--amber);}
+  .vertrek-uitleg{margin-left:auto;font-size:12px;color:var(--tekst-3);
+    max-width:52ch;text-align:right;}
+
+  /* De vloer: een lichte plint met een subtiele tegelrichting, zodat het als
+     een ruimte leest en niet als nog een kaartenraster. */
+  .vloer{border:1px solid var(--lijn);border-radius:0 0 8px 8px;
+    background:
+      repeating-linear-gradient(90deg, var(--vloerlijn) 0 1px, transparent 1px 88px),
+      repeating-linear-gradient(0deg, var(--vloerlijn) 0 1px, transparent 1px 88px),
+      var(--vloer);
+    padding:28px 20px 22px;
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:26px 18px;}
+
+  /* ---------------------------------------------------------- werkplek */
+  .werkplek{position:relative;display:block;width:100%;text-align:center;
+    background:transparent;border:0;padding:52px 0 0;margin:0;cursor:pointer;
+    font:inherit;color:inherit;border-radius:8px;}
+  .werkplek:focus-visible{outline:2px solid var(--accent);outline-offset:4px;}
+  .werkplek:hover .blad{border-color:var(--accent);}
+
+  /* Stoel en persoon staan achter het bureaublad. Alle onderdelen zijn
+     block of absolute: een span is van zichzelf inline en negeert dan
+     breedte en hoogte. */
+  .stoel{position:absolute;top:22px;left:50%;transform:translateX(-50%);
+    display:block;width:48px;height:46px;border-radius:11px 11px 4px 4px;
+    background:#d6dbdf;border:1px solid #c3c9ce;}
+  .persoon{position:absolute;top:4px;left:50%;transform:translateX(-50%);
+    display:block;width:48px;height:58px;}
+  .hoofd{position:absolute;top:0;left:50%;transform:translateX(-50%);
+    display:block;width:20px;height:20px;border-radius:50%;background:#7d8790;
+    border:1px solid rgba(0,0,0,0.06);}
+  .romp{position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+    display:block;width:44px;height:34px;border-radius:16px 16px 4px 4px;
+    background:#7d8790;}
+
+  /* het scherm staat op het blad en toont waar de agent mee bezig is */
+  .scherm{position:relative;z-index:2;display:block;margin:0 auto;
+    width:136px;max-width:100%;height:58px;
+    background:var(--scherm);border-radius:5px;border:1px solid #1b242b;
+    padding:8px 9px 7px;text-align:left;overflow:hidden;}
+  .scherm-tekst{display:block;font-family:var(--mono);font-size:10px;line-height:1.35;
+    color:#c9d3da;max-height:36px;overflow:hidden;word-break:break-word;}
+  .lampje{position:absolute;right:6px;bottom:5px;display:block;
+    width:6px;height:6px;border-radius:50%;background:var(--rust);}
+  .voet{position:relative;z-index:2;display:block;width:26px;height:8px;margin:0 auto;
+    background:#b9c0c6;border-radius:0 0 3px 3px;}
+
+  /* het bureaublad zelf */
+  .blad{position:relative;z-index:3;display:block;margin:-1px auto 0;
+    width:100%;height:14px;
+    background:linear-gradient(180deg,#e7eaed 0 6px,var(--blad) 6px);
+    border:1px solid var(--blad-rand);border-radius:4px;}
+  .plaat{position:relative;z-index:3;display:block;margin:8px auto 0;max-width:100%;}
+  .wie{display:block;font-size:12.5px;font-weight:600;line-height:1.3;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .wat{display:block;font-size:11.5px;color:var(--tekst-2);line-height:1.3;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .statusregel{display:flex;align-items:center;justify-content:center;gap:6px;
+    margin-top:5px;font-size:11.5px;color:var(--tekst-2);}
+  .stip{width:7px;height:7px;border-radius:50%;background:var(--rust);flex:0 0 7px;}
+  .stat{text-transform:capitalize;}
+  .sinds{color:var(--tekst-3);font-variant-numeric:tabular-nums;}
+
+  /* ------------------------------------------------- status per werkplek */
+  .werkplek[data-status="actief"] .stip,
+  .werkplek[data-status="actief"] .lampje{background:var(--actief);}
+  .werkplek[data-status="actief"] .romp,
+  .werkplek[data-status="actief"] .hoofd{background:#4b6a58;}
+  .werkplek[data-status="waakt"] .stip,
+  .werkplek[data-status="waakt"] .lampje{background:var(--accent);}
+  .werkplek[data-status="klaar"] .stip,
+  .werkplek[data-status="klaar"] .lampje{background:var(--klaar);}
+  .werkplek[data-status="fout"] .stip,
+  .werkplek[data-status="fout"] .lampje{background:var(--fout);}
+  .werkplek[data-status="fout"] .scherm{background:#3b2326;border-color:#2a1a1c;}
+  .werkplek[data-status="stil"] .stip,
+  .werkplek[data-status="stil"] .lampje{background:var(--amber);}
+
+  /* Stil of nooit gekoppeld: de stoel blijft leeg en het scherm gaat uit.
+     Dat is het hele punt van deze weergave, je ziet het zonder te lezen. */
+  .werkplek[data-status="stil"] .persoon,
+  .werkplek[data-status="niet gekoppeld"] .persoon{display:none;}
+  .werkplek[data-status="stil"] .scherm,
+  .werkplek[data-status="niet gekoppeld"] .scherm,
+  .werkplek[data-status="rust"] .scherm{background:var(--scherm-uit);border-color:#9aa3aa;}
+  .werkplek[data-status="stil"] .scherm-tekst,
+  .werkplek[data-status="niet gekoppeld"] .scherm-tekst,
+  .werkplek[data-status="rust"] .scherm-tekst{color:#3f474d;}
+  .werkplek[data-status="niet gekoppeld"]{opacity:0.62;}
+
+  /* Alleen wie echt bezig is knippert; anders wordt de hele vloer onrustig. */
+  @keyframes tikken{0%,100%{opacity:1;}50%{opacity:0.35;}}
+  .werkplek[data-status="actief"] .lampje{animation:tikken 1.6s ease-in-out infinite;}
+  @media (prefers-reduced-motion: reduce){
+    .werkplek[data-status="actief"] .lampje{animation:none;}
+  }
+
+  /* ---------------------------------------------------------- dialoog */
+  dialog{border:1px solid var(--lijn-sterk);border-radius:8px;padding:0;max-width:560px;width:92vw;
+    color:var(--tekst);background:var(--paneel);}
+  dialog::backdrop{background:rgba(20,28,34,0.34);}
+  .d-kop{display:flex;align-items:flex-start;gap:12px;padding:16px 18px 12px;
+    border-bottom:1px solid var(--lijn);}
+  .d-kop h2{margin:0;font-size:15px;font-weight:600;}
+  .d-kop .d-rol{color:var(--tekst-2);font-size:12.5px;}
+  .d-sluit{margin-left:auto;border:1px solid var(--lijn-sterk);background:var(--paneel);
+    border-radius:5px;padding:4px 10px;font-size:12.5px;cursor:pointer;color:var(--tekst-2);}
+  .d-body{padding:14px 18px 18px;font-size:13px;}
+  .d-body h3{font-size:11px;text-transform:uppercase;letter-spacing:0.05em;
+    color:var(--tekst-3);margin:14px 0 4px;font-weight:600;}
+  .d-body h3:first-child{margin-top:0;}
+  .d-body ul{margin:0;padding-left:18px;} .d-body li{margin:2px 0;}
+  .d-body p{margin:0;}
+
+  footer{margin-top:30px;color:var(--tekst-3);font-size:12px;
+    border-top:1px solid var(--lijn);padding-top:14px;}
+  .ververst{font-variant-numeric:tabular-nums;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kop">
+    <h1>Kantoor</h1>
+    <div class="sub">Wie er nu aan het werk is. Een lege stoel betekent dat een
+      agent al te lang niets van zich liet horen.</div>
+    <a class="kop-link" href="/">Kaartweergave</a>
+    <a class="kop-link" href="/overzicht">Overzicht &amp; status</a>
+  </div>
+
+  <div class="legenda">
+    <span><i class="lg actief"></i> actief</span>
+    <span><i class="lg waakt"></i> waakt</span>
+    <span><i class="lg klaar"></i> klaar</span>
+    <span><i class="lg rust"></i> rust</span>
+    <span><i class="lg stil"></i> stil, stoel leeg</span>
+    <span><i class="lg fout"></i> fout</span>
+  </div>
+
+  {% for s in secties %}
+  <section class="vertrek">
+    <div class="naamplaat">
+      <span class="vertrek-titel">{{ s.titel }}</span>
+      <span class="vertrek-tel{{ ' let-op' if s.aandacht }}"
+            data-sectie="{{ s.sleutel }}">{{ s.samenvatting }}</span>
+      <span class="vertrek-uitleg">{{ s.toelichting }}</span>
+    </div>
+    <div class="vloer">
+      {% for a in s.agents %}
+      <button type="button" class="werkplek" data-naam="{{ a.naam }}"
+              data-status="{{ a.status }}"
+              aria-label="{{ a.kort or a.label }}, {{ a.status }}. Openen voor mandaat en grenzen.">
+        <span class="stoel"></span>
+        <span class="persoon"><span class="hoofd"></span><span class="romp"></span></span>
+        <span class="scherm">
+          <span class="scherm-tekst">{{ a.taak or a.detail or '' }}</span>
+          <span class="lampje"></span>
+        </span>
+        <span class="voet"></span>
+        <span class="blad"></span>
+        <span class="plaat">
+          <span class="wie">{{ a.kort or a.label }}</span>
+          <span class="wat">{{ a.rol }}</span>
+        </span>
+        <span class="statusregel">
+          <span class="stip"></span><span class="stat">{{ a.status }}</span>
+          <span class="sinds">{{ a.sinds or '' }}</span>
+        </span>
+      </button>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <dialog id="kaart">
+    <div class="d-kop">
+      <div>
+        <h2 id="d-naam"></h2>
+        <div class="d-rol" id="d-rol"></div>
+      </div>
+      <button class="d-sluit" onclick="document.getElementById('kaart').close()">Sluiten</button>
+    </div>
+    <div class="d-body" id="d-body"></div>
+  </dialog>
+
+  <footer>
+    Aangemeld als {{ username }}. Ververst vanzelf, laatst om
+    <span class="ververst" id="ververst">--:--</span>.
+    Terug naar het <a href="{{ portal_url }}">portaal</a>.
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+// De vloer spiegelt /api/status, dezelfde bron als de kaartweergave. Valt de
+// verversing uit, dan blijft staan wat er stond; een oude stand is beter dan
+// een lege vloer, en de klok in de voettekst verraadt hoe oud hij is.
+function tekst(el, waarde) { if (el && el.textContent !== waarde) el.textContent = waarde; }
+
+function verwerk(data) {
+  (data.agents || []).forEach(function (a) {
+    var plek = document.querySelector('.werkplek[data-naam="' + a.naam + '"]');
+    if (!plek) return;
+    if (plek.dataset.status !== a.status) plek.dataset.status = a.status;
+    tekst(plek.querySelector(".scherm-tekst"), a.taak || a.detail || "");
+    tekst(plek.querySelector(".stat"), a.status);
+    tekst(plek.querySelector(".sinds"), a.sinds || "");
+    plek.setAttribute("aria-label",
+      plek.querySelector(".wie").textContent + ", " + a.status +
+      ". Openen voor mandaat en grenzen.");
+  });
+  (data.secties || []).forEach(function (s) {
+    var el = document.querySelector('.vertrek-tel[data-sectie="' + s.sleutel + '"]');
+    if (!el) return;
+    tekst(el, s.samenvatting);
+    el.classList.toggle("let-op", !!s.aandacht);
+  });
+  var k = new Date();
+  tekst(document.getElementById("ververst"),
+        String(k.getHours()).padStart(2, "0") + ":" + String(k.getMinutes()).padStart(2, "0"));
+}
+
+function ververs() {
+  fetch("/api/status", { headers: { "Accept": "application/json" } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { if (d) verwerk(d); })
+    .catch(function () { /* stil: de vorige stand blijft staan */ });
+}
+
+// ------------------------------------------------------------------ dialoog
+function lijst(titel, items) {
+  if (!items || !items.length) return "";
+  var ul = items.map(function (i) {
+    var li = document.createElement("li");
+    li.textContent = i;
+    return li.outerHTML;
+  }).join("");
+  return "<h3>" + titel + "</h3><ul>" + ul + "</ul>";
+}
+
+function alinea(titel, waarde) {
+  if (!waarde) return "";
+  var p = document.createElement("p");
+  p.textContent = waarde;
+  return "<h3>" + titel + "</h3>" + p.outerHTML;
+}
+
+function openAgent(naam) {
+  var dlg = document.getElementById("kaart");
+  document.getElementById("d-naam").textContent = "Laden";
+  document.getElementById("d-rol").textContent = "";
+  document.getElementById("d-body").textContent = "";
+  if (!dlg.open) dlg.showModal();
+  fetch("/api/agent/" + encodeURIComponent(naam))
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (a) {
+      if (!a) {
+        document.getElementById("d-naam").textContent = "Niet gevonden";
+        return;
+      }
+      document.getElementById("d-naam").textContent = a.label;
+      document.getElementById("d-rol").textContent = a.rol;
+      document.getElementById("d-body").innerHTML =
+        alinea("Mandaat", a.mandaat) +
+        lijst("Mag", a.mag) +
+        lijst("Grenzen", a.grenzen) +
+        alinea("Cadans", a.cadans) +
+        lijst("Gereedschap", a.tools);
+    })
+    .catch(function () {
+      document.getElementById("d-naam").textContent = "Niet bereikbaar";
+    });
+}
+
+document.querySelectorAll(".werkplek").forEach(function (plek) {
+  plek.addEventListener("click", function () { openAgent(plek.dataset.naam); });
+});
+
+ververs();
+setInterval(ververs, 10000);
+</script>
+</body>
+</html>
