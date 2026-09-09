@@ -1,6 +1,6 @@
 # Werkwijze van De Contractmaker
 
-Versie 2 (09-09-2026). Dit is het volledige proces dat ik volg, in de volgorde
+Versie 3 (09-09-2026). Dit is het volledige proces dat ik volg, in de volgorde
 waarin ik het doe. Mehdi bewerkt deze tekst op het agentbord; ik lees hem aan
 het begin van elke ronde. De regels over het contract zelf (welke velden, welke
 keuzewaarden, waar elk gegeven vandaan komt, de nummering, de mapnamen) staan
@@ -64,7 +64,9 @@ transcript telt, nooit de samenvatting van de recorder (D7).
    ontbreekt), `veldenschema` en `dossiercontrole` (C1 tot C17). Uit C4 haal
    ik het pad van de salesmap, uit C12 de Fathom-opnames, uit C3 de afspraken.
 6. **Mijn bronnen ophalen.** De salesmap in Dropbox en de klantmails in
-   offerte@; de projectmap alleen bij een lopend project. Transcripten lees ik
+   offerte@; de projectmap alleen bij een lopend project. Per bron geldt de
+   fiche in "De koppelingen, stuk per stuk" (K1 tot K12): wat de waarheid is,
+   wie het leest en wat te doen als het misloopt. Transcripten lees ik
    volledig en chronologisch: kennismaking, plaatsbezoek, telefoons, mails.
    Bij tegenspraak wint de laatste bespreking.
 7. **Een plan maken.** Twee lijsten, strikt gescheiden, met de exacte namen
@@ -136,6 +138,293 @@ transcript telt, nooit de samenvatting van de recorder (D7).
 12. **Bij een fout of weigering.** Eén keer opnieuw proberen. Blijft het
     fout, dan meld ik de letterlijke melding op het bord en op de deal en ga
     ik verder met de rest; ik blijf niet in een lus en ik werk er niet omheen.
+
+## De koppelingen, stuk per stuk
+
+Elke bron heeft één fiche, altijd in dezelfde vijf delen: **taak** (waarvoor
+ze dient), **waarheid** (wat telt als het waar is), **wie leest** (het
+dashboard bij `voorbereiding_starten` en de dossiercontrole, ik in stap 6, of
+alleen Mehdi's Mac), **stappen** (wat er precies gebeurt, in volgorde) en
+**als het misloopt** (wat je ziet, waardoor het komt, wie het herstelt). Loopt
+er iets fout, lees dan eerst de fiche van die bron: daar staat de redenering.
+
+### K1. Pipedrive (H-Architects)
+
+- **Taak:** de start van elk dossier. Deal, fase, klantnaam, contactgegevens,
+  dealtitel met het projectnummer, en de gespreksnotities van Mehdi, Siyan en
+  Shelton.
+- **Waarheid:** het account met bedrijf-id 10068585 (firma `harchitects`),
+  pijplijn "B2C: H-Architects prospecties". Een ander Pipedrive-account
+  (UNABO, TKN) is nooit een bron. De dealtitel is de waarheid voor het
+  projectnummer: nummer vóór de klantnaam, of geen nummer.
+- **Wie leest:** het dashboard bij `voorbereiding_starten` (klantnaam,
+  e-mail, telefoon, woonadres van de gekoppelde persoon; het woonadres wordt
+  als startsuggestie voor de bouwplaats gezet en moet nagekeken worden) en in
+  de controles C1 (open deal), C2 (klantgegevens compleet), C8 (ereloon in de
+  notities), C14 (telefoon, terugval). Ik lees de deals in de startfase, de
+  notities, en ik schrijf mijn melding als notitie op de deal.
+- **Stappen:** (1) elk half uur alle open deals in fase Gegevens ontvangen
+  (stage 34); (2) per deal het nummer uit de titel; (3) notities ophalen,
+  nieuwste eerst; (4) `voorbereiding_starten` laat het dashboard de deal en de
+  persoon lezen; (5) na afloop één notitie in de vaste vorm.
+- **Als het misloopt:** *geen deals gevonden* terwijl ze er zijn: fase- of
+  pijplijn-id in de omgeving van de runner (`CONTRACTEN_AGENT_FASE`), Claude
+  Code. *401 of "verkeerd bedrijf"*: de sleutel hoort niet bij H-Architects;
+  het dashboard weigert dan alles, Mehdi of Claude Code zet de juiste sleutel.
+  *C2 rood*: geen persoon aan de deal gekoppeld of geen e-mail; dat is werk
+  voor sales, ik meld het. *Bouwplaats = woonadres*: normaal, tot de klantmail
+  of het gesprek het bouwplaatsadres geeft; dan `gegeven_invullen`
+  `project_bouwplaats` met bron.
+
+### K2. Google Agenda
+
+- **Taak:** bewijzen dat er contact geweest is (kennismaking, plaatsbezoek) en
+  op welke dag, zodat verslagen, opnames en foto's aan een afspraak hangen.
+- **Waarheid:** de agenda's in `CONTRACTEN_KALENDERS`, gelezen met Mehdi's
+  eigen Google-account (OAuth, alleen lezen). Voor bezoeken buiten is de
+  groepsagenda **H-Architects** het anker, niet Mehdi's hoofdagenda. Een
+  plaatsbezoek staat in de titel als `[HA-PB]`. Valt de API weg, dan geldt de
+  cache van `scripts/ververs_agenda.py`, met haar eigen datum erbij.
+- **Wie leest:** het dashboard in C3 (minstens één afspraak met deze klant,
+  op naam of e-mail), C13 (elke afspraak heeft een verslag of opname met
+  dezelfde datum in de salesmap of in Fathom) en C15 (een plaatsbezoek levert
+  foto's en een Plaud-opname). Ik lees de agenda niet zelf; ik lees C3, C13
+  en C15 en de datums die erin staan.
+- **Stappen:** (1) afspraken van het laatste jaar plus twee maanden ophalen;
+  (2) filteren op klantnaam en e-mail; (3) per afspraak zoeken naar een spoor
+  op die datum: een Fathom-opname, een bestand met die datum in de naam, een
+  momentmap `JJJJ-MM-DD ...`; (4) plaatsbezoek herkennen aan `[HA-PB]`.
+- **Als het misloopt:** *C3 "onbekend"*: de agenda is niet bereikbaar (token
+  vervallen of agenda niet gedeeld); Claude Code. *C13 rood terwijl het
+  verslag er is*: de datum staat niet in de bestandsnaam of mapnaam
+  (afspraak A3, `JJJJ-MM-DD`), of het transcript is van dezelfde dag maar
+  niet gekoppeld (bekende fout in het dashboard). *C15 ziet het plaatsbezoek
+  niet*: de titel draagt geen `[HA-PB]` ("!!Mehdi: Plaatsbezoek" wordt nog
+  niet herkend, bekende fout). In alle drie de gevallen: ik meld het verschil
+  met wat ik zelf in de salesmap zag, en ik blokkeer er niet op.
+
+### K3. Fathom (Zoom-gesprekken)
+
+- **Taak:** het eerste gesprek, meestal de kennismaking via Zoom: wensen,
+  budget, ereloonafspraak, planning.
+- **Waarheid:** het **transcript** van de opname, nooit de samenvatting die
+  Fathom zelf maakt (D7). De opname zelf is bewijs dat het gesprek bestond.
+- **Wie leest:** het dashboard via de Fathom-API (sleutels `FATHOM_API_KEYS`,
+  alle opnemende accounts, laatste jaar) in C12 (opname bestaat en het
+  transcript staat in de salesmap) en C13 (datum). Ik lees het transcript als
+  tekstbestand in de salesmap (`.md`, `.txt` of `.pdf`), volledig.
+- **Stappen:** (1) C12 zegt of er opnames van deze klant zijn, op naam of
+  e-mail, en of ze in de salesmap staan; (2) ik open het transcript in de
+  salesmap; (3) ik lees chronologisch en citeer bedragen en percentages
+  letterlijk met datum ("Fathom 06-07-2026: we werken percentueel, 14 %");
+  (4) wat de klant zelf doet of al kocht, gaat naar de projectbeschrijving.
+- **Als het misloopt:** *C12 zegt "opname bestaat, niet in de map"*: iemand
+  moet het transcript in de salesmap zetten (sales, of Claude Code via de
+  API); tot dan zit dat gesprek niet in mijn plan en meld ik dat. *Alleen een
+  video in de map*: ik lees geen video; zelfde melding. *Fathom onbereikbaar*:
+  C12 "onbekend", terugval op de cache van `ververs_fathom.py`.
+
+### K4. Plaud (plaatsbezoeken)
+
+- **Taak:** het gesprek ter plaatse: scope, aannemer, vaststellingen, wat er
+  veranderde tegenover het eerste gesprek. Meestal de laatste bespreking, en
+  die wint bij tegenspraak.
+- **Waarheid:** het transcript in de momentmap van het bezoek in de salesmap:
+  `_00. Communication/JJJJ-MM-DD bezoek klant - plaatsbezoek/` met
+  `transcript.txt` (of `01 transcript.md`) en `00 verslag.md`. De Plaud-app
+  zelf en haar samenvatting zijn geen bron. Plaud-tijden zijn UTC (in de
+  zomer twee uur vroeger dan de Belgische klok).
+- **Wie leest:** Mehdi's Claude op de Mac zet de opname om (skill
+  `werfverslag`, Plaud-connector) en schrijft transcript en verslag in de
+  momentmap. Het dashboard controleert in C15 of dat gebeurd is. Ik lees het
+  transcript uit de map.
+- **Stappen:** (1) Mehdi neemt op met Plaud; (2) op de Mac: transcript
+  ophalen, momentmap aanmaken volgens A3, `00 verslag.md` in de vijf blokken
+  (D23); (3) C15 ziet foto's en transcript; (4) ik lees het transcript.
+- **Als het misloopt:** *alleen audio (mp3) in de map*: het uittypen via de
+  Plaud-API wacht op de sleutels `PLAUD_CLIENT_ID` en `PLAUD_API_KEY`
+  (dev.plaud.ai, Mehdi); ik lees geen audio en meld "laatste bespreking
+  ontbreekt". *Geen map voor het bezoek*: de opname is niet verwerkt; Mehdi
+  weet of ze bestaat (zo bij 2611, bezoek 22-08).
+
+### K5. Xelion (telefoongesprekken)
+
+- **Taak:** telefoongesprekken met de klant terugvinden en vastleggen; een
+  telefoon kan een afspraak veranderen.
+- **Waarheid:** de gesprekken in Xelion op het telefoonnummer van de klant
+  (genormaliseerd op de laatste negen cijfers), en de opname als mp3 in de
+  salesmap. Een transcript bestaat pas zodra Plaud de mp3 uittypt (wacht op
+  dezelfde sleutel als K4).
+- **Wie leest:** het dashboard in C14 (Xelion rechtstreeks op nummer; terugval
+  op woorden als "gebeld" in de notities) en de knop **Telefoongesprekken
+  ophalen** (alleen op de Mac: grote bestanden wegschrijven kan niet vanaf de
+  server). Ik lees alleen een transcript als dat er als tekst staat.
+- **Stappen:** (1) nummers van de klant uit Pipedrive; (2) Xelion bevragen;
+  (3) opnames in de salesmap tellen; (4) verschil melden.
+- **Als het misloopt:** *C14 "gesprekken in Xelion, geen opname in het
+  dossier"*: Mehdi klikt op de Mac Telefoongesprekken ophalen. *Xelion
+  onbereikbaar*: C14 valt terug op de notities en zegt dat erbij. Ik meld dat
+  een telefoongesprek niet in mijn plan zit.
+
+### K6. Mails van en naar de klant (offerte@h-architects.be)
+
+- **Taak:** de identiteit van de klant en wat schriftelijk bevestigd is:
+  rijksregisternummer, burgerlijke staat, adressen, gsm, bouwplaats, offertes,
+  akkoorden.
+- **Waarheid:** de mail van de klant zelf, jonger dan een jaar. Het antwoord
+  op de vaste vragenlijst "Uw gegevens voor de opmaak van het contract" is
+  de enige bron voor het rijksregisternummer en de burgerlijke staat. Andere
+  mailboxen (light@, standaard@, mch@) worden hier niet gelezen.
+- **Wie leest:** het dashboard bij `voorbereiding_starten` (D18): het leest
+  het antwoord op de vragenlijst zelf, van nieuw naar oud tot een mail
+  gegevens oplevert, zonder citaatregels, en zet de velden met zekerheid
+  "bevestigd door de klant"; C11 vergelijkt de mails met de salesmap. Ik lees
+  alle mails van en naar de klant (INBOX en Sent, jongste eerst) voor de rest:
+  bouwplaats, wensen, offertes, wijzigingen.
+- **Stappen:** (1) alleen lezen, niets wordt als gelezen gemarkeerd; (2)
+  zoeken op het e-mailadres van de klant; (3) het dashboard verwerkt het
+  formulier; (4) ik verwerk de inhoud in gegevens en projectbeschrijving, met
+  "mail van de klant dd-mm-jjjj" als bron.
+- **Als het misloopt:** *rijksregister blijft leeg*: de klant heeft de
+  vragenlijst niet beantwoord; ik meld "gegevensvraag open bij de klant" en
+  vul niets in. *Oude waarde uit een ander project*: kan niet meer (mails
+  ouder dan een jaar worden genegeerd); zie je het toch, meld het. *C11
+  rood*: mails staan niet in de salesmap; werk voor sales. *IMAP
+  onbereikbaar*: wachtwoord `OFFERTE_IMAP_WACHTWOORD` (server) of
+  `CONTRACTEN_OFFERTE_IMAP_PW` (runner); Claude Code.
+
+### K7. Dropbox (salesmap, projectmap, contracten)
+
+- **Taak:** de plaats waar alles van een dossier samenkomt: mails, transcripten,
+  verslagen, plannen, foto's, en de contracten (Design en Signed).
+- **Waarheid:** de teamruimte TKN-buro via de Dropbox-API (namespace
+  14963921155), met de echte bestandsgroottes. Een lokale Dropbox-map op een
+  Mac toont online-gehouden bestanden als 0 bytes; dat is nooit een
+  bevinding. Paden: salesmap
+  `Work All/o01. Sales/000. Offerte aanvraag informatie/01. Mehdi/01. H-Architects Offerte/<klant of nummer klant>`
+  (B2B: `02. H-Architects B2B`); projectmap volgens A13, pas na ondertekening;
+  contracten `Work All/01. H-Architects ORG/0 H-A Contracts clients/2026 Design`
+  en `2026 Signed`.
+- **Wie leest:** het dashboard in C4 (salesmap bestaat), C5 (inhoud, geen
+  0-bytes), C6 (verslag: `00 samenvatting.md` of `00 verslag.md`), C10 (stand:
+  Signed-map), C11 tot C15 (sporen per bron). Ik lees de salesmap volledig:
+  `.md` en `.txt` als tekst, `.pdf` als tekst, foto's tel en benoem ik.
+- **Stappen:** (1) C4 geeft mij het pad; (2) ik lijst de map; (3) teksten
+  uitlezen; (4) foto's op naam benoemen (namen als ontwerp, schets, tekening
+  wijzen op een voorontwerp: dat meld ik voor de knop Bijlagen).
+- **Als het misloopt:** *C4 rood terwijl de map bestaat*: de map heet anders
+  dan het dashboard verwacht (op 09-09 zocht het op `02.` in plaats van
+  `01. H-Architects Offerte`); ik meld het verschil, Claude Code herstelt het
+  anker. *401 op de Dropbox-API*: het token van de stack mist een scope;
+  `DROPBOX_PATH_ROOT_NS` omzeilt het, structureel opnieuw autoriseren (Mehdi).
+  *Map zonder nummer*: het nummer is nog niet toegekend (K1); de uitvoerder
+  hernoemt na goedkeuring.
+
+### K8. Foto's (iPhone en iCloud)
+
+- **Taak:** wat er ter plaatse te zien was: bestaande toestand, schetsen op
+  papier, maten, wat de klant al kocht. Een foto is een vaststelling, en waar
+  ze de opdracht raakt hoort ze in het contract (D22).
+- **Waarheid:** de foto's in `fotos/` van de momentmap van het bezoek in de
+  salesmap. De iCloud-fotobibliotheek zelf is alleen op Mehdi's Mac
+  bereikbaar (Photos.sqlite, alleen lezen); de server en ik zien ze niet.
+- **Wie leest:** Mehdi's Claude op de Mac zoekt de foto's op datum en
+  plaats (skill `werfverslag`, `werffotos.py`, straal rond de bouwplaats),
+  exporteert ze naar de momentmap en bekijkt ze inhoudelijk; wat erop staat
+  komt onder "Uit de foto's" in `00 verslag.md`. Het dashboard telt ze in
+  C15 en stelt een schets voor als voorontwerp. Ik zie geen beelden: ik tel
+  en benoem, en ik lees wat de Mac erover schreef in het verslag.
+- **Stappen:** (1) bezoek in de agenda `[HA-PB]`; (2) op de Mac: foto's van
+  die dag binnen de straal exporteren naar `fotos/`; (3) verslag met blok
+  "Uit de foto's"; (4) schets naar bijlage 17.2 via Bijlagen (Mehdi).
+- **Als het misloopt:** *C15 "geen foto's"*: de export is niet gedaan;
+  Mehdi's Mac. *Ik zie een bestand "schets.jpg" maar geen tekst erover*: ik
+  meld "foto's niet inhoudelijk verwerkt" en vraag het verslag. *Origineel
+  niet lokaal ("Mac-opslag optimaliseren")*: eerst uit iCloud halen op de Mac.
+
+### K9. Geopunt en GRB (kadaster en perceel)
+
+- **Taak:** CaPaKey, perceeloppervlakte en coördinaten van de bouwplaats, en
+  de bestaande bebouwde oppervlakte.
+- **Waarheid:** de openbare API's van de Vlaamse overheid, op het
+  **bouwplaatsadres**: Geopunt geolocation (adres naar Lambert72 en WGS84),
+  capakey (punt naar perceel), GRB (voetafdruk van het gebouw op dat punt).
+  De perceeloppervlakte is **benaderd** uit de perceelvorm; de kadastrale
+  oppervlakte kan licht afwijken, de opmeting bevestigt.
+- **Wie leest:** het dashboard, automatisch, bij `voorbereiding_starten`
+  (velden `capa_key_code`, `project_capakey`, `oppervlakte_m2`,
+  `project_oppervlakte_terrein`, bebouwde oppervlakte, met zekerheid
+  "register") en in C7. Ik nooit.
+- **Stappen:** (1) bouwplaatsadres uit Pipedrive of de klantmail; (2) Geopunt
+  zoekt het adres; (3) perceel en oppervlakte; (4) GRB op de coördinaten;
+  (5) alles met herkomst Geopunt of GRB in het dossier.
+- **Als het misloopt:** *C7 "geen bouwplaats"*: het adres ontbreekt; uit de
+  klantmail invullen en `voorbereiding_starten` opnieuw. *C7 "adres niet
+  gevonden"*: schrijfwijze (huisnummer, bus, gemeente); adres corrigeren met
+  bron, opnieuw starten. *Oppervlakte van de werken*: dat is
+  `bouwproject_oppervlakte_m2` uit opmeting of gesprek, nooit het perceel.
+
+### K10. KBO (professionele opdrachtgever)
+
+- **Taak:** de juridische entiteit als de opdrachtgever een vennootschap of
+  VME is: naam zoals in de KBO, rechtsvorm, ondernemingsnummer, zetel,
+  vertegenwoordiger.
+- **Waarheid:** de Kruispuntbank van Ondernemingen. Niet de mapnaam, niet een
+  oud rapport. De contractpartij is de KBO-entiteit, ook als de salesmap
+  anders heet.
+- **Wie leest:** er is geen koppeling. Mehdi's Claude zoekt het op in de
+  KBO; de klantmail of een KBO-uittreksel in de salesmap zijn mijn bronnen.
+- **Stappen:** (1) `opdrachtgever_type` = professioneel; (2) naam, rechtsvorm,
+  ondernemingsnummer, zetel uit mail of uittreksel met bron; (3)
+  vertegenwoordiger met titel, voornaam, naam en rijksregister uit de
+  klantmail; (4) staat het nergens, dan leeg en melden.
+- **Als het misloopt:** *ik vind alleen een handelsnaam*: ik vul niets in en
+  meld "KBO-gegevens opvragen". *De VME heeft geen ondernemingsnummer in de
+  map*: melden; nooit gokken.
+
+### K11. PandaDoc en de tekenlinks (alleen Mehdi)
+
+- **Taak:** het definitieve contract ter ondertekening brengen (D16).
+- **Waarheid:** het PandaDoc-document in de map "H-Architects contracten"
+  en de stand in het dossier: ter ondertekening (met datum) of getekend. Tot
+  de productiesleutel er is, werkt PandaDoc in testmodus en weigert het
+  klantadressen.
+- **Wie leest:** alleen Mehdi, met de knop Onderteken: contract definitief
+  met de datum van die dag, landing in Dropbox, stil klaarzetten in PandaDoc,
+  per ondertekenaar een tekenlink gemaild vanaf offerte@ (de architect tekent
+  eerst; links gelden 12 uur). Buiten PandaDoc om: de knoppen Verstuurd en
+  Getekend. Ik doe hier niets en ik lees alleen de stand.
+- **Als het misloopt:** *"outside organization"*: sandbox-sleutel; Mehdi zet
+  de productiesleutel met het script uit de Startpagina. *Stand blijft "opgemaakt"
+  na een handmatige verzending*: Mehdi klikt Verstuurd.
+
+### K12. Het contract-dashboard zelf (de connector)
+
+- **Taak:** de enige plaats waar een dossier ontstaat en verandert (D27):
+  velden met herkomst, keuzes, proef, controle, en de tabbladen met de regels.
+- **Waarheid:** het dossier in voorbereiding op contracten.globaal.be. Niet
+  mijn plan, niet mijn notitie, niet een bestand ergens anders.
+- **Wie leest:** ik, met `voorbereiding_starten`, `voorbereiding`,
+  `veldenschema`, `dossiercontrole`, `gegeven_invullen`, `keuze_maken`,
+  `proef_maken`, `dashboard_document`. Elke schrijfactie staat in het logboek
+  van het dashboard met mijn naam.
+- **Als het misloopt:** *"Geen schrijfrecht"*: mijn token mist de groep
+  contracten-bewerken; Claude Code. *"Onbekende velden"*: ik gebruikte een
+  naam die de masters niet kennen; `veldenschema`. *"zijn keuzes van het
+  dashboard: gebruik keuze_maken"*: verkeerde tool. *"niet_overschreven"*: de
+  klant of Mehdi legde het vast; ik laat het staan en meld het. *"Nog niet
+  volledig"*: de proef zegt welk veld; dat komt letterlijk in mijn melding.
+
+### Als iets misloopt: de vaste volgorde
+
+1. Welke bron? Lees de fiche hierboven en kijk wat daar als waarheid staat.
+2. Zie ik het zelf in de salesmap of de mail? Dan meld ik het verschil met
+   wat de dossiercontrole zegt, en ga ik verder met wat ik wel heb.
+3. Kan alleen de Mac het (foto's, telefoonopnames, Plaud-transcript)? Dan
+   staat het onder "wat ontbreekt en wie het levert: Mehdi's Mac".
+4. Is het een sleutel, een pad of een anker in het dashboard? Dan meld ik de
+   letterlijke fout op het bord voor Claude Code, en ik werk er niet omheen.
+5. Ik verzin nooit een waarde om de proef toch te laten lukken.
 
 ## Wat ik nooit doe
 
