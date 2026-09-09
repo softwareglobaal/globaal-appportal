@@ -237,6 +237,13 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
             plan = dict(b.input)
     if plan is None:
         raise RuntimeError("model gaf geen plan terug")
+    # Soms verpakt het model het hele plan in één extra sleutel (bv. "velden");
+    # dan uitpakken. Een plan zonder melding is onbruikbaar: liever een fout op
+    # het bord dan een lege notitie op de deal.
+    if "melding" not in plan and len(plan) == 1 and isinstance(next(iter(plan.values())), dict):
+        plan = dict(next(iter(plan.values())))
+    if not isinstance(plan.get("melding"), dict) or not plan["melding"].get("vastligt", None) and not plan["melding"].get("volgende_stap"):
+        raise RuntimeError("plan zonder bruikbare melding; niets geschreven")
     tokens = (getattr(resp.usage, "input_tokens", 0) or 0) + (getattr(resp.usage, "output_tokens", 0) or 0)
     return plan, tokens
 
@@ -331,7 +338,7 @@ def verwerk(deal, werkinstructie, staat):
     # iets op het dashboard (bv. de scope kiezen), dan verschilt de stempel en
     # pakt de volgende ronde de deal meteen opnieuw op, ook binnen de 24 uur.
     try:
-        stempel = (mcp.call("voorbereiding", deal_id=deal_id) or {}).get("bijgewerkt", "")
+        stempel = vingerafdruk(mcp.call("voorbereiding", deal_id=deal_id))
     except Exception:  # noqa: BLE001
         stempel = ""
     staat[str(deal_id)] = {"laatst": datetime.now(timezone.utc).isoformat(), "proef": proef,
@@ -340,12 +347,26 @@ def verwerk(deal, werkinstructie, staat):
     return {"proef": proef, "fouten": fouten}
 
 
+def vingerafdruk(voorb):
+    """Stabiele vingerafdruk van de inhoud van het dossier in voorbereiding:
+    de velden (zonder de dagdatum) en de gekozen keuzes. Geen tijdstempel, want
+    'voorbereiding' levert die niet en onze eigen ronde mag niet tellen."""
+    if not isinstance(voorb, dict):
+        return ""
+    velden = {k: v for k, v in (voorb.get("velden") or {}).items() if k != "datum_vandaag"}
+    keuzes = {k.get("veld"): k.get("gekozen") for k in (voorb.get("keuzes") or []) if isinstance(k, dict)}
+    return hashlib.sha256(json.dumps([velden, keuzes, voorb.get("soort")], sort_keys=True,
+                                     ensure_ascii=False).encode()).hexdigest()[:16]
+
+
 def dossier_gewijzigd(deal_id, s):
-    """True als het dossier in voorbereiding sinds onze laatste ronde veranderde."""
+    """True als het dossier in voorbereiding sinds onze laatste ronde veranderde.
+    Zonder bruikbare stempel: NIET opnieuw doen (de 24-uursregel geldt dan),
+    anders zou elke ronde dezelfde deal opnieuw verwerken en een notitie zetten."""
     if not s or not s.get("stempel"):
-        return True
+        return False
     try:
-        return (mcp.call("voorbereiding", deal_id=deal_id) or {}).get("bijgewerkt", "") != s["stempel"]
+        return vingerafdruk(mcp.call("voorbereiding", deal_id=deal_id)) != s["stempel"]
     except Exception:  # noqa: BLE001
         return False
 
