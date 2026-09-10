@@ -51,6 +51,12 @@
   .merk.bezoek{background:var(--bezoek);} .merk.rit{background:var(--rit);}
   .duur{font-variant-numeric:tabular-nums;white-space:nowrap;}
   .leeg{color:var(--tekst-3);font-size:13px;padding:20px 14px;}
+  .plek{font-weight:600;}
+  .dossier{display:inline-block;background:#eef2f6;border:1px solid var(--lijn-sterk);
+    border-radius:4px;padding:0 5px;font-family:var(--mono);font-size:11.5px;
+    color:var(--accent);margin-left:5px;}
+  .coord{color:var(--tekst-3);font-size:12px;}
+  .wijze{color:var(--tekst-3);font-size:12px;}
   .voet{margin-top:26px;font-size:12px;color:var(--tekst-3);}
 </style>
 </head>
@@ -88,7 +94,7 @@
   <div class="paneel">
     {% if stukken %}
     <table>
-      <thead><tr><th>van</th><th>tot</th><th>duur</th><th>wat</th><th>plaats</th></tr></thead>
+      <thead><tr><th>van</th><th>tot</th><th>duur</th><th>wat</th><th>plaats</th><th>wifi</th></tr></thead>
       <tbody>
       {% for s in stukken %}
         <tr class="rij" data-lat="{{ s.lat if s.soort == 'bezoek' else s.spoor[0][0] }}"
@@ -98,16 +104,25 @@
           <td class="duur">{{ s.minuten }} min</td>
           <td>
             <span class="merk {{ 'bezoek' if s.soort == 'bezoek' else 'rit' }}"></span>
-            {{ 'bezoek' if s.soort == 'bezoek' else 'onderweg' }}
+            {% if s.soort == 'bezoek' %}bezoek{% else %}onderweg{% if s.wijze %}
+              <span class="wijze">{{ wijzen.get(s.wijze, s.wijze) }}</span>{% endif %}{% endif %}
           </td>
           <td>
             {% if s.soort == 'bezoek' %}
-              <a href="https://maps.google.com/?q={{ s.lat }},{{ s.lon }}" target="_blank"
-                 rel="noopener">{{ '%.5f'|format(s.lat) }}, {{ '%.5f'|format(s.lon) }}</a>
+              {% if s.plek %}
+                <span class="plek">{{ s.plek }}</span>
+                {% if s.dossier %}<span class="dossier">{{ s.dossier }}</span>{% endif %}
+                <a class="coord" href="https://maps.google.com/?q={{ s.lat }},{{ s.lon }}"
+                   target="_blank" rel="noopener">kaart</a>
+              {% else %}
+                <a href="https://maps.google.com/?q={{ s.lat }},{{ s.lon }}" target="_blank"
+                   rel="noopener">{{ '%.5f'|format(s.lat) }}, {{ '%.5f'|format(s.lon) }}</a>
+              {% endif %}
             {% else %}
               {{ (s.meter / 1000) | round(1) }} km
             {% endif %}
           </td>
+          <td class="coord">{{ s.wifi or '' }}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -143,7 +158,8 @@
           var m = L.circleMarker([s.lat, s.lon], {
             radius: 7, color: '#2f7d5a', fillColor: '#2f7d5a', fillOpacity: 0.75, weight: 2
           }).addTo(kaart);
-          m.bindPopup(s.minuten + ' min stil');
+          var naam = s.plek ? '<b>' + s.plek + '</b>' + (s.dossier ? ' <code>' + s.dossier + '</code>' : '') + '<br>' : '';
+          m.bindPopup(naam + s.minuten + ' min');
           grenzen.push([s.lat, s.lon]);
         } else if (s.spoor && s.spoor.length > 1) {
           L.polyline(s.spoor, { color: '#3663a0', weight: 3, opacity: 0.8 }).addTo(kaart);

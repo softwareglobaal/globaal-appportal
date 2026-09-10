@@ -655,6 +655,8 @@ def index():
     laatste = punten[-1] if punten else None
     return render_template(
         "index.html", dagen=dagen, datum=datum, stukken=stukken,
+        wijzen={"automotive": "auto", "cycling": "fiets", "walking": "te voet",
+                "running": "lopend"},
         aantal=len(punten), km=round(km, 1),
         batterij=laatste["batt"] if laatste else None,
         laatste_tijd=_lokaal(laatste["tst"]).strftime("%H:%M") if laatste else None)
