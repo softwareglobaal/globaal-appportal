@@ -164,8 +164,9 @@ een handmatige toets op de VM voor de dingen die je niet kunt nabootsen: dat de
 rol niet kan schrijven, niet bij de hashes komt, en dat de grens tussen apps
 door Postgres wordt afgedwongen.
 
-Gemeten cataloog: 54 applicaties, 0 onzeker. Voor mehdi: 46 apps toegankelijk,
-waarvan 15 nu leesbaar, 10 die elders staan en 21 nog niet uitgezocht.
+Gemeten cataloog (10-09-2026): **58 applicaties, 18 leesbaar, 40 elders, 0
+onbekend**. De kaart is dus compleet: elke app die Authentik kent, weet nu waar
+zijn data staat of waarom je er niet bij kunt.
 
 De HTTP-laag draait: OAuth met PKCE, JSON-RPC, en de drie stukken gereedschap.
 Getoetst door nginx heen met een echt token: sufa ziet haar twee apps, leest de
@@ -176,9 +177,40 @@ Postgres; mehdi leest dezelfde tabel wel; een onzin-token geeft 401.
 Mongo, staving in de native Postgres op 5432, status in SQLite). Die staan nu in
 de cataloog met de reden waarom ze nog niet leesbaar zijn.
 
-**De 21 onuitgezochte apps** krijgen `onbekend` mee. Een regel promoveren doe je
-op bewijs, niet op de naam: kijk in de broncode van de app welke schema's hij
-bevraagt en zet dat commando in het veld `bewijs`. Zie de kop van `bronnen.py`.
+## Hoe de bronnenkaart is vastgesteld
+
+Op 10-09-2026 zijn de laatste 25 onbekende apps uitgezocht. De methode is het
+bewaren waard, want de voor de hand liggende aanpak leidde twee keer het
+verkeerde pad op.
+
+**Grep op `schema.tabel` alleen is niet genoeg.** Die telling zei dat `agents` en
+`siyanagents` het schema `elevait` bevragen. Bij het nakijken van de context
+bleken het beschrijvende teksten te zijn (`"Schrijven naar elevait.kandidaat"`),
+geen queries. Hun eigen opslag is SQLite. Was ik daarop afgegaan, dan hadden die
+apps leesrecht gekregen op data waar ze niets mee doen.
+
+Wat wel werkte, in deze volgorde:
+
+1. **De vhost**, om te zien welke container of host-poort de app bedient.
+2. **De omgeving van die container**, gefilterd op DB-achtige variabelen. Dat
+   gaf de doorslag bij `items` (ITEMS_DB_URL naar appportal), `elevait-intern`,
+   `siyantaken` (`file:/data/takendashboard.db`) en `contactsync`.
+3. **De soort verbindingsaanroep in de code**: `sqlite3.connect`,
+   `psycopg.connect`, `MongoClient`, `imaplib`. Dat scheidde de SQLite-apps van
+   de rest, en liet zien dat `post` alleen IMAP doet en `xelion` alleen de
+   Xelion-API.
+4. **Pas als dat niets opleverde: waar zet de app dan iets neer.** Vijf apps
+   bleken alles in JSON-bestanden te bewaren (chaos, blogredactie, watchtower,
+   facturatiecontrole, factuurrouter). Er is daar simpelweg geen database.
+
+Een regel promoveren van `elders` naar `gedeelde_db` doe je op dat soort bewijs,
+en je zet het in het veld `bewijs` zodat de volgende het niet opnieuw hoeft uit
+te zoeken.
+
+Twee dingen die onderweg boven water kwamen en los van de MCP nuttig zijn: de
+Xelion-spiegel (`communicatie.xelion_*`) hoort bij de app **communicatie** en
+niet bij de app xelion, en **Barsten & Scheuren** draait op een eigen database
+`tkn_knowledge` op de native Postgres (5432), niet op de gedeelde.
 
 ## Valkuil bij het uitrollen: ufw
 

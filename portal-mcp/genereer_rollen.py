@@ -31,14 +31,14 @@ from itertools import combinations
 from bronnen import (BRONNEN, CATEGORIEEN, GEDEELDE_DB, categorieen_in,
                      rolnaam)
 
-# Alle app-schema's in de appportal-database, stand 08-09-2026. Deze lijst
+# Alle app-schema's in de appportal-database, stand 10-09-2026. Deze lijst
 # dient om `mcp_lezer` zijn eigen rechten af te nemen: die horen uitsluitend bij
 # de per-app rollen te liggen. Een eerdere opzet gaf mcp_lezer rechtstreeks
 # SELECT op alles, en dan is SET LOCAL ROLE een lege huls.
 ALLE_SCHEMAS = (
     "angela, boekhouding, communicatie, draaiboek, elevait, finance, hr, "
     "intercompany, items, kern, kosten, monday, namen, omv, ontwikkeling, "
-    "organisatie, quickbooks, schuldentracker, vermogen"
+    "organisatie, quickbooks, schuldentracker, uitgaven, vermogen"
 )
 
 KOP = """\

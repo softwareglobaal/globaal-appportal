@@ -65,6 +65,19 @@ def _elders(reden):
     return Bron(ELDERS, reden=reden)
 
 
+def _sqlite(waar=""):
+    """Een app met een eigen SQLite-bestand. Vraagt een adapter (fase 3)."""
+    extra = f" ({waar})" if waar else ""
+    return Bron(ELDERS, reden=f"Eigen SQLite-bestand{extra}, niet de gedeelde "
+                              f"database. Vraagt een adapter (fase 3).")
+
+
+def _json(waar):
+    """Een app die zijn gegevens in JSON-bestanden bewaart."""
+    return Bron(ELDERS, reden=f"Bewaart alles in JSON-bestanden ({waar}), er is "
+                              f"geen database om te bevragen.")
+
+
 # Vastgesteld op 08-09-2026 door in de broncode op de VM te tellen welke
 # schema's elke app bevraagt. Het getal tussen haakjes is het aantal
 # schema-gekwalificeerde verwijzingen dat die telling opleverde.
@@ -111,6 +124,59 @@ BRONNEN = {
     "boek-mcp": _elders("Is zelf een MCP-server, geen gegevensbron."),
     "portal-mcp": _elders("Deze server zelf. Geen gegevensbron; hij is de "
                           "poortwachter voor de connector-koppeling."),
+    # --- gedeelde database, vastgesteld 10-09-2026 -------------------------
+    "items": _db(("items", "angela"),
+                 "ITEMS_DB_URL wijst naar de appportal-database; broncode "
+                 "angela(10), items(5). Zelfde codebase als angela-sr."),
+    "elevait-intern": _db(("elevait", "kern", "hr"),
+                          "ELEVAIT_DB_URL wijst naar de appportal-database; "
+                          "broncode elevait(152), en echte queries op "
+                          "hr.medewerker en hr.verlof_feestdag"),
+    "uitgaven": _db(("uitgaven",),
+                    "eigen schema `uitgaven` met 6 tabellen; UITGAVEN_DB_URL "
+                    "plus psycopg.connect in de broncode"),
+
+    # --- eigen SQLite, vastgesteld 10-09-2026 ------------------------------
+    "agents": _sqlite("AGENTS_DB"),
+    "mijnagents": _sqlite("AGENTS_DB"),
+    "siyanagents": _sqlite("AGENTS_DB"),
+    "locatie": _sqlite("LOCATIE_DB"),
+    "projecten": _sqlite(),
+    "contactsync": _sqlite("DB_PATH=/data/sync.db"),
+    "siyantaken": _sqlite("DATABASE_URL=file:/data/takendashboard.db"),
+    "facturatie": _sqlite(),
+    "stage": _sqlite(),
+    "energie-efficient": _sqlite("SALES_DB"),
+    "boek": _sqlite("de kennisbank van de vitrine"),
+    "telefoonregister": _elders(
+        "Eigen SQLite (DB_CLIENT=better-sqlite3). Bovendien de eigen checkout "
+        "van een collega, die we ongemoeid laten."),
+    "contracten": _elders(
+        "Leest IMAP en houdt zelf een SQLite bij. Vraagt een adapter (fase 3)."),
+
+    # --- alleen JSON-bestanden, vastgesteld 10-09-2026 ---------------------
+    "chaos": _json("data/state.json"),
+    "blogredactie": _json("data/inhoud.json"),
+    "watchtower": _json("register.json"),
+    "facturatiecontrole": _json(
+        "data/bronstatus.json; haalt zijn cijfers live bij Octopus en Pipedrive"),
+    "factuurrouter": _json("JSON-bestanden naast de Gmail-koppeling"),
+
+    # --- andere database ---------------------------------------------------
+    "barstenscheuren": _elders(
+        "Eigen database `tkn_knowledge` op de native Postgres (poort 5432), "
+        "niet de gedeelde appportal-database. Vraagt een adapter (fase 3)."),
+
+    # --- externe dienst, houdt zelf geen data ------------------------------
+    "post": _elders(
+        "Praat rechtstreeks IMAP en houdt zelf geen gegevens bij. Zie de "
+        "Postbus-MCP als je hier iets mee wilt."),
+    "xelion": _elders(
+        "Praat rechtstreeks met de Xelion-API. De spiegel in de database "
+        "(communicatie.xelion_*) hoort bij de app communicatie en is daar "
+        "leesbaar."),
+    "agenda": _elders(
+        "Leest alleen-lezen uit Google Calendar en houdt zelf niets bij."),
 }
 
 

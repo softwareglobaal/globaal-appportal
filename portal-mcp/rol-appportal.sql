@@ -16,9 +16,9 @@ ALTER ROLE mcp_lezer NOINHERIT;
 -- mcp_lezer mag hier zelf niets. Rechten liggen bij de per-app rollen; alleen
 -- na SET LOCAL ROLE komt er data. Deze intrekking staat er ook voor het geval
 -- een eerdere opzet wel rechtstreeks rechten heeft gegeven.
-ALTER DEFAULT PRIVILEGES IN SCHEMA angela, boekhouding, communicatie, draaiboek, elevait, finance, hr, intercompany, items, kern, kosten, monday, namen, omv, ontwikkeling, organisatie, quickbooks, schuldentracker, vermogen REVOKE SELECT ON TABLES FROM mcp_lezer;
-REVOKE ALL ON ALL TABLES IN SCHEMA angela, boekhouding, communicatie, draaiboek, elevait, finance, hr, intercompany, items, kern, kosten, monday, namen, omv, ontwikkeling, organisatie, quickbooks, schuldentracker, vermogen FROM mcp_lezer;
-REVOKE ALL ON SCHEMA angela, boekhouding, communicatie, draaiboek, elevait, finance, hr, intercompany, items, kern, kosten, monday, namen, omv, ontwikkeling, organisatie, quickbooks, schuldentracker, vermogen FROM mcp_lezer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA angela, boekhouding, communicatie, draaiboek, elevait, finance, hr, intercompany, items, kern, kosten, monday, namen, omv, ontwikkeling, organisatie, quickbooks, schuldentracker, uitgaven, vermogen REVOKE SELECT ON TABLES FROM mcp_lezer;
+REVOKE ALL ON ALL TABLES IN SCHEMA angela, boekhouding, communicatie, draaiboek, elevait, finance, hr, intercompany, items, kern, kosten, monday, namen, omv, ontwikkeling, organisatie, quickbooks, schuldentracker, uitgaven, vermogen FROM mcp_lezer;
+REVOKE ALL ON SCHEMA angela, boekhouding, communicatie, draaiboek, elevait, finance, hr, intercompany, items, kern, kosten, monday, namen, omv, ontwikkeling, organisatie, quickbooks, schuldentracker, uitgaven, vermogen FROM mcp_lezer;
 
 -- angela-sr: angela, items
 SELECT 'CREATE ROLE mcp_app_angela_sr NOLOGIN'
@@ -100,6 +100,66 @@ GRANT SELECT ON kern.persoon_afwezigheid TO mcp_app_draaiboek_financieel_persone
 GRANT SELECT ON kern.persoon_inzage TO mcp_app_draaiboek_financieel_personeel;
 GRANT SELECT ON kern.persoon_dienstfirma TO mcp_app_draaiboek_financieel_personeel;
 GRANT mcp_app_draaiboek_financieel_personeel TO mcp_lezer;
+
+-- elevait-intern: elevait, kern, hr
+SELECT 'CREATE ROLE mcp_app_elevait_intern NOLOGIN'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mcp_app_elevait_intern')
+\gexec
+
+GRANT USAGE ON SCHEMA elevait, kern, hr TO mcp_app_elevait_intern;
+GRANT SELECT ON ALL TABLES IN SCHEMA elevait, kern TO mcp_app_elevait_intern;
+REVOKE ALL ON kern.audit FROM mcp_app_elevait_intern;
+REVOKE ALL ON kern.audit_overzicht FROM mcp_app_elevait_intern;
+REVOKE ALL ON kern.persoon_afwezigheid FROM mcp_app_elevait_intern;
+REVOKE ALL ON kern.persoon_beloning FROM mcp_app_elevait_intern;
+REVOKE ALL ON kern.persoon_dienstfirma FROM mcp_app_elevait_intern;
+REVOKE ALL ON kern.persoon_hr FROM mcp_app_elevait_intern;
+REVOKE ALL ON kern.persoon_inzage FROM mcp_app_elevait_intern;
+-- hr is in zijn geheel gevoelig: alleen USAGE.
+REVOKE ALL ON ALL TABLES IN SCHEMA hr FROM mcp_app_elevait_intern;
+GRANT mcp_app_elevait_intern TO mcp_lezer;
+
+-- elevait-intern met financiele gegevens (banktransacties, kosten, audit)
+SELECT 'CREATE ROLE mcp_app_elevait_intern_financieel NOLOGIN'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mcp_app_elevait_intern_financieel')
+\gexec
+
+GRANT mcp_app_elevait_intern TO mcp_app_elevait_intern_financieel;
+GRANT SELECT ON kern.audit TO mcp_app_elevait_intern_financieel;
+GRANT SELECT ON kern.audit_overzicht TO mcp_app_elevait_intern_financieel;
+GRANT mcp_app_elevait_intern_financieel TO mcp_lezer;
+
+-- elevait-intern met personeelsgegevens (beloning, verlof, hr-dossier)
+SELECT 'CREATE ROLE mcp_app_elevait_intern_personeel NOLOGIN'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mcp_app_elevait_intern_personeel')
+\gexec
+
+GRANT mcp_app_elevait_intern TO mcp_app_elevait_intern_personeel;
+GRANT USAGE ON SCHEMA hr TO mcp_app_elevait_intern_personeel;
+GRANT SELECT ON ALL TABLES IN SCHEMA hr TO mcp_app_elevait_intern_personeel;
+GRANT SELECT ON kern.persoon_beloning TO mcp_app_elevait_intern_personeel;
+GRANT SELECT ON kern.persoon_hr TO mcp_app_elevait_intern_personeel;
+GRANT SELECT ON kern.persoon_afwezigheid TO mcp_app_elevait_intern_personeel;
+GRANT SELECT ON kern.persoon_inzage TO mcp_app_elevait_intern_personeel;
+GRANT SELECT ON kern.persoon_dienstfirma TO mcp_app_elevait_intern_personeel;
+GRANT mcp_app_elevait_intern_personeel TO mcp_lezer;
+
+-- elevait-intern met financiele gegevens (banktransacties, kosten, audit) + personeelsgegevens (beloning, verlof, hr-dossier)
+SELECT 'CREATE ROLE mcp_app_elevait_intern_financieel_personeel NOLOGIN'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mcp_app_elevait_intern_financieel_personeel')
+\gexec
+
+GRANT mcp_app_elevait_intern TO mcp_app_elevait_intern_financieel_personeel;
+GRANT SELECT ON kern.audit TO mcp_app_elevait_intern_financieel_personeel;
+GRANT SELECT ON kern.audit_overzicht TO mcp_app_elevait_intern_financieel_personeel;
+GRANT USAGE ON SCHEMA hr TO mcp_app_elevait_intern_financieel_personeel;
+GRANT SELECT ON ALL TABLES IN SCHEMA hr TO mcp_app_elevait_intern_financieel_personeel;
+GRANT SELECT ON kern.persoon_beloning TO mcp_app_elevait_intern_financieel_personeel;
+GRANT SELECT ON kern.persoon_hr TO mcp_app_elevait_intern_financieel_personeel;
+GRANT SELECT ON kern.persoon_afwezigheid TO mcp_app_elevait_intern_financieel_personeel;
+GRANT SELECT ON kern.persoon_inzage TO mcp_app_elevait_intern_financieel_personeel;
+GRANT SELECT ON kern.persoon_dienstfirma TO mcp_app_elevait_intern_financieel_personeel;
+GRANT mcp_app_elevait_intern_financieel_personeel TO mcp_lezer;
 
 -- hr: hr, kern
 SELECT 'CREATE ROLE mcp_app_hr NOLOGIN'
@@ -214,6 +274,15 @@ GRANT SELECT ON kern.persoon_afwezigheid TO mcp_app_intercompany_financieel_pers
 GRANT SELECT ON kern.persoon_inzage TO mcp_app_intercompany_financieel_personeel;
 GRANT SELECT ON kern.persoon_dienstfirma TO mcp_app_intercompany_financieel_personeel;
 GRANT mcp_app_intercompany_financieel_personeel TO mcp_lezer;
+
+-- items: items, angela
+SELECT 'CREATE ROLE mcp_app_items NOLOGIN'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mcp_app_items')
+\gexec
+
+GRANT USAGE ON SCHEMA items, angela TO mcp_app_items;
+GRANT SELECT ON ALL TABLES IN SCHEMA items, angela TO mcp_app_items;
+GRANT mcp_app_items TO mcp_lezer;
 
 -- kosten: kosten, kern, finance
 SELECT 'CREATE ROLE mcp_app_kosten NOLOGIN'
@@ -433,6 +502,15 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mcp_app_quickbooks')
 GRANT USAGE ON SCHEMA quickbooks TO mcp_app_quickbooks;
 GRANT SELECT ON ALL TABLES IN SCHEMA quickbooks TO mcp_app_quickbooks;
 GRANT mcp_app_quickbooks TO mcp_lezer;
+
+-- uitgaven: uitgaven
+SELECT 'CREATE ROLE mcp_app_uitgaven NOLOGIN'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mcp_app_uitgaven')
+\gexec
+
+GRANT USAGE ON SCHEMA uitgaven TO mcp_app_uitgaven;
+GRANT SELECT ON ALL TABLES IN SCHEMA uitgaven TO mcp_app_uitgaven;
+GRANT mcp_app_uitgaven TO mcp_lezer;
 
 -- vermogen: vermogen, kern
 SELECT 'CREATE ROLE mcp_app_vermogen NOLOGIN'
