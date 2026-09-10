@@ -71,6 +71,7 @@
   <h1>{{ app_naam }}</h1>
   <span class="telling">{{ aantal }} agent{{ 's' if aantal != 1 else '' }}</span>
   <a href="{{ url_for('organogram') }}" style="color:var(--accent);text-decoration:none;font-size:13px">Organogram</a>
+  {% if mag_beslissen %}<a href="{{ url_for('gesprekken_pagina') }}" style="color:var(--accent);text-decoration:none;font-size:13px">Gesprekken</a>{% endif %}
   <span class="wie">{{ gebruiker }}</span>
 </header>
 <main>

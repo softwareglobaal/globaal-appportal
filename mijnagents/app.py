@@ -129,6 +129,15 @@ def init_db():
             opgepakt_ts   TEXT DEFAULT ''
         );
         CREATE UNIQUE INDEX IF NOT EXISTS klaarzet_uniek ON klaarzet(uniek) WHERE uniek<>'';
+        CREATE TABLE IF NOT EXISTS gesprek_log (
+            uniek     TEXT PRIMARY KEY,   -- bv. fathom:816732165
+            datum     TEXT, start TEXT, minuten INTEGER,
+            personen  TEXT DEFAULT '', bedrijf TEXT DEFAULT '', afdeling TEXT DEFAULT '',
+            thema     TEXT DEFAULT '', project TEXT DEFAULT '', prive INTEGER DEFAULT 0,
+            zekerheid TEXT DEFAULT '', waarom TEXT DEFAULT '', archief TEXT DEFAULT '',
+            link      TEXT DEFAULT '', opgenomen_door TEXT DEFAULT '', bron TEXT DEFAULT 'fathom',
+            ts        TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS afdeling (
             naam         TEXT PRIMARY KEY,   -- sleutel, gelijk aan agent.type
             label        TEXT NOT NULL,
@@ -345,6 +354,39 @@ def api_klaarzet_opgepakt(kid):
                  ((p.get("door") or "")[:80], nu(), kid))
     db().commit()
     return jsonify(ok=True)
+
+
+# --- gesprekkentabel: het "Excel-achtige" logboek van gesprekken (Fathom, later Plaud,
+#     telefoon). Alleen beheer ziet het; privé-rijen zijn er, maar alleen voor beheer.
+@app.route("/api/gesprekken", methods=["POST"])
+def api_gesprekken_zetten():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    conn = db()
+    n = 0
+    for r in p.get("rijen") or []:
+        if not r.get("uniek"):
+            continue
+        conn.execute(
+            "INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,bedrijf,afdeling,thema,project,prive,zekerheid,waarom,archief,link,opgenomen_door,bron,ts) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(uniek) DO UPDATE SET datum=excluded.datum, start=excluded.start, minuten=excluded.minuten, "
+            "personen=excluded.personen, bedrijf=excluded.bedrijf, afdeling=excluded.afdeling, thema=excluded.thema, project=excluded.project, prive=excluded.prive, "
+            "zekerheid=excluded.zekerheid, waarom=excluded.waarom, archief=excluded.archief, link=excluded.link, opgenomen_door=excluded.opgenomen_door, ts=excluded.ts",
+            (r["uniek"], r.get("datum", ""), r.get("start", ""), int(r.get("minuten") or 0), r.get("personen", ""), r.get("bedrijf", ""),
+             r.get("afdeling", ""), r.get("thema", ""), r.get("project", ""), 1 if r.get("prive") else 0, r.get("zekerheid", ""),
+             r.get("waarom", ""), r.get("archief", ""), r.get("link", ""), r.get("opgenomen_door", ""), r.get("bron", "fathom"), nu()))
+        n += 1
+    conn.commit()
+    return jsonify(ok=True, rijen=n)
+
+
+@app.route("/gesprekken")
+def gesprekken_pagina():
+    if not mag_beslissen():
+        abort(403)
+    rijen = db().execute("SELECT * FROM gesprek_log ORDER BY datum DESC, start DESC LIMIT 2000").fetchall()
+    return render_template("gesprekken.html", app_naam=APP_NAAM, rijen=rijen)
 
 
 # --- organogram: getekend uit de gegevens zelf (afdelingen, agents, levert_aan)

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gesprekken — {{ app_naam }}</title>
+<style>
+  :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;--stil:#f59e0b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tekst);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--rand);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+  header h1{margin:0;font-size:19px}
+  header a{color:var(--accent);text-decoration:none;font-size:13px}
+  main{padding:16px 24px}
+  .balk{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+  input,select{font:inherit;background:#0c0e12;color:var(--tekst);border:1px solid var(--rand);border-radius:8px;padding:6px 10px}
+  .wrap{overflow-x:auto;border:1px solid var(--rand);border-radius:10px;background:var(--paper)}
+  table{border-collapse:collapse;width:100%;min-width:1100px}
+  th,td{text-align:left;padding:7px 9px;border-top:1px solid var(--rand);vertical-align:top}
+  th{cursor:pointer;color:var(--zacht);font-weight:600;position:sticky;top:0;background:var(--paper);user-select:none;white-space:nowrap}
+  th.actief{color:var(--accent)}
+  tr.prive td{color:#f3c9c9}
+  td.waarom{color:var(--zacht);font-size:12px;max-width:340px}
+  .tel{color:var(--zacht);font-size:12px}
+  a.link{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<header><h1>Gesprekken</h1><a href="{{ url_for('bord') }}">← bord</a><span class="tel" id="tel"></span></header>
+<main>
+  <div class="balk">
+    <input id="zoek" placeholder="zoek: persoon, bedrijf, thema, project" style="min-width:320px">
+    <select id="afd"><option value="">alle afdelingen</option></select>
+    <select id="prv"><option value="">privé en werk</option><option value="0">alleen werk</option><option value="1">alleen privé</option></select>
+    <span class="tel">Klik een kolomkop om te sorteren. "Waarom" is de redenering van de agent; klopt ze niet, verbeter dan zijn personentabel op zijn pagina.</span>
+  </div>
+  <div class="wrap">
+  <table id="t">
+    <thead><tr>
+      <th data-k="datum">Datum</th><th data-k="start">Start</th><th data-k="minuten">Min</th><th data-k="personen">Personen</th>
+      <th data-k="bedrijf">Bedrijf</th><th data-k="afdeling">Afdeling</th><th data-k="thema">Thema</th><th data-k="project">Project</th>
+      <th data-k="zekerheid">Zeker</th><th>Waarom</th><th>Bron</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rijen %}
+    <tr class="{{ 'prive' if r['prive'] else '' }}" data-afd="{{ r['afdeling'] }}" data-prv="{{ r['prive'] }}">
+      <td data-v="{{ r['datum'] }}">{{ r['datum'] }}</td><td data-v="{{ r['start'] }}">{{ r['start'] }}</td><td data-v="{{ r['minuten'] }}">{{ r['minuten'] }}</td>
+      <td>{{ r['personen'] }}</td><td>{{ r['bedrijf'] }}</td><td>{{ r['afdeling'] }}{% if r['prive'] %} · privé{% endif %}</td>
+      <td>{{ r['thema'] }}</td><td>{{ r['project'] }}</td><td>{{ r['zekerheid'] }}</td>
+      <td class="waarom">{{ r['waarom'] }}</td>
+      <td>{% if r['link'] %}<a class="link" href="{{ r['link'] }}" target="_blank">{{ r['bron'] }}</a>{% else %}{{ r['bron'] }}{% endif %}<div class="tel">{{ r['opgenomen_door'] }}</div></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</main>
+<script>
+(function(){
+  var t=document.getElementById('t'), tb=t.tBodies[0], rijen=[].slice.call(tb.rows);
+  var afd=document.getElementById('afd'), prv=document.getElementById('prv'), zoek=document.getElementById('zoek'), tel=document.getElementById('tel');
+  var afds={}; rijen.forEach(function(r){var a=r.dataset.afd; if(a) afds[a]=1;});
+  Object.keys(afds).sort().forEach(function(a){var o=document.createElement('option');o.value=a;o.textContent=a;afd.appendChild(o);});
+  function filter(){
+    var q=zoek.value.toLowerCase(), a=afd.value, p=prv.value, n=0;
+    rijen.forEach(function(r){
+      var ok=(!a||r.dataset.afd===a)&&(p===''||r.dataset.prv===p)&&(!q||r.textContent.toLowerCase().indexOf(q)>=0);
+      r.style.display=ok?'':'none'; if(ok)n++;
+    });
+    tel.textContent=n+' van '+rijen.length+' gesprekken';
+  }
+  [zoek,afd,prv].forEach(function(e){e.addEventListener('input',filter);e.addEventListener('change',filter);});
+  var richting={};
+  [].forEach.call(t.tHead.rows[0].cells,function(th,i){
+    th.addEventListener('click',function(){
+      var k=th.dataset.k; if(!k) return; richting[i]=!richting[i];
+      [].forEach.call(t.tHead.rows[0].cells,function(c){c.classList.remove('actief');}); th.classList.add('actief');
+      rijen.sort(function(x,y){
+        var a=(x.cells[i].dataset.v||x.cells[i].textContent).trim(), b=(y.cells[i].dataset.v||y.cells[i].textContent).trim();
+        var na=parseFloat(a), nb=parseFloat(b), c=(!isNaN(na)&&!isNaN(nb))?na-nb:a.localeCompare(b,'nl');
+        return richting[i]?c:-c;
+      });
+      rijen.forEach(function(r){tb.appendChild(r);});
+    });
+  });
+  filter();
+})();
+</script>
+</body>
+</html>
