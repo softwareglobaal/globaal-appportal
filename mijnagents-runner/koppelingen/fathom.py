@@ -3,10 +3,14 @@ Sleutel(s) bij naam uit ~/appportal/.env: FATHOM_API_KEYS (komma-gescheiden).
 Zelfde API als het contract-dashboard (webapp/fathom_api.py)."""
 import json
 import os
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
 BASIS = "https://api.fathom.ai/external/v1"
+POGINGEN = int(os.environ.get("FATHOM_POGINGEN", "5"))
+PAUZE = float(os.environ.get("FATHOM_PAUZE", "2.5"))  # s tussen pagina's met transcript
 
 
 def _env(pad):
@@ -32,10 +36,24 @@ def beschikbaar():
 
 
 def _haal(sleutel, pad, params=None):
+    """Een GET met herkansing bij 429 (Fathom: circa 30 zware calls per minuut).
+    Wacht de Retry-After af, anders oplopend 10, 20, 40, 80 s; daarna pas de fout doorgeven."""
     url = f"{BASIS}{pad}" + ("?" + urllib.parse.urlencode(params) if params else "")
     req = urllib.request.Request(url, headers={"X-Api-Key": sleutel, "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.load(r)
+    wacht = 10
+    for poging in range(POGINGEN):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or poging == POGINGEN - 1:
+                raise
+            try:
+                pauze = max(int(e.headers.get("Retry-After", "0")), wacht)
+            except ValueError:
+                pauze = wacht
+            time.sleep(min(pauze, 120))
+            wacht *= 2
 
 
 def gesprekken(sinds_iso, met_transcript=False):
@@ -52,6 +70,8 @@ def gesprekken(sinds_iso, met_transcript=False):
             cursor = d.get("next_cursor")
             if not cursor:
                 break
+            if met_transcript:
+                time.sleep(PAUZE)
     return uit
 
 
