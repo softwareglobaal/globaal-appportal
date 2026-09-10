@@ -410,6 +410,73 @@ def gesprekken_pagina():
     return render_template("gesprekken.html", app_naam=APP_NAAM, rijen=rijen)
 
 
+# --- dagen: het dagdashboard van de logboek-laag. Per dag wat de Dagbundelaar
+#     samenbracht: uren onderweg, bezoeken, gesprekken en met wie, afspraken,
+#     foto's, lichaam, en de spiegel van De Levenscoach. Alleen beheer.
+@app.route("/dagen")
+def dagen_pagina():
+    if not mag_beslissen():
+        abort(403)
+    conn = db()
+    dagen = {}
+
+    def dag_van(it):
+        inhoud = it["inhoud"] or ""
+        try:
+            d = json.loads(inhoud) if inhoud.startswith("{") else {}
+        except ValueError:
+            d = {}
+        return (d.get("datum") or d.get("start") or it["sleutel"] or "")[:10], d
+
+    for it in conn.execute("SELECT * FROM klaarzet ORDER BY id").fetchall():
+        dag, d = dag_van(it)
+        if not (len(dag) == 10 and dag[4] == "-"):
+            continue
+        r = dagen.setdefault(dag, {"dag": dag, "afspraken": 0, "gesprekken": 0, "gesprek_min": 0, "personen": set(), "bezoeken": 0,
+                                   "km": 0.0, "onderweg_min": 0, "fotos": 0, "slaap": "", "hartslag": "", "spiegel": "", "bundels": 0,
+                                   "signalen": 0, "transcripten": 0})
+        s = it["soort"]
+        if s == "afspraak":
+            r["afspraken"] += 1
+        elif s == "transcript":
+            r["transcripten"] += 1
+        elif s == "foto":
+            r["fotos"] += int(d.get("aantal") or 0)
+        elif s == "locatie":
+            for regel in (it["inhoud"] or "").splitlines():
+                if regel.startswith("| ") and "| bezoek" in regel:
+                    r["bezoeken"] += 1
+                if regel.startswith("| ") and "verplaatsing" in regel:
+                    try:
+                        r["km"] += float(regel.rsplit("|", 2)[-2].strip().replace(" km", "").replace(",", "."))
+                        m = regel.split("|")[3].strip()
+                        r["onderweg_min"] += (int(m.split("u")[0]) * 60 + int(m.split("u")[1])) if "u" in m else int(m.replace(" min", "") or 0)
+                    except (ValueError, IndexError):
+                        pass
+        elif s == "gezondheid":
+            r["slaap"] = (d.get("samenvatting") or "")[:160]
+        elif s == "coaching" and not it["sleutel"].startswith("week"):
+            r["spiegel"] = it["inhoud"] or ""
+        elif s == "dagbundel":
+            r["bundels"] += 1
+        elif s == "signaal":
+            r["signalen"] += 1
+    for g in conn.execute("SELECT datum, minuten, personen, prive FROM gesprek_log").fetchall():
+        r = dagen.setdefault(g["datum"], {"dag": g["datum"], "afspraken": 0, "gesprekken": 0, "gesprek_min": 0, "personen": set(), "bezoeken": 0,
+                                          "km": 0.0, "onderweg_min": 0, "fotos": 0, "slaap": "", "hartslag": "", "spiegel": "", "bundels": 0,
+                                          "signalen": 0, "transcripten": 0})
+        r["gesprekken"] += 1
+        r["gesprek_min"] += int(g["minuten"] or 0)
+        for p in (g["personen"] or "").split(","):
+            if p.strip():
+                r["personen"].add(p.strip())
+    rijen = sorted(dagen.values(), key=lambda x: x["dag"], reverse=True)[:120]
+    for r in rijen:
+        r["personen"] = ", ".join(sorted(r["personen"]))[:200]
+        r["spiegel_html"] = md(r["spiegel"]) if r["spiegel"] else ""
+    return render_template("dagen.html", app_naam=APP_NAAM, rijen=rijen)
+
+
 # --- organogram: getekend uit de gegevens zelf (afdelingen, agents, levert_aan)
 @app.route("/organogram")
 def organogram():

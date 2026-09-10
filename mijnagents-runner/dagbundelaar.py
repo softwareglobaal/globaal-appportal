@@ -88,7 +88,18 @@ def main():
         ag.log(f"dag {DAG}", "bevinding", f"{len(van_dag)} klaargezette bronnen, {len(per_deal)} bundel(s), {len(vragen)} toe te wijzen", verslag)
         ag.log(f"dag {DAG}", "schrijf", f"bundels klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend; {opgepakt} bronnen als opgepakt gemarkeerd")
         ag.log_verstuur()
-        ag.hartslag("klaar" if van_dag else "waakt", taak=f"dag {DAG} gebundeld", detail=f"{len(per_deal)} bundel(s), {len(vragen)} toe te wijzen")
+        # Werkwijze stap 8: welke bronnen ontbraken, en wat ik nodig heb om ze te krijgen.
+        soorten = {it.get("soort") for it in items if (it.get("sleutel") or "")[:10] == DAG or it.get("soort") == "locatie"}
+        nood = []
+        for soort, tekst, wie in (("gezondheid", "Apple Watch-gegevens (Gezondheidswacht op de Mac: Health Auto Export en iCloud moeten lopen)", "mehdi"),
+                                  ("foto", "Foto's van de dag (iCloud-wacht op de Mac moet om 21:15 gedraaid hebben)", "mehdi"),
+                                  ("locatie", "Locatiedagboek (Locatiewacht 21:30; tracker aan?)", "mehdi")):
+            if soort not in soorten:
+                nood.append({"tekst": f"Voor {DAG} geen {tekst}", "wie": wie})
+        nood += [{"tekst": "WhatsApp: geen bron; een chat-export per gesprek in een map op de Mac is de enige weg, Mehdi kiest welke", "wie": "mehdi"},
+                 {"tekst": "Telefoon (Xelion): koppeling bestaat, de belwacht-agent nog niet", "wie": "claude-code"},
+                 {"tekst": "Plaud-opnames komen pas als de Plaud-routine op claude.ai draait", "wie": "mehdi"}]
+        ag.hartslag("klaar" if van_dag else "waakt", taak=f"dag {DAG} gebundeld", detail=f"{len(per_deal)} bundel(s), {len(vragen)} toe te wijzen", nood=nood)
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
         ag.log_verstuur()
