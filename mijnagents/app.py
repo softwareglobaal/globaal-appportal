@@ -852,6 +852,24 @@ def gesprek_sturen():
     return redirect(doel + "#gesprek")
 
 
+@app.route("/api/gesprek", methods=["POST"])
+def api_gesprek_sturen():
+    """Voor De Bode: een bericht van Mehdi uit Telegram als gesprek op het bord."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    aan = (p.get("aan") or "regisseur").strip()
+    tekst = (p.get("tekst") or "").strip()
+    if not tekst:
+        return jsonify(fout="tekst vereist"), 400
+    conn = db()
+    if aan != "regisseur" and not conn.execute("SELECT 1 FROM agent WHERE naam=?", (aan,)).fetchone():
+        aan = "regisseur"
+    cur = conn.execute("INSERT INTO gesprek(aan, van, tekst, ts) VALUES(?,?,?,?)", (aan, (p.get("van") or "mehdi (telegram)")[:60], tekst[:8000], nu()))
+    conn.commit()
+    return jsonify(ok=True, id=cur.lastrowid, aan=aan)
+
+
 @app.route("/api/gesprek/open")
 def api_gesprek_open():
     if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:

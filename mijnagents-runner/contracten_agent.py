@@ -619,10 +619,7 @@ def main():
             proeven += 1 if uit.get("proef") else 0
             if not DROOG:
                 bewaar_staat(staat)
-        nood = []
-        if bronnen_mod.dropbox_beschikbaar() and not bronnen_mod.team_namespace():
-            nood.append({"tekst": "Dropbox: geen team-namespace (account_info.read ontbreekt op het stack-token en DROPBOX_PATH_ROOT_NS is leeg); de salesmap is onleesbaar", "wie": "mehdi"})
-        hartslag("waakt", taak="wacht op nieuwe dossiers", nood=nood,
+        hartslag("waakt", taak="wacht op nieuwe dossiers", nood=[{"tekst": "Dropbox-app van de stack opnieuw autoriseren met account_info.read (nu omweg via DROPBOX_PATH_ROOT_NS)", "wie": "mehdi"}],
                  detail=f"laatste ronde: {len(deals)} in fase, {gedaan} verwerkt, {proeven} proef/proeven, {overgeslagen} recent al gedaan")
         print(f"klaar: {gedaan} verwerkt, {proeven} proeven, {overgeslagen} overgeslagen")
     except Exception as e:  # noqa: BLE001

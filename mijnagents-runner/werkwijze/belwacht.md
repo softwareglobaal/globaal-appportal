@@ -28,11 +28,5 @@ niet").
 
 ## Wat ik nu nodig heb
 
-- De koppeling leest de gesprekslijst al: de Xelion-spiegel op de VM
-  (`communicatie.xelion_communicatie`, sinds 16-06-2026) kent Mehdi als
-  gebruiker (oid 2567925). Gemeten op 10-09-2026 staan er 8 gesprekken van hem
-  op vijf lijnen: "Mehdi Chegini gsm" (eigen lijn), "Prospection H-Architects",
-  "H-Architects Office / Main", "UNABO Sales" en "Standard Projects H-A".
-- Bevestiging van Mehdi: welke van die lijnen zijn werk en welke privé, en
-  klopt het lage aantal (8 gesprekken in drie maanden), of belt hij vooral
-  buiten Xelion om?
+- Bevestiging welke Xelion-lijnen van Mehdi zijn (werk en privé) en dat de
+  koppeling de gesprekslijst mag lezen.

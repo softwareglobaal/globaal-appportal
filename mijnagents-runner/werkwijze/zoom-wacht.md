@@ -28,7 +28,5 @@ Mehdi's opdracht via De Bode of een voorstel.
 
 ## Wat ik nu nodig heb
 
-- Scopes: geregeld op 10-09-2026. De Server-to-Server-app leest nu berichten,
-  sessies en kanalen (Team Chat), meetings, afgelopen meetings en deelnemers,
-  en kan een gebruiker op e-mail opzoeken. Gecontroleerd met een vers token.
-- Mijn eigen runner (nog te bouwen door Claude Code).
+- Bevestiging dat de Zoom-koppeling van de stack de scopes chat en meetings
+  mag lezen (nu alleen chat-berichten sturen); anders een scope erbij (Mehdi, Zoom Marketplace).

@@ -18,7 +18,6 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import bronnen  # noqa: E402
-import dropbox_prive  # noqa: E402
 import fathom  # noqa: E402
 import pipedrive  # noqa: E402
 
@@ -28,9 +27,6 @@ DAGEN = int(os.environ.get("FATHOM_WACHT_DAGEN", "14"))
 ARCHIEF = os.path.expanduser(os.environ.get("FATHOM_ARCHIEF_PAD", "~/appportal/mijnagents-data/fathom"))
 MODEL = os.environ.get("FATHOM_WACHT_MODEL", "claude-sonnet-5")
 AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "regie", "prive")
-# Kenmerken in het e-mailadres van de opnemer waaraan we Mehdi's eigen Fathom-sleutel herkennen
-MEHDI_FATHOM_EIGENAARS = tuple(k.strip() for k in os.environ.get(
-    "FATHOM_MEHDI_EIGENAARS", "h-architects,mch@,zoomafspraken@gmail.com").split(",") if k.strip())
 
 
 def laad_env(pad):
@@ -237,11 +233,6 @@ def main():
                       "| start | min | personen | bedrijf | afdeling | thema | project | privé |", "|---|---|---|---|---|---|---|---|"]
             regels += [f"| {r['start']} | {r['minuten']} | {r['personen']} | {r['bedrijf']} | {r['afdeling']} | {r['thema'][:50]} | {r['project'][:40]} | {'ja' if r['prive'] else ''} |" for r in sorted(lijst, key=lambda x: x["start"])]
             open(os.path.join(ARCHIEF, "logboek", f"{dag}.md"), "w", encoding="utf-8").write("\n".join(regels) + "\n")
-        # kopie van het archief naar Mehdi's eigen Dropbox (alleen wat nieuw is)
-        sp = dropbox_prive.spiegel_map(ARCHIEF, "/Fathom")
-        if sp["verstuurd"] or sp["fout"]:
-            ag.log("Fathom", "schrijf", f"Dropbox privé: {sp['verstuurd']} bestand(en) verstuurd, {sp['rest']} nog te gaan"
-                   + (f"; fout: {sp['fout']}" if sp["fout"] else ""))
         bord.call("/api/gesprekken", {"rijen": rijen})
         uit = ag.klaarzet(klaar)
         ag.log("Fathom", "bron", f"{len(gesprekken)} gesprekken sinds {sinds[:10]} van {len(fathom.sleutels())} sleutel(s); {nieuw_archief} nieuw in het archief; {prive_n} privé; {len(personen)} personen in de tabel",
@@ -250,10 +241,10 @@ def main():
         ag.log_verstuur()
         nood = []
         eigenaars = {(g.get("recorded_by") or {}).get("email", "") for g in gesprekken}
-        # Mehdi's Fathom-account neemt op als zoomafspraken@gmail.com (sleutel MEHDI_FATHOM_API_KEY, ook in ~/elevait/.env)
-        if not any(any(kenmerk in e for kenmerk in MEHDI_FATHOM_EIGENAARS) for e in eigenaars):
+        if not any("h-architects" in e or "mch@" in e for e in eigenaars):
             nood.append({"tekst": "Mehdi's eigen Fathom-sleutel ontbreekt op de VM (FATHOM_API_KEYS is nu van Shaniel); ik zie zijn gesprekken niet", "wie": "mehdi"})
-        nood += dropbox_prive.nood(wat="het Fathom-archief")
+        if not os.environ.get("DROPBOX_PRIVE_REFRESH_TOKEN"):
+            nood.append({"tekst": "Geen privé-Dropbox-token: het archief staat op de VM, niet in Mehdi's eigen Dropbox", "wie": "mehdi"})
         if any(len(p["mails"]) == 0 and "aan te vullen" in p.get("mails", []) for p in personen) or len([p for p in personen if p["mails"]]) < 6:
             nood.append({"tekst": "De tabel Betrokken personen mist e-mailadressen van collega's (dashboard van Mehdi)", "wie": "mehdi"})
         ag.hartslag("waakt", taak="wacht op nieuwe gesprekken", detail=f"laatste ronde: {len(gesprekken)} gesprekken, {nieuw_archief} nieuw, {prive_n} privé", nood=nood)
