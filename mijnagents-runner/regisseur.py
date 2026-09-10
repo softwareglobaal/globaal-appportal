@@ -34,7 +34,7 @@ DASHBOARD_LEES = {"overzicht", "dossiers", "dossier", "openstaand", "dossiercont
 RUNNERS = {n: os.path.join(HIER, s) for n, s in {
     "contracten-agent": "contracten_agent.py", "agenda-wacht": "agenda_wacht.py", "fathom-wacht": "fathom_wacht.py",
     "plaud-wacht": "plaud_wacht.py", "dagbundelaar": "dagbundelaar.py", "locatie-wacht": "locatie_wacht.py",
-    "ontwikkelaar": "ontwikkelaar.py"}.items()}
+    "ontwikkelaar": "ontwikkelaar.py", "levenscoach": "levenscoach.py", "bode": "bode.py"}.items()}
 # icloud-wacht draait op de Mac (launchd), niet hier.
 
 
