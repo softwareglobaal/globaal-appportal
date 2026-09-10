@@ -16,6 +16,7 @@ Geen klantnamen, geen bedragen, geen dossierinhoud. Tellingen en neutrale
 taakomschrijvingen zijn de grens.
 """
 import json
+import re
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -221,8 +222,11 @@ def nu():
 
 
 def groepen():
+    # Authentik scheidt groepen met "|" (forward auth); onze eigen tests en oudere
+    # koppelingen gebruiken ",". Allebei aanvaarden, anders herkent het bord
+    # beheer niet en verdwijnen gespreksvak, werkverslag en bewerken.
     ruw = request.headers.get("X-authentik-groups", "")
-    return {x.strip() for x in ruw.split(",") if x.strip()}
+    return {x.strip() for x in re.split(r"[|,]", ruw) if x.strip()}
 
 
 def gebruiker():
