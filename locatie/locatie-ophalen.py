@@ -190,7 +190,10 @@ def markdown(datum, gegevens, cache, adressen=True):
             # Een vastgelegde naam gaat voor het opgezochte adres: "Thuis" zegt
             # meer dan "Herfstlaan 65", en blijft kloppen als de GPS afdrijft.
             if s.get("plek"):
-                waar = f"**{s['plek']}** ({waar})"
+                merk = f"**{s['plek']}**"
+                if s.get("dossier"):
+                    merk += f" `{s['dossier']}`"
+                waar = f"{merk} ({waar})"
             r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} "
                      f"| bezoek | {waar} | {s.get('wifi') or ''} |")
         else:

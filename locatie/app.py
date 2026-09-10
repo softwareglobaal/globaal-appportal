@@ -102,6 +102,12 @@ def plek_db(conn):
             soort   TEXT,                  -- thuis, werk, klant, werf, onderweg
             notitie TEXT
         )""")
+    # Het dossiernummer van H-Architects hoort in een eigen veld en niet in de
+    # notitie: hierop gaat de agent straks een werfbezoek aan het projectdossier
+    # koppelen, en dan moet het exact te vergelijken zijn.
+    kolommen = {r["name"] for r in conn.execute("PRAGMA table_info(plek)")}
+    if "dossier" not in kolommen:
+        conn.execute("ALTER TABLE plek ADD COLUMN dossier TEXT")
     conn.commit()
 
 
@@ -422,16 +428,17 @@ def api_plekken():
             conn.commit(); conn.close()
             return jsonify({"ok": True, "verwijderd": naam})
         plek_db(conn)
-        conn.execute("""INSERT INTO plek (naam, lat, lon, straal, wifi, soort, notitie)
-                        VALUES (?,?,?,?,?,?,?)
+        conn.execute("""INSERT INTO plek (naam, lat, lon, straal, wifi, soort, notitie, dossier)
+                        VALUES (?,?,?,?,?,?,?,?)
                         ON CONFLICT(naam) DO UPDATE SET
                           lat=excluded.lat, lon=excluded.lon, straal=excluded.straal,
                           wifi=excluded.wifi, soort=excluded.soort,
-                          notitie=excluded.notitie""",
+                          notitie=excluded.notitie, dossier=excluded.dossier""",
                      (naam, d.get("lat"), d.get("lon"), int(d.get("straal") or 120),
                       str(d.get("wifi", ""))[:200] or None,
                       str(d.get("soort", ""))[:40] or None,
-                      str(d.get("notitie", ""))[:200] or None))
+                      str(d.get("notitie", ""))[:200] or None,
+                      str(d.get("dossier", ""))[:20] or None))
         conn.commit()
         uit = plekken(conn)
         conn.close()
@@ -558,6 +565,9 @@ def dagindeling(punten):
             mlat = round(sum(p["lat"] for p in groep) / len(groep), 6)
             mlon = round(sum(p["lon"] for p in groep) / len(groep), 6)
             gezien = {(p.get("ssid") or "").lower() for p in groep if p.get("ssid")}
+            naam = noem_plek(mlat, mlon, gezien, bekende_plekken)
+            dossier = next((p.get("dossier") for p in bekende_plekken
+                            if p["naam"] == naam), None) if naam else None
             resultaat.append({
                 "soort": "bezoek",
                 "van": groep[0]["tst"], "tot": groep[-1]["tst"],
@@ -565,7 +575,8 @@ def dagindeling(punten):
                 "lat": mlat, "lon": mlon,
                 "punten": len(groep),
                 "wifi": next((p.get("ssid") for p in groep if p.get("ssid")), None),
-                "plek": noem_plek(mlat, mlon, gezien, bekende_plekken),
+                "plek": naam,
+                "dossier": dossier,
             })
         else:
             # Een rit loopt van waar je vertrok tot waar je aankwam, dus het
