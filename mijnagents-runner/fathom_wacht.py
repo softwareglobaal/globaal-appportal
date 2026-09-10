@@ -27,6 +27,9 @@ DAGEN = int(os.environ.get("FATHOM_WACHT_DAGEN", "14"))
 ARCHIEF = os.path.expanduser(os.environ.get("FATHOM_ARCHIEF_PAD", "~/appportal/mijnagents-data/fathom"))
 MODEL = os.environ.get("FATHOM_WACHT_MODEL", "claude-sonnet-5")
 AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "regie", "prive")
+# Kenmerken in het e-mailadres van de opnemer waaraan we Mehdi's eigen Fathom-sleutel herkennen
+MEHDI_FATHOM_EIGENAARS = tuple(k.strip() for k in os.environ.get(
+    "FATHOM_MEHDI_EIGENAARS", "h-architects,mch@,zoomafspraken@gmail.com").split(",") if k.strip())
 
 
 def laad_env(pad):
@@ -241,7 +244,8 @@ def main():
         ag.log_verstuur()
         nood = []
         eigenaars = {(g.get("recorded_by") or {}).get("email", "") for g in gesprekken}
-        if not any("h-architects" in e or "mch@" in e for e in eigenaars):
+        # Mehdi's Fathom-account neemt op als zoomafspraken@gmail.com (sleutel MEHDI_FATHOM_API_KEY, ook in ~/elevait/.env)
+        if not any(any(kenmerk in e for kenmerk in MEHDI_FATHOM_EIGENAARS) for e in eigenaars):
             nood.append({"tekst": "Mehdi's eigen Fathom-sleutel ontbreekt op de VM (FATHOM_API_KEYS is nu van Shaniel); ik zie zijn gesprekken niet", "wie": "mehdi"})
         if not os.environ.get("DROPBOX_PRIVE_REFRESH_TOKEN"):
             nood.append({"tekst": "Geen privé-Dropbox-token: het archief staat op de VM, niet in Mehdi's eigen Dropbox", "wie": "mehdi"})
