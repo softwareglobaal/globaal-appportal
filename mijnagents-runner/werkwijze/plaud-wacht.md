@@ -87,8 +87,10 @@ Mehdi's claude.ai-account.
 
 - De Plaud-routine inplannen op claude.ai (opdracht staat klaar in
   `werkwijze/plaud-routine.md`), eerst voor zijn eigen account.
-- De accounts van Angela, Siyan en Shaniel: elk een eigen connector en routine,
-  of een gedeeld Plaud-team; dat is zijn keuze in Plaud.
+- Er is één Plaud-account dat Mehdi en de collega's delen (bevestigd door
+  Shaniel, 10-09-2026), dus één routine op Mehdi's claude.ai dekt iedereen.
+  Wie een opname maakte leid ik af uit de naam in Plaud en het transcript, niet
+  uit het account.
 - De openingszin consequent gebruiken; dat maakt alles beter.
 - Per voorstel: welke kopie naar welke map.
 

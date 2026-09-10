@@ -139,7 +139,6 @@ def main():
             bord.call("/api/gesprekken", {"rijen": rijen})
         uit = ag.klaarzet(klaar)
         nood = [] if gezien else [{"tekst": "De Plaud-routine op claude.ai is nog niet ingepland (opdracht: werkwijze/plaud-routine.md); zonder haar zie ik niets", "wie": "mehdi"}]
-        nood.append({"tekst": "Plaud-accounts van Angela, Siyan en Shaniel: elk een eigen connector en routine, of een Plaud-team", "wie": "mehdi"})
         ag.log("Plaud", "bron", f"{gezien} transcriptbestanden in inbox en salesmappen; {nieuw} nieuw verwerkt; {len(personen)} personen in de tabel")
         ag.log("Plaud", "schrijf", f"gesprekkentabel +{len(rijen)}; klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend")
         ag.log_verstuur()
