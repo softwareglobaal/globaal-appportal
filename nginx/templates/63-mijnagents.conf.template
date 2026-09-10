@@ -30,6 +30,13 @@ server {
         proxy_set_header X-authentik-groups "";
         proxy_pass $app_upstream;
     }
+    location = /api/gesprekken {
+        client_max_body_size 2m;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass $app_upstream;
+    }
     location = /api/logboek {
         client_max_body_size 1m;
         proxy_set_header Host $host;
