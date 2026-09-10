@@ -50,6 +50,15 @@ def db():
     return g.db
 
 
+@app.after_request
+def _geen_cache(resp):
+    # Het bord verandert elke minuut (hartslagen, noden, nieuwe agents). Een
+    # telefoon die een oude pagina vasthoudt toont anders een verouderd
+    # organogram; daarom nooit bewaren.
+    resp.headers["Cache-Control"] = "no-store, max-age=0"
+    return resp
+
+
 @app.teardown_appcontext
 def _sluit(_exc):
     d = g.pop("db", None)
