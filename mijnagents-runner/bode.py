@@ -21,6 +21,7 @@ from datetime import datetime
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+import bellen  # noqa: E402
 import bord  # noqa: E402
 
 NAAM = "bode"
@@ -193,6 +194,8 @@ def main():
     herinnering_oud = (not staat.get("laatste_herinnering")) or (datetime.now() - datetime.fromisoformat(staat["laatste_herinnering"])).total_seconds() > HERINNERING_UREN * 3600
     herinner = totaal_voorstellen and (totaal_voorstellen != staat.get("laatste_voorstellen", 0) or herinnering_oud)
     kanaal = ""
+    # dringend signaal: bellen (Twilio), ook in de stille uren; herhaalt tot er opgenomen wordt
+    bel_detail = bellen.alarm_bellen(staat, alarm, log=ag.log)
     if (items or herinner) and (not stil or alarm):
         regels = [f"Mehdi Agents, {datetime.now().strftime('%H:%M')}:"]
         for it in items[-8:]:
@@ -214,9 +217,9 @@ def main():
     json.dump(staat, open(STAAT, "w"))
     if not TG_TOKEN:
         nood.append({"tekst": "Telegram niet ingesteld: bot bij BotFather, TELEGRAM_BOT_TOKEN en TELEGRAM_CHAT_ID in mijnagents-data/.env", "wie": "mehdi"})
-    nood.append({"tekst": "Bellen bij een alarm: dienst kiezen (Twilio of Xelion-API)", "wie": "mehdi"})
+    nood += bellen.nood()
     ag.log_verstuur()
-    detail = f"{binnen} binnen, {terug} antwoorden terug, {len(items)} items" + (f" via {kanaal}" if kanaal else "") + (f"; {len(staat.get('wacht', []))} wacht op antwoord" if staat.get("wacht") else "")
+    detail = f"{binnen} binnen, {terug} antwoorden terug, {len(items)} items" + (f" via {kanaal}" if kanaal else "") + (f"; {bel_detail}" if bel_detail else "") + (f"; {len(staat.get('wacht', []))} wacht op antwoord" if staat.get("wacht") else "")
     ag.hartslag("actief" if (binnen or terug or kanaal) else ("rust" if stil else "waakt"),
                 taak="luistert op Telegram" if TG_TOKEN else "luistert", detail=detail, nood=nood)
 
