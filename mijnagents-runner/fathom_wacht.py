@@ -239,7 +239,15 @@ def main():
                "\n".join(f"{r['datum']} {r['start']} {r['personen'][:40]} | {r['afdeling']} | {r['thema'][:50]}" for r in rijen))
         ag.log("Fathom", "schrijf", f"gesprekkentabel bijgewerkt ({len(rijen)} rijen); klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend; logboek voor {len(logdag)} dag(en)")
         ag.log_verstuur()
-        ag.hartslag("waakt", taak="wacht op nieuwe gesprekken", detail=f"laatste ronde: {len(gesprekken)} gesprekken, {nieuw_archief} nieuw, {prive_n} privé")
+        nood = []
+        eigenaars = {(g.get("recorded_by") or {}).get("email", "") for g in gesprekken}
+        if not any("h-architects" in e or "mch@" in e for e in eigenaars):
+            nood.append({"tekst": "Mehdi's eigen Fathom-sleutel ontbreekt op de VM (FATHOM_API_KEYS is nu van Shaniel); ik zie zijn gesprekken niet", "wie": "mehdi"})
+        if not os.environ.get("DROPBOX_PRIVE_REFRESH_TOKEN"):
+            nood.append({"tekst": "Geen privé-Dropbox-token: het archief staat op de VM, niet in Mehdi's eigen Dropbox", "wie": "mehdi"})
+        if any(len(p["mails"]) == 0 and "aan te vullen" in p.get("mails", []) for p in personen) or len([p for p in personen if p["mails"]]) < 6:
+            nood.append({"tekst": "De tabel Betrokken personen mist e-mailadressen van collega's (dashboard van Mehdi)", "wie": "mehdi"})
+        ag.hartslag("waakt", taak="wacht op nieuwe gesprekken", detail=f"laatste ronde: {len(gesprekken)} gesprekken, {nieuw_archief} nieuw, {prive_n} privé", nood=nood)
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
         ag.log_verstuur()

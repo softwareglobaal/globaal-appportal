@@ -104,6 +104,20 @@
   {% endif %}
 
   {% if mag_beslissen %}
+    {% set noden = [] %}
+    {% for type, kaarten in groepen.items() %}{% for k in kaarten %}{% for n in k['nood'] %}{% set _ = noden.append((k['label'], n)) %}{% endfor %}{% endfor %}{% endfor %}
+    {% if noden %}
+    <section class="blok" id="nood">
+      <h2>Wat de agents nodig hebben ({{ noden|length }})</h2>
+      {% for label, n in noden %}
+      <div style="border-top:1px solid var(--rand);padding:8px 0;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap">
+        <b style="min-width:150px">{{ label }}</b><span style="flex:1">{{ n['tekst'] }}</span>
+        <span class="badge" style="color:var(--stil);border-color:var(--stil)">{{ n['wie'] }}</span>
+      </div>
+      {% endfor %}
+      <p style="margin:10px 0 0;color:var(--zacht);font-size:12px">Elke agent meldt dit zelf bij zijn hartslag; wat opgelost is verdwijnt vanzelf.</p>
+    </section>
+    {% endif %}
     {% with aan='regisseur', titel='Zeg iets tegen De Regisseur, je hoofdagent', gesprekken=gesprekken, mdf=regisseur_html %}{% include '_gesprek.html' %}{% endwith %}
   {% endif %}
 
@@ -138,6 +152,7 @@
         </div>
         {% if k['taak'] %}<div class="taak">{{ k['taak'] }}</div>{% endif %}
         {% if k['detail'] %}<div class="detail">{{ k['detail'] }}</div>{% endif %}
+        {% if k['nood'] and mag_beslissen %}<div class="vlag" style="color:var(--stil)">Heeft nodig: {{ k['nood'][0]['tekst'][:90] }}{% if k['nood']|length > 1 %} (+{{ k['nood']|length - 1 }}){% endif %}</div>{% endif %}
         {% if k['toestand'] == 'stil' %}
           <div class="vlag">Geen recente hartslag ({{ k['leeftijd_min'] }} min)</div>
         {% elif k['toestand'] == 'onbekend' %}

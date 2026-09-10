@@ -63,7 +63,8 @@ def main():
         ag.log_verstuur()
         detail = (f"laatste ronde: {gezien} bestanden, {uit.get('nieuw', 0)} nieuw" if gezien
                   else "wacht op de Plaud-routine: nog geen transcripten in 0 Plaud of de inbox")
-        ag.hartslag("waakt" if gezien else "rust", taak="wacht op Plaud-transcripten", detail=detail)
+        ag.hartslag("waakt" if gezien else "rust", taak="wacht op Plaud-transcripten", detail=detail,
+                    nood=[] if gezien else [{"tekst": "De Plaud-routine op claude.ai (Plaud- en Dropbox-connector) is nog niet ingepland; zonder haar zie ik niets", "wie": "mehdi"}])
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
         ag.log_verstuur()

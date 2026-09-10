@@ -230,7 +230,9 @@ def main():
         ag.log(f"dag {DAG}", "bevinding", f"{len(onbekend)} bezoek(en) van 20 min of meer zonder afspraak", volledig)
         ag.log(f"dag {DAG}", "schrijf", f"dagboek geschreven: {pad}; klaargezet voor Mehdi ({uit.get('nieuw', 0)} nieuw)")
         ag.log_verstuur()
-        ag.hartslag("klaar", taak=f"dagboek {DAG} klaar", detail=f"{len(bezoeken)} bezoeken, {len(onbekend)} zonder afspraak")
+        ag.hartslag("klaar", taak=f"dagboek {DAG} klaar", detail=f"{len(bezoeken)} bezoeken, {len(onbekend)} zonder afspraak",
+                    nood=([{"tekst": "Geen Dropbox-token van Mehdi's eigen account: het dagboek staat op de VM, de kopie naar private/... maakt het Mac-script", "wie": "mehdi"}] if not os.environ.get("DROPBOX_PRIVE_REFRESH_TOKEN") else [])
+                    + ([{"tekst": f"{len(zonder_adres)} afspraken zonder adres in de agenda: de vergelijking is daar blind", "wie": "collega"}] if zonder_adres else []))
         try:
             controle()
         except Exception:  # noqa: BLE001

@@ -164,7 +164,9 @@ def main():
         ag.log(f"dag {vandaag}", "bevinding", f"{len(niet_conform)} toekomstige afspraken zonder Nova-code", "\n".join(niet_conform[:60]))
         ag.log(f"dag {vandaag}", "schrijf", f"klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend", tekst)
         ag.log_verstuur()
-        ag.hartslag("waakt", taak="agenda in het oog", detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; {len(niet_conform)} zonder code")
+        ag.hartslag("waakt", taak="agenda in het oog", detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; {len(niet_conform)} zonder code",
+                    nood=([{"tekst": f"{len(niet_conform)} toekomstige afspraken zonder Nova-code ([HA-KB] enz.): titels rechtzetten door Nova of Mehdi", "wie": "collega"}] if niet_conform else [])
+                    + ([{"tekst": f"{len(fouten)} agenda(s) niet leesbaar: " + ", ".join(f["kalender"][:30] for f in fouten), "wie": "mehdi"}] if fouten else []))
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
         ag.log_verstuur()

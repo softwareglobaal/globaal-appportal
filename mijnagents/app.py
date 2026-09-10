@@ -129,6 +129,15 @@ def init_db():
             opgepakt_ts   TEXT DEFAULT ''
         );
         CREATE UNIQUE INDEX IF NOT EXISTS klaarzet_uniek ON klaarzet(uniek) WHERE uniek<>'';
+        CREATE TABLE IF NOT EXISTS nood (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            naam    TEXT NOT NULL,       -- agent
+            tekst   TEXT NOT NULL,       -- wat hij nodig heeft of wat niet werkt
+            wie     TEXT DEFAULT '',     -- wie het kan oplossen: mehdi | claude-code | collega
+            open    INTEGER DEFAULT 1,
+            ts      TEXT NOT NULL,
+            opgelost_ts TEXT DEFAULT ''
+        );
         CREATE TABLE IF NOT EXISTS gesprek_log (
             uniek     TEXT PRIMARY KEY,   -- bv. fathom:816732165
             datum     TEXT, start TEXT, minuten INTEGER,
@@ -247,6 +256,9 @@ def kaarten():
         "SELECT naam, COUNT(*) n FROM voorstel WHERE status='open' GROUP BY naam"
     ).fetchall():
         open_per[r["naam"]] = r["n"]
+    nood_per = {}
+    for r in conn.execute("SELECT naam, tekst, wie FROM nood WHERE open=1 ORDER BY id").fetchall():
+        nood_per.setdefault(r["naam"], []).append(dict(r))
 
     uit = []
     for a in rijen:
@@ -268,9 +280,18 @@ def kaarten():
                 "taak": taak, "detail": detail, "ts": ts,
                 "leeftijd_min": None if leeftijd is None else int(leeftijd),
                 "open_voorstellen": open_per.get(a["naam"], 0),
+                "nood": nood_per.get(a["naam"], []),
             }
         )
     return uit
+
+
+@app.route("/api/nood")
+def api_nood():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    rijen = db().execute("SELECT * FROM nood WHERE open=1 ORDER BY naam, id").fetchall()
+    return jsonify(nood=[dict(r) for r in rijen])
 
 
 # ------------------------------------------------------------------- routes ---
@@ -571,6 +592,20 @@ def agent_status():
         "detail=excluded.detail, tokens=excluded.tokens, ts=excluded.ts",
         (naam, status, p.get("taak", ""), p.get("detail", ""), p.get("tokens"), nu()),
     )
+    # Wat de agent nodig heeft of wat bij hem niet werkt: hij meldt de volledige
+    # lijst; wat er niet meer in staat is opgelost. Zo ziet beheer in één
+    # overzicht waar geholpen moet worden.
+    if isinstance(p.get("nood"), list):
+        nieuw = [(str(n.get("tekst") if isinstance(n, dict) else n).strip()[:400],
+                  (n.get("wie") if isinstance(n, dict) else "mehdi") or "mehdi") for n in p["nood"]]
+        nieuw = [(t, w) for t, w in nieuw if t]
+        open_ = {r["tekst"]: r["id"] for r in conn.execute("SELECT id, tekst FROM nood WHERE naam=? AND open=1", (naam,)).fetchall()}
+        for t, w in nieuw:
+            if t not in open_:
+                conn.execute("INSERT INTO nood(naam, tekst, wie, ts) VALUES(?,?,?,?)", (naam, t, w, nu()))
+        for t, nid in open_.items():
+            if t not in {x for x, _ in nieuw}:
+                conn.execute("UPDATE nood SET open=0, opgelost_ts=? WHERE id=?", (nu(), nid))
     # Optioneel voorstel meegestuurd (mens-in-de-lus).
     v = p.get("voorstel")
     if isinstance(v, dict) and v.get("actie"):

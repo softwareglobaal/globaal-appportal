@@ -35,10 +35,15 @@ class Agent:
         self.naam = naam
         self._log = []
 
-    def hartslag(self, status, taak="", detail="", voorstel=None):
+    def hartslag(self, status, taak="", detail="", voorstel=None, nood=None):
+        """nood: de volledige lijst van wat de agent nodig heeft of wat bij hem niet
+        werkt, elk {"tekst": ..., "wie": "mehdi|claude-code|collega"}; wat er niet
+        meer in staat, is voor het bord opgelost."""
         p = {"naam": self.naam, "status": status, "taak": taak, "detail": detail}
         if voorstel:
             p["voorstel"] = voorstel
+        if nood is not None:
+            p["nood"] = nood
         try:
             call("/agent-status", p)
         except Exception as e:  # noqa: BLE001

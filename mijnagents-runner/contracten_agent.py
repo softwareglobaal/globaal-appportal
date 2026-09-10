@@ -77,10 +77,12 @@ TOKEN = _token_van_dit_bord()
 
 
 # ------------------------------------------------------------- agentbord ---
-def hartslag(status, taak="", detail="", voorstel=None):
+def hartslag(status, taak="", detail="", voorstel=None, nood=None):
     payload = {"naam": NAAM, "status": status, "taak": taak, "detail": detail}
     if voorstel:
         payload["voorstel"] = voorstel
+    if nood is not None:
+        payload["nood"] = nood
     req = urllib.request.Request(f"{PLATFORM}/agent-status", data=json.dumps(payload).encode(),
                                  headers={"Content-Type": "application/json", "X-Agents-Token": TOKEN},
                                  method="POST")
@@ -617,7 +619,7 @@ def main():
             proeven += 1 if uit.get("proef") else 0
             if not DROOG:
                 bewaar_staat(staat)
-        hartslag("waakt", taak="wacht op nieuwe dossiers",
+        hartslag("waakt", taak="wacht op nieuwe dossiers", nood=[{"tekst": "Dropbox-app van de stack opnieuw autoriseren met account_info.read (nu omweg via DROPBOX_PATH_ROOT_NS)", "wie": "mehdi"}],
                  detail=f"laatste ronde: {len(deals)} in fase, {gedaan} verwerkt, {proeven} proef/proeven, {overgeslagen} recent al gedaan")
         print(f"klaar: {gedaan} verwerkt, {proeven} proeven, {overgeslagen} overgeslagen")
     except Exception as e:  # noqa: BLE001
