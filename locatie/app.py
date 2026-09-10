@@ -84,6 +84,49 @@ def db():
     return conn
 
 
+def plek_db(conn):
+    """Plekken met een naam: thuis, kantoor, een werf.
+
+    Herkenning gebeurt op twee manieren, en wifi gaat voor. Een wifi-naam is
+    onmiskenbaar: GPS drijft 's nachts tientallen meters, een netwerknaam niet.
+    Mehdi's huis heeft er twee (6La5Ra en Proximus-Home-829822) en beide wijzen
+    naar hetzelfde adres.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS plek (
+            naam    TEXT PRIMARY KEY,
+            lat     REAL,
+            lon     REAL,
+            straal  INTEGER DEFAULT 120,   -- meter
+            wifi    TEXT,                  -- kommagescheiden ssid's
+            soort   TEXT,                  -- thuis, werk, klant, werf, onderweg
+            notitie TEXT
+        )""")
+    conn.commit()
+
+
+def plekken(conn):
+    plek_db(conn)
+    return [dict(r) for r in conn.execute("SELECT * FROM plek")]
+
+
+def noem_plek(lat, lon, wifis, lijst):
+    """Geeft de naam van de plek waar dit bezoek was, of None.
+
+    wifis is de verzameling netwerknamen die tijdens het bezoek gezien zijn.
+    """
+    for p in lijst:
+        eigen = {w.strip().lower() for w in (p.get("wifi") or "").split(",") if w.strip()}
+        if eigen and wifis & eigen:
+            return p["naam"]
+    for p in lijst:
+        if p.get("lat") is None or p.get("lon") is None:
+            continue
+        if afstand(lat, lon, p["lat"], p["lon"]) <= (p.get("straal") or 120):
+            return p["naam"]
+    return None
+
+
 def _lokaal(tst):
     """Epoch naar Belgische tijd.
 
@@ -356,6 +399,49 @@ def gezondheid():
     return jsonify({"ok": True, "datum": datum, "bewaard": n})
 
 
+@app.route("/api/plekken", methods=["GET", "POST"])
+def api_plekken():
+    """Plekken met een naam beheren.
+
+    Deze route zit achter de gewone login van Authentik; alleen /pub,
+    /gebeurtenis en /gezondheid passeren die. Vanaf de VM zelf is hij
+    rechtstreeks bereikbaar op 127.0.0.1:3031, en zo worden plekken toegevoegd.
+    De wachtwoordcontrole bij POST is een tweede slot voor het geval de route
+    later wel naar buiten wordt opengezet.
+    """
+    conn = db()
+    if request.method == "POST":
+        if not WACHTWOORD or not _wachtwoord_klopt():
+            abort(403)
+        d = request.get_json(silent=True) or {}
+        naam = str(d.get("naam", "")).strip()[:60]
+        if not naam:
+            abort(400)
+        if d.get("verwijder"):
+            conn.execute("DELETE FROM plek WHERE naam=?", (naam,))
+            conn.commit(); conn.close()
+            return jsonify({"ok": True, "verwijderd": naam})
+        plek_db(conn)
+        conn.execute("""INSERT INTO plek (naam, lat, lon, straal, wifi, soort, notitie)
+                        VALUES (?,?,?,?,?,?,?)
+                        ON CONFLICT(naam) DO UPDATE SET
+                          lat=excluded.lat, lon=excluded.lon, straal=excluded.straal,
+                          wifi=excluded.wifi, soort=excluded.soort,
+                          notitie=excluded.notitie""",
+                     (naam, d.get("lat"), d.get("lon"), int(d.get("straal") or 120),
+                      str(d.get("wifi", ""))[:200] or None,
+                      str(d.get("soort", ""))[:40] or None,
+                      str(d.get("notitie", ""))[:200] or None))
+        conn.commit()
+        uit = plekken(conn)
+        conn.close()
+        return jsonify({"ok": True, "bewaard": naam, "plekken": uit})
+
+    uit = plekken(conn)
+    conn.close()
+    return jsonify({"plekken": uit})
+
+
 @app.route("/api/gezondheid/<datum>")
 def api_gezondheid(datum):
     conn = db()
@@ -445,6 +531,12 @@ def dagindeling(punten):
     if not punten:
         return []
 
+    # Eenmalig ophalen: de lijst is kort en verandert zelden, maar hem per
+    # bezoek opvragen zou een databaseverbinding per stuk kosten.
+    conn = db()
+    bekende_plekken = plekken(conn)
+    conn.close()
+
     toestanden = []
     for i, p in enumerate(punten):
         toestanden.append(_toestand(p, punten[i - 1] if i else None))
@@ -463,14 +555,17 @@ def dagindeling(punten):
             minuten = (groep[-1]["tst"] - groep[0]["tst"]) / 60
             if minuten < STILSTAND_MINUTEN:
                 continue        # te kort om een bezoek te heten
+            mlat = round(sum(p["lat"] for p in groep) / len(groep), 6)
+            mlon = round(sum(p["lon"] for p in groep) / len(groep), 6)
+            gezien = {(p.get("ssid") or "").lower() for p in groep if p.get("ssid")}
             resultaat.append({
                 "soort": "bezoek",
                 "van": groep[0]["tst"], "tot": groep[-1]["tst"],
                 "minuten": round(minuten),
-                "lat": round(sum(p["lat"] for p in groep) / len(groep), 6),
-                "lon": round(sum(p["lon"] for p in groep) / len(groep), 6),
+                "lat": mlat, "lon": mlon,
                 "punten": len(groep),
                 "wifi": next((p.get("ssid") for p in groep if p.get("ssid")), None),
+                "plek": noem_plek(mlat, mlon, gezien, bekende_plekken),
             })
         else:
             # Een rit loopt van waar je vertrok tot waar je aankwam, dus het

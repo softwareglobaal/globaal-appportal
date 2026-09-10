@@ -187,6 +187,10 @@ def markdown(datum, gegevens, cache, adressen=True):
                 a = adres_van(s["lat"], s["lon"], cache)
                 if a and a["kort"]:
                     waar = f"{a['kort']} ([kaart](https://maps.google.com/?q={s['lat']},{s['lon']}))"
+            # Een vastgelegde naam gaat voor het opgezochte adres: "Thuis" zegt
+            # meer dan "Herfstlaan 65", en blijft kloppen als de GPS afdrijft.
+            if s.get("plek"):
+                waar = f"**{s['plek']}** ({waar})"
             r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} "
                      f"| bezoek | {waar} | {s.get('wifi') or ''} |")
         else:
@@ -200,6 +204,8 @@ def markdown(datum, gegevens, cache, adressen=True):
         for s in bezoeken:
             a = cache.get(f"{s['lat']:.4f},{s['lon']:.4f}")
             naam = a["volledig"] if a else f"{s['lat']:.5f}, {s['lon']:.5f}"
+            if s.get("plek"):
+                naam = f"{s['plek']} - {naam}"
             r.append(f"- **{uur(s['van'])}-{uur(s['tot'])}** ({duur(s['minuten'])}) {naam}")
 
     r += ["", "---", "",
