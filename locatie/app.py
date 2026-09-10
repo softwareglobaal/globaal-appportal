@@ -46,6 +46,13 @@ LATERE_KOLOMMEN = {
     "regios": "TEXT",       # geofences waar de telefoon op dat moment in zat
     "gebeurtenis": "TEXT",  # enter of leave, bij een zone-overgang
     "zone": "TEXT",         # naam van de zone die betreden of verlaten werd
+    # Wanneer het bericht hier aankwam, naast tst (wanneer het gemeten werd).
+    # Zonder dit verschil is niet te zien of een stilte betekent dat de telefoon
+    # niets mat, of dat hij wel mat maar niets kwijt kon en het later nastuurde.
+    # Op 10-9-2026 viel de stroom stil zodra de telefoon op de wifi van de auto
+    # zat (4G-router); pas dit veld kan zeggen welke van de twee het was.
+    "ontvangen": "INTEGER",
+    "gemaakt": "INTEGER",   # created_at van OwnTracks: wanneer het bericht klaarstond
 }
 
 
@@ -189,10 +196,10 @@ def pub():
     conn.execute(
         """INSERT INTO punt (tst, lat, lon, acc, alt, vel, batt, conn, tid, soort, ruw,
                              bs, ssid, bssid, motion, druk, vac, trigger, regios,
-                             gebeurtenis, zone)
+                             gebeurtenis, zone, ontvangen, gemaakt)
            VALUES (:tst, :lat, :lon, :acc, :alt, :vel, :batt, :conn, :tid, :soort, :ruw,
                    :bs, :ssid, :bssid, :motion, :druk, :vac, :trigger, :regios,
-                   :gebeurtenis, :zone)
+                   :gebeurtenis, :zone, :ontvangen, :gemaakt)
            ON CONFLICT(tst) DO NOTHING""",
         {"bs": heel("bs"),
          "ssid": str(data.get("ssid", ""))[:64] or None,
@@ -207,6 +214,8 @@ def pub():
          # afstanden, en het werkt ook in de zuinige stand van iOS.
          "gebeurtenis": str(data.get("event", ""))[:8] or None,
          "zone": str(data.get("desc", ""))[:80] or None,
+         "ontvangen": int(time.time()),
+         "gemaakt": heel("created_at"),
          "tst": tst, "lat": lat, "lon": lon, "acc": heel("acc"), "alt": heel("alt"),
          "vel": heel("vel"), "batt": heel("batt"),
          "conn": str(data.get("conn", ""))[:4], "tid": str(data.get("tid", ""))[:8],
