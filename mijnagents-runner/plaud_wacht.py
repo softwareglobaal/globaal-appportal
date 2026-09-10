@@ -20,6 +20,7 @@ sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import bronnen  # noqa: E402
+import dropbox_prive  # noqa: E402
 import fathom_wacht as fw  # noqa: E402  (personen_uit_werkwijze, herken, deals_index, veilige_naam)
 
 NAAM = "plaud-wacht"
@@ -142,6 +143,9 @@ def main():
         ag.log("Plaud", "bron", f"{gezien} transcriptbestanden in inbox en salesmappen; {nieuw} nieuw verwerkt; {len(personen)} personen in de tabel")
         ag.log("Plaud", "schrijf", f"gesprekkentabel +{len(rijen)}; klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend")
         ag.log_verstuur()
+        sp = dropbox_prive.spiegel_map(ARCHIEF, "/Plaud")
+        if sp["verstuurd"] or sp["fout"]:
+            ag.log("Plaud", "schrijf", f"Dropbox privé: {sp['verstuurd']} bestand(en) verstuurd" + (f"; fout: {sp['fout']}" if sp["fout"] else ""))
         ag.hartslag("waakt" if gezien else "rust", taak="wacht op Plaud-transcripten",
                     detail=(f"laatste ronde: {gezien} bestanden, {nieuw} nieuw" if gezien else "wacht op de Plaud-routine (claude.ai)"), nood=nood)
     except Exception as e:  # noqa: BLE001

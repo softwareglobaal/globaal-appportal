@@ -34,6 +34,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import agenda  # noqa: E402
 import bord  # noqa: E402
+import dropbox_prive  # noqa: E402
 
 NAAM = "locatie-wacht"
 ag = bord.Agent(NAAM)
@@ -229,9 +230,12 @@ def main():
         ag.log(f"dag {DAG}", "bron", f"{len(gegevens.get('indeling') or [])} segmenten, {len(bezoeken)} bezoeken; agenda: {len(doorgegaan)} doorgegaan, {len(niet_gezien)} niet gezien, {len(zonder_adres)} zonder adres")
         ag.log(f"dag {DAG}", "bevinding", f"{len(onbekend)} bezoek(en) van 20 min of meer zonder afspraak", volledig)
         ag.log(f"dag {DAG}", "schrijf", f"dagboek geschreven: {pad}; klaargezet voor Mehdi ({uit.get('nieuw', 0)} nieuw)")
+        sp = dropbox_prive.spiegel_map(MAP, "/Locatie")
+        if sp["verstuurd"] or sp["fout"]:
+            ag.log(f"dag {DAG}", "schrijf", f"Dropbox privé: {sp['verstuurd']} bestand(en) verstuurd" + (f"; fout: {sp['fout']}" if sp["fout"] else ""))
         ag.log_verstuur()
         ag.hartslag("klaar", taak=f"dagboek {DAG} klaar", detail=f"{len(bezoeken)} bezoeken, {len(onbekend)} zonder afspraak",
-                    nood=([{"tekst": "Geen Dropbox-token van Mehdi's eigen account: het dagboek staat op de VM, de kopie naar private/... maakt het Mac-script", "wie": "mehdi"}] if not os.environ.get("DROPBOX_PRIVE_REFRESH_TOKEN") else [])
+                    nood=dropbox_prive.nood(wat="het locatielogboek")
                     + ([{"tekst": f"{len(zonder_adres)} afspraken zonder adres in de agenda: de vergelijking is daar blind", "wie": "collega"}] if zonder_adres else []))
         try:
             controle()

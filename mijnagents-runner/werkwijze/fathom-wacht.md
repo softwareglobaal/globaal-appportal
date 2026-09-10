@@ -89,9 +89,13 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
   Shaniel), anders zie ik zijn gesprekken niet. Zetten: `FATHOM_API_KEYS` in
   `~/appportal/.env`, komma-gescheiden; het script `contracten-fathom-sleutel`
   bestaat nog niet, Claude Code maakt het.
-- **De privé-Dropbox**: een account of map die alleen van hem is, met een token
-  op de VM (`DROPBOX_PRIVE_APP_KEY/SECRET/REFRESH_TOKEN` en
-  `FATHOM_ARCHIEF_PAD`). Tot dan staat het archief op de VM.
+- **De privé-Dropbox**: een Dropbox-app die Mehdi op zijn eigen account
+  toestaat; koppelen doet Shaniel met Mehdi erbij via
+  `mijnagents-runner/dropbox_prive_koppelen.py` (zet
+  `DROPBOX_PRIVE_APP_KEY/SECRET/REFRESH_TOKEN` in `~/appportal/.env`). Daarna
+  spiegel ik het archief elke ronde naar de map `Fathom` in die Dropbox
+  (`koppelingen/dropbox_prive.py`: alleen schrijven, nooit wissen). Tot dan
+  staat het archief alleen op de VM.
 - **Toegang van anderen tot Fathom wegnemen**: dat doet hij in Fathom zelf;
   daarna deel ik.
 - **De tabel "Betrokken personen"** aanvullen met zijn dashboard van collega's.
