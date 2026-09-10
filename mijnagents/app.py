@@ -534,6 +534,39 @@ def api_kantoor():
     return jsonify(agents=[{k: a[k] for k in ("naam", "toestand", "taak", "detail")} for a in agents])
 
 
+@app.route("/dag/<datum>")
+def dag_pagina(datum):
+    """Alles van één dag bij elkaar: overzicht en bundels van de Dagbundelaar, de
+    spiegel van De Levenscoach, het locatiedagboek, de gesprekken, de afspraken,
+    de foto's, het lichaam, de mails. Alleen beheer."""
+    if not mag_beslissen() or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", datum):
+        abort(404 if mag_beslissen() else 403)
+    conn = db()
+    items = []
+    for it in conn.execute("SELECT * FROM klaarzet ORDER BY id").fetchall():
+        inhoud = it["inhoud"] or ""
+        try:
+            d = json.loads(inhoud) if inhoud.startswith("{") else {}
+        except ValueError:
+            d = {}
+        dag = (d.get("datum") or d.get("start") or it["sleutel"] or "")[:10]
+        if dag == datum or (it["soort"] in ("dagbundel", "coaching", "locatie", "dagplan", "mail", "gezondheid") and it["sleutel"] == datum):
+            r = dict(it)
+            r["json"] = d
+            r["tekst"] = inhoud if not inhoud.startswith("{") else ""
+            items.append(r)
+    def van_soort(*s):
+        return [i for i in items if i["soort"] in s]
+    gesprekken = conn.execute("SELECT * FROM gesprek_log WHERE datum=? ORDER BY start", (datum,)).fetchall()
+    return render_template(
+        "dag.html", app_naam=APP_NAAM, datum=datum, mdf=md,
+        overzichten=van_soort("dagbundel"), spiegels=van_soort("coaching"), locaties=van_soort("locatie"),
+        dagplannen=van_soort("dagplan"), afspraken=van_soort("afspraak"), fotos=van_soort("foto"),
+        gezondheid=van_soort("gezondheid"), mails=van_soort("mail"), signalen=van_soort("signaal"),
+        transcripten=van_soort("transcript", "werfbezoek"), gesprekken=gesprekken,
+    )
+
+
 # --- organogram: getekend uit de gegevens zelf (afdelingen, agents, levert_aan)
 @app.route("/organogram")
 def organogram():

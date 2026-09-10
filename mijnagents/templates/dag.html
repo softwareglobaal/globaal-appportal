@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ datum }} — {{ app_naam }}</title>
+<style>
+  :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;--stil:#f59e0b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tekst);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:16px 24px;border-bottom:1px solid var(--rand);display:flex;gap:14px;align-items:baseline}
+  header h1{margin:0;font-size:19px}
+  header a{color:var(--accent);text-decoration:none;font-size:13px}
+  main{padding:18px 24px;max-width:1000px;margin:0 auto}
+  .blok{background:var(--paper);border:1px solid var(--rand);border-radius:12px;padding:14px 18px;margin-bottom:14px}
+  .blok h2{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--zacht)}
+  .md h1,.md h2,.md h3{color:var(--tekst);letter-spacing:0;text-transform:none;margin:14px 0 6px}
+  .md h1{font-size:17px}.md h2{font-size:14px}.md h3{font-size:13px}
+  .md table{border-collapse:collapse;font-size:13px;width:100%}.md td,.md th{padding:4px 8px;border-top:1px solid var(--rand);text-align:left;vertical-align:top}
+  .md ul{padding-left:20px;margin:4px 0}.md p{margin:6px 0}
+  .wrap{overflow-x:auto}
+  table.t{border-collapse:collapse;width:100%;font-size:13px}
+  table.t td,table.t th{padding:5px 8px;border-top:1px solid var(--rand);text-align:left;vertical-align:top}
+  table.t th{color:var(--zacht);font-weight:600}
+  .leeg{color:var(--zacht);font-style:italic}
+  details summary{cursor:pointer;color:var(--accent)}
+  .tag{font-size:11px;color:var(--zacht)}
+  pre{white-space:pre-wrap;font-size:12px;background:#0c0e12;padding:8px;border-radius:6px}
+</style>
+</head>
+<body>
+<header><h1>Dag {{ datum }}</h1><a href="{{ url_for('dagen_pagina') }}">← alle dagen</a><a href="{{ url_for('bord') }}">bord</a></header>
+<main>
+
+  <div class="blok">
+    <h2>Dagoverzicht en bundels (De Dagbundelaar)</h2>
+    {% for o in overzichten %}
+      <details {% if loop.first %}open{% endif %}><summary>{{ o['titel'] }} <span class="tag">{{ o['van'] }} · {{ o['ts'][:16].replace('T',' ') }}</span></summary>
+        <div class="md">{{ mdf(o['tekst'] or o['inhoud'])|safe }}</div></details>
+    {% else %}<p class="leeg">Nog geen bundel voor deze dag. De Dagbundelaar draait elke werkdag om 07:00 voor de dag ervoor.</p>{% endfor %}
+  </div>
+
+  <div class="blok">
+    <h2>Dagspiegel (De Levenscoach)</h2>
+    {% for s in spiegels %}<div class="md">{{ mdf(s['tekst'])|safe }}</div>{% else %}<p class="leeg">Nog geen spiegel.</p>{% endfor %}
+  </div>
+
+  <div class="blok">
+    <h2>Locatie (De Locatiewacht)</h2>
+    {% for l in locaties %}<div class="md">{{ mdf(l['tekst'])|safe }}</div>{% else %}<p class="leeg">Geen locatiedagboek voor deze dag.</p>{% endfor %}
+  </div>
+
+  <div class="blok">
+    <h2>Agenda (De Agendawacht)</h2>
+    {% if dagplannen %}{% for p in dagplannen %}<pre>{{ p['tekst'] }}</pre>{% endfor %}{% endif %}
+    {% if afspraken %}<div class="wrap"><table class="t"><tr><th>Tijd</th><th>Afspraak</th><th>Plaats</th><th>Deal</th></tr>
+      {% for a in afspraken %}<tr><td>{{ a['json'].get('start','')[11:16] }}</td><td>{{ a['json'].get('titel','') }}</td><td>{{ (a['json'].get('locatie') or '')[:50] }}</td><td>{{ a['json'].get('deal_id') or '' }}</td></tr>{% endfor %}
+    </table></div>{% elif not dagplannen %}<p class="leeg">Geen afspraken klaargezet voor deze dag.</p>{% endif %}
+  </div>
+
+  <div class="blok">
+    <h2>Gesprekken (Fathom, Plaud, mail, telefoon)</h2>
+    {% if gesprekken %}<div class="wrap"><table class="t"><tr><th>Bron</th><th>Start</th><th>Min</th><th>Personen</th><th>Afdeling</th><th>Thema</th><th>Project</th><th>Zeker</th></tr>
+      {% for g in gesprekken %}<tr><td>{{ g['bron'] }}</td><td>{{ g['start'] }}</td><td>{{ g['minuten'] or '' }}</td><td>{{ g['personen'] }}</td><td>{{ g['afdeling'] }}{% if g['prive'] %} · privé{% endif %}</td><td>{{ g['thema'] }}</td><td>{{ g['project'] }}</td><td>{{ g['zekerheid'] }}</td></tr>{% endfor %}
+    </table></div>{% else %}<p class="leeg">Geen gesprekken in de tabel voor deze dag.</p>{% endif %}
+  </div>
+
+  <div class="blok">
+    <h2>Mail</h2>
+    {% for m in mails %}<p>{{ m['json'].get('overzicht','') }}</p>{% for h in m['json'].get('hoog', []) %}<div>- {{ h }}</div>{% endfor %}{% else %}<p class="leeg">Geen mailoverzicht.</p>{% endfor %}
+  </div>
+
+  <div class="blok">
+    <h2>Foto's en lichaam</h2>
+    {% for f in fotos %}<div>{{ f['titel'] }}</div>{% else %}<p class="leeg">Geen foto's klaargezet.</p>{% endfor %}
+    {% for g in gezondheid %}<pre>{{ g['json'].get('samenvatting','') }}</pre>{% else %}<p class="leeg">Geen Apple Watch-gegevens.</p>{% endfor %}
+  </div>
+
+  {% if signalen %}<div class="blok"><h2>Signalen</h2>{% for s in signalen %}<div>- {{ s['titel'] }} <span class="tag">{{ s['van'] }}</span></div>{% endfor %}</div>{% endif %}
+</main>
+</body>
+</html>

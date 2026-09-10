@@ -27,14 +27,14 @@
 <body>
 <header><h1>Dagen</h1><a href="{{ url_for('bord') }}">← bord</a></header>
 <main>
-  <p class="uitleg">Per dag wat de logboek-laag samenbracht. De Dagbundelaar verzamelt, De Levenscoach schrijft de spiegel. Ontbreekt een kolom, dan zegt de agent op zijn kaart wat hij daarvoor nodig heeft.</p>
+  <p class="uitleg">Per dag wat de logboek-laag samenbracht. Klik op de datum voor de dagpagina met alles van die dag: overzicht en bundels, spiegel, locatie, agenda, gesprekken, mail, foto's en lichaam. Ontbreekt een kolom, dan zegt de agent op zijn kaart wat hij daarvoor nodig heeft.</p>
   <div class="wrap">
   <table>
     <thead><tr><th>Dag</th><th>Afspraken</th><th>Gesprekken</th><th>Min</th><th>Met wie</th><th>Bezoeken</th><th>Km</th><th>Onderweg</th><th>Foto's</th><th>Lichaam</th><th>Spiegel</th></tr></thead>
     <tbody>
     {% for r in rijen %}
     <tr>
-      <td><b>{{ r['dag'] }}</b>{% if r['signalen'] %}<div class="leeg">{{ r['signalen'] }} signaal</div>{% endif %}</td>
+      <td><a href="{{ url_for('dag_pagina', datum=r['dag']) }}" style="color:var(--accent);text-decoration:none;font-weight:600">{{ r['dag'] }}</a>{% if r['signalen'] %}<div class="leeg">{{ r['signalen'] }} signaal</div>{% endif %}</td>
       <td class="n">{{ r['afspraken'] or '' }}</td>
       <td class="n">{{ r['gesprekken'] or '' }}</td>
       <td class="n">{{ r['gesprek_min'] or '' }}</td>
