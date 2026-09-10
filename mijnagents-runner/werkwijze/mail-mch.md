@@ -26,6 +26,25 @@ zijn Mac, omdat het wachtwoord daar in de Keychain staat (service onemail).
 | Wie is wie | de tabel Betrokken personen in de werkwijze van De Fathomwacht; plus vaste rollen: boekhouder, bankier, notaris, advocaat, overheid, verzekeraar |
 | Wat al opgeruimd en uitgeschreven is | de scripts in ~/.claude/tools/mailopruiming (46 afzenders uitgeschreven op 04-09-2026) |
 
+## Afzenders met hoog belang (Mehdi bevestigt en vult aan; ik herken op naam of domein in het Van-veld)
+
+Elke rij: een rol, en een of meer kenmerken (naam of domein, gescheiden door
+komma's) die in de afzender voorkomen. Elke rol in deze tabel is hoog belang.
+Startlijst van Shaniel, 10-09-2026, uit Octopus (dossier H-Architects, laatste
+jaar) en de eerste mailrondes; "(in te vullen)" telt niet mee tot Mehdi het invult.
+
+| Rol | Afzender (naam of domein) | Bron | Opmerking |
+|---|---|---|---|
+| bank | kbc.be, KBC Brussels | Octopus H-A: 12 boekingen | zakelijke rekening |
+| boekhouder | (in te vullen) | geen accountantskantoor in de H-A-boekingen van het laatste jaar; DRT & Partners is Harmoniebouw | Mehdi: wie doet de boekhouding van H-Architects? |
+| sociaal verzekeringsfonds | liantis.be, Liantis | Octopus H-A | bijdragen, altijd hoog |
+| overheid | belgium.be, vlaanderen.be, minfin.fgov.be, omgevingsloket, Vlaamse Belastingdienst, FOD Financien | vaste lijst | |
+| advocaat | legaloffice.be | mail 09-09-2026, al hoog herkend | Mehdi: klopt dit kantoor? |
+| notaris | (in te vullen) | geen notaris bij H-A in het laatste jaar | |
+| verzekeraar | (in te vullen) | bij andere firma's AXA, Ethias, Federale | Mehdi: welke verzekeraar voor H-A en prive? |
+| arts | (in te vullen) | | huisarts, ziekenhuis, mutualiteit |
+| klant wacht | (in te vullen) | | klanten die altijd voorrang krijgen |
+
 ## Wat ik doe, in deze volgorde
 
 1. Elk uur op de Mac, en om 07:00 een dagoverzicht.

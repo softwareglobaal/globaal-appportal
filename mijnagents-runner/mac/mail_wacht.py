@@ -71,11 +71,49 @@ def tekst_van(b):
     return b.get_payload(decode=True).decode(b.get_content_charset() or "utf-8", "replace")
 
 
+HOOG_ROLLEN = {"boekhouder", "bank", "overheid", "notaris", "advocaat", "deurwaarder"}
+
+
+def werkwijze(naam):
+    """De werkwijze van deze wacht op het bord (zelfde token als de hartslag)."""
+    try:
+        req = urllib.request.Request(f"{BORD}/api/agent/{naam}/werkwijze", headers={"X-Agents-Token": token()})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return (json.loads(r.read().decode() or "{}")).get("werkwijze") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def afzenders_uit_werkwijze(tekst):
+    """Tabel '## Afzenders met hoog belang' op het bord: | Rol | Afzender (naam of domein) | ... |.
+    Elke afzender-cel mag meerdere kenmerken bevatten, gescheiden door komma of puntkomma.
+    Vult ROLLEN aan en maakt elke rol uit die tabel een rol met hoog belang. Geeft het aantal kenmerken."""
+    blok = tekst.split("## Afzenders met hoog belang", 1)
+    if len(blok) < 2:
+        return 0
+    n = 0
+    for regel in blok[1].split("\n## ", 1)[0].splitlines():
+        if not regel.startswith("|") or regel.startswith("|---") or regel.lower().startswith("| rol"):
+            continue
+        cellen = [c.strip() for c in regel.strip().strip("|").split("|")]
+        if len(cellen) < 2 or not cellen[0] or not cellen[1] or "in te vullen" in cellen[1].lower():
+            continue
+        rol = cellen[0].lower()
+        kenmerken = [k.strip().lower() for k in re.split(r"[,;]", cellen[1]) if len(k.strip()) > 2]
+        if not kenmerken:
+            continue
+        ROLLEN.setdefault(rol, [])
+        ROLLEN[rol] = list(dict.fromkeys(ROLLEN[rol] + kenmerken))
+        HOOG_ROLLEN.add(rol)
+        n += len(kenmerken)
+    return n
+
+
 def trieer(van, onderwerp, tekst, koppen):
     laag = (van + " " + onderwerp).lower()
     rol = next((r for r, delen in ROLLEN.items() if any(d in laag for d in delen)), "")
     nieuwsbrief = bool(koppen.get("List-Unsubscribe")) or any(w in laag for w in LAAG)
-    hoog = rol in ("boekhouder", "bank", "overheid", "notaris", "advocaat", "deurwaarder") or any(w in (onderwerp + " " + tekst[:600]).lower() for w in HOOG)
+    hoog = rol in HOOG_ROLLEN or any(w in (onderwerp + " " + tekst[:600]).lower() for w in HOOG)
     belang = "laag" if nieuwsbrief and not hoog else ("hoog" if hoog else "midden")
     soort = "nieuwsbrief" if nieuwsbrief else ("factuur" if re.search(r"factuur|invoice|betaling", laag) else ("afspraak" if re.search(r"afspraak|meeting|uitnodiging", laag) else "bericht"))
     waarom = ", ".join(x for x in (f"rol {rol}" if rol else "", "nieuwsbrief-kop" if koppen.get("List-Unsubscribe") else "",
@@ -95,6 +133,9 @@ def main():
                                "nood": [{"tekst": f"Geen wachtwoord in de Keychain voor {a.account}: security add-generic-password -s onemail -a {a.account} -w (hotmail: app-wachtwoord)", "wie": "mehdi"}]})
         print("geen wachtwoord"); return
     bord("/agent-status", {"naam": naam, "status": "actief", "taak": "mail lezen"})
+    extra = afzenders_uit_werkwijze(werkwijze(naam))
+    if extra:
+        print(f"{extra} afzender-kenmerken met hoog belang uit de werkwijze op het bord")
     host = PROVIDERS.get(a.account.split("@")[-1].lower(), ("imap.one.com", 993))
     sinds = (datetime.now(timezone.utc) - timedelta(hours=a.uren)).strftime("%d-%b-%Y")
     M = imaplib.IMAP4_SSL(*host)
