@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kantoor — {{ app_naam }}</title>
+<style>
+  :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;
+        --rust:#6b7280;--waakt:#3b82f6;--actief:#22c55e;--klaar:#8b5cf6;--fout:#ef4444;--stil:#f59e0b;--onbekend:#4b5563;
+        --vloer:#1b1f28;--muur:#2c3340;--hout:#5a4632;--hout2:#7a6244}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tekst);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:16px 24px;border-bottom:1px solid var(--rand);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+  header h1{margin:0;font-size:19px}
+  header a{color:var(--accent);text-decoration:none;font-size:13px}
+  header .tel{color:var(--zacht);font-size:12px;margin-left:auto}
+  main{padding:18px 24px;max-width:1300px;margin:0 auto}
+  .verdieping{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+  .kamer{background:var(--vloer);border:3px solid var(--muur);border-radius:14px;padding:12px 14px 10px;position:relative;min-height:190px}
+  .kamer.regie{grid-column:1/-1;background:#1a2030}
+  .kamer h2{margin:0 0 8px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--zacht);display:flex;justify-content:space-between}
+  .kamer h2 small{text-transform:none;letter-spacing:0;font-weight:400}
+  .bureaus{display:flex;flex-wrap:wrap;gap:10px 14px}
+  .bureau{width:150px;text-decoration:none;color:inherit;text-align:center;position:relative}
+  .bureau svg{width:150px;height:130px;display:block}
+  .bureau .naam{font-weight:600;font-size:13px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bureau .rol{color:var(--zacht);font-size:11px;line-height:1.25;height:28px;overflow:hidden}
+  .ballon{position:absolute;left:8px;right:8px;top:0;background:#fff;color:#111;border-radius:10px;padding:5px 8px;font-size:11px;line-height:1.25;
+          box-shadow:0 2px 8px rgba(0,0,0,.4);opacity:0;transform:translateY(6px);transition:.2s;pointer-events:none;z-index:2;text-align:left}
+  .ballon:after{content:"";position:absolute;left:50%;bottom:-7px;margin-left:-7px;border:7px solid transparent;border-top-color:#fff;border-bottom:0}
+  .bureau:hover .ballon,.bureau.praat .ballon{opacity:1;transform:translateY(0)}
+  .leeg{color:var(--zacht);font-size:12px;font-style:italic;padding:30px 0}
+  .parking{grid-column:1/-1;background:#14171d;border:3px dashed var(--muur);border-radius:14px;padding:10px 14px;display:flex;align-items:center;gap:16px;color:var(--zacht);font-size:12px}
+  .legenda{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0 0;color:var(--zacht);font-size:12px}
+  .stip{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+</style>
+</head>
+<body>
+<header><h1>Kantoor</h1><a href="{{ url_for('bord') }}">← bord</a><a href="{{ url_for('organogram') }}">organogram</a><span class="tel" id="tel"></span></header>
+<main>
+  <div class="verdieping">
+  {% for k in kamers %}
+    <section class="kamer {{ 'regie' if k['naam'] == 'regie' else '' }}">
+      <h2>{{ k['label'] }} <small>{{ k['leden']|length }} {{ 'bureau' if k['leden']|length == 1 else 'bureaus' }}</small></h2>
+      {% if not k['leden'] %}<div class="leeg">Nog geen bureau bezet.</div>{% endif %}
+      <div class="bureaus">
+      {% for a in k['leden'] %}
+        {% set kl = ['#e8b26b','#c98d5a','#9c6b45','#f1d2b0','#6b4a35','#d4a373'][a['kleur']] %}
+        {% set kleding = ['#3b82f6','#8b5cf6','#22c55e','#f59e0b','#ec4899','#14b8a6'][(a['kleur']+2)%6] %}
+        <a class="bureau" href="{{ url_for('detail', naam=a['naam']) }}" data-naam="{{ a['naam'] }}">
+          <div class="ballon" data-ballon>{{ a['taak'] or 'nog niets gemeld' }}{% if a['detail'] %}<br><span style="color:#555">{{ a['detail'] }}</span>{% endif %}</div>
+          <svg viewBox="0 0 150 130" aria-hidden="true">
+            <!-- bureau -->
+            <rect x="15" y="88" width="120" height="10" rx="3" fill="var(--hout2)"/>
+            <rect x="22" y="98" width="8" height="26" fill="var(--hout)"/><rect x="120" y="98" width="8" height="26" fill="var(--hout)"/>
+            <!-- laptop -->
+            <rect x="92" y="70" width="30" height="18" rx="2" fill="#2b3240"/><rect x="95" y="73" width="24" height="12" fill="#6ea8fe" opacity=".8"/>
+            <!-- stoel -->
+            <rect x="55" y="96" width="40" height="8" rx="3" fill="#3a3f4b"/>
+            <!-- figuur -->
+            <g>
+              <rect x="52" y="56" width="46" height="34" rx="10" fill="{{ kleding }}"/>
+              <circle cx="75" cy="42" r="17" fill="{{ kl }}"/>
+              {% if a['kleur'] % 3 == 0 %}<path d="M58 40 q17 -22 34 0 q-6 -8 -17 -8 q-11 0 -17 8z" fill="#2b1d12"/>
+              {% elif a['kleur'] % 3 == 1 %}<path d="M58 38 q17 -18 34 0 v6 q-17 -10 -34 0z" fill="#3d2a1a"/>
+              {% else %}<ellipse cx="75" cy="29" rx="18" ry="7" fill="#1f1a17"/>{% endif %}
+              <circle cx="69" cy="43" r="1.8" fill="#222"/><circle cx="81" cy="43" r="1.8" fill="#222"/>
+              <path d="M69 50 q6 5 12 0" stroke="#222" stroke-width="1.5" fill="none"/>
+              <!-- prop -->
+              {% set p = a['prop'] %}
+              {% if p == 'megafoon' %}<path d="M104 52 l16 -8 v20 l-16 -8z" fill="#f59e0b"/><rect x="98" y="54" width="8" height="8" fill="#d97706"/>
+              {% elif p == 'envelop' %}<rect x="100" y="50" width="22" height="14" fill="#f8fafc"/><path d="M100 50 l11 8 l11 -8" stroke="#94a3b8" fill="none"/>
+              {% elif p == 'pen' %}<rect x="108" y="44" width="4" height="24" fill="#111" transform="rotate(20 110 56)"/>
+              {% elif p == 'kalender' %}<rect x="100" y="48" width="20" height="18" fill="#fff"/><rect x="100" y="48" width="20" height="5" fill="#ef4444"/>
+              {% elif p == 'koptelefoon' %}<path d="M60 38 a15 15 0 0 1 30 0" stroke="#111" stroke-width="3" fill="none"/><rect x="57" y="36" width="6" height="10" rx="2" fill="#111"/><rect x="87" y="36" width="6" height="10" rx="2" fill="#111"/>
+              {% elif p == 'microfoon' %}<rect x="106" y="42" width="8" height="16" rx="4" fill="#111"/><rect x="109" y="58" width="2" height="8" fill="#111"/>
+              {% elif p == 'kompas' %}<circle cx="110" cy="52" r="9" fill="#fff" stroke="#111"/><path d="M110 45 l3 7 l-3 7 l-3 -7z" fill="#ef4444"/>
+              {% elif p == 'camera' %}<rect x="100" y="48" width="22" height="14" rx="2" fill="#111"/><circle cx="111" cy="55" r="4" fill="#6ea8fe"/>
+              {% elif p == 'hart' %}<path d="M110 62 l-8 -8 a5 5 0 0 1 8 -6 a5 5 0 0 1 8 6z" fill="#ef4444"/>
+              {% elif p == 'kopje' %}<rect x="102" y="52" width="14" height="12" rx="2" fill="#fff"/><path d="M116 55 a4 4 0 0 1 0 8" stroke="#fff" fill="none"/>
+              {% elif p == 'map' %}<rect x="100" y="50" width="22" height="16" fill="#f59e0b"/><rect x="100" y="47" width="10" height="4" fill="#d97706"/>
+              {% elif p == 'brief' %}<rect x="100" y="52" width="20" height="12" fill="#fff"/><path d="M100 52 l10 7 l10 -7" stroke="#94a3b8" fill="none"/>
+              {% elif p == 'scherm' %}<rect x="98" y="46" width="24" height="16" rx="2" fill="#111"/><rect x="101" y="49" width="18" height="10" fill="#22c55e" opacity=".8"/>
+              {% elif p == 'telefoon' %}<rect x="105" y="44" width="10" height="20" rx="3" fill="#111"/><rect x="107" y="47" width="6" height="12" fill="#22c55e" opacity=".8"/>
+              {% elif p == 'hoorn' %}<path d="M100 50 q10 -10 20 0 q-4 6 -10 6 q-6 0 -10 -6z" fill="#111"/>
+              {% elif p == 'netwerk' %}<circle cx="104" cy="50" r="3" fill="#6ea8fe"/><circle cx="118" cy="50" r="3" fill="#6ea8fe"/><circle cx="111" cy="62" r="3" fill="#6ea8fe"/><path d="M104 50 L118 50 L111 62 Z" stroke="#6ea8fe" fill="none"/>
+              {% elif p == 'schroevendraaier' %}<rect x="108" y="42" width="4" height="14" fill="#ef4444"/><rect x="109" y="56" width="2" height="12" fill="#9ca3af"/>
+              {% endif %}
+            </g>
+            <!-- statuslampje -->
+            <circle cx="24" cy="76" r="5" data-stip fill="var(--{{ a['toestand'] }})"/>
+          </svg>
+          <div class="naam">{{ a['label'] }}</div>
+          <div class="rol">{{ a['rol'] }}</div>
+        </a>
+      {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+    <section class="parking">
+      <svg width="120" height="46" viewBox="0 0 120 46" aria-hidden="true"><rect x="10" y="20" width="100" height="16" rx="6" fill="#dc2626"/><path d="M30 20 l12 -12 h36 l12 12z" fill="#b91c1c"/><rect x="45" y="10" width="14" height="9" fill="#93c5fd"/><rect x="62" y="10" width="14" height="9" fill="#93c5fd"/><circle cx="32" cy="36" r="7" fill="#111"/><circle cx="88" cy="36" r="7" fill="#111"/><circle cx="32" cy="36" r="3" fill="#9ca3af"/><circle cx="88" cy="36" r="3" fill="#9ca3af"/></svg>
+      <span>Parking. De Locatiewacht weet waar deze staat; de Agendawacht weet wanneer hij weg moet.</span>
+    </section>
+  </div>
+  <div class="legenda">
+    <span><span class="stip" style="background:var(--actief)"></span>actief</span>
+    <span><span class="stip" style="background:var(--waakt)"></span>waakt</span>
+    <span><span class="stip" style="background:var(--klaar)"></span>klaar</span>
+    <span><span class="stip" style="background:var(--rust)"></span>rust</span>
+    <span><span class="stip" style="background:var(--stil)"></span>stil</span>
+    <span><span class="stip" style="background:var(--fout)"></span>fout</span>
+    <span>Beweeg over een bureau voor de laatste taak; klik voor de agentpagina. Ververst elke 30 seconden.</span>
+  </div>
+</main>
+<script>
+(function(){
+  var tel=document.getElementById('tel');
+  function ververs(){
+    fetch('/api/kantoor',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+      var n=0;(d.agents||[]).forEach(function(a){
+        var el=document.querySelector('.bureau[data-naam="'+a.naam+'"]'); if(!el) return;
+        var stip=el.querySelector('[data-stip]'); if(stip) stip.setAttribute('fill','var(--'+a.toestand+')');
+        var b=el.querySelector('[data-ballon]'); if(b){ b.innerHTML=(a.taak||'nog niets gemeld')+(a.detail?'<br><span style="color:#555">'+a.detail.replace(/</g,'&lt;')+'</span>':''); }
+        el.classList.toggle('praat', a.toestand==='actief'); if(a.toestand==='actief') n++;
+      });
+      tel.textContent=n+' aan het werk, '+new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+    }).catch(function(){});
+  }
+  ververs(); setInterval(ververs,30000);
+})();
+</script>
+</body>
+</html>

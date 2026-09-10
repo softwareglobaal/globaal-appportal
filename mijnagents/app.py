@@ -486,6 +486,50 @@ def dagen_pagina():
     return render_template("dagen.html", app_naam=APP_NAAM, rijen=rijen)
 
 
+# --- kantoor: het virtuele kantoor. Elke afdeling een kamer, elke agent een
+#     bureau met een figuurtje; de tekstballon is zijn laatste taak. Alles uit
+#     de gegevens, dus een nieuwe agent krijgt vanzelf een bureau.
+PROPS = (("regisseur", "megafoon"), ("ontwikkelaar", "schroevendraaier"), ("bode", "envelop"), ("contract", "pen"),
+         ("agenda", "kalender"), ("fathom", "koptelefoon"), ("plaud", "microfoon"), ("locatie", "kompas"),
+         ("icloud", "camera"), ("gezondheid", "hart"), ("levenscoach", "kopje"), ("dagbundel", "map"),
+         ("mail", "brief"), ("zoom", "scherm"), ("whatsapp", "telefoon"), ("bel", "hoorn"), ("communicatie", "netwerk"))
+
+
+def _kantoor_gegevens():
+    conn = db()
+    afd = [dict(r) for r in conn.execute("SELECT * FROM afdeling ORDER BY volgorde, naam").fetchall()]
+    agents = [dict(r) for r in conn.execute(f"SELECT naam,label,type,rol,draait_op,cadans,prive FROM agent WHERE actief=1{zichtbaar_sql()} ORDER BY label").fetchall()]
+    st = {r["naam"]: dict(r) for r in conn.execute("SELECT * FROM status").fetchall()}
+    for a in agents:
+        s = st.get(a["naam"])
+        a["toestand"], a["taak"], a["detail"] = "onbekend", "", ""
+        if s:
+            leeftijd = leeftijd_min(s["ts"])
+            t = s["status"] if s["status"] in STILTE_MIN else "waakt"
+            a["toestand"] = "stil" if (leeftijd is not None and leeftijd > STILTE_MIN.get(t, 150)) else t
+            a["taak"], a["detail"] = s["taak"] or "", (s["detail"] or "")[:90]
+        a["prop"] = next((p for k, p in PROPS if k in a["naam"]), "laptop")
+        a["kleur"] = sum(ord(c) for c in a["naam"]) % 6
+    return afd, agents
+
+
+@app.route("/kantoor")
+def kantoor():
+    afd, agents = _kantoor_gegevens()
+    # kamers: Regie apart bovenaan; de rest in rijen van drie, met de agents per kamer
+    kamers = []
+    for a in afd:
+        leden = [x for x in agents if x["type"] == a["naam"]]
+        kamers.append({**a, "leden": leden})
+    return render_template("kantoor.html", app_naam=APP_NAAM, kamers=kamers, mag_beslissen=mag_beslissen())
+
+
+@app.route("/api/kantoor")
+def api_kantoor():
+    _, agents = _kantoor_gegevens()
+    return jsonify(agents=[{k: a[k] for k in ("naam", "toestand", "taak", "detail")} for a in agents])
+
+
 # --- organogram: getekend uit de gegevens zelf (afdelingen, agents, levert_aan)
 @app.route("/organogram")
 def organogram():
