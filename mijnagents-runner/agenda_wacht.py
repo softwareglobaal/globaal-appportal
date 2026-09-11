@@ -24,6 +24,7 @@ from datetime import datetime, timedelta
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import agenda  # noqa: E402
+import projectadressen  # noqa: E402
 import bord  # noqa: E402
 import pipedrive  # noqa: E402
 
@@ -263,14 +264,38 @@ def coord(adres, cache):
     return uit
 
 
-def rijtijd_min(van, naar):
-    """Rijtijd in minuten via OSRM (openbare router), afgerond op 5 en met buffer."""
-    import math
+# Filefactor op de vrije rijtijd, per vertrekuur op een werkdag (Vlaanderen: ochtend- en
+# avondspits). Weekend en feestdagen: 1.0. Mehdi kan dit bijstellen in de werkwijze; de
+# tabel hier is de uitvoering ervan.
+SPITS = [((7, 0), (9, 30), 1.6), ((6, 30), (7, 0), 1.3), ((9, 30), (10, 0), 1.3),
+         ((16, 0), (18, 30), 1.6), ((15, 30), (16, 0), 1.3), ((18, 30), (19, 0), 1.3)]
+DAL_FACTOR = 1.1
+
+
+def filefactor(vertrek):
+    if vertrek.weekday() >= 5:
+        return 1.0
+    u = (vertrek.hour, vertrek.minute)
+    for van, tot, f in SPITS:
+        if van <= u < tot:
+            return f
+    return DAL_FACTOR
+
+
+def vrije_rijtijd_min(van, naar):
     import urllib.request
     url = f"https://router.project-osrm.org/route/v1/driving/{van[1]},{van[0]};{naar[1]},{naar[0]}?overview=false"
     d = json.load(urllib.request.urlopen(url, timeout=20))
-    minuten = d["routes"][0]["duration"] / 60
-    return int(math.ceil((minuten + BUFFER_MIN) / 5) * 5)
+    return d["routes"][0]["duration"] / 60
+
+
+def rijtijd_min(van, naar, vertrek):
+    """Rijtijd in minuten: vrije rijtijd (OSRM) x filefactor op het vertrekuur + buffer, afgerond op 5.
+    Geeft (minuten, factor)."""
+    import math
+    vrij = vrije_rijtijd_min(van, naar)
+    f = filefactor(vertrek)
+    return int(math.ceil((vrij * f + BUFFER_MIN) / 5) * 5), f
 
 
 def plaatsnaam(adres):
@@ -301,15 +326,24 @@ def reistijd_zetten(items, alleen_dag=None):
     nu = datetime.now().astimezone()
     gemaakt, al, geen_adres, fout, regels = 0, 0, 0, 0, []
     reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"]]
+    projecten = projectadressen.index()
     buiten = []
     for a in items:
         if a.get("hele_dag") or a.get("kalender", "").startswith("en.be#"):
             continue
         info = lees_titel(a["titel"])
         adres = a.get("locatie") or ""
-        fysiek = adres and not adres.lower().startswith("http")
+        fysiek = bool(adres) and not adres.lower().startswith("http")
+        bron_adres = "agenda"
+        if not fysiek and info["nummer"] and info["nummer"] in projecten:
+            adres, fysiek, bron_adres = projecten[info["nummer"]]["adres"], True, "projectmap"
         if info["reistijd"] or not (info["buiten"] or (info["soort"] in ("PB", "KB") and fysiek)):
             continue
+        a["_bron_adres"] = bron_adres
+        if fysiek and bron_adres == "agenda" and info["nummer"] in projecten:
+            g = projecten[info["nummer"]]["gemeente"].lower()
+            if g and g not in adres.lower():
+                regels.append(f"{a['start'][:16]} {a['titel'][:50]}: adres in agenda ({adres[:35]}) wijkt af van projectmap {info['nummer']} ({projecten[info['nummer']]['adres'][:35]})")
         try:
             start = datetime.fromisoformat(a["start"]); einde = datetime.fromisoformat(a["einde"])
         except ValueError:
@@ -332,38 +366,87 @@ def reistijd_zetten(items, alleen_dag=None):
             continue
         vertrek_van = vorige_per_dag.get(dag, thuis)
         try:
-            heen = rijtijd_min(vertrek_van, doel)
-            terug = rijtijd_min(doel, thuis)
+            # eerste schatting om het vertrekuur te kennen, dan de filefactor op dat uur
+            heen, _ = rijtijd_min(vertrek_van, doel, start)
+            heen, fh = rijtijd_min(vertrek_van, doel, start - timedelta(minutes=heen))
+            terug, ft = rijtijd_min(doel, thuis, einde)
         except Exception as e:  # noqa: BLE001
             fout += 1
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: rijtijd niet berekend ({type(e).__name__})")
             continue
         vorige_per_dag[dag] = doel
         plaats = plaatsnaam(adres)
-        def bestaat(t0, t1):
-            return any(x["kalender"] == a["kalender"] and t0 <= datetime.fromisoformat(x["start"]) <= t1 for x in reistijden if "T" in x["start"])
+        def bestaand(t0, t1):
+            for x in reistijden:
+                if x["kalender"] == a["kalender"] and "T" in x["start"] and t0 <= datetime.fromisoformat(x["start"]) <= t1:
+                    return x
+            return None
+
+        def eigen(x):
+            return "OSRM" in (x.get("omschrijving") or "")
+
+        def bijwerken(x, s, e, tekst):
+            """Een blok dat ik zelf maakte, pas ik aan als de rijtijd meer dan 10 min verschilt."""
+            duur_oud = (datetime.fromisoformat(x["einde"]) - datetime.fromisoformat(x["start"])).total_seconds() / 60
+            if eigen(x) and abs(duur_oud - (e - s).total_seconds() / 60) >= 10:
+                _patch(x, {"start": {"dateTime": s.isoformat()}, "end": {"dateTime": e.isoformat()}, "description": tekst}, tok)
+                return True
+            return False
+        uitleg_h = f"Reistijd voor: {a['titel']} ({heen} min = vrije rijtijd x filefactor {fh} + {BUFFER_MIN} min buffer, OSRM; adres uit {bron_adres})"
+        uitleg_t = f"Reistijd na: {a['titel']} ({terug} min = vrije rijtijd x filefactor {ft} + {BUFFER_MIN} min buffer, OSRM)"
         kleur = {"colorId": "11", "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 5}]}}
         try:
-            if bestaat(start - timedelta(hours=3), start):
+            x = bestaand(start - timedelta(hours=3), start)
+            if x:
                 al += 1
+                if bijwerken(x, start - timedelta(minutes=heen), start, uitleg_h):
+                    gemaakt += 1
             else:
                 _insert(a["kalender"], {"summary": f"🚗 Reistijd → {plaats}", "start": {"dateTime": (start - timedelta(minutes=heen)).isoformat()},
-                                        "end": {"dateTime": start.isoformat()}, "description": f"Reistijd voor: {a['titel']} ({heen} min incl. {BUFFER_MIN} min buffer, OSRM)", **kleur}, tok)
+                                        "end": {"dateTime": start.isoformat()}, "description": uitleg_h, **kleur}, tok)
                 gemaakt += 1
-            if bestaat(einde, einde + timedelta(hours=3)):
+            x = bestaand(einde, einde + timedelta(hours=3))
+            if x:
                 al += 1
+                if bijwerken(x, einde, einde + timedelta(minutes=terug), uitleg_t):
+                    gemaakt += 1
             else:
                 _insert(a["kalender"], {"summary": f"🚗 Reistijd ← {plaats}", "start": {"dateTime": einde.isoformat()},
-                                        "end": {"dateTime": (einde + timedelta(minutes=terug)).isoformat()}, "description": f"Reistijd na: {a['titel']} ({terug} min incl. buffer, OSRM)",
+                                        "end": {"dateTime": (einde + timedelta(minutes=terug)).isoformat()}, "description": uitleg_t,
                                         **{"colorId": "11", "reminders": {"useDefault": False, "overrides": []}}}, tok)
                 gemaakt += 1
             _patch(a, {"reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": heen + 5}]}}, tok)
-            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: heen {heen} min, terug {terug} min, herinnering {heen + 5} min vooraf")
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: heen {heen} min (file x{fh}), terug {terug} min (file x{ft}), adres uit {bron_adres}, herinnering {heen + 5} min vooraf")
         except Exception as e:  # noqa: BLE001
             fout += 1
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: reistijd niet gezet ({type(e).__name__})")
     _cache_bewaren(cache)
     return gemaakt, al, geen_adres, fout, regels
+
+
+def onvolledige_afspraken(items, vandaag):
+    """Regel van Mehdi (11-09-2026): elke klantafspraak draagt een projectnummer; online volstaat
+    het nummer, buiten moet er ook een adres zijn (uit de agenda of uit de projectmap).
+    Prospecten (PO/PB) hebben nog geen nummer: daar vraag ik alleen een adres bij buiten."""
+    projecten = projectadressen.index()
+    uit = []
+    for a in items:
+        if a.get("hele_dag") or a["start"][:10] < vandaag or a.get("kalender", "").startswith("en.be#") or a.get("_terugkerend"):
+            continue
+        info = lees_titel(a["titel"])
+        if info["reistijd"] or not info["firma"] or info["soort"] == "IN":
+            continue
+        adres = a.get("locatie") or ""
+        fysiek = bool(adres) and not adres.lower().startswith("http")
+        wat = []
+        if info["soort"] in ("KB", "KO") and not info["nummer"]:
+            wat.append("geen projectnummer")
+        if info["soort"] in ("KB", "PB") or info["buiten"]:
+            if not fysiek and not (info["nummer"] in projecten):
+                wat.append("geen adres (niet in agenda, geen projectmap met dit nummer)")
+        if wat:
+            uit.append(f"{a['start'][:16]} {a['titel'][:60]} ({KALENDERS.get(a['kalender'], '')[:12]}): " + ", ".join(wat))
+    return uit
 
 
 def botsingen(items):
@@ -430,6 +513,10 @@ def main():
         if niet_conform:
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(niet_conform)} afspraken zonder code ([HA-KB] enz.)",
                           "uniek": f"agenda-conventie:{vandaag}", "inhoud": "\n".join("- " + x for x in niet_conform[:40])})
+        onvolledig = onvolledige_afspraken(items, vandaag)
+        if onvolledig:
+            klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(onvolledig)} afspraken zonder projectnummer of adres",
+                          "uniek": f"agenda-onvolledig:{vandaag}:{len(onvolledig)}", "inhoud": "\n".join("- " + x for x in onvolledig[:40])})
         uit = ag.klaarzet(klaar)
         dag_grens = DAG_ARG or (vandaag if ALLEEN_VANDAAG else None)
         rg, ral, rgeen, rfout, rregels = reistijd_zetten(items, dag_grens)

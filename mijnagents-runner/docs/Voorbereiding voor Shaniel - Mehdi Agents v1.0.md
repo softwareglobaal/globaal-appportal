@@ -37,6 +37,8 @@ de agent.
 | B1 | **Tabel Betrokken personen**: naam, e-mail, afdeling, rol, bijzonderheden van alle collega's en vaste contacten (het dashboard met namen per afdeling) | de werkwijze van De Fathomwacht op het bord (knop "Werkwijze bewerken"); één plek, alle agents lezen ze daar |
 | B2 | **Afzenders met hoog belang** voor de mailwachten: boekhouder, bank, notaris, advocaat, verzekeraar, overheid, arts | de werkwijze van De Mailwacht mch@ |
 | B3 | **43 agenda-afspraken zonder code** | titels rechtzetten volgens Mehdi's titelconventie (`[HA-KB]` enz.); lijst staat als signaal op het bord |
+| B4 | **Live verkeersinfo voor de reistijdblokken** (nu: vrije rijtijd OSRM x filefactor per vertrekuur, tabel in de werkwijze van De Agendawacht) | Mehdi maakt in Google Cloud een sleutel met Routes API aan en zet die als GOOGLE_ROUTES_KEY in ~/appportal/.env; daarna vervangt live verkeer de filefactor |
+| B5 | **Projectnummer op elke klantafspraak, adres bij elke buitenafspraak** (adres komt uit de H-A projectmapnaam, regel A13) | Mehdi past titels aan; UNABO/Harmoniebouw/Contrax-mappen krijgen dezelfde naamregel als ze meegelezen moeten worden |
 
 ## C. Keuzes die Mehdi maakt (uit het ontwikkelverslag van De Ontwikkelaar, W37)
 
