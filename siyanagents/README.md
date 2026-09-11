@@ -5,6 +5,17 @@ validatie en branding. De agents van het operations-platform (signalen,
 gezondheid, ingestie, factuurrouter, Elevait) horen hier niet thuis; die
 staan op agents.globaal.be.
 
+## Vormgeving
+
+Sinds 11 september 2026 volgt het bord de vaste huisstijl voor alle platformen van Siyan
+(`~/Claude/platform-huisstijl/HUISSTIJL.md`). Drie bestanden in `static/`:
+
+- `glas.css`: ongewijzigde kopie van het gedeelde stylesheet (nooit hier aanpassen, altijd in de bronmap en opnieuw kopiëren);
+- `sa.css`: de eigen regels voor de pagina's die op `base.html` bouwen (glazen zijbalk, kaarten, tabellen, chips), met aliassen voor de oude variabelenamen;
+- `sa-los.css`: de aanvulling voor de losse pagina's zonder `base.html` (organogram, kennisbank, keten, zoeken, ingestie, fragment, agents): grond, lettertypen en kleuren, met de eigen opbouw van die pagina's ongemoeid.
+
+De templates en hun JavaScript zijn bij de overzet niet aangeraakt; alleen `base.html` kreeg de nieuwe schil en de losse pagina's twee extra stylesheet-regels na hun eigen stijlblok.
+
 ## Vakagents en Disciplines
 
 De lijst vakagents staat in `SM_AGENTS` in `app.py`: agentcode (gelijk aan

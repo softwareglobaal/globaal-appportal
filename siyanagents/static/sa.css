@@ -1,0 +1,188 @@
+/* Siyanagents: eigen regels bovenop glas.css (de gedeelde huisstijl,
+   ~/Claude/platform-huisstijl). De templates en hun JavaScript zijn bij de
+   overzet niet aangeraakt; de klassen hieronder zijn de klassen die base.html
+   en de pagina's al gebruiken. De oude variabelenamen blijven als alias bestaan. */
+
+:root {
+  --bg: var(--grond);
+  --paneel: #ffffff;
+  --lijn-sterk: rgba(22, 21, 15, 0.16);
+  --tekst: var(--inkt);
+  --tekst-2: var(--inkt-zacht);
+  --tekst-3: var(--inkt-vaag);
+  --rust: var(--inkt-vaag);
+  --actief: var(--goed);
+  --klaar: var(--info);
+  --fout: var(--kritiek);
+  --ja: var(--goed);
+  --nee: var(--kritiek);
+  --amber: var(--let);
+  --mono: var(--sans);
+}
+body { font-size: 14px; }
+a { color: var(--inkt); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---------------------------------------------------------------- schil */
+.app-sa {
+  position: relative; z-index: 1; display: grid; grid-template-columns: 132px minmax(0, 1fr);
+  gap: 18px; min-height: 100vh; padding: 18px;
+}
+.rail nav { margin-top: 26px; }
+.rail nav a { min-width: 0; }
+.rail nav a span.lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail nav a:hover { text-decoration: none; }
+.badge-n {
+  margin-left: auto; background: var(--let); color: #fff; border-radius: var(--pil);
+  font-size: 10.5px; font-weight: 600; padding: 1px 6px; font-variant-numeric: tabular-nums; flex: none;
+}
+.rail nav a.actief .badge-n { background: rgba(255, 255, 255, 0.2); }
+.rail .gebruiker .rol a { color: inherit; text-decoration: underline; }
+@media (max-width: 1100px) { .badge-n { display: none; } }
+
+.wrap { min-width: 0; max-width: 1240px; width: 100%; padding: 0 0 60px; }
+main.wrap { display: block; }
+
+/* ------------------------------------------------------------- koppen */
+.kop { margin-bottom: 18px; }
+.kop h1 { margin: 0; font: 400 34px/1.05 var(--serif); letter-spacing: -0.01em; text-wrap: balance; }
+.kop .sub { color: var(--inkt-zacht); font-size: 13px; margin-top: 6px; max-width: 76ch; line-height: 1.5; }
+h2 { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--inkt-vaag); margin: 24px 0 8px; }
+
+/* ------------------------------------------------------------ panelen */
+.paneel { display: block; padding: 0; overflow: hidden; }
+.leeg { color: var(--inkt-zacht); font-size: 13px; padding: 16px 18px; display: block; text-align: left; }
+
+/* filters: keuzechips zijn pillen, actief = zwart */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.chip {
+  border: 1px solid var(--glas-rand); background: rgba(255, 255, 255, 0.75); border-radius: var(--pil);
+  padding: 6px 13px; font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; color: var(--inkt-zacht);
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.chip b { color: var(--inkt); font-variant-numeric: tabular-nums; font-weight: 600; }
+.chip:hover { background: #fff; color: var(--inkt); }
+.chip.actief, .chip[aria-pressed="true"] { border-color: var(--donker); color: #fff; background: var(--donker); }
+.chip.actief b, .chip[aria-pressed="true"] b { color: #fff; }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 16px; }
+.filters input, .filters select {
+  border: 1px solid var(--lijn); background: #fff; border-radius: var(--pil); padding: 8px 14px;
+  font: inherit; font-size: 12.5px; color: var(--inkt); outline: none;
+}
+.filters input:focus, .filters select:focus { border-color: var(--inkt); box-shadow: 0 0 0 3px rgba(22, 21, 15, 0.08); }
+.filters input { min-width: 220px; }
+
+/* agentkaarten */
+.agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.agent-kaart {
+  background: #fff; border: 1px solid rgba(22, 21, 15, 0.06); border-radius: 18px; padding: 16px;
+  box-shadow: var(--schaduw-kaart);
+}
+.k-top { display: flex; align-items: center; gap: 10px; }
+.avatar {
+  display: inline-flex; width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(145deg, #f7f5f2, #d9d3cb); color: var(--inkt); font: 500 13px/1 var(--serif);
+  align-items: center; justify-content: center; flex: 0 0 34px; border: 1px solid rgba(255, 255, 255, 0.9);
+}
+.k-id { min-width: 0; }
+.k-naam { font-weight: 500; font-size: 13.5px; }
+.k-naam .nick { font-weight: 400; color: var(--inkt-vaag); font-style: italic; font-size: 12px; }
+.k-rol { color: var(--inkt-zacht); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-status { display: flex; align-items: center; margin-top: 12px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--inkt-vaag); margin-right: 7px; }
+.agent-kaart[data-groep="bezig"] .dot { background: var(--goed); }
+.agent-kaart[data-groep="klaar"] .dot { background: var(--info); }
+.agent-kaart[data-groep="fout"] .dot { background: var(--kritiek); }
+.agent-kaart[data-groep="stil"] .dot { background: var(--let); }
+.s-txt { font-size: 12.5px; color: var(--inkt-zacht); text-transform: capitalize; }
+.team-tag {
+  margin-left: auto; font-size: 10.5px; color: var(--inkt-zacht); border: 1px solid var(--lijn);
+  border-radius: var(--pil); padding: 1px 8px; white-space: nowrap;
+}
+.k-act { margin-top: 6px; font-size: 12px; color: var(--inkt-zacht); min-height: 16px; }
+
+/* tabellen */
+table.lijst { width: 100%; border-collapse: collapse; }
+table.lijst th, table.lijst td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--lijn); font-size: 13px; vertical-align: top; }
+table.lijst thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--inkt-vaag); font-weight: 500; white-space: nowrap; }
+table.lijst tbody tr:last-child td { border-bottom: 0; }
+table.lijst tbody tr:hover td { background: rgba(255, 255, 255, 0.5); }
+.code { font-size: 12px; color: var(--inkt-zacht); font-variant-numeric: tabular-nums; }
+
+/* statusbadges: betekeniskleur op de lichte variant */
+.sb { font-size: 11px; font-weight: 500; padding: 2px 9px; border-radius: var(--pil); white-space: nowrap; display: inline-block; }
+.sb.in_review, .sb.wijziging_gevraagd { background: var(--let-licht); color: var(--let); }
+.sb.goedgekeurd { background: var(--goed-licht); color: var(--goed); }
+.sb.afgewezen { background: var(--kritiek-licht); color: var(--kritiek); }
+.sb.gepubliceerd { background: var(--info-licht); color: var(--info); }
+
+/* lopende tekst (rolbestanden, opleveringen) */
+.prose { background: #fff; border: 1px solid rgba(22, 21, 15, 0.06); border-radius: 18px; padding: 24px 28px; font-size: 14px; line-height: 1.65; }
+.prose h1 { font: 500 24px/1.15 var(--serif); margin: 18px 0 8px; letter-spacing: -0.01em; }
+.prose h1:first-child { margin-top: 0; }
+.prose h2 { font: 500 18px/1.2 var(--serif); text-transform: none; letter-spacing: 0; color: var(--inkt); margin: 22px 0 6px; }
+.prose h3 { font: 500 15px/1.25 var(--serif); margin: 16px 0 4px; }
+.prose p { margin: 0 0 10px; }
+.prose ul, .prose ol { margin: 0 0 10px; padding-left: 22px; }
+.prose li { margin: 3px 0; }
+.prose table { border-collapse: collapse; width: 100%; margin: 8px 0 14px; font-size: 13px; display: block; overflow-x: auto; }
+.prose th, .prose td { border-bottom: 1px solid var(--lijn); padding: 7px 10px; text-align: left; }
+.prose th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--inkt-vaag); font-weight: 500; }
+.prose code { font: inherit; font-size: 12.5px; background: var(--vlak); padding: 1px 6px; border-radius: 6px; }
+.prose pre { background: var(--vlak); border-radius: var(--rkk); padding: 10px 12px; overflow-x: auto; font-size: 12.5px; }
+.prose blockquote { border-left: 3px solid var(--lijn); margin: 8px 0; padding: 2px 14px; color: var(--inkt-zacht); }
+.prose a { color: var(--accent); text-decoration: underline; }
+
+.meta-rij { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; color: var(--inkt-zacht); font-size: 12.5px; margin: 6px 0 14px; }
+.acties {
+  background: var(--glas); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--glas-rand); border-radius: var(--r); box-shadow: var(--schaduw); padding: 20px 22px; margin-top: 16px;
+}
+.acties textarea, .acties input:not([type="file"]) {
+  width: 100%; border: 1px solid var(--lijn); border-radius: var(--rkk); padding: 10px 12px; font: inherit; font-size: 13.5px;
+  color: var(--inkt); background: #fff; resize: vertical; min-height: 56px; outline: none;
+}
+.acties textarea:focus, .acties input:focus { border-color: var(--inkt); box-shadow: 0 0 0 3px rgba(22, 21, 15, 0.08); }
+.acties-knoppen { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.knop {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 15px;
+  border: 1px solid var(--glas-rand); background: rgba(255, 255, 255, 0.75); color: var(--inkt);
+  border-radius: var(--pil); cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; text-decoration: none;
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.knop:hover { background: #fff; text-decoration: none; }
+.knop.ja { background: var(--donker); color: #fff; border-color: var(--donker); }
+.knop.ja:hover { transform: translateY(-1px); box-shadow: var(--schaduw-zweef); }
+.knop.nee:hover { border-color: var(--kritiek); color: var(--kritiek); }
+.knop.pub:hover { border-color: var(--info); color: var(--info); }
+button.knop[type="submit"] { background: var(--donker); color: #fff; border-color: var(--donker); }
+button.knop[type="submit"]:hover { transform: translateY(-1px); box-shadow: var(--schaduw-zweef); }
+/* Verwijderknoppen (in de validatietabel) blijven licht, met de betekeniskleur als tekst. */
+form[action$="/verwijder"] button.knop { background: rgba(255, 255, 255, 0.75); border-color: var(--glas-rand); height: 28px; }
+
+footer { margin-top: 34px; color: var(--inkt-vaag); font-size: 12px; border-top: 1px solid var(--lijn); padding-top: 14px; }
+
+/* pagina-eigen kaarten die op base bouwen (opdrachten, disciplines, agent, kantoor) */
+.opd, .ag, .prof, .zijbalk { background: #fff !important; border: 1px solid rgba(22, 21, 15, 0.06) !important; border-radius: 18px !important; box-shadow: var(--schaduw-kaart); }
+.stappen { border-radius: var(--rk) !important; }
+.stap .nr { background: var(--vlak) !important; color: var(--inkt-zacht) !important; }
+.st-wacht { background: var(--vlak) !important; color: var(--inkt-vaag) !important; }
+.st-bezig { background: var(--let-licht) !important; color: var(--let) !important; }
+.st-klaar { background: var(--goed-licht) !important; color: var(--goed) !important; }
+.kop-link, .werkbalk button { border-radius: var(--pil) !important; }
+.werkbalk button.actief { background: var(--donker) !important; border-color: var(--donker) !important; }
+
+@media (max-width: 760px) {
+  .app-sa { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
+  .kop h1 { font-size: 26px; }
+  table.lijst th, table.lijst td { padding: 9px 12px; }
+}
+
+/* ---- resets voor klassen die glas.css ook kent maar hier iets anders betekenen ---- */
+/* Het iso-kantoor heet .scene; in glas.css is .scene de vaste achtergrond met bollen. */
+.wrap .scene { position: static; inset: auto; z-index: auto; pointer-events: auto; overflow: hidden; filter: none; }
+.wrap .scene i { position: static; filter: none; border-radius: 0; }
+/* Tabellen dragen de klasse .lijst; in glas.css is .lijst een flex-kolom. */
+table.lijst { display: table; gap: 0; }
+.legenda, .legende { flex-direction: row; }

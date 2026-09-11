@@ -1,0 +1,76 @@
+/* Siyanagents, losse pagina's zonder base.html (organogram, kennisbank, keten,
+   zoeken, ingestie, fragment, agents). Wordt NA het eigen stijlblok van de pagina
+   geladen: zet grond, lettertypen en de gedeelde kleuren van de huisstijl, laat de
+   eigen opbouw van de pagina (organogram, kantoor, tabellen) met rust. */
+
+:root {
+  /* namen uit base-achtige pagina's */
+  --bg: var(--grond);
+  --paneel: #ffffff;
+  --lijn-sterk: rgba(22, 21, 15, 0.16);
+  --tekst: var(--inkt);
+  --tekst-2: var(--inkt-zacht);
+  --tekst-3: var(--inkt-vaag);
+  --rust: var(--inkt-vaag);
+  --actief: var(--goed);
+  --klaar: var(--info);
+  --fout: var(--kritiek);
+  --ja: var(--goed);
+  --nee: var(--kritiek);
+  --amber: var(--let);
+  --goed: #2f7a4e;
+  --let-op: var(--let);
+  --mono: var(--sans);
+  /* namen uit het organogram */
+  --panel: #ffffff;
+  --text: var(--inkt);
+  --muted: var(--inkt-zacht);
+  --line: var(--lijn);
+  --line-strong: rgba(22, 21, 15, 0.2);
+  --open: var(--inkt-vaag);
+  --bezig: var(--let);
+  --bezig-bg: var(--let-licht);
+  --bezig-line: rgba(176, 122, 18, 0.35);
+  --font: var(--sans);
+}
+body {
+  background: var(--grond);
+  color: var(--inkt);
+  font-family: var(--sans);
+  font-size: 14px;
+}
+.wrap { position: relative; z-index: 1; }
+h1, header h1 { font: 400 34px/1.05 var(--serif) !important; letter-spacing: -0.01em; }
+header { border-bottom: 0 !important; }
+.sub, .subnote, .h2note { color: var(--inkt-zacht) !important; }
+h2 { font-family: var(--serif); font-weight: 500; }
+
+/* navigatie bovenaan het organogram: pillen, actief = zwart */
+.smnav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border: 0 !important; margin: 0 0 18px; padding: 0 !important; }
+.smnav .sm-area { font: 500 15px/1.2 var(--serif) !important; color: var(--inkt) !important; padding: 0 14px 0 4px !important; }
+.smnav a { padding: 8px 14px !important; border-radius: var(--pil); border: 1px solid var(--glas-rand) !important; background: rgba(255, 255, 255, 0.6); color: var(--inkt-zacht) !important; font-size: 13px !important; font-weight: 500; text-decoration: none; }
+.smnav a:hover { background: #fff; color: var(--inkt) !important; text-decoration: none; }
+.smnav a.sm-actief { background: var(--donker); border-color: var(--donker) !important; color: #fff !important; }
+.sm-badge { background: var(--let) !important; }
+
+/* de 'nu bezig'-balk en de badges */
+.active { border-radius: var(--rk) !important; border-left-width: 1px !important; }
+.badge { border-radius: var(--pil); }
+.b-actief { background: var(--goed-licht) !important; color: var(--goed) !important; }
+.b-klaar { background: var(--goed-licht) !important; color: var(--goed) !important; }
+.b-open { background: var(--vlak) !important; color: var(--inkt-vaag) !important; border: 0 !important; }
+
+/* kaarten, vensters en knoppen op de losse pagina's */
+.agent-kaart, .venster, .paneel, .prose { border-radius: 18px !important; border-color: rgba(22, 21, 15, 0.06) !important; }
+.venster { box-shadow: var(--schaduw) !important; }
+.v-knoppen button, .kop-link, button.knop, a.knop, .knop { border-radius: var(--pil) !important; font-family: var(--sans); }
+.overlay { background: rgba(22, 21, 15, 0.18) !important; backdrop-filter: blur(3px); }
+footer { color: var(--inkt-vaag) !important; border-top: 1px solid var(--lijn); padding-top: 14px; }
+a { color: var(--inkt); }
+
+/* ---- resets voor klassen die glas.css ook kent maar hier iets anders betekenen ---- */
+.legenda { display: flex; flex-direction: row; flex-wrap: wrap; gap: 14px; }
+.legenda i { width: 8px; height: 8px; border-radius: 50%; }
+.opmerking { background: none; padding: 0; border-radius: 0; color: var(--inkt-zacht); font-size: 12.5px; }
+table.lijst { display: table; gap: 0; }
+.kaart .label { text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--inkt-zacht); }
