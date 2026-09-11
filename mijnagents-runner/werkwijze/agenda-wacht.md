@@ -109,9 +109,13 @@ Een afspraak is online of ter plaatse bij de klant. Voor allebei geldt:
   uur toe. Vertrekpunt is thuis (Herfstlaan 65, 3010 Leuven), of de vorige
   buitenafspraak van dezelfde dag; terug is altijd naar thuis. Mehdi mag de tabel
   hier aanpassen; de tabel in mijn code volgt dan (De Ontwikkelaar controleert dat).
-- Live verkeersinfo (Google Routes of TomTom) heb ik niet: daar is een sleutel
-  voor nodig die alleen Mehdi kan aanmaken. Zolang die er niet is, is de
-  filefactor mijn beste schatting en zeg ik dat in elk blok.
+- **Live verkeersinfo**: staat er een GOOGLE_ROUTES_KEY in de omgeving van mijn
+  runner, dan vraag ik Google Routes de rijtijd met verkeer op het vertrekuur
+  (routingPreference TRAFFIC_AWARE_OPTIMAL) en gebruik ik die in plaats van de
+  filefactor; in het blok staat dan "live verkeer Google". Zonder sleutel, of
+  als Google niet antwoordt, val ik terug op de filefactor. De sleutel kan alleen
+  Mehdi aanmaken (Google Cloud Console, Routes API, gekoppeld aan facturatie);
+  de stappen staan in het Shaniel-document, beslissing B4.
 - Bestaat er al een reistijdblok binnen drie uur voor of na, dan maak ik geen
   nieuw. Maakte ik het zelf, dan pas ik het aan als de rijtijd meer dan 10
   minuten verschilt (bv. na een adres- of tijdwijziging). Een blok van iemand

@@ -289,10 +289,37 @@ def vrije_rijtijd_min(van, naar):
     return d["routes"][0]["duration"] / 60
 
 
+ROUTES_KEY = os.environ.get("GOOGLE_ROUTES_KEY", "").strip()
+
+
+def google_rijtijd_min(van, naar, vertrek):
+    """Rijtijd met live verkeer via Google Routes API (alleen als GOOGLE_ROUTES_KEY gezet is).
+    Vertrek moet in de toekomst liggen; anders neemt Google 'nu'. Geeft minuten of None."""
+    import urllib.request
+    from datetime import timezone
+    body = {"origin": {"location": {"latLng": {"latitude": van[0], "longitude": van[1]}}},
+            "destination": {"location": {"latLng": {"latitude": naar[0], "longitude": naar[1]}}},
+            "travelMode": "DRIVE", "routingPreference": "TRAFFIC_AWARE_OPTIMAL"}
+    if vertrek > datetime.now().astimezone():
+        body["departureTime"] = vertrek.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    req = urllib.request.Request("https://routes.googleapis.com/directions/v2:computeRoutes", data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json", "X-Goog-Api-Key": ROUTES_KEY, "X-Goog-FieldMask": "routes.duration"})
+    try:
+        d = json.load(urllib.request.urlopen(req, timeout=20))
+        return float(d["routes"][0]["duration"].rstrip("s")) / 60
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def rijtijd_min(van, naar, vertrek):
-    """Rijtijd in minuten: vrije rijtijd (OSRM) x filefactor op het vertrekuur + buffer, afgerond op 5.
+    """Rijtijd in minuten + buffer, afgerond op 5. Met GOOGLE_ROUTES_KEY: live verkeer van Google
+    op het vertrekuur (factor 'live'). Zonder: vrije rijtijd (OSRM) x filefactor op het vertrekuur.
     Geeft (minuten, factor)."""
     import math
+    if ROUTES_KEY:
+        live = google_rijtijd_min(van, naar, vertrek)
+        if live is not None:
+            return int(math.ceil((live + BUFFER_MIN) / 5) * 5), "live"
     vrij = vrije_rijtijd_min(van, naar)
     f = filefactor(vertrek)
     return int(math.ceil((vrij * f + BUFFER_MIN) / 5) * 5), f
@@ -392,8 +419,8 @@ def reistijd_zetten(items, alleen_dag=None):
                 _patch(x, {"start": {"dateTime": s.isoformat()}, "end": {"dateTime": e.isoformat()}, "description": tekst}, tok)
                 return True
             return False
-        uitleg_h = f"Reistijd voor: {a['titel']} ({heen} min = vrije rijtijd x filefactor {fh} + {BUFFER_MIN} min buffer, OSRM; adres uit {bron_adres})"
-        uitleg_t = f"Reistijd na: {a['titel']} ({terug} min = vrije rijtijd x filefactor {ft} + {BUFFER_MIN} min buffer, OSRM)"
+        uitleg_h = f"Reistijd voor: {a['titel']} ({heen} min = " + ("live verkeer Google" if fh == "live" else f"vrije rijtijd x filefactor {fh}") + f" + {BUFFER_MIN} min buffer, OSRM; adres uit {bron_adres})"
+        uitleg_t = f"Reistijd na: {a['titel']} ({terug} min = " + ("live verkeer Google" if ft == "live" else f"vrije rijtijd x filefactor {ft}") + f" + {BUFFER_MIN} min buffer, OSRM)"
         kleur = {"colorId": "11", "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 5}]}}
         try:
             x = bestaand(start - timedelta(hours=3), start)
