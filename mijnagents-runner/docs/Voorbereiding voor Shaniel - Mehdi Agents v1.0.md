@@ -76,11 +76,11 @@ de agent.
 
 ## F. Stand op 11-09-2026 (gemeten op de server, alleen namen van sleutels)
 
-**Gedaan:** A1 Fathom (twee sleutels), A2 prive-Dropbox (DROPBOX_PRIVE_*), A5 Telegram (bot + chat-id, tweerichting werkt), C3 Docker-opruimbeurt (cron zondag 04:30), C4 (Telegram).
+**Gedaan:** B4 Google Routes (11-09), A1 Fathom (twee sleutels), A2 prive-Dropbox (DROPBOX_PRIVE_*), A5 Telegram (bot + chat-id, tweerichting werkt), C3 Docker-opruimbeurt (cron zondag 04:30), C4 (Telegram).
 
 **Open, in volgorde van opbrengst:**
 
-1. B4 Google Routes: de Google-kant is gedaan en betaald (zegt Mehdi), maar de sleutel staat nog niet op de server: stap 6 van de handleiding (regel GOOGLE_ROUTES_KEY in ~/appportal/.env). Daarna het controlecommando uit de handleiding.
+1. B4 Google Routes: GEDAAN op 11-09 (sleutel staat op de server, blokken zeggen "live verkeer Google").
 2. A3 Dropbox-app van de stack opnieuw autoriseren met scope account_info.read (de omweg DROPBOX_PATH_ROOT_NS staat nog).
 3. A4 Hotmail app-wachtwoord in de Keychain van de Mac van Mehdi (Mailwacht prive staat stil).
 4. A10 Health Auto Export op de iPhone naar iCloud Drive (Gezondheidswacht ziet niets).
