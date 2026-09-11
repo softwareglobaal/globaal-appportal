@@ -1,6 +1,6 @@
 # Handleiding: Google Routes-sleutel voor De Agendawacht
 
-Versie 1.1, 11-09-2026. Voor Shaniel, in opdracht van Mehdi.
+Versie 1.2, 11-09-2026. Voor Shaniel, in opdracht van Mehdi.
 
 ## Wat alleen Mehdi kan doen
 
@@ -41,10 +41,12 @@ Een route met verkeersinfo valt onder **Routes: Compute Routes Pro**:
 | Gratis per maand | 5.000 aanvragen |
 | Daarboven | 10 dollar per 1.000 aanvragen (tot 100.000 per maand) |
 
-De Agendawacht vraagt per buitenafspraak twee routes (heen en terug), alleen bij een
-nieuwe afspraak en één keer per dag in de ochtendronde ter controle. Bij pakweg tien
-buitenafspraken per week is dat ruim onder 500 aanvragen per maand. **Verwachte kost:
-0 euro.** Als grendel zetten we in stap 7 een dagplafond en een budgetmelding.
+De Agendawacht vraagt per buitenafspraak drie routes: twee voor de heenweg (een
+eerste schatting om het vertrekuur te kennen, dan de echte) en een voor de terugweg.
+Dat gebeurt alleen bij een nieuwe afspraak en een keer per dag in de ochtendronde ter
+controle. Bij pakweg tien buitenafspraken per week is dat ruim onder 500 aanvragen per
+maand. **Verwachte kost: 0 euro.** Als grendel zetten we in stap 7 een dagplafond en
+een budgetmelding.
 
 Een betaalkaart is wel verplicht om Billing te activeren; zonder Billing werkt de
 API niet, ook niet in het gratis deel.
@@ -85,10 +87,13 @@ API niet, ook niet in het gratis deel.
    je anders pas weken later opmerken.
 
 7. **Grendels tegen kosten.**
-   - Menu > **APIs & Services** > **Enabled APIs & services** > **Routes API** >
-     tab **Quotas & System Limits**. Zoek "Compute Routes requests per day", klik
-     het potlood, zet **150**. Zo kan een fout in de code nooit meer dan
-     4.500 aanvragen per maand doen, en dat is nog steeds gratis.
+   - De dagquota van de Routes API is **niet verlaagbaar**: in de console staat
+     die rij op "Adjustable: No". Daarom zit de harde stop in onze eigen code.
+     `agenda_wacht.py` telt de aanroepen per dag in
+     `~/appportal/mijnagents-data/routes-teller.json` en valt bij het plafond
+     terug op de filefactor, met een melding op het bord. Standaard 100 per dag,
+     bij te stellen met `AGENDA_ROUTES_DAGLIMIET` in `~/appportal/.env`. Ook een
+     volle maand op dat plafond blijft onder de 5.000 gratis aanvragen.
    - Menu > **Billing** > **Budgets & alerts** > **Create budget**. Name
      `mehdi-agents`, Amount **5 EUR**, meldingen op 50, 90 en 100 procent naar
      mehdiprivewerkagenda@gmail.com. Create.

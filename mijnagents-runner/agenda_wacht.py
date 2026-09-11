@@ -291,6 +291,39 @@ def vrije_rijtijd_min(van, naar):
 
 ROUTES_KEY = os.environ.get("GOOGLE_ROUTES_KEY", "").strip()
 
+# Harde dagstop op de Google-aanroepen. Google laat de dagquota van de Routes API niet
+# verlagen (in de console staat die rij op "Adjustable: No"), dus houden we de teller
+# zelf bij. Bij het plafond rekent de wacht verder met de filefactor en komt het op het
+# bord. 100 per dag is ruim: ook een volle maand op het plafond blijft onder de 5.000
+# gratis aanvragen per maand.
+ROUTES_DAGLIMIET = int(os.environ.get("AGENDA_ROUTES_DAGLIMIET", "100"))
+ROUTES_TELLER = os.path.expanduser("~/appportal/mijnagents-data/routes-teller.json")
+ROUTES_GESTOPT = False
+
+
+def routes_vandaag():
+    """Geeft (datum, aantal Google-aanroepen vandaag). De teller begint elke dag opnieuw."""
+    vandaag = datetime.now().strftime("%Y-%m-%d")
+    try:
+        with open(ROUTES_TELLER) as f:
+            d = json.load(f)
+        return vandaag, (int(d["aantal"]) if d.get("dag") == vandaag else 0)
+    except (OSError, ValueError, KeyError, TypeError):
+        return vandaag, 0
+
+
+def routes_tel_op():
+    """Telt een aanroep mee voordat hij gedaan wordt: een mislukte aanroep telt bij
+    Google evengoed mee, dus hier ook."""
+    vandaag, aantal = routes_vandaag()
+    try:
+        os.makedirs(os.path.dirname(ROUTES_TELLER), exist_ok=True)
+        with open(ROUTES_TELLER, "w") as f:
+            json.dump({"dag": vandaag, "aantal": aantal + 1}, f)
+    except OSError as e:  # noqa: BLE001
+        print("routes-teller niet weggeschreven:", e, file=sys.stderr)
+    return aantal + 1
+
 
 def google_rijtijd_min(van, naar, vertrek):
     """Rijtijd met live verkeer via Google Routes API (alleen als GOOGLE_ROUTES_KEY gezet is).
@@ -315,11 +348,17 @@ def rijtijd_min(van, naar, vertrek):
     """Rijtijd in minuten + buffer, afgerond op 5. Met GOOGLE_ROUTES_KEY: live verkeer van Google
     op het vertrekuur (factor 'live'). Zonder: vrije rijtijd (OSRM) x filefactor op het vertrekuur.
     Geeft (minuten, factor)."""
+    global ROUTES_GESTOPT
     import math
     if ROUTES_KEY:
-        live = google_rijtijd_min(van, naar, vertrek)
-        if live is not None:
-            return int(math.ceil((live + BUFFER_MIN) / 5) * 5), "live"
+        _, gebruikt = routes_vandaag()
+        if gebruikt >= ROUTES_DAGLIMIET:
+            ROUTES_GESTOPT = True
+        else:
+            routes_tel_op()
+            live = google_rijtijd_min(van, naar, vertrek)
+            if live is not None:
+                return int(math.ceil((live + BUFFER_MIN) / 5) * 5), "live"
     vrij = vrije_rijtijd_min(van, naar)
     f = filefactor(vertrek)
     return int(math.ceil((vrij * f + BUFFER_MIN) / 5) * 5), f
@@ -575,10 +614,15 @@ def main():
                "\n".join(f"{a['start'][:16]} {KALENDERS.get(a['kalender'], a['kalender'])[:14]} | {a['titel']}" for a in items))
         ag.log(f"dag {vandaag}", "bevinding", f"{len(niet_conform)} toekomstige afspraken zonder code", "\n".join(niet_conform[:60]))
         ag.log(f"dag {vandaag}", "schrijf", f"klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend", tekst)
+        if ROUTES_KEY:
+            _, routes_gebruikt = routes_vandaag()
+            ag.log(f"dag {vandaag}", "bron", f"Google Routes: {routes_gebruikt} van {ROUTES_DAGLIMIET} aanroepen vandaag"
+                   + (" (plafond bereikt, reistijden verder op de filefactor)" if ROUTES_GESTOPT else ""))
         ag.log_verstuur()
         ag.hartslag("waakt", taak="agenda in het oog", detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; {len(niet_conform)} zonder code",
                     nood=([{"tekst": f"{len(niet_conform)} toekomstige afspraken zonder code ([HA-KB] enz.): titels rechtzetten (Mehdi, of via een voorstel zodra het runbook agenda-titel er is)", "wie": "mehdi"}] if niet_conform else [])
                     + ([{"tekst": f"{fout_h} herinneringen konden niet gezet worden", "wie": "claude-code"}] if fout_h else [])
+                    + ([{"tekst": f"dagplafond Google Routes bereikt ({ROUTES_DAGLIMIET} aanroepen); reistijden vandaag verder op de filefactor. Klopt dat met het aantal buitenafspraken, dan mag AGENDA_ROUTES_DAGLIMIET omhoog; zo niet, dan vraagt er iets te veel op", "wie": "claude-code"}] if ROUTES_GESTOPT else [])
                     + ([{"tekst": f"{len(fouten)} agenda(s) niet leesbaar: " + ", ".join(f["kalender"][:30] for f in fouten), "wie": "mehdi"}] if fouten else []))
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
