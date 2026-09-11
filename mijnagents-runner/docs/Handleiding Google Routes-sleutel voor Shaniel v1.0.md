@@ -1,6 +1,13 @@
 # Handleiding: Google Routes-sleutel voor De Agendawacht
 
-Versie 1.0, 11-09-2026. Voor Shaniel, in opdracht van Mehdi.
+Versie 1.1, 11-09-2026. Voor Shaniel, in opdracht van Mehdi.
+
+## Wat alleen Mehdi kan doen
+
+Alles hieronder wacht op twee dingen die niemand anders kan doen: **inloggen op
+zijn eigen Google-account** en **zijn betaalkaart invoeren bij Billing**. Dat is
+stap 1 en 2, samen ongeveer vijf minuten. Geeft hij daarna Shaniel de rol Editor
+op het project (optie B hieronder), dan doet Shaniel stap 3 tot 7 alleen.
 
 ## Waarvoor
 
@@ -64,8 +71,18 @@ API niet, ook niet in het gratis deel.
    niet in chat, niet in een document, niet in git.
 
    ```bash
-   ssh globaal 'printf "GOOGLE_ROUTES_KEY=PLAK-HIER\n" >> ~/appportal/.env'
+   ssh globaal 'bash ~/appportal/scripts/agendawacht-routes-sleutel.sh PLAK-HIER'
    ```
+
+   Het script probeert de sleutel eerst bij Google en schrijft pas weg als er een
+   rijtijd terugkomt. Werkt de sleutel niet, dan zegt het waarom (Billing, Routes
+   API of de beperking uit stap 5) en blijft `.env` ongemoeid. Daarna doet het
+   meteen de controle van de volgende paragraaf. Twee keer draaien mag: een
+   bestaande regel wordt vervangen, niet verdubbeld.
+
+   Dit is met opzet geen losse `>>`-regel. De Agendawacht slikt een mislukte
+   route-aanroep stil en valt terug op de filefactor, dus een foute sleutel zou
+   je anders pas weken later opmerken.
 
 7. **Grendels tegen kosten.**
    - Menu > **APIs & Services** > **Enabled APIs & services** > **Routes API** >
@@ -78,7 +95,8 @@ API niet, ook niet in het gratis deel.
 
 ## Controleren dat het werkt
 
-Op de Globaal-VM, één commando; het antwoord moet "live" bevatten:
+Het script uit stap 6 doet deze controle zelf. Wil je later opnieuw kijken, dan is
+dit het commando; het antwoord moet "live" bevatten:
 
 ```bash
 ssh globaal 'cd ~/appportal/mijnagents-runner && ~/agents/.venv/bin/python -c "import sys; sys.path[:0]=[\"koppelingen\",\".\"]; import agenda_wacht as aw, datetime; print(aw.rijtijd_min([50.8798,4.7005],[51.0603,4.3604], (datetime.datetime.now()+datetime.timedelta(days=1)).replace(hour=8).astimezone()))"'
