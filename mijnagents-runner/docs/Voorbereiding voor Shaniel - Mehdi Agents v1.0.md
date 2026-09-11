@@ -73,3 +73,21 @@ de agent.
 4. A4 (hotmail) en A10 (Health Auto Export): privé-mail en lichaam in het logboek.
 5. A2 en A3 (Dropbox): archieven op de juiste plek en het contract-dashboard zonder omweg.
 6. De rest.
+
+## F. Stand op 11-09-2026 (gemeten op de server, alleen namen van sleutels)
+
+**Gedaan:** A1 Fathom (twee sleutels), A2 prive-Dropbox (DROPBOX_PRIVE_*), A5 Telegram (bot + chat-id, tweerichting werkt), C3 Docker-opruimbeurt (cron zondag 04:30), C4 (Telegram).
+
+**Open, in volgorde van opbrengst:**
+
+1. B4 Google Routes: de Google-kant is gedaan en betaald (zegt Mehdi), maar de sleutel staat nog niet op de server: stap 6 van de handleiding (regel GOOGLE_ROUTES_KEY in ~/appportal/.env). Daarna het controlecommando uit de handleiding.
+2. A3 Dropbox-app van de stack opnieuw autoriseren met scope account_info.read (de omweg DROPBOX_PATH_ROOT_NS staat nog).
+3. A4 Hotmail app-wachtwoord in de Keychain van de Mac van Mehdi (Mailwacht prive staat stil).
+4. A10 Health Auto Export op de iPhone naar iCloud Drive (Gezondheidswacht ziet niets).
+5. A8 en A9 Plaud-routine op claude.ai, daarna de accounts van Angela, Siyan en Shaniel.
+6. A6 Zoom-scopes lezen (chat_message:read:admin, meeting:read:admin) op de Server-to-Server-app.
+7. A7 Xelion: bevestigen welke van de vijf lijnen van Mehdi zijn (werk en prive).
+8. A12 Bellen bij alarm: Twilio-account met nummer; sleutels in mijnagents-data/.env.
+9. A11 WhatsApp-exports in ~/Documents/WhatsApp exports op de Mac (Mehdi kiest de gesprekken).
+10. B1 Tabel Betrokken personen aanvullen in de werkwijze van De Fathomwacht; B2 afzenders met hoog belang.
+11. B3 en B5: 43 afspraken zonder code en de titels zonder projectnummer of adres (signaal op het bord); dit is de agenda van Mehdi, Shaniel kan de lijst voorbereiden.
