@@ -102,3 +102,97 @@ def alarm_bellen(staat, alarmen, log=None):
         if log:
             log("alarm", "bellen", f"bellen mislukt: {type(e).__name__}: {str(e)[:120]}")
         return "bellen mislukt"
+
+
+# ------------------------------------------------------------ afspraken bellen ---
+# Mehdi's zwakke punt (11-09-2026): een agendamelding volstaat niet, hij moet effectief
+# gebeld worden voor een afspraak, ook al is het een gemiste oproep. Twee kanalen:
+#   1. Telegram-spraakoproep via CallMeBot (gratis): CALLMEBOT_USER in mijnagents-data/.env
+#      (Telegram-gebruikersnaam met @, of gsm-nummer met landcode); Mehdi stuurt één keer
+#      /start naar @CallMeBot_txtbot. Stem: CALLMEBOT_STEM (standaard nl-NL-Wavenet-B).
+#   2. Echte telefoonoproep via Twilio (zie boven), zodra die sleutels er zijn.
+# Zijn beide beschikbaar, dan bellen we via beide: dubbel is beter dan gemist.
+# Het rooster (mijnagents-data/belrooster.json) schrijft De Agendawacht; De Bode leest het
+# elke minuut en belt op het moment zelf.
+
+ROOSTER = os.path.expanduser("~/appportal/mijnagents-data/belrooster.json")
+VENSTER_MIN = 4  # binnen zoveel minuten na het beltijdstip bellen we nog
+
+
+def callmebot_beschikbaar():
+    return bool(os.environ.get("CALLMEBOT_USER", "").strip())
+
+
+def afspraak_bellen_beschikbaar():
+    return callmebot_beschikbaar() or beschikbaar()
+
+
+def bel_telegram(tekst):
+    """Telegram-spraakoproep via CallMeBot; de tekst wordt voorgelezen (twee keer)."""
+    q = urllib.parse.urlencode({"user": os.environ["CALLMEBOT_USER"].strip(), "text": tekst[:300],
+                                "lang": os.environ.get("CALLMEBOT_STEM", "nl-NL-Wavenet-B"), "rpt": "2", "timeout": "40"})
+    with urllib.request.urlopen(f"https://api.callmebot.com/start.php?{q}", timeout=40) as r:
+        return r.read().decode(errors="replace")[:200]
+
+
+def bel_afspraak(tekst):
+    """Belt via elk beschikbaar kanaal. Geeft lijst van (kanaal, resultaat of fout)."""
+    uit = []
+    if callmebot_beschikbaar():
+        try:
+            uit.append(("telegram-oproep", bel_telegram(tekst)))
+        except Exception as e:  # noqa: BLE001
+            uit.append(("telegram-oproep", f"mislukt: {type(e).__name__}"))
+    if beschikbaar():
+        try:
+            uit.append(("twilio", bel(tekst)))
+        except Exception as e:  # noqa: BLE001
+            uit.append(("twilio", f"mislukt: {type(e).__name__}"))
+    return uit
+
+
+def rooster_schrijven(regels):
+    """regels: [{sleutel, tijd (ISO, lokale tijd met zone), tekst, titel}]. Vervangt het rooster."""
+    os.makedirs(os.path.dirname(ROOSTER), exist_ok=True)
+    json.dump({"geschreven": __import__("datetime").datetime.now().astimezone().isoformat(), "regels": regels},
+              open(ROOSTER, "w"), ensure_ascii=False, indent=0)
+
+
+def afspraken_bellen(staat, log=None):
+    """Elke minuut door De Bode. Belt elke roosterregel waarvan het beltijdstip nu is
+    (tot VENSTER_MIN minuten geleden) en die nog niet gebeld is. Geeft korte tekst of ''."""
+    from datetime import datetime, timedelta
+    if not afspraak_bellen_beschikbaar():
+        return ""
+    try:
+        rooster = json.load(open(ROOSTER)).get("regels", [])
+    except (OSError, ValueError):
+        return ""
+    gebeld = staat.setdefault("gebeld", {})
+    nu = datetime.now().astimezone()
+    # opruimen: ouder dan twee dagen
+    for k in [k for k, v in gebeld.items() if v < (nu - timedelta(days=2)).isoformat()]:
+        gebeld.pop(k, None)
+    uit = []
+    for r in rooster:
+        try:
+            t = datetime.fromisoformat(r["tijd"])
+        except (KeyError, ValueError):
+            continue
+        if r["sleutel"] in gebeld or not (t <= nu < t + timedelta(minutes=VENSTER_MIN)):
+            continue
+        res = bel_afspraak(r["tekst"])
+        gebeld[r["sleutel"]] = nu.isoformat()
+        samen = ", ".join(f"{k}: {str(v)[:40]}" for k, v in res)
+        if log:
+            log("bellen", "afspraak", f"gebeld voor: {r.get('titel', '')[:80]}", f"{r['tekst']}\n{samen}")
+        uit.append(r.get("titel", "")[:40])
+    return ("belt: " + "; ".join(uit)) if uit else ""
+
+
+def nood_afspraken():
+    if afspraak_bellen_beschikbaar():
+        return []
+    return [{"tekst": "Bellen voor afspraken: gratis via Telegram-oproep. Mehdi: in Telegram een gebruikersnaam zetten "
+                      "(Settings > Username), /start sturen naar @CallMeBot_txtbot, en CALLMEBOT_USER=@gebruikersnaam "
+                      "in mijnagents-data/.env (of het gsm-nummer met +32)", "wie": "mehdi"}]

@@ -38,6 +38,23 @@ hij terugstuurt, zet ik op het bord als bericht aan De Regisseur.
    aan De Regisseur op het bord; die antwoordt, en ik breng het antwoord terug.
 5. Stilte-uren: tussen 22:00 en 07:00 stuur ik niets, behalve een alarm.
 
+## Bellen voor elke afspraak (mandaat van Mehdi, 11-09-2026)
+
+Een agendamelding volstaat niet: Mehdi moet effectief gebeld worden, een gemiste
+oproep is genoeg. Dit is zijn zwakke punt en hij mist anders online afspraken.
+
+- De Agendawacht schrijft elke ronde het belrooster (mijnagents-data/belrooster.json):
+  online afspraken 5 minuten vooraf, buitenafspraken op het vertrekmoment (start van
+  het reistijdblok). Niet voor intern, terugkerend, hele dag, reistijd, Lara, feestdagen.
+- Ik lees dat rooster elke minuut en bel op het moment zelf, ook in de stille uren
+  (een afspraak is een afspraak). Elke oproep één keer; ik onthoud wat gebeld is.
+- Kanalen, allebei als ze er zijn: een Telegram-spraakoproep via CallMeBot (gratis;
+  CALLMEBOT_USER in mijnagents-data/.env, Mehdi stuurt één keer /start naar
+  @CallMeBot_txtbot) en een echte telefoonoproep via Twilio (TWILIO_* sleutels).
+- De tekst: "Mehdi, over 5 minuten online: naam, om uur. De link staat in je agenda."
+  Of bij buiten: "Mehdi, vertrekken: naam, om uur. Adres staat in je agenda."
+- Ontbreekt elk kanaal, dan meld ik dat als nood en bel ik niet.
+
 ## Wat ik nooit doe
 
 - Iets versturen naar iemand anders dan Mehdi.

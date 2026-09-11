@@ -196,6 +196,9 @@ def main():
     kanaal = ""
     # dringend signaal: bellen (Twilio), ook in de stille uren; herhaalt tot er opgenomen wordt
     bel_detail = bellen.alarm_bellen(staat, alarm, log=ag.log)
+    bel_afspraak = bellen.afspraken_bellen(staat, log=ag.log)
+    if bel_afspraak:
+        bel_detail = (bel_detail + '; ' if bel_detail else '') + bel_afspraak
     if (items or herinner) and (not stil or alarm):
         regels = [f"Mehdi Agents, {datetime.now().strftime('%H:%M')}:"]
         for it in items[-8:]:
@@ -217,7 +220,7 @@ def main():
     json.dump(staat, open(STAAT, "w"))
     if not TG_TOKEN:
         nood.append({"tekst": "Telegram niet ingesteld: bot bij BotFather, TELEGRAM_BOT_TOKEN en TELEGRAM_CHAT_ID in mijnagents-data/.env", "wie": "mehdi"})
-    nood += bellen.nood()
+    nood += bellen.nood() + bellen.nood_afspraken()
     ag.log_verstuur()
     detail = f"{binnen} binnen, {terug} antwoorden terug, {len(items)} items" + (f" via {kanaal}" if kanaal else "") + (f"; {bel_detail}" if bel_detail else "") + (f"; {len(staat.get('wacht', []))} wacht op antwoord" if staat.get("wacht") else "")
     ag.hartslag("actief" if (binnen or terug or kanaal) else ("rust" if stil else "waakt"),

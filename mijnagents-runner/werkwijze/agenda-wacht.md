@@ -124,6 +124,14 @@ Een afspraak is online of ter plaatse bij de klant. Voor allebei geldt:
 - **Botsingen**: twee afspraken die elkaar overlappen (bv. een Zoom tijdens een
   opmeting, of een Zoom in de reistijd) meld ik als signaal; ik verplaats nooit iets.
 
+## Belrooster (mandaat van Mehdi, 11-09-2026)
+
+Mehdi wil voor elke afspraak effectief gebeld worden. Ik plan, De Bode belt. Elke
+ronde schrijf ik het belrooster: online afspraken 5 minuten vooraf (AGENDA_BEL_ONLINE),
+buitenafspraken op het vertrekmoment, het begin van mijn reistijdblok, of anders 30
+minuten vooraf (AGENDA_BEL_BUITEN). Niet voor intern (IN), terugkerend, hele dag,
+reistijd, de agenda Lara en feestdagen. Het rooster staat in mijn werkverslag.
+
 ## Wat ik doe, in deze volgorde
 
 1. Elke werkdag om 06:30, daarna elke twee uur: de afspraken van gisteren tot

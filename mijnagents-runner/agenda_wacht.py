@@ -24,6 +24,7 @@ from datetime import datetime, timedelta
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import agenda  # noqa: E402
+import bellen  # noqa: E402
 import projectadressen  # noqa: E402
 import bord  # noqa: E402
 import pipedrive  # noqa: E402
@@ -526,6 +527,42 @@ def onvolledige_afspraken(items, vandaag):
     return uit
 
 
+BEL_ONLINE_MIN = int(os.environ.get("AGENDA_BEL_ONLINE", "5"))
+BEL_BUITEN_MIN = int(os.environ.get("AGENDA_BEL_BUITEN", "30"))
+
+
+def belrooster(items, vandaag):
+    """Regel van Mehdi (11-09-2026): voor elke afspraak effectief gebeld worden, een gemiste
+    oproep volstaat. Online: BEL_ONLINE_MIN minuten vooraf. Buiten: op het vertrekmoment
+    (start van mijn reistijdblok), anders BEL_BUITEN_MIN vooraf. Niet voor intern (IN),
+    terugkerend, hele dag, reistijd, Lara, feestdagen."""
+    from datetime import timedelta
+    reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"] and "T" in x["start"]]
+    regels = []
+    for a in items:
+        if a.get("hele_dag") or a.get("_terugkerend") or a["start"][:10] < vandaag or a.get("kalender", "").startswith("en.be#"):
+            continue
+        kal = KALENDERS.get(a["kalender"], "")
+        info = lees_titel(a["titel"])
+        if info["reistijd"] or info["soort"] == "IN" or kal == "Lara":
+            continue
+        start = datetime.fromisoformat(a["start"])
+        adres = a.get("locatie") or ""
+        buiten = info["buiten"] or info["soort"] in ("KB", "PB") or (adres and not adres.lower().startswith("http"))
+        if buiten:
+            blok = [x for x in reistijden if x["kalender"] == a["kalender"] and start - timedelta(hours=3) <= datetime.fromisoformat(x["start"]) < start]
+            beltijd = datetime.fromisoformat(blok[-1]["start"]) if blok else start - timedelta(minutes=BEL_BUITEN_MIN)
+            hoe = "vertrekken" if blok else f"over {BEL_BUITEN_MIN} minuten vertrekken"
+        else:
+            beltijd = start - timedelta(minutes=BEL_ONLINE_MIN)
+            hoe = f"over {BEL_ONLINE_MIN} minuten online"
+        klant = info["klant"] or a["titel"][:60]
+        tekst = f"Mehdi, {hoe}: {klant}, om {start.strftime('%H:%M')}." + (" De link staat in je agenda." if not buiten else " Adres staat in je agenda.")
+        regels.append({"sleutel": f"{a['kalender']}:{a['id']}:{a['start']}", "tijd": beltijd.isoformat(), "tekst": tekst, "titel": a["titel"][:80]})
+    regels.sort(key=lambda r: r["tijd"])
+    return regels
+
+
 def botsingen(items):
     """Twee afspraken die elkaar overlappen op dezelfde dag (bv. een Zoom tijdens een opmeting)."""
     uit = []
@@ -598,6 +635,10 @@ def main():
         dag_grens = DAG_ARG or (vandaag if ALLEEN_VANDAAG else None)
         rg, ral, rgeen, rfout, rregels = reistijd_zetten(items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"reistijd: {rg} blok(ken) gemaakt, {ral} bestonden al, {rgeen} zonder adres, {rfout} mislukt", "\n".join(rregels))
+        rooster = belrooster(items, vandaag)
+        bellen.rooster_schrijven(rooster)
+        ag.log(f"dag {vandaag}", "schrijf", f"belrooster: {len(rooster)} oproepen gepland (online {BEL_ONLINE_MIN} min vooraf, buiten op het vertrekmoment)",
+               "\n".join(f"{r['tijd'][:16]} bel: {r['titel']}" for r in rooster[:60]))
         bots = [b for b in botsingen(items) if b[:10] >= vandaag]
         if bots:
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(bots)} botsende afspraken in de komende week",
