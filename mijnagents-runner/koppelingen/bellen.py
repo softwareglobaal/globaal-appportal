@@ -1,8 +1,11 @@
 """Bellen bij een alarm (De Bode, punt A12): een gesproken oproep via Twilio.
 
 Sleutels bij naam in ~/appportal/mijnagents-data/.env:
-  TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN  (Twilio Console, Account Info)
-  TWILIO_VAN      het gekochte Twilio-nummer, E.164 (+32..., +31..., +1...)
+  TWILIO_ACCOUNT_SID   het account (Console, Account Info; begint met AC)
+  TWILIO_API_KEY_SID + TWILIO_API_KEY_SECRET   een API key (Settings, API keys & tokens;
+                       aanbevolen door Twilio, intrekbaar zonder het account te raken)
+  of, als er geen API key is: TWILIO_AUTH_TOKEN
+  TWILIO_VAN      het gekochte Twilio-nummer, E.164 (+1..., +3197...)
   ALARM_NUMMER    Mehdi's gsm, E.164 (+32...)
 
 Geen SDK: de REST-API rechtstreeks. De tekst wordt in het Nederlands uitgesproken
@@ -35,15 +38,26 @@ def _env(pad):
 _env(ENV)
 
 
+def _e(n):
+    return os.environ.get(n, "").strip()
+
+
+def _aanmelding():
+    """(gebruiker, geheim) voor Basic auth: API key als die er is, anders het Auth Token."""
+    if _e("TWILIO_API_KEY_SID") and _e("TWILIO_API_KEY_SECRET"):
+        return _e("TWILIO_API_KEY_SID"), _e("TWILIO_API_KEY_SECRET")
+    return _e("TWILIO_ACCOUNT_SID"), _e("TWILIO_AUTH_TOKEN")
+
+
 def beschikbaar():
-    return all(os.environ.get(n, "").strip() for n in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_VAN", "ALARM_NUMMER"))
+    return bool(_e("TWILIO_ACCOUNT_SID") and _e("TWILIO_VAN") and _e("ALARM_NUMMER") and all(_aanmelding()))
 
 
 def _verzoek(pad, data=None):
-    sid, tok = os.environ["TWILIO_ACCOUNT_SID"].strip(), os.environ["TWILIO_AUTH_TOKEN"].strip()
-    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/{pad}"
+    gebruiker, geheim = _aanmelding()
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{_e('TWILIO_ACCOUNT_SID')}/{pad}"
     req = urllib.request.Request(url, data=urllib.parse.urlencode(data).encode() if data else None,
-                                 headers={"Authorization": "Basic " + base64.b64encode(f"{sid}:{tok}".encode()).decode()})
+                                 headers={"Authorization": "Basic " + base64.b64encode(f"{gebruiker}:{geheim}".encode()).decode()})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
 
@@ -69,8 +83,8 @@ def status(call_sid):
 
 
 def nood():
-    return [] if beschikbaar() else [{"tekst": "Bellen bij een alarm: Twilio-account met nummer, dan TWILIO_ACCOUNT_SID, "
-                                                "TWILIO_AUTH_TOKEN, TWILIO_VAN en ALARM_NUMMER in mijnagents-data/.env", "wie": "shaniel"}]
+    return [] if beschikbaar() else [{"tekst": "Bellen bij een alarm: Twilio-account met nummer, dan TWILIO_ACCOUNT_SID, een API key "
+                                                "(TWILIO_API_KEY_SID en _SECRET), TWILIO_VAN en ALARM_NUMMER in mijnagents-data/.env", "wie": "shaniel"}]
 
 
 def alarm_bellen(staat, alarmen, log=None):
