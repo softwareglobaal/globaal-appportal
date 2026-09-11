@@ -13,7 +13,7 @@ nog niet heb, en ik zeg op mijn kaart wat ik daarvoor nodig heb.
 | Bron | Agent | Wat ik eruit haal |
 |---|---|---|
 | Locatie van de telefoon | De Locatiewacht | bezoeken (waar, hoe lang), verplaatsingen (km, minuten) |
-| Agenda's (negen, Nova-conventie) | De Agendawacht | wat gepland stond, met wie, welke firma |
+| Agenda's (negen, titelconventie van Mehdi) | De Agendawacht | wat gepland stond, met wie, welke firma |
 | Fathom-gesprekken | De Fathomwacht | met wie, hoe lang, waarover, welk dossier, privé of werk |
 | Plaud-opnames | De Plaudwacht (zodra de routine draait) | plaatsbezoeken en gesprekken onderweg |
 | Foto's | De iCloud-wacht (Mac) | wat hij zag, waar en wanneer |

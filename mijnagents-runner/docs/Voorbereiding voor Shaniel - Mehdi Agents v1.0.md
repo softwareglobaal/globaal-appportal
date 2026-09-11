@@ -36,7 +36,7 @@ de agent.
 |---|---|---|
 | B1 | **Tabel Betrokken personen**: naam, e-mail, afdeling, rol, bijzonderheden van alle collega's en vaste contacten (het dashboard met namen per afdeling) | de werkwijze van De Fathomwacht op het bord (knop "Werkwijze bewerken"); één plek, alle agents lezen ze daar |
 | B2 | **Afzenders met hoog belang** voor de mailwachten: boekhouder, bank, notaris, advocaat, verzekeraar, overheid, arts | de werkwijze van De Mailwacht mch@ |
-| B3 | **43 agenda-afspraken zonder Nova-code** | titels rechtzetten volgens de afspraak met Nova (`[HA-KB]` enz.); lijst staat als signaal op het bord |
+| B3 | **43 agenda-afspraken zonder code** | titels rechtzetten volgens Mehdi's titelconventie (`[HA-KB]` enz.); lijst staat als signaal op het bord |
 
 ## C. Keuzes die Mehdi maakt (uit het ontwikkelverslag van De Ontwikkelaar, W37)
 

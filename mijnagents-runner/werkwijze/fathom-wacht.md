@@ -28,10 +28,9 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
 | Angela | (aan te vullen) | Regie | collega en partner van Mehdi | gesprekken alleen met Angela zonder klant of collega zijn **privé**: nooit delen, apart zetten |
 | Siyan | siyanhdswerk@gmail.com | h-architects (sales/marketing) | sales | |
 | Shelton | (aan te vullen) | h-architects (sales) | sales | |
-| Shaniel | shaniel@hdssr.com | Regie / HDS Suriname | ontwikkeling, agenda-opzet met Nova | zijn Fathom-sleutel staat nu op de VM |
+| Shaniel | shaniel@hdssr.com | Regie / HDS Suriname | ontwikkeling, agenda-opzet | zijn Fathom-sleutel staat nu op de VM |
 | Joey | (aan te vullen) | h-architects (sales) | sales | |
 | Lara | (aan te vullen) | privé | | eigen agenda "Lara" |
-| Nova | (aan te vullen) | Regie | AI-assistent voor de agenda | |
 | UNABO-team | (aan te vullen) | unabo | EPB, plaatsbeschrijving, 3D-scan | |
 | Harmoniebouw-team | (aan te vullen) | harmoniebouw | | |
 | Contrax-team | (aan te vullen) | contrax | | |

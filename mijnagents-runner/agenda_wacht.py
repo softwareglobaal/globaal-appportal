@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""De Agendawacht (Privé) — leest Mehdi's agenda's volgens de afspraken met Nova
+"""De Agendawacht (Privé) — leest Mehdi's agenda's volgens de agenda-regels van Mehdi
 en zet klaar wat anderen nodig hebben.
 
 Elke werkdag om 06:30 en daarna elke twee uur:
   1. de negen actieve agenda's (AGENDA_KALENDERS in mijnagents-data/.env, anders
      de vaste lijst hieronder) van gisteren tot zeven dagen vooruit;
-  2. per afspraak de titel lezen zoals Nova hem afspraak: "Mehdi: !! [HA-KB] WB 2310 -
+  2. per afspraak de titel lezen volgens de titelconventie: "Mehdi: !! [HA-KB] WB 2310 -
      werfbezoek ..." -> firma HA, soort KB (klant buiten), type WB, nummer 2310;
      "!!" = buiten met reistijd, "??" = niet bevestigd; "Reistijd"-blokken slaan we over;
   3. koppelen aan een deal (Pipedrive H-Architects: projectnummer, anders naam);
@@ -30,7 +30,7 @@ import pipedrive  # noqa: E402
 NAAM = "agenda-wacht"
 ag = bord.Agent(NAAM)
 
-# De negen actieve agenda's volgens "agenda afspraken met Nova" (Feestdagen is read-only).
+# De negen actieve agenda's van Mehdi (Feestdagen is read-only).
 KALENDERS = {
     "mehdiprivewerkagenda@gmail.com": "mehdiprivewerkagenda (intern + Harmoniebouw-werk)",
     "73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51ce370494e7de7501f0c4@group.calendar.google.com": "H-Architects",
@@ -57,7 +57,7 @@ def kalenders():
 
 
 def lees_titel(titel):
-    """Ontleedt een titel volgens de Nova-conventie. Geeft dict met firma, soort, type,
+    """Ontleedt een titel volgens Mehdi's titelconventie. Geeft dict met firma, soort, type,
     nummer, klant, buiten (!!), onzeker (??), reistijd, conform."""
     t = titel.strip()
     uit = {"reistijd": bool(re.search(r"reistijd", t, re.I)) or t.startswith("🚗"),
@@ -223,7 +223,7 @@ def kleuren_zetten(items, alleen_dag=None):
     return gezet, goed, geen, fout
 
 
-# Reistijd (Nova deed dit; nu de Agendawacht). Thuisbasis en bufferminuten in de omgeving.
+# Reistijd, taak van de Agendawacht. Thuisbasis en bufferminuten in de omgeving.
 THUIS = os.environ.get("AGENDA_THUIS", "Herfstlaan 65, 3010 Leuven")
 BUFFER_MIN = int(os.environ.get("AGENDA_REISTIJD_BUFFER", "10"))
 ADRES_CACHE = os.path.expanduser("~/appportal/mijnagents-data/agenda-adressen.json")
@@ -428,7 +428,7 @@ def main():
                 "\n\nGisteren, klantcontact waar een verslag of opname bij hoort:\n" + ("\n".join("- " + r for r in gisteren_lijst) or "- niets")
         klaar.append({"voor": "mehdi", "soort": "dagplan", "sleutel": vandaag, "titel": f"Dagplan {vandaag}", "uniek": f"dagplan:{vandaag}", "inhoud": tekst})
         if niet_conform:
-            klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(niet_conform)} afspraken zonder Nova-code ([HA-KB] enz.)",
+            klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(niet_conform)} afspraken zonder code ([HA-KB] enz.)",
                           "uniek": f"agenda-conventie:{vandaag}", "inhoud": "\n".join("- " + x for x in niet_conform[:40])})
         uit = ag.klaarzet(klaar)
         dag_grens = DAG_ARG or (vandaag if ALLEEN_VANDAAG else None)
@@ -448,7 +448,7 @@ def main():
         ag.log(f"dag {vandaag}", "bron", f"{len(items)} afspraken uit {len(kalenders())} agenda's; {gekoppeld} H-A-afspraken aan een deal gekoppeld; per afdeling: " +
                ", ".join(f"{k} {v}" for k, v in sorted(per_afdeling.items())) + (f"; {len(fouten)} agenda's niet leesbaar: " + ", ".join(f['kalender'] for f in fouten) if fouten else ""),
                "\n".join(f"{a['start'][:16]} {KALENDERS.get(a['kalender'], a['kalender'])[:14]} | {a['titel']}" for a in items))
-        ag.log(f"dag {vandaag}", "bevinding", f"{len(niet_conform)} toekomstige afspraken zonder Nova-code", "\n".join(niet_conform[:60]))
+        ag.log(f"dag {vandaag}", "bevinding", f"{len(niet_conform)} toekomstige afspraken zonder code", "\n".join(niet_conform[:60]))
         ag.log(f"dag {vandaag}", "schrijf", f"klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend", tekst)
         ag.log_verstuur()
         ag.hartslag("waakt", taak="agenda in het oog", detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; {len(niet_conform)} zonder code",

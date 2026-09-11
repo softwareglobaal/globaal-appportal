@@ -53,7 +53,7 @@ Mehdi's claude.ai-account.
 | Het transcript met sprekers en tijden | de inbox (van de routine) of een map `0 Plaud` in een salesmap | de kern |
 | Wie is wie | de tabel "Betrokken personen" in de werkwijze van De Fathomwacht (één plek, geen kopie) | sprekers en afdeling herkennen |
 | Waar Mehdi was op dat moment | De Locatiewacht (bezoek op de starttijd) | welk project, welke werf |
-| Wat er in de agenda stond | De Agendawacht (afspraak op de starttijd, met Nova-code en nummer) | welk dossier, welke firma |
+| Wat er in de agenda stond | De Agendawacht (afspraak op de starttijd, met code en nummer) | welk dossier, welke firma |
 | De deals van H-Architects | Pipedrive (lezen) | projectnummer of naam |
 | De salesmap en de projectmap | Dropbox | de kopie voor het dossier (`0 Plaud`) |
 
