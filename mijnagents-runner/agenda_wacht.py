@@ -392,6 +392,18 @@ def reistijd_zetten(items, alleen_dag=None):
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: adres niet gevonden ({adres[:40]})")
             continue
         vertrek_van = vorige_per_dag.get(dag, thuis)
+        vorige_per_dag[dag] = doel
+        # Zuinig met aanvragen (Google Routes Pro: 5.000 gratis per maand): bestaan mijn twee
+        # blokken al, dan herbereken ik alleen in de eerste ronde van de dag (voor 08:00) of met --dag.
+        def _bestaand(t0, t1):
+            for x in reistijden:
+                if x["kalender"] == a["kalender"] and "T" in x["start"] and t0 <= datetime.fromisoformat(x["start"]) <= t1:
+                    return x
+            return None
+        if (_bestaand(start - timedelta(hours=3), start) and _bestaand(einde, einde + timedelta(hours=3))
+                and nu.hour >= 8 and not DAG_ARG):
+            al += 2
+            continue
         try:
             # eerste schatting om het vertrekuur te kennen, dan de filefactor op dat uur
             heen, _ = rijtijd_min(vertrek_van, doel, start)
@@ -401,7 +413,6 @@ def reistijd_zetten(items, alleen_dag=None):
             fout += 1
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: rijtijd niet berekend ({type(e).__name__})")
             continue
-        vorige_per_dag[dag] = doel
         plaats = plaatsnaam(adres)
         def bestaand(t0, t1):
             for x in reistijden:
