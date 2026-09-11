@@ -85,6 +85,7 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 "deelnemers": [a.get("email", "") for a in ev.get("attendees", []) if a.get("email")],
                 "link": ev.get("htmlLink", ""),
                 "_reminders": ev.get("reminders") or {},
+                "_terugkerend": bool(ev.get("recurringEventId")),
             })
     uit.sort(key=lambda x: x.get("start", ""))
     return uit

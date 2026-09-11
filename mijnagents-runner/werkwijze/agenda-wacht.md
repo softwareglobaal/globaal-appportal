@@ -39,12 +39,15 @@ en elke afspraak gebruikt die standaard. Daarom kwam er nooit een melding. De
 standaard per agenda kan ik niet veranderen (daar heeft mijn koppeling geen
 recht op), maar een herinnering per afspraak wel. Dus:
 
-- Elke komende afspraak zonder eigen herinnering krijgt een pop-upherinnering:
-  **online** (Zoom- of Meet-link, of soort PO/KO) 5 minuten vooraf; **buiten**
-  (`!!`) 30 minuten vooraf, zodat hij op tijd vertrekt; overig 10 minuten.
-- Ik voeg alleen toe; een herinnering die Mehdi zelf zette, laat ik staan.
-- Reistijdblokken en hele-dag-items krijgen er geen.
-- Dit is de enige schrijfhandeling die ik doe, en ik meld elke ronde hoeveel.
+- **Alleen afspraken met prospecten** van H-Architects, UNABO en TKN krijgen een
+  melding: codes `[HA-PO]`, `[HA-PB]`, `[UNABO-PO]`, `[UNABO-PB]`, `[TKN-PO]`,
+  `[TKN-PB]`. Online (PO) 5 minuten vooraf, buiten (PB, `!!`) 30 minuten vooraf.
+- **Geen melding** voor intern (`-IN`), klantafspraken (KB, KO), terugkerende
+  afspraken, reistijdblokken, hele-dag-items en privé. Zette ik daar eerder zelf
+  een herinnering op (mijn handtekening: één pop-up van 5, 10 of 30 minuten),
+  dan haal ik die weer weg. Een herinnering die Mehdi zelf zette, laat ik staan.
+- Dit is de enige schrijfhandeling die ik doe, en ik meld elke ronde per
+  afspraak "MELDING" of "stil", zodat Mehdi het kan nakijken.
 
 Wat Mehdi zelf één keer moet nakijken op de iPhone: Instellingen, Meldingen,
 Google Agenda: meldingen aan, geluid aan, en de focusstand (Niet storen, Werk)

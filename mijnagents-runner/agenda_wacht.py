@@ -112,40 +112,62 @@ BUITEN_MIN = int(os.environ.get("AGENDA_HERINNERING_BUITEN", "30"))
 OVERIG_MIN = int(os.environ.get("AGENDA_HERINNERING_OVERIG", "10"))
 
 
-def herinneringen_zetten(items):
-    """Werkwijze stap 5 (mandaat van Mehdi, 11-09-2026): elke komende afspraak krijgt een
-    eigen pop-upherinnering als hij er geen heeft. Alle agenda's staan op 'geen
-    standaardherinnering', dus zonder deze stap maakt de telefoon nooit lawaai.
-    Online (Zoom-link of PO/KO) 5 min, buiten (!!) 30 min, overig 10 min. Alleen
-    toevoegen, nooit een bestaande herinnering weghalen. Idempotent."""
+PROSPECT_FIRMAS = ("HA", "UNABO", "TKN")
+PROSPECT_SOORTEN = ("PO", "PB")
+
+
+def melding_gewenst(a):
+    """De regel van Mehdi (11-09-2026): alleen afspraken met prospecten van
+    H-Architects, UNABO en TKN (codes PO en PB) krijgen een melding. Geen intern,
+    geen terugkerende afspraken, geen reistijd, geen hele-dag-items."""
+    info = lees_titel(a["titel"])
+    if a.get("hele_dag") or a.get("_terugkerend") or info["reistijd"]:
+        return False, info
+    return (info["firma"] in PROSPECT_FIRMAS and info["soort"] in PROSPECT_SOORTEN), info
+
+
+def _patch(a, body, tok):
     import urllib.parse
     import urllib.request
+    url = f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/{urllib.parse.quote(a['id'], safe='')}"
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PATCH",
+                                 headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+    urllib.request.urlopen(req, timeout=30)
+
+
+def herinneringen_zetten(items, alleen_dag=None):
+    """Werkwijze stap 5: een pop-upherinnering op elke komende prospect-afspraak
+    (regel in melding_gewenst) die er nog geen heeft: online 5 min, buiten (!!) 30 min.
+    Een herinnering die ik zelf eerder op een niet-gewenste afspraak zette (mijn
+    handtekening: één pop-up van 10 of 30 min) haal ik weer weg, zodat intern en
+    terugkerend stil blijven. Bestaande herinneringen van Mehdi laat ik staan.
+    Geeft (gezet, al, weggehaald, fout)."""
     tok = agenda._toegang()
     nu_iso = datetime.now().astimezone().isoformat()
-    gezet, al, fout = 0, 0, 0
+    gezet, al, weg, fout = 0, 0, 0, 0
     for a in items:
-        if a.get("hele_dag") or a["start"] < nu_iso[:len(a["start"])] or a.get("kalender", "").startswith("en.be#"):
+        if a["start"] < nu_iso[:len(a["start"])] or a.get("kalender", "").startswith("en.be#"):
             continue
+        if alleen_dag and a["start"][:10] != alleen_dag:
+            continue
+        gewenst, info = melding_gewenst(a)
         r = a.get("_reminders") or {}
-        if r.get("overrides"):
-            al += 1
-            continue
-        info = lees_titel(a["titel"])
-        if info["reistijd"]:
-            continue
-        online = "zoom.us" in (a.get("locatie") or "") or info["soort"] in ("PO", "KO") or "meet.google" in (a.get("locatie") or "")
-        minuten = BUITEN_MIN if info["buiten"] else (ONLINE_MIN if online else OVERIG_MIN)
-        body = {"reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": minuten}]}}
-        url = f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/{urllib.parse.quote(a['id'], safe='')}"
-        req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PATCH",
-                                     headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+        eigen = r.get("overrides") or []
+        mijn = len(eigen) == 1 and eigen[0].get("method") == "popup" and eigen[0].get("minutes") in (OVERIG_MIN, BUITEN_MIN, ONLINE_MIN)
         try:
-            urllib.request.urlopen(req, timeout=30)
-            gezet += 1
+            if gewenst and not eigen:
+                minuten = BUITEN_MIN if info["buiten"] else ONLINE_MIN
+                _patch(a, {"reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": minuten}]}}, tok)
+                gezet += 1
+            elif gewenst:
+                al += 1
+            elif not gewenst and mijn:
+                _patch(a, {"reminders": {"useDefault": True, "overrides": []}}, tok)
+                weg += 1
         except Exception as e:  # noqa: BLE001
             fout += 1
             print("herinnering mislukt:", a["titel"][:40], type(e).__name__, file=sys.stderr)
-    return gezet, al, fout
+    return gezet, al, weg, fout
 
 
 def main():
@@ -199,8 +221,9 @@ def main():
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(niet_conform)} afspraken zonder Nova-code ([HA-KB] enz.)",
                           "uniek": f"agenda-conventie:{vandaag}", "inhoud": "\n".join("- " + x for x in niet_conform[:40])})
         uit = ag.klaarzet(klaar)
-        gezet, al, fout_h = herinneringen_zetten(items)
-        ag.log(f"dag {vandaag}", "schrijf", f"herinneringen: {gezet} gezet (online {ONLINE_MIN} min, buiten {BUITEN_MIN} min, overig {OVERIG_MIN} min), {al} hadden er al een, {fout_h} mislukt")
+        gezet, al, weg, fout_h = herinneringen_zetten(items)
+        ag.log(f"dag {vandaag}", "schrijf", f"herinneringen (alleen prospecten HA/UNABO/TKN, PO en PB): {gezet} gezet (online {ONLINE_MIN} min, buiten {BUITEN_MIN} min), {al} hadden er al een, {weg} weggehaald van intern of terugkerend, {fout_h} mislukt",
+               "\n".join(f"{'MELDING ' if melding_gewenst(a)[0] else 'stil    '} {a['start'][:16]} {a['titel'][:70]}" for a in items if a['start'][:10] >= vandaag and not a.get('hele_dag')))
         ag.log(f"dag {vandaag}", "bron", f"{len(items)} afspraken uit {len(kalenders())} agenda's; {gekoppeld} H-A-afspraken aan een deal gekoppeld; per afdeling: " +
                ", ".join(f"{k} {v}" for k, v in sorted(per_afdeling.items())) + (f"; {len(fouten)} agenda's niet leesbaar: " + ", ".join(f['kalender'] for f in fouten) if fouten else ""),
                "\n".join(f"{a['start'][:16]} {KALENDERS.get(a['kalender'], a['kalender'])[:14]} | {a['titel']}" for a in items))
