@@ -434,7 +434,7 @@ def onvolledige_afspraken(items, vandaag):
         if a.get("hele_dag") or a["start"][:10] < vandaag or a.get("kalender", "").startswith("en.be#") or a.get("_terugkerend"):
             continue
         info = lees_titel(a["titel"])
-        if info["reistijd"] or not info["firma"] or info["soort"] == "IN":
+        if info["reistijd"] or info["soort"] == "IN" or not (info["firma"] or info["buiten"]):
             continue
         adres = a.get("locatie") or ""
         fysiek = bool(adres) and not adres.lower().startswith("http")
