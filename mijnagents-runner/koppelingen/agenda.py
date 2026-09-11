@@ -86,6 +86,7 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 "link": ev.get("htmlLink", ""),
                 "_reminders": ev.get("reminders") or {},
                 "_terugkerend": bool(ev.get("recurringEventId")),
+                "_kleur": ev.get("colorId", ""),
             })
     uit.sort(key=lambda x: x.get("start", ""))
     return uit

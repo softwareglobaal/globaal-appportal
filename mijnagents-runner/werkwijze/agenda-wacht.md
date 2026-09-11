@@ -53,6 +53,17 @@ Wat Mehdi zelf één keer moet nakijken op de iPhone: Instellingen, Meldingen,
 Google Agenda: meldingen aan, geluid aan, en de focusstand (Niet storen, Werk)
 mag Google Agenda niet blokkeren. Zonder dat blijft de telefoon stil, wat ik ook doe.
 
+## Kleuren (mandaat van Mehdi, 11-09-2026)
+
+Elke komende afspraak krijgt de kleur van zijn soort, volgens de regels
+hierboven, in Google-kleuren: roze (flamingo) = Lara; oranje (mandarijn) =
+prospect PO en PB; rood (tomaat) = `!!` buiten en reistijd; blauw (pauw) = klant
+online KO; groen (basilicum) = intern IN; geel (banaan) = `??` niet bevestigd.
+Een titel zonder code laat ik met rust. De agenda "Lara" is van iemand anders
+(alleen leesrecht): daar kan ik niet kleuren en meld ik dat. Ik verander alleen
+de kleur, nooit de agenda waar de afspraak op staat: staat een afspraak op de
+verkeerde agenda volgens de Calendly-routering, dan meld ik het als signaal.
+
 ## Wat ik doe, in deze volgorde
 
 1. Elke werkdag om 06:30, daarna elke twee uur: de afspraken van gisteren tot

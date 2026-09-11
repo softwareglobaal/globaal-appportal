@@ -170,6 +170,59 @@ def herinneringen_zetten(items, alleen_dag=None):
     return gezet, al, weg, fout
 
 
+# Kleuren (de regels van Mehdi, Google-kleurnummers): roze 4 flamingo = Lara;
+# oranje 6 mandarijn = prospect (PO, PB); rood 11 tomaat = !! buiten en reistijd;
+# blauw 7 pauw = klant online (KO); groen 10 basilicum = intern (IN); geel 5 banaan = ?? niet bevestigd.
+KLEURNAAM = {"4": "roze", "6": "oranje", "11": "rood", "7": "blauw", "10": "groen", "5": "geel"}
+ALLEEN_VANDAAG = "--vandaag" in sys.argv
+
+
+def kleur_gewenst(a, info):
+    kal = KALENDERS.get(a.get("kalender", ""), "")
+    if kal == "Lara":
+        return "4"
+    if info["reistijd"] or info["buiten"]:
+        return "11"
+    if info["onzeker"]:
+        return "5"
+    if info["soort"] in ("PO", "PB"):
+        return "6"
+    if info["soort"] == "KO":
+        return "7"
+    if info["soort"] == "IN":
+        return "10"
+    return ""   # titel zonder code: geen regel, kleur laten staan
+
+
+def kleuren_zetten(items, alleen_dag=None):
+    """Werkwijze: elke komende afspraak krijgt de kleur van zijn soort. Alleen als de
+    kleur afwijkt; agenda's waar Mehdi enkel leesrecht heeft (Lara) kan ik niet
+    veranderen en meld ik. Geeft (gezet, al_goed, geen_regel, fout)."""
+    tok = agenda._toegang()
+    nu_dag = datetime.now().date().isoformat()
+    gezet, goed, geen, fout = 0, 0, 0, 0
+    for a in items:
+        if a["start"][:10] < nu_dag or a.get("kalender", "").startswith("en.be#"):
+            continue
+        if alleen_dag and a["start"][:10] != alleen_dag:
+            continue
+        info = lees_titel(a["titel"])
+        wens = kleur_gewenst(a, info)
+        if not wens:
+            geen += 1
+            continue
+        if (a.get("_kleur") or "") == wens:
+            goed += 1
+            continue
+        try:
+            _patch(a, {"colorId": wens}, tok)
+            gezet += 1
+        except Exception as e:  # noqa: BLE001
+            fout += 1
+            print("kleur mislukt:", a["titel"][:40], type(e).__name__, file=sys.stderr)
+    return gezet, goed, geen, fout
+
+
 def main():
     ag.hartslag("actief", taak="agenda lezen")
     try:
@@ -221,7 +274,11 @@ def main():
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(niet_conform)} afspraken zonder Nova-code ([HA-KB] enz.)",
                           "uniek": f"agenda-conventie:{vandaag}", "inhoud": "\n".join("- " + x for x in niet_conform[:40])})
         uit = ag.klaarzet(klaar)
-        gezet, al, weg, fout_h = herinneringen_zetten(items)
+        dag_grens = vandaag if ALLEEN_VANDAAG else None
+        kg, kgoed, kgeen, kfout = kleuren_zetten(items, dag_grens)
+        ag.log(f"dag {vandaag}", "schrijf", f"kleuren: {kg} gezet, {kgoed} klopten al, {kgeen} zonder regel (titel zonder code), {kfout} niet gelukt (leesrecht)",
+               "\n".join(f"{a['start'][:16]} {a['titel'][:60]} -> {KLEURNAAM.get(kleur_gewenst(a, lees_titel(a['titel'])), 'laten staan')}" for a in items if a['start'][:10] >= vandaag and (not dag_grens or a['start'][:10] == dag_grens)))
+        gezet, al, weg, fout_h = herinneringen_zetten(items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"herinneringen (alleen prospecten HA/UNABO/TKN, PO en PB): {gezet} gezet (online {ONLINE_MIN} min, buiten {BUITEN_MIN} min), {al} hadden er al een, {weg} weggehaald van intern of terugkerend, {fout_h} mislukt",
                "\n".join(f"{'MELDING ' if melding_gewenst(a)[0] else 'stil    '} {a['start'][:16]} {a['titel'][:70]}" for a in items if a['start'][:10] >= vandaag and not a.get('hele_dag')))
         ag.log(f"dag {vandaag}", "bron", f"{len(items)} afspraken uit {len(kalenders())} agenda's; {gekoppeld} H-A-afspraken aan een deal gekoppeld; per afdeling: " +
