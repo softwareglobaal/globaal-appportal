@@ -185,6 +185,11 @@ def afspraken_bellen(staat, log=None):
         if r["sleutel"] in gebeld or not (t <= nu < t + timedelta(minutes=VENSTER_MIN)):
             continue
         res = bel_afspraak(r["tekst"])
+        if any("65 seconds" in str(v) for _, v in res):
+            # CallMeBot laat maar één oproep per 65 s toe: deze regel volgende minuut opnieuw
+            if log:
+                log("bellen", "afspraak", f"even wachten (één oproep per 65 s): {r.get('titel', '')[:60]}")
+            break
         gebeld[r["sleutel"]] = nu.isoformat()
         samen = ", ".join(f"{k}: {str(v)[:40]}" for k, v in res)
         if log:
