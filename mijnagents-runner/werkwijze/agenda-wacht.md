@@ -64,6 +64,21 @@ Een titel zonder code laat ik met rust. De agenda "Lara" is van iemand anders
 de kleur, nooit de agenda waar de afspraak op staat: staat een afspraak op de
 verkeerde agenda volgens de Calendly-routering, dan meld ik het als signaal.
 
+## Reistijd en botsingen (mandaat van Mehdi, 11-09-2026; dit deed Nova)
+
+- Elke komende afspraak **buiten** (`!!`, of PB/KB met een adres) krijgt twee
+  blokken op dezelfde agenda: `🚗 Reistijd → plaats` ervoor en `🚗 Reistijd ←
+  plaats` erna, rood. De duur is de echte rijtijd (OSRM-router op OpenStreetMap)
+  vanaf thuis, of vanaf de vorige buitenafspraak van die dag, plus 10 minuten
+  buffer, afgerond op 5. De afspraak zelf krijgt een herinnering op het
+  vertrekmoment plus 5 minuten; het heenblok een pop-up 5 minuten vooraf.
+- Bestaat er al een reistijdblok binnen drie uur voor of na, dan maak ik niets.
+  Geen adres, of een adres dat ik niet vind: dan meld ik dat in plaats van te gokken.
+- Thuisbasis en buffer staan in de omgeving van mijn runner (AGENDA_THUIS,
+  AGENDA_REISTIJD_BUFFER).
+- **Botsingen**: twee afspraken die elkaar overlappen (bv. een Zoom tijdens een
+  opmeting) meld ik als signaal aan Mehdi; ik verplaats nooit iets zelf.
+
 ## Wat ik doe, in deze volgorde
 
 1. Elke werkdag om 06:30, daarna elke twee uur: de afspraken van gisteren tot

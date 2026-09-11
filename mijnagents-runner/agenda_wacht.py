@@ -223,6 +223,163 @@ def kleuren_zetten(items, alleen_dag=None):
     return gezet, goed, geen, fout
 
 
+# Reistijd (Nova deed dit; nu de Agendawacht). Thuisbasis en bufferminuten in de omgeving.
+THUIS = os.environ.get("AGENDA_THUIS", "Herfstlaan 65, 3010 Leuven")
+BUFFER_MIN = int(os.environ.get("AGENDA_REISTIJD_BUFFER", "10"))
+ADRES_CACHE = os.path.expanduser("~/appportal/mijnagents-data/agenda-adressen.json")
+DAG_ARG = None
+for _i, _a in enumerate(sys.argv):
+    if _a == "--dag" and _i + 1 < len(sys.argv):
+        DAG_ARG = sys.argv[_i + 1]
+
+
+def _cache_laden():
+    try:
+        return json.load(open(ADRES_CACHE))
+    except (OSError, ValueError):
+        return {}
+
+
+def _cache_bewaren(c):
+    os.makedirs(os.path.dirname(ADRES_CACHE), exist_ok=True)
+    json.dump(c, open(ADRES_CACHE, "w"), ensure_ascii=False)
+
+
+def coord(adres, cache):
+    import time
+    import urllib.parse
+    import urllib.request
+    sleutel = adres.strip().lower()
+    if sleutel in cache:
+        return cache[sleutel]
+    time.sleep(1.1)
+    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({"q": adres, "format": "jsonv2", "limit": 1, "countrycodes": "be,nl"})
+    try:
+        d = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "MehdiAgents-agendawacht/1.0 (mch@h-architects.be)"}), timeout=20))
+        uit = [float(d[0]["lat"]), float(d[0]["lon"])] if d else None
+    except Exception:  # noqa: BLE001
+        uit = None
+    cache[sleutel] = uit
+    return uit
+
+
+def rijtijd_min(van, naar):
+    """Rijtijd in minuten via OSRM (openbare router), afgerond op 5 en met buffer."""
+    import math
+    import urllib.request
+    url = f"https://router.project-osrm.org/route/v1/driving/{van[1]},{van[0]};{naar[1]},{naar[0]}?overview=false"
+    d = json.load(urllib.request.urlopen(url, timeout=20))
+    minuten = d["routes"][0]["duration"] / 60
+    return int(math.ceil((minuten + BUFFER_MIN) / 5) * 5)
+
+
+def plaatsnaam(adres):
+    m = re.search(r"\d{4}\s+([A-Za-zÀ-ÿ' -]+)", adres or "")
+    return (m.group(1).strip() if m else (adres or "").split(",")[0]).strip()[:30]
+
+
+def _insert(kalender, body, tok):
+    import urllib.parse
+    import urllib.request
+    url = f"{agenda.API}/calendars/{urllib.parse.quote(kalender, safe='')}/events"
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
+                                 headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+    return json.load(urllib.request.urlopen(req, timeout=30))
+
+
+def reistijd_zetten(items, alleen_dag=None):
+    """Werkwijze: elke komende afspraak buiten (!!, of PB/KB met een adres) krijgt een
+    blok 'Reistijd -> plaats' ervoor en 'Reistijd <- plaats' erna, met de rijtijd
+    vanaf thuis (of de vorige buitenafspraak van die dag) plus buffer, rood, op
+    dezelfde agenda. Bestaat er al een reistijdblok binnen drie uur voor of na,
+    dan niets. De afspraak zelf krijgt een herinnering op het vertrekmoment plus 5.
+    Geeft (gemaakt, al, geen_adres, fout, regels)."""
+    from datetime import timedelta
+    tok = agenda._toegang()
+    cache = _cache_laden()
+    thuis = coord(THUIS, cache)
+    nu = datetime.now().astimezone()
+    gemaakt, al, geen_adres, fout, regels = 0, 0, 0, 0, []
+    reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"]]
+    buiten = []
+    for a in items:
+        if a.get("hele_dag") or a.get("kalender", "").startswith("en.be#"):
+            continue
+        info = lees_titel(a["titel"])
+        adres = a.get("locatie") or ""
+        fysiek = adres and not adres.lower().startswith("http")
+        if info["reistijd"] or not (info["buiten"] or (info["soort"] in ("PB", "KB") and fysiek)):
+            continue
+        try:
+            start = datetime.fromisoformat(a["start"]); einde = datetime.fromisoformat(a["einde"])
+        except ValueError:
+            continue
+        if start < nu or (alleen_dag and a["start"][:10] != alleen_dag):
+            continue
+        buiten.append((start, einde, a, info, adres, fysiek))
+    buiten.sort(key=lambda x: x[0])
+    vorige_per_dag = {}
+    for start, einde, a, info, adres, fysiek in buiten:
+        dag = a["start"][:10]
+        if not fysiek:
+            geen_adres += 1
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen adres, geen reistijd")
+            continue
+        doel = coord(adres, cache)
+        if not (doel and thuis):
+            geen_adres += 1
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: adres niet gevonden ({adres[:40]})")
+            continue
+        vertrek_van = vorige_per_dag.get(dag, thuis)
+        try:
+            heen = rijtijd_min(vertrek_van, doel)
+            terug = rijtijd_min(doel, thuis)
+        except Exception as e:  # noqa: BLE001
+            fout += 1
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: rijtijd niet berekend ({type(e).__name__})")
+            continue
+        vorige_per_dag[dag] = doel
+        plaats = plaatsnaam(adres)
+        def bestaat(t0, t1):
+            return any(x["kalender"] == a["kalender"] and t0 <= datetime.fromisoformat(x["start"]) <= t1 for x in reistijden if "T" in x["start"])
+        kleur = {"colorId": "11", "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 5}]}}
+        try:
+            if bestaat(start - timedelta(hours=3), start):
+                al += 1
+            else:
+                _insert(a["kalender"], {"summary": f"🚗 Reistijd → {plaats}", "start": {"dateTime": (start - timedelta(minutes=heen)).isoformat()},
+                                        "end": {"dateTime": start.isoformat()}, "description": f"Reistijd voor: {a['titel']} ({heen} min incl. {BUFFER_MIN} min buffer, OSRM)", **kleur}, tok)
+                gemaakt += 1
+            if bestaat(einde, einde + timedelta(hours=3)):
+                al += 1
+            else:
+                _insert(a["kalender"], {"summary": f"🚗 Reistijd ← {plaats}", "start": {"dateTime": einde.isoformat()},
+                                        "end": {"dateTime": (einde + timedelta(minutes=terug)).isoformat()}, "description": f"Reistijd na: {a['titel']} ({terug} min incl. buffer, OSRM)",
+                                        **{"colorId": "11", "reminders": {"useDefault": False, "overrides": []}}}, tok)
+                gemaakt += 1
+            _patch(a, {"reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": heen + 5}]}}, tok)
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: heen {heen} min, terug {terug} min, herinnering {heen + 5} min vooraf")
+        except Exception as e:  # noqa: BLE001
+            fout += 1
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: reistijd niet gezet ({type(e).__name__})")
+    _cache_bewaren(cache)
+    return gemaakt, al, geen_adres, fout, regels
+
+
+def botsingen(items):
+    """Twee afspraken die elkaar overlappen op dezelfde dag (bv. een Zoom tijdens een opmeting)."""
+    uit = []
+    tijd = [(datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"]), x) for x in items
+            if "T" in x["start"] and not lees_titel(x["titel"])["reistijd"] and not x.get("kalender", "").startswith("en.be#")]
+    tijd.sort(key=lambda t: t[0])
+    for i, (s1, e1, a) in enumerate(tijd):
+        for s2, e2, b in tijd[i + 1:]:
+            if s2 >= e1:
+                break
+            uit.append(f"{a['start'][:16]} {a['titel'][:45]}  ×  {b['start'][11:16]} {b['titel'][:45]}")
+    return uit
+
+
 def main():
     ag.hartslag("actief", taak="agenda lezen")
     try:
@@ -274,7 +431,14 @@ def main():
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(niet_conform)} afspraken zonder Nova-code ([HA-KB] enz.)",
                           "uniek": f"agenda-conventie:{vandaag}", "inhoud": "\n".join("- " + x for x in niet_conform[:40])})
         uit = ag.klaarzet(klaar)
-        dag_grens = vandaag if ALLEEN_VANDAAG else None
+        dag_grens = DAG_ARG or (vandaag if ALLEEN_VANDAAG else None)
+        rg, ral, rgeen, rfout, rregels = reistijd_zetten(items, dag_grens)
+        ag.log(f"dag {vandaag}", "schrijf", f"reistijd: {rg} blok(ken) gemaakt, {ral} bestonden al, {rgeen} zonder adres, {rfout} mislukt", "\n".join(rregels))
+        bots = [b for b in botsingen(items) if b[:10] >= vandaag]
+        if bots:
+            ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(bots)} botsende afspraken in de komende week",
+                          "uniek": f"agenda-botsing:{vandaag}:{len(bots)}", "inhoud": "\n".join("- " + b for b in bots)}])
+            ag.log(f"dag {vandaag}", "bevinding", f"{len(bots)} botsende afspraken", "\n".join(bots))
         kg, kgoed, kgeen, kfout = kleuren_zetten(items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"kleuren: {kg} gezet, {kgoed} klopten al, {kgeen} zonder regel (titel zonder code), {kfout} niet gelukt (leesrecht)",
                "\n".join(f"{a['start'][:16]} {a['titel'][:60]} -> {KLEURNAAM.get(kleur_gewenst(a, lees_titel(a['titel'])), 'laten staan')}" for a in items if a['start'][:10] >= vandaag and (not dag_grens or a['start'][:10] == dag_grens)))
