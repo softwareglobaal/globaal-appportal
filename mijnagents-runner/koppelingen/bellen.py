@@ -109,7 +109,7 @@ def alarm_bellen(staat, alarmen, log=None):
 # gebeld worden voor een afspraak, ook al is het een gemiste oproep. Twee kanalen:
 #   1. Telegram-spraakoproep via CallMeBot (gratis): CALLMEBOT_USER in mijnagents-data/.env
 #      (Telegram-gebruikersnaam met @, of gsm-nummer met landcode); Mehdi stuurt één keer
-#      /start naar @CallMeBot_txtbot. Stem: CALLMEBOT_STEM (standaard nl-NL-Wavenet-B).
+#      /start naar @CallMeBot_txtbot. Stem: CALLMEBOT_STEM (standaard nl-NL-Standard-B).
 #   2. Echte telefoonoproep via Twilio (zie boven), zodra die sleutels er zijn.
 # Zijn beide beschikbaar, dan bellen we via beide: dubbel is beter dan gemist.
 # Het rooster (mijnagents-data/belrooster.json) schrijft De Agendawacht; De Bode leest het
@@ -129,10 +129,13 @@ def afspraak_bellen_beschikbaar():
 
 def bel_telegram(tekst):
     """Telegram-spraakoproep via CallMeBot; de tekst wordt voorgelezen (twee keer)."""
-    q = urllib.parse.urlencode({"user": os.environ["CALLMEBOT_USER"].strip(), "text": tekst[:300],
-                                "lang": os.environ.get("CALLMEBOT_STEM", "nl-NL-Wavenet-B"), "rpt": "2", "timeout": "40"})
-    with urllib.request.urlopen(f"https://api.callmebot.com/start.php?{q}", timeout=40) as r:
-        return r.read().decode(errors="replace")[:200]
+    # de gebruiker (+32... of @naam) mag niet URL-gecodeerd worden: CallMeBot leest %2B verkeerd
+    q = urllib.parse.urlencode({"text": tekst[:300], "lang": os.environ.get("CALLMEBOT_STEM", "nl-NL-Standard-B"), "rpt": "2", "timeout": "40"})
+    import re
+    with urllib.request.urlopen(f"https://api.callmebot.com/start.php?user={os.environ['CALLMEBOT_USER'].strip()}&{q}", timeout=60) as r:
+        h = r.read().decode(errors="replace")
+    h = re.sub(r"<script.*?</script>|<style.*?</style>", "", h, flags=re.S)
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", h)).strip()[:200]
 
 
 def bel_afspraak(tekst):
