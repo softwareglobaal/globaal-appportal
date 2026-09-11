@@ -107,6 +107,47 @@ def koppel(info, titel, deals):
     return (beste, f"naam in de titel ({score} woorden)") if beste and score >= 2 else (None, "")
 
 
+ONLINE_MIN = int(os.environ.get("AGENDA_HERINNERING_ONLINE", "5"))
+BUITEN_MIN = int(os.environ.get("AGENDA_HERINNERING_BUITEN", "30"))
+OVERIG_MIN = int(os.environ.get("AGENDA_HERINNERING_OVERIG", "10"))
+
+
+def herinneringen_zetten(items):
+    """Werkwijze stap 5 (mandaat van Mehdi, 11-09-2026): elke komende afspraak krijgt een
+    eigen pop-upherinnering als hij er geen heeft. Alle agenda's staan op 'geen
+    standaardherinnering', dus zonder deze stap maakt de telefoon nooit lawaai.
+    Online (Zoom-link of PO/KO) 5 min, buiten (!!) 30 min, overig 10 min. Alleen
+    toevoegen, nooit een bestaande herinnering weghalen. Idempotent."""
+    import urllib.parse
+    import urllib.request
+    tok = agenda._toegang()
+    nu_iso = datetime.now().astimezone().isoformat()
+    gezet, al, fout = 0, 0, 0
+    for a in items:
+        if a.get("hele_dag") or a["start"] < nu_iso[:len(a["start"])] or a.get("kalender", "").startswith("en.be#"):
+            continue
+        r = a.get("_reminders") or {}
+        if r.get("overrides"):
+            al += 1
+            continue
+        info = lees_titel(a["titel"])
+        if info["reistijd"]:
+            continue
+        online = "zoom.us" in (a.get("locatie") or "") or info["soort"] in ("PO", "KO") or "meet.google" in (a.get("locatie") or "")
+        minuten = BUITEN_MIN if info["buiten"] else (ONLINE_MIN if online else OVERIG_MIN)
+        body = {"reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": minuten}]}}
+        url = f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/{urllib.parse.quote(a['id'], safe='')}"
+        req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PATCH",
+                                     headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=30)
+            gezet += 1
+        except Exception as e:  # noqa: BLE001
+            fout += 1
+            print("herinnering mislukt:", a["titel"][:40], type(e).__name__, file=sys.stderr)
+    return gezet, al, fout
+
+
 def main():
     ag.hartslag("actief", taak="agenda lezen")
     try:
@@ -158,6 +199,8 @@ def main():
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(niet_conform)} afspraken zonder Nova-code ([HA-KB] enz.)",
                           "uniek": f"agenda-conventie:{vandaag}", "inhoud": "\n".join("- " + x for x in niet_conform[:40])})
         uit = ag.klaarzet(klaar)
+        gezet, al, fout_h = herinneringen_zetten(items)
+        ag.log(f"dag {vandaag}", "schrijf", f"herinneringen: {gezet} gezet (online {ONLINE_MIN} min, buiten {BUITEN_MIN} min, overig {OVERIG_MIN} min), {al} hadden er al een, {fout_h} mislukt")
         ag.log(f"dag {vandaag}", "bron", f"{len(items)} afspraken uit {len(kalenders())} agenda's; {gekoppeld} H-A-afspraken aan een deal gekoppeld; per afdeling: " +
                ", ".join(f"{k} {v}" for k, v in sorted(per_afdeling.items())) + (f"; {len(fouten)} agenda's niet leesbaar: " + ", ".join(f['kalender'] for f in fouten) if fouten else ""),
                "\n".join(f"{a['start'][:16]} {KALENDERS.get(a['kalender'], a['kalender'])[:14]} | {a['titel']}" for a in items))
@@ -165,7 +208,8 @@ def main():
         ag.log(f"dag {vandaag}", "schrijf", f"klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend", tekst)
         ag.log_verstuur()
         ag.hartslag("waakt", taak="agenda in het oog", detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; {len(niet_conform)} zonder code",
-                    nood=([{"tekst": f"{len(niet_conform)} toekomstige afspraken zonder Nova-code ([HA-KB] enz.): titels rechtzetten door Nova of Mehdi", "wie": "collega"}] if niet_conform else [])
+                    nood=([{"tekst": f"{len(niet_conform)} toekomstige afspraken zonder code ([HA-KB] enz.): titels rechtzetten (Mehdi, of via een voorstel zodra het runbook agenda-titel er is)", "wie": "mehdi"}] if niet_conform else [])
+                    + ([{"tekst": f"{fout_h} herinneringen konden niet gezet worden", "wie": "claude-code"}] if fout_h else [])
                     + ([{"tekst": f"{len(fouten)} agenda(s) niet leesbaar: " + ", ".join(f["kalender"][:30] for f in fouten), "wie": "mehdi"}] if fouten else []))
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
