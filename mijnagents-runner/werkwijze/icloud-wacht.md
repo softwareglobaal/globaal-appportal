@@ -37,18 +37,32 @@ daarna gaan ze via een runbook naar de projectmap.
 - De validatie per groep: bij welk dossier, of niet.
 - Wanneer de export naar de projectmap gebeurt.
 
-## De foto's zelf, niet alleen de metadata (mandaat van Mehdi, 12-09-2026)
+## Eerst metadata, dan alleen de werkfoto's (mandaat van Mehdi, 12-09-2026)
 
-- Per dag schrijf ik één map `Fotos/<JJJJ-MM-DD>/` in Mehdi's Dropbox-app-map (Apps/Mehdi Agents),
-  die ook in **Data uit Mehdi/Fotos** terechtkomt: `metadata.json` (tijd, GPS, uuid, bestand,
-  groep), `overzicht.md` (de plekken van de dag) en de originelen als `<UUMM> <uuid8>.<ext>`.
-- De **bron blijft in die map staan**, ook nadat een foto na validatie naar een projectmap
-  gekopieerd is. Zo kunnen de agents er later uit leren (welke foto hoorde bij welke werf).
-- Originelen die op de Mac staan kopieer ik rechtstreeks; wat alleen in iCloud staat vraag ik
-  aan Photos (export met originelen). Lukt dat niet, dan staat het onder "Nog in iCloud" in
-  het overzicht en meld ik het aantal in mijn werkverslag.
-- Kopiëren naar een projectmap doe ik niet zelf: dat is een runbook na validatie op het bord
-  (beslissing van Mehdi over automatisch binnen 300 m van het afspraakadres, anders na zijn ja).
+Mehdi wil omgekeerd werken: niet alles downloaden en dan sorteren, maar eerst uit de
+metadata weten waar hij was, en alleen de foto's van een werkbezoek ophalen. Privéfoto's
+komen nooit op Dropbox. Dus:
+
+1. Ik lees elke avond de **metadata** van alle foto's van de dag (tijd, GPS, uuid, groep per
+   plek) en schrijf die als `metadata.json` en `overzicht.md` in `Fotos/<JJJJ-MM-DD>/`
+   (Mehdi's Dropbox-app-map Apps/Mehdi Agents, ook in Data uit Mehdi/Fotos). Van
+   privéfoto's staat daar alleen tijd en plek, geen bestand.
+2. Ik haal de **werkafspraken met adres** van die dag uit de bak van De Agendawacht en
+   zoek de coördinaten van het adres op (OpenStreetMap, met cache op de Mac).
+3. Een foto **hoort bij een bezoek** als ze binnen 300 m van het adres genomen is, tussen
+   30 minuten voor de start en 90 minuten na het einde van de afspraak.
+4. Alleen die foto's exporteer ik, als origineel, in een submap met de naam van de afspraak:
+   `Fotos/2026-09-12/Mehdi Opmeting 2614/1047 3A9FE9C5.heic`. Lokale originelen kopieer ik
+   rechtstreeks; wat alleen in iCloud staat vraag ik aan Photos. De **bron blijft in die map**
+   staan, ook na kopie naar de projectmap, zodat de agents er later uit leren.
+5. Geen afspraak met adres op een plek waar wel foto's gemaakt zijn: dat meld ik in het
+   overzicht als "geen (niet geexporteerd)". Mehdi kan dan zelf zeggen dat het werk was,
+   en dan haal ik ze alsnog (via De Regisseur).
+6. Kopiëren naar een projectmap doe ik niet zelf: dat is een runbook na validatie op het bord.
+
+Gemeten op 12-09-2026: 9 september 39 foto's, 1 werkfoto (plaatsbezoek 2605); 12 september
+10 foto's, 6 werkfoto's (opmeting 2614). De 137 foto's die ik eerder die dag zonder deze
+regel exporteerde, zijn weer weggehaald; de metadata bleef.
 
 ## Wat ik nodig heb (Mac-rechten, één keer)
 
