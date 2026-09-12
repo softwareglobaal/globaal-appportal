@@ -48,16 +48,35 @@ def nl_datum(d):
 
 # ------------------------------------------------------------------ ophalen
 
+def over_ssh(opdracht, pogingen=3, wacht=20):
+    """Voert iets uit op de VM en probeert opnieuw bij een netwerkhapering.
+
+    De avondtaak van 11-09-2026 viel stil op "Connection reset by peer" en heeft
+    daarna twee dagen niets meer geschreven. Een taak die om kwart voor elf in
+    zijn eentje draait mag niet op de eerste hapering opgeven; niemand ziet dat.
+    """
+    laatste = ""
+    for poging in range(1, pogingen + 1):
+        uit = subprocess.run(
+            ["ssh", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=5",
+             VM, opdracht],
+            capture_output=True, text=True, timeout=180)
+        if uit.returncode == 0:
+            return uit.stdout
+        laatste = uit.stderr.strip()
+        if poging < pogingen:
+            print(f"   (poging {poging} mislukt: {laatste[:80]}; opnieuw over {wacht}s)",
+                  file=sys.stderr)
+            time.sleep(wacht)
+    raise SystemExit(f"SSH naar {VM} mislukt na {pogingen} pogingen: {laatste}")
+
+
 def haal_dag(datum):
     """Vraagt de tegel om een dag, via SSH langs de login om."""
-    uit = subprocess.run(
-        ["ssh", VM, f"curl -s -m 20 http://127.0.0.1:{POORT}/api/dag/{datum}"],
-        capture_output=True, text=True, timeout=60)
-    if uit.returncode != 0:
-        raise SystemExit(f"SSH naar {VM} mislukt: {uit.stderr.strip()}")
-    if not uit.stdout.strip():
+    uit = over_ssh(f"curl -s -m 20 http://127.0.0.1:{POORT}/api/dag/{datum}")
+    if not uit.strip():
         raise SystemExit(f"Geen antwoord van de tegel voor {datum}. Draait app-locatie?")
-    return json.loads(uit.stdout)
+    return json.loads(uit)
 
 
 # ----------------------------------------------------------------- adressen
@@ -134,15 +153,15 @@ def kopieer_database():
         "&& docker cp app-locatie:%s %s "
         "&& docker exec app-locatie rm -f %s"
     ) % (tijdelijk, tijdelijk, tijdelijk, tijdelijk)
-    uit = subprocess.run(["ssh", VM, opdracht], capture_output=True, text=True,
-                         timeout=120)
-    if uit.returncode != 0:
-        print("   (kopie van de database mislukt: %s)" % uit.stderr.strip()[:200],
-              file=sys.stderr)
+    try:
+        over_ssh(opdracht)
+    except SystemExit as fout:
+        print("   (kopie van de database mislukt: %s)" % str(fout)[:200], file=sys.stderr)
         return None
     haal = subprocess.run(["scp", "-q", "%s:%s" % (VM, tijdelijk), doel],
                           capture_output=True, text=True, timeout=120)
-    subprocess.run(["ssh", VM, "rm -f %s" % tijdelijk], capture_output=True)
+    subprocess.run(["ssh", "-o", "ConnectTimeout=15", VM, "rm -f %s" % tijdelijk],
+                   capture_output=True)
     if haal.returncode != 0:
         print("   (ophalen van de kopie mislukt)", file=sys.stderr)
         return None
