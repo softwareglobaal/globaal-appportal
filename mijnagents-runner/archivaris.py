@@ -126,6 +126,12 @@ def label_met_model(g, tekst, afspraak, locatie, project, regels_mehdi):
               "dossiernummer (26xx, 56xx) maakt het een project, geen sales. 'Regie intern' = Mehdi met collega's (zie de lijst 'collegas': naam, afdeling, firma; uit organisatie.globaal.be) "
               "over organisatie, AI, IT, HR, planning; een collega van TKN-Buro of Harmoniebouw over een klantdossier is wel die firma. "
               "'Prive' = Mehdi alleen, met Angela (partner) of persoonlijk; bij twijfel tussen werk en privé kies Prive. "
+              "Weeg personen op AFDELING en FUNCTIE, niet op hun firma (regel van Mehdi, 12-09-2026): de firma van een deelnemer zegt weinig, "
+              "want partners zitten in meerdere bedrijven (Siyan en Shaniel zijn partner in Elevait en meer, niet alleen Sales of ICT; Tom is partner TKN-Buro; "
+              "Catalin partner Harmoniebouw; Matthias partner Energie Efficiënt) en collega's helpen over afdelingen heen. Een deskundige die erbij zit "
+              "(Shaniel als AI/ICT bij een Energy-gesprek) verandert het onderwerp niet: het blijft een Energy-gesprek. Joan is boekhouding (Finance). "
+              "Vul 'afdeling_onderwerp' met de afdeling waar de INHOUD over gaat (de lijst van organisatie.globaal.be) en 'deelnemers_rol' met wie "
+              "in welke rol aanwezig was (bv. 'Mukesh en Amrish (Energy, uitvoerend), Shaniel (AI & ICT, deskundige)'). "
               "Spreekt de inhoud de agenda tegen, zeg dat in agenda_toets en kies zekerheid middel. Onbekende externe zonder "
               "aanwijzing: 'Onbekend', zekerheid laag, en formuleer één korte vraag aan Mehdi. Nederlands, kort, geen emoji. "
               "Regels die Mehdi zelf gaf gaan boven alles.")
