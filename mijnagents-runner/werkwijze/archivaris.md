@@ -15,6 +15,8 @@ niets: dat is de volgende stap (beslissing 3 en 4 van Mehdi, nog open).
 | Projectnummer en adres uit de H-A projectmappen | De Agendawacht (adressenindex) | project herkennen |
 | Correcties van Mehdi (hieronder) | Mehdi, op deze pagina | mijn regels bijstellen |
 
+**Collega's** (naam, afdeling, firma) lees ik uit de centrale organisatiedatabase (organisatie.globaal.be, schema kern), niet uit een vaste lijst. Wie daar staat is intern; zijn firma en afdeling wegen mee in het label.
+
 ## De labels (beslissing van Mehdi, 12-09-2026; TKN toegevoegd op zijn aanwijzing dezelfde dag)
 
 De firma's en hun codes komen uit het agenda-afsprakendocument van Mehdi

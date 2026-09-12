@@ -18,6 +18,8 @@ from datetime import datetime, timedelta
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
+import organisatie  # noqa: E402
+import organisatie  # noqa: E402
 import projectadressen  # noqa: E402
 
 DB = os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db")
@@ -119,8 +121,8 @@ def label_met_model(g, tekst, afspraak, locatie, project, regels_mehdi):
               "Contrax. Je geeft een opgenomen gesprek één label uit de vaste lijst. Regels: inhoud eerst; de agenda-afspraak op dat uur is "
               "een zware toets (code PO/PB = sales, KO/KB = project, IN = intern; de firma in de code is de firma: [TKN-PO] is TKN sales, "
               "nooit HA sales); de locatie is een toets voor gesprekken buiten; een "
-              "dossiernummer (26xx, 56xx) maakt het een project, geen sales. 'Regie intern' = Mehdi met collega's (Shaniel, Siyan, Chilton, "
-              "Raisha, Chesron, Joey, Tom, Mukesh, Ultischa, Catalin, Abi-Gail, Zjafhira) over organisatie, AI, IT, HR, planning. "
+              "dossiernummer (26xx, 56xx) maakt het een project, geen sales. 'Regie intern' = Mehdi met collega's (zie de lijst 'collegas': naam, afdeling, firma; uit organisatie.globaal.be) "
+              "over organisatie, AI, IT, HR, planning; een collega van TKN-Buro of Harmoniebouw over een klantdossier is wel die firma. "
               "'Prive' = Mehdi alleen, met Angela (partner) of persoonlijk; bij twijfel tussen werk en privé kies Prive. "
               "Spreekt de inhoud de agenda tegen, zeg dat in agenda_toets en kies zekerheid middel. Onbekende externe zonder "
               "aanwijzing: 'Onbekend', zekerheid laag, en formuleer één korte vraag aan Mehdi. Nederlands, kort, geen emoji. "
@@ -132,7 +134,7 @@ def label_met_model(g, tekst, afspraak, locatie, project, regels_mehdi):
                                                        "nummer": afspraak.get("nummer"), "klant": afspraak.get("klant"), "locatie": afspraak.get("locatie"),
                                                        "buiten": afspraak.get("buiten")} if afspraak else None),
                        "locatie_van_mehdi_op_dat_uur": locatie or "onbekend",
-                       "projectmap_bij_nummer": project, "regels_van_mehdi": regels_mehdi,
+                       "projectmap_bij_nummer": project, "regels_van_mehdi": regels_mehdi, "collegas": organisatie.samenvatting(),
                        "transcript_begin": tekst[:5000]}, ensure_ascii=False)
     resp = Anthropic().messages.create(model=MODEL, max_tokens=900, system=system, messages=[{"role": "user", "content": user}],
                                        tools=[schema], tool_choice={"type": "tool", "name": "label"})

@@ -35,6 +35,8 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
 | Harmoniebouw-team | (aan te vullen) | harmoniebouw | | |
 | Contrax-team | (aan te vullen) | contrax | | |
 
+**Collega's** (naam, afdeling, firma, land) lees ik uit de centrale organisatiedatabase van de groep (organisatie.globaal.be, schema kern; 34 collega's in dienst op 12-09-2026). Dat zegt wie intern is. De tabel Betrokken personen hieronder blijft voor externe vaste contacten en voor bijzonderheden die de database niet kent. De database heeft alleen van Mehdi een e-mailadres; Fathom-deelnemers herken ik dus op naam, tot de adressen daar aangevuld zijn (Shaniel, in het organisatiedashboard).
+
 ## Wat ik doe, in deze volgorde
 
 1. **Twee keer per dag** (07:00 en 13:00) en **op verzoek**: zegt Mehdi tegen

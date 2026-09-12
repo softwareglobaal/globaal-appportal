@@ -21,6 +21,8 @@ sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import bronnen  # noqa: E402
 import dropbox_prive  # noqa: E402
+import organisatie  # noqa: E402
+import organisatie  # noqa: E402
 import fathom  # noqa: E402
 import pipedrive  # noqa: E402
 
@@ -207,11 +209,13 @@ def herken(g, tekst, personen, deal, hoe):
               "(h-architects, unabo, harmoniebouw, contrax, regie, prive), thema, project of dossier, en of het privé is. "
               "Privé: alleen Mehdi en Angela (zijn partner), Mehdi alleen, of een duidelijk persoonlijk onderwerp; bij twijfel privé. "
               "Raad geen afdeling voor een onbekende externe deelnemer: dan 'onbekend' en zekerheid laag. Nederlands, kort. "
-              "Motiveer in 'waarom' waarop je je baseert (deelnemer, e-mail, titel, wat er gezegd werd), zodat Mehdi je redenering kan nalezen.")
+              "Motiveer in 'waarom' waarop je je baseert (deelnemer, e-mail, titel, wat er gezegd werd), zodat Mehdi je redenering kan nalezen. "
+              "De lijst 'collegas' (uit organisatie.globaal.be) zegt wie intern is, bij welke afdeling en firma; een gesprek van Mehdi met "
+              "alleen collega's is intern (afdeling regie, of de afdeling van het onderwerp), niet een klant.")
     user = json.dumps({"titel": g.get("title") or g.get("meeting_title"), "start": g.get("recording_start_time"),
                        "opgenomen_door": g.get("recorded_by"), "deelnemers": deelnemers, "herkend_uit_tabel": bekend,
                        "pipedrive_deal": ({"id": deal["id"], "titel": deal["titel"], "hoe": hoe} if deal else None),
-                       "personentabel": personen, "transcript_begin": tekst[:6000]}, ensure_ascii=False)
+                       "personentabel": personen, "collegas": organisatie.samenvatting(), "transcript_begin": tekst[:6000]}, ensure_ascii=False)
     resp = Anthropic().messages.create(model=MODEL, max_tokens=1200, system=system, messages=[{"role": "user", "content": user}],
                                        tools=[schema], tool_choice={"type": "tool", "name": "herkenning"})
     for b in resp.content:
