@@ -9,6 +9,7 @@ herkent met dezelfde herkenning als De Fathomwacht (personentabel, agenda en
 locatie op de starttijd, Pipedrive, openingszin); archief in
 mijnagents-data/plaud; gesprekkentabel (bron plaud); klaarzetten per afdeling.
 """
+import glob
 import json
 import os
 import re
@@ -60,11 +61,40 @@ def context_op(start_iso):
     return afspraken, plek
 
 
+def audio_ophalen(map_, kop, start):
+    """Regel van Mehdi (12-09-2026): de geluidsopname hoort bij het transcript. De Plaud-routine
+    zet in de kop een regel `audio_url:` (getekende link van Plaud, 24 uur geldig); wij halen het
+    bestand binnen die tijd op als opname.mp3. Ontbreekt de regel of is de link verlopen, dan
+    melden we dat in het logboek in plaats van te zwijgen."""
+    import urllib.request
+    doel = os.path.join(map_, "opname.mp3")
+    url = (kop.get("audio_url") or "").strip()
+    if os.path.exists(doel) or not url:
+        if not url and not os.path.exists(doel):
+            ag.log(f"opname {start}", "bevinding", "geen audio_url in de kop van het inboxbestand; opname.mp3 ontbreekt (routine op claude.ai moet de link meegeven)")
+        return
+    try:
+        with urllib.request.urlopen(url, timeout=600) as r, open(doel + ".deel", "wb") as f:
+            while True:
+                blok = r.read(1 << 20)
+                if not blok:
+                    break
+                f.write(blok)
+        os.rename(doel + ".deel", doel)
+        ag.log(f"opname {start}", "schrijf", f"opname.mp3 opgehaald ({os.path.getsize(doel) // 1_000_000} MB)")
+    except Exception as ex:  # noqa: BLE001
+        ag.log(f"opname {start}", "fout", f"audio niet opgehaald: {type(ex).__name__} (link verlopen? de routine schrijft een nieuwe bij de volgende ronde)")
+
+
 def verwerk_bestand(e, bron_map, personen, deals, gezien_ids):
     tekst = bronnen.download(e["path_lower"]).decode("utf-8", "replace")
     kop = kop_van(tekst)
     pid = kop.get("plaud_id") or e.get("id") or e.get("path_lower")
     if pid in gezien_ids:
+        # al gearchiveerd: alleen nog de audio bijhalen als die ontbreekt en de kop nu een link heeft
+        for gj in glob.glob(os.path.join(ARCHIEF, "*", "*", "gesprek.json")):
+            if json.load(open(gj)).get("plaud_id") == pid and not os.path.exists(os.path.join(os.path.dirname(gj), "opname.mp3")) and kop.get("audio_url"):
+                audio_ophalen(os.path.dirname(gj), kop, kop.get("start", "")[:16])
         return None
     start = kop.get("start", "")[:16] or e.get("client_modified", "")[:16]
     afspraken, plek = context_op(start)
@@ -83,6 +113,7 @@ def verwerk_bestand(e, bron_map, personen, deals, gezien_ids):
         os.makedirs(map_, exist_ok=True)
         open(os.path.join(map_, "transcript.md"), "w", encoding="utf-8").write(tekst)
         open(os.path.join(map_, "gesprek.json"), "w", encoding="utf-8").write(json.dumps({"plaud_id": pid, "kop": kop, "bron_bestand": e.get("path_display"), "herkenning": herk}, ensure_ascii=False, indent=1))
+    audio_ophalen(map_, kop, start)
     duur = int(float(kop.get("duur_minuten") or 0) or 0)
     prive = bool(herk.get("prive"))
     rij = {"uniek": f"plaud:{pid}", "datum": start[:10], "start": start[11:16], "minuten": duur, "personen": ", ".join(herk.get("personen") or []),

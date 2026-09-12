@@ -31,7 +31,14 @@ Doe dit, in deze volgorde:
    start: <ISO-tijd, Belgische tijd>
    duur_minuten: <n>
    naam_in_plaud: <de naam zoals Plaud hem toont>
+   audio_url: <presigned_url uit get_file, letterlijk; 24 uur geldig>
    ```
+
+   De regel `audio_url` is verplicht (Mehdi, 12-09-2026: de geluidsopname hoort bij
+   het transcript). De Plaudwacht op de server haalt met die link het bestand op en
+   zet het als opname.mp3 naast het transcript. Staat een opname al in de inbox
+   zonder `audio_url`, voeg de regel dan toe in de kop van dat bestand (dit is de
+   enige toegestane wijziging aan een bestaand bestand).
 
 5. Opnames zonder transcript (`source_list` leeg bij `get_file`): niet
    ophalen; zet ze in een lijstje in `Plaud inbox/00 nog te transcriberen.md`
@@ -39,5 +46,6 @@ Doe dit, in deze volgorde:
 6. Geef als antwoord alleen: hoeveel opnames gezien, hoeveel nieuw geschreven,
    hoeveel overgeslagen, hoeveel nog te transcriberen. Geen inhoud van gesprekken.
 
-Grenzen: niets verwijderen, geen audio downloaden, geen bestand overschrijven
-(bestaat de naam al, dan een volgnummer erachter), geen samenvattingen.
+Grenzen: niets verwijderen, geen audio zelf downloaden (alleen de link meegeven;
+de server haalt het bestand), geen bestand overschrijven behalve het toevoegen
+van de regel `audio_url` in de kop, geen samenvattingen.

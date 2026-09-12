@@ -76,6 +76,17 @@ Mehdi's claude.ai-account.
    een voorstel dat Mehdi goedkeurt. Elke kopie in mijn logboek "wat naar waar".
 7. Werkverslag op het bord; wat ik mis als nood op mijn kaart.
 
+## De opname zelf en de mapnaam (mandaat van Mehdi, 12-09-2026)
+
+- **Elke gesprekmap bevat de geluidsopname** als `opname.mp3`, naast `transcript.md`
+  en `gesprek.json`. De Plaud-routine op claude.ai zet de getekende audiolink
+  (`audio_url`, 24 uur geldig) in de kop van het inboxbestand; ik haal het bestand
+  binnen die tijd op. Ontbreekt de link, dan meld ik dat per opname in mijn logboek.
+- **Mapnaam** = `JJJJ-MM-DD UUMM Hoofdpersoon`, bijvoorbeeld
+  `2026-09-10 1347 Mehdi Chegini`: jaar, maand, dag, uur en minuut van de start
+  in Belgische tijd, dan de hoofdpersoon. Zelfde regel als bij De Fathomwacht.
+- Alles wat ik archiveer komt via de Mac van Mehdi in Dropbox **Data uit Mehdi/Plaud**.
+
 ## Wat ik nooit doe
 
 - Iets in Plaud veranderen of verwijderen; audio downloaden zonder Mehdi's ja.

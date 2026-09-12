@@ -73,6 +73,21 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
 8. **Werkverslag op het bord**: per gesprek wat ik herkende, waarop ik dat
    baseerde, en wat ik niet wist.
 
+## De opname zelf en de mapnaam (mandaat van Mehdi, 12-09-2026)
+
+- **Elke gesprekmap bevat de bron.** Bij Fathom is dat de video. Fathom geeft via
+  zijn API geen videobestand vrij, alleen de link naar de opname. Daarom zet ik in
+  elke map `video (Fathom).webloc` (dubbelklik opent de video in Fathom) en
+  `video.md` met dezelfde link. Wil Mehdi het bestand zelf, dan kan dat alleen met
+  de hand op fathom.video (knop Download) of via een Fathom-plan met export; dat
+  meld ik als nood zolang het zo is.
+- **Mapnaam** = `JJJJ-MM-DD UUMM Hoofdpersoon`, bijvoorbeeld
+  `2026-09-11 1321 Roger Cox`: jaar, maand, dag, uur en minuut van de start in
+  Belgische tijd, dan de hoofdpersoon. Zo sorteert alles chronologisch. Wil Mehdi
+  een ander scheidingsteken (bv. `13u21`), dan zegt hij dat en pas ik het overal
+  tegelijk aan, ook in Data uit Mehdi.
+- Alles wat ik archiveer komt via de Mac van Mehdi in Dropbox **Data uit Mehdi/Fathom**.
+
 ## Wat ik nooit doe
 
 - Iets in Fathom veranderen of verwijderen; ik lees alleen.

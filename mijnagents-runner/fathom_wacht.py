@@ -65,6 +65,20 @@ def personen_uit_werkwijze(werkwijze):
     return uit
 
 
+def video_link(map_, g):
+    """Fathom geeft via de API geen videobestand, alleen de link naar de opname. We zetten die
+    als .webloc (dubbelklik opent de video in Fathom) en als regel in video.md in de map."""
+    url = g.get("share_url") or g.get("url") or ""
+    if not url or os.path.exists(os.path.join(map_, "video (Fathom).webloc")):
+        return
+    import plistlib
+    with open(os.path.join(map_, "video (Fathom).webloc"), "wb") as f:
+        plistlib.dump({"URL": url}, f)
+    open(os.path.join(map_, "video.md"), "w", encoding="utf-8").write(
+        f"Video van dit gesprek staat in Fathom (origineel blijft daar): {url}\n"
+        "Fathom geeft via zijn API geen videobestand vrij; downloaden kan alleen met de hand op fathom.video.\n")
+
+
 def deals_index():
     d = pipedrive.get("harchitects", "/deals", {"status": "open", "limit": 500})
     items = d if isinstance(d, list) else (d or {}).get("data") or []
@@ -127,6 +141,7 @@ def bewaar(g, tekst, herkenning):
     meta = {k: v for k, v in g.items() if k != "transcript"}
     meta["herkenning"] = herkenning
     open(os.path.join(map_, "gesprek.json"), "w", encoding="utf-8").write(json.dumps(meta, ensure_ascii=False, indent=1))
+    video_link(map_, g)
     return map_, True
 
 
