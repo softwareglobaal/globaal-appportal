@@ -36,3 +36,24 @@ daarna gaan ze via een runbook naar de projectmap.
 
 - De validatie per groep: bij welk dossier, of niet.
 - Wanneer de export naar de projectmap gebeurt.
+
+## De foto's zelf, niet alleen de metadata (mandaat van Mehdi, 12-09-2026)
+
+- Per dag schrijf ik één map `Fotos/<JJJJ-MM-DD>/` in Mehdi's Dropbox-app-map (Apps/Mehdi Agents),
+  die ook in **Data uit Mehdi/Fotos** terechtkomt: `metadata.json` (tijd, GPS, uuid, bestand,
+  groep), `overzicht.md` (de plekken van de dag) en de originelen als `<UUMM> <uuid8>.<ext>`.
+- De **bron blijft in die map staan**, ook nadat een foto na validatie naar een projectmap
+  gekopieerd is. Zo kunnen de agents er later uit leren (welke foto hoorde bij welke werf).
+- Originelen die op de Mac staan kopieer ik rechtstreeks; wat alleen in iCloud staat vraag ik
+  aan Photos (export met originelen). Lukt dat niet, dan staat het onder "Nog in iCloud" in
+  het overzicht en meld ik het aantal in mijn werkverslag.
+- Kopiëren naar een projectmap doe ik niet zelf: dat is een runbook na validatie op het bord
+  (beslissing van Mehdi over automatisch binnen 300 m van het afspraakadres, anders na zijn ja).
+
+## Wat ik nodig heb (Mac-rechten, één keer)
+
+Onder launchd draai ik als `/usr/bin/python3`; die heeft van macOS geen toegang tot de
+fotobibliotheek zolang Mehdi dat niet toestaat: System Settings > Privacy & Security >
+Full Disk Access > python3 aan. Voor de iCloud-export vraagt macOS één keer om Photos te
+mogen sturen (Automation): Allow. Les van 11-09-2026: mijn avondrondes vielen stil met
+"authorization denied" tot dat geregeld is; op 12-09 draaide Claude Code mij handmatig.
