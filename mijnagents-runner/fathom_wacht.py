@@ -13,6 +13,8 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+BE = ZoneInfo("Europe/Brussels")
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
@@ -114,18 +116,57 @@ def koppel_deal(g, deals):
 
 
 # ------------------------------------------------------------- archief ---
+def belgisch(iso):
+    """UTC-tijd van Fathom naar Belgische tijd. Regel van Mehdi (12-09-2026): elk uur in het
+    archief, de mapnamen, het logboek en de tabel is Belgisch, waar hij ook zit (Suriname, VS).
+    Geeft 'JJJJ-MM-DDTUU:MM' of ''."""
+    if not iso:
+        return ""
+    try:
+        d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return d.astimezone(BE).strftime("%Y-%m-%dT%H:%M")
+    except ValueError:
+        return iso[:16]
+
+
+def bestaande_map(g):
+    """De archiefmap van dit gesprek als ze al bestaat (gewone jaarmap of Prive/jaar), anders ''."""
+    jaar = (belgisch(g.get("recording_start_time") or "") or "x")[:4]
+    for basis in (os.path.join(ARCHIEF, jaar), os.path.join(ARCHIEF, "Prive", jaar)):
+        if not os.path.isdir(basis):
+            continue
+        for p in os.listdir(basis):
+            gj = os.path.join(basis, p, "gesprek.json")
+            try:
+                if os.path.exists(gj) and json.load(open(gj)).get("recording_id") == g.get("recording_id"):
+                    return os.path.join(basis, p)
+            except (OSError, ValueError):
+                continue
+    return ""
+
+
+def pad_delen(g):
+    """Jaarmap (Belgische tijd) van een gesprek; bestaande mappen worden in main gezocht in
+    zowel de gewone jaarmap als Prive/jaar."""
+    return ((belgisch(g.get("recording_start_time") or "") or "x")[:4],)
+
+
 def veilige_naam(t):
     return re.sub(r"[^\w\- .,()]+", "", t or "").strip()[:70] or "gesprek"
 
 
 def bewaar(g, tekst, herkenning):
-    start = (g.get("recording_start_time") or g.get("created_at") or "")[:16].replace("T", " ").replace(":", "")
+    start = belgisch(g.get("recording_start_time") or g.get("created_at") or "").replace("T", " ").replace(":", "")
     hoofd = herkenning.get("hoofdpersoon") or (g.get("title") or g.get("meeting_title") or "")
-    map_ = os.path.join(ARCHIEF, start[:4] or "onbekend", f"{start} {veilige_naam(hoofd)}")
+    # privé-gesprekken apart (Mehdi, 12-09-2026), zodat die map later afgeschermd kan worden
+    map_ = os.path.join(ARCHIEF, *(("Prive",) if herkenning.get("prive") else ()), start[:4] or "onbekend", f"{start} {veilige_naam(hoofd)}")
     if os.path.exists(os.path.join(map_, "gesprek.json")):
         return map_, False
     os.makedirs(map_, exist_ok=True)
-    kop = (f"# {g.get('title') or g.get('meeting_title') or ''}\n\nFathom {g.get('recording_start_time', '')} tot "
+    kop = (f"# {g.get('title') or g.get('meeting_title') or ''}\n\nBelgische tijd: {belgisch(g.get('recording_start_time', '')).replace('T', ' ')} tot {belgisch(g.get('recording_end_time', '')).replace('T', ' ')}\n"
+           f"Fathom (UTC) {g.get('recording_start_time', '')} tot "
            f"{g.get('recording_end_time', '')} · {g.get('url', '')}\nDeellink: {g.get('share_url', '')}\n"
            f"Opgenomen door: {(g.get('recorded_by') or {}).get('name', '')}\nDeelnemers: "
            + ", ".join(f"{i.get('name', '')} <{i.get('email', '')}>" for i in (g.get("calendar_invitees") or []))
@@ -201,17 +242,15 @@ def main():
             tekst = fathom.transcript_tekst(g)
             deal, hoe = koppel_deal(g, deals)
             # herkenning alleen voor wat nog niet in het archief zit (kosten)
-            al = [p for p in (os.listdir(os.path.join(ARCHIEF, (g.get("recording_start_time") or "x")[:4])) if os.path.isdir(os.path.join(ARCHIEF, (g.get("recording_start_time") or "x")[:4])) else [])
-                  if os.path.exists(os.path.join(ARCHIEF, (g.get("recording_start_time") or "x")[:4], p, "gesprek.json"))
-                  and json.load(open(os.path.join(ARCHIEF, (g.get("recording_start_time") or "x")[:4], p, "gesprek.json"))).get("recording_id") == g.get("recording_id")]
+            al = bestaande_map(g)
             if al:
-                herk = json.load(open(os.path.join(ARCHIEF, (g.get("recording_start_time") or "x")[:4], al[0], "gesprek.json"))).get("herkenning", {})
+                herk = json.load(open(os.path.join(al, "gesprek.json"))).get("herkenning", {})
                 map_, nieuw = os.path.join(ARCHIEF, (g.get("recording_start_time") or "x")[:4], al[0]), False
             else:
                 herk = herken(g, tekst, personen, deal, hoe)
                 map_, nieuw = bewaar(g, tekst, herk)
             nieuw_archief += 1 if nieuw else 0
-            start = (g.get("recording_start_time") or "")[:16]
+            start = belgisch(g.get("recording_start_time") or g.get("created_at") or "")
             duur = 0
             try:
                 duur = int((datetime.fromisoformat(g["recording_end_time"].replace("Z", "+00:00")) - datetime.fromisoformat(g["recording_start_time"].replace("Z", "+00:00"))).total_seconds() / 60)

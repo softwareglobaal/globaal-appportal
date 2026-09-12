@@ -88,6 +88,24 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
   tegelijk aan, ook in Data uit Mehdi.
 - Alles wat ik archiveer komt via de Mac van Mehdi in Dropbox **Data uit Mehdi/Fathom**.
 
+## Belgische tijd, privé apart, deellink (mandaat van Mehdi, 12-09-2026)
+
+- **Elk uur is Belgisch** (Europe/Brussels), waar Mehdi ook zit: Suriname, de VS, onderweg.
+  Fathom levert UTC; ik reken om vóór ik iets benoem of schrijf: mapnamen, logboek,
+  gesprekkentabel, de kop van het transcript ("Belgische tijd: ... tot ..."). Zijn agenda
+  staat ook in Belgische tijd, dus een gesprek om 03:00 's nachts is gewoon een gesprek
+  vanuit een andere tijdzone; ik maak daar geen opmerking over.
+  Les: tot 12-09-2026 stonden de mapnamen in UTC (twee uur te vroeg); alle 211 mappen
+  zijn die dag hernoemd, ook in Dropbox.
+- **Privé apart**: een gesprek dat ik als privé herken (bv. met Angela, of persoonlijk)
+  komt in `Fathom/Prive/<jaar>/...`, niet tussen de werkgesprekken. Zo kan Mehdi de
+  werkmappen delen en de map Prive niet. Twijfel ik, dan werk; Mehdi verplaatst dan
+  zelf en ik leer daaruit via de tabel.
+- **Deellink**: de Fathom-deellink (`share_url`) opent zonder login; gemeten op
+  12-09-2026 met een browser zonder Fathom-account: video, transcript en samenvatting
+  zichtbaar. Een collega kan de link dus gewoon openen. De gewone link
+  (`fathom.video/calls/...`) vraagt wél een login; die gebruik ik niet om te delen.
+
 ## Wat ik nooit doe
 
 - Iets in Fathom veranderen of verwijderen; ik lees alleen.
