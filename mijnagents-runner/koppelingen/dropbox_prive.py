@@ -36,6 +36,27 @@ def _env(pad):
 
 _env("~/appportal/.env")
 _token = {"waarde": "", "tot": 0.0}
+_root = {"ns": None}
+
+
+def _path_root():
+    """Koppen voor de team-ruimte: een map op het hoogste niveau van een Dropbox Business
+    (zoals "Data uit Mehdi") staat in de root-namespace, niet in de eigen ledenmap.
+    DROPBOX_PRIVE_ROOT_NS zet hem vast; leeg = automatisch uit het account (root_info)."""
+    if _root["ns"] is None:
+        ns = os.environ.get("DROPBOX_PRIVE_ROOT_NS", "").strip()
+        if not ns and basis():
+            try:
+                req = urllib.request.Request(f"{API}/2/users/get_current_account", b"null",
+                                             {"Authorization": f"Bearer {_toegang()}", "Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    ri = (json.load(r).get("root_info") or {})
+                if ri.get("root_namespace_id") and ri.get("root_namespace_id") != ri.get("home_namespace_id"):
+                    ns = ri.get("root_namespace_id", "")
+            except Exception:  # noqa: BLE001
+                ns = ""
+        _root["ns"] = ns
+    return {"Dropbox-API-Path-Root": json.dumps({".tag": "root", "root": _root["ns"]})} if _root["ns"] else {}
 
 
 def beschikbaar():
@@ -67,7 +88,7 @@ def _verzoek(url, data, koppen, pogingen=5):
     """POST met herkansing bij 429 (Retry-After) en 5xx."""
     wacht = 5
     for poging in range(pogingen):
-        req = urllib.request.Request(url, data, {"Authorization": f"Bearer {_toegang()}", **koppen})
+        req = urllib.request.Request(url, data, {"Authorization": f"Bearer {_toegang()}", **_path_root(), **koppen})
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
                 return json.load(r)
@@ -93,7 +114,7 @@ def account():
     """E-mail en naam van het gekoppelde account (om te zien dat het Mehdi's is)."""
     a = _verzoek(f"{API}/2/users/get_current_account", b"null", {"Content-Type": "application/json"})
     return {"email": a.get("email", ""), "naam": (a.get("name") or {}).get("display_name", ""),
-            "type": (a.get("account_type") or {}).get(".tag", "")}
+            "type": (a.get("account_type") or {}).get(".tag", ""), "root": (a.get("root_info") or {}).get(".tag", "")}
 
 
 def upload(inhoud, extern_pad, overschrijf=True):
@@ -103,9 +124,14 @@ def upload(inhoud, extern_pad, overschrijf=True):
                     {"Content-Type": "application/octet-stream", "Dropbox-API-Arg": json.dumps(arg)})
 
 
+def _staat_pad(lokaal):
+    b = basis().strip("/").replace("/", "_").replace(" ", "-")
+    return os.path.join(lokaal, STAAT if not b else f".dropbox_gespiegeld.{b}.json")
+
+
 def _laad_staat(lokaal):
     try:
-        return json.load(open(os.path.join(lokaal, STAAT), encoding="utf-8"))
+        return json.load(open(_staat_pad(lokaal), encoding="utf-8"))
     except (OSError, ValueError):
         return {}
 
@@ -120,7 +146,7 @@ def spiegel_map(lokaal, extern, max_per_ronde=400):
     te_doen = []
     for wortel, _mappen, bestanden in os.walk(lokaal):
         for b in sorted(bestanden):
-            if b == STAAT or b.startswith("."):
+            if b.startswith("."):
                 continue
             vol = os.path.join(wortel, b)
             rel = os.path.relpath(vol, lokaal).replace(os.sep, "/")
@@ -142,7 +168,7 @@ def spiegel_map(lokaal, extern, max_per_ronde=400):
             break
     uit["rest"] = len(te_doen) - uit["verstuurd"]
     try:
-        json.dump(staat, open(os.path.join(lokaal, STAAT), "w", encoding="utf-8"))
+        json.dump(staat, open(_staat_pad(lokaal), "w", encoding="utf-8"))
     except OSError:
         pass
     return uit

@@ -61,8 +61,12 @@ def zet_env(waarden):
 
 def main():
     env = lees_env()
-    sleutel = env.get("DROPBOX_PRIVE_APP_KEY") or getpass.getpass("App key van de privé-app (Dropbox App Console): ").strip()
-    geheim = env.get("DROPBOX_PRIVE_APP_SECRET") or getpass.getpass("App secret: ").strip()
+    nieuw = "--nieuw" in sys.argv  # andere Dropbox-app (bv. met volledige toegang): sleutels opnieuw vragen
+    basis_arg = ""
+    if "--basis" in sys.argv:
+        basis_arg = sys.argv[sys.argv.index("--basis") + 1].strip()
+    sleutel = ("" if nieuw else env.get("DROPBOX_PRIVE_APP_KEY")) or getpass.getpass("App key van de Dropbox-app (App Console): ").strip()
+    geheim = ("" if nieuw else env.get("DROPBOX_PRIVE_APP_SECRET")) or getpass.getpass("App secret: ").strip()
     if not (sleutel and geheim):
         print("Geen app key of secret; stop.")
         return 1
@@ -85,17 +89,20 @@ def main():
     if not a.get("refresh_token"):
         print("Geen refresh-token in het antwoord (staat token_access_type=offline in de link?).")
         return 1
-    zet_env({"DROPBOX_PRIVE_APP_KEY": sleutel, "DROPBOX_PRIVE_APP_SECRET": geheim,
-             "DROPBOX_PRIVE_REFRESH_TOKEN": a["refresh_token"]})
+    waarden = {"DROPBOX_PRIVE_APP_KEY": sleutel, "DROPBOX_PRIVE_APP_SECRET": geheim,
+               "DROPBOX_PRIVE_REFRESH_TOKEN": a["refresh_token"]}
+    if basis_arg:
+        waarden["DROPBOX_PRIVE_BASIS"] = basis_arg
+    zet_env(waarden)
     print("Token opgeslagen in ~/appportal/.env (backup ernaast).")
 
     # controle: van wie is het account, en kunnen we schrijven?
-    for k in ("DROPBOX_PRIVE_APP_KEY", "DROPBOX_PRIVE_APP_SECRET", "DROPBOX_PRIVE_REFRESH_TOKEN"):
+    for k in ("DROPBOX_PRIVE_APP_KEY", "DROPBOX_PRIVE_APP_SECRET", "DROPBOX_PRIVE_REFRESH_TOKEN", "DROPBOX_PRIVE_BASIS"):
         os.environ.pop(k, None)
     import dropbox_prive  # noqa: E402
     acc = dropbox_prive.account()
-    print(f"Gekoppeld aan: {acc['naam']} <{acc['email']}> ({acc['type']})")
-    if "mehdi" not in (acc["naam"] + acc["email"]).lower():
+    print(f"Gekoppeld aan: {acc['naam']} <{acc['email']}> ({acc['type']}, root {acc.get('root')})")
+    if "mehdi" not in (acc["naam"] + acc["email"]).lower() and "h-architects" not in acc["email"].lower():
         print("LET OP: dit lijkt niet Mehdi's account. Draai opnieuw met Mehdi ingelogd in de browser.")
     proef = f"Gekoppeld op {time.strftime('%Y-%m-%d %H:%M')} UTC door de agents op mijnagents.globaal.be.\n".encode()
     dropbox_prive.upload(proef, "/Fathom/gekoppeld.txt")
