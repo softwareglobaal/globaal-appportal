@@ -49,6 +49,8 @@
   .tijd{font-family:var(--mono);font-size:12.5px;white-space:nowrap;color:var(--tekst-2);}
   .merk{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:1px;}
   .merk.bezoek{background:var(--bezoek);} .merk.rit{background:var(--rit);}
+  .merk.leeg-merk{background:transparent;border:1px dashed var(--tekst-3);}
+  tr.gat td{color:var(--tekst-3);background:#fafafa;font-style:italic;}
   .duur{font-variant-numeric:tabular-nums;white-space:nowrap;}
   .leeg{color:var(--tekst-3);font-size:13px;padding:20px 14px;}
   .plek{font-weight:600;}
@@ -97,6 +99,15 @@
       <thead><tr><th>van</th><th>tot</th><th>duur</th><th>wat</th><th>plaats</th><th>wifi</th></tr></thead>
       <tbody>
       {% for s in stukken %}
+        {% if s.soort == 'gat' %}
+        <tr class="gat">
+          <td class="tijd">{{ s.van_tekst }}</td>
+          <td class="tijd">{{ s.tot_tekst }}</td>
+          <td class="duur">{{ s.minuten }} min</td>
+          <td><span class="merk leeg-merk"></span>geen meting</td>
+          <td class="coord" colspan="2">telefoon zweeg; {{ (s.meter / 1000) | round(1) }} km hemelsbreed tussen voor en na</td>
+        </tr>
+        {% else %}
         <tr class="rij" data-lat="{{ s.lat if s.soort == 'bezoek' else s.spoor[0][0] }}"
                         data-lon="{{ s.lon if s.soort == 'bezoek' else s.spoor[0][1] }}">
           <td class="tijd">{{ s.van_tekst }}</td>
@@ -122,8 +133,9 @@
               {{ (s.meter / 1000) | round(1) }} km
             {% endif %}
           </td>
-          <td class="coord">{{ s.wifi or '' }}</td>
+          <td class="coord">{{ s.wifi or '' }}{% if s.soort == 'bezoek' and s.langste_stilte and s.langste_stilte > 30 %}<br>stilte {{ s.langste_stilte }} min{% endif %}</td>
         </tr>
+        {% endif %}
       {% endfor %}
       </tbody>
     </table>
@@ -134,7 +146,8 @@
   </div>
 
   <div class="voet">
-    Een bezoek is: minstens 8 minuten binnen 120 meter. Ruwe gegevens via
+    Een bezoek is: minstens 8 minuten binnen 150 meter. Een gat is een stilte van
+    meer dan 30 minuten waarna je elders was; wat er gebeurde is niet gemeten. Ruwe gegevens via
     <a href="/api/dag/{{ datum }}">/api/dag/{{ datum }}</a>.
   </div>
 

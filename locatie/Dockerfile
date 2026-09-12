@@ -10,4 +10,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Grendel: de uitrol weigert als de dagindeling een eerder gevonden fout
+# terugbrengt. Faalt dit, dan faalt `docker compose build` en blijft de vorige,
+# werkende container gewoon draaien. Zie test_dagindeling.py voor de gevallen.
+RUN LOCATIE_DB=/tmp/test.db python3 test_dagindeling.py
+
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3031} --workers 2 --timeout 60 app:app"]

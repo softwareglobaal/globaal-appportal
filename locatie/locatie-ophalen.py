@@ -187,6 +187,7 @@ def markdown(datum, gegevens, cache, adressen=True):
     punten = gegevens.get("punten", [])
     bezoeken = [s for s in indeling if s["soort"] == "bezoek"]
     ritten = [s for s in indeling if s["soort"] == "verplaatsing"]
+    gaten = [s for s in indeling if s["soort"] == "gat"]
     km = sum(s.get("meter", 0) for s in ritten) / 1000
 
     r = [f"# {nl_datum(d)}", ""]
@@ -196,6 +197,10 @@ def markdown(datum, gegevens, cache, adressen=True):
 
     r.append(f"{len(bezoeken)} bezoeken, {len(ritten)} verplaatsingen, "
              f"{km:.1f} km, {len(punten)} meetpunten")
+    if gaten:
+        zonder = sum(s["minuten"] for s in gaten)
+        r.append("")
+        r.append(f"Let op: {len(gaten)} keer zweeg de telefoon, samen {duur(zonder)} zonder meting.")
     r.append("")
     r.append("| van | tot | duur | wat | waar | wifi |")
     r.append("|---|---|---|---|---|---|")
@@ -213,8 +218,13 @@ def markdown(datum, gegevens, cache, adressen=True):
                 if s.get("dossier"):
                     merk += f" `{s['dossier']}`"
                 waar = f"{merk} ({waar})"
+            if (s.get("langste_stilte") or 0) > 30:
+                waar += f" (stilte {s['langste_stilte']} min)"
             r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} "
                      f"| bezoek | {waar} | {s.get('wifi') or ''} |")
+        elif s["soort"] == "gat":
+            r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} "
+                     f"| *geen meting* | *{s['meter'] / 1000:.1f} km hemelsbreed* | |")
         else:
             wijze = {"automotive": "auto", "cycling": "fiets", "walking": "te voet",
                      "running": "lopend"}.get(s.get("wijze"), s.get("wijze") or "")
@@ -231,7 +241,8 @@ def markdown(datum, gegevens, cache, adressen=True):
             r.append(f"- **{uur(s['van'])}-{uur(s['tot'])}** ({duur(s['minuten'])}) {naam}")
 
     r += ["", "---", "",
-          "Een bezoek is minstens 8 minuten binnen 120 meter. Bron: "
+          "Een bezoek is minstens 8 minuten binnen 150 meter; een gat is een stilte "
+          "van meer dan 30 minuten waarna je elders was. Bron: "
           "locatie.globaal.be, verzameld met OwnTracks. Adressen via OpenStreetMap."]
     return "\n".join(r) + "\n"
 

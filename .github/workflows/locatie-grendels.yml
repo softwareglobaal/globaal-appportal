@@ -1,0 +1,20 @@
+# Vroege waarschuwing voor de locatietegel. De harde grendel zit in
+# locatie/Dockerfile: daar weigert de uitrol op de VM als deze tests falen.
+name: locatie-grendels
+
+on:
+  push:
+    paths: ["locatie/**"]
+  pull_request:
+    paths: ["locatie/**"]
+
+jobs:
+  dagindeling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r locatie/requirements.txt
+      - run: python3 locatie/test_dagindeling.py

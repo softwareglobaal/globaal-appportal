@@ -64,12 +64,9 @@ def main():
 
         km = sum(s.get("meter", 0) for s in rit) / 1000
         punten = d.get("punten", [])
-        spanne = ""
-        if punten:
-            tijden = [p["tijd"] for p in punten]
-            spanne = "%s-%s" % (datetime.fromisoformat(min(tijden)).strftime("%H:%M"),
-                                datetime.fromisoformat(max(tijden)).strftime("%H:%M"))
-        rijen.append((dag, len(bez), len(rit), km, len(punten), spanne))
+        zwijg = sum(s["minuten"] for s in ind if s["soort"] == "gat")
+        tot["gat"] = tot.get("gat", 0) + zwijg
+        rijen.append((dag, len(bez), len(rit), km, len(punten), duur(zwijg) if zwijg else "-"))
         tot["km"] += km; tot["bez"] += len(bez)
         tot["rit"] += len(rit); tot["pnt"] += len(punten)
 
@@ -92,14 +89,15 @@ def main():
     print("PERIODEOVERZICHT  %s t/m %s" % (rijen[0][0], rijen[-1][0]))
     print("=" * breed)
     print()
-    print("%-13s %8s %8s %9s %9s %10s" % ("dag", "bezoeken", "ritten", "km",
-                                          "punten", "gemeten"))
+    print("%-13s %8s %8s %9s %9s %11s" % ("dag", "bezoeken", "ritten", "km",
+                                          "punten", "zonder meet"))
     print("-" * breed)
     for r in rijen:
-        print("%-13s %8d %8d %9.1f %9d %10s" % r)
+        print("%-13s %8d %8d %9.1f %9d %11s" % r)
     print("-" * breed)
-    print("%-13s %8d %8d %9.1f %9d" % ("TOTAAL", tot["bez"], tot["rit"],
-                                       tot["km"], tot["pnt"]))
+    print("%-13s %8d %8d %9.1f %9d %11s" % ("TOTAAL", tot["bez"], tot["rit"],
+                                            tot["km"], tot["pnt"],
+                                            duur(tot.get("gat", 0)) if tot.get("gat") else "-"))
     print()
 
     print("WAAR JE TIJD NAARTOE GING")

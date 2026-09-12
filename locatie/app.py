@@ -485,134 +485,277 @@ VOERTUIG_WIFI = {n.strip().lower()
                  if n.strip()}
 
 
-def _toestand(punt, vorige):
-    """Stond de telefoon stil of was hij onderweg, op dit punt?
+# Een verblijf is een plek waar je minstens STILSTAND_MINUTEN binnen deze straal
+# bleef. Ruimer dan STILSTAND_METER omdat rondlopen op een werf of in een gebouw
+# er gewoon bij hoort.
+VERBLIJF_STRAAL = 150
+# Zolang de telefoon niets meldt weten we niet wat er gebeurde. Een stilte langer
+# dan dit wordt als gat getoond, tenzij voor en na het gat op dezelfde plek.
+GAT_MINUTEN = 30
 
-    De eerste versie leidde dat af uit de afstand tot het vorige punt. Dat gaat
-    stuk in de zuinige stand van iOS: die meldt pas na enkele honderden meters,
-    dus twee punten van dezelfde plek liggen 600 meter uit elkaar en elk bezoek
-    verdwijnt. Op 9-9-2026 werd een avond van anderhalf uur zo een rit van
-    7,8 km.
 
-    De telefoon weet het zelf en stuurt het mee. We geloven in deze volgorde:
+def _rijdt(punt):
+    """Zit dit punt zeker in een voertuig?
 
-    1. `motion` - de bewegingssensor van iOS zegt stationary, walking, cycling
-       of automotive. Dit is een meting, geen gok, en kost geen batterij.
-    2. `ssid` - hetzelfde wifi-netwerk als het vorige punt betekent hetzelfde
-       gebouw. Zekerder dan elke coordinaat.
-    3. de afstand - alleen als de eerste twee niets zeggen.
+    Alleen voertuig-wifi en de sensorwaarden automotive en cycling tellen.
+    Walking breekt een verblijf niet: rondlopen op een werf is daar zijn. Op
+    12-09-2026 viel een middag van drieenhalf uur op Bezelaervelden in Willebroek
+    uiteen in twee korte bezoekjes en zeven "verplaatsingen" van 0,0 km, omdat de
+    eerste versie elke stap als onderweg las.
     """
-    ssid = punt.get("ssid")
-    in_voertuig = bool(ssid) and ssid.lower() in VOERTUIG_WIFI
-
-    motion = (punt.get("motion") or "").lower()
-    if motion:
-        # Stilstaan in een rijdende auto bestaat niet: dan sta je stil in een
-        # file of voor een licht, en dat is nog steeds onderweg.
-        if "stationary" in motion and not in_voertuig:
-            return "stil"
-        if any(w in motion for w in ONDERWEG_WOORDEN):
-            return "onderweg"
-
-    if in_voertuig:
-        return "onderweg"
-
-    if ssid and vorige and vorige.get("ssid") == ssid:
-        return "stil"
-
-    if vorige is None:
-        return "stil"
-    meter = afstand(vorige["lat"], vorige["lon"], punt["lat"], punt["lon"])
-    # Ruime marge: de onzekerheid van beide metingen telt mee.
-    speling = STILSTAND_METER + (punt.get("acc") or 0) + (vorige.get("acc") or 0)
-    return "stil" if meter <= speling else "onderweg"
+    ssid = (punt.get("ssid") or "").lower()
+    if ssid and ssid in VOERTUIG_WIFI:
+        return True
+    # Alleen automotive. Cycling niet: in heel de meting kwam het twee keer voor,
+    # beide keren als losse uitschieter midden op een werf. Wie echt wegfietst
+    # verlaat de straal van het verblijf en breekt het zo alsnog.
+    return "automotive" in (punt.get("motion") or "").lower()
 
 
-def dagindeling(punten):
-    """Losse punten omzetten naar bezoeken en verplaatsingen.
+def _middelpunt(groep):
+    return (sum(p["lat"] for p in groep) / len(groep),
+            sum(p["lon"] for p in groep) / len(groep))
 
-    Bepaalt per punt of de telefoon stilstond of onderweg was, plakt
-    opeenvolgende gelijke toestanden aan elkaar, en houdt alleen stiltes over
-    die lang genoeg duurden om een bezoek te heten.
+
+def _verblijven(punten):
+    """Zoekt de reeksen punten waar de telefoon op een plek bleef.
+
+    Klassieke verblijfsdetectie: begin bij een punt, groei zolang elk volgend
+    punt binnen VERBLIJF_STRAAL van het middelpunt valt en niet in een voertuig
+    zit. Duurt dat lang genoeg, dan is het een verblijf.
+
+    Een stilte in de meting breekt een verblijf niet zolang het volgende punt op
+    dezelfde plek ligt: dan was je er gewoon, alleen zweeg de telefoon. Maar ligt
+    het volgende punt verderop, dan stopt het verblijf, hoe de sensor dat punt
+    ook noemt. Op 12-09-2026 plakte de eerste versie een middag in Willebroek en
+    een avond thuis in Kessel-Lo over een gat van vijf uur aan elkaar tot een
+    bezoek "Thuis" in Willebroek, en verdween de rit van 40 km ertussen.
+    """
+    uit = []
+    i, n = 0, len(punten)
+    while i < n:
+        if _rijdt(punten[i]):
+            i += 1
+            continue
+        groep = [punten[i]]
+        j = i + 1
+        while j < n and not _rijdt(punten[j]):
+            mlat, mlon = _middelpunt(groep)
+            # Een slordige meting mag wat speling krijgen, maar niet onbeperkt:
+            # een punt met 150 m onzekerheid mag geen verblijf van 300 m maken.
+            speling = min(punten[j].get("acc") or 0, 50)
+            if afstand(mlat, mlon, punten[j]["lat"], punten[j]["lon"]) > VERBLIJF_STRAAL + speling:
+                break
+            groep.append(punten[j])
+            j += 1
+        if (groep[-1]["tst"] - groep[0]["tst"]) / 60 >= STILSTAND_MINUTEN:
+            uit.append((i, j))
+            i = j
+        else:
+            i += 1
+    return uit
+
+
+def _rit(spoor, groep):
+    meter = sum(afstand(spoor[x]["lat"], spoor[x]["lon"],
+                        spoor[x + 1]["lat"], spoor[x + 1]["lon"])
+                for x in range(len(spoor) - 1))
+    # De dominante wijze wint, niet een verzameling: een autorit van 83 km die
+    # onderweg een paar stappen opving is geen rit "auto en te voet".
+    telling = {}
+    for p in groep:
+        for w in (p.get("motion") or "").split(","):
+            if w in ONDERWEG_WOORDEN:
+                telling[w] = telling.get(w, 0) + 1
+    if not telling and any((p.get("ssid") or "").lower() in VOERTUIG_WIFI for p in groep):
+        telling["automotive"] = 1
+    return {
+        "soort": "verplaatsing",
+        "van": spoor[0]["tst"], "tot": spoor[-1]["tst"],
+        "minuten": round((spoor[-1]["tst"] - spoor[0]["tst"]) / 60),
+        "meter": round(meter),
+        "wijze": max(telling, key=telling.get) if telling else None,
+        "spoor": [[p["lat"], p["lon"]] for p in spoor],
+    }
+
+
+def _stuk_tussen(spoor):
+    """Het stuk tussen twee verblijven, opgedeeld waar de meting zweeg.
+
+    spoor begint met het laatste punt van het vorige verblijf en eindigt met het
+    eerste van het volgende. Een stilte langer dan
+    GAT_MINUTEN wordt een gat en geen rit: we weten niet welke weg er gereden is,
+    en een rechte lijn tekenen zou een route verzinnen.
+    """
+    uit = []
+    begin = 0
+    for x in range(1, len(spoor)):
+        if (spoor[x]["tst"] - spoor[x - 1]["tst"]) / 60 > GAT_MINUTEN:
+            if x - 1 > begin:
+                uit.append(_rit(spoor[begin:x], spoor[begin:x]))
+            uit.append({
+                "soort": "gat",
+                "van": spoor[x - 1]["tst"], "tot": spoor[x]["tst"],
+                "minuten": round((spoor[x]["tst"] - spoor[x - 1]["tst"]) / 60),
+                "meter": round(afstand(spoor[x - 1]["lat"], spoor[x - 1]["lon"],
+                                       spoor[x]["lat"], spoor[x]["lon"])),
+            })
+            begin = x
+    if len(spoor) - begin >= 2:
+        uit.append(_rit(spoor[begin:], spoor[begin:]))
+    return uit
+
+
+# Twee bezoeken met alleen een korte stilte of wat rondlopen ertussen, binnen
+# deze afstand van elkaar, zijn een verblijf.
+SAMENVOEG_METER = 300
+
+
+def _zonder_uitschieters(punten):
+    """Laat losse GPS-sprongen weg.
+
+    Een punt dat ver van zijn beide buren ligt terwijl die buren vlak bij elkaar
+    liggen, is geen verplaatsing maar een foute meting. Op 11-09-2026 brak zo een
+    enkel punt een avond thuis in tweeen met een "rit" van 1,4 km in nul minuten.
+    """
+    if len(punten) < 3:
+        return list(punten)
+    uit = [punten[0]]
+    for i in range(1, len(punten) - 1):
+        a, b, c = punten[i - 1], punten[i], punten[i + 1]
+        ver_van_a = afstand(a["lat"], a["lon"], b["lat"], b["lon"]) > 500
+        ver_van_c = afstand(b["lat"], b["lon"], c["lat"], c["lon"]) > 500
+        buren_samen = afstand(a["lat"], a["lon"], c["lat"], c["lon"]) < VERBLIJF_STRAAL
+        kort = (c["tst"] - a["tst"]) / 60 < 15
+        if ver_van_a and ver_van_c and buren_samen and kort:
+            continue
+        uit.append(b)
+    uit.append(punten[-1])
+    return uit
+
+
+def _klein(stuk, lat, lon):
+    """Bleef dit tussenstuk in de buurt van (lat, lon)?
+
+    Bij een rit telt hoe ver je van de plek wegging, niet de afgelegde weg: wie
+    op een werf rondloopt telt GPS-ruis op tot een lange weg zonder ver te gaan.
+    Op 12-09-2026 werd drieenhalf uur op Bezelaervelden, mediaan 7 m van het
+    middelpunt, zo een "wandeling van 0,7 km" die het verblijf in stukken brak.
+    """
+    if stuk["soort"] == "gat":
+        return stuk["meter"] <= SAMENVOEG_METER
+    return all(afstand(lat, lon, a, b) <= SAMENVOEG_METER for a, b in stuk.get("spoor", []))
+
+
+def _voeg_samen(items):
+    """Plakt bezoeken aan elkaar die in werkelijkheid een verblijf waren.
+
+    Tussen twee bezoeken op dezelfde plek mag een korte wandeling of een stilte
+    zitten; dat is nog steeds daar zijn. En wat vlak voor een bezoek in de buurt
+    bleef (uitstappen, een stilte die op dezelfde plek eindigt) hoort bij dat
+    bezoek: op 12-09-2026 stapte Mehdi om 10:39 uit in Willebroek, zweeg de
+    telefoon 111 minuten, en lag het volgende punt op dezelfde plek.
+
+    De langste stilte gaat mee, zodat zichtbaar blijft waarop een lang bezoek rust.
+    """
+    uit = []
+    for item in items:
+        if item["soort"] != "bezoek":
+            uit.append(item)
+            continue
+
+        # Kleine stukken vlak voor dit bezoek, terug tot het vorige bezoek of
+        # tot een stuk dat echt wegging.
+        k = len(uit)
+        while k > 0 and uit[k - 1]["soort"] != "bezoek" and _klein(uit[k - 1], item["lat"], item["lon"]):
+            k -= 1
+        voor = uit[k:]
+        stilte = max([item.get("langste_stilte", 0)]
+                     + [t["minuten"] for t in voor if t["soort"] == "gat"])
+
+        vorig = uit[k - 1] if k > 0 and uit[k - 1]["soort"] == "bezoek" else None
+        if vorig and afstand(vorig["lat"], vorig["lon"], item["lat"], item["lon"]) <= SAMENVOEG_METER:
+            del uit[k:]
+            n1, n2 = vorig["punten"], item["punten"]
+            uit[k - 1] = dict(vorig,
+                              tot=item["tot"],
+                              minuten=round((item["tot"] - vorig["van"]) / 60),
+                              lat=round((vorig["lat"] * n1 + item["lat"] * n2) / (n1 + n2), 6),
+                              lon=round((vorig["lon"] * n1 + item["lon"] * n2) / (n1 + n2), 6),
+                              punten=n1 + n2,
+                              langste_stilte=round(max(stilte, vorig.get("langste_stilte", 0))),
+                              wifi=vorig.get("wifi") or item.get("wifi"),
+                              plek=vorig.get("plek") or item.get("plek"),
+                              dossier=vorig.get("dossier") or item.get("dossier"))
+            continue
+
+        if voor:
+            del uit[k:]
+            item = dict(item, van=voor[0]["van"],
+                        minuten=round((item["tot"] - voor[0]["van"]) / 60),
+                        langste_stilte=round(stilte))
+        uit.append(item)
+    return uit
+
+
+def dagindeling_zuiver(punten, bekende_plekken):
+    """Bezoeken, ritten en gaten uit losse punten, zonder databasetoegang.
+
+    Los van dagindeling() zodat het tegen echte punten getest kan worden.
     """
     if not punten:
         return []
+    punten = _zonder_uitschieters(punten)
+    resultaat = []
+    verblijven = _verblijven(punten)
+    vorige_eind = None                  # index van het laatste punt van het vorige verblijf
 
-    # Eenmalig ophalen: de lijst is kort en verandert zelden, maar hem per
-    # bezoek opvragen zou een databaseverbinding per stuk kosten.
+    for (i, j) in verblijven + [(len(punten), len(punten))]:
+        # Het stuk voor dit verblijf.
+        tussen = punten[(vorige_eind + 1) if vorige_eind is not None else 0:i]
+        spoor = ([punten[vorige_eind]] if vorige_eind is not None else []) + tussen
+        if i < len(punten):
+            spoor.append(punten[i])
+        if len(spoor) >= 2:
+            resultaat.extend(_stuk_tussen(spoor))
+
+        if i >= len(punten):
+            break
+        groep = punten[i:j]
+        mlat, mlon = _middelpunt(groep)
+        gezien = {(p.get("ssid") or "").lower() for p in groep if p.get("ssid")}
+        naam = noem_plek(mlat, mlon, gezien, bekende_plekken)
+        dossier = next((p.get("dossier") for p in bekende_plekken
+                        if p["naam"] == naam), None) if naam else None
+        # Het langste stille stuk binnen het verblijf, zodat een lezer ziet dat
+        # "5 uur thuis" op een handvol punten kan rusten.
+        stilte = max(((groep[x]["tst"] - groep[x - 1]["tst"]) / 60
+                      for x in range(1, len(groep))), default=0)
+        resultaat.append({
+            "soort": "bezoek",
+            "van": groep[0]["tst"], "tot": groep[-1]["tst"],
+            "minuten": round((groep[-1]["tst"] - groep[0]["tst"]) / 60),
+            "lat": round(mlat, 6), "lon": round(mlon, 6),
+            "punten": len(groep),
+            "langste_stilte": round(stilte),
+            "wifi": next((p.get("ssid") for p in groep if p.get("ssid")), None),
+            "plek": naam,
+            "dossier": dossier,
+        })
+        vorige_eind = j - 1
+    return _voeg_samen(resultaat)
+
+
+def dagindeling(punten):
+    """Losse punten omzetten naar bezoeken, verplaatsingen en gaten."""
+    if not punten:
+        return []
+    # Eenmalig ophalen: de lijst is kort, maar hem per bezoek opvragen zou een
+    # databaseverbinding per stuk kosten.
     conn = db()
     bekende_plekken = plekken(conn)
     conn.close()
-
-    toestanden = []
-    for i, p in enumerate(punten):
-        toestanden.append(_toestand(p, punten[i - 1] if i else None))
-
-    # Opeenvolgende gelijke toestanden samenvoegen tot blokken.
-    blokken = []
-    start = 0
-    for i in range(1, len(punten) + 1):
-        if i == len(punten) or toestanden[i] != toestanden[start]:
-            blokken.append((toestanden[start], punten[start:i]))
-            start = i
-
-    resultaat = []
-    for b, (soort, groep) in enumerate(blokken):
-        if soort == "stil":
-            minuten = (groep[-1]["tst"] - groep[0]["tst"]) / 60
-            if minuten < STILSTAND_MINUTEN:
-                continue        # te kort om een bezoek te heten
-            mlat = round(sum(p["lat"] for p in groep) / len(groep), 6)
-            mlon = round(sum(p["lon"] for p in groep) / len(groep), 6)
-            gezien = {(p.get("ssid") or "").lower() for p in groep if p.get("ssid")}
-            naam = noem_plek(mlat, mlon, gezien, bekende_plekken)
-            dossier = next((p.get("dossier") for p in bekende_plekken
-                            if p["naam"] == naam), None) if naam else None
-            resultaat.append({
-                "soort": "bezoek",
-                "van": groep[0]["tst"], "tot": groep[-1]["tst"],
-                "minuten": round(minuten),
-                "lat": mlat, "lon": mlon,
-                "punten": len(groep),
-                "wifi": next((p.get("ssid") for p in groep if p.get("ssid")), None),
-                "plek": naam,
-                "dossier": dossier,
-            })
-        else:
-            # Een rit loopt van waar je vertrok tot waar je aankwam, dus het
-            # laatste punt van het vorige blok en het eerste van het volgende
-            # tellen mee. Anders mist de afstand precies de twee stukken waar
-            # het meeste verplaatsing in zit, en verdwijnt een rit die maar
-            # een enkel onderweg-punt opleverde volledig.
-            spoor = list(groep)
-            if b > 0:
-                spoor.insert(0, blokken[b - 1][1][-1])
-            if b + 1 < len(blokken):
-                spoor.append(blokken[b + 1][1][0])
-            if len(spoor) < 2:
-                continue
-            meter = sum(afstand(spoor[x]["lat"], spoor[x]["lon"],
-                                spoor[x + 1]["lat"], spoor[x + 1]["lon"])
-                        for x in range(len(spoor) - 1))
-            # De dominante wijze wint, niet een verzameling. Een rit van 83 km
-            # die onderweg een paar punten "walking" opving is een autorit, geen
-            # rit "auto en te voet". Wie die lijst later optelt schrijft anders
-            # de helft van de kilometers op de verkeerde wijze: in het eerste
-            # overzicht stond 101 km te voet.
-            telling = {}
-            for p in groep:
-                for w in (p.get("motion") or "").split(","):
-                    if w in ONDERWEG_WOORDEN:
-                        telling[w] = telling.get(w, 0) + 1
-            resultaat.append({
-                "soort": "verplaatsing",
-                "van": spoor[0]["tst"], "tot": spoor[-1]["tst"],
-                "minuten": round((spoor[-1]["tst"] - spoor[0]["tst"]) / 60),
-                "meter": round(meter),
-                "wijze": max(telling, key=telling.get) if telling else None,
-                "spoor": [[p["lat"], p["lon"]] for p in spoor],
-            })
-    return resultaat
+    return dagindeling_zuiver(punten, bekende_plekken)
 
 
 def punten_van_dag(datum):
