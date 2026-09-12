@@ -22,7 +22,7 @@ niets: dat is de volgende stap (beslissing 3 en 4 van Mehdi, nog open).
 De firma's en hun codes komen uit het agenda-afsprakendocument van Mehdi
 (`Work All/000 AI Opzet`, agenda-afspraken: negen agenda's, Calendly-routering,
 titelconventie `[FIRMA-SOORT]`). De firma in de code is de firma: `[TKN-PO]` is
-TKN sales, nooit HA sales. Les van 12-09-2026: ik had TKN eerst bij H-Architects
+TKN sales, nooit HA sales. Elevait NV toegevoegd op 12-09-2026 op aanwijzing van Mehdi. Les van 12-09-2026: ik had TKN eerst bij H-Architects
 geteld; dat is verbeterd en de betrokken gesprekken zijn opnieuw gelabeld.
 
 | Label | Betekenis | Waar het later heen gaat (nog niet actief) |
@@ -35,6 +35,7 @@ geteld; dat is verbeterd en de betrokken gesprekken zijn opnieuw gelabeld.
 | TKN project | klant van TKN-Buro met lopende studie | projectmap TKN-Buro |
 | Harmoniebouw | aannemer, werf, offerte-uitsplitsing | Harmoniebouw |
 | Contrax | Contrax | Contrax |
+| Elevait | Elevait NV, het bedrijf van Mehdi met zijn partners Shaniel, Angela en Siyan (AI-trainingen, AI-toepassingen, sollicitaties, opbouw); code `[ELEVAIT-..]` | map Elevait |
 | Regie intern | Mehdi met collega's (Shaniel, Siyan, Chilton, ...) over organisatie, AI, IT | blijft in Data uit Mehdi/Fathom |
 | Prive | Mehdi alleen, met Angela, of persoonlijk | Fathom/Prive |
 | Onbekend | ik kan het niet zeggen | vraag aan Mehdi |

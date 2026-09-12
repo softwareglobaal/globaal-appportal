@@ -25,11 +25,11 @@ import projectadressen  # noqa: E402
 DB = os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db")
 BORDMAP = os.path.expanduser("~/appportal/mijnagents-data/bord")
 MODEL = os.environ.get("ARCHIVARIS_MODEL", "claude-sonnet-5")
-LABELS = ["HA project", "HA sales", "UNABO sales", "UNABO project", "TKN sales", "TKN project", "Harmoniebouw", "Contrax", "Regie intern", "Prive", "Onbekend"]
-FIRMA = {"HA": "HA", "UNABO": "UNABO", "HB": "Harmoniebouw", "HARMONIEBOUW": "Harmoniebouw", "CONTRAX": "Contrax", "TKN": "TKN", "PRIVE": "Prive"}
+LABELS = ["HA project", "HA sales", "UNABO sales", "UNABO project", "TKN sales", "TKN project", "Harmoniebouw", "Contrax", "Elevait", "Regie intern", "Prive", "Onbekend"]
+FIRMA = {"HA": "HA", "UNABO": "UNABO", "HB": "Harmoniebouw", "HARMONIEBOUW": "Harmoniebouw", "CONTRAX": "Contrax", "TKN": "TKN", "ELEVAIT": "Elevait", "PRIVE": "Prive"}
 DOEL = {"HA project": "projectmap H-A, map 0 Fathom", "HA sales": "salesmap onder o01. Sales", "UNABO sales": "salesmap onder o01. Sales",
         "UNABO project": "projectmap UNABO", "TKN sales": "salesmap onder o01. Sales (TKN-Buro)", "TKN project": "projectmap TKN-Buro",
-        "Harmoniebouw": "Harmoniebouw", "Contrax": "Contrax",
+        "Harmoniebouw": "Harmoniebouw", "Contrax": "Contrax", "Elevait": "Elevait NV (map Elevait in Data uit Mehdi)",
         "Regie intern": "blijft in Data uit Mehdi/Fathom", "Prive": "Fathom/Prive", "Onbekend": "vraag aan Mehdi"}
 ag = bord.Agent("archivaris")
 
@@ -118,7 +118,8 @@ def label_met_model(g, tekst, afspraak, locatie, project, regels_mehdi):
         "required": ["label", "zekerheid", "reden", "agenda_toets", "locatie_toets", "projectnummer", "vraag_aan_mehdi"]}}
     system = ("Je bent De Archivaris van Mehdi Chegini. Zijn firma's: H-Architects (HA, architectuur), UNABO (EPB, plaatsbeschrijving, "
               "3D-scan, stabiliteit als dienst), TKN-Buro (TKN, engineering en stabiliteitsstudies; eigen sales), Harmoniebouw (aannemer), "
-              "Contrax. Je geeft een opgenomen gesprek één label uit de vaste lijst. Regels: inhoud eerst; de agenda-afspraak op dat uur is "
+              "Contrax, en Elevait NV (opgericht door Mehdi met zijn partners Shaniel, Angela en Siyan: AI-trainingen, AI-toepassingen, "
+              "sollicitaties en opbouw van dat bedrijf horen bij het label Elevait, niet bij Regie intern). Je geeft een opgenomen gesprek één label uit de vaste lijst. Regels: inhoud eerst; de agenda-afspraak op dat uur is "
               "een zware toets (code PO/PB = sales, KO/KB = project, IN = intern; de firma in de code is de firma: [TKN-PO] is TKN sales, "
               "nooit HA sales); de locatie is een toets voor gesprekken buiten; een "
               "dossiernummer (26xx, 56xx) maakt het een project, geen sales. 'Regie intern' = Mehdi met collega's (zie de lijst 'collegas': naam, afdeling, firma; uit organisatie.globaal.be) "

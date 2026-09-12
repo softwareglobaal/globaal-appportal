@@ -45,12 +45,12 @@ KALENDERS = {
     "en.be#holiday@group.v.calendar.google.com": "Feestdagen BE",
 }
 FIRMA_AFDELING = {"HA": "h-architects", "UNABO": "unabo", "HB": "harmoniebouw", "HARMONIEBOUW": "harmoniebouw",
-                  "CONTRAX": "contrax", "ENERGIE": "unabo", "TKN": "tkn", "PRIVE": "mehdi"}
+                  "CONTRAX": "contrax", "ENERGIE": "unabo", "TKN": "tkn", "ELEVAIT": "elevait", "PRIVE": "mehdi"}
 KALENDER_AFDELING = {"H-Architects": "h-architects", "UNABO": "unabo", "Harmoniebouw": "harmoniebouw", "Contrax": "contrax",
                      "zoomafspraken (sales via Calendly)": "h-architects"}
 SOORT = {"KB": "klant buiten", "PB": "prospect buiten (plaatsbezoek)", "KO": "klant online", "PO": "prospect online", "IN": "intern"}
 TYPES = {"WB": "werfbezoek", "OPL": "oplevering", "PLB": "plaatsbeschrijving", "SCN": "3D-scan", "EPB": "EPB"}
-CODE_RE = re.compile(r"\[(HA|UNABO|HB|HARMONIEBOUW|CONTRAX|ENERGIE|TKN|PRIVE)(?:-(KB|PB|KO|PO|IN))?\]", re.I)
+CODE_RE = re.compile(r"\[(HA|UNABO|HB|HARMONIEBOUW|CONTRAX|ENERGIE|TKN|ELEVAIT|PRIVE)(?:-(KB|PB|KO|PO|IN))?\]", re.I)
 
 
 def kalenders():

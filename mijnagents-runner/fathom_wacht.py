@@ -31,7 +31,7 @@ ag = bord.Agent(NAAM)
 DAGEN = int(os.environ.get("FATHOM_WACHT_DAGEN", "14"))
 ARCHIEF = os.path.expanduser(os.environ.get("FATHOM_ARCHIEF_PAD", "~/appportal/mijnagents-data/fathom"))
 MODEL = os.environ.get("FATHOM_WACHT_MODEL", "claude-sonnet-5")
-AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "regie", "prive")
+AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "tkn", "elevait", "regie", "prive")
 # Kenmerken in het e-mailadres van de opnemer waaraan we Mehdi's eigen Fathom-sleutel herkennen
 MEHDI_FATHOM_EIGENAARS = tuple(k.strip() for k in os.environ.get(
     "FATHOM_MEHDI_EIGENAARS", "h-architects,mch@,zoomafspraken@gmail.com").split(",") if k.strip())
@@ -206,7 +206,8 @@ def herken(g, tekst, personen, deal, hoe):
         "zekerheid": {"type": "string", "enum": ["hoog", "middel", "laag"]}, "waarom": {"type": "string"}},
         "required": ["personen", "hoofdpersoon", "bedrijf", "afdeling", "thema", "project", "prive", "zekerheid", "waarom"]}}
     system = ("Je herkent voor Mehdi Chegini (H-Architects) een Fathom-gesprek: wie erbij was, welk bedrijf, welke afdeling "
-              "(h-architects, unabo, harmoniebouw, contrax, regie, prive), thema, project of dossier, en of het privé is. "
+              "(h-architects, unabo, harmoniebouw, contrax, tkn, elevait, regie, prive), thema, project of dossier, en of het privé is. "
+              "Elevait NV is het bedrijf van Mehdi met zijn partners Shaniel, Angela en Siyan (AI-trainingen en AI-toepassingen); gesprekken over de opbouw van Elevait, AI-trainingen of sollicitaties daar zijn afdeling elevait. TKN-Buro (partner Tom) doet engineering en stabiliteit. "
               "Privé: alleen Mehdi en Angela (zijn partner), Mehdi alleen, of een duidelijk persoonlijk onderwerp; bij twijfel privé. "
               "Raad geen afdeling voor een onbekende externe deelnemer: dan 'onbekend' en zekerheid laag. Nederlands, kort. "
               "Motiveer in 'waarom' waarop je je baseert (deelnemer, e-mail, titel, wat er gezegd werd), zodat Mehdi je redenering kan nalezen. "

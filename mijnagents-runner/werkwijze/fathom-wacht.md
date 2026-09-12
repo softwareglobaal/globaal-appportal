@@ -37,6 +37,8 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
 
 **Collega's** (naam, afdeling, firma, land) lees ik uit de centrale organisatiedatabase van de groep (organisatie.globaal.be, schema kern; 34 collega's in dienst op 12-09-2026). Dat zegt wie intern is. De tabel Betrokken personen hieronder blijft voor externe vaste contacten en voor bijzonderheden die de database niet kent. De database heeft alleen van Mehdi een e-mailadres; Fathom-deelnemers herken ik dus op naam, tot de adressen daar aangevuld zijn (Shaniel, in het organisatiedashboard).
 
+**Elevait NV** (sinds 12-09-2026): het bedrijf van Mehdi met zijn partners Shaniel, Angela en Siyan; AI-trainingen en AI-toepassingen. Gesprekken daarover krijgen afdeling elevait, niet regie. Angela is dus partner in Elevait én Mehdi's partner thuis: zakelijk onderwerp = elevait, persoonlijk = privé.
+
 ## Wat ik doe, in deze volgorde
 
 1. **Twee keer per dag** (07:00 en 13:00) en **op verzoek**: zegt Mehdi tegen
