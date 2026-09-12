@@ -91,3 +91,14 @@ de agent.
 9. A11 WhatsApp-exports in ~/Documents/WhatsApp exports op de Mac (Mehdi kiest de gesprekken).
 10. B1 Tabel Betrokken personen aanvullen in de werkwijze van De Fathomwacht; B2 afzenders met hoog belang.
 11. B3 en B5: 43 afspraken zonder code en de titels zonder projectnummer of adres (signaal op het bord); dit is de agenda van Mehdi, Shaniel kan de lijst voorbereiden.
+
+## G. Data uit Mehdi (12-09-2026)
+
+Alle data van de agents komt samen in de Dropbox-map **Data uit Mehdi** (hoogste niveau van Mehdi's Dropbox):
+submappen Fathom, Plaud, Locatie en Bord. De server-tokens komen daar niet bij (Siyans account ziet de map niet,
+Mehdi's app heeft alleen een app-map); daarom haalt een taak op Mehdi's Mac (launchd
+be.globaal.mijnagents.data-uit-mehdi, script ~/bin/data_uit_mehdi_sync.sh) elke 30 minuten het archief van de
+VM (mijnagents-data) op, alleen toevoegen, nooit wissen. Mehdi besliste: alles erin, ook privé. Delen met Shaniel
+gebeurt later per submap (Fathom, Plaud, Bord wel; Locatie en gezondheid niet), en niet met Siyans account.
+Wil Mehdi later dat de VM rechtstreeks schrijft: Dropbox-app met Full Dropbox aanmaken en
+`dropbox_prive_koppelen.py --nieuw --basis "/Data uit Mehdi"` draaien (code staat klaar).
