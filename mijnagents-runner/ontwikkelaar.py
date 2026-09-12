@@ -97,6 +97,12 @@ def gedrag():
     return per_agent, {"niet_opgepakt_h-architects": len(klaar)}
 
 
+VRAAG = ""
+for _i, _a in enumerate(__import__("sys").argv):
+    if _a == "--vraag" and _i + 1 < len(__import__("sys").argv):
+        VRAAG = __import__("sys").argv[_i + 1].strip()
+
+
 def verslag_met_model(per_agent, bak, code, logs):
     from anthropic import Anthropic
     client = Anthropic()
@@ -112,12 +118,17 @@ def verslag_met_model(per_agent, bak, code, logs):
         "'## Verbeteringen die ik voorstel' (genummerd; per punt: wat, waarom, waar (bestand/werkwijze), moeite klein/middel/groot), "
         "'## Van buiten' (drie tot vijf ontwikkelingen die voor dit team tellen, met url en wat we ermee kunnen), "
         "'## Wat Mehdi beslist' (korte lijst). Maximaal 900 woorden."
+        + (" Gerichte ronde: Mehdi stelt een vraag. Zet dan als EERSTE kop '## Antwoord op de vraag van Mehdi' met een "
+           "concreet, onderbouwd antwoord (bronnen met url, wat het voor dit team betekent, wat het kost aan werk), "
+           "en hou de andere koppen kort; maximaal 1400 woorden." if VRAAG else "")
     )
     user = json.dumps({"agents": per_agent, "bak": bak, "git_laatste_week": logs}, ensure_ascii=False)[:150000]
     user += "\n\n===== CODE =====\n" + code
     tools = [{"type": "web_search_20250305", "name": "web_search", "max_uses": 8}]
-    berichten = [{"role": "user", "content": user + "\n\nZoek ook op het web naar wat er deze week nieuw is rond: Claude Agent SDK, "
-                                                    "Anthropic agents, 'OpenClaw' agents GitHub, open-source agent frameworks voor kleine bedrijven."}]
+    zoek = ("\n\nVRAAG VAN MEHDI (beantwoord deze eerst, zoek gericht op het web, minstens vier bronnen): " + VRAAG) if VRAAG else \
+        ("\n\nZoek ook op het web naar wat er deze week nieuw is rond: Claude Agent SDK, "
+         "Anthropic agents, 'OpenClaw' agents GitHub, open-source agent frameworks voor kleine bedrijven.")
+    berichten = [{"role": "user", "content": user + zoek}]
     teksten, tokens = [], 0
     for _ in range(6):
         resp = client.messages.create(model=MODEL, max_tokens=6000, system=system, messages=berichten, tools=tools)
@@ -134,7 +145,7 @@ def main():
     ag.hartslag("actief", taak="weekcontrole van het team")
     try:
         per_agent, bak = gedrag()
-        code = code_bundel()
+        code = code_bundel() if not VRAAG else "(gerichte ronde: codebundel overgeslagen om tokens te sparen)"
         logs = {naam: git_log(pad) for naam, pad in REPOS.items()}
         ag.log("week", "bron", f"{len(per_agent)} agents bekeken, {sum(a['fouten_7d'] for a in per_agent)} fouten in 7 dagen, "
                                f"{bak['niet_opgepakt_h-architects']} items niet opgepakt; code {len(code)} tekens; git van 2 repo's")
@@ -142,6 +153,8 @@ def main():
         week = datetime.now().strftime("%G-W%V")
         uit = ag.klaarzet([{"voor": "mehdi", "soort": "verslag", "sleutel": week, "titel": f"Ontwikkelverslag {week}",
                             "uniek": f"ontwikkelverslag:{week}:{datetime.now().strftime('%d%H%M')}", "inhoud": tekst}])
+        if VRAAG:
+            ag.log("week", "bron", "gerichte ronde op vraag van Mehdi", VRAAG)
         ag.log("week", "melding", f"ontwikkelverslag {week} klaargezet voor Mehdi ({tokens} tokens)", tekst)
         ag.log_verstuur()
         ag.hartslag("klaar", taak=f"ontwikkelverslag {week} klaar", detail=f"{len(per_agent)} agents, {sum(a['fouten_7d'] for a in per_agent)} fouten in 7 dagen",
