@@ -15,7 +15,13 @@ niets: dat is de volgende stap (beslissing 3 en 4 van Mehdi, nog open).
 | Projectnummer en adres uit de H-A projectmappen | De Agendawacht (adressenindex) | project herkennen |
 | Correcties van Mehdi (hieronder) | Mehdi, op deze pagina | mijn regels bijstellen |
 
-## De labels (beslissing van Mehdi, 12-09-2026)
+## De labels (beslissing van Mehdi, 12-09-2026; TKN toegevoegd op zijn aanwijzing dezelfde dag)
+
+De firma's en hun codes komen uit het agenda-afsprakendocument van Mehdi
+(`Work All/000 AI Opzet`, agenda-afspraken: negen agenda's, Calendly-routering,
+titelconventie `[FIRMA-SOORT]`). De firma in de code is de firma: `[TKN-PO]` is
+TKN sales, nooit HA sales. Les van 12-09-2026: ik had TKN eerst bij H-Architects
+geteld; dat is verbeterd en de betrokken gesprekken zijn opnieuw gelabeld.
 
 | Label | Betekenis | Waar het later heen gaat (nog niet actief) |
 |---|---|---|
@@ -23,6 +29,8 @@ niets: dat is de volgende stap (beslissing 3 en 4 van Mehdi, nog open).
 | HA sales | prospect van H-Architects (PO/PB, kennismaking, offerte) | salesmap onder o01. Sales |
 | UNABO sales | prospect van UNABO (stabiliteit, EPB, opmeting, offerte) | salesmap onder o01. Sales |
 | UNABO project | klant van UNABO met lopende opdracht | projectmap UNABO |
+| TKN sales | prospect van TKN-Buro (engineering, stabiliteitsstudie; code `[TKN-PO]`/`[TKN-PB]`) | salesmap onder o01. Sales (TKN-Buro) |
+| TKN project | klant van TKN-Buro met lopende studie | projectmap TKN-Buro |
 | Harmoniebouw | aannemer, werf, offerte-uitsplitsing | Harmoniebouw |
 | Contrax | Contrax | Contrax |
 | Regie intern | Mehdi met collega's (Shaniel, Siyan, Chilton, ...) over organisatie, AI, IT | blijft in Data uit Mehdi/Fathom |

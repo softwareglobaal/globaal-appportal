@@ -341,24 +341,34 @@ def api_klaarzet():
     p = request.get_json(silent=True) or {}
     items = p.get("items") if isinstance(p.get("items"), list) else [p]
     conn = db()
-    nieuw, bestaand = 0, 0
+    nieuw, bestaand, bijgewerkt = 0, 0, 0
     for it in items:
         if not (it.get("van") and it.get("voor") and it.get("soort") and it.get("titel")):
             continue
         uniek = (it.get("uniek") or "")[:200]
-        if uniek and conn.execute("SELECT 1 FROM klaarzet WHERE uniek=?", (uniek,)).fetchone():
-            bestaand += 1
-            continue
         inhoud = it.get("inhoud")
         if not isinstance(inhoud, str):
             inhoud = json.dumps(inhoud, ensure_ascii=False)
+        oud = conn.execute("SELECT id, voor, titel, inhoud, verwijzing, status FROM klaarzet WHERE uniek=?", (uniek,)).fetchone() if uniek else None
+        if oud:
+            # Les van 12-09-2026: een item dat nog niet opgepakt is, volgt de bron. Toen de Agendawacht TKN leerde
+            # herkennen, bleef de afspraak van Britt Verboven bij h-architects staan omdat de bak nooit bijwerkte.
+            if oud["status"] == "klaar" and (oud["voor"], oud["titel"], oud["inhoud"], oud["verwijzing"] or "") != \
+                    (it["voor"], it["titel"][:300], inhoud[:60000], (it.get("verwijzing") or "")[:500]):
+                conn.execute("UPDATE klaarzet SET voor=?, titel=?, inhoud=?, verwijzing=?, sleutel=? WHERE id=?",
+                             (it["voor"], it["titel"][:300], inhoud[:60000], (it.get("verwijzing") or "")[:500],
+                              str(it.get("sleutel") or "")[:120], oud["id"]))
+                bijgewerkt += 1
+            else:
+                bestaand += 1
+            continue
         conn.execute(
             "INSERT INTO klaarzet(van, voor, soort, sleutel, titel, inhoud, verwijzing, uniek, ts) VALUES(?,?,?,?,?,?,?,?,?)",
             (it["van"], it["voor"], it["soort"][:40], str(it.get("sleutel") or "")[:120], it["titel"][:300],
              inhoud[:60000], (it.get("verwijzing") or "")[:500], uniek, nu()))
         nieuw += 1
     conn.commit()
-    return jsonify(ok=True, nieuw=nieuw, bestaand=bestaand)
+    return jsonify(ok=True, nieuw=nieuw, bestaand=bestaand, bijgewerkt=bijgewerkt)
 
 
 @app.route("/api/klaarzet")
