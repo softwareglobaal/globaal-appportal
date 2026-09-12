@@ -1193,3 +1193,12 @@ subdiscipline-statistieken.
       **Veiligste winst: `docker builder prune` voor die 6,4 GB build cache.**
       Dat raakt 90 draaiende containers en meerdere lopende sessies, dus niet
       ongevraagd gedaan. Ook het geheugen is krap: 419 MB vrij van 7,6 GB.
+- [ ] **GEVAAR: draai nooit `docker volume prune` of `docker system prune
+      --volumes` op deze VM.** Van de 15 volumes die Docker als ongebruikt
+      aanmerkt zijn er zes `renovision-*_mongo-data` (admin, marise, mehdi,
+      mukesh, raisha, zjafhira), samen ongeveer 3 GB. Die staan als "ongebruikt"
+      omdat er geen mongo-container meer draait, niet omdat ze leeg zijn: zie het
+      punt hierboven over RenoVision, waar de gegevens nog in die volumes zitten
+      en de containers alleen opnieuw gestart moeten worden. Opruimen wist dus
+      het werk van zes collega's. De overige negen zijn 4 KB elk en niet de
+      moeite waard.
