@@ -1180,3 +1180,16 @@ subdiscipline-statistieken.
       `appportal-authentik-server-1`. Gevonden op 2026-09-09 toen hetzelfde
       patroon voor de locatietegel stukliep. Vermoedelijk geldt dit voor meer
       `add-*-app.py`-scripts; een keer nalopen.
+
+## Schijfruimte op de VM (gemeten 2026-09-12)
+
+- [ ] **De VM zit op 86% schijf: 66 van 77 GB, nog 11 GB vrij.** Gemeten bij het
+      onderzoek of er een Traccar-server bij kon; dat kan nu niet. Verdeling:
+      `/var/lib/docker` is 64 GB, waarvan `overlay2` alleen al 58 GB. De
+      container-logboeken zijn het niet (verwaarloosbaar, en er staat netjes een
+      limiet van 20 MB x 3 in `/etc/docker/daemon.json`).
+      Wat `docker system df` meldt: images 21,5 GB, build cache 6,4 GB, volumes
+      5,8 GB waarvan 3,13 GB ongebruikt, containers 0,9 GB.
+      **Veiligste winst: `docker builder prune` voor die 6,4 GB build cache.**
+      Dat raakt 90 draaiende containers en meerdere lopende sessies, dus niet
+      ongevraagd gedaan. Ook het geheugen is krap: 419 MB vrij van 7,6 GB.
