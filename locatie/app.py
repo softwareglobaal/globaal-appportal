@@ -594,14 +594,22 @@ def dagindeling(punten):
             meter = sum(afstand(spoor[x]["lat"], spoor[x]["lon"],
                                 spoor[x + 1]["lat"], spoor[x + 1]["lon"])
                         for x in range(len(spoor) - 1))
-            wijzen = {w for p in groep for w in (p.get("motion") or "").split(",")
-                      if w in ONDERWEG_WOORDEN}
+            # De dominante wijze wint, niet een verzameling. Een rit van 83 km
+            # die onderweg een paar punten "walking" opving is een autorit, geen
+            # rit "auto en te voet". Wie die lijst later optelt schrijft anders
+            # de helft van de kilometers op de verkeerde wijze: in het eerste
+            # overzicht stond 101 km te voet.
+            telling = {}
+            for p in groep:
+                for w in (p.get("motion") or "").split(","):
+                    if w in ONDERWEG_WOORDEN:
+                        telling[w] = telling.get(w, 0) + 1
             resultaat.append({
                 "soort": "verplaatsing",
                 "van": spoor[0]["tst"], "tot": spoor[-1]["tst"],
                 "minuten": round((spoor[-1]["tst"] - spoor[0]["tst"]) / 60),
                 "meter": round(meter),
-                "wijze": ", ".join(sorted(wijzen)) or None,
+                "wijze": max(telling, key=telling.get) if telling else None,
                 "spoor": [[p["lat"], p["lon"]] for p in spoor],
             })
     return resultaat
