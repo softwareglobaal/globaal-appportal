@@ -212,7 +212,9 @@ def herken(g, tekst, personen, deal, hoe):
               "Raad geen afdeling voor een onbekende externe deelnemer: dan 'onbekend' en zekerheid laag. Nederlands, kort. "
               "Motiveer in 'waarom' waarop je je baseert (deelnemer, e-mail, titel, wat er gezegd werd), zodat Mehdi je redenering kan nalezen. "
               "De lijst 'collegas' (uit organisatie.globaal.be) zegt wie intern is, bij welke afdeling en firma; een gesprek van Mehdi met "
-              "alleen collega's is intern (afdeling regie, of de afdeling van het onderwerp), niet een klant.")
+              "alleen collega's is intern (afdeling regie, of de afdeling van het onderwerp), niet een klant. Weeg personen op afdeling en functie, "
+              "niet op firma: partners (Siyan, Shaniel, Angela, Tom, Catalin, Matthias) zitten in meerdere bedrijven, en een deskundige die "
+              "erbij zit (Shaniel als AI/ICT bij een Energy-gesprek) verandert het onderwerp niet. Het thema en de afdeling volgen de inhoud.")
     user = json.dumps({"titel": g.get("title") or g.get("meeting_title"), "start": g.get("recording_start_time"),
                        "opgenomen_door": g.get("recorded_by"), "deelnemers": deelnemers, "herkend_uit_tabel": bekend,
                        "pipedrive_deal": ({"id": deal["id"], "titel": deal["titel"], "hoe": hoe} if deal else None),

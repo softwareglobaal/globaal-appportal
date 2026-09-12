@@ -39,6 +39,8 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
 
 **Elevait NV** (sinds 12-09-2026): het bedrijf van Mehdi met zijn partners Shaniel, Angela en Siyan; AI-trainingen en AI-toepassingen. Gesprekken daarover krijgen afdeling elevait, niet regie. Angela is dus partner in Elevait én Mehdi's partner thuis: zakelijk onderwerp = elevait, persoonlijk = privé.
 
+**Personen weeg ik op afdeling en functie, niet op firma** (Mehdi, 12-09-2026): partners zitten in meerdere bedrijven; een deskundige die erbij zit (Shaniel als AI/ICT bij een Energy-gesprek) verandert het onderwerp niet. Thema en afdeling volgen de inhoud; De Archivaris geeft het definitieve label.
+
 ## Wat ik doe, in deze volgorde
 
 1. **Twee keer per dag** (07:00 en 13:00) en **op verzoek**: zegt Mehdi tegen

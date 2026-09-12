@@ -69,7 +69,8 @@ def herken(tekst):
 def samenvatting():
     per = {}
     for p in collegas():
-        per.setdefault(p["afdeling"] or "zonder afdeling", []).append(f"{p['naam']} ({p['firma'] or '?'}" + (f", {p['functie']}" if p.get("functie") else "") + ")")
+        per.setdefault(p["afdeling"] or "zonder afdeling", []).append(
+            f"{p['naam']} ({p['firma'] or '?'}" + (f", {p['rol']}" if p.get("rol") else "") + (f", {p['functie']}" if p.get("functie") else "") + ")")
     return "\n".join(f"- {afd}: " + "; ".join(sorted(namen)) for afd, namen in sorted(per.items()))
 
 

@@ -40,6 +40,37 @@ geteld; dat is verbeterd en de betrokken gesprekken zijn opnieuw gelabeld.
 | Prive | Mehdi alleen, met Angela, of persoonlijk | Fathom/Prive |
 | Onbekend | ik kan het niet zeggen | vraag aan Mehdi |
 
+## Personen weeg ik op afdeling en functie, niet op firma (regel van Mehdi, 12-09-2026)
+
+De firma van een deelnemer zegt weinig: partners zitten in meerdere bedrijven en
+collega's helpen over afdelingen heen. Ik kijk naar drie dingen, in deze volgorde:
+
+1. **De inhoud**: waarover gaat het gesprek werkelijk.
+2. **De afdeling en functie van wie erbij zit** (uit organisatie.globaal.be): Joan is
+   Finance, dus boekhouding; Mukesh, Amrish en Marise zijn Energy; Abi-Gail,
+   Alexander en Zjafhira zijn Scanning; Raisha, Chesron, Chilton en Sufa zijn
+   Architecture; Tom is Engineering (TKN-Buro).
+3. **De rol in dat gesprek**: uitvoerend, leidend, of deskundige die komt helpen.
+
+Voorbeelden van Mehdi:
+
+- Energy-collega's plus Shaniel: Shaniel zit erbij als AI/ICT-deskundige, het
+  gesprek blijft **Energy**. Het label volgt het onderwerp, niet de helper.
+- Siyan is partner in drie bedrijven (waaronder Elevait), niet alleen Sales. Een
+  gesprek met Siyan krijgt het label van wat besproken wordt.
+- Shaniel is AI & ICT én partner in Elevait: over de opbouw van Elevait is het
+  **Elevait**, over de agents of servers is het **Regie intern** (AI & ICT).
+
+Daarom lever ik naast het label twee velden: **afdeling van het onderwerp** (de
+afdelingen van de groep: AI & ICT, Architecture, Construction, Energy, Engineering,
+Finance, HR, Management, Office, Rendering, Safety, Sales, Scanning) en **wie in
+welke rol** aanwezig was. Zo ziet Mehdi waarom ik koos, en kan een collega van de
+afdeling het gesprek terugvinden.
+
+**Partners** (zoals de organisatiedatabase en Mehdi ze noemen): Shaniel, Angela en
+Siyan (Elevait, met Mehdi); Tom (TKN-Buro); Catalin (Harmoniebouw); Matthias
+(Energie Efficiënt); Luc (Safety).
+
 ## Hoe ik label, in deze volgorde
 
 1. **Inhoud eerst.** Ik lees het begin van het transcript en de herkenning van de

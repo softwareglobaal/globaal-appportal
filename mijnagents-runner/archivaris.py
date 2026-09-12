@@ -114,8 +114,9 @@ def label_met_model(g, tekst, afspraak, locatie, project, regels_mehdi):
     schema = {"name": "label", "description": "Definitief label van het gesprek", "input_schema": {"type": "object", "properties": {
         "label": {"type": "string", "enum": LABELS}, "zekerheid": {"type": "string", "enum": ["hoog", "middel", "laag"]},
         "reden": {"type": "string"}, "agenda_toets": {"type": "string"}, "locatie_toets": {"type": "string"},
-        "projectnummer": {"type": "string"}, "vraag_aan_mehdi": {"type": "string"}},
-        "required": ["label", "zekerheid", "reden", "agenda_toets", "locatie_toets", "projectnummer", "vraag_aan_mehdi"]}}
+        "projectnummer": {"type": "string"}, "vraag_aan_mehdi": {"type": "string"},
+        "afdeling_onderwerp": {"type": "string", "enum": ["AI & ICT", "Architecture", "Construction", "Energy", "Engineering", "Finance", "HR", "Management", "Office", "Rendering", "Safety", "Sales", "Scanning", "Prive", "Onbekend"]}, "deelnemers_rol": {"type": "string"}},
+        "required": ["label", "zekerheid", "reden", "agenda_toets", "locatie_toets", "projectnummer", "vraag_aan_mehdi", "afdeling_onderwerp", "deelnemers_rol"]}}
     system = ("Je bent De Archivaris van Mehdi Chegini. Zijn firma's: H-Architects (HA, architectuur), UNABO (EPB, plaatsbeschrijving, "
               "3D-scan, stabiliteit als dienst), TKN-Buro (TKN, engineering en stabiliteitsstudies; eigen sales), Harmoniebouw (aannemer), "
               "Contrax, en Elevait NV (opgericht door Mehdi met zijn partners Shaniel, Angela en Siyan: AI-trainingen, AI-toepassingen, "
@@ -169,11 +170,13 @@ def weekoverzicht(week):
     rijen.sort()
     regels = [f"# Labels {week}: gesprekken volgens De Archivaris", "",
               "Label op inhoud, getoetst aan agenda en locatie. Correcties: werkwijze van De Archivaris op het bord, sectie Correcties van Mehdi.", "",
-              "| datum | uur | map | label | zekerheid | agenda | locatie | doelmap (nog niet actief) |", "|---|---|---|---|---|---|---|---|"]
+              "| datum | uur | map | label | afdeling onderwerp | wie, in welke rol | zekerheid | agenda | doelmap (nog niet actief) |", "|---|---|---|---|---|---|---|---|---|"]
     for datum, start, naam, a in rijen:
-        regels.append(f"| {datum} | {start} | {naam[:45]} | **{a['label']}** | {a['zekerheid']} | {a.get('agenda_toets', '')[:60]} | {a.get('locatie_toets', '')[:40]} | {a.get('doelmap', '')} |")
+        regels.append(f"| {datum} | {start} | {naam[:45]} | **{a['label']}** | {a.get('afdeling_onderwerp', '')} | {a.get('deelnemers_rol', '')[:70]} | {a['zekerheid']} | {a.get('agenda_toets', '')[:50]} | {a.get('doelmap', '')} |")
     tel = Counter(a["label"] for *_, a in rijen)
-    regels += ["", "## Telling", "", "| label | aantal |", "|---|---|"] + [f"| {k} | {v} |" for k, v in tel.most_common()] + [""]
+    tel_afd = Counter(a.get("afdeling_onderwerp", "") for *_, a in rijen)
+    regels += ["", "## Telling per label", "", "| label | aantal |", "|---|---|"] + [f"| {k} | {v} |" for k, v in tel.most_common()]
+    regels += ["", "## Telling per afdeling van het onderwerp", "", "| afdeling | aantal |", "|---|---|"] + [f"| {k} | {v} |" for k, v in tel_afd.most_common()] + [""]
     os.makedirs(BORDMAP, exist_ok=True)
     open(os.path.join(BORDMAP, f"Labels {week}.md"), "w", encoding="utf-8").write("\n".join(regels))
     return len(rijen)
@@ -214,7 +217,7 @@ def main():
             d = json.load(open(gj, encoding="utf-8"))
             sleutel = (g["datum"], g["start"])
             c = corr.get(sleutel)
-            if d.get("archivaris") and not (c and d["archivaris"].get("label") != c[0]):
+            if d.get("archivaris") and d["archivaris"].get("versie", 1) >= 2 and not (c and d["archivaris"].get("label") != c[0]):
                 overgeslagen += 1
                 weken.add(d["archivaris"].get("week"))
                 continue
@@ -233,12 +236,12 @@ def main():
                 tokens += t_
             week = datetime.fromisoformat(g["datum"]).strftime("%G-W%V")
             d["archivaris"] = {**uit, "doelmap": DOEL.get(uit["label"], ""), "datum": g["datum"], "start": g["start"], "week": week,
-                               "agenda_afspraak": (a or {}).get("titel", ""), "locatie": loc, "ts": datetime.now().astimezone().isoformat(), "versie": 1}
+                               "agenda_afspraak": (a or {}).get("titel", ""), "locatie": loc, "ts": datetime.now().astimezone().isoformat(), "versie": 2}
             json.dump(d, open(gj, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
             gelabeld += 1
             tel[uit["label"]] += 1
             weken.add(week)
-            ag.log(f"{g['datum']} {g['start']}", "bevinding", f"{uit['label']} ({uit['zekerheid']}) · {(g.get('personen') or '')[:40]}",
+            ag.log(f"{g['datum']} {g['start']}", "bevinding", f"{uit['label']} · {uit.get('afdeling_onderwerp', '')} ({uit['zekerheid']}) · {(g.get('personen') or '')[:40]}",
                    f"reden: {uit['reden']}\nagenda: {uit.get('agenda_toets', '')}\nlocatie: {uit.get('locatie_toets', '')}")
             if uit["zekerheid"] == "laag" or uit["label"] == "Onbekend":
                 twijfel.append(f"{g['datum']} {g['start']} {(g.get('personen') or '')[:35]} · voorstel {uit['label']} · {uit.get('vraag_aan_mehdi') or uit['reden'][:80]}")
