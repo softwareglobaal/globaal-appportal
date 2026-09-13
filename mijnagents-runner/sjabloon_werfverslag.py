@@ -247,11 +247,24 @@ def van_markdown(md):
 
 # ---------------------------------------------------------------------- docx ---
 def _leeg_lichaam(doc):
+    """Alle inhoud van de master weg; de sectie-instellingen van de EERSTE sectie (die verwijzen naar de kop- en
+    voettekst) komen in de plaats van de laatste sectPr, want de tweede sectie van de master is 'linked to previous'."""
+    import copy
     body = doc.element.body
+    W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    eerste = None
+    for p in body.iter(W + "p"):
+        sp = p.find(W + "pPr/" + W + "sectPr")
+        if sp is not None:
+            eerste = copy.deepcopy(sp)
+            break
     for kind in list(body):
         if kind.tag.endswith("}sectPr"):
             continue
         body.remove(kind)
+    laatste = body.find(W + "sectPr")
+    if eerste is not None and laatste is not None:
+        body.replace(laatste, eerste)
 
 
 def _voettekst(doc, tekst):
