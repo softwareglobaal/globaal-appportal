@@ -302,11 +302,62 @@ def open_dossiers():
         return []
 
 
+def opdrachten():
+    """Opdrachten van de bezoekpagina (klaarzet soort `opdracht`, voor mij): 'voorbereid <d> <n>' of
+    'proef <d> <n>'. Eén voor één, met bewijs in het werkverslag; daarna gemarkeerd als opgepakt."""
+    import werfverslag_proef as wp
+    items = bord.klaargezet_voor(NAAM, n=20)
+    items = [it for it in items if it.get("soort") == "opdracht"]
+    if not items:
+        return 0
+    ag.hartslag("actief", taak=f"{len(items)} opdracht(en) van de bezoekpagina")
+    gedaan = 0
+    for it in reversed(items):
+        m = re.match(r"(voorbereid|proef)\s+(\d{4})\s+(\d+)", it.get("titel", ""))
+        if not m:
+            bord.opgepakt(it["id"], NAAM)
+            continue
+        soort, d, n = m.group(1), m.group(2), int(m.group(3))
+        try:
+            if soort == "voorbereid":
+                wp.voorbereid(ag, d, n)
+            else:
+                wp.proef(ag, d, n)
+            gedaan += 1
+        except Exception as e:  # noqa: BLE001
+            ag.log(f"{d}-{n}", "fout", f"{soort} mislukt: {type(e).__name__}: {str(e)[:300]}")
+        bord.opgepakt(it["id"], NAAM)
+        ag.log_verstuur()
+    ag.hartslag("klaar", taak=f"{gedaan} opdracht(en) uitgevoerd", detail="voorbereiding of proef van de bezoekpagina")
+    return gedaan
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--project", nargs="*", default=[], help="dossiernummers")
     p.add_argument("--droog", action="store_true")
+    p.add_argument("--voorbereid", nargs=2, metavar=("DOSSIER", "BEZOEK"), help="gegevens uit de bezoekmap halen")
+    p.add_argument("--proef", nargs=2, metavar=("DOSSIER", "BEZOEK"), help="concept-werfverslag (md + docx) in de bezoekmap zetten")
+    p.add_argument("--opdrachten", action="store_true", help="opdrachten van de bezoekpagina uitvoeren (cron elke 5 min)")
     a = p.parse_args()
+    if a.opdrachten:
+        print("opdrachten:", opdrachten())
+        return
+    if a.voorbereid or a.proef:
+        import werfverslag_proef as wp
+        d, n = a.voorbereid or a.proef
+        ag.hartslag("actief", taak=f"{'voorbereiding' if a.voorbereid else 'proef'} {d}-{n}")
+        try:
+            uit = wp.voorbereid(ag, d, int(n)) if a.voorbereid else wp.proef(ag, d, int(n))
+            print(json.dumps(uit, ensure_ascii=False, indent=1) if a.voorbereid else uit[0])
+            ag.hartslag("klaar", taak=f"{'voorbereiding' if a.voorbereid else 'proef'} {d}-{n} klaar")
+        except Exception as e:
+            ag.log(f"{d}-{n}", "fout", f"{type(e).__name__}: {str(e)[:300]}")
+            ag.hartslag("fout", taak=f"{d}-{n} mislukt", detail=str(e)[:200])
+            raise
+        finally:
+            ag.log_verstuur()
+        return
     nummers = [n for n in a.project if re.fullmatch(r"\d{4}", n)]
     nummers += [n for n in open_dossiers() if n not in nummers]
     ag.hartslag("actief", taak="ronde gestart", detail=f"{len(nummers)} dossier(s)")

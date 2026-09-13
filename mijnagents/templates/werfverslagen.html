@@ -66,7 +66,7 @@
       {% for b in d['bezoeken'] %}
       {% set cmap = {} %}{% for c in b['controles'] %}{% set _ = cmap.update({c['code']: c}) %}{% endfor %}
       <tr>
-        <td><b>{{ d['dossier'] }}-{{ b['volgnr'] }}</b></td>
+        <td><a href="{{ url_for('werfbezoek_pagina', dossier=d['dossier'], volgnr=b['volgnr']) }}" style="color:var(--accent);font-weight:700;text-decoration:none">{{ d['dossier'] }}-{{ b['volgnr'] }}</a></td>
         <td>{{ b['datum'] }}</td>
         {% for c in codes %}
           {% set x = cmap.get(c) %}
