@@ -7,9 +7,29 @@ server {
     # Variable + resolver re-resolves the container IP after restarts.
     resolver 127.0.0.11 valid=30s;
 
+    # Sessiecontrole voor alles onder /app/. De Authentik-API geeft 200 met een
+    # geldige sessie en 403 zonder. Wie al is aangemeld merkt hier niets van;
+    # wie niet is aangemeld gaat naar de aanmeldstroom en komt daarna terug op
+    # dezelfde link.
+    location = /app/sessiecontrole {
+        internal;
+        set $sessie_backend http://authentik-server:9000/api/v3/core/users/me/;
+        proxy_pass $sessie_backend;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        include /etc/nginx/snippets/proxy-common.conf;
+    }
+
+    location @app_aanmelden {
+        return 302 https://auth.${BASE_DOMAIN}/flows/-/default/authentication/?next=$request_uri;
+    }
+
     # Downloadknop voor de desktop-app. Een vaste link; de server kiest het
     # bestand op basis van het besturingssysteem, de gebruiker kiest niets.
     location = /app/download {
+        auth_request /app/sessiecontrole;
+        error_page 401 403 = @app_aanmelden;
+
         # Telefoons en tablets eerst: hun user-agent bevat ook "Mac OS X".
         if ($http_user_agent ~* "(iPhone|iPad|iPod|Android)") {
             return 302 https://auth.${BASE_DOMAIN}/app/alleen-desktop;
@@ -25,15 +45,21 @@ server {
         return 200 '<!doctype html><meta charset="utf-8"><title>Globaal</title><body style="margin:0;display:grid;place-items:center;height:100vh;background:#1c1b18;color:#faf9f6;font:15px/1.5 -apple-system,Segoe UI,system-ui,sans-serif"><div style="max-width:22rem;padding:1.5rem;text-align:center"><h1 style="font-size:17px;margin:0 0 .6rem">Alleen voor computers</h1><p style="margin:0;color:#9b988e">De Globaal-app is er voor Windows en macOS. Open deze link op je laptop of desktop.</p></div>';
     }
 
-    # De installers zelf. Bestanden staan op de VM in ~/appportal/downloads.
-    # Alleen .exe en .dmg zijn bereikbaar, de rest van de map niet.
-    location ~ ^/app/bestanden/(?<installer>[A-Za-z0-9._-]+\.(?:exe|dmg))$ {
+    # De installers en het bijwerk-manifest. Bestanden staan op de VM in
+    # ~/appportal/downloads; alleen deze extensies zijn bereikbaar en alleen voor
+    # wie is aangemeld. De app stuurt bij het bijwerken de sessiecookie van de
+    # gebruiker mee, dus die komt hier net zo goed langs.
+    location ~ ^/app/bestanden/(?<installer>[A-Za-z0-9._-]+\.(?:exe|dmg|tar\.gz|json))$ {
+        auth_request /app/sessiecontrole;
+        error_page 401 403 = @app_aanmelden;
+
         alias /srv/downloads/$installer;
         add_header Content-Disposition "attachment";
         add_header Cache-Control "no-cache";
     }
 
-    # Scriptje dat de knop in de launcher tekent.
+    # Scriptje dat de knop in de launcher tekent. Bewust open: het staat toch in
+    # de HTML van de launcher en bevat niets gevoeligs.
     location = /app-knop.js {
         alias /srv/downloads/app-knop.js;
         default_type application/javascript;
