@@ -101,10 +101,17 @@ def pdf_tekst(b, max_blz=12):
         return f"(pdf niet leesbaar: {type(e).__name__})"
 
 
-def lees_bezoekmap(bezoekmap):
-    """Alle leesbare bestanden in de bezoekmap: [{naam, pad, tekst}], plus foto's en opnames (namen en paden)."""
+EIGEN_TEKSTEN = ("transcript.txt", "00 verslag.md", "00 fotos.md")
+
+
+def lees_bezoekmap(bezoekmap, alleen_eigen=False):
+    """Alle leesbare bestanden in de bezoekmap: [{naam, pad, tekst}], plus foto's en opnames (namen en paden).
+    alleen_eigen (keuze van Mehdi): uitsluitend zijn eigen materiaal van het bezoek: transcript.txt, 00 verslag.md,
+    00 fotos.md en de foto's in fotos/ (door de iCloud-wacht uit zijn telefoon gezet); documenten en foto's van derden
+    (bouwheer, aannemer) blijven buiten beschouwing, ook als ze in de map staan."""
     items = bronnen.lijst(bezoekmap) or []
     teksten, fotos, opnames = [], [], []
+    namen = {(e.get("name") or "").lower() for e in items}
     for e in items:
         if e.get(".tag") != "file":
             continue
@@ -112,6 +119,11 @@ def lees_bezoekmap(bezoekmap):
         laag = naam.lower()
         if laag.startswith(".") or "(concept)" in laag:
             continue
+        in_fotos = "/fotos/" in pad.lower()
+        if alleen_eigen and not (laag in EIGEN_TEKSTEN or in_fotos or laag.endswith((".mp3", ".m4a", ".wav"))):
+            continue
+        if in_fotos and laag.endswith(".heic") and (laag[:-5] + ".jpg") in namen:
+            continue  # de jpeg-kopie telt, niet het HEIC-origineel
         try:
             if laag.endswith((".jpg", ".jpeg", ".heic", ".png")):
                 fotos.append({"naam": naam, "pad": pad, "grootte": e.get("size", 0)})
@@ -128,6 +140,23 @@ def lees_bezoekmap(bezoekmap):
         except Exception as ex:  # noqa: BLE001
             teksten.append({"naam": naam, "pad": pad, "tekst": f"(niet leesbaar: {type(ex).__name__})"})
     return teksten, fotos, opnames
+
+
+EIGEN_REGEL = (" KEUZE VAN MEHDI: gebruik uitsluitend zijn eigen materiaal van dit bezoek: het transcript van het gesprek ter plaatse "
+               "en zijn eigen foto's (fotos/). Wat hij niet zelf gezien, gefotografeerd of ter plaatse besproken heeft, komt niet in "
+               "het verslag: geen historiek, geen documenten, facturen of foto's van de bouwheer of de aannemer, geen bedragen daaruit. "
+               "Beperk je tot vaststellingen ter plaatse en wat er besproken is; verwijs naar zijn foto's op bestandsnaam.")
+
+
+def fotolijst(fotos):
+    """De eigen foto's met tijd, als bron voor de schrijver: bestandsnaam 'UUMM xxxxxxxx.jpg' = uur en minuut van de opname."""
+    if not fotos:
+        return ""
+    regels = []
+    for f in fotos:
+        n = f["naam"]
+        regels.append(f"- {n} (om {n[:2]}:{n[2:4]})" if n[:4].isdigit() else f"- {n}")
+    return "\n\n### BRON: eigen foto's van Mehdi in fotos/ (verwijs met de bestandsnaam)\n" + "\n".join(regels)
 
 
 def bronnenbundel(teksten, maximum=MAX_BRON_TEKENS):
@@ -287,12 +316,15 @@ def _bewaar(rij, dossier, volgnr, **velden):
 def voorbereid(ag, dossier, volgnr):
     rij = _rij(dossier, volgnr)
     ag.log(f"{dossier}-{volgnr}", "bron", f"bezoekmap lezen: {rij['bezoekmap']}")
-    teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"])
-    ag.log(f"{dossier}-{volgnr}", "bron", f"{len(teksten)} tekstbron(nen), {len(fotos)} foto's, {len(opnames)} opname(s) gelezen",
+    eigen = (rij.get("keuzes") or {}).get("bronnen") == "eigen"
+    teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=eigen)
+    ag.log(f"{dossier}-{volgnr}", "bron", f"{len(teksten)} tekstbron(nen), {len(fotos)} foto's, {len(opnames)} opname(s) gelezen"
+           + (" (keuze van Mehdi: alleen eigen opname en foto's)" if eigen else ""),
            [t["naam"] + f" ({len(t['tekst'])} tekens)" for t in teksten])
     kop = (f"Dossier {dossier}, {rij.get('adres','')}. Werfbezoek {volgnr} op {rij['datum']}. "
-           f"Bezoekmap: {rij['bezoekmap']}. Foto's in de map: {len(fotos)}; opnames: {len(opnames)}.")
-    uit, usage = vraag_gegevens(kop, bronnenbundel(teksten))
+           f"Bezoekmap: {rij['bezoekmap']}. Foto's in de map: {len(fotos)}; opnames: {len(opnames)}."
+           + (EIGEN_REGEL if eigen else ""))
+    uit, usage = vraag_gegevens(kop, bronnenbundel(teksten) + fotolijst(fotos))
     uit["bronbestanden"] = [t["naam"] for t in teksten]
     uit["fotos_in_map"] = [f["naam"] for f in fotos]
     uit["opnames_in_map"] = opnames
@@ -324,6 +356,7 @@ def _fotos_verzamelen(teksten, fotos, verslag):
                 except Exception:  # noqa: BLE001
                     pass
     per_naam = {f["naam"]: f for f in fotos}
+    per_naam.update({os.path.basename(f["pad"]): f for f in fotos})
     for b in gevraagd:
         f = per_naam.get(b)
         if f and f["naam"].lower().endswith((".jpg", ".jpeg", ".png")) and f["grootte"] <= MAX_FOTO_BYTES:
@@ -371,7 +404,8 @@ def proef(ag, dossier, volgnr):
     keuzes = rij.get("keuzes") or {}
     verslagtype = keuzes.get("verslagtype") or gegevens.get("verslagtype_voorstel") or "werfverslag"
     taal = keuzes.get("taal") or "nl"
-    teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"])
+    eigen = keuzes.get("bronnen") == "eigen"
+    teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=eigen)
     vandaag = date.today().isoformat()
     nr_label = (rij.get("bronnen") or {}).get("nr_label") or str(volgnr)
     soort_bezoek = (rij.get("bronnen") or {}).get("soort_bezoek", "werfbezoek")
@@ -379,8 +413,10 @@ def proef(ag, dossier, volgnr):
            + (" (plaatsbezoek vóór de werfstart: geen werfverslagnummer, titel 'Verslag plaatsbezoek')" if soort_bezoek == "plaatsbezoek" else "") + ". "
            f"Verslagtype: {verslagtype}. Taal: {'Nederlands en Engels' if taal == 'nl+en' else 'alleen Nederlands (tekst_en en status_en leeg laten)'}. "
            f"Datum van opmaak: {vandaag}. Foto's in de map: {', '.join(f['naam'] for f in fotos) or 'geen'}; opnames: {', '.join(opnames) or 'geen'}.")
+    if eigen:
+        kop += EIGEN_REGEL
     ag.log(f"{dossier}-{volgnr}", "besluit", f"proef als {verslagtype}, taal {taal}, keuzes: {', '.join(k for k in keuzes if keuzes[k]) or 'geen'}")
-    uit, usage = vraag_verslag(kop, gegevens, keuzes, bronnenbundel(teksten))
+    uit, usage = vraag_verslag(kop, gegevens, keuzes, bronnenbundel(teksten) + fotolijst(fotos))
     if keuzes.get("aanwezigen"):
         uit["aanwezigen"] = keuzes["aanwezigen"]
     br = rij.get("bronnen") or {}

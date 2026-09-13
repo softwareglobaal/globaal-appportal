@@ -64,7 +64,7 @@
 <p class="stil">Jij beslist wat de schrijver niet mag raden. De rest vult het systeem in.</p>
 <form method="post" action="{{ url_for('werfbezoek_keuzes', dossier=b.dossier, volgnr=b.volgnr) }}">
   {% set k = b.keuzes %}
-  <div class="rij">
+  <div class="rij" style="grid-template-columns:1fr 1fr 1fr 1fr">
     <div class="veld"><label>Verslagtype {% if g.verslagtype_voorstel %}<span class="stil">(voorstel schrijver: {{ g.verslagtype_voorstel }})</span>{% endif %}</label>
       <select name="verslagtype">
         <option value="" {{ 'selected' if not k.verslagtype }}>volg het voorstel van de schrijver</option>
@@ -72,6 +72,8 @@
         <option value="vaststellingsverslag" {{ 'selected' if k.verslagtype=='vaststellingsverslag' }}>vaststellingsverslag (schade, geschil, met raming)</option>
         <option value="opleveringsverslag" {{ 'selected' if k.verslagtype=='opleveringsverslag' }}>opleveringsverslag</option>
       </select></div>
+    <div class="veld"><label>Bronnen</label>
+      <select name="bronnen"><option value="eigen" {{ 'selected' if k.bronnen!='alles' }}>alleen mijn eigen opname en foto's van het bezoek</option><option value="alles" {{ 'selected' if k.bronnen=='alles' }}>alles in de bezoekmap, ook documenten van derden</option></select></div>
     <div class="veld"><label>Taal</label>
       <select name="taal"><option value="nl" {{ 'selected' if k.taal!='nl+en' }}>Nederlands</option><option value="nl+en" {{ 'selected' if k.taal=='nl+en' }}>Nederlands en Engels (zoals Archisnapper)</option></select></div>
     <div class="veld"><label>Doorlopende punten (omgevingsloket, werfbezoeken, netheid, facturatie, veiligheid, EPB)</label>
