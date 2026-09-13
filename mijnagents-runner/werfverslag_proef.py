@@ -148,14 +148,10 @@ GEGEVENS_SCHEMA = {
     "input_schema": {
         "type": "object",
         "properties": {
-            "gegevens": {"type": "array", "items": {"type": "object", "properties": {
-                "veld": {"type": "string"},
-                "waarde": {"type": "string"},
-                "bron": {"type": "string", "description": "bestandsnaam en plaats waar het staat, of 'niet gevonden'"},
-                "zekerheid": {"type": "string", "enum": ["zeker", "na te kijken", "ontbreekt"]},
-            }, "required": ["veld", "waarde", "bron", "zekerheid"]}},
+            "verslagtype_voorstel": {"type": "string", "enum": ["werfverslag", "vaststellingsverslag", "opleveringsverslag"],
+                                     "description": "werfverslag bij lopende werken; vaststellingsverslag bij schade of geschil; opleveringsverslag bij oplevering"},
             "situatie": {"type": "string", "description": "de situatie op de werf in 5 tot 10 zinnen, alleen uit de bronnen"},
-            "onderdelen": {"type": "array", "description": "vaststellingen per bouwonderdeel", "items": {"type": "object", "properties": {
+            "onderdelen": {"type": "array", "description": "vaststellingen per bouwonderdeel, kort", "items": {"type": "object", "properties": {
                 "onderdeel": {"type": "string"},
                 "vaststellingen": {"type": "array", "items": {"type": "string"}},
                 "bron": {"type": "string"},
@@ -163,8 +159,12 @@ GEGEVENS_SCHEMA = {
             "acties": {"type": "array", "items": {"type": "object", "properties": {
                 "wie": {"type": "string"}, "wat": {"type": "string"}, "tegen": {"type": "string"}}, "required": ["wie", "wat"]}},
             "ontbreekt": {"type": "array", "items": {"type": "string"}, "description": "wat de architect nog moet aanleveren of nakijken vóór het verslag af is"},
-            "verslagtype_voorstel": {"type": "string", "enum": ["werfverslag", "vaststellingsverslag", "opleveringsverslag"],
-                                     "description": "werfverslag bij lopende werken; vaststellingsverslag bij schade of geschil; opleveringsverslag bij oplevering"},
+            "gegevens": {"type": "array", "description": "kort: waarde in één regel, bron in één regel", "items": {"type": "object", "properties": {
+                "veld": {"type": "string"},
+                "waarde": {"type": "string"},
+                "bron": {"type": "string", "description": "bestandsnaam en plaats waar het staat, of 'niet gevonden'"},
+                "zekerheid": {"type": "string", "enum": ["zeker", "na te kijken", "ontbreekt"]},
+            }, "required": ["veld", "waarde", "bron", "zekerheid"]}},
         },
         "required": ["gegevens", "situatie", "onderdelen", "acties", "ontbreekt", "verslagtype_voorstel"],
     },
@@ -251,17 +251,20 @@ def _tool(resp):
 
 
 def vraag_gegevens(kop, bundel):
-    resp = _client().messages.create(model=MODEL, max_tokens=6000, system=SYSTEEM_VOORBEREID,
+    resp = _client().messages.create(model=MODEL, max_tokens=14000, system=SYSTEEM_VOORBEREID,
                                      messages=[{"role": "user", "content": kop + "\n\n" + bundel}],
                                      tools=[GEGEVENS_SCHEMA], tool_choice={"type": "tool", "name": "gegevens"})
-    return _tool(resp), resp.usage
+    uit = _tool(resp)
+    if resp.stop_reason == "max_tokens":
+        uit["_afgekapt"] = True
+    return uit, resp.usage
 
 
 def vraag_verslag(kop, gegevens, keuzes, bundel):
     user = (kop + "\n\n## KEUZES VAN MEHDI\n" + json.dumps(keuzes, ensure_ascii=False, indent=1)
             + "\n\n## GEGEVENS (uit de voorbereiding, met bron en zekerheid)\n" + json.dumps(gegevens, ensure_ascii=False, indent=1)
             + "\n\n## BRONNEN\n" + bundel)
-    resp = _client().messages.create(model=MODEL, max_tokens=12000, system=SYSTEEM_PROEF,
+    resp = _client().messages.create(model=MODEL, max_tokens=16000, system=SYSTEEM_PROEF,
                                      messages=[{"role": "user", "content": user}],
                                      tools=[VERSLAG_SCHEMA], tool_choice={"type": "tool", "name": "werfverslag"})
     return _tool(resp), resp.usage
@@ -293,9 +296,10 @@ def voorbereid(ag, dossier, volgnr):
     uit["bronbestanden"] = [t["naam"] for t in teksten]
     uit["fotos_in_map"] = [f["naam"] for f in fotos]
     uit["opnames_in_map"] = opnames
-    ag.log(f"{dossier}-{volgnr}", "bevinding", f"{len(uit.get('gegevens', []))} gegevens, {len(uit.get('onderdelen', []))} onderdelen, "
+    ag.log(f"{dossier}-{volgnr}", "bevinding" if not uit.get("_afgekapt") else "fout",
+           f"{len(uit.get('gegevens', []))} gegevens, {len(uit.get('onderdelen', []))} onderdelen, "
            f"{len(uit.get('ontbreekt', []))} open punten; voorstel verslagtype: {uit.get('verslagtype_voorstel')} "
-           f"({usage.input_tokens}+{usage.output_tokens} tokens)")
+           f"({usage.input_tokens}+{usage.output_tokens} tokens{'; AFGEKAPT op max_tokens' if uit.get('_afgekapt') else ''})")
     bijlagen = [{"naam": t["naam"], "pad": t["pad"], "soort": "document", "tekens": len(t["tekst"])} for t in teksten] + \
                [{"naam": f["naam"], "pad": f["pad"], "soort": "foto", "grootte": f["grootte"]} for f in fotos] + \
                [{"naam": o, "soort": "opname"} for o in opnames]
