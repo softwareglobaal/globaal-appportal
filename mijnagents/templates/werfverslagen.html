@@ -39,13 +39,13 @@ Werfverslag voorbereider verifieert (controle), geeft door aan Werfverslag schri
 {% if not dossiers %}<p class="stil">Nog geen dossiers. Vraag De Regisseur een dossier te volgen, of: <code>werfverslag_voorbereider.py --project 2309</code>.</p>{% endif %}
 
 {% for d in dossiers %}
-<h2>{{ d.dossier }} · {{ d.adres }} <span class="stil" style="text-transform:none;letter-spacing:0;font-weight:400">({{ d.soort }}-project, {{ d.bezoeken|length }} bezoek(en))</span></h2>
+<h2>{{ d.dossier }} · {{ d.adres }} <span class="stil" style="text-transform:none;letter-spacing:0;font-weight:400">({{ d.soort }}-project, {{ d.bezoeken|selectattr('volgnr')|list|length }} bezoek(en){% if d.bezoeken and d.bezoeken[0].bronnen.werfstart %}, werfstart {{ d.bezoeken[0].bronnen.werfstart }}{% endif %})</span></h2>
 <table>
   <tr><th>Nr</th><th>Bezoek</th><th>Bronnen</th><th>Stand</th><th>Wat nog nodig is</th><th></th></tr>
   {% for b in d.bezoeken %}
   <tr>
-    <td><strong>{{ d.dossier }}-{{ b.volgnr }}</strong></td>
-    <td>{{ b.datum }}<br><span class="stil">{{ b.bronnen.bron_map }}</span></td>
+    <td><strong>{{ d.dossier }}-{{ b.bronnen.nr_label or b.volgnr }}</strong>{% if b.bronnen.soort_bezoek == 'plaatsbezoek' %}<br><span class="stil">plaatsbezoek</span>{% endif %}</td>
+    <td>{{ b.datum or '—' }}<br><span class="stil">{{ b.bronnen.bron_map or b.stand }}</span></td>
     <td class="stil">{{ b.bronnen.fotos or 0 }} foto's · {{ b.bronnen.opnames|length }} opname(s) · {{ b.bronnen.transcripten|length }} transcript(en) · {{ (b.bronnen.notities|length) + (b.bronnen.verslagen|length) }} document(en)</td>
     <td>
       {% if b.fase == 'te vervolledigen' %}<span class="let_op">te vervolledigen</span>
@@ -55,6 +55,7 @@ Werfverslag voorbereider verifieert (controle), geeft door aan Werfverslag schri
     </td>
     <td>{% if b.nodig %}{{ b.nodig|join(', ') }}{% else %}<span class="stil">niets — nakijken en versturen</span>{% endif %}</td>
     <td style="white-space:nowrap">
+      {% if b.volgnr %}
       {# Vaste knoppenrij, zoals in het contractsysteem (D25): Openen · Keuzes · Bijlagen · Proef · Herkomst · Controle #}
       <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr) }}">Openen</a>
       <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr, tab='keuzes') }}#keuzes">Keuzes</a>
@@ -62,6 +63,7 @@ Werfverslag voorbereider verifieert (controle), geeft door aan Werfverslag schri
       <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr, tab='proef') }}#proef">Proef</a>
       <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr, tab='herkomst') }}#herkomst">Herkomst</a>
       <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr, tab='controle') }}#controle">Controle</a>
+      {% else %}<span class="stil">wacht op het eerste bezoek</span>{% endif %}
     </td>
   </tr>
   {% endfor %}

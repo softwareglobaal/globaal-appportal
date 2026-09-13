@@ -52,6 +52,33 @@ DATUM_PAT = re.compile(r"(20\d{2})[-_. ]?(\d{2})[-_. ]?(\d{2})")
 AGENDAWACHT_SINDS = "2026-09-09"
 
 ag = bord.Agent(NAAM)
+DOSSIERS_PAD = os.path.expanduser("~/appportal/mijnagents-data/werfverslag_dossiers.json")
+
+
+def dossiers_lezen():
+    """Per dossier wat Mehdi vastlegde: werfstart (JJJJ-MM-DD). Bezoeken vóór de werfstart zijn plaatsbezoeken
+    (PB1, PB2, ...) zonder werfverslagnummer (A7/A8); bezoeken vanaf de werfstart tellen als werfbezoek 1, 2, 3."""
+    try:
+        return json.load(open(DOSSIERS_PAD))
+    except (OSError, ValueError):
+        return {}
+
+
+def dossiers_schrijven(d):
+    json.dump(d, open(DOSSIERS_PAD, "w"), ensure_ascii=False, indent=1)
+
+
+def nummer_bezoeken(bezoeken, werfstart):
+    """Zet volgnr (uniek, oplopend), nr_label (PB1.. of 1..) en soort_bezoek."""
+    pb, wb = 0, 0
+    for b in sorted(bezoeken, key=lambda m: (m["datum"], m["map"])):
+        if werfstart and b["datum"] < werfstart:
+            pb += 1
+            b["soort_bezoek"], b["nr_label"], b["werfnr"] = "plaatsbezoek", f"PB{pb}", 0
+        else:
+            wb += 1
+            b["soort_bezoek"], b["nr_label"], b["werfnr"] = "werfbezoek", str(wb), wb
+    return bezoeken
 
 
 # ------------------------------------------------------------- hulpjes ---
@@ -260,7 +287,10 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
     else:
         post("W11", "voorbereiding door de schrijver", "ok", "gegevens met herkomst staan op de bezoekpagina; Keuzes en Proef zijn aan Mehdi")
     # W8 verslagnummer
-    post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek['volgnr']} (bezoek {bezoek['volgnr']} in volgorde van de mappen)")
+    if bezoek.get("soort_bezoek") == "plaatsbezoek":
+        post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek['nr_label']}: plaatsbezoek vóór de werfstart, geen werfverslagnummer (A7/A8)")
+    else:
+        post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek.get('nr_label', bezoek['volgnr'])} (werfbezoek {bezoek.get('nr_label', bezoek['volgnr'])} sinds de werfstart)")
     # W9 verstuurd
     post("W9", "verstuurd aan de klant", "onbekend", "alleen uit de mail af te lezen; de Mailwacht mch@ koppelt nog niet aan dossiers")
     if bezoek["notities"]:
@@ -286,7 +316,10 @@ def verwerk(nummer, droog=False):
     adres = adres_uit_mapnaam(os.path.basename(projectmap))
     ag.log(str(nummer), "bron", f"projectmap ({soort}): {projectmap}", {"adres": adres})
     bezoeken = bezoeken_in(projectmap)
-    ag.log(str(nummer), "bevinding", f"{len(bezoeken)} bezoek(en) in de mappen: " + ", ".join(b["datum"] for b in bezoeken))
+    werfstart = (dossiers_lezen().get(str(nummer)) or {}).get("werfstart", "")
+    bezoeken = nummer_bezoeken(bezoeken, werfstart)
+    ag.log(str(nummer), "bevinding", f"{len(bezoeken)} bezoek(en) in de mappen: " + ", ".join(f"{b['nr_label']} {b['datum']}" for b in bezoeken)
+           + (f"; werfstart {werfstart}" if werfstart else "; geen werfstart bekend"))
     bak = klaargezet(nummer)
     try:
         bord_rijen = {r.get("bezoekmap"): r for r in bord.call(f"/api/werfbezoek?dossier={nummer}").get("rijen", [])}
@@ -296,7 +329,7 @@ def verwerk(nummer, droog=False):
     if not bezoeken:
         # dossier gevolgd zonder bezoek (bv. werf start binnenkort): een rij met volgnummer 0, zodat het op de pagina staat
         rijen.append({"dossier": str(nummer), "adres": adres, "soort_project": soort, "projectmap": projectmap, "bezoekmap": "",
-                      "datum": "", "volgnr": 0, "bronnen": {}, "taken": [], "stand": "gevolgd, nog geen bezoekmap",
+                      "datum": "", "volgnr": 0, "bronnen": {"werfstart": werfstart}, "taken": [], "stand": "gevolgd, nog geen bezoekmap" + (f"; werfstart {werfstart}" if werfstart else ""),
                       "controles": [{"code": "W2", "naam": "projectmap gevonden", "stand": "ok", "toelichting": f"{soort}: {projectmap}"},
                                     {"code": "W3", "naam": "bezoekmap", "stand": "ontbreekt", "toelichting": "nog geen momentmap met een werf- of plaatsbezoek; na het eerste bezoek maakt de skill werfverslag de map aan"}]})
         ag.log(str(nummer), "bevinding", "nog geen bezoekmap; dossier wordt gevolgd tot het eerste bezoek")
@@ -313,7 +346,8 @@ def verwerk(nummer, droog=False):
         alle_taken += taakrijen
         rijen.append({"dossier": str(nummer), "adres": adres, "soort_project": soort, "projectmap": projectmap,
                       "bezoekmap": b["map"], "datum": b["datum"], "volgnr": b["volgnr"],
-                      "bronnen": {k: b[k] for k in ("fotos", "opnames", "transcripten", "verslagen", "notities", "bestanden", "bron_map")},
+                      "bronnen": {**{k: b[k] for k in ("fotos", "opnames", "transcripten", "verslagen", "notities", "bestanden", "bron_map")},
+                                  "nr_label": b["nr_label"], "soort_bezoek": b["soort_bezoek"], "werfstart": werfstart},
                       "controles": controles, "taken": [{"voor": t["voor"], "titel": t["titel"], "uniek": t["uniek"]} for t in taakrijen],
                       "stand": stand_van(controles)})
         ag.log(str(nummer), "bevinding", f"bezoek {b['volgnr']} ({b['datum']}): {rijen[-1]['stand']}; "
@@ -342,7 +376,13 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--project", nargs="*", default=[], help="dossiernummers")
     p.add_argument("--droog", action="store_true")
+    p.add_argument("--werfstart", nargs=2, metavar=("DOSSIER", "JJJJ-MM-DD"), help="werfstart van een dossier vastleggen")
     a = p.parse_args()
+    if a.werfstart:
+        d = dossiers_lezen(); d.setdefault(a.werfstart[0], {})["werfstart"] = a.werfstart[1]; dossiers_schrijven(d)
+        print(f"werfstart {a.werfstart[0]} = {a.werfstart[1]}")
+        if a.werfstart[0] not in a.project:
+            a.project.append(a.werfstart[0])
     nummers = [n for n in a.project if re.fullmatch(r"\d{4}", n)]
     nummers += [n for n in open_dossiers() if n not in nummers]
     ag.hartslag("actief", taak="ronde gestart", detail=f"{len(nummers)} dossier(s)")

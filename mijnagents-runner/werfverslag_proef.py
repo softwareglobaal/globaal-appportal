@@ -373,14 +373,19 @@ def proef(ag, dossier, volgnr):
     taal = keuzes.get("taal") or "nl"
     teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"])
     vandaag = date.today().isoformat()
-    kop = (f"Dossier {dossier}, {rij.get('adres','')}. Werfbezoek {volgnr} op {rij['datum']}; verslagnummer {dossier}-{volgnr}. "
+    nr_label = (rij.get("bronnen") or {}).get("nr_label") or str(volgnr)
+    soort_bezoek = (rij.get("bronnen") or {}).get("soort_bezoek", "werfbezoek")
+    kop = (f"Dossier {dossier}, {rij.get('adres','')}. {soort_bezoek.capitalize()} {nr_label} op {rij['datum']}; verslagnummer {dossier}-{nr_label}"
+           + (" (plaatsbezoek vóór de werfstart: geen werfverslagnummer, titel 'Verslag plaatsbezoek')" if soort_bezoek == "plaatsbezoek" else "") + ". "
            f"Verslagtype: {verslagtype}. Taal: {'Nederlands en Engels' if taal == 'nl+en' else 'alleen Nederlands (tekst_en en status_en leeg laten)'}. "
            f"Datum van opmaak: {vandaag}. Foto's in de map: {', '.join(f['naam'] for f in fotos) or 'geen'}; opnames: {', '.join(opnames) or 'geen'}.")
     ag.log(f"{dossier}-{volgnr}", "besluit", f"proef als {verslagtype}, taal {taal}, keuzes: {', '.join(k for k in keuzes if keuzes[k]) or 'geen'}")
     uit, usage = vraag_verslag(kop, gegevens, keuzes, bronnenbundel(teksten))
     if keuzes.get("aanwezigen"):
         uit["aanwezigen"] = keuzes["aanwezigen"]
-    verslag = {"dossier": dossier, "bezoek": volgnr, "adres": rij.get("adres", ""), "datum": rij["datum"], "opgemaakt": vandaag,
+    br = rij.get("bronnen") or {}
+    verslag = {"dossier": dossier, "bezoek": br.get("nr_label") or str(volgnr), "soort_bezoek": br.get("soort_bezoek", "werfbezoek"),
+               "adres": rij.get("adres", ""), "datum": rij["datum"], "opgemaakt": vandaag,
                "verslagtype": verslagtype, "bronnen_kort": f"{len(teksten)} document(en), {len(fotos)} foto's en {len(opnames)} opname(s) in de bezoekmap",
                "status_nl": uit.get("status_nl", ""), "status_en": uit.get("status_en", "") if taal == "nl+en" else "",
                "aanwezigen": uit.get("aanwezigen", []), "raming": uit.get("raming", []) if verslagtype == "vaststellingsverslag" else [],
@@ -393,7 +398,7 @@ def proef(ag, dossier, volgnr):
     beelden = _fotos_verzamelen(teksten, fotos, verslag)
     md = sjab.naar_markdown(verslag)
     docx = sjab.naar_docx(verslag, beelden)
-    naam = f"{dossier}-{volgnr} werfverslag (concept)"
+    naam = f"{dossier}-{verslag['bezoek']} {'verslag plaatsbezoek' if verslag['soort_bezoek'] == 'plaatsbezoek' else 'werfverslag'} (concept)"
     pad_md = bronnen.upload(f"{rij['bezoekmap']}/{naam}.md", md.encode("utf8"))
     pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
     telling = sjab.telling_open(md)

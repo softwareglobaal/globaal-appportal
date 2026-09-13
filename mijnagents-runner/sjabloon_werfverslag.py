@@ -78,7 +78,7 @@ def datum_nl(iso):
 def naar_markdown(v):
     r = []
     nr, n = v["dossier"], v["bezoek"]
-    r.append(f"# Werfverslag {n} voor project {nr} {v['adres']}")
+    r.append(f"# {'Verslag plaatsbezoek' if v.get('soort_bezoek') == 'plaatsbezoek' else 'Werfverslag'} {n} voor project {nr} {v['adres']}")
     r.append("")
     r.append(f"**CONCEPT** - opgemaakt op {v['opgemaakt']} door Werfverslag schrijver uit {v.get('bronnen_kort', 'de bezoekmap')}. "
              "Na te kijken en aan te vullen door Mehdi Chegini vóór verzending.")
@@ -199,7 +199,7 @@ def naar_docx(v, fotos=None):
     p = doc.add_paragraph()
     r = p.add_run(FIRMA["naam"]); r.bold = True; r.font.size = Pt(12)
     p.add_run(f"\n{FIRMA['adres']}\n{FIRMA['btw']}").font.size = Pt(9)
-    kop(f"Werfverslag {n} voor project {nr} {v['adres']}", 0)
+    kop(f"{'Verslag plaatsbezoek' if v.get('soort_bezoek') == 'plaatsbezoek' else 'Werfverslag'} {n} voor project {nr} {v['adres']}", 0)
     p = doc.add_paragraph()
     p.add_run("CONCEPT").bold = True
     p.add_run(f" - opgemaakt op {v['opgemaakt']} door Werfverslag schrijver uit {v.get('bronnen_kort', 'de bezoekmap')}. "

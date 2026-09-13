@@ -43,8 +43,8 @@
   <span class="sub"><a href="{{ url_for('werfverslagen_pagina') }}">&larr; alle dossiers</a> · <a href="{{ url_for('bord') }}">bord</a></span>
 </header>
 <main>
-<h1>{{ b.dossier }}-{{ b.volgnr }} — {{ b.adres }}</h1>
-<p class="stil">Werfbezoek {{ b.volgnr }} van {{ b.datum }} · {{ b.soort_project }}-project · gemeten {{ b.ts[:16].replace('T',' ') }} UTC</p>
+<h1>{{ b.dossier }}-{{ b.bronnen.nr_label or b.volgnr }} — {{ b.adres }}</h1>
+<p class="stil">{{ 'Plaatsbezoek' if b.bronnen.soort_bezoek == 'plaatsbezoek' else 'Werfbezoek' }} {{ b.bronnen.nr_label or b.volgnr }} van {{ b.datum }} · {{ b.soort_project }}-project · gemeten {{ b.ts[:16].replace('T',' ') }} UTC</p>
 
 <div style="background:{{ '#edf2ef' if b.heeft_proef else ('#fbf3e3' if b.voorbereid else '#f7e8e5') }}; border:1px solid {{ '#1f3d33' if b.heeft_proef else ('#a1701a' if b.voorbereid else '#a33a2a') }}; border-radius:4px; padding:12px 16px; margin:14px 0 6px;">
   <strong style="font-size:16px;">
