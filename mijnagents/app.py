@@ -993,11 +993,11 @@ def gezondheid():
 
 init_db()
 
-# --- werfverslagen: de pagina's van De Werfverslaggever. Per dossier en per bezoek de
-#     controleposten W1-W10, de taken die hij bij collega-agents uitzette en of die
-#     opgepakt zijn; per bezoek een dossierpagina in de logica van het contractsysteem
-#     (gegevens met herkomst, controles, bronnen, proef). Alleen beheer.
-WERF_KOLOMMEN = ("gegevens", "verslag_md", "proef_pad", "proef_ts")
+# --- werfverslagen: de pagina's van De Werfverslaggever en De Werfverslagschrijver, in de logica
+#     van het contractsysteem: per dossier en per bezoek een rij met Openen · Keuzes · Bijlagen ·
+#     Proef · Herkomst · Controle. Alleen beheer (dossiernummers en adressen zijn inhoud).
+WERF_KOLOMMEN = ("gegevens", "verslag_md", "proef_pad", "proef_ts", "keuzes", "bijlagen", "proef_info")
+WERF_JSON = {"gegevens": {}, "keuzes": {}, "bijlagen": [], "proef_info": {}, "bronnen": {}, "controles": [], "taken": []}
 
 
 def _werfbezoek_tabel(conn):
@@ -1046,7 +1046,7 @@ def api_werfbezoek():
         sleutel = (str(r["dossier"])[:10], (r.get("bezoekmap") or "")[:500], r["datum"][:10])
         alleen = r.get("_alleen")
         if alleen:
-            # gerichte bijwerking (voorbereiding, proef): alleen die kolommen, de verificatie blijft staan
+            # gerichte bijwerking (voorbereiding, proef, keuzes): alleen die kolommen, de verificatie blijft staan
             velden = {k: r.get(k) for k in alleen if k in WERF_KOLOMMEN}
             for k, v in velden.items():
                 velden[k] = json.dumps(v, ensure_ascii=False) if not isinstance(v, str) else v
@@ -1070,6 +1070,13 @@ def api_werfbezoek():
     return jsonify(ok=True, rijen=n)
 
 
+def _werf_dict(r):
+    d = dict(r)
+    for k, leeg in WERF_JSON.items():
+        d[k] = _json(d.get(k), leeg)
+    return d
+
+
 @app.route("/api/werfbezoek")
 def api_werfbezoek_lezen():
     if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
@@ -1080,14 +1087,7 @@ def api_werfbezoek_lezen():
         q, a = "SELECT * FROM werfbezoek WHERE dossier=?", [request.args["dossier"]]
         if request.args.get("volgnr"):
             q += " AND volgnr=?"; a.append(int(request.args["volgnr"]))
-        rijen = []
-        for r in conn.execute(q + " ORDER BY volgnr", a).fetchall():
-            d = dict(r)
-            d["gegevens"] = _json(d.get("gegevens"), {})
-            d["bronnen"] = _json(d.get("bronnen"), {})
-            d["controles"] = _json(d.get("controles"), [])
-            rijen.append(d)
-        return jsonify(rijen=rijen)
+        return jsonify(rijen=[_werf_dict(r) for r in conn.execute(q + " ORDER BY volgnr", a).fetchall()])
     q = "SELECT dossier, MAX(ts) AS ts, COUNT(*) AS bezoeken FROM werfbezoek"
     if request.args.get("open"):
         q += " WHERE open=1"
@@ -1095,43 +1095,9 @@ def api_werfbezoek_lezen():
     return jsonify(dossiers=[dict(r) for r in conn.execute(q).fetchall()])
 
 
-def _werf_rij(d, taak_status):
-    for k in ("bronnen", "controles", "taken"):
-        d[k] = _json(d.get(k), [] if k != "bronnen" else {})
-    d["gegevens"] = _json(d.get("gegevens"), {})
-    for t in d["taken"]:
-        s = taak_status.get(t.get("uniek"))
-        t["status"] = (s["status"] if s else "niet klaargezet")
-        t["door"] = (s["opgepakt_door"] if s else "")
-    d["ok"] = sum(1 for c in d["controles"] if c["stand"] == "ok")
-    d["ontbreekt"] = sum(1 for c in d["controles"] if c["stand"] == "ontbreekt")
-    return d
-
-
 def _taak_status(conn):
     return {r["uniek"]: dict(r) for r in conn.execute(
-        "SELECT uniek, status, opgepakt_door, opgepakt_ts, voor FROM klaarzet WHERE soort='taak' AND van='werfverslaggever'").fetchall()}
-
-
-@app.route("/werfverslagen")
-def werfverslagen_pagina():
-    if not mag_beslissen():
-        abort(403)
-    conn = db()
-    _werfbezoek_tabel(conn)
-    taak_status = _taak_status(conn)
-    dossiers = {}
-    for r in conn.execute("SELECT * FROM werfbezoek WHERE open=1 ORDER BY dossier, datum, volgnr").fetchall():
-        d = _werf_rij(dict(r), taak_status)
-        ds = dossiers.setdefault(d["dossier"], {"dossier": d["dossier"], "adres": d["adres"], "soort": d["soort_project"],
-                                                "projectmap": d["projectmap"], "bezoeken": [], "ts": d["ts"]})
-        ds["bezoeken"].append(d)
-        ds["ts"] = max(ds["ts"], d["ts"])
-    noden = [dict(r) for r in conn.execute("SELECT tekst, wie, ts FROM nood WHERE naam='werfverslaggever' AND open=1 ORDER BY id").fetchall()]
-    st = conn.execute("SELECT * FROM status WHERE naam='werfverslaggever'").fetchone()
-    codes = ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10"]
-    return render_template("werfverslagen.html", app_naam=APP_NAAM, dossiers=list(dossiers.values()), noden=noden,
-                           status=dict(st) if st else None, codes=codes)
+        "SELECT uniek, status, opgepakt_door, opgepakt_ts, voor FROM klaarzet WHERE soort IN ('taak','opdracht') AND van='werfverslaggever'").fetchall()}
 
 
 # Vertaling van de standen van de agent naar de tekens van de dossiercontrole (contractsysteem).
@@ -1141,9 +1107,71 @@ WERF_ACTIE = {
     "W4": "iCloud-wacht: foto's van die dag binnen 300 m klaarzetten; of foto's van de klant in de bezoekmap zetten",
     "W5": "Plaudwacht: opname van die dag koppelen; geen opname = verslag uit geheugen (E8)",
     "W6": "Plaudwacht: transcript maken of ophalen",
-    "W7": "Proef maken op deze pagina, daarna nakijken",
+    "W7": "Keuzes bewaren en Proef maken; De Werfverslagschrijver schrijft het concept",
     "W9": "Mailwacht: verzending aan de klant terugvinden",
+    "W11": "De Werfverslagschrijver bereidt voor (opdracht staat klaar), daarna Keuzes en Proef",
 }
+
+
+def _werf_rij(d, taak_status):
+    for t in d["taken"]:
+        s = taak_status.get(t.get("uniek"))
+        t["status"] = (s["status"] if s else "niet klaargezet")
+        t["door"] = (s["opgepakt_door"] if s else "")
+    d["controle_rijen"] = []
+    for c in d["controles"]:
+        st = WERF_STAND.get(c["stand"], "onbekend")
+        d["controle_rijen"].append({"nummer": c["code"], "titel": c["naam"], "status": st, "bevinding": c["toelichting"],
+                                    "actie": WERF_ACTIE.get(c["code"], "") if st != "ok" else ""})
+    d["telling"] = {k: sum(1 for c in d["controle_rijen"] if c["status"] == k) for k in ("ok", "let_op", "fout", "onbekend")}
+    g = d["gegevens"] or {}
+    for x in g.get("gegevens", []):
+        x["status"] = {"zeker": "ok", "na te kijken": "let_op", "ontbreekt": "fout"}.get(x.get("zekerheid"), "onbekend")
+    d["voorbereid"] = bool(g.get("gegevens"))
+    d["heeft_proef"] = bool(d.get("proef_pad"))
+    d["heeft_keuzes"] = bool(d["keuzes"])
+    # wat nog nodig is, in de woorden van het contractdashboard
+    nodig = []
+    if not d["voorbereid"]:
+        nodig.append("voorbereiding door de schrijver")
+    elif not d["heeft_keuzes"]:
+        nodig.append("keuzes van Mehdi")
+    if not d["heeft_proef"]:
+        nodig.append("proef")
+    else:
+        op = (d["proef_info"] or {}).get("open") or {}
+        if isinstance(op, dict) and any(op.values()):
+            nodig.append(f"nakijken: {op.get('in_te_vullen', 0)} in te vullen, {op.get('na_te_kijken', 0)} na te kijken")
+    for c in d["controle_rijen"]:
+        if c["status"] == "fout" and c["nummer"] in ("W4", "W5", "W6"):
+            nodig.append(c["titel"])
+    d["nodig"] = nodig
+    if d["heeft_proef"]:
+        d["fase"] = "proef klaar, nakijken"
+    elif d["voorbereid"]:
+        d["fase"] = "te controleren"
+    else:
+        d["fase"] = "te vervolledigen"
+    return d
+
+
+@app.route("/werfverslagen")
+def werfverslagen_pagina():
+    if not mag_beslissen():
+        abort(403)
+    conn = db()
+    _werfbezoek_tabel(conn)
+    taak_status = _taak_status(conn)
+    rijen = [_werf_rij(_werf_dict(r), taak_status) for r in conn.execute("SELECT * FROM werfbezoek WHERE open=1 ORDER BY dossier, datum, volgnr").fetchall()]
+    dossiers = {}
+    for d in rijen:
+        ds = dossiers.setdefault(d["dossier"], {"dossier": d["dossier"], "adres": d["adres"], "soort": d["soort_project"],
+                                                "projectmap": d["projectmap"], "bezoeken": []})
+        ds["bezoeken"].append(d)
+    noden = [dict(r) for r in conn.execute("SELECT naam, tekst, wie, ts FROM nood WHERE naam IN ('werfverslaggever','werfverslagschrijver') AND open=1 ORDER BY id").fetchall()]
+    st = {r["naam"]: dict(r) for r in conn.execute("SELECT * FROM status WHERE naam IN ('werfverslaggever','werfverslagschrijver')").fetchall()}
+    return render_template("werfverslagen.html", app_naam=APP_NAAM, dossiers=list(dossiers.values()), noden=noden, status=st,
+                           gebruiker=gebruiker())
 
 
 @app.route("/werfverslag/<dossier>/<int:volgnr>")
@@ -1155,32 +1183,44 @@ def werfbezoek_pagina(dossier, volgnr):
     r = conn.execute("SELECT * FROM werfbezoek WHERE dossier=? AND volgnr=? ORDER BY id DESC LIMIT 1", (dossier, volgnr)).fetchone()
     if not r:
         abort(404)
-    b = _werf_rij(dict(r), _taak_status(conn))
-    controles = []
-    for c in b["controles"]:
-        st = WERF_STAND.get(c["stand"], "onbekend")
-        controles.append({"nummer": c["code"], "titel": c["naam"], "status": st, "bevinding": c["toelichting"],
-                          "actie": WERF_ACTIE.get(c["code"], "") if st != "ok" else ""})
-    telling = {k: sum(1 for c in controles if c["status"] == k) for k in ("ok", "let_op", "fout", "onbekend")}
-    g = b["gegevens"] or {}
-    for x in g.get("gegevens", []):
-        x["status"] = {"zeker": "ok", "na te kijken": "let_op", "ontbreekt": "fout"}.get(x.get("zekerheid"), "onbekend")
+    b = _werf_rij(_werf_dict(r), _taak_status(conn))
     open_opdr = [dict(x) for x in conn.execute(
-        "SELECT id, titel, status, ts FROM klaarzet WHERE soort='opdracht' AND voor='werfverslaggever' AND sleutel=? ORDER BY id DESC LIMIT 6",
+        "SELECT id, titel, status, ts, van FROM klaarzet WHERE soort='opdracht' AND voor='werfverslagschrijver' AND sleutel=? ORDER BY id DESC LIMIT 6",
         (f"{dossier}-{volgnr}",)).fetchall()]
     logboek = [dict(x) for x in conn.execute(
-        "SELECT stap, tekst, ts FROM logboek WHERE naam='werfverslaggever' AND onderwerp IN (?, ?) ORDER BY id DESC LIMIT 25",
+        "SELECT naam, stap, tekst, ts FROM logboek WHERE naam IN ('werfverslaggever','werfverslagschrijver') AND onderwerp IN (?, ?) ORDER BY id DESC LIMIT 30",
         (f"{dossier}-{volgnr}", dossier)).fetchall()]
-    klaar_voor_proef = bool(g.get("gegevens"))
-    return render_template("werfbezoek.html", app_naam=APP_NAAM, b=b, controles=controles, telling=telling, g=g,
-                           opdrachten=open_opdr, logboek=logboek, klaar_voor_proef=klaar_voor_proef,
-                           verslag_html=md(b.get("verslag_md") or "") if b.get("verslag_md") else "")
+    return render_template("werfbezoek.html", app_naam=APP_NAAM, b=b, g=b["gegevens"], opdrachten=open_opdr, logboek=logboek,
+                           verslag_html=md(b.get("verslag_md") or "") if b.get("verslag_md") else "", tab=request.args.get("tab", ""))
+
+
+@app.route("/werfverslag/<dossier>/<int:volgnr>/keuzes", methods=["POST"])
+def werfbezoek_keuzes(dossier, volgnr):
+    """Keuzes van Mehdi (zoals Keuzes in het contractsysteem): verslagtype, taal, doorlopende punten,
+    aanwezigen, opmerking voor de schrijver. Bewaard op de rij; de schrijver leest ze bij de proef."""
+    if not mag_beslissen():
+        abort(403)
+    conn = db()
+    _werfbezoek_tabel(conn)
+    f = request.form
+    aanwezigen = []
+    for regel in (f.get("aanwezigen") or "").splitlines():
+        delen = [x.strip() for x in regel.split("|")]
+        if len(delen) >= 3 and any(delen):
+            while len(delen) < 5:
+                delen.append("")
+            aanwezigen.append({"rol": delen[0], "firma": delen[1], "naam": delen[2], "contact": delen[3], "aanwezig": delen[4] or "ja"})
+    keuzes = {"verslagtype": f.get("verslagtype", ""), "taal": f.get("taal", "nl"), "doorlopend": f.get("doorlopend", "ja"),
+              "aanwezigen": aanwezigen, "opmerking": (f.get("opmerking") or "")[:2000], "door": gebruiker(), "ts": nu()}
+    conn.execute("UPDATE werfbezoek SET keuzes=?, ts=? WHERE dossier=? AND volgnr=?", (json.dumps(keuzes, ensure_ascii=False), nu(), dossier, volgnr))
+    conn.commit()
+    return redirect(url_for("werfbezoek_pagina", dossier=dossier, volgnr=volgnr, tab="keuzes"))
 
 
 @app.route("/werfverslag/<dossier>/<int:volgnr>/opdracht", methods=["POST"])
 def werfbezoek_opdracht(dossier, volgnr):
-    """Knop op de bezoekpagina: zet een opdracht klaar voor De Werfverslaggever (voorbereid | proef).
-    De agent voert ze uit in zijn opdrachtenronde (cron elke 5 min) en meldt bewijs in zijn werkverslag."""
+    """Knop op de bezoekpagina: zet een opdracht klaar voor De Werfverslagschrijver (voorbereid | proef).
+    Hij voert ze uit in zijn opdrachtenronde (cron elke 5 min) en meldt bewijs in zijn werkverslag."""
     if not mag_beslissen():
         abort(403)
     soort = request.form.get("soort", "")
@@ -1188,10 +1228,10 @@ def werfbezoek_opdracht(dossier, volgnr):
         abort(400)
     conn = db()
     conn.execute("INSERT INTO klaarzet(van, voor, soort, sleutel, titel, inhoud, verwijzing, uniek, ts) VALUES(?,?,?,?,?,?,?,?,?)",
-                 (f"bord:{gebruiker()}", "werfverslaggever", "opdracht", f"{dossier}-{volgnr}", f"{soort} {dossier} {volgnr}",
+                 (f"bord:{gebruiker()}", "werfverslagschrijver", "opdracht", f"{dossier}-{volgnr}", f"{soort} {dossier} {volgnr}",
                   json.dumps({"door": gebruiker()}), "", "", nu()))
     conn.commit()
-    return redirect(url_for("werfbezoek_pagina", dossier=dossier, volgnr=volgnr))
+    return redirect(url_for("werfbezoek_pagina", dossier=dossier, volgnr=volgnr, tab="proef"))
 
 
 if __name__ == "__main__":

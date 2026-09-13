@@ -20,12 +20,19 @@
   .stil { color:var(--grijs); font-size:13px; }
   .knop { display:inline-block; background:var(--accent); color:var(--wit); border:0; padding:9px 16px; border-radius:4px; font-size:14px; cursor:pointer; text-decoration:none; font-family:inherit; }
   .knop.licht { background:var(--accent-licht); color:var(--accent); }
+  .knop.klein { padding:4px 10px; font-size:13px; }
   .melding { background:var(--accent-licht); border:1px solid var(--accent); border-radius:4px; padding:10px 14px; margin:10px 0; }
   .teken { text-align:center; font-weight:700; font-size:16px; }
   .verslag { background:var(--wit); border:1px solid var(--lijn); border-radius:4px; padding:18px 24px; }
-  .verslag table { margin:8px 0; } .verslag h1 { font-size:18px; } .verslag h2 { text-transform:none; letter-spacing:0; font-size:15px; border:0; margin:18px 0 6px; }
+  .verslag table { margin:8px 0; } .verslag h1 { font-size:18px; } .verslag h2 { text-transform:none; letter-spacing:0; font-size:15px; border:0; margin:18px 0 6px; } .verslag h3 { font-size:14px; margin:14px 0 4px; }
   code { font-size:12px; color:var(--grijs); word-break:break-all; }
-  form { display:inline; }
+  form.inline { display:inline; }
+  .veld { margin-bottom:12px; } .veld label { display:block; font-size:13px; color:var(--grijs); margin-bottom:3px; }
+  .veld select, .veld textarea, .veld input[type=text] { width:100%; padding:8px 10px; border:1px solid var(--lijn); border-radius:4px; font-size:14px; font-family:inherit; background:var(--wit); }
+  .rij { display:grid; grid-template-columns:1fr 1fr 1fr; gap:0 18px; }
+  .keuzeblok { display:flex; gap:16px; flex-wrap:wrap; margin:6px 0 14px; }
+  .keuzeblok label { display:flex; align-items:center; gap:6px; font-size:14px; background:var(--wit); border:1px solid var(--lijn); border-radius:4px; padding:7px 12px; cursor:pointer; }
+  nav.tabs { display:flex; gap:6px; flex-wrap:wrap; margin:14px 0 4px; }
 </style>
 </head>
 <body>
@@ -33,30 +40,83 @@
 {% set kleur = {"ok": "#1f6b3d", "let_op": "#a1701a", "fout": "#a33a2a", "onbekend": "#6b6b6b"} %}
 <header>
   <a class="merk" href="{{ url_for('werfverslagen_pagina') }}">Werfverslagen</a>
-  <span class="sub">De Werfverslaggever · <a href="{{ url_for('bord') }}">bord</a></span>
+  <span class="sub"><a href="{{ url_for('werfverslagen_pagina') }}">&larr; alle dossiers</a> · <a href="{{ url_for('bord') }}">bord</a></span>
 </header>
 <main>
-<h1>Werfverslag {{ b.dossier }}-{{ b.volgnr }} — {{ b.adres }}</h1>
-<p class="stil">Werfbezoek {{ b.volgnr }} van {{ b.datum }} · {{ b.soort_project }}-project · stand: <strong>{{ b.stand }}</strong> · gemeten {{ b.ts[:16].replace('T',' ') }} UTC</p>
+<h1>{{ b.dossier }}-{{ b.volgnr }} — {{ b.adres }}</h1>
+<p class="stil">Werfbezoek {{ b.volgnr }} van {{ b.datum }} · {{ b.soort_project }}-project · gemeten {{ b.ts[:16].replace('T',' ') }} UTC</p>
 
-<div style="background:{{ '#edf2ef' if klaar_voor_proef else '#f7e8e5' }}; border:1px solid {{ '#1f3d33' if klaar_voor_proef else '#a33a2a' }}; border-radius:4px; padding:12px 16px; margin:14px 0 18px;">
+<div style="background:{{ '#edf2ef' if b.heeft_proef else ('#fbf3e3' if b.voorbereid else '#f7e8e5') }}; border:1px solid {{ '#1f3d33' if b.heeft_proef else ('#a1701a' if b.voorbereid else '#a33a2a') }}; border-radius:4px; padding:12px 16px; margin:14px 0 6px;">
   <strong style="font-size:16px;">
-    {% if b.proef_pad %}Proef staat klaar in de bezoekmap.{% elif klaar_voor_proef %}Gegevens verzameld: klaar om de proef te maken.{% else %}Nog niet voorbereid: de agent heeft de bezoekmap nog niet uitgelezen.{% endif %}
+    {% if b.heeft_proef %}Proef staat klaar in de bezoekmap: nakijken en versturen.{% elif b.voorbereid %}Voorbereid door De Werfverslagschrijver: maak je keuzes en laat de proef maken.{% else %}Nog niet voorbereid: De Werfverslagschrijver leest de bezoekmap nog uit.{% endif %}
   </strong><br>
-  <span class="stil">{{ telling.ok }} in orde · {{ telling.let_op }} nakijken · {{ telling.fout }} ontbreekt · {{ telling.onbekend }} niet meetbaar</span>
+  <span class="stil">{{ b.telling.ok }} in orde · {{ b.telling.let_op }} nakijken · {{ b.telling.fout }} ontbreekt · {{ b.telling.onbekend }} niet meetbaar{% if b.nodig %} — nog nodig: {{ b.nodig|join(', ') }}{% endif %}</span>
 </div>
-
 {% if opdrachten and opdrachten[0].status == 'klaar' %}
-<div class="melding"><strong>Opdracht "{{ opdrachten[0].titel }}" staat klaar voor de agent.</strong> Hij pakt ze binnen 5 minuten op; deze pagina ververst zichzelf.</div>
+<div class="melding"><strong>Opdracht "{{ opdrachten[0].titel }}" staat klaar voor De Werfverslagschrijver.</strong> Hij pakt ze binnen 5 minuten op; deze pagina ververst zichzelf.</div>
 {% endif %}
 
-<p>
-  <form method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="soort" value="voorbereid"><button class="knop{{ ' licht' if klaar_voor_proef else '' }}" type="submit">{{ 'Opnieuw voorbereiden' if klaar_voor_proef else 'Voorbereiden' }}</button></form>
-  <form method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="soort" value="proef"><button class="knop{{ '' if klaar_voor_proef else ' licht' }}" type="submit">Proef maken (Word)</button></form>
-  <a class="knop licht" href="{{ url_for('detail', naam='werfverslaggever') }}">Werkverslag van de agent</a>
-</p>
+<nav class="tabs">
+  <a class="knop klein" href="#keuzes">Keuzes</a><a class="knop klein" href="#bijlagen">Bijlagen</a><a class="knop klein" href="#proef">Proef</a><a class="knop klein" href="#herkomst">Herkomst</a><a class="knop klein" href="#controle">Controle</a><a class="knop klein licht" href="#werkverslag">Werkverslag</a>
+</nav>
 
-<h2>Gegevens en herkomst</h2>
+<h2 id="keuzes">Keuzes</h2>
+<p class="stil">Jij beslist wat de schrijver niet mag raden. De rest vult het systeem in.</p>
+<form method="post" action="{{ url_for('werfbezoek_keuzes', dossier=b.dossier, volgnr=b.volgnr) }}">
+  {% set k = b.keuzes %}
+  <div class="rij">
+    <div class="veld"><label>Verslagtype {% if g.verslagtype_voorstel %}<span class="stil">(voorstel schrijver: {{ g.verslagtype_voorstel }})</span>{% endif %}</label>
+      <select name="verslagtype">
+        <option value="" {{ 'selected' if not k.verslagtype }}>volg het voorstel van de schrijver</option>
+        <option value="werfverslag" {{ 'selected' if k.verslagtype=='werfverslag' }}>werfverslag (lopende werken)</option>
+        <option value="vaststellingsverslag" {{ 'selected' if k.verslagtype=='vaststellingsverslag' }}>vaststellingsverslag (schade, geschil, met raming)</option>
+        <option value="opleveringsverslag" {{ 'selected' if k.verslagtype=='opleveringsverslag' }}>opleveringsverslag</option>
+      </select></div>
+    <div class="veld"><label>Taal</label>
+      <select name="taal"><option value="nl" {{ 'selected' if k.taal!='nl+en' }}>Nederlands</option><option value="nl+en" {{ 'selected' if k.taal=='nl+en' }}>Nederlands en Engels (zoals Archisnapper)</option></select></div>
+    <div class="veld"><label>Doorlopende punten (omgevingsloket, werfbezoeken, netheid, facturatie, veiligheid, EPB)</label>
+      <select name="doorlopend"><option value="ja" {{ 'selected' if k.doorlopend!='nee' }}>ja, bij een werfverslag</option><option value="nee" {{ 'selected' if k.doorlopend=='nee' }}>nee</option></select></div>
+  </div>
+  <div class="veld"><label>Aanwezigen, één per regel: rol | firma | naam | contact | aanwezig (ja/nee). Leeg = de schrijver leidt af uit de bronnen.</label>
+    <textarea name="aanwezigen" rows="5" placeholder="Architect | H-Architects BV | Mehdi Chegini | light@h-architects.be | ja">{% for a in k.aanwezigen or [] %}{{ a.rol }} | {{ a.firma }} | {{ a.naam }} | {{ a.contact }} | {{ a.aanwezig }}
+{% endfor %}</textarea></div>
+  <div class="veld"><label>Opmerking voor de schrijver (wat hij moet weten dat niet in de bronnen staat)</label>
+    <textarea name="opmerking" rows="3">{{ k.opmerking or '' }}</textarea></div>
+  <p><button class="knop" type="submit">Keuzes bewaren</button> {% if k.ts %}<span class="stil">bewaard {{ k.ts[:16].replace('T',' ') }} door {{ k.door }}</span>{% endif %}</p>
+</form>
+
+<h2 id="bijlagen">Bijlagen</h2>
+<p class="stil"><code>{{ b.bezoekmap }}</code></p>
+{% if b.bijlagen %}
+<table><tr><th>Soort</th><th>Bestand</th><th></th></tr>
+{% for x in b.bijlagen %}<tr><td>{{ x.soort }}</td><td>{{ x.naam }}</td><td class="stil">{% if x.tekens %}{{ x.tekens }} tekens gelezen{% elif x.grootte %}{{ (x.grootte/1024)|round|int }} kB{% endif %}</td></tr>{% endfor %}
+</table>
+{% else %}
+<table>
+  <tr><th>Soort</th><th>Wat</th></tr>
+  <tr><td>Foto's</td><td>{{ b.bronnen.fotos or 0 }}</td></tr>
+  <tr><td>Opnames</td><td>{{ b.bronnen.opnames|join(', ') if b.bronnen.opnames else 'geen' }}</td></tr>
+  <tr><td>Transcripten</td><td>{{ b.bronnen.transcripten|join(', ') if b.bronnen.transcripten else 'geen' }}</td></tr>
+  <tr><td>Verslagen</td><td>{{ b.bronnen.verslagen|join(', ') if b.bronnen.verslagen else 'geen' }}</td></tr>
+  <tr><td>Documenten</td><td>{{ b.bronnen.notities|join(', ') if b.bronnen.notities else 'geen' }}</td></tr>
+</table>
+<p class="stil">Na de voorbereiding staat hier per bestand wat de schrijver ervan las.</p>
+{% endif %}
+
+<h2 id="proef">Proef</h2>
+<p>
+  <form class="inline" method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="soort" value="voorbereid"><button class="knop{{ ' licht' if b.voorbereid else '' }}" type="submit">{{ 'Opnieuw voorbereiden' if b.voorbereid else 'Voorbereiden' }}</button></form>
+  <form class="inline" method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="soort" value="proef"><button class="knop{{ '' if b.voorbereid else ' licht' }}" type="submit">{{ 'Nieuwe proef maken (Word)' if b.heeft_proef else 'Proef maken (Word)' }}</button></form>
+</p>
+{% if b.heeft_proef %}
+<div class="melding"><strong>Word-concept:</strong> <code>{{ b.proef_pad }}</code><br>
+  <span class="stil">Gemaakt op {{ b.proef_ts }}{% if b.proef_info %} · {{ b.proef_info.verslagtype }} · {{ b.proef_info.punten }} punten · {{ b.proef_info.fotos }} foto's · {{ b.proef_info.docx_kb }} kB{% if b.proef_info.open %} · nog {{ b.proef_info.open.in_te_vullen }} in te vullen, {{ b.proef_info.open.na_te_kijken }} na te kijken, {{ b.proef_info.open.raming_open }} ramingen{% endif %}{% endif %}. Dezelfde tekst staat ernaast als .md. Jij legt er je laag overheen en verstuurt; de agents versturen nooit.</span></div>
+<div class="verslag">{{ verslag_html|safe }}</div>
+{% else %}
+<p class="stil">Nog geen proef. Bewaar eerst je keuzes, klik dan <em>Proef maken (Word)</em>: De Werfverslagschrijver schrijft het concept in het sjabloon van H-Architects en zet .docx en .md in de bezoekmap.</p>
+{% endif %}
+
+<h2 id="herkomst">Herkomst</h2>
 {% if g.gegevens %}
 <table>
   <tr><th style="width:34px;"></th><th>Gegeven</th><th>Waarde</th><th>Bron</th></tr>
@@ -64,20 +124,20 @@
   <tr><td class="teken" style="color:{{ kleur[x.status] }};">{{ teken[x.status]|safe }}</td><td><strong>{{ x.veld }}</strong></td><td>{{ x.waarde }}</td><td class="stil">{{ x.bron }}</td></tr>
   {% endfor %}
 </table>
-{% if g.situatie %}<h2>Situatie volgens de bronnen</h2><p>{{ g.situatie }}</p>{% endif %}
-{% if g.onderdelen %}<h2>Vaststellingen per onderdeel</h2>
+{% if g.situatie %}<h3>Situatie volgens de bronnen</h3><p>{{ g.situatie }}</p>{% endif %}
+{% if g.onderdelen %}<h3>Vaststellingen per onderdeel</h3>
 <table><tr><th>Onderdeel</th><th>Vaststellingen</th><th>Bron</th></tr>
 {% for o in g.onderdelen %}<tr><td><strong>{{ o.onderdeel }}</strong></td><td><ul style="margin:0;padding-left:18px;">{% for v in o.vaststellingen %}<li>{{ v }}</li>{% endfor %}</ul></td><td class="stil">{{ o.bron }}</td></tr>{% endfor %}
 </table>{% endif %}
-{% if g.ontbreekt %}<h2>Wat de architect nog moet aanvullen</h2><ul>{% for x in g.ontbreekt %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
+{% if g.ontbreekt %}<h3>Wat de architect nog moet aanvullen</h3><ul>{% for x in g.ontbreekt %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
 {% else %}
-<p class="stil">Nog geen gegevens. Klik <em>Voorbereiden</em>: de agent leest alle bestanden in de bezoekmap en haalt er de gegevens uit, elk met bron en zekerheid.</p>
+<p class="stil">Nog geen gegevens. De Werfverslaggever geeft na zijn verificatie de opdracht "voorbereid" door aan De Werfverslagschrijver; je kunt het ook zelf starten met <em>Voorbereiden</em>.</p>
 {% endif %}
 
-<h2>Controles</h2>
+<h2 id="controle">Controle</h2>
 <table>
   <tr><th style="width:34px;"></th><th style="width:44px;">Nr</th><th>Controle</th><th>Bevinding</th></tr>
-  {% for c in controles %}
+  {% for c in b.controle_rijen %}
   <tr>
     <td class="teken" style="color:{{ kleur[c.status] }};">{{ teken[c.status]|safe }}</td>
     <td class="stil">{{ c.nummer }}</td>
@@ -87,32 +147,12 @@
   {% endfor %}
 </table>
 <p class="stil">&#10003; in orde · ! nakijken · &#10007; ontbreekt (taak bij de agent die het kan leveren) · ? niet meetbaar</p>
-{% if b.taken %}<table style="margin-top:8px;"><tr><th>Taak uitgezet bij</th><th>Wat</th><th>Stand</th></tr>
+{% if b.taken %}<table style="margin-top:8px;"><tr><th>Uitgezet bij</th><th>Wat</th><th>Stand</th></tr>
 {% for t in b.taken %}<tr><td><strong>{{ t.voor }}</strong></td><td>{{ t.titel }}</td><td>{{ t.status }}{% if t.door %} door {{ t.door }}{% endif %}</td></tr>{% endfor %}</table>{% endif %}
 
-<h2>Bronnen in de bezoekmap</h2>
-<p><code>{{ b.bezoekmap }}</code></p>
-<table>
-  <tr><th>Soort</th><th>Wat</th></tr>
-  <tr><td>Foto's</td><td>{{ b.bronnen.fotos or 0 }}{% if g.fotos_in_map %} <span class="stil">({{ g.fotos_in_map|join(', ') }})</span>{% endif %}</td></tr>
-  <tr><td>Opnames</td><td>{{ b.bronnen.opnames|join(', ') if b.bronnen.opnames else 'geen' }}</td></tr>
-  <tr><td>Transcripten</td><td>{{ b.bronnen.transcripten|join(', ') if b.bronnen.transcripten else 'geen' }}</td></tr>
-  <tr><td>Verslagen</td><td>{{ b.bronnen.verslagen|join(', ') if b.bronnen.verslagen else 'geen' }}</td></tr>
-  <tr><td>Notities en documenten</td><td>{{ b.bronnen.notities|join(', ') if b.bronnen.notities else 'geen' }}</td></tr>
-  {% if g.bronbestanden %}<tr><td>Gelezen door de agent</td><td class="stil">{{ g.bronbestanden|join(', ') }}</td></tr>{% endif %}
-</table>
-
-<h2>Proef</h2>
-{% if b.proef_pad %}
-<div class="melding"><strong>Word-concept:</strong> <code>{{ b.proef_pad }}</code><br><span class="stil">Gemaakt op {{ b.proef_ts }}. Ernaast staat dezelfde tekst als .md. Mehdi legt er zijn laag overheen en verstuurt; de agent verstuurt nooit.</span></div>
-<div class="verslag">{{ verslag_html|safe }}</div>
-{% else %}
-<p class="stil">Nog geen proef. Klik <em>Proef maken (Word)</em>: de agent schrijft het concept in de vaste opbouw (E6) uit de gegevens en de bronnen, en zet .docx en .md in de bezoekmap.</p>
-{% endif %}
-
-<h2>Werkverslag van de agent voor dit bezoek</h2>
-<table><tr><th style="width:120px">Wanneer</th><th style="width:90px">Stap</th><th>Wat</th></tr>
-{% for l in logboek %}<tr><td class="stil">{{ l.ts[:16].replace('T',' ') }}</td><td class="stil">{{ l.stap }}</td><td>{{ l.tekst }}</td></tr>{% else %}<tr><td colspan="3" class="stil">nog niets</td></tr>{% endfor %}</table>
+<h2 id="werkverslag">Werkverslag van de agents voor dit bezoek</h2>
+<table><tr><th style="width:120px">Wanneer</th><th style="width:150px">Agent</th><th style="width:80px">Stap</th><th>Wat</th></tr>
+{% for l in logboek %}<tr><td class="stil">{{ l.ts[:16].replace('T',' ') }}</td><td class="stil">{{ l.naam }}</td><td class="stil">{{ l.stap }}</td><td>{{ l.tekst }}</td></tr>{% else %}<tr><td colspan="4" class="stil">nog niets</td></tr>{% endfor %}</table>
 </main>
 </body>
 </html>

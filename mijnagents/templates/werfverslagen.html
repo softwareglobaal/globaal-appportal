@@ -5,101 +5,83 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Werfverslagen — {{ app_naam }}</title>
 <style>
-  :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;--ok:#3ecf8e;--mis:#f0655d;--onb:#f59e0b}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--tekst);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  header{padding:18px 24px;border-bottom:1px solid var(--rand);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
-  header h1{margin:0;font-size:19px}
-  header a{color:var(--accent);text-decoration:none;font-size:13px}
-  main{padding:16px 24px;max-width:1500px}
-  .tel{color:var(--zacht);font-size:12px}
-  .kaart{border:1px solid var(--rand);border-radius:10px;background:var(--paper);padding:14px 16px;margin-bottom:16px}
-  .kaart h2{margin:0 0 4px;font-size:16px}
-  .wrap{overflow-x:auto}
-  table{border-collapse:collapse;width:100%;min-width:1000px}
-  th,td{text-align:left;padding:6px 8px;border-top:1px solid var(--rand);vertical-align:top;font-size:13px}
-  th{color:var(--zacht);font-weight:600;white-space:nowrap}
-  .b{display:inline-block;min-width:34px;text-align:center;border-radius:6px;padding:2px 6px;font-size:12px;font-weight:600;color:#0f1115}
-  .b.ok{background:var(--ok)} .b.ontbreekt{background:var(--mis);color:#fff} .b.onbekend{background:var(--onb)} .b.nvt{background:#444;color:#ccc}
-  .stand{font-weight:600}
-  .taak{font-size:12px;color:var(--zacht)} .taak b{color:var(--tekst)}
-  .taak .klaar{color:var(--onb)} .taak .opgepakt{color:var(--ok)}
-  details{margin-top:6px} summary{cursor:pointer;color:var(--accent);font-size:12px}
-  ul.legenda{columns:2;font-size:12px;color:var(--zacht);margin:6px 0 0;padding-left:18px}
-  .nood{border-left:3px solid var(--onb);padding:4px 10px;margin:4px 0;font-size:13px}
-  .nood .wie{color:var(--zacht);font-size:12px}
-  code{font-size:12px;color:var(--zacht)}
+  :root { --ink:#1c1c1c; --grijs:#6b6b6b; --lijn:#e2ddd5; --fond:#faf8f4; --accent:#1f3d33; --accent-licht:#edf2ef; --rood:#a33a2a; --wit:#fff; --oranje:#a1701a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Helvetica Neue",Arial,sans-serif; color:var(--ink); background:var(--fond); font-size:15px; line-height:1.5; }
+  header { background:var(--accent); color:var(--wit); padding:14px 28px; display:flex; align-items:baseline; gap:18px; flex-wrap:wrap; }
+  header a { color:var(--wit); text-decoration:none; } header .merk { font-weight:700; letter-spacing:.04em; } header .sub { opacity:.75; font-size:13px; }
+  main { max-width:1180px; margin:28px auto 60px; padding:0 24px; }
+  h1 { font-size:22px; font-weight:600; margin:0 0 18px; }
+  h2 { font-size:15px; font-weight:700; margin:26px 0 10px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); border-bottom:1px solid var(--lijn); padding-bottom:6px; }
+  p.leid { color:var(--grijs); margin:0 0 12px; }
+  table { width:100%; border-collapse:collapse; background:var(--wit); }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--lijn); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--grijs); }
+  .knop { display:inline-block; background:var(--accent); color:var(--wit); border:0; padding:9px 16px; border-radius:4px; font-size:14px; cursor:pointer; text-decoration:none; font-family:inherit; }
+  .knop.licht { background:var(--accent-licht); color:var(--accent); }
+  .knop.klein { padding:4px 10px; font-size:13px; margin:1px 0; }
+  .stil { color:var(--grijs); font-size:13px; }
+  .ok { color:#1f6b3d; font-weight:600; } .let_op { color:var(--oranje); font-weight:600; } .fout { color:var(--rood); font-weight:600; }
+  .nood { border-left:3px solid var(--oranje); padding:4px 10px; margin:4px 0; font-size:14px; background:var(--wit); }
+  code { font-size:12px; color:var(--grijs); }
 </style>
 </head>
 <body>
 <header>
-  <h1>Werfverslagen</h1>
-  <a href="{{ url_for('bord') }}">← bord</a>
-  <a href="{{ url_for('detail', naam='werfverslaggever') }}">De Werfverslaggever</a>
-  <span class="tel">
-    {% if status %}laatste ronde {{ status['ts'][:16].replace('T',' ') }} UTC · {{ status['taak'] }} · {{ status['detail'] }}{% else %}nog geen ronde{% endif %}
-  </span>
+  <span class="merk">Werfverslagen</span>
+  <span class="sub">H-Architects · <a href="{{ url_for('bord') }}">bord</a> · <a href="{{ url_for('detail', naam='werfverslaggever') }}">De Werfverslaggever</a> · <a href="{{ url_for('detail', naam='werfverslagschrijver') }}">De Werfverslagschrijver</a></span>
 </header>
 <main>
-  <div class="kaart">
-    <h2>Controleposten</h2>
-    <ul class="legenda">
-      <li><b>W1</b> afspraak in de agenda (Agendawacht)</li><li><b>W2</b> projectmap gevonden (Dropbox)</li>
-      <li><b>W3</b> bezoekmap met datum</li><li><b>W4</b> foto's in de bezoekmap (anders: iCloud-wacht)</li>
-      <li><b>W5</b> opname (map of Plaud-/Fathomwacht)</li><li><b>W6</b> transcript</li>
-      <li><b>W7</b> verslag of concept in de map</li><li><b>W8</b> verslagnummer &lt;dossier&gt;-&lt;bezoek&gt;</li>
-      <li><b>W9</b> verstuurd aan de klant (Mailwacht, nog niet gekoppeld)</li><li><b>W10</b> notities in de map</li>
-    </ul>
-    <p class="tel">Groen = geverifieerd, rood = ontbreekt (taak uitgezet bij de agent die het kan leveren), oranje = niet meetbaar. Klik een bezoek open voor de toelichting per post en de stand van de taken.</p>
-  </div>
+<h1>Werfverslagen</h1>
+<p class="leid">Per dossier en per werfbezoek: van de bronnen in de bezoekmap tot het concept-werfverslag. Wat er nog moet komen staat erbij.
+De Werfverslaggever verifieert (controle), geeft door aan De Werfverslagschrijver (voorbereiding en proef); jij maakt de keuzes en kijkt de proef na.</p>
 
-  {% if not dossiers %}<div class="kaart">Nog geen dossiers. Start met <code>werfverslaggever.py --project 2309</code> of vraag het De Regisseur.</div>{% endif %}
+{% if not dossiers %}<p class="stil">Nog geen dossiers. Vraag De Regisseur een dossier te volgen, of: <code>werfverslaggever.py --project 2309</code>.</p>{% endif %}
 
-  {% for d in dossiers %}
-  <div class="kaart">
-    <h2>{{ d['dossier'] }} · {{ d['adres'] }} <span class="tel">({{ d['soort'] }}, {{ d['bezoeken']|length }} bezoek(en), gemeten {{ d['ts'][:16].replace('T',' ') }} UTC)</span></h2>
-    <div class="tel"><code>{{ d['projectmap'] }}</code></div>
-    <div class="wrap">
-    <table>
-      <thead><tr><th>Bezoek</th><th>Datum</th>{% for c in codes %}<th>{{ c }}</th>{% endfor %}<th>Foto's</th><th>Stand</th><th>Taken</th></tr></thead>
-      <tbody>
-      {% for b in d['bezoeken'] %}
-      {% set cmap = {} %}{% for c in b['controles'] %}{% set _ = cmap.update({c['code']: c}) %}{% endfor %}
-      <tr>
-        <td><a href="{{ url_for('werfbezoek_pagina', dossier=d['dossier'], volgnr=b['volgnr']) }}" style="color:var(--accent);font-weight:700;text-decoration:none">{{ d['dossier'] }}-{{ b['volgnr'] }}</a></td>
-        <td>{{ b['datum'] }}</td>
-        {% for c in codes %}
-          {% set x = cmap.get(c) %}
-          <td>{% if x %}<span class="b {{ x['stand'] }}" title="{{ x['toelichting'] }}">{{ c }}</span>{% else %}<span class="b nvt">–</span>{% endif %}</td>
-        {% endfor %}
-        <td>{{ b['bronnen'].get('fotos', 0) }}</td>
-        <td class="stand">{{ b['stand'] }}</td>
-        <td>
-          {% for t in b['taken'] %}
-            <div class="taak"><b>{{ t['voor'] }}</b> · <span class="{{ t['status'] }}">{{ t['status'] }}{% if t['door'] %} door {{ t['door'] }}{% endif %}</span></div>
-          {% else %}<span class="tel">geen</span>{% endfor %}
-        </td>
-      </tr>
-      <tr><td colspan="{{ 5 + codes|length }}" style="border-top:0;padding-top:0">
-        <details><summary>toelichting bezoek {{ b['volgnr'] }} ({{ b['bronnen'].get('bron_map','') }})</summary>
-          <table style="min-width:0;margin-top:6px">
-            {% for c in b['controles'] %}<tr><td style="white-space:nowrap"><span class="b {{ c['stand'] }}">{{ c['code'] }}</span> {{ c['naam'] }}</td><td>{{ c['toelichting'] }}</td></tr>{% endfor %}
-            {% for t in b['taken'] %}<tr><td style="white-space:nowrap">taak → {{ t['voor'] }}</td><td>{{ t['titel'] }} <span class="tel">({{ t['status'] }})</span></td></tr>{% endfor %}
-            <tr><td>bezoekmap</td><td><code>{{ b['bezoekmap'] }}</code></td></tr>
-          </table>
-        </details>
-      </td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    </div>
-  </div>
+{% for d in dossiers %}
+<h2>{{ d.dossier }} · {{ d.adres }} <span class="stil" style="text-transform:none;letter-spacing:0;font-weight:400">({{ d.soort }}-project, {{ d.bezoeken|length }} bezoek(en))</span></h2>
+<table>
+  <tr><th>Nr</th><th>Bezoek</th><th>Bronnen</th><th>Stand</th><th>Wat nog nodig is</th><th></th></tr>
+  {% for b in d.bezoeken %}
+  <tr>
+    <td><strong>{{ d.dossier }}-{{ b.volgnr }}</strong></td>
+    <td>{{ b.datum }}<br><span class="stil">{{ b.bronnen.bron_map }}</span></td>
+    <td class="stil">{{ b.bronnen.fotos or 0 }} foto's · {{ b.bronnen.opnames|length }} opname(s) · {{ b.bronnen.transcripten|length }} transcript(en) · {{ (b.bronnen.notities|length) + (b.bronnen.verslagen|length) }} document(en)</td>
+    <td>
+      {% if b.fase == 'te vervolledigen' %}<span class="let_op">te vervolledigen</span>
+      {% elif b.fase == 'te controleren' %}<span class="ok">te controleren</span>
+      {% else %}<span class="ok">{{ b.fase }}</span>{% endif %}
+      <br><span class="stil">{{ b.telling.ok }} ✓ · {{ b.telling.fout }} ✗ · {{ b.telling.onbekend }} ?</span>
+    </td>
+    <td>{% if b.nodig %}{{ b.nodig|join(', ') }}{% else %}<span class="stil">niets — nakijken en versturen</span>{% endif %}</td>
+    <td style="white-space:nowrap">
+      {# Vaste knoppenrij, zoals in het contractsysteem (D25): Openen · Keuzes · Bijlagen · Proef · Herkomst · Controle #}
+      <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr) }}">Openen</a>
+      <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr, tab='keuzes') }}#keuzes">Keuzes</a>
+      <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr, tab='bijlagen') }}#bijlagen">Bijlagen</a>
+      <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr, tab='proef') }}#proef">Proef</a>
+      <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr, tab='herkomst') }}#herkomst">Herkomst</a>
+      <a class="knop klein" href="{{ url_for('werfbezoek_pagina', dossier=d.dossier, volgnr=b.volgnr, tab='controle') }}#controle">Controle</a>
+    </td>
+  </tr>
   {% endfor %}
+</table>
+<p class="stil"><code>{{ d.projectmap }}</code></p>
+{% endfor %}
 
-  <div class="kaart">
-    <h2>Waar het vastloopt</h2>
-    {% for n in noden %}<div class="nood">{{ n['tekst'] }} <span class="wie">· {{ n['wie'] }}</span></div>{% else %}<span class="tel">niets gemeld</span>{% endfor %}
-  </div>
+<h2>De agents</h2>
+<table>
+  <tr><th>Agent</th><th>Stand</th><th>Laatste taak</th></tr>
+  {% for naam, label in [('werfverslaggever', 'De Werfverslaggever (verifieert, geeft door)'), ('werfverslagschrijver', 'De Werfverslagschrijver (voorbereidt, schrijft de proef)')] %}
+  {% set s = status.get(naam) %}
+  <tr><td><a href="{{ url_for('detail', naam=naam) }}" style="color:var(--accent)">{{ label }}</a></td>
+      <td>{% if s %}{{ s.status }} <span class="stil">{{ s.ts[:16].replace('T',' ') }} UTC</span>{% else %}<span class="stil">nog geen ronde</span>{% endif %}</td>
+      <td>{% if s %}{{ s.taak }} <span class="stil">{{ s.detail }}</span>{% endif %}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>Waar het vastloopt</h2>
+{% for n in noden %}<div class="nood">{{ n.tekst }} <span class="stil">· {{ n.naam }} · {{ n.wie }}</span></div>{% else %}<span class="stil">niets gemeld</span>{% endfor %}
 </main>
 </body>
 </html>

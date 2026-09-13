@@ -177,7 +177,7 @@ def dag_van(it):
 
 
 # ------------------------------------------------------- controleposten ---
-def controleer(nummer, adres, soort_project, projectmap, bezoek, bak):
+def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=None):
     """Geeft (controles, taken, noden). controles: lijst {code, naam, stand, toelichting}.
     stand in ok | ontbreekt | onbekend | nvt."""
     d = bezoek["datum"]
@@ -227,12 +227,31 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak):
         taken.append(("plaud-wacht", f"Transcript maken/ophalen van de opname in {bezoek['map']} (dossier {nummer}, {d})"))
     else:
         post("W6", "transcript", "ontbreekt", "geen opname, dus geen transcript")
-    # W7 verslag
+    # W7 verslag; W11 nacontrole van de proef van De Werfverslagschrijver
+    br = bord_rij or {}
     if bezoek["verslagen"]:
         post("W7", "verslag of concept", "ok", "; ".join(bezoek["verslagen"])[:160])
+    elif br.get("proef_pad"):
+        post("W7", "verslag of concept", "ok", f"proef van De Werfverslagschrijver: {os.path.basename(br['proef_pad'])}")
     else:
-        post("W7", "verslag of concept", "ontbreekt", "nog geen verslag in de map")
-        noden.append({"tekst": f"Verslag schrijven voor {nummer} bezoek {bezoek['volgnr']} ({d}): geen agent kan dat nog; nu skill werfverslag op de Mac", "wie": "claude-code"})
+        post("W7", "verslag of concept", "ontbreekt", "nog geen verslag; De Werfverslagschrijver maakt de proef na Keuzes en Proef op de bezoekpagina")
+    if br.get("proef_pad"):
+        info = br.get("proef_info") or {}
+        if isinstance(info, str):
+            try:
+                info = json.loads(info or "{}")
+            except ValueError:
+                info = {}
+        op = info.get("open") or {}
+        n_open = sum(int(x or 0) for x in op.values()) if isinstance(op, dict) else 0
+        post("W11", "proef nagekeken", "ok" if n_open == 0 else "onbekend",
+             f"{info.get('punten', '?')} punten, {info.get('fotos', '?')} foto's; nog {op.get('in_te_vullen', '?')} in te vullen, "
+             f"{op.get('na_te_kijken', '?')} na te kijken, {op.get('raming_open', '?')} ramingen open" if isinstance(op, dict) else "geen telling")
+    elif not (br.get("gegevens") or {}).get("gegevens") if isinstance(br.get("gegevens"), dict) else not br.get("gegevens"):
+        post("W11", "voorbereiding door de schrijver", "ontbreekt", "nog geen gegevens met herkomst; opdracht voorbereid wordt doorgegeven")
+        taken.append(("werfverslagschrijver", f"voorbereid {nummer} {bezoek['volgnr']}"))
+    else:
+        post("W11", "voorbereiding door de schrijver", "ok", "gegevens met herkomst staan op de bezoekpagina; Keuzes en Proef zijn aan Mehdi")
     # W8 verslagnummer
     post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek['volgnr']} (bezoek {bezoek['volgnr']} in volgorde van de mappen)")
     # W9 verstuurd
@@ -262,16 +281,21 @@ def verwerk(nummer, droog=False):
     bezoeken = bezoeken_in(projectmap)
     ag.log(str(nummer), "bevinding", f"{len(bezoeken)} bezoek(en) in de mappen: " + ", ".join(b["datum"] for b in bezoeken))
     bak = klaargezet(nummer)
+    try:
+        bord_rijen = {r.get("bezoekmap"): r for r in bord.call(f"/api/werfbezoek?dossier={nummer}").get("rijen", [])}
+    except Exception:  # noqa: BLE001
+        bord_rijen = {}
     rijen, alle_taken, noden = [], [], []
     if not bezoeken:
         noden.append({"tekst": f"Dossier {nummer}: geen bezoekmap met datum gevonden onder {projectmap}", "wie": "mehdi"})
     for b in bezoeken:
-        controles, taken, n = controleer(nummer, adres, soort, projectmap, b, bak)
+        controles, taken, n = controleer(nummer, adres, soort, projectmap, b, bak, bord_rijen.get(b["map"]))
         noden += n
         taakrijen = []
         for voor, tekst in taken:
             uniek = f"werf:{nummer}:{b['datum']}:{voor}"
-            taakrijen.append({"voor": voor, "soort": "taak", "sleutel": str(nummer), "titel": tekst[:300],
+            soort = "opdracht" if voor == "werfverslagschrijver" else "taak"
+            taakrijen.append({"voor": voor, "soort": soort, "sleutel": (f"{nummer}-{b['volgnr']}" if soort == "opdracht" else str(nummer)), "titel": tekst[:300],
                               "inhoud": {"dossier": nummer, "datum": b["datum"], "adres": adres, "bezoekmap": b["map"], "volgnr": b["volgnr"]},
                               "verwijzing": b["map"], "uniek": uniek})
         alle_taken += taakrijen
@@ -302,62 +326,11 @@ def open_dossiers():
         return []
 
 
-def opdrachten():
-    """Opdrachten van de bezoekpagina (klaarzet soort `opdracht`, voor mij): 'voorbereid <d> <n>' of
-    'proef <d> <n>'. Eén voor één, met bewijs in het werkverslag; daarna gemarkeerd als opgepakt."""
-    import werfverslag_proef as wp
-    items = bord.klaargezet_voor(NAAM, n=20)
-    items = [it for it in items if it.get("soort") == "opdracht"]
-    if not items:
-        return 0
-    ag.hartslag("actief", taak=f"{len(items)} opdracht(en) van de bezoekpagina")
-    gedaan = 0
-    for it in reversed(items):
-        m = re.match(r"(voorbereid|proef)\s+(\d{4})\s+(\d+)", it.get("titel", ""))
-        if not m:
-            bord.opgepakt(it["id"], NAAM)
-            continue
-        soort, d, n = m.group(1), m.group(2), int(m.group(3))
-        try:
-            if soort == "voorbereid":
-                wp.voorbereid(ag, d, n)
-            else:
-                wp.proef(ag, d, n)
-            gedaan += 1
-        except Exception as e:  # noqa: BLE001
-            ag.log(f"{d}-{n}", "fout", f"{soort} mislukt: {type(e).__name__}: {str(e)[:300]}")
-        bord.opgepakt(it["id"], NAAM)
-        ag.log_verstuur()
-    ag.hartslag("klaar", taak=f"{gedaan} opdracht(en) uitgevoerd", detail="voorbereiding of proef van de bezoekpagina")
-    return gedaan
-
-
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--project", nargs="*", default=[], help="dossiernummers")
     p.add_argument("--droog", action="store_true")
-    p.add_argument("--voorbereid", nargs=2, metavar=("DOSSIER", "BEZOEK"), help="gegevens uit de bezoekmap halen")
-    p.add_argument("--proef", nargs=2, metavar=("DOSSIER", "BEZOEK"), help="concept-werfverslag (md + docx) in de bezoekmap zetten")
-    p.add_argument("--opdrachten", action="store_true", help="opdrachten van de bezoekpagina uitvoeren (cron elke 5 min)")
     a = p.parse_args()
-    if a.opdrachten:
-        print("opdrachten:", opdrachten())
-        return
-    if a.voorbereid or a.proef:
-        import werfverslag_proef as wp
-        d, n = a.voorbereid or a.proef
-        ag.hartslag("actief", taak=f"{'voorbereiding' if a.voorbereid else 'proef'} {d}-{n}")
-        try:
-            uit = wp.voorbereid(ag, d, int(n)) if a.voorbereid else wp.proef(ag, d, int(n))
-            print(json.dumps(uit, ensure_ascii=False, indent=1) if a.voorbereid else uit[0])
-            ag.hartslag("klaar", taak=f"{'voorbereiding' if a.voorbereid else 'proef'} {d}-{n} klaar")
-        except Exception as e:
-            ag.log(f"{d}-{n}", "fout", f"{type(e).__name__}: {str(e)[:300]}")
-            ag.hartslag("fout", taak=f"{d}-{n} mislukt", detail=str(e)[:200])
-            raise
-        finally:
-            ag.log_verstuur()
-        return
     nummers = [n for n in a.project if re.fullmatch(r"\d{4}", n)]
     nummers += [n for n in open_dossiers() if n not in nummers]
     ag.hartslag("actief", taak="ronde gestart", detail=f"{len(nummers)} dossier(s)")
@@ -378,7 +351,7 @@ def main():
             standen[r["stand"]] = standen.get(r["stand"], 0) + 1
     # vaste noden: wat structureel nog ontbreekt om zonder mens te werken
     noden += [
-        {"tekst": "Collega-agents (Agendawacht, Plaudwacht, iCloud-wacht) lezen mijn taken (klaarzet soort taak) nog niet; ze staan klaar maar worden niet opgepakt", "wie": "claude-code"},
+        {"tekst": "Agendawacht, Plaudwacht en iCloud-wacht lezen mijn taken (klaarzet soort taak) nog niet; De Werfverslagschrijver leest zijn opdrachten wel", "wie": "claude-code"},
         {"tekst": "Verstuurd-status (W9) vraagt een koppeling mail -> dossier bij de Mailwacht mch@", "wie": "claude-code"},
     ]
     # dubbels weg, volgorde behouden

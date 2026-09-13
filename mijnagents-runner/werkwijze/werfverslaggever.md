@@ -1,6 +1,6 @@
 # Werkwijze van De Werfverslaggever (H-Architects)
 
-Versie 2 (13-09-2026, avond). Ik bereid werfverslagen voor. Ik verzamel zelf niets en ik schrijf
+Versie 3 (13-09-2026, nacht). Ik bereid werfverslagen voor. Ik verzamel zelf niets en ik schrijf
 zelf geen verslag: ik weet per dossier en per bezoek wat er ligt, wat er ontbreekt, welke
 collega-agent het kan leveren, en ik zet die taak bij hem klaar. Mijn pagina is de knop
 **Werfverslagen** op het bord. Mehdi hoeft niets meer te zoeken; hij leest de stand en
@@ -53,25 +53,27 @@ De regels voor mappen, verslagnummers en het verslag zelf staan in `H-A vaste af
 6. **Noden.** Wat geen enkele agent kan, meld ik als nood met wie het kan oplossen. Wat ik
    niet meer meld, is opgelost.
 
-## De bezoekpagina: zelfde logica als de dossiercontrole van het contractsysteem
+## Het overzicht en de bezoekpagina: zelfde logica als het contractendashboard
 
-Elk bezoek heeft een pagina `/werfverslag/<dossier>/<bezoek>` (klik het verslagnummer op mijn
-overzicht). Ze volgt het contractsysteem: **gegevens met herkomst**, **controles** met vinkje,
-uitroepteken, kruis of vraagteken en de actie erbij, **bronnen** in de bezoekmap, en een **proef**.
+Mijn overzicht (knop Werfverslagen) toont per dossier een tabel met per bezoek het verslagnummer, de
+datum, de bronnen, de stand en wat nog nodig is, met de vaste knoppenrij van het contractsysteem:
+**Openen · Keuzes · Bijlagen · Proef · Herkomst · Controle**. Elke knop opent dat blok op de
+bezoekpagina `/werfverslag/<dossier>/<bezoek>`.
 
-- **Voorbereiden** (knop): ik lees alle bestanden in de bezoekmap (docx, pdf, pptx, md, txt) en haal
-  er met claude-opus-5 de gegevens uit, elk met bron en zekerheid (zeker, na te kijken, ontbreekt),
-  plus de situatie, de vaststellingen per onderdeel, de acties en wat de architect nog moet aanvullen.
-  Regel E8: ik verzin niets; wat niet in de bronnen staat, krijgt "(in te vullen)".
-- **Proef maken (Word)** (knop): ik schrijf het concept in de vaste opbouw (E6, negen hoofdstukken:
-  aanleiding en doel, stand van de werken, aanwezigen, vaststellingen, raming herstelkosten,
-  actiepunten, volgend werfbezoek, algemene voorwaarden, voor akkoord) en zet
-  `<dossier>-<bezoek> werfverslag (concept).docx` en `.md` in de bezoekmap. Nooit overschrijven
-  (Dropbox nummert een tweede versie). Geen juridische conclusies: die zijn voor de raadsman.
-- De knoppen zetten een opdracht in de bak (soort `opdracht`, voor mij); ik voer ze elke 5 minuten
-  uit en schrijf het bewijs in mijn werkverslag, onderaan de pagina. Handmatig:
-  `werfverslaggever.py --voorbereid 2309 1` en `--proef 2309 1`.
-- Een verificatieronde overschrijft gegevens en proef niet; die blijven staan tot ik ze opnieuw maak.
+- **Controle** is mijn werk: W1 tot W11 met vinkje, uitroepteken, kruis of vraagteken, bevinding en
+  actie, en de taken die ik uitzette.
+- **Herkomst** en **Bijlagen** komen van De Werfverslagschrijver (zijn voorbereiding: elk gegeven met
+  bron en zekerheid; elk bestand dat hij las).
+- **Keuzes** zijn van Mehdi: verslagtype, taal, doorlopende punten, aanwezigen, opmerking.
+- **Proef** is het concept van de schrijver (Word en markdown in de bezoekmap).
+
+## Doorgeven aan De Werfverslagschrijver
+
+Na mijn verificatie geef ik elk bezoek zonder voorbereiding door: opdracht `voorbereid <dossier>
+<bezoek>` in de bak (soort `opdracht`, voor werfverslagschrijver, één keer per bezoek). De proef
+start alleen na Mehdi's keuzes en zijn klik. Staat er een proef, dan kijk ik ze na (W11): aantal
+punten en foto's, en hoeveel er nog in te vullen, na te kijken of te ramen is. Pas als dat nul is,
+staat W11 op groen. Ik schrijf zelf nooit een verslag.
 
 ## Wat ik nooit doe
 
@@ -104,4 +106,5 @@ Wordt aangevuld na de eerste ronde; per punt oorzaak en wat we eraan deden.
 | 8 | 2324 heeft al twee werf-updates (03-03-2025, 02-06-2026) en een map 23-06-2026 met foto's van de klant, zonder opname | | Verslag 3 kan uit foto's en het Fathom-gesprek van 22-06 (Toon Aerts); dat gesprek staat in `7. Communication`, niet in de bezoekmap: koppeling op datum nog te bouwen. Open. |
 | 9 | 2309-1 (03-06-2026): geen eigen foto's, geen opname, wel 12 documenten van de bouwheer (pptx met 52 dia's, gebrekenlijst, schade, offerte, facturen, mailwisseling) | Light-bezoek door een collega; de bouwheer levert het materiaal | Voorbereiding en proef gemaakt uit die documenten (13-09, 21k+8k tokens per stap). Het verslag zegt letterlijk dat elke vaststelling uit de melding van de bouwheer komt en ter plaatse na te kijken is. Mehdi vult aanwezigen en ramingen aan. |
 | 10 | Mehdi wil ook een **pdf** | Op de VM staat geen LibreOffice; python-docx maakt alleen .docx | Voorlopig via Word op de Mac (osascript); structureel LibreOffice op de VM. Mehdi beslist. Open. |
+| 11 | Mehdi: "ik zie geen dossiernummers; per dossier wil ik keuzes, bijlagen, proef, herkomst en controle, zoals bij contracten" | Mijn eerste overzicht was een controletabel, geen dossierlijst | Overzicht herbouwd naar het contractendashboard (rij per bezoek, vaste knoppenrij); bezoekpagina met de vijf blokken. Schrijven afgesplitst naar De Werfverslagschrijver. Opgelost 13-09. |
 
