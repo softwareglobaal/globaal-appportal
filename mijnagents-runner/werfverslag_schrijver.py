@@ -63,9 +63,19 @@ def main():
     p.add_argument("--opdrachten", action="store_true")
     p.add_argument("--voorbereid", nargs=2, metavar=("DOSSIER", "BEZOEK"))
     p.add_argument("--proef", nargs=2, metavar=("DOSSIER", "BEZOEK"))
+    p.add_argument("--herlayout", nargs=2, metavar=("DOSSIER", "BEZOEK"), help="Word opnieuw opmaken uit de bewaarde proef, zonder Claude")
     a = p.parse_args()
     if a.opdrachten:
         print("opdrachten:", opdrachten())
+        return
+    if a.herlayout:
+        d, n = a.herlayout
+        ag.hartslag("actief", taak=f"nieuwe opmaak {d}-{n}")
+        try:
+            print(wp.herlayout(ag, d, int(n)))
+            ag.hartslag("klaar", taak=f"nieuwe opmaak {d}-{n} klaar")
+        finally:
+            ag.log_verstuur()
         return
     if a.voorbereid or a.proef:
         d, n = a.voorbereid or a.proef

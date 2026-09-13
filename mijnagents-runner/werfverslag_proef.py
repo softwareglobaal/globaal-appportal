@@ -444,3 +444,24 @@ def proef(ag, dossier, volgnr):
     _bewaar(rij, dossier, volgnr, verslag_md=md, proef_pad=pad_docx, proef_ts=vandaag,
             proef_info={"verslagtype": verslagtype, "taal": taal, "punten": n_punten, "fotos": len(beelden), "open": telling, "docx_kb": len(docx) // 1024})
     return pad_docx, md
+
+
+def herlayout(ag, dossier, volgnr):
+    """Nieuwe Word-opmaak uit de bewaarde markdown, zonder Claude (geen tokens): na een wijziging van het sjabloon."""
+    rij = _rij(dossier, volgnr)
+    md = rij.get("verslag_md") or ""
+    if not md.strip():
+        raise RuntimeError("geen bewaarde proef (verslag_md) om opnieuw op te maken")
+    v = sjab.van_markdown(md)
+    v.setdefault("datum", rij["datum"]); v.setdefault("adres", rij.get("adres", "")); v.setdefault("opgemaakt", date.today().isoformat())
+    keuzes = rij.get("keuzes") or {}
+    teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(keuzes.get("bronnen") == "eigen"))
+    beelden = _fotos_verzamelen(teksten, fotos, v)
+    docx = sjab.naar_docx(v, beelden)
+    naam = f"{dossier}-{v.get('bezoek', volgnr)} {'verslag plaatsbezoek' if v.get('soort_bezoek') == 'plaatsbezoek' else 'werfverslag'} (concept)"
+    pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
+    info = rij.get("proef_info") or {}
+    info.update({"fotos": len(beelden), "docx_kb": len(docx) // 1024, "layout": "HA-master"})
+    ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak (huisstijl contractmaster): {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {len(beelden)} foto's), zonder Claude")
+    _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info)
+    return pad_docx
