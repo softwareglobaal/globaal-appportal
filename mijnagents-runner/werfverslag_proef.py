@@ -1,4 +1,4 @@
-"""Voorbereiden en proef maken: het werk van De Werfverslagschrijver.
+"""Voorbereiden en proef maken: het werk van Werfverslag schrijver.
 
 Twee stappen, naar het patroon van het contractsysteem (gegevens met herkomst, dan een proef):
   voorbereid(dossier, bezoek): leest alles in de bezoekmap (docx, pdf, pptx, md, txt), haalt er met
@@ -219,7 +219,7 @@ VERSLAG_SCHEMA = {
     },
 }
 
-SYSTEEM_PROEF = """Je bent De Werfverslagschrijver van H-Architects (België). Je schrijft het concept-werfverslag voor de klant
+SYSTEEM_PROEF = """Je bent Werfverslag schrijver van H-Architects (België). Je schrijft het concept-werfverslag voor de klant
 in het sjabloon van het kantoor, geleerd uit meer dan duizend eerdere verslagen (Archisnapper): status van de werf,
 contactpersonen en aanwezigen, waarnemingen per categorie, elk genummerd en gedateerd, met een vlag (OK als het punt
 in orde is, Belangrijk, Dringend, of niets), een verantwoordelijke en de foto's die erbij horen, dan actiepunten,
@@ -275,7 +275,7 @@ def _rij(dossier, volgnr):
     r = bord.call(f"/api/werfbezoek?dossier={dossier}&volgnr={volgnr}")
     rijen = r.get("rijen") or []
     if not rijen:
-        raise RuntimeError(f"bezoek {dossier}-{volgnr} staat niet op het bord; De Werfverslaggever moet eerst verifiëren")
+        raise RuntimeError(f"bezoek {dossier}-{volgnr} staat niet op het bord; Werfverslag voorbereider moet eerst verifiëren")
     return rijen[0]
 
 

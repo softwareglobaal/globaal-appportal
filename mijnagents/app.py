@@ -993,7 +993,7 @@ def gezondheid():
 
 init_db()
 
-# --- werfverslagen: de pagina's van De Werfverslaggever en De Werfverslagschrijver, in de logica
+# --- werfverslagen: de pagina's van Werfverslag voorbereider en Werfverslag schrijver, in de logica
 #     van het contractsysteem: per dossier en per bezoek een rij met Openen · Keuzes · Bijlagen ·
 #     Proef · Herkomst · Controle. Alleen beheer (dossiernummers en adressen zijn inhoud).
 WERF_KOLOMMEN = ("gegevens", "verslag_md", "proef_pad", "proef_ts", "keuzes", "bijlagen", "proef_info")
@@ -1097,7 +1097,7 @@ def api_werfbezoek_lezen():
 
 def _taak_status(conn):
     return {r["uniek"]: dict(r) for r in conn.execute(
-        "SELECT uniek, status, opgepakt_door, opgepakt_ts, voor FROM klaarzet WHERE soort IN ('taak','opdracht') AND van='werfverslaggever'").fetchall()}
+        "SELECT uniek, status, opgepakt_door, opgepakt_ts, voor FROM klaarzet WHERE soort IN ('taak','opdracht') AND van='werfverslag-voorbereider'").fetchall()}
 
 
 # Vertaling van de standen van de agent naar de tekens van de dossiercontrole (contractsysteem).
@@ -1107,9 +1107,9 @@ WERF_ACTIE = {
     "W4": "iCloud-wacht: foto's van die dag binnen 300 m klaarzetten; of foto's van de klant in de bezoekmap zetten",
     "W5": "Plaudwacht: opname van die dag koppelen; geen opname = verslag uit geheugen (E8)",
     "W6": "Plaudwacht: transcript maken of ophalen",
-    "W7": "Keuzes bewaren en Proef maken; De Werfverslagschrijver schrijft het concept",
+    "W7": "Keuzes bewaren en Proef maken; Werfverslag schrijver schrijft het concept",
     "W9": "Mailwacht: verzending aan de klant terugvinden",
-    "W11": "De Werfverslagschrijver bereidt voor (opdracht staat klaar), daarna Keuzes en Proef",
+    "W11": "Werfverslag schrijver bereidt voor (opdracht staat klaar), daarna Keuzes en Proef",
 }
 
 
@@ -1168,8 +1168,8 @@ def werfverslagen_pagina():
         ds = dossiers.setdefault(d["dossier"], {"dossier": d["dossier"], "adres": d["adres"], "soort": d["soort_project"],
                                                 "projectmap": d["projectmap"], "bezoeken": []})
         ds["bezoeken"].append(d)
-    noden = [dict(r) for r in conn.execute("SELECT naam, tekst, wie, ts FROM nood WHERE naam IN ('werfverslaggever','werfverslagschrijver') AND open=1 ORDER BY id").fetchall()]
-    st = {r["naam"]: dict(r) for r in conn.execute("SELECT * FROM status WHERE naam IN ('werfverslaggever','werfverslagschrijver')").fetchall()}
+    noden = [dict(r) for r in conn.execute("SELECT naam, tekst, wie, ts FROM nood WHERE naam IN ('werfverslag-voorbereider','werfverslag-schrijver') AND open=1 ORDER BY id").fetchall()]
+    st = {r["naam"]: dict(r) for r in conn.execute("SELECT * FROM status WHERE naam IN ('werfverslag-voorbereider','werfverslag-schrijver')").fetchall()}
     return render_template("werfverslagen.html", app_naam=APP_NAAM, dossiers=list(dossiers.values()), noden=noden, status=st,
                            gebruiker=gebruiker())
 
@@ -1185,10 +1185,10 @@ def werfbezoek_pagina(dossier, volgnr):
         abort(404)
     b = _werf_rij(_werf_dict(r), _taak_status(conn))
     open_opdr = [dict(x) for x in conn.execute(
-        "SELECT id, titel, status, ts, van FROM klaarzet WHERE soort='opdracht' AND voor='werfverslagschrijver' AND sleutel=? ORDER BY id DESC LIMIT 6",
+        "SELECT id, titel, status, ts, van FROM klaarzet WHERE soort='opdracht' AND voor='werfverslag-schrijver' AND sleutel=? ORDER BY id DESC LIMIT 6",
         (f"{dossier}-{volgnr}",)).fetchall()]
     logboek = [dict(x) for x in conn.execute(
-        "SELECT naam, stap, tekst, ts FROM logboek WHERE naam IN ('werfverslaggever','werfverslagschrijver') AND onderwerp IN (?, ?) ORDER BY id DESC LIMIT 30",
+        "SELECT naam, stap, tekst, ts FROM logboek WHERE naam IN ('werfverslag-voorbereider','werfverslag-schrijver') AND onderwerp IN (?, ?) ORDER BY id DESC LIMIT 30",
         (f"{dossier}-{volgnr}", dossier)).fetchall()]
     return render_template("werfbezoek.html", app_naam=APP_NAAM, b=b, g=b["gegevens"], opdrachten=open_opdr, logboek=logboek,
                            verslag_html=md(b.get("verslag_md") or "") if b.get("verslag_md") else "", tab=request.args.get("tab", ""))
@@ -1219,7 +1219,7 @@ def werfbezoek_keuzes(dossier, volgnr):
 
 @app.route("/werfverslag/<dossier>/<int:volgnr>/opdracht", methods=["POST"])
 def werfbezoek_opdracht(dossier, volgnr):
-    """Knop op de bezoekpagina: zet een opdracht klaar voor De Werfverslagschrijver (voorbereid | proef).
+    """Knop op de bezoekpagina: zet een opdracht klaar voor Werfverslag schrijver (voorbereid | proef).
     Hij voert ze uit in zijn opdrachtenronde (cron elke 5 min) en meldt bewijs in zijn werkverslag."""
     if not mag_beslissen():
         abort(403)
@@ -1228,7 +1228,7 @@ def werfbezoek_opdracht(dossier, volgnr):
         abort(400)
     conn = db()
     conn.execute("INSERT INTO klaarzet(van, voor, soort, sleutel, titel, inhoud, verwijzing, uniek, ts) VALUES(?,?,?,?,?,?,?,?,?)",
-                 (f"bord:{gebruiker()}", "werfverslagschrijver", "opdracht", f"{dossier}-{volgnr}", f"{soort} {dossier} {volgnr}",
+                 (f"bord:{gebruiker()}", "werfverslag-schrijver", "opdracht", f"{dossier}-{volgnr}", f"{soort} {dossier} {volgnr}",
                   json.dumps({"door": gebruiker()}), "", "", nu()))
     conn.commit()
     return redirect(url_for("werfbezoek_pagina", dossier=dossier, volgnr=volgnr, tab="proef"))

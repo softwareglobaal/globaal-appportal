@@ -80,7 +80,7 @@ def naar_markdown(v):
     nr, n = v["dossier"], v["bezoek"]
     r.append(f"# Werfverslag {n} voor project {nr} {v['adres']}")
     r.append("")
-    r.append(f"**CONCEPT** - opgemaakt op {v['opgemaakt']} door De Werfverslagschrijver uit {v.get('bronnen_kort', 'de bezoekmap')}. "
+    r.append(f"**CONCEPT** - opgemaakt op {v['opgemaakt']} door Werfverslag schrijver uit {v.get('bronnen_kort', 'de bezoekmap')}. "
              "Na te kijken en aan te vullen door Mehdi Chegini vóór verzending.")
     r.append("")
     r.append("| | |\n|---|---|")
@@ -202,7 +202,7 @@ def naar_docx(v, fotos=None):
     kop(f"Werfverslag {n} voor project {nr} {v['adres']}", 0)
     p = doc.add_paragraph()
     p.add_run("CONCEPT").bold = True
-    p.add_run(f" - opgemaakt op {v['opgemaakt']} door De Werfverslagschrijver uit {v.get('bronnen_kort', 'de bezoekmap')}. "
+    p.add_run(f" - opgemaakt op {v['opgemaakt']} door Werfverslag schrijver uit {v.get('bronnen_kort', 'de bezoekmap')}. "
               "Na te kijken en aan te vullen door Mehdi Chegini vóór verzending.").italic = True
     tabel(["", ""], [["Verslagnummer", f"{nr}-{n}"], ["Datum werfbezoek", datum_nl(v["datum"])],
                      ["Verslagtype", v.get("verslagtype", "werfverslag")], ["Opgemaakt door", FIRMA["naam"]]], [4, 12.5])

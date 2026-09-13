@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""De Werfverslagschrijver (H-Architects) — schrijft de voorbereiding en de proef van een werfverslag.
+"""Werfverslag schrijver (H-Architects) — schrijft de voorbereiding en de proef van een werfverslag.
 
-Hij werkt alleen op opdracht: van De Werfverslaggever (na verificatie: "voorbereid <dossier> <bezoek>")
+Hij werkt alleen op opdracht: van Werfverslag voorbereider (na verificatie: "voorbereid <dossier> <bezoek>")
 of van Mehdi via de bezoekpagina ("voorbereid ..." of "proef ..."). Hij leest de bezoekmap, haalt de
 gegevens eruit met bron en zekerheid, en schrijft het concept in het eigen sjabloon (Word + markdown)
 in de bezoekmap. Hij verstuurt nooit en overschrijft nooit.
 
 Gebruik:
-    werfverslagschrijver.py --opdrachten          # cron elke 5 min: opdrachten uit de bak uitvoeren
-    werfverslagschrijver.py --voorbereid 2309 1   # handmatig
-    werfverslagschrijver.py --proef 2309 1
+    werfverslag_schrijver.py --opdrachten          # cron elke 5 min: opdrachten uit de bak uitvoeren
+    werfverslag_schrijver.py --voorbereid 2309 1   # handmatig
+    werfverslag_schrijver.py --proef 2309 1
 """
 import argparse
 import json
@@ -22,14 +22,14 @@ sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import werfverslag_proef as wp  # noqa: E402
 
-NAAM = "werfverslagschrijver"
+NAAM = "werfverslag-schrijver"
 ag = bord.Agent(NAAM)
 
 
 def opdrachten():
     items = [it for it in bord.klaargezet_voor(NAAM, n=30) if it.get("soort") == "opdracht"]
     if not items:
-        ag.hartslag("waakt", taak="wacht op opdrachten", detail="van De Werfverslaggever of van de bezoekpagina")
+        ag.hartslag("waakt", taak="wacht op opdrachten", detail="van Werfverslag voorbereider of van de bezoekpagina")
         return 0
     ag.hartslag("actief", taak=f"{len(items)} opdracht(en)")
     gedaan, fouten = 0, 0

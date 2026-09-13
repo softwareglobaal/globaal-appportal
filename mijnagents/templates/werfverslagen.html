@@ -29,14 +29,14 @@
 <body>
 <header>
   <span class="merk">Werfverslagen</span>
-  <span class="sub">H-Architects · <a href="{{ url_for('bord') }}">bord</a> · <a href="{{ url_for('detail', naam='werfverslaggever') }}">De Werfverslaggever</a> · <a href="{{ url_for('detail', naam='werfverslagschrijver') }}">De Werfverslagschrijver</a></span>
+  <span class="sub">H-Architects · <a href="{{ url_for('bord') }}">bord</a> · <a href="{{ url_for('detail', naam='werfverslag-voorbereider') }}">Werfverslag voorbereider</a> · <a href="{{ url_for('detail', naam='werfverslag-schrijver') }}">Werfverslag schrijver</a></span>
 </header>
 <main>
 <h1>Werfverslagen</h1>
 <p class="leid">Per dossier en per werfbezoek: van de bronnen in de bezoekmap tot het concept-werfverslag. Wat er nog moet komen staat erbij.
-De Werfverslaggever verifieert (controle), geeft door aan De Werfverslagschrijver (voorbereiding en proef); jij maakt de keuzes en kijkt de proef na.</p>
+Werfverslag voorbereider verifieert (controle), geeft door aan Werfverslag schrijver (voorbereiding en proef); jij maakt de keuzes en kijkt de proef na.</p>
 
-{% if not dossiers %}<p class="stil">Nog geen dossiers. Vraag De Regisseur een dossier te volgen, of: <code>werfverslaggever.py --project 2309</code>.</p>{% endif %}
+{% if not dossiers %}<p class="stil">Nog geen dossiers. Vraag De Regisseur een dossier te volgen, of: <code>werfverslag_voorbereider.py --project 2309</code>.</p>{% endif %}
 
 {% for d in dossiers %}
 <h2>{{ d.dossier }} · {{ d.adres }} <span class="stil" style="text-transform:none;letter-spacing:0;font-weight:400">({{ d.soort }}-project, {{ d.bezoeken|length }} bezoek(en))</span></h2>
@@ -72,7 +72,7 @@ De Werfverslaggever verifieert (controle), geeft door aan De Werfverslagschrijve
 <h2>De agents</h2>
 <table>
   <tr><th>Agent</th><th>Stand</th><th>Laatste taak</th></tr>
-  {% for naam, label in [('werfverslaggever', 'De Werfverslaggever (verifieert, geeft door)'), ('werfverslagschrijver', 'De Werfverslagschrijver (voorbereidt, schrijft de proef)')] %}
+  {% for naam, label in [('werfverslag-voorbereider', 'Werfverslag voorbereider (verifieert, geeft door)'), ('werfverslag-schrijver', 'Werfverslag schrijver (voorbereidt, schrijft de proef)')] %}
   {% set s = status.get(naam) %}
   <tr><td><a href="{{ url_for('detail', naam=naam) }}" style="color:var(--accent)">{{ label }}</a></td>
       <td>{% if s %}{{ s.status }} <span class="stil">{{ s.ts[:16].replace('T',' ') }} UTC</span>{% else %}<span class="stil">nog geen ronde</span>{% endif %}</td>

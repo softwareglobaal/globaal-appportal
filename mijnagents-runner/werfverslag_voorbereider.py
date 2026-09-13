@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""De Werfverslaggever (H-Architects) — bereidt werfverslagen voor.
+"""Werfverslag voorbereider (H-Architects) — bereidt werfverslagen voor.
 
 Hij verzamelt zelf niets en schrijft zelf geen verslag. Hij:
   1. neemt een opdracht (dossiernummer) aan, van Mehdi (--project) of uit zijn eigen tabel;
@@ -13,9 +13,9 @@ Hij verzamelt zelf niets en schrijft zelf geen verslag. Hij:
   6. schrijft de stand naar zijn pagina op het bord (/werfverslagen).
 
 Gebruik:
-    werfverslaggever.py                      # alle open dossiers uit de tabel opnieuw verifiëren
-    werfverslaggever.py --project 2309 2324  # dossiers toevoegen en meteen verifiëren
-    werfverslaggever.py --project 2416 --droog   # alleen kijken, niets klaarzetten
+    werfverslag_voorbereider.py                      # alle open dossiers uit de tabel opnieuw verifiëren
+    werfverslag_voorbereider.py --project 2309 2324  # dossiers toevoegen en meteen verifiëren
+    werfverslag_voorbereider.py --project 2416 --droog   # alleen kijken, niets klaarzetten
 """
 import argparse
 import json
@@ -29,12 +29,18 @@ sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import bronnen  # noqa: E402
 
-NAAM = "werfverslaggever"
+NAAM = "werfverslag-voorbereider"
 LIGHT_BASIS = "/Work All/01. H-A WORK/0 H-A Light projects/5. H-A light SITE VISITS"
-STANDAARD_BASES = [bronnen.PROJECT_BASIS,
-                   "/Work All/01. H-A WORK/0 H-A Standaard projects/2. STAN Permission awaited",
-                   "/Work All/01. H-A WORK/0 H-A Standaard projects/3. STAN Permission received",
-                   "/Work All/01. H-A WORK/0 H-A Standaard projects/4. STAN Execution"]
+STANDAARD_OUDER = "/Work All/01. H-A WORK/0 H-A Standaard projects"
+
+
+def standaard_bases():
+    """De STAN-fasemappen zoals ze nu heten (0. STAN Voorstudie ... 6.STAN Ready to Deliver), gemeten."""
+    uit = []
+    for e in bronnen.lijst(STANDAARD_OUDER, recursief=False) or []:
+        if e.get(".tag") == "folder" and re.match(r"^\d\.?\s*STAN", e.get("name", "")):
+            uit.append(e.get("path_display"))
+    return sorted(uit)
 # Mappen waarin een bezoek kan liggen (kleine letters, deel van het pad)
 BEZOEK_ANKERS = ("site reports", "werfverslagen", "werf updates", "site visits", "communicat", "werfbezoek")
 FOTO_EXT = (".heic", ".jpg", ".jpeg", ".png", ".webp")
@@ -71,7 +77,7 @@ def adres_uit_mapnaam(naam):
 
 def zoek_projectmap(nummer):
     """Eerst de standaardprojecten (STAN-fasen), dan de light-projecten."""
-    for basis in STANDAARD_BASES:
+    for basis in standaard_bases():
         for e in bronnen.lijst(basis, recursief=False) or []:
             if e.get(".tag") == "folder" and e.get("name", "").startswith(str(nummer)):
                 return e.get("path_display"), "standaard"
@@ -100,8 +106,9 @@ def bezoeken_in(projectmap):
         # een datummap ónder een fotomap is een fotoreeks van het bezoek, geen bezoek
         if any(("foto" in s or "photo" in s) for s in delen[:-1]):
             continue
-        # in de communicatiemap telt alleen een momentmap (A3/A7): naam bevat 'bezoek'
-        if "communicat" in rel and "bezoek" not in naam:
+        # in de communicatiemap telt alleen een momentmap (A3/A7) van een werf- of plaatsbezoek:
+        # naam bevat 'bezoek', maar niet leverancier, toonzaal, online of tel
+        if "communicat" in rel and ("bezoek" not in naam or any(x in naam for x in ("leverancier", "toonzaal", "online", "tel "))):
             continue
         if True:
             mappen[pad] = {"map": pad, "datum": d, "fotos": 0, "opnames": [], "transcripten": [],
@@ -227,14 +234,14 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
         taken.append(("plaud-wacht", f"Transcript maken/ophalen van de opname in {bezoek['map']} (dossier {nummer}, {d})"))
     else:
         post("W6", "transcript", "ontbreekt", "geen opname, dus geen transcript")
-    # W7 verslag; W11 nacontrole van de proef van De Werfverslagschrijver
+    # W7 verslag; W11 nacontrole van de proef van Werfverslag schrijver
     br = bord_rij or {}
     if bezoek["verslagen"]:
         post("W7", "verslag of concept", "ok", "; ".join(bezoek["verslagen"])[:160])
     elif br.get("proef_pad"):
-        post("W7", "verslag of concept", "ok", f"proef van De Werfverslagschrijver: {os.path.basename(br['proef_pad'])}")
+        post("W7", "verslag of concept", "ok", f"proef van Werfverslag schrijver: {os.path.basename(br['proef_pad'])}")
     else:
-        post("W7", "verslag of concept", "ontbreekt", "nog geen verslag; De Werfverslagschrijver maakt de proef na Keuzes en Proef op de bezoekpagina")
+        post("W7", "verslag of concept", "ontbreekt", "nog geen verslag; Werfverslag schrijver maakt de proef na Keuzes en Proef op de bezoekpagina")
     if br.get("proef_pad"):
         info = br.get("proef_info") or {}
         if isinstance(info, str):
@@ -249,7 +256,7 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
              f"{op.get('na_te_kijken', '?')} na te kijken, {op.get('raming_open', '?')} ramingen open" if isinstance(op, dict) else "geen telling")
     elif not (br.get("gegevens") or {}).get("gegevens") if isinstance(br.get("gegevens"), dict) else not br.get("gegevens"):
         post("W11", "voorbereiding door de schrijver", "ontbreekt", "nog geen gegevens met herkomst; opdracht voorbereid wordt doorgegeven")
-        taken.append(("werfverslagschrijver", f"voorbereid {nummer} {bezoek['volgnr']}"))
+        taken.append(("werfverslag-schrijver", f"voorbereid {nummer} {bezoek['volgnr']}"))
     else:
         post("W11", "voorbereiding door de schrijver", "ok", "gegevens met herkomst staan op de bezoekpagina; Keuzes en Proef zijn aan Mehdi")
     # W8 verslagnummer
@@ -287,14 +294,19 @@ def verwerk(nummer, droog=False):
         bord_rijen = {}
     rijen, alle_taken, noden = [], [], []
     if not bezoeken:
-        noden.append({"tekst": f"Dossier {nummer}: geen bezoekmap met datum gevonden onder {projectmap}", "wie": "mehdi"})
+        # dossier gevolgd zonder bezoek (bv. werf start binnenkort): een rij met volgnummer 0, zodat het op de pagina staat
+        rijen.append({"dossier": str(nummer), "adres": adres, "soort_project": soort, "projectmap": projectmap, "bezoekmap": "",
+                      "datum": "", "volgnr": 0, "bronnen": {}, "taken": [], "stand": "gevolgd, nog geen bezoekmap",
+                      "controles": [{"code": "W2", "naam": "projectmap gevonden", "stand": "ok", "toelichting": f"{soort}: {projectmap}"},
+                                    {"code": "W3", "naam": "bezoekmap", "stand": "ontbreekt", "toelichting": "nog geen momentmap met een werf- of plaatsbezoek; na het eerste bezoek maakt de skill werfverslag de map aan"}]})
+        ag.log(str(nummer), "bevinding", "nog geen bezoekmap; dossier wordt gevolgd tot het eerste bezoek")
     for b in bezoeken:
         controles, taken, n = controleer(nummer, adres, soort, projectmap, b, bak, bord_rijen.get(b["map"]))
         noden += n
         taakrijen = []
         for voor, tekst in taken:
             uniek = f"werf:{nummer}:{b['datum']}:{voor}"
-            soort = "opdracht" if voor == "werfverslagschrijver" else "taak"
+            soort = "opdracht" if voor == "werfverslag-schrijver" else "taak"
             taakrijen.append({"voor": voor, "soort": soort, "sleutel": (f"{nummer}-{b['volgnr']}" if soort == "opdracht" else str(nummer)), "titel": tekst[:300],
                               "inhoud": {"dossier": nummer, "datum": b["datum"], "adres": adres, "bezoekmap": b["map"], "volgnr": b["volgnr"]},
                               "verwijzing": b["map"], "uniek": uniek})
@@ -351,7 +363,7 @@ def main():
             standen[r["stand"]] = standen.get(r["stand"], 0) + 1
     # vaste noden: wat structureel nog ontbreekt om zonder mens te werken
     noden += [
-        {"tekst": "Agendawacht, Plaudwacht en iCloud-wacht lezen mijn taken (klaarzet soort taak) nog niet; De Werfverslagschrijver leest zijn opdrachten wel", "wie": "claude-code"},
+        {"tekst": "Agendawacht, Plaudwacht en iCloud-wacht lezen mijn taken (klaarzet soort taak) nog niet; Werfverslag schrijver leest zijn opdrachten wel", "wie": "claude-code"},
         {"tekst": "Verstuurd-status (W9) vraagt een koppeling mail -> dossier bij de Mailwacht mch@", "wie": "claude-code"},
     ]
     # dubbels weg, volgorde behouden

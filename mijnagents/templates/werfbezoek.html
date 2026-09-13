@@ -48,12 +48,12 @@
 
 <div style="background:{{ '#edf2ef' if b.heeft_proef else ('#fbf3e3' if b.voorbereid else '#f7e8e5') }}; border:1px solid {{ '#1f3d33' if b.heeft_proef else ('#a1701a' if b.voorbereid else '#a33a2a') }}; border-radius:4px; padding:12px 16px; margin:14px 0 6px;">
   <strong style="font-size:16px;">
-    {% if b.heeft_proef %}Proef staat klaar in de bezoekmap: nakijken en versturen.{% elif b.voorbereid %}Voorbereid door De Werfverslagschrijver: maak je keuzes en laat de proef maken.{% else %}Nog niet voorbereid: De Werfverslagschrijver leest de bezoekmap nog uit.{% endif %}
+    {% if b.heeft_proef %}Proef staat klaar in de bezoekmap: nakijken en versturen.{% elif b.voorbereid %}Voorbereid door Werfverslag schrijver: maak je keuzes en laat de proef maken.{% else %}Nog niet voorbereid: Werfverslag schrijver leest de bezoekmap nog uit.{% endif %}
   </strong><br>
   <span class="stil">{{ b.telling.ok }} in orde · {{ b.telling.let_op }} nakijken · {{ b.telling.fout }} ontbreekt · {{ b.telling.onbekend }} niet meetbaar{% if b.nodig %} — nog nodig: {{ b.nodig|join(', ') }}{% endif %}</span>
 </div>
 {% if opdrachten and opdrachten[0].status == 'klaar' %}
-<div class="melding"><strong>Opdracht "{{ opdrachten[0].titel }}" staat klaar voor De Werfverslagschrijver.</strong> Hij pakt ze binnen 5 minuten op; deze pagina ververst zichzelf.</div>
+<div class="melding"><strong>Opdracht "{{ opdrachten[0].titel }}" staat klaar voor Werfverslag schrijver.</strong> Hij pakt ze binnen 5 minuten op; deze pagina ververst zichzelf.</div>
 {% endif %}
 
 <nav class="tabs">
@@ -113,7 +113,7 @@
   <span class="stil">Gemaakt op {{ b.proef_ts }}{% if b.proef_info %} · {{ b.proef_info.verslagtype }} · {{ b.proef_info.punten }} punten · {{ b.proef_info.fotos }} foto's · {{ b.proef_info.docx_kb }} kB{% if b.proef_info.open %} · nog {{ b.proef_info.open.in_te_vullen }} in te vullen, {{ b.proef_info.open.na_te_kijken }} na te kijken, {{ b.proef_info.open.raming_open }} ramingen{% endif %}{% endif %}. Dezelfde tekst staat ernaast als .md. Jij legt er je laag overheen en verstuurt; de agents versturen nooit.</span></div>
 <div class="verslag">{{ verslag_html|safe }}</div>
 {% else %}
-<p class="stil">Nog geen proef. Bewaar eerst je keuzes, klik dan <em>Proef maken (Word)</em>: De Werfverslagschrijver schrijft het concept in het sjabloon van H-Architects en zet .docx en .md in de bezoekmap.</p>
+<p class="stil">Nog geen proef. Bewaar eerst je keuzes, klik dan <em>Proef maken (Word)</em>: Werfverslag schrijver schrijft het concept in het sjabloon van H-Architects en zet .docx en .md in de bezoekmap.</p>
 {% endif %}
 
 <h2 id="herkomst">Herkomst</h2>
@@ -131,7 +131,7 @@
 </table>{% endif %}
 {% if g.ontbreekt %}<h3>Wat de architect nog moet aanvullen</h3><ul>{% for x in g.ontbreekt %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
 {% else %}
-<p class="stil">Nog geen gegevens. De Werfverslaggever geeft na zijn verificatie de opdracht "voorbereid" door aan De Werfverslagschrijver; je kunt het ook zelf starten met <em>Voorbereiden</em>.</p>
+<p class="stil">Nog geen gegevens. Werfverslag voorbereider geeft na zijn verificatie de opdracht "voorbereid" door aan Werfverslag schrijver; je kunt het ook zelf starten met <em>Voorbereiden</em>.</p>
 {% endif %}
 
 <h2 id="controle">Controle</h2>
