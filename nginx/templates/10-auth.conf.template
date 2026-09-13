@@ -29,7 +29,12 @@ server {
     location = /app/download {
         auth_request /app/sessiecontrole;
         error_page 401 403 = @app_aanmelden;
+        # try_files draait in de content-fase, dus na de sessiecontrole. Een
+        # "return" hier zou al in de rewrite-fase vuren en de controle overslaan.
+        try_files /bestaat-niet @kies_installer;
+    }
 
+    location @kies_installer {
         # Telefoons en tablets eerst: hun user-agent bevat ook "Mac OS X".
         if ($http_user_agent ~* "(iPhone|iPad|iPod|Android)") {
             return 302 https://auth.${BASE_DOMAIN}/app/alleen-desktop;
