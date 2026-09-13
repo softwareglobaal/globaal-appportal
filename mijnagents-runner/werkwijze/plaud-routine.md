@@ -49,3 +49,14 @@ Doe dit, in deze volgorde:
 Grenzen: niets verwijderen, geen audio zelf downloaden (alleen de link meegeven;
 de server haalt het bestand), geen bestand overschrijven behalve het toevoegen
 van de regel `audio_url` in de kop, geen samenvattingen.
+
+## Extra stap (14-09-2026): gezochte opnames op opnamedatum
+
+Lees in de inbox het bestand `00 gezocht.md` (geschreven door de Werfverslag voorbereider). Voor elke regel:
+zoek in Plaud de opnames waarvan `start_at` (UTC; Belgische tijd is +1 u in de winter, +2 u in de zomer) op die
+bezoekdag valt, ongeacht wanneer ze geüpload zijn (gebruik `date_from`/`date_to` ruim, tot een jaar terug, en kijk
+naar `start_at`). Haal per gevonden opname het transcript (block `transaction`) op en zet het in de inbox als
+`<datum> <UUMM> Plaud transcript - <id>.md`, met in de kop `dossier:`, `bezoekmap:` (letterlijk uit de regel) en
+`audio_url:`. Is er geen transcript (source_list leeg): schrijf één regel `niet getranscribeerd` in het bestand.
+Les van 2309: het werfbezoek van 03-06-2026 werd pas op 21-08 geüpload en viel daardoor buiten "de laatste tien dagen".
+

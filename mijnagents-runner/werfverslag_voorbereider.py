@@ -247,6 +247,8 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
     transcripten_bak = [t for t in bak.get("transcript", []) if dag_van(t) == d]
     if bezoek["opnames"]:
         post("W5", "opname", "ok", "; ".join(bezoek["opnames"])[:160])
+    elif bezoek["transcripten"]:
+        post("W5", "opname", "ok", "opname bestaat in Plaud; het transcript staat in de map (audio pas na een ja van Mehdi)")
     elif transcripten_bak:
         post("W5", "opname", "ok", "opname bij de Plaud-/Fathomwacht, niet in de map")
     else:
@@ -325,6 +327,12 @@ def verwerk(nummer, droog=False):
         bord_rijen = {r.get("bezoekmap"): r for r in bord.call(f"/api/werfbezoek?dossier={nummer}").get("rijen", [])}
     except Exception:  # noqa: BLE001
         bord_rijen = {}
+    open_taken = {}
+    for agent in ("icloud-wacht", "plaud-wacht"):
+        try:
+            open_taken[agent] = [it for it in bord.klaargezet_voor(agent, n=300) if it.get("soort") == "taak" and it.get("van") == NAAM]
+        except Exception:  # noqa: BLE001
+            open_taken[agent] = []
     rijen, alle_taken, noden = [], [], []
     if not bezoeken:
         # dossier gevolgd zonder bezoek (bv. werf start binnenkort): een rij met volgnummer 0, zodat het op de pagina staat
@@ -335,6 +343,17 @@ def verwerk(nummer, droog=False):
         ag.log(str(nummer), "bevinding", "nog geen bezoekmap; dossier wordt gevolgd tot het eerste bezoek")
     for b in bezoeken:
         controles, taken, n = controleer(nummer, adres, soort, projectmap, b, bak, bord_rijen.get(b["map"]))
+        # een taak die intussen vervuld is (foto's of transcript staan in de map) vink ik af, zodat de zoeklijst klopt
+        st = {c["code"]: c["stand"] for c in controles}
+        for code, agent in (("W4", "icloud-wacht"), ("W6", "plaud-wacht")):
+            if st.get(code) == "ok":
+                for it in open_taken.get(agent, []):
+                    if it.get("uniek") == f"werf:{nummer}:{b['datum']}:{agent}":
+                        try:
+                            bord.opgepakt(it["id"], NAAM)
+                            ag.log(str(nummer), "besluit", f"taak voor {agent} ({b['datum']}) afgevinkt: bron staat in de map")
+                        except Exception:  # noqa: BLE001
+                            pass
         noden += n
         taakrijen = []
         for voor, tekst in taken:
@@ -363,6 +382,50 @@ def verwerk(nummer, droog=False):
     except Exception as e:  # noqa: BLE001
         ag.log(str(nummer), "fout", f"stand niet naar het bord: {e}")
     return rijen, noden
+
+
+GEZOCHT_PAD = "/Work All/000 AI Opzet/Mehdi Agents/Plaud inbox/00 gezocht.md"
+
+
+def upload_overschrijf(pad, data):
+    """Bestand in Dropbox schrijven of vervangen (mode overwrite); alleen voor mijn eigen zoeklijst."""
+    import json as _j
+    import urllib.request
+    arg = _j.dumps({"path": pad, "mode": "overwrite", "mute": True})
+    req = urllib.request.Request(f"{bronnen.INHOUD}/2/files/upload", data=data, method="POST",
+                                 headers=bronnen._koppen({"Dropbox-API-Arg": arg, "Content-Type": "application/octet-stream"}))
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return _j.load(r).get("path_display", pad)
+
+
+def gezocht_schrijven():
+    """De zoeklijst voor de Plaud-routine (claude.ai): elke open opname-taak als een regel met bezoekdag, dossier, adres
+    en bezoekmap. De routine zoekt op OPNAMEDATUM (start_at, UTC), niet op uploaddatum, en zet het transcript in de inbox
+    met de kop `bezoekmap:` zodat de Plaudwacht het in de bezoekmap zet. Les van 2309 (03-06, geüpload 21-08)."""
+    try:
+        taken = [it for it in bord.klaargezet_voor("plaud-wacht", n=200) if it.get("soort") == "taak" and it.get("van") == NAAM]
+    except Exception:  # noqa: BLE001
+        return 0
+    regels = ["# Gezochte Plaud-opnames (geschreven door de Werfverslag voorbereider)", "",
+              "Voor de Plaud-routine: zoek per regel de opname(s) waarvan `start_at` (UTC, +2 u in de zomer) op de bezoekdag valt,",
+              "haal het transcript (block transaction) op en zet het in deze inbox als `<datum> <UUMM> Plaud transcript - <id>.md`",
+              "met in de kop `dossier:`, `bezoekmap:` en `audio_url:`. Zonder transcript in Plaud: meld `niet getranscribeerd`.", "",
+              "| bezoekdag | dossier | adres | bezoekmap | taak |", "|---|---|---|---|---|"]
+    n = 0
+    for it in taken:
+        try:
+            d = json.loads(it.get("inhoud") or "{}")
+        except ValueError:
+            d = {}
+        if not d.get("datum"):
+            continue
+        regels.append(f"| {d['datum']} | {d.get('dossier','')} | {d.get('adres','')} | {d.get('bezoekmap','')} | {it['id']} |")
+        n += 1
+    try:
+        upload_overschrijf(GEZOCHT_PAD, ("\n".join(regels) + "\n").encode("utf-8"))
+    except Exception as e:  # noqa: BLE001
+        ag.log("plaud", "fout", f"zoeklijst niet geschreven: {e}")
+    return n
 
 
 def open_dossiers():
@@ -411,6 +474,9 @@ def main():
     for x in noden:
         if x["tekst"] not in gezien:
             gezien.add(x["tekst"]); uniek.append(x)
+    if not a.droog:
+        nz = gezocht_schrijven()
+        ag.log("plaud", "schrijf", f"zoeklijst voor de Plaud-routine bijgewerkt: {nz} bezoekdag(en) zonder opname ({GEZOCHT_PAD})")
     ag.log_verstuur()
     detail = "; ".join(f"{k}: {v}" for k, v in sorted(standen.items())) or "geen bezoeken"
     if not a.droog:

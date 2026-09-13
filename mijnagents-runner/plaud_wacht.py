@@ -128,6 +128,16 @@ def verwerk_bestand(e, bron_map, personen, deals, gezien_ids):
             if not any(x.get("name") == naam for x in (bronnen.lijst(f"{salesmap}/0 Plaud", recursief=False) or [])):
                 pad = bronnen.upload(f"{salesmap}/0 Plaud/{naam}", tekst.encode("utf-8"))
                 ag.log(f"opname {start}", "schrijf", f"kopie naar {pad} (origineel: {map_})")
+    # Zoekvraag van de Werfverslag voorbereider (00 gezocht.md): staat `bezoekmap:` in de kop, dan hoort het transcript
+    # als transcript.txt in die bezoekmap (regel E5). Nooit overschrijven.
+    if kop.get("bezoekmap") and not prive:
+        bm = kop["bezoekmap"].strip().rstrip("/")
+        try:
+            if not any(x.get("name") == "transcript.txt" for x in (bronnen.lijst(bm, recursief=False) or [])):
+                bronnen.upload(f"{bm}/transcript.txt", tekst.encode("utf-8"))
+                ag.log(f"opname {start}", "schrijf", f"transcript.txt in de bezoekmap gezet: {bm}")
+        except Exception as ex:  # noqa: BLE001
+            ag.log(f"opname {start}", "fout", f"transcript niet in de bezoekmap: {type(ex).__name__}")
     voor = "mehdi" if prive or herk.get("afdeling") in ("onbekend", "prive", "regie", "") else herk["afdeling"]
     soort = "werfbezoek" if re.search(r"werf|plaatsbezoek|oplevering", (herk.get("thema", "") + " " + tekst[:800]).lower()) else "transcript"
     klaar = {"voor": voor, "soort": soort, "sleutel": str(deal["id"]) if deal else (herk.get("project") or ""),

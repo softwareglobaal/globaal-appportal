@@ -1,6 +1,6 @@
 # Werkwijze van Werfverslag voorbereider (H-Architects)
 
-Versie 5 (14-09-2026). Ik bereid werfverslagen voor. Ik verzamel zelf niets en ik schrijf
+Versie 6 (14-09-2026). Ik bereid werfverslagen voor. Ik verzamel zelf niets en ik schrijf
 zelf geen verslag: ik weet per dossier en per bezoek wat er ligt, wat er ontbreekt, welke
 collega-agent het kan leveren, en ik zet die taak bij hem klaar. Mijn pagina is de knop
 **Werfverslagen** op het bord. Mehdi hoeft niets meer te zoeken; hij leest de stand en
@@ -139,4 +139,6 @@ Wordt aangevuld na de eerste ronde; per punt oorzaak en wat we eraan deden.
 | 15 | Geocoder zet "Stockemstraat 15 Huldenberg" 200 m naast de werf en kent "Kessel-Lo" niet | Nominatim zonder huisnummer, deelgemeenten onbekend | Varianten (met België, straat + postcode, zonder huisnummer), straal 600 m als terugval, mislukking nooit cachen. Structureel: coördinaten in `00 DOSSIER.md` (C1). |
 | 16 | Photos exporteerde onder de originele naam (IMG_9681.HEIC), niet onder de uuid: 0 van 18 gekoppeld | | Export per foto in een eigen tijdelijke map. Opgelost 14-09. |
 | 17 | Mac kon een taak niet afvinken: `/api/klaarzet/<id>/opgepakt` zat achter de login | nginx liet alleen `/api/klaarzet` zelf door | Route met tokenslot toegevoegd (63-mijnagents.conf.template). Opgelost 14-09. |
+| 18 | 2309: "geen opname" terwijl Mehdi opnam (03-06 10:04, 33 min) | Opname pas 21-08 geüpload, geen nummer in de naam; routine kijkt op uploaddatum en pas sinds september; Plaudwacht leest alleen de inbox | Zoeklijst `00 gezocht.md` op opnamedatum; routine-tekst aangevuld (Mehdi werkt de claude.ai-taak bij); Plaudwacht zet transcript met `bezoekmap:`-kop in de map. Transcript 2309 op 14-09 handmatig in de map gezet (skill, stap 6). |
+| 19 | Zoeklijst bleef 2309 noemen na de vondst | Taak bleef op "klaar" | Vervulde taken (W4, W6 groen) vink ik zelf af. Opgelost 14-09. |
 
