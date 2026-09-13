@@ -255,22 +255,27 @@ def _leeg_lichaam(doc):
 
 
 def _voettekst(doc, tekst):
-    from docx.oxml import OxmlElement
-    from docx.oxml.ns import qn
+    """De master heeft de voettekst in een tabel: links 'nummer | soort' (vet, grijs, 9 pt), rechts 'Pagina X'.
+    Alleen de linkertekst wordt vervangen; de opmaak en het paginaveld blijven van de master."""
     for s in doc.sections:
         f = s.footer
-        for p in f.paragraphs[1:]:
-            p._element.getparent().remove(p._element)
-        p = f.paragraphs[0] if f.paragraphs else f.add_paragraph()
-        for r in list(p.runs):
-            r._element.getparent().remove(r._element)
-        p.add_run(tekst + "    Pagina ")
-        run = p.add_run()
-        for t, txt in (("begin", None), (None, " PAGE "), ("end", None)):
-            if t:
-                el = OxmlElement("w:fldChar"); el.set(qn("w:fldCharType"), t); run._r.append(el)
+        if f.tables:
+            cel = f.tables[0].rows[0].cells[0]
+            p = cel.paragraphs[0]
+            runs = list(p.runs)
+            if runs:
+                runs[0].text = tekst
+                for r in runs[1:]:
+                    r._element.getparent().remove(r._element)
             else:
-                it = OxmlElement("w:instrText"); it.set(qn("xml:space"), "preserve"); it.text = txt; run._r.append(it)
+                p.add_run(tekst)
+            for extra in cel.paragraphs[1:]:
+                extra._element.getparent().remove(extra._element)
+        else:
+            p = f.paragraphs[0] if f.paragraphs else f.add_paragraph()
+            for r in list(p.runs):
+                r._element.getparent().remove(r._element)
+            p.add_run(tekst)
 
 
 def naar_docx(v, fotos=None, master=MASTER):
