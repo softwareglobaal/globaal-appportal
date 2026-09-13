@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werfverslagen — {{ app_naam }}</title>
+<style>
+  :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;--ok:#3ecf8e;--mis:#f0655d;--onb:#f59e0b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tekst);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--rand);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+  header h1{margin:0;font-size:19px}
+  header a{color:var(--accent);text-decoration:none;font-size:13px}
+  main{padding:16px 24px;max-width:1500px}
+  .tel{color:var(--zacht);font-size:12px}
+  .kaart{border:1px solid var(--rand);border-radius:10px;background:var(--paper);padding:14px 16px;margin-bottom:16px}
+  .kaart h2{margin:0 0 4px;font-size:16px}
+  .wrap{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;min-width:1000px}
+  th,td{text-align:left;padding:6px 8px;border-top:1px solid var(--rand);vertical-align:top;font-size:13px}
+  th{color:var(--zacht);font-weight:600;white-space:nowrap}
+  .b{display:inline-block;min-width:34px;text-align:center;border-radius:6px;padding:2px 6px;font-size:12px;font-weight:600;color:#0f1115}
+  .b.ok{background:var(--ok)} .b.ontbreekt{background:var(--mis);color:#fff} .b.onbekend{background:var(--onb)} .b.nvt{background:#444;color:#ccc}
+  .stand{font-weight:600}
+  .taak{font-size:12px;color:var(--zacht)} .taak b{color:var(--tekst)}
+  .taak .klaar{color:var(--onb)} .taak .opgepakt{color:var(--ok)}
+  details{margin-top:6px} summary{cursor:pointer;color:var(--accent);font-size:12px}
+  ul.legenda{columns:2;font-size:12px;color:var(--zacht);margin:6px 0 0;padding-left:18px}
+  .nood{border-left:3px solid var(--onb);padding:4px 10px;margin:4px 0;font-size:13px}
+  .nood .wie{color:var(--zacht);font-size:12px}
+  code{font-size:12px;color:var(--zacht)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Werfverslagen</h1>
+  <a href="{{ url_for('bord') }}">← bord</a>
+  <a href="{{ url_for('detail', naam='werfverslaggever') }}">De Werfverslaggever</a>
+  <span class="tel">
+    {% if status %}laatste ronde {{ status['ts'][:16].replace('T',' ') }} UTC · {{ status['taak'] }} · {{ status['detail'] }}{% else %}nog geen ronde{% endif %}
+  </span>
+</header>
+<main>
+  <div class="kaart">
+    <h2>Controleposten</h2>
+    <ul class="legenda">
+      <li><b>W1</b> afspraak in de agenda (Agendawacht)</li><li><b>W2</b> projectmap gevonden (Dropbox)</li>
+      <li><b>W3</b> bezoekmap met datum</li><li><b>W4</b> foto's in de bezoekmap (anders: iCloud-wacht)</li>
+      <li><b>W5</b> opname (map of Plaud-/Fathomwacht)</li><li><b>W6</b> transcript</li>
+      <li><b>W7</b> verslag of concept in de map</li><li><b>W8</b> verslagnummer &lt;dossier&gt;-&lt;bezoek&gt;</li>
+      <li><b>W9</b> verstuurd aan de klant (Mailwacht, nog niet gekoppeld)</li><li><b>W10</b> notities in de map</li>
+    </ul>
+    <p class="tel">Groen = geverifieerd, rood = ontbreekt (taak uitgezet bij de agent die het kan leveren), oranje = niet meetbaar. Klik een bezoek open voor de toelichting per post en de stand van de taken.</p>
+  </div>
+
+  {% if not dossiers %}<div class="kaart">Nog geen dossiers. Start met <code>werfverslaggever.py --project 2309</code> of vraag het De Regisseur.</div>{% endif %}
+
+  {% for d in dossiers %}
+  <div class="kaart">
+    <h2>{{ d['dossier'] }} · {{ d['adres'] }} <span class="tel">({{ d['soort'] }}, {{ d['bezoeken']|length }} bezoek(en), gemeten {{ d['ts'][:16].replace('T',' ') }} UTC)</span></h2>
+    <div class="tel"><code>{{ d['projectmap'] }}</code></div>
+    <div class="wrap">
+    <table>
+      <thead><tr><th>Bezoek</th><th>Datum</th>{% for c in codes %}<th>{{ c }}</th>{% endfor %}<th>Foto's</th><th>Stand</th><th>Taken</th></tr></thead>
+      <tbody>
+      {% for b in d['bezoeken'] %}
+      {% set cmap = {} %}{% for c in b['controles'] %}{% set _ = cmap.update({c['code']: c}) %}{% endfor %}
+      <tr>
+        <td><b>{{ d['dossier'] }}-{{ b['volgnr'] }}</b></td>
+        <td>{{ b['datum'] }}</td>
+        {% for c in codes %}
+          {% set x = cmap.get(c) %}
+          <td>{% if x %}<span class="b {{ x['stand'] }}" title="{{ x['toelichting'] }}">{{ c }}</span>{% else %}<span class="b nvt">–</span>{% endif %}</td>
+        {% endfor %}
+        <td>{{ b['bronnen'].get('fotos', 0) }}</td>
+        <td class="stand">{{ b['stand'] }}</td>
+        <td>
+          {% for t in b['taken'] %}
+            <div class="taak"><b>{{ t['voor'] }}</b> · <span class="{{ t['status'] }}">{{ t['status'] }}{% if t['door'] %} door {{ t['door'] }}{% endif %}</span></div>
+          {% else %}<span class="tel">geen</span>{% endfor %}
+        </td>
+      </tr>
+      <tr><td colspan="{{ 5 + codes|length }}" style="border-top:0;padding-top:0">
+        <details><summary>toelichting bezoek {{ b['volgnr'] }} ({{ b['bronnen'].get('bron_map','') }})</summary>
+          <table style="min-width:0;margin-top:6px">
+            {% for c in b['controles'] %}<tr><td style="white-space:nowrap"><span class="b {{ c['stand'] }}">{{ c['code'] }}</span> {{ c['naam'] }}</td><td>{{ c['toelichting'] }}</td></tr>{% endfor %}
+            {% for t in b['taken'] %}<tr><td style="white-space:nowrap">taak → {{ t['voor'] }}</td><td>{{ t['titel'] }} <span class="tel">({{ t['status'] }})</span></td></tr>{% endfor %}
+            <tr><td>bezoekmap</td><td><code>{{ b['bezoekmap'] }}</code></td></tr>
+          </table>
+        </details>
+      </td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="kaart">
+    <h2>Waar het vastloopt</h2>
+    {% for n in noden %}<div class="nood">{{ n['tekst'] }} <span class="wie">· {{ n['wie'] }}</span></div>{% else %}<span class="tel">niets gemeld</span>{% endfor %}
+  </div>
+</main>
+</body>
+</html>

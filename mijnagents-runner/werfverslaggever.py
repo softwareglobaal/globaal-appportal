@@ -1,0 +1,336 @@
+#!/usr/bin/env python3
+"""De Werfverslaggever (H-Architects) — bereidt werfverslagen voor.
+
+Hij verzamelt zelf niets en schrijft zelf geen verslag. Hij:
+  1. neemt een opdracht (dossiernummer) aan, van Mehdi (--project) of uit zijn eigen tabel;
+  2. zoekt de projectmap in Dropbox (standaard- én light-projecten);
+  3. leest de bezoekmappen (Site Reports, Werfverslagen, momentmappen) en inventariseert
+     per bezoek wat er ligt: foto's, opname, transcript, verslag, notities;
+  4. verifieert per bezoek de controleposten W1-W9 tegen wat de andere agents klaarzetten
+     (Agendawacht, Plaudwacht, Fathomwacht, iCloud-wacht);
+  5. zet voor elke ontbrekende bron een taak klaar voor de agent die ze kan leveren
+     (klaarzet soort `taak`), en meldt wat geen enkele agent kan als nood;
+  6. schrijft de stand naar zijn pagina op het bord (/werfverslagen).
+
+Gebruik:
+    werfverslaggever.py                      # alle open dossiers uit de tabel opnieuw verifiëren
+    werfverslaggever.py --project 2309 2324  # dossiers toevoegen en meteen verifiëren
+    werfverslaggever.py --project 2416 --droog   # alleen kijken, niets klaarzetten
+"""
+import argparse
+import json
+import os
+import re
+import sys
+from datetime import date, datetime
+
+HIER = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+import bord  # noqa: E402
+import bronnen  # noqa: E402
+
+NAAM = "werfverslaggever"
+LIGHT_BASIS = "/Work All/01. H-A WORK/0 H-A Light projects/5. H-A light SITE VISITS"
+STANDAARD_BASES = [bronnen.PROJECT_BASIS,
+                   "/Work All/01. H-A WORK/0 H-A Standaard projects/2. STAN Permission awaited",
+                   "/Work All/01. H-A WORK/0 H-A Standaard projects/3. STAN Permission received",
+                   "/Work All/01. H-A WORK/0 H-A Standaard projects/4. STAN Execution"]
+# Mappen waarin een bezoek kan liggen (kleine letters, deel van het pad)
+BEZOEK_ANKERS = ("site reports", "werfverslagen", "werf updates", "site visits", "communicat", "werfbezoek")
+FOTO_EXT = (".heic", ".jpg", ".jpeg", ".png", ".webp")
+OPNAME_EXT = (".mp3", ".m4a", ".wav", ".mp4", ".mov")
+VERSLAG_PAT = re.compile(r"werf ?(verslag|update|rapport)|site ?report|verslag", re.I)
+TRANSCRIPT_PAT = re.compile(r"transcri|00 verslag", re.I)
+DATUM_PAT = re.compile(r"(20\d{2})[-_. ]?(\d{2})[-_. ]?(\d{2})")
+# De Agendawacht zet pas klaar sinds deze dag; oudere bezoeken kan hij (nog) niet bevestigen.
+AGENDAWACHT_SINDS = "2026-09-09"
+
+ag = bord.Agent(NAAM)
+
+
+# ------------------------------------------------------------- hulpjes ---
+def datum_uit(naam):
+    m = DATUM_PAT.search(naam)
+    if not m:
+        return ""
+    j, ma, d = m.groups()
+    try:
+        return date(int(j), int(ma), int(d)).isoformat()
+    except ValueError:
+        return ""
+
+
+def adres_uit_mapnaam(naam):
+    """`2416 [ INT - EPB, ING, VC] Julien Breugelmansstraat 16, 2950 Kapellen` -> adres."""
+    n = re.sub(r"^\s*\d{4}\s*", "", naam)
+    n = re.sub(r"\[[^\]]*\]", "", n)
+    n = re.sub(r"\([^)]*\)", "", n)
+    n = n.split("_")[0]
+    return re.sub(r"\s+", " ", n).strip(" -,")
+
+
+def zoek_projectmap(nummer):
+    """Eerst de standaardprojecten (STAN-fasen), dan de light-projecten."""
+    for basis in STANDAARD_BASES:
+        for e in bronnen.lijst(basis, recursief=False) or []:
+            if e.get(".tag") == "folder" and e.get("name", "").startswith(str(nummer)):
+                return e.get("path_display"), "standaard"
+    for e in bronnen.lijst(LIGHT_BASIS, recursief=False) or []:
+        if e.get(".tag") == "folder" and re.match(rf"\s*{nummer}\b", e.get("name", "")):
+            return e.get("path_display"), "light"
+    return None, ""
+
+
+def bezoeken_in(projectmap):
+    """Per bezoek een dict: map, datum, en de bestanden erin naar soort."""
+    items = bronnen.lijst(projectmap, recursief=True) or []
+    mappen = {}
+    for e in items:
+        if e.get(".tag") != "folder":
+            continue
+        pad = e.get("path_display") or ""
+        rel = pad[len(projectmap):].lower()
+        if not any(a in rel for a in BEZOEK_ANKERS):
+            continue
+        d = datum_uit(e.get("name", ""))
+        if d and not any(a in e.get("name", "").lower() for a in ("foto", "photo")):
+            mappen[pad] = {"map": pad, "datum": d, "fotos": 0, "opnames": [], "transcripten": [],
+                           "verslagen": [], "notities": [], "bestanden": 0, "bron_map": rel.strip("/").split("/")[0]}
+    # losse verslagen buiten een bezoekmap (bv. `1. Werf updates/Werf update 2 - ... - 2026-06-02.docx`)
+    losse = []
+    for e in items:
+        if e.get(".tag") != "file":
+            continue
+        pad, naam = e.get("path_display") or "", e.get("name", "")
+        laag = naam.lower()
+        if laag.startswith(".") or laag == ".ds_store":
+            continue
+        eigenaar = None
+        for mp in sorted(mappen, key=len, reverse=True):
+            if pad.startswith(mp + "/"):
+                eigenaar = mappen[mp]
+                break
+        if eigenaar is None:
+            if VERSLAG_PAT.search(naam) and laag.endswith((".docx", ".pdf", ".md")) and datum_uit(naam) \
+                    and any(a in pad.lower() for a in BEZOEK_ANKERS):
+                losse.append({"pad": pad, "datum": datum_uit(naam)})
+            continue
+        eigenaar["bestanden"] += 1
+        if laag.endswith(FOTO_EXT):
+            eigenaar["fotos"] += 1
+        elif laag.endswith(OPNAME_EXT):
+            eigenaar["opnames"].append(naam)
+        elif TRANSCRIPT_PAT.search(naam) and laag.endswith((".md", ".txt", ".docx")):
+            eigenaar["transcripten"].append(naam)
+        elif VERSLAG_PAT.search(naam) and laag.endswith((".docx", ".pdf", ".md")):
+            eigenaar["verslagen"].append(naam)
+        elif laag.endswith((".docx", ".pdf", ".md", ".txt", ".xlsx", ".pptx")):
+            eigenaar["notities"].append(naam)
+    for v in losse:
+        doel = next((m for m in mappen.values() if m["datum"] == v["datum"]), None)
+        if doel:
+            doel["verslagen"].append(os.path.basename(v["pad"]))
+        else:
+            mappen[v["pad"]] = {"map": os.path.dirname(v["pad"]), "datum": v["datum"], "fotos": 0, "opnames": [],
+                                "transcripten": [], "verslagen": [os.path.basename(v["pad"])], "notities": [],
+                                "bestanden": 1, "bron_map": "los verslag"}
+    uit = sorted(mappen.values(), key=lambda m: (m["datum"], m["map"]))
+    for i, m in enumerate(uit, 1):
+        m["volgnr"] = i
+    return uit
+
+
+def klaargezet(nummer):
+    """Wat de andere agents over dit dossier klaarzetten, per soort."""
+    try:
+        alles = bord.call("/api/klaarzet?status=alle&n=500").get("items", [])
+    except Exception as e:  # noqa: BLE001
+        ag.log(str(nummer), "fout", f"bord niet bereikbaar: {e}")
+        return {}
+    per = {"afspraak": [], "transcript": [], "foto": []}
+    for it in alles:
+        if it["soort"] not in per:
+            continue
+        tekst = f'{it.get("sleutel", "")} {it.get("titel", "")} {(it.get("inhoud") or "")[:400]}'
+        if it["soort"] == "foto" or re.search(rf"\b{nummer}\b", tekst):
+            per[it["soort"]].append(it)
+    return per
+
+
+def dag_van(it):
+    inhoud = it.get("inhoud") or ""
+    try:
+        d = json.loads(inhoud) if inhoud.startswith("{") else {}
+    except ValueError:
+        d = {}
+    return (d.get("datum") or d.get("start") or it.get("sleutel") or it.get("titel") or "")[:10]
+
+
+# ------------------------------------------------------- controleposten ---
+def controleer(nummer, adres, soort_project, projectmap, bezoek, bak):
+    """Geeft (controles, taken, noden). controles: lijst {code, naam, stand, toelichting}.
+    stand in ok | ontbreekt | onbekend | nvt."""
+    d = bezoek["datum"]
+    c, taken, noden = [], [], []
+
+    def post(code, naam, stand, toel=""):
+        c.append({"code": code, "naam": naam, "stand": stand, "toelichting": toel})
+
+    # W1 agenda
+    afspraken = [a for a in bak.get("afspraak", []) if dag_van(a) == d]
+    if afspraken:
+        post("W1", "afspraak in de agenda", "ok", afspraken[0].get("titel", "")[:120])
+    elif d < AGENDAWACHT_SINDS:
+        post("W1", "afspraak in de agenda", "onbekend", f"bezoek van vóór {AGENDAWACHT_SINDS}: de Agendawacht kijkt nog niet terug in de tijd")
+        noden.append({"tekst": f"Agendawacht kan geen afspraken van vóór {AGENDAWACHT_SINDS} bevestigen; een ronde met --dag over het verleden is nodig", "wie": "claude-code"})
+    else:
+        post("W1", "afspraak in de agenda", "ontbreekt", "geen afspraak met dit nummer op die dag klaargezet")
+        taken.append(("agenda-wacht", f"Zoek in alle agenda's de afspraak van dossier {nummer} op {d} ({adres}) en zet ze klaar met sleutel {nummer}"))
+    # W2 projectmap, W3 bezoekmap
+    post("W2", "projectmap gevonden", "ok" if projectmap else "ontbreekt", f"{soort_project}: {projectmap}" if projectmap else "")
+    post("W3", "bezoekmap", "ok", bezoek["map"])
+    # W4 foto's
+    if bezoek["fotos"]:
+        post("W4", "foto's", "ok", f"{bezoek['fotos']} in de bezoekmap")
+    else:
+        fotos = [f for f in bak.get("foto", []) if dag_van(f) == d]
+        if fotos:
+            post("W4", "foto's", "ontbreekt", f"niet in de map, wel {len(fotos)} reeks(en) van die dag bij de iCloud-wacht")
+        else:
+            post("W4", "foto's", "ontbreekt", "geen foto's in de map en niets van die dag bij de iCloud-wacht")
+        taken.append(("icloud-wacht", f"Foto's van {d} binnen 300 m van {adres} (dossier {nummer}) klaarzetten voor de bezoekmap"))
+    # W5 opname, W6 transcript
+    transcripten_bak = [t for t in bak.get("transcript", []) if dag_van(t) == d]
+    if bezoek["opnames"]:
+        post("W5", "opname", "ok", "; ".join(bezoek["opnames"])[:160])
+    elif transcripten_bak:
+        post("W5", "opname", "ok", "opname bij de Plaud-/Fathomwacht, niet in de map")
+    else:
+        post("W5", "opname", "ontbreekt", "geen opname in de map en geen transcript van die dag klaargezet")
+        taken.append(("plaud-wacht", f"Zoek een Plaud-opname van {d} voor dossier {nummer} ({adres}) en zet het transcript klaar met sleutel {nummer}"))
+    if bezoek["transcripten"]:
+        post("W6", "transcript", "ok", "; ".join(bezoek["transcripten"])[:160])
+    elif transcripten_bak:
+        post("W6", "transcript", "ok", f"klaargezet door {transcripten_bak[0].get('van')}: {transcripten_bak[0].get('titel', '')[:100]}")
+    elif bezoek["opnames"]:
+        post("W6", "transcript", "ontbreekt", "opname zonder transcript in de map")
+        taken.append(("plaud-wacht", f"Transcript maken/ophalen van de opname in {bezoek['map']} (dossier {nummer}, {d})"))
+    else:
+        post("W6", "transcript", "ontbreekt", "geen opname, dus geen transcript")
+    # W7 verslag
+    if bezoek["verslagen"]:
+        post("W7", "verslag of concept", "ok", "; ".join(bezoek["verslagen"])[:160])
+    else:
+        post("W7", "verslag of concept", "ontbreekt", "nog geen verslag in de map")
+        noden.append({"tekst": f"Verslag schrijven voor {nummer} bezoek {bezoek['volgnr']} ({d}): geen agent kan dat nog; nu skill werfverslag op de Mac", "wie": "claude-code"})
+    # W8 verslagnummer
+    post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek['volgnr']} (bezoek {bezoek['volgnr']} in volgorde van de mappen)")
+    # W9 verstuurd
+    post("W9", "verstuurd aan de klant", "onbekend", "alleen uit de mail af te lezen; de Mailwacht mch@ koppelt nog niet aan dossiers")
+    if bezoek["notities"]:
+        post("W10", "notities in de map", "ok", "; ".join(bezoek["notities"])[:160])
+    return c, taken, noden
+
+
+def stand_van(controles):
+    s = {x["code"]: x["stand"] for x in controles}
+    bronnen_ok = all(s.get(k) == "ok" for k in ("W4", "W5", "W6"))
+    if s.get("W7") == "ok":
+        return "verslag aanwezig" if bronnen_ok else "verslag aanwezig, bronnen onvolledig"
+    return "klaar voor verslag" if bronnen_ok else "te verzamelen"
+
+
+# ------------------------------------------------------------- de ronde ---
+def verwerk(nummer, droog=False):
+    ag.log(str(nummer), "bron", f"dossier {nummer}: projectmap zoeken")
+    projectmap, soort = zoek_projectmap(nummer)
+    if not projectmap:
+        ag.log(str(nummer), "fout", "geen projectmap gevonden in STAN-fasen of light SITE VISITS")
+        return [], [{"tekst": f"Dossier {nummer}: geen projectmap gevonden; Mehdi geeft het pad", "wie": "mehdi"}]
+    adres = adres_uit_mapnaam(os.path.basename(projectmap))
+    ag.log(str(nummer), "bron", f"projectmap ({soort}): {projectmap}", {"adres": adres})
+    bezoeken = bezoeken_in(projectmap)
+    ag.log(str(nummer), "bevinding", f"{len(bezoeken)} bezoek(en) in de mappen: " + ", ".join(b["datum"] for b in bezoeken))
+    bak = klaargezet(nummer)
+    rijen, alle_taken, noden = [], [], []
+    if not bezoeken:
+        noden.append({"tekst": f"Dossier {nummer}: geen bezoekmap met datum gevonden onder {projectmap}", "wie": "mehdi"})
+    for b in bezoeken:
+        controles, taken, n = controleer(nummer, adres, soort, projectmap, b, bak)
+        noden += n
+        taakrijen = []
+        for voor, tekst in taken:
+            uniek = f"werf:{nummer}:{b['datum']}:{voor}"
+            taakrijen.append({"voor": voor, "soort": "taak", "sleutel": str(nummer), "titel": tekst[:300],
+                              "inhoud": {"dossier": nummer, "datum": b["datum"], "adres": adres, "bezoekmap": b["map"], "volgnr": b["volgnr"]},
+                              "verwijzing": b["map"], "uniek": uniek})
+        alle_taken += taakrijen
+        rijen.append({"dossier": str(nummer), "adres": adres, "soort_project": soort, "projectmap": projectmap,
+                      "bezoekmap": b["map"], "datum": b["datum"], "volgnr": b["volgnr"],
+                      "bronnen": {k: b[k] for k in ("fotos", "opnames", "transcripten", "verslagen", "notities", "bestanden", "bron_map")},
+                      "controles": controles, "taken": [{"voor": t["voor"], "titel": t["titel"], "uniek": t["uniek"]} for t in taakrijen],
+                      "stand": stand_van(controles)})
+        ag.log(str(nummer), "bevinding", f"bezoek {b['volgnr']} ({b['datum']}): {rijen[-1]['stand']}; "
+               + ", ".join(f"{x['code']} {x['stand']}" for x in controles))
+    if droog:
+        print(json.dumps(rijen, ensure_ascii=False, indent=1))
+        return rijen, noden
+    if alle_taken:
+        uit = ag.klaarzet(alle_taken)
+        ag.log(str(nummer), "besluit", f"{len(alle_taken)} taak/taken uitgezet bij collega-agents", uit)
+    try:
+        bord.call("/api/werfbezoek", {"rijen": rijen})
+    except Exception as e:  # noqa: BLE001
+        ag.log(str(nummer), "fout", f"stand niet naar het bord: {e}")
+    return rijen, noden
+
+
+def open_dossiers():
+    try:
+        return [r["dossier"] for r in bord.call("/api/werfbezoek?open=1").get("dossiers", [])]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--project", nargs="*", default=[], help="dossiernummers")
+    p.add_argument("--droog", action="store_true")
+    a = p.parse_args()
+    nummers = [n for n in a.project if re.fullmatch(r"\d{4}", n)]
+    nummers += [n for n in open_dossiers() if n not in nummers]
+    ag.hartslag("actief", taak="ronde gestart", detail=f"{len(nummers)} dossier(s)")
+    if not bronnen.dropbox_beschikbaar():
+        ag.hartslag("fout", taak="geen Dropbox", detail="DROPBOX_APP_KEY/SECRET/REFRESH_TOKEN ontbreken",
+                    nood=[{"tekst": "Dropbox-sleutels van de stack ontbreken in ~/appportal/.env", "wie": "mehdi"}])
+        return
+    totaal, noden, standen = 0, [], {}
+    for n in nummers:
+        try:
+            rijen, nd = verwerk(n, droog=a.droog)
+        except Exception as e:  # noqa: BLE001
+            ag.log(n, "fout", f"ronde voor {n} mislukt: {e}")
+            rijen, nd = [], [{"tekst": f"Dossier {n}: ronde mislukt ({type(e).__name__})", "wie": "claude-code"}]
+        totaal += len(rijen)
+        noden += nd
+        for r in rijen:
+            standen[r["stand"]] = standen.get(r["stand"], 0) + 1
+    # vaste noden: wat structureel nog ontbreekt om zonder mens te werken
+    noden += [
+        {"tekst": "Collega-agents (Agendawacht, Plaudwacht, iCloud-wacht) lezen mijn taken (klaarzet soort taak) nog niet; ze staan klaar maar worden niet opgepakt", "wie": "claude-code"},
+        {"tekst": "Verstuurd-status (W9) vraagt een koppeling mail -> dossier bij de Mailwacht mch@", "wie": "claude-code"},
+    ]
+    # dubbels weg, volgorde behouden
+    gezien, uniek = set(), []
+    for x in noden:
+        if x["tekst"] not in gezien:
+            gezien.add(x["tekst"]); uniek.append(x)
+    ag.log_verstuur()
+    detail = "; ".join(f"{k}: {v}" for k, v in sorted(standen.items())) or "geen bezoeken"
+    if not a.droog:
+        ag.hartslag("klaar" if totaal else "waakt", taak=f"{len(nummers)} dossier(s), {totaal} bezoek(en) geverifieerd", detail=detail[:200], nood=uniek)
+    print(f"klaar: {len(nummers)} dossier(s), {totaal} bezoek(en); {detail}")
+
+
+if __name__ == "__main__":
+    main()
