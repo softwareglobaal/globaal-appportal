@@ -319,6 +319,23 @@ def exporteer_naar(fotos, doel):
     return klaar
 
 
+def jpeg_kopieen(doel, max_px=1800):
+    """Naast elke HEIC een JPEG (sips, max 1800 px): Word en de bezoekpagina kunnen geen HEIC tonen; het origineel blijft."""
+    import subprocess
+    n = 0
+    for naam in sorted(os.listdir(doel)):
+        if not naam.lower().endswith(".heic"):
+            continue
+        jpg = os.path.join(doel, os.path.splitext(naam)[0] + ".jpg")
+        if os.path.exists(jpg) and os.path.getsize(jpg) > 0:
+            continue
+        r = subprocess.run(["sips", "-s", "format", "jpeg", "-s", "formatOptions", "85", "-Z", str(max_px), os.path.join(doel, naam), "--out", jpg],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            n += 1
+    return n
+
+
 def taken():
     """Foto-taken van de Werfverslag voorbereider: {dossier, datum, adres, bezoekmap}. Regel: alleen foto's van die dag
     binnen STRAAL_M van het werfadres; vindt de geocoder het huisnummer niet (straatmidden), dan 600 m en dat wordt gemeld.
@@ -352,6 +369,7 @@ def taken():
             taak_opgepakt(it["id"]); continue
         doel = os.path.join(DROPBOX_LOKAAL, bezoekmap.lstrip("/"), "fotos")
         n = exporteer_naar(binnen, doel)
+        jpeg_kopieen(doel)
         clat = round(sum(f["lat"] for f in binnen) / len(binnen), 5); clon = round(sum(f["lon"] for f in binnen) / len(binnen), 5)
         md = [f"# Foto's {dossier} {dag}", "", f"{len(binnen)} foto's van de iPhone binnen {straal} m van {adres} (zwaartepunt {clat}, {clon}); "
               f"geëxporteerd door de iCloud-wacht op {datetime.now().date().isoformat()}. Bron: iCloud-fotobibliotheek van Mehdi; foto's buiten de straal bleven in Photos.", "",
@@ -371,6 +389,9 @@ def taken():
 
 
 def main():
+    if "--jpeg" in sys.argv:
+        print("jpeg-kopieën:", jpeg_kopieen(sys.argv[sys.argv.index("--jpeg") + 1]))
+        return
     if "--taken" in sys.argv:
         if not TOKEN:
             sys.exit("geen token")
