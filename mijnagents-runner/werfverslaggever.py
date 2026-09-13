@@ -92,8 +92,18 @@ def bezoeken_in(projectmap):
         rel = pad[len(projectmap):].lower()
         if not any(a in rel for a in BEZOEK_ANKERS):
             continue
-        d = datum_uit(e.get("name", ""))
-        if d and not any(a in e.get("name", "").lower() for a in ("foto", "photo")):
+        naam = e.get("name", "").lower()
+        delen = rel.strip("/").split("/")
+        d = datum_uit(naam)
+        if not d or any(a in naam for a in ("foto", "photo", "mail", "offerte", "factu")):
+            continue
+        # een datummap ónder een fotomap is een fotoreeks van het bezoek, geen bezoek
+        if any(("foto" in s or "photo" in s) for s in delen[:-1]):
+            continue
+        # in de communicatiemap telt alleen een momentmap (A3/A7): naam bevat 'bezoek'
+        if "communicat" in rel and "bezoek" not in naam:
+            continue
+        if True:
             mappen[pad] = {"map": pad, "datum": d, "fotos": 0, "opnames": [], "transcripten": [],
                            "verslagen": [], "notities": [], "bestanden": 0, "bron_map": rel.strip("/").split("/")[0]}
     # losse verslagen buiten een bezoekmap (bv. `1. Werf updates/Werf update 2 - ... - 2026-06-02.docx`)
