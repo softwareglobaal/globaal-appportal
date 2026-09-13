@@ -201,6 +201,28 @@ cutover niet geraakt:
 
 De Authentik-config wordt aangemaakt door de scripts (zie §7), niet handmatig.
 
+### 4.1 Desktop-app en de downloadknop
+
+De launcher (`/if/user/`) krijgt rechtsboven een groene knop **Download de app**.
+Die komt niet uit Authentik zelf: nginx injecteert met `sub_filter` een
+`<script src="/app-knop.js">` in de HTML van die ene location (daarom staat daar
+`proxy_set_header Accept-Encoding ""`; de rest van `auth.globaal.be` blijft
+gecomprimeerd). Het scriptje staat in `downloads/app-knop.js` in deze repo.
+
+De knop wijst altijd naar **`/app/download`**. Daar kiest nginx op de user-agent:
+`.dmg` voor macOS, `.exe` voor de rest, en telefoons krijgen een melding dat de
+app voor computers is. De gebruiker kiest dus nooit zelf een besturingssysteem.
+Bestanden staan op de VM in `~/appportal/downloads/` (gemount als
+`/srv/downloads`, alleen `.exe` en `.dmg` zijn bereikbaar) onder de vaste namen
+`Globaal-setup.exe` en `Globaal.dmg`. Ze staan bewust niet in git.
+
+De app zelf is de repo **`globaal-desktop`** (Tauri 2): een venster met links de
+applijst uit `/api/v3/core/applications/` en rechts de app. De lijst wordt
+opgehaald met de sessiecookies van de gebruiker zelf, dus iedereen ziet exact
+zijn eigen tegels en er zit geen token in de app. De Windows-installer bouwen we
+lokaal, de macOS-`.dmg` via GitHub Actions op een tag `v*`. Nieuwe versie =
+nieuw bestand onder dezelfde naam in `~/appportal/downloads/`.
+
 ---
 
 ## 5. De Flask-portal
