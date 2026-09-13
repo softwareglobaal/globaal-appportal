@@ -23,8 +23,13 @@
   .knop.klein { padding:4px 10px; font-size:13px; }
   .melding { background:var(--accent-licht); border:1px solid var(--accent); border-radius:4px; padding:10px 14px; margin:10px 0; }
   .teken { text-align:center; font-weight:700; font-size:16px; }
-  .verslag { background:var(--wit); border:1px solid var(--lijn); border-radius:4px; padding:18px 24px; }
-  .verslag table { margin:8px 0; } .verslag h1 { font-size:18px; } .verslag h2 { text-transform:none; letter-spacing:0; font-size:15px; border:0; margin:18px 0 6px; } .verslag h3 { font-size:14px; margin:14px 0 4px; }
+  /* de webweergave van de proef volgt de Word-huisstijl van de contractmasters: Aptos, blauwe hoofdstukken */
+  .verslag { background:var(--wit); border:1px solid var(--lijn); border-radius:4px; padding:28px 36px; font-family:Aptos,"Aptos Display",Calibri,"Helvetica Neue",Arial,sans-serif; font-size:15px; color:#1c1c1c; max-width:820px; }
+  .verslag table { margin:8px 0; font-size:13px; } .verslag th { color:#365F91; text-transform:none; letter-spacing:0; font-size:13px; }
+  .verslag h1 { font-size:22px; font-weight:700; color:#1c1c1c; margin:0 0 10px; }
+  .verslag h2 { text-transform:uppercase; letter-spacing:0; font-size:16px; font-weight:700; color:#365F91; border:0; margin:20px 0 8px; }
+  .verslag h3 { font-size:15px; font-weight:700; color:#4F81BD; margin:14px 0 4px; }
+  .verslag strong { color:#1c1c1c; } .verslag em { color:#555; }
   code { font-size:12px; color:var(--grijs); word-break:break-all; }
   form.inline { display:inline; }
   .veld { margin-bottom:12px; } .veld label { display:block; font-size:13px; color:var(--grijs); margin-bottom:3px; }

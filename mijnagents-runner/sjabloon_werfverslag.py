@@ -317,15 +317,15 @@ def naar_docx(v, fotos=None, master=MASTER):
             p.paragraph_format.space_after = Pt(na)
         return p
 
-    def h1(tekst):  # "1. HET VOORWERP ..." zoals in de master
+    def h1(tekst):  # "1. HET VOORWERP ..." zoals in de master: vet, 12 pt, 365F91, voor 12 pt, na 6 pt
         p = alinea(tekst.upper(), vet=True, grootte=12, kleur=BLAUW_H1, na=6)
-        p.paragraph_format.space_before = Pt(14)
+        p.paragraph_format.space_before = Pt(12)
         p.paragraph_format.keep_with_next = True
         return p
 
-    def h2(tekst):  # "3.1. Het bouwproject"
-        p = alinea(tekst, vet=True, kleur=BLAUW_H2, na=4)
-        p.paragraph_format.space_before = Pt(8)
+    def h2(tekst):  # "3.1. Het bouwproject": vet, 4F81BD, voor 9 pt, na 3 pt
+        p = alinea(tekst, vet=True, kleur=BLAUW_H2, na=3)
+        p.paragraph_format.space_before = Pt(9)
         p.paragraph_format.keep_with_next = True
         return p
 
@@ -352,7 +352,7 @@ def naar_docx(v, fotos=None, master=MASTER):
 
     # kop zoals de master: Projectnummer vet, titel 16 pt vet, CONCEPT-regel
     alinea(f"Projectnummer: {nr}", vet=True, na=2)
-    alinea(f"{titel}: {v['adres']}", vet=True, grootte=16, na=4)
+    alinea(f"{titel}: {v['adres']}", vet=True, grootte=16, na=8)
     p = alinea(na=8)
     r = p.add_run("CONCEPT"); r.bold = True; r.font.color.rgb = RGBColor(0xC2, 0x41, 0x0C)
     r = p.add_run(f" - opgemaakt op {v['opgemaakt']} uit {v.get('bronnen_kort', 'de bezoekmap')}. Na te kijken en aan te vullen door Mehdi Chegini vóór verzending.")
@@ -371,7 +371,14 @@ def naar_docx(v, fotos=None, master=MASTER):
           [3.2, 3.4, 3.6, 4.4, 1.8])
     for t in (VAST_VEILIGHEID, VAST_TIENJARIG):
         alinea(t, grootte=9, na=4)
-    # 3 waarnemingen
+    # 3 waarnemingen; foto's krijgen een volgnummer in volgorde van eerste verwijzing en komen achteraan
+    fotonummer, fotolijst = {}, []
+    for cat in v.get("categorieen", []):
+        for pt in cat.get("punten", []):
+            for b in pt.get("fotos", []):
+                if b in fotos and b not in fotonummer:
+                    fotonummer[b] = len(fotolijst) + 1
+                    fotolijst.append((b, f"{pt['nummer']} {pt['titel']}"))
     h1("3. Waarnemingen")
     for cat in v.get("categorieen", []):
         h2(cat["naam"])
@@ -384,26 +391,17 @@ def naar_docx(v, fotos=None, master=MASTER):
             if vlag:
                 r = p.add_run(f"   {vlag}"); r.bold = True
                 r.font.color.rgb = RGBColor(0x1F, 0x6B, 0x3D) if vlag == "OK" else RGBColor(0xA3, 0x3A, 0x2A)
-            alinea(pt.get("tekst_nl", ""), na=2)
+            nrs = [fotonummer[b] for b in pt.get("fotos", []) if b in fotonummer]
+            tekst = pt.get("tekst_nl", "")
+            if nrs:
+                tekst = tekst.rstrip() + (" " if tekst.strip() else "") + "(" + ("foto " if len(nrs) == 1 else "foto's ") + ", ".join(str(x) for x in nrs) + ")"
+            alinea(tekst, na=2)
             if pt.get("tekst_en"):
                 alinea(pt["tekst_en"], cursief=True, na=2)
             if pt.get("verantwoordelijke"):
-                q = alinea(na=4)
+                q = alinea(na=6)
                 r = q.add_run("Verantwoordelijke: "); r.font.size = Pt(9); r.font.color.rgb = BLAUW_LABEL; r.bold = True
                 r = q.add_run(pt["verantwoordelijke"]); r.font.size = Pt(9)
-            beelden = [(b, fotos[b]) for b in pt.get("fotos", []) if b in fotos]
-            if beelden:
-                t = doc.add_table(rows=0, cols=2)
-                for i in range(0, len(beelden), 2):
-                    cellen = t.add_row().cells
-                    for j, (bijschrift, data) in enumerate(beelden[i:i + 2]):
-                        par = cellen[j].paragraphs[0]
-                        try:
-                            par.add_run().add_picture(io.BytesIO(data), width=Cm(8))
-                        except Exception:  # noqa: BLE001
-                            par.add_run(f"(foto {bijschrift} niet leesbaar)")
-                        c = cellen[j].add_paragraph(); r = c.add_run(bijschrift); r.font.size = Pt(8); r.font.color.rgb = RGBColor(0x6B, 0x6B, 0x6B)
-                alinea(na=4)
             else:
                 alinea(na=4)
     k = 4
@@ -421,9 +419,29 @@ def naar_docx(v, fotos=None, master=MASTER):
     alinea(v.get("volgend") or "(in te vullen)")
     h1(f"{k}. Algemene voorwaarden"); k += 1
     alinea(VAST_VOORWAARDEN)
-    h1(f"{k}. Voor akkoord")
+    h1(f"{k}. Voor akkoord"); k += 1
     tabel(["Partij", "Naam", "Handtekening", "Datum"], [[a.get("partij", ""), a.get("naam", ""), "", ""] for a in v.get("akkoord", [])], [4, 5.4, 4, 3])
     alinea("Opgemaakt en verzonden door de architect op: (in te vullen)")
+    # foto's achteraan: elke foto één keer, halve pagina hoog, dus twee per pagina, met verwijzing naar het punt
+    if fotolijst:
+        from docx.enum.text import WD_BREAK
+        doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+        h1(f"{k}. Foto's")
+        alinea(f"{len(fotolijst)} foto's genomen door de architect tijdens het bezoek van {datum_nl(v['datum'])}; het nummer verwijst naar het punt in hoofdstuk 3.", grootte=9.5, na=6)
+        for i, (b, punt) in enumerate(fotolijst, 1):
+            p = doc.add_paragraph()
+            p.paragraph_format.keep_with_next = True
+            p.paragraph_format.space_after = Pt(0)
+            try:
+                p.add_run().add_picture(io.BytesIO(fotos[b]), height=Cm(10.6))
+            except Exception:  # noqa: BLE001
+                p.add_run(f"(foto {b} niet leesbaar)")
+            q = alinea(na=10)
+            r = q.add_run(f"Foto {i}"); r.bold = True; r.font.size = Pt(9)
+            tijd = f"{b[:2]}:{b[2:4]}" if b[:4].isdigit() else b
+            r = q.add_run(f"   {tijd}   bij punt {punt}"); r.font.size = Pt(9); r.font.color.rgb = RGBColor(0x6B, 0x6B, 0x6B)
+            if i % 2 == 0 and i < len(fotolijst):
+                doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
