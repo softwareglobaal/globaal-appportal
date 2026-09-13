@@ -71,3 +71,15 @@ fotobibliotheek zolang Mehdi dat niet toestaat: System Settings > Privacy & Secu
 Full Disk Access > python3 aan. Voor de iCloud-export vraagt macOS één keer om Photos te
 mogen sturen (Automation): Allow. Les van 11-09-2026: mijn avondrondes vielen stil met
 "authorization denied" tot dat geregeld is; op 12-09 draaide Claude Code mij handmatig.
+
+## Foto-taken van de Werfverslag voorbereider (14-09-2026)
+
+Naast de avondronde voer ik elke 30 minuten (`icloud_wacht.py --taken`, launchd
+`be.globaal.mijnagents.icloud-taken`) de taken uit die de Werfverslag voorbereider voor mij klaarzet:
+dossier, datum, adres, bezoekmap. Ik geocodeer het adres (varianten; mislukking nooit gecachet), neem
+de foto's van die dag binnen 300 m (600 m als het huisnummer niet gevonden is), exporteer de originelen
+per foto uit Photos naar `<bezoekmap>/fotos/` in Dropbox en schrijf `00 fotos.md` met tijd, plaats en
+afstand. Foto's buiten de straal blijven in Photos. Ik vink de taak af en meld het in mijn werkverslag.
+Nood: /usr/bin/python3 heeft Full Disk Access en Automation (Photos) nodig, anders draai ik alleen
+vanuit Claude Code.
+

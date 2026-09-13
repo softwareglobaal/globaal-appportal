@@ -8,7 +8,9 @@ valideert op het bord; pas dan gaan ze via een runbook naar de projectmap.
 Token: ~/.config/mijnagents/token (AGENTS_TOKEN van het bord). Bord:
 https://mijnagents.globaal.be (de routes /agent-status, /api/klaarzet en
 /api/logboek passeren de forward-auth en toetsen het token).
-Gebruik: icloud_wacht.py [--dag JJJJ-MM-DD]
+Gebruik: icloud_wacht.py [--dag JJJJ-MM-DD] | icloud_wacht.py --taken
+  --taken: de foto-taken van de Werfverslag voorbereider uitvoeren (klaarzet soort taak, voor icloud-wacht):
+  foto's van de bezoekdag binnen de straal van het werfadres exporteren naar <bezoekmap>/fotos/ in Dropbox.
 """
 import json
 import os
@@ -177,7 +179,9 @@ def werkafspraken(dag):
 
 
 def coord(adres):
-    """Coördinaten van een adres via Nominatim, met cache; None als niet gevonden."""
+    """Coördinaten van een adres via Nominatim, met cache van geslaagde antwoorden; probeert varianten
+    (met 'België', zonder huisnummer, alleen straat en gemeente) vóór hij opgeeft. Mislukking wordt nooit gecachet."""
+    import re
     import time
     import urllib.parse
     try:
@@ -185,18 +189,30 @@ def coord(adres):
     except (OSError, ValueError):
         cache = {}
     k = adres.strip().lower()
-    if k in cache:
+    if cache.get(k):
         return cache[k]
-    time.sleep(1.1)
-    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({"q": adres, "format": "jsonv2", "limit": 1, "countrycodes": "be,nl"})
-    try:
-        d = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "MehdiAgents-icloudwacht/1.0"}), timeout=20))
-        uit = [float(d[0]["lat"]), float(d[0]["lon"])] if d else None
-    except Exception:  # noqa: BLE001
-        uit = None
-    cache[k] = uit
-    os.makedirs(os.path.dirname(ADRESSEN), exist_ok=True)
-    json.dump(cache, open(ADRESSEN, "w"))
+    zonder_nr = re.sub(r"\b\d+[a-zA-Z]?\b\s*,?", "", adres, count=1).strip(" ,")
+    zonder_post = re.sub(r"\b\d{4}\b", "", zonder_nr).strip(" ,")
+    # Nominatim kent deelgemeenten (Kessel-Lo, Wijgmaal) vaak niet: straat + postcode werkt dan wel
+    m_post = re.search(r"\b(\d{4})\b", adres)
+    straat = re.split(r",|\b\d", adres, maxsplit=1)[0].strip()
+    straat_post = f"{straat}, {m_post.group(1)}" if m_post and straat else ""
+    varianten = [v for v in (adres, adres + ", België", straat_post, zonder_nr, zonder_post) if v]
+    uit = None
+    for q in varianten:
+        time.sleep(1.1)
+        url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({"q": q, "format": "jsonv2", "limit": 1, "countrycodes": "be,nl"})
+        try:
+            d = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "MehdiAgents-icloudwacht/1.0"}), timeout=20))
+        except Exception:  # noqa: BLE001
+            d = []
+        if d:
+            uit = [float(d[0]["lat"]), float(d[0]["lon"])]
+            break
+    if uit:
+        cache[k] = uit
+        os.makedirs(os.path.dirname(ADRESSEN), exist_ok=True)
+        json.dump(cache, open(ADRESSEN, "w"))
     return uit
 
 
@@ -249,7 +265,117 @@ def groepeer(fotos):
     return groepen
 
 
+DROPBOX_LOKAAL = os.path.expanduser(os.environ.get("DROPBOX_LOKAAL", "~/TKN-buro Dropbox"))
+
+
+def taken_lezen():
+    import urllib.parse
+    req = urllib.request.Request(f"{BORD}/api/klaarzet?" + urllib.parse.urlencode({"voor": NAAM, "status": "klaar", "n": 50}),
+                                 headers={"X-Agents-Token": TOKEN})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return [it for it in json.loads(r.read().decode() or "{}").get("items", []) if it.get("soort") == "taak"]
+
+
+def taak_opgepakt(kid):
+    bord(f"/api/klaarzet/{kid}/opgepakt", {"door": NAAM})
+
+
+def exporteer_naar(fotos, doel):
+    """Originelen van de gegeven foto's naar de map doel (lokaal in Dropbox): lokaal kopiëren, anders via Photos."""
+    import shutil
+    import subprocess
+    import tempfile
+    os.makedirs(doel, exist_ok=True)
+    klaar, ontbrekend = 0, []
+    for f in fotos:
+        ext = os.path.splitext(f["bestand"] or "")[1] or ".jpg"
+        f["export"] = f"{f['tijd'].replace(':', '')} {f['uuid'][:8]}{ext}"
+        uit = os.path.join(doel, f["export"])
+        if os.path.exists(uit) and os.path.getsize(uit) > 0:
+            klaar += 1
+            continue
+        bron = os.path.join(LIB, f["uuid"][0], f"{f['uuid']}{ext}")
+        if os.path.exists(bron) and os.path.getsize(bron) > 0:
+            shutil.copy2(bron, uit)
+            klaar += 1
+        else:
+            ontbrekend.append(f)
+    for f in ontbrekend[:80]:
+        # per foto een eigen tijdelijke map: Photos exporteert onder de originele bestandsnaam (IMG_9681.HEIC),
+        # dus zo weet ik zeker welk bestand bij welke foto hoort
+        tmp = tempfile.mkdtemp(prefix="foto-")
+        script = f'tell application "Photos" to export {{media item id "{f["uuid"]}"}} to POSIX file "{tmp}" as alias with using originals'
+        r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=300)
+        namen = [n for n in os.listdir(tmp) if not n.startswith(".")] if r.returncode == 0 else []
+        if namen:
+            naam = sorted(namen, key=lambda n: os.path.getsize(os.path.join(tmp, n)), reverse=True)[0]
+            ext = os.path.splitext(naam)[1] or ".jpg"
+            f["export"] = f"{f['tijd'].replace(':', '')} {f['uuid'][:8]}{ext}"
+            shutil.move(os.path.join(tmp, naam), os.path.join(doel, f["export"]))
+            klaar += 1
+        else:
+            print("Photos-export mislukt voor", f["uuid"][:8], (r.stderr or "").strip()[:120], file=sys.stderr)
+        shutil.rmtree(tmp, ignore_errors=True)
+    return klaar
+
+
+def taken():
+    """Foto-taken van de Werfverslag voorbereider: {dossier, datum, adres, bezoekmap}. Regel: alleen foto's van die dag
+    binnen STRAAL_M van het werfadres; vindt de geocoder het huisnummer niet (straatmidden), dan 600 m en dat wordt gemeld.
+    Nooit privéfoto's: wat buiten de straal valt blijft in Photos."""
+    lijst = taken_lezen()
+    if not lijst:
+        return 0
+    hartslag("actief", taak=f"{len(lijst)} foto-taak/taken van de voorbereider")
+    regels, gedaan = [], 0
+    for it in lijst:
+        try:
+            d = json.loads(it.get("inhoud") or "{}")
+        except ValueError:
+            d = {}
+        dag, adres, bezoekmap, dossier = d.get("datum", ""), d.get("adres", ""), d.get("bezoekmap", ""), d.get("dossier", "?")
+        if not (dag and adres and bezoekmap):
+            regels.append({"naam": NAAM, "onderwerp": str(dossier), "stap": "fout", "tekst": f"taak {it['id']} onvolledig (datum, adres of bezoekmap ontbreekt)"})
+            taak_opgepakt(it["id"]); continue
+        c = coord(adres)
+        if not c:
+            regels.append({"naam": NAAM, "onderwerp": str(dossier), "stap": "fout", "tekst": f"{dag}: adres niet gevonden door de geocoder: {adres}", "detail": "Mehdi of de voorbereider geeft coördinaten (00 DOSSIER.md, regel C1)"})
+            taak_opgepakt(it["id"]); continue
+        fotos = [f for f in fotos_van(dag) if f["lat"] is not None]
+        straal = STRAAL_M
+        binnen = [f for f in fotos if afstand_m(f["lat"], f["lon"], c[0], c[1]) <= straal]
+        if not binnen:
+            straal = 600
+            binnen = [f for f in fotos if afstand_m(f["lat"], f["lon"], c[0], c[1]) <= straal]
+        if not binnen:
+            regels.append({"naam": NAAM, "onderwerp": str(dossier), "stap": "bevinding", "tekst": f"{dag}: geen foto's binnen 600 m van {adres} ({len(fotos)} foto's met GPS die dag); niets geëxporteerd"})
+            taak_opgepakt(it["id"]); continue
+        doel = os.path.join(DROPBOX_LOKAAL, bezoekmap.lstrip("/"), "fotos")
+        n = exporteer_naar(binnen, doel)
+        clat = round(sum(f["lat"] for f in binnen) / len(binnen), 5); clon = round(sum(f["lon"] for f in binnen) / len(binnen), 5)
+        md = [f"# Foto's {dossier} {dag}", "", f"{len(binnen)} foto's van de iPhone binnen {straal} m van {adres} (zwaartepunt {clat}, {clon}); "
+              f"geëxporteerd door de iCloud-wacht op {datetime.now().date().isoformat()}. Bron: iCloud-fotobibliotheek van Mehdi; foto's buiten de straal bleven in Photos.", "",
+              "| tijd | bestand | lat, lon | afstand |", "|---|---|---|---|"]
+        for f in sorted(binnen, key=lambda x: x["tijd"]):
+            md.append(f"| {f['tijd']} | {f.get('export','')} | {f['lat']}, {f['lon']} | {int(afstand_m(f['lat'], f['lon'], c[0], c[1]))} m |")
+        open(os.path.join(doel, "00 fotos.md"), "w", encoding="utf-8").write("\n".join(md) + "\n")
+        regels.append({"naam": NAAM, "onderwerp": str(dossier), "stap": "schrijf",
+                       "tekst": f"{dag}: {n} van {len(binnen)} foto's binnen {straal} m van {adres} geëxporteerd naar {bezoekmap}/fotos (zwaartepunt {clat}, {clon}"
+                               + ("; straal verruimd tot 600 m omdat de geocoder geen huisnummer vond" if straal != STRAAL_M else "") + ")",
+                       "detail": "\n".join(f"{f['tijd']} {f.get('export','')}" for f in binnen)})
+        taak_opgepakt(it["id"]); gedaan += 1
+    if regels:
+        bord("/api/logboek", {"regels": regels})
+    hartslag("klaar", taak=f"{gedaan} foto-taak/taken uitgevoerd", detail="foto's in de bezoekmap; de voorbereider ziet ze bij zijn volgende ronde")
+    return gedaan
+
+
 def main():
+    if "--taken" in sys.argv:
+        if not TOKEN:
+            sys.exit("geen token")
+        print("taken:", taken())
+        return
     if not TOKEN:
         print("geen token in ~/.config/mijnagents/token", file=sys.stderr)
         sys.exit(1)

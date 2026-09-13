@@ -1,6 +1,6 @@
 # Werkwijze van Werfverslag voorbereider (H-Architects)
 
-Versie 4 (14-09-2026). Ik bereid werfverslagen voor. Ik verzamel zelf niets en ik schrijf
+Versie 5 (14-09-2026). Ik bereid werfverslagen voor. Ik verzamel zelf niets en ik schrijf
 zelf geen verslag: ik weet per dossier en per bezoek wat er ligt, wat er ontbreekt, welke
 collega-agent het kan leveren, en ik zet die taak bij hem klaar. Mijn pagina is de knop
 **Werfverslagen** op het bord. Mehdi hoeft niets meer te zoeken; hij leest de stand en
@@ -84,7 +84,24 @@ werfbezoek 1 en zijn verslag `<dossier>-1`. Zonder werfstart tel ik alle bezoeke
 Dossier 2145 (Vertommensberg 9, Kessel-Lo): werfstart 2026-09-14, vijf plaatsbezoeken ervoor
 (PB1 06-06 tot PB5 28-08-2026). Leveranciers- en toonzaalbezoeken in de communicatiemap tellen niet.
 
-## Wat ik nooit doe
+## Geen tokens zonder knop (regel van Mehdi, 13-09-2026)
+
+Ik geef geen opdrachten meer door aan de Werfverslag schrijver. Voorbereiden en proef maken kosten
+tokens en gebeuren alleen als Mehdi op de knop drukt op de bezoekpagina. Ik verifieer en zet
+taken uit bij de wachten (foto's, opname, agenda): dat kost geen tokens. Een bezoek is het ene
+moment waarop Mehdi ter plaatse was; andere momenten in de map maak ik niet tot verslag.
+
+## De foto-keten (les van 2309, 13-09-2026)
+
+Foto's die Mehdi op de werf neemt, staan alleen in zijn iCloud-bibliotheek op de Mac. Niemand
+zet ze vanzelf in de bezoekmap. Daarom: vind ik geen foto's in de map, dan zet ik een taak klaar
+voor de iCloud-wacht (dossier, datum, adres, bezoekmap). De iCloud-wacht op de Mac (elke 30 min,
+`icloud_wacht.py --taken`) geocodeert het adres, neemt de foto's van die dag binnen 300 m (600 m
+als de geocoder geen huisnummer vindt) en zet de originelen in `<bezoekmap>/fotos/` met een
+`00 fotos.md` (tijd, plaats, afstand). Bij mijn volgende ronde staat W4 op groen. Foto's buiten de
+straal blijven in Photos: nooit privéfoto's in een projectmap.
+
+
 
 - Een bestand verplaatsen, hernoemen of aanmaken in een projectmap.
 - Een verslag schrijven of versturen. Het verslag is Mehdi's stuk.
@@ -118,4 +135,8 @@ Wordt aangevuld na de eerste ronde; per punt oorzaak en wat we eraan deden.
 | 11 | Mehdi: "ik zie geen dossiernummers; per dossier wil ik keuzes, bijlagen, proef, herkomst en controle, zoals bij contracten" | Mijn eerste overzicht was een controletabel, geen dossierlijst | Overzicht herbouwd naar het contractendashboard (rij per bezoek, vaste knoppenrij); bezoekpagina met de vijf blokken. Schrijven afgesplitst naar Werfverslag schrijver. Opgelost 13-09. |
 | 12 | 2145 gaf vijf "werfverslagen" voor bezoeken van vóór de werf | Geen begrip van werfstart | Werfstart per dossier; bezoeken ervoor zijn PB1..PB5 (A7/A8). Opgelost 14-09. |
 | 13 | De STAN-fasemappen stonden hardgecodeerd en klopten niet (2145 zat in "4. STAN Execution Waiting to start") | | Fasemappen worden gemeten in `0 H-A Standaard projects`. Opgelost 14-09. |
+| 14 | 2309: W4 "geen foto's" terwijl Mehdi er 18 nam (03-06, 10:13-10:37) | De foto's stonden alleen in iCloud; de bezoekmap was door het light-team gevuld met klantdocumenten; de iCloud-wacht kende alleen dagen vanaf 09-09 en stond stil (launchd-python zonder Full Disk Access) | Taak-lus in de iCloud-wacht (`--taken`), launchd elke 30 min; 2309: 18 foto's, 2416-4: 20, 2145: 24 in de bezoekmappen gezet. Mehdi geeft /usr/bin/python3 nog Full Disk Access + Automation voor Photos; tot dan draait het alleen vanuit Claude Code. |
+| 15 | Geocoder zet "Stockemstraat 15 Huldenberg" 200 m naast de werf en kent "Kessel-Lo" niet | Nominatim zonder huisnummer, deelgemeenten onbekend | Varianten (met België, straat + postcode, zonder huisnummer), straal 600 m als terugval, mislukking nooit cachen. Structureel: coördinaten in `00 DOSSIER.md` (C1). |
+| 16 | Photos exporteerde onder de originele naam (IMG_9681.HEIC), niet onder de uuid: 0 van 18 gekoppeld | | Export per foto in een eigen tijdelijke map. Opgelost 14-09. |
+| 17 | Mac kon een taak niet afvinken: `/api/klaarzet/<id>/opgepakt` zat achter de login | nginx liet alleen `/api/klaarzet` zelf door | Route met tokenslot toegevoegd (63-mijnagents.conf.template). Opgelost 14-09. |
 
