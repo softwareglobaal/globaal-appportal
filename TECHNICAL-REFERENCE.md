@@ -213,8 +213,25 @@ De knop wijst altijd naar **`/app/download`**. Daar kiest nginx op de user-agent
 `.dmg` voor macOS, `.exe` voor de rest, en telefoons krijgen een melding dat de
 app voor computers is. De gebruiker kiest dus nooit zelf een besturingssysteem.
 Bestanden staan op de VM in `~/appportal/downloads/` (gemount als
-`/srv/downloads`, alleen `.exe` en `.dmg` zijn bereikbaar) onder de vaste namen
-`Globaal-setup.exe` en `Globaal.dmg`. Ze staan bewust niet in git.
+`/srv/downloads`) onder de vaste namen `Globaal-setup.exe`, `Globaal.dmg`,
+`Globaal.app.tar.gz` en `update.json`. Ze staan bewust niet in git.
+
+**Alles onder `/app/` zit achter de aanmelding.** nginx toetst de sessie met
+`auth_request` tegen `/api/v3/core/users/me/` (200 met sessie, 403 zonder); wie
+al is aangemeld merkt niets, wie niet is aangemeld gaat naar
+`/flows/-/default/authentication/?next=<link>` en komt daarna terug. Let op de
+volgorde van de nginx-fasen: een `return` in de location vuurt in de
+rewrite-fase, dus vóór `auth_request`. Daarom gaat `/app/download` via
+`try_files` naar een named location, zodat de OS-keuze pas in de content-fase
+gebeurt.
+
+**Automatisch bijwerken:** de app haalt `update.json` op en installeert nieuwe
+versies zelf. De updater heeft een eigen HTTP-client (geen webview), dus de app
+geeft de sessiecookie van de gebruiker als kopregel mee en komt zo langs
+dezelfde `auth_request`. Artefacten zijn ondertekend met een minisign-sleutel;
+de private sleutel staat op de werkmachine van de beheerder en als
+GitHub-secrets. Publiceren gaat met `scripts/publiceer.sh <tag>` in de repo
+`globaal-desktop`.
 
 De app zelf is de repo **`globaal-desktop`** (Tauri 2): een venster met links de
 applijst uit `/api/v3/core/applications/` en rechts de app. De lijst wordt
