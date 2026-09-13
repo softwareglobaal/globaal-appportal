@@ -29,6 +29,17 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+# De server draait in UTC. Tot 14-09-2026 stonden alle tijden in het dagboek
+# daardoor twee uur te vroeg ("22:00-08:15 in Etterbeek" voor 00:00-10:15), en
+# leek een werfbezoek van 11:14 om 09:14 te vallen, naast een afspraak om 10:00.
+# Afspraak van Mehdi: Belgische tijd overal, ook als hij reist.
+BRUSSEL = ZoneInfo("Europe/Brussels")
+
+
+def nu():
+    return datetime.now(BRUSSEL)
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
@@ -49,7 +60,7 @@ DAG = None
 for i, a in enumerate(sys.argv):
     if a == "--dag" and i + 1 < len(sys.argv):
         DAG = sys.argv[i + 1]
-DAG = DAG or datetime.now().date().isoformat()
+DAG = DAG or nu().date().isoformat()
 UA = {"User-Agent": "MehdiAgents-locatiewacht/1.0 (mch@h-architects.be)"}
 
 
@@ -123,7 +134,7 @@ def afstand_m(lat1, lon1, lat2, lon2):
 
 
 def uur(epoch):
-    return datetime.fromtimestamp(int(epoch)).strftime("%H:%M")
+    return datetime.fromtimestamp(int(epoch), BRUSSEL).strftime("%H:%M")
 
 
 def duur(m):
@@ -196,14 +207,14 @@ def vergelijk_agenda(dag, bezoeken, cache):
 def controle():
     g = haal("/gezond")
     minuten = int(g.get("minuten_geleden") or 0)
-    nu_uur = datetime.now().hour
+    nu_uur = nu().hour
     nacht = nu_uur >= NACHT[0] or nu_uur < NACHT[1]
     if minuten > ALARM_UREN * 60 and not nacht:
-        ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": datetime.now().date().isoformat(),
+        ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": nu().date().isoformat(),
                       "titel": f"Tracker stil sinds {minuten // 60} uur",
-                      "uniek": f"locatie-alarm:{datetime.now().strftime('%Y-%m-%d-%H')}",
+                      "uniek": f"locatie-alarm:{nu().strftime('%Y-%m-%d-%H')}",
                       "inhoud": "Er kwam meer dan zes uur geen locatiepunt binnen terwijl het geen nacht is. Kijk de OwnTracks-app op de iPhone na."}])
-        ag.log(datetime.now().date().isoformat(), "fout", f"tracker stil sinds {minuten} min")
+        ag.log(nu().date().isoformat(), "fout", f"tracker stil sinds {minuten} min")
         ag.log_verstuur()
         ag.hartslag("fout", taak="tracker stil", detail=f"geen punt sinds {minuten // 60} uur")
     else:

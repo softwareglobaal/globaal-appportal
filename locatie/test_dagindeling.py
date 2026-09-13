@@ -136,6 +136,9 @@ def test_locatiewacht_schrijft_een_gat_niet_als_rit():
         return
     bron = open(pad, encoding="utf-8").read()
     assert re.search(r'soort"\)\s*==\s*"gat"', bron), "de Locatiewacht behandelt een gat niet apart"
+    # 14-09-2026: de server draait in UTC en elke tijd in het dagboek stond twee uur te vroeg.
+    assert "datetime.now()" not in bron, "de Locatiewacht gebruikt de klok van de server (UTC)"
+    assert re.search(r"fromtimestamp\(int\(epoch\),\s*BRUSSEL\)", bron), "uur() rekent niet naar Belgische tijd"
 
 
 if __name__ == "__main__":
