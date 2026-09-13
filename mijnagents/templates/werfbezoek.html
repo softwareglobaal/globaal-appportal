@@ -32,7 +32,15 @@
   .rij { display:grid; grid-template-columns:1fr 1fr 1fr; gap:0 18px; }
   .keuzeblok { display:flex; gap:16px; flex-wrap:wrap; margin:6px 0 14px; }
   .keuzeblok label { display:flex; align-items:center; gap:6px; font-size:14px; background:var(--wit); border:1px solid var(--lijn); border-radius:4px; padding:7px 12px; cursor:pointer; }
-  nav.tabs { display:flex; gap:6px; flex-wrap:wrap; margin:14px 0 4px; }
+  nav.tabs { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; border-bottom:2px solid var(--lijn); padding-bottom:10px; }
+  nav.tabs .tab { display:inline-block; padding:11px 22px; border-radius:6px; font-size:16px; font-weight:700; text-decoration:none; cursor:pointer; border:2px solid var(--lijn); background:var(--wit); color:var(--ink); }
+  nav.tabs .tab.actief { background:var(--accent); color:var(--wit); border-color:var(--accent); }
+  nav.tabs .tab.proef { border-color:#c2410c; color:#c2410c; }
+  nav.tabs .tab.proef.actief { background:#c2410c; color:var(--wit); }
+  nav.tabs .tab .nr { display:inline-block; width:22px; height:22px; line-height:22px; border-radius:50%; background:rgba(0,0,0,.12); text-align:center; font-size:13px; margin-right:8px; }
+  .blad { display:none; } .blad.actief { display:block; }
+  .groteknop { display:inline-block; background:#c2410c; color:var(--wit); padding:12px 22px; border-radius:6px; font-size:16px; font-weight:700; text-decoration:none; margin-top:8px; }
+  h3 { font-size:14px; margin:18px 0 6px; color:var(--accent); }
 </style>
 </head>
 <body>
@@ -51,16 +59,78 @@
     {% if b.heeft_proef %}Proef staat klaar in de bezoekmap: nakijken en versturen.{% elif b.voorbereid %}Voorbereid door Werfverslag schrijver: maak je keuzes en laat de proef maken.{% else %}Nog niet voorbereid: Werfverslag schrijver leest de bezoekmap nog uit.{% endif %}
   </strong><br>
   <span class="stil">{{ b.telling.ok }} in orde · {{ b.telling.let_op }} nakijken · {{ b.telling.fout }} ontbreekt · {{ b.telling.onbekend }} niet meetbaar{% if b.nodig %} — nog nodig: {{ b.nodig|join(', ') }}{% endif %}</span>
+  {% if b.heeft_proef %}<br><a class="groteknop" href="#proef" data-blad="proef">Proef openen &rarr;</a>{% endif %}
 </div>
 {% if opdrachten and opdrachten[0].status == 'klaar' %}
 <div class="melding"><strong>Opdracht "{{ opdrachten[0].titel }}" staat klaar voor Werfverslag schrijver.</strong> Hij pakt ze binnen 5 minuten op; deze pagina ververst zichzelf.</div>
 {% endif %}
 
 <nav class="tabs">
-  <a class="knop klein" href="#keuzes">Keuzes</a><a class="knop klein" href="#bijlagen">Bijlagen</a><a class="knop klein" href="#proef">Proef</a><a class="knop klein" href="#herkomst">Herkomst</a><a class="knop klein" href="#controle">Controle</a><a class="knop klein licht" href="#werkverslag">Werkverslag</a>
+  <a class="tab" data-blad="analyse" href="#analyse"><span class="nr">1</span>Analyse</a>
+  <a class="tab" data-blad="keuzes" href="#keuzes"><span class="nr">2</span>Keuzes</a>
+  <a class="tab proef" data-blad="proef" href="#proef"><span class="nr">3</span>Proef{% if b.heeft_proef %} (klaar){% endif %}</a>
+  <a class="tab" data-blad="werkverslag" href="#werkverslag" style="margin-left:auto;font-weight:400">Werkverslag agents</a>
 </nav>
+<p class="stil">Eerst analyseren (1): wat de agents vonden en wat nog ontbreekt. Dan kiezen (2). Pas dan de proef laten maken en nakijken (3).</p>
 
-<h2 id="keuzes">Keuzes</h2>
+<div class="blad" id="blad-analyse">
+<h2 id="analyse">1. Analyse</h2>
+<p class="stil">Wat de Werfverslag voorbereider verifieerde en wat de Werfverslag schrijver uit de bezoekmap haalde. Rood = ontbreekt, vraagteken = niet meetbaar.</p>
+<h3 id="controle">Controle (W1 tot W11)</h3>
+<table>
+  <tr><th style="width:34px;"></th><th style="width:44px;">Nr</th><th>Controle</th><th>Bevinding</th></tr>
+  {% for c in b.controle_rijen %}
+  <tr>
+    <td class="teken" style="color:{{ kleur[c.status] }};">{{ teken[c.status]|safe }}</td>
+    <td class="stil">{{ c.nummer }}</td>
+    <td><strong>{{ c.titel }}</strong></td>
+    <td>{{ c.bevinding }}{% if c.actie %}<br><span style="color:{{ kleur[c.status] }};">&rarr; {{ c.actie }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+<p class="stil">&#10003; in orde · ! nakijken · &#10007; ontbreekt (taak bij de agent die het kan leveren) · ? niet meetbaar</p>
+{% if b.taken %}<table style="margin-top:8px;"><tr><th>Uitgezet bij</th><th>Wat</th><th>Stand</th></tr>
+{% for t in b.taken %}<tr><td><strong>{{ t.voor }}</strong></td><td>{{ t.titel }}</td><td>{{ t.status }}{% if t.door %} door {{ t.door }}{% endif %}</td></tr>{% endfor %}</table>{% endif %}
+
+<h3 id="bijlagen">Bijlagen in de bezoekmap</h3>
+<p class="stil"><code>{{ b.bezoekmap }}</code></p>
+{% if b.bijlagen %}
+<table><tr><th>Soort</th><th>Bestand</th><th></th></tr>
+{% for x in b.bijlagen %}<tr><td>{{ x.soort }}</td><td>{{ x.naam }}</td><td class="stil">{% if x.tekens %}{{ x.tekens }} tekens gelezen{% elif x.grootte %}{{ (x.grootte/1024)|round|int }} kB{% endif %}</td></tr>{% endfor %}
+</table>
+{% else %}
+<table>
+  <tr><th>Soort</th><th>Wat</th></tr>
+  <tr><td>Foto's</td><td>{{ b.bronnen.fotos or 0 }}</td></tr>
+  <tr><td>Opnames</td><td>{{ b.bronnen.opnames|join(', ') if b.bronnen.opnames else 'geen' }}</td></tr>
+  <tr><td>Transcripten</td><td>{{ b.bronnen.transcripten|join(', ') if b.bronnen.transcripten else 'geen' }}</td></tr>
+  <tr><td>Verslagen</td><td>{{ b.bronnen.verslagen|join(', ') if b.bronnen.verslagen else 'geen' }}</td></tr>
+  <tr><td>Documenten</td><td>{{ b.bronnen.notities|join(', ') if b.bronnen.notities else 'geen' }}</td></tr>
+</table>
+<p class="stil">Na de voorbereiding staat hier per bestand wat de schrijver ervan las.</p>
+{% endif %}
+
+<h3 id="herkomst">Herkomst: gegevens met bron en zekerheid</h3>
+{% if g.gegevens %}
+<table>
+  <tr><th style="width:34px;"></th><th>Gegeven</th><th>Waarde</th><th>Bron</th></tr>
+  {% for x in g.gegevens %}
+  <tr><td class="teken" style="color:{{ kleur[x.status] }};">{{ teken[x.status]|safe }}</td><td><strong>{{ x.veld }}</strong></td><td>{{ x.waarde }}</td><td class="stil">{{ x.bron }}</td></tr>
+  {% endfor %}
+</table>
+{% if g.situatie %}<h4>Situatie volgens de bronnen</h4><p>{{ g.situatie }}</p>{% endif %}
+{% if g.onderdelen %}<h4>Vaststellingen per onderdeel</h4>
+<table><tr><th>Onderdeel</th><th>Vaststellingen</th><th>Bron</th></tr>
+{% for o in g.onderdelen %}<tr><td><strong>{{ o.onderdeel }}</strong></td><td><ul style="margin:0;padding-left:18px;">{% for v in o.vaststellingen %}<li>{{ v }}</li>{% endfor %}</ul></td><td class="stil">{{ o.bron }}</td></tr>{% endfor %}
+</table>{% endif %}
+{% if g.ontbreekt %}<h4>Wat de architect nog moet aanvullen</h4><ul>{% for x in g.ontbreekt %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
+{% else %}
+<p class="stil">Nog geen gegevens. Werfverslag voorbereider geeft na zijn verificatie de opdracht "voorbereid" door aan Werfverslag schrijver; je kunt het ook zelf starten met <em>Voorbereiden</em>.</p>
+{% endif %}
+
+</div>
+<div class="blad" id="blad-keuzes">
+<h2 id="keuzes">2. Keuzes</h2>
 <p class="stil">Jij beslist wat de schrijver niet mag raden. De rest vult het systeem in.</p>
 <form method="post" action="{{ url_for('werfbezoek_keuzes', dossier=b.dossier, volgnr=b.volgnr) }}">
   {% set k = b.keuzes %}
@@ -87,25 +157,9 @@
   <p><button class="knop" type="submit">Keuzes bewaren</button> {% if k.ts %}<span class="stil">bewaard {{ k.ts[:16].replace('T',' ') }} door {{ k.door }}</span>{% endif %}</p>
 </form>
 
-<h2 id="bijlagen">Bijlagen</h2>
-<p class="stil"><code>{{ b.bezoekmap }}</code></p>
-{% if b.bijlagen %}
-<table><tr><th>Soort</th><th>Bestand</th><th></th></tr>
-{% for x in b.bijlagen %}<tr><td>{{ x.soort }}</td><td>{{ x.naam }}</td><td class="stil">{% if x.tekens %}{{ x.tekens }} tekens gelezen{% elif x.grootte %}{{ (x.grootte/1024)|round|int }} kB{% endif %}</td></tr>{% endfor %}
-</table>
-{% else %}
-<table>
-  <tr><th>Soort</th><th>Wat</th></tr>
-  <tr><td>Foto's</td><td>{{ b.bronnen.fotos or 0 }}</td></tr>
-  <tr><td>Opnames</td><td>{{ b.bronnen.opnames|join(', ') if b.bronnen.opnames else 'geen' }}</td></tr>
-  <tr><td>Transcripten</td><td>{{ b.bronnen.transcripten|join(', ') if b.bronnen.transcripten else 'geen' }}</td></tr>
-  <tr><td>Verslagen</td><td>{{ b.bronnen.verslagen|join(', ') if b.bronnen.verslagen else 'geen' }}</td></tr>
-  <tr><td>Documenten</td><td>{{ b.bronnen.notities|join(', ') if b.bronnen.notities else 'geen' }}</td></tr>
-</table>
-<p class="stil">Na de voorbereiding staat hier per bestand wat de schrijver ervan las.</p>
-{% endif %}
-
-<h2 id="proef">Proef</h2>
+</div>
+<div class="blad" id="blad-proef">
+<h2 id="proef" style="color:#c2410c;border-color:#c2410c">3. Proef</h2>
 <p>
   <form class="inline" method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="soort" value="voorbereid"><button class="knop{{ ' licht' if b.voorbereid else '' }}" type="submit">{{ 'Opnieuw voorbereiden' if b.voorbereid else 'Voorbereiden' }}</button></form>
   <form class="inline" method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="soort" value="proef"><button class="knop{{ '' if b.voorbereid else ' licht' }}" type="submit">{{ 'Nieuwe proef maken (Word)' if b.heeft_proef else 'Proef maken (Word)' }}</button></form>
@@ -118,43 +172,27 @@
 <p class="stil">Nog geen proef. Bewaar eerst je keuzes, klik dan <em>Proef maken (Word)</em>: Werfverslag schrijver schrijft het concept in het sjabloon van H-Architects en zet .docx en .md in de bezoekmap.</p>
 {% endif %}
 
-<h2 id="herkomst">Herkomst</h2>
-{% if g.gegevens %}
-<table>
-  <tr><th style="width:34px;"></th><th>Gegeven</th><th>Waarde</th><th>Bron</th></tr>
-  {% for x in g.gegevens %}
-  <tr><td class="teken" style="color:{{ kleur[x.status] }};">{{ teken[x.status]|safe }}</td><td><strong>{{ x.veld }}</strong></td><td>{{ x.waarde }}</td><td class="stil">{{ x.bron }}</td></tr>
-  {% endfor %}
-</table>
-{% if g.situatie %}<h3>Situatie volgens de bronnen</h3><p>{{ g.situatie }}</p>{% endif %}
-{% if g.onderdelen %}<h3>Vaststellingen per onderdeel</h3>
-<table><tr><th>Onderdeel</th><th>Vaststellingen</th><th>Bron</th></tr>
-{% for o in g.onderdelen %}<tr><td><strong>{{ o.onderdeel }}</strong></td><td><ul style="margin:0;padding-left:18px;">{% for v in o.vaststellingen %}<li>{{ v }}</li>{% endfor %}</ul></td><td class="stil">{{ o.bron }}</td></tr>{% endfor %}
-</table>{% endif %}
-{% if g.ontbreekt %}<h3>Wat de architect nog moet aanvullen</h3><ul>{% for x in g.ontbreekt %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
-{% else %}
-<p class="stil">Nog geen gegevens. Werfverslag voorbereider geeft na zijn verificatie de opdracht "voorbereid" door aan Werfverslag schrijver; je kunt het ook zelf starten met <em>Voorbereiden</em>.</p>
-{% endif %}
-
-<h2 id="controle">Controle</h2>
-<table>
-  <tr><th style="width:34px;"></th><th style="width:44px;">Nr</th><th>Controle</th><th>Bevinding</th></tr>
-  {% for c in b.controle_rijen %}
-  <tr>
-    <td class="teken" style="color:{{ kleur[c.status] }};">{{ teken[c.status]|safe }}</td>
-    <td class="stil">{{ c.nummer }}</td>
-    <td><strong>{{ c.titel }}</strong></td>
-    <td>{{ c.bevinding }}{% if c.actie %}<br><span style="color:{{ kleur[c.status] }};">&rarr; {{ c.actie }}</span>{% endif %}</td>
-  </tr>
-  {% endfor %}
-</table>
-<p class="stil">&#10003; in orde · ! nakijken · &#10007; ontbreekt (taak bij de agent die het kan leveren) · ? niet meetbaar</p>
-{% if b.taken %}<table style="margin-top:8px;"><tr><th>Uitgezet bij</th><th>Wat</th><th>Stand</th></tr>
-{% for t in b.taken %}<tr><td><strong>{{ t.voor }}</strong></td><td>{{ t.titel }}</td><td>{{ t.status }}{% if t.door %} door {{ t.door }}{% endif %}</td></tr>{% endfor %}</table>{% endif %}
-
+</div>
+<div class="blad" id="blad-werkverslag">
 <h2 id="werkverslag">Werkverslag van de agents voor dit bezoek</h2>
 <table><tr><th style="width:120px">Wanneer</th><th style="width:150px">Agent</th><th style="width:80px">Stap</th><th>Wat</th></tr>
 {% for l in logboek %}<tr><td class="stil">{{ l.ts[:16].replace('T',' ') }}</td><td class="stil">{{ l.naam }}</td><td class="stil">{{ l.stap }}</td><td>{{ l.tekst }}</td></tr>{% else %}<tr><td colspan="4" class="stil">nog niets</td></tr>{% endfor %}</table>
+</div>
+<script>
+(function(){
+  var bladen={analyse:'blad-analyse',keuzes:'blad-keuzes',proef:'blad-proef',werkverslag:'blad-werkverslag'};
+  var alias={controle:'analyse',bijlagen:'analyse',herkomst:'analyse'};
+  function toon(naam, scrollNaar){
+    naam=alias[naam]||naam; if(!bladen[naam]) naam='analyse';
+    Object.keys(bladen).forEach(function(k){document.getElementById(bladen[k]).classList.toggle('actief',k===naam);});
+    document.querySelectorAll('nav.tabs .tab').forEach(function(t){t.classList.toggle('actief',t.dataset.blad===naam);});
+    if(scrollNaar){var el=document.getElementById(scrollNaar); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});}
+  }
+  document.querySelectorAll('[data-blad]').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault(); var h=(a.getAttribute('href')||'').replace('#',''); history.replaceState(null,'','#'+h); toon(h,h);});});
+  var start=(location.hash||'').replace('#','')||'{{ tab }}'||'{{ "proef" if b.heeft_proef and not tab else "analyse" }}';
+  toon(start, start&&start!=='analyse'&&start!=='keuzes'&&start!=='proef'?start:null);
+})();
+</script>
 </main>
 </body>
 </html>
