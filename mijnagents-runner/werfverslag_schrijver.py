@@ -35,7 +35,10 @@ def opdrachten():
     gedaan, fouten = 0, 0
     for it in reversed(items):
         m = re.match(r"(voorbereid|proef)\s+(\d{4})\s+(\d+)", it.get("titel", ""))
-        if not m:
+        # Regel van Mehdi (13-09-2026): alleen opdrachten van de knop op het bord (van = bord:<gebruiker>);
+        # een opdracht van een agent voer ik niet uit, want elke stap kost tokens.
+        if not m or not str(it.get("van", "")).startswith("bord:"):
+            ag.log(it.get("sleutel", "?"), "besluit", f"opdracht overgeslagen (niet van de knop): {it.get('titel','')} van {it.get('van','')}")
             bord.opgepakt(it["id"], NAAM)
             continue
         soort, d, n = m.group(1), m.group(2), int(m.group(3))

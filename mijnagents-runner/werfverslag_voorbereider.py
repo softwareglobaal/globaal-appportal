@@ -282,8 +282,8 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
              f"{info.get('punten', '?')} punten, {info.get('fotos', '?')} foto's; nog {op.get('in_te_vullen', '?')} in te vullen, "
              f"{op.get('na_te_kijken', '?')} na te kijken, {op.get('raming_open', '?')} ramingen open" if isinstance(op, dict) else "geen telling")
     elif not (br.get("gegevens") or {}).get("gegevens") if isinstance(br.get("gegevens"), dict) else not br.get("gegevens"):
-        post("W11", "voorbereiding door de schrijver", "ontbreekt", "nog geen gegevens met herkomst; opdracht voorbereid wordt doorgegeven")
-        taken.append(("werfverslag-schrijver", f"voorbereid {nummer} {bezoek['volgnr']}"))
+        # Regel van Mehdi (13-09-2026): geen voorbereiding en geen proef zonder zijn knop; elke stap kost tokens.
+        post("W11", "voorbereiding door de schrijver", "onbekend", "wacht op Mehdi: knop Voorbereiden op de bezoekpagina (kost tokens, dus nooit automatisch)")
     else:
         post("W11", "voorbereiding door de schrijver", "ok", "gegevens met herkomst staan op de bezoekpagina; Keuzes en Proef zijn aan Mehdi")
     # W8 verslagnummer
