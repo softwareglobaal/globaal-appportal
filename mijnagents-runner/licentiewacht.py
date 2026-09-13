@@ -35,8 +35,13 @@ DIENST = [("wispr", "Wispr Flow"), ("anthropic|claude", "Claude (Anthropic)"), (
           ("meta|facebook|instagram", "Meta (Facebook/Instagram)"), ("twilio", "Twilio"), ("cloudflare", "Cloudflare"), ("hetzner", "Hetzner"), ("ovh", "OVH")]
 
 
+EIGEN = re.compile(r"h-?architects|unabo|harmonie|tkn|contrax|h-?invest|melodie|hds|zidi|qoppa|enstaco|corenbo|elevait|energie effici|orvantis|build for future", re.I)
+
+
 def dienst_van(*teksten):
     t = " ".join(x or "" for x in teksten).lower()
+    if EIGEN.search((teksten[0] or "").lower()):
+        return None  # eigen firma als leverancier: intercompany, geen abonnement
     for patroon, naam in DIENST:
         if re.search(patroon, t):
             return naam
@@ -77,6 +82,8 @@ def main():
         bronnen = defaultdict(set)
         for r in kaart:
             d = dienst_van(r["vendor"], r["omschrijving"])
+            if not d:
+                continue
             k = (r["firma"], d)
             per[k][maand(r["datum"])] += -float(r["bedrag"] or 0)
             laatste[k] = max(laatste.get(k, ""), r["datum"])
@@ -84,6 +91,8 @@ def main():
             bronnen[k].add("Visa")
         for r in fact:
             d = dienst_van(r["leverancier"], r["omschrijving"])
+            if not d:
+                continue
             k = (r["firma"] or "?", d)
             per[k][maand(r["datum"])] += float(r["bedrag"] or 0)
             laatste[k] = max(laatste.get(k, ""), r["datum"])
@@ -95,7 +104,10 @@ def main():
         for (firma, dienst), mnd in per.items():
             tot = sum(v for m, v in mnd.items() if m in maanden)
             actieve = [m for m in maanden if mnd.get(m, 0) > 0]
-            gem = tot / max(len(actieve), 1)
+            # per maand = totaal gespreid over de maanden sinds de eerste betaling in het venster (jaarfacturen tellen zo juist mee)
+            eerste = min(actieve) if actieve else maanden[0]
+            spanne = max(1, maanden.index(maanden[-1]) - maanden.index(eerste) + 1)
+            gem = tot / spanne
             # ouderdom tegenover de jongste geboekte lijn van die firma, niet tegenover vandaag: de staten lopen achter
             peil = date.fromisoformat(staat.get(firma) or vandaag.isoformat())
             oud = (max(peil, date.fromisoformat(laatste[(firma, dienst)])) - date.fromisoformat(laatste[(firma, dienst)])).days
