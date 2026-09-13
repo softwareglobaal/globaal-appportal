@@ -1,6 +1,6 @@
 # Werkwijze van Werfverslag voorbereider (H-Architects)
 
-Versie 3 (13-09-2026, nacht). Ik bereid werfverslagen voor. Ik verzamel zelf niets en ik schrijf
+Versie 4 (14-09-2026). Ik bereid werfverslagen voor. Ik verzamel zelf niets en ik schrijf
 zelf geen verslag: ik weet per dossier en per bezoek wat er ligt, wat er ontbreekt, welke
 collega-agent het kan leveren, en ik zet die taak bij hem klaar. Mijn pagina is de knop
 **Werfverslagen** op het bord. Mehdi hoeft niets meer te zoeken; hij leest de stand en
@@ -75,6 +75,15 @@ start alleen na Mehdi's keuzes en zijn klik. Staat er een proef, dan kijk ik ze 
 punten en foto's, en hoeveel er nog in te vullen, na te kijken of te ramen is. Pas als dat nul is,
 staat W11 op groen. Ik schrijf zelf nooit een verslag.
 
+## Werfstart en nummering (A7/A8)
+
+Per dossier ken ik een **werfstart** (`--werfstart 2145 2026-09-14`, bewaard in
+`mijnagents-data/werfverslag_dossiers.json`). Bezoeken vóór de werfstart zijn **plaatsbezoeken**
+(PB1, PB2, ...) en krijgen geen werfverslagnummer; het eerste bezoek vanaf de werfstart is
+werfbezoek 1 en zijn verslag `<dossier>-1`. Zonder werfstart tel ik alle bezoeken als werfbezoek.
+Dossier 2145 (Vertommensberg 9, Kessel-Lo): werfstart 2026-09-14, vijf plaatsbezoeken ervoor
+(PB1 06-06 tot PB5 28-08-2026). Leveranciers- en toonzaalbezoeken in de communicatiemap tellen niet.
+
 ## Wat ik nooit doe
 
 - Een bestand verplaatsen, hernoemen of aanmaken in een projectmap.
@@ -107,4 +116,6 @@ Wordt aangevuld na de eerste ronde; per punt oorzaak en wat we eraan deden.
 | 9 | 2309-1 (03-06-2026): geen eigen foto's, geen opname, wel 12 documenten van de bouwheer (pptx met 52 dia's, gebrekenlijst, schade, offerte, facturen, mailwisseling) | Light-bezoek door een collega; de bouwheer levert het materiaal | Voorbereiding en proef gemaakt uit die documenten (13-09, 21k+8k tokens per stap). Het verslag zegt letterlijk dat elke vaststelling uit de melding van de bouwheer komt en ter plaatse na te kijken is. Mehdi vult aanwezigen en ramingen aan. |
 | 10 | Mehdi wil ook een **pdf** | Op de VM staat geen LibreOffice; python-docx maakt alleen .docx | Voorlopig via Word op de Mac (osascript); structureel LibreOffice op de VM. Mehdi beslist. Open. |
 | 11 | Mehdi: "ik zie geen dossiernummers; per dossier wil ik keuzes, bijlagen, proef, herkomst en controle, zoals bij contracten" | Mijn eerste overzicht was een controletabel, geen dossierlijst | Overzicht herbouwd naar het contractendashboard (rij per bezoek, vaste knoppenrij); bezoekpagina met de vijf blokken. Schrijven afgesplitst naar Werfverslag schrijver. Opgelost 13-09. |
+| 12 | 2145 gaf vijf "werfverslagen" voor bezoeken van vóór de werf | Geen begrip van werfstart | Werfstart per dossier; bezoeken ervoor zijn PB1..PB5 (A7/A8). Opgelost 14-09. |
+| 13 | De STAN-fasemappen stonden hardgecodeerd en klopten niet (2145 zat in "4. STAN Execution Waiting to start") | | Fasemappen worden gemeten in `0 H-A Standaard projects`. Opgelost 14-09. |
 
