@@ -17,6 +17,10 @@ server {
         proxy_pass $sessie_backend;
         proxy_pass_request_body off;
         proxy_set_header Content-Length "";
+        # De subrequest erft de Accept-kopregel van de client. Vraagt die om
+        # octet-stream (de updater) of html (een browser), dan antwoordt de
+        # API met 406 en maakt nginx daar een 500 van. Dus hier vastzetten.
+        proxy_set_header Accept "application/json";
         include /etc/nginx/snippets/proxy-common.conf;
     }
 
