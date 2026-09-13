@@ -71,3 +71,14 @@ De regels voor mappen, verslagnummers en het verslag zelf staan in `H-A vaste af
 ## Waar het op 13-09-2026 vastliep (eerste ronde op 2309, 2324, 2416)
 
 Wordt aangevuld na de eerste ronde; per punt oorzaak en wat we eraan deden.
+
+| # | Wat | Oorzaak | Wat we deden / wie beslist |
+|---|---|---|---|
+| 1 | 2309, 2324 en 2416 zijn **light-projecten**; de projectmap-zoeker van De Contractmaker kent alleen STAN Submission | Light-projecten staan onder `0 H-A Light projects/5. H-A light SITE VISITS` | Ik zoek nu eerst STAN-fasen 1-4, dan light. Opgelost. |
+| 2 | 2324 gaf 30 "bezoeken" | Fotomappen per datum (`4. Foto's/20251018`) en mailmappen (`2024-01-31 mail klant`) hebben een datum in de naam | Fotomappen, mailmappen, offertes en facturen tellen niet; in de communicatiemap telt alleen een momentmap met "bezoek" in de naam. Nu 3 bezoeken. Opgelost. |
+| 3 | W1 (afspraak in de agenda) is voor alle 9 bezoeken **onbekend** | De Agendawacht zet pas klaar sinds 09-09-2026; de bezoeken zijn van april tot juli 2026 | Agendawacht een ronde `--dag` over het verleden laten draaien (bouw: claude-code). Open. |
+| 4 | 11 taken staan klaar (4 iCloud-wacht, 7 Plaudwacht) maar **niemand pakt ze op** | De collega-agents lezen de bak nog niet op soort `taak` | Elke wacht krijgt een stap "lees mijn taken (voor=mijn naam, soort=taak) en meld opgepakt". Bouw: claude-code. Mehdi beslist of dat de weg is. Open. |
+| 5 | W7 ontbreekt voor 6 bezoeken (2309-1, 2416-1 t/m 5) en **geen agent schrijft een verslag** | Het verslag ontstaat nu alleen via de skill `werfverslag` op de Mac | Beslissing 3 uit het plan van 12-09: verslag door een agent op de VM (claude-opus-5, met transcript en foto's uit Dropbox) of door de skill op de Mac. Mehdi beslist. Open. |
+| 6 | W9 (verstuurd) is nergens meetbaar | Geen koppeling mail -> dossier | Mailwacht mch@ leert een dossiernummer in onderwerp/bijlage herkennen. Bouw: claude-code. Open. |
+| 7 | 2416-2 (07-05) en 2416-3 (20-05) zijn **klaar voor verslag**: foto's, Plaud-mp3 en transcript liggen in de map | | Eerste kandidaten voor het eerste echte werfverslag. Mehdi beslist met welk bezoek we starten. |
+| 8 | 2324 heeft al twee werf-updates (03-03-2025, 02-06-2026) en een map 23-06-2026 met foto's van de klant, zonder opname | | Verslag 3 kan uit foto's en het Fathom-gesprek van 22-06 (Toon Aerts); dat gesprek staat in `7. Communication`, niet in de bezoekmap: koppeling op datum nog te bouwen. Open. |
