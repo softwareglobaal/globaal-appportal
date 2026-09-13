@@ -109,6 +109,35 @@ def test_rit_krijgt_de_dominante_wijze():
     assert ritten and all(r["wijze"] == "automotive" for r in ritten), ritten
 
 
+def test_dag_die_in_stilte_eindigt_zegt_dat():
+    """13-09-2026: laatste punt 11:56, daarna twaalf uur niets, zonder vermelding."""
+    from datetime import datetime as dt
+    middag = dt(2026, 9, 13, 11, 56).astimezone().timestamp()
+    punten = [{"tst": int(middag) - 600 + i * 60, "lat": WERF[0], "lon": WERF[1],
+               "acc": 5, "motion": "stationary", "ssid": None} for i in range(11)]
+    ind = app.met_open_einde(app.dagindeling_zuiver(punten, PLEKKEN), punten,
+                             "2026-09-13", nu=middag + 13 * 3600)
+    assert ind[-1]["soort"] == "gat" and ind[-1].get("open"), ind[-1]
+    assert ind[-1]["meter"] is None, "een open gat mag geen afstand verzinnen"
+    assert ind[-1]["minuten"] > 11 * 60
+    # Een dag die gewoon doorloopt tot kort voor nu, krijgt geen open gat.
+    kort = app.met_open_einde(app.dagindeling_zuiver(punten, PLEKKEN), punten,
+                              "2026-09-13", nu=middag + 10 * 60)
+    assert not kort or not kort[-1].get("open")
+
+
+def test_locatiewacht_schrijft_een_gat_niet_als_rit():
+    """13-09-2026: de Locatiewacht schreef een gat van 5 uur als 'verplaatsing 30,1 km'."""
+    import re
+    pad = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                       "mijnagents-runner", "locatie_wacht.py")
+    if not os.path.exists(pad):
+        # In de container staat alleen locatie/; deze grendel draait in de repo en de CI.
+        return
+    bron = open(pad, encoding="utf-8").read()
+    assert re.search(r'soort"\)\s*==\s*"gat"', bron), "de Locatiewacht behandelt een gat niet apart"
+
+
 if __name__ == "__main__":
     fouten = 0
     for naam, fn in sorted(globals().items()):

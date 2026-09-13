@@ -746,6 +746,31 @@ def dagindeling_zuiver(punten, bekende_plekken):
     return _voeg_samen(resultaat)
 
 
+def met_open_einde(indeling, punten, datum, nu=None):
+    """Zegt het als een dag in stilte eindigt.
+
+    Op 13-09-2026 kwam het laatste punt om 11:56, daarna twaalf uur niets. Het
+    dagboek eindigde met "rit tot 11:56", wat leest alsof de dag toen gedaan was.
+    Ligt het laatste punt meer dan GAT_MINUTEN voor het einde van de dag (of voor
+    nu, als de dag nog loopt), dan komt er een open gat bij: geen afstand, want
+    waar de telefoon daarna was is onbekend.
+    """
+    if not punten:
+        return indeling
+    nu = time.time() if nu is None else nu
+    einde = datetime.strptime(datum, "%Y-%m-%d").astimezone() + timedelta(days=1)
+    grens = min(einde.timestamp(), nu)
+    laatste = punten[-1]["tst"]
+    if (grens - laatste) / 60 <= GAT_MINUTEN:
+        return indeling
+    return indeling + [{
+        "soort": "gat", "open": True,
+        "van": laatste, "tot": int(grens),
+        "minuten": round((grens - laatste) / 60),
+        "meter": None,
+    }]
+
+
 def dagindeling(punten):
     """Losse punten omzetten naar bezoeken, verplaatsingen en gaten."""
     if not punten:
@@ -798,11 +823,11 @@ def index():
     datum = request.args.get("dag") or (dagen[0] if dagen else
                                         datetime.now().strftime("%Y-%m-%d"))
     punten = punten_van_dag(datum)
-    stukken = dagindeling(punten)
+    stukken = met_open_einde(dagindeling(punten), punten, datum)
     for s in stukken:
         s["van_tekst"] = _lokaal(s["van"]).strftime("%H:%M")
         s["tot_tekst"] = _lokaal(s["tot"]).strftime("%H:%M")
-    km = sum(s.get("meter", 0) for s in stukken) / 1000
+    km = sum(s.get("meter") or 0 for s in stukken if s["soort"] == "verplaatsing") / 1000
     laatste = punten[-1] if punten else None
     return render_template(
         "index.html", dagen=dagen, datum=datum, stukken=stukken,
@@ -829,7 +854,7 @@ def api_dag(datum):
                     "luchtdruk": p["druk"], "aanleiding": p["trigger"],
                     "zones": p["regios"]}
                    for p in punten],
-        "indeling": dagindeling(punten),
+        "indeling": met_open_einde(dagindeling(punten), punten, datum),
     })
 
 

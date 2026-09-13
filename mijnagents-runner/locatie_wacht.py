@@ -154,8 +154,15 @@ def dagboek(dag, cache):
     for s in indeling:
         if s.get("soort") == "bezoek":
             r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} | bezoek{' (vaste plek)' if s.get('vaste_plek') else ''} | {s['adres']} |")
+        elif s.get("soort") == "gat":
+            # Een gat is geen rit. Tot 13-09-2026 schreef deze wacht alles wat geen
+            # bezoek was als "verplaatsing", zodat vijf uur zonder meting in het
+            # dagboek stond als een rit van 30,1 km die nooit gemeten is.
+            waar = ("sindsdien niets meer binnen" if s.get("open")
+                    else f"{int((s.get('meter') or 0) / 100) / 10} km hemelsbreed")
+            r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} | geen meting | {waar} |")
         else:
-            r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} | verplaatsing {s.get('wijze', '')} | {int(s.get('meter', 0) / 100) / 10} km |")
+            r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} | verplaatsing {s.get('wijze') or ''} | {int((s.get('meter') or 0) / 100) / 10} km |")
     return "\n".join(r), bezoeken, gegevens
 
 

@@ -188,7 +188,7 @@ def markdown(datum, gegevens, cache, adressen=True):
     bezoeken = [s for s in indeling if s["soort"] == "bezoek"]
     ritten = [s for s in indeling if s["soort"] == "verplaatsing"]
     gaten = [s for s in indeling if s["soort"] == "gat"]
-    km = sum(s.get("meter", 0) for s in ritten) / 1000
+    km = sum(s.get("meter") or 0 for s in ritten) / 1000
 
     r = [f"# {nl_datum(d)}", ""]
     if not indeling:
@@ -223,8 +223,10 @@ def markdown(datum, gegevens, cache, adressen=True):
             r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} "
                      f"| bezoek | {waar} | {s.get('wifi') or ''} |")
         elif s["soort"] == "gat":
+            waar = ("*sindsdien niets meer binnen*" if s.get("open")
+                    else f"*{s['meter'] / 1000:.1f} km hemelsbreed*")
             r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} "
-                     f"| *geen meting* | *{s['meter'] / 1000:.1f} km hemelsbreed* | |")
+                     f"| *geen meting* | {waar} | |")
         else:
             wijze = {"automotive": "auto", "cycling": "fiets", "walking": "te voet",
                      "running": "lopend"}.get(s.get("wijze"), s.get("wijze") or "")

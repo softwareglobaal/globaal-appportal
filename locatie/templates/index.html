@@ -105,7 +105,7 @@
           <td class="tijd">{{ s.tot_tekst }}</td>
           <td class="duur">{{ s.minuten }} min</td>
           <td><span class="merk leeg-merk"></span>geen meting</td>
-          <td class="coord" colspan="2">telefoon zweeg; {{ (s.meter / 1000) | round(1) }} km hemelsbreed tussen voor en na</td>
+          <td class="coord" colspan="2">{% if s.open %}sinds het laatste punt komt er niets meer binnen{% else %}telefoon zweeg; {{ (s.meter / 1000) | round(1) }} km hemelsbreed tussen voor en na{% endif %}</td>
         </tr>
         {% else %}
         <tr class="rij" data-lat="{{ s.lat if s.soort == 'bezoek' else s.spoor[0][0] }}"
