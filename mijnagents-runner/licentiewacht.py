@@ -96,7 +96,9 @@ def main():
             tot = sum(v for m, v in mnd.items() if m in maanden)
             actieve = [m for m in maanden if mnd.get(m, 0) > 0]
             gem = tot / max(len(actieve), 1)
-            oud = (vandaag - date.fromisoformat(laatste[(firma, dienst)])).days
+            # ouderdom tegenover de jongste geboekte lijn van die firma, niet tegenover vandaag: de staten lopen achter
+            peil = date.fromisoformat(staat.get(firma) or vandaag.isoformat())
+            oud = (max(peil, date.fromisoformat(laatste[(firma, dienst)])) - date.fromisoformat(laatste[(firma, dienst)])).days
             status = "loopt" if oud <= 45 else ("mogelijk gestopt" if oud <= 120 else "gestopt of niet meer geboekt")
             rijen.append({"firma": firma, "dienst": dienst, "totaal": round(tot, 2), "per_maand": round(gem, 2), "maanden_actief": len(actieve),
                           "laatste": laatste[(firma, dienst)], "dagen_geleden": oud, "status": status, "bron": "+".join(sorted(bronnen[(firma, dienst)])),
