@@ -2,3 +2,8 @@
 !.gitignore
 !app-knop.js
 !app-pagina.html
+!globaal.webmanifest
+!iphone-pagina.html
+!pwa-icoon-180.png
+!pwa-icoon-192.png
+!pwa-icoon-512.png

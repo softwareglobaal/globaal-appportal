@@ -56,7 +56,7 @@ server {
             return 302 https://auth.${BASE_DOMAIN}/app/bestanden/Globaal.apk;
         }
         if ($http_user_agent ~* "(iPhone|iPad|iPod)") {
-            return 302 https://auth.${BASE_DOMAIN}/app/geen-ios;
+            return 302 https://auth.${BASE_DOMAIN}/app/iphone;
         }
         if ($http_user_agent ~* "(Macintosh|Mac OS X)") {
             return 302 https://auth.${BASE_DOMAIN}/app/bestanden/Globaal.dmg;
@@ -64,9 +64,14 @@ server {
         return 302 https://auth.${BASE_DOMAIN}/app/bestanden/Globaal-setup.exe;
     }
 
-    location = /app/geen-ios {
+    # iPhone en iPad: geen installatiebestand mogelijk, wel op het beginscherm.
+    location = /app/iphone {
+        auth_request /app/sessiecontrole;
+        error_page 401 403 = @app_aanmelden;
+        alias /srv/downloads/iphone-pagina.html;
         default_type text/html;
-        return 200 '<!doctype html><meta charset="utf-8"><title>Globaal</title><body style="margin:0;display:grid;place-items:center;height:100vh;background:#1c1b18;color:#faf9f6;font:15px/1.5 -apple-system,Segoe UI,system-ui,sans-serif"><div style="max-width:22rem;padding:1.5rem;text-align:center"><h1 style="font-size:17px;margin:0 0 .6rem">Nog geen iOS-app</h1><p style="margin:0 0 1rem;color:#9b988e">Voor iPhone en iPad is er nog geen Globaal-app. Windows, macOS en Android kunnen wel.</p><a href="/app" style="color:#059669">Terug naar de downloads</a></div>';
+        add_header Cache-Control "no-cache";
+        add_header Strict-Transport-Security "max-age=31536000" always;
     }
 
     # De installers en het bijwerk-manifest. Bestanden staan op de VM in
@@ -80,6 +85,25 @@ server {
         alias /srv/downloads/$installer;
         add_header Content-Disposition "attachment";
         add_header Cache-Control "no-cache";
+        add_header Strict-Transport-Security "max-age=31536000" always;
+    }
+
+    # Webapp-manifest en iconen, zodat de launcher op een telefoon op het
+    # beginscherm gezet kan worden en dan zonder browserbalk opent. Voor iPhone
+    # is dit de enige manier om een app-icoon te krijgen: iOS kent geen
+    # installeren buiten de App Store om. Bewust openbaar, er staat niets
+    # gevoeligs in en de telefoon haalt ze soms zonder sessie op.
+    location = /globaal.webmanifest {
+        alias /srv/downloads/globaal.webmanifest;
+        default_type application/manifest+json;
+        add_header Cache-Control "max-age=3600";
+        add_header Strict-Transport-Security "max-age=31536000" always;
+    }
+
+    location ~ ^/(?<pwa_icoon>pwa-icoon-(?:180|192|512)\.png)$ {
+        alias /srv/downloads/$pwa_icoon;
+        default_type image/png;
+        add_header Cache-Control "max-age=86400";
         add_header Strict-Transport-Security "max-age=31536000" always;
     }
 
@@ -104,6 +128,10 @@ server {
 
         proxy_set_header Accept-Encoding "";
         sub_filter_once on;
+        # Maakt de launcher installeerbaar op het beginscherm van een telefoon.
+        # apple-touch-icon en apple-mobile-web-app-capable zijn wat iOS leest;
+        # het manifest is voor Android en de desktopbrowsers.
+        sub_filter '</head>' '<link rel="manifest" href="/globaal.webmanifest"><link rel="apple-touch-icon" href="/pwa-icoon-180.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Globaal"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="theme-color" content="#1c1b18"></head>';
         sub_filter '</body>' '<script src="/app-knop.js" defer></script></body>';
     }
 

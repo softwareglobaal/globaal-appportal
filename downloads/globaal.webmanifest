@@ -1,0 +1,26 @@
+{
+  "name": "Globaal Werkplek",
+  "short_name": "Globaal",
+  "description": "Al je Globaal-apps op een plek, met eenmalig aanmelden.",
+  "lang": "nl",
+  "start_url": "/if/user/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1c1b18",
+  "theme_color": "#1c1b18",
+  "icons": [
+    {
+      "src": "/pwa-icoon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icoon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -115,6 +115,15 @@
       </span>
       <span class="pijl">&rsaquo;</span>
     </a>
+
+    <a class="kaart" data-os="ios" data-geen-grootte href="/app/iphone">
+      <span class="pict"><svg viewBox="0 0 24 24"><path d="M16.4 12.8c0-2 1.6-3 1.7-3-.9-1.4-2.4-1.5-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.3 2-1.4 2.4-.4 6 1 8 .7 1 1.5 2.1 2.5 2 1-.1 1.4-.6 2.6-.6s1.5.6 2.6.6 1.7-1 2.3-2c.7-1.1 1-2.2 1-2.3-.1 0-2-.8-2-3.1zM14.5 6.3c.5-.7.9-1.6.8-2.5-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9.1 1.7-.4 2.3-1.1z"/></svg></span>
+      <span class="tekst">
+        <span class="naam">iPhone en iPad <span class="merkje" data-merkje hidden>Jouw toestel</span></span>
+        <span class="meta" data-meta>Op het beginscherm zetten</span>
+      </span>
+      <span class="pijl">&rsaquo;</span>
+    </a>
   </div>
 
   <p class="voet">Versie <span id="versie">...</span> &middot; Gemaakt door Elevait</p>
@@ -132,7 +141,10 @@
   document.getElementById("auto-os").textContent = namen[os];
 
   if (os === "ios") {
-    document.getElementById("auto-detail").textContent = "Voor iPhone en iPad is er nog geen app. Kies hieronder een computer of Android.";
+    var auto = document.querySelector(".auto");
+    auto.href = "/app/iphone";
+    document.getElementById("auto-os").textContent = "iPhone";
+    document.getElementById("auto-detail").textContent = "Apple staat installeren buiten de App Store niet toe; we laten zien hoe je Globaal op je beginscherm zet.";
   }
 
   // Licht het toestel van de bezoeker uit.
@@ -151,7 +163,7 @@
   }
 
   // Grootte per bestand ophalen; ontbreekt het bestand, dan de kaart dimmen.
-  document.querySelectorAll(".kaart").forEach(function (kaart) {
+  document.querySelectorAll(".kaart:not([data-geen-grootte])").forEach(function (kaart) {
     var href = kaart.getAttribute("href");
     var meta = kaart.querySelector("[data-meta]");
     var soort = meta.textContent;
