@@ -28,8 +28,18 @@ server {
         return 302 https://auth.${BASE_DOMAIN}/flows/-/default/authentication/?next=$request_uri;
     }
 
-    # Downloadknop voor de desktop-app. Een vaste link; de server kiest het
-    # bestand op basis van het besturingssysteem, de gebruiker kiest niets.
+    # Overzichtspagina: alle downloads (Windows, macOS, Android) met versie en
+    # grootte, plus een auto-knop. Achter de aanmelding, net als de bestanden.
+    location = /app {
+        auth_request /app/sessiecontrole;
+        error_page 401 403 = @app_aanmelden;
+        alias /srv/downloads/app-pagina.html;
+        default_type text/html;
+        add_header Cache-Control "no-cache";
+    }
+
+    # Downloadknop voor de app. Een vaste link; de server kiest het bestand op
+    # basis van het besturingssysteem, de gebruiker kiest niets.
     location = /app/download {
         auth_request /app/sessiecontrole;
         error_page 401 403 = @app_aanmelden;
@@ -39,9 +49,13 @@ server {
     }
 
     location @kies_installer {
-        # Telefoons en tablets eerst: hun user-agent bevat ook "Mac OS X".
-        if ($http_user_agent ~* "(iPhone|iPad|iPod|Android)") {
-            return 302 https://auth.${BASE_DOMAIN}/app/alleen-desktop;
+        # Android eerst; daarna Apple-telefoons (hun user-agent bevat ook
+        # "Mac OS X"), dan Mac, dan de rest naar Windows.
+        if ($http_user_agent ~* "Android") {
+            return 302 https://auth.${BASE_DOMAIN}/app/bestanden/Globaal.apk;
+        }
+        if ($http_user_agent ~* "(iPhone|iPad|iPod)") {
+            return 302 https://auth.${BASE_DOMAIN}/app/geen-ios;
         }
         if ($http_user_agent ~* "(Macintosh|Mac OS X)") {
             return 302 https://auth.${BASE_DOMAIN}/app/bestanden/Globaal.dmg;
@@ -49,16 +63,16 @@ server {
         return 302 https://auth.${BASE_DOMAIN}/app/bestanden/Globaal-setup.exe;
     }
 
-    location = /app/alleen-desktop {
+    location = /app/geen-ios {
         default_type text/html;
-        return 200 '<!doctype html><meta charset="utf-8"><title>Globaal</title><body style="margin:0;display:grid;place-items:center;height:100vh;background:#1c1b18;color:#faf9f6;font:15px/1.5 -apple-system,Segoe UI,system-ui,sans-serif"><div style="max-width:22rem;padding:1.5rem;text-align:center"><h1 style="font-size:17px;margin:0 0 .6rem">Alleen voor computers</h1><p style="margin:0;color:#9b988e">De Globaal-app is er voor Windows en macOS. Open deze link op je laptop of desktop.</p></div>';
+        return 200 '<!doctype html><meta charset="utf-8"><title>Globaal</title><body style="margin:0;display:grid;place-items:center;height:100vh;background:#1c1b18;color:#faf9f6;font:15px/1.5 -apple-system,Segoe UI,system-ui,sans-serif"><div style="max-width:22rem;padding:1.5rem;text-align:center"><h1 style="font-size:17px;margin:0 0 .6rem">Nog geen iOS-app</h1><p style="margin:0 0 1rem;color:#9b988e">Voor iPhone en iPad is er nog geen Globaal-app. Windows, macOS en Android kunnen wel.</p><a href="/app" style="color:#059669">Terug naar de downloads</a></div>';
     }
 
     # De installers en het bijwerk-manifest. Bestanden staan op de VM in
     # ~/appportal/downloads; alleen deze extensies zijn bereikbaar en alleen voor
     # wie is aangemeld. De app stuurt bij het bijwerken de sessiecookie van de
     # gebruiker mee, dus die komt hier net zo goed langs.
-    location ~ ^/app/bestanden/(?<installer>[A-Za-z0-9._-]+\.(?:exe|dmg|tar\.gz|json))$ {
+    location ~ ^/app/bestanden/(?<installer>[A-Za-z0-9._-]+\.(?:exe|dmg|apk|tar\.gz|json))$ {
         auth_request /app/sessiecontrole;
         error_page 401 403 = @app_aanmelden;
 

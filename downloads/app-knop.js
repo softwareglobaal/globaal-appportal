@@ -46,8 +46,8 @@
 
     var link = document.createElement("a");
     link.className = "pf-c-button pf-m-secondary";
-    link.href = "/app/download";
-    link.title = "Globaal als programma op je computer";
+    link.href = "/app";
+    link.title = "Globaal als programma op je computer of telefoon";
 
     var icoon = document.createElement("i");
     icoon.className = "fas fa-download";
