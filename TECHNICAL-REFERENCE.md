@@ -209,12 +209,16 @@ Die komt niet uit Authentik zelf: nginx injecteert met `sub_filter` een
 `proxy_set_header Accept-Encoding ""`; de rest van `auth.globaal.be` blijft
 gecomprimeerd). Het scriptje staat in `downloads/app-knop.js` in deze repo.
 
-De knop wijst altijd naar **`/app/download`**. Daar kiest nginx op de user-agent:
-`.dmg` voor macOS, `.exe` voor de rest, en telefoons krijgen een melding dat de
-app voor computers is. De gebruiker kiest dus nooit zelf een besturingssysteem.
-Bestanden staan op de VM in `~/appportal/downloads/` (gemount als
+De knop wijst naar de **overzichtspagina `/app`** (`downloads/app-pagina.html`):
+alle downloads met versie en grootte, het toestel van de bezoeker uitgelicht,
+plus een auto-knop. Die auto-knop is **`/app/download`**, waar nginx op de
+user-agent kiest: `.apk` voor Android, `.dmg` voor macOS, `.exe` voor de rest;
+iPhone/iPad krijgen een melding dat er nog geen iOS-app is. De gebruiker hoeft
+dus nooit zelf een besturingssysteem te kiezen, maar kan op de pagina wel alles
+zien. Bestanden staan op de VM in `~/appportal/downloads/` (gemount als
 `/srv/downloads`) onder de vaste namen `Globaal-setup.exe`, `Globaal.dmg`,
-`Globaal.app.tar.gz` en `update.json`. Ze staan bewust niet in git.
+`Globaal.apk`, `Globaal.app.tar.gz` en `update.json`. Ze staan bewust niet in
+git; alleen `.exe/.dmg/.apk/.tar.gz/.json` zijn via de bestanden-route bereikbaar.
 
 **Alles onder `/app/` zit achter de aanmelding.** nginx toetst de sessie met
 `auth_request` tegen `/api/v3/core/users/me/` (200 met sessie, 403 zonder); wie
