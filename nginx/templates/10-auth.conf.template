@@ -36,6 +36,7 @@ server {
         alias /srv/downloads/app-pagina.html;
         default_type text/html;
         add_header Cache-Control "no-cache";
+        add_header Strict-Transport-Security "max-age=31536000" always;
     }
 
     # Downloadknop voor de app. Een vaste link; de server kiest het bestand op
@@ -79,6 +80,7 @@ server {
         alias /srv/downloads/$installer;
         add_header Content-Disposition "attachment";
         add_header Cache-Control "no-cache";
+        add_header Strict-Transport-Security "max-age=31536000" always;
     }
 
     # Scriptje dat de knop in de launcher tekent. Bewust open: het staat toch in
@@ -87,6 +89,7 @@ server {
         alias /srv/downloads/app-knop.js;
         default_type application/javascript;
         add_header Cache-Control "max-age=300";
+        add_header Strict-Transport-Security "max-age=31536000" always;
     }
 
     # De launcher zelf: hier injecteren we de knop. Aparte location zodat we
