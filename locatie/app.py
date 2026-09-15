@@ -492,6 +492,8 @@ VERBLIJF_STRAAL = 150
 # Zolang de telefoon niets meldt weten we niet wat er gebeurde. Een stilte langer
 # dan dit wordt als gat getoond, tenzij voor en na het gat op dezelfde plek.
 GAT_MINUTEN = 30
+# Punten met meer onzekerheid dan dit (meter) zijn geen satellietmeting.
+MAX_ONZEKERHEID = 250
 
 
 def _rijdt(punt):
@@ -705,7 +707,13 @@ def dagindeling_zuiver(punten, bekende_plekken):
     """
     if not punten:
         return []
-    punten = _zonder_uitschieters(punten)
+    # Een punt met een onzekerheid van honderden meters is geen GPS-meting maar
+    # een schatting via zendmast of wifi. Op 14-09-2026 brak zo een punt van
+    # 1414 m een avond van drie uur in Gent in stukken: "geen meting" en "5 min
+    # onderweg" in plaats van een bezoek. Zulke punten tellen niet mee; zijn er
+    # alleen zulke punten, dan houden we ze liever dan niets.
+    goed = [p for p in punten if (p.get("acc") or 0) <= MAX_ONZEKERHEID]
+    punten = _zonder_uitschieters(goed if goed else punten)
     resultaat = []
     verblijven = _verblijven(punten)
     vorige_eind = None                  # index van het laatste punt van het vorige verblijf

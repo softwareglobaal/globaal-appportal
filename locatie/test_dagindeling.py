@@ -109,6 +109,21 @@ def test_rit_krijgt_de_dominante_wijze():
     assert ritten and all(r["wijze"] == "automotive" for r in ritten), ritten
 
 
+def test_zendmastpunt_breekt_geen_bezoek():
+    """14-09-2026: een punt van 1414 m onzekerheid brak drie uur in Gent in stukken."""
+    punten = (rit(0, 20, THUIS, WERF, stap=2, motion="automotive")
+              + [punt(22, WERF, "walking", acc=30)]
+              + [punt(92, WERF, None, acc=1414, dlat=0.0033, dlon=-0.0050)]
+              + [punt(92.2, WERF, "stationary", acc=33), punt(97, WERF, "stationary", acc=10)]
+              + [punt(207, WERF, None, acc=2, dlat=-0.0003)]
+              + rit(208, 230, WERF, THUIS, stap=2, motion="automotive"))
+    ind = app.dagindeling_zuiver(punten, PLEKKEN)
+    bezoeken = [s for s in ind if s["soort"] == "bezoek"]
+    assert bezoeken and bezoeken[0]["minuten"] >= 170, soorten(ind)
+    assert not any(s["soort"] == "gat" and s["van"] < bezoeken[0]["tot"]
+                   and s["tot"] > bezoeken[0]["van"] for s in ind), soorten(ind)
+
+
 def test_dag_die_in_stilte_eindigt_zegt_dat():
     """13-09-2026: laatste punt 11:56, daarna twaalf uur niets, zonder vermelding."""
     from datetime import datetime as dt
