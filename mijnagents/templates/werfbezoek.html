@@ -145,7 +145,8 @@
         <option value="" {{ 'selected' if not k.verslagtype }}>volg het voorstel van de schrijver</option>
         <option value="werfverslag" {{ 'selected' if k.verslagtype=='werfverslag' }}>werfverslag (lopende werken)</option>
         <option value="vaststellingsverslag" {{ 'selected' if k.verslagtype=='vaststellingsverslag' }}>vaststellingsverslag (schade, geschil, met raming)</option>
-        <option value="opleveringsverslag" {{ 'selected' if k.verslagtype=='opleveringsverslag' }}>opleveringsverslag</option>
+        <option value="voorlopige_oplevering" {{ 'selected' if k.verslagtype=='voorlopige_oplevering' }}>proces-verbaal voorlopige oplevering</option>
+        <option value="definitieve_oplevering" {{ 'selected' if k.verslagtype=='definitieve_oplevering' }}>proces-verbaal definitieve oplevering</option>
       </select></div>
     <div class="veld"><label>Bronnen</label>
       <select name="bronnen"><option value="eigen" {{ 'selected' if k.bronnen!='alles' }}>alleen mijn eigen opname en foto's van het bezoek</option><option value="alles" {{ 'selected' if k.bronnen=='alles' }}>alles in de bezoekmap, ook documenten van derden</option></select></div>

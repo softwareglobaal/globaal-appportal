@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import bronnen  # noqa: E402
 import sjabloon_werfverslag as sjab  # noqa: E402
+import sjabloon_oplevering as pv  # noqa: E402
 
 MODEL = os.environ.get("WERFVERSLAG_MODEL", "claude-opus-5")
 MAX_BRON_TEKENS = 60000
@@ -403,6 +404,26 @@ def proef(ag, dossier, volgnr):
         rij = _rij(dossier, volgnr)
     keuzes = rij.get("keuzes") or {}
     verslagtype = keuzes.get("verslagtype") or gegevens.get("verslagtype_voorstel") or "werfverslag"
+    if verslagtype in pv.SOORTEN:
+        # proces-verbaal van oplevering: het sjabloon met de gekende gegevens ingevuld, zonder Claude; Mehdi vult de rondgang in
+        v = pv.leeg(verslagtype, dossier, rij.get("adres", ""))
+        v.update({"datum": rij["datum"], "overgang": keuzes.get("overgang", "tweede rondgang"), "waarborg": keuzes.get("waarborg", "12")})
+        for g in gegevens.get("gegevens", []):
+            veld = (g.get("veld") or "").lower()
+            if "bouwheer" in veld and g.get("zekerheid") == "zeker":
+                v["bouwheer"] = g.get("waarde", "")
+            if "aannemer" in veld and g.get("zekerheid") == "zeker":
+                v["aannemer"] = g.get("waarde", "")
+        if keuzes.get("aanwezigen"):
+            v["aanwezigen"] = [dict(a, ontvangt="ja") for a in keuzes["aanwezigen"]]
+        docx = pv.naar_docx_pv(v)
+        naam = f"{dossier}-{'VO' if verslagtype == 'voorlopige_oplevering' else 'DO'} {pv.SOORTEN[verslagtype]} (concept)"
+        pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
+        md = f"# {pv.SOORTEN[verslagtype]} {dossier} {rij.get('adres','')}\n\nWord-sjabloon ingevuld met de gekende gegevens; de rondgang, de gebrekenlijst en de handtekeningen vult Mehdi in. Bestand: {os.path.basename(pad_docx)}\n"
+        ag.log(f"{dossier}-{volgnr}", "schrijf", f"proces-verbaal klaargezet: {os.path.basename(pad_docx)} ({len(docx)//1024} kB), zonder Claude")
+        _bewaar(rij, dossier, volgnr, verslag_md=md, proef_pad=pad_docx, proef_ts=date.today().isoformat(),
+                proef_info={"verslagtype": verslagtype, "taal": "nl", "punten": 0, "fotos": 0, "open": sjab.telling_open(md), "docx_kb": len(docx)//1024, "layout": "HA-master"})
+        return pad_docx, md
     taal = keuzes.get("taal") or "nl"
     eigen = keuzes.get("bronnen") == "eigen"
     teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=eigen)

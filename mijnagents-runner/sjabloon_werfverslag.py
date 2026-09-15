@@ -37,33 +37,123 @@ VAST_TIENJARIG = ("Tienjarige aansprakelijkheid: de verzekeringsattesten voor de
 VAST_VOORWAARDEN = ("Zonder tegenbericht per e-mail binnen de vijf kalenderdagen wordt aangenomen dat alle partijen akkoord "
                     "gaan met dit verslag. Vragen of opmerkingen kunnen per e-mail worden bezorgd aan H-Architects.")
 
-# Doorlopende punten uit verslag 1 (Archisnapper 1.1 tot 1.6), in elk werfverslag herhaald tot OK.
-DOORLOPEND = [
-    ("Algemeen", "Start- en einddatum van de werken",
-     "De bouwheer vult de start- en einddatum van de werken in het omgevingsloket in. Volgens de vergunning starten de "
-     "werken binnen 2 jaar na de vergunning en is het gebouw binnen 5 jaar wind- en waterdicht.", "Bouwheer"),
-    ("Algemeen", "Werfbezoeken",
-     "Werfbezoeken gebeuren volgens de architectenovereenkomst en zijn op oproep beschikbaar. Voor kritieke handelingen die "
-     "achteraf niet te inspecteren zijn (wapening en dergelijke) bezorgt de aannemer foto's ter verificatie. Werfinspecties "
-     "betreffen altijd de zichtbare staat van het pand; foto's genomen buiten de aanwezigheid van de architect worden gedeeld.",
-     "Aannemer, bouwheer"),
-    ("Algemeen", "Orde en netheid",
-     "Elke aannemer houdt de werf net en ordelijk en voert puin en afval van zijn werken snel af; netheid is een "
-     "veiligheidszaak.", "Aannemers"),
-    ("Algemeen", "Facturatie",
-     "De bouwheer deelt alle facturen en werkelijke kosten van de werken met het architectenbureau, zodat de erelonen "
-     "volgens het contract correct worden afgerekend. Bijkomende werken buiten de oorspronkelijke opdracht tellen mee bij "
-     "de herberekening als de architect ze opvolgt.", "Bouwheer"),
-    ("Veiligheidscoördinatie", "Veiligheidscoördinatie",
-     "De veiligheidscoördinator houdt toezicht en levert verslagen. Elke aannemer ontvangt het VGP, bewaart het op de werf en "
-     "leeft het na; de hoofdaannemer informeert de onderaannemers. Valbescherming, leuningen, correct laddergebruik en "
-     "nagelverwijdering zijn verplicht. De architect is niet aansprakelijk voor slecht verankerde stellingen of het niet "
-     "naleven van het VGP; werfinspecties zijn momentopnames.", "Aannemers"),
-    ("EPB", "EPB-eisen",
-     "Alle eisen van het EPB-verslag worden gevolgd (isolatiewaarden, ventilatie, raamwaarden). De aannemer levert facturen, "
-     "technische fiches en Uw-rapporten; de bouwheer fotografeert elke werkstap die fotobewijs vraagt en bezorgt op het einde "
-     "alles aan de EPB-verslaggever voor de eindverklaring.", "Aannemer, bouwheer"),
+# Vaste punten (Archisnapper-analyse 15-09-2026, 31 verslagen 2020-2025): in verslag 1 genummerd 1.1 t/m 1.11 en in elk
+# volgend verslag herhaald met de oorspronkelijke datum, tot de sluitvoorwaarde vervuld is (dan nog één keer als OK).
+# Velden: sleutel, categorie, titel, verantwoordelijke, tekst NL, tekst EN, sluitvoorwaarde, bron.
+VASTE_PUNTEN = [
+    {"sleutel": "omgevingsloket", "categorie": "Algemeen", "titel": "Start- en einddatum van de werken", "wie": "Bouwheer",
+     "nl": "Het is de verantwoordelijkheid van de bouwheer om de start- en einddatum van de werken in het omgevingsloket in te vullen. "
+           "Volgens de vergunning moeten de werken binnen 2 jaar na de vergunning beginnen en moet het gebouw binnen 5 jaar na de vergunning wind- en waterdicht zijn.",
+     "en": "It is the responsibility of the client to fill in the starting and ending date of the works in the omgevingsloket. According to the permit, "
+           "works have to begin within 2 years from the permit and the building has to be wind- and watertight within 5 years of the permit.",
+     "ok_als": "startdatum gemeld in het omgevingsloket (bewijs in dossier); einddatum bij de oplevering", "bron": "2410-1, 2231-1, 13 van 31"},
+    {"sleutel": "werfbezoeken", "categorie": "Algemeen", "titel": "Werfbezoeken", "wie": "Bouwheer, aannemer",
+     "nl": "Werfbezoeken worden uitgevoerd volgens de architectenovereenkomst en zijn altijd beschikbaar op oproep, zodat cruciale zaken continu "
+           "worden opgevolgd. Voor kritieke handelingen die achteraf niet te inspecteren zijn (wapening en dergelijke) legt de aannemer foto's vast "
+           "en legt hij ze ter verificatie voor. Alle werfinspecties betreffen de zichtbare staat van het pand. Foto's genomen wanneer de architect "
+           "niet ter plaatse is, worden met de architect gedeeld zodat al het bewijs beschikbaar is.",
+     "en": "Site visits are conducted in accordance with the architect's agreement and are always available on call, so that crucial matters are "
+           "continuously monitored. For critical actions that cannot be inspected post-execution (reinforcement and similar), the contractor captures "
+           "photographs and presents them for verification. All site inspections pertain to the visible condition of the property. Photos taken when "
+           "the architect is not on site are shared with the architect so that all evidence is available.",
+     "ok_als": "blijft staan (disclaimer)", "bron": "2231-1, 8 van 31"},
+    {"sleutel": "netheid", "categorie": "Algemeen", "titel": "Orde en netheid", "wie": "Alle aannemers",
+     "nl": "Elke betrokken aannemer houdt de werf net en ordelijk en verwijdert snel het puin en afval van zijn werken. Een nette werf is essentieel "
+           "voor de veiligheid; lege blikjes, sigarettenpeuken en verpakkingen worden regelmatig weggegooid.",
+     "en": "Each contractor involved keeps the site clean and orderly and promptly removes debris and waste generated during their work. Keeping the "
+           "site tidy is essential for safety; empty cans, cigarette butts and packaging are disposed of regularly.",
+     "ok_als": "blijft staan; een vuile werf krijgt een gedateerd NOK-punt", "bron": "2410-1, 8 van 31"},
+    {"sleutel": "facturatie", "categorie": "Algemeen", "titel": "Facturatie", "wie": "Bouwheer",
+     "nl": "Om correct gefactureerd te worden volgens het contract deelt de bouwheer alle facturen en de werkelijke kosten van de werken met het "
+           "architectenbureau. Bijkomende werken buiten de oorspronkelijke opdracht die de architect op vraag opvolgt, tellen mee bij de herberekening "
+           "van de erelonen; anders beheert de bouwheer die werken zelf, zonder de architect.",
+     "en": "To be invoiced correctly in accordance with the contract, the client shares all invoices and the actual costs of the works with the "
+           "architecture office. Additional works outside the original assignment that the architect follows up on request count in the recalculation "
+           "of the fees; otherwise the client manages those works independently, without the architect.",
+     "ok_als": "blijft staan tot de eindafrekening van de erelonen", "bron": "2231-1, 4 van 31"},
+    {"sleutel": "veiligheidscoordinatie", "categorie": "Veiligheidscoördinatie", "titel": "Veiligheidscoördinatie en VGP", "wie": "Bouwheer (aanstelling), hoofdaannemer (naleving)",
+     "nl": "Het is verplicht een veiligheidscoördinator aan te stellen; dat is de taak van de bouwheer en de werken starten niet zonder. De "
+           "veiligheidscoördinator houdt toezicht en levert verslagen. Elke aannemer ontvangt het veiligheids- en gezondheidsplan (VGP), bewaart het op "
+           "de werf en leeft het na; de hoofdaannemer informeert de onderaannemers. Valbescherming, leuningen, correct laddergebruik en "
+           "nagelverwijdering zijn verplicht; stellingen worden verankerd. Zelfbouwers volgen dezelfde regels. De architect is niet aansprakelijk "
+           "voor slecht verankerde stellingen of het niet naleven van het VGP; werfinspecties zijn momentopnames.",
+     "en": "A safety coordinator must be appointed; this is the client's task and works do not start without one. The safety coordinator oversees "
+           "safety and provides reports. Each contractor receives the health and safety plan (VGP), keeps it on site and complies with it; the main "
+           "contractor informs the subcontractors. Fall protection, guardrails, proper ladder use and nail removal are mandatory; scaffolding is "
+           "anchored. Self-builders follow the same rules. The architect is not liable for improperly anchored scaffolding or non-compliance with "
+           "the VGP; site inspections are snapshots.",
+     "ok_als": "veiligheidscoördinator aangesteld en getekend VGP op de werf", "bron": "2231-1 1.7, 1939-1 1.2, 5 van 31"},
+    {"sleutel": "verzekeringen", "categorie": "Algemeen", "titel": "Verzekeringsattesten BA10 en BBR", "wie": "Bouwheer vraagt op, elke aannemer levert",
+     "nl": "Om de correcte uitvoering van de werken en de naleving van de wettelijke verplichtingen te waarborgen, vraagt de bouwheer bij zijn aannemers "
+           "de volgende attesten op en bezorgt ze aan de architect vóór de start van de werken: het attest van de tienjarige burgerlijke "
+           "aansprakelijkheid (BA10) voor de werken aan de gesloten ruwbouw, zoals vereist door de wet Peeters-Borsus van 31 mei 2017, en het attest "
+           "van de burgerlijke beroepsaansprakelijkheid (BBR) van alle betrokken aannemers, hoofdaannemer en onderaannemers. Ook de ingenieur, de "
+           "ramenplaatser en de architect bezorgen hun attest.",
+     "en": "To guarantee the correct execution of the works and compliance with legal obligations, the client requests the following certificates "
+           "from the contractors and provides them to the architect before the start of the works: the ten-year civil liability certificate (BA10) "
+           "for the works on the closed shell, as required by the Peeters-Borsus Act of 31 May 2017, and the professional civil liability certificate "
+           "(BBR) of all contractors involved, main contractor and subcontractors. The engineer, the window installer and the architect provide "
+           "their certificate as well.",
+     "ok_als": "per aannemer OK zodra het attest in het dossier zit (naam, datum ontvangst)", "bron": "2444-1, 2185-6 6.4, 1939-1 1.5, 21 van 31"},
+    {"sleutel": "stabiliteit", "categorie": "Ruwbouw", "titel": "Stabiliteitsplannen", "wie": "Aannemer, ingenieur",
+     "nl": "Alle uitgevoerde werken volgen de stabiliteitsplannen van de ingenieur. Elke wijziging ten opzichte van de plannen wordt gedocumenteerd, "
+           "door de ingenieur goedgekeurd en aan de architect bezorgd.",
+     "en": "All works carried out follow the stability plans of the engineer. Any change from the plans is documented, approved by the engineer and "
+           "provided to the architect.",
+     "ok_als": "blijft staan tot de ruwbouw wind- en waterdicht is", "bron": "2410-1 1.6, 6 van 31"},
+    {"sleutel": "epb", "categorie": "EPB", "titel": "EPB-eisen", "wie": "Aannemer (stukken), bouwheer (foto's, eindverklaring)",
+     "nl": "Alle eisen van het EPB-verslag worden gevolgd (isolatiewaarden, ventilatie, raamwaarden); elk element haalt minstens de vereiste "
+           "waarde. De aannemer levert de facturen, technische fiches en Uw-rapporten van alle elementen uit het EPB-verslag. De bouwheer fotografeert "
+           "elke werkstap die fotobewijs vraagt en bezorgt op het einde de nodige informatie (facturen, foto's, vorderingsstaten, technische fiches) "
+           "aan de EPB-verslaggever voor de eindverklaring.",
+     "en": "All requirements of the EPB report are followed (insulation values, ventilation, window values); each element meets at least the required "
+           "value. The contractor provides the invoices, technical sheets and Uw reports of all elements in the EPB report. The client photographs "
+           "every work step that requires photo evidence and, at the end, provides the necessary information (invoices, photos, progress statements, "
+           "technical sheets) to the EPB reporter for the final declaration.",
+     "ok_als": "blijft staan tot de EPB-eindverklaring is ingediend", "bron": "2231-1 1.9, 9 van 31"},
+    {"sleutel": "vergunning", "categorie": "Algemeen", "titel": "Uitvoering volgens de vergunde plannen", "wie": "Bouwheer",
+     "nl": "De werken worden exact uitgevoerd volgens de ingediende en vergunde plannen en de voorwaarden van de vergunning. Voor elke aanpassing "
+           "tijdens de werken die afwijkt van de vergunde plannen draagt de bouwheer de verantwoordelijkheid; afwijkingen tegen het advies van de "
+           "architect in worden in het verslag vastgelegd.",
+     "en": "The works are executed exactly according to the submitted and permitted plans and the conditions of the permit. The client bears the "
+           "responsibility for any change during the works that deviates from the permitted plans; deviations against the architect's advice are "
+           "recorded in the report.",
+     "ok_als": "blijft staan; elke afwijking krijgt een gedateerd NOK-punt", "bron": "2249-1 1.2, 2103-13 13.3, 2444-1 1.5, 7 van 31"},
+    {"sleutel": "plaatsbeschrijving", "categorie": "Algemeen", "titel": "Plaatsbeschrijving", "wie": "Bouwheer",
+     "nl": "De plaatsbeschrijving van het openbaar domein en van de aanpalende panden wordt vóór de start van de werken opgemaakt; de bouwheer "
+           "bezorgt ze aan de aannemer en de architect.",
+     "en": "The condition report of the public domain and the adjacent properties is drawn up before the start of the works; the client provides it "
+           "to the contractor and the architect.",
+     "ok_als": "OK zodra de plaatsbeschrijving in het dossier zit; daarna weglaten", "bron": "2138-1 1.3"},
+    {"sleutel": "plannen", "categorie": "Algemeen", "titel": "Actuele plannen op de werf", "wie": "Aannemer",
+     "nl": "Alle bijgewerkte plannen zijn op de werf aanwezig. Bij een nieuw plan worden de oude plannen van de werf verwijderd om misverstanden te vermijden.",
+     "en": "All updated drawings are present on the site. When there is an updated drawing, the old plans are removed from the site to avoid misunderstandings.",
+     "ok_als": "blijft staan", "bron": "2190-6"},
 ]
+# Compatibiliteit: DOORLOPEND (categorie, titel, tekst, wie) is afgeleid uit VASTE_PUNTEN.
+DOORLOPEND = [(p["categorie"], p["titel"], p["nl"], p["wie"]) for p in VASTE_PUNTEN]
+
+# Fasepunten: komen in het eerste verslag van die fase en blijven tot OK (bron: Archisnapper-analyse B.4).
+FASE_PUNTEN = {
+    "afbraak": ["Sloop volgens sloopplannen; lijst nog uit te voeren sloopwerken per verdieping", "Bescherming van terras, buur en openbaar domein; voorlopige regenwaterafvoer; plaat onder de container",
+                "Asbest: inventaris, verwijdering met datum en attest van de verwijderaar", "Stutwerk na sloop van dragende wanden", "Dak afdekken na verwijderen van de pannen",
+                "Plaatsbeschrijving vóór de eerste sloop", "Onverwachte toestand (verborgen kelder, slechte muren) met beslissing ter plaatse"],
+    "ruwbouw": ["Stabiliteitsplannen gevolgd; foto's van de wapening vóór het storten", "Fundering en sleuven; positie van de afvoeren in de fundering",
+                "Stalen balken en kolommen volgens ingenieur: oplegging, lassen, verankering", "Riolering: ligging volgens uitvoeringsplan, hellingen, aansluithoeken kleiner dan 90 graden, gescheiden RWA/DWA, zichtbaar vóór wapening en beton",
+                "Scheidingsmuren eenvormig afgewerkt aan buurzijde", "Stelling geplaatst en verankerd", "Afgewerkte binnenhoogte (minimum 2,60 m)", "Brandveiligheid bij meergezins: EI60-plafonds, brandwerende inkomdeuren"],
+    "dak": ["Dakconstructie, onderdak, tengel- en panlatten, pannen, goten en afvoeren, overstek en boeiboorden", "Groendak: brandpreventie en toplaag boven de EPDM",
+            "Dakisolatie: dikte en lambda tegen het EPB-verslag", "Dakramen en lichtkoepels conform vergunning; afwatering platdakraam"],
+    "buitenschrijnwerk": ["Ramen en deuren geplaatst; silicone, grepen, muggenramen, rolluiken, garagepoort", "Uw-rapport en factuur van de ramen voor EPB; BA10-attest van de ramenplaatser",
+                          "Waterinfiltratie rond ramen en dorpels", "Gevelafwerking conform vergunning en afspraak met de buur; plinten en ventilatieroosters", "Balustrades terras en buitentrap"],
+    "technieken": ["Elektriciteit volgens uitvoeringsplan; videofoon, laadpaal, zonnepanelen; keuringsattest bij oplevering", "Sanitair en afvoeren; beluchting toilet; lavabo niet op de toiletafvoer",
+                   "Verwarming: leidingen, radiatoren, thermostaat volgens plan", "Ventilatie volgens EPB: unit, kanalen, ventielen, buitenaansluiting; keuken en toilet", "Airco binnenunits",
+                   "Vloerisolatie en chape met EPB-waarden"],
+    "afwerking": ["Pleisterwerk, gyproc, schilderwerk; wie schildert", "Binnendeuren, plinten, aansluitprofielen", "Keuken en maatwerk: planning leverancier, kabeldoorvoeren, fronten",
+                  "Trapleuningen en trapopening beveiligd", "Badkamer: doucheplaat, uitloop, voegen", "Vloerafwerking, sanitaire toestellen en keukenplannen door de bouwheer bezorgd"],
+    "oplevering": ["Lijst nog uit te voeren werken met deadline en geldigheid van de vergunning", "Einddatum werken melden in het omgevingsloket", "EPB-stukken en eindverklaring",
+                   "Verharding tuin en terras binnen de vergunde oppervlakte, waterdoorlatend", "Foto's van gevels en elk niveau op de dag van de oplevering",
+                   "Restpunten opvolgen tot afgewerkt; uitgevoerde werken bevestigen", "Definitieve oplevering: apart proces-verbaal"],
+}
 
 VLAG = {"ok": "OK", "belangrijk": "Belangrijk", "dringend": "Dringend", "": ""}
 VLAG_TERUG = {v.lower(): k for k, v in VLAG.items() if v}

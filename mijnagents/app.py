@@ -1225,7 +1225,7 @@ def werfbezoek_keuzes(dossier, volgnr):
                 delen.append("")
             aanwezigen.append({"rol": delen[0], "firma": delen[1], "naam": delen[2], "contact": delen[3], "aanwezig": delen[4] or "ja"})
     keuzes = {"verslagtype": f.get("verslagtype", ""), "taal": f.get("taal", "nl"), "doorlopend": f.get("doorlopend", "ja"),
-              "bronnen": f.get("bronnen", "eigen"),
+              "bronnen": f.get("bronnen", "eigen"), "overgang": f.get("overgang", "tweede rondgang"), "waarborg": (f.get("waarborg") or "12")[:3],
               "aanwezigen": aanwezigen, "opmerking": (f.get("opmerking") or "")[:2000], "door": gebruiker(), "ts": nu()}
     conn.execute("UPDATE werfbezoek SET keuzes=?, ts=? WHERE dossier=? AND volgnr=?", (json.dumps(keuzes, ensure_ascii=False), nu(), dossier, volgnr))
     conn.commit()
