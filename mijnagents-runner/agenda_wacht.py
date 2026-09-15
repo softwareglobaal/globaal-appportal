@@ -49,7 +49,10 @@ FIRMA_AFDELING = {"HA": "h-architects", "UNABO": "unabo", "HB": "harmoniebouw", 
 KALENDER_AFDELING = {"H-Architects": "h-architects", "UNABO": "unabo", "Harmoniebouw": "harmoniebouw", "Contrax": "contrax",
                      "zoomafspraken (sales via Calendly)": "h-architects"}
 SOORT = {"KB": "klant buiten", "PB": "prospect buiten (plaatsbezoek)", "KO": "klant online", "PO": "prospect online", "IN": "intern"}
-TYPES = {"WB": "werfbezoek", "OPL": "oplevering", "PLB": "plaatsbeschrijving", "SCN": "3D-scan", "EPB": "EPB"}
+# Diensten met een verslagagent (Commandocentrum, 16-09-2026): WB/OPL werfverslag, VC veiligheidscoördinatie,
+# PLB plaatsbeschrijving, BS/STA barsten en scheuren. De code staat na de firmacode, vóór het nummer of de naam.
+TYPES = {"WB": "werfbezoek", "OPL": "oplevering", "PLB": "plaatsbeschrijving", "SCN": "3D-scan", "EPB": "EPB",
+         "VC": "veiligheidscoördinatie", "BS": "barsten en scheuren", "STA": "stabiliteit", "SD": "schetsontwerp", "OPM": "opmeting"}
 CODE_RE = re.compile(r"\[(HA|UNABO|HB|HARMONIEBOUW|CONTRAX|ENERGIE|TKN|ELEVAIT|PRIVE)(?:-(KB|PB|KO|PO|IN))?\]", re.I)
 
 
@@ -71,7 +74,7 @@ def lees_titel(titel):
     rest = CODE_RE.sub("", t)
     rest = re.sub(r"^\s*(mehdi|siyan|shelton|angela)\s*:\s*", "", rest, flags=re.I)
     rest = rest.replace("!!", "").replace("??", "").strip(" -")
-    mt = re.match(r"^\s*(WB|OPL|PLB|SCN|EPB)\b", rest, re.I)
+    mt = re.match(r"^\s*(WB|OPL|PLB|SCN|EPB|VC|BS|STA|SD|OPM)\b", rest, re.I)
     if mt:
         uit["type"] = mt.group(1).upper()
         rest = rest[mt.end():].strip(" -")

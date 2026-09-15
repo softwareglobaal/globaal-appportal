@@ -1249,5 +1249,217 @@ def werfbezoek_opdracht(dossier, volgnr):
     return redirect(url_for("werfbezoek_pagina", dossier=dossier, volgnr=volgnr, tab="proef"))
 
 
+# --- commandocentrum: één rij per bezoek ter plaatse dat een verslag vraagt (werfverslag, veiligheidscoördinatie,
+#     plaatsbeschrijving, barsten en scheuren). Het Commandocentrum (agent) leest de agenda-bak, herkent de
+#     verslagsoort, stuurt de impuls naar de verslagagent en laat de wachten het pakket vullen (foto's, opname,
+#     transcript). De verslagagent meet het pakket en schrijft de proef na Mehdi's knop. Alleen beheer ziet de
+#     pagina (klant- en dossiernamen zijn inhoud).
+VERSLAG_KOLOMMEN = ("dossiermap", "bezoekmap", "pakket", "taken", "stand", "impuls_voorbereiding_ts", "impuls_verslag_ts",
+                    "proef_pad", "proef_ts", "verslag_md", "proef_info", "opmerking", "open")
+VERSLAG_JSON = {"pakket": {}, "taken": [], "proef_info": {}}
+PAKKET_LABELS = (("agenda", "agenda"), ("dossiermap", "dossiermap"), ("bezoekmap", "bezoekmap"), ("fotos", "foto's"),
+                 ("opnames", "opname"), ("transcripten", "transcript"), ("documenten", "documenten"))
+
+
+def _verslagopdracht_tabel(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS verslagopdracht (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            uniek     TEXT NOT NULL UNIQUE,   -- agenda:<kalender>:<event-id>, uit de bak van de Agendawacht
+            verslagsoort TEXT NOT NULL,       -- sleutel in verslagsoorten.SOORTEN
+            agent     TEXT NOT NULL,          -- verslagagent die hem draagt
+            afdeling  TEXT DEFAULT '',
+            dossier   TEXT DEFAULT '',        -- projectnummer als de titel er een had
+            klant     TEXT DEFAULT '',
+            adres     TEXT DEFAULT '',
+            datum     TEXT NOT NULL,
+            start     TEXT DEFAULT '',
+            einde     TEXT DEFAULT '',
+            titel     TEXT DEFAULT '',
+            agenda    TEXT DEFAULT '',
+            deal_id   TEXT DEFAULT '',
+            dossiermap TEXT DEFAULT '',
+            bezoekmap TEXT DEFAULT '',
+            pakket    TEXT DEFAULT '{}',      -- json: agenda, dossiermap, bezoekmap, fotos, opnames, transcripten, documenten, gemeten_ts
+            taken     TEXT DEFAULT '[]',      -- json: [{voor, uniek, titel}]
+            stand     TEXT DEFAULT 'gepland', -- gepland | voorbereid | verzamelen | pakket klaar | proef gevraagd | proef klaar | gesloten
+            impuls_voorbereiding_ts TEXT DEFAULT '',
+            impuls_verslag_ts TEXT DEFAULT '',
+            proef_pad TEXT DEFAULT '',
+            proef_ts  TEXT DEFAULT '',
+            verslag_md TEXT DEFAULT '',
+            proef_info TEXT DEFAULT '{}',
+            opmerking TEXT DEFAULT '',        -- van Mehdi, voor de verslagagent
+            open      INTEGER DEFAULT 1,
+            ts        TEXT NOT NULL
+        )""")
+
+
+def _verslag_dict(r):
+    d = dict(r)
+    for k, leeg in VERSLAG_JSON.items():
+        d[k] = _json(d.get(k), leeg)
+    return d
+
+
+@app.route("/api/verslagopdracht", methods=["POST"])
+def api_verslagopdracht():
+    """Upsert op uniek. Met `_alleen` worden alleen die kolommen bijgewerkt (de verslagagent meldt pakket,
+    dossiermap, bezoekmap, proef; het Commandocentrum meldt impulsen en stand) zonder elkaars werk te overschrijven."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    conn = db()
+    _verslagopdracht_tabel(conn)
+    n = 0
+    for r in p.get("rijen") or []:
+        if not r.get("uniek"):
+            continue
+        alleen = r.get("_alleen")
+        if alleen:
+            velden = {}
+            for k in alleen:
+                if k in VERSLAG_KOLOMMEN:
+                    v = r.get(k)
+                    velden[k] = v if isinstance(v, (str, int)) or v is None else json.dumps(v, ensure_ascii=False)
+            if not velden:
+                continue
+            velden["ts"] = nu()
+            zet = ", ".join(f"{k}=?" for k in velden)
+            n += conn.execute(f"UPDATE verslagopdracht SET {zet} WHERE uniek=?", (*velden.values(), r["uniek"][:200])).rowcount
+            continue
+        if not (r.get("verslagsoort") and r.get("agent") and r.get("datum")):
+            continue
+        conn.execute(
+            "INSERT INTO verslagopdracht(uniek, verslagsoort, agent, afdeling, dossier, klant, adres, datum, start, einde, titel, agenda, deal_id, ts) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(uniek) DO UPDATE SET verslagsoort=excluded.verslagsoort, agent=excluded.agent, "
+            "afdeling=excluded.afdeling, dossier=excluded.dossier, klant=excluded.klant, adres=excluded.adres, datum=excluded.datum, "
+            "start=excluded.start, einde=excluded.einde, titel=excluded.titel, agenda=excluded.agenda, deal_id=excluded.deal_id, ts=excluded.ts",
+            (r["uniek"][:200], r["verslagsoort"][:40], r["agent"][:60], (r.get("afdeling") or "")[:40], str(r.get("dossier") or "")[:20],
+             (r.get("klant") or "")[:120], (r.get("adres") or "")[:200], r["datum"][:10], (r.get("start") or "")[:40],
+             (r.get("einde") or "")[:40], (r.get("titel") or "")[:200], (r.get("agenda") or "")[:60], str(r.get("deal_id") or "")[:20], nu()))
+        n += 1
+    conn.commit()
+    return jsonify(ok=True, rijen=n)
+
+
+@app.route("/api/verslagopdracht")
+def api_verslagopdracht_lezen():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    conn = db()
+    _verslagopdracht_tabel(conn)
+    q, a = "SELECT * FROM verslagopdracht WHERE 1=1", []
+    if request.args.get("agent"):
+        q += " AND agent=?"; a.append(request.args["agent"])
+    if request.args.get("uniek"):
+        q += " AND uniek=?"; a.append(request.args["uniek"])
+    if request.args.get("id"):
+        q += " AND id=?"; a.append(int(request.args["id"]))
+    if request.args.get("open", "1") != "alle":
+        q += " AND open=1"
+    return jsonify(rijen=[_verslag_dict(r) for r in conn.execute(q + " ORDER BY datum, start", a).fetchall()])
+
+
+def _verslag_rij(d, taak_status):
+    """Wat de pagina toont: pakketlampjes (in de tekens van de dossiercontrole), taken met stand, wat nog nodig is."""
+    pk = d["pakket"] or {}
+    lampjes = []
+    for sleutel, label in PAKKET_LABELS:
+        v = pk.get(sleutel)
+        if sleutel in ("agenda", "dossiermap", "bezoekmap"):
+            st = "ok" if v else ("onbekend" if v is None else "fout")
+            tekst = (d.get(sleutel) or "").rsplit("/", 1)[-1] if sleutel != "agenda" else ("gevonden" if v else "")
+        else:
+            st = "ok" if (v or 0) > 0 else ("onbekend" if v is None else "fout")
+            tekst = str(v) if v is not None else "?"
+        lampjes.append({"sleutel": sleutel, "label": label, "status": st, "tekst": tekst})
+    d["lampjes"] = lampjes
+    for t in d["taken"]:
+        s = taak_status.get(t.get("uniek"))
+        t["status"] = s["status"] if s else "niet klaargezet"
+        t["door"] = s["opgepakt_door"] if s else ""
+    nodig = []
+    if not d.get("dossiermap"):
+        nodig.append("dossiermap (agent zoekt; anders zet jij het pad)")
+    elif not d.get("bezoekmap"):
+        nodig.append("bezoekmap (agent maakt hem aan)")
+    if d["stand"] not in ("gepland",) and d.get("bezoekmap"):
+        if not pk.get("fotos"):
+            nodig.append("foto's (iCloud-wacht)")
+        if not pk.get("transcripten"):
+            nodig.append("transcript (Plaudwacht)")
+    if d["stand"] == "pakket klaar" and not d.get("proef_pad"):
+        nodig.append("jouw knop: Proef maken")
+    if d.get("proef_pad"):
+        nodig = ["proef nakijken"] + ([] if not (d["proef_info"] or {}).get("open") else ["open punten in de proef"])
+    d["nodig"] = nodig
+    d["proef_naam"] = (d.get("proef_pad") or "").rsplit("/", 1)[-1]
+    return d
+
+
+@app.route("/commandocentrum")
+def commandocentrum_pagina():
+    if not mag_beslissen():
+        abort(403)
+    conn = db()
+    _verslagopdracht_tabel(conn)
+    taak_status = {r["uniek"]: dict(r) for r in conn.execute(
+        "SELECT uniek, status, opgepakt_door FROM klaarzet WHERE van='commandocentrum' AND uniek<>''").fetchall()}
+    rijen = [_verslag_rij(_verslag_dict(r), taak_status) for r in conn.execute(
+        "SELECT * FROM verslagopdracht WHERE open=1 ORDER BY datum DESC, start DESC").fetchall()]
+    vandaag = nu()[:10]
+    komend = [r for r in rijen if r["datum"] >= vandaag and r["stand"] in ("gepland", "voorbereid")]
+    lopend = [r for r in rijen if r not in komend and not r.get("proef_pad")]
+    proef = [r for r in rijen if r.get("proef_pad")]
+    agents_namen = ["commandocentrum", "werfverslag-voorbereider", "werfverslag-schrijver", "veiligheidscoordinatie-verslag",
+                    "plaatsbeschrijving-verslag", "barsten-scheuren-verslag", "icloud-wacht", "plaud-wacht", "agenda-wacht"]
+    st = {r["naam"]: dict(r) for r in conn.execute(
+        f"SELECT * FROM status WHERE naam IN ({','.join('?' * len(agents_namen))})", agents_namen).fetchall()}
+    labels = {r["naam"]: r["label"] for r in conn.execute("SELECT naam, label FROM agent").fetchall()}
+    noden = [dict(r) for r in conn.execute(
+        f"SELECT naam, tekst, wie, ts FROM nood WHERE open=1 AND naam IN ({','.join('?' * len(agents_namen))}) ORDER BY id", agents_namen).fetchall()]
+    logboek = [dict(r) for r in conn.execute(
+        "SELECT naam, onderwerp, stap, tekst, ts FROM logboek WHERE naam IN ('commandocentrum','veiligheidscoordinatie-verslag',"
+        "'plaatsbeschrijving-verslag','barsten-scheuren-verslag') ORDER BY id DESC LIMIT 25").fetchall()]
+    gesloten = conn.execute("SELECT COUNT(*) FROM verslagopdracht WHERE open=0").fetchone()[0]
+    return render_template("commandocentrum.html", app_naam=APP_NAAM, komend=komend, lopend=lopend, proef=proef, status=st,
+                           labels=labels, agents_namen=agents_namen, noden=noden, logboek=logboek, gesloten=gesloten, gebruiker=gebruiker())
+
+
+@app.route("/commandocentrum/<int:vid>/opdracht", methods=["POST"])
+def commandocentrum_opdracht(vid):
+    """Knoppen op de pagina. `proef`: opdracht voor de verslagagent (kost tokens, dus alleen op de knop).
+    `dossiermap`: Mehdi zet het pad zelf als de agent de map niet vond. `sluiten`: van de pagina."""
+    if not mag_beslissen():
+        abort(403)
+    conn = db()
+    _verslagopdracht_tabel(conn)
+    r = conn.execute("SELECT * FROM verslagopdracht WHERE id=?", (vid,)).fetchone()
+    if not r:
+        abort(404)
+    soort = request.form.get("soort", "")
+    if soort == "proef":
+        conn.execute("INSERT INTO klaarzet(van, voor, soort, sleutel, titel, inhoud, verwijzing, uniek, ts) VALUES(?,?,?,?,?,?,?,?,?)",
+                     (f"bord:{gebruiker()}", r["agent"], "opdracht", str(vid), f"proef {vid}",
+                      json.dumps({"door": gebruiker(), "uniek": r["uniek"], "opmerking": (request.form.get("opmerking") or "")[:2000]}),
+                      r["bezoekmap"] or "", "", nu()))
+        conn.execute("UPDATE verslagopdracht SET stand='proef gevraagd', opmerking=?, ts=? WHERE id=?",
+                     ((request.form.get("opmerking") or "")[:2000], nu(), vid))
+    elif soort == "dossiermap":
+        pad = (request.form.get("dossiermap") or "").strip()[:500]
+        conn.execute("UPDATE verslagopdracht SET dossiermap=?, bezoekmap='', impuls_voorbereiding_ts='', ts=? WHERE id=?", (pad, nu(), vid))
+        # de agent maakt de bezoekmap bij zijn volgende impuls; het Commandocentrum zet die opnieuw klaar
+        conn.execute("DELETE FROM klaarzet WHERE uniek=?", (f"cc:{r['uniek']}:voorbereiding",))
+    elif soort == "sluiten":
+        conn.execute("UPDATE verslagopdracht SET open=0, stand='gesloten', ts=? WHERE id=?", (nu(), vid))
+    elif soort == "heropen":
+        conn.execute("UPDATE verslagopdracht SET open=1, ts=? WHERE id=?", (nu(), vid))
+    else:
+        abort(400)
+    conn.commit()
+    return redirect(url_for("commandocentrum_pagina") + f"#v{vid}")
+
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.environ.get("PORT", 3022)), debug=True)

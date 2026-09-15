@@ -403,7 +403,8 @@ def gezocht_schrijven():
     en bezoekmap. De routine zoekt op OPNAMEDATUM (start_at, UTC), niet op uploaddatum, en zet het transcript in de inbox
     met de kop `bezoekmap:` zodat de Plaudwacht het in de bezoekmap zet. Les van 2309 (03-06, geüpload 21-08)."""
     try:
-        taken = [it for it in bord.klaargezet_voor("plaud-wacht", n=200) if it.get("soort") == "taak" and it.get("van") == NAAM]
+        # ook de opname-taken van het Commandocentrum (andere verslagsoorten) komen op dezelfde zoeklijst
+        taken = [it for it in bord.klaargezet_voor("plaud-wacht", n=200) if it.get("soort") == "taak" and it.get("van") in (NAAM, "commandocentrum")]
     except Exception:  # noqa: BLE001
         return 0
     regels = ["# Gezochte Plaud-opnames (geschreven door de Werfverslag voorbereider)", "",
@@ -447,6 +448,22 @@ def main():
         if a.werfstart[0] not in a.project:
             a.project.append(a.werfstart[0])
     nummers = [n for n in a.project if re.fullmatch(r"\d{4}", n)]
+    # impulsen van het Commandocentrum (16-09-2026): een werfbezoek in de agenda maakt het dossier vanzelf gevolgd
+    try:
+        for it in bord.klaargezet_voor(NAAM, n=50):
+            if it.get("soort") != "impuls" or it.get("van") != "commandocentrum":
+                continue
+            try:
+                d = json.loads(it.get("inhoud") or "{}")
+            except ValueError:
+                d = {}
+            n = str(d.get("dossier") or "")
+            if re.fullmatch(r"\d{4}", n) and n not in nummers:
+                nummers.append(n)
+                ag.log(n, "bron", f"impuls van het Commandocentrum: {it.get('titel', '')[:100]}")
+            bord.opgepakt(it["id"], NAAM)
+    except Exception as e:  # noqa: BLE001
+        ag.log("bak", "fout", f"impulsen niet gelezen: {type(e).__name__}")
     nummers += [n for n in open_dossiers() if n not in nummers]
     ag.hartslag("actief", taak="ronde gestart", detail=f"{len(nummers)} dossier(s)")
     if not bronnen.dropbox_beschikbaar():

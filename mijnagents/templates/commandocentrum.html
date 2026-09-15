@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commandocentrum — {{ app_naam }}</title>
+<style>
+  :root { --ink:#1c1c1c; --grijs:#6b6b6b; --lijn:#e2ddd5; --fond:#faf8f4; --accent:#1f3d33; --accent-licht:#edf2ef; --rood:#a33a2a; --wit:#fff; --oranje:#a1701a; --groen:#1f6b3d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Helvetica Neue",Arial,sans-serif; color:var(--ink); background:var(--fond); font-size:15px; line-height:1.5; }
+  header { background:var(--accent); color:var(--wit); padding:14px 28px; display:flex; align-items:baseline; gap:18px; flex-wrap:wrap; }
+  header a { color:var(--wit); text-decoration:none; } header .merk { font-weight:700; letter-spacing:.04em; } header .sub { opacity:.75; font-size:13px; }
+  main { max-width:1240px; margin:28px auto 60px; padding:0 24px; }
+  h1 { font-size:22px; font-weight:600; margin:0 0 18px; }
+  h2 { font-size:15px; font-weight:700; margin:26px 0 10px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); border-bottom:1px solid var(--lijn); padding-bottom:6px; }
+  p.leid { color:var(--grijs); margin:0 0 12px; }
+  table { width:100%; border-collapse:collapse; background:var(--wit); }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--lijn); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--grijs); }
+  .knop { display:inline-block; background:var(--accent); color:var(--wit); border:0; padding:9px 16px; border-radius:4px; font-size:14px; cursor:pointer; text-decoration:none; font-family:inherit; }
+  .knop.licht { background:var(--accent-licht); color:var(--accent); }
+  .knop.klein { padding:4px 10px; font-size:13px; margin:1px 0; }
+  .stil { color:var(--grijs); font-size:13px; }
+  .ok { color:var(--groen); font-weight:600; } .let_op { color:var(--oranje); font-weight:600; } .fout { color:var(--rood); font-weight:600; } .onbekend { color:var(--grijs); }
+  .lamp { display:inline-block; margin:0 8px 2px 0; white-space:nowrap; font-size:13px; }
+  .lamp b { font-weight:700; }
+  .soort { display:inline-block; background:var(--accent-licht); color:var(--accent); padding:1px 8px; border-radius:10px; font-size:12px; }
+  .nood { border-left:3px solid var(--oranje); padding:4px 10px; margin:4px 0; font-size:14px; background:var(--wit); }
+  form.inline { display:inline; }
+  input[type=text] { font:inherit; padding:5px 8px; border:1px solid var(--lijn); border-radius:4px; width:100%; }
+  details summary { cursor:pointer; color:var(--accent); font-size:13px; }
+  code { font-size:12px; color:var(--grijs); word-break:break-all; }
+</style>
+</head>
+<body>
+<header>
+  <span class="merk">Commandocentrum</span>
+  <span class="sub">verslagen uit de agenda · <a href="{{ url_for('bord') }}">bord</a> · <a href="{{ url_for('werfverslagen_pagina') }}">Werfverslagen</a> · <a href="{{ url_for('detail', naam='commandocentrum') }}">Het Commandocentrum</a></span>
+</header>
+<main>
+<h1>Commandocentrum</h1>
+<p class="leid">Elke afspraak ter plaatse met een dienst erbij (werfbezoek, veiligheidscoördinatie, plaatsbeschrijving, barsten en scheuren) wordt hier een rij.
+Het Commandocentrum stuurt de verslagagent vooraf op pad (dossiermap, bezoekmap) en laat na het bezoek de wachten het pakket vullen (foto's, opname, transcript).
+Is het pakket vol, dan druk jij op <strong>Proef maken</strong>; de proef landt in de bezoekmap. Werfverslagen lopen door hun eigen keten (knop Werfverslagen).</p>
+
+{% macro lampjes(r) -%}
+  {% for l in r.lampjes %}<span class="lamp {{ l.status }}"><b>{{ l.label }}</b> {{ l.tekst }}</span>{% endfor %}
+{%- endmacro %}
+
+{% macro rij(r, knoppen) -%}
+  <tr id="v{{ r.id }}">
+    <td><strong>{{ r.datum }}</strong><br><span class="stil">{{ r.start[11:16] }}–{{ r.einde[11:16] }}</span></td>
+    <td><span class="soort">{{ r.verslagsoort }}</span><br><span class="stil">{{ r.agent }}</span></td>
+    <td>{% if r.dossier %}<strong>{{ r.dossier }}</strong> {% endif %}{{ r.klant }}<br><span class="stil">{{ r.adres or 'geen adres in de agenda' }}</span>
+        <details><summary>agenda</summary><span class="stil">{{ r.agenda }} · {{ r.titel }}{% if r.deal_id %} · deal {{ r.deal_id }}{% endif %}</span>
+        {% if r.dossiermap %}<br><code>{{ r.dossiermap }}</code>{% endif %}{% if r.bezoekmap %}<br><code>{{ r.bezoekmap }}</code>{% endif %}</details></td>
+    <td>{{ lampjes(r) }}
+        {% if r.taken %}<br><span class="stil">taken: {% for t in r.taken %}{{ t.voor }} ({{ t.status }}){% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</td>
+    <td>{% if r.stand in ('pakket klaar', 'proef klaar') %}<span class="ok">{{ r.stand }}</span>{% elif r.stand in ('proef gevraagd',) %}<span class="let_op">{{ r.stand }}</span>{% else %}{{ r.stand }}{% endif %}
+        <br><span class="stil">{{ r.nodig|join(', ') if r.nodig else 'niets' }}</span></td>
+    <td style="white-space:nowrap">
+      {% if r.verslagsoort == 'werfverslag' %}
+        <a class="knop klein licht" href="{{ url_for('werfverslagen_pagina') }}">Werfverslagen</a>
+      {% else %}
+        {% if r.bezoekmap and not r.proef_pad and r.stand != 'proef gevraagd' %}
+        <form class="inline" method="post" action="{{ url_for('commandocentrum_opdracht', vid=r.id) }}"><input type="hidden" name="soort" value="proef">
+          <button class="knop klein" type="submit" {% if r.stand != 'pakket klaar' %}title="pakket nog niet vol; de proef gebruikt wat er ligt"{% endif %}>Proef maken{% if r.stand != 'pakket klaar' %} (toch){% endif %}</button></form>
+        {% endif %}
+        {% if r.proef_pad %}<span class="stil">{{ r.proef_naam }}</span>
+        <form class="inline" method="post" action="{{ url_for('commandocentrum_opdracht', vid=r.id) }}"><input type="hidden" name="soort" value="proef"><button class="knop klein licht" type="submit">Opnieuw</button></form>{% endif %}
+        {% if not r.dossiermap %}
+        <details><summary>dossiermap zetten</summary>
+          <form method="post" action="{{ url_for('commandocentrum_opdracht', vid=r.id) }}"><input type="hidden" name="soort" value="dossiermap">
+          <input type="text" name="dossiermap" placeholder="/Work All/03. Enstaco WORK/3. VC (Veiligheidscoördinatie)/3321 ..."><button class="knop klein" type="submit" style="margin-top:4px">Bewaren</button></form></details>
+        {% endif %}
+      {% endif %}
+      <form class="inline" method="post" action="{{ url_for('commandocentrum_opdracht', vid=r.id) }}"><input type="hidden" name="soort" value="sluiten"><button class="knop klein licht" type="submit">Sluiten</button></form>
+    </td>
+  </tr>
+{%- endmacro %}
+
+<h2>Komende bezoeken ({{ komend|length }})</h2>
+<p class="leid">De verslagagent zoekt nu al de dossiermap en maakt de bezoekmap aan, zodat alles klaarstaat als je terugkomt.</p>
+{% if komend %}<table><tr><th>Wanneer</th><th>Verslag</th><th>Dossier</th><th>Pakket</th><th>Stand</th><th></th></tr>{% for r in komend %}{{ rij(r) }}{% endfor %}</table>
+{% else %}<p class="stil">Geen komende bezoeken met een verslagsoort in de agenda. Zet de dienstcode in de titel (WB, OPL, VC, PLB, BS, STA) en het Commandocentrum ziet hem binnen het kwartier.</p>{% endif %}
+
+<h2>Na het bezoek: pakket en verslag ({{ lopend|length }})</h2>
+<p class="leid">Foto's komen van de iCloud-wacht (Mac), het transcript van de Plaudwacht. Vol pakket = groen; dan is de knop aan jou.</p>
+{% if lopend %}<table><tr><th>Wanneer</th><th>Verslag</th><th>Dossier</th><th>Pakket</th><th>Stand</th><th></th></tr>{% for r in lopend %}{{ rij(r) }}{% endfor %}</table>
+{% else %}<p class="stil">Niets in behandeling.</p>{% endif %}
+
+<h2>Proef klaar, na te kijken ({{ proef|length }})</h2>
+{% if proef %}<table><tr><th>Wanneer</th><th>Verslag</th><th>Dossier</th><th>Pakket</th><th>Stand</th><th></th></tr>{% for r in proef %}{{ rij(r) }}{% endfor %}</table>
+{% else %}<p class="stil">Nog geen proeven.</p>{% endif %}
+{% if gesloten %}<p class="stil">{{ gesloten }} gesloten rij(en) staan niet meer op de pagina.</p>{% endif %}
+
+{% if noden %}
+<h2>Wat de agents nodig hebben</h2>
+{% for n in noden %}<div class="nood"><strong>{{ labels.get(n.naam, n.naam) }}</strong> ({{ n.wie }}): {{ n.tekst }} <span class="stil">{{ n.ts[:16].replace('T',' ') }}</span></div>{% endfor %}
+{% endif %}
+
+<h2>De keten</h2>
+<table>
+  <tr><th>Agent</th><th>Stand</th><th>Laatste taak</th></tr>
+  {% for naam in agents_namen %}{% set s = status.get(naam) %}
+  <tr><td><a href="{{ url_for('detail', naam=naam) }}" style="color:var(--accent)">{{ labels.get(naam, naam) }}</a></td>
+      <td>{% if s %}{{ s.status }} <span class="stil">{{ s.ts[:16].replace('T',' ') }} UTC</span>{% else %}<span class="stil">nog geen ronde</span>{% endif %}</td>
+      <td class="stil">{% if s %}{{ s.taak }}{% if s.detail %} · {{ s.detail }}{% endif %}{% endif %}</td></tr>
+  {% endfor %}
+</table>
+
+{% if logboek %}
+<h2>Laatste stappen</h2>
+<table>{% for l in logboek %}<tr><td class="stil" style="white-space:nowrap">{{ l.ts[:16].replace('T',' ') }}</td><td class="stil">{{ l.naam }}</td><td><span class="stil">{{ l.onderwerp }}</span> · {{ l.stap }}: {{ l.tekst }}</td></tr>{% endfor %}</table>
+{% endif %}
+</main>
+</body>
+</html>
