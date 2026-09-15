@@ -32,16 +32,22 @@ server {
     set $proef_upstream http://elevait-proef-web:8090;
     set $demo_upstream http://demo-kennisbank:3030;
 
-    # De contractenpagina is opgegaan in de bredere dienstpagina
-    # administratie-automatisering. Vaste doorverwijzing, zodat wat al
-    # geindexeerd of gedeeld is niet op een foutmelding uitkomt.
-    location = /projecten/contracten {
-        return 301 https://$host/projecten/administratie-automatisering;
-    }
+    # Herbouw van 15 sep 2026: /projecten werd /diensten, de kennisbank-demo
+    # is van de site tot hij goed werkt, en de oude dienstnamen kregen een
+    # nieuwe plek. Vaste doorverwijzingen, zodat wat al gedeeld of
+    # geindexeerd is nergens op een foutmelding uitkomt.
+    location = /projecten { return 301 https://$host/diensten; }
+    location = /projecten/contracten { return 301 https://$host/diensten/administratie-automatisering; }
+    location = /projecten/administratie-automatisering { return 301 https://$host/diensten/administratie-automatisering; }
+    location = /projecten/vindplaats { return 301 https://$host/diensten/administratie-automatisering; }
+    location = /projecten/maatwerk { return 301 https://$host/diensten/applicaties-op-maat; }
+    location = /projecten/it-beheer { return 301 https://$host/diensten; }
+    location = /team { return 301 https://$host/over-ons; }
+    location = /demo { return 302 https://$host/diensten/administratie-automatisering; }
 
     # De kennisbank-demo draait maar een keer; de proefsite kijkt mee naar
     # dezelfde container als de live site. Zo klopt de link in het menu.
-    location /demo {
+    location /demo/email-automation {
         client_max_body_size 16m;
         client_body_timeout 120s;
         proxy_read_timeout 180s;
