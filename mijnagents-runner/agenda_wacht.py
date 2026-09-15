@@ -71,9 +71,10 @@ def lees_titel(titel):
     if m:
         uit["firma"] = m.group(1).upper()
         uit["soort"] = (m.group(2) or "").upper()
-    rest = CODE_RE.sub("", t)
-    rest = re.sub(r"^\s*(mehdi|siyan|shelton|angela)\s*:\s*", "", rest, flags=re.I)
-    rest = rest.replace("!!", "").replace("??", "").strip(" -")
+    # eerst !! en ?? weg, dan de naam vooraan: anders bleef bij "!! Mehdi: BS ..." de naam staan en werd de
+    # dienstcode niet gelezen (klant droeg "Mehdi:" mee; gezien in het Commandocentrum, 16-09-2026)
+    rest = CODE_RE.sub("", t).replace("!!", "").replace("??", "")
+    rest = re.sub(r"^\s*(mehdi|siyan|shelton|angela)[^:]{0,40}:\s*", "", rest, flags=re.I).strip(" -")
     mt = re.match(r"^\s*(WB|OPL|PLB|SCN|EPB|VC|BS|STA|SD|OPM)\b", rest, re.I)
     if mt:
         uit["type"] = mt.group(1).upper()
