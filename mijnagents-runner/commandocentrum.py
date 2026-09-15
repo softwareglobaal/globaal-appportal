@@ -24,6 +24,7 @@ Gebruik:
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -118,8 +119,9 @@ def main():
             s = vs.SOORTEN[soort]
             per_soort[soort] = per_soort.get(soort, 0) + 1
             uniek = it["uniek"]
+            klant = re.sub(r"^\s*(mehdi|siyan|shelton|angela)[^:]*:\s*", "", d.get("klant") or "", flags=re.I).strip(" -:")
             rij = {"uniek": uniek, "verslagsoort": soort, "agent": s["agent"], "afdeling": s["afdeling"],
-                   "dossier": d.get("nummer") or "", "klant": d.get("klant") or "", "adres": d.get("locatie") or "",
+                   "dossier": d.get("nummer") or "", "klant": klant, "adres": d.get("locatie") or "",
                    "datum": d.get("datum"), "start": d.get("start") or "", "einde": d.get("einde") or "",
                    "titel": d.get("titel") or "", "agenda": d.get("agenda") or "", "deal_id": d.get("deal_id") or ""}
             oud = bestaand.get(uniek)

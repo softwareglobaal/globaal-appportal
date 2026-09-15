@@ -106,12 +106,19 @@ def _online(info, inhoud):
     return info.get("soort") in ONLINE_SOORTEN or loc.startswith("http") or "zoom" in loc
 
 
+def ter_plaatse(inhoud):
+    """Een bezoek ter plaatse: '!!' in de titel (buiten met reistijd) of een fysiek adres als locatie.
+    Les van de eerste droge ronde (16-09-2026): het dagelijkse werkblok 'Ai stabiliteit' zonder adres is geen bezoek."""
+    loc = (inhoud.get("locatie") or "").strip().lower()
+    return bool(inhoud.get("buiten")) or bool(loc and not loc.startswith("http") and "zoom" not in loc)
+
+
 def herken(inhoud):
     """Welke verslagsoort hoort bij een afspraak uit de bak van de Agendawacht? None = geen verslag nodig.
     Alleen bezoeken ter plaatse tellen: interne en online afspraken krijgen nooit een verslagimpuls."""
     info = {"firma": (inhoud.get("firma") or "").upper(), "soort": (inhoud.get("soort") or "").upper(),
             "type": (inhoud.get("type") or "").upper()}
-    if _online(info, inhoud):
+    if _online(info, inhoud) or not ter_plaatse(inhoud):
         return None
     titel = (inhoud.get("titel") or "").lower()
     kaal = re.sub(r"\[[^\]]*\]", " ", titel)
