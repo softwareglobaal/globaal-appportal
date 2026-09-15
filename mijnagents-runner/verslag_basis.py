@@ -428,6 +428,17 @@ class VerslagAgent:
             n_o = self.opdrachten()
             gemeten = 0
             for rij in self.rijen():
+                onderwerp = f"{rij['datum']} {rij.get('dossier') or rij.get('klant') or ''}".strip()
+                if not rij.get("dossiermap") and rij.get("impuls_voorbereiding_ts"):
+                    # nog geen dossiermap: elke ronde opnieuw zoeken (Mehdi kan de map intussen gemaakt hebben) en de nood
+                    # opnieuw melden, want een hartslag zonder de nood sluit hem op het bord
+                    pad, hoe = self.zoek_dossiermap(rij)
+                    if pad:
+                        self.voorbereiding(rij, onderwerp)
+                        continue
+                    self._noden.append({"tekst": f"{onderwerp}: dossiermap niet gevonden; zet het pad op de pagina Commandocentrum", "wie": "mehdi"})
+                elif rij.get("dossiermap") and not rij.get("bezoekmap"):
+                    self.voorbereiding(rij, onderwerp)   # pad door Mehdi gezet: bezoekmap alsnog aanmaken
                 if rij.get("bezoekmap") and not rij.get("proef_pad"):
                     pk = self.meet_pakket(rij)
                     oud = rij.get("pakket") or {}

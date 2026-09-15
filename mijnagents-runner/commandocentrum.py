@@ -152,7 +152,7 @@ def main():
                                      "inhoud": {"fase": "voorbereiding", "uniek": uniek, **rij, "straal_m": STRAAL_M},
                                      "verwijzing": it.get("verwijzing") or "", "uniek": f"cc:{uniek}:voorbereiding"})
                     if not a.droog:
-                        bewaar(uniek, impuls_voorbereiding_ts=nu.isoformat(), stand="gepland" if rij["datum"] >= vandaag else stand)
+                        bewaar(uniek, impuls_voorbereiding_ts=nu.isoformat())   # de stand is van de verslagagent
             # 2. na het bezoek: taken voor de wachten, zodra de bezoekmap bekend is
             bezoekmap = oud.get("bezoekmap") or ""
             if voorbij and s["eigen_keten"] and stand in ("gepland", "voorbereid") and not a.droog:
