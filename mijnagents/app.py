@@ -1409,9 +1409,11 @@ def commandocentrum_pagina():
     rijen = [_verslag_rij(_verslag_dict(r), taak_status) for r in conn.execute(
         "SELECT * FROM verslagopdracht WHERE open=1 ORDER BY datum DESC, start DESC").fetchall()]
     vandaag = nu()[:10]
-    komend = [r for r in rijen if r["datum"] >= vandaag and r["stand"] in ("gepland", "voorbereid")]
-    lopend = [r for r in rijen if r not in komend and not r.get("proef_pad")]
-    proef = [r for r in rijen if r.get("proef_pad")]
+    werf = [r for r in rijen if r["verslagsoort"] == "werfverslag"]      # eigen keten: pagina Werfverslagen
+    eigen = [r for r in rijen if r not in werf]
+    komend = [r for r in eigen if r["datum"] >= vandaag and r["stand"] in ("gepland", "voorbereid")]
+    lopend = [r for r in eigen if r not in komend and not r.get("proef_pad")]
+    proef = [r for r in eigen if r.get("proef_pad")]
     agents_namen = ["commandocentrum", "werfverslag-voorbereider", "werfverslag-schrijver", "veiligheidscoordinatie-verslag",
                     "plaatsbeschrijving-verslag", "barsten-scheuren-verslag", "icloud-wacht", "plaud-wacht", "agenda-wacht"]
     st = {r["naam"]: dict(r) for r in conn.execute(
@@ -1423,7 +1425,7 @@ def commandocentrum_pagina():
         "SELECT naam, onderwerp, stap, tekst, ts FROM logboek WHERE naam IN ('commandocentrum','veiligheidscoordinatie-verslag',"
         "'plaatsbeschrijving-verslag','barsten-scheuren-verslag') ORDER BY id DESC LIMIT 25").fetchall()]
     gesloten = conn.execute("SELECT COUNT(*) FROM verslagopdracht WHERE open=0").fetchone()[0]
-    return render_template("commandocentrum.html", app_naam=APP_NAAM, komend=komend, lopend=lopend, proef=proef, status=st,
+    return render_template("commandocentrum.html", app_naam=APP_NAAM, komend=komend, lopend=lopend, proef=proef, werf=werf, status=st,
                            labels=labels, agents_namen=agents_namen, noden=noden, logboek=logboek, gesloten=gesloten, gebruiker=gebruiker())
 
 

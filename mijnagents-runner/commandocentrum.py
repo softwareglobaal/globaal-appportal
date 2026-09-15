@@ -129,8 +129,14 @@ def main():
                 nieuw.append(rij)
                 oud = {**rij, "pakket": {}, "taken": [], "stand": "gepland", "dossiermap": "", "bezoekmap": "",
                        "impuls_voorbereiding_ts": "", "impuls_verslag_ts": "", "proef_pad": "", "open": 1}
+                if not a.droog:
+                    # de rij moet bestaan vóór de gerichte bijwerkingen hieronder (les van de eerste ronde: ts bleef leeg)
+                    bord.call("/api/verslagopdracht", {"rijen": [rij]})
             elif not oud.get("open"):
                 continue
+            else:
+                # agenda kan veranderd zijn (adres, titel, klant): de rij volgt de agenda
+                bord.call("/api/verslagopdracht", {"rijen": [rij]}) if not a.droog else None
             einde = _tijd(oud.get("einde") or d.get("einde") or "")
             voorbij = bool(einde and nu >= einde + timedelta(minutes=NA_BEZOEK_MIN))
             pk = oud.get("pakket") or {}
@@ -149,6 +155,8 @@ def main():
                         bewaar(uniek, impuls_voorbereiding_ts=nu.isoformat(), stand="gepland" if rij["datum"] >= vandaag else stand)
             # 2. na het bezoek: taken voor de wachten, zodra de bezoekmap bekend is
             bezoekmap = oud.get("bezoekmap") or ""
+            if voorbij and s["eigen_keten"] and stand in ("gepland", "voorbereid") and not a.droog:
+                bewaar(uniek, stand="werfverslagketen")   # verder op de pagina Werfverslagen
             if voorbij and not s["eigen_keten"]:
                 bestaande_taken = {t.get("voor") for t in (oud.get("taken") or [])}
                 if bezoekmap:
@@ -187,8 +195,6 @@ def main():
         if a.droog:
             print(json.dumps({"nieuw": nieuw, "impulsen": impulsen, "taken": taken, "noden": noden}, ensure_ascii=False, indent=1))
             return
-        if nieuw:
-            bord.call("/api/verslagopdracht", {"rijen": nieuw})
         uit_i = ag.klaarzet(impulsen) if impulsen else {"nieuw": 0, "bestaand": 0}
         uit_t = ag.klaarzet(taken) if taken else {"nieuw": 0, "bestaand": 0}
         ag.log(f"ronde {vandaag}", "bron", f"{len(lijst)} afspraken in de bak ({sinds} tot {tot}); {sum(per_soort.values())} met een verslagsoort, "

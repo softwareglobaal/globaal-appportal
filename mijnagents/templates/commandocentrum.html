@@ -92,6 +92,15 @@ Is het pakket vol, dan druk jij op <strong>Proef maken</strong>; de proef landt 
 <h2>Proef klaar, na te kijken ({{ proef|length }})</h2>
 {% if proef %}<table><tr><th>Wanneer</th><th>Verslag</th><th>Dossier</th><th>Pakket</th><th>Stand</th><th></th></tr>{% for r in proef %}{{ rij(r) }}{% endfor %}</table>
 {% else %}<p class="stil">Nog geen proeven.</p>{% endif %}
+{% if werf %}
+<h2>Werfverslagen uit de agenda ({{ werf|length }})</h2>
+<p class="leid">Deze lopen door de eigen keten (Werfverslag voorbereider en schrijver). Het Commandocentrum meldt het bezoek aan; de stand staat op de pagina <a href="{{ url_for('werfverslagen_pagina') }}">Werfverslagen</a>.</p>
+<table><tr><th>Wanneer</th><th>Dossier</th><th>Titel</th><th>Stand</th><th></th></tr>
+{% for r in werf %}<tr id="v{{ r.id }}"><td>{{ r.datum }} <span class="stil">{{ r.start[11:16] }}–{{ r.einde[11:16] }}</span></td><td><strong>{{ r.dossier or '(geen nummer)' }}</strong><br><span class="stil">{{ r.adres }}</span></td><td class="stil">{{ r.titel }}</td><td>{{ r.stand }}</td>
+<td style="white-space:nowrap"><a class="knop klein licht" href="{{ url_for('werfverslagen_pagina') }}">Werfverslagen</a>
+<form class="inline" method="post" action="{{ url_for('commandocentrum_opdracht', vid=r.id) }}"><input type="hidden" name="soort" value="sluiten"><button class="knop klein licht" type="submit">Sluiten</button></form></td></tr>{% endfor %}
+</table>
+{% endif %}
 {% if gesloten %}<p class="stil">{{ gesloten }} gesloten rij(en) staan niet meer op de pagina.</p>{% endif %}
 
 {% if noden %}
