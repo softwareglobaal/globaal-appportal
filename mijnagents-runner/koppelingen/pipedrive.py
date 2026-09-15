@@ -34,7 +34,11 @@ def _laad_env():
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
-                    os.environ.setdefault(k, v.strip().strip('"').strip("'"))
+                    # Alleen de Pipedrive-tokens: de rest van dat .env (zoals
+                    # PLATFORM_URL van de Siyan-tegel) hoort hier niet in de omgeving.
+                    if not k.strip().startswith("PIPEDRIVE_"):
+                        continue
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
         except OSError:
             pass
 

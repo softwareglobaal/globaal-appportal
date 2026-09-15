@@ -6,7 +6,10 @@ import sys
 import urllib.parse
 import urllib.request
 
-PLATFORM = os.environ.get("PLATFORM_URL", "http://127.0.0.1:3022")
+# Eigen variabele, bewust niet PLATFORM_URL: die staat ook in het .env van de
+# Siyan-tegel (poort 3021) dat koppelingen/pipedrive.py inleest, en dan
+# kwam elke klaarzet-aanroep op het verkeerde bord uit (404, 9 tot 15-9).
+PLATFORM = os.environ.get("MIJNAGENTS_URL", "http://127.0.0.1:3022")
 
 
 def token():
