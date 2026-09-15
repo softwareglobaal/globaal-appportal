@@ -231,17 +231,18 @@ SCHEMA_UITLEG = """Antwoord met UITSLUITEND een JSON-object met deze sleutels:
    "volgende_stap": "één zin voor Mehdi"
  }
 }
-Strikte scheiding (werkwijze stap 7): 'gegevens' zijn velden zoals hoedanigheid_opdrachtgever_label,
-bestemming_bouwplaats_label, bouwproject_type_label, bouwproject_oppervlakte_m2, bouwbudget_bedrag_euro,
-ereloon_percentage_bouwproject, opdrachtgever_type, aantal_opdrachtgevers, gespecialiseerde_studies_benoeming.
-'keuzes' zijn UITSLUITEND de keuzevelden die 'voorbereiding' onder "keuzes" opsomt (soort, architectuur_scope,
-ereloon_scenario, budget_scenario, uitvoeringswijze_label, relatievorm_label, ereloon_minimum_keuze,
-voorontwerp_aanwezig, ...) plus de vrije teksten project_beschrijving en project_omvat_extra_vrije_toevoeging.
+Strikte scheiding (werkwijze stap 7): 'gegevens' zijn UITSLUITEND velden uit veldenschema.master.<soort>.velden,
+de placeholders van de master van DIT contracttype (bv. regularisatie: ereloon_regularisatie en
+regularisatiewerken_bullets; architectuur: bouwbudget_bedrag_euro en ereloon_percentage_bouwproject). Een veld
+van een ander contracttype bestaat niet voor dit dossier, ook al lijkt de naam te passen.
+Vul eerst veldenschema.master.<soort>.verplicht aan; elke post onder voorbereiding.herkomst.ontbreekt draagt zijn
+exacte 'sleutel'. 'keuzes' zijn UITSLUITEND de keuzevelden die 'voorbereiding' voor dit dossier onder "keuzes"
+opsomt plus de vrije velden uit veldenschema.master.<soort>.vrije_velden. Andere keuzes bestaan niet voor dit type.
 Een gegeven onder 'keuzes' of een keuze onder 'gegevens' wordt geweigerd.
 Regels die je nooit breekt:
-- Gebruik UITSLUITEND veldnamen uit 'veldenschema' en 'voorbereiding' (exacte sleutels, bv. hoedanigheid_opdrachtgever_label, opdrachtgever_1_rijksregister, bouwproject_oppervlakte_m2). Een verzonnen veldnaam wordt geweigerd.
+- Gebruik UITSLUITEND veldnamen uit veldenschema.master.<soort> en 'voorbereiding' (exacte sleutels). Een verzonnen veldnaam of een veld van een ander contracttype wordt geweigerd.
 - Bereken of schat NOOIT capa_key_code, project_capakey, oppervlakte_m2 of project_oppervlakte_terrein. Een rijksregisternummer vul je alleen in als het letterlijk in een klantmail van minder dan een jaar oud staat (bron: die mail met datum); anders leeg en bij 'ontbreekt'.
-- Het mandaat is: invullen en een proef maken. Zet daarom voor elke keuze die de proef blokkeert (architectuur_scope, uitvoeringswijze_label, hoedanigheid, bestemming, type bouwproject, bouwproject_oppervlakte_m2) de best onderbouwde waarde uit de gesprekken, transcripten en mails, en meld ze onder 'keuzes_vastgelegd' mét bron zodat Mehdi ze nakijkt. Laat een keuze alleen leeg als de bronnen er echt niets over zeggen; zeg dan bij 'ontbreekt' wat Mehdi moet beslissen.
+- Het mandaat is: invullen en een proef maken. Zet daarom voor elk veld en elke keuze die de proef blokkeert (veldenschema.master.<soort>.verplicht en de keuzes van 'voorbereiding') de best onderbouwde waarde uit de gesprekken, transcripten en mails, en meld ze onder 'keuzes_vastgelegd' mét bron zodat Mehdi ze nakijkt. Laat een keuze alleen leeg als de bronnen er echt niets over zeggen; zeg dan bij 'ontbreekt' wat Mehdi moet beslissen.
 - Overschrijf nooit een veld dat als bevestigd door de klant of vastgelegd door Mehdi staat.
 - Elke 'gegevens'-post heeft een concrete bron met datum. Geen bron = niet invullen, wel melden.
 - Bedragen als '50.000,00'; percentages als getal ('14').

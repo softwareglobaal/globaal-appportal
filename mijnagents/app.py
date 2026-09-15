@@ -777,6 +777,20 @@ def agent_status():
     v = p.get("voorstel")
     if isinstance(v, dict) and v.get("actie"):
         params = v.get("parameters")
+        # Eén open voorstel per agent, runbook en deal: een nieuw voorstel
+        # (bv. een ander nummer) vervangt het vorige, anders blijven er twee
+        # tegenstrijdige voorstellen open staan (deal 14531: 2616 en 5609).
+        deal = (params or {}).get("deal_id") if isinstance(params, dict) else None
+        if deal is not None and v.get("runbook"):
+            for r in conn.execute("SELECT id, parameters FROM voorstel WHERE naam=? AND runbook=? AND status='open'",
+                                  (naam, v["runbook"])).fetchall():
+                try:
+                    oud_deal = json.loads(r["parameters"] or "{}").get("deal_id")
+                except Exception:
+                    oud_deal = None
+                if str(oud_deal) == str(deal):
+                    conn.execute("UPDATE voorstel SET status='vervallen', besluit_door='systeem', besluit_ts=?, "
+                                 "bewijs=? WHERE id=?", (nu(), f"vervangen door een nieuw voorstel: {v['actie']}", r["id"]))
         conn.execute(
             "INSERT INTO voorstel(naam,actie,doel,reden,parameters,runbook,ts) "
             "VALUES(?,?,?,?,?,?,?)",
