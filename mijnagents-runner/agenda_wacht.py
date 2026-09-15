@@ -42,8 +42,6 @@ KALENDERS = {
     "385ee9ff8749fe5e5929090550d42611f4ce2437d11b56f3d4d943619b4c479f@group.calendar.google.com": "Lara",
     "bfe28ee64dc72b449582af5e6a9fc6af3669709adf07adc8b49eb97666f07981@group.calendar.google.com": "Prive Buiten",
     "zoomafspraken@gmail.com": "zoomafspraken (sales via Calendly)",
-    "haagendalightprojects@gmail.com": "HA Light (klanten via Calendly)",
-    "96a221cfc30796d958e0b21ee24386299679e600aeb9638293f2bb51590bd84b@group.calendar.google.com": "H-Architects Buiten",
     "en.be#holiday@group.v.calendar.google.com": "Feestdagen BE",
 }
 FIRMA_AFDELING = {"HA": "h-architects", "UNABO": "unabo", "HB": "harmoniebouw", "HARMONIEBOUW": "harmoniebouw",
