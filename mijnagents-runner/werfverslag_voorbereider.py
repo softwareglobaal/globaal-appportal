@@ -164,7 +164,7 @@ def bezoeken_in(projectmap):
             eigenaar["fotos"] += 1
         elif laag.endswith(OPNAME_EXT):
             eigenaar["opnames"].append(naam)
-        elif TRANSCRIPT_PAT.search(naam) and laag.endswith((".md", ".txt", ".docx")):
+        elif TRANSCRIPT_PAT.search(naam) and laag.endswith((".md", ".txt", ".docx")) and not re.search(r"niet getranscribeerd|geen opname|00 fotos", laag):
             eigenaar["transcripten"].append(naam)
         elif VERSLAG_PAT.search(naam) and laag.endswith((".docx", ".pdf", ".md")):
             eigenaar["verslagen"].append(naam)
