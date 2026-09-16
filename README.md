@@ -89,13 +89,16 @@ which is the default). After creating a user:
 
 Every user now has to enroll a TOTP app at their first login.
 
-### 2.4 Cap the Authentik session at 8 hours
+### 2.4 Set the Authentik session to 24 hours
 
 *Flows and Stages → Stages → `default-authentication-login`* (edit):
 
-- **Session duration**: `hours=8`
+- **Session duration**: `hours=24`
 
-This matches the portal's own 8-hour session so neither outlives the other.
+Was 8 hours, which meant logging in again within a working day. With 24 hours a
+user signs in once a day at most. The proxy providers keep their one hour access
+token on purpose: those refresh silently while the session lives, and that
+refresh is where revoked access takes effect.
 
 ### 2.5 Create the portal's OIDC provider + application
 

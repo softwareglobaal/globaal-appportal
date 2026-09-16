@@ -197,7 +197,10 @@ cutover niet geraakt:
   regelt alleen de tegel-zichtbaarheid.
 - **TOTP verplicht:** stage `default-authentication-mfa-validation` → niet
   geconfigureerd = forceren + TOTP-setup-stage.
-- **Sessieduur:** 8 uur (`default-authentication-login`).
+- **Sessieduur:** 24 uur (`default-authentication-login`), sinds 16-09-2026; was
+  8 uur. De proxy-providers houden bewust een toegangstoken van een uur: dat
+  vernieuwt stil zolang de sessie leeft, en juist daar werkt het intrekken van
+  rechten door.
 
 De Authentik-config wordt aangemaakt door de scripts (zie §7), niet handmatig.
 

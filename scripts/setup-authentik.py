@@ -136,13 +136,17 @@ if mfa and totp_setup:
     mfa.configuration_stages.set([totp_setup])
     print("mfa: users without an authenticator are forced to enroll TOTP")
 
-# --- cap the Authentik session at 8 hours (README 2.4) ------------------------
+# --- de Authentik-sessie duurt een etmaal --------------------------------------
+# Was 8 uur, maar dan moet je binnen een werkdag opnieuw aanmelden. Met 24 uur
+# log je hooguit een keer per dag in. De app-tokens van de forward-auth blijven
+# bewust op een uur staan: die vernieuwen zichzelf stil zolang de sessie leeft,
+# en juist bij die vernieuwing werkt het intrekken van rechten door.
 from authentik.stages.user_login.models import UserLoginStage
 
 UserLoginStage.objects.filter(name="default-authentication-login").update(
-    session_duration="hours=8"
+    session_duration="hours=24"
 )
-print("session duration: hours=8 on default-authentication-login")
+print("session duration: hours=24 on default-authentication-login")
 
 # --- assign all proxy providers to the embedded outpost ----------------------
 outpost = Outpost.objects.filter(managed="goauthentik.io/outposts/embedded").first()
