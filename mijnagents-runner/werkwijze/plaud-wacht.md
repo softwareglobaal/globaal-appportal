@@ -82,9 +82,15 @@ Mehdi's claude.ai-account.
   en `gesprek.json`. De Plaud-routine op claude.ai zet de getekende audiolink
   (`audio_url`, 24 uur geldig) in de kop van het inboxbestand; ik haal het bestand
   binnen die tijd op. Ontbreekt de link, dan meld ik dat per opname in mijn logboek.
-- **Mapnaam** = `JJJJ-MM-DD UUMM Hoofdpersoon`, bijvoorbeeld
-  `2026-09-10 1347 Mehdi Chegini`: jaar, maand, dag, uur en minuut van de start
-  in Belgische tijd, dan de hoofdpersoon. Zelfde regel als bij De Fathomwacht.
+- **Mapnaam sinds 17-09-2026** = `JJJJ-MM-DD UUMM <naam in Plaud>`, **plat in het archief, zonder
+  jaarmap**: de datum rangschikt zichzelf. Bijvoorbeeld
+  `2026-09-16 1521 Vergadering Keuze en plaatsing nieuwe voordeur Bittawiri straat`.
+  Het voorvoegsel `MM-DD ` dat Plaud zelf voor zijn titels zet gaat eraf (dubbel met de datum),
+  een opname zonder eigen titel heet `... zonder titel`, en tekens die Dropbox niet in een
+  mapnaam wil worden een spatie. Dezelfde regel staat in `archiefmap()` in `plaud_wacht.py` en in
+  `plaud/mapnaam.py`, dat het volledige archief ophaalde; wie er een verandert, verandert ze allebei.
+  Tot die datum heette een map `JJJJ-MM-DD UUMM Hoofdpersoon` (zoals bij De Fathomwacht); oude
+  mappen in `Plaud/2026/` heten nog zo.
 - Alles wat ik archiveer komt via de Mac van Mehdi in Dropbox **Data uit Mehdi/Plaud**.
 
 ## Wat ik nooit doe

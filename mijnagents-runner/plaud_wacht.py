@@ -31,6 +31,31 @@ ARCHIEF = os.path.expanduser(os.environ.get("PLAUD_ARCHIEF_PAD", "~/appportal/mi
 AFDELING_VAN_TITEL = re.compile(r"\[(HA|UNABO|HB|CONTRAX|PRIVE)", re.I)
 
 
+ALLEEN_TIJD = re.compile(r"^\s*\d{4}[-/ ]?\d{2}[-/ ]?\d{2}[ T]\d{2}[:.]?\d{2}([:.]?\d{2})?\s*$")
+VOORVOEGSEL = re.compile(r"^\s*\d{1,2}-\d{1,2}\s+")
+VERBODEN_TEKEN = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
+
+
+def archiefmap(start, naam_in_plaud):
+    """`JJJJ-MM-DD UUMM <naam in Plaud>`, plat in het archief (Mehdi, 17-09-2026).
+
+    Geen jaarmap meer: de datum rangschikt zichzelf. Plaud zet zelf `MM-DD ` voor
+    zijn titels; dat is dubbel met de datum en gaat eraf. Zelfde regel als
+    `plaud/mapnaam.py`, dat het volledige archief heeft opgehaald; wie er een
+    verandert, verandert ze allebei.
+    """
+    stempel = (start or "")[:16].replace("T", " ").replace(":", "")
+    n = (naam_in_plaud or "").strip()
+    if not n or ALLEEN_TIJD.match(n):
+        n = "zonder titel"
+    else:
+        n = VOORVOEGSEL.sub("", n)
+        n = VERBODEN_TEKEN.sub(" ", n).replace("–", "-")
+        n = re.sub(r"\s+", " ", n).strip(" .-") or "zonder titel"
+    uit = f"{stempel} {n}"
+    return uit[:110].rstrip(" ,;-") + "…" if len(uit) > 110 else uit
+
+
 def kop_van(tekst):
     """De kopregels uit een routinebestand (plaud_id, account, start, duur_minuten, naam_in_plaud)."""
     uit = {}
@@ -106,9 +131,8 @@ def verwerk_bestand(e, bron_map, personen, deals, gezien_ids):
     extra = (f"\n\n[context] agenda op {start[:10]}: " + "; ".join(afspraken[:6]) + (f"\n[context] locatie om {start[11:16]}: {plek}" if plek else "")
              + "\n[regel] Lees de eerste minuut op Mehdi's openingszin (waar, met wie, wat). Sprekers heten 'Speaker N'; herleid ze uit wat ze zeggen.")
     herk = fw.herken(g, tekst[:6000] + extra, personen, deal, hoe)
-    # archief
-    jaar = start[:4] or "onbekend"
-    map_ = os.path.join(ARCHIEF, jaar, f"{start.replace('T', ' ').replace(':', '')} {fw.veilige_naam(herk.get('hoofdpersoon') or e['name'])}")
+    # archief: plat, met de naam die Plaud aan de opname geeft (afspraak Mehdi 17-09-2026)
+    map_ = os.path.join(ARCHIEF, archiefmap(start, kop.get("naam_in_plaud") or e["name"]))
     if not os.path.exists(os.path.join(map_, "gesprek.json")):
         os.makedirs(map_, exist_ok=True)
         open(os.path.join(map_, "transcript.md"), "w", encoding="utf-8").write(tekst)

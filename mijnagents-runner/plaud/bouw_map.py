@@ -66,8 +66,25 @@ def schrijf_transcript(uitingen: list, kop: dict) -> str:
     return "\n".join(regels) + "\n"
 
 
+LIJST = Path(__file__).parent / "plaud_lijst.json"
+
+
+def _vul_aan(op: dict) -> dict:
+    """Naam, starttijd en duur komen uit de opgehaalde Plaud-lijst, niet uit
+    overgetypte tekst: zo kan een tikfout de mapnaam niet meer bepalen."""
+    if not LIJST.exists():
+        return op
+    for r in json.loads(LIJST.read_text(encoding="utf-8")):
+        if r.get("id") == op.get("id"):
+            for k in ("name", "start_at", "duration"):
+                if r.get(k) is not None:
+                    op[k] = r[k]
+            break
+    return op
+
+
 def main(pad_invoer: str) -> int:
-    op = json.loads(Path(pad_invoer).read_text(encoding="utf-8"))
+    op = _vul_aan(json.loads(Path(pad_invoer).read_text(encoding="utf-8")))
     naam = mapnaam(op)
     map_ = DOEL / naam
     map_.mkdir(parents=True, exist_ok=True)
@@ -93,6 +110,8 @@ def main(pad_invoer: str) -> int:
         except Exception as e:
             verslag["fouten"].append(f"transcript: {type(e).__name__} {str(e)[:120]}")
     else:
+        (map_ / "geen-transcript.txt").write_text(
+            "Deze opname is in Plaud nooit getranscribeerd.\n", encoding="utf-8")
         verslag["transcript"] = "niet getranscribeerd in Plaud"
 
     # audio
