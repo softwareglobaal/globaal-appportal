@@ -80,7 +80,9 @@ class Agent:
 
 
 def klaargezet_voor(voor, sleutel=None, afdeling=None, status="klaar", n=100):
-    q = {"voor": voor, "status": status, "n": n}
+    q = {"status": status, "n": n}
+    if voor:
+        q["voor"] = voor
     if sleutel:
         q["sleutel"] = sleutel
     if afdeling:

@@ -184,6 +184,16 @@ def verzoeken_op_bord(deal_id, titel, gaten):
                       "inhoud": f"Dossier {titel} (deal {deal_id}). Moment: {m['datum']} {m.get('tijd', '')} {m['soort']} "
                                 f"— {m.get('titel', '')}. Op te vragen bij: {m.get('opvragen_bij', '')}. "
                                 f"Zet het bewijs in de salesmap; De Contractmaker bouwt de tijdlijn dan opnieuw."})
+    # Verzoeken waarvan het bewijs er intussen is, sluiten (opgepakt): anders blijft
+    # het bord vol staan met wat al opgelost is.
+    open_unieks = {it["uniek"] for it in items}
+    try:
+        import bord as bord_mod
+        for k in bord_mod.klaargezet_voor(None, sleutel=str(deal_id), n=200) or []:
+            if k.get("soort") == "verzoek" and k.get("uniek") and k["uniek"] not in open_unieks:
+                bord_mod.opgepakt(k["id"], NAAM)
+    except Exception as e:  # noqa: BLE001
+        print("verzoeken sluiten mislukt:", e, file=sys.stderr)
     if not items:
         return
     req = urllib.request.Request(f"{PLATFORM}/api/klaarzet", data=json.dumps({"items": items}).encode(),
