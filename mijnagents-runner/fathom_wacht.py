@@ -5,8 +5,12 @@ gesprekkentabel bij, en zet klaar voor de afdelingen. Werkwijze v2 (10-09-2026):
 het volledige proces staat op het bord (werkwijze/fathom-wacht.md is het zaad).
 
 Twee keer per dag (07:00, 13:00) en op verzoek via De Regisseur (agent_ronde).
-Archief: FATHOM_ARCHIEF_PAD (standaard mijnagents-data/fathom op de VM; later de
-privé-Dropbox van Mehdi). Nooit overschrijven, nooit verwijderen.
+Archief: FATHOM_ARCHIEF_PAD (standaard mijnagents-data/fathom-data op de VM, plat:
+één map per gesprek `JJJJ-MM-DD UUMM <titel in Fathom>`, sinds 18-09-2026 zonder
+jaarmap en zonder Prive-submap; de privé-vlag staat in gesprek.json). De launchd-sync
+op de Mac haalt die map naar Dropbox `Data uit Mehdi/Fathom data`. Nooit overschrijven,
+nooit verwijderen. Het volledige archief (sinds 2024) is opgehaald door
+fathom_haal_alles.py; dit script houdt het bij.
 """
 import json
 import os
@@ -29,7 +33,8 @@ import pipedrive  # noqa: E402
 NAAM = "fathom-wacht"
 ag = bord.Agent(NAAM)
 DAGEN = int(os.environ.get("FATHOM_WACHT_DAGEN", "14"))
-ARCHIEF = os.path.expanduser(os.environ.get("FATHOM_ARCHIEF_PAD", "~/appportal/mijnagents-data/fathom"))
+ARCHIEF = os.path.expanduser(os.environ.get("FATHOM_ARCHIEF_PAD", "~/appportal/mijnagents-data/fathom-data"))
+VERBODEN_TEKEN = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
 MODEL = os.environ.get("FATHOM_WACHT_MODEL", "claude-sonnet-5")
 AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "tkn", "elevait", "regie", "prive")
 # Kenmerken in het e-mailadres van de opnemer waaraan we Mehdi's eigen Fathom-sleutel herkennen
@@ -133,26 +138,41 @@ def belgisch(iso):
         return iso[:16]
 
 
+def archiefmap(g, uniek=False):
+    """`JJJJ-MM-DD UUMM <titel in Fathom>`, plat in het archief (Mehdi, 18-09-2026).
+
+    Geen jaarmap en geen Prive-submap meer: de datum rangschikt zichzelf en de privé-vlag
+    staat in gesprek.json. Botst de naam met een ander gesprek (uniek=True), dan komt het
+    recording_id erachter. Dezelfde regel staat in fathom_haal_alles.py, dat het volledige
+    archief ophaalde; wie er een verandert, verandert ze allebei.
+    """
+    start = belgisch(g.get("recording_start_time") or g.get("created_at") or "").replace("T", " ").replace(":", "")
+    titel = VERBODEN_TEKEN.sub(" ", g.get("title") or g.get("meeting_title") or "").replace("–", "-")
+    titel = re.sub(r"\s+", " ", titel).strip(" .-") or "zonder titel"
+    staart = f" [{g.get('recording_id')}]" if uniek else ""
+    naam = f"{start} {titel}"
+    if len(naam) + len(staart) > 110:
+        naam = naam[:110 - len(staart)].rstrip(" ,;-") + "…"
+    return naam + staart
+
+
+_INDEX = None
+
+
 def bestaande_map(g):
-    """De archiefmap van dit gesprek als ze al bestaat (gewone jaarmap of Prive/jaar), anders ''."""
-    jaar = (belgisch(g.get("recording_start_time") or "") or "x")[:4]
-    for basis in (os.path.join(ARCHIEF, jaar), os.path.join(ARCHIEF, "Prive", jaar)):
-        if not os.path.isdir(basis):
-            continue
-        for p in os.listdir(basis):
-            gj = os.path.join(basis, p, "gesprek.json")
+    """De archiefmap van dit gesprek als ze al bestaat, gezocht op recording_id (één keer
+    per ronde een index over alle mappen; de titel in Fathom kan later veranderd zijn)."""
+    global _INDEX
+    if _INDEX is None:
+        _INDEX = {}
+        for p in (os.listdir(ARCHIEF) if os.path.isdir(ARCHIEF) else []):
+            gj = os.path.join(ARCHIEF, p, "gesprek.json")
             try:
-                if os.path.exists(gj) and json.load(open(gj)).get("recording_id") == g.get("recording_id"):
-                    return os.path.join(basis, p)
+                if os.path.exists(gj):
+                    _INDEX[json.load(open(gj)).get("recording_id")] = os.path.join(ARCHIEF, p)
             except (OSError, ValueError):
                 continue
-    return ""
-
-
-def pad_delen(g):
-    """Jaarmap (Belgische tijd) van een gesprek; bestaande mappen worden in main gezocht in
-    zowel de gewone jaarmap als Prive/jaar."""
-    return ((belgisch(g.get("recording_start_time") or "") or "x")[:4],)
+    return _INDEX.get(g.get("recording_id"), "")
 
 
 def veilige_naam(t):
@@ -160,13 +180,23 @@ def veilige_naam(t):
 
 
 def bewaar(g, tekst, herkenning):
-    start = belgisch(g.get("recording_start_time") or g.get("created_at") or "").replace("T", " ").replace(":", "")
-    hoofd = herkenning.get("hoofdpersoon") or (g.get("title") or g.get("meeting_title") or "")
-    # privé-gesprekken apart (Mehdi, 12-09-2026), zodat die map later afgeschermd kan worden
-    map_ = os.path.join(ARCHIEF, *(("Prive",) if herkenning.get("prive") else ()), start[:4] or "onbekend", f"{start} {veilige_naam(hoofd)}")
-    if os.path.exists(os.path.join(map_, "gesprek.json")):
-        return map_, False
+    map_ = os.path.join(ARCHIEF, archiefmap(g))
+    gj = os.path.join(map_, "gesprek.json")
+    if os.path.exists(gj):
+        try:
+            ander = json.load(open(gj)).get("recording_id")
+        except (OSError, ValueError):
+            ander = None
+        if ander == g.get("recording_id"):
+            return map_, False
+        map_ = os.path.join(ARCHIEF, archiefmap(g, uniek=True))   # naambotsing
+        if os.path.exists(os.path.join(map_, "gesprek.json")):
+            return map_, False
     os.makedirs(map_, exist_ok=True)
+    ruw = g.get("transcript") if isinstance(g.get("transcript"), list) else []
+    open(os.path.join(map_, "transcript.json"), "w", encoding="utf-8").write(json.dumps(ruw, ensure_ascii=False, indent=1))
+    if not ruw and not tekst:
+        open(os.path.join(map_, "geen-transcript.txt"), "w", encoding="utf-8").write("Fathom heeft voor dit gesprek geen transcript.\n")
     kop = (f"# {g.get('title') or g.get('meeting_title') or ''}\n\nBelgische tijd: {belgisch(g.get('recording_start_time', '')).replace('T', ' ')} tot {belgisch(g.get('recording_end_time', '')).replace('T', ' ')}\n"
            f"Fathom (UTC) {g.get('recording_start_time', '')} tot "
            f"{g.get('recording_end_time', '')} · {g.get('url', '')}\nDeellink: {g.get('share_url', '')}\n"
@@ -252,7 +282,7 @@ def main():
             al = bestaande_map(g)
             if al:
                 herk = json.load(open(os.path.join(al, "gesprek.json"))).get("herkenning", {})
-                map_, nieuw = os.path.join(ARCHIEF, (g.get("recording_start_time") or "x")[:4], al[0]), False
+                map_, nieuw = al, False
             else:
                 herk = herken(g, tekst, personen, deal, hoe)
                 map_, nieuw = bewaar(g, tekst, herk)
@@ -299,7 +329,7 @@ def main():
             regels += [f"| {r['start']} | {r['minuten']} | {r['personen']} | {r['bedrijf']} | {r['afdeling']} | {r['thema'][:50]} | {r['project'][:40]} | {'ja' if r['prive'] else ''} |" for r in sorted(lijst, key=lambda x: x["start"])]
             open(os.path.join(ARCHIEF, "logboek", f"{dag}.md"), "w", encoding="utf-8").write("\n".join(regels) + "\n")
         # kopie van het archief naar Mehdi's eigen Dropbox (alleen wat nieuw is)
-        sp = dropbox_prive.spiegel_map(ARCHIEF, "/Fathom")
+        sp = dropbox_prive.spiegel_map(ARCHIEF, "/Fathom data")
         if sp["verstuurd"] or sp["fout"]:
             ag.log("Fathom", "schrijf", f"Dropbox privé: {sp['verstuurd']} bestand(en) verstuurd, {sp['rest']} nog te gaan"
                    + (f"; fout: {sp['fout']}" if sp["fout"] else ""))

@@ -48,12 +48,15 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
    hij niet een halve dag hoeft te wachten.
 2. **Alles ophalen** van de laatste veertien dagen, met transcript, van elke
    sleutel. Wat ik al heb, doe ik niet opnieuw (gesprek-id).
-3. **Bewaren op onze eigen plek**, per gesprek een map
-   `<jaar>/<datum tijd> <titel of hoofdpersoon>/` met `transcript.md`
-   (sprekers en tijden), `samenvatting.md` (van Fathom, als er een is),
-   `actiepunten.md`, `hoogtepunten.md` en `gesprek.json` (alle metadata, de
-   deellink). Nu op de VM in `mijnagents-data/fathom/`; zodra Mehdi's eigen
-   privé-Dropbox aan de VM hangt, daar. Nooit iets overschrijven of verwijderen.
+3. **Bewaren op onze eigen plek**, per gesprek een map, plat (geen jaarmap),
+   `JJJJ-MM-DD UUMM <titel in Fathom>/` met `transcript.md` (sprekers en tijden),
+   `transcript.json` (de ruwe uitingen, de bron), `samenvatting.md` (van Fathom,
+   als er een is), `actiepunten.md`, `hoogtepunten.md`, `gesprek.json` (alle
+   metadata, de deellink, mijn herkenning) en de link naar de video. Op de VM in
+   `mijnagents-data/fathom-data/`; de Mac van Mehdi haalt die map elk half uur naar
+   Dropbox `Data uit Mehdi/Fathom data`. Nooit iets overschrijven of verwijderen.
+   Het volledige archief sinds oktober 2024 is op 18-09-2026 in één keer opgehaald
+   met `fathom_haal_alles.py`; ik houd het sindsdien bij.
 4. **Herkennen**: uit de deelnemers (e-mail, naam, intern of extern), het
    transcript en de titel bepaal ik met de tabel "Betrokken personen" en
    Pipedrive: welke personen, welk bedrijf, welke afdeling, welk dossier of
@@ -87,12 +90,17 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
   `video.md` met dezelfde link. Wil Mehdi het bestand zelf, dan kan dat alleen met
   de hand op fathom.video (knop Download) of via een Fathom-plan met export; dat
   meld ik als nood zolang het zo is.
-- **Mapnaam** = `JJJJ-MM-DD UUMM Hoofdpersoon`, bijvoorbeeld
-  `2026-09-11 1321 Roger Cox`: jaar, maand, dag, uur en minuut van de start in
-  Belgische tijd, dan de hoofdpersoon. Zo sorteert alles chronologisch. Wil Mehdi
-  een ander scheidingsteken (bv. `13u21`), dan zegt hij dat en pas ik het overal
-  tegelijk aan, ook in Data uit Mehdi.
-- Alles wat ik archiveer komt via de Mac van Mehdi in Dropbox **Data uit Mehdi/Fathom**.
+- **Mapnaam sinds 18-09-2026** = `JJJJ-MM-DD UUMM <titel in Fathom>`, plat in het
+  archief, zonder jaarmap: jaar, maand, dag, uur en minuut van de start in Belgische
+  tijd, dan de titel zoals Fathom hem geeft. Botst de naam met een ander gesprek, dan
+  komt het recording_id erachter. Dezelfde regel staat in `archiefmap()` in
+  `fathom_wacht.py` en in `fathom_haal_alles.py`; wie er een verandert, verandert ze
+  allebei. Let op: bijna elke titel in Fathom is "Impromptu Zoom Meeting" (gemeten
+  18-09: 259 van de eerste 297). Een betekenisvolle naam uit inhoud, agenda en
+  dossier is de volgende stap, met Mehdi's regels; tot dan blijft de Fathom-titel.
+  Tot 18-09 heette een map `JJJJ-MM-DD UUMM Hoofdpersoon` in `<jaar>/`; de oude
+  mappen in `Fathom/2026/` en `Fathom/Prive/` heten nog zo tot ze opgeruimd zijn.
+- Alles wat ik archiveer komt via de Mac van Mehdi in Dropbox **Data uit Mehdi/Fathom data**.
 
 ## Belgische tijd, privé apart, deellink (mandaat van Mehdi, 12-09-2026)
 
@@ -103,10 +111,11 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
   vanuit een andere tijdzone; ik maak daar geen opmerking over.
   Les: tot 12-09-2026 stonden de mapnamen in UTC (twee uur te vroeg); alle 211 mappen
   zijn die dag hernoemd, ook in Dropbox.
-- **Privé apart**: een gesprek dat ik als privé herken (bv. met Angela, of persoonlijk)
-  komt in `Fathom/Prive/<jaar>/...`, niet tussen de werkgesprekken. Zo kan Mehdi de
-  werkmappen delen en de map Prive niet. Twijfel ik, dan werk; Mehdi verplaatst dan
-  zelf en ik leer daaruit via de tabel.
+- **Privé als vlag, niet als map** (sinds 18-09-2026): een gesprek dat ik als privé
+  herken (bv. met Angela, of persoonlijk) krijgt `prive: true` in de herkenning in
+  `gesprek.json` en staat gewoon tussen de andere mappen, want het archief is plat.
+  Wie deelt, filtert op die vlag. Tot 18-09 stond privé apart in `Fathom/Prive/<jaar>/`.
+  Twijfel ik, dan werk; Mehdi zet de vlag dan zelf en ik leer daaruit via de tabel.
 - **Deellink**: de Fathom-deellink (`share_url`) opent zonder login; gemeten op
   12-09-2026 met een browser zonder Fathom-account: video, transcript en samenvatting
   zichtbaar. Een collega kan de link dus gewoon openen. De gewone link
