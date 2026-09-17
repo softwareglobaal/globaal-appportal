@@ -8,4 +8,20 @@ server {
     # gaan als X-authentik-* headers naar de Node-app.
     set $app_upstream http://app-communicatie:3008;
     include /etc/nginx/snippets/forward-auth.conf;
+
+    # Werk-luik voor de lokale transcriptiewerker (de Linux-pc die de opnames
+    # met Whisper uitschrijft). Die machine heeft geen Authentik-sessie en geen
+    # publiek adres; hij haalt zijn werk zelf op met een eigen bearer-token dat
+    # de app controleert. Zolang TRANSCRIPTIE_WORKER_TOKEN niet in .env staat,
+    # antwoordt de app hier met 404.
+    # Opnames zijn klein (ongeveer 0,5 MB per kwartier), maar de limiet staat
+    # ruim zodat een lang gesprek niet halverwege afknapt.
+    location ^~ /werker {
+        client_max_body_size 64m;
+        proxy_read_timeout 300s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
 }

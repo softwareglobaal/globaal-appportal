@@ -518,6 +518,9 @@ services:
       PLAUD_MODUS: ${PLAUD_MODUS:-}
       PLAUD_WEB_TOKEN: ${PLAUD_WEB_TOKEN:-}
       PLAUD_WEB_TAAL: ${PLAUD_WEB_TAAL:-}
+      # Lokale transcriptiewerker (migratie 152): de Linux-pc met Whisper haalt
+      # zijn werk op via /werker met dit token. Leeg = het luik bestaat niet.
+      TRANSCRIPTIE_WORKER_TOKEN: ${TRANSCRIPTIE_WORKER_TOKEN:-}
       # Contactherkenning (migratie 151): externe nummers uit het belarchief
       # opzoeken in de vijf Pipedrive-administraties. Leest alleen en kost
       # niets; zonder tokens herkent hij alleen onze eigen nummers.
