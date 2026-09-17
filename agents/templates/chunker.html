@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Algemene chunker</title>
+<style>
+  :root {
+    --bg: #f5f6f7; --paneel: #ffffff; --lijn: #e4e7ea; --lijn-sterk: #d5dade;
+    --tekst: #1e2830; --tekst-2: #5c6771; --tekst-3: #8d959d;
+    --accent: #2f4a63;
+    --goed: #2f7d5a; --fout: #a63d3d; --stil: #b3bac0; --live: #3663a0;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--tekst);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         font-size: 14px; line-height: 1.5; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 26px 22px 60px; }
+  .kop { border-bottom: 1px solid var(--lijn); padding-bottom: 14px; margin-bottom: 22px; }
+  .kop h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .kop .sub { color: var(--tekst-2); font-size: 12.5px; margin-top: 3px; max-width: 760px; }
+  .kop-link { display: inline-block; margin-top: 10px; margin-right: 6px;
+              border: 1px solid var(--lijn-sterk); background: var(--paneel);
+              color: var(--tekst); border-radius: 5px; padding: 5px 12px;
+              font-size: 12.5px; font-weight: 500; }
+  .kop-link:hover { background: #f2f4f5; }
+
+  h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+       color: var(--tekst-2); margin: 28px 0 8px; }
+  .hint { color: var(--tekst-3); font-size: 12px; margin: 0 0 12px; max-width: 760px; }
+  .paneel { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px; }
+  .leeg { padding: 20px 14px; color: var(--tekst-3); font-size: 13px; }
+  .waarschuwing { border-left: 3px solid var(--fout); padding: 9px 13px; font-size: 13px;
+                  background: var(--paneel); border-radius: 5px; margin-bottom: 14px;
+                  border-top: 1px solid var(--lijn); border-right: 1px solid var(--lijn);
+                  border-bottom: 1px solid var(--lijn); }
+
+  .cijfers { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+             gap: 1px; background: var(--lijn); border: 1px solid var(--lijn);
+             border-radius: 6px; overflow: hidden; }
+  .cijfer { background: var(--paneel); padding: 13px 15px; }
+  .cijfer .getal { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+  .cijfer .naam { color: var(--tekst-3); font-size: 11.5px; text-transform: uppercase;
+                  letter-spacing: 0.04em; margin-top: 1px; }
+
+  .doc { border-bottom: 1px solid var(--lijn); padding: 15px 18px; }
+  .doc:last-child { border-bottom: none; }
+  .doc-kop { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline;
+             justify-content: space-between; }
+  .doc-naam { font-weight: 600; font-size: 14px; }
+  .doc-meta { color: var(--tekst-3); font-size: 12px; }
+
+  .keten { display: flex; flex-wrap: wrap; gap: 0; margin: 12px 0 2px;
+           border: 1px solid var(--lijn); border-radius: 5px; overflow: hidden; }
+  .stap { flex: 1 1 190px; padding: 9px 12px; border-right: 1px solid var(--lijn);
+          min-width: 0; }
+  .stap:last-child { border-right: none; }
+  .stap .label { color: var(--tekst-3); font-size: 10.5px; text-transform: uppercase;
+                 letter-spacing: 0.05em; }
+  .stap .waarde { font-size: 13px; font-weight: 500; margin-top: 2px;
+                  word-break: break-word; }
+  .stap .onder { color: var(--tekst-2); font-size: 11.5px; }
+
+  .poorten { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+             gap: 8px; margin-top: 10px; }
+  .poort { border: 1px solid var(--lijn); border-radius: 5px; padding: 8px 11px;
+           border-left-width: 3px; }
+  .poort.gehaald { border-left-color: var(--goed); }
+  .poort.gevallen { border-left-color: var(--fout); }
+  .poort.niet-gedraaid { border-left-color: var(--stil); }
+  .poort .naam { font-size: 12.5px; font-weight: 600; }
+  .poort .cijfer { color: var(--tekst-2); font-size: 11.5px; font-family: var(--mono); }
+  .poort.niet-gedraaid .naam { color: var(--tekst-3); font-weight: 500; }
+
+  .merk { display: inline-block; border: 1px solid var(--lijn-sterk); border-radius: 3px;
+          padding: 1px 6px; font-size: 11.5px; font-family: var(--mono);
+          color: var(--tekst-2); background: #fafbfb; }
+  .merk.soort { border-color: var(--live); color: var(--live); }
+
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--tekst-2); font-size: 12px; }
+  summary:hover { color: var(--tekst); }
+  pre { background: #fafbfb; border: 1px solid var(--lijn); border-radius: 5px;
+        padding: 11px 13px; font-family: var(--mono); font-size: 11.5px;
+        overflow-x: auto; margin: 9px 0 0; }
+  .uitleg { margin: 9px 0 0; font-size: 12.5px; color: var(--tekst-2); }
+  .uitleg b { color: var(--tekst); font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+       color: var(--tekst-3); font-weight: 600; padding: 9px 14px;
+       border-bottom: 1px solid var(--lijn); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--lijn); vertical-align: top;
+       font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  .familie td { background: #fafbfb; font-weight: 600; font-size: 12px; }
+  .familie .om { color: var(--tekst-3); font-weight: 400; }
+  .mono { font-family: var(--mono); font-size: 11.5px; color: var(--tekst-2); }
+  .stand-gereed { color: var(--goed); font-weight: 500; }
+  .stand-wacht { color: var(--tekst-3); }
+  .nb { color: var(--tekst-3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kop">
+    <h1>Algemene chunker</h1>
+    <div class="sub">
+      Eén chunker voor alle corpora. De agent leest eerst zelf wat voor bron een
+      document is en hoe je het wil terugvinden, en kiest daarna de snijmethode
+      die bij die soort hoort. Achteraf bewijst de invariantenpoort dat het
+      snijden de bron niet heeft beschadigd; zonder dat bewijs wordt er niets
+      geladen. Aangemeld als {{ username }}.
+    </div>
+    <a class="kop-link" href="/">Terug naar Agents</a>
+    <a class="kop-link" href="/ingestie">Document aanleveren</a>
+    <a class="kop-link" href="/kennisbanken">Kennisbanken</a>
+  </div>
+
+  {% if taxonomie_fout %}
+    <div class="waarschuwing">
+      De zoekdienst op de host is niet bereikbaar, dus de bronsoorten staan er
+      niet bij: {{ taxonomie_fout }}. De verwerkte documenten hieronder komen
+      uit de eigen database en kloppen wel.
+    </div>
+  {% endif %}
+
+  {% set sam = taxonomie.samenvatting if taxonomie and taxonomie.samenvatting else None %}
+  <div class="cijfers">
+    {% if sam %}
+    <div class="cijfer"><div class="getal">{{ sam.soorten }}</div><div class="naam">Bronsoorten</div></div>
+    <div class="cijfer"><div class="getal">{{ sam.families }}</div><div class="naam">Families</div></div>
+    <div class="cijfer"><div class="getal">{{ sam.doelen }}</div><div class="naam">Ophaaldoelen</div></div>
+    <div class="cijfer"><div class="getal">{{ sam.gereed }}</div><div class="naam">Nu door de keten</div></div>
+    {% endif %}
+    <div class="cijfer"><div class="getal">{{ rijen|length }}</div><div class="naam">Documenten</div></div>
+    <div class="cijfer">
+      <div class="getal">{{ rijen|selectattr('status', 'equalto', 'live')|list|length }}</div>
+      <div class="naam">Live</div>
+    </div>
+  </div>
+
+  <h2>Wat de agent met elk document deed</h2>
+  <p class="hint">
+    Per document: wat hij herkende, hoe hij daarom sneed, en of het bewijs stand
+    hield. Een poort die niet gedraaid heeft is grijs; dat is iets anders dan een
+    poort die viel.
+  </p>
+  <div class="paneel">
+    {% if rijen %}
+      {% for r in rijen %}
+      <div class="doc">
+        <div class="doc-kop">
+          <div>
+            <span class="doc-naam">{{ r.bestandsnaam }}</span>
+            {% if r.titel %}<span class="doc-meta"> &middot; {{ r.titel }}</span>{% endif %}
+          </div>
+          <div class="doc-meta">
+            {{ r.status }}{% if r.fase %} &middot; {{ r.fase }}{% endif %}
+            {% if r.corpus %} &middot; <span class="mono">{{ r.corpus }}</span>{% endif %}
+            &middot; {{ r.bijgewerkt_kort or r.aangeleverd_kort }}
+          </div>
+        </div>
+
+        {% if r.bronsoort %}
+        <div class="keten">
+          <div class="stap">
+            <div class="label">Herkend als</div>
+            <div class="waarde"><span class="merk soort">{{ r.bronsoort }}</span></div>
+            <div class="onder">
+              {{ r.drager or 'drager onbekend' }}, zekerheid {{ r.zekerheid or '?' }}
+            </div>
+          </div>
+          <div class="stap">
+            <div class="label">Om te kunnen</div>
+            <div class="waarde">{{ r.ophaaldoelen|join(', ') or '—' }}</div>
+            <div class="onder">bepaalt de grootte en de ouderlaag</div>
+          </div>
+          <div class="stap">
+            <div class="label">Dus gesneden met</div>
+            <div class="waarde">{{ r.strategie or '—' }}</div>
+            <div class="onder">
+              {% set n = r.detectoren|length %}
+              {% if n %}{{ n }} detector{{ '' if n == 1 else 'en' }} aan{% else %}—{% endif %}
+            </div>
+          </div>
+          <div class="stap">
+            <div class="label">Opgeleverd</div>
+            <div class="waarde">
+              {% if r.kinderen %}{{ r.kinderen }} fragmenten{% else %}—{% endif %}
+            </div>
+            <div class="onder">
+              {% if r.ouders %}{{ r.ouders }} ouders op {{ r.ouderniveau }}niveau{% else %}geen ouderlaag{% endif %}
+            </div>
+          </div>
+        </div>
+        {% elif not r.rapport_fout %}
+          <div class="uitleg nb">
+            Nog geen herkenning: {{ r.detail or 'dit document is nog niet verwerkt.' }}
+          </div>
+        {% endif %}
+
+        {% if r.bronsoort or r.status == 'afgekeurd' %}
+        <div class="poorten">
+          {% for p in r.poorten %}
+          <div class="poort {{ p.stand }}">
+            <div class="naam">{{ p.naam }}</div>
+            <div class="cijfer">{{ p.cijfer or 'niet gedraaid' }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if r.rapport_fout %}
+          <div class="uitleg"><b>{{ r.rapport_fout }}.</b> Wat de tegel wel weet:
+            {{ r.detail or 'niets' }}.</div>
+        {% endif %}
+
+        {% if r.waarom or r.zorgen or r.detectoren or r.rapport_mooi %}
+        <details>
+          <summary>Waarom deze keuze, en het hele rapport</summary>
+          {% if r.waarom %}
+            <p class="uitleg"><b>Motivering.</b> {{ r.waarom }}</p>
+          {% endif %}
+          {% if r.zorgen %}
+            <p class="uitleg"><b>Zorgen van het model.</b> {{ r.zorgen|join('; ') }}</p>
+          {% endif %}
+          {% if r.detectoren %}
+            <p class="uitleg"><b>Detectoren.</b>
+              {% for naam, aantal in r.detectoren.items() %}
+                <span class="merk">{{ naam }}: {{ aantal if aantal is not mapping else aantal|length }}</span>
+              {% endfor %}
+            </p>
+          {% endif %}
+          {% if r.ingekort %}
+            <p class="uitleg"><b>Ingekort.</b> Deze delen pasten niet in het
+              bewaarde rapport: {{ r.ingekort|join(', ') }}. Ze staan wel in de
+              journal (<span class="mono">journalctl -t ingestieagent</span>).</p>
+          {% endif %}
+          {% if r.rapport_mooi %}<pre>{{ r.rapport_mooi }}</pre>{% endif %}
+        </details>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="leeg">Nog geen documenten verwerkt.</div>
+    {% endif %}
+  </div>
+
+  {% if taxonomie and taxonomie.bronsoorten %}
+  <h2>Welke bronsoorten de chunker kent</h2>
+  <p class="hint">
+    De vaste lijst waaruit de herkenning moet kiezen; vrij benoemen geeft elke
+    keer een andere naam en dan valt er geen lezer aan te hangen. Per soort de
+    natuurlijke eenheid, de lezer die die eenheid oplevert en de snijmethodes die
+    erbij passen. Een soort is pas gereed als lezer, detectoren en strategieën er
+    alle drie zijn.
+  </p>
+  <div class="paneel">
+    <table>
+      <thead>
+        <tr>
+          <th>Bronsoort</th><th>Natuurlijke eenheid</th><th>Lezer</th>
+          <th>Snijmethode</th><th>Stand</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fam, f in taxonomie.families.items() %}
+          <tr class="familie">
+            <td colspan="5">{{ fam }} <span class="om">&middot; {{ f.omschrijving }}</span></td>
+          </tr>
+          {% for naam in f.soorten %}
+            {% set s = taxonomie.bronsoorten[naam] %}
+            <tr>
+              <td>
+                <span class="mono">{{ naam }}</span>
+                {% if not s.chunkprobleem %}
+                  <div class="nb" style="font-size:11.5px">geen chunkprobleem: hoort naar een record of schema</div>
+                {% endif %}
+              </td>
+              <td>{{ s.eenheid }}</td>
+              <td><span class="mono">{{ s.lezer }}</span></td>
+              <td class="mono">{{ s.strategieen|join(', ') or '—' }}</td>
+              <td>
+                {% if s.gereed %}
+                  <span class="stand-gereed">gereed</span>
+                {% else %}
+                  <span class="stand-wacht">wacht op {{ s.ontbreekt|join(', ') }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Waarvoor je het wil terugvinden</h2>
+  <p class="hint">
+    Het ophaaldoel bepaalt de granulariteit, niet de bronsoort alleen. Hetzelfde
+    document gaat anders de kast in als je eruit wil citeren dan als je er een
+    feit uit wil halen. Klein indexeren, groot teruggeven: het kind draagt de
+    vindplaats, de ouder geeft de context.
+  </p>
+  <div class="paneel">
+    <table>
+      <thead>
+        <tr>
+          <th>Ophaaldoel</th><th>Wat het is</th><th>Indexeren op</th>
+          <th>Teruggeven</th><th>Kind in tokens</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for naam, d in taxonomie.ophaaldoelen.items() %}
+        <tr>
+          <td><span class="mono">{{ naam }}</span></td>
+          <td>{{ d.omschrijving }}</td>
+          <td>{{ d.indexeer_op }}</td>
+          <td>{{ d.teruggeven }}{% if d.ouder %} <span class="nb">(ouder: {{ d.ouder }})</span>{% endif %}</td>
+          <td class="mono">{{ d.kind_tokens|join(' tot ') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>
