@@ -62,12 +62,32 @@ def bevries(deal_id: int):
     lopend = soort in ("addendum", "regularisatie")
     bronnen = ca.bronnen_mod.verzamel(salesmap, nummer if lopend else "", klant_email)
     werk = ca.mcp.call("dashboard_document", sleutel="werkinstructie")
+    # De test vertrekt van het dossier VÓÓR het modelwerk: alles wat als afgeleid of
+    # uit een gesprek in de Herkomst staat, en alle keuzes (behalve de soort), gaan
+    # eruit, zodat het model ze opnieuw moet leveren. Wat de klant, Pipedrive, een
+    # register of het kantoor gaf, blijft staan: dat is invoer, geen oordeel.
+    herkomst_vol = {g["sleutel"]: g for g in (voorb.get("herkomst") or {}).get("gevuld", [])}
+    weg = {k for k, g in herkomst_vol.items() if g.get("soort") in ("afgeleid", "gesprek", "dashboard")} | VRIJE_TEKST
+    keuzevelden = {k["veld"] for k in voorb.get("keuzes", []) if isinstance(k, dict) and k.get("veld") != "soort"}
+    weg |= keuzevelden
+    test_voorb = json.loads(json.dumps(voorb))
+    test_voorb["velden"] = {k: v for k, v in velden.items() if k not in weg}
+    test_voorb["herkomst"] = {
+        "gevuld": [g for g in herkomst_vol.values() if g["sleutel"] not in weg],
+        "ontbreekt": (voorb.get("herkomst") or {}).get("ontbreekt", []) + [
+            {"veld": herkomst_vol[k].get("veld", k), "sleutel": k, "verwacht_uit": "nog te bepalen"}
+            for k in sorted(weg) if k in velden and k not in VRIJE_TEKST and k in herkomst_vol],
+    }
+    test_voorb["keuzes"] = [dict(k, gekozen="" if k.get("veld") != "soort" else k.get("gekozen")) for k in voorb.get("keuzes", [])]
+    test_voorb["vrije_velden"] = [dict(v, waarde="") for v in voorb.get("vrije_velden", [])]
+    test_voorb["ontbreekt"] = [o["veld"] for o in test_voorb["herkomst"]["ontbreekt"]]
+    test_voorb["stand"] = "te vervolledigen"
     invoer = {
         "bevroren_op": datetime.now(timezone.utc).isoformat(), "deal_id": deal_id, "nummer": nummer, "soort": soort,
         "deal": {"id": deal.get("id"), "title": deal.get("title"), "value": deal.get("value"),
                  "person_name": (deal.get("person_id") or {}).get("name") if isinstance(deal.get("person_id"), dict) else deal.get("person_name"),
                  "org_name": (deal.get("org_id") or {}).get("name") if isinstance(deal.get("org_id"), dict) else deal.get("org_name")},
-        "voorbereiding": voorb, "controle": controle, "notities": ca.notities(deal_id),
+        "voorbereiding": test_voorb, "voorbereiding_volledig": voorb, "controle": controle, "notities": ca.notities(deal_id),
         "vrij_nummer": "" if ca.nummer_uit_titel(deal.get("title", "")) else ca.volgend_vrij_nummer("56" if soort == "regularisatie" else "26"),
         "bronnen": ca._bronnen_compact(bronnen),
         "werkinstructie": werk.get("markdown", "") if isinstance(werk, dict) else str(werk),
@@ -82,11 +102,13 @@ def bevries(deal_id: int):
     # modelwerk (afgeleid/gesprek) en keuzes. Mehdi keurt na en past aan.
     herkomst = {g["sleutel"]: g for g in (voorb.get("herkomst") or {}).get("gevuld", [])}
     gegevens = {k: v for k, v in velden.items()
-                if k not in SYSTEEMVELDEN and k not in VRIJE_TEKST and herkomst.get(k, {}).get("soort") in ("afgeleid", "gesprek")}
+                if k not in SYSTEEMVELDEN and k not in VRIJE_TEKST and k not in keuzevelden
+                and herkomst.get(k, {}).get("soort") in ("afgeleid", "gesprek", "dashboard")}
     keuzes = {k["veld"]: k["gekozen"] for k in voorb.get("keuzes", []) if k.get("gekozen")}
     feiten = {k: [] for k in VRIJE_TEKST if velden.get(k)}
     goed = m / "goedgekeurd.json"
-    if not goed.exists():
+    bestaand = json.loads(goed.read_text(encoding="utf-8")) if goed.exists() else {}
+    if not bestaand.get("goedgekeurd_op"):
         goed.write_text(json.dumps({"nummer": nummer, "goedgekeurd_door": "", "goedgekeurd_op": "",
                                     "gegevens": gegevens, "keuzes": keuzes, "vrije_tekst_feiten": feiten,
                                     "toelichting": "gegevens = harde velden die het model moet leveren (exact na normalisatie); "
