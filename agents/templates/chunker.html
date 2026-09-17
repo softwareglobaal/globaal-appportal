@@ -121,9 +121,16 @@
 
   {% if taxonomie_fout %}
     <div class="waarschuwing">
-      De zoekdienst op de host is niet bereikbaar, dus de bronsoorten staan er
-      niet bij: {{ taxonomie_fout }}. De verwerkte documenten hieronder komen
-      uit de eigen database en kloppen wel.
+      {% if 'onbekende route' in taxonomie_fout %}
+        De zoekdienst op de host kent <span class="mono">/taxonomie</span> nog
+        niet, dus de lijst met bronsoorten staat er niet bij. Die route zit in
+        globaal-agents; na het samenvoegen en een herstart van de zoekdienst
+        verschijnt ze vanzelf.
+      {% else %}
+        De zoekdienst op de host antwoordde niet, dus de lijst met bronsoorten
+        staat er niet bij: {{ taxonomie_fout }}.
+      {% endif %}
+      De verwerkte documenten hieronder komen uit de eigen database en kloppen wel.
     </div>
   {% endif %}
 
