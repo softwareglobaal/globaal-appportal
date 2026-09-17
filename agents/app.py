@@ -857,18 +857,6 @@ LEAD_MAX_BYTES = 12 * 1024 * 1024
 LEAD_MAX_BESTANDEN = 6
 
 
-def ingestie_rijen(limit=25):
-    conn = db()
-    rows = conn.execute(
-        """SELECT id, bestandsnaam, bytes, door, aangeleverd, status, fase,
-                  detail, corpus, bijgewerkt FROM ingestie
-           ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
-    conn.close()
-    return [dict(r) | {"aangeleverd_kort": _fmt(r["aangeleverd"]),
-                       "bijgewerkt_kort": _fmt(r["bijgewerkt"] or ""),
-                       "kb": round((r["bytes"] or 0) / 1024)} for r in rows]
-
-
 # De poorten die een document moet halen, in de volgorde waarin de lus ze zet.
 # Elke poort noemt zijn sleutel in het rapport en wat het betekent als hij valt.
 POORTEN = (
@@ -911,63 +899,77 @@ def _poortstand(sleutel: str, rapport: dict) -> dict:
     return {"stand": "gehaald" if goed else "gevallen", "cijfer": cijfer}
 
 
-def chunker_rijen(limit=40):
-    """Per document: wat de chunker koos en of het bewijs stand hield.
+def _chunker_rij(r) -> dict:
+    """Een databaserij plus wat er in zijn rapport staat.
 
     Alles komt uit de kolom `rapport`, die de lus na elke rit meestuurt. De
     tegel rekent hier niets uit; ze toont wat de keten heeft gemeten.
     """
+    rij = dict(r)
+    rapport, fout = {}, ""
+    if (r["rapport"] or "").strip():
+        try:
+            rapport = json.loads(r["rapport"])
+        except (ValueError, TypeError) as e:
+            # Zichtbaar maken, niet stil overslaan: een rapport dat niet te
+            # lezen is, is zelf een bevinding.
+            fout = f"rapport onleesbaar ({type(e).__name__})"
+    herkend = rapport.get("herkenning") or {}
+    profiel = rapport.get("profiel") or {}
+    ouders = rapport.get("ouders") or {}
+    keur = rapport.get("keuring") or {}
+    poorten = [{"sleutel": s, "naam": n, "uitleg": u} | _poortstand(s, rapport)
+               for s, n, u in POORTEN]
+    return rij | {
+        "aangeleverd_kort": _fmt(r["aangeleverd"]),
+        "bijgewerkt_kort": _fmt(r["bijgewerkt"] or ""),
+        "kb": round((r["bytes"] or 0) / 1024),
+        "bronsoort": herkend.get("bronsoort", ""),
+        "drager": herkend.get("drager", ""),
+        "ophaaldoelen": herkend.get("ophaaldoelen") or [],
+        "zekerheid": herkend.get("zekerheid", ""),
+        "titel": herkend.get("titel", ""),
+        "waarom": herkend.get("motivering", ""),
+        "zorgen": herkend.get("zorgen") or [],
+        "strategie": profiel.get("strategie", ""),
+        "detectoren": rapport.get("detectoren") or {},
+        "kinderen": keur.get("aantal", ""),
+        "ouderniveau": ouders.get("niveau", ""),
+        "ouders": ouders.get("aantal", ""),
+        "poorten": poorten,
+        # De documenten van voor de herkenning hebben wel een keuring en een
+        # rookproef. Die alleen tonen als er een bronsoort staat maakte de
+        # tegel blind voor alles wat de keten tot nu toe heeft gedaan: op de
+        # VM stonden 40 documenten zonder een enkel cijfer in beeld.
+        "heeft_keten": bool(herkend.get("bronsoort") or profiel.get("strategie")),
+        "heeft_poorten": any(p["stand"] != "niet-gedraaid" for p in poorten),
+        "gehaald": sum(1 for p in poorten if p["stand"] == "gehaald"),
+        "gevallen": sum(1 for p in poorten if p["stand"] == "gevallen"),
+        "ingekort": rapport.get("_ingekort") or [],
+        "rapport_fout": fout,
+        "rapport_mooi": json.dumps(rapport, ensure_ascii=False, indent=2) if rapport else "",
+    }
+
+
+KOLOMMEN = """id, bestandsnaam, bytes, door, aangeleverd, status, fase, detail,
+              corpus, rapport, bijgewerkt"""
+
+
+def chunker_rijen(limit=60):
+    """De lijst voor de homepage: nieuwste bron eerst."""
     conn = db()
     rows = conn.execute(
-        """SELECT id, bestandsnaam, door, aangeleverd, status, fase, detail,
-                  corpus, rapport, bijgewerkt FROM ingestie
-           ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
+        f"SELECT {KOLOMMEN} FROM ingestie ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     conn.close()
+    return [_chunker_rij(r) for r in rows]
 
-    uit = []
-    for r in rows:
-        rij = dict(r)
-        rapport, fout = {}, ""
-        if (r["rapport"] or "").strip():
-            try:
-                rapport = json.loads(r["rapport"])
-            except (ValueError, TypeError) as e:
-                # Zichtbaar maken, niet stil overslaan: een rapport dat niet te
-                # lezen is, is zelf een bevinding.
-                fout = f"rapport onleesbaar ({type(e).__name__})"
-        herkend = rapport.get("herkenning") or {}
-        profiel = rapport.get("profiel") or {}
-        ouders = rapport.get("ouders") or {}
-        keur = rapport.get("keuring") or {}
-        poorten = [{"sleutel": s, "naam": n, "uitleg": u} | _poortstand(s, rapport)
-                   for s, n, u in POORTEN]
-        uit.append(rij | {
-            "aangeleverd_kort": _fmt(r["aangeleverd"]),
-            "bijgewerkt_kort": _fmt(r["bijgewerkt"] or ""),
-            "bronsoort": herkend.get("bronsoort", ""),
-            "drager": herkend.get("drager", ""),
-            "ophaaldoelen": herkend.get("ophaaldoelen") or [],
-            "zekerheid": herkend.get("zekerheid", ""),
-            "titel": herkend.get("titel", ""),
-            "waarom": herkend.get("motivering", ""),
-            "zorgen": herkend.get("zorgen") or [],
-            "strategie": profiel.get("strategie", ""),
-            "detectoren": rapport.get("detectoren") or {},
-            "kinderen": keur.get("aantal", ""),
-            "ouderniveau": ouders.get("niveau", ""),
-            "ouders": ouders.get("aantal", ""),
-            "poorten": poorten,
-            # De documenten van voor de herkenning hebben wel een keuring en een
-            # rookproef. Die alleen tonen als er een bronsoort staat maakte de
-            # tegel blind voor alles wat de keten tot nu toe heeft gedaan: op de
-            # VM stonden 40 documenten zonder een enkel cijfer in beeld.
-            "heeft_keten": bool(herkend.get("bronsoort") or profiel.get("strategie")),
-            "heeft_poorten": any(p["stand"] != "niet-gedraaid" for p in poorten),
-            "ingekort": rapport.get("_ingekort") or [],
-            "rapport_fout": fout,
-            "rapport_mooi": json.dumps(rapport, ensure_ascii=False, indent=2) if rapport else "",
-        })
-    return uit
+
+def chunker_bron(bron_id: int) -> dict | None:
+    """Eén bron, voor zijn eigen pagina."""
+    conn = db()
+    rij = conn.execute(f"SELECT {KOLOMMEN} FROM ingestie WHERE id=?", (bron_id,)).fetchone()
+    conn.close()
+    return _chunker_rij(rij) if rij else None
 
 
 def zoekdienst_json(pad: str, velden: dict) -> dict:
@@ -1199,35 +1201,56 @@ def api_zoeken():
 
 @app.route("/ingestie")
 def ingestie():
-    """Achter de SSO: documenten aanleveren en de voortgang volgen."""
+    """Oude adres van het aanleverformulier.
+
+    Het aanleveren en de lijst staan nu samen op /chunker, met per bron een
+    eigen pagina. Twee pagina's met elk een uploadveld leverde de vraag op
+    welke van de twee de echte was, dus dit adres wijst door in plaats van een
+    tweede lijst te tonen. Bestaande links en bladwijzers blijven werken.
+    """
+    return redirect("/chunker" + (f"?m={request.args['m']}" if request.args.get("m") else ""))
+
+
+@app.route("/chunker")
+def chunker():
+    """De homepage van de chunker: eerst een bron aanleveren, daarna de lijst
+    met wat er al verwerkt is. Per bron alleen wat je nodig hebt om te kiezen
+    waar je doorklikt; de details staan op de pagina van die bron zelf."""
     return render_template(
-        "ingestie.html",
-        rijen=ingestie_rijen(),
+        "chunker.html",
+        rijen=chunker_rijen(),
         melding=request.args.get("m", ""),
         portal_url=f"https://portal.{BASE_DOMAIN}/",
         username=request.headers.get("X-authentik-username", "onbekend"),
     )
 
 
-@app.route("/chunker")
-def chunker():
-    """De algemene chunker: welke bronsoorten de agent kent, hoe hij ze snijdt,
-    en wat hij bij elk verwerkt document koos.
+@app.route("/chunker/bron/<int:bron_id>")
+def chunker_bron_pagina(bron_id):
+    """Alles wat de keten over deze ene bron heeft vastgelegd."""
+    bron = chunker_bron(bron_id)
+    if not bron:
+        abort(404)
+    return render_template(
+        "chunker-bron.html", b=bron,
+        portal_url=f"https://portal.{BASE_DOMAIN}/",
+        username=request.headers.get("X-authentik-username", "onbekend"))
 
-    De taxonomie komt van de zoekdienst op de host en niet uit een lijst hier:
-    een nieuwe bronsoort hoort op een plek te worden ingevoerd. Ligt de
-    zoekdienst plat, dan blijft de tabel met documenten gewoon staan; die komt
-    uit de eigen database.
+
+@app.route("/chunker/bronsoorten")
+def chunker_bronsoorten():
+    """Welke bronsoorten de chunker kent en hoe hij ze snijdt.
+
+    De lijst komt van de zoekdienst op de host en niet uit een lijst hier: een
+    nieuwe bronsoort hoort op een plek te worden ingevoerd.
     """
     taxonomie = zoekdienst_json("/taxonomie", {})
     return render_template(
-        "chunker.html",
-        rijen=chunker_rijen(),
+        "chunker-soorten.html",
         taxonomie=taxonomie,
         taxonomie_fout=taxonomie.get("fout", ""),
         portal_url=f"https://portal.{BASE_DOMAIN}/",
-        username=request.headers.get("X-authentik-username", "onbekend"),
-    )
+        username=request.headers.get("X-authentik-username", "onbekend"))
 
 
 @app.route("/ingestie/aanleveren", methods=["POST"])
@@ -1236,10 +1259,10 @@ def ingestie_aanleveren():
     aanleveraar is bekend uit de forward-auth-header."""
     bestand = request.files.get("bestand")
     if not bestand or not bestand.filename:
-        return redirect("/ingestie?m=geen-bestand")
+        return redirect("/chunker?m=geen-bestand")
     naam = os.path.basename(bestand.filename)[:200]
     if os.path.splitext(naam)[1].lower() not in TOEGESTAAN:
-        return redirect("/ingestie?m=soort")
+        return redirect("/chunker?m=soort")
 
     os.makedirs(INGESTIE_MAP, exist_ok=True)
     conn = db()
@@ -1257,11 +1280,11 @@ def ingestie_aanleveren():
         conn.execute("DELETE FROM ingestie WHERE id=?", (rij_id,))
         conn.commit()
         conn.close()
-        return redirect("/ingestie?m=te-groot")
+        return redirect("/chunker?m=te-groot")
     conn.execute("UPDATE ingestie SET pad=?, bytes=? WHERE id=?", (pad, grootte, rij_id))
     conn.commit()
     conn.close()
-    return redirect("/ingestie?m=aangenomen")
+    return redirect("/chunker?m=aangenomen")
 
 
 @app.route("/api/ingestie-wacht")

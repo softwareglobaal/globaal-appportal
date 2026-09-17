@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bronsoorten</title>
+<style>
+  :root {
+    --bg: #f5f6f7; --paneel: #ffffff; --lijn: #e4e7ea; --lijn-sterk: #d5dade;
+    --tekst: #1e2830; --tekst-2: #5c6771; --tekst-3: #8d959d;
+    --accent: #2f4a63; --goed: #2f7d5a; --fout: #a63d3d;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--tekst);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         font-size: 14px; line-height: 1.5; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 26px 22px 60px; }
+  .terug { color: var(--tekst-3); font-size: 12.5px; }
+  .terug:hover { color: var(--tekst); }
+  .kop { border-bottom: 1px solid var(--lijn); padding-bottom: 14px; margin-bottom: 22px; }
+  .kop h1 { margin: 6px 0 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .kop .sub { color: var(--tekst-2); font-size: 12.5px; margin-top: 3px; max-width: 760px; }
+
+  h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+       color: var(--tekst-2); margin: 28px 0 8px; }
+  .hint { color: var(--tekst-3); font-size: 12px; margin: 0 0 12px; max-width: 760px; }
+  .paneel { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px; }
+  .waarschuwing { border: 1px solid var(--lijn); border-left: 3px solid var(--fout);
+                  background: var(--paneel); border-radius: 5px; padding: 10px 14px;
+                  font-size: 13px; }
+
+  .cijfers { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+             gap: 1px; background: var(--lijn); border: 1px solid var(--lijn);
+             border-radius: 6px; overflow: hidden; margin-bottom: 4px; }
+  .cijfer { background: var(--paneel); padding: 13px 15px; }
+  .cijfer .getal { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+  .cijfer .naam { color: var(--tekst-3); font-size: 11.5px; text-transform: uppercase;
+                  letter-spacing: 0.04em; margin-top: 1px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+       color: var(--tekst-3); font-weight: 600; padding: 9px 14px;
+       border-bottom: 1px solid var(--lijn); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--lijn); vertical-align: top;
+       font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  .familie td { background: #fafbfb; font-weight: 600; font-size: 12px; }
+  .familie .om { color: var(--tekst-3); font-weight: 400; }
+  .mono { font-family: var(--mono); font-size: 11.5px; color: var(--tekst-2); }
+  .stand-gereed { color: var(--goed); font-weight: 500; }
+  .stand-wacht { color: var(--tekst-3); }
+  .nb { color: var(--tekst-3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kop">
+    <a class="terug" href="/chunker">&lsaquo; Terug naar de chunker</a>
+    <h1>Welke bronsoorten de chunker kent</h1>
+    <div class="sub">
+      De vaste lijst waaruit de herkenning moet kiezen. Vrij benoemen geeft elke
+      keer een andere naam ("handboek", "vakboek", "naslagwerk") en dan valt er
+      geen lezer of detector aan te hangen.
+    </div>
+  </div>
+
+  {% if taxonomie_fout %}
+    <div class="waarschuwing">
+      {% if 'onbekende route' in taxonomie_fout %}
+        De zoekdienst op de host kent <span class="mono">/taxonomie</span> nog niet.
+        Die route zit in globaal-agents; na het samenvoegen en een herstart van de
+        zoekdienst verschijnt de lijst vanzelf.
+      {% else %}
+        De zoekdienst op de host antwoordde niet: {{ taxonomie_fout }}.
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if taxonomie and taxonomie.bronsoorten %}
+  {% set sam = taxonomie.samenvatting %}
+  <div class="cijfers">
+    <div class="cijfer"><div class="getal">{{ sam.soorten }}</div><div class="naam">Bronsoorten</div></div>
+    <div class="cijfer"><div class="getal">{{ sam.families }}</div><div class="naam">Families</div></div>
+    <div class="cijfer"><div class="getal">{{ sam.doelen }}</div><div class="naam">Ophaaldoelen</div></div>
+    <div class="cijfer"><div class="getal">{{ sam.gereed }}</div><div class="naam">Nu door de keten</div></div>
+  </div>
+  <p class="hint">
+    Een soort is pas gereed als lezer, detectoren en snijmethodes er alle drie
+    zijn. Wat nog wacht, wacht vrijwel altijd op zijn lezer: dat is de stap die
+    het plafond bepaalt, niet het snijden.
+  </p>
+
+  <div class="paneel">
+    <table>
+      <thead>
+        <tr>
+          <th>Bronsoort</th><th>Natuurlijke eenheid</th><th>Lezer</th>
+          <th>Snijmethode</th><th>Stand</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fam, f in taxonomie.families.items() %}
+          <tr class="familie">
+            <td colspan="5">{{ fam }} <span class="om">&middot; {{ f.omschrijving }}</span></td>
+          </tr>
+          {% for naam in f.soorten %}
+            {% set s = taxonomie.bronsoorten[naam] %}
+            <tr>
+              <td>
+                <span class="mono">{{ naam }}</span>
+                {% if not s.chunkprobleem %}
+                  <div class="nb" style="font-size:11.5px">geen chunkprobleem: hoort naar een record of schema</div>
+                {% endif %}
+              </td>
+              <td>{{ s.eenheid }}</td>
+              <td><span class="mono">{{ s.lezer }}</span></td>
+              <td class="mono">{{ s.strategieen|join(', ') or '—' }}</td>
+              <td>
+                {% if s.gereed %}
+                  <span class="stand-gereed">gereed</span>
+                {% else %}
+                  <span class="stand-wacht">wacht op {{ s.ontbreekt|join(', ') }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Waarvoor je het wil terugvinden</h2>
+  <p class="hint">
+    Het ophaaldoel bepaalt de granulariteit, niet de bronsoort alleen. Hetzelfde
+    document gaat anders de kast in als je eruit wil citeren dan als je er een
+    feit uit wil halen. Klein indexeren, groot teruggeven: het kind draagt de
+    vindplaats, de ouder geeft de context.
+  </p>
+  <div class="paneel">
+    <table>
+      <thead>
+        <tr>
+          <th>Ophaaldoel</th><th>Wat het is</th><th>Indexeren op</th>
+          <th>Teruggeven</th><th>Kind in tokens</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for naam, d in taxonomie.ophaaldoelen.items() %}
+        <tr>
+          <td><span class="mono">{{ naam }}</span></td>
+          <td>{{ d.omschrijving }}</td>
+          <td>{{ d.indexeer_op }}</td>
+          <td>{{ d.teruggeven }}{% if d.ouder %} <span class="nb">(ouder: {{ d.ouder }})</span>{% endif %}</td>
+          <td class="mono">{{ d.kind_tokens|join(' tot ') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>

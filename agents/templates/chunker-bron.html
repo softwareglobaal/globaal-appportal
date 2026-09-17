@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ b.bestandsnaam }}</title>
+<style>
+  :root {
+    --bg: #f5f6f7; --paneel: #ffffff; --lijn: #e4e7ea; --lijn-sterk: #d5dade;
+    --tekst: #1e2830; --tekst-2: #5c6771; --tekst-3: #8d959d;
+    --accent: #2f4a63;
+    --goed: #2f7d5a; --fout: #a63d3d; --stil: #b3bac0; --live: #3663a0;
+    --wacht: #98a0a8;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--tekst);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         font-size: 14px; line-height: 1.5; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 26px 22px 60px; }
+  .terug { color: var(--tekst-3); font-size: 12.5px; }
+  .terug:hover { color: var(--tekst); }
+  .kop { border-bottom: 1px solid var(--lijn); padding-bottom: 14px; margin-bottom: 22px; }
+  .kop h1 { margin: 6px 0 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em;
+            word-break: break-word; }
+  .kop .sub { color: var(--tekst-2); font-size: 12.5px; margin-top: 3px; }
+  .kop-link { display: inline-block; margin-top: 10px; margin-right: 6px;
+              border: 1px solid var(--lijn-sterk); background: var(--paneel);
+              color: var(--tekst); border-radius: 5px; padding: 5px 12px;
+              font-size: 12.5px; font-weight: 500; }
+  .kop-link:hover { background: #f2f4f5; }
+
+  h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+       color: var(--tekst-2); margin: 26px 0 8px; }
+  .hint { color: var(--tekst-3); font-size: 12px; margin: 0 0 12px; max-width: 700px; }
+  .paneel { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px;
+            padding: 15px 18px; }
+  .nb { color: var(--tekst-3); }
+  .mono { font-family: var(--mono); font-size: 11.5px; }
+
+  .stip { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+  .s-wacht { background: var(--wacht); } .s-bezig { background: var(--goed); }
+  .s-live { background: var(--live); } .s-afgekeurd { background: var(--fout); }
+
+  .keten { display: flex; flex-wrap: wrap; border: 1px solid var(--lijn);
+           border-radius: 6px; overflow: hidden; background: var(--paneel); }
+  .stap { flex: 1 1 200px; padding: 12px 15px; border-right: 1px solid var(--lijn); min-width: 0; }
+  .stap:last-child { border-right: none; }
+  .stap .label { color: var(--tekst-3); font-size: 10.5px; text-transform: uppercase;
+                 letter-spacing: 0.05em; }
+  .stap .waarde { font-size: 14px; font-weight: 500; margin-top: 3px; word-break: break-word; }
+  .stap .onder { color: var(--tekst-2); font-size: 11.5px; margin-top: 1px; }
+
+  .poorten { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 9px; }
+  .poort { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px;
+           padding: 11px 13px; border-left-width: 3px; }
+  .poort.gehaald { border-left-color: var(--goed); }
+  .poort.gevallen { border-left-color: var(--fout); }
+  .poort.niet-gedraaid { border-left-color: var(--stil); }
+  .poort .naam { font-size: 13px; font-weight: 600; }
+  .poort .cijfer { font-family: var(--mono); font-size: 11.5px; color: var(--tekst-2);
+                   margin-top: 2px; }
+  .poort .uitleg { color: var(--tekst-3); font-size: 11.5px; margin-top: 4px; }
+  .poort.niet-gedraaid .naam { color: var(--tekst-3); font-weight: 500; }
+
+  dl { margin: 0; display: grid; grid-template-columns: 170px 1fr; gap: 7px 14px; }
+  dt { color: var(--tekst-3); font-size: 12.5px; }
+  dd { margin: 0; font-size: 13px; word-break: break-word; }
+
+  .merk { display: inline-block; border: 1px solid var(--lijn-sterk); border-radius: 3px;
+          padding: 1px 6px; font-size: 11.5px; font-family: var(--mono);
+          color: var(--tekst-2); background: #fafbfb; margin: 0 3px 3px 0; }
+  .merk.soort { border-color: #c7d5e6; color: var(--live); background: #fafbfc; }
+
+  details summary { cursor: pointer; color: var(--tekst-2); font-size: 12.5px; }
+  details summary:hover { color: var(--tekst); }
+  pre { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px;
+        padding: 13px 15px; font-family: var(--mono); font-size: 11.5px;
+        overflow-x: auto; margin: 9px 0 0; }
+  .waarschuwing { border: 1px solid var(--lijn); border-left: 3px solid var(--fout);
+                  background: var(--paneel); border-radius: 5px; padding: 10px 14px;
+                  font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kop">
+    <a class="terug" href="/chunker">&lsaquo; Alle bronnen</a>
+    <h1>{{ b.bestandsnaam }}</h1>
+    <div class="sub">
+      <span class="stip s-{{ b.status }}"></span>{{ b.status }}{% if b.fase %}, {{ b.fase }}{% endif %}
+      {% if b.titel %} &middot; {{ b.titel }}{% endif %}
+    </div>
+    {% if b.corpus %}
+      <a class="kop-link" href="/kennisbank/{{ b.corpus }}">Door de kennisbank lopen</a>
+      <a class="kop-link" href="/zoeken?corpus={{ b.corpus }}">Hierin zoeken</a>
+    {% endif %}
+  </div>
+
+  {% if b.detail %}
+    <div class="{{ 'waarschuwing' if b.status == 'afgekeurd' else 'paneel' }}">
+      {{ b.detail }}
+    </div>
+  {% endif %}
+
+  {% if b.heeft_keten %}
+  <h2>Hoe de agent deze bron sneed</h2>
+  <p class="hint">
+    Van links naar rechts: wat hij erin zag, waarvoor het terugvindbaar moest
+    zijn, welke methode daaruit volgde en wat eruit kwam.
+  </p>
+  <div class="keten">
+    <div class="stap">
+      <div class="label">Herkend als</div>
+      {% if b.bronsoort %}
+        <div class="waarde"><span class="merk soort">{{ b.bronsoort }}</span></div>
+        <div class="onder">{{ b.drager or 'drager onbekend' }}, zekerheid {{ b.zekerheid or '?' }}</div>
+      {% else %}
+        <div class="waarde nb">niet bepaald</div>
+        <div class="onder">verwerkt voordat de herkenning bestond</div>
+      {% endif %}
+    </div>
+    <div class="stap">
+      <div class="label">Om te kunnen</div>
+      <div class="waarde">{{ b.ophaaldoelen|join(', ') or '—' }}</div>
+      <div class="onder">
+        {% if b.ophaaldoelen %}bepaalt de grootte en de ouderlaag
+        {% else %}geen ophaaldoel vastgelegd{% endif %}
+      </div>
+    </div>
+    <div class="stap">
+      <div class="label">Dus gesneden met</div>
+      <div class="waarde">{{ b.strategie or '—' }}</div>
+      <div class="onder">
+        {% set n = b.detectoren|length %}
+        {% if n %}{{ n }} detector{{ '' if n == 1 else 'en' }} aan{% else %}—{% endif %}
+      </div>
+    </div>
+    <div class="stap">
+      <div class="label">Opgeleverd</div>
+      <div class="waarde">{% if b.kinderen %}{{ b.kinderen }} fragmenten{% else %}—{% endif %}</div>
+      <div class="onder">
+        {% if b.ouders %}{{ b.ouders }} ouders op {{ b.ouderniveau }}niveau
+        {% else %}geen ouderlaag{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <h2>De poorten</h2>
+  <p class="hint">
+    Elke poort die valt betekent: niet publiceren. Grijs is niet gedraaid, en dat
+    is iets anders dan gevallen.
+  </p>
+  <div class="poorten">
+    {% for p in b.poorten %}
+    <div class="poort {{ p.stand }}">
+      <div class="naam">{{ p.naam }}</div>
+      <div class="cijfer">{{ p.cijfer or 'niet gedraaid' }}</div>
+      <div class="uitleg">{{ p.uitleg }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if b.waarom or b.zorgen %}
+  <h2>Waarom deze keuze</h2>
+  <div class="paneel">
+    {% if b.waarom %}<p style="margin:0">{{ b.waarom }}</p>{% endif %}
+    {% if b.zorgen %}
+      <p style="margin:9px 0 0; color:var(--tekst-2); font-size:12.5px">
+        Zorgen van het model: {{ b.zorgen|join('; ') }}
+      </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if b.detectoren %}
+  <h2>Detectoren</h2>
+  <p class="hint">Wat ze in deze bron aanwezen. Ze markeren alleen; verwijderen doen ze nooit.</p>
+  <div class="paneel">
+    {% for naam, aantal in b.detectoren.items() %}
+      <span class="merk">{{ naam }}: {{ aantal if aantal is not mapping else aantal|length }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <h2>Herkomst</h2>
+  <div class="paneel">
+    <dl>
+      <dt>Aangeleverd</dt><dd>{{ b.aangeleverd_kort }} door {{ b.door or 'onbekend' }}</dd>
+      {% if b.bijgewerkt_kort %}<dt>Laatst bijgewerkt</dt><dd>{{ b.bijgewerkt_kort }}</dd>{% endif %}
+      <dt>Grootte</dt><dd>{{ b.kb }} KB</dd>
+      {% if b.corpus %}<dt>Kennisbank</dt><dd class="mono">{{ b.corpus }}</dd>{% endif %}
+    </dl>
+  </div>
+
+  {% if b.rapport_fout %}
+    <h2>Rapport</h2>
+    <div class="waarschuwing">
+      <b>{{ b.rapport_fout }}.</b> Dit rapport is opgeslagen toen de lus de JSON
+      nog op 8.000 tekens afsneed, dus het houdt middenin op. Wat de keten toen
+      gemeten heeft staat nog wel in de journal
+      (<span class="mono">journalctl -t ingestieagent</span>). Nieuwe ritten
+      bewaren een rapport dat past en heel blijft.
+    </div>
+  {% elif b.rapport_mooi %}
+    <h2>Het hele rapport</h2>
+    {% if b.ingekort %}
+      <p class="hint">
+        Deze delen pasten niet in het bewaarde rapport en zijn eruit gelaten:
+        {{ b.ingekort|join(', ') }}. Ze staan in de journal.
+      </p>
+    {% endif %}
+    <details>
+      <summary>Tonen</summary>
+      <pre>{{ b.rapport_mooi }}</pre>
+    </details>
+  {% endif %}
+</div>
+</body>
+</html>
