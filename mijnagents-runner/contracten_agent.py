@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import contracten_mcp as mcp  # noqa: E402
 import pipedrive  # noqa: E402
 import bronnen as bronnen_mod  # noqa: E402
+import herhaalbaar as hh  # noqa: E402
 
 NAAM = "contracten-agent"
 FIRMA = "harchitects"
@@ -40,6 +41,7 @@ PLATFORM = os.environ.get("PLATFORM_URL", "http://127.0.0.1:3022")
 STAAT_PAD = os.path.expanduser("~/appportal/mijnagents-data/contracten-agent.json")
 HERRONDE_UREN = 24
 DROOG = "--droog" in sys.argv          # alleen plannen, niets schrijven
+VERS = "--vers" in sys.argv            # plan-cache negeren: het model opnieuw vragen
 ALLEEN = None                          # --deal 14474: alleen die deal
 for i, a in enumerate(sys.argv):
     if a == "--deal" and i + 1 < len(sys.argv):
@@ -98,8 +100,10 @@ _LOG = []
 def log(onderwerp, stap, tekst, detail=""):
     """Werkverslag-regel voor het bord (alleen beheer ziet het). Wordt per deal
     gebundeld verstuurd met log_verstuur()."""
-    _LOG.append({"naam": NAAM, "onderwerp": onderwerp, "stap": stap, "tekst": tekst,
-                 "detail": detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False, indent=1)})
+    # Geen rijksregisternummer in een log of op het bord (rapport 17-09-2026, deel 8).
+    tekst = hh.masker_rrn(tekst)
+    detail = hh.masker_rrn(detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False, indent=1))
+    _LOG.append({"naam": NAAM, "onderwerp": onderwerp, "stap": stap, "tekst": tekst, "detail": detail})
     print(f"  [{stap}] {tekst}")
 
 
@@ -173,6 +177,11 @@ def mcp_call(naam, **args):
         print(f"  {naam}: {type(e).__name__}, nog één keer", file=sys.stderr)
         return mcp.call(naam, **args)
 
+
+VRIJE_STANDAARD = {"project_beschrijving", "project_omvat_extra_vrije_toevoeging", "ereloon_minimum_bedrag_euro",
+                   "datum_oorspronkelijke_overeenkomst", "vaststellingen_bullets", "opdracht_omschrijving",
+                   "doorlooptijd_werkdagen", "ereloon_bedrag_euro", "ereloon_percentage", "uurtarief_euro",
+                   "betaalschema_bullets", "addendum_aanleiding_omschrijving"}
 
 CONTRACT_MAPPEN = ["/Work All/01. H-Architects ORG/0 H-A Contracts clients/2026 Design",
                    "/Work All/01. H-Architects ORG/0 H-A Contracts clients/2026 Signed"]
@@ -368,9 +377,20 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
             "required": ["gegevens", "keuzes", "nummer_voorstel", "melding"],
         },
     }
+    # Het model ziet nooit een rijksregisternummer: die vult het systeem zelf in
+    # uit de klantmail (D18). Masker over de hele invoer, ook de werkinstructie.
+    user = hh.masker_rrn(user)
+    system = hh.masker_rrn(system)
     resp = client.messages.create(model=MODEL, max_tokens=8000, system=system,
                                   messages=[{"role": "user", "content": user}],
                                   tools=[plan_tool], tool_choice={"type": "tool", "name": "plan"})
+    meta = {"model_id": getattr(resp, "model", MODEL), "stop_reason": getattr(resp, "stop_reason", ""),
+            "tokens_in": getattr(resp.usage, "input_tokens", 0) or 0,
+            "tokens_uit": getattr(resp.usage, "output_tokens", 0) or 0}
+    # Een weigering of een afgekapt antwoord is een gewoon antwoord met status 200;
+    # wie het niet apart vastlegt, ziet het nooit (rapport deel 6).
+    if meta["stop_reason"] in ("refusal", "max_tokens"):
+        raise RuntimeError(f"model stopte met {meta['stop_reason']}; geen plan ({meta['tokens_in']} tokens in)")
     plan = None
     for b in resp.content:
         if getattr(b, "type", "") == "tool_use" and b.name == "plan":
@@ -384,8 +404,8 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
         plan = dict(next(iter(plan.values())))
     if not isinstance(plan.get("melding"), dict) or not plan["melding"].get("vastligt", None) and not plan["melding"].get("volgende_stap"):
         raise RuntimeError("plan zonder bruikbare melding; niets geschreven")
-    tokens = (getattr(resp.usage, "input_tokens", 0) or 0) + (getattr(resp.usage, "output_tokens", 0) or 0)
-    return plan, tokens
+    tokens = meta["tokens_in"] + meta["tokens_uit"]
+    return plan, tokens, meta
 
 
 # -------------------------------------------------------------- melding ---
@@ -410,7 +430,7 @@ def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None)
     if proef and not ontbreekt and (m.get("projectmap_voorstel") or "").strip():
         uit += f"- Voorstel projectmapnaam bij ondertekening (A13): {m['projectmap_voorstel'].strip()}<br>"
     uit += "<br><i>Nakijken en ondertekenen op contracten.globaal.be (In voorbereiding).</i>"
-    return uit
+    return hh.masker_rrn(uit)
 
 
 # ---------------------------------------------------------------- werk ---
@@ -472,24 +492,53 @@ def verwerk(deal, werkinstructie, staat):
         "teksten: " + ", ".join(bestanden) + "\nmails: " + ", ".join(f"{m['datum'][:16]} {m['onderwerp']}" for m in bronnen.get("mails", [])))
 
     vrij = "" if nummer else volgend_vrij_nummer("56" if soort == "regularisatie" else "26")
-    plan, tokens = plan_met_model(werkinstructie, deal, voorb, controle, notities(deal_id), vrij, bronnen)
+    notitielijst = notities(deal_id)
+    schema = veldenschema_voor(soort)
+    # Stap 1 van het rapport: één hash over alle invoer. Zelfde hash = zelfde plan,
+    # zonder het model opnieuw te vragen. Zo is "zelfde invoer, zelfde uitvoer" een
+    # constructie en geen hoop.
+    record = hh.RunRecord(NAAM, deal_id)
+    hash_, per_deel = hh.invoerhash({
+        "dossier": {"velden": {k: v for k, v in velden.items() if k != "datum_vandaag"},
+                    "keuzes": {k.get("veld"): k.get("gekozen") for k in ((voorb or {}).get("keuzes") or []) if isinstance(k, dict)},
+                    "soort": soort},
+        "notities": notitielijst, "bronnen": _bronnen_compact(bronnen),
+        "werkinstructie": werkinstructie, "werkwijze": WERKWIJZE, "veldenschema": schema,
+        "model": MODEL, "vrij_nummer": vrij, "promptversie": SCHEMA_UITLEG})
+    record.zet(invoerhash=hash_, hashes=per_deel, dossier_stempel=vingerafdruk(voorb), model_gevraagd=MODEL,
+               werkinstructie_hash=per_deel.get("werkinstructie"), werkwijze_hash=per_deel.get("werkwijze"),
+               schema_hash=per_deel.get("veldenschema"))
+    cache = None if VERS else hh.plan_uit_cache(NAAM, deal_id, hash_)
+    if cache:
+        plan, tokens, meta = cache["plan"], 0, dict(cache.get("meta") or {}, hergebruikt=True)
+        log(ond, "besluit", f"plan hergebruikt: zelfde invoer als run {meta.get('run_id', '?')} (hash {hash_}); het model is niet gevraagd")
+    else:
+        plan, tokens, meta = plan_met_model(werkinstructie, deal, voorb, controle, notitielijst, vrij, bronnen)
+        meta["run_id"] = record.record["run_id"]
+        if not DROOG:
+            hh.plan_in_cache(NAAM, deal_id, hash_, plan, meta)
+    record.zet(model_id=meta.get("model_id"), stop_reason=meta.get("stop_reason"), tokens_in=meta.get("tokens_in", 0),
+               tokens_uit=meta.get("tokens_uit", 0), kost_eur=hh.kost_eur(meta.get("model_id") or "", meta.get("tokens_in", 0), meta.get("tokens_uit", 0)),
+               plan_hergebruikt=bool(cache), plan=plan)
     log(ond, "besluit", f"plan: {len(plan.get('gegevens') or [])} gegevensposten, {len(plan.get('keuzes') or {})} keuzes"
                         f"{', nummer-voorstel ' + str(plan.get('nummer_voorstel')) if plan.get('nummer_voorstel') and not nummer else ''}"
-                        f" ({tokens} tokens)", plan)
+                        f" ({tokens} tokens, model {meta.get('model_id', '?')})", plan)
     if DROOG:
         log_verstuur()
+        record.sluit("droog")
         return {"droog": True, "plan": plan}
 
-    # toepassen, deterministisch
-    fouten, geschreven = [], []
+    # toepassen, deterministisch: eerst validatie in code (rapport stap 4), dan schrijven
+    fouten, geschreven, geweigerd_lijst = [], [], []
+    toegelaten = set(((schema.get("master") or {}).get(soort) or {}).get("velden") or []) or None
     for post in plan.get("gegevens") or []:
-        velden, bron = post.get("velden") or {}, (post.get("bron") or "").strip()
-        verboden = {"capa_key_code", "project_capakey", "oppervlakte_m2", "project_oppervlakte_terrein"}
-        # Rijksregister alleen met een klantmail als bron (D18); anders nooit.
-        if "rijksregister" in " ".join(velden) and "mail" not in bron.lower():
-            velden = {k: v for k, v in velden.items() if "rijksregister" not in k}
-        velden = {k: v for k, v in velden.items() if k not in verboden and str(v).strip()}
-        if not velden or not bron:
+        velden_ruw, bron = post.get("velden") or {}, (post.get("bron") or "").strip()
+        velden, geweigerd = hh.valideer_gegevens(velden_ruw, bron, toegelaten)
+        for veld, waarde, reden in geweigerd:
+            geweigerd_lijst.append({"veld": veld, "waarde": str(waarde)[:80], "reden": reden, "bron": bron[:80]})
+            fouten.append(f"{veld} geweigerd: {reden}")
+            log(ond, "geweigerd", f"{veld} = {str(waarde)[:60]}: {reden}")
+        if not velden:
             continue
         try:
             mcp_call("gegeven_invullen", deal_id=deal_id, velden=velden, bron=bron)
@@ -506,12 +555,14 @@ def verwerk(deal, werkinstructie, staat):
                    "datum_oorspronkelijke_overeenkomst", "vaststellingen_bullets", "opdracht_omschrijving",
                    "doorlooptijd_werkdagen", "ereloon_bedrag_euro", "ereloon_percentage", "uurtarief_euro",
                    "betaalschema_bullets", "addendum_aanleiding_omschrijving"}
-    ruwe = {k: v for k, v in (plan.get("keuzes") or {}).items() if str(v).strip()}
-    keuzes = {k: v for k, v in ruwe.items() if k in toegelaten}
-    verkeerd = [k for k in ruwe if k not in toegelaten]
-    if verkeerd:
-        fouten.append(f"onder 'keuzes' gezet maar geen keuzeveld, niet geschreven: {', '.join(verkeerd)}")
-        log(ond, "fout", f"geen keuzeveld, overgeslagen: {', '.join(verkeerd)}")
+    opties = {k.get("veld"): list(k.get("opties") or []) for k in ((voorb or {}).get("keuzes") or []) if isinstance(k, dict)}
+    # Vrije tekstvelden: uit het masterschema, plus de vaste lijst van het dashboard.
+    vrij_velden = set(((schema.get("master") or {}).get(soort) or {}).get("vrije_velden") or []) | VRIJE_STANDAARD
+    keuzes, geweigerd = hh.valideer_keuzes(plan.get("keuzes") or {}, opties, vrij_velden)
+    for veld, waarde, reden in geweigerd:
+        geweigerd_lijst.append({"veld": veld, "waarde": str(waarde)[:80], "reden": reden, "bron": "keuze"})
+        fouten.append(f"keuze {veld} geweigerd: {reden}")
+        log(ond, "geweigerd", f"keuze {veld} = {str(waarde)[:60]}: {reden}")
     keuzes_bron = (plan.get("keuzes_bron") or "").strip() or "gesprekken en mails in het dossier"
     if keuzes:
         try:
@@ -562,7 +613,9 @@ def verwerk(deal, werkinstructie, staat):
         stempel = ""
     staat[str(deal_id)] = {"laatst": datetime.now(timezone.utc).isoformat(), "proef": proef,
                            "fouten": len(fouten), "tokens": tokens, "nummer_voorstel": nummer_voorstel,
-                           "stempel": stempel}
+                           "stempel": stempel, "run_id": record.record["run_id"], "invoerhash": hash_}
+    record.zet(geschreven=geschreven, geweigerd=geweigerd_lijst, fouten=fouten, proef=proef,
+               nummer_voorstel=nummer_voorstel, stempel_na=stempel).sluit("klaar")
     return {"proef": proef, "fouten": fouten}
 
 
@@ -594,6 +647,20 @@ def main():
     if not TOKEN:
         print("FOUT: geen AGENTS_TOKEN", file=sys.stderr)
         return
+    # Rapport stap 8: cron start elke halve uur, ook als de vorige ronde nog loopt.
+    try:
+        slot = hh.Slot(NAAM).__enter__()
+    except RuntimeError as e:
+        print(f"overgeslagen: {e}")
+        hartslag("waakt", taak="vorige ronde loopt nog", detail=str(e)[:150])
+        return
+    try:
+        _main_binnen_slot()
+    finally:
+        slot.__exit__(None, None, None)
+
+
+def _main_binnen_slot():
     hartslag("actief", taak="ronde gestart", detail="Pipedrive fase Gegevens ontvangen nakijken")
     try:
         werk = mcp.call("dashboard_document", sleutel="werkinstructie")
