@@ -513,6 +513,26 @@ services:
       PLAUD_BASE_URL: ${PLAUD_BASE_URL:-}
       # Kostenplafond in uren audio per maand ($0,28/uur). 0 = geen plafond.
       PLAUD_MAX_UREN_PER_MAAND: ${PLAUD_MAX_UREN_PER_MAAND:-100}
+      # De consumentenkant van Plaud (PLAUD_MODUS=web), voor als de
+      # developer-API weigert zolang er geen Plaud-apparaat gekoppeld is.
+      PLAUD_MODUS: ${PLAUD_MODUS:-}
+      PLAUD_WEB_TOKEN: ${PLAUD_WEB_TOKEN:-}
+      PLAUD_WEB_TAAL: ${PLAUD_WEB_TAAL:-}
+      # Contactherkenning (migratie 151): externe nummers uit het belarchief
+      # opzoeken in de vijf Pipedrive-administraties. Leest alleen en kost
+      # niets; zonder tokens herkent hij alleen onze eigen nummers.
+      CONTACT_HERKENNING_ENABLED: ${CONTACT_HERKENNING_ENABLED:-false}
+      PIPEDRIVE_TOKEN_HARCHITECTS: ${PIPEDRIVE_TOKEN_HARCHITECTS:-}
+      PIPEDRIVE_TOKEN_UNABO: ${PIPEDRIVE_TOKEN_UNABO:-}
+      PIPEDRIVE_TOKEN_TKNBURO: ${PIPEDRIVE_TOKEN_TKNBURO:-}
+      PIPEDRIVE_TOKEN_ENERGIEEFFICIENT: ${PIPEDRIVE_TOKEN_ENERGIEEFFICIENT:-}
+      PIPEDRIVE_TOKEN_HARMONIEBOUW: ${PIPEDRIVE_TOKEN_HARMONIEBOUW:-}
+      # Duiding (migratie 151): één AI-aanroep per uitgeschreven gesprek voor
+      # onderwerp, soort, project en vervolgstap. Zonder transcripties gebeurt
+      # er niets, want er is dan niets om te duiden.
+      DUIDING_ENABLED: ${DUIDING_ENABLED:-false}
+      DUIDING_MODEL: ${DUIDING_MODEL:-}
+      DUIDING_MAX_PER_RONDE: ${DUIDING_MAX_PER_RONDE:-10}
     healthcheck:
       test: node -e "require('http').get('http://127.0.0.1:3008/api/me',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
       interval: 2m
