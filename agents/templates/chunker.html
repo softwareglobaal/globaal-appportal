@@ -171,19 +171,27 @@
           </div>
         </div>
 
-        {% if r.bronsoort %}
+        {% if r.heeft_keten %}
         <div class="keten">
           <div class="stap">
             <div class="label">Herkend als</div>
-            <div class="waarde"><span class="merk soort">{{ r.bronsoort }}</span></div>
-            <div class="onder">
-              {{ r.drager or 'drager onbekend' }}, zekerheid {{ r.zekerheid or '?' }}
-            </div>
+            {% if r.bronsoort %}
+              <div class="waarde"><span class="merk soort">{{ r.bronsoort }}</span></div>
+              <div class="onder">
+                {{ r.drager or 'drager onbekend' }}, zekerheid {{ r.zekerheid or '?' }}
+              </div>
+            {% else %}
+              <div class="waarde nb">niet bepaald</div>
+              <div class="onder">verwerkt voordat de herkenning bestond</div>
+            {% endif %}
           </div>
           <div class="stap">
             <div class="label">Om te kunnen</div>
             <div class="waarde">{{ r.ophaaldoelen|join(', ') or '—' }}</div>
-            <div class="onder">bepaalt de grootte en de ouderlaag</div>
+            <div class="onder">
+              {% if r.ophaaldoelen %}bepaalt de grootte en de ouderlaag
+              {% else %}geen ophaaldoel vastgelegd{% endif %}
+            </div>
           </div>
           <div class="stap">
             <div class="label">Dus gesneden met</div>
@@ -205,11 +213,11 @@
         </div>
         {% elif not r.rapport_fout %}
           <div class="uitleg nb">
-            Nog geen herkenning: {{ r.detail or 'dit document is nog niet verwerkt.' }}
+            Nog niet gesneden: {{ r.detail or 'dit document is nog niet verwerkt.' }}
           </div>
         {% endif %}
 
-        {% if r.bronsoort or r.status == 'afgekeurd' %}
+        {% if r.heeft_poorten or r.status == 'afgekeurd' %}
         <div class="poorten">
           {% for p in r.poorten %}
           <div class="poort {{ p.stand }}">

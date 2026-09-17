@@ -939,6 +939,8 @@ def chunker_rijen(limit=40):
         profiel = rapport.get("profiel") or {}
         ouders = rapport.get("ouders") or {}
         keur = rapport.get("keuring") or {}
+        poorten = [{"sleutel": s, "naam": n, "uitleg": u} | _poortstand(s, rapport)
+                   for s, n, u in POORTEN]
         uit.append(rij | {
             "aangeleverd_kort": _fmt(r["aangeleverd"]),
             "bijgewerkt_kort": _fmt(r["bijgewerkt"] or ""),
@@ -954,8 +956,13 @@ def chunker_rijen(limit=40):
             "kinderen": keur.get("aantal", ""),
             "ouderniveau": ouders.get("niveau", ""),
             "ouders": ouders.get("aantal", ""),
-            "poorten": [{"sleutel": s, "naam": n, "uitleg": u} | _poortstand(s, rapport)
-                        for s, n, u in POORTEN],
+            "poorten": poorten,
+            # De documenten van voor de herkenning hebben wel een keuring en een
+            # rookproef. Die alleen tonen als er een bronsoort staat maakte de
+            # tegel blind voor alles wat de keten tot nu toe heeft gedaan: op de
+            # VM stonden 40 documenten zonder een enkel cijfer in beeld.
+            "heeft_keten": bool(herkend.get("bronsoort") or profiel.get("strategie")),
+            "heeft_poorten": any(p["stand"] != "niet-gedraaid" for p in poorten),
             "ingekort": rapport.get("_ingekort") or [],
             "rapport_fout": fout,
             "rapport_mooi": json.dumps(rapport, ensure_ascii=False, indent=2) if rapport else "",
