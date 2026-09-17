@@ -97,8 +97,9 @@ gedeelde `compleet()` in `mapnaam.py` toetst op het Plaud-id in plaats van op he
 
 ## Wat hierna nog moet
 
-1. **De Plaudwacht meeverhuizen.** `plaud_wacht.py` schrijft nog naar `mijnagents-data/plaud/<jaar>/`
-   met de hoofdpersoon in de mapnaam. Zolang dat zo is, botst hij met de nieuwe indeling.
+1. ~~De Plaudwacht meeverhuizen.~~ **Gedaan op 17-09:** `archiefmap()` in `plaud_wacht.py` maakt nu
+   dezelfde platte naam als `plaud/mapnaam.py`. Wat nog open staat is de plaats: de wacht schrijft op
+   de VM, het archief staat op de Mac. Zolang de VM-map leeg blijft botsen ze niet.
 2. **De sync omdraaien.** `~/bin/data_uit_mehdi_sync.sh` haalt elk half uur de VM-map naar Dropbox en
    zet zo `Plaud/2026/` terug. Zodra de Plaudwacht mee is, moet de Mac leidend zijn voor Plaud.
 3. **Opruimen.** De vier mappen in `Plaud/2026/` zijn dezelfde gesprekken onder de oude naam. Ze
