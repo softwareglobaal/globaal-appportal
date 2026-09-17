@@ -62,6 +62,7 @@ def afspraken(van_dagen=-1, tot_dagen=8):
     tmin = (nu + timedelta(days=van_dagen)).replace(hour=0, minute=0, second=0, microsecond=0)
     tmax = (nu + timedelta(days=tot_dagen)).replace(hour=0, minute=0, second=0, microsecond=0)
     uit = []
+    gezien = set()
     for kal in kalenders():
         params = {"timeMin": tmin.isoformat(), "timeMax": tmax.isoformat(), "singleEvents": "true",
                   "orderBy": "startTime", "maxResults": 250}
@@ -76,6 +77,12 @@ def afspraken(van_dagen=-1, tot_dagen=8):
         for ev in d.get("items", []):
             if ev.get("status") == "cancelled":
                 continue
+            # Een uitnodiging staat op elke agenda die ze kreeg (bv. Contrax en
+            # mehdiprivewerkagenda) met hetzelfde id: één keer tellen, anders
+            # botst een afspraak met zichzelf (gemeten 17-09-2026).
+            if ev.get("id") in gezien:
+                continue
+            gezien.add(ev.get("id"))
             s, e_ = ev.get("start", {}), ev.get("end", {})
             uit.append({
                 "kalender": kal, "id": ev.get("id", ""), "titel": ev.get("summary", "(zonder titel)"),
