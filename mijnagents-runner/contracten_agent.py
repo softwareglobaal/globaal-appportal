@@ -156,6 +156,10 @@ def notities(deal_id):
     for n in sorted(items, key=lambda x: x.get("add_time", "")):
         tekst = re.sub(r"<[^>]+>", " ", n.get("content") or "")
         tekst = re.sub(r"\s+", " ", tekst).strip()
+        # Mijn eigen meldingen zijn uitvoer, geen bron: anders wordt elke ronde
+        # anders dan de vorige en vraagt de agent het model telkens opnieuw.
+        if tekst.startswith("Contracten-agent"):
+            continue
         if tekst:
             uit.append(f"[{(n.get('add_time') or '')[:10]}] {tekst}")
     return uit
