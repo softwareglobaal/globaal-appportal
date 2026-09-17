@@ -165,13 +165,42 @@ def notities(deal_id):
     return uit
 
 
+# Wie welk bewijs levert (D37): de agentnaam op het bord, of "mehdi".
+OPVRAGEN_AGENT = (("fathom", "fathom-wacht"), ("plaud", "plaud-wacht"), ("belwacht", "belwacht"),
+                  ("xelion", "belwacht"), ("icloud", "icloud-wacht"), ("mails_naar_salesmap", "mehdi"),
+                  ("mehdi", "mehdi"))
+
+
+def verzoeken_op_bord(deal_id, titel, gaten):
+    """Elk ontbrekend bewijs als verzoek (klaarzet) bij de agent die het levert,
+    idempotent op (deal, datum, soort). Wie het levert, staat in de tijdlijn."""
+    items = []
+    for m in gaten:
+        tekst = (m.get("opvragen_bij") or "").lower()
+        voor = next((agent for woord, agent in OPVRAGEN_AGENT if woord in tekst), "mehdi")
+        items.append({"van": NAAM, "voor": voor, "soort": "verzoek", "sleutel": str(deal_id),
+                      "uniek": f"verzoek:{deal_id}:{m['datum']}:{m['soort']}",
+                      "titel": f"{titel}: bewijs van {m['datum']} {m['soort']} ontbreekt",
+                      "inhoud": f"Dossier {titel} (deal {deal_id}). Moment: {m['datum']} {m.get('tijd', '')} {m['soort']} "
+                                f"— {m.get('titel', '')}. Op te vragen bij: {m.get('opvragen_bij', '')}. "
+                                f"Zet het bewijs in de salesmap; De Contractmaker bouwt de tijdlijn dan opnieuw."})
+    if not items:
+        return
+    req = urllib.request.Request(f"{PLATFORM}/api/klaarzet", data=json.dumps({"items": items}).encode(),
+                                 headers={"Content-Type": "application/json", "X-Agents-Token": TOKEN}, method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=20)
+    except Exception as e:  # noqa: BLE001
+        print("verzoeken op het bord mislukt:", e, file=sys.stderr)
+
+
 def nummer_uit_titel(titel):
     m = re.match(r"^\s*((?:26|56)\d\d)\b", titel or "")
     return m.group(1) if m else ""
 
 
 def mcp_call(naam, **args):
-    """Werkwijze stap 12: bij een transportfout één keer opnieuw; een inhoudelijke
+    """Werkwijze stap 13: bij een transportfout één keer opnieuw; een inhoudelijke
     weigering (ToolFout) komt meteen terug, want opnieuw proberen verandert die niet."""
     try:
         return mcp.call(naam, **args)
@@ -245,7 +274,7 @@ SCHEMA_UITLEG = """Antwoord met UITSLUITEND een JSON-object met deze sleutels:
    "volgende_stap": "één zin voor Mehdi"
  }
 }
-Strikte scheiding (werkwijze stap 7): 'gegevens' zijn UITSLUITEND velden uit veldenschema.master.<soort>.velden,
+Strikte scheiding (werkwijze stap 8): 'gegevens' zijn UITSLUITEND velden uit veldenschema.master.<soort>.velden,
 de placeholders van de master van DIT contracttype (bv. regularisatie: ereloon_regularisatie en
 regularisatiewerken_bullets; architectuur: bouwbudget_bedrag_euro en ereloon_percentage_bouwproject). Een veld
 van een ander contracttype bestaat niet voor dit dossier, ook al lijkt de naam te passen.
@@ -418,7 +447,7 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
 
 
 # -------------------------------------------------------------- melding ---
-def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None):
+def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None, tijdlijn=None, gaten=None):
     m = plan.get("melding") or {}
     def blok(kop, items):
         items = [str(x) for x in (items or []) if str(x).strip()]
@@ -426,6 +455,10 @@ def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None)
     uit = "<b>Contracten-agent</b> — " + datetime.now().strftime("%d-%m-%Y %H:%M") + "<br><br>"
     # Deterministisch, uit de echte schrijfacties: wat er in het dossier kwam en
     # wat het dashboard weigerde. Het model beschrijft; dit blok bewijst.
+    if tijdlijn:
+        uit += blok(f"T. Tijdlijn (D37): eerste contact {tijdlijn.get('eerste_contact') or '?'}, {tijdlijn.get('aantal', 0)} momenten",
+                    [f"ONTBREEKT {g['datum']} {g['soort']}: {g.get('titel', '')[:50]} -> op te vragen bij {g.get('opvragen_bij', '')}" for g in (gaten or [])]
+                    or ["volledig: elk moment heeft zijn bewijs in de salesmap"])
     uit += blok("0. In deze ronde in het dossier geschreven", (geschreven or []) + [f"GEWEIGERD: {g}" for g in (geweigerd or [])])
     uit += blok("1. Vastgelegd, met bron", m.get("vastligt"))
     uit += blok("2. Afgeleid, na te kijken", m.get("nakijken"))
@@ -471,6 +504,21 @@ def verwerk(deal, werkinstructie, staat):
     log(ond, "bevinding", f"dossiercontrole: {tel.get('ok', 0)} ok, {tel.get('let_op', 0)} let op, {tel.get('fout', 0)} fout",
         "\n".join(rood))
 
+    # Werkwijze stap 6 (D37): eerst de tijdlijn. Wat er wanneer gebeurde, en of het
+    # bewijs in de salesmap staat. Elk gat gaat als verzoek naar de agent die ervoor
+    # staat; zolang er gaten zijn komt er geen proef (het dashboard weigert ze ook).
+    tijdlijn, tijdlijn_gaten = {}, []
+    if not DROOG:
+        try:
+            tijdlijn = mcp_call("tijdlijn", deal_id=deal_id, vernieuw=True) or {}
+            tijdlijn_gaten = [m for m in tijdlijn.get("momenten", []) if m.get("status") == "ontbreekt"]
+            log(ond, "tijdlijn", f"tijdlijn: eerste contact {tijdlijn.get('eerste_contact') or '?'}, "
+                                 f"{tijdlijn.get('aantal', 0)} momenten, {len(tijdlijn_gaten)} zonder bewijs",
+                "\n".join(f"{m['datum']} {m['soort']}: {m['titel'][:60]} -> {m['opvragen_bij']}" for m in tijdlijn_gaten))
+            verzoeken_op_bord(deal_id, titel, tijdlijn_gaten)
+        except Exception as e:  # noqa: BLE001
+            log(ond, "fout", f"tijdlijn niet gebouwd: {str(e)[:160]}")
+
     # bronnen: salesmap (uit C4), projectmap (op nummer), klantmails (offerte@)
     salesmap_pad = ""
     for c in (controle or {}).get("controles", []):
@@ -478,7 +526,7 @@ def verwerk(deal, werkinstructie, staat):
             salesmap_pad = (c.get("bewijs") or "").strip()
     velden = (voorb or {}).get("velden") or {}
     klant_email = velden.get("opdrachtgever_1_email") or velden.get("opdrachtgever_email") or ""
-    # Werkwijze stap 6: de projectmap bestaat pas na de ondertekening (S15); alleen
+    # Werkwijze stap 7: de projectmap bestaat pas na de ondertekening (S15); alleen
     # bij een lopend project (addendum, regularisatie) lees ik hem.
     soort = (voorb or {}).get("soort") or "architectuur"
     lopend = soort in ("addendum", "regularisatie")
@@ -569,7 +617,7 @@ def verwerk(deal, werkinstructie, staat):
         except mcp.ToolFout as e:
             fouten.append(f"gegeven_invullen {list(velden)}: {str(e)[:160]}")
             log(ond, "fout", f"gegeven_invullen {', '.join(velden)} geweigerd: {str(e)[:160]}")
-    # Werkwijze stap 7: keuzes zijn uitsluitend de keuzevelden van het dashboard
+    # Werkwijze stap 8: keuzes zijn uitsluitend de keuzevelden van het dashboard
     # plus de vrije teksten. Een gegeven dat het model onder 'keuzes' zette gaat
     # niet mee (en staat in het verslag), want keuze_maken weigert het.
     toegelaten = {k.get("veld") for k in ((voorb or {}).get("keuzes") or []) if isinstance(k, dict)}
@@ -595,7 +643,15 @@ def verwerk(deal, werkinstructie, staat):
             fouten.append(f"keuze_maken: {str(e)[:200]}")
             log(ond, "fout", f"keuze_maken geweigerd: {str(e)[:200]}")
     proef = ""
+    if tijdlijn_gaten and str(velden.get("tijdlijn_aanvaard", "")).lower() != "ja":
+        fouten.append(f"proef: tijdlijn heeft {len(tijdlijn_gaten)} gat(en) zonder bewijs (D37); verzoeken staan op het bord")
+        log(ond, "proef", f"geen proef: tijdlijn heeft {len(tijdlijn_gaten)} gat(en) zonder bewijs (D37)")
+        p = None
+    else:
+        p = True
     try:
+        if p is None:
+            raise mcp.ToolFout("tijdlijn niet volledig (D37)")
         p = mcp_call("proef_maken", deal_id=deal_id)
         proef = p.get("docx", "") if isinstance(p, dict) else ""
         log(ond, "proef", f"proef gemaakt: {proef}")
@@ -620,7 +676,8 @@ def verwerk(deal, werkinstructie, staat):
                 bord_mod.opgepakt(k["id"], NAAM)
             except Exception:  # noqa: BLE001
                 pass
-    tekst = melding_tekst(plan, proef, nummer_voorstel, geschreven, [f for f in fouten if not f.startswith("proef")])
+    tekst = melding_tekst(plan, proef, nummer_voorstel, geschreven, [f for f in fouten if not f.startswith("proef")],
+                          tijdlijn=tijdlijn, gaten=tijdlijn_gaten)
     tekst += f"<br><i>Bronnen gelezen: {bronnen_mod.samenvatting(bronnen)}</i>"
     pipedrive.schrijf(FIRMA, "POST", "/notes", body={"deal_id": deal_id, "content": tekst})
     log(ond, "melding", "notitie op de Pipedrive-deal gezet", re.sub(r"<[^>]+>", "", tekst.replace("<br>", "\n")))

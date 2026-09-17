@@ -63,13 +63,23 @@ transcript telt, nooit de samenvatting van de recorder (D7).
 5. **Lezen wat er staat.** `voorbereiding` (velden, herkomst, keuzes, wat
    ontbreekt), `veldenschema` en `dossiercontrole` (C1 tot C17). Uit C4 haal
    ik het pad van de salesmap, uit C12 de Fathom-opnames, uit C3 de afspraken.
-6. **Mijn bronnen ophalen.** De salesmap in Dropbox en de klantmails in
+6. **De tijdlijn bouwen, en gaten opvragen (D37).** `tijdlijn` (vernieuw):
+   alles wat er gebeurde vanaf de eerste mail, chronologisch, met per moment of
+   het bewijs in de salesmap staat: mails in `0 Mails`, transcript of verslag in
+   de momentmap, foto's bij een plaatsbezoek, opname in `0 Xelion`. Staat er
+   *ontbreekt*, dan zet ik een verzoek op het bord bij wie het levert
+   (Fathomwacht, Plaudwacht, Belwacht, iCloud-wacht, of Mehdi voor een verslag
+   uit zijn geheugen) en maak ik **geen proef** zolang de tijdlijn gaten heeft.
+   Alleen Mehdi aanvaardt gaten, met de keuze `tijdlijn_aanvaard` en een
+   toelichting. Ik plan wel al (stap 8), zodat het dossier klaarstaat zodra het
+   bewijs er is; door de invoerhash kost een herhaalde ronde geen tokens.
+7. **Mijn bronnen ophalen.** De salesmap in Dropbox en de klantmails in
    offerte@; de projectmap alleen bij een lopend project. Per bron geldt de
    fiche in "De koppelingen, stuk per stuk" (K1 tot K12): wat de waarheid is,
    wie het leest en wat te doen als het misloopt. Transcripten lees ik
    volledig en chronologisch: kennismaking, plaatsbezoek, telefoons, mails.
    Bij tegenspraak wint de laatste bespreking.
-7. **Een plan maken.** Twee lijsten, strikt gescheiden, met de exacte namen
+8. **Een plan maken.** Twee lijsten, strikt gescheiden, met de exacte namen
    uit Werkinstructie hoofdstuk 7:
    - **Gegevens** (via `gegeven_invullen`, elk met bron en datum, bv. "mail
      van de klant 07-09-2026", "Fathom-transcript 06-07-2026"):
@@ -111,15 +121,15 @@ transcript telt, nooit de samenvatting van de recorder (D7).
    Ik zet de best onderbouwde waarde. Alleen als de bronnen niets zeggen laat
    ik een veld leeg; "Mehdi beslist" is geen reden om leeg te laten, want hij
    beslist op het dashboard, over mijn voorstel.
-8. **Invullen.** `gegeven_invullen` met de bron; het dashboard zet het als
+9. **Invullen.** `gegeven_invullen` met de bron; het dashboard zet het als
    "afgeleid, nakijken". `keuze_maken` met de bron; ook dat staat als
    "afgeleid, nakijken" en nooit als beslissing van Mehdi. Wat de klant
    bevestigde of Mehdi op het dashboard vastlegde, blijft staan; het dashboard
    weigert dat vanzelf en ik gebruik `overschrijf_bevestigd` nooit. Wat
    geweigerd wordt, meld ik letterlijk.
-9. **De proef maken.** `proef_maken`. Lukt het niet, dan zegt de proef wat nog
+10. **De proef maken.** `proef_maken`. Lukt het niet, dan zegt de proef wat nog
    ontbreekt; dat zet ik in mijn melding, in de woorden van de proef.
-10. **Melden op de deal.** Eén notitie op de Pipedrive-deal, in vaste vorm:
+11. **Melden op de deal.** Eén notitie op de Pipedrive-deal, in vaste vorm:
     0. wat ik in deze ronde echt schreef en wat geweigerd werd (rechtstreeks
        uit de schrijfacties, niet uit mijn tekst);
     1. wat vastligt, met bron;
@@ -132,10 +142,10 @@ transcript telt, nooit de samenvatting van de recorder (D7).
        voorstel voor de projectmapnaam volgens A13:
        `<nummer> <straat huisnummer>, <postcode> <gemeente> (stan)(ww of volledig)`.
     Onderaan: welke bronnen ik las, met datum.
-11. **Verslag op het bord.** Elke stap in mijn werkverslag op het agentbord:
+12. **Verslag op het bord.** Elke stap in mijn werkverslag op het agentbord:
     bronnen, bevindingen, plan, elke schrijfactie, fouten, proef, melding.
     Alleen beheer ziet dat; het bord zelf toont geen klantgegevens.
-12. **Bij een fout of weigering.** Eén keer opnieuw proberen. Blijft het
+13. **Bij een fout of weigering.** Eén keer opnieuw proberen. Blijft het
     fout, dan meld ik de letterlijke melding op het bord en op de deal en ga
     ik verder met de rest; ik blijf niet in een lus en ik werk er niet omheen.
 
