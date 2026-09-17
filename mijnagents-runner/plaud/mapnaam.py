@@ -35,12 +35,43 @@ def titel_van(naam: str) -> str:
     return n or "zonder titel"
 
 
-def mapnaam(opname: dict) -> str:
+def mapnaam(opname: dict, uniek: bool = False) -> str:
+    """Met uniek=True komt het korte Plaud-id erachter. Nodig omdat naamloze
+    opnames in dezelfde minuut anders dezelfde map zouden krijgen: op
+    17-09-2026 botsten 24 opnames op 10 namen."""
     t = belgisch(opname["start_at"])
     naam = f"{t:%Y-%m-%d %H%M} {titel_van(opname.get('name'))}"
-    if len(naam) > MAX:
-        naam = naam[:MAX].rstrip(" ,;-") + "…"
-    return naam
+    staart = f" [{(opname.get('id') or '').replace('of_', '')[:6]}]" if uniek else ""
+    if len(naam) + len(staart) > MAX:
+        naam = naam[:MAX - len(staart)].rstrip(" ,;-") + "…"
+    return naam + staart
+
+
+def map_van(opname: dict, doel) -> "Path":
+    """De map van deze opname: de gewone naam, of de variant met het korte id
+    als de gewone map van een andere opname blijkt te zijn."""
+    from pathlib import Path
+    import json as _json
+    doel = Path(doel)
+    m = doel / mapnaam(opname)
+    g = m / "gesprek.json"
+    if g.exists():
+        try:
+            if _json.loads(g.read_text(encoding="utf-8")).get("plaud_id") not in (None, opname.get("id")):
+                return doel / mapnaam(opname, uniek=True)
+        except Exception:  # noqa: BLE001
+            pass
+    return m
+
+
+def compleet(opname: dict, doel) -> bool:
+    """Compleet = de map van deze opname heeft een geluidsopname en een
+    transcript (of het merkbestand dat Plaud er geen heeft)."""
+    m = map_van(opname, doel)
+    if not m.is_dir():
+        return False
+    audio = [p for p in m.glob("opname.*") if p.stat().st_size > 1000]
+    return bool(audio) and ((m / "transcript.json").exists() or (m / "geen-transcript.txt").exists())
 
 
 if __name__ == "__main__":

@@ -87,6 +87,17 @@ def main(pad_invoer: str) -> int:
     op = _vul_aan(json.loads(Path(pad_invoer).read_text(encoding="utf-8")))
     naam = mapnaam(op)
     map_ = DOEL / naam
+    # Botsing: twee naamloze opnames in dezelfde minuut. Dan het korte id erachter,
+    # anders overschrijft de tweede de eerste of verdwijnt hij achter "bestond al".
+    bestaand = map_ / "gesprek.json"
+    if bestaand.exists():
+        try:
+            ander = json.loads(bestaand.read_text(encoding="utf-8")).get("plaud_id")
+        except Exception:  # noqa: BLE001
+            ander = None
+        if ander and ander != op.get("id"):
+            naam = mapnaam(op, uniek=True)
+            map_ = DOEL / naam
     map_.mkdir(parents=True, exist_ok=True)
     t_bel = belgisch(op["start_at"])
     duur_min = round((op.get("duration") or 0) / 60000, 1)
