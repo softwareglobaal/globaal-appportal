@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from mapnaam import mapnaam, belgisch  # noqa: E402
+from mapnaam import mapnaam, belgisch, map_van  # noqa: E402
 
 SP = Path(__file__).parent
 DOEL = Path.home() / "TKN-buro Dropbox" / "Data uit Mehdi" / "Plaud"
@@ -22,7 +22,8 @@ def main() -> int:
               "| datum | uur | duur | naam in Plaud | transcript | opname |", "|---|---|---|---|---|---|"]
     for op in lijst:
         naam = mapnaam(op)
-        m = DOEL / naam
+        m = map_van(op, DOEL)
+        naam = m.name
         t = belgisch(op["start_at"])
         duur = f"{round((op.get('duration') or 0) / 60000)} min"
         audio = [p for p in m.glob("opname.*") if p.stat().st_size > 1000]

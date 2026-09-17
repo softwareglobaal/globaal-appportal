@@ -77,9 +77,9 @@ def main():
     print(f"{AUTORISATIE}?{params}\n")
     srv = http.server.HTTPServer(("127.0.0.1", 8199), Callback)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    print("Ik wacht tot een uur op de terugkeer...")
-    if not gereed.wait(3600):
-        print("Niets ontvangen binnen het uur."); return 1
+    print("Ik wacht tot 24 uur op de terugkeer...")
+    if not gereed.wait(86400):
+        print("Niets ontvangen binnen 24 uur."); return 1
     srv.shutdown()
     if "code" not in uitkomst:
         print("Mislukt:", uitkomst.get("fout")); return 1

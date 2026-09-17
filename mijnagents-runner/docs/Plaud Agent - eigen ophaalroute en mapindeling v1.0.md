@@ -70,6 +70,31 @@ het archief van het account. Gemeten op 17-09: elk leesverzoek met die sleutels 
 Daarom staat het archief op de **Mac** in Dropbox en niet op de VM: die zat op 17-09 op 98 % vol,
 met 2,1 GB vrij.
 
+## Uitkomst (18-09-2026, 00:45)
+
+Het volledige archief staat in `Data uit Mehdi/Plaud`. Gemeten met `controle.py`:
+
+| | |
+|---|---|
+| Opnames in Plaud | 773 |
+| Mappen compleet | 773 (elke map heeft de geluidsopname) |
+| Met transcript | 664 |
+| Zonder transcript | 109 (Plaud heeft ze nooit uitgetypt; `geen-transcript.txt` in de map) |
+| Uitingen samen | 106.766 |
+| Audio | 11,0 GB |
+| Jaren | 181 mappen uit 2025, 592 uit 2026 |
+
+`00 index.md` in die map is de inhoudstafel: datum, uur, duur, naam in Plaud, aantal uitingen en de
+grootte van de opname, nieuwste eerst.
+
+Opgehaald met werkagenten over de Plaud-MCP, omdat de eigen API nog wacht op de eenmalige
+aanmelding. Eén les daaruit staat hieronder bij de naambotsing.
+
+**Naambotsing (opgelost).** 773 opnames leverden 759 unieke mapnamen op: naamloze opnames in dezelfde
+minuut kregen dezelfde naam, en twee verdwenen daardoor achter "audio bestond al". `bouw_map.py`
+hangt nu het korte Plaud-id achter de naam zodra de map van een andere opname blijkt te zijn, en de
+gedeelde `compleet()` in `mapnaam.py` toetst op het Plaud-id in plaats van op het bestaan van de map.
+
 ## Wat hierna nog moet
 
 1. **De Plaudwacht meeverhuizen.** `plaud_wacht.py` schrijft nog naar `mijnagents-data/plaud/<jaar>/`
