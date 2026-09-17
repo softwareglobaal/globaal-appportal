@@ -869,6 +869,100 @@ def ingestie_rijen(limit=25):
                        "kb": round((r["bytes"] or 0) / 1024)} for r in rows]
 
 
+# De poorten die een document moet halen, in de volgorde waarin de lus ze zet.
+# Elke poort noemt zijn sleutel in het rapport en wat het betekent als hij valt.
+POORTEN = (
+    ("invarianten", "Invarianten", "bewijst dat het snijden de bron niet beschadigde"),
+    ("keuring", "Keuring", "gemiddelden: wezen, reuzen, duplicaten, rommel"),
+    ("dekking", "Dekking", "zit elk stuk brontekst in een fragment"),
+    ("rookproef", "Rookproef", "geeft de kennisbank echt antwoord op de gouden vragen"),
+)
+
+
+def _poortstand(sleutel: str, rapport: dict) -> dict:
+    """Of een poort gehaald is, met het cijfer dat erbij hoort.
+
+    Drie uitkomsten en niet twee: een poort die niet gedraaid heeft is iets
+    anders dan een poort die viel. Een document dat bij de herkenning strandde
+    heeft nooit een keuring gezien, en dat als rood tonen zou liegen.
+    """
+    blok = rapport.get(sleutel)
+    if not isinstance(blok, dict) or not blok:
+        return {"stand": "niet-gedraaid", "cijfer": ""}
+    if sleutel == "invarianten":
+        goed = bool(blok.get("geslaagd"))
+        cijfer = f"dekking {blok.get('dekking', '?')}, ontrouw {blok.get('ontrouw', '?')}"
+        if not goed and blok.get("gezakt"):
+            cijfer = "gezakt op " + ", ".join(blok["gezakt"])
+    elif sleutel == "keuring":
+        # De keuring zet zijn metingen in het rapport, niet zijn oordeel: de lus
+        # escaleert al bij bezwaren, dus wie hier staat is erdoor.
+        goed = True
+        cijfer = (f"{blok.get('aantal', '?')} fragmenten, mediaan "
+                  f"{blok.get('tokens_mediaan', '?')} tokens, "
+                  f"{blok.get('duplicaten', 0)} duplicaten")
+    elif sleutel == "dekking":
+        goed = True
+        cijfer = (f"{blok.get('dekking', '?')}% gedekt, "
+                  f"{blok.get('onverklaard_aandeel', '?')}% onverklaard")
+    else:
+        goed = bool(blok.get("geslaagd"))
+        cijfer = f"{blok.get('beantwoord', '?')}/{blok.get('vragen', '?')} vragen"
+    return {"stand": "gehaald" if goed else "gevallen", "cijfer": cijfer}
+
+
+def chunker_rijen(limit=40):
+    """Per document: wat de chunker koos en of het bewijs stand hield.
+
+    Alles komt uit de kolom `rapport`, die de lus na elke rit meestuurt. De
+    tegel rekent hier niets uit; ze toont wat de keten heeft gemeten.
+    """
+    conn = db()
+    rows = conn.execute(
+        """SELECT id, bestandsnaam, door, aangeleverd, status, fase, detail,
+                  corpus, rapport, bijgewerkt FROM ingestie
+           ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
+    conn.close()
+
+    uit = []
+    for r in rows:
+        rij = dict(r)
+        rapport, fout = {}, ""
+        if (r["rapport"] or "").strip():
+            try:
+                rapport = json.loads(r["rapport"])
+            except (ValueError, TypeError) as e:
+                # Zichtbaar maken, niet stil overslaan: een rapport dat niet te
+                # lezen is, is zelf een bevinding.
+                fout = f"rapport onleesbaar ({type(e).__name__})"
+        herkend = rapport.get("herkenning") or {}
+        profiel = rapport.get("profiel") or {}
+        ouders = rapport.get("ouders") or {}
+        keur = rapport.get("keuring") or {}
+        uit.append(rij | {
+            "aangeleverd_kort": _fmt(r["aangeleverd"]),
+            "bijgewerkt_kort": _fmt(r["bijgewerkt"] or ""),
+            "bronsoort": herkend.get("bronsoort", ""),
+            "drager": herkend.get("drager", ""),
+            "ophaaldoelen": herkend.get("ophaaldoelen") or [],
+            "zekerheid": herkend.get("zekerheid", ""),
+            "titel": herkend.get("titel", ""),
+            "waarom": herkend.get("motivering", ""),
+            "zorgen": herkend.get("zorgen") or [],
+            "strategie": profiel.get("strategie", ""),
+            "detectoren": rapport.get("detectoren") or {},
+            "kinderen": keur.get("aantal", ""),
+            "ouderniveau": ouders.get("niveau", ""),
+            "ouders": ouders.get("aantal", ""),
+            "poorten": [{"sleutel": s, "naam": n, "uitleg": u} | _poortstand(s, rapport)
+                        for s, n, u in POORTEN],
+            "ingekort": rapport.get("_ingekort") or [],
+            "rapport_fout": fout,
+            "rapport_mooi": json.dumps(rapport, ensure_ascii=False, indent=2) if rapport else "",
+        })
+    return uit
+
+
 def zoekdienst_json(pad: str, velden: dict) -> dict:
     """Vraagt iets aan de zoekdienst op de host.
 
@@ -1103,6 +1197,27 @@ def ingestie():
         "ingestie.html",
         rijen=ingestie_rijen(),
         melding=request.args.get("m", ""),
+        portal_url=f"https://portal.{BASE_DOMAIN}/",
+        username=request.headers.get("X-authentik-username", "onbekend"),
+    )
+
+
+@app.route("/chunker")
+def chunker():
+    """De algemene chunker: welke bronsoorten de agent kent, hoe hij ze snijdt,
+    en wat hij bij elk verwerkt document koos.
+
+    De taxonomie komt van de zoekdienst op de host en niet uit een lijst hier:
+    een nieuwe bronsoort hoort op een plek te worden ingevoerd. Ligt de
+    zoekdienst plat, dan blijft de tabel met documenten gewoon staan; die komt
+    uit de eigen database.
+    """
+    taxonomie = zoekdienst_json("/taxonomie", {})
+    return render_template(
+        "chunker.html",
+        rijen=chunker_rijen(),
+        taxonomie=taxonomie,
+        taxonomie_fout=taxonomie.get("fout", ""),
         portal_url=f"https://portal.{BASE_DOMAIN}/",
         username=request.headers.get("X-authentik-username", "onbekend"),
     )

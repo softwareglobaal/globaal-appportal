@@ -1691,6 +1691,27 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   verwerkt standaard in de VS en bewaart API-transcripties 7 dagen;
   EU-verwerking loopt via hun sales. Volledig onderzoek, endpoints en kosten:
   **`docs/ONDERZOEK-PLAUD-API.md`**.
+- **Duiding (migratie 151, 17-09-2026):** van uitgeschreven tekst naar een
+  antwoord op "wie belde waarover, en voor welk bedrijf". Opdracht Mehdi. Drie
+  bronnen, bewust gescheiden: **`communicatie.lijn_firma`** koppelt een
+  Xelion-lijnnaam aan een firma (de spiegeltabel `xelion_belvolgorde` wordt elke
+  ronde overschreven, dus een handmatige kolom daarin zou sneuvelen; eerste
+  vulling op naampatroon, lijnen zonder firmanaam blijven leeg in plaats van
+  geraden). **`communicatie.contact_herkenning`** is het externe nummer
+  opgezocht in de vijf Pipedrive-administraties (`communicatie/src/pipedrive.js`
+  + `contact-sync.js`), gecachet **per nummer** en niet per gesprek; gezocht op
+  de laatste negen cijfers en daarna zelf gecontroleerd, want Pipedrive bewaart
+  nummers zoals iemand ze ooit intypte. "Niet gevonden" is ook een antwoord en
+  wordt bewaard. **`communicatie.gesprek_duiding`** is de AI-kant
+  (`duiding-sync.js`): één aanroep per gesprek voor `soort` (prospect, klant,
+  leverancier, intern, sollicitatie, overig), `onderwerp`, `samenvatting`,
+  `project` en `vervolgstap`. **De AI beslist niet over de harde feiten**: welke
+  firma bij een gesprek hoort komt uit het register (`gebruikt_voor_firma_id`)
+  of uit `lijn_firma`, nooit uit de tekst. Een gesprek met te weinig tekst gaat
+  niet naar de AI. Zelfde slot als de transcriptie, `ON DELETE CASCADE` daarop,
+  en alle drie de tabellen staan in `_NOOIT` van `graaf.py`. Standaard uit:
+  `CONTACT_HERKENNING_ENABLED` (leest alleen, kost niets) en `DUIDING_ENABLED`.
+  Bewust niet gebouwd: een AI-cijfer voor hoe goed een medewerker belt.
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
