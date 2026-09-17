@@ -141,8 +141,12 @@ def uitkomst_van(plan: dict, invoer: dict):
     schema = invoer.get("veldenschema") or {}
     toegelaten = set(((schema.get("master") or {}).get(soort) or {}).get("velden") or []) or None
     gegevens = {}
+    teksten = hh.bronteksten(invoer.get("bronnen"), invoer.get("notities"))
     for post in plan.get("gegevens") or []:
-        goed, _ = hh.valideer_gegevens(post.get("velden") or {}, (post.get("bron") or "").strip(), toegelaten)
+        bron, citaatfout = hh.pas_citaat_toe(post, teksten)
+        if citaatfout:
+            continue
+        goed, _ = hh.valideer_gegevens(post.get("velden") or {}, bron, toegelaten)
         gegevens.update(goed)
     opties = {k.get("veld"): list(k.get("opties") or []) for k in (invoer["voorbereiding"].get("keuzes") or []) if isinstance(k, dict)}
     vrij = set(((schema.get("master") or {}).get(soort) or {}).get("vrije_velden") or []) | ca.VRIJE_STANDAARD

@@ -231,7 +231,8 @@ def volgend_vrij_nummer(reeks="26"):
 # ------------------------------------------------------------ taalmodel ---
 SCHEMA_UITLEG = """Antwoord met UITSLUITEND een JSON-object met deze sleutels:
 {
- "gegevens": [ {"velden": {"veldnaam": "waarde", ...}, "bron": "bv. 'Pipedrive-notitie 14-10-2023' of 'mail van de klant 02-09-2026'"} ],
+ "gegevens": [ {"velden": {"veldnaam": "waarde", ...}, "bron": "bv. 'Pipedrive-notitie 14-10-2023' of 'mail van de klant 02-09-2026'",
+                "citaat": "de zin uit die bron waar dit letterlijk in staat, exact overgeschreven (12 tot 300 tekens)"} ],
  "keuzes": {"veld": "waarde", ...},
  "keuzes_bron": "waarop de keuzes steunen, bv. 'Fathom-transcript 06-07-2026'",
  "nummer_voorstel": "26xx of null",
@@ -257,7 +258,10 @@ Regels die je nooit breekt:
 - Bereken of schat NOOIT capa_key_code, project_capakey, oppervlakte_m2 of project_oppervlakte_terrein. Een rijksregisternummer vul je alleen in als het letterlijk in een klantmail van minder dan een jaar oud staat (bron: die mail met datum); anders leeg en bij 'ontbreekt'.
 - Het mandaat is: invullen en een proef maken. Zet daarom voor elk veld en elke keuze die de proef blokkeert (veldenschema.master.<soort>.verplicht en de keuzes van 'voorbereiding') de best onderbouwde waarde uit de gesprekken, transcripten en mails, en meld ze onder 'keuzes_vastgelegd' mét bron zodat Mehdi ze nakijkt. Laat een keuze alleen leeg als de bronnen er echt niets over zeggen; zeg dan bij 'ontbreekt' wat Mehdi moet beslissen.
 - Overschrijf nooit een veld dat als bevestigd door de klant of vastgelegd door Mehdi staat.
-- Elke 'gegevens'-post heeft een concrete bron met datum. Geen bron = niet invullen, wel melden.
+- Elke 'gegevens'-post heeft een concrete bron met datum én een letterlijk citaat uit die bron (transcript, mail,
+  notitie of document dat je kreeg), exact overgeschreven. De code zoekt het citaat terug; staat het er niet
+  letterlijk, dan wordt de post geweigerd. Geen citaat = niet invullen, wel melden. Groepeer per citaat: één post
+  per bronzin, met alleen de velden die die zin bewijst.
 - Bedragen als '50.000,00'; percentages als getal ('14').
 - project_beschrijving volgens de vaste opbouw uit de Werkinstructie (per ruimte, chronologisch, wat de architect doet en wat de klant zelf doet, 'Het project omvat niet'), alleen uit de gesprekken en notities die je kreeg.
 - Geef 'nummer_voorstel' alleen als de dealtitel géén 26xx/56xx-nummer heeft; gebruik dan het aangereikte volgende vrije nummer.
@@ -364,8 +368,9 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
             "type": "object",
             "properties": {
                 "gegevens": {"type": "array", "items": {"type": "object", "properties": {
-                    "velden": {"type": "object"}, "bron": {"type": "string"}},
-                    "required": ["velden", "bron"]}},
+                    "velden": {"type": "object"}, "bron": {"type": "string"},
+                    "citaat": {"type": "string", "description": "letterlijk uit de bron, 12 tot 300 tekens"}},
+                    "required": ["velden", "bron", "citaat"]}},
                 "keuzes": {"type": "object"},
                 "keuzes_bron": {"type": "string"},
                 "nummer_voorstel": {"type": ["string", "null"]},
@@ -539,8 +544,17 @@ def verwerk(deal, werkinstructie, staat):
     # toepassen, deterministisch: eerst validatie in code (rapport stap 4), dan schrijven
     fouten, geschreven, geweigerd_lijst = [], [], []
     toegelaten = set(((schema.get("master") or {}).get(soort) or {}).get("velden") or []) or None
+    teksten = hh.bronteksten(_bronnen_compact(bronnen), notitielijst)
     for post in plan.get("gegevens") or []:
-        velden_ruw, bron = post.get("velden") or {}, (post.get("bron") or "").strip()
+        velden_ruw = post.get("velden") or {}
+        # Rapport deel 5: eerst het citaat terugzoeken; niet gevonden = hele post geweigerd.
+        bron, citaatfout = hh.pas_citaat_toe(post, teksten)
+        if citaatfout:
+            for veld, waarde in velden_ruw.items():
+                geweigerd_lijst.append({"veld": veld, "waarde": str(waarde)[:80], "reden": citaatfout, "bron": bron[:80]})
+                fouten.append(f"{veld} geweigerd: {citaatfout[:60]}")
+            log(ond, "geweigerd", f"{', '.join(velden_ruw)}: {citaatfout}")
+            continue
         velden, geweigerd = hh.valideer_gegevens(velden_ruw, bron, toegelaten)
         for veld, waarde, reden in geweigerd:
             geweigerd_lijst.append({"veld": veld, "waarde": str(waarde)[:80], "reden": reden, "bron": bron[:80]})

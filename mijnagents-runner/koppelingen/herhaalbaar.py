@@ -269,3 +269,55 @@ class Slot:
             fcntl.flock(self.fh, fcntl.LOCK_UN); self.fh.close()
         except Exception:  # noqa: BLE001
             pass
+
+
+# ---------------------------------------------------------------- 6. citaat ---
+# Rapport deel 5: eerst letterlijk citeren, dan pas concluderen, en intrekken als
+# het citaat niet in de bron staat. Het model geeft per gegevenspost een citaat;
+# deze code zoekt het terug. Geen citaat of niet gevonden: het gegeven komt niet
+# in het dossier. Wat wel gevonden is, krijgt het citaat in zijn herkomst.
+def _plat(s: str) -> str:
+    s = str(s or "").casefold()
+    s = s.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"').replace("…", "...")
+    s = re.sub(r"[\s ]+", " ", s)
+    return s.strip(" .,;:'\"«»()[]")
+
+
+def bronteksten(bronnen_compact, notitielijst=None) -> list[tuple[str, str]]:
+    """Alle tekst waarin een citaat mag staan, als (naam, tekst)."""
+    uit = []
+    b = bronnen_compact or {}
+    for sleutel in ("salesmap", "projectmap"):
+        for t in ((b.get(sleutel) or {}).get("teksten") or []):
+            uit.append((f"{sleutel}: {t.get('bestand', '?')}", t.get("tekst") or ""))
+    for m in b.get("mails") or []:
+        uit.append((f"mail {str(m.get('datum', ''))[:10]} {m.get('onderwerp', '')}", m.get("tekst") or ""))
+    for k in b.get("klaargezet") or []:
+        uit.append((f"klaargezet: {k.get('titel', '')}", k.get("inhoud") or ""))
+    for n in notitielijst or []:
+        uit.append(("Pipedrive-notitie", n))
+    return uit
+
+
+def citaat_gevonden(citaat: str, teksten: list[tuple[str, str]]):
+    """(gevonden, naam van de bron). Vergelijking zonder hoofdletters, dubbele
+    spaties en aanhalingstekens; een citaat korter dan 12 tekens telt niet."""
+    c = _plat(citaat)
+    if len(c) < 12:
+        return False, ""
+    for naam, tekst in teksten:
+        if c in _plat(tekst):
+            return True, naam
+    return False, ""
+
+
+def pas_citaat_toe(post: dict, teksten: list[tuple[str, str]]):
+    """Geeft (bron_met_citaat, reden_van_weigering). Leeg reden = in orde."""
+    citaat = " ".join(str(post.get("citaat") or "").split()).strip()
+    bron = " ".join(str(post.get("bron") or "").split()).strip()
+    if not citaat:
+        return bron, "geen letterlijk citaat uit de bron"
+    gevonden, naam = citaat_gevonden(citaat, teksten)
+    if not gevonden:
+        return bron, f"citaat niet teruggevonden in de bronnen: «{citaat[:80]}»"
+    return f"{bron} — citaat ({naam}): «{citaat[:300]}»", ""

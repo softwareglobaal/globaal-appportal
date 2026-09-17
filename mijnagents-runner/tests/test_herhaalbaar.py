@@ -77,5 +77,22 @@ with hh.Slot("agent-x") as s1:
 with hh.Slot("agent-x"):
     check("na afloop is het slot vrij", True)
 
+print("\n6. citaat: letterlijk terug te vinden, anders geweigerd")
+bronnen = {"salesmap": {"teksten": [{"bestand": "transcript.txt", "tekst": "00:05:07 Mehdi: op onze contract gaat er staan 2.500 euro voor ons, 1.500 euro voor de externe partij."}]},
+           "mails": [{"datum": "2026-09-13", "onderwerp": "Re: offerte", "tekst": "Wij gaan akkoord met uw voorstel.\nGSM-nummer(s): 0471 29 27 33"}]}
+teksten = hh.bronteksten(bronnen, ["[2026-07-06] 12% , bouwbudget is 150.000 al in!!"])
+check("drie bronteksten verzameld", len(teksten) == 3, teksten)
+bron, fout1 = hh.pas_citaat_toe({"bron": "Fathom 11-09", "citaat": "op onze contract gaat er staan 2.500 euro voor ons"}, teksten)
+check("citaat uit het transcript gevonden en in de bron gezet", not fout1 and "citaat (salesmap: transcript.txt)" in bron, (bron, fout1))
+_, fout2 = hh.pas_citaat_toe({"bron": "mail", "citaat": "WIJ GAAN AKKOORD  met uw voorstel"}, teksten)
+check("hoofdletters en dubbele spaties tellen niet", not fout2, fout2)
+_, fout3 = hh.pas_citaat_toe({"bron": "mail", "citaat": "de klant betaalt 5.000 euro"}, teksten)
+check("verzonnen citaat geweigerd", "niet teruggevonden" in fout3, fout3)
+_, fout4 = hh.pas_citaat_toe({"bron": "mail", "citaat": ""}, teksten)
+check("zonder citaat geweigerd", "geen letterlijk citaat" in fout4)
+_, fout5 = hh.pas_citaat_toe({"bron": "notitie", "citaat": "bouwbudget is 150.000"}, teksten)
+check("citaat uit een Pipedrive-notitie gevonden", not fout5, fout5)
+check("te kort citaat telt niet", hh.citaat_gevonden("akkoord", teksten) == (False, ""))
+
 print(f"\n{'='*50}\n{ok} geslaagd, {fout} gefaald\n{'='*50}")
 sys.exit(1 if fout else 0)
