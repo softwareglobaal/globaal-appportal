@@ -59,9 +59,27 @@ In elke map: `transcript.md` (leesbaar, met kop), `transcript.json` (de ruwe uit
 Het archief staat op de VM omdat de sleutels daar staan en het alleen tekst is (2.248 gesprekken
 is ongeveer 200 MB); de VM had op 18-09 weer 9,5 GB vrij.
 
-## Uitkomst
+## Uitkomst (18-09-2026, 01:55)
 
-Wordt aangevuld zodra `fathom_haal_alles.py` klaar is (regel `KLAAR` in `00 opbouw.log`).
+`fathom_haal_alles.py` liep in ongeveer 25 minuten, zonder één fout of herkansing. Daarna is
+`data_uit_mehdi_sync.sh` met de hand gedraaid; de Mac telt hetzelfde als de VM.
+
+| | |
+|---|---|
+| Gesprekken in Fathom | 2.248 (beide sleutels, ontdubbeld op `recording_id`) |
+| Mappen in `Fathom data` | 2.248, elk met `gesprek.json` en `transcript.json` |
+| Zonder transcript | 6 (Fathom heeft er geen; `geen-transcript.txt` in de map) |
+| Overgenomen uit het oude archief, met herkenning | 288 |
+| Naambotsingen | 0 |
+| Uitingen samen | 668.725 |
+| Omvang | 225 MB op de VM, 215 MB in Dropbox |
+| Per jaar | 149 uit 2024, 912 uit 2025, 1.187 uit 2026 |
+| Vroegste | 2024-10-28 1105 Joseph Ugale H-Architects Prospections |
+| Titel "Impromptu Zoom Meeting" of even leeg | 843 van 2.248 (38 %) |
+
+Twee dingen die de API niet geeft: `default_summary` is bij alle 2.248 leeg (de samenvatting van
+Fathom zit niet in de lijst-oproep; niet erg, ze is geen bron), en er is geen videobestand (wel de
+deellink in elke map).
 
 ## Wat hierna nog moet
 
