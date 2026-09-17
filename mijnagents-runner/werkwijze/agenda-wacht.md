@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 6 (16-09-2026, het document 'agenda afspraken met Nova.docx' is de enige bron; negen agenda's; v5 van dezelfde dag met elf agenda's is teruggedraaid; v4 11-09-2026: reistijd met file, projectnummer en adres uit de projectmap). Ik ben de bronnen-agent voor
+Versie 6.1 (17-09-2026, Elevait als firma L; v6 16-09-2026: het document 'agenda afspraken met Nova.docx' is de enige bron; negen agenda's; v5 van dezelfde dag met elf agenda's is teruggedraaid; v4 11-09-2026: reistijd met file, projectnummer en adres uit de projectmap). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -19,7 +19,7 @@ fout, niet het document. Sinds 16-09-2026 voer ik die afspraken zelf uit.
 blauw = klant online; groen = intern; geel = ?? niet bevestigd.
 
 **I. De 9 actieve agenda's (de rest blijft verborgen en lees ik niet)**:
-1. mehdiprivewerkagenda (intern + Harmoniebouw-werk van Mehdi), 2. H-Architects (alle
+1. mehdiprivewerkagenda (intern + Harmoniebouw-werk van Mehdi + Elevait), 2. H-Architects (alle
 HA-events), 3. UNABO (alle UNABO + diensten), 4. Harmoniebouw (alleen HB-events),
 5. Contrax, 6. Lara, 7. Prive Buiten, 8. zoomafspraken (sales funnel via Calendly),
 9. Feestdagen BE+SU (alleen lezen).
@@ -35,6 +35,11 @@ agenda), dan meld ik dat als signaal "verkeerde agenda".
 **K. Cross-firma-regel**: de dienst wint, niet de klant. EPB-werk voor een
 H-Architects-klant is `[UNABO-xx] ... EPB ...` op de UNABO-agenda, niet op HA.
 
+**L. Elevait (toegevoegd 17-09-2026)**: het bedrijf van Mehdi met Shaniel en Siyan (AI-trainingen
+en AI-toepassingen). Firma-code `[ELEVAIT]` met dezelfde soorten (IN, PO, PB, KO, KB); de
+afspraken staan op mehdiprivewerkagenda, er is geen eigen agenda. Afdeling op het bord: elevait.
+Voorbeeld: `Mehdi: [ELEVAIT-IN] Shaniel - LegalFly`.
+
 **De titel** (voorbeelden uit het document):
 `Mehdi: !! [HA-KB] WB 2310 - werfbezoek gemeente Aarschot`,
 `Mehdi: !! [HA-KB] OPL 2531 Spleesters`, `Mehdi: !! [UNABO-KB] PLB 46073 Wathion -
@@ -44,7 +49,7 @@ Energy wekelijks`, `Mehdi: [PRIVE] Tandarts Mathilda`, `🚗 Reistijd → Aarsch
 `🚗 Reistijd ← Aarschot`. Dus: `Mehdi:` eerst, dan de marker (`!!` buiten met
 reistijdblokken, `??` niet bevestigd), dan `[FIRMA-SOORT]` met firma HA, UNABO, HB,
 CTX, LARA, PRIVE en soort KB klant buiten, PB prospect buiten, KO klant online, PO
-prospect online, IN intern; dan het type (WB werfbezoek, OPL oplevering, PLB
+prospect online, IN intern (firma ook ELEVAIT, zie L); dan het type (WB werfbezoek, OPL oplevering, PLB
 plaatsbeschrijving/plaatsbezoek, SCN 3D-scan, EPB, VC, STA), nummer en klant. Ontbreekt
 de code, dan zet ik de afspraak toch klaar en meld ik hem bij "afspraken zonder code".
 
