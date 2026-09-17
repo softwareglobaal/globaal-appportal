@@ -129,7 +129,9 @@ transcript telt, nooit de samenvatting van de recorder (D7).
    geweigerd wordt, meld ik letterlijk.
 10. **De proef maken.** `proef_maken`. Lukt het niet, dan zegt de proef wat nog
    ontbreekt; dat zet ik in mijn melding, in de woorden van de proef.
-11. **Melden op de deal.** Eén notitie op de Pipedrive-deal, in vaste vorm:
+11. **Melden op de deal.** Eén notitie op de Pipedrive-deal, in vaste vorm, die ik
+    bijwerk in plaats van er telkens een nieuwe naast te zetten; is de inhoud niet
+    veranderd, dan raak ik ze niet aan (D39). Notities van mensen raak ik nooit aan. Vorm:
     0. wat ik in deze ronde echt schreef en wat geweigerd werd (rechtstreeks
        uit de schrijfacties, niet uit mijn tekst);
     1. wat vastligt, met bron;

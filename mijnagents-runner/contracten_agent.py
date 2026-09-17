@@ -165,6 +165,32 @@ def notities(deal_id):
     return uit
 
 
+def notitie_bijwerken(deal_id, tekst):
+    """Eén notitie van de agent per deal (D39). De nieuwste eigen notitie wordt
+    bijgewerkt, oudere eigen notities verdwijnen, en als de inhoud (zonder het
+    tijdstip) niet veranderde, blijft de notitie onaangeroerd. Notities van
+    mensen worden nooit aangeraakt. Geeft een woord voor het verslag terug."""
+    d = pipedrive.get(FIRMA, "/notes", {"deal_id": deal_id, "limit": 100})
+    items = d if isinstance(d, list) else (d or {}).get("data") or []
+    eigen = sorted((n for n in items if (n.get("content") or "").startswith("<b>Contracten-agent</b>")),
+                   key=lambda n: n.get("add_time", ""))
+    def kern(html):
+        return re.sub(r"Contracten-agent</b> — \d{2}-\d{2}-\d{4} \d{2}:\d{2}", "", html or "").strip()
+    for oud in eigen[:-1]:
+        try:
+            pipedrive.schrijf(FIRMA, "DELETE", f"/notes/{oud['id']}")
+        except Exception as e:  # noqa: BLE001
+            print(f"oude notitie {oud['id']} niet verwijderd: {e}", file=sys.stderr)
+    if eigen:
+        laatste = eigen[-1]
+        if kern(laatste.get("content")) == kern(tekst):
+            return "ongewijzigd gelaten (zelfde inhoud)"
+        pipedrive.schrijf(FIRMA, "PUT", f"/notes/{laatste['id']}", body={"content": tekst})
+        return f"bijgewerkt (notitie {laatste['id']}" + (f", {len(eigen) - 1} oudere verwijderd)" if len(eigen) > 1 else ")")
+    pipedrive.schrijf(FIRMA, "POST", "/notes", body={"deal_id": deal_id, "content": tekst})
+    return "gezet"
+
+
 # Wie welk bewijs levert (D37): de agentnaam op het bord, of "mehdi".
 OPVRAGEN_AGENT = (("fathom", "fathom-wacht"), ("plaud", "plaud-wacht"), ("belwacht", "belwacht"),
                   ("xelion", "belwacht"), ("icloud", "icloud-wacht"), ("mails_naar_salesmap", "mehdi"),
@@ -689,8 +715,8 @@ def verwerk(deal, werkinstructie, staat):
     tekst = melding_tekst(plan, proef, nummer_voorstel, geschreven, [f for f in fouten if not f.startswith("proef")],
                           tijdlijn=tijdlijn, gaten=tijdlijn_gaten)
     tekst += f"<br><i>Bronnen gelezen: {bronnen_mod.samenvatting(bronnen)}</i>"
-    pipedrive.schrijf(FIRMA, "POST", "/notes", body={"deal_id": deal_id, "content": tekst})
-    log(ond, "melding", "notitie op de Pipedrive-deal gezet", re.sub(r"<[^>]+>", "", tekst.replace("<br>", "\n")))
+    uitkomst = notitie_bijwerken(deal_id, tekst)
+    log(ond, "melding", f"notitie op de Pipedrive-deal {uitkomst}", re.sub(r"<[^>]+>", "", tekst.replace("<br>", "\n")))
     log_verstuur()
 
     # Stempel van het dossier ná onze eigen schrijfacties: wijzigt Mehdi daarna
