@@ -514,7 +514,11 @@ def verwerk(deal, werkinstructie, staat):
                schema_hash=per_deel.get("veldenschema"))
     cache = None if VERS else hh.plan_uit_cache(NAAM, deal_id, hash_)
     if cache:
-        plan, tokens, meta = cache["plan"], 0, dict(cache.get("meta") or {}, hergebruikt=True)
+        # Een hergebruikte ronde kost niets: tokens en kost op nul, met verwijzing naar de bronronde.
+        meta0 = cache.get("meta") or {}
+        plan, tokens, meta = cache["plan"], 0, {"model_id": meta0.get("model_id"), "stop_reason": "hergebruikt",
+                                                "tokens_in": 0, "tokens_uit": 0, "bron_run_id": meta0.get("run_id"),
+                                                "run_id": meta0.get("run_id")}
         log(ond, "besluit", f"plan hergebruikt: zelfde invoer als run {meta.get('run_id', '?')} (hash {hash_}); het model is niet gevraagd")
     else:
         plan, tokens, meta = plan_met_model(werkinstructie, deal, voorb, controle, notitielijst, vrij, bronnen)
@@ -523,7 +527,7 @@ def verwerk(deal, werkinstructie, staat):
             hh.plan_in_cache(NAAM, deal_id, hash_, plan, meta)
     record.zet(model_id=meta.get("model_id"), stop_reason=meta.get("stop_reason"), tokens_in=meta.get("tokens_in", 0),
                tokens_uit=meta.get("tokens_uit", 0), kost_eur=hh.kost_eur(meta.get("model_id") or "", meta.get("tokens_in", 0), meta.get("tokens_uit", 0)),
-               plan_hergebruikt=bool(cache), plan=plan)
+               plan_hergebruikt=bool(cache), bron_run_id=meta.get("bron_run_id"), plan=plan)
     log(ond, "besluit", f"plan: {len(plan.get('gegevens') or [])} gegevensposten, {len(plan.get('keuzes') or {})} keuzes"
                         f"{', nummer-voorstel ' + str(plan.get('nummer_voorstel')) if plan.get('nummer_voorstel') and not nummer else ''}"
                         f" ({tokens} tokens, model {meta.get('model_id', '?')})", plan)
