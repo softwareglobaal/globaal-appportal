@@ -1,8 +1,11 @@
+# v1 is op 17-09-2026 verwijderd (container bs-dashboard, poort 8080).
+# De naam blijft bestaan en verwijst door naar v2. Bewust 302 en geen 301:
+# browsers cachen een 301 blijvend, waardoor een eventuele terugkeer van v1
+# niet meer te bereiken zou zijn.
 server {
     listen 443 ssl;
     http2 on;
     server_name barstenscheuren.${BASE_DOMAIN};
     include /etc/nginx/snippets/ssl.conf;
-    set $app_upstream http://172.17.0.1:8080;
-    include /etc/nginx/snippets/forward-auth.conf;
+    return 302 https://barstenscheurenv2.${BASE_DOMAIN}$request_uri;
 }
