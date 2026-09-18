@@ -1432,6 +1432,16 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   de `X-authentik-*`-headers; alleen **admin/manager** hebben toegang (Authentik
   group-binding + check in de app). Leest `kern.persoon` via de `portal`-rol; de
   connectiestring staat in `.env` als `APPPORTAL_DB_URL`.
+- **Naam en dienstverband** (migratie 153, sectie op het profiel, alleen admin):
+  voornaam, achternaam, weergavenaam en in/uit dienst met datum. Vertrekkers
+  worden **niet verwijderd** maar op `in_dienst = false` gezet met
+  `datum_uit_dienst`; de lijst toont standaard alleen wie in dienst is en alle
+  historie (uren, beloning, meetings, firma-koppelingen) blijft staan. Daarvoor
+  breidt migratie 153 de smalle schrijfrol uit met
+  `UPDATE (voornaam, achternaam, in_dienst, datum_uit_dienst)`; zolang die
+  migratie niet gedraaid is, meldt de app dat op het profiel in plaats van stil
+  te falen. Hiervóór was elke vertrekker of naamswijziging een los stuk SQL op
+  productie.
 - **Firma's-tab:** het dashboard heet **Organisatie** en heeft tabs *Medewerkers* |
   *Firma's*. De Firma's-tab toont de centrale lijst met tellingen (medewerkers in
   dienst, dienstverbanden, nummers, e-mailadressen - de laatste twee via SQL op het
