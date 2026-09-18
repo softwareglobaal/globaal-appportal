@@ -124,6 +124,22 @@ def test_zendmastpunt_breekt_geen_bezoek():
                    and s["tot"] > bezoeken[0]["van"] for s in ind), soorten(ind)
 
 
+def test_zones_gaan_mee_als_antwoord_op_een_meting():
+    """18-09-2026: 25,6 uur waarin hij ergens was zonder meting; zones dichten dat."""
+    b = app.waypoint_bericht(PLEKKEN + [{"naam": "Werf", "lat": WERF[0], "lon": WERF[1],
+                                         "straal": 200}])
+    assert b["_type"] == "cmd" and b["action"] == "setWaypoints"
+    zones = b["waypoints"]["waypoints"]
+    assert b["waypoints"]["_type"] == "waypoints" and len(zones) == 2
+    for z in zones:
+        assert z["_type"] == "waypoint" and z["desc"] and z["rad"] > 0
+        assert isinstance(z["tst"], int) and -90 <= z["lat"] <= 90
+    # Tweemaal opvragen geeft dezelfde tst: anders maakt iOS elke keer nieuwe zones.
+    assert [z["tst"] for z in app.waypoint_bericht(PLEKKEN)["waypoints"]["waypoints"]] == \
+           [z["tst"] for z in app.waypoint_bericht(PLEKKEN)["waypoints"]["waypoints"]]
+    assert app.waypoint_bericht([{"naam": "Zonder plek", "lat": None, "lon": None}]) is None
+
+
 def test_dag_die_in_stilte_eindigt_zegt_dat():
     """13-09-2026: laatste punt 11:56, daarna twaalf uur niets, zonder vermelding."""
     from datetime import datetime as dt

@@ -202,6 +202,60 @@ def _waarom_geweigerd():
             f" tekens wijken af (gebruiker '{gebruiker}')")
 
 
+def waypoint_bericht(lijst):
+    """De vastgelegde plekken als zones voor de telefoon.
+
+    Zones (regions) worden door iOS zelf bewaakt: hij wekt de app bij aankomst
+    en vertrek, ook in de zuinige stand en ook als de app is afgesloten. Dat is
+    het enige dat de gaten dicht waarin Mehdi ergens was zonder dat er iets
+    gemeten werd: tussen 15 en 18 september 25,6 uur.
+
+    Ze met de hand op de kaart tekenen is werk dat blijft liggen. De telefoon
+    kan ze ontvangen als antwoord op een gewone meting, mits afstandsbediening
+    (Cmd) in de app aanstaat. Formaat volgens owntracks.org/booklet/tech/json.
+    """
+    zones = []
+    for i, p in enumerate(sorted(lijst, key=lambda x: x["naam"])):
+        if p.get("lat") is None or p.get("lon") is None:
+            continue
+        zones.append({"_type": "waypoint", "desc": p["naam"],
+                      "lat": p["lat"], "lon": p["lon"],
+                      "rad": int(p.get("straal") or 150),
+                      # Vast tijdstip per plek: iOS gebruikt desc als sleutel,
+                      # maar een wisselende tst zou elke keer een nieuwe zone maken.
+                      "tst": 1789000000 + i})
+    if not zones:
+        return None
+    return {"_type": "cmd", "action": "setWaypoints",
+            "waypoints": {"_type": "waypoints", "waypoints": zones}}
+
+
+def _zones_vingerafdruk(lijst):
+    return json.dumps(sorted([(p["naam"], p.get("lat"), p.get("lon"), p.get("straal"))
+                              for p in lijst if p.get("lat") is not None]))
+
+
+def zones_te_sturen(conn, lijst):
+    """Geeft het setWaypoints-bericht zodra de lijst plekken veranderd is.
+
+    Een telefoon bevestigt niet dat hij de zones heeft aangenomen, dus we
+    onthouden wat we het laatst stuurden en sturen alleen bij een wijziging.
+    Komt het niet aan (afstandsbediening uit), dan kan `zones_opnieuw` de
+    vingerafdruk wissen zodat hij bij het volgende punt weer meegaat.
+    """
+    conn.execute("CREATE TABLE IF NOT EXISTS instelling (sleutel TEXT PRIMARY KEY, waarde TEXT)")
+    afdruk = _zones_vingerafdruk(lijst)
+    rij = conn.execute("SELECT waarde FROM instelling WHERE sleutel='zones'").fetchone()
+    if rij and rij[0] == afdruk:
+        return None
+    bericht = waypoint_bericht(lijst)
+    if not bericht:
+        return None
+    conn.execute("INSERT INTO instelling (sleutel, waarde) VALUES ('zones', ?) "
+                 "ON CONFLICT(sleutel) DO UPDATE SET waarde=excluded.waarde", (afdruk,))
+    return bericht
+
+
 @app.route("/pub", methods=["POST"])
 def pub():
     if not WACHTWOORD:
@@ -269,9 +323,20 @@ def pub():
          "vel": heel("vel"), "batt": heel("batt"),
          "conn": str(data.get("conn", ""))[:4], "tid": str(data.get("tid", ""))[:8],
          "soort": soort, "ruw": json.dumps(data, ensure_ascii=False)[:4000]})
+    # Het antwoord op een meting is de enige weg terug naar de telefoon: hier
+    # gaan de zones mee zodra ze veranderd zijn.
+    antwoord = []
+    try:
+        bericht = zones_te_sturen(conn, plekken(conn))
+        if bericht:
+            antwoord.append(bericht)
+            app.logger.info("zones meegestuurd: %d",
+                            len(bericht["waypoints"]["waypoints"]))
+    except Exception as fout:      # noqa: BLE001
+        app.logger.warning("zones meesturen mislukt: %s", fout)
     conn.commit()
     conn.close()
-    return jsonify([])      # OwnTracks verwacht een (eventueel lege) lijst terug
+    return jsonify(antwoord)
 
 
 # ------------------------------------------- gebeurtenissen en gezondheid
