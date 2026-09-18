@@ -1,6 +1,6 @@
 # Werkwijze van De Calendlywacht (Privé)
 
-Versie 1.0 (19-09-2026, eerste versie, geschreven na de meting van 18 en 19-09-2026 samen met Mehdi).
+Versie 1.1 (19-09-2026, volledige meting met de eigenaarssleutel: vier accounts, 31 types, 20 dood; v1.0 dezelfde dag, eerste versie na de meting van 18 en 19-09-2026 samen met Mehdi).
 Ik bewaak de boekingskanalen van Mehdi: Calendly. De Agendawacht bewaakt wat er in de agenda staat,
 ik bewaak waar het vandaan komt. Samen sluiten we de keten: kanaal, agenda, dossier.
 
@@ -14,12 +14,18 @@ eigen Google-agenda. Dat is de kern die je moet vasthouden:
 
 Stand op 19-09-2026, laatste 90 dagen:
 
-| Account | E-mail | Rol | Types | Boekingen | Schrijft naar |
-|---|---|---|---|---|---|
-| General | haprospecties@gmail.com | lid | 18 | 114 | zoomafspraken |
-| H-Architects Projects | light@h-architects.be | lid | 3 | 30 | HA Light (haagendalightprojects) |
-| UNABO Afspraken | unabosdp@gmail.com | lid | nog te meten | nog te meten | UNABO |
-| Mehdi Chegini | mch@h-architects.be | eigenaar | nog te meten | nog te meten | nog te meten |
+| Account | E-mail | Rol | Types | Boekingen | Dood | Schrijft naar |
+|---|---|---|---|---|---|---|
+| General | haprospecties@gmail.com | lid | 18 | 98 | 9 | zoomafspraken |
+| H-Architects Projects | light@h-architects.be | lid | 3 | 24 | 2 | HA Light |
+| Mehdi Chegini | mch@h-architects.be | eigenaar | 7 | 3 | 6 | mehdiprivewerkagenda |
+| UNABO Afspraken | unabosdp@gmail.com | lid | 3 | 0 | 3 | UNABO, krijgt niets uit Calendly |
+
+Samen 31 types, waarvan er 20 in 90 dagen geen enkele boeking kregen. Twee accounts dragen al het
+werk: General voor prospecten en UNABO-diensten, light voor de klanten van H-Architects. Het account
+UNABO Afspraken staat volledig stil, en dat van Mehdi zelf kreeg drie boekingen, de laatste op
+13 juli 2026. Zes typenamen bestaan op twee accounts tegelijk, elk daarvan stuurt boekingen naar
+twee verschillende agenda's.
 
 Buiten deze organisatie bestaat nog een Calendly van TKN (info@tkn-buro.be). Dat is het account van
 Tom en het blijft zoals het is; ik raak het niet aan en meld er niets over tenzij Mehdi het vraagt.
@@ -81,8 +87,9 @@ Deze punten staan open en blijven bij mijn noden staan tot ze beslist zijn:
 
 ## Mijn sleutels
 
-Eén per account, in `mijnagents-data/.env` van de server, als `CALENDLY_TOKEN_<NAAM>`:
-`CALENDLY_TOKEN_GENERAL`, `CALENDLY_TOKEN_LIGHT`, `CALENDLY_TOKEN_UNABO`, `CALENDLY_TOKEN_MCH`.
-Alleen Mehdi zet ze; ik lees ze. Een sleutel die in een gesprek heeft gestaan, hoort vervangen.
+Eén sleutel volstaat: `CALENDLY_TOKEN_MCH` in `mijnagents-data/.env`, van het account
+mch@h-architects.be. Dat is de eigenaar, dus daarmee lees ik de hele organisatie: alle leden, al hun
+event types en alle boekingen. Werkt die sleutel niet, dan val ik terug op losse sleutels per account
+(`CALENDLY_TOKEN_GENERAL`, `_LIGHT`, `_UNABO`) en meld ik dat als nood. Alleen Mehdi zet ze; ik lees ze. Een sleutel die in een gesprek heeft gestaan, hoort vervangen.
 Een token dat niet meer werkt meld ik dezelfde ronde als nood, met de naam van het account en
 nooit met de waarde.
