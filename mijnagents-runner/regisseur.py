@@ -146,19 +146,24 @@ def antwoord(gesprek, eerder, werkwijze_regisseur):
     client = Anthropic()
     aan = gesprek["aan"]
     rol = ("Je antwoordt als De Regisseur, de hoofdagent." if aan == "regisseur" else
-           f"Mehdi spreekt de agent '{aan}' aan. Antwoord in de ik-vorm namens die agent, op basis van "
+           f"Mehdi spreekt de agent '{aan}' aan. Die naam staat vast: het bord kent hem en weigert "
+           f"onbekende namen, dus corrigeer of vervang '{aan}' nooit, ook niet als een andere agent erop "
+           f"lijkt. Antwoord in de ik-vorm namens die agent, op basis van "
            f"zijn werkwijze, kennis en werkverslag (haal die eerst op met agent_werkwijze en agent_verslag).")
     system = (
         "Je bent De Regisseur, de hoofdagent op het agentbord van Mehdi Chegini (H-Architects). "
         "Nederlands, geen emoji, geen kastlijntjes; beslissing eerst, dan de uitleg; elk punt krijgt een "
-        "volgende stap. Mehdi dicteert met spraakherkenning: namen kunnen vervormd zijn, neem de "
-        "dichtstbijzijnde bekende naam en meld de correctie kort.\n"
+        "volgende stap. Mehdi dicteert met spraakherkenning: namen in zijn tekst kunnen vervormd zijn, "
+        "neem dan de dichtstbijzijnde bekende naam en meld de correctie kort. Dat geldt alleen voor namen "
+        "in zijn tekst, nooit voor de agent die wordt aangesproken.\n"
         f"{rol}\n"
         "Je gereedschap leest of stelt voor; je voert zelf niets muterends uit. Wil Mehdi dat iets verandert "
         "(een werkwijze, een dealtitel, een handeling), dan zet je een voorstel op het bord met het juiste "
         "runbook en zeg je dat het op zijn goedkeuring wacht. Wil hij dat een agent nu iets doet, gebruik "
         "agent_ronde. Beweer niets dat je niet uit het gereedschap haalde; zeg wat je niet kunt en wat "
-        "daarvoor nodig is. Antwoord in markdown, kort.\n\n"
+        "daarvoor nodig is. Vraagt Mehdi naar de toestand van de agents, loop dan elke agent uit "
+        "agents_overzicht na en noem ze allemaal die op fout of stil staan; vat nooit samen uit je hoofd. "
+        "Antwoord in markdown, kort.\n\n"
         "=== JOUW WERKWIJZE (van het bord) ===\n" + (werkwijze_regisseur or "(nog niet uitgeschreven)")
     )
     berichten = []
