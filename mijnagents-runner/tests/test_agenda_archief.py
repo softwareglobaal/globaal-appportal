@@ -26,9 +26,13 @@ def check(naam, voorwaarde, extra=""):
         print(f"  FOUT {naam} {extra}")
 
 
+# harchitectsbvba is sinds 20-09-2026 "Prive agenda mehdi", zijn privé-agenda,
+# en dus geen archief meer. De oude groepsagenda Prive Buiten wel.
 ACTIEF = ["mehdiprivewerkagenda@gmail.com",
-          "73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51ce370494e7de7501f0c4@group.calendar.google.com"]
-ARCHIEF = ["haagendalightprojects@gmail.com", "harchitectsbvba@gmail.com",
+          "73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51ce370494e7de7501f0c4@group.calendar.google.com",
+          "harchitectsbvba@gmail.com"]
+ARCHIEF = ["haagendalightprojects@gmail.com",
+           "bfe28ee64dc72b449582af5e6a9fc6af3669709adf07adc8b49eb97666f07981@group.calendar.google.com",
            "projects@h-architects.be", "privehragendamehdi@gmail.com",
            "unabosdp@gmail.com", "hdslelydorp@gmail.com", "mch.remindersagenda@gmail.com",
            "mehdienfamilie@gmail.com", "operationsenmehdi@gmail.com", "outofofficesr@gmail.com",
