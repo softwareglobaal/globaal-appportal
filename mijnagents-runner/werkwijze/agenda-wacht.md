@@ -175,6 +175,72 @@ reistijd, de agenda Lara en feestdagen. Het rooster staat in mijn werkverslag.
 - Een koppeling verzinnen.
 - Persoonsgegevens op het bord zetten waar de groep agents ze ziet.
 
+## Delen van agenda's (gemeten 19-09-2026)
+
+Mehdi beheert 24 agenda's en is geabonneerd op 20 van anderen. Ik heb per agenda
+uitgelezen wie toegang heeft en met welk recht.
+
+**De les.** Ik heb harchitectsbvba hernoemd naar "ZZ ARCHIEF ..." zonder na te
+kijken wie die agenda ziet. Tien andere accounts kregen die naam te zien.
+Teruggezet op 19-09-2026 en nagekeken vanaf een ander account.
+**Een agendanaam is nooit privé: wie de agenda gedeeld heeft, ziet elke
+naamwijziging meteen.**
+
+**Ik hernoem nooit een agenda.** Ook niet om te archiveren. Dat hoeft ook niet:
+ik lees een vaste lijst van negen agenda-id's (KALENDERS in agenda_wacht.py).
+Wat daar niet in staat, lees ik niet en meld ik niet. Archiveren is voor mij dus
+een lege handeling; het is alleen iets in het beeld van Mehdi.
+
+Vier knoppen, van zacht naar hard. Ik stel nooit een hardere voor dan nodig:
+
+1. Uitvinken in de lijst van Mehdi. Alleen hij merkt het. Standaardactie.
+2. Mijn negen-lijst. Al geregeld.
+3. Hernoemen. Iedereen ziet het. Alleen bij nul tot twee andere accounts,
+   en pas na een bericht aan die accounts. Mehdi doet dit zelf.
+4. Schrijfrecht terugzetten naar leesrecht. De echte bevriezing: er komt niets
+   nieuws bij, alles blijft leesbaar. Alleen na een briefing.
+
+Recept voor een agenda die stopt: bericht sturen, wachten tot na de laatste
+geboekte afspraak, schrijfrecht naar leesrecht, uitvinken. Hernoemen alleen als
+er niemand anders op zit.
+
+Hoeveel andere accounts per agenda (19-09-2026), zodat ik dit nooit meer vergeet:
+
+| agenda | anderen | agenda | anderen |
+| --- | ---: | --- | ---: |
+| outofofficesr | 48 | haagendalightprojects | 7 |
+| projects@h-architects.be | 17 | UNABO | 6 |
+| zoomafspraken | 11 | H-Architects | 5 |
+| Prive Buiten (harchitectsbvba) | 10 | unabosdp | 5 |
+| privehragendamehdi | 9 | haprospecties | 5 |
+| mehdiprivewerkagenda | 8 | HRM | 5 |
+| contraxcalendar | 4 | Lara | 4 |
+| Prive Buiten (groep) | 4 | mehdienfamilie | 3 |
+| Harmoniebouw | 3 | Kantoor Lelydorp | 3 |
+| High Design Studio NV | 2 | UNABO Buiten | 2 |
+| mch.remindersagenda | 2 | H-Architects Buiten | 1 |
+| operationsenmehdi | 1 | melodiebvba | 0 |
+
+Vier punten die geen naamkwestie zijn maar een privacykwestie. Ik meld ze tot
+Mehdi beslist heeft, daarna neem ik zijn antwoord hier op:
+
+- privehragendamehdi, zijn echte privé-agenda, staat open voor negen accounts,
+  zes met volledige beheerrechten, waaronder sollicitaties@medianselections.com.
+- Prive Buiten (groep) draagt de omschrijving "discreet, alleen Mehdi" maar vier
+  accounts lezen alles en twee kunnen erin schrijven.
+- mehdienfamilie is gedeeld met drie accounts, waaronder teamsoftwarehds.
+- De agenda van zijn dochter Lara wordt gelezen door twee werkaccounts
+  (haagendalightprojects en siyanhdswerk).
+
+**SU-regel bij namen.** Geen enkele agenda die uitnodigingen naar klanten of
+prospecten stuurt, mag Suriname, SR of Lelydorp in de naam dragen. Vandaag zijn
+dat mehdiprivewerkagenda en zoomafspraken; beide zijn neutraal. Kantoor Lelydorp
+en outofofficesr zijn intern en mogen hun naam houden, maar mogen nooit de
+agenda worden waarin Calendly boekt.
+
+Volledige tabel met wie precies welk recht heeft:
+`private/0 Chegini Mehdi/Prive met Claude/Agenda delen en archiveren v1.0.pdf`.
+
 ## Wat Mehdi beslist
 
 - Welke agenda's ik lees en de minuten van de herinneringen
@@ -184,3 +250,5 @@ reistijd, de agenda Lara en feestdagen. Het rooster staat in mijn werkverslag.
 - De filefactoren en de buffer (tabel hierboven), en of prospecten ook een nummer krijgen.
 - Of hij een sleutel voor live verkeersinfo aanmaakt (Google Routes API); dan
   vervangt die de filefactor.
+- Per agenda: uitvinken, hernoemen, of rechten afbouwen. Ik stel voor, hij beslist,
+  en ik hernoem nooit zelf.
