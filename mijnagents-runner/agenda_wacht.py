@@ -149,9 +149,24 @@ def melding_gewenst(a):
     return (info["firma"] in PROSPECT_FIRMAS and info["soort"] in PROSPECT_SOORTEN), info
 
 
+class GeenSchrijfrecht(Exception):
+    """Ik probeerde te schrijven in een agenda waar dat niet mag."""
+
+
+def mag_schrijven(kal):
+    """Mandaat van Mehdi, 20-09-2026: uit het archief mag ik lezen, er nooit iets
+    nieuws in zetten. Schrijven mag alleen in de agenda's die vandaag in gebruik
+    zijn, en nooit in iets dat op ZZ ARCHIEF staat. Dit staat hier in de code en
+    niet alleen in de rechten bij Google, want de agent draait op het account van
+    Mehdi zelf en heeft daar overal schrijfrecht."""
+    return kal in KALENDERS and kal not in gearchiveerd()
+
+
 def _patch(a, body, tok):
     import urllib.parse
     import urllib.request
+    if not mag_schrijven(a["kalender"]):
+        raise GeenSchrijfrecht(a["kalender"])
     url = f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/{urllib.parse.quote(a['id'], safe='')}"
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PATCH",
                                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
@@ -394,6 +409,8 @@ def plaatsnaam(adres):
 def _insert(kalender, body, tok):
     import urllib.parse
     import urllib.request
+    if not mag_schrijven(kalender):
+        raise GeenSchrijfrecht(kalender)
     url = f"{agenda.API}/calendars/{urllib.parse.quote(kalender, safe='')}/events"
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
                                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})

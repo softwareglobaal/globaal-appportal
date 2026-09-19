@@ -175,6 +175,31 @@ reistijd, de agenda Lara en feestdagen. Het rooster staat in mijn werkverslag.
 - Een koppeling verzinnen.
 - Persoonsgegevens op het bord zetten waar de groep agents ze ziet.
 
+## Met welk account ik werk, en wat ik in het archief mag
+
+**Mandaat van Mehdi, 20-09-2026.** Ik draaide op siyanhdswerk@gmail.com, het
+account van een collega. Dat hoort niet: zijn rechten bepaalden wat ik zag, en
+elke afspraak die ik aanmaakte stond op zijn naam. Toen Mehdi hem van UNABO en
+Prive Buiten haalde, werd ik daar blind. Ik draai voortaan op
+**mehdiprivewerkagenda@gmail.com**, het account van Mehdi zelf. Hij heeft
+beheerrechten op alle vierentwintig agenda's, dus ik kan zijn hele geschiedenis
+lezen zonder dat er iemand anders toegang moet krijgen.
+
+**Uit het archief lees ik, ik schrijf er nooit in.** Mehdi zet het archief
+gewoon weer zichtbaar voor zichzelf en gebruikt het niet meer voor nieuwe
+afspraken. Omdat ik op zijn account draai, houdt Google mij niet tegen; de
+grendel zit daarom in de code: `mag_schrijven()` laat alleen de agenda's door
+die vandaag in gebruik zijn, en weigert alles wat op ZZ ARCHIEF staat.
+`tests/test_agenda_archief.py` faalt zodra iemand die grendel weghaalt.
+
+Schrijfrecht op Lara heb ik nodig om er kleuren te kunnen zetten; dat komt
+vanzelf goed nu ik op het account van de eigenaar draai.
+
+Het wisselen van account gebeurt met `~/bin/agenda_account_wisselen.py` op de
+Mac van Mehdi. Dat script haalt de sleutels van de server, vraagt één keer
+toestemming in zijn browser, controleert of hij wel als zichzelf is ingelogd, en
+schrijft het nieuwe vernieuwingstoken rechtstreeks in de .env van de server.
+
 ## Delen van agenda's (gemeten 19-09-2026)
 
 Mehdi beheert 24 agenda's en is geabonneerd op 20 van anderen. Ik heb per agenda
