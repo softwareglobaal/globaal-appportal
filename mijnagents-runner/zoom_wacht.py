@@ -40,6 +40,11 @@ DAGEN_EERST = int(os.environ.get("ZOOM_WACHT_DAGEN", "14"))
 DROOG = "--droog" in sys.argv
 API = "https://api.zoom.us/v2"
 PRIVE_NAMEN = ("angela", "lara")
+# Een onbekende 1:1 met een teamadres is werk (afdeling onbekend), geen privé; alleen een onbekende
+# buiten het team valt onder "bij twijfel privé".
+TEAM_DOMEINEN = tuple(d.strip().lower() for d in os.environ.get(
+    "ZOOM_TEAM_DOMEINEN", "globaal.be,h-architects.be,h-invest.be,unabo.be,harmoniebouw.be,contrax.be,tkn-buro.be,elevaitnv.com,hdssr.com").split(",") if d.strip())
+NIET_ALS_DEELNEMER = ("notetaker", "fathom", "otter", "read.ai", "fireflies")
 
 
 def laad_env(pad):
@@ -163,14 +168,21 @@ def chat_rijen(van_dag, tot_dag, personen, mijn_email):
         per_dag = defaultdict(list)
         for m in berichten:
             per_dag[fw.belgisch(m.get("date_time", ""))[:10]].append(m)
-        persoon = herken_persoon(personen, s.get("peer_contact_email", ""), naam) if een_op_een else None
+        peer = (s.get("peer_contact_email") or "").lower()
+        persoon = herken_persoon(personen, peer, naam if "@" not in naam else "") if een_op_een else None
         if een_op_een:
+            team = peer.rsplit("@", 1)[-1] in TEAM_DOMEINEN if "@" in peer else False
+            if persoon:
+                naam = persoon["naam"]
+            elif "@" in naam:
+                naam = naam.split("@")[0].replace(".", " ").replace("-", " ").title()
             afd = (persoon or {}).get("afdeling", "") or "onbekend"
-            prive = is_prive_naam(naam) or "priv" in afd.lower() or persoon is None
-            zeker = "hoog" if persoon else "laag"
-            waarom = f"1:1 met {naam}; " + ("bekend uit de personentabel" if persoon else "niet in de personentabel: bij twijfel privé")
+            prive = is_prive_naam(naam) or "priv" in afd.lower() or (persoon is None and not team)
+            zeker = "hoog" if persoon else ("middel" if team else "laag")
+            waarom = f"1:1 met {naam}; " + ("bekend uit de personentabel" if persoon else
+                                             ("teamadres, niet in de personentabel" if team else "niet in de personentabel en geen teamadres: bij twijfel privé"))
         else:
-            afd = afdeling_uit_naam(naam) or "onbekend"
+            afd = afdeling_uit_naam(naam) or ("regie" if "automation" in naam.lower() else "onbekend")
             prive = False
             zeker = "hoog" if afd != "onbekend" else "middel"
             waarom = f"kanaal {naam}; afdeling uit de kanaalnaam" if afd != "onbekend" else f"kanaal {naam}; afdeling niet uit de naam af te leiden"
@@ -221,13 +233,15 @@ def meeting_rijen(van_dag, tot_dag, personen, mijn_email):
         namen, afdelingen, bekend = [], defaultdict(int), 0
         for d in deelnemers:
             n = d.get("name") or d.get("user_email") or "?"
-            if n not in namen:
-                namen.append(n)
+            if any(x in n.lower() for x in NIET_ALS_DEELNEMER) or n in namen:
+                continue  # opname-bots tellen niet als deelnemer; dubbele records (herverbinden) ook niet
+            namen.append(n)
             p = herken_persoon(personen, d.get("user_email", ""), n)
             if p:
                 bekend += 1
-                if p["afdeling"] and "priv" not in p["afdeling"].lower():
-                    afdelingen[p["afdeling"].split(" ")[0].lower()] += 1
+                a = (p["afdeling"] or "").split(" ")[0].lower()
+                if a and a not in ("alle", "onbekend") and "priv" not in a:  # Mehdi zelf (alle) stemt niet mee
+                    afdelingen[a] += 1
         anderen = [n for n in namen if "mehdi" not in n.lower()]
         prive = bool(anderen) and all(is_prive_naam(n) for n in anderen)
         afd = max(afdelingen, key=afdelingen.get) if afdelingen else (afdeling_uit_naam(m.get("topic", "")) or ("prive" if prive else "onbekend"))
