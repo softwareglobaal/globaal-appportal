@@ -175,6 +175,37 @@ reistijd, de agenda Lara en feestdagen. Het rooster staat in mijn werkverslag.
 - Een koppeling verzinnen.
 - Persoonsgegevens op het bord zetten waar de groep agents ze ziet.
 
+## Calendly en dubbele boekingen (gemeten 20-09-2026)
+
+In Calendly, onder Availability en Calendar settings, staan zes Google-koppelingen.
+Elke agenda die daar aangevinkt staat wordt van Mehdi's beschikbaarheid afgetrokken:
+
+| koppeling | controleert |
+| --- | --- |
+| mehdiprivewerkagenda@gmail.com | 7 agenda's, dit is de hoofdkoppeling |
+| zoomafspraken@gmail.com | 1 |
+| contraxcalendar@gmail.com | 1 |
+| unabosdp@gmail.com | 1 |
+| harchitectsbvba@gmail.com | 4 |
+| haagendalightprojects@gmail.com | 1 |
+
+"Calendar to add events to" staat op mehdi werk agenda
+(mehdiprivewerkagenda@gmail.com). Nieuwe boekingen landen dus in Werk. Wat nog op
+zoomafspraken en haagendalightprojects staat is van vóór die omschakeling.
+
+haprospecties@gmail.com is alleen de login van het Calendly-account, geen
+agendakoppeling. Een agenda die Calendly moet meetellen, deel je met
+mehdiprivewerkagenda en vink je daar aan.
+
+Een wijziging in Google is ongeveer een minuut later bij Calendly bekend. Wie dat
+wil testen moet dus minstens een minuut wachten voor hij meet; met 25 seconden
+trok ik zelf de verkeerde conclusie.
+
+**Niet losmaken voor 29-09-2026.** Op zoomafspraken en haagendalightprojects
+staan nog negen geboekte klantafspraken, de laatste op 29-09 om 20:00. Maak je de
+koppeling eerder los of hernoem je die agenda's naar ZZ ARCHIEF, dan werken de
+annuleer- en verzetlinks van die klanten niet meer en negeer ik die afspraken.
+
 ## Met welk account ik werk, en wat ik in het archief mag
 
 **Mandaat van Mehdi, 20-09-2026.** Ik draaide op siyanhdswerk@gmail.com, het
