@@ -197,8 +197,16 @@ Vier knoppen, van zacht naar hard. Ik stel nooit een hardere voor dan nodig:
 2. Mijn negen-lijst. Al geregeld.
 3. Hernoemen. Iedereen ziet het. Alleen bij nul tot twee andere accounts,
    en pas na een bericht aan die accounts. Mehdi doet dit zelf.
-4. Schrijfrecht terugzetten naar leesrecht. De echte bevriezing: er komt niets
-   nieuws bij, alles blijft leesbaar. Alleen na een briefing.
+4. Toegang intrekken. Mehdi, 19-09-2026: "iets dat ik niet meer ga gebruiken,
+   waarom zou ik dat nog delen met anderen?" Hij heeft gelijk. Een agenda die
+   stopt, verliest zijn delers, niet zijn naam. De agenda verdwijnt dan netjes
+   uit de lijst van de collega, in plaats van er met een rare naam te blijven
+   staan. Er gaat niets verloren: Mehdi blijft eigenaar en alle afspraken
+   blijven staan, toegang intrekken wist nooit een afspraak.
+   Uitzondering, en alleen die: iemand die de geschiedenis nog echt raadpleegt
+   zet ik terug op leesrecht in plaats van eruit. Wie dat is, meet ik: ik tel
+   per agenda wie er de laatste twaalf maanden afspraken in heeft aangemaakt.
+   Wie nul heeft aangemaakt en niets komt opzoeken, hoort er niet meer op.
 
 Recept voor een agenda die stopt: bericht sturen, wachten tot na de laatste
 geboekte afspraak, schrijfrecht naar leesrecht, uitvinken. Hernoemen alleen als
