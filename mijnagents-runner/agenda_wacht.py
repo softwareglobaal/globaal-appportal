@@ -34,13 +34,13 @@ ag = bord.Agent(NAAM)
 
 # De negen actieve agenda's van Mehdi (Feestdagen is read-only).
 KALENDERS = {
-    "mehdiprivewerkagenda@gmail.com": "mehdiprivewerkagenda (intern + Harmoniebouw-werk)",
+    "mehdiprivewerkagenda@gmail.com": "mehdi werk agenda (alle firma's, via de code in de titel)",
     "73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51ce370494e7de7501f0c4@group.calendar.google.com": "H-Architects",
     "b135d9900db83399539bb5fe4ad9dc1ace19af20273c078ce2180cc47e9232fe@group.calendar.google.com": "UNABO",
     "e108191db825d97fb068a781463302c0e9c527d3927a85a514b1c8c5754b6048@group.calendar.google.com": "Harmoniebouw",
     "contraxcalendar@gmail.com": "Contrax",
     "385ee9ff8749fe5e5929090550d42611f4ce2437d11b56f3d4d943619b4c479f@group.calendar.google.com": "Lara",
-    "bfe28ee64dc72b449582af5e6a9fc6af3669709adf07adc8b49eb97666f07981@group.calendar.google.com": "Prive Buiten",
+    "harchitectsbvba@gmail.com": "Prive agenda mehdi (privé, alleen Mehdi)",
     "zoomafspraken@gmail.com": "zoomafspraken (sales via Calendly)",
     "en.be#holiday@group.v.calendar.google.com": "Feestdagen BE",
 }
