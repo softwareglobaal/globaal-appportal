@@ -97,3 +97,22 @@ def afspraken(van_dagen=-1, tot_dagen=8):
             })
     uit.sort(key=lambda x: x.get("start", ""))
     return uit
+
+
+def kalendernamen():
+    """id -> naam zoals die nu in Google staat, voor alle agenda's van dit account.
+    Gebruikt om te zien wat Mehdi op ZZ ARCHIEF heeft gezet."""
+    kop = {"Authorization": "Bearer " + _toegang()}
+    uit, pagina = {}, None
+    while True:
+        q = {"maxResults": "250", "showHidden": "true", "fields": "items(id,summary,summaryOverride),nextPageToken"}
+        if pagina:
+            q["pageToken"] = pagina
+        req = urllib.request.Request(API + "/users/me/calendarList?" + urllib.parse.urlencode(q), headers=kop)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.load(r)
+        for c in d.get("items", []):
+            uit[c["id"]] = c.get("summaryOverride") or c.get("summary") or ""
+        pagina = d.get("nextPageToken")
+        if not pagina:
+            return uit

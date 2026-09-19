@@ -44,6 +44,11 @@ KALENDERS = {
     "zoomafspraken@gmail.com": "zoomafspraken (sales via Calendly)",
     "en.be#holiday@group.v.calendar.google.com": "Feestdagen BE",
 }
+# Wat Mehdi archiveert krijgt "ZZ ARCHIEF" voor de naam, nadat hij de agenda van
+# alle andere accounts heeft losgekoppeld. Tweede grendel naast KALENDERS: ook als
+# zo'n agenda ooit in de lijst hierboven belandt, laat ik hem met rust. 19-09-2026.
+ARCHIEFVOORVOEGSEL = "ZZ ARCHIEF"
+
 FIRMA_AFDELING = {"HA": "h-architects", "UNABO": "unabo", "HB": "harmoniebouw", "HARMONIEBOUW": "harmoniebouw",
                   "CONTRAX": "contrax", "ENERGIE": "unabo", "TKN": "tkn", "ELEVAIT": "elevait", "PRIVE": "mehdi"}
 KALENDER_AFDELING = {"H-Architects": "h-architects", "UNABO": "unabo", "Harmoniebouw": "harmoniebouw", "Contrax": "contrax",
@@ -58,7 +63,19 @@ CODE_RE = re.compile(r"\[(HA|UNABO|HB|HARMONIEBOUW|CONTRAX|ENERGIE|TKN|ELEVAIT|P
 
 def kalenders():
     ruw = os.environ.get("AGENDA_KALENDERS", "").strip()
-    return [k.strip() for k in ruw.split(",") if k.strip()] or list(KALENDERS)
+    lijst = [k.strip() for k in ruw.split(",") if k.strip()] or list(KALENDERS)
+    return [k for k in lijst if k not in gearchiveerd()]
+
+
+def gearchiveerd():
+    """Agenda's die Mehdi op archief heeft gezet: hij koppelt ze eerst los van alle
+    andere accounts en zet er dan ZZ ARCHIEF voor. Die laat ik met rust, ook als ze
+    nog in KALENDERS staan. Lukt het opvragen niet, dan raak ik niets aan."""
+    try:
+        namen = agenda.kalendernamen()
+    except Exception:
+        return set()
+    return {k for k, naam in namen.items() if naam.upper().startswith(ARCHIEFVOORVOEGSEL)}
 
 
 def lees_titel(titel):
