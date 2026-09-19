@@ -1425,6 +1425,11 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   `nginx/templates/44-medewerkers.conf.template`. Registratie in Authentik
   (proxy-provider + applicatie + group-binding + embedded outpost) via
   `scripts/add-medewerkers-app.py`.
+- **Beide lijsten tonen standaard alleen wat nog meetelt**: de medewerkerslijst
+  wie in dienst is, de Firma's-tab wat actief is. De kop heeft een schakelaar
+  (`?toon=alles`) om de rest erbij te halen, zodat beheer iemand of iets kan
+  terugzetten. Uit dienst zetten en zacht uitzetten verwijderen niets; zonder
+  dit filter bleef een vertrekker gewoon in beeld staan.
 - Toont de **medewerkerslijst**: platte lijst op volledige naam met kolommen
   Naam/Afdeling/Rol/In dienst/Diensten voor/Locatie/HR-nummer; zoeken, filters op
   **afdeling en rol**, en een **groepeer-knop** (Geen / Afdeling / Rol) die in lijst- én
