@@ -85,7 +85,10 @@ def hartslag(status, taak="", detail="", voorstel=None):
 
 # ------------------------------------------------------------ gereedschap ---
 TOOLS = [
-    {"name": "agents_overzicht", "description": "Alle agents op het bord met hun afdeling, rol, mandaat, grenzen, cadans, status en aantal open voorstellen.",
+    {"name": "agents_overzicht", "description": "ALLE agents op het bord (kort): afdeling, rol, cadans, status met taak, detail en tijdstip, "
+                                                "en aantal open voorstellen. Volledig, dus dit is de lijst waarop je je uitspraken over de "
+                                                "toestand baseert. Mandaat, grenzen, gereedschap en werkwijze staan er niet in: haal die per "
+                                                "agent op met agent_werkwijze.",
      "input_schema": {"type": "object", "properties": {}}},
     {"name": "agent_werkwijze", "description": "De volledige werkwijze (het proces) van een agent, zoals Mehdi hem op het bord vastlegde.",
      "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}}, "required": ["naam"]}},
@@ -102,9 +105,19 @@ TOOLS = [
 ]
 
 
+# Het volledige overzicht is ~190 KB (werkwijze, mandaat en gereedschap per agent) en werd
+# afgekapt op de 60 KB van een toolresultaat: de Regisseur zag dan maar de eerste vier agents
+# en sprak over "de andere drie". Daarom dunnen we het hier uit tot wat een overzicht nodig
+# heeft; het zware werk per agent haalt hij met agent_werkwijze en agent_verslag.
+OVERZICHT_VELDEN = ("naam", "label", "type", "cadans", "rol", "status", "open_voorstellen", "nood")
+
+
 def voer_tool_uit(naam, inp):
     if naam == "agents_overzicht":
-        return bord("/api/overzicht")
+        uit = bord("/api/overzicht")
+        agents = [{k: a.get(k) for k in OVERZICHT_VELDEN if a.get(k) not in (None, "", [])}
+                  for a in uit.get("agents") or []]
+        return {"agents": agents, "aantal": len(agents)}
     if naam == "agent_werkwijze":
         return bord(f"/api/agent/{inp['naam']}/werkwijze")
     if naam == "agent_verslag":
