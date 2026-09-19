@@ -200,8 +200,20 @@ def meeting_rijen(van_dag, tot_dag, personen, mijn_email):
         if uuid in gezien:
             continue
         gezien.add(uuid)
-        detail = get(f"/past_meetings/{uuid_pad(uuid)}") or {}
-        deelnemers = get_alles(f"/past_meetings/{uuid_pad(uuid)}/participants", {"page_size": 300}, "participants") if detail else []
+        # past_meetings op uuid; lukt dat niet (oude of dubbel gecodeerde uuid), dan op het nummer
+        # (dat geeft de laatste keer dat de meeting liep). Geen van beide: nooit gestart, geen gesprek.
+        detail, ref = {}, ""
+        for kandidaat in (uuid_pad(uuid), str(m.get("id") or "")):
+            if kandidaat:
+                detail = get(f"/past_meetings/{kandidaat}") or {}
+                if detail:
+                    ref = kandidaat
+                    break
+        if not detail:
+            if DROOG:
+                print(f"   meeting {fw.belgisch(m.get('start_time', ''))}: niet gestart of geen gegevens, overgeslagen ({(m.get('topic') or '')[:50]})")
+            continue
+        deelnemers = get_alles(f"/past_meetings/{ref}/participants", {"page_size": 300}, "participants")
         start = fw.belgisch(detail.get("start_time") or m.get("start_time") or "")
         if not start:
             continue
@@ -267,8 +279,9 @@ def main():
             klaar.append({"voor": "mehdi", "soort": "zoom", "sleutel": dag, "titel": titel, "uniek": f"zoom:dag:{dag}", "inhoud": inhoud})
         if DROOG:
             print(f"(droog) {len(chat)} chatrijen, {len(meet)} meetingrijen, {len(klaar)} dagregels; venster {van_dag} tot {tot_dag}; gebruiker {ik.get('first_name', '')} ({'e-mail bekend' if mijn_email else 'geen e-mail'})")
-            for r in rijen[:8]:
-                print("  ", r["datum"], r["start"], r["afdeling"], "privé" if r["prive"] else "werk", "|", r["thema"][:70])
+            print("   personentabel:", len(personen), "rijen")
+            for r in rijen[:10]:
+                print("  ", r["datum"], r["start"], r["afdeling"], "privé" if r["prive"] else "werk", "|", r["personen"][:40], "|", r["thema"][:60])
             return
         if rijen:
             bord.call("/api/gesprekken", {"rijen": rijen})
