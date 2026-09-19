@@ -39,7 +39,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 # Welke Google-agenda een account beschrijft, gemeten 19-09-2026. Leeg = nog niet
 # vastgesteld. Dit is alleen voor het verslag; ik leid er niets uit af.
 AGENDA_VAN = {
-    "General": "zoomafspraken",
+    "General": "zoomafspraken, wordt mehdiprivewerkagenda",
     "H-Architects Projects": "HA Light",
     "UNABO Afspraken": "UNABO (krijgt niets uit Calendly)",
     "Mehdi Chegini": "mehdiprivewerkagenda",
@@ -98,7 +98,8 @@ def q(u):
 def verzamel(noden):
     """Geeft (accounts, boekingen_per_user) terug. Accounts: lijst dicts met
     naam, email, rol, uri, types."""
-    token = env("CALENDLY_TOKEN_MCH")
+    # Sinds 19-09-2026 is General de eigenaar van de organisatie; zijn sleutel leest alles.
+    token = env("CALENDLY_TOKEN_GENERAL") or env("CALENDLY_TOKEN_MCH")
     nu = datetime.datetime.now(datetime.timezone.utc)
     van = (nu - datetime.timedelta(days=DOOD_NA_DAGEN)).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
     accounts, boekingen = [], []
@@ -120,10 +121,10 @@ def verzamel(noden):
                 accounts.append({"naam": u.get("name") or "?", "email": u.get("email") or "",
                                  "rol": m.get("role") or "", "uri": u.get("uri") or "", "types": types})
             return accounts, boekingen
-        noden.append({"tekst": "CALENDLY_TOKEN_MCH werkt niet meer; nieuwe sleutel nodig", "wie": "mehdi"})
+        noden.append({"tekst": "CALENDLY_TOKEN_GENERAL werkt niet meer; nieuwe sleutel nodig", "wie": "mehdi"})
 
     # terugval: losse sleutels per account
-    for sl in ("GENERAL", "LIGHT", "UNABO"):
+    for sl in ("GENERAL",):
         t = env("CALENDLY_TOKEN_" + sl)
         if not t:
             noden.append({"tekst": f"geen sleutel voor {sl} en geen eigenaarssleutel", "wie": "mehdi"})
