@@ -208,6 +208,23 @@ Vier knoppen, van zacht naar hard. Ik stel nooit een hardere voor dan nodig:
    per agenda wie er de laatste twaalf maanden afspraken in heeft aangemaakt.
    Wie nul heeft aangemaakt en niets komt opzoeken, hoort er niet meer op.
 
+**De volgorde van Mehdi, 19-09-2026.** Hij doet het zo, en die volgorde is juist:
+eerst de agenda loskoppelen van alle andere accounts, dan pas hernoemen naar
+ZZ ARCHIEF. Zodra er niemand anders meer op zit, is die naam alleen nog van hem
+en ziet geen enkele collega hem. Andersom lekt het, dat is precies wat er op
+19-09 misging. De agenda blijft in zijn lijst staan, met alle afspraken erin.
+
+Twee agenda's vallen hierbuiten: outofofficesr en HRM. Die staan wel op zijn
+naam maar zijn het werkinstrument van HR (hr.harchitects22 maakte er het laatste
+jaar 1134 afspraken in aan). Daar niemand afhalen en niet hernoemen; Mehdi vinkt
+ze enkel uit in zijn eigen lijst.
+
+Agenda's van anderen kan hij sowieso niet hernoemen, alleen uitvinken of
+loskoppelen. Uitvinken merkt de eigenaar niet.
+
+Ik negeer alles wat met "ZZ ARCHIEF" begint, ook als het ooit in mijn negen zou
+belanden. Dubbele grendel naast de id-lijst.
+
 Recept voor een agenda die stopt: bericht sturen, wachten tot na de laatste
 geboekte afspraak, schrijfrecht naar leesrecht, uitvinken. Hernoemen alleen als
 er niemand anders op zit.
