@@ -75,7 +75,7 @@ def gearchiveerd():
         namen = agenda.kalendernamen()
     except Exception:
         return set()
-    return {k for k, naam in namen.items() if naam.upper().startswith(ARCHIEFVOORVOEGSEL)}
+    return {k for k, naam in namen.items() if naam.strip().upper().startswith(ARCHIEFVOORVOEGSEL)}
 
 
 def lees_titel(titel):
