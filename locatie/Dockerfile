@@ -15,4 +15,8 @@ COPY . .
 # werkende container gewoon draaien. Zie test_dagindeling.py voor de gevallen.
 RUN LOCATIE_DB=/tmp/test.db python3 test_dagindeling.py
 
+# Tweede grendel: de ontleder van de trackerberichten, getoetst aan echte
+# voorbeeldregels uit de handleiding van de fabrikant. Zie test_atrack.py.
+RUN python3 test_atrack.py
+
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3031} --workers 2 --timeout 60 app:app"]
