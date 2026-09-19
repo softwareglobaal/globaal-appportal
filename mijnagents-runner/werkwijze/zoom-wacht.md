@@ -28,7 +28,20 @@ Mehdi's opdracht via De Bode of een voorstel.
 
 ## Wat ik nu nodig heb
 
-- Scopes: geregeld op 10-09-2026. De Server-to-Server-app leest nu berichten,
-  sessies en kanalen (Team Chat), meetings, afgelopen meetings en deelnemers,
-  en kan een gebruiker op e-mail opzoeken. Gecontroleerd met een vers token.
-- Mijn eigen runner (nog te bouwen door Claude Code).
+- Niets. Scopes geregeld op 10-09-2026, eigen runner (`zoom_wacht.py`) sinds
+  19-09-2026, twee keer per dag (07:15 en 13:15 UTC). Mehdi is de eigenaar van
+  het Zoom-account, dus ik lees als "me".
+
+## Hoe ik werk (sinds 19-09-2026)
+
+- Chat: per gesprek (1:1 of kanaal) per dag één rij met aantallen en tijden,
+  nooit de inhoud. Een 1:1 met iemand uit de personentabel krijgt diens
+  afdeling; een teamadres dat ik niet ken is werk met afdeling onbekend; een
+  onbekende buiten het team is privé, bij twijfel privé.
+- Meetings: elke afgelopen meeting met duur en deelnemers; opname-bots tellen
+  niet als deelnemer; de afdeling volgt uit de deelnemers, anders uit de tag in
+  de titel ([UNABO-PO], [HA-B2B]). Een geplande meeting die nooit startte sla
+  ik over.
+- Eén dagregel voor De Dagbundelaar (soort zoom), alleen voor Mehdi.
+- Grens die ik ken: sommige gesprekken met recente activiteit geven via de API
+  geen berichten terug (reacties, bewerkingen, bestanden); die tel ik dan niet.

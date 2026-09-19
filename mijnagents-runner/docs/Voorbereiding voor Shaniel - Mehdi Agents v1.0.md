@@ -85,7 +85,7 @@ de agent.
 3. A4 Hotmail app-wachtwoord in de Keychain van de Mac van Mehdi (Mailwacht prive staat stil).
 4. A10 Health Auto Export op de iPhone naar iCloud Drive (Gezondheidswacht ziet niets).
 5. A8 en A9 Plaud-routine op claude.ai, daarna de accounts van Angela, Siyan en Shaniel.
-6. A6 Zoom-scopes lezen (chat_message:read:admin, meeting:read:admin) op de Server-to-Server-app.
+6. A6 Zoom: GEDAAN. Scopes op 10-09, eigen runner (zoom_wacht.py, 07:15 en 13:15 UTC) op 19-09; eerste ronde: 29 meetings en 4 chatdagen in de gesprekkentabel (bron zoom).
 7. A7 Xelion: bevestigen welke van de vijf lijnen van Mehdi zijn (werk en prive).
 8. A12 Bellen bij alarm: GEDAAN op 19-09 (Twilio pay-as-you-go, nummer +15079921137, API key, Belgie toegestaan; De Bode heeft geen bel-nood meer). TE DOEN: een testoproep naar ALARM_NUMMER op een moment dat Mehdi hem verwacht, daarna de status van de oproep nakijken (opgenomen, niet beantwoord, mislukt).
 9. A11 WhatsApp-exports in ~/Documents/WhatsApp exports op de Mac (Mehdi kiest de gesprekken).
