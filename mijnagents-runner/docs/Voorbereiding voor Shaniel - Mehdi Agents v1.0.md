@@ -87,7 +87,7 @@ de agent.
 5. A8 en A9 Plaud-routine op claude.ai, daarna de accounts van Angela, Siyan en Shaniel.
 6. A6 Zoom: GEDAAN. Scopes op 10-09, eigen runner (zoom_wacht.py, 07:15 en 13:15 UTC) op 19-09; eerste ronde: 29 meetings en 4 chatdagen in de gesprekkentabel (bron zoom).
 7. A7 Xelion: bevestigen welke van de vijf lijnen van Mehdi zijn (werk en prive).
-8. A12 Bellen bij alarm: GEDAAN op 19-09 (Twilio pay-as-you-go, nummer +15079921137, API key, Belgie toegestaan; De Bode heeft geen bel-nood meer). Testoproep GEDAAN op 19-09 naar Shaniels nummer (Suriname aangezet in de geo-permissies): rinkelde na 3 s, opgenomen na 9 s, 23 s, 0,57 USD. ALARM_NUMMER staat weer op Mehdi.
+8. A12 Bellen bij alarm: GEDAAN op 19-09 (Twilio pay-as-you-go, nummer +15079921137, API key, Belgie toegestaan; De Bode heeft geen bel-nood meer). Testoproep GEDAAN op 19-09 naar Shaniels nummer (Suriname aangezet in de geo-permissies): rinkelde na 3 s, opgenomen na 9 s, 23 s, 0,57 USD. ALARM_NUMMER staat weer op Mehdi. Testoproep naar Mehdi zelf ook geslaagd (opgenomen, 23 s, 0,56 USD). VOLGENDE STAP: Belgisch mobiel nummer (1,25 EUR/maand) omdat een EER-afzender 0,0387 i.p.v. 0,5576 EUR/min kost naar een Belgische gsm; regulatory bundle BU05809df5 (KBO-uittreksel H-Architects) ingediend op 19-09, wacht op Twilio (tot 3 werkdagen); daarna nummer kopen en TWILIO_VAN omzetten.
 9. A11 WhatsApp-exports in ~/Documents/WhatsApp exports op de Mac (Mehdi kiest de gesprekken).
 10. B1 Tabel Betrokken personen aanvullen in de werkwijze van De Fathomwacht; B2 afzenders met hoog belang.
 11. B3 en B5: 43 afspraken zonder code en de titels zonder projectnummer of adres (signaal op het bord); dit is de agenda van Mehdi, Shaniel kan de lijst voorbereiden.
