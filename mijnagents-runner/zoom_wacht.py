@@ -101,24 +101,39 @@ def uuid_pad(uuid):
 
 
 # ------------------------------------------------------------ herkenning ---
+def _tokens(naam):
+    return {t for t in re.split(r"[^a-zà-ÿ]+", (naam or "").lower()) if len(t) > 2}
+
+
 def herken_persoon(personen, email="", naam=""):
-    """Rij uit de tabel Betrokken personen op e-mail of voornaam, of None."""
+    """Rij uit de tabel Betrokken personen: op e-mail, anders op naamdelen (de tabel
+    kan 'Voornaam Naam' of 'Naam Voornaam' bevatten, Zoom geeft weergavenamen)."""
     email = (email or "").lower()
-    voornaam = (naam or "").strip().lower().split(" ")[0] if naam else ""
     for p in personen:
         if email and email in p["mails"]:
             return p
+    zt = _tokens(naam)
+    if not zt:
+        return None
+    beste, score = None, 0
     for p in personen:
-        pv = p["naam"].lower().split()[0]
-        if voornaam and (pv == voornaam or (len(voornaam) > 3 and voornaam in p["naam"].lower())):
-            return p
-    return None
+        pt = _tokens(p["naam"])
+        s = len(zt & pt)
+        if s > score or (s == score and s and len(pt) < len(_tokens(beste["naam"]))):
+            beste, score = p, s
+    return beste if score >= 1 else None
+
+
+AFDELING_ALIAS = {"ha-": "h-architects", "[ha]": "h-architects", "h-a ": "h-architects", "hb-": "harmoniebouw", "ctx-": "contrax", "tkn-": "tkn"}
 
 
 def afdeling_uit_naam(tekst):
     t = (tekst or "").lower()
     for a in fw.AFDELINGEN:
         if a in t or a.replace("-", "") in t.replace("-", "").replace(" ", ""):
+            return a
+    for k, a in AFDELING_ALIAS.items():
+        if k in t:
             return a
     return ""
 
@@ -212,6 +227,8 @@ def meeting_rijen(van_dag, tot_dag, personen, mijn_email):
                       "archief": "", "link": m.get("join_url", ""), "opgenomen_door": detail.get("user_name") or "Mehdi", "bron": "zoom"})
         dagtel[dag]["meetings"] += 1
         dagtel[dag]["minuten"] += duur
+        if DROOG:
+            print(f"   meeting {dag} {start[11:16]}: {len(deelnemers)} deelnemerrecords, {len(namen)} namen, {bekend} bekend, detail {'ja' if detail else 'nee'}, afd {afd}")
     return rijen, dagtel
 
 
