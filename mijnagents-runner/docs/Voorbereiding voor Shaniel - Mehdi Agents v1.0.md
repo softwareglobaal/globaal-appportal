@@ -87,7 +87,7 @@ de agent.
 5. A8 en A9 Plaud-routine op claude.ai, daarna de accounts van Angela, Siyan en Shaniel.
 6. A6 Zoom-scopes lezen (chat_message:read:admin, meeting:read:admin) op de Server-to-Server-app.
 7. A7 Xelion: bevestigen welke van de vijf lijnen van Mehdi zijn (werk en prive).
-8. A12 Bellen bij alarm: Twilio-account met nummer; sleutels in mijnagents-data/.env.
+8. A12 Bellen bij alarm: GEDAAN op 19-09 (Twilio pay-as-you-go, nummer +15079921137, API key, Belgie toegestaan; De Bode heeft geen bel-nood meer). TE DOEN: een testoproep naar ALARM_NUMMER op een moment dat Mehdi hem verwacht, daarna de status van de oproep nakijken (opgenomen, niet beantwoord, mislukt).
 9. A11 WhatsApp-exports in ~/Documents/WhatsApp exports op de Mac (Mehdi kiest de gesprekken).
 10. B1 Tabel Betrokken personen aanvullen in de werkwijze van De Fathomwacht; B2 afzenders met hoog belang.
 11. B3 en B5: 43 afspraken zonder code en de titels zonder projectnummer of adres (signaal op het bord); dit is de agenda van Mehdi, Shaniel kan de lijst voorbereiden.
