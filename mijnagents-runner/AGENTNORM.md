@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.1, 20-09-2026 (N10, de omgevingstoets S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.2, 20-09-2026 (N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -38,7 +38,7 @@ Twee regels die hieruit volgen:
 - **Wie een kopie maakt, is verantwoordelijk voor het verschil.** Kan een kopie
   niet gelijk blijven, dan hoort ze er niet te zijn.
 
-## 2. De tien normen
+## 2. De elf normen
 
 | norm | de eis | waarom, en waar het misging |
 |---|---|---|
@@ -52,6 +52,8 @@ Twee regels die hieruit volgen:
 | **N8** | Geen sleutel, token of wachtwoord in de werkwijze | Een werkwijze wordt geëxporteerd naar Dropbox en gelezen door elke sessie. |
 | **N9** | Geen gedachtestreepjes in de werkwijze | Afspraak van 04-07-2026. Teksten horen menselijk te lezen. |
 | **N10** | Een nood draagt geen aantal in zijn tekst | Noden zijn declaratief: elke ronde stuurt een agent de hele lijst, en wat er niet meer in staat geldt als opgelost. Staat er een teller in de tekst ("11 afspraken zonder code"), dan is elke ronde formeel een nieuwe nood en sluit de lus nooit. Zo verzamelde de Agendawacht dertig identieke regels. Het aantal hoort in het detail. |
+
+| **N11** | Verse hartslag, niet in fout en niet vastgelopen | Zes agents draaien op de Mac van Mehdi. Slaapt die laptop, dan gaat hun ronde niet door en merkt niemand het. Op 20-09-2026 stonden acht agents stil zonder dat iemand het wist: het commandocentrum 39 uur (cadans: elk kwartier), de dagbundelaar 54 uur, de wisprwacht zestien uur op fout, de icloudwacht achttien uur vastgelopen in dezelfde ronde. Stil vallen mag, ongemerkt stil vallen niet. |
 
 ### De omgeving
 
@@ -101,7 +103,26 @@ normwacht.py --droog      meten en tonen, niets naar het bord schrijven
 
 Zo komt hij terug tot het klopt, zonder dat iemand het hoeft te onthouden.
 
-## 5. Wat je doet als een norm faalt
+## 5. Hoe een agent Mehdi bereikt
+
+Zijn laptop slaapt 's nachts en vroeg in de ochtend. Een melding op een scherm
+dat uit staat is geen melding. Drie kanalen, van zacht naar hard:
+
+| kanaal | hoe | waarvoor |
+|---|---|---|
+| het bord | `hartslag(..., nood=[...])` | alles wat kan wachten tot hij kijkt |
+| Telegram | een klaarzet-item met `soort: signaal` en `voor: mehdi`; De Bode bundelt en stuurt | wat hij vandaag moet weten |
+| bellen (Twilio) | `koppelingen/bellen.py`, De Bode belt | alleen wat op een tijdstip moet gebeuren, zoals het belrooster van de Agendawacht |
+
+**Een nood alleen op het bord bereikt hem niet.** De Bode stuurt klaarzet-items
+en voorstellen door, geen noden. Wie wil dat Mehdi iets ziet, zet een signaal.
+
+Geef elk signaal een `uniek` zonder aantallen erin, om dezelfde reden als N10:
+anders komt hetzelfde bericht elke ronde opnieuw. De Normwacht gebruikt
+`normwacht-stilte-<agent>-<fout|stil|vastgelopen>`, zodat een agent die weer
+draait vanzelf uit de meldingen verdwijnt.
+
+## 6. Wat je doet als een norm faalt
 
 1. **Herstel in de bron, niet in het geval.** Een fout in één werkwijze los je op
    in het sjabloon of in de code, zodat elke volgende agent het goed heeft.
@@ -112,7 +133,7 @@ Zo komt hij terug tot het klopt, zonder dat iemand het hoeft te onthouden.
 3. **Verlaag de norm alleen in dit document.** Wie een norm te streng vindt, past
    hem hier aan en in `controle_agenten.py`, nooit het geval dat toevallig faalt.
 
-## 6. Een nieuwe agent die meteen slaagt
+## 7. Een nieuwe agent die meteen slaagt
 
 ```
 python3 ~/appportal/mijnagents-runner/nieuwe-agent.py --naam post-wacht --label "Postwacht" \
@@ -126,7 +147,7 @@ De werkwijze die je meegeeft moet zelf al door N1, N2, N8 en N9 komen. Daarna:
 - laat hem noden schrijven met een eigenaar en een besluit, niet als logregel (N7);
 - draai `controle_agenten.py --agent <naam> --uitleg` voor je hem op de cron zet.
 
-## 7. De chatkant
+## 8. De chatkant
 
 Een agent die Mehdi ook in een gesprek aanspreekt, hoort een skill te hebben in
 `~/.claude/skills/<naam>/SKILL.md` op zijn Mac. Die skill wordt automatisch

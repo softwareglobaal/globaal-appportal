@@ -193,6 +193,46 @@ def n10_noden_hebben_sleutel(rij, con):
     return True, f"{len(rijen)} open nood(en), geen teller in de tekst"
 
 
+def _drempel_uren(cadans):
+    """Hoe lang mag het stil blijven voor het stil te lang is. De cadans is
+    vrije tekst, dus we lezen alleen de orde van grootte."""
+    c = (cadans or "").lower()
+    if "maand" in c:
+        return 32 * 24
+    if "week" in c or "maandag" in c:
+        return 8 * 24
+    return 25
+
+
+def n11_hartslag(rij, con):
+    """N11 hij heeft nog een hartslag gegeven, en staat niet stil in fout.
+
+    Zes agents draaien op de Mac van Mehdi. Slaapt die laptop, dan gaat hun
+    ronde gewoon niet door en merkt niemand het. Een agent die stil valt of in
+    fout blijft staan hoort op te vallen, niet te verdwijnen.
+    """
+    try:
+        r = con.execute("select status, ts, taak from status where naam=?", (rij["naam"],)).fetchone()
+    except sqlite3.Error:
+        return None, "geen status-tabel"
+    if not r:
+        return False, "nooit een hartslag gegeven"
+    status, ts, taak = r[0], r[1], (r[2] or "")
+    d = _ouderdom_dagen(ts)
+    if d is None:
+        return None, f"tijdstempel onleesbaar: {ts}"
+    uren = d * 24
+    grens = _drempel_uren(_tekst(rij, "cadans"))
+    if status == "fout":
+        return False, f"staat op fout sinds {uren:.0f} uur: {taak[:60]}"
+    if status == "actief" and uren > 3:
+        return False, f"staat al {uren:.0f} uur op actief, ronde vastgelopen: {taak[:60]}"
+    if uren > grens:
+        waar = _tekst(rij, "draait_op") or "?"
+        return False, f"{uren:.0f} uur stil (mag {grens} uur, draait op {waar})"
+    return True, f"{uren:.0f} uur geleden, {status}"
+
+
 NORMEN = [
     ("N1", "werkwijze op het bord", n1_werkwijze),
     ("N2", "grenzen staan erin", n2_grenzen_in_werkwijze),
@@ -204,6 +244,7 @@ NORMEN = [
     ("N8", "geen geheim", n8_geen_geheim),
     ("N9", "stijl", n9_stijl),
     ("N10", "noden hebben een sleutel", n10_noden_hebben_sleutel),
+    ("N11", "hartslag vers", n11_hartslag),
 ]
 
 

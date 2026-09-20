@@ -46,6 +46,47 @@ def noodtekst(norm, eis, agents):
     return f"{norm} {eis}: bij meerdere agents"
 
 
+def stilte_signalen(uitslag):
+    """Een agent die stilstaat of in fout hangt is acuut: dat gaat apart naar
+    Telegram, met de agentnaam in `uniek` zodat het per agent één keer komt en
+    vanzelf verdwijnt zodra hij weer draait.
+    """
+    uit = []
+    for u in uitslag:
+        for t in u["toetsen"]:
+            if t["norm"] == "N11" and t["ok"] is False:
+                # De sleutel draagt alleen de soort storing, nooit het aantal
+                # uren: anders is elke ronde een nieuw signaal (norm N10).
+                uitleg = t["uitleg"]
+                soort = ("fout" if "op fout" in uitleg else
+                         "vastgelopen" if "vastgelopen" in uitleg else "stil")
+                uit.append({
+                    "voor": "mehdi", "soort": "signaal",
+                    "titel": f"{u['agent']} draait niet: {uitleg}",
+                    "uniek": f"normwacht-stilte-{u['agent']}-{soort}",
+                    "inhoud": "Deze agent geeft geen verse hartslag. Draait hij op de Mac, "
+                              "dan kan een slapende laptop de reden zijn; draait hij op de VM, "
+                              "kijk dan in zijn log.",
+                })
+    return uit
+
+
+def norm_signaal(gezakt, uitslag, schoon):
+    """Eén samenvatting per dag. `uniek` bevat alleen welke normen zakken, niet
+    hoeveel: zo komt hetzelfde bericht niet elke ochtend opnieuw (norm N10).
+    """
+    normen = sorted({norm for (norm, _) in gezakt})
+    regels = [f"{norm} {eis}: {len(agents)} agent(s) ({', '.join(sorted(agents)[:4])}"
+              f"{' en meer' if len(agents) > 4 else ''})"
+              for (norm, eis), agents in sorted(gezakt.items())]
+    return {
+        "voor": "mehdi", "soort": "signaal",
+        "titel": f"Agentnorm: {len(normen)} norm(en) open, {len(schoon)} van {len(uitslag)} agents zonder fout",
+        "uniek": "normwacht-stand-" + "-".join(normen),
+        "inhoud": "\n".join(regels) + "\n\nHet logboek staat in Data uit Mehdi/agentnorm/logboek.md.",
+    }
+
+
 def ronde(droog=False):
     ag = bord.Agent(NAAM)
     if not droog:
@@ -90,6 +131,10 @@ def ronde(droog=False):
         print(f"{len(uitslag)} agents, {totaal} gezakte norm(en). Zou {len(noden)} nood(en) zetten:")
         for n in noden:
             print(f"  [{n['wie']}] {n['tekst']}")
+        signalen = stilte_signalen(uitslag) + [norm_signaal(gezakt, uitslag, schoon)]
+        print(f"\nEn {len(signalen)} signaal/signalen naar Telegram (via De Bode):")
+        for s in signalen:
+            print(f"  {s['titel']}")
         return 0 if totaal == 0 else 1
 
     ag.log_verstuur()
@@ -97,7 +142,13 @@ def ronde(droog=False):
                 taak=f"{len(uitslag)} agents getoetst",
                 detail=f"{totaal} gezakte norm(en), {len(schoon)} agent(s) zonder fout",
                 nood=noden)
-    print(f"{len(uitslag)} agents, {totaal} gezakte norm(en), {len(noden)} nood(en) op het bord.")
+
+    # Een nood blijft op het bord staan; De Bode stuurt alleen klaarzet en
+    # voorstellen door. Mehdi's laptop slaapt 's ochtends, dus wat hij moet
+    # weten gaat als signaal naar Telegram, niet naar een scherm dat uit staat.
+    gezet = ag.klaarzet(stilte_signalen(uitslag) + [norm_signaal(gezakt, uitslag, schoon)])
+    print(f"{len(uitslag)} agents, {totaal} gezakte norm(en), {len(noden)} nood(en) op het bord, "
+          f"{gezet.get('nieuw', 0)} signaal/signalen naar De Bode.")
     if regel:
         print(f"logboek: {MD}")
     return 0 if totaal == 0 else 1
