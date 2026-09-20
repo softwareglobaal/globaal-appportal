@@ -72,6 +72,14 @@ class Agent:
         except Exception:  # noqa: BLE001
             return ""
 
+    def kennis(self, tekst, bron=""):
+        """Norm N4: melden welk regelboek ik deze ronde las, zodat achteraf te zien is
+        welke versie van de regels ik gebruikte toen ik iets deed."""
+        try:
+            call(f"/api/agent/{self.naam}/kennis", {"kennis": tekst, "bron": bron})
+        except Exception as e:  # noqa: BLE001
+            print("kennis niet gemeld:", e, file=sys.stderr)
+
     def klaarzet(self, items):
         """items: lijst van dicts met voor, soort, titel, en optioneel sleutel, inhoud, verwijzing, uniek."""
         for it in items:

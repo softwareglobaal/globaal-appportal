@@ -716,6 +716,7 @@ def botsingen(items):
 
 
 def main():
+    werkwijze = ag.werkwijze()
     ag.hartslag("actief", taak="agenda lezen")
     try:
         if not agenda.beschikbaar():
@@ -814,11 +815,48 @@ def main():
             ag.log(f"dag {vandaag}", "bron", f"Google Routes: {routes_gebruikt} van {ROUTES_DAGLIMIET} aanroepen vandaag"
                    + (" (plafond bereikt, reistijden verder op de filefactor)" if ROUTES_GESTOPT else ""))
         ag.log_verstuur()
-        ag.hartslag("waakt", taak="agenda in het oog", detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; {len(niet_conform)} zonder code",
-                    nood=([{"tekst": f"{len(niet_conform)} toekomstige afspraken zonder code ([HA-KB] enz.): titels rechtzetten (Mehdi, of via een voorstel zodra het runbook agenda-titel er is)", "wie": "mehdi"}] if niet_conform else [])
-                    + ([{"tekst": f"{fout_h} herinneringen konden niet gezet worden", "wie": "claude-code"}] if fout_h else [])
-                    + ([{"tekst": f"dagplafond Google Routes bereikt ({ROUTES_DAGLIMIET} aanroepen); reistijden vandaag verder op de filefactor. Klopt dat met het aantal buitenafspraken, dan mag AGENDA_ROUTES_DAGLIMIET omhoog; zo niet, dan vraagt er iets te veel op", "wie": "claude-code"}] if ROUTES_GESTOPT else [])
-                    + ([{"tekst": f"{len(fouten)} agenda(s) niet leesbaar: " + ", ".join(f["kalender"][:30] for f in fouten), "wie": "mehdi"}] if fouten else []))
+        # Norm N4: melden welk regelboek ik deze ronde las, zodat achteraf te zien is
+        # welke versie van de regels gold toen ik iets deed.
+        try:
+            ag.kennis(f"werkwijze van het bord, {len(werkwijze or '')} tekens; "
+                      f"afspraken uit werkwijze/agenda-taken.json; "
+                      f"firmacodes uit organisatie.globaal.be ({len(FIRMACODES)} firma's)",
+                      bron="bord + agenda-taken.json + kern.firma")
+        except Exception:  # noqa: BLE001
+            pass
+        # Norm N10: een nood draagt geen aantal in zijn tekst, anders is elke ronde
+        # formeel een nieuwe nood en sluit de lus nooit. Het aantal hoort in het detail.
+        noden = []
+        if niet_conform:
+            noden.append({"tekst": "Afspraken zonder firmacode in de titel: rechtzetten, anders krijgen ze geen kleur",
+                          "wie": "mehdi"})
+        if oud_code:
+            noden.append({"tekst": "Titels met een oude firmacode: omzetten naar de code van organisatie.globaal.be",
+                          "wie": "mehdi"})
+        if onvolledig:
+            noden.append({"tekst": "Buitenafspraken zonder adres: zonder adres kan ik geen reistijd berekenen",
+                          "wie": "mehdi"})
+        try:
+            ontbreekt = adresboek.onvolledig()
+        except Exception:  # noqa: BLE001
+            ontbreekt = []
+        if ontbreekt:
+            noden.append({"tekst": "Vaste plaatsen zonder adres in het adresboek: " + ", ".join(ontbreekt),
+                          "wie": "mehdi"})
+        if fout_h:
+            noden.append({"tekst": "Herinneringen konden niet gezet worden", "wie": "claude-code"})
+        if ROUTES_GESTOPT:
+            noden.append({"tekst": "Dagplafond van de Google Routes API bereikt; reistijden lopen verder op "
+                                   "de filefactor. Klopt dat met het aantal buitenafspraken, dan mag "
+                                   "AGENDA_ROUTES_DAGLIMIET omhoog", "wie": "claude-code"})
+        if fouten:
+            noden.append({"tekst": "Agenda's die ik niet kan lezen: " + ", ".join(f["kalender"][:30] for f in fouten),
+                          "wie": "mehdi"})
+        ag.hartslag("waakt", taak="agenda in het oog",
+                    detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; "
+                           f"{len(niet_conform)} zonder code; {len(oud_code)} met een oude code; "
+                           f"{len(onvolledig)} zonder adres",
+                    nood=noden)
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
         ag.log_verstuur()
