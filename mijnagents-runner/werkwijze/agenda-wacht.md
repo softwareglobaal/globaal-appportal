@@ -244,7 +244,7 @@ staan nog negen geboekte klantafspraken, de laatste op 29-09 om 20:00. Maak je d
 koppeling eerder los of hernoem je die agenda's naar ZZ ARCHIEF, dan werken de
 annuleer- en verzetlinks van die klanten niet meer en negeer ik die afspraken.
 
-## De afspraken op een rij (versie 1.0, 2026-09-20)
+## De afspraken op een rij (versie 1.1, 2026-09-20)
 
 Dit staat ook als machineleesbaar bestand in `werkwijze/agenda-taken.json`.
 `tests/test_agenda_taken.py` faalt zodra de code en dat bestand uit elkaar lopen,
@@ -259,7 +259,6 @@ dus wat hieronder staat kan niet stilletjes verouderen.
 | Lara | `385ee9ff8749fe5e5929090550d42611f4ce2437d11b` | lara | school, zwemmen, ophalen |
 | H-Architects | `73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51` | firma | leeg sinds 20-09-2026, blijft meelezen tot de collega's overgeschakeld zijn |
 | UNABO | `b135d9900db83399539bb5fe4ad9dc1ace19af20273c` | firma | leeg sinds 20-09-2026, blijft meelezen tot de collega's overgeschakeld zijn |
-| Harmoniebouw | `e108191db825d97fb068a781463302c0e9c527d3927a` | firma | nog in gebruik, nul afspraken in twaalf maanden, beslissing van Mehdi open |
 | zoomafspraken | `zoomafspraken@gmail.com` | sales | oude Calendly-boekingen tot en met 29-09-2026, daarna archief. Fathom hangt aan dit account |
 | Feestdagen BE | `en.be#holiday@group.v.calendar.google.com` | feestdagen | Belgische feestdagen |
 
@@ -306,11 +305,17 @@ Tekens: `!!` buiten met reistijd, `??` nog niet bevestigd.
 
 **Nog openstaand**
 
-- schrijfrecht op mehdi werk agenda voor haagendalightprojects, abigailqoppa en scanningenstaco (Mehdi, voor het bericht aan de collega's)
-- bericht aan de collega's versturen (Mehdi, deze week)
-- vier oude Calendly-koppelingen losmaken (Mehdi, na 29-09-2026)
-- H-Architects en UNABO uit de leeslijst halen (de agent, als het bericht buiten is)
-- Harmoniebouw: blijft die of gaat die op archief (Mehdi, open)
+- rechten op mehdi werk agenda regelen per collega, wie plant krijgt schrijfrecht (Shaniel, morgen)
+- bericht aan de collega's verspreiden (Shaniel, morgen)
+- Harmoniebouw hernoemen naar ZZ ARCHIEF Harmoniebouw, drie collega's zien die naam (Shaniel, morgen)
+- vier oude Calendly-koppelingen losmaken, herinnering staat in de agenda (Mehdi, 30-09-2026)
+- H-Architects en UNABO uit de leeslijst halen (de agent, als het bericht verspreid is)
+
+**Beslissingen van Mehdi**
+
+- 2026-09-20: Harmoniebouw gaat op archief, nul afspraken in twaalf maanden
+- 2026-09-20: abigailqoppa en scanningenstaco krijgen geen schrijfrecht op Werk, zij plannen niet meer voor Mehdi
+- 2026-09-20: Shaniel regelt de rechten van de collega's, niet Mehdi zelf
 
 ## Met welk account ik werk, en wat ik in het archief mag
 

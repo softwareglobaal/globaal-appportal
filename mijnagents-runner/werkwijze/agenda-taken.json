@@ -1,5 +1,5 @@
 {
- "versie": "1.0",
+ "versie": "1.1",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -37,13 +37,6 @@
    "adres": "b135d9900db83399539bb5fe4ad9dc1ace19af20273c078ce2180cc47e9232fe@group.calendar.google.com",
    "waarover": "leeg sinds 20-09-2026, blijft meelezen tot de collega's overgeschakeld zijn",
    "wie_schrijft": "niemand meer"
-  },
-  {
-   "rol": "firma",
-   "naam": "Harmoniebouw",
-   "adres": "e108191db825d97fb068a781463302c0e9c527d3927a85a514b1c8c5754b6048@group.calendar.google.com",
-   "waarover": "nog in gebruik, nul afspraken in twaalf maanden, beslissing van Mehdi open",
-   "wie_schrijft": "siyanhdswerk"
   },
   {
    "rol": "sales",
@@ -215,29 +208,43 @@
  },
  "openstaand": [
   {
-   "wat": "schrijfrecht op mehdi werk agenda voor haagendalightprojects, abigailqoppa en scanningenstaco",
-   "wie": "Mehdi",
-   "wanneer": "voor het bericht aan de collega's"
+   "wat": "rechten op mehdi werk agenda regelen per collega, wie plant krijgt schrijfrecht",
+   "wie": "Shaniel",
+   "wanneer": "morgen"
   },
   {
-   "wat": "bericht aan de collega's versturen",
-   "wie": "Mehdi",
-   "wanneer": "deze week"
+   "wat": "bericht aan de collega's verspreiden",
+   "wie": "Shaniel",
+   "wanneer": "morgen"
   },
   {
-   "wat": "vier oude Calendly-koppelingen losmaken",
+   "wat": "Harmoniebouw hernoemen naar ZZ ARCHIEF Harmoniebouw, drie collega's zien die naam",
+   "wie": "Shaniel",
+   "wanneer": "morgen"
+  },
+  {
+   "wat": "vier oude Calendly-koppelingen losmaken, herinnering staat in de agenda",
    "wie": "Mehdi",
-   "wanneer": "na 29-09-2026"
+   "wanneer": "30-09-2026"
   },
   {
    "wat": "H-Architects en UNABO uit de leeslijst halen",
    "wie": "de agent",
-   "wanneer": "als het bericht buiten is"
+   "wanneer": "als het bericht verspreid is"
+  }
+ ],
+ "beslissingen": [
+  {
+   "datum": "2026-09-20",
+   "wat": "Harmoniebouw gaat op archief, nul afspraken in twaalf maanden"
   },
   {
-   "wat": "Harmoniebouw: blijft die of gaat die op archief",
-   "wie": "Mehdi",
-   "wanneer": "open"
+   "datum": "2026-09-20",
+   "wat": "abigailqoppa en scanningenstaco krijgen geen schrijfrecht op Werk, zij plannen niet meer voor Mehdi"
+  },
+  {
+   "datum": "2026-09-20",
+   "wat": "Shaniel regelt de rechten van de collega's, niet Mehdi zelf"
   }
  ]
 }
