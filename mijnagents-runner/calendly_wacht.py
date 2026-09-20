@@ -39,10 +39,19 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 # Welke Google-agenda een account beschrijft, gemeten 19-09-2026. Leeg = nog niet
 # vastgesteld. Dit is alleen voor het verslag; ik leid er niets uit af.
 AGENDA_VAN = {
-    "General": "zoomafspraken, wordt mehdiprivewerkagenda",
+    "General": "mehdi werk agenda (mehdiprivewerkagenda@gmail.com), gezet 20-09-2026",
     "H-Architects Projects": "HA Light",
     "UNABO Afspraken": "UNABO (krijgt niets uit Calendly)",
     "Mehdi Chegini": "mehdiprivewerkagenda",
+}
+
+# Types die Mehdi bewust openhoudt hoewel ze niet geboekt worden: een firma zonder
+# boekingslink is erger dan een link die stilligt. Beslist 20-09-2026.
+BEWUST_LEEG = {
+    "Contrax - Prospect", "TKN: Klant", "UNABO prospect - Permits",
+    "EE: Energy", "Harmoniebouw: Prospect", "HA: Advies (Prospect)",
+    "UNABO prospect - Plaatsbeschrijving", "UNABO prospect - Veiligheidscoörd.",
+    "Bespreking", "H-Architects: Klant",
 }
 
 # De negen types uit tabel J van het agenda-document, met de naam zoals ze in
@@ -183,9 +192,9 @@ def main():
             namen[nm].append(a["naam"])
             if not t.get("active"):
                 continue
-            if t_tel[nm] == 0:
+            if t_tel[nm] == 0 and nm not in BEWUST_LEEG:
                 dood.append(f"{nm} ({t.get('duration')} min)")
-            if nm not in DOCUMENT_TYPES:
+            if nm not in DOCUMENT_TYPES and nm not in BEWUST_LEEG:
                 signalen.append(f"{a['naam']}: type '{nm}' staat niet in het agenda-document")
         doel = AGENDA_VAN.get(a["naam"], "")
         regels.append(f"{a['naam']}: {len(a['types'])} types, {sum(t_tel.values())} boekingen, "
