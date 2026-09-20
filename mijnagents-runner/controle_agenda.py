@@ -62,6 +62,28 @@ for kal, label in W.KALENDERS.items():
         stand, tekst = "LET OP", "staat op ZZ ARCHIEF en wordt overgeslagen"
     toets(label[:46], stand, tekst)
 
+print("\n2b. DE VASTE AGENDAKLEUREN")
+staat = {c["id"]: c for c in lijst["items"]}
+for kal, afspraak in W.AGENDA_VASTE_KLEUR.items():
+    c = staat.get(kal)
+    if not c:
+        toets(f"{afspraak['naam']} staat in de lijst", "FOUT", "niet gevonden")
+        continue
+    echt = (c.get("backgroundColor") or "").lower()
+    toets(f"{afspraak['naam']} is {afspraak['kleur']}",
+          "GOED" if echt == afspraak["achtergrond"] else "LET OP",
+          f"staat op {echt or '?'}, afgesproken {afspraak['achtergrond']}")
+    try:
+        d = g(f"/calendars/{urllib.parse.quote(kal, safe='')}/events",
+              timeMin=(nu - timedelta(days=30)).isoformat(), singleEvents="true", maxResults=2500,
+              fields="items(colorId)")
+        met = [e for e in d.get("items", []) if e.get("colorId")]
+        toets(f"{afspraak['naam']} zonder eigen kleuren per afspraak",
+              "GOED" if not met else "LET OP",
+              f"{len(met)} afspraken hebben een eigen kleur en overschrijven de agendakleur")
+    except urllib.error.HTTPError as e:
+        toets(f"{afspraak['naam']} leesbaar", "FOUT", f"HTTP {e.code}")
+
 print("\n3. DE GRENDEL OP HET ARCHIEF")
 for kal, verwacht in (("mehdiprivewerkagenda@gmail.com", True),
                       ("mehdipriveagena@gmail.com", True),

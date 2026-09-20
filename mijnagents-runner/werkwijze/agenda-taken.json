@@ -1,5 +1,5 @@
 {
- "versie": "1.1",
+ "versie": "1.3",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -55,17 +55,25 @@
  ],
  "titelconventie": {
   "vorm": "Mehdi: !! [FIRMA-SOORT] TYPE nummer - klant, straat nummer, postcode gemeente",
-  "voorbeeld": "Mehdi: !! [HA-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen",
+  "voorbeeld": "Mehdi: !! [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen",
   "firmas": {
-   "HA": "h-architects",
-   "UNABO": "unabo",
-   "HB": "harmoniebouw",
-   "HARMONIEBOUW": "harmoniebouw",
-   "CONTRAX": "contrax",
-   "ENERGIE": "unabo",
-   "TKN": "tkn",
-   "ELEVAIT": "elevait",
-   "PRIVE": "mehdi"
+   "BFUT": "Build for Future",
+   "CONT": "Contrax",
+   "CORE": "Corenbo",
+   "ELEV": "Elevait NV",
+   "ENEF": "Energie Efficiënt",
+   "ENST": "ENSTACO",
+   "HARC": "H-Architects",
+   "HARM": "Harmoniebouw",
+   "HDSI": "High Design Studio (India)",
+   "HDSS": "High Design Studio (Suriname)",
+   "HINV": "H-Invest",
+   "MELO": "Melodie",
+   "ORVA": "Orvantis",
+   "QOPP": "Qoppa",
+   "TKNB": "TKN-Buro",
+   "UNAB": "UnaBo",
+   "ZIDI": "Zidi Construct"
   },
   "soorten": {
    "KB": "klant buiten",
@@ -89,47 +97,85 @@
   "tekens": {
    "!!": "buiten, reistijd nodig",
    "??": "nog niet bevestigd"
+  },
+  "afdeling_op_het_bord": {
+   "HARC": "h-architects",
+   "UNAB": "unabo",
+   "HARM": "harmoniebouw",
+   "CONT": "contrax",
+   "TKNB": "tkn",
+   "ELEV": "elevait",
+   "ENEF": "unabo",
+   "PRIVE": "prive"
+  },
+  "niet_firma": {
+   "PRIVE": "privé van Mehdi"
+  },
+  "oude_codes": {
+   "HA": "HARC",
+   "UNABO": "UNAB",
+   "HB": "HARM",
+   "HARMONIEBOUW": "HARM",
+   "CONTRAX": "CONT",
+   "ENERGIE": "ENEF",
+   "TKN": "TKNB",
+   "ELEVAIT": "ELEV"
   }
  },
  "kleuren": {
-  "volgorde": "de eerste regel die past wint",
-  "regels": [
-   {
-    "wanneer": "agenda is Lara",
-    "kleur": "4",
-    "naam": "flamingo, roze"
-   },
-   {
-    "wanneer": "reistijdblok of !! buiten",
-    "kleur": "11",
-    "naam": "tomaat, rood"
-   },
-   {
-    "wanneer": "?? niet bevestigd",
-    "kleur": "5",
-    "naam": "banaan, geel"
-   },
-   {
-    "wanneer": "soort PO of PB, prospect",
-    "kleur": "6",
-    "naam": "mandarijn, oranje"
-   },
-   {
-    "wanneer": "soort KO, klant online",
-    "kleur": "7",
-    "naam": "pauw, blauw"
-   },
-   {
-    "wanneer": "soort IN, intern",
-    "kleur": "10",
-    "naam": "basilicum, groen"
-   },
-   {
-    "wanneer": "titel zonder code",
-    "kleur": "",
-    "naam": "niets doen, kleur blijft"
-   }
-  ]
+  "vaste_agendakleuren": {
+   "waarom": "een agenda met één aard krijgt zijn kleur op de agenda zelf. De agent zet daar geen kleur per afspraak en haalt er een weg, want die overschrijft de agendakleur. Hij controleert alleen of de agendakleur nog klopt.",
+   "agendas": [
+    {
+     "naam": "Lara",
+     "adres": "385ee9ff8749fe5e5929090550d42611f4ce2437d11b56f3d4d943619b4c479f@group.calendar.google.com",
+     "kleur": "flamingo roze",
+     "achtergrond": "#f691b2"
+    },
+    {
+     "naam": "prive agenda Mehdi",
+     "adres": "mehdipriveagena@gmail.com",
+     "kleur": "zwart",
+     "achtergrond": "#000000"
+    }
+   ]
+  },
+  "per_afspraak": {
+   "waar": "alleen in mehdi werk agenda en de firma-agenda's, want die mengen firma's en soorten",
+   "volgorde": "de eerste regel die past wint",
+   "regels": [
+    {
+     "wanneer": "reistijdblok of !! buiten",
+     "kleur": "11",
+     "naam": "tomaat, rood"
+    },
+    {
+     "wanneer": "?? niet bevestigd",
+     "kleur": "5",
+     "naam": "banaan, geel"
+    },
+    {
+     "wanneer": "soort PO of PB, prospect",
+     "kleur": "6",
+     "naam": "mandarijn, oranje"
+    },
+    {
+     "wanneer": "soort KO, klant online",
+     "kleur": "7",
+     "naam": "pauw, blauw"
+    },
+    {
+     "wanneer": "soort IN, intern",
+     "kleur": "10",
+     "naam": "basilicum, groen"
+    },
+    {
+     "wanneer": "titel zonder code",
+     "kleur": "",
+     "naam": "niets doen, kleur blijft"
+    }
+   ]
+  }
  },
  "herinneringen": {
   "wel": "alleen prospecten van HA, UNABO en TKN: PO vijf minuten vooraf, PB dertig minuten vooraf",
@@ -208,6 +254,11 @@
  },
  "openstaand": [
   {
+   "wat": "28 titels dragen nog een oude firmacode; de agent leest ze wel en meldt ze",
+   "wie": "Mehdi of zijn planners",
+   "wanneer": "lopend"
+  },
+  {
    "wat": "rechten op mehdi werk agenda regelen per collega, wie plant krijgt schrijfrecht",
    "wie": "Shaniel",
    "wanneer": "morgen"
@@ -236,6 +287,14 @@
  "beslissingen": [
   {
    "datum": "2026-09-20",
+   "wat": "Lara en de privé-agenda krijgen hun kleur op de agenda zelf, roze en zwart. De agent zet daar geen kleur per afspraak meer en controleert alleen of het nog klopt"
+  },
+  {
+   "datum": "2026-09-20",
+   "wat": "alle afkortingen en namen komen van organisatie.globaal.be; de agenda-codes zijn daarop omgezet: HA wordt HARC, UNABO wordt UNAB, HB wordt HARM, CONTRAX wordt CONT, TKN wordt TKNB, ELEVAIT wordt ELEV, ENERGIE wordt ENEF"
+  },
+  {
+   "datum": "2026-09-20",
    "wat": "Harmoniebouw gaat op archief, nul afspraken in twaalf maanden"
   },
   {
@@ -246,5 +305,10 @@
    "datum": "2026-09-20",
    "wat": "Shaniel regelt de rechten van de collega's, niet Mehdi zelf"
   }
- ]
+ ],
+ "bron_afkortingen": {
+  "waar": "organisatie.globaal.be, tabel kern.firma in de appportal-database",
+  "hoe": "de agent leest ze bij elke ronde via organisatie.firmacodes(); er wordt nergens een tweede lijst bijgehouden",
+  "regel": "elke firma heeft overal dezelfde code van vier letters, ook in agenda-titels"
+ }
 }

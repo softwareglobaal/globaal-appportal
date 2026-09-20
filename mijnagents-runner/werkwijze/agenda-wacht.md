@@ -244,7 +244,7 @@ staan nog negen geboekte klantafspraken, de laatste op 29-09 om 20:00. Maak je d
 koppeling eerder los of hernoem je die agenda's naar ZZ ARCHIEF, dan werken de
 annuleer- en verzetlinks van die klanten niet meer en negeer ik die afspraken.
 
-## De afspraken op een rij (versie 1.1, 2026-09-20)
+## De afspraken op een rij (versie 1.2, 2026-09-20)
 
 Dit staat ook als machineleesbaar bestand in `werkwijze/agenda-taken.json`.
 `tests/test_agenda_taken.py` faalt zodra de code en dat bestand uit elkaar lopen,
@@ -262,15 +262,43 @@ dus wat hieronder staat kan niet stilletjes verouderen.
 | zoomafspraken | `zoomafspraken@gmail.com` | sales | oude Calendly-boekingen tot en met 29-09-2026, daarna archief. Fathom hangt aan dit account |
 | Feestdagen BE | `en.be#holiday@group.v.calendar.google.com` | feestdagen | Belgische feestdagen |
 
+**De firmacodes komen van organisatie.globaal.be**
+
+elke firma heeft overal dezelfde code van vier letters, ook in agenda-titels. Ik lees ze bij elke ronde uit
+`kern.firma` via `organisatie.firmacodes()` en houd hier geen tweede lijst bij.
+Komt er een firma bij, dan ken ik die vanzelf. Valt de bron weg, dan val ik terug
+op wat er het laatst gelezen is.
+
+| code | firma | afdeling op het bord |
+| --- | --- | --- |
+| `BFUT` | Build for Future | - |
+| `CONT` | Contrax | contrax |
+| `CORE` | Corenbo | - |
+| `ELEV` | Elevait NV | elevait |
+| `ENEF` | Energie Efficiënt | unabo |
+| `ENST` | ENSTACO | - |
+| `HARC` | H-Architects | h-architects |
+| `HARM` | Harmoniebouw | harmoniebouw |
+| `HDSI` | High Design Studio (India) | - |
+| `HDSS` | High Design Studio (Suriname) | - |
+| `HINV` | H-Invest | - |
+| `MELO` | Melodie | - |
+| `ORVA` | Orvantis | - |
+| `QOPP` | Qoppa | - |
+| `TKNB` | TKN-Buro | tkn |
+| `UNAB` | UnaBo | unabo |
+| `ZIDI` | Zidi Construct | - |
+
+`PRIVE` is geen firma maar mag wel in een titel staan; die gaat naar de afdeling Privé.
+
+**Oude codes.** Titels van voor 20-09-2026 dragen nog de oude afkortingen:
+`CONTRAX` wordt `CONT`, `ELEVAIT` wordt `ELEV`, `ENERGIE` wordt `ENEF`, `HA` wordt `HARC`, `HARMONIEBOUW` wordt `HARM`, `HB` wordt `HARM`, `TKN` wordt `TKNB`, `UNABO` wordt `UNAB`. Die blijf ik lezen en reken ik om, en ik meld elke ronde hoeveel er nog zo staan.
+
 **De titel**
 
 `Mehdi: !! [FIRMA-SOORT] TYPE nummer - klant, straat nummer, postcode gemeente`
 
-Voorbeeld: `Mehdi: !! [HA-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen`
-
-Firma's: HA, UNABO, HB, HARMONIEBOUW, CONTRAX, ENERGIE, TKN, ELEVAIT, PRIVE.
-Soorten: KB = klant buiten, PB = prospect buiten (plaatsbezoek), KO = klant online, PO = prospect online, IN = intern.
-Tekens: `!!` buiten met reistijd, `??` nog niet bevestigd.
+Voorbeeld: `Mehdi: !! [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen`
 
 **Kleuren**, de eerste regel die past wint
 
@@ -305,6 +333,7 @@ Tekens: `!!` buiten met reistijd, `??` nog niet bevestigd.
 
 **Nog openstaand**
 
+- 28 titels dragen nog een oude firmacode; de agent leest ze wel en meldt ze (Mehdi of zijn planners, lopend)
 - rechten op mehdi werk agenda regelen per collega, wie plant krijgt schrijfrecht (Shaniel, morgen)
 - bericht aan de collega's verspreiden (Shaniel, morgen)
 - Harmoniebouw hernoemen naar ZZ ARCHIEF Harmoniebouw, drie collega's zien die naam (Shaniel, morgen)
@@ -313,6 +342,7 @@ Tekens: `!!` buiten met reistijd, `??` nog niet bevestigd.
 
 **Beslissingen van Mehdi**
 
+- 2026-09-20: alle afkortingen en namen komen van organisatie.globaal.be; de agenda-codes zijn daarop omgezet: HA wordt HARC, UNABO wordt UNAB, HB wordt HARM, CONTRAX wordt CONT, TKN wordt TKNB, ELEVAIT wordt ELEV, ENERGIE wordt ENEF
 - 2026-09-20: Harmoniebouw gaat op archief, nul afspraken in twaalf maanden
 - 2026-09-20: abigailqoppa en scanningenstaco krijgen geen schrijfrecht op Werk, zij plannen niet meer voor Mehdi
 - 2026-09-20: Shaniel regelt de rechten van de collega's, niet Mehdi zelf

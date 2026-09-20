@@ -27,6 +27,7 @@ import agenda  # noqa: E402
 import bellen  # noqa: E402
 import projectadressen  # noqa: E402
 import bord  # noqa: E402
+import organisatie  # noqa: E402
 import pipedrive  # noqa: E402
 
 NAAM = "agenda-wacht"
@@ -47,16 +48,63 @@ KALENDERS = {
 # zo'n agenda ooit in de lijst hierboven belandt, laat ik hem met rust. 19-09-2026.
 ARCHIEFVOORVOEGSEL = "ZZ ARCHIEF"
 
-FIRMA_AFDELING = {"HA": "h-architects", "UNABO": "unabo", "HB": "harmoniebouw", "HARMONIEBOUW": "harmoniebouw",
-                  "CONTRAX": "contrax", "ENERGIE": "unabo", "TKN": "tkn", "ELEVAIT": "elevait", "PRIVE": "mehdi"}
-KALENDER_AFDELING = {"H-Architects": "h-architects", "UNABO": "unabo", "Harmoniebouw": "harmoniebouw", "Contrax": "contrax",
+# De firmacodes komen uit organisatie.globaal.be (tabel kern.firma), de enige bron.
+# Ik houd hier geen eigen lijst bij; valt de bron weg, dan val ik terug op wat er
+# het laatst gelezen is. Mandaat van Mehdi, 20-09-2026.
+VALNET_FIRMAS = {"BFUT": "Build for Future", "CONT": "Contrax", "CORE": "Corenbo", "ELEV": "Elevait NV",
+                 "ENEF": "Energie Efficiënt", "ENST": "ENSTACO", "HARC": "H-Architects", "HARM": "Harmoniebouw",
+                 "HDSI": "High Design Studio (India)", "HDSS": "High Design Studio (Suriname)",
+                 "HINV": "H-Invest", "MELO": "Melodie", "ORVA": "Orvantis", "QOPP": "Qoppa",
+                 "TKNB": "TKN-Buro", "UNAB": "UnaBo", "ZIDI": "Zidi Construct"}
+
+
+def firmacodes():
+    try:
+        uit = organisatie.firmacodes()
+        if uit:
+            return uit
+    except Exception:  # noqa: BLE001
+        pass
+    return dict(VALNET_FIRMAS)
+
+
+FIRMACODES = firmacodes()
+
+# Titels van voor 20-09-2026 dragen nog de oude afkortingen. Die blijf ik lezen en
+# reken ik om naar de officiele code, en ik meld hoeveel er nog zo staan.
+OUDE_CODES = {"HA": "HARC", "UNABO": "UNAB", "HB": "HARM", "HARMONIEBOUW": "HARM",
+              "CONTRAX": "CONT", "ENERGIE": "ENEF", "TKN": "TKNB", "ELEVAIT": "ELEV"}
+
+# PRIVE is geen firma maar hoort wel in een titel te mogen staan.
+NIET_FIRMA = {"PRIVE": "privé van Mehdi"}
+
+# Welke code op welk bord-afdeling terechtkomt. Alleen de afdelingen die op het
+# bord bestaan; een firma zonder afdeling lees ik wel maar zet ik nergens klaar.
+FIRMA_AFDELING = {"HARC": "h-architects", "UNAB": "unabo", "HARM": "harmoniebouw", "CONT": "contrax",
+                  "TKNB": "tkn", "ELEV": "elevait", "ENEF": "unabo", "PRIVE": "prive"}
+KALENDER_AFDELING = {"H-Architects": "h-architects", "UNABO": "unabo",
                      "zoomafspraken (sales via Calendly)": "h-architects"}
-SOORT = {"KB": "klant buiten", "PB": "prospect buiten (plaatsbezoek)", "KO": "klant online", "PO": "prospect online", "IN": "intern"}
+SOORT = {"KB": "klant buiten", "PB": "prospect buiten (plaatsbezoek)", "KO": "klant online",
+         "PO": "prospect online", "IN": "intern"}
 # Diensten met een verslagagent (Commandocentrum, 16-09-2026): WB/OPL werfverslag, VC veiligheidscoördinatie,
 # PLB plaatsbeschrijving, BS/STA barsten en scheuren. De code staat na de firmacode, vóór het nummer of de naam.
 TYPES = {"WB": "werfbezoek", "OPL": "oplevering", "PLB": "plaatsbeschrijving", "SCN": "3D-scan", "EPB": "EPB",
          "VC": "veiligheidscoördinatie", "BS": "barsten en scheuren", "STA": "stabiliteit", "SD": "schetsontwerp", "OPM": "opmeting"}
-CODE_RE = re.compile(r"\[(HA|UNABO|HB|HARMONIEBOUW|CONTRAX|ENERGIE|TKN|ELEVAIT|PRIVE)(?:-(KB|PB|KO|PO|IN))?\]", re.I)
+# Agenda's met één aard krijgen hun kleur op de agenda zelf, niet per afspraak.
+# Mandaat van Mehdi, 20-09-2026: "voor prive wil ik zwart en de agenda is al zwart
+# gezet zodat altijd zwart komt, en de agent kan controleren. Lara is al flamingo
+# roze." Ik zet daar dus geen kleur per afspraak en haal een kleur die er staat weg,
+# want die overschrijft de agendakleur. Alleen de werkagenda mengt firma's en soorten
+# en heeft wel kleur per afspraak nodig.
+AGENDA_VASTE_KLEUR = {
+    "385ee9ff8749fe5e5929090550d42611f4ce2437d11b56f3d4d943619b4c479f@group.calendar.google.com":
+        {"naam": "Lara", "kleur": "flamingo roze", "achtergrond": "#f691b2", "agenda_kleurid": "22"},
+    "mehdipriveagena@gmail.com":
+        {"naam": "prive agenda Mehdi", "kleur": "zwart", "achtergrond": "#000000", "agenda_kleurid": "8"},
+}
+
+ALLE_CODES = sorted(set(FIRMACODES) | set(OUDE_CODES) | set(NIET_FIRMA), key=len, reverse=True)
+CODE_RE = re.compile(r"\[(" + "|".join(ALLE_CODES) + r")(?:-(KB|PB|KO|PO|IN))?\]", re.I)
 
 
 def kalenders():
@@ -84,8 +132,12 @@ def lees_titel(titel):
            "buiten": "!!" in t, "onzeker": "??" in t, "firma": "", "soort": "", "type": "", "nummer": "", "klant": ""}
     m = CODE_RE.search(t)
     if m:
-        uit["firma"] = m.group(1).upper()
+        gevonden = m.group(1).upper()
+        uit["firma"] = OUDE_CODES.get(gevonden, gevonden)
+        uit["oude_code"] = gevonden if gevonden in OUDE_CODES else ""
         uit["soort"] = (m.group(2) or "").upper()
+    else:
+        uit["oude_code"] = ""
     # eerst !! en ?? weg, dan de naam vooraan: anders bleef bij "!! Mehdi: BS ..." de naam staan en werd de
     # dienstcode niet gelezen (klant droeg "Mehdi:" mee; gezien in het Commandocentrum, 16-09-2026)
     rest = CODE_RE.sub("", t).replace("!!", "").replace("??", "")
@@ -214,9 +266,8 @@ ALLEEN_VANDAAG = "--vandaag" in sys.argv
 
 
 def kleur_gewenst(a, info):
-    kal = KALENDERS.get(a.get("kalender", ""), "")
-    if kal == "Lara":
-        return "4"
+    if a.get("kalender", "") in AGENDA_VASTE_KLEUR:
+        return ""   # die agenda heeft een vaste kleur; per afspraak niets zetten
     if info["reistijd"] or info["buiten"]:
         return "11"
     if info["onzeker"]:
@@ -663,6 +714,22 @@ def main():
         if niet_conform:
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(niet_conform)} afspraken zonder code ([HA-KB] enz.)",
                           "uniek": f"agenda-conventie:{vandaag}", "inhoud": "\n".join("- " + x for x in niet_conform[:40])})
+        oud_code = []
+        for a in items:
+            if a.get("fout"):
+                continue
+            info = lees_titel(a.get("titel", ""))
+            if info.get("oude_code"):
+                oud_code.append(f"{a['start'][:16]} [{info['oude_code']} -> {info['firma']}] {a.get('titel','')[:60]}")
+        if oud_code:
+            klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
+                          "titel": f"{len(oud_code)} titels met een oude firmacode",
+                          "uniek": f"agenda-oudecode:{vandaag}",
+                          "inhoud": "De officiele codes komen van organisatie.globaal.be. Ik lees de oude "
+                                    "nog wel, maar ze horen rechtgezet te worden.\n"
+                                    + "\n".join("- " + x for x in oud_code[:40])})
+            ag.log(f"dag {vandaag}", "bevinding", f"{len(oud_code)} titels met een oude firmacode",
+                   "\n".join(oud_code[:60]))
         onvolledig = onvolledige_afspraken(items, vandaag)
         if onvolledig:
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(onvolledig)} afspraken zonder projectnummer of adres",

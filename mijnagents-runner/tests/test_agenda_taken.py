@@ -29,12 +29,27 @@ def check(naam, voorwaarde, extra=""):
 adressen = {a["adres"] for a in taken["agendas"]}
 check("elke agenda uit de JSON staat in KALENDERS", adressen == set(W.KALENDERS),
       f"alleen in JSON: {adressen - set(W.KALENDERS)} | alleen in code: {set(W.KALENDERS) - adressen}")
-check("firmacodes gelijk", taken["titelconventie"]["firmas"] == W.FIRMA_AFDELING)
+import organisatie as O
+
+bron = O.firmacodes()
+check("de firmacodes komen uit organisatie.globaal.be",
+      bool(bron) and taken["titelconventie"]["firmas"] == bron,
+      f"bron heeft {len(bron)}, JSON heeft {len(taken['titelconventie']['firmas'])}")
+check("de agent gebruikt diezelfde codes", W.FIRMACODES == bron)
+check("elke oude code wijst naar een bestaande code",
+      all(v in bron for v in W.OUDE_CODES.values()),
+      str({k: v for k, v in W.OUDE_CODES.items() if v not in bron}))
+check("elke afdeling op het bord hoort bij een bestaande code of is PRIVE",
+      all(k in bron or k in W.NIET_FIRMA for k in W.FIRMA_AFDELING),
+      str([k for k in W.FIRMA_AFDELING if k not in bron and k not in W.NIET_FIRMA]))
+for code in bron:
+    check(f"de titelregel herkent [{code}]", bool(W.CODE_RE.search(f"Mehdi: [{code}-IN] proef")))
+for oudc, nieuwc in W.OUDE_CODES.items():
+    d = W.lees_titel(f"Mehdi: [{oudc}-IN] proef")
+    check(f"[{oudc}] wordt gelezen als {nieuwc}", d["firma"] == nieuwc and d["oude_code"] == oudc)
 check("soorten gelijk", taken["titelconventie"]["soorten"] == W.SOORT)
 check("types gelijk", taken["titelconventie"]["types"] == W.TYPES)
 
-for firma in W.FIRMA_AFDELING:
-    check(f"de titelregel herkent [{firma}]", bool(W.CODE_RE.search(f"Mehdi: [{firma}-IN] proef")))
 
 # de kleurregels uit de JSON naspelen op de echte functie
 proeven = [

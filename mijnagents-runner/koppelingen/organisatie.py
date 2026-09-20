@@ -15,6 +15,7 @@ import subprocess
 import time
 
 CACHE = os.path.expanduser("~/appportal/mijnagents-data/organisatie.json")
+CACHE_FIRMA = os.path.expanduser("~/appportal/mijnagents-data/firmas.json")
 CONTAINER = os.environ.get("KERN_POSTGRES_CONTAINER", "appportal-postgresql-1")
 DB = os.environ.get("KERN_DB", "appportal")
 SQL = ("select json_agg(json_build_object("
@@ -30,6 +31,50 @@ def _lees():
     if uit.returncode != 0:
         raise RuntimeError(uit.stderr.strip()[:200])
     return json.loads(uit.stdout.strip() or "[]") or []
+
+
+SQL_FIRMA = ("select json_agg(json_build_object('code', f.code, 'naam', f.naam, "
+             "'land', coalesce(f.land,''), 'actief', coalesce(f.actief, false))) from kern.firma f")
+
+
+def _lees_firmas():
+    gebruiker = subprocess.run(["docker", "exec", CONTAINER, "sh", "-c", "echo $POSTGRES_USER"],
+                               capture_output=True, text=True, timeout=30).stdout.strip() or "postgres"
+    uit = subprocess.run(["docker", "exec", CONTAINER, "psql", "-U", gebruiker, "-d", DB, "-At", "-c", SQL_FIRMA],
+                         capture_output=True, text=True, timeout=60)
+    if uit.returncode != 0:
+        raise RuntimeError(uit.stderr.strip()[:200])
+    return json.loads(uit.stdout.strip() or "[]") or []
+
+
+def firmas(maximum_uren=24):
+    """De firma's van de groep met hun officiele code, uit kern.firma.
+    Dit is de enige bron voor afkortingen; nergens anders een lijst bijhouden.
+    Elk item: code, naam, land, actief."""
+    data = None
+    try:
+        c = json.load(open(CACHE_FIRMA, encoding="utf-8"))
+        if time.time() - c.get("ts", 0) < maximum_uren * 3600:
+            data = c["firmas"]
+    except (OSError, ValueError, KeyError):
+        pass
+    if data is None:
+        try:
+            data = _lees_firmas()
+            os.makedirs(os.path.dirname(CACHE_FIRMA), exist_ok=True)
+            json.dump({"ts": time.time(), "firmas": data}, open(CACHE_FIRMA, "w", encoding="utf-8"),
+                      ensure_ascii=False, indent=0)
+        except Exception:  # noqa: BLE001
+            try:
+                data = json.load(open(CACHE_FIRMA, encoding="utf-8"))["firmas"]
+            except (OSError, ValueError, KeyError):
+                return []
+    return sorted(data, key=lambda f: f.get("code") or "")
+
+
+def firmacodes(maximum_uren=24):
+    """code -> naam, alleen de codes die echt bestaan."""
+    return {f["code"]: f["naam"] for f in firmas(maximum_uren) if f.get("code")}
 
 
 def collegas(maximum_uren=24, alleen_in_dienst=True):
