@@ -142,7 +142,11 @@ def lees_titel(titel):
     """Ontleedt een titel volgens Mehdi's titelconventie. Geeft dict met firma, soort, type,
     nummer, klant, buiten (!!), onzeker (??), reistijd, conform."""
     t = titel.strip()
-    uit = {"reistijd": bool(re.search(r"reistijd", t, re.I)) or t.startswith("🚗"),
+    # Ook wat Mehdi zelf als rit schrijft telt als reistijd: "Rijden naar huis",
+    # "Rijden naar Stadskantoor". Anders meldt de wacht die als afspraak zonder code
+    # en zet hij er een tweede reistijdblok naast. Gezien 20-09-2026.
+    uit = {"reistijd": bool(re.search(r"reistijd|\brijden naar\b|\bonderweg naar\b", t, re.I))
+                       or t.startswith("🚗"),
            "buiten": "!!" in t, "onzeker": "??" in t, "firma": "", "soort": "", "type": "", "nummer": "", "klant": ""}
     m = CODE_RE.search(t)
     if m:
@@ -320,7 +324,13 @@ def titelfouten(a, info):
         # Mehdi leest weinig en kijkt: buiten hoort altijd zichtbaar te zijn met !!
         fouten.append("buiten zonder !!")
     if info["soort"] == "IN" and not namen_in_titel(a.get("titel") or ""):
-        fouten.append("intern zonder naam van een collega")
+        # Een blok dat Mehdi alleen doet ("Ai stabiliteit") heeft geen naam nodig.
+        # Pas als er iemand bij is, hoort die naam erbij, anders is achteraf niet te
+        # zien wie niet kwam opdagen. Verfijnd op 20-09-2026.
+        met_iemand = bool(a.get("deelnemers")) or bool(re.search(r"[+&]| en | met ", 
+                          (a.get("titel") or "").split("[")[0], re.I))
+        if met_iemand:
+            fouten.append("intern met iemand, maar zonder herkende naam")
     return fouten
 
 
