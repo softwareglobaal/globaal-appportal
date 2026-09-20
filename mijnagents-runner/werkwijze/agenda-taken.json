@@ -1,5 +1,5 @@
 {
- "versie": "1.9",
+ "versie": "2.0",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -56,25 +56,6 @@
  "titelconventie": {
   "vorm": "Mehdi: !! [FIRMA-SOORT] TYPE nummer - klant, straat nummer, postcode gemeente",
   "voorbeeld": "Mehdi: !! [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen",
-  "firmas": {
-   "BFUT": "Build for Future",
-   "CONT": "Contrax",
-   "CORE": "Corenbo",
-   "ELEV": "Elevait NV",
-   "ENEF": "Energie Efficiënt",
-   "ENST": "ENSTACO",
-   "HARC": "H-Architects",
-   "HARM": "Harmoniebouw",
-   "HDSI": "High Design Studio (India)",
-   "HDSS": "High Design Studio (Suriname)",
-   "HINV": "H-Invest",
-   "MELO": "Melodie",
-   "ORVA": "Orvantis",
-   "QOPP": "Qoppa",
-   "TKNB": "TKN-Buro",
-   "UNAB": "UnaBo",
-   "ZIDI": "Zidi Construct"
-  },
   "soorten": {
    "KB": "klant buiten",
    "PB": "prospect buiten (plaatsbezoek)",
@@ -345,6 +326,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-20",
+   "wat": "dit bestand houdt geen kopie meer bij van de firmalijst. Wie de codes wil, kijkt op organisatie.globaal.be. Alleen wat echt van de agenda is blijft hier: de agendacodes, de soorten, de types, de kleuren en de regels"
+  },
   {
    "datum": "2026-09-20",
    "wat": "EE staat voor Energie Efficiënt (ENEF) en komt ook los in oude titels voor. Opgenomen in de vertaaltabel zodat het verleden leesbaar blijft"
@@ -664,5 +649,25 @@
    "toch doorgegaan, de tracker miste het"
   ],
   "namen": "bij een interne afspraak hoort de naam van de collega, getoetst aan kern.persoon, zodat telbaar wordt wie een afspraak niet nakwam"
+ },
+ "bronnen_van_waarheid": {
+  "firmas_en_codes": {
+   "waar": "organisatie.globaal.be, tabel kern.firma",
+   "hoe": "de agent leest ze bij elke ronde via organisatie.firmacodes()",
+   "regel": "hier staat geen lijst. Een tweede lijst veroudert en dan zijn er twee waarheden. Wie de codes wil zien, kijkt op organisatie.globaal.be of in de momentopname achteraan de pdf, met de datum erbij"
+  },
+  "namen_van_collegas": {
+   "waar": "organisatie.globaal.be, tabel kern.persoon",
+   "hoe": "de agent toetst de namen in een interne titel via organisatie.herken()",
+   "regel": "alleen eigen mensen staan hier; iemand van buiten de organisatie hoort er niet in en is dus geen fout"
+  },
+  "plaatsen": {
+   "waar": "locatie.globaal.be, de benoemde plekken",
+   "regel": "de school, de zwemles en de grootouders van Lara horen daar, niet in een eigen adresboek van de agent"
+  },
+  "werkwijze": {
+   "waar": "het bord, mijnagents.globaal.be",
+   "regel": "het zaad in werkwijze/ is een kopie; het bord is de waarheid"
+  }
  }
 }

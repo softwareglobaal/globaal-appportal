@@ -32,9 +32,12 @@ check("elke agenda uit de JSON staat in KALENDERS", adressen == set(W.KALENDERS)
 import organisatie as O
 
 bron = O.firmacodes()
-check("de firmacodes komen uit organisatie.globaal.be",
-      bool(bron) and taken["titelconventie"]["firmas"] == bron,
-      f"bron heeft {len(bron)}, JSON heeft {len(taken['titelconventie']['firmas'])}")
+check("de JSON houdt GEEN kopie van de firmalijst bij",
+      "firmas" not in taken["titelconventie"],
+      "er staat weer een lijst in; dat is een tweede waarheid")
+check("de JSON wijst naar organisatie.globaal.be als bron",
+      "kern.firma" in taken["bronnen_van_waarheid"]["firmas_en_codes"]["waar"])
+check("de bron geeft firmacodes", bool(bron), f"{len(bron)} codes gelezen")
 check("de agent gebruikt diezelfde codes", W.FIRMACODES == bron)
 check("elke agendacode wijst naar een bestaande firma",
       all(v in bron for v in W.AGENDACODE_NAAR_FIRMA.values()),
