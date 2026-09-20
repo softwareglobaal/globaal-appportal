@@ -175,6 +175,33 @@ reistijd, de agenda Lara en feestdagen. Het rooster staat in mijn werkverslag.
 - Een koppeling verzinnen.
 - Persoonsgegevens op het bord zetten waar de groep agents ze ziet.
 
+## De verhuizing naar Werk (uitgevoerd 20-09-2026)
+
+Alles wat nog in de toekomst stond op H-Architects en UNABO staat nu in Werk
+(mehdiprivewerkagenda@gmail.com). Beide agenda's zijn vanaf vandaag leeg voor de
+toekomst; hun verleden staat er ongemoeid op.
+
+Zo is het gegaan, en zo doe ik het een volgende keer:
+
+- Losse afspraken verhuis ik met `events.move`. Die houden hun identiteit, er
+  komt niets dubbel.
+- Terugkerende reeksen kan Google niet verplaatsen. Ik maak ze opnieuw aan in
+  Werk en laat de oude **stoppen** met een UNTIL in de RRULE. Nooit verwijderen:
+  een reeks verwijderen wist ook alle afspraken uit het verleden.
+- Let op: een reeks bevat altijd zijn eigen begindatum, ook als UNTIL daarvoor
+  ligt. Begint de oude reeks in de toekomst, dan blijft die ene dag dubbel staan
+  en moet ik die instantie apart schrappen. Dat gebeurde bij WB 2145.
+- Instanties die Mehdi eerder had geschrapt, schrap ik in de nieuwe reeks
+  opnieuw. Bij Ai stabiliteit was dat maandag 21-09 om 12:00.
+- Vijf van de zes reeksen hadden geen gasten en zijn stil verhuisd. De zesde,
+  engineering wekelijks, had matthewblijd10@gmail.com als gast; die kreeg één
+  nieuwe uitnodiging en geen annulering, omdat ik de oude reeks met UNTIL heb
+  stopgezet en niet verwijderd.
+
+H-Architects en UNABO blijven voorlopig in mijn negen staan, voor het geval een
+collega er nog iets in zet. Ze mogen eruit zodra het bericht aan de collega's
+buiten is.
+
 ## Calendly en dubbele boekingen (gemeten 20-09-2026)
 
 In Calendly, onder Availability en Calendar settings, staan zes Google-koppelingen.
