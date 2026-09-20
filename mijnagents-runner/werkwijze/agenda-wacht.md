@@ -244,7 +244,7 @@ staan nog negen geboekte klantafspraken, de laatste op 29-09 om 20:00. Maak je d
 koppeling eerder los of hernoem je die agenda's naar ZZ ARCHIEF, dan werken de
 annuleer- en verzetlinks van die klanten niet meer en negeer ik die afspraken.
 
-## De afspraken op een rij (versie 1.4, 2026-09-20)
+## De afspraken op een rij (versie 1.6, 2026-09-20)
 
 Dit staat ook als machineleesbaar bestand in `werkwijze/agenda-taken.json`.
 `tests/test_agenda_taken.py` faalt zodra de code en dat bestand uit elkaar lopen,
@@ -360,8 +360,22 @@ gratis routering (OSRM) maal een spitsfactor, 1,6 tussen 07:00 en 09:30, en het 
 **Controle.** Wie wil nakijken of alles klopt, draait
 `~/agents/.venv/bin/python ~/appportal/mijnagents-runner/controle_agenda.py`. twintig toetsen: account, leesbaarheid van elke agenda, de grendel, het archief, Calendly en de titels.
 
+**De vier wachten**
+
+| wacht | bestand | wanneer | wat |
+| --- | --- | --- | --- |
+| Agendawacht | `agenda_wacht.py` | werkdagen 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30 | leest, ontleedt, koppelt, zet reistijd, kleuren en herinneringen, meldt signalen en zet alles klaar op het bord |
+| Signaalwacht | `agenda_signaal.py` | elke twaalf minuten tussen 06:00 en 21:00, elke dag | kijkt of er een afspraak bijgekomen, gewijzigd of geschrapt is en zet de Agendawacht dan meteen aan voor die dag. Zijn eigen reistijdblokken tellen niet mee |
+| Filewacht | `file_wacht.py` | elke tien minuten tussen 06:00 en 21:00, elke dag | vraagt voor elke buitenafspraak binnen twee uur de rijtijd opnieuw op met het verkeer van dat moment. Duurt de rit meer dan de buffer langer dan gepland, of kom je te laat, dan belt Twilio je met de plaats, de nieuwe rijtijd en hoeveel te laat |
+| Zoomwacht | `nog te bouwen` | één minuut na de start van een online afspraak | kijken of Mehdi in de juiste meeting zit en hem bellen als hij er niet is |
+
+**Bellen.** Twilio, gesproken in het Nederlands, stem Lotte, twee keer herhaald. Vandaag: voor elke afspraak volgens het belrooster: online vijf minuten vooraf, buiten op het vertrekmoment.
+Nieuw: extra oproep van de Filewacht zodra de file je buffer opeet, met een buffer van 10 minuten.
+
 **Nog openstaand**
 
+- Zoom-app aanmaken (Server-to-Server OAuth) zodat de Zoomwacht kan zien of je in de meeting zit; daarna bouw ik hem (Mehdi, zodra het kan)
+- adresboek aanvullen: school Lara, zwemschool Lara, grootouders Lara, kantoor H-Architects (Mehdi, zodra het kan)
 - 11 afspraken zonder firmacode en 4 buitenafspraken zonder adres rechtzetten (Mehdi, lopend)
 - 28 titels dragen nog een oude firmacode; de agent leest ze wel en meldt ze (Mehdi of zijn planners, lopend)
 - rechten op mehdi werk agenda regelen per collega, wie plant krijgt schrijfrecht (Shaniel, morgen)
@@ -372,6 +386,8 @@ gratis routering (OSRM) maal een spitsfactor, 1,6 tussen 07:00 en 09:30, en het 
 
 **Beslissingen van Mehdi**
 
+- 2026-09-20: bellen als de file meer dan de buffer van tien minuten kost, en een Zoomwacht die belt als Mehdi één minuut na de start niet in de meeting zit
+- 2026-09-20: herinneringen voor iedereen behalve intern, klanten dus ook. Een keten van ritten per dag in plaats van telkens terug naar huis. Een adresboek met vaste plaatsen. En een trigger die elke twaalf minuten kijkt of er iets gewijzigd is
 - 2026-09-20: de kleur zegt waarvóór hij ergens is, !! zegt dát hij naar buiten gaat. Rood is werk buiten. Lara en privé houden hun kleur ook buiten, maar krijgen wel reistijd. ?? is geel tot het bevestigd is. Een afspraak zonder code is een fout, geen uitzondering. WB, OPL, PLB, SCN, OPM en BS zijn per definitie buiten; EPB, VC, STA en SD niet
 - 2026-09-20: Lara en de privé-agenda krijgen hun kleur op de agenda zelf, roze en zwart. De agent zet daar geen kleur per afspraak meer en controleert alleen of het nog klopt
 - 2026-09-20: alle afkortingen en namen komen van organisatie.globaal.be; de agenda-codes zijn daarop omgezet: HA wordt HARC, UNABO wordt UNAB, HB wordt HARM, CONTRAX wordt CONT, TKN wordt TKNB, ELEVAIT wordt ELEV, ENERGIE wordt ENEF

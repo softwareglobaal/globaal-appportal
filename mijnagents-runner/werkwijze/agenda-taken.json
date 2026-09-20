@@ -1,5 +1,5 @@
 {
- "versie": "1.5",
+ "versie": "1.6",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -278,6 +278,11 @@
  },
  "openstaand": [
   {
+   "wat": "Zoom-app aanmaken (Server-to-Server OAuth) zodat de Zoomwacht kan zien of je in de meeting zit; daarna bouw ik hem",
+   "wie": "Mehdi",
+   "wanneer": "zodra het kan"
+  },
+  {
    "wat": "adresboek aanvullen: school Lara, zwemschool Lara, grootouders Lara, kantoor H-Architects",
    "wie": "Mehdi",
    "wanneer": "zodra het kan"
@@ -319,6 +324,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-20",
+   "wat": "bellen als de file meer dan de buffer van tien minuten kost, en een Zoomwacht die belt als Mehdi één minuut na de start niet in de meeting zit"
+  },
   {
    "datum": "2026-09-20",
    "wat": "herinneringen voor iedereen behalve intern, klanten dus ook. Een keten van ritten per dag in plaats van telkens terug naar huis. Een adresboek met vaste plaatsen. En een trigger die elke twaalf minuten kijkt of er iets gewijzigd is"
@@ -406,5 +415,39 @@
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",
   "bij_wijziging": "agenda_signaal.py kijkt elke twaalf minuten tussen 06:00 en 21:00 of er een afspraak bijgekomen, gewijzigd of geschrapt is, en zet de wacht dan meteen aan voor die dag",
   "eigen_werk": "reistijdblokken die de wacht zelf maakt tellen niet als wijziging, anders start hij zichzelf"
+ },
+ "wachten": [
+  {
+   "naam": "Agendawacht",
+   "bestand": "agenda_wacht.py",
+   "wanneer": "werkdagen 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",
+   "wat": "leest, ontleedt, koppelt, zet reistijd, kleuren en herinneringen, meldt signalen en zet alles klaar op het bord"
+  },
+  {
+   "naam": "Signaalwacht",
+   "bestand": "agenda_signaal.py",
+   "wanneer": "elke twaalf minuten tussen 06:00 en 21:00, elke dag",
+   "wat": "kijkt of er een afspraak bijgekomen, gewijzigd of geschrapt is en zet de Agendawacht dan meteen aan voor die dag. Zijn eigen reistijdblokken tellen niet mee"
+  },
+  {
+   "naam": "Filewacht",
+   "bestand": "file_wacht.py",
+   "wanneer": "elke tien minuten tussen 06:00 en 21:00, elke dag",
+   "wat": "vraagt voor elke buitenafspraak binnen twee uur de rijtijd opnieuw op met het verkeer van dat moment. Duurt de rit meer dan de buffer langer dan gepland, of kom je te laat, dan belt Twilio je met de plaats, de nieuwe rijtijd en hoeveel te laat",
+   "grenzen": "per afspraak hoogstens elke twintig minuten narekenen en hoogstens twee oproepen"
+  },
+  {
+   "naam": "Zoomwacht",
+   "bestand": "nog te bouwen",
+   "wanneer": "één minuut na de start van een online afspraak",
+   "wat": "kijken of Mehdi in de juiste meeting zit en hem bellen als hij er niet is",
+   "ontbreekt": "een Zoom-app met Account ID, Client ID en Client Secret. Zonder die sleutels kan geen enkel systeem zien wie er in een meeting zit"
+  }
+ ],
+ "bellen": {
+  "kanaal": "Twilio, gesproken in het Nederlands, stem Lotte, twee keer herhaald",
+  "wanneer_nu": "voor elke afspraak volgens het belrooster: online vijf minuten vooraf, buiten op het vertrekmoment",
+  "wanneer_nieuw": "extra oproep van de Filewacht zodra de file je buffer opeet",
+  "buffer_minuten": 10
  }
 }
