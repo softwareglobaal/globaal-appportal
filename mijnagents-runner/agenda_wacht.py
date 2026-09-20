@@ -327,7 +327,22 @@ def titelfouten(a, info):
         return []
     fouten = []
     if a.get("kalender", "") not in AGENDA_VASTE_KLEUR and not info.get("firma"):
-        fouten.append("geen firmacode")
+        # Niet alleen klagen: staan er namen in die ik ken, dan zegt "diensten voor" op
+        # organisatie.globaal.be voor welke firma die mensen werken, en dat is de firma
+        # van de afspraak. Mandaat van Mehdi, 20-09-2026.
+        namen = namen_in_titel(a.get("titel") or "")
+        firmas = []
+        if namen:
+            try:
+                firmas = organisatie.firma_van([n.split(" (")[0] for n in namen])
+            except Exception:  # noqa: BLE001
+                firmas = []
+        if len(firmas) == 1:
+            fouten.append(f"geen firmacode, maar de namen wijzen naar [{firmas[0]}]")
+        elif firmas:
+            fouten.append("geen firmacode; de namen werken voor " + " of ".join(firmas))
+        else:
+            fouten.append("geen firmacode")
     buiten = info["buiten"] or info["soort"] in ("PB", "KB", "LB")
     if buiten and "!!" not in (a.get("titel") or ""):
         # Mehdi leest weinig en kijkt: buiten hoort altijd zichtbaar te zijn met !!

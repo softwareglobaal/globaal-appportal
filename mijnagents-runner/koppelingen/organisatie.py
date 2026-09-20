@@ -5,7 +5,10 @@ namen.globaal.be). Alleen lezen. De runners draaien op de host en lezen via
 mijnagents-data/organisatie.json. Geen wachtwoord nodig (de containergebruiker mag lezen).
 
 Gebruik:
-    organisatie.collegas()            -> [{"naam","voornaam","email","afdeling","firma","rol","functie","locatie","in_dienst"}]
+    organisatie.collegas()            -> [{"naam","voornaam","email","afdeling","firma","diensten_voor",...}]
+    "firma" is de werkgever; "diensten_voor" zijn de firma's waarvoor die persoon werkt,
+    en dat laatste bepaalt onder welke firma een interne afspraak valt. Zo staat het ook
+    op organisatie.globaal.be, kolom "diensten voor".
     organisatie.herken(naam_of_mail)  -> collega-dict of None (voornaam, volledige naam of e-mail)
     organisatie.samenvatting()        -> korte tekst voor in een prompt (naam, afdeling, firma)
 """
@@ -21,7 +24,7 @@ DB = os.environ.get("KERN_DB", "appportal")
 SQL = ("select json_agg(json_build_object("
        "'naam', coalesce(p.weergavenaam, p.voornaam||' '||coalesce(p.achternaam,'')), 'voornaam', p.voornaam, 'achternaam', coalesce(p.achternaam,''), "
        "'email', coalesce(p.email,''), 'afdeling', coalesce(a.naam,''), 'firma', coalesce(f.naam,''), 'firma_code', coalesce(f.code,''), "
-       "'rol', coalesce(p.rol,''), 'functie', coalesce(p.functie,''), 'locatie', coalesce(p.locatie,''), 'in_dienst', p.in_dienst)) "
+       "'rol', coalesce(p.rol,''), 'functie', coalesce(p.functie,''), 'locatie', coalesce(p.locatie,''), 'in_dienst', p.in_dienst, 'diensten_voor', coalesce((select json_agg(df.code order by df.code) from kern.persoon_dienstfirma pd join kern.firma df on df.id = pd.firma_id where pd.persoon_id = p.id), '[]'::json))) "
        "from kern.persoon p left join kern.afdeling a on a.id=p.afdeling_id left join kern.firma f on f.id=p.werkgever_firma_id")
 
 
@@ -109,6 +112,20 @@ def herken(tekst):
             return p
     kandidaten = [p for p in lijst if p["voornaam"].lower() == t.split()[0]]
     return kandidaten[0] if len(kandidaten) == 1 else None
+
+
+def firma_van(namen):
+    """De firma waarvoor een groep mensen werkt, uit 'diensten voor' op
+    organisatie.globaal.be. Werken ze allemaal voor dezelfde firma, dan is dat de firma
+    van de afspraak. Anders geeft hij de firma's die ze gemeen hebben, of niets."""
+    gemeen = None
+    for n in namen:
+        p = herken(n)
+        if not p:
+            continue
+        dv = set(p.get("diensten_voor") or [])
+        gemeen = dv if gemeen is None else (gemeen & dv)
+    return sorted(gemeen) if gemeen else []
 
 
 def samenvatting():

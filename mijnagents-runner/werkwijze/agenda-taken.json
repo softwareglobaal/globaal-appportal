@@ -1,5 +1,5 @@
 {
- "versie": "2.0",
+ "versie": "2.1",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -107,7 +107,8 @@
   },
   "oude_termen_in_vrije_tekst": {
    "EE": "Energie Efficiënt (ENEF); Mehdi schreef dat los in titels zoals 'AI & EE'"
-  }
+  },
+  "firma_afleiden": "staat er geen firmacode in een interne titel, dan kijkt de agent welke firma's de genoemde mensen gemeen hebben volgens 'diensten voor'. Is dat er precies een, dan stelt hij die voor. Zijn het er meer, dan noemt hij ze allebei en vraagt hij het"
  },
  "kleuren": {
   "grondregel": "de kleur zegt waarvóór Mehdi ergens is, de twee uitroeptekens zeggen dát hij naar buiten gaat. Dat zijn twee verschillende dingen. Een afspraak kan nooit kleurloos zijn: ze is werk, privé of Lara.",
@@ -326,6 +327,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-20",
+   "wat": "organisatie.globaal.be is de plek om te kijken, niet de tabellen eronder. En de firma van een interne afspraak volgt uit 'diensten voor', niet uit de werkgever: Matthew werkt bij Orvantis maar doet diensten voor TKN-Buro"
+  },
   {
    "datum": "2026-09-20",
    "wat": "dit bestand houdt geen kopie meer bij van de firmalijst. Wie de codes wil, kijkt op organisatie.globaal.be. Alleen wat echt van de agenda is blijft hier: de agendacodes, de soorten, de types, de kleuren en de regels"
@@ -652,14 +657,15 @@
  },
  "bronnen_van_waarheid": {
   "firmas_en_codes": {
-   "waar": "organisatie.globaal.be, tabel kern.firma",
+   "waar": "https://organisatie.globaal.be/",
    "hoe": "de agent leest ze bij elke ronde via organisatie.firmacodes()",
    "regel": "hier staat geen lijst. Een tweede lijst veroudert en dan zijn er twee waarheden. Wie de codes wil zien, kijkt op organisatie.globaal.be of in de momentopname achteraan de pdf, met de datum erbij"
   },
   "namen_van_collegas": {
-   "waar": "organisatie.globaal.be, tabel kern.persoon",
+   "waar": "https://organisatie.globaal.be/",
    "hoe": "de agent toetst de namen in een interne titel via organisatie.herken()",
-   "regel": "alleen eigen mensen staan hier; iemand van buiten de organisatie hoort er niet in en is dus geen fout"
+   "regel": "alleen eigen mensen staan hier; iemand van buiten de organisatie hoort er niet in en is dus geen fout",
+   "let_op": "de kolom 'firma' is de werkgever, de kolom 'diensten voor' zegt voor welke firma iemand werkt. Voor een agenda-afspraak telt 'diensten voor'. Matthew staat bij Orvantis maar doet diensten voor TKN-Buro, dus een overleg met hem is TKNB"
   },
   "plaatsen": {
    "waar": "locatie.globaal.be, de benoemde plekken",
@@ -668,6 +674,11 @@
   "werkwijze": {
    "waar": "het bord, mijnagents.globaal.be",
    "regel": "het zaad in werkwijze/ is een kopie; het bord is de waarheid"
+  },
+  "dashboard": {
+   "waar": "https://organisatie.globaal.be/",
+   "wat": "wie hier werkt, met per persoon de afdeling, de rol, de werkgever, de firma's waarvoor hij diensten doet, de locatie en het HR-nummer",
+   "regel": "dit is de plek om te kijken. De agent leest dezelfde gegevens, maar het dashboard is waar Mehdi en de collega's ze bekijken en aanpassen"
   }
  }
 }
