@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.0, 20-09-2026.
+Versie 1.1, 20-09-2026 (N10, de omgevingstoets S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -38,7 +38,7 @@ Twee regels die hieruit volgen:
 - **Wie een kopie maakt, is verantwoordelijk voor het verschil.** Kan een kopie
   niet gelijk blijven, dan hoort ze er niet te zijn.
 
-## 2. De negen normen
+## 2. De tien normen
 
 | norm | de eis | waarom, en waar het misging |
 |---|---|---|
@@ -51,25 +51,57 @@ Twee regels die hieruit volgen:
 | **N7** | Geen nood die langer dan drie dagen open staat | Een nood die blijft terugkomen is geen melding meer maar ruis. De Agendawacht meldde dertig keer dezelfde nood over titels zonder code, zette hem telkens op opgelost, en meldde hem twee uur later opnieuw, omdat hij wachtte op een runbook dat niemand bouwde. |
 | **N8** | Geen sleutel, token of wachtwoord in de werkwijze | Een werkwijze wordt geëxporteerd naar Dropbox en gelezen door elke sessie. |
 | **N9** | Geen gedachtestreepjes in de werkwijze | Afspraak van 04-07-2026. Teksten horen menselijk te lezen. |
+| **N10** | Een nood draagt geen aantal in zijn tekst | Noden zijn declaratief: elke ronde stuurt een agent de hele lijst, en wat er niet meer in staat geldt als opgelost. Staat er een teller in de tekst ("11 afspraken zonder code"), dan is elke ronde formeel een nieuwe nood en sluit de lus nooit. Zo verzamelde de Agendawacht dertig identieke regels. Het aantal hoort in het detail. |
+
+### De omgeving
+
+| norm | de eis | waarom |
+|---|---|---|
+| **S1** | De VM staat niet voor of achter op GitHub | Op 20-09-2026 stonden zeventien commits alleen op de VM, en een paar uur later alweer een nieuwe. Werk dat maar op één schijf bestaat is geen werk, het is een risico. Deze toets draait niet per agent maar één keer per ronde. |
 
 Een norm die niet van toepassing is (een agent die op de Mac draait heeft geen
 runner in deze repo) telt niet mee en wordt als `n.v.t.` gemeld.
 
 ## 3. De nulmeting van 20-09-2026
 
-28 actieve agents, 53 gezakte normen. Eén agent slaagde voor alles: de
+28 actieve agents, 56 gezakte normen. Eén agent slaagde voor alles: de
 contracten-agent. De meest voorkomende gaten:
 
 - **N4 bij 27 van de 28.** Agents melden niet welk regelboek ze lazen.
-- **N7 bij dertien agents.** Noden die tot tien dagen open staan zonder besluit.
-- **N6 bij vier agents** (belwacht, fathom-wacht, werfverslag-voorbereider,
-  zoom-wacht): het zaad in de repo wijkt af van het bord.
+- **N7 bij twaalf agents.** Noden die tot tien dagen open staan zonder besluit.
+- **N6 bij zes agents**: het zaad in de repo wijkt af van het bord.
+- **N2 bij vijf agents**: de werkwijze zegt niet wat Mehdi beslist.
 - **N5 bij twee agents** (belwacht, communicatie-bundelaar): op het bord, maar
   zonder eigen runner.
+- **N10 bij twee agents** (agenda-wacht, locatie-wacht): noden met een teller
+  in de tekst.
+
+Dit is regel één van het logboek. Elke volgende meting komt eronder, zodat je
+ziet of we vooruit gaan of alleen praten.
 
 Dat is de lijst om af te werken, niet een reden om de norm te verlagen.
 
-## 4. Wat je doet als een norm faalt
+## 4. De Normwacht en het logboek
+
+`normwacht.py` doet elke ochtend om 06:10 een ronde, vóór de meeste agents aan
+hun werk beginnen. Hij raakt geen enkele andere agent aan. Hij meet, en:
+
+- **schrijft het logboek.** `mijnagents-data/agentnorm/logboek.jsonl` is de
+  machinekant (één regel per meting, nooit overschreven), `logboek.md` de
+  leesbare kant: waar we gestart zijn, waar we nu staan, en per norm hoeveel
+  agents er nog zakken. Dat bestand komt via de export ook in Dropbox.
+- **zet per gezakte norm één nood op het bord**, met een eigenaar erbij: wat een
+  mens moet beslissen gaat naar Mehdi, wat code is naar claude-code. Zeven noden
+  in plaats van 56 losse meldingen, en de tekst blijft morgen gelijk, zodat je
+  ziet of iets echt is opgelost of alleen opnieuw gemeld.
+
+```
+normwacht.py --droog      meten en tonen, niets naar het bord schrijven
+```
+
+Zo komt hij terug tot het klopt, zonder dat iemand het hoeft te onthouden.
+
+## 5. Wat je doet als een norm faalt
 
 1. **Herstel in de bron, niet in het geval.** Een fout in één werkwijze los je op
    in het sjabloon of in de code, zodat elke volgende agent het goed heeft.
@@ -80,7 +112,7 @@ Dat is de lijst om af te werken, niet een reden om de norm te verlagen.
 3. **Verlaag de norm alleen in dit document.** Wie een norm te streng vindt, past
    hem hier aan en in `controle_agenten.py`, nooit het geval dat toevallig faalt.
 
-## 5. Een nieuwe agent die meteen slaagt
+## 6. Een nieuwe agent die meteen slaagt
 
 ```
 python3 ~/appportal/mijnagents-runner/nieuwe-agent.py --naam post-wacht --label "Postwacht" \
@@ -94,7 +126,7 @@ De werkwijze die je meegeeft moet zelf al door N1, N2, N8 en N9 komen. Daarna:
 - laat hem noden schrijven met een eigenaar en een besluit, niet als logregel (N7);
 - draai `controle_agenten.py --agent <naam> --uitleg` voor je hem op de cron zet.
 
-## 6. De chatkant
+## 7. De chatkant
 
 Een agent die Mehdi ook in een gesprek aanspreekt, hoort een skill te hebben in
 `~/.claude/skills/<naam>/SKILL.md` op zijn Mac. Die skill wordt automatisch
