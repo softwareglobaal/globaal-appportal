@@ -286,6 +286,44 @@ KLEURNAAM = {"4": "roze", "6": "oranje", "11": "rood", "7": "blauw", "10": "groe
 ALLEEN_VANDAAG = "--vandaag" in sys.argv
 
 
+def namen_in_titel(titel):
+    """Wie staat er in de titel, getoetst aan kern.persoon via organisatie.globaal.be.
+    Mandaat van Mehdi, 20-09-2026: bij een interne afspraak hoort altijd een naam,
+    anders is achteraf niet te zien wie er niet kwam opdagen."""
+    # de hele titel, niet alleen de kop: een naam staat even vaak achter de code
+    # ("[ELEV-IN] Shaniel - LegalFly") als ervoor ("Mehdi+Tom: [UNAB-IN] ...")
+    zonder_code = CODE_RE.sub(" ", titel)
+    stukken = re.split(r"[+&,/:\-]| en | met ", zonder_code, flags=re.I)
+    uit = []
+    for stuk in stukken:
+        stuk = stuk.strip(" -!?").strip()
+        if not stuk or stuk.lower() in ("mehdi", "mehdi ", ""):
+            continue
+        try:
+            p = organisatie.herken(stuk)
+        except Exception:  # noqa: BLE001
+            p = None
+        if p:
+            uit.append(p["naam"])
+    return uit
+
+
+def titelfouten(a, info):
+    """De fouten die Mehdi hard wil zien. Geeft een lijst met korte redenen."""
+    if info["reistijd"] or a.get("hele_dag"):
+        return []
+    fouten = []
+    if a.get("kalender", "") not in AGENDA_VASTE_KLEUR and not info.get("firma"):
+        fouten.append("geen firmacode")
+    buiten = info["buiten"] or info["soort"] in ("PB", "KB")
+    if buiten and "!!" not in (a.get("titel") or ""):
+        # Mehdi leest weinig en kijkt: buiten hoort altijd zichtbaar te zijn met !!
+        fouten.append("buiten zonder !!")
+    if info["soort"] == "IN" and not namen_in_titel(a.get("titel") or ""):
+        fouten.append("intern zonder naam van een collega")
+    return fouten
+
+
 def kleur_gewenst(a, info):
     """De kleur zegt waarvóór Mehdi ergens is; `!!` zegt dat hij naar buiten gaat.
     Dat zijn twee verschillende dingen. Mandaat van Mehdi, 20-09-2026:
@@ -819,7 +857,19 @@ def main():
         # Norm N10: een nood draagt geen aantal in zijn tekst, anders is elke ronde
         # formeel een nieuwe nood en sluit de lus nooit. Het aantal hoort in het detail.
         noden = []
-        if niet_conform:
+        titel_fouten = {}
+        for a in items:
+            if a.get("fout"):
+                continue
+            inf = lees_titel(a.get("titel", ""))
+            for reden in titelfouten(a, inf):
+                titel_fouten.setdefault(reden, []).append(f"{a['start'][:16]} {a.get('titel','')[:58]}")
+        for reden, rij in sorted(titel_fouten.items()):
+            klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
+                          "titel": f"Titels: {reden}", "uniek": f"agenda-titel-{reden[:20]}:{vandaag}",
+                          "inhoud": "\n".join("- " + x for x in rij[:40])})
+            noden.append({"tekst": f"Afspraken met een titel die niet klopt: {reden}", "wie": "mehdi"})
+        if niet_conform and "geen firmacode" not in titel_fouten:
             noden.append({"tekst": "Afspraken zonder firmacode in de titel: rechtzetten, anders krijgen ze geen kleur",
                           "wie": "mehdi"})
         if onvolledig:

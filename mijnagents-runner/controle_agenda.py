@@ -166,27 +166,27 @@ if me:
 
 print("\n6. TITELS EN ADRESSEN")
 items = A.afspraken(van_dagen=0, tot_dagen=30)
-zonder, geen_adres = [], []
+per_fout, geen_adres = {}, []
 for a in items:
     if a.get("fout") or a.get("hele_dag") or a.get("kalender", "").startswith("en.be#"):
         continue
     i = W.lees_titel(a["titel"])
-    if a["kalender"] in W.AGENDA_VASTE_KLEUR or i["reistijd"]:
+    if i["reistijd"]:
         continue
-    if not i.get("firma"):
-        zonder.append(f"{a['start'][:16]} {a['titel'][:60]}")
-        continue
+    for reden in W.titelfouten(a, i):
+        per_fout.setdefault(reden, []).append(f"{a['start'][:16]} {a['titel'][:58]}")
     if i["buiten"] or i["soort"] in ("PB", "KB"):
         adres = a.get("locatie") or ""
         if not adres or adres.lower().startswith("http"):
-            geen_adres.append(f"{a['start'][:16]} {a['titel'][:60]}")
+            geen_adres.append(f"{a['start'][:16]} {a['titel'][:58]}")
 
-# Mandaat van Mehdi, 20-09-2026: een afspraak kan niet kleurloos zijn en buiten kan
-# niet zonder adres. Allebei zijn dit fouten, geen aandachtspunten.
-toets("elke afspraak heeft een firmacode", "GOED" if not zonder else "FOUT",
-      f"{len(zonder)} zonder code in de komende dertig dagen")
-for r in zonder[:20]:
-    print(f"          {r}")
+for reden in ("geen firmacode", "buiten zonder !!", "intern zonder naam van een collega"):
+    rij = per_fout.get(reden, [])
+    toets(f"geen enkele afspraak met: {reden}", "GOED" if not rij else "FOUT",
+          f"{len(rij)} in de komende dertig dagen")
+    for x in rij[:12]:
+        print(f"          {x}")
+
 toets("elke buitenafspraak heeft een adres", "GOED" if not geen_adres else "FOUT",
       f"{len(geen_adres)} buiten zonder adres")
 for r in geen_adres[:20]:
