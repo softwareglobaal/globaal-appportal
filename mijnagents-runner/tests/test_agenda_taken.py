@@ -36,7 +36,11 @@ check("de JSON houdt GEEN kopie van de firmalijst bij",
       "firmas" not in taken["titelconventie"],
       "er staat weer een lijst in; dat is een tweede waarheid")
 check("de JSON wijst naar organisatie.globaal.be als bron",
-      "kern.firma" in taken["bronnen_van_waarheid"]["firmas_en_codes"]["waar"])
+      "organisatie.globaal.be" in taken["bronnen_van_waarheid"]["firmas_en_codes"]["waar"])
+check("de JSON kent het dashboard als plek om te kijken",
+      "organisatie.globaal.be" in taken["bronnen_van_waarheid"]["dashboard"]["waar"])
+check("de JSON legt uit dat 'diensten voor' telt, niet de werkgever",
+      "diensten voor" in taken["bronnen_van_waarheid"]["namen_van_collegas"].get("let_op", ""))
 check("de bron geeft firmacodes", bool(bron), f"{len(bron)} codes gelezen")
 check("de agent gebruikt diezelfde codes", W.FIRMACODES == bron)
 check("elke agendacode wijst naar een bestaande firma",
