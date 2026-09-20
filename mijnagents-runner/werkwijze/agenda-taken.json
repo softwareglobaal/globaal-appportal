@@ -1,5 +1,5 @@
 {
- "versie": "1.4",
+ "versie": "1.5",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -184,9 +184,12 @@
   }
  },
  "herinneringen": {
-  "wel": "alleen prospecten van HA, UNABO en TKN: PO vijf minuten vooraf, PB dertig minuten vooraf",
-  "niet": "intern, klanten, terugkerende afspraken, reistijd, hele dag, prive",
-  "opruimen": "een eerdere herinnering van de agent zelf haalt hij weg; een herinnering van Mehdi blijft"
+  "wel": "elke afspraak met iemand van buiten het huis, klant zowel als prospect, ook terugkerende",
+  "niet": "alleen intern (-IN), en hele-dag-items",
+  "online_minuten": 5,
+  "buiten_minuten": 30,
+  "vertrek": "een buitenafspraak krijgt daarbovenop een melding op het vertrekmoment plus vijf minuten, en het reistijdblok draagt zelf ook een melding",
+  "opruimen": "een eerdere melding van de agent op iets wat nu stil moet blijven haalt hij weg; een melding die Mehdi zelf zette blijft staan"
  },
  "grendels": [
   {
@@ -219,8 +222,8 @@
   {
    "nr": 1,
    "naam": "lezen",
-   "wanneer": "elke werkdag 07:00",
-   "wat": "alle agenda's uit KALENDERS van gisteren tot zeven dagen vooruit, dubbele uitnodigingen één keer"
+   "wanneer": "bij elke ronde en bij elke wijziging",
+   "wat": "alle agenda's uit de lijst van gisteren tot zeven dagen vooruit, dubbele uitnodigingen één keer"
   },
   {
    "nr": 2,
@@ -235,17 +238,17 @@
   {
    "nr": 4,
    "naam": "reistijd",
-   "wat": "voor elke buitenafspraak met adres een blok heen en terug, met filefactor"
+   "wat": "per dag een keten van ritten, met van waar naar waar, en alleen na de laatste buitenafspraak terug naar huis"
   },
   {
    "nr": 5,
    "naam": "kleuren",
-   "wat": "volgens de kleurregels hierboven"
+   "wat": "volgens de kleurregels; vaste agendakleuren laat hij met rust"
   },
   {
    "nr": 6,
    "naam": "herinneringen",
-   "wat": "volgens de regels hierboven"
+   "wat": "alles behalve intern, plus een melding op het vertrekmoment"
   },
   {
    "nr": 7,
@@ -254,11 +257,16 @@
   },
   {
    "nr": 8,
+   "naam": "signalen",
+   "wat": "titels zonder code, buiten zonder adres, oude firmacodes"
+  },
+  {
+   "nr": 9,
    "naam": "klaarzetten",
    "wat": "per firma op het bord, plus het dagplan en gisteren zonder verslag"
   },
   {
-   "nr": 9,
+   "nr": 10,
    "naam": "verslag",
    "wat": "werkverslag op het bord met alles wat hij deed en vond"
   }
@@ -269,6 +277,11 @@
   "uitkomst": "GOED, LET OP of FOUT per toets; hij eindigt met een foutcode als er iets FOUT is"
  },
  "openstaand": [
+  {
+   "wat": "adresboek aanvullen: school Lara, zwemschool Lara, grootouders Lara, kantoor H-Architects",
+   "wie": "Mehdi",
+   "wanneer": "zodra het kan"
+  },
   {
    "wat": "11 afspraken zonder firmacode en 4 buitenafspraken zonder adres rechtzetten",
    "wie": "Mehdi",
@@ -306,6 +319,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-20",
+   "wat": "herinneringen voor iedereen behalve intern, klanten dus ook. Een keten van ritten per dag in plaats van telkens terug naar huis. Een adresboek met vaste plaatsen. En een trigger die elke twaalf minuten kijkt of er iets gewijzigd is"
+  },
   {
    "datum": "2026-09-20",
    "wat": "de kleur zegt waarvóór hij ergens is, !! zegt dát hij naar buiten gaat. Rood is werk buiten. Lara en privé houden hun kleur ook buiten, maar krijgen wel reistijd. ?? is geel tot het bevestigd is. Een afspraak zonder code is een fout, geen uitzondering. WB, OPL, PLB, SCN, OPM en BS zijn per definitie buiten; EPB, VC, STA en SD niet"
@@ -368,6 +385,26 @@
    "waarom": "Google laat de dagquota van de Routes API niet verlagen, dus houdt de agent de teller zelf bij. Honderd per dag blijft ruim onder de 5.000 gratis per maand",
    "terugval": "gratis routering (OSRM) maal een spitsfactor, 1,6 tussen 07:00 en 09:30"
   },
-  "dubbel": "bestaat er al een reistijdblok binnen drie uur voor of na, dan maakt hij er geen tweede"
+  "dubbel": "bestaat er al een reistijdblok binnen drie uur voor of na, dan maakt hij er geen tweede",
+  "ketening": "de rit naar huis maakt hij alleen na de laatste buitenafspraak van de dag. Tussen twee buitenafspraken is er één rit, en dat is de heenrit van de volgende. Elke rit draagt in zijn titel van waar naar waar hij gaat.",
+  "adres_zoeken": "eerst het adres in de agenda, dan het projectnummer in de projectmap, dan het adresboek met de vaste plaatsen"
+ },
+ "adresboek": {
+  "bestand": "werkwijze/adressen.json",
+  "waarvoor": "vaste plaatsen waar Mehdi naartoe rijdt, zodat een titel als 'zwemles Lara' toch een rijtijd krijgt",
+  "ingevuld": [
+   "thuis"
+  ],
+  "nog_in_te_vullen": [
+   "school Lara",
+   "zwemschool Lara",
+   "grootouders Lara",
+   "kantoor H-Architects"
+  ]
+ },
+ "triggers": {
+  "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",
+  "bij_wijziging": "agenda_signaal.py kijkt elke twaalf minuten tussen 06:00 en 21:00 of er een afspraak bijgekomen, gewijzigd of geschrapt is, en zet de wacht dan meteen aan voor die dag",
+  "eigen_werk": "reistijdblokken die de wacht zelf maakt tellen niet als wijziging, anders start hij zichzelf"
  }
 }

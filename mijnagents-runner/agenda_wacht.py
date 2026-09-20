@@ -28,6 +28,7 @@ import bellen  # noqa: E402
 import projectadressen  # noqa: E402
 import bord  # noqa: E402
 import organisatie  # noqa: E402
+import adresboek  # noqa: E402
 import pipedrive  # noqa: E402
 
 NAAM = "agenda-wacht"
@@ -192,18 +193,23 @@ BUITEN_MIN = int(os.environ.get("AGENDA_HERINNERING_BUITEN", "30"))
 OVERIG_MIN = int(os.environ.get("AGENDA_HERINNERING_OVERIG", "10"))
 
 
-PROSPECT_FIRMAS = ("HA", "UNABO", "TKN")
-PROSPECT_SOORTEN = ("PO", "PB")
+# Mandaat van Mehdi, 20-09-2026: iedereen behalve intern krijgt een melding. Klanten
+# dus ook, niet alleen prospecten. Voor een afspraak buiten telt het vertrekmoment,
+# niet het beginuur: daar zorgt het reistijdblok voor, dat zelf een melding draagt.
+GEEN_MELDING_SOORTEN = ("IN",)
 
 
 def melding_gewenst(a):
-    """De regel van Mehdi (11-09-2026): alleen afspraken met prospecten van
-    H-Architects, UNABO en TKN (codes PO en PB) krijgen een melding. Geen intern,
-    geen terugkerende afspraken, geen reistijd, geen hele-dag-items."""
+    """Regel van Mehdi, 20-09-2026: elke afspraak met iemand van buiten het huis
+    krijgt een melding, klant zowel als prospect. Alleen intern (-IN) blijft stil.
+    Hele-dag-items en reistijdblokken tellen niet mee; een reistijdblok draagt zijn
+    eigen melding op het vertrekmoment."""
     info = lees_titel(a["titel"])
-    if a.get("hele_dag") or a.get("_terugkerend") or info["reistijd"]:
+    if a.get("hele_dag") or info["reistijd"]:
         return False, info
-    return (info["firma"] in PROSPECT_FIRMAS and info["soort"] in PROSPECT_SOORTEN), info
+    if not info["firma"] or info["soort"] in GEEN_MELDING_SOORTEN:
+        return False, info
+    return True, info
 
 
 class GeenSchrijfrecht(Exception):
@@ -513,6 +519,12 @@ def reistijd_zetten(items, alleen_dag=None):
         bron_adres = "agenda"
         if not fysiek and info["nummer"] and info["nummer"] in projecten:
             adres, fysiek, bron_adres = projecten[info["nummer"]]["adres"], True, "projectmap"
+        if not fysiek:
+            # geen adres in de agenda en geen projectnummer: misschien een vaste plaats
+            # uit het adresboek, zoals de school of de zwemles van Lara
+            gevonden, naam = adresboek.zoek(a["titel"] + " " + (a.get("omschrijving") or ""))
+            if gevonden:
+                adres, fysiek, bron_adres = gevonden, True, f"adresboek ({naam})"
         if info["reistijd"] or not (info["buiten"] or info["soort"] in ("PB", "KB")):
             continue
         a["_bron_adres"] = bron_adres
@@ -528,7 +540,17 @@ def reistijd_zetten(items, alleen_dag=None):
             continue
         buiten.append((start, einde, a, info, adres, fysiek))
     buiten.sort(key=lambda x: x[0])
+    # Mandaat van Mehdi, 20-09-2026: "als er twee afspraken buiten zijn en het is ver,
+    # dan kom ik niet naar huis om dan te gaan". Dus: de rit terug naar huis maak ik
+    # alleen na de laatste buitenafspraak van de dag. Tussen twee buitenafspraken is er
+    # één rit, en dat is de heenrit van de volgende. Elke rit draagt in zijn titel van
+    # waar naar waar hij gaat.
+    per_dag = {}
+    for _ in buiten:
+        per_dag.setdefault(_[2]["start"][:10], []).append(_)
+    laatste_van_de_dag = {d: rij[-1][2].get("id") for d, rij in per_dag.items()}
     vorige_per_dag = {}
+    vorige_plaats_per_dag = {}
     for start, einde, a, info, adres, fysiek in buiten:
         dag = a["start"][:10]
         if not fysiek:
@@ -541,7 +563,9 @@ def reistijd_zetten(items, alleen_dag=None):
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: adres niet gevonden ({adres[:40]})")
             continue
         vertrek_van = vorige_per_dag.get(dag, thuis)
+        van_plaats = vorige_plaats_per_dag.get(dag, plaatsnaam(THUIS) or "thuis")
         vorige_per_dag[dag] = doel
+        is_laatste = laatste_van_de_dag.get(dag) == a.get("id")
         # Zuinig met aanvragen (Google Routes Pro: 5.000 gratis per maand): bestaan mijn twee
         # blokken al, dan herbereken ik alleen in de eerste ronde van de dag (voor 08:00) of met --dag.
         def _bestaand(t0, t1):
@@ -557,12 +581,13 @@ def reistijd_zetten(items, alleen_dag=None):
             # eerste schatting om het vertrekuur te kennen, dan de filefactor op dat uur
             heen, _ = rijtijd_min(vertrek_van, doel, start)
             heen, fh = rijtijd_min(vertrek_van, doel, start - timedelta(minutes=heen))
-            terug, ft = rijtijd_min(doel, thuis, einde)
+            terug, ft = (rijtijd_min(doel, thuis, einde) if is_laatste else (0, ""))
         except Exception as e:  # noqa: BLE001
             fout += 1
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: rijtijd niet berekend ({type(e).__name__})")
             continue
         plaats = plaatsnaam(adres)
+        vorige_plaats_per_dag[dag] = plaats
         def bestaand(t0, t1):
             for x in reistijden:
                 if x["kalender"] == a["kalender"] and "T" in x["start"] and t0 <= datetime.fromisoformat(x["start"]) <= t1:
@@ -589,21 +614,25 @@ def reistijd_zetten(items, alleen_dag=None):
                 if bijwerken(x, start - timedelta(minutes=heen), start, uitleg_h):
                     gemaakt += 1
             else:
-                _insert(a["kalender"], {"summary": f"🚗 Reistijd → {plaats}", "start": {"dateTime": (start - timedelta(minutes=heen)).isoformat()},
+                _insert(a["kalender"], {"summary": f"🚗 Reistijd: {van_plaats} → {plaats}", "start": {"dateTime": (start - timedelta(minutes=heen)).isoformat()},
                                         "end": {"dateTime": start.isoformat()}, "description": uitleg_h, **kleur}, tok)
                 gemaakt += 1
-            x = bestaand(einde, einde + timedelta(hours=3))
+            x = bestaand(einde, einde + timedelta(hours=3)) if is_laatste else None
+            if not is_laatste:
+                regels.append(f"{a['start'][:16]} {a['titel'][:44]}: geen rit naar huis, je gaat door naar de volgende buitenafspraak")
             if x:
                 al += 1
                 if bijwerken(x, einde, einde + timedelta(minutes=terug), uitleg_t):
                     gemaakt += 1
-            else:
-                _insert(a["kalender"], {"summary": f"🚗 Reistijd ← {plaats}", "start": {"dateTime": einde.isoformat()},
+            elif is_laatste:
+                _insert(a["kalender"], {"summary": f"🚗 Reistijd: {plaats} → {plaatsnaam(THUIS) or 'thuis'}", "start": {"dateTime": einde.isoformat()},
                                         "end": {"dateTime": (einde + timedelta(minutes=terug)).isoformat()}, "description": uitleg_t,
                                         **{"colorId": "11", "reminders": {"useDefault": False, "overrides": []}}}, tok)
                 gemaakt += 1
             _patch(a, {"reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": heen + 5}]}}, tok)
-            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: heen {heen} min (file x{fh}), terug {terug} min (file x{ft}), adres uit {bron_adres}, herinnering {heen + 5} min vooraf")
+            regels.append(f"{a['start'][:16]} {a['titel'][:44]}: {van_plaats} → {plaats} {heen} min (file x{fh})"
+                          + (f", terug naar huis {terug} min (file x{ft})" if is_laatste else ", daarna door naar de volgende")
+                          + f", adres uit {bron_adres}, melding {heen + 5} min vooraf")
         except Exception as e:  # noqa: BLE001
             fout += 1
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: reistijd niet gezet ({type(e).__name__})")
@@ -773,7 +802,7 @@ def main():
         ag.log(f"dag {vandaag}", "schrijf", f"kleuren: {kg} gezet, {kgoed} klopten al, {kvast} op een agenda met vaste kleur, {kgeen} ZONDER CODE (fout), {kfout} niet gelukt",
                "\n".join(f"{a['start'][:16]} {a['titel'][:60]} -> {KLEURNAAM.get(kleur_gewenst(a, lees_titel(a['titel'])), 'laten staan')}" for a in items if a['start'][:10] >= vandaag and (not dag_grens or a['start'][:10] == dag_grens)))
         gezet, al, weg, fout_h = herinneringen_zetten(items, dag_grens)
-        ag.log(f"dag {vandaag}", "schrijf", f"herinneringen (alleen prospecten HA/UNABO/TKN, PO en PB): {gezet} gezet (online {ONLINE_MIN} min, buiten {BUITEN_MIN} min), {al} hadden er al een, {weg} weggehaald van intern of terugkerend, {fout_h} mislukt",
+        ag.log(f"dag {vandaag}", "schrijf", f"herinneringen (alles behalve intern): {gezet} gezet (online {ONLINE_MIN} min, buiten {BUITEN_MIN} min), {al} hadden er al een, {weg} weggehaald van intern, {fout_h} mislukt",
                "\n".join(f"{'MELDING ' if melding_gewenst(a)[0] else 'stil    '} {a['start'][:16]} {a['titel'][:70]}" for a in items if a['start'][:10] >= vandaag and not a.get('hele_dag')))
         ag.log(f"dag {vandaag}", "bron", f"{len(items)} afspraken uit {len(kalenders())} agenda's; {gekoppeld} H-A-afspraken aan een deal gekoppeld; per afdeling: " +
                ", ".join(f"{k} {v}" for k, v in sorted(per_afdeling.items())) + (f"; {len(fouten)} agenda's niet leesbaar: " + ", ".join(f['kalender'] for f in fouten) if fouten else ""),
