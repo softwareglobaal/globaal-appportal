@@ -1,5 +1,5 @@
 {
- "versie": "1.7",
+ "versie": "1.8",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -80,6 +80,8 @@
    "PB": "prospect buiten (plaatsbezoek)",
    "KO": "klant online",
    "PO": "prospect online",
+   "LB": "leverancier buiten (wij kopen)",
+   "LO": "leverancier online (wij kopen)",
    "IN": "intern"
   },
   "types": {
@@ -161,9 +163,14 @@
      "naam": "banaan, geel"
     },
     {
-     "wanneer": "buiten: !! of een dienst die per definitie buiten is, of soort KB of PB",
+     "wanneer": "buiten: !! of een dienst die per definitie buiten is, of soort KB, PB of LB",
      "kleur": "11",
      "naam": "tomaat, rood"
+    },
+    {
+     "wanneer": "soort LO, leverancier online, geld dat buitengaat",
+     "kleur": "3",
+     "naam": "druif, paars"
     },
     {
      "wanneer": "soort KO, klant online",
@@ -334,6 +341,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-20",
+   "wat": "nieuwe soort L van leverancier, LB buiten en LO online: een extern bedrijf waar Mehdi de klant wordt. Dat is geen klant en geen prospect. LO krijgt de kleur druif, paars, zodat geld dat buitengaat te onderscheiden is van geld dat binnenkomt"
+  },
   {
    "datum": "2026-09-20",
    "wat": "de validatie wordt niet een nieuwe agent: de Levenscoach vergelijkt al gepland tegenover gebeurd. De Agendawacht levert de plankant en zet het vinkje"
