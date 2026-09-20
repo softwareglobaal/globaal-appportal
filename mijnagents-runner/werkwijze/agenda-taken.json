@@ -1,5 +1,5 @@
 {
- "versie": "1.6",
+ "versie": "1.7",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -278,6 +278,16 @@
  },
  "openstaand": [
   {
+   "wat": "Zoom-scopes voor meetings bijzetten op het account info@h-invest.be; daarmee werkt zowel de Zoomwacht als de controle of Mehdi in de meeting zit",
+   "wie": "Mehdi",
+   "wanneer": "zodra het kan"
+  },
+  {
+   "wat": "titels rechtzetten, week per week samen: 18 zonder firmacode en 42 interne zonder naam",
+   "wie": "Mehdi en Claude",
+   "wanneer": "wekelijks"
+  },
+  {
    "wat": "Zoom-app aanmaken (Server-to-Server OAuth) zodat de Zoomwacht kan zien of je in de meeting zit; daarna bouw ik hem",
    "wie": "Mehdi",
    "wanneer": "zodra het kan"
@@ -324,6 +334,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-20",
+   "wat": "de validatie wordt niet een nieuwe agent: de Levenscoach vergelijkt al gepland tegenover gebeurd. De Agendawacht levert de plankant en zet het vinkje"
+  },
   {
    "datum": "2026-09-20",
    "wat": "bellen als de file meer dan de buffer van tien minuten kost, en een Zoomwacht die belt als Mehdi één minuut na de start niet in de meeting zit"
@@ -449,5 +463,187 @@
   "wanneer_nu": "voor elke afspraak volgens het belrooster: online vijf minuten vooraf, buiten op het vertrekmoment",
   "wanneer_nieuw": "extra oproep van de Filewacht zodra de file je buffer opeet",
   "buffer_minuten": 10
+ },
+ "waar_hij_van_leest": [
+  {
+   "bron": "Google Agenda",
+   "wat": "de zeven agenda's, van gisteren tot zeven dagen vooruit",
+   "soort": "systeem"
+  },
+  {
+   "bron": "organisatie.globaal.be (kern.firma)",
+   "wat": "de officiele firmacodes, zeventien stuks",
+   "soort": "bron van waarheid"
+  },
+  {
+   "bron": "organisatie.globaal.be (kern.persoon)",
+   "wat": "de namen van collega's, om te toetsen of een interne afspraak een naam draagt",
+   "soort": "bron van waarheid"
+  },
+  {
+   "bron": "locatie.globaal.be",
+   "wat": "benoemde plekken met een straal, zoals Thuis en de werven",
+   "soort": "agent",
+   "let_op": "hier horen de school, de zwemles en de grootouders van Lara in, niet in een eigen adresboek"
+  },
+  {
+   "bron": "Pipedrive H-Architects",
+   "wat": "de deal bij een projectnummer",
+   "soort": "systeem"
+  },
+  {
+   "bron": "projectadressen (de projectmap)",
+   "wat": "het adres bij een projectnummer",
+   "soort": "systeem"
+  },
+  {
+   "bron": "Google Routes API",
+   "wat": "rijtijd met het echte verkeer op het vertrekuur",
+   "soort": "betaald"
+  },
+  {
+   "bron": "OSRM",
+   "wat": "gratis routering als terugval bij de dagstop",
+   "soort": "gratis"
+  },
+  {
+   "bron": "het bord",
+   "wat": "zijn eigen werkwijze, die hij elke ronde leest en meldt",
+   "soort": "bord"
+  }
+ ],
+ "aan_wie_hij_levert": [
+  {
+   "ontvanger": "Mehdi",
+   "wat": "het dagplan, de signalen over titels, adressen en oude codes, en een telefoontje als de file de buffer opeet"
+  },
+  {
+   "ontvanger": "afdelingen op het bord",
+   "wat": "elke afspraak bij de juiste firma: h-architects, unabo, harmoniebouw, contrax, tkn, elevait en prive"
+  },
+  {
+   "ontvanger": "Dagbundelaar",
+   "wat": "wat er gepland stond, zodat hij de dag per dossier kan bundelen"
+  },
+  {
+   "ontvanger": "Levenscoach",
+   "wat": "de plankant van gepland tegenover gebeurd; hij vergelijkt en haalt er patronen uit"
+  },
+  {
+   "ontvanger": "Commandocentrum",
+   "wat": "de afspraken die een verslag nodig hebben, zoals werfbezoek en plaatsbeschrijving"
+  },
+  {
+   "ontvanger": "Bode",
+   "wat": "het belrooster: wie wanneer gebeld moet worden"
+  },
+  {
+   "ontvanger": "de agenda zelf",
+   "wat": "kleur, herinnering en reistijdblokken"
+  }
+ ],
+ "buren": [
+  {
+   "agent": "levenscoach",
+   "wanneer": "elke ochtend 06:45, maandag de week",
+   "wat": "gepland tegenover gebeurd, patronen en coaching",
+   "afspraak": "hij vergelijkt, ik lever de plankant. Ik bouw zelf geen validatie"
+  },
+  {
+   "agent": "dagbundelaar",
+   "wanneer": "werkdagen 07:00",
+   "wat": "de dag per dossier, en legt Mehdi voor wat zonder dossier is",
+   "afspraak": "hij stelt de avondvraag over wat geen bewijs heeft"
+  },
+  {
+   "agent": "icloud-wacht",
+   "wanneer": "elke avond 21:15",
+   "wat": "de foto's van de dag met tijd en plaats",
+   "afspraak": "bewijs voor een afspraak buiten"
+  },
+  {
+   "agent": "locatie-wacht",
+   "wanneer": "elke avond 21:30",
+   "wat": "het bewegingslogboek uit de telefoon",
+   "afspraak": "bewijs dat hij er was, en de benoemde plekken"
+  },
+  {
+   "agent": "fathom-wacht",
+   "wanneer": "07:00 en 13:00",
+   "wat": "opnames van online gesprekken",
+   "afspraak": "bewijs voor een afspraak online"
+  },
+  {
+   "agent": "plaud-wacht",
+   "wanneer": "elk uur",
+   "wat": "opnames buiten",
+   "afspraak": "bewijs voor een afspraak buiten"
+  },
+  {
+   "agent": "zoom-wacht",
+   "wanneer": "twee keer per dag",
+   "wat": "Zoom-chat en meetings",
+   "afspraak": "kan vandaag geen meetings zien; de koppeling mag alleen chat versturen. Zoom-account: info@h-invest.be"
+  },
+  {
+   "agent": "communicatie-bundelaar",
+   "wanneer": "07:20",
+   "wat": "met wie Mehdi praat, per persoon en per dag over alle kanalen",
+   "afspraak": "de gesprekkentabel bevat vandaag ook nieuwsbrieven en facturen; dat maakt het beeld troebel"
+  },
+  {
+   "agent": "calendly-wacht",
+   "wanneer": "werkdagen 07:15",
+   "wat": "de boekingskanalen",
+   "afspraak": "hij bewaakt Calendly, ik de agenda waarin geboekt wordt"
+  },
+  {
+   "agent": "commandocentrum",
+   "wanneer": "op de agenda-impuls",
+   "wat": "verbindt de agenda met de verslagagents",
+   "afspraak": "ik lever de afspraak, hij de opdracht"
+  },
+  {
+   "agent": "regisseur",
+   "wanneer": "doorlopend",
+   "wat": "hoofdagent, praat met Mehdi en met de agents",
+   "afspraak": "wat ik bij een collega wil aankaarten, gaat via hem"
+  }
+ ],
+ "validatie": {
+  "stand": "ontworpen, nog niet gebouwd",
+  "wie_doet_wat": "de Agendawacht zet het vinkje en levert de plankant; de Levenscoach vergelijkt en zoekt patronen; de Dagbundelaar stelt de avondvraag",
+  "bewijs": [
+   {
+    "soort": "online",
+    "bron": "Fathom-opname die de afspraak overlapt"
+   },
+   {
+    "soort": "buiten",
+    "bron": "locatie binnen de straal van het adres, of een Plaud-opname, of een foto met tijd en plaats"
+   },
+   {
+    "soort": "intern ter plaatse",
+    "bron": "locatie op het kantooradres"
+   },
+   {
+    "soort": "privé en Lara",
+    "bron": "alleen locatie, en dat gaat nooit naar een afdeling"
+   }
+  ],
+  "wanneer_telt_het": "geweest is geweest: één bewijs binnen het tijdvak volstaat, geen percentages",
+  "merkteken": "een vinkje of een kruisje voor de titel, maar alleen als er geen externe gast op de afspraak staat. Bij een afspraak met een klant stuurt Google anders een wijzigingsmail; dan blijft de titel ongemoeid en staat het merkteken op het bord",
+  "redenen": [
+   "klant niet gekomen",
+   "klant heeft verzet",
+   "ik ben het vergeten",
+   "file of te laat",
+   "geen zin, niet gedaan",
+   "collega had geen tijd",
+   "dubbel geboekt",
+   "ziek",
+   "toch doorgegaan, de tracker miste het"
+  ],
+  "namen": "bij een interne afspraak hoort de naam van de collega, getoetst aan kern.persoon, zodat telbaar wordt wie een afspraak niet nakwam"
  }
 }

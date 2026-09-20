@@ -244,7 +244,7 @@ staan nog negen geboekte klantafspraken, de laatste op 29-09 om 20:00. Maak je d
 koppeling eerder los of hernoem je die agenda's naar ZZ ARCHIEF, dan werken de
 annuleer- en verzetlinks van die klanten niet meer en negeer ik die afspraken.
 
-## De afspraken op een rij (versie 1.6, 2026-09-20)
+## De afspraken op een rij (versie 1.7, 2026-09-20)
 
 Dit staat ook als machineleesbaar bestand in `werkwijze/agenda-taken.json`.
 `tests/test_agenda_taken.py` faalt zodra de code en dat bestand uit elkaar lopen,
@@ -372,8 +372,68 @@ gratis routering (OSRM) maal een spitsfactor, 1,6 tussen 07:00 en 09:30, en het 
 **Bellen.** Twilio, gesproken in het Nederlands, stem Lotte, twee keer herhaald. Vandaag: voor elke afspraak volgens het belrooster: online vijf minuten vooraf, buiten op het vertrekmoment.
 Nieuw: extra oproep van de Filewacht zodra de file je buffer opeet, met een buffer van 10 minuten.
 
+**Waar ik van lees**
+
+| bron | wat |
+| --- | --- |
+| Google Agenda | de zeven agenda's, van gisteren tot zeven dagen vooruit |
+| organisatie.globaal.be (kern.firma) | de officiele firmacodes, zeventien stuks |
+| organisatie.globaal.be (kern.persoon) | de namen van collega's, om te toetsen of een interne afspraak een naam draagt |
+| locatie.globaal.be | benoemde plekken met een straal, zoals Thuis en de werven |
+| Pipedrive H-Architects | de deal bij een projectnummer |
+| projectadressen (de projectmap) | het adres bij een projectnummer |
+| Google Routes API | rijtijd met het echte verkeer op het vertrekuur |
+| OSRM | gratis routering als terugval bij de dagstop |
+| het bord | zijn eigen werkwijze, die hij elke ronde leest en meldt |
+
+**Aan wie ik lever**
+
+| ontvanger | wat |
+| --- | --- |
+| Mehdi | het dagplan, de signalen over titels, adressen en oude codes, en een telefoontje als de file de buffer opeet |
+| afdelingen op het bord | elke afspraak bij de juiste firma: h-architects, unabo, harmoniebouw, contrax, tkn, elevait en prive |
+| Dagbundelaar | wat er gepland stond, zodat hij de dag per dossier kan bundelen |
+| Levenscoach | de plankant van gepland tegenover gebeurd; hij vergelijkt en haalt er patronen uit |
+| Commandocentrum | de afspraken die een verslag nodig hebben, zoals werfbezoek en plaatsbeschrijving |
+| Bode | het belrooster: wie wanneer gebeld moet worden |
+| de agenda zelf | kleur, herinnering en reistijdblokken |
+
+**Mijn buren, en wat we afgesproken hebben**
+
+| agent | wanneer | afspraak |
+| --- | --- | --- |
+| levenscoach | elke ochtend 06:45, maandag de week | hij vergelijkt, ik lever de plankant. Ik bouw zelf geen validatie |
+| dagbundelaar | werkdagen 07:00 | hij stelt de avondvraag over wat geen bewijs heeft |
+| icloud-wacht | elke avond 21:15 | bewijs voor een afspraak buiten |
+| locatie-wacht | elke avond 21:30 | bewijs dat hij er was, en de benoemde plekken |
+| fathom-wacht | 07:00 en 13:00 | bewijs voor een afspraak online |
+| plaud-wacht | elk uur | bewijs voor een afspraak buiten |
+| zoom-wacht | twee keer per dag | kan vandaag geen meetings zien; de koppeling mag alleen chat versturen. Zoom-account: info@h-invest.be |
+| communicatie-bundelaar | 07:20 | de gesprekkentabel bevat vandaag ook nieuwsbrieven en facturen; dat maakt het beeld troebel |
+| calendly-wacht | werkdagen 07:15 | hij bewaakt Calendly, ik de agenda waarin geboekt wordt |
+| commandocentrum | op de agenda-impuls | ik lever de afspraak, hij de opdracht |
+| regisseur | doorlopend | wat ik bij een collega wil aankaarten, gaat via hem |
+
+**Validatie van afspraken (ontworpen, nog niet gebouwd)**
+
+de Agendawacht zet het vinkje en levert de plankant; de Levenscoach vergelijkt en zoekt patronen; de Dagbundelaar stelt de avondvraag.
+
+| soort afspraak | bewijs |
+| --- | --- |
+| online | Fathom-opname die de afspraak overlapt |
+| buiten | locatie binnen de straal van het adres, of een Plaud-opname, of een foto met tijd en plaats |
+| intern ter plaatse | locatie op het kantooradres |
+| privé en Lara | alleen locatie, en dat gaat nooit naar een afdeling |
+
+Geweest is geweest: één bewijs binnen het tijdvak volstaat, geen percentages. Een vinkje of een kruisje voor de titel, maar alleen als er geen externe gast op de afspraak staat. bij een afspraak met een klant stuurt google anders een wijzigingsmail; dan blijft de titel ongemoeid en staat het merkteken op het bord.
+Bij een interne afspraak hoort de naam van de collega, getoetst aan kern.persoon, zodat telbaar wordt wie een afspraak niet nakwam.
+
+Vaste redenen: klant niet gekomen, klant heeft verzet, ik ben het vergeten, file of te laat, geen zin, niet gedaan, collega had geen tijd, dubbel geboekt, ziek, toch doorgegaan, de tracker miste het.
+
 **Nog openstaand**
 
+- Zoom-scopes voor meetings bijzetten op het account info@h-invest.be; daarmee werkt zowel de Zoomwacht als de controle of Mehdi in de meeting zit (Mehdi, zodra het kan)
+- titels rechtzetten, week per week samen: 18 zonder firmacode en 42 interne zonder naam (Mehdi en Claude, wekelijks)
 - Zoom-app aanmaken (Server-to-Server OAuth) zodat de Zoomwacht kan zien of je in de meeting zit; daarna bouw ik hem (Mehdi, zodra het kan)
 - adresboek aanvullen: school Lara, zwemschool Lara, grootouders Lara, kantoor H-Architects (Mehdi, zodra het kan)
 - 11 afspraken zonder firmacode en 4 buitenafspraken zonder adres rechtzetten (Mehdi, lopend)
@@ -386,6 +446,7 @@ Nieuw: extra oproep van de Filewacht zodra de file je buffer opeet, met een buff
 
 **Beslissingen van Mehdi**
 
+- 2026-09-20: de validatie wordt niet een nieuwe agent: de Levenscoach vergelijkt al gepland tegenover gebeurd. De Agendawacht levert de plankant en zet het vinkje
 - 2026-09-20: bellen als de file meer dan de buffer van tien minuten kost, en een Zoomwacht die belt als Mehdi één minuut na de start niet in de meeting zit
 - 2026-09-20: herinneringen voor iedereen behalve intern, klanten dus ook. Een keten van ritten per dag in plaats van telkens terug naar huis. Een adresboek met vaste plaatsen. En een trigger die elke twaalf minuten kijkt of er iets gewijzigd is
 - 2026-09-20: de kleur zegt waarvóór hij ergens is, !! zegt dát hij naar buiten gaat. Rood is werk buiten. Lara en privé houden hun kleur ook buiten, maar krijgen wel reistijd. ?? is geel tot het bevestigd is. Een afspraak zonder code is een fout, geen uitzondering. WB, OPL, PLB, SCN, OPM en BS zijn per definitie buiten; EPB, VC, STA en SD niet
