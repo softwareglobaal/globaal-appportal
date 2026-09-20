@@ -71,10 +71,18 @@ def firmacodes():
 
 FIRMACODES = firmacodes()
 
-# Titels van voor 20-09-2026 dragen nog de oude afkortingen. Die blijf ik lezen en
-# reken ik om naar de officiele code, en ik meld hoeveel er nog zo staan.
-OUDE_CODES = {"HA": "HARC", "UNABO": "UNAB", "HB": "HARM", "HARMONIEBOUW": "HARM",
-              "CONTRAX": "CONT", "ENERGIE": "ENEF", "TKN": "TKNB", "ELEVAIT": "ELEV"}
+# Twee soorten codes, allebei juist, elk met hun eigen bron:
+#   de AGENDACODE staat in de titel (HA, UNABO, ELEVAIT, TKN). Bron: het document
+#   'agenda afspraken met Nova.docx'. Dat is volgens mijn werkwijze de enige bron
+#   voor titels, dus deze codes zijn niet oud en horen niet vervangen te worden.
+#   de FIRMACODE is de vierletterige code van organisatie.globaal.be (HARC, UNAB,
+#   ELEV, TKNB). Bron: het schema kern. Die gebruik ik intern, om een afspraak aan
+#   een firma en een afdeling te koppelen.
+# Ik vertaal tussen die twee, ik vervang nooit de ene door de andere in een titel.
+# Fout gemeten op 20-09-2026: ik meldde 28 titels als "oude firmacode" die
+# rechtgezet moest worden. Dat advies was verkeerd om en is weggehaald.
+AGENDACODE_NAAR_FIRMA = {"HA": "HARC", "UNABO": "UNAB", "HB": "HARM", "HARMONIEBOUW": "HARM",
+                         "CONTRAX": "CONT", "ENERGIE": "ENEF", "TKN": "TKNB", "ELEVAIT": "ELEV"}
 
 # PRIVE is geen firma maar hoort wel in een titel te mogen staan.
 NIET_FIRMA = {"PRIVE": "privé van Mehdi"}
@@ -109,7 +117,7 @@ AGENDA_VASTE_KLEUR = {
 # evengoed online.
 BUITEN_TYPES = {"WB", "OPL", "PLB", "SCN", "OPM", "BS"}
 
-ALLE_CODES = sorted(set(FIRMACODES) | set(OUDE_CODES) | set(NIET_FIRMA), key=len, reverse=True)
+ALLE_CODES = sorted(set(FIRMACODES) | set(AGENDACODE_NAAR_FIRMA) | set(NIET_FIRMA), key=len, reverse=True)
 CODE_RE = re.compile(r"\[(" + "|".join(ALLE_CODES) + r")(?:-(KB|PB|KO|PO|IN))?\]", re.I)
 
 
@@ -139,11 +147,11 @@ def lees_titel(titel):
     m = CODE_RE.search(t)
     if m:
         gevonden = m.group(1).upper()
-        uit["firma"] = OUDE_CODES.get(gevonden, gevonden)
-        uit["oude_code"] = gevonden if gevonden in OUDE_CODES else ""
+        uit["firma"] = AGENDACODE_NAAR_FIRMA.get(gevonden, gevonden)
+        uit["agendacode"] = gevonden if gevonden in AGENDACODE_NAAR_FIRMA else ""
         uit["soort"] = (m.group(2) or "").upper()
     else:
-        uit["oude_code"] = ""
+        uit["agendacode"] = ""
     # eerst !! en ?? weg, dan de naam vooraan: anders bleef bij "!! Mehdi: BS ..." de naam staan en werd de
     # dienstcode niet gelezen (klant droeg "Mehdi:" mee; gezien in het Commandocentrum, 16-09-2026)
     rest = CODE_RE.sub("", t).replace("!!", "").replace("??", "")
@@ -766,26 +774,10 @@ def main():
         if niet_conform:
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(niet_conform)} afspraken zonder code ([HA-KB] enz.)",
                           "uniek": f"agenda-conventie:{vandaag}", "inhoud": "\n".join("- " + x for x in niet_conform[:40])})
-        oud_code = []
-        for a in items:
-            if a.get("fout"):
-                continue
-            info = lees_titel(a.get("titel", ""))
-            if info.get("oude_code"):
-                oud_code.append(f"{a['start'][:16]} [{info['oude_code']} -> {info['firma']}] {a.get('titel','')[:60]}")
-        if oud_code:
-            klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
-                          "titel": f"{len(oud_code)} titels met een oude firmacode",
-                          "uniek": f"agenda-oudecode:{vandaag}",
-                          "inhoud": "De officiele codes komen van organisatie.globaal.be. Ik lees de oude "
-                                    "nog wel, maar ze horen rechtgezet te worden.\n"
-                                    + "\n".join("- " + x for x in oud_code[:40])})
-            ag.log(f"dag {vandaag}", "bevinding", f"{len(oud_code)} titels met een oude firmacode",
-                   "\n".join(oud_code[:60]))
         onvolledig = onvolledige_afspraken(items, vandaag)
         if onvolledig:
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(onvolledig)} afspraken zonder projectnummer of adres",
-                          "uniek": f"agenda-onvolledig:{vandaag}:{len(onvolledig)}", "inhoud": "\n".join("- " + x for x in onvolledig[:40])})
+                          "uniek": f"agenda-onvolledig:{vandaag}", "inhoud": "\n".join("- " + x for x in onvolledig[:40])})
         uit = ag.klaarzet(klaar)
         dag_grens = DAG_ARG or (vandaag if ALLEEN_VANDAAG else None)
         rg, ral, rgeen, rfout, rregels = reistijd_zetten(items, dag_grens)
@@ -797,7 +789,7 @@ def main():
         bots = [b for b in botsingen(items) if b[:10] >= vandaag]
         if bots:
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(bots)} botsende afspraken in de komende week",
-                          "uniek": f"agenda-botsing:{vandaag}:{len(bots)}", "inhoud": "\n".join("- " + b for b in bots)}])
+                          "uniek": f"agenda-botsing:{vandaag}", "inhoud": "\n".join("- " + b for b in bots)}])
             ag.log(f"dag {vandaag}", "bevinding", f"{len(bots)} botsende afspraken", "\n".join(bots))
         kg, kgoed, kgeen, kfout, kvast = kleuren_zetten(items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"kleuren: {kg} gezet, {kgoed} klopten al, {kvast} op een agenda met vaste kleur, {kgeen} ZONDER CODE (fout), {kfout} niet gelukt",
@@ -830,9 +822,6 @@ def main():
         if niet_conform:
             noden.append({"tekst": "Afspraken zonder firmacode in de titel: rechtzetten, anders krijgen ze geen kleur",
                           "wie": "mehdi"})
-        if oud_code:
-            noden.append({"tekst": "Titels met een oude firmacode: omzetten naar de code van organisatie.globaal.be",
-                          "wie": "mehdi"})
         if onvolledig:
             noden.append({"tekst": "Buitenafspraken zonder adres: zonder adres kan ik geen reistijd berekenen",
                           "wie": "mehdi"})
@@ -854,7 +843,7 @@ def main():
                           "wie": "mehdi"})
         ag.hartslag("waakt", taak="agenda in het oog",
                     detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; "
-                           f"{len(niet_conform)} zonder code; {len(oud_code)} met een oude code; "
+                           f"{len(niet_conform)} zonder code; "
                            f"{len(onvolledig)} zonder adres",
                     nood=noden)
     except Exception as e:  # noqa: BLE001
