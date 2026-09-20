@@ -164,12 +164,33 @@ if me:
     toets("boekingen zonder dubbele bezetting", "GOED" if bots == 0 else "LET OP",
           f"{len(boek)} boekingen, {bots} botsen")
 
-print("\n6. TITELS")
+print("\n6. TITELS EN ADRESSEN")
 items = A.afspraken(van_dagen=0, tot_dagen=30)
-zonder = [a for a in items if not a.get("fout") and not W.CODE_RE.search(a.get("titel", ""))
-          and "reistijd" not in a.get("titel", "").lower()]
-toets("titels met een firmacode", "GOED" if not zonder else "LET OP",
+zonder, geen_adres = [], []
+for a in items:
+    if a.get("fout") or a.get("hele_dag") or a.get("kalender", "").startswith("en.be#"):
+        continue
+    i = W.lees_titel(a["titel"])
+    if a["kalender"] in W.AGENDA_VASTE_KLEUR or i["reistijd"]:
+        continue
+    if not i.get("firma"):
+        zonder.append(f"{a['start'][:16]} {a['titel'][:60]}")
+        continue
+    if i["buiten"] or i["soort"] in ("PB", "KB"):
+        adres = a.get("locatie") or ""
+        if not adres or adres.lower().startswith("http"):
+            geen_adres.append(f"{a['start'][:16]} {a['titel'][:60]}")
+
+# Mandaat van Mehdi, 20-09-2026: een afspraak kan niet kleurloos zijn en buiten kan
+# niet zonder adres. Allebei zijn dit fouten, geen aandachtspunten.
+toets("elke afspraak heeft een firmacode", "GOED" if not zonder else "FOUT",
       f"{len(zonder)} zonder code in de komende dertig dagen")
+for r in zonder[:20]:
+    print(f"          {r}")
+toets("elke buitenafspraak heeft een adres", "GOED" if not geen_adres else "FOUT",
+      f"{len(geen_adres)} buiten zonder adres")
+for r in geen_adres[:20]:
+    print(f"          {r}")
 
 print(f"\n{goed} goed, {letop} let op, {fout} fout\n")
 sys.exit(1 if fout else 0)

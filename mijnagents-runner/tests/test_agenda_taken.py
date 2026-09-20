@@ -51,26 +51,41 @@ check("soorten gelijk", taken["titelconventie"]["soorten"] == W.SOORT)
 check("types gelijk", taken["titelconventie"]["types"] == W.TYPES)
 
 
-# de kleurregels uit de JSON naspelen op de echte functie
+# de kleurregels naspelen op de echte functie
+WERK = "mehdiprivewerkagenda@gmail.com"
 proeven = [
-    ({"kalender": list(W.KALENDERS)[0]},
-     {"reistijd": True, "buiten": False, "onzeker": False, "soort": ""}, "11"),
-    ({"kalender": list(W.KALENDERS)[0]},
-     {"reistijd": False, "buiten": True, "onzeker": False, "soort": "KB"}, "11"),
-    ({"kalender": list(W.KALENDERS)[0]},
-     {"reistijd": False, "buiten": False, "onzeker": True, "soort": "PO"}, "5"),
-    ({"kalender": list(W.KALENDERS)[0]},
-     {"reistijd": False, "buiten": False, "onzeker": False, "soort": "PO"}, "6"),
-    ({"kalender": list(W.KALENDERS)[0]},
-     {"reistijd": False, "buiten": False, "onzeker": False, "soort": "KO"}, "7"),
-    ({"kalender": list(W.KALENDERS)[0]},
-     {"reistijd": False, "buiten": False, "onzeker": False, "soort": "IN"}, "10"),
-    ({"kalender": list(W.KALENDERS)[0]},
-     {"reistijd": False, "buiten": False, "onzeker": False, "soort": ""}, ""),
+    (WERK, "Mehdi: !! [HARC-KB] WB 2310 - werf, Dorpstraat 5", "11", "rood, buiten voor het werk"),
+    (WERK, "Mehdi: [HARC-KB] WB 2310 - werf zonder uitroeptekens", "11", "WB is per definitie buiten"),
+    (WERK, "Mehdi: ?? [HARC-PB] PLB 2311 - nog niet vast", "5", "geel zolang het niet bevestigd is"),
+    (WERK, "Mehdi: [HARC-KO] klant online", "7", "blauw"),
+    (WERK, "Mehdi: [UNAB-PO] prospect online", "6", "oranje"),
+    (WERK, "Mehdi: [ELEV-IN] intern", "10", "groen"),
+    (WERK, "Mehdi: [UNAB-KO] EPB online", "7", "EPB is niet automatisch buiten"),
+    (WERK, "Mehdi: !! [UNAB-KO] VC op de werf, Kerkstraat 1", "11", "met !! wel buiten"),
+    (WERK, "Mehdi: afspraak zonder code", "", "geen kleur, dat is een fout"),
 ]
-for a, info, verwacht in proeven:
-    uit = W.kleur_gewenst(a, info)
-    check(f"kleur voor {info} is {verwacht or 'geen'}", uit == verwacht, f"kreeg {uit}")
+for kal, titel, verwacht, waarom in proeven:
+    i = W.lees_titel(titel)
+    uit = W.kleur_gewenst({"kalender": kal, "titel": titel}, i)
+    check(f"{waarom}: {titel[:40]}", uit == verwacht, f"kreeg {uit or 'geen'}, verwacht {verwacht or 'geen'}")
+
+for kal in W.AGENDA_VASTE_KLEUR:
+    i = W.lees_titel("!! [PRIVE] iets buiten, Kerkstraat 1")
+    check(f"vaste agendakleur blijft: {W.AGENDA_VASTE_KLEUR[kal]['naam']}",
+          W.kleur_gewenst({"kalender": kal, "titel": "x"}, i) == "")
+    check(f"maar buiten telt wel mee: {W.AGENDA_VASTE_KLEUR[kal]['naam']}", i["buiten"])
+
+for ty in W.BUITEN_TYPES:
+    i = W.lees_titel(f"Mehdi: [HARC-KB] {ty} 1234 - proef")
+    check(f"{ty} is per definitie buiten", i["buiten"])
+for ty in ("EPB", "VC", "STA", "SD"):
+    i = W.lees_titel(f"Mehdi: [HARC-KO] {ty} 1234 - proef")
+    check(f"{ty} is niet automatisch buiten", not i["buiten"])
+
+check("de diensten in de JSON kloppen met de code",
+      sorted(taken["buiten"]["diensten_altijd_buiten"]) == sorted(W.BUITEN_TYPES))
+check("de reistijdbuffer in de JSON klopt", taken["reistijd"]["buffer_minuten"] == W.BUFFER_MIN)
+check("de dagstop op Google Routes klopt", taken["reistijd"]["dagstop"]["aantal"] == W.ROUTES_DAGLIMIET)
 
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())

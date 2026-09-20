@@ -244,7 +244,7 @@ staan nog negen geboekte klantafspraken, de laatste op 29-09 om 20:00. Maak je d
 koppeling eerder los of hernoem je die agenda's naar ZZ ARCHIEF, dan werken de
 annuleer- en verzetlinks van die klanten niet meer en negeer ik die afspraken.
 
-## De afspraken op een rij (versie 1.2, 2026-09-20)
+## De afspraken op een rij (versie 1.4, 2026-09-20)
 
 Dit staat ook als machineleesbaar bestand in `werkwijze/agenda-taken.json`.
 `tests/test_agenda_taken.py` faalt zodra de code en dat bestand uit elkaar lopen,
@@ -300,17 +300,46 @@ op wat er het laatst gelezen is.
 
 Voorbeeld: `Mehdi: !! [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen`
 
-**Kleuren**, de eerste regel die past wint
+**Kleuren**
 
-| wanneer | kleur |
-| --- | --- |
-| agenda is Lara | flamingo, roze |
-| reistijdblok of !! buiten | tomaat, rood |
-| ?? niet bevestigd | banaan, geel |
-| soort PO of PB, prospect | mandarijn, oranje |
-| soort KO, klant online | pauw, blauw |
-| soort IN, intern | basilicum, groen |
-| titel zonder code | niets doen, kleur blijft |
+de kleur zegt waarvóór Mehdi ergens is, de twee uitroeptekens zeggen dát hij naar buiten gaat. Dat zijn twee verschillende dingen. Een afspraak kan nooit kleurloos zijn: ze is werk, privé of Lara.
+
+Twee agenda's houden altijd hun eigen kleur, ook buiten:
+
+| agenda | kleur | code |
+| --- | --- | --- |
+| Lara | flamingo roze | `#f691b2` |
+| prive agenda Mehdi | zwart | `#000000` |
+
+Op de werkagenda's beslist de titel, de eerste regel die past wint:
+
+| | kleur | wanneer |
+| --- | --- | --- |
+| 1 | tomaat, rood | reistijdblok |
+| 2 | FOUT, hij zet geen kleur en meldt het | geen firmacode in de titel |
+| 3 | banaan, geel | ?? nog niet bevestigd |
+| 4 | tomaat, rood | buiten: !! of een dienst die per definitie buiten is, of soort KB of PB |
+| 5 | pauw, blauw | soort KO, klant online |
+| 6 | mandarijn, oranje | soort PO, prospect online |
+| 7 | basilicum, groen | soort IN, intern |
+
+**Buiten**
+
+twee uitroeptekens vooraan, of een dienst die per definitie buiten gebeurt, of soort KB of PB. Diensten die per definitie buiten gebeuren:
+BS, OPL, OPM, PLB, SCN, WB. Niet automatisch buiten, daar hoort `!!` bij
+als het toch buiten is: EPB, VC, STA, SD.
+
+Lara en de privé-agenda. Die houden hun kleur, maar krijgen wel reistijd. elke buitenafspraak moet een adres hebben, anders kan de rijtijd niet berekend worden. Ontbreekt het, dan is dat een fout. twee vraagtekens betekenen nog niet bevestigd. Zolang die er staan is de afspraak geel; haalt Mehdi ze weg, dan wordt ze vanzelf rood.
+
+**Reistijd**
+
+elke buitenafspraak krijgt een blok heen en een blok terug, rood, op dezelfde agenda, vanaf thuis, of vanaf de vorige buitenafspraak van die dag. Thuisbasis: Herfstlaan 65, 3010 Leuven.
+De rijtijd komt van Google Routes API met het echte verkeer op het vertrekuur (TRAFFIC_AWARE_OPTIMAL), plus 10 minuten buffer,
+naar boven op vijf minuten. bestaat er al een reistijdblok binnen drie uur voor of na, dan maakt hij er geen tweede.
+
+Er staat een harde dagstop van 100 aanroepen op de betaalde
+Google-sleutel: Google laat de dagquota van de Routes API niet verlagen, dus houdt de agent de teller zelf bij. Honderd per dag blijft ruim onder de 5.000 gratis per maand. Bij dat plafond valt hij terug op
+gratis routering (OSRM) maal een spitsfactor, 1,6 tussen 07:00 en 09:30, en het komt op het bord.
 
 **Herinneringen.** alleen prospecten van HA, UNABO en TKN: PO vijf minuten vooraf, PB dertig minuten vooraf. Geen melding voor intern, klanten, terugkerende afspraken, reistijd, hele dag, prive.
 
@@ -333,6 +362,7 @@ Voorbeeld: `Mehdi: !! [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800
 
 **Nog openstaand**
 
+- 11 afspraken zonder firmacode en 4 buitenafspraken zonder adres rechtzetten (Mehdi, lopend)
 - 28 titels dragen nog een oude firmacode; de agent leest ze wel en meldt ze (Mehdi of zijn planners, lopend)
 - rechten op mehdi werk agenda regelen per collega, wie plant krijgt schrijfrecht (Shaniel, morgen)
 - bericht aan de collega's verspreiden (Shaniel, morgen)
@@ -342,6 +372,8 @@ Voorbeeld: `Mehdi: !! [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800
 
 **Beslissingen van Mehdi**
 
+- 2026-09-20: de kleur zegt waarvóór hij ergens is, !! zegt dát hij naar buiten gaat. Rood is werk buiten. Lara en privé houden hun kleur ook buiten, maar krijgen wel reistijd. ?? is geel tot het bevestigd is. Een afspraak zonder code is een fout, geen uitzondering. WB, OPL, PLB, SCN, OPM en BS zijn per definitie buiten; EPB, VC, STA en SD niet
+- 2026-09-20: Lara en de privé-agenda krijgen hun kleur op de agenda zelf, roze en zwart. De agent zet daar geen kleur per afspraak meer en controleert alleen of het nog klopt
 - 2026-09-20: alle afkortingen en namen komen van organisatie.globaal.be; de agenda-codes zijn daarop omgezet: HA wordt HARC, UNABO wordt UNAB, HB wordt HARM, CONTRAX wordt CONT, TKN wordt TKNB, ELEVAIT wordt ELEV, ENERGIE wordt ENEF
 - 2026-09-20: Harmoniebouw gaat op archief, nul afspraken in twaalf maanden
 - 2026-09-20: abigailqoppa en scanningenstaco krijgen geen schrijfrecht op Werk, zij plannen niet meer voor Mehdi

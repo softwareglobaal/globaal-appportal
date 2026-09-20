@@ -103,6 +103,11 @@ AGENDA_VASTE_KLEUR = {
         {"naam": "prive agenda Mehdi", "kleur": "zwart", "achtergrond": "#000000", "agenda_kleurid": "8"},
 }
 
+# Diensten die per definitie buiten gebeuren; daar hoeft Mehdi geen !! meer bij te
+# typen. Beslist 20-09-2026. EPB, VC, STA en SD staan er bewust niet bij: die kunnen
+# evengoed online.
+BUITEN_TYPES = {"WB", "OPL", "PLB", "SCN", "OPM", "BS"}
+
 ALLE_CODES = sorted(set(FIRMACODES) | set(OUDE_CODES) | set(NIET_FIRMA), key=len, reverse=True)
 CODE_RE = re.compile(r"\[(" + "|".join(ALLE_CODES) + r")(?:-(KB|PB|KO|PO|IN))?\]", re.I)
 
@@ -146,6 +151,8 @@ def lees_titel(titel):
     if mt:
         uit["type"] = mt.group(1).upper()
         rest = rest[mt.end():].strip(" -")
+    if uit["type"] in BUITEN_TYPES:
+        uit["buiten"] = True
     mn = re.search(r"\b(\d{4,5})\b", rest)
     if mn:
         uit["nummer"] = mn.group(1)
@@ -266,19 +273,31 @@ ALLEEN_VANDAAG = "--vandaag" in sys.argv
 
 
 def kleur_gewenst(a, info):
+    """De kleur zegt waarvóór Mehdi ergens is; `!!` zegt dat hij naar buiten gaat.
+    Dat zijn twee verschillende dingen. Mandaat van Mehdi, 20-09-2026:
+
+    - Lara en de privé-agenda houden altijd hun eigen agendakleur, ook buiten.
+    - Op de werkagenda's: geel zolang `??`, daarna rood als het buiten is,
+      anders blauw voor klant online, oranje voor prospect online, groen voor intern.
+    - Een titel zonder code krijgt geen kleur en is een fout, geen uitzondering.
+    """
     if a.get("kalender", "") in AGENDA_VASTE_KLEUR:
-        return ""   # die agenda heeft een vaste kleur; per afspraak niets zetten
-    if info["reistijd"] or info["buiten"]:
+        return ""   # die agenda heeft een vaste kleur, per afspraak niets zetten
+    if info["reistijd"]:
         return "11"
+    if not info.get("firma"):
+        return ""   # geen code: fout, wordt gemeld
     if info["onzeker"]:
         return "5"
-    if info["soort"] in ("PO", "PB"):
-        return "6"
+    if info["buiten"] or info["soort"] in ("PB", "KB"):
+        return "11"
     if info["soort"] == "KO":
         return "7"
+    if info["soort"] == "PO":
+        return "6"
     if info["soort"] == "IN":
         return "10"
-    return ""   # titel zonder code: geen regel, kleur laten staan
+    return ""
 
 
 def kleuren_zetten(items, alleen_dag=None):
@@ -287,16 +306,19 @@ def kleuren_zetten(items, alleen_dag=None):
     veranderen en meld ik. Geeft (gezet, al_goed, geen_regel, fout)."""
     tok = agenda._toegang()
     nu_dag = datetime.now().date().isoformat()
-    gezet, goed, geen, fout = 0, 0, 0, 0
+    gezet, goed, geen, fout, vast = 0, 0, 0, 0, 0
     for a in items:
         if a["start"][:10] < nu_dag or a.get("kalender", "").startswith("en.be#"):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
             continue
+        if a.get("kalender", "") in AGENDA_VASTE_KLEUR:
+            vast += 1          # die agenda heeft een vaste kleur, hier hoort niets gezet
+            continue
         info = lees_titel(a["titel"])
         wens = kleur_gewenst(a, info)
         if not wens:
-            geen += 1
+            geen += 1          # geen code in de titel: dat is een fout, geen uitzondering
             continue
         if (a.get("_kleur") or "") == wens:
             goed += 1
@@ -307,7 +329,7 @@ def kleuren_zetten(items, alleen_dag=None):
         except Exception as e:  # noqa: BLE001
             fout += 1
             print("kleur mislukt:", a["titel"][:40], type(e).__name__, file=sys.stderr)
-    return gezet, goed, geen, fout
+    return gezet, goed, geen, fout, vast
 
 
 # Reistijd, taak van de Agendawacht. Thuisbasis en bufferminuten in de omgeving.
@@ -491,7 +513,7 @@ def reistijd_zetten(items, alleen_dag=None):
         bron_adres = "agenda"
         if not fysiek and info["nummer"] and info["nummer"] in projecten:
             adres, fysiek, bron_adres = projecten[info["nummer"]]["adres"], True, "projectmap"
-        if info["reistijd"] or not (info["buiten"] or (info["soort"] in ("PB", "KB") and fysiek)):
+        if info["reistijd"] or not (info["buiten"] or info["soort"] in ("PB", "KB")):
             continue
         a["_bron_adres"] = bron_adres
         if fysiek and bron_adres == "agenda" and info["nummer"] in projecten:
@@ -747,8 +769,8 @@ def main():
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(bots)} botsende afspraken in de komende week",
                           "uniek": f"agenda-botsing:{vandaag}:{len(bots)}", "inhoud": "\n".join("- " + b for b in bots)}])
             ag.log(f"dag {vandaag}", "bevinding", f"{len(bots)} botsende afspraken", "\n".join(bots))
-        kg, kgoed, kgeen, kfout = kleuren_zetten(items, dag_grens)
-        ag.log(f"dag {vandaag}", "schrijf", f"kleuren: {kg} gezet, {kgoed} klopten al, {kgeen} zonder regel (titel zonder code), {kfout} niet gelukt (leesrecht)",
+        kg, kgoed, kgeen, kfout, kvast = kleuren_zetten(items, dag_grens)
+        ag.log(f"dag {vandaag}", "schrijf", f"kleuren: {kg} gezet, {kgoed} klopten al, {kvast} op een agenda met vaste kleur, {kgeen} ZONDER CODE (fout), {kfout} niet gelukt",
                "\n".join(f"{a['start'][:16]} {a['titel'][:60]} -> {KLEURNAAM.get(kleur_gewenst(a, lees_titel(a['titel'])), 'laten staan')}" for a in items if a['start'][:10] >= vandaag and (not dag_grens or a['start'][:10] == dag_grens)))
         gezet, al, weg, fout_h = herinneringen_zetten(items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"herinneringen (alleen prospecten HA/UNABO/TKN, PO en PB): {gezet} gezet (online {ONLINE_MIN} min, buiten {BUITEN_MIN} min), {al} hadden er al een, {weg} weggehaald van intern of terugkerend, {fout_h} mislukt",

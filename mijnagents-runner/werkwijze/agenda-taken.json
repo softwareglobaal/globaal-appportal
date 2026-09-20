@@ -1,5 +1,5 @@
 {
- "versie": "1.3",
+ "versie": "1.4",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -123,8 +123,9 @@
   }
  },
  "kleuren": {
+  "grondregel": "de kleur zegt waarvóór Mehdi ergens is, de twee uitroeptekens zeggen dát hij naar buiten gaat. Dat zijn twee verschillende dingen. Een afspraak kan nooit kleurloos zijn: ze is werk, privé of Lara.",
   "vaste_agendakleuren": {
-   "waarom": "een agenda met één aard krijgt zijn kleur op de agenda zelf. De agent zet daar geen kleur per afspraak en haalt er een weg, want die overschrijft de agendakleur. Hij controleert alleen of de agendakleur nog klopt.",
+   "waarom": "Lara en de privé-agenda houden altijd hun eigen kleur, ook bij een activiteit buiten. De agent zet daar geen kleur per afspraak en haalt er een weg die er staat.",
    "agendas": [
     {
      "naam": "Lara",
@@ -141,23 +142,28 @@
    ]
   },
   "per_afspraak": {
-   "waar": "alleen in mehdi werk agenda en de firma-agenda's, want die mengen firma's en soorten",
+   "waar": "alleen op de werkagenda's",
    "volgorde": "de eerste regel die past wint",
    "regels": [
     {
-     "wanneer": "reistijdblok of !! buiten",
+     "wanneer": "reistijdblok",
      "kleur": "11",
      "naam": "tomaat, rood"
     },
     {
-     "wanneer": "?? niet bevestigd",
+     "wanneer": "geen firmacode in de titel",
+     "kleur": "",
+     "naam": "FOUT, hij zet geen kleur en meldt het"
+    },
+    {
+     "wanneer": "?? nog niet bevestigd",
      "kleur": "5",
      "naam": "banaan, geel"
     },
     {
-     "wanneer": "soort PO of PB, prospect",
-     "kleur": "6",
-     "naam": "mandarijn, oranje"
+     "wanneer": "buiten: !! of een dienst die per definitie buiten is, of soort KB of PB",
+     "kleur": "11",
+     "naam": "tomaat, rood"
     },
     {
      "wanneer": "soort KO, klant online",
@@ -165,14 +171,14 @@
      "naam": "pauw, blauw"
     },
     {
+     "wanneer": "soort PO, prospect online",
+     "kleur": "6",
+     "naam": "mandarijn, oranje"
+    },
+    {
      "wanneer": "soort IN, intern",
      "kleur": "10",
      "naam": "basilicum, groen"
-    },
-    {
-     "wanneer": "titel zonder code",
-     "kleur": "",
-     "naam": "niets doen, kleur blijft"
     }
    ]
   }
@@ -197,6 +203,16 @@
    "naam": "nooit verplaatsen",
    "hoe": "hij verandert alleen kleur, herinnering en reistijd, nooit de agenda van een afspraak",
    "test": "afspraak in de werkwijze, geen code"
+  },
+  {
+   "naam": "geen afspraak zonder kleur",
+   "hoe": "een titel zonder firmacode krijgt geen kleur en telt als fout in de controle",
+   "test": "controle_agenda.py, onderdeel 6"
+  },
+  {
+   "naam": "buiten kan niet zonder adres",
+   "hoe": "een buitenafspraak zonder adres telt als fout, want dan kan de rijtijd niet berekend worden",
+   "test": "controle_agenda.py, onderdeel 6"
   }
  ],
  "taken": [
@@ -254,6 +270,11 @@
  },
  "openstaand": [
   {
+   "wat": "11 afspraken zonder firmacode en 4 buitenafspraken zonder adres rechtzetten",
+   "wie": "Mehdi",
+   "wanneer": "lopend"
+  },
+  {
    "wat": "28 titels dragen nog een oude firmacode; de agent leest ze wel en meldt ze",
    "wie": "Mehdi of zijn planners",
    "wanneer": "lopend"
@@ -287,6 +308,10 @@
  "beslissingen": [
   {
    "datum": "2026-09-20",
+   "wat": "de kleur zegt waarvóór hij ergens is, !! zegt dát hij naar buiten gaat. Rood is werk buiten. Lara en privé houden hun kleur ook buiten, maar krijgen wel reistijd. ?? is geel tot het bevestigd is. Een afspraak zonder code is een fout, geen uitzondering. WB, OPL, PLB, SCN, OPM en BS zijn per definitie buiten; EPB, VC, STA en SD niet"
+  },
+  {
+   "datum": "2026-09-20",
    "wat": "Lara en de privé-agenda krijgen hun kleur op de agenda zelf, roze en zwart. De agent zet daar geen kleur per afspraak meer en controleert alleen of het nog klopt"
   },
   {
@@ -310,5 +335,39 @@
   "waar": "organisatie.globaal.be, tabel kern.firma in de appportal-database",
   "hoe": "de agent leest ze bij elke ronde via organisatie.firmacodes(); er wordt nergens een tweede lijst bijgehouden",
   "regel": "elke firma heeft overal dezelfde code van vier letters, ook in agenda-titels"
+ },
+ "buiten": {
+  "wat_bepaalt_het": "twee uitroeptekens vooraan, of een dienst die per definitie buiten gebeurt, of soort KB of PB",
+  "diensten_altijd_buiten": [
+   "BS",
+   "OPL",
+   "OPM",
+   "PLB",
+   "SCN",
+   "WB"
+  ],
+  "diensten_niet_automatisch": [
+   "EPB",
+   "VC",
+   "STA",
+   "SD"
+  ],
+  "geldt_ook_voor": "Lara en de privé-agenda. Die houden hun kleur, maar krijgen wel reistijd.",
+  "adres_verplicht": "elke buitenafspraak moet een adres hebben, anders kan de rijtijd niet berekend worden. Ontbreekt het, dan is dat een fout.",
+  "vraagtekens": "twee vraagtekens betekenen nog niet bevestigd. Zolang die er staan is de afspraak geel; haalt Mehdi ze weg, dan wordt ze vanzelf rood."
+ },
+ "reistijd": {
+  "regel": "elke buitenafspraak krijgt een blok heen en een blok terug, rood, op dezelfde agenda",
+  "van_waar": "vanaf thuis, of vanaf de vorige buitenafspraak van die dag",
+  "thuis": "Herfstlaan 65, 3010 Leuven",
+  "rijtijd": "Google Routes API met het echte verkeer op het vertrekuur (TRAFFIC_AWARE_OPTIMAL)",
+  "buffer_minuten": 10,
+  "afronding": "naar boven op vijf minuten",
+  "dagstop": {
+   "aantal": 100,
+   "waarom": "Google laat de dagquota van de Routes API niet verlagen, dus houdt de agent de teller zelf bij. Honderd per dag blijft ruim onder de 5.000 gratis per maand",
+   "terugval": "gratis routering (OSRM) maal een spitsfactor, 1,6 tussen 07:00 en 09:30"
+  },
+  "dubbel": "bestaat er al een reistijdblok binnen drie uur voor of na, dan maakt hij er geen tweede"
  }
 }
