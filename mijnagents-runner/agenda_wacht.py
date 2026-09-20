@@ -416,22 +416,49 @@ def _cache_bewaren(c):
     json.dump(c, open(ADRES_CACHE, "w"), ensure_ascii=False)
 
 
-def coord(adres, cache):
+def _nominatim(params):
     import time
     import urllib.parse
     import urllib.request
-    sleutel = adres.strip().lower()
-    if sleutel in cache:
-        return cache[sleutel]
     time.sleep(1.1)
-    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({"q": adres, "format": "jsonv2", "limit": 1, "countrycodes": "be,nl"})
+    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(params)
     try:
-        d = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "MehdiAgents-agendawacht/1.0 (mch@h-architects.be)"}), timeout=20))
-        uit = [float(d[0]["lat"]), float(d[0]["lon"])] if d else None
+        d = json.load(urllib.request.urlopen(urllib.request.Request(
+            url, headers={"User-Agent": "MehdiAgents-agendawacht/1.0 (mch@h-architects.be)"}), timeout=20))
+        return [float(d[0]["lat"]), float(d[0]["lon"])] if d else None
     except Exception:  # noqa: BLE001
-        uit = None
-    cache[sleutel] = uit
-    return uit
+        return None
+
+
+def coord(adres, cache):
+    """Adres naar coordinaten. Probeert meerdere schrijfwijzen, want een deelgemeente
+    zoals "3010 Kessel-Lo" kent Nominatim niet terwijl "3010 Leuven" wel lukt. Gezien
+    op 20-09-2026: daardoor kreeg het wekelijkse werfbezoek geen reistijd.
+    Een mislukking wordt niet blijvend onthouden; anders blijft hij voor altijd fout."""
+    sleutel = adres.strip().lower()
+    if cache.get(sleutel):
+        return cache[sleutel]
+
+    pogingen = [{"q": adres, "format": "jsonv2", "limit": 1, "countrycodes": "be,nl"}]
+    m = re.search(r"^(.*?),?\s*(\d{4})\s+([A-Za-zÀ-ÿ '\-]+)\s*$", adres.strip())
+    if m:
+        straat, post, gemeente = m.group(1).strip(" ,"), m.group(2), m.group(3).strip()
+        # gestructureerd zoeken: postcode telt, de naam van de deelgemeente niet
+        pogingen.append({"street": straat, "postalcode": post, "country": "Belgium",
+                         "format": "jsonv2", "limit": 1})
+        pogingen.append({"q": f"{straat}, {post}", "format": "jsonv2", "limit": 1,
+                         "countrycodes": "be,nl"})
+        pogingen.append({"q": f"{straat}, {gemeente}, België", "format": "jsonv2", "limit": 1,
+                         "countrycodes": "be,nl"})
+    for i, params in enumerate(pogingen):
+        uit = _nominatim(params)
+        if uit:
+            if i:
+                print(f"adres gevonden via poging {i + 1}: {adres}", file=sys.stderr)
+            cache[sleutel] = uit
+            return uit
+    cache.pop(sleutel, None)   # niet blijvend onthouden dat het mislukte
+    return None
 
 
 # Filefactor op de vrije rijtijd, per vertrekuur op een werkdag (Vlaanderen: ochtend- en
@@ -830,6 +857,18 @@ def main():
         dag_grens = DAG_ARG or (vandaag if ALLEEN_VANDAAG else None)
         rg, ral, rgeen, rfout, rregels = reistijd_zetten(items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"reistijd: {rg} blok(ken) gemaakt, {ral} bestonden al, {rgeen} zonder adres, {rfout} mislukt", "\n".join(rregels))
+        # Een rit die niet berekend raakte mag nooit alleen een cijfer zijn: dan ziet
+        # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
+        # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
+        zonder_rit = {"geen adres in de agenda": [], "adres niet gevonden": [], "rijtijd niet berekend": []}
+        for regel in rregels:
+            if "geen adres, geen reistijd" in regel:
+                zonder_rit["geen adres in de agenda"].append(regel.split(":")[0][:80])
+            elif "adres niet gevonden" in regel:
+                zonder_rit["adres niet gevonden"].append(regel[:110])
+            elif "rijtijd niet berekend" in regel:
+                zonder_rit["rijtijd niet berekend"].append(regel[:110])
+
         rooster = belrooster(items, vandaag)
         bellen.rooster_schrijven(rooster)
         ag.log(f"dag {vandaag}", "schrijf", f"belrooster: {len(rooster)} oproepen gepland (online {BEL_ONLINE_MIN} min vooraf, buiten op het vertrekmoment)",
@@ -867,6 +906,20 @@ def main():
         # Norm N10: een nood draagt geen aantal in zijn tekst, anders is elke ronde
         # formeel een nieuwe nood en sluit de lus nooit. Het aantal hoort in het detail.
         noden = []
+        # Een rit die niet berekend raakte mag nooit alleen een cijfer zijn, anders ziet
+        # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
+        # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
+        rit_signalen = []
+        for reden, rij in zonder_rit.items():
+            if not rij:
+                continue
+            rit_signalen.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
+                                 "titel": f"Buitenafspraak zonder reistijd: {reden}",
+                                 "uniek": f"agenda-reistijd-{reden[:18]}:{vandaag}",
+                                 "inhoud": "\n".join("- " + x for x in rij[:30])})
+            noden.append({"tekst": f"Buitenafspraken zonder reistijd, reden: {reden}", "wie": "mehdi"})
+        if rit_signalen:
+            ag.klaarzet(rit_signalen)
         titel_fouten = {}
         for a in items:
             if a.get("fout"):

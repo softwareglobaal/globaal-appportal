@@ -27,6 +27,10 @@ VOORUIT_MIN = 120      # zover vooruit kijken
 HERTEST_MIN = 20       # niet vaker dan dit per afspraak narekenen
 MAX_OPROEPEN = 2       # per afspraak per dag
 DROOG = "--droog" in sys.argv
+if DROOG:
+    # Een proefronde mag de betaalde Google-aanroepen niet opeten. Op 20-09-2026 stond
+    # de teller door mijn eigen proeven op 100 van 100 en viel alles terug op de filefactor.
+    W.ROUTES_KEY = ""
 
 
 def stand():

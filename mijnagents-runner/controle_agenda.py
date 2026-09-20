@@ -164,6 +164,7 @@ if me:
     toets("boekingen zonder dubbele bezetting", "GOED" if bots == 0 else "LET OP",
           f"{len(boek)} boekingen, {bots} botsen")
 
+_adrescache = W._cache_laden()
 print("\n6. TITELS EN ADRESSEN")
 items = A.afspraken(van_dagen=0, tot_dagen=30)
 per_fout, geen_adres = {}, []
@@ -176,9 +177,17 @@ for a in items:
     for reden in W.titelfouten(a, i):
         per_fout.setdefault(reden, []).append(f"{a['start'][:16]} {a['titel'][:58]}")
     if i["buiten"] or i["soort"] in ("PB", "KB"):
+        # Niet alleen kijken of er iets ingevuld staat: de vraag is of de agent er
+        # echt een rijtijd mee kan berekenen. Op 20-09-2026 stond "3010 Kessel-Lo"
+        # keurig in de agenda en kon er toch geen rit van gemaakt worden.
         adres = a.get("locatie") or ""
+        if (not adres or adres.lower().startswith("http")) and i["nummer"]:
+            pr = W.projectadressen.index().get(i["nummer"])
+            adres = pr["adres"] if pr else adres
         if not adres or adres.lower().startswith("http"):
-            geen_adres.append(f"{a['start'][:16]} {a['titel'][:58]}")
+            geen_adres.append(f"{a['start'][:16]} {a['titel'][:50]}  (geen adres)")
+        elif not W.coord(adres, _adrescache):
+            geen_adres.append(f"{a['start'][:16]} {a['titel'][:50]}  (adres niet om te zetten: {adres[:34]})")
 
 for reden in ("geen firmacode", "buiten zonder !!", "intern zonder naam van een collega"):
     rij = per_fout.get(reden, [])
@@ -187,7 +196,8 @@ for reden in ("geen firmacode", "buiten zonder !!", "intern zonder naam van een 
     for x in rij[:12]:
         print(f"          {x}")
 
-toets("elke buitenafspraak heeft een adres", "GOED" if not geen_adres else "FOUT",
+W._cache_bewaren(_adrescache)
+toets("elke buitenafspraak heeft een bruikbaar adres", "GOED" if not geen_adres else "FOUT",
       f"{len(geen_adres)} buiten zonder adres")
 for r in geen_adres[:20]:
     print(f"          {r}")
