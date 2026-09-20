@@ -36,17 +36,17 @@ check("de firmacodes komen uit organisatie.globaal.be",
       bool(bron) and taken["titelconventie"]["firmas"] == bron,
       f"bron heeft {len(bron)}, JSON heeft {len(taken['titelconventie']['firmas'])}")
 check("de agent gebruikt diezelfde codes", W.FIRMACODES == bron)
-check("elke oude code wijst naar een bestaande code",
-      all(v in bron for v in W.OUDE_CODES.values()),
-      str({k: v for k, v in W.OUDE_CODES.items() if v not in bron}))
+check("elke agendacode wijst naar een bestaande firma",
+      all(v in bron for v in W.AGENDACODE_NAAR_FIRMA.values()),
+      str({k: v for k, v in W.AGENDACODE_NAAR_FIRMA.items() if v not in bron}))
 check("elke afdeling op het bord hoort bij een bestaande code of is PRIVE",
       all(k in bron or k in W.NIET_FIRMA for k in W.FIRMA_AFDELING),
       str([k for k in W.FIRMA_AFDELING if k not in bron and k not in W.NIET_FIRMA]))
 for code in bron:
     check(f"de titelregel herkent [{code}]", bool(W.CODE_RE.search(f"Mehdi: [{code}-IN] proef")))
-for oudc, nieuwc in W.OUDE_CODES.items():
+for oudc, nieuwc in W.AGENDACODE_NAAR_FIRMA.items():
     d = W.lees_titel(f"Mehdi: [{oudc}-IN] proef")
-    check(f"[{oudc}] wordt gelezen als {nieuwc}", d["firma"] == nieuwc and d["oude_code"] == oudc)
+    check(f"[{oudc}] hoort bij firma {nieuwc}", d["firma"] == nieuwc and d["agendacode"] == oudc)
 check("soorten gelijk", taken["titelconventie"]["soorten"] == W.SOORT)
 check("types gelijk", taken["titelconventie"]["types"] == W.TYPES)
 
