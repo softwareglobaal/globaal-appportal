@@ -1,0 +1,761 @@
+{
+ "versie": "1.0",
+ "datum": "2026-09-20",
+ "waarover": "Elk project waar Mehdi naartoe gaat, met firma, nummer, adres en coordinaten. Gebouwd uit de agenda van de laatste twaalf maanden plus wat er vooruit staat, aangevuld met het adres uit de projectmap.",
+ "regels": {
+  "opname": "een project komt erin zodra er een afspraak met dat nummer in de agenda staat",
+  "opschonen": "geen afspraak meer in 6 maanden betekent eruit, zodat het register niet oeverloos wordt",
+  "architect": "nog niet in te vullen: geen enkele bron die ik kan lezen kent de architect per project (niet het dossiersysteem, niet Pipedrive, niet de mapnaam)"
+ },
+ "aantal": 50,
+ "verlopen_deze_ronde": [
+  "1930",
+  "2026",
+  "2229",
+  "2436",
+  "2477",
+  "2529",
+  "2554",
+  "2640",
+  "2800",
+  "5465",
+  "5518",
+  "5525",
+  "5597",
+  "8570"
+ ],
+ "projecten": [
+  {
+   "nummer": "2145",
+   "firma": "HARC",
+   "architect": "",
+   "adres": "Vertommensberg 9, 3010 Kessel-Lo",
+   "gemeente": "Kessel-Lo",
+   "coordinaten": [
+    50.8682281,
+    4.7501461
+   ],
+   "laatst_gezien": "2027-01-18",
+   "eerst_gezien": "2026-03-10",
+   "aantal_afspraken": 34,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2607",
+   "firma": "HARC",
+   "architect": "",
+   "adres": "Eksterstraat 58, 3370 Boutersem, België",
+   "gemeente": "Boutersem",
+   "coordinaten": [
+    50.8456683,
+    4.8264663
+   ],
+   "laatst_gezien": "2026-09-28",
+   "eerst_gezien": "2026-05-05",
+   "aantal_afspraken": 8,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2616",
+   "firma": "",
+   "architect": "",
+   "adres": "Stadskantoor, Professor Van Overstraetenplein 1, 3000 Leuven",
+   "gemeente": "Leuven",
+   "coordinaten": [
+    50.8800635,
+    4.716001
+   ],
+   "laatst_gezien": "2026-09-24",
+   "eerst_gezien": "2026-09-24",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2025",
+   "firma": "",
+   "architect": "",
+   "adres": "",
+   "gemeente": "",
+   "coordinaten": null,
+   "laatst_gezien": "2026-09-20",
+   "eerst_gezien": "2026-04-22",
+   "aantal_afspraken": 2,
+   "bron_adres": ""
+  },
+  {
+   "nummer": "2601",
+   "firma": "",
+   "architect": "",
+   "adres": "Ruisbroekstraat 11, 3360 Bierbeek, België",
+   "gemeente": "Bierbeek",
+   "coordinaten": [
+    50.8382458,
+    4.7526266
+   ],
+   "laatst_gezien": "2026-09-15",
+   "eerst_gezien": "2026-06-15",
+   "aantal_afspraken": 7,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2173",
+   "firma": "HARC",
+   "architect": "",
+   "adres": "Meerbeekstraat 36, 3071 Kortenberg, België",
+   "gemeente": "",
+   "coordinaten": [
+    50.8915722,
+    4.5881245
+   ],
+   "laatst_gezien": "2026-09-15",
+   "eerst_gezien": "2026-07-07",
+   "aantal_afspraken": 6,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2405",
+   "firma": "",
+   "architect": "",
+   "adres": "Eikblokstraat 72, 2100 Deurne",
+   "gemeente": "Deurne",
+   "coordinaten": [
+    51.2234769,
+    4.4633321
+   ],
+   "laatst_gezien": "2026-09-13",
+   "eerst_gezien": "2026-06-27",
+   "aantal_afspraken": 3,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2612",
+   "firma": "",
+   "architect": "",
+   "adres": "Tweegezusterslaan 16, 2100 Antwerpen, België",
+   "gemeente": "Deurne",
+   "coordinaten": [
+    51.2261741,
+    4.4738711
+   ],
+   "laatst_gezien": "2026-09-13",
+   "eerst_gezien": "2026-09-13",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2614",
+   "firma": "",
+   "architect": "",
+   "adres": "Bezelaervelden 8, 2830 Willebroek, België",
+   "gemeente": "Willebroek",
+   "coordinaten": [
+    51.0547388,
+    4.3754619
+   ],
+   "laatst_gezien": "2026-09-12",
+   "eerst_gezien": "2026-09-12",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2604",
+   "firma": "",
+   "architect": "",
+   "adres": "Van Espenstraat 1, 3120 Tremelo, België",
+   "gemeente": "Tremelo",
+   "coordinaten": [
+    50.9892074,
+    4.7243973
+   ],
+   "laatst_gezien": "2026-09-10",
+   "eerst_gezien": "2026-09-10",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2605",
+   "firma": "",
+   "architect": "",
+   "adres": "Van der Nootstraat 88, 3012 Leuven, België",
+   "gemeente": "Leuven",
+   "coordinaten": [
+    50.920116,
+    4.7099484
+   ],
+   "laatst_gezien": "2026-09-09",
+   "eerst_gezien": "2026-05-20",
+   "aantal_afspraken": 2,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2270",
+   "firma": "",
+   "architect": "",
+   "adres": "Schaliënstraat 10.4, 2000 Antwerpen",
+   "gemeente": "Antwerpen",
+   "coordinaten": [
+    51.2083893,
+    4.386134
+   ],
+   "laatst_gezien": "2026-09-07",
+   "eerst_gezien": "2026-08-29",
+   "aantal_afspraken": 2,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2610",
+   "firma": "HARC",
+   "architect": "",
+   "adres": "Leemputstraat 73, 2600 Antwerpen",
+   "gemeente": "Antwerpen",
+   "coordinaten": [
+    51.2015919,
+    4.4330489
+   ],
+   "laatst_gezien": "2026-09-07",
+   "eerst_gezien": "2026-06-19",
+   "aantal_afspraken": 3,
+   "bron_adres": "projectmap"
+  },
+  {
+   "nummer": "2530",
+   "firma": "",
+   "architect": "",
+   "adres": "Isabellalei 8, 2180 Antwerpen, België",
+   "gemeente": "Anwterpren",
+   "coordinaten": [
+    51.2876529,
+    4.4427904
+   ],
+   "laatst_gezien": "2026-08-30",
+   "eerst_gezien": "2026-08-21",
+   "aantal_afspraken": 2,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2465",
+   "firma": "",
+   "architect": "",
+   "adres": "Maurits Sabbelaan 44, 2020 Antwerpen, België",
+   "gemeente": "Antwerpen",
+   "coordinaten": [
+    51.1897711,
+    4.3727678
+   ],
+   "laatst_gezien": "2026-08-29",
+   "eerst_gezien": "2026-06-16",
+   "aantal_afspraken": 3,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "5520",
+   "firma": "HARC",
+   "architect": "",
+   "adres": "Korte Albertstraat 2, 2300 Turnhout",
+   "gemeente": "Turnhout",
+   "coordinaten": [
+    51.3285147,
+    4.9473672
+   ],
+   "laatst_gezien": "2026-08-25",
+   "eerst_gezien": "2026-08-25",
+   "aantal_afspraken": 1,
+   "bron_adres": "projectmap"
+  },
+  {
+   "nummer": "5517",
+   "firma": "HARC",
+   "architect": "",
+   "adres": "Brandstraat 18, 2221 Heist-op-den-Berg, België",
+   "gemeente": "",
+   "coordinaten": [
+    51.047791,
+    4.7894411
+   ],
+   "laatst_gezien": "2026-08-24",
+   "eerst_gezien": "2026-08-24",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "5603",
+   "firma": "",
+   "architect": "",
+   "adres": "Provinciebaan 20, 3110 Rotselaar, België",
+   "gemeente": "Rotselaar",
+   "coordinaten": [
+    50.9518284,
+    4.709699
+   ],
+   "laatst_gezien": "2026-08-22",
+   "eerst_gezien": "2026-06-25",
+   "aantal_afspraken": 5,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "5503",
+   "firma": "",
+   "architect": "",
+   "adres": "Guldenmouwstraat 6, 2800 Mechelen, België",
+   "gemeente": "Mechelen",
+   "coordinaten": [
+    51.0212952,
+    4.4803776
+   ],
+   "laatst_gezien": "2026-08-21",
+   "eerst_gezien": "2026-08-21",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2527",
+   "firma": "",
+   "architect": "",
+   "adres": "",
+   "gemeente": "",
+   "coordinaten": null,
+   "laatst_gezien": "2026-08-20",
+   "eerst_gezien": "2025-09-25",
+   "aantal_afspraken": 3,
+   "bron_adres": ""
+  },
+  {
+   "nummer": "2514",
+   "firma": "",
+   "architect": "",
+   "adres": "",
+   "gemeente": "",
+   "coordinaten": null,
+   "laatst_gezien": "2026-08-12",
+   "eerst_gezien": "2026-08-12",
+   "aantal_afspraken": 1,
+   "bron_adres": ""
+  },
+  {
+   "nummer": "2531",
+   "firma": "",
+   "architect": "",
+   "adres": "Mechelsesteenweg 757, 3020 Herent",
+   "gemeente": "Herent",
+   "coordinaten": [
+    50.9192488,
+    4.6504143
+   ],
+   "laatst_gezien": "2026-07-20",
+   "eerst_gezien": "2026-07-20",
+   "aantal_afspraken": 1,
+   "bron_adres": "projectmap"
+  },
+  {
+   "nummer": "2602",
+   "firma": "",
+   "architect": "",
+   "adres": "Bergstraat 46, 3010 Leuven",
+   "gemeente": "Leuven",
+   "coordinaten": [
+    50.9028672,
+    4.7282253
+   ],
+   "laatst_gezien": "2026-07-16",
+   "eerst_gezien": "2026-06-03",
+   "aantal_afspraken": 3,
+   "bron_adres": "projectmap"
+  },
+  {
+   "nummer": "46099",
+   "firma": "",
+   "architect": "",
+   "adres": "Lage Kaart 184, 2930 Brasschaat, België",
+   "gemeente": "",
+   "coordinaten": [
+    51.2985122,
+    4.47691
+   ],
+   "laatst_gezien": "2026-07-11",
+   "eerst_gezien": "2026-07-11",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2505",
+   "firma": "",
+   "architect": "",
+   "adres": "Aarschotsesteenweg 252, 3012 Wilsele",
+   "gemeente": "Wilsele",
+   "coordinaten": [
+    50.9064939,
+    4.7116877
+   ],
+   "laatst_gezien": "2026-07-08",
+   "eerst_gezien": "2026-07-08",
+   "aantal_afspraken": 1,
+   "bron_adres": "projectmap"
+  },
+  {
+   "nummer": "46076",
+   "firma": "",
+   "architect": "",
+   "adres": "",
+   "gemeente": "",
+   "coordinaten": null,
+   "laatst_gezien": "2026-07-08",
+   "eerst_gezien": "2026-07-08",
+   "aantal_afspraken": 1,
+   "bron_adres": ""
+  },
+  {
+   "nummer": "2300",
+   "firma": "",
+   "architect": "",
+   "adres": "",
+   "gemeente": "",
+   "coordinaten": null,
+   "laatst_gezien": "2026-07-07",
+   "eerst_gezien": "2025-11-17",
+   "aantal_afspraken": 2,
+   "bron_adres": ""
+  },
+  {
+   "nummer": "46081",
+   "firma": "",
+   "architect": "",
+   "adres": "Hoogkouter 41, 1653 Dworp",
+   "gemeente": "",
+   "coordinaten": [
+    50.7228896,
+    4.2953281
+   ],
+   "laatst_gezien": "2026-07-06",
+   "eerst_gezien": "2026-07-06",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "46096",
+   "firma": "",
+   "architect": "",
+   "adres": "Pieter Van Isackerlaan 24, 2100 Antwerpen",
+   "gemeente": "",
+   "coordinaten": [
+    51.2116256,
+    4.4578843
+   ],
+   "laatst_gezien": "2026-07-05",
+   "eerst_gezien": "2026-07-05",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2517",
+   "firma": "",
+   "architect": "",
+   "adres": "Korbeekdamstraat 17d, 3050 Oud-Heverlee, België",
+   "gemeente": "Oud-Heverlee",
+   "coordinaten": [
+    50.831519,
+    4.6574033
+   ],
+   "laatst_gezien": "2026-07-02",
+   "eerst_gezien": "2026-07-02",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2209",
+   "firma": "",
+   "architect": "",
+   "adres": "Lage Kaart 184, 2930 Brasschaat, België",
+   "gemeente": "Brasschaat",
+   "coordinaten": [
+    51.2985122,
+    4.47691
+   ],
+   "laatst_gezien": "2026-07-01",
+   "eerst_gezien": "2026-06-16",
+   "aantal_afspraken": 2,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2501",
+   "firma": "",
+   "architect": "",
+   "adres": "Kardelaan 65, 2180 Antwerpen, België",
+   "gemeente": "Ekeren-Antwerpen",
+   "coordinaten": [
+    51.2766741,
+    4.4314389
+   ],
+   "laatst_gezien": "2026-07-01",
+   "eerst_gezien": "2026-06-16",
+   "aantal_afspraken": 2,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "5519",
+   "firma": "",
+   "architect": "",
+   "adres": "Verhoevenlei 11, 2930 Brasschaat, België",
+   "gemeente": "Brasschaat",
+   "coordinaten": [
+    51.2886954,
+    4.4850752
+   ],
+   "laatst_gezien": "2026-07-01",
+   "eerst_gezien": "2026-07-01",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "46079",
+   "firma": "",
+   "architect": "",
+   "adres": "Schutterijstraat 15, 3740 Bilzen-Hoeselt, België",
+   "gemeente": "",
+   "coordinaten": [
+    50.8644892,
+    5.5426271
+   ],
+   "laatst_gezien": "2026-07-01",
+   "eerst_gezien": "2026-07-01",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2416",
+   "firma": "",
+   "architect": "",
+   "adres": "Julien Breugelmansstraat 16, 2950 Kapellen, België",
+   "gemeente": "Kapellen",
+   "coordinaten": [
+    51.3181029,
+    4.4281091
+   ],
+   "laatst_gezien": "2026-06-29",
+   "eerst_gezien": "2026-06-16",
+   "aantal_afspraken": 2,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2324",
+   "firma": "",
+   "architect": "",
+   "adres": "Langstraat 49, 2270 Herenthout, België",
+   "gemeente": "Herenthout",
+   "coordinaten": [
+    51.1330162,
+    4.7556909
+   ],
+   "laatst_gezien": "2026-06-23",
+   "eerst_gezien": "2026-06-13",
+   "aantal_afspraken": 2,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2603",
+   "firma": "",
+   "architect": "",
+   "adres": "Provinciebaan 20, 3110 Rotselaar, België",
+   "gemeente": "Rotselaar",
+   "coordinaten": [
+    50.9518284,
+    4.709699
+   ],
+   "laatst_gezien": "2026-06-19",
+   "eerst_gezien": "2026-06-19",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2310",
+   "firma": "",
+   "architect": "",
+   "adres": "Alfons Roelandtsstraat 11 3010 Kessel-Lo",
+   "gemeente": "",
+   "coordinaten": [
+    50.8897082,
+    4.7250944
+   ],
+   "laatst_gezien": "2026-06-18",
+   "eerst_gezien": "2026-05-28",
+   "aantal_afspraken": 4,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2457",
+   "firma": "HARC",
+   "architect": "",
+   "adres": "Gemeentehuis Holsbeek, Dutselstraat 15, 3220 Holsbeek, België",
+   "gemeente": "Holsbeek",
+   "coordinaten": [
+    50.9265152,
+    4.8051788
+   ],
+   "laatst_gezien": "2026-06-15",
+   "eerst_gezien": "2026-06-10",
+   "aantal_afspraken": 2,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2254",
+   "firma": "",
+   "architect": "",
+   "adres": "Hertstraat 16, 3080 Tervuren, België",
+   "gemeente": "Vossem",
+   "coordinaten": [
+    50.8382115,
+    4.5533835
+   ],
+   "laatst_gezien": "2026-06-03",
+   "eerst_gezien": "2026-06-03",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2309",
+   "firma": "",
+   "architect": "",
+   "adres": "Stockemstraat 15, 3040 Huldenberg, België",
+   "gemeente": "",
+   "coordinaten": [
+    50.7852262,
+    4.5793496
+   ],
+   "laatst_gezien": "2026-06-03",
+   "eerst_gezien": "2026-06-03",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "46068",
+   "firma": "",
+   "architect": "",
+   "adres": "Trapstraat 31, 2060 Antwerpen, België",
+   "gemeente": "",
+   "coordinaten": [
+    51.2290045,
+    4.4237448
+   ],
+   "laatst_gezien": "2026-06-01",
+   "eerst_gezien": "2026-06-01",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "46070",
+   "firma": "",
+   "architect": "",
+   "adres": "Van der Nootstraat 88, 3012 Leuven, Belgium",
+   "gemeente": "",
+   "coordinaten": [
+    50.920116,
+    4.7099484
+   ],
+   "laatst_gezien": "2026-05-30",
+   "eerst_gezien": "2026-05-30",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2279",
+   "firma": "",
+   "architect": "",
+   "adres": "Oude Luikerbaan 103, 3500 Hasselt, België",
+   "gemeente": "Hasselt",
+   "coordinaten": [
+    50.9193402,
+    5.3478993
+   ],
+   "laatst_gezien": "2026-05-29",
+   "eerst_gezien": "2026-05-29",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "46073",
+   "firma": "",
+   "architect": "",
+   "adres": "Eikstraat 13, 3360 Bierbeek, België",
+   "gemeente": "",
+   "coordinaten": [
+    50.8636127,
+    4.7527121
+   ],
+   "laatst_gezien": "2026-05-26",
+   "eerst_gezien": "2026-05-26",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "46067",
+   "firma": "",
+   "architect": "",
+   "adres": "Peperstraat 71, 3080 Tervuren, België",
+   "gemeente": "",
+   "coordinaten": [
+    50.8231721,
+    4.5093917
+   ],
+   "laatst_gezien": "2026-05-24",
+   "eerst_gezien": "2026-05-24",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "46061",
+   "firma": "",
+   "architect": "",
+   "adres": "Eksterstraat 58, 3370 Boutersem, België",
+   "gemeente": "",
+   "coordinaten": [
+    50.8456683,
+    4.8264663
+   ],
+   "laatst_gezien": "2026-05-23",
+   "eerst_gezien": "2026-05-23",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2490",
+   "firma": "",
+   "architect": "",
+   "adres": "",
+   "gemeente": "",
+   "coordinaten": null,
+   "laatst_gezien": "2026-05-13",
+   "eerst_gezien": "2026-05-13",
+   "aantal_afspraken": 1,
+   "bron_adres": ""
+  },
+  {
+   "nummer": "2609",
+   "firma": "",
+   "architect": "",
+   "adres": "Pater Richard van de Wouwerstraat 1, Zichem Scherpenheuvel-Zichem, Belgium",
+   "gemeente": "Scherpenheuvel-Zichem",
+   "coordinaten": [
+    51.0018127,
+    4.9859449
+   ],
+   "laatst_gezien": "2026-05-13",
+   "eerst_gezien": "2026-05-13",
+   "aantal_afspraken": 1,
+   "bron_adres": "agenda"
+  },
+  {
+   "nummer": "2606",
+   "firma": "",
+   "architect": "",
+   "adres": "Eikstraat 13, 3360 Bierbeek",
+   "gemeente": "Bierbeek",
+   "coordinaten": [
+    50.8636127,
+    4.7527121
+   ],
+   "laatst_gezien": "2026-04-29",
+   "eerst_gezien": "2026-04-29",
+   "aantal_afspraken": 1,
+   "bron_adres": "projectmap"
+  }
+ ]
+}

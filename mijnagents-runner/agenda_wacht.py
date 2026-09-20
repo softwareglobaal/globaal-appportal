@@ -28,7 +28,6 @@ import bellen  # noqa: E402
 import projectadressen  # noqa: E402
 import bord  # noqa: E402
 import organisatie  # noqa: E402
-import adresboek  # noqa: E402
 import pipedrive  # noqa: E402
 
 NAAM = "agenda-wacht"
@@ -297,6 +296,43 @@ def herinneringen_zetten(items, alleen_dag=None):
 # blauw 7 pauw = klant online (KO); groen 10 basilicum = intern (IN); geel 5 banaan = ?? niet bevestigd.
 KLEURNAAM = {"4": "roze", "6": "oranje", "11": "rood", "7": "blauw", "10": "groen", "5": "geel"}
 ALLEEN_VANDAAG = "--vandaag" in sys.argv
+
+
+PLEKKEN_URL = os.environ.get("LOCATIE_URL", "http://127.0.0.1:3031") + "/api/plekken"
+_plekken = {"tot": 0.0, "lijst": []}
+
+
+def plekken():
+    """De benoemde plaatsen uit locatie.globaal.be: naam, coordinaten en straal.
+    Dat is de bron voor plaatsen. De agent houdt er geen eigen adresboek van bij;
+    mandaat van Mehdi, 20-09-2026."""
+    import time
+    import urllib.request
+    if _plekken["lijst"] and time.time() < _plekken["tot"]:
+        return _plekken["lijst"]
+    try:
+        with urllib.request.urlopen(PLEKKEN_URL, timeout=15) as r:
+            d = json.load(r)
+        lijst = d if isinstance(d, list) else (d.get("plekken") or d.get("items") or [])
+    except Exception:  # noqa: BLE001
+        lijst = _plekken["lijst"]
+    _plekken["lijst"], _plekken["tot"] = lijst, time.time() + 3600
+    return lijst
+
+
+def plek_zoeken(tekst):
+    """Geeft (adres of 'lat,lon', naam) van de eerste benoemde plek die in de tekst staat."""
+    t = (tekst or "").lower()
+    if not t:
+        return None, None
+    for p in plekken():
+        naam = (p.get("naam") or "").strip()
+        if naam and naam.lower() in t:
+            if p.get("adres"):
+                return p["adres"], naam
+            if p.get("lat") and p.get("lon"):
+                return f"{p['lat']},{p['lon']}", naam
+    return None, None
 
 
 def namen_in_titel(titel):
@@ -629,11 +665,12 @@ def reistijd_zetten(items, alleen_dag=None):
         if not fysiek and info["nummer"] and info["nummer"] in projecten:
             adres, fysiek, bron_adres = projecten[info["nummer"]]["adres"], True, "projectmap"
         if not fysiek:
-            # geen adres in de agenda en geen projectnummer: misschien een vaste plaats
-            # uit het adresboek, zoals de school of de zwemles van Lara
-            gevonden, naam = adresboek.zoek(a["titel"] + " " + (a.get("omschrijving") or ""))
+            # geen adres in de agenda en geen projectnummer: misschien een benoemde plek
+            # uit locatie.globaal.be, zoals de school of de zwemles van Lara. Dat is de
+            # bron voor plaatsen; de agent houdt er geen eigen lijst van bij.
+            gevonden, naam = plek_zoeken(a["titel"] + " " + (a.get("omschrijving") or ""))
             if gevonden:
-                adres, fysiek, bron_adres = gevonden, True, f"adresboek ({naam})"
+                adres, fysiek, bron_adres = gevonden, True, f"locatiesysteem ({naam})"
         if info["reistijd"] or not (info["buiten"] or info["soort"] in ("PB", "KB", "LB")):
             continue
         a["_bron_adres"] = bron_adres
@@ -964,12 +1001,15 @@ def main():
         if onvolledig:
             noden.append({"tekst": "Buitenafspraken zonder adres: zonder adres kan ik geen reistijd berekenen",
                           "wie": "mehdi"})
+        # De plaatsen van Lara horen in locatie.globaal.be, niet in een lijst van mij.
         try:
-            ontbreekt = adresboek.onvolledig()
+            bekend = {(x.get("naam") or "").lower() for x in plekken()}
         except Exception:  # noqa: BLE001
-            ontbreekt = []
-        if ontbreekt:
-            noden.append({"tekst": "Vaste plaatsen zonder adres in het adresboek: " + ", ".join(ontbreekt),
+            bekend = set()
+        mist = [n for n in ("school", "zwemschool", "grootouders", "kantoor")
+                if not any(n in b for b in bekend)]
+        if mist:
+            noden.append({"tekst": "Plaatsen die nog niet in locatie.globaal.be staan: " + ", ".join(mist),
                           "wie": "mehdi"})
         if fout_h:
             noden.append({"tekst": "Herinneringen konden niet gezet worden", "wie": "claude-code"})

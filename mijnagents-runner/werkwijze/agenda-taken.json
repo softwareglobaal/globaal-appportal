@@ -1,5 +1,5 @@
 {
- "versie": "2.1",
+ "versie": "2.2",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -271,6 +271,11 @@
  },
  "openstaand": [
   {
+   "wat": "school, zwemschool, grootouders en kantoor toevoegen aan locatie.globaal.be, met een straal",
+   "wie": "Mehdi",
+   "wanneer": "zodra het kan"
+  },
+  {
    "wat": "Zoom-scopes voor meetings bijzetten op het account info@h-invest.be; daarmee werkt zowel de Zoomwacht als de controle of Mehdi in de meeting zit",
    "wie": "Mehdi",
    "wanneer": "zodra het kan"
@@ -282,11 +287,6 @@
   },
   {
    "wat": "Zoom-app aanmaken (Server-to-Server OAuth) zodat de Zoomwacht kan zien of je in de meeting zit; daarna bouw ik hem",
-   "wie": "Mehdi",
-   "wanneer": "zodra het kan"
-  },
-  {
-   "wat": "adresboek aanvullen: school Lara, zwemschool Lara, grootouders Lara, kantoor H-Architects",
    "wie": "Mehdi",
    "wanneer": "zodra het kan"
   },
@@ -327,6 +327,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-20",
+   "wat": "het eigen adresboek van de agent is verwijderd. De benoemde plaatsen komen uit locatie.globaal.be; daar hoort de school, de zwemles en de grootouders van Lara ook in. Tien oude documenten in Dropbox zijn naar Agenda archief verplaatst, zodat er over dit onderwerp nog een document overblijft"
+  },
   {
    "datum": "2026-09-20",
    "wat": "organisatie.globaal.be is de plek om te kijken, niet de tabellen eronder. En de firma van een interne afspraak volgt uit 'diensten voor', niet uit de werkgever: Matthew werkt bij Orvantis maar doet diensten voor TKN-Buro"
@@ -419,20 +423,7 @@
   },
   "dubbel": "bestaat er al een reistijdblok binnen drie uur voor of na, dan maakt hij er geen tweede",
   "ketening": "de rit naar huis maakt hij alleen na de laatste buitenafspraak van de dag. Tussen twee buitenafspraken is er één rit, en dat is de heenrit van de volgende. Elke rit draagt in zijn titel van waar naar waar hij gaat.",
-  "adres_zoeken": "eerst het adres in de agenda, dan het projectnummer in de projectmap, dan het adresboek met de vaste plaatsen"
- },
- "adresboek": {
-  "bestand": "werkwijze/adressen.json",
-  "waarvoor": "vaste plaatsen waar Mehdi naartoe rijdt, zodat een titel als 'zwemles Lara' toch een rijtijd krijgt",
-  "ingevuld": [
-   "thuis"
-  ],
-  "nog_in_te_vullen": [
-   "school Lara",
-   "zwemschool Lara",
-   "grootouders Lara",
-   "kantoor H-Architects"
-  ]
+  "adres_zoeken": "eerst het adres in de agenda, dan het projectnummer in de projectmap, dan de benoemde plekken uit locatie.globaal.be"
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",

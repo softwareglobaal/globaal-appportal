@@ -76,7 +76,7 @@ def main():
             if info["nummer"] and info["nummer"] in projecten:
                 adres = projecten[info["nummer"]]["adres"]
             else:
-                gevonden, _ = W.adresboek.zoek(a["titel"] + " " + (a.get("omschrijving") or ""))
+                gevonden, _ = W.plek_zoeken(a["titel"] + " " + (a.get("omschrijving") or ""))
                 adres = gevonden or ""
         if not adres:
             continue
