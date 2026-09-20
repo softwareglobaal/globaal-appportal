@@ -81,8 +81,13 @@ FIRMACODES = firmacodes()
 # Ik vertaal tussen die twee, ik vervang nooit de ene door de andere in een titel.
 # Fout gemeten op 20-09-2026: ik meldde 28 titels als "oude firmacode" die
 # rechtgezet moest worden. Dat advies was verkeerd om en is weggehaald.
+# De schrijfwijzen die Mehdi in zijn agenda gebruikte voor de firmacodes van
+# organisatie.globaal.be de norm werden. Ze blijven leesbaar, zodat een afspraak van
+# vorig jaar bij dezelfde firma terechtkomt als een van vandaag. "EE" gebruikte hij
+# voor Energie Efficiënt, ook los in een titel zoals "AI & EE" (20-09-2026).
 AGENDACODE_NAAR_FIRMA = {"HA": "HARC", "UNABO": "UNAB", "HB": "HARM", "HARMONIEBOUW": "HARM",
-                         "CONTRAX": "CONT", "ENERGIE": "ENEF", "TKN": "TKNB", "ELEVAIT": "ELEV"}
+                         "CONTRAX": "CONT", "ENERGIE": "ENEF", "EE": "ENEF", "TKN": "TKNB",
+                         "ELEVAIT": "ELEV"}
 
 # PRIVE is geen firma maar hoort wel in een titel te mogen staan.
 NIET_FIRMA = {"PRIVE": "privé van Mehdi"}
