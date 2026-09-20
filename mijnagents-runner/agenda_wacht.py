@@ -3,7 +3,7 @@
 en zet klaar wat anderen nodig hebben.
 
 Elke werkdag om 06:30 en daarna elke twee uur:
-  1. de negen actieve agenda's (AGENDA_KALENDERS in mijnagents-data/.env, anders
+  1. de acht actieve agenda's (AGENDA_KALENDERS in mijnagents-data/.env, anders
      de vaste lijst hieronder) van gisteren tot zeven dagen vooruit;
   2. per afspraak de titel lezen volgens de titelconventie: "Mehdi: !! [HA-KB] WB 2310 -
      werfbezoek ..." -> firma HA, soort KB (klant buiten), type WB, nummer 2310;
@@ -38,7 +38,6 @@ KALENDERS = {
     "73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51ce370494e7de7501f0c4@group.calendar.google.com": "H-Architects",
     "b135d9900db83399539bb5fe4ad9dc1ace19af20273c078ce2180cc47e9232fe@group.calendar.google.com": "UNABO",
     "e108191db825d97fb068a781463302c0e9c527d3927a85a514b1c8c5754b6048@group.calendar.google.com": "Harmoniebouw",
-    "contraxcalendar@gmail.com": "Contrax",
     "385ee9ff8749fe5e5929090550d42611f4ce2437d11b56f3d4d943619b4c479f@group.calendar.google.com": "Lara",
     "mehdipriveagena@gmail.com": "prive agenda Mehdi (privé, alleen Mehdi)",
     "zoomafspraken@gmail.com": "zoomafspraken (sales via Calendly)",

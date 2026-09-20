@@ -1,0 +1,243 @@
+{
+ "versie": "1.0",
+ "datum": "2026-09-20",
+ "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
+ "agendas": [
+  {
+   "rol": "werk",
+   "naam": "mehdi werk agenda",
+   "adres": "mehdiprivewerkagenda@gmail.com",
+   "waarover": "alles zakelijk van alle firma's, uit elkaar gehouden door de code in de titel",
+   "wie_schrijft": "Mehdi, zijn planners, Calendly en de agent"
+  },
+  {
+   "rol": "prive",
+   "naam": "prive agenda Mehdi",
+   "adres": "mehdipriveagena@gmail.com",
+   "waarover": "tandarts, beurzen, alles wat uren bezet houdt zonder dat iemand ziet wat het is",
+   "wie_schrijft": "alleen Mehdi en de agent"
+  },
+  {
+   "rol": "lara",
+   "naam": "Lara",
+   "adres": "385ee9ff8749fe5e5929090550d42611f4ce2437d11b56f3d4d943619b4c479f@group.calendar.google.com",
+   "waarover": "school, zwemmen, ophalen",
+   "wie_schrijft": "Mehdi en Leen"
+  },
+  {
+   "rol": "firma",
+   "naam": "H-Architects",
+   "adres": "73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51ce370494e7de7501f0c4@group.calendar.google.com",
+   "waarover": "leeg sinds 20-09-2026, blijft meelezen tot de collega's overgeschakeld zijn",
+   "wie_schrijft": "niemand meer"
+  },
+  {
+   "rol": "firma",
+   "naam": "UNABO",
+   "adres": "b135d9900db83399539bb5fe4ad9dc1ace19af20273c078ce2180cc47e9232fe@group.calendar.google.com",
+   "waarover": "leeg sinds 20-09-2026, blijft meelezen tot de collega's overgeschakeld zijn",
+   "wie_schrijft": "niemand meer"
+  },
+  {
+   "rol": "firma",
+   "naam": "Harmoniebouw",
+   "adres": "e108191db825d97fb068a781463302c0e9c527d3927a85a514b1c8c5754b6048@group.calendar.google.com",
+   "waarover": "nog in gebruik, nul afspraken in twaalf maanden, beslissing van Mehdi open",
+   "wie_schrijft": "siyanhdswerk"
+  },
+  {
+   "rol": "sales",
+   "naam": "zoomafspraken",
+   "adres": "zoomafspraken@gmail.com",
+   "waarover": "oude Calendly-boekingen tot en met 29-09-2026, daarna archief. Fathom hangt aan dit account",
+   "wie_schrijft": "Calendly, tot de koppeling los is"
+  },
+  {
+   "rol": "feestdagen",
+   "naam": "Feestdagen BE",
+   "adres": "en.be#holiday@group.v.calendar.google.com",
+   "waarover": "Belgische feestdagen",
+   "wie_schrijft": "Google"
+  }
+ ],
+ "titelconventie": {
+  "vorm": "Mehdi: !! [FIRMA-SOORT] TYPE nummer - klant, straat nummer, postcode gemeente",
+  "voorbeeld": "Mehdi: !! [HA-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen",
+  "firmas": {
+   "HA": "h-architects",
+   "UNABO": "unabo",
+   "HB": "harmoniebouw",
+   "HARMONIEBOUW": "harmoniebouw",
+   "CONTRAX": "contrax",
+   "ENERGIE": "unabo",
+   "TKN": "tkn",
+   "ELEVAIT": "elevait",
+   "PRIVE": "mehdi"
+  },
+  "soorten": {
+   "KB": "klant buiten",
+   "PB": "prospect buiten (plaatsbezoek)",
+   "KO": "klant online",
+   "PO": "prospect online",
+   "IN": "intern"
+  },
+  "types": {
+   "WB": "werfbezoek",
+   "OPL": "oplevering",
+   "PLB": "plaatsbeschrijving",
+   "SCN": "3D-scan",
+   "EPB": "EPB",
+   "VC": "veiligheidscoördinatie",
+   "BS": "barsten en scheuren",
+   "STA": "stabiliteit",
+   "SD": "schetsontwerp",
+   "OPM": "opmeting"
+  },
+  "tekens": {
+   "!!": "buiten, reistijd nodig",
+   "??": "nog niet bevestigd"
+  }
+ },
+ "kleuren": {
+  "volgorde": "de eerste regel die past wint",
+  "regels": [
+   {
+    "wanneer": "agenda is Lara",
+    "kleur": "4",
+    "naam": "flamingo, roze"
+   },
+   {
+    "wanneer": "reistijdblok of !! buiten",
+    "kleur": "11",
+    "naam": "tomaat, rood"
+   },
+   {
+    "wanneer": "?? niet bevestigd",
+    "kleur": "5",
+    "naam": "banaan, geel"
+   },
+   {
+    "wanneer": "soort PO of PB, prospect",
+    "kleur": "6",
+    "naam": "mandarijn, oranje"
+   },
+   {
+    "wanneer": "soort KO, klant online",
+    "kleur": "7",
+    "naam": "pauw, blauw"
+   },
+   {
+    "wanneer": "soort IN, intern",
+    "kleur": "10",
+    "naam": "basilicum, groen"
+   },
+   {
+    "wanneer": "titel zonder code",
+    "kleur": "",
+    "naam": "niets doen, kleur blijft"
+   }
+  ]
+ },
+ "herinneringen": {
+  "wel": "alleen prospecten van HA, UNABO en TKN: PO vijf minuten vooraf, PB dertig minuten vooraf",
+  "niet": "intern, klanten, terugkerende afspraken, reistijd, hele dag, prive",
+  "opruimen": "een eerdere herinnering van de agent zelf haalt hij weg; een herinnering van Mehdi blijft"
+ },
+ "grendels": [
+  {
+   "naam": "archief is leesbaar maar niet beschrijfbaar",
+   "hoe": "mag_schrijven() laat alleen agenda's door die in KALENDERS staan en niet op ZZ ARCHIEF",
+   "test": "tests/test_agenda_archief.py"
+  },
+  {
+   "naam": "nooit hernoemen",
+   "hoe": "de agent verandert nooit de naam van een agenda, want dat ziet iedereen met wie gedeeld is",
+   "test": "afspraak in de werkwijze, geen code"
+  },
+  {
+   "naam": "nooit verplaatsen",
+   "hoe": "hij verandert alleen kleur, herinnering en reistijd, nooit de agenda van een afspraak",
+   "test": "afspraak in de werkwijze, geen code"
+  }
+ ],
+ "taken": [
+  {
+   "nr": 1,
+   "naam": "lezen",
+   "wanneer": "elke werkdag 07:00",
+   "wat": "alle agenda's uit KALENDERS van gisteren tot zeven dagen vooruit, dubbele uitnodigingen één keer"
+  },
+  {
+   "nr": 2,
+   "naam": "titel ontleden",
+   "wat": "firma, soort, type, nummer, buiten, onzeker; wat niet klopt wordt gemeld"
+  },
+  {
+   "nr": 3,
+   "naam": "koppelen",
+   "wat": "aan een deal in Pipedrive via het projectnummer, anders via de naam"
+  },
+  {
+   "nr": 4,
+   "naam": "reistijd",
+   "wat": "voor elke buitenafspraak met adres een blok heen en terug, met filefactor"
+  },
+  {
+   "nr": 5,
+   "naam": "kleuren",
+   "wat": "volgens de kleurregels hierboven"
+  },
+  {
+   "nr": 6,
+   "naam": "herinneringen",
+   "wat": "volgens de regels hierboven"
+  },
+  {
+   "nr": 7,
+   "naam": "botsingen",
+   "wat": "overlappende afspraken melden, uitnodigingen niet dubbel tellen"
+  },
+  {
+   "nr": 8,
+   "naam": "klaarzetten",
+   "wat": "per firma op het bord, plus het dagplan en gisteren zonder verslag"
+  },
+  {
+   "nr": 9,
+   "naam": "verslag",
+   "wat": "werkverslag op het bord met alles wat hij deed en vond"
+  }
+ ],
+ "controle": {
+  "commando": "~/agents/.venv/bin/python ~/appportal/mijnagents-runner/controle_agenda.py",
+  "wat": "twintig toetsen: account, leesbaarheid van elke agenda, de grendel, het archief, Calendly en de titels",
+  "uitkomst": "GOED, LET OP of FOUT per toets; hij eindigt met een foutcode als er iets FOUT is"
+ },
+ "openstaand": [
+  {
+   "wat": "schrijfrecht op mehdi werk agenda voor haagendalightprojects, abigailqoppa en scanningenstaco",
+   "wie": "Mehdi",
+   "wanneer": "voor het bericht aan de collega's"
+  },
+  {
+   "wat": "bericht aan de collega's versturen",
+   "wie": "Mehdi",
+   "wanneer": "deze week"
+  },
+  {
+   "wat": "vier oude Calendly-koppelingen losmaken",
+   "wie": "Mehdi",
+   "wanneer": "na 29-09-2026"
+  },
+  {
+   "wat": "H-Architects en UNABO uit de leeslijst halen",
+   "wie": "de agent",
+   "wanneer": "als het bericht buiten is"
+  },
+  {
+   "wat": "Harmoniebouw: blijft die of gaat die op archief",
+   "wie": "Mehdi",
+   "wanneer": "open"
+  }
+ ]
+}

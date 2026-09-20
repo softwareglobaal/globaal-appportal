@@ -80,8 +80,7 @@ Elke komende afspraak krijgt de kleur van zijn soort, volgens de regels
 hierboven, in Google-kleuren: roze (flamingo) = Lara; oranje (mandarijn) =
 prospect PO en PB; rood (tomaat) = `!!` buiten en reistijd; blauw (pauw) = klant
 online KO; groen (basilicum) = intern IN; geel (banaan) = `??` niet bevestigd.
-Een titel zonder code laat ik met rust. De agenda "Lara" is van iemand anders
-(alleen leesrecht): daar kan ik niet kleuren en meld ik dat. Ik verander alleen
+Een titel zonder code laat ik met rust. Sinds 20-09-2026 draai ik op het account van Mehdi zelf, dus ik kan ook op Lara kleuren zetten. Ik verander alleen
 de kleur, nooit de agenda waar de afspraak op staat: staat een afspraak op de
 verkeerde agenda volgens de Calendly-routering, dan meld ik het als signaal.
 
@@ -244,6 +243,74 @@ mehdiprivewerkagenda en daar aanvinken volstaat.
 staan nog negen geboekte klantafspraken, de laatste op 29-09 om 20:00. Maak je de
 koppeling eerder los of hernoem je die agenda's naar ZZ ARCHIEF, dan werken de
 annuleer- en verzetlinks van die klanten niet meer en negeer ik die afspraken.
+
+## De afspraken op een rij (versie 1.0, 2026-09-20)
+
+Dit staat ook als machineleesbaar bestand in `werkwijze/agenda-taken.json`.
+`tests/test_agenda_taken.py` faalt zodra de code en dat bestand uit elkaar lopen,
+dus wat hieronder staat kan niet stilletjes verouderen.
+
+**De agenda's die ik lees**
+
+| naam | adres | rol | waarover |
+| --- | --- | --- | --- |
+| mehdi werk agenda | `mehdiprivewerkagenda@gmail.com` | werk | alles zakelijk van alle firma's, uit elkaar gehouden door de code in de titel |
+| prive agenda Mehdi | `mehdipriveagena@gmail.com` | prive | tandarts, beurzen, alles wat uren bezet houdt zonder dat iemand ziet wat het is |
+| Lara | `385ee9ff8749fe5e5929090550d42611f4ce2437d11b` | lara | school, zwemmen, ophalen |
+| H-Architects | `73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51` | firma | leeg sinds 20-09-2026, blijft meelezen tot de collega's overgeschakeld zijn |
+| UNABO | `b135d9900db83399539bb5fe4ad9dc1ace19af20273c` | firma | leeg sinds 20-09-2026, blijft meelezen tot de collega's overgeschakeld zijn |
+| Harmoniebouw | `e108191db825d97fb068a781463302c0e9c527d3927a` | firma | nog in gebruik, nul afspraken in twaalf maanden, beslissing van Mehdi open |
+| zoomafspraken | `zoomafspraken@gmail.com` | sales | oude Calendly-boekingen tot en met 29-09-2026, daarna archief. Fathom hangt aan dit account |
+| Feestdagen BE | `en.be#holiday@group.v.calendar.google.com` | feestdagen | Belgische feestdagen |
+
+**De titel**
+
+`Mehdi: !! [FIRMA-SOORT] TYPE nummer - klant, straat nummer, postcode gemeente`
+
+Voorbeeld: `Mehdi: !! [HA-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen`
+
+Firma's: HA, UNABO, HB, HARMONIEBOUW, CONTRAX, ENERGIE, TKN, ELEVAIT, PRIVE.
+Soorten: KB = klant buiten, PB = prospect buiten (plaatsbezoek), KO = klant online, PO = prospect online, IN = intern.
+Tekens: `!!` buiten met reistijd, `??` nog niet bevestigd.
+
+**Kleuren**, de eerste regel die past wint
+
+| wanneer | kleur |
+| --- | --- |
+| agenda is Lara | flamingo, roze |
+| reistijdblok of !! buiten | tomaat, rood |
+| ?? niet bevestigd | banaan, geel |
+| soort PO of PB, prospect | mandarijn, oranje |
+| soort KO, klant online | pauw, blauw |
+| soort IN, intern | basilicum, groen |
+| titel zonder code | niets doen, kleur blijft |
+
+**Herinneringen.** alleen prospecten van HA, UNABO en TKN: PO vijf minuten vooraf, PB dertig minuten vooraf. Geen melding voor intern, klanten, terugkerende afspraken, reistijd, hele dag, prive.
+
+**Wat ik elke ochtend doe**
+
+| nr | stap | wat |
+| --- | --- | --- |
+| 1 | lezen | alle agenda's uit KALENDERS van gisteren tot zeven dagen vooruit, dubbele uitnodigingen één keer |
+| 2 | titel ontleden | firma, soort, type, nummer, buiten, onzeker; wat niet klopt wordt gemeld |
+| 3 | koppelen | aan een deal in Pipedrive via het projectnummer, anders via de naam |
+| 4 | reistijd | voor elke buitenafspraak met adres een blok heen en terug, met filefactor |
+| 5 | kleuren | volgens de kleurregels hierboven |
+| 6 | herinneringen | volgens de regels hierboven |
+| 7 | botsingen | overlappende afspraken melden, uitnodigingen niet dubbel tellen |
+| 8 | klaarzetten | per firma op het bord, plus het dagplan en gisteren zonder verslag |
+| 9 | verslag | werkverslag op het bord met alles wat hij deed en vond |
+
+**Controle.** Wie wil nakijken of alles klopt, draait
+`~/agents/.venv/bin/python ~/appportal/mijnagents-runner/controle_agenda.py`. twintig toetsen: account, leesbaarheid van elke agenda, de grendel, het archief, Calendly en de titels.
+
+**Nog openstaand**
+
+- schrijfrecht op mehdi werk agenda voor haagendalightprojects, abigailqoppa en scanningenstaco (Mehdi, voor het bericht aan de collega's)
+- bericht aan de collega's versturen (Mehdi, deze week)
+- vier oude Calendly-koppelingen losmaken (Mehdi, na 29-09-2026)
+- H-Architects en UNABO uit de leeslijst halen (de agent, als het bericht buiten is)
+- Harmoniebouw: blijft die of gaat die op archief (Mehdi, open)
 
 ## Met welk account ik werk, en wat ik in het archief mag
 
