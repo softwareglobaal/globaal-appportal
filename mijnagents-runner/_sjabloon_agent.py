@@ -1,88 +1,67 @@
 #!/usr/bin/env python3
-"""%%LABEL%% — runner voor mijnagents.globaal.be.
+"""%%LABEL%% : runner voor mijnagents.globaal.be.
 
 Gegenereerd door nieuwe-agent.py. Draait op de host via cron (buiten de
-container), praat met de mijnagents-app over localhost en meldt zijn status
-via het hartslag-contract.
+container) en praat met het bord via de gedeelde module `bord`.
 
-Vul WERK() in met wat deze agent echt doet. Houd je aan de grenzen die op
-het bord staan en aan de zichtbaarheidsregel: in `taak`/`detail` alleen
-neutrale werkstatus, nooit inhoud (geen klantnamen, geen bedragen).
+Vul werk(r) in. De ronde eromheen regelt wat de Agentnorm eist, zodat je daar
+zelf niet aan hoeft te denken (zie AGENTNORM.md):
 
-Muteren mag NIET rechtstreeks: doe een voorstel (stel_voor) dat je op het
+  N4  hij meldt welk regelboek hij deze ronde las, met een vingerafdruk per
+      bron, zodat achteraf te zien is welke regels golden toen hij iets deed;
+  N10 een nood zonder aantal in de tekst, zodat dezelfde nood morgen dezelfde
+      nood is en de lus kan sluiten. Het aantal zet je in r.detail;
+  N11 hij blijft nooit hangen op "actief": een ronde die breekt meldt "fout".
+
+Houd je aan de grenzen die op het bord staan en aan de zichtbaarheidsregel: in
+taak en detail alleen neutrale werkstatus, nooit inhoud (geen klantnamen, geen
+bedragen).
+
+Muteren mag NIET rechtstreeks: doe een voorstel (stel_voor) dat Mehdi op het
 bord goedkeurt. Pas na goedkeuring voert de uitvoerder het uit.
 """
-import json
 import os
-import urllib.request
+import sys
+
+HIER = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+import bord  # noqa: E402
 
 NAAM = "%%NAAM%%"
-PLATFORM = os.environ.get("PLATFORM_URL", "http://127.0.0.1:%%POORT%%")
-
-
-def _env(pad):
-    """Laadt KEY=VALUE-regels uit een .env in os.environ (secrets nooit in git)."""
-    pad = os.path.expanduser(pad)
-    if not os.path.exists(pad):
-        return
-    for regel in open(pad):
-        regel = regel.strip()
-        if regel and not regel.startswith("#") and "=" in regel:
-            k, v = regel.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
-
-
-_env("~/appportal/mijnagents-data/.env")   # AGENTS_TOKEN
-TOKEN = os.environ.get("AGENTS_TOKEN", "")
-
-
-def hartslag(status, taak="", detail="", tokens=None, voorstel=None):
-    """Meldt status aan het bord. status in rust|waakt|actief|klaar|fout."""
-    payload = {"naam": NAAM, "status": status, "taak": taak, "detail": detail}
-    if tokens is not None:
-        payload["tokens"] = tokens
-    if voorstel is not None:
-        payload["voorstel"] = voorstel
-    req = urllib.request.Request(
-        f"{PLATFORM}/agent-status",
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "X-Agents-Token": TOKEN},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return r.status == 200
-    except Exception as e:
-        print("hartslag mislukt:", e)
-        return False
+ag = bord.Agent(NAAM)
 
 
 def stel_voor(actie, doel="", reden="", parameters=None, runbook=""):
-    """Zet een voorstel op het bord. Zonder parameters is het een louter
-    signaal (nooit autonoom uitvoerbaar); met parameters wordt het, na jouw
-    goedkeuring, door de uitvoerder uitgevoerd."""
-    return hartslag("waakt", taak=actie, detail=reden, voorstel={
+    """Zet een voorstel op het bord. Zonder parameters is het een louter signaal
+    (nooit autonoom uitvoerbaar); met parameters wordt het, na goedkeuring van
+    Mehdi, door de uitvoerder uitgevoerd."""
+    return ag.hartslag("waakt", taak=actie, detail=reden, voorstel={
         "actie": actie, "doel": doel, "reden": reden,
         "parameters": parameters, "runbook": runbook,
     })
 
 
-def werk():
-    """VUL DIT IN. Doe hier het echte werk van de agent en meld neutrale status.
+def werk(r):
+    """VUL DIT IN. Doe hier het echte werk van de agent.
+
+    `r` is de ronde. Wat je ermee kunt:
+
+        r.werkwijze          de tekst zoals ze nu op het bord staat, jouw regelboek
+        r.bron(naam, tekst)  een ander regelboek dat je las (een JSON, een document)
+        r.nood(tekst, wie)   wat je nodig hebt; wie is mehdi, claude-code of collega
+        r.detail = "..."     neutrale samenvatting van deze ronde, met de aantallen
 
     Voorbeeld:
         gedaan = 0
-        # ... doe het werk ...
-        hartslag("klaar", taak="ronde afgerond",
-                 detail=f"laatste ronde: {gedaan} items bekeken")
+        for item in iets():
+            gedaan += 1
+        r.detail = f"{gedaan} items bekeken"
+        if gedaan == 0:
+            r.nood("Geen bron gevonden om te lezen", wie="claude-code")
     """
-    hartslag("waakt", taak="beschikbaar", detail="skelet — werk() nog in te vullen")
+    r.detail = "skelet, werk() nog in te vullen"
 
 
 if __name__ == "__main__":
-    hartslag("actief", taak="ronde gestart")
-    try:
-        werk()
-    except Exception as e:
-        hartslag("fout", taak="ronde mislukt", detail=str(e)[:200])
-        raise
+    with ag.ronde("ronde") as r:
+        werk(r)

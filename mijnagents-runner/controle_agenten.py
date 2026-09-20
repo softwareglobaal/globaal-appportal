@@ -235,6 +235,30 @@ def n11_hartslag(rij, con):
     return True, f"{uren:.0f} uur geleden, {status}"
 
 
+def n12_gebruikt_de_ronde(rij, con):
+    """N12 de runner gaat door de gedeelde ronde (`with ag.ronde(...)`).
+
+    Dat is het minimum waar elke agent doorheen hoort te gaan: hij haalt zijn
+    werkwijze van het bord, meldt wat hij las (N4), schrijft noden zonder teller
+    (N10) en blijft nooit hangen op actief (N11). Wie het zelf bouwt, vergeet
+    er een. Gemeten op 20-09-2026: van de 39 runners haalden er vier hun
+    werkwijze op en meldde er een zijn kennis.
+    """
+    p = _runnerpad(rij["naam"])
+    if not os.path.exists(p):
+        return None, "geen runner in deze repo (zie N5)"
+    with open(p, encoding="utf-8") as f:
+        code = f.read()
+    if ".ronde(" in code:
+        return True, "gaat door de gedeelde ronde"
+    mist = []
+    if ".werkwijze()" not in code:
+        mist.append("leest zijn werkwijze niet")
+    if ".kennis(" not in code:
+        mist.append("meldt niet wat hij las")
+    return False, ("gebruikt de ronde niet" + (": " + ", ".join(mist) if mist else ""))
+
+
 NORMEN = [
     ("N1", "werkwijze op het bord", n1_werkwijze),
     ("N2", "grenzen staan erin", n2_grenzen_in_werkwijze),
@@ -247,6 +271,7 @@ NORMEN = [
     ("N9", "stijl", n9_stijl),
     ("N10", "noden hebben een sleutel", n10_noden_hebben_sleutel),
     ("N11", "hartslag vers", n11_hartslag),
+    ("N12", "gaat door de ronde", n12_gebruikt_de_ronde),
 ]
 
 

@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.3, 20-09-2026 (het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.4, 20-09-2026 (N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -38,7 +38,7 @@ Twee regels die hieruit volgen:
 - **Wie een kopie maakt, is verantwoordelijk voor het verschil.** Kan een kopie
   niet gelijk blijven, dan hoort ze er niet te zijn.
 
-## 2. De elf normen
+## 2. De twaalf normen
 
 | norm | de eis | waarom, en waar het misging |
 |---|---|---|
@@ -54,6 +54,8 @@ Twee regels die hieruit volgen:
 | **N10** | Een nood draagt geen aantal in zijn tekst | Noden zijn declaratief: elke ronde stuurt een agent de hele lijst, en wat er niet meer in staat geldt als opgelost. Staat er een teller in de tekst ("11 afspraken zonder code"), dan is elke ronde formeel een nieuwe nood en sluit de lus nooit. Zo verzamelde de Agendawacht dertig identieke regels. Het aantal hoort in het detail. |
 
 | **N11** | Verse hartslag, niet in fout en niet vastgelopen | Zes agents draaien op de Mac van Mehdi. Slaapt die laptop, dan gaat hun ronde niet door en merkt niemand het. Op 20-09-2026 stonden acht agents stil zonder dat iemand het wist: het commandocentrum 39 uur (cadans: elk kwartier), de dagbundelaar 54 uur, de wisprwacht zestien uur op fout, de icloudwacht achttien uur vastgelopen in dezelfde ronde. Stil vallen mag, ongemerkt stil vallen niet. |
+
+| **N12** | De runner gaat door de gedeelde ronde (`with ag.ronde(...)`) | Dit is het minimum. Wie zijn eigen doorgang bouwt vergeet er altijd een: gemeten op 20-09-2026 haalden vier van de 39 runners hun werkwijze van het bord op, en meldde er precies een welk regelboek hij las. De werkwijze was voor de rest decoratie: een tekst die beschrijft wat de code zou moeten doen, die niemand naast de code legt. |
 
 ### De omgeving
 
@@ -103,7 +105,40 @@ normwacht.py --droog      meten en tonen, niets naar het bord schrijven
 
 Zo komt hij terug tot het klopt, zonder dat iemand het hoeft te onthouden.
 
-## 5. Hoe een agent Mehdi bereikt
+## 5. Het minimum: de ronde
+
+Elke agent gaat door dezelfde doorgang, `Ronde` in `koppelingen/bord.py`. Wie
+die gebruikt haalt N4, N10 en N11 vanzelf, zonder eraan te denken:
+
+```python
+import bord
+ag = bord.Agent("post-wacht")
+
+with ag.ronde("post sorteren") as r:
+    regels = r.werkwijze                      # de tekst zoals ze nu op het bord staat
+    r.bron("sorteerregels.json", open(pad).read())
+    ...
+    r.nood("Postvak niet leesbaar", wie="claude-code")
+    r.detail = f"{n} berichten bekeken"
+```
+
+Wat de ronde zelf doet:
+
+| bij het begin | bij het einde |
+|---|---|
+| hartslag op "actief" met de taak | hartslag op "klaar", of "waakt" als er noden zijn |
+| de werkwijze van het bord ophalen en doorgeven als `r.werkwijze` | melden welke regelboeken hij las, met een vingerafdruk van acht tekens per bron (N4) |
+| | het werkverslag versturen |
+| | breekt de ronde, dan hartslag "fout" met de foutmelding, nooit blijven hangen op "actief" (N11) |
+
+`r.nood()` haalt een aantal vooraan uit de tekst weg en weigert dubbels, zodat
+dezelfde nood morgen dezelfde nood is (N10). Het aantal zet je in `r.detail`.
+
+`tests/test_agentnorm.py` faalt zodra iemand deze doorgang weghaalt of uitholt,
+en ook als het sjabloon hem niet meer gebruikt. Acht toetsen, allemaal groen op
+20-09-2026.
+
+## 6. Hoe een agent Mehdi bereikt
 
 Zijn laptop slaapt 's nachts en vroeg in de ochtend. Een melding op een scherm
 dat uit staat is geen melding. Drie kanalen, van zacht naar hard:
@@ -129,7 +164,7 @@ anders komt hetzelfde bericht elke ronde opnieuw. De Normwacht gebruikt
 `normwacht-stilte-<agent>-<fout|stil|vastgelopen>`, zodat een agent die weer
 draait vanzelf uit de meldingen verdwijnt.
 
-## 6. Wat je doet als een norm faalt
+## 7. Wat je doet als een norm faalt
 
 1. **Herstel in de bron, niet in het geval.** Een fout in één werkwijze los je op
    in het sjabloon of in de code, zodat elke volgende agent het goed heeft.
@@ -140,7 +175,7 @@ draait vanzelf uit de meldingen verdwijnt.
 3. **Verlaag de norm alleen in dit document.** Wie een norm te streng vindt, past
    hem hier aan en in `controle_agenten.py`, nooit het geval dat toevallig faalt.
 
-## 7. Een nieuwe agent die meteen slaagt
+## 8. Een nieuwe agent die meteen slaagt
 
 ```
 python3 ~/appportal/mijnagents-runner/nieuwe-agent.py --naam post-wacht --label "Postwacht" \
@@ -154,7 +189,7 @@ De werkwijze die je meegeeft moet zelf al door N1, N2, N8 en N9 komen. Daarna:
 - laat hem noden schrijven met een eigenaar en een besluit, niet als logregel (N7);
 - draai `controle_agenten.py --agent <naam> --uitleg` voor je hem op de cron zet.
 
-## 8. De chatkant
+## 9. De chatkant
 
 Een agent die Mehdi ook in een gesprek aanspreekt, hoort een skill te hebben in
 `~/.claude/skills/<naam>/SKILL.md` op zijn Mac. Die skill wordt automatisch

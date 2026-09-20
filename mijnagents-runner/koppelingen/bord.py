@@ -1,7 +1,9 @@
 """Gedeelde bord-client voor de runners van Mehdi Agents: hartslag, werkverslag,
 klaarzetten en lezen wat klaargezet is. Token uit mijnagents-data/.env."""
+import hashlib
 import json
 import os
+import re
 import sys
 import urllib.parse
 import urllib.request
@@ -85,6 +87,80 @@ class Agent:
         for it in items:
             it.setdefault("van", self.naam)
         return call("/api/klaarzet", {"items": items}) if items else {"nieuw": 0, "bestaand": 0}
+
+    def ronde(self, taak="ronde", bronnen=None):
+        """De standaarddoorgang van een ronde. Zie AGENTNORM.md.
+
+        Wie hiermee werkt haalt vanzelf N4 (melden welk regelboek je las), N11
+        (nooit blijven hangen op actief) en N10 (een nood zonder teller):
+
+            with ag.ronde("agenda in het oog") as r:
+                regels = r.werkwijze          # de tekst zoals ze nu op het bord staat
+                r.bron("agenda-taken.json", open(pad).read())
+                ...
+                r.nood("Buitenafspraken zonder adres", wie="mehdi")
+                r.detail = f"{n} afspraken bekeken"
+
+        bronnen: extra regelboeken als {naam: inhoud}, bovenop de werkwijze.
+        """
+        return Ronde(self, taak, bronnen or {})
+
+
+class Ronde:
+    """Eén ronde van een agent, van hartslag tot hartslag."""
+
+    def __init__(self, agent, taak, bronnen):
+        self.agent = agent
+        self.taak = taak
+        self.detail = ""
+        self.werkwijze = ""
+        self._bronnen = dict(bronnen)
+        self._noden = []
+
+    def bron(self, naam, inhoud):
+        """Een regelboek dat ik deze ronde gelezen heb. Gaat mee als kennis."""
+        self._bronnen[naam] = inhoud if isinstance(inhoud, str) else json.dumps(inhoud, ensure_ascii=False)
+
+    def nood(self, tekst, wie="mehdi"):
+        """Wat ik nodig heb of wat bij mij niet werkt.
+
+        Norm N10: geen aantal vooraan in de tekst. Noden zijn declaratief, dus met
+        een teller erin ("11 afspraken zonder code") is elke ronde formeel een
+        nieuwe nood en sluit de lus nooit. Het aantal hoort in het detail.
+        """
+        schoon = tekst.strip()
+        if re.match(r"^\d+\s", schoon):
+            schoon = re.sub(r"^\d+\s+", "", schoon)
+            schoon = schoon[:1].upper() + schoon[1:]
+            print(f"  [norm N10] aantal uit de noodtekst gehaald: {tekst[:50]}", file=sys.stderr)
+        if not any(n["tekst"] == schoon for n in self._noden):
+            self._noden.append({"tekst": schoon, "wie": wie})
+
+    def _kennis(self):
+        """Wat ik las, met een vingerafdruk per bron, zodat achteraf te zien is
+        welke versie van de regels gold toen ik iets deed."""
+        return "\n".join(
+            f"{naam}: {len(inhoud or '')} tekens, {hashlib.sha256((inhoud or '').encode()).hexdigest()[:8]}"
+            for naam, inhoud in self._bronnen.items())
+
+    def __enter__(self):
+        self.agent.hartslag("actief", taak=self.taak)
+        self.werkwijze = self.agent.werkwijze()
+        if self.werkwijze:
+            self._bronnen.setdefault("werkwijze op het bord", self.werkwijze)
+        return self
+
+    def __exit__(self, soort, fout, spoor):
+        self.agent.kennis(self._kennis(), bron=", ".join(self._bronnen) or "geen")
+        self.agent.log_verstuur()
+        if fout is not None:
+            # N11: nooit blijven hangen op "actief". Een ronde die breekt meldt dat.
+            self.agent.hartslag("fout", taak=self.taak,
+                                detail=f"{type(fout).__name__}: {str(fout)[:180]}", nood=self._noden)
+            return False
+        self.agent.hartslag("klaar" if not self._noden else "waakt",
+                            taak=self.taak, detail=self.detail, nood=self._noden)
+        return False
 
 
 def klaargezet_voor(voor, sleutel=None, afdeling=None, status="klaar", n=100):
