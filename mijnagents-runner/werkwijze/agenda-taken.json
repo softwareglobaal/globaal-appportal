@@ -1,5 +1,5 @@
 {
- "versie": "2.2",
+ "versie": "2.3",
  "datum": "2026-09-20",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -329,6 +329,10 @@
  "beslissingen": [
   {
    "datum": "2026-09-20",
+   "wat": "het uur van een afspraak is het uur van aankomst; de rit ligt altijd ervoor. En de rit na een buitenafspraak gaat naar de volgende plaats, niet naar huis, tenzij de volgende afspraak zelf naar huis gaat"
+  },
+  {
+   "datum": "2026-09-20",
    "wat": "het eigen adresboek van de agent is verwijderd. De benoemde plaatsen komen uit locatie.globaal.be; daar hoort de school, de zwemles en de grootouders van Lara ook in. Tien oude documenten in Dropbox zijn naar Agenda archief verplaatst, zodat er over dit onderwerp nog een document overblijft"
   },
   {
@@ -407,7 +411,8 @@
   ],
   "geldt_ook_voor": "Lara en de privé-agenda. Die houden hun kleur, maar krijgen wel reistijd.",
   "adres_verplicht": "elke buitenafspraak moet een adres hebben, anders kan de rijtijd niet berekend worden. Ontbreekt het, dan is dat een fout.",
-  "vraagtekens": "twee vraagtekens betekenen nog niet bevestigd. Zolang die er staan is de afspraak geel; haalt Mehdi ze weg, dan wordt ze vanzelf rood."
+  "vraagtekens": "twee vraagtekens betekenen nog niet bevestigd. Zolang die er staan is de afspraak geel; haalt Mehdi ze weg, dan wordt ze vanzelf rood.",
+  "ook_prive": "een afspraak van Lara of privé die op een adres gebeurt, hoort ook !! te dragen. Zonder dat denkt de agent dat je thuis blijft en zet hij de ritten verkeerd. De zwemles had geen !!, en daardoor stuurde hij je naar huis."
  },
  "reistijd": {
   "regel": "elke buitenafspraak krijgt een blok heen en een blok terug, rood, op dezelfde agenda",
@@ -422,8 +427,10 @@
    "terugval": "gratis routering (OSRM) maal een spitsfactor, 1,6 tussen 07:00 en 09:30"
   },
   "dubbel": "bestaat er al een reistijdblok binnen drie uur voor of na, dan maakt hij er geen tweede",
-  "ketening": "de rit naar huis maakt hij alleen na de laatste buitenafspraak van de dag. Tussen twee buitenafspraken is er één rit, en dat is de heenrit van de volgende. Elke rit draagt in zijn titel van waar naar waar hij gaat.",
-  "adres_zoeken": "eerst het adres in de agenda, dan het projectnummer in de projectmap, dan de benoemde plekken uit locatie.globaal.be"
+  "ketening": "Na een buitenafspraak gaat de rit naar de volgende plaats, niet naar huis. Thuis is alleen de bestemming als er niets meer volgt, of als de volgende afspraak zelf naar huis gaat, zoals 'Lara naar huis brengen'. Dan is die afspraak de terugrit en maakt de agent er geen tweede.",
+  "adres_zoeken": "eerst het adres in de agenda, dan het projectnummer in de projectmap, dan de benoemde plekken uit locatie.globaal.be",
+  "het_uur_is_aankomst": "Het uur van een afspraak is het uur dat Mehdi er MOET ZIJN, niet het uur dat hij vertrekt. De rit ligt dus altijd VOOR de afspraak, nooit tijdens en nooit erna. Gezien op 20-09-2026: de zwemles van Lara begint om 18:00 en er stond een rit naar huis om 18:00. Dat kan niet.",
+  "keten_voorbeeld": "dinsdag: thuis 17:10, oma 17:30 tot 17:40, rijden 17:40, zwembad 18:00 tot 19:00, daarna brengt hij Lara zelf naar huis"
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",

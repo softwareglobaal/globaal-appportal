@@ -712,6 +712,22 @@ def reistijd_zetten(items, alleen_dag=None):
         van_plaats = vorige_plaats_per_dag.get(dag, plaatsnaam(THUIS) or "thuis")
         vorige_per_dag[dag] = doel
         is_laatste = laatste_van_de_dag.get(dag) == a.get("id")
+        # Gaat de eerstvolgende afspraak al naar huis, zoals "Lara naar huis brengen",
+        # dan is dat zelf de terugrit en maak ik er geen tweede. Gezien 20-09-2026.
+        for x in items:
+            if x is a or not x.get("start", "").startswith(dag):
+                continue
+            try:
+                xs = datetime.fromisoformat(x["start"])
+            except (ValueError, KeyError):
+                continue
+            if einde <= xs <= einde + timedelta(minutes=15):
+                xl = (x.get("locatie") or "").strip()
+                if xl and not xl.lower().startswith("http") and coord(xl, cache) == thuis:
+                    is_laatste = False
+                    regels.append(f"{a['start'][:16]} {a['titel'][:40]}: geen terugrit, "
+                                  f"'{x.get('titel','')[:30]}' gaat zelf naar huis")
+                    break
         # Zuinig met aanvragen (Google Routes Pro: 5.000 gratis per maand): bestaan mijn twee
         # blokken al, dan herbereken ik alleen in de eerste ronde van de dag (voor 08:00) of met --dag.
         def _bestaand(t0, t1):
