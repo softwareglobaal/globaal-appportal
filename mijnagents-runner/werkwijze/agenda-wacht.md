@@ -201,6 +201,18 @@ Een wijziging in Google is ongeveer een minuut later bij Calendly bekend. Wie da
 wil testen moet dus minstens een minuut wachten voor hij meet; met 25 seconden
 trok ik zelf de verkeerde conclusie.
 
+**Val bij het opruimen, gemeten 20-09-2026.** De privé-agenda "Prive agenda mehdi"
+(harchitectsbvba@gmail.com) wordt vandaag door Calendly meegeteld via zijn eigen
+koppeling harchitectsbvba, niet via mehdiprivewerkagenda. Maken we die oude
+koppeling los, dan valt de bescherming van zijn privé-tijd weg tenzij hij eerst
+aangevinkt staat onder de koppeling mehdiprivewerkagenda. Eerst aanvinken, dan
+pas losmaken.
+
+Het account mehdipriveagena@gmail.com is aangemaakt maar niet in gebruik. Een
+poging om het rechtstreeks aan Calendly te koppelen gaf "Google hasn't granted
+Calendly enough access". Die koppeling is niet nodig: een privé-agenda delen met
+mehdiprivewerkagenda en daar aanvinken volstaat.
+
 **Niet losmaken voor 29-09-2026.** Op zoomafspraken en haagendalightprojects
 staan nog negen geboekte klantafspraken, de laatste op 29-09 om 20:00. Maak je de
 koppeling eerder los of hernoem je die agenda's naar ZZ ARCHIEF, dan werken de
