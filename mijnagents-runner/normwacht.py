@@ -59,7 +59,7 @@ def stilte_signalen(uitslag):
                 # uren: anders is elke ronde een nieuw signaal (norm N10).
                 uitleg = t["uitleg"]
                 soort = ("fout" if "op fout" in uitleg else
-                         "vastgelopen" if "vastgelopen" in uitleg else "stil")
+                         "vastgelopen" if "vastgelopen" in uitleg else "geenhartslag")
                 uit.append({
                     "voor": "mehdi", "soort": "signaal",
                     "titel": f"{u['agent']} draait niet: {uitleg}",

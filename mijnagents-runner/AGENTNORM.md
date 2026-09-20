@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.2, 20-09-2026 (N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.3, 20-09-2026 (het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -116,6 +116,13 @@ dat uit staat is geen melding. Drie kanalen, van zacht naar hard:
 
 **Een nood alleen op het bord bereikt hem niet.** De Bode stuurt klaarzet-items
 en voorstellen door, geen noden. Wie wil dat Mehdi iets ziet, zet een signaal.
+
+**Het woord "stil" in een signaaltitel belt hem op.** De Bode leest een signaal
+met "stil" erin als alarm en start een gesproken oproep via Twilio, herhaald tot
+er wordt opgenomen, ook in de stille uren (`alarm = [... if "stil" in titel]` in
+`bode.py`). Gemeten op 20-09-2026: de eerste ronde van de Normwacht meldde "39
+uur stil" en belde Mehdi daarop op. Een agent die niet draait is geen alarm; dat
+heet nu "geen hartslag". Bellen blijft voor wat op een tijdstip moet gebeuren.
 
 Geef elk signaal een `uniek` zonder aantallen erin, om dezelfde reden als N10:
 anders komt hetzelfde bericht elke ronde opnieuw. De Normwacht gebruikt

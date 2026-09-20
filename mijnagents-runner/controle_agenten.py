@@ -229,7 +229,9 @@ def n11_hartslag(rij, con):
         return False, f"staat al {uren:.0f} uur op actief, ronde vastgelopen: {taak[:60]}"
     if uren > grens:
         waar = _tekst(rij, "draait_op") or "?"
-        return False, f"{uren:.0f} uur stil (mag {grens} uur, draait op {waar})"
+        # Bewust niet het woord "stil": De Bode leest dat in een signaaltitel als
+        # alarm en belt Mehdi dan op, herhaald, ook 's nachts. Zie AGENTNORM.md 5.
+        return False, f"{uren:.0f} uur geen hartslag (mag {grens} uur, draait op {waar})"
     return True, f"{uren:.0f} uur geleden, {status}"
 
 
