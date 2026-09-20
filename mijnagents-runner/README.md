@@ -3,7 +3,16 @@
 Host-side code voor Mehdi's agent-omgeving (mijnagents.globaal.be). Draait op
 de VM buiten de containers (via cron), praat met de mijnagents-app over
 localhost (`http://127.0.0.1:3022`) en meldt status via het hartslag-contract.
-Wordt **niet** in een container gebouwd — alleen ./mijnagents is de build-context.
+Wordt **niet** in een container gebouwd: alleen ./mijnagents is de build-context.
+
+**Elke agent wordt getoetst aan [AGENTNORM.md](AGENTNORM.md).** Daar staat ook
+waar de waarheid per soort gegeven vandaan komt: wie hier werkt, de werkwijze,
+de code, de uitvoer en de sleutels. Toetsen gaat zo:
+
+```
+python3 controle_agenten.py                          # alle agents
+python3 controle_agenten.py --agent <naam> --uitleg
+```
 
 ## Een nieuwe agent maken
 
