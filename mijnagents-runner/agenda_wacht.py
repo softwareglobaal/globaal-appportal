@@ -40,7 +40,7 @@ KALENDERS = {
     "e108191db825d97fb068a781463302c0e9c527d3927a85a514b1c8c5754b6048@group.calendar.google.com": "Harmoniebouw",
     "contraxcalendar@gmail.com": "Contrax",
     "385ee9ff8749fe5e5929090550d42611f4ce2437d11b56f3d4d943619b4c479f@group.calendar.google.com": "Lara",
-    "harchitectsbvba@gmail.com": "Prive agenda mehdi (privé, alleen Mehdi)",
+    "mehdipriveagena@gmail.com": "prive agenda Mehdi (privé, alleen Mehdi)",
     "zoomafspraken@gmail.com": "zoomafspraken (sales via Calendly)",
     "en.be#holiday@group.v.calendar.google.com": "Feestdagen BE",
 }
