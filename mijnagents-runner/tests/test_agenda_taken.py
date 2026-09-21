@@ -164,6 +164,17 @@ check("Nadien (boekhouder) en Wally (AI-software) staan in de lijst",
       {"Nadien", "Wally"} <= {r.get("naam") for r in W.EXTERNE_RELATIES})
 check("ALGE staat niet op het dashboard (bewust een aparte lijst)", "ALGE" not in W.FIRMACODES)
 
+# Tijdens een schoolvakantie of feestdag geen Lara-ophaling en geen rit. Mehdi, 22-09-2026.
+_vak = W.lara_vakantiedagen()
+check("de agent leest de schoolvakanties uit de agenda van Lara", len(_vak) > 30)
+_lara = next((k for k, v in W.AGENDA_VASTE_KLEUR.items() if v.get("naam") == "Lara"), None)
+_dag = sorted(_vak)[0] if _vak else "2026-10-26"
+_items = [{"kalender": _lara, "titel": "Mehdi: !! [LARA] Lara ophalen en thuis afzetten",
+           "start": _dag + "T16:00:00+02:00", "einde": _dag + "T17:00:00+02:00", "locatie": "De Speelkriebel, 3010 Kessel-Lo", "id": "t", "hele_dag": False}]
+_g, _al, _geen, _fout, _reg = W.reistijd_zetten(_items, _dag)
+check("geen Lara-rit op een vakantiedag", _g == 0 and _al == 0)
+check("de schoolvakantie-regel staat in de JSON", "schoolvakantie" in json.dumps(taken.get("reistijd", {})) or "vakantie" in json.dumps(taken))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

@@ -684,6 +684,53 @@ def rijtijd_min(van, naar, vertrek):
     return int(math.ceil((vrij * f + BUFFER_MIN) / 5) * 5), f
 
 
+_lara_vrij = {"tot": 0.0, "dagen": frozenset()}
+
+
+def lara_vakantiedagen():
+    """De dagen die de agenda van Lara als schoolvakantie of feestdag markeert. Op zo'n
+    dag is er geen Lara-ophaling, dus maakt de agent geen Lara-rit. Mandaat van Mehdi,
+    22-09-2026. Staat een vakantie maar als losse dag in de agenda in plaats van als
+    volledige week, dan dekt deze grendel alleen die dag; de weken horen als meerdaagse
+    events in de agenda te staan."""
+    import time
+    import urllib.parse
+    import urllib.request
+    from datetime import date, timedelta
+    if time.time() < _lara_vrij["tot"]:
+        return _lara_vrij["dagen"]
+    lara = next((k for k, val in AGENDA_VASTE_KLEUR.items() if val.get("naam") == "Lara"), None)
+    dagen = set()
+    if lara:
+        try:
+            nu = datetime.now().astimezone()
+            tok = None
+            while True:
+                q = {"timeMin": nu.replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+                     "timeMax": (nu + timedelta(days=400)).isoformat(),
+                     "singleEvents": "true", "maxResults": "2500"}
+                if tok:
+                    q["pageToken"] = tok
+                url = f"{agenda.API}/calendars/{urllib.parse.quote(lara, safe='')}/events?" + urllib.parse.urlencode(q)
+                req = urllib.request.Request(url, headers={"Authorization": f"Bearer {agenda._toegang()}"})
+                d = json.load(urllib.request.urlopen(req, timeout=25))
+                for e in d.get("items", []):
+                    t = (e.get("summary") or "").lower()
+                    if "date" not in e.get("start", {}) or not ("vakanti" in t or "feestdag" in t):
+                        continue
+                    a, b = date.fromisoformat(e["start"]["date"]), date.fromisoformat(e["end"]["date"])
+                    while a < b:
+                        dagen.add(a.isoformat()); a += timedelta(days=1)
+                tok = d.get("nextPageToken")
+                if not tok:
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+    _lara_vrij["dagen"] = frozenset(dagen)
+    _lara_vrij["tot"] = time.time() + 3600
+    return _lara_vrij["dagen"]
+
+
 def ritlabel(adres, ander_adres=""):
     """Een naam voor een rit die iets zegt. Thuis heet thuis; ligt de andere kant in
     dezelfde gemeente, dan de straat, want "Leuven → Leuven" zegt niets."""
@@ -738,8 +785,14 @@ def reistijd_zetten(items, alleen_dag=None):
     reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"]]
     projecten = projectadressen.index()
     buiten = []
+    vrij = lara_vakantiedagen()
     for a in items:
         if a.get("hele_dag") or a.get("kalender", "").startswith("en.be#"):
+            continue
+        # Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit voor
+        # een afspraak op de agenda van Lara op zo'n dag. Mandaat van Mehdi, 22-09-2026.
+        if a.get("kalender") in AGENDA_VASTE_KLEUR and AGENDA_VASTE_KLEUR[a["kalender"]].get("naam") == "Lara" \
+                and a.get("start", "")[:10] in vrij:
             continue
         info = lees_titel(a["titel"])
         adres = a.get("locatie") or ""

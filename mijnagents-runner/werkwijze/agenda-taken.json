@@ -1,5 +1,5 @@
 {
- "versie": "3.0",
+ "versie": "3.1",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -277,6 +277,16 @@
  },
  "openstaand": [
   {
+   "wat": "rechtbank maandag 28-09 (ondernemingsrechtbank/vennootschappen Leuven) loopt tot 16:00 en botst met Lara ophalen 16:00. Welke firma en welk adres, en wie haalt Lara die dag op?",
+   "wie": "Mehdi",
+   "wanneer": "voor 28-09"
+  },
+  {
+   "wat": "donderdag 24-09: dubbele ritten op de werkagenda, want een collega vulde 'Rijden naar ...' handmatig in naast de rit van de agent. Opruimen, en de agent zou een handmatig 'Rijden naar'-blok moeten herkennen zodat hij niet dubbelt",
+   "wie": "Claude",
+   "wanneer": "kort"
+  },
+  {
    "wat": "Lara ophalen staat nog in de reeks op drie vrije dagen: maandag 26-10 en vrijdag 30-10 (herfstvakantie) en vrijdag 02-07-2027 (zomervakantie). Waar haalt Mehdi haar die dagen op, of vallen ze weg?",
    "wie": "Mehdi",
    "wanneer": "voor 26-10"
@@ -345,14 +355,13 @@
    "wat": "vier oude Calendly-koppelingen losmaken, herinnering staat in de agenda",
    "wie": "Mehdi",
    "wanneer": "30-09-2026"
-  },
-  {
-   "wat": "H-Architects en UNABO uit de leeslijst halen",
-   "wie": "de agent",
-   "wanneer": "als het bericht verspreid is"
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-22",
+   "wat": "tijdens schoolvakanties en feestdagen geen Lara-ophaling, geen rit en geen 'Geen buiten afspraken'-marker; de agent leest de vakantiedagen uit de agenda van Lara. Deze Lara-regelingen gelden per schooljaar. Donderdag bij oma blijft optioneel (met Leen). Maandag na werfbezoek 2145 komt Mehdi naar huis. Zondag 27-09 is Lara thuis (Leen werkt), geen ophaling"
+  },
   {
    "datum": "2026-09-22",
    "wat": "nieuwe overkoepelende firmacode ALGE (Algemeen, 4 letters) voor leveranciers en afspraken die voor alle bedrijven gelden, niet voor een. Staat bewust niet op het dashboard maar in werkwijze/externe-relaties.json, samen met de externe partijen: Nadien (boekhouder) en Wally (AI-software). Beide leverancier, dus [ALGE-LO] online, paars"
@@ -500,7 +509,8 @@
     "18:00-19:00 !! Mehdi: Zwemles Lara",
     "19:00-19:30 Mehdi: Lara naar huis brengen, dat is zelf de terugrit, dus geen tweede"
    ],
-   "hoe": "de twee afspraken zijn reeksen die op 22-09-2026 beginnen; aangepast in de reeks zelf, er is geen verleden dat verandert. De ritten maakt de agent elke week zelf"
+   "hoe": "de twee afspraken zijn reeksen die op 22-09-2026 beginnen; aangepast in de reeks zelf, er is geen verleden dat verandert. De ritten maakt de agent elke week zelf",
+   "vakantie": "vervalt tijdens schoolvakanties en feestdagen"
   },
   "thuisrit_telt": "Staat er na een buitenafspraak al een rit naar huis in de agenda, dan gaat Mehdi naar huis en vertrekt de volgende rit van thuis. Gezien 21-09-2026: op vrijdag vertrok de rit naar Lara van de griffie, terwijl er om 11:00 al een rit naar huis stond",
   "lara_maandag_vrijdag": {
@@ -510,7 +520,7 @@
    "afzetten": "thuis, Herfstlaan 65",
    "ritten": "15:45-16:00 thuis → De Speelkriebel en 17:00-17:15 De Speelkriebel → thuis, roze op de agenda van Lara",
    "stand": "adres gezet in alle komende afspraken van maandag en vrijdag tot 02-07-2027, niet op vakantie- en feestdagen van de agenda van Lara. Daar staat het ophalen nog in de reeks (26-10, 30-10 en 02-07-2027) en vraagt de agent het",
-   "vakantie": "op een dag die de agenda van Lara als schoolvakantie of feestdag toont, zet de agent geen schooladres"
+   "vakantie": "tijdens schoolvakanties en feestdagen geen ophaling; buiten de vakanties elke maandag en vrijdag"
   },
   "lara_vooruit": {
    "regel": "de agenda van Lara loopt in vaste reeksen per schooljaar. Haar ritten zet de agent tot 300 dagen vooruit, tot het einde van het schooljaar; voor de rest acht dagen, want werkafspraken schuiven",
@@ -527,8 +537,17 @@
    "ophalen": "bij oma, Wilselsesteenweg 57, 3010 Leuven (zelfde oma als de dinsdagketen)",
    "afzetten": "thuis, Herfstlaan 65",
    "ritten": "17:25-17:45 thuis -> oma en 18:30-18:50 oma -> thuis, roze op de agenda van Lara",
-   "let_op": "de titel draagt nog '(optioneel)'; dat is Mehdi's tekst, de agent haalt het niet weg. De rit staat er wel, want de afspraak is bevestigd"
-  }
+   "let_op": "de titel draagt nog '(optioneel)'; dat is Mehdi's tekst, de agent haalt het niet weg. De rit staat er wel, want de afspraak is bevestigd",
+   "optioneel": "de donderdag bij oma is optioneel (zo afgesproken met Leen): als Mehdi kan gaat hij, anders niet. Daarom draagt de titel '(optioneel)'; dat blijft staan"
+  },
+  "schoolvakantie": {
+   "regel": "tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen ophaalafspraak, geen rit, en de marker 'Geen buiten afspraken Lara ophalen' hoort er die dag ook niet (dan mogen collega's wel buiten-afspraken plannen)",
+   "bron": "de agent leest de vakantie- en feestdagen uit de agenda van Lara (all-day items met 'vakantie' of 'feestdag'); die horen als volledige weken in de agenda te staan",
+   "grendel": "lara_vakantiedagen() -> geen rit voor een Lara-afspraak op zo'n dag",
+   "per_schooljaar": "deze Lara-regelingen (ophalen, oma, zwemles, vakanties) gelden per schooljaar en moeten elk jaar opnieuw bijgesteld worden; ze staan niet voor altijd vast",
+   "mehdi": "22-09-2026"
+  },
+  "maandag_na_werfbezoek": "op maandag komt Mehdi na werfbezoek 2145 (tot 11:30) naar huis voor de online afspraak van 12:00; afspraak C is voor die maandag bevestigd (22-09-2026)"
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",
