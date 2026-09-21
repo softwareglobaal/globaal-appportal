@@ -327,7 +327,12 @@ def plek_zoeken(tekst):
         return None, None
     for p in plekken():
         naam = (p.get("naam") or "").strip()
-        if naam and naam.lower() in t:
+        # Thuis is het vertrekpunt, nooit een bestemming die ik uit een titel haal:
+        # "Lara ophalen en thuis afzetten" gebeurt niet thuis. Gezien 21-09-2026, toen
+        # maakte ik een rit van thuis naar thuis.
+        if not naam or p.get("soort") == "thuis" or naam.lower() == "thuis":
+            continue
+        if re.search(r"(?<![\w])" + re.escape(naam.lower()) + r"(?![\w])", t):
             if p.get("adres"):
                 return p["adres"], naam
             if p.get("lat") and p.get("lon"):
@@ -623,6 +628,25 @@ def rijtijd_min(van, naar, vertrek):
     return int(math.ceil((vrij * f + BUFFER_MIN) / 5) * 5), f
 
 
+def ritlabel(adres, ander_adres=""):
+    """Een naam voor een rit die iets zegt. Thuis heet thuis; ligt de andere kant in
+    dezelfde gemeente, dan de straat, want "Leuven → Leuven" zegt niets."""
+    if not adres:
+        return "?"
+    if re.fullmatch(r"\s*-?\d+\.\d+\s*,\s*-?\d+\.\d+\s*", adres):
+        lat, lon = (float(v) for v in adres.split(","))
+        for p in plekken():
+            if p.get("lat") and abs(p["lat"] - lat) < 0.0005 and abs(p["lon"] - lon) < 0.0005:
+                return "thuis" if p.get("soort") == "thuis" else p["naam"]
+        return "?"
+    if adres.strip().lower() == THUIS.strip().lower() or adres.lower().startswith(THUIS.split(",")[0].lower()):
+        return "thuis"
+    g1, g2 = plaatsnaam(adres), plaatsnaam(ander_adres) if ander_adres else ""
+    if g1 and g2 and g1 == g2:
+        return adres.split(",")[0].strip()
+    return g1 or adres.split(",")[0].strip()
+
+
 def plaatsnaam(adres):
     m = re.search(r"\d{4}\s+([A-Za-zÀ-ÿ' -]+)", adres or "")
     return (m.group(1).strip() if m else (adres or "").split(",")[0]).strip()[:30]
@@ -709,14 +733,14 @@ def reistijd_zetten(items, alleen_dag=None):
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: adres niet gevonden ({adres[:40]})")
             continue
         vertrek_van = vorige_per_dag.get(dag, thuis)
-        van_plaats = vorige_plaats_per_dag.get(dag, plaatsnaam(THUIS) or "thuis")
+        van_adres = vorige_plaats_per_dag.get(dag, THUIS)
         vorige_per_dag[dag] = doel
         is_laatste = laatste_van_de_dag.get(dag) == a.get("id")
         # Gaat de eerstvolgende afspraak al naar huis, zoals "Lara naar huis brengen",
         # dan is dat zelf de terugrit en maak ik er geen tweede. Gezien 20-09-2026.
         for x in items:
-            if x is a or not x.get("start", "").startswith(dag):
-                continue
+            if x is a or not x.get("start", "").startswith(dag) or "T" not in x.get("start", ""):
+                continue  # een afspraak van de hele dag heeft geen uur om mee te vergelijken
             try:
                 xs = datetime.fromisoformat(x["start"])
             except (ValueError, KeyError):
@@ -748,8 +772,9 @@ def reistijd_zetten(items, alleen_dag=None):
             fout += 1
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: rijtijd niet berekend ({type(e).__name__})")
             continue
-        plaats = plaatsnaam(adres)
-        vorige_plaats_per_dag[dag] = plaats
+        plaats = ritlabel(adres, van_adres)
+        van_plaats = ritlabel(van_adres, adres)
+        vorige_plaats_per_dag[dag] = adres
         def bestaand(t0, t1):
             for x in reistijden:
                 if x["kalender"] == a["kalender"] and "T" in x["start"] and t0 <= datetime.fromisoformat(x["start"]) <= t1:
@@ -759,21 +784,39 @@ def reistijd_zetten(items, alleen_dag=None):
         def eigen(x):
             return "OSRM" in (x.get("omschrijving") or "")
 
-        def bijwerken(x, s, e, tekst):
-            """Een blok dat ik zelf maakte, pas ik aan als de rijtijd meer dan 10 min verschilt."""
+        def bijwerken(x, s, e, tekst, titel):
+            """Een blok dat ik zelf maakte, pas ik aan als de rijtijd meer dan 10 min verschilt,
+            en altijd als titel of kleur niet meer klopt met de afspraak waarvoor ik rijd."""
+            if not eigen(x):
+                return False
             duur_oud = (datetime.fromisoformat(x["einde"]) - datetime.fromisoformat(x["start"])).total_seconds() / 60
-            if eigen(x) and abs(duur_oud - (e - s).total_seconds() / 60) >= 10:
-                _patch(x, {"start": {"dateTime": s.isoformat()}, "end": {"dateTime": e.isoformat()}, "description": tekst}, tok)
+            wijzig = {}
+            if abs(duur_oud - (e - s).total_seconds() / 60) >= 10:
+                wijzig.update({"start": {"dateTime": s.isoformat()}, "end": {"dateTime": e.isoformat()}, "description": tekst})
+            if x.get("titel") != titel:
+                wijzig["summary"] = titel
+            if (x.get("_kleur") or "") != rit_kleur.get("colorId", ""):
+                wijzig["colorId"] = rit_kleur.get("colorId") or None
+            if wijzig:
+                _patch(x, wijzig, tok)
                 return True
             return False
         uitleg_h = f"Reistijd voor: {a['titel']} ({heen} min = " + ("live verkeer Google" if fh == "live" else f"vrije rijtijd x filefactor {fh}") + f" + {BUFFER_MIN} min buffer, OSRM; adres uit {bron_adres})"
         uitleg_t = f"Reistijd na: {a['titel']} ({terug} min = " + ("live verkeer Google" if ft == "live" else f"vrije rijtijd x filefactor {ft}") + f" + {BUFFER_MIN} min buffer, OSRM)"
-        kleur = {"colorId": "11", "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 5}]}}
+        # Een rit hoort bij de afspraak waarvoor je rijdt: zelfde agenda, zelfde kleur. Een
+        # rit voor Lara staat roze op de agenda van Lara, een privérit zwart op privé. Rood
+        # is alleen voor werk. Anders zien collega's op je werkagenda dat je ergens heen
+        # gaat, zonder wat, en weer terugkomt. Mandaat van Mehdi, 21-09-2026.
+        # De kleur komt uit dezelfde regel die elke afspraak nakijkt, zodat maker en
+        # controleur het nooit oneens kunnen zijn.
+        _wens = kleur_gewenst({"kalender": a["kalender"]}, {"reistijd": True})
+        rit_kleur = {"colorId": _wens} if _wens else {}
+        kleur = {**rit_kleur, "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 5}]}}
         try:
             x = bestaand(start - timedelta(hours=3), start)
             if x:
                 al += 1
-                if bijwerken(x, start - timedelta(minutes=heen), start, uitleg_h):
+                if bijwerken(x, start - timedelta(minutes=heen), start, uitleg_h, f"🚗 Reistijd: {van_plaats} → {plaats}"):
                     gemaakt += 1
             else:
                 _insert(a["kalender"], {"summary": f"🚗 Reistijd: {van_plaats} → {plaats}", "start": {"dateTime": (start - timedelta(minutes=heen)).isoformat()},
@@ -784,12 +827,12 @@ def reistijd_zetten(items, alleen_dag=None):
                 regels.append(f"{a['start'][:16]} {a['titel'][:44]}: geen rit naar huis, je gaat door naar de volgende buitenafspraak")
             if x:
                 al += 1
-                if bijwerken(x, einde, einde + timedelta(minutes=terug), uitleg_t):
+                if bijwerken(x, einde, einde + timedelta(minutes=terug), uitleg_t, f"🚗 Reistijd: {plaats} → thuis"):
                     gemaakt += 1
             elif is_laatste:
-                _insert(a["kalender"], {"summary": f"🚗 Reistijd: {plaats} → {plaatsnaam(THUIS) or 'thuis'}", "start": {"dateTime": einde.isoformat()},
+                _insert(a["kalender"], {"summary": f"🚗 Reistijd: {plaats} → thuis", "start": {"dateTime": einde.isoformat()},
                                         "end": {"dateTime": (einde + timedelta(minutes=terug)).isoformat()}, "description": uitleg_t,
-                                        **{"colorId": "11", "reminders": {"useDefault": False, "overrides": []}}}, tok)
+                                        **{**rit_kleur, "reminders": {"useDefault": False, "overrides": []}}}, tok)
                 gemaakt += 1
             _patch(a, {"reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": heen + 5}]}}, tok)
             regels.append(f"{a['start'][:16]} {a['titel'][:44]}: {van_plaats} → {plaats} {heen} min (file x{fh})"

@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 6.2 (19-09-2026, wie welke agenda ziet en de regel dat ik nooit hernoem; v6.1 17-09-2026 Elevait als firma L; v6 16-09-2026: het document 'agenda afspraken met Nova.docx' is de enige bron; negen agenda's; v5 van dezelfde dag met elf agenda's is teruggedraaid; v4 11-09-2026: reistijd met file, projectnummer en adres uit de projectmap). Ik ben de bronnen-agent voor
+Versie 6.3 (21-09-2026, een rit staat op dezelfde agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt; thuis komt nooit uit een titel; de dinsdagketen van Lara). v6.2 (19-09-2026, wie welke agenda ziet en de regel dat ik nooit hernoem; v6.1 17-09-2026 Elevait als firma L; v6 16-09-2026: het document 'agenda afspraken met Nova.docx' is de enige bron; negen agenda's; v5 van dezelfde dag met elf agenda's is teruggedraaid; v4 11-09-2026: reistijd met file, projectnummer en adres uit de projectmap). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -15,8 +15,10 @@ bron voor agenda's, titels, kleuren en Calendly-routering. Andere lijsten (Downl
 bord-teksten, chats) tellen niet. Wijkt de agenda af van het document, dan is de agenda
 fout, niet het document. Sinds 16-09-2026 voer ik die afspraken zelf uit.
 
-**Kleuren**: roze = Lara; oranje = sales/prospect; rood = !! buiten + reistijd;
-blauw = klant online; groen = intern; geel = ?? niet bevestigd.
+**Kleuren**: roze = Lara (agendakleur); zwart = privé (agendakleur); rood = werk
+buiten en de rit ervoor; blauw = klant online; oranje = prospect online; paars =
+leverancier online; groen = intern; geel = ?? niet bevestigd. Een rit voor Lara of
+privé krijgt de kleur van die agenda, geen rood (21-09-2026).
 
 **I. De 9 actieve agenda's (de rest blijft verborgen en lees ik niet)**:
 1. mehdiprivewerkagenda (intern + Harmoniebouw-werk van Mehdi + Elevait), 2. H-Architects (alle
@@ -76,11 +78,14 @@ mag Google Agenda niet blokkeren. Zonder dat blijft de telefoon stil, wat ik ook
 
 ## Kleuren (mandaat van Mehdi, 11-09-2026)
 
-Elke komende afspraak krijgt de kleur van zijn soort, volgens de regels
-hierboven, in Google-kleuren: roze (flamingo) = Lara; oranje (mandarijn) =
-prospect PO en PB; rood (tomaat) = `!!` buiten en reistijd; blauw (pauw) = klant
-online KO; groen (basilicum) = intern IN; geel (banaan) = `??` niet bevestigd.
-Een titel zonder code laat ik met rust. Sinds 20-09-2026 draai ik op het account van Mehdi zelf, dus ik kan ook op Lara kleuren zetten. Ik verander alleen
+De kleur zegt waarvoor Mehdi ergens is, `!!` zegt dat hij naar buiten gaat
+(20-09-2026). Lara (flamingo roze) en privé (zwart) krijgen hun kleur op de agenda
+zelf; daar zet ik per afspraak niets, ook niet op de rit. Op de werkagenda, de
+eerste regel die past: rit voor werk = rood (tomaat); geen firmacode = fout, geen
+kleur; `??` = geel (banaan); buiten (`!!`, een dienst die altijd buiten is, of KB,
+PB, LB) = rood (tomaat); LO = paars (druif); KO = blauw (pauw); PO = oranje
+(mandarijn); IN = groen (basilicum). De volledige tabel staat in
+`werkwijze/agenda-taken.json`. Ik verander alleen
 de kleur, nooit de agenda waar de afspraak op staat: staat een afspraak op de
 verkeerde agenda volgens de Calendly-routering, dan meld ik het als signaal.
 
@@ -108,10 +113,29 @@ Een afspraak is online of ter plaatse bij de klant. Voor allebei geldt:
 
 ## Reistijd en botsingen (mandaat van Mehdi, 11-09-2026)
 
-- Elke komende afspraak **buiten** krijgt twee blokken op dezelfde agenda:
-  `🚗 Reistijd → plaats` ervoor en `🚗 Reistijd ← plaats` erna, rood, zonder
-  herinnering (het heenblok wel: 5 minuten vooraf). De afspraak zelf krijgt een
-  herinnering op het vertrekmoment plus 5 minuten.
+- Elke komende afspraak **buiten** krijgt een rit ervoor en, na de laatste van de
+  dag, een rit naar huis: `🚗 Reistijd: van → naar`. **De rit staat op dezelfde
+  agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt** (mandaat van
+  Mehdi, 21-09-2026): werk rood, Lara roze op de agenda van Lara, privé zwart op
+  de privé-agenda. Anders zien collega's op de werkagenda dat Mehdi ergens heen
+  gaat, niet waarvoor, en weer terugkomt. Elke rit draagt het autootje; alleen de
+  `!!` op de afspraak zegt dat hij naar buiten gaat. De kleur van de rit komt uit
+  dezelfde regel waarmee ik elke afspraak nakijk, zodat maker en controleur het
+  nooit oneens zijn.
+- De titel zegt van waar naar waar: thuis heet thuis; liggen beide kanten in
+  dezelfde gemeente, dan de straat; een plek uit locatie.globaal.be zonder adres
+  heet naar haar naam, nooit naar coördinaten. Een rit die ik zelf maakte en die al
+  bestond, krijgt de juiste titel en kleur terug.
+- Het heenblok heeft een herinnering 5 minuten vooraf, het terugblok geen. De
+  afspraak zelf krijgt een herinnering op het vertrekmoment plus 5 minuten.
+- Het uur van een afspraak is het uur van aankomst: de rit ligt altijd ervoor.
+  Na een buitenafspraak gaat de rit naar de volgende plaats, niet naar huis. Thuis
+  is de bestemming als er niets meer volgt, of als de volgende afspraak zelf naar
+  huis gaat (zoals `Lara naar huis brengen`); dan maak ik er geen tweede.
+- **Dinsdag, elke week vanaf 22-09-2026, op de agenda van Lara**: 17:10 rit thuis
+  naar oma (Wilselsesteenweg 57), 17:30-17:40 Lara ophalen bij oma, 17:40 rit naar
+  het zwembad (Stadionlaan 4), 18:00-19:00 `!! Mehdi: Zwemles Lara`, 19:00-19:30
+  Lara naar huis brengen, en dat is meteen de terugrit.
 - **De rijtijd is niet de kaart-tijd.** Ik neem de vrije rijtijd (OSRM-router op
   OpenStreetMap) en vermenigvuldig met een filefactor op het vertrekuur, en tel
   10 minuten buffer bij, afgerond op 5 minuten:
@@ -127,7 +151,7 @@ Een afspraak is online of ter plaatse bij de klant. Voor allebei geldt:
 
   Voor het heenblok bereken ik eerst het vertrekuur en pas dan de factor op dat
   uur toe. Vertrekpunt is thuis (Herfstlaan 65, 3010 Leuven), of de vorige
-  buitenafspraak van dezelfde dag; terug is altijd naar thuis. Mehdi mag de tabel
+  buitenafspraak van dezelfde dag. Mehdi mag de tabel
   hier aanpassen; de tabel in mijn code volgt dan (De Ontwikkelaar controleert dat).
 - **Live verkeersinfo**: staat er een GOOGLE_ROUTES_KEY in de omgeving van mijn
   runner, dan vraag ik Google Routes de rijtijd met verkeer op het vertrekuur
@@ -140,7 +164,13 @@ Een afspraak is online of ter plaatse bij de klant. Voor allebei geldt:
   nieuw. Maakte ik het zelf, dan pas ik het aan als de rijtijd meer dan 10
   minuten verschilt (bv. na een adres- of tijdwijziging). Een blok van iemand
   anders laat ik met rust.
-- Geen adres, of een adres dat ik niet vind: dan meld ik dat in plaats van te gokken.
+- Het adres zoek ik in de agenda, dan via het projectnummer in de projectmap, dan
+  bij de benoemde plekken van locatie.globaal.be. Een plek telt alleen als haar
+  naam als heel woord in de titel staat. **Thuis is het vertrekpunt en nooit een
+  bestemming uit een titel**: in `Lara ophalen en thuis afzetten` gebeurt het
+  ophalen niet thuis. Op 21-09-2026 maakte ik daardoor een rit van thuis naar thuis.
+- Geen adres, of een adres dat ik niet vind: dan zet ik geen rit en meld ik het,
+  in plaats van te gokken.
 - **Botsingen**: twee afspraken die elkaar overlappen (bv. een Zoom tijdens een
   opmeting, of een Zoom in de reistijd) meld ik als signaal; ik verplaats nooit iets.
 

@@ -1,6 +1,6 @@
 {
- "versie": "2.3",
- "datum": "2026-09-20",
+ "versie": "2.4",
+ "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
   {
@@ -134,7 +134,7 @@
    "volgorde": "de eerste regel die past wint",
    "regels": [
     {
-     "wanneer": "reistijdblok",
+     "wanneer": "reistijdblok voor een werkafspraak (op Lara en privé krijgt de rit de agendakleur, zoals de afspraak)",
      "kleur": "11",
      "naam": "tomaat, rood"
     },
@@ -271,6 +271,16 @@
  },
  "openstaand": [
   {
+   "wat": "waar haalt Mehdi Lara op maandag en vrijdag om 16:00 op, en waar zet hij haar af? Tot dan zet de agent daar geen rit",
+   "wie": "Mehdi",
+   "wanneer": "nu"
+  },
+  {
+   "wat": "vrijdag 25-09: tussen de griffie (tot 11:00) en Lara (16:00) zitten online afspraken. Gaat Mehdi tussendoor naar huis? Samen bekijken als we bij vrijdag zijn",
+   "wie": "Mehdi en Claude",
+   "wanneer": "bij vrijdag"
+  },
+  {
    "wat": "school, zwemschool, grootouders en kantoor toevoegen aan locatie.globaal.be, met een straal",
    "wie": "Mehdi",
    "wanneer": "zodra het kan"
@@ -327,6 +337,14 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-21",
+   "wat": "een rit staat op dezelfde agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt: Lara roze op Lara, privé zwart op privé, alleen werk is rood. Altijd het autootje. Alleen !! maakt het verschil. De dinsdagketen van Lara (oma, zwembad, naar huis) geldt elke week"
+  },
+  {
+   "datum": "2026-09-21",
+   "wat": "fout rechtgezet: het woord 'thuis' in 'Lara ophalen en thuis afzetten' werd herkend als de plek Thuis, waardoor de agent een rit van thuis naar thuis maakte (ook de eerdere 'Leuven → Leuven'). Thuis komt nooit meer uit een titel, en een plek telt alleen als heel woord"
+  },
   {
    "datum": "2026-09-20",
    "wat": "het uur van een afspraak is het uur van aankomst; de rit ligt altijd ervoor. En de rit na een buitenafspraak gaat naar de volgende plaats, niet naar huis, tenzij de volgende afspraak zelf naar huis gaat"
@@ -415,7 +433,7 @@
   "ook_prive": "een afspraak van Lara of privé die op een adres gebeurt, hoort ook !! te dragen. Zonder dat denkt de agent dat je thuis blijft en zet hij de ritten verkeerd. De zwemles had geen !!, en daardoor stuurde hij je naar huis."
  },
  "reistijd": {
-  "regel": "elke buitenafspraak krijgt een blok heen en een blok terug, rood, op dezelfde agenda",
+  "regel": "elke buitenafspraak krijgt een blok heen en een blok terug, op dezelfde agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt: werk rood, Lara roze en privé zwart (de kleur van die agenda). Elke rit draagt het autootje 🚗. Alleen de twee uitroeptekens !! op de afspraak zeggen dat hij naar buiten gaat",
   "van_waar": "vanaf thuis, of vanaf de vorige buitenafspraak van die dag",
   "thuis": "Herfstlaan 65, 3010 Leuven",
   "rijtijd": "Google Routes API met het echte verkeer op het vertrekuur (TRAFFIC_AWARE_OPTIMAL)",
@@ -428,9 +446,22 @@
   },
   "dubbel": "bestaat er al een reistijdblok binnen drie uur voor of na, dan maakt hij er geen tweede",
   "ketening": "Na een buitenafspraak gaat de rit naar de volgende plaats, niet naar huis. Thuis is alleen de bestemming als er niets meer volgt, of als de volgende afspraak zelf naar huis gaat, zoals 'Lara naar huis brengen'. Dan is die afspraak de terugrit en maakt de agent er geen tweede.",
-  "adres_zoeken": "eerst het adres in de agenda, dan het projectnummer in de projectmap, dan de benoemde plekken uit locatie.globaal.be",
+  "adres_zoeken": "eerst het adres in de agenda, dan het projectnummer in de projectmap, dan de benoemde plekken uit locatie.globaal.be. Een plek telt alleen als haar naam als heel woord in de titel staat. Thuis is het vertrekpunt en nooit een bestemming die uit een titel komt: in 'Lara ophalen en thuis afzetten' gebeurt het ophalen niet thuis. Vindt de agent geen adres, dan zet hij geen rit en meldt hij het; hij gokt geen plaats",
   "het_uur_is_aankomst": "Het uur van een afspraak is het uur dat Mehdi er MOET ZIJN, niet het uur dat hij vertrekt. De rit ligt dus altijd VOOR de afspraak, nooit tijdens en nooit erna. Gezien op 20-09-2026: de zwemles van Lara begint om 18:00 en er stond een rit naar huis om 18:00. Dat kan niet.",
-  "keten_voorbeeld": "dinsdag: thuis 17:10, oma 17:30 tot 17:40, rijden 17:40, zwembad 18:00 tot 19:00, daarna brengt hij Lara zelf naar huis"
+  "keten_voorbeeld": "dinsdag: thuis 17:10, oma 17:30 tot 17:40, rijden 17:40, zwembad 18:00 tot 19:00, daarna brengt hij Lara zelf naar huis",
+  "waarom_zelfde_agenda": "Mehdi, 21-09-2026: staat de rit voor Lara of voor iets privé rood op de werkagenda, dan zien collega's dat Mehdi ergens heen gaat, niet waarvoor, en weer terugkomt. De rit hoort bij de afspraak en is dus even zichtbaar als die afspraak: wie de agenda van Lara niet ziet, ziet de rit ook niet",
+  "titel": "🚗 Reistijd: van → naar. Thuis heet thuis. Liggen beide kanten in dezelfde gemeente, dan de straat, want 'Leuven → Leuven' zegt niets. Een plek uit locatie.globaal.be zonder adres heet naar zijn naam, nooit naar coördinaten. Een rit die de agent zelf maakte en die al bestond, krijgt de juiste titel en kleur terug",
+  "lara_dinsdag": {
+   "vanaf": "2026-09-22, elke dinsdag, op de agenda van Lara",
+   "keten": [
+    "17:10-17:30 🚗 rit thuis → oma (Wilselsesteenweg 57)",
+    "17:30-17:40 !! Mehdi: Lara ophalen bij oma",
+    "17:40-18:00 🚗 rit oma → zwembad (Stadionlaan 4)",
+    "18:00-19:00 !! Mehdi: Zwemles Lara",
+    "19:00-19:30 Mehdi: Lara naar huis brengen, dat is zelf de terugrit, dus geen tweede"
+   ],
+   "hoe": "de twee afspraken zijn reeksen die op 22-09-2026 beginnen; aangepast in de reeks zelf, er is geen verleden dat verandert. De ritten maakt de agent elke week zelf"
+  }
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",

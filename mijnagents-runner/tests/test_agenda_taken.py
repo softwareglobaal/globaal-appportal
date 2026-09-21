@@ -94,6 +94,35 @@ check("de diensten in de JSON kloppen met de code",
 check("de reistijdbuffer in de JSON klopt", taken["reistijd"]["buffer_minuten"] == W.BUFFER_MIN)
 check("de dagstop op Google Routes klopt", taken["reistijd"]["dagstop"]["aantal"] == W.ROUTES_DAGLIMIET)
 
+# Een rit hoort bij de afspraak waarvoor Mehdi rijdt: zelfde agenda, zelfde kleur.
+# Mandaat van Mehdi, 21-09-2026. Alleen werk is rood.
+for kal in W.AGENDA_VASTE_KLEUR:
+    check(f"een rit op {kal[:24]} krijgt de agendakleur, geen rood",
+          W.kleur_gewenst({"kalender": kal}, {"reistijd": True}) == "")
+check("een rit op de werkagenda is rood",
+      W.kleur_gewenst({"kalender": "mehdiprivewerkagenda@gmail.com"}, {"reistijd": True}) == "11")
+check("de agent herkent zijn eigen rit met het autootje",
+      W.lees_titel("🚗 Reistijd: thuis → Wilselsesteenweg 57")["reistijd"])
+check("de JSON zegt dat een rit op dezelfde agenda en in dezelfde kleur staat",
+      "dezelfde agenda" in taken["reistijd"]["regel"] and "🚗" in taken["reistijd"]["regel"])
+check("de dinsdagketen van Lara staat in de JSON", "lara_dinsdag" in taken["reistijd"])
+
+# Thuis is het vertrekpunt, nooit een bestemming uit een titel. Gezien 21-09-2026:
+# "Lara ophalen en thuis afzetten" gaf een rit van thuis naar thuis.
+_echt = W.plekken
+W.plekken = lambda: [{"naam": "Thuis", "soort": "thuis", "lat": 50.891811, "lon": 4.718396},
+                     {"naam": "school Lara", "soort": "school", "lat": 50.88, "lon": 4.70},
+                     {"naam": "Zwembad", "adres": "Stadionlaan 4, 3010 Leuven"}]
+check("'thuis afzetten' maakt van de afspraak geen afspraak thuis",
+      W.plek_zoeken("Mehdi: !! [LARA] Lara ophalen en thuis afzetten") == (None, None))
+check("een benoemde plek wordt gevonden", W.plek_zoeken("!! Mehdi: school Lara")[1] == "school Lara")
+check("een plek telt alleen als heel woord", W.plek_zoeken("zwembadrand kuisen") == (None, None))
+check("een rit naar thuis heet thuis, niet coördinaten", W.ritlabel("50.891811,4.718396") == "thuis")
+check("een plek zonder adres heet naar haar naam", W.ritlabel("50.88,4.70") == "school Lara")
+W.plekken = _echt
+check("binnen dezelfde gemeente heet de rit naar de straat",
+      W.ritlabel("Vaartstraat 5, 3000 Leuven", "Herfstlaan 65, 3010 Leuven") == "Vaartstraat 5")
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 
