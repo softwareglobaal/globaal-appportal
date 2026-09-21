@@ -651,7 +651,10 @@ def ritlabel(adres, ander_adres=""):
     if adres.strip().lower() == THUIS.strip().lower() or adres.lower().startswith(THUIS.split(",")[0].lower()):
         return "thuis"
     g1, g2 = plaatsnaam(adres), plaatsnaam(ander_adres) if ander_adres else ""
-    if g1 and g2 and g1 == g2:
+    p1 = re.search(r"\b(\d{4})\s+[A-Za-zÀ-ÿ]", adres or "")
+    p2 = re.search(r"\b(\d{4})\s+[A-Za-zÀ-ÿ]", ander_adres or "")
+    if (g1 and g2 and g1 == g2) or (p1 and p2 and p1.group(1) == p2.group(1)):
+        # zelfde gemeente of zelfde postcode: 3010 heet soms Leuven, soms Kessel-Lo
         return adres.split(",")[0].strip()
     return g1 or adres.split(",")[0].strip()
 
@@ -730,6 +733,19 @@ def reistijd_zetten(items, alleen_dag=None):
     laatste_van_de_dag = {d: rij[-1][2].get("id") for d, rij in per_dag.items()}
     vorige_per_dag = {}
     vorige_plaats_per_dag = {}
+    vorige_einde_per_dag = {}
+
+    def is_thuisrit(x):
+        t = x.get("titel") or ""
+        return ("Reistijd na:" in (x.get("omschrijving") or "") or "Reistijd ←" in t
+                or bool(re.search(r"→\s*thuis\s*$", t)))
+
+    def thuisrit_tussen(t0, t1):
+        for x in reistijden:
+            if "T" in x.get("start", "") and is_thuisrit(x) and t0 <= datetime.fromisoformat(x["start"]) <= t1:
+                return x
+        return None
+
     for start, einde, a, info, adres, fysiek in buiten:
         dag = a["start"][:10]
         if not fysiek:
@@ -743,8 +759,17 @@ def reistijd_zetten(items, alleen_dag=None):
             continue
         vertrek_van = vorige_per_dag.get(dag, thuis)
         van_adres = vorige_plaats_per_dag.get(dag, THUIS)
+        # Staat er tussen de vorige buitenafspraak en deze al een rit naar huis, dan is
+        # hij thuis en vertrekt hij van thuis. Gezien 21-09-2026: op vrijdag vertrok de
+        # rit naar Lara van de griffie, terwijl er om 11:00 al een rit naar huis stond.
+        if dag in vorige_einde_per_dag and thuisrit_tussen(vorige_einde_per_dag[dag], start):
+            vertrek_van, van_adres = thuis, THUIS
         vorige_per_dag[dag] = doel
+        vorige_einde_per_dag[dag] = einde
         is_laatste = laatste_van_de_dag.get(dag) == a.get("id")
+        if not is_laatste and thuisrit_tussen(einde, einde + timedelta(minutes=30)):
+            is_laatste = True   # die rit naar huis staat er al, dus hij gaat naar huis
+            regels.append(f"{a['start'][:16]} {a['titel'][:40]}: er staat al een rit naar huis, die telt")
         # Gaat de eerstvolgende afspraak al naar huis, zoals "Lara naar huis brengen",
         # dan is dat zelf de terugrit en maak ik er geen tweede. Gezien 20-09-2026.
         for x in items:

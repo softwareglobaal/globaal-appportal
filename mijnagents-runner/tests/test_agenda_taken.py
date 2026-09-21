@@ -128,6 +128,12 @@ for _script in ("controle_agenda.py", "file_wacht.py"):
     _code = (HIER / _script).read_text(encoding="utf-8")
     check(f"{_script} leest de agenda's via de Agendawacht zelf",
           "W.afspraken(" in _code and "A.afspraken(" not in _code)
+check("zelfde postcode, andere gemeentenaam: de rit heet naar de plek",
+      W.ritlabel("De Speelkriebel, Jozef Pierrestraat 104, 3010 Kessel-Lo", W.THUIS) == "De Speelkriebel")
+_bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("een rit naar huis die al in de agenda staat, telt als thuiskomen",
+      "thuisrit_tussen(vorige_einde_per_dag[dag], start)" in _bron and "thuisrit_tussen(einde, einde" in _bron)
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

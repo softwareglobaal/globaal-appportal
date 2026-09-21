@@ -1,5 +1,5 @@
 {
- "versie": "2.4",
+ "versie": "2.5",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -271,14 +271,29 @@
  },
  "openstaand": [
   {
-   "wat": "waar haalt Mehdi Lara op maandag en vrijdag om 16:00 op, en waar zet hij haar af? Tot dan zet de agent daar geen rit",
+   "wat": "bevestigen dat de opvang van 16:00 op De Speelkriebel is; dan zet de agent het adres in de hele reeks van maandag en vrijdag, nu staat het alleen in de week van 21-09",
    "wie": "Mehdi",
    "wanneer": "nu"
   },
   {
-   "wat": "vrijdag 25-09: tussen de griffie (tot 11:00) en Lara (16:00) zitten online afspraken. Gaat Mehdi tussendoor naar huis? Samen bekijken als we bij vrijdag zijn",
+   "wat": "zondag 27-09, 'Leen moet werken' 08:00-20:00: waar begint die dag, haalt Mehdi Lara ergens op? Tot dan geen rit",
+   "wie": "Mehdi",
+   "wanneer": "voor zondag"
+  },
+  {
+   "wat": "donderdag 24-09 17:45, '?? Lara ophalen bij oma (optioneel)': nog niet bevestigd, dus geen rit. Bij bevestiging !! ervoor en het adres van oma in de afspraak",
+   "wie": "Mehdi",
+   "wanneer": "voor donderdag"
+  },
+  {
+   "wat": "vrijdag 25-09: griffie tot 11:00, de rit naar huis staat er en telt. Open blijft of Mehdi de online afspraken van 11:15 en 11:30 vanuit de auto of thuis doet (afspraak C)",
    "wie": "Mehdi en Claude",
    "wanneer": "bij vrijdag"
+  },
+  {
+   "wat": "donderdag 24-09: op de werkagenda staan de ritten dubbel, 'Rijden naar ...' van Mehdi en '🚗 Reistijd' van de agent, plus een oude 'Leuven → Leuven'",
+   "wie": "Mehdi en Claude",
+   "wanneer": "bij donderdag"
   },
   {
    "wat": "school, zwemschool, grootouders en kantoor toevoegen aan locatie.globaal.be, met een straal",
@@ -337,6 +352,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-21",
+   "wat": "Lara wordt op maandag en vrijdag om 16:00 opgehaald op De Speelkriebel (bron: de agenda van Lara zelf) en thuis afgezet; de ritten staan roze op de agenda van Lara. Een rit naar huis die al in de agenda staat, telt: de volgende rit vertrekt dan van thuis"
+  },
   {
    "datum": "2026-09-21",
    "wat": "een rit staat op dezelfde agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt: Lara roze op Lara, privé zwart op privé, alleen werk is rood. Altijd het autootje. Alleen !! maakt het verschil. De dinsdagketen van Lara (oma, zwembad, naar huis) geldt elke week"
@@ -450,7 +469,7 @@
   "het_uur_is_aankomst": "Het uur van een afspraak is het uur dat Mehdi er MOET ZIJN, niet het uur dat hij vertrekt. De rit ligt dus altijd VOOR de afspraak, nooit tijdens en nooit erna. Gezien op 20-09-2026: de zwemles van Lara begint om 18:00 en er stond een rit naar huis om 18:00. Dat kan niet.",
   "keten_voorbeeld": "dinsdag: thuis 17:10, oma 17:30 tot 17:40, rijden 17:40, zwembad 18:00 tot 19:00, daarna brengt hij Lara zelf naar huis",
   "waarom_zelfde_agenda": "Mehdi, 21-09-2026: staat de rit voor Lara of voor iets privé rood op de werkagenda, dan zien collega's dat Mehdi ergens heen gaat, niet waarvoor, en weer terugkomt. De rit hoort bij de afspraak en is dus even zichtbaar als die afspraak: wie de agenda van Lara niet ziet, ziet de rit ook niet",
-  "titel": "🚗 Reistijd: van → naar. Thuis heet thuis. Liggen beide kanten in dezelfde gemeente, dan de straat, want 'Leuven → Leuven' zegt niets. Een plek uit locatie.globaal.be zonder adres heet naar zijn naam, nooit naar coördinaten. Een rit die de agent zelf maakte en die al bestond, krijgt de juiste titel en kleur terug",
+  "titel": "🚗 Reistijd: van → naar. Thuis heet thuis. Liggen beide kanten in dezelfde gemeente, dan de straat, want 'Leuven → Leuven' zegt niets. Een plek uit locatie.globaal.be zonder adres heet naar zijn naam, nooit naar coördinaten. Een rit die de agent zelf maakte en die al bestond, krijgt de juiste titel en kleur terug. Zelfde postcode telt als zelfde gemeente, want 3010 heet soms Leuven en soms Kessel-Lo: de rit heet dan naar de plek, zoals 'thuis → De Speelkriebel'",
   "lara_dinsdag": {
    "vanaf": "2026-09-22, elke dinsdag, op de agenda van Lara",
    "keten": [
@@ -461,6 +480,15 @@
     "19:00-19:30 Mehdi: Lara naar huis brengen, dat is zelf de terugrit, dus geen tweede"
    ],
    "hoe": "de twee afspraken zijn reeksen die op 22-09-2026 beginnen; aangepast in de reeks zelf, er is geen verleden dat verandert. De ritten maakt de agent elke week zelf"
+  },
+  "thuisrit_telt": "Staat er na een buitenafspraak al een rit naar huis in de agenda, dan gaat Mehdi naar huis en vertrekt de volgende rit van thuis. Gezien 21-09-2026: op vrijdag vertrok de rit naar Lara van de griffie, terwijl er om 11:00 al een rit naar huis stond",
+  "lara_maandag_vrijdag": {
+   "afspraak": "Mehdi: !! [LARA] Lara ophalen en thuis afzetten, maandag en vrijdag 16:00-17:00, op de agenda van Lara",
+   "ophalen": "De Speelkriebel, Jozef Pierrestraat 104, 3010 Kessel-Lo",
+   "bron": "de agenda van Lara zelf: 'Lara → Cokido' op 10-08-2026, locatie 'haar school De Speelkriebel'",
+   "afzetten": "thuis, Herfstlaan 65",
+   "ritten": "15:45-16:00 thuis → De Speelkriebel en 17:00-17:15 De Speelkriebel → thuis, roze op de agenda van Lara",
+   "stand": "adres gezet in de week van 21-09 (maandag 21 en vrijdag 25). In de hele reeks pas als Mehdi bevestigt dat de opvang van 16:00 op school is"
   }
  },
  "triggers": {
