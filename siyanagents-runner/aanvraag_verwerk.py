@@ -54,6 +54,43 @@ _laad_env("~/appportal/siyanagents-data/.env")
 
 PD_TOKEN = os.environ.get("PIPEDRIVE_TOKEN_UNABO", "")
 PD = "https://unabo.pipedrive.com/v1"
+
+# ---- firma's met een eigen Pipedrive-account ----
+#
+# Dit script bediende oorspronkelijk alleen UNABO. Sinds de site van TKN-Buro
+# (september 2026) komen er aanvragen binnen van een firma met een eigen
+# Pipedrive-account, eigen pijplijnen en zonder contactsync.
+#
+# De regel is: staat de bron NIET in FIRMAS, dan gebeurt exact wat er altijd al
+# gebeurde (UNABO). Zo kan deze uitbreiding de bestaande leadstroom niet raken.
+#
+# Per firma:
+#   api, token_env  het Pipedrive-account waar de deal in komt
+#   pipeline        vaste (pipeline_id, stage_id) voor elke websiteaanvraag
+#   label           id van het deallabel
+#   contactsync     True  = via Google Contacts, wachten op de sync (UNABO)
+#                   False = persoon rechtstreeks in Pipedrive aanmaken
+#   env             extra .env met de SMTP-gegevens voor de meldingsmail
+FIRMAS = {
+    "tkn-site": {
+        "naam": "TKN-Buro",
+        "api": "https://tkn-buro-tekenwerk.pipedrive.com/v1",
+        "token_env": "PIPEDRIVE_TOKEN_TKNBURO",
+        # Pijplijn 8 "TKN-Stabiliteitsstudie", eerste fase 110 "New / Off.
+        # aanvraag". Bewust niet pijplijn 2 "TKN-Tekenwerk": die begint met
+        # Mail 1, Postmaster, DoNotCallMe en Bellen en is dus een pijplijn voor
+        # koude acquisitie, niet voor binnenkomende aanvragen.
+        "pipeline": (8, 110),
+        "label": 48,          # "website"
+        "contactsync": False,
+        "env": "~/tkn-site/.env",
+    },
+}
+
+
+def firma_van(bron):
+    """De firma-instellingen voor een bron, of None voor het standaardgedrag."""
+    return FIRMAS.get((bron or "").strip().lower())
 PLATFORM = os.environ.get("PLATFORM_URL", "http://127.0.0.1:3021")
 AGENTS_TOKEN = os.environ.get("AGENTS_TOKEN", "")
 
@@ -98,9 +135,17 @@ def sleutel(t):
 
 # ---------- Pipedrive ----------
 
-def pd(pad, method="GET", body=None, **params):
-    params["api_token"] = PD_TOKEN
-    url = f"{PD}{pad}?" + urllib.parse.urlencode(params)
+def pd(pad, method="GET", body=None, _firma=None, **params):
+    """Roept Pipedrive aan. Zonder _firma is dat het account van UNABO,
+    precies zoals dit altijd werkte."""
+    basis, token = (PD, PD_TOKEN)
+    if _firma:
+        token = os.environ.get(_firma["token_env"], "")
+        if not token:
+            raise RuntimeError(f"geen token {_firma['token_env']} voor {_firma['naam']}")
+        basis = _firma["api"]
+    params["api_token"] = token
+    url = f"{basis}{pad}?" + urllib.parse.urlencode(params)
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     if data:
@@ -109,11 +154,27 @@ def pd(pad, method="GET", body=None, **params):
         return json.loads(r.read().decode())
 
 
-def zoek_persoon(email):
-    """Zoekt de gesynchroniseerde persoon op e-mailadres."""
+def persoon_aanmaken(a, firma):
+    """Maakt de persoon rechtstreeks in Pipedrive aan.
+
+    Alleen voor accounts zonder sync vanuit Google Contacts. Daar kan geen
+    dubbel contact ontstaan, want dat account kent maar een bron.
+    """
+    voor, achter = a.get("voornaam", ""), a.get("achternaam", "")
+    body = {"name": f"{voor} {achter}".strip() or (a.get("email") or "Onbekend")}
+    if a.get("email"):
+        body["email"] = [{"value": a["email"], "primary": True}]
+    if a.get("telefoon"):
+        body["phone"] = [{"value": a["telefoon"], "primary": True}]
+    return pd("/persons", method="POST", body=body, _firma=firma)["data"]["id"]
+
+
+def zoek_persoon(email, firma=None):
+    """Zoekt de persoon op e-mailadres in het account van de firma."""
     if not email:
         return None
-    r = pd("/persons/search", term=email, fields="email", exact_match="true", limit=5)
+    r = pd("/persons/search", term=email, fields="email", exact_match="true", limit=5,
+           _firma=firma)
     items = (r.get("data") or {}).get("items") or []
     for it in items:
         p = it.get("item") or {}
@@ -197,35 +258,52 @@ def verwerk(conn, rij, droog=False):
     if not a["voornaam"] and not a.get("email"):
         raise ValueError("aanvraag zonder naam en zonder e-mail")
 
-    (pipeline, fase), label = kies_pipeline(a.get("diensten"))
+    firma = firma_van(rij["bron"])
+    if firma:
+        # Eigen Pipedrive-account: een vaste pijplijn voor elke websiteaanvraag.
+        (pipeline, fase), label = firma["pipeline"], firma["label"]
+    else:
+        (pipeline, fase), label = kies_pipeline(a.get("diensten"))
     titel = (a.get("adres") or "").strip() or f"{a['voornaam']} {a['achternaam']}".strip() or "Aanvraag via website"
 
     if droog:
-        print(f"  #{rij['id']} zou worden: pipeline {pipeline}, fase {fase}, label {label}, titel '{titel}'")
+        waar = firma["naam"] if firma else "UNABO (standaard)"
+        print(f"  #{rij['id']} [{rij['bron']}] zou worden: {waar}, pipeline {pipeline}, "
+              f"fase {fase}, label {label}, titel '{titel}'")
         return
 
-    # 1. Google-contact
-    google_id = rij["google_id"]
-    if not google_id:
-        google_id = google_contact_aanmaken(a)
-        conn.execute("UPDATE aanvraag SET google_id=? WHERE id=?", (google_id, rij["id"]))
-        conn.commit()
-
-    # 2. wachten tot de sync hem in Pipedrive heeft gezet
     persoon = rij["persoon_id"]
-    if not persoon:
-        einde = time.time() + SYNC_GEDULD
-        while time.time() < einde:
-            persoon = zoek_persoon(a.get("email"))
-            if persoon:
-                break
-            time.sleep(SYNC_INTERVAL)
+    if firma and not firma["contactsync"]:
+        # Naar dit account loopt geen sync vanuit Google Contacts, dus zoeken wij
+        # de persoon zelf op en maken hem anders meteen aan.
         if not persoon:
-            raise TimeoutError(
-                f"persoon staat na {SYNC_GEDULD // 60} minuten nog niet in Pipedrive "
-                "(sync van Google Contacts loopt achter of ligt stil)")
+            persoon = zoek_persoon(a.get("email"), firma=firma)
+        if not persoon:
+            persoon = persoon_aanmaken(a, firma)
         conn.execute("UPDATE aanvraag SET persoon_id=? WHERE id=?", (persoon, rij["id"]))
         conn.commit()
+    else:
+        # 1. Google-contact
+        google_id = rij["google_id"]
+        if not google_id:
+            google_id = google_contact_aanmaken(a)
+            conn.execute("UPDATE aanvraag SET google_id=? WHERE id=?", (google_id, rij["id"]))
+            conn.commit()
+
+        # 2. wachten tot de sync hem in Pipedrive heeft gezet
+        if not persoon:
+            einde = time.time() + SYNC_GEDULD
+            while time.time() < einde:
+                persoon = zoek_persoon(a.get("email"))
+                if persoon:
+                    break
+                time.sleep(SYNC_INTERVAL)
+            if not persoon:
+                raise TimeoutError(
+                    f"persoon staat na {SYNC_GEDULD // 60} minuten nog niet in Pipedrive "
+                    "(sync van Google Contacts loopt achter of ligt stil)")
+            conn.execute("UPDATE aanvraag SET persoon_id=? WHERE id=?", (persoon, rij["id"]))
+            conn.commit()
 
     # 3. deal
     body = {
@@ -235,16 +313,23 @@ def verwerk(conn, rij, droog=False):
         "stage_id": fase,
         "label": label,
     }
-    g = optie(GEBOUWTYPE, a.get("gebouwtype"))
-    if g:
-        body[VELD_GEBOUWTYPE] = g
-    t = optie(TYPE_AANVRAAG, a.get("type_aanvraag"))
-    if t:
-        body[VELD_TYPE_AANVRAAG] = t
+    if not firma:
+        # Deze veld-ids zijn die van UNABO en bestaan niet in een ander account.
+        # Wat erin stond, komt daar in de notitie terecht.
+        g = optie(GEBOUWTYPE, a.get("gebouwtype"))
+        if g:
+            body[VELD_GEBOUWTYPE] = g
+        t = optie(TYPE_AANVRAAG, a.get("type_aanvraag"))
+        if t:
+            body[VELD_TYPE_AANVRAAG] = t
 
-    deal = pd("/deals", method="POST", body=body)["data"]["id"]
+    deal = pd("/deals", method="POST", body=body, _firma=firma)["data"]["id"]
 
     regels = [f"Aanvraag via het formulier op {a.get('pagina') or 'unabo.be'}."]
+    if firma:
+        for k, lab in (("gebouwtype", "Gebouwtype"), ("type_aanvraag", "Aard van de werken")):
+            if a.get(k):
+                regels.append(f"{lab}: {a[k]}")
     if a.get("diensten"):
         regels.append("Gevraagde diensten: " + ", ".join(a["diensten"]))
     for k, lab in (("gevonden_via", "Gevonden via"), ("telefoon", "Telefoon"), ("email", "E-mail")):
@@ -252,13 +337,14 @@ def verwerk(conn, rij, droog=False):
             regels.append(f"{lab}: {a[k]}")
     if a.get("omschrijving"):
         regels.append("\nOmschrijving van de klant:\n" + a["omschrijving"])
-    pd("/notes", method="POST", body={"deal_id": deal, "content": "\n".join(regels)})
+    pd("/notes", method="POST", body={"deal_id": deal, "content": "\n".join(regels)}, _firma=firma)
 
     conn.execute(
         "UPDATE aanvraag SET status='klaar', deal_id=?, verwerkt=?, laatste_fout='' WHERE id=?",
         (deal, nu(), rij["id"]))
     conn.commit()
-    print(f"  #{rij['id']} -> deal {deal} ({titel}) in pipeline {pipeline}, persoon {persoon}")
+    print(f"  #{rij['id']} -> {firma['naam'] if firma else 'UNABO'}: deal {deal} "
+          f"({titel}) in pipeline {pipeline}, persoon {persoon}")
 
 
 def meld_vastgelopen(rij, fout):
