@@ -1,5 +1,5 @@
 {
- "versie": "2.7",
+ "versie": "2.8",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -287,11 +287,6 @@
    "wanneer": "voor zondag"
   },
   {
-   "wat": "donderdag 24-09 17:45, '?? Lara ophalen bij oma (optioneel)': nog niet bevestigd, dus geen rit. Bij bevestiging !! ervoor en het adres van oma in de afspraak",
-   "wie": "Mehdi",
-   "wanneer": "voor donderdag"
-  },
-  {
    "wat": "vrijdag 25-09: griffie tot 11:00, de rit naar huis staat er en telt. Open blijft of Mehdi de online afspraken van 11:15 en 11:30 vanuit de auto of thuis doet (afspraak C)",
    "wie": "Mehdi en Claude",
    "wanneer": "bij vrijdag"
@@ -358,6 +353,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-21",
+   "wat": "de donderdag-reeks van Lara (ophalen bij oma en thuis afzetten, 17:45) is bevestigd en kreeg het adres van oma (Wilselsesteenweg 57) en !!; alle 34 donderdagen tot 02-07-2027 hebben nu heen- en terugrit, roze op de agenda van Lara"
+  },
   {
    "datum": "2026-09-21",
    "wat": "afspraak C voorlopig ingevuld: staat er tussen twee buitenafspraken iets achter het bureau, dan rekent de agent dat Mehdi naar huis gaat en vraagt hij het. Een rit vertrekt nooit voor de vorige afspraak gedaan is. Een rit hoort bij precies één afspraak. En nooit twee rondes tegelijk"
@@ -513,7 +512,15 @@
    "mandaat": "Mehdi, 21-09-2026: 'zorg dat alle agenda's van Lara in de komende tijd ook in orde zijn met de heen-en-terug tijden'"
   },
   "niet_voor_de_vorige_klaar_is": "een rit vertrekt nooit voor de vorige afspraak gedaan is. Dinsdag is hij tot 17:40 bij oma, dus de rit naar het zwembad begint om 17:40, ook als de rijtijd met buffer langer is. Past de rit zelfs zonder buffer niet, dan meldt de agent 'te krap'",
-  "een_rit_een_afspraak": "een heenrit van de agent eindigt op het begin van zijn afspraak, een terugrit begint op haar einde. Zo wordt een rit nooit aan een buurafspraak gekoppeld. Een rit die Mehdi zelf zette binnen drie uur ervoor of erna, telt ook, en dan maakt de agent er geen tweede. Gezien 21-09-2026: de zwemles nam de rit naar oma over"
+  "een_rit_een_afspraak": "een heenrit van de agent eindigt op het begin van zijn afspraak, een terugrit begint op haar einde. Zo wordt een rit nooit aan een buurafspraak gekoppeld. Een rit die Mehdi zelf zette binnen drie uur ervoor of erna, telt ook, en dan maakt de agent er geen tweede. Gezien 21-09-2026: de zwemles nam de rit naar oma over",
+  "lara_donderdag": {
+   "afspraak": "Mehdi: !! [LARA] Lara ophalen bij oma en thuis afzetten (optioneel), elke donderdag 17:45-18:30, op de agenda van Lara",
+   "reeks": "reeks vanaf 2026-09-24 tot 2027-07-01, 34 donderdagen. Mehdi heeft de reeks op 21-09-2026 bevestigd (het ?? weggehaald)",
+   "ophalen": "bij oma, Wilselsesteenweg 57, 3010 Leuven (zelfde oma als de dinsdagketen)",
+   "afzetten": "thuis, Herfstlaan 65",
+   "ritten": "17:25-17:45 thuis -> oma en 18:30-18:50 oma -> thuis, roze op de agenda van Lara",
+   "let_op": "de titel draagt nog '(optioneel)'; dat is Mehdi's tekst, de agent haalt het niet weg. De rit staat er wel, want de afspraak is bevestigd"
+  }
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",

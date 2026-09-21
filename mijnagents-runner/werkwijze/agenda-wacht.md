@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 6.5 (21-09-2026, afspraak C voorlopig, nooit vertrekken voor de vorige afspraak gedaan is, een rit hoort bij één afspraak, een ronde tegelijk, ritten van Lara tot het einde van het schooljaar. v6.4: een rit naar huis die al in de agenda staat telt; Lara op maandag en vrijdag van De Speelkriebel. v6.3: een rit staat op dezelfde agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt; thuis komt nooit uit een titel; de dinsdagketen van Lara). v6.2 (19-09-2026, wie welke agenda ziet en de regel dat ik nooit hernoem; v6.1 17-09-2026 Elevait als firma L; v6 16-09-2026: het document 'agenda afspraken met Nova.docx' is de enige bron; negen agenda's; v5 van dezelfde dag met elf agenda's is teruggedraaid; v4 11-09-2026: reistijd met file, projectnummer en adres uit de projectmap). Ik ben de bronnen-agent voor
+Versie 6.6 (21-09-2026, donderdag Lara: ophalen bij oma en thuis afzetten, heen en terug, hele reeks. v6.5: afspraak C voorlopig, nooit vertrekken voor de vorige afspraak gedaan is, een rit hoort bij één afspraak, een ronde tegelijk, ritten van Lara tot het einde van het schooljaar. v6.4: een rit naar huis die al in de agenda staat telt; Lara op maandag en vrijdag van De Speelkriebel. v6.3: een rit staat op dezelfde agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt; thuis komt nooit uit een titel; de dinsdagketen van Lara). v6.2 (19-09-2026, wie welke agenda ziet en de regel dat ik nooit hernoem; v6.1 17-09-2026 Elevait als firma L; v6 16-09-2026: het document 'agenda afspraken met Nova.docx' is de enige bron; negen agenda's; v5 van dezelfde dag met elf agenda's is teruggedraaid; v4 11-09-2026: reistijd met file, projectnummer en adres uit de projectmap). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -155,6 +155,11 @@ Een afspraak is online of ter plaatse bij de klant. Voor allebei geldt:
   naar oma (Wilselsesteenweg 57), 17:30-17:40 Lara ophalen bij oma, 17:40 rit naar
   het zwembad (Stadionlaan 4), 18:00-19:00 `!! Mehdi: Zwemles Lara`, 19:00-19:30
   Lara naar huis brengen, en dat is meteen de terugrit.
+- **Donderdag, 17:45-18:30, Lara ophalen bij oma en thuis afzetten** (reeks tot
+  02-07-2027): ophalen bij oma, Wilselsesteenweg 57 (zelfde oma als dinsdag),
+  afzetten thuis. Ritten 17:25 thuis → oma en 18:30 oma → thuis, roze op de agenda
+  van Lara. De titel draagt nog `(optioneel)`; dat is Mehdi's tekst, ik haal het niet
+  weg. Bevestigd door Mehdi op 21-09-2026.
 - **Maandag en vrijdag, 16:00-17:00, Lara ophalen en thuis afzetten**: ophalen op
   De Speelkriebel, Jozef Pierrestraat 104, 3010 Kessel-Lo (bron: de agenda van Lara
   zelf, 'Lara → Cokido' op 10-08-2026), afzetten thuis. Ritten 15:45 thuis → De
