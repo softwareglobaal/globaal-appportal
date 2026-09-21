@@ -135,6 +135,15 @@ def kalenders():
     return [k for k in lijst if k not in gearchiveerd()]
 
 
+
+def afspraken(van_dagen=-1, tot_dagen=8):
+    """De afspraken van precies de agenda's die de Agendawacht leest. Eén plek, zodat de
+    controle en de filewacht dezelfde agenda's zien als de agent. Gezien 21-09-2026:
+    zij lazen alleen de werkagenda en zoomafspraken, niet Lara en niet privé."""
+    os.environ["CONTRACTEN_KALENDERS"] = ",".join(kalenders())   # agenda.kalenders() leest die
+    return agenda.afspraken(van_dagen, tot_dagen)
+
+
 def gearchiveerd():
     """Agenda's die Mehdi op archief heeft gezet: hij koppelt ze eerst los van alle
     andere accounts en zet er dan ZZ ARCHIEF voor. Die laat ik met rust, ook als ze
@@ -927,8 +936,7 @@ def main():
         if not agenda.beschikbaar():
             ag.hartslag("fout", taak="geen agendatoegang", detail="GOOGLE_AGENDA_* ontbreekt in ~/appportal/.env")
             return
-        os.environ["CONTRACTEN_KALENDERS"] = ",".join(kalenders())   # agenda.kalenders() leest die
-        items = agenda.afspraken(-1, 8)
+        items = afspraken(-1, 8)
         fouten = [i for i in items if i.get("fout")]
         items = [i for i in items if not i.get("fout")]
         deals = deals_index()

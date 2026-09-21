@@ -166,7 +166,7 @@ if me:
 
 _adrescache = W._cache_laden()
 print("\n6. TITELS EN ADRESSEN")
-items = A.afspraken(van_dagen=0, tot_dagen=30)
+items = W.afspraken(van_dagen=0, tot_dagen=30)
 per_fout, geen_adres = {}, []
 for a in items:
     if a.get("fout") or a.get("hele_dag") or a.get("kalender", "").startswith("en.be#"):
@@ -176,7 +176,7 @@ for a in items:
         continue
     for reden in W.titelfouten(a, i):
         per_fout.setdefault(reden, []).append(f"{a['start'][:16]} {a['titel'][:58]}")
-    if i["buiten"] or i["soort"] in ("PB", "KB"):
+    if i["buiten"] or i["soort"] in ("PB", "KB", "LB"):
         # Niet alleen kijken of er iets ingevuld staat: de vraag is of de agent er
         # echt een rijtijd mee kan berekenen. Op 20-09-2026 stond "3010 Kessel-Lo"
         # keurig in de agenda en kon er toch geen rit van gemaakt worden.
@@ -184,6 +184,9 @@ for a in items:
         if (not adres or adres.lower().startswith("http")) and i["nummer"]:
             pr = W.projectadressen.index().get(i["nummer"])
             adres = pr["adres"] if pr else adres
+        if not adres or adres.lower().startswith("http"):
+            # zelfde volgorde als de agent: dan de benoemde plekken van locatie.globaal.be
+            adres = W.plek_zoeken(a["titel"] + " " + (a.get("omschrijving") or ""))[0] or adres
         if not adres or adres.lower().startswith("http"):
             geen_adres.append(f"{a['start'][:16]} {a['titel'][:50]}  (geen adres)")
         elif not W.coord(adres, _adrescache):

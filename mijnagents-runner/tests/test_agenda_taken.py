@@ -123,6 +123,11 @@ W.plekken = _echt
 check("binnen dezelfde gemeente heet de rit naar de straat",
       W.ritlabel("Vaartstraat 5, 3000 Leuven", "Herfstlaan 65, 3010 Leuven") == "Vaartstraat 5")
 
+# De controle en de filewacht lezen dezelfde agenda's als de agent (gezien 21-09-2026).
+for _script in ("controle_agenda.py", "file_wacht.py"):
+    _code = (HIER / _script).read_text(encoding="utf-8")
+    check(f"{_script} leest de agenda's via de Agendawacht zelf",
+          "W.afspraken(" in _code and "A.afspraken(" not in _code)
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

@@ -51,7 +51,7 @@ def main():
     st = stand()
     nu = datetime.now().astimezone()
     grens = nu + timedelta(minutes=VOORUIT_MIN)
-    items = A.afspraken(van_dagen=0, tot_dagen=1)
+    items = W.afspraken(van_dagen=0, tot_dagen=1)
     cache = W._cache_laden()
     thuis = W.coord(W.THUIS, cache)
     projecten = W.projectadressen.index()
