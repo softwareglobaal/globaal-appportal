@@ -132,7 +132,26 @@ check("zelfde postcode, andere gemeentenaam: de rit heet naar de plek",
       W.ritlabel("De Speelkriebel, Jozef Pierrestraat 104, 3010 Kessel-Lo", W.THUIS) == "De Speelkriebel")
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("een rit naar huis die al in de agenda staat, telt als thuiskomen",
-      "thuisrit_tussen(vorige_einde_per_dag[dag], start)" in _bron and "thuisrit_tussen(einde, einde" in _bron)
+      "if thuisrit_tussen(e_, s_volgend):" in _bron)
+check("afspraak C: iets achter het bureau tussen twee buitenafspraken is een vraag, geen stille keuze",
+      "bureau = aan_bureau_tussen(e_, s_volgend)" in _bron and "VRAAG om" in _bron)
+check("een rit hoort bij precies één afspraak: de heenrit eindigt op haar begin",
+      'datetime.fromisoformat(x["einde"]) == start' in _bron and "x = heenblok()" in _bron and "x = terugblok()" in _bron)
+check("nooit vertrekken voor de vorige afspraak gedaan is",
+      "rit_start = vorige_einde" in _bron and "TE KRAP" in _bron)
+check("nooit twee rondes tegelijk", "_slot = slot_nemen()" in _bron)
+
+_bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("de herinneringsregel raakt een rit niet aan",
+      'if info["reistijd"]:\n            continue   # een rit draagt zijn eigen melding' in _bron)
+check("de herinneringen komen voor de ritten, de vertrekmelding heeft het laatste woord",
+      _bron.index("gezet, al, weg, fout_h = herinneringen_zetten(") < _bron.index("rg, ral, rgeen, rfout, rregels = reistijd_zetten("))
+check("de agenda van Lara krijgt ritten tot het einde van het schooljaar",
+      W.RIT_VOORUIT_DAGEN.get("Lara", 0) >= 280 and "lara_vooruit" in json.dumps(taken["reistijd"]))
+
+_agenda = (HIER / "koppelingen" / "agenda.py").read_text(encoding="utf-8")
+check("de agenda wordt helemaal gelezen, niet alleen de eerste 250 afspraken",
+      'params["pageToken"] = pagina' in _agenda)
 
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())

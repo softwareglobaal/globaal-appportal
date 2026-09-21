@@ -64,17 +64,30 @@ def afspraken(van_dagen=-1, tot_dagen=8):
     uit = []
     gezien = set()
     for kal in kalenders():
-        params = {"timeMin": tmin.isoformat(), "timeMax": tmax.isoformat(), "singleEvents": "true",
-                  "orderBy": "startTime", "maxResults": 250}
-        url = f"{API}/calendars/{urllib.parse.quote(kal, safe='')}/events?" + urllib.parse.urlencode(params)
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {_toegang()}"})
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                d = json.load(r)
-        except urllib.error.HTTPError as e:
-            uit.append({"kalender": kal, "fout": f"{e.code}"})
+        # Alle pagina's, niet alleen de eerste 250. Gezien 21-09-2026: de agenda van Lara
+        # heeft er over een schooljaar meer, en alles na maart viel stil weg.
+        items, pagina, mislukt = [], None, False
+        while True:
+            params = {"timeMin": tmin.isoformat(), "timeMax": tmax.isoformat(), "singleEvents": "true",
+                      "orderBy": "startTime", "maxResults": 250}
+            if pagina:
+                params["pageToken"] = pagina
+            url = f"{API}/calendars/{urllib.parse.quote(kal, safe='')}/events?" + urllib.parse.urlencode(params)
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {_toegang()}"})
+            try:
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    d = json.load(r)
+            except urllib.error.HTTPError as e:
+                uit.append({"kalender": kal, "fout": f"{e.code}"})
+                mislukt = True
+                break
+            items += d.get("items", [])
+            pagina = d.get("nextPageToken")
+            if not pagina:
+                break
+        if mislukt:
             continue
-        for ev in d.get("items", []):
+        for ev in items:
             if ev.get("status") == "cancelled":
                 continue
             # Een uitnodiging staat op elke agenda die ze kreeg (bv. Contrax en

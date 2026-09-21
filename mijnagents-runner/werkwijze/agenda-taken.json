@@ -1,5 +1,5 @@
 {
- "versie": "2.5",
+ "versie": "2.7",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -182,7 +182,8 @@
   "online_minuten": 5,
   "buiten_minuten": 30,
   "vertrek": "een buitenafspraak krijgt daarbovenop een melding op het vertrekmoment plus vijf minuten, en het reistijdblok draagt zelf ook een melding",
-  "opruimen": "een eerdere melding van de agent op iets wat nu stil moet blijven haalt hij weg; een melding die Mehdi zelf zette blijft staan"
+  "opruimen": "een eerdere melding van de agent op iets wat nu stil moet blijven haalt hij weg; een melding die Mehdi zelf zette blijft staan",
+  "ritten": "de heenrit draagt een melding 5 minuten vooraf, de terugrit geen. De gewone herinneringsregel raakt ritten niet aan en haalt de vertrekmelding van een buitenafspraak niet weg. De herinneringen komen voor de ritten, zodat de vertrekmelding het laatste woord heeft. Gezien 21-09-2026: de melding op elke heenrit en op de zwemles van Lara verdween elke ronde"
  },
  "grendels": [
   {
@@ -209,6 +210,11 @@
    "naam": "buiten kan niet zonder adres",
    "hoe": "een buitenafspraak zonder adres telt als fout, want dan kan de rijtijd niet berekend worden",
    "test": "controle_agenda.py, onderdeel 6"
+  },
+  {
+   "naam": "een ronde tegelijk",
+   "hoe": "slot_nemen(): de agent neemt een slot voor hij schrijft, een tweede ronde wacht tot de eerste klaar is. Gezien 21-09-2026: een volledige ronde en de wijzigingswacht maakten tegelijk ritten",
+   "test": "tests/test_agenda_taken.py"
   }
  ],
  "taken": [
@@ -271,9 +277,9 @@
  },
  "openstaand": [
   {
-   "wat": "bevestigen dat de opvang van 16:00 op De Speelkriebel is; dan zet de agent het adres in de hele reeks van maandag en vrijdag, nu staat het alleen in de week van 21-09",
+   "wat": "Lara ophalen staat nog in de reeks op drie vrije dagen: maandag 26-10 en vrijdag 30-10 (herfstvakantie) en vrijdag 02-07-2027 (zomervakantie). Waar haalt Mehdi haar die dagen op, of vallen ze weg?",
    "wie": "Mehdi",
-   "wanneer": "nu"
+   "wanneer": "voor 26-10"
   },
   {
    "wat": "zondag 27-09, 'Leen moet werken' 08:00-20:00: waar begint die dag, haalt Mehdi Lara ergens op? Tot dan geen rit",
@@ -352,6 +358,14 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-21",
+   "wat": "afspraak C voorlopig ingevuld: staat er tussen twee buitenafspraken iets achter het bureau, dan rekent de agent dat Mehdi naar huis gaat en vraagt hij het. Een rit vertrekt nooit voor de vorige afspraak gedaan is. Een rit hoort bij precies één afspraak. En nooit twee rondes tegelijk"
+  },
+  {
+   "datum": "2026-09-21",
+   "wat": "alle komende afspraken van Lara krijgen hun ritten, tot het einde van het schooljaar. Het adres van De Speelkriebel staat in alle ophaalafspraken van maandag en vrijdag, behalve op vakantie- en feestdagen. En de melding op de heenrit blijft voortaan staan"
+  },
   {
    "datum": "2026-09-21",
    "wat": "Lara wordt op maandag en vrijdag om 16:00 opgehaald op De Speelkriebel (bron: de agenda van Lara zelf) en thuis afgezet; de ritten staan roze op de agenda van Lara. Een rit naar huis die al in de agenda staat, telt: de volgende rit vertrekt dan van thuis"
@@ -463,8 +477,8 @@
    "waarom": "Google laat de dagquota van de Routes API niet verlagen, dus houdt de agent de teller zelf bij. Honderd per dag blijft ruim onder de 5.000 gratis per maand",
    "terugval": "gratis routering (OSRM) maal een spitsfactor, 1,6 tussen 07:00 en 09:30"
   },
-  "dubbel": "bestaat er al een reistijdblok binnen drie uur voor of na, dan maakt hij er geen tweede",
-  "ketening": "Na een buitenafspraak gaat de rit naar de volgende plaats, niet naar huis. Thuis is alleen de bestemming als er niets meer volgt, of als de volgende afspraak zelf naar huis gaat, zoals 'Lara naar huis brengen'. Dan is die afspraak de terugrit en maakt de agent er geen tweede.",
+  "dubbel": "zie een_rit_een_afspraak",
+  "ketening": "Na een buitenafspraak gaat de rit rechtstreeks naar de volgende buitenafspraak, niet naar huis. Naar huis gaat hij: na de laatste buitenafspraak van de dag; als er al een rit naar huis in de agenda staat; en voorlopig als er tussen twee buitenafspraken een afspraak achter het bureau staat (afspraak C). In dat laatste geval rekent de agent dat hij naar huis gaat, zoals op maandag 21-09-2026, en stelt hij de vraag: klopt dat, of doe je het vanuit de auto? Gaat de volgende afspraak zelf naar huis, zoals 'Lara naar huis brengen', dan is die de terugrit",
   "adres_zoeken": "eerst het adres in de agenda, dan het projectnummer in de projectmap, dan de benoemde plekken uit locatie.globaal.be. Een plek telt alleen als haar naam als heel woord in de titel staat. Thuis is het vertrekpunt en nooit een bestemming die uit een titel komt: in 'Lara ophalen en thuis afzetten' gebeurt het ophalen niet thuis. Vindt de agent geen adres, dan zet hij geen rit en meldt hij het; hij gokt geen plaats",
   "het_uur_is_aankomst": "Het uur van een afspraak is het uur dat Mehdi er MOET ZIJN, niet het uur dat hij vertrekt. De rit ligt dus altijd VOOR de afspraak, nooit tijdens en nooit erna. Gezien op 20-09-2026: de zwemles van Lara begint om 18:00 en er stond een rit naar huis om 18:00. Dat kan niet.",
   "keten_voorbeeld": "dinsdag: thuis 17:10, oma 17:30 tot 17:40, rijden 17:40, zwembad 18:00 tot 19:00, daarna brengt hij Lara zelf naar huis",
@@ -488,8 +502,18 @@
    "bron": "de agenda van Lara zelf: 'Lara → Cokido' op 10-08-2026, locatie 'haar school De Speelkriebel'",
    "afzetten": "thuis, Herfstlaan 65",
    "ritten": "15:45-16:00 thuis → De Speelkriebel en 17:00-17:15 De Speelkriebel → thuis, roze op de agenda van Lara",
-   "stand": "adres gezet in de week van 21-09 (maandag 21 en vrijdag 25). In de hele reeks pas als Mehdi bevestigt dat de opvang van 16:00 op school is"
-  }
+   "stand": "adres gezet in alle komende afspraken van maandag en vrijdag tot 02-07-2027, niet op vakantie- en feestdagen van de agenda van Lara. Daar staat het ophalen nog in de reeks (26-10, 30-10 en 02-07-2027) en vraagt de agent het",
+   "vakantie": "op een dag die de agenda van Lara als schoolvakantie of feestdag toont, zet de agent geen schooladres"
+  },
+  "lara_vooruit": {
+   "regel": "de agenda van Lara loopt in vaste reeksen per schooljaar. Haar ritten zet de agent tot 300 dagen vooruit, tot het einde van het schooljaar; voor de rest acht dagen, want werkafspraken schuiven",
+   "zuinig": "een rit verder dan acht dagen wordt eenmaal gezet en niet elke ochtend herberekend; zodra de dag binnen acht dagen komt, rekent de agent hem opnieuw uit met het echte verkeer",
+   "wijziging": "verzet Mehdi een afspraak op een verre dag, dan werkt de agent die dag bij (--dag leest elke dag, ook verder dan acht dagen)",
+   "rit_zonder_afspraak": "een eigen rit waarvan de afspraak weg of verzet is, meldt de agent als 'rit zonder afspraak'. Hij verwijdert hem niet zelf",
+   "mandaat": "Mehdi, 21-09-2026: 'zorg dat alle agenda's van Lara in de komende tijd ook in orde zijn met de heen-en-terug tijden'"
+  },
+  "niet_voor_de_vorige_klaar_is": "een rit vertrekt nooit voor de vorige afspraak gedaan is. Dinsdag is hij tot 17:40 bij oma, dus de rit naar het zwembad begint om 17:40, ook als de rijtijd met buffer langer is. Past de rit zelfs zonder buffer niet, dan meldt de agent 'te krap'",
+  "een_rit_een_afspraak": "een heenrit van de agent eindigt op het begin van zijn afspraak, een terugrit begint op haar einde. Zo wordt een rit nooit aan een buurafspraak gekoppeld. Een rit die Mehdi zelf zette binnen drie uur ervoor of erna, telt ook, en dan maakt de agent er geen tweede. Gezien 21-09-2026: de zwemles nam de rit naar oma over"
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",
