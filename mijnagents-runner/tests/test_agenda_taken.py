@@ -153,6 +153,17 @@ _agenda = (HIER / "koppelingen" / "agenda.py").read_text(encoding="utf-8")
 check("de agenda wordt helemaal gelezen, niet alleen de eerste 250 afspraken",
       'params["pageToken"] = pagina' in _agenda)
 
+# Externe relaties (buiten het dashboard) en de overkoepelende code ALGE. Mehdi, 22-09-2026.
+check("de lijst externe-relaties.json bestaat", (HIER / "werkwijze" / "externe-relaties.json").exists())
+check("ALGE is een geldige overkoepelende firmacode", "ALGE" in W.ALLE_CODES and "ALGE" in W.EXTERNE_FIRMAS)
+_i = W.lees_titel("Mehdi & Angela: [ALGE-LO] Nadien boekhouder")
+check("[ALGE-LO] leest als firma ALGE, leverancier online", _i["firma"] == "ALGE" and _i["soort"] == "LO")
+check("een ALGE-leverancier online is paars (druif)",
+      W.kleur_gewenst({"kalender": "mehdiprivewerkagenda@gmail.com"}, _i) == "3")
+check("Nadien (boekhouder) en Wally (AI-software) staan in de lijst",
+      {"Nadien", "Wally"} <= {r.get("naam") for r in W.EXTERNE_RELATIES})
+check("ALGE staat niet op het dashboard (bewust een aparte lijst)", "ALGE" not in W.FIRMACODES)
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

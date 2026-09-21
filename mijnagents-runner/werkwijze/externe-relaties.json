@@ -1,0 +1,11 @@
+{
+ "wat": "Externe partijen die bewust NIET op organisatie.globaal.be staan (dat is de interne organisatie). Leveranciers en hun contactpersonen, plus de overkoepelende firmacode ALGE. De agent leest deze lijst zodat ALGE een geldige firmacode is en externe namen herkend worden.",
+ "mandaat": "Mehdi, 22-09-2026: maak een aparte lijst voor namen en relaties die niet op het dashboard komen; het dashboard is de interne organisatie, dit zijn de externe partijen.",
+ "overkoepelende_firmas": {
+  "ALGE": "Algemeen (overkoepelend, voor alle bedrijven van de groep). Vier letters, net als de andere codes. Voor een leverancier of afspraak die niet bij een bedrijf hoort maar voor de hele groep geldt."
+ },
+ "relaties": [
+  {"naam": "Nadien", "relatie": "boekhouder", "soort": "leverancier", "firma": "ALGE", "contact": "Angela", "opmerking": "boekhouding voor alle bedrijven, dus overkoepelend -> ALGE"},
+  {"naam": "Wally", "relatie": "AI-bedrijf dat software levert", "soort": "leverancier", "firma": "ALGE", "opmerking": "levert software voor de groep, overkoepelend -> ALGE"}
+ ]
+}

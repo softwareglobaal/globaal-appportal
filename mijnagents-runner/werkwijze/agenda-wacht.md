@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 6.7 (22-09-2026, hele-dag markers = signaal aan collega's, laten staan. v6.6: donderdag Lara: ophalen bij oma en thuis afzetten, heen en terug, hele reeks. v6.5: afspraak C voorlopig, nooit vertrekken voor de vorige afspraak gedaan is, een rit hoort bij één afspraak, een ronde tegelijk, ritten van Lara tot het einde van het schooljaar. v6.4: een rit naar huis die al in de agenda staat telt; Lara op maandag en vrijdag van De Speelkriebel. v6.3: een rit staat op dezelfde agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt; thuis komt nooit uit een titel; de dinsdagketen van Lara). v6.2 (19-09-2026, wie welke agenda ziet en de regel dat ik nooit hernoem; v6.1 17-09-2026 Elevait als firma L; v6 16-09-2026: het document 'agenda afspraken met Nova.docx' is de enige bron; negen agenda's; v5 van dezelfde dag met elf agenda's is teruggedraaid; v4 11-09-2026: reistijd met file, projectnummer en adres uit de projectmap). Ik ben de bronnen-agent voor
+Versie 6.8 (22-09-2026, ALGE = overkoepelende code voor leveranciers van de hele groep, aparte lijst externe-relaties.json. v6.7: hele-dag markers = signaal aan collega's, laten staan. v6.6: donderdag Lara: ophalen bij oma en thuis afzetten, heen en terug, hele reeks. v6.5: afspraak C voorlopig, nooit vertrekken voor de vorige afspraak gedaan is, een rit hoort bij één afspraak, een ronde tegelijk, ritten van Lara tot het einde van het schooljaar. v6.4: een rit naar huis die al in de agenda staat telt; Lara op maandag en vrijdag van De Speelkriebel. v6.3: een rit staat op dezelfde agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt; thuis komt nooit uit een titel; de dinsdagketen van Lara). v6.2 (19-09-2026, wie welke agenda ziet en de regel dat ik nooit hernoem; v6.1 17-09-2026 Elevait als firma L; v6 16-09-2026: het document 'agenda afspraken met Nova.docx' is de enige bron; negen agenda's; v5 van dezelfde dag met elf agenda's is teruggedraaid; v4 11-09-2026: reistijd met file, projectnummer en adres uit de projectmap). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -110,6 +110,21 @@ Een afspraak is online of ter plaatse bij de klant. Voor allebei geldt:
 - UNABO, Harmoniebouw en Contrax hebben (nog) geen mappen met adres in de naam;
   daar telt alleen het adresveld van de afspraak. Zodra die mappen dezelfde
   naamregel volgen, lees ik ze mee.
+
+## Externe relaties en de code ALGE (mandaat van Mehdi, 22-09-2026)
+
+Het dashboard organisatie.globaal.be is de interne organisatie. Externe partijen
+(leveranciers en hun contacten) staan daar bewust niet op; die houd ik in een aparte
+lijst, `werkwijze/externe-relaties.json`.
+
+- Een leverancier of afspraak die niet bij een bedrijf hoort maar voor de hele groep
+  geldt, krijgt de overkoepelende code **`ALGE`** (Algemeen, vier letters net als de
+  andere codes). Nooit een rij bedrijfsafkortingen in de titel; altijd de ene code.
+- Zo staat het nu: **Nadien** (onze boekhouder) en **Wally** (AI-bedrijf dat software
+  levert). Allebei leverancier, dus `[ALGE-LO]` online (of `[ALGE-LB]` buiten), kleur
+  paars zoals elke leverancier.
+- ALGE is een geldige firmacode voor mij (uit die lijst), dus een titel met `[ALGE-..]`
+  is geen fout.
 
 ## Hele-dag markers (mandaat van Mehdi, 22-09-2026)
 

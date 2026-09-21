@@ -70,6 +70,22 @@ def firmacodes():
 
 FIRMACODES = firmacodes()
 
+
+def externe_relaties():
+    """Externe partijen die bewust niet op organisatie.globaal.be staan: leveranciers
+    en hun contactpersonen, plus de overkoepelende firmacode ALGE. Een aparte lijst,
+    want het dashboard is de interne organisatie. Mandaat van Mehdi, 22-09-2026."""
+    pad = os.path.join(os.path.dirname(os.path.abspath(__file__)), "werkwijze", "externe-relaties.json")
+    try:
+        return json.load(open(pad, encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {"overkoepelende_firmas": {}, "relaties": []}
+
+
+EXTERNE = externe_relaties()
+EXTERNE_FIRMAS = EXTERNE.get("overkoepelende_firmas", {})   # ALGE = algemeen/overkoepelend
+EXTERNE_RELATIES = EXTERNE.get("relaties", [])              # Nadien (boekhouder), Wally (AI-software), ...
+
 # Twee soorten codes, allebei juist, elk met hun eigen bron:
 #   de AGENDACODE staat in de titel (HA, UNABO, ELEVAIT, TKN). Bron: het document
 #   'agenda afspraken met Nova.docx'. Dat is volgens mijn werkwijze de enige bron
@@ -125,7 +141,7 @@ AGENDA_VASTE_KLEUR = {
 # evengoed online.
 BUITEN_TYPES = {"WB", "OPL", "PLB", "SCN", "OPM", "BS"}
 
-ALLE_CODES = sorted(set(FIRMACODES) | set(AGENDACODE_NAAR_FIRMA) | set(NIET_FIRMA), key=len, reverse=True)
+ALLE_CODES = sorted(set(FIRMACODES) | set(EXTERNE_FIRMAS) | set(AGENDACODE_NAAR_FIRMA) | set(NIET_FIRMA), key=len, reverse=True)
 CODE_RE = re.compile(r"\[(" + "|".join(ALLE_CODES) + r")(?:-(KB|PB|KO|PO|LB|LO|IN))?\]", re.I)
 
 

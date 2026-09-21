@@ -1,5 +1,5 @@
 {
- "versie": "2.9",
+ "versie": "3.0",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -353,6 +353,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-22",
+   "wat": "nieuwe overkoepelende firmacode ALGE (Algemeen, 4 letters) voor leveranciers en afspraken die voor alle bedrijven gelden, niet voor een. Staat bewust niet op het dashboard maar in werkwijze/externe-relaties.json, samen met de externe partijen: Nadien (boekhouder) en Wally (AI-software). Beide leverancier, dus [ALGE-LO] online, paars"
+  },
   {
    "datum": "2026-09-22",
    "wat": "de hele-dag marker 'Geen buiten afspraken Lara ophalen' (agenda Lara) is een signaal voor de collega's om die dag geen verre buiten-afspraken voor Mehdi te zetten, want hij haalt Lara op. Blijft altijd staan, ook bij een week vrijmaken"
@@ -780,5 +784,12 @@
    "Mehdi: Geen Buiten afspraken maken": "op de werkagenda: zelfde idee, een dag waarop geen buiten-afspraken gepland mogen worden"
   },
   "hoe_de_agent": "een hele-dag marker is geen afspraak: geen kleur, geen melding, geen reistijd, geen titelfout. De agent laat hem staan, ook als hij een week leegmaakt"
+ },
+ "externe_relaties": {
+  "wat": "externe partijen die bewust niet op organisatie.globaal.be staan: leveranciers en hun contacten",
+  "bestand": "werkwijze/externe-relaties.json (de agent leest die; geen kopie hier)",
+  "overkoepelende_code": "ALGE = Algemeen, vier letters net als de andere codes, voor een leverancier of afspraak die niet bij een bedrijf hoort maar voor de hele groep geldt",
+  "voorbeelden": "Nadien (onze boekhouder) en Wally (AI-bedrijf dat software levert): allebei leverancier, allebei ALGE. In de titel [ALGE-LO] als het online is, [ALGE-LB] als het buiten is; kleur paars zoals elke leverancier",
+  "waarom_geen_lijst_van_bedrijven": "een leverancier voor meerdere bedrijven krijgt niet een rij afkortingen in de titel (niet leesbaar), maar altijd de ene code ALGE"
  }
 }
