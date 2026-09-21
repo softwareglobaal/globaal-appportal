@@ -521,6 +521,9 @@ services:
       # Lokale transcriptiewerker (migratie 152): de Linux-pc met Whisper haalt
       # zijn werk op via /werker met dit token. Leeg = het luik bestaat niet.
       TRANSCRIPTIE_WORKER_TOKEN: ${TRANSCRIPTIE_WORKER_TOKEN:-}
+      # Pauzeknop: op true krijgt de werker geen werk meer. De machine staat
+      # elders en heeft geen publiek adres, dus dit is onze enige rem.
+      TRANSCRIPTIE_PAUZE: ${TRANSCRIPTIE_PAUZE:-false}
       # Contactherkenning (migratie 151): externe nummers uit het belarchief
       # opzoeken in de vijf Pipedrive-administraties. Leest alleen en kost
       # niets; zonder tokens herkent hij alleen onze eigen nummers.
