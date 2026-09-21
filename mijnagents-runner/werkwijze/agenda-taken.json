@@ -1,5 +1,5 @@
 {
- "versie": "2.8",
+ "versie": "2.9",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -353,6 +353,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-22",
+   "wat": "de hele-dag marker 'Geen buiten afspraken Lara ophalen' (agenda Lara) is een signaal voor de collega's om die dag geen verre buiten-afspraken voor Mehdi te zetten, want hij haalt Lara op. Blijft altijd staan, ook bij een week vrijmaken"
+  },
   {
    "datum": "2026-09-21",
    "wat": "de donderdag-reeks van Lara (ophalen bij oma en thuis afzetten, 17:45) is bevestigd en kreeg het adres van oma (Wilselsesteenweg 57) en !!; alle 34 donderdagen tot 02-07-2027 hebben nu heen- en terugrit, roze op de agenda van Lara"
@@ -768,5 +772,13 @@
    "wat": "wie hier werkt, met per persoon de afdeling, de rol, de werkgever, de firma's waarvoor hij diensten doet, de locatie en het HR-nummer",
    "regel": "dit is de plek om te kijken. De agent leest dezelfde gegevens, maar het dashboard is waar Mehdi en de collega's ze bekijken en aanpassen"
   }
+ },
+ "markers": {
+  "wat": "hele-dag items die geen echte afspraak zijn maar een signaal aan de collega's",
+  "voorbeelden": {
+   "Geen buiten afspraken Lara ophalen": "op de agenda van Lara: zegt de collega's dat ze op die dag GEEN (verre) buiten-afspraken voor Mehdi mogen plannen, want hij haalt Lara op. Mehdi, 22-09-2026",
+   "Mehdi: Geen Buiten afspraken maken": "op de werkagenda: zelfde idee, een dag waarop geen buiten-afspraken gepland mogen worden"
+  },
+  "hoe_de_agent": "een hele-dag marker is geen afspraak: geen kleur, geen melding, geen reistijd, geen titelfout. De agent laat hem staan, ook als hij een week leegmaakt"
  }
 }
