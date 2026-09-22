@@ -161,6 +161,11 @@ BRONNEN = {
     "facturatiecontrole": _json(
         "data/bronstatus.json; haalt zijn cijfers live bij Octopus en Pipedrive"),
     "factuurrouter": _json("JSON-bestanden naast de Gmail-koppeling"),
+    "boekhouding-dashboard": _elders(
+        "Bewaart alles in YAML-bestanden in de repo (app/data/register.yaml, "
+        "systemen.yaml, regels.yaml), versiebeheerd in git; er is geen database "
+        "om te bevragen. Lees de bestanden in softwareglobaal/"
+        "globaal-boekhouding-dashboard."),
 
     # --- andere database ---------------------------------------------------
     "barstenscheuren": _elders(
