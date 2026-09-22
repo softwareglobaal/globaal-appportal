@@ -1,0 +1,46 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name octopus.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Tweede naam voor dezelfde app als 55-boekhouding. De MCP-server gaat over
+    # Octopus, dus heet hij naar buiten ook zo; boekhouding.${BASE_DOMAIN}
+    # blijft werken voor wie al gekoppeld is. De app leidt zijn OAuth-metadata
+    # af uit de Host, dus beide namen beschrijven zichzelf correct.
+    set $app_upstream http://app-boekhouding:3014;
+    proxy_read_timeout 300s;
+    include /etc/nginx/snippets/forward-auth.conf;
+
+    # MCP-endpoint voor Claude: buiten de forward-auth om, want een MCP-client
+    # heeft geen Authentik-sessie; de app checkt zelf het token. Dekt ook de
+    # OAuth-endpoints voor claude.ai-connectors (/mcp/token, /mcp/register).
+    location ^~ /mcp {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
+    # De loginstap valt bewust WEL onder de forward-auth hierboven; deze route
+    # doet niets dan doorsturen naar /oauth/inloggen met een enkele parameter,
+    # omdat de gedeelde snippet zijn rd= maar tot de eerste & meekrijgt.
+    location = /oauth/authorize {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
+    # OAuth-discovery, publiek leesbaar.
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+}
