@@ -1805,6 +1805,16 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   `bron_bijgewerkt_op` leeg zodra zo'n veld echt verandert, tenzij de aanroep
   `bron` expliciet meestuurt (import). Link *one.com ↗* per rij naar
   `overview.do?domain=<domein>`, wat het paneel op dat domein zet.
+  **Woordkeuze (punt 6, migratie 158):** afspraak Shaniel: bestaande termen
+  hergebruiken, nieuwe in het woordenboek. `status` (Actief / Niet-actief) en
+  `behouden` gelden nu voor nummers en e-mailadressen (definities verruimd;
+  `email_behouden` verwijderd); nieuw: `open_eindje`, `email_domein`,
+  `email_aandacht`. In de UI: rij Status i.p.v. Staat, kolom Behouden en rij
+  Validatie i.p.v. Beoordeling, rij Open eindjes met Zonder verantwoordelijke
+  en Zonder firma (weg uit de firma-chips), Stuurt door onder Aandacht
+  (`aandacht=doorsturen`; `staat=doorsturen` blijft werken). Punt 11 (kosten)
+  is uitgesteld, punt 14 (uit dienst) vervalt; de lijst in
+  `communicatie/docs/TODO-EMAILREGISTER.md` is daarmee afgewerkt.
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
