@@ -182,6 +182,13 @@ check("een buitenafspraak op een dag zonder auto wordt gemeld", "BUITEN op een d
 check("buiten-boekingen-handmatig staat vastgelegd in de JSON",
       "handmatig" in json.dumps(taken, ensure_ascii=False) and "Calendly" in json.dumps(taken, ensure_ascii=False))
 
+# Wie de afspraak maakte, uit het creator-veld (feature van 22-09-2026, samen met een andere sessie).
+check("de agent kent maker() en de boekingsaccounts", hasattr(W, "maker") and "siyanhdswerk@gmail.com" in W.BOEKINGSACCOUNTS)
+check("een boekingsaccount wordt bij naam getoond", W.maker({"maker": "siyanhdswerk@gmail.com", "kalender": "x"}) == "Siyan")
+check("de maker staat bij een buitenafspraak op een dag zonder auto",
+      "BUITEN op een dag zonder auto (door {maker(a)})" in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+check("de makerslijst is vastgelegd in de JSON", "maker" in json.dumps(taken, ensure_ascii=False) and "creator" in json.dumps(taken, ensure_ascii=False))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

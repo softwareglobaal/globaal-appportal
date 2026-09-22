@@ -876,7 +876,7 @@ def reistijd_zetten(items, alleen_dag=None):
         # waarschuwing (collega die het vergat), geen gewone rit. Mandaat van Mehdi, 22-09-2026.
         if a.get("start", "")[:10] in zonder_auto and not lees_titel(a["titel"])["reistijd"]:
             if info["buiten"] or info["soort"] in ("PB", "KB", "LB"):
-                regels.append(f"{a['start'][:16]} {a['titel'][:50]}: BUITEN op een dag zonder auto")
+                regels.append(f"{a['start'][:16]} {a['titel'][:50]}: BUITEN op een dag zonder auto (door {maker(a)})")
             continue
         adres = a.get("locatie") or ""
         fysiek = bool(adres) and not adres.lower().startswith("http")

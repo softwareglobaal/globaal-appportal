@@ -1,5 +1,5 @@
 {
- "versie": "3.2",
+ "versie": "3.3",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -358,6 +358,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-22",
+   "wat": "wie een afspraak maakte lezen we uit het creator-veld van Google (maker(), geen titel-clutter); getoond bij afspraken zonder code, buiten op een dag zonder auto, en per afdeling. 13-10 gemarkeerd als eerste 'geen auto'-dag"
+  },
   {
    "datum": "2026-09-22",
    "wat": "nieuwe 'geen auto'-dag: een hele-dag marker met 'geen auto' op de werkagenda. De agent maakt dan geen rit en waarschuwt bij een buitenafspraak. Buiten-boekingen gebeuren toch handmatig door Mehdi of Chilton, niet via Calendly; de online boeking blijft open. Rechtbank 28-09 is HARC, ongeveer 15 minuten rijden, adres onbekend (laat zo)"
@@ -827,6 +831,14 @@
   "regel": "buiten-afspraken en werfbezoeken worden handmatig ingepland door Mehdi of Chilton, niet via de online boeking (Calendly)",
   "calendly": "Calendly boekt alleen online afspraken; die vragen geen auto en worden niet geblokkeerd door de geen-auto-marker",
   "gevolg": "een dubbele of handmatige rit op de werkagenda kan van Mehdi of Chilton komen; zie donderdag 24-09",
+  "mehdi": "22-09-2026"
+ },
+ "wie_maakte_de_afspraak": {
+  "wat": "wie een afspraak inplande, staat in het creator-veld van Google; niets extra in de titel nodig (gebouwd 22-09-2026, samen met een andere sessie)",
+  "functie": "maker(): een boekingsaccount toont hij bij zijn rol, een echt persoon zoekt hij op via organisatie.globaal.be, anders het deel voor de @",
+  "boekingsaccounts": "mehdiprivewerkagenda = Mehdi zelf, siyanhdswerk = Siyan, haagendalightprojects = Calendly (light projects), zoomafspraken = Calendly (zoom), unabosdp = Calendly (UNABO), contraxcalendar = Calendly (Contrax)",
+  "getoond": "de maker staat bij een afspraak zonder firmacode, bij een buitenafspraak op een dag zonder auto, en in de inhoud die per afdeling klaargezet wordt",
+  "let_op": "Mehdi noemde 'Chilton' als wie handmatig 'Rijden naar'-blokken invulde; die dragen het account haagendalightprojects, dat nu als Calendly (light projects) gelabeld staat. Uit te klaren wie dat account gebruikt",
   "mehdi": "22-09-2026"
  }
 }
