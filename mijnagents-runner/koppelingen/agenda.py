@@ -103,6 +103,9 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 "hele_dag": "date" in s and "dateTime" not in s,
                 "locatie": ev.get("location", ""), "omschrijving": (ev.get("description") or "")[:2000],
                 "deelnemers": [a.get("email", "") for a in ev.get("attendees", []) if a.get("email")],
+                # wie de afspraak heeft aangemaakt (Google: creator). Zo is achteraf te zien
+                # wie iets zette en waarom het ergens staat. Mandaat van Mehdi, 22-09-2026.
+                "maker": (ev.get("creator") or {}).get("email", ""),
                 "link": ev.get("htmlLink", ""),
                 "_reminders": ev.get("reminders") or {},
                 "_terugkerend": bool(ev.get("recurringEventId")),

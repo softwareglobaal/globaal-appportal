@@ -418,6 +418,38 @@ def namen_in_titel(titel):
     return uit
 
 
+# De agenda- en boekingsaccounts zijn geen personen in kern.persoon; voor die
+# adressen zeg ik zelf wat ze zijn. Een echt persoon zoek ik op in
+# organisatie.globaal.be, dat blijft de bron voor mensen.
+BOEKINGSACCOUNTS = {
+    "mehdiprivewerkagenda@gmail.com": "Mehdi zelf",
+    "siyanhdswerk@gmail.com": "Siyan",
+    "haagendalightprojects@gmail.com": "Calendly (light projects)",
+    "zoomafspraken@gmail.com": "Calendly (zoom)",
+    "unabosdp@gmail.com": "Calendly (UNABO)",
+    "contraxcalendar@gmail.com": "Calendly (Contrax)",
+}
+
+
+def maker(a):
+    """Wie de afspraak heeft aangemaakt, als een naam die Mehdi herkent. Een
+    boekingsaccount noem ik bij zijn rol, een echt persoon zoek ik op in
+    organisatie.globaal.be, en anders toon ik het deel voor de @. Mandaat van
+    Mehdi, 22-09-2026: zo weet hij wie iets zette en waarom het ergens staat."""
+    mail = (a.get("maker") or "").strip().lower()
+    if not mail:
+        return ""
+    if mail in BOEKINGSACCOUNTS:
+        return BOEKINGSACCOUNTS[mail]
+    try:
+        p = organisatie.herken(mail)
+    except Exception:  # noqa: BLE001
+        p = None
+    if p:
+        return p["naam"].split(" (")[0]
+    return mail.split("@")[0]
+
+
 def titelfouten(a, info):
     """De fouten die Mehdi hard wil zien. Geeft een lijst met korte redenen."""
     if info["reistijd"] or a.get("hele_dag"):
@@ -1239,7 +1271,9 @@ def main():
                 deal, hoe = koppel(info, a["titel"], deals)
                 gekoppeld += 1 if deal else 0
             if not info["conform"] and kal not in ("Lara", "Prive Buiten", "Feestdagen BE") and dag >= vandaag:
-                niet_conform.append(f"{dag} {a['start'][11:16]} {a['titel']} ({kal})")
+                wie = maker(a)
+                niet_conform.append(f"{dag} {a['start'][11:16]} {a['titel']} ({kal}"
+                                    + (f", gezet door {wie}" if wie else "") + ")")
             oms = ", ".join(x for x in (SOORT.get(info["soort"], ""), TYPES.get(info["type"], ""),
                                         "buiten + reistijd" if info["buiten"] else "", "niet bevestigd" if info["onzeker"] else "") if x)
             regel = f"{'hele dag' if a['hele_dag'] else a['start'][11:16]} {a['titel']}" + (f" [{oms}]" if oms else "") + (f" · deal {deal['id']}" if deal else "")
@@ -1254,7 +1288,7 @@ def main():
                               "inhoud": {"datum": dag, "start": a["start"], "einde": a["einde"], "titel": a["titel"], "agenda": kal,
                                          "firma": info["firma"], "soort": info["soort"], "type": info["type"], "nummer": info["nummer"],
                                          "klant": info["klant"], "buiten": info["buiten"], "onzeker": info["onzeker"],
-                                         "locatie": a["locatie"], "deelnemers": a["deelnemers"],
+                                         "locatie": a["locatie"], "deelnemers": a["deelnemers"], "gezet_door": maker(a),
                                          "deal_id": deal["id"] if deal else None, "koppeling": hoe, "omschrijving": a["omschrijving"][:800]}})
         tekst = "Vandaag:\n" + ("\n".join("- " + r for r in dagplan) or "- niets in de agenda") + \
                 "\n\nGisteren, klantcontact waar een verslag of opname bij hoort:\n" + ("\n".join("- " + r for r in gisteren_lijst) or "- niets")
