@@ -1786,7 +1786,14 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   persoonfilter van tab 2, met "(uit dienst sinds)" in rij en keuzelijst; de
   belvolgorde blijft op `refs.personen`. Grens: kern.persoon telt 34 mensen, de
   ~130 ex-collega's van h-architects.be bestaan er niet in; dat is een
-  HR-beslissing.
+  HR-beslissing. **Tweede ronde (punten 7, 8, 2, 12):** `stats` levert ook de
+  aantallen per chip (`per_firma`, `postbus`, `spam_uit`, `extern`, `groot`,
+  `met_gebruikers`, ...) zodat elke chip zegt wat hij oplevert en firma's zonder
+  adressen geen chip krijgen; domeinen op aantal; **Alles wissen**; de
+  OPEN-badge alleen als minder dan de helft zonder verantwoordelijke is (anders
+  is leeg de regel en staat het cijfer in de kaart); kolom Gebruikers verborgen
+  tot de eerste koppeling (`verberg` op de kolom); risico's als tag in de rij
+  (*spam uit*, *auto-antwoord*, *naar buiten*).
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
