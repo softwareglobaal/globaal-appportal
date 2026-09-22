@@ -1911,6 +1911,34 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   nu eerst `if (!eigen.length) return false`, geen lijst is geen oordeel.
   Verder een globale `[hidden] { display: none !important }`, omdat `display:
   flex` twee keer `hidden` overstemde.
+- **Doel per adres (migratie 162/163, 22-09-2026):** het register zei wie
+  verantwoordelijk is en wat het kost, maar niet waarvoor een adres bestaat.
+  Mehdi in de vergadering over info@elevaitservices.com: "ik kan die vraag
+  binnen een week terugvragen, het is niet dat ik kan onthouden." Kolom `doel`
+  op `communicatie.emailadres`, met hetzelfde begrip en dezelfde beheerde lijst
+  als bij telefoonnummers (`communicatie.lijst`, categorie "Doel"), want een
+  nummer en een adres die allebei voor Finance zijn horen hetzelfde woord te
+  krijgen. Vier waarden erbij: Persoonlijk, IT en systemen, Opbouw, Archief.
+  **Wel een keuze en geen vrij tekstveld**, anders dan bij nummers: daar gaf
+  vrije tekst 38 waarden op tachtig nummers (namen van collega's,
+  "Enstaco (oud)/Ashvand"), en op 502 adressen filtert niemand daar nog op. De
+  server weigert een waarde die niet in de lijst staat, ook via de API;
+  specifieker dan de lijst schrijf je in Omschrijving. Te zetten in de rij
+  (select), in het detailvenster en **in bulk** (`PATCH /api/emails/doel`) -
+  zonder dat laatste blijven er 414 lege cellen staan die niemand een voor een
+  invult. Filteren met een vinkjesknop, inclusief de regel **Nog niet
+  ingevuld**, want juist die groep is het werk; doelen die nergens voorkomen
+  krijgen geen regel (`per_doel` in de stats, ontbrekende sleutel is nul).
+  Doel staat ook in de export en is doorzoekbaar.
+  **Eerste vulling 88 van de 502**, alleen waar de regel een feit is: het deel
+  voor de apenstaart is exact een rolwoord, of exact de naam van iemand in
+  `kern.persoon`. Geen "bevat" en geen patroonherkenning: bij "bevat" wordt
+  ap.zidiconstruct Finance, en ai.finance, ass-arch-light1 en archief_andrew
+  zijn huisconventies die je moet kennen om te kunnen duiden. De ~130
+  ex-collega's van h-architects.be staan niet in kern.persoon, dus hun
+  naampostvakken vallen buiten de regel. Migratie 163 haalde ar@ alsnog binnen:
+  ap@ stond op Finance en ar@ niet, terwijl het twee helften van dezelfde
+  conventie zijn op hetzelfde domein.
 - **Adres per persoon (22-09-2026):** `#email=<uuid>` opent tab 2 met dat adres
   in het detailvenster en de filters leeg, zodat een opgeslagen view het adres
   niet kan verbergen (`openEmailViaLink()`). Dat is nodig omdat het
