@@ -1793,7 +1793,18 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   OPEN-badge alleen als minder dan de helft zonder verantwoordelijke is (anders
   is leeg de regel en staat het cijfer in de kaart); kolom Gebruikers verborgen
   tot de eerste koppeling (`verberg` op de kolom); risico's als tag in de rij
-  (*spam uit*, *auto-antwoord*, *naar buiten*).
+  (*spam uit*, *auto-antwoord*, *naar buiten*). **Afwerking (punten 4, 5, 13,
+  migratie 157):** `view_instelling` heeft er `email_kolommen` en
+  `email_sortering` bij (`GET/PUT /api/view/email`), zelfde tabel als de
+  nummerview zodat "view van Mehdi" op beide tabbladen hetzelfde betekent; de
+  kiezer op tab 2 kent alleen aan/uit, geen volgorde. Peildatumregel onder de
+  kaarten (`max(bron_bijgewerkt_op)`), rood na 90 dagen; definities
+  `email_peildatum` en `email_opruimen` (de 1 MB-drempel, die ook in de query
+  blijft). Bronvelden in het detailvenster staan op slot zolang `bron` gevuld
+  is; **Toch bewerken** zet ze open en de server maakt `bron` en
+  `bron_bijgewerkt_op` leeg zodra zo'n veld echt verandert, tenzij de aanroep
+  `bron` expliciet meestuurt (import). Link *one.com ↗* per rij naar
+  `overview.do?domain=<domein>`, wat het paneel op dat domein zet.
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
