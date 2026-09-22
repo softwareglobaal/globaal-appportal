@@ -100,6 +100,12 @@ DIENST_PIPELINE = {
     "stabiliteit": (2, 67),
     "veiligheidscoordinatie": (5, 22),
     "vergunning": (14, 138),
+    # Regularisatie is sinds 4 sep 2026 een eigen dienst op unabo.be en loopt door
+    # dezelfde pijplijn als de vergunningen. Zonder deze regel valt zo'n aanvraag
+    # in Engineering met label "Te routeren" (dat is gebeurd; rechtgezet 22 sep).
+    "regularisatie": (14, 138),
+    # 3D-rendering: zelfde team en zelfde soort dossier als 3D-scanning.
+    "3d-rendering": (4, 17),
     "3d-scanning": (4, 17),
     "landmeter": (21, 245),
     "plaatsbeschrijving": (26, 327),
