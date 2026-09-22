@@ -1828,9 +1828,13 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   Besparen zit bij het pakket: contrax.be betaalt EUR 193,87 voor twee adressen
   en 0,4 GB op een 100 GB-pakket; unabo.be is met EUR 336,75 het duurste domein.
   **Firma uit het domein** (`firma_afleiden`) vult de firma waar het domein
-  eenduidig is; bewust uit voor globaal.be (gedeeld groepsdomein, prefixen
-  `ha.`/`ee.`/`tkn.`/`hb.` zouden 66 van 238 kunnen vullen - aparte beslissing)
-  en voor medianselections.com (geen firma-record). Kerncijfers herzien naar zes
+  eenduidig is. Twee besluiten 22-09-2026 (migratie 160): **Median Selections &
+  Consultancy** is aangemaakt in `kern.firma` (code `MEDI`, Suriname, naam en
+  vestiging van hun eigen website) en de veertien adressen hangen eraan;
+  **geen prefixregel op globaal.be**, want een prefix (`ha.`, `ee.`, `tkn.`,
+  `hb.`) is geen eigendomsbewijs. Beide besluiten staan als opmerking bij het
+  domein. Zonder firma: 258 naar 240 (238 globaal.be plus twee
+  regularisatie-domeinen). Kerncijfers herzien naar zes
   openstaande taken, met **leeg** (174) en **leeg en staat aan** (86) bovenaan in
   plaats van achter een chip. Peildatumwaarschuwing van 90 naar **14 dagen**;
   getallen in Nederlandse notatie (komma). Uitrolvolgorde en meetlat:
