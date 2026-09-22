@@ -1812,9 +1812,31 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   `email_aandacht`. In de UI: rij Status i.p.v. Staat, kolom Behouden en rij
   Validatie i.p.v. Beoordeling, rij Open eindjes met Zonder verantwoordelijke
   en Zonder firma (weg uit de firma-chips), Stuurt door onder Aandacht
-  (`aandacht=doorsturen`; `staat=doorsturen` blijft werken). Punt 11 (kosten)
-  is uitgesteld, punt 14 (uit dienst) vervalt; de lijst in
-  `communicatie/docs/TODO-EMAILREGISTER.md` is daarmee afgewerkt.
+  (`aandacht=doorsturen`; `staat=doorsturen` blijft werken).
+- **Kosten en pilot (tweede kritiekronde, migratie 159):** de tab toonde 502
+  adressen, nul oordelen en geen euro. **`communicatie.email_domein`** zet het
+  domein neer als eigen ding: firma + `firma_afleiden`, pakket, quota,
+  pakketverbruik, opslag-add-on, jaarbedrag, factuurdatum, verlengdatum,
+  factuurregels, opmerking; gevuld uit de one.com mail-overview-API en de
+  laatste factuur per order (17 orders, EUR 1.769,14 per jaar). **De euro hangt
+  aan het domein en niet aan het adres**, want bij one.com is het aantal
+  postbussen onbeperkt binnen een pakket: een postbus wissen bespaart niets, en
+  de kostenregel in de UI zegt dat er letterlijk bij. Daarmee is de veelgenoemde
+  213,1 GB op h-architects.be tegen 200 GB quotum géén kostenpost: de add-on
+  "Onbeperkt e-mail" staat sinds 2021 op elke factuur en geen enkele factuur
+  toont een overschrijdingsregel (wel twee keer EUR 12 herinneringskosten).
+  Besparen zit bij het pakket: contrax.be betaalt EUR 193,87 voor twee adressen
+  en 0,4 GB op een 100 GB-pakket; unabo.be is met EUR 336,75 het duurste domein.
+  **Firma uit het domein** (`firma_afleiden`) vult de firma waar het domein
+  eenduidig is; bewust uit voor globaal.be (gedeeld groepsdomein, prefixen
+  `ha.`/`ee.`/`tkn.`/`hb.` zouden 66 van 238 kunnen vullen - aparte beslissing)
+  en voor medianselections.com (geen firma-record). Kerncijfers herzien naar zes
+  openstaande taken, met **leeg** (174) en **leeg en staat aan** (86) bovenaan in
+  plaats van achter een chip. Peildatumwaarschuwing van 90 naar **14 dagen**;
+  getallen in Nederlandse notatie (komma). Uitrolvolgorde en meetlat:
+  **`communicatie/docs/PILOT-EMAILREGISTER.md`** - eerst elevaitservices.com (4)
+  als flowtest en hdssr.com (19) als testset, norm 80 procent volledig binnen
+  een half uur, pas daarna de overige 483. Punt 14 (uit dienst) vervalt.
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
