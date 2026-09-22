@@ -1727,6 +1727,31 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   en alle drie de tabellen staan in `_NOOIT` van `graaf.py`. Standaard uit:
   `CONTACT_HERKENNING_ENABLED` (leest alleen, kost niets) en `DUIDING_ENABLED`.
   Bewust niet gebouwd: een AI-cijfer voor hoe goed een medewerker belt.
+- **E-mailregister gevuld (migratie 155, 22-09-2026):** tab 2 stond leeg en kende
+  alleen adres, firma, verantwoordelijke en gebruikers. Daarmee kun je een adres
+  registreren, maar niet beoordelen. `emailadres` heeft er daarom de harde
+  postvakgegevens bij: **`soort`** (postbus of alias), **`opslag_mb`** +
+  **`quota_gb`**, **`spamfilter`**, **`autoreply`**, **`forwards`** (puntkomma-
+  gescheiden) en **`backup_restore`**, plus **`bron`** + **`bron_bijgewerkt_op`**
+  zodat zichtbaar is waar een rij vandaan komt en hoe oud de waarde is (leeg =
+  met de hand ingevoerd). Kolommen op de tabel zelf en **geen spiegeltabel**
+  zoals `xelion_belvolgorde`: een adres is een vast gegeven, en het register moet
+  ook adressen aankunnen die niet bij one.com staan. De bestaande `actief` houdt
+  het aan/uit van het adres (one.com `mailAddressStatus`); het groene "Active"
+  dat one.com in zijn lijst toont hoort bij Backup & Restore en zit dus in
+  `backup_restore`.
+  **Eerste vulling:** 502 adressen over 14 domeinen uit het one.com
+  controlepaneel (`GET /admin/api/domains/<domein>/mail/overview` in een
+  ingelogde sessie), peildatum 22-09-2026. Firma is alleen ingevuld waar het
+  domein eenduidig één firma is (244 rijen); `globaal.be`, medianselections.com,
+  mijnregularisatie.be, regulariseren.be en elevaitservices.com blijven leeg en
+  komen dus als open eindje in beeld - dat is precies waar de tab voor is. De
+  import is een **eenmalige SQL-load, geen poller**: one.com geeft geen
+  laatste-login of laatste-maildatum, dus opslag is de enige gebruiksindicatie en
+  een dagelijkse sync zou niets toevoegen. Her-draaien is veilig: `ON CONFLICT
+  (adres)` werkt alleen de postvakgegevens bij en laat firma, verantwoordelijke
+  en omschrijving met rust. Filters in de UI: **Uitgezet**, **Op te ruimen**
+  (uitgezet en onder 1 MB) en **Doorsturen**.
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
