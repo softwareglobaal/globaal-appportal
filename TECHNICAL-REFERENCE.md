@@ -1299,6 +1299,46 @@ Surinaamse N.V. en een "PVT. LTD."), allebei met echte boekingen. Twee
 entiteiten of een dubbele fiche is nog niet uitgeklaard; tot dan telt elke fiche
 mee en is dat per fiche omkeerbaar op het tabblad Relatiefiches.
 
+### 13.10 Boekhouding-dashboard - `boekhouding-dashboard.globaal.be`
+
+Het register van de boekhouding van de groep: welke firma's er zijn, hun
+bankrekeningen, kaarten en boekhoudmailboxen, wie welke rol heeft in de
+boekhoudstroom, in welke systemen de boekhouding zit, en welke regels daar
+gelden. Opdracht Mehdi 22-09-2026: eerst het register uit de Factuurrouter,
+daarna repo voor repo de redenering erbij. Repo
+`globaal-boekhouding-dashboard`, checkout `~/appportal/boekhouding-dashboard`,
+compose-service `app-boekhouding-dashboard` op **poort 3023**, nginx-template
+`66-boekhouding-dashboard.conf.template`, Authentik via
+`scripts/add-boekhouding-dashboard-app.py` (groepen admin/manager/boekhouding,
+dezelfde kring als 13.7).
+
+**Niet hetzelfde als 13.7.** De Boekhouding-app werkt in Octopus (factureren,
+openstaande posten). Dit dashboard zegt wat er is en waar het zit, en
+schrijft nergens naartoe.
+
+- **Geen database, geen sleutels.** De stamdata staat in drie YAML-bestanden in
+  de repo (`app/data/register.yaml`, `systemen.yaml`, `regels.yaml`), met per
+  gegeven de bron. Een wijziging is een commit. Bewust: zolang geen andere app
+  de rekeningen en kaarten leest, is git de bron; een schema komt er pas als
+  dat wel zo is (zie de volgende stappen in de CLAUDE.md van de repo).
+- **Signalen zijn afgeleid**, nooit handmatig: per controle een functie in
+  `app/register.py` met de regel erbij (kaart niet uniek over de firma's, IBAN
+  met foute controlecijfers, firma zonder rekening of routing, Octopus-dossier
+  dat de Boekhouding-app niet volgt, rekening die de routingtabel niet kent,
+  ...). Elk signaal draagt een voorgestelde volgende stap.
+- **Herkomst eerste vulling (22-09-2026):** routingtabel v1.9 van de
+  Factuurrouter (kennisset 2026-04-06), `kern.firma` (18 codes), de
+  Octopus-dossierlijst (13 dossiers), `boekhouding.firma` (8 gevolgd), de
+  kaartmappen van Kosten en de CODA-reeks van Melodie. Wat toen gemeten is: alle
+  15 IBAN's slagen op mod 97, geen kaart komt bij twee firma's voor, 31
+  signalen waarvan 0 hoog.
+- **Rijksregisternummers horen er niet in**; `check_register.py` faalt erop. De
+  routingtabel van de Factuurrouter kent er een, dit register bewust niet.
+- **CI** (`rooktest.yml`): stamdata-controle, render- en klikbaarheidscheck,
+  `node --check` op het losse script, huisstijl, execute-bit op het
+  deploy-script. `deploy-stack.sh` draait de stamdata-controle nog eens voor
+  hij de container wisselt.
+
 ---
 
 ## 14. Centrale gebruikersdatabase & Medewerkers-app

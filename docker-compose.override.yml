@@ -147,6 +147,31 @@ services:
       start_interval: 5s
     networks: [appnet]
 
+  # Boekhouding-dashboard - het register van de boekhouding van de groep:
+  # firma's, bankrekeningen, kaarten, personen, systemen en regels, met de
+  # signalen die daaruit volgen. Leest alleen uit YAML in de repo; geen
+  # database, geen sleutels. Eigen repo softwareglobaal/globaal-boekhouding-
+  # dashboard, uitgecheckt in ./boekhouding-dashboard met auto-deploy via
+  # deploy-stack.sh en cron.
+  app-boekhouding-dashboard:
+    build:
+      context: ./boekhouding-dashboard
+      dockerfile: app/Dockerfile
+    image: appportal-boekhouding-dashboard
+    restart: unless-stopped
+    environment:
+      PORT: "3023"
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+      BOEKHOUDING_DASHBOARD_GROUPS: ${BOEKHOUDING_DASHBOARD_GROUPS:-boekhouding,manager}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3023/healthz', timeout=5)"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    networks: [appnet]
+
   # QuickBooks-connector voor HDS (Suriname). Tweede boekhoudsysteem naast
   # Octopus; MCP-server zodat Claude die boekhouding kan lezen en beperkt
   # bijwerken. Eigen repo softwareglobaal/globaal-quickbooks, uitgecheckt in

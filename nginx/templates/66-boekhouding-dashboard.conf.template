@@ -1,0 +1,12 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name boekhouding-dashboard.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Forward-auth (embedded outpost) beschermt de hele app; identiteit en
+    # groepen gaan als X-authentik-* headers naar de Flask-app, die daar zelf
+    # nog eens BOEKHOUDING_DASHBOARD_GROUPS tegen aftoetst.
+    set $app_upstream http://app-boekhouding-dashboard:3023;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

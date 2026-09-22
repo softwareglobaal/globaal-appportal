@@ -30,6 +30,7 @@ auto-merge** - in beide gevallen deployt de VM daarna automatisch via cron (2 mi
 | globaal-schuldentracker | Schuldentracker (host-app :5050) | `~/Finance/Schuldentracker` | PR → auto-merge | auto (`~/deploy-schuldentracker.sh`) |
 | globaal-boekhouding | Boekhouding: factureren Monday→Octopus + openstaande posten (§13.7, :3014) | `~/appportal/boekhouding` | directe push | auto (`deploy-stack.sh`, cron 2 min) |
 | globaal-intercompany | Intercompany: onderlinge facturatie HDS naar de Belgische firma's (§13.9, :3016) - **niet** hetzelfde als boekhouding, dat gaat over klanten | `~/appportal/intercompany` | directe push | auto (`deploy-stack.sh`, cron 2 min) |
+| globaal-boekhouding-dashboard | Boekhouding-dashboard: register van firma's, rekeningen, kaarten, personen, systemen en regels van de boekhouding (§13.10, :3023) - het overzicht boven de finance-apps, werkt niet in Octopus | `~/appportal/boekhouding-dashboard` | directe push | auto (`deploy-stack.sh`, cron 2 min) |
 | angela-site | Website merk Angela (angela.sr, §14.8) + beheer-tegel items.globaal.be | `~/appportal/angela-site` | directe push | auto (`deploy-stack.sh`, cron 2 min) |
 | telefoonregister | telefoonregister van de collega - **ongemoeid laten** | eigen checkout | - | - |
 

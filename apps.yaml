@@ -78,6 +78,12 @@ apps:
     subdomain: boekhouding
     roles: [admin, manager, boekhouding]
     status: active
+  - id: boekhouding-dashboard
+    name: Boekhouding-dashboard
+    description: Register van firma's, rekeningen, kaarten, personen, systemen en regels van de boekhouding
+    subdomain: boekhouding-dashboard
+    roles: [admin, manager, boekhouding]
+    status: active
   - id: quickbooks
     name: QuickBooks
     description: Boekhouding HDS via QuickBooks Online
