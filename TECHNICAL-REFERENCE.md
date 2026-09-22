@@ -1767,6 +1767,26 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   wordt. De sorteerstand van tab 2 wordt niet bewaard: daar is geen persoonlijke
   view, de kolommen liggen vast in `EMAIL_KOLOMMEN` (kop, sorteerwaarde en cel
   bij elkaar).
+- **Kritiekronde 22-09-2026 (migratie 156):** vier gaten gedicht, de rest staat
+  in `communicatie/docs/TODO-EMAILREGISTER.md`. (1) **Kerncijfers als filter:**
+  zes KPI-kaarten over het hele register (`GET /api/emails/stats`: adressen,
+  actief, uitgezet, op te ruimen, zonder firma, nog te beoordelen), klikken zet
+  de filter aan; teller "x van y". (3) **Handelen:** kolom **`behouden`** op
+  `emailadres` met hetzelfde drieluik als nummers (behouden / verifieren /
+  elimineren, leeg = nog te beoordelen) plus `beoordeeld_door`/`beoordeeld_op`;
+  bewust geen vierde waarde "archiveren", de app leidt "eerst archiveren" af
+  (elimineren en meer dan 1 GB). Selectievinkjes + bulkbalk voor editors,
+  `PATCH /api/emails/behouden {ids, waarde}`; export van de gefilterde lijst via
+  `GET /api/emails/export.xlsx` met dezelfde parameters (filterlogica gedeeld in
+  `pasEmailFiltersToe()`); de verwijderknop zegt nu eerlijk dat alleen de
+  registratie verdwijnt, niet de mailbox bij one.com. (9) Lege staat zegt "Geen
+  adressen gevonden voor deze filters" in plaats van "nog niets geregistreerd".
+  (10) **Ex-collega's koppelbaar:** `refs.personen_alle` (iedereen, met
+  `in_dienst` en `datum_uit_dienst`) voor verantwoordelijke, gebruikers en de
+  persoonfilter van tab 2, met "(uit dienst sinds)" in rij en keuzelijst; de
+  belvolgorde blijft op `refs.personen`. Grens: kern.persoon telt 34 mensen, de
+  ~130 ex-collega's van h-architects.be bestaan er niet in; dat is een
+  HR-beslissing.
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
