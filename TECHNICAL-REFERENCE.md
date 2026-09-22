@@ -1750,8 +1750,23 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   laatste-login of laatste-maildatum, dus opslag is de enige gebruiksindicatie en
   een dagelijkse sync zou niets toevoegen. Her-draaien is veilig: `ON CONFLICT
   (adres)` werkt alleen de postvakgegevens bij en laat firma, verantwoordelijke
-  en omschrijving met rust. Filters in de UI: **Uitgezet**, **Op te ruimen**
-  (uitgezet en onder 1 MB) en **Doorsturen**.
+  en omschrijving met rust.
+  **Filteren en sorteren:** alle filters draaien op de server, zodat een chip
+  hetzelfde antwoord geeft als een query op de database. Chip-rijen: soort
+  (postbus/alias), staat (actief, uitgezet, **op te ruimen** = uitgezet en onder
+  1 MB, doorsturen), **firma multi-select met een aparte waarde `geen`** voor de
+  adressen zonder firma, domein (afgeleid uit het adres zelf, met hun aantal uit
+  `refs.emaildomeinen` - geen aparte lijst om bij te houden), persoon
+  (verantwoordelijke **of** gebruiker, want zo stelt iemand de vraag), wel/geen
+  gebruikers, en aandacht (spamfilter uit, automatisch antwoord aan, **extern
+  doorsturen** = naar een domein dat zelf niet in het register staat, groter dan
+  1 GB). Bewust geen "bijna vol": de one.com-quota lopen van 3 tot 750 GB en
+  niemand komt er tegenaan; wat bij opruimen telt is wat je eerst moet
+  archiveren. Sorteren werkt als op de telefonietab (asc, desc, uit; lege
+  waarden onderaan) via `sorteerOpKolom()`, dat nu door beide tabellen gedeeld
+  wordt. De sorteerstand van tab 2 wordt niet bewaard: daar is geen persoonlijke
+  view, de kolommen liggen vast in `EMAIL_KOLOMMEN` (kop, sorteerwaarde en cel
+  bij elkaar).
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
