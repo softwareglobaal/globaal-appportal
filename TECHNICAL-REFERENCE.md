@@ -1799,8 +1799,9 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   `refs.emaildomeinen` - geen aparte lijst om bij te houden), persoon
   (verantwoordelijke **of** gebruiker, want zo stelt iemand de vraag), wel/geen
   gebruikers, en aandacht (spamfilter uit, automatisch antwoord aan, **extern
-  doorsturen** = naar een domein dat zelf niet in het register staat, groter dan
-  1 GB). Bewust geen "bijna vol": de one.com-quota lopen van 3 tot 750 GB en
+  doorsturen** = naar een domein dat zelf niet in het register staat; zie
+  migratie 161 verderop, die deze rij van vijf naar drie signalen bracht).
+  Bewust geen "bijna vol": de one.com-quota lopen van 3 tot 750 GB en
   niemand komt er tegenaan; wat bij opruimen telt is wat je eerst moet
   archiveren. Sorteren werkt als op de telefonietab (asc, desc, uit; lege
   waarden onderaan) via `sorteerOpKolom()`, dat nu door beide tabellen gedeeld
@@ -1881,6 +1882,49 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   **`communicatie/docs/PILOT-EMAILREGISTER.md`** - eerst elevaitservices.com (4)
   als flowtest en hdssr.com (19) als testset, norm 80 procent volledig binnen
   een half uur, pas daarna de overige 483. Punt 14 (uit dienst) vervalt.
+- **Filters herzien en migratie 161 (22-09-2026, derde ronde):** de filterrij
+  **Aandacht** had vijf items, en die waren niet gekozen maar overgebleven:
+  one.com geeft `spamFilter`, `autoReply`, `forwards` en `diskUsage` terug, en
+  van elk veld was een knop gemaakt. Twee houden geen stand en zijn weg.
+  *Stuurt door* (31) is normaal, 26 van de 31 blijven binnen de groep, en het
+  staat al in de kolom Doorsturen naar. *Groter dan 1 GB* (33) kost niets, want
+  het aantal postbussen is onbeperkt binnen een pakket. Wat overblijft zijn drie
+  uitzonderingen die iemand iets kosten als je ze laat liggen: spamfilter uit,
+  automatisch antwoord aan, doorsturen naar buiten. Meerdere signalen combineren
+  met **OF** (`SIGNAAL` in `api.js`), anders loopt iemand in een val waarin
+  meer aanvinken minder oplevert. Woordenboek bijgewerkt in migratie 161.
+  **Chips naar een keuzelijst met vinkjes** (`keuzelijstMulti()`): chips blijven
+  voor korte lijsten die je vergelijkt, maar firma (16), domein (14) en persoon
+  (34) zijn een opzoekprobleem, geen vergelijking. De knop toont de keuze
+  ("3 van 14"), het paneel is een lijst met vinkjes, sluiten met Escape of een
+  klik ernaast. **Domeinen alfabetisch**, niet op aantal: bij veertien items
+  zoek je een naam, en dan moet die lijst zich als een woordenboek gedragen.
+  In de voet **Alles aan** en **Alles uit** (vergadering 22-09-2026: Mehdi had
+  Elevait aangevinkt, wilde naar Contrax en moest handmatig terug). Getest met
+  het scenario uit die vergadering: alles aan, dan globaal.be en h-architects.be
+  uit geeft 116 rijen, precies 502 min 238 min 148.
+  Twee bugs eruit: de selectiekolom was 111 px breed voor een vinkje van 14 px
+  (niet de breedte maar `.tbl td { padding: 8px 14px }` won van `.sel-col`,
+  gelijke specificiteit, later in het bestand), en `isExternAdres()` zette de
+  tag *naar buiten* op alle 31 doorstuuradressen zolang `refs.emaildomeinen`
+  nog niet geladen was, want `!lijst.some(...)` is `true` op een lege lijst -
+  nu eerst `if (!eigen.length) return false`, geen lijst is geen oordeel.
+  Verder een globale `[hidden] { display: none !important }`, omdat `display:
+  flex` twee keer `hidden` overstemde.
+- **Adres per persoon (22-09-2026):** `#email=<uuid>` opent tab 2 met dat adres
+  in het detailvenster en de filters leeg, zodat een opgeslagen view het adres
+  niet kan verbergen (`openEmailViaLink()`). Dat is nodig omdat het
+  **medewerkersprofiel** in globaal-organisatie er nu naar linkt: onder
+  Telefoonnummers staat een blok **E-mailadressen** dat read-only uit
+  `communicatie.emailadres` leest (`telefoon.emailadressen_van()`), zowel waar
+  iemand verantwoordelijke is als waar iemand gebruiker is, niet-actieve
+  adressen onderaan. Wijzigen gebeurt in Communicatie, waar de bron staat.
+  Uit de vergadering: "dan hebben we daar namen, telefoonnummer, e-mailadres,
+  en dan kunnen we een per een aan toevoegen".
+  Vastgelegd bij elevaitservices.com: de vergadering zei dat het domein was
+  opgezegd, one.com toont verlenging op 14-09-2027 zonder vervaldatum. Beide
+  feiten staan als opmerking bij het domein en bij de vier adressen; het
+  oordeel `behouden` van akadmin is niet omgezet.
 
 > **Ontwerp-/achtergronddocument** (datamodel, flows, governance, tradeoffs):
 > `ONTWERP-CENTRALE-GEBRUIKERSDATABASE.md` (lokaal, nog buiten deze repo).
