@@ -175,6 +175,13 @@ _g, _al, _geen, _fout, _reg = W.reistijd_zetten(_items, _dag)
 check("geen Lara-rit op een vakantiedag", _g == 0 and _al == 0)
 check("de schoolvakantie-regel staat in de JSON", "schoolvakantie" in json.dumps(taken.get("reistijd", {})) or "vakantie" in json.dumps(taken))
 
+# Geen auto: de agent leest de marker en maakt geen rit op zo'n dag. Mehdi, 22-09-2026.
+_bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("de agent kent de grendel geen_auto_dagen", "def geen_auto_dagen" in _bron and "zonder_auto = geen_auto_dagen()" in _bron)
+check("een buitenafspraak op een dag zonder auto wordt gemeld", "BUITEN op een dag zonder auto" in _bron)
+check("buiten-boekingen-handmatig staat vastgelegd in de JSON",
+      "handmatig" in json.dumps(taken, ensure_ascii=False) and "Calendly" in json.dumps(taken, ensure_ascii=False))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

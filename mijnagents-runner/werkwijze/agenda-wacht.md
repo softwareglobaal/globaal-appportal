@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 6.9 (22-09-2026, geen Lara-ophaling of rit tijdens schoolvakanties/feestdagen; per schooljaar bijstellen; maandag na 2145 naar huis; donderdag oma optioneel. v6.8: ALGE = overkoepelende code voor leveranciers van de hele groep, aparte lijst externe-relaties.json. v6.7: hele-dag markers = signaal aan collega's, laten staan. v6.6: donderdag Lara: ophalen bij oma en thuis afzetten, heen en terug, hele reeks. v6.5: afspraak C voorlopig, nooit vertrekken voor de vorige afspraak gedaan is, een rit hoort bij één afspraak, een ronde tegelijk, ritten van Lara tot het einde van het schooljaar. v6.4: een rit naar huis die al in de agenda staat telt; Lara op maandag en vrijdag van De Speelkriebel. v6.3: een rit staat op dezelfde agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt; thuis komt nooit uit een titel; de dinsdagketen van Lara). v6.2 (19-09-2026, wie welke agenda ziet en de regel dat ik nooit hernoem; v6.1 17-09-2026 Elevait als firma L; v6 16-09-2026: het document 'agenda afspraken met Nova.docx' is de enige bron; negen agenda's; v5 van dezelfde dag met elf agenda's is teruggedraaid; v4 11-09-2026: reistijd met file, projectnummer en adres uit de projectmap). Ik ben de bronnen-agent voor
+Versie 6.10 (22-09-2026, 'geen auto'-dag: hele-dag marker op werk, agent maakt geen rit en waarschuwt; buiten-boekingen handmatig door Mehdi of Chilton, Calendly online blijft open. v6.9: geen Lara-ophaling of rit tijdens schoolvakanties/feestdagen; per schooljaar bijstellen; maandag na 2145 naar huis; donderdag oma optioneel. v6.8: ALGE = overkoepelende code voor leveranciers van de hele groep, aparte lijst externe-relaties.json. v6.7: hele-dag markers = signaal aan collega's, laten staan. v6.6: donderdag Lara: ophalen bij oma en thuis afzetten, heen en terug, hele reeks. v6.5: afspraak C voorlopig, nooit vertrekken voor de vorige afspraak gedaan is, een rit hoort bij één afspraak, een ronde tegelijk, ritten van Lara tot het einde van het schooljaar. v6.4: een rit naar huis die al in de agenda staat telt; Lara op maandag en vrijdag van De Speelkriebel. v6.3: een rit staat op dezelfde agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt; thuis komt nooit uit een titel; de dinsdagketen van Lara). v6.2 (19-09-2026, wie welke agenda ziet en de regel dat ik nooit hernoem; v6.1 17-09-2026 Elevait als firma L; v6 16-09-2026: het document 'agenda afspraken met Nova.docx' is de enige bron; negen agenda's; v5 van dezelfde dag met elf agenda's is teruggedraaid; v4 11-09-2026: reistijd met file, projectnummer en adres uit de projectmap). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -110,6 +110,19 @@ Een afspraak is online of ter plaatse bij de klant. Voor allebei geldt:
 - UNABO, Harmoniebouw en Contrax hebben (nog) geen mappen met adres in de naam;
   daar telt alleen het adresveld van de afspraak. Zodra die mappen dezelfde
   naamregel volgen, lees ik ze mee.
+
+## Geen auto, en wie buiten inplant (mandaat van Mehdi, 22-09-2026)
+
+Op een dag zonder auto kan Mehdi niet naar buiten rijden. Hij (of Chilton) zet dan
+een **hele-dag marker met `geen auto`** in de titel op de werkagenda, bv.
+`Mehdi: geen auto - geen werfbezoeken/buiten`. Zichtbaar voor de collega's: die dag
+niets buiten plannen.
+
+- Ik lees die dagen (`geen_auto_dagen`), maak **geen rit**, en meld het als er toch
+  een buitenafspraak op staat (een collega die het vergat).
+- **Buiten-afspraken en werfbezoeken plant Mehdi of Chilton handmatig in, niet via de
+  online boeking.** Calendly boekt alleen online afspraken; die vragen geen auto, dus
+  de online boeking blijft open en wordt niet geblokkeerd door de geen-auto-marker.
 
 ## Lara tijdens schoolvakanties (mandaat van Mehdi, 22-09-2026)
 

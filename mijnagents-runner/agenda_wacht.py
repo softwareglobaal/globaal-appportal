@@ -731,6 +731,50 @@ def lara_vakantiedagen():
     return _lara_vrij["dagen"]
 
 
+_geen_auto = {"tot": 0.0, "dagen": frozenset()}
+
+
+def geen_auto_dagen():
+    """Dagen waarop Mehdi geen auto heeft. Hij (of een planner) zet er een hele-dag
+    marker met 'geen auto' in de titel op de werkagenda. Op zo'n dag kan hij niet naar
+    buiten rijden: de agent maakt geen rit en waarschuwt als er toch buiten gepland
+    staat. Buiten-boekingen gebeuren sowieso handmatig, niet via Calendly. Mandaat van
+    Mehdi, 22-09-2026."""
+    import time
+    import urllib.parse
+    import urllib.request
+    from datetime import date, timedelta
+    if time.time() < _geen_auto["tot"]:
+        return _geen_auto["dagen"]
+    werk = next((k for k, val in KALENDERS.items() if "werk agenda" in val), "mehdiprivewerkagenda@gmail.com")
+    dagen = set()
+    try:
+        nu = datetime.now().astimezone()
+        tok = None
+        while True:
+            q = {"timeMin": nu.replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+                 "timeMax": (nu + timedelta(days=400)).isoformat(), "singleEvents": "true", "maxResults": "2500", "q": "geen auto"}
+            if tok:
+                q["pageToken"] = tok
+            url = f"{agenda.API}/calendars/{urllib.parse.quote(werk, safe='')}/events?" + urllib.parse.urlencode(q)
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {agenda._toegang()}"})
+            d = json.load(urllib.request.urlopen(req, timeout=25))
+            for e in d.get("items", []):
+                if "date" not in e.get("start", {}) or "geen auto" not in (e.get("summary") or "").lower():
+                    continue
+                a, b = date.fromisoformat(e["start"]["date"]), date.fromisoformat(e["end"]["date"])
+                while a < b:
+                    dagen.add(a.isoformat()); a += timedelta(days=1)
+            tok = d.get("nextPageToken")
+            if not tok:
+                break
+    except Exception:  # noqa: BLE001
+        pass
+    _geen_auto["dagen"] = frozenset(dagen)
+    _geen_auto["tot"] = time.time() + 3600
+    return _geen_auto["dagen"]
+
+
 def ritlabel(adres, ander_adres=""):
     """Een naam voor een rit die iets zegt. Thuis heet thuis; ligt de andere kant in
     dezelfde gemeente, dan de straat, want "Leuven → Leuven" zegt niets."""
@@ -786,6 +830,7 @@ def reistijd_zetten(items, alleen_dag=None):
     projecten = projectadressen.index()
     buiten = []
     vrij = lara_vakantiedagen()
+    zonder_auto = geen_auto_dagen()
     for a in items:
         if a.get("hele_dag") or a.get("kalender", "").startswith("en.be#"):
             continue
@@ -795,6 +840,12 @@ def reistijd_zetten(items, alleen_dag=None):
                 and a.get("start", "")[:10] in vrij:
             continue
         info = lees_titel(a["titel"])
+        # Geen auto die dag: geen rit. Staat er toch een buitenafspraak, dan is dat een
+        # waarschuwing (collega die het vergat), geen gewone rit. Mandaat van Mehdi, 22-09-2026.
+        if a.get("start", "")[:10] in zonder_auto and not lees_titel(a["titel"])["reistijd"]:
+            if info["buiten"] or info["soort"] in ("PB", "KB", "LB"):
+                regels.append(f"{a['start'][:16]} {a['titel'][:50]}: BUITEN op een dag zonder auto")
+            continue
         adres = a.get("locatie") or ""
         fysiek = bool(adres) and not adres.lower().startswith("http")
         bron_adres = "agenda"
@@ -1233,7 +1284,7 @@ def main():
         # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
         # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
         zonder_rit = {"geen adres in de agenda": [], "adres niet gevonden": [], "rijtijd niet berekend": [],
-                      "rit zonder afspraak": []}
+                      "rit zonder afspraak": [], "buiten op een dag zonder auto": []}
         for regel in rregels:
             if "geen adres, geen reistijd" in regel:
                 # rsplit: in het uur staat zelf een dubbelpunt, dus split(":") hield alleen
@@ -1241,6 +1292,8 @@ def main():
                 zonder_rit["geen adres in de agenda"].append(regel.rsplit(": geen adres", 1)[0][:80])
             elif "rit zonder afspraak" in regel:
                 zonder_rit["rit zonder afspraak"].append(regel[:110])
+            elif "BUITEN op een dag zonder auto" in regel:
+                zonder_rit["buiten op een dag zonder auto"].append(regel[:110])
             elif "adres niet gevonden" in regel:
                 zonder_rit["adres niet gevonden"].append(regel[:110])
             elif "rijtijd niet berekend" in regel:

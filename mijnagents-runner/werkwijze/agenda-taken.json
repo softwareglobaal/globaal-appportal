@@ -1,5 +1,5 @@
 {
- "versie": "3.1",
+ "versie": "3.2",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -358,6 +358,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-22",
+   "wat": "nieuwe 'geen auto'-dag: een hele-dag marker met 'geen auto' op de werkagenda. De agent maakt dan geen rit en waarschuwt bij een buitenafspraak. Buiten-boekingen gebeuren toch handmatig door Mehdi of Chilton, niet via Calendly; de online boeking blijft open. Rechtbank 28-09 is HARC, ongeveer 15 minuten rijden, adres onbekend (laat zo)"
+  },
   {
    "datum": "2026-09-22",
    "wat": "tijdens schoolvakanties en feestdagen geen Lara-ophaling, geen rit en geen 'Geen buiten afspraken'-marker; de agent leest de vakantiedagen uit de agenda van Lara. Deze Lara-regelingen gelden per schooljaar. Donderdag bij oma blijft optioneel (met Leen). Maandag na werfbezoek 2145 komt Mehdi naar huis. Zondag 27-09 is Lara thuis (Leen werkt), geen ophaling"
@@ -810,5 +814,19 @@
   "overkoepelende_code": "ALGE = Algemeen, vier letters net als de andere codes, voor een leverancier of afspraak die niet bij een bedrijf hoort maar voor de hele groep geldt",
   "voorbeelden": "Nadien (onze boekhouder) en Wally (AI-bedrijf dat software levert): allebei leverancier, allebei ALGE. In de titel [ALGE-LO] als het online is, [ALGE-LB] als het buiten is; kleur paars zoals elke leverancier",
   "waarom_geen_lijst_van_bedrijven": "een leverancier voor meerdere bedrijven krijgt niet een rij afkortingen in de titel (niet leesbaar), maar altijd de ene code ALGE"
+ },
+ "geen_auto": {
+  "wat": "dagen waarop Mehdi geen auto heeft en dus niet naar buiten kan rijden",
+  "marker": "een hele-dag item op de werkagenda met 'geen auto' in de titel (bv. 'Mehdi: geen auto - geen werfbezoeken/buiten'). Zichtbaar voor de collega's: die dag niets buiten plannen",
+  "agent": "de agent leest die dagen (geen_auto_dagen), maakt geen rit, en meldt het als er toch een buitenafspraak op staat (een collega die het vergat)",
+  "calendly": "de online boeking blijft gewoon open; die hoeft niets te blokkeren, want online-afspraken vragen geen auto",
+  "wie_zet_de_marker": "Mehdi of Chilton zet de marker op de dagen zonder auto",
+  "mehdi": "22-09-2026"
+ },
+ "buiten_boekingen": {
+  "regel": "buiten-afspraken en werfbezoeken worden handmatig ingepland door Mehdi of Chilton, niet via de online boeking (Calendly)",
+  "calendly": "Calendly boekt alleen online afspraken; die vragen geen auto en worden niet geblokkeerd door de geen-auto-marker",
+  "gevolg": "een dubbele of handmatige rit op de werkagenda kan van Mehdi of Chilton komen; zie donderdag 24-09",
+  "mehdi": "22-09-2026"
  }
 }
