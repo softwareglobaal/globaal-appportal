@@ -1,6 +1,6 @@
 {
- "versie": "3.12",
- "datum": "2026-09-21",
+ "versie": "4.0",
+ "datum": "2026-09-24",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
   {
@@ -118,7 +118,8 @@
    "??": "nog niet bevestigd, geel",
    "ZL": "zonder link: een online gesprek met een externe partij waar nog geen link in staat. Mehdi stuurt de link zelf. ZL staat ALTIJD HELEMAAL VOORAAN, voor ?? en voor alles, zodat Mehdi het meteen ziet (Mehdi, 23-09-2026). De agent zet ZL en haalt het weg zodra er een link in de afspraak staat"
   },
-  "aannemer": "AB/AO: een aannemer van een klant (Mehdi heeft als architect veel afspraken met aannemers). Geen klant, geen leverancier: een eigen soort. Buiten rood, online salie. Mehdi, 23-09-2026"
+  "aannemer": "AB/AO: een aannemer van een klant (Mehdi heeft als architect veel afspraken met aannemers). Geen klant, geen leverancier: een eigen soort. Buiten rood, online salie. Mehdi, 23-09-2026",
+  "zonder_soort": "een firmacode zonder soort ('[HARC] Rechtbank') wordt gemeld; een gemeente of rechtbank past nog in geen soort, dat beslist Mehdi (FR-27)"
  },
  "kleuren": {
   "grondregel": "de kleur zegt waarvóór Mehdi ergens is, de twee uitroeptekens zeggen dát hij naar buiten gaat. Dat zijn twee verschillende dingen. Een afspraak kan nooit kleurloos zijn: ze is werk, privé of Lara.",
@@ -189,6 +190,11 @@
      "naam": "basilicum, groen"
     }
    ]
+  },
+  "handkleur": {
+   "regel": "de agent laat bij elke kleur die hij zet een onzichtbaar merk achter (extendedProperties.private.agendawacht_kleur). Een kleur zonder zijn merk komt van een mens: die raakt hij niet aan, hij vraagt of het bewust is",
+   "waarom": "hij zette eerder AI stabiliteit terug; op 24-09 om 00:15 werden 18 afspraken met de hand paars en geel gezet (FR-20, FR-21)",
+   "mehdi": "24-09-2026"
   }
  },
  "herinneringen": {
@@ -199,7 +205,8 @@
   "vertrek": "een buitenafspraak krijgt daarbovenop een melding op het vertrekmoment plus vijf minuten, en het reistijdblok draagt zelf ook een melding",
   "opruimen": "een eerdere melding van de agent op iets wat nu stil moet blijven haalt hij weg; een melding die Mehdi zelf zette blijft staan",
   "ritten": "de heenrit draagt een melding 5 minuten vooraf, de terugrit geen. De gewone herinneringsregel raakt ritten niet aan en haalt de vertrekmelding van een buitenafspraak niet weg. De herinneringen komen voor de ritten, zodat de vertrekmelding het laatste woord heeft. Gezien 21-09-2026: de melding op elke heenrit en op de zwemles van Lara verdween elke ronde",
-  "stil": "stil is expliciet GEEN melding, niet de standaard van de agenda: die is op de werkagenda 30 minuten en op Lara 10 minuten. Tot 23-09-2026 zette 'stil maken' alles terug op die standaard, zodat interne overleggen 30 min vooraf rinkelden en de Lara-marker om 23:50 de avond ervoor. Een intern overleg of een hele-dag-item op de agenda-standaard wordt nu ook stil gemaakt; een melding die Mehdi zelf zette (andere minuten) blijft staan"
+  "stil": "stil is expliciet GEEN melding, niet de standaard van de agenda: die is op de werkagenda 30 minuten en op Lara 10 minuten. Tot 23-09-2026 zette 'stil maken' alles terug op die standaard, zodat interne overleggen 30 min vooraf rinkelden en de Lara-marker om 23:50 de avond ervoor. Een intern overleg of een hele-dag-item op de agenda-standaard wordt nu ook stil gemaakt; een melding die Mehdi zelf zette (andere minuten) blijft staan",
+  "handmatige_ritten": "een rit die iemand met de hand zette ('Rijden naar ...') en op de agendastandaard staat, krijgt dezelfde melding als een eigen rit: heen 5 minuten vooraf, naar huis stil. Een melding die iemand zelf koos, blijft staan (FR-24)"
  },
  "grendels": [
   {
@@ -293,6 +300,41 @@
  },
  "openstaand": [
   {
+   "wat": "Kleuren van 24-09 om 00:15: UNABO-overleggen en UNABO-boekingen paars, AI stabiliteit geel, per script gezet. Bewust? Is UNABO paars een nieuwe regel, of is AI stabiliteit onzeker (dan ?? in de titel)? Tot dan laat de agent ze staan (FR-21)",
+   "wie": "Mehdi",
+   "wanneer": "zo snel mogelijk"
+  },
+  {
+   "wat": "Maandag 28-09: rechtbank tot 16:00 in Leuven en Lara om 16:00 in Kessel-Lo. Met de auto kom je rond 16:15 aan. Wie haalt Lara op, of schuift er iets? (FR-37)",
+   "wie": "Mehdi",
+   "wanneer": "voor 28-09"
+  },
+  {
+   "wat": "Welke soort krijgt een afspraak met een gemeente of rechtbank ('[HARC] 2616 Stad Leuven', '[HARC] Rechtbank')? Voorstel: een eigen soort voor de overheid, buiten en online (FR-27)",
+   "wie": "Mehdi",
+   "wanneer": "zodra het kan"
+  },
+  {
+   "wat": "Wie gebruikt het account haagendalightprojects? Gemeten: het zet met de hand ritten in, geen Calendly-boekingen. Is het Chilton? (FR-23)",
+   "wie": "Mehdi",
+   "wanneer": "zodra het kan"
+  },
+  {
+   "wat": "?? Mehdi: [ALGE-LO] Nadine Boekhouder (22-09): doorgegaan of niet? (FR-26)",
+   "wie": "Mehdi",
+   "wanneer": "nu"
+  },
+  {
+   "wat": "'Mehdi: 2607' op maandag 28-09 om 20:30: welke firma en soort? Voorstel [HARC], het nummer staat in de H-A-projectmap",
+   "wie": "Mehdi",
+   "wanneer": "voor 28-09"
+  },
+  {
+   "wat": "Botsingen die een keuze vragen: 28-09 14:00 rechtbank en Afdelings meeting Energy; 01-10 12:30 Sales wekelijks en ENEF AI",
+   "wie": "Mehdi",
+   "wanneer": "voor de dag zelf"
+  },
+  {
    "wat": "de juiste vaste Zoom-link van Mehdi, zodat de agent die zelf kan toekennen",
    "wie": "Mehdi",
    "wanneer": "zodra het kan"
@@ -303,34 +345,9 @@
    "wanneer": "zodra het kan"
   },
   {
-   "wat": "rechtbank maandag 28-09 (ondernemingsrechtbank/vennootschappen Leuven) loopt tot 16:00 en botst met Lara ophalen 16:00. Welke firma en welk adres, en wie haalt Lara die dag op?",
-   "wie": "Mehdi",
-   "wanneer": "voor 28-09"
-  },
-  {
-   "wat": "donderdag 24-09: dubbele ritten op de werkagenda, want een collega vulde 'Rijden naar ...' handmatig in naast de rit van de agent. Opruimen, en de agent zou een handmatig 'Rijden naar'-blok moeten herkennen zodat hij niet dubbelt",
-   "wie": "Claude",
-   "wanneer": "kort"
-  },
-  {
    "wat": "Lara ophalen staat nog in de reeks op drie vrije dagen: maandag 26-10 en vrijdag 30-10 (herfstvakantie) en vrijdag 02-07-2027 (zomervakantie). Waar haalt Mehdi haar die dagen op, of vallen ze weg?",
    "wie": "Mehdi",
    "wanneer": "voor 26-10"
-  },
-  {
-   "wat": "zondag 27-09, 'Leen moet werken' 08:00-20:00: waar begint die dag, haalt Mehdi Lara ergens op? Tot dan geen rit",
-   "wie": "Mehdi",
-   "wanneer": "voor zondag"
-  },
-  {
-   "wat": "vrijdag 25-09: griffie tot 11:00, de rit naar huis staat er en telt. Open blijft of Mehdi de online afspraken van 11:15 en 11:30 vanuit de auto of thuis doet (afspraak C)",
-   "wie": "Mehdi en Claude",
-   "wanneer": "bij vrijdag"
-  },
-  {
-   "wat": "donderdag 24-09: op de werkagenda staan de ritten dubbel, 'Rijden naar ...' van Mehdi en '🚗 Reistijd' van de agent, plus een oude 'Leuven → Leuven'",
-   "wie": "Mehdi en Claude",
-   "wanneer": "bij donderdag"
   },
   {
    "wat": "school, zwemschool, grootouders en kantoor toevoegen aan locatie.globaal.be, met een straal",
@@ -343,24 +360,9 @@
    "wanneer": "zodra het kan"
   },
   {
-   "wat": "titels rechtzetten, week per week samen: 18 zonder firmacode en 42 interne zonder naam",
-   "wie": "Mehdi en Claude",
-   "wanneer": "wekelijks"
-  },
-  {
    "wat": "Zoom-app aanmaken (Server-to-Server OAuth) zodat de Zoomwacht kan zien of je in de meeting zit; daarna bouw ik hem",
    "wie": "Mehdi",
    "wanneer": "zodra het kan"
-  },
-  {
-   "wat": "11 afspraken zonder firmacode en 4 buitenafspraken zonder adres rechtzetten",
-   "wie": "Mehdi",
-   "wanneer": "lopend"
-  },
-  {
-   "wat": "28 titels dragen nog een oude firmacode; de agent leest ze wel en meldt ze",
-   "wie": "Mehdi of zijn planners",
-   "wanneer": "lopend"
   },
   {
    "wat": "rechten op mehdi werk agenda regelen per collega, wie plant krijgt schrijfrecht",
@@ -519,6 +521,10 @@
   {
    "datum": "2026-09-20",
    "wat": "Shaniel regelt de rechten van de collega's, niet Mehdi zelf"
+  },
+  {
+   "datum": "2026-09-24",
+   "wat": "definitieve versie 4.0 van de afspraken (PDF v2.0), het foutenregister apart, en de zelfcontrole elke werkdag om 07:00. Nieuw: handkleur wordt gevraagd, niet overschreven; het Google-plafond is hard; alles op Brusselse tijd; te krap toont de echte aankomst; een handmatige rit krijgt de rit-melding; ?? na afloop wordt gevraagd; een rit volgt zijn afspraak (titel en agenda)"
   }
  ],
  "bron_afkortingen": {
@@ -557,7 +563,8 @@
   "dagstop": {
    "aantal": 100,
    "waarom": "Google laat de dagquota van de Routes API niet verlagen, dus houdt de agent de teller zelf bij. Honderd per dag blijft ruim onder de 5.000 gratis per maand",
-   "terugval": "gratis routering (OSRM) maal een spitsfactor, 1,6 tussen 07:00 en 09:30"
+   "terugval": "gratis routering (OSRM) maal een spitsfactor, 1,6 tussen 07:00 en 09:30",
+   "hard": "100 is een plafond, geen instelling: de omgeving kan het alleen verlagen. Verhogen kan alleen in de code (ROUTES_PLAFOND), met een commit die Mehdi ziet. Proefrondes draaien droog (FR-01, FR-17)"
   },
   "dubbel": "zie een_rit_een_afspraak",
   "ketening": "Na een buitenafspraak gaat de rit rechtstreeks naar de volgende buitenafspraak, niet naar huis. Naar huis gaat hij: na de laatste buitenafspraak van de dag; als er al een rit naar huis in de agenda staat; en voorlopig als er tussen twee buitenafspraken een afspraak achter het bureau staat (afspraak C). In dat laatste geval rekent de agent dat hij naar huis gaat, zoals op maandag 21-09-2026, en stelt hij de vraag: klopt dat, of doe je het vanuit de auto? Gaat de volgende afspraak zelf naar huis, zoals 'Lara naar huis brengen', dan is die de terugrit",
@@ -625,30 +632,32 @@
    "voorbeeld": "24-09-2026 Genk: vertrek thuis 10:00, aankomst 11:00, 11:00-11:20 Rem Braspenning geparkeerd, 11:30-13:55 in de brasserie",
    "mehdi": "23-09-2026"
   },
-  "meting_boven_schatting": "een schatting (gratis routeplanner x filefactor) overschrijft nooit een rit die met live verkeer van Google gemeten is. Gezien 23-09-2026: de rit naar Genk schoof zo van 10:00 naar 09:45 toen de dagteller op was"
+  "meting_boven_schatting": "een schatting (gratis routeplanner x filefactor) overschrijft nooit een rit die met live verkeer van Google gemeten is. Gezien 23-09-2026: de rit naar Genk schoof zo van 10:00 naar 09:45 toen de dagteller op was",
+  "te_krap": "past de rit niet tussen twee afspraken, dan toont hij de echte rijtijd en dus de late aankomst (geen blok van nul minuten), en komt 'Te krap: je komt te laat' op het bord (FR-37)",
+  "rit_volgt_afspraak": "de omschrijving van een rit volgt de titel van zijn afspraak; verhuist de afspraak naar een andere agenda (werk naar privé), dan verhuist de rit mee (FR-25, FR-28)"
  },
  "triggers": {
-  "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",
-  "bij_wijziging": "agenda_signaal.py kijkt elke twaalf minuten tussen 06:00 en 21:00 of er een afspraak bijgekomen, gewijzigd of geschrapt is, en zet de wacht dan meteen aan voor die dag",
+  "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30 Brusselse tijd",
+  "bij_wijziging": "agenda_signaal.py kijkt elke twaalf minuten tussen 06:00 en 23:59 Brusselse tijd of er een afspraak bijgekomen, gewijzigd of geschrapt is, en zet de wacht dan meteen aan voor die dag",
   "eigen_werk": "reistijdblokken die de wacht zelf maakt tellen niet als wijziging, anders start hij zichzelf"
  },
  "wachten": [
   {
    "naam": "Agendawacht",
    "bestand": "agenda_wacht.py",
-   "wanneer": "werkdagen 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",
+   "wanneer": "werkdagen 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30, Brusselse tijd",
    "wat": "leest, ontleedt, koppelt, zet reistijd, kleuren en herinneringen, meldt signalen en zet alles klaar op het bord"
   },
   {
    "naam": "Signaalwacht",
    "bestand": "agenda_signaal.py",
-   "wanneer": "elke twaalf minuten tussen 06:00 en 21:00, elke dag",
+   "wanneer": "elke twaalf minuten tussen 06:00 en 23:59 Brusselse tijd, elke dag",
    "wat": "kijkt of er een afspraak bijgekomen, gewijzigd of geschrapt is en zet de Agendawacht dan meteen aan voor die dag. Zijn eigen reistijdblokken tellen niet mee"
   },
   {
    "naam": "Filewacht",
    "bestand": "file_wacht.py",
-   "wanneer": "elke tien minuten tussen 06:00 en 21:00, elke dag",
+   "wanneer": "elke tien minuten tussen 06:00 en 21:59 Brusselse tijd, elke dag",
    "wat": "vraagt voor elke buitenafspraak binnen twee uur de rijtijd opnieuw op met het verkeer van dat moment. Duurt de rit meer dan de buffer langer dan gepland, of kom je te laat, dan belt Twilio je met de plaats, de nieuwe rijtijd en hoeveel te laat",
    "grenzen": "per afspraak hoogstens elke twintig minuten narekenen en hoogstens twee oproepen"
   },
@@ -658,6 +667,12 @@
    "wanneer": "één minuut na de start van een online afspraak",
    "wat": "kijken of Mehdi in de juiste meeting zit en hem bellen als hij er niet is",
    "ontbreekt": "een Zoom-app met Account ID, Client ID en Client Secret. Zonder die sleutels kan geen enkel systeem zien wie er in een meeting zit"
+  },
+  {
+   "naam": "Zelfcontrole",
+   "bestand": "zelfcontrole.py",
+   "wanneer": "werkdagen 07:00 Brusselse tijd",
+   "wat": "kijkt in de agenda zelf of klopt wat de agent beweert, van zeven dagen terug tot zeven dagen vooruit, en koppelt elke bevinding aan het foutenregister"
   }
  ],
  "bellen": {
@@ -846,7 +861,8 @@
    "ziek",
    "toch doorgegaan, de tracker miste het"
   ],
-  "namen": "bij een interne afspraak hoort de naam van de collega, getoetst aan kern.persoon, zodat telbaar wordt wie een afspraak niet nakwam"
+  "namen": "bij een interne afspraak hoort de naam van de collega, getoetst aan kern.persoon, zodat telbaar wordt wie een afspraak niet nakwam",
+  "na_afloop": "een afspraak die voorbij is en nog ?? draagt, komt de dag zelf en de dag erna als vraag op het bord: doorgegaan of niet? (FR-26)"
  },
  "bronnen_van_waarheid": {
   "firmas_en_codes": {
@@ -906,10 +922,11 @@
  "wie_maakte_de_afspraak": {
   "wat": "wie een afspraak inplande, staat in het creator-veld van Google; niets extra in de titel nodig (gebouwd 22-09-2026, samen met een andere sessie)",
   "functie": "maker(): een boekingsaccount toont hij bij zijn rol, een echt persoon zoekt hij op via organisatie.globaal.be, anders het deel voor de @",
-  "boekingsaccounts": "mehdiprivewerkagenda = Mehdi zelf, siyanhdswerk = Siyan, haagendalightprojects = Calendly (light projects), zoomafspraken = Calendly (zoom), unabosdp = Calendly (UNABO), contraxcalendar = Calendly (Contrax)",
+  "boekingsaccounts": "mehdiprivewerkagenda = Mehdi zelf, siyanhdswerk = Siyan, haagendalightprojects = account light projects (handmatig), zoomafspraken = Calendly (zoom), unabosdp = Calendly (UNABO), contraxcalendar = Calendly (Contrax)",
   "getoond": "de maker staat bij een afspraak zonder firmacode, bij een buitenafspraak op een dag zonder auto, en in de inhoud die per afdeling klaargezet wordt",
-  "let_op": "Mehdi noemde 'Chilton' als wie handmatig 'Rijden naar'-blokken invulde; die dragen het account haagendalightprojects, dat nu als Calendly (light projects) gelabeld staat. Uit te klaren wie dat account gebruikt",
-  "mehdi": "22-09-2026"
+  "let_op": "gemeten 24-09-2026: het account haagendalightprojects zette 'Rijden naar huis' en 'Rijden naar Stadskantoor', geen Calendly-boekingen. Wie erachter zit (Chilton?) bevestigt Mehdi nog",
+  "mehdi": "22-09-2026",
+  "calendly": "een Calendly-boeking wordt herkend aan de calendly.com-links in de omschrijving, niet aan het account; op de werkagenda heet ze 'Calendly (werkagenda)' (FR-23)"
  },
  "klantsoorten_voorstel": {
   "aanleiding": "Mehdi, 22-09-2026: B2B toont een externe professionele partij waar wij nog geen klant van zijn; bij een leverancier zijn we dat al. En bij ONZE klanten moeten we particulier en professioneel onderscheiden; professioneel is wie terugkerende opdrachten geeft",
@@ -927,5 +944,18 @@
   "oude_code": "een oude code (HA, UNABO, TKN) in een afspraak gemaakt na 21-09-2026 wordt de vierletterige code",
   "vaste_zoom": "nog niet gekend. Mehdi, 23-09-2026: 'stuur nog geen linken omdat je hebt die niet'. Tot hij de juiste link geeft, zet de agent geen link",
   "zoom": "een online gesprek met een externe partij zonder link krijgt de notitie 'Online. Mehdi stuurt de link naar ...'. Geen link, niet bij bellen, niet bij Calendly-boekingen, niet bij een intern overleg of een taak zonder iemand anders, niet bij terugkerende overleggen"
+ },
+ "leren": {
+  "wat": "Het systeem leert van zijn fouten: elke fout komt in het foutenregister, met waarom ze niet gezien werd, de oorzaak en een grendel. Elke ochtend kijkt de zelfcontrole in de agenda zelf of het klopt.",
+  "foutenregister": "werkwijze/foutenregister.json (apart van deze afspraken; statussen opgelost, bewaakt, open, vraag)",
+  "zelfcontrole": "zelfcontrole.py, werkdagen om 07:00 Brusselse tijd, van zeven dagen terug tot zeven dagen vooruit. Elke bevinding hangt aan een nummer uit het register: TERUGGEKEERD (opgelost maar weer daar: de grendel werkt niet), NIEUW (nog niet in het register), BEKEND (een vraag aan Mehdi)",
+  "weekcontrole": "zelfcontrole.py --van <maandag> --tot <zondag>; de eerste was 21-27 september 2026",
+  "grendel_op_het_register": "tests/test_foutenregister.py: geen 'opgelost' zonder een grendel die bestaat, en elke controle van de zelfcontrole hangt aan precies een fout",
+  "claude": "Claude begint elke sessie aan de Agendawacht met de lessen uit het register en de laatste zelfcontrole, en sluit af met een nieuwe zelfcontrole als bewijs",
+  "mehdi": "24-09-2026"
+ },
+ "tijd": {
+  "regel": "alle tijden zijn Brusselse tijd, zomer en winter. De VM draait op UTC en cron kent daar geen tijdzone: cron start de scripts vaker, en elk script beslist zelf op Brusselse tijd of het zijn beurt is (FR-18)",
+  "logboek": "elke ronde en elke regel van de wijzigings- en filewacht begint met zijn tijdstip (FR-19)"
  }
 }

@@ -112,6 +112,8 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 "_reminders": ev.get("reminders") or {},
                 "_terugkerend": bool(ev.get("recurringEventId")),
                 "_kleur": ev.get("colorId", ""),
+                # het merk dat de Agendawacht achterlaat (welke kleur zette hij zelf)
+                "_merk": (ev.get("extendedProperties") or {}).get("private") or {},
             })
     uit.sort(key=lambda x: x.get("start", ""))
     return uit

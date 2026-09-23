@@ -142,8 +142,22 @@ check("nooit vertrekken voor de vorige afspraak gedaan is",
 check("nooit twee rondes tegelijk", "_slot = slot_nemen()" in _bron)
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
-check("de herinneringsregel raakt een rit niet aan",
-      'if info["reistijd"]:\n            continue   # een rit draagt zijn eigen melding' in _bron)
+# gedrag, geen broncode (FR-33): een eigen rit (OSRM) laat de herinneringsstap altijd staan
+from datetime import timedelta as _td0
+_gp0 = []
+_op0, _ot0 = W._patch, W.agenda._toegang
+W._patch = lambda a, body, tok: _gp0.append(a["titel"])
+W.agenda._toegang = lambda: "tok"
+_t0 = (W.nu_lokaal() + _td0(days=1)).replace(hour=9, minute=0, second=0, microsecond=0).isoformat()
+try:
+    W.herinneringen_zetten([
+        {"titel": "🚗 Reistijd: thuis → Genk", "start": _t0, "einde": _t0, "kalender": W.WERKAGENDA,
+         "_reminders": {"useDefault": True}, "omschrijving": "Reistijd voor: x (60 min = live verkeer Google + 10 min buffer, OSRM)"},
+        {"titel": "🚗 Reistijd: Genk → thuis", "start": _t0, "einde": _t0, "kalender": W.WERKAGENDA,
+         "_reminders": {"useDefault": False, "overrides": []}, "omschrijving": "Reistijd na: x (60 min, OSRM)"}])
+finally:
+    W._patch, W.agenda._toegang = _op0, _ot0
+check("de herinneringsregel raakt een rit niet aan", _gp0 == [], str(_gp0))
 check("de herinneringen komen voor de ritten, de vertrekmelding heeft het laatste woord",
       _bron.index("gezet, al, weg, fout_h = herinneringen_zetten(") < _bron.index("rg, ral, rgeen, rfout, rregels = reistijd_zetten("))
 check("de agenda van Lara krijgt ritten tot het einde van het schooljaar",
@@ -270,6 +284,127 @@ check("een ZL die verder staat, schuift naar voren", W.met_zl("?? ZL Mehdi en Sh
 check("ZL gaat er weer af", W.zonder_zl("ZL ?? Mehdi en Shaniel: [ELEV-LO] Robby") == "?? Mehdi en Shaniel: [ELEV-LO] Robby")
 check("ZL breekt de titelcode niet", W.lees_titel("ZL Mehdi & Pioter: [HARC-AO] 2405")["soort"] == "AO")
 check("ZL staat in de JSON", "ZL" in json.dumps(taken["titelconventie"], ensure_ascii=False))
+
+# Weekcontrole 21-27 september (24-09-2026). Gedrag testen, geen letterlijke broncode.
+from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+import urllib.request as _ur
+
+# FR-20 handkleur: wat een mens zette, is een vraag
+check("een kleur die een mens zette, is een vraag en wordt niet overschreven",
+      W.kleur_actie({"_kleur": "3", "_merk": {}}, "10") == "vraag"
+      and W.kleur_actie({"_kleur": "10", "_merk": {W.KLEURMERK: "10"}}, "6") == "zetten"
+      and W.kleur_actie({"_kleur": ""}, "6") == "zetten"
+      and W.kleur_actie({"_kleur": "6", "_merk": {}}, "6") == "merken"
+      and W.kleur_actie({"_kleur": "6", "_merk": {W.KLEURMERK: "6"}}, "6") == "goed")
+
+# FR-17 het Google-plafond is hard
+_oud = (W.ROUTES_KEY, W.routes_vandaag, W.google_rijtijd_min, W.vrije_rijtijd_min, W.ROUTES_DAGLIMIET)
+_geroepen = []
+W.ROUTES_KEY, W.ROUTES_DAGLIMIET = "proef", 400
+W.routes_vandaag = lambda: ("vandaag", 100)
+W.google_rijtijd_min = lambda *a: _geroepen.append(a) or 20.0
+W.vrije_rijtijd_min = lambda *a: 20.0
+W.rijtijd_min((50.9, 4.7), (50.95, 4.75), W.nu_lokaal() + _td(hours=2))
+W.ROUTES_KEY, W.routes_vandaag, W.google_rijtijd_min, W.vrije_rijtijd_min, W.ROUTES_DAGLIMIET = _oud
+check("het Google-plafond gaat nooit boven 100, ook niet via de omgeving",
+      not _geroepen and W.ROUTES_PLAFOND == 100 and W.ROUTES_DAGLIMIET <= 100)
+
+# FR-18 Brusselse tijd, zomer en winter
+_u = lambda *a: _dt(*a, tzinfo=_tz.utc)
+check("de ronde volgt de Brusselse tijd, zomer en winter",
+      W.is_rondetijd(_u(2026, 9, 24, 4, 30)) and not W.is_rondetijd(_u(2026, 9, 24, 5, 30))
+      and W.is_rondetijd(_u(2026, 12, 1, 5, 30)) and not W.is_rondetijd(_u(2026, 9, 26, 4, 30)))
+check("de filewacht slaapt niet tijdens de ochtendspits",
+      W.binnen_uren(6, 21, _u(2026, 9, 24, 5, 0)) and not W.binnen_uren(6, 21, _u(2026, 9, 24, 21, 0)))
+
+# FR-19 elke ronde begint met zijn tijdstip
+check("elke ronde begint met zijn tijdstip",
+      "Brussel · " in (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+      and "nu_lokaal():%d-%m %H:%M" in (HIER / "agenda_signaal.py").read_text(encoding="utf-8"))
+
+# nooit een mail naar gasten
+_urls = []
+_oud_open, _oud_mag = _ur.urlopen, W.mag_schrijven
+_ur.urlopen = lambda req, timeout=0: (_urls.append(req.full_url), type("R", (), {"read": lambda s: b"{}"})())[1]
+W.mag_schrijven = lambda k: True
+try:
+    W._patch({"kalender": W.WERKAGENDA, "id": "x"}, {}, "tok")
+    try:
+        W._insert(W.WERKAGENDA, {}, "tok")
+    except Exception:
+        pass
+finally:
+    _ur.urlopen, W.mag_schrijven = _oud_open, _oud_mag
+check("een gast krijgt nooit een mail: sendUpdates=none bij wijzigen en aanmaken",
+      len(_urls) == 2 and all("sendUpdates=none" in u for u in _urls), str(_urls))
+
+# FR-23 maker
+check("maker herkent een Calendly-boeking aan de inhoud",
+      W.maker({"maker": W.WERKAGENDA, "omschrijving": "... https://calendly.com/cancellations/abc"}) == "Calendly (werkagenda)"
+      and W.maker({"maker": W.WERKAGENDA, "omschrijving": ""}) == "Mehdi zelf"
+      and W.maker({"maker": "haagendalightprojects@gmail.com", "omschrijving": ""}).startswith("account light projects"))
+
+# FR-29 plaatsnaam
+check("LEUVEN wordt Leuven in een ritlabel", W.plaatsnaam("Tessenstraat 3, 3000 LEUVEN") == "Leuven")
+
+# FR-27 en FR-30 titelfouten
+_f = W.titelfouten({"kalender": W.WERKAGENDA, "titel": "!! Mehdi: [HARC] 2616 Stad Leuven", "maker": W.WERKAGENDA},
+                   W.lees_titel("!! Mehdi: [HARC] 2616 Stad Leuven"))
+check("een firmacode zonder soort wordt gemeld", any("zonder soort" in x for x in _f), str(_f))
+_f = W.titelfouten({"kalender": W.WERKAGENDA, "titel": "[ENEF-IN] Afdelings meeting Energy",
+                    "maker": "ee.ashvand@globaal.be", "deelnemers": ["a@x.be", "b@x.be"]},
+                   W.lees_titel("[ENEF-IN] Afdelings meeting Energy"))
+check("een uitnodiging van een collega krijgt geen naamfout", not any("naam" in x for x in _f), str(_f))
+
+# FR-26 ?? na afloop
+_g = (W.nu_lokaal() - _td(days=1)).replace(hour=11, minute=0, second=0, microsecond=0)
+_v = W.onbevestigd_voorbij([{"titel": "?? Mehdi: [ALGE-LO] Nadine", "start": _g.isoformat(),
+                             "einde": (_g + _td(hours=1)).isoformat(), "kalender": W.WERKAGENDA}],
+                           W.nu_lokaal().date().isoformat())
+check("?? na afloop wordt gevraagd: doorgegaan of niet", len(_v) == 1 and "doorgegaan" in _v[0])
+
+# FR-24 een handmatige rit krijgt de rit-melding
+_gepatcht = []
+_oud_p, _oud_t = W._patch, W.agenda._toegang
+W._patch = lambda a, body, tok: _gepatcht.append((a["titel"], body))
+W.agenda._toegang = lambda: "tok"
+_m = (W.nu_lokaal() + _td(days=1)).replace(hour=13, minute=55, second=0, microsecond=0).isoformat()
+try:
+    W.herinneringen_zetten([
+        {"titel": "!! Mehdi: Rijden naar Stadskantoor Leuven", "start": _m, "einde": _m, "kalender": W.WERKAGENDA,
+         "_reminders": {"useDefault": True}, "omschrijving": ""},
+        {"titel": "!! Mehdi: Rijden naar huis", "start": _m, "einde": _m, "kalender": W.WERKAGENDA,
+         "_reminders": {"useDefault": True}, "omschrijving": ""},
+        {"titel": "!! Mehdi: Rijden naar huis", "start": _m, "einde": _m, "kalender": W.WERKAGENDA,
+         "_reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 25}]}, "omschrijving": ""}])
+finally:
+    W._patch, W.agenda._toegang = _oud_p, _oud_t
+check("een handmatige rit krijgt de rit-melding, niet de agendastandaard",
+      len(_gepatcht) == 2 and _gepatcht[0][1]["reminders"]["overrides"] == [{"method": "popup", "minutes": 5}]
+      and _gepatcht[1][1]["reminders"]["overrides"] == [], str(_gepatcht))
+
+# FR-25 de rit volgt de titel van zijn afspraak
+check("een rit neemt de nieuwe titel van zijn afspraak over",
+      'tekst.split(" (", 1)[0] not in (x.get("omschrijving") or "")' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+
+# FR-28 een rit verhuist mee met zijn afspraak
+check("een eigen rit verhuist mee als zijn afspraak naar een andere agenda gaat",
+      hasattr(W, "_verplaats") and "rit verhuisd naar" in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+
+# de zelfcontrole en het register
+import zelfcontrole as Z
+_reg = Z.register()
+_nu = W.nu_lokaal()
+_mo = (_nu + _td(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+_b = Z.bevindingen([{"titel": "Mehdi: [UNAB-IN] overleg Tom", "start": _mo.isoformat(), "einde": (_mo + _td(hours=1)).isoformat(),
+                     "kalender": W.WERKAGENDA, "_kleur": "3", "_merk": {}, "_reminders": {"useDefault": False, "overrides": []},
+                     "maker": W.WERKAGENDA}], _nu.date().isoformat(), (_nu + _td(days=2)).date().isoformat(), _nu)
+check("de zelfcontrole ziet een handkleur als vraag", [x["controle"] for x in _b] == ["handkleur"], str(_b))
+_i = Z.indelen([{"controle": "kleur", "dag": "", "uur": ""}, {"controle": "iets_nieuws", "dag": "", "uur": ""}], _reg)
+check("een opgeloste fout die terugkomt heet TERUGGEKEERD, een onbekende NIEUW",
+      [x["staat"] for x in _i] == ["TERUGGEKEERD", "NIEUW"], str(_i))
+check("de JSON wijst naar het foutenregister en de zelfcontrole",
+      "foutenregister.json" in json.dumps(taken.get("leren", {})) and "zelfcontrole.py" in json.dumps(taken.get("leren", {})))
 
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())

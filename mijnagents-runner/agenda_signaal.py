@@ -68,10 +68,11 @@ def main():
             wat.append(f"{s} {ev.get('status','')[:9]:<9} {(ev.get('summary') or '(zonder titel)')[:52]}")
 
     bewaar({"gekeken": nu.isoformat(), "laatste_dagen": sorted(dagen)})
+    tijd = f"{W.nu_lokaal():%d-%m %H:%M}"          # elke regel met zijn tijd (Brussel)
     if not dagen:
-        print("niets gewijzigd")
+        print(tijd, "niets gewijzigd")
         return 0
-    print(f"{len(wat)} wijziging(en) op {len(dagen)} dag(en):")
+    print(f"{tijd} {len(wat)} wijziging(en) op {len(dagen)} dag(en):")
     for r in sorted(set(wat))[:20]:
         print("  ", r)
     for dag in sorted(dagen):
@@ -83,4 +84,9 @@ def main():
 
 
 if __name__ == "__main__":
+    # cron start dit om de 12 minuten, de klok rond; ik kijk van 06:00 tot 23:59 Brusselse
+    # tijd. Mehdi verzet ook 's avonds laat nog afspraken. Gezien 24-09-2026: op UTC liep het
+    # van 08:00 tot 23:59 en miste het de vroege ochtend.
+    if "--ronde" in sys.argv and not W.binnen_uren(6, 23):
+        sys.exit(0)
     sys.exit(main())

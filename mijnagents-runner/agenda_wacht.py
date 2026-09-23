@@ -20,6 +20,7 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
@@ -32,6 +33,28 @@ import pipedrive  # noqa: E402
 
 NAAM = "agenda-wacht"
 ag = bord.Agent(NAAM)
+
+# De VM draait op UTC en cron kent daar geen tijdzone. Gezien 24-09-2026: de ronde van
+# "06:30" liep om 08:30 Belgische tijd en de filewacht sliep tijdens de ochtendspits.
+# Daarom start cron elk uur en beslist de agent zelf op Brusselse tijd, zomer en winter.
+TIJDZONE = ZoneInfo("Europe/Brussels")
+RONDE_UREN = (6, 8, 10, 12, 14, 16, 18)               # werkdagen, telkens om half
+
+
+def nu_lokaal():
+    return datetime.now(TIJDZONE)
+
+
+def is_rondetijd(t=None):
+    """Hoort er nu een volledige ronde? Werkdag en een ronde-uur, op Brusselse tijd."""
+    t = (t or nu_lokaal()).astimezone(TIJDZONE)
+    return t.weekday() < 5 and t.hour in RONDE_UREN
+
+
+def binnen_uren(van, tot, t=None):
+    """Voor de signaal- en filewacht: alleen tussen van:00 en tot:59, Brusselse tijd."""
+    t = (t or nu_lokaal()).astimezone(TIJDZONE)
+    return van <= t.hour <= tot
 
 # De negen actieve agenda's van Mehdi (Feestdagen is read-only).
 KALENDERS = {
@@ -311,7 +334,10 @@ def _patch(a, body, tok):
     import urllib.request
     if not mag_schrijven(a["kalender"]):
         raise GeenSchrijfrecht(a["kalender"])
-    url = f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/{urllib.parse.quote(a['id'], safe='')}"
+    # sendUpdates=none: een gast krijgt nooit een mail omdat de agent iets bijzet. Google
+    # doet dat standaard ook niet, maar hier staat het expliciet, met een test erop.
+    url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
+           f"{urllib.parse.quote(a['id'], safe='')}?sendUpdates=none")
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PATCH",
                                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
     urllib.request.urlopen(req, timeout=30)
@@ -333,9 +359,27 @@ def herinneringen_zetten(items, alleen_dag=None):
         if alleen_dag and a["start"][:10] != alleen_dag:
             continue
         gewenst, info = melding_gewenst(a)
-        if info["reistijd"]:
-            continue   # een rit draagt zijn eigen melding, die zet reistijd_zetten
         r = a.get("_reminders") or {}
+        if info["reistijd"]:
+            # Mijn eigen ritten krijgen hun melding van reistijd_zetten. Een rit die iemand met de
+            # hand zette ("Rijden naar Stadskantoor") stond op de agendastandaard: 30 minuten
+            # vooraf, midden in de afspraak ervoor. Gezien 24-09-2026 in Genk. Zo'n rit krijgt
+            # dezelfde melding als de mijne: heen 5 minuten vooraf, naar huis stil. Een melding
+            # die iemand zelf koos, laat ik staan.
+            standaard = r.get("useDefault", True) and not (r.get("overrides") or [])
+            if standaard and "OSRM" not in (a.get("omschrijving") or "") and not a.get("hele_dag"):
+                naar_huis = bool(re.search(r"naar huis|→\s*thuis", a["titel"], re.I))
+                try:
+                    _patch(a, {"reminders": {"useDefault": False, "overrides": [] if naar_huis else
+                                             [{"method": "popup", "minutes": 5}]}}, tok)
+                    if naar_huis:
+                        weg += 1
+                    else:
+                        gezet += 1
+                except Exception as e:  # noqa: BLE001
+                    fout += 1
+                    print("rit-melding mislukt:", a["titel"][:40], type(e).__name__, file=sys.stderr)
+            continue
         eigen = r.get("overrides") or []
         mijn = len(eigen) == 1 and eigen[0].get("method") == "popup" and eigen[0].get("minutes") in (OVERIG_MIN, BUITEN_MIN, ONLINE_MIN)
         try:
@@ -372,7 +416,28 @@ def herinneringen_zetten(items, alleen_dag=None):
 # Kleuren (de regels van Mehdi, Google-kleurnummers): roze 4 flamingo = Lara;
 # oranje 6 mandarijn = prospect (PO, PB); rood 11 tomaat = !! buiten en reistijd;
 # blauw 7 pauw = klant online (KO); groen 10 basilicum = intern (IN); geel 5 banaan = ?? niet bevestigd.
-KLEURNAAM = {"4": "roze", "6": "oranje", "11": "rood", "7": "blauw", "10": "groen", "5": "geel"}
+KLEURNAAM = {"4": "roze", "6": "oranje", "11": "rood", "7": "blauw", "10": "groen", "5": "geel",
+             "1": "lavendel", "2": "salie", "3": "paars (druif)", "8": "grafiet", "9": "bosbes"}
+
+# Welke kleur zette ik zelf? Dat staat als onzichtbaar merk in de afspraak (Google:
+# extendedProperties.private, alleen op deze agenda). Zo weet ik of een kleur van mij komt
+# of van een mens. Gezien 24-09-2026: om 00:15 kregen de UNABO-overleggen paars en AI
+# stabiliteit geel, niet door de agent; de ronde erna had dat stil teruggezet, zoals eerder
+# met AI stabiliteit van 30-09. Een kleur die een mens zette, is een vraag, geen fout.
+KLEURMERK = "agendawacht_kleur"
+
+
+def kleur_actie(a, wens):
+    """Wat doe ik met de kleur van deze afspraak? Geeft 'goed', 'merken' (klopt, maar mijn
+    merk ontbreekt nog), 'zetten' (leeg, of een kleur die ik zelf zette en die niet meer
+    klopt) of 'vraag' (iemand anders zette een andere kleur: niet aanraken, vragen)."""
+    huidig = a.get("_kleur") or ""
+    merk = (a.get("_merk") or {}).get(KLEURMERK, "")
+    if huidig == wens:
+        return "goed" if merk == wens else "merken"
+    if not huidig or huidig == merk or "OSRM" in (a.get("omschrijving") or ""):
+        return "zetten"
+    return "vraag"
 ALLEEN_VANDAAG = "--vandaag" in sys.argv
 
 
@@ -446,11 +511,17 @@ def namen_in_titel(titel):
 BOEKINGSACCOUNTS = {
     "mehdiprivewerkagenda@gmail.com": "Mehdi zelf",
     "siyanhdswerk@gmail.com": "Siyan",
-    "haagendalightprojects@gmail.com": "Calendly (light projects)",
+    # Gemeten 24-09-2026: dit account zette "Rijden naar huis" en "Rijden naar Stadskantoor",
+    # geen Calendly-boekingen. Wie erachter zit (Chilton?) moet Mehdi nog bevestigen.
+    "haagendalightprojects@gmail.com": "account light projects (handmatig)",
     "zoomafspraken@gmail.com": "Calendly (zoom)",
     "unabosdp@gmail.com": "Calendly (UNABO)",
     "contraxcalendar@gmail.com": "Calendly (Contrax)",
 }
+
+
+# Accounts die alleen Calendly gebruikt: daar staat Calendly al in de naam.
+CALENDLY_ACCOUNTS = {"zoomafspraken@gmail.com", "unabosdp@gmail.com", "contraxcalendar@gmail.com"}
 
 
 def maker(a):
@@ -461,6 +532,12 @@ def maker(a):
     mail = (a.get("maker") or "").strip().lower()
     if not mail:
         return ""
+    # Een Calendly-boeking herken ik aan de inhoud (de annuleer- en verzetlinks van
+    # calendly.com), niet aan het account. Gezien 24-09-2026: boekingen op de werkagenda
+    # stonden als "Mehdi zelf", en handmatige ritten van light projects als "Calendly".
+    if "calendly.com" in (a.get("omschrijving") or "").lower() and mail not in CALENDLY_ACCOUNTS:
+        return "Calendly (" + {"mehdiprivewerkagenda@gmail.com": "werkagenda"}.get(
+            mail, BOEKINGSACCOUNTS.get(mail, mail.split("@")[0])) + ")"
     if mail in BOEKINGSACCOUNTS:
         return BOEKINGSACCOUNTS[mail]
     try:
@@ -725,11 +802,18 @@ def titelfouten(a, info):
                 fouten.append("geen firmacode; de namen werken voor " + " of ".join(firmas))
             else:
                 fouten.append("geen firmacode")
+    if info.get("firma") and not info["soort"] and a.get("kalender", "") not in AGENDA_VASTE_KLEUR:
+        # "[HARC] 2616 Stad Leuven" of "[HARC] Rechtbank": firma wel, soort niet. Een gemeente
+        # of rechtbank past in geen enkele soort; dat is een vraag aan Mehdi. Gezien 24-09-2026.
+        fouten.append("firmacode zonder soort (welke soort? gemeente of rechtbank past nog nergens)")
     buiten = info["buiten"] or info["soort"] in BUITEN_SOORTEN
     if buiten and "!!" not in (a.get("titel") or ""):
         # Mehdi leest weinig en kijkt: buiten hoort altijd zichtbaar te zijn met !!
         fouten.append("buiten zonder !!")
-    if info["soort"] == "IN" and not namen_in_titel(a.get("titel") or ""):
+    eigen_titel = (a.get("maker") or WERKAGENDA).lower() == WERKAGENDA
+    if info["soort"] == "IN" and eigen_titel and not namen_in_titel(a.get("titel") or ""):
+        # Alleen voor titels van Mehdi zelf: een uitnodiging van een collega ("Afdelings
+        # meeting Energy" van ashvand) raakt de agent niet aan, dus hij zeurt er ook niet over.
         # Een blok dat Mehdi alleen doet ("Ai stabiliteit") heeft geen naam nodig.
         # Pas als er iemand bij is, hoort die naam erbij, anders is achteraf niet te
         # zien wie niet kwam opdagen. Verfijnd op 20-09-2026.
@@ -774,13 +858,18 @@ def kleur_gewenst(a, info):
     return ""
 
 
+HANDKLEUREN = []   # de vragen van de laatste kleurronde
+
+
 def kleuren_zetten(items, alleen_dag=None):
     """Werkwijze: elke komende afspraak krijgt de kleur van zijn soort. Alleen als de
     kleur afwijkt; agenda's waar Mehdi enkel leesrecht heeft (Lara) kan ik niet
     veranderen en meld ik. Geeft (gezet, al_goed, geen_regel, fout)."""
     tok = agenda._toegang()
-    nu_dag = datetime.now().date().isoformat()
+    nu_dag = nu_lokaal().date().isoformat()
     gezet, goed, geen, fout, vast = 0, 0, 0, 0, 0
+    global HANDKLEUREN
+    HANDKLEUREN = []
     for a in items:
         if a["start"][:10] < nu_dag or a.get("kalender", "").startswith("en.be#"):
             continue
@@ -794,11 +883,22 @@ def kleuren_zetten(items, alleen_dag=None):
         if not wens:
             geen += 1          # geen code in de titel: dat is een fout, geen uitzondering
             continue
-        if (a.get("_kleur") or "") == wens:
-            goed += 1
+        actie = kleur_actie(a, wens)
+        if actie == "vraag":
+            HANDKLEUREN.append(f"{a['start'][:16]} {a['titel'][:55]}: {KLEURNAAM.get(a.get('_kleur'), a.get('_kleur'))} "
+                               f"met de hand gezet, de titel zegt {KLEURNAAM.get(wens, wens)}. Bewust? Dan hoort de "
+                               f"titel mee te veranderen; anders zet ik de kleur terug")
             continue
+        merk = {"extendedProperties": {"private": {KLEURMERK: wens}}}
         try:
-            _patch(a, {"colorId": wens}, tok)
+            if actie == "goed":
+                goed += 1
+                continue
+            if actie == "merken":
+                _patch(a, merk, tok)
+                goed += 1
+                continue
+            _patch(a, {"colorId": wens, **merk}, tok)
             gezet += 1
         except Exception as e:  # noqa: BLE001
             fout += 1
@@ -914,14 +1014,20 @@ ROUTES_KEY = os.environ.get("GOOGLE_ROUTES_KEY", "").strip()
 # zelf bij. Bij het plafond rekent de wacht verder met de filefactor en komt het op het
 # bord. 100 per dag is ruim: ook een volle maand op het plafond blijft onder de 5.000
 # gratis aanvragen per maand.
-ROUTES_DAGLIMIET = int(os.environ.get("AGENDA_ROUTES_DAGLIMIET", "100"))
+# Het plafond is hard: de omgeving mag het verlagen, nooit verhogen. Gezien 23-09-2026:
+# Claude trok het voor handmatige rondes zelf op (110, 150, 200, 400) en de teller eindigde
+# op 137 van 100. Op 20-09-2026 at een proefronde de teller al eens leeg. Een grendel die
+# de uitvoerder zelf kan openzetten, is geen grendel. Verhogen gebeurt alleen hier, in de
+# code, met een commit die Mehdi ziet.
+ROUTES_PLAFOND = 100
+ROUTES_DAGLIMIET = min(int(os.environ.get("AGENDA_ROUTES_DAGLIMIET", str(ROUTES_PLAFOND))), ROUTES_PLAFOND)
 ROUTES_TELLER = os.path.expanduser("~/appportal/mijnagents-data/routes-teller.json")
 ROUTES_GESTOPT = False
 
 
 def routes_vandaag():
     """Geeft (datum, aantal Google-aanroepen vandaag). De teller begint elke dag opnieuw."""
-    vandaag = datetime.now().strftime("%Y-%m-%d")
+    vandaag = nu_lokaal().strftime("%Y-%m-%d")
     try:
         with open(ROUTES_TELLER) as f:
             d = json.load(f)
@@ -976,7 +1082,7 @@ def rijtijd_min(van, naar, vertrek):
     dichtbij = vertrek <= datetime.now().astimezone() + timedelta(hours=48)
     if ROUTES_KEY and dichtbij:
         _, gebruikt = routes_vandaag()
-        if gebruikt >= ROUTES_DAGLIMIET:
+        if gebruikt >= min(ROUTES_DAGLIMIET, ROUTES_PLAFOND):
             ROUTES_GESTOPT = True
         else:
             routes_tel_op()
@@ -1103,7 +1209,9 @@ def ritlabel(adres, ander_adres=""):
 
 def plaatsnaam(adres):
     m = re.search(r"\d{4}\s+([A-Za-zÀ-ÿ' -]+)", adres or "")
-    return (m.group(1).strip() if m else (adres or "").split(",")[0]).strip()[:30]
+    naam = (m.group(1).strip() if m else (adres or "").split(",")[0]).strip()[:30]
+    # een adres in hoofdletters ("3000 LEUVEN") gaf "thuis → LEUVEN"; gezien 23-09-2026
+    return naam.title() if naam.isupper() else naam
 
 
 def _insert(kalender, body, tok):
@@ -1111,10 +1219,22 @@ def _insert(kalender, body, tok):
     import urllib.request
     if not mag_schrijven(kalender):
         raise GeenSchrijfrecht(kalender)
-    url = f"{agenda.API}/calendars/{urllib.parse.quote(kalender, safe='')}/events"
+    url = f"{agenda.API}/calendars/{urllib.parse.quote(kalender, safe='')}/events?sendUpdates=none"
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
                                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
     return json.load(urllib.request.urlopen(req, timeout=30))
+
+
+def _verplaats(x, doel, tok):
+    """Verhuist een eigen rit naar de agenda waar zijn afspraak nu staat (Google: events.move)."""
+    import urllib.parse
+    import urllib.request
+    if not (mag_schrijven(x["kalender"]) and mag_schrijven(doel)):
+        raise GeenSchrijfrecht(doel)
+    url = (f"{agenda.API}/calendars/{urllib.parse.quote(x['kalender'], safe='')}/events/"
+           f"{urllib.parse.quote(x['id'], safe='')}/move?" + urllib.parse.urlencode({"destination": doel, "sendUpdates": "none"}))
+    req = urllib.request.Request(url, data=b"", method="POST", headers={"Authorization": f"Bearer {tok}"})
+    urllib.request.urlopen(req, timeout=30)
 
 
 def reistijd_zetten(items, alleen_dag=None):
@@ -1128,7 +1248,7 @@ def reistijd_zetten(items, alleen_dag=None):
     tok = agenda._toegang()
     cache = _cache_laden()
     thuis = coord(THUIS, cache)
-    nu = datetime.now().astimezone()
+    nu = nu_lokaal()
     gemaakt, al, geen_adres, fout, regels = 0, 0, 0, 0, []
     reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"]]
     projecten = projectadressen.index()
@@ -1334,6 +1454,11 @@ def reistijd_zetten(items, alleen_dag=None):
                 if x["kalender"] == a["kalender"] and "T" in x["start"] and datetime.fromisoformat(x["einde"]) in aankomsten:
                     return x
             for x in reistijden:
+                # mijn rit voor precies deze afspraak, ook als hij te laat aankomt (te krap)
+                if (x["kalender"] == a["kalender"] and _mijn(x) and x["start"][:10] == a["start"][:10]
+                        and f"Reistijd voor: {a['titel']} (" in (x.get("omschrijving") or "")):
+                    return x
+            for x in reistijden:
                 if (x["kalender"] == a["kalender"] and "T" in x["start"] and not _mijn(x)
                         and start - timedelta(hours=3) <= datetime.fromisoformat(x["start"]) <= start):
                     return x
@@ -1390,8 +1515,14 @@ def reistijd_zetten(items, alleen_dag=None):
         if vorige_einde and rit_start < vorige_einde:
             ruimte = (aankomst - vorige_einde).total_seconds() / 60
             if ruimte < heen - BUFFER_MIN:
-                regels.append(f"{a['start'][:16]} {a['titel'][:40]}: TE KRAP, rijden duurt {heen - BUFFER_MIN} min, "
-                              f"er is {ruimte:.0f} min na de vorige afspraak")
+                # Past de rit niet, dan toont hij de echte rijtijd en dus de late aankomst, geen
+                # blok van nul minuten. Gezien 24-09-2026: rechtbank tot 16:00, Lara om 16:00 in
+                # Kessel-Lo, en de rit stond van 16:00 tot 16:00.
+                rijden = heen - BUFFER_MIN
+                aankomst = vorige_einde + timedelta(minutes=rijden)
+                regels.append(f"{a['start'][:16]} {a['titel'][:40]}: TE KRAP, rijden duurt {rijden} min, "
+                              f"er is {ruimte:.0f} min na de vorige afspraak: aankomst {aankomst:%H:%M}, "
+                              f"{int(rijden - ruimte)} min te laat")
             rit_start = vorige_einde
         # Een schatting overschrijft nooit een echte meting. Staat er al een eigen rit met live
         # verkeer van Google en heb ik nu alleen de schatting (dagteller op), dan houd ik de live
@@ -1439,6 +1570,10 @@ def reistijd_zetten(items, alleen_dag=None):
                 wijzig.update({"start": {"dateTime": s.isoformat()}, "end": {"dateTime": e.isoformat()}, "description": tekst})
             if x.get("titel") != titel:
                 wijzig["summary"] = titel
+            if tekst.split(" (", 1)[0] not in (x.get("omschrijving") or ""):
+                # de afspraak kreeg een andere titel ("Harchitects-KB 2505" werd "[HARC-KB] 2505"):
+                # de rit zegt anders nog waarvoor hij vroeger was. Gezien 24-09-2026.
+                wijzig["description"] = tekst
             if (x.get("_kleur") or "") != rit_kleur.get("colorId", ""):
                 wijzig["colorId"] = rit_kleur.get("colorId") or None
             r = x.get("_reminders") or {}
@@ -1493,11 +1628,14 @@ def reistijd_zetten(items, alleen_dag=None):
     # heenrit eindigt op het begin van zijn afspraak, een terugrit begint op het einde.
     # Ik verwijder hem niet zelf; dat beslist Mehdi.
     grenzen = set()
+    elders = {}          # tijdstip -> agenda's met een afspraak die dan begint of eindigt
     begins_alle, eindes_alle = set(), set()
     for x in items:
         if "T" in x.get("start", "") and not lees_titel(x["titel"])["reistijd"]:
             grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
             grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
+            elders.setdefault(datetime.fromisoformat(x["start"]), set()).add(x["kalender"])
+            elders.setdefault(datetime.fromisoformat(x["einde"]), set()).add(x["kalender"])
             if extern_gesprek(x):
                 begins_alle.add(datetime.fromisoformat(x["start"]))
                 eindes_alle.add(datetime.fromisoformat(x["einde"]))
@@ -1508,6 +1646,24 @@ def reistijd_zetten(items, alleen_dag=None):
         s0, e0 = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"])
         if (s0 >= nu and (x["kalender"], e0) not in grenzen and (x["kalender"], s0) not in grenzen
                 and e0 not in begins_alle and s0 not in eindes_alle):
+            # Staat de afspraak intussen op een andere agenda (privé in plaats van werk), dan
+            # verhuist mijn rit mee. Gezien 24-09-2026: de ritten voor een privé-afspraak van
+            # 23-09 bleven rood op de werkagenda staan, zichtbaar voor collega's.
+            m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
+            bij = [y for y in items if m and not lees_titel(y["titel"])["reistijd"] and y["start"][:10] == x["start"][:10]
+                   and y["titel"].strip() == m.group(1).strip()]
+            if any(y["kalender"] == x["kalender"] for y in bij):
+                continue          # de afspraak staat er nog, op deze agenda (bv. te laat aankomen)
+            ander = {y["kalender"] for y in bij} & ((elders.get(e0, set()) | elders.get(s0, set())) - {x["kalender"]})
+            if len(ander) == 1:
+                doel = next(iter(ander))
+                try:
+                    _verplaats(x, doel, tok)
+                    regels.append(f"{x['start'][:16]} {x['titel'][:50]}: rit verhuisd naar "
+                                  f"{KALENDERS.get(doel, doel)[:20]}, want de afspraak staat daar nu")
+                    continue
+                except Exception as e:  # noqa: BLE001
+                    regels.append(f"{x['start'][:16]} {x['titel'][:50]}: rit niet verhuisd ({type(e).__name__})")
             regels.append(f"{x['start'][:16]} {x['titel'][:50]}: rit zonder afspraak")
     _cache_bewaren(cache)
     return gemaakt, al, geen_adres, fout, regels
@@ -1574,6 +1730,28 @@ def belrooster(items, vandaag):
     return regels
 
 
+def onbevestigd_voorbij(items, vandaag):
+    """Afspraken van gisteren en vandaag die voorbij zijn en nog ?? dragen. Of ze doorgingen,
+    weet alleen Mehdi; zonder die vraag blijft ?? eeuwig staan. Gezien 24-09-2026: de
+    boekhouder op 22-09 stond twee dagen later nog op ??. Mandaat: "laat ons nadien de
+    afspraken van vandaag valideren zodat we weten welke is doorgegaan en welke niet"."""
+    nu = nu_lokaal()
+    gisteren = (datetime.fromisoformat(vandaag) - timedelta(days=1)).date().isoformat()
+    uit = []
+    for a in items:
+        if a.get("hele_dag") or "T" not in a.get("einde", "") or a["start"][:10] < gisteren:
+            continue
+        if not lees_titel(a["titel"])["onzeker"] or lees_titel(a["titel"])["reistijd"]:
+            continue
+        try:
+            if datetime.fromisoformat(a["einde"]) > nu:
+                continue
+        except ValueError:
+            continue
+        uit.append(f"{a['start'][:16]} {a['titel'][:60]}: doorgegaan? Dan ?? weg; niet doorgegaan? Dan annuleren of verzetten")
+    return uit
+
+
 def botsingen(items):
     """Twee afspraken die elkaar overlappen op dezelfde dag (bv. een Zoom tijdens een opmeting)."""
     uit = []
@@ -1621,8 +1799,8 @@ def main():
         fouten = [i for i in items if i.get("fout")]
         items = [i for i in items if not i.get("fout")]
         deals = deals_index()
-        vandaag = datetime.now().date().isoformat()
-        gisteren = (datetime.now().date() - timedelta(days=1)).isoformat()
+        vandaag = nu_lokaal().date().isoformat()
+        gisteren = (nu_lokaal().date() - timedelta(days=1)).isoformat()
         klaar, gekoppeld, niet_conform, dagplan, gisteren_lijst = [], 0, [], [], []
         per_afdeling = {}
         for a in items:
@@ -1695,6 +1873,7 @@ def main():
         # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
         zonder_rit = {"geen adres in de agenda": [], "adres niet gevonden": [], "rijtijd niet berekend": [],
                       "rit zonder afspraak": [], "buiten op een dag zonder auto": []}
+        te_krap = [r[:140] for r in rregels if "TE KRAP" in r]
         for regel in rregels:
             if "geen adres, geen reistijd" in regel:
                 # rsplit: in het uur staat zelf een dubbelpunt, dus split(":") hield alleen
@@ -1719,6 +1898,17 @@ def main():
                           "uniek": f"agenda-botsing:{vandaag}", "inhoud": "\n".join("- " + b for b in bots)}])
             ag.log(f"dag {vandaag}", "bevinding", f"{len(bots)} botsende afspraken", "\n".join(bots))
         kg, kgoed, kgeen, kfout, kvast = kleuren_zetten(rit_items if DAG_ARG else items, dag_grens)
+        if HANDKLEUREN:
+            ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
+                          "titel": "Kleuren die iemand met de hand zette: bewust?",
+                          "uniek": f"agenda-handkleur:{vandaag}:{dag_grens or 'alle'}",
+                          "inhoud": "\n".join("- " + x for x in HANDKLEUREN[:40])}])
+        open_na = onbevestigd_voorbij(items, vandaag)
+        if open_na:
+            ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
+                          "titel": "Doorgegaan of niet? Staat nog op ??",
+                          "uniek": f"agenda-validatie:{vandaag}",
+                          "inhoud": "\n".join("- " + x for x in open_na)}])
         ag.log(f"dag {vandaag}", "schrijf", f"kleuren: {kg} gezet, {kgoed} klopten al, {kvast} op een agenda met vaste kleur, {kgeen} ZONDER CODE (fout), {kfout} niet gelukt",
                "\n".join(f"{a['start'][:16]} {a['titel'][:60]} -> {KLEURNAAM.get(kleur_gewenst(a, lees_titel(a['titel'])), 'laten staan')}" for a in items if a['start'][:10] >= vandaag and (not dag_grens or a['start'][:10] == dag_grens)))
         ag.log(f"dag {vandaag}", "schrijf", f"herinneringen (alles behalve intern): {gezet} gezet (online {ONLINE_MIN} min, buiten {BUITEN_MIN} min), {al} hadden er al een, {weg} weggehaald van intern, {fout_h} mislukt",
@@ -1757,6 +1947,11 @@ def main():
                                  "uniek": f"agenda-reistijd-{reden[:18]}:{vandaag}",
                                  "inhoud": "\n".join("- " + x for x in rij[:30])})
             noden.append({"tekst": f"Buitenafspraken zonder reistijd, reden: {reden}", "wie": "mehdi"})
+        if te_krap:
+            rit_signalen.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
+                                 "titel": "Te krap: je komt te laat", "uniek": f"agenda-te-krap:{vandaag}:{dag_grens or 'alle'}",
+                                 "inhoud": "\n".join("- " + x for x in te_krap[:30])})
+            noden.append({"tekst": "Afspraken die te krap op elkaar volgen: wie verschuift?", "wie": "mehdi"})
         if rit_signalen:
             ag.klaarzet(rit_signalen)
         titel_fouten = {}
@@ -1789,10 +1984,14 @@ def main():
                           "wie": "mehdi"})
         if fout_h:
             noden.append({"tekst": "Herinneringen konden niet gezet worden", "wie": "claude-code"})
+        if HANDKLEUREN:
+            noden.append({"tekst": "Kleuren met de hand gezet: laat ik ze staan of volgen ze de titel?", "wie": "mehdi"})
+        if open_na:
+            noden.append({"tekst": "Afspraken voorbij met ??: doorgegaan of niet?", "wie": "mehdi"})
         if ROUTES_GESTOPT:
             noden.append({"tekst": "Dagplafond van de Google Routes API bereikt; reistijden lopen verder op "
-                                   "de filefactor. Klopt dat met het aantal buitenafspraken, dan mag "
-                                   "AGENDA_ROUTES_DAGLIMIET omhoog", "wie": "claude-code"})
+                                   "de filefactor. Het plafond (ROUTES_PLAFOND) verhoogt alleen Mehdi, "
+                                   "in de code", "wie": "mehdi"})
         if fouten:
             noden.append({"tekst": "Agenda's die ik niet kan lezen: " + ", ".join(f["kalender"][:30] for f in fouten),
                           "wie": "mehdi"})
@@ -1809,4 +2008,9 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--ronde" in sys.argv and not is_rondetijd():
+        sys.exit(0)          # cron start elk uur; alleen op de ronde-uren (Brusselse tijd) werk ik
+    # Elke ronde begint met zijn tijdstip. Gezien 24-09-2026: het logboek had geen enkele tijd,
+    # zodat niet na te gaan was wanneer iets gebeurde.
+    print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · " + (f"dag {DAG_ARG}" if DAG_ARG else "volledige ronde"), flush=True)
     main()

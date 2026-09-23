@@ -142,4 +142,9 @@ def main():
 
 
 if __name__ == "__main__":
+    # cron start dit om de 10 minuten, de klok rond; de filewacht werkt van 06:00 tot 21:59
+    # Brusselse tijd. Gezien 24-09-2026: op UTC sliep hij tijdens de ochtendspits (06:00-08:00).
+    if "--ronde" in sys.argv and not W.binnen_uren(6, 21):
+        sys.exit(0)
+    print(f"{W.nu_lokaal():%d-%m %H:%M} filewacht", flush=True)
     sys.exit(main())

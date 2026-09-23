@@ -1,0 +1,798 @@
+{
+ "naam": "Foutenregister van de Agendawacht",
+ "versie": "1.0",
+ "datum": "24-09-2026",
+ "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
+ "hoe_het_leert": [
+  "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
+  "Geen 'opgelost' zonder grendel: tests/test_foutenregister.py faalt zodra een opgeloste fout geen test, controle of vaste regel heeft die echt bestaat.",
+  "Elke werkdag om 07:00 (Brusselse tijd) kijkt zelfcontrole.py in de agenda zelf na of het klopt, van zeven dagen terug tot zeven dagen vooruit. Elke bevinding hangt aan een nummer hieronder.",
+  "Komt een fout terug die als opgelost staat, dan meldt de zelfcontrole TERUGGEKEERD, bovenaan: de grendel werkt niet en dat gaat voor alles.",
+  "Een bevinding zonder nummer heet NIEUW: die komt hier eerst in, met oorzaak en grendel.",
+  "Claude begint elke sessie aan de Agendawacht met de lessen hieronder en de laatste zelfcontrole, en sluit af met een nieuwe zelfcontrole als bewijs."
+ ],
+ "statussen": {
+  "opgelost": "gerepareerd in de bron, met een grendel; komt ze terug, dan heet ze TERUGGEKEERD",
+  "bewaakt": "de agent vangt het op en legt het als vraag aan Mehdi voor; een bevinding is dan geen fout van de agent",
+  "open": "oorzaak gekend, de oplossing is een handeling die klaarstaat (meestal voor Mehdi)",
+  "vraag": "wacht op een beslissing van Mehdi"
+ },
+ "lessen": [
+  {
+   "id": "L1",
+   "les": "Kijk naar de uitkomst in de agenda, niet naar het logboek van de agent. Het logboek zegt wat de agent dacht te doen.",
+   "uit": [
+    "FR-11",
+    "FR-20",
+    "FR-25"
+   ]
+  },
+  {
+   "id": "L2",
+   "les": "Een grendel open je nooit zelf, ook niet even voor een test. Proefrondes draaien droog, zonder betaalde aanroepen.",
+   "uit": [
+    "FR-01",
+    "FR-17"
+   ]
+  },
+  {
+   "id": "L3",
+   "les": "Meet de bron voor je een vraag stelt of een oorzaak noemt. Wat de bron beslist, vraag je niet.",
+   "uit": [
+    "FR-09"
+   ]
+  },
+  {
+   "id": "L4",
+   "les": "Tijd is Brusselse tijd; de server draait op UTC. Elke tijdsregel krijgt een test in zomer- en wintertijd.",
+   "uit": [
+    "FR-18"
+   ]
+  },
+  {
+   "id": "L5",
+   "les": "Wat een mens zette (kleur, melding, titel), overschrijf je niet stil. Je vraagt.",
+   "uit": [
+    "FR-20",
+    "FR-24"
+   ]
+  },
+  {
+   "id": "L6",
+   "les": "Een getal dat elke ronde gelijk blijft terwijl je iets oplost, is een lus. Vergelijk rondes.",
+   "uit": [
+    "FR-11"
+   ]
+  },
+  {
+   "id": "L7",
+   "les": "Lees git log van de VM en GitHub voor je bouwt: er werken andere sessies aan dezelfde code.",
+   "uit": [
+    "FR-16"
+   ]
+  },
+  {
+   "id": "L8",
+   "les": "Een mislukte stap stopt de keten. Elk anker in een wijziging wordt gecontroleerd, anders stopt het script.",
+   "uit": [
+    "FR-32"
+   ]
+  },
+  {
+   "id": "L9",
+   "les": "Test gedrag, niet letterlijke broncode: een bewuste herschrijving mag een goede test niet breken.",
+   "uit": [
+    "FR-33"
+   ]
+  },
+  {
+   "id": "L10",
+   "les": "Controleer ook het verleden. De agent werkt alleen vooruit, dus een fout van gisteren ziet hij nooit, tenzij iemand terugkijkt.",
+   "uit": [
+    "FR-26",
+    "FR-28"
+   ]
+  }
+ ],
+ "fouten": [
+  {
+   "id": "FR-01",
+   "datum": "20-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "Een proefronde at de Google-teller op (100 van 100).",
+   "gevolg": "De reistijden vielen de rest van de dag terug op een schatting.",
+   "waarom_niet_gezien": "De teller werd pas bekeken toen hij al op was.",
+   "oorzaak": "Proefrondes gebruikten de echte Google-sleutel.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "De filewacht draait met --droog zonder Google-sleutel.",
+   "grendel": {
+    "soort": "code",
+    "waar": "file_wacht.py",
+    "tekst": "W.ROUTES_KEY = \"\""
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-02",
+   "datum": "20-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "\"Rijden naar huis\" werd niet als rit herkend.",
+   "gevolg": "De agent zette er een tweede rit naast en meldde het als afspraak zonder code.",
+   "waarom_niet_gezien": "Alleen de eigen ritten met het autootje werden als rit gelezen.",
+   "oorzaak": "De herkenning kende alleen 'Reistijd' en het autootje.",
+   "soort_oorzaak": "code",
+   "oplossing": "'rijden naar' en 'onderweg naar' tellen als rit; een handmatige rit naar huis telt als thuiskomen.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een handmatige 'Rijden naar huis' telt als rit naar huis"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-03",
+   "datum": "20-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Het wekelijkse werfbezoek kreeg geen rit; het verslag zei alleen '1 zonder adres'.",
+   "gevolg": "Een buitenafspraak zonder vertrektijd en zonder vertrekmelding.",
+   "waarom_niet_gezien": "Een getal zegt niet welke afspraak het is.",
+   "oorzaak": "'3010 Kessel-Lo' was niet om te zetten naar een plaats, en de melding noemde de afspraak niet.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een extra zoekpoging op het laatste adresdeel, en elke afspraak zonder rit wordt bij naam gemeld met de reden.",
+   "grendel": {
+    "soort": "code",
+    "waar": "agenda_wacht.py",
+    "tekst": "zonder_rit = {\"geen adres in de agenda\""
+   },
+   "controle": [
+    "rit_ontbreekt"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-04",
+   "datum": "21-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Ritten van thuis naar thuis.",
+   "gevolg": "Lege ritten in de agenda van Lara.",
+   "waarom_niet_gezien": "De naam van een plek werd als los woord gezocht in de titel.",
+   "oorzaak": "'thuis afzetten' in een titel werd gelezen als 'de afspraak is thuis'.",
+   "soort_oorzaak": "code",
+   "oplossing": "Thuis is nooit een bestemming uit een titel, en een plek telt alleen als heel woord.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "'thuis afzetten' maakt van de afspraak geen afspraak thuis"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-05",
+   "datum": "21-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "De controle en de filewacht zagen de agenda's van Lara en privé niet.",
+   "gevolg": "Een rit voor Lara werd niet op file gecontroleerd en niet mee getoetst.",
+   "waarom_niet_gezien": "Elk script koos zelf zijn agenda's; niemand vergeleek de lijsten.",
+   "oorzaak": "De controle en de filewacht lazen alleen de werkagenda en zoomafspraken.",
+   "soort_oorzaak": "code",
+   "oplossing": "Eén functie (W.afspraken) bepaalt voor alle scripts welke agenda's gelezen worden.",
+   "grendel": {
+    "soort": "code",
+    "waar": "controle_agenda.py",
+    "tekst": "W.afspraken("
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-06",
+   "datum": "21-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "De agenda van Lara werd na 250 afspraken afgekapt.",
+   "gevolg": "Alles na maart viel stil weg: geen ritten.",
+   "waarom_niet_gezien": "Google geeft zonder foutmelding de eerste pagina terug.",
+   "oorzaak": "Er werd maar één pagina opgevraagd.",
+   "soort_oorzaak": "code",
+   "oplossing": "Alle pagina's lezen.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de agenda wordt helemaal gelezen, niet alleen de eerste 250 afspraken"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-07",
+   "datum": "21-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Dubbele ritten.",
+   "gevolg": "Twee keer dezelfde rit in de agenda.",
+   "waarom_niet_gezien": "Twee rondes liepen tegelijk; elk zag de rit van de ander nog niet.",
+   "oorzaak": "Geen slot tussen de volledige ronde en de wijzigingswacht, en een losse koppeling rit-afspraak binnen drie uur.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een slot (nooit twee rondes tegelijk) en een rit hoort bij precies een afspraak.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "nooit twee rondes tegelijk"
+   },
+   "controle": [
+    "rit_dubbel"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-08",
+   "datum": "21-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "De vertrekmelding werd weggehaald door de herinneringsstap.",
+   "gevolg": "Geen melding om te vertrekken.",
+   "waarom_niet_gezien": "Elke stap op zich klopte; de volgorde niet.",
+   "oorzaak": "De herinneringen liepen na de ritten en haalden hun melding weer weg.",
+   "soort_oorzaak": "code",
+   "oplossing": "Eerst de herinneringen, dan de ritten: de vertrekmelding heeft het laatste woord.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de herinneringen komen voor de ritten, de vertrekmelding heeft het laatste woord"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-09",
+   "datum": "22-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Claude vroeg 'welke firma?' terwijl de bron het al zei.",
+   "gevolg": "Mehdi moest antwoorden op iets wat in zijn eigen systeem stond.",
+   "waarom_niet_gezien": "Claude vroeg voor het mat.",
+   "oorzaak": "De griffie had woord voor woord de omschrijving van de H-A-rechtbank; 'Mehdi : Sales' was een spook uit 2023.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "De agent stelt zelf een firma voor uit de projectmap, de lijst externe relaties en 'diensten voor'. Claude meet eerst de bron (omschrijving, aanmaakdatum, maker).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een projectnummer uit de H-A map stelt [HARC] voor"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-10",
+   "datum": "23-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "Het vertrek naar Genk schoof stil naar 09:45.",
+   "gevolg": "Een echte meting van Google werd vervangen door een ruwe schatting.",
+   "waarom_niet_gezien": "De schatting kwam pas toen de teller op was, 's middags.",
+   "oorzaak": "Verre ritten aten de dagteller op, en een schatting mocht een meting overschrijven.",
+   "soort_oorzaak": "code",
+   "oplossing": "Google alleen voor ritten binnen 48 uur; een meting gaat altijd voor een schatting.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een schatting overschrijft nooit een live meting van Google"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-11",
+   "datum": "23-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "'Stil' was niet stil, en de ronde haalde elke keer dezelfde 13 meldingen weg.",
+   "gevolg": "21 interne overleggen per week rinkelden 30 minuten vooraf; de marker van Lara om 23:50 de avond ervoor.",
+   "waarom_niet_gezien": "Het logboek zei elke ronde '13 weggehaald'. Een getal dat nooit daalt, is een lus, maar niemand vergeleek de rondes.",
+   "oorzaak": "Stil maken zette de agendastandaard terug (werk 30 min, Lara 10 min) in plaats van geen melding.",
+   "soort_oorzaak": "code",
+   "oplossing": "Stil is expliciet geen melding. 127 afspraken rechtgezet.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "stil maken zet expliciet geen melding, niet de agenda-standaard"
+   },
+   "controle": [
+    "melding_niet_stil",
+    "melding_ontbreekt"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-12",
+   "datum": "23-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "Het adres 'Brasserie 360°, Stadsplein ...' werd niet gevonden.",
+   "gevolg": "Geen rit naar Genk.",
+   "waarom_niet_gezien": "Pas zichtbaar bij de eerste afspraak met een naam voor het adres.",
+   "oorzaak": "De adreszoeker kreeg de naam van de zaak mee.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een tweede poging zonder de naam vooraan.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een adres met een naam vooraan wordt gevonden"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-13",
+   "datum": "23-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Een extern gesprek stond gepland terwijl Mehdi reed.",
+   "gevolg": "Het gesprek met Rem Braspenning viel midden in de rit naar Genk.",
+   "waarom_niet_gezien": "De regel 'extern alleen geparkeerd, intern mag rijdend' stond nergens.",
+   "oorzaak": "De rit werd alleen op het begin van de buitenafspraak gezet.",
+   "soort_oorzaak": "ontbrekende regel",
+   "oplossing": "Valt een extern gesprek in de heenrit, dan is de aankomst voor het gesprek; het gesprek gebeurt geparkeerd.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een extern gesprek tijdens de heenrit vervroegt de aankomst"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-14",
+   "datum": "23-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Claude zette een Zoom-link die niet de juiste was.",
+   "gevolg": "Een klant had een verkeerde link kunnen krijgen.",
+   "waarom_niet_gezien": "De link die het vaakst in de agenda stond, werd als de vaste link aangenomen.",
+   "oorzaak": "Gokken in plaats van vragen.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "De agent zet nooit een link, alleen ZL en de notitie dat Mehdi de link stuurt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de agent zet zelf geen Zoom-link zolang de juiste niet gekend is"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-15",
+   "datum": "23-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "ZL stond achter ?? in plaats van helemaal vooraan.",
+   "gevolg": "Mehdi zag niet meteen dat er nog een link moet.",
+   "waarom_niet_gezien": "ZL werd behandeld zoals !! en ??, die in de kop mogen staan.",
+   "oorzaak": "De plaats van ZL was niet afgesproken.",
+   "soort_oorzaak": "ontbrekende regel",
+   "oplossing": "ZL altijd helemaal vooraan.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "ZL komt helemaal vooraan, ook voor ??"
+   },
+   "controle": [
+    "zl"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-16",
+   "datum": "23-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "De maker-functie werd twee keer gebouwd, door Claude en door een parallelle sessie.",
+   "gevolg": "Botsende code; het eigen werk moest weg.",
+   "waarom_niet_gezien": "Er werd gebouwd zonder eerst git log te lezen.",
+   "oorzaak": "Parallelle sessies werken aan dezelfde repo.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "Voor elke wijziging: git fetch van de VM en GitHub, en git log lezen.",
+   "grendel": {
+    "soort": "werkwijze",
+    "waar": "werkwijze/agenda-wacht.md",
+    "tekst": "Voor elke wijziging: git fetch van de VM en GitHub, en git log lezen"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-17",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "De Google-teller stond op 137 van 100. Claude trok het plafond bij handmatige rondes zelf op (110, 150, 200, 400).",
+   "gevolg": "37 aanroepen boven het afgesproken plafond. Binnen de gratis maandlimiet, maar de grendel werkte niet.",
+   "waarom_niet_gezien": "Het logboek zei '122 van 100' en niemand las het. Het plafond was een omgevingswaarde die elke uitvoerder kon verhogen.",
+   "oorzaak": "Herhaling van FR-01. Snel willen werken ging voor de afspraak.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "Het plafond is hard (ROUTES_PLAFOND = 100). De omgeving kan het alleen verlagen; verhogen kan alleen in de code, met een commit die Mehdi ziet.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "het Google-plafond gaat nooit boven 100, ook niet via de omgeving"
+   },
+   "controle": [
+    "google_plafond"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-18",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "De ronde van 06:30 liep om 08:30. De filewacht en de wijzigingswacht sliepen van 06:00 tot 08:00.",
+   "gevolg": "Geen filecontrole tijdens de ochtendspits; wijzigingen van de vroege ochtend pas om 08:00 verwerkt.",
+   "waarom_niet_gezien": "De cronregel zegt '30 6', en dat leest als 06:30. Niemand vergeleek het met de klok van de server.",
+   "oorzaak": "De VM draait op UTC en cron kent daar geen tijdzone.",
+   "soort_oorzaak": "omgeving",
+   "oplossing": "Cron start elk uur (de wachten om de 10 en 12 minuten); de agent beslist zelf op Brusselse tijd, zomer en winter.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de ronde volgt de Brusselse tijd, zomer en winter"
+   },
+   "controle": [
+    "ochtendronde"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-19",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "De logboeken hadden geen tijdstip.",
+   "gevolg": "Niet na te gaan wanneer iets gebeurde. De kleuren van 00:15 moesten uit Google zelf gehaald worden.",
+   "waarom_niet_gezien": "Het bord heeft wel tijden, dus het logbestand leek niet nodig.",
+   "oorzaak": "De scripts schreven alleen wat ze deden, niet wanneer.",
+   "soort_oorzaak": "code",
+   "oplossing": "Elke ronde en elke regel van de wijzigingswacht en de filewacht begint met de Brusselse tijd.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "elke ronde begint met zijn tijdstip"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-20",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "De agent zette een kleur die een mens koos stil terug.",
+   "gevolg": "Eerder 'AI stabiliteit' van 30-09, dat met de hand geel was. Op 24-09 om 00:15 werden 18 afspraken met de hand paars en geel gezet; de ronde van 06:30 had ze teruggezet.",
+   "waarom_niet_gezien": "De agent kon zijn eigen kleur niet onderscheiden van die van een mens, en de regel zei: de kleur volgt de titel.",
+   "oorzaak": "Er stond nergens welke kleur de agent zelf zette.",
+   "soort_oorzaak": "code",
+   "oplossing": "De agent laat een onzichtbaar merk achter bij elke kleur die hij zet. Een kleur zonder zijn merk komt van een mens: niet aanraken, vragen.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een kleur die een mens zette, is een vraag en wordt niet overschreven"
+   },
+   "controle": [
+    "kleur"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-21",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "Op 24-09 om 00:15 kregen de UNABO-overleggen en de UNABO-boekingen paars, en AI stabiliteit geel. Het ging een per seconde: een script, niet met de hand in Google.",
+   "gevolg": "De kleur zegt niet meer wat de titel zegt (paars is leverancier online).",
+   "waarom_niet_gezien": "Het gebeurde na de laatste ronde van de dag.",
+   "oorzaak": "Niet de VM, niet de scripts op de Mac en geen Claude Code-sessie. Wie of wat het deed, is niet gemeten.",
+   "soort_oorzaak": "onbekend",
+   "oplossing": "De agent laat deze kleuren staan en vraagt Mehdi of het bewust is. Is UNABO paars een nieuwe regel, dan hoort die in de afspraken; is AI stabiliteit onzeker, dan krijgt de titel ??.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de zelfcontrole ziet een handkleur als vraag"
+   },
+   "controle": [
+    "handkleur"
+   ],
+   "status": "vraag"
+  },
+  {
+   "id": "FR-22",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "Zeven nieuwe boekingen deze week dragen nog de oude code ([HA-PO], [UNABO-PO], [TKN-PO]).",
+   "gevolg": "Werkt, want de agent vertaalt de oude codes, maar twee schrijfwijzen naast elkaar.",
+   "waarom_niet_gezien": "Gezien op 23-09; de oplossing ligt buiten de agent.",
+   "oorzaak": "De titelsjablonen in Calendly.",
+   "soort_oorzaak": "bron",
+   "oplossing": "Mehdi zet de sjablonen om (HA naar HARC, UNABO naar UNAB, TKN naar TKNB). Zoom-dossier leest beide al.",
+   "grendel": {
+    "soort": "zelfcontrole",
+    "waar": "zelfcontrole.py",
+    "tekst": "oude_code"
+   },
+   "controle": [
+    "oude_code"
+   ],
+   "status": "open"
+  },
+  {
+   "id": "FR-23",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "'Wie maakte de afspraak' klopte niet: Calendly-boekingen op de werkagenda stonden als 'Mehdi zelf', en handmatige ritten van het account light projects als 'Calendly'.",
+   "gevolg": "Een verkeerde naam bij 'wie zette dit'.",
+   "waarom_niet_gezien": "De maker werd alleen uit het account gehaald, niet uit de inhoud.",
+   "oorzaak": "Een account is geen persoon: hetzelfde account boekt via Calendly en met de hand.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een Calendly-boeking wordt herkend aan de calendly.com-links in de omschrijving. Light projects heet 'handmatig' tot Mehdi zegt wie het is.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "maker herkent een Calendly-boeking aan de inhoud"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-24",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "Een handmatige rit ('Rijden naar Stadskantoor Leuven') rinkelde op de agendastandaard.",
+   "gevolg": "Een melding om 13:25, midden in de afspraak in Genk.",
+   "waarom_niet_gezien": "De herinneringsstap sloeg elke rit over; alleen de eigen ritten kregen een melding.",
+   "oorzaak": "Ritten van anderen vielen tussen twee stappen.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een handmatige rit op de agendastandaard krijgt dezelfde melding als een eigen rit: heen 5 minuten vooraf, naar huis stil. Een melding die iemand zelf koos, blijft staan.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een handmatige rit krijgt de rit-melding, niet de agendastandaard"
+   },
+   "controle": [
+    "rit_melding_standaard"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-25",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "Een rit droeg de oude titel van zijn afspraak (Catalin, 26-09).",
+   "gevolg": "Wie de rit opent, leest waarvoor hij vroeger was.",
+   "waarom_niet_gezien": "De rit werd alleen bijgewerkt als de tijd veranderde.",
+   "oorzaak": "Een titelwijziging (vrije tekst naar code) raakte de rit niet.",
+   "soort_oorzaak": "code",
+   "oplossing": "De omschrijving van de rit volgt de titel van de afspraak.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een rit neemt de nieuwe titel van zijn afspraak over"
+   },
+   "controle": [
+    "rit_oude_titel"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-26",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "?? bleef staan na afloop (boekhouder op 22-09).",
+   "gevolg": "Niet te zien of de afspraak doorging.",
+   "waarom_niet_gezien": "De agent kijkt alleen vooruit.",
+   "oorzaak": "Niemand vroeg na afloop of een onbevestigde afspraak doorging.",
+   "soort_oorzaak": "ontbrekende regel",
+   "oplossing": "Na afloop vraagt de agent: doorgegaan of niet? Het antwoord zet Mehdi in de titel (?? weg) of hij annuleert.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "?? na afloop wordt gevraagd: doorgegaan of niet"
+   },
+   "controle": [
+    "onbevestigd_voorbij"
+   ],
+   "status": "bewaakt"
+  },
+  {
+   "id": "FR-27",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "Een firmacode zonder soort: '[HARC] 2616 Stad Leuven' en '[HARC] Rechtbank'.",
+   "gevolg": "Werkt voor de kleur (buiten), maar het is niet te zien wat voor afspraak het is.",
+   "waarom_niet_gezien": "De controle keek of er een code stond, niet of de soort erbij stond.",
+   "oorzaak": "Een gemeente of rechtbank past in geen enkele soort.",
+   "soort_oorzaak": "ontbrekende regel",
+   "oplossing": "De agent meldt een code zonder soort. Mehdi beslist of er een soort voor de overheid komt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een firmacode zonder soort wordt gemeld"
+   },
+   "controle": [],
+   "status": "vraag"
+  },
+  {
+   "id": "FR-28",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "De ritten voor een privé-afspraak (revalidatie, 23-09) stonden rood op de werkagenda.",
+   "gevolg": "Collega's zagen dat Mehdi ergens heen reed.",
+   "waarom_niet_gezien": "De afspraak verhuisde na de rit van agenda. De rit bleef, als 'rit zonder afspraak', alleen gemeld.",
+   "oorzaak": "Een rit verhuisde niet mee met zijn afspraak.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een eigen rit verhuist mee naar de agenda waar zijn afspraak nu staat.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een eigen rit verhuist mee als zijn afspraak naar een andere agenda gaat"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-29",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "Een rit heette 'thuis → LEUVEN'.",
+   "gevolg": "Een schreeuwerige titel.",
+   "waarom_niet_gezien": "Pas zichtbaar bij een adres in hoofdletters.",
+   "oorzaak": "De plaatsnaam werd overgenomen zoals ze in het adres stond.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een plaatsnaam in hoofdletters wordt gewoon geschreven.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "LEUVEN wordt Leuven in een ritlabel"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-30",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "De uitnodiging 'Afdelings meeting Energy' van een collega werd elke ronde als titelfout gemeld.",
+   "gevolg": "Ruis in de meldingen, terwijl Mehdi zei: niet aanraken.",
+   "waarom_niet_gezien": "De naamcontrole keek niet wie de titel schreef.",
+   "oorzaak": "De regel 'intern met iemand hoort een naam' is voor de eigen titels van Mehdi.",
+   "soort_oorzaak": "code",
+   "oplossing": "De naamcontrole geldt alleen voor de eigen titels van Mehdi.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een uitnodiging van een collega krijgt geen naamfout"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-31",
+   "datum": "21-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "Afspraken zonder link liepen zonder ZL (21-09 Libra AI, 22-09 boekhouder).",
+   "gevolg": "Niet te zien dat er nog een link moest.",
+   "waarom_niet_gezien": "De regel ZL bestond pas vanaf 23-09.",
+   "oorzaak": "Ontbrekende regel, intussen FR-15.",
+   "soort_oorzaak": "ontbrekende regel",
+   "oplossing": "ZL met de notitie 'Mehdi stuurt de link'. Het verleden wordt niet herschreven.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een online gesprek krijgt de notitie dat Mehdi de link stuurt"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-32",
+   "datum": "23-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "Een wijziging met een anker dat niet paste, liep toch door in de keten (nieuw PDF gemaakt, vorige gearchiveerd).",
+   "gevolg": "Een PDF zonder de bedoelde wijziging, en het vorige archief overschreven.",
+   "waarom_niet_gezien": "De keten keek niet of elke stap gelukt was.",
+   "oorzaak": "Opdrachten op de VM als losse eenregelaars met aanhalingstekens in aanhalingstekens.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "Wijzigingen als script in een bestand, met een controle op elk anker; een mislukte stap stopt het script.",
+   "grendel": {
+    "soort": "werkwijze",
+    "waar": "werkwijze/agenda-wacht.md",
+    "tekst": "Wijzigingen als script in een bestand, met een controle op elk anker"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-33",
+   "datum": "23-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "Grendeltests op letterlijke broncode faalden na bewuste herschrijvingen.",
+   "gevolg": "Rode tests zonder echte fout; het gevaar is dat men ze dan negeert.",
+   "waarom_niet_gezien": "Een test op tekst leek sneller dan een test op gedrag.",
+   "oorzaak": "De test keek naar hoe de code geschreven was, niet naar wat ze doet.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "Nieuwe grendels testen het gedrag met nagemaakte afspraken.",
+   "grendel": {
+    "soort": "werkwijze",
+    "waar": "werkwijze/agenda-wacht.md",
+    "tekst": "Nieuwe grendels testen het gedrag met nagemaakte afspraken"
+   },
+   "controle": [],
+   "status": "bewaakt"
+  },
+  {
+   "id": "FR-34",
+   "datum": "22-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Regel, geen voorval: klanten en prospecten zien nooit 'Suriname'. Afgekort is het SU of HDSS.",
+   "gevolg": "Zou een klant iets laten zien wat Mehdi niet wil tonen.",
+   "waarom_niet_gezien": "Nog niet voorgekomen; de zelfcontrole bewaakt het.",
+   "oorzaak": "Vaste regel van Mehdi.",
+   "soort_oorzaak": "regel",
+   "oplossing": "De zelfcontrole zoekt 'Suriname' in titel, locatie en omschrijving van elke afspraak.",
+   "grendel": {
+    "soort": "zelfcontrole",
+    "waar": "zelfcontrole.py",
+    "tekst": "su_zichtbaar"
+   },
+   "controle": [
+    "su_zichtbaar"
+   ],
+   "status": "bewaakt"
+  },
+  {
+   "id": "FR-35",
+   "datum": "22-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Regel, geen voorval: op een dag zonder auto hoort geen buitenafspraak; een collega kan dat vergeten.",
+   "gevolg": "Mehdi staat ergens zonder vervoer.",
+   "waarom_niet_gezien": "Nog niet voorgekomen; de agent en de zelfcontrole bewaken het.",
+   "oorzaak": "Buitenboekingen gebeuren met de hand, door Mehdi of Chilton.",
+   "soort_oorzaak": "regel",
+   "oplossing": "Hele-dag-marker 'geen auto' op de werkagenda; een buitenafspraak die dag wordt gemeld, met wie ze zette.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een buitenafspraak op een dag zonder auto wordt gemeld"
+   },
+   "controle": [
+    "buiten_zonder_auto"
+   ],
+   "status": "bewaakt"
+  },
+  {
+   "id": "FR-36",
+   "datum": "20-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Regel, geen voorval: een buitenafspraak zonder adres kan geen rit krijgen.",
+   "gevolg": "Geen vertrektijd, geen vertrekmelding.",
+   "waarom_niet_gezien": "Het adres ontbreekt in de bron (titel, locatie, projectmap, locatie.globaal.be).",
+   "oorzaak": "Wie de afspraak zette, gaf geen adres mee.",
+   "soort_oorzaak": "bron",
+   "oplossing": "De agent zoekt het adres in de agenda, de projectmap en locatie.globaal.be; vindt hij niets, dan meldt hij de afspraak bij naam.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een benoemde plek wordt gevonden"
+   },
+   "controle": [
+    "buiten_zonder_adres"
+   ],
+   "status": "bewaakt"
+  },
+  {
+   "id": "FR-37",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (weekcontrole)",
+   "fout": "Een rit van 16:00 tot 16:00 op maandag 28-09: de rechtbank loopt tot 16:00 en Lara moet om 16:00 in Kessel-Lo opgehaald worden.",
+   "gevolg": "De agenda toonde een rit van nul minuten in plaats van 'je komt een kwartier te laat'. Het bord kreeg niets.",
+   "waarom_niet_gezien": "'TE KRAP' stond alleen in het logboek, niet als signaal. De controle keek of er een rit was, niet hoe lang hij duurde.",
+   "oorzaak": "Bij te weinig tijd werd het vertrek op het einde van de vorige afspraak gezet, en de aankomst bleef het begin van de volgende.",
+   "soort_oorzaak": "code",
+   "oplossing": "De rit toont de echte rijtijd en dus de late aankomst. 'Te krap: je komt te laat' komt als signaal en nood op het bord, met de vraag wie verschuift.",
+   "grendel": {
+    "soort": "code",
+    "waar": "agenda_wacht.py",
+    "tekst": "aankomst = vorige_einde + timedelta(minutes=rijden)"
+   },
+   "controle": [
+    "rit_nul_minuten"
+   ],
+   "status": "opgelost"
+  }
+ ]
+}
