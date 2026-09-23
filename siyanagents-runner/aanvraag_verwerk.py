@@ -107,6 +107,10 @@ DIENST_PIPELINE = {
     # Functiewijziging is sinds 23 sep 2026 een eigen dienst op unabo.be. Ook een
     # vergunningsdossier, dus dezelfde pijplijn als vergunningen en regularisatie.
     "functiewijziging": (14, 138),
+    # Aankoopbegeleiding (23 sep 2026): de kern is de vergunningstoestand en
+    # eventuele bouwovertredingen van het pand, dus de vergunningenpijplijn.
+    # Bouwkundige vragen (vocht, stabiliteit) worden van daaruit doorgezet.
+    "aankoopbegeleiding": (14, 138),
     # 3D-rendering: zelfde team en zelfde soort dossier als 3D-scanning.
     "3d-rendering": (4, 17),
     "3d-scanning": (4, 17),
