@@ -121,8 +121,12 @@ def bevindingen(items, van, tot, nu):
                 start = datetime.fromisoformat(a["start"])
             except ValueError:
                 continue
+            # een heenrit eindigt voor het begin, of later als het te krap is; dan draagt hij de
+            # titel van deze afspraak in zijn omschrijving (FR-37)
             heen = [x for x in ritten if x.get("kalender") == kal and "T" in x.get("einde", "")
-                    and start - timedelta(hours=3) <= datetime.fromisoformat(x["einde"]) <= start]
+                    and (start - timedelta(hours=3) <= datetime.fromisoformat(x["einde"]) <= start
+                         or (x["start"][:10] == a["start"][:10]
+                             and f"Reistijd voor: {a['titel']} (" in (x.get("omschrijving") or "")))]
             if not heen:
                 fysiek = bool(loc.strip()) and not loc.lower().startswith("http")
                 bekend = fysiek or (info["nummer"] and info["nummer"] in W.projectadressen.index()) \

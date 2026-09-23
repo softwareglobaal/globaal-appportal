@@ -399,6 +399,16 @@ _mo = (_nu + _td(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
 _b = Z.bevindingen([{"titel": "Mehdi: [UNAB-IN] overleg Tom", "start": _mo.isoformat(), "einde": (_mo + _td(hours=1)).isoformat(),
                      "kalender": W.WERKAGENDA, "_kleur": "3", "_merk": {}, "_reminders": {"useDefault": False, "overrides": []},
                      "maker": W.WERKAGENDA}], _nu.date().isoformat(), (_nu + _td(days=2)).date().isoformat(), _nu)
+_lara = (_nu + _td(days=1)).replace(hour=16, minute=0, second=0, microsecond=0)
+_b2 = Z.bevindingen([{"titel": "Mehdi: !! [LARA] Lara ophalen", "start": _lara.isoformat(), "einde": (_lara + _td(hours=1)).isoformat(),
+                      "kalender": "385ee9ff8749fe5e5929090550d42611f4ce2437d11b56f3d4d943619b4c479f@group.calendar.google.com",
+                      "locatie": "De Speelkriebel, Kessel-Lo", "_reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 5}]}},
+                     {"titel": "🚗 Reistijd: Leuven → Kessel-Lo", "start": _lara.isoformat(), "einde": (_lara + _td(minutes=5)).isoformat(),
+                      "kalender": "385ee9ff8749fe5e5929090550d42611f4ce2437d11b56f3d4d943619b4c479f@group.calendar.google.com",
+                      "omschrijving": "Reistijd voor: Mehdi: !! [LARA] Lara ophalen (15 min = vrije rijtijd x filefactor 1.3 + 10 min buffer, OSRM)",
+                      "_reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 5}]}}],
+                    _nu.date().isoformat(), (_nu + _td(days=2)).date().isoformat(), _nu)
+check("de zelfcontrole kent een rit die te laat aankomt als heenrit", not [x for x in _b2 if x["controle"] == "rit_ontbreekt"], str(_b2))
 check("de zelfcontrole ziet een handkleur als vraag", [x["controle"] for x in _b] == ["handkleur"], str(_b))
 _i = Z.indelen([{"controle": "kleur", "dag": "", "uur": ""}, {"controle": "iets_nieuws", "dag": "", "uur": ""}], _reg)
 check("een opgeloste fout die terugkomt heet TERUGGEKEERD, een onbekende NIEUW",

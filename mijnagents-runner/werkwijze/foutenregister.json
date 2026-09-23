@@ -793,6 +793,24 @@
     "rit_nul_minuten"
    ],
    "status": "opgelost"
+  },
+  {
+   "id": "FR-38",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole (eerste proefronde)",
+   "fout": "De zelfcontrole meldde de rit naar Lara van 28-09 als 'ontbrekend', omdat die rit na het begin aankomt (te krap).",
+   "gevolg": "Een valse TERUGGEKEERD. Voor de uitrol gevonden, niet op het bord gekomen.",
+   "waarom_niet_gezien": "De controle nam aan dat een heenrit altijd voor het begin eindigt; FR-37 maakte dat anders.",
+   "oorzaak": "Twee regels die elkaar raken, de controle en de te-krap-rit, werden los gebouwd.",
+   "soort_oorzaak": "code",
+   "oplossing": "De zelfcontrole herkent een heenrit ook aan de titel van zijn afspraak in de omschrijving.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de zelfcontrole kent een rit die te laat aankomt als heenrit"
+   },
+   "controle": [],
+   "status": "opgelost"
   }
  ]
 }
