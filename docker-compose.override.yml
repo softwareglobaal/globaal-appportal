@@ -526,6 +526,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-claude-sonnet-5}
       XELION_DEBUG: "${XELION_DEBUG:-false}"
+      # Hoe ver het belarchief terugloopt (dagen). Sinds 23-09-2026 op 365 in
+      # .env: de Telefonie-tab toont twaalf maanden per nummer.
+      XELION_COMM_BACKFILL_DAGEN: ${XELION_COMM_BACKFILL_DAGEN:-90}
       XELION_BASE_URL: ${XELION_BASE_URL:-}
       XELION_USERSPACE: ${XELION_USERSPACE:-}
       XELION_USERNAME: ${XELION_USERNAME:-}
