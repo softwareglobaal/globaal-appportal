@@ -1,5 +1,5 @@
 {
- "versie": "3.3",
+ "versie": "3.4",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -108,7 +108,8 @@
   "oude_termen_in_vrije_tekst": {
    "EE": "Energie Efficiënt (ENEF); Mehdi schreef dat los in titels zoals 'AI & EE'"
   },
-  "firma_afleiden": "staat er geen firmacode in een interne titel, dan kijkt de agent welke firma's de genoemde mensen gemeen hebben volgens 'diensten voor'. Is dat er precies een, dan stelt hij die voor. Zijn het er meer, dan noemt hij ze allebei en vraagt hij het"
+  "firma_afleiden": "staat er geen firmacode in een interne titel, dan kijkt de agent welke firma's de genoemde mensen gemeen hebben volgens 'diensten voor'. Is dat er precies een, dan stelt hij die voor. Zijn het er meer, dan noemt hij ze allebei en vraagt hij het",
+  "firma_afleiden_uitgebreid": "staat er geen firmacode, dan stelt de agent er een voor: een projectnummer dat in de H-Architects-projectmap staat -> [HARC]; een leverancier uit externe-relaties (boekhouder Nadien/Nadine, Wally) -> [ALGE]; anders de firma van de genoemde personen via 'diensten voor' op organisatie.globaal.be"
  },
  "kleuren": {
   "grondregel": "de kleur zegt waarvóór Mehdi ergens is, de twee uitroeptekens zeggen dát hij naar buiten gaat. Dat zijn twee verschillende dingen. Een afspraak kan nooit kleurloos zijn: ze is werk, privé of Lara.",
@@ -358,6 +359,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-22",
+   "wat": "de agent stelt nu een firma voor bij een titel zonder code: uit het projectnummer (H-A map = HARC) en uit de leverancierslijst (boekhouder/Wally = ALGE). Deze week zelf rechtgezet: 2616 -> [HARC], Nadine boekhouder -> [ALGE-LO], 'Leen moet werken' zonder !! (Lara is thuis)"
+  },
   {
    "datum": "2026-09-22",
    "wat": "wie een afspraak maakte lezen we uit het creator-veld van Google (maker(), geen titel-clutter); getoond bij afspraken zonder code, buiten op een dag zonder auto, en per afdeling. 13-10 gemarkeerd als eerste 'geen auto'-dag"

@@ -189,6 +189,15 @@ check("de maker staat bij een buitenafspraak op een dag zonder auto",
       "BUITEN op een dag zonder auto (door {maker(a)})" in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
 check("de makerslijst is vastgelegd in de JSON", "maker" in json.dumps(taken, ensure_ascii=False) and "creator" in json.dumps(taken, ensure_ascii=False))
 
+# Firma voorstellen bij een titel zonder code: uit projectnummer en leverancierslijst. Mehdi 22-09-2026.
+def _tf(titel):
+    a = {"titel": titel, "kalender": "mehdiprivewerkagenda@gmail.com", "hele_dag": False, "deelnemers": []}
+    return W.titelfouten(a, W.lees_titel(titel))
+check("een projectnummer uit de H-A map stelt [HARC] voor",
+      any("HARC" in x for x in _tf("!! Mehdi: 2616 Stad Leuven stedenbouwkundige info")))
+check("een leverancier uit de lijst stelt [ALGE] voor",
+      any("ALGE" in x for x in _tf("?? Mehdi: Nadine Boekhouder")))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

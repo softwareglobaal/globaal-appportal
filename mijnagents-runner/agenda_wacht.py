@@ -456,22 +456,38 @@ def titelfouten(a, info):
         return []
     fouten = []
     if a.get("kalender", "") not in AGENDA_VASTE_KLEUR and not info.get("firma"):
-        # Niet alleen klagen: staan er namen in die ik ken, dan zegt "diensten voor" op
-        # organisatie.globaal.be voor welke firma die mensen werken, en dat is de firma
-        # van de afspraak. Mandaat van Mehdi, 20-09-2026.
-        namen = namen_in_titel(a.get("titel") or "")
-        firmas = []
-        if namen:
-            try:
-                firmas = organisatie.firma_van([n.split(" (")[0] for n in namen])
-            except Exception:  # noqa: BLE001
-                firmas = []
-        if len(firmas) == 1:
-            fouten.append(f"geen firmacode, maar de namen wijzen naar [{firmas[0]}]")
-        elif firmas:
-            fouten.append("geen firmacode; de namen werken voor " + " of ".join(firmas))
+        # Niet alleen klagen, maar een firma voorstellen waar dat kan. Mandaat van Mehdi,
+        # 22-09-2026: los zoveel mogelijk zelf op, van waar het probleem komt.
+        voorstel = ""
+        # 1) een projectnummer dat in de H-Architects-projectmap staat, is een H-A-project
+        if info.get("nummer") and info["nummer"] in projectadressen.index():
+            voorstel = "HARC"
+        # 2) een externe leverancier uit de lijst (boekhouder Nadien/Nadine, Wally): ALGE
+        if not voorstel:
+            tl = (a.get("titel") or "").lower()
+            for r in EXTERNE_RELATIES:
+                namen_r = [r.get("naam") or ""] + list(r.get("ook_geschreven") or [])
+                if any(nm and re.search(r"(?<![\w])" + re.escape(nm.lower()) + r"(?![\w])", tl) for nm in namen_r):
+                    voorstel = r.get("firma") or "ALGE"
+                    break
+        if voorstel:
+            fouten.append(f"geen firmacode, wellicht [{voorstel}]")
         else:
-            fouten.append("geen firmacode")
+            # 3) staan er namen in die ik ken, dan zegt "diensten voor" op
+            # organisatie.globaal.be voor welke firma die mensen werken. Mandaat 20-09-2026.
+            namen = namen_in_titel(a.get("titel") or "")
+            firmas = []
+            if namen:
+                try:
+                    firmas = organisatie.firma_van([n.split(" (")[0] for n in namen])
+                except Exception:  # noqa: BLE001
+                    firmas = []
+            if len(firmas) == 1:
+                fouten.append(f"geen firmacode, maar de namen wijzen naar [{firmas[0]}]")
+            elif firmas:
+                fouten.append("geen firmacode; de namen werken voor " + " of ".join(firmas))
+            else:
+                fouten.append("geen firmacode")
     buiten = info["buiten"] or info["soort"] in ("PB", "KB", "LB")
     if buiten and "!!" not in (a.get("titel") or ""):
         # Mehdi leest weinig en kijkt: buiten hoort altijd zichtbaar te zijn met !!

@@ -5,7 +5,23 @@
   "ALGE": "Algemeen (overkoepelend, voor alle bedrijven van de groep). Vier letters, net als de andere codes. Voor een leverancier of afspraak die niet bij een bedrijf hoort maar voor de hele groep geldt."
  },
  "relaties": [
-  {"naam": "Nadien", "relatie": "boekhouder", "soort": "leverancier", "firma": "ALGE", "contact": "Angela", "opmerking": "boekhouding voor alle bedrijven, dus overkoepelend -> ALGE"},
-  {"naam": "Wally", "relatie": "AI-bedrijf dat software levert", "soort": "leverancier", "firma": "ALGE", "opmerking": "levert software voor de groep, overkoepelend -> ALGE"}
+  {
+   "naam": "Nadien",
+   "relatie": "boekhouder",
+   "soort": "leverancier",
+   "firma": "ALGE",
+   "contact": "Angela",
+   "opmerking": "boekhouding voor alle bedrijven, dus overkoepelend -> ALGE (Mehdi schrijft ook 'Nadine')",
+   "ook_geschreven": [
+    "Nadine"
+   ]
+  },
+  {
+   "naam": "Wally",
+   "relatie": "AI-bedrijf dat software levert",
+   "soort": "leverancier",
+   "firma": "ALGE",
+   "opmerking": "levert software voor de groep, overkoepelend -> ALGE"
+  }
  ]
 }
