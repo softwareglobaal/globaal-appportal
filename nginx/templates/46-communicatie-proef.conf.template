@@ -1,0 +1,12 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name communicatie-proef.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Proefomgeving van het Communicatie-dashboard (tak `proef`), zelfde
+    # forward-auth en dezelfde database als live. Geen werker-luik: de
+    # transcriptiewerker praat alleen met de live app.
+    set $app_upstream http://app-communicatie-proef:3018;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

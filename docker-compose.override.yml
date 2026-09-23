@@ -585,6 +585,40 @@ services:
       start_interval: 5s
     networks: [appnet]
 
+  # Communicatie PROEF (sinds 23 sep 2026): de tak `proef` van dezelfde repo,
+  # uitgecheckt in ./communicatie-proef, op communicatie-proef.<domein>. Leest
+  # en schrijft dezelfde database als live (één register), maar alle pollers
+  # staan uit: Xelion laat één sessie per userspace toe, en dubbel werk in
+  # Plaud, contactherkenning of duiding kost geld. Geen deploy-cron; met de
+  # hand: cd ~/appportal/communicatie-proef && git pull && cd ~/appportal &&
+  # docker compose up -d --build app-communicatie-proef
+  app-communicatie-proef:
+    build: ./communicatie-proef
+    image: appportal-communicatie-proef
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      DATABASE_URL: ${COMMUNICATIE_DB_URL:-}
+      PORT: "3018"
+      EDITOR_GROUPS: communicatie-editors,admin
+      # Proefvlag: banner in de app en bewerkknoppen uit tot de eigenaar akkoord is.
+      PROEF: "1"
+      XELION_ENABLED: "false"
+      PLAUD_ENABLED: "false"
+      CONTACT_HERKENNING_ENABLED: "false"
+      DUIDING_ENABLED: "false"
+      TRANSCRIPTIE_PAUZE: "true"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-claude-sonnet-5}
+    healthcheck:
+      test: node -e "require('http').get('http://127.0.0.1:3018/api/me',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+      interval: 2m
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+      start_interval: 5s
+    networks: [appnet]
+
   # Vermogen — panden / verzekeringen / leningen & leasingen / syndicus (skelet).
   app-vermogen:
     build: ./vermogen
