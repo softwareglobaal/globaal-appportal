@@ -14,8 +14,8 @@
 -- vergadering maakte over een centrale bron in plaats van vijf dashboards.
 --
 -- Wel een verschil in invoer. Bij nummers is doel een vrij tekstveld met
--- meerdere waarden achter puntkomma's, en dat is uit de hand gelopen: 38
--- verschillende waarden op tachtig nummers, waaronder namen van collega's en
+-- meerdere waarden achter puntkomma's, en dat is uit de hand gelopen: 58
+-- verschillende waarden op 94 nummers, waaronder namen van collega's en
 -- "Enstaco (oud)/Ashvand". Op 502 adressen zou dat driehonderd waarden geven
 -- en dan filtert niemand er meer op. Bij e-mail is doel daarom een keuze uit
 -- de lijst, een waarde per adres. Wie het specifieker wil, schrijft het in

@@ -1920,7 +1920,7 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   nummer en een adres die allebei voor Finance zijn horen hetzelfde woord te
   krijgen. Vier waarden erbij: Persoonlijk, IT en systemen, Opbouw, Archief.
   **Wel een keuze en geen vrij tekstveld**, anders dan bij nummers: daar gaf
-  vrije tekst 38 waarden op tachtig nummers (namen van collega's,
+  vrije tekst 58 waarden op 94 nummers (namen van collega's,
   "Enstaco (oud)/Ashvand"), en op 502 adressen filtert niemand daar nog op. De
   server weigert een waarde die niet in de lijst staat, ook via de API;
   specifieker dan de lijst schrijf je in Omschrijving. Te zetten in de rij
