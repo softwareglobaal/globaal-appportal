@@ -556,6 +556,11 @@ services:
       # Pauzeknop: op true krijgt de werker geen werk meer. De machine staat
       # elders en heeft geen publiek adres, dus dit is onze enige rem.
       TRANSCRIPTIE_PAUZE: ${TRANSCRIPTIE_PAUZE:-false}
+      # Proefslot: hoeveel gesprekken buiten de proefset er uitgeschreven mogen
+      # worden nadat een variant de meting haalde. Leeg = 50 (de eerste stap),
+      # daarna bewust 200, pas dan 0 (geen grens). Zonder geslaagde meting
+      # staat het slot hoe dan ook dicht.
+      TRANSCRIPTIE_STAP: ${TRANSCRIPTIE_STAP:-}
       # Contactherkenning (migratie 151): externe nummers uit het belarchief
       # opzoeken in de vijf Pipedrive-administraties. Leest alleen en kost
       # niets; zonder tokens herkent hij alleen onze eigen nummers.
