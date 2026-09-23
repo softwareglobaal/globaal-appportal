@@ -265,8 +265,9 @@ check("[HARC-AB] is aannemer buiten, rood", W.lees_titel("!! Mehdi: [HARC-AB] 24
 check("de soorten komen uit een centrale lijst", "AB" in W.BUITEN_SOORTEN and "AO" in W.EXTERN_ONLINE)
 check("vrije tekst 'aannemer online' wordt AO",
       W.titel_voorstel("Mehdi & Pioter: Harchitects aannemer online 2405")[0] == "Mehdi & Pioter: [HARC-AO] 2405")
-check("ZL komt voor Mehdi, na ??", W.met_zl("?? Mehdi en Shaniel: [ELEV-LO] Robby") == "?? ZL Mehdi en Shaniel: [ELEV-LO] Robby")
-check("ZL gaat er weer af", W.zonder_zl("?? ZL Mehdi en Shaniel: [ELEV-LO] Robby") == "?? Mehdi en Shaniel: [ELEV-LO] Robby")
+check("ZL komt helemaal vooraan, ook voor ??", W.met_zl("?? Mehdi en Shaniel: [ELEV-LO] Robby") == "ZL ?? Mehdi en Shaniel: [ELEV-LO] Robby")
+check("een ZL die verder staat, schuift naar voren", W.met_zl("?? ZL Mehdi en Shaniel: [ELEV-LO] Robby") == "ZL ?? Mehdi en Shaniel: [ELEV-LO] Robby")
+check("ZL gaat er weer af", W.zonder_zl("ZL ?? Mehdi en Shaniel: [ELEV-LO] Robby") == "?? Mehdi en Shaniel: [ELEV-LO] Robby")
 check("ZL breekt de titelcode niet", W.lees_titel("ZL Mehdi & Pioter: [HARC-AO] 2405")["soort"] == "AO")
 check("ZL staat in de JSON", "ZL" in json.dumps(taken["titelconventie"], ensure_ascii=False))
 

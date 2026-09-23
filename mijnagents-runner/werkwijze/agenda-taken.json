@@ -1,5 +1,5 @@
 {
- "versie": "3.11",
+ "versie": "3.12",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -116,7 +116,7 @@
   "markers": {
    "!!": "buiten",
    "??": "nog niet bevestigd, geel",
-   "ZL": "zonder link: een online gesprek met een externe partij waar nog geen link in staat. Mehdi stuurt de link zelf. De agent zet ZL en haalt het weg zodra er een link in de afspraak staat. Volgorde: !! of ?? eerst, dan ZL, dan Mehdi"
+   "ZL": "zonder link: een online gesprek met een externe partij waar nog geen link in staat. Mehdi stuurt de link zelf. ZL staat ALTIJD HELEMAAL VOORAAN, voor ?? en voor alles, zodat Mehdi het meteen ziet (Mehdi, 23-09-2026). De agent zet ZL en haalt het weg zodra er een link in de afspraak staat"
   },
   "aannemer": "AB/AO: een aannemer van een klant (Mehdi heeft als architect veel afspraken met aannemers). Geen klant, geen leverancier: een eigen soort. Buiten rood, online salie. Mehdi, 23-09-2026"
  },

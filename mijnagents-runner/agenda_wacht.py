@@ -611,14 +611,12 @@ def _heeft_zl(titel):
 
 
 def met_zl(titel):
-    """ZL (zonder link) vooraan, zoals !! en ??: voor 'Mehdi', na de tekens !! en ??."""
-    if _heeft_zl(titel):
+    """ZL (zonder link) helemaal vooraan, voor ?? en voor alles, zodat Mehdi het meteen ziet.
+    Mandaat van Mehdi, 23-09-2026: "die teken van ZL moet van voor komen". Staat ZL al ergens
+    anders in de kop, dan schuift het naar voren."""
+    if titel.startswith("ZL "):
         return titel
-    kop_einde = titel.find(":") if ":" in titel else len(titel)
-    m = re.search(r"\bMehdi\b", titel)
-    if m and m.start() < kop_einde:
-        return titel[:m.start()] + "ZL " + titel[m.start():]
-    return "ZL " + titel
+    return "ZL " + (zonder_zl(titel) if _heeft_zl(titel) else titel)
 
 
 def zonder_zl(titel):
@@ -672,7 +670,7 @@ def zoom_zetten(items, alleen_dag=None):
             continue                      # een taak zonder iemand anders heeft geen link nodig
         wie = ", ".join(namen)
         wijzig = {}
-        if not _heeft_zl(titel):
+        if met_zl(titel) != titel:
             wijzig["summary"] = met_zl(titel)
         if "stuurt de link" not in oms:
             wijzig["description"] = f"Online. Mehdi stuurt de link naar {wie}." + ("\n\n" + oms if oms else "")
