@@ -1945,6 +1945,20 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   niet opnieuw getekend. Nu lost `refreshRefs()` de belofte `refsGeladen` in
   (ook bij een fout) en wachten `loadEmails()`, statistieken en transcripties
   daarop. De cellen houden hun fail-safe: zonder lijst geen label.
+- **Werkplan (migratie 164, 23-09-2026):** paneel Voortgang per domein
+  bovenaan tab 2, op verzoek van Angela ("een planning ... met checks", "ik
+  weet niet waar ik moet starten"). Kleinste domein bovenaan; per domein een
+  balk en wat er ontbreekt; klik = tabel op dat domein en alleen wat nog niet
+  af is. **Af** = Elimineren, of Behouden met doel en verantwoordelijke
+  (`EMAIL_AF_SQL`, gedeeld door `GET /api/emails/voortgang` en de filter
+  `werk=open|af`); Verifieren telt niet. Geen afvinktabel: het vinkje wordt
+  berekend uit het register. Termen `email_werkplan` en `email_af` in het
+  woordenboek. Angela staat sinds 23-09 in `communicatie` (openen) en
+  `communicatie-editors` (bewerken); met alleen de tweede opent de tegel niet.
+  Let op: er bestaan twee migraties met nummer 164 (deze en
+  `164-werker-laatste-antwoord.sql` van een andere sessie). Dat werkt, want
+  `schema_migrations` houdt bestandsnamen bij, maar het volgende nummer is 166
+  zodra `165-transcriptie-proefset.sql` gepusht is.
   **Eerste vulling 88 van de 502**, alleen waar de regel een feit is: het deel
   voor de apenstaart is exact een rolwoord, of exact de naam van iemand in
   `kern.persoon`. Geen "bevat" en geen patroonherkenning: bij "bevat" wordt
