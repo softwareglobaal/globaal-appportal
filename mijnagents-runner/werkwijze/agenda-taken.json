@@ -1,5 +1,5 @@
 {
- "versie": "3.6",
+ "versie": "3.7",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -362,6 +362,10 @@
  "beslissingen": [
   {
    "datum": "2026-09-23",
+   "wat": "interne gesprekken mogen tijdens het rijden, externe alleen geparkeerd. Valt een extern gesprek tijdens een rit, dan komt Mehdi aan voor het begint (heen) of vertrekt hij pas erna (terug). Genk 24-09: vertrek 10:00, aankomst 11:00"
+  },
+  {
+   "datum": "2026-09-23",
    "wat": "Brasserie 360° Genk (HDS prospect) op 24-09 van 11:30 tot 13:55, met het echte verkeer: vertrek thuis 10:30, uiterlijk vertrek Genk 13:55 naar 2616 om 15:00. Google enkel binnen 48 uur; adres met naam vooraan; handmatige rit naar huis telt"
   },
   {
@@ -572,7 +576,15 @@
   "maandag_na_werfbezoek": "op maandag komt Mehdi na werfbezoek 2145 (tot 11:30) naar huis voor de online afspraak van 12:00; afspraak C is voor die maandag bevestigd (22-09-2026)",
   "google_alleen_dichtbij": "Google live verkeer alleen voor ritten die binnen 48 uur vertrekken; verder vooruit de gratis routeplanner maal de filefactor. Gezien 23-09-2026: de dagteller stond om de middag al op 100/100 door verre ritten, zodat de rit van morgen naar Genk geen echt verkeer kreeg",
   "adres_met_naam": "een adres met een naam vooraan ('Brasserie 360°, Stadsplein 16, 3600 Genk') wordt gezocht zonder die naam als het anders niet lukt",
-  "handmatige_thuisrit": "een zelf ingetikte rit naar huis ('Rijden naar huis') telt ook als rit naar huis in de keten"
+  "handmatige_thuisrit": "een zelf ingetikte rit naar huis ('Rijden naar huis') telt ook als rit naar huis in de keten",
+  "gesprekken_in_de_auto": {
+   "intern": "een intern overleg (-IN) mag Mehdi online voeren tijdens het rijden",
+   "extern": "een extern gesprek (klant, prospect, leverancier, B2B, Calendly-boeking) voert hij in de auto alleen geparkeerd, nooit rijdend",
+   "heenrit": "valt een extern gesprek tijdens de heenrit, dan komt hij aan voor dat gesprek begint en doet hij het geparkeerd ter plaatse; de rit eindigt dan op het begin van het gesprek, niet op het begin van de afspraak",
+   "terugrit": "valt een extern gesprek tijdens de rit naar huis, dan doet hij het eerst geparkeerd en vertrekt hij daarna",
+   "voorbeeld": "24-09-2026 Genk: vertrek thuis 10:00, aankomst 11:00, 11:00-11:20 Rem Braspenning geparkeerd, 11:30-13:55 in de brasserie",
+   "mehdi": "23-09-2026"
+  }
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",

@@ -135,8 +135,8 @@ check("een rit naar huis die al in de agenda staat, telt als thuiskomen",
       "if thuisrit_tussen(e_, s_volgend):" in _bron)
 check("afspraak C: iets achter het bureau tussen twee buitenafspraken is een vraag, geen stille keuze",
       "bureau = aan_bureau_tussen(e_, s_volgend)" in _bron and "VRAAG om" in _bron)
-check("een rit hoort bij precies één afspraak: de heenrit eindigt op haar begin",
-      'datetime.fromisoformat(x["einde"]) == start' in _bron and "x = heenblok()" in _bron and "x = terugblok()" in _bron)
+check("een rit hoort bij precies één afspraak: de heenrit eindigt op haar begin of op een extern gesprek ervoor",
+      'aankomsten = {start} |' in _bron and "x = heenblok()" in _bron and "x = terugblok()" in _bron)
 check("nooit vertrekken voor de vorige afspraak gedaan is",
       "rit_start = vorige_einde" in _bron and "TE KRAP" in _bron)
 check("nooit twee rondes tegelijk", "_slot = slot_nemen()" in _bron)
@@ -214,6 +214,14 @@ _c = {}
 check("een adres met een naam vooraan wordt gevonden", bool(W.coord("Brasserie 360°, Stadsplein 16, 3600 Genk", _c)))
 check("een handmatige 'Rijden naar huis' telt als rit naar huis",
       r'\bnaar huis\b' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+
+# Extern gesprek alleen geparkeerd, intern mag rijdend (23-09-2026).
+_bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("een extern gesprek tijdens de heenrit vervroegt de aankomst",
+      "tijdens = [z for z in externe_gesprekken(vertrek, aankomst)" in _bron and '"end": {"dateTime": aankomst.isoformat()}' in _bron)
+check("een intern overleg telt niet als extern gesprek", 'ix["soort"] in ("PB", "KB", "LB", "IN")' in _bron)
+check("op de terugweg wacht de rit tot het externe gesprek voorbij is", "terug_start = max(z[1] for z in tijdens)" in _bron)
+check("de regel staat in de JSON", "geparkeerd" in json.dumps(taken, ensure_ascii=False))
 
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())

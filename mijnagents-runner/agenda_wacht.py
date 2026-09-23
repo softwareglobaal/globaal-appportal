@@ -986,6 +986,31 @@ def reistijd_zetten(items, alleen_dag=None):
     # tussen twee buitenafspraken iets achter het bureau staat (afspraak C): dan reken ik
     # dat hij naar huis gaat, zoals op maandag 21-09-2026, en vraag ik het hem. Anders
     # rijdt hij rechtstreeks door naar de volgende.
+    def extern_gesprek(x):
+        """Een extern online gesprek: klant, prospect, leverancier, B2B of een Calendly-boeking.
+        Dat voert Mehdi in de auto alleen geparkeerd, nooit rijdend. Een intern overleg mag wel
+        tijdens het rijden. Mandaat van Mehdi, 23-09-2026."""
+        if "T" not in x.get("start", "") or x.get("hele_dag"):
+            return False
+        ix = lees_titel(x.get("titel") or "")
+        if ix["reistijd"] or ix["buiten"] or ix["soort"] in ("PB", "KB", "LB", "IN"):
+            return False
+        return ix["soort"] in ("KO", "PO", "LO", "B2B") or x.get("kalender") == "zoomafspraken@gmail.com"
+
+    def externe_gesprekken(t0, t1):
+        """Externe gesprekken die [t0, t1) raken, als (begin, einde, afspraak), op begin gesorteerd."""
+        uit = []
+        for x in items:
+            if not extern_gesprek(x):
+                continue
+            try:
+                xs, xe = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"])
+            except ValueError:
+                continue
+            if xs < t1 and xe > t0:
+                uit.append((xs, xe, x))
+        return sorted(uit, key=lambda z: z[0])
+
     naar_huis_na = {}
     for rij in per_dag.values():
         for i, (s_, e_, a_, *_r) in enumerate(rij):
@@ -1056,8 +1081,11 @@ def reistijd_zetten(items, alleen_dag=None):
             return "OSRM" in (x.get("omschrijving") or "")
 
         def heenblok():
+            # aankomen kan op het begin van de afspraak, of eerder: op het begin van een extern
+            # gesprek dat Mehdi geparkeerd ter plaatse doet
+            aankomsten = {start} | {z[0] for z in externe_gesprekken(start - timedelta(hours=3), start) if z[0] < start}
             for x in reistijden:
-                if x["kalender"] == a["kalender"] and "T" in x["start"] and datetime.fromisoformat(x["einde"]) == start:
+                if x["kalender"] == a["kalender"] and "T" in x["start"] and datetime.fromisoformat(x["einde"]) in aankomsten:
                     return x
             for x in reistijden:
                 if (x["kalender"] == a["kalender"] and "T" in x["start"] and not _mijn(x)
@@ -1066,8 +1094,9 @@ def reistijd_zetten(items, alleen_dag=None):
             return None
 
         def terugblok():
+            vertrekken = {einde} | {z[1] for z in externe_gesprekken(einde, einde + timedelta(hours=3)) if z[1] > einde}
             for x in reistijden:
-                if x["kalender"] == a["kalender"] and "T" in x["start"] and datetime.fromisoformat(x["start"]) == einde:
+                if x["kalender"] == a["kalender"] and "T" in x["start"] and datetime.fromisoformat(x["start"]) in vertrekken:
                     return x
             for x in reistijden:
                 if (x["kalender"] == a["kalender"] and "T" in x["start"] and not _mijn(x)
@@ -1092,14 +1121,45 @@ def reistijd_zetten(items, alleen_dag=None):
         # Nooit vertrekken voor de vorige afspraak gedaan is: dinsdag ben je tot 17:40 bij
         # oma, dus de rit naar het zwembad begint om 17:40, ook als de rijtijd met buffer
         # langer is. Past de rit zelfs zonder buffer niet, dan meld ik dat.
-        rit_start = start - timedelta(minutes=heen)
+        # Valt er een extern gesprek tijdens de heenrit, dan komt hij aan voor het begint en
+        # doet hij het geparkeerd ter plaatse. Gezien 23-09-2026: Genk, aankomst 11:00 voor
+        # het gesprek met Rem Braspenning, pas om 11:30 de brasserie in.
+        aankomst, reden_aankomst = start, None
+        for _ in range(3):
+            vertrek = aankomst - timedelta(minutes=heen)
+            tijdens = [z for z in externe_gesprekken(vertrek, aankomst) if vertrek <= z[0] < aankomst]
+            if not tijdens:
+                break
+            aankomst, reden_aankomst = tijdens[0][0], tijdens[0][2]
+            heen, fh = rijtijd_min(vertrek_van, doel, aankomst - timedelta(minutes=heen))
+        lopend = [z for z in externe_gesprekken(aankomst - timedelta(minutes=heen), aankomst)
+                  if z[0] < aankomst - timedelta(minutes=heen)]
+        if lopend:
+            regels.append(f"{a['start'][:16]} {a['titel'][:40]}: LET OP, extern gesprek "
+                          f"'{lopend[0][2]['titel'][:30]}' loopt nog bij vertrek; rijdend kan dat niet")
+        if reden_aankomst:
+            regels.append(f"{a['start'][:16]} {a['titel'][:40]}: aankomst {aankomst:%H:%M} in plaats van "
+                          f"{start:%H:%M}, want '{reden_aankomst['titel'][:30]}' doe je geparkeerd, niet rijdend")
+        rit_start = aankomst - timedelta(minutes=heen)
         if vorige_einde and rit_start < vorige_einde:
-            ruimte = (start - vorige_einde).total_seconds() / 60
+            ruimte = (aankomst - vorige_einde).total_seconds() / 60
             if ruimte < heen - BUFFER_MIN:
                 regels.append(f"{a['start'][:16]} {a['titel'][:40]}: TE KRAP, rijden duurt {heen - BUFFER_MIN} min, "
                               f"er is {ruimte:.0f} min na de vorige afspraak")
             rit_start = vorige_einde
         vertrek_min = int((start - rit_start).total_seconds() // 60)
+        # Terug: valt er een extern gesprek tijdens de rit naar huis, dan doet hij het eerst
+        # geparkeerd en vertrekt hij daarna.
+        terug_start = einde
+        if is_laatste and terug:
+            for _ in range(3):
+                tijdens = [z for z in externe_gesprekken(terug_start, terug_start + timedelta(minutes=terug)) if z[1] > terug_start]
+                if not tijdens:
+                    break
+                terug_start = max(z[1] for z in tijdens)
+            if terug_start != einde:
+                regels.append(f"{a['start'][:16]} {a['titel'][:40]}: vertrek naar huis pas {terug_start:%H:%M}, "
+                              f"eerst een extern gesprek geparkeerd")
 
         def eigen(x):
             return "OSRM" in (x.get("omschrijving") or "")
@@ -1141,23 +1201,23 @@ def reistijd_zetten(items, alleen_dag=None):
             x = heenblok()
             if x:
                 al += 1
-                if bijwerken(x, rit_start, start, uitleg_h, f"🚗 Reistijd: {van_plaats} → {plaats}",
+                if bijwerken(x, rit_start, aankomst, uitleg_h, f"🚗 Reistijd: {van_plaats} → {plaats}",
                              [{"method": "popup", "minutes": 5}]):
                     gemaakt += 1
             else:
                 _insert(a["kalender"], {"summary": f"🚗 Reistijd: {van_plaats} → {plaats}", "start": {"dateTime": rit_start.isoformat()},
-                                        "end": {"dateTime": start.isoformat()}, "description": uitleg_h, **kleur}, tok)
+                                        "end": {"dateTime": aankomst.isoformat()}, "description": uitleg_h, **kleur}, tok)
                 gemaakt += 1
             x = terugblok() if is_laatste else None
             if not is_laatste:
                 regels.append(f"{a['start'][:16]} {a['titel'][:44]}: geen rit naar huis, je gaat door naar de volgende afspraak")
             if x:
                 al += 1
-                if bijwerken(x, einde, einde + timedelta(minutes=terug), uitleg_t, f"🚗 Reistijd: {plaats} → thuis", []):
+                if bijwerken(x, terug_start, terug_start + timedelta(minutes=terug), uitleg_t, f"🚗 Reistijd: {plaats} → thuis", []):
                     gemaakt += 1
             elif is_laatste:
-                _insert(a["kalender"], {"summary": f"🚗 Reistijd: {plaats} → thuis", "start": {"dateTime": einde.isoformat()},
-                                        "end": {"dateTime": (einde + timedelta(minutes=terug)).isoformat()}, "description": uitleg_t,
+                _insert(a["kalender"], {"summary": f"🚗 Reistijd: {plaats} → thuis", "start": {"dateTime": terug_start.isoformat()},
+                                        "end": {"dateTime": (terug_start + timedelta(minutes=terug)).isoformat()}, "description": uitleg_t,
                                         **{**rit_kleur, "reminders": {"useDefault": False, "overrides": []}}}, tok)
                 gemaakt += 1
             _patch(a, {"reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": vertrek_min + 5}]}}, tok)
@@ -1171,16 +1231,21 @@ def reistijd_zetten(items, alleen_dag=None):
     # heenrit eindigt op het begin van zijn afspraak, een terugrit begint op het einde.
     # Ik verwijder hem niet zelf; dat beslist Mehdi.
     grenzen = set()
+    begins_alle, eindes_alle = set(), set()
     for x in items:
         if "T" in x.get("start", "") and not lees_titel(x["titel"])["reistijd"]:
             grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
             grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
+            if extern_gesprek(x):
+                begins_alle.add(datetime.fromisoformat(x["start"]))
+                eindes_alle.add(datetime.fromisoformat(x["einde"]))
     for x in reistijden:
         if ("OSRM" not in (x.get("omschrijving") or "") or "T" not in x.get("start", "")
                 or (alleen_dag and x["start"][:10] != alleen_dag)):
             continue
         s0, e0 = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"])
-        if s0 >= nu and (x["kalender"], e0) not in grenzen and (x["kalender"], s0) not in grenzen:
+        if (s0 >= nu and (x["kalender"], e0) not in grenzen and (x["kalender"], s0) not in grenzen
+                and e0 not in begins_alle and s0 not in eindes_alle):
             regels.append(f"{x['start'][:16]} {x['titel'][:50]}: rit zonder afspraak")
     _cache_bewaren(cache)
     return gemaakt, al, geen_adres, fout, regels
