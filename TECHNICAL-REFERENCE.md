@@ -1988,6 +1988,20 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   opmerking achter **Notitie**, neutraal en pas na een klik. Het totaalbeeld
   toont elk domein dat binnen 60 dagen vervalt in rood, klikbaar. Termen
   `email_pakket_verbruik`, `email_vervaldatum`, `email_domein_notitie`.
+- **Back-up voor de bron van de waarheid (23-09-2026):** code vastgepind met
+  tag `backup-2026-09-23` in globaal-communicatie (`ca14cee`),
+  globaal-organisatie (`84d306d`) en globaal-appportal (`ff6b988`); data in
+  `~/backups/dashboards-communicatie-kern-organisatie-20260923-1250.dump`
+  (schema's communicatie, kern en organisatie, 73 tabellen, 3 MB, chmod 600,
+  met persoonsgegevens: blijft op de VM). **Dump per schema met
+  `--extension citext`**: zonder dat viel het terugzetten om met 69 fouten,
+  want `citext` staat in `public` en elke tabel met een citext-kolom, plus
+  alles wat ervan afhangt, faalde. Getest door terug te zetten in een lege
+  database: 0 fouten, negen tellingen gelijk aan live. Terugdraaien: eerst in
+  een lege database zetten zoals getest en dan per tabel terugzetten, nooit
+  `--clean` rechtstreeks op appportal (dat probeert ook de extensie te
+  verwijderen). Het document "Bron van de waarheid" staat als gedeeld
+  Claude-document; besluiten die daar vallen, komen hier.
   **Eerste vulling 88 van de 502**, alleen waar de regel een feit is: het deel
   voor de apenstaart is exact een rolwoord, of exact de naam van iemand in
   `kern.persoon`. Geen "bevat" en geen patroonherkenning: bij "bevat" wordt
