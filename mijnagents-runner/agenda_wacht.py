@@ -339,12 +339,24 @@ def herinneringen_zetten(items, alleen_dag=None):
                 gezet += 1
             elif gewenst:
                 al += 1
-            elif not gewenst and mijn and not (info["buiten"] or info["soort"] in ("PB", "KB", "LB")):
-                # Op een buitenafspraak is die ene melding het vertrekmoment plus vijf, gezet
-                # door reistijd_zetten. Die haal ik niet weg. Gezien 21-09-2026: de melding
-                # van de heenritten en van de zwemles van Lara verdween elke ronde.
-                _patch(a, {"reminders": {"useDefault": True, "overrides": []}}, tok)
-                weg += 1
+            elif not gewenst:
+                # Stil is expliciet GEEN melding, niet de standaard van de agenda: die is op de
+                # werkagenda 30 minuten en op Lara 10 minuten. Gezien 23-09-2026: "stil maken"
+                # zette alles terug op die standaard, zodat 21 interne overleggen per week 30 min
+                # vooraf rinkelden en de marker van Lara om 23:50 de avond ervoor.
+                STIL = {"useDefault": False, "overrides": []}
+                standaard = r.get("useDefault", True) and not eigen
+                buitenachtig = info["buiten"] or info["soort"] in ("PB", "KB", "LB")
+                if mijn and (a.get("hele_dag") or not buitenachtig):
+                    # een melding die ik vroeger zelf zette; op een buitenafspraak is die ene
+                    # melding het vertrekmoment plus vijf (reistijd_zetten), die laat ik staan
+                    _patch(a, {"reminders": STIL}, tok)
+                    weg += 1
+                elif standaard and (info["soort"] == "IN" or a.get("hele_dag")):
+                    # intern en hele-dag-items blijven stil; de agenda-standaard telt niet als
+                    # een melding die Mehdi zelf zette
+                    _patch(a, {"reminders": STIL}, tok)
+                    weg += 1
         except Exception as e:  # noqa: BLE001
             fout += 1
             print("herinnering mislukt:", a["titel"][:40], type(e).__name__, file=sys.stderr)
@@ -1147,10 +1159,26 @@ def reistijd_zetten(items, alleen_dag=None):
                 regels.append(f"{a['start'][:16]} {a['titel'][:40]}: TE KRAP, rijden duurt {heen - BUFFER_MIN} min, "
                               f"er is {ruimte:.0f} min na de vorige afspraak")
             rit_start = vorige_einde
+        # Een schatting overschrijft nooit een echte meting. Staat er al een eigen rit met live
+        # verkeer van Google en heb ik nu alleen de schatting (dagteller op), dan houd ik de live
+        # rijtijd. Gezien 23-09-2026: de rit naar Genk schoof zo van 10:00 naar 09:45.
+        _x = heenblok()
+        _oms = (_x or {}).get("omschrijving") or ""
+        if _x and "OSRM" in _oms and "live verkeer Google" in _oms and fh != "live":
+            heen = int((datetime.fromisoformat(_x["einde"]) - datetime.fromisoformat(_x["start"])).total_seconds() // 60)
+            fh = "live"
+            rit_start = aankomst - timedelta(minutes=heen)
+            if vorige_einde and rit_start < vorige_einde:
+                rit_start = vorige_einde
         vertrek_min = int((start - rit_start).total_seconds() // 60)
         # Terug: valt er een extern gesprek tijdens de rit naar huis, dan doet hij het eerst
         # geparkeerd en vertrekt hij daarna.
         terug_start = einde
+        _t = terugblok() if is_laatste else None
+        _toms = (_t or {}).get("omschrijving") or ""
+        if _t and "OSRM" in _toms and "live verkeer Google" in _toms and ft != "live":
+            terug = int((datetime.fromisoformat(_t["einde"]) - datetime.fromisoformat(_t["start"])).total_seconds() // 60)
+            ft = "live"
         if is_laatste and terug:
             for _ in range(3):
                 tijdens = [z for z in externe_gesprekken(terug_start, terug_start + timedelta(minutes=terug)) if z[1] > terug_start]

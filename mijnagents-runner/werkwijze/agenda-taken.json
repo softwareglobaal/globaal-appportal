@@ -1,5 +1,5 @@
 {
- "versie": "3.7",
+ "versie": "3.8",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -185,7 +185,8 @@
   "buiten_minuten": 30,
   "vertrek": "een buitenafspraak krijgt daarbovenop een melding op het vertrekmoment plus vijf minuten, en het reistijdblok draagt zelf ook een melding",
   "opruimen": "een eerdere melding van de agent op iets wat nu stil moet blijven haalt hij weg; een melding die Mehdi zelf zette blijft staan",
-  "ritten": "de heenrit draagt een melding 5 minuten vooraf, de terugrit geen. De gewone herinneringsregel raakt ritten niet aan en haalt de vertrekmelding van een buitenafspraak niet weg. De herinneringen komen voor de ritten, zodat de vertrekmelding het laatste woord heeft. Gezien 21-09-2026: de melding op elke heenrit en op de zwemles van Lara verdween elke ronde"
+  "ritten": "de heenrit draagt een melding 5 minuten vooraf, de terugrit geen. De gewone herinneringsregel raakt ritten niet aan en haalt de vertrekmelding van een buitenafspraak niet weg. De herinneringen komen voor de ritten, zodat de vertrekmelding het laatste woord heeft. Gezien 21-09-2026: de melding op elke heenrit en op de zwemles van Lara verdween elke ronde",
+  "stil": "stil is expliciet GEEN melding, niet de standaard van de agenda: die is op de werkagenda 30 minuten en op Lara 10 minuten. Tot 23-09-2026 zette 'stil maken' alles terug op die standaard, zodat interne overleggen 30 min vooraf rinkelden en de Lara-marker om 23:50 de avond ervoor. Een intern overleg of een hele-dag-item op de agenda-standaard wordt nu ook stil gemaakt; een melding die Mehdi zelf zette (andere minuten) blijft staan"
  },
  "grendels": [
   {
@@ -279,6 +280,11 @@
  },
  "openstaand": [
   {
+   "wat": "Calendly-sjablonen per boekingstype omzetten naar de nieuwe codes (HA -> HARC, UNABO -> UNAB, TKN -> TKNB); zoom-dossier leest beide al",
+   "wie": "Mehdi",
+   "wanneer": "zodra het kan"
+  },
+  {
    "wat": "rechtbank maandag 28-09 (ondernemingsrechtbank/vennootschappen Leuven) loopt tot 16:00 en botst met Lara ophalen 16:00. Welke firma en welk adres, en wie haalt Lara die dag op?",
    "wie": "Mehdi",
    "wanneer": "voor 28-09"
@@ -360,6 +366,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-23",
+   "wat": "Genk op [HDSS-PB] (HDSI niet actief). Griffie 25-09 op [HARC]: dezelfde zaak als de rechtbank van 28-09. Stil is voortaan expliciet geen melding (21 interne overleggen per week rinkelden via de agenda-standaard van 30 min). Een schatting overschrijft nooit een live meting. 'Mehdi : Sales' op 25-09 is een spook uit januari 2023"
+  },
   {
    "datum": "2026-09-23",
    "wat": "interne gesprekken mogen tijdens het rijden, externe alleen geparkeerd. Valt een extern gesprek tijdens een rit, dan komt Mehdi aan voor het begint (heen) of vertrekt hij pas erna (terug). Genk 24-09: vertrek 10:00, aankomst 11:00"
@@ -584,7 +594,8 @@
    "terugrit": "valt een extern gesprek tijdens de rit naar huis, dan doet hij het eerst geparkeerd en vertrekt hij daarna",
    "voorbeeld": "24-09-2026 Genk: vertrek thuis 10:00, aankomst 11:00, 11:00-11:20 Rem Braspenning geparkeerd, 11:30-13:55 in de brasserie",
    "mehdi": "23-09-2026"
-  }
+  },
+  "meting_boven_schatting": "een schatting (gratis routeplanner x filefactor) overschrijft nooit een rit die met live verkeer van Google gemeten is. Gezien 23-09-2026: de rit naar Genk schoof zo van 10:00 naar 09:45 toen de dagteller op was"
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30",
@@ -874,5 +885,10 @@
   "aanleiding": "Mehdi, 22-09-2026: B2B toont een externe professionele partij waar wij nog geen klant van zijn; bij een leverancier zijn we dat al. En bij ONZE klanten moeten we particulier en professioneel onderscheiden; professioneel is wie terugkerende opdrachten geeft",
   "gedaan": "B2B is nu een herkende soort met de kleur lavendel",
   "nog_te_beslissen": "de splitsing van onze klanten: KB/KO blijft de particuliere klant, en een nieuwe code (voorstel ZB/ZO, van zakelijk) voor de professionele klant met terugkerende opdrachten, kleur blauwbes. Ook nog te beslissen of prospecten op dezelfde manier gesplitst worden"
+ },
+ "hds": {
+  "regel": "HDS-afspraken krijgen de code HDSS. HDSI is momenteel niet actief (Mehdi doet niets voor HDSI)",
+  "let_op": "de volledige naam van HDSS nooit tonen aan klanten of prospecten; alleen de code",
+  "mehdi": "23-09-2026"
  }
 }

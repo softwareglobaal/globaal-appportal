@@ -223,6 +223,20 @@ check("een intern overleg telt niet als extern gesprek", 'ix["soort"] in ("PB", 
 check("op de terugweg wacht de rit tot het externe gesprek voorbij is", "terug_start = max(z[1] for z in tijdens)" in _bron)
 check("de regel staat in de JSON", "geparkeerd" in json.dumps(taken, ensure_ascii=False))
 
+# Een schatting overschrijft nooit een live meting; een hele-dag item krijgt geen melding (23-09-2026).
+_bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("een schatting overschrijft nooit een live meting van Google",
+      '"live verkeer Google" in _oms and fh != "live"' in _bron and '"live verkeer Google" in _toms and ft != "live"' in _bron)
+check("een melding van de agent op een hele-dag item wordt weggehaald, ook met !!",
+      'mijn and (a.get("hele_dag") or not' in _bron)
+
+# Stil is expliciet geen melding, niet de agenda-standaard (werk 30 min, Lara 10 min). 23-09-2026.
+_bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("stil maken zet expliciet geen melding, niet de agenda-standaard",
+      'STIL = {"useDefault": False, "overrides": []}' in _bron and '"reminders": {"useDefault": True, "overrides": []}' not in _bron)
+check("een intern overleg op de agenda-standaard wordt stil gemaakt",
+      'elif standaard and (info["soort"] == "IN" or a.get("hele_dag"))' in _bron)
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 
