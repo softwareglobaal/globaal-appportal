@@ -1938,6 +1938,13 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   ging `finance` naast `Finance` erdoor. Open: een waarde **hernoemen** in
   Keuzelijsten past de rijen die hem gebruiken niet aan; ze tonen dan
   "(niet in de lijst)".
+  **Laadvolgorde (23-09-2026):** `bind()` start de tab uit de URL al voordat
+  `/api/refs` binnen is. Wie herlaadde op `#email` kreeg daardoor bij alle 90
+  ingevulde doelen "(niet in de lijst)", en eerder "naar buiten" op alle 31
+  doorstuuradressen: de rijen vergeleken met een lege lijst en werden daarna
+  niet opnieuw getekend. Nu lost `refreshRefs()` de belofte `refsGeladen` in
+  (ook bij een fout) en wachten `loadEmails()`, statistieken en transcripties
+  daarop. De cellen houden hun fail-safe: zonder lijst geen label.
   **Eerste vulling 88 van de 502**, alleen waar de regel een feit is: het deel
   voor de apenstaart is exact een rolwoord, of exact de naam van iemand in
   `kern.persoon`. Geen "bevat" en geen patroonherkenning: bij "bevat" wordt
