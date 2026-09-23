@@ -1976,6 +1976,18 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   `164-werker-laatste-antwoord.sql` van een andere sessie). Dat werkt, want
   `schema_migrations` houdt bestandsnamen bij, maar het volgende nummer is 166
   zodra `165-transcriptie-proefset.sql` gepusht is.
+- **Kostenregel als vaste velden (migratie 166, 23-09-2026):** de
+  `opmerking` van `email_domein` stond als gele waarschuwing onder de regel.
+  Dat was analyse-proza uit migratie 159 op 11 van de 17 domeinen, met op
+  unabo.be een tweede verbruiksgetal (35,4) naast het getal in de regel (30,1),
+  en de enige echte waarschuwing (qoppa.be vervalt) bestond alleen als zin. Nu:
+  kolom **`vervaldatum`** (one.com `expirationDate`; qoppa.be 29-09-2026), en
+  per domein vaste velden in vaste volgorde (Pakket, Verbruik van het hele
+  pakket, Jaarbedrag, Verlengdatum of Vervaldatum), labels uit een vaste set
+  (vervalt over n dagen, boven quotum gedekt of niet, duurste domein) en de
+  opmerking achter **Notitie**, neutraal en pas na een klik. Het totaalbeeld
+  toont elk domein dat binnen 60 dagen vervalt in rood, klikbaar. Termen
+  `email_pakket_verbruik`, `email_vervaldatum`, `email_domein_notitie`.
   **Eerste vulling 88 van de 502**, alleen waar de regel een feit is: het deel
   voor de apenstaart is exact een rolwoord, of exact de naam van iemand in
   `kern.persoon`. Geen "bevat" en geen patroonherkenning: bij "bevat" wordt
