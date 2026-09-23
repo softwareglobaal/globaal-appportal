@@ -1930,6 +1930,14 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   ingevuld**, want juist die groep is het werk; doelen die nergens voorkomen
   krijgen geen regel (`per_doel` in de stats, ontbrekende sleutel is nul).
   Doel staat ook in de export en is doorzoekbaar.
+  **Nieuw doel toevoegen** kan op de plek waar je het mist: "+ Nieuw doel..."
+  onderaan de keuze in de rij, het venster en de bulkbalk (`POST /api/lists`,
+  categorie Doel; live-sync zet het meteen bij collega's). `POST` en `PUT
+  /api/lists` weigeren sindsdien een tweeling ongeacht hoofdletters en
+  spaties (409 met `bestaande`, de client kiest dan die spelling); daarvoor
+  ging `finance` naast `Finance` erdoor. Open: een waarde **hernoemen** in
+  Keuzelijsten past de rijen die hem gebruiken niet aan; ze tonen dan
+  "(niet in de lijst)".
   **Eerste vulling 88 van de 502**, alleen waar de regel een feit is: het deel
   voor de apenstaart is exact een rolwoord, of exact de naam van iemand in
   `kern.persoon`. Geen "bevat" en geen patroonherkenning: bij "bevat" wordt
