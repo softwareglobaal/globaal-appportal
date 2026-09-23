@@ -219,7 +219,7 @@ check("een handmatige 'Rijden naar huis' telt als rit naar huis",
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("een extern gesprek tijdens de heenrit vervroegt de aankomst",
       "tijdens = [z for z in externe_gesprekken(vertrek, aankomst)" in _bron and '"end": {"dateTime": aankomst.isoformat()}' in _bron)
-check("een intern overleg telt niet als extern gesprek", 'ix["soort"] in ("PB", "KB", "LB", "IN")' in _bron)
+check("een intern overleg telt niet als extern gesprek", 'ix["soort"] in BUITEN_SOORTEN + ("IN",)' in _bron)
 check("op de terugweg wacht de rit tot het externe gesprek voorbij is", "terug_start = max(z[1] for z in tijdens)" in _bron)
 check("de regel staat in de JSON", "geparkeerd" in json.dumps(taken, ensure_ascii=False))
 
@@ -247,15 +247,28 @@ check("een leverancier uit de lijst wordt [ALGE-LO]",
 check("een titel zonder dubbelpunt wordt niet blind herschreven", W.titel_voorstel("Mehdi, (HARC- aanne) Pioter 2405")[0] is None)
 check("de agent zet zelf geen Zoom-link zolang de juiste niet gekend is", W.VASTE_ZOOM == "")
 check("een online gesprek krijgt de notitie dat Mehdi de link stuurt",
-      'notitie = f"Online. Mehdi stuurt de link naar {wie}."' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+      'f"Online. Mehdi stuurt de link naar {wie}."' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
 check("de zoom-functie wijzigt de locatie niet",
       '"location": VASTE_ZOOM' not in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
 _zb = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("geen notitie bij bellen, Calendly of terugkerende overleggen",
-      'bel(t|len)?' in _zb and 'a.get("_terugkerend") or a.get("_conferentie")' in _zb)
+      'bel(t|len)?' in _zb and 'a.get("_terugkerend")' in _zb and 'bool(a.get("_conferentie"))' in _zb)
 
 check("een adres uit de projectmap komt ook in de afspraak zelf",
       'bron_adres == "projectmap" and fysiek and not (a.get("locatie") or "").strip()' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+
+# Aannemer (AB/AO) en ZL = zonder link (23-09-2026).
+_a = W.lees_titel("Mehdi & Pioter: [HARC-AO] 2405 - aannemer van Dorien")
+check("[HARC-AO] is aannemer online, kleur salie", _a["soort"] == "AO" and W.kleur_gewenst({"kalender": W.WERKAGENDA}, _a) == "2")
+check("[HARC-AB] is aannemer buiten, rood", W.lees_titel("!! Mehdi: [HARC-AB] 2405")["buiten"]
+      and W.kleur_gewenst({"kalender": W.WERKAGENDA}, W.lees_titel("!! Mehdi: [HARC-AB] 2405")) == "11")
+check("de soorten komen uit een centrale lijst", "AB" in W.BUITEN_SOORTEN and "AO" in W.EXTERN_ONLINE)
+check("vrije tekst 'aannemer online' wordt AO",
+      W.titel_voorstel("Mehdi & Pioter: Harchitects aannemer online 2405")[0] == "Mehdi & Pioter: [HARC-AO] 2405")
+check("ZL komt voor Mehdi, na ??", W.met_zl("?? Mehdi en Shaniel: [ELEV-LO] Robby") == "?? ZL Mehdi en Shaniel: [ELEV-LO] Robby")
+check("ZL gaat er weer af", W.zonder_zl("?? ZL Mehdi en Shaniel: [ELEV-LO] Robby") == "?? Mehdi en Shaniel: [ELEV-LO] Robby")
+check("ZL breekt de titelcode niet", W.lees_titel("ZL Mehdi & Pioter: [HARC-AO] 2405")["soort"] == "AO")
+check("ZL staat in de JSON", "ZL" in json.dumps(taken["titelconventie"], ensure_ascii=False))
 
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())

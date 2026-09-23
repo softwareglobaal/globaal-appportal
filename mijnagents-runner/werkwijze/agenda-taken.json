@@ -1,5 +1,5 @@
 {
- "versie": "3.10",
+ "versie": "3.11",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -57,6 +57,8 @@
   "vorm": "Mehdi: !! [FIRMA-SOORT] TYPE nummer - klant, straat nummer, postcode gemeente",
   "voorbeeld": "Mehdi: !! [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen",
   "soorten": {
+   "AB": "aannemer buiten",
+   "AO": "aannemer online",
    "B2B": "professioneel extern, wij nog geen klant",
    "IN": "intern",
    "KB": "klant buiten",
@@ -110,7 +112,13 @@
    "EE": "Energie Efficiënt (ENEF); Mehdi schreef dat los in titels zoals 'AI & EE'"
   },
   "firma_afleiden": "staat er geen firmacode in een interne titel, dan kijkt de agent welke firma's de genoemde mensen gemeen hebben volgens 'diensten voor'. Is dat er precies een, dan stelt hij die voor. Zijn het er meer, dan noemt hij ze allebei en vraagt hij het",
-  "firma_afleiden_uitgebreid": "staat er geen firmacode, dan stelt de agent er een voor: een projectnummer dat in de H-Architects-projectmap staat -> [HARC]; een leverancier uit externe-relaties (boekhouder Nadien/Nadine, Wally) -> [ALGE]; anders de firma van de genoemde personen via 'diensten voor' op organisatie.globaal.be"
+  "firma_afleiden_uitgebreid": "staat er geen firmacode, dan stelt de agent er een voor: een projectnummer dat in de H-Architects-projectmap staat -> [HARC]; een leverancier uit externe-relaties (boekhouder Nadien/Nadine, Wally) -> [ALGE]; anders de firma van de genoemde personen via 'diensten voor' op organisatie.globaal.be",
+  "markers": {
+   "!!": "buiten",
+   "??": "nog niet bevestigd, geel",
+   "ZL": "zonder link: een online gesprek met een externe partij waar nog geen link in staat. Mehdi stuurt de link zelf. De agent zet ZL en haalt het weg zodra er een link in de afspraak staat. Volgorde: !! of ?? eerst, dan ZL, dan Mehdi"
+  },
+  "aannemer": "AB/AO: een aannemer van een klant (Mehdi heeft als architect veel afspraken met aannemers). Geen klant, geen leverancier: een eigen soort. Buiten rood, online salie. Mehdi, 23-09-2026"
  },
  "kleuren": {
   "grondregel": "de kleur zegt waarvóór Mehdi ergens is, de twee uitroeptekens zeggen dát hij naar buiten gaat. Dat zijn twee verschillende dingen. Een afspraak kan nooit kleurloos zijn: ze is werk, privé of Lara.",
@@ -151,9 +159,14 @@
      "naam": "banaan, geel"
     },
     {
-     "wanneer": "buiten: !! of een dienst die per definitie buiten is, of soort KB, PB of LB",
+     "wanneer": "buiten: !! of een dienst die per definitie buiten is, of soort KB, PB, LB of AB",
      "kleur": "11",
      "naam": "tomaat, rood"
+    },
+    {
+     "wanneer": "soort AO, aannemer online",
+     "kleur": "2",
+     "naam": "salie"
     },
     {
      "wanneer": "soort LO, leverancier online, geld dat buitengaat",
@@ -371,6 +384,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-23",
+   "wat": "nieuwe soort AB/AO voor aannemers (buiten rood, online salie). Nieuwe marker ZL (zonder link) naast !! en ??: de agent zet hem bij een online gesprek met een externe partij zonder link, en haalt hem weg zodra er een link staat. Mehdi stuurt de link zelf"
+  },
   {
    "datum": "2026-09-23",
    "wat": "geen Zoom-link zetten zolang de juiste niet gekend is; alleen de notitie dat Mehdi de link stuurt. De drie links van 30-09 zijn teruggedraaid"

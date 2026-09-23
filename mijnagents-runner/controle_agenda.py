@@ -176,7 +176,7 @@ for a in items:
         continue
     for reden in W.titelfouten(a, i):
         per_fout.setdefault(reden, []).append(f"{a['start'][:16]} {a['titel'][:58]}")
-    if i["buiten"] or i["soort"] in ("PB", "KB", "LB"):
+    if i["buiten"] or i["soort"] in W.BUITEN_SOORTEN:
         # Niet alleen kijken of er iets ingevuld staat: de vraag is of de agent er
         # echt een rijtijd mee kan berekenen. Op 20-09-2026 stond "3010 Kessel-Lo"
         # keurig in de agenda en kon er toch geen rit van gemaakt worden.
