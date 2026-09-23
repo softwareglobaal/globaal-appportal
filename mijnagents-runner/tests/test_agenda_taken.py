@@ -205,6 +205,16 @@ check("B2B is lavendel, de lichte versie van leverancier-paars",
       W.kleur_gewenst({"kalender": "zoomafspraken@gmail.com"}, _b) == "1")
 check("B2B staat in de soortenlijst", "B2B" in W.SOORT)
 
+# Google alleen voor ritten binnen 48 uur, zodat de dagteller niet opgaat aan verre ritten (23-09-2026).
+check("Google alleen voor ritten binnen 48 uur",
+      "dichtbij = vertrek <= datetime.now().astimezone() + timedelta(hours=48)" in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+
+# Een naam vooraan in het adres, en een handmatige rit naar huis (23-09-2026).
+_c = {}
+check("een adres met een naam vooraan wordt gevonden", bool(W.coord("Brasserie 360°, Stadsplein 16, 3600 Genk", _c)))
+check("een handmatige 'Rijden naar huis' telt als rit naar huis",
+      r'\bnaar huis\b' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

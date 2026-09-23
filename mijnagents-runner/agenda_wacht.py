@@ -627,6 +627,15 @@ def coord(adres, cache):
                          "countrycodes": "be,nl"})
         pogingen.append({"q": f"{straat}, {gemeente}, België", "format": "jsonv2", "limit": 1,
                          "countrycodes": "be,nl"})
+        if "," in straat:
+            # Een naam vooraan ("Brasserie 360°, Stadsplein 16") laat de kaartdienst struikelen:
+            # alleen het laatste stuk voor de postcode is de straat. Gezien 23-09-2026, toen de
+            # rit naar Genk daardoor niet gemaakt werd.
+            kort = straat.split(",")[-1].strip()
+            pogingen.append({"street": kort, "postalcode": post, "country": "Belgium",
+                             "format": "jsonv2", "limit": 1})
+            pogingen.append({"q": f"{kort}, {post} {gemeente}", "format": "jsonv2", "limit": 1,
+                             "countrycodes": "be,nl"})
     for i, params in enumerate(pogingen):
         uit = _nominatim(params)
         if uit:
@@ -724,7 +733,13 @@ def rijtijd_min(van, naar, vertrek):
     Geeft (minuten, factor)."""
     global ROUTES_GESTOPT
     import math
-    if ROUTES_KEY:
+    from datetime import timedelta
+    # Google alleen voor ritten binnen 48 uur: daar telt het echte verkeer. Verder vooruit is
+    # ook Google's verkeer maar een voorspelling, en elke aanvraag ging van dezelfde dagteller
+    # af. Gezien 23-09-2026: de teller stond al om de middag op 100/100 door verre ritten, zodat
+    # de rit van morgen naar Genk geen echt verkeer meer kreeg.
+    dichtbij = vertrek <= datetime.now().astimezone() + timedelta(hours=48)
+    if ROUTES_KEY and dichtbij:
         _, gebruikt = routes_vandaag()
         if gebruikt >= ROUTES_DAGLIMIET:
             ROUTES_GESTOPT = True
@@ -939,8 +954,10 @@ def reistijd_zetten(items, alleen_dag=None):
 
     def is_thuisrit(x):
         t = x.get("titel") or ""
+        # Ook een rit naar huis die iemand zelf intikte ("Rijden naar huis"). Gezien 23-09-2026:
+        # die werd niet herkend, zodat de rit naar oma van het stadskantoor vertrok.
         return ("Reistijd na:" in (x.get("omschrijving") or "") or "Reistijd ←" in t
-                or bool(re.search(r"→\s*thuis\s*$", t)))
+                or bool(re.search(r"→\s*thuis\s*$", t)) or bool(re.search(r"\bnaar huis\b", t, re.I)))
 
     def thuisrit_tussen(t0, t1):
         for x in reistijden:
