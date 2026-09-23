@@ -80,7 +80,9 @@ def voer_uit(p):
         # Google Ads muteert alleen via :mutate-endpoints; dat dwingen we af.
         if not path.endswith(":mutate"):
             return "mislukt", f"Google Ads schrijven mag alleen via een :mutate-pad, niet '{path}'", ""
-        data, kort = googleads.schrijf(cid, path, p.get("body"))
+        # Optionele manager-header per voorstel (accounts onder een manager).
+        lid = str(p.get("login_customer_id", "") or "").replace("-", "") or None
+        data, kort = googleads.schrijf(cid, path, p.get("body"), login_customer_id=lid)
         return "gelukt", kort, json.dumps(data)[:4000]
 
     return "mislukt", f"onbekende dienst '{dienst}'", ""

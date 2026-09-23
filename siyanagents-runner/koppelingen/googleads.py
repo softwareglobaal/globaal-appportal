@@ -63,20 +63,25 @@ def _access_token():
         raise RuntimeError(f"OAuth-refresh mislukt HTTP {e.code}: {e.read().decode()[:200]}")
 
 
-def _headers(login=True):
+def _headers(login=True, login_customer_id=None):
+    """login_customer_id: manager-id per aanroep, voor accounts die onder een
+    manager hangen (zoals 907-796-3960 onder 519-389-9219). De accounts die de
+    OAuth-gebruiker rechtstreeks heeft (UNABO, H-Architects) weigeren die header
+    juist, dus hij staat nooit serverbreed aan."""
     c = _creds()
     h = {"Authorization": f"Bearer {_access_token()}",
          "developer-token": c["developer_token"], "Content-Type": "application/json"}
-    if login and c["login_customer_id"]:
-        h["login-customer-id"] = c["login_customer_id"]
+    lid = str(login_customer_id or c["login_customer_id"] or "").replace("-", "")
+    if login and lid:
+        h["login-customer-id"] = lid
     return h
 
 
-def _call(method, path, body=None, login=True):
+def _call(method, path, body=None, login=True, login_customer_id=None):
     url = f"{API}/{VERSIE}{path}"
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
-    for k, v in _headers(login=login).items():
+    for k, v in _headers(login=login, login_customer_id=login_customer_id).items():
         req.add_header(k, v)
     try:
         with urllib.request.urlopen(req, timeout=45) as r:
@@ -92,10 +97,12 @@ def accounts():
     return _call("GET", "/customers:listAccessibleCustomers", login=False).get("resourceNames", [])
 
 
-def zoek(customer_id, gaql):
-    """GAQL-query tegen een account. customer_id met of zonder streepjes."""
+def zoek(customer_id, gaql, login_customer_id=None):
+    """GAQL-query tegen een account. customer_id met of zonder streepjes.
+    login_customer_id: manager-id voor accounts onder een manager."""
     cid = str(customer_id).replace("-", "")
-    uit = _call("POST", f"/customers/{cid}/googleAds:searchStream", {"query": gaql})
+    uit = _call("POST", f"/customers/{cid}/googleAds:searchStream", {"query": gaql},
+                login_customer_id=login_customer_id)
     rijen = []
     for blok in (uit if isinstance(uit, list) else [uit]):
         rijen.extend(blok.get("results", []))
@@ -104,11 +111,12 @@ def zoek(customer_id, gaql):
 
 # ---- SCHRIJVEN (alleen via de uitvoerder, na goedkeuring) -------------------
 
-def schrijf(customer_id, path, body):
+def schrijf(customer_id, path, body, login_customer_id=None):
     """Muterende call (mutate). path is relatief vanaf /customers/{cid}, bv.
-    '/campaignBudgets:mutate'. Body bevat de operations. Geeft (resultaat, kort)."""
+    '/campaignBudgets:mutate'. Body bevat de operations. Geeft (resultaat, kort).
+    login_customer_id: manager-id voor accounts onder een manager."""
     cid = str(customer_id).replace("-", "")
     vol = f"/customers/{cid}{path}"
-    uit = _call("POST", vol, body)
+    uit = _call("POST", vol, body, login_customer_id=login_customer_id)
     n = len(uit.get("results", [])) if isinstance(uit, dict) else 0
     return uit, f"POST {vol} ok ({n} resultaten)"
