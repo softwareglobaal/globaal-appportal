@@ -952,7 +952,13 @@
   "weekcontrole": "zelfcontrole.py --van <maandag> --tot <zondag>; de eerste was 21-27 september 2026",
   "grendel_op_het_register": "tests/test_foutenregister.py: geen 'opgelost' zonder een grendel die bestaat, en elke controle van de zelfcontrole hangt aan precies een fout",
   "claude": "Claude begint elke sessie aan de Agendawacht met de lessen uit het register en de laatste zelfcontrole, en sluit af met een nieuwe zelfcontrole als bewijs",
-  "mehdi": "24-09-2026"
+  "mehdi": "24-09-2026",
+  "documenten": {
+   "afspraken": "Agendawacht - afspraken kleuren en taken v2.0.pdf (definitief, zonder verloop per dag)",
+   "foutenregister": "Agendawacht - foutenregister v1.0.pdf",
+   "waar": "Dropbox private/0 Chegini Mehdi/Prive met Claude; oude versies in Agenda archief/oude documenten",
+   "maken": "werkwijze/pdf/afspraken_pdf.py en werkwijze/pdf/foutenregister_pdf.py, op de Mac; ze lezen uit deze JSON en het register"
+  }
  },
  "tijd": {
   "regel": "alle tijden zijn Brusselse tijd, zomer en winter. De VM draait op UTC en cron kent daar geen tijdzone: cron start de scripts vaker, en elk script beslist zelf op Brusselse tijd of het zijn beurt is (FR-18)",
