@@ -1,5 +1,5 @@
 {
- "versie": "3.4",
+ "versie": "3.5",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -57,13 +57,14 @@
   "vorm": "Mehdi: !! [FIRMA-SOORT] TYPE nummer - klant, straat nummer, postcode gemeente",
   "voorbeeld": "Mehdi: !! [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen",
   "soorten": {
+   "B2B": "professioneel extern, wij nog geen klant",
+   "IN": "intern",
    "KB": "klant buiten",
-   "PB": "prospect buiten (plaatsbezoek)",
    "KO": "klant online",
-   "PO": "prospect online",
    "LB": "leverancier buiten (wij kopen)",
    "LO": "leverancier online (wij kopen)",
-   "IN": "intern"
+   "PB": "prospect buiten (plaatsbezoek)",
+   "PO": "prospect online"
   },
   "types": {
    "WB": "werfbezoek",
@@ -359,6 +360,10 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-22",
+   "wat": "B2B is een soort geworden: professioneel extern waar wij nog geen klant van zijn, kleur lavendel (de lichte versie van leverancier-paars). Afdelings meeting Energy op [ENEF-IN] gezet; de revalidatie is naar de prive-agenda verplaatst, zodat collega's geen medische afspraak zien"
+  },
   {
    "datum": "2026-09-22",
    "wat": "de agent stelt nu een firma voor bij een titel zonder code: uit het projectnummer (H-A map = HARC) en uit de leverancierslijst (boekhouder/Wally = ALGE). Deze week zelf rechtgezet: 2616 -> [HARC], Nadine boekhouder -> [ALGE-LO], 'Leen moet werken' zonder !! (Lara is thuis)"
@@ -845,5 +850,10 @@
   "getoond": "de maker staat bij een afspraak zonder firmacode, bij een buitenafspraak op een dag zonder auto, en in de inhoud die per afdeling klaargezet wordt",
   "let_op": "Mehdi noemde 'Chilton' als wie handmatig 'Rijden naar'-blokken invulde; die dragen het account haagendalightprojects, dat nu als Calendly (light projects) gelabeld staat. Uit te klaren wie dat account gebruikt",
   "mehdi": "22-09-2026"
+ },
+ "klantsoorten_voorstel": {
+  "aanleiding": "Mehdi, 22-09-2026: B2B toont een externe professionele partij waar wij nog geen klant van zijn; bij een leverancier zijn we dat al. En bij ONZE klanten moeten we particulier en professioneel onderscheiden; professioneel is wie terugkerende opdrachten geeft",
+  "gedaan": "B2B is nu een herkende soort met de kleur lavendel",
+  "nog_te_beslissen": "de splitsing van onze klanten: KB/KO blijft de particuliere klant, en een nieuwe code (voorstel ZB/ZO, van zakelijk) voor de professionele klant met terugkerende opdrachten, kleur blauwbes. Ook nog te beslissen of prospecten op dezelfde manier gesplitst worden"
  }
 }

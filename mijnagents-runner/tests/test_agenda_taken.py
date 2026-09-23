@@ -198,6 +198,13 @@ check("een projectnummer uit de H-A map stelt [HARC] voor",
 check("een leverancier uit de lijst stelt [ALGE] voor",
       any("ALGE" in x for x in _tf("?? Mehdi: Nadine Boekhouder")))
 
+# B2B: professioneel extern waar wij nog geen klant van zijn. Mehdi, 22-09-2026.
+_b = W.lees_titel("Mehdi & Siyan: [HA-B2B] Stefan Oosterbaan")
+check("[HA-B2B] leest als firma HARC en soort B2B", _b["firma"] == "HARC" and _b["soort"] == "B2B")
+check("B2B is lavendel, de lichte versie van leverancier-paars",
+      W.kleur_gewenst({"kalender": "zoomafspraken@gmail.com"}, _b) == "1")
+check("B2B staat in de soortenlijst", "B2B" in W.SOORT)
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

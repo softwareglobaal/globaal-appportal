@@ -118,7 +118,11 @@ KALENDER_AFDELING = {"H-Architects": "h-architects", "UNABO": "unabo",
 # Mehdi, 20-09-2026, gevonden bij de gesprekken met LegalFly en Libra AI.
 SOORT = {"KB": "klant buiten", "PB": "prospect buiten (plaatsbezoek)", "KO": "klant online",
          "PO": "prospect online", "LB": "leverancier buiten (wij kopen)",
-         "LO": "leverancier online (wij kopen)", "IN": "intern"}
+         "LO": "leverancier online (wij kopen)", "IN": "intern",
+         # B2B: een externe professionele partij waar wij nog GEEN klant van zijn. Een
+         # leverancier is hetzelfde, maar daar zijn we al klant. Mandaat van Mehdi,
+         # 22-09-2026, gezien bij de Calendly-boeking [HA-B2B] Stefan Oosterbaan.
+         "B2B": "professioneel extern, wij nog geen klant"}
 # Diensten met een verslagagent (Commandocentrum, 16-09-2026): WB/OPL werfverslag, VC veiligheidscoördinatie,
 # PLB plaatsbeschrijving, BS/STA barsten en scheuren. De code staat na de firmacode, vóór het nummer of de naam.
 TYPES = {"WB": "werfbezoek", "OPL": "oplevering", "PLB": "plaatsbeschrijving", "SCN": "3D-scan", "EPB": "EPB",
@@ -142,7 +146,7 @@ AGENDA_VASTE_KLEUR = {
 BUITEN_TYPES = {"WB", "OPL", "PLB", "SCN", "OPM", "BS"}
 
 ALLE_CODES = sorted(set(FIRMACODES) | set(EXTERNE_FIRMAS) | set(AGENDACODE_NAAR_FIRMA) | set(NIET_FIRMA), key=len, reverse=True)
-CODE_RE = re.compile(r"\[(" + "|".join(ALLE_CODES) + r")(?:-(KB|PB|KO|PO|LB|LO|IN))?\]", re.I)
+CODE_RE = re.compile(r"\[(" + "|".join(ALLE_CODES) + r")(?:-(B2B|KB|PB|KO|PO|LB|LO|IN))?\]", re.I)
 
 
 def kalenders():
@@ -522,6 +526,8 @@ def kleur_gewenst(a, info):
         return "5"
     if info["buiten"] or info["soort"] in ("PB", "KB", "LB"):
         return "11"
+    if info["soort"] == "B2B":
+        return "1"    # lavendel: professioneel extern, wij nog geen klant (lichter dan leverancier)
     if info["soort"] == "LO":
         return "3"    # druif, paars: geld dat buitengaat
     if info["soort"] == "KO":
