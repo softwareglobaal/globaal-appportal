@@ -104,6 +104,9 @@ DIENST_PIPELINE = {
     # dezelfde pijplijn als de vergunningen. Zonder deze regel valt zo'n aanvraag
     # in Engineering met label "Te routeren" (dat is gebeurd; rechtgezet 22 sep).
     "regularisatie": (14, 138),
+    # Functiewijziging is sinds 23 sep 2026 een eigen dienst op unabo.be. Ook een
+    # vergunningsdossier, dus dezelfde pijplijn als vergunningen en regularisatie.
+    "functiewijziging": (14, 138),
     # 3D-rendering: zelfde team en zelfde soort dossier als 3D-scanning.
     "3d-rendering": (4, 17),
     "3d-scanning": (4, 17),
