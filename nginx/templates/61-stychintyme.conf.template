@@ -1,0 +1,57 @@
+# stychintyme.com: de website van Stychin Tyme (naaiatelier, Fort Lauderdale).
+# Statische site uit /srv/websites/stychintyme-v6 (zie websites/README.md). Eigen
+# Let's Encrypt-certificaat; de deploy-hook kopieert het naar certs/stychintyme/.
+# Dit is het ECHTE domein: geen X-Robots-Tag noindex hier, dat staat alleen op de
+# proefadressen web-*.${BASE_DOMAIN} in 60-websites.conf.template.
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name www.stychintyme.com;
+    ssl_certificate /etc/nginx/certs/stychintyme/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/stychintyme/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    return 301 https://stychintyme.com$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name stychintyme.com;
+    ssl_certificate /etc/nginx/certs/stychintyme/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/stychintyme/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root /srv/websites/stychintyme-v6;
+    index index.html;
+
+    # Geen types{}-blok hier: dat vervangt de hele MIME-tabel (alles wordt octet-stream).
+    location = /site.webmanifest { default_type application/manifest+json; }
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # Foto's en iconen lang cachen; HTML en de tekstbestanden kort, zodat een
+    # nieuwe upload meteen zichtbaar is. LET OP: een add_header in een locatieblok
+    # vervangt ALLE add_header-regels van het niveau erboven; daarom herhaald.
+    location ~* \.(jpg|jpeg|png|gif|webp|svg|ico|woff2?)$ {
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+    }
+    location / {
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        try_files $uri $uri/ $uri.html =404;
+    }
+
+    access_log /var/log/nginx/stychintyme.access.log;
+}
