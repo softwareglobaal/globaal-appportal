@@ -237,6 +237,26 @@ check("stil maken zet expliciet geen melding, niet de agenda-standaard",
 check("een intern overleg op de agenda-standaard wordt stil gemaakt",
       'elif standaard and (info["soort"] == "IN" or a.get("hele_dag"))' in _bron)
 
+# In één keer goed: vrije tekst naar de titelcode, en de vaste Zoom (23-09-2026).
+check("vrije tekst 'Harchitects-KB 2505' wordt [HARC-KB]",
+      W.titel_voorstel("!! Mehdi & Catalin: Harchitects-KB 2505")[0] == "!! Mehdi & Catalin: [HARC-KB] 2505")
+check("vrije tekst 'elevait-Leverancie online' wordt [ELEV-LO]",
+      W.titel_voorstel("?? Mehdi en Shaniel: Robby elevait-Leverancie online")[0] == "?? Mehdi en Shaniel: [ELEV-LO] Robby")
+check("een leverancier uit de lijst wordt [ALGE-LO]",
+      (W.titel_voorstel("Mehdi: Nadine boekhouder online")[0] or "").startswith("Mehdi: [ALGE-LO]"))
+check("een titel zonder dubbelpunt wordt niet blind herschreven", W.titel_voorstel("Mehdi, (HARC- aanne) Pioter 2405")[0] is None)
+check("de agent zet zelf geen Zoom-link zolang de juiste niet gekend is", W.VASTE_ZOOM == "")
+check("een online gesprek krijgt de notitie dat Mehdi de link stuurt",
+      'notitie = f"Online. Mehdi stuurt de link naar {wie}."' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+check("de zoom-functie wijzigt de locatie niet",
+      '"location": VASTE_ZOOM' not in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+_zb = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("geen notitie bij bellen, Calendly of terugkerende overleggen",
+      'bel(t|len)?' in _zb and 'a.get("_terugkerend") or a.get("_conferentie")' in _zb)
+
+check("een adres uit de projectmap komt ook in de afspraak zelf",
+      'bron_adres == "projectmap" and fysiek and not (a.get("locatie") or "").strip()' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

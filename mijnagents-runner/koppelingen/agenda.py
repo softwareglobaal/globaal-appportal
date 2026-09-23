@@ -106,6 +106,8 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 # wie de afspraak heeft aangemaakt (Google: creator). Zo is achteraf te zien
                 # wie iets zette en waarom het ergens staat. Mandaat van Mehdi, 22-09-2026.
                 "maker": (ev.get("creator") or {}).get("email", ""),
+                "_gemaakt": ev.get("created", ""),
+                "_conferentie": bool(ev.get("hangoutLink") or ev.get("conferenceData")),
                 "link": ev.get("htmlLink", ""),
                 "_reminders": ev.get("reminders") or {},
                 "_terugkerend": bool(ev.get("recurringEventId")),

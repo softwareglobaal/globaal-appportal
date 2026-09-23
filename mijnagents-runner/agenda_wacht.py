@@ -466,6 +466,178 @@ def maker(a):
     return mail.split("@")[0]
 
 
+
+# ---------------------------------------------------------------------------------------
+# In één keer goed zetten. Mandaat van Mehdi, 23-09-2026: "ik schrijf wat er moet, leer het
+# om in een keer goed te zetten." Hij typt vrije tekst ("Harchitects-KB 2505", "elevait-
+# Leverancie online"); de agent maakt er de titelcode van als dat eenduidig kan, anders doet
+# hij een voorstel. En een online afspraak zonder link krijgt zijn vaste Zoom.
+# ---------------------------------------------------------------------------------------
+# De vaste Zoom-link van Mehdi is nog niet gekend: 9432885212 kwam het vaakst voor in de agenda, maar
+# Mehdi zei op 23-09-2026 "stuur nog geen linken omdat je hebt die niet". Tot hij de juiste link geeft,
+# zet de agent GEEN link, alleen de notitie dat Mehdi de link stuurt.
+VASTE_ZOOM = ""
+WERKAGENDA = "mehdiprivewerkagenda@gmail.com"
+KANTELDATUM = "2026-09-21"                            # vanaf hier dragen nieuwe afspraken de vierletterige code
+SOORT_CODES = {"KB", "KO", "PB", "PO", "LB", "LO", "IN", "B2B"}
+
+
+def _plat(t):
+    return re.sub(r"[^a-z0-9]", "", (t or "").lower())
+
+
+def firma_aliassen():
+    """Elke schrijfwijze van een firma die Mehdi typt -> de vierletterige code."""
+    uit = {}
+    for code, naam in {**FIRMACODES, **EXTERNE_FIRMAS}.items():
+        uit[_plat(code)] = code
+        kern = naam.split(" (")[0]
+        uit[_plat(kern)] = code                     # "H-Architects" -> harchitects
+        eerste = _plat(kern.split()[0]) if kern.split() else ""
+        if len(eerste) >= 5:
+            uit.setdefault(eerste, code)            # "Elevait NV" -> elevait
+    for oud, nieuw in AGENDACODE_NAAR_FIRMA.items():
+        uit[_plat(oud)] = nieuw
+    return uit
+
+
+def _van_mehdi(a):
+    m = (a.get("maker") or "").lower()
+    return m in ("", WERKAGENDA) and a.get("kalender") != "zoomafspraken@gmail.com" and not a.get("deelnemers")
+
+
+def titel_voorstel(titel):
+    """Leest vrije tekst en geeft (nieuwe titel of None, firma, soort, uitleg)."""
+    if CODE_RE.search(titel) or ":" not in titel:
+        return None, None, None, ""
+    kop, rest = titel.split(":", 1)
+    alias = firma_aliassen()
+    relaties = {}
+    for r in EXTERNE_RELATIES:
+        for nm in [r.get("naam") or ""] + list(r.get("ook_geschreven") or []):
+            if nm:
+                relaties[_plat(nm)] = r.get("firma") or "ALGE"
+    firma, soort_code, rol, waar = None, None, None, None
+    weg = []
+    for tok in re.split(r"[\s,;()\[\]/]+", rest):
+        if not tok:
+            continue
+        delen = [tok] + tok.split("-")
+        for d in delen:
+            pd = _plat(d)
+            if not pd:
+                continue
+            if pd in alias and firma in (None, alias[pd]):
+                firma = alias[pd]; weg.append(tok if d == tok else d)
+            elif pd in relaties and firma in (None, relaties[pd]):
+                firma = relaties[pd]; rol = rol or "L"          # de naam blijft in de titel staan
+            elif d.upper() in SOORT_CODES:
+                soort_code = d.upper(); weg.append(d)
+            elif pd.startswith("klant"):
+                rol = "K"; weg.append(d)
+            elif pd.startswith("prospect"):
+                rol = "P"; weg.append(d)
+            elif pd.startswith("leveranc") or pd.startswith("leverancie"):
+                rol = "L"; weg.append(d)
+            elif pd == "intern":
+                rol = "IN"; weg.append(d)
+            elif pd == "online":
+                waar = "O"; weg.append(d)
+            elif pd == "buiten":
+                waar = "B"; weg.append(d)
+    if not firma:
+        return None, None, None, ""
+    if not waar:
+        waar = "B" if "!!" in titel else "O"
+    soort = soort_code or ("IN" if rol == "IN" else (rol + waar if rol else None))
+    over = rest
+    for w in sorted(set(weg), key=len, reverse=True):
+        over = re.sub(r"(?<![\w])" + re.escape(w) + r"(?![\w])", " ", over)
+    over = re.sub(r"\s*-\s*(?=\s|$)", " ", over)
+    over = re.sub(r"\s+", " ", over).strip(" -,")
+    code = f"[{firma}-{soort}]" if soort else f"[{firma}]"
+    nieuw = f"{kop.strip()}: {code}" + (f" {over}" if over else "")
+    uitleg = f"firma {firma} uit de tekst" + (f", soort {soort}" if soort else ", soort niet te bepalen")
+    return nieuw, firma, soort, uitleg
+
+
+def titels_normaliseren(items, alleen_dag=None):
+    """Vrije tekst naar de titelcode, alleen voor afspraken die Mehdi zelf maakte, zonder gasten.
+    Eenduidig (firma én soort) -> herschrijven. Anders -> een voorstel in de regels.
+    Een oude code in een nieuwe afspraak (na de kanteldatum) -> de vierletterige code."""
+    tok = agenda._toegang()
+    nu = datetime.now().astimezone().isoformat()
+    gedaan, regels = 0, []
+    for a in items:
+        if a.get("hele_dag") or "T" not in a.get("start", "") or a["start"] < nu[:len(a["start"])]:
+            continue
+        if alleen_dag and a["start"][:10] != alleen_dag:
+            continue
+        if a.get("kalender") != WERKAGENDA or lees_titel(a["titel"])["reistijd"]:
+            continue
+        titel = a["titel"]
+        info = lees_titel(titel)
+        nieuw = None
+        if info.get("agendacode") and (a.get("_gemaakt") or "")[:10] >= KANTELDATUM and _van_mehdi(a):
+            nieuw = re.sub(r"\[" + re.escape(info["agendacode"]) + r"(?=[-\]])", "[" + info["firma"], titel, count=1, flags=re.I)
+            uitleg = f"oude code {info['agendacode']} in een nieuwe afspraak -> {info['firma']}"
+        elif not info.get("firma"):
+            nieuw, firma, soort, uitleg = titel_voorstel(titel)
+            if nieuw and not (firma and soort and _van_mehdi(a) and not a.get("_terugkerend")):
+                regels.append(f"{a['start'][:16]} {titel[:50]}: VOORSTEL '{nieuw[:70]}' ({uitleg})")
+                nieuw = None
+        if nieuw and nieuw != titel:
+            try:
+                _patch(a, {"summary": nieuw}, tok)
+                regels.append(f"{a['start'][:16]} '{titel[:45]}' -> '{nieuw[:60]}' ({uitleg})")
+                a["titel"] = nieuw
+                gedaan += 1
+            except Exception as e:  # noqa: BLE001
+                regels.append(f"{a['start'][:16]} {titel[:45]}: titel niet gezet ({type(e).__name__})")
+    return gedaan, regels
+
+
+def zoom_zetten(items, alleen_dag=None):
+    """Een online gesprek met een externe partij en zonder link krijgt de notitie 'Online. Mehdi
+    stuurt de link naar ...'. De agent zet zelf GEEN link: de juiste vaste Zoom is nog niet gekend
+    (Mehdi, 23-09-2026). Niet bij bellen, niet bij Calendly-boekingen (eigen link), niet bij een
+    intern overleg, niet bij een taak zonder iemand anders, niet bij terugkerende overleggen."""
+    tok = agenda._toegang()
+    nu = datetime.now().astimezone().isoformat()
+    gedaan, regels = 0, []
+    for a in items:
+        if a.get("hele_dag") or "T" not in a.get("start", "") or a["start"] < nu[:len(a["start"])]:
+            continue
+        if alleen_dag and a["start"][:10] != alleen_dag:
+            continue
+        if a.get("kalender") != WERKAGENDA or a.get("_terugkerend") or a.get("_conferentie"):
+            continue
+        info = lees_titel(a["titel"])
+        if (info["reistijd"] or not info.get("firma") or info["soort"] == "IN" or info["buiten"]
+                or info["soort"] in ("PB", "KB", "LB")):
+            continue
+        oms = a.get("omschrijving") or ""
+        tekst = f"{a['titel']} {a.get('locatie') or ''} {oms}"
+        if re.search(r"https?://", tekst) or re.search(r"\bbel(t|len)?\b|telefo", tekst, re.I) or "stuurt de link" in oms:
+            continue
+        kop, _, rest = a["titel"].partition(":")
+        namen = [n.strip(" !?") for n in re.split(r"[,&+]| en ", kop) if n.strip(" !?") and n.strip(" !?").lower() != "mehdi"]
+        rest_naam = CODE_RE.sub(" ", rest).strip(" -:")
+        if rest_naam and not re.search(r"\d", rest_naam) and len(rest_naam.split()) <= 3:
+            namen.append(rest_naam)
+        if not namen:
+            continue                      # een taak zonder iemand anders heeft geen link nodig
+        wie = ", ".join(namen)
+        notitie = f"Online. Mehdi stuurt de link naar {wie}."
+        try:
+            _patch(a, {"description": notitie + ("\n\n" + oms if oms else "")}, tok)
+            regels.append(f"{a['start'][:16]} {a['titel'][:45]}: online zonder link, stuur de link naar {wie}")
+            gedaan += 1
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"{a['start'][:16]} {a['titel'][:45]}: notitie niet gezet ({type(e).__name__})")
+    return gedaan, regels
+
+
 def titelfouten(a, info):
     """De fouten die Mehdi hard wil zien. Geeft een lijst met korte redenen."""
     if info["reistijd"] or a.get("hele_dag"):
@@ -952,6 +1124,17 @@ def reistijd_zetten(items, alleen_dag=None):
             continue
         if start < nu or (alleen_dag and a["start"][:10] != alleen_dag):
             continue
+        # Komt het adres uit de projectmap en staat er geen locatie in de afspraak, dan zet ik het
+        # erin, zodat Mehdi (en wie meegaat) kan navigeren. Alleen bij zijn eigen afspraken zonder
+        # gasten. Mandaat van Mehdi, 23-09-2026: "in een keer goed zetten".
+        if (bron_adres == "projectmap" and fysiek and not (a.get("locatie") or "").strip()
+                and _van_mehdi(a) and not a.get("_terugkerend")):
+            try:
+                _patch(a, {"location": adres}, tok)
+                a["locatie"] = adres
+                regels.append(f"{a['start'][:16]} {a['titel'][:45]}: projectadres in de afspraak gezet ({adres[:40]})")
+            except Exception as e:  # noqa: BLE001
+                regels.append(f"{a['start'][:16]} {a['titel'][:45]}: projectadres niet gezet ({type(e).__name__})")
         buiten.append((start, einde, a, info, adres, fysiek))
     buiten.sort(key=lambda x: x[0])
     # Mandaat van Mehdi, 20-09-2026: "als er twee afspraken buiten zijn en het is ver,
@@ -1442,6 +1625,16 @@ def main():
         else:
             extra = []
         rit_items = items + [a for a in extra if (a["kalender"], a["id"], a["start"]) not in gezien_ids]
+        # eerst de titel in één keer goed, dan de vaste Zoom, dan de rest
+        ng, nregels = titels_normaliseren(rit_items, dag_grens)
+        zg, zregels = zoom_zetten(rit_items, dag_grens)
+        ag.log(f"dag {vandaag}", "schrijf", f"titels: {ng} rechtgezet uit vrije tekst; link-notitie: {zg} gezet",
+               "\n".join(nregels + zregels))
+        if zregels or [r for r in nregels if "VOORSTEL" in r]:
+            ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
+                          "titel": "Link doorsturen of titel nakijken",
+                          "uniek": f"agenda-zoom-titel:{vandaag}:{dag_grens or 'alle'}",
+                          "inhoud": "\n".join("- " + r for r in (zregels + [r for r in nregels if "VOORSTEL" in r])[:30])}])
         # eerst de gewone herinneringen, dan de ritten: zo heeft de vertrekmelding het laatste woord
         gezet, al, weg, fout_h = herinneringen_zetten(rit_items, dag_grens)
         rg, ral, rgeen, rfout, rregels = reistijd_zetten(rit_items, dag_grens)

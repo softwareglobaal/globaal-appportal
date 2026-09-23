@@ -1,5 +1,5 @@
 {
- "versie": "3.8",
+ "versie": "3.10",
  "datum": "2026-09-21",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -280,6 +280,11 @@
  },
  "openstaand": [
   {
+   "wat": "de juiste vaste Zoom-link van Mehdi, zodat de agent die zelf kan toekennen",
+   "wie": "Mehdi",
+   "wanneer": "zodra het kan"
+  },
+  {
    "wat": "Calendly-sjablonen per boekingstype omzetten naar de nieuwe codes (HA -> HARC, UNABO -> UNAB, TKN -> TKNB); zoom-dossier leest beide al",
    "wie": "Mehdi",
    "wanneer": "zodra het kan"
@@ -366,6 +371,14 @@
   }
  ],
  "beslissingen": [
+  {
+   "datum": "2026-09-23",
+   "wat": "geen Zoom-link zetten zolang de juiste niet gekend is; alleen de notitie dat Mehdi de link stuurt. De drie links van 30-09 zijn teruggedraaid"
+  },
+  {
+   "datum": "2026-09-23",
+   "wat": "de agent zet een afspraak in een keer goed: vrije tekst naar de titelcode, en de vaste Zoom (9432885212) met 'stuur de link naar' bij een online afspraak zonder link"
+  },
   {
    "datum": "2026-09-23",
    "wat": "Genk op [HDSS-PB] (HDSI niet actief). Griffie 25-09 op [HARC]: dezelfde zaak als de rechtbank van 28-09. Stil is voortaan expliciet geen melding (21 interne overleggen per week rinkelden via de agenda-standaard van 30 min). Een schatting overschrijft nooit een live meting. 'Mehdi : Sales' op 25-09 is een spook uit januari 2023"
@@ -890,5 +903,12 @@
   "regel": "HDS-afspraken krijgen de code HDSS. HDSI is momenteel niet actief (Mehdi doet niets voor HDSI)",
   "let_op": "de volledige naam van HDSS nooit tonen aan klanten of prospecten; alleen de code",
   "mehdi": "23-09-2026"
+ },
+ "in_een_keer_goed": {
+  "wat": "Mehdi typt vrije tekst; de agent zet de afspraak in een keer goed. Mandaat van Mehdi, 23-09-2026",
+  "titel": "vrije tekst naar de titelcode: een firmanaam (Harchitects, elevait, TKN, ...) of een leverancier uit de lijst, plus een rol (klant, prospect, leverancier, intern, KB, LO, ...) en online of buiten (!!) -> [FIRMA-SOORT]. Alleen bij afspraken die Mehdi zelf maakte, zonder gasten, niet terugkerend, en alleen als firma en soort eenduidig zijn; anders een voorstel",
+  "oude_code": "een oude code (HA, UNABO, TKN) in een afspraak gemaakt na 21-09-2026 wordt de vierletterige code",
+  "vaste_zoom": "nog niet gekend. Mehdi, 23-09-2026: 'stuur nog geen linken omdat je hebt die niet'. Tot hij de juiste link geeft, zet de agent geen link",
+  "zoom": "een online gesprek met een externe partij zonder link krijgt de notitie 'Online. Mehdi stuurt de link naar ...'. Geen link, niet bij bellen, niet bij Calendly-boekingen, niet bij een intern overleg of een taak zonder iemand anders, niet bij terugkerende overleggen"
  }
 }
