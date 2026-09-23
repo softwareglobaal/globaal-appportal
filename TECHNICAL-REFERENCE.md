@@ -1746,6 +1746,23 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   verwerkt standaard in de VS en bewaart API-transcripties 7 dagen;
   EU-verwerking loopt via hun sales. Volledig onderzoek, endpoints en kosten:
   **`docs/ONDERZOEK-PLAUD-API.md`**.
+- **Uitschrijven en de proefset (migraties 152, 164, 165):** de opnames worden
+  uitgeschreven met Whisper op de eigen Linux-pc, die zijn werk ophaalt via
+  `/werker` (eigen bearer-token, buiten de forward-auth). De centrale zet elke
+  gesprekspartner op een eigen stereospoor; los uitgeschreven geeft dat sprekers
+  zonder extra model. Voor er in bulk wordt uitgeschreven, wordt gemeten op een
+  vaste **proefset** van tien gesprekken, in het dashboard zelf (tabblad
+  Transcripties, knop Proefset): per gesprek de uitkomst van elke variant, een
+  door een mens verbeterde referentie en elke meting (`gesprek_proefset`,
+  `gesprek_proef_variant`, `gesprek_referentie`, `gesprek_meting`). De meetlat
+  (`communicatie/src/meetlat.js`) rekent vijf grenzen uit
+  (`werker/CRITERIA.md`, vastgelegd voor de eerste meting) en **weigert** te
+  meten zolang niet elke referentie nagekeken is. Dat stond eerst als
+  bestanden op een laptop; Mehdi 23-09-2026: twee waarheden en klantgesprekken
+  op een onbeheerde machine. Migratie 164 houdt bij wat de server de werker
+  het laatst antwoordde (werk, leeg, pauze, verouderd), en de signalen-agent
+  slaat alarm als er werk klaarligt maar een uur niets afkomt: op 22-09 lag de
+  transcriptie vijftien uur stil terwijl de hartslag gewoon binnenkwam.
 - **Duiding (migratie 151, 17-09-2026):** van uitgeschreven tekst naar een
   antwoord op "wie belde waarover, en voor welk bedrijf". Opdracht Mehdi. Drie
   bronnen, bewust gescheiden: **`communicatie.lijn_firma`** koppelt een
