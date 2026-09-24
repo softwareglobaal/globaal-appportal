@@ -77,4 +77,4 @@ Klein beginnen, later bijbouwen. Volgorde:
 | # | Wat | Oorzaak | Wat we deden / wie beslist |
 |---|---|---|---|
 | 1 | Word op de Mac weigert "save as pdf" via AppleScript; op de VM staat geen LibreOffice | | Pdf blijft open; LibreOffice op de VM is de structurele weg. Mehdi beslist. |
-| 2 | Bij 2145-1, -2 en -3 schreef ik "in de opdracht vermeld als werfbezoek 6, 7, 8: na te kijken" (voorbereiding van 24-09) | Ik kreeg het volgnummer van de rij mee, dat ook de vijf plaatsbezoeken telt | Alleen het bezoeknummer gaat mee; punten met het bezoeknummer. Grendel `tests/test_werfverslag_nummer.py`. Die drie voorbereidingen opnieuw maken is Mehdi's knop. Opgelost 24-09. |
+| 2 | Bij 2145-1, -2 en -3 schreef ik "in de opdracht vermeld als werfbezoek 6, 7, 8: na te kijken" (voorbereiding van 24-09) | Ik kreeg het volgnummer van de rij mee, dat ook de vijf plaatsbezoeken telt | Alleen het bezoeknummer gaat mee; punten met het bezoeknummer. Grendel `tests/test_werfverslag_nummer.py`. Ook PB1 tot PB5 van 2145 staan in hun voorbereiding als "Werfbezoek 1 tot 5"; die acht opnieuw voorbereiden is Mehdi's knop. Opgelost 24-09. |
