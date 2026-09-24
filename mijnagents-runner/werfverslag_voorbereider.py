@@ -425,8 +425,9 @@ def verwerk(nummer, droog=False):
         taakrijen = []
         for voor, tekst in taken:
             uniek = f"werf:{nummer}:{b['datum']}:{voor}"
-            soort = "opdracht" if voor == "werfverslag-schrijver" else "taak"
-            taakrijen.append({"voor": voor, "soort": soort, "sleutel": (f"{nummer}-{b['volgnr']}" if soort == "opdracht" else str(nummer)), "titel": tekst[:300],
+            # eigen naam: 'soort' is het soort project (standaard, light); overschrijven gaf 'taak-project' op de pagina
+            taaksoort = "opdracht" if voor == "werfverslag-schrijver" else "taak"
+            taakrijen.append({"voor": voor, "soort": taaksoort, "sleutel": (f"{nummer}-{b['volgnr']}" if taaksoort == "opdracht" else str(nummer)), "titel": tekst[:300],
                               "inhoud": {"dossier": nummer, "datum": b["datum"], "adres": adres, "bezoekmap": b["map"], "volgnr": b["volgnr"],
                                          "nr_label": b["nr_label"], "soort_bezoek": b["soort_bezoek"]},
                               "verwijzing": b["map"], "uniek": uniek})

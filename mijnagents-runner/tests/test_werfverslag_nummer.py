@@ -68,6 +68,13 @@ check("zonder nr_label (oude rij) blijft het volgnummer", P.bezoeknummer({"bronn
 cats = P._nummer_punten({"categorieen": [{"naam": "Ruwbouw", "punten": [{"titel": "a"}, {"titel": "b"}]}]}, "3", doorlopend=False)
 check("de punten van werfbezoek 3 heten 3.1, 3.2", [p["nummer"] for p in cats[0]["punten"]] == ["3.1", "3.2"], cats)
 
+import ast  # noqa: E402
+verwerk = next(f for f in ast.walk(ast.parse((HIER / "werfverslag_voorbereider.py").read_text(encoding="utf-8")))
+               if isinstance(f, ast.FunctionDef) and f.name == "verwerk")
+toekenningen = [t.id for n in ast.walk(verwerk) if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)]
+check("het soort project wordt in verwerk maar één keer gezet (anders 'taak-project' op de pagina)",
+      toekenningen.count("soort") == 0, f"{toekenningen.count('soort')} gewone toekenning(en) aan 'soort'")
+
 bron = (HIER / "werfverslag_proef.py").read_text(encoding="utf-8")
 check("geen 'Werfbezoek {volgnr}' meer in de schrijver", "Werfbezoek {volgnr}" not in bron)
 check("proef nummert met het bezoeknummer", "_nummer_punten(uit, nr_label" in bron)
