@@ -354,6 +354,20 @@ Suriname (elevaitnv.com). Leeft in de Second Brain als eigen spoke-schema
 in de graaf filterbaar op firma. Machineleesbaar in `kern.definitie` (sleutel
 `elevait`) en het eigen definitieboek `elevait.definitie`.
 
+### Bron van de waarheid
+Per **soort gegeven het ene systeem** waar dat gegeven ontstaat of beslist
+wordt. Alles wat elders staat is een kopie die alleen leest; bij verschil wint
+de bron, en een kopie wordt nooit rechtstreeks aangepast. Een kopie zonder sync
+is een probleem, geen voetnoot. Elke regel heeft **een beslisser** (een naam,
+niet twee: bij twee wacht iedereen op de ander); tot die hem op Besloten zet, is
+het een voorstel.
+- **Bij ons:** `kern.bron_regel` (migratie 172, 24-09-2026), pagina **Bron van
+  de waarheid** in de organisatie-app met een live controle per regel. Eerste
+  drie regels: persoon, telefoonnummer, e-mailadres. Machineleesbaar:
+  `bron_van_de_waarheid`, `bron_regel_status`, `bron_beslisser`.
+- **Let op:** dit definitieboek is zelf een kopie van `kern.definitie` zonder
+  sync. Op 24-09-2026 telde de database 140 termen en dit bestand 44 koppen.
+
 ## Vermijden / opletten
 | Niet doen | Wel |
 |---|---|

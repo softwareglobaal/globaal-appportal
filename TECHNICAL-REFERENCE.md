@@ -1620,6 +1620,25 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   Uitrol op een nieuwe machine: `scripts/installeer-ontwikkeling-hook.ps1
   -Token ... -Email ... -Naam ...` (zet git-identiteit, token, beide hooks).
   Nooit sessie-detail of gespreksinhoud, alleen per persoon per dag.
+- **Bron van de waarheid (migratie 172, 24-09-2026):** pagina `/bronnen`,
+  tabel `kern.bron_regel` (sleutel, gegeven, bron, wie wijzigt, kopieën, hoe,
+  status voorstel/besloten/afgewezen, **een** beslisser, besloten door en op,
+  opmerking; audit-trigger; `portal` leest, `medewerker_writer` werkt bij).
+  De live controles staan niet in de tabel maar in `bronnen.py`, per sleutel
+  uitgerekend bij elk bezoek met niveau ok, let op of fout; een controle die
+  zelf faalt toont dat en laat de rest staan. `persoon`: gekoppeld aan login,
+  DeskTime zonder persoon, DeskTime-spiegel; `telefoon`: nummers per status,
+  laatste wijziging, Xelion-sync, en het telefoonregister als "niet leesbaar"
+  (eigen SQLite); `email`: laatst gelijkgezet met one.com (grens 14 dagen) en
+  domeinen die binnen 30 dagen vervallen. Status zetten: de beslisser van de
+  regel of `BRON_BEHEER` (standaard mehdi, akadmin); beslisser aanwijzen: alleen
+  `BRON_BEHEER`; afwijzen vraagt een opmerking. Bekijken volgt
+  `_require_staff` (admin, manager, `STAFF_GROUPS` = hr, organisatie): wie in
+  geen van die groepen zit, ziet de pagina niet. Vervangt het gedeelde document
+  van 23-09, waarvan de getypte cijfers binnen een dag verouderden. Back-up
+  vooraf: tag `backup-2026-09-24`, dump
+  `~/backups/dashboards-communicatie-kern-organisatie-20260924-1019.dump`,
+  terugzet-test 0 fouten.
 
 ### 14.3 Authentik-koppeling (Toegang-panel)
 - Bestaande Authentik-accounts zijn **handmatig gekoppeld** aan hun persoon door
