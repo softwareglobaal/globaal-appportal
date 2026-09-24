@@ -21,6 +21,9 @@ Cron (elke minuut):
 
 Droogdraaien (toont wat er zou gebeuren, verandert niets):
   ~/agents/.venv/bin/python ~/appportal/siyanagents-runner/aanvraag_verwerk.py --droog
+
+Meldingsmail alsnog sturen voor aanvragen #24 en #31:
+  ~/agents/.venv/bin/python ~/appportal/siyanagents-runner/aanvraag_verwerk.py --nastuur 24 31
 """
 
 import json
@@ -31,6 +34,8 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+
+import aanvraagmail
 
 DB = os.path.expanduser(os.environ.get("AANVRAAG_DB_HOST", "~/appportal/aanvraag-data/aanvragen.db"))
 MAX_POGINGEN = 5
@@ -51,6 +56,8 @@ def _laad_env(pad):
 
 _laad_env("~/appportal/.env")
 _laad_env("~/appportal/siyanagents-data/.env")
+# De SMTP-gegevens van de UNABO-site staan bij de site zelf.
+_laad_env("~/unabo-site/.env")
 
 PD_TOKEN = os.environ.get("PIPEDRIVE_TOKEN_UNABO", "")
 PD = "https://unabo.pipedrive.com/v1"
@@ -262,6 +269,183 @@ def optie(tabel, waarde):
     return None
 
 
+# ---------- meldingsmail naar sales ----------
+#
+# Afspraak met het salesteam: elke aanvraag komt ook binnen als opgemaakte mail
+# in de huisstijl, ongelezen, met een knop naar de deal. Het team werkt vanuit
+# de mailbox; zonder die mail ziet niemand dat er een nieuwe deal in "New" staat.
+#
+# LET OP: dit deel ging op 18 sep 2026 verloren omdat het nooit gecommit was en
+# een reset van ~/appportal het overschreef. Het staat nu in git. Wijzig dit
+# bestand nooit alleen op de server.
+
+# Aanvragen die vóór dit tijdstip verwerkt zijn, krijgen niet alsnog
+# automatisch een mail. Nasturen gebeurt bewust met de hand.
+MAIL_VANAF = "2026-09-18T00:00:00+00:00"
+
+# Hoe lang wij blijven proberen de verstuurde mail aan de deal te hangen. De
+# mail moet eerst door Pipedrive uit de mailbox zijn opgehaald; dat duurt
+# doorgaans enkele minuten.
+KOPPEL_GEDULD = 2 * 3600
+
+
+def migratie(conn):
+    """Voegt de kolommen toe die de mailkoppeling bijhoudt. Mag altijd draaien."""
+    bestaand = {r[1] for r in conn.execute("PRAGMA table_info(aanvraag)")}
+    for kolom in ("mail_verstuurd", "mail_onderwerp", "mail_gekoppeld"):
+        if kolom not in bestaand:
+            conn.execute(f"ALTER TABLE aanvraag ADD COLUMN {kolom} TEXT DEFAULT ''")
+    conn.commit()
+
+
+def _env_bestand(pad):
+    """Leest een .env apart uit, zonder de omgeving van dit proces te wijzigen."""
+    waarden = {}
+    try:
+        for regel in open(os.path.expanduser(pad)):
+            regel = regel.strip()
+            if regel and not regel.startswith("#") and "=" in regel:
+                k, v = regel.split("=", 1)
+                waarden[k.strip()] = v.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return waarden
+
+
+def mailinstellingen(firma=None):
+    """SMTP-gegevens voor de meldingsmail, of None als ze niet volledig zijn.
+
+    Zonder firma zijn dat de gegevens van UNABO uit ~/unabo-site/.env. Een firma
+    met een eigen site leest zijn eigen .env, zodat de melding van het eigen
+    adres vertrekt en naar de eigen mailbox gaat.
+    """
+    bron = os.environ
+    if firma and firma.get("env"):
+        bron = _env_bestand(firma["env"])
+    van = bron.get("MAIL_FROM") or bron.get("SMTP_FROM")
+    nodig = (bron.get("SMTP_HOST"), bron.get("SMTP_USER"),
+             bron.get("SMTP_PASS"), van, bron.get("MAIL_CONTACT"))
+    if any(not w for w in nodig):
+        return None
+    return {
+        "host": bron["SMTP_HOST"],
+        "poort": int(bron.get("SMTP_PORT", "465")),
+        "beveiligd": bron.get("SMTP_SECURE", "true") == "true",
+        "gebruiker": bron["SMTP_USER"],
+        "wachtwoord": bron["SMTP_PASS"],
+        "van": van,
+        "naar": bron["MAIL_CONTACT"],
+    }
+
+
+def stuur_mail(conn, rij):
+    """Stuurt de meldingsmail voor één aanvraag die al een deal heeft."""
+    a = json.loads(rij["payload"])
+    a.setdefault("bron", rij["bron"])
+    instellingen = mailinstellingen(firma_van(rij["bron"]))
+    if not instellingen:
+        print(f"  #{rij['id']} geen SMTP-gegevens, geen meldingsmail verstuurd")
+        return False
+    aanvraagmail.verstuur(a, rij["deal_id"], instellingen=instellingen)
+    conn.execute("UPDATE aanvraag SET mail_verstuurd=?, mail_onderwerp=? WHERE id=?",
+                 (nu(), aanvraagmail.onderwerp(a), rij["id"]))
+    conn.commit()
+    print(f"  #{rij['id']} meldingsmail verstuurd naar {instellingen['naar']} (deal {rij['deal_id']})")
+    return True
+
+
+def stuur_mails(conn, droog=False):
+    """Mailt elke verwerkte aanvraag die nog geen meldingsmail kreeg.
+
+    Een aparte ronde en niet midden in verwerk(): mislukt de mail, dan staat de
+    deal er al en probeert de volgende minuut alleen de mail opnieuw, zonder een
+    tweede deal te maken.
+    """
+    rijen = conn.execute(
+        "SELECT * FROM aanvraag WHERE status='klaar' AND deal_id IS NOT NULL "
+        "AND mail_verstuurd='' AND verwerkt >= ? ORDER BY id", (MAIL_VANAF,)).fetchall()
+    for rij in rijen:
+        if droog:
+            print(f"  #{rij['id']} zou een meldingsmail krijgen (deal {rij['deal_id']})")
+            continue
+        try:
+            stuur_mail(conn, rij)
+        except Exception as e:  # noqa: BLE001
+            print(f"  #{rij['id']} melding mailen mislukt: {type(e).__name__}: {e}"[:200])
+
+
+def koppel_mails(conn):
+    """Hangt verstuurde meldingsmails aan hun deal in de Pipedrive-inbox en
+    laat ze ongelezen staan.
+
+    Zo ziet de sales-collega in de Sales Inbox meteen "Linked deal" staan en
+    hoeft niemand nog met de hand op "Link to existing" te klikken. Ongelezen
+    is een uitdrukkelijke vraag van het team: de mail is hun seintje dat er
+    werk wacht, ook al bestaat de deal al.
+    """
+    # Alleen aanvragen van het standaardaccount: deze koppeling zoekt in de
+    # Pipedrive-inbox van UNABO, en een deal van een andere firma bestaat daar
+    # niet. Firma's met een eigen account slaan we hier over.
+    eigen = tuple(FIRMAS)
+    vragen = "AND bron NOT IN (%s)" % ",".join("?" * len(eigen)) if eigen else ""
+    rijen = conn.execute(
+        "SELECT id, deal_id, mail_verstuurd, mail_onderwerp FROM aanvraag "
+        "WHERE deal_id IS NOT NULL AND mail_verstuurd != '' AND mail_gekoppeld = '' "
+        + vragen, eigen).fetchall()
+    if not rijen:
+        return
+
+    try:
+        threads = (pd("/mailbox/mailThreads", folder="inbox", limit=100).get("data") or [])
+    except Exception as e:  # noqa: BLE001
+        print(f"  mailkoppeling: inbox niet leesbaar ({type(e).__name__})")
+        return
+
+    # Alleen gesprekken die nog nergens aan hangen komen in aanmerking.
+    vrij = {}
+    for t in threads:
+        if t.get("deal_id"):
+            continue
+        vrij.setdefault((t.get("subject") or "").strip(), t.get("id"))
+
+    for rij in rijen:
+        onderwerp = (rij["mail_onderwerp"] or "").strip()
+        thread = vrij.get(onderwerp)
+        if not thread:
+            # Te oud: de mail is nooit in de inbox verschenen. Niet blijven zoeken.
+            try:
+                oud = time.time() - time.mktime(time.strptime(
+                    rij["mail_verstuurd"][:19], "%Y-%m-%dT%H:%M:%S"))
+            except ValueError:
+                oud = 0
+            if oud > KOPPEL_GEDULD:
+                conn.execute("UPDATE aanvraag SET mail_gekoppeld=? WHERE id=?",
+                             ("niet gevonden", rij["id"]))
+                conn.commit()
+                print(f"  #{rij['id']} mail niet teruggevonden in de inbox, opgegeven")
+            continue
+        try:
+            pd(f"/mailbox/mailThreads/{thread}", method="PUT",
+               body={"deal_id": rij["deal_id"], "read_flag": 0})
+        except Exception as e:  # noqa: BLE001
+            print(f"  #{rij['id']} koppelen mislukt: {type(e).__name__}: {e}"[:200])
+            continue
+        conn.execute("UPDATE aanvraag SET mail_gekoppeld=? WHERE id=?", (nu(), rij["id"]))
+        conn.commit()
+        print(f"  #{rij['id']} mail {thread} gekoppeld aan deal {rij['deal_id']}, ongelezen gelaten")
+
+
+def nastuur(conn, ids):
+    """Stuurt de meldingsmail voor deze aanvraagnummers alsnog, met de hand."""
+    for i in ids:
+        rij = conn.execute("SELECT * FROM aanvraag WHERE id=?", (i,)).fetchone()
+        if not rij or not rij["deal_id"]:
+            print(f"  #{i} bestaat niet of heeft geen deal, overgeslagen")
+            continue
+        conn.execute("UPDATE aanvraag SET mail_gekoppeld='' WHERE id=?", (i,))
+        stuur_mail(conn, rij)
+
+
 # ---------- verwerking ----------
 
 def verwerk(conn, rij, droog=False):
@@ -336,7 +520,13 @@ def verwerk(conn, rij, droog=False):
         if t:
             body[VELD_TYPE_AANVRAAG] = t
 
-    deal = pd("/deals", method="POST", body=body, _firma=firma)["data"]["id"]
+    # Het dealnummer meteen vastleggen: faalt de notitie hierna, dan maakt de
+    # volgende ronde geen tweede deal aan (zo ontstonden 3763 en 3764).
+    deal = rij["deal_id"]
+    if not deal:
+        deal = pd("/deals", method="POST", body=body, _firma=firma)["data"]["id"]
+        conn.execute("UPDATE aanvraag SET deal_id=? WHERE id=?", (deal, rij["id"]))
+        conn.commit()
 
     regels = [f"Aanvraag via het formulier op {a.get('pagina') or 'unabo.be'}."]
     if firma:
@@ -389,9 +579,23 @@ def main(argv):
         return 0
     conn = sqlite3.connect(DB, timeout=30)
     conn.row_factory = sqlite3.Row
+    migratie(conn)
+
+    if "--nastuur" in argv:
+        ids = [int(x) for x in argv[argv.index("--nastuur") + 1:] if x.isdigit()]
+        nastuur(conn, ids)
+        conn.close()
+        return 0
+
+    # Eerst de mails van vorige rondes koppelen: die staan intussen in de
+    # Pipedrive-inbox. Dit draait ook als er niets nieuws in de rij staat.
+    if not droog:
+        koppel_mails(conn)
+
     rijen = conn.execute(
         "SELECT * FROM aanvraag WHERE status='wacht' AND pogingen < ? ORDER BY id", (MAX_POGINGEN,)).fetchall()
     if not rijen:
+        stuur_mails(conn, droog)
         conn.close()
         return 0
 
@@ -410,6 +614,9 @@ def main(argv):
             print(f"  #{rij['id']} MISLUKT ({pogingen}/{MAX_POGINGEN}): {fout}")
             if vast:
                 meld_vastgelopen(rij, fout)
+
+    # Pas nu de meldingsmails: de deals van deze ronde bestaan intussen.
+    stuur_mails(conn, droog)
     conn.close()
     return 0
 
