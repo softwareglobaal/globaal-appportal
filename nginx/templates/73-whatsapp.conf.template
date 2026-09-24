@@ -1,0 +1,31 @@
+# WhatsApp - whatsapp.${BASE_DOMAIN}
+#
+# De inbox staat achter forward-auth. Alleen /twilio/ staat erbuiten: Twilio
+# heeft geen Authentik-sessie. Daar beschermt de app zelf met een geheim pad
+# (WHATSAPP_WEBHOOK_GEHEIM) en, als het Auth Token gezet is, de handtekening
+# van Twilio. Een verkeerd pad geeft 404.
+#
+# Twilio levert hooguit een paar berichten per seconde; wie meer stuurt is
+# geen Twilio.
+
+limit_req_zone $binary_remote_addr zone=whatsapp_twilio:1m rate=30r/s;
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name whatsapp.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    set $app_upstream http://app-whatsapp:3033;
+    include /etc/nginx/snippets/forward-auth.conf;
+
+    location ^~ /twilio/ {
+        limit_req zone=whatsapp_twilio burst=60 nodelay;
+        limit_except POST { deny all; }
+        client_max_body_size 64k;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+}

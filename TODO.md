@@ -1202,3 +1202,13 @@ subdiscipline-statistieken.
       en de containers alleen opnieuw gestart moeten worden. Opruimen wist dus
       het werk van zes collega's. De overige negen zijn 4 KB elk en niet de
       moeite waard.
+
+## WhatsApp UNABO (meeting 2026-09-23, gebouwd 2026-09-24, zie TECHNICAL-REFERENCE 14.11)
+
+- [x] App whatsapp.globaal.be: inbox, agent-voorstellen, nummerregister (migratie 170)
+- [ ] Test in de Twilio-sandbox (webhook-URL in de Console zetten, join-code sturen)
+- [ ] UNABO-nummer als WhatsApp-sender bij Twilio registreren (Meta-inlog + bedrijfsverificatie UNABO); nummer uit de gewone app of via coexistence
+- [ ] Bevestigen welk nummer: Office was afgesproken, gekoppeld werd volgens Siyan het cold-call-nummer
+- [ ] Kennis unab.md aanvullen met de antwoorden die Office dagelijks geeft
+- [ ] Office-collega's in Authentik-groep `whatsapp`
+- [ ] Sjablonen voor berichten buiten het 24-uursvenster

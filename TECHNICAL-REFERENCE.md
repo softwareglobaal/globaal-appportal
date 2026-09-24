@@ -2521,3 +2521,21 @@ auto-deploy) live op **Stagebeoordeling, Kosten én Factuurrouter**; het
 **Kosten-dashboard** (`kosten.globaal.be`); het **HR-/DeskTime-dashboard** (in opzet);
 en de hernoeming **Remy → Factuurrouter** (`factuurrouter.globaal.be`, repo
 `globaal-factuurrouter`) waarbij de werknaam overal is verwijderd - zie §6A en §13.*
+
+### 14.11 WhatsApp - gedeelde inbox met antwoordvoorstellen (`whatsapp.globaal.be`)
+
+Sinds 2026-09-24. Repo `softwareglobaal/globaal-whatsapp`, checkout `~/appportal/whatsapp`,
+compose-service `app-whatsapp` (:3033), vhost `73-whatsapp`, schema `whatsapp` (migratie 170),
+rol `whatsapp_writer`, Authentik-app `whatsapp` (groepen `whatsapp`, `whatsapp-beheer`, `manager`, `admin`).
+
+- **Waarom**: klanten van UNABO hebben Mehdi's eigen nummer (meeting 23-09-2026). De firma krijgt
+  een eigen WhatsApp-nummer; Office behandelt de berichten samen in deze app.
+- **Koppeling**: officiele WhatsApp Business API via Twilio (zelfde account als De Bode). Geen
+  onofficiele koppeling (Baileys e.d.): Meta blokkeert zo'n nummer.
+- **Agent stelt voor, mens verstuurt** (afspraak 24-09-2026). Kennis in `app/kennis/<firma>.md`,
+  plus Pipedrive van de firma en de laatste 30 berichten. Model `WHATSAPP_AI_MODEL` (claude-sonnet-5).
+- **Webhook** `POST /twilio/binnen/<WHATSAPP_WEBHOOK_GEHEIM>` en `/twilio/status/<geheim>`, buiten
+  forward-auth; met `TWILIO_AUTH_TOKEN` ook handtekeningcontrole.
+- **24-uursvenster**: buiten 24 uur na het laatste klantbericht kan niet vrij verstuurd worden;
+  sjablonen zijn nog niet gebouwd.
+- **Meetlat**: tab Voorstellen telt ongewijzigd / aangepast / verworpen, met gelijkenis.

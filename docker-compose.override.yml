@@ -417,6 +417,44 @@ services:
       start_interval: 5s
     networks: [appnet]
 
+  # WhatsApp: gedeelde inbox per firma (eerst UNABO) via de officiele Business
+  # API van Twilio, met een agent die antwoorden VOORSTELT; een collega
+  # verstuurt. Schema whatsapp (migratie 170). Eigen repo
+  # softwareglobaal/globaal-whatsapp, uitgecheckt in ./whatsapp met auto-deploy
+  # via deploy-stack.sh en cron. /twilio/* staat buiten de forward-auth (vhost
+  # 73-whatsapp), beschermd door WHATSAPP_WEBHOOK_GEHEIM.
+  app-whatsapp:
+    build:
+      context: ./whatsapp
+      dockerfile: app/Dockerfile
+    image: appportal-whatsapp
+    restart: unless-stopped
+    environment:
+      PORT: "3033"
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+      WHATSAPP_DB_URL: ${WHATSAPP_DB_URL:-}
+      WHATSAPP_WEBHOOK_GEHEIM: ${WHATSAPP_WEBHOOK_GEHEIM:-}
+      WHATSAPP_GROUPS: ${WHATSAPP_GROUPS:-whatsapp,manager}
+      WHATSAPP_BEHEER_GROUPS: ${WHATSAPP_BEHEER_GROUPS:-whatsapp-beheer}
+      WHATSAPP_AI_MODEL: ${WHATSAPP_AI_MODEL:-claude-sonnet-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Zelfde Twilio-account als De Bode (mijnagents). Het Auth Token is
+      # optioneel: met token controleert de app ook de handtekening van Twilio.
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_API_KEY_SID: ${TWILIO_API_KEY_SID:-}
+      TWILIO_API_KEY_SECRET: ${TWILIO_API_KEY_SECRET:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      PIPEDRIVE_TOKEN_UNABO: ${PIPEDRIVE_TOKEN_UNABO:-}
+      PIPEDRIVE_TOKEN_HARCHITECTS: ${PIPEDRIVE_TOKEN_HARCHITECTS:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3033/healthz', timeout=5)"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+      start_interval: 5s
+    networks: [appnet]
+
   app-sales:
     build: ./sales
     image: appportal-sales
