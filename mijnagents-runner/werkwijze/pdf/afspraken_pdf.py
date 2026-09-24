@@ -98,7 +98,7 @@ tr{{break-inside:avoid}}
 .twee{{column-count:2;column-gap:7mm}} .twee table{{break-inside:avoid}}
 </style>
 <div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; 24 september 2026 &nbsp;|&nbsp; versie {VERSIE}, <b>definitief</b> &nbsp;|&nbsp;
-bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.0 op de server</div>
+bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.1 op de server</div>
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
