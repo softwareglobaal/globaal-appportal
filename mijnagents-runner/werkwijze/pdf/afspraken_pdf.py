@@ -19,8 +19,8 @@ reg = json.loads((REPO / "werkwijze/foutenregister.json").read_text(encoding="ut
 snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python", "-"],
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
-assert t["versie"] == "4.1", t["versie"]
-VERSIE = "2.1"
+assert t["versie"] == "4.2", t["versie"]
+VERSIE = "2.2"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -98,11 +98,11 @@ tr{{break-inside:avoid}}
 .twee{{column-count:2;column-gap:7mm}} .twee table{{break-inside:avoid}}
 </style>
 <div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; 24 september 2026 &nbsp;|&nbsp; versie {VERSIE}, <b>definitief</b> &nbsp;|&nbsp;
-bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.1 op de server</div>
+bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.2 op de server</div>
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
-Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.0, 1.7 en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
+Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.1, 2.0, 1.7 en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
 Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de server. De test <code>tests/test_agenda_taken.py</code>
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
@@ -171,9 +171,15 @@ en blijven geldig; de agent vertaalt: {ou}.</li>
 eenduidig zijn. Anders een voorstel.</li>
 <li><b>Geen firmacode:</b> de agent stelt er een voor. Een projectnummer uit de H-Architects-projectmap wordt HARC; een leverancier uit
 de lijst wordt ALGE; anders de firma waarvoor de genoemde mensen werken ('diensten voor').</li>
+<li><b>Projectnummers van H-Architects zijn JJNN.</b> JJ is het jaar (25 = 2025, 26 = 2026), NN het volgnummer van dat jaar: 2505 is
+het vijfde project van 2025. Zo nummert alleen H-Architects; de andere firma's hebben een eigen benaming. Een nummer met een projectmap is
+een klant, want die map ontstaat bij de ondertekening.</li>
+<li><b>Waar de klant staat.</b> In deze volgorde: het contractsysteem, het contract en de CLAUDE.md in de projectmap (H-A WORK), de agenda van
+vroeger, en pas dan Pipedrive. De salesmap is de verkoop, niet het dossier. Voorbeeld: 2505 is Patrick Carolan &amp; Norma Gleeson, klant
+sinds april 2025, volgens het contract.</li>
 <li><b>Een titel met een projectnummer is pas volledig met de klant en, buiten, het adres</b>:
-<code>!! Mehdi &amp; Catalin: [HARC-KB] 2505 - Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele</code>. De klant komt uit Pipedrive (de persoon van
-de deal), het adres uit de agenda of de projectmap. Zonder gasten vult de agent het zelf aan, ook als een collega de afspraak zette; met
+<code>!! Mehdi &amp; Catalin: [HARC-KB] 2505 - Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele</code>. De klant komt uit de bronnen hierboven, het adres uit de agenda of de
+projectmap. Zonder gasten vult de agent het zelf aan, ook als een collega de afspraak zette; met
 gasten, van Calendly of in een reeks doet hij een voorstel.</li>
 <li><b>Een firmacode zonder soort</b> ('[HARC] Rechtbank') wordt gemeld. Een gemeente of rechtbank past nog in geen soort; dat staat open.</li>
 </ul>

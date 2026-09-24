@@ -103,6 +103,8 @@ def bevindingen(items, van, tot, nu):
                 actie = W.kleur_actie(a, wens)
                 meld("handkleur" if actie == "vraag" else "kleur", a,
                      f"kleur {W.KLEURNAAM.get(a.get('_kleur'), a.get('_kleur') or 'agenda')}, regel zegt {W.KLEURNAAM.get(wens, wens)}")
+            if info.get("firma") == "HARC" and info["soort"] in ("PO", "PB") and info["nummer"] in projecten:
+                meld("prospect_met_projectmap", a, "prospect, maar er is een projectmap: is al klant (FR-43)")
             if info.get("agendacode") and (a.get("_gemaakt") or "")[:10] >= W.KANTELDATUM:
                 meld("oude_code", a, f"[{info['agendacode']}] in een afspraak van na {W.KANTELDATUM}")
             gewenst, _ = W.melding_gewenst(a)

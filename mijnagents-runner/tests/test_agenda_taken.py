@@ -452,6 +452,29 @@ check("een afspraak in een archiefagenda wordt gelezen en gemeld, nooit beschrev
       hasattr(W, "archief_afspraken") and _gp9 == [] and [x["controle"] for x in _b9] == ["afspraak_in_archief"]
       and not W.mag_schrijven("haagendalightprojects@gmail.com"), str((_gp9, _b9)))
 
+# De klant vragen aan wie het weet (FR-46), en een prospect met projectmap is klant (FR-43)
+check("de opdrachtgevers uit een contract, zonder rijksregisternummer",
+      W._namen_uit_contract("TUSSEN Naam: Carolan Patrick Rijksregisternummer: 83 Tel Naam: Gleeson Norma Rijksregisternummer: 79 "
+                            "Hierna genoemd de Opdrachtgever Naam: Chegini Mehdi Rijksregisternummer: 1") == ["Patrick Carolan", "Norma Gleeson"])
+import contracten_mcp as _cm
+_oud_call, _oud_cache, _oud_idx = _cm.call, W.KLANTEN_CACHE, W.projectadressen.index
+_cm.call = lambda naam, **a: {"dossiers": [{"project_nummer": "2615", "klant": "KD Sports Turnhout"}, {"project_nummer": "2607", "klant": "Robin Verlinden en Silvie Boudou"}]}
+W.KLANTEN_CACHE = "/tmp/klanten-test.json"
+W.projectadressen.index = lambda *a, **k: {"5520": {"adres": "Korte Albertstraat 2, 2300 Turnhout", "map": ""}}
+W._KLANTEN.clear()
+try:
+    import os as _os
+    if _os.path.exists(W.KLANTEN_CACHE):
+        _os.remove(W.KLANTEN_CACHE)
+    _k = W.klant_van_nummer("2607")
+    _f = W.titelfouten({"kalender": W.WERKAGENDA, "titel": "Mehdi: [HARC-PO] 5520 - Kane Downs", "maker": W.WERKAGENDA},
+                       W.lees_titel("Mehdi: [HARC-PO] 5520 - Kane Downs"))
+finally:
+    _cm.call, W.KLANTEN_CACHE, W.projectadressen.index = _oud_call, _oud_cache, _oud_idx
+    W._KLANTEN.clear()
+check("de klant komt eerst uit het contractsysteem en de projectmap", _k == "Robin Verlinden en Silvie Boudou", _k)
+check("een prospect met een projectmap wordt gemeld als klant", any("projectmap" in x for x in _f), str(_f))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

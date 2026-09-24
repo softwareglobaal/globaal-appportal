@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "1.1",
+ "versie": "1.2",
  "datum": "24-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -105,6 +105,21 @@
    "les": "Wie iets verhuist, verhuist alles wat erbij hoort. Een handeling half doen is een nieuwe fout.",
    "uit": [
     "FR-42"
+   ]
+  },
+  {
+   "id": "L13",
+   "les": "Vraag het aan wie het weet: het contractsysteem, de projectmap, de agenda van vroeger. Pipedrive en de salesmap zijn de voorkant van de verkoop, niet het dossier van een klant.",
+   "uit": [
+    "FR-43",
+    "FR-46"
+   ]
+  },
+  {
+   "id": "L14",
+   "les": "Een gedicteerde zin die de bronnen tegenspreekt, is een vraag met de bronnen erbij, geen opdracht.",
+   "uit": [
+    "FR-43"
    ]
   }
  ],
@@ -910,19 +925,21 @@
    "id": "FR-43",
    "datum": "24-09-2026",
    "gevonden_door": "Claude",
-   "fout": "5520 Kane Downs: Pipedrive zegt gewonnen en getekend (fase SIGNED), Mehdi zegt dat de klant nog niet tekende.",
-   "gevolg": "Twee bronnen spreken elkaar tegen; de agent zou uit Pipedrive 'klant' afleiden.",
-   "waarom_niet_gezien": "Niemand vergeleek de deal met de afspraak.",
-   "oorzaak": "Onbekend: de deal staat misschien te vroeg op gewonnen.",
-   "soort_oorzaak": "bron",
-   "oplossing": "De afspraak staat op prospect, zoals Mehdi zei. Of de deal terug moet naar open, beslist Mehdi.",
+   "fout": "5520 Kane Downs werd op prospect gezet, terwijl hij klant is van H-Architects.",
+   "gevolg": "Een verkeerde soort en kleur op een klantafspraak.",
+   "waarom_niet_gezien": "Claude volgde een gedicteerde zin ('klant heeft nog niet getekend') tegen twee bronnen in: Pipedrive (gewonnen, SIGNED) en de projectmap (die ontstaat pas bij de ondertekening, A13). Het contractsysteem had de uitleg: het nieuwe contract 2615 KD Sports Turnhout is in voorbereiding en nog niet getekend.",
+   "oorzaak": "Niet eerst gevraagd aan wie het weet; een gedicteerde zin gelezen als opdracht in plaats van als vraag.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "5520 staat op klant ([HARC-KO], blauw). De agent meldt voortaan een prospect met een projectmap. Spreken de bronnen en een gedicteerde zin elkaar tegen, dan legt Claude de bronnen voor voor hij iets verandert.",
    "grendel": {
-    "soort": "werkwijze",
-    "waar": "werkwijze/agenda-wacht.md",
-    "tekst": "Spreken Pipedrive en Mehdi elkaar tegen, dan geldt Mehdi"
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een prospect met een projectmap wordt gemeld als klant"
    },
-   "controle": [],
-   "status": "vraag"
+   "controle": [
+    "prospect_met_projectmap"
+   ],
+   "status": "opgelost"
   },
   {
    "id": "FR-44",
@@ -961,6 +978,42 @@
     "titel_voorstel"
    ],
    "status": "bewaakt"
+  },
+  {
+   "id": "FR-46",
+   "datum": "24-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "De klant van 2505 werd in Pipedrive en de salesmap gezocht, niet in de architectuurmap. Zo leek er een tegenspraak (Norma Carolan tegenover Norma Gleeson).",
+   "gevolg": "Een vraag aan Mehdi over iets wat het contract al zei: de opdrachtgevers zijn Patrick Carolan en Norma Gleeson, klant sinds april 2025.",
+   "waarom_niet_gezien": "De agent vroeg het alleen aan Pipedrive. Hij raadpleegde het contractsysteem, de projectmap en de agenda van vroeger niet, terwijl die op de VM bereikbaar zijn.",
+   "oorzaak": "Geen afspraak over waar de klant van een project staat, en geen gewoonte om het aan de andere agents te vragen.",
+   "soort_oorzaak": "code",
+   "oplossing": "klant_van_nummer() vraagt het in volgorde aan het contractsysteem, het contract in de projectmap, de CLAUDE.md van het project, de agenda van vroeger, en pas dan aan Pipedrive. De naam wordt dertig dagen bewaard met zijn bron; een rijksregisternummer nooit.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de klant komt eerst uit het contractsysteem en de projectmap"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-47",
+   "datum": "24-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "De nummering van H-Architects was niet vastgelegd: in 2505 is 25 het jaar (2025) en 05 het volgnummer. Zo nummert alleen H-Architects; de andere firma's hebben andere benamingen.",
+   "gevolg": "De agent en Claude konden uit een nummer niet afleiden bij welke firma en welk jaar het hoort.",
+   "waarom_niet_gezien": "Het H-A afsprakenboek (A13) zegt waar het nummer vandaan komt, niet wat het betekent.",
+   "oorzaak": "Kennis die alleen bij Mehdi zat.",
+   "soort_oorzaak": "ontbrekende regel",
+   "oplossing": "Vastgelegd in de afspraken van de Agendawacht (JSON, werkwijze, PDF). Voor het H-A afsprakenboek staat de tekst klaar; de nieuwste versie van dat boek staat in het Claude-project '2145 vertomensberg'.",
+   "grendel": {
+    "soort": "werkwijze",
+    "waar": "werkwijze/agenda-wacht.md",
+    "tekst": "JJ is het jaar"
+   },
+   "controle": [],
+   "status": "open"
   }
  ]
 }

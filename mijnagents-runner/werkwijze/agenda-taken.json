@@ -1,5 +1,5 @@
 {
- "versie": "4.1",
+ "versie": "4.2",
  "datum": "2026-09-24",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -120,7 +120,9 @@
   },
   "aannemer": "AB/AO: een aannemer van een klant (Mehdi heeft als architect veel afspraken met aannemers). Geen klant, geen leverancier: een eigen soort. Buiten rood, online salie. Mehdi, 23-09-2026",
   "zonder_soort": "een firmacode zonder soort ('[HARC] Rechtbank') wordt gemeld; een gemeente of rechtbank past nog in geen soort, dat beslist Mehdi (FR-27)",
-  "volledig": "een titel met een projectnummer is pas volledig met de klant (Pipedrive, de persoon van de deal) en, buiten, het adres: '[FIRMA-SOORT] TYPE nummer - klant, adres'. Zonder gasten en niet terugkerend vult de agent het zelf aan, ook als een collega de afspraak zette; met gasten, van Calendly of in een reeks doet hij een voorstel (FR-41, FR-45)"
+  "volledig": "een titel met een projectnummer is pas volledig met de klant (Pipedrive, de persoon van de deal) en, buiten, het adres: '[FIRMA-SOORT] TYPE nummer - klant, adres'. Zonder gasten en niet terugkerend vult de agent het zelf aan, ook als een collega de afspraak zette; met gasten, van Calendly of in een reeks doet hij een voorstel (FR-41, FR-45)",
+  "projectnummer_ha": "Projectnummers van H-Architects zijn JJNN: JJ is het jaar (25 = 2025, 26 = 2026), NN het volgnummer van dat jaar (2505 is het vijfde project van 2025). Zo nummert alleen H-Architects; de andere firma's hebben een eigen benaming. Een nummer met een projectmap is een klant, want die map ontstaat bij de ondertekening (A13). Mehdi, 24-09-2026 (FR-47)",
+  "klant_bron": "de klant van een project komt, in deze volgorde, uit het contractsysteem (contracten.globaal.be), het contract of de CLAUDE.md in de projectmap (H-A WORK), de agenda van vroeger, en pas dan uit Pipedrive. De salesmap is de verkoop, niet het dossier. Een gevonden naam wordt dertig dagen bewaard met zijn bron (mijnagents-data/klanten.json); een rijksregisternummer nooit (FR-46)"
  },
  "kleuren": {
   "grondregel": "de kleur zegt waarvóór Mehdi ergens is, de twee uitroeptekens zeggen dát hij naar buiten gaat. Dat zijn twee verschillende dingen. Een afspraak kan nooit kleurloos zijn: ze is werk, privé of Lara.",
@@ -301,24 +303,14 @@
  },
  "openstaand": [
   {
-   "wat": "De reeks '2145:wekelijkse werfbezoek' loopt nog elke maandag in 'ZZ ARCHIEF H-Architects Buiten', naast dezelfde reeks op werk, tot eind december (ook 05-10, de week in SU). Mag ik ze stoppen met een einddatum? Het verleden blijft staan (FR-39)",
-   "wie": "Mehdi",
-   "wanneer": "voor 28-09"
-  },
-  {
-   "wat": "Calendly-type 'HA: Klant' van het account light projects schrijft nog in de archiefagenda. In Calendly (account light projects): bij 'HA: Klant' de agenda op 'mehdi werk agenda' zetten en de titel op 'Mehdi: [HARC-KO] {nummer} - {naam}' (FR-39, FR-22)",
+   "wat": "Calendly, account light projects, type 'HA: Klant': de agenda op 'mehdi werk agenda' zetten en het titelsjabloon op 'Mehdi: [HARC-KO] ...'. Stappen staan in het antwoord van 24-09; tot dan leest de agent de archiefagenda mee (FR-39, FR-22)",
    "wie": "Mehdi",
    "wanneer": "zo snel mogelijk"
   },
   {
-   "wat": "5520 Kane Downs staat in Pipedrive op gewonnen, fase SIGNED; volgens Mehdi tekende de klant nog niet. De afspraak staat nu op prospect. Moet de deal terug naar open? (FR-43)",
+   "wat": "H-A afsprakenboek, A13: de betekenis van het projectnummer toevoegen (JJNN, JJ = jaar, alleen H-Architects). De nieuwste versie van het boek staat in het Claude-project '2145 vertomensberg'; de tekst staat klaar in de JSON onder titelconventie.projectnummer_ha (FR-47)",
    "wie": "Mehdi",
-   "wanneer": "zodra het kan"
-  },
-  {
-   "wat": "2505: de deal heet '2505 Norma Carolan', de persoon en de salesmap 'Norma Gleeson'. Welke naam klopt? De titel draagt nu Norma Gleeson",
-   "wie": "Mehdi",
-   "wanneer": "zodra het kan"
+   "wanneer": "bij de volgende versie van het boek"
   },
   {
    "wat": "Kleuren van 24-09 om 00:15: UNABO-overleggen en UNABO-boekingen paars, AI stabiliteit geel, per script gezet. Bewust? Is UNABO paars een nieuwe regel, of is AI stabiliteit onzeker (dan ?? in de titel)? Tot dan laat de agent ze staan (FR-21)",
@@ -550,6 +542,10 @@
   {
    "datum": "2026-09-24",
    "wat": "archiefagenda's worden meegelezen (alleen lezen); elke rit draagt het autootje; 'Lara naar huis brengen' is de rit naar huis tot 19:30; titels met projectnummer krijgen klant en adres; 5520 op prospect (klant nog niet getekend); de ritten naar de kine van 23-09 naar privé"
+  },
+  {
+   "datum": "2026-09-24",
+   "wat": "5520 is klant van H-Architects ([HARC-KO]); 2505 = Patrick Carolan & Norma Gleeson (contract), klant sinds april 2025; de reeks 2145 in het archief blijft staan (project net begonnen); projectnummers H-Architects zijn JJNN; de klant komt uit het contractsysteem en de projectmap, niet uit de salesmap"
   }
  ],
  "bron_afkortingen": {

@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -707,27 +708,131 @@ def titels_normaliseren(items, alleen_dag=None):
 
 
 _KLANTEN = {}
+KLANTEN_CACHE = os.path.expanduser("~/appportal/mijnagents-data/klanten.json")
+
+
+def _klanten_cache():
+    try:
+        return json.load(open(KLANTEN_CACHE))
+    except (OSError, ValueError):
+        return {}
+
+
+def _namen_uit_contract(tekst):
+    """De opdrachtgevers uit een architectuurovereenkomst: 'Naam: Carolan Patrick Rijksregisternummer ...'
+    -> ['Patrick Carolan']. Alleen de naam; een rijksregisternummer lees ik niet uit en bewaar ik nooit."""
+    kop = tekst.split("Hierna genoemd", 1)[0][:4000]
+    uit = []
+    for n in re.findall(r"Naam:\s*([A-Za-zÀ-ÿ' .-]+?)\s+Rijksregisternummer", kop):
+        delen = n.split()
+        if len(delen) >= 2:
+            uit.append(f"{delen[-1]} {' '.join(delen[:-1])}")
+    return uit
 
 
 def klant_van_nummer(nr):
-    """De klant bij een H-Architects-projectnummer: de persoon van de Pipedrive-deal waarvan de
-    titel met dat nummer begint ('2505 Norma Carolan', persoon Norma Gleeson). De salesmap draagt
-    dezelfde naam (A13). Geen deal met precies dat nummer: leeg, dan gok ik niets."""
+    """De klant bij een H-Architects-projectnummer. Ik vraag het aan wie het weet, in deze volgorde:
+    1. het contractsysteem (contracten.globaal.be): het dossier met precies dat projectnummer;
+    2. de projectmap in H-A WORK: het contract in '0. General Information/2. Contract' (de opdrachtgevers),
+       anders de CLAUDE.md van het project (de bouwheer);
+    3. de agenda van vroeger: de naam die al bij dat nummer stond;
+    4. Pipedrive: de persoon van de deal, als laatste.
+    Mehdi, 24-09-2026: 'waarom kijk je in de salesmap, je moet in de architectuurmap kijken ... Norma is
+    1,5 jaar klant ... waarom praat je niet met andere agenten om slimmer te worden'. Een gevonden naam
+    bewaar ik dertig dagen, met de bron erbij."""
     if nr in _KLANTEN:
         return _KLANTEN[nr]
-    naam = ""
+    cache = _klanten_cache()
+    c = cache.get(nr) or {}
+    if c.get("naam") and time.time() - c.get("ts", 0) < 30 * 86400:
+        _KLANTEN[nr] = c["naam"]
+        return c["naam"]
+    naam, bron = "", ""
+    # 1 het contractsysteem
     try:
-        d = pipedrive.get("harchitects", "/deals/search", {"term": nr, "fields": "title", "limit": 5})
-        lijst = d.get("items") if isinstance(d, dict) else d
-        for it in lijst or []:
-            x = it.get("item", it)
-            if re.match(rf"^\s*{re.escape(nr)}\b", x.get("title") or ""):
-                naam = ((x.get("person") or {}).get("name") or re.sub(rf"^\s*{re.escape(nr)}\s*", "", x["title"])).strip()
+        import contracten_mcp
+        r = contracten_mcp.call("zoek", term=nr)
+        for d in (r.get("dossiers") if isinstance(r, dict) else []) or []:
+            if str(d.get("project_nummer")) == nr and d.get("klant"):
+                naam, bron = d["klant"].strip(), "contractsysteem"
                 break
     except Exception:  # noqa: BLE001
-        naam = ""
+        pass
+    # 2 de projectmap: het contract, anders de CLAUDE.md van het project
+    kaart = (projectadressen.index() or {}).get(nr) or {}
+    if not naam and kaart.get("map"):
+        import bronnen
+        try:
+            for e in bronnen.lijst(kaart["map"] + "/0. General Information/2. Contract", recursief=False) or []:
+                if e.get(".tag") == "file" and e["name"].lower().endswith(".pdf") and e["name"].startswith(nr):
+                    namen = _namen_uit_contract(bronnen.pdf_tekst(bronnen.download(e["path_display"])) or "")
+                    if namen:
+                        naam, bron = " & ".join(namen), "contract in de projectmap"
+                        break
+        except Exception:  # noqa: BLE001
+            pass
+        if not naam:
+            try:
+                md = bronnen.download(kaart["map"] + "/CLAUDE.md", 200_000).decode("utf-8", "ignore")
+                m = re.search(r"bouwheer\s*\|\s*([^—|\n]+?)\s*(?:—|\||$)", md, re.I | re.M)
+                if m:
+                    naam, bron = m.group(1).strip(), "CLAUDE.md van het project"
+            except Exception:  # noqa: BLE001
+                pass
+    # 3 de agenda van vroeger
+    if not naam:
+        try:
+            naam = _naam_uit_oude_agenda(nr)
+            bron = "de agenda van vroeger" if naam else ""
+        except Exception:  # noqa: BLE001
+            naam = ""
+    # 4 Pipedrive, als laatste
+    if not naam:
+        try:
+            d = pipedrive.get("harchitects", "/deals/search", {"term": nr, "fields": "title", "limit": 5})
+            lijst = d.get("items") if isinstance(d, dict) else d
+            for it in lijst or []:
+                x = it.get("item", it)
+                if re.match(rf"^\s*{re.escape(nr)}\b", x.get("title") or ""):
+                    naam = ((x.get("person") or {}).get("name") or re.sub(rf"^\s*{re.escape(nr)}\s*", "", x["title"])).strip()
+                    bron = "Pipedrive"
+                    break
+        except Exception:  # noqa: BLE001
+            naam = ""
+    if naam.islower():
+        naam = naam.title()          # 'lisa cuppens' uit een mail wordt 'Lisa Cuppens'
     _KLANTEN[nr] = naam
+    if naam:
+        cache[nr] = {"naam": naam, "bron": bron, "ts": time.time()}
+        try:
+            os.makedirs(os.path.dirname(KLANTEN_CACHE), exist_ok=True)
+            json.dump(cache, open(KLANTEN_CACHE, "w"), ensure_ascii=False, indent=0)
+        except OSError:
+            pass
     return naam
+
+
+def _naam_uit_oude_agenda(nr):
+    """De naam die in de afgelopen twee jaar al bij dit nummer stond ('2505 - Norma Gleeson'), in alle
+    agenda's van het account, ook de archieven. De meest gebruikte naam wint."""
+    import urllib.parse
+    import urllib.request
+    from collections import Counter
+    tok = agenda._toegang()
+    van = (nu_lokaal() - timedelta(days=730)).isoformat()
+    tel = Counter()
+    for kal in agenda.kalendernamen():
+        url = (f"{agenda.API}/calendars/{urllib.parse.quote(kal, safe='')}/events?"
+               + urllib.parse.urlencode({"q": nr, "timeMin": van, "singleEvents": "true", "maxResults": 50}))
+        try:
+            d = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"}), timeout=30))
+        except Exception:  # noqa: BLE001
+            continue
+        for ev in d.get("items", []):
+            m = re.search(rf"\b{re.escape(nr)}\b\s*[-:]?\s*([A-ZÀ-Ý][A-Za-zÀ-ÿ'-]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'-]+){{0,3}})", ev.get("summary") or "")
+            if m and "@" not in m.group(1) and not re.search(r"straat|steenweg|laan|weg\b", m.group(1), re.I):
+                tel[m.group(1).strip()] += 1
+    return tel.most_common(1)[0][0] if tel else ""
 
 
 def titel_aanvulling(a, projecten):
@@ -914,6 +1019,11 @@ def titelfouten(a, info):
                 fouten.append("geen firmacode; de namen werken voor " + " of ".join(firmas))
             else:
                 fouten.append("geen firmacode")
+    if info.get("firma") == "HARC" and info["soort"] in ("PO", "PB") and info["nummer"] \
+            and info["nummer"] in projectadressen.index():
+        # Een projectmap ontstaat bij de ondertekening (A13): wie er een heeft, is klant. Gezien
+        # 24-09-2026: 5520 stond op prospect terwijl de projectmap in 'permission received' stond.
+        fouten.append("prospect met een projectmap: is al klant (K in plaats van P)")
     if info.get("firma") and not info["soort"] and a.get("kalender", "") not in AGENDA_VASTE_KLEUR:
         # "[HARC] 2616 Stad Leuven" of "[HARC] Rechtbank": firma wel, soort niet. Een gemeente
         # of rechtbank past in geen enkele soort; dat is een vraag aan Mehdi. Gezien 24-09-2026.
