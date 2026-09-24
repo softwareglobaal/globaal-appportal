@@ -124,6 +124,49 @@ def test_zendmastpunt_breekt_geen_bezoek():
                    and s["tot"] > bezoeken[0]["van"] for s in ind), soorten(ind)
 
 
+DICHTBIJ = (50.7800, 4.7300)    # ruim 3 km van THUIS
+
+
+def test_korte_stop_in_een_rit_blijft_een_bezoek():
+    """15-09-2026: een half uur op de werf verdween in een rit van 07:24 tot 08:28.
+    Twee punten bij aankomst, allebei 'rijden' (autorouter, sensor automotive), dan
+    27 minuten stilte en het volgende punt 560 m verder, al rijdend."""
+    punten = (rit(0, 10, THUIS, DICHTBIJ, stap=5, motion="automotive", ssid="AUTO-ROUTER")
+              + [punt(13.7, DICHTBIJ, "automotive", ssid="GAST-WIFI", dlat=0.0001)]
+              + rit(41, 61, (DICHTBIJ[0] + 0.005, DICHTBIJ[1]), THUIS, stap=5,
+                    motion="automotive", ssid="AUTO-ROUTER"))
+    ind = app.dagindeling_zuiver(punten, PLEKKEN)
+    bezoeken = [s for s in ind if s["soort"] == "bezoek"]
+    assert len(bezoeken) == 1 and bezoeken[0].get("stop"), soorten(ind)
+    stop = bezoeken[0]
+    assert stop["van"] == T0 + 10 * 60, "de stop begint bij de aankomst"
+    assert stop["tot"] == T0 + 41 * 60, "de stop loopt tot het eerste punt elders"
+    assert app.afstand(stop["lat"], stop["lon"], *DICHTBIJ) < 50
+    assert stop["wifi"] == "GAST-WIFI", "de autorouter zegt niets over de plek"
+    assert not any(s["soort"] == "verplaatsing" and s["van"] < stop["tot"] and s["tot"] > stop["van"]
+                   for s in ind), "een rit overlapt de stop"
+
+
+def test_stop_loopt_door_zolang_de_punten_op_de_plek_liggen():
+    """15-09-2026: na de stilte kwamen nog punten op dezelfde plek (autorouter)."""
+    punten = (rit(0, 10, THUIS, DICHTBIJ, stap=5, motion="automotive")
+              + [punt(19, DICHTBIJ, "automotive"), punt(26, DICHTBIJ, "stationary", ssid="AUTO-ROUTER")]
+              + rit(30, 40, (DICHTBIJ[0] + 0.004, DICHTBIJ[1]), THUIS, stap=5, motion="automotive"))
+    ind = app.dagindeling_zuiver(punten, PLEKKEN)
+    stops = [s for s in ind if s.get("stop")]
+    assert len(stops) == 1, soorten(ind)
+    assert (stops[0]["van"], stops[0]["tot"]) == (T0 + 10 * 60, T0 + 26 * 60), stops[0]
+
+
+def test_rit_met_trage_meting_is_geen_stop():
+    """Onderweg meldt de telefoon zich om de vijf tot tien minuten. Een rit door de
+    stad met tien minuten tussen de punten en 1,2 km verder per punt is geen stop."""
+    traag = rit(0, 30, THUIS, (THUIS[0] - 0.0324, THUIS[1]), stap=10, motion="automotive")
+    snel = rit(30, 66, (THUIS[0] - 0.0324, THUIS[1]), WERF, stap=6, motion="automotive")[1:]
+    ind = app.dagindeling_zuiver(traag + snel, PLEKKEN)
+    assert "bezoek" not in soorten(ind), soorten(ind)
+
+
 def test_zones_gaan_mee_als_antwoord_op_een_meting():
     """18-09-2026: 25,6 uur waarin hij ergens was zonder meting; zones dichten dat."""
     b = app.waypoint_bericht(PLEKKEN + [{"naam": "Werf", "lat": WERF[0], "lon": WERF[1],

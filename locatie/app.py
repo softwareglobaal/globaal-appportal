@@ -559,6 +559,19 @@ VERBLIJF_STRAAL = 150
 GAT_MINUTEN = 30
 # Punten met meer onzekerheid dan dit (meter) zijn geen satellietmeting.
 MAX_ONZEKERHEID = 250
+# Een kortere stilte midden in een rit is een stop als er na de rijtijd nog
+# minstens STILSTAND_MINUTEN overblijft. De telefoon zwijgt zodra hij stilligt en
+# meldt zich pas weer na een paar honderd meter. Op 15-09-2026 stond Mehdi een
+# half uur op de werf van 2145: twee punten bij aankomst (07:34 nog aan de
+# autorouter, 07:38 met sensor "automotive"), 27 minuten stilte, om 08:05 562 m
+# verder al rijdend. Geen gat (korter dan GAT_MINUTEN) en geen verblijf (de
+# punten telden als rijden), dus verdween het werfbezoek in een rit van 07:24
+# tot 08:28.
+STOP_METER = 1500           # verder na de stilte: hij reed weg of stond in de file
+# Meter per minuut (20 km/u, stadsverkeer) om de rijtijd van de stilte af te
+# trekken. Met 30 km/u werd op 15-09 een rit van 1,2 km in elf minuten door
+# Leuven een stop, terwijl er onderweg een punt "automotive" lag.
+STOP_RIJTEMPO = 333
 
 
 def _rijdt(punt):
@@ -623,7 +636,47 @@ def _verblijven(punten):
     return uit
 
 
-def _rit(spoor, groep):
+def _bezoek(groep, bekende_plekken, tot=None):
+    """Een verblijf uit een reeks punten op een plek. tot gaat voorbij het laatste
+    punt als de telefoon daarna zweeg terwijl hij er nog was (een stop)."""
+    tot = groep[-1]["tst"] if tot is None else tot
+    mlat, mlon = _middelpunt(groep)
+    # De autorouter hangt nog in de lucht na het parkeren; die zegt niets over de plek.
+    gezien = {(p.get("ssid") or "").lower() for p in groep
+              if p.get("ssid") and (p.get("ssid") or "").lower() not in VOERTUIG_WIFI}
+    naam = noem_plek(mlat, mlon, gezien, bekende_plekken)
+    dossier = next((p.get("dossier") for p in bekende_plekken
+                    if p["naam"] == naam), None) if naam else None
+    # Het langste stille stuk binnen het verblijf, zodat een lezer ziet dat
+    # "5 uur thuis" op een handvol punten kan rusten.
+    stilte = max([(groep[x]["tst"] - groep[x - 1]["tst"]) / 60 for x in range(1, len(groep))]
+                 + [(tot - groep[-1]["tst"]) / 60])
+    return {
+        "soort": "bezoek",
+        "van": groep[0]["tst"], "tot": tot,
+        "minuten": round((tot - groep[0]["tst"]) / 60),
+        "lat": round(mlat, 6), "lon": round(mlon, 6),
+        "punten": len(groep),
+        "langste_stilte": round(stilte),
+        "wifi": next((p.get("ssid") for p in groep if p.get("ssid")
+                      and p["ssid"].lower() not in VOERTUIG_WIFI), None),
+        "plek": naam,
+        "dossier": dossier,
+    }
+
+
+def _is_stop(voor, na):
+    """Stond hij stil in de stilte tussen deze twee punten van een rit?"""
+    minuten = (na["tst"] - voor["tst"]) / 60
+    meter = afstand(voor["lat"], voor["lon"], na["lat"], na["lon"])
+    return (minuten <= GAT_MINUTEN and meter <= STOP_METER
+            and minuten - meter / STOP_RIJTEMPO >= STILSTAND_MINUTEN)
+
+
+def _rit(spoor, groep, van=None):
+    """van: later dan het eerste punt als de rit uit een stop vertrekt; de stop
+    loopt tot het eerste punt na de stilte, de afstand telt vanaf de stop."""
+    van = spoor[0]["tst"] if van is None else van
     meter = sum(afstand(spoor[x]["lat"], spoor[x]["lon"],
                         spoor[x + 1]["lat"], spoor[x + 1]["lon"])
                 for x in range(len(spoor) - 1))
@@ -638,28 +691,32 @@ def _rit(spoor, groep):
         telling["automotive"] = 1
     return {
         "soort": "verplaatsing",
-        "van": spoor[0]["tst"], "tot": spoor[-1]["tst"],
-        "minuten": round((spoor[-1]["tst"] - spoor[0]["tst"]) / 60),
+        "van": van, "tot": spoor[-1]["tst"],
+        "minuten": round((spoor[-1]["tst"] - van) / 60),
         "meter": round(meter),
         "wijze": max(telling, key=telling.get) if telling else None,
         "spoor": [[p["lat"], p["lon"]] for p in spoor],
     }
 
 
-def _stuk_tussen(spoor):
+def _stuk_tussen(spoor, bekende_plekken=()):
     """Het stuk tussen twee verblijven, opgedeeld waar de meting zweeg.
 
     spoor begint met het laatste punt van het vorige verblijf en eindigt met het
     eerste van het volgende. Een stilte langer dan
     GAT_MINUTEN wordt een gat en geen rit: we weten niet welke weg er gereden is,
-    en een rechte lijn tekenen zou een route verzinnen.
+    en een rechte lijn tekenen zou een route verzinnen. Een kortere stilte waarin
+    hij nauwelijks vooruitkwam is een stop (zie STOP_METER): een bezoek van de
+    aankomst tot het eerste punt na de stilte.
     """
     uit = []
     begin = 0
-    for x in range(1, len(spoor)):
+    van = None                          # vertrek uit een stop, als de rit daar begint
+    x = 1
+    while x < len(spoor):
         if (spoor[x]["tst"] - spoor[x - 1]["tst"]) / 60 > GAT_MINUTEN:
             if x - 1 > begin:
-                uit.append(_rit(spoor[begin:x], spoor[begin:x]))
+                uit.append(_rit(spoor[begin:x], spoor[begin:x], van))
             uit.append({
                 "soort": "gat",
                 "van": spoor[x - 1]["tst"], "tot": spoor[x]["tst"],
@@ -667,9 +724,35 @@ def _stuk_tussen(spoor):
                 "meter": round(afstand(spoor[x - 1]["lat"], spoor[x - 1]["lon"],
                                        spoor[x]["lat"], spoor[x]["lon"])),
             })
-            begin = x
+            begin, van = x, None
+        elif _is_stop(spoor[x - 1], spoor[x]):
+            plek = spoor[x - 1]
+            # De aankomst hoort bij de stop: terug zolang de punten op de plek liggen.
+            c = x - 1
+            while c > begin and afstand(spoor[c - 1]["lat"], spoor[c - 1]["lon"],
+                                        plek["lat"], plek["lon"]) <= VERBLIJF_STRAAL:
+                c -= 1
+            # En wat na de stilte nog op de plek ligt ook: de autorouter en de
+            # sensor "automotive" hangen na het parkeren nog even na.
+            e = x - 1
+            while e + 1 < len(spoor) and afstand(spoor[e + 1]["lat"], spoor[e + 1]["lon"],
+                                                 plek["lat"], plek["lon"]) <= VERBLIJF_STRAAL:
+                e += 1
+            # Vertrokken in de laatste stilte: de stop loopt tot het eerste punt elders.
+            weg = e + 1 < len(spoor) and _is_stop(spoor[e], spoor[e + 1])
+            tot = spoor[e + 1]["tst"] if weg else spoor[e]["tst"]
+            if c > begin:
+                uit.append(_rit(spoor[begin:c + 1], spoor[begin:c + 1], van))
+            stop = dict(_bezoek(spoor[c:e + 1], bekende_plekken, tot=tot), stop=True)
+            if van and stop["van"] < van:
+                stop.update(van=van, minuten=round((stop["tot"] - van) / 60))
+            uit.append(stop)
+            begin, van = e, (tot if weg else None)
+            # Niet weg in een stilte: het stuk na e kan nog een gat zijn.
+            x = e + 1 if weg else e
+        x += 1
     if len(spoor) - begin >= 2:
-        uit.append(_rit(spoor[begin:], spoor[begin:]))
+        uit.append(_rit(spoor[begin:], spoor[begin:], van))
     return uit
 
 
@@ -753,7 +836,8 @@ def _voeg_samen(items):
                               langste_stilte=round(max(stilte, vorig.get("langste_stilte", 0))),
                               wifi=vorig.get("wifi") or item.get("wifi"),
                               plek=vorig.get("plek") or item.get("plek"),
-                              dossier=vorig.get("dossier") or item.get("dossier"))
+                              dossier=vorig.get("dossier") or item.get("dossier"),
+                              stop=bool(vorig.get("stop") and item.get("stop")))
             continue
 
         if voor:
@@ -790,31 +874,11 @@ def dagindeling_zuiver(punten, bekende_plekken):
         if i < len(punten):
             spoor.append(punten[i])
         if len(spoor) >= 2:
-            resultaat.extend(_stuk_tussen(spoor))
+            resultaat.extend(_stuk_tussen(spoor, bekende_plekken))
 
         if i >= len(punten):
             break
-        groep = punten[i:j]
-        mlat, mlon = _middelpunt(groep)
-        gezien = {(p.get("ssid") or "").lower() for p in groep if p.get("ssid")}
-        naam = noem_plek(mlat, mlon, gezien, bekende_plekken)
-        dossier = next((p.get("dossier") for p in bekende_plekken
-                        if p["naam"] == naam), None) if naam else None
-        # Het langste stille stuk binnen het verblijf, zodat een lezer ziet dat
-        # "5 uur thuis" op een handvol punten kan rusten.
-        stilte = max(((groep[x]["tst"] - groep[x - 1]["tst"]) / 60
-                      for x in range(1, len(groep))), default=0)
-        resultaat.append({
-            "soort": "bezoek",
-            "van": groep[0]["tst"], "tot": groep[-1]["tst"],
-            "minuten": round((groep[-1]["tst"] - groep[0]["tst"]) / 60),
-            "lat": round(mlat, 6), "lon": round(mlon, 6),
-            "punten": len(groep),
-            "langste_stilte": round(stilte),
-            "wifi": next((p.get("ssid") for p in groep if p.get("ssid")), None),
-            "plek": naam,
-            "dossier": dossier,
-        })
+        resultaat.append(_bezoek(punten[i:j], bekende_plekken))
         vorige_eind = j - 1
     return _voeg_samen(resultaat)
 

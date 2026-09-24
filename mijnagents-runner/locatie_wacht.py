@@ -2,33 +2,44 @@
 """De Locatiewacht (Privé, alleen voor Mehdi) — zijn bewegingslogboek.
 
 Bron: de tegel locatie.globaal.be (OwnTracks op de iPhone), op de VM zonder login
-bereikbaar op 127.0.0.1:3031: GET /api/dag/JJJJ-MM-DD (indeling in bezoeken en
-verplaatsingen) en GET /gezond (punten, minuten sinds het laatste punt).
+bereikbaar op 127.0.0.1:3031: GET /api/dag/JJJJ-MM-DD (indeling in bezoeken,
+verplaatsingen en gaten, plus de ruwe punten), GET /api/plekken (de plekken die de
+tegel kent, zoals Thuis) en GET /gezond (punten, minuten sinds het laatste punt).
 
 Elke avond (21:30) en met --dag JJJJ-MM-DD:
-  1. het dagboek van de dag samenstellen, met adressen (Nominatim, gecachet), en
-     wegschrijven op de VM: mijnagents-data/locatielogboek/dagen/<dag>.md.
+  1. het dagboek van de dag samenstellen en wegschrijven op de VM:
+     mijnagents-data/locatielogboek/dagen/<dag>.md. Elke plek krijgt een naam: een
+     plek die de tegel kent, anders een bouwplaats (binnen 300 m van een
+     projectcoördinaat, met het projectnummer), anders het adres (Nominatim, gecachet).
+     Een gat in de meting is meestal een stilstand: de telefoon zwijgt zodra hij
+     stilligt. Die stilstand krijgt de plek waar de telefoon stil viel.
      De Dropbox-map "private/0 Chegini Mehdi/Prive met Claude" is met het token
      van de stack (Siyans account) niet bereikbaar, dus de Dropbox-kopie maakt
      het Mac-script locatie/locatie-ophalen.py, zoals nu.
   2. het dagboek naast de agenda leggen: welke afspraak is volgens de locatie
-     doorgegaan (adres van de afspraak binnen 300 m van een bezoek dat in tijd
-     overlapt), welke niet gezien.
-  3. bezoeken van meer dan twintig minuten zonder afspraak melden als mogelijk
-     niet-geregistreerd werfbezoek (vaste plekken, vaak bezocht, apart benoemd).
+     doorgegaan (plek van de afspraak binnen 300 m van een bezoek of stilstand dat
+     in tijd overlapt), welke niet gezien. De plek van een afspraak komt eerst uit
+     het projectregister (projectnummer in de titel: werkwijze/projecten.json, dan
+     het adres uit de projectmapnaam volgens A13 in projectadressen.json), pas
+     daarna uit het adres in de agenda.
+  3. verblijven op een bouwplaats zonder afspraak melden als mogelijk
+     niet-geregistreerd werfbezoek, en elders verblijven van twintig minuten of
+     meer die geen vaste plek zijn.
   4. alles klaarzetten voor Mehdi (nooit voor een afdeling), werkverslag op het bord.
 Elke twee uur (--controle): alarm als er meer dan zes uur geen punt binnenkwam
 terwijl het geen nacht is (07:00-22:00): dan is de tracker stuk.
+Met --droog: het dagboek samenstellen en tonen, zonder weg te schrijven of het bord te raken.
 Leest alleen. Verwijdert niets uit het logboek.
 """
 import json
 import math
 import os
+import re
 import sys
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 # De server draait in UTC. Tot 14-09-2026 stonden alle tijden in het dagboek
@@ -42,17 +53,29 @@ def nu():
     return datetime.now(BRUSSEL)
 
 HIER = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import agenda  # noqa: E402
+import agenda_wacht as W  # noqa: E402  titelregels, agenda's en adres naar coördinaten, zoals De Agendawacht
 import bord  # noqa: E402
 import dropbox_prive  # noqa: E402
+import projectadressen  # noqa: E402
 
 NAAM = "locatie-wacht"
 ag = bord.Agent(NAAM)
 LOCATIE = os.environ.get("LOCATIE_URL", "http://127.0.0.1:3031")
 MAP = os.path.expanduser("~/appportal/mijnagents-data/locatielogboek")
 CACHE = os.path.join(MAP, "adressen.json")
+PROJECTEN = os.path.join(HIER, "werkwijze", "projecten.json")
 MIN_BEZOEK = 20
+# Binnen deze afstand van een projectcoördinaat is een verblijf een bouwplaats; dezelfde
+# 300 m als voor de foto's bij een werfbezoek.
+BOUWPLAATS_M = 300
+# Een gat is een stilstand zolang het eerste punt erna dichtbij ligt: de telefoon zwijgt
+# als hij stilligt en meldt zich pas na een paar honderd meter (gemeten 21 en 22-09-2026:
+# 0,4 tot 1,2 km). Ligt het volgende punt verder, dan gebeurde er in de stilte meer.
+STILSTAND_METER = 2000
+REGISTER_OUD_DAGEN = 14
 ALARM_UREN = 6
 NACHT = (22, 7)
 CONTROLE = "--controle" in sys.argv
@@ -112,19 +135,6 @@ def adres_van(lat, lon, cache):
     return adres
 
 
-def coord_van_adres(tekst, cache):
-    sleutel = "zoek:" + tekst.strip().lower()
-    if sleutel in cache:
-        return cache[sleutel].get("lat"), cache[sleutel].get("lon")
-    try:
-        d = _nominatim("search", {"q": tekst, "format": "jsonv2", "limit": 1, "countrycodes": "be,nl"})
-        lat, lon = (float(d[0]["lat"]), float(d[0]["lon"])) if d else (None, None)
-    except Exception:  # noqa: BLE001
-        lat, lon = None, None
-    cache[sleutel] = {"lat": lat, "lon": lon}
-    return lat, lon
-
-
 def afstand_m(lat1, lon1, lat2, lon2):
     r = 6371000
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -142,6 +152,10 @@ def duur(m):
     return f"{m // 60}u{m % 60:02d}" if m >= 60 else f"{m} min"
 
 
+def km(meter):
+    return int((meter or 0) / 100) / 10
+
+
 def epoch_van_iso(iso):
     try:
         return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
@@ -149,59 +163,191 @@ def epoch_van_iso(iso):
         return None
 
 
+def kort(adres):
+    return re.sub(r",\s*(Belgi[eë]|Belgium)\s*$", "", (adres or "").strip())
+
+
+def online(tekst):
+    return bool(re.match(r"\s*https?://", tekst or "")
+                or re.search(r"zoom\.us|meet\.google|teams\.microsoft|webex", tekst or "", re.I))
+
+
+# ---------------------------------------------------------- projecten ---
+def projectregister():
+    """Projectnummer naar adres en coördinaten, uit de twee bronnen die er al zijn:
+    werkwijze/projecten.json (projectregister.py, met coördinaten) en de projectmappen
+    volgens A13 (projectadressen.json, adres uit de mapnaam, nog zonder coördinaten).
+    Geeft (register, gelezen teksten voor de kennis, datum van het register)."""
+    reg, gelezen, datum = {}, {}, ""
+    try:
+        tekst = open(PROJECTEN, encoding="utf-8").read()
+        gelezen["projecten.json"] = tekst
+        d = json.loads(tekst)
+        datum = d.get("datum", "")
+        for p in d.get("projecten", []):
+            if p.get("nummer"):
+                c = p.get("coordinaten")
+                reg[str(p["nummer"])] = {"adres": kort(p.get("adres")), "coord": tuple(c) if c else None,
+                                         "bron": "projectregister", "afspraken": p.get("aantal_afspraken", 0),
+                                         "map": False}
+    except (OSError, ValueError):
+        pass
+    mappen = projectadressen.index()
+    gelezen["projectadressen.json"] = json.dumps(mappen, ensure_ascii=False, sort_keys=True)
+    for nr, p in mappen.items():
+        r = reg.setdefault(nr, {"adres": "", "coord": None, "bron": "projectmap (A13)", "afspraken": 0})
+        r["map"] = True
+        r["adres"] = r["adres"] or kort(p.get("adres"))
+    return reg, gelezen, datum
+
+
+def plek_van_afspraak(a, info, reg, wcache):
+    """Waar een afspraak plaatsvindt: (lat, lon, herkomst) of (None, None, reden).
+
+    Eerst het projectnummer in de titel: de coördinaten uit het projectregister, dan het
+    adres uit de projectmap (A13). Pas daarna het adres in de agenda. Gezien 21-09-2026:
+    'WB 2145' met Vertommensberg 9, 3010 Kessel-Lo gaf 'adres niet gevonden', omdat
+    Nominatim de deelgemeente niet kent en deze wacht die mislukking voor altijd
+    bewaarde, terwijl het projectregister de coördinaten al had. Het omzetten van een
+    adres gebeurt nu door W.coord, die meerdere schrijfwijzen probeert en een
+    mislukking niet onthoudt."""
+    loc = (a.get("locatie") or "").strip()
+    nr = info.get("nummer") or ""
+    # Een postcode is geen projectnummer: "Kerkstraat 1, 3010 Leuven" in titel of adres.
+    if nr and (re.search(rf",\s*{nr}\s+[A-Za-zÀ-ÿ]", a.get("titel", "")) or re.search(rf"\b{nr}\s+[A-Za-zÀ-ÿ]", loc)):
+        nr = ""
+    p = reg.get(nr) if nr else None
+    if p and p.get("coord"):
+        bron = "het projectregister" if p.get("bron") == "projectregister" else "de projectmap (A13)"
+        return p["coord"][0], p["coord"][1], f"{bron}, project {nr}"
+    if p and p.get("adres"):
+        c = W.coord(p["adres"], wcache)
+        if c:
+            p["coord"] = (c[0], c[1])
+            return c[0], c[1], f"de projectmap (A13), project {nr}"
+    if loc and not online(loc):
+        c = W.coord(loc, wcache)
+        if c:
+            return c[0], c[1], "het adres in de agenda"
+        return None, None, f"adres niet gevonden: {loc[:50]}"
+    return None, None, "geen adres en geen bekend projectnummer"
+
+
+def bouwplaats(lat, lon, reg):
+    """Het project binnen BOUWPLAATS_M van dit punt, of "". Liggen er meer op dezelfde
+    plek (2603 en 5603 op Provinciebaan 20), dan eerst het nummer met een projectmap
+    (A13), dan vier cijfers, dan het nummer met de meeste afspraken."""
+    dicht = [(afstand_m(lat, lon, *p["coord"]), nr, p) for nr, p in reg.items() if p.get("coord")]
+    dicht = [k for k in dicht if k[0] <= BOUWPLAATS_M]
+    if not dicht:
+        return ""
+    grens = min(k[0] for k in dicht) + 25
+    return max((k for k in dicht if k[0] <= grens),
+               key=lambda k: (bool(k[2].get("map")), len(k[1]) == 4, k[2].get("afspraken", 0)))[1]
+
+
+def benoem(lat, lon, plekken, reg, cache):
+    """De naam van een plek: een plek die de tegel kent (Thuis, of een werf met dossier),
+    dan een bouwplaats uit het projectregister, anders het adres.
+    Een bouwplaats is nooit een vaste plek: een wekelijkse werf zou anders na vijf
+    bezoeken uit de lijst van niet-geregistreerde werfbezoeken verdwijnen."""
+    for p in plekken:
+        if p.get("lat") is not None and afstand_m(lat, lon, p["lat"], p["lon"]) <= (p.get("straal") or 150):
+            nr = str(p.get("dossier") or "")
+            if nr:
+                return {"waar": f"bouwplaats {nr}, {(reg.get(nr) or {}).get('adres') or p['naam']}",
+                        "bouwplaats": nr, "vaste_plek": False}
+            return {"waar": p["naam"], "bouwplaats": "", "vaste_plek": True}
+    nr = bouwplaats(lat, lon, reg)
+    if nr:
+        adres = reg[nr].get("adres")
+        return {"waar": f"bouwplaats {nr}" + (f", {adres}" if adres else ""), "bouwplaats": nr, "vaste_plek": False}
+    adres = adres_van(lat, lon, cache)
+    return {"waar": adres, "bouwplaats": "", "vaste_plek": cache.get(f"{lat:.4f},{lon:.4f}", {}).get("n", 0) >= 5}
+
+
 # ------------------------------------------------------------------ werk ---
-def dagboek(dag, cache):
-    gegevens = haal(f"/api/dag/{dag}")
+def dagboek(dag, gegevens, plekken, reg, cache):
+    """Het dagboek als tekst, en de verblijven (bezoeken en stilstanden, elk met lat, lon,
+    waar en bouwplaats) voor de vergelijking met de agenda."""
     indeling = gegevens.get("indeling") or []
-    bezoeken = [s for s in indeling if s.get("soort") == "bezoek"]
-    for s in bezoeken:
-        s["adres"] = adres_van(s["lat"], s["lon"], cache)
-        s["vaste_plek"] = cache.get(f"{s['lat']:.4f},{s['lon']:.4f}", {}).get("n", 0) >= 5
+    # Het punt waar de telefoon stil viel, voor een gat: de tegel geeft alleen de tijd.
+    op = {}
+    for p in sorted(gegevens.get("punten") or [], key=lambda p: (p.get("acc") or 0) > 250):
+        e = epoch_van_iso(p.get("tijd") or "")
+        if e is not None and p.get("lat") is not None:
+            op.setdefault(e, (p["lat"], p["lon"]))
+    verblijven = []
     r = [f"# Locatielogboek {dag}", ""]
     if not indeling:
         r.append("Geen gegevens. De telefoon heeft die dag niets doorgestuurd.")
-        return "\n".join(r), bezoeken, gegevens
+        return "\n".join(r), verblijven
     r += ["| van | tot | duur | wat | waar |", "|---|---|---|---|---|"]
     for s in indeling:
+        tijd = f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} |"
         if s.get("soort") == "bezoek":
-            r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} | bezoek{' (vaste plek)' if s.get('vaste_plek') else ''} | {s['adres']} |")
+            s.update(benoem(s["lat"], s["lon"], plekken, reg, cache))
+            verblijven.append(s)
+            # Een stop is een bezoek dat de tegel uit een stilte in een rit haalt (15-09-2026).
+            wat = "stop" if s.get("stop") else "bezoek"
+            r.append(f"{tijd} {wat}{' (vaste plek)' if s['vaste_plek'] else ''} | {s['waar']} |")
         elif s.get("soort") == "gat":
             # Een gat is geen rit. Tot 13-09-2026 schreef deze wacht alles wat geen
             # bezoek was als "verplaatsing", zodat vijf uur zonder meting in het
             # dagboek stond als een rit van 30,1 km die nooit gemeten is.
-            waar = ("sindsdien niets meer binnen" if s.get("open")
-                    else f"{int((s.get('meter') or 0) / 100) / 10} km hemelsbreed")
-            r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} | geen meting | {waar} |")
+            # En een gat is meestal een stilstand. Tot 24-09-2026 stond het hier zonder
+            # plek: 22-09 15:48-16:56 op de werf van 2145 (foto's 15:59, Plaud 15:46) las
+            # als "geen meting, 1,1 km hemelsbreed".
+            punt = op.get(int(s["van"]))
+            plek = benoem(punt[0], punt[1], plekken, reg, cache) if punt else None
+            gezien = f"laatst gezien: {plek['waar']}" if plek else ""
+            if s.get("open"):
+                r.append(f"{tijd} geen meting | sindsdien niets meer binnen{'; ' + gezien if gezien else ''} |")
+            elif plek and (s.get("meter") or 0) <= STILSTAND_METER:
+                s.update(plek, lat=punt[0], lon=punt[1], stilstand=True)
+                verblijven.append(s)
+                r.append(f"{tijd} stilstand, geen meting{' (vaste plek)' if s['vaste_plek'] else ''} | "
+                         f"{s['waar']}; volgend punt {km(s.get('meter'))} km verder |")
+            else:
+                r.append(f"{tijd} geen meting | {km(s.get('meter'))} km hemelsbreed{'; ' + gezien if gezien else ''} |")
         else:
-            r.append(f"| {uur(s['van'])} | {uur(s['tot'])} | {duur(s['minuten'])} | verplaatsing {s.get('wijze') or ''} | {int((s.get('meter') or 0) / 100) / 10} km |")
-    return "\n".join(r), bezoeken, gegevens
+            r.append(f"{tijd} verplaatsing {s.get('wijze') or ''} | {km(s.get('meter'))} km |")
+    return "\n".join(r), verblijven
 
 
-def vergelijk_agenda(dag, bezoeken, cache):
-    """(doorgegaan, niet_gezien, onbekend) op basis van adres en tijd."""
-    alle = agenda.afspraken(-1, 8) if agenda.beschikbaar() else []
-    vandaag = [a for a in alle if a.get("start", "")[:10] == dag and not a.get("hele_dag")]
-    doorgegaan, niet_gezien, zonder_adres = [], [], []
-    for a in vandaag:
-        van, tot = epoch_van_iso(a["start"]), epoch_van_iso(a["einde"])
-        if not a.get("locatie"):
-            zonder_adres.append(a["titel"])
+def vergelijk_agenda(dag, verblijven, reg, wcache):
+    """(doorgegaan, niet_gezien, zonder_adres, niet_te_toetsen). Te toetsen is een afspraak
+    buiten (!!, een buitensoort of een buitendienst in de titel) of met een fysiek adres.
+    Online, intern en reistijd tellen alleen mee in het aantal."""
+    alle = W.afspraken_dag(dag) if agenda.beschikbaar() else []
+    doorgegaan, niet_gezien, zonder_adres, overig = [], [], [], 0
+    for a in alle:
+        if a.get("fout") or a.get("hele_dag") or "T" not in a.get("start", ""):
             continue
-        lat, lon = coord_van_adres(a["locatie"], cache)
+        info = W.lees_titel(a.get("titel", ""))
+        loc = (a.get("locatie") or "").strip()
+        buiten = info["buiten"] or info["soort"] in W.BUITEN_SOORTEN
+        if info["reistijd"] or not (buiten or (loc and not online(loc))):
+            overig += 1
+            continue
+        lat, lon, herkomst = plek_van_afspraak(a, info, reg, wcache)
         if lat is None:
-            zonder_adres.append(f"{a['titel']} (adres niet gevonden: {a['locatie'][:40]})")
+            zonder_adres.append(f"{a['start'][11:16]} {a['titel']} ({herkomst})")
             continue
-        treffer = None
-        for b in bezoeken:
-            if afstand_m(lat, lon, b["lat"], b["lon"]) <= 300 and b["van"] <= (tot or 0) + 1800 and b["tot"] >= (van or 0) - 1800:
-                treffer = b
-                break
-        if treffer:
-            doorgegaan.append(f"{a['start'][11:16]} {a['titel']} · ter plaatse {uur(treffer['van'])}-{uur(treffer['tot'])}")
-            treffer["afspraak"] = a["titel"]
+        van, tot = epoch_van_iso(a["start"]), epoch_van_iso(a["einde"])
+        # Alle verblijven op de plek die in tijd aansluiten: een bezoek en de stilstand
+        # erna zijn één oplevering (15-09-2026, Kortenberg 16:59-17:55 en 17:55-18:31).
+        treffers = [v for v in verblijven if afstand_m(lat, lon, v["lat"], v["lon"]) <= 300
+                    and v["van"] <= (tot or 0) + 1800 and v["tot"] >= (van or 0) - 1800]
+        if treffers:
+            doorgegaan.append(f"{a['start'][11:16]} {a['titel']} · ter plaatse "
+                              f"{uur(min(v['van'] for v in treffers))}-{uur(max(v['tot'] for v in treffers))}"
+                              f", {treffers[0]['waar']} (plek uit {herkomst})")
+            for v in treffers:
+                v["afspraak"] = a["titel"]
         else:
-            niet_gezien.append(f"{a['start'][11:16]} {a['titel']} · {a['locatie'][:50]}")
-    return doorgegaan, niet_gezien, zonder_adres
+            niet_gezien.append(f"{a['start'][11:16]} {a['titel']} · plek uit {herkomst}")
+    return doorgegaan, niet_gezien, zonder_adres, overig
 
 
 def controle():
@@ -210,60 +356,106 @@ def controle():
     nu_uur = nu().hour
     nacht = nu_uur >= NACHT[0] or nu_uur < NACHT[1]
     if minuten > ALARM_UREN * 60 and not nacht:
+        # Geen "stil" in de titel en geen teller: De Bode belt bij "stil" (AGENTNORM v1.3),
+        # en met het uur in de sleutel kwam dit tot 24-09-2026 elke twee uur opnieuw.
         ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": nu().date().isoformat(),
-                      "titel": f"Tracker stil sinds {minuten // 60} uur",
-                      "uniek": f"locatie-alarm:{nu().strftime('%Y-%m-%d-%H')}",
-                      "inhoud": "Er kwam meer dan zes uur geen locatiepunt binnen terwijl het geen nacht is. Kijk de OwnTracks-app op de iPhone na."}])
-        ag.log(nu().date().isoformat(), "fout", f"tracker stil sinds {minuten} min")
+                      "titel": "Locatietracker geeft geen punten door",
+                      "uniek": f"locatie-tracker-zwijgt:{nu().date().isoformat()}",
+                      "inhoud": f"Al {minuten // 60} uur geen locatiepunt terwijl het geen nacht is. "
+                                "Kijk de OwnTracks-app op de iPhone na."}])
+        ag.log(nu().date().isoformat(), "fout", f"tracker zwijgt sinds {minuten} min")
         ag.log_verstuur()
-        ag.hartslag("fout", taak="tracker stil", detail=f"geen punt sinds {minuten // 60} uur")
+        ag.hartslag("fout", taak="tracker zwijgt", detail=f"geen punt sinds {minuten // 60} uur")
     else:
         ag.hartslag("waakt", taak="tracker in het oog", detail=f"laatste punt {minuten} min geleden, {g.get('punten', '?')} punten vandaag")
+
+
+def maak(dag):
+    """Het dagboek van een dag met de vergelijking, zonder iets weg te schrijven.
+    Geeft een dict met de tekst, de lijsten en wat er gelezen is."""
+    cache, wcache = laad_cache(), W._cache_laden()
+    wcache_voor = dict(wcache)
+    reg, gelezen, datum = projectregister()
+    gegevens = haal(f"/api/dag/{dag}")
+    tekst, verblijven = dagboek(dag, gegevens, W.plekken(), reg, cache)
+    doorgegaan, niet_gezien, zonder_adres, overig = vergelijk_agenda(dag, verblijven, reg, wcache)
+    zonder = [v for v in verblijven if not v.get("afspraak")]
+    werf = [v for v in zonder if v.get("bouwplaats")]
+    elders = [v for v in zonder if not v.get("bouwplaats") and not v.get("vaste_plek")
+              and int(v.get("minuten", 0)) >= MIN_BEZOEK]
+
+    def lijn(v):
+        return f"- {uur(v['van'])}-{uur(v['tot'])} ({duur(v['minuten'])}) {v['waar']}" \
+               + (" (stilstand, geen meting)" if v.get("stilstand") else "")
+
+    regels = [tekst, "", "## Naast de agenda", ""]
+    regels += ["Doorgegaan volgens de locatie:"] + ([f"- {x}" for x in doorgegaan] or ["- (geen)"])
+    regels += ["", "Niet gezien op de plek van de afspraak:"] + ([f"- {x}" for x in niet_gezien] or ["- (geen)"])
+    if zonder_adres:
+        regels += ["", "Buitenafspraken zonder bruikbaar adres:"] + [f"- {x}" for x in zonder_adres]
+    regels += ["", f"Niet te toetsen (online, intern of reistijd): {overig} afspraken."]
+    regels += ["", "Op een bouwplaats zonder afspraak (mogelijk niet-geregistreerd werfbezoek):"]
+    regels += [lijn(v) for v in werf] or ["- (geen)"]
+    regels += ["", "Elders 20 minuten of meer zonder afspraak, geen vaste plek:"]
+    regels += [lijn(v) for v in elders] or ["- (geen)"]
+    return {"volledig": "\n".join(regels) + "\n", "gelezen": gelezen, "datum": datum, "reg": reg,
+            "segmenten": len(gegevens.get("indeling") or []), "verblijven": verblijven,
+            "doorgegaan": doorgegaan, "niet_gezien": niet_gezien, "zonder_adres": zonder_adres,
+            "overig": overig, "werf": werf, "elders": elders, "cache": cache,
+            "wcache": wcache if wcache != wcache_voor else None,
+            "bouwplaatsen": sorted({v["bouwplaats"] for v in verblijven if v.get("bouwplaats")})}
 
 
 def main():
     if CONTROLE:
         controle()
         return
-    ag.hartslag("actief", taak=f"dagboek {DAG}")
-    try:
-        cache = laad_cache()
-        tekst, bezoeken, gegevens = dagboek(DAG, cache)
-        doorgegaan, niet_gezien, zonder_adres = vergelijk_agenda(DAG, bezoeken, cache)
-        onbekend = [b for b in bezoeken if int(b.get("minuten", 0)) >= MIN_BEZOEK and not b.get("afspraak") and not b.get("vaste_plek")]
-        bewaar_cache(cache)
-        r = [tekst, "", "## Naast de agenda", ""]
-        r += ["Doorgegaan volgens de locatie:"] + ([f"- {x}" for x in doorgegaan] or ["- (geen)"])
-        r += ["", "Niet gezien op de plek van de afspraak:"] + ([f"- {x}" for x in niet_gezien] or ["- (geen)"])
-        if zonder_adres:
-            r += ["", "Afspraken zonder bruikbaar adres:"] + [f"- {x}" for x in zonder_adres]
-        r += ["", "Bezoeken van 20 minuten of meer zonder afspraak (mogelijk niet-geregistreerd werfbezoek):"]
-        r += [f"- {uur(b['van'])}-{uur(b['tot'])} ({duur(b['minuten'])}) {b['adres']}" for b in onbekend] or ["- (geen)"]
-        volledig = "\n".join(r) + "\n"
+    if "--droog" in sys.argv:
+        # Samenstellen en tonen: geen dagboek, geen bord, geen cache (de teller van de
+        # vaste plekken zou anders bij elke proef oplopen).
+        print(maak(DAG)["volledig"])
+        return
+    with ag.ronde(f"dagboek {DAG}") as r:
+        d = maak(DAG)
+        for naam, tekst in d["gelezen"].items():
+            r.bron(naam, tekst)
+        bewaar_cache(d["cache"])
+        if d["wcache"] is not None:       # de Agendawacht schrijft in hetzelfde bestand
+            W._cache_bewaren(d["wcache"])
         os.makedirs(os.path.join(MAP, "dagen"), exist_ok=True)
         pad = os.path.join(MAP, "dagen", f"{DAG}.md")
-        open(pad, "w", encoding="utf-8").write(volledig)
+        open(pad, "w", encoding="utf-8").write(d["volledig"])
         uit = ag.klaarzet([{"voor": "mehdi", "soort": "locatie", "sleutel": DAG, "titel": f"Locatielogboek {DAG}",
-                            "uniek": f"locatie:{DAG}", "verwijzing": pad, "inhoud": volledig[:20000]}])
-        ag.log(f"dag {DAG}", "bron", f"{len(gegevens.get('indeling') or [])} segmenten, {len(bezoeken)} bezoeken; agenda: {len(doorgegaan)} doorgegaan, {len(niet_gezien)} niet gezien, {len(zonder_adres)} zonder adres")
-        ag.log(f"dag {DAG}", "bevinding", f"{len(onbekend)} bezoek(en) van 20 min of meer zonder afspraak", volledig)
+                            "uniek": f"locatie:{DAG}", "verwijzing": pad, "inhoud": d["volledig"][:20000]}])
+        plaatsen = ", ".join(d["bouwplaatsen"]) or "geen"
+        ag.log(f"dag {DAG}", "bron", f"{d['segmenten']} segmenten, {len(d['verblijven'])} verblijven (bezoeken en "
+               f"stilstanden); projectregister {d['datum'] or 'onbekend'} met {len(d['reg'])} projecten; agenda: "
+               f"{len(d['doorgegaan'])} doorgegaan, {len(d['niet_gezien'])} niet gezien, "
+               f"{len(d['zonder_adres'])} buiten zonder adres, {d['overig']} niet te toetsen")
+        ag.log(f"dag {DAG}", "bevinding", f"bouwplaatsen: {plaatsen}; {len(d['werf'])} verblijf(ven) op een "
+               f"bouwplaats zonder afspraak, {len(d['elders'])} elders", d["volledig"])
         ag.log(f"dag {DAG}", "schrijf", f"dagboek geschreven: {pad}; klaargezet voor Mehdi ({uit.get('nieuw', 0)} nieuw)")
         sp = dropbox_prive.spiegel_map(MAP, "/Locatie")
         if sp["verstuurd"] or sp["fout"]:
             ag.log(f"dag {DAG}", "schrijf", f"Dropbox privé: {sp['verstuurd']} bestand(en) verstuurd" + (f"; fout: {sp['fout']}" if sp["fout"] else ""))
-        ag.log_verstuur()
-        ag.hartslag("klaar", taak=f"dagboek {DAG} klaar", detail=f"{len(bezoeken)} bezoeken, {len(onbekend)} zonder afspraak",
-                    nood=dropbox_prive.nood(wat="het locatielogboek")
-                    + ([{"tekst": f"{len(zonder_adres)} afspraken zonder adres in de agenda: de vergelijking is daar blind", "wie": "collega"}] if zonder_adres else []))
+        for n in dropbox_prive.nood(wat="het locatielogboek"):
+            r.nood(n["tekst"], wie=n["wie"])
+        if d["zonder_adres"]:
+            r.nood("Buitenafspraken zonder adres of bekend projectnummer: de vergelijking met de locatie is daar blind",
+                   wie="collega")
         try:
-            controle()
-        except Exception:  # noqa: BLE001
-            pass
-    except Exception as e:  # noqa: BLE001
-        ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
-        ag.log_verstuur()
-        ag.hartslag("fout", taak="ronde mislukt", detail=f"{type(e).__name__}: {str(e)[:120]}")
-        raise
+            oud = (nu().date() - date.fromisoformat(d["datum"])).days > REGISTER_OUD_DAGEN
+        except ValueError:
+            oud = True
+        if oud:
+            r.nood("Het projectregister (werkwijze/projecten.json) is ouder dan twee weken: nieuwe projecten "
+                   "krijgen geen coördinaten. Draai projectregister.py", wie="claude-code")
+        r.detail = (f"{len(d['verblijven'])} verblijven, bouwplaatsen: {plaatsen}, "
+                    f"{len(d['werf']) + len(d['elders'])} zonder afspraak, {len(d['zonder_adres'])} buitenafspraken zonder adres")
+    try:
+        controle()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 if __name__ == "__main__":

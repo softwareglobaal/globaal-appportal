@@ -4,9 +4,9 @@ name: locatie-grendels
 
 on:
   push:
-    paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py"]
+    paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py", "mijnagents-runner/tests/test_locatie_wacht.py"]
   pull_request:
-    paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py"]
+    paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py", "mijnagents-runner/tests/test_locatie_wacht.py"]
 
 jobs:
   dagindeling:
@@ -19,3 +19,5 @@ jobs:
       - run: pip install -r locatie/requirements.txt
       - run: python3 locatie/test_dagindeling.py
     # draait ook de grendel op mijnagents-runner/locatie_wacht.py, die in de container wordt overgeslagen
+      # de wacht zelf: projectregister voor Nominatim, bouwplaats bij een stilstand, geen belsignaal (24-09-2026)
+      - run: python3 mijnagents-runner/tests/test_locatie_wacht.py
