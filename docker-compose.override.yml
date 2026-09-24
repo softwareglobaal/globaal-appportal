@@ -444,6 +444,11 @@ services:
       META_WA_TOKEN: ${META_WA_TOKEN:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
       META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v26.0}
+      # Tab Toegang: wie zit in de groepen van deze app. Zelfde alleen-lezen
+      # service-account als het organisatie-dashboard (medewerkers-readonly,
+      # alleen view_user en view_group; TECHNICAL-REFERENCE 14.3).
+      AUTHENTIK_API_URL: https://auth.${BASE_DOMAIN}/api/v3
+      AUTHENTIK_API_TOKEN: ${MEDEWERKERS_AUTHENTIK_TOKEN:-}
       PIPEDRIVE_TOKEN_UNABO: ${PIPEDRIVE_TOKEN_UNABO:-}
       PIPEDRIVE_TOKEN_HARCHITECTS: ${PIPEDRIVE_TOKEN_HARCHITECTS:-}
     healthcheck:
