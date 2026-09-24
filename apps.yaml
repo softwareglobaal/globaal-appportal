@@ -102,6 +102,12 @@ apps:
     subdomain: post
     roles: [admin, manager, postbus]
     status: active
+  - id: werfverslag
+    name: Werfverslag
+    description: Werfverslagen, to-do-lijsten en checklijsten (H-Architects)
+    subdomain: werf
+    roles: [admin, manager, werfverslag, contracten]
+    status: active
   - id: contracten
     name: Contracten
     description: Contracten H-Architects, dossiercontrole en salesproces

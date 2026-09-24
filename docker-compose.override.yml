@@ -19,6 +19,50 @@ services:
       - "127.0.0.1:3022:3022"
     networks: [appnet]
 
+  # Werfverslag-dashboard (werf.globaal.be): eigen ArchiSnapper van H-Architects.
+  # Repo softwareglobaal/globaal-werfverslag, checkout ./werfverslag, data in
+  # ./werfverslag-data (werf.db, foto's, plannen, pdf's, historiek.json; buiten git).
+  # Auto-deploy: cron ./werfverslag/deploy.sh elke 2 min. Het gedeelde bord-token
+  # (AGENTS_TOKEN) komt uit mijnagents-data/.env, zodat de agents dezelfde sleutel
+  # gebruiken voor het bord en voor deze API.
+  app-werfverslag:
+    build: ./werfverslag
+    image: appportal-werfverslag
+    container_name: app-werfverslag
+    restart: unless-stopped
+    env_file:
+      - path: ./mijnagents-data/.env
+        required: false
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      PORT: "3025"
+      WERF_DATA: /data
+      WERF_DB: /data/werf.db
+      WERF_SECRET: ${WERF_SECRET:-}
+      TOEGANG_GROEPEN: admin,manager,werfverslag,contracten
+      ADMIN_GROEPEN: admin,manager
+      BORD_URL: http://app-mijnagents:3022
+      # Mail: pas wanneer Mehdi de afzender kiest (bv. standaard@h-architects.be).
+      WERF_SMTP_HOST: ${WERF_SMTP_HOST:-}
+      WERF_SMTP_PORT: ${WERF_SMTP_PORT:-465}
+      WERF_SMTP_USER: ${WERF_SMTP_USER:-}
+      WERF_SMTP_PASS: ${WERF_SMTP_PASS:-}
+      WERF_SMTP_VAN: ${WERF_SMTP_VAN:-}
+      # Dropbox: dezelfde sleutels als de andere diensten (teamruimte).
+      DROPBOX_APP_KEY: ${DROPBOX_APP_KEY:-}
+      DROPBOX_APP_SECRET: ${DROPBOX_APP_SECRET:-}
+      DROPBOX_REFRESH_TOKEN: ${DROPBOX_REFRESH_TOKEN:-}
+      DROPBOX_PATH_ROOT_NS: ${DROPBOX_PATH_ROOT_NS:-}
+    volumes:
+      - ./werfverslag-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3025/gezond', timeout=5)"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks: [appnet]
+
   # De appportal-Postgres op loopback voor host-services (kosten-dashboard):
   # gedocumenteerd contract in globaal-kosten/deploy/appportal. Stond eerder
   # alleen als handmatige wijziging op de VM en verdween daardoor bij het

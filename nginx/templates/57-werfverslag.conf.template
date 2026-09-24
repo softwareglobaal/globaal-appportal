@@ -1,0 +1,36 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name werf.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Werfverslag-dashboard (eigen ArchiSnapper van H-Architects). Forward-auth
+    # via Authentik; identiteit en groepen gaan als X-authentik-* naar de app,
+    # die zelf nog TOEGANG_GROEPEN toetst.
+    set $app_upstream http://app-werfverslag:3025;
+    include /etc/nginx/snippets/forward-auth.conf;
+
+    # PDF's met veel foto's en uploads vanaf de telefoon.
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+    client_max_body_size 64m;
+
+    # JSON-API voor de agents van het bord: buiten de forward-auth, de app
+    # controleert zelf het Bearer-token of X-Agents-Token.
+    location ^~ /api/ {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
+    # Publieke pagina's zonder login: deellinks voor aannemers, uploadlink voor
+    # opgevraagde documenten, feedback op gedeelde punten, statische bestanden,
+    # PWA-manifest en service worker. De app geeft daar niets anders vrij.
+    location ~ ^/(deel|upload|feedback|static|manifest\.webmanifest|sw\.js|gezond)(/|$) {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+}
