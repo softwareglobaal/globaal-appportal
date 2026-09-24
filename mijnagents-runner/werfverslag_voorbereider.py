@@ -81,6 +81,56 @@ def nummer_bezoeken(bezoeken, werfstart):
     return bezoeken
 
 
+def verhuisde_rijen(bezoeken, projectmap, bord_rijen):
+    """De projectmap verhuisde van fasemap (2145 op 24-09-2026: 4. STAN Execution waiting to start naar 5. STAN
+    Execution ONGOING). Per bezoekmap van nu: de rijen op het bord met dezelfde datum en dezelfde bezoekmap binnen
+    de projectmap, maar onder een andere projectmap. Oudste rij eerst, die draagt de gegevens van de schrijver."""
+    uit = {}
+    for b in bezoeken:
+        if not b["map"].startswith(projectmap + "/"):
+            continue
+        rel = b["map"][len(projectmap):]
+        oud = [r for r in bord_rijen
+               if r.get("datum") == b["datum"] and r.get("projectmap") and r["projectmap"] != projectmap
+               and r.get("bezoekmap") == r["projectmap"] + rel]
+        if oud:
+            uit[b["map"]] = sorted(oud, key=lambda r: r.get("id") or 0)
+    return uit
+
+
+def samengevoegd(rijen):
+    """Eén bordrij uit de rij van het nieuwe pad en die van het oude: wat de schrijver al deed (gegevens, proef)
+    telt ook in de controle van deze ronde, ook al staat het nog op de oude rij."""
+    uit = {}
+    for r in rijen:
+        for k, v in (r or {}).items():
+            if v and not uit.get(k):
+                uit[k] = v
+    return uit
+
+
+def opruimvoorstel(dubbels):
+    """Eén voorstel voor alle dubbele rijen na een verhuis. Mehdi beslist op het bord; het runbook
+    werfbezoek-dubbels wist na zijn ja alleen rijen waarvan alles op de rij van het nieuwe pad staat."""
+    if not dubbels:
+        return None
+    per = {}
+    for x in dubbels:
+        per.setdefault(x["dossier"], []).append(x)
+    paren = sorted([x["dubbel"], x["id"]] for x in dubbels)
+    botsing = [f"rij {x['dubbel']} ({', '.join(x['botsing'])})" for x in dubbels if x.get("botsing")]
+    return {"actie": "Dubbele werfbezoek-rijen opruimen na verhuis van de projectmap: "
+                     + ", ".join(f"dossier {d} ({len(v)} rij(en))" for d, v in sorted(per.items())),
+            "doel": ", ".join(f"dossier {d}" for d in sorted(per)),
+            "reden": ("De projectmap verhuisde naar een andere fasemap; per bezoek staat er een rij van het oude pad naast "
+                      "de rij van het nieuwe. Gegevens, keuzes, bijlagen en proef van de oude rij zijn overgenomen. Na je ja "
+                      f"wist het runbook alleen de oude rijen ({', '.join(str(p[0]) for p in paren)}), met een volledige kopie "
+                      "in werfbezoek_gewist.jsonl."
+                      + (f" Verschilt op beide rijen, de nieuwe wint: {'; '.join(botsing)}." if botsing else "")),
+            "runbook": "werfbezoek-dubbels",
+            "parameters": {"sleutel": "werfbezoek-dubbels", "paren": paren}}
+
+
 # ------------------------------------------------------------- hulpjes ---
 def datum_uit(naam):
     m = DATUM_PAT.search(naam)
@@ -314,7 +364,7 @@ def verwerk(nummer, droog=False):
     projectmap, soort = zoek_projectmap(nummer)
     if not projectmap:
         ag.log(str(nummer), "fout", "geen projectmap gevonden in STAN-fasen of light SITE VISITS")
-        return [], [{"tekst": f"Dossier {nummer}: geen projectmap gevonden; Mehdi geeft het pad", "wie": "mehdi"}]
+        return [], [{"tekst": f"Dossier {nummer}: geen projectmap gevonden; Mehdi geeft het pad", "wie": "mehdi"}], []
     adres = adres_uit_mapnaam(os.path.basename(projectmap))
     ag.log(str(nummer), "bron", f"projectmap ({soort}): {projectmap}", {"adres": adres})
     bezoeken = bezoeken_in(projectmap)
@@ -324,16 +374,30 @@ def verwerk(nummer, droog=False):
            + (f"; werfstart {werfstart}" if werfstart else "; geen werfstart bekend"))
     bak = klaargezet(nummer)
     try:
-        bord_rijen = {r.get("bezoekmap"): r for r in bord.call(f"/api/werfbezoek?dossier={nummer}").get("rijen", [])}
+        alle_rijen = bord.call(f"/api/werfbezoek?dossier={nummer}").get("rijen", [])
     except Exception:  # noqa: BLE001
-        bord_rijen = {}
+        alle_rijen = []
+    bord_rijen = {r.get("bezoekmap"): r for r in alle_rijen}
     open_taken = {}
     for agent in ("icloud-wacht", "plaud-wacht"):
         try:
             open_taken[agent] = [it for it in bord.klaargezet_voor(agent, n=300) if it.get("soort") == "taak" and it.get("van") == NAAM]
         except Exception:  # noqa: BLE001
             open_taken[agent] = []
-    rijen, alle_taken, noden = [], [], []
+    rijen, alle_taken, noden, dubbels = [], [], [], []
+    # verhuisde projectmap: de rij van het oude pad gaat mee naar het nieuwe, maar alleen als het oude pad echt weg
+    # is; staat de bezoekmap op beide plaatsen, dan is het een kopie en beslist Mehdi welke geldt
+    verhuisd = verhuisde_rijen(bezoeken, projectmap, alle_rijen)
+    for mp, oude in list(verhuisd.items()):
+        nog = [r for r in oude if bronnen.bestaat(r["bezoekmap"])]
+        if nog:
+            noden.append({"tekst": f"Dossier {nummer}: bezoekmap staat zowel onder {nog[0]['projectmap'].split('/')[-2]} "
+                                   f"als onder {projectmap.split('/')[-2]}; Mehdi zegt welke geldt", "wie": "mehdi"})
+            verhuisd[mp] = [r for r in oude if r not in nog]
+    verhuisd = {k: v for k, v in verhuisd.items() if v}
+    if verhuisd:
+        ag.log(str(nummer), "bevinding", f"projectmap verhuisd: {len(verhuisd)} bezoekmap(pen) hebben een rij op het oude pad "
+               f"({next(iter(verhuisd.values()))[0]['projectmap'].split('/')[-2]}); die rij gaat mee naar het nieuwe pad")
     if not bezoeken:
         # dossier gevolgd zonder bezoek (bv. werf start binnenkort): een rij met volgnummer 0, zodat het op de pagina staat
         rijen.append({"dossier": str(nummer), "adres": adres, "soort_project": soort, "projectmap": projectmap, "bezoekmap": "",
@@ -342,7 +406,8 @@ def verwerk(nummer, droog=False):
                                     {"code": "W3", "naam": "bezoekmap", "stand": "ontbreekt", "toelichting": "nog geen momentmap met een werf- of plaatsbezoek; na het eerste bezoek maakt de skill werfverslag de map aan"}]})
         ag.log(str(nummer), "bevinding", "nog geen bezoekmap; dossier wordt gevolgd tot het eerste bezoek")
     for b in bezoeken:
-        controles, taken, n = controleer(nummer, adres, soort, projectmap, b, bak, bord_rijen.get(b["map"]))
+        oude = verhuisd.get(b["map"], [])
+        controles, taken, n = controleer(nummer, adres, soort, projectmap, b, bak, samengevoegd([bord_rijen.get(b["map"])] + oude))
         # een taak die intussen vervuld is (foto's of transcript staan in de map) vink ik af, zodat de zoeklijst klopt
         st = {c["code"]: c["stand"] for c in controles}
         for code, agent in (("W4", "icloud-wacht"), ("W6", "plaud-wacht")):
@@ -360,7 +425,8 @@ def verwerk(nummer, droog=False):
             uniek = f"werf:{nummer}:{b['datum']}:{voor}"
             soort = "opdracht" if voor == "werfverslag-schrijver" else "taak"
             taakrijen.append({"voor": voor, "soort": soort, "sleutel": (f"{nummer}-{b['volgnr']}" if soort == "opdracht" else str(nummer)), "titel": tekst[:300],
-                              "inhoud": {"dossier": nummer, "datum": b["datum"], "adres": adres, "bezoekmap": b["map"], "volgnr": b["volgnr"]},
+                              "inhoud": {"dossier": nummer, "datum": b["datum"], "adres": adres, "bezoekmap": b["map"], "volgnr": b["volgnr"],
+                                         "nr_label": b["nr_label"], "soort_bezoek": b["soort_bezoek"]},
                               "verwijzing": b["map"], "uniek": uniek})
         alle_taken += taakrijen
         rijen.append({"dossier": str(nummer), "adres": adres, "soort_project": soort, "projectmap": projectmap,
@@ -369,19 +435,31 @@ def verwerk(nummer, droog=False):
                                   "nr_label": b["nr_label"], "soort_bezoek": b["soort_bezoek"], "werfstart": werfstart},
                       "controles": controles, "taken": [{"voor": t["voor"], "titel": t["titel"], "uniek": t["uniek"]} for t in taakrijen],
                       "stand": stand_van(controles)})
-        ag.log(str(nummer), "bevinding", f"bezoek {b['volgnr']} ({b['datum']}): {rijen[-1]['stand']}; "
+        if oude:
+            rijen[-1]["vorige_bezoekmappen"] = [r["bezoekmap"] for r in oude]
+        # het bezoeknummer (PB1.., 1..) is wat in het verslag komt; de rij telt alle bezoeken door en is alleen het adres op het bord
+        ag.log(str(nummer), "bevinding", f"{b['soort_bezoek']} {b['nr_label']} (rij {b['volgnr']}, {b['datum']}): {rijen[-1]['stand']}; "
                + ", ".join(f"{x['code']} {x['stand']}" for x in controles))
     if droog:
         print(json.dumps(rijen, ensure_ascii=False, indent=1))
-        return rijen, noden
+        return rijen, noden, dubbels
     if alle_taken:
         uit = ag.klaarzet(alle_taken)
         ag.log(str(nummer), "besluit", f"{len(alle_taken)} taak/taken uitgezet bij collega-agents", uit)
     try:
-        bord.call("/api/werfbezoek", {"rijen": rijen})
+        uit = bord.call("/api/werfbezoek", {"rijen": rijen})
     except Exception as e:  # noqa: BLE001
         ag.log(str(nummer), "fout", f"stand niet naar het bord: {e}")
-    return rijen, noden
+        uit = {}
+    for h in uit.get("herkoppeld") or []:
+        if h.get("wat") == "herkoppeld":
+            ag.log(str(nummer), "besluit", f"rij {h['id']} met haar gegevens meegenomen naar het nieuwe pad (was {h['van']})")
+            continue
+        dubbels.append({"dossier": str(nummer), "dubbel": h["dubbel"], "id": h["id"], "botsing": h.get("botsing") or []})
+        if h.get("kolommen"):
+            ag.log(str(nummer), "besluit", f"rij {h['id']} aangevuld met {', '.join(h['kolommen'])} van de oude rij {h['dubbel']}; "
+                   "de oude rij blijft tot Mehdi de opruiming goedkeurt")
+    return rijen, noden, dubbels
 
 
 GEZOCHT_PAD = "/Work All/000 AI Opzet/Mehdi Agents/Plaud inbox/00 gezocht.md"
@@ -470,15 +548,16 @@ def main():
         ag.hartslag("fout", taak="geen Dropbox", detail="DROPBOX_APP_KEY/SECRET/REFRESH_TOKEN ontbreken",
                     nood=[{"tekst": "Dropbox-sleutels van de stack ontbreken in ~/appportal/.env", "wie": "mehdi"}])
         return
-    totaal, noden, standen = 0, [], {}
+    totaal, noden, standen, dubbels = 0, [], {}, []
     for n in nummers:
         try:
-            rijen, nd = verwerk(n, droog=a.droog)
+            rijen, nd, db = verwerk(n, droog=a.droog)
         except Exception as e:  # noqa: BLE001
             ag.log(n, "fout", f"ronde voor {n} mislukt: {e}")
-            rijen, nd = [], [{"tekst": f"Dossier {n}: ronde mislukt ({type(e).__name__})", "wie": "claude-code"}]
+            rijen, nd, db = [], [{"tekst": f"Dossier {n}: ronde mislukt ({type(e).__name__})", "wie": "claude-code"}], []
         totaal += len(rijen)
         noden += nd
+        dubbels += db
         for r in rijen:
             standen[r["stand"]] = standen.get(r["stand"], 0) + 1
     # vaste noden: wat structureel nog ontbreekt om zonder mens te werken
@@ -494,10 +573,15 @@ def main():
     if not a.droog:
         nz = gezocht_schrijven()
         ag.log("plaud", "schrijf", f"zoeklijst voor de Plaud-routine bijgewerkt: {nz} bezoekdag(en) zonder opname ({GEZOCHT_PAD})")
+    # opruimen van dubbele rijen na een verhuis: een voorstel, nooit zelf wissen; hetzelfde voorstel zet het bord niet twee keer
+    voorstel = opruimvoorstel(dubbels)
+    if voorstel:
+        ag.log("bord", "besluit", f"opruiming voorgesteld aan Mehdi: {voorstel['actie']}", voorstel["parameters"])
     ag.log_verstuur()
     detail = "; ".join(f"{k}: {v}" for k, v in sorted(standen.items())) or "geen bezoeken"
     if not a.droog:
-        ag.hartslag("klaar" if totaal else "waakt", taak=f"{len(nummers)} dossier(s), {totaal} bezoek(en) geverifieerd", detail=detail[:200], nood=uniek)
+        ag.hartslag("klaar" if totaal else "waakt", taak=f"{len(nummers)} dossier(s), {totaal} bezoek(en) geverifieerd", detail=detail[:200],
+                    nood=uniek, voorstel=voorstel)
     print(f"klaar: {len(nummers)} dossier(s), {totaal} bezoek(en); {detail}")
 
 

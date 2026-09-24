@@ -309,6 +309,21 @@ def _rij(dossier, volgnr):
     return rijen[0]
 
 
+def bezoeknummer(rij, volgnr):
+    """Het nummer dat in het verslag hoort: werfbezoek 1, 2, 3 sinds de werfstart, of PB1, PB2 voor een plaatsbezoek.
+    Het volgnummer van de rij telt alle bezoeken door (2145: werfbezoek 3 is rij 8) en is alleen het adres op het
+    bord; het gaat nooit naar Claude, anders schrijft hij 'in de opdracht vermeld als werfbezoek 8' (24-09-2026)."""
+    br = rij.get("bronnen") or {}
+    return br.get("nr_label") or str(volgnr), br.get("soort_bezoek") or "werfbezoek"
+
+
+def kop_voorbereiding(dossier, rij, volgnr, fotos, opnames, eigen=False):
+    nr, soort_bezoek = bezoeknummer(rij, volgnr)
+    return (f"Dossier {dossier}, {rij.get('adres','')}. {soort_bezoek.capitalize()} {nr} op {rij['datum']}; verslagnummer {dossier}-{nr}. "
+            f"Bezoekmap: {rij['bezoekmap']}. Foto's in de map: {len(fotos)}; opnames: {len(opnames)}."
+            + (EIGEN_REGEL if eigen else ""))
+
+
 def _bewaar(rij, dossier, volgnr, **velden):
     velden["_alleen"] = list(velden)
     bord.call("/api/werfbezoek", {"rijen": [{"dossier": dossier, "datum": rij["datum"], "bezoekmap": rij["bezoekmap"], "volgnr": volgnr, **velden}]})
@@ -319,12 +334,11 @@ def voorbereid(ag, dossier, volgnr):
     ag.log(f"{dossier}-{volgnr}", "bron", f"bezoekmap lezen: {rij['bezoekmap']}")
     eigen = (rij.get("keuzes") or {}).get("bronnen") == "eigen"
     teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=eigen)
-    ag.log(f"{dossier}-{volgnr}", "bron", f"{len(teksten)} tekstbron(nen), {len(fotos)} foto's, {len(opnames)} opname(s) gelezen"
+    nr, soort_bezoek = bezoeknummer(rij, volgnr)
+    ag.log(f"{dossier}-{volgnr}", "bron", f"{soort_bezoek} {nr} (rij {volgnr}): {len(teksten)} tekstbron(nen), {len(fotos)} foto's, {len(opnames)} opname(s) gelezen"
            + (" (keuze van Mehdi: alleen eigen opname en foto's)" if eigen else ""),
            [t["naam"] + f" ({len(t['tekst'])} tekens)" for t in teksten])
-    kop = (f"Dossier {dossier}, {rij.get('adres','')}. Werfbezoek {volgnr} op {rij['datum']}. "
-           f"Bezoekmap: {rij['bezoekmap']}. Foto's in de map: {len(fotos)}; opnames: {len(opnames)}."
-           + (EIGEN_REGEL if eigen else ""))
+    kop = kop_voorbereiding(dossier, rij, volgnr, fotos, opnames, eigen)
     uit, usage = vraag_gegevens(kop, bronnenbundel(teksten) + fotolijst(fotos))
     uit["bronbestanden"] = [t["naam"] for t in teksten]
     uit["fotos_in_map"] = [f["naam"] for f in fotos]
@@ -372,8 +386,9 @@ def _fotos_verzamelen(teksten, fotos, verslag):
     return uit
 
 
-def _nummer_punten(verslag, volgnr, doorlopend):
-    """Nummering <verslag>.<punt> zoals Archisnapper; doorlopende punten uit verslag 1 vooraan bij een werfverslag."""
+def _nummer_punten(verslag, bezoek, doorlopend):
+    """Nummering <verslag>.<punt> zoals Archisnapper, met het bezoeknummer (3.1 voor werfbezoek 3, PB2.1 voor een
+    plaatsbezoek), nooit het volgnummer van de rij; doorlopende punten uit verslag 1 vooraan bij een werfverslag."""
     cats = []
     if doorlopend:
         per = {}
@@ -392,7 +407,7 @@ def _nummer_punten(verslag, volgnr, doorlopend):
     for cat in cats:
         for p in cat["punten"]:
             i += 1
-            p["nummer"] = f"{1 if p.get('doorlopend') else volgnr}.{i}"
+            p["nummer"] = f"{1 if p.get('doorlopend') else bezoek}.{i}"
     return cats
 
 
@@ -428,26 +443,25 @@ def proef(ag, dossier, volgnr):
     eigen = keuzes.get("bronnen") == "eigen"
     teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=eigen)
     vandaag = date.today().isoformat()
-    nr_label = (rij.get("bronnen") or {}).get("nr_label") or str(volgnr)
-    soort_bezoek = (rij.get("bronnen") or {}).get("soort_bezoek", "werfbezoek")
+    nr_label, soort_bezoek = bezoeknummer(rij, volgnr)
     kop = (f"Dossier {dossier}, {rij.get('adres','')}. {soort_bezoek.capitalize()} {nr_label} op {rij['datum']}; verslagnummer {dossier}-{nr_label}"
            + (" (plaatsbezoek vóór de werfstart: geen werfverslagnummer, titel 'Verslag plaatsbezoek')" if soort_bezoek == "plaatsbezoek" else "") + ". "
            f"Verslagtype: {verslagtype}. Taal: {'Nederlands en Engels' if taal == 'nl+en' else 'alleen Nederlands (tekst_en en status_en leeg laten)'}. "
            f"Datum van opmaak: {vandaag}. Foto's in de map: {', '.join(f['naam'] for f in fotos) or 'geen'}; opnames: {', '.join(opnames) or 'geen'}.")
     if eigen:
         kop += EIGEN_REGEL
-    ag.log(f"{dossier}-{volgnr}", "besluit", f"proef als {verslagtype}, taal {taal}, keuzes: {', '.join(k for k in keuzes if keuzes[k]) or 'geen'}")
+    ag.log(f"{dossier}-{volgnr}", "besluit", f"proef van {soort_bezoek} {nr_label} (rij {volgnr}) als {verslagtype}, taal {taal}, "
+           f"keuzes: {', '.join(k for k in keuzes if keuzes[k]) or 'geen'}")
     uit, usage = vraag_verslag(kop, gegevens, keuzes, bronnenbundel(teksten) + fotolijst(fotos))
     if keuzes.get("aanwezigen"):
         uit["aanwezigen"] = keuzes["aanwezigen"]
-    br = rij.get("bronnen") or {}
-    verslag = {"dossier": dossier, "bezoek": br.get("nr_label") or str(volgnr), "soort_bezoek": br.get("soort_bezoek", "werfbezoek"),
+    verslag = {"dossier": dossier, "bezoek": nr_label, "soort_bezoek": soort_bezoek,
                "adres": rij.get("adres", ""), "datum": rij["datum"], "opgemaakt": vandaag,
                "verslagtype": verslagtype, "bronnen_kort": f"{len(teksten)} document(en), {len(fotos)} foto's en {len(opnames)} opname(s) in de bezoekmap",
                "status_nl": uit.get("status_nl", ""), "status_en": uit.get("status_en", "") if taal == "nl+en" else "",
                "aanwezigen": uit.get("aanwezigen", []), "raming": uit.get("raming", []) if verslagtype == "vaststellingsverslag" else [],
                "acties": uit.get("acties", []), "volgend": uit.get("volgend", ""), "akkoord": uit.get("akkoord", [])}
-    verslag["categorieen"] = _nummer_punten(uit, volgnr, doorlopend=(verslagtype == "werfverslag" and keuzes.get("doorlopend", "ja") != "nee"))
+    verslag["categorieen"] = _nummer_punten(uit, nr_label, doorlopend=(verslagtype == "werfverslag" and keuzes.get("doorlopend", "ja") != "nee"))
     if taal != "nl+en":
         for cat in verslag["categorieen"]:
             for p in cat["punten"]:
@@ -479,7 +493,7 @@ def herlayout(ag, dossier, volgnr):
     teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(keuzes.get("bronnen") == "eigen"))
     beelden = _fotos_verzamelen(teksten, fotos, v)
     docx = sjab.naar_docx(v, beelden)
-    naam = f"{dossier}-{v.get('bezoek', volgnr)} {'verslag plaatsbezoek' if v.get('soort_bezoek') == 'plaatsbezoek' else 'werfverslag'} (concept)"
+    naam = f"{dossier}-{v.get('bezoek') or bezoeknummer(rij, volgnr)[0]} {'verslag plaatsbezoek' if v.get('soort_bezoek') == 'plaatsbezoek' else 'werfverslag'} (concept)"
     pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
     info = rij.get("proef_info") or {}
     info.update({"fotos": len(beelden), "docx_kb": len(docx) // 1024, "layout": "HA-master"})

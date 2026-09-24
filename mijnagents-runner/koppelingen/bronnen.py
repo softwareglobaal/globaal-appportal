@@ -109,6 +109,11 @@ def _rpc(pad, body):
         raise
 
 
+def bestaat(pad):
+    """Staat dit pad (map of bestand) nog in Dropbox? Een 409 van de API betekent: niet gevonden."""
+    return _rpc("files/get_metadata", {"path": pad}) is not None
+
+
 def lijst(pad, recursief=True):
     uit = _rpc("files/list_folder", {"path": pad, "recursive": recursief, "limit": 500})
     if uit is None:
