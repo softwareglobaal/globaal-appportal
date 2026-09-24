@@ -125,5 +125,32 @@ def test_sjabloon_gebruikt_de_ronde():
 def test_de_norm_staat_beschreven():
     """Code zonder het document is een regel die niemand kan nalezen."""
     norm = open(os.path.join(RUNNER, "AGENTNORM.md"), encoding="utf-8").read()
-    for code in ("N4", "N10", "N11"):
+    for code in ("N4", "N10", "N11", "N13"):
         assert code in norm, f"{code} wordt hier getoetst maar staat niet in AGENTNORM.md"
+
+
+def test_n13_gedeelde_lessen_bestaan_en_zijn_geldig():
+    """Wat een agent leert, hoort elke agent te weten. Het lessenboek moet er zijn
+    en elke les moet zeggen waar ze vandaan komt, anders is het een mening."""
+    import json
+    pad = os.path.join(RUNNER, "werkwijze", "lessen.json")
+    assert os.path.exists(pad), "werkwijze/lessen.json ontbreekt: dan leest geen enkele agent nog lessen"
+    d = json.load(open(pad, encoding="utf-8"))
+    lessen = d.get("lessen") or []
+    assert lessen, "het lessenboek is leeg"
+    ids = [l["id"] for l in lessen]
+    assert len(ids) == len(set(ids)), "twee lessen met hetzelfde nummer"
+    for l in lessen:
+        for veld in ("id", "les", "bron", "geldt_voor"):
+            assert l.get(veld), f"les {l.get('id')} mist het veld {veld}"
+    assert any(l["id"] == "L15" for l in lessen), "L15 (zeg eerst wat blijft) is de les van 24-09-2026 en hoort erin"
+
+
+def test_n13_ronde_leest_de_gedeelde_lessen():
+    """De ronde leest het lessenboek mee als bron, zodat het in de kennis staat en
+    de Normwacht kan zien dat een agent het echt las."""
+    nb = BordNabootsing()
+    r = ronde_met(nb)
+    assert r.lessen, "de ronde geeft de lessen niet door aan de agent (r.lessen is leeg)"
+    gemeld = nb.kennis()
+    assert gemeld and "gedeelde lessen" in gemeld[0]["kennis"], "de gedeelde lessen staan niet in de gemelde kennis: N13 kan dan nooit slagen"

@@ -259,6 +259,36 @@ def n12_gebruikt_de_ronde(rij, con):
     return False, ("gebruikt de ronde niet" + (": " + ", ".join(mist) if mist else ""))
 
 
+def n13_leest_de_lessen(rij, con):
+    """N13 hij las in zijn laatste ronde de gedeelde lessen (werkwijze/lessen.json).
+
+    Wat een agent leert, hoort elke agent te weten. Tot 24-09-2026 leefde elke les
+    in het foutenregister van een agent en las niemand anders ze; de ronde leest
+    ze nu mee als bron. Deze toets kijkt niet of het bestand er is, maar of deze
+    agent het echt las: het staat dan in de kennis die hij meldde.
+    """
+    pad = os.path.join(RUNNER, "werkwijze", "lessen.json")
+    try:
+        with open(pad, encoding="utf-8") as f:
+            lessen = json.load(f).get("lessen", [])
+    except (OSError, ValueError) as e:
+        return False, f"werkwijze/lessen.json ontbreekt of is stuk: {type(e).__name__}"
+    if not lessen:
+        return False, "werkwijze/lessen.json bevat geen lessen"
+    p = _runnerpad(rij["naam"])
+    if not os.path.exists(p):
+        return None, "geen runner in deze repo (zie N5)"
+    with open(p, encoding="utf-8") as f:
+        if ".ronde(" not in f.read():
+            return None, "gaat nog niet door de ronde (zie N12)"
+    kennis = _tekst(rij, "kennis")
+    if "gedeelde lessen" in kennis:
+        return True, f"{len(lessen)} lessen gelezen in zijn laatste ronde"
+    if not kennis:
+        return False, "nog geen kennis gemeld, dus ook de lessen niet"
+    return False, "zijn laatste kennis noemt de gedeelde lessen niet (oude ronde-code op de VM?)"
+
+
 NORMEN = [
     ("N1", "werkwijze op het bord", n1_werkwijze),
     ("N2", "grenzen staan erin", n2_grenzen_in_werkwijze),
@@ -272,6 +302,7 @@ NORMEN = [
     ("N10", "noden hebben een sleutel", n10_noden_hebben_sleutel),
     ("N11", "hartslag vers", n11_hartslag),
     ("N12", "gaat door de ronde", n12_gebruikt_de_ronde),
+    ("N13", "leest de gedeelde lessen", n13_leest_de_lessen),
 ]
 
 

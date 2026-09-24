@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Werfverslag voorbereider (H-Architects) — bereidt werfverslagen voor.
+"""Werfverslag voorbereider (H-Architects): bereidt werfverslagen voor.
 
 Hij verzamelt zelf niets en schrijft zelf geen verslag. Hij:
   1. neemt een opdracht (dossiernummer) aan, van Mehdi (--project) of uit zijn eigen tabel;
@@ -112,7 +112,11 @@ def samengevoegd(rijen):
 
 def opruimvoorstel(dubbels):
     """Eén voorstel voor alle dubbele rijen na een verhuis. Mehdi beslist op het bord; het runbook
-    werfbezoek-dubbels wist na zijn ja alleen rijen waarvan alles op de rij van het nieuwe pad staat."""
+    werfbezoek-dubbels voegt na zijn ja de oude rij in de nieuwe samen en bewaart een kopie.
+
+    De tekst zegt eerst wat blijft en dan wat verandert. Gezien 24-09-2026: de woorden
+    "opruimen" en "oude rijen" liet Mehdi lezen dat dossier 2145 verwijderd zou worden, terwijl
+    het net het eerste testdossier van het nieuwe communicatiesysteem is. Gedeelde les L15."""
     if not dubbels:
         return None
     per = {}
@@ -120,13 +124,16 @@ def opruimvoorstel(dubbels):
         per.setdefault(x["dossier"], []).append(x)
     paren = sorted([x["dubbel"], x["id"]] for x in dubbels)
     botsing = [f"rij {x['dubbel']} ({', '.join(x['botsing'])})" for x in dubbels if x.get("botsing")]
-    return {"actie": "Dubbele werfbezoek-rijen opruimen na verhuis van de projectmap: "
-                     + ", ".join(f"dossier {d} ({len(v)} rij(en))" for d, v in sorted(per.items())),
-            "doel": ", ".join(f"dossier {d}" for d in sorted(per)),
-            "reden": ("De projectmap verhuisde naar een andere fasemap; per bezoek staat er een rij van het oude pad naast "
-                      "de rij van het nieuwe. Gegevens, keuzes, bijlagen en proef van de oude rij zijn overgenomen. Na je ja "
-                      f"wist het runbook alleen de oude rijen ({', '.join(str(p[0]) for p in paren)}), met een volledige kopie "
-                      "in werfbezoek_gewist.jsonl."
+    dossiers = ", ".join(f"dossier {d}" for d in sorted(per))
+    return {"actie": "Dubbele werfbezoek-rijen samenvoegen na de verhuis van de projectmap: "
+                     + ", ".join(f"dossier {d} ({len(v)} rij(en))" for d, v in sorted(per.items()))
+                     + ". Het dossier en alle bezoeken blijven",
+            "doel": dossiers,
+            "reden": (f"{dossiers[0].upper() + dossiers[1:]} blijft volledig; er verdwijnt geen bezoek. "
+                      "Na de verhuis van de projectmap staat elk bezoek twee keer: eenmaal met het oude pad, eenmaal met "
+                      "het nieuwe. Gegevens, keuzes, bijlagen en proef staan al op de nieuwe rij. Na je ja worden de "
+                      f"dubbels ({', '.join(str(p[0]) for p in paren)}) in de nieuwe rij samengevoegd; een volledige kopie "
+                      "blijft in werfbezoek_gewist.jsonl."
                       + (f" Verschilt op beide rijen, de nieuwe wint: {'; '.join(botsing)}." if botsing else "")),
             "runbook": "werfbezoek-dubbels",
             "parameters": {"sleutel": "werfbezoek-dubbels", "paren": paren}}

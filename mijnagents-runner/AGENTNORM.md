@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.4, 20-09-2026 (N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.5, 24-09-2026 (N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -56,6 +56,7 @@ Twee regels die hieruit volgen:
 | **N11** | Verse hartslag, niet in fout en niet vastgelopen | Zes agents draaien op de Mac van Mehdi. Slaapt die laptop, dan gaat hun ronde niet door en merkt niemand het. Op 20-09-2026 stonden acht agents stil zonder dat iemand het wist: het commandocentrum 39 uur (cadans: elk kwartier), de dagbundelaar 54 uur, de wisprwacht zestien uur op fout, de icloudwacht achttien uur vastgelopen in dezelfde ronde. Stil vallen mag, ongemerkt stil vallen niet. |
 
 | **N12** | De runner gaat door de gedeelde ronde (`with ag.ronde(...)`) | Dit is het minimum. Wie zijn eigen doorgang bouwt vergeet er altijd een: gemeten op 20-09-2026 haalden vier van de 39 runners hun werkwijze van het bord op, en meldde er precies een welk regelboek hij las. De werkwijze was voor de rest decoratie: een tekst die beschrijft wat de code zou moeten doen, die niemand naast de code legt. |
+| **N13** | Hij las in zijn laatste ronde de gedeelde lessen (`werkwijze/lessen.json`) | Wat een agent leert, hoort elke agent te weten. Tot 24-09-2026 had alleen de Agendawacht een foutenregister (47 fouten, 14 lessen) en las geen enkele andere agent het. Dezelfde dag stelde de werfverslag-voorbereider voor om "dubbele rijen op te ruimen" van dossier 2145, en Mehdi las dat als "2145 verwijderen", terwijl het net het eerste testdossier van het nieuwe communicatiesysteem is. Die les (L15: zeg eerst wat blijft) gold voor elke agent die voorstellen schrijft, en niemand anders kende ze. De ronde leest de lessen nu mee als bron; deze toets kijkt of ze in de gemelde kennis van de agent staan. |
 
 ### De omgeving
 

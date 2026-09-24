@@ -1,0 +1,26 @@
+{
+  "naam": "Gedeelde lessen van alle agents",
+  "versie": "1.0",
+  "datum": "24-09-2026",
+  "doel": "Wat een agent leert, hoort elke agent te weten. Tot vandaag leefde elke les in het foutenregister van een agent en las niemand anders ze. Dit bestand leest elke agent elke ronde (bord.Ronde), het telt mee in zijn kennis (norm N4) en de Normwacht toetst het (N13). Mandaat van Mehdi, 24-09-2026: \"die praat niet met andere agents om van hun te leren\".",
+  "hoe": [
+    "Elke ronde leest dit bestand via bord.Ronde en meldt het als bron. Een agent met een taalmodel krijgt de lessen in zijn opdracht; een script-agent meldt dat hij ze las en de Normwacht toetst zijn gedrag ertegen.",
+    "Een les komt hier alleen als ze voor meer dan een agent geldt. Een les die alleen over de agenda gaat blijft in werkwijze/foutenregister.json van de Agendawacht.",
+    "De Ontwikkelaar kijkt elke maandag welke lessen uit de registers van de agents hierheen horen, en stelt dat voor. Mehdi beslist.",
+    "Elke les draagt de agent waar ze vandaan komt en de fout waaruit ze kwam, zodat niemand ze voor een mening kan houden.",
+    "Een les verdwijnt nooit stil: wie er een weghaalt, zegt in de commit waarom."
+  ],
+  "lessen": [
+    {"id": "L1", "les": "Kijk naar de uitkomst in het systeem, niet naar het logboek van de agent. Het logboek zegt wat de agent dacht te doen.", "bron": "agenda-wacht", "uit": ["FR-11", "FR-20", "FR-25"], "geldt_voor": "alle agents"},
+    {"id": "L2", "les": "Een grendel open je nooit zelf, ook niet even voor een test. Proefrondes draaien droog, zonder betaalde aanroepen en zonder te schrijven.", "bron": "agenda-wacht", "uit": ["FR-01", "FR-17"], "geldt_voor": "alle agents"},
+    {"id": "L3", "les": "Meet de bron voor je een vraag stelt of een oorzaak noemt. Wat de bron beslist, vraag je niet aan Mehdi.", "bron": "agenda-wacht", "uit": ["FR-09"], "geldt_voor": "alle agents"},
+    {"id": "L5", "les": "Wat een mens zette (kleur, melding, titel, plaats), overschrijf je niet stil. Je vraagt, of je stelt voor.", "bron": "agenda-wacht", "uit": ["FR-20", "FR-24"], "geldt_voor": "alle agents"},
+    {"id": "L6", "les": "Een getal dat elke ronde gelijk blijft terwijl je iets oplost, is een lus. Vergelijk rondes met elkaar.", "bron": "agenda-wacht", "uit": [], "geldt_voor": "alle agents"},
+    {"id": "L7", "les": "Lees git log van de VM en van GitHub voor je bouwt: er werken andere sessies aan dezelfde code.", "bron": "agenda-wacht", "uit": [], "geldt_voor": "claude-code"},
+    {"id": "L10", "les": "Controleer ook het verleden. Een agent werkt vooruit, dus een fout van gisteren ziet hij nooit, tenzij iemand terugkijkt.", "bron": "agenda-wacht", "uit": [], "geldt_voor": "alle agents"},
+    {"id": "L12", "les": "Wie iets verhuist, verhuist alles wat erbij hoort. Een handeling half doen is een nieuwe fout.", "bron": "agenda-wacht", "uit": [], "geldt_voor": "alle agents"},
+    {"id": "L14", "les": "Een gedicteerde zin die de bronnen tegenspreekt, is een vraag met de bronnen erbij, geen opdracht.", "bron": "agenda-wacht", "uit": [], "geldt_voor": "alle agents"},
+    {"id": "L15", "les": "Een voorstel zegt eerst wat blijft en dan pas wat verandert. Nooit 'opruimen', 'wissen' of 'oude rijen' voor iets wat samenvoegt of verplaatst: de lezer leest dat als verlies. Op 24-09-2026 las Mehdi 'dubbele rijen opruimen' als 'dossier 2145 verwijderen', terwijl 2145 het eerste testdossier van het nieuwe communicatiesysteem is.", "bron": "werfverslag-voorbereider", "uit": ["voorstel werfbezoek-dubbels 24-09-2026"], "geldt_voor": "alle agents"},
+    {"id": "L16", "les": "Een dossier, een reeks of een agenda die nog leeft, stel je nooit voor om weg te halen omdat hij oud is. Oud is geen reden; ongebruikt en door niemand gemist is er een, en dan nog als voorstel. Wat 'archief' heet, kan nog in gebruik zijn.", "bron": "agenda-wacht", "uit": ["FR-30", "signaal 'Afspraken in een archiefagenda' 24-09-2026"], "geldt_voor": "alle agents"}
+  ]
+}

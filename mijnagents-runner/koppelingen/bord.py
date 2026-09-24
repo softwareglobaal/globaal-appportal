@@ -148,6 +148,19 @@ class Ronde:
         self.werkwijze = self.agent.werkwijze()
         if self.werkwijze:
             self._bronnen.setdefault("werkwijze op het bord", self.werkwijze)
+        # Norm N13: wat een agent leert, leest elke agent. De gedeelde lessen gaan elke
+        # ronde mee als bron, zodat ze in de kennis staan en een taalmodel ze in zijn
+        # opdracht krijgt. Ontbreekt het bestand, dan breekt de ronde niet: dat meldt de
+        # Normwacht. Mandaat van Mehdi, 24-09-2026.
+        self.lessen = []
+        try:
+            pad = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "werkwijze", "lessen.json")
+            with open(pad, encoding="utf-8") as f:
+                tekst = f.read()
+            self.lessen = json.loads(tekst).get("lessen", [])
+            self._bronnen.setdefault("gedeelde lessen", tekst)
+        except (OSError, ValueError):
+            pass
         return self
 
     def __exit__(self, soort, fout, spoor):
