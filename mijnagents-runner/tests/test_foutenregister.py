@@ -43,8 +43,12 @@ for f in reg["fouten"]:
 
 # elke controle van de zelfcontrole hangt aan een fout in het register
 zc = (HIER / "zelfcontrole.py").read_text(encoding="utf-8")
-gebruikt = set(re.findall(r'meld\("([a-z_]+)"', zc)) | set(re.findall(r'"controle": "([a-z_]+)"', zc))
-gebruikt |= {"handkleur", "kleur"}      # via een voorwaardelijke expressie
+gebruikt = set(re.findall(r'"controle": "([a-z_]+)"', zc))
+for eerste in re.findall(r'meld\((.*?),\s*[ax],', zc, re.S):      # ook "a" if ... else "b"
+    m = re.match(r'\s*"([a-z_]+)"', eerste)
+    if m:
+        gebruikt.add(m.group(1))
+    gebruikt |= set(re.findall(r'else\s+"([a-z_]+)"', eerste))
 gekend = {c for f in reg["fouten"] for c in f.get("controle") or []}
 check("elke controle van de zelfcontrole staat in het register", gebruikt <= gekend, f"zonder nummer: {gebruikt - gekend}")
 check("elke controle in het register bestaat in de zelfcontrole", gekend <= gebruikt, f"onbekend: {gekend - gebruikt}")

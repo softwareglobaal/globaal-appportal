@@ -194,6 +194,28 @@ def afspraken(van_dagen=-1, tot_dagen=8):
 
 
 
+def archief_afspraken(van_dagen=-1, tot_dagen=8):
+    """De afspraken in een archiefagenda (naam begint met ZZ ARCHIEF), alleen om te lezen.
+    Gezien 24-09-2026: Calendly boekte nog in 'ZZ ARCHIEF haagendalightprojects' (5520 Downs,
+    2603 Lisa Cuppens) en niemand zag ze. Ze komen in het dagplan, het belrooster en de
+    botsingen, en als signaal 'hoort op werk'. Schrijven blijft verboden (mag_schrijven)."""
+    try:
+        namen = agenda.kalendernamen()
+    except Exception:  # noqa: BLE001
+        return []
+    ids = [k for k, naam in namen.items() if naam.strip().upper().startswith(ARCHIEFVOORVOEGSEL)]
+    if not ids:
+        return []
+    os.environ["CONTRACTEN_KALENDERS"] = ",".join(ids)
+    try:
+        uit = [a for a in agenda.afspraken(van_dagen, tot_dagen) if not a.get("fout")]
+    finally:
+        os.environ["CONTRACTEN_KALENDERS"] = ",".join(kalenders())
+    for a in uit:
+        a["_archief"] = namen.get(a["kalender"], a["kalender"])
+    return uit
+
+
 # Hoe ver vooruit ik ritten zet. Gewoon acht dagen, want werkafspraken schuiven. De
 # agenda van Lara loopt in vaste reeksen per schooljaar; die ritten zet ik tot het
 # einde ervan, zodat Mehdi ze vooruit ziet. Mandaat van Mehdi, 21-09-2026.
@@ -237,7 +259,9 @@ def lees_titel(titel):
     # Ook wat Mehdi zelf als rit schrijft telt als reistijd: "Rijden naar huis",
     # "Rijden naar Stadskantoor". Anders meldt de wacht die als afspraak zonder code
     # en zet hij er een tweede reistijdblok naast. Gezien 20-09-2026.
-    uit = {"reistijd": bool(re.search(r"reistijd|\brijden naar\b|\bonderweg naar\b", t, re.I))
+    # En "Lara naar huis brengen" is de rit naar huis na de zwemles. Gezien 24-09-2026: die stond
+    # als gewone afspraak, zonder autootje en met de melding van de agenda.
+    uit = {"reistijd": bool(re.search(r"reistijd|\brijden naar\b|\bonderweg naar\b|\bnaar huis\b", t, re.I))
                        or t.startswith("🚗"),
            "buiten": "!!" in t, "onzeker": "??" in t, "firma": "", "soort": "", "type": "", "nummer": "", "klant": ""}
     m = CODE_RE.search(t)
@@ -679,6 +703,94 @@ def titels_normaliseren(items, alleen_dag=None):
                 gedaan += 1
             except Exception as e:  # noqa: BLE001
                 regels.append(f"{a['start'][:16]} {titel[:45]}: titel niet gezet ({type(e).__name__})")
+    return gedaan, regels
+
+
+_KLANTEN = {}
+
+
+def klant_van_nummer(nr):
+    """De klant bij een H-Architects-projectnummer: de persoon van de Pipedrive-deal waarvan de
+    titel met dat nummer begint ('2505 Norma Carolan', persoon Norma Gleeson). De salesmap draagt
+    dezelfde naam (A13). Geen deal met precies dat nummer: leeg, dan gok ik niets."""
+    if nr in _KLANTEN:
+        return _KLANTEN[nr]
+    naam = ""
+    try:
+        d = pipedrive.get("harchitects", "/deals/search", {"term": nr, "fields": "title", "limit": 5})
+        lijst = d.get("items") if isinstance(d, dict) else d
+        for it in lijst or []:
+            x = it.get("item", it)
+            if re.match(rf"^\s*{re.escape(nr)}\b", x.get("title") or ""):
+                naam = ((x.get("person") or {}).get("name") or re.sub(rf"^\s*{re.escape(nr)}\s*", "", x["title"])).strip()
+                break
+    except Exception:  # noqa: BLE001
+        naam = ""
+    _KLANTEN[nr] = naam
+    return naam
+
+
+def titel_aanvulling(a, projecten):
+    """Wat ontbreekt aan een titel om conform te zijn? Geeft (nieuwe titel, uitleg) of (None, '').
+    - een rit draagt het autootje vooraan (Mehdi, 24-09-2026: 'autootje niet vergeten');
+    - '[HARC-..] nummer' zonder klant krijgt ' - klant' uit Pipedrive, en buiten ook het adres
+      uit de agenda of de projectmap: '[FIRMA-SOORT] TYPE nummer - klant, adres'."""
+    titel = a["titel"]
+    info = lees_titel(titel)
+    if info["reistijd"]:
+        if not titel.lstrip().startswith("🚗"):
+            return "🚗 " + re.sub(r"^\s*!!\s*", "", titel), "een rit draagt het autootje"
+        return None, ""
+    if info.get("firma") != "HARC" or not info["nummer"]:
+        return None, ""
+    m = re.search(rf"\b{info['nummer']}\b(.*)$", titel)
+    rest = (m.group(1) if m else "").strip(" -,:")
+    buiten = info["buiten"] or info["soort"] in BUITEN_SOORTEN
+    adres = ""
+    if buiten:
+        loc = (a.get("locatie") or "").strip()
+        adres = loc if loc and not loc.lower().startswith("http") else (projecten.get(info["nummer"]) or {}).get("adres", "")
+        adres = re.sub(r",\s*(Belgi[eë]|Belgium)\s*$", "", adres)
+    if not rest:
+        klant = klant_van_nummer(info["nummer"])
+        if klant:
+            return (f"{titel.rstrip()} - {klant}" + (f", {adres}" if adres else ""),
+                    "klant uit Pipedrive" + (", adres uit de agenda of de projectmap" if adres else ""))
+    elif buiten and adres and not re.search(r"\b\d{4}\s+[A-Za-zÀ-ÿ]", rest):
+        return f"{titel.rstrip()}, {adres}", "adres bij een buitenafspraak"
+    return None, ""
+
+
+def titels_aanvullen(items, alleen_dag=None):
+    """Maakt titels conform (zie titel_aanvulling). Zelf rechtzetten mag bij een afspraak zonder
+    gasten die niet terugkeert, ook als een collega ze zette (Mehdi, 24-09-2026: 'zijn vooral
+    handmatige of via de calendly die nog niet ok zijn'). Met gasten, Calendly of een reeks:
+    een voorstel. Archiefagenda's komen hier nooit binnen."""
+    tok = agenda._toegang()
+    nu = nu_lokaal().isoformat()
+    projecten = projectadressen.index()
+    gedaan, regels = 0, []
+    for a in items:
+        if a.get("hele_dag") or "T" not in a.get("start", "") or a["start"] < nu[:len(a["start"])] or a.get("_archief"):
+            continue
+        if alleen_dag and a["start"][:10] != alleen_dag:
+            continue
+        if a.get("kalender", "").startswith("en.be#"):
+            continue
+        nieuw, uitleg = titel_aanvulling(a, projecten)
+        if not nieuw or nieuw == a["titel"]:
+            continue
+        zelf = (not a.get("deelnemers") and not a.get("_terugkerend") and a.get("kalender") != "zoomafspraken@gmail.com")
+        if not zelf:
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: VOORSTEL '{nieuw[:90]}' ({uitleg})")
+            continue
+        try:
+            _patch(a, {"summary": nieuw}, tok)
+            regels.append(f"{a['start'][:16]} '{a['titel'][:45]}' -> '{nieuw[:80]}' ({uitleg})")
+            a["titel"] = nieuw
+            gedaan += 1
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"{a['start'][:16]} {a['titel'][:45]}: titel niet aangevuld ({type(e).__name__})")
     return gedaan, regels
 
 
@@ -1798,12 +1910,13 @@ def main():
         items = afspraken(-1, 8)
         fouten = [i for i in items if i.get("fout")]
         items = [i for i in items if not i.get("fout")]
+        archief = archief_afspraken(-1, 8)     # alleen lezen (FR-39)
         deals = deals_index()
         vandaag = nu_lokaal().date().isoformat()
         gisteren = (nu_lokaal().date() - timedelta(days=1)).isoformat()
         klaar, gekoppeld, niet_conform, dagplan, gisteren_lijst = [], 0, [], [], []
         per_afdeling = {}
-        for a in items:
+        for a in items + archief:
             info = lees_titel(a["titel"])
             if info["reistijd"] or a["kalender"] == "en.be#holiday@group.v.calendar.google.com":
                 continue
@@ -1856,6 +1969,9 @@ def main():
         rit_items = items + [a for a in extra if (a["kalender"], a["id"], a["start"]) not in gezien_ids]
         # eerst de titel in één keer goed, dan de vaste Zoom, dan de rest
         ng, nregels = titels_normaliseren(rit_items, dag_grens)
+        ag_, aregels = titels_aanvullen(rit_items, dag_grens)
+        ng += ag_
+        nregels += aregels
         zg, zregels = zoom_zetten(rit_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"titels: {ng} rechtgezet uit vrije tekst; link-notitie: {zg} gezet",
                "\n".join(nregels + zregels))
@@ -1888,11 +2004,18 @@ def main():
             elif "rijtijd niet berekend" in regel:
                 zonder_rit["rijtijd niet berekend"].append(regel[:110])
 
-        rooster = belrooster(items, vandaag)
+        rooster = belrooster(items + archief, vandaag)
         bellen.rooster_schrijven(rooster)
         ag.log(f"dag {vandaag}", "schrijf", f"belrooster: {len(rooster)} oproepen gepland (online {BEL_ONLINE_MIN} min vooraf, buiten op het vertrekmoment)",
                "\n".join(f"{r['tijd'][:16]} bel: {r['titel']}" for r in rooster[:60]))
-        bots = [b for b in botsingen(items) if b[:10] >= vandaag]
+        bots = [b for b in botsingen(items + archief) if b[:10] >= vandaag]
+        in_archief = [f"{a['start'][:16]} {a['titel'][:60]} (in '{a['_archief'][:40]}', gezet door {maker(a)})"
+                      for a in archief if a["start"][:10] >= vandaag and not a.get("hele_dag")]
+        if in_archief:
+            ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
+                          "titel": "Afspraken in een archiefagenda: horen op werk",
+                          "uniek": f"agenda-archief:{vandaag}", "inhoud": "\n".join("- " + x for x in in_archief[:30])
+                          + "\n\nDe agent leest ze mee (dagplan, belrooster, botsingen) maar schrijft er niets in."}])
         if bots:
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(bots)} botsende afspraken in de komende week",
                           "uniek": f"agenda-botsing:{vandaag}", "inhoud": "\n".join("- " + b for b in bots)}])
@@ -1955,7 +2078,7 @@ def main():
         if rit_signalen:
             ag.klaarzet(rit_signalen)
         titel_fouten = {}
-        for a in items:
+        for a in items + archief:
             if a.get("fout"):
                 continue
             inf = lees_titel(a.get("titel", ""))
@@ -1984,6 +2107,8 @@ def main():
                           "wie": "mehdi"})
         if fout_h:
             noden.append({"tekst": "Herinneringen konden niet gezet worden", "wie": "claude-code"})
+        if in_archief:
+            noden.append({"tekst": "Er wordt nog geboekt in een archiefagenda: het Calendly-kanaal omzetten naar werk", "wie": "mehdi"})
         if HANDKLEUREN:
             noden.append({"tekst": "Kleuren met de hand gezet: laat ik ze staan of volgen ze de titel?", "wie": "mehdi"})
         if open_na:

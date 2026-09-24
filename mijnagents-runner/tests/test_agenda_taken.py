@@ -416,6 +416,42 @@ check("een opgeloste fout die terugkomt heet TERUGGEKEERD, een onbekende NIEUW",
 check("de JSON wijst naar het foutenregister en de zelfcontrole",
       "foutenregister.json" in json.dumps(taken.get("leren", {})) and "zelfcontrole.py" in json.dumps(taken.get("leren", {})))
 
+# Punten van Mehdi op 24-09-2026: Lara naar huis, titels volledig, archiefagenda's
+check("'Lara naar huis brengen' is een rit naar huis",
+      W.lees_titel("Mehdi: Lara naar huis brengen")["reistijd"]
+      and W.titel_aanvulling({"titel": "Mehdi: Lara naar huis brengen"}, {})[0] == "🚗 Mehdi: Lara naar huis brengen"
+      and W.titel_aanvulling({"titel": "🚗 Reistijd: Stadionlaan 4 → thuis (Lara naar huis brengen)"}, {})[0] is None
+      and W.titel_aanvulling({"titel": "!! Mehdi: Rijden naar huis"}, {})[0] == "🚗 Mehdi: Rijden naar huis")
+_oud_k = W.klant_van_nummer
+W.klant_van_nummer = lambda nr: {"2505": "Norma Gleeson"}.get(nr, "")
+try:
+    _t1 = W.titel_aanvulling({"titel": "!! Mehdi & Catalin: [HARC-KB] 2505", "locatie": "Aarschotsesteenweg 252, 3012 Wilsele, Belgium"}, {})[0]
+    _t2 = W.titel_aanvulling({"titel": "!! Mehdi & Catalin: [HARC-KB] 2505 - Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele"}, {})[0]
+    _t3 = W.titel_aanvulling({"titel": "Mehdi: [HARC-KO] 2505"}, {})[0]
+    _t4 = W.titel_aanvulling({"titel": "Mehdi: [HARC-KO] 9999"}, {})[0]
+finally:
+    W.klant_van_nummer = _oud_k
+check("een titel met projectnummer krijgt de klant en bij buiten het adres",
+      _t1 == "!! Mehdi & Catalin: [HARC-KB] 2505 - Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele"
+      and _t2 is None and _t3 == "Mehdi: [HARC-KO] 2505 - Norma Gleeson" and _t4 is None, str((_t1, _t2, _t3, _t4)))
+_gp9 = []
+_op9, _ot9 = W._patch, W.agenda._toegang
+W._patch = lambda a, body, tok: _gp9.append(a["titel"])
+W.agenda._toegang = lambda: "tok"
+_m9 = (W.nu_lokaal() + _td(days=1)).replace(hour=8, minute=0, second=0, microsecond=0).isoformat()
+try:
+    W.titels_aanvullen([{"titel": "!! Mehdi: Rijden naar huis", "start": _m9, "einde": _m9, "kalender": "haagendalightprojects@gmail.com",
+                         "_archief": "ZZ ARCHIEF haagendalightprojects"},
+                        {"titel": "!! Mehdi: Rijden naar huis", "start": _m9, "einde": _m9, "kalender": W.WERKAGENDA,
+                         "deelnemers": ["klant@x.be"]}])
+finally:
+    W._patch, W.agenda._toegang = _op9, _ot9
+_b9 = Z.bevindingen([{"titel": "Mehdi: 5520 Downs", "start": _m9, "einde": _m9, "kalender": "haagendalightprojects@gmail.com",
+                      "_archief": "ZZ ARCHIEF haagendalightprojects"}], _nu.date().isoformat(), (_nu + _td(days=2)).date().isoformat(), _nu)
+check("een afspraak in een archiefagenda wordt gelezen en gemeld, nooit beschreven",
+      hasattr(W, "archief_afspraken") and _gp9 == [] and [x["controle"] for x in _b9] == ["afspraak_in_archief"]
+      and not W.mag_schrijven("haagendalightprojects@gmail.com"), str((_gp9, _b9)))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

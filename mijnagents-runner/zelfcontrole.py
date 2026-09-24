@@ -61,11 +61,29 @@ def bevindingen(items, van, tot, nu):
                     "tekst": tekst, "door": W.maker(a)})
 
     binnen = [a for a in items if van <= a.get("start", "")[:10] <= tot and not a.get("kalender", "").startswith("en.be#")]
-    ritten = [a for a in binnen if W.lees_titel(a["titel"])["reistijd"]]
+    ritten = [a for a in binnen if W.lees_titel(a["titel"])["reistijd"] and not a.get("_archief")]
+    projecten = W.projectadressen.index() if items else {}
     for a in binnen:
         info = W.lees_titel(a["titel"])
         kal = a.get("kalender", "")
         toekomst = a["start"][:10] >= vandaag
+        if a.get("_archief"):
+            # een archiefagenda lees ik alleen: een komende afspraak daar hoort op werk (FR-39)
+            if toekomst and not a.get("hele_dag"):
+                meld("afspraak_in_archief", a, f"staat in '{a['_archief'][:40]}': hoort op werk")
+            continue
+        # titelvorm (FR-40, FR-41): wat de agent zelf moet aanvullen, en wat een voorstel blijft
+        if toekomst and not a.get("hele_dag") and kal not in vaste and "T" in a.get("start", ""):
+            nieuw, _uitleg = W.titel_aanvulling(a, projecten)
+            if nieuw:
+                zelf = not a.get("deelnemers") and not a.get("_terugkerend") and kal != "zoomafspraken@gmail.com"
+                if info["reistijd"]:
+                    meld("rit_zonder_autootje" if zelf else "titel_voorstel", a, f"hoort '{nieuw[:70]}'")
+                else:
+                    meld("titel_onvolledig" if zelf else "titel_voorstel", a, f"hoort '{nieuw[:70]}'")
+        elif toekomst and info["reistijd"] and not a["titel"].lstrip().startswith("🚗") and not a.get("deelnemers") \
+                and not a.get("_terugkerend") and not a.get("hele_dag"):
+            meld("rit_zonder_autootje", a, "rit zonder autootje")
         r = a.get("_reminders") or {}
         eigen = r.get("overrides") or []
         standaard = r.get("useDefault", True) and not eigen
@@ -143,6 +161,17 @@ def bevindingen(items, van, tot, nu):
         m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
         if m and W.zonder_zl(m.group(1)).strip() not in titels:
             meld("rit_oude_titel", x, f"rit verwijst naar '{m.group(1)[:45]}', die titel bestaat niet meer")
+    # een eigen rit hoort op de agenda van zijn afspraak (FR-28, FR-42)
+    for x in ritten:
+        if x["start"][:10] < vandaag or "OSRM" not in (x.get("omschrijving") or ""):
+            continue
+        m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
+        if not m:
+            continue
+        bij = [a for a in binnen if a["titel"].strip() == m.group(1).strip() and a["start"][:10] == x["start"][:10]
+               and not a.get("_archief")]
+        if bij and all(a.get("kalender") != x.get("kalender") for a in bij):
+            meld("rit_andere_agenda", x, f"de afspraak staat op {W.KALENDERS.get(bij[0]['kalender'], '?')[:20]}, de rit niet")
     # een rit van nul minuten is geen rit: hij verbergt dat het te krap is
     for x in ritten:
         if x["start"][:10] >= vandaag and "T" in x["start"] and x["start"] == x.get("einde"):
@@ -202,6 +231,7 @@ def main():
     d_van = (datetime.fromisoformat(van).date() - datetime.now().date()).days
     d_tot = (datetime.fromisoformat(tot).date() - datetime.now().date()).days
     items = [a for a in W.afspraken(d_van - 1, d_tot + 2) if not a.get("fout")]
+    items += W.archief_afspraken(d_van - 1, d_tot + 2)      # alleen lezen (FR-39)
     reg = register()
     gevonden = indelen(bevindingen(items, van, tot, nu) + omgeving(nu), reg)
     tel = {s: sum(1 for b in gevonden if b["staat"] == s) for s in ("TERUGGEKEERD", "NIEUW", "BEKEND")}

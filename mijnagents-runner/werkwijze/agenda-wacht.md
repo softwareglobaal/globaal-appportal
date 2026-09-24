@@ -371,6 +371,12 @@ Wat ik daaruit meeneem:
 - Een handmatige rit op de agendastandaard krijgt de melding van een rit.
 - Een afspraak die voorbij is en nog ?? draagt: ik vraag of ze doorging.
 - Een rit volgt zijn afspraak: nieuwe titel, andere agenda.
+- Een archiefagenda (ZZ ARCHIEF) lees ik mee, alleen lezen: een komende afspraak daar komt in het
+  dagplan, het belrooster en de botsingen, en als signaal 'hoort op werk'. Ik schrijf er nooit in.
+- 'naar huis' in een titel is een rit. Elke rit draagt het autootje. 'Lara naar huis brengen' is de
+  rit naar huis na de zwemles en blijft tot 19:30 staan, zonder melding.
+- Een titel met een projectnummer is pas volledig met de klant (Pipedrive) en, buiten, het adres:
+  '[FIRMA-SOORT] TYPE nummer - klant, adres'. Zonder gasten vul ik aan; met gasten of Calendly stel ik voor.
 
 ## Hoe Claude aan de agent werkt
 
@@ -383,6 +389,10 @@ Wat ik daaruit meeneem:
 - Een grendel zet je nooit zelf open, ook niet voor een proef. Proefrondes draaien droog.
 - Meet de bron voor je vraagt of een oorzaak noemt.
 - Sluit af met een zelfcontrole als bewijs, en een nieuwe fout eerst in het register.
+- Een handmatige wijziging gaat alleen op een afspraak die op titel en uur precies klopt: eerst tonen
+  wat geraakt wordt, dan pas wijzigen. Google zoekt ook in de omschrijving.
+- Wie een afspraak van agenda verhuist, verhuist haar ritten mee.
+- Spreken Pipedrive en Mehdi elkaar tegen, dan geldt Mehdi; de tegenspraak komt als vraag op het bord.
 
 ## Wat ik doe, in deze volgorde
 

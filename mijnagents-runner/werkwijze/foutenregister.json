@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "1.0",
+ "versie": "1.1",
  "datum": "24-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -91,6 +91,20 @@
    "uit": [
     "FR-26",
     "FR-28"
+   ]
+  },
+  {
+   "id": "L11",
+   "les": "Een archief is niet leeg zolang er iets in schrijft. Lees mee wat je niet mag beschrijven, en kijk of er nog iets binnenkomt.",
+   "uit": [
+    "FR-39"
+   ]
+  },
+  {
+   "id": "L12",
+   "les": "Wie iets verhuist, verhuist alles wat erbij hoort. Een handeling half doen is een nieuwe fout.",
+   "uit": [
+    "FR-42"
    ]
   }
  ],
@@ -811,6 +825,142 @@
    },
    "controle": [],
    "status": "opgelost"
+  },
+  {
+   "id": "FR-39",
+   "datum": "24-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Afspraken in een archiefagenda bleven onzichtbaar: 'Mehdi: 5520 Downs' (24-09 08:00) en 'Mehdi: 2603 Lisa Cuppens' (25-09 21:00) staan in 'ZZ ARCHIEF haagendalightprojects'.",
+   "gevolg": "Geen code, geen kleur, geen melding, geen belrooster, geen signaal. Ook de weekcontrole zag ze niet.",
+   "waarom_niet_gezien": "De agent en de weekcontrole lezen alleen de vaste lijst agenda's. Een archiefagenda werd als 'af' beschouwd, maar Calendly boekt er nog in.",
+   "oorzaak": "Het Calendly-type 'HA: Klant' van het account light projects schrijft nog in de gearchiveerde agenda.",
+   "soort_oorzaak": "bron",
+   "oplossing": "De agent leest elke archiefagenda mee, alleen lezen: komende afspraken komen in het dagplan, het belrooster en de botsingen, en als signaal 'hoort op werk'. De zelfcontrole kijkt er ook in.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een afspraak in een archiefagenda wordt gelezen en gemeld, nooit beschreven"
+   },
+   "controle": [
+    "afspraak_in_archief"
+   ],
+   "status": "bewaakt"
+  },
+  {
+   "id": "FR-40",
+   "datum": "24-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "'Mehdi: Lara naar huis brengen' (dinsdag 19:00-19:30) was een rit naar huis, maar stond als gewone afspraak: zonder autootje, met de standaardmelding van Lara.",
+   "gevolg": "Niet consistent met de andere ritten; een melding 10 minuten vooraf, midden in de zwemles.",
+   "waarom_niet_gezien": "De agent herkende 'naar huis brengen' alleen in de keten (als terugrit), niet als rit in de titel. De controle keek niet of een rit het autootje draagt.",
+   "oorzaak": "Twee plekken in de code herkenden een rit elk op hun eigen manier.",
+   "soort_oorzaak": "code",
+   "oplossing": "'naar huis' in een titel is een rit. Elke rit zonder gasten krijgt het autootje en de vorm '🚗 Reistijd: van → naar'. De rit van Lara blijft tot 19:30 staan, naar huis stil. De reeks is rechtgezet.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "'Lara naar huis brengen' is een rit naar huis"
+   },
+   "controle": [
+    "rit_zonder_autootje"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-41",
+   "datum": "24-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Titels met een projectnummer maar zonder klant en adres: '!! Mehdi & Catalin: [HARC-KB] 2505', en de Calendly-boekingen van light projects.",
+   "gevolg": "Niet conform de titelvorm '[FIRMA-SOORT] TYPE nummer - klant, adres'; wie de agenda leest, weet niet wie of waar.",
+   "waarom_niet_gezien": "De controle keek of er een code stond, niet of de titel volledig was. 'In een keer goed' zette de code, maar vulde de klant niet aan.",
+   "oorzaak": "De klantnaam staat in Pipedrive en de salesmap, niet in de agenda; niemand haalde hem op.",
+   "soort_oorzaak": "code",
+   "oplossing": "De agent vult bij een projectnummer de klant aan (Pipedrive, persoon van de deal) en bij buiten het adres (agenda of projectmap). Bij eigen afspraken zonder gasten doet hij het zelf; bij Calendly of met gasten een voorstel.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een titel met projectnummer krijgt de klant en bij buiten het adres"
+   },
+   "controle": [
+    "titel_onvolledig"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-42",
+   "datum": "24-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "De ritten naar de kine van 23-09 stonden rood op de werkagenda, de kine zelf zwart op privé.",
+   "gevolg": "De kleur van de rit en die van de afspraak kwamen niet overeen; collega's zagen de rit.",
+   "waarom_niet_gezien": "Claude verhuisde op 23-09 de afspraak naar privé en liet de ritten staan. De regel 'rit verhuist mee' (FR-28) werkt alleen vooruit.",
+   "oorzaak": "Een handeling van Claude die de helft deed.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "De twee ritten verhuisd naar privé, zonder eigen kleur. Wie een afspraak van agenda verhuist, verhuist haar ritten mee; de agent doet dat voortaan zelf.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een eigen rit verhuist mee als zijn afspraak naar een andere agenda gaat"
+   },
+   "controle": [
+    "rit_andere_agenda"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-43",
+   "datum": "24-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "5520 Kane Downs: Pipedrive zegt gewonnen en getekend (fase SIGNED), Mehdi zegt dat de klant nog niet tekende.",
+   "gevolg": "Twee bronnen spreken elkaar tegen; de agent zou uit Pipedrive 'klant' afleiden.",
+   "waarom_niet_gezien": "Niemand vergeleek de deal met de afspraak.",
+   "oorzaak": "Onbekend: de deal staat misschien te vroeg op gewonnen.",
+   "soort_oorzaak": "bron",
+   "oplossing": "De afspraak staat op prospect, zoals Mehdi zei. Of de deal terug moet naar open, beslist Mehdi.",
+   "grendel": {
+    "soort": "werkwijze",
+    "waar": "werkwijze/agenda-wacht.md",
+    "tekst": "Spreken Pipedrive en Mehdi elkaar tegen, dan geldt Mehdi"
+   },
+   "controle": [],
+   "status": "vraag"
+  },
+  {
+   "id": "FR-44",
+   "datum": "24-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "Bij het rechtzetten van 2505 zocht Claude op '2505'; Google vond ook de twee ritten (die dragen 2505 in hun omschrijving), en die kregen de titel van de afspraak.",
+   "gevolg": "Twee ritten droegen vijf minuten lang de titel van de afspraak. Meteen teruggezet.",
+   "waarom_niet_gezien": "De zoekopdracht leek precies, maar Google zoekt ook in de omschrijving.",
+   "oorzaak": "Een wijziging op een zoekresultaat zonder na te gaan of elk gevonden item het bedoelde was.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "Een handmatige wijziging gaat alleen op een afspraak die op titel en uur precies klopt; eerst tonen wat geraakt wordt, dan pas wijzigen.",
+   "grendel": {
+    "soort": "werkwijze",
+    "waar": "werkwijze/agenda-wacht.md",
+    "tekst": "Een handmatige wijziging gaat alleen op een afspraak die op titel en uur precies klopt"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-45",
+   "datum": "24-09-2026",
+   "gevonden_door": "zelfcontrole",
+   "fout": "Regel, geen voorval: een onvolledige titel met gasten, van Calendly of in een reeks mag de agent niet zelf herschrijven.",
+   "gevolg": "Die titels blijven onvolledig tot iemand ze aanpast.",
+   "waarom_niet_gezien": "Bewaakt sinds 24-09-2026.",
+   "oorzaak": "Een gast ziet de titel mee; een reeks raakt ook het verleden.",
+   "soort_oorzaak": "regel",
+   "oplossing": "De agent zet een voorstel met de volledige titel op het bord. Voor Calendly is de echte oplossing het titelsjabloon (FR-22).",
+   "grendel": {
+    "soort": "code",
+    "waar": "agenda_wacht.py",
+    "tekst": "VOORSTEL '{nieuw[:90]}'"
+   },
+   "controle": [
+    "titel_voorstel"
+   ],
+   "status": "bewaakt"
   }
  ]
 }

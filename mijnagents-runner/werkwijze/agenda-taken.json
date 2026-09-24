@@ -1,5 +1,5 @@
 {
- "versie": "4.0",
+ "versie": "4.1",
  "datum": "2026-09-24",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -119,7 +119,8 @@
    "ZL": "zonder link: een online gesprek met een externe partij waar nog geen link in staat. Mehdi stuurt de link zelf. ZL staat ALTIJD HELEMAAL VOORAAN, voor ?? en voor alles, zodat Mehdi het meteen ziet (Mehdi, 23-09-2026). De agent zet ZL en haalt het weg zodra er een link in de afspraak staat"
   },
   "aannemer": "AB/AO: een aannemer van een klant (Mehdi heeft als architect veel afspraken met aannemers). Geen klant, geen leverancier: een eigen soort. Buiten rood, online salie. Mehdi, 23-09-2026",
-  "zonder_soort": "een firmacode zonder soort ('[HARC] Rechtbank') wordt gemeld; een gemeente of rechtbank past nog in geen soort, dat beslist Mehdi (FR-27)"
+  "zonder_soort": "een firmacode zonder soort ('[HARC] Rechtbank') wordt gemeld; een gemeente of rechtbank past nog in geen soort, dat beslist Mehdi (FR-27)",
+  "volledig": "een titel met een projectnummer is pas volledig met de klant (Pipedrive, de persoon van de deal) en, buiten, het adres: '[FIRMA-SOORT] TYPE nummer - klant, adres'. Zonder gasten en niet terugkerend vult de agent het zelf aan, ook als een collega de afspraak zette; met gasten, van Calendly of in een reeks doet hij een voorstel (FR-41, FR-45)"
  },
  "kleuren": {
   "grondregel": "de kleur zegt waarvóór Mehdi ergens is, de twee uitroeptekens zeggen dát hij naar buiten gaat. Dat zijn twee verschillende dingen. Een afspraak kan nooit kleurloos zijn: ze is werk, privé of Lara.",
@@ -299,6 +300,26 @@
   "uitkomst": "GOED, LET OP of FOUT per toets; hij eindigt met een foutcode als er iets FOUT is"
  },
  "openstaand": [
+  {
+   "wat": "De reeks '2145:wekelijkse werfbezoek' loopt nog elke maandag in 'ZZ ARCHIEF H-Architects Buiten', naast dezelfde reeks op werk, tot eind december (ook 05-10, de week in SU). Mag ik ze stoppen met een einddatum? Het verleden blijft staan (FR-39)",
+   "wie": "Mehdi",
+   "wanneer": "voor 28-09"
+  },
+  {
+   "wat": "Calendly-type 'HA: Klant' van het account light projects schrijft nog in de archiefagenda. In Calendly (account light projects): bij 'HA: Klant' de agenda op 'mehdi werk agenda' zetten en de titel op 'Mehdi: [HARC-KO] {nummer} - {naam}' (FR-39, FR-22)",
+   "wie": "Mehdi",
+   "wanneer": "zo snel mogelijk"
+  },
+  {
+   "wat": "5520 Kane Downs staat in Pipedrive op gewonnen, fase SIGNED; volgens Mehdi tekende de klant nog niet. De afspraak staat nu op prospect. Moet de deal terug naar open? (FR-43)",
+   "wie": "Mehdi",
+   "wanneer": "zodra het kan"
+  },
+  {
+   "wat": "2505: de deal heet '2505 Norma Carolan', de persoon en de salesmap 'Norma Gleeson'. Welke naam klopt? De titel draagt nu Norma Gleeson",
+   "wie": "Mehdi",
+   "wanneer": "zodra het kan"
+  },
   {
    "wat": "Kleuren van 24-09 om 00:15: UNABO-overleggen en UNABO-boekingen paars, AI stabiliteit geel, per script gezet. Bewust? Is UNABO paars een nieuwe regel, of is AI stabiliteit onzeker (dan ?? in de titel)? Tot dan laat de agent ze staan (FR-21)",
    "wie": "Mehdi",
@@ -525,6 +546,10 @@
   {
    "datum": "2026-09-24",
    "wat": "definitieve versie 4.0 van de afspraken (PDF v2.0), het foutenregister apart, en de zelfcontrole elke werkdag om 07:00. Nieuw: handkleur wordt gevraagd, niet overschreven; het Google-plafond is hard; alles op Brusselse tijd; te krap toont de echte aankomst; een handmatige rit krijgt de rit-melding; ?? na afloop wordt gevraagd; een rit volgt zijn afspraak (titel en agenda)"
+  },
+  {
+   "datum": "2026-09-24",
+   "wat": "archiefagenda's worden meegelezen (alleen lezen); elke rit draagt het autootje; 'Lara naar huis brengen' is de rit naar huis tot 19:30; titels met projectnummer krijgen klant en adres; 5520 op prospect (klant nog niet getekend); de ritten naar de kine van 23-09 naar privé"
   }
  ],
  "bron_afkortingen": {
@@ -634,7 +659,9 @@
   },
   "meting_boven_schatting": "een schatting (gratis routeplanner x filefactor) overschrijft nooit een rit die met live verkeer van Google gemeten is. Gezien 23-09-2026: de rit naar Genk schoof zo van 10:00 naar 09:45 toen de dagteller op was",
   "te_krap": "past de rit niet tussen twee afspraken, dan toont hij de echte rijtijd en dus de late aankomst (geen blok van nul minuten), en komt 'Te krap: je komt te laat' op het bord (FR-37)",
-  "rit_volgt_afspraak": "de omschrijving van een rit volgt de titel van zijn afspraak; verhuist de afspraak naar een andere agenda (werk naar privé), dan verhuist de rit mee (FR-25, FR-28)"
+  "rit_volgt_afspraak": "de omschrijving van een rit volgt de titel van zijn afspraak; verhuist de afspraak naar een andere agenda (werk naar privé), dan verhuist de rit mee (FR-25, FR-28)",
+  "autootje": "elke rit draagt het autootje vooraan, ook een rit die iemand met de hand zette; 'naar huis' in een titel is een rit (FR-40)",
+  "lara_naar_huis": "dinsdag 19:00 tot 19:30: '🚗 Reistijd: Stadionlaan 4 → thuis (Lara naar huis brengen)', de rit naar huis na de zwemles. Blijft tot 19:30 staan zodat er tijd is om Lara van de les naar huis te brengen; zonder melding (Mehdi, 24-09-2026)"
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30 Brusselse tijd",
@@ -963,5 +990,10 @@
  "tijd": {
   "regel": "alle tijden zijn Brusselse tijd, zomer en winter. De VM draait op UTC en cron kent daar geen tijdzone: cron start de scripts vaker, en elk script beslist zelf op Brusselse tijd of het zijn beurt is (FR-18)",
   "logboek": "elke ronde en elke regel van de wijzigings- en filewacht begint met zijn tijdstip (FR-19)"
+ },
+ "archief_lezen": {
+  "regel": "een archiefagenda (ZZ ARCHIEF) leest de agent mee, alleen lezen: komende afspraken komen in het dagplan, het belrooster en de botsingen, en als signaal 'hoort op werk'. Schrijven blijft verboden (FR-39)",
+  "waarom": "Calendly boekte nog in 'ZZ ARCHIEF haagendalightprojects' (5520, 2603) en de reeks WB 2145 liep door in 'ZZ ARCHIEF H-Architects Buiten'. Niemand zag het",
+  "mehdi": "24-09-2026"
  }
 }
