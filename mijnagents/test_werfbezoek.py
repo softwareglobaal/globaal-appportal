@@ -94,7 +94,30 @@ check("de bezoekpagina toont de levende rij", "5. STAN Execution ONGOING" in bl 
 ov = c.get("/werfverslagen", headers=BEHEER).get_data(as_text=True)
 check("het overzicht toont de dubbel apart", "oude rij(en) van vóór de verhuis" in ov)
 
+# 2b. de echte toestand van 145-149 na de eerste herkoppeling: de fasemap stond als 'waiting' op de rij en als
+#     'Waiting' in de bijlagen, dus de paden bleven oud, ook op de blijvende rij
+leeg_db()
+HOOFD = OUD.replace("waiting to start", "Waiting to start")
+stale = [{"naam": "a.docx", "pad": HOOFD + BEZOEK + "/a.docx"}]
+c.post("/api/werfbezoek", json={"rijen": [rij(OUD)]}, headers=K)
+c.post("/api/werfbezoek", json={"rijen": [rij(NIEUW)]}, headers=K)
+for pad in (OUD, NIEUW):
+    c.post("/api/werfbezoek", json={"rijen": [{"dossier": "2145", "datum": "2026-06-06", "bezoekmap": pad + BEZOEK, "_alleen": ["gegevens", "bijlagen"],
+                                               "gegevens": {"gegevens": [{"veld": "x", "bron": HOOFD + BEZOEK + "/a.docx"}]}, "bijlagen": stale}]}, headers=K)
+uit = c.post("/api/werfbezoek", json={"rijen": [rij(NIEUW, vorige_bezoekmappen=[OUD + BEZOEK])]}, headers=K).get_json()
+blijft = [x for x in rijen_db() if x["bezoekmap"] == NIEUW + BEZOEK][0]
+check("een andere hoofdletter in de fasemap belet de omzetting niet", json.loads(blijft["bijlagen"])[0]["pad"] == NIEUW + BEZOEK + "/a.docx", blijft["bijlagen"])
+check("ook de gegevens van de blijvende rij wijzen naar het nieuwe pad", "Waiting to start" not in blijft["gegevens"], blijft["gegevens"][:200])
+check("het antwoord meldt wat omgezet is", set(uit["herkoppeld"][0].get("omgezet") or []) == {"gegevens", "bijlagen"}, uit)
+check("na de omzetting geen botsing tussen oud en nieuw", uit["herkoppeld"][0]["botsing"] == [], uit)
+
 # 3. opruimen: weigert zolang de rij die blijft iets mist, wist daarna met een kopie
+leeg_db()
+c.post("/api/werfbezoek", json={"rijen": [rij(OUD)]}, headers=K)
+c.post("/api/werfbezoek", json={"rijen": [{"dossier": "2145", "datum": "2026-06-06", "bezoekmap": OUD + BEZOEK, "_alleen": ["gegevens"],
+                                           "gegevens": {"gegevens": [{"veld": "bouwheer", "waarde": "x"}]}}]}, headers=K)
+c.post("/api/werfbezoek", json={"rijen": [rij(NIEUW)]}, headers=K)
+oud_id, nieuw_id = [x["id"] for x in rijen_db()]
 leeg = c.post("/api/werfbezoek/opruimen", json={"paren": [[oud_id, nieuw_id]]}, headers=K).get_json()
 check("opruimen weigert als de rij die blijft de gegevens nog mist", not leeg["gewist"] and oud_id in {x["id"] for x in rijen_db()}, leeg)
 c.post("/api/werfbezoek", json={"rijen": [rij(NIEUW, vorige_bezoekmappen=[OUD + BEZOEK])]}, headers=K)

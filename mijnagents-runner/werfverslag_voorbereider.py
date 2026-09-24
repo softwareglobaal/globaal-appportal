@@ -84,15 +84,16 @@ def nummer_bezoeken(bezoeken, werfstart):
 def verhuisde_rijen(bezoeken, projectmap, bord_rijen):
     """De projectmap verhuisde van fasemap (2145 op 24-09-2026: 4. STAN Execution waiting to start naar 5. STAN
     Execution ONGOING). Per bezoekmap van nu: de rijen op het bord met dezelfde datum en dezelfde bezoekmap binnen
-    de projectmap, maar onder een andere projectmap. Oudste rij eerst, die draagt de gegevens van de schrijver."""
+    de projectmap, maar onder een ander pad. Oudste rij eerst, die draagt de gegevens van de schrijver.
+    Hoofdletterongevoelig, zoals Dropbox: de fasemap heette zowel 'waiting to start' als 'Waiting to start'."""
     uit = {}
     for b in bezoeken:
         if not b["map"].startswith(projectmap + "/"):
             continue
-        rel = b["map"][len(projectmap):]
+        rel = b["map"][len(projectmap):].lower()
         oud = [r for r in bord_rijen
-               if r.get("datum") == b["datum"] and r.get("projectmap") and r["projectmap"] != projectmap
-               and r.get("bezoekmap") == r["projectmap"] + rel]
+               if r.get("datum") == b["datum"] and r.get("projectmap") and r.get("bezoekmap") != b["map"]
+               and (r.get("bezoekmap") or "").lower() == r["projectmap"].lower() + rel]
         if oud:
             uit[b["map"]] = sorted(oud, key=lambda r: r.get("id") or 0)
     return uit
@@ -389,7 +390,8 @@ def verwerk(nummer, droog=False):
     # is; staat de bezoekmap op beide plaatsen, dan is het een kopie en beslist Mehdi welke geldt
     verhuisd = verhuisde_rijen(bezoeken, projectmap, alle_rijen)
     for mp, oude in list(verhuisd.items()):
-        nog = [r for r in oude if bronnen.bestaat(r["bezoekmap"])]
+        # verschilt alleen de schrijfwijze, dan is het voor Dropbox dezelfde map: geen kopie
+        nog = [r for r in oude if r["bezoekmap"].lower() != mp.lower() and bronnen.bestaat(r["bezoekmap"])]
         if nog:
             noden.append({"tekst": f"Dossier {nummer}: bezoekmap staat zowel onder {nog[0]['projectmap'].split('/')[-2]} "
                                    f"als onder {projectmap.split('/')[-2]}; Mehdi zegt welke geldt", "wie": "mehdi"})
@@ -456,8 +458,9 @@ def verwerk(nummer, droog=False):
             ag.log(str(nummer), "besluit", f"rij {h['id']} met haar gegevens meegenomen naar het nieuwe pad (was {h['van']})")
             continue
         dubbels.append({"dossier": str(nummer), "dubbel": h["dubbel"], "id": h["id"], "botsing": h.get("botsing") or []})
-        if h.get("kolommen"):
-            ag.log(str(nummer), "besluit", f"rij {h['id']} aangevuld met {', '.join(h['kolommen'])} van de oude rij {h['dubbel']}; "
+        if h.get("kolommen") or h.get("omgezet"):
+            ag.log(str(nummer), "besluit", f"rij {h['id']}: aangevuld met {', '.join(h.get('kolommen') or []) or 'niets'} van de oude rij "
+                   f"{h['dubbel']}, paden naar het nieuwe pad in {', '.join(h.get('omgezet') or []) or 'niets'}; "
                    "de oude rij blijft tot Mehdi de opruiming goedkeurt")
     return rijen, noden, dubbels
 

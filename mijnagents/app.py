@@ -1067,8 +1067,10 @@ def _werf_leeg(v):
 
 
 def _pad_vervang(v, oud, nieuw):
+    # hoofdletterongevoelig, zoals Dropbox zelf: bij 2145 stond de fasemap als 'waiting to start' op de rij en
+    # als 'Waiting to start' in de bijlagen, en een gewone replace liet de bijlagen op het oude pad staan
     if isinstance(v, str):
-        return v.replace(oud, nieuw)
+        return re.sub(re.escape(oud), lambda _: nieuw, v, flags=re.IGNORECASE)
     if isinstance(v, list):
         return [_pad_vervang(x, oud, nieuw) for x in v]
     if isinstance(v, dict):
@@ -1083,13 +1085,13 @@ def _werf_verhuisd(kolom, tekst, oud, nieuw):
             return json.dumps(_pad_vervang(json.loads(tekst), oud, nieuw), ensure_ascii=False)
         except ValueError:
             pass
-    return (tekst or "").replace(oud, nieuw)
+    return _pad_vervang(tekst or "", oud, nieuw)
 
 
 def _werf_rel(r):
-    """Het pad van de bezoekmap binnen de projectmap: gelijk voor en na een verhuis van fasemap."""
+    """Het pad van de bezoekmap binnen de projectmap, in kleine letters: gelijk voor en na een verhuis van fasemap."""
     pm, bm = r["projectmap"] or "", r["bezoekmap"] or ""
-    return bm[len(pm):] if pm and bm.startswith(pm + "/") else None
+    return bm[len(pm):].lower() if pm and bm.lower().startswith(pm.lower() + "/") else None
 
 
 def _werf_herkoppel(conn, dossier, datum, bezoekmap, projectmap, vorige):
@@ -1101,7 +1103,7 @@ def _werf_herkoppel(conn, dossier, datum, bezoekmap, projectmap, vorige):
     if not oud:
         return None
     oud_pm = oud["projectmap"] or ""
-    if oud_pm and projectmap and vorige.startswith(oud_pm + "/") and bezoekmap.startswith(projectmap + "/"):
+    if oud_pm and projectmap and vorige.lower().startswith(oud_pm.lower() + "/") and bezoekmap.startswith(projectmap + "/"):
         van, naar = oud_pm, projectmap
     else:
         van, naar = vorige, bezoekmap
@@ -1111,13 +1113,16 @@ def _werf_herkoppel(conn, dossier, datum, bezoekmap, projectmap, vorige):
         velden = {"bezoekmap": bezoekmap, "projectmap": projectmap or oud_pm, **data}
         conn.execute(f"UPDATE werfbezoek SET {', '.join(f'{k}=?' for k in velden)} WHERE id=?", (*velden.values(), oud["id"]))
         return {"wat": "herkoppeld", "id": oud["id"], "van": vorige}
-    aangevuld = [k for k in data if _werf_leeg(nieuw[k])]
-    if aangevuld:
-        conn.execute(f"UPDATE werfbezoek SET {', '.join(f'{k}=?' for k in aangevuld)} WHERE id=?",
-                     (*(data[k] for k in aangevuld), nieuw["id"]))
+    # ook wat al op de blijvende rij stond, wijst voortaan naar het nieuwe pad (het oude bestaat niet meer)
+    huidig = {k: _werf_verhuisd(k, nieuw[k], van, naar) for k in WERF_KOLOMMEN if not _werf_leeg(nieuw[k])}
+    aangevuld = [k for k in data if k not in huidig]
+    zet = {**{k: v for k, v in huidig.items() if v != nieuw[k]}, **{k: data[k] for k in aangevuld}}
+    if zet:
+        conn.execute(f"UPDATE werfbezoek SET {', '.join(f'{k}=?' for k in zet)} WHERE id=?", (*zet.values(), nieuw["id"]))
     conn.execute("UPDATE werfbezoek SET stand=? WHERE id=?", (WERF_DUBBEL, oud["id"]))
     return {"wat": "aangevuld", "id": nieuw["id"], "dubbel": oud["id"], "kolommen": aangevuld,
-            "botsing": [k for k in data if k not in aangevuld and nieuw[k] != data[k]]}
+            "omgezet": [k for k in zet if k not in aangevuld],
+            "botsing": [k for k in data if k in huidig and huidig[k] != data[k]]}
 
 
 @app.route("/api/werfbezoek", methods=["POST"])
@@ -1187,10 +1192,12 @@ def api_werfbezoek_opruimen():
         reden = ""
         if not oud or not blijft:
             reden = "rij bestaat niet (meer)"
+        elif oud_id == blijft_id:
+            reden = "dezelfde rij"
         elif (oud["dossier"], oud["datum"]) != (blijft["dossier"], blijft["datum"]):
             reden = "ander dossier of andere datum"
-        elif _werf_rel(oud) is None or _werf_rel(oud) != _werf_rel(blijft) or oud["projectmap"] == blijft["projectmap"]:
-            reden = "geen verhuisde bezoekmap (pad binnen de projectmap verschilt, of zelfde fasemap)"
+        elif _werf_rel(oud) is None or _werf_rel(oud) != _werf_rel(blijft):
+            reden = "geen verhuisde bezoekmap (ander pad binnen de projectmap)"
         else:
             kwijt = [k for k in WERF_KOLOMMEN if not _werf_leeg(oud[k]) and _werf_leeg(blijft[k])]
             if kwijt:

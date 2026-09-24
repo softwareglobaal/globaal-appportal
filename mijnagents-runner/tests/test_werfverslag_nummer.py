@@ -43,6 +43,8 @@ v = V.verhuisde_rijen(bezoeken, NIEUW, bord)
 check("de rij van het oude fasepad wordt herkend", [r["id"] for r in v.get(NIEUW + REL, [])] == [19], v)
 check("een andere datum of een andere bezoekmap telt niet als verhuis", set(v) == {NIEUW + REL}, v)
 check("de rij van het nieuwe pad zelf is geen verhuis", all(r["id"] != 145 for x in v.values() for r in x))
+hoofd = [{"id": 19, "datum": "2026-06-06", "projectmap": OUD.replace("waiting", "Waiting"), "bezoekmap": OUD.replace("waiting", "Waiting") + REL.upper()}]
+check("een andere hoofdletter in het pad belet de herkenning niet", [r["id"] for r in V.verhuisde_rijen(bezoeken, NIEUW, hoofd).get(NIEUW + REL, [])] == [19])
 s = V.samengevoegd([bord[0], bord[1]])
 check("de controle ziet de gegevens van de oude rij", s.get("gegevens") and s["bezoekmap"] == NIEUW + REL, s)
 
