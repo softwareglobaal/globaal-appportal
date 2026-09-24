@@ -19,8 +19,8 @@ reg = json.loads((REPO / "werkwijze/foutenregister.json").read_text(encoding="ut
 snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python", "-"],
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
-assert t["versie"] == "4.0", t["versie"]
-VERSIE = "2.0"
+assert t["versie"] == "4.1", t["versie"]
+VERSIE = "2.1"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -102,7 +102,7 @@ bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.0 op de server<
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
-Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 1.7 en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
+Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.0, 1.7 en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
 Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de server. De test <code>tests/test_agenda_taken.py</code>
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
@@ -139,6 +139,8 @@ De filewacht belt extra zodra de file de buffer van {t['bellen']['buffer_minuten
 <tbody>{ag}</tbody></table>
 
 <h2>4. De titel</h2>
+<p><b>Archiefagenda's.</b> Een agenda die op ZZ ARCHIEF staat, leest de agent mee maar beschrijft hij nooit. Een komende afspraak daar komt
+in het dagplan, het belrooster en de botsingen, en als signaal: hoort op werk.</p>
 <p>De vorm: <code>{e(t['titelconventie']['vorm'])}</code><br>Voorbeeld: <code>{e(t['titelconventie']['voorbeeld'])}</code></p>
 <h3>De tekens vooraan</h3>
 <table><tbody>
@@ -169,6 +171,10 @@ en blijven geldig; de agent vertaalt: {ou}.</li>
 eenduidig zijn. Anders een voorstel.</li>
 <li><b>Geen firmacode:</b> de agent stelt er een voor. Een projectnummer uit de H-Architects-projectmap wordt HARC; een leverancier uit
 de lijst wordt ALGE; anders de firma waarvoor de genoemde mensen werken ('diensten voor').</li>
+<li><b>Een titel met een projectnummer is pas volledig met de klant en, buiten, het adres</b>:
+<code>!! Mehdi &amp; Catalin: [HARC-KB] 2505 - Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele</code>. De klant komt uit Pipedrive (de persoon van
+de deal), het adres uit de agenda of de projectmap. Zonder gasten vult de agent het zelf aan, ook als een collega de afspraak zette; met
+gasten, van Calendly of in een reeks doet hij een voorstel.</li>
 <li><b>Een firmacode zonder soort</b> ('[HARC] Rechtbank') wordt gemeld. Een gemeente of rechtbank past nog in geen soort; dat staat open.</li>
 </ul>
 
@@ -206,7 +212,8 @@ huis staat, of als er tussen twee buitenafspraken iets achter het bureau staat: 
 hij of het klopt.</li>
 <li><b>Nooit vertrekken voor de vorige afspraak gedaan is.</b> Past de rit niet, dan toont hij de echte rijtijd en dus de late aankomst,
 en komt <b>'Te krap: je komt te laat'</b> op het bord.</li>
-<li><b>Een rit hoort bij precies één afspraak.</b> Een rit die iemand met de hand zette ('Rijden naar huis') telt mee.</li>
+<li><b>Een rit hoort bij precies één afspraak.</b> Een rit die iemand met de hand zette ('Rijden naar huis') telt mee.
+'naar huis' in een titel is een rit, en <b>elke rit draagt het autootje</b>, ook een handmatige.</li>
 <li><b>Het adres</b>: eerst de agenda, dan de projectmap (het projectnummer), dan de benoemde plekken uit locatie.globaal.be. Thuis komt
 nooit uit een titel. Komt het adres uit de projectmap, dan zet de agent het ook in de afspraak. Geen adres: geen rit, wel een melding.</li>
 <li><b>Rijtijd.</b> Google met het echte verkeer, alleen voor ritten binnen 48 uur; verder vooruit de gratis routeplanner maal een
@@ -220,7 +227,8 @@ spitsfactor. Plus {snap['buffer']} minuten buffer, naar boven afgerond op vijf. 
 <tr><td style="width:30mm"><b>Maandag en vrijdag</b></td><td>16:00 ophalen op De Speelkriebel (Jozef Pierrestraat 104, 3010 Kessel-Lo) en thuis
 afzetten. Rit 15:45 heen, 17:00 terug.</td></tr>
 <tr><td><b>Dinsdag</b></td><td>17:10 rit naar oma (Wilselsesteenweg 57), 17:30 tot 17:40 ophalen bij oma, 17:40 rit naar het zwembad
-(Stadionlaan 4), 18:00 tot 19:00 zwemles, daarna brengt Mehdi haar zelf naar huis.</td></tr>
+(Stadionlaan 4), 18:00 tot 19:00 zwemles, 19:00 tot 19:30 <code>🚗 Reistijd: Stadionlaan 4 → thuis (Lara naar huis brengen)</code>: de rit naar
+huis, tot 19:30 geblokkeerd zodat er tijd is om Lara van de les naar huis te brengen, zonder melding.</td></tr>
 <tr><td><b>Donderdag</b></td><td>17:45 Lara ophalen bij oma en thuis afzetten, <b>optioneel</b>: als Mehdi kan. Zo afgesproken met Leen.</td></tr>
 <tr><td><b>Maandag, werf</b></td><td>Na het wekelijkse werfbezoek 2145 (09:30 tot 11:30) gaat Mehdi naar huis.</td></tr>
 <tr><td><b>Schoolvakantie en feestdag</b></td><td>Geen ophaling, geen rit, en ook geen marker 'Geen buiten afspraken Lara ophalen': die dag

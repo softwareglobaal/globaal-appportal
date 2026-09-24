@@ -28,7 +28,7 @@ tel_status = Counter(f["status"] for f in reg["fouten"])
 tel_oorzaak = Counter(f.get("soort_oorzaak", "") for f in reg["fouten"])
 tel_door = Counter(("Mehdi" if f["gevonden_door"] == "Mehdi" else "Claude" if f["gevonden_door"] == "Claude" else "zelfcontrole")
                    for f in reg["fouten"])
-week = [f for f in reg["fouten"] if f["datum"] == "24-09-2026" and "zelfcontrole" in f["gevonden_door"]]
+week = [f for f in reg["fouten"] if f["datum"] == "24-09-2026"]
 
 stappen = "".join(f"<li>{e(s)}</li>" for s in reg["hoe_het_leert"])
 lessen = "".join(f"<tr><td class=nr>{e(l['id'])}</td><td>{e(l['les'])}</td><td class=kl>{e(', '.join(l['uit']))}</td></tr>" for l in reg["lessen"])
@@ -88,7 +88,9 @@ niemand het eerder zag, en wat het voortaan tegenhoudt. Het is ook geen dagboek:
 
 <h2>2. De week van 21 tot 27 september, nagekeken</h2>
 <p>Op 24 september keek de weekcontrole in de agenda zelf, niet in het logboek: alle zeven agenda's, 87 afspraken van maandag tot
-zondag, en ter controle ook de week erna (131 afspraken in totaal). Daaruit kwamen {len(week)} nieuwe fouten, hieronder in deel 5.
+zondag, en ter controle ook de week erna (131 afspraken in totaal). Samen met wat Mehdi daarna zelf nakeek, kwamen er {len(week)}
+fouten en bewaakte regels bij, hieronder in deel 5. De grootste blinde vlek vond Mehdi: afspraken in een archiefagenda, die de agent en
+de weekcontrole allebei niet lazen (FR-39).
 Na de reparatie en een nieuwe ronde van de agent gaf de zelfcontrole: <b>0 teruggekeerd, 0 nieuw</b>. Wat overblijft zijn vragen
 aan Mehdi: kleuren die met de hand gezet werden, oude codes uit de Calendly-sjablonen, en een afspraak die nog op ?? staat.</p>
 <p><b>Waarom ik deze fouten niet eerder zag.</b> Het komt neer op vijf dingen:</p>
@@ -115,10 +117,10 @@ zonder herkomst. (FR-20, FR-24, FR-37, FR-38)</li>
 </div>
 <p class=kl>'Werkwijze van Claude' zijn fouten in hoe ik werkte, niet in de code: vragen voor meten, een grendel openzetten, bouwen zonder git log.</p>
 
-<h2>5. De fouten van de weekcontrole (24 september)</h2>
+<h2>5. Gevonden op 24 september: de weekcontrole en wat Mehdi nakeek</h2>
 {kaarten_week}
 
-<h2>6. Eerdere fouten en bewaakte regels (20 tot 23 september)</h2>
+<h2>6. Eerder gevonden (20 tot 23 september)</h2>
 {kaarten_rest}
 
 <h2>7. Wat de zelfcontrole elke ochtend nakijkt</h2>
