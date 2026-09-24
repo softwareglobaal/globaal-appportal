@@ -1,5 +1,5 @@
 {
- "versie": "4.2",
+ "versie": "4.3",
  "datum": "2026-09-24",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -991,5 +991,21 @@
   "regel": "een archiefagenda (ZZ ARCHIEF) leest de agent mee, alleen lezen: komende afspraken komen in het dagplan, het belrooster en de botsingen, en als signaal 'hoort op werk'. Schrijven blijft verboden (FR-39)",
   "waarom": "Calendly boekte nog in 'ZZ ARCHIEF haagendalightprojects' (5520, 2603) en de reeks WB 2145 liep door in 'ZZ ARCHIEF H-Architects Buiten'. Niemand zag het",
   "mehdi": "24-09-2026"
+ },
+ "waar_alles_staat": {
+  "bron_code_en_afspraken": "GitHub softwareglobaal/globaal-appportal, map mijnagents-runner (lokaal ~/dev/globaal-appportal op de Mac, ~/appportal op de VM globaal)",
+  "afspraken": "werkwijze/agenda-taken.json (deze), werkwijze/agenda-wacht.md (werkwijze, ook op het bord), werkwijze/foutenregister.json, werkwijze/externe-relaties.json",
+  "code": "agenda_wacht.py (de agent), agenda_signaal.py (wijzigingswacht), file_wacht.py (filewacht), zelfcontrole.py, controle_agenda.py, koppelingen/*.py",
+  "testen": "tests/test_agenda_taken.py, tests/test_foutenregister.py, tests/test_agenda_archief.py",
+  "pdf_makers": "werkwijze/pdf/afspraken_pdf.py, werkwijze/pdf/foutenregister_pdf.py, werkwijze/pdf/momentopname.py (draaien op de Mac)",
+  "data_op_de_vm": "~/appportal/mijnagents-data/: agenda-adressen.json (adrescache), routes-teller.json (Google-teller), zelfcontrole.json, klanten.json (klantnamen met bron, 30 dagen), agenda-signaal.json, file-wacht.json, projectadressen.json, belrooster.json, agenda_wacht.lock",
+  "logboeken_op_de_vm": "~/agents/agenda_wacht.log, ~/appportal/logs/agenda-signaal.log, ~/appportal/logs/file-wacht.log, ~/appportal/logs/zelfcontrole.log",
+  "sleutels": "~/appportal/.env op de VM (namen: GOOGLE_AGENDA_*, GOOGLE_ROUTES_KEY, PIPEDRIVE_TOKEN_HARCHITECTS, CONTRACTEN_MCP_TOKEN, DROPBOX_*); nooit in git of in een document",
+  "cron_op_de_vm": "crontab van ubuntu: agenda_wacht --ronde (elk uur :30), agenda_signaal --ronde (elke 12 min), file_wacht --ronde (elke 10 min), zelfcontrole --ronde (werkdagen :05); reservekopie van voor 24-09 in ~/crontab-voor-brussel-20260923.txt",
+  "dropbox_voor_mehdi": "private/0 Chegini Mehdi/Prive met Claude: de PDF's afspraken en foutenregister; oude versies in Agenda archief/oude documenten. Data uit Mehdi/Agendawacht: werkverslag, dagplan, klaargezet, noden.md, adressen.json, belrooster.json, werkwijze.md (kopie van de VM, elke 30 min)",
+  "bord": "mijnagents.globaal.be, agent agenda-wacht: werkwijze, werkverslag, signalen, noden",
+  "claude": "geheugen ~/.claude/projects/-Users-mehdichegini-TKN-buro-Dropbox/memory/ (agendawacht-*.md, klant-van-een-project.md, calendly-kanalen.md, agenda-delen-rechten.md) en de skill ~/.claude/skills/agendawacht/SKILL.md",
+  "wat_de_agent_leest": "Google Agenda (werk, Lara, privé, zoomafspraken, H-Architects, UNABO, feestdagen, en alle ZZ ARCHIEF-agenda's alleen lezen), organisatie.globaal.be, locatie.globaal.be, contracten.globaal.be (MCP), Dropbox H-A WORK (projectmappen, contracten, CLAUDE.md), Pipedrive H-Architects, Google Routes, OSRM en Nominatim",
+  "wat_de_agent_schrijft_in_de_agenda": "zijn eigen ritten, kleuren (met merk agendawacht_kleur), meldingen, en titels van afspraken zonder gasten; nooit in een ZZ ARCHIEF-agenda"
  }
 }

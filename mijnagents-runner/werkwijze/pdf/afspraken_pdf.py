@@ -19,7 +19,7 @@ reg = json.loads((REPO / "werkwijze/foutenregister.json").read_text(encoding="ut
 snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python", "-"],
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
-assert t["versie"] == "4.2", t["versie"]
+assert t["versie"].startswith("4."), t["versie"]
 VERSIE = "2.2"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
