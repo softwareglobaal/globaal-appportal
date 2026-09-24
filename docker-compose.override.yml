@@ -443,7 +443,7 @@ services:
       # controleren. Leeg = versturen kan niet / geen handtekeningcontrole.
       META_WA_TOKEN: ${META_WA_TOKEN:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
-      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v23.0}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v26.0}
       PIPEDRIVE_TOKEN_UNABO: ${PIPEDRIVE_TOKEN_UNABO:-}
       PIPEDRIVE_TOKEN_HARCHITECTS: ${PIPEDRIVE_TOKEN_HARCHITECTS:-}
     healthcheck:
