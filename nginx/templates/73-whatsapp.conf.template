@@ -1,14 +1,14 @@
 # WhatsApp - whatsapp.${BASE_DOMAIN}
 #
-# De inbox staat achter forward-auth. Alleen /twilio/ staat erbuiten: Twilio
-# heeft geen Authentik-sessie. Daar beschermt de app zelf met een geheim pad
-# (WHATSAPP_WEBHOOK_GEHEIM) en, als het Auth Token gezet is, de handtekening
-# van Twilio. Een verkeerd pad geeft 404.
+# De inbox staat achter forward-auth. Alleen /meta/ staat erbuiten: Meta heeft
+# geen Authentik-sessie. Daar beschermt de app zelf met een geheim pad
+# (WHATSAPP_WEBHOOK_GEHEIM, ook het verify token) en X-Hub-Signature-256 met
+# het app-geheim. Een verkeerd pad geeft 404.
 #
-# Twilio levert hooguit een paar berichten per seconde; wie meer stuurt is
-# geen Twilio.
+# GET is nodig voor de eenmalige verificatie door Meta, POST voor de
+# berichten. Een webhook kan meerdere berichten bundelen, vandaar 256k.
 
-limit_req_zone $binary_remote_addr zone=whatsapp_twilio:1m rate=30r/s;
+limit_req_zone $binary_remote_addr zone=whatsapp_meta:1m rate=30r/s;
 
 server {
     listen 443 ssl;
@@ -19,10 +19,10 @@ server {
     set $app_upstream http://app-whatsapp:3033;
     include /etc/nginx/snippets/forward-auth.conf;
 
-    location ^~ /twilio/ {
-        limit_req zone=whatsapp_twilio burst=60 nodelay;
-        limit_except POST { deny all; }
-        client_max_body_size 64k;
+    location ^~ /meta/ {
+        limit_req zone=whatsapp_meta burst=60 nodelay;
+        limit_except GET POST { deny all; }
+        client_max_body_size 256k;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

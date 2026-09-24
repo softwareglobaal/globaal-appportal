@@ -417,12 +417,12 @@ services:
       start_interval: 5s
     networks: [appnet]
 
-  # WhatsApp: gedeelde inbox per firma (eerst UNABO) via de officiele Business
-  # API van Twilio, met een agent die antwoorden VOORSTELT; een collega
-  # verstuurt. Schema whatsapp (migratie 170). Eigen repo
+  # WhatsApp: gedeelde inbox per firma (eerst UNABO) via de Cloud API van Meta
+  # (rechtstreeks, met coexistence), met een agent die antwoorden VOORSTELT;
+  # een collega verstuurt. Schema whatsapp (migraties 170, 171). Eigen repo
   # softwareglobaal/globaal-whatsapp, uitgecheckt in ./whatsapp met auto-deploy
-  # via deploy-stack.sh en cron. /twilio/* staat buiten de forward-auth (vhost
-  # 73-whatsapp), beschermd door WHATSAPP_WEBHOOK_GEHEIM.
+  # via deploy-stack.sh en cron. /meta/* staat buiten de forward-auth (vhost
+  # 73-whatsapp), beschermd door WHATSAPP_WEBHOOK_GEHEIM en META_APP_SECRET.
   app-whatsapp:
     build:
       context: ./whatsapp
@@ -438,12 +438,12 @@ services:
       WHATSAPP_BEHEER_GROUPS: ${WHATSAPP_BEHEER_GROUPS:-whatsapp-beheer}
       WHATSAPP_AI_MODEL: ${WHATSAPP_AI_MODEL:-claude-sonnet-5}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      # Zelfde Twilio-account als De Bode (mijnagents). Het Auth Token is
-      # optioneel: met token controleert de app ook de handtekening van Twilio.
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
-      TWILIO_API_KEY_SID: ${TWILIO_API_KEY_SID:-}
-      TWILIO_API_KEY_SECRET: ${TWILIO_API_KEY_SECRET:-}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      # Meta: permanente token van een system user (Business Manager) met
+      # whatsapp_business_messaging; het app-geheim om X-Hub-Signature-256 te
+      # controleren. Leeg = versturen kan niet / geen handtekeningcontrole.
+      META_WA_TOKEN: ${META_WA_TOKEN:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v23.0}
       PIPEDRIVE_TOKEN_UNABO: ${PIPEDRIVE_TOKEN_UNABO:-}
       PIPEDRIVE_TOKEN_HARCHITECTS: ${PIPEDRIVE_TOKEN_HARCHITECTS:-}
     healthcheck:
