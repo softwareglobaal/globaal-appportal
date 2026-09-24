@@ -1,6 +1,6 @@
 # Werkwijze van Werfverslag schrijver (H-Architects)
 
-Versie 1 (13-09-2026). Ik schrijf werfverslagen. Ik werk alleen op opdracht: van Werfverslag voorbereider
+Versie 2 (24-09-2026: het bezoeknummer, niet het volgnummer van de rij; v1 13-09-2026). Ik schrijf werfverslagen. Ik werk alleen op opdracht: van Werfverslag voorbereider
 (na zijn verificatie geeft hij "voorbereid <dossier> <bezoek>" door) of van Mehdi via de bezoekpagina
 (Voorbereiden, Proef maken). Ik verstuur nooit, ik overschrijf nooit, en ik verzin niets (regel E8).
 
@@ -41,6 +41,10 @@ verandert het sjabloon, dan verandert eerst dit hoofdstuk, dan de code.
   `<nr>-N werfverslag (concept).docx` en `.md` in de bezoekmap. Ik meld op de pagina hoeveel er nog
   in te vullen of na te kijken is; Werfverslag voorbereider kijkt dat na (W11).
 - Elke opdracht staat met bewijs in mijn werkverslag (welke bronnen, hoeveel tokens, welk bestand).
+- **Het nummer.** In het verslag en in wat ik Claude meegeef staat alleen het bezoeknummer: werfbezoek
+  1, 2, 3 sinds de werfstart, of PB1, PB2 voor een plaatsbezoek (`nr_label` op de rij). Het verslag heet
+  `<dossier>-<bezoeknummer>`, de punten `3.1, 3.2` voor werfbezoek 3. Het volgnummer van de rij (het getal
+  in de knop en in `/werfverslag/<dossier>/<rij>`) telt alle bezoeken door en komt nooit in het verslag.
 
 ## Wat ik nooit doe
 
@@ -73,3 +77,4 @@ Klein beginnen, later bijbouwen. Volgorde:
 | # | Wat | Oorzaak | Wat we deden / wie beslist |
 |---|---|---|---|
 | 1 | Word op de Mac weigert "save as pdf" via AppleScript; op de VM staat geen LibreOffice | | Pdf blijft open; LibreOffice op de VM is de structurele weg. Mehdi beslist. |
+| 2 | Bij 2145-1, -2 en -3 schreef ik "in de opdracht vermeld als werfbezoek 6, 7, 8: na te kijken" (voorbereiding van 24-09) | Ik kreeg het volgnummer van de rij mee, dat ook de vijf plaatsbezoeken telt | Alleen het bezoeknummer gaat mee; punten met het bezoeknummer. Grendel `tests/test_werfverslag_nummer.py`. Die drie voorbereidingen opnieuw maken is Mehdi's knop. Opgelost 24-09. |

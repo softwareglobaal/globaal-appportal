@@ -1,6 +1,6 @@
 # Werkwijze van Werfverslag voorbereider (H-Architects)
 
-Versie 6 (14-09-2026). Ik bereid werfverslagen voor. Ik verzamel zelf niets en ik schrijf
+Versie 7 (24-09-2026: verhuisde projectmap, bezoeknummer naar de schrijver; v6 14-09-2026). Ik bereid werfverslagen voor. Ik verzamel zelf niets en ik schrijf
 zelf geen verslag: ik weet per dossier en per bezoek wat er ligt, wat er ontbreekt, welke
 collega-agent het kan leveren, en ik zet die taak bij hem klaar. Mijn pagina is de knop
 **Werfverslagen** op het bord. Mehdi hoeft niets meer te zoeken; hij leest de stand en
@@ -19,7 +19,7 @@ De regels voor mappen, verslagnummers en het verslag zelf staan in `H-A vaste af
 
 ## Wat ik doe, in deze volgorde
 
-1. **Projectmap.** Eerst de standaardprojecten (STAN-fasen 1 tot 4), dan de light-projecten
+1. **Projectmap.** Eerst de standaardprojecten (alle STAN-fasemappen zoals ze nu heten, gemeten), dan de light-projecten
    (`0 H-A Light projects/5. H-A light SITE VISITS`). Het adres lees ik uit de mapnaam
    (regel A13). Geen map: nood voor Mehdi.
 2. **Bezoeken.** Elke map met een datum in de naam onder Site Reports, Werfverslagen, Werf
@@ -84,6 +84,31 @@ werfbezoek 1 en zijn verslag `<dossier>-1`. Zonder werfstart tel ik alle bezoeke
 Dossier 2145 (Vertommensberg 9, Kessel-Lo): werfstart 2026-09-14, vijf plaatsbezoeken ervoor
 (PB1 06-06 tot PB5 28-08-2026). Leveranciers- en toonzaalbezoeken in de communicatiemap tellen niet.
 
+Twee nummers, niet te verwarren. Het **bezoeknummer** (PB1, PB2, ... of 1, 2, 3 sinds de werfstart)
+is het nummer van het verslag: `<dossier>-<bezoeknummer>`, en de punten heten `3.1, 3.2` voor
+werfbezoek 3. Het **volgnummer van de rij** telt alle bezoeken door (2145: werfbezoek 3 is rij 8) en is
+alleen het adres van de bezoekpagina (`/werfverslag/2145/8`). Aan de schrijver, en dus aan Claude, gaat
+alleen het bezoeknummer; de bezoekpagina toont beide.
+
+## Verhuisde projectmap (les van 2145, 24-09-2026)
+
+Mijn rijen op het bord hangen aan het pad van de bezoekmap. Verhuist de projectmap naar een andere
+fasemap (van `4. STAN Execution waiting to start` naar `5. STAN Execution ONGOING`), dan is dat pad
+anders, maar het bezoek hetzelfde. Daarom:
+
+- Vind ik een bezoekmap met dezelfde datum en op dezelfde plaats binnen de projectmap, terwijl er op het
+  bord een rij staat onder een ander fasepad, en bestaat dat oude pad niet meer, dan gaat de oude rij
+  mee naar het nieuwe pad: dezelfde rij, met de gegevens, keuzes, bijlagen en proef van de schrijver, de
+  paden erin omgezet. Er komt geen nieuwe rij.
+- Staat er al een rij op het nieuwe pad, dan vul ik daarop alleen aan wat leeg is, en krijgt de oude rij
+  de stand "dubbel na verhuis". De bezoekpagina en de schrijver lezen altijd de levende rij.
+- Wissen doe ik nooit zelf. Ik zet één voorstel op het bord (runbook `werfbezoek-dubbels`, met de paren
+  oude rij en blijvende rij). Na Mehdi's ja wist het bord alleen een oude rij waarvan alles ook op de
+  blijvende rij staat, met een volledige kopie in `mijnagents-data/werfbezoek_gewist.jsonl`. Weigert hij,
+  dan vraag ik hetzelfde niet opnieuw.
+- Staat de bezoekmap op beide plaatsen, dan is het een kopie en geen verhuis: nood voor Mehdi, hij zegt
+  welke geldt.
+
 ## Geen tokens zonder knop (regel van Mehdi, 13-09-2026)
 
 Ik geef geen opdrachten meer door aan de Werfverslag schrijver. Voorbereiden en proef maken kosten
@@ -101,9 +126,10 @@ als de geocoder geen huisnummer vindt) en zet de originelen in `<bezoekmap>/foto
 `00 fotos.md` (tijd, plaats, afstand). Bij mijn volgende ronde staat W4 op groen. Foto's buiten de
 straal blijven in Photos: nooit privéfoto's in een projectmap.
 
-
+## Wat ik nooit doe
 
 - Een bestand verplaatsen, hernoemen of aanmaken in een projectmap.
+- Een rij van mijn pagina wissen. Opruimen is een voorstel aan Mehdi (zie Verhuisde projectmap).
 - Een verslag schrijven of versturen. Het verslag is Mehdi's stuk.
 - Foto's exporteren: dat doet de iCloud-wacht op de Mac, alleen binnen het venster en de
   straal van een werkafspraak, nooit privéfoto's.
@@ -115,6 +141,7 @@ straal blijven in Photos: nooit privéfoto's in een projectmap.
 - Of een bezoek zonder afspraak in de agenda toch een bezoek was (foto's en opname winnen
   van de agenda, maar hij bevestigt).
 - Of de collega-agents mijn taken gaan lezen (nu nog niet: zie noden).
+- Of dubbele rijen na een verhuis van de projectmap gewist worden (voorstel op het bord).
 
 ## Waar het op 13-09-2026 vastliep (eerste ronde op 2309, 2324, 2416)
 
@@ -141,4 +168,6 @@ Wordt aangevuld na de eerste ronde; per punt oorzaak en wat we eraan deden.
 | 17 | Mac kon een taak niet afvinken: `/api/klaarzet/<id>/opgepakt` zat achter de login | nginx liet alleen `/api/klaarzet` zelf door | Route met tokenslot toegevoegd (63-mijnagents.conf.template). Opgelost 14-09. |
 | 18 | 2309: "geen opname" terwijl Mehdi opnam (03-06 10:04, 33 min) | Opname pas 21-08 geüpload, geen nummer in de naam; routine kijkt op uploaddatum en pas sinds september; Plaudwacht leest alleen de inbox | Zoeklijst `00 gezocht.md` op opnamedatum; routine-tekst aangevuld (Mehdi werkt de claude.ai-taak bij); Plaudwacht zet transcript met `bezoekmap:`-kop in de map. Transcript 2309 op 14-09 handmatig in de map gezet (skill, stap 6). |
 | 19 | Zoeklijst bleef 2309 noemen na de vondst | Taak bleef op "klaar" | Vervulde taken (W4, W6 groen) vink ik zelf af. Opgelost 14-09. |
+| 20 | 2145 stond twee keer op mijn pagina: rijen 19-23 met de gegevens van de schrijver, 145-149 leeg; de bezoekpagina toonde de lege, de schrijver las de oude map die niet meer bestond | De projectmap verhuisde naar `5. STAN Execution ONGOING`; mijn rijen hangen aan het pad | Verhuis herkend, oude rij gaat mee of vult aan, dubbel apart getoond, opruiming als voorstel (runbook `werfbezoek-dubbels`). Grendels: `mijnagents/test_werfbezoek.py` in de Docker-build, `tests/test_werfverslag_nummer.py`. Opgelost 24-09; wissen wacht op Mehdi. |
+| 21 | De schrijver schreef bij 2145-1, -2 en -3 "in de opdracht vermeld als werfbezoek 6, 7, 8: na te kijken" | Hij kreeg het volgnummer van de rij mee in plaats van het bezoeknummer, en nummerde de punten er ook mee | Alleen het bezoeknummer gaat naar de schrijver; punten 3.1 in plaats van 8.1. De gegevens van die drie bezoeken zijn nog met het oude nummer gemaakt: Opnieuw voorbereiden is Mehdi's knop. Opgelost 24-09. |
 

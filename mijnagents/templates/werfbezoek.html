@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Werfverslag {{ b.dossier }}-{{ b.volgnr }} — {{ app_naam }}</title>
+<title>Werfverslag {{ b.dossier }}-{{ b.bronnen.nr_label or b.volgnr }} — {{ app_naam }}</title>
 {% if opdrachten and opdrachten[0].status == 'klaar' %}<meta http-equiv="refresh" content="30">{% endif %}
 <style>
   :root { --ink:#1c1c1c; --grijs:#6b6b6b; --lijn:#e2ddd5; --fond:#faf8f4; --accent:#1f3d33; --accent-licht:#edf2ef; --rood:#a33a2a; --wit:#fff; }
@@ -57,7 +57,7 @@
 </header>
 <main>
 <h1>{{ b.dossier }}-{{ b.bronnen.nr_label or b.volgnr }} — {{ b.adres }}</h1>
-<p class="stil">{{ 'Plaatsbezoek' if b.bronnen.soort_bezoek == 'plaatsbezoek' else 'Werfbezoek' }} {{ b.bronnen.nr_label or b.volgnr }} van {{ b.datum }} · {{ b.soort_project }}-project · gemeten {{ b.ts[:16].replace('T',' ') }} UTC</p>
+<p class="stil">{{ 'Plaatsbezoek' if b.bronnen.soort_bezoek == 'plaatsbezoek' else 'Werfbezoek' }} {{ b.bronnen.nr_label or b.volgnr }} van {{ b.datum }}{% if b.bronnen.nr_label and b.bronnen.nr_label != b.volgnr|string %} · rij {{ b.volgnr }} op het bord (telt alle bezoeken door, geen verslagnummer){% endif %} · {{ b.soort_project }}-project · gemeten {{ b.ts[:16].replace('T',' ') }} UTC</p>
 
 <div style="background:{{ '#edf2ef' if b.heeft_proef else ('#fbf3e3' if b.voorbereid else '#f7e8e5') }}; border:1px solid {{ '#1f3d33' if b.heeft_proef else ('#a1701a' if b.voorbereid else '#a33a2a') }}; border-radius:4px; padding:12px 16px; margin:14px 0 6px;">
   <strong style="font-size:16px;">

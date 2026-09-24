@@ -777,26 +777,36 @@ def agent_status():
     v = p.get("voorstel")
     if isinstance(v, dict) and v.get("actie"):
         params = v.get("parameters")
-        # Eén open voorstel per agent, runbook en deal: een nieuw voorstel
+        pjson = json.dumps(params) if params else ""
+        # Hetzelfde voorstel (agent, runbook, actie en parameters) dat al open staat, goedgekeurd op uitvoering
+        # wacht of door Mehdi geweigerd is, zet je niet opnieuw: een agent die elke ronde voorstelt, zou hem
+        # anders elke ronde opnieuw vragen (werfverslag-voorbereider, opruiming van dubbele rijen, 24-09-2026).
+        zelfde = pjson and conn.execute(
+            "SELECT id FROM voorstel WHERE naam=? AND runbook=? AND actie=? AND parameters=? "
+            "AND status IN ('open','goedgekeurd','geweigerd')", (naam, v.get("runbook", ""), v["actie"], pjson)).fetchone()
+        # Eén open voorstel per agent, runbook en deal (of sleutel): een nieuw voorstel
         # (bv. een ander nummer) vervangt het vorige, anders blijven er twee
         # tegenstrijdige voorstellen open staan (deal 14531: 2616 en 5609).
-        deal = (params or {}).get("deal_id") if isinstance(params, dict) else None
-        if deal is not None and v.get("runbook"):
+        deal = None
+        if isinstance(params, dict):
+            deal = params.get("deal_id") if params.get("deal_id") is not None else params.get("sleutel")
+        if deal is not None and v.get("runbook") and not zelfde:
             for r in conn.execute("SELECT id, parameters FROM voorstel WHERE naam=? AND runbook=? AND status='open'",
                                   (naam, v["runbook"])).fetchall():
                 try:
-                    oud_deal = json.loads(r["parameters"] or "{}").get("deal_id")
+                    oud_p = json.loads(r["parameters"] or "{}")
+                    oud_deal = oud_p.get("deal_id") if oud_p.get("deal_id") is not None else oud_p.get("sleutel")
                 except Exception:
                     oud_deal = None
                 if str(oud_deal) == str(deal):
                     conn.execute("UPDATE voorstel SET status='vervallen', besluit_door='systeem', besluit_ts=?, "
                                  "bewijs=? WHERE id=?", (nu(), f"vervangen door een nieuw voorstel: {v['actie']}", r["id"]))
-        conn.execute(
-            "INSERT INTO voorstel(naam,actie,doel,reden,parameters,runbook,ts) "
-            "VALUES(?,?,?,?,?,?,?)",
-            (naam, v["actie"], v.get("doel", ""), v.get("reden", ""),
-             json.dumps(params) if params else "", v.get("runbook", ""), nu()),
-        )
+        if not zelfde:
+            conn.execute(
+                "INSERT INTO voorstel(naam,actie,doel,reden,parameters,runbook,ts) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (naam, v["actie"], v.get("doel", ""), v.get("reden", ""), pjson, v.get("runbook", ""), nu()),
+            )
     conn.commit()
     return jsonify(ok=True)
 
@@ -1046,6 +1056,70 @@ def _json(v, leeg):
         return leeg
 
 
+# Een rij die na de verhuis van haar projectmap vervangen is door de rij op het nieuwe pad. Ze blijft staan
+# (niets wissen zonder Mehdi's ja) tot hij het opruimvoorstel van Werfverslag voorbereider goedkeurt.
+WERF_DUBBEL = "dubbel na verhuis; opruiming wacht op Mehdi"
+WERF_GEWIST = os.path.join(os.path.dirname(DB_PAD), "werfbezoek_gewist.jsonl")
+
+
+def _werf_leeg(v):
+    return (v or "").strip() in ("", "{}", "[]", "null")
+
+
+def _pad_vervang(v, oud, nieuw):
+    if isinstance(v, str):
+        return v.replace(oud, nieuw)
+    if isinstance(v, list):
+        return [_pad_vervang(x, oud, nieuw) for x in v]
+    if isinstance(v, dict):
+        return {k: _pad_vervang(x, oud, nieuw) for k, x in v.items()}
+    return v
+
+
+def _werf_verhuisd(kolom, tekst, oud, nieuw):
+    """Een kolom met het oude pad erin (bijlagen, proef_pad, gegevens) naar het nieuwe pad."""
+    if kolom in WERF_JSON:
+        try:
+            return json.dumps(_pad_vervang(json.loads(tekst), oud, nieuw), ensure_ascii=False)
+        except ValueError:
+            pass
+    return (tekst or "").replace(oud, nieuw)
+
+
+def _werf_rel(r):
+    """Het pad van de bezoekmap binnen de projectmap: gelijk voor en na een verhuis van fasemap."""
+    pm, bm = r["projectmap"] or "", r["bezoekmap"] or ""
+    return bm[len(pm):] if pm and bm.startswith(pm + "/") else None
+
+
+def _werf_herkoppel(conn, dossier, datum, bezoekmap, projectmap, vorige):
+    """De projectmap verhuisde van fasemap (zelfde dossier, zelfde bezoekmapnaam, ander fasepad). De rij van het
+    oude pad gaat mee naar het nieuwe, met gegevens, keuzes, bijlagen en proef, in plaats van een nieuwe rij.
+    Bestaat er op het nieuwe pad al een rij (2145 op 24-09-2026: 19-23 en 145-149), dan vult de oude rij alleen de
+    lege kolommen van die rij aan en krijgt ze de stand WERF_DUBBEL; wissen doet pas het runbook na Mehdi's ja."""
+    oud = conn.execute("SELECT * FROM werfbezoek WHERE dossier=? AND bezoekmap=? AND datum=?", (dossier, vorige, datum)).fetchone()
+    if not oud:
+        return None
+    oud_pm = oud["projectmap"] or ""
+    if oud_pm and projectmap and vorige.startswith(oud_pm + "/") and bezoekmap.startswith(projectmap + "/"):
+        van, naar = oud_pm, projectmap
+    else:
+        van, naar = vorige, bezoekmap
+    data = {k: _werf_verhuisd(k, oud[k], van, naar) for k in WERF_KOLOMMEN if not _werf_leeg(oud[k])}
+    nieuw = conn.execute("SELECT * FROM werfbezoek WHERE dossier=? AND bezoekmap=? AND datum=?", (dossier, bezoekmap, datum)).fetchone()
+    if not nieuw:
+        velden = {"bezoekmap": bezoekmap, "projectmap": projectmap or oud_pm, **data}
+        conn.execute(f"UPDATE werfbezoek SET {', '.join(f'{k}=?' for k in velden)} WHERE id=?", (*velden.values(), oud["id"]))
+        return {"wat": "herkoppeld", "id": oud["id"], "van": vorige}
+    aangevuld = [k for k in data if _werf_leeg(nieuw[k])]
+    if aangevuld:
+        conn.execute(f"UPDATE werfbezoek SET {', '.join(f'{k}=?' for k in aangevuld)} WHERE id=?",
+                     (*(data[k] for k in aangevuld), nieuw["id"]))
+    conn.execute("UPDATE werfbezoek SET stand=? WHERE id=?", (WERF_DUBBEL, oud["id"]))
+    return {"wat": "aangevuld", "id": nieuw["id"], "dubbel": oud["id"], "kolommen": aangevuld,
+            "botsing": [k for k in data if k not in aangevuld and nieuw[k] != data[k]]}
+
+
 @app.route("/api/werfbezoek", methods=["POST"])
 def api_werfbezoek():
     if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
@@ -1053,12 +1127,19 @@ def api_werfbezoek():
     p = request.get_json(silent=True) or {}
     conn = db()
     _werfbezoek_tabel(conn)
-    n = 0
+    n, herkoppeld = 0, []
     for r in p.get("rijen") or []:
         if not (r.get("dossier") and r.get("datum")):
             continue
         sleutel = (str(r["dossier"])[:10], (r.get("bezoekmap") or "")[:500], r["datum"][:10])
         alleen = r.get("_alleen")
+        if not alleen:
+            for vorige in r.get("vorige_bezoekmappen") or []:
+                vorige = str(vorige)[:500]
+                if vorige and vorige != sleutel[1]:
+                    uit = _werf_herkoppel(conn, sleutel[0], sleutel[2], sleutel[1], (r.get("projectmap") or "")[:500], vorige)
+                    if uit:
+                        herkoppeld.append(uit)
         if alleen:
             # gerichte bijwerking (voorbereiding, proef, keuzes): alleen die kolommen, de verificatie blijft staan
             velden = {k: r.get(k) for k in alleen if k in WERF_KOLOMMEN}
@@ -1081,7 +1162,48 @@ def api_werfbezoek():
              json.dumps(r.get("taken") or [], ensure_ascii=False), (r.get("stand") or "")[:80], nu()))
         n += 1
     conn.commit()
-    return jsonify(ok=True, rijen=n)
+    return jsonify(ok=True, rijen=n, herkoppeld=herkoppeld)
+
+
+@app.route("/api/werfbezoek/opruimen", methods=["POST"])
+def api_werfbezoek_opruimen():
+    """Alleen via het runbook werfbezoek-dubbels, na Mehdi's ja op het bord. Wist een oude rij pas als ze echt een
+    dubbel is van de rij die blijft (zelfde dossier, datum en bezoekmap binnen de projectmap, andere fasemap) en als
+    alles wat ze droeg ook op die rij staat. Elke gewiste rij komt eerst volledig in werfbezoek_gewist.jsonl."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    conn = db()
+    _werfbezoek_tabel(conn)
+    gewist, overgeslagen = [], []
+    for paar in p.get("paren") or []:
+        try:
+            oud_id, blijft_id = int(paar[0]), int(paar[1])
+        except (TypeError, ValueError, IndexError):
+            overgeslagen.append({"paar": paar, "reden": "geen paar van twee rij-id's"})
+            continue
+        oud = conn.execute("SELECT * FROM werfbezoek WHERE id=?", (oud_id,)).fetchone()
+        blijft = conn.execute("SELECT * FROM werfbezoek WHERE id=?", (blijft_id,)).fetchone()
+        reden = ""
+        if not oud or not blijft:
+            reden = "rij bestaat niet (meer)"
+        elif (oud["dossier"], oud["datum"]) != (blijft["dossier"], blijft["datum"]):
+            reden = "ander dossier of andere datum"
+        elif _werf_rel(oud) is None or _werf_rel(oud) != _werf_rel(blijft) or oud["projectmap"] == blijft["projectmap"]:
+            reden = "geen verhuisde bezoekmap (pad binnen de projectmap verschilt, of zelfde fasemap)"
+        else:
+            kwijt = [k for k in WERF_KOLOMMEN if not _werf_leeg(oud[k]) and _werf_leeg(blijft[k])]
+            if kwijt:
+                reden = f"de rij die blijft mist nog {', '.join(kwijt)}"
+        if reden:
+            overgeslagen.append({"id": oud_id, "blijft": blijft_id, "reden": reden})
+            continue
+        with open(WERF_GEWIST, "a") as f:
+            f.write(json.dumps({"gewist_ts": nu(), "blijft": blijft_id, "rij": dict(oud)}, ensure_ascii=False) + "\n")
+        conn.execute("DELETE FROM werfbezoek WHERE id=?", (oud_id,))
+        gewist.append(oud_id)
+    conn.commit()
+    return jsonify(ok=True, gewist=gewist, overgeslagen=overgeslagen)
 
 
 def _werf_dict(r):
@@ -1101,7 +1223,10 @@ def api_werfbezoek_lezen():
         q, a = "SELECT * FROM werfbezoek WHERE dossier=?", [request.args["dossier"]]
         if request.args.get("volgnr"):
             q += " AND volgnr=?"; a.append(int(request.args["volgnr"]))
-        return jsonify(rijen=[_werf_dict(r) for r in conn.execute(q + " ORDER BY volgnr", a).fetchall()])
+        # bij hetzelfde volgnummer eerst de levende rij, nooit de dubbel van een verhuisde projectmap:
+        # de schrijver neemt rijen[0] en las anders een bezoekmap die niet meer bestaat
+        q += " ORDER BY volgnr, (stand=?), id DESC"; a.append(WERF_DUBBEL)
+        return jsonify(rijen=[_werf_dict(r) for r in conn.execute(q, a).fetchall()])
     q = "SELECT dossier, MAX(ts) AS ts, COUNT(*) AS bezoeken FROM werfbezoek"
     if request.args.get("open"):
         q += " WHERE open=1"
@@ -1180,8 +1305,12 @@ def werfverslagen_pagina():
     dossiers = {}
     for d in rijen:
         ds = dossiers.setdefault(d["dossier"], {"dossier": d["dossier"], "adres": d["adres"], "soort": d["soort_project"],
-                                                "projectmap": d["projectmap"], "bezoeken": []})
-        ds["bezoeken"].append(d)
+                                                "projectmap": d["projectmap"], "bezoeken": [], "dubbels": []})
+        # een dubbel na verhuis telt niet als bezoek; hij staat apart tot Mehdi de opruiming goedkeurt
+        ds["dubbels" if d["stand"] == WERF_DUBBEL else "bezoeken"].append(d)
+    for ds in dossiers.values():
+        if ds["bezoeken"]:
+            ds["projectmap"] = ds["bezoeken"][-1]["projectmap"]
     noden = [dict(r) for r in conn.execute("SELECT naam, tekst, wie, ts FROM nood WHERE naam IN ('werfverslag-voorbereider','werfverslag-schrijver') AND open=1 ORDER BY id").fetchall()]
     st = {r["naam"]: dict(r) for r in conn.execute("SELECT * FROM status WHERE naam IN ('werfverslag-voorbereider','werfverslag-schrijver')").fetchall()}
     return render_template("werfverslagen.html", app_naam=APP_NAAM, dossiers=list(dossiers.values()), noden=noden, status=st,
@@ -1194,7 +1323,8 @@ def werfbezoek_pagina(dossier, volgnr):
         abort(403)
     conn = db()
     _werfbezoek_tabel(conn)
-    r = conn.execute("SELECT * FROM werfbezoek WHERE dossier=? AND volgnr=? ORDER BY id DESC LIMIT 1", (dossier, volgnr)).fetchone()
+    r = conn.execute("SELECT * FROM werfbezoek WHERE dossier=? AND volgnr=? ORDER BY (stand=?), id DESC LIMIT 1",
+                     (dossier, volgnr, WERF_DUBBEL)).fetchone()
     if not r:
         abort(404)
     b = _werf_rij(_werf_dict(r), _taak_status(conn))

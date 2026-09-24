@@ -69,6 +69,8 @@ Werfverslag voorbereider verifieert (controle), geeft door aan Werfverslag schri
   {% endfor %}
 </table>
 <p class="stil"><code>{{ d.projectmap }}</code></p>
+{% if d.dubbels %}<div class="nood">{{ d.dubbels|length }} oude rij(en) van vóór de verhuis van de projectmap (rij-id {{ d.dubbels|map(attribute='id')|join(', ') }}):
+gegevens, keuzes en proef staan nu op de rij van het nieuwe pad. Opruimen staat als voorstel op het <a href="{{ url_for('bord') }}">bord</a>; er wordt niets gewist zonder je ja.</div>{% endif %}
 {% endfor %}
 
 <h2>De agents</h2>
