@@ -924,6 +924,20 @@ def titel_uit_onderzoek(a):
     info = lees_titel(titel)
     if info.get("firma") or info["reistijd"] or a.get("hele_dag"):
         return None, ""
+    # Spoor 1: een H-Architects-projectnummer (JJNN) met een projectmap. De map ontstaat bij de ondertekening,
+    # dus klant; zonder !! is het achter het bureau (online). Gezien 25-09-2026: 'Mehdi: 2607' kreeg een vraag
+    # terwijl de bronnen het antwoord hadden (Robin Verlinden en Silvie Boudou).
+    kaart = (projectadressen.index() or {}).get(info["nummer"]) if info["nummer"] else None
+    if kaart:
+        klant = klant_van_nummer(info["nummer"])
+        if klant:
+            code = next((c for rx, c in ACTIVITEIT_WOORDEN["HARC"] if re.search(rx, titel, re.I)), "")
+            buiten = info["buiten"] or code in BUITEN_TYPES
+            adres = ((a.get("locatie") or "").strip() or kaart.get("adres", "")) if buiten else ""
+            nieuw = (f"{'!! ' if buiten else ''}Mehdi: [HARC-K{'B' if buiten else 'O'}] {code + ' ' if code else ''}{info['nummer']} - {klant}"
+                     + (f", {re.sub(r',\s*(Belgi[eë]|Belgium)\s*$', '', adres)}" if adres else ""))
+            return nieuw, f"uitgezocht: {info['nummer']} is een H-Architects-project met een projectmap, klant {klant}"
+    # Spoor 2: een activiteit met een adres
     adres = (a.get("locatie") or "").strip()
     if not adres or adres.lower().startswith("http"):
         return None, ""

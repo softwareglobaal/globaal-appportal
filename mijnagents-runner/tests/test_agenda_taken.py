@@ -530,6 +530,17 @@ check("vastgelopen: de agent belt een keer, met een zin wat Mehdi moet doen",
       _z1 and _z2 is None and len(_bel) == 1 and "zeg voor welke firma" in _bel[0], str(_bel))
 _bron_alle = "".join((HIER / f).read_text(encoding="utf-8") for f in ("agenda_wacht.py", "zelfcontrole.py", "koppelingen/agenda.py", "agenda_signaal.py", "file_wacht.py"))
 check("de agent verwijdert nooit een afspraak: geen enkele DELETE naar de agenda", "DELETE" not in _bron_alle)
+_oud_i, _oud_k2 = W.projectadressen.index, W.klant_van_nummer
+W.projectadressen.index = lambda *a, **k: {"2607": {"adres": "Kerkstraat 1, 3000 Leuven", "map": "x"}}
+W.klant_van_nummer = lambda nr: "Robin Verlinden en Silvie Boudou" if nr == "2607" else ""
+try:
+    _p1 = W.titel_uit_onderzoek({"titel": "VR Mehdi: 2607"})[0]
+    _p2 = W.titel_uit_onderzoek({"titel": "!! Mehdi: 2607 werfbezoek"})[0]
+finally:
+    W.projectadressen.index, W.klant_van_nummer = _oud_i, _oud_k2
+check("een projectnummer met een projectmap wordt een volledige titel, zonder vraag",
+      _p1 == "Mehdi: [HARC-KO] 2607 - Robin Verlinden en Silvie Boudou"
+      and _p2 == "!! Mehdi: [HARC-KB] WB 2607 - Robin Verlinden en Silvie Boudou, Kerkstraat 1, 3000 Leuven", str((_p1, _p2)))
 
 # De vraag staat in de agenda zelf (VR), niet in Telegram (25-09-2026)
 _gpv = []
