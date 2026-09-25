@@ -565,6 +565,27 @@ check("een vraag van de agent staat vooraan in de titel (VR) en gaat er weer af 
 check("VR blijft voor ZL, ZL blijft voor ??", W.met_zl("VR ?? Mehdi: [ELEV-LO] Robby") == "VR ZL ?? Mehdi: [ELEV-LO] Robby"
       and W.lees_titel("VR ZL Mehdi: [HARC-KB] WB 2145")["type"] == "WB")
 
+# Een oproep, een kanaal, vijf minuten op voorhand (Mehdi, 25-09-2026)
+_kan = []
+_ob = (W.bellen.beschikbaar, W.bellen.callmebot_beschikbaar, W.bellen.bel, W.bellen.bel_telegram)
+W.bellen.beschikbaar = lambda: True
+W.bellen.callmebot_beschikbaar = lambda: True
+W.bellen.bel = lambda tekst, slot="": _kan.append("twilio") or "sid"
+W.bellen.bel_telegram = lambda tekst: _kan.append("telegram") or "ok"
+try:
+    W.bellen.bel_afspraak("proef")
+finally:
+    W.bellen.beschikbaar, W.bellen.callmebot_beschikbaar, W.bellen.bel, W.bellen.bel_telegram = _ob
+import file_wacht as _fw
+_vb = (W.nu_lokaal() + _td(days=1)).replace(hour=11, minute=0, second=0, microsecond=0)
+_rb = W.belrooster([{"id": "b1", "titel": "!! Mehdi: [UNAB-KB] BS - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken",
+                     "start": _vb.isoformat(), "einde": (_vb + _td(hours=1)).isoformat(), "kalender": W.WERKAGENDA, "locatie": "Koning Albertlaan 206, 3620 Lanaken"},
+                    {"id": "r1", "titel": "🚗 Reistijd: thuis → Lanaken", "start": (_vb - _td(minutes=90)).isoformat(), "einde": _vb.isoformat(),
+                     "kalender": W.WERKAGENDA, "locatie": ""}], W.nu_lokaal().date().isoformat())
+check("een oproep, via een kanaal, nooit herhaald", _kan == ["twilio"] and W.bellen.POGINGEN == 1 and _fw.MAX_OPROEPEN == 1, str(_kan))
+check("buiten belt de agent vijf minuten voor het vertrek",
+      len(_rb) == 1 and _rb[0]["tijd"] == (_vb - _td(minutes=95)).isoformat() and "over 5 minuten vertrekken" in _rb[0]["tekst"], str(_rb))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

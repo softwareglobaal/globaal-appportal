@@ -25,7 +25,7 @@ from koppelingen import bord, bellen          # noqa: E402
 STAND = Path.home() / "appportal/mijnagents-data/file-wacht.json"
 VOORUIT_MIN = 120      # zover vooruit kijken
 HERTEST_MIN = 20       # niet vaker dan dit per afspraak narekenen
-MAX_OPROEPEN = 2       # per afspraak per dag
+MAX_OPROEPEN = 1       # per afspraak per dag: een oproep volstaat (Mehdi, 25-09-2026)
 DROOG = "--droog" in sys.argv
 if DROOG:
     # Een proefronde mag de betaalde Google-aanroepen niet opeten. Op 20-09-2026 stond

@@ -2079,8 +2079,11 @@ def belrooster(items, vandaag):
         buiten = info["buiten"] or info["soort"] in ("KB", "PB") or (adres and not adres.lower().startswith("http"))
         if buiten:
             blok = [x for x in reistijden if x["kalender"] == a["kalender"] and start - timedelta(hours=3) <= datetime.fromisoformat(x["start"]) < start]
-            beltijd = datetime.fromisoformat(blok[-1]["start"]) if blok else start - timedelta(minutes=BEL_BUITEN_MIN)
-            hoe = "vertrekken" if blok else f"over {BEL_BUITEN_MIN} minuten vertrekken"
+            # Een oproep betekent altijd: je hebt vijf minuten om iets te doen (Mehdi, 25-09-2026). Buiten dus
+            # vijf minuten voor het vertrek, zoals de melding op de rit; online vijf minuten voor het begin.
+            beltijd = (datetime.fromisoformat(blok[-1]["start"]) - timedelta(minutes=BEL_ONLINE_MIN)) if blok \
+                else start - timedelta(minutes=BEL_BUITEN_MIN)
+            hoe = f"over {BEL_ONLINE_MIN} minuten vertrekken" if blok else f"over {BEL_BUITEN_MIN} minuten vertrekken"
         else:
             beltijd = start - timedelta(minutes=BEL_ONLINE_MIN)
             hoe = f"over {BEL_ONLINE_MIN} minuten online"

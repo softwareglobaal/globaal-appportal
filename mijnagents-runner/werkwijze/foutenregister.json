@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "1.6",
+ "versie": "1.7",
  "datum": "24-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1122,6 +1122,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een vraag van de agent staat vooraan in de titel (VR) en gaat er weer af als ze opgelost is"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-53",
+   "datum": "25-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "De agents belden te veel: een afspraak via twee kanalen tegelijk (Telegram en telefoon), een alarm ('Tracker stil sinds 10 uur') tot drie keer na elkaar, de filewacht tot twee keer per afspraak.",
+   "gevolg": "Drie of meer oproepen na elkaar, terwijl Mehdi meestal niet opneemt en een oproep hem genoeg zegt.",
+   "waarom_niet_gezien": "Elke regel was op zich redelijk ('dubbel is beter dan gemist'); niemand telde hoeveel oproepen er samen binnenkwamen.",
+   "oorzaak": "Geen afspraak over hoe vaak er gebeld mag worden.",
+   "soort_oorzaak": "ontbrekende regel",
+   "oplossing": "Een oproep, via een kanaal (de telefoon; Telegram alleen als de telefoon niet kan), nooit herhaald (POGINGEN = 1, hard). Een oproep betekent altijd: je hebt vijf minuten om iets te doen; online vijf minuten voor het begin, buiten vijf minuten voor het vertrek.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een oproep, via een kanaal, nooit herhaald"
    },
    "controle": [],
    "status": "opgelost"

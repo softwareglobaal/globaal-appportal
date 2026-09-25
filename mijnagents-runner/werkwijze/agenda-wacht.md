@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 7.6 (25-09-2026, plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
+Versie 7.7 (25-09-2026, plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -342,7 +342,9 @@ geen reistijd, geen titelfout. Ik laat hem staan, ook als ik een week leegmaak.
 
 ## Belrooster (mandaat van Mehdi, 11-09-2026)
 
-Mehdi wil voor elke afspraak effectief gebeld worden. Ik plan, De Bode belt. Elke
+Mehdi wil voor elke afspraak effectief gebeld worden. Ik plan, De Bode belt. Een oproep, via een kanaal (de telefoon),
+nooit herhaald: meestal neemt Mehdi niet op en de oproep zelf is het signaal. Een oproep betekent altijd: je
+hebt vijf minuten om iets te doen. Online vijf minuten voor het begin, buiten vijf minuten voor het vertrek. Elke
 ronde schrijf ik het belrooster: online afspraken 5 minuten vooraf (AGENDA_BEL_ONLINE),
 buitenafspraken op het vertrekmoment, het begin van mijn reistijdblok, of anders 30
 minuten vooraf (AGENDA_BEL_BUITEN). Niet voor intern (IN), terugkerend, hele dag,

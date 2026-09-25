@@ -20,7 +20,9 @@ import urllib.request
 from xml.sax.saxutils import escape
 
 ENV = os.path.expanduser("~/appportal/mijnagents-data/.env")
-POGINGEN = int(os.environ.get("ALARM_POGINGEN", "3"))
+# Een oproep, geen herhaling. Mehdi, 25-09-2026: "meestal neem ik het niet op, dus de agent moet niet drie keer
+# na elkaar bellen. Voor mij is dat meer dan voldoende." Hoger kan alleen hier, in de code.
+POGINGEN = min(int(os.environ.get("ALARM_POGINGEN", "1")), 1)
 AFGEROND = {"completed", "busy", "no-answer", "failed", "canceled"}
 
 
@@ -153,19 +155,22 @@ def bel_telegram(tekst):
 
 
 def bel_afspraak(tekst, slot="Details staan op Telegram en op het bord."):
-    """Belt via elk beschikbaar kanaal. Geeft lijst van (kanaal, resultaat of fout)."""
-    uit = []
-    if callmebot_beschikbaar():
-        try:
-            uit.append(("telegram-oproep", bel_telegram(tekst)))
-        except Exception as e:  # noqa: BLE001
-            uit.append(("telegram-oproep", f"mislukt: {type(e).__name__}"))
+    """Belt een keer, via een kanaal: de telefoon (Twilio), en alleen als die niet kan de Telegram-oproep.
+    Mehdi, 25-09-2026: een oproep is meer dan voldoende; vroeger belden beide kanalen tegelijk.
+    Geeft lijst van (kanaal, resultaat of fout)."""
     if beschikbaar():
         try:
-            uit.append(("twilio", bel(tekst, slot)))
+            return [("twilio", bel(tekst, slot))]
         except Exception as e:  # noqa: BLE001
-            uit.append(("twilio", f"mislukt: {type(e).__name__}"))
-    return uit
+            fout = [("twilio", f"mislukt: {type(e).__name__}")]
+    else:
+        fout = []
+    if callmebot_beschikbaar():
+        try:
+            return fout + [("telegram-oproep", bel_telegram(tekst))]
+        except Exception as e:  # noqa: BLE001
+            return fout + [("telegram-oproep", f"mislukt: {type(e).__name__}")]
+    return fout
 
 
 def rooster_schrijven(regels):
