@@ -1017,5 +1017,94 @@
   "light": "light@h-architects.be (H-Architects Projects): nog 1 actief type 'HA: Klant', schrijft in de archiefagenda haagendalightprojects",
   "mch": "mch@h-architects.be: het persoonlijke account van Mehdi, 2 eigen types; niet het boekingsaccount. De Calendly-plugin moet op General ingelogd zijn om de 19 types te zien",
   "gemeten": "25-09-2026"
+ },
+ "voorstel_activiteiten": {
+  "status": "VOORSTEL, te valideren door Mehdi (25-09-2026); de agent gebruikt het nog niet",
+  "waarom": "Mehdi, 25-09-2026: de titel moet ook zeggen wat hij gaat doen, niet alleen voor welke firma en of het buiten of online is. Bestaande afkortingen (WB enz.) blijven.",
+  "vorm": "[FIRMA-SOORT] ACTIVITEIT nummer - klant, adres; bv. '!! Mehdi: [HARC-KB] VOPL 2505 - Patrick Carolan & Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele'",
+  "regel": "de firma zegt het vak (HARC = architectuur), de activiteit zegt wat er gebeurt; een code botst nooit met een soort (KB, KO, PB, PO, LB, LO, AB, AO, IN, B2B) of een firmacode",
+  "bronnen": "Master_Architectuurovereenkomst (fases 4.2.1 tot 4.4), de diensten op unabo.be, de Calendly-types van General, en de woorden in een jaar agendatitels (stabiliteit 123, EPB 96, werfbezoek 88, contract 50, offerte 48, plaatsbezoek 40, VC 38, kennismaking 34)",
+  "HARC": {
+   "verkoop": {
+    "KM": "kennismaking",
+    "ADV": "advies",
+    "OFB": "offertebespreking",
+    "CB": "contractbespreking, ondertekening"
+   },
+   "studiefase": {
+    "PBZ": "plaatsbezoek (bezoek aan de bouwplaats)",
+    "OPM": "opmeting (bestaat)"
+   },
+   "voorontwerp": {
+    "SD": "schetsontwerp (bestaat)",
+    "OWB": "ontwerpbespreking met de klant"
+   },
+   "vergunning": {
+    "OMV": "omgevingsvergunning: dossier, gemeente, opvolging"
+   },
+   "uitvoeringsfase": {
+    "UIT": "uitvoeringsdossier, plannen en meetstaten",
+    "AANB": "aanbesteding en keuze van de aannemer",
+    "MAT": "materiaalkeuze, toonzaal"
+   },
+   "controle": {
+    "WB": "werfbezoek (bestaat)"
+   },
+   "oplevering": {
+    "VOPL": "voorlopige oplevering",
+    "DOPL": "definitieve oplevering",
+    "OPL": "oplevering zonder meer (bestaat)"
+   }
+  },
+  "UNAB": {
+   "EPB": "EPB-verslaggeving (bestaat)",
+   "VEN": "ventilatie, ventilatiemeting",
+   "BDT": "blowerdoortest",
+   "STA": "stabiliteit (bestaat)",
+   "BS": "barsten en scheuren (bestaat)",
+   "VERG": "vergunning of melding zonder architect",
+   "FW": "functiewijziging",
+   "REG": "regularisatie",
+   "PLB": "plaatsbeschrijving (bestaat)",
+   "SCN": "3D-scan (bestaat)",
+   "REN": "3D-rendering",
+   "VC": "veiligheidscoördinatie (bestaat)",
+   "LM": "landmeter: opmeting, afpaling, muurovername",
+   "SD": "ontwerp, schetsen (zelfde code als H-A)",
+   "DRA": "drafting, plannen tekenen of digitaliseren",
+   "MST": "meetstaat",
+   "KM": "kennismaking",
+   "OFB": "offertebespreking",
+   "BUN": "bundel (meerdere diensten samen)"
+  },
+  "altijd_buiten": [
+   "WB",
+   "PBZ",
+   "OPM",
+   "VOPL",
+   "DOPL",
+   "OPL",
+   "PLB",
+   "SCN",
+   "BS",
+   "LM",
+   "BDT",
+   "VEN"
+  ],
+  "contracttypes": {
+   "STAN": "standaard (architectuur), met omvang ww of volledig",
+   "LIGHT": "light",
+   "VST": "voorstudie",
+   "REG": "regularisatie",
+   "ADD": "addendum",
+   "OND": "onderzoek zonder contract",
+   "voorstel": "niet in de titel: het nummer zegt het al via de projectmap; de agent toont het in het dagplan, bv. '2505 (stan, volledig)'"
+  },
+  "vragen": [
+   "Klopt de lijst voor H-Architects per fase, en ontbreekt er een activiteit?",
+   "Voor UNABO: volstaat de dienst (STA, EPB, VC ...), of wil je er ook de activiteit bij (bv. VC VOPL voor een oplevering)?",
+   "Contracttype (stan, light, voorstudie, reg) in de titel, of alleen in het dagplan?",
+   "Gelden de UNABO-codes ook voor TKN-Buro en Energie Efficiënt als ze dezelfde dienst doen (STA, EPB)?"
+  ]
  }
 }
