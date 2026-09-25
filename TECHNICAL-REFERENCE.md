@@ -2007,6 +2007,22 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   opmerking achter **Notitie**, neutraal en pas na een klik. Het totaalbeeld
   toont elk domein dat binnen 60 dagen vervalt in rood, klikbaar. Termen
   `email_pakket_verbruik`, `email_vervaldatum`, `email_domein_notitie`.
+- **Gelinkt aan: logins uit Bitwarden (migratie 173, 25-09-2026):**
+  `communicatie.emailadres_dienst` (emailadres_id FK, bitwarden_id, soort
+  dienst/mailbox/onbekend, dienst = host van de login-URL, naam, collectie,
+  bron, bron_bijgewerkt_op; uniek per adres en item; audit-trigger). Nooit een
+  geheim: `scripts/bitwarden-diensten-laden.py` draait op de pc met `bw serve`
+  (localhost:8087, niet op de VM), gooit wachtwoorden, TOTP, notities, velden,
+  kaarten en identiteiten weg voordat er iets de pc verlaat, en schrijft
+  idempotente SQL (bijwerken, verdwenen items binnen de scope verwijderen,
+  logins op adressen buiten het register melden). Dashboard: blok per gekozen
+  domein (`GET /api/emails/diensten`), markering "n logins" in de rij (rood als
+  het adres uit staat), lijst in het venster, kolom in de export. Second Brain:
+  een knoop per dienst met kanten "login bij". Eerste lading 25-09 alleen
+  qoppa.be (vervalt 29-09): 39 logins, 7 diensten, 24 mailboxwachtwoorden,
+  8 zonder URL. De kruising over de hele kluis (1207 items, 25-09) vond 17
+  uitgezette adressen met 21 herkenbare diensten en 10 adressen die niet meer
+  bestaan maar nog Microsoft-, Monday- en Google-accounts dragen.
 - **Back-up voor de bron van de waarheid (23-09-2026):** code vastgepind met
   tag `backup-2026-09-23` in globaal-communicatie (`ca14cee`),
   globaal-organisatie (`84d306d`) en globaal-appportal (`ff6b988`); data in

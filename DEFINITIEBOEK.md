@@ -368,6 +368,16 @@ het een voorstel.
 - **Let op:** dit definitieboek is zelf een kopie van `kern.definitie` zonder
   sync. Op 24-09-2026 telde de database 140 termen en dit bestand 44 koppen.
 
+### Gelinkt aan
+De **logins die aan een e-mailadres hangen**: de diensten waar dat adres de
+gebruikersnaam of het herstel-adres is. Een adres met logins ruim je niet
+zomaar op: verhuis eerst de login naar een adres dat blijft, anders kan niemand
+het wachtwoord van die dienst nog herstellen. Het wachtwoord van de mailbox
+zelf telt niet als dienst.
+- **Bij ons:** `communicatie.emailadres_dienst` (migratie 173), gevuld uit
+  Bitwarden met alleen metadata, nooit een geheim. Machineleesbaar:
+  `email_dienst`.
+
 ## Vermijden / opletten
 | Niet doen | Wel |
 |---|---|
