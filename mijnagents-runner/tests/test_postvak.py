@@ -162,7 +162,9 @@ def test_dringend_is_smal():
                "Schorsing polis Kangoo", "Fwd: 28255 Mehdi Chegini / Orde van Architecten (tuchtprocedure 2)",
                "Your team's Dropbox account is paused", "Contrat 154011294: Mise en demeure"):
         assert d(ja), ja
-    for nee in ("Herinnering premiebetaling", "Factuur 2026-12", "Openstaande bijdragenota 2026", "Re: Offerte koppeling"):
+    assert d("Aankondiging afsluiting elektriciteit Fluvius")
+    for nee in ("Herinnering premiebetaling", "Factuur 2026-12", "Openstaande bijdragenota 2026", "Re: Offerte koppeling",
+                "H-architects - jaarafsluiting 31/12/2025"):
         assert not d(nee), nee
 
 

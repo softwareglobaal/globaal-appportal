@@ -95,7 +95,7 @@ GESPREK = re.compile(r"^\s*(re|antw|aw|sv|fw|fwd|tr)\s*:", re.I)
 # Dringend: hiervoor mag De Mailregisseur De Bode vragen Mehdi te bellen (Mehdi, 26-09-2026: "voor de urgente zaken kan
 # de agent mijn andere agent vragen mij te bellen"). Alleen bij belangrijk zonder antwoord; bewust smal, anders is het ruis.
 DRINGEND = re.compile(r"(gerechts)?deurwaarder|ingebrekestelling|dagvaarding|\bbeslag|laatste (aanmaning|herinnering|verwittiging)|"
-                      r"tweede aanmaning|derde aanmaning|afsluiting|schorsing|tuchtprocedure|vonnis|mise en demeure|dernier rappel|"
+                      r"tweede aanmaning|derde aanmaning|\bafsluiting|schorsing|tuchtprocedure|vonnis|mise en demeure|dernier rappel|"
                       r"final notice|account (is )?(suspended|deactivated|gepauzeerd|paused)", re.I)
 
 
