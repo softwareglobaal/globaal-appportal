@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.7"
+VERSIE = "2.8"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -104,11 +104,11 @@ tr{{break-inside:avoid}}
 .twee{{column-count:2;column-gap:7mm}} .twee table{{break-inside:avoid}}
 </style>
 <div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; 24 september 2026 &nbsp;|&nbsp; versie {VERSIE}, <b>definitief</b> &nbsp;|&nbsp;
-bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.9 op de server</div>
+bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.10 op de server</div>
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
-Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.6 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
+Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.7 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
 Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de server. De test <code>tests/test_agenda_taken.py</code>
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
@@ -286,6 +286,8 @@ op het bord.</td></tr>
 <tr><td><b>Bellen</b></td><td>Een oproep betekent altijd: je hebt vijf minuten om iets te doen. Online 5 minuten voor het begin, buiten
 5 minuten voor het vertrek. Een keer, via de telefoon, nooit herhaald: ook niet als je niet opneemt. Afspraken bellen van het
 afsprakennummer, vastzitten en alarmen van een tweede nummer.</td></tr>
+<tr><td><b>Dubbel geboekt</b></td><td>Twee afspraken met iemand van buiten tegelijk, op welke agenda ook: de agent belt binnen
+48 uur een keer met een zin. Er is nog een boekingskanaal, Calendly General; het telt werk, Lara en het archief als bezet mee.</td></tr>
 <tr><td><b>Zoom</b></td><td>Een klant krijgt altijd de volledige Zoom-link met het wachtwoord erin. Een link zonder wachtwoord bij een
 afspraak met een gast binnen 48 uur: de agent belt een keer per dag met een zin.</td></tr>
 </tbody></table>

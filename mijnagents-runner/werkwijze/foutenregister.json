@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "1.9",
+ "versie": "2.0",
  "datum": "24-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -150,6 +150,13 @@
    "les": "Een grendel hoort op het laagste niveau. Een test die een hogere functie afschermt, vergeet de weg die morgen een andere sessie toevoegt.",
    "uit": [
     "FR-55"
+   ]
+  },
+  {
+   "id": "L19",
+   "les": "Elk boekingskanaal moet alle agenda's als bezet meetellen. Meet de bezette tijden per kanaal (Calendly user_busy_times); twee kanalen die elkaar niet zien, boeken dubbel.",
+   "uit": [
+    "FR-57"
    ]
   }
  ],
@@ -1205,6 +1212,26 @@
     "tekst": "een online klantgesprek met de klant na het nummer krijgt ZL en de linknotitie"
    },
    "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-57",
+   "datum": "26-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Twee klanten tegelijk op zaterdag 26-09 om 09:00: Cel Breugelmans (Calendly General, geboekt 22-09) en 2610 Yannick Verlinden en Karolien (Calendly light@, geboekt 24-09).",
+   "gevolg": "Een klant moet verzet worden; bij een online gesprek wacht er een in de lege Zoom.",
+   "waarom_niet_gezien": "De agent zag de botsing, maar zette ze alleen op het bord (dat Mehdi niet leest) en de archiefagenda werd pas sinds 24-09 meegelezen.",
+   "oorzaak": "Calendly light@ telde geen enkele agenda als bezet (gemeten: 1 bezet blok, alleen zijn eigen boeking); General telt werk, Lara en het archief wel mee (22 blokken). Twee boekingskanalen die elkaar niet zien, boeken dubbel.",
+   "soort_oorzaak": "bron",
+   "oplossing": "'HA: Klant' op light@ uitgezet op 26-09 (in plaats van 01-10); alle klanten boeken via General. De agent ziet elke dubbele boeking met iemand van buiten, op welke agenda ook, belt binnen 48 uur een keer met een zin, en de zelfcontrole kijkt acht dagen vooruit.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "twee klanten tegelijk worden gezien, ook over agenda's heen, en in een zin gemeld"
+   },
+   "controle": [
+    "dubbele_boeking"
+   ],
    "status": "opgelost"
   }
  ]

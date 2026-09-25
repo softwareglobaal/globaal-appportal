@@ -661,6 +661,19 @@ finally:
 check("een online klantgesprek met de klant na het nummer krijgt ZL en de linknotitie",
       len(_gz) == 1 and _gz[0].get("summary", "").startswith("ZL ") and "Robin Verlinden en Silvie Boudou" in _gz[0].get("description", ""), str(_gz))
 
+# Dubbele boeking (FR-57)
+_nd = W.nu_lokaal().replace(hour=0, minute=30, second=0, microsecond=0)
+_d9 = (_nd + _td(hours=8, minutes=30))
+_idb = [{"id": "c1", "titel": "Mehdi: [UNABO-PO] Cel Breugelmans - STA", "start": _d9.isoformat(), "einde": (_d9 + _td(minutes=20)).isoformat(),
+         "kalender": W.WERKAGENDA, "deelnemers": ["cel@x.be"]},
+        {"id": "y1", "titel": "Mehdi: [HARC-KO] 2610 - Yannick Verlinden en Karolien", "start": _d9.isoformat(), "einde": (_d9 + _td(minutes=45)).isoformat(),
+         "kalender": "haagendalightprojects@gmail.com", "_archief": "ZZ ARCHIEF", "deelnemers": ["k@x.be"]},
+        {"id": "i1", "titel": "Mehdi: [UNAB-IN] overleg", "start": _d9.isoformat(), "einde": (_d9 + _td(minutes=30)).isoformat(), "kalender": W.WERKAGENDA}]
+_pd9 = W.dubbele_boekingen(_idb, _nd)
+_zd9 = [z for s_, z in W.vastgelopen(_idb, _nd) if s_.startswith("dubbel:")]
+check("twee klanten tegelijk worden gezien, ook over agenda's heen, en in een zin gemeld",
+      [(a["id"], b["id"]) for a, b in _pd9] == [("c1", "y1")] and len(_zd9) == 1 and "Verzet er een" in _zd9[0], str((_pd9, _zd9)))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

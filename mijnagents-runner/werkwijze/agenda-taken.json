@@ -1,5 +1,5 @@
 {
- "versie": "4.10",
+ "versie": "4.11",
  "datum": "2026-09-25",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -380,11 +380,6 @@
    "wanneer": "zodra het kan"
   },
   {
-   "wat": "Calendly 'HA: Klant' (light@) gaat uit op 01-10-2026 om 09:00 (eenmalig/calendly_ha_klant_uit.py, alleen als er geen komende boekingen meer op staan; ja van Mehdi 25-09). Wie klanten een link stuurt (Mehdi, Chilton), gebruikt voortaan https://calendly.com/general-meetings-2026/h-architects-klant. De oude link staat niet in de code, niet in de verzonden mails van light@, standaard@, mch@ en info@, niet in Gmail en niet op de websites",
-   "wie": "de agent (01-10), Mehdi en Chilton (nieuwe link)",
-   "wanneer": "01-10-2026"
-  },
-  {
    "wat": "H-A afsprakenboek, A13: de betekenis van het projectnummer toevoegen (JJNN, JJ = jaar, alleen H-Architects). De nieuwste versie van het boek staat in het Claude-project '2145 vertomensberg'; de tekst staat klaar in de JSON onder titelconventie.projectnummer_ha (FR-47)",
    "wie": "Mehdi",
    "wanneer": "bij de volgende versie van het boek"
@@ -638,6 +633,10 @@
   {
    "datum": "2026-09-25",
    "wat": "bellen: een oproep, een kanaal, nooit herhaald; een oproep = je hebt vijf minuten (online 5 min voor het begin, buiten 5 min voor het vertrek)"
+  },
+  {
+   "datum": "2026-09-26",
+   "wat": "'HA: Klant' op light@ vervroegd uitgezet (dubbele boeking 26-09 09:00); alle klanten boeken via Calendly General"
   }
  ],
  "bron_afkortingen": {
@@ -1092,8 +1091,8 @@
   "claude": "Claude begint elke sessie aan de Agendawacht met de lessen uit het register en de laatste zelfcontrole, en sluit af met een nieuwe zelfcontrole als bewijs",
   "mehdi": "24-09-2026",
   "documenten": {
-   "afspraken": "Agendawacht - afspraken kleuren en taken v2.7.pdf (definitief, zonder verloop per dag)",
-   "foutenregister": "Agendawacht - foutenregister v1.9.pdf",
+   "afspraken": "Agendawacht - afspraken kleuren en taken v2.8.pdf (definitief, zonder verloop per dag)",
+   "foutenregister": "Agendawacht - foutenregister v2.0.pdf",
    "waar": "Dropbox private/0 Chegini Mehdi/Prive met Claude; oude versies in Agenda archief/oude documenten",
    "maken": "werkwijze/pdf/afspraken_pdf.py en werkwijze/pdf/foutenregister_pdf.py, op de Mac; ze lezen uit deze JSON en het register"
   }
@@ -1142,5 +1141,10 @@
   "bron_oplossing": "Zoom, het account dat aan Calendly General hangt (Calendly, Integraties, Zoom toont welk): Instellingen, Vergadering, Beveiliging, 'Toegangscode insluiten in uitnodigingslink voor deelname met één klik' aan. Werkt voor elke nieuwe boeking",
   "agent": "ziet elke Zoom-link zonder wachtwoord bij een afspraak met een gast binnen 48 uur en belt Mehdi een keer per dag met een zin; de zelfcontrole kijkt acht dagen vooruit (FR-54)",
   "mehdi": "25-09-2026"
+ },
+ "dubbele_boeking": {
+  "regel": "elk boekingskanaal telt alle agenda's als bezet mee; er is nog een kanaal: Calendly General (haprospecties@gmail.com), dat werk, Lara en het archief meetelt",
+  "gemeten": "26-09-2026: light@ telde niets mee en boekte 2610 om 09:00 bovenop Cel Breugelmans; 'HA: Klant' op light@ is daarom op 26-09 uitgezet",
+  "agent": "ziet elke overlapping van twee afspraken met iemand van buiten, op welke agenda ook, belt binnen 48 uur een keer met een zin; de zelfcontrole kijkt acht dagen vooruit (FR-57)"
  }
 }

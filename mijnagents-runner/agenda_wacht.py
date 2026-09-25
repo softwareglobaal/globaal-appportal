@@ -2145,6 +2145,38 @@ def zoom_zonder_wachtwoord(items, nu=None, uren=48):
     return uit
 
 
+EXTERNE_SOORTEN = {"KB", "KO", "PB", "PO", "LB", "LO", "AB", "AO", "B2B"}
+
+
+def dubbele_boekingen(items, nu=None, uren=48):
+    """Twee afspraken met iemand van buiten die elkaar overlappen, op welke agenda ook (ook het archief).
+    Gezien 26-09-2026: Calendly light@ telde geen enkele agenda als bezet en boekte 2610 om 09:00 bovenop
+    Cel Breugelmans. Geeft [(a, b)]."""
+    nu = nu or nu_lokaal()
+    def extern(a):
+        info = lees_titel(a["titel"])
+        return not info["reistijd"] and info["soort"] != "IN" and (bool(a.get("deelnemers")) or info["soort"] in EXTERNE_SOORTEN)
+    lijst = []
+    for a in items:
+        if a.get("hele_dag") or "T" not in a.get("start", "") or a["titel"].lower().startswith("canceled") or not extern(a):
+            continue
+        try:
+            s_, e_ = datetime.fromisoformat(a["start"]), datetime.fromisoformat(a["einde"])
+        except ValueError:
+            continue
+        if nu < s_ <= nu + timedelta(hours=uren):
+            lijst.append((s_, e_, a))
+    lijst.sort(key=lambda x: x[0])
+    uit = []
+    for i, (s1, e1, a) in enumerate(lijst):
+        for s2, e2, b in lijst[i + 1:]:
+            if s2 >= e1:
+                break
+            if a.get("id") != b.get("id"):
+                uit.append((a, b))
+    return uit
+
+
 def vastgelopen(items, nu=None, uren=48):
     """Afspraken binnen 48 uur waar de agent niet verder kan: geen firmacode na zijn onderzoek, of buiten
     zonder adres. Geeft [(sleutel, zin)], de zin is wat Mehdi moet doen, in een zin."""
@@ -2171,6 +2203,13 @@ def vastgelopen(items, nu=None, uren=48):
         elif (info["buiten"] or info["soort"] in BUITEN_SOORTEN) and not (a.get("locatie") or "").strip() \
                 and not (info["nummer"] and info["nummer"] in projecten):
             uit.append((f"{a['id']}:adres", f"Mehdi, de afspraak buiten van {wanneer}, {kort}: zet het adres erin."))
+    # Twee klanten tegelijk: een zin per paar, wat Mehdi moet doen
+    for a, b in dubbele_boekingen(items, nu, uren):
+        s_ = datetime.fromisoformat(a["start"])
+        dagnaam = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'][s_.weekday()]
+        na = lambda x: (lees_titel(x["titel"])["klant"] or x["titel"])[:30]
+        sleutel = "dubbel:" + ":".join(sorted([a.get("id", "")[:16], b.get("id", "")[:16]]))
+        uit.append((sleutel, f"Mehdi, {dagnaam} om {s_:%H:%M} staan twee afspraken tegelijk: {na(a)} en {na(b)}. Verzet er een."))
     # Zoom zonder wachtwoord: een zin per dag voor alle klanten samen, want de klant raakt er niet in
     per_dag = {}
     for a in zoom_zonder_wachtwoord(items, nu, uren):
