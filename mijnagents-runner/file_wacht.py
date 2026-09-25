@@ -128,7 +128,7 @@ def main():
         if DROOG:
             print("     (droog) zou bellen:", tekst[:90])
         else:
-            uit = bellen.bel_afspraak(tekst)
+            uit = bellen.bel_afspraak(tekst, W.AGENDA_SLOT)
             st[sleutel]["oproepen"] = vorig.get("oproepen", 0) + 1
             print("     gebeld:", uit)
 

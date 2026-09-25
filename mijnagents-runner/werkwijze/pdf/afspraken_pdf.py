@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.4"
+VERSIE = "2.5"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -104,11 +104,11 @@ tr{{break-inside:avoid}}
 .twee{{column-count:2;column-gap:7mm}} .twee table{{break-inside:avoid}}
 </style>
 <div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; 24 september 2026 &nbsp;|&nbsp; versie {VERSIE}, <b>definitief</b> &nbsp;|&nbsp;
-bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.4 op de server</div>
+bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.6 op de server</div>
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
-Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.3 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
+Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.4 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
 Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de server. De test <code>tests/test_agenda_taken.py</code>
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
@@ -128,6 +128,12 @@ alleen recht bij een afspraak van Mehdi zelf, zonder gasten, uit zijn eigen vrij
 <li><b>De kleur volgt de titel.</b> Een afwijkende kleur zet hij terug en meldt hij, met het tijdstip waarop ze veranderde.
 Wie iets anders wil tonen, verandert de titel (?? voor onzeker). Een melding die iemand zelf koos, blijft wel staan.</li>
 <li><b>Ligt de regel vast, dan lost hij het op</b> in plaats van een vraag te laten hangen, en meldt hij wat hij deed.</li>
+<li><b>Het uitzoeken is zijn werk.</b> Een korte titel ('mehdi; barsten en scheuren' met een adres) zoekt hij zelf uit: de activiteit uit de
+woorden, de firma uit de activiteit, klant en soort uit de deal op dat adres.</li>
+<li><b>De agenda is de plek.</b> Mehdi leest Telegram en het bord niet voor de agenda. Wat de agent van hem nodig heeft, staat in de afspraak
+zelf: <b>VR</b> helemaal vooraan de titel en de vraag in een zin bovenaan de omschrijving. Zit hij vast bij een afspraak binnen 48 uur, dan
+belt hij een keer (08:00 tot 20:00) met een zin wat Mehdi moet doen.</li>
+<li><b>Hij verwijdert nooit iets.</b> Moet iets weg, dan zegt hij duidelijk wat en waarom, en wacht hij op een ja.</li>
 <li><b>Een grendel gaat nooit open</b>, ook niet even voor een proef. Proefrondes draaien droog.</li>
 <li><b>SU.</b> Klanten en prospecten zien nooit de volledige landnaam; alleen SU of de code HDSS.</li>
 <li><b>Het verleden wordt niet herschreven</b>, wel nagekeken. Een fout van gisteren komt in het register.</li>
@@ -151,6 +157,8 @@ in het dagplan, het belrooster en de botsingen, en als signaal: hoort op werk.</
 <p>De vorm: <code>{e(t['titelconventie']['vorm'])}</code><br>Voorbeeld: <code>{e(t['titelconventie']['voorbeeld'])}</code></p>
 <h3>De tekens vooraan</h3>
 <table><tbody>
+<tr><td class=c style="width:14mm"><b>VR</b></td><td><b>Vraag van de agent.</b> Helemaal vooraan, nog voor ZL. De vraag staat in een
+zin bovenaan de omschrijving. Is ze opgelost, dan gaan VR en de zin er vanzelf af.</td></tr>
 <tr><td class=c style="width:14mm"><b>ZL</b></td><td><b>Zonder link.</b> Een online gesprek met een externe partij zonder link. ZL staat
 <b>helemaal vooraan</b>, voor ?? en voor alles: <code>ZL ?? Mehdi en Shaniel: [ELEV-LO] Robby</code>. De agent zet er de notitie
 'Online. Mehdi stuurt de link naar ...' bij. Staat er later een link, dan gaan ZL en de notitie er weer af. <b>De agent zet zelf nooit

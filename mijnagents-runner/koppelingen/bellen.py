@@ -62,18 +62,18 @@ def _verzoek(pad, data=None):
         return json.load(r)
 
 
-def twiml(tekst):
+def twiml(tekst, slot="Details staan op Telegram en op het bord."):
     t = escape(tekst[:600])
     return ('<Response><Pause length="1"/>'
             f'<Say language="nl-NL" voice="Polly.Lotte">{t}</Say><Pause length="1"/>'
             f'<Say language="nl-NL" voice="Polly.Lotte">Ik herhaal. {t}</Say>'
-            '<Say language="nl-NL" voice="Polly.Lotte">Details staan op Telegram en op het bord.</Say></Response>')
+            f'<Say language="nl-NL" voice="Polly.Lotte">{escape(slot)}</Say></Response>')
 
 
-def bel(tekst):
-    """Start de oproep; geeft de call-sid terug."""
+def bel(tekst, slot="Details staan op Telegram en op het bord."):
+    """Start de oproep; geeft de call-sid terug. slot: de laatste zin (de Agendawacht zegt: in je agenda)."""
     uit = _verzoek("Calls.json", {"To": os.environ["ALARM_NUMMER"].strip(), "From": os.environ["TWILIO_VAN"].strip(),
-                                  "Twiml": twiml(tekst), "Timeout": "25"})
+                                  "Twiml": twiml(tekst, slot), "Timeout": "25"})
     return uit.get("sid", "")
 
 
@@ -152,7 +152,7 @@ def bel_telegram(tekst):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", h)).strip()[:200]
 
 
-def bel_afspraak(tekst):
+def bel_afspraak(tekst, slot="Details staan op Telegram en op het bord."):
     """Belt via elk beschikbaar kanaal. Geeft lijst van (kanaal, resultaat of fout)."""
     uit = []
     if callmebot_beschikbaar():
@@ -162,7 +162,7 @@ def bel_afspraak(tekst):
             uit.append(("telegram-oproep", f"mislukt: {type(e).__name__}"))
     if beschikbaar():
         try:
-            uit.append(("twilio", bel(tekst)))
+            uit.append(("twilio", bel(tekst, slot)))
         except Exception as e:  # noqa: BLE001
             uit.append(("twilio", f"mislukt: {type(e).__name__}"))
     return uit
@@ -198,7 +198,7 @@ def afspraken_bellen(staat, log=None):
             continue
         if r["sleutel"] in gebeld or not (t <= nu < t + timedelta(minutes=VENSTER_MIN)):
             continue
-        res = bel_afspraak(r["tekst"])
+        res = bel_afspraak(r["tekst"], "Details staan in je agenda.")   # het belrooster komt uit de agenda
         if any("65 seconds" in str(v) for _, v in res):
             # CallMeBot laat maar één oproep per 65 s toe: deze regel volgende minuut opnieuw
             if log:

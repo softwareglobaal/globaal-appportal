@@ -513,7 +513,7 @@ check("de klant komt uit de deal op dat adres, zonder dubbele voornaam", _dl == 
 _bel = []
 _oud_b = (W.bellen.afspraak_bellen_beschikbaar, W.bellen.bel_afspraak, W.BELVRAGEN)
 W.bellen.afspraak_bellen_beschikbaar = lambda: True
-W.bellen.bel_afspraak = lambda tekst: _bel.append(tekst) or [("proef", "ok")]
+W.bellen.bel_afspraak = lambda tekst, *r: _bel.append(tekst) or [("proef", "ok")]
 W.BELVRAGEN = "/tmp/belvragen-test.json"
 import os as _os2
 if _os2.path.exists(W.BELVRAGEN):
@@ -530,6 +530,29 @@ check("vastgelopen: de agent belt een keer, met een zin wat Mehdi moet doen",
       _z1 and _z2 is None and len(_bel) == 1 and "zeg voor welke firma" in _bel[0], str(_bel))
 _bron_alle = "".join((HIER / f).read_text(encoding="utf-8") for f in ("agenda_wacht.py", "zelfcontrole.py", "koppelingen/agenda.py", "agenda_signaal.py", "file_wacht.py"))
 check("de agent verwijdert nooit een afspraak: geen enkele DELETE naar de agenda", "DELETE" not in _bron_alle)
+
+# De vraag staat in de agenda zelf (VR), niet in Telegram (25-09-2026)
+_gpv = []
+_opv, _otv = W._patch, W.agenda._toegang
+W._patch = lambda a, body, tok: _gpv.append(body)
+W.agenda._toegang = lambda: "tok"
+_nv = W.nu_lokaal().replace(hour=10, minute=0, second=0, microsecond=0)
+_iv = [{"id": "v1", "titel": "mehdi; iets", "start": (_nv + _td(days=3)).isoformat(), "einde": (_nv + _td(days=3, hours=1)).isoformat(),
+        "kalender": W.WERKAGENDA, "locatie": "", "omschrijving": ""}]
+try:
+    W.vragen_in_agenda(_iv, _nv)
+    _t_vr = _iv[0]["titel"]
+    _iv[0]["titel"] = "VR Mehdi: [UNAB-KB] BS - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken"
+    _iv[0]["locatie"] = "Koning Albertlaan 206, 3620 Lanaken"
+    _iv[0]["omschrijving"] = "Agendawacht vraagt: zeg voor welke firma en welke klant.\n\nnotitie"
+    W.vragen_in_agenda(_iv, _nv)
+finally:
+    W._patch, W.agenda._toegang = _opv, _otv
+check("een vraag van de agent staat vooraan in de titel (VR) en gaat er weer af als ze opgelost is",
+      _t_vr == "VR mehdi; iets" and _gpv[0]["description"].startswith("Agendawacht vraagt: zeg voor welke firma")
+      and _gpv[1]["summary"].startswith("Mehdi: [UNAB-KB] BS") and _gpv[1]["description"] == "notitie", str(_gpv))
+check("VR blijft voor ZL, ZL blijft voor ??", W.met_zl("VR ?? Mehdi: [ELEV-LO] Robby") == "VR ZL ?? Mehdi: [ELEV-LO] Robby"
+      and W.lees_titel("VR ZL Mehdi: [HARC-KB] WB 2145")["type"] == "WB")
 
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())

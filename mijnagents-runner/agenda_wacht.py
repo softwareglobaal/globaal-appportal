@@ -289,6 +289,7 @@ def lees_titel(titel):
     # eerst !! en ?? weg, dan de naam vooraan: anders bleef bij "!! Mehdi: BS ..." de naam staan en werd de
     # dienstcode niet gelezen (klant droeg "Mehdi:" mee; gezien in het Commandocentrum, 16-09-2026)
     rest = CODE_RE.sub("", t).replace("!!", "").replace("??", "")
+    rest = re.sub(r"^\s*((ZL|VR)\s+)+", "", rest)
     rest = re.sub(r"^\s*(mehdi|siyan|shelton|angela)[^:]{0,40}:\s*", "", rest, flags=re.I).strip(" -")
     mt = TYPE_RE.match(rest)      # hoofdletters: 'Ren' of 'Kim' als klantnaam is geen code
     if mt:
@@ -1030,6 +1031,8 @@ def met_zl(titel):
     """ZL (zonder link) helemaal vooraan, voor ?? en voor alles, zodat Mehdi het meteen ziet.
     Mandaat van Mehdi, 23-09-2026: "die teken van ZL moet van voor komen". Staat ZL al ergens
     anders in de kop, dan schuift het naar voren."""
+    if titel.startswith("VR "):
+        return "VR " + met_zl(titel[3:])       # VR (vraag van de agent) blijft helemaal vooraan
     if titel.startswith("ZL "):
         return titel
     return "ZL " + (zonder_zl(titel) if _heeft_zl(titel) else titel)
@@ -2099,7 +2102,7 @@ def onbevestigd_voorbij(items, vandaag):
 BELVRAGEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-belvragen.json")
 
 
-def vastgelopen(items, nu=None):
+def vastgelopen(items, nu=None, uren=48):
     """Afspraken binnen 48 uur waar de agent niet verder kan: geen firmacode na zijn onderzoek, of buiten
     zonder adres. Geeft [(sleutel, zin)], de zin is wat Mehdi moet doen, in een zin."""
     nu = nu or nu_lokaal()
@@ -2113,7 +2116,7 @@ def vastgelopen(items, nu=None):
             start = datetime.fromisoformat(a["start"])
         except ValueError:
             continue
-        if not (nu < start <= nu + timedelta(hours=48)):
+        if not (nu < start <= nu + timedelta(hours=uren)):
             continue
         info = lees_titel(a["titel"])
         if info["reistijd"]:
@@ -2126,6 +2129,39 @@ def vastgelopen(items, nu=None):
                 and not (info["nummer"] and info["nummer"] in projecten):
             uit.append((f"{a['id']}:adres", f"Mehdi, de afspraak buiten van {wanneer}, {kort}: zet het adres erin."))
     return uit
+
+
+AGENDA_SLOT = "Details staan in je agenda."     # Mehdi leest Telegram niet voor de agenda (25-09-2026)
+VR_REGEL = "Agendawacht vraagt: "
+
+
+def vragen_in_agenda(items, nu=None):
+    """Mehdi, 25-09-2026: 'ik lees de telegram niet voor de agenda ... de agenda zelf op een oogopslag geeft mij
+    veel meer inzicht'. Wat de agent van hem nodig heeft, staat daarom in de afspraak zelf: VR (vraag) helemaal
+    vooraan de titel en de vraag in een zin bovenaan de omschrijving. Opgelost: VR en de zin gaan er weer af.
+    Alleen bij eigen afspraken op de werkagenda zonder gasten en niet in een reeks. Geeft (gezet, weg)."""
+    tok = agenda._toegang()
+    open_ = {sleutel.split(":")[0]: zin for sleutel, zin in vastgelopen(items, nu, uren=24 * 8)}
+    gezet = weg = 0
+    for a in items:
+        if a.get("kalender") != WERKAGENDA or a.get("deelnemers") or a.get("_terugkerend") or a.get("_archief"):
+            continue
+        titel, oms = a["titel"], a.get("omschrijving") or ""
+        zin = open_.get(a.get("id"))
+        try:
+            if zin and not titel.startswith("VR "):
+                schoon = re.sub(rf"^{VR_REGEL}[^\n]*\n*", "", oms)
+                _patch(a, {"summary": "VR " + titel, "description": VR_REGEL + zin.split(": ", 1)[-1] + ("\n\n" + schoon if schoon else "")}, tok)
+                a["titel"] = "VR " + titel
+                gezet += 1
+            elif not zin and (titel.startswith("VR ") or oms.startswith(VR_REGEL)):
+                nieuw = titel[3:] if titel.startswith("VR ") else titel
+                _patch(a, {"summary": nieuw, "description": re.sub(rf"^{VR_REGEL}[^\n]*\n*", "", oms)}, tok)
+                a["titel"] = nieuw
+                weg += 1
+        except Exception as e:  # noqa: BLE001
+            print("vraag in agenda mislukt:", titel[:40], type(e).__name__, file=sys.stderr)
+    return gezet, weg
 
 
 def bel_als_vastgelopen(items, nu=None):
@@ -2141,7 +2177,7 @@ def bel_als_vastgelopen(items, nu=None):
     for sleutel, zin in vastgelopen(items, nu):
         if sleutel in staat:
             continue
-        uit = bellen.bel_afspraak(zin)
+        uit = bellen.bel_afspraak(zin, AGENDA_SLOT)
         staat[sleutel] = {"tijd": nu.isoformat(), "zin": zin, "resultaat": str(uit)[:200]}
         json.dump(staat, open(BELVRAGEN, "w"), ensure_ascii=False, indent=0)
         return zin
@@ -2393,6 +2429,9 @@ def main():
             noden.append({"tekst": "Herinneringen konden niet gezet worden", "wie": "claude-code"})
         if in_archief:
             noden.append({"tekst": "Er wordt nog geboekt in een archiefagenda: het Calendly-kanaal omzetten naar werk", "wie": "mehdi"})
+        vg, vw = vragen_in_agenda(rit_items)
+        if vg or vw:
+            ag.log(f"dag {vandaag}", "schrijf", f"vragen in de agenda: {vg} gezet (VR), {vw} opgelost")
         if not DAG_ARG:
             gebeld = bel_als_vastgelopen(items)
             if gebeld:

@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "1.5",
+ "versie": "1.6",
  "datum": "24-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -136,6 +136,13 @@
    "uit": [
     "FR-50",
     "FR-51"
+   ]
+  },
+  {
+   "id": "L17",
+   "les": "Zet de uitvoer waar Mehdi kijkt: in de agenda zelf, op een oogopslag. Een bord of Telegram dat hij niet leest, bestaat voor hem niet.",
+   "uit": [
+    "FR-52"
    ]
   }
  ],
@@ -1100,6 +1107,24 @@
    },
    "controle": [],
    "status": "bewaakt"
+  },
+  {
+   "id": "FR-52",
+   "datum": "25-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "De vragen en signalen van de agent gingen naar het bord en Telegram, die Mehdi voor de agenda niet leest.",
+   "gevolg": "Een vraag bleef onbeantwoord; Mehdi zag in zijn agenda niet dat er iets ontbrak.",
+   "waarom_niet_gezien": "Het bord leek de plek voor signalen, maar Mehdi kijkt naar de agenda zelf.",
+   "oorzaak": "De uitvoer van de agent stond niet waar Mehdi kijkt.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "Wat de agent van Mehdi nodig heeft, staat in de afspraak zelf: VR helemaal vooraan de titel en de vraag in een zin bovenaan de omschrijving; opgelost gaat het er weer af. De oproep zegt 'details staan in je agenda'.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een vraag van de agent staat vooraan in de titel (VR) en gaat er weer af als ze opgelost is"
+   },
+   "controle": [],
+   "status": "opgelost"
   }
  ]
 }

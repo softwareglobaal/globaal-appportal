@@ -1,5 +1,5 @@
 {
- "versie": "4.6",
+ "versie": "4.7",
  "datum": "2026-09-24",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -97,7 +97,8 @@
   },
   "tekens": {
    "!!": "buiten, reistijd nodig",
-   "??": "nog niet bevestigd"
+   "??": "nog niet bevestigd",
+   "VR": "vraag van de agent: helemaal vooraan (voor ZL), de vraag staat bovenaan de omschrijving; gaat eraf als ze opgelost is"
   },
   "afdeling_op_het_bord": {
    "HARC": "h-architects",
@@ -624,6 +625,10 @@
   {
    "datum": "2026-09-25",
    "wat": "de agent zoekt korte titels zelf uit (activiteit, firma, klant, adres), belt Mehdi met een zin als hij vastzit, en verwijdert nooit zonder duidelijke vraag en een ja"
+  },
+  {
+   "datum": "2026-09-25",
+   "wat": "de vragen van de agent staan in de agenda zelf (VR vooraan de titel, de vraag in de omschrijving), niet in Telegram"
   }
  ],
  "bron_afkortingen": {
@@ -1070,8 +1075,8 @@
   "claude": "Claude begint elke sessie aan de Agendawacht met de lessen uit het register en de laatste zelfcontrole, en sluit af met een nieuwe zelfcontrole als bewijs",
   "mehdi": "24-09-2026",
   "documenten": {
-   "afspraken": "Agendawacht - afspraken kleuren en taken v2.4.pdf (definitief, zonder verloop per dag)",
-   "foutenregister": "Agendawacht - foutenregister v1.4.pdf",
+   "afspraken": "Agendawacht - afspraken kleuren en taken v2.5.pdf (definitief, zonder verloop per dag)",
+   "foutenregister": "Agendawacht - foutenregister v1.6.pdf",
    "waar": "Dropbox private/0 Chegini Mehdi/Prive met Claude; oude versies in Agenda archief/oude documenten",
    "maken": "werkwijze/pdf/afspraken_pdf.py en werkwijze/pdf/foutenregister_pdf.py, op de Mac; ze lezen uit deze JSON en het register"
   }
@@ -1111,6 +1116,7 @@
   "regel": "het uitzoeken is het werk van de agent: bij een korte titel zoekt hij de activiteit (uit de woorden), de firma (uit de activiteit), de klant en de soort (uit de deal op het adres, getekend = klant) en schrijft hij de titel conform, bij eigen afspraken zonder gasten (FR-50)",
   "bellen": "zit hij vast bij een afspraak binnen 48 uur (geen firma na zijn onderzoek, of buiten zonder adres), dan belt hij Mehdi een keer, tussen 08:00 en 20:00, met een zin wat hij moet doen (FR-51)",
   "verwijderen": "de agent verwijdert nooit een afspraak. Moet iets weg, dan zegt hij duidelijk wat en waarom en wacht hij op een ja van Mehdi",
-  "mehdi": "25-09-2026: 'ik ga niet uitgebreid schrijven wat ik ga doen en dit is je werk ... als je vast zit dan kan je mij bellen via de agent en in een zin zeggen wat ik moet doen'"
+  "mehdi": "25-09-2026: 'ik ga niet uitgebreid schrijven wat ik ga doen en dit is je werk ... als je vast zit dan kan je mij bellen via de agent en in een zin zeggen wat ik moet doen'",
+  "waar_mehdi_kijkt": "Mehdi leest Telegram en het bord niet voor de agenda; de agenda zelf is de plek. Een vraag staat als VR in de afspraak, en de oproep zegt 'details staan in je agenda' (FR-52)"
  }
 }
