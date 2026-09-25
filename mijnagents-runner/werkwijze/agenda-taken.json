@@ -308,9 +308,9 @@
    "wanneer": "zodra het kan"
   },
   {
-   "wat": "Calendly: het account light@h-architects.be heeft nog het type 'HA: Klant' actief en boekt in de archiefagenda (4 boekingen sinds 19-09). Voorstel: klanten krijgen voortaan de link 'H-Architects: Klant' van het account General (schrijft op werk, vraagt het projectnummer), en 'HA: Klant' gaat uit na de laatste geboekte afspraak (30-09). Uitzetten kan de agent via de API, na een ja van Mehdi (FR-39)",
-   "wie": "Mehdi",
-   "wanneer": "voor 01-10"
+   "wat": "Calendly 'HA: Klant' (light@) gaat uit op 01-10-2026 om 09:00 (eenmalig/calendly_ha_klant_uit.py, alleen als er geen komende boekingen meer op staan; ja van Mehdi 25-09). Wie klanten een link stuurt (Mehdi, Chilton), gebruikt voortaan https://calendly.com/general-meetings-2026/h-architects-klant. De oude link staat niet in de code, niet in de verzonden mails van light@, standaard@, mch@ en info@, niet in Gmail en niet op de websites",
+   "wie": "de agent (01-10), Mehdi en Chilton (nieuwe link)",
+   "wanneer": "01-10-2026"
   },
   {
    "wat": "H-A afsprakenboek, A13: de betekenis van het projectnummer toevoegen (JJNN, JJ = jaar, alleen H-Architects). De nieuwste versie van het boek staat in het Claude-project '2145 vertomensberg'; de tekst staat klaar in de JSON onder titelconventie.projectnummer_ha (FR-47)",
