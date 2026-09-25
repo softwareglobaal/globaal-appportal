@@ -105,6 +105,30 @@ def test_hotmail_uit_het_bestand_van_de_mac(tmp_path=None):
     assert any("niet vers" in t for t, _w in r.noden), r.noden
 
 
+def test_wat_op_25_september_ten_onrechte_doorkwam():
+    """De droge ronde van 25-09-2026 op mch@, Melodie en hotmail: dit mag niet op de lijst."""
+    t = lambda van, ond, naam="", **k: postvak.trieer(dict(kop(van, ond, naam), **k), EIGEN)  # noqa: E731
+    assert t("x@audit.frequentflyer.com", "Réponse automatique : URGENT - Hacked and blocked Flying Blue account")[0] == "melding"
+    assert t("contactcenter@dsb.sr", "[##1455335##] Bedankt voor uw e-mail aan het Customer Contact Center")[0] == "melding"
+    assert t("postmaster@one.com", "Delivery delayed: URGENT - Hacked and blocked Flying Blue account", "Postmaster")[0] == "melding"
+    assert t("postmaster@one.com", "Undeliverable: Factuur 2026-12", "Postmaster")[0] == "actie"
+    assert t("no-reply@email.claude.com", "[No Action Required:] Text watermarking begins September 30", "Claude Team")[0] == "melding"
+    assert "advocaat" not in t("support@twilio.com", "Request# 29703128 | Regulatory Bundle", "Stevenson Lawrence Lim (Support)")[1]
+    assert t("support@octopus.be", "Import rapport")[0] == "melding"
+    assert t("info@cluboase.sr", "75 jaar Oase – sport, vriendschap en mooie herinneringen!", automatisch=True)[0] == "melding"
+    assert t("info@kineplusleuven.be", "HERINNERING - Uw afspraak bij KINEPLUSLEUVEN - woensdag 23/09", automatisch=True)[0] == "melding"
+    assert t("alle.ouders@sk.sgarchipel.be", "Nieuwsbrief kinderkuren", lijst=True)[0] in ("melding", "rommel")
+
+
+def test_wat_op_25_september_terecht_doorkwam_blijft():
+    t = lambda van, ond, naam="", **k: postvak.trieer(dict(kop(van, ond, naam), **k), EIGEN)  # noqa: E731
+    assert t("info-kbc@mail-kbc.be", "Je hebt info over een achterstal/overschrijding ontvangen voor H-INVEST BV",
+             automatisch=True)[0] == "actie"
+    assert t("daniel.renard@verz.kbc.be", "72971400 - PATRIMONIUMPOLIS HANDEL - herinnering premiebetaling")[0] == "hoog"
+    assert t("an.berghmans@notaris.be", "RE: Verkoop Plantin en Moretuslei 6", "Notaris An BERGHMANS")[0] == "hoog"
+    assert t("dussart@dinconsulting.be", "Afstemming intercompany Qoppa/H-Architects", "Nadine Dussart - Din Consulting")[0] == "hoog"
+
+
 def test_werkdagen_tellen_het_weekend_niet():
     vr = datetime.fromisoformat("2026-09-25T10:00:00+02:00")
     ma = datetime.fromisoformat("2026-09-28T10:00:00+02:00")

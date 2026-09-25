@@ -60,18 +60,21 @@ def lees():
         raise LookupError("geen mappen van hotmail in de index van Mail")
     ontvangers = {}
     uit = []
-    vraag = ("SELECT m.ROWID, m.mailbox, m.date_received, a.address, a.comment, m.subject_prefix, s.subject, g.message_id_header "
+    # automated_conversation: Mail markeert zelf wat automatisch verstuurd is (2); list_id_hash: een mailinglijst.
+    vraag = ("SELECT m.ROWID, m.mailbox, m.date_received, a.address, a.comment, m.subject_prefix, s.subject, g.message_id_header, "
+             "m.automated_conversation, m.list_id_hash "
              "FROM messages m LEFT JOIN addresses a ON m.sender=a.ROWID LEFT JOIN subjects s ON m.subject=s.ROWID "
              "LEFT JOIN message_global_data g ON m.global_message_id=g.ROWID "
              f"WHERE m.deleted=0 AND m.mailbox IN ({','.join('?' * len(mappen))}) AND m.date_received >= ?")
     grens_verzonden = (nu - timedelta(days=VERZONDEN_DAGEN)).timestamp()
-    for rid, mbox, ts, van, naam, prefix, ond, mid in c.execute(vraag, (*mappen, grens_verzonden)):
+    for rid, mbox, ts, van, naam, prefix, ond, mid, auto, lijst in c.execute(vraag, (*mappen, grens_verzonden)):
         kaart = mappen[mbox]
         if kaart == "INBOX" and ts < (nu - timedelta(days=ONTVANGEN_DAGEN)).timestamp():
             continue
         uit.append({"map": kaart, "uid": rid, "datum": datetime.fromtimestamp(ts, timezone.utc).isoformat(),
                     "van": (van or "").lower(), "van_naam": naam or "", "aan": [], "cc": [],
-                    "onderwerp": ((prefix or "") + (ond or "")).strip(), "message_id": mid or ""})
+                    "onderwerp": ((prefix or "") + (ond or "")).strip(), "message_id": mid or "",
+                    "automatisch": auto == 2, "lijst": bool(lijst)})
     ids = [b["uid"] for b in uit]
     for i in range(0, len(ids), 500):
         deel = ids[i:i + 500]

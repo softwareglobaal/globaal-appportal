@@ -51,11 +51,12 @@ ROLLEN = {
     "bank": ["kbc", "belfius", "bnp", "@ing.be", ".ing.be", "argenta", "crelan", "alpha credit", "alphacredit"],
     "overheid": ["belgium.be", "vlaanderen.be", "minfin", "fod", "rsz", "onss", "socialsecurity", "gemeente", "stad.",
                  "omgevingsloket", "vlabel", "belastingdienst", "architect.be", "orde van architecten"],
-    "notaris": ["notaris"], "advocaat": ["advoca", "law"], "deurwaarder": ["deurwaarder", "gerechtsdeurwaarder"],
+    "notaris": ["notaris"], "advocaat": ["advoca", "law firm", "lawfirm", "legaloffice", "@law", ".law"], "deurwaarder": ["deurwaarder", "gerechtsdeurwaarder"],
     "verzekering": ["verzeker", "insurance", "ethias", "axa", "@ag.be", ".ag.be", "baloise", "arcoinsurance"],
 }
 HOOG_ROLLEN = {"boekhouder", "bank", "overheid", "notaris", "advocaat", "deurwaarder", "verzekering"}
-HOOG = ["factuur", "betaling", "betalen", "betalingsuitnodiging", "herinnering", "aanmaning", "deadline", "uiterlijk",
+# "herinnering" telt niet in "herinneringen" (25-09-2026: "75 jaar Oase ... mooie herinneringen"); zie _woord.
+HOOG = ["factuur", "betaling", "betalen", "betalingsuitnodiging", "herinnering", "aanmaning", "achterstal", "overschrijding", "deadline", "uiterlijk",
         "dringend", "urgent", "ingebrekestelling", "vervaldag", "vervalt", "verloopt", "contract", "vergunning",
         "belasting", "aanslag", "schorsing", "opzeg", "openstaande", "bijdragenota", "action needed", "action required",
         "payment", "overdue", "deactivated", "suspended", "paused", "mislukt", "failed", "e-box"]
@@ -72,7 +73,18 @@ MELDING_AFZENDERS = ["noreply", "no-reply", "donotreply", "robot@", "notificatio
                      "mailer-daemon", "postmaster", "bpost", "dpdgroup", "postnl", "shopify", "zendesk", "sales@one.com",
                      "statement", "billing@", "invoice@", "facturatie@"]
 MELDING_ONDERWERPEN = ["order overview", "order is being processed", "bestelling", "verzending", "pakje", "pakket",
-                       "statement", "welcome to", "password", "wachtwoord"]
+                       "statement", "welcome to", "password", "wachtwoord", "import rapport", "uitgavenstaat"]
+# Automatische antwoorden. Vooraan in het onderwerp: afwezigheid. Overal: ontvangstbevestigingen van een loket.
+AUTO_BEGIN = re.compile(r"^\s*(automatisch antwoord|automatic reply|auto(matic)?[- ]?reply|out of office|afwezig|absence|"
+                        r"r[ée]ponse automatique|automatische antwort)", re.I)
+AUTO_OVERAL = re.compile(r"(bedankt voor uw e-?mail|ontvangstbevestiging|accus[ée] de r[ée]ception|"
+                         r"we hebben je vraag goed ontvangen|we have received your)", re.I)
+# Een herinnering aan een afspraak (kinesist, garage) is een melding, geen betalingsherinnering.
+AFSPRAAK = re.compile(r"((herinnering|reminder)\W+(uw |je |your )?(afspraak|appointment)|afspraakherinnering|"
+                      r"appointment reminder)", re.I)
+# Een bericht van de mailserver gaat over onze eigen verzonden mail; het onderwerp is dat van onze mail.
+MAILSERVER = ("postmaster@", "mailer-daemon@")
+NIET_BEZORGD = re.compile(r"(undeliver|niet (be)?bezorgd|onbestelbaar|delivery (status notification \()?fail|returned mail)", re.I)
 # Een afzender die zich voordoet als bank of overheid vanaf een gratis mailadres is verdacht:
 # nooit doorgeven als belangrijk, wel tellen. Gezien 25-09-2026: "My MINFIN" van een gmail-adres.
 GRATIS = ("gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "live.com", "icloud.com")
@@ -188,21 +200,48 @@ def _adres(veld):
     return m.group(0).lower() if m else ""
 
 
+def _woord(o):
+    """Het eerste woord met gevolg in dit onderwerp (kleine letters), of ''."""
+    o = o.replace("no action required", "")  # "[No Action Required:]" van Claude Team, gezien 25-09-2026
+    for w in HOOG:
+        if w == "herinnering":
+            if re.search(r"herinnering(?!en)", o):
+                return w
+        elif w in o:
+            return w
+    return ""
+
+
+def automatisch_antwoord(onderwerp):
+    o = schoon(onderwerp)
+    return bool(AUTO_BEGIN.match(o) or AUTO_OVERAL.search(o))
+
+
 def trieer(b, eigen_domeinen=(), bekend=frozenset()):
-    """(soort, waarom) voor een kop uit imapbron.lijst; zie de lijst bovenaan dit bestand."""
+    """(soort, waarom) voor een kop uit imapbron.lijst; zie de lijst bovenaan dit bestand.
+    Een bron mag zelf zeggen dat een bericht automatisch is ('automatisch', zoals Mail op de Mac dat bijhoudt)
+    of van een mailinglijst komt ('lijst')."""
     van, naam, ond = (b.get("van") or "").lower(), (b.get("van_naam") or "").lower(), schoon(b.get("onderwerp"))
     o = ond.lower()
     dom = _domein(van)
     if dom.endswith(GRATIS) and any(v in naam for v in VERDACHTE_NAMEN):
         return "verdacht", f"'{b.get('van_naam')}' vanaf een gratis adres ({dom})"
-    if re.match(r"(automatisch antwoord|automatic reply|auto(matic)?[- ]?reply|out of office|afwezig|absence)", o):
-        return "melding", "automatisch afwezigheidsbericht"
+    if automatisch_antwoord(ond):
+        return "melding", "automatisch antwoord of ontvangstbevestiging"
+    if van.startswith(MAILSERVER):
+        return (("actie", "onze mail kwam niet aan") if NIET_BEZORGD.search(o)
+                else ("melding", "bericht van de mailserver over onze eigen mail"))
+    if AFSPRAAK.search(o):
+        return "melding", "herinnering aan een afspraak"
     rol = next((r for r, delen in ROLLEN.items() if any(d in f"{van} {naam} {o}" for d in delen)), "")
-    woord = next((w for w in HOOG if w in o), "")
-    automatisch = any(a in van or a in naam for a in MELDING_AFZENDERS) or any(m in o for m in MELDING_ONDERWERPEN)
+    woord = _woord(o)
+    automatisch = (bool(b.get("automatisch")) or any(a in van or a in naam for a in MELDING_AFZENDERS)
+                   or any(m in o for m in MELDING_ONDERWERPEN))
     reclame = any(d in van for d in ROMMEL_DOMEINEN) or any(w in o for w in ROMMEL)
     if reclame and not woord:
         return "rommel", "reclame, nieuwsbrief of afmelding"
+    if b.get("lijst") and rol not in HOOG_ROLLEN and not woord:
+        return "melding", "mailinglijst of nieuwsbrief"
     if automatisch:
         return ("actie", f"automatisch, woord '{woord}'") if woord else ("melding", "automatisch bericht")
     if rol in HOOG_ROLLEN or woord:
@@ -289,8 +328,7 @@ def ronde(naam, ag, r, nu=None):
         berichten = [b for b in berichten if (b.get("van") or "").lower() != adres.lower()]
         afwezig = {}
         for b in berichten:
-            if re.match(r"(automatisch antwoord|automatic reply|auto(matic)?[- ]?reply|out of office|afwezig|absence)",
-                        schoon(b.get("onderwerp")).lower()) and _datum(b):
+            if automatisch_antwoord(b.get("onderwerp")) and _datum(b):
                 afwezig.setdefault(b.get("van", ""), []).append(_datum(b))
         for b in berichten:
             d = _datum(b)
