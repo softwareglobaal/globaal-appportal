@@ -674,6 +674,37 @@ _zd9 = [z for s_, z in W.vastgelopen(_idb, _nd) if s_.startswith("dubbel:")]
 check("twee klanten tegelijk worden gezien, ook over agenda's heen, en in een zin gemeld",
       [(a["id"], b["id"]) for a, b in _pd9] == [("c1", "y1")] and len(_zd9) == 1 and "Verzet er een" in _zd9[0], str((_pd9, _zd9)))
 
+# Kleurherstel elk uur, vier weken vooruit, ook 's nachts en in het weekend (FR-21)
+import tempfile as _tf
+_khb, _khd = [], []
+_dk = (W.nu_lokaal() + _td(days=20)).replace(hour=13, minute=0, second=0, microsecond=0)
+
+
+def _kh_afspraken(van, tot):
+    _khd.append((van, tot))
+    return [{"id": "u1", "titel": "Mehdi+Tom+Matthew: [UNABO-IN] engineering wekelijks", "start": _dk.isoformat(),
+             "einde": (_dk + _td(hours=1)).isoformat(), "kalender": W.WERKAGENDA,
+             "_kleur": "3", "_merk": {W.KLEURMERK: "10"}, "_gewijzigd": "2026-09-25T22:15:49Z"}]
+
+
+_kh_oud = (W._patch, W.agenda._toegang, W.afspraken, W.slot_nemen, W.KLEURHERSTEL_LOG)
+W._patch = lambda a, body, tok: _khb.append(body)
+W.agenda._toegang = lambda: "tok"
+W.afspraken = _kh_afspraken
+W.slot_nemen = lambda *x, **k: None
+W.KLEURHERSTEL_LOG = os.path.join(_tf.mkdtemp(), "kleurherstel.json")
+try:
+    _kh_terug = W.kleurherstel()
+    _kh_log = json.loads(Path(W.KLEURHERSTEL_LOG).read_text(encoding="utf-8"))
+finally:
+    W._patch, W.agenda._toegang, W.afspraken, W.slot_nemen, W.KLEURHERSTEL_LOG = _kh_oud
+_kh_src = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("de kleuren worden elk uur vier weken vooruit teruggezet, ook in het weekend",
+      _kh_terug == 1 and _khd and _khd[0][1] >= 28 and [b.get("colorId") for b in _khb] == ["10"]
+      and _kh_log[-1]["teruggezet"] == 1
+      and _kh_src.index('"--kleuren" in sys.argv') < _kh_src.index('"--ronde" in sys.argv and not is_rondetijd'),
+      str((_kh_terug, _khd, _khb)))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

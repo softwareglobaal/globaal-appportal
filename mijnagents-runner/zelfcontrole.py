@@ -207,6 +207,19 @@ def omgeving(nu):
         if not re.search(rf"=== {vandaag} 06:\d\d Brussel", staart):
             uit.append({"controle": "ochtendronde", "dag": vandaag, "uur": "", "agenda": "", "titel": "",
                         "tekst": "geen ronde om 06:30 Brusselse tijd in het logboek", "door": ""})
+    # De nachtelijke kleurwissel (FR-21): zolang die bron niet uit is, zet het kleurherstel elke
+    # nacht kleuren terug. Dat blijft zichtbaar tot het ophoudt, anders lijkt het opgelost.
+    try:
+        herstel = json.loads(Path(W.KLEURHERSTEL_LOG).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        herstel = []
+    grens = (nu - timedelta(days=1)).isoformat(timespec="minutes")
+    recent = [h for h in herstel if h.get("tijd", "") >= grens and h.get("teruggezet")]
+    if recent:
+        uit.append({"controle": "kleur_nacht", "dag": nu.date().isoformat(), "uur": recent[-1]["tijd"][11:16],
+                    "agenda": "", "titel": "",
+                    "tekst": f"iets buiten de agent veranderde {sum(h['teruggezet'] for h in recent)} kleuren in 24 uur; "
+                             f"het kleurherstel zette ze terug", "door": ""})
     return uit
 
 

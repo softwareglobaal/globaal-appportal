@@ -1,6 +1,6 @@
 {
- "versie": "4.11",
- "datum": "2026-09-25",
+ "versie": "4.12",
+ "datum": "2026-09-26",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
   {
@@ -265,6 +265,13 @@
    "regel": "de kleur volgt de titel. Staat er een andere kleur (iets buiten de agent zette ze), dan zet de agent ze terug en meldt hij het op het bord, met het tijdstip van de wijziging. Wie iets anders wil tonen, verandert de titel (?? voor onzeker). Een onzichtbaar merk (extendedProperties.private.agendawacht_kleur) toont welke kleur de agent zelf zette",
    "waarom": "op 24-09 om 00:15 en 13:45 kleurde iets UNABO paars en AI stabiliteit geel; de agent liet het staan als vraag en de interne gesprekken van 25-09 hadden verschillende kleuren (FR-20, FR-21, FR-48)",
    "mehdi": "25-09-2026"
+  },
+  "kleurherstel": {
+   "wat": "agenda_wacht.py --kleuren: alleen de kleuren terugzetten naar de regel, 29 dagen vooruit, geen ritten, geen Routes, geen oproepen",
+   "wanneer": "elk uur om :20 (cron op de VM), ook 's nachts en in het weekend",
+   "waarom": "elke nacht om 00:15 zet iets buiten de agent alle UNABO- en TKNB-afspraken van vier weken op paars en geel (FR-21); de volledige ronde kijkt maar acht dagen vooruit en draait niet in het weekend",
+   "spoor": "mijnagents-data/agenda-kleurherstel.json; de zelfcontrole meldt kleur_nacht zolang het gebeurt",
+   "bron_uitzetten": "aan Mehdi: script.google.com/home/triggers en myaccount.google.com/connections op de accounts met schrijfrecht op de werkagenda"
   }
  },
  "herinneringen": {

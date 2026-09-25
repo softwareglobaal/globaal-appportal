@@ -1269,6 +1269,39 @@ def kleuren_zetten(items, alleen_dag=None):
     return gezet, goed, geen, fout, vast
 
 
+# Kleurherstel, elk uur, ook in het weekend (FR-21). Gemeten 23-09 en 25-09-2026: elke nacht om
+# 00:15 zet iets buiten de agent, rechtstreeks bij Google, elke afspraak met UNABO of TKNB in de
+# titel voor de komende vier weken op paars en geel, een per seconde. Het zit niet op de server,
+# niet op de Mac, niet in Claude of Codex. De volledige ronde kijkt maar acht dagen vooruit en
+# draait niet in het weekend, dus bleef de agenda van zaterdag de hele dag fout. Deze korte ronde
+# zet alleen de kleuren terug (geen ritten, geen Routes, geen oproepen) en onthoudt wanneer.
+KLEUR_VOORUIT_DAGEN = 29
+KLEURHERSTEL_LOG = os.path.expanduser("~/appportal/mijnagents-data/agenda-kleurherstel.json")
+
+
+def kleurherstel():
+    """Alleen de kleuren, vier weken vooruit. Geeft het aantal teruggezette kleuren."""
+    _slot = slot_nemen()  # noqa: F841
+    items = [i for i in afspraken(0, KLEUR_VOORUIT_DAGEN) if not i.get("fout")]
+    gezet, goed, geen, fout, vast = kleuren_zetten(items)
+    terug = len(HANDKLEUREN)
+    print(f"  [schrijf] kleurherstel ({KLEUR_VOORUIT_DAGEN} dagen): {terug} teruggezet omdat iets anders ze veranderde, "
+          f"{gezet - terug} nieuw gezet, {goed} klopten al, {geen} zonder code, {fout} niet gelukt", flush=True)
+    for regel in HANDKLEUREN[:40]:
+        print("    " + regel)
+    if gezet or fout:
+        try:
+            with open(KLEURHERSTEL_LOG, encoding="utf-8") as f:
+                geschiedenis = json.load(f)
+        except (OSError, ValueError):
+            geschiedenis = []
+        geschiedenis.append({"tijd": nu_lokaal().isoformat(timespec="minutes"), "teruggezet": terug,
+                             "nieuw": gezet - terug, "mislukt": fout, "voorbeelden": HANDKLEUREN[:10]})
+        with open(KLEURHERSTEL_LOG, "w", encoding="utf-8") as f:
+            json.dump(geschiedenis[-200:], f, ensure_ascii=False, indent=1)
+    return terug
+
+
 # Reistijd, taak van de Agendawacht. Thuisbasis en bufferminuten in de omgeving.
 THUIS = os.environ.get("AGENDA_THUIS", "Herfstlaan 65, 3010 Leuven")
 BUFFER_MIN = int(os.environ.get("AGENDA_REISTIJD_BUFFER", "10"))
@@ -2552,6 +2585,10 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--kleuren" in sys.argv:          # elk uur, ook 's nachts en in het weekend (FR-21)
+        print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · kleurherstel", flush=True)
+        kleurherstel()
+        sys.exit(0)
     if "--ronde" in sys.argv and not is_rondetijd():
         sys.exit(0)          # cron start elk uur; alleen op de ronde-uren (Brusselse tijd) werk ik
     # Elke ronde begint met zijn tijdstip. Gezien 24-09-2026: het logboek had geen enkele tijd,

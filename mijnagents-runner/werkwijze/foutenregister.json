@@ -1,7 +1,7 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "2.0",
- "datum": "24-09-2026",
+ "versie": "2.1",
+ "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
   "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
@@ -157,6 +157,13 @@
    "les": "Elk boekingskanaal moet alle agenda's als bezet meetellen. Meet de bezette tijden per kanaal (Calendly user_busy_times); twee kanalen die elkaar niet zien, boeken dubbel.",
    "uit": [
     "FR-57"
+   ]
+  },
+  {
+   "id": "L20",
+   "les": "Een herstel dat alleen op werkdagen en acht dagen vooruit loopt, laat een fout die elke nacht vier weken vooruit terugkomt het hele weekend staan. Het herstel moet even ver en even vaak kijken als de fout.",
+   "uit": [
+    "FR-21"
    ]
   }
  ],
@@ -540,19 +547,22 @@
    "id": "FR-21",
    "datum": "24-09-2026",
    "gevonden_door": "zelfcontrole (weekcontrole)",
-   "fout": "Iets buiten de agent zet kleuren: op 24-09 om 00:15 werden de UNABO-overleggen en UNABO-boekingen paars en AI stabiliteit geel, een per seconde, en op 24-09 om 13:45 werd 'Geoffrey Vergauwen' opnieuw paars nadat de agent hem oranje had gezet.",
-   "gevolg": "De kleur zegt niet meer wat de titel zegt (paars is leverancier online).",
-   "waarom_niet_gezien": "Het gebeurt buiten de VM, de Mac en de Claude Code-sessies; Google zegt niet wie een afspraak wijzigt.",
-   "oorzaak": "Onbekend: een tool of persoon met schrijfrecht op de werkagenda en zoomafspraken die UNABO paars kleurt.",
-   "soort_oorzaak": "onbekend",
-   "oplossing": "De agent zet de kleuren terug en meldt elke keer het tijdstip (FR-20). Wie of wat het doet, zoekt Mehdi uit met de tijdstippen.",
+   "fout": "Iets buiten de agent zet kleuren: elke nacht om 00:15 (gemeten 23-09 en 25-09) worden alle afspraken met UNABO of TKNB in de titel voor de komende vier weken paars en geel, een per seconde, in volgorde van datum. Andere firma's blijven ongemoeid.",
+   "gevolg": "De kleur zegt niet meer wat de titel zegt (paars is leverancier online, geel is onbevestigd). Omdat de volledige ronde alleen op werkdagen en acht dagen vooruit draait, bleef het in het weekend en verder dan acht dagen staan.",
+   "waarom_niet_gezien": "Google zegt niet wie een afspraak wijzigt; het merk van de agent bleef staan, alleen de kleur veranderde.",
+   "oorzaak": "Een programma dat rechtstreeks bij Google schrijft met schrijfrecht op de werkagenda, met een vaste regel per firma (UNABO paars, TKNB geel) en een venster van vier weken. Nagekeken en uitgesloten op 26-09: alle cronjobs, timers en containers op de VM (geen andere code zet een kleur), de launchd-taken en crontab op de Mac, de geplande Claude-taken en cloudroutines, de Codex-automatiseringen en Apps Script in de Drive van mch@. Het patroon (elke dag tussen 0 en 1 uur, een per seconde) past bij een Apps Script-trigger of een Make/Zapier-scenario op een ander Google-account.",
+   "soort_oorzaak": "bron",
+   "oplossing": "Het kleurherstel (agenda_wacht.py --kleuren) draait elk uur om :20, ook 's nachts en in het weekend, kijkt 29 dagen vooruit en zet alleen de kleuren terug; elke keer staat in mijnagents-data/agenda-kleurherstel.json. De zelfcontrole meldt zolang het gebeurt (kleur_nacht). De bron uitzetten is aan Mehdi: script.google.com/home/triggers en myaccount.google.com/connections nakijken op de accounts met schrijfrecht op de werkagenda.",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
-    "tekst": "de zelfcontrole ziet een handkleur als vraag"
+    "tekst": "de kleuren worden elk uur vier weken vooruit teruggezet, ook in het weekend"
    },
-   "controle": [],
-   "status": "open"
+   "controle": [
+    "kleur_nacht"
+   ],
+   "status": "bewaakt",
+   "bijgewerkt": "26-09-2026"
   },
   {
    "id": "FR-22",
