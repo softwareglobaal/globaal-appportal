@@ -287,7 +287,13 @@ def dashboard(register, tijdlijn, lijst, onbekend, vandaag, vz=None):
                            km_per_dag=extra.get("km_per_dag"), termijnen=sorted(termijn_per.get(v["plaat"], []), key=lambda t: (t["dagen"] is None, t["dagen"] or 0)),
                            onderhoud=onderhoud, post=post[:60], laatste_km=km[-1] if km else None,
                            te_klasseren=sum(1 for e in post if not e.get("geklasseerd"))))
-    return {"gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"), "vandaag": vandaag.isoformat(),
+    # Wat op meer dan een wagen terugkomt (bv. de aandrijfas op beide Transits): over het hele wagenpark.
+    vloot = {}
+    for plaat, b in blik.items():
+        for o, n in (b.get("herstellingen") or {}).items():
+            vloot.setdefault(o, {})[plaat] = n
+    vloot = {o: p for o, p in vloot.items() if len(p) >= 2 or sum(p.values()) >= 2}
+    return {"gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"), "vandaag": vandaag.isoformat(), "vaak_wagenpark": vloot,
             "wagens": wagens, "niet_toegewezen": sorted(per.get("", []), key=lambda e: e["datum"], reverse=True)[:40],
             "mappen_standaard": register.get("submappen_standaard", [])}
 
@@ -336,13 +342,15 @@ def vooruitblik(register, vandaag):
             dagen = (date.fromisoformat(km[-1]["datum"][:10]) - date.fromisoformat(km[0]["datum"][:10])).days
             if dagen > 60:
                 per_dag = (km[-1]["km"] - km[0]["km"]) / dagen
-        blik, vaak = [], {}
+        blik, vaak, herst = [], {}, {}
         for r in regels["onderdelen"]:
             gedaan = []
             for o in v.get("onderhoud") or []:
                 if any(any(w in tekst.lower() for w in r["woorden"]) for tekst, _ in _werken(o)):
                     gedaan.append(o)
             if r.get("alleen_bij_klacht"):
+                if gedaan:
+                    herst[r["onderdeel"]] = len(gedaan)
                 if len(gedaan) >= 2:
                     vaak[r["onderdeel"]] = len(gedaan)
                 continue
@@ -378,7 +386,8 @@ def vooruitblik(register, vandaag):
                          "kost_eigen_facturen": round(sum(kost) / len(kost)) if kost else None, "groot": r.get("groot", False)})
             if len([o for o in gedaan if o.get("soort") == "herstelling"]) >= 2:
                 vaak[r["onderdeel"]] = len(gedaan)
-        uit[v["plaat"]] = {"vooruitblik": sorted(blik, key=lambda b: b["dagen"]), "vaak": vaak, "km_per_dag": round(per_dag) if per_dag else None}
+        uit[v["plaat"]] = {"vooruitblik": sorted(blik, key=lambda b: b["dagen"]), "vaak": vaak, "herstellingen": herst,
+                           "km_per_dag": round(per_dag) if per_dag else None}
     return uit
 
 
