@@ -1,6 +1,6 @@
 # Werkwijze van De Mailwacht hotmail
 
-Versie 1.2 (26-09-2026). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
+Versie 1.3 (26-09-2026; 1.2 dezelfde nacht). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
 zodat elke agent apart kan toezien en de belangrijke e-mails kan opvolgen, zodat het niet allemaal bij mij komt en
 ik niet alles moet onthouden. Geen spam, geen rommelinformatie." En op 26-09-2026: "ik wil een overzicht hebben
 zodat we het aantal mails onder controle krijgen, en ik wil de mails opschonen, er is te veel rommel en ruis."
@@ -45,6 +45,10 @@ De regels staan voor alle mailwachten op een plek: koppelingen/postvak.py en wer
 regel die voor mij verandert, verandert voor elke mailwacht. Er zijn er vijf, elk met een eigen postvak, op
 beslissing van Mehdi van 25 en 26-09-2026: info@h-architects.be, info@h-invest.be, mch@h-architects.be,
 mehdichegini@hotmail.com en melodiebvba@gmail.com.
+
+## Sorteren
+
+Hotmail sorteer ik niet: de server kan niet in hotmail schrijven (Microsoft laat geen wachtwoord-login toe). Opruimen gebeurt daar met regels in Outlook zelf; dat beslist Mehdi.
 
 ## Wat ik nooit doe
 

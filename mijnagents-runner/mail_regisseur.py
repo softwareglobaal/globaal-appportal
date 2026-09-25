@@ -19,6 +19,7 @@ Ik lees geen mail zelf, verstuur niets en beantwoord niets.
 """
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -123,6 +124,18 @@ def main():
         items = [{"voor": "regisseur", "soort": "verslag", "sleutel": vandaag, "titel": f"Mail {vandaag} {m}: {samen}",
                   "uniek": f"mailregisseur:{vandaag}:{m}", "inhoud": tekst}]
         d = dringend(lijst)
+        # Dringend (postvak.DRINGEND: deurwaarder, ingebrekestelling, laatste aanmaning, schorsing, ...): De Bode laten
+        # bellen, een keer per bericht, op een van mijn momenten (werkdagen 08:00, 12:30, 17:00). Nooit het woord stil.
+        for i in (x for x in lijst if x.get("dringend")):
+            # een oproep per bericht (uniek op het item), dus nooit twee keer gebeld voor hetzelfde; De Bode bundelt
+            # wat tegelijk binnenkomt in een gesprek
+            items.append({"voor": "mehdi", "soort": "oproep", "sleutel": vandaag,
+                          "titel": re.sub("stil", "st.l", f"Dringende mail van {i.get('van_naam') or i.get('van')}: "
+                                                          f"{i.get('onderwerp', '')[:90]}", flags=re.I)[:280],
+                          "uniek": f"mailoproep:{i.get('id')}",
+                          "inhoud": f"{FIRMANAMEN.get(i['firma'], i['firma'])}, {i.get('postvak')}: {i.get('van_naam') or i.get('van')}, "
+                                    f"{i.get('onderwerp', '')[:140]} ({i.get('werkdagen_zonder_antwoord')} werkdagen zonder antwoord). "
+                                    "Staat op mijnagents.globaal.be/mail."})
         if m == MOMENTEN[0] and d:
             # Een bericht per dag, zonder aantal in de sleutel (N10), zonder het woord stil (AGENTNORM 6).
             items.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,

@@ -1,0 +1,180 @@
+[KOP]
+# Sorteerregels mch@h-architects.be, versie 1.0, 26-9-2026 (Claude, op vraag van Mehdi: "ruim op zoals info@h-invest,
+# laat elke door de toepasselijke agent doen en blijf het handhaven"). Basis: regels_hinvest.txt v1.1; toevoegingen in
+# toevoegingen_mch.txt; gemaakt met maak_regels.py. Handhaving: De Mailwacht mch@ (mail-mch) op de VM.
+#
+# Elke sectie [INBOX.Map] is een doelmap. Een regel per lijn:
+#   naam@domein.be   precies dit adres
+#   @domein.be       alleen dit domein, geen subdomeinen
+#   .domein.be       dit domein en alle subdomeinen
+# Voorrang: [oplichting] gaat voor alles; dan het exacte adres, dan @domein, dan .domein.
+# Wat nergens past blijft in INBOX; is het ouder dan [archief] dagen, dan gaat het naar het jaararchief.
+# Niets wordt verwijderd of als gelezen gemarkeerd. Terugzetten kan altijd met de hand in de webmail.
+#
+# mch@ is het werkadres van Mehdi (ook Angela leest mee). In INBOX blijft (bewust geen regel): mensen die schrijven,
+# de KBC-adviseurs (Coeckelberghs, Vleugels, Van Hest), advocaat (legaloffice.be), notarissen (belnot.be), boekhouder
+# (Din Consulting, AB Partners, Loic Creation), collega's (h-architects.be, globaal.be met om@, tkn-buro.be, unabo.be,
+# hdssr.com), overheid (minfin, economie.fgov.be, vlaanderen.be, RSZ, stad Antwerpen), deurwaarders (GDW De Alliantie),
+# makelaars en vastgoed (Vastgoed Chase, ERA De Kern, Immo Robert, Werner Immo), apotheek en artsen, Tesla,
+# ondertekenverzoeken (Adobe Sign) en de beveiligingsmeldingen van Flying Blue (flyingbluecrm@).
+# Nieuwe mappen die info@h-invest niet heeft: Scans (de printers), Reizen (vluchten, taxi), Nieuwsbrieven
+# (vakinhoudelijk, zoals NAV: niet uitschrijven zonder ja van Mehdi, 4-9-2026).
+[/KOP]
+
+[SAMEN]
+INBOX.Bpost -> INBOX.Bestellingen
+INBOX.Octopus -> INBOX.Boekhouding
+
+[WEG]
+INBOX.Maes
+INBOX.Lading Vertraco
+
+[EIGEN]
+energie-efficient.be, elevaitnv.com, contrax.be, zidiconstruct.be
+
+[INBOX.Anthropic]
+# bestaande map
+@email.anthropic.com
+.mail.anthropic.com
+@email.claude.com
+
+[INBOX.Qoppa sluiting]
+# bestaande map
+@qoppa.be
+
+[INBOX.ORDE]
+# bestaande map
+.ordevanarchitecten.be
+
+[INBOX.Scans]
+# nieuw: scans van de printers (KM_C250i, KM_C258), ook doorgestuurd
+scannerbizhubc250i@gmail.com
+scan@harmoniebouw.be
+
+[INBOX.Reizen]
+# nieuw: vluchten, boekingen, check-in, bagage, taxi; de wacht leest deze map mee (vertraging, betaling)
+flight-compensation@cheaptickets.be
+@t.cheaptickets.nl
+@t.cheaptickets.be
+airfrance-klm@service-flyingblue.com
+.klm-info.com
+.infos-klm.com
+.connect-passengers.com
+@amadeus.com
+@doc.mail.amadeus.com
+.klm.com
+.klm-mail.com
+@flyslm.com
+@airhelp.com
+.brusselsairlines.com
+@uber.com
+@bagrepat.aero
+
+[INBOX.Nieuwsbrieven]
+# nieuw: vakinhoudelijke nieuwsbrieven; bewust niet uitgeschreven
+communication@easypay-group.com
+@devijfdegevel.be
+@comm.mobilit.fgov.be
+info@nav.be
+nieuws@nav.be
+@learn.mail.monday.com
+@quadient-impress.eu
+
+[INBOX.Bank en verzekering]
+noreply@paypal.com
+info.admin.kbc@kbc.be
+internet@kbc.be
+@communications.paypal.com
+@paypal.be
+
+[INBOX.Boekhouding]
+sse-boekhouding@easypay-group.com
+@campaign.eranova.fgov.be
+@vastgoedexperts.com
+
+[INBOX.Bestellingen]
+@dropon.info
+@wyze.com
+
+[INBOX.Accounts en abonnementen]
+@support.whatsapp.com
+@x.ai
+@elevenlabs.io
+@accounts.logi.com
+@ngrok.com
+@cursor.sh
+@emails.mistral.ai
+@twilio.zendesk.com
+@agentmail.to
+@tm.openai.com
+@tm1.openai.com
+billing@desktime.com
+noreply@desktime.com
+@costalerts.amazonaws.com
+@google.com
+@csam.be
+@substack.com
+@teamleader.eu
+@twilio.com
+@slack.com
+@immersed.com
+@teltonika-networks.com
+@legalfly.com
+.facebookmail.com
+@pantasign.digital
+@mail.perplexity.ai
+@console.agentmail.to
+@nicehash.com
+@hover.to
+@prodigisign.org
+@discord.com
+@wetransfer.com
+
+[INBOX.Opgeruimd]
+# reclame, nieuwsbrieven zonder vakinhoud, koude acquisitie, het bombardement van 13-7-2026, en oplichting
+@mar.medallia.com
+@surveys-instantsurvey.com
+@era.be
+@erabelgium.be
+@thesolarlab.com
+@onidmail.be
+@navvis.com
+@send.calendly.com
+@newsletter.life360.com
+@email.easypay-group.com
+@provideremail.uhc.com
+b2b.mkt@holafly.com
+@billit.eu
+@b2buildacademy.be
+@mail.zuru.com
+# het bombardement van 13-7-2026: verificatiecodes van diensten waar Mehdi nooit voor koos
+@bluemercury.com
+@first.org
+@circlesquarediamond.com
+@dealsourcr.com
+@utc.dji.com
+@member-notifications.com
+@scewebservices.com
+@menu.app
+@mail.remind.com
+@notice.aliexpress.com
+@email.openai.com
+success@desktime.com
+.sbm.be
+@team.twilio.com
+@livestormevents.com
+@newsletter.agentmail.to
+@e.cheaptickets.nl
+@e.cheaptickets.be
+@qemailserver.com
+news@vab.be
+@mail.cursor.com
+news@vandenbroele.be
+@team.holafly.com
+@insideapple.apple.com
+@messaging.metamail.com
+@email.wefashion.com
+@hello.wyze.com
+@anmgroup.be
+@ttphsnl.com
+.ipsos-online.com

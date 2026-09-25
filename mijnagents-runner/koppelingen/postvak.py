@@ -30,7 +30,7 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta
-from email.utils import parseaddr
+from email.utils import parseaddr, parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -92,6 +92,11 @@ NIET_BEZORGD = re.compile(r"(undeliver|niet (be)?bezorgd|onbestelbaar|delivery (
 GRATIS = ("gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "live.com", "icloud.com")
 VERDACHTE_NAMEN = ["minfin", "fod financi", "belastingdienst", "kbc", "belfius", "ing ", "itsme", "politie", "bpost"]
 GESPREK = re.compile(r"^\s*(re|antw|aw|sv|fw|fwd|tr)\s*:", re.I)
+# Dringend: hiervoor mag De Mailregisseur De Bode vragen Mehdi te bellen (Mehdi, 26-09-2026: "voor de urgente zaken kan
+# de agent mijn andere agent vragen mij te bellen"). Alleen bij belangrijk zonder antwoord; bewust smal, anders is het ruis.
+DRINGEND = re.compile(r"(gerechts)?deurwaarder|ingebrekestelling|dagvaarding|\bbeslag|laatste (aanmaning|herinnering|verwittiging)|"
+                      r"tweede aanmaning|derde aanmaning|afsluiting|schorsing|tuchtprocedure|vonnis|mise en demeure|dernier rappel|"
+                      r"final notice|account (is )?(suspended|deactivated|gepauzeerd|paused)", re.I)
 
 
 def wachten():
@@ -102,6 +107,8 @@ def wachten():
 
 VERZONDEN = ("INBOX.Sent", "INBOX.Sent Messages", "INBOX.Sent Items", "Sent", "[Gmail]/Verzonden berichten", "[Gmail]/Sent Mail")
 DATA = os.path.expanduser("~/appportal/mijnagents-data")
+REGELMAP = os.path.join(RUNNER, "mailregels")   # sorteerregels per postvak; ook de Mac-tools lezen hier (26-9-2026)
+SORTEER_DAGEN = 3           # de nieuwe mail van zoveel dagen wordt elke ronde gesorteerd, zoals de ochtendtaak van 24-9
 BRON_VERS_UREN = 3          # een kopie van de Mac die ouder is dan dit, meld ik als niet vers
 
 
@@ -392,6 +399,7 @@ def ronde(naam, ag, r, nu=None, regels=None):
                           "inhoud": {"postvak": adres, "van": b.get("van"), "van_naam": b.get("van_naam"), "onderwerp": ond,
                                      "datum": d.isoformat(), "uid": b.get("uid"), "soort": soort, "waarom": waarom,
                                      "werkdagen_zonder_antwoord": wacht,
+                                     "dringend": bool(soort in ("hoog", "actie") and DRINGEND.search(f"{ond} {b.get('van_naam') or ''}")),
                                      "voorstel": {"actie": "nakijken en regelen (automatisch bericht, geen antwoord mogelijk)",
                                                   "hoog": "beantwoorden of regelen",  # het waarom staat er al naast
                                                   "midden": "beantwoorden of doorzetten naar wie het opvolgt"}[soort]}})
@@ -499,6 +507,89 @@ def opruimen(mb, wie):
     return [mid for _, mid in weg]
 
 
+def _sorteren():
+    """mailregels/sorteren.py: laad_regels, bestemming, imapnaam. Een bron voor de Mac en de VM."""
+    if REGELMAP not in sys.path:
+        sys.path.insert(0, REGELMAP)
+    import sorteren  # noqa: E402
+    return sorteren
+
+
+def sorteerregels_van(adres):
+    """Het regelbestand van dit postvak (mailwachten.json, 'sorteerregels'), of None."""
+    try:
+        naam = wachten().get("sorteerregels", {}).get(adres.lower())
+    except (OSError, ValueError):
+        return None
+    return os.path.join(REGELMAP, naam) if naam else None
+
+
+def gmailnaam(mb, mapnaam):
+    """INBOX.Bank en verzekering is op Gmail het label 'Bank en verzekering' (een punt wordt een schuine streep)."""
+    if "gmail" in (mb.get("imap_host") or "") and mapnaam.startswith("INBOX."):
+        return mapnaam[6:].replace(".", "/")
+    return mapnaam
+
+
+def sorteer(mb, regelpad, nu, dagen=SORTEER_DAGEN, doe=True):
+    """Past het regelbestand toe op de INBOX, zoals sorteren.py --sinds 3d --nieuwe-reclame --doe op de Mac: de nieuwe
+    mail van de laatste dagen, en wat in INBOX ouder is dan een jaar naar het jaararchief. Alleen UID MOVE: niets
+    verwijderd, niets als gelezen gemarkeerd. Alleen als de postbus dit postvak laat schrijven.
+    doe=False: alleen tonen wat er zou gebeuren (ook zonder schrijfrecht). dagen=None: de hele INBOX (eenmalig opruimen).
+    Geeft [(message_id, afzender, onderwerp, naar, reden)]."""
+    if not mb or mb.get("bron") or (doe and not mb.get("schrijven")) or not regelpad or not os.path.exists(regelpad):
+        return []
+    s = _sorteren()
+    regels = s.laad_regels(regelpad)
+    dagen_archief = regels["archief"]["dagen"]
+    grens = nu - timedelta(days=dagen_archief) if dagen_archief else None
+    _, imapbron = _postbus()
+    per_doel, uit = {}, []
+    with imapbron._Sessie(mb) as M:
+        (imapbron._selecteer_schrijfbaar if doe else imapbron._selecteer)(M, "INBOX")
+        sinds = (nu - timedelta(days=dagen)).date().isoformat() if dagen else None
+        uids = set(imapbron.zoek_uids(M, imapbron._criteria(None, None, None, None, sinds, None, False)))
+        if grens:
+            uids |= set(imapbron.zoek_uids(M, imapbron._criteria(None, None, None, None, None, grens.date().isoformat(), False)))
+        uids = sorted(uids)
+        for i in range(0, len(uids), 200):
+            ok, data = M.uid("FETCH", ",".join(str(u) for u in uids[i:i + 200]),
+                             "(UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE LIST-UNSUBSCRIBE MESSAGE-ID)])")
+            for el in data or []:
+                if not isinstance(el, tuple):
+                    continue
+                m = re.search(rb"UID (\d+)", el[0] or b"")
+                if not m:
+                    continue
+                kop = email.message_from_bytes(el[1] or b"")
+                naam, adres = parseaddr(imapbron._kop(kop.get("From")))
+                try:
+                    datum = parsedate_to_datetime(kop.get("Date"))
+                    datum = datum if datum.tzinfo else datum.replace(tzinfo=BRUSSEL)
+                except Exception:  # noqa: BLE001
+                    datum = None
+                rij = {"addr": adres.lower(), "name": naam, "subject": imapbron._kop(kop.get("Subject"))[:120],
+                       "datum": datum, "unsub": bool(kop.get("List-Unsubscribe"))}
+                doel, reden = s.bestemming(rij, regels, True, grens)
+                if doel:
+                    doel = gmailnaam(mb, doel)
+                    per_doel.setdefault(doel, []).append(m.group(1).decode())
+                    uit.append((imapbron._kop(kop.get("Message-ID")) or m.group(1).decode(), adres.lower(), rij["subject"], doel, reden))
+        if per_doel and doe:
+            if "MOVE" not in imapbron.capabilities(M):
+                raise ValueError("deze mailserver kan niet verplaatsen (geen MOVE)")
+            bestaand = {n.lower() for _, n in imapbron._lijst_mappen(M)}
+            for doel, lijst in per_doel.items():
+                if doel.lower() not in bestaand:
+                    M.create(s.imapnaam(doel))
+                    M.subscribe(s.imapnaam(doel))
+                for i in range(0, len(lijst), 100):
+                    ok, gegevens = M.uid("MOVE", ",".join(lijst[i:i + 100]), s.imapnaam(doel))
+                    if ok != "OK":
+                        raise ValueError(f"verplaatsen naar {doel} mislukt: " + imapbron._leesbaar(gegevens))
+    return uit
+
+
 def aan_de_beurt(nu=None):
     """Cadans van de mailwachten: elk uur tussen 07:00 en 21:00 Brusselse tijd."""
     nu = nu or datetime.now(BRUSSEL)
@@ -532,8 +623,31 @@ def werk(naam, ag, r):
                 except Exception as e:  # noqa: BLE001
                     ag.log("opruimen", "fout", f"{adres} {wie}: {type(e).__name__}: {str(e)[:120]}")
     tel["opgeruimd"] = len(opgeruimd)
+    # De sorteerregels van het postvak (mailregels/regels_<alias>.txt), elke ronde op de nieuwe mail: Mehdi, 26-9-2026:
+    # "laat elke door de toepasselijke agent doen en dat we deze ook in de toekomst blijven handhaven".
+    verplaatst, gesorteerd = [], []
+    for adres in cfg["postvakken"]:
+        mb = postvak(adres)
+        pad = sorteerregels_van(adres)
+        if not pad or not mb or mb.get("bron"):
+            continue
+        if not mb.get("schrijven"):
+            r.nood(f"{adres} heeft sorteerregels, maar de postbus laat dit postvak niet schrijven", wie="mehdi")
+            continue
+        r.bron(os.path.basename(pad), open(pad, encoding="utf-8").read())
+        try:
+            for mid, van, ond, naar, reden in sorteer(mb, pad, nu):
+                gesorteerd.append(f"{van} | {ond[:70]} -> {naar} ({reden})")
+                verplaatst.append({"uniek": f"{adres}:{mid}", "naar": naar})
+        except Exception as e:  # noqa: BLE001
+            r.nood(f"Sorteren van {adres} lukte niet", wie="claude-code")
+            ag.log("sorteren", "fout", f"{adres}: {type(e).__name__}: {str(e)[:160]}")
+    tel["gesorteerd"] = len(gesorteerd)
+    if gesorteerd:
+        ag.log(f"dag {nu.date().isoformat()}", "sorteren", f"{len(gesorteerd)} berichten uit de INBOX gesorteerd", "\n".join(gesorteerd))
     try:
-        bord.call("/api/mail", {"wacht": naam, "rijen": alle, "opgeruimd": opgeruimd, "postvakken": postvakken})
+        bord.call("/api/mail", {"wacht": naam, "rijen": alle, "opgeruimd": opgeruimd, "postvakken": postvakken,
+                                "verplaatst": verplaatst})
     except Exception as e:  # noqa: BLE001
         r.nood("Het maildashboard kreeg de berichten van deze ronde niet", wie="claude-code")
         ag.log("dashboard", "schrijf", f"/api/mail: {type(e).__name__}: {str(e)[:120]}")
@@ -550,6 +664,6 @@ def werk(naam, ag, r):
             ag.log("gesprekken", "schrijf", f"gesprekkentabel niet bijgewerkt: {type(e).__name__}")
     r.detail = (f"laatste 24 u: hoog {tel['hoog']}, gewoon {tel['midden']}, actie {tel['actie']}, meldingen {tel['melding']}, "
                 f"koud {tel['koud']}, rommel {tel['rommel']}, verdacht {tel['verdacht']}; op de lijst van de "
-                f"Mailregisseur: {tel['open']} (nieuw {uit.get('nieuw', 0)}); opgeruimd {tel['opgeruimd']}")
+                f"Mailregisseur: {tel['open']} (nieuw {uit.get('nieuw', 0)}); gesorteerd {tel['gesorteerd']}, opgeruimd {tel['opgeruimd']}")
     ag.log(f"dag {nu.date().isoformat()}", "ronde", r.detail,
            "\n".join(f"{i['inhoud']['datum'][:16]} {i['inhoud']['soort']} {i['titel']}" for i in items[:80]))

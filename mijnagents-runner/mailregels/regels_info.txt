@@ -1,0 +1,726 @@
+# Sorteerregels info@h-architects.be, versie 1.1, 26-9-2026 (v1.1: de bestaande mappen BOEKHOUDING, BOEKHOUDING.E-Box, BOEKHOUDING.TELENET en ARCO in plaats van nieuwe) (Claude, op vraag van Mehdi: "ruim op zoals info@h-invest,
+# laat elke door de toepasselijke agent doen en blijf het handhaven"). Basis: regels_hinvest.txt v1.0; toevoegingen in
+# toevoegingen_info.txt; gemaakt met maak_regels.py. Handhaving: De Mailwacht info@ H-Architects (mail-info-harc) op de VM.
+#
+# Elke sectie [INBOX.Map] is een doelmap. Een regel per lijn:
+#   naam@domein.be   precies dit adres
+#   @domein.be       alleen dit domein, geen subdomeinen
+#   .domein.be       dit domein en alle subdomeinen
+# Voorrang: [oplichting] gaat voor alles; dan het exacte adres, dan @domein, dan .domein.
+# Wat nergens past blijft in INBOX; is het ouder dan [archief] dagen, dan gaat het naar het jaararchief.
+# Niets wordt verwijderd of als gelezen gemarkeerd. Terugzetten kan altijd met de hand in de webmail.
+#
+# Wie in INBOX hoort (bewust geen regel): mensen die schrijven (klanten, ook via gmail, hotmail, telenet, skynet),
+# collega's (h-architects.be, unabo.be, harmoniebouw.be, globaal.be), studiebureaus en adviseurs (Luc Van de Wiel,
+# Van Craen, Nitra, MijnEPB, SafetySnapper-verslagen, Impact, SB-V), notaris, overheid (vlaanderen.be, RSZ),
+# incasso en deurwaarders (GDW De Wilde, Alert Services, Legal Recovery), en wat Mehdi bewust behield op 8-9-2026:
+# BMP, UNIZO, Embuild, Wienerberger, PMG, Phoenix, Ceiso, Eco Heating, NAV.
+
+[INBOX.Bestellingen]
+# webshops: bestelling, verzending, levering en de factuur van de shop
+@bol.com
+@verkopen.bol.com
+@partnerklantenservice.bol.com
+@coolblue.be
+@edm.postnl.nl
+@edm.postnl.be
+.dhl.com
+@dhlparcel.nl
+@dhl.de
+@dhlecommerce.nl
+@ups.com
+.dpd.be
+@dpd.nl
+.dpdgroup.com
+@goparcel.nl
+@sendcloud.com
+@gls-group.eu
+@gls-netherlands.com
+@trakpak.co.uk
+@myparcel.nl
+@trans-mission.nl
+@parcelplaza.com
+@mediamarkt.be
+@mediamarkt.nl
+@media-saturn.com
+@megekko.nl
+@thesolutionshop.nl
+.plaud.ai
+@vify.io
+@patrickshop.nl
+@allekabels.nl
+@allekabels.be
+@dectdirect.nl
+.shopifyemail.com
+@shop.app
+@email.shop.app
+@inktweb.nl
+.kamera-express.be
+.kamera-express.nl
+@123-3d.nl
+@alternate.nl
+@alternate.be
+@conrad.be
+@conrad.nl
+@eccellente.nl
+@eccellente.be
+@rammount.com
+@hellowe.eu
+@kaffek.be
+@kaffekapslen.nl
+@urbanarmorgear.com
+@mail.swiship.com
+@kabeldirect.nl
+@fotolooman.nl
+.17track.net
+@123inkt.be
+@rubbermagazijn.nl
+@rubbermagazijn.be
+@picqerapp.com
+@kabelshop.nl
+@sodealstore.nl
+@tidioreply.com
+@tvvloerstandaardshop.nl
+@pinegroup.nl
+@destofzuigerzak.nl
+@hoesjesdirect.nl
+@krefel.be
+@dekzeilenshop.be
+@metaltis.com
+@cameranu.nl
+@orders.apple.com
+@email.apple.com
+@fixje.nl
+@risolutions.eu
+@brico.be
+@info.brico.be
+@telefoonshop.net
+.galaxus.be
+@galaxus.nl
+@offgridpowerstation.com
+@aura-displays.com
+@mojogear.eu
+@groupeseb.com
+@eetgroup.nl
+@mifi-hotspot.nl
+@gomibo.be
+@cubic-colors.be
+@cubic-colors.com
+@deurbeslag.nl
+@tobikes.be
+@giantstore-tobikes.be
+@spanbanden.nl
+@online.vikingdirect.be
+@be.vikingoffice.eu
+@shop.logitech.com
+@zipmend.com
+@multisafepay.com
+@ikea.com
+@automail.action.com
+@amazon.com.be
+@macvoorminder.nl
+@onedirect.be
+@discountoffice.be
+@flsparcel-verzendwinkel.be
+@vdslogistiek.nl
+@dockx.be
+@dockx-rental.be
+@exact.com
+@telecomsupplier.com
+@notice.alibaba.com
+@hako.be
+@azerty.nl
+# (uit INBOX.Bpost)
+.bpost.be
+@bpost.cloud
+# toegevoegd voor deze mailbox
+@post.vlav.be
+
+[INBOX.Veilingen]
+.troostwijkauctions.com
+@auctim.com
+.bca.com
+@auctionlogistics.nl
+@auctionport.be
+@tbauctions.com
+@chrvermeer.nl
+@getequipment.eu
+@proplusauctions.be
+@clicpublic.be
+.pickthisup.com
+.pickthisup.nl
+.vavato.com
+@nextupsoftware.com
+@openbare-verkopen.be
+@stripe.com
+
+[INBOX.Bank en verzekering]
+# automatische berichten van bank, verzekeraar en incasso; de adviseurs zelf blijven in INBOX
+@mail-kbc.be
+.ethias.be
+@revolut.com
+.qonto.com
+@qonto9015-be.zendesk.com
+@update.bunq.com
+@bunq.com
+@intrum.be
+@alektumgroup.com
+@cmadvice.be
+.pandadoc.net
+@email.getpandadoc.com
+@docusign.net
+# toegevoegd voor deze mailbox
+@services.axa.be
+noreply@axa.be
+.grenke.be
+.grenke.com
+@customerportal.grenke.com
+
+[INBOX.Accounts en abonnementen]
+# hosting, software, accounts, beveiligingsmeldingen van echte diensten
+@ascio.com
+@telenetgroup.be
+@one.com
+@nl.one.com
+notify@mail.notion.so
+billing@mail.notion.so
+@pipedrivebilling.com
+@pipedrive.com
+.microsoft.com
+@accounts.google.com
+@id.apple.com
+@ebay.com
+@info.ebay.be
+@bitwarden.com
+.talentlms.com
+@talentlms.zendesk.com
+support@manatal.com
+sawyan.n@manatal.com
+@kobo.com
+@rakutenkobo.zendesk.com
+@kobosupport.com
+@leica-geosystems.com
+@cyclone-cloud.com
+@calendly.zendesk.com
+@calendly.com
+@p.monday.com
+@monday.com
+@dnsbelgium.be
+@account.temu.com
+@2dehands.be
+@marktplaats.nl
+@amazon.com
+@mail.binance.com
+@buildwise.be
+@rexel.be
+@justonweb.be
+@hilti.com
+# toegevoegd voor deze mailbox
+invoices@4411.be
+noreply@4411.be
+@1stline.zendesk.com
+@wati.io
+@vectorworks.net
+@designexpress.eu
+.facebookmail.com
+@developers.facebook.com
+@support.facebook.com
+noreply@google.com
+@wetransfer.com
+@archisnapper.com
+@archisnapper---safetysnapper.intercom-mail.com
+@deltek.com
+@sender.zohoinvoice.com
+@transactional.tomtom.com
+@communications.paypal.com
+@vdbconnect.be
+@its-printer.com
+@e.godaddy.com
+@mail.anthropic.com
+@emails.avast.com
+no-reply@ecoheating.be
+
+[INBOX.Zoom]
+.zoom.us
+
+[INBOX.Opgeruimd]
+# reclame zonder mens erachter, enquêtes, koude acquisitie, en oplichting (zie ook [oplichting])
+@zakelijklenen.nl
+@standaardboekhandel.be
+.alibaba.com
+@tuincentrumthiels.be
+@combifit.be
+@combifit.nl
+@vostools.be
+@loeters.be
+@machineryinkoop.nl
+@penworld.be
+@lecot.be
+@stonecenter-shop.nl
+@astropad.com
+@wikitech.be
+@mp-sanit.be
+@minderadministratie.be
+@news.otto-office.com
+@weegree.com
+@weegree.eu
+@layher.news
+@b-motors.be
+@uptodatewebdesign.com
+@kaffekapslen.be
+@kaffekapslen.ie
+@krachtigonline.be
+@techlink.be
+@ltf.be
+@levix.nl
+@levixmailing.nl
+@printhings.be
+@bouwplanafdruk.be
+@grossbelgium.be
+@belgium-gross.be
+@ventureproperties.be
+@sg.booking.com
+@netwerkkabel.eu
+.mailchimpapp.com
+.t-sender-sib.com
+@telecomhunter.nl
+@trustedshops.com
+@trustpilotmail.com
+@trendstopmail.be
+@mail.trends.be
+@mediv-nieuws.be
+@epignosishq.com
+@noreplyfinancexplained.com
+@amg-magazines.be
+@eco-mobiel.be
+@betatraining.eu
+@merak.be
+@email.marktplaats.nl
+@jacketfils.com
+@fonduehuis-leuven.be
+@fonduehuis-sinttruiden.be
+@ecogiving.nl
+@diasen.com
+@eu.creditformerchants.com
+@profshop.be
+@profipack.nl
+@proximus.be
+@mykmo.eu
+@craneww.com
+@coolblue.nl
+@feedback.coolblue.eu
+@feedback.bol.com
+@e.cameranu.nl
+@kiyoh.com
+@feeddex.nl
+@5sterrenspecialist.nl
+@krefel-mail.be
+@veiligheids-sloten.nl
+@markteffectmail.nl
+@markteffect.postnl.be
+.privault.rpip.nl
+@surveys.assaabloy.com
+@feedback.zoom.com
+@ipsos-online.com
+@monarch-cleanair.com
+@text-it.be
+@by.emailr.com
+@keyware.be
+@keyware.com
+@idcreationnews.be
+@metacoat.be
+@risperoutbound.com
+@risperleads.com
+@athospersoneelsdiensten.eu
+@synergiejobs.be
+@sv-trucks.de
+@occacamion.com
+@locoheim.de
+@ssc-trucks.com
+@ss-consult.de
+@sns-consult.com
+@camionexport.eu
+@mvi66.de
+@zimmerei-baumhauer.de
+.pascal-motors.be
+@autobedrijffbr.be
+@labelspeed.com
+@lichtweelde.be
+@exclusief.be
+@shoeboxdesign.be
+@boldtdigital.com
+@sprintis.nl
+@sprintis.e-mailnews.de
+@paesentrucks.be
+@socialmediaagency.be
+@tglpeeters.be
+@finforward.be
+@stedelijkegids.com
+@deondernemersgids.com
+@goudengids.be
+@productpine.com
+@cityreports.be
+@effixgroup.be
+@remondis-newsletter.de
+@worldline.com
+@vivendi-outsourcing.be
+@headmind4sme.com
+@deschacht.eu
+@tapasandwine.be
+@drive2impress.be
+@gevelgasten.nl
+@eurotopconcept.be
+@043web.nl
+@spangenberggroep.nl
+@webhive.be
+@vergelijk-betaalterminals.be
+@rothenberger.com
+@meestersbouw.be
+@starofservice.com
+@copaco.com
+@m1glio.com
+@letsconnect.be
+@sib.kapateco.be
+@werkmannen.nu
+@alcosafe.be
+@digi.hosting
+@bouwsoft.com
+@mesoworks.com
+@idrbenelux.com
+@idrsolutions.com
+@swiftict.be
+@renoxperts.be
+@la-street.be
+@mail.360-businessview.com
+@wolterskluwer.com
+@eurosender.io
+@euro-sender.com
+@eurosender.app
+@spbrands.nl
+@kenyaforum.net
+@woodgrangeshutters.co.uk
+@wearecoolbox.staging.net.au
+@3code.us
+@aka.cl
+@plyfoam.mu
+@envisionalerts.com
+@kuleuven.be
+@geodynamics.be
+@claeskensnv.be
+@clymans.be
+@clymans-willebroek.be
+@vanmarcke.com
+tips@one.com
+@news.one.com
+ivan@mail.notion.so
+team@mail.notion.so
+contact@manatal.com
+@reply.ebay.be
+@nuwelcome.ebay.com
+@business.amazon.com
+@news.conrad.be
+hi@eccellente.nl
+hello@aura-displays.com
+@kingsberry.be
+.syntra-ab.be
+@ectect.be
+@send.impermo.be
+@hubspotemail.net
+@innomedio.be
+# oplichting op vaste domeinen (nooit op klikken, nooit op antwoorden)
+@alumnos.uady.mx
+@youthbd.com
+@bauru.sp.gov.br
+@umw.edu.pl
+@inspe-paris.fr
+@saber.games
+@entremail.se
+@parachute.network
+@monification.com
+@pronabec.edu.pe
+@24kupi.com
+@clicandwalk.com
+@lingbe.com
+@wallet-tx.blockchain.com
+@acerta.iboardup.com
+@huboonline.be
+@euroffice.it
+@diversif.com.mx
+@pluta-recht.de
+@noerr-recht.de
+@sixtcarssales.de
+@thoughtandstyle.com
+@betaseries.com
+@pienissimo.net
+@vammarcke.be
+@confortluxe.com
+.algodata.fr
+commercialinfo12@gmail.com
+europraca12@gmail.com
+autosimon5555@gmail.com
+automaxim2005@gmail.com
+md.cars43@gmail.com
+@impacct.info
+@surveymonkeyuser.com
+@mdbosslandscaping.com
+@stud.uz.zgora.pl
+@foodchow.com
+@allgoodgoddess.com
+@restorationofhopeinitiative.org
+@bertolipropiedades.cl
+@harborbanksharescorp.com
+@gardenroutegetaways.co.za
+@partnerships-theroyalroost.com
+@mydoseapp.com
+@multitake.bettersolution.gr
+@venomspharma.com
+@splnleap.com
+@spacewln.com
+@sankyo-shodoku.jp
+@fgov.xavih.com
+@hilcoglobal.com
+@auroracl.com
+@xogrup.com
+@ing-client.be
+@arabianhillsestate.com
+@hkctop.com
+@accurdigitus.com
+@hetnet.nl
+@mamnasi.shop
+@decktetapi.com
+@klant.itsme-update.be
+@whm.bizlawyer.ro
+@actboldstaging.com
+@belgische-overheid81.com
+@bcc.com
+@hmtrackreal.com
+@mail.o.medna.us
+@christel1jke-mutualiteit.be
+@cm-ziekenfondsen0.be
+@larueda.com.co
+@iep.rs
+@bhuonline.in
+@mail.sunkonnect.in
+@kaushalbharat.gov.in
+@payments.vjvtech.com
+@luzasol.com.br
+@sibnia.ru
+@primehome.com
+@hairexpert.net
+@intelligentedu.tech
+@minetxc.com
+@tribalize.ai
+@homepay.sg
+@conqyp.com
+@local.verticalknits.com
+@update-pro.be
+@amedsys.com
+@asl-one.com
+@eshop-one.com
+@nodo50.org
+@chl.com.co
+@support.be
+@bpost.com.ar
+@mg.crefirm.com
+@opleidingvinden.eu
+@geoset.kz
+@istitutovenere.it
+@mg.darkmatter.io
+@intellishare.ai
+@fod.mymin.fin.be
+# toegevoegd voor deze mailbox
+# reclame, koude acquisitie, nieuwsbrieven zonder mens, en oplichting (nooit op een link klikken)
+@vlassakverhulst.be
+@hello.4411.be
+communication@arcoinsurance.be
+@survey.telenet.be
+news@vandenbroele.be
+.multimail.be
+@architecte-agent-immobilier.com
+@archi-et-immo.eu
+@archi-immo.eu
+@aanvrager.trustlocal.be
+@trustlocal.be
+@wooniot.nl
+@inforegio.be
+@mailrelayb-n.fediap.be
+@gottlieb-group.be
+@aliuminiumsystems.com
+@natashacheng.com
+@kubiqs.com
+@ginterieur.be
+@quincalux.com
+@cloudgroup.be
+@easyhomebv.be
+@renoa.be
+@home-lift.be
+@ontdekplanion.be
+@greenfix.be
+@harmonyai.nl
+@abmadvies.be
+@igenia.be
+@papillons-srl.be
+@akhradigital.com
+@news.laredoute.be
+@recupel.be
+@biso.be
+@bimregister.nl
+@mailing.biokamino.com
+@bruneau.be
+@mega.be
+@unizoleuven360.be
+# oplichting en domeinnaam-oplichting (echte verlenging komt van one.com)
+@patelwealth.com
+@mis.gilaniultrasound.com
+@bravodebut.net
+@foreverweb.net
+@send2sell.com
+@securenettech.com
+@serhtani.from-hi.com
+@the-cloud-one.com
+@tempo-one.com
+
+[INBOX.BOEKHOUDING]
+# (uit INBOX.Octopus)
+@octopus.be
+# (uit INBOX.Boekhouding)
+.fidiaz.be
+@vanmarcke.be
+facturatie@h-architects.be
+boekhouding@h-invest.be
+.h-aannemingen.be
+@sdworx.com
+# toegevoegd voor deze mailbox
+# bestaande map (hoofdletters)
+no-reply@liantis.be
+info@liantis.be
+@invoicing.ecovis.be
+@drinksvcb.be
+@farys.be
+
+[INBOX.ORDE]
+# toegevoegd voor deze mailbox
+# bestaande map: de Orde van Architecten (bijdragen, raad Brabant)
+.ordevanarchitecten.be
+
+[INBOX.HDFC Bank]
+# toegevoegd voor deze mailbox
+# bestaande map: HDFC Bank, echte overschrijvingen van High Design Studio (behouden op 8-9-2026)
+.hdfcbank.com
+.hdfcbank.bank.in
+.hdfcbank.net
+.hdfc.bank.in
+
+[INBOX.dropbox]
+# toegevoegd voor deze mailbox
+# bestaande map: meldingen van het Dropbox-team; de wacht leest deze map mee (account gepauzeerd, betaling)
+@dropbox.com
+@txn.dropbox.com
+@notices.dropbox.com
+@dropbox.zendesk.com
+
+[INBOX.WERNER IMMO]
+# toegevoegd voor deze mailbox
+# bestaande map
+@wernerimmo.be
+
+[INBOX.BOEKHOUDING.E-Box]
+# toegevoegd voor deze mailbox
+# bestaande map: meldingen dat er een bericht in de e-Box van de sociale zekerheid staat; de wacht leest deze map mee
+e-box.noreply@socialsecurity.be
+
+[INBOX.Done.Promo.Toolmaster]
+# toegevoegd voor deze mailbox
+# bestaande map: Toolmaster (behouden op 8-9-2026, geen uitschrijving)
+@toolmaster.io
+
+[INBOX.ARCO]
+# toegevoegd voor deze mailbox
+# bestaande map: AR&CO, de verzekeringsmakelaar (aangiftes, schadedossiers); de wacht leest deze map mee
+@ar-co.be
+@arcoinsurance.be
+
+[INBOX.BOEKHOUDING.TELENET]
+# toegevoegd voor deze mailbox
+# bestaande map: facturen van Telenet Business
+@comm.telenet.be
+
+[oplichting]
+# eigen domeinen zijn nooit oplichting
+eigen = h-invest.be, h-aannemingen.be, h-architects.be, globaal.be, hdssr.com, harmoniebouw.be, unabo.be, tkn-buro.be, energie-efficient.be, elevaitnv.com, contrax.be, zidiconstruct.be
+CSAM = csam.be
+sdworx = sdworx.com, sdworx.be
+# Naam in het Van-veld bevat de merknaam, maar het domein hoort niet bij het merk: naar INBOX.Opgeruimd, gemeld als oplichting.
+# Vorm: merknaam = echt domein, echt domein
+KBO = kbo.be, economie.fgov.be, kbopub.economie.fgov.be
+Kruispunt = kbo.be, economie.fgov.be
+Argenta = argenta.be
+Аrɡеntа = argenta.be
+itsme = itsme.be, itsme-id.com
+itsmе = itsme.be
+Christelijke Mutua = cm.be
+CM Gezondheidsfond = cm.be
+CM Ondernemersserv = cm.be
+CM ziekteverzekeri = cm.be
+BECMTEAM = cm.be
+Solidaris = solidaris.be
+SD Worx = sdworx.com, sdworx.be
+SDiWORX = sdworx.com
+ṠD Worx = sdworx.com
+Bpost = bpost.be, bpost.cloud
+bpost = bpost.be, bpost.cloud
+Doccle = doccle.be
+ING = ing.be, ing.com
+BNP Paribas = bnpparibasfortis.be, bnpparibasfortis.com
+Easy Banking = bnpparibasfortis.be
+Telenet = telenet.be, telenetgroup.be
+Fluvius = fluvius.be
+CardStop = cardstop.be
+Cardstop = cardstop.be
+Card Stop = cardstop.be
+# ascio.com: de registrar waarlangs one.com domeinen verlengt (gelezen 26-9-2026: renewal highdesignstudio.in)
+one.com = one.com, ascio.com
+ｏｎｅ.ｃｏｍ = one.com, ascio.com
+Acerta = acerta.be
+Liantis = liantis.be
+VLAIO = vlaio.be
+ISABEL = isabel.eu, isabel.be
+MyPension = mypension.be
+Intervat = minfin.fgov.be, minfin.fed.be
+lntervat = minfin.fgov.be
+Myminfin = minfin.fgov.be, minfin.fed.be
+My MINFIN = minfin.fgov.be, minfin.fed.be
+FOD Myminfin = minfin.fgov.be, minfin.fed.be
+RSVZ = rsvz.be, rsvz-inasti.fgov.be
+Sociale Zekerheid = socialsecurity.be
+Xerius = xerius.be
+ENGIE = engie.be, engie.com
+Mondial relay = mondialrelay.be, mondialrelay.fr
+M-Relay = mondialrelay.be
+KBC = kbc.be, mail-kbc.be, verz.kbc.be, kbc.com
+Hubo = hubo.be
+Proximus = proximus.be, proximus.com
+DHL = dhl.com, dhl.de, dhlparcel.nl, dhlecommerce.nl
+PostNL = postnl.be, postnl.nl, edm.postnl.be, edm.postnl.nl, markteffect.postnl.be, privault.rpip.nl
+Coolblue = coolblue.be, coolblue.nl, coolblue.eu
+Microsoft = microsoft.com
+Apple = apple.com
+Google = google.com, gmail.com, googlemail.com
+Amazon = amazon.com, amazon.com.be, amazon.de, amazon.nl
+PayPal = paypal.com, paypal.be
+# 'Vlaanderen' alleen was te breed: echte bedrijven dragen het in hun naam (NAV, Netwerk Architecten Vlaanderen;
+# Asbestattesten Vlaanderen BV via eenvoudigfactureren.be). Wat zich als de overheid voordoet, blijft gevangen.
+Vlaamse overheid = vlaanderen.be
+Vlaanderen.be = vlaanderen.be
+Rijksdienst = socialsecurity.be, rsvz.be, rva.be, onprvp.fgov.be
+FOD Financ = minfin.fgov.be, minfin.fed.be
+LottoPay = geen
+Sociale = socialsecurity.be, cm.be, solidaris.be
+Exodus = exodus.com
+Binance = binance.com
+
+[archief]
+# alles wat in INBOX blijft en ouder is dan dit aantal dagen gaat naar het jaararchief
+dagen = 365
+map = INBOX.Archief.{jaar}
+

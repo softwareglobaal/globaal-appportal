@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.6, 25-09-2026 (N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.7, 26-09-2026 (een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -161,6 +161,13 @@ er wordt opgenomen, ook in de stille uren (`alarm = [... if "stil" in titel]` in
 `bode.py`). Gemeten op 20-09-2026: de eerste ronde van de Normwacht meldde "39
 uur stil" en belde Mehdi daarop op. Een agent die niet draait is geen alarm; dat
 heet nu "geen hartslag". Bellen blijft voor wat op een tijdstip moet gebeuren.
+
+**Wie Mehdi wil laten bellen, zet een oproep klaar**: een klaarzet-item met `soort: oproep` en `voor: mehdi`. De
+Bode belt dan meteen, van het vaste nummer (L17), en bundelt wat tegelijk binnenkomt in een gesprek. Geef elke oproep
+een eigen `uniek` per zaak, dan wordt Mehdi nooit twee keer voor hetzelfde gebeld. Sinds 26-09-2026 doet De
+Mailregisseur dit bij dringende mail zonder antwoord (deurwaarder, ingebrekestelling, laatste aanmaning, schorsing,
+tuchtprocedure; `postvak.DRINGEND`), op werkdagen om 08:00, 12:30 of 17:00. Nieuwe agents gebruiken dit, niet het
+woord "stil".
 
 Geef elk signaal een `uniek` zonder aantallen erin, om dezelfde reden als N10:
 anders komt hetzelfde bericht elke ronde opnieuw. De Normwacht gebruikt

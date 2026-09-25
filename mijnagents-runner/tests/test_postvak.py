@@ -155,6 +155,33 @@ def test_opruimen_raakt_alleen_de_juiste_afzender():
     assert postvak.opruimmap({"imap_host": "imap.one.com"}) == "INBOX.Opgeruimd"
 
 
+def test_dringend_is_smal():
+    """26-09-2026: bij dringende mail laat De Mailregisseur De Bode bellen. Alleen dit, anders wordt bellen ruis."""
+    d = postvak.DRINGEND.search
+    for ja in ("Ingebrekestelling dossier 46025", "Dossier 2601E6129 - Gerechtsdeurwaarders", "Laatste aanmaning factuur 12",
+               "Schorsing polis Kangoo", "Fwd: 28255 Mehdi Chegini / Orde van Architecten (tuchtprocedure 2)",
+               "Your team's Dropbox account is paused", "Contrat 154011294: Mise en demeure"):
+        assert d(ja), ja
+    for nee in ("Herinnering premiebetaling", "Factuur 2026-12", "Openstaande bijdragenota 2026", "Re: Offerte koppeling"):
+        assert not d(nee), nee
+
+
+def test_sorteren_door_de_wacht():
+    """26-09-2026: de wacht sorteert zijn postvak elke ronde volgens mailregels/regels_<alias>.txt."""
+    for adres in ("info@h-invest.be", "info@h-architects.be", "mch@h-architects.be", "melodiebvba@gmail.com"):
+        pad = postvak.sorteerregels_van(adres)
+        assert pad and os.path.exists(pad), adres
+    assert postvak.sorteer({"adres": "x@y.be", "schrijven": False}, postvak.sorteerregels_van("info@h-invest.be"),
+                           datetime.now(postvak.BRUSSEL)) == [], "zonder schrijfrecht verplaatst de wacht niets"
+    assert postvak.gmailnaam({"imap_host": "imap.gmail.com"}, "INBOX.Bank en verzekering") == "Bank en verzekering"
+    assert postvak.gmailnaam({"imap_host": "imap.gmail.com"}, "INBOX.Archief.2025") == "Archief/2025"
+    assert postvak.gmailnaam({"imap_host": "imap.one.com"}, "INBOX.Opgeruimd") == "INBOX.Opgeruimd"
+    bode = open(os.path.join(HIER, "bode.py"), encoding="utf-8").read()
+    assert '"oproep")' in bode and 'it["soort"] == "oproep"' in bode, "De Bode belt bij een oproep"
+    regisseur = open(os.path.join(HIER, "mail_regisseur.py"), encoding="utf-8").read()
+    assert '"soort": "oproep"' in regisseur and 'f"mailoproep:{i.get(\'id\')}"' in regisseur, "een oproep per bericht"
+
+
 def test_werkdagen_tellen_het_weekend_niet():
     vr = datetime.fromisoformat("2026-09-25T10:00:00+02:00")
     ma = datetime.fromisoformat("2026-09-28T10:00:00+02:00")

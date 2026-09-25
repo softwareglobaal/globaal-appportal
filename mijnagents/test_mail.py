@@ -95,6 +95,11 @@ c.post("/mail/regel", headers=BEHEER, data={"postvak": "mch@h-architects.be", "w
 check("ongedaan maken haalt de regel weg", c.get("/api/mailregels", headers=K).get_json()["regels"] == [])
 
 c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [], "opgeruimd": ["mch@h-architects.be:b"]})
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [], "verplaatst": [{"uniek": "mch@h-architects.be:d", "naar": "INBOX.Bestellingen"}]})
+with A.app.app_context():
+    check("wat de wacht sorteerde, krijgt zijn map",
+          A.db().execute("SELECT naar, opgeruimd FROM mailbericht WHERE uniek='mch@h-architects.be:d'").fetchone()[:] == ("INBOX.Bestellingen", 0))
+check("de tegel telt wat uit de inbox gesorteerd is", "Uit de inbox gesorteerd" in c.get("/mail?periode=7", headers=BEHEER).get_data(as_text=True))
 c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [bericht("b", "rommel", "promo@winkel.be")]})
 with A.app.app_context():
     check("opgeruimd blijft staan als de wacht het bericht later nog eens doorgeeft",

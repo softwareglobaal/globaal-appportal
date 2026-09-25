@@ -497,6 +497,8 @@ def _mail_tabellen(conn):
         CREATE TABLE IF NOT EXISTS mailpostvak (
             postvak TEXT PRIMARY KEY, wacht TEXT, schrijven INTEGER DEFAULT 0, ts TEXT);
     """)
+    if "naar" not in {r[1] for r in conn.execute("PRAGMA table_info(mailbericht)").fetchall()}:
+        conn.execute("ALTER TABLE mailbericht ADD COLUMN naar TEXT DEFAULT ''")  # waar de wacht het naartoe sorteerde
 
 
 @app.route("/api/mail", methods=["POST"])
@@ -528,6 +530,10 @@ def api_mail():
         n += 1
     for u in p.get("opgeruimd") or []:
         conn.execute("UPDATE mailbericht SET opgeruimd=1 WHERE uniek=?", (str(u)[:250],))
+    for v in p.get("verplaatst") or []:  # de sorteerregels van het postvak (mailregels/regels_<alias>.txt)
+        naar = str(v.get("naar") or "")[:120]
+        conn.execute("UPDATE mailbericht SET naar=?, opgeruimd=CASE WHEN ? LIKE '%Opgeruimd' THEN 1 ELSE opgeruimd END WHERE uniek=?",
+                     (naar, naar, str(v.get("uniek") or "")[:250]))
     for pv in p.get("postvakken") or []:
         conn.execute("INSERT INTO mailpostvak(postvak,wacht,schrijven,ts) VALUES(?,?,?,?) ON CONFLICT(postvak) DO UPDATE SET "
                      "wacht=excluded.wacht, schrijven=excluded.schrijven, ts=excluded.ts",
@@ -576,12 +582,13 @@ def _mail_cijfers(conn, van_dag, postvak=""):
     for r in conn.execute(f"SELECT postvak, soort, COUNT(*) n FROM mailbericht WHERE {w} GROUP BY postvak, soort", a).fetchall():
         per_postvak.setdefault(r["postvak"], {})[r["soort"]] = r["n"]
     opgeruimd = conn.execute(f"SELECT COUNT(*) FROM mailbericht WHERE {w} AND opgeruimd=1", a).fetchone()[0]
+    gesorteerd = conn.execute(f"SELECT COUNT(*) FROM mailbericht WHERE {w} AND (naar<>'' OR opgeruimd=1)", a).fetchone()[0]
     ruis = conn.execute(
         f"SELECT postvak, van, MAX(van_naam) naam, COUNT(*) n, GROUP_CONCAT(DISTINCT soort) soorten, "
         f"MAX(onderwerp) voorbeeld, MAX(datum) laatst, MAX(lijst) lijst, SUM(opgeruimd) opgeruimd FROM mailbericht "
         f"WHERE {w} AND soort IN ({','.join('?' * len(MAIL_RUIS))}) GROUP BY postvak, van ORDER BY n DESC, laatst DESC LIMIT 30",
         a + list(MAIL_RUIS)).fetchall()
-    return per_soort, per_dag, per_postvak, opgeruimd, [dict(r) for r in ruis]
+    return per_soort, per_dag, per_postvak, (opgeruimd, gesorteerd), [dict(r) for r in ruis]
 
 
 def _grafiek(per_dag, dagen):
@@ -641,7 +648,7 @@ def mail_pagina():
         lijst.sort(key=lambda p: (p["orde"], -p["werkdagen"]))
     open_alle = [p for lijst in per.values() for p in lijst]
 
-    per_soort, per_dag, per_postvak, opgeruimd, ruis = _mail_cijfers(conn, van_dag, postvak)
+    per_soort, per_dag, per_postvak, (opgeruimd, gesorteerd), ruis = _mail_cijfers(conn, van_dag, postvak)
     _, grafiek_per_dag, _, _, _ = _mail_cijfers(conn, grafiek_dagen[0], postvak)
     totaal = sum(per_soort.values())
     ruis_n = sum(per_soort.get(k, 0) for k in MAIL_RUIS)
@@ -662,7 +669,7 @@ def mail_pagina():
            "open": len(open_alle), "lang": sum(1 for p in open_alle if p["werkdagen"] >= 5),
            "ruis": ruis_n, "ruis_pct": round(100 * ruis_n / totaal) if totaal else 0,
            "rommel": per_soort.get("rommel", 0), "melding": per_soort.get("melding", 0), "koud": per_soort.get("koud", 0),
-           "verdacht": per_soort.get("verdacht", 0), "opgeruimd": opgeruimd,
+           "verdacht": per_soort.get("verdacht", 0), "opgeruimd": opgeruimd, "gesorteerd": gesorteerd,
            "opruim_regels": sum(1 for r in regels if r["actie"] == "opruimen")}
     return render_template("mail.html", app_naam=APP_NAAM, wachten=list(per), per=per, labels=labels, status=status,
                            noden=noden, klaar=klaar, kpi=kpi, periode=periode, periodes=MAIL_PERIODES, postvak=postvak,

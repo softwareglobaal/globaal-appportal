@@ -94,8 +94,8 @@
       <div class="delta">{{ kpi.ruis }} mails: reclame {{ kpi.rommel }}, meldingen {{ kpi.melding }}, onbekend {{ kpi.koud }}</div></div>
     <div class="paneel kpi {{ 'kritiek' if kpi.verdacht }}"><span class="label">Verdacht (phishing)</span><div class="groot">{{ kpi.verdacht }}</div>
       <div class="delta">nooit openen of beantwoorden</div></div>
-    <div class="paneel kpi"><span class="label">Opgeruimd</span><div class="groot">{{ kpi.opgeruimd }}</div>
-      <div class="delta">{{ kpi.opruim_regels }} afzender{{ '' if kpi.opruim_regels == 1 else 's' }} op opruimen</div></div>
+    <div class="paneel kpi"><span class="label">Uit de inbox gesorteerd</span><div class="groot">{{ kpi.gesorteerd }}</div>
+      <div class="delta">waarvan {{ kpi.opgeruimd }} naar Opgeruimd; {{ kpi.opruim_regels }} afzender{{ '' if kpi.opruim_regels == 1 else 's' }} op opruimen</div></div>
   </section>
 
   <section class="paneel">

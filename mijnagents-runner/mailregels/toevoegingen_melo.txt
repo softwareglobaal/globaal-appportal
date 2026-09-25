@@ -1,0 +1,83 @@
+[KOP]
+# Sorteerregels melodiebvba@gmail.com, versie 1.0, 26-9-2026 (Claude, op vraag van Mehdi: "ruim op zoals info@h-invest,
+# laat elke door de toepasselijke agent doen en blijf het handhaven"). Basis: regels_hinvest.txt; toevoegingen in
+# toevoegingen_melo.txt; gemaakt met maak_regels.py. Handhaving: De Mailwacht Melodie (mail-melo) op de VM.
+#
+# Gmail: een map is een label. Mapnamen die met "INBOX." beginnen, worden bij Gmail een label zonder dat voorvoegsel
+# (INBOX.Opgeruimd wordt Opgeruimd, INBOX.Archief.2025 wordt Archief/2025). Mapnamen met een schuine streep zijn de
+# labels die Melodie al had (INBOX/Finance/Support Octopus, INBOX/Facturen/Radius, ...); die gaan ongewijzigd door.
+# Verplaatsen uit INBOX haalt het label INBOX weg; het bericht blijft in Alle e-mail. Niets wordt verwijderd.
+#
+# Wie in INBOX hoort (bewust geen regel): syndici en VME (Syndiconnect, De Syndicus, Quality Beheer), notarissen
+# (belnot.be, fednot.be), makelaars en vastgoed (Immo Diest, Werner Immo, Vastgoed Chase, Makelaarshuys, ...),
+# huurders en mensen die schrijven, advocaten (Antonissen), boekhouder (Din Consulting, Moore), overheid (minfin,
+# e-Box-herinneringen gaan wel naar hun label), Fluvius-gesprekken, Radius-incasso (creditcollections), PandaDoc.
+[/KOP]
+
+[SAMEN]
+INBOX.Bpost -> INBOX.Bestellingen
+INBOX.Octopus -> INBOX/Finance/Support Octopus
+
+[WEG]
+INBOX.Maes
+INBOX.Lading Vertraco
+
+[EIGEN]
+energie-efficient.be, elevaitnv.com, contrax.be, zidiconstruct.be
+
+[INBOX/Finance/Support Octopus]
+# bestaand label: importrapporten en CODA-meldingen van Octopus
+support@octopus.be
+
+[INBOX/Finance/E-box]
+# bestaand label
+e-box.noreply@socialsecurity.be
+
+[INBOX/Finance/ING Belgie]
+# bestaand label
+@ing.com
+
+[INBOX/Overige Mails/scan harmoniebouw]
+# bestaand label: scans van de printers, ook doorgestuurd
+scan@harmoniebouw.be
+scanfacturen@gmail.com
+
+[INBOX/Overige Mails/Doccle]
+# bestaand label
+@doccle.be
+
+[INBOX/Overige Mails/KBC]
+# bestaand label: automatische berichten van KBC (de verzekeraars zelf blijven in INBOX)
+@mail-kbc.be
+
+[INBOX/Facturen/Radius]
+# bestaand label: factuuroverzichten tankkaart (incasso via creditcollections blijft in INBOX)
+fuel.maintenance.be@radius.com
+
+[INBOX/Facturen/De Watergroep]
+# bestaand label
+.dewatergroep.be
+
+[INBOX/Facturen]
+# bestaand label: facturen via Peppol en facturatieplatformen
+@my.billit.be
+@adminpulse.be
+
+[INBOX.Accounts en abonnementen]
+@accounts.google.com
+@google.com
+@csam.be
+@korfine.be
+
+[INBOX.Nieuwsbrieven]
+# vakinhoudelijk: panden die de overheid verkoopt (Finimmoweb)
+info@news.minfin.fed.be
+
+[INBOX.Opgeruimd]
+@comms.radius.com
+@billit.eu
+@testgroup.eu
+@rushfiles.com
+@lab9.be
+@b2b.telenet.be
+.ipsos-online.com

@@ -1,18 +1,24 @@
 {
- "_uitleg": "Welke mailwacht welk postvak leest (koppelingen/postvak.py). Versie 1.2, 26-09-2026: Mehdi zette info@h-architects.be er weer bij ('ik wil de info@h-architects.be ook toevoegen'). Versie 1.1, 25-09-2026: Mehdi koos na het lezen van alle mail van 30 dagen vier postvakken, elk met een eigen wacht: info@h-invest.be, mch@h-architects.be, mehdichegini@hotmail.com en melodiebvba@gmail.com. 'De andere mogen weg': De Mailwacht info@ H-Architects is uitgezet, boekhouding@h-invest.be wordt niet meer gelezen. Versie 1.0 (dezelfde ochtend): info@ H-Architects en H-Invest. Boven de wachten staat De Mailregisseur, die bundelt en aan De Regisseur rapporteert; Mehdi krijgt hoogstens een bericht per dag. postvakken: wat de wacht leest. antwoord_vanuit: postvakken waarvan de verzonden post ook telt als antwoord. eigen_domeinen: post van de eigen groep is geen opvolgpunt. De wachtwoorden staan alleen in ~/post-config/mailboxen.yaml op de VM.",
+ "_uitleg": "Welke mailwacht welk postvak leest (koppelingen/postvak.py). Versie 1.3, 26-09-2026: elke wacht sorteert zijn postvak elke ronde volgens mailregels/regels_<alias>.txt ('sorteerregels'), zoals info@h-invest op 23-24-9 werd opgeruimd; Mehdi: 'laat elke door de toepasselijke agent doen en blijf het handhaven'. Versie 1.2, 26-09-2026: Mehdi zette info@h-architects.be er weer bij ('ik wil de info@h-architects.be ook toevoegen'). Versie 1.1, 25-09-2026: Mehdi koos na het lezen van alle mail van 30 dagen vier postvakken, elk met een eigen wacht: info@h-invest.be, mch@h-architects.be, mehdichegini@hotmail.com en melodiebvba@gmail.com. 'De andere mogen weg': De Mailwacht info@ H-Architects is uitgezet, boekhouding@h-invest.be wordt niet meer gelezen. Versie 1.0 (dezelfde ochtend): info@ H-Architects en H-Invest. Boven de wachten staat De Mailregisseur, die bundelt en aan De Regisseur rapporteert; Mehdi krijgt hoogstens een bericht per dag. postvakken: wat de wacht leest. antwoord_vanuit: postvakken waarvan de verzonden post ook telt als antwoord. eigen_domeinen: post van de eigen groep is geen opvolgpunt. De wachtwoorden staan alleen in ~/post-config/mailboxen.yaml op de VM.",
  "mappen": {
-  "_uitleg": "Welke mappen per postvak gelezen worden (standaard alleen INBOX). info@h-invest: de sorteertaak op de Mac (24-09-2026) verplaatst belangrijke post naar Bank en verzekering en Boekhouding. mch@: Qoppa sluiting en ORDE krijgen post via een regel; de map Anthropic (kwitanties) niet. Melodie: Gmail zet een deel van de post met een filter meteen in een label (Octopus, Din Consulting, E-box), dus lees ik Alle e-mail; wat Melodie zelf verstuurde, slaat de module over.",
+  "_uitleg": "Welke mappen per postvak gelezen worden (standaard alleen INBOX). info@h-invest: de sorteertaak op de Mac (24-09-2026) verplaatst belangrijke post naar Bank en verzekering en Boekhouding. mch@: Qoppa sluiting en ORDE krijgen post via een regel; de map Anthropic (kwitanties) niet. Melodie: Gmail zet een deel van de post met een filter meteen in een label (Octopus, Din Consulting, E-box), dus lees ik Alle e-mail; wat Melodie zelf verstuurde, slaat de module over. Sinds de sortering (26-09-2026) leest elke wacht ook de mappen waar belangrijke post naartoe gaat (Bank en verzekering, Boekhouding, Accounts en abonnementen, ...), zodat een mislukte betaling of herinnering niet uit beeld verdwijnt; Opgeruimd, Scans, Veilingen, Bestellingen, Nieuwsbrieven en het archief leest hij niet.",
   "info@h-invest.be": [
    "INBOX",
    "INBOX.Bank en verzekering",
    "INBOX.Boekhouding",
    "INBOX.Octopus",
-   "INBOX.Maes"
+   "INBOX.Maes",
+   "INBOX.Accounts en abonnementen"
   ],
   "mch@h-architects.be": [
    "INBOX",
    "INBOX.Qoppa sluiting",
-   "INBOX.ORDE"
+   "INBOX.ORDE",
+   "INBOX.Bank en verzekering",
+   "INBOX.Boekhouding",
+   "INBOX.Accounts en abonnementen",
+   "INBOX.Anthropic",
+   "INBOX.Reizen"
   ],
   "melodiebvba@gmail.com": [
    "[Gmail]/Alle e-mail"
@@ -23,10 +29,22 @@
    "INBOX.IMPORTANT",
    "INBOX.BOEKHOUDING",
    "INBOX.BOEKHOUDING.E-Box",
+   "INBOX.BOEKHOUDING.TELENET",
    "INBOX.ORDE",
    "INBOX.Questions",
-   "INBOX.ARCO"
+   "INBOX.ARCO",
+   "INBOX.Bank en verzekering",
+   "INBOX.dropbox",
+   "INBOX.HDFC Bank",
+   "INBOX.Accounts en abonnementen"
   ]
+ },
+ "sorteerregels": {
+  "_uitleg": "Welk regelbestand (mijnagents-runner/mailregels/) de wacht elke ronde op de INBOX toepast: de nieuwe mail van drie dagen, en wat ouder is dan een jaar naar het jaararchief. Alleen UID MOVE, alleen met 'schrijven' in de postbus. Dezelfde bestanden gebruikt sorteren.py op de Mac (via een snelkoppeling in ~/.claude/tools/mailopruiming). regels_info.txt en regels_mch.txt worden gemaakt met maak_regels.py uit regels_hinvest.txt en toevoegingen_<alias>.txt.",
+  "info@h-invest.be": "regels_hinvest.txt",
+  "info@h-architects.be": "regels_info.txt",
+  "mch@h-architects.be": "regels_mch.txt",
+  "melodiebvba@gmail.com": "regels_melo.txt"
  },
  "bronnen": {
   "_uitleg": "Postvakken die de server niet zelf kan lezen. Microsoft laat voor hotmail geen wachtwoord-login toe (gemeten, ook op 25-09-2026). Mail op de Mac van Mehdi haalt hotmail wel op; mac/hotmail_koppen.py zet elk uur de koppen (geen tekst) in dit bestand onder mijnagents-data. Is het ouder dan drie uur, dan meldt de wacht dat.",

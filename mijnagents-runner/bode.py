@@ -28,7 +28,9 @@ NAAM = "bode"
 ag = bord.Agent(NAAM)
 STAAT = os.path.expanduser("~/appportal/mijnagents-data/bode.json")
 STIL = (22, 7)
-SOORTEN = ("signaal", "coaching", "verslag", "dagplan", "dagbundel")
+# "oproep": een agent vraagt uitdrukkelijk om Mehdi te bellen (sinds 26-09-2026 De Mailregisseur bij dringende mail).
+# Dat vervangt voor nieuwe agents het woord "stil" in een signaaltitel, dat vroeger per ongeluk belde.
+SOORTEN = ("signaal", "coaching", "verslag", "dagplan", "dagbundel", "oproep")
 HERINNERING_UREN = 6
 # Mehdi, 25-09-2026: "stuur mij geen domme berichten over mijn agenda op mijn Telegram; heel mijn ding is
 # visueel gemaakt". Wat deze agents klaarzetten blijft op het bord en in de agenda zelf, maar gaat niet naar
@@ -194,7 +196,7 @@ def main():
              if it["id"] > staat.get("laatste_id", 0) and it["soort"] in SOORTEN]
     agents_met_voorstel = [a for a in bord.call("/api/overzicht").get("agents", []) if a.get("open_voorstellen")]
     totaal_voorstellen = sum(a["open_voorstellen"] for a in agents_met_voorstel)
-    alarm = [it for it in items if it["soort"] == "signaal" and "stil" in it["titel"].lower()]
+    alarm = [it for it in items if it["soort"] == "oproep" or (it["soort"] == "signaal" and "stil" in it["titel"].lower())]
     herinnering_oud = (not staat.get("laatste_herinnering")) or (datetime.now() - datetime.fromisoformat(staat["laatste_herinnering"])).total_seconds() > HERINNERING_UREN * 3600
     herinner = totaal_voorstellen and (totaal_voorstellen != staat.get("laatste_voorstellen", 0) or herinnering_oud)
     kanaal = ""

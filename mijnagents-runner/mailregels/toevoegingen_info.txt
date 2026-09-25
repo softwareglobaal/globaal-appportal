@@ -1,0 +1,165 @@
+[KOP]
+# Sorteerregels info@h-architects.be, versie 1.1, 26-9-2026 (v1.1: de bestaande mappen BOEKHOUDING, BOEKHOUDING.E-Box, BOEKHOUDING.TELENET en ARCO in plaats van nieuwe) (Claude, op vraag van Mehdi: "ruim op zoals info@h-invest,
+# laat elke door de toepasselijke agent doen en blijf het handhaven"). Basis: regels_hinvest.txt v1.0; toevoegingen in
+# toevoegingen_info.txt; gemaakt met maak_regels.py. Handhaving: De Mailwacht info@ H-Architects (mail-info-harc) op de VM.
+#
+# Elke sectie [INBOX.Map] is een doelmap. Een regel per lijn:
+#   naam@domein.be   precies dit adres
+#   @domein.be       alleen dit domein, geen subdomeinen
+#   .domein.be       dit domein en alle subdomeinen
+# Voorrang: [oplichting] gaat voor alles; dan het exacte adres, dan @domein, dan .domein.
+# Wat nergens past blijft in INBOX; is het ouder dan [archief] dagen, dan gaat het naar het jaararchief.
+# Niets wordt verwijderd of als gelezen gemarkeerd. Terugzetten kan altijd met de hand in de webmail.
+#
+# Wie in INBOX hoort (bewust geen regel): mensen die schrijven (klanten, ook via gmail, hotmail, telenet, skynet),
+# collega's (h-architects.be, unabo.be, harmoniebouw.be, globaal.be), studiebureaus en adviseurs (Luc Van de Wiel,
+# Van Craen, Nitra, MijnEPB, SafetySnapper-verslagen, Impact, SB-V), notaris, overheid (vlaanderen.be, RSZ),
+# incasso en deurwaarders (GDW De Wilde, Alert Services, Legal Recovery), en wat Mehdi bewust behield op 8-9-2026:
+# BMP, UNIZO, Embuild, Wienerberger, PMG, Phoenix, Ceiso, Eco Heating, NAV.
+[/KOP]
+
+[SAMEN]
+INBOX.Bpost -> INBOX.Bestellingen
+INBOX.Octopus -> INBOX.BOEKHOUDING
+INBOX.Boekhouding -> INBOX.BOEKHOUDING
+
+[WEG]
+INBOX.Maes
+INBOX.Lading Vertraco
+
+[EIGEN]
+energie-efficient.be, elevaitnv.com, contrax.be, zidiconstruct.be
+
+[INBOX.ORDE]
+# bestaande map: de Orde van Architecten (bijdragen, raad Brabant)
+.ordevanarchitecten.be
+
+[INBOX.HDFC Bank]
+# bestaande map: HDFC Bank, echte overschrijvingen van High Design Studio (behouden op 8-9-2026)
+.hdfcbank.com
+.hdfcbank.bank.in
+.hdfcbank.net
+.hdfc.bank.in
+
+[INBOX.dropbox]
+# bestaande map: meldingen van het Dropbox-team; de wacht leest deze map mee (account gepauzeerd, betaling)
+@dropbox.com
+@txn.dropbox.com
+@notices.dropbox.com
+@dropbox.zendesk.com
+
+[INBOX.WERNER IMMO]
+# bestaande map
+@wernerimmo.be
+
+[INBOX.BOEKHOUDING.E-Box]
+# bestaande map: meldingen dat er een bericht in de e-Box van de sociale zekerheid staat; de wacht leest deze map mee
+e-box.noreply@socialsecurity.be
+
+[INBOX.Done.Promo.Toolmaster]
+# bestaande map: Toolmaster (behouden op 8-9-2026, geen uitschrijving)
+@toolmaster.io
+
+[INBOX.ARCO]
+# bestaande map: AR&CO, de verzekeringsmakelaar (aangiftes, schadedossiers); de wacht leest deze map mee
+@ar-co.be
+@arcoinsurance.be
+
+[INBOX.Bank en verzekering]
+@services.axa.be
+noreply@axa.be
+.grenke.be
+.grenke.com
+@customerportal.grenke.com
+
+[INBOX.BOEKHOUDING.TELENET]
+# bestaande map: facturen van Telenet Business
+@comm.telenet.be
+
+[INBOX.BOEKHOUDING]
+# bestaande map (hoofdletters)
+no-reply@liantis.be
+info@liantis.be
+@invoicing.ecovis.be
+@drinksvcb.be
+@farys.be
+
+[INBOX.Bestellingen]
+@post.vlav.be
+
+[INBOX.Accounts en abonnementen]
+invoices@4411.be
+noreply@4411.be
+@1stline.zendesk.com
+@wati.io
+@vectorworks.net
+@designexpress.eu
+.facebookmail.com
+@developers.facebook.com
+@support.facebook.com
+noreply@google.com
+@wetransfer.com
+@archisnapper.com
+@archisnapper---safetysnapper.intercom-mail.com
+@deltek.com
+@sender.zohoinvoice.com
+@transactional.tomtom.com
+@communications.paypal.com
+@vdbconnect.be
+@its-printer.com
+@e.godaddy.com
+@mail.anthropic.com
+@emails.avast.com
+no-reply@ecoheating.be
+
+[INBOX.Opgeruimd]
+# reclame, koude acquisitie, nieuwsbrieven zonder mens, en oplichting (nooit op een link klikken)
+@vlassakverhulst.be
+@hello.4411.be
+communication@arcoinsurance.be
+@survey.telenet.be
+news@vandenbroele.be
+.multimail.be
+@architecte-agent-immobilier.com
+@archi-et-immo.eu
+@archi-immo.eu
+@aanvrager.trustlocal.be
+@trustlocal.be
+@wooniot.nl
+@inforegio.be
+@mailrelayb-n.fediap.be
+@gottlieb-group.be
+@aliuminiumsystems.com
+@natashacheng.com
+@kubiqs.com
+@ginterieur.be
+@quincalux.com
+@cloudgroup.be
+@easyhomebv.be
+@renoa.be
+@home-lift.be
+@ontdekplanion.be
+@greenfix.be
+@harmonyai.nl
+@abmadvies.be
+@igenia.be
+@papillons-srl.be
+@akhradigital.com
+@news.laredoute.be
+@recupel.be
+@biso.be
+@bimregister.nl
+@mailing.biokamino.com
+@bruneau.be
+@mega.be
+@unizoleuven360.be
+# oplichting en domeinnaam-oplichting (echte verlenging komt van one.com)
+@patelwealth.com
+@mis.gilaniultrasound.com
+@bravodebut.net
+@foreverweb.net
+@send2sell.com
+@securenettech.com
+@serhtani.from-hi.com
+@the-cloud-one.com
+@tempo-one.com
