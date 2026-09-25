@@ -1600,6 +1600,29 @@ def commandocentrum_opdracht(vid):
     return redirect(url_for("commandocentrum_pagina") + f"#v{vid}")
 
 
+TESTFORMULIER = """<!doctype html><html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Testformulier De Bode</title>
+<style>body{font-family:system-ui,sans-serif;max-width:520px;margin:40px auto;padding:0 16px;color:#1d1d1f}
+label{display:block;margin:14px 0 4px;font-weight:600}input{width:100%;padding:9px;border:1px solid #bbb;border-radius:6px;font-size:15px}
+button{margin-top:20px;padding:10px 18px;border:0;border-radius:6px;background:#0b5cad;color:#fff;font-size:15px}
+.info{background:#f2f2f5;padding:10px 12px;border-radius:6px;font-size:14px}#uit{margin-top:16px;font-weight:600}</style></head>
+<body><h1>Klantgegevens bevestigen</h1>
+<p class="info">Testformulier voor de bel-tool van De Bode. Er wordt niets verstuurd en niets bewaard, ook niet als je op Versturen klikt.</p>
+<form onsubmit="event.preventDefault();document.getElementById('uit').textContent='Test: niets verstuurd, niets bewaard.';this.reset();">
+<label for="naam">Volledige naam</label><input id="naam" name="naam" autocomplete="off">
+<label for="mail">E-mailadres</label><input id="mail" name="mail" type="email" autocomplete="off">
+<label for="pas">Paspoortnummer</label><input id="pas" name="pas" autocomplete="off">
+<label for="iban">IBAN</label><input id="iban" name="iban" autocomplete="off">
+<button type="submit">Versturen</button></form><div id="uit"></div></body></html>"""
+
+
+@app.get("/test/formulier")
+def testformulier():
+    """Nepformulier om de bel-tool te testen (25-09-2026): vraagt om een paspoortnummer en een IBAN, waar
+    Claude niet zelf mag invullen. Alles blijft in de browser: geen POST, geen opslag."""
+    return TESTFORMULIER
+
+
 # MCP voor Mehdi's Claude: "roep Mehdi" als een agent vastzit (mcp_bode.py, 25-09-2026).
 import mcp_bode  # noqa: E402
 mcp_bode.registreer(app, gebruiker, groepen, db, nu)
