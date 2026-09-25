@@ -318,7 +318,9 @@ def vooruitblik(register, vandaag):
     prijzen = {}
     for v in register["voertuigen"]:
         for o in v.get("onderhoud") or []:
-            for tekst, bedrag in _werken(o):
+            # Alleen een aparte factuurlijn telt als prijs van een onderdeel; het totaal van een factuur
+            # hoort niet bij de ruitenwissers omdat die er toevallig ook op stonden (gezien 25-09-2026: 945 EUR).
+            for tekst, bedrag in [(f"{x.get('onderdeel') or ''} {x.get('omschrijving') or ''}", x.get("bedrag")) for x in o.get("werken") or []]:
                 for r in regels["onderdelen"]:
                     if any(w in tekst.lower() for w in r["woorden"]) and _bedrag(bedrag):
                         prijzen.setdefault(r["onderdeel"], []).append(_bedrag(bedrag))
