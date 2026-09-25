@@ -455,14 +455,17 @@ KLEURMERK = "agendawacht_kleur"
 def kleur_actie(a, wens):
     """Wat doe ik met de kleur van deze afspraak? Geeft 'goed', 'merken' (klopt, maar mijn
     merk ontbreekt nog), 'zetten' (leeg, of een kleur die ik zelf zette en die niet meer
-    klopt) of 'vraag' (iemand anders zette een andere kleur: niet aanraken, vragen)."""
+    klopt) of 'herstellen' (iets anders zette een andere kleur: terugzetten en melden).
+    Mehdi, 25-09-2026: "ik zie op vandaag dat verschillende interne gesprekken verschillende
+    kleuren hebben ... waarom los je niet constructief deze type problemen op". De kleur volgt
+    de titel; wie iets anders wil tonen, verandert de titel (?? voor onzeker)."""
     huidig = a.get("_kleur") or ""
     merk = (a.get("_merk") or {}).get(KLEURMERK, "")
     if huidig == wens:
         return "goed" if merk == wens else "merken"
     if not huidig or huidig == merk or "OSRM" in (a.get("omschrijving") or ""):
         return "zetten"
-    return "vraag"
+    return "herstellen"
 ALLEEN_VANDAAG = "--vandaag" in sys.argv
 
 
@@ -1106,11 +1109,11 @@ def kleuren_zetten(items, alleen_dag=None):
             geen += 1          # geen code in de titel: dat is een fout, geen uitzondering
             continue
         actie = kleur_actie(a, wens)
-        if actie == "vraag":
+        if actie == "herstellen":
+            # Iets buiten de agent zette een andere kleur. Ik zet ze terug en meld het, met het
+            # tijdstip van die wijziging: zo is te zien wie of wat het doet (FR-20, FR-21).
             HANDKLEUREN.append(f"{a['start'][:16]} {a['titel'][:55]}: {KLEURNAAM.get(a.get('_kleur'), a.get('_kleur'))} "
-                               f"met de hand gezet, de titel zegt {KLEURNAAM.get(wens, wens)}. Bewust? Dan hoort de "
-                               f"titel mee te veranderen; anders zet ik de kleur terug")
-            continue
+                               f"teruggezet naar {KLEURNAAM.get(wens, wens)} (gewijzigd op {(a.get('_gewijzigd') or '?')[:16]} UTC)")
         merk = {"extendedProperties": {"private": {KLEURMERK: wens}}}
         try:
             if actie == "goed":
@@ -2133,7 +2136,7 @@ def main():
         kg, kgoed, kgeen, kfout, kvast = kleuren_zetten(rit_items if DAG_ARG else items, dag_grens)
         if HANDKLEUREN:
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
-                          "titel": "Kleuren die iemand met de hand zette: bewust?",
+                          "titel": "Kleuren teruggezet naar de regel: iets anders had ze veranderd",
                           "uniek": f"agenda-handkleur:{vandaag}:{dag_grens or 'alle'}",
                           "inhoud": "\n".join("- " + x for x in HANDKLEUREN[:40])}])
         open_na = onbevestigd_voorbij(items, vandaag)
@@ -2220,7 +2223,7 @@ def main():
         if in_archief:
             noden.append({"tekst": "Er wordt nog geboekt in een archiefagenda: het Calendly-kanaal omzetten naar werk", "wie": "mehdi"})
         if HANDKLEUREN:
-            noden.append({"tekst": "Kleuren met de hand gezet: laat ik ze staan of volgen ze de titel?", "wie": "mehdi"})
+            noden.append({"tekst": "Iets buiten de agent verandert kleuren (tijdstippen in het signaal): welke tool of wie?", "wie": "mehdi"})
         if open_na:
             noden.append({"tekst": "Afspraken voorbij met ??: doorgegaan of niet?", "wie": "mehdi"})
         if ROUTES_GESTOPT:

@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "1.2",
+ "versie": "1.3",
  "datum": "24-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -51,10 +51,11 @@
   },
   {
    "id": "L5",
-   "les": "Wat een mens zette (kleur, melding, titel), overschrijf je niet stil. Je vraagt.",
+   "les": "Wat buiten de regel staat, zet je terug en meld je, met wanneer het veranderde. Nooit stil, en nooit laten hangen als vraag wanneer de regel al vastligt. Een melding die iemand zelf koos, blijft wel staan.",
    "uit": [
     "FR-20",
-    "FR-24"
+    "FR-24",
+    "FR-48"
    ]
   },
   {
@@ -120,6 +121,13 @@
    "les": "Een gedicteerde zin die de bronnen tegenspreekt, is een vraag met de bronnen erbij, geen opdracht.",
    "uit": [
     "FR-43"
+   ]
+  },
+  {
+   "id": "L15",
+   "les": "Een vraag die blijft hangen is geen oplossing. Ligt de regel vast, kies dan, herstel, en meld wat je deed en waarom.",
+   "uit": [
+    "FR-48"
    ]
   }
  ],
@@ -488,11 +496,11 @@
    "waarom_niet_gezien": "De agent kon zijn eigen kleur niet onderscheiden van die van een mens, en de regel zei: de kleur volgt de titel.",
    "oorzaak": "Er stond nergens welke kleur de agent zelf zette.",
    "soort_oorzaak": "code",
-   "oplossing": "De agent laat een onzichtbaar merk achter bij elke kleur die hij zet. Een kleur zonder zijn merk komt van een mens: niet aanraken, vragen.",
+   "oplossing": "De agent laat een onzichtbaar merk achter bij elke kleur die hij zet. Sinds 25-09-2026 geldt: de kleur volgt de titel. Staat er een andere kleur (zonder zijn merk, of over zijn merk heen), dan zet hij ze terug en meldt hij het, met het tijdstip van die wijziging. Wie iets anders wil tonen, verandert de titel (?? voor onzeker).",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
-    "tekst": "een kleur die een mens zette, is een vraag en wordt niet overschreven"
+    "tekst": "een kleur buiten de regel wordt teruggezet en gemeld"
    },
    "controle": [
     "kleur"
@@ -503,21 +511,19 @@
    "id": "FR-21",
    "datum": "24-09-2026",
    "gevonden_door": "zelfcontrole (weekcontrole)",
-   "fout": "Op 24-09 om 00:15 kregen de UNABO-overleggen en de UNABO-boekingen paars, en AI stabiliteit geel. Het ging een per seconde: een script, niet met de hand in Google.",
+   "fout": "Iets buiten de agent zet kleuren: op 24-09 om 00:15 werden de UNABO-overleggen en UNABO-boekingen paars en AI stabiliteit geel, een per seconde, en op 24-09 om 13:45 werd 'Geoffrey Vergauwen' opnieuw paars nadat de agent hem oranje had gezet.",
    "gevolg": "De kleur zegt niet meer wat de titel zegt (paars is leverancier online).",
-   "waarom_niet_gezien": "Het gebeurde na de laatste ronde van de dag.",
-   "oorzaak": "Niet de VM, niet de scripts op de Mac en geen Claude Code-sessie. Wie of wat het deed, is niet gemeten.",
+   "waarom_niet_gezien": "Het gebeurt buiten de VM, de Mac en de Claude Code-sessies; Google zegt niet wie een afspraak wijzigt.",
+   "oorzaak": "Onbekend: een tool of persoon met schrijfrecht op de werkagenda en zoomafspraken die UNABO paars kleurt.",
    "soort_oorzaak": "onbekend",
-   "oplossing": "De agent laat deze kleuren staan en vraagt Mehdi of het bewust is. Is UNABO paars een nieuwe regel, dan hoort die in de afspraken; is AI stabiliteit onzeker, dan krijgt de titel ??.",
+   "oplossing": "De agent zet de kleuren terug en meldt elke keer het tijdstip (FR-20). Wie of wat het doet, zoekt Mehdi uit met de tijdstippen.",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "de zelfcontrole ziet een handkleur als vraag"
    },
-   "controle": [
-    "handkleur"
-   ],
-   "status": "vraag"
+   "controle": [],
+   "status": "open"
   },
   {
    "id": "FR-22",
@@ -1014,6 +1020,24 @@
    },
    "controle": [],
    "status": "open"
+  },
+  {
+   "id": "FR-48",
+   "datum": "25-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Interne gesprekken van vandaag hadden verschillende kleuren (groen, paars, geel), omdat Claude de afwijkende kleuren als vraag liet staan in plaats van ze op te lossen.",
+   "gevolg": "Een onrustige agenda, twee dagen lang, en een vraag die Mehdi niet had moeten krijgen.",
+   "waarom_niet_gezien": "De regel 'wat een mens zette, blijft staan' leek voorzichtig, maar liet het probleem hangen; er was geen mens die het bewust zo wilde.",
+   "oorzaak": "Een vraag gesteld waar een beslissing kon: de kleurregel was al afgesproken.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "Alle afwijkende kleuren teruggezet; de agent herstelt voortaan zelf en meldt het (FR-20).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een kleur buiten de regel wordt teruggezet en gemeld"
+   },
+   "controle": [],
+   "status": "opgelost"
   }
  ]
 }

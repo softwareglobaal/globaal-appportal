@@ -290,8 +290,9 @@ from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 import urllib.request as _ur
 
 # FR-20 handkleur: wat een mens zette, is een vraag
-check("een kleur die een mens zette, is een vraag en wordt niet overschreven",
-      W.kleur_actie({"_kleur": "3", "_merk": {}}, "10") == "vraag"
+check("een kleur buiten de regel wordt teruggezet en gemeld",
+      W.kleur_actie({"_kleur": "3", "_merk": {}}, "10") == "herstellen"
+      and W.kleur_actie({"_kleur": "3", "_merk": {W.KLEURMERK: "6"}}, "6") == "herstellen"
       and W.kleur_actie({"_kleur": "10", "_merk": {W.KLEURMERK: "10"}}, "6") == "zetten"
       and W.kleur_actie({"_kleur": ""}, "6") == "zetten"
       and W.kleur_actie({"_kleur": "6", "_merk": {}}, "6") == "merken"
@@ -409,7 +410,7 @@ _b2 = Z.bevindingen([{"titel": "Mehdi: !! [LARA] Lara ophalen", "start": _lara.i
                       "_reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 5}]}}],
                     _nu.date().isoformat(), (_nu + _td(days=2)).date().isoformat(), _nu)
 check("de zelfcontrole kent een rit die te laat aankomt als heenrit", not [x for x in _b2 if x["controle"] == "rit_ontbreekt"], str(_b2))
-check("de zelfcontrole ziet een handkleur als vraag", [x["controle"] for x in _b] == ["handkleur"], str(_b))
+check("de zelfcontrole ziet een kleur buiten de regel", [x["controle"] for x in _b] == ["kleur"], str(_b))
 _i = Z.indelen([{"controle": "kleur", "dag": "", "uur": ""}, {"controle": "iets_nieuws", "dag": "", "uur": ""}], _reg)
 check("een opgeloste fout die terugkomt heet TERUGGEKEERD, een onbekende NIEUW",
       [x["staat"] for x in _i] == ["TERUGGEKEERD", "NIEUW"], str(_i))
