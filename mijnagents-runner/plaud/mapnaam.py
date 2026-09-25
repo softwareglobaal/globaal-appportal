@@ -53,6 +53,12 @@ def map_van(opname: dict, doel) -> "Path":
     from pathlib import Path
     import json as _json
     doel = Path(doel)
+    # Eerst op Plaud-id: een map die hernoemd is (benaming, 25-09-2026) heet niet
+    # meer zoals Plaud hem noemt, maar blijft dezelfde opname. Zonder deze stap
+    # haalt een volgende ronde hem opnieuw binnen als dubbel.
+    gevonden = _index(doel).get(opname.get("id"))
+    if gevonden is not None and gevonden.is_dir():
+        return gevonden
     m = doel / mapnaam(opname)
     g = m / "gesprek.json"
     if g.exists():
@@ -62,6 +68,28 @@ def map_van(opname: dict, doel) -> "Path":
         except Exception:  # noqa: BLE001
             pass
     return m
+
+
+_INDEXEN = {}
+
+
+def _index(doel):
+    """plaud_id -> map, één keer per archief per run opgebouwd uit de gesprek.json-bestanden."""
+    from pathlib import Path
+    import json as _json
+    sleutel = str(doel)
+    if sleutel not in _INDEXEN:
+        uit = {}
+        for g in Path(doel).glob("*/gesprek.json"):
+            try:
+                pid = _json.loads(g.read_text(encoding="utf-8")).get("plaud_id")
+            except Exception:  # noqa: BLE001
+                continue
+            if pid:
+                uit[pid] = g.parent
+                uit[pid.replace("of_", "")] = g.parent
+        _INDEXEN[sleutel] = uit
+    return _INDEXEN[sleutel]
 
 
 def compleet(opname: dict, doel) -> bool:
