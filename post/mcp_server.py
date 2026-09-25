@@ -264,7 +264,12 @@ def registreer(app, gebruiker, groepen_van_verzoek):
              description="Zet een concept klaar in de conceptenmap. Er wordt "
                          "NIETS verstuurd: de gebruiker leest het na in zijn "
                          "webmail en verstuurt het zelf. Met antwoord_op "
-                         "wordt het een net antwoord in de conversatie.",
+                         "wordt het een net antwoord in de conversatie. Met "
+                         "bijlagen_van gaan de bijlagen van een bestaand "
+                         "bericht in dezelfde mailbox mee (bv. een scan die "
+                         "eerder gemaild werd): zet het concept dus volledig "
+                         "klaar, met bijlage, zodat de gebruiker alleen nog "
+                         "hoeft na te lezen en te versturen.",
              inputSchema={"type": "object", "properties": {
                  "mailbox": {"type": "string"},
                  "aan": {"type": "string",
@@ -277,7 +282,16 @@ def registreer(app, gebruiker, groepen_van_verzoek):
                                  "description": "uid van het bericht waarop "
                                                 "dit een antwoord is"},
                  "map": {"type": "string",
-                         "description": "map van dat bericht, standaard INBOX"}},
+                         "description": "map van dat bericht, standaard INBOX"},
+                 "bijlagen_van": {"type": "number",
+                                  "description": "uid van een bestaand bericht "
+                                                 "waarvan de bijlagen mee moeten"},
+                 "bijlagen_map": {"type": "string",
+                                  "description": "map van dat bericht, standaard INBOX"},
+                 "bijlage_namen": {"type": "string",
+                                   "description": "alleen bijlagen waarvan de naam "
+                                                  "dit bevat, komma-gescheiden; "
+                                                  "leeg = alle"}},
                  "required": ["mailbox", "tekst"]}),
         dict(name="doorsturen",
              description="Stuurt een bericht dat al in de mailbox staat door "
@@ -431,12 +445,15 @@ def registreer(app, gebruiker, groepen_van_verzoek):
         mailbox = config.zoek(args.get("mailbox"), wie)
         config.vereis_schrijven(mailbox, "Een concept opslaan", wie)
         van_map = config.map_toegestaan(mailbox, args.get("map") or "INBOX")
+        bijlagen_map = config.map_toegestaan(mailbox, args.get("bijlagen_map") or "INBOX")
         uit = imapbron.concept_opslaan(
             mailbox, args.get("aan"), args.get("onderwerp"), args.get("tekst"),
             cc=args.get("cc"), antwoord_op=args.get("antwoord_op"),
-            van_map=van_map)
+            van_map=van_map, bijlagen_van=args.get("bijlagen_van"),
+            bijlagen_map=bijlagen_map, bijlage_namen=args.get("bijlage_namen"))
         _log(wie, f"CONCEPT {mailbox['adres']} -> {uit['map']} "
-                  f"aan {', '.join(uit['aan'])} (niet verstuurd)")
+                  f"aan {', '.join(uit['aan'])} (niet verstuurd)"
+                  + (f", {len(uit['bijlagen'])} bijlage(n)" if uit.get("bijlagen") else ""))
         return uit
 
     def t_doorsturen(wie, args):

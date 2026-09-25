@@ -647,18 +647,59 @@ def bouw_bericht(M, mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
     return bericht, ontvangers, kopie, verwijzing
 
 
+MAX_BIJLAGEN_BYTES = 20 * 1024 * 1024
+
+
+def _bijlagen_uit_bericht(M, mapnaam, uid, namen=None):
+    """De bijlagen van een bestaand bericht in dezelfde mailbox, als
+    [(naam, maintype, subtype, bytes)]. namen: komma-gescheiden stukjes van
+    bestandsnamen om te filteren (hoofdletterongevoelig); leeg = alle."""
+    _selecteer(M, mapnaam)
+    ok, gegevens = M.uid("FETCH", str(int(uid)), "(BODY.PEEK[])")
+    ruw = next((el[1] for el in (gegevens or []) if isinstance(el, tuple)), None)
+    if ok != "OK" or not ruw:
+        raise ValueError(f"Geen bericht met uid {uid} in {mapnaam} om bijlagen uit te halen")
+    filters = [f.strip().lower() for f in str(namen or "").split(",") if f.strip()]
+    uit = []
+    for deel in email.message_from_bytes(ruw).walk():
+        if deel.get_content_maintype() == "multipart" or not _is_bijlage(deel):
+            continue
+        naam = _kop(deel.get_filename()) or "bijlage"
+        if filters and not any(f in naam.lower() for f in filters):
+            continue
+        uit.append((naam, deel.get_content_maintype(), deel.get_content_subtype(),
+                    deel.get_payload(decode=True) or b""))
+    if not uit:
+        raise ValueError(f"Bericht {uid} in {mapnaam} heeft geen bijlage"
+                         + (f" die past op '{namen}'" if filters else ""))
+    if sum(len(b[3]) for b in uit) > MAX_BIJLAGEN_BYTES:
+        raise ValueError("De bijlagen samen zijn groter dan 20 MB")
+    return uit
+
+
 def concept_opslaan(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
-                    van_map="INBOX"):
+                    van_map="INBOX", bijlagen_van=None, bijlagen_map="INBOX",
+                    bijlage_namen=None):
     """Legt een concept in de conceptenmap. Verstuurt niets.
 
     Met antwoord_op (een uid) worden de kopvelden van een antwoord ingevuld:
     ontvanger, onderwerp met Re: en de verwijzing naar het oorspronkelijke
     bericht, zodat het in de webmail als antwoord in de conversatie hangt.
+
+    Met bijlagen_van (een uid, in bijlagen_map) gaan de bijlagen van dat
+    bestaande bericht mee in het concept, eventueel gefilterd op
+    bijlage_namen. Mehdi, 25-09-2026: een agent weet waar de scan staat maar
+    kon hem niet meesturen, waardoor Mehdi het zelf moest doen. Het blijft een
+    concept: Mehdi leest het na en verstuurt het zelf.
     """
     with _Sessie(mailbox) as M:
+        bijlagen = (_bijlagen_uit_bericht(M, bijlagen_map, bijlagen_van, bijlage_namen)
+                    if bijlagen_van is not None else [])
         bericht, ontvangers, kopie, verwijzing = bouw_bericht(
             M, mailbox, aan, onderwerp, tekst, cc=cc, antwoord_op=antwoord_op,
             van_map=van_map)
+        for naam, hoofd, sub, inhoud in bijlagen:
+            bericht.add_attachment(inhoud, maintype=hoofd, subtype=sub, filename=naam)
         doelmap = _conceptenmap(M)
         ok, gegevens = M.append(f'"{doelmap}"', "(\\Draft)",
                                 imaplib.Time2Internaldate(time.time()),
@@ -670,6 +711,7 @@ def concept_opslaan(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
             "aan": ontvangers, "cc": kopie,
             "onderwerp": bericht["Subject"],
             "antwoord_op": verwijzing,
+            "bijlagen": [b[0] for b in bijlagen],
             "let_op": "Dit is een concept. Er is niets verstuurd en deze "
                       "koppeling kan ook niet versturen: open het in de "
                       "webmail, lees het na en verstuur het zelf."}
