@@ -72,11 +72,29 @@ def twiml(tekst, slot="Details staan op Telegram en op het bord."):
             f'<Say language="nl-NL" voice="Polly.Lotte">{escape(slot)}</Say></Response>')
 
 
-def bel(tekst, slot="Details staan op Telegram en op het bord."):
-    """Start de oproep; geeft de call-sid terug. slot: de laatste zin (de Agendawacht zegt: in je agenda)."""
-    uit = _verzoek("Calls.json", {"To": os.environ["ALARM_NUMMER"].strip(), "From": os.environ["TWILIO_VAN"].strip(),
+def bel(tekst, slot="Details staan op Telegram en op het bord.", van=None):
+    """Start de oproep; geeft de call-sid terug. slot: de laatste zin (de Agendawacht zegt: in je agenda).
+    van: afzender; standaard TWILIO_VAN (het afsprakennummer)."""
+    uit = _verzoek("Calls.json", {"To": os.environ["ALARM_NUMMER"].strip(), "From": (van or os.environ["TWILIO_VAN"]).strip(),
                                   "Twiml": twiml(tekst, slot), "Timeout": "25"})
     return uit.get("sid", "")
+
+
+def van_vast():
+    """Mehdi, 25-09-2026: een agent die vastzit of iets dringends heeft, belt van een ANDER nummer dan de
+    afsprakenbel, zodat hij zonder op te nemen weet: dit is geen afspraak, een agent heeft mij nodig.
+    TWILIO_VAN_VAST in mijnagents-data/.env (+32460233042, gekocht 25-09); ontbreekt het, dan TWILIO_VAN."""
+    return _e("TWILIO_VAN_VAST") or _e("TWILIO_VAN")
+
+
+def bel_vast(tekst, slot="Details staan op Telegram en op het bord."):
+    """Een oproep van het vastzit-nummer. Geeft [(kanaal, sid of fout)], zelfde vorm als bel_afspraak."""
+    if not beschikbaar():
+        return []
+    try:
+        return [("twilio-vast", bel(tekst, slot, van=van_vast()))]
+    except Exception as e:  # noqa: BLE001
+        return [("twilio-vast", f"mislukt: {type(e).__name__}")]
 
 
 def status(call_sid):
@@ -108,7 +126,7 @@ def alarm_bellen(staat, alarmen, log=None):
         if nieuw:
             b.update({"sleutel": sleutel, "pogingen": 0, "titels": [a.get("titel", "")[:80] for a in alarmen][:3]})
         tekst = "Dit is De Bode van Mehdi Agents met een dringend signaal. " + ". ".join(b.get("titels") or ["Er wacht een dringend signaal"])
-        b["sid"] = bel(tekst)
+        b["sid"] = bel(tekst, van=van_vast())
         b["pogingen"] += 1
         b["laatste_status"] = "queued"
         if log:

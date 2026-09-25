@@ -30,6 +30,10 @@ STAAT = os.path.expanduser("~/appportal/mijnagents-data/bode.json")
 STIL = (22, 7)
 SOORTEN = ("signaal", "coaching", "verslag", "dagplan", "dagbundel")
 HERINNERING_UREN = 6
+# Mehdi, 25-09-2026: "stuur mij geen domme berichten over mijn agenda op mijn Telegram; heel mijn ding is
+# visueel gemaakt". Wat deze agents klaarzetten blijft op het bord en in de agenda zelf, maar gaat niet naar
+# Telegram. Een oproep (belrooster, vastzitten) blijft wel gewoon werken.
+NIET_OP_TELEGRAM = tuple(x.strip() for x in os.environ.get("BODE_NIET_OP_TELEGRAM", "agenda-wacht,calendly-wacht").split(",") if x.strip())
 ZOOM_ENV = os.path.expanduser("~/pipedrive-won-deals/.env")
 
 
@@ -199,12 +203,15 @@ def main():
     bel_afspraak = bellen.afspraken_bellen(staat, log=ag.log)
     if bel_afspraak:
         bel_detail = (bel_detail + '; ' if bel_detail else '') + bel_afspraak
-    if (items or herinner) and (not stil or alarm):
+    items_tg = [it for it in items if it.get("van") not in NIET_OP_TELEGRAM]
+    if items and not items_tg and not herinner:
+        staat["laatste_id"] = max(it["id"] for it in items)  # alleen agendazaken: niet sturen, wel als gezien tellen
+    if (items_tg or herinner) and (not stil or alarm):
         regels = [f"Mehdi Agents, {datetime.now().strftime('%H:%M')}:"]
-        for it in items[-8:]:
+        for it in items_tg[-8:]:
             regels.append(f"- {it['soort']}: {it['titel'][:110]} (van {it['van']})")
-        if len(items) > 8:
-            regels.append(f"- en nog {len(items) - 8} andere")
+        if len(items_tg) > 8:
+            regels.append(f"- en nog {len(items_tg) - 8} andere")
         if herinner:
             for a in agents_met_voorstel:
                 regels.append(f"- {a['open_voorstellen']} voorstel(len) van {a['label']} wachten op je goedkeuring")

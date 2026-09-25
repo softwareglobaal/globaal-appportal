@@ -2194,7 +2194,7 @@ def bel_als_vastgelopen(items, nu=None):
     for sleutel, zin in vastgelopen(items, nu):
         if sleutel in staat:
             continue
-        uit = bellen.bel_afspraak(zin, AGENDA_SLOT)
+        uit = bellen.bel_vast(zin, AGENDA_SLOT) or bellen.bel_afspraak(zin, AGENDA_SLOT)  # vastzit-nummer, niet het afsprakennummer
         staat[sleutel] = {"tijd": nu.isoformat(), "zin": zin, "resultaat": str(uit)[:200]}
         json.dump(staat, open(BELVRAGEN, "w"), ensure_ascii=False, indent=0)
         return zin
