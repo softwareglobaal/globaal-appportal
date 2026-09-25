@@ -204,6 +204,24 @@ def test_suriname_krijgt_geen_belgische_keuring():
     assert not [x for x in lijst if x[1] in ("keuring", "groene kaart")] and not onbekend
 
 
+def test_bouwjaar_uit_het_chassisnummer():
+    assert W.bouwjaar_uit_vin("WF0FXXTTRFMA13765") == 2021   # 2BAS423, ingeschreven 10-09-2021
+    assert W.bouwjaar_uit_vin("WF0ZXXTTGZLS08891") == 2020   # 2ACH377, gebouwd 2020, ingeschreven 02-2021
+    assert W.bouwjaar_uit_vin("W0VBF8EG3H8101077") == 2017   # 2HHE117, Astra modeljaar 2017
+    assert W.bouwjaar_uit_vin("VR7EDYHZ4SJ858741") is None   # Citroën codeert het jaar niet vast: nooit gokken
+
+
+def test_kosten_per_jaar_en_per_km():
+    v = {"plaat": "X", "status": "in gebruik", "leasing": {"maandbedrag": "414,57 excl. btw = 501,63 incl. btw", "start": "2025-11-21", "einde": "2026-02-21"},
+         "onderhoud": [{"datum": "2026-01-10", "soort": "herstelling", "bedrag": "1.000,00"}, {"datum": "2026-02-01", "soort": "onderhoud", "bedrag": "2.000 SRD"}],
+         "km": [{"datum": "2025-12-01", "km": 100000}, {"datum": "2026-12-31", "km": 130000}]}
+    k = W.kosten({"voertuigen": [v]}, [], date(2026, 12, 31))["X"]
+    assert k["2025"]["munt"]["EUR"]["financiering"] == round(501.63 * 2)
+    assert k["2026"]["munt"]["EUR"] == {"onderhoud en herstel": 1000, "financiering": round(501.63 * 2)}
+    assert k["2026"]["munt"]["SRD"] == {"onderhoud en herstel": 2000}, "SRD nooit bij EUR"
+    assert k["2026"]["km_zeker"] and 29000 < k["2026"]["km"] < 30000
+
+
 if __name__ == "__main__":
     fout = 0
     for n, f in sorted(globals().items()):

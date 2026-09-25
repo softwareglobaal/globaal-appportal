@@ -282,6 +282,11 @@ def dashboard(register, tijdlijn, lijst, onbekend, vandaag, vz=None):
     except Exception as e:  # noqa: BLE001  een fout in de vooruitblik mag het dashboard niet tegenhouden
         blik = {}
         print("vooruitblik mislukt:", type(e).__name__, e, file=sys.stderr)
+    try:
+        kost = kosten(register, vz, vandaag)
+    except Exception as e:  # noqa: BLE001
+        kost = {}
+        print("kosten mislukt:", type(e).__name__, e, file=sys.stderr)
     for v in register["voertuigen"]:
         post = sorted(per.get(v["plaat"], []), key=lambda e: e["datum"], reverse=True)
         onderhoud = [dict(o, herkomst="register") for o in v.get("onderhoud") or []]
@@ -291,7 +296,7 @@ def dashboard(register, tijdlijn, lijst, onbekend, vandaag, vz=None):
         onderhoud.sort(key=lambda o: o.get("datum") or "", reverse=True)
         km = sorted(v.get("km") or [], key=lambda k: k.get("datum") or "")
         extra = blik.get(v["plaat"], {})
-        wagens.append(dict(v, polissen=polissen_van(v, vz), vooruitblik=extra.get("vooruitblik", []), vaak=extra.get("vaak", {}),
+        wagens.append(dict(v, polissen=polissen_van(v, vz), kosten=kost.get(v["plaat"], {}), bouwjaar_vin=bouwjaar_uit_vin(v.get("chassis"), vandaag), vooruitblik=extra.get("vooruitblik", []), vaak=extra.get("vaak", {}),
                            km_per_dag=extra.get("km_per_dag"), termijnen=sorted(termijn_per.get(v["plaat"], []), key=lambda t: (t["dagen"] is None, t["dagen"] or 0)),
                            onderhoud=onderhoud, post=post[:60], laatste_km=km[-1] if km else None,
                            te_klasseren=sum(1 for e in post if not e.get("geklasseerd"))))
@@ -311,7 +316,10 @@ def _bedrag(s):
     if not m:
         return None
     x = m.group(1).replace(" ", "")
-    x = x.replace(".", "").replace(",", ".") if "," in x else x
+    if "," in x:
+        x = x.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"\d{1,3}(\.\d{3})+", x):
+        x = x.replace(".", "")  # '2.000 SRD' is tweeduizend, geen twee (gezien 25-09-2026)
     try:
         return float(x)
     except ValueError:
@@ -396,6 +404,98 @@ def vooruitblik(register, vandaag):
                 vaak[r["onderdeel"]] = len(gedaan)
         uit[v["plaat"]] = {"vooruitblik": sorted(blik, key=lambda b: b["dagen"]), "vaak": vaak, "herstellingen": herst,
                            "km_per_dag": round(per_dag) if per_dag else None}
+    return uit
+
+
+JAARCODE = "ABCDEFGHJKLMNPRSTVWXY123456789"  # ISO 3779, zonder I, O, Q, U, Z en 0; A = 2010
+
+
+def bouwjaar_uit_vin(vin, vandaag=None):
+    """Bouwjaar uit het chassisnummer, alleen waar de fabrikant het vast codeert: Ford Europa (WF0) op positie 11,
+    Opel (W0V, W0L) op positie 10. Anders None: nooit gokken."""
+    v = re.sub(r"[^A-Z0-9]", "", (vin or "").upper())
+    if len(v) != 17:
+        return None
+    pos = 10 if v.startswith("WF0") else (9 if v[:3] in ("W0V", "W0L") else None)
+    if pos is None or v[pos] not in JAARCODE:
+        return None
+    jaar = 2010 + JAARCODE.index(v[pos])
+    return jaar if jaar <= (vandaag or date.today()).year + 1 else jaar - 30
+
+
+def _incl(s):
+    """Het bedrag incl. btw uit een tekst als '414,57 excl. btw = 501,63 incl. btw'; anders het eerste bedrag."""
+    m = re.search(r"([\d.\s]+,\d{2}|\d+(?:\.\d{2})?)\s*(?:eur\s*)?incl", str(s or ""), re.I)
+    return _bedrag(m.group(1)) if m else _bedrag(s)
+
+
+def _km_op(punten, d):
+    """Kilometerstand op dag d door lineair te interpoleren tussen twee gekende standen; None als d er niet tussen ligt."""
+    voor = [p for p in punten if p[0] <= d]
+    na = [p for p in punten if p[0] >= d]
+    if not voor or not na:
+        return None
+    a, b = voor[-1], na[0]
+    if a[0] == b[0]:
+        return a[1]
+    return a[1] + (b[1] - a[1]) * (d - a[0]).days / (b[0] - a[0]).days
+
+
+CATEGORIE = {"onderhoud": "onderhoud en herstel", "herstelling": "onderhoud en herstel", "garage": "onderhoud en herstel",
+             "banden": "banden", "keuring": "keuring", "schade": "schade", "verzekering": "verzekering", "brandstof": "brandstof"}
+
+
+def kosten(register, vz, vandaag):
+    """Kosten per wagen per kalenderjaar en per categorie, met km en kost per km. Munt apart: SRD wordt nooit bij EUR opgeteld.
+    Bronnen: onderhoudsregels met een bedrag, de financiering (maandbedrag maal de maanden in het jaar), de jaarpremie uit
+    vermogen.verzekering, en brandstof per maand zodra de tankkaarten gelezen zijn (veld brandstof_maanden)."""
+    uit = {}
+    for v in register["voertuigen"]:
+        if v.get("status") in WEG:
+            continue
+        jaren = {}
+
+        def boek(jaar, cat, bedrag, munt="EUR"):
+            if bedrag:
+                j = jaren.setdefault(str(jaar), {"munt": {}})
+                j["munt"].setdefault(munt, {}).setdefault(cat, 0.0)
+                j["munt"][munt][cat] += bedrag
+        for o in v.get("onderhoud") or []:
+            if not o.get("datum") or not o.get("bedrag"):
+                continue
+            munt = "SRD" if "srd" in str(o["bedrag"]).lower() else ("USD" if "usd" in str(o["bedrag"]).lower() else "EUR")
+            boek(o["datum"][:4], CATEGORIE.get(o.get("soort"), "andere"), _incl(o["bedrag"]), munt)
+        l = v.get("leasing") or {}
+        mb = _incl(l.get("maandbedrag")) if l.get("maandbedrag") else None
+        start = re.search(r"\d{4}-\d{2}-\d{2}", str(l.get("start") or ""))
+        einde = re.findall(r"\d{4}-\d{2}-\d{2}", str(l.get("einde") or l.get("einde_tekst") or ""))
+        if mb and start:
+            s = date.fromisoformat(start.group(0))
+            e = min(date.fromisoformat(einde[-1]) if einde else vandaag, vandaag)
+            d = date(s.year, s.month, 1)
+            while d <= e:
+                boek(d.year, "financiering", mb)
+                d = date(d.year + (d.month == 12), d.month % 12 + 1, 1)
+        for p in polissen_van(v, vz):
+            if p.get("jaarpremie") and p.get("einddatum"):
+                boek(int(str(p["einddatum"])[:4]) - 1, "verzekering", float(p["jaarpremie"]))
+        for m in v.get("brandstof_maanden") or []:
+            boek(m["maand"][:4], "brandstof", _bedrag(m.get("bedrag_incl") or m.get("bedrag_excl")))
+        punten = sorted({(date.fromisoformat(k["datum"][:10]), k["km"]) for k in v.get("km") or [] if k.get("datum") and k.get("km")})
+        for jaar, j in jaren.items():
+            y = int(jaar)
+            a, b = _km_op(punten, date(y, 1, 1)), _km_op(punten, min(date(y, 12, 31), vandaag))
+            binnen = [p[1] for p in punten if p[0].year == y]
+            if a is not None and b is not None:
+                j["km"], j["km_zeker"] = round(b - a), True
+            elif len(binnen) >= 2:
+                j["km"], j["km_zeker"] = max(binnen) - min(binnen), False
+            eur = j["munt"].get("EUR", {})
+            j["totaal_eur"] = round(sum(eur.values()))
+            if j.get("km") and j["km"] > 500 and eur:
+                j["per_km"] = round(sum(eur.values()) / j["km"], 3)
+            j["munt"] = {m: {c: round(x) for c, x in cats.items()} for m, cats in j["munt"].items()}
+        uit[v["plaat"]] = dict(sorted(jaren.items()))
     return uit
 
 
