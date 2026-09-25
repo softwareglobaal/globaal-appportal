@@ -138,7 +138,7 @@ def termijnen(register, vandaag, vz=None):
                 continue
             naam = p.get("verzekeraar") or "verzekeraar"
             uit.append((v, f"vervaldag verzekering {naam}", einde, (einde - vandaag).days))
-            opzeg = _min_maanden(einde, p.get("opzegtermijn_maanden") or 3)
+            opzeg = _min_maanden(einde, p.get("opzegtermijn_maanden") or 2)  # wet 9-10-2023: 2 maanden sinds 1-10-2024
             uit.append((v, f"opzeggen verzekering {naam}", opzeg, (opzeg - vandaag).days))
         for pad, wat in TERMIJNEN:
             if pad == "verzekering.tot" and pol:
