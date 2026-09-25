@@ -2343,7 +2343,7 @@ def main():
 
         rooster = belrooster(items + archief, vandaag)
         bellen.rooster_schrijven(rooster)
-        ag.log(f"dag {vandaag}", "schrijf", f"belrooster: {len(rooster)} oproepen gepland (online {BEL_ONLINE_MIN} min vooraf, buiten op het vertrekmoment)",
+        ag.log(f"dag {vandaag}", "schrijf", f"belrooster: {len(rooster)} oproepen gepland (een oproep per afspraak: online {BEL_ONLINE_MIN} min vooraf, buiten {BEL_ONLINE_MIN} min voor het vertrek)",
                "\n".join(f"{r['tijd'][:16]} bel: {r['titel']}" for r in rooster[:60]))
         bots = [b for b in botsingen(items + archief) if b[:10] >= vandaag]
         in_archief = [f"{a['start'][:16]} {a['titel'][:60]} (in '{a['_archief'][:40]}', gezet door {maker(a)})"
