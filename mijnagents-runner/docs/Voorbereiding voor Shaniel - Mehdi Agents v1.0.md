@@ -102,3 +102,12 @@ VM (mijnagents-data) op, alleen toevoegen, nooit wissen. Mehdi besliste: alles e
 gebeurt later per submap (Fathom, Plaud, Bord wel; Locatie en gezondheid niet), en niet met Siyans account.
 Wil Mehdi later dat de VM rechtstreeks schrijft: Dropbox-app met Full Dropbox aanmaken en
 `dropbox_prive_koppelen.py --nieuw --basis "/Data uit Mehdi"` draaien (code staat klaar).
+
+## H. Gesprek Mehdi 25-09-2026 (agents), uitgevoerd
+
+- Tweede nummer +32460233042 (TWILIO_VAN_VAST): vastzit- en alarmoproepen. Afspraken blijven op +32460208703. Beide nummers via Telegram aan Mehdi gestuurd.
+- Een oproep, nooit herhaald (Mehdi's eigen sessie, FR-53).
+- Agendameldingen niet meer op Telegram (BODE_NIET_OP_TELEGRAM: agenda-wacht, calendly-wacht); ze blijven op het bord en in de agenda.
+- Postbus: concept_opslaan neemt bijlagen van een bestaand bericht mee (bijlagen_van). Een agent zet een mail met scan volledig klaar in mch@; Mehdi verstuurt.
+- Kosten per maand: 2 nummers 2,50 EUR; oproepen 0,0387 EUR/min, niet opgenomen gratis, verwacht max 5 EUR. Telegram en CallMeBot gratis.
+- Open: WhatsApp voor agents (Meta Cloud API, tweede nummer registreren; antwoorden binnen 24 uur gratis, zelf beginnen minder dan 0,03 EUR per bericht). Vraagt Shaniels Meta-login.
