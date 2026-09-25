@@ -224,6 +224,14 @@ def test_kosten_per_jaar_en_per_km():
     assert "andere" not in W.kosten({"voertuigen": [v]}, [], date(2026, 12, 31))["X"]["2026"]["munt"]["EUR"], "een offerte is geen kost"
 
 
+def test_bedragen_lezen():
+    assert W._bedrag("3036,49") == 3036.49, "zonder duizendtalpunt werd dit 303"
+    assert W._bedrag("1.379,60") == 1379.60 and W._bedrag("2.000 SRD") == 2000 and W._bedrag("414,57 excl.") == 414.57
+    assert W._incl("414,57 excl. btw = 501,63 incl. btw") == 501.63
+    v = {"plaat": "S", "status": "in gebruik", "onderhoud": [{"datum": "2026-09-11", "soort": "herstelling", "bedrag": "OFFERTE: 626,57 excl. btw; niet besteld"}]}
+    assert W.kosten({"voertuigen": [v]}, [], date(2026, 12, 31))["S"] == {}, "een offerte als herstelling telt ook niet"
+
+
 if __name__ == "__main__":
     fout = 0
     for n, f in sorted(globals().items()):

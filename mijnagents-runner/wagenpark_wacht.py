@@ -312,7 +312,8 @@ def dashboard(register, tijdlijn, lijst, onbekend, vandaag, vz=None):
 
 
 def _bedrag(s):
-    m = re.search(r"(\d{1,3}(?:[.\s]\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)", str(s or ""))
+    # Eerst een getal met duizendtallen (1.379,60 of 2.000), dan een gewoon getal (3036,49): anders werd 3036,49 gelezen als 303.
+    m = re.search(r"(\d{1,3}(?:[.\s]\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)", str(s or ""))
     if not m:
         return None
     x = m.group(1).replace(" ", "")
@@ -461,7 +462,8 @@ def kosten(register, vz, vandaag):
                 j["munt"].setdefault(munt, {}).setdefault(cat, 0.0)
                 j["munt"][munt][cat] += bedrag
         for o in v.get("onderhoud") or []:
-            if not o.get("datum") or not o.get("bedrag") or o.get("soort") == "offerte":
+            tekst = f"{o.get('bedrag') or ''} {o.get('omschrijving') or ''}".lower()
+            if not o.get("datum") or not o.get("bedrag") or o.get("soort") == "offerte" or "offerte" in tekst:
                 continue  # een offerte is geen uitgave
             munt = "SRD" if "srd" in str(o["bedrag"]).lower() else ("USD" if "usd" in str(o["bedrag"]).lower() else "EUR")
             boek(o["datum"][:4], CATEGORIE.get(o.get("soort"), "andere"), _incl(o["bedrag"]), munt)
@@ -471,7 +473,7 @@ def kosten(register, vz, vandaag):
         einde = re.findall(r"\d{4}-\d{2}-\d{2}", str(l.get("einde") or l.get("einde_tekst") or ""))
         if mb and start:
             s = date.fromisoformat(start.group(0))
-            e = min(date.fromisoformat(einde[-1]) if einde else vandaag, vandaag)
+            e = min(date.fromisoformat(min(einde)) if einde else vandaag, vandaag)  # de laatste betaalde huur, niet het contracteinde
             d = date(s.year, s.month, 1)
             while d <= e:
                 boek(d.year, "financiering", mb)
