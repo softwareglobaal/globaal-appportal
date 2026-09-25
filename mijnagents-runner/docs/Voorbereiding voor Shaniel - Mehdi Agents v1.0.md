@@ -112,3 +112,12 @@ Wil Mehdi later dat de VM rechtstreeks schrijft: Dropbox-app met Full Dropbox aa
 - Kosten per maand: 2 nummers 2,50 EUR; oproepen 0,0387 EUR/min, niet opgenomen gratis, verwacht max 5 EUR. Telegram en CallMeBot gratis.
 - Bel-tool roep_mehdi (MCP op https://mijnagents.globaal.be/mcp): Claude zet alles klaar tot de stap die alleen Mehdi kan doen, en belt hem dan meteen van het vastzit-nummer met een zin (wat en waar), plus Telegram. Mehdi koppelt de connector zelf in claude.ai (Instellingen, Connectors, custom connector, inloggen via SSO). Test: Flying Blue eerst.
 - Open: WhatsApp voor agents (Meta Cloud API, tweede nummer registreren; antwoorden binnen 24 uur gratis, zelf beginnen minder dan 0,03 EUR per bericht). Vraagt Shaniels Meta-login.
+
+## I. Gesprek Mehdi 25-09-2026 (mail, wagenpark, collega's), uitgevoerd
+
+- Afsprakennummer belt altijd vijf minuten vooraf, ook buiten zonder reistijdblok (voordien dertig). Twee nummers in de werkwijze van de Agendawacht (v7.8), in `agenda-taken.json` (v4.9) en als gedeelde les L17; test in `tests/test_agenda_taken.py`. Contactkaart voor Mehdi's iPhone in `Prive met Claude`.
+- N14: elke agent kent zijn collega's; de ronde leest `/api/agents` levend en meldt het als bron (`r.collegas`). AGENTNORM v1.6.
+- Afdeling Mail met `mail-info-harc`, `mail-hinv` en `mail-regisseur` (rapporteert aan De Regisseur, Mehdi hoogstens een bericht per dag om 08:00). Regels in `koppelingen/postvak.py`, postvakken en mappen in `werkwijze/mailwachten.json`. Draait met `/usr/bin/python3` omdat de venv geen yaml heeft.
+- `wagenpark-wacht` (organisatie): register van tien wagens, termijnen, post per wagen, te klasseren; uitvoer in Data uit Mehdi/Wagenparkwacht.
+- Open voor Shaniel: app-wachtwoorden van melodiebvba@gmail.com en wagenparkha@gmail.com als postvak in `~/post-config/mailboxen.yaml` (imap_host imap.gmail.com, groepen [admin]); daarna een regel in `mailwachten.json` en voor Melodie een `mail-melo` naar het model van `mail_hinv.py`.
+- Open voor Mehdi: mch@ van de Mac naar de VM (de Mac-wacht stuurt elk bericht van hoog belang apart); de standaard mapstructuur voor wagens; de pincodes van tankkaarten uit het overzicht-xlsx in o16 halen.
