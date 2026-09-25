@@ -238,9 +238,19 @@ def dashboard(register, tijdlijn, lijst, onbekend, vandaag):
             "mappen_standaard": register.get("submappen_standaard", [])}
 
 
-def signalen(lijst, vandaag):
-    """Een signaal op 30, 14 en 3 dagen voor een termijn en een keer als hij verlopen is; uniek per trede."""
+def signalen(lijst, vandaag, register=None):
+    """Een signaal op 30, 14 en 3 dagen voor een termijn en een keer als hij verlopen is; uniek per trede.
+    Plus een signaal per achterstand op een lening of renting (25-09-2026: KBC dreigde bij 2BAS423 met inbeslagname)."""
     uit = []
+    for v in (register or {}).get("voertuigen", []):
+        a = (v.get("leasing") or {}).get("achterstand")
+        if a and v.get("status") not in WEG:
+            uit.append({"voor": "mehdi", "soort": "signaal", "sleutel": v["plaat"],
+                        "titel": re.sub("stil", "st.l", f"Wagenpark: achterstand {v['leasing'].get('maatschappij') or ''} op {v['plaat']} "
+                                                        f"({v['merk_model']}): {str(a)[:120]}", flags=re.I),
+                        "uniek": f"wagenpark:{v['plaat']}:achterstand:{(v['leasing'].get('contract') or '')[:40]}",
+                        "inhoud": {"plaat": v["plaat"], "financiering": v["leasing"],
+                                   "voorstel": "achterstand betalen, dan pas de aankoopoptie; bewijs in 00_Basisgegevens & contract"}})
     for v, wat, d, n in lijst:
         trede = "verlopen" if n < 0 else next((str(t) for t in sorted(TREDEN) if n <= t), None)
         if not trede:
@@ -299,7 +309,7 @@ def main():
         te_klasseren = [e for e in tijdlijn.values() if not e.get("geklasseerd") and e.get("plaat") in hier]
         json.dump(sorted(te_klasseren, key=lambda e: e["datum"]), open(os.path.join(EXPORT, "te klasseren.json"), "w", encoding="utf-8"),
                   ensure_ascii=False, indent=1)
-        sig = signalen(lijst, vandaag)
+        sig = signalen(lijst, vandaag, register)
         if sig:
             ag.klaarzet(sig)
         ag.log(f"dag {vandaag.isoformat()}", "overzicht", f"{len(lijst)} termijnen, {n} nieuwe post, {len(te_klasseren)} te klasseren", tekst)
