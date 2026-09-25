@@ -67,6 +67,39 @@ TERMIJNEN = [("keuring_tot", "keuring"), ("groene_kaart_tot", "groene kaart"), (
              ("onderhoud_volgend", "onderhoud")]
 TREDEN = (30, 14, 3)
 WEG = ("verkocht", "geschrapt", "buiten gebruik")
+ONDERDELEN = os.path.join(HIER, "werkwijze", "wagenpark-onderdelen.json")
+OPZEG_TREDEN = (60, 30, 14)  # tijd om offertes te vragen: een nieuwe verzekeraar geeft het eerste jaar 20 tot 25% korting
+VZ_SQL = ("select coalesce(json_agg(json_build_object('id', v.id, 'verzekeraar', v.verzekeraar, 'polisnummer', v.polisnummer, "
+          "'object', v.object, 'startdatum', v.startdatum, 'einddatum', v.einddatum, 'opzegtermijn_maanden', v.opzegtermijn_maanden, "
+          "'jaarpremie', v.jaarpremie, 'omschrijving', v.omschrijving, 'firma', f.code, 'extra', v.extra)), '[]'::json) "
+          "from vermogen.verzekering v left join kern.firma f on f.id = v.firma_id "
+          "where lower(v.soort) = 'auto' and coalesce(v.actief, true)")
+
+
+def verzekeringen():
+    """De autoverzekeringen uit vermogen.verzekering: de bron, Mehdi beheert ze in de vastgoedapp
+    (vermogen.globaal.be, Verzekeringen, soort Auto, object = nummerplaat). Leeg als de databank niet antwoordt."""
+    import subprocess
+    try:
+        c = os.environ.get("KERN_POSTGRES_CONTAINER", "appportal-postgresql-1")
+        g = subprocess.run(["docker", "exec", c, "sh", "-c", "echo $POSTGRES_USER"], capture_output=True, text=True,
+                           timeout=30).stdout.strip() or "postgres"
+        r = subprocess.run(["docker", "exec", c, "psql", "-U", g, "-d", os.environ.get("KERN_DB", "appportal"), "-At", "-c", VZ_SQL],
+                           capture_output=True, text=True, timeout=60)
+        return json.loads(r.stdout.strip() or "[]") if r.returncode == 0 else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def polissen_van(v, vz):
+    return [p for p in vz or [] if _norm(v["plaat"]) and _norm(v["plaat"]) in _norm(p.get("object"))]
+
+
+def _min_maanden(d, n):
+    """d min n maanden (n negatief = erbij), met de dag begrensd op het einde van de maand."""
+    import calendar
+    j, m = divmod(d.month - 1 - int(n), 12)
+    return date(d.year + j, m + 1, min(d.day, calendar.monthrange(d.year + j, m + 1)[1]))
 
 
 def _norm(tekst):
@@ -90,13 +123,26 @@ def _veld(v, pad):
     return v
 
 
-def termijnen(register, vandaag):
-    """[(voertuig, wat, datum, dagen)] voor wagens in gebruik, plus [(voertuig, wat)] zonder datum."""
+def termijnen(register, vandaag, vz=None):
+    """[(voertuig, wat, datum, dagen)] voor wagens in gebruik, plus [(voertuig, wat)] zonder datum.
+    Staat de wagen in vermogen.verzekering, dan komen vervaldag en opzegdatum van daar, niet uit het register."""
     uit, onbekend = [], []
     for v in register["voertuigen"]:
         if v.get("status") not in ("in gebruik", "onzeker"):
             continue
+        pol = polissen_van(v, vz)
+        for p in pol:
+            try:
+                einde = date.fromisoformat(str(p.get("einddatum"))[:10])
+            except ValueError:
+                continue
+            naam = p.get("verzekeraar") or "verzekeraar"
+            uit.append((v, f"vervaldag verzekering {naam}", einde, (einde - vandaag).days))
+            opzeg = _min_maanden(einde, p.get("opzegtermijn_maanden") or 3)
+            uit.append((v, f"opzeggen verzekering {naam}", opzeg, (opzeg - vandaag).days))
         for pad, wat in TERMIJNEN:
+            if pad == "verzekering.tot" and pol:
+                continue
             d = _veld(v, pad)
             if not d:
                 if pad in ("keuring_tot", "verzekering.tot") and v.get("status") == "in gebruik":
@@ -207,7 +253,7 @@ def overzicht(register, tijdlijn, lijst, onbekend, vandaag):
     return "\n".join(r)
 
 
-def dashboard(register, tijdlijn, lijst, onbekend, vandaag):
+def dashboard(register, tijdlijn, lijst, onbekend, vandaag, vz=None):
     """De gegevens voor het wagenparkdashboard op vermogen.globaal.be/wagenpark-dashboard (alleen lezen daar).
     Per wagen: het register, de bestuurders, de termijnen met hun stand, de onderhoudshistoriek (uit het
     register en uit de post van garages) en de post. Nooit pincodes of kaartnummers: die staan niet in het register."""
@@ -222,6 +268,11 @@ def dashboard(register, tijdlijn, lijst, onbekend, vandaag):
     for v, wat in onbekend:
         termijn_per.setdefault(v["plaat"], []).append({"wat": wat, "datum": None, "dagen": None, "stand": "onbekend"})
     wagens = []
+    try:
+        blik = vooruitblik(register, vandaag)
+    except Exception as e:  # noqa: BLE001  een fout in de vooruitblik mag het dashboard niet tegenhouden
+        blik = {}
+        print("vooruitblik mislukt:", type(e).__name__, e, file=sys.stderr)
     for v in register["voertuigen"]:
         post = sorted(per.get(v["plaat"], []), key=lambda e: e["datum"], reverse=True)
         onderhoud = [dict(o, herkomst="register") for o in v.get("onderhoud") or []]
@@ -230,12 +281,100 @@ def dashboard(register, tijdlijn, lijst, onbekend, vandaag):
                       for e in post if e["soort"] in ("garage", "keuring", "schade")]
         onderhoud.sort(key=lambda o: o.get("datum") or "", reverse=True)
         km = sorted(v.get("km") or [], key=lambda k: k.get("datum") or "")
-        wagens.append(dict(v, termijnen=sorted(termijn_per.get(v["plaat"], []), key=lambda t: (t["dagen"] is None, t["dagen"] or 0)),
+        extra = blik.get(v["plaat"], {})
+        wagens.append(dict(v, polissen=polissen_van(v, vz), vooruitblik=extra.get("vooruitblik", []), vaak=extra.get("vaak", {}),
+                           km_per_dag=extra.get("km_per_dag"), termijnen=sorted(termijn_per.get(v["plaat"], []), key=lambda t: (t["dagen"] is None, t["dagen"] or 0)),
                            onderhoud=onderhoud, post=post[:60], laatste_km=km[-1] if km else None,
                            te_klasseren=sum(1 for e in post if not e.get("geklasseerd"))))
     return {"gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"), "vandaag": vandaag.isoformat(),
             "wagens": wagens, "niet_toegewezen": sorted(per.get("", []), key=lambda e: e["datum"], reverse=True)[:40],
             "mappen_standaard": register.get("submappen_standaard", [])}
+
+
+def _bedrag(s):
+    m = re.search(r"(\d{1,3}(?:[.\s]\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)", str(s or ""))
+    if not m:
+        return None
+    x = m.group(1).replace(" ", "")
+    x = x.replace(".", "").replace(",", ".") if "," in x else x
+    try:
+        return float(x)
+    except ValueError:
+        return None
+
+
+def _werken(o):
+    """De werken van een onderhoudsregel als teksten: uit de factuur (werken) of anders de omschrijving."""
+    w = o.get("werken") or []
+    if w:
+        return [(f"{x.get('onderdeel') or ''} {x.get('omschrijving') or ''}", x.get("bedrag")) for x in w]
+    return [(f"{o.get('soort') or ''} {o.get('omschrijving') or ''}", o.get("bedrag"))]
+
+
+def vooruitblik(register, vandaag):
+    """Per wagen die er nog is: wanneer elk onderdeel weer aan de beurt is, wat het volgens de eigen facturen kost,
+    en welke herstellingen vaak terugkomen. Regels in werkwijze/wagenpark-onderdelen.json; een fabrieksgegeven gaat voor."""
+    regels = json.load(open(ONDERDELEN, encoding="utf-8"))
+    prijzen = {}
+    for v in register["voertuigen"]:
+        for o in v.get("onderhoud") or []:
+            for tekst, bedrag in _werken(o):
+                for r in regels["onderdelen"]:
+                    if any(w in tekst.lower() for w in r["woorden"]) and _bedrag(bedrag):
+                        prijzen.setdefault(r["onderdeel"], []).append(_bedrag(bedrag))
+    uit = {}
+    for v in register["voertuigen"]:
+        if v.get("status") in WEG:
+            continue
+        fab = v.get("fabrikant") or {}
+        km = sorted([k for k in v.get("km") or [] if k.get("km") and k.get("datum")], key=lambda k: k["datum"])
+        per_dag = None
+        if len(km) >= 2:
+            dagen = (date.fromisoformat(km[-1]["datum"][:10]) - date.fromisoformat(km[0]["datum"][:10])).days
+            if dagen > 60:
+                per_dag = (km[-1]["km"] - km[0]["km"]) / dagen
+        blik, vaak = [], {}
+        for r in regels["onderdelen"]:
+            gedaan = []
+            for o in v.get("onderhoud") or []:
+                if any(any(w in tekst.lower() for w in r["woorden"]) for tekst, _ in _werken(o)):
+                    gedaan.append(o)
+            if r.get("alleen_bij_klacht"):
+                if len(gedaan) >= 2:
+                    vaak[r["onderdeel"]] = len(gedaan)
+                continue
+            i_km, i_m = r.get("interval_km"), r.get("interval_maanden")
+            herkomst = "richtwaarde"
+            if r["onderdeel"].startswith("onderhoudsbeurt"):
+                i_km, i_m, herkomst = fab.get("interval_km"), fab.get("interval_maanden"), "fabrikant"
+            if r.get("alleen_als_riem"):
+                i_km, i_m, herkomst = fab.get("riem_km"), fab.get("riem_maanden"), "fabrikant"
+            if not (i_km or i_m) or i_km == "fabrikant":
+                continue
+            laatst = max(gedaan, key=lambda o: o.get("datum") or "") if gedaan else None
+            basis_d = (laatst or {}).get("datum") or v.get("eerste_inschrijving")
+            basis_km = (laatst or {}).get("km") or (0 if not laatst else None)
+            kandidaten = []
+            if i_m and basis_d:
+                d0 = date.fromisoformat(str(basis_d)[:10])
+                kandidaten.append(_min_maanden(d0, -int(i_m)))
+            verwacht_km = (basis_km + i_km) if (i_km and basis_km is not None) else None
+            if verwacht_km and per_dag and km:
+                kandidaten.append(date.fromisoformat(km[-1]["datum"][:10]) + timedelta(days=max(0, (verwacht_km - km[-1]["km"]) / max(per_dag, 1))))
+            if not kandidaten:
+                continue
+            wanneer = min(kandidaten)
+            kost = prijzen.get(r["onderdeel"])
+            n = (wanneer - vandaag).days
+            blik.append({"onderdeel": r["onderdeel"], "laatst": (laatst or {}).get("datum"), "laatst_km": (laatst or {}).get("km"),
+                         "interval": " of ".join(x for x in (f"{i_m} maanden" if i_m else "", f"{i_km:,} km".replace(",", ".") if i_km else "") if x),
+                         "herkomst": herkomst, "verwacht": wanneer.isoformat(), "verwacht_km": verwacht_km, "dagen": n,
+                         "stand": "te laat" if n < 0 else ("binnenkort" if n <= regels.get("vooruit_dagen", 90) else "later"),
+                         "kost_eigen_facturen": round(sum(kost) / len(kost)) if kost else None, "groot": r.get("groot", False)})
+            if len([o for o in gedaan if o.get("soort") == "herstelling"]) >= 2:
+                vaak[r["onderdeel"]] = len(gedaan)
+        uit[v["plaat"]] = {"vooruitblik": sorted(blik, key=lambda b: b["dagen"]), "vaak": vaak, "km_per_dag": round(per_dag) if per_dag else None}
+    return uit
 
 
 def signalen(lijst, vandaag, register=None):
@@ -252,7 +391,8 @@ def signalen(lijst, vandaag, register=None):
                         "inhoud": {"plaat": v["plaat"], "financiering": v["leasing"],
                                    "voorstel": "achterstand betalen, dan pas de aankoopoptie; bewijs in 00_Basisgegevens & contract"}})
     for v, wat, d, n in lijst:
-        trede = "verlopen" if n < 0 else next((str(t) for t in sorted(TREDEN) if n <= t), None)
+        treden = OPZEG_TREDEN if wat.startswith("opzeggen verzekering") else TREDEN
+        trede = "verlopen" if n < 0 else next((str(t) for t in sorted(treden) if n <= t), None)
         if not trede:
             continue
         staat = f"verlopen sinds {d.strftime('%d-%m-%Y')}" if n < 0 else f"over {n} dagen, op {d.strftime('%d-%m-%Y')}"
@@ -261,7 +401,10 @@ def signalen(lijst, vandaag, register=None):
                     "titel": re.sub("stil", "st.l", titel, flags=re.I),
                     "uniek": f"wagenpark:{v['plaat']}:{wat}:{d.isoformat()}:{trede}",
                     "inhoud": {"plaat": v["plaat"], "wat": wat, "datum": d.isoformat(), "mappen": v.get("mappen"),
-                               "voorstel": f"{wat} regelen voor {v['plaat']}; het bewijs in de map {v['mappen'][-1] if v.get('mappen') else ''}"}})
+                               "voorstel": (f"Vraag nu offertes bij minstens twee andere verzekeraars (het eerste jaar geeft een nieuwe verzekeraar "
+                                            f"20 tot 25% korting). Opzeggen aangetekend of via de nieuwe verzekeraar, uiterlijk {d.strftime('%d-%m-%Y')}."
+                                            if wat.startswith("opzeggen verzekering") else
+                                            f"{wat} regelen voor {v['plaat']}; het bewijs in de map {v['mappen'][-1] if v.get('mappen') else ''}")}})
     return uit
 
 
@@ -281,7 +424,8 @@ def main():
     except (OSError, ValueError):
         tijdlijn = {}
     dagen = DAGELIJKS_DAGEN if tijdlijn else EERSTE_KEER_DAGEN
-    lijst, onbekend = termijnen(register, vandaag)
+    vz = verzekeringen()
+    lijst, onbekend = termijnen(register, vandaag, vz)
     if droog:
         class _L:
             def log(self, *a):
@@ -302,7 +446,9 @@ def main():
         with open(os.path.join(EXPORT, "Wagenpark overzicht.md"), "w", encoding="utf-8") as f:
             f.write(tekst + "\n")
         json.dump(register, open(os.path.join(EXPORT, "voertuigen.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-        json.dump(dashboard(register, tijdlijn, lijst, onbekend, vandaag),
+        r.bron("vermogen.verzekering (autoverzekeringen)", json.dumps(vz, ensure_ascii=False, sort_keys=True, default=str))
+        r.bron("wagenpark-onderdelen.json", open(ONDERDELEN, encoding="utf-8").read())
+        json.dump(dashboard(register, tijdlijn, lijst, onbekend, vandaag, vz),
                   open(os.path.join(EXPORT, "dashboard.json"), "w", encoding="utf-8"), ensure_ascii=False)
         # Mehdi, 25-09-2026: wagens die er niet meer zijn tellen niet mee (verkocht, geschrapt, buiten gebruik).
         hier = {v["plaat"] for v in register["voertuigen"] if v.get("status") not in WEG}

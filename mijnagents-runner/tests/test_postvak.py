@@ -158,6 +158,34 @@ def test_wagenpark_een_signaal_per_trede_zonder_alarmwoord():
     assert all("stil" not in x["titel"].lower() for x in s)
 
 
+def test_verzekering_geeft_vervaldag_en_opzegdatum():
+    """Mehdi, 25-09-2026: op tijd opzeggen om bij een nieuwe verzekeraar de eerstejaarskorting te nemen."""
+    v = {"plaat": "2JCR831", "merk_model": "Citroën Berlingo", "status": "in gebruik", "gebruik": "Harmoniebouw", "mappen": ["/x"],
+         "verzekering": {"tot": "2027-03-31"}}
+    vz = [{"object": "2-JCR-831", "verzekeraar": "AXA", "einddatum": "2027-03-31", "opzegtermijn_maanden": 3}]
+    lijst, _ = W.termijnen({"voertuigen": [v]}, date(2026, 12, 1), vz)
+    wat = {x[1]: x[2] for x in lijst}
+    assert wat["opzeggen verzekering AXA"] == date(2026, 12, 31), wat
+    assert wat["vervaldag verzekering AXA"] == date(2027, 3, 31)
+    assert "verzekering" not in wat, "met een polis in vermogen telt de datum uit het register niet dubbel"
+    s = W.signalen(lijst, date(2026, 12, 1))
+    opz = [x for x in s if "opzeggen" in x["titel"]]
+    assert opz and opz[0]["uniek"].endswith(":30") and "offertes" in opz[0]["inhoud"]["voorstel"]
+
+
+def test_vooruitblik_volgt_de_fabrikant_en_de_eigen_facturen():
+    reg = {"voertuigen": [{"plaat": "2BAS423", "merk_model": "Ford Transit Custom", "status": "in gebruik", "eerste_inschrijving": "2021-09-10",
+                           "fabrikant": {"interval_km": 60000, "interval_maanden": 24, "riem_km": 160000, "riem_maanden": 72},
+                           "km": [{"datum": "2025-05-26", "km": 120000}, {"datum": "2026-05-26", "km": 147858}],
+                           "onderhoud": [{"datum": "2025-04-10", "soort": "onderhoud", "km": 118000, "omschrijving": "onderhoud olie en filters", "bedrag": "400,00"},
+                                         {"datum": "2024-01-10", "soort": "herstelling", "km": 100000, "werken": [{"onderdeel": "remblokken voor", "bedrag": "250,00"}]}]}]}
+    b = {x["onderdeel"]: x for x in W.vooruitblik(reg, date(2026, 9, 25))["2BAS423"]["vooruitblik"]}
+    assert b["distributieriem"]["herkomst"] == "fabrikant" and b["distributieriem"]["laatst"] is None
+    assert b["onderhoudsbeurt (olie en filters)"]["verwacht"] == "2027-04-10"
+    assert b["onderhoudsbeurt (olie en filters)"]["kost_eigen_facturen"] == 400
+    assert b["remblokken"]["kost_eigen_facturen"] == 250
+
+
 if __name__ == "__main__":
     fout = 0
     for n, f in sorted(globals().items()):

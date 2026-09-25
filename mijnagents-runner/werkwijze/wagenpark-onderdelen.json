@@ -1,0 +1,20 @@
+{
+ "_uitleg": "Regelboek van De Wagenparkwacht voor de vooruitblik (versie 1.0, 25-09-2026). Per onderdeel: de woorden waarmee het op een factuur staat en een richtwaarde voor het interval. Een fabrieksgegeven in het register (veld fabrikant) gaat altijd voor; de richtwaarden hieronder zijn algemene waarden voor een wagen zonder fabrieksgegeven en staan in het dashboard als 'richtwaarde', nooit als voorschrift. De kost komt uit de eigen facturen van de groep (gemiddelde per onderdeel), nooit uit een schatting. Mandaat van Mehdi: 'dat de agent ons op de hoogte kan houden wat er nog moet gebeuren, of er nog grote kosten komen, en wat de vaak voorkomende problemen zijn'.",
+ "onderdelen": [
+  {"onderdeel": "onderhoudsbeurt (olie en filters)", "woorden": ["olie", "oliefilter", "onderhoud", "service", "entretien", "grote beurt", "kleine beurt", "revisie"], "interval_km": "fabrikant", "interval_maanden": "fabrikant", "groot": false},
+  {"onderdeel": "distributieriem", "woorden": ["distributie", "distributieriem", "timing belt", "courroie de distribution", "riem en waterpomp"], "interval_km": "fabrikant", "interval_maanden": "fabrikant", "groot": true, "alleen_als_riem": true},
+  {"onderdeel": "remblokken", "woorden": ["remblok", "remblokken", "plaquettes", "brake pad"], "interval_km": 45000, "interval_maanden": null, "groot": false},
+  {"onderdeel": "remschijven", "woorden": ["remschijf", "remschijven", "disques", "brake disc"], "interval_km": 90000, "interval_maanden": null, "groot": true},
+  {"onderdeel": "remvloeistof", "woorden": ["remvloeistof", "remolie", "liquide de frein", "brake fluid"], "interval_km": null, "interval_maanden": 24, "groot": false},
+  {"onderdeel": "banden", "woorden": ["band", "banden", "pneu", "tyre", "tire", "bestdrive", "velg"], "interval_km": 40000, "interval_maanden": 60, "groot": true},
+  {"onderdeel": "koppeling", "woorden": ["koppeling", "embrayage", "clutch", "vliegwiel", "volant moteur"], "interval_km": null, "interval_maanden": null, "groot": true, "alleen_bij_klacht": true},
+  {"onderdeel": "batterij", "woorden": ["batterij", "accu", "batterie", "battery"], "interval_km": null, "interval_maanden": 60, "groot": false},
+  {"onderdeel": "airco", "woorden": ["airco", "climatisation", "airconditioning", "koelmiddel"], "interval_km": null, "interval_maanden": 24, "groot": false},
+  {"onderdeel": "ruitenwissers", "woorden": ["wisser", "ruitenwisser", "essuie-glace"], "interval_km": null, "interval_maanden": 12, "groot": false},
+  {"onderdeel": "schokdempers", "woorden": ["schokdemper", "amortisseur", "ophanging", "veerpoot"], "interval_km": 120000, "interval_maanden": null, "groot": true},
+  {"onderdeel": "carrosserie en schade", "woorden": ["carrosserie", "schade", "deuk", "spiegel", "bumper", "voorruit", "ruit"], "interval_km": null, "interval_maanden": null, "groot": false, "alleen_bij_klacht": true},
+  {"onderdeel": "diagnose en elektronica", "woorden": ["diagnose", "storing", "foutcode", "sensor", "egr", "dpf", "roetfilter", "adblue", "injector"], "interval_km": null, "interval_maanden": null, "groot": true, "alleen_bij_klacht": true}
+ ],
+ "grote_kost_vanaf_eur": 500,
+ "vooruit_dagen": 90
+}
