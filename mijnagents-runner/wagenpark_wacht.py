@@ -461,8 +461,8 @@ def kosten(register, vz, vandaag):
                 j["munt"].setdefault(munt, {}).setdefault(cat, 0.0)
                 j["munt"][munt][cat] += bedrag
         for o in v.get("onderhoud") or []:
-            if not o.get("datum") or not o.get("bedrag"):
-                continue
+            if not o.get("datum") or not o.get("bedrag") or o.get("soort") == "offerte":
+                continue  # een offerte is geen uitgave
             munt = "SRD" if "srd" in str(o["bedrag"]).lower() else ("USD" if "usd" in str(o["bedrag"]).lower() else "EUR")
             boek(o["datum"][:4], CATEGORIE.get(o.get("soort"), "andere"), _incl(o["bedrag"]), munt)
         l = v.get("leasing") or {}

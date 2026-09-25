@@ -219,7 +219,9 @@ def test_kosten_per_jaar_en_per_km():
     assert k["2025"]["munt"]["EUR"]["financiering"] == round(501.63 * 2)
     assert k["2026"]["munt"]["EUR"] == {"onderhoud en herstel": 1000, "financiering": round(501.63 * 2)}
     assert k["2026"]["munt"]["SRD"] == {"onderhoud en herstel": 2000}, "SRD nooit bij EUR"
-    assert k["2026"]["km_zeker"] and 29000 < k["2026"]["km"] < 30000
+    assert k["2026"]["km_zeker"] and 27000 < k["2026"]["km"] < 28000, k["2026"]  # vanaf 1 januari, niet vanaf de eerste stand
+    v["onderhoud"].append({"datum": "2026-03-01", "soort": "offerte", "bedrag": "899,34"})
+    assert "andere" not in W.kosten({"voertuigen": [v]}, [], date(2026, 12, 31))["X"]["2026"]["munt"]["EUR"], "een offerte is geen kost"
 
 
 if __name__ == "__main__":
