@@ -85,6 +85,32 @@ def wachten():
         return json.load(f)
 
 
+VERZONDEN = ("INBOX.Sent", "INBOX.Sent Messages", "INBOX.Sent Items", "Sent")
+
+
+def mappen_van(adres):
+    """De mappen die van dit postvak gelezen worden; standaard alleen INBOX (zie mailwachten.json, 'mappen')."""
+    try:
+        return wachten().get("mappen", {}).get(adres) or ["INBOX"]
+    except (OSError, ValueError):
+        return ["INBOX"]
+
+
+def koppen_mappen(adres, mappen, sinds, ag=None, plafond=1000):
+    """Koppen uit meerdere mappen; een map die niet bestaat of niet leesbaar is, wordt overgeslagen en gelogd."""
+    uit, gelukt = [], 0
+    for m in mappen:
+        try:
+            uit += koppen(adres, m, sinds=sinds, plafond=plafond)
+            gelukt += 1
+        except Exception as e:  # noqa: BLE001
+            if ag:
+                ag.log("mappen", "bron", f"{adres} {m} niet leesbaar: {type(e).__name__}")
+    if not gelukt:
+        raise LookupError(f"geen enkele map van {adres} leesbaar")
+    return uit
+
+
 def _postbus():
     if POST not in sys.path:
         sys.path.insert(0, POST)
@@ -202,14 +228,13 @@ def ronde(naam, ag, r, nu=None):
         mb = postvak(adres)
         if not mb:
             continue
-        for m in ("INBOX.Sent", "Sent"):
+        for m in VERZONDEN:
             if mb.get("mappen") and m not in mb["mappen"]:
                 continue
             try:
                 verzonden += koppen(adres, m, sinds=(nu - timedelta(days=BEKEND_DAGEN)).date().isoformat(), plafond=1500)
-                break
-            except Exception as e:  # noqa: BLE001
-                ag.log("verzonden", "bron", f"{adres} {m} niet leesbaar: {type(e).__name__}")
+            except Exception:  # noqa: BLE001
+                pass  # niet elk postvak heeft elke variant van Verzonden
     bekend = frozenset(_adres(a) for s in verzonden for a in (s.get("aan") or []) + (s.get("cc") or []) if _adres(a))
     tel["verzonden_gelezen"], tel["bekende_contacten"] = len(verzonden), len(bekend)
     items, rijen = [], []
@@ -218,7 +243,7 @@ def ronde(naam, ag, r, nu=None):
             r.nood(f"{adres} staat niet in de postbus: de wacht kan het niet lezen", wie="claude-code")
             continue
         try:
-            berichten = koppen(adres, "INBOX", sinds=sinds)
+            berichten = koppen_mappen(adres, mappen_van(adres), sinds, ag)
         except Exception as e:  # noqa: BLE001
             r.nood(f"{adres} niet leesbaar via de postbus", wie="claude-code")
             ag.log("inbox", "bron", f"{adres}: {type(e).__name__}: {str(e)[:120]}")

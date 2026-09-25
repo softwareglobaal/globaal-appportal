@@ -1,5 +1,10 @@
 {
  "_uitleg": "Welke mailwacht welke postvakken leest (koppelingen/postvak.py). Versie 1.0, 25-09-2026, mandaat van Mehdi: een aparte agent per postvak, een Mailregisseur erboven die aan De Regisseur rapporteert, geen spam of rommel naar Mehdi. postvakken: wat de wacht leest. antwoord_vanuit: postvakken waarvan de verzonden post telt als antwoord (bij H-Architects antwoordt light@ vaak op wat in info@ binnenkomt). eigen_domeinen: post van de eigen groep is geen opvolgpunt. De wachtwoorden staan alleen in ~/post-config/mailboxen.yaml op de VM.",
+ "mappen": {
+  "_uitleg": "Welke mappen per postvak gelezen worden (standaard alleen INBOX). Nodig omdat de sorteertaak op de Mac (Mailwacht info@h-invest, 24-09-2026) belangrijke post uit de INBOX verplaatst naar Bank en verzekering en Boekhouding; zonder deze lijst zou geen wacht die post nog zien.",
+  "info@h-invest.be": ["INBOX", "INBOX.Bank en verzekering", "INBOX.Boekhouding", "INBOX.Octopus", "INBOX.Maes"],
+  "info@h-architects.be": ["INBOX", "INBOX.for MEHDI", "INBOX.IMPORTANT", "INBOX.BOEKHOUDING", "INBOX.BOEKHOUDING.E-Box", "INBOX.ORDE", "INBOX.Questions", "INBOX.ARCO"]
+ },
  "mail-info-harc": {
   "label": "De Mailwacht info@ H-Architects",
   "firma": "HARC",

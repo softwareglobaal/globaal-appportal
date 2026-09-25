@@ -141,7 +141,7 @@ def post_koppelen(register, tijdlijn, dagen, ag):
             weg.append(adres)
             continue
         try:
-            berichten = postvak.koppen(adres, "INBOX", sinds=sinds, plafond=3000)
+            berichten = postvak.koppen_mappen(adres, postvak.mappen_van(adres), sinds, ag, plafond=3000)
         except Exception as e:  # noqa: BLE001
             weg.append(adres)
             ag.log("post", "bron", f"{adres}: {type(e).__name__}: {str(e)[:100]}")
