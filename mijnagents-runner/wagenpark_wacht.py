@@ -201,6 +201,37 @@ def overzicht(register, tijdlijn, lijst, onbekend, vandaag):
     return "\n".join(r)
 
 
+def dashboard(register, tijdlijn, lijst, onbekend, vandaag):
+    """De gegevens voor het wagenparkdashboard op vermogen.globaal.be/wagenpark-dashboard (alleen lezen daar).
+    Per wagen: het register, de bestuurders, de termijnen met hun stand, de onderhoudshistoriek (uit het
+    register en uit de post van garages) en de post. Nooit pincodes of kaartnummers: die staan niet in het register."""
+    per = {}
+    for e in tijdlijn.values():
+        per.setdefault(e.get("plaat") or "", []).append(e)
+    termijn_per = {}
+    for v, wat, d, n in lijst:
+        termijn_per.setdefault(v["plaat"], []).append(
+            {"wat": wat, "datum": d.isoformat(), "dagen": n,
+             "stand": "verlopen" if n < 0 else ("dringend" if n <= 14 else ("binnenkort" if n <= 30 else "ok"))})
+    for v, wat in onbekend:
+        termijn_per.setdefault(v["plaat"], []).append({"wat": wat, "datum": None, "dagen": None, "stand": "onbekend"})
+    wagens = []
+    for v in register["voertuigen"]:
+        post = sorted(per.get(v["plaat"], []), key=lambda e: e["datum"], reverse=True)
+        onderhoud = [dict(o, herkomst="register") for o in v.get("onderhoud") or []]
+        onderhoud += [{"datum": e["datum"], "soort": e["soort"], "garage": e["van"], "km": None, "bedrag": None,
+                       "omschrijving": e["onderwerp"], "bron": f"mail {e['postvak']}", "herkomst": "post"}
+                      for e in post if e["soort"] in ("garage", "keuring", "schade")]
+        onderhoud.sort(key=lambda o: o.get("datum") or "", reverse=True)
+        km = sorted(v.get("km") or [], key=lambda k: k.get("datum") or "")
+        wagens.append(dict(v, termijnen=sorted(termijn_per.get(v["plaat"], []), key=lambda t: (t["dagen"] is None, t["dagen"] or 0)),
+                           onderhoud=onderhoud, post=post[:60], laatste_km=km[-1] if km else None,
+                           te_klasseren=sum(1 for e in post if not e.get("geklasseerd"))))
+    return {"gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"), "vandaag": vandaag.isoformat(),
+            "wagens": wagens, "niet_toegewezen": sorted(per.get("", []), key=lambda e: e["datum"], reverse=True)[:40],
+            "mappen_standaard": register.get("submappen_standaard", [])}
+
+
 def signalen(lijst, vandaag):
     """Een signaal op 30, 14 en 3 dagen voor een termijn en een keer als hij verlopen is; uniek per trede."""
     uit = []
@@ -255,6 +286,8 @@ def main():
         with open(os.path.join(EXPORT, "Wagenpark overzicht.md"), "w", encoding="utf-8") as f:
             f.write(tekst + "\n")
         json.dump(register, open(os.path.join(EXPORT, "voertuigen.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        json.dump(dashboard(register, tijdlijn, lijst, onbekend, vandaag),
+                  open(os.path.join(EXPORT, "dashboard.json"), "w", encoding="utf-8"), ensure_ascii=False)
         te_klasseren = [e for e in tijdlijn.values() if not e.get("geklasseerd") and e.get("plaat")]
         json.dump(sorted(te_klasseren, key=lambda e: e["datum"]), open(os.path.join(EXPORT, "te klasseren.json"), "w", encoding="utf-8"),
                   ensure_ascii=False, indent=1)
