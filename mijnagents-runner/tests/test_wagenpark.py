@@ -25,11 +25,13 @@ def test_km_nazicht_en_tankcontrole():
     assert {"liters", "twee keer"} <= {x["soort"] for x in tc}, tc
 
 
-def test_verbruikspiek():
-    v = {"plaat": "X", "merk_model": "Citroën Berlingo", "brandstof_maanden": [
-        {"maand": f"2026-0{i}", "liters": 70, "km_laagst": 1000 * i, "km_hoogst": 1000 * i + 1000} for i in range(1, 5)] +
-        [{"maand": "2026-05", "liters": 150, "km_laagst": 5000, "km_hoogst": 6000}]}
-    tc, verbruik = W.tankcontrole(v)
+def test_verbruik_per_tankbeurt_en_piek():
+    """De liters van een beurt vullen de km sinds de vorige beurt; een maand met veel meer verbruik komt in de controle."""
+    km = [{"datum": f"2026-0{m}-{d:02d}", "km": 10000 + 500 * i, "bron": "tankkaart", "liters": 40}
+          for i, (m, d) in enumerate([(1, 5), (1, 20), (2, 5), (2, 20), (3, 5), (3, 20), (4, 5), (4, 20)])]
+    km += [{"datum": "2026-05-05", "km": 14500, "bron": "tankkaart", "liters": 100}, {"datum": "2026-05-20", "km": 15000, "bron": "tankkaart", "liters": 100}]
+    tc, verbruik = W.tankcontrole({"plaat": "X", "merk_model": "Ford Transit Custom", "km": km})
+    assert dict(verbruik)["2026-02"] == 8.0, verbruik
     assert [x["wanneer"] for x in tc if x["soort"] == "verbruik"] == ["2026-05"], tc
 
 

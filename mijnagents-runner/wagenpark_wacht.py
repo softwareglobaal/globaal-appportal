@@ -481,9 +481,21 @@ def tankcontrole(v):
     """Afwijkingen in het tanken: verbruik per maand boven anderhalve keer het mediaanverbruik van de wagen, meer liters
     dan de tank kan bevatten, twee tankbeurten op dezelfde dag."""
     uit, verbruik = [], []
-    for m in v.get("brandstof_maanden") or []:
-        if m.get("liters") and m.get("km_laagst") and m.get("km_hoogst") and m["km_hoogst"] - m["km_laagst"] > 300:
-            verbruik.append((m["maand"], round(m["liters"] / (m["km_hoogst"] - m["km_laagst"]) * 100, 1)))
+    # Verbruik per tankbeurt: de liters van een beurt vullen de km sinds de vorige beurt (volle tank). De eerste beurt van een
+    # maand hoort dus bij de km van de maand ervoor; wie dat vergeet, rekent te hoog (gezien 26-09-2026: 11,9 in plaats van 8,0).
+    fout_km = {x[1] for x in km_reeks(v)[1]}
+    beurten = sorted((k["datum"][:10], int(k["km"]), float(k.get("liters") or 0)) for k in v.get("km") or []
+                     if k.get("bron") == "tankkaart" and k.get("km") and k.get("liters") and int(k["km"]) not in fout_km)
+    per_maand = {}
+    for a, b in zip(beurten, beurten[1:]):
+        if b[1] > a[1]:
+            liters, km = per_maand.get(b[0][:7], (0.0, 0))
+            per_maand[b[0][:7]] = (liters + b[2], km + b[1] - a[1])
+    verbruik = [(m, round(liters / km * 100, 1)) for m, (liters, km) in sorted(per_maand.items()) if km > 300]
+    if not beurten:
+        for m in v.get("brandstof_maanden") or []:
+            if m.get("liters") and m.get("km_laagst") and m.get("km_hoogst") and m["km_hoogst"] - m["km_laagst"] > 300:
+                verbruik.append((m["maand"], round(m["liters"] / (m["km_hoogst"] - m["km_laagst"]) * 100, 1)))
     if len(verbruik) >= 3:
         med = sorted(x[1] for x in verbruik)[len(verbruik) // 2]
         uit += [{"soort": "verbruik", "wanneer": maand, "wat": f"{x} l/100 km tegenover gewoonlijk {med}"} for maand, x in verbruik if x > 1.5 * med]
