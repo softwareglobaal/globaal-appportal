@@ -232,6 +232,18 @@ def test_bedragen_lezen():
     assert W.kosten({"voertuigen": [v]}, [], date(2026, 12, 31))["S"] == {}, "een offerte als herstelling telt ook niet"
 
 
+def test_boekhouding_gaat_voor_en_telt_niet_dubbel():
+    v = {"plaat": "B", "status": "in gebruik", "leasing": {"maandbedrag": "100,00 incl.", "start": "2025-01-01", "einde": "2025-12-31"},
+         "boekingen": [{"datum": "2025-03-01", "soort": "leasing", "excl": "1000.00"}, {"datum": "2025-05-01", "soort": "andere", "excl": "53.00", "omschrijving": "GAS-boete"},
+                       {"datum": "2025-06-01", "soort": "aankoop", "excl": "15000.00"}],
+         "onderhoud": [{"datum": "2025-04-01", "soort": "onderhoud", "bedrag": "300,00"}]}
+    k = W.kosten({"voertuigen": [v]}, [], date(2025, 12, 31))["B"]["2025"]
+    e = k["munt"]["EUR"]
+    assert e["financiering"] == 1000, "de boekhouding gaat voor op maandbedrag maal maanden"
+    assert e["boetes"] == 53 and e["onderhoud en herstel"] == 300
+    assert k["totaal_eur"] == 1353, "een aankoop telt niet als jaarkost"
+
+
 if __name__ == "__main__":
     fout = 0
     for n, f in sorted(globals().items()):

@@ -446,6 +446,11 @@ CATEGORIE = {"onderhoud": "onderhoud en herstel", "herstelling": "onderhoud en h
              "banden": "banden", "keuring": "keuring", "schade": "schade", "verzekering": "verzekering", "brandstof": "brandstof"}
 
 
+BOEK_CATEGORIE = {"onderhoud": "onderhoud en herstel", "herstelling": "onderhoud en herstel", "banden": "banden", "keuring": "keuring",
+                  "schade": "schade", "verzekering": "verzekering", "belasting": "belasting", "leasing": "financiering",
+                  "brandstof": "brandstof", "aankoop": "aankoop", "andere": "andere"}
+
+
 def kosten(register, vz, vandaag):
     """Kosten per wagen per kalenderjaar en per categorie, met km en kost per km. Munt apart: SRD wordt nooit bij EUR opgeteld.
     Bronnen: onderhoudsregels met een bedrag, de financiering (maandbedrag maal de maanden in het jaar), de jaarpremie uit
@@ -454,13 +459,30 @@ def kosten(register, vz, vandaag):
     for v in register["voertuigen"]:
         if v.get("status") in WEG:
             continue
-        jaren = {}
+        jaren, uit_boekhouding = {}, set()
 
-        def boek(jaar, cat, bedrag, munt="EUR"):
+        def boek(jaar, cat, bedrag, munt="EUR", bron="aanvulling"):
+            if not bedrag:
+                return
+            # De boekhouding gaat voor: een aanvulling uit contract of factuur telt alleen als de boekhouding voor die
+            # wagen, dat jaar en die categorie niets heeft. Zo telt niets dubbel.
+            if bron == "aanvulling" and munt == "EUR" and (str(jaar), cat) in uit_boekhouding:
+                return
+            j = jaren.setdefault(str(jaar), {"munt": {}})
+            j["munt"].setdefault(munt, {}).setdefault(cat, 0.0)
+            j["munt"][munt][cat] += bedrag
+        for b in v.get("boekingen") or []:
+            if not b.get("datum"):
+                continue
+            cat = BOEK_CATEGORIE.get(b.get("soort") or "andere", "andere")
+            if cat == "andere" and "boete" in (b.get("omschrijving") or "").lower():
+                cat = "boetes"
+            bedrag = _bedrag(b.get("excl")) if b.get("excl") not in (None, "") else _bedrag(b.get("incl"))
+            if bedrag and str(b.get("excl") or b.get("incl") or "").strip().startswith("-"):
+                bedrag = -bedrag  # creditnota
             if bedrag:
-                j = jaren.setdefault(str(jaar), {"munt": {}})
-                j["munt"].setdefault(munt, {}).setdefault(cat, 0.0)
-                j["munt"][munt][cat] += bedrag
+                uit_boekhouding.add((b["datum"][:4], cat))
+                boek(b["datum"][:4], cat, bedrag, bron="boekhouding")
         for o in v.get("onderhoud") or []:
             tekst = f"{o.get('bedrag') or ''} {o.get('omschrijving') or ''}".lower()
             if not o.get("datum") or not o.get("bedrag") or o.get("soort") == "offerte" or "offerte" in tekst:
@@ -482,7 +504,7 @@ def kosten(register, vz, vandaag):
             if p.get("jaarpremie") and p.get("einddatum"):
                 boek(int(str(p["einddatum"])[:4]) - 1, "verzekering", float(p["jaarpremie"]))
         for m in v.get("brandstof_maanden") or []:
-            boek(m["maand"][:4], "brandstof", _bedrag(m.get("bedrag_incl") or m.get("bedrag_excl")))
+            boek(m["maand"][:4], "brandstof", _bedrag(m.get("bedrag_excl") or m.get("bedrag_incl")))
         punten = sorted({(date.fromisoformat(k["datum"][:10]), k["km"]) for k in v.get("km") or [] if k.get("datum") and k.get("km")})
         for jaar, j in jaren.items():
             y = int(jaar)
@@ -492,7 +514,7 @@ def kosten(register, vz, vandaag):
                 j["km"], j["km_zeker"] = round(b - a), True
             elif len(binnen) >= 2:
                 j["km"], j["km_zeker"] = max(binnen) - min(binnen), False
-            eur = j["munt"].get("EUR", {})
+            eur = {c: x for c, x in j["munt"].get("EUR", {}).items() if c != "aankoop"}  # een aankoop is een investering, geen jaarkost
             j["totaal_eur"] = round(sum(eur.values()))
             if j.get("km") and j["km"] > 500 and eur:
                 j["per_km"] = round(sum(eur.values()) / j["km"], 3)
