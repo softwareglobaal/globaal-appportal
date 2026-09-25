@@ -136,9 +136,10 @@ def termijnen(register, vandaag, vz=None):
                 einde = date.fromisoformat(str(p.get("einddatum"))[:10])
             except ValueError:
                 continue
-            naam = p.get("verzekeraar") or "verzekeraar"
+            naam = re.split(r" \(|,", p.get("verzekeraar") or "verzekeraar")[0].strip()
             uit.append((v, f"vervaldag verzekering {naam}", einde, (einde - vandaag).days))
-            opzeg = _min_maanden(einde, p.get("opzegtermijn_maanden") or 2)  # wet 9-10-2023: 2 maanden sinds 1-10-2024
+            # Wet 9-10-2023 (sinds 1-10-2024): minstens 2 maanden voor de vervaldag. Een dag vroeger, zodat je nooit te laat bent.
+            opzeg = _min_maanden(einde, p.get("opzegtermijn_maanden") or 2) - timedelta(days=1)
             uit.append((v, f"opzeggen verzekering {naam}", opzeg, (opzeg - vandaag).days))
         for pad, wat in TERMIJNEN:
             if pad == "verzekering.tot" and pol:

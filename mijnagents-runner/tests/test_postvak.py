@@ -165,7 +165,7 @@ def test_verzekering_geeft_vervaldag_en_opzegdatum():
     vz = [{"object": "2-JCR-831", "verzekeraar": "AXA", "einddatum": "2027-03-31", "opzegtermijn_maanden": 3}]
     lijst, _ = W.termijnen({"voertuigen": [v]}, date(2026, 12, 1), vz)
     wat = {x[1]: x[2] for x in lijst}
-    assert wat["opzeggen verzekering AXA"] == date(2026, 12, 31), wat
+    assert wat["opzeggen verzekering AXA"] == date(2026, 12, 30), wat
     assert wat["vervaldag verzekering AXA"] == date(2027, 3, 31)
     assert "verzekering" not in wat, "met een polis in vermogen telt de datum uit het register niet dubbel"
     s = W.signalen(lijst, date(2026, 12, 1))
