@@ -47,11 +47,12 @@ BEKEND_DAGEN = 180          # wie we in deze periode mailden, is een bekend cont
 # wat op 25-09-2026 in info@ H-Architects en info@ H-Invest binnenkwam.
 ROLLEN = {
     "boekhouder": ["octopus", "boekhoud", "accountant", "fiscal", "liantis", "din consulting"],
-    "bank": ["kbc", "belfius", "bnp", "ing.be", "argenta", "crelan", "alpha credit", "alphacredit"],
+    # "@ing.be" en ".ing.be", niet "ing.be": dat laatste zit ook in valoprojectontwikkeling.be (gezien 25-09-2026)
+    "bank": ["kbc", "belfius", "bnp", "@ing.be", ".ing.be", "argenta", "crelan", "alpha credit", "alphacredit"],
     "overheid": ["belgium.be", "vlaanderen.be", "minfin", "fod", "rsz", "onss", "socialsecurity", "gemeente", "stad.",
                  "omgevingsloket", "vlabel", "belastingdienst", "architect.be", "orde van architecten"],
     "notaris": ["notaris"], "advocaat": ["advoca", "law"], "deurwaarder": ["deurwaarder", "gerechtsdeurwaarder"],
-    "verzekering": ["verzeker", "insurance", "ethias", "axa", "ag.be", "baloise", "arcoinsurance"],
+    "verzekering": ["verzeker", "insurance", "ethias", "axa", "@ag.be", ".ag.be", "baloise", "arcoinsurance"],
 }
 HOOG_ROLLEN = {"boekhouder", "bank", "overheid", "notaris", "advocaat", "deurwaarder", "verzekering"}
 HOOG = ["factuur", "betaling", "betalen", "betalingsuitnodiging", "herinnering", "aanmaning", "deadline", "uiterlijk",
@@ -85,7 +86,9 @@ def wachten():
         return json.load(f)
 
 
-VERZONDEN = ("INBOX.Sent", "INBOX.Sent Messages", "INBOX.Sent Items", "Sent")
+VERZONDEN = ("INBOX.Sent", "INBOX.Sent Messages", "INBOX.Sent Items", "Sent", "[Gmail]/Verzonden berichten", "[Gmail]/Sent Mail")
+DATA = os.path.expanduser("~/appportal/mijnagents-data")
+BRON_VERS_UREN = 3          # een kopie van de Mac die ouder is dan dit, meld ik als niet vers
 
 
 def mappen_van(adres):
@@ -120,18 +123,48 @@ def _postbus():
 
 
 def postvak(adres):
-    """Het postvak uit de postbus, met zijn gegevens; None als het er niet in staat."""
+    """Het postvak uit de postbus, met zijn gegevens; None als het er niet in staat.
+    Een postvak dat de server niet zelf kan lezen (mailwachten.json, 'bronnen') komt uit een bestand
+    dat de Mac aanlevert: dan {'adres', 'bron'}."""
+    try:
+        bron = wachten().get("bronnen", {}).get(adres.lower())
+    except (OSError, ValueError):
+        bron = None
+    if bron:
+        return {"adres": adres, "bron": os.path.join(DATA, bron)}
     config, _ = _postbus()
     mailboxen, _fouten = config.alles()
     return next((m for m in mailboxen if m["adres"].lower() == adres.lower()), None)
 
 
+def uit_bestand(pad, mapnaam, sinds=None):
+    """Koppen uit een bestand van de Mac (mac/hotmail_koppen.py), zelfde vorm als imapbron.lijst, nieuwste eerst."""
+    with open(pad, encoding="utf-8") as f:
+        d = json.load(f)
+    uit = [b for b in d.get("berichten", []) if b.get("map") == mapnaam and (not sinds or (b.get("datum") or "")[:10] >= sinds)]
+    return sorted(uit, key=lambda b: b.get("datum") or "", reverse=True)
+
+
+def bron_uren_oud(mb, nu=None):
+    """Hoe oud de kopie van de Mac is, in uren; None als het geen bestand is of het niet leesbaar is."""
+    if not mb or not mb.get("bron"):
+        return None
+    try:
+        with open(mb["bron"], encoding="utf-8") as f:
+            gemaakt = datetime.fromisoformat(json.load(f)["gemaakt"])
+    except (OSError, ValueError, KeyError):
+        return None
+    return ((nu or datetime.now(BRUSSEL)) - gemaakt).total_seconds() / 3600
+
+
 def koppen(adres, mapnaam="INBOX", sinds=None, maximaal=200, plafond=1000):
-    """Koppen van een postvak via de postbus: alleen lezen, nieuwste eerst."""
-    _, imapbron = _postbus()
+    """Koppen van een postvak via de postbus (of het bestand van de Mac): alleen lezen, nieuwste eerst."""
     mb = postvak(adres)
     if not mb:
         raise LookupError(f"{adres} staat niet in de postbus")
+    if mb.get("bron"):
+        return uit_bestand(mb["bron"], mapnaam, sinds)[:plafond]
+    _, imapbron = _postbus()
     uit, vanaf = [], 0
     while True:
         r = imapbron.lijst(mb, mapnaam, sinds=sinds, maximaal=maximaal, vanaf=vanaf)
@@ -239,15 +272,21 @@ def ronde(naam, ag, r, nu=None):
     tel["verzonden_gelezen"], tel["bekende_contacten"] = len(verzonden), len(bekend)
     items, rijen = [], []
     for adres in cfg["postvakken"]:
-        if not postvak(adres):
+        mb = postvak(adres)
+        if not mb:
             r.nood(f"{adres} staat niet in de postbus: de wacht kan het niet lezen", wie="claude-code")
             continue
+        oud = bron_uren_oud(mb, nu)
+        if mb.get("bron") and (oud is None or oud > BRON_VERS_UREN):
+            r.nood(f"De kopie van {adres} van de Mac is niet vers: de Mac slaapt, of Mail staat uit", wie="mehdi")
         try:
             berichten = koppen_mappen(adres, mappen_van(adres), sinds, ag)
         except Exception as e:  # noqa: BLE001
             r.nood(f"{adres} niet leesbaar via de postbus", wie="claude-code")
             ag.log("inbox", "bron", f"{adres}: {type(e).__name__}: {str(e)[:120]}")
             continue
+        # Wat het postvak zelf verstuurde, is geen opvolgpunt (Gmail 'Alle e-mail' bevat ook de verzonden post).
+        berichten = [b for b in berichten if (b.get("van") or "").lower() != adres.lower()]
         afwezig = {}
         for b in berichten:
             if re.match(r"(automatisch antwoord|automatic reply|auto(matic)?[- ]?reply|out of office|afwezig|absence)",

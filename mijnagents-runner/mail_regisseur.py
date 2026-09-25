@@ -34,8 +34,9 @@ MOMENTEN = ("08:00", "12:30", "17:00")
 STAAT = os.path.expanduser("~/appportal/mijnagents-data/mail-regisseur.json")
 UIT = os.path.expanduser("~/appportal/mijnagents-data/export/Mailregisseur")  # komt via de Mac-sync in Data uit Mehdi
 VOLGORDE = {"hoog": 0, "actie": 1, "midden": 2}
-FIRMANAMEN = {"HARC": "H-Architects", "HINV": "H-Invest", "MELO": "Melodie", "HARM": "Harmoniebouw", "UNAB": "UNABO",
-              "TKNB": "TKN-Buro", "ENEF": "Energie Efficiënt", "HDSS": "HDS Suriname"}
+FIRMANAMEN = {"HINV": "info@ H-Invest", "MCH": "mch@ (Mehdi)", "PRIV": "hotmail (privé)", "MELO": "Melodie",
+              "HARC": "H-Architects", "HARM": "Harmoniebouw", "UNAB": "UNABO", "TKNB": "TKN-Buro",
+              "ENEF": "Energie Efficiënt", "HDSS": "HDS Suriname"}
 
 
 def moment(nu, staat):

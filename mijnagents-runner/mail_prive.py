@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""De Mailwacht info@ H-Invest (info@h-invest.be; vroeger H-Aannemingen). Leest alleen, via de postbus, en zet wat opvolging vraagt klaar
+"""De Mailwacht hotmail (mehdichegini@hotmail.com). Leest alleen, via de koppen die de Mac elk uur uit Mail aanlevert (mac/hotmail_koppen.py), en zet wat opvolging vraagt klaar
 voor De Mailregisseur. Alle regels staan in koppelingen/postvak.py en werkwijze/mailwachten.json,
-zodat elke mailwacht dezelfde regels volgt. Werkwijze op het bord: werkwijze/mail-hinv.md.
+zodat elke mailwacht dezelfde regels volgt. Werkwijze op het bord: werkwijze/mail-prive.md.
 
-    mail_hinv.py            een ronde (07-21 Brusselse tijd)
-    mail_hinv.py --droog    tonen wat er klaargezet zou worden, niets naar het bord
+    mail_prive.py            een ronde (07-21 Brusselse tijd)
+    mail_prive.py --droog    tonen wat er klaargezet zou worden, niets naar het bord
 """
 import os
 import sys
@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "kop
 import bord  # noqa: E402
 import postvak  # noqa: E402
 
-NAAM = "mail-hinv"
+NAAM = "mail-prive"
 
 if __name__ == "__main__":
     if "--droog" in sys.argv:

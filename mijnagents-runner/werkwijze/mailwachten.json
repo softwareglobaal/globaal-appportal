@@ -1,33 +1,47 @@
 {
- "_uitleg": "Welke mailwacht welke postvakken leest (koppelingen/postvak.py). Versie 1.0, 25-09-2026, mandaat van Mehdi: een aparte agent per postvak, een Mailregisseur erboven die aan De Regisseur rapporteert, geen spam of rommel naar Mehdi. postvakken: wat de wacht leest. antwoord_vanuit: postvakken waarvan de verzonden post telt als antwoord (bij H-Architects antwoordt light@ vaak op wat in info@ binnenkomt). eigen_domeinen: post van de eigen groep is geen opvolgpunt. De wachtwoorden staan alleen in ~/post-config/mailboxen.yaml op de VM.",
+ "_uitleg": "Welke mailwacht welk postvak leest (koppelingen/postvak.py). Versie 1.1, 25-09-2026: Mehdi koos na het lezen van alle mail van 30 dagen vier postvakken, elk met een eigen wacht: info@h-invest.be, mch@h-architects.be, mehdichegini@hotmail.com en melodiebvba@gmail.com. 'De andere mogen weg': De Mailwacht info@ H-Architects is uitgezet, boekhouding@h-invest.be wordt niet meer gelezen. Versie 1.0 (dezelfde ochtend): info@ H-Architects en H-Invest. Boven de wachten staat De Mailregisseur, die bundelt en aan De Regisseur rapporteert; Mehdi krijgt hoogstens een bericht per dag. postvakken: wat de wacht leest. antwoord_vanuit: postvakken waarvan de verzonden post ook telt als antwoord. eigen_domeinen: post van de eigen groep is geen opvolgpunt. De wachtwoorden staan alleen in ~/post-config/mailboxen.yaml op de VM.",
  "mappen": {
-  "_uitleg": "Welke mappen per postvak gelezen worden (standaard alleen INBOX). Nodig omdat de sorteertaak op de Mac (Mailwacht info@h-invest, 24-09-2026) belangrijke post uit de INBOX verplaatst naar Bank en verzekering en Boekhouding; zonder deze lijst zou geen wacht die post nog zien.",
+  "_uitleg": "Welke mappen per postvak gelezen worden (standaard alleen INBOX). info@h-invest: de sorteertaak op de Mac (24-09-2026) verplaatst belangrijke post naar Bank en verzekering en Boekhouding. mch@: Qoppa sluiting en ORDE krijgen post via een regel; de map Anthropic (kwitanties) niet. Melodie: Gmail zet een deel van de post met een filter meteen in een label (Octopus, Din Consulting, E-box), dus lees ik Alle e-mail; wat Melodie zelf verstuurde, slaat de module over.",
   "info@h-invest.be": ["INBOX", "INBOX.Bank en verzekering", "INBOX.Boekhouding", "INBOX.Octopus", "INBOX.Maes"],
-  "info@h-architects.be": ["INBOX", "INBOX.for MEHDI", "INBOX.IMPORTANT", "INBOX.BOEKHOUDING", "INBOX.BOEKHOUDING.E-Box", "INBOX.ORDE", "INBOX.Questions", "INBOX.ARCO"]
+  "mch@h-architects.be": ["INBOX", "INBOX.Qoppa sluiting", "INBOX.ORDE"],
+  "melodiebvba@gmail.com": ["[Gmail]/Alle e-mail"]
  },
- "mail-info-harc": {
-  "label": "De Mailwacht info@ H-Architects",
-  "firma": "HARC",
-  "afdeling": "h-architects",
-  "postvakken": ["info@h-architects.be"],
-  "antwoord_vanuit": ["light@h-architects.be", "standaard@h-architects.be", "mch@h-architects.be"],
-  "eigen_domeinen": ["h-architects.be", "unabo.be", "harmoniebouw.be", "tkn-buro.be", "energie-efficient.be", "h-invest.be", "globaal.be", "elevaitnv.com", "hdssr.com"]
+ "bronnen": {
+  "_uitleg": "Postvakken die de server niet zelf kan lezen. Microsoft laat voor hotmail geen wachtwoord-login toe (gemeten, ook op 25-09-2026). Mail op de Mac van Mehdi haalt hotmail wel op; mac/hotmail_koppen.py zet elk uur de koppen (geen tekst) in dit bestand onder mijnagents-data. Is het ouder dan drie uur, dan meldt de wacht dat.",
+  "mehdichegini@hotmail.com": "hotmail/koppen.json"
  },
  "mail-hinv": {
-  "label": "De Mailwacht H-Invest",
+  "label": "De Mailwacht info@ H-Invest",
   "firma": "HINV",
   "afdeling": "organisatie",
-  "postvakken": ["info@h-invest.be", "boekhouding@h-invest.be"],
-  "antwoord_vanuit": ["mch@h-architects.be"],
+  "postvakken": ["info@h-invest.be"],
+  "antwoord_vanuit": ["mch@h-architects.be", "boekhouding@h-invest.be"],
   "eigen_domeinen": ["h-architects.be", "unabo.be", "harmoniebouw.be", "tkn-buro.be", "energie-efficient.be", "h-invest.be", "globaal.be", "elevaitnv.com", "hdssr.com"],
   "_let_op": "H-Invest heette vroeger H-Aannemingen; post aan info@h-aannemingen.be komt hier binnen (Octopus-dossier 111725)."
  },
- "zonder_wacht": [
-  {"postvak": "mch@h-architects.be", "wie": "Mehdi", "stand": "De Mailwacht mch@ draait op de Mac (launchd, elk uur) en stuurt elk bericht van hoog belang apart naar Mehdi. Voorstel: naar de VM met deze module, dan gaat opvolging via de Mailregisseur. Mehdi beslist, want de Mac-taak moet dan uit."},
-  {"postvak": "melodiebvba@gmail.com", "wie": "Melodie", "stand": "Gmail, niet in de postbus. Nodig: een app-wachtwoord van dat Google-account en een regel in ~/post-config/mailboxen.yaml met imap_host imap.gmail.com; dan komt mail-melo erbij."},
-  {"postvak": "mehdichegini@hotmail.com", "wie": "Chegini (Outlook)", "stand": "De Mailwacht prive wacht op het app-wachtwoord van hotmail in de Keychain van de Mac."},
-  {"postvak": "mehdi@h-architects.be", "wie": "Chegini", "stand": "Staat in het e-mailregister (12 GB, doel Persoonlijk) maar niet in de postbus."},
-  {"postvak": "wagenparkha@gmail.com", "wie": "Wagenpark", "stand": "Hier komen garagefacturen van de bestuurders binnen. Niet gekoppeld; nodig voor De Wagenparkwacht."},
-  {"postvak": "kantoor@harmoniebouw.be", "wie": "Harmoniebouw", "stand": "Staat in de postbus, maar geen wacht. Voorstel: mail-harm, zelfde module."}
- ]
+ "mail-mch": {
+  "label": "De Mailwacht mch@",
+  "firma": "MCH",
+  "afdeling": "prive-communicatie",
+  "postvakken": ["mch@h-architects.be"],
+  "antwoord_vanuit": [],
+  "eigen_domeinen": ["h-architects.be", "unabo.be", "harmoniebouw.be", "tkn-buro.be", "energie-efficient.be", "h-invest.be", "globaal.be", "elevaitnv.com", "hdssr.com"]
+ },
+ "mail-prive": {
+  "label": "De Mailwacht hotmail",
+  "firma": "PRIV",
+  "afdeling": "prive-communicatie",
+  "postvakken": ["mehdichegini@hotmail.com"],
+  "antwoord_vanuit": [],
+  "eigen_domeinen": ["h-architects.be", "unabo.be", "harmoniebouw.be", "tkn-buro.be", "energie-efficient.be", "h-invest.be", "globaal.be", "elevaitnv.com", "hdssr.com"]
+ },
+ "mail-melo": {
+  "label": "De Mailwacht Melodie",
+  "firma": "MELO",
+  "afdeling": "organisatie",
+  "postvakken": ["melodiebvba@gmail.com"],
+  "antwoord_vanuit": ["mch@h-architects.be"],
+  "eigen_domeinen": ["h-architects.be", "unabo.be", "harmoniebouw.be", "tkn-buro.be", "energie-efficient.be", "h-invest.be", "globaal.be", "elevaitnv.com", "hdssr.com"]
+ },
+ "zonder_wacht": []
 }

@@ -50,6 +50,61 @@ def test_antwoord_en_afwezigheid_tellen_als_beantwoord():
     assert postvak.beantwoord("x@kbc.be", na, [], afwezig)
 
 
+def test_een_domein_op_ing_be_is_nog_geen_bank():
+    """25-09-2026: VALO projectontwikkeling kreeg 'rol bank' omdat valoprojectontwikkeling.be op ing.be eindigt."""
+    soort, waarom = postvak.trieer(kop("info@valoprojectontwikkeling.be", "Re: 8288-002 Predallen"), EIGEN)
+    assert "bank" not in waarom
+    assert postvak.trieer(kop("klant@ing.be", "Uw rekening"), EIGEN)[1].startswith("rol bank")
+
+
+GEKOZEN = {"mail-hinv": ["info@h-invest.be"], "mail-mch": ["mch@h-architects.be"],
+           "mail-prive": ["mehdichegini@hotmail.com"], "mail-melo": ["melodiebvba@gmail.com"]}
+
+
+def test_de_vier_postvakken_die_mehdi_koos_elk_met_een_eigen_runner():
+    """Mehdi, 25-09-2026: 'elk e-mailadres een agent', alleen deze vier; 'de andere mogen weg'.
+    Wie een postvak toevoegt of weghaalt, past deze lijst bewust aan."""
+    cfg = postvak.wachten()
+    wachten = {k: v for k, v in cfg.items() if isinstance(v, dict) and "postvakken" in v}
+    assert {k: v["postvakken"] for k, v in wachten.items()} == GEKOZEN
+    for naam in wachten:
+        pad = os.path.join(HIER, naam.replace("-", "_") + ".py")
+        assert os.path.exists(pad), f"geen runner voor {naam}"
+        assert f'NAAM = "{naam}"' in open(pad).read()
+    runners = {f[:-3].replace("_", "-") for f in os.listdir(HIER) if f.startswith("mail_") and f.endswith(".py")}
+    assert runners - set(wachten) == {"mail-regisseur"}, f"runner zonder wacht: {runners - set(wachten)}"
+
+
+def test_hotmail_uit_het_bestand_van_de_mac(tmp_path=None):
+    """De hotmail-wacht leest een bestand van de Mac: eigen verzonden post telt niet, een bank zonder antwoord
+    komt op de lijst, en een kopie die niet vers is, wordt gemeld."""
+    import json
+    import tempfile
+    d = tempfile.mkdtemp()
+    nu = datetime.fromisoformat("2026-09-25T10:00:00+02:00")
+    koppen = {"gemaakt": "2026-09-25T02:00:00+02:00", "berichten": [
+        {"map": "INBOX", "uid": 1, "datum": "2026-09-24T09:00:00+02:00", "van": "info@kbc.be", "van_naam": "KBC",
+         "onderwerp": "Herinnering betaling", "message_id": "<a@kbc>", "aan": [], "cc": []},
+        {"map": "INBOX", "uid": 2, "datum": "2026-09-24T09:30:00+02:00", "van": "mehdichegini@hotmail.com",
+         "van_naam": "Mehdi", "onderwerp": "Factuur voor mezelf", "message_id": "<b@x>", "aan": [], "cc": []},
+        {"map": "Sent", "uid": 3, "datum": "2026-09-01T09:00:00+02:00", "van": "mehdichegini@hotmail.com",
+         "van_naam": "", "onderwerp": "x", "message_id": "<c@x>", "aan": ["iemand@ander.be"], "cc": []}]}
+    json.dump(koppen, open(os.path.join(d, "koppen.json"), "w"))
+    cfg = {"bronnen": {"mehdichegini@hotmail.com": os.path.join(d, "koppen.json")},
+           "mail-prive": {"firma": "PRIV", "postvakken": ["mehdichegini@hotmail.com"], "antwoord_vanuit": [], "eigen_domeinen": []}}
+    json.dump(cfg, open(os.path.join(d, "mailwachten.json"), "w"))
+    oud = postvak.WACHTEN
+    postvak.WACHTEN = os.path.join(d, "mailwachten.json")
+    try:
+        r = postvak._Droog()
+        items, tel, _ = postvak.ronde("mail-prive", postvak._DroogAgent(), r, nu)
+    finally:
+        postvak.WACHTEN = oud
+    assert [i["inhoud"]["van"] for i in items] == ["info@kbc.be"]
+    assert tel["bekende_contacten"] == 1
+    assert any("niet vers" in t for t, _w in r.noden), r.noden
+
+
 def test_werkdagen_tellen_het_weekend_niet():
     vr = datetime.fromisoformat("2026-09-25T10:00:00+02:00")
     ma = datetime.fromisoformat("2026-09-28T10:00:00+02:00")
