@@ -174,6 +174,9 @@ def bevindingen(items, van, tot, nu):
                and not a.get("_archief")]
         if bij and all(a.get("kalender") != x.get("kalender") for a in bij):
             meld("rit_andere_agenda", x, f"de afspraak staat op {W.KALENDERS.get(bij[0]['kalender'], '?')[:20]}, de rit niet")
+    # een klant met een Zoom-link zonder wachtwoord raakt niet in de vergadering (FR-54)
+    for a in W.zoom_zonder_wachtwoord(binnen, nu, uren=24 * 8):
+        meld("zoom_zonder_wachtwoord", a, "Zoom-link zonder wachtwoord: de klant kan gevraagd worden om een wachtwoord")
     # een rit van nul minuten is geen rit: hij verbergt dat het te krap is
     for x in ritten:
         if x["start"][:10] >= vandaag and "T" in x["start"] and x["start"] == x.get("einde"):

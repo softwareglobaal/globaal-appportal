@@ -1099,6 +1099,8 @@ def zoom_zetten(items, alleen_dag=None):
         rest_naam = CODE_RE.sub(" ", rest).strip(" -:")
         if rest_naam and not re.search(r"\d", rest_naam) and len(rest_naam.split()) <= 3:
             namen.append(rest_naam)
+        if not namen and info["soort"] in EXTERN_ONLINE and info.get("klant"):
+            namen = [info["klant"]]       # '[HARC-KO] 2607 - Robin Verlinden en Silvie Boudou': de klant (25-09-2026)
         if not namen:
             continue                      # een taak zonder iemand anders heeft geen link nodig
         wie = ", ".join(namen)
@@ -2122,6 +2124,27 @@ def onbevestigd_voorbij(items, vandaag):
 BELVRAGEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-belvragen.json")
 
 
+def zoom_zonder_wachtwoord(items, nu=None, uren=48):
+    """Online afspraken met een gast waarvan de Zoom-link geen wachtwoord bevat (geen ?pwd= en geen passcode
+    in de uitnodiging). Gezien 25-09-2026: Maureen Van De Poel annuleerde met 'ik heb geen wachtwoord voor de
+    meeting'; de Calendly-links van het account General dragen het wachtwoord niet."""
+    nu = nu or nu_lokaal()
+    uit = []
+    for a in items:
+        if not a.get("deelnemers") or "T" not in a.get("start", "") or a["titel"].lower().startswith("canceled"):
+            continue
+        try:
+            start = datetime.fromisoformat(a["start"])
+        except ValueError:
+            continue
+        if not (nu < start <= nu + timedelta(hours=uren)):
+            continue
+        tekst = f"{a.get('locatie') or ''} {re.sub(r'<[^>]+>', ' ', a.get('omschrijving') or '')}"
+        if re.search(r"zoom\.us/j/\d+", tekst) and not re.search(r"zoom\.us/j/\d+\?pwd=|passcode|password|wachtwoord|toegangscode", tekst, re.I):
+            uit.append(a)
+    return uit
+
+
 def vastgelopen(items, nu=None, uren=48):
     """Afspraken binnen 48 uur waar de agent niet verder kan: geen firmacode na zijn onderzoek, of buiten
     zonder adres. Geeft [(sleutel, zin)], de zin is wat Mehdi moet doen, in een zin."""
@@ -2148,6 +2171,14 @@ def vastgelopen(items, nu=None, uren=48):
         elif (info["buiten"] or info["soort"] in BUITEN_SOORTEN) and not (a.get("locatie") or "").strip() \
                 and not (info["nummer"] and info["nummer"] in projecten):
             uit.append((f"{a['id']}:adres", f"Mehdi, de afspraak buiten van {wanneer}, {kort}: zet het adres erin."))
+    # Zoom zonder wachtwoord: een zin per dag voor alle klanten samen, want de klant raakt er niet in
+    per_dag = {}
+    for a in zoom_zonder_wachtwoord(items, nu, uren):
+        per_dag.setdefault(a["start"][:10], []).append(a)
+    for dag, lijst in sorted(per_dag.items()):
+        namen = ", ".join(f"{(lees_titel(x['titel'])['klant'] or x['titel'])[:25]} om {x['start'][11:16]}" for x in lijst[:4])
+        uit.append((f"zoompwd:{dag}:{len(lijst)}", f"Mehdi, {len(lijst)} Zoom-afspraken op {dag[8:10]}-{dag[5:7]} hebben een link zonder wachtwoord "
+                    f"({namen}): stuur de klant de uitnodiging vanuit Zoom."))
     return uit
 
 

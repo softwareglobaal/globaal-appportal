@@ -72,9 +72,17 @@ def twiml(tekst, slot="Details staan op Telegram en op het bord."):
             f'<Say language="nl-NL" voice="Polly.Lotte">{escape(slot)}</Say></Response>')
 
 
+def _niet_in_een_test():
+    """In een test belt niets echt, langs welke weg ook. Gezien 25-09-2026: een test stubde bel_afspraak,
+    maar een nieuwe weg (bel_vast) belde Mehdi twee keer echt. De grendel zit daarom hier, op het laagste niveau."""
+    if os.environ.get("BELLEN_UIT"):
+        raise RuntimeError("bellen staat uit (test)")
+
+
 def bel(tekst, slot="Details staan op Telegram en op het bord.", van=None):
     """Start de oproep; geeft de call-sid terug. slot: de laatste zin (de Agendawacht zegt: in je agenda).
     van: afzender; standaard TWILIO_VAN (het afsprakennummer)."""
+    _niet_in_een_test()
     uit = _verzoek("Calls.json", {"To": os.environ["ALARM_NUMMER"].strip(), "From": (van or os.environ["TWILIO_VAN"]).strip(),
                                   "Twiml": twiml(tekst, slot), "Timeout": "25"})
     return uit.get("sid", "")
@@ -163,6 +171,7 @@ def afspraak_bellen_beschikbaar():
 
 def bel_telegram(tekst):
     """Telegram-spraakoproep via CallMeBot; de tekst wordt voorgelezen (twee keer)."""
+    _niet_in_een_test()
     # de gebruiker (+32... of @naam) mag niet URL-gecodeerd worden: CallMeBot leest %2B verkeerd
     q = urllib.parse.urlencode({"text": tekst[:300], "lang": os.environ.get("CALLMEBOT_STEM", "nl-NL-Standard-B"), "rpt": "2", "timeout": "40"})
     import re

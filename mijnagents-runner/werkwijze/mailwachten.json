@@ -1,0 +1,28 @@
+{
+ "_uitleg": "Welke mailwacht welke postvakken leest (koppelingen/postvak.py). Versie 1.0, 25-09-2026, mandaat van Mehdi: een aparte agent per postvak, een Mailregisseur erboven die aan De Regisseur rapporteert, geen spam of rommel naar Mehdi. postvakken: wat de wacht leest. antwoord_vanuit: postvakken waarvan de verzonden post telt als antwoord (bij H-Architects antwoordt light@ vaak op wat in info@ binnenkomt). eigen_domeinen: post van de eigen groep is geen opvolgpunt. De wachtwoorden staan alleen in ~/post-config/mailboxen.yaml op de VM.",
+ "mail-info-harc": {
+  "label": "De Mailwacht info@ H-Architects",
+  "firma": "HARC",
+  "afdeling": "h-architects",
+  "postvakken": ["info@h-architects.be"],
+  "antwoord_vanuit": ["light@h-architects.be", "standaard@h-architects.be", "mch@h-architects.be", "offerte@h-architects.be"],
+  "eigen_domeinen": ["h-architects.be", "unabo.be", "harmoniebouw.be", "tkn-buro.be", "energie-efficient.be", "h-invest.be", "globaal.be", "elevaitnv.com", "hdssr.com"]
+ },
+ "mail-hinv": {
+  "label": "De Mailwacht H-Invest",
+  "firma": "HINV",
+  "afdeling": "organisatie",
+  "postvakken": ["info@h-invest.be", "boekhouding@h-invest.be"],
+  "antwoord_vanuit": ["mch@h-architects.be"],
+  "eigen_domeinen": ["h-architects.be", "unabo.be", "harmoniebouw.be", "tkn-buro.be", "energie-efficient.be", "h-invest.be", "globaal.be", "elevaitnv.com", "hdssr.com"],
+  "_let_op": "H-Invest heette vroeger H-Aannemingen; post aan info@h-aannemingen.be komt hier binnen (Octopus-dossier 111725)."
+ },
+ "zonder_wacht": [
+  {"postvak": "mch@h-architects.be", "wie": "Mehdi", "stand": "De Mailwacht mch@ draait op de Mac (launchd, elk uur) en stuurt elk bericht van hoog belang apart naar Mehdi. Voorstel: naar de VM met deze module, dan gaat opvolging via de Mailregisseur. Mehdi beslist, want de Mac-taak moet dan uit."},
+  {"postvak": "melodiebvba@gmail.com", "wie": "Melodie", "stand": "Gmail, niet in de postbus. Nodig: een app-wachtwoord van dat Google-account en een regel in ~/post-config/mailboxen.yaml met imap_host imap.gmail.com; dan komt mail-melo erbij."},
+  {"postvak": "mehdichegini@hotmail.com", "wie": "Chegini (Outlook)", "stand": "De Mailwacht prive wacht op het app-wachtwoord van hotmail in de Keychain van de Mac."},
+  {"postvak": "mehdi@h-architects.be", "wie": "Chegini", "stand": "Staat in het e-mailregister (12 GB, doel Persoonlijk) maar niet in de postbus."},
+  {"postvak": "wagenparkha@gmail.com", "wie": "Wagenpark", "stand": "Hier komen garagefacturen van de bestuurders binnen. Niet gekoppeld; nodig voor De Wagenparkwacht."},
+  {"postvak": "kantoor@harmoniebouw.be", "wie": "Harmoniebouw", "stand": "Staat in de postbus, maar geen wacht. Voorstel: mail-harm, zelfde module."}
+ ]
+}

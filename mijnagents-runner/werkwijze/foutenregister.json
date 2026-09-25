@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "1.7",
+ "versie": "1.9",
  "datum": "24-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -143,6 +143,13 @@
    "les": "Zet de uitvoer waar Mehdi kijkt: in de agenda zelf, op een oogopslag. Een bord of Telegram dat hij niet leest, bestaat voor hem niet.",
    "uit": [
     "FR-52"
+   ]
+  },
+  {
+   "id": "L18",
+   "les": "Een grendel hoort op het laagste niveau. Een test die een hogere functie afschermt, vergeet de weg die morgen een andere sessie toevoegt.",
+   "uit": [
+    "FR-55"
    ]
   }
  ],
@@ -1140,6 +1147,62 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een oproep, via een kanaal, nooit herhaald"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-54",
+   "datum": "25-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Klanten kregen een Zoom-link zonder wachtwoord en raakten niet in de vergadering. Maureen Van De Poel annuleerde op 24-09 met 'ik heb geen wachtwoord voor de meeting'.",
+   "gevolg": "Een verloren prospect, en klanten die bij het inloggen om een wachtwoord gevraagd worden.",
+   "waarom_niet_gezien": "De link staat in de agenda en lijkt goed; dat het wachtwoord ontbreekt, zie je pas als je hem als klant opent.",
+   "oorzaak": "Het Zoom-account achter Calendly General maakt vergaderingen met een wachtwoord, maar zet dat niet in de uitnodigingslink ('wachtwoord insluiten in de uitnodigingslink' staat uit). Calendly kent het wachtwoord niet en stuurt het dus ook niet mee. Bij light@ staat het wel goed.",
+   "soort_oorzaak": "bron",
+   "oplossing": "In Zoom (het account dat aan Calendly General hangt): Instellingen, Vergadering, Beveiliging, 'Toegangscode insluiten in uitnodigingslink voor deelname met één klik' aanzetten. Tot dan ziet de agent elke Zoom-link zonder wachtwoord binnen 48 uur en belt hij een keer per dag met een zin.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een Zoom-link zonder wachtwoord wordt gezien en in een zin gemeld"
+   },
+   "controle": [
+    "zoom_zonder_wachtwoord"
+   ],
+   "status": "open"
+  },
+  {
+   "id": "FR-55",
+   "datum": "25-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "Een test en een controle van Claude belden Mehdi twee keer echt, met een proefzin ('de afspraak van zaterdag om 06:00, mehdi iets').",
+   "gevolg": "Twee onnodige oproepen, net nadat Mehdi vroeg om minder te bellen.",
+   "waarom_niet_gezien": "De test stubde bel_afspraak. Een parallelle sessie had intussen een tweede weg toegevoegd (bel_vast, het vastzit-nummer) en die was niet afgeschermd.",
+   "oorzaak": "De grendel zat op een functie hoog in de keten in plaats van op het laagste niveau.",
+   "soort_oorzaak": "werkwijze van Claude",
+   "oplossing": "bellen.bel en bel_telegram weigeren als BELLEN_UIT gezet is; test_agenda_taken zet dat bovenaan. Geen enkele test kan nog echt bellen, langs welke weg ook.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "in een test belt niets echt, langs welke weg ook"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-56",
+   "datum": "25-09-2026",
+   "gevonden_door": "zelfcontrole",
+   "fout": "'Mehdi: [HARC-KO] 2607 - Robin Verlinden en Silvie Boudou' kreeg geen ZL en geen linknotitie.",
+   "gevolg": "Een online klantgesprek zonder link, zonder dat het zichtbaar was.",
+   "waarom_niet_gezien": "De ZL-regel zocht namen voor de dubbelpunt of een naam zonder cijfers; na een projectnummer vond hij er geen.",
+   "oorzaak": "De klant na het nummer telde niet als persoon.",
+   "soort_oorzaak": "code",
+   "oplossing": "Bij een extern online gesprek telt de klant uit de titel als de persoon naar wie de link moet.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een online klantgesprek met de klant na het nummer krijgt ZL en de linknotitie"
    },
    "controle": [],
    "status": "opgelost"

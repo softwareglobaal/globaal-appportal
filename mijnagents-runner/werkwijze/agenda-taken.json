@@ -1,5 +1,5 @@
 {
- "versie": "4.9",
+ "versie": "4.10",
  "datum": "2026-09-25",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -369,6 +369,11 @@
   "uitkomst": "GOED, LET OP of FOUT per toets; hij eindigt met een foutcode als er iets FOUT is"
  },
  "openstaand": [
+  {
+   "wat": "Zoom: 'Toegangscode insluiten in uitnodigingslink' aanzetten op het Zoom-account dat aan Calendly General hangt. Komende klanten met een link zonder wachtwoord: de uitnodiging vanuit Zoom sturen (FR-54)",
+   "wie": "Mehdi",
+   "wanneer": "vandaag"
+  },
   {
    "wat": "Iets buiten de agent kleurt UNABO-afspraken paars en AI stabiliteit geel (24-09 om 00:15 en 13:45 Brusselse tijd). De agent zet het terug en meldt elk tijdstip. Welke tool of wie heeft schrijfrecht op de werkagenda en zoomafspraken en doet dit? (FR-21)",
    "wie": "Mehdi",
@@ -811,7 +816,8 @@
    "vastzitten": "+32460233042 (TWILIO_VAN_VAST): een agent of een Claude-sessie zit vast en heeft Mehdi nodig, of een dringend alarm. Nooit voor een afspraak",
    "waarom": "Mehdi, 25-09-2026: zonder op te nemen weten welke soort oproep het is",
    "grendel": "tests/test_agenda_taken.py: de afspraak belt van TWILIO_VAN, vastzitten en alarm van TWILIO_VAN_VAST, en het rooster zegt altijd over 5 minuten"
-  }
+  },
+  "test": "een test belt nooit echt: BELLEN_UIT blokkeert bellen.bel en bel_telegram (FR-55)"
  },
  "waar_hij_van_leest": [
   {
@@ -1086,8 +1092,8 @@
   "claude": "Claude begint elke sessie aan de Agendawacht met de lessen uit het register en de laatste zelfcontrole, en sluit af met een nieuwe zelfcontrole als bewijs",
   "mehdi": "24-09-2026",
   "documenten": {
-   "afspraken": "Agendawacht - afspraken kleuren en taken v2.6.pdf (definitief, zonder verloop per dag)",
-   "foutenregister": "Agendawacht - foutenregister v1.7.pdf",
+   "afspraken": "Agendawacht - afspraken kleuren en taken v2.7.pdf (definitief, zonder verloop per dag)",
+   "foutenregister": "Agendawacht - foutenregister v1.9.pdf",
    "waar": "Dropbox private/0 Chegini Mehdi/Prive met Claude; oude versies in Agenda archief/oude documenten",
    "maken": "werkwijze/pdf/afspraken_pdf.py en werkwijze/pdf/foutenregister_pdf.py, op de Mac; ze lezen uit deze JSON en het register"
   }
@@ -1129,5 +1135,12 @@
   "verwijderen": "de agent verwijdert nooit een afspraak. Moet iets weg, dan zegt hij duidelijk wat en waarom en wacht hij op een ja van Mehdi",
   "mehdi": "25-09-2026: 'ik ga niet uitgebreid schrijven wat ik ga doen en dit is je werk ... als je vast zit dan kan je mij bellen via de agent en in een zin zeggen wat ik moet doen'",
   "waar_mehdi_kijkt": "Mehdi leest Telegram en het bord niet voor de agenda; de agenda zelf is de plek. Een vraag staat als VR in de afspraak, en de oproep zegt 'details staan in je agenda' (FR-52)"
+ },
+ "zoom_wachtwoord": {
+  "regel": "een klant krijgt altijd de volledige Zoom-link met het wachtwoord erin (?pwd=), in de mail van Calendly en in de agenda",
+  "gemeten": "25-09-2026: alle komende boekingen van Calendly General hebben een link zonder wachtwoord, en Calendly kent het wachtwoord niet; bij light@ zitten de nieuwste links wel goed. Maureen Van De Poel annuleerde op 24-09 omdat ze het wachtwoord niet had",
+  "bron_oplossing": "Zoom, het account dat aan Calendly General hangt (Calendly, Integraties, Zoom toont welk): Instellingen, Vergadering, Beveiliging, 'Toegangscode insluiten in uitnodigingslink voor deelname met één klik' aan. Werkt voor elke nieuwe boeking",
+  "agent": "ziet elke Zoom-link zonder wachtwoord bij een afspraak met een gast binnen 48 uur en belt Mehdi een keer per dag met een zin; de zelfcontrole kijkt acht dagen vooruit (FR-54)",
+  "mehdi": "25-09-2026"
  }
 }

@@ -4,8 +4,11 @@ De JSON is de afspraak met Mehdi. Deze test faalt zodra iemand een agenda, een
 code of een kleurregel in de code verandert zonder de afspraak bij te werken.
 """
 import json
+import os
 import sys
 from pathlib import Path
+
+os.environ["BELLEN_UIT"] = "1"      # een test belt nooit echt (FR-55)
 
 HIER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HIER))
@@ -514,6 +517,8 @@ _bel = []
 _oud_b = (W.bellen.afspraak_bellen_beschikbaar, W.bellen.bel_afspraak, W.BELVRAGEN)
 W.bellen.afspraak_bellen_beschikbaar = lambda: True
 W.bellen.bel_afspraak = lambda tekst, *r: _bel.append(tekst) or [("proef", "ok")]
+_oud_vast = W.bellen.bel_vast
+W.bellen.bel_vast = lambda tekst, *r: _bel.append(tekst) or [("proef-vast", "ok")]
 W.BELVRAGEN = "/tmp/belvragen-test.json"
 import os as _os2
 if _os2.path.exists(W.BELVRAGEN):
@@ -526,6 +531,7 @@ try:
     _z2 = W.bel_als_vastgelopen(_it9, _nu9)
 finally:
     W.bellen.afspraak_bellen_beschikbaar, W.bellen.bel_afspraak, W.BELVRAGEN = _oud_b
+    W.bellen.bel_vast = _oud_vast
 check("vastgelopen: de agent belt een keer, met een zin wat Mehdi moet doen",
       _z1 and _z2 is None and len(_bel) == 1 and "zeg voor welke firma" in _bel[0], str(_bel))
 _bron_alle = "".join((HIER / f).read_text(encoding="utf-8") for f in ("agenda_wacht.py", "zelfcontrole.py", "koppelingen/agenda.py", "agenda_signaal.py", "file_wacht.py"))
@@ -623,6 +629,36 @@ _bron_aw = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("de Agendawacht belt voor een afspraak nooit van het vastzit-nummer, en als hij vastzit wel",
       "bellen.bel_vast(zin" in _bron_aw and "rooster_schrijven(" in _bron_aw
       and "bel_vast" not in _bron_aw.split("def belrooster", 1)[1].split("\ndef ", 1)[0])
+
+# Zoom-link zonder wachtwoord (FR-54)
+_nz = W.nu_lokaal().replace(hour=9, minute=0, second=0, microsecond=0)
+_iz = [{"id": "z1", "titel": "Mehdi: [UNABO-PO] Jonatan Puype - Stabiliteit", "start": (_nz + _td(hours=4)).isoformat(), "einde": (_nz + _td(hours=5)).isoformat(),
+        "kalender": "zoomafspraken@gmail.com", "locatie": "https://us06web.zoom.us/j/81234567890", "omschrijving": "", "deelnemers": ["klant@x.be"]},
+       {"id": "z2", "titel": "Mehdi: [HARC-KO] 2609 - Filip Vandelook", "start": (_nz + _td(hours=6)).isoformat(), "einde": (_nz + _td(hours=7)).isoformat(),
+        "kalender": "x", "locatie": "https://us06web.zoom.us/j/8123?pwd=abc", "omschrijving": "", "deelnemers": ["klant@x.be"]}]
+_vz = [z for s_, z in W.vastgelopen(_iz, _nz) if s_.startswith("zoompwd:")]
+check("een Zoom-link zonder wachtwoord wordt gezien en in een zin gemeld",
+      [a["id"] for a in W.zoom_zonder_wachtwoord(_iz, _nz)] == ["z1"] and len(_vz) == 1 and "zonder wachtwoord" in _vz[0], str(_vz))
+
+try:
+    W.bellen.bel("proef")
+    _geblokkeerd = False
+except RuntimeError:
+    _geblokkeerd = True
+check("in een test belt niets echt, langs welke weg ook", _geblokkeerd)
+
+_gz = []
+_oz, _oz2 = W._patch, W.agenda._toegang
+W._patch = lambda a, body, tok: _gz.append(body)
+W.agenda._toegang = lambda: "tok"
+_mz = (W.nu_lokaal() + _td(days=2)).replace(hour=20, minute=30, second=0, microsecond=0)
+try:
+    W.zoom_zetten([{"id": "k1", "titel": "Mehdi: [HARC-KO] 2607 - Robin Verlinden en Silvie Boudou", "start": _mz.isoformat(), "einde": _mz.isoformat(),
+                    "kalender": W.WERKAGENDA, "locatie": "", "omschrijving": ""}])
+finally:
+    W._patch, W.agenda._toegang = _oz, _oz2
+check("een online klantgesprek met de klant na het nummer krijgt ZL en de linknotitie",
+      len(_gz) == 1 and _gz[0].get("summary", "").startswith("ZL ") and "Robin Verlinden en Silvie Boudou" in _gz[0].get("description", ""), str(_gz))
 
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
