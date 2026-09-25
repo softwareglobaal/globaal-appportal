@@ -28,6 +28,10 @@ class BordNabootsing:
         self.gestuurd.append((pad, payload))
         if "werkwijze" in pad:
             return {"werkwijze": self.werkwijze}
+        if pad == "/api/agents":
+            return [{"naam": "proefagent", "label": "De Proefagent", "type": "regie", "rol": "ik zelf", "actief": 1},
+                    {"naam": "bode", "label": "De Bode", "type": "regie", "rol": "brengt wat telt naar Mehdi", "actief": 1},
+                    {"naam": "oud", "label": "Oude agent", "type": "regie", "rol": "uit dienst", "actief": 0}]
         return {"nieuw": 0}
 
     def statussen(self):
@@ -125,7 +129,7 @@ def test_sjabloon_gebruikt_de_ronde():
 def test_de_norm_staat_beschreven():
     """Code zonder het document is een regel die niemand kan nalezen."""
     norm = open(os.path.join(RUNNER, "AGENTNORM.md"), encoding="utf-8").read()
-    for code in ("N4", "N10", "N11", "N13"):
+    for code in ("N4", "N10", "N11", "N13", "N14"):
         assert code in norm, f"{code} wordt hier getoetst maar staat niet in AGENTNORM.md"
 
 
@@ -154,3 +158,32 @@ def test_n13_ronde_leest_de_gedeelde_lessen():
     assert r.lessen, "de ronde geeft de lessen niet door aan de agent (r.lessen is leeg)"
     gemeld = nb.kennis()
     assert gemeld and "gedeelde lessen" in gemeld[0]["kennis"], "de gedeelde lessen staan niet in de gemelde kennis: N13 kan dan nooit slagen"
+
+
+def test_n14_ronde_kent_de_collegas():
+    """Mehdi, 25-09-2026: "zorg ervoor dat alle agents van elkaar op de hoogte zijn". De ronde
+    haalt de actieve agents levend van het bord, zonder zichzelf en zonder wie uit dienst is,
+    en meldt die lijst als bron, zodat de Normwacht kan zien dat hij ze kende."""
+    nb = BordNabootsing()
+    r = ronde_met(nb)
+    namen = [c["naam"] for c in r.collegas]
+    assert namen == ["bode"], f"de ronde hoort alleen actieve collega's te geven, zonder zichzelf: {namen}"
+    gemeld = nb.kennis()
+    assert gemeld and "collega's op het bord" in gemeld[0]["kennis"], "de collega's staan niet in de gemelde kennis: N14 kan dan nooit slagen"
+    assert "De Bode (bode, regie)" in bord.collega_tekst(r.collegas), "de collega-tekst noemt label, naam en afdeling"
+
+
+def test_n14_bord_dat_niet_antwoordt_breekt_de_ronde_niet():
+    """Antwoordt het bord niet, dan loopt de ronde door; de Normwacht meldt het gat."""
+    nb = BordNabootsing()
+    echt_call = nb.call
+
+    def zonder_agents(pad, payload=None, method=None):
+        if pad == "/api/agents":
+            raise OSError("bord weg")
+        return echt_call(pad, payload, method)
+
+    nb.call = zonder_agents
+    r = ronde_met(nb)
+    assert r.collegas == [], "zonder bord hoort de lijst leeg te zijn"
+    assert nb.statussen()[-1]["status"] in ("klaar", "waakt"), "een ontbrekende collega-lijst mag de ronde niet breken"

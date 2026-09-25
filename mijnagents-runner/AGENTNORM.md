@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.5, 24-09-2026 (N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.6, 25-09-2026 (N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -38,7 +38,7 @@ Twee regels die hieruit volgen:
 - **Wie een kopie maakt, is verantwoordelijk voor het verschil.** Kan een kopie
   niet gelijk blijven, dan hoort ze er niet te zijn.
 
-## 2. De twaalf normen
+## 2. De normen
 
 | norm | de eis | waarom, en waar het misging |
 |---|---|---|
@@ -57,6 +57,7 @@ Twee regels die hieruit volgen:
 
 | **N12** | De runner gaat door de gedeelde ronde (`with ag.ronde(...)`) | Dit is het minimum. Wie zijn eigen doorgang bouwt vergeet er altijd een: gemeten op 20-09-2026 haalden vier van de 39 runners hun werkwijze van het bord op, en meldde er precies een welk regelboek hij las. De werkwijze was voor de rest decoratie: een tekst die beschrijft wat de code zou moeten doen, die niemand naast de code legt. |
 | **N13** | Hij las in zijn laatste ronde de gedeelde lessen (`werkwijze/lessen.json`) | Wat een agent leert, hoort elke agent te weten. Tot 24-09-2026 had alleen de Agendawacht een foutenregister (47 fouten, 14 lessen) en las geen enkele andere agent het. Dezelfde dag stelde de werfverslag-voorbereider voor om "dubbele rijen op te ruimen" van dossier 2145, en Mehdi las dat als "2145 verwijderen", terwijl het net het eerste testdossier van het nieuwe communicatiesysteem is. Die les (L15: zeg eerst wat blijft) gold voor elke agent die voorstellen schrijft, en niemand anders kende ze. De ronde leest de lessen nu mee als bron; deze toets kijkt of ze in de gemelde kennis van de agent staan. |
+| **N14** | Hij las in zijn laatste ronde de lijst van actieve collega's van het bord | Mehdi, 25-09-2026: "zorg ervoor dat alle agents van elkaar op de hoogte zijn, en dat is momenteel niet het geval". Tot die dag wist geen agent wie er nog meer draaide, dus zette niemand iets klaar voor een collega die het beter kon, en vroeg elke agent alles aan Mehdi. De ronde haalt de lijst elke ronde levend van het bord (`/api/agents`), nooit uit een kopie, en geeft ze door als `r.collegas`; een taalmodel-agent krijgt `bord.collega_tekst(r.collegas)` in zijn opdracht. Hoort iets bij een collega, dan zet hij het voor die agent klaar (`klaarzet`, `voor: <naam>`). |
 
 ### De omgeving
 
@@ -129,6 +130,7 @@ Wat de ronde zelf doet:
 |---|---|
 | hartslag op "actief" met de taak | hartslag op "klaar", of "waakt" als er noden zijn |
 | de werkwijze van het bord ophalen en doorgeven als `r.werkwijze` | melden welke regelboeken hij las, met een vingerafdruk van acht tekens per bron (N4) |
+| de gedeelde lessen lezen (`r.lessen`, N13) en de collega's van het bord (`r.collegas`, N14) | |
 | | het werkverslag versturen |
 | | breekt de ronde, dan hartslag "fout" met de foutmelding, nooit blijven hangen op "actief" (N11) |
 

@@ -289,6 +289,28 @@ def n13_leest_de_lessen(rij, con):
     return False, "zijn laatste kennis noemt de gedeelde lessen niet (oude ronde-code op de VM?)"
 
 
+def n14_kent_zijn_collegas(rij, con):
+    """N14 hij las in zijn laatste ronde de lijst van actieve collega's van het bord.
+
+    Mehdi, 25-09-2026: "zorg ervoor dat alle agents van elkaar op de hoogte zijn, en
+    dat is momenteel niet het geval". Tot die dag wist geen agent wie er nog meer
+    draaide, dus zette niemand iets klaar voor een collega die het beter kon. De ronde
+    haalt de lijst nu levend van het bord; deze toets kijkt of ze in de kennis staat.
+    """
+    p = _runnerpad(rij["naam"])
+    if not os.path.exists(p):
+        return None, "geen runner in deze repo (zie N5)"
+    with open(p, encoding="utf-8") as f:
+        if ".ronde(" not in f.read():
+            return None, "gaat nog niet door de ronde (zie N12)"
+    kennis = _tekst(rij, "kennis")
+    if "collega's op het bord" in kennis:
+        return True, "kende zijn collega's in zijn laatste ronde"
+    if not kennis:
+        return False, "nog geen kennis gemeld, dus ook zijn collega's niet"
+    return False, "zijn laatste kennis noemt zijn collega's niet (oude ronde-code op de VM, of het bord antwoordde niet)"
+
+
 NORMEN = [
     ("N1", "werkwijze op het bord", n1_werkwijze),
     ("N2", "grenzen staan erin", n2_grenzen_in_werkwijze),
@@ -303,6 +325,7 @@ NORMEN = [
     ("N11", "hartslag vers", n11_hartslag),
     ("N12", "gaat door de ronde", n12_gebruikt_de_ronde),
     ("N13", "leest de gedeelde lessen", n13_leest_de_lessen),
+    ("N14", "kent zijn collega's", n14_kent_zijn_collegas),
 ]
 
 

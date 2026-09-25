@@ -161,6 +161,12 @@ class Ronde:
             self._bronnen.setdefault("gedeelde lessen", tekst)
         except (OSError, ValueError):
             pass
+        # Norm N14: een agent kent zijn collega's. Mehdi, 25-09-2026: "zorg ervoor dat alle
+        # agents van elkaar op de hoogte zijn". De lijst komt elke ronde levend van het bord
+        # (de waarheid, N6), nooit uit een kopie: wie er morgen bijkomt, kent iedereen meteen.
+        self.collegas = collegas(zonder=self.agent.naam)
+        if self.collegas:
+            self._bronnen.setdefault("collega's op het bord", collega_tekst(self.collegas))
         return self
 
     def __exit__(self, soort, fout, spoor):
@@ -174,6 +180,32 @@ class Ronde:
         self.agent.hartslag("klaar" if not self._noden else "waakt",
                             taak=self.taak, detail=self.detail, nood=self._noden)
         return False
+
+
+def collegas(zonder=None):
+    """De actieve agents zoals ze nu op het bord staan: naam, label, afdeling, rol, cadans.
+    Leeg als het bord niet antwoordt; de ronde breekt daar niet op, de Normwacht meldt het (N14)."""
+    try:
+        rijen = call("/api/agents")
+    except Exception:  # noqa: BLE001
+        return []
+    if not isinstance(rijen, list):
+        return []
+    rijen = [r for r in rijen if isinstance(r, dict) and r.get("naam")]
+    return sorted(({"naam": r["naam"], "label": r.get("label") or r["naam"], "afdeling": r.get("type") or "",
+                    "rol": r.get("rol") or "", "cadans": r.get("cadans") or ""}
+                   for r in rijen if r.get("actief") and r.get("naam") != zonder),
+                  key=lambda c: (c["afdeling"], c["naam"]))
+
+
+def collega_tekst(lijst):
+    """Een regel per collega, voor de kennis van de ronde en voor de opdracht van een taalmodel-agent:
+    wie bestaat er, waarvoor, en bij wie hoort een vraag die niet de mijne is."""
+    regels = ["Mijn collega's op het bord. Hoort iets bij een van hen, dan zet ik het voor die agent klaar "
+              "(klaarzet, voor: <naam>) in plaats van het zelf te doen. Mehdi bereik ik via De Bode (signaal)."]
+    for c in lijst:
+        regels.append(f"- {c['label']} ({c['naam']}, {c['afdeling']}): {c['rol'][:160]}")
+    return "\n".join(regels)
 
 
 def klaargezet_voor(voor, sleutel=None, afdeling=None, status="klaar", n=100):
