@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.8"
+VERSIE = "2.9"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -104,11 +104,11 @@ tr{{break-inside:avoid}}
 .twee{{column-count:2;column-gap:7mm}} .twee table{{break-inside:avoid}}
 </style>
 <div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; 24 september 2026 &nbsp;|&nbsp; versie {VERSIE}, <b>definitief</b> &nbsp;|&nbsp;
-bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.10 op de server</div>
+bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.11 op de server</div>
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
-Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.7 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
+Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.8 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
 Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de server. De test <code>tests/test_agenda_taken.py</code>
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
@@ -213,6 +213,9 @@ regel die past, wint.</p>
 <li><b>Een afwijkende kleur wordt teruggezet en gemeld.</b> Bij elke kleur die de agent zet, laat hij een onzichtbaar merk achter.
 Staat er een andere kleur, dan heeft iets buiten de agent ze veranderd: hij zet ze terug en meldt het op het bord, met het tijdstip.
 Zo blijven alle interne gesprekken groen, alle prospecten oranje.</li>
+<li><b>Kleurherstel elk uur, ook 's nachts en in het weekend.</b> Elke nacht om 00:15 zet iets buiten de agent, rechtstreeks bij
+Google, alle UNABO- en TKNB-afspraken van de komende vier weken op paars en geel. Daarom zet een korte ronde elk uur om :20 alleen de
+kleuren terug, 29 dagen vooruit, ook in het weekend. De bron uitzetten kan alleen Mehdi (FR-21).</li>
 </ul>
 
 <h2>6. Waar een afspraak plaatsvindt</h2>
