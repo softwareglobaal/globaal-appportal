@@ -52,5 +52,36 @@ server {
         proxy_pass $app_upstream;
     }
 
+    # MCP voor Mehdi's Claude (roep_mehdi, 25-09-2026): zelfde opbouw als de
+    # Postbus. /oauth/authorize en /mcp staan buiten de forward-auth (de app
+    # controleert zelf het getekende token); /oauth/inloggen staat er WEL
+    # achter, daar is de SSO-login de authenticatie. Zonder
+    # MIJNAGENTS_MCP_SECRET geeft de app 404.
+    location = /oauth/authorize {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass $app_upstream;
+    }
+    location ^~ /mcp {
+        client_max_body_size 64k;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass $app_upstream;
+    }
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+
     include /etc/nginx/snippets/forward-auth.conf;
 }

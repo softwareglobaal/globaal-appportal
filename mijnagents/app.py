@@ -1600,5 +1600,10 @@ def commandocentrum_opdracht(vid):
     return redirect(url_for("commandocentrum_pagina") + f"#v{vid}")
 
 
+# MCP voor Mehdi's Claude: "roep Mehdi" als een agent vastzit (mcp_bode.py, 25-09-2026).
+import mcp_bode  # noqa: E402
+mcp_bode.registreer(app, gebruiker, groepen, db, nu)
+
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.environ.get("PORT", 3022)), debug=True)
