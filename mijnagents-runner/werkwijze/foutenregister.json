@@ -854,7 +854,7 @@
    "fout": "Afspraken in een archiefagenda bleven onzichtbaar: 'Mehdi: 5520 Downs' (24-09 08:00) en 'Mehdi: 2603 Lisa Cuppens' (25-09 21:00) staan in 'ZZ ARCHIEF haagendalightprojects'.",
    "gevolg": "Geen code, geen kleur, geen melding, geen belrooster, geen signaal. Ook de weekcontrole zag ze niet.",
    "waarom_niet_gezien": "De agent en de weekcontrole lezen alleen de vaste lijst agenda's. Een archiefagenda werd als 'af' beschouwd, maar Calendly boekt er nog in.",
-   "oorzaak": "Het Calendly-type 'HA: Klant' van het account light projects schrijft nog in de gearchiveerde agenda.",
+   "oorzaak": "Het Calendly-account light@h-architects.be ('H-Architects Projects') bestaat nog als apart account, met één actief type 'HA: Klant'. Het schrijft in de Google-agenda haagendalightprojects, die op archief staat. Sinds de opruiming van 19-09 kwamen er nog vier boekingen binnen (2603, 2610, 2609 Filip Vandelook, en 5520 van daarvoor). Het boekingstype dat het vervangt, 'H-Architects: Klant', staat op het account General en schrijft op werk.",
    "soort_oorzaak": "bron",
    "oplossing": "De agent leest elke archiefagenda mee, alleen lezen: komende afspraken komen in het dagplan, het belrooster en de botsingen, en als signaal 'hoort op werk'. De zelfcontrole kijkt er ook in.",
    "grendel": {

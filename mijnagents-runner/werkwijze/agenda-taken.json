@@ -308,9 +308,9 @@
    "wanneer": "zodra het kan"
   },
   {
-   "wat": "Calendly, account light projects, type 'HA: Klant': de agenda op 'mehdi werk agenda' zetten en het titelsjabloon op 'Mehdi: [HARC-KO] ...'. Stappen staan in het antwoord van 24-09; tot dan leest de agent de archiefagenda mee (FR-39, FR-22)",
+   "wat": "Calendly: het account light@h-architects.be heeft nog het type 'HA: Klant' actief en boekt in de archiefagenda (4 boekingen sinds 19-09). Voorstel: klanten krijgen voortaan de link 'H-Architects: Klant' van het account General (schrijft op werk, vraagt het projectnummer), en 'HA: Klant' gaat uit na de laatste geboekte afspraak (30-09). Uitzetten kan de agent via de API, na een ja van Mehdi (FR-39)",
    "wie": "Mehdi",
-   "wanneer": "zo snel mogelijk"
+   "wanneer": "voor 01-10"
   },
   {
    "wat": "H-A afsprakenboek, A13: de betekenis van het projectnummer toevoegen (JJNN, JJ = jaar, alleen H-Architects). De nieuwste versie van het boek staat in het Claude-project '2145 vertomensberg'; de tekst staat klaar in de JSON onder titelconventie.projectnummer_ha (FR-47)",
@@ -1011,5 +1011,11 @@
   "claude": "geheugen ~/.claude/projects/-Users-mehdichegini-TKN-buro-Dropbox/memory/ (agendawacht-*.md, klant-van-een-project.md, calendly-kanalen.md, agenda-delen-rechten.md) en de skill ~/.claude/skills/agendawacht/SKILL.md",
   "wat_de_agent_leest": "Google Agenda (werk, Lara, privé, zoomafspraken, H-Architects, UNABO, feestdagen, en alle ZZ ARCHIEF-agenda's alleen lezen), organisatie.globaal.be, locatie.globaal.be, contracten.globaal.be (MCP), Dropbox H-A WORK (projectmappen, contracten, CLAUDE.md), Pipedrive H-Architects, Google Routes, OSRM en Nominatim",
   "wat_de_agent_schrijft_in_de_agenda": "zijn eigen ritten, kleuren (met merk agendawacht_kleur), meldingen, en titels van afspraken zonder gasten; nooit in een ZZ ARCHIEF-agenda"
+ },
+ "agendas_calendly": {
+  "general": "haprospecties@gmail.com (General): 19 boekingstypes, schrijft op werk; dit is het boekingsaccount",
+  "light": "light@h-architects.be (H-Architects Projects): nog 1 actief type 'HA: Klant', schrijft in de archiefagenda haagendalightprojects",
+  "mch": "mch@h-architects.be: het persoonlijke account van Mehdi, 2 eigen types; niet het boekingsaccount. De Calendly-plugin moet op General ingelogd zijn om de 19 types te zien",
+  "gemeten": "25-09-2026"
  }
 }
