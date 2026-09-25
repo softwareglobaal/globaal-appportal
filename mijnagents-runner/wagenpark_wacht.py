@@ -66,6 +66,7 @@ TERMIJNEN = [("keuring_tot", "keuring"), ("groene_kaart_tot", "groene kaart"), (
              ("leasing.einde", "einde leasing"), ("verkeersbelasting_vervaldag", "verkeersbelasting"),
              ("onderhoud_volgend", "onderhoud")]
 TREDEN = (30, 14, 3)
+WEG = ("verkocht", "geschrapt", "buiten gebruik")
 
 
 def _norm(tekst):
@@ -180,7 +181,12 @@ def overzicht(register, tijdlijn, lijst, onbekend, vandaag):
     per = {}
     for e in tijdlijn.values():
         per.setdefault(e.get("plaat") or "onbekende wagen", []).append(e)
+    weg = [v for v in register["voertuigen"] if v.get("status") in WEG]
+    if weg:
+        r += ["", "Niet meer in het wagenpark (tellen niet mee): " + "; ".join(f"{v['plaat']} {v['merk_model']} ({v['status']})" for v in weg)]
     for v in register["voertuigen"]:
+        if v.get("status") in WEG:
+            continue
         r += ["", f"## {v['plaat']} {v['merk_model']}", "",
               f"- Status: {v.get('status')}; firma nu: {v.get('firma')}; gebruik: {v.get('gebruik')}",
               f"- Chassis: {v.get('chassis')}; oude platen: {', '.join(v.get('platen_oud') or []) or 'geen'}",
@@ -288,7 +294,9 @@ def main():
         json.dump(register, open(os.path.join(EXPORT, "voertuigen.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         json.dump(dashboard(register, tijdlijn, lijst, onbekend, vandaag),
                   open(os.path.join(EXPORT, "dashboard.json"), "w", encoding="utf-8"), ensure_ascii=False)
-        te_klasseren = [e for e in tijdlijn.values() if not e.get("geklasseerd") and e.get("plaat")]
+        # Mehdi, 25-09-2026: wagens die er niet meer zijn tellen niet mee (verkocht, geschrapt, buiten gebruik).
+        hier = {v["plaat"] for v in register["voertuigen"] if v.get("status") not in WEG}
+        te_klasseren = [e for e in tijdlijn.values() if not e.get("geklasseerd") and e.get("plaat") in hier]
         json.dump(sorted(te_klasseren, key=lambda e: e["datum"]), open(os.path.join(EXPORT, "te klasseren.json"), "w", encoding="utf-8"),
                   ensure_ascii=False, indent=1)
         sig = signalen(lijst, vandaag)
