@@ -301,7 +301,8 @@ def main():
         if weg:
             r.nood("Postvakken voor het wagenpark niet leesbaar via de postbus: " + ", ".join(weg), wie="claude-code")
         r.nood("Pincodes van tankkaarten staan in klare tekst in 'overzicht wagenpark (keuring en verzekering).xlsx' "
-               "(Work All/o16. Wagenpark/Wagens). Voorstel: die kolom weghalen en de codes in de Keychain of een kluis", wie="mehdi")
+               "(Work All/o16. Wagenpark/Wagens) en in bestandsnamen onder Work All/o07. UNIVERSAL/00. CARS/*/Tank Card. "
+               "Voorstel: die kolom en die namen opschonen en de codes in de Keychain of een kluis", wie="mehdi")
         r.nood("Twee mapstructuren voor de wagens (o16. Wagenpark en Harmoniebouw 60. INVENTARIS/Werkvoertuigen). "
                "Voorstel: de Harmoniebouw-structuur met submappen 00 tot 07 als standaard voor elke firma", wie="mehdi")
         r.nood("Documenten in de map van de wagen zetten kan alleen vanaf de Mac; de klasseerhulp die 'te klasseren.json' "
