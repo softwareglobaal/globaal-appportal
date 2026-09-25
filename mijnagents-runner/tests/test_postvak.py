@@ -182,7 +182,7 @@ def test_vooruitblik_volgt_de_fabrikant_en_de_eigen_facturen():
     b = {x["onderdeel"]: x for x in W.vooruitblik(reg, date(2026, 9, 25))["2BAS423"]["vooruitblik"]}
     assert b["distributieriem"]["herkomst"] == "fabrikant" and b["distributieriem"]["laatst"] is None
     assert b["onderhoudsbeurt (olie en filters)"]["verwacht"] == "2027-04-10"
-    assert b["onderhoudsbeurt (olie en filters)"]["kost_eigen_facturen"] == 400
+    assert b["onderhoudsbeurt (olie en filters)"]["kost_eigen_facturen"] is None, "een factuurtotaal zonder aparte lijn is geen prijs"
     assert b["remblokken"]["kost_eigen_facturen"] == 250
 
 
