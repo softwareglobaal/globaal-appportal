@@ -186,6 +186,24 @@ def test_vooruitblik_volgt_de_fabrikant_en_de_eigen_facturen():
     assert b["remblokken"]["kost_eigen_facturen"] == 250
 
 
+def test_onderhoudstermijn_komt_uit_de_laatste_factuur():
+    """25-09-2026: 'onderhoud 2HHE117 verlopen' bleef staan uit een vaste datum, terwijl Auto 5 hem op 12-08-2026 onderhield."""
+    v = {"plaat": "2HHE117", "merk_model": "Opel Astra", "status": "in gebruik", "gebruik": "Mehdi", "mappen": ["/x"],
+         "onderhoud_volgend": "2025-07-10", "keuring_tot": "2027-01-01", "verzekering": {"tot": "2027-07-16"},
+         "fabrikant": {"interval_km": 30000, "interval_maanden": 12},
+         "onderhoud": [{"datum": "2026-08-12", "soort": "onderhoud", "km": 147788, "omschrijving": "olie en filters"}]}
+    reg = {"voertuigen": [v]}
+    lijst, _ = W.termijnen(reg, date(2026, 9, 25), [], W.vooruitblik(reg, date(2026, 9, 25)))
+    ond = [x for x in lijst if x[1] == "onderhoud"]
+    assert ond and ond[0][2] == date(2027, 8, 12), ond
+
+
+def test_suriname_krijgt_geen_belgische_keuring():
+    v = {"plaat": "1YLG530", "merk_model": "Suzuki Swift", "status": "in gebruik", "land": "Suriname", "mappen": ["/x"]}
+    lijst, onbekend = W.termijnen({"voertuigen": [v]}, date(2026, 9, 25), [])
+    assert not [x for x in lijst if x[1] in ("keuring", "groene kaart")] and not onbekend
+
+
 if __name__ == "__main__":
     fout = 0
     for n, f in sorted(globals().items()):

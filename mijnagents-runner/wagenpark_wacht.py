@@ -123,7 +123,7 @@ def _veld(v, pad):
     return v
 
 
-def termijnen(register, vandaag, vz=None):
+def termijnen(register, vandaag, vz=None, blik=None):
     """[(voertuig, wat, datum, dagen)] voor wagens in gebruik, plus [(voertuig, wat)] zonder datum.
     Staat de wagen in vermogen.verzekering, dan komen vervaldag en opzegdatum van daar, niet uit het register."""
     uit, onbekend = [], []
@@ -141,12 +141,20 @@ def termijnen(register, vandaag, vz=None):
             # Wet 9-10-2023 (sinds 1-10-2024): minstens 2 maanden voor de vervaldag. Een dag vroeger, zodat je nooit te laat bent.
             opzeg = _min_maanden(einde, p.get("opzegtermijn_maanden") or 2) - timedelta(days=1)
             uit.append((v, f"opzeggen verzekering {naam}", opzeg, (opzeg - vandaag).days))
+        belgie = (v.get("land") or "België") == "België"
         for pad, wat in TERMIJNEN:
             if pad == "verzekering.tot" and pol:
                 continue
+            if not belgie and pad in ("keuring_tot", "groene_kaart_tot", "verkeersbelasting_vervaldag"):
+                continue  # Belgische keuring en verkeersbelasting gelden niet in Suriname
             d = _veld(v, pad)
+            if pad == "onderhoud_volgend":
+                # Altijd uit de laatste onderhoudsfactuur en het fabrieksinterval, nooit een vaste datum in het register:
+                # op 25-09-2026 bleef 'onderhoud 2HHE117 verlopen' staan terwijl Auto 5 hem op 12-08-2026 onderhield.
+                ob = next((b for b in (blik or {}).get(v["plaat"], {}).get("vooruitblik", []) if b["onderdeel"].startswith("onderhoudsbeurt")), None)
+                d = ob["verwacht"] if ob else d
             if not d:
-                if pad in ("keuring_tot", "verzekering.tot") and v.get("status") == "in gebruik":
+                if belgie and pad in ("keuring_tot", "verzekering.tot") and v.get("status") == "in gebruik":
                     onbekend.append((v, wat))
                 continue
             try:
@@ -439,7 +447,11 @@ def main():
         tijdlijn = {}
     dagen = DAGELIJKS_DAGEN if tijdlijn else EERSTE_KEER_DAGEN
     vz = verzekeringen()
-    lijst, onbekend = termijnen(register, vandaag, vz)
+    try:
+        blik_nu = vooruitblik(register, vandaag)
+    except Exception:  # noqa: BLE001
+        blik_nu = {}
+    lijst, onbekend = termijnen(register, vandaag, vz, blik_nu)
     if droog:
         class _L:
             def log(self, *a):
