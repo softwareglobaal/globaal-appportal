@@ -884,6 +884,72 @@ def met_activiteit(titel, code):
     return re.sub(r"\s{2,}", " ", nieuw)
 
 
+PIPEDRIVE_VAN = {"HARC": "harchitects", "UNAB": "unabo"}
+_DEALS_OP_ADRES = {}
+
+
+def _deal_op_adres(firma, adres):
+    """De deal van die firma met dit adres in de titel (UNABO noemt een deal naar het adres).
+    Geeft (klant, gewonnen) of None. De persoonsnaam 'Natasja Gerritsen Natasja' wordt 'Natasja Gerritsen'."""
+    straat = adres.split(",")[0].strip()
+    sleutel = (firma, straat.lower())
+    if sleutel in _DEALS_OP_ADRES:
+        return _DEALS_OP_ADRES[sleutel]
+    uit = None
+    try:
+        d = pipedrive.get(PIPEDRIVE_VAN[firma], "/deals/search", {"term": straat, "fields": "title", "limit": 10})
+        for it in (d.get("items") if isinstance(d, dict) else d) or []:
+            x = it.get("item", it)
+            if straat.lower() in (x.get("title") or "").lower():
+                naam = ((x.get("person") or {}).get("name") or "").split()
+                naam = [w for w in naam if w not in ("PA", "KL")]
+                if len(naam) > 2 and naam[-1] == naam[0]:
+                    naam = naam[:-1]
+                uit = (" ".join(naam), x.get("status") == "won")
+                if uit[1]:
+                    break
+    except Exception:  # noqa: BLE001
+        uit = None
+    _DEALS_OP_ADRES[sleutel] = uit
+    return uit
+
+
+def titel_uit_onderzoek(a):
+    """Een korte titel zonder firmacode ('mehdi; barsten en scheuren') met een adres, zelf uitzoeken:
+    de activiteit uit de woorden, de firma uit de activiteit (alleen als die code bij precies een firma hoort),
+    klant en soort uit de deal met dat adres (gewonnen = klant). Mehdi, 25-09-2026: 'ik ga niet uitgebreid
+    schrijven wat ik ga doen, dit is je werk'. Lukt een stap niet, dan geen titel: dan vraagt de agent het."""
+    titel = a["titel"]
+    info = lees_titel(titel)
+    if info.get("firma") or info["reistijd"] or a.get("hele_dag"):
+        return None, ""
+    adres = (a.get("locatie") or "").strip()
+    if not adres or adres.lower().startswith("http"):
+        return None, ""
+    adres = re.sub(r",\s*(Belgi[eë]|Belgium)\s*$", "", adres)
+    gevonden = {}
+    for firma in ("HARC", "UNAB"):
+        for rx, code in ACTIVITEIT_WOORDEN[firma]:
+            if re.search(rx, titel, re.I):
+                gevonden.setdefault(code, set()).add(firma)
+    if "VOPL" in gevonden or "DOPL" in gevonden:
+        gevonden.pop("OPL", None)
+    if len(gevonden) != 1:
+        return None, ""
+    code, firmas = next(iter(gevonden.items()))
+    if len(firmas) != 1:
+        return None, ""
+    firma = next(iter(firmas))
+    deal = _deal_op_adres(firma, adres)
+    if not deal or not deal[0]:
+        return None, ""
+    klant, gewonnen = deal
+    buiten = code in BUITEN_TYPES or info["buiten"]
+    soort = ("K" if gewonnen else "P") + ("B" if buiten else "O")
+    nieuw = f"{'!! ' if buiten else ''}Mehdi: [{firma}-{soort}] {code} - {klant}, {adres}"
+    return nieuw, f"uitgezocht: activiteit {code}, firma {firma}, klant {klant} ({'getekend' if gewonnen else 'nog niet getekend'}) uit de deal op dit adres"
+
+
 def titel_aanvulling(a, projecten):
     """Wat ontbreekt aan een titel om conform te zijn? Geeft (nieuwe titel, uitleg) of (None, '').
     - een rit draagt het autootje vooraan (Mehdi, 24-09-2026: 'autootje niet vergeten');
@@ -891,6 +957,8 @@ def titel_aanvulling(a, projecten):
       uit de agenda of de projectmap: '[FIRMA-SOORT] TYPE nummer - klant, adres'."""
     titel = a["titel"]
     info = lees_titel(titel)
+    if not info.get("firma") and not info["reistijd"]:
+        return titel_uit_onderzoek(a)
     code = activiteit_voorstel(titel, info)
     if code and not info["reistijd"]:
         nieuw = met_activiteit(titel, code)
@@ -2028,6 +2096,58 @@ def onbevestigd_voorbij(items, vandaag):
     return uit
 
 
+BELVRAGEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-belvragen.json")
+
+
+def vastgelopen(items, nu=None):
+    """Afspraken binnen 48 uur waar de agent niet verder kan: geen firmacode na zijn onderzoek, of buiten
+    zonder adres. Geeft [(sleutel, zin)], de zin is wat Mehdi moet doen, in een zin."""
+    nu = nu or nu_lokaal()
+    projecten = projectadressen.index()
+    uit = []
+    for a in items:
+        if a.get("hele_dag") or "T" not in a.get("start", "") or a.get("kalender") in AGENDA_VASTE_KLEUR \
+                or a.get("kalender", "").startswith("en.be#"):
+            continue
+        try:
+            start = datetime.fromisoformat(a["start"])
+        except ValueError:
+            continue
+        if not (nu < start <= nu + timedelta(hours=48)):
+            continue
+        info = lees_titel(a["titel"])
+        if info["reistijd"]:
+            continue
+        wanneer = f"{['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'][start.weekday()]} om {start:%H:%M}"
+        kort = re.sub(r"[^\w ]", " ", a["titel"])[:40].strip()
+        if not info.get("firma") and a.get("kalender") == WERKAGENDA:
+            uit.append((f"{a['id']}:firma", f"Mehdi, de afspraak van {wanneer}, {kort}: zeg voor welke firma en welke klant."))
+        elif (info["buiten"] or info["soort"] in BUITEN_SOORTEN) and not (a.get("locatie") or "").strip() \
+                and not (info["nummer"] and info["nummer"] in projecten):
+            uit.append((f"{a['id']}:adres", f"Mehdi, de afspraak buiten van {wanneer}, {kort}: zet het adres erin."))
+    return uit
+
+
+def bel_als_vastgelopen(items, nu=None):
+    """Mehdi, 25-09-2026: 'als je vast zit dan kan je mij bellen via de agent en in een zin zeggen wat ik moet
+    doen'. Een oproep per ronde, tussen 08:00 en 20:00, en nooit twee keer voor dezelfde vraag."""
+    nu = nu or nu_lokaal()
+    if not (8 <= nu.hour < 20) or not bellen.afspraak_bellen_beschikbaar():
+        return None
+    try:
+        staat = json.load(open(BELVRAGEN))
+    except (OSError, ValueError):
+        staat = {}
+    for sleutel, zin in vastgelopen(items, nu):
+        if sleutel in staat:
+            continue
+        uit = bellen.bel_afspraak(zin)
+        staat[sleutel] = {"tijd": nu.isoformat(), "zin": zin, "resultaat": str(uit)[:200]}
+        json.dump(staat, open(BELVRAGEN, "w"), ensure_ascii=False, indent=0)
+        return zin
+    return None
+
+
 def botsingen(items):
     """Twee afspraken die elkaar overlappen op dezelfde dag (bv. een Zoom tijdens een opmeting)."""
     uit = []
@@ -2273,6 +2393,10 @@ def main():
             noden.append({"tekst": "Herinneringen konden niet gezet worden", "wie": "claude-code"})
         if in_archief:
             noden.append({"tekst": "Er wordt nog geboekt in een archiefagenda: het Calendly-kanaal omzetten naar werk", "wie": "mehdi"})
+        if not DAG_ARG:
+            gebeld = bel_als_vastgelopen(items)
+            if gebeld:
+                ag.log(f"dag {vandaag}", "bellen", "vastgelopen: Mehdi gebeld", gebeld)
         if HANDKLEUREN:
             noden.append({"tekst": "Iets buiten de agent verandert kleuren (tijdstippen in het signaal): welke tool of wie?", "wie": "mehdi"})
         if open_na:

@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "1.4",
+ "versie": "1.5",
  "datum": "24-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -128,6 +128,14 @@
    "les": "Een vraag die blijft hangen is geen oplossing. Ligt de regel vast, kies dan, herstel, en meld wat je deed en waarom.",
    "uit": [
     "FR-48"
+   ]
+  },
+  {
+   "id": "L16",
+   "les": "Het uitzoeken is mijn werk, niet dat van Mehdi. Ik zoek tot het einde (activiteit, firma, klant, adres); zit ik vast, dan bel ik met een zin wat hij moet doen. Wissen doe ik nooit zonder duidelijke vraag en een ja.",
+   "uit": [
+    "FR-50",
+    "FR-51"
    ]
   }
  ],
@@ -1056,6 +1064,42 @@
    },
    "controle": [],
    "status": "opgelost"
+  },
+  {
+   "id": "FR-50",
+   "datum": "25-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Een korte titel ('mehdi barsten en scheruen klant van donderdag', later 'mehdi; barsten en scheuren' in Lanaken) bleef onduidelijk; de agent wachtte tot Mehdi het uitschreef.",
+   "gevolg": "Mehdi moest zelf uitleggen wat de agent had kunnen vinden: barsten en scheuren bij Natasja Gerritsen (UNABO, getekend op 17-09, deal 3741; uitvoering TKN-Buro project 46118).",
+   "waarom_niet_gezien": "De agent zocht alleen een firmanaam in de titel; hij zocht niet verder met de activiteit en het adres.",
+   "oorzaak": "Geen regel dat het uitzoeken het werk van de agent is.",
+   "soort_oorzaak": "ontbrekende regel",
+   "oplossing": "titel_uit_onderzoek(): activiteit uit de woorden, firma uit de activiteit, klant en soort uit de deal op het adres. Lukt het niet, dan belt de agent Mehdi met een zin (FR-51).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een korte titel wordt zelf uitgezocht: activiteit, firma, klant en adres"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-51",
+   "datum": "25-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Regel, geen voorval van de agent: Mehdi vroeg of iets van maandag verwijderd was. Gemeten: de afspraak van maandag 28-09 (barsten en scheuren) werd om 10:35 geannuleerd en om 10:58 als nieuwe afspraak op donderdag 01-10 gezet, allebei via het account van Mehdi; de agent en Claude hebben geen code die een afspraak wist.",
+   "gevolg": "Onrust: het leek of de agent iets wiste.",
+   "waarom_niet_gezien": "Wie een afspraak annuleert, toont Google niet.",
+   "oorzaak": "Onbekend wie het deed; niet de agent.",
+   "soort_oorzaak": "regel",
+   "oplossing": "De agent verwijdert nooit iets; moet iets weg, dan zegt hij duidelijk wat en waarom en wacht hij op een ja. Zit hij vast, dan belt hij Mehdi met een zin wat er moet gebeuren (een keer per vraag, 08:00-20:00, binnen 48 uur).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de agent verwijdert nooit een afspraak: geen enkele DELETE naar de agenda"
+   },
+   "controle": [],
+   "status": "bewaakt"
   }
  ]
 }

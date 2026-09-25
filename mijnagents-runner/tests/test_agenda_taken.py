@@ -489,6 +489,48 @@ check("een activiteit wordt gelezen en voorgesteld",
       and W.activiteit_voorstel("!! Mehdi: [HARC-KB] 2505 stabiliteit", W.lees_titel("!! Mehdi: [HARC-KB] 2505 stabiliteit")) == "")
 check("architectuur kent voorlopig alleen WB, VOPL, DOPL en OPL", W.ACTIVITEITEN["HARC"] == ("WB", "VOPL", "DOPL", "OPL"))
 
+# Zelf uitzoeken, nooit wissen, bellen als hij vastzit (Mehdi, 25-09-2026)
+_oud_d = W._deal_op_adres
+W._deal_op_adres = lambda firma, adres: ("Natasja Gerritsen", True) if firma == "UNAB" and "Albertlaan 206" in adres else None
+try:
+    _o1 = W.titel_uit_onderzoek({"titel": "mehdi; barsten en scheuren", "locatie": "Koning Albertlaan 206, 3620 Lanaken, Belgium"})[0]
+    _o2 = W.titel_uit_onderzoek({"titel": "mehdi; barsten en scheuren", "locatie": "Kerkstraat 1, 3000 Leuven"})[0]
+    _o3 = W.titel_uit_onderzoek({"titel": "mehdi; barsten en scheuren", "locatie": ""})[0]
+finally:
+    W._deal_op_adres = _oud_d
+check("een korte titel wordt zelf uitgezocht: activiteit, firma, klant en adres",
+      _o1 == "!! Mehdi: [UNAB-KB] BS - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken" and _o2 is None and _o3 is None, str((_o1, _o2, _o3)))
+import pipedrive as _pd
+_oud_get = _pd.get
+_pd.get = lambda firma, pad, q=None: {"items": [{"item": {"title": "Koning Albertlaan 206, 3620 Lanaken", "status": "won", "person": {"name": "Natasja Gerritsen Natasja"}}}]}
+W._DEALS_OP_ADRES.clear()
+try:
+    _dl = W._deal_op_adres("UNAB", "Koning Albertlaan 206, 3620 Lanaken")
+finally:
+    _pd.get = _oud_get
+    W._DEALS_OP_ADRES.clear()
+check("de klant komt uit de deal op dat adres, zonder dubbele voornaam", _dl == ("Natasja Gerritsen", True), str(_dl))
+_bel = []
+_oud_b = (W.bellen.afspraak_bellen_beschikbaar, W.bellen.bel_afspraak, W.BELVRAGEN)
+W.bellen.afspraak_bellen_beschikbaar = lambda: True
+W.bellen.bel_afspraak = lambda tekst: _bel.append(tekst) or [("proef", "ok")]
+W.BELVRAGEN = "/tmp/belvragen-test.json"
+import os as _os2
+if _os2.path.exists(W.BELVRAGEN):
+    _os2.remove(W.BELVRAGEN)
+_nu9 = W.nu_lokaal().replace(hour=10, minute=0, second=0, microsecond=0)
+_it9 = [{"id": "x1", "titel": "mehdi; iets", "start": (_nu9 + _td(hours=20)).isoformat(), "einde": (_nu9 + _td(hours=21)).isoformat(),
+         "kalender": W.WERKAGENDA, "locatie": ""}]
+try:
+    _z1 = W.bel_als_vastgelopen(_it9, _nu9)
+    _z2 = W.bel_als_vastgelopen(_it9, _nu9)
+finally:
+    W.bellen.afspraak_bellen_beschikbaar, W.bellen.bel_afspraak, W.BELVRAGEN = _oud_b
+check("vastgelopen: de agent belt een keer, met een zin wat Mehdi moet doen",
+      _z1 and _z2 is None and len(_bel) == 1 and "zeg voor welke firma" in _bel[0], str(_bel))
+_bron_alle = "".join((HIER / f).read_text(encoding="utf-8") for f in ("agenda_wacht.py", "zelfcontrole.py", "koppelingen/agenda.py", "agenda_signaal.py", "file_wacht.py"))
+check("de agent verwijdert nooit een afspraak: geen enkele DELETE naar de agenda", "DELETE" not in _bron_alle)
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 
