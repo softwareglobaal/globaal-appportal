@@ -10,5 +10,7 @@ COPY . .
 # als de schrijver de dubbel kan lezen, of als de opruiming iets wist wat nog nergens anders staat. Faalt dit,
 # dan faalt `docker compose build` en blijft de vorige container draaien. Zie test_werfbezoek.py.
 RUN python3 test_werfbezoek.py
+# Grendel op het maildashboard (/mail): alleen beheer, belangrijk bovenaan, afgehandeld komt niet terug. Zie test_mail.py.
+RUN python3 test_mail.py
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3022} --workers 2 --timeout 900 app:app"]

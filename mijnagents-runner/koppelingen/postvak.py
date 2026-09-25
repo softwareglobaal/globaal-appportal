@@ -367,7 +367,7 @@ def ronde(naam, ag, r, nu=None):
                                      "datum": d.isoformat(), "uid": b.get("uid"), "soort": soort, "waarom": waarom,
                                      "werkdagen_zonder_antwoord": wacht,
                                      "voorstel": {"actie": "nakijken en regelen (automatisch bericht, geen antwoord mogelijk)",
-                                                  "hoog": "beantwoorden of regelen: " + waarom,
+                                                  "hoog": "beantwoorden of regelen",  # het waarom staat er al naast
                                                   "midden": "beantwoorden of doorzetten naar wie het opvolgt"}[soort]}})
     return items, tel, rijen
 

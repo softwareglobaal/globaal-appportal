@@ -18,6 +18,9 @@ hoog belang eerst en daarna wat het langst wacht. Elk punt krijgt een voorstel: 
 - Het overzicht staat in mijn werkverslag. Daar leest De Regisseur het (agent_verslag), zodat hij Mehdi kan antwoorden
   op "wat staat er nog open aan mail" zonder zelf mail te lezen.
 - Ik zet het ook klaar voor De Regisseur (soort verslag).
+- Mehdi volgt de open punten zelf op de pagina Mail van het bord (mijnagents.globaal.be/mail), per postvak.
+  Wat hij daar als afgehandeld aanklikt, verdwijnt van mijn lijst en komt niet terug; zet hij het terug, dan staat
+  het er weer.
 - Om 08:00, en alleen dan, stuur ik Mehdi een signaal als er iets van hoog belang of een automatisch bericht met gevolg
   op hem wacht, of iets dat al vijf werkdagen wacht. Een bericht per dag, met de lijst erbij. Niets te melden: geen
   bericht.

@@ -19,7 +19,8 @@ import json
 import re
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, url_for
 
@@ -431,6 +432,97 @@ def gesprekken_pagina():
         abort(403)
     rijen = db().execute("SELECT * FROM gesprek_log ORDER BY datum DESC, start DESC LIMIT 2000").fetchall()
     return render_template("gesprekken.html", app_naam=APP_NAAM, rijen=rijen)
+
+
+# --- mail: het dashboard van de mailwachten. Mehdi, 25-09-2026: "een dashboard dat we de belangrijke zaken van
+#     daar kunnen volgen". Per postvak wat de wacht klaarzette voor De Mailregisseur (klaarzet, voor mail-regisseur),
+#     met een knop Afgehandeld. Afgehandeld is opgepakt: de wacht zet hetzelfde bericht niet opnieuw klaar (uniek),
+#     en De Mailregisseur neemt het niet meer op in zijn overzicht. Alleen beheer: afzenders en onderwerpen zijn inhoud.
+MAIL_SOORT = {"hoog": (0, "Belangrijk"), "actie": (1, "Automatisch, met gevolg"), "midden": (2, "Gewone mail")}
+BRUSSEL = ZoneInfo("Europe/Brussels")
+
+
+def _brussel(ts, dag=False):
+    """Een tijdstip in Brusselse tijd, '25-09 19:52'; met dag=True 'vr 25-09 19:52'."""
+    try:
+        t = datetime.fromisoformat(ts)
+        t = (t if t.tzinfo else t.replace(tzinfo=timezone.utc)).astimezone(BRUSSEL)
+    except (TypeError, ValueError):
+        return ""
+    return (("ma di wo do vr za zo".split()[t.weekday()] + " ") if dag else "") + t.strftime("%d-%m %H:%M")
+
+
+def _werkdagen_sinds(ts, vandaag=None):
+    """Werkdagen (ma-vr) na de dag van ts, tot vandaag (Brusselse tijd); None als ts onleesbaar is."""
+    try:
+        t = datetime.fromisoformat(ts)
+        d = (t if t.tzinfo else t.replace(tzinfo=timezone.utc)).astimezone(BRUSSEL).date()
+    except (TypeError, ValueError):
+        return None
+    vandaag, n = vandaag or datetime.now(BRUSSEL).date(), 0
+    while d < vandaag:
+        d += timedelta(days=1)
+        n += d.weekday() < 5
+    return n
+
+
+def _mailpunt(r):
+    try:
+        i = json.loads(r["inhoud"] or "{}")
+    except ValueError:
+        i = {}
+    orde, label = MAIL_SOORT.get(i.get("soort", ""), (9, i.get("soort", "")))
+    wd = _werkdagen_sinds(i.get("datum"))
+    return {"id": r["id"], "wacht": r["van"], "postvak": i.get("postvak", ""), "van": i.get("van", ""),
+            "van_naam": i.get("van_naam") or "", "onderwerp": i.get("onderwerp") or r["titel"],
+            "datum": _brussel(i.get("datum"), dag=True), "soort": i.get("soort", ""), "soort_label": label,
+            "orde": orde, "werkdagen": wd if wd is not None else int(i.get("werkdagen_zonder_antwoord") or 0),
+            "waarom": i.get("waarom", ""), "voorstel": i.get("voorstel", ""),
+            "door": r["opgepakt_door"] or "", "opgepakt": _brussel(r["opgepakt_ts"])}
+
+
+@app.route("/mail")
+def mail_pagina():
+    if not mag_beslissen():
+        abort(403)
+    conn = db()
+    labels = {r["naam"]: dict(r) for r in conn.execute("SELECT naam, label, rol, actief FROM agent WHERE naam LIKE 'mail-%'").fetchall()}
+    wachten = sorted((n for n, a in labels.items() if a["actief"] and n != "mail-regisseur"), key=lambda n: labels[n]["label"])
+    status = {r["naam"]: {**dict(r), "wanneer": _brussel(r["ts"])}
+              for r in conn.execute("SELECT * FROM status WHERE naam LIKE 'mail-%'").fetchall()}
+    noden = {}
+    for r in conn.execute("SELECT naam, tekst, wie FROM nood WHERE open=1 AND naam LIKE 'mail-%' ORDER BY id").fetchall():
+        noden.setdefault(r["naam"], []).append(dict(r))
+    per = {n: [] for n in wachten}
+    for r in conn.execute("SELECT * FROM klaarzet WHERE voor='mail-regisseur' AND status='klaar' ORDER BY id DESC LIMIT 1000").fetchall():
+        per.setdefault(r["van"], []).append(_mailpunt(r))
+    for lijst in per.values():
+        lijst.sort(key=lambda p: (p["orde"], -p["werkdagen"]))
+    grens = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    klaar = [_mailpunt(r) for r in conn.execute(
+        "SELECT * FROM klaarzet WHERE voor='mail-regisseur' AND status='opgepakt' AND opgepakt_ts>=? "
+        "ORDER BY opgepakt_ts DESC LIMIT 300", (grens,)).fetchall()]
+    return render_template("mail.html", app_naam=APP_NAAM, wachten=list(per), per=per, labels=labels, status=status,
+                           noden=noden, klaar=klaar, nu=datetime.now(BRUSSEL).strftime("%d-%m-%Y %H:%M"))
+
+
+@app.route("/mail/<int:kid>/<actie>", methods=["POST"])
+def mail_actie(kid, actie):
+    """Afgehandeld: Mehdi regelde het zelf (of het hoeft niet). Terug: een vergissing ongedaan maken."""
+    if not mag_beslissen():
+        abort(403)
+    conn = db()
+    if not conn.execute("SELECT 1 FROM klaarzet WHERE id=? AND voor='mail-regisseur'", (kid,)).fetchone():
+        abort(404)
+    if actie == "afgehandeld":
+        conn.execute("UPDATE klaarzet SET status='opgepakt', opgepakt_door=?, opgepakt_ts=? WHERE id=?",
+                     (f"{gebruiker()}: afgehandeld op het bord", nu(), kid))
+    elif actie == "terug":
+        conn.execute("UPDATE klaarzet SET status='klaar', opgepakt_door='', opgepakt_ts='' WHERE id=?", (kid,))
+    else:
+        abort(400)
+    conn.commit()
+    return redirect(url_for("mail_pagina") + (f"#p{kid}" if actie == "terug" else ""))
 
 
 # --- dagen: het dagdashboard van de logboek-laag. Per dag wat de Dagbundelaar

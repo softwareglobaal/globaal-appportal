@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mail · {{ app_naam }}</title>
+<style>
+  :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;
+        --hoog:#f87171;--actie:#f59e0b;--midden:#6ea8fe;--ok:#4ade80}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tekst);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--rand);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+  header h1{margin:0;font-size:19px}
+  header a{color:var(--accent);text-decoration:none;font-size:13px}
+  .tel{color:var(--zacht);font-size:12px}
+  main{padding:16px 24px 60px;max-width:1100px;margin:0 auto}
+  .uitleg{color:var(--zacht);margin:0 0 16px;max-width:780px}
+  .samen{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+  .samen a{flex:1 1 140px;background:var(--paper);border:1px solid var(--rand);border-radius:12px;padding:12px 14px;color:var(--tekst);text-decoration:none}
+  .samen .getal{font-size:26px;font-weight:700;line-height:1.1}
+  .samen .getal small{font-size:13px;font-weight:600;color:var(--hoog);margin-left:6px}
+  .samen .wie{color:var(--zacht);font-size:12px}
+  section.pv{background:var(--paper);border:1px solid var(--rand);border-radius:12px;padding:14px 16px;margin-bottom:22px}
+  section.pv h2{margin:0;font-size:16px}
+  .adres{color:var(--zacht);font-size:12.5px;margin:2px 0 6px}
+  .stand{color:var(--zacht);font-size:12px;margin-bottom:8px}
+  .nood{color:var(--actie);font-size:12.5px;margin:4px 0}
+  .leeg{color:var(--ok);font-size:13px;margin:6px 0 2px}
+  .punt{border-top:1px solid var(--rand);padding:10px 0;display:flex;gap:12px;align-items:flex-start}
+  .punt .in{flex:1;min-width:0}
+  .rij{display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;font-size:12px;color:var(--zacht)}
+  .soort{font-weight:700;font-size:12px}
+  .s-hoog .soort{color:var(--hoog)} .s-actie .soort{color:var(--actie)} .s-midden .soort{color:var(--midden)}
+  .wacht{font-weight:600} .wacht.lang{color:var(--hoog)}
+  .van{margin-top:3px;overflow-wrap:anywhere} .van span{color:var(--zacht);font-size:12px}
+  .ond{font-weight:600;margin-top:2px;overflow-wrap:anywhere}
+  .waarom{color:var(--zacht);font-size:12px;margin-top:3px}
+  form{margin:0}
+  button{font:inherit;font-size:12.5px;font-weight:600;border:1px solid var(--rand);background:#212734;color:var(--tekst);
+         padding:7px 12px;border-radius:9px;cursor:pointer;white-space:nowrap}
+  button:hover{filter:brightness(1.2)}
+  details.klaar{background:var(--paper);border:1px solid var(--rand);border-radius:12px;padding:12px 16px}
+  details.klaar summary{cursor:pointer;font-weight:600}
+  details.klaar .punt{opacity:.8}
+  @media (max-width:640px){main{padding:12px 14px 50px}header{padding:14px}.punt{flex-direction:column}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mail</h1>
+  <a href="{{ url_for('bord') }}">← bord</a>
+  <a href="{{ url_for('kantoor') }}">kantoor</a>
+  <span class="tel">stand {{ nu }}</span>
+</header>
+<main>
+  <p class="uitleg">Wat de mailwachten elk uur (07:00 tot 21:00) vonden dat op jou of je team wacht: belangrijk (bank, overheid,
+    boekhouder, notaris, aanmaning) zonder antwoord, gewone mail van een bekend contact na twee werkdagen zonder antwoord,
+    en automatische berichten met gevolg. Reclame, meldingen en onbekende afzenders staan hier niet. Komt er een antwoord,
+    dan haalt de wacht het zelf weg. Regelde je het op een andere manier, klik dan Afgehandeld.</p>
+
+  <div class="samen">
+    {% for n in wachten %}{% set l = per[n] %}
+    <a href="#{{ n }}">
+      <div class="getal">{{ l|length }}{% set h = l|selectattr('soort', 'equalto', 'hoog')|list|length %}{% if h %}<small>{{ h }} belangrijk</small>{% endif %}</div>
+      <div class="wie">{{ labels[n]['label'] if n in labels else n }}</div>
+    </a>
+    {% endfor %}
+  </div>
+
+  {% for n in wachten %}{% set l = per[n] %}{% set s = status.get(n) %}
+  <section class="pv" id="{{ n }}">
+    <h2>{{ labels[n]['label'] if n in labels else n }}</h2>
+    <div class="adres">{{ labels[n]['rol'] if n in labels else '' }}</div>
+    <div class="stand">{% if s %}laatste ronde {{ s['wanneer'] }}{% if s['detail'] %} · {{ s['detail'] }}{% endif %}{% else %}nog geen ronde{% endif %}</div>
+    {% for d in noden.get(n, []) %}<div class="nood">Nodig: {{ d['tekst'] }} ({{ d['wie'] }})</div>{% endfor %}
+    {% if not l %}<div class="leeg">Niets open.</div>{% endif %}
+    {% for p in l %}
+    <div class="punt s-{{ p['soort'] }}" id="p{{ p['id'] }}">
+      <div class="in">
+        <div class="rij"><span class="soort">{{ p['soort_label'] }}</span><span>{{ p['datum'] }}</span>
+          <span class="wacht {{ 'lang' if p['werkdagen'] >= 5 else '' }}">{{ p['werkdagen'] }} werkdag{{ '' if p['werkdagen'] == 1 else 'en' }} zonder antwoord</span></div>
+        <div class="van">{{ p['van_naam'] or p['van'] }} <span>&lt;{{ p['van'] }}&gt;</span></div>
+        <div class="ond">{{ p['onderwerp'] }}</div>
+        <div class="waarom">{{ p['waarom'] }}{% if p['voorstel'] %} · voorstel: {{ p['voorstel'] }}{% endif %}</div>
+      </div>
+      <form method="post" action="{{ url_for('mail_actie', kid=p['id'], actie='afgehandeld') }}"><button>Afgehandeld</button></form>
+    </div>
+    {% endfor %}
+  </section>
+  {% endfor %}
+
+  <details class="klaar">
+    <summary>Afgehandeld of beantwoord, laatste 7 dagen ({{ klaar|length }})</summary>
+    {% for p in klaar %}
+    <div class="punt s-{{ p['soort'] }}" id="k{{ p['id'] }}">
+      <div class="in">
+        <div class="rij"><span class="soort">{{ p['soort_label'] }}</span><span>{{ p['datum'] }}</span><span>{{ p['postvak'] }}</span></div>
+        <div class="van">{{ p['van_naam'] or p['van'] }} <span>&lt;{{ p['van'] }}&gt;</span></div>
+        <div class="ond">{{ p['onderwerp'] }}</div>
+        <div class="waarom">{{ p['opgepakt'] }} · {{ p['door'] }}</div>
+      </div>
+      <form method="post" action="{{ url_for('mail_actie', kid=p['id'], actie='terug') }}"><button>Terugzetten</button></form>
+    </div>
+    {% endfor %}
+  </details>
+</main>
+</body>
+</html>
