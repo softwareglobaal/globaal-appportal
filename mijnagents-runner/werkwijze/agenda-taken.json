@@ -1,5 +1,5 @@
 {
- "versie": "4.4",
+ "versie": "4.5",
  "datum": "2026-09-24",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -78,7 +78,22 @@
    "BS": "barsten en scheuren",
    "STA": "stabiliteit",
    "SD": "schetsontwerp",
-   "OPM": "opmeting"
+   "OPM": "opmeting",
+   "VOPL": "voorlopige oplevering",
+   "DOPL": "definitieve oplevering",
+   "VEN": "ventilatie, ventilatiemeting",
+   "BDT": "blowerdoortest",
+   "VERG": "vergunning of melding zonder architect",
+   "FW": "functiewijziging",
+   "REG": "regularisatie",
+   "REN": "3D-rendering",
+   "LM": "landmeter: opmeting, afpaling, muurovername",
+   "DRA": "drafting, plannen tekenen of digitaliseren",
+   "MST": "meetstaat",
+   "KM": "kennismaking",
+   "OFB": "offertebespreking",
+   "BUN": "bundel van meerdere diensten",
+   "AI+AT": "AI en automatisering (interne bespreking)"
   },
   "tekens": {
    "!!": "buiten, reistijd nodig",
@@ -122,7 +137,58 @@
   "zonder_soort": "een firmacode zonder soort ('[HARC] Rechtbank') wordt gemeld; een gemeente of rechtbank past nog in geen soort, dat beslist Mehdi (FR-27)",
   "volledig": "een titel met een projectnummer is pas volledig met de klant (Pipedrive, de persoon van de deal) en, buiten, het adres: '[FIRMA-SOORT] TYPE nummer - klant, adres'. Zonder gasten en niet terugkerend vult de agent het zelf aan, ook als een collega de afspraak zette; met gasten, van Calendly of in een reeks doet hij een voorstel (FR-41, FR-45)",
   "projectnummer_ha": "Projectnummers van H-Architects zijn JJNN: JJ is het jaar (25 = 2025, 26 = 2026), NN het volgnummer van dat jaar (2505 is het vijfde project van 2025). Zo nummert alleen H-Architects; de andere firma's hebben een eigen benaming. Een nummer met een projectmap is een klant, want die map ontstaat bij de ondertekening (A13). Mehdi, 24-09-2026 (FR-47)",
-  "klant_bron": "de klant van een project komt, in deze volgorde, uit het contractsysteem (contracten.globaal.be), het contract of de CLAUDE.md in de projectmap (H-A WORK), de agenda van vroeger, en pas dan uit Pipedrive. De salesmap is de verkoop, niet het dossier. Een gevonden naam wordt dertig dagen bewaard met zijn bron (mijnagents-data/klanten.json); een rijksregisternummer nooit (FR-46)"
+  "klant_bron": "de klant van een project komt, in deze volgorde, uit het contractsysteem (contracten.globaal.be), het contract of de CLAUDE.md in de projectmap (H-A WORK), de agenda van vroeger, en pas dan uit Pipedrive. De salesmap is de verkoop, niet het dossier. Een gevonden naam wordt dertig dagen bewaard met zijn bron (mijnagents-data/klanten.json); een rijksregisternummer nooit (FR-46)",
+  "activiteiten": {
+   "regel": "de titel zegt ook wat Mehdi gaat doen: [FIRMA-SOORT] ACTIVITEIT nummer - klant, adres. De firma zegt het vak, de activiteit wat er gebeurt",
+   "HARC": {
+    "WB": "werfbezoek",
+    "VOPL": "voorlopige oplevering",
+    "DOPL": "definitieve oplevering",
+    "OPL": "oplevering zonder meer",
+    "noot": "voorlopig alleen deze vier (Mehdi, 25-09-2026); de andere fases van het contract komen later"
+   },
+   "UNAB": {
+    "EPB": "EPB",
+    "VEN": "ventilatie, ventilatiemeting",
+    "BDT": "blowerdoortest",
+    "STA": "stabiliteit",
+    "BS": "barsten en scheuren",
+    "VERG": "vergunning of melding zonder architect",
+    "FW": "functiewijziging",
+    "REG": "regularisatie",
+    "PLB": "plaatsbeschrijving",
+    "SCN": "3D-scan",
+    "REN": "3D-rendering",
+    "VC": "veiligheidscoördinatie",
+    "LM": "landmeter: opmeting, afpaling, muurovername",
+    "SD": "schetsontwerp",
+    "DRA": "drafting, plannen tekenen of digitaliseren",
+    "MST": "meetstaat",
+    "KM": "kennismaking",
+    "OFB": "offertebespreking",
+    "BUN": "bundel van meerdere diensten"
+   },
+   "intern": {
+    "AI+AT": "AI en automatisering: de interne besprekingen daarover, voor elke firma"
+   },
+   "oude_codes": "OPM en de andere codes van voor 25-09 blijven geldig",
+   "altijd_buiten": [
+    "BDT",
+    "BS",
+    "DOPL",
+    "LM",
+    "OPL",
+    "OPM",
+    "PLB",
+    "SCN",
+    "VEN",
+    "VOPL",
+    "WB"
+   ],
+   "hoe_de_agent": "hij leest de code (hoofdletters), en stelt ze voor uit de woorden in de titel (werfbezoek wordt WB, stabiliteit STA, AI of Automation bij intern AI+AT). Bij eigen afspraken zonder gasten en niet in een reeks vult hij ze zelf in; anders een voorstel op het bord",
+   "open": "gelden de UNABO-codes ook voor TKN-Buro en Energie Efficiënt als ze dezelfde dienst doen?",
+   "mehdi": "25-09-2026"
+  }
  },
  "kleuren": {
   "grondregel": "de kleur zegt waarvóór Mehdi ergens is, de twee uitroeptekens zeggen dát hij naar buiten gaat. Dat zijn twee verschillende dingen. Een afspraak kan nooit kleurloos zijn: ze is werk, privé of Lara.",
@@ -550,6 +616,10 @@
   {
    "datum": "2026-09-25",
    "wat": "de kleur volgt de titel: een afwijkende kleur zet de agent terug en meldt hij, geen vraag meer (Mehdi: 'waarom los je niet constructief deze type problemen op')"
+  },
+  {
+   "datum": "2026-09-25",
+   "wat": "activiteitscodes: architectuur voorlopig WB, VOPL, DOPL en OPL; UNABO de volledige dienstenlijst van unabo.be; interne besprekingen over AI en automatisering AI+AT"
   }
  ],
  "bron_afkortingen": {
@@ -560,18 +630,33 @@
  "buiten": {
   "wat_bepaalt_het": "twee uitroeptekens vooraan, of een dienst die per definitie buiten gebeurt, of soort KB of PB",
   "diensten_altijd_buiten": [
+   "BDT",
    "BS",
+   "DOPL",
+   "LM",
    "OPL",
    "OPM",
    "PLB",
    "SCN",
+   "VEN",
+   "VOPL",
    "WB"
   ],
   "diensten_niet_automatisch": [
    "EPB",
    "VC",
    "STA",
-   "SD"
+   "SD",
+   "VERG",
+   "FW",
+   "REG",
+   "REN",
+   "DRA",
+   "MST",
+   "KM",
+   "OFB",
+   "BUN",
+   "AI+AT"
   ],
   "geldt_ook_voor": "Lara en de privé-agenda. Die houden hun kleur, maar krijgen wel reistijd.",
   "adres_verplicht": "elke buitenafspraak moet een adres hebben, anders kan de rijtijd niet berekend worden. Ontbreekt het, dan is dat een fout.",
@@ -1017,94 +1102,5 @@
   "light": "light@h-architects.be (H-Architects Projects): nog 1 actief type 'HA: Klant', schrijft in de archiefagenda haagendalightprojects",
   "mch": "mch@h-architects.be: het persoonlijke account van Mehdi, 2 eigen types; niet het boekingsaccount. De Calendly-plugin moet op General ingelogd zijn om de 19 types te zien",
   "gemeten": "25-09-2026"
- },
- "voorstel_activiteiten": {
-  "status": "VOORSTEL, te valideren door Mehdi (25-09-2026); de agent gebruikt het nog niet",
-  "waarom": "Mehdi, 25-09-2026: de titel moet ook zeggen wat hij gaat doen, niet alleen voor welke firma en of het buiten of online is. Bestaande afkortingen (WB enz.) blijven.",
-  "vorm": "[FIRMA-SOORT] ACTIVITEIT nummer - klant, adres; bv. '!! Mehdi: [HARC-KB] VOPL 2505 - Patrick Carolan & Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele'",
-  "regel": "de firma zegt het vak (HARC = architectuur), de activiteit zegt wat er gebeurt; een code botst nooit met een soort (KB, KO, PB, PO, LB, LO, AB, AO, IN, B2B) of een firmacode",
-  "bronnen": "Master_Architectuurovereenkomst (fases 4.2.1 tot 4.4), de diensten op unabo.be, de Calendly-types van General, en de woorden in een jaar agendatitels (stabiliteit 123, EPB 96, werfbezoek 88, contract 50, offerte 48, plaatsbezoek 40, VC 38, kennismaking 34)",
-  "HARC": {
-   "verkoop": {
-    "KM": "kennismaking",
-    "ADV": "advies",
-    "OFB": "offertebespreking",
-    "CB": "contractbespreking, ondertekening"
-   },
-   "studiefase": {
-    "PBZ": "plaatsbezoek (bezoek aan de bouwplaats)",
-    "OPM": "opmeting (bestaat)"
-   },
-   "voorontwerp": {
-    "SD": "schetsontwerp (bestaat)",
-    "OWB": "ontwerpbespreking met de klant"
-   },
-   "vergunning": {
-    "OMV": "omgevingsvergunning: dossier, gemeente, opvolging"
-   },
-   "uitvoeringsfase": {
-    "UIT": "uitvoeringsdossier, plannen en meetstaten",
-    "AANB": "aanbesteding en keuze van de aannemer",
-    "MAT": "materiaalkeuze, toonzaal"
-   },
-   "controle": {
-    "WB": "werfbezoek (bestaat)"
-   },
-   "oplevering": {
-    "VOPL": "voorlopige oplevering",
-    "DOPL": "definitieve oplevering",
-    "OPL": "oplevering zonder meer (bestaat)"
-   }
-  },
-  "UNAB": {
-   "EPB": "EPB-verslaggeving (bestaat)",
-   "VEN": "ventilatie, ventilatiemeting",
-   "BDT": "blowerdoortest",
-   "STA": "stabiliteit (bestaat)",
-   "BS": "barsten en scheuren (bestaat)",
-   "VERG": "vergunning of melding zonder architect",
-   "FW": "functiewijziging",
-   "REG": "regularisatie",
-   "PLB": "plaatsbeschrijving (bestaat)",
-   "SCN": "3D-scan (bestaat)",
-   "REN": "3D-rendering",
-   "VC": "veiligheidscoördinatie (bestaat)",
-   "LM": "landmeter: opmeting, afpaling, muurovername",
-   "SD": "ontwerp, schetsen (zelfde code als H-A)",
-   "DRA": "drafting, plannen tekenen of digitaliseren",
-   "MST": "meetstaat",
-   "KM": "kennismaking",
-   "OFB": "offertebespreking",
-   "BUN": "bundel (meerdere diensten samen)"
-  },
-  "altijd_buiten": [
-   "WB",
-   "PBZ",
-   "OPM",
-   "VOPL",
-   "DOPL",
-   "OPL",
-   "PLB",
-   "SCN",
-   "BS",
-   "LM",
-   "BDT",
-   "VEN"
-  ],
-  "contracttypes": {
-   "STAN": "standaard (architectuur), met omvang ww of volledig",
-   "LIGHT": "light",
-   "VST": "voorstudie",
-   "REG": "regularisatie",
-   "ADD": "addendum",
-   "OND": "onderzoek zonder contract",
-   "voorstel": "niet in de titel: het nummer zegt het al via de projectmap; de agent toont het in het dagplan, bv. '2505 (stan, volledig)'"
-  },
-  "vragen": [
-   "Klopt de lijst voor H-Architects per fase, en ontbreekt er een activiteit?",
-   "Voor UNABO: volstaat de dienst (STA, EPB, VC ...), of wil je er ook de activiteit bij (bv. VC VOPL voor een oplevering)?",
-   "Contracttype (stan, light, voorstudie, reg) in de titel, of alleen in het dagplan?",
-   "Gelden de UNABO-codes ook voor TKN-Buro en Energie Efficiënt als ze dezelfde dienst doen (STA, EPB)?"
-  ]
  }
 }

@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 7.3 (25-09-2026, definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat en de kleur volgt de titel; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
+Versie 7.4 (25-09-2026, definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -379,6 +379,10 @@ Wat ik daaruit meeneem:
 - Projectnummers van H-Architects zijn JJNN: JJ is het jaar (25 = 2025), NN het volgnummer van dat jaar.
   Zo nummert alleen H-Architects; de andere firma's hebben een eigen benaming. Een nummer met een
   projectmap is een klant: die map ontstaat bij de ondertekening (A13).
+- De titel zegt ook wat Mehdi gaat doen: [FIRMA-SOORT] ACTIVITEIT nummer - klant, adres. Architectuur voorlopig
+  WB, VOPL (voorlopige oplevering), DOPL (definitieve oplevering) en OPL; UNABO de diensten van unabo.be (EPB, VEN,
+  BDT, STA, BS, VERG, FW, REG, PLB, SCN, REN, VC, LM, SD, DRA, MST, KM, OFB, BUN); interne besprekingen over AI en
+  automatisering AI+AT. Ik stel de code voor uit de woorden in de titel; zonder gasten vul ik ze zelf in.
 - Een titel met een projectnummer is pas volledig met de klant (zie hierboven waar die staat) en, buiten, het adres:
   '[FIRMA-SOORT] TYPE nummer - klant, adres'. Zonder gasten vul ik aan; met gasten of Calendly stel ik voor.
 

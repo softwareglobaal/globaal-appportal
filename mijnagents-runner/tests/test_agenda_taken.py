@@ -476,6 +476,19 @@ finally:
 check("de klant komt eerst uit het contractsysteem en de projectmap", _k == "Robin Verlinden en Silvie Boudou", _k)
 check("een prospect met een projectmap wordt gemeld als klant", any("projectmap" in x for x in _f), str(_f))
 
+# Activiteitscodes (beslist 25-09-2026)
+check("een activiteit wordt gelezen en voorgesteld",
+      W.lees_titel("!! Mehdi: [HARC-KB] VOPL 2505 - Norma Gleeson")["type"] == "VOPL"
+      and W.lees_titel("!! Mehdi: [HARC-KB] VOPL 2505")["buiten"]
+      and W.lees_titel("Mehdi: [UNAB-PO] Ren Lee")["type"] == ""
+      and W.lees_titel("Mehdi & Siyan: [ELEV-IN] AI+AT")["type"] == "AI+AT"
+      and W.titel_aanvulling({"titel": "Mehdi & Siyan: [ELEV-IN] Automation"}, {})[0] == "Mehdi & Siyan: [ELEV-IN] AI+AT"
+      and W.titel_aanvulling({"titel": "Mehdi, Matthew, Gul & Aqib: [TKNB-IN] AI stabiliteit"}, {})[0] == "Mehdi, Matthew, Gul & Aqib: [TKNB-IN] AI+AT stabiliteit"
+      and W.titel_aanvulling({"titel": "!! Mehdi: [HARC-KB] 2282 voorlopige oplevering"}, {})[0] == "!! Mehdi: [HARC-KB] VOPL 2282 voorlopige oplevering"
+      and W.titel_aanvulling({"titel": "Mehdi: [UNAB-PO] Kian Nazeryan - Stabiliteit"}, {})[0] == "Mehdi: [UNAB-PO] STA Kian Nazeryan - Stabiliteit"
+      and W.activiteit_voorstel("!! Mehdi: [HARC-KB] 2505 stabiliteit", W.lees_titel("!! Mehdi: [HARC-KB] 2505 stabiliteit")) == "")
+check("architectuur kent voorlopig alleen WB, VOPL, DOPL en OPL", W.ACTIVITEITEN["HARC"] == ("WB", "VOPL", "DOPL", "OPL"))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

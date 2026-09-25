@@ -155,8 +155,21 @@ BUITEN_SOORTEN = ("PB", "KB", "LB", "AB")             # per definitie buiten
 EXTERN_ONLINE = ("KO", "PO", "LO", "B2B", "AO")       # online met iemand van buiten: alleen geparkeerd
 # Diensten met een verslagagent (Commandocentrum, 16-09-2026): WB/OPL werfverslag, VC veiligheidscoördinatie,
 # PLB plaatsbeschrijving, BS/STA barsten en scheuren. De code staat na de firmacode, vóór het nummer of de naam.
+# De activiteit: wat Mehdi gaat doen. Beslist op 25-09-2026: voor architectuur voorlopig alleen WB,
+# VOPL, DOPL en OPL; voor UNABO de volledige lijst van de diensten op unabo.be; interne besprekingen
+# over AI en automatisering AI+AT. De oude codes (OPM, SD ...) blijven geldig.
 TYPES = {"WB": "werfbezoek", "OPL": "oplevering", "PLB": "plaatsbeschrijving", "SCN": "3D-scan", "EPB": "EPB",
-         "VC": "veiligheidscoördinatie", "BS": "barsten en scheuren", "STA": "stabiliteit", "SD": "schetsontwerp", "OPM": "opmeting"}
+         "VC": "veiligheidscoördinatie", "BS": "barsten en scheuren", "STA": "stabiliteit", "SD": "schetsontwerp", "OPM": "opmeting",
+         "VOPL": "voorlopige oplevering", "DOPL": "definitieve oplevering",
+         "VEN": "ventilatie, ventilatiemeting", "BDT": "blowerdoortest", "VERG": "vergunning of melding zonder architect",
+         "FW": "functiewijziging", "REG": "regularisatie", "REN": "3D-rendering", "LM": "landmeter: opmeting, afpaling, muurovername",
+         "DRA": "drafting, plannen tekenen of digitaliseren", "MST": "meetstaat", "KM": "kennismaking", "OFB": "offertebespreking",
+         "BUN": "bundel van meerdere diensten", "AI+AT": "AI en automatisering (interne bespreking)"}
+ACTIVITEITEN = {"HARC": ("WB", "VOPL", "DOPL", "OPL"),
+                "UNAB": ("EPB", "VEN", "BDT", "STA", "BS", "VERG", "FW", "REG", "PLB", "SCN", "REN", "VC", "LM", "SD", "DRA",
+                         "MST", "KM", "OFB", "BUN"),
+                "intern": ("AI+AT",)}
+TYPE_RE = re.compile(r"^\s*(" + "|".join(re.escape(k) for k in sorted(TYPES, key=len, reverse=True)) + r")(?![\w+])")
 # Agenda's met één aard krijgen hun kleur op de agenda zelf, niet per afspraak.
 # Mandaat van Mehdi, 20-09-2026: "voor prive wil ik zwart en de agenda is al zwart
 # gezet zodat altijd zwart komt, en de agent kan controleren. Lara is al flamingo
@@ -173,7 +186,7 @@ AGENDA_VASTE_KLEUR = {
 # Diensten die per definitie buiten gebeuren; daar hoeft Mehdi geen !! meer bij te
 # typen. Beslist 20-09-2026. EPB, VC, STA en SD staan er bewust niet bij: die kunnen
 # evengoed online.
-BUITEN_TYPES = {"WB", "OPL", "PLB", "SCN", "OPM", "BS"}
+BUITEN_TYPES = {"WB", "OPL", "VOPL", "DOPL", "PLB", "SCN", "OPM", "BS", "LM", "BDT", "VEN"}
 
 ALLE_CODES = sorted(set(FIRMACODES) | set(EXTERNE_FIRMAS) | set(AGENDACODE_NAAR_FIRMA) | set(NIET_FIRMA), key=len, reverse=True)
 CODE_RE = re.compile(r"\[(" + "|".join(ALLE_CODES) + r")(?:-(" + "|".join(sorted(SOORT, key=len, reverse=True)) + r"))?\]", re.I)
@@ -277,7 +290,7 @@ def lees_titel(titel):
     # dienstcode niet gelezen (klant droeg "Mehdi:" mee; gezien in het Commandocentrum, 16-09-2026)
     rest = CODE_RE.sub("", t).replace("!!", "").replace("??", "")
     rest = re.sub(r"^\s*(mehdi|siyan|shelton|angela)[^:]{0,40}:\s*", "", rest, flags=re.I).strip(" -")
-    mt = re.match(r"^\s*(WB|OPL|PLB|SCN|EPB|VC|BS|STA|SD|OPM)\b", rest, re.I)
+    mt = TYPE_RE.match(rest)      # hoofdletters: 'Ren' of 'Kim' als klantnaam is geen code
     if mt:
         uit["type"] = mt.group(1).upper()
         rest = rest[mt.end():].strip(" -")
@@ -838,6 +851,39 @@ def _naam_uit_oude_agenda(nr):
     return tel.most_common(1)[0][0] if tel else ""
 
 
+# Welke woorden in een titel naar welke activiteit wijzen (beslist 25-09-2026). Per firma alleen de
+# codes die voor die firma gelden; wijzen de woorden naar meer dan een code, dan geen voorstel.
+ACTIVITEIT_WOORDEN = {
+    "HARC": [(r"voorlopige oplevering", "VOPL"), (r"definitieve oplevering", "DOPL"), (r"\boplevering\b", "OPL"), (r"werfbezoek", "WB")],
+    "UNAB": [(r"stabiliteit", "STA"), (r"barst|scheur", "BS"), (r"\bEPB\b", "EPB"), (r"ventilatie", "VEN"), (r"blower", "BDT"),
+             (r"vergunning|melding", "VERG"), (r"functiewijziging", "FW"), (r"regularisatie", "REG"), (r"plaatsbeschrijving", "PLB"),
+             (r"3D.?scan|scanning", "SCN"), (r"render", "REN"), (r"veiligheid|\bVC\b", "VC"), (r"landmeter|afpaling|muurovername", "LM"),
+             (r"ontwerp|schets", "SD"), (r"drafting", "DRA"), (r"meetstaat", "MST"), (r"kennismaking", "KM"), (r"offerte", "OFB"),
+             (r"bundel", "BUN")],
+    "intern": [(r"\bAI\b|automation|automatisering", "AI+AT")],
+}
+
+
+def activiteit_voorstel(titel, info):
+    """De activiteitscode die de woorden in de titel eenduidig aanwijzen, of ''."""
+    if info.get("type") or info["reistijd"] or not info.get("firma"):
+        return ""
+    lijst = ACTIVITEIT_WOORDEN["intern"] if info["soort"] == "IN" else ACTIVITEIT_WOORDEN.get(info["firma"], [])
+    rest = CODE_RE.sub(" ", titel)
+    codes = {code for rx, code in lijst if re.search(rx, rest, re.I)}
+    if {"VOPL", "OPL"} <= codes or {"DOPL", "OPL"} <= codes:
+        codes.discard("OPL")            # 'voorlopige oplevering' bevat ook 'oplevering'
+    return next(iter(codes)) if len(codes) == 1 else ""
+
+
+def met_activiteit(titel, code):
+    """Zet de code meteen na [FIRMA-SOORT]. Bij AI+AT valt een los 'AI' of 'Automation' erna weg."""
+    nieuw = CODE_RE.sub(lambda m: f"{m.group(0)} {code}", titel, count=1)
+    if code == "AI+AT":
+        nieuw = re.sub(r"(AI\+AT)\s+(AI|Automation|automatisering)\b\s*", r"\1 ", nieuw, count=1, flags=re.I).rstrip()
+    return re.sub(r"\s{2,}", " ", nieuw)
+
+
 def titel_aanvulling(a, projecten):
     """Wat ontbreekt aan een titel om conform te zijn? Geeft (nieuwe titel, uitleg) of (None, '').
     - een rit draagt het autootje vooraan (Mehdi, 24-09-2026: 'autootje niet vergeten');
@@ -845,6 +891,11 @@ def titel_aanvulling(a, projecten):
       uit de agenda of de projectmap: '[FIRMA-SOORT] TYPE nummer - klant, adres'."""
     titel = a["titel"]
     info = lees_titel(titel)
+    code = activiteit_voorstel(titel, info)
+    if code and not info["reistijd"]:
+        nieuw = met_activiteit(titel, code)
+        if nieuw != titel:
+            return nieuw, f"activiteit {code} ({TYPES.get(code, '')})"
     if info["reistijd"]:
         if not titel.lstrip().startswith("🚗"):
             return "🚗 " + re.sub(r"^\s*!!\s*", "", titel), "een rit draagt het autootje"

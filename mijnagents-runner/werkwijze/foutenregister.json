@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "1.3",
+ "versie": "1.4",
  "datum": "24-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1035,6 +1035,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een kleur buiten de regel wordt teruggezet en gemeld"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-49",
+   "datum": "25-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "De titels zeiden voor welke firma en of het buiten of online was, maar niet wat Mehdi ging doen (werfbezoek, oplevering, stabiliteit).",
+   "gevolg": "Achteraf niet te zien waarvoor een afspraak was.",
+   "waarom_niet_gezien": "De titelvorm had een plaats voor het type, maar met tien codes en zonder regel om ze in te vullen.",
+   "oorzaak": "Ontbrekende afspraak over de activiteiten per firma.",
+   "soort_oorzaak": "ontbrekende regel",
+   "oplossing": "Activiteitscodes per firma (architectuur WB, VOPL, DOPL, OPL; UNABO de volledige dienstenlijst; intern AI+AT). De agent leest ze, stelt ze voor uit de woorden in de titel en vult ze in bij eigen afspraken zonder gasten.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een activiteit wordt gelezen en voorgesteld"
    },
    "controle": [],
    "status": "opgelost"
