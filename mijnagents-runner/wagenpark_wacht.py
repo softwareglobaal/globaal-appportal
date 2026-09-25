@@ -324,7 +324,7 @@ def vooruitblik(register, vandaag):
                         prijzen.setdefault(r["onderdeel"], []).append(_bedrag(bedrag))
     uit = {}
     for v in register["voertuigen"]:
-        if v.get("status") in WEG:
+        if v.get("status") in WEG or v.get("status") == "stilgelegd":
             continue
         fab = v.get("fabrikant") or {}
         km = sorted([k for k in v.get("km") or [] if k.get("km") and k.get("datum")], key=lambda k: k["datum"])
@@ -369,7 +369,9 @@ def vooruitblik(register, vandaag):
             blik.append({"onderdeel": r["onderdeel"], "laatst": (laatst or {}).get("datum"), "laatst_km": (laatst or {}).get("km"),
                          "interval": " of ".join(x for x in (f"{i_m} maanden" if i_m else "", f"{i_km:,} km".replace(",", ".") if i_km else "") if x),
                          "herkomst": herkomst, "verwacht": wanneer.isoformat(), "verwacht_km": verwacht_km, "dagen": n,
-                         "stand": "te laat" if n < 0 else ("binnenkort" if n <= regels.get("vooruit_dagen", 90) else "later"),
+                         # Zonder historiek weet ik niet of het te laat is: een richtwaarde zonder factuur is een vraag, geen alarm.
+                         "stand": ("geen historiek" if (not laatst and herkomst == "richtwaarde") else
+                                   "te laat" if n < 0 else ("binnenkort" if n <= regels.get("vooruit_dagen", 90) else "later")),
                          "kost_eigen_facturen": round(sum(kost) / len(kost)) if kost else None, "groot": r.get("groot", False)})
             if len([o for o in gedaan if o.get("soort") == "herstelling"]) >= 2:
                 vaak[r["onderdeel"]] = len(gedaan)
