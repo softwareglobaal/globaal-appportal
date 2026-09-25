@@ -1,5 +1,5 @@
 {
- "_uitleg": "Regelboek van De Wagenparkwacht voor de vooruitblik (versie 1.1, 25-09-2026: aandrijfas en voorruit apart, want ze kwamen op beide Transits terug). Per onderdeel: de woorden waarmee het op een factuur staat en een richtwaarde voor het interval. Een fabrieksgegeven in het register (veld fabrikant) gaat altijd voor; de richtwaarden hieronder zijn algemene waarden voor een wagen zonder fabrieksgegeven en staan in het dashboard als 'richtwaarde', nooit als voorschrift. De kost komt uit de eigen facturen van de groep (gemiddelde per onderdeel), nooit uit een schatting. Mandaat van Mehdi: 'dat de agent ons op de hoogte kan houden wat er nog moet gebeuren, of er nog grote kosten komen, en wat de vaak voorkomende problemen zijn'.",
+ "_uitleg": "Regelboek van De Wagenparkwacht voor de vooruitblik (versie 1.2, 25-09-2026: aandrijfas en voorruit apart, want ze kwamen op beide Transits terug; ruitenwissers weg, want klein; 'diagnose' telt niet meer als storing, want het staat bij elke onderhoudsbeurt). Per onderdeel: de woorden waarmee het op een factuur staat en een richtwaarde voor het interval. Een fabrieksgegeven in het register (veld fabrikant) gaat altijd voor; de richtwaarden hieronder zijn algemene waarden voor een wagen zonder fabrieksgegeven en staan in het dashboard als 'richtwaarde', nooit als voorschrift. De kost komt uit de eigen facturen van de groep (gemiddelde per onderdeel), nooit uit een schatting. Mandaat van Mehdi: 'dat de agent ons op de hoogte kan houden wat er nog moet gebeuren, of er nog grote kosten komen, en wat de vaak voorkomende problemen zijn'.",
  "onderdelen": [
   {
    "onderdeel": "onderhoudsbeurt (olie en filters)",
@@ -148,17 +148,6 @@
    "groot": false
   },
   {
-   "onderdeel": "ruitenwissers",
-   "woorden": [
-    "wisser",
-    "ruitenwisser",
-    "essuie-glace"
-   ],
-   "interval_km": null,
-   "interval_maanden": 12,
-   "groot": false
-  },
-  {
    "onderdeel": "schokdempers",
    "woorden": [
     "schokdemper",
@@ -187,7 +176,6 @@
   {
    "onderdeel": "diagnose en elektronica",
    "woorden": [
-    "diagnose",
     "storing",
     "foutcode",
     "sensor",
@@ -195,7 +183,9 @@
     "dpf",
     "roetfilter",
     "adblue",
-    "injector"
+    "injector",
+    "motorlampje",
+    "storingslampje"
    ],
    "interval_km": null,
    "interval_maanden": null,
