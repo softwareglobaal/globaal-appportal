@@ -51,6 +51,8 @@ POSTVAKKEN = ["info@h-invest.be", "boekhouding@h-invest.be", "mch@h-architects.b
 EERSTE_KEER_DAGEN, DAGELIJKS_DAGEN = 365, 14
 SOORTEN = [  # soort, woorden in het onderwerp of de afzender, submap in het voertuigdossier
     ("keuring", ["autoveiligheid", "keuring", "aibv", "sbat", "goca", "autokeuring"], "04_Keuring"),
+    ("inschrijving", ["inschrijving", "nummerplaat", "kentekenbewijs", "div ", "gelijkvormigheid", "car-pass", "carpass"],
+     "03_Inschrijving en boorddocumenten"),
     ("verzekering", ["verzeker", "polis", "ethias", "axa", "groene kaart", "schorsing", "premie"], "06_Verzekering"),
     ("leasing", ["leasing", "lease", "renting", "alpha credit", "alphacredit", "aankoopoptie"], "00_Basisgegevens & contract"),
     ("belasting", ["verkeersbelasting", "biv", "belastingdienst", "vlabel", "aanslagbiljet"], "01_Facturen"),
@@ -146,7 +148,8 @@ def post_koppelen(register, tijdlijn, dagen, ag):
             continue
         for b in berichten:
             ond = postvak.schoon(b.get("onderwerp"))
-            if postvak.trieer(b)[0] in ("rommel", "verdacht"):
+            if postvak.trieer(b)[0] in ("rommel", "verdacht") or re.match(
+                    r"(ontvangstbevestiging|accus. de r.ception|automatic reply|automatisch antwoord|out of office)", ond, re.I):
                 continue
             tekst = f"{ond} {b.get('van_naam') or ''} {b.get('van') or ''}"
             v, hoe = welke_wagen(ond, register)
