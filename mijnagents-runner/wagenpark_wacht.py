@@ -583,7 +583,7 @@ def kosten(register, vz, vandaag):
                 j["km"], j["km_zeker"] = max(binnen) - min(binnen), False
             eur = {c: x for c, x in j["munt"].get("EUR", {}).items() if c != "aankoop"}  # een aankoop is een investering, geen jaarkost
             j["totaal_eur"] = round(sum(eur.values()))
-            if j.get("km") and j["km"] > 500 and eur:
+            if j.get("km") and j["km"] > 500 and eur and j.get("km_zeker"):  # geen kost per km over een half gemeten jaar
                 j["per_km"] = round(sum(eur.values()) / j["km"], 3)
             j["munt"] = {m: {c: round(x) for c, x in cats.items()} for m, cats in j["munt"].items()}
         uit[v["plaat"]] = dict(sorted(jaren.items()))

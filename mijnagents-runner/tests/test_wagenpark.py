@@ -33,6 +33,13 @@ def test_verbruikspiek():
     assert [x["wanneer"] for x in tc if x["soort"] == "verbruik"] == ["2026-05"], tc
 
 
+def test_geen_kost_per_km_over_een_half_gemeten_jaar():
+    v = {"plaat": "H", "status": "in gebruik", "onderhoud": [{"datum": "2026-02-01", "soort": "onderhoud", "bedrag": "5000,00"}],
+         "km": [{"datum": "2026-03-01", "km": 100000}, {"datum": "2026-05-01", "km": 105000}]}
+    k = W.kosten({"voertuigen": [v]}, [], date(2026, 9, 26))["H"]["2026"]
+    assert k["km"] == 5000 and not k["km_zeker"] and "per_km" not in k, k
+
+
 if __name__ == "__main__":
     fout = 0
     for n, f in sorted(globals().items()):
