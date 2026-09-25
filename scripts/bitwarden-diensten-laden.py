@@ -111,10 +111,10 @@ DELETE FROM communicatie.emailadres_dienst d
    AND {("lower(e.adres::text) LIKE " + q('%@' + a.domein.lower())) if a.domein else "true"}
    AND d.bitwarden_id NOT IN (SELECT bitwarden_id FROM bw_in);
 
-SELECT soort, count(*) AS logins, count(DISTINCT emailadres_id) AS adressen
+SELECT d.soort, count(*) AS logins, count(DISTINCT d.emailadres_id) AS adressen
   FROM communicatie.emailadres_dienst d JOIN communicatie.emailadres e ON e.id = d.emailadres_id
  WHERE {("lower(e.adres::text) LIKE " + q('%@' + a.domein.lower())) if a.domein else "true"}
- GROUP BY soort ORDER BY soort;
+ GROUP BY d.soort ORDER BY d.soort;
 COMMIT;""")
 
 
