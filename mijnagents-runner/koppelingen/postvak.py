@@ -310,40 +310,45 @@ def afsluiten(naam, items, bord, ag, nu):
     return n
 
 
-def draai(naam, droog=False):
-    """Volledige ronde van een mailwacht, via de gedeelde ronde (N4, N10, N11, N13, N14).
-    droog: alleen lezen en tonen wat er klaargezet zou worden, niets naar het bord."""
+def droog(naam):
+    """Alleen lezen en tonen wat er klaargezet zou worden, niets naar het bord."""
+    nu = datetime.now(BRUSSEL)
+    r = _Droog()
+    items, tel, _ = ronde(naam, _DroogAgent(), r, nu)
+    print(json.dumps(tel, ensure_ascii=False))
+    for it in items:
+        i = it["inhoud"]
+        print(f"  opvolgen: {i['datum'][:10]} ({i['werkdagen_zonder_antwoord']} wd) {i['soort']:6} {it['titel'][:105]}  [{i['waarom']}]")
+    for t, w in r.noden:
+        print(f"  nood ({w}): {t}")
+    return items, tel
+
+
+def aan_de_beurt(nu=None):
+    """Cadans van de mailwachten: elk uur tussen 07:00 en 21:00 Brusselse tijd."""
+    nu = nu or datetime.now(BRUSSEL)
+    return 7 <= nu.hour < 21
+
+
+def werk(naam, ag, r):
+    """Het werk van een mailwacht binnen zijn ronde (de runner opent de ronde: N12)."""
     sys.path.insert(0, HIER)
     import bord  # noqa: E402
     nu = datetime.now(BRUSSEL)
-    if droog:
-        r = _Droog()
-        items, tel, _ = ronde(naam, _DroogAgent(), r, nu)
-        print(json.dumps(tel, ensure_ascii=False))
-        for it in items:
-            i = it["inhoud"]
-            print(f"  opvolgen: {i['datum'][:10]} ({i['werkdagen_zonder_antwoord']} wd) {i['soort']:6} {it['titel'][:105]}  [{i['waarom']}]")
-        for t, w in r.noden:
-            print(f"  nood ({w}): {t}")
-        return items, tel
-    if nu.hour < 7 or nu.hour >= 21:
-        return  # stille uren: geen ronde (cadans: elk uur 07-21 Brusselse tijd)
-    ag = bord.Agent(naam)
-    with ag.ronde("postvak in het oog") as r:
-        items, tel, rijen = ronde(naam, ag, r, nu)
-        for it in items:
-            it["van"] = naam
-            if "stil" in it["titel"].lower():  # het woord stil laat De Bode bellen (AGENTNORM 6)
-                it["titel"] = re.sub("stil", "st.l", it["titel"], flags=re.I)
-        uit = ag.klaarzet(items) if items else {"nieuw": 0}
-        afsluiten(naam, items, bord, ag, nu)
-        if rijen:
-            try:
-                bord.call("/api/gesprekken", {"rijen": rijen})
-            except Exception as e:  # noqa: BLE001
-                ag.log("gesprekken", "schrijf", f"gesprekkentabel niet bijgewerkt: {type(e).__name__}")
-        r.detail = (f"laatste 24 u: hoog {tel['hoog']}, gewoon {tel['midden']}, actie {tel['actie']}, meldingen {tel['melding']}, "
-                    f"koud {tel['koud']}, rommel {tel['rommel']}, verdacht {tel['verdacht']}; op de lijst van de "
-                    f"Mailregisseur: {tel['open']} (nieuw {uit.get('nieuw', 0)})")
-        ag.log(f"dag {nu.date().isoformat()}", "ronde", r.detail,
-               "\n".join(f"{i['inhoud']['datum'][:16]} {i['inhoud']['soort']} {i['titel']}" for i in items[:80]))
+    items, tel, rijen = ronde(naam, ag, r, nu)
+    for it in items:
+        it["van"] = naam
+        if "stil" in it["titel"].lower():  # het woord stil laat De Bode bellen (AGENTNORM 6)
+            it["titel"] = re.sub("stil", "st.l", it["titel"], flags=re.I)
+    uit = ag.klaarzet(items) if items else {"nieuw": 0}
+    afsluiten(naam, items, bord, ag, nu)
+    if rijen:
+        try:
+            bord.call("/api/gesprekken", {"rijen": rijen})
+        except Exception as e:  # noqa: BLE001
+            ag.log("gesprekken", "schrijf", f"gesprekkentabel niet bijgewerkt: {type(e).__name__}")
+    r.detail = (f"laatste 24 u: hoog {tel['hoog']}, gewoon {tel['midden']}, actie {tel['actie']}, meldingen {tel['melding']}, "
+                f"koud {tel['koud']}, rommel {tel['rommel']}, verdacht {tel['verdacht']}; op de lijst van de "
+                f"Mailregisseur: {tel['open']} (nieuw {uit.get('nieuw', 0)})")
+    ag.log(f"dag {nu.date().isoformat()}", "ronde", r.detail,
+           "\n".join(f"{i['inhoud']['datum'][:16]} {i['inhoud']['soort']} {i['titel']}" for i in items[:80]))

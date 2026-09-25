@@ -10,7 +10,15 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "koppelingen"))
+import bord  # noqa: E402
 import postvak  # noqa: E402
 
+NAAM = "mail-info-harc"
+
 if __name__ == "__main__":
-    postvak.draai("mail-info-harc", droog="--droog" in sys.argv)
+    if "--droog" in sys.argv:
+        postvak.droog(NAAM)
+    elif postvak.aan_de_beurt():
+        ag = bord.Agent(NAAM)
+        with ag.ronde("postvak in het oog") as r:
+            postvak.werk(NAAM, ag, r)
