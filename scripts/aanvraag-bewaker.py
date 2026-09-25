@@ -144,7 +144,12 @@ def wachtrij():
     conn = sqlite3.connect(DB, timeout=30)
     conn.row_factory = sqlite3.Row
     try:
-        return [dict(r) for r in conn.execute("SELECT * FROM aanvraag ORDER BY id")]
+        # Bewust stopgezette aanvragen (testaanvragen van een nieuwe site staan op
+        # 'afgebroken', oude WordPress-inzendingen op 'overgeslagen') tellen niet
+        # mee: anders meldt de bewaker eeuwig een probleem dat er niet is.
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM aanvraag WHERE status NOT IN ('afgebroken', 'overgeslagen') "
+            "ORDER BY id")]
     finally:
         conn.close()
 
@@ -211,6 +216,9 @@ def bevindingen():
     # 5. Mail niet aan de deal gehangen: minder erg, wel het opvolgen waard.
     hangt = [r for r in rijen
              if r.get("mail_verstuurd") and not r.get("mail_gekoppeld")
+             # Alleen UNABO: de koppeling zoekt in de Pipedrive-inbox van UNABO,
+             # andere firma's hebben een eigen account en worden niet gekoppeld.
+             and r.get("bron") not in ("tkn-site",)
              and ouder_dan(r["mail_verstuurd"], GEDULD_KOPPELING)]
     if hangt:
         uit.append(("koppeling-uit",
