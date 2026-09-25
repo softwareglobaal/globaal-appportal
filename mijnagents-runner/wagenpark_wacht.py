@@ -294,10 +294,13 @@ def dashboard(register, tijdlijn, lijst, onbekend, vandaag, vz=None):
                        "omschrijving": e["onderwerp"], "bron": f"mail {e['postvak']}", "herkomst": "post"}
                       for e in post if e["soort"] in ("garage", "keuring", "schade")]
         onderhoud.sort(key=lambda o: o.get("datum") or "", reverse=True)
-        km = sorted(v.get("km") or [], key=lambda k: k.get("datum") or "")
+        schoon, verdacht = km_reeks(v)
+        km = [{"datum": d.isoformat(), "km": x, "bron": b} for d, x, b in schoon]
+        tc, verbruik = tankcontrole(v)
         extra = blik.get(v["plaat"], {})
         wagens.append(dict(v, polissen=polissen_van(v, vz), kosten=kost.get(v["plaat"], {}), bouwjaar_vin=bouwjaar_uit_vin(v.get("chassis"), vandaag), vooruitblik=extra.get("vooruitblik", []), vaak=extra.get("vaak", {}),
-                           km_per_dag=extra.get("km_per_dag"), termijnen=sorted(termijn_per.get(v["plaat"], []), key=lambda t: (t["dagen"] is None, t["dagen"] or 0)),
+                           km_per_dag=extra.get("km_per_dag"), tankcontrole=tc, verbruik=verbruik,
+                           km_nazicht=[{"datum": d.isoformat(), "km": x, "bron": b} for d, x, b in verdacht], termijnen=sorted(termijn_per.get(v["plaat"], []), key=lambda t: (t["dagen"] is None, t["dagen"] or 0)),
                            onderhoud=onderhoud, post=post[:60], laatste_km=km[-1] if km else None,
                            te_klasseren=sum(1 for e in post if not e.get("geklasseerd"))))
     # Wat op meer dan een wagen terugkomt (bv. de aandrijfas op beide Transits): over het hele wagenpark.
@@ -353,7 +356,7 @@ def vooruitblik(register, vandaag):
         if v.get("status") in WEG or v.get("status") == "stilgelegd":
             continue
         fab = v.get("fabrikant") or {}
-        km = sorted([k for k in v.get("km") or [] if k.get("km") and k.get("datum")], key=lambda k: k["datum"])
+        km = [{"datum": d.isoformat(), "km": x} for d, x, _ in km_reeks(v)[0]]
         per_dag = None
         if len(km) >= 2:
             dagen = (date.fromisoformat(km[-1]["datum"][:10]) - date.fromisoformat(km[0]["datum"][:10])).days
@@ -442,6 +445,59 @@ def _km_op(punten, d):
     return a[1] + (b[1] - a[1]) * (d - a[0]).days / (b[0] - a[0]).days
 
 
+TANKINHOUD = {"Transit Custom": 70, "Berlingo": 50, "Astra": 52, "Fiesta": 42, "Kangoo": 60}  # liter, richtwaarde uit de technische fiche
+
+
+def km_reeks(v):
+    """(betrouwbare km-punten, verdachte punten). De langste reeks die nooit daalt telt; een stand daarbuiten of een sprong
+    van meer dan 1.500 km per dag gaat naar de nazichtlijst (gezien 26-09-2026: de tankkaart van 2BAS423 bij de km-stand
+    van de Berlingo)."""
+    pts = sorted({(date.fromisoformat(k["datum"][:10]), int(k["km"]), k.get("bron") or "") for k in v.get("km") or []
+                  if k.get("datum") and k.get("km")}, key=lambda x: (x[0], x[1]))
+    if not pts:
+        return [], []
+    n = len(pts)
+    lang, vorig = [1] * n, [-1] * n
+    for i in range(n):
+        for j in range(i):
+            if pts[j][1] <= pts[i][1] and lang[j] + 1 > lang[i]:
+                lang[i], vorig[i] = lang[j] + 1, j
+    i = max(range(n), key=lambda x: (lang[x], x))
+    hou = set()
+    while i != -1:
+        hou.add(i)
+        i = vorig[i]
+    goed = [pts[i] for i in sorted(hou)]
+    schoon, verdacht = [goed[0]], [pts[i] for i in range(n) if i not in hou]
+    for pt in goed[1:]:
+        if (pt[1] - schoon[-1][1]) / max((pt[0] - schoon[-1][0]).days, 1) > 1500:
+            verdacht.append(pt)
+        else:
+            schoon.append(pt)
+    return schoon, sorted(verdacht)
+
+
+def tankcontrole(v):
+    """Afwijkingen in het tanken: verbruik per maand boven anderhalve keer het mediaanverbruik van de wagen, meer liters
+    dan de tank kan bevatten, twee tankbeurten op dezelfde dag."""
+    uit, verbruik = [], []
+    for m in v.get("brandstof_maanden") or []:
+        if m.get("liters") and m.get("km_laagst") and m.get("km_hoogst") and m["km_hoogst"] - m["km_laagst"] > 300:
+            verbruik.append((m["maand"], round(m["liters"] / (m["km_hoogst"] - m["km_laagst"]) * 100, 1)))
+    if len(verbruik) >= 3:
+        med = sorted(x[1] for x in verbruik)[len(verbruik) // 2]
+        uit += [{"soort": "verbruik", "wanneer": maand, "wat": f"{x} l/100 km tegenover gewoonlijk {med}"} for maand, x in verbruik if x > 1.5 * med]
+    tank = next((c for mdl, c in TANKINHOUD.items() if mdl.lower() in (v.get("merk_model") or "").lower()), None)
+    per_dag = {}
+    for k in v.get("km") or []:
+        if k.get("bron") == "tankkaart" and k.get("datum"):
+            per_dag.setdefault(k["datum"][:10], []).append(k)
+            if tank and (k.get("liters") or 0) > tank * 1.05:
+                uit.append({"soort": "liters", "wanneer": k["datum"][:10], "wat": f"{k['liters']} liter, meer dan de tank ({tank} l)"})
+    uit += [{"soort": "twee keer", "wanneer": dag, "wat": f"{len(ks)} tankbeurten op dezelfde dag"} for dag, ks in per_dag.items() if len(ks) >= 2]
+    return sorted(uit, key=lambda x: x["wanneer"], reverse=True), verbruik
+
+
 CATEGORIE = {"onderhoud": "onderhoud en herstel", "herstelling": "onderhoud en herstel", "garage": "onderhoud en herstel",
              "banden": "banden", "keuring": "keuring", "schade": "schade", "verzekering": "verzekering", "brandstof": "brandstof"}
 
@@ -516,7 +572,7 @@ def kosten(register, vz, vandaag):
                 boek(int(str(p["einddatum"])[:4]) - 1, "verzekering", float(p["jaarpremie"]))
         for m in v.get("brandstof_maanden") or []:
             boek(m["maand"][:4], "brandstof", _bedrag(m.get("bedrag_excl") or m.get("bedrag_incl")))
-        punten = sorted({(date.fromisoformat(k["datum"][:10]), k["km"]) for k in v.get("km") or [] if k.get("datum") and k.get("km")})
+        punten = [(d, km) for d, km, _ in km_reeks(v)[0]]
         for jaar, j in jaren.items():
             y = int(jaar)
             a, b = _km_op(punten, date(y, 1, 1)), _km_op(punten, min(date(y, 12, 31), vandaag))
