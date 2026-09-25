@@ -1176,7 +1176,7 @@
    "datum": "25-09-2026",
    "gevonden_door": "Claude",
    "fout": "Een test en een controle van Claude belden Mehdi twee keer echt, met een proefzin ('de afspraak van zaterdag om 06:00, mehdi iets').",
-   "gevolg": "Twee onnodige oproepen, net nadat Mehdi vroeg om minder te bellen.",
+   "gevolg": "Twee onnodige oproepen, net nadat Mehdi vroeg om minder te bellen. Om 13:51 volgde nog een derde, overbodige oproep over de Zoom-link van Matijs: de sleutel 'al gemeld' bevatte het aantal afspraken, en de agent telde zonder archief een afspraak minder. Nu een sleutel per dag, zonder aantal, en het archief telt mee.",
    "waarom_niet_gezien": "De test stubde bel_afspraak. Een parallelle sessie had intussen een tweede weg toegevoegd (bel_vast, het vastzit-nummer) en die was niet afgeschermd.",
    "oorzaak": "De grendel zat op een functie hoog in de keten in plaats van op het laagste niveau.",
    "soort_oorzaak": "werkwijze van Claude",

@@ -637,8 +637,9 @@ _iz = [{"id": "z1", "titel": "Mehdi: [UNABO-PO] Jonatan Puype - Stabiliteit", "s
        {"id": "z2", "titel": "Mehdi: [HARC-KO] 2609 - Filip Vandelook", "start": (_nz + _td(hours=6)).isoformat(), "einde": (_nz + _td(hours=7)).isoformat(),
         "kalender": "x", "locatie": "https://us06web.zoom.us/j/8123?pwd=abc", "omschrijving": "", "deelnemers": ["klant@x.be"]}]
 _vz = [z for s_, z in W.vastgelopen(_iz, _nz) if s_.startswith("zoompwd:")]
+_sz = [s_ for s_, z in W.vastgelopen(_iz, _nz) if s_.startswith("zoompwd:")]
 check("een Zoom-link zonder wachtwoord wordt gezien en in een zin gemeld",
-      [a["id"] for a in W.zoom_zonder_wachtwoord(_iz, _nz)] == ["z1"] and len(_vz) == 1 and "zonder wachtwoord" in _vz[0], str(_vz))
+      [a["id"] for a in W.zoom_zonder_wachtwoord(_iz, _nz)] == ["z1"] and len(_vz) == 1 and "zonder wachtwoord" in _vz[0] and _sz[0].count(":") == 1, str((_vz, _sz)))
 
 try:
     W.bellen.bel("proef")

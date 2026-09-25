@@ -2177,7 +2177,7 @@ def vastgelopen(items, nu=None, uren=48):
         per_dag.setdefault(a["start"][:10], []).append(a)
     for dag, lijst in sorted(per_dag.items()):
         namen = ", ".join(f"{(lees_titel(x['titel'])['klant'] or x['titel'])[:25]} om {x['start'][11:16]}" for x in lijst[:4])
-        uit.append((f"zoompwd:{dag}:{len(lijst)}", f"Mehdi, {len(lijst)} Zoom-afspraken op {dag[8:10]}-{dag[5:7]} hebben een link zonder wachtwoord "
+        uit.append((f"zoompwd:{dag}", f"Mehdi, {len(lijst)} Zoom-afspraken op {dag[8:10]}-{dag[5:7]} hebben een link zonder wachtwoord "
                     f"({namen}): stuur de klant de uitnodiging vanuit Zoom."))
     return uit
 
@@ -2484,7 +2484,9 @@ def main():
         if vg or vw:
             ag.log(f"dag {vandaag}", "schrijf", f"vragen in de agenda: {vg} gezet (VR), {vw} opgelost")
         if not DAG_ARG:
-            gebeld = bel_als_vastgelopen(items)
+            # het archief telt mee: een Calendly-boeking kan daar nog staan (FR-39). Een sleutel per dag, zonder
+            # aantal, zodat een telling met of zonder archief geen tweede oproep geeft (gezien 25-09-2026, 13:51).
+            gebeld = bel_als_vastgelopen(items + archief)
             if gebeld:
                 ag.log(f"dag {vandaag}", "bellen", "vastgelopen: Mehdi gebeld", gebeld)
         if HANDKLEUREN:
