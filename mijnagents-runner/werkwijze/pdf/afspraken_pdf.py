@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.3"
+VERSIE = "2.4"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -68,7 +68,13 @@ fi = "".join(f"<tr><td class=c style='width:12mm'><b>{e(a[0])}</b></td><td>{e(a[
              + (f"<td class=c style='width:12mm'><b>{e(b[0])}</b></td><td>{e(b[1])}</td>" if b else "<td></td><td></td>") + "</tr>"
              for a, b in zip(_fl[:_h], _fl[_h:] + [None]))
 so = "".join(f"<tr><td class=c><b>{e(k)}</b></td><td>{e(v)}</td></tr>" for k, v in t["titelconventie"]["soorten"].items())
-ty = "".join(f"<tr><td class=c><b>{e(k)}</b></td><td>{e(v)}</td></tr>" for k, v in t["titelconventie"]["types"].items())
+_act = t["titelconventie"]["activiteiten"]
+ty = ("<tr><td colspan=2 class=kl><b>Architectuur (HARC), voorlopig</b></td></tr>"
+      + "".join(f"<tr><td class=c><b>{e(k)}</b></td><td>{e(v)}</td></tr>" for k, v in _act["HARC"].items() if k != "noot")
+      + "<tr><td colspan=2 class=kl><b>Intern, elke firma</b></td></tr>"
+      + "".join(f"<tr><td class=c><b>{e(k)}</b></td><td>{e(v)}</td></tr>" for k, v in _act["intern"].items())
+      + "<tr><td colspan=2 class=kl><b>UNABO (UNAB), de diensten van unabo.be</b></td></tr>"
+      + "".join(f"<tr><td class=c><b>{e(k)}</b></td><td>{e(v)}</td></tr>" for k, v in _act["UNAB"].items()))
 ou = ", ".join(f"<code>{e(k)}</code> = <code>{e(v)}</code>" for k, v in t["titelconventie"]["oude_codes"].items())
 tk = "".join(f"<tr><td class=nr>{x['nr']}</td><td><b>{e(x['naam'])}</b></td><td>{e(x['wat'])}</td></tr>" for x in t["taken"])
 op = "".join(f"<tr><td>{e(su(x['wat']))}</td><td class=c>{e(x['wie'])}</td><td class=c>{e(x['wanneer'])}</td><td class=vak></td></tr>"
@@ -98,11 +104,11 @@ tr{{break-inside:avoid}}
 .twee{{column-count:2;column-gap:7mm}} .twee table{{break-inside:avoid}}
 </style>
 <div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; 24 september 2026 &nbsp;|&nbsp; versie {VERSIE}, <b>definitief</b> &nbsp;|&nbsp;
-bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.3 op de server</div>
+bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.4 op de server</div>
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
-Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.2, 2.1, 2.0, 1.7 en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
+Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.3 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
 Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de server. De test <code>tests/test_agenda_taken.py</code>
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
@@ -153,12 +159,16 @@ een link.</b> Niet bij bellen, Calendly-boekingen, intern overleg of terugkerend
 <tr><td class=c><b>??</b></td><td><b>Nog niet bevestigd.</b> Geel. Is de afspraak voorbij en staat ?? er nog, dan vraagt de agent of ze
 doorging.</td></tr></tbody></table>
 <table class=naast><tr><td style="width:50%;padding:0 4mm 0 0;border:0"><h3>De soorten</h3><table><tbody>{so}</tbody></table></td>
-<td style="width:50%;padding:0 0 0 4mm;border:0"><h3>De diensten (type)</h3><table><tbody>{ty}</tbody></table></td></tr></table>
+<td style="width:50%;padding:0 0 0 4mm;border:0"><h3>De activiteit: wat Mehdi gaat doen</h3><table><tbody>{ty}</tbody></table></td></tr></table>
+<p class=kl>De titel zegt ook wat Mehdi gaat doen: <b>[FIRMA-SOORT] ACTIVITEIT nummer - klant, adres</b>, bv.
+<code>!! Mehdi: [HARC-KB] VOPL 2505 - Patrick Carolan &amp; Norma Gleeson, ...</code>. De firma zegt het vak, de activiteit wat er gebeurt.
+De agent stelt de code voor uit de woorden in de titel (werfbezoek wordt WB, stabiliteit STA, AI of Automation bij intern AI+AT) en vult
+ze zelf in bij eigen afspraken zonder gasten. Altijd buiten: {", ".join(_act["altijd_buiten"])}. Oudere codes (OPM ...) blijven geldig.</p>
 <p class=kl>De eerste letter van een soort zegt wie het is (klant, prospect, leverancier, aannemer), de tweede waar: buiten of online.
 Een leverancier (LB/LO): daar zijn wij al klant. B2B: een professionele partij waar wij nog geen klant van zijn.
 Een aannemer (AB/AO): de aannemer van een klant.</p>
 <h3>De firmacodes</h3>
-<p>Vier letters, van organisatie.globaal.be. Daar kijkt de agent, live. Stand op 24 september 2026:</p>
+<p>Vier letters, van organisatie.globaal.be. Daar kijkt de agent, live. Stand op {__import__('datetime').date.today():%d-%m-%Y}:</p>
 <table><tbody>{fi}</tbody></table>
 <ul>
 <li><b>ALGE</b> is voor een leverancier of afspraak die voor de hele groep geldt, niet voor een firma. Externe partijen staan

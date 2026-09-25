@@ -1066,8 +1066,8 @@
   "claude": "Claude begint elke sessie aan de Agendawacht met de lessen uit het register en de laatste zelfcontrole, en sluit af met een nieuwe zelfcontrole als bewijs",
   "mehdi": "24-09-2026",
   "documenten": {
-   "afspraken": "Agendawacht - afspraken kleuren en taken v2.3.pdf (definitief, zonder verloop per dag)",
-   "foutenregister": "Agendawacht - foutenregister v1.3.pdf",
+   "afspraken": "Agendawacht - afspraken kleuren en taken v2.4.pdf (definitief, zonder verloop per dag)",
+   "foutenregister": "Agendawacht - foutenregister v1.4.pdf",
    "waar": "Dropbox private/0 Chegini Mehdi/Prive met Claude; oude versies in Agenda archief/oude documenten",
    "maken": "werkwijze/pdf/afspraken_pdf.py en werkwijze/pdf/foutenregister_pdf.py, op de Mac; ze lezen uit deze JSON en het register"
   }
