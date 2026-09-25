@@ -57,12 +57,12 @@ def test_een_domein_op_ing_be_is_nog_geen_bank():
     assert postvak.trieer(kop("klant@ing.be", "Uw rekening"), EIGEN)[1].startswith("rol bank")
 
 
-GEKOZEN = {"mail-hinv": ["info@h-invest.be"], "mail-mch": ["mch@h-architects.be"],
+GEKOZEN = {"mail-info-harc": ["info@h-architects.be"], "mail-hinv": ["info@h-invest.be"], "mail-mch": ["mch@h-architects.be"],
            "mail-prive": ["mehdichegini@hotmail.com"], "mail-melo": ["melodiebvba@gmail.com"]}
 
 
-def test_de_vier_postvakken_die_mehdi_koos_elk_met_een_eigen_runner():
-    """Mehdi, 25-09-2026: 'elk e-mailadres een agent', alleen deze vier; 'de andere mogen weg'.
+def test_de_postvakken_die_mehdi_koos_elk_met_een_eigen_runner():
+    """Mehdi, 25-09-2026: 'elk e-mailadres een agent', alleen deze vier; 'de andere mogen weg'. 26-09-2026: info@ H-A erbij.
     Wie een postvak toevoegt of weghaalt, past deze lijst bewust aan."""
     cfg = postvak.wachten()
     wachten = {k: v for k, v in cfg.items() if isinstance(v, dict) and "postvakken" in v}
@@ -97,12 +97,14 @@ def test_hotmail_uit_het_bestand_van_de_mac(tmp_path=None):
     postvak.WACHTEN = os.path.join(d, "mailwachten.json")
     try:
         r = postvak._Droog()
-        items, tel, _ = postvak.ronde("mail-prive", postvak._DroogAgent(), r, nu)
+        items, tel, _, alle = postvak.ronde("mail-prive", postvak._DroogAgent(), r, nu)
     finally:
         postvak.WACHTEN = oud
     assert [i["inhoud"]["van"] for i in items] == ["info@kbc.be"]
     assert tel["bekende_contacten"] == 1
     assert any("niet vers" in t for t, _w in r.noden), r.noden
+    assert [a["van"] for a in alle] == ["info@kbc.be"], "elk beoordeeld bericht gaat naar het dashboard, eigen post niet"
+    assert alle[0]["soort"] == "hoog" and alle[0]["beantwoord"] == 0 and alle[0]["uniek"] == "mehdichegini@hotmail.com:<a@kbc>"
 
 
 def test_wat_op_25_september_ten_onrechte_doorkwam():
@@ -128,6 +130,29 @@ def test_wat_op_25_september_terecht_doorkwam_blijft():
     assert t("daniel.renard@verz.kbc.be", "72971400 - PATRIMONIUMPOLIS HANDEL - herinnering premiebetaling")[0] == "hoog"
     assert t("an.berghmans@notaris.be", "RE: Verkoop Plantin en Moretuslei 6", "Notaris An BERGHMANS")[0] == "hoog"
     assert t("dussart@dinconsulting.be", "Afstemming intercompany Qoppa/H-Architects", "Nadine Dussart - Din Consulting")[0] == "hoog"
+
+
+def test_de_beslissing_van_mehdi_gaat_voor_de_regels():
+    """26-09-2026: per afzender belangrijk, ruis of opruimen op het maildashboard."""
+    regels = {("info@h-architects.be", "@oase.sr"): "ruis", ("*", "nadine@dinconsulting.be"): "belangrijk",
+              ("info@h-architects.be", "nadine@dinconsulting.be"): "ruis"}
+    assert postvak.regel_voor(regels, "info@h-architects.be", "info@oase.sr") == "ruis"
+    assert postvak.regel_voor(regels, "mch@h-architects.be", "info@oase.sr") == ""
+    assert postvak.regel_voor(regels, "mch@h-architects.be", "Nadine@DinConsulting.be") == "belangrijk"
+    assert postvak.regel_voor(regels, "info@h-architects.be", "nadine@dinconsulting.be") == "ruis", "dit postvak gaat voor *"
+    assert postvak.trieer(kop("info@lamella-mail.com", "Word dealer"), EIGEN, regel="belangrijk")[0] == "hoog"
+    assert postvak.trieer(kop("vincent@verz.kbc.be", "Schorsing"), EIGEN, regel="opruimen")[0] == "rommel"
+    assert postvak.trieer(kop("x@gmail.com", "Action requise", "My MINFIN"), EIGEN, regel="belangrijk")[0] == "verdacht"
+
+
+def test_opruimen_raakt_alleen_de_juiste_afzender():
+    assert postvak.past("info@kbc.be", "@kbc.be") and postvak.past("x@mail.kbc.be", "@kbc.be")
+    assert not postvak.past("x@mail-kbc.be", "@kbc.be"), "een ander domein dat op kbc.be eindigt"
+    assert postvak.past("Info@Oase.sr", "info@oase.sr") and not postvak.past("info2@oase.sr", "info@oase.sr")
+    assert postvak.opruimen({"adres": "x@y.be", "schrijven": False}, "@kbc.be") == [], "alleen-lezen: niets verplaatsen"
+    assert postvak.opruimen({"adres": "h@hotmail.com", "bron": "/x", "schrijven": True}, "@kbc.be") == [], "hotmail: kan niet"
+    assert postvak.opruimmap({"imap_host": "imap.gmail.com"}) == "Opgeruimd"
+    assert postvak.opruimmap({"imap_host": "imap.one.com"}) == "INBOX.Opgeruimd"
 
 
 def test_werkdagen_tellen_het_weekend_niet():

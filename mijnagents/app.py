@@ -435,10 +435,26 @@ def gesprekken_pagina():
 
 
 # --- mail: het dashboard van de mailwachten. Mehdi, 25-09-2026: "een dashboard dat we de belangrijke zaken van
-#     daar kunnen volgen". Per postvak wat de wacht klaarzette voor De Mailregisseur (klaarzet, voor mail-regisseur),
-#     met een knop Afgehandeld. Afgehandeld is opgepakt: de wacht zet hetzelfde bericht niet opnieuw klaar (uniek),
-#     en De Mailregisseur neemt het niet meer op in zijn overzicht. Alleen beheer: afzenders en onderwerpen zijn inhoud.
+#     daar kunnen volgen"; 26-09-2026: "ik wil zien hoeveel mails zijn binnengekomen, hoeveel belangrijk, hoeveel
+#     spam, hoeveel reclame, en ik wil de mails opschonen". Elke mailwacht geeft elk beoordeeld bericht door
+#     (/api/mail, tabel mailbericht); Mehdi beslist per afzender (tabel mailregel: belangrijk, ruis, opruimen), en
+#     de wachten lezen die beslissingen elke ronde (/api/mailregels). De open punten zijn de klaarzet-items voor
+#     mail-regisseur: Afgehandeld is opgepakt, en de wacht zet hetzelfde bericht niet opnieuw klaar (uniek).
+#     Alleen beheer: afzenders en onderwerpen zijn inhoud.
 MAIL_SOORT = {"hoog": (0, "Belangrijk"), "actie": (1, "Automatisch, met gevolg"), "midden": (2, "Gewone mail")}
+# Volgorde, naam en kleur per soort in de cijfers; de ruis staat achteraan, in grijzen.
+MAIL_SOORTEN = [("hoog", "Belangrijk", "var(--kritiek)"), ("actie", "Met gevolg", "var(--let)"),
+                ("midden", "Gewone mail", "#56708f"), ("melding", "Melding", "#9aa1ad"),
+                ("koud", "Onbekend", "#c3bdb4"), ("rommel", "Reclame en ruis", "#ddd6cc"),
+                ("verdacht", "Verdacht", "#6b2a2a")]
+MAIL_RUIS = ("melding", "koud", "rommel", "verdacht")
+MAIL_ACTIES = {"belangrijk": "Belangrijk", "ruis": "Ruis (tellen, niet tonen)", "opruimen": "Opruimen"}
+MAIL_PERIODES = {"vandaag": ("Vandaag", 0), "7": ("7 dagen", 6), "30": ("30 dagen", 29)}
+# Een regel op een heel domein kan hier niet: gratis maildiensten (dan raak je iedereen) en de eigen groep.
+MAIL_GEEN_DOMEIN = ("gmail.com", "googlemail.com", "hotmail.com", "hotmail.be", "outlook.com", "outlook.be", "live.com",
+                    "live.be", "yahoo.com", "icloud.com", "me.com", "telenet.be", "skynet.be", "proximus.be",
+                    "h-architects.be", "unabo.be", "harmoniebouw.be", "tkn-buro.be", "energie-efficient.be", "h-invest.be",
+                    "globaal.be", "elevaitnv.com", "hdssr.com", "contrax.be", "zidiconstruct.be")
 BRUSSEL = ZoneInfo("Europe/Brussels")
 
 
@@ -466,6 +482,70 @@ def _werkdagen_sinds(ts, vandaag=None):
     return n
 
 
+def _mail_tabellen(conn):
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS mailbericht (
+            uniek TEXT PRIMARY KEY, wacht TEXT, postvak TEXT, map TEXT DEFAULT '', datum TEXT, dag TEXT,
+            van TEXT, van_naam TEXT DEFAULT '', domein TEXT DEFAULT '', onderwerp TEXT DEFAULT '', soort TEXT,
+            waarom TEXT DEFAULT '', lijst INTEGER DEFAULT 0, beantwoord INTEGER DEFAULT 0,
+            opgeruimd INTEGER DEFAULT 0, ts TEXT);
+        CREATE INDEX IF NOT EXISTS mailbericht_dag ON mailbericht(dag);
+        CREATE INDEX IF NOT EXISTS mailbericht_van ON mailbericht(postvak, van);
+        CREATE TABLE IF NOT EXISTS mailregel (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, postvak TEXT NOT NULL, wie TEXT NOT NULL, actie TEXT NOT NULL,
+            door TEXT DEFAULT '', ts TEXT, actief INTEGER DEFAULT 1, UNIQUE(postvak, wie));
+        CREATE TABLE IF NOT EXISTS mailpostvak (
+            postvak TEXT PRIMARY KEY, wacht TEXT, schrijven INTEGER DEFAULT 0, ts TEXT);
+    """)
+
+
+@app.route("/api/mail", methods=["POST"])
+def api_mail():
+    """Elke ronde van een mailwacht: alle beoordeelde berichten (upsert op uniek), wat hij opruimde, en per postvak
+    of opruimen daar kan."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    conn = db()
+    _mail_tabellen(conn)
+    n = 0
+    for r in p.get("rijen") or []:
+        if not r.get("uniek") or not r.get("postvak"):
+            continue
+        try:
+            dag = datetime.fromisoformat(r.get("datum")).astimezone(BRUSSEL).date().isoformat()
+        except (TypeError, ValueError):
+            continue
+        van = (r.get("van") or "").lower()[:200]
+        conn.execute(
+            "INSERT INTO mailbericht(uniek,wacht,postvak,map,datum,dag,van,van_naam,domein,onderwerp,soort,waarom,lijst,beantwoord,ts) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(uniek) DO UPDATE SET soort=excluded.soort, waarom=excluded.waarom, "
+            "beantwoord=excluded.beantwoord, lijst=excluded.lijst, van_naam=excluded.van_naam, ts=excluded.ts",
+            (r["uniek"][:250], (p.get("wacht") or r.get("wacht") or "")[:60], r["postvak"][:120], (r.get("map") or "")[:120],
+             r["datum"][:40], dag, van, (r.get("van_naam") or "")[:120], van.rsplit("@", 1)[-1] if "@" in van else "",
+             (r.get("onderwerp") or "")[:300], (r.get("soort") or "")[:20], (r.get("waarom") or "")[:200],
+             1 if r.get("lijst") else 0, 1 if r.get("beantwoord") else 0, nu()))
+        n += 1
+    for u in p.get("opgeruimd") or []:
+        conn.execute("UPDATE mailbericht SET opgeruimd=1 WHERE uniek=?", (str(u)[:250],))
+    for pv in p.get("postvakken") or []:
+        conn.execute("INSERT INTO mailpostvak(postvak,wacht,schrijven,ts) VALUES(?,?,?,?) ON CONFLICT(postvak) DO UPDATE SET "
+                     "wacht=excluded.wacht, schrijven=excluded.schrijven, ts=excluded.ts",
+                     (pv.get("postvak", "")[:120], pv.get("wacht", "")[:60], 1 if pv.get("schrijven") else 0, nu()))
+    conn.commit()
+    return jsonify(ok=True, rijen=n)
+
+
+@app.route("/api/mailregels")
+def api_mailregels():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    conn = db()
+    _mail_tabellen(conn)
+    return jsonify(regels=[dict(r) for r in conn.execute(
+        "SELECT postvak, wie, actie, door, ts FROM mailregel WHERE actief=1 ORDER BY id").fetchall()])
+
+
 def _mailpunt(r):
     try:
         i = json.loads(r["inhoud"] or "{}")
@@ -481,11 +561,67 @@ def _mailpunt(r):
             "door": r["opgepakt_door"] or "", "opgepakt": _brussel(r["opgepakt_ts"])}
 
 
+def _mail_cijfers(conn, van_dag, postvak=""):
+    """Tellingen per soort, per dag en per postvak vanaf van_dag (Brusselse datum), eventueel voor een postvak."""
+    w, a = "dag>=?", [van_dag]
+    if postvak:
+        w += " AND postvak=?"
+        a.append(postvak)
+    per_soort = {r["soort"]: r["n"] for r in conn.execute(
+        f"SELECT soort, COUNT(*) n FROM mailbericht WHERE {w} GROUP BY soort", a).fetchall()}
+    per_dag = {}
+    for r in conn.execute(f"SELECT dag, soort, COUNT(*) n FROM mailbericht WHERE {w} GROUP BY dag, soort", a).fetchall():
+        per_dag.setdefault(r["dag"], {})[r["soort"]] = r["n"]
+    per_postvak = {}
+    for r in conn.execute(f"SELECT postvak, soort, COUNT(*) n FROM mailbericht WHERE {w} GROUP BY postvak, soort", a).fetchall():
+        per_postvak.setdefault(r["postvak"], {})[r["soort"]] = r["n"]
+    opgeruimd = conn.execute(f"SELECT COUNT(*) FROM mailbericht WHERE {w} AND opgeruimd=1", a).fetchone()[0]
+    ruis = conn.execute(
+        f"SELECT postvak, van, MAX(van_naam) naam, COUNT(*) n, GROUP_CONCAT(DISTINCT soort) soorten, "
+        f"MAX(onderwerp) voorbeeld, MAX(datum) laatst, MAX(lijst) lijst, SUM(opgeruimd) opgeruimd FROM mailbericht "
+        f"WHERE {w} AND soort IN ({','.join('?' * len(MAIL_RUIS))}) GROUP BY postvak, van ORDER BY n DESC, laatst DESC LIMIT 30",
+        a + list(MAIL_RUIS)).fetchall()
+    return per_soort, per_dag, per_postvak, opgeruimd, [dict(r) for r in ruis]
+
+
+def _grafiek(per_dag, dagen):
+    """Gestapelde staven per dag (inline SVG), in de volgorde van MAIL_SOORTEN."""
+    hoogste = max([sum(per_dag.get(d, {}).values()) for d in dagen] + [1])
+    b, h, onder = 900, 220, 26
+    stap = b / max(len(dagen), 1)
+    staaf = max(min(stap * 0.68, 34), 4)
+    delen = []
+    for i, d in enumerate(dagen):
+        x, y = i * stap + (stap - staaf) / 2, h
+        tel = per_dag.get(d, {})
+        titel = ", ".join(f"{label.lower()} {tel[k]}" for k, label, _ in MAIL_SOORTEN if tel.get(k))
+        for k, _label, kleur in reversed(MAIL_SOORTEN):
+            n = tel.get(k, 0)
+            if not n:
+                continue
+            hh = n / hoogste * (h - 10)
+            y -= hh
+            delen.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{staaf:.1f}" height="{hh:.1f}" rx="3" fill="{kleur}">'
+                         f'<title>{d[8:10]}-{d[5:7]}: {sum(tel.values())} mails; {titel}</title></rect>')
+        if len(dagen) <= 10 or i % max(len(dagen) // 10, 1) == 0 or i == len(dagen) - 1:
+            delen.append(f'<text x="{x + staaf / 2:.1f}" y="{h + 17}" text-anchor="middle">{d[8:10]}-{d[5:7]}</text>')
+    delen.append(f'<text x="0" y="12" class="as">{hoogste}</text><line x1="0" x2="{b}" y1="{h}" y2="{h}" class="as"/>')
+    return f'<svg viewBox="0 0 {b} {h + onder}" class="grafiek" role="img" aria-label="Mails per dag">{"".join(delen)}</svg>'
+
+
 @app.route("/mail")
 def mail_pagina():
     if not mag_beslissen():
         abort(403)
     conn = db()
+    _mail_tabellen(conn)
+    periode = request.args.get("periode", "7")
+    periode = periode if periode in MAIL_PERIODES else "7"
+    postvak = request.args.get("postvak", "")
+    vandaag = datetime.now(BRUSSEL).date()
+    van_dag = (vandaag - timedelta(days=MAIL_PERIODES[periode][1])).isoformat()
+    grafiek_dagen = [(vandaag - timedelta(days=i)).isoformat() for i in range(max(MAIL_PERIODES[periode][1], 13), -1, -1)]
+
     labels = {r["naam"]: dict(r) for r in conn.execute("SELECT naam, label, rol, actief FROM agent WHERE naam LIKE 'mail-%'").fetchall()}
     wachten = sorted((n for n, a in labels.items() if a["actief"] and n != "mail-regisseur"), key=lambda n: labels[n]["label"])
     status = {r["naam"]: {**dict(r), "wanneer": _brussel(r["ts"])}
@@ -493,36 +629,103 @@ def mail_pagina():
     noden = {}
     for r in conn.execute("SELECT naam, tekst, wie FROM nood WHERE open=1 AND naam LIKE 'mail-%' ORDER BY id").fetchall():
         noden.setdefault(r["naam"], []).append(dict(r))
+    postvakken = {r["postvak"]: dict(r) for r in conn.execute("SELECT * FROM mailpostvak").fetchall()}
+    wacht_van = {pv["wacht"]: a for a, pv in postvakken.items()}
+
     per = {n: [] for n in wachten}
     for r in conn.execute("SELECT * FROM klaarzet WHERE voor='mail-regisseur' AND status='klaar' ORDER BY id DESC LIMIT 1000").fetchall():
-        per.setdefault(r["van"], []).append(_mailpunt(r))
+        p = _mailpunt(r)
+        if not postvak or p["postvak"] == postvak:
+            per.setdefault(r["van"], []).append(p)
     for lijst in per.values():
         lijst.sort(key=lambda p: (p["orde"], -p["werkdagen"]))
+    open_alle = [p for lijst in per.values() for p in lijst]
+
+    per_soort, per_dag, per_postvak, opgeruimd, ruis = _mail_cijfers(conn, van_dag, postvak)
+    _, grafiek_per_dag, _, _, _ = _mail_cijfers(conn, grafiek_dagen[0], postvak)
+    totaal = sum(per_soort.values())
+    ruis_n = sum(per_soort.get(k, 0) for k in MAIL_RUIS)
+    regels = [dict(r) for r in conn.execute("SELECT * FROM mailregel WHERE actief=1 ORDER BY ts DESC").fetchall()]
+    regel_van = {(r["postvak"], r["wie"]): r["actie"] for r in regels}
+    for x in ruis:
+        x["regel"] = regel_van.get((x["postvak"], x["van"])) or regel_van.get((x["postvak"], "@" + x["van"].rsplit("@", 1)[-1]), "")
+        x["kan_opruimen"] = bool(postvakken.get(x["postvak"], {}).get("schrijven"))
+        x["laatst"] = _brussel(x["laatst"], dag=True)
     grens = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     klaar = [_mailpunt(r) for r in conn.execute(
         "SELECT * FROM klaarzet WHERE voor='mail-regisseur' AND status='opgepakt' AND opgepakt_ts>=? "
         "ORDER BY opgepakt_ts DESC LIMIT 300", (grens,)).fetchall()]
+    for r in regels:
+        r["wanneer"] = _brussel(r["ts"])
+    kpi = {"totaal": totaal, "per_dag": round(totaal / (MAIL_PERIODES[periode][1] + 1), 1),
+           "hoog": per_soort.get("hoog", 0), "hoog_open": sum(1 for p in open_alle if p["soort"] == "hoog"),
+           "open": len(open_alle), "lang": sum(1 for p in open_alle if p["werkdagen"] >= 5),
+           "ruis": ruis_n, "ruis_pct": round(100 * ruis_n / totaal) if totaal else 0,
+           "rommel": per_soort.get("rommel", 0), "melding": per_soort.get("melding", 0), "koud": per_soort.get("koud", 0),
+           "verdacht": per_soort.get("verdacht", 0), "opgeruimd": opgeruimd,
+           "opruim_regels": sum(1 for r in regels if r["actie"] == "opruimen")}
     return render_template("mail.html", app_naam=APP_NAAM, wachten=list(per), per=per, labels=labels, status=status,
-                           noden=noden, klaar=klaar, nu=datetime.now(BRUSSEL).strftime("%d-%m-%Y %H:%M"))
+                           noden=noden, klaar=klaar, kpi=kpi, periode=periode, periodes=MAIL_PERIODES, postvak=postvak,
+                           postvakken=postvakken, wacht_van=wacht_van, per_postvak=per_postvak, soorten=MAIL_SOORTEN,
+                           ruis=ruis, regels=regels, acties=MAIL_ACTIES, gratis=MAIL_GEEN_DOMEIN, grafiek=_grafiek(grafiek_per_dag, grafiek_dagen),
+                           nu=datetime.now(BRUSSEL).strftime("%d-%m-%Y %H:%M"))
+
+
+def _terug_naar_mail(anker=""):
+    q = {k: v for k, v in (("periode", request.form.get("periode", "")), ("postvak", request.form.get("filter", ""))) if v}
+    return redirect(url_for("mail_pagina", **q) + anker)
 
 
 @app.route("/mail/<int:kid>/<actie>", methods=["POST"])
 def mail_actie(kid, actie):
-    """Afgehandeld: Mehdi regelde het zelf (of het hoeft niet). Terug: een vergissing ongedaan maken."""
+    """Afgehandeld: Mehdi regelde het zelf (of het hoeft niet). Ruis: afgehandeld, en deze afzender voortaan als
+    ruis tellen in dit postvak. Terug: een vergissing ongedaan maken."""
     if not mag_beslissen():
         abort(403)
     conn = db()
-    if not conn.execute("SELECT 1 FROM klaarzet WHERE id=? AND voor='mail-regisseur'", (kid,)).fetchone():
+    r = conn.execute("SELECT * FROM klaarzet WHERE id=? AND voor='mail-regisseur'", (kid,)).fetchone()
+    if not r:
         abort(404)
-    if actie == "afgehandeld":
+    if actie in ("afgehandeld", "ruis"):
         conn.execute("UPDATE klaarzet SET status='opgepakt', opgepakt_door=?, opgepakt_ts=? WHERE id=?",
-                     (f"{gebruiker()}: afgehandeld op het bord", nu(), kid))
+                     (f"{gebruiker()}: {'ruis' if actie == 'ruis' else 'afgehandeld'} op het bord", nu(), kid))
+        if actie == "ruis":
+            p = _mailpunt(r)
+            _mail_regel_zetten(conn, p["postvak"], p["van"], "ruis")
     elif actie == "terug":
         conn.execute("UPDATE klaarzet SET status='klaar', opgepakt_door='', opgepakt_ts='' WHERE id=?", (kid,))
     else:
         abort(400)
     conn.commit()
-    return redirect(url_for("mail_pagina") + (f"#p{kid}" if actie == "terug" else ""))
+    return _terug_naar_mail(f"#p{kid}" if actie == "terug" else "")
+
+
+def _mail_regel_zetten(conn, postvak, wie, actie):
+    _mail_tabellen(conn)
+    postvak, wie = (postvak or "*").strip().lower()[:120], (wie or "").strip().lower()[:200]
+    if not wie or ("@" not in wie):
+        abort(400)
+    if wie.startswith("@") and wie[1:] in MAIL_GEEN_DOMEIN and actie != "weg":
+        abort(400)
+    if actie == "weg":
+        conn.execute("UPDATE mailregel SET actief=0, door=?, ts=? WHERE postvak=? AND wie=?", (gebruiker(), nu(), postvak, wie))
+        return
+    if actie not in MAIL_ACTIES:
+        abort(400)
+    conn.execute("INSERT INTO mailregel(postvak, wie, actie, door, ts, actief) VALUES(?,?,?,?,?,1) ON CONFLICT(postvak, wie) "
+                 "DO UPDATE SET actie=excluded.actie, door=excluded.door, ts=excluded.ts, actief=1",
+                 (postvak, wie, actie, gebruiker(), nu()))
+
+
+@app.route("/mail/regel", methods=["POST"])
+def mail_regel():
+    """Mehdi beslist over een afzender (adres of @domein) in een postvak: belangrijk, ruis, opruimen, of weg."""
+    if not mag_beslissen():
+        abort(403)
+    conn = db()
+    _mail_regel_zetten(conn, request.form.get("postvak"), request.form.get("wie"), request.form.get("actie", ""))
+    conn.commit()
+    return _terug_naar_mail("#opschonen")
 
 
 # --- dagen: het dagdashboard van de logboek-laag. Per dag wat de Dagbundelaar

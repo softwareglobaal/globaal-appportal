@@ -24,11 +24,13 @@ De soorten, van stil naar luid:
   midden    een bekend contact, een lopend gesprek of een aanvraag: opvolgen na twee werkdagen
   hoog      een mens met een rol of woord met gevolg (bank, overheid, aanmaning): meteen opvolgen
 """
+import email
 import json
 import os
 import re
 import sys
 from datetime import datetime, timedelta
+from email.utils import parseaddr
 from zoneinfo import ZoneInfo
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -39,7 +41,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 WACHTEN = os.path.join(RUNNER, "werkwijze", "mailwachten.json")
 
 OPVOLGEN_NA_WERKDAGEN = 2   # een gewoon bericht zonder antwoord wordt na zoveel werkdagen een opvolgpunt
-TERUG_DAGEN = 21            # zover kijken we terug naar berichten die op antwoord wachten
+TERUG_DAGEN = 30            # zover kijken we terug: naar berichten die op antwoord wachten, en voor de cijfers
 ACTIE_DAGEN = 7             # zolang blijft een automatisch bericht met gevolg op de lijst
 BEKEND_DAGEN = 180          # wie we in deze periode mailden, is een bekend contact
 
@@ -116,7 +118,7 @@ def koppen_mappen(adres, mappen, sinds, ag=None, plafond=1000):
     uit, gelukt = [], 0
     for m in mappen:
         try:
-            uit += koppen(adres, m, sinds=sinds, plafond=plafond)
+            uit += [dict(b, map_=m) for b in koppen(adres, m, sinds=sinds, plafond=plafond)]
             gelukt += 1
         except Exception as e:  # noqa: BLE001
             if ag:
@@ -217,15 +219,32 @@ def automatisch_antwoord(onderwerp):
     return bool(AUTO_BEGIN.match(o) or AUTO_OVERAL.search(o))
 
 
-def trieer(b, eigen_domeinen=(), bekend=frozenset()):
+def regel_voor(regels, postvak_adres, van):
+    """De beslissing van Mehdi over deze afzender (op het maildashboard): 'belangrijk', 'ruis' of 'opruimen',
+    of ''. Een regel op het adres gaat voor een regel op het domein (@domein); een regel voor dit postvak
+    gaat voor een regel voor alle postvakken (*)."""
+    van = (van or "").lower()
+    for pv in ((postvak_adres or "").lower(), "*"):
+        for wie in (van, "@" + _domein(van)):
+            actie = (regels or {}).get((pv, wie))
+            if actie:
+                return actie
+    return ""
+
+
+def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel=""):
     """(soort, waarom) voor een kop uit imapbron.lijst; zie de lijst bovenaan dit bestand.
     Een bron mag zelf zeggen dat een bericht automatisch is ('automatisch', zoals Mail op de Mac dat bijhoudt)
-    of van een mailinglijst komt ('lijst')."""
+    of van een mailinglijst komt ('lijst'). `regel` is wat Mehdi over deze afzender besliste (regel_voor)."""
     van, naam, ond = (b.get("van") or "").lower(), (b.get("van_naam") or "").lower(), schoon(b.get("onderwerp"))
     o = ond.lower()
     dom = _domein(van)
     if dom.endswith(GRATIS) and any(v in naam for v in VERDACHTE_NAMEN):
         return "verdacht", f"'{b.get('van_naam')}' vanaf een gratis adres ({dom})"
+    if regel == "belangrijk":
+        return "hoog", "Mehdi zette deze afzender op belangrijk"
+    if regel in ("ruis", "opruimen"):
+        return "rommel", "Mehdi zette deze afzender op ruis"
     if automatisch_antwoord(ond):
         return "melding", "automatisch antwoord of ontvangstbevestiging"
     if van.startswith(MAILSERVER) or naam in ("postmaster", "mail delivery subsystem", "mail delivery system"):
@@ -285,9 +304,10 @@ def beantwoord(van_adres, na, verzonden, afwezig=None):
     return False
 
 
-def ronde(naam, ag, r, nu=None):
+def ronde(naam, ag, r, nu=None, regels=None):
     """Een ronde van mailwacht `naam`. `ag` is de bord.Agent (of iets met log), `r` de lopende Ronde.
-    Geeft (items voor de Mailregisseur, telling, rijen voor de gesprekkentabel)."""
+    Geeft (items voor de Mailregisseur, telling, rijen voor de gesprekkentabel, alle beoordeelde berichten
+    voor het maildashboard)."""
     nu = nu or datetime.now(BRUSSEL)
     cfg = wachten()[naam]
     r.bron("mailwachten.json", json.dumps(cfg, ensure_ascii=False, sort_keys=True))
@@ -309,7 +329,7 @@ def ronde(naam, ag, r, nu=None):
                 pass  # niet elk postvak heeft elke variant van Verzonden
     bekend = frozenset(_adres(a) for s in verzonden for a in (s.get("aan") or []) + (s.get("cc") or []) if _adres(a))
     tel["verzonden_gelezen"], tel["bekende_contacten"] = len(verzonden), len(bekend)
-    items, rijen = [], []
+    items, rijen, alle = [], [], []
     for adres in cfg["postvakken"]:
         mb = postvak(adres)
         if not mb:
@@ -334,8 +354,14 @@ def ronde(naam, ag, r, nu=None):
             d = _datum(b)
             if not d:
                 continue
-            soort, waarom = trieer(b, eigen, bekend)
+            soort, waarom = trieer(b, eigen, bekend, regel_voor(regels, adres, b.get("van")))
             ond = schoon(b.get("onderwerp"))
+            antw = (soort in ("hoog", "midden") and _domein(b.get("van", "")) not in eigen
+                    and beantwoord(b.get("van", ""), d, verzonden, afwezig))
+            alle.append({"uniek": f"{adres}:{(b.get('message_id') or b.get('uid'))}"[:250], "wacht": naam, "postvak": adres,
+                         "map": b.get("map_") or "", "datum": d.isoformat(), "van": (b.get("van") or "").lower(),
+                         "van_naam": (b.get("van_naam") or "")[:120], "onderwerp": ond[:300], "soort": soort,
+                         "waarom": kort_waarom(waarom), "lijst": 1 if b.get("lijst") else 0, "beantwoord": 1 if antw else 0})
             if d >= nu - timedelta(days=1):
                 tel[soort] += 1
                 if soort in ("hoog", "midden", "actie"):
@@ -369,7 +395,11 @@ def ronde(naam, ag, r, nu=None):
                                      "voorstel": {"actie": "nakijken en regelen (automatisch bericht, geen antwoord mogelijk)",
                                                   "hoog": "beantwoorden of regelen",  # het waarom staat er al naast
                                                   "midden": "beantwoorden of doorzetten naar wie het opvolgt"}[soort]}})
-    return items, tel, rijen
+    return items, tel, rijen, alle
+
+
+def kort_waarom(w):
+    return (w or "")[:200]
 
 
 class _Droog:
@@ -416,7 +446,7 @@ def droog(naam):
     """Alleen lezen en tonen wat er klaargezet zou worden, niets naar het bord."""
     nu = datetime.now(BRUSSEL)
     r = _Droog()
-    items, tel, _ = ronde(naam, _DroogAgent(), r, nu)
+    items, tel, _, _ = ronde(naam, _DroogAgent(), r, nu)
     print(json.dumps(tel, ensure_ascii=False))
     for it in items:
         i = it["inhoud"]
@@ -424,6 +454,49 @@ def droog(naam):
     for t, w in r.noden:
         print(f"  nood ({w}): {t}")
     return items, tel
+
+
+def opruimmap(mb):
+    """De map voor wat Mehdi liet opruimen: one.com gebruikt een punt als scheiding, Gmail een label."""
+    return "Opgeruimd" if "gmail" in (mb.get("imap_host") or "") else "INBOX.Opgeruimd"
+
+
+def past(van, wie):
+    """Past dit afzenderadres bij een regel op een adres of op @domein (ook een subdomein)?"""
+    van, wie = (van or "").lower(), (wie or "").lower()
+    if wie.startswith("@"):
+        dom = _domein(van)
+        return dom == wie[1:] or dom.endswith("." + wie[1:])
+    return van == wie
+
+
+def opruimen(mb, wie):
+    """Verplaatst alle post van `wie` (adres of @domein) uit de INBOX naar de map Opgeruimd, op beslissing van
+    Mehdi. Alleen als de postbus dit postvak laat schrijven (mailboxen.yaml, 'schrijven'). Niets wordt verwijderd:
+    de map staat gewoon in de webmail. Geeft de Message-ID's (of uid's) van wat verplaatst werd."""
+    if not mb or mb.get("bron") or not mb.get("schrijven"):
+        return []
+    _, imapbron = _postbus()
+    doel = opruimmap(mb)
+    with imapbron._Sessie(mb) as M:
+        if doel.lower() not in [n.lower() for _, n in imapbron._lijst_mappen(M)]:
+            M.create(f'"{doel}"')
+            M.subscribe(f'"{doel}"')
+        if "MOVE" not in imapbron.capabilities(M):
+            raise ValueError("deze mailserver kan niet verplaatsen (geen MOVE)")
+        imapbron._selecteer_schrijfbaar(M, "INBOX")
+        uids = imapbron.zoek_uids(M, [b"FROM", imapbron._q(wie.lstrip("@"))])[:500]
+        # IMAP zoekt op een deel van het adres; ik controleer het echte adres voor ik iets verplaats.
+        weg = []
+        for uid, (_prefix, ruw) in imapbron._fetch_koppen(M, uids).items():
+            kop = email.message_from_bytes(ruw)
+            if past(parseaddr(imapbron._kop(kop.get("From")))[1], wie):
+                weg.append((uid, imapbron._kop(kop.get("Message-ID")) or str(uid)))
+        if weg:
+            ok, gegevens = M.uid("MOVE", ",".join(str(u) for u, _ in weg), f'"{doel}"')
+            if ok != "OK":
+                raise ValueError("verplaatsen mislukt: " + imapbron._leesbaar(gegevens))
+    return [mid for _, mid in weg]
 
 
 def aan_de_beurt(nu=None):
@@ -437,7 +510,33 @@ def werk(naam, ag, r):
     sys.path.insert(0, HIER)
     import bord  # noqa: E402
     nu = datetime.now(BRUSSEL)
-    items, tel, rijen = ronde(naam, ag, r, nu)
+    cfg = wachten()[naam]
+    # Wat Mehdi op het maildashboard over afzenders besliste: belangrijk, ruis of opruimen.
+    try:
+        lijst = bord.call("/api/mailregels").get("regels", [])
+    except Exception as e:  # noqa: BLE001
+        lijst = []
+        ag.log("regels", "bron", f"regels van het maildashboard niet gelezen: {type(e).__name__}")
+    regels = {((x.get("postvak") or "*").lower(), (x.get("wie") or "").lower()): x.get("actie") for x in lijst}
+    r.bron("mailregels", json.dumps(sorted(f"{k[0]} {k[1]} {v}" for k, v in regels.items()), ensure_ascii=False))
+    items, tel, rijen, alle = ronde(naam, ag, r, nu, regels)
+    opgeruimd, postvakken = [], []
+    for adres in cfg["postvakken"]:
+        mb = postvak(adres)
+        schrijven = bool(mb and mb.get("schrijven") and not mb.get("bron"))
+        postvakken.append({"postvak": adres, "wacht": naam, "schrijven": 1 if schrijven else 0})
+        for (pv, wie), actie in regels.items():
+            if actie == "opruimen" and pv in (adres.lower(), "*") and schrijven:
+                try:
+                    opgeruimd += [f"{adres}:{mid}" for mid in opruimen(mb, wie)]
+                except Exception as e:  # noqa: BLE001
+                    ag.log("opruimen", "fout", f"{adres} {wie}: {type(e).__name__}: {str(e)[:120]}")
+    tel["opgeruimd"] = len(opgeruimd)
+    try:
+        bord.call("/api/mail", {"wacht": naam, "rijen": alle, "opgeruimd": opgeruimd, "postvakken": postvakken})
+    except Exception as e:  # noqa: BLE001
+        r.nood("Het maildashboard kreeg de berichten van deze ronde niet", wie="claude-code")
+        ag.log("dashboard", "schrijf", f"/api/mail: {type(e).__name__}: {str(e)[:120]}")
     for it in items:
         it["van"] = naam
         if "stil" in it["titel"].lower():  # het woord stil laat De Bode bellen (AGENTNORM 6)
@@ -451,6 +550,6 @@ def werk(naam, ag, r):
             ag.log("gesprekken", "schrijf", f"gesprekkentabel niet bijgewerkt: {type(e).__name__}")
     r.detail = (f"laatste 24 u: hoog {tel['hoog']}, gewoon {tel['midden']}, actie {tel['actie']}, meldingen {tel['melding']}, "
                 f"koud {tel['koud']}, rommel {tel['rommel']}, verdacht {tel['verdacht']}; op de lijst van de "
-                f"Mailregisseur: {tel['open']} (nieuw {uit.get('nieuw', 0)})")
+                f"Mailregisseur: {tel['open']} (nieuw {uit.get('nieuw', 0)}); opgeruimd {tel['opgeruimd']}")
     ag.log(f"dag {nu.date().isoformat()}", "ronde", r.detail,
            "\n".join(f"{i['inhoud']['datum'][:16]} {i['inhoud']['soort']} {i['titel']}" for i in items[:80]))

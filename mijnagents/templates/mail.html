@@ -4,105 +4,252 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mail · {{ app_naam }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='glas.css') }}">
 <style>
-  :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;
-        --hoog:#f87171;--actie:#f59e0b;--midden:#6ea8fe;--ok:#4ade80}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--tekst);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  header{padding:18px 24px;border-bottom:1px solid var(--rand);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
-  header h1{margin:0;font-size:19px}
-  header a{color:var(--accent);text-decoration:none;font-size:13px}
-  .tel{color:var(--zacht);font-size:12px}
-  main{padding:16px 24px 60px;max-width:1100px;margin:0 auto}
-  .uitleg{color:var(--zacht);margin:0 0 16px;max-width:780px}
-  .samen{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
-  .samen a{flex:1 1 140px;background:var(--paper);border:1px solid var(--rand);border-radius:12px;padding:12px 14px;color:var(--tekst);text-decoration:none}
-  .samen .getal{font-size:26px;font-weight:700;line-height:1.1}
-  .samen .getal small{font-size:13px;font-weight:600;color:var(--hoog);margin-left:6px}
-  .samen .wie{color:var(--zacht);font-size:12px}
-  section.pv{background:var(--paper);border:1px solid var(--rand);border-radius:12px;padding:14px 16px;margin-bottom:22px}
-  section.pv h2{margin:0;font-size:16px}
-  .adres{color:var(--zacht);font-size:12.5px;margin:2px 0 6px}
-  .stand{color:var(--zacht);font-size:12px;margin-bottom:8px}
-  .nood{color:var(--actie);font-size:12.5px;margin:4px 0}
-  .leeg{color:var(--ok);font-size:13px;margin:6px 0 2px}
-  .punt{border-top:1px solid var(--rand);padding:10px 0;display:flex;gap:12px;align-items:flex-start}
-  .punt .in{flex:1;min-width:0}
-  .rij{display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;font-size:12px;color:var(--zacht)}
-  .soort{font-weight:700;font-size:12px}
-  .s-hoog .soort{color:var(--hoog)} .s-actie .soort{color:var(--actie)} .s-midden .soort{color:var(--midden)}
-  .wacht{font-weight:600} .wacht.lang{color:var(--hoog)}
-  .van{margin-top:3px;overflow-wrap:anywhere} .van span{color:var(--zacht);font-size:12px}
-  .ond{font-weight:600;margin-top:2px;overflow-wrap:anywhere}
-  .waarom{color:var(--zacht);font-size:12px;margin-top:3px}
-  form{margin:0}
-  button{font:inherit;font-size:12.5px;font-weight:600;border:1px solid var(--rand);background:#212734;color:var(--tekst);
-         padding:7px 12px;border-radius:9px;cursor:pointer;white-space:nowrap}
-  button:hover{filter:brightness(1.2)}
-  details.klaar{background:var(--paper);border:1px solid var(--rand);border-radius:12px;padding:12px 16px}
-  details.klaar summary{cursor:pointer;font-weight:600}
-  details.klaar .punt{opacity:.8}
-  @media (max-width:640px){main{padding:12px 14px 50px}header{padding:14px}.punt{flex-direction:column}}
+  /* platform: het maildashboard (alleen wat glas.css niet heeft) */
+  .blad{position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:18px 18px 60px;display:flex;flex-direction:column;gap:var(--gap)}
+  .seg a{padding:7px 14px;border-radius:var(--pil);font-size:13px;color:var(--inkt-zacht);font-weight:500;text-decoration:none;white-space:nowrap}
+  .seg a.actief{background:#fff;color:var(--inkt);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .seg{flex-wrap:wrap}
+  .kpirij{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:var(--gap)}
+  .kpi .groot small{font:500 14px var(--sans);color:var(--inkt-vaag);margin-left:4px}
+  .kpi.kritiek .groot{color:var(--kritiek)} .kpi.let .groot{color:var(--let)}
+  .grafiek{width:100%;height:auto;display:block}
+  .grafiek text{font:11px var(--sans);fill:var(--inkt-vaag)} .grafiek line.as{stroke:var(--lijn)}
+  .legenda{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--inkt-zacht)}
+  .legenda i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .tabel td small{display:block;color:var(--inkt-vaag);font-size:11.5px}
+  .tabel td.stil{color:var(--inkt-vaag)}
+  .groep{margin-top:6px}
+  .groep h3{margin:16px 0 8px;font:500 16px var(--serif)}
+  .groep h3 small{font:400 12px var(--sans);color:var(--inkt-vaag);margin-left:6px}
+  .punt{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:var(--rk);background:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.8);margin-bottom:8px}
+  .punt .t{flex:1;min-width:0}
+  .punt .rij{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--inkt-vaag)}
+  .punt .van{margin-top:5px;overflow-wrap:anywhere}
+  .punt .van span{color:var(--inkt-vaag);font-size:12px}
+  .punt .ond{font-weight:600;margin-top:2px;overflow-wrap:anywhere}
+  .punt .waarom{color:var(--inkt-zacht);font-size:12px;margin-top:4px}
+  .knoppen{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .knoppen form{margin:0}
+  .nood{margin:6px 0}
+  details.paneel summary{cursor:pointer;font:500 18px var(--serif)}
+  .ruisrij td .ond{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--inkt-zacht);font-size:12px}
+  .tabel td.nw{white-space:nowrap}
+  .tabel td.naam{min-width:230px}
+  .ruisrij .knoppen{flex-wrap:nowrap}
+  @media (max-width:1100px){
+    table.stapel thead{display:none}
+    table.stapel tr{display:block;border-bottom:1px solid var(--lijn);padding:8px 0}
+    table.stapel td{display:inline-block;border:0;padding:3px 12px;vertical-align:top}
+    table.stapel td:first-child{display:block}
+    table.stapel .knoppen{justify-content:flex-start;flex-wrap:wrap}
+  }
+  @media (max-width:760px){
+    .blad{padding:12px 12px 50px}
+    .topbar h1{font-size:30px}
+    .kpirij{grid-template-columns:repeat(2,1fr)}
+    .kpi .groot{font-size:28px}
+    .punt{flex-direction:column}
+    .knoppen{justify-content:flex-start}
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Mail</h1>
-  <a href="{{ url_for('bord') }}">← bord</a>
-  <a href="{{ url_for('kantoor') }}">kantoor</a>
-  <span class="tel">stand {{ nu }}</span>
-</header>
-<main>
-  <p class="uitleg">Wat de mailwachten elk uur (07:00 tot 21:00) vonden dat op jou of je team wacht: belangrijk (bank, overheid,
-    boekhouder, notaris, aanmaning) zonder antwoord, gewone mail van een bekend contact na twee werkdagen zonder antwoord,
-    en automatische berichten met gevolg. Reclame, meldingen en onbekende afzenders staan hier niet. Komt er een antwoord,
-    dan haalt de wacht het zelf weg. Regelde je het op een andere manier, klik dan Afgehandeld.</p>
+<div class="scene"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
+<div class="blad">
 
-  <div class="samen">
-    {% for n in wachten %}{% set l = per[n] %}
-    <a href="#{{ n }}">
-      <div class="getal">{{ l|length }}{% set h = l|selectattr('soort', 'equalto', 'hoog')|list|length %}{% if h %}<small>{{ h }} belangrijk</small>{% endif %}</div>
-      <div class="wie">{{ labels[n]['label'] if n in labels else n }}</div>
-    </a>
-    {% endfor %}
+  <div class="topbar">
+    <h1>Mail <em>onder controle</em></h1>
+    <a class="knop-licht knop-klein" href="{{ url_for('bord') }}">Bord</a>
+    <a class="knop-licht knop-klein" href="{{ url_for('kantoor') }}">Kantoor</a>
   </div>
 
-  {% for n in wachten %}{% set l = per[n] %}{% set s = status.get(n) %}
-  <section class="pv" id="{{ n }}">
-    <h2>{{ labels[n]['label'] if n in labels else n }}</h2>
-    <div class="adres">{{ labels[n]['rol'] if n in labels else '' }}</div>
-    <div class="stand">{% if s %}laatste ronde {{ s['wanneer'] }}{% if s['detail'] %} · {{ s['detail'] }}{% endif %}{% else %}nog geen ronde{% endif %}</div>
-    {% for d in noden.get(n, []) %}<div class="nood">Nodig: {{ d['tekst'] }} ({{ d['wie'] }})</div>{% endfor %}
-    {% if not l %}<div class="leeg">Niets open.</div>{% endif %}
-    {% for p in l %}
-    <div class="punt s-{{ p['soort'] }}" id="p{{ p['id'] }}">
-      <div class="in">
-        <div class="rij"><span class="soort">{{ p['soort_label'] }}</span><span>{{ p['datum'] }}</span>
-          <span class="wacht {{ 'lang' if p['werkdagen'] >= 5 else '' }}">{{ p['werkdagen'] }} werkdag{{ '' if p['werkdagen'] == 1 else 'en' }} zonder antwoord</span></div>
-        <div class="van">{{ p['van_naam'] or p['van'] }} <span>&lt;{{ p['van'] }}&gt;</span></div>
-        <div class="ond">{{ p['onderwerp'] }}</div>
-        <div class="waarom">{{ p['waarom'] }}{% if p['voorstel'] %} · voorstel: {{ p['voorstel'] }}{% endif %}</div>
-      </div>
-      <form method="post" action="{{ url_for('mail_actie', kid=p['id'], actie='afgehandeld') }}"><button>Afgehandeld</button></form>
+  <div class="werkbalk">
+    <div class="seg">
+      {% for k, (naam, _d) in periodes.items() %}
+      <a class="{{ 'actief' if k == periode }}" href="{{ url_for('mail_pagina', periode=k, postvak=postvak or None) }}">{{ naam }}</a>
+      {% endfor %}
     </div>
-    {% endfor %}
-  </section>
-  {% endfor %}
+    <div class="seg">
+      <a class="{{ 'actief' if not postvak }}" href="{{ url_for('mail_pagina', periode=periode) }}">Alle postvakken</a>
+      {% for a in postvakken|sort %}
+      <a class="{{ 'actief' if a == postvak }}" href="{{ url_for('mail_pagina', periode=periode, postvak=a) }}">{{ a.split('@')[0] }}@{{ a.split('@')[1].split('.')[0] }}</a>
+      {% endfor %}
+    </div>
+    <span class="chip">stand {{ nu }}</span>
+  </div>
 
-  <details class="klaar">
+  <section class="kpirij">
+    <div class="paneel kpi"><span class="label">Binnengekomen</span><div class="groot">{{ kpi.totaal }}</div>
+      <div class="delta">gemiddeld {{ kpi.per_dag }} per dag</div></div>
+    <div class="paneel kpi kritiek"><span class="label">Belangrijk</span><div class="groot">{{ kpi.hoog }}</div>
+      <div class="delta">{{ kpi.hoog_open }} nog zonder antwoord</div></div>
+    <div class="paneel kpi {{ 'let' if kpi.lang }}"><span class="label">Op te volgen</span><div class="groot">{{ kpi.open }}</div>
+      <div class="delta">{{ kpi.lang }} langer dan 5 werkdagen</div></div>
+    <div class="paneel kpi"><span class="label">Ruis</span><div class="groot">{{ kpi.ruis_pct }}<small>%</small></div>
+      <div class="delta">{{ kpi.ruis }} mails: reclame {{ kpi.rommel }}, meldingen {{ kpi.melding }}, onbekend {{ kpi.koud }}</div></div>
+    <div class="paneel kpi {{ 'kritiek' if kpi.verdacht }}"><span class="label">Verdacht (phishing)</span><div class="groot">{{ kpi.verdacht }}</div>
+      <div class="delta">nooit openen of beantwoorden</div></div>
+    <div class="paneel kpi"><span class="label">Opgeruimd</span><div class="groot">{{ kpi.opgeruimd }}</div>
+      <div class="delta">{{ kpi.opruim_regels }} afzender{{ '' if kpi.opruim_regels == 1 else 's' }} op opruimen</div></div>
+  </section>
+
+  <section class="paneel">
+    <div class="kop"><h2>Instroom per dag</h2><small>elke staaf is een dag; beweeg erover voor de cijfers</small></div>
+    {{ grafiek|safe }}
+    <div class="legenda">{% for k, naam, kleur in soorten %}<span><i style="background:{{ kleur }}"></i>{{ naam }}</span>{% endfor %}</div>
+  </section>
+
+  <section class="paneel">
+    <div class="kop"><h2>Per postvak</h2><small>{{ periodes[periode][0]|lower }}</small></div>
+    <div class="tabelwrap"><table class="tabel">
+      <thead><tr><th>Postvak</th><th class="num">Binnen</th>{% for k, naam, _ in soorten %}<th class="num">{{ naam }}</th>{% endfor %}
+        <th class="num">Ruis</th><th class="num">Open</th><th>Opruimen</th><th>Laatste ronde</th></tr></thead>
+      <tbody>
+      {% for n in wachten %}{% set a = wacht_van.get(n, '') %}{% set tel = per_postvak.get(a, {}) %}{% set tot = tel.values()|sum %}
+      {% set ruis_n = (tel.get('melding', 0) + tel.get('koud', 0) + tel.get('rommel', 0) + tel.get('verdacht', 0)) %}
+      <tr>
+        <td class="naam"><a href="{{ url_for('mail_pagina', periode=periode, postvak=a) }}" style="text-decoration:none"><b style="font-weight:500">{{ labels[n]['label'] if n in labels else n }}</b></a><small>{{ a }}</small></td>
+        <td class="num">{{ tot }}</td>
+        {% for k, _n, _k in soorten %}<td class="num {{ 'stil' if not tel.get(k) }}">{{ tel.get(k, 0) }}</td>{% endfor %}
+        <td class="num">{{ (100 * ruis_n / tot)|round|int if tot else 0 }}%</td>
+        <td class="num">{{ per[n]|length }}</td>
+        <td>{% if postvakken.get(a, {}).get('schrijven') %}<span class="chip goed">kan</span>{% else %}<span class="chip">alleen lezen</span>{% endif %}</td>
+        <td>{{ status.get(n, {}).get('wanneer', '') }}{% for d in noden.get(n, []) %}<div class="notitie let nood">{{ d['tekst'] }}</div>{% endfor %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="paneel" id="opvolgen">
+    <div class="kop"><h2>Op te volgen</h2><small>belangrijk bovenaan; komt er een antwoord, dan verdwijnt het vanzelf</small></div>
+    {% for n in wachten %}{% set l = per[n] %}
+    {% if l %}
+    <div class="groep">
+      <h3>{{ labels[n]['label'] if n in labels else n }}<small>{{ l|length }} open</small></h3>
+      {% for p in l %}
+      <div class="punt" id="p{{ p['id'] }}">
+        <div class="t">
+          <div class="rij">
+            <span class="chip {{ 'kritiek' if p['soort'] == 'hoog' else ('let' if p['soort'] == 'actie' else 'accent') }}">{{ p['soort_label'] }}</span>
+            <span>{{ p['datum'] }}</span>
+            <span class="chip {{ 'kritiek' if p['werkdagen'] >= 5 else '' }}">{{ p['werkdagen'] }} werkdag{{ '' if p['werkdagen'] == 1 else 'en' }} zonder antwoord</span>
+          </div>
+          <div class="van">{{ p['van_naam'] or p['van'] }} <span>&lt;{{ p['van'] }}&gt;</span></div>
+          <div class="ond">{{ p['onderwerp'] }}</div>
+          <div class="waarom">{{ p['waarom'] }}{% if p['voorstel'] %} · voorstel: {{ p['voorstel'] }}{% endif %}</div>
+        </div>
+        <div class="knoppen">
+          <form method="post" action="{{ url_for('mail_actie', kid=p['id'], actie='afgehandeld') }}">
+            <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
+            <button class="knop-donker knop-klein">Afgehandeld</button></form>
+          <form method="post" action="{{ url_for('mail_actie', kid=p['id'], actie='ruis') }}"
+                onsubmit='return confirm({{ (p["van"] ~ " voortaan als ruis tellen in " ~ p["postvak"] ~ "? Er wordt niets verplaatst of verwijderd.")|tojson }})'>
+            <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
+            <button class="knop-stil knop-klein">Ruis</button></form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% if not (per.values()|map('length')|sum) %}<div class="notitie goed">Niets open.</div>{% endif %}
+  </section>
+
+  <section class="paneel" id="opschonen">
+    <div class="kop"><h2>Opschonen</h2><small>wie stuurt de meeste ruis, {{ periodes[periode][0]|lower }}</small></div>
+    <p class="lede" style="margin-bottom:12px">Opruimen zet alle mail van die afzender uit de inbox in de map Opgeruimd, ook wat later komt.
+      Er wordt niets verwijderd: de map staat in je webmail. Ruis telt de afzender mee maar toont hem nooit. De wacht voert je keuze uit
+      bij zijn volgende ronde (elk uur, 07:00 tot 21:00).</p>
+    {% if ruis %}
+    <div class="tabelwrap"><table class="tabel stapel">
+      <thead><tr><th>Afzender</th><th>Postvak</th><th class="num">Mails</th><th>Soort</th><th>Laatste</th><th></th></tr></thead>
+      <tbody>
+      {% for x in ruis %}{% set dom = x['van'].split('@')[-1] %}
+      <tr class="ruisrij">
+        <td><b style="font-weight:500">{{ x['naam'] or x['van'] }}</b><small>{{ x['van'] }}</small><div class="ond">{{ x['voorbeeld'] }}</div></td>
+        <td class="nw">{{ x['postvak'] }}</td>
+        <td class="num">{{ x['n'] }} mails</td>
+        <td>{% for s in (x['soorten'] or '').split(',') %}<span class="chip">{{ {'rommel': 'reclame', 'melding': 'melding', 'koud': 'onbekend', 'verdacht': 'verdacht'}.get(s, s) }}</span> {% endfor %}{% if x['lijst'] %}<span class="chip">mailinglijst</span>{% endif %}</td>
+        <td class="nw">{{ x['laatst'] }}</td>
+        <td><div class="knoppen">
+          {% if x['regel'] %}
+            <span class="chip {{ 'goed' if x['regel'] == 'opruimen' else ('kritiek' if x['regel'] == 'belangrijk' else '') }}">{{ acties.get(x['regel'], x['regel']) }}</span>
+          {% else %}
+            {% if x['kan_opruimen'] %}
+            <form method="post" action="{{ url_for('mail_regel') }}" onsubmit='return confirm({{ ("Alle mail van " ~ x["van"] ~ " uit de inbox van " ~ x["postvak"] ~ " naar Opgeruimd, ook wat later komt? Er wordt niets verwijderd.")|tojson }})'>
+              <input type="hidden" name="postvak" value="{{ x['postvak'] }}"><input type="hidden" name="wie" value="{{ x['van'] }}"><input type="hidden" name="actie" value="opruimen">
+              <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
+              <button class="knop-donker knop-klein">Opruimen</button></form>
+            {% if dom not in gratis %}
+            <form method="post" action="{{ url_for('mail_regel') }}" onsubmit='return confirm({{ ("Alle mail van het hele domein " ~ dom ~ " uit de inbox van " ~ x["postvak"] ~ " naar Opgeruimd, ook wat later komt? Er wordt niets verwijderd.")|tojson }})'>
+              <input type="hidden" name="postvak" value="{{ x['postvak'] }}"><input type="hidden" name="wie" value="@{{ dom }}"><input type="hidden" name="actie" value="opruimen">
+              <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
+              <button class="knop-licht knop-klein" title="alle mail van {{ dom }}">Heel domein</button></form>
+            {% endif %}
+            {% endif %}
+            <form method="post" action="{{ url_for('mail_regel') }}">
+              <input type="hidden" name="postvak" value="{{ x['postvak'] }}"><input type="hidden" name="wie" value="{{ x['van'] }}"><input type="hidden" name="actie" value="ruis">
+              <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
+              <button class="knop-stil knop-klein">Ruis</button></form>
+            <form method="post" action="{{ url_for('mail_regel') }}">
+              <input type="hidden" name="postvak" value="{{ x['postvak'] }}"><input type="hidden" name="wie" value="{{ x['van'] }}"><input type="hidden" name="actie" value="belangrijk">
+              <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
+              <button class="knop-stil knop-klein">Is belangrijk</button></form>
+          {% endif %}
+        </div></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<div class="notitie goed">Geen ruis in deze periode.</div>{% endif %}
+  </section>
+
+  <section class="paneel" id="regels">
+    <div class="kop"><h2>Jouw regels</h2><small>{{ regels|length }} actief; de wachten lezen ze elke ronde</small></div>
+    {% if regels %}
+    <div class="tabelwrap"><table class="tabel">
+      <thead><tr><th>Afzender</th><th>Postvak</th><th>Regel</th><th>Sinds</th><th></th></tr></thead>
+      <tbody>
+      {% for r in regels %}
+      <tr><td>{{ r['wie'] }}</td><td>{{ r['postvak'] }}</td>
+        <td><span class="chip {{ 'goed' if r['actie'] == 'opruimen' else ('kritiek' if r['actie'] == 'belangrijk' else '') }}">{{ acties.get(r['actie'], r['actie']) }}</span></td>
+        <td>{{ r['wanneer'] }}</td>
+        <td><form method="post" action="{{ url_for('mail_regel') }}">
+          <input type="hidden" name="postvak" value="{{ r['postvak'] }}"><input type="hidden" name="wie" value="{{ r['wie'] }}"><input type="hidden" name="actie" value="weg">
+          <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
+          <button class="knop-stil knop-klein">Ongedaan maken</button></form></td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    <p class="lede" style="margin-top:10px;font-size:12.5px">Ongedaan maken stopt de regel. Wat al in Opgeruimd staat, blijft daar; zet het in je webmail terug als het moet.</p>
+    {% else %}<div class="notitie">Nog geen regels. Begin bij Opschonen: de afzenders met de meeste ruis staan bovenaan.</div>{% endif %}
+  </section>
+
+  <details class="paneel">
     <summary>Afgehandeld of beantwoord, laatste 7 dagen ({{ klaar|length }})</summary>
+    <div style="margin-top:12px">
     {% for p in klaar %}
-    <div class="punt s-{{ p['soort'] }}" id="k{{ p['id'] }}">
-      <div class="in">
-        <div class="rij"><span class="soort">{{ p['soort_label'] }}</span><span>{{ p['datum'] }}</span><span>{{ p['postvak'] }}</span></div>
+    <div class="punt" id="k{{ p['id'] }}">
+      <div class="t">
+        <div class="rij"><span class="chip">{{ p['soort_label'] }}</span><span>{{ p['datum'] }}</span><span>{{ p['postvak'] }}</span></div>
         <div class="van">{{ p['van_naam'] or p['van'] }} <span>&lt;{{ p['van'] }}&gt;</span></div>
         <div class="ond">{{ p['onderwerp'] }}</div>
         <div class="waarom">{{ p['opgepakt'] }} · {{ p['door'] }}</div>
       </div>
-      <form method="post" action="{{ url_for('mail_actie', kid=p['id'], actie='terug') }}"><button>Terugzetten</button></form>
+      <div class="knoppen"><form method="post" action="{{ url_for('mail_actie', kid=p['id'], actie='terug') }}">
+        <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
+        <button class="knop-stil knop-klein">Terugzetten</button></form></div>
     </div>
     {% endfor %}
+    </div>
   </details>
-</main>
+
+</div>
 </body>
 </html>

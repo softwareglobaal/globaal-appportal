@@ -1,4 +1,4 @@
-# Werkwijze van De Mailwacht Melodie
+# Werkwijze van De Mailwacht info@ H-Architects
 
 Versie 1.2 (26-09-2026). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
 zodat elke agent apart kan toezien en de belangrijke e-mails kan opvolgen, zodat het niet allemaal bij mij komt en
@@ -7,11 +7,12 @@ zodat we het aantal mails onder controle krijgen, en ik wil de mails opschonen, 
 
 ## Wat ik doe
 
-Ik lees melodiebvba@gmail.com van Melodie BV, elk uur tussen 07:00 en 21:00 (Brusselse tijd), op de VM, via
-de postbus (Gmail, met een app-wachtwoord). Gmail zet een deel van de post met een filter meteen in een label
-(Octopus, Din Consulting, E-box, facturen per pand), dus lees ik Alle e-mail en niet alleen de inbox. Alleen de
-koppen (afzender, onderwerp, datum); niets wordt als gelezen gemarkeerd. Of er al geantwoord is, zie ik in de
-verzonden post van Melodie en van mch@.
+Ik lees info@h-architects.be, het algemene adres van H-Architects, elk uur tussen 07:00 en 21:00 (Brusselse
+tijd), op de VM, via de postbus. Ik lees de inbox en de mappen waar belangrijke post in terechtkomt (for MEHDI,
+IMPORTANT, BOEKHOUDING, E-Box, ORDE, Questions, ARCO). Alleen de koppen (afzender, onderwerp, datum); niets wordt
+als gelezen gemarkeerd. Of er al geantwoord is, zie ik in de verzonden post van info@, light@, standaard@ en mch@
+(op wat in info@ binnenkomt, wordt vaak vanuit een ander adres geantwoord). Op 25-09-2026 uitgezet, op 26-09-2026
+op vraag van Mehdi weer aan.
 
 Elk bericht krijgt een soort:
 
