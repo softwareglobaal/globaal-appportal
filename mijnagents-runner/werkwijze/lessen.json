@@ -1,7 +1,7 @@
 {
   "naam": "Gedeelde lessen van alle agents",
-  "versie": "1.0",
-  "datum": "24-09-2026",
+  "versie": "1.1",
+  "datum": "25-09-2026",
   "doel": "Wat een agent leert, hoort elke agent te weten. Tot vandaag leefde elke les in het foutenregister van een agent en las niemand anders ze. Dit bestand leest elke agent elke ronde (bord.Ronde), het telt mee in zijn kennis (norm N4) en de Normwacht toetst het (N13). Mandaat van Mehdi, 24-09-2026: \"die praat niet met andere agents om van hun te leren\".",
   "hoe": [
     "Elke ronde leest dit bestand via bord.Ronde en meldt het als bron. Een agent met een taalmodel krijgt de lessen in zijn opdracht; een script-agent meldt dat hij ze las en de Normwacht toetst zijn gedrag ertegen.",
@@ -21,6 +21,7 @@
     {"id": "L12", "les": "Wie iets verhuist, verhuist alles wat erbij hoort. Een handeling half doen is een nieuwe fout.", "bron": "agenda-wacht", "uit": [], "geldt_voor": "alle agents"},
     {"id": "L14", "les": "Een gedicteerde zin die de bronnen tegenspreekt, is een vraag met de bronnen erbij, geen opdracht.", "bron": "agenda-wacht", "uit": [], "geldt_voor": "alle agents"},
     {"id": "L15", "les": "Een voorstel zegt eerst wat blijft en dan pas wat verandert. Nooit 'opruimen', 'wissen' of 'oude rijen' voor iets wat samenvoegt of verplaatst: de lezer leest dat als verlies. Op 24-09-2026 las Mehdi 'dubbele rijen opruimen' als 'dossier 2145 verwijderen', terwijl 2145 het eerste testdossier van het nieuwe communicatiesysteem is.", "bron": "werfverslag-voorbereider", "uit": ["voorstel werfbezoek-dubbels 24-09-2026"], "geldt_voor": "alle agents"},
-    {"id": "L16", "les": "Een dossier, een reeks of een agenda die nog leeft, stel je nooit voor om weg te halen omdat hij oud is. Oud is geen reden; ongebruikt en door niemand gemist is er een, en dan nog als voorstel. Wat 'archief' heet, kan nog in gebruik zijn.", "bron": "agenda-wacht", "uit": ["FR-30", "signaal 'Afspraken in een archiefagenda' 24-09-2026"], "geldt_voor": "alle agents"}
+    {"id": "L16", "les": "Een dossier, een reeks of een agenda die nog leeft, stel je nooit voor om weg te halen omdat hij oud is. Oud is geen reden; ongebruikt en door niemand gemist is er een, en dan nog als voorstel. Wat 'archief' heet, kan nog in gebruik zijn.", "bron": "agenda-wacht", "uit": ["FR-30", "signaal 'Afspraken in een archiefagenda' 24-09-2026"], "geldt_voor": "alle agents"},
+    {"id": "L17", "les": "Er zijn twee belnummers en ze betekenen elk iets anders. +32460208703 (TWILIO_VAN, bellen.bel_afspraak) is alleen de agenda: Mehdi heeft dan vijf minuten. +32460233042 (TWILIO_VAN_VAST, bellen.bel_vast) is een agent of een Claude-sessie die vastzit en hem nodig heeft, of een dringend alarm. Wie vastzit belt nooit van het afsprakennummer, en niemand belt voor iets wat kan wachten: dat is een signaal via De Bode. Bellen is een keer, nooit herhaald.", "bron": "agenda-wacht", "uit": ["gesprek Mehdi 25-09-2026", "commit 362568f"], "geldt_voor": "alle agents"}
   ]
 }

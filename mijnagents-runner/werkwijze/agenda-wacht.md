@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 7.7 (25-09-2026, plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
+Versie 7.8 (25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -346,9 +346,22 @@ Mehdi wil voor elke afspraak effectief gebeld worden. Ik plan, De Bode belt. Een
 nooit herhaald: meestal neemt Mehdi niet op en de oproep zelf is het signaal. Een oproep betekent altijd: je
 hebt vijf minuten om iets te doen. Online vijf minuten voor het begin, buiten vijf minuten voor het vertrek. Elke
 ronde schrijf ik het belrooster: online afspraken 5 minuten vooraf (AGENDA_BEL_ONLINE),
-buitenafspraken op het vertrekmoment, het begin van mijn reistijdblok, of anders 30
-minuten vooraf (AGENDA_BEL_BUITEN). Niet voor intern (IN), terugkerend, hele dag,
-reistijd, de agenda Lara en feestdagen. Het rooster staat in mijn werkverslag.
+buitenafspraken 5 minuten voor het vertrek, het begin van mijn reistijdblok. Zonder
+reistijdblok reken ik dat je 30 minuten voor het begin vertrekt (AGENDA_BEL_BUITEN) en bel
+ik 5 minuten daarvoor. Niet voor intern (IN), terugkerend, hele dag, reistijd, de agenda
+Lara en feestdagen. Het rooster staat in mijn werkverslag.
+
+Twee nummers (Mehdi, 25-09-2026), zodat hij zonder op te nemen weet wat een oproep is:
+
+- +32460208703 (TWILIO_VAN) is het afsprakennummer, alleen voor de agenda. Belt dit
+  nummer, dan heeft Mehdi altijd vijf minuten: nooit dertig, nooit nu meteen. Mijn
+  belrooster en de Filewacht bellen van dit nummer.
+- +32460233042 (TWILIO_VAN_VAST) is het vastzit-nummer: een agent of een Claude-sessie
+  zit vast en heeft Mehdi nodig, of er is een dringend alarm. Zit ik zelf vast bij een
+  afspraak binnen 48 uur, dan bel ik van dit nummer, nooit van het afsprakennummer.
+
+Een afspraak die ik van het vastzit-nummer zou bellen, of een vastzitten van het
+afsprakennummer, is een fout: de test in tests/test_agenda_taken.py bewaakt dat.
 
 ## Leren: foutenregister en zelfcontrole (mandaat van Mehdi, 24-09-2026)
 

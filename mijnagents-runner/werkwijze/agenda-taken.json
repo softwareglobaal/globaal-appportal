@@ -1,6 +1,6 @@
 {
- "versie": "4.8",
- "datum": "2026-09-24",
+ "versie": "4.9",
+ "datum": "2026-09-25",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
   {
@@ -805,7 +805,13 @@
   "wanneer_nu": "een oproep betekent altijd: je hebt vijf minuten om iets te doen. Online vijf minuten voor het begin, buiten vijf minuten voor het vertrek",
   "wanneer_nieuw": "extra oproep van de Filewacht zodra de file je buffer opeet",
   "buffer_minuten": 10,
-  "hoe_vaak": "een keer, nooit herhaald: ook niet als Mehdi niet opneemt (meestal neemt hij niet op; de oproep zelf is het signaal). Ook alarmen en de filewacht bellen hoogstens een keer (FR-53)"
+  "hoe_vaak": "een keer, nooit herhaald: ook niet als Mehdi niet opneemt (meestal neemt hij niet op; de oproep zelf is het signaal). Ook alarmen en de filewacht bellen hoogstens een keer (FR-53)",
+  "nummers": {
+   "afspraak": "+32460208703 (TWILIO_VAN): alleen de agenda. Belt dit nummer, dan heb je vijf minuten: online vijf minuten voor het begin, buiten vijf minuten voor het vertrek (zonder reistijdblok: vijf minuten voor een vertrek dat ik dertig minuten voor het begin reken). De Filewacht belt ook van dit nummer",
+   "vastzitten": "+32460233042 (TWILIO_VAN_VAST): een agent of een Claude-sessie zit vast en heeft Mehdi nodig, of een dringend alarm. Nooit voor een afspraak",
+   "waarom": "Mehdi, 25-09-2026: zonder op te nemen weten welke soort oproep het is",
+   "grendel": "tests/test_agenda_taken.py: de afspraak belt van TWILIO_VAN, vastzitten en alarm van TWILIO_VAN_VAST, en het rooster zegt altijd over 5 minuten"
+  }
  },
  "waar_hij_van_leest": [
   {

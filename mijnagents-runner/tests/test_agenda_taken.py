@@ -586,6 +586,44 @@ check("een oproep, via een kanaal, nooit herhaald", _kan == ["twilio"] and W.bel
 check("buiten belt de agent vijf minuten voor het vertrek",
       len(_rb) == 1 and _rb[0]["tijd"] == (_vb - _td(minutes=95)).isoformat() and "over 5 minuten vertrekken" in _rb[0]["tekst"], str(_rb))
 
+# Het afsprakennummer betekent altijd vijf minuten, ook zonder reistijdblok (Mehdi, 25-09-2026). Tot die dag
+# belde een buitenafspraak zonder rit dertig minuten vooraf met "over 30 minuten vertrekken".
+_rz = W.belrooster([{"id": "b2", "titel": "!! Mehdi: [UNAB-KB] BS - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken",
+                     "start": _vb.isoformat(), "einde": (_vb + _td(hours=1)).isoformat(), "kalender": W.WERKAGENDA,
+                     "locatie": "Koning Albertlaan 206, 3620 Lanaken"},
+                    {"id": "o1", "titel": "Mehdi: [HARC-PO] Prospect - Jan Peeters", "start": (_vb + _td(hours=3)).isoformat(),
+                     "einde": (_vb + _td(hours=4)).isoformat(), "kalender": W.WERKAGENDA, "locatie": "https://zoom.us/j/1"}],
+                   W.nu_lokaal().date().isoformat())
+check("het afsprakennummer belt altijd vijf minuten vooraf, ook buiten zonder reistijdblok",
+      len(_rz) == 2 and _rz[0]["tijd"] == (_vb - _td(minutes=W.BEL_BUITEN_MIN + 5)).isoformat()
+      and _rz[1]["tijd"] == (_vb + _td(hours=3) - _td(minutes=5)).isoformat()
+      and all("over 5 minuten" in r["tekst"] for r in _rz), str(_rz))
+
+# Twee nummers (Mehdi, 25-09-2026): de afspraak belt van TWILIO_VAN, vastzitten en alarm van TWILIO_VAN_VAST.
+# Zo weet hij zonder op te nemen of het een afspraak is of een agent die hem nodig heeft.
+import os as _os
+_van = []
+_ob3 = (W.bellen.beschikbaar, W.bellen.bel, _os.environ.get("TWILIO_VAN_VAST"))
+W.bellen.beschikbaar = lambda: True
+W.bellen.bel = lambda tekst, slot="", van=None: _van.append(van) or "sid"
+_os.environ["TWILIO_VAN_VAST"] = "+32000000002"
+try:
+    W.bellen.bel_afspraak("afspraak")
+    W.bellen.bel_vast("vast")
+    W.bellen.alarm_bellen({}, [{"id": 1, "titel": "proef"}])
+finally:
+    W.bellen.beschikbaar, W.bellen.bel = _ob3[0], _ob3[1]
+    if _ob3[2] is None:
+        _os.environ.pop("TWILIO_VAN_VAST", None)
+    else:
+        _os.environ["TWILIO_VAN_VAST"] = _ob3[2]
+check("de afspraak belt van het afsprakennummer, vastzitten en alarm van het vastzit-nummer",
+      _van == [None, "+32000000002", "+32000000002"], str(_van))
+_bron_aw = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("de Agendawacht belt voor een afspraak nooit van het vastzit-nummer, en als hij vastzit wel",
+      "bellen.bel_vast(zin" in _bron_aw and "rooster_schrijven(" in _bron_aw
+      and "bel_vast" not in _bron_aw.split("def belrooster", 1)[1].split("\ndef ", 1)[0])
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 
