@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.2"
+VERSIE = "2.3"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -98,11 +98,11 @@ tr{{break-inside:avoid}}
 .twee{{column-count:2;column-gap:7mm}} .twee table{{break-inside:avoid}}
 </style>
 <div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; 24 september 2026 &nbsp;|&nbsp; versie {VERSIE}, <b>definitief</b> &nbsp;|&nbsp;
-bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.2 op de server</div>
+bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.3 op de server</div>
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
-Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.1, 2.0, 1.7 en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
+Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.2, 2.1, 2.0, 1.7 en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
 Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de server. De test <code>tests/test_agenda_taken.py</code>
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
@@ -119,8 +119,9 @@ al zegt, vraagt hij niet.</div>
 rit verhuist mee met zijn afspraak. Een titel zet hij
 alleen recht bij een afspraak van Mehdi zelf, zonder gasten, uit zijn eigen vrije tekst; anders doet hij een voorstel.</li>
 <li><b>Gasten krijgen nooit een mail</b> omdat de agent iets bijzet.</li>
-<li><b>Wat een mens zette, blijft staan.</b> Een melding die iemand koos, en een kleur die iemand met de hand zette.
-Past het niet bij de titel, dan vraagt hij of het bewust is.</li>
+<li><b>De kleur volgt de titel.</b> Een afwijkende kleur zet hij terug en meldt hij, met het tijdstip waarop ze veranderde.
+Wie iets anders wil tonen, verandert de titel (?? voor onzeker). Een melding die iemand zelf koos, blijft wel staan.</li>
+<li><b>Ligt de regel vast, dan lost hij het op</b> in plaats van een vraag te laten hangen, en meldt hij wat hij deed.</li>
 <li><b>Een grendel gaat nooit open</b>, ook niet even voor een proef. Proefrondes draaien droog.</li>
 <li><b>SU.</b> Klanten en prospecten zien nooit de volledige landnaam; alleen SU of de code HDSS.</li>
 <li><b>Het verleden wordt niet herschreven</b>, wel nagekeken. Een fout van gisteren komt in het register.</li>
@@ -191,8 +192,9 @@ regel die past, wint.</p>
 <tbody>{kl}</tbody></table>
 <ul>
 <li>Een afspraak op de werkagenda zonder firmacode krijgt geen kleur: dat is een fout, en die wordt gemeld.</li>
-<li><b>Een kleur die een mens zette, blijft staan.</b> Bij elke kleur die de agent zet, laat hij een onzichtbaar merk achter. Een kleur
-zonder zijn merk komt van een mens; dan vraagt hij of het bewust is. Is het bewust, dan hoort de titel mee te veranderen.</li>
+<li><b>Een afwijkende kleur wordt teruggezet en gemeld.</b> Bij elke kleur die de agent zet, laat hij een onzichtbaar merk achter.
+Staat er een andere kleur, dan heeft iets buiten de agent ze veranderd: hij zet ze terug en meldt het op het bord, met het tijdstip.
+Zo blijven alle interne gesprekken groen, alle prospecten oranje.</li>
 </ul>
 
 <h2>6. Waar een afspraak plaatsvindt</h2>
