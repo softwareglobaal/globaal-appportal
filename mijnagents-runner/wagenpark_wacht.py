@@ -446,6 +446,8 @@ CATEGORIE = {"onderhoud": "onderhoud en herstel", "herstelling": "onderhoud en h
              "banden": "banden", "keuring": "keuring", "schade": "schade", "verzekering": "verzekering", "brandstof": "brandstof"}
 
 
+EIGEN_FIRMA = re.compile(r"h-?\s?invest|h-?\s?aannemingen|harmonie\s?bouw|h-?\s?architects|melodie|high design|hds\b|tkn|unabo|"
+                         r"energie effici|zidi|elevait", re.I)
 BOEK_CATEGORIE = {"onderhoud": "onderhoud en herstel", "herstelling": "onderhoud en herstel", "banden": "banden", "keuring": "keuring",
                   "schade": "schade", "verzekering": "verzekering", "belasting": "belasting", "leasing": "financiering",
                   "brandstof": "brandstof", "aankoop": "aankoop", "andere": "andere"}
@@ -471,9 +473,18 @@ def kosten(register, vz, vandaag):
             j = jaren.setdefault(str(jaar), {"munt": {}})
             j["munt"].setdefault(munt, {}).setdefault(cat, 0.0)
             j["munt"][munt][cat] += bedrag
+        gezien = set()
         for b in v.get("boekingen") or []:
             if not b.get("datum"):
                 continue
+            # Interne huur telt niet voor de groep: H-Invest least bij KBC en verhuurt aan Harmoniebouw, en beide boeken
+            # huur (gezien 26-09-2026: 2ACH377 kwam op 13.112 EUR in 2024). Dezelfde factuur twee keer telt een keer.
+            if EIGEN_FIRMA.search(b.get("leverancier") or ""):
+                continue
+            sleutel = (b.get("datum"), (b.get("leverancier") or "").lower(), b.get("factuurnummer"), b.get("excl") or b.get("incl"))
+            if b.get("factuurnummer") and sleutel in gezien:
+                continue
+            gezien.add(sleutel)
             cat = BOEK_CATEGORIE.get(b.get("soort") or "andere", "andere")
             if cat == "andere" and "boete" in (b.get("omschrijving") or "").lower():
                 cat = "boetes"

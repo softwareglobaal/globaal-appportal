@@ -244,6 +244,16 @@ def test_boekhouding_gaat_voor_en_telt_niet_dubbel():
     assert k["totaal_eur"] == 1353, "een aankoop telt niet als jaarkost"
 
 
+def test_interne_huur_en_dubbele_factuur_tellen_niet():
+    v = {"plaat": "I", "status": "in gebruik", "boekingen": [
+        {"datum": "2024-02-05", "soort": "leasing", "excl": "363.69", "leverancier": "KBC Bank", "factuurnummer": "A1"},
+        {"datum": "2024-02-06", "soort": "leasing", "excl": "650.00", "leverancier": "H-Invest BV", "factuurnummer": "26001"},
+        {"datum": "2024-03-01", "soort": "onderhoud", "excl": "400.49", "leverancier": "Hac Driessen", "factuurnummer": "F9"},
+        {"datum": "2024-03-01", "soort": "onderhoud", "excl": "400.49", "leverancier": "Hac Driessen", "factuurnummer": "F9"}]}
+    e = W.kosten({"voertuigen": [v]}, [], date(2024, 12, 31))["I"]["2024"]["munt"]["EUR"]
+    assert e == {"financiering": 364, "onderhoud en herstel": 400}, e
+
+
 if __name__ == "__main__":
     fout = 0
     for n, f in sorted(globals().items()):
