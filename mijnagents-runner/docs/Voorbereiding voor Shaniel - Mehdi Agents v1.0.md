@@ -110,4 +110,5 @@ Wil Mehdi later dat de VM rechtstreeks schrijft: Dropbox-app met Full Dropbox aa
 - Agendameldingen niet meer op Telegram (BODE_NIET_OP_TELEGRAM: agenda-wacht, calendly-wacht); ze blijven op het bord en in de agenda.
 - Postbus: concept_opslaan neemt bijlagen van een bestaand bericht mee (bijlagen_van). Een agent zet een mail met scan volledig klaar in mch@; Mehdi verstuurt.
 - Kosten per maand: 2 nummers 2,50 EUR; oproepen 0,0387 EUR/min, niet opgenomen gratis, verwacht max 5 EUR. Telegram en CallMeBot gratis.
+- Bel-tool roep_mehdi (MCP op https://mijnagents.globaal.be/mcp): Claude zet alles klaar tot de stap die alleen Mehdi kan doen, en belt hem dan meteen van het vastzit-nummer met een zin (wat en waar), plus Telegram. Mehdi koppelt de connector zelf in claude.ai (Instellingen, Connectors, custom connector, inloggen via SSO). Test: Flying Blue eerst.
 - Open: WhatsApp voor agents (Meta Cloud API, tweede nummer registreren; antwoorden binnen 24 uur gratis, zelf beginnen minder dan 0,03 EUR per bericht). Vraagt Shaniels Meta-login.
