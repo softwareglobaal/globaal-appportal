@@ -112,6 +112,7 @@ def test_wat_op_25_september_ten_onrechte_doorkwam():
     assert t("contactcenter@dsb.sr", "[##1455335##] Bedankt voor uw e-mail aan het Customer Contact Center")[0] == "melding"
     assert t("postmaster@one.com", "Delivery delayed: URGENT - Hacked and blocked Flying Blue account", "Postmaster")[0] == "melding"
     assert t("postmaster@one.com", "Undeliverable: Factuur 2026-12", "Postmaster")[0] == "actie"
+    assert t("bounce@send.one.com", "Delivery delayed: URGENT - Flying Blue", "Postmaster")[0] == "melding"
     assert t("no-reply@email.claude.com", "[No Action Required:] Text watermarking begins September 30", "Claude Team")[0] == "melding"
     assert "advocaat" not in t("support@twilio.com", "Request# 29703128 | Regulatory Bundle", "Stevenson Lawrence Lim (Support)")[1]
     assert t("support@octopus.be", "Import rapport")[0] == "melding"

@@ -228,7 +228,7 @@ def trieer(b, eigen_domeinen=(), bekend=frozenset()):
         return "verdacht", f"'{b.get('van_naam')}' vanaf een gratis adres ({dom})"
     if automatisch_antwoord(ond):
         return "melding", "automatisch antwoord of ontvangstbevestiging"
-    if van.startswith(MAILSERVER):
+    if van.startswith(MAILSERVER) or naam in ("postmaster", "mail delivery subsystem", "mail delivery system"):
         return (("actie", "onze mail kwam niet aan") if NIET_BEZORGD.search(o)
                 else ("melding", "bericht van de mailserver over onze eigen mail"))
     if AFSPRAAK.search(o):
