@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "2.5",
+ "versie": "2.6",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -557,7 +557,7 @@
    "fout": "Iets buiten de agent zet kleuren: elke 30 minuten, om :15 en :45 UTC (gemeten 26-09 met een volgmeting: 12:15:44 tot 12:16:11, 30 afspraken), worden alle afspraken met UNABO of TKNB in de titel voor de komende vier weken paars en geel, een per seconde. [UNAB-..] en de andere firma's blijven ongemoeid. Eerst gezien 23-09.",
    "gevolg": "De kleur zegt niet meer wat de titel zegt (paars is leverancier online, geel is onbevestigd). Omdat de volledige ronde alleen op werkdagen en acht dagen vooruit draait, bleef het in het weekend en verder dan acht dagen staan.",
    "waarom_niet_gezien": "Google zegt niet wie een afspraak wijzigt; het merk van de agent bleef staan, alleen de kleur veranderde.",
-   "oorzaak": "Een programma dat rechtstreeks bij Google schrijft met schrijfrecht op de werkagenda, met een vaste regel per firma (UNABO paars, TKNB geel) en een venster van vier weken. Nagekeken en uitgesloten op 26-09: alle cronjobs, timers en containers op de VM (geen andere code zet een kleur), de launchd-taken en crontab op de Mac, de geplande Claude-taken en cloudroutines, de Codex-automatiseringen en Apps Script in de Drive van mch@. Het patroon (elke dag tussen 0 en 1 uur, een per seconde) past bij een Apps Script-trigger of een Make/Zapier-scenario op een ander Google-account.",
+   "oorzaak": "Een programma buiten de server en de Mac, met schrijfrecht op de werkagenda, met een vaste regel per titelwoord (UNABO paars, TKNB geel), een venster van vier weken en een schema van elke 30 minuten. Gemeten op 26-09: om 12:45 UTC had geen enkel proces op de server een nieuwe Google-verbinding; om 13:15 hadden alleen bs-dashboard-v2, contactsync en app-hds er een (Contacten, beeldherkenning, en een agendasynchronisatie met een ingetrokken sleutel); om 14:45 verstuurden die verbindingen samen 3,8 kB in 100 seconden, terwijl de actor 38 afspraken wijzigde. Geen IPv6 op de server. De Mac-taken lezen alleen. Het patroon past bij een Apps Script-trigger 'elke 30 minuten' of een Make/Zapier/n8n-scenario op een Google-account met schrijfrecht.",
    "soort_oorzaak": "bron",
    "oplossing": "Het kleurherstel (agenda_wacht.py --kleuren) draait om :17 en :47, net na de actor, ook 's nachts en in het weekend, 29 dagen vooruit; elke keer staat in mijnagents-data/agenda-kleurherstel.json. De wijzigingswacht reageert niet meer op kleuren (FR-62). De zelfcontrole meldt zolang het gebeurt (kleur_nacht). De bron uitzetten is aan Mehdi: script.google.com/home/triggers en myaccount.google.com/connections nakijken op de accounts met schrijfrecht op de werkagenda.",
    "grendel": {
