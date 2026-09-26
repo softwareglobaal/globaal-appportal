@@ -186,6 +186,16 @@ class Gesprek:
         if self.ophangen and self.marks > self.ophang_na_mark and self.laatste_mark in self.terug:
             self.einde.set()
 
+    def vraag_ophangen(self):
+        """Ophangen na de zin van het lopende antwoord (de afscheidszin), niet pas na een volgende zin."""
+        if self.ophangen:
+            return
+        self.ophangen = True
+        self.ophang_na_mark = self.marks_bij_antwoord
+        taak = asyncio.create_task(self.ophang_wachter())
+        ACHTERGROND.add(taak)
+        taak.add_done_callback(ACHTERGROND.discard)
+
     async def ophang_wachter(self):
         """Vangnet. Begint het model na de ophang-vraag niet meer te spreken, dan na OPHANG_WACHT seconden
         ophangen. Spreekt het wel (test 26-09: de bevestiging liep nog toen de oude wachter ophing), dan wacht
@@ -241,13 +251,7 @@ class Gesprek:
             log(f"Mehdi antwoordde: {antwoord[:120]}", self.rij["zin"])
             uitkomst = {"genoteerd": True}
         elif naam == "ophangen":
-            if not self.ophangen:
-                self.ophangen = True
-                # Ophangen na de zin van DIT antwoord (de afscheidszin), niet pas na een volgende zin.
-                self.ophang_na_mark = self.marks_bij_antwoord
-                taak = asyncio.create_task(self.ophang_wachter())
-                ACHTERGROND.add(taak)
-                taak.add_done_callback(ACHTERGROND.discard)
+            self.vraag_ophangen()
             uitkomst = {"ophangen": True}
         else:
             uitkomst = {"fout": "onbekende functie"}
@@ -295,6 +299,11 @@ class Gesprek:
                 # Met 'ophangen' in dit antwoord is de afscheidszin al gezegd: geen nieuw antwoord vragen.
                 if namen and "ophangen" not in namen:
                     await self.naar_openai({"type": "response.create"})
+                # Test met Mehdi 26-09: na het noteren zei De Bode 'Tot straks' maar vroeg niet om op te hangen;
+                # de lijn bleef open. Is het antwoord al genoteerd en sprak De Bode daarna een zin zonder nieuwe
+                # functie, dan was dat het afscheid: ophangen na die zin.
+                elif not namen and self.antwoord and self.marks > self.marks_bij_antwoord:
+                    self.vraag_ophangen()
                 self.misschien_einde()
             elif soort == "error":
                 log(f"OpenAI-fout: {json.dumps(e.get('error'))[:200]}")
