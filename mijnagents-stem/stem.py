@@ -165,6 +165,7 @@ class Gesprek:
         self.terug = set()         # marks die Twilio al afspeelde
         self.usage = {}            # opgetelde tokens van alle antwoorden, voor de kosten
         self.ophang_na_mark = 0    # het aantal marks op het moment dat ophangen gevraagd werd
+        self.audio_na_ophang = False   # sprak het model nog na de ophang-vraag (de bevestiging)?
         self.einde = asyncio.Event()
 
     def misschien_einde(self):
@@ -176,9 +177,15 @@ class Gesprek:
             self.einde.set()
 
     async def ophang_wachter(self):
+        """Vangnet. Begint het model na de ophang-vraag niet meer te spreken, dan na OPHANG_WACHT seconden
+        ophangen. Spreekt het wel (test 26-09: de bevestiging liep nog toen de oude wachter ophing), dan wacht
+        misschien_einde() op de laatste mark, met hoogstens 25 seconden extra als noodrem."""
         await asyncio.sleep(OPHANG_WACHT)
-        if self.marks <= self.ophang_na_mark:     # er kwam geen nieuwe zin meer
+        if not self.audio_na_ophang:
             self.einde.set()
+            return
+        await asyncio.sleep(25)
+        self.einde.set()
 
     async def naar_twilio(self, bericht):
         if not self.tw.closed:
@@ -195,7 +202,8 @@ class Gesprek:
         await self.naar_openai({"type": "session.update", "session": {
             "type": "realtime", "model": MODEL, "output_modalities": ["audio"],
             "instructions": instructies(self.rij["zin"], self.rij["context"]),
-            "audio": {"input": {"format": {"type": "audio/pcmu"}, "turn_detection": {"type": "server_vad", "silence_duration_ms": 700}},
+            "audio": {"input": {"format": {"type": "audio/pcmu"}, "turn_detection": {"type": "server_vad", "silence_duration_ms": 700,
+                                                                                         "interrupt_response": False}},
                       "output": {"format": {"type": "audio/pcmu"}, "voice": STEM}},
             "tools": TOOLS, "tool_choice": "auto"}})
         await self.naar_openai({"type": "response.create"})
@@ -231,13 +239,15 @@ class Gesprek:
             e = json.loads(m.data)
             soort = e.get("type", "")
             if soort == "response.output_audio.delta" and self.stream_sid:
+                if self.ophangen:
+                    self.audio_na_ophang = True
                 await self.naar_twilio({"event": "media", "streamSid": self.stream_sid, "media": {"payload": e["delta"]}})
             elif soort == "response.output_audio.done" and self.stream_sid:
                 self.marks += 1
                 self.laatste_mark = f"m{self.marks}"
                 await self.naar_twilio({"event": "mark", "streamSid": self.stream_sid, "mark": {"name": self.laatste_mark}})
-            elif soort == "input_audio_buffer.speech_started" and self.stream_sid:
-                await self.naar_twilio({"event": "clear", "streamSid": self.stream_sid})
+            # Onderbreken staat uit (interrupt_response false): test 26-09 sneed een "hallo" bij het opnemen de
+            # openingszin af. De zinnen van De Bode zijn kort; wat Mehdi intussen zegt, wordt daarna beantwoord.
             elif soort == "response.output_audio_transcript.done":
                 self.verslag.append("Bode: " + e.get("transcript", ""))
             elif soort == "response.done":
@@ -253,6 +263,8 @@ class Gesprek:
                         namen.append(item.get("name"))
                 # Pas na ALLE functieresultaten een nieuw antwoord vragen: zo spreekt het model de bevestiging
                 # uit, ook als het noteren en ophangen in hetzelfde antwoord vroeg.
+                if namen:
+                    print(f"{nu()} stem: functies {namen}", flush=True)
                 if any(n != "ophangen" for n in namen):
                     await self.naar_openai({"type": "response.create"})
                 self.misschien_einde()
