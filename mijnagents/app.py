@@ -1918,6 +1918,45 @@ button{margin-top:20px;padding:10px 18px;border:0;border-radius:6px;background:#
 <button type="submit">Versturen</button></form><div id="uit"></div></body></html>"""
 
 
+@app.get("/stemkosten")
+def stemkosten():
+    """Kosten van de gesprekken van De Bode met Mehdi (OpenAI Realtime + Twilio), per gesprek en per maand."""
+    if not mag_beslissen():
+        abort(403)
+    try:
+        rijen = db().execute("SELECT id, ts, zin, status, antwoord, duur_s, model, openai_usd, twilio_usd "
+                             "FROM stemgesprek ORDER BY id DESC LIMIT 500").fetchall()
+    except sqlite3.OperationalError:
+        rijen = []
+    from html import escape as e
+    maanden = {}
+    for r in rijen:
+        m = maanden.setdefault((r["ts"] or "")[:7], [0, 0.0, 0.0])
+        m[0] += 1
+        m[1] += r["openai_usd"] or 0
+        m[2] += r["twilio_usd"] or 0
+    kop = "<tr><th>Maand</th><th>Gesprekken</th><th>OpenAI</th><th>Twilio</th><th>Totaal</th></tr>"
+    mrij = "".join(f"<tr><td>{k}</td><td>{v[0]}</td><td>${v[1]:.3f}</td><td>${v[2]:.3f}</td><td>${v[1] + v[2]:.3f}</td></tr>"
+                   for k, v in sorted(maanden.items(), reverse=True))
+    def bedrag(v, leeg):
+        return leeg if v is None else "$%.4f" % v
+
+    grij = ""
+    for r in rijen:
+        wanneer = (r["ts"] or "")[:16].replace("T", " ")
+        grij += (f"<tr><td>{e(wanneer)}</td><td>{e(r['zin'][:90])}</td><td>{e(r['status'])}</td>"
+                 f"<td>{e((r['antwoord'] or '')[:90])}</td><td>{r['duur_s'] or ''}</td><td>{e(r['model'] or '')}</td>"
+                 f"<td>{bedrag(r['openai_usd'], '')}</td><td>{bedrag(r['twilio_usd'], 'nog niet')}</td></tr>")
+    return ("<!doctype html><meta charset='utf-8'><title>Kosten stem De Bode</title>"
+            "<style>body{font-family:system-ui,sans-serif;margin:24px;color:#1d1d1f}table{border-collapse:collapse;margin:8px 0 24px}"
+            "td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left;font-size:14px}th{background:#f2f2f5}</style>"
+            "<h1>Kosten van de gesprekken van De Bode</h1><p>OpenAI uit de tokens per gesprek, Twilio zoals Twilio het "
+            "aanrekent (komt een paar minuten na het gesprek binnen). Bedragen in dollar.</p>"
+            f"<h2>Per maand</h2><table>{kop}{mrij or '<tr><td colspan=5>Nog geen gesprekken</td></tr>'}</table>"
+            "<h2>Per gesprek</h2><table><tr><th>Wanneer</th><th>Zin</th><th>Status</th><th>Antwoord</th><th>Duur (s)</th>"
+            f"<th>Model</th><th>OpenAI</th><th>Twilio</th></tr>{grij}</table>")
+
+
 @app.get("/test/formulier")
 def testformulier():
     """Nepformulier om de bel-tool te testen (25-09-2026): vraagt om een paspoortnummer en een IBAN, waar

@@ -34,6 +34,8 @@ services:
       PORT: "3040"
     volumes:
       - ./mijnagents-data:/data
+      # alleen OPENAI_API_KEY wordt hieruit gelezen (stem.py: sleutel()); alleen-lezen
+      - ../agents/.env:/run/agents.env:ro
     networks: [appnet]
 
   # Werfverslag-dashboard (werf.globaal.be): eigen ArchiSnapper van H-Architects.

@@ -29,7 +29,47 @@ from datetime import datetime, timezone
 from aiohttp import WSMsgType, web, ClientSession
 
 DB = os.environ.get("AGENTS_DB", "/data/mijnagents.db")
-MODEL = os.environ.get("OPENAI_REALTIME_MODEL", "gpt-realtime-2.1")
+MODEL = os.environ.get("OPENAI_REALTIME_MODEL", "gpt-realtime-2.1-mini")
+# USD per 1 miljoen tokens (developers.openai.com/api/docs/pricing, gelezen 26-09-2026):
+# tekst in, tekst in cached, tekst uit, audio in, audio in cached, audio uit.
+PRIJZEN = {"gpt-realtime-2.1": (4.00, 0.40, 24.00, 32.00, 0.40, 64.00),
+           "gpt-realtime-2.1-mini": (0.60, 0.06, 2.40, 10.00, 0.30, 20.00)}
+TWILIO_PRIJS_WACHT = (120, 300)   # seconden na het gesprek: Twilio zet de prijs pas na een tijdje
+
+
+def sleutel():
+    """OPENAI_API_KEY uit de omgeving, anders uit ~/agents/.env (alleen-lezen gemount op /run/agents.env).
+    Alleen die ene regel wordt gelezen; de rest van dat bestand blijft onaangeroerd."""
+    k = os.environ.get("OPENAI_API_KEY", "").strip()
+    if k:
+        return k
+    try:
+        for r in open("/run/agents.env", encoding="utf-8"):
+            if r.startswith("OPENAI_API_KEY="):
+                return r.split("=", 1)[1].strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return ""
+
+
+def kosten_usd(model, u):
+    """Kosten van een gesprek uit de opgetelde usage van alle response.done-events."""
+    ti, tc, to, ai, ac, ao = PRIJZEN.get(model, PRIJZEN["gpt-realtime-2.1"])
+    i, o = u.get("input_token_details") or {}, u.get("output_token_details") or {}
+    cd = i.get("cached_tokens_details") or {}
+    c_t, c_a = cd.get("text_tokens", 0), cd.get("audio_tokens", 0)
+    som = ((i.get("text_tokens", 0) - c_t) * ti + c_t * tc + (i.get("audio_tokens", 0) - c_a) * ai + c_a * ac
+           + o.get("text_tokens", 0) * to + o.get("audio_tokens", 0) * ao)
+    return round(som / 1_000_000, 5)
+
+
+def tel_op(totaal, u):
+    """Telt een usage-dict (geneste getallen) op bij het totaal."""
+    for k, v in (u or {}).items():
+        if isinstance(v, dict):
+            tel_op(totaal.setdefault(k, {}), v)
+        elif isinstance(v, (int, float)):
+            totaal[k] = totaal.get(k, 0) + v
 STEM = os.environ.get("OPENAI_REALTIME_STEM", "marin")
 MAX_SECONDEN = int(os.environ.get("STEM_MAX_SECONDEN", "150"))
 GEVOELIG = re.compile(r"\b([A-Z]{2}\d{2}[ ]?(\d{4}[ ]?){2,4}\d{0,4}|[A-Z]{1,2}\d{6,8})\b")  # IBAN of paspoortachtig
@@ -66,6 +106,11 @@ def maak_tabel():
             id INTEGER PRIMARY KEY AUTOINCREMENT, zin TEXT NOT NULL, context TEXT DEFAULT '', wie TEXT DEFAULT '',
             twilio_sid TEXT DEFAULT '', status TEXT DEFAULT 'gepland', antwoord TEXT DEFAULT '',
             verslag TEXT DEFAULT '', ts TEXT NOT NULL, ts_eind TEXT DEFAULT '')""")
+        kolommen = {r[1] for r in c.execute("PRAGMA table_info(stemgesprek)")}
+        for naam, soort in (("model", "TEXT DEFAULT ''"), ("tokens", "TEXT DEFAULT ''"), ("openai_usd", "REAL"),
+                            ("twilio_usd", "REAL"), ("duur_s", "INTEGER")):
+            if naam not in kolommen:
+                c.execute(f"ALTER TABLE stemgesprek ADD COLUMN {naam} {soort}")
 
 
 def instructies(zin, context):
@@ -116,6 +161,7 @@ class Gesprek:
         self.marks = 0
         self.laatste_mark = ""
         self.terug = set()         # marks die Twilio al afspeelde
+        self.usage = {}            # opgetelde tokens van alle antwoorden, voor de kosten
         self.einde = asyncio.Event()
 
     def misschien_einde(self):
@@ -132,10 +178,9 @@ class Gesprek:
             await self.oa.send_json(bericht)
 
     async def start_openai(self, sessie):
-        sleutel = os.environ.get("OPENAI_API_KEY", "")
         basis = os.environ.get("OPENAI_REALTIME_URL", "wss://api.openai.com/v1/realtime")
         self.oa = await sessie.ws_connect(f"{basis}?model={MODEL}",
-                                          headers={"Authorization": f"Bearer {sleutel}"}, heartbeat=20)
+                                          headers={"Authorization": f"Bearer {sleutel()}"}, heartbeat=20)
         await self.naar_openai({"type": "session.update", "session": {
             "type": "realtime", "model": MODEL, "output_modalities": ["audio"],
             "instructions": instructies(self.rij["zin"], self.rij["context"]),
@@ -182,6 +227,7 @@ class Gesprek:
             elif soort == "response.output_audio_transcript.done":
                 self.verslag.append("Bode: " + e.get("transcript", ""))
             elif soort == "response.done":
+                tel_op(self.usage, (e.get("response") or {}).get("usage"))
                 for item in (e.get("response") or {}).get("output") or []:
                     if item.get("type") == "function_call":
                         try:
@@ -209,10 +255,36 @@ class Gesprek:
                 break
 
 
+ACHTERGROND = set()
+
+
+async def twilio_prijs(gid, sid):
+    """Twilio zet de prijs van een oproep pas een paar minuten na het einde; dan ophalen en bewaren."""
+    if not sid:
+        return
+    acc = os.environ.get("TWILIO_ACCOUNT_SID", "")
+    gebruiker = os.environ.get("TWILIO_API_KEY_SID") or acc
+    geheim = os.environ.get("TWILIO_API_KEY_SECRET") or os.environ.get("TWILIO_AUTH_TOKEN", "")
+    from aiohttp import BasicAuth
+    for wacht in TWILIO_PRIJS_WACHT:
+        await asyncio.sleep(wacht)
+        try:
+            async with ClientSession() as s:
+                async with s.get(f"https://api.twilio.com/2010-04-01/Accounts/{acc}/Calls/{sid}.json",
+                                 auth=BasicAuth(gebruiker, geheim), timeout=30) as r:
+                    d = await r.json()
+            if d.get("price") is not None:
+                with db() as c:
+                    c.execute("UPDATE stemgesprek SET twilio_usd=? WHERE id=?", (abs(float(d["price"])), gid))
+                return
+        except Exception:  # noqa: BLE001
+            pass
+
+
 async def stroom(request):
     tw = web.WebSocketResponse(heartbeat=20)
     await tw.prepare(request)
-    rij, gesprek = None, None
+    rij, gesprek, begin = None, None, time.time()
     async with ClientSession() as sessie:
         try:
             async for m in tw:
@@ -235,6 +307,7 @@ async def stroom(request):
                 gesprek = Gesprek(tw, rij)
                 gesprek.stream_sid = e["start"]["streamSid"]
                 await gesprek.start_openai(sessie)
+                begin = time.time()
                 log(f"gesprek {gid} gestart met {MODEL}", rij["zin"])
                 taken = [asyncio.create_task(gesprek.lees_openai()), asyncio.create_task(gesprek.lees_twilio()),
                          asyncio.create_task(gesprek.einde.wait())]
@@ -248,18 +321,25 @@ async def stroom(request):
             if gesprek and gesprek.oa is not None:
                 await gesprek.oa.close()
             if rij:
+                usage = gesprek.usage if gesprek else {}
+                oa_usd = kosten_usd(MODEL, usage) if usage else 0.0
                 with db() as c:
                     status = "beantwoord" if gesprek and gesprek.antwoord else "zonder antwoord"
-                    c.execute("UPDATE stemgesprek SET status=?, verslag=?, ts_eind=? WHERE id=?",
-                              (status, "\n".join(gesprek.verslag if gesprek else [])[:4000], nu(), rij["id"]))
-                if not (gesprek and gesprek.antwoord):
-                    log(f"gesprek {rij['id']} zonder antwoord beeindigd", rij["zin"])
+                    c.execute("UPDATE stemgesprek SET status=?, verslag=?, ts_eind=?, model=?, tokens=?, openai_usd=?, "
+                              "duur_s=? WHERE id=?",
+                              (status, "\n".join(gesprek.verslag if gesprek else [])[:4000], nu(), MODEL,
+                               json.dumps(usage), oa_usd, int(time.time() - begin), rij["id"]))
+                log(f"gesprek {rij['id']} {status}: {int(time.time() - begin)} s, OpenAI {oa_usd:.4f} USD "
+                    f"({usage.get('input_tokens', 0)} in, {usage.get('output_tokens', 0)} uit)", rij["zin"])
+                taak = asyncio.create_task(twilio_prijs(rij["id"], rij["twilio_sid"]))
+                ACHTERGROND.add(taak)
+                taak.add_done_callback(ACHTERGROND.discard)
             await tw.close()
     return tw
 
 
 async def gezond(_request):
-    return web.json_response({"ok": True, "model": MODEL, "sleutel": bool(os.environ.get("OPENAI_API_KEY"))})
+    return web.json_response({"ok": True, "model": MODEL, "sleutel": bool(sleutel())})
 
 
 def app():
