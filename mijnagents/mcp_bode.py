@@ -58,8 +58,10 @@ INSTRUCTIES = (
     "vastzit-nummer en zet hetzelfde op Telegram. "
     "'wat' is de actie in een korte zin (bv. 'Flying Blue wacht op je paspoortnummer'); 'waar' zegt waar "
     "het klaarstaat (bv. 'het formulier staat open in Chrome'). Nooit vaag ('er is een dringend signaal'), "
-    "nooit een statusmelding, en een oproep per blokkade. Controleer daarna met oproep_status of hij "
-    "opnam; wacht dan tot hij de stap gedaan heeft en ga verder. Laat de sessie open staan."
+    "nooit een statusmelding, en een oproep per blokkade. Geef in 'context' kort mee wat je al deed en welke "
+    "keuzes er zijn: Mehdi kan aan de telefoon terugpraten en doorvragen. Controleer daarna met oproep_status "
+    "of hij opnam; staat er 'antwoord_van_mehdi', voer dat uit. Wacht anders tot hij de stap gedaan heeft en ga "
+    "verder. Laat de sessie open staan."
 )
 
 
@@ -164,6 +166,33 @@ def _zin(wat, waar):
     return zin
 
 
+STEM_URL = os.environ.get("MIJNAGENTS_STEM_URL", "http://app-mijnagents-stem:3040")
+
+
+def _stem_klaar():
+    """De spraakserver draait en heeft een OpenAI-sleutel. Zo niet: voorlezen zoals voorheen."""
+    try:
+        with urllib.request.urlopen(STEM_URL + "/gezond", timeout=2) as r:
+            return bool(json.load(r).get("sleutel"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _stem_teken(gid):
+    return hmac.new(_secret(), f"stem:{gid}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def _stemgesprek(conn, zin, context, wie):
+    conn.execute("""CREATE TABLE IF NOT EXISTS stemgesprek (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, zin TEXT NOT NULL, context TEXT DEFAULT '', wie TEXT DEFAULT '',
+        twilio_sid TEXT DEFAULT '', status TEXT DEFAULT 'gepland', antwoord TEXT DEFAULT '',
+        verslag TEXT DEFAULT '', ts TEXT NOT NULL, ts_eind TEXT DEFAULT '')""")
+    cur = conn.execute("INSERT INTO stemgesprek(zin, context, wie, ts) VALUES(?,?,?,?)",
+                       (zin, context, wie, datetime.now().astimezone().isoformat()))
+    conn.commit()
+    return cur.lastrowid
+
+
 def registreer(app, gebruiker, groepen_van_verzoek, db, nu):
     """Hang /mcp en de OAuth-endpoints aan de Flask-app van mijnagents."""
 
@@ -175,7 +204,9 @@ def registreer(app, gebruiker, groepen_van_verzoek, db, nu):
                          "'Mehdi, <wat>. <waar>.'",
              inputSchema={"type": "object", "properties": {
                  "wat": {"type": "string", "description": "de actie die Mehdi moet doen, in een korte zin"},
-                 "waar": {"type": "string", "description": "waar het klaarstaat (venster, mailconcept, map)"}},
+                 "waar": {"type": "string", "description": "waar het klaarstaat (venster, mailconcept, map)"},
+                 "context": {"type": "string", "description": "optioneel: achtergrond voor de stem als Mehdi "
+                             "doorvraagt (wat je al gedaan hebt, welke keuzes er zijn). Geen gevoelige gegevens."}},
                  "required": ["wat", "waar"]}),
         dict(name="oproep_status",
              description="Status van een oproep van roep_mehdi: queued, ringing, in-progress, completed "
@@ -210,15 +241,26 @@ def registreer(app, gebruiker, groepen_van_verzoek, db, nu):
         elif not (_e("TWILIO_ACCOUNT_SID") and _e("ALARM_NUMMER") and (_e("TWILIO_VAN_VAST") or _e("TWILIO_VAN"))):
             uit.update({"gebeld": False, "reden": "Twilio staat niet ingesteld op de server"})
         else:
-            t = escape(zin)
-            twiml = ('<Response><Pause length="1"/>'
-                     f'<Say language="nl-NL" voice="Polly.Lotte">{t}</Say><Pause length="1"/>'
-                     f'<Say language="nl-NL" voice="Polly.Lotte">Ik herhaal. {t}</Say>'
-                     '<Say language="nl-NL" voice="Polly.Lotte">Het staat ook op Telegram.</Say></Response>')
+            # Met de stem (mijnagents-stem, OpenAI Realtime) kan Mehdi terugpraten; is die er niet, dan
+            # leest Twilio de zin voor zoals voorheen.
+            gid = _stemgesprek(conn, zin, str(args.get("context") or "")[:1500], wie) if _stem_klaar() else None
+            if gid:
+                twiml = ('<Response><Connect><Stream url="' + _basis().replace("https://", "wss://") + '/stem/ws">'
+                         f'<Parameter name="g" value="{gid}"/><Parameter name="t" value="{_stem_teken(gid)}"/>'
+                         '</Stream></Connect></Response>')
+            else:
+                t = escape(zin)
+                twiml = ('<Response><Pause length="1"/>'
+                         f'<Say language="nl-NL" voice="Polly.Lotte">{t}</Say><Pause length="1"/>'
+                         f'<Say language="nl-NL" voice="Polly.Lotte">Ik herhaal. {t}</Say>'
+                         '<Say language="nl-NL" voice="Polly.Lotte">Het staat ook op Telegram.</Say></Response>')
             try:
                 c = _twilio("Calls.json", {"To": _e("ALARM_NUMMER"), "From": _e("TWILIO_VAN_VAST") or _e("TWILIO_VAN"),
                                            "Twiml": twiml, "Timeout": "25"})
-                uit.update({"gebeld": True, "sid": c.get("sid", ""), "van": _e("TWILIO_VAN_VAST") or _e("TWILIO_VAN")})
+                uit.update({"gebeld": True, "sid": c.get("sid", ""), "van": _e("TWILIO_VAN_VAST") or _e("TWILIO_VAN"),
+                            "gesprek": "Mehdi kan terugpraten" if gid else "alleen voorgelezen"})
+                if gid:
+                    conn.execute("UPDATE stemgesprek SET twilio_sid=?, status='gebeld' WHERE id=?", (c.get("sid", ""), gid))
             except urllib.error.HTTPError as e:
                 uit.update({"gebeld": False, "reden": f"Twilio weigerde ({e.code})"})
         conn.execute("INSERT INTO logboek(naam, onderwerp, stap, tekst, detail, ts) VALUES(?,?,?,?,?,?)",
@@ -238,7 +280,17 @@ def registreer(app, gebruiker, groepen_van_verzoek, db, nu):
         s = _twilio(f"Calls/{sid}.json").get("status", "")
         betekenis = {"completed": "opgenomen", "busy": "weggedrukt of bezet", "no-answer": "niet opgenomen",
                      "failed": "mislukt", "canceled": "geannuleerd"}.get(s, "nog bezig")
-        return {"status": s, "betekenis": betekenis}
+        uit = {"status": s, "betekenis": betekenis}
+        try:
+            r = db().execute("SELECT status, antwoord FROM stemgesprek WHERE twilio_sid=?", (sid,)).fetchone()
+        except Exception:  # noqa: BLE001  (tabel bestaat nog niet)
+            r = None
+        if r:
+            uit["gesprek"] = r["status"]
+            if r["antwoord"]:
+                uit["antwoord_van_mehdi"] = r["antwoord"]
+                uit["volgende_stap"] = "Voer dit antwoord uit. Is het onduidelijk, vraag het Mehdi in de chat."
+        return uit
 
     handlers = {"roep_mehdi": t_roep, "oproep_status": t_status}
 

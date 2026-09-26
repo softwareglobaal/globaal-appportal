@@ -19,6 +19,23 @@ services:
       - "127.0.0.1:3022:3022"
     networks: [appnet]
 
+  # De stem van De Bode (26-09-2026): Mehdi kan terugpraten als een agent hem belt.
+  # Twilio Media Streams <-> OpenAI Realtime; bereikbaar via wss://mijnagents.<domein>/stem/ws.
+  # Deelt de database en de secrets met app-mijnagents (OPENAI_API_KEY in mijnagents-data/.env).
+  # Zonder sleutel of zonder deze container leest Twilio de zin gewoon voor.
+  app-mijnagents-stem:
+    build: ./mijnagents-stem
+    container_name: app-mijnagents-stem
+    restart: unless-stopped
+    env_file:
+      - ./mijnagents-data/.env
+    environment:
+      AGENTS_DB: /data/mijnagents.db
+      PORT: "3040"
+    volumes:
+      - ./mijnagents-data:/data
+    networks: [appnet]
+
   # Werfverslag-dashboard (werf.globaal.be): eigen ArchiSnapper van H-Architects.
   # Repo softwareglobaal/globaal-werfverslag, checkout ./werfverslag, data in
   # ./werfverslag-data (werf.db, foto's, plannen, pdf's, historiek.json; buiten git).
