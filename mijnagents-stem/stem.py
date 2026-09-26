@@ -36,6 +36,7 @@ PRIJZEN = {"gpt-realtime-2.1": (4.00, 0.40, 24.00, 32.00, 0.40, 64.00),
            "gpt-realtime-2.1-mini": (0.60, 0.06, 2.40, 10.00, 0.30, 20.00)}
 TWILIO_PRIJS_WACHT = (120, 300)   # seconden na het gesprek: Twilio zet de prijs pas na een tijdje
 OPHANG_WACHT = float(os.environ.get("STEM_OPHANG_WACHT", "6"))  # s: zegt het model na 'ophangen' niets meer, dan toch ophangen
+EERSTE_WACHT = float(os.environ.get("STEM_EERSTE_WACHT", "3.5"))  # s: zegt Mehdi bij het opnemen niets, dan begint De Bode zelf
 ACHTERGROND = set()               # lopende achtergrondtaken (prijs ophalen, ophang-wachter)
 
 
@@ -119,8 +120,11 @@ def instructies(zin, context):
     return (
         "Je bent De Bode, de telefonische assistent van Mehdi Chegini. Je belt hem omdat een van zijn agents "
         "vastzit en hem nodig heeft. Spreek Nederlands zoals in Vlaanderen, kort, vriendelijk en zakelijk. "
-        f"Begin meteen met deze zin, woord voor woord: \"{zin}\" "
-        "Vraag daarna in een korte zin wat hij wil dat de agent doet. Luister. "
+        "Zoals bij elk telefoongesprek neemt Mehdi op en zegt hij eerst iets, meestal 'hallo'. Dat is een "
+        "begroeting, geen antwoord en geen vraag. Antwoord daarop met 'Hallo Mehdi, met De Bode.' en daarna "
+        f"deze zin, woord voor woord: \"{zin}\" Vraag daarna in een korte zin wat hij wil dat de agent doet. "
+        "Zegt hij niets, begin dan zelf op dezelfde manier. Zegt hij later nog eens alleen 'hallo' of 'ja', "
+        "herhaal dan niet alles maar vraag kort of hij je hoort en wat de agent moet doen. Luister. "
         "Zodra hij een antwoord of beslissing geeft, roep je noteer_antwoord aan met zijn antwoord in zijn eigen "
         "woorden, bevestig je in een zin wat je doorgeeft, en roep je ophangen aan. "
         "Zegt hij dat hij het zelf doet of dat hij later terugkomt, noteer dat ook. "
@@ -166,6 +170,8 @@ class Gesprek:
         self.usage = {}            # opgetelde tokens van alle antwoorden, voor de kosten
         self.ophang_na_mark = 0    # het aantal marks op het moment dat ophangen gevraagd werd
         self.audio_na_ophang = False   # sprak het model nog na de ophang-vraag (de bevestiging)?
+        self.mehdi_sprak = False       # zei Mehdi al iets (meestal 'hallo')?
+        self.begonnen = False          # is De Bode al beginnen spreken?
         self.einde = asyncio.Event()
 
     def misschien_einde(self):
@@ -206,7 +212,18 @@ class Gesprek:
                                                                                          "interrupt_response": False}},
                       "output": {"format": {"type": "audio/pcmu"}, "voice": STEM}},
             "tools": TOOLS, "tool_choice": "auto"}})
-        await self.naar_openai({"type": "response.create"})
+        # Niet meteen spreken: wachten op Mehdi's 'hallo' (de spraakdetectie start dan zelf het antwoord).
+        # Test 26-09: De Bode sprak meteen, Mehdi's 'hallo' viel erdoorheen en bracht hem in de war.
+        taak = asyncio.create_task(self.zelf_beginnen())
+        ACHTERGROND.add(taak)
+        taak.add_done_callback(ACHTERGROND.discard)
+
+    async def zelf_beginnen(self):
+        """Zegt Mehdi binnen EERSTE_WACHT seconden niets (voicemail, stil opgenomen), dan begint De Bode zelf."""
+        await asyncio.sleep(EERSTE_WACHT)
+        if not self.mehdi_sprak and not self.begonnen:
+            self.begonnen = True
+            await self.naar_openai({"type": "response.create"})
 
     async def functie(self, naam, call_id, args):
         if naam == "noteer_antwoord":
@@ -238,6 +255,10 @@ class Gesprek:
                 break
             e = json.loads(m.data)
             soort = e.get("type", "")
+            if soort == "input_audio_buffer.speech_started":
+                self.mehdi_sprak = True
+            elif soort == "response.created":
+                self.begonnen = True
             if soort == "response.output_audio.delta" and self.stream_sid:
                 if self.ophangen:
                     self.audio_na_ophang = True
