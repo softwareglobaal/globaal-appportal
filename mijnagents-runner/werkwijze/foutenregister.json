@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "2.1",
+ "versie": "2.2",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1242,6 +1242,24 @@
    "controle": [
     "dubbele_boeking"
    ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-58",
+   "datum": "26-09-2026",
+   "gevonden_door": "Claude (bij het inplannen van Hamid, Korbeek-Lo)",
+   "fout": "De titel 'Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo' kreeg het adres een tweede keer, en de belzin zei 'Nieuwstraat 39, Korbeek-Lo' zonder postcode.",
+   "gevolg": "Een dubbele, onleesbare titel en een onvolledig adres in de oproep voor het vertrek.",
+   "waarom_niet_gezien": "Alle testtitels hadden een projectnummer vóór het adres; een prospect zonder nummer maar met een adres kwam in geen enkele test voor.",
+   "oorzaak": "lees_titel nam het eerste getal van vier cijfers als projectnummer, ook de postcode, en haalde elk getal van vier cijfers uit de klantnaam.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een postcode na een komma telt niet meer als projectnummer; uit de klantnaam valt alleen het echte projectnummer weg. Titel van Hamid teruggezet.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een postcode in het adres wordt nooit een projectnummer, en blijft in de belzin"
+   },
+   "controle": [],
    "status": "opgelost"
   }
  ]

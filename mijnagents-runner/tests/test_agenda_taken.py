@@ -674,6 +674,15 @@ _zd9 = [z for s_, z in W.vastgelopen(_idb, _nd) if s_.startswith("dubbel:")]
 check("twee klanten tegelijk worden gezien, ook over agenda's heen, en in een zin gemeld",
       [(a["id"], b["id"]) for a, b in _pd9] == [("c1", "y1")] and len(_zd9) == 1 and "Verzet er een" in _zd9[0], str((_pd9, _zd9)))
 
+# Een postcode is geen projectnummer (FR-58)
+_pc = W.lees_titel("Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo")
+_pc2 = W.lees_titel("!! Mehdi & Catalin: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele")
+_pc3 = W.titel_aanvulling({"titel": "Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo",
+                           "locatie": "Nieuwstraat 39, 3360 Korbeek-Lo", "start": "2026-09-26T15:00:00+02:00"}, {})
+check("een postcode in het adres wordt nooit een projectnummer, en blijft in de belzin",
+      _pc["nummer"] == "" and "3360 Korbeek-Lo" in _pc["klant"] and _pc2["nummer"] == "2505"
+      and "3012 Wilsele" in _pc2["klant"] and _pc3[0] is None, str((_pc["nummer"], _pc["klant"], _pc2["nummer"], _pc3)))
+
 # Kleurherstel elk uur, vier weken vooruit, ook 's nachts en in het weekend (FR-21)
 import tempfile as _tf
 _khb, _khd = [], []
