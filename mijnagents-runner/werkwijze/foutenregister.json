@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "2.3",
+ "versie": "2.4",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1301,6 +1301,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "de takenlijst noemt elke stap die de agent echt doet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-61",
+   "datum": "26-09-2026",
+   "gevonden_door": "Claude (bij het inplannen van Tom bellen en Aalst)",
+   "fout": "'[TKNB-IN] Tom bellen (onderweg naar Aalst)' werd een rit (autootje, rood), en 'Pontstraat 72 bus 1, 9300 Aalst' kreeg geen rit ('zonder adres').",
+   "gevolg": "Een telefoontje zag eruit als een rit, en de rit naar het kantoor in Aalst ontbrak.",
+   "waarom_niet_gezien": "Geen enkele testtitel had een opmerking tussen haakjes, en geen enkel testadres een busnummer.",
+   "oorzaak": "lees_titel zocht de ritwoorden ook tussen haakjes; de kaartdienst kent 'bus 1' niet en er was geen poging zonder busnummer.",
+   "soort_oorzaak": "code",
+   "oplossing": "Ritwoorden tellen niet tussen haakjes; coord probeert ook de straat zonder busnummer.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een adres met een busnummer vindt toch zijn rit, en haakjes maken van een afspraak geen rit"
    },
    "controle": [],
    "status": "opgelost"

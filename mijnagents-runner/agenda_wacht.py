@@ -275,7 +275,10 @@ def lees_titel(titel):
     # en zet hij er een tweede reistijdblok naast. Gezien 20-09-2026.
     # En "Lara naar huis brengen" is de rit naar huis na de zwemles. Gezien 24-09-2026: die stond
     # als gewone afspraak, zonder autootje en met de melding van de agenda.
-    uit = {"reistijd": bool(re.search(r"reistijd|\brijden naar\b|\bonderweg naar\b|\bnaar huis\b", t, re.I))
+    # Een opmerking tussen haakjes maakt van een afspraak geen rit: '[TKNB-IN] Tom bellen (onderweg naar
+    # Aalst)' kreeg op 26-09-2026 het autootje en rood (FR-61).
+    uit = {"reistijd": bool(re.search(r"reistijd|\brijden naar\b|\bonderweg naar\b|\bnaar huis\b",
+                                      re.sub(r"\([^)]*\)", "", t), re.I))
                        or t.startswith("🚗"),
            "buiten": "!!" in t, "onzeker": "??" in t, "firma": "", "soort": "", "type": "", "nummer": "", "klant": ""}
     m = CODE_RE.search(t)
@@ -1362,6 +1365,14 @@ def coord(adres, cache):
                          "countrycodes": "be,nl"})
         pogingen.append({"q": f"{straat}, {gemeente}, België", "format": "jsonv2", "limit": 1,
                          "countrycodes": "be,nl"})
+        zonder_bus = re.sub(r"\s+bus\s+\w+$", "", straat, flags=re.I)
+        if zonder_bus != straat:
+            # Een busnummer ("Pontstraat 72 bus 1") kent de kaartdienst niet. Gezien 26-09-2026: de rit naar
+            # het kantoor in Aalst werd daardoor niet gemaakt (FR-61).
+            pogingen.append({"street": zonder_bus, "postalcode": post, "country": "Belgium",
+                             "format": "jsonv2", "limit": 1})
+            pogingen.append({"q": f"{zonder_bus}, {post} {gemeente}", "format": "jsonv2", "limit": 1,
+                             "countrycodes": "be,nl"})
         if "," in straat:
             # Een naam vooraan ("Brasserie 360°, Stadsplein 16") laat de kaartdienst struikelen:
             # alleen het laatste stuk voor de postcode is de straat. Gezien 23-09-2026, toen de

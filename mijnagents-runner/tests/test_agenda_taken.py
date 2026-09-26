@@ -694,6 +694,17 @@ check("alleen de geplande ronde belt, en vrijdag kijkt tot maandag vooruit",
       'if not DAG_ARG and "--ronde" in sys.argv:' in _src59[_i59 - 500:_i59]
       and W.belvenster_uren(_vrijdag) >= 72 and W.belvenster_uren(_vrijdag + _td(days=3)) == 48)
 
+# Een busnummer en een opmerking tussen haakjes (FR-61)
+_nom_oud = W._nominatim
+W._nominatim = lambda params: None if "bus" in json.dumps(params).lower() else (50.94, 4.03)
+try:
+    _bus = W.coord("Pontstraat 72 bus 1, 9300 Aalst", {})
+finally:
+    W._nominatim = _nom_oud
+check("een adres met een busnummer vindt toch zijn rit, en haakjes maken van een afspraak geen rit",
+      _bus == (50.94, 4.03) and not W.lees_titel("Mehdi: [TKNB-IN] Tom bellen (onderweg naar Aalst)")["reistijd"]
+      and W.lees_titel("Mehdi: Lara naar huis brengen")["reistijd"], str(_bus))
+
 # Een postcode is geen projectnummer (FR-58)
 _pc = W.lees_titel("Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo")
 _pc2 = W.lees_titel("!! Mehdi & Catalin: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele")
