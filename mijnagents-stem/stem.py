@@ -122,11 +122,14 @@ def instructies(zin, context):
         "vastzit en hem nodig heeft. Spreek Nederlands zoals in Vlaanderen, kort, vriendelijk en zakelijk. "
         "Zoals bij elk telefoongesprek neemt Mehdi op en zegt hij eerst iets, meestal 'hallo'. Dat is een "
         "begroeting, geen antwoord en geen vraag. Antwoord daarop met 'Hallo Mehdi, met De Bode.' en daarna "
-        f"deze zin, woord voor woord: \"{zin}\" Vraag daarna in een korte zin wat hij wil dat de agent doet. "
+        f"deze zin, woord voor woord en zonder een woord te veranderen: \"{zin}\" Vraag daarna in een korte "
+        "zin wat hij wil dat de agent doet. "
         "Zegt hij niets, begin dan zelf op dezelfde manier. Zegt hij later nog eens alleen 'hallo' of 'ja', "
         "herhaal dan niet alles maar vraag kort of hij je hoort en wat de agent moet doen. Luister. "
-        "Zodra hij een antwoord of beslissing geeft, roep je noteer_antwoord aan met zijn antwoord in zijn eigen "
-        "woorden, bevestig je in een zin wat je doorgeeft, en roep je ophangen aan. "
+        "Zodra hij een antwoord of beslissing geeft, zeg je in een zin wat je aan de agent doorgeeft en neem je "
+        "afscheid, bijvoorbeeld: 'Goed, ik laat de agent weten dat je het zelf invult. Tot straks.' Praat niet over "
+        "wat je zelf doet (zeg nooit 'ik noteer' of 'ik bevestig'). Roep in datzelfde antwoord noteer_antwoord aan "
+        "met zijn antwoord in zijn eigen woorden, en daarna ophangen. "
         "Zegt hij dat hij het zelf doet of dat hij later terugkomt, noteer dat ook. "
         "Vraag nooit naar gevoelige gegevens (paspoortnummer, rekeningnummer, wachtwoord, codes). Noemt hij ze "
         "toch, noteer ze NIET en zeg dat hij ze zelf op het scherm moet invullen. Verzin niets en beloof niets "
@@ -171,6 +174,7 @@ class Gesprek:
         self.ophang_na_mark = 0    # het aantal marks op het moment dat ophangen gevraagd werd
         self.audio_na_ophang = False   # sprak het model nog na de ophang-vraag (de bevestiging)?
         self.mehdi_sprak = False       # zei Mehdi al iets (meestal 'hallo')?
+        self.marks_bij_antwoord = 0    # aantal marks bij de start van het lopende antwoord
         self.begonnen = False          # is De Bode al beginnen spreken?
         self.einde = asyncio.Event()
 
@@ -187,7 +191,7 @@ class Gesprek:
         ophangen. Spreekt het wel (test 26-09: de bevestiging liep nog toen de oude wachter ophing), dan wacht
         misschien_einde() op de laatste mark, met hoogstens 25 seconden extra als noodrem."""
         await asyncio.sleep(OPHANG_WACHT)
-        if not self.audio_na_ophang:
+        if not self.audio_na_ophang and self.marks <= self.ophang_na_mark:   # geen afscheidszin gezegd
             self.einde.set()
             return
         await asyncio.sleep(25)
@@ -239,7 +243,8 @@ class Gesprek:
         elif naam == "ophangen":
             if not self.ophangen:
                 self.ophangen = True
-                self.ophang_na_mark = self.marks
+                # Ophangen na de zin van DIT antwoord (de afscheidszin), niet pas na een volgende zin.
+                self.ophang_na_mark = self.marks_bij_antwoord
                 taak = asyncio.create_task(self.ophang_wachter())
                 ACHTERGROND.add(taak)
                 taak.add_done_callback(ACHTERGROND.discard)
@@ -259,6 +264,7 @@ class Gesprek:
                 self.mehdi_sprak = True
             elif soort == "response.created":
                 self.begonnen = True
+                self.marks_bij_antwoord = self.marks   # marks voor dit antwoord: zo telt de afscheidszin mee
             if soort == "response.output_audio.delta" and self.stream_sid:
                 if self.ophangen:
                     self.audio_na_ophang = True
@@ -286,7 +292,8 @@ class Gesprek:
                 # uit, ook als het noteren en ophangen in hetzelfde antwoord vroeg.
                 if namen:
                     print(f"{nu()} stem: functies {namen}", flush=True)
-                if any(n != "ophangen" for n in namen):
+                # Met 'ophangen' in dit antwoord is de afscheidszin al gezegd: geen nieuw antwoord vragen.
+                if namen and "ophangen" not in namen:
                     await self.naar_openai({"type": "response.create"})
                 self.misschien_einde()
             elif soort == "error":
