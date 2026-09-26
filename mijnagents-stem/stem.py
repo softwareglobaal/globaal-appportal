@@ -35,6 +35,8 @@ MODEL = os.environ.get("OPENAI_REALTIME_MODEL", "gpt-realtime-2.1-mini")
 PRIJZEN = {"gpt-realtime-2.1": (4.00, 0.40, 24.00, 32.00, 0.40, 64.00),
            "gpt-realtime-2.1-mini": (0.60, 0.06, 2.40, 10.00, 0.30, 20.00)}
 TWILIO_PRIJS_WACHT = (120, 300)   # seconden na het gesprek: Twilio zet de prijs pas na een tijdje
+OPHANG_WACHT = float(os.environ.get("STEM_OPHANG_WACHT", "6"))  # s: zegt het model na 'ophangen' niets meer, dan toch ophangen
+ACHTERGROND = set()               # lopende achtergrondtaken (prijs ophalen, ophang-wachter)
 
 
 def sleutel():
@@ -162,11 +164,20 @@ class Gesprek:
         self.laatste_mark = ""
         self.terug = set()         # marks die Twilio al afspeelde
         self.usage = {}            # opgetelde tokens van alle antwoorden, voor de kosten
+        self.ophang_na_mark = 0    # het aantal marks op het moment dat ophangen gevraagd werd
         self.einde = asyncio.Event()
 
     def misschien_einde(self):
-        """Ophangen pas als de laatste zin volledig afgespeeld is (Twilio stuurt de mark terug)."""
-        if self.ophangen and (not self.laatste_mark or self.laatste_mark in self.terug):
+        """Ophangen pas als de bevestiging NA de ophang-vraag volledig afgespeeld is (Twilio stuurt de mark
+        terug). Test 26-09: het model vroeg noteren en ophangen in hetzelfde antwoord; toen hing de oude code
+        meteen op, zonder bevestiging. Zegt het model na de ophang-vraag niets meer, dan hangt de wachter
+        in ophang_wachter() na OPHANG_WACHT seconden toch op."""
+        if self.ophangen and self.marks > self.ophang_na_mark and self.laatste_mark in self.terug:
+            self.einde.set()
+
+    async def ophang_wachter(self):
+        await asyncio.sleep(OPHANG_WACHT)
+        if self.marks <= self.ophang_na_mark:     # er kwam geen nieuwe zin meer
             self.einde.set()
 
     async def naar_twilio(self, bericht):
@@ -201,14 +212,17 @@ class Gesprek:
             log(f"Mehdi antwoordde: {antwoord[:120]}", self.rij["zin"])
             uitkomst = {"genoteerd": True}
         elif naam == "ophangen":
-            self.ophangen = True
+            if not self.ophangen:
+                self.ophangen = True
+                self.ophang_na_mark = self.marks
+                taak = asyncio.create_task(self.ophang_wachter())
+                ACHTERGROND.add(taak)
+                taak.add_done_callback(ACHTERGROND.discard)
             uitkomst = {"ophangen": True}
         else:
             uitkomst = {"fout": "onbekende functie"}
         await self.naar_openai({"type": "conversation.item.create",
                                 "item": {"type": "function_call_output", "call_id": call_id, "output": json.dumps(uitkomst)}})
-        if naam != "ophangen":
-            await self.naar_openai({"type": "response.create"})
 
     async def lees_openai(self):
         async for m in self.oa:
@@ -228,6 +242,7 @@ class Gesprek:
                 self.verslag.append("Bode: " + e.get("transcript", ""))
             elif soort == "response.done":
                 tel_op(self.usage, (e.get("response") or {}).get("usage"))
+                namen = []
                 for item in (e.get("response") or {}).get("output") or []:
                     if item.get("type") == "function_call":
                         try:
@@ -235,6 +250,11 @@ class Gesprek:
                         except ValueError:
                             args = {}
                         await self.functie(item.get("name"), item.get("call_id"), args)
+                        namen.append(item.get("name"))
+                # Pas na ALLE functieresultaten een nieuw antwoord vragen: zo spreekt het model de bevestiging
+                # uit, ook als het noteren en ophangen in hetzelfde antwoord vroeg.
+                if any(n != "ophangen" for n in namen):
+                    await self.naar_openai({"type": "response.create"})
                 self.misschien_einde()
             elif soort == "error":
                 log(f"OpenAI-fout: {json.dumps(e.get('error'))[:200]}")
@@ -255,9 +275,6 @@ class Gesprek:
                 break
 
 
-ACHTERGROND = set()
-
-
 async def twilio_prijs(gid, sid):
     """Twilio zet de prijs van een oproep pas een paar minuten na het einde; dan ophalen en bewaren."""
     if not sid:
@@ -265,13 +282,13 @@ async def twilio_prijs(gid, sid):
     acc = os.environ.get("TWILIO_ACCOUNT_SID", "")
     gebruiker = os.environ.get("TWILIO_API_KEY_SID") or acc
     geheim = os.environ.get("TWILIO_API_KEY_SECRET") or os.environ.get("TWILIO_AUTH_TOKEN", "")
-    from aiohttp import BasicAuth
+    kop = {"Authorization": "Basic " + base64.b64encode(f"{gebruiker}:{geheim}".encode()).decode()}
     for wacht in TWILIO_PRIJS_WACHT:
         await asyncio.sleep(wacht)
         try:
             async with ClientSession() as s:
                 async with s.get(f"https://api.twilio.com/2010-04-01/Accounts/{acc}/Calls/{sid}.json",
-                                 auth=BasicAuth(gebruiker, geheim), timeout=30) as r:
+                                 headers=kop, timeout=30) as r:
                     d = await r.json()
             if d.get("price") is not None:
                 with db() as c:
