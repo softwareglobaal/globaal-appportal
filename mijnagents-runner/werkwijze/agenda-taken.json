@@ -827,20 +827,32 @@
    "naam": "Agendawacht",
    "bestand": "agenda_wacht.py",
    "wanneer": "werkdagen 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30, Brusselse tijd",
-   "wat": "leest, ontleedt, koppelt, zet reistijd, kleuren en herinneringen, meldt signalen en zet alles klaar op het bord"
+   "wat": "de volledige ronde: de 15 stappen uit de takenlijst. Belt Mehdi alleen vanuit deze geplande ronde"
   },
   {
    "naam": "Signaalwacht",
    "bestand": "agenda_signaal.py",
    "wanneer": "elke twaalf minuten tussen 06:00 en 23:59 Brusselse tijd, elke dag",
-   "wat": "kijkt of er een afspraak bijgekomen, gewijzigd of geschrapt is en zet de Agendawacht dan meteen aan voor die dag. Zijn eigen reistijdblokken tellen niet mee"
+   "wat": "kijkt of de titel, tijd, plaats, status of gasten van een afspraak veranderden en zet de Agendawacht dan meteen aan voor die dag. Een kleur, omschrijving of herinnering alleen telt niet, en zijn eigen reistijdblokken ook niet (FR-62)"
+  },
+  {
+   "naam": "Kleurherstel",
+   "bestand": "agenda_wacht.py --kleuren",
+   "wanneer": "om :17 en :47, dag en nacht, elke dag",
+   "wat": "zet alleen de kleuren terug naar de regel, 29 dagen vooruit: iets buiten de agent kleurt UNABO en TKNB om :15 en :45 UTC om (FR-21)"
+  },
+  {
+   "naam": "De Bode",
+   "bestand": "bode.py",
+   "wanneer": "elke minuut",
+   "wat": "belt volgens het belrooster: online 5 minuten vooraf, buiten 5 minuten voor het vertrek; niet voor intern"
   },
   {
    "naam": "Filewacht",
    "bestand": "file_wacht.py",
    "wanneer": "elke tien minuten tussen 06:00 en 21:59 Brusselse tijd, elke dag",
    "wat": "vraagt voor elke buitenafspraak binnen twee uur de rijtijd opnieuw op met het verkeer van dat moment. Duurt de rit meer dan de buffer langer dan gepland, of kom je te laat, dan belt Twilio je met de plaats, de nieuwe rijtijd en hoeveel te laat",
-   "grenzen": "per afspraak hoogstens elke twintig minuten narekenen en hoogstens twee oproepen"
+   "grenzen": "per afspraak hoogstens elke twintig minuten narekenen en hoogstens een oproep"
   },
   {
    "naam": "Zoomwacht",
@@ -852,7 +864,7 @@
   {
    "naam": "Zelfcontrole",
    "bestand": "zelfcontrole.py",
-   "wanneer": "werkdagen 07:00 Brusselse tijd",
+   "wanneer": "werkdagen 07:05 Brusselse tijd",
    "wat": "kijkt in de agenda zelf of klopt wat de agent beweert, van zeven dagen terug tot zeven dagen vooruit, en koppelt elke bevinding aan het foutenregister"
   }
  ],
