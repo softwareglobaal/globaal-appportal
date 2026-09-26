@@ -40,34 +40,61 @@ def bewaar(d):
     STAND.write_text(json.dumps(d, indent=0))
 
 
+def vingerafdruk(ev):
+    """Wat de agent aangaat van een afspraak: titel, status, tijd, plaats en gasten. Een kleur, omschrijving,
+    herinnering of merk hoort er niet bij. Gezien 26-09-2026: elke kleurwissel van buiten en elke eigen
+    schrijfactie startte de ronde opnieuw, elke 12 minuten voor 15 dagen, en het Google-plafond was om
+    09:00 op (FR-62)."""
+    return json.dumps([ev.get("summary"), ev.get("status"), ev.get("start"), ev.get("end"), ev.get("location"),
+                       sorted((g.get("email") or "") for g in ev.get("attendees") or [])], ensure_ascii=False)
+
+
+def te_verwerken(kal, items, oud, vinger):
+    """Geeft (dagen, regels) voor de afspraken die echt veranderden, en werkt `vinger` bij."""
+    dagen, wat = set(), []
+    for ev in items:
+        s = (ev.get("start", {}).get("dateTime") or ev.get("start", {}).get("date") or "")[:10]
+        if not s:
+            continue
+        # reistijdblokken van de wacht zelf tellen niet mee, anders start hij zichzelf
+        if W.lees_titel(ev.get("summary", "") or "")["reistijd"]:
+            continue
+        sleutel = f"{kal}|{ev.get('id', '')}"
+        vp = vingerafdruk(ev)
+        vinger[sleutel] = [vp, s]
+        if (oud.get(sleutel) or [None])[0] == vp:
+            continue
+        dagen.add(s)
+        wat.append(f"{s} {ev.get('status','')[:9]:<9} {(ev.get('summary') or '(zonder titel)')[:52]}")
+    return dagen, wat
+
+
 def main():
     st = vorige()
     sinds = st.get("gekeken") or (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
     nu = datetime.now(timezone.utc)
     kop = {"Authorization": "Bearer " + A._toegang()}
     dagen, wat = set(), []
+    oud = st.get("vinger") or {}
+    vinger = dict(oud)
     for kal in W.kalenders():
         q = {"updatedMin": sinds, "singleEvents": "true", "showDeleted": "true", "maxResults": "250",
              "timeMin": (nu - timedelta(days=1)).isoformat(),
              "timeMax": (nu + timedelta(days=30)).isoformat(),
-             "fields": "items(summary,status,updated,start/dateTime,start/date)"}
+             "fields": "items(id,summary,status,updated,start/dateTime,start/date,end/dateTime,end/date,location,attendees/email)"}
         url = f"{A.API}/calendars/{urllib.parse.quote(kal, safe='')}/events?" + urllib.parse.urlencode(q)
         try:
             d = json.load(urllib.request.urlopen(urllib.request.Request(url, headers=kop), timeout=40))
         except urllib.error.HTTPError as e:
             print(f"{kal[:32]}: HTTP {e.code}", file=sys.stderr)
             continue
-        for ev in d.get("items", []):
-            s = (ev.get("start", {}).get("dateTime") or ev.get("start", {}).get("date") or "")[:10]
-            if not s:
-                continue
-            # reistijdblokken van de wacht zelf tellen niet mee, anders start hij zichzelf
-            if W.lees_titel(ev.get("summary", "") or "")["reistijd"]:
-                continue
-            dagen.add(s)
-            wat.append(f"{s} {ev.get('status','')[:9]:<9} {(ev.get('summary') or '(zonder titel)')[:52]}")
+        d_, w_ = te_verwerken(kal, d.get("items", []), oud, vinger)
+        dagen |= d_
+        wat += w_
 
-    bewaar({"gekeken": nu.isoformat(), "laatste_dagen": sorted(dagen)})
+    grens = (nu - timedelta(days=2)).date().isoformat()
+    vinger = {k: v for k, v in vinger.items() if v[1] >= grens}
+    bewaar({"gekeken": nu.isoformat(), "laatste_dagen": sorted(dagen), "vinger": vinger})
     tijd = f"{W.nu_lokaal():%d-%m %H:%M}"          # elke regel met zijn tijd (Brussel)
     if not dagen:
         print(tijd, "niets gewijzigd")

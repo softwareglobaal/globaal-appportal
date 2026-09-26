@@ -705,6 +705,17 @@ check("een adres met een busnummer vindt toch zijn rit, en haakjes maken van een
       _bus == (50.94, 4.03) and not W.lees_titel("Mehdi: [TKNB-IN] Tom bellen (onderweg naar Aalst)")["reistijd"]
       and W.lees_titel("Mehdi: Lara naar huis brengen")["reistijd"], str(_bus))
 
+# De wijzigingswacht start geen ronde voor een kleur, omschrijving of herinnering (FR-62)
+import agenda_signaal as _sg
+_ev = {"id": "e1", "summary": "Mehdi: [UNABO-IN] EPB Sales", "status": "confirmed",
+       "start": {"dateTime": "2026-09-29T15:00:00+02:00"}, "end": {"dateTime": "2026-09-29T16:00:00+02:00"}}
+_v1 = {}
+_sd1, _ = _sg.te_verwerken("werk", [_ev], {}, _v1)
+_sd2, _ = _sg.te_verwerken("werk", [dict(_ev, colorId="3", description="x")], dict(_v1), dict(_v1))
+_sd3, _ = _sg.te_verwerken("werk", [dict(_ev, start={"dateTime": "2026-09-29T16:00:00+02:00"})], dict(_v1), dict(_v1))
+check("de wijzigingswacht start geen ronde voor alleen een kleur of omschrijving, wel voor een echte wijziging",
+      _sd1 == {"2026-09-29"} and not _sd2 and _sd3 == {"2026-09-29"}, str((_sd1, _sd2, _sd3)))
+
 # Een postcode is geen projectnummer (FR-58)
 _pc = W.lees_titel("Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo")
 _pc2 = W.lees_titel("!! Mehdi & Catalin: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele")

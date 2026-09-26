@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "2.4",
+ "versie": "2.5",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -554,12 +554,12 @@
    "id": "FR-21",
    "datum": "24-09-2026",
    "gevonden_door": "zelfcontrole (weekcontrole)",
-   "fout": "Iets buiten de agent zet kleuren: elke nacht om 00:15 (gemeten 23-09 en 25-09) worden alle afspraken met UNABO of TKNB in de titel voor de komende vier weken paars en geel, een per seconde, in volgorde van datum. Andere firma's blijven ongemoeid.",
+   "fout": "Iets buiten de agent zet kleuren: elke 30 minuten, om :15 en :45 UTC (gemeten 26-09 met een volgmeting: 12:15:44 tot 12:16:11, 30 afspraken), worden alle afspraken met UNABO of TKNB in de titel voor de komende vier weken paars en geel, een per seconde. [UNAB-..] en de andere firma's blijven ongemoeid. Eerst gezien 23-09.",
    "gevolg": "De kleur zegt niet meer wat de titel zegt (paars is leverancier online, geel is onbevestigd). Omdat de volledige ronde alleen op werkdagen en acht dagen vooruit draait, bleef het in het weekend en verder dan acht dagen staan.",
    "waarom_niet_gezien": "Google zegt niet wie een afspraak wijzigt; het merk van de agent bleef staan, alleen de kleur veranderde.",
    "oorzaak": "Een programma dat rechtstreeks bij Google schrijft met schrijfrecht op de werkagenda, met een vaste regel per firma (UNABO paars, TKNB geel) en een venster van vier weken. Nagekeken en uitgesloten op 26-09: alle cronjobs, timers en containers op de VM (geen andere code zet een kleur), de launchd-taken en crontab op de Mac, de geplande Claude-taken en cloudroutines, de Codex-automatiseringen en Apps Script in de Drive van mch@. Het patroon (elke dag tussen 0 en 1 uur, een per seconde) past bij een Apps Script-trigger of een Make/Zapier-scenario op een ander Google-account.",
    "soort_oorzaak": "bron",
-   "oplossing": "Het kleurherstel (agenda_wacht.py --kleuren) draait elk uur om :20, ook 's nachts en in het weekend, kijkt 29 dagen vooruit en zet alleen de kleuren terug; elke keer staat in mijnagents-data/agenda-kleurherstel.json. De zelfcontrole meldt zolang het gebeurt (kleur_nacht). De bron uitzetten is aan Mehdi: script.google.com/home/triggers en myaccount.google.com/connections nakijken op de accounts met schrijfrecht op de werkagenda.",
+   "oplossing": "Het kleurherstel (agenda_wacht.py --kleuren) draait om :17 en :47, net na de actor, ook 's nachts en in het weekend, 29 dagen vooruit; elke keer staat in mijnagents-data/agenda-kleurherstel.json. De wijzigingswacht reageert niet meer op kleuren (FR-62). De zelfcontrole meldt zolang het gebeurt (kleur_nacht). De bron uitzetten is aan Mehdi: script.google.com/home/triggers en myaccount.google.com/connections nakijken op de accounts met schrijfrecht op de werkagenda.",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
@@ -1319,6 +1319,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een adres met een busnummer vindt toch zijn rit, en haakjes maken van een afspraak geen rit"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-62",
+   "datum": "26-09-2026",
+   "gevonden_door": "Claude (Google-plafond om 09:00 al op, op een zaterdag)",
+   "fout": "De wijzigingswacht zag elke 12 minuten 20 tot 58 'wijzigingen' en draaide telkens de ronde voor 15 dagen; het Google-plafond (100 routeberekeningen) was om 09:00 op.",
+   "gevolg": "Nieuwe ritten na 09:00 kregen alleen een schatting zonder verkeer, en de agenda werd de hele dag heen en weer geschreven.",
+   "waarom_niet_gezien": "Het logboek van de wijzigingswacht leest niemand, en elke ronde afzonderlijk zag er gewoon uit.",
+   "oorzaak": "De wacht reageerde op elke wijziging (het veld updated), ook op een kleur van buiten (FR-21), een omschrijving van de Zoom-dossierwacht en de eigen herinneringen en merken van de agent.",
+   "soort_oorzaak": "code",
+   "oplossing": "De wacht vergelijkt een vingerafdruk (titel, status, tijd, plaats, gasten) met de vorige keer; alleen een echte wijziging start een ronde.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de wijzigingswacht start geen ronde voor alleen een kleur of omschrijving, wel voor een echte wijziging"
    },
    "controle": [],
    "status": "opgelost"

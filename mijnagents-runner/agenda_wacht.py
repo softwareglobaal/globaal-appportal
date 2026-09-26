@@ -1276,9 +1276,9 @@ def kleuren_zetten(items, alleen_dag=None):
     return gezet, goed, geen, fout, vast
 
 
-# Kleurherstel, elk uur, ook in het weekend (FR-21). Gemeten 23-09 en 25-09-2026: elke nacht om
-# 00:15 zet iets buiten de agent, rechtstreeks bij Google, elke afspraak met UNABO of TKNB in de
-# titel voor de komende vier weken op paars en geel, een per seconde. Het zit niet op de server,
+# Kleurherstel om :17 en :47, ook 's nachts en in het weekend (FR-21). Gemeten 26-09-2026 met een
+# volgmeting: elke 30 minuten, om :15 en :45 UTC, zet iets buiten de agent, rechtstreeks bij Google,
+# elke afspraak met UNABO of TKNB in de titel voor de komende vier weken op paars en geel, een per seconde. Het zit niet op de server,
 # niet op de Mac, niet in Claude of Codex. De volledige ronde kijkt maar acht dagen vooruit en
 # draait niet in het weekend, dus bleef de agenda van zaterdag de hele dag fout. Deze korte ronde
 # zet alleen de kleuren terug (geen ritten, geen Routes, geen oproepen) en onthoudt wanneer.
@@ -2608,7 +2608,7 @@ def main():
 
 
 if __name__ == "__main__":
-    if "--kleuren" in sys.argv:          # elk uur, ook 's nachts en in het weekend (FR-21)
+    if "--kleuren" in sys.argv:          # om :17 en :47, ook 's nachts en in het weekend (FR-21)
         print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · kleurherstel", flush=True)
         kleurherstel()
         sys.exit(0)

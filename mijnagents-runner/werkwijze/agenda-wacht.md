@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 7.12 (26-09-2026, plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
+Versie 7.13 (26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -380,9 +380,9 @@ Wat ik daaruit meeneem:
 - De kleur volgt de titel. Bij elke kleur die ik zet laat ik een onzichtbaar merk achter. Staat er een
   andere kleur, dan zet ik ze terug en meld ik het met het tijdstip van de wijziging; wie iets anders wil
   tonen, verandert de titel (?? voor onzeker). Ligt de regel vast, dan los ik het op in plaats van te vragen.
-- Kleurherstel (FR-21): elke nacht om 00:15 zet iets buiten mij, rechtstreeks bij Google, alle UNABO- en
-  TKNB-afspraken van de komende vier weken op paars en geel. Daarom zet `agenda_wacht.py --kleuren` elk uur
-  om :20, ook 's nachts en in het weekend, alleen de kleuren terug, 29 dagen vooruit. Elke keer staat in
+- Kleurherstel (FR-21): elke 30 minuten, om :15 en :45 UTC, zet iets buiten mij, rechtstreeks bij Google, alle
+  UNABO- en TKNB-afspraken van de komende vier weken op paars en geel. Daarom zet `agenda_wacht.py --kleuren` om
+  :17 en :47, ook 's nachts en in het weekend, alleen de kleuren terug, 29 dagen vooruit. Elke keer staat in
   `mijnagents-data/agenda-kleurherstel.json`; de zelfcontrole meldt het (kleur_nacht) tot de bron uit is.
 - Alle tijden zijn Brusselse tijd. De VM draait op UTC; cron start mij vaker en ik beslis
   zelf of het mijn beurt is. Elke ronde begint in het logboek met haar tijdstip.
@@ -438,8 +438,9 @@ Wat ik daaruit meeneem:
 
 Wanneer (Brusselse tijd):
 - Volledige ronde: werkdagen om 06:30, daarna elke twee uur tot 18:30.
-- Wijzigingswacht: elke 12 minuten van 06:00 tot 23:59, elke dag; bij een wijziging de ronde voor die dag.
-- Kleurherstel: elk uur om :20, dag en nacht, ook in het weekend, 29 dagen vooruit.
+- Wijzigingswacht: elke 12 minuten van 06:00 tot 23:59, elke dag; verandert titel, tijd, plaats, status of
+  gasten, dan de ronde voor die dag. Een kleur of omschrijving alleen start geen ronde.
+- Kleurherstel: om :17 en :47, dag en nacht, ook in het weekend, 29 dagen vooruit.
 - Filewacht: elke 10 minuten van 06:00 tot 21:59. De Bode: elke minuut, volgens het belrooster.
 - Zelfcontrole: werkdagen om 07:05.
 - Weekend: geen volledige ronde en geen oproepen over vastgelopen afspraken. De ronde van vrijdag kijkt

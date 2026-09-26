@@ -1,5 +1,5 @@
 {
- "versie": "4.13",
+ "versie": "4.14",
  "datum": "2026-09-26",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -268,8 +268,8 @@
   },
   "kleurherstel": {
    "wat": "agenda_wacht.py --kleuren: alleen de kleuren terugzetten naar de regel, 29 dagen vooruit, geen ritten, geen Routes, geen oproepen",
-   "wanneer": "elk uur om :20 (cron op de VM), ook 's nachts en in het weekend",
-   "waarom": "elke nacht om 00:15 zet iets buiten de agent alle UNABO- en TKNB-afspraken van vier weken op paars en geel (FR-21); de volledige ronde kijkt maar acht dagen vooruit en draait niet in het weekend",
+   "wanneer": "om :17 en :47 (cron op de VM), ook 's nachts en in het weekend",
+   "waarom": "elke 30 minuten, om :15 en :45 UTC, zet iets buiten de agent alle UNABO- en TKNB-afspraken van vier weken op paars en geel (FR-21)",
    "spoor": "mijnagents-data/agenda-kleurherstel.json; de zelfcontrole meldt kleur_nacht zolang het gebeurt",
    "bron_uitzetten": "aan Mehdi: script.google.com/home/triggers en myaccount.google.com/connections op de accounts met schrijfrecht op de werkagenda"
   }
@@ -375,7 +375,7 @@
   {
    "nr": 10,
    "naam": "kleuren",
-   "wanneer": "elke ronde en elk uur (kleurherstel)",
+   "wanneer": "elke ronde en om :17 en :47 (kleurherstel)",
    "wat": "de kleur volgt de titel; een afwijkende kleur wordt teruggezet met het tijdstip waarop ze veranderde; vaste agendakleuren blijven"
   },
   {
@@ -1202,8 +1202,8 @@
  "dagprogramma": {
   "waarom": "Mehdi, 26-09-2026: 'weet de agent wat die moet dagelijks doen?' De oude takenlijst had 10 stappen, de agent deed er 18. Dit is het volledige programma, in Brusselse tijd; de VM draait op UTC en elk script beslist zelf of het zijn beurt is.",
   "volledige_ronde": "werkdagen om 06:30, daarna elke twee uur tot 18:30 (agenda_wacht.py --ronde)",
-  "wijzigingswacht": "elke 12 minuten van 06:00 tot 23:59, elke dag: verandert er een afspraak, dan de ronde voor die dag (agenda_signaal.py -> agenda_wacht.py --dag)",
-  "kleurherstel": "elk uur om :20, dag en nacht, ook in het weekend, 29 dagen vooruit (agenda_wacht.py --kleuren)",
+  "wijzigingswacht": "elke 12 minuten van 06:00 tot 23:59, elke dag: verandert de titel, tijd, plaats, status of gasten van een afspraak, dan de ronde voor die dag; een kleur of omschrijving alleen start geen ronde (agenda_signaal.py -> agenda_wacht.py --dag)",
+  "kleurherstel": "om :17 en :47, dag en nacht, ook in het weekend, 29 dagen vooruit, net na de kleurwissel van buiten (agenda_wacht.py --kleuren)",
   "filewacht": "elke 10 minuten van 06:00 tot 21:59: loopt een rit uit door file, dan een oproep (file_wacht.py)",
   "de_bode": "elke minuut: belt volgens het belrooster, online 5 minuten vooraf, buiten 5 minuten voor het vertrek (bode.py)",
   "zelfcontrole": "werkdagen om 07:05: de agenda nakijken tegen het foutenregister (zelfcontrole.py)",
