@@ -1,5 +1,5 @@
 {
- "versie": "4.12",
+ "versie": "4.13",
  "datum": "2026-09-26",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -321,53 +321,98 @@
   {
    "nr": 1,
    "naam": "lezen",
-   "wanneer": "bij elke ronde en bij elke wijziging",
-   "wat": "alle agenda's uit de lijst van gisteren tot zeven dagen vooruit, dubbele uitnodigingen één keer"
+   "wanneer": "elke ronde",
+   "wat": "alle agenda's uit de lijst, van gisteren tot acht dagen vooruit (Lara tot het einde van het schooljaar voor de ritten), plus de archiefagenda's, die alleen gelezen worden"
   },
   {
    "nr": 2,
    "naam": "titel ontleden",
-   "wat": "firma, soort, type, nummer, buiten, onzeker; wat niet klopt wordt gemeld"
+   "wanneer": "elke ronde",
+   "wat": "firma, soort, activiteit, projectnummer, klant, adres, !!, ??, ZL en VR; een postcode is nooit een projectnummer"
   },
   {
    "nr": 3,
    "naam": "koppelen",
-   "wat": "aan een deal in Pipedrive via het projectnummer, anders via de naam"
+   "wanneer": "elke ronde",
+   "wat": "H-Architects-afspraken aan de Pipedrive-deal (bedrijf 10068585), via het projectnummer, anders via de naam"
   },
   {
    "nr": 4,
-   "naam": "reistijd",
-   "wat": "per dag een keten van ritten, met van waar naar waar, en alleen na de laatste buitenafspraak terug naar huis"
+   "naam": "titels rechtzetten",
+   "wanneer": "elke ronde",
+   "wat": "vrije tekst naar de code, en aanvullen met activiteit, klant bij een projectnummer en adres bij buiten; zelf bij een afspraak zonder gasten die niet terugkeert, anders een voorstel (gasten, Calendly, reeksen)"
   },
   {
    "nr": 5,
-   "naam": "kleuren",
-   "wat": "volgens de kleurregels; vaste agendakleuren laat hij met rust"
+   "naam": "online zonder link",
+   "wanneer": "elke ronde",
+   "wat": "een extern online gesprek zonder link krijgt ZL vooraan en de notitie dat Mehdi de link stuurt; de agent zet zelf geen link"
   },
   {
    "nr": 6,
    "naam": "herinneringen",
-   "wat": "alles behalve intern, plus een melding op het vertrekmoment"
+   "wanneer": "elke ronde",
+   "wat": "alles behalve intern: online 5 minuten, buiten 30 minuten, een rit op het vertrekmoment"
   },
   {
    "nr": 7,
-   "naam": "botsingen",
-   "wat": "overlappende afspraken melden, uitnodigingen niet dubbel tellen"
+   "naam": "reistijd",
+   "wanneer": "elke ronde",
+   "wat": "per dag een keten van ritten met het autootje, van waar naar waar, in de kleur en op de agenda van de afspraak; alleen na de laatste buitenafspraak terug naar huis"
   },
   {
    "nr": 8,
-   "naam": "signalen",
-   "wat": "titels zonder code, buiten zonder adres, oude firmacodes"
+   "naam": "belrooster",
+   "wanneer": "elke ronde",
+   "wat": "een oproep per afspraak voor De Bode: online 5 minuten vooraf, buiten 5 minuten voor het vertrek"
   },
   {
    "nr": 9,
-   "naam": "klaarzetten",
-   "wat": "per firma op het bord, plus het dagplan en gisteren zonder verslag"
+   "naam": "botsingen en dubbele boekingen",
+   "wanneer": "elke ronde",
+   "wat": "overlappende afspraken, en twee afspraken met iemand van buiten tegelijk, over alle agenda's heen"
   },
   {
    "nr": 10,
-   "naam": "verslag",
-   "wat": "werkverslag op het bord met alles wat hij deed en vond"
+   "naam": "kleuren",
+   "wanneer": "elke ronde en elk uur (kleurherstel)",
+   "wat": "de kleur volgt de titel; een afwijkende kleur wordt teruggezet met het tijdstip waarop ze veranderde; vaste agendakleuren blijven"
+  },
+  {
+   "nr": 11,
+   "naam": "doorgegaan of niet",
+   "wanneer": "elke ronde",
+   "wat": "een voorbije afspraak die nog op ?? staat"
+  },
+  {
+   "nr": 12,
+   "naam": "signalen",
+   "wanneer": "elke ronde",
+   "wat": "titels zonder code, buiten zonder adres, oude firmacodes, afspraken in een archiefagenda, Zoom-links zonder wachtwoord"
+  },
+  {
+   "nr": 13,
+   "naam": "vragen in de agenda",
+   "wanneer": "elke ronde",
+   "wat": "wat Mehdi moet beslissen staat in de afspraak zelf: VR vooraan de titel en de vraag in de omschrijving (alleen zonder gasten)"
+  },
+  {
+   "nr": 14,
+   "naam": "vastgelopen: bellen",
+   "wanneer": "alleen de geplande ronde, werkdagen 08:00-20:00",
+   "wat": "een oproep met een zin wat Mehdi moet doen, nooit twee keer voor dezelfde vraag; 48 uur vooruit, vrijdag tot en met maandag"
+  },
+  {
+   "nr": 15,
+   "naam": "klaarzetten en verslag",
+   "wanneer": "elke ronde",
+   "wat": "per afdeling op het bord, het dagplan, klantcontact van gisteren zonder verslag, en het werkverslag met alles wat hij deed en vond"
+  },
+  {
+   "nr": 16,
+   "naam": "zelfcontrole",
+   "wanneer": "werkdagen 07:05",
+   "wat": "de agenda van een week terug tot een week vooruit nakijken tegen het foutenregister: TERUGGEKEERD, NIEUW of BEKEND"
   }
  ],
  "controle": {
@@ -1153,5 +1198,15 @@
   "regel": "elk boekingskanaal telt alle agenda's als bezet mee; er is nog een kanaal: Calendly General (haprospecties@gmail.com), dat werk, Lara en het archief meetelt",
   "gemeten": "26-09-2026: light@ telde niets mee en boekte 2610 om 09:00 bovenop Cel Breugelmans; 'HA: Klant' op light@ is daarom op 26-09 uitgezet",
   "agent": "ziet elke overlapping van twee afspraken met iemand van buiten, op welke agenda ook, belt binnen 48 uur een keer met een zin; de zelfcontrole kijkt acht dagen vooruit (FR-57)"
+ },
+ "dagprogramma": {
+  "waarom": "Mehdi, 26-09-2026: 'weet de agent wat die moet dagelijks doen?' De oude takenlijst had 10 stappen, de agent deed er 18. Dit is het volledige programma, in Brusselse tijd; de VM draait op UTC en elk script beslist zelf of het zijn beurt is.",
+  "volledige_ronde": "werkdagen om 06:30, daarna elke twee uur tot 18:30 (agenda_wacht.py --ronde)",
+  "wijzigingswacht": "elke 12 minuten van 06:00 tot 23:59, elke dag: verandert er een afspraak, dan de ronde voor die dag (agenda_signaal.py -> agenda_wacht.py --dag)",
+  "kleurherstel": "elk uur om :20, dag en nacht, ook in het weekend, 29 dagen vooruit (agenda_wacht.py --kleuren)",
+  "filewacht": "elke 10 minuten van 06:00 tot 21:59: loopt een rit uit door file, dan een oproep (file_wacht.py)",
+  "de_bode": "elke minuut: belt volgens het belrooster, online 5 minuten vooraf, buiten 5 minuten voor het vertrek (bode.py)",
+  "zelfcontrole": "werkdagen om 07:05: de agenda nakijken tegen het foutenregister (zelfcontrole.py)",
+  "weekend": "geen volledige ronde en geen oproepen over vastgelopen afspraken; wel de wijzigingswacht, het kleurherstel, de filewacht en De Bode. Daarom kijkt de ronde van vrijdag voor oproepen tot en met maandag vooruit."
  }
 }

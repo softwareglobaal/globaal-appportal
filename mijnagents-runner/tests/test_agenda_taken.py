@@ -674,6 +674,26 @@ _zd9 = [z for s_, z in W.vastgelopen(_idb, _nd) if s_.startswith("dubbel:")]
 check("twee klanten tegelijk worden gezien, ook over agenda's heen, en in een zin gemeld",
       [(a["id"], b["id"]) for a, b in _pd9] == [("c1", "y1")] and len(_zd9) == 1 and "Verzet er een" in _zd9[0], str((_pd9, _zd9)))
 
+# De takenlijst noemt elke stap die de agent echt doet (FR-60)
+_tk = json.loads((HIER / "werkwijze" / "agenda-taken.json").read_text(encoding="utf-8"))
+_tk_tekst = json.dumps({"taken": _tk.get("taken"), "dag": _tk.get("dagprogramma")}, ensure_ascii=False).lower()
+_tk_stappen = ["titels rechtzetten", "zl", "herinneringen", "reistijd", "belrooster", "dubbele boekingen", "kleuren",
+               "kleurherstel", "vragen in de agenda", "vastgelopen", "zelfcontrole", "wijzigingswacht", "filewacht", "de bode",
+               "archiefagenda", "zoom-link"]
+_tk_mist = [s for s in _tk_stappen if s not in _tk_tekst]
+_wk = (HIER / "werkwijze" / "agenda-wacht.md").read_text(encoding="utf-8")
+check("de takenlijst noemt elke stap die de agent echt doet",
+      not _tk_mist and "Een afspraak verplaatsen, verwijderen of een titel veranderen" not in _wk, str(_tk_mist))
+
+# Alleen de geplande ronde belt; vrijdag kijkt tot en met maandag vooruit (FR-59)
+_src59 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+_i59 = _src59.index("gebeld = bel_als_vastgelopen(items + archief)")
+_vr = W.nu_lokaal()
+_vrijdag = _vr + _td(days=(4 - _vr.weekday()) % 7)
+check("alleen de geplande ronde belt, en vrijdag kijkt tot maandag vooruit",
+      'if not DAG_ARG and "--ronde" in sys.argv:' in _src59[_i59 - 500:_i59]
+      and W.belvenster_uren(_vrijdag) >= 72 and W.belvenster_uren(_vrijdag + _td(days=3)) == 48)
+
 # Een postcode is geen projectnummer (FR-58)
 _pc = W.lees_titel("Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo")
 _pc2 = W.lees_titel("!! Mehdi & Catalin: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele")

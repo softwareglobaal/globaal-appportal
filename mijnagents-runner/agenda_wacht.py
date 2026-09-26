@@ -2291,6 +2291,13 @@ def vragen_in_agenda(items, nu=None):
     return gezet, weg
 
 
+def belvenster_uren(nu):
+    """Hoe ver vooruit een vastgelopen afspraak een oproep waard is. In het weekend loopt geen geplande
+    ronde, dus vrijdag kijkt tot en met maandag: een probleem voor maandagochtend moet vrijdag gemeld zijn.
+    Gezien 26-09-2026: de Zoom-links zonder wachtwoord van maandag 09:00 kwamen pas zaterdag aan het licht (FR-59)."""
+    return 96 if nu.weekday() == 4 else 48
+
+
 def bel_als_vastgelopen(items, nu=None):
     """Mehdi, 25-09-2026: 'als je vast zit dan kan je mij bellen via de agent en in een zin zeggen wat ik moet
     doen'. Een oproep per ronde, tussen 08:00 en 20:00, en nooit twee keer voor dezelfde vraag."""
@@ -2301,7 +2308,7 @@ def bel_als_vastgelopen(items, nu=None):
         staat = json.load(open(BELVRAGEN))
     except (OSError, ValueError):
         staat = {}
-    for sleutel, zin in vastgelopen(items, nu):
+    for sleutel, zin in vastgelopen(items, nu, uren=belvenster_uren(nu)):
         if sleutel in staat:
             continue
         uit = bellen.bel_vast(zin, AGENDA_SLOT) or bellen.bel_afspraak(zin, AGENDA_SLOT)  # vastzit-nummer, niet het afsprakennummer
@@ -2559,9 +2566,10 @@ def main():
         vg, vw = vragen_in_agenda(rit_items)
         if vg or vw:
             ag.log(f"dag {vandaag}", "schrijf", f"vragen in de agenda: {vg} gezet (VR), {vw} opgelost")
-        if not DAG_ARG:
+        if not DAG_ARG and "--ronde" in sys.argv:
             # het archief telt mee: een Calendly-boeking kan daar nog staan (FR-39). Een sleutel per dag, zonder
             # aantal, zodat een telling met of zonder archief geen tweede oproep geeft (gezien 25-09-2026, 13:51).
+            # Alleen de geplande ronde belt: een ronde die Claude met de hand start, belt nooit (FR-59).
             gebeld = bel_als_vastgelopen(items + archief)
             if gebeld:
                 ag.log(f"dag {vandaag}", "bellen", "vastgelopen: Mehdi gebeld", gebeld)

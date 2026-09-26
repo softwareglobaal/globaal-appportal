@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "2.2",
+ "versie": "2.3",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -164,6 +164,13 @@
    "les": "Een herstel dat alleen op werkdagen en acht dagen vooruit loopt, laat een fout die elke nacht vier weken vooruit terugkomt het hele weekend staan. Het herstel moet even ver en even vaak kijken als de fout.",
    "uit": [
     "FR-21"
+   ]
+  },
+  {
+   "id": "L21",
+   "les": "Een grens die in de cron zit, geldt niet voor wie het script met de hand start. Zet de grens in de code die de handeling start, niet alleen in de cron.",
+   "uit": [
+    "FR-59"
    ]
   }
  ],
@@ -1258,6 +1265,42 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een postcode in het adres wordt nooit een projectnummer, en blijft in de belzin"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-59",
+   "datum": "26-09-2026",
+   "gevonden_door": "Claude",
+   "fout": "Een volledige ronde die Claude op zaterdag om 13:45 met de hand startte, belde Mehdi echt (Zoom-links zonder wachtwoord voor maandag 09:00 en 13:00).",
+   "gevolg": "Een oproep op zaterdag die niemand had aangekondigd. Omgekeerd kwam hetzelfde probleem zonder die ronde pas maandag om 08:30 aan het licht, een half uur voor de afspraak.",
+   "waarom_niet_gezien": "De weekend- en uurgrens zat alleen in de cron (--ronde), niet in het bellen zelf; het venster van 48 uur keek vrijdag niet tot maandag.",
+   "oorzaak": "bel_als_vastgelopen liep in elke volledige ronde, ook een handmatige; het belvenster hield geen rekening met het weekend.",
+   "soort_oorzaak": "code",
+   "oplossing": "Alleen de geplande ronde (--ronde) belt nog; op vrijdag kijkt het belvenster tot en met maandag vooruit (96 uur).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "alleen de geplande ronde belt, en vrijdag kijkt tot maandag vooruit"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-60",
+   "datum": "26-09-2026",
+   "gevonden_door": "Mehdi ('weet de agent wat die moet dagelijks doen?')",
+   "fout": "De takenlijst in agenda-taken.json had 10 stappen terwijl de agent er 16 uitvoert, zonder uren of weekend, en de werkwijze zei nog 'nooit een titel veranderen'.",
+   "gevolg": "Wie de werkwijze leest (Mehdi, een andere sessie of AI) weet niet wat de agent elke dag doet en wanneer.",
+   "waarom_niet_gezien": "Elke nieuwe taak kwam in een eigen sectie van de werkwijze, de lijst zelf werd nooit bijgewerkt en niets toetste haar.",
+   "oorzaak": "Geen grendel tussen de code en de takenlijst.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "Takenlijst herschreven (16 stappen plus het dagprogramma met uren en weekend), 'Wat ik nooit doe' rechtgezet; een test faalt zodra een stap ontbreekt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de takenlijst noemt elke stap die de agent echt doet"
    },
    "controle": [],
    "status": "opgelost"
