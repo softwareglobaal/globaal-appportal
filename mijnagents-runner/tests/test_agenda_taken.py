@@ -739,7 +739,7 @@ check("!! staat altijd vooraan, voor de naam; alleen VR gaat ervoor",
       and _tv("!!Mehdi: Lara ophalen bij oma") == "!! Mehdi: Lara ophalen bij oma"
       and _tv("VR Mehdi: !! architect") == "VR !! Mehdi: architect" and _tv("VR !! Mehdi: architect") == "VR !! Mehdi: architect"
       and _tv("\U0001F697 Reistijd: thuis \u2192 Herent") == "\U0001F697 Reistijd: thuis \u2192 Herent"
-      and _tv("Mehdi: [HARC-KO] 2607 - Robin") == "Mehdi: [HARC-KO] 2607 - Robin")
+      and _tv("Mehdi: [HARC-KO] 2607 - Robin") == "Mehdi: [HARC-KO] 2607 - Robin" and _tv("Lara jaardag!!") == "Lara jaardag!!")
 
 # Afspraak is afspraak: ritten tot een jaar vooruit op elke agenda, en OSRM wordt bewaard (FR-65)
 _va = []

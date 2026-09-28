@@ -743,11 +743,12 @@ def titels_normaliseren(items, alleen_dag=None):
 def tekens_vooraan(titel):
     """'!!' staat altijd helemaal vooraan, voor de naam; alleen VR gaat er nog voor. Mehdi, 28-09-2026: "ik wil
     dat !! altijd eerst is en dan mijn naam". Een rit (autootje) blijft zoals hij is (FR-64)."""
-    if "!!" not in titel or titel.lstrip().startswith("\U0001F697"):
+    # alleen het teken zelf, niet de uitroep achter een woord ('Lara jaardag!!')
+    if not re.search(r"(?<!\w)!!", titel) or titel.lstrip().startswith("\U0001F697"):
         return titel
     vr = re.match(r"^\s*VR\s+", titel)
     kern = titel[vr.end():] if vr else titel
-    kern = re.sub(r"\s{2,}", " ", re.sub(r"\s*!!\s*", " ", kern)).strip()
+    kern = re.sub(r"\s{2,}", " ", re.sub(r"\s*(?<!\w)!!\s*", " ", kern)).strip()
     return ("VR " if vr else "") + "!! " + kern
 
 
