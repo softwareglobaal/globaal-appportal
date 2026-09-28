@@ -300,10 +300,11 @@ def lees_titel(titel):
         rest = rest[mt.end():].strip(" -")
     if uit["type"] in BUITEN_TYPES:
         uit["buiten"] = True
-    # Een postcode in het adres is geen projectnummer. Gezien 26-09-2026: 'Hamid, Nieuwstraat 39, 3360
-    # Korbeek-Lo' werd project 3360, het adres kwam er een tweede keer achter en de postcode viel uit de
-    # belzin (FR-58). In de titelvorm staat de postcode altijd na een komma, het projectnummer nooit.
-    mn = re.search(r"\b(\d{4,5})\b", re.sub(r",\s*\d{4}\s+[A-Za-zÀ-ÿ].*$", "", rest))
+    # Het adres is geen projectnummer: niet de postcode en niet het huisnummer. Gezien 26-09-2026: 'Hamid,
+    # Nieuwstraat 39, 3360 Korbeek-Lo' werd project 3360; op 28-09 werd 'Shaniel, Mechelsesteenweg 1143, 3020
+    # Herent' project 1143 en viel het huisnummer uit de belzin (FR-58). In de titelvorm staat het projectnummer
+    # altijd voor de eerste komma, het adres erna.
+    mn = re.search(r"\b(\d{4,5})\b", rest.split(",", 1)[0])
     if mn:
         uit["nummer"] = mn.group(1)
     kaal = re.sub(rf"\b{uit['nummer']}\b", "", rest, count=1) if uit["nummer"] else rest
