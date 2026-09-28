@@ -267,6 +267,25 @@ groepen die binden en wat `apps.yaml` voorschrijft. De afsluitcode is 1 zodra er
 een verschil is. Een verschil is geen fout op zichzelf: het betekent dat iemand
 moet kiezen welke van de twee klopt, want na de omzetting geldt `apps.yaml`.
 
+### 3.5 Vanzelf, via de cron
+
+Staat `scripts/apps-bijwerken.sh` in de cron van de VM, dan hoeft stap 3.2 niet
+met de hand:
+
+```
+*/5 * * * * cd ~/appportal && sh scripts/apps-bijwerken.sh
+```
+
+Die pullt, kijkt met `scripts/apps-ontbrekend.py` welke actieve apps nog geen
+nginx-blok of compose-service hebben, en maakt alleen die aan. Een gemergede
+pull request met een nieuwe entry in `apps.yaml` staat daarmee binnen een paar
+minuten live.
+
+Wat de cron niet doet: bestaande apps aanraken, apps verwijderen, migraties
+draaien, of nginx herladen als `nginx -t` zakt. In dat laatste geval blijft de
+oude configuratie staan en komt de fout in `~/apps-bijwerken.log`. Zien wat hij
+zou doen zonder iets te wijzigen: `python3 scripts/apps-ontbrekend.py --uitleg`.
+
 Aan de portal-code verandert niets.
 
 ## 3a. OMV Pipeline (placeholder → real app)
