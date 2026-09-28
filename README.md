@@ -203,40 +203,71 @@ Leave `AUTHENTIK_API_TOKEN` empty to keep the page disabled (it then shows a
 
 ---
 
-## 3. Add a fifth application later
+## 3. Een app toevoegen
 
-Example: `TimeTracker` on internal port 3006, managers only.
-(Ports 3001–3005 are in use: factorydocs/inventory/finance/maintenance/omv.)
+Een nieuwe app is één entry in `apps.yaml` plus één commando. Wie de app bouwt
+levert de entry aan in een pull request; de beheerder kijkt de rollen na, merget
+en draait het commando op de VM.
 
-1. **docker-compose.yml** - add a service (copy `app-maintenance`, reuse the
-   stub image or point `build:` at the real app):
+### 3.1 De entry (door de bouwer van de app, in een PR)
 
-   ```yaml
-   app-timetracker:
-     image: appportal-stubapp
-     pull_policy: never
-     restart: unless-stopped
-     environment:
-       APP_NAME: TimeTracker
-       PORT: "3006"
-       BASE_DOMAIN: ${BASE_DOMAIN}
-     networks: [appnet]
-   ```
+```yaml
+  - id: timetracker
+    name: TimeTracker
+    description: Urenregistratie voor projecten
+    subdomain: timetracker
+    roles: [admin, manager]
+    poort: 3006
+    status: active
+```
 
-2. **nginx/templates/30-apps.conf.template** - copy a server block; set
-   `server_name timetracker.${BASE_DOMAIN};` and
-   `set $app_upstream http://app-timetracker:3006;`.
-3. **certs**: add the new subdomain to the cert by extending the default
-   `SUBDOMAINS` list in `scripts/generate-certs.sh` (or set `CERT_SUBDOMAINS`
-   in `.env`); the existing CA is reused, so no browser re-import is needed.
-4. **apps.yaml** - add an entry with `id`, `name`, `subdomain: timetracker`
-   and `roles: [manager]`. (Picked up automatically, no restart needed.)
-5. **Authentik** - repeat §2.6 (proxy provider + application + add to the
-   embedded outpost) and §2.7 (group binding) for the new app. (You can copy
-   `scripts/add-omv-app.py` as a template for scripting this.)
-6. Apply: `docker compose up -d certgen app-timetracker && docker compose restart nginx`
+`roles` is de enige regel die echt over veiligheid gaat: precies deze groepen
+komen de app in. Heeft de app daarbinnen nog eigen rechten, bijvoorbeeld wie mag
+bewerken, zet die groepen dan in `extra_groepen`; die worden wel aangemaakt maar
+geven op zichzelf geen toegang.
 
-No portal code changes are required.
+### 3.2 Het commando (door de beheerder, op de VM)
+
+```bash
+python3 scripts/nieuwe-app.py timetracker              # laat zien wat er gebeurt
+python3 scripts/nieuwe-app.py timetracker --schrijf --registreer
+docker compose up -d app-timetracker
+docker compose up -d --force-recreate nginx
+```
+
+Dat maakt het nginx-blok in `nginx/templates/`, de service in
+`docker-compose.override.yml`, en de proxy provider, applicatie, groepsbindingen
+en outpost in Authentik. Zonder `--schrijf` verandert er niets en zie je alleen
+de uitkomst.
+
+Certificaten hoef je niet te regelen: alle subdomeinen delen er al een.
+
+### 3.3 Alleen de Authentik-kant
+
+Is nginx en compose al geregeld en wil je alleen de registratie bijwerken, dan
+volstaat:
+
+```bash
+python3 scripts/app-registreren.py timetracker --dry-run   # toont de code
+python3 scripts/app-registreren.py timetracker
+```
+
+Dit script vervangt de losse `add-<app>-app.py` scripts. Het maakt bewust geen
+gebruikers of wachtwoorden aan; dat deden enkele oude scripts wel, en dat hoort
+niet in een registratie.
+
+### 3.4 Controleren voordat je de oude scripts weggooit
+
+```bash
+python3 scripts/vergelijk-authentik.py
+```
+
+Dit leest de oude `add-*.py` scripts statisch en zet per app naast elkaar welke
+groepen die binden en wat `apps.yaml` voorschrijft. De afsluitcode is 1 zodra er
+een verschil is. Een verschil is geen fout op zichzelf: het betekent dat iemand
+moet kiezen welke van de twee klopt, want na de omzetting geldt `apps.yaml`.
+
+Aan de portal-code verandert niets.
 
 ## 3a. OMV Pipeline (placeholder → real app)
 
