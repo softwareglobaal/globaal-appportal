@@ -1,4 +1,14 @@
 # Application catalog. Echte applicaties; toegang via één groep per app.
+#
+# roles         de groepen die de app mogen openen. Dit wordt in Authentik een
+#               policy binding; wie hier niet in staat, komt er niet in.
+# extra_groepen groepen die wel moeten bestaan maar GEEN toegang geven. Bedoeld
+#               voor rechten die de app zelf aftoetst, zoals vermogen-editors.
+# host          alleen nodig als de app niet op <subdomain>.globaal.be draait.
+# poort         alleen nodig om nginx en compose te genereren voor een nieuwe app.
+#
+# scripts/app-registreren.py zet dit om naar Authentik.
+# scripts/vergelijk-authentik.py laat zien of dat klopt met wat er nu staat.
 apps:
   - id: omv
     name: OMV Pipeline
@@ -23,6 +33,7 @@ apps:
     description: Agenda en beschikbaarheid van Mehdi
     subdomain: agenda
     roles: [agenda-bekijken]
+    extra_groepen: [agenda-volledig, agenda-architect]
     status: active
   - id: telefoonregister
     name: Telefoonregister
@@ -53,12 +64,14 @@ apps:
     description: Panden, verzekeringen, leningen & leasingen, syndicus
     subdomain: vermogen
     roles: [admin, manager, vermogen]
+    extra_groepen: [vermogen-editors]
     status: active
   - id: draaiboek
     name: Draaiboek
     description: Playbook-management — draaiboeken, dossiers en runs
     subdomain: draaiboek
     roles: [admin, manager, draaiboek]
+    extra_groepen: [draaiboek-editors]
     status: active
   - id: agents
     name: Agents
