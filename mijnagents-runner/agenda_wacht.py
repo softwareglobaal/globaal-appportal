@@ -29,6 +29,7 @@ import agenda  # noqa: E402
 import bellen  # noqa: E402
 import projectadressen  # noqa: E402
 import bord  # noqa: E402
+import zoom  # noqa: E402
 import organisatie  # noqa: E402
 import pipedrive  # noqa: E402
 
@@ -2194,6 +2195,33 @@ def zoom_zonder_wachtwoord(items, nu=None, uren=48):
     return uit
 
 
+def zoom_zonder_wachtkamer(items, nu=None, uren=48):
+    """Online afspraken met een gast waarvan de Zoom-meeting geen wachtkamer heeft: met het wachtwoord in de link
+    staat de klant meteen binnen, ook voor Mehdi er is. Gezien 28-09-2026: Alexander Uwents stond in de meeting
+    zonder dat Mehdi hem toeliet; als enige van 18 Calendly-meetings sinds 18-09 had die geen wachtkamer (FR-63).
+    Leest Zoom alleen. Geeft [(a, meeting_id)]."""
+    if not zoom.beschikbaar():
+        return []
+    nu = nu or nu_lokaal()
+    uit = []
+    for a in items:
+        if not a.get("deelnemers") or "T" not in a.get("start", "") or a["titel"].lower().startswith("canceled"):
+            continue
+        try:
+            start = datetime.fromisoformat(a["start"])
+        except ValueError:
+            continue
+        if not (nu < start <= nu + timedelta(hours=uren)):
+            continue
+        m = re.search(r"zoom\.us/j/(\d+)", f"{a.get('locatie') or ''} {a.get('omschrijving') or ''}")
+        if not m:
+            continue
+        d = zoom.meeting(m.group(1))
+        if d and not (d.get("settings") or {}).get("waiting_room"):
+            uit.append((a, m.group(1)))
+    return uit
+
+
 EXTERNE_SOORTEN = {"KB", "KO", "PB", "PO", "LB", "LO", "AB", "AO", "B2B"}
 
 
@@ -2267,6 +2295,13 @@ def vastgelopen(items, nu=None, uren=48):
         namen = ", ".join(f"{(lees_titel(x['titel'])['klant'] or x['titel'])[:25]} om {x['start'][11:16]}" for x in lijst[:4])
         uit.append((f"zoompwd:{dag}", f"Mehdi, {len(lijst)} Zoom-afspraken op {dag[8:10]}-{dag[5:7]} hebben een link zonder wachtwoord "
                     f"({namen}): stuur de klant de uitnodiging vanuit Zoom."))
+    # Zoom zonder wachtkamer: de klant staat meteen binnen (FR-63)
+    for a, mid in zoom_zonder_wachtkamer(items, nu, uren):
+        s_ = datetime.fromisoformat(a["start"])
+        dagnaam = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'][s_.weekday()]
+        klant = (lees_titel(a["titel"])["klant"] or a["titel"])[:30]
+        uit.append((f"wachtkamer:{mid}", f"Mehdi, de Zoom met {klant} van {dagnaam} om {s_:%H:%M} heeft geen wachtkamer: "
+                    f"zet ze aan in Zoom bij die meeting, anders staat de klant meteen binnen."))
     return uit
 
 

@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 7.13 (26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
+Versie 7.14 (28-09-2026, plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -406,6 +406,8 @@ Wat ik daaruit meeneem:
   zin. Elk boekingskanaal moet alle agenda's als bezet meetellen; er is nog een: Calendly General (FR-57).
 - Een klant krijgt altijd de volledige Zoom-link met het wachtwoord erin. Zie ik bij een afspraak met een gast
   binnen 48 uur een Zoom-link zonder wachtwoord, dan bel ik Mehdi een keer per dag met een zin (FR-54).
+- Elke Zoom-meeting met een klant heeft een wachtkamer: Mehdi laat de klant zelf toe. Heeft een meeting binnen
+  48 uur er geen, dan bel ik een keer met een zin (FR-63). Zoom lees ik alleen; aanzetten doet Mehdi in Zoom.
 - Mehdi kijkt naar de agenda, niet naar Telegram of het bord. Wat ik van hem nodig heb, zet ik in de afspraak
   zelf: VR helemaal vooraan de titel (voor ZL) en de vraag in een zin bovenaan de omschrijving. Opgelost: weg.
 - De titel zegt ook wat Mehdi gaat doen: [FIRMA-SOORT] ACTIVITEIT nummer - klant, adres. Architectuur voorlopig
@@ -460,7 +462,7 @@ Per ronde:
 9. Botsingen en dubbele boekingen, over alle agenda's heen.
 10. Kleuren: de kleur volgt de titel; een afwijking zet ik terug.
 11. Voorbije afspraken die nog op ?? staan.
-12. Signalen: zonder code, buiten zonder adres, oude codes, archief, Zoom-link zonder wachtwoord.
+12. Signalen: zonder code, buiten zonder adres, oude codes, archief, Zoom-link zonder wachtwoord of zonder wachtkamer.
 13. Vragen in de agenda zelf: VR vooraan de titel, de vraag in de omschrijving (alleen zonder gasten).
 14. Vastgelopen: een oproep met een zin, alleen vanuit de geplande ronde, werkdagen 08:00-20:00.
 15. Klaarzetten per afdeling, dagplan, werkverslag.

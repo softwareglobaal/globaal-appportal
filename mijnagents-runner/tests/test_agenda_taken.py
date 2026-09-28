@@ -716,6 +716,22 @@ _sd3, _ = _sg.te_verwerken("werk", [dict(_ev, start={"dateTime": "2026-09-29T16:
 check("de wijzigingswacht start geen ronde voor alleen een kleur of omschrijving, wel voor een echte wijziging",
       _sd1 == {"2026-09-29"} and not _sd2 and _sd3 == {"2026-09-29"}, str((_sd1, _sd2, _sd3)))
 
+# Een Zoom-meeting zonder wachtkamer wordt gezien en in een zin gemeld (FR-63)
+_zo = (W.zoom.beschikbaar, W.zoom.meeting)
+W.zoom.beschikbaar = lambda: True
+W.zoom.meeting = lambda mid: {"settings": {"waiting_room": mid != "111"}}
+_zs = (W.nu_lokaal() + _td(hours=5)).replace(second=0, microsecond=0)
+_zi = [{"id": "z1", "titel": "Mehdi: [HA-PO] Alexander Uwents", "start": _zs.isoformat(), "einde": (_zs + _td(minutes=45)).isoformat(),
+        "kalender": W.WERKAGENDA, "deelnemers": ["a@x.be"], "locatie": "https://us06web.zoom.us/j/111?pwd=x"},
+       {"id": "z2", "titel": "Mehdi: [HA-PO] Philippe Seminck", "start": _zs.isoformat(), "einde": (_zs + _td(minutes=45)).isoformat(),
+        "kalender": W.WERKAGENDA, "deelnemers": ["p@x.be"], "locatie": "https://us06web.zoom.us/j/222?pwd=y"}]
+try:
+    _zv = [(s, z) for s, z in W.vastgelopen(_zi, W.nu_lokaal()) if s.startswith("wachtkamer:")]
+finally:
+    W.zoom.beschikbaar, W.zoom.meeting = _zo
+check("een Zoom-meeting zonder wachtkamer wordt gezien en in een zin gemeld",
+      [s for s, _ in _zv] == ["wachtkamer:111"] and "geen wachtkamer" in _zv[0][1], str(_zv))
+
 # Een postcode is geen projectnummer (FR-58)
 _pc = W.lees_titel("Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo")
 _pc2 = W.lees_titel("!! Mehdi & Catalin: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele")

@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "2.7",
+ "versie": "2.8",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1340,6 +1340,26 @@
    },
    "controle": [],
    "status": "opgelost"
+  },
+  {
+   "id": "FR-63",
+   "datum": "28-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Alexander Uwents (HA-prospect, 28-09 18:00) stond in de Zoom-meeting zonder dat Mehdi hem toeliet.",
+   "gevolg": "Een klant zit in de meeting voor Mehdi er is en zonder dat hij hem toelaat.",
+   "waarom_niet_gezien": "De agent keek alleen of het wachtwoord in de link zat (FR-54), niet of de meeting een wachtkamer heeft; met het wachtwoord in de link en zonder wachtkamer staat de klant meteen binnen.",
+   "oorzaak": "Die ene meeting (gemaakt door Calendly op 27-09 om 14:50 UTC, host info@h-invest.be) had geen wachtkamer; de 17 andere Calendly-meetings sinds 18-09 en de boekingen van 28-09 hebben er wel een. De Zoom-app mag alleen lezen, dus wie of wat het uitzette is niet te zien.",
+   "soort_oorzaak": "bron",
+   "oplossing": "De agent leest bij elke online afspraak met een gast de Zoom-instellingen; zonder wachtkamer belt hij Mehdi binnen 48 uur een keer met een zin, en de zelfcontrole kijkt acht dagen vooruit. De wachtkamer aanzetten blijft een handeling in Zoom.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een Zoom-meeting zonder wachtkamer wordt gezien en in een zin gemeld"
+   },
+   "controle": [
+    "zoom_zonder_wachtkamer"
+   ],
+   "status": "bewaakt"
   }
  ]
 }

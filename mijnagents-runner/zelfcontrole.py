@@ -180,6 +180,8 @@ def bevindingen(items, van, tot, nu):
     # een klant met een Zoom-link zonder wachtwoord raakt niet in de vergadering (FR-54)
     for a in W.zoom_zonder_wachtwoord(binnen, nu, uren=24 * 8):
         meld("zoom_zonder_wachtwoord", a, "Zoom-link zonder wachtwoord: de klant kan gevraagd worden om een wachtwoord")
+    for a, _mid in W.zoom_zonder_wachtkamer(binnen, nu, uren=24 * 8):
+        meld("zoom_zonder_wachtkamer", a, "Zoom-meeting zonder wachtkamer: de klant staat meteen binnen, ook voor Mehdi er is")
     # een rit van nul minuten is geen rit: hij verbergt dat het te krap is
     for x in ritten:
         if x["start"][:10] >= vandaag and "T" in x["start"] and x["start"] == x.get("einde"):
