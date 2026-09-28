@@ -80,7 +80,7 @@ def main():
     for kal in W.kalenders():
         q = {"updatedMin": sinds, "singleEvents": "true", "showDeleted": "true", "maxResults": "250",
              "timeMin": (nu - timedelta(days=1)).isoformat(),
-             "timeMax": (nu + timedelta(days=30)).isoformat(),
+             "timeMax": (nu + timedelta(days=366)).isoformat(),   # afspraak is afspraak, hoe ver ook (FR-65)
              "fields": "items(id,summary,status,updated,start/dateTime,start/date,end/dateTime,end/date,location,attendees/email)"}
         url = f"{A.API}/calendars/{urllib.parse.quote(kal, safe='')}/events?" + urllib.parse.urlencode(q)
         try:

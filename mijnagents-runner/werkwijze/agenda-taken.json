@@ -1,5 +1,5 @@
 {
- "versie": "4.15",
+ "versie": "4.16",
  "datum": "2026-09-28",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -54,8 +54,8 @@
   }
  ],
  "titelconventie": {
-  "vorm": "Mehdi: !! [FIRMA-SOORT] TYPE nummer - klant, straat nummer, postcode gemeente",
-  "voorbeeld": "Mehdi: !! [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen",
+  "vorm": "!! Mehdi: [FIRMA-SOORT] TYPE nummer - klant, straat nummer, postcode gemeente",
+  "voorbeeld": "!! Mehdi: [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen",
   "soorten": {
    "AB": "aannemer buiten",
    "AO": "aannemer online",
@@ -96,7 +96,7 @@
    "AI+AT": "AI en automatisering (interne bespreking)"
   },
   "tekens": {
-   "!!": "buiten, reistijd nodig",
+   "!!": "buiten, reistijd nodig. Staat altijd helemaal vooraan, voor de naam; alleen VR gaat er nog voor (Mehdi, 28-09-2026)",
    "??": "nog niet bevestigd",
    "VR": "vraag van de agent: helemaal vooraan (voor ZL), de vraag staat bovenaan de omschrijving; gaat eraf als ze opgelost is"
   },
@@ -340,7 +340,7 @@
    "nr": 4,
    "naam": "titels rechtzetten",
    "wanneer": "elke ronde",
-   "wat": "vrije tekst naar de code, en aanvullen met activiteit, klant bij een projectnummer en adres bij buiten; zelf bij een afspraak zonder gasten die niet terugkeert, anders een voorstel (gasten, Calendly, reeksen)"
+   "wat": "vrije tekst naar de code, en aanvullen met activiteit, klant bij een projectnummer en adres bij buiten; zelf bij een afspraak zonder gasten die niet terugkeert, anders een voorstel (gasten, Calendly, reeksen); !! altijd vooraan, voor de naam"
   },
   {
    "nr": 5,
@@ -358,7 +358,7 @@
    "nr": 7,
    "naam": "reistijd",
    "wanneer": "elke ronde",
-   "wat": "per dag een keten van ritten met het autootje, van waar naar waar, in de kleur en op de agenda van de afspraak; alleen na de laatste buitenafspraak terug naar huis"
+   "wat": "per dag een keten van ritten met het autootje, van waar naar waar, in de kleur en op de agenda van de afspraak; alleen na de laatste buitenafspraak terug naar huis; voor elke buitenafspraak tot een jaar vooruit"
   },
   {
    "nr": 8,
@@ -766,7 +766,7 @@
   },
   "thuisrit_telt": "Staat er na een buitenafspraak al een rit naar huis in de agenda, dan gaat Mehdi naar huis en vertrekt de volgende rit van thuis. Gezien 21-09-2026: op vrijdag vertrok de rit naar Lara van de griffie, terwijl er om 11:00 al een rit naar huis stond",
   "lara_maandag_vrijdag": {
-   "afspraak": "Mehdi: !! [LARA] Lara ophalen en thuis afzetten, maandag en vrijdag 16:00-17:00, op de agenda van Lara",
+   "afspraak": "!! Mehdi: [LARA] Lara ophalen en thuis afzetten, maandag en vrijdag 16:00-17:00, op de agenda van Lara",
    "ophalen": "De Speelkriebel, Jozef Pierrestraat 104, 3010 Kessel-Lo",
    "bron": "de agenda van Lara zelf: 'Lara → Cokido' op 10-08-2026, locatie 'haar school De Speelkriebel'",
    "afzetten": "thuis, Herfstlaan 65",
@@ -784,7 +784,7 @@
   "niet_voor_de_vorige_klaar_is": "een rit vertrekt nooit voor de vorige afspraak gedaan is. Dinsdag is hij tot 17:40 bij oma, dus de rit naar het zwembad begint om 17:40, ook als de rijtijd met buffer langer is. Past de rit zelfs zonder buffer niet, dan meldt de agent 'te krap'",
   "een_rit_een_afspraak": "een heenrit van de agent eindigt op het begin van zijn afspraak, een terugrit begint op haar einde. Zo wordt een rit nooit aan een buurafspraak gekoppeld. Een rit die Mehdi zelf zette binnen drie uur ervoor of erna, telt ook, en dan maakt de agent er geen tweede. Gezien 21-09-2026: de zwemles nam de rit naar oma over",
   "lara_donderdag": {
-   "afspraak": "Mehdi: !! [LARA] Lara ophalen bij oma en thuis afzetten (optioneel), elke donderdag 17:45-18:30, op de agenda van Lara",
+   "afspraak": "!! Mehdi: [LARA] Lara ophalen bij oma en thuis afzetten (optioneel), elke donderdag 17:45-18:30, op de agenda van Lara",
    "reeks": "reeks vanaf 2026-09-24 tot 2027-07-01, 34 donderdagen. Mehdi heeft de reeks op 21-09-2026 bevestigd (het ?? weggehaald)",
    "ophalen": "bij oma, Wilselsesteenweg 57, 3010 Leuven (zelfde oma als de dinsdagketen)",
    "afzetten": "thuis, Herfstlaan 65",
@@ -815,7 +815,8 @@
   "te_krap": "past de rit niet tussen twee afspraken, dan toont hij de echte rijtijd en dus de late aankomst (geen blok van nul minuten), en komt 'Te krap: je komt te laat' op het bord (FR-37)",
   "rit_volgt_afspraak": "de omschrijving van een rit volgt de titel van zijn afspraak; verhuist de afspraak naar een andere agenda (werk naar privé), dan verhuist de rit mee (FR-25, FR-28)",
   "autootje": "elke rit draagt het autootje vooraan, ook een rit die iemand met de hand zette; 'naar huis' in een titel is een rit (FR-40)",
-  "lara_naar_huis": "dinsdag 19:00 tot 19:30: '🚗 Reistijd: Stadionlaan 4 → thuis (Lara naar huis brengen)', de rit naar huis na de zwemles. Blijft tot 19:30 staan zodat er tijd is om Lara van de les naar huis te brengen; zonder melding (Mehdi, 24-09-2026)"
+  "lara_naar_huis": "dinsdag 19:00 tot 19:30: '🚗 Reistijd: Stadionlaan 4 → thuis (Lara naar huis brengen)', de rit naar huis na de zwemles. Blijft tot 19:30 staan zodat er tijd is om Lara van de les naar huis te brengen; zonder melding (Mehdi, 24-09-2026)",
+  "hoe_ver_vooruit": "elke buitenafspraak, tot een jaar vooruit, op elke agenda: afspraak is afspraak (Mehdi, 28-09-2026; vervangt de acht dagen van 21-09). Google Routes alleen binnen 48 uur, daarbuiten OSRM met de filefactor; die rijtijden worden 90 dagen bewaard"
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30 Brusselse tijd",
@@ -1215,7 +1216,7 @@
  "dagprogramma": {
   "waarom": "Mehdi, 26-09-2026: 'weet de agent wat die moet dagelijks doen?' De oude takenlijst had 10 stappen, de agent deed er 18. Dit is het volledige programma, in Brusselse tijd; de VM draait op UTC en elk script beslist zelf of het zijn beurt is.",
   "volledige_ronde": "werkdagen om 06:30, daarna elke twee uur tot 18:30 (agenda_wacht.py --ronde)",
-  "wijzigingswacht": "elke 12 minuten van 06:00 tot 23:59, elke dag: verandert de titel, tijd, plaats, status of gasten van een afspraak, dan de ronde voor die dag; een kleur of omschrijving alleen start geen ronde (agenda_signaal.py -> agenda_wacht.py --dag)",
+  "wijzigingswacht": "elke 12 minuten, tot een jaar vooruit, van 06:00 tot 23:59, elke dag: verandert de titel, tijd, plaats, status of gasten van een afspraak, dan de ronde voor die dag; een kleur of omschrijving alleen start geen ronde (agenda_signaal.py -> agenda_wacht.py --dag)",
   "kleurherstel": "om :17 en :47, dag en nacht, ook in het weekend, 29 dagen vooruit, net na de kleurwissel van buiten (agenda_wacht.py --kleuren)",
   "filewacht": "elke 10 minuten van 06:00 tot 21:59: loopt een rit uit door file, dan een oproep (file_wacht.py)",
   "de_bode": "elke minuut: belt volgens het belrooster, online 5 minuten vooraf, buiten 5 minuten voor het vertrek (bode.py)",

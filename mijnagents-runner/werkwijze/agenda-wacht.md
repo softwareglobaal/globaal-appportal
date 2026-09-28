@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 7.14 (28-09-2026, plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
+Versie 7.15 (28-09-2026, plus !! altijd vooraan en ritten voor elke buitenafspraak tot een jaar vooruit; eerder plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -44,9 +44,9 @@ afspraken staan op mehdiprivewerkagenda, er is geen eigen agenda. Afdeling op he
 Voorbeeld: `Mehdi: [ELEVAIT-IN] Shaniel - LegalFly`.
 
 **De titel** (voorbeelden uit het document):
-`Mehdi: !! [HA-KB] WB 2310 - werfbezoek gemeente Aarschot`,
-`Mehdi: !! [HA-KB] OPL 2531 Spleesters`, `Mehdi: !! [UNABO-KB] PLB 46073 Wathion -
-plaatsbeschrijving`, `Mehdi: !! [UNABO-PB] SCN Janssens - 3D scan`, `Mehdi: [HA-KO] 2531
+`!! Mehdi: [HA-KB] WB 2310 - werfbezoek gemeente Aarschot`,
+`!! Mehdi: [HA-KB] OPL 2531 Spleesters`, `!! Mehdi: [UNABO-KB] PLB 46073 Wathion -
+plaatsbeschrijving`, `!! Mehdi: [UNABO-PB] SCN Janssens - 3D scan`, `Mehdi: [HA-KO] 2531
 Spleesters - voortgang`, `Mehdi: ?? [HA-PB] 2512 plaatsbezoek`, `Mehdi: [UNABO-IN] team
 Energy wekelijks`, `Mehdi: [PRIVE] Tandarts Mathilda`, `🚗 Reistijd → Aarschot`,
 `🚗 Reistijd ← Aarschot`. Dus: `Mehdi:` eerst, dan de marker (`!!` buiten met
@@ -262,9 +262,10 @@ geen reistijd, geen titelfout. Ik laat hem staan, ook als ik een week leegmaak.
 - **Een rit hoort bij precies één afspraak**: mijn heenrit eindigt op haar begin,
   mijn terugrit begint op haar einde. Een rit die Mehdi zelf zette binnen drie uur,
   telt ook; dan maak ik er geen tweede.
-- **De agenda van Lara krijgt haar ritten tot het einde van het schooljaar** (300
-  dagen), de rest acht dagen. Een verre rit zet ik één keer; zodra de dag binnen acht
-  dagen komt, reken ik hem opnieuw uit met het echte verkeer. Een eigen rit waarvan
+- **Afspraak is afspraak: elke buitenafspraak krijgt meteen haar ritten, tot een jaar
+  vooruit** (Mehdi, 28-09-2026; vervangt de acht dagen van 21-09). Lara tot het einde van
+  het schooljaar. Een verre rit zet ik één keer; zodra de dag binnen acht dagen komt,
+  reken ik hem opnieuw uit met het echte verkeer. Een eigen rit waarvan
   de afspraak weg of verzet is, meld ik als 'rit zonder afspraak'; ik verwijder hem
   niet zelf.
 - **Google live verkeer enkel voor ritten binnen 48 uur.** Verder vooruit reken ik met de
@@ -457,7 +458,8 @@ Per ronde:
    afspraak zonder gasten die niet terugkeert; met gasten, Calendly of een reeks wordt het een voorstel.
 5. Een extern online gesprek zonder link: ZL vooraan en de notitie dat Mehdi de link stuurt.
 6. Herinneringen: alles behalve intern.
-7. Reistijd: een keten van ritten per dag, met het autootje, in de kleur van de afspraak.
+7. Reistijd: een keten van ritten per dag, met het autootje, in de kleur van de afspraak, voor elke
+   buitenafspraak tot een jaar vooruit (afspraak is afspraak, 28-09-2026).
 8. Belrooster voor De Bode: online 5 minuten vooraf, buiten 5 minuten voor het vertrek.
 9. Botsingen en dubbele boekingen, over alle agenda's heen.
 10. Kleuren: de kleur volgt de titel; een afwijking zet ik terug.

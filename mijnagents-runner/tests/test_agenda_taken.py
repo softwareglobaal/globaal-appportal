@@ -732,6 +732,39 @@ finally:
 check("een Zoom-meeting zonder wachtkamer wordt gezien en in een zin gemeld",
       [s for s, _ in _zv] == ["wachtkamer:111"] and "geen wachtkamer" in _zv[0][1], str(_zv))
 
+# !! altijd vooraan, voor de naam (FR-64)
+_tv = W.tekens_vooraan
+check("!! staat altijd vooraan, voor de naam; alleen VR gaat ervoor",
+      _tv("Mehdi: !! [HARC-PB] Shaniel, Mechelsesteenweg 1143, 3020 Herent") == "!! Mehdi: [HARC-PB] Shaniel, Mechelsesteenweg 1143, 3020 Herent"
+      and _tv("!!Mehdi: Lara ophalen bij oma") == "!! Mehdi: Lara ophalen bij oma"
+      and _tv("VR Mehdi: !! architect") == "VR !! Mehdi: architect" and _tv("VR !! Mehdi: architect") == "VR !! Mehdi: architect"
+      and _tv("\U0001F697 Reistijd: thuis \u2192 Herent") == "\U0001F697 Reistijd: thuis \u2192 Herent"
+      and _tv("Mehdi: [HARC-KO] 2607 - Robin") == "Mehdi: [HARC-KO] 2607 - Robin")
+
+# Afspraak is afspraak: ritten tot een jaar vooruit op elke agenda, en OSRM wordt bewaard (FR-65)
+_va = []
+_vo = (W.agenda.afspraken, W.kalenders)
+W.agenda.afspraken = lambda van, tot: _va.append((os.environ.get("CONTRACTEN_KALENDERS"), van, tot)) or []
+W.kalenders = lambda: [k for k in W.KALENDERS]
+try:
+    W.verre_afspraken()
+finally:
+    W.agenda.afspraken, W.kalenders = _vo
+_vk = {k for k, v, tt in _va if tt >= 365}
+_oc = W.OSRM_CACHE
+import tempfile as _tmp65
+W.OSRM_CACHE = os.path.join(_tmp65.mkdtemp(), "osrm.json")
+W._osrm.clear()
+W._osrm.update({"_": {}, "50.00000,4.00000>51.00000,5.00000": [42.0, __import__("time").time()]})
+try:
+    _om = W.vrije_rijtijd_min((50.0, 4.0), (51.0, 5.0))
+finally:
+    W.OSRM_CACHE = _oc
+    W._osrm.clear()
+check("afspraak is afspraak: elke agenda krijgt ritten tot een jaar vooruit, zonder elke ronde OSRM te vragen",
+      _vk >= {k for k in W.KALENDERS if not k.startswith("en.be#")} and _om == 42.0
+      and "days=366" in (HIER / "agenda_signaal.py").read_text(encoding="utf-8"), str((_va, _om)))
+
 # Een postcode is geen projectnummer (FR-58)
 _pc = W.lees_titel("Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo")
 _pc2 = W.lees_titel("!! Mehdi & Catalin: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele")

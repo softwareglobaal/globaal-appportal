@@ -235,13 +235,20 @@ def archief_afspraken(van_dagen=-1, tot_dagen=8):
 # agenda van Lara loopt in vaste reeksen per schooljaar; die ritten zet ik tot het
 # einde ervan, zodat Mehdi ze vooruit ziet. Mandaat van Mehdi, 21-09-2026.
 RIT_VOORUIT_DAGEN = {"Lara": 300}
+# Afspraak is afspraak: elke buitenafspraak krijgt meteen haar ritten, hoe ver vooruit ook. Mehdi, 28-09-2026,
+# toen de zitting van 23-11 geen rit kreeg: "hoe komt dat je heen en terug niet gerekend hebt ... afspraak is
+# afspraak". Dat vervangt de acht dagen van 21-09. Ver vooruit kost niets: Google telt alleen binnen 48 uur,
+# daarbuiten is het OSRM met de filefactor, en die rijtijden bewaar ik (FR-65).
+RIT_VOORUIT_ALLES = 365
 
 
 def verre_afspraken():
-    """De afspraken voorbij de gewone acht dagen, alleen van de agenda's in RIT_VOORUIT_DAGEN."""
+    """De afspraken voorbij de gewone acht dagen, van elke agenda die ik lees, tot een jaar vooruit."""
     uit = []
     for kid, naam in KALENDERS.items():
-        dagen = RIT_VOORUIT_DAGEN.get(naam)
+        dagen = max(RIT_VOORUIT_DAGEN.get(naam, 0), RIT_VOORUIT_ALLES)
+        if kid.startswith("en.be#"):
+            continue
         if dagen and kid in kalenders():
             os.environ["CONTRACTEN_KALENDERS"] = kid
             uit += agenda.afspraken(8, dagen)
@@ -730,6 +737,55 @@ def titels_normaliseren(items, alleen_dag=None):
                 gedaan += 1
             except Exception as e:  # noqa: BLE001
                 regels.append(f"{a['start'][:16]} {titel[:45]}: titel niet gezet ({type(e).__name__})")
+    return gedaan, regels
+
+
+def tekens_vooraan(titel):
+    """'!!' staat altijd helemaal vooraan, voor de naam; alleen VR gaat er nog voor. Mehdi, 28-09-2026: "ik wil
+    dat !! altijd eerst is en dan mijn naam". Een rit (autootje) blijft zoals hij is (FR-64)."""
+    if "!!" not in titel or titel.lstrip().startswith("\U0001F697"):
+        return titel
+    vr = re.match(r"^\s*VR\s+", titel)
+    kern = titel[vr.end():] if vr else titel
+    kern = re.sub(r"\s{2,}", " ", re.sub(r"\s*!!\s*", " ", kern)).strip()
+    return ("VR " if vr else "") + "!! " + kern
+
+
+def uitroep_vooraan(items, alleen_dag=None):
+    """Zet !! vooraan in elke komende titel zonder gasten, op elke agenda waar ik mag schrijven. Een reeks krijgt
+    het een keer, in de reeks zelf. Geeft (gezet, regels)."""
+    import urllib.parse
+    import urllib.request
+    tok = agenda._toegang()
+    nu = nu_lokaal().isoformat()
+    gedaan, regels, reeksen = 0, [], set()
+    for a in items:
+        if a.get("hele_dag") or "T" not in a.get("start", "") or a["start"] < nu[:len(a["start"])] \
+                or a.get("_archief") or a.get("deelnemers") or not mag_schrijven(a.get("kalender", "")):
+            continue
+        if alleen_dag and a["start"][:10] != alleen_dag:
+            continue
+        nieuw = tekens_vooraan(a["titel"])
+        if nieuw == a["titel"]:
+            continue
+        try:
+            if a.get("_reeks"):
+                if a["_reeks"] not in reeksen:
+                    reeksen.add(a["_reeks"])
+                    url = f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='@')}/events/{urllib.parse.quote(a['_reeks'])}"
+                    reeks = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": "Bearer " + tok}), timeout=30))
+                    nieuw_reeks = tekens_vooraan(reeks.get("summary") or "")
+                    if nieuw_reeks != (reeks.get("summary") or ""):
+                        _patch({"kalender": a["kalender"], "id": a["_reeks"]}, {"summary": nieuw_reeks}, tok)
+                        regels.append(f"reeks '{(reeks.get('summary') or '')[:50]}' -> '{nieuw_reeks[:60]}'")
+                        gedaan += 1
+            else:
+                _patch(a, {"summary": nieuw}, tok)
+                regels.append(f"{a['start'][:16]} '{a['titel'][:50]}' -> '{nieuw[:60]}'")
+                gedaan += 1
+            a["titel"] = nieuw
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"{a['start'][:16]} {a['titel'][:45]}: !! niet vooraan gezet ({type(e).__name__})")
     return gedaan, regels
 
 
@@ -1413,11 +1469,34 @@ def filefactor(vertrek):
     return DAL_FACTOR
 
 
+OSRM_CACHE = os.path.expanduser("~/appportal/mijnagents-data/osrm-rijtijden.json")
+_osrm = {}
+
+
 def vrije_rijtijd_min(van, naar):
+    """Rijtijd zonder verkeer (OSRM). Die verandert niet tussen twee vaste punten, dus ik bewaar ze 90 dagen:
+    met ritten tot een jaar vooruit (FR-65) zou elke ronde anders honderden aanvragen doen bij de openbare server."""
+    import time as _t
     import urllib.request
+    if not _osrm:
+        try:
+            _osrm.update(json.load(open(OSRM_CACHE)))
+        except (OSError, ValueError):
+            _osrm["_"] = {}
+    sleutel = f"{van[0]:.5f},{van[1]:.5f}>{naar[0]:.5f},{naar[1]:.5f}"
+    bewaard = _osrm.get(sleutel)
+    if bewaard and _t.time() - bewaard[1] < 90 * 86400:
+        return bewaard[0]
     url = f"https://router.project-osrm.org/route/v1/driving/{van[1]},{van[0]};{naar[1]},{naar[0]}?overview=false"
     d = json.load(urllib.request.urlopen(url, timeout=20))
-    return d["routes"][0]["duration"] / 60
+    minuten = d["routes"][0]["duration"] / 60
+    _osrm[sleutel] = [minuten, _t.time()]
+    try:
+        with open(OSRM_CACHE, "w") as f:
+            json.dump(_osrm, f)
+    except OSError:
+        pass
+    return minuten
 
 
 ROUTES_KEY = os.environ.get("GOOGLE_ROUTES_KEY", "").strip()
@@ -2471,8 +2550,9 @@ def main():
         # eerst de titel in één keer goed, dan de vaste Zoom, dan de rest
         ng, nregels = titels_normaliseren(rit_items, dag_grens)
         ag_, aregels = titels_aanvullen(rit_items, dag_grens)
-        ng += ag_
-        nregels += aregels
+        ug, uregels = uitroep_vooraan(rit_items, dag_grens)
+        ng += ag_ + ug
+        nregels += aregels + uregels
         zg, zregels = zoom_zetten(rit_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"titels: {ng} rechtgezet uit vrije tekst; link-notitie: {zg} gezet",
                "\n".join(nregels + zregels))

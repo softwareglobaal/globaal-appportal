@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "2.8",
+ "versie": "2.9",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1360,6 +1360,42 @@
     "zoom_zonder_wachtkamer"
    ],
    "status": "bewaakt"
+  },
+  {
+   "id": "FR-64",
+   "datum": "28-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Titels hadden !! nu eens voor, dan weer na de naam ('Mehdi: !! [HARC-PB] Shaniel ...', '!! Mehdi: [UNAB-KB] ...'); ook Claude zette ze op 26 en 28-09 na de naam.",
+   "gevolg": "Buitenafspraken springen niet in het oog; Mehdi wil !! altijd eerst.",
+   "waarom_niet_gezien": "De titelvorm in de werkwijze zelf zette !! na de naam ('Mehdi: !! [FIRMA-SOORT] ...'), en niets controleerde de volgorde.",
+   "oorzaak": "Een titelvorm die niet overeenkwam met wat Mehdi wil, en geen normalisatie van de volgorde.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "Vorm nu '!! Mehdi: [FIRMA-SOORT] ...' (VR mag er nog voor). De agent zet !! vooraan in elke komende titel zonder gasten, ook in reeksen (in de reeks zelf).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "!! staat altijd vooraan, voor de naam; alleen VR gaat ervoor"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-65",
+   "datum": "28-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "De zitting van de ondernemingsrechtbank op 23-11 kreeg geen rit heen en terug.",
+   "gevolg": "Een buitenafspraak ver vooruit staat zonder reistijd in de agenda; Mehdi ziet niet wanneer hij moet vertrekken.",
+   "waarom_niet_gezien": "Zo afgesproken op 21-09: ritten alleen acht dagen vooruit (behalve Lara), omdat werkafspraken schuiven. De wijzigingswacht keek bovendien maar 30 dagen vooruit.",
+   "oorzaak": "Een horizon van acht dagen voor ritten.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "Afspraak is afspraak: ritten voor elke buitenafspraak tot een jaar vooruit, op elke agenda; de wijzigingswacht kijkt 366 dagen vooruit. Ver vooruit kost niets: Google alleen binnen 48 uur, daarbuiten OSRM, en die rijtijden worden 90 dagen bewaard.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "afspraak is afspraak: elke agenda krijgt ritten tot een jaar vooruit, zonder elke ronde OSRM te vragen"
+   },
+   "controle": [],
+   "status": "opgelost"
   }
  ]
 }
