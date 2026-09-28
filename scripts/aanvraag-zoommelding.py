@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Meldt elke nieuwe websiteaanvraag van UNABO meteen in Zoom, kanaal
-"General (Sales team)".
+"Binnengekomen leads-Automation" (tot 28 sep 2026: "General (Sales team)").
 
 Waarom (vraag van Siyan, 24 sep 2026): sales moet weten dat er een aanvraag
 aankomt VOORDAT de automaat ze in Pipedrive zet. Verschijnt de deal daarna
@@ -34,7 +34,8 @@ import urllib.request
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-KANAAL = "General (Sales team)"
+KANAAL = "Binnengekomen leads-Automation"
+PIPEDRIVE = "UNABO"   # welk Pipedrive-account deze aanvragen krijgt
 LEADS_CONTAINER = "unabo-web"
 LEADS_PAD = "/data/aanvragen.jsonl"
 STAND = os.path.expanduser("~/appportal/aanvraag-data/zoommelding.state")
@@ -80,6 +81,7 @@ def bericht(a):
     except ValueError:
         moment = "zonet"
     return ("📩 Nieuwe aanvraag via de website\n"
+            f"Pipedrive: {PIPEDRIVE}\n"
             f"Klant: {naam}\n"
             f"Dienst: {diensten}\n"
             f"Binnengekomen: {moment} (Belgische tijd)\n"
