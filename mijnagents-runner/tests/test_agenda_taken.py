@@ -761,7 +761,11 @@ try:
 finally:
     W.OSRM_CACHE = _oc
     W._osrm.clear()
+_src65 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+_ver_alleen = all(x in _src65 for x in ("herinneringen_zetten(kort_items", "zoom_zetten(kort_items", "titels_aanvullen(kort_items",
+                                         "reistijd_zetten(rit_items", "uitroep_vooraan(rit_items"))
 check("afspraak is afspraak: elke agenda krijgt ritten tot een jaar vooruit, zonder elke ronde OSRM te vragen",
+      _ver_alleen and
       _vk >= {k for k in W.KALENDERS if not k.startswith("en.be#")} and _om == 42.0
       and "days=366" in (HIER / "agenda_signaal.py").read_text(encoding="utf-8"), str((_va, _om)))
 

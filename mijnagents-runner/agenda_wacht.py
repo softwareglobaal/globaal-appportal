@@ -2547,13 +2547,19 @@ def main():
         else:
             extra = []
         rit_items = items + [a for a in extra if (a["kalender"], a["id"], a["start"]) not in gezien_ids]
+        # Ver vooruit (FR-65) dient alleen voor de ritten en !! vooraan. Titels aanvullen, Zoom en herinneringen
+        # blijven bij de acht dagen (en Lara, zoals voorheen). Gezien 28-09-2026: met een jaar aan afspraken voor
+        # elke stap duurde de ronde langer dan 25 minuten en werd elk exemplaar van elke reeks apart herschreven.
+        lara = {k for k, n in KALENDERS.items() if n == "Lara"}
+        kort_items = rit_items if DAG_ARG else [a for a in rit_items
+                                                if (a["kalender"], a["id"], a["start"]) in gezien_ids or a["kalender"] in lara]
         # eerst de titel in één keer goed, dan de vaste Zoom, dan de rest
-        ng, nregels = titels_normaliseren(rit_items, dag_grens)
-        ag_, aregels = titels_aanvullen(rit_items, dag_grens)
+        ng, nregels = titels_normaliseren(kort_items, dag_grens)
+        ag_, aregels = titels_aanvullen(kort_items, dag_grens)
         ug, uregels = uitroep_vooraan(rit_items, dag_grens)
         ng += ag_ + ug
         nregels += aregels + uregels
-        zg, zregels = zoom_zetten(rit_items, dag_grens)
+        zg, zregels = zoom_zetten(kort_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"titels: {ng} rechtgezet uit vrije tekst; link-notitie: {zg} gezet",
                "\n".join(nregels + zregels))
         if zregels or [r for r in nregels if "VOORSTEL" in r]:
@@ -2562,7 +2568,7 @@ def main():
                           "uniek": f"agenda-zoom-titel:{vandaag}:{dag_grens or 'alle'}",
                           "inhoud": "\n".join("- " + r for r in (zregels + [r for r in nregels if "VOORSTEL" in r])[:30])}])
         # eerst de gewone herinneringen, dan de ritten: zo heeft de vertrekmelding het laatste woord
-        gezet, al, weg, fout_h = herinneringen_zetten(rit_items, dag_grens)
+        gezet, al, weg, fout_h = herinneringen_zetten(kort_items, dag_grens)
         rg, ral, rgeen, rfout, rregels = reistijd_zetten(rit_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"reistijd: {rg} blok(ken) gemaakt, {ral} bestonden al, {rgeen} zonder adres, {rfout} mislukt", "\n".join(rregels))
         # Een rit die niet berekend raakte mag nooit alleen een cijfer zijn: dan ziet
@@ -2690,7 +2696,7 @@ def main():
             noden.append({"tekst": "Herinneringen konden niet gezet worden", "wie": "claude-code"})
         if in_archief:
             noden.append({"tekst": "Er wordt nog geboekt in een archiefagenda: het Calendly-kanaal omzetten naar werk", "wie": "mehdi"})
-        vg, vw = vragen_in_agenda(rit_items)
+        vg, vw = vragen_in_agenda(kort_items)
         if vg or vw:
             ag.log(f"dag {vandaag}", "schrijf", f"vragen in de agenda: {vg} gezet (VR), {vw} opgelost")
         if not DAG_ARG and "--ronde" in sys.argv:
