@@ -2026,16 +2026,19 @@ def reistijd_zetten(items, alleen_dag=None):
         # Valt er een extern gesprek tijdens de heenrit, dan komt hij aan voor het begint en
         # doet hij het geparkeerd ter plaatse. Gezien 23-09-2026: Genk, aankomst 11:00 voor
         # het gesprek met Rem Braspenning, pas om 11:30 de brasserie in.
+        # Mehdi, 29-09-2026: "ik moet de afspraken hiervoor in de auto doen zodat ik op tijd daar ben". Staat 'in de auto'
+        # in de afspraak, dan doet hij de gesprekken onderweg: ik vervroeg de aankomst niet en waarschuw niet (FR-70).
+        in_de_auto = "in de auto" in f"{a.get('titel') or ''} {a.get('omschrijving') or ''}".lower()
         aankomst, reden_aankomst = start, None
-        for _ in range(3):
+        for _ in range(0 if in_de_auto else 3):
             vertrek = aankomst - timedelta(minutes=heen)
             tijdens = [z for z in externe_gesprekken(vertrek, aankomst) if vertrek <= z[0] < aankomst]
             if not tijdens:
                 break
             aankomst, reden_aankomst = tijdens[0][0], tijdens[0][2]
             heen, fh = rijtijd_min(vertrek_van, doel, aankomst - timedelta(minutes=heen))
-        lopend = [z for z in externe_gesprekken(aankomst - timedelta(minutes=heen), aankomst)
-                  if z[0] < aankomst - timedelta(minutes=heen)]
+        lopend = [] if in_de_auto else [z for z in externe_gesprekken(aankomst - timedelta(minutes=heen), aankomst)
+                                        if z[0] < aankomst - timedelta(minutes=heen)]
         if lopend:
             regels.append(f"{a['start'][:16]} {a['titel'][:40]}: LET OP, extern gesprek "
                           f"'{lopend[0][2]['titel'][:30]}' loopt nog bij vertrek; rijdend kan dat niet")

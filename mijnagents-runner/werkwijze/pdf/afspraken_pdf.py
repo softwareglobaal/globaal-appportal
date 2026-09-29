@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.14"
+VERSIE = "2.15"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -104,11 +104,11 @@ tr{{break-inside:avoid}}
 .twee{{column-count:2;column-gap:7mm}} .twee table{{break-inside:avoid}}
 </style>
 <div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; 24 september 2026 &nbsp;|&nbsp; versie {VERSIE}, <b>definitief</b> &nbsp;|&nbsp;
-bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.18 op de server</div>
+bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.19 op de server</div>
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
-Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.13 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
+Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.14 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
 Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de server. De test <code>tests/test_agenda_taken.py</code>
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
@@ -248,6 +248,7 @@ nooit uit een titel. Komt het adres uit de projectmap, dan zet de agent het ook 
 <li><b>Rijtijd.</b> Google met het echte verkeer, alleen voor ritten binnen 48 uur; verder vooruit de gratis routeplanner maal een
 spitsfactor. Plus {snap['buffer']} minuten buffer, naar boven afgerond op vijf. Een schatting overschrijft nooit een echte meting.
 <b>Google heeft een hard plafond van {snap['plafond']} aanvragen per dag</b>; dat gaat alleen omhoog in de code.</li>
+<li><b>'In de auto':</b> staat dat in een buitenafspraak, dan doet Mehdi de gesprekken ervoor onderweg en vertrekt de rit gewoon op tijd.</li>
 <li><b>Tussendoor naar huis alleen als het kan:</b> minstens 90 minuten tussen twee buitenafspraken; anders rechtstreeks van de ene naar de andere.</li>
 <li><b>Eigen ritten ruimt de agent zelf op.</b> Een rit die hij zette en die niet meer klopt (de afspraak is weg of verzet, of er volgt nog een buitenafspraak), haalt hij zelf weg. Een afspraak of een rit die Mehdi zelf zette, raakt hij nooit aan.</li>
 <li><b>Afspraak is afspraak:</b> elke buitenafspraak krijgt meteen haar rit heen en terug, tot een jaar vooruit; de agenda van Lara het hele schooljaar.</li>

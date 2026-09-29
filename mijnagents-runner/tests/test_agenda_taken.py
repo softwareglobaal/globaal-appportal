@@ -796,6 +796,11 @@ _src69 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("met minder dan 90 minuten tussen twee buitenafspraken rijdt de agent rechtstreeks, ook met iets achter het bureau",
       "if bureau and (s_volgend - e_) < timedelta(minutes=90):" in _src69)
 
+# 'In de auto': gesprekken onderweg, de aankomst schuift niet (FR-70)
+_src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("staat 'in de auto' in de afspraak, dan schuift de aankomst niet voor gesprekken onderweg",
+      "for _ in range(0 if in_de_auto else 3):" in _src70 and "lopend = [] if in_de_auto else" in _src70)
+
 # Een postcode is geen projectnummer (FR-58)
 _pc = W.lees_titel("Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo")
 _pc2 = W.lees_titel("!! Mehdi & Catalin: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele")

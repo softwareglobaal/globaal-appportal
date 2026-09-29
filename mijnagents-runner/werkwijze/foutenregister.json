@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.3",
+ "versie": "3.4",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1447,6 +1447,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "met minder dan 90 minuten tussen twee buitenafspraken rijdt de agent rechtstreeks, ook met iets achter het bureau"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-70",
+   "datum": "29-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Bij Nelleke Stropke (01-10 20:00) zou de agent het vertrek vervroegen om de gesprekken van 19:00 en 19:30 geparkeerd te doen, terwijl Mehdi ze in de auto doet.",
+   "gevolg": "Een rit die te vroeg vertrekt en een waarschuwing die niet klopt.",
+   "waarom_niet_gezien": "De regel 'een extern gesprek tijdens de rit doe je geparkeerd' (23-09) had geen uitzondering.",
+   "oorzaak": "Geen manier om te zeggen dat Mehdi onderweg belt.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "Staat 'in de auto' in de titel of omschrijving van de buitenafspraak, dan vertrekt de rit gewoon op tijd en tellen gesprekken onderweg niet mee.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "staat 'in de auto' in de afspraak, dan schuift de aankomst niet voor gesprekken onderweg"
    },
    "controle": [],
    "status": "opgelost"
