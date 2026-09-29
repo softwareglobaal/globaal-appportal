@@ -1819,8 +1819,12 @@ def reistijd_zetten(items, alleen_dag=None):
                 or bool(re.search(r"→\s*thuis\s*$", t)) or bool(re.search(r"\bnaar huis\b", t, re.I)))
 
     def thuisrit_tussen(t0, t1):
+        # Alleen een rit naar huis die Mehdi zelf zette, telt. Mijn eigen terugrit (OSRM in de omschrijving) is geen
+        # bewijs dat hij tussendoor naar huis gaat: die zette ik toen die afspraak nog de laatste van de dag was.
+        # Gezien 29-09-2026: na Boechout kwam 2443 in Merksem erbij en ik rekende van thuis, met overlappende ritten (FR-68).
         for x in reistijden:
-            if "T" in x.get("start", "") and is_thuisrit(x) and t0 <= datetime.fromisoformat(x["start"]) <= t1:
+            if "T" in x.get("start", "") and is_thuisrit(x) and "OSRM" not in (x.get("omschrijving") or "") \
+                    and t0 <= datetime.fromisoformat(x["start"]) <= t1:
                 return x
         return None
 

@@ -770,6 +770,12 @@ check("afspraak is afspraak: elke agenda krijgt ritten tot een jaar vooruit, zon
       _vk >= {k for k in W.KALENDERS if not k.startswith("en.be#")} and _om == 42.0
       and "days=366" in (HIER / "agenda_signaal.py").read_text(encoding="utf-8"), str((_va, _om)))
 
+# Mijn eigen terugrit is geen bewijs dat Mehdi tussendoor naar huis gaat (FR-68)
+_src68 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+_i68 = _src68.index("def thuisrit_tussen")
+check("een eigen terugrit van de agent telt niet als 'Mehdi gaat tussendoor naar huis'",
+      '"OSRM" not in (x.get("omschrijving") or "")' in _src68[_i68:_i68 + 900])
+
 # Een postcode is geen projectnummer (FR-58)
 _pc = W.lees_titel("Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo")
 _pc2 = W.lees_titel("!! Mehdi & Catalin: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele")

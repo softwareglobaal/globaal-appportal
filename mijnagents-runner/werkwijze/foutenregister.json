@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.0",
+ "versie": "3.1",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1411,6 +1411,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "buiten is altijd rood, ook onbevestigd (FR-67)"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-68",
+   "datum": "29-09-2026",
+   "gevonden_door": "Claude (zaterdag 03-10 nagekeken)",
+   "fout": "Zaterdag 03-10: na Boechout (tot 11:00) stond 'Boechout -> thuis' (11:00-12:05) en daarna 'thuis -> Merksem' (11:55-13:00); ze overlappen, en rechtstreeks Boechout -> Merksem was de juiste rit.",
+   "gevolg": "Ritten die elkaar overlappen en een rit langs huis die niet kan.",
+   "waarom_niet_gezien": "De agent keek of er al een rit naar huis stond en nam zijn eigen terugrit, gezet toen Boechout nog de laatste afspraak was, als bewijs dat Mehdi tussendoor naar huis gaat.",
+   "oorzaak": "thuisrit_tussen telde ook de eigen ritten van de agent.",
+   "soort_oorzaak": "code",
+   "oplossing": "Alleen een rit naar huis die Mehdi zelf zette, telt nog. De oude eigen terugrit die niet meer klopt, blijft staan tot Mehdi ja zegt op het weghalen.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een eigen terugrit van de agent telt niet als 'Mehdi gaat tussendoor naar huis'"
    },
    "controle": [],
    "status": "opgelost"
