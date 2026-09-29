@@ -1730,6 +1730,29 @@ def _verplaats(x, doel, tok):
     urllib.request.urlopen(req, timeout=30)
 
 
+def is_eigen_rit(x):
+    """Een ritblok dat de agent zelf maakte: het autootje vooraan en zijn uitleg (Reistijd voor/na ... OSRM)
+    in de omschrijving. Alleen zo'n blok mag hij ooit weghalen."""
+    oms = x.get("omschrijving") or ""
+    return ((x.get("titel") or "").lstrip().startswith("\U0001F697") and "OSRM" in oms
+            and ("Reistijd voor:" in oms or "Reistijd na:" in oms))
+
+
+def _eigen_rit_weg(x, tok):
+    """Haalt een eigen ritblok weg dat niet meer klopt (de afspraak is weg of verzet, of er komt nog een
+    buitenafspraak na, zodat de rit naar huis niet meer past). Mehdi, 29-09-2026: "je hebt zelf dat toegevoegd
+    en nu heb je mij nodig om dat weg te doen ... dus ja doe weg! pas aan!". Nooit iets anders: een afspraak,
+    een rit die Mehdi zelf zette of iets in het archief blijft altijd staan (FR-68)."""
+    import urllib.parse
+    import urllib.request
+    if not is_eigen_rit(x) or not mag_schrijven(x.get("kalender", "")) or not x.get("id"):
+        return False
+    url = (f"{agenda.API}/calendars/{urllib.parse.quote(x['kalender'], safe='')}/events/"
+           f"{urllib.parse.quote(x['id'], safe='')}?sendUpdates=none")
+    urllib.request.urlopen(urllib.request.Request(url, method="DELETE", headers={"Authorization": f"Bearer {tok}"}), timeout=30)
+    return True
+
+
 def reistijd_zetten(items, alleen_dag=None):
     """Werkwijze: elke komende afspraak buiten (!!, of PB/KB met een adres) krijgt een
     blok 'Reistijd -> plaats' ervoor en 'Reistijd <- plaats' erna, met de rijtijd
@@ -2105,6 +2128,14 @@ def reistijd_zetten(items, alleen_dag=None):
             x = terugblok() if is_laatste else None
             if not is_laatste:
                 regels.append(f"{a['start'][:16]} {a['titel'][:44]}: geen rit naar huis, je gaat door naar de volgende afspraak")
+                oud_terug = terugblok()
+                # terugblok() geeft de rit die op het einde van deze afspraak vertrekt; mijn eigen terugrit
+                # herken ik aan zijn merk, niet aan de titel (die kan intussen veranderd zijn, bv. ?? eraf)
+                if oud_terug and "Reistijd na:" in (oud_terug.get("omschrijving") or "") \
+                        and _eigen_rit_weg(oud_terug, tok):
+                    reistijden.remove(oud_terug) if oud_terug in reistijden else None
+                    regels.append(f"{a['start'][:16]} {a['titel'][:44]}: mijn oude rit naar huis weggehaald, "
+                                  f"er komt nog een buitenafspraak na")
             if x:
                 al += 1
                 if bijwerken(x, terug_start, terug_start + timedelta(minutes=terug), uitleg_t, f"🚗 Reistijd: {plaats} → thuis", []):
@@ -2161,6 +2192,12 @@ def reistijd_zetten(items, alleen_dag=None):
                     continue
                 except Exception as e:  # noqa: BLE001
                     regels.append(f"{x['start'][:16]} {x['titel'][:50]}: rit niet verhuisd ({type(e).__name__})")
+            try:
+                if _eigen_rit_weg(x, tok):
+                    regels.append(f"{x['start'][:16]} {x['titel'][:50]}: mijn rit zonder afspraak weggehaald")
+                    continue
+            except Exception as e:  # noqa: BLE001
+                regels.append(f"{x['start'][:16]} {x['titel'][:50]}: rit niet weggehaald ({type(e).__name__})")
             regels.append(f"{x['start'][:16]} {x['titel'][:50]}: rit zonder afspraak")
     _cache_bewaren(cache)
     return gemaakt, al, geen_adres, fout, regels

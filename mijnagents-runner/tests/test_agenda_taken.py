@@ -536,7 +536,22 @@ finally:
 check("vastgelopen: de agent belt een keer, met een zin wat Mehdi moet doen",
       _z1 and _z2 is None and len(_bel) == 1 and "zeg voor welke firma" in _bel[0], str(_bel))
 _bron_alle = "".join((HIER / f).read_text(encoding="utf-8") for f in ("agenda_wacht.py", "zelfcontrole.py", "koppelingen/agenda.py", "agenda_signaal.py", "file_wacht.py"))
-check("de agent verwijdert nooit een afspraak: geen enkele DELETE naar de agenda", "DELETE" not in _bron_alle)
+# Alleen een eigen ritblok mag weg (Mehdi, 29-09-2026); een afspraak of een rit van Mehdi nooit (FR-68)
+_del = []
+import urllib.request as _ur68
+_uo68, _ms68 = _ur68.urlopen, W.mag_schrijven
+_ur68.urlopen = lambda req, timeout=30: _del.append((req.get_method(), req.full_url)) or None
+W.mag_schrijven = lambda k: k == W.WERKAGENDA
+try:
+    _w1 = W._eigen_rit_weg({"id": "r1", "kalender": W.WERKAGENDA, "titel": "\U0001F697 Reistijd: Boechout \u2192 thuis",
+                            "omschrijving": "Reistijd na: X (65 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM)"}, "tok")
+    _w2 = W._eigen_rit_weg({"id": "a1", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [HARC-KB] 2505 - klant", "omschrijving": "OSRM"}, "tok")
+    _w3 = W._eigen_rit_weg({"id": "m1", "kalender": W.WERKAGENDA, "titel": "\U0001F697 naar oma", "omschrijving": "zelf gezet"}, "tok")
+finally:
+    _ur68.urlopen, W.mag_schrijven = _uo68, _ms68
+check("de agent verwijdert nooit een afspraak: geen enkele DELETE naar de agenda",
+      _w1 and not _w2 and not _w3 and len(_del) == 1 and _del[0][0] == "DELETE"
+      and _bron_alle.count("DELETE") == 1 and "def _eigen_rit_weg" in _bron_alle, str(_del))
 _oud_i, _oud_k2 = W.projectadressen.index, W.klant_van_nummer
 W.projectadressen.index = lambda *a, **k: {"2607": {"adres": "Kerkstraat 1, 3000 Leuven", "map": "x"}}
 W.klant_van_nummer = lambda nr: "Robin Verlinden en Silvie Boudou" if nr == "2607" else ""

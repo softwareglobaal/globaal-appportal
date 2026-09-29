@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.1",
+ "versie": "3.2",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1424,7 +1424,7 @@
    "waarom_niet_gezien": "De agent keek of er al een rit naar huis stond en nam zijn eigen terugrit, gezet toen Boechout nog de laatste afspraak was, als bewijs dat Mehdi tussendoor naar huis gaat.",
    "oorzaak": "thuisrit_tussen telde ook de eigen ritten van de agent.",
    "soort_oorzaak": "code",
-   "oplossing": "Alleen een rit naar huis die Mehdi zelf zette, telt nog. De oude eigen terugrit die niet meer klopt, blijft staan tot Mehdi ja zegt op het weghalen.",
+   "oplossing": "Alleen een rit naar huis die Mehdi zelf zette, telt nog. En de agent haalt zijn eigen ritblokken weg die niet meer kloppen (een terugrit terwijl er nog een buitenafspraak volgt, of een rit waarvan de afspraak weg of verzet is); Mehdi, 29-09-2026: 'je hebt zelf dat toegevoegd en nu heb je mij nodig om dat weg te doen ... dus ja doe weg'. Een afspraak of een rit die Mehdi zelf zette, blijft altijd staan.",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
