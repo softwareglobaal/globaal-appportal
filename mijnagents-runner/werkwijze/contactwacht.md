@@ -5,7 +5,7 @@ tegelijk de PDF "De Contactwacht - regels en stand". Wie iets wil veranderen, ve
 tekst; de PDF wordt eruit gemaakt en kan er dus nooit van afwijken.
 
 Nieuw in 0.2: de contactcodes van de firma's (HA, UN, ...) staan in organisatie.globaal.be,
-naast de firmacodes van vier letters. Ik lees ze daar bij elke ronde. De tabel in hoofdstuk 2
+naast de agendacodes van vier letters. Ik lees ze daar bij elke ronde. De tabel in hoofdstuk 2
 is een kopie om te lezen; bij verschil wint organisatie.globaal.be.
 
 Ik zorg dat elk contact in de contactendatabase zegt wie iemand is, bij welke firma van de
@@ -28,7 +28,7 @@ Door Mehdi, 29-09-2026.
 - Eén contact per persoon. Een telefoonnummer staat bij één contact; een gedeelde vaste lijn wordt één huishoudcontact.
 - Google Contacts is de bron. De contactsync zet elke wijziging binnen de minuut in Xelion. Ik schrijf nooit rechtstreeks in Xelion.
 - Ik ben een algemene agent, boven de firma's, in de afdeling Algemeen, en ik word gedeeld met Siyan.
-- Elke firma heeft twee codes, allebei in organisatie.globaal.be bij Firma's: de **firmacode** van vier letters (HARC) voor agenda, mappen en gesprekken, en de **contactcode** van twee letters (HA) voor de naamregel. Nergens anders staat een lijst; ik lees ze daar.
+- Elke firma heeft twee afkortingen, allebei in organisatie.globaal.be bij Firma's: de **agendacode** van vier letters (HARC), die sinds 21-09-2026 in de titel van een afspraak staat (`[HARC-KB] 2601 Jan Peeters`), en de **contactcode** van twee letters (HA) voor de naamregel (`K HA2601 Jan Peeters`). Nergens anders staat een lijst; ik lees ze daar.
 
 ## 2. De regels voor een contact
 
@@ -92,7 +92,7 @@ Gemeten op 29-09-2026.
 3. **Het UNABO-nummer**, en dat van TKN-Buro.
 4. **Wie goedkeurt.** Mehdi alleen, of ook Siyan voor zijn firma's?
 5. **De bestaande contacten.** Worden H-A en KL omgezet naar de nieuwe vorm, en in welke volgorde? Voorstel: de lopende dossiers eerst.
-6. **De contactcodes bevestigen.** Ze staan sinds 29-09-2026 in organisatie.globaal.be, naast de firmacodes. Bevestigen is één klik: op de pagina Bron van de waarheid de regel Firma op Besloten zetten. Tot dan blijft dit punt open op het bord.
+6. **De contactcodes bevestigen.** Ze staan sinds 29-09-2026 in organisatie.globaal.be, naast de agendacodes. Bevestigen is één klik: op de pagina Bron van de waarheid de regel Firma op Besloten zetten. Tot dan blijft dit punt open op het bord.
 
 ## 6. Wat ik doe
 

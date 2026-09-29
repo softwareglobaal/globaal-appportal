@@ -74,7 +74,7 @@ De **juridische entiteit** (rechtspersoon) die contracten sluit, factureert en e
 BTW-/ondernemingsnummer heeft. In grotere organisaties heet dit een *legal entity* - de
 eenheid met eigen boekhouding en juridische scheiding.
 - **Bij ons:** de firma's in `kern.firma` (15 actief op 29-09-2026: H-Architects, Contrax, UnaBo …).
-- Elke firma heeft twee codes: een **firmacode** van vier letters en, als ze klanten heeft, een **contactcode** van twee (zie daar).
+- Elke firma heeft twee afkortingen: een **agendacode** van vier letters en, als ze klanten heeft, een **contactcode** van twee (zie daar).
 - *Niet* verwarren met afdeling of team.
 
 ### Afdeling
@@ -323,10 +323,12 @@ Het **ondernemingsnummer** van een firma in de Kruispuntbank van Ondernemingen -
 de sleutel naar officiële bronnen (KBO Public Search, NBB-jaarrekeningen). Staat op
 `kern.firma`; invullen via het firma-beheer in het Organisatie-dashboard.
 
-### Firmacode
-De afkorting van **vier letters** van een firma, bv. HARC, UNAB, TKNB. Staat in
-agenda-afspraken, mapnamen en gesprekken. Uniek per firma; beheerd op
-organisatie.globaal.be bij Firma's (`kern.firma.code`).
+### Agendacode (firmacode)
+De afkorting van **vier letters** van een firma, bv. HARC, UNAB, TKNB. Staat sinds
+21-09-2026 in de titel van een agenda-afspraak: `[HARC-KB] 2601 Jan Peeters` (mandaat
+Mehdi 23-09-2026, werkwijze van de Agendawacht). Oudere afspraken dragen nog HA,
+UNABO of TKN; die blijven leesbaar. De agents herkennen er een firma mee. Uniek per
+firma; beheerd op organisatie.globaal.be bij Firma's (`kern.firma.code`).
 
 ### Contactcode
 De afkorting van **twee letters** van een firma in de naamregel van een contact in
@@ -335,7 +337,7 @@ dossiernummer geplakt: `HA5609` is dossier 5609 van H-Architects. Uniek per firm
 alleen een firma met klanten of prospects heeft er een (`kern.firma.code_contact`,
 migratie 175, Mehdi 29-09-2026). De Contactwacht leest ze daar; nergens anders
 staat een lijst.
-- *Niet* verwarren met de firmacode: twee codes, elk voor zijn eigen plek.
+- *Niet* verwarren met de agendacode: twee afkortingen, elk voor zijn eigen plek.
 
 ### Land (firma)
 Het land van een firma als **ISO-code van twee letters**: BE België, NL Nederland,

@@ -32,9 +32,10 @@ def _lees():
     return _psql(SQL) or []
 
 
-# Twee codes per firma (migratie 175, 29-09-2026): code is de firmacode van vier letters
-# (HARC), code_contact de contactcode van twee letters (HA) voor de naamregel van een
-# contact. Land is een ISO-code (BE, SR, IN). De tweede query is voor een database zonder
+# Twee afkortingen per firma (migratie 175, 29-09-2026): code is de agendacode (ook
+# firmacode genoemd) van vier letters (HARC), die sinds 21-09-2026 in de titel van een
+# afspraak staat; code_contact de contactcode van twee letters (HA) voor de naamregel van
+# een contact. Land is een ISO-code (BE, SR, IN). De tweede query is voor een database zonder
 # migratie 175: dan ontbreekt code_contact.
 SQL_FIRMA = ("select json_agg(json_build_object('code', f.code, 'code_contact', f.code_contact, 'naam', f.naam, "
              "'land', coalesce(f.land,''), 'actief', coalesce(f.actief, false))) from kern.firma f")

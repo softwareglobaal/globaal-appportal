@@ -119,6 +119,12 @@ EXTERNE_RELATIES = EXTERNE.get("relaties", [])              # Nadien (boekhouder
 #   ELEV, TKNB). Bron: het schema kern. Die gebruik ik intern, om een afspraak aan
 #   een firma en een afdeling te koppelen.
 # Ik vertaal tussen die twee, ik vervang nooit de ene door de andere in een titel.
+# Bijgewerkt: dat gold tot de KANTELDATUM. Sinds het mandaat van 23-09-2026 ("In een keer
+# goed" in mijn werkwijze) krijgt een afspraak die Mehdi vanaf 21-09-2026 zelf maakte de
+# vierletterige code, ook als hij de oude typte; oudere afspraken houden hun schrijfwijze.
+# Op organisatie.globaal.be heet de vierletterige code sinds 29-09-2026 de agendacode,
+# naast de contactcode van twee letters voor Google Contacts. Gemeten op 29-09-2026: van
+# de afspraken gemaakt sinds 21-09 dragen er 55 de vierletterige code en 12 nog een oude.
 # Fout gemeten op 20-09-2026: ik meldde 28 titels als "oude firmacode" die
 # rechtgezet moest worden. Dat advies was verkeerd om en is weggehaald.
 # De schrijfwijzen die Mehdi in zijn agenda gebruikte voor de firmacodes van
