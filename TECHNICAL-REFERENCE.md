@@ -1339,6 +1339,36 @@ schrijft nergens naartoe.
   deploy-script. `deploy-stack.sh` draait de stamdata-controle nog eens voor
   hij de container wisselt.
 
+### 13.11 Organisatie kosten - `organisatiekosten.globaal.be`
+
+Wat elke firma van de groep maandelijks aan gedeelde kosten draagt, per land
+(Suriname, België, India), met bij elke kostregel de bron en de redenering in
+zes stappen. Werknaam Doorbelasting; vervangt de statische kostenplaat van
+Angela (kostenplaat.globaal.be). Opdracht Siyan 29-09-2026. Repo
+`globaal-doorbelasting`, checkout `~/appportal/organisatiekosten`,
+compose-service `app-organisatiekosten` op **poort 3130**, nginx-template
+`74-organisatiekosten.conf.template`, migratie 176, Authentik via
+`apps.yaml` + `scripts/app-registreren.py organisatiekosten`, groep gevuld met
+`scripts/organisatiekosten-groep-vullen.py`.
+
+- **Toegang:** `admin` en `db-alles` (Siyan, Mehdi, Angela) zien alles. Later per
+  firma een groep `db-<code>` (bv. `db-tknb`); de app filtert dan aan de
+  serverkant welke firma iemand ziet.
+- **Database:** schema `doorbelasting`, eigendom van rol `doorbelasting_app`. De
+  app maakt haar tabellen zelf (idempotente `schema.sql`) en vult ze bij de
+  eerste start uit `data/bron/` in de app-repo (momentopname van kern en van de
+  kostenplaat, zonder lonen). Geen leesrecht voor `portal`: in
+  `doorbelasting.persoon_kost` komen later individuele lonen, rechtstreeks op de
+  server en nooit in git.
+- **Rekenregels (28-09-2026):** geen buffer, 10% marge voor elke firma,
+  loonbelasting apart als reservering die niet in het factuurbedrag zit, schuld
+  Orvantis aan HDS als aparte verrekenregel.
+- **Octopus:** in fase 1 geen koppeling. De knop "Concept in Octopus" schrijft
+  enkel in het logboek van de app. Later alleen lezen plus een factuur als
+  concept na menselijke bevestiging, nooit boeken of versturen.
+- **Geen stille terugval:** zonder `ORGANISATIEKOSTEN_DB_URL` geeft de app een fout
+  en faalt de health-check; de ingebouwde PGlite is enkel voor lokaal ontwikkelen.
+
 ---
 
 ## 14. Centrale gebruikersdatabase & Medewerkers-app

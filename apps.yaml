@@ -136,3 +136,14 @@ apps:
     subdomain: locatie
     roles: [locatie]
     status: active
+  # Organisatie kosten (werknaam Doorbelasting): wat elke firma van de groep
+  # maandelijks aan gedeelde kosten draagt, per land, met bron en redenering per
+  # regel. Volledige toegang via db-alles (Siyan, Mehdi, Angela); later per firma
+  # een groep db-<code>, die de app zelf aan de serverkant filtert.
+  - id: organisatiekosten
+    name: Organisatie kosten
+    description: Gedeelde kosten per firma en per land, met bron en redenering per regel
+    subdomain: organisatiekosten
+    roles: [admin, db-alles]
+    status: active
+    poort: 3130
