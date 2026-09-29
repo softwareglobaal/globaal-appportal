@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.2",
+ "versie": "3.3",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1429,6 +1429,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een eigen terugrit van de agent telt niet als 'Mehdi gaat tussendoor naar huis'"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-69",
+   "datum": "29-09-2026",
+   "gevonden_door": "Claude (woensdag 30-09 nagekeken)",
+   "fout": "Woensdag 30-09: na Belauto (tot 09:00) rekende de agent 'thuis -> Berchem' en 'Mortsel -> thuis' in plaats van rechtstreeks Mortsel -> Berchem (09:20).",
+   "gevolg": "Onmogelijke ritten langs huis; Mehdi moet er zelf achter komen.",
+   "waarom_niet_gezien": "De regel 'iets achter het bureau tussen twee buitenafspraken = tussendoor naar huis' keek niet of daar tijd voor was; 'Calendly opruimen' om 09:00 trok hem.",
+   "oorzaak": "Geen minimum tussentijd in de bureauregel.",
+   "soort_oorzaak": "code",
+   "oplossing": "Naar huis tussendoor alleen bij minstens 90 minuten tussen twee buitenafspraken; anders rechtstreeks. De agent ruimt zijn eigen verkeerde ritten zelf op (FR-68).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "met minder dan 90 minuten tussen twee buitenafspraken rijdt de agent rechtstreeks, ook met iets achter het bureau"
    },
    "controle": [],
    "status": "opgelost"

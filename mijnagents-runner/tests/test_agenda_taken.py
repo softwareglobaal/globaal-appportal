@@ -791,6 +791,11 @@ _i68 = _src68.index("def thuisrit_tussen")
 check("een eigen terugrit van de agent telt niet als 'Mehdi gaat tussendoor naar huis'",
       '"OSRM" not in (x.get("omschrijving") or "")' in _src68[_i68:_i68 + 900])
 
+# Naar huis tussendoor alleen als er minstens 90 minuten zijn (FR-69)
+_src69 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("met minder dan 90 minuten tussen twee buitenafspraken rijdt de agent rechtstreeks, ook met iets achter het bureau",
+      "if bureau and (s_volgend - e_) < timedelta(minutes=90):" in _src69)
+
 # Een postcode is geen projectnummer (FR-58)
 _pc = W.lees_titel("Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo")
 _pc2 = W.lees_titel("!! Mehdi & Catalin: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele")

@@ -1,5 +1,5 @@
 {
- "versie": "4.18",
+ "versie": "4.19",
  "datum": "2026-09-29",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -817,7 +817,8 @@
   "autootje": "elke rit draagt het autootje vooraan, ook een rit die iemand met de hand zette; 'naar huis' in een titel is een rit (FR-40)",
   "lara_naar_huis": "dinsdag 19:00 tot 19:30: '🚗 Reistijd: Stadionlaan 4 → thuis (Lara naar huis brengen)', de rit naar huis na de zwemles. Blijft tot 19:30 staan zodat er tijd is om Lara van de les naar huis te brengen; zonder melding (Mehdi, 24-09-2026)",
   "hoe_ver_vooruit": "elke buitenafspraak, tot een jaar vooruit, op elke agenda: afspraak is afspraak (Mehdi, 28-09-2026; vervangt de acht dagen van 21-09). Google Routes alleen binnen 48 uur, daarbuiten OSRM met de filefactor; die rijtijden worden 90 dagen bewaard",
-  "eigen_ritten_opruimen": "De agent haalt zijn eigen ritblokken weg die niet meer kloppen: een terugrit terwijl er nog een buitenafspraak volgt, of een rit waarvan de afspraak weg of verzet is. Alleen blokken met het autootje en zijn eigen uitleg (OSRM). Een afspraak, een rit die Mehdi zelf zette of iets in het archief raakt hij nooit aan (Mehdi, 29-09-2026)."
+  "eigen_ritten_opruimen": "De agent haalt zijn eigen ritblokken weg die niet meer kloppen: een terugrit terwijl er nog een buitenafspraak volgt, of een rit waarvan de afspraak weg of verzet is. Alleen blokken met het autootje en zijn eigen uitleg (OSRM). Een afspraak, een rit die Mehdi zelf zette of iets in het archief raakt hij nooit aan (Mehdi, 29-09-2026).",
+  "tussendoor_naar_huis": "Alleen als er minstens 90 minuten zijn tussen twee buitenafspraken en er iets achter het bureau staat; anders rechtstreeks van de ene naar de andere (29-09-2026)."
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30 Brusselse tijd",

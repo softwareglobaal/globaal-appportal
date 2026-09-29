@@ -1916,6 +1916,11 @@ def reistijd_zetten(items, alleen_dag=None):
                 regels.append(f"{a_['start'][:16]} {a_['titel'][:40]}: er staat al een rit naar huis, die telt")
                 continue
             bureau = aan_bureau_tussen(e_, s_volgend)
+            # Naar huis tussendoor alleen als het kan: met minder dan 90 minuten tussen twee buitenafspraken rijd je
+            # rechtstreeks, ook als er iets achter het bureau in staat. Gezien 29-09-2026: 'Calendly opruimen' om 09:00
+            # tussen Belauto (tot 09:00) en Berchem (09:20) liet de agent langs huis rekenen (FR-69).
+            if bureau and (s_volgend - e_) < timedelta(minutes=90):
+                bureau = None
             naar_huis_na[sleutel_] = bool(bureau)
             if bureau:
                 regels.append(f"{a_['start'][:16]} {a_['titel'][:40]}: VRAAG om {bureau['start'][11:16]} "
