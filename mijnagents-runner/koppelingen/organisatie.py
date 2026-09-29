@@ -29,35 +29,48 @@ SQL = ("select json_agg(json_build_object("
 
 
 def _lees():
-    gebruiker = subprocess.run(["docker", "exec", CONTAINER, "sh", "-c", "echo $POSTGRES_USER"], capture_output=True, text=True, timeout=30).stdout.strip() or "postgres"
-    uit = subprocess.run(["docker", "exec", CONTAINER, "psql", "-U", gebruiker, "-d", DB, "-At", "-c", SQL], capture_output=True, text=True, timeout=60)
-    if uit.returncode != 0:
-        raise RuntimeError(uit.stderr.strip()[:200])
-    return json.loads(uit.stdout.strip() or "[]") or []
+    return _psql(SQL) or []
 
 
-SQL_FIRMA = ("select json_agg(json_build_object('code', f.code, 'naam', f.naam, "
+# Twee codes per firma (migratie 175, 29-09-2026): code is de firmacode van vier letters
+# (HARC), code_contact de contactcode van twee letters (HA) voor de naamregel van een
+# contact. Land is een ISO-code (BE, SR, IN). De tweede query is voor een database zonder
+# migratie 175: dan ontbreekt code_contact.
+SQL_FIRMA = ("select json_agg(json_build_object('code', f.code, 'code_contact', f.code_contact, 'naam', f.naam, "
              "'land', coalesce(f.land,''), 'actief', coalesce(f.actief, false))) from kern.firma f")
+SQL_FIRMA_VOOR_175 = ("select json_agg(json_build_object('code', f.code, 'naam', f.naam, "
+                      "'land', coalesce(f.land,''), 'actief', coalesce(f.actief, false))) from kern.firma f")
 
 
-def _lees_firmas():
+def _psql(sql):
     gebruiker = subprocess.run(["docker", "exec", CONTAINER, "sh", "-c", "echo $POSTGRES_USER"],
                                capture_output=True, text=True, timeout=30).stdout.strip() or "postgres"
-    uit = subprocess.run(["docker", "exec", CONTAINER, "psql", "-U", gebruiker, "-d", DB, "-At", "-c", SQL_FIRMA],
+    uit = subprocess.run(["docker", "exec", CONTAINER, "psql", "-U", gebruiker, "-d", DB, "-At", "-c", sql],
                          capture_output=True, text=True, timeout=60)
     if uit.returncode != 0:
         raise RuntimeError(uit.stderr.strip()[:200])
-    return json.loads(uit.stdout.strip() or "[]") or []
+    return json.loads(uit.stdout.strip() or "null")
+
+
+def _lees_firmas():
+    try:
+        return _psql(SQL_FIRMA) or []
+    except RuntimeError as e:
+        if "code_contact" not in str(e):
+            raise
+        return _psql(SQL_FIRMA_VOOR_175) or []
 
 
 def firmas(maximum_uren=24):
-    """De firma's van de groep met hun officiele code, uit kern.firma.
+    """De firma's van de groep met hun officiele codes, uit kern.firma.
     Dit is de enige bron voor afkortingen; nergens anders een lijst bijhouden.
-    Elk item: code, naam, land, actief."""
+    Elk item: code, code_contact, naam, land, actief. Een bewaarde lijst zonder
+    code_contact (van voor migratie 175) telt als verouderd."""
     data = None
     try:
         c = json.load(open(CACHE_FIRMA, encoding="utf-8"))
-        if time.time() - c.get("ts", 0) < maximum_uren * 3600:
+        if (time.time() - c.get("ts", 0) < maximum_uren * 3600
+                and all("code_contact" in f for f in c["firmas"])):
             data = c["firmas"]
     except (OSError, ValueError, KeyError):
         pass
@@ -78,6 +91,25 @@ def firmas(maximum_uren=24):
 def firmacodes(maximum_uren=24):
     """code -> naam, alleen de codes die echt bestaan."""
     return {f["code"]: f["naam"] for f in firmas(maximum_uren) if f.get("code")}
+
+
+def contactcodes(maximum_uren=24):
+    """contactcode -> firmacode (HA -> HARC), voor de naamregel van een contact.
+    Leeg als migratie 175 nog niet gedraaid is of de database niet bereikbaar is."""
+    return {f["code_contact"]: f["code"] for f in firmas(maximum_uren) if f.get("code_contact")}
+
+
+def bronregel(sleutel):
+    """De regel van de pagina Bron van de waarheid (kern.bron_regel): status, beslisser,
+    besloten_door, besloten_op. None als de regel of de tabel niet bestaat. Niet bewaard:
+    een agent die hierop wacht, moet de klik van de beslisser meteen zien."""
+    if not sleutel.replace("_", "").isalnum():
+        raise ValueError("sleutel")
+    try:
+        return _psql("select row_to_json(r) from (select status, beslisser, besloten_door, besloten_op "
+                     f"from kern.bron_regel where sleutel = '{sleutel}') r")
+    except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired):
+        return None
 
 
 def collegas(maximum_uren=24, alleen_in_dienst=True):

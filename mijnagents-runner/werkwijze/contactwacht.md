@@ -1,8 +1,12 @@
 # Werkwijze van De Contactwacht (Algemeen)
 
-Versie 0.1, 29-09-2026, opgemaakt met Mehdi. Deze tekst is mijn werkwijze op het bord en
+Versie 0.2, 29-09-2026, opgemaakt met Mehdi. Deze tekst is mijn werkwijze op het bord en
 tegelijk de PDF "De Contactwacht - regels en stand". Wie iets wil veranderen, verandert deze
 tekst; de PDF wordt eruit gemaakt en kan er dus nooit van afwijken.
+
+Nieuw in 0.2: de contactcodes van de firma's (HA, UN, ...) staan in organisatie.globaal.be,
+naast de firmacodes van vier letters. Ik lees ze daar bij elke ronde. De tabel in hoofdstuk 2
+is een kopie om te lezen; bij verschil wint organisatie.globaal.be.
 
 Ik zorg dat elk contact in de contactendatabase zegt wie iemand is, bij welke firma van de
 groep hij klant of prospect is, onder welk dossier en voor welke dienst. Zo weet wie de
@@ -24,6 +28,7 @@ Door Mehdi, 29-09-2026.
 - Eén contact per persoon. Een telefoonnummer staat bij één contact; een gedeelde vaste lijn wordt één huishoudcontact.
 - Google Contacts is de bron. De contactsync zet elke wijziging binnen de minuut in Xelion. Ik schrijf nooit rechtstreeks in Xelion.
 - Ik ben een algemene agent, boven de firma's, in de afdeling Algemeen, en ik word gedeeld met Siyan.
+- Elke firma heeft twee codes, allebei in organisatie.globaal.be bij Firma's: de **firmacode** van vier letters (HARC) voor agenda, mappen en gesprekken, en de **contactcode** van twee letters (HA) voor de naamregel. Nergens anders staat een lijst; ik lees ze daar.
 
 ## 2. De regels voor een contact
 
@@ -41,7 +46,7 @@ De naamregel leest van links naar rechts: **wat iemand is, zijn dossiers met hun
 | wat | codes |
 |---|---|
 | wat iemand is | **K** klant, **P** prospect. Voor professionals blijven de bestaande beroepscodes: B2B ARC architect, LM landmeter, ING ingenieur, EPB verslaggever, MK makelaar, AAN aannemer, DW dakwerker, GW gevelwerker |
-| firma, aan het nummer geplakt | **HA** H-Architects, **UN** UNABO, **TK** TKN-Buro, **EE** Energie Efficiënt, **HB** Harmoniebouw, **CX** Contrax, **EL** Elevait |
+| firma, aan het nummer geplakt | de contactcode uit organisatie.globaal.be. Op 29-09-2026: **HA** H-Architects, **UN** UNABO, **TK** TKN-Buro, **EE** Energie Efficiënt, **HB** Harmoniebouw, **CX** Contrax, **EL** Elevait |
 | dienst, na zijn dossier | dezelfde codes als in de agenda: **SCN** 3D-scan, **EPB**, **STA** stabiliteit, **VC** veiligheidscoördinatie, **BS** barsten en scheuren, **PLB** plaatsbeschrijving, **REG** regularisatie |
 
 Drie regels maken het leesbaar:
@@ -69,6 +74,8 @@ Gemeten op 29-09-2026.
 - Waar staat wat getekend is: voor H-Architects het contractsysteem (contracten.globaal.be) en de projectmap; voor de andere firma's Pipedrive per firma, met de deal, de fase en de producten, die de diensten zijn. Een factuur noemt het projectnummer en is het sterkste bewijs dat iemand klant is.
 - Projectnummers verschillen per firma. H-Architects nummert JJNN: 2531 is 2025, volgnummer 31.
 - De proef van 29-09-2026: één contact (dossiers HA5609 en UN3782) staat in de nieuwe vorm in Google en in Xelion. Daarbij bleek het adres van de klant fout over te komen uit de offerte, zowel in het contact als in de UNABO-deal, en had de tweede opdrachtgever in het contract hetzelfde nummer en dezelfde mail als de eerste.
+- Op 29-09-2026 draagt alleen dat proefcontact een dossiercode. Geen enkel contact heeft een dossiercode van een firma die niet in organisatie.globaal.be staat.
+- De firma's zonder contactcode (onder meer H-Invest, Melodie, Corenbo, Zidi Construct en de studio's in Suriname en India) krijgen er pas een als ze klanten of prospects hebben.
 
 ## 4. Wat we nog niet weten
 
@@ -85,13 +92,15 @@ Gemeten op 29-09-2026.
 3. **Het UNABO-nummer**, en dat van TKN-Buro.
 4. **Wie goedkeurt.** Mehdi alleen, of ook Siyan voor zijn firma's?
 5. **De bestaande contacten.** Worden H-A en KL omgezet naar de nieuwe vorm, en in welke volgorde? Voorstel: de lopende dossiers eerst.
-6. **De korte firmacodes** (HA, UN, TK, EE, HB, CX, EL) vastleggen naast de vierletterige codes in organisatie.globaal.be, zodat agenda en contacten één bron hebben.
+6. **De contactcodes bevestigen.** Ze staan sinds 29-09-2026 in organisatie.globaal.be, naast de firmacodes. Bevestigen is één klik: op de pagina Bron van de waarheid de regel Firma op Besloten zetten. Tot dan blijft dit punt open op het bord.
 
 ## 6. Wat ik doe
 
-Nu, in versie 0.1: elke werkdag om 07:40 lees ik de contactendatabase, alleen lezend, en tel ik
-hoeveel contacten al in de nieuwe vorm staan en hoeveel nog de oude codes H-A of KL dragen. De
-open beslissingen zet ik als noden op het bord, voor Mehdi. Ik schrijf niets.
+Nu, in versie 0.2: elke werkdag om 07:40 lees ik de contactcodes uit organisatie.globaal.be en
+de contactendatabase, allebei alleen lezend. Ik tel hoeveel contacten al in de nieuwe vorm staan,
+hoeveel een dossiercode dragen van een firma die niet in organisatie.globaal.be staat, en hoeveel
+nog de oude codes H-A of KL dragen. De open beslissingen zet ik als noden op het bord, voor
+Mehdi. Ik schrijf niets.
 
 Straks, na de beslissingen:
 
@@ -115,6 +124,7 @@ Straks, na de beslissingen:
 ## 8. Wat Mehdi beslist
 
 - De open punten van hoofdstuk 5.
+- Welke firma een contactcode krijgt, en welke. Dat gebeurt op organisatie.globaal.be bij Firma's, niet in deze tekst.
 - Welke lijsten met voorstellen goedgekeurd worden, en door wie.
 - Wanneer ik van meten naar schrijven overga.
 - Of een contact met een oude code wordt omgezet.

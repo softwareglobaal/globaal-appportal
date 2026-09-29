@@ -1414,8 +1414,14 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   vind-of-maak; app-rollen hebben alleen EXECUTE). In de Second Brain één adres-knoop met
   al zijn relaties (firma "gevestigd op", pand "op adres"). Invoer via de
   adres-autocomplete; bestaande pand/dossier-teksten zijn gebackfilld.
-- **`kern.firma`** - centrale firmalijst (13 bedrijven van de groep): `id` (uuid), `naam`,
-  `code` (uniek, 4 hoofdletters), `land`, `actief` (zacht uitzetten), `kbo_nummer`
+- **`kern.firma`** - centrale firmalijst (18 rijen op 29-09-2026, waarvan 15 actief): `id` (uuid), `naam`,
+  `code` (de **firmacode**: uniek, 4 hoofdletters, voor agenda, mappen en gesprekken),
+  `code_contact` (de **contactcode**, migratie 175: 2 hoofdletters, uniek als ingevuld,
+  voor de naamregel van een contact in Google Contacts en Xelion, bv. `HA5609`; leeg
+  voor een firma zonder klanten; De Contactwacht leest ze via
+  `mijnagents-runner/koppelingen/organisatie.py`), `land` (ISO 3166-1-code van 2
+  letters sinds migratie 175: BE, NL, SR, IN; CHECK `firma_land_iso`; de volle naam is
+  alleen weergave in de organisatie-app), `actief` (zacht uitzetten), `kbo_nummer`
   (migratie 018 - het firma-detail linkt ermee naar KBO Public Search en de
   NBB-jaarrekeningen; API-verrijking later). Gekoppeld aan
   personen via **`persoon.werkgever_firma_id`** ("in dienst bij" - uniselect, FK) en de
@@ -1630,7 +1636,10 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   DeskTime zonder persoon, DeskTime-spiegel; `telefoon`: nummers per status,
   laatste wijziging, Xelion-sync, en het telefoonregister als "niet leesbaar"
   (eigen SQLite); `email`: laatst gelijkgezet met one.com (grens 14 dagen) en
-  domeinen die binnen 30 dagen vervallen. Status zetten: de beslisser van de
+  domeinen die binnen 30 dagen vervallen; `firma` (migratie 175, 29-09-2026):
+  de contactcodes naast hun firmacode, de actieve firma's zonder contactcode, en
+  of elk land een ISO-code is. De Contactwacht leest de status van die regel en
+  houdt een nood open tot hij Besloten is. Status zetten: de beslisser van de
   regel of `BRON_BEHEER` (standaard mehdi, akadmin); beslisser aanwijzen: alleen
   `BRON_BEHEER`; afwijzen vraagt een opmerking. Bekijken volgt
   `_require_staff` (admin, manager, `STAFF_GROUPS` = hr, organisatie): wie in

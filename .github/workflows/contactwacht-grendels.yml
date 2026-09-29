@@ -1,0 +1,19 @@
+# Grendels op De Contactwacht: de contactcodes komen uit organisatie.globaal.be
+# (kern.firma, migratie 175), niet uit de agent zelf. Afspraak Mehdi 29-09-2026.
+name: contactwacht-grendels
+
+on:
+  push:
+    paths: ["mijnagents-runner/contactwacht.py", "mijnagents-runner/koppelingen/organisatie.py", "mijnagents-runner/tests/test_contactwacht.py"]
+  pull_request:
+    paths: ["mijnagents-runner/contactwacht.py", "mijnagents-runner/koppelingen/organisatie.py", "mijnagents-runner/tests/test_contactwacht.py"]
+
+jobs:
+  grendels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python3 mijnagents-runner/tests/test_contactwacht.py
