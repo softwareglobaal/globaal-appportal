@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""De Contactwacht (Algemeen): houdt de contactendatabase in lijn met de afspraken.
+
+Elk contact zegt wie iemand is, bij welke firma hij klant of prospect is, onder welk
+dossier en voor welke dienst, zodat wie opneemt meteen weet wie er belt. De regels staan
+in werkwijze/contactwacht.md; die tekst is ook de werkwijze op het bord en de PDF.
+
+Versie 0.1 (29-09-2026) leest alleen. Hij telt in de index van de contactsync hoeveel
+contacten al in de nieuwe vorm staan en hoeveel nog een oude code dragen, en zet de open
+beslissingen als noden op het bord. Schrijven in Google Contacts komt pas na die
+beslissingen, en dan alleen na goedkeuring.
+
+    contactwacht.py            een ronde
+"""
+import os
+import re
+import sqlite3
+import sys
+
+HIER = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+import bord  # noqa: E402
+
+NAAM = "contactwacht"
+ag = bord.Agent(NAAM)
+
+# De index van de contactsync: een doorzoekbare kopie van Google Contacts. Alleen lezen.
+SYNC_DB = os.environ.get("CONTACTSYNC_DB", os.path.expanduser("~/appportal/contactsync-data/sync.db"))
+
+# Een dossier in de naamregel: firma aan het nummer geplakt (HA5609, UN3782).
+DOSSIER = re.compile(r"\b(HA|UN|TK|EE|HB|CX|EL)\d{3,5}\b")
+OUD_HA = re.compile(r"\bH-A\b")
+OUD_KL = re.compile(r"^KL\b")
+
+# De open beslissingen uit hoofdstuk 5 van de werkwijze. Zonder aantal in de tekst (N10):
+# zolang ze hier staan, zijn ze open; een beslissing die genomen is, gaat uit deze lijst.
+OPEN = [
+    "Beslissen hoe een gemengde status in de naamregel staat: klant bij de ene firma, prospect bij de andere",
+    "Beslissen of de diensten in de naamregel staan of alleen in de kaart, na de schermtest in Xelion",
+    "Beslissen welk nummer een UNABO-dossier draagt, en dat van TKN-Buro",
+    "Beslissen wie voorstellen mag goedkeuren: Mehdi alleen, of ook Siyan voor zijn firma's",
+    "Beslissen of de bestaande contacten met H-A en KL worden omgezet, en in welke volgorde",
+    "De korte firmacodes vastleggen naast de vierletterige in organisatie.globaal.be",
+]
+
+
+def meet(pad):
+    """Tellingen uit de index van de contactsync. Geen namen: op het bord staan aantallen."""
+    con = sqlite3.connect(f"file:{pad}?mode=ro", uri=True)
+    namen = [n or "" for (n,) in con.execute(
+        # de sync zet de status op "gearchiveerd" (niet "archief") en de naam krijgt "[ARCHIEF] " vooraan
+        "select display_name from contact_details where coalesce(status, 'actief') != 'gearchiveerd' "
+        "and coalesce(display_name, '') not like '[ARCHIEF]%'")]
+    return {
+        "actief": len(namen),
+        "nieuwe_vorm": sum(1 for n in namen if DOSSIER.search(n)),
+        "met_h_a": sum(1 for n in namen if OUD_HA.search(n)),
+        "met_kl": sum(1 for n in namen if OUD_KL.search(n)),
+    }
+
+
+def werk(r):
+    r.bron("contactsync-index", SYNC_DB)
+    if not os.path.exists(SYNC_DB):
+        r.nood("De index van de contactsync is niet leesbaar", wie="claude-code")
+        r.detail = "index niet gevonden"
+        return
+    t = meet(SYNC_DB)
+    r.detail = (f"{t['actief']} actieve contacten; {t['nieuwe_vorm']} in de nieuwe vorm; "
+                f"{t['met_h_a']} met de oude code H-A; {t['met_kl']} met KL vooraan. Versie 0.1: ik meet, ik schrijf niets.")
+    for tekst in OPEN:
+        r.nood(tekst, wie="mehdi")
+
+
+if __name__ == "__main__":
+    with ag.ronde("contacten meten") as r:
+        werk(r)
