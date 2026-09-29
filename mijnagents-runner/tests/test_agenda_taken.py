@@ -66,7 +66,8 @@ WERK = "mehdiprivewerkagenda@gmail.com"
 proeven = [
     (WERK, "Mehdi: !! [HARC-KB] WB 2310 - werf, Dorpstraat 5", "11", "rood, buiten voor het werk"),
     (WERK, "Mehdi: [HARC-KB] WB 2310 - werf zonder uitroeptekens", "11", "WB is per definitie buiten"),
-    (WERK, "Mehdi: ?? [HARC-PB] PLB 2311 - nog niet vast", "5", "geel zolang het niet bevestigd is"),
+    (WERK, "Mehdi: ?? [HARC-PB] PLB 2311 - nog niet vast", "11", "buiten is altijd rood, ook onbevestigd (FR-67)"),
+    (WERK, "?? Mehdi: [HARC-PO] Jan Peeters", "5", "online en nog niet bevestigd: geel"),
     (WERK, "Mehdi: [HARC-KO] klant online", "7", "blauw"),
     (WERK, "Mehdi: [UNAB-PO] prospect online", "6", "oranje"),
     (WERK, "Mehdi: [ELEV-IN] intern", "10", "groen"),

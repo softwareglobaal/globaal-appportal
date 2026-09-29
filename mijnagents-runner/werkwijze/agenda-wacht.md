@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 7.15 (28-09-2026, plus !! altijd vooraan en ritten voor elke buitenafspraak tot een jaar vooruit; eerder plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
+Versie 7.16 (29-09-2026, plus buiten altijd rood, ook onbevestigd; eerder 28-09-2026, plus !! altijd vooraan en ritten voor elke buitenafspraak tot een jaar vooruit; eerder plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -117,7 +117,7 @@ De kleur zegt waarvoor Mehdi ergens is, `!!` zegt dat hij naar buiten gaat
 (20-09-2026). Lara (flamingo roze) en privé (zwart) krijgen hun kleur op de agenda
 zelf; daar zet ik per afspraak niets, ook niet op de rit. Op de werkagenda, de
 eerste regel die past: rit voor werk = rood (tomaat); geen firmacode = fout, geen
-kleur; `??` = geel (banaan); buiten (`!!`, een dienst die altijd buiten is, of KB,
+kleur; buiten is altijd rood, ook met `??` (29-09-2026); `??` online = geel (banaan); buiten (`!!`, een dienst die altijd buiten is, of KB,
 PB, LB) = rood (tomaat); LO = paars (druif); KO = blauw (pauw); PO = oranje
 (mandarijn); IN = groen (basilicum). De volledige tabel staat in
 `werkwijze/agenda-taken.json`. Ik verander alleen

@@ -1258,8 +1258,8 @@ def kleur_gewenst(a, info):
     Dat zijn twee verschillende dingen. Mandaat van Mehdi, 20-09-2026:
 
     - Lara en de privé-agenda houden altijd hun eigen agendakleur, ook buiten.
-    - Op de werkagenda's: geel zolang `??`, daarna rood als het buiten is,
-      anders blauw voor klant online, oranje voor prospect online, groen voor intern.
+    - Op de werkagenda's: rood als het buiten is, ook met `??` (Mehdi, 29-09-2026); anders geel zolang `??`,
+      daarna blauw voor klant online, oranje voor prospect online, groen voor intern.
     - Een titel zonder code krijgt geen kleur en is een fout, geen uitzondering.
     """
     if a.get("kalender", "") in AGENDA_VASTE_KLEUR:
@@ -1268,10 +1268,10 @@ def kleur_gewenst(a, info):
         return "11"
     if not info.get("firma"):
         return ""   # geen code: fout, wordt gemeld
+    if info["buiten"] or info["soort"] in BUITEN_SOORTEN:
+        return "11"   # buiten is altijd rood, ook als het nog niet bevestigd is (Mehdi, 29-09-2026, FR-67)
     if info["onzeker"]:
         return "5"
-    if info["buiten"] or info["soort"] in BUITEN_SOORTEN:
-        return "11"
     if info["soort"] == "AO":
         return "2"    # salie: aannemer online (een aannemer van een klant)
     if info["soort"] == "B2B":

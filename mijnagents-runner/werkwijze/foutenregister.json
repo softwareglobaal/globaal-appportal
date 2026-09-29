@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "2.9",
+ "versie": "3.0",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1393,6 +1393,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "afspraak is afspraak: elke agenda krijgt ritten tot een jaar vooruit, zonder elke ronde OSRM te vragen"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-67",
+   "datum": "29-09-2026",
+   "gevonden_door": "Mehdi",
+   "fout": "Een buitenafspraak die nog niet bevestigd was (Koen Van den Steen en Laura Vanovertveldt, 03-10) stond geel in plaats van rood.",
+   "gevolg": "Een buitenafspraak valt niet op als buiten; Mehdi ziet niet dat hij moet rijden.",
+   "waarom_niet_gezien": "De kleurregel liet ?? (geel) voorgaan op buiten (rood); zo stond het in de werkwijze, de JSON en de PDF.",
+   "oorzaak": "De volgorde van de kleurregels.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "Buiten is altijd rood, ook met ??; geel geldt alleen nog voor een online afspraak die niet bevestigd is.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "buiten is altijd rood, ook onbevestigd (FR-67)"
    },
    "controle": [],
    "status": "opgelost"

@@ -1,6 +1,6 @@
 {
- "versie": "4.16",
- "datum": "2026-09-28",
+ "versie": "4.17",
+ "datum": "2026-09-29",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
   {
@@ -225,14 +225,14 @@
      "naam": "FOUT, hij zet geen kleur en meldt het"
     },
     {
-     "wanneer": "?? nog niet bevestigd",
-     "kleur": "5",
-     "naam": "banaan, geel"
-    },
-    {
-     "wanneer": "buiten: !! of een dienst die per definitie buiten is, of soort KB, PB, LB of AB",
+     "wanneer": "buiten: !! of een dienst die per definitie buiten is, of soort KB, PB, LB of AB. Altijd rood, ook met ?? (nog niet bevestigd)",
      "kleur": "11",
      "naam": "tomaat, rood"
+    },
+    {
+     "wanneer": "?? nog niet bevestigd, bij een online afspraak. Buiten blijft rood, ook onbevestigd (Mehdi, 29-09-2026)",
+     "kleur": "5",
+     "naam": "banaan, geel"
     },
     {
      "wanneer": "soort AO, aannemer online",

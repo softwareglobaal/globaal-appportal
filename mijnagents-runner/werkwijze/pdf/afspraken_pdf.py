@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.11"
+VERSIE = "2.12"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -43,8 +43,8 @@ def bol(k):
 KLEUREN = [
     ("4", "Agenda Lara", "Altijd roze, de kleur van de agenda. Ook buiten, ook de ritten."),
     ("zwart", "Privé-agenda", "Altijd zwart, de kleur van de agenda. Ook buiten, ook de ritten."),
-    ("11", "Werk buiten", "!!, een dienst die per definitie buiten is (WB, OPL, PLB, SCN, OPM, BS), of soort KB, PB, LB of AB. En de rit ervoor en erna."),
-    ("5", "Nog niet bevestigd", "?? in de titel. Gaat voor alles behalve Lara, privé en ritten."),
+    ("11", "Werk buiten", "!!, een dienst die per definitie buiten is (WB, OPL, PLB, SCN, OPM, BS), of soort KB, PB, LB of AB. En de rit ervoor en erna. Altijd rood, ook als het nog niet bevestigd is (??)."),
+    ("5", "Online, nog niet bevestigd", "?? in de titel van een online afspraak. Buiten blijft rood."),
     ("7", "Klant online", "KO"),
     ("6", "Prospect online", "PO"),
     ("3", "Leverancier online", "LO: wij kopen, geld dat buitengaat"),
@@ -104,11 +104,11 @@ tr{{break-inside:avoid}}
 .twee{{column-count:2;column-gap:7mm}} .twee table{{break-inside:avoid}}
 </style>
 <div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; 24 september 2026 &nbsp;|&nbsp; versie {VERSIE}, <b>definitief</b> &nbsp;|&nbsp;
-bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.15 op de server</div>
+bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.16 op de server</div>
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
-Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.10 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
+Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.11 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
 Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de server. De test <code>tests/test_agenda_taken.py</code>
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
@@ -164,7 +164,7 @@ zin bovenaan de omschrijving. Is ze opgelost, dan gaan VR en de zin er vanzelf a
 'Online. Mehdi stuurt de link naar ...' bij. Staat er later een link, dan gaan ZL en de notitie er weer af. <b>De agent zet zelf nooit
 een link.</b> Niet bij bellen, Calendly-boekingen, intern overleg of terugkerende overleggen.</td></tr>
 <tr><td class=c><b>!!</b></td><td><b>Buiten</b>, op het adres van de afspraak. Er komt een rit voor en na.</td></tr>
-<tr><td class=c><b>??</b></td><td><b>Nog niet bevestigd.</b> Geel. Is de afspraak voorbij en staat ?? er nog, dan vraagt de agent of ze
+<tr><td class=c><b>??</b></td><td><b>Nog niet bevestigd.</b> Geel bij een online afspraak; buiten blijft rood. Is de afspraak voorbij en staat ?? er nog, dan vraagt de agent of ze
 doorging.</td></tr></tbody></table>
 <table class=naast><tr><td style="width:50%;padding:0 4mm 0 0;border:0"><h3>De soorten</h3><table><tbody>{so}</tbody></table></td>
 <td style="width:50%;padding:0 0 0 4mm;border:0"><h3>De activiteit: wat Mehdi gaat doen</h3><table><tbody>{ty}</tbody></table></td></tr></table>
