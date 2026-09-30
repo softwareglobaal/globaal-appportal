@@ -1466,6 +1466,19 @@ SPITS = [((7, 0), (9, 30), 1.6), ((6, 30), (7, 0), 1.3), ((9, 30), (10, 0), 1.3)
 DAL_FACTOR = 1.1
 
 
+THUIS_MIN = 30   # minstens zoveel minuten thuis na de rit heen en terug, anders rijdt hij rechtstreeks (FR-75)
+
+
+def via_huis_zinvol(gat_min, heen_min, terug_min):
+    """Tussendoor naar huis heeft alleen zin als er na de rit naar huis en de rit terug nog tijd thuis overblijft.
+    Gezien 30-09-2026: tussen Lanaken (tot 12:00) en MediaMarkt Woluwe (13:50) rekende de agent langs huis, met
+    75 + 35 minuten rijden in 110 minuten; de ritten overlapten en de 90 minuten van FR-69 hielden dat niet tegen (FR-75).
+    Zonder rijtijden (adres onbekend) blijft de grens van 90 minuten."""
+    if heen_min is None or terug_min is None:
+        return gat_min >= 90
+    return gat_min - heen_min - terug_min >= THUIS_MIN
+
+
 def filefactor(vertrek):
     if vertrek.weekday() >= 5:
         return 1.0
@@ -1921,6 +1934,19 @@ def reistijd_zetten(items, alleen_dag=None):
             # tussen Belauto (tot 09:00) en Berchem (09:20) liet de agent langs huis rekenen (FR-69).
             if bureau and (s_volgend - e_) < timedelta(minutes=90):
                 bureau = None
+            if bureau:
+                # ook met 90 minuten of meer: past de rit naar huis en terug niet met tijd thuis, dan rechtstreeks (FR-75)
+                try:
+                    c1 = coord(rij[i][4], cache) if rij[i][5] and rij[i][4] else None
+                    c2 = coord(rij[i + 1][4], cache) if rij[i + 1][5] and rij[i + 1][4] else None
+                    heen = vrije_rijtijd_min(c1, thuis) * filefactor(e_) + BUFFER_MIN if c1 and thuis else None
+                    terug = vrije_rijtijd_min(thuis, c2) * filefactor(s_volgend) + BUFFER_MIN if c2 and thuis else None
+                except Exception:  # noqa: BLE001
+                    heen = terug = None
+                if not via_huis_zinvol((s_volgend - e_).total_seconds() / 60, heen, terug):
+                    regels.append(f"{a_['start'][:16]} {a_['titel'][:40]}: geen tijd om tussendoor naar huis te gaan, "
+                                  f"rechtstreeks naar {a_volgend['titel'][:30]}")
+                    bureau = None
             naar_huis_na[sleutel_] = bool(bureau)
             if bureau:
                 regels.append(f"{a_['start'][:16]} {a_['titel'][:40]}: VRAAG om {bureau['start'][11:16]} "
@@ -1931,16 +1957,25 @@ def reistijd_zetten(items, alleen_dag=None):
         dag = a["start"][:10]
         sleutel = (a["kalender"], a.get("id"), a["start"])
         vorige = vorige_per_dag.get(dag)
+        def zonder_plek():
+            # Zonder adres weet ik niet waar hij is; de volgende rit vertrekt dan van de laatste plek die ik ken, niet van
+            # thuis. Gezien 30-09-2026: 'KBC ophalen' zonder adres tussen MediaMarkt Woluwe en MegaMobile Mechelen liet de
+            # rit naar Mechelen van thuis vertrekken, terwijl hij van Woluwe kwam (FR-75).
+            if vorige is not None and vorige[1] is not None and not naar_huis_na.get(vorige[0]):
+                vorige_per_dag[dag] = (sleutel, vorige[1], vorige[2], vorige[3])
+            else:
+                vorige_per_dag[dag] = (sleutel, None, None, einde)
+
         if not fysiek:
             geen_adres += 1
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen adres, geen reistijd")
-            vorige_per_dag[dag] = (sleutel, None, None, einde)
+            zonder_plek()
             continue
         doel = coord(adres, cache)
         if not (doel and thuis):
             geen_adres += 1
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: adres niet gevonden ({adres[:40]})")
-            vorige_per_dag[dag] = (sleutel, None, None, einde)
+            zonder_plek()
             continue
         vorige_einde = None   # gezet als hij rechtstreeks van de vorige afspraak komt
         if vorige is None or naar_huis_na.get(vorige[0]):

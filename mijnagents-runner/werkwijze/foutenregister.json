@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.8",
+ "versie": "3.9",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1577,6 +1577,24 @@
     "soort": "test",
     "waar": "tests/test_leren_in_lagen.py",
     "tekst": "een marker over meerdere dagen staat in de dagcontrole van elke dag die hij dekt"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-75",
+   "datum": "30-09-2026",
+   "gevonden_door": "Claude, bij de dagcontrole na het zetten van MediaMarkt en MegaMobile (01-10)",
+   "fout": "Op 01-10 rekende de agent na Lanaken (tot 12:00) langs huis naar MediaMarkt Woluwe (13:50): 'Lanaken -> thuis' 12:00-13:15 en 'thuis -> Sint-Lambrechts-Woluwe' 12:55-13:30, die overlapten. En de rit naar MegaMobile Mechelen vertrok van thuis, omdat 'KBC ophalen' ertussen geen adres heeft.",
+   "gevolg": "Onmogelijke ritten in de agenda; Mehdi ziet een route die niet klopt.",
+   "waarom_niet_gezien": "FR-69 zette een vaste grens van 90 minuten, zonder te kijken of de rit naar huis en terug daarin past. Een afspraak zonder adres liet de keten terugvallen op thuis.",
+   "oorzaak": "De keuze 'tussendoor naar huis' keek naar het gat, niet naar de rijtijden; en 'geen adres' betekende 'vanaf thuis'.",
+   "soort_oorzaak": "code",
+   "oplossing": "via_huis_zinvol: langs huis alleen als na de rit heen en terug (vrije rijtijd x filefactor + buffer) nog 30 minuten thuis overblijft. Een buitenafspraak zonder adres neemt de laatste bekende plek over, zodat de volgende rit van daar vertrekt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "langs huis alleen met tijd thuis na de ritten"
    },
    "controle": [],
    "status": "opgelost"

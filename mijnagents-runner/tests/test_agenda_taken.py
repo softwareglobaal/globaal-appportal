@@ -809,6 +809,12 @@ _src69 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("met minder dan 90 minuten tussen twee buitenafspraken rijdt de agent rechtstreeks, ook met iets achter het bureau",
       "if bureau and (s_volgend - e_) < timedelta(minutes=90):" in _src69)
 
+# Naar huis tussendoor alleen als er na de ritten tijd thuis overblijft; zonder adres vanaf de laatste plek (FR-75)
+check("langs huis alleen met tijd thuis na de ritten; zonder adres rekent de agent vanaf de laatste plek, niet vanaf thuis",
+      not W.via_huis_zinvol(110, 75, 35) and W.via_huis_zinvol(180, 40, 40) and not W.via_huis_zinvol(80, None, None)
+      and W.via_huis_zinvol(95, None, None) and "zonder_plek()" in _src69
+      and "vorige_per_dag[dag] = (sleutel, vorige[1], vorige[2], vorige[3])" in _src69)
+
 # 'In de auto': gesprekken onderweg, de aankomst schuift niet (FR-70)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("staat 'in de auto' in de afspraak, dan schuift de aankomst niet voor gesprekken onderweg",
