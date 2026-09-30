@@ -29,7 +29,7 @@
    "opdracht": "(?i)(api\\.calendly\\.com|event_types|calendly)",
    "regels": [
     "Een Calendly-type uitzetten na een ja van Mehdi; verwijderen doet Mehdi zelf.",
-    "Elk boekingskanaal telt alle agenda's (werk, privé, Lara, archief) als bezet (FR-57).",
+    "Elk boekingskanaal telt alle agenda's in gebruik (werk met Lara, privé) als bezet (FR-57); de oude koppelingen zijn sinds 30-09 los.",
     "Nooit een link of uitnodiging naar een klant sturen."
    ]
   },
