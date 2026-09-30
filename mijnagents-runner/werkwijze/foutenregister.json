@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.6",
+ "versie": "3.7",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -188,6 +188,14 @@
     "FR-64",
     "FR-71",
     "FR-72"
+   ]
+  },
+  {
+   "id": "L24",
+   "les": "Meet aan de bron, niet aan een teken ervan: of een meeting een wachtwoord vraagt, staat in Zoom, niet in de link.",
+   "uit": [
+    "FR-54",
+    "FR-73"
    ]
   }
  ],
@@ -1201,7 +1209,7 @@
    "waarom_niet_gezien": "De link staat in de agenda en lijkt goed; dat het wachtwoord ontbreekt, zie je pas als je hem als klant opent.",
    "oorzaak": "Het Zoom-account achter Calendly General maakt vergaderingen met een wachtwoord, maar zet dat niet in de uitnodigingslink ('wachtwoord insluiten in de uitnodigingslink' staat uit). Calendly kent het wachtwoord niet en stuurt het dus ook niet mee. Bij light@ staat het wel goed.",
    "soort_oorzaak": "bron",
-   "oplossing": "In Zoom (het account dat aan Calendly General hangt): Instellingen, Vergadering, Beveiliging, 'Toegangscode insluiten in uitnodigingslink voor deelname met één klik' aanzetten. Tot dan ziet de agent elke Zoom-link zonder wachtwoord binnen 48 uur en belt hij een keer per dag met een zin.",
+   "oplossing": "In Zoom (het account dat aan Calendly General hangt): Instellingen, Vergadering, Beveiliging, 'Toegangscode insluiten in uitnodigingslink voor deelname met één klik' aanzetten. Tot dan ziet de agent elke Zoom-link zonder wachtwoord binnen 48 uur en belt hij een keer per dag met een zin. Gemeten 30-09-2026 in Zoom zelf: de Calendly-meetings sinds 28-09 (Damian Wojtas, Tim De Bondt, Levi Sonck, Stijn Hahn) hebben geen toegangscode meer en wel een wachtkamer; de enige komende meeting met een code (2609 Filip Vandelook, light@) heeft ze in de link. Geen enkele komende klant heeft nog een wachtwoord nodig.",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
@@ -1210,7 +1218,7 @@
    "controle": [
     "zoom_zonder_wachtwoord"
    ],
-   "status": "open"
+   "status": "opgelost"
   },
   {
    "id": "FR-55",
@@ -1529,6 +1537,24 @@
    },
    "controle": [],
    "status": "open"
+  },
+  {
+   "id": "FR-73",
+   "datum": "30-09-2026",
+   "gevonden_door": "Claude, bij Mehdi's vraag welke Zoom-klanten een wachtwoord nodig hebben",
+   "fout": "De agent belde van 28-09 tot 02-10 elke dag over 'Zoom-afspraken met een link zonder wachtwoord' (Damian Wojtas, Tim De Bondt, Levi Sonck), terwijl die meetings geen toegangscode hebben. De zelfcontrole meldde dezelfde drie.",
+   "gevolg": "Valse oproepen, en Mehdi denkt dat klanten niet in de meeting raken en laat een collega mailen voor niets.",
+   "waarom_niet_gezien": "De controle keek alleen naar de tekst van de link (?pwd=). Sinds FR-63 leest de agent Zoom wel, maar alleen voor de wachtkamer, niet voor de toegangscode.",
+   "oorzaak": "Een link zonder ?pwd= werd gelijkgesteld met een ontbrekend wachtwoord, ook als de meeting geen wachtwoord heeft.",
+   "soort_oorzaak": "code",
+   "oplossing": "zoom_zonder_wachtwoord leest de meeting in Zoom: zonder toegangscode geen melding; met een code die niet in de link of de uitnodiging staat wel. Is Zoom niet te lezen, dan telt de link zoals voorheen.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een meeting zonder toegangscode is geen Zoom-link zonder wachtwoord"
+   },
+   "controle": [],
+   "status": "opgelost"
   }
  ]
 }

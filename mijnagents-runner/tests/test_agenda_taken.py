@@ -652,10 +652,23 @@ _iz = [{"id": "z1", "titel": "Mehdi: [UNABO-PO] Jonatan Puype - Stabiliteit", "s
         "kalender": "zoomafspraken@gmail.com", "locatie": "https://us06web.zoom.us/j/81234567890", "omschrijving": "", "deelnemers": ["klant@x.be"]},
        {"id": "z2", "titel": "Mehdi: [HARC-KO] 2609 - Filip Vandelook", "start": (_nz + _td(hours=6)).isoformat(), "einde": (_nz + _td(hours=7)).isoformat(),
         "kalender": "x", "locatie": "https://us06web.zoom.us/j/8123?pwd=abc", "omschrijving": "", "deelnemers": ["klant@x.be"]}]
-_vz = [z for s_, z in W.vastgelopen(_iz, _nz) if s_.startswith("zoompwd:")]
-_sz = [s_ for s_, z in W.vastgelopen(_iz, _nz) if s_.startswith("zoompwd:")]
-check("een Zoom-link zonder wachtwoord wordt gezien en in een zin gemeld",
-      [a["id"] for a in W.zoom_zonder_wachtwoord(_iz, _nz)] == ["z1"] and len(_vz) == 1 and "zonder wachtwoord" in _vz[0] and _sz[0].count(":") == 1, str((_vz, _sz)))
+_zo54 = (W.zoom.beschikbaar, W.zoom.meeting)
+W.zoom.beschikbaar = lambda: True
+W.zoom.meeting = lambda mid: {"password": "123456", "settings": {"waiting_room": True}}
+try:
+    _vz = [z for s_, z in W.vastgelopen(_iz, _nz) if s_.startswith("zoompwd:")]
+    _sz = [s_ for s_, z in W.vastgelopen(_iz, _nz) if s_.startswith("zoompwd:")]
+    check("een Zoom-link zonder wachtwoord wordt gezien en in een zin gemeld",
+          [a["id"] for a in W.zoom_zonder_wachtwoord(_iz, _nz)] == ["z1"] and len(_vz) == 1 and "zonder wachtwoord" in _vz[0] and _sz[0].count(":") == 1, str((_vz, _sz)))
+    # FR-73: een meeting zonder toegangscode heeft geen wachtwoord nodig; de klant komt met de link in de wachtkamer
+    W.zoom.meeting = lambda mid: {"password": "", "settings": {"waiting_room": True}}
+    _z73 = W.zoom_zonder_wachtwoord(_iz, _nz)
+    W.zoom.meeting = lambda mid: None
+    _z73b = W.zoom_zonder_wachtwoord(_iz, _nz)
+    check("een meeting zonder toegangscode is geen Zoom-link zonder wachtwoord (en is Zoom onleesbaar, dan telt de link)",
+          _z73 == [] and [a["id"] for a in _z73b] == ["z1"], str((_z73, _z73b)))
+finally:
+    W.zoom.beschikbaar, W.zoom.meeting = _zo54
 
 try:
     W.bellen.bel("proef")

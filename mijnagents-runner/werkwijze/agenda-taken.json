@@ -1,5 +1,5 @@
 {
- "versie": "4.22",
+ "versie": "4.23",
  "datum": "2026-09-30",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -421,11 +421,6 @@
   "uitkomst": "GOED, LET OP of FOUT per toets; hij eindigt met een foutcode als er iets FOUT is"
  },
  "openstaand": [
-  {
-   "wat": "Zoom: 'Toegangscode insluiten in uitnodigingslink' aanzetten op het Zoom-account dat aan Calendly General hangt. Komende klanten met een link zonder wachtwoord: de uitnodiging vanuit Zoom sturen (FR-54)",
-   "wie": "Mehdi",
-   "wanneer": "vandaag"
-  },
   {
    "wat": "Iets buiten de agent kleurt UNABO-afspraken paars en AI stabiliteit geel (24-09 om 00:15 en 13:45 Brusselse tijd). De agent zet het terug en meldt elk tijdstip. Welke tool of wie heeft schrijfrecht op de werkagenda en zoomafspraken en doet dit? (FR-21)",
    "wie": "Mehdi",
@@ -1199,9 +1194,10 @@
   "regel": "een klant krijgt altijd de volledige Zoom-link met het wachtwoord erin (?pwd=), in de mail van Calendly en in de agenda",
   "gemeten": "25-09-2026: alle komende boekingen van Calendly General hebben een link zonder wachtwoord, en Calendly kent het wachtwoord niet; bij light@ zitten de nieuwste links wel goed. Maureen Van De Poel annuleerde op 24-09 omdat ze het wachtwoord niet had",
   "bron_oplossing": "Zoom, het account dat aan Calendly General hangt (Calendly, Integraties, Zoom toont welk): Instellingen, Vergadering, Beveiliging, 'Toegangscode insluiten in uitnodigingslink voor deelname met één klik' aan. Werkt voor elke nieuwe boeking",
-  "agent": "ziet elke Zoom-link zonder wachtwoord bij een afspraak met een gast binnen 48 uur en belt Mehdi een keer per dag met een zin; de zelfcontrole kijkt acht dagen vooruit (FR-54)",
+  "agent": "leest bij elke online afspraak met een gast de meeting in Zoom; heeft die een toegangscode die niet in de link of de uitnodiging staat, dan belt hij Mehdi binnen 48 uur een keer per dag met een zin; de zelfcontrole kijkt acht dagen vooruit (FR-54, FR-73)",
   "mehdi": "25-09-2026",
-  "wachtkamer": "Elke Zoom-meeting met een klant heeft een wachtkamer: Mehdi laat de klant zelf toe. De agent leest de instellingen in Zoom (alleen lezen) en belt binnen 48 uur een keer met een zin als een meeting er geen heeft (FR-63)."
+  "wachtkamer": "Elke Zoom-meeting met een klant heeft een wachtkamer: Mehdi laat de klant zelf toe. De agent leest de instellingen in Zoom (alleen lezen) en belt binnen 48 uur een keer met een zin als een meeting er geen heeft (FR-63).",
+  "gemeten_30_09": "De Calendly-meetings sinds 28-09 hebben geen toegangscode meer en wel een wachtkamer; een link zonder ?pwd= is dan geen probleem. De agent leest de toegangscode in Zoom en meldt alleen een code die de klant niet heeft (FR-73)."
  },
  "dubbele_boeking": {
   "regel": "elk boekingskanaal telt alle agenda's als bezet mee; er is nog een kanaal: Calendly General (haprospecties@gmail.com), dat werk, Lara en het archief meetelt",

@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.17"
+VERSIE = "2.18"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -295,8 +295,9 @@ op het bord.</td></tr>
 afsprakennummer, vastzitten en alarmen van een tweede nummer.</td></tr>
 <tr><td><b>Dubbel geboekt</b></td><td>Twee afspraken met iemand van buiten tegelijk, op welke agenda ook: de agent belt binnen
 48 uur een keer met een zin. Er is nog een boekingskanaal, Calendly General; het telt werk, Lara en het archief als bezet mee.</td></tr>
-<tr><td><b>Zoom</b></td><td>Een klant krijgt altijd de volledige Zoom-link met het wachtwoord erin. Een link zonder wachtwoord bij een
-afspraak met een gast binnen 48 uur: de agent belt een keer per dag met een zin.</td></tr>
+<tr><td><b>Zoom</b></td><td>Een klant krijgt altijd de volledige Zoom-link met het wachtwoord erin. Of een meeting een wachtwoord vraagt,
+leest de agent in Zoom zelf: een toegangscode die niet in de link staat, bij een afspraak met een gast binnen 48 uur, geeft een oproep
+per dag met een zin. Een meeting zonder toegangscode is in orde: de klant wacht in de wachtkamer tot Mehdi hem toelaat.</td></tr>
 </tbody></table>
 
 <h2>11. Wat hij op het bord zet</h2>

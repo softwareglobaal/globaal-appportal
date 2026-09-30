@@ -2325,8 +2325,16 @@ def zoom_zonder_wachtwoord(items, nu=None, uren=48):
         if not (nu < start <= nu + timedelta(hours=uren)):
             continue
         tekst = f"{a.get('locatie') or ''} {re.sub(r'<[^>]+>', ' ', a.get('omschrijving') or '')}"
-        if re.search(r"zoom\.us/j/\d+", tekst) and not re.search(r"zoom\.us/j/\d+\?pwd=|passcode|password|wachtwoord|toegangscode", tekst, re.I):
-            uit.append(a)
+        m = re.search(r"zoom\.us/j/(\d+)", tekst)
+        if not m or re.search(r"zoom\.us/j/\d+\?pwd=|passcode|password|wachtwoord|toegangscode", tekst, re.I):
+            continue
+        # Heeft de meeting zelf geen toegangscode, dan komt de klant met de link binnen (in de wachtkamer, FR-63).
+        # Gezien 30-09-2026: de Calendly-meetings sinds 28-09 hebben geen code meer, en toch belde de agent elke
+        # dag over 'een link zonder wachtwoord' (FR-73). Is Zoom niet te lezen, dan telt de link, zoals voorheen.
+        d = zoom.meeting(m.group(1)) if zoom.beschikbaar() else None
+        if d is not None and not d.get("password"):
+            continue
+        uit.append(a)
     return uit
 
 
