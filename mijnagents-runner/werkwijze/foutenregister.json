@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.9",
+ "versie": "3.10",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1595,6 +1595,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "langs huis alleen met tijd thuis na de ritten"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-76",
+   "datum": "30-09-2026",
+   "gevonden_door": "Claude, dagcontrole van 01-10 na de herstelling van FR-75",
+   "fout": "'Reistijd: Sint-Lambrechts-Woluwe -> Mechelen' (14:10-14:45, voor MegaMobile) stond twee keer in de werkagenda.",
+   "gevolg": "Een dubbele rit in de agenda.",
+   "waarom_niet_gezien": "De agent zoekt per afspraak een heenrit en werkt die bij; een tweede eigen heenrit voor dezelfde afspraak zag hij niet. De eerste ronde maakte een nieuwe rit, de tweede herrekende de oude 'thuis -> Mechelen' tot dezelfde rit.",
+   "oorzaak": "Geen opruiming van een tweede eigen heenrit voor dezelfde afspraak.",
+   "soort_oorzaak": "code",
+   "oplossing": "Na het bijwerken van de heenrit haalt de agent elke andere eigen heenrit voor dezelfde afspraak weg (alleen eigen ritten, FR-68). De dagcontrole ziet overlappende ritten (rit_overlap).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een tweede eigen heenrit voor dezelfde afspraak haalt de agent zelf weg"
    },
    "controle": [],
    "status": "opgelost"

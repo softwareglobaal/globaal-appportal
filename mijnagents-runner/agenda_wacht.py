@@ -2170,6 +2170,14 @@ def reistijd_zetten(items, alleen_dag=None):
                 if bijwerken(x, rit_start, aankomst, uitleg_h, f"🚗 Reistijd: {van_plaats} → {plaats}",
                              [{"method": "popup", "minutes": 5}]):
                     gemaakt += 1
+                # Een afspraak heeft precies één heenrit. Staat er nog een tweede eigen heenrit voor dezelfde afspraak, dan
+                # haal ik die weg. Gezien 30-09-2026: 'Sint-Lambrechts-Woluwe -> Mechelen' stond twee keer, nadat de oude rit
+                # 'thuis -> Mechelen' was herrekend terwijl de nieuwe al bestond (FR-76).
+                for y in [y for y in reistijden if y is not x and y["kalender"] == a["kalender"] and _mijn(y)
+                          and y["start"][:10] == a["start"][:10] and f"Reistijd voor: {a['titel']} (" in (y.get("omschrijving") or "")]:
+                    if _eigen_rit_weg(y, tok):
+                        reistijden.remove(y)
+                        regels.append(f"{a['start'][:16]} {a['titel'][:44]}: dubbele heenrit weggehaald")
             else:
                 _insert(a["kalender"], {"summary": f"🚗 Reistijd: {van_plaats} → {plaats}", "start": {"dateTime": rit_start.isoformat()},
                                         "end": {"dateTime": aankomst.isoformat()}, "description": uitleg_h, **kleur}, tok)

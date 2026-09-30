@@ -815,6 +815,11 @@ check("langs huis alleen met tijd thuis na de ritten; zonder adres rekent de age
       and W.via_huis_zinvol(95, None, None) and "zonder_plek()" in _src69
       and "vorige_per_dag[dag] = (sleutel, vorige[1], vorige[2], vorige[3])" in _src69)
 
+# Een afspraak heeft precies één heenrit van de agent; een tweede eigen heenrit haalt hij weg (FR-76)
+_src76 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("een tweede eigen heenrit voor dezelfde afspraak haalt de agent zelf weg",
+      "dubbele heenrit weggehaald" in _src76 and "y is not x and y[\"kalender\"] == a[\"kalender\"] and _mijn(y)" in _src76)
+
 # 'In de auto': gesprekken onderweg, de aankomst schuift niet (FR-70)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("staat 'in de auto' in de afspraak, dan schuift de aankomst niet voor gesprekken onderweg",
