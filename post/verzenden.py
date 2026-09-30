@@ -252,18 +252,13 @@ def doorsturen(mailbox, mapnaam, uid, naar, notitie=None):
     return uit
 
 
-def verstuur(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
-             van_map="INBOX", wie=None):
-    """Stelt een bericht op en verstuurt het echt namens de mailbox.
+def _controle_versturen(mailbox, wie):
+    """Alles wat moet kloppen voordat er iets verstuurd mag worden.
 
-    Anders dan doorsturen mag de bestemming hier vrij zijn: dit is de enige
-    plek waar de server post naar een zelfgekozen adres stuurt. Het is daarom
-    dubbel begrensd: de mailbox moet 'verzenden: ja' hebben (config) en de
-    server-noodrem POSTBUS_VERZENDEN moet aanstaan. Een kopie gaat in de map
-    Verzonden en het dagplafond geldt samen met doorsturen.
+    Eén plek, gebruikt door het concept (verstuur_voorbereiden) en door het
+    echte versturen, zodat een concept nooit iets belooft dat daarna niet mag.
     """
     config.vereis_verzenden(mailbox, wie)
-
     if not ACTIEF_VERZENDEN:
         raise ValueError(
             "Versturen staat uit op deze server (POSTBUS_VERZENDEN). De "
@@ -277,12 +272,76 @@ def verstuur(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
             f"Dagplafond van {DAGPLAFOND} uitgaande berichten bereikt. Er gaat "
             "vandaag niets meer uit; morgen telt hij opnieuw.")
 
+
+def verstuur_voorbereiden(mailbox, aan, onderwerp, tekst, cc=None,
+                          antwoord_op=None, van_map="INBOX", wie=None):
+    """Stelt het bericht samen zoals het zou vertrekken, en verstuurt NIETS.
+
+    Geeft de ingevulde velden terug: ontvangers en onderwerp zijn bij een
+    antwoord (antwoord_op) pas hier bekend, en juist die moet de gebruiker
+    zien voordat hij toestemming geeft. Bij het bevestigen gaan deze velden
+    letterlijk mee naar verstuur(), zodat verstuurd wordt wat getoond werd.
+    """
+    _controle_versturen(mailbox, wie)
+    van_map = config.map_toegestaan(mailbox, van_map)
+    with imapbron._Sessie(mailbox) as M:
+        bericht, ontvangers, kopie, verwijzing = imapbron.bouw_bericht(
+            M, mailbox, aan, onderwerp, tekst, cc=cc, antwoord_op=antwoord_op,
+            van_map=van_map)
+    return {"van": mailbox["adres"], "aan": ontvangers, "cc": kopie,
+            "onderwerp": bericht["Subject"], "tekst": str(tekst or ""),
+            "antwoord_op": antwoord_op, "antwoord_op_bericht": verwijzing,
+            "map": van_map}
+
+
+def doorsturen_voorbereiden(mailbox, mapnaam, uid, naar, notitie=None):
+    """Toont wat er doorgestuurd zou worden, en verstuurt NIETS."""
+    bestemming = config.vereis_doorsturen(mailbox, naar)
+    if not ACTIEF:
+        raise ValueError(
+            "Doorsturen staat uit op deze server (POSTBUS_DOORSTUREN).")
+    bron_map = config.map_toegestaan(mailbox, mapnaam)
+    origineel = imapbron.bericht(mailbox, bron_map, uid)
+    onderwerp = origineel["onderwerp"] or "(geen onderwerp)"
+    return {"van": mailbox["adres"], "naar": bestemming,
+            "onderwerp": (onderwerp if onderwerp.lower().startswith("fwd:")
+                          else "Fwd: " + onderwerp),
+            "notitie": str(notitie or "").strip(),
+            "origineel": {"van": origineel["van"], "datum": origineel["datum"],
+                          "onderwerp": origineel["onderwerp"],
+                          "bijlagen": [b["naam"] for b in origineel["bijlagen"]]},
+            "map": bron_map, "uid": int(uid)}
+
+
+def verstuur(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
+             van_map="INBOX", wie=None, verwacht=None):
+    """Stelt een bericht op en verstuurt het echt namens de mailbox.
+
+    Anders dan doorsturen mag de bestemming hier vrij zijn: dit is de enige
+    plek waar de server post naar een zelfgekozen adres stuurt. Het is daarom
+    dubbel begrensd: de mailbox moet 'verzenden: ja' hebben (config) en de
+    server-noodrem POSTBUS_VERZENDEN moet aanstaan. Een kopie gaat in de map
+    Verzonden en het dagplafond geldt samen met doorsturen.
+    """
+    _controle_versturen(mailbox, wie)
     van_map = config.map_toegestaan(mailbox, van_map)
 
     with imapbron._Sessie(mailbox) as M:
         bericht, ontvangers, kopie, verwijzing = imapbron.bouw_bericht(
             M, mailbox, aan, onderwerp, tekst, cc=cc, antwoord_op=antwoord_op,
             van_map=van_map)
+
+        # Na toestemming: vertrekt het nog precies zoals het getoond werd?
+        # Zo niet (bijvoorbeeld een ander antwoordadres in het origineel), dan
+        # gaat er niets uit en moet de gebruiker het nieuwe concept zien.
+        if verwacht is not None and (
+                ontvangers != verwacht["aan"] or kopie != verwacht["cc"]
+                or bericht["Subject"] != verwacht["onderwerp"]
+                or str(tekst or "") != verwacht["tekst"]):
+            raise ValueError(
+                "Het bericht zou nu anders vertrekken dan het concept dat de "
+                "gebruiker zag. Er is niets verstuurd; vraag een nieuw concept "
+                "op en laat dat opnieuw goedkeuren.")
 
         try:
             _afleveren(mailbox, bericht)

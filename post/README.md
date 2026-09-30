@@ -90,6 +90,19 @@ Regels die in de code zitten, niet in een afspraak:
 
 ## De tools
 
+**Versturen en doorsturen gaan altijd in twee stappen** (`wachtrij.py`). De
+eerste aanroep verstuurt niets: de server stelt het bericht samen en geeft het
+concept terug (van, aan, cc, onderwerp, tekst) met een bevestigingscode. Pas
+een tweede aanroep met `bevestig: <code>` verstuurt, en dan precies dat
+concept: `verstuur` bouwt het opnieuw op en weigert als ontvangers, onderwerp
+of tekst afwijken. Een code is persoonlijk, eenmalig en een half uur geldig.
+De instructies aan het model zeggen het concept altijd volledig te tonen en op
+een uitdrukkelijk ja te wachten. Dat laatste kan de server zelf niet
+afdwingen; zet daarom in claude.ai bij de connector de tools `versturen` en
+`doorsturen` op "altijd vragen", dan moet de gebruiker elke bevestiging ook
+zelf aanklikken. De doorstuuragent gebruikt deze stap niet: die stuurt alleen
+volgens een vaste regel naar een vaste bestemming. Test: `post/test_bevestigen.py`.
+
 | Tool | Wat het doet | Wijzigt |
 |---|---|---|
 | `mailboxen` | welke mailboxen deze gebruiker mag lezen, met de open mappen en de rechten per mailbox | nee |

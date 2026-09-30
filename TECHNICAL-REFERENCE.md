@@ -2457,6 +2457,12 @@ de wijzigfuncties openen een map schrijfbaar.
   veranderd is).
 - Beheerderspagina toont alle mailboxen, de fouten in het bestand (nooit een
   wachtwoord) en een knop die per mailbox echt inlogt op IMAP.
+- **Versturen en doorsturen in twee stappen** (2026-09-30): de eerste
+  MCP-aanroep verstuurt niets en geeft een concept met bevestigingscode
+  (`wachtrij.py`, bestanden in `/tmp/postbus-wacht` omdat gunicorn meerdere
+  workers heeft); pas `bevestig` verstuurt, en `verstuur(verwacht=...)` weigert
+  als het bericht afwijkt van het getoonde concept. Code persoonlijk, eenmalig,
+  30 minuten. De doorstuuragent blijft eenstaps.
 - **Microsoft-mailboxen via OAuth2** (2026-09-30): Microsoft weigert basic auth
   op IMAP, ook met app-wachtwoord. Een mailbox met `auth: microsoft` +
   `oauth_client_id` logt in met XOAUTH2 (`oauth_ms.py`); het refresh token komt
