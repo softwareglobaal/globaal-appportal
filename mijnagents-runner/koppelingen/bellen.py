@@ -64,7 +64,7 @@ def _verzoek(pad, data=None):
         return json.load(r)
 
 
-def twiml(tekst, slot="Details staan op Telegram en op het bord."):
+def twiml(tekst, slot="Details staan op WhatsApp en op het bord."):
     t = escape(tekst[:600])
     return ('<Response><Pause length="1"/>'
             f'<Say language="nl-NL" voice="Polly.Lotte">{t}</Say><Pause length="1"/>'
@@ -79,7 +79,7 @@ def _niet_in_een_test():
         raise RuntimeError("bellen staat uit (test)")
 
 
-def bel(tekst, slot="Details staan op Telegram en op het bord.", van=None):
+def bel(tekst, slot="Details staan op WhatsApp en op het bord.", van=None):
     """Start de oproep; geeft de call-sid terug. slot: de laatste zin (de Agendawacht zegt: in je agenda).
     van: afzender; standaard TWILIO_VAN (het afsprakennummer)."""
     _niet_in_een_test()
@@ -95,7 +95,7 @@ def van_vast():
     return _e("TWILIO_VAN_VAST") or _e("TWILIO_VAN")
 
 
-def bel_vast(tekst, slot="Details staan op Telegram en op het bord."):
+def bel_vast(tekst, slot="Details staan op WhatsApp en op het bord."):
     """Een oproep van het vastzit-nummer. Geeft [(kanaal, sid of fout)], zelfde vorm als bel_afspraak."""
     if not beschikbaar():
         return []
@@ -181,7 +181,7 @@ def bel_telegram(tekst):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", h)).strip()[:200]
 
 
-def bel_afspraak(tekst, slot="Details staan op Telegram en op het bord."):
+def bel_afspraak(tekst, slot="Details staan op WhatsApp en op het bord."):
     """Belt een keer, via een kanaal: de telefoon (Twilio), en alleen als die niet kan de Telegram-oproep.
     Mehdi, 25-09-2026: een oproep is meer dan voldoende; vroeger belden beide kanalen tegelijk.
     Geeft lijst van (kanaal, resultaat of fout)."""

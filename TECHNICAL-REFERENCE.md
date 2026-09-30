@@ -2620,3 +2620,10 @@ rol `whatsapp_writer`, Authentik-app `whatsapp` (groepen `whatsapp`, `whatsapp-b
 - **24-uursvenster**: buiten 24 uur na het laatste klantbericht kan niet vrij verstuurd worden (Meta-fout
   131047); sjablonen zijn nog niet gebouwd. Media bewaart Meta 30 dagen.
 - **Meetlat**: tab Voorstellen telt ongewijzigd / aangepast / verworpen, met gelijkenis.
+- **De Bode gebruikt dezelfde koppeling** (sinds 30-09-2026, `mijnagents-runner/koppelingen/whatsapp.py`):
+  de meldingen van de agents gaan naar Mehdi via WhatsApp in plaats van Telegram, voorlopig van het
+  UNABO-nummer (`WA_AFZENDER_FIRMA`, standaard UNAB; een eigen agentennummer volgt). Buiten het
+  24-uursvenster alleen met sjabloon `WA_SJABLOON` (`agent_melding`, aan te vragen met
+  `whatsapp_sjabloon.py <waba-id>`); zonder sjabloon valt De Bode terug op Telegram. Mehdi's
+  antwoorden leest De Bode uit `whatsapp.bericht` en zet ze als gesprek op het bord. Wat De Bode
+  stuurt, staat niet in de inbox; wat Mehdi terugstuurt wel.

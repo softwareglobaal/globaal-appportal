@@ -2,12 +2,14 @@
 """De Bode (Regie) — twee richtingen tussen het bord en Mehdi.
 
 Naar Mehdi: wat de agents voor hem klaarzetten en welke voorstellen wachten,
-gebundeld, via Telegram (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID in
-mijnagents-data/.env), anders Zoom-chat. Alleen als er iets NIEUWS is; een
-herinnering aan open voorstellen hoogstens één keer per zes uur.
-Van Mehdi: wat hij in Telegram typt wordt een bericht op het bord aan De
-Regisseur, of aan een agent als hij begint met diens naam ("Contractmaker: ...").
-Het antwoord komt terug in Telegram zodra de agent het op het bord zette.
+gebundeld, via WhatsApp (sinds 30-09-2026, koppelingen/whatsapp.py: de Cloud API
+van Meta, voorlopig van het UNABO-nummer). Mag WhatsApp niet (venster van 24 uur
+dicht en nog geen sjabloon) of lukt het niet, dan Telegram, dan Zoom-chat. Alleen
+als er iets NIEUWS is; een herinnering aan open voorstellen hoogstens één keer per
+zes uur.
+Van Mehdi: wat hij op WhatsApp of Telegram typt wordt een bericht op het bord aan
+De Regisseur, of aan een agent als hij begint met diens naam ("Contractmaker: ...").
+Het antwoord komt terug zodra de agent het op het bord zette.
 Elke minuut. Werkwijze op het bord (werkwijze/bode.md is het zaad).
 """
 import base64
@@ -23,6 +25,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bellen  # noqa: E402
 import bord  # noqa: E402
+import whatsapp  # noqa: E402
 
 NAAM = "bode"
 ag = bord.Agent(NAAM)
@@ -37,6 +40,10 @@ HERINNERING_UREN = 6
 # Telegram. Een oproep (belrooster, vastzitten) blijft wel gewoon werken.
 NIET_OP_TELEGRAM = tuple(x.strip() for x in os.environ.get("BODE_NIET_OP_TELEGRAM", "agenda-wacht,calendly-wacht").split(",") if x.strip())
 ZOOM_ENV = os.path.expanduser("~/pipedrive-won-deals/.env")
+# Zonder aantal (N10): zolang het venster dicht is en er geen sjabloon is, staat deze nood open.
+WA_NOOD = ("WhatsApp mag je pas schrijven na een bericht van jou: stuur iets naar het agentennummer "
+           "(nu het UNABO-nummer +32 472 01 66 56); tot dan gaat het via Telegram")
+WA_KORT = ("start", "/start", "test", "hallo", "hoi")
 
 
 def laad_env(pad):
@@ -90,6 +97,14 @@ def stuur_zoom(tekst):
 
 
 def stuur(tekst, nood):
+    # Mehdi, 30-09-2026: WhatsApp in plaats van Telegram. Telegram blijft het vangnet
+    # zolang het WhatsApp-venster dicht kan zijn zonder goedgekeurd sjabloon.
+    try:
+        return whatsapp.stuur(tekst)
+    except whatsapp.NietBeschikbaar as e:
+        nood.append({"tekst": WA_NOOD if "venster" in str(e) else f"WhatsApp: {e}", "wie": "mehdi"})
+    except Exception as e:  # noqa: BLE001
+        nood.append({"tekst": f"WhatsApp sturen mislukt: {type(e).__name__}: {str(e)[:100]}", "wie": "claude-code"})
     try:
         return stuur_telegram(tekst)
     except Exception as e:  # noqa: BLE001
@@ -158,6 +173,38 @@ def lees_telegram(staat, namen):
     return n
 
 
+def lees_whatsapp(staat, namen, nood):
+    """Nieuwe WhatsApp-berichten van Mehdi aan het agentennummer -> gesprek op het bord.
+    De WhatsApp-app bewaart ze (whatsapp.bericht); ik lees daar, alleen lezend. Geeft aantal."""
+    try:
+        nieuw = whatsapp.binnen(staat.get("wa_laatste_id", 0))
+    except Exception as e:  # noqa: BLE001
+        nood.append({"tekst": f"WhatsApp lezen mislukt: {type(e).__name__}", "wie": "claude-code"})
+        return 0
+    if "wa_laatste_id" not in staat:
+        # eerste ronde: alleen de stand onthouden, geen oude berichten opnieuw op het bord
+        staat["wa_laatste_id"] = max([m["id"] for m in nieuw] or [0])
+        return 0
+    n, aan = 0, "regisseur"
+    for m in nieuw:
+        staat["wa_laatste_id"] = max(staat["wa_laatste_id"], m["id"])
+        tekst = (m.get("tekst") or "").strip()
+        if not tekst:
+            continue
+        if tekst.lower() in WA_KORT:
+            stuur("WhatsApp staat aan: de meldingen van je agents komen voortaan hier. "
+                  "Antwoord gewoon; begin met de naam van een agent om hem rechtstreeks te spreken.", nood)
+            continue
+        aan, vraag = doel_van(tekst, namen)
+        uit = bord.call("/api/gesprek", {"aan": aan, "tekst": vraag, "van": "mehdi (whatsapp)"})
+        staat.setdefault("wacht", []).append({"id": uit["id"], "aan": uit["aan"]})
+        ag.log(f"bericht {uit['id']}", "bron", f"uit WhatsApp aan {namen.get(uit['aan'], uit['aan'])}: {vraag[:120]}")
+        n += 1
+    if n:
+        stuur(f"Ontvangen, {namen.get(aan, 'De Regisseur')} kijkt ernaar. Antwoord binnen een paar minuten.", nood)
+    return n
+
+
 def antwoorden_terug(staat, namen, nood):
     """Beantwoorde berichten uit het bord -> Telegram."""
     klaar, rest = 0, []
@@ -170,7 +217,7 @@ def antwoorden_terug(staat, namen, nood):
             kop = namen.get(w["aan"], "De Regisseur")
             if stuur(f"{kop}:\n\n{platte_tekst(g.get('antwoord') or '(geen antwoord)')}", nood):
                 klaar += 1
-                ag.log(f"bericht {w['id']}", "melding", f"antwoord van {kop} naar Telegram", g.get("antwoord", "")[:2000])
+                ag.log(f"bericht {w['id']}", "melding", f"antwoord van {kop} naar Mehdi", g.get("antwoord", "")[:2000])
             else:
                 rest.append(w)
         else:
@@ -187,7 +234,7 @@ def main():
         staat = {"laatste_id": 0, "tg_offset": 0, "wacht": [], "laatste_herinnering": "", "laatste_voorstellen": 0}
     nood = []
     namen = agentnamen()
-    binnen = lees_telegram(staat, namen)
+    binnen = lees_whatsapp(staat, namen, nood) + lees_telegram(staat, namen)
     terug = antwoorden_terug(staat, namen, nood)
 
     uur = datetime.now().hour
@@ -230,10 +277,17 @@ def main():
     if not TG_TOKEN:
         nood.append({"tekst": "Telegram niet ingesteld: bot bij BotFather, TELEGRAM_BOT_TOKEN en TELEGRAM_CHAT_ID in mijnagents-data/.env", "wie": "mehdi"})
     nood += bellen.nood() + bellen.nood_afspraken()
+    try:
+        ins = whatsapp.instellingen()
+        if not ins["sjabloon"] and not whatsapp.venster(ins)[0]:
+            nood.append({"tekst": WA_NOOD, "wie": "mehdi"})
+    except Exception:  # noqa: BLE001
+        pass
+    nood = list({n["tekst"]: n for n in nood}.values())   # dezelfde nood een keer, ook als hij twee keer ontstond
     ag.log_verstuur()
     detail = f"{binnen} binnen, {terug} antwoorden terug, {len(items)} items" + (f" via {kanaal}" if kanaal else "") + (f"; {bel_detail}" if bel_detail else "") + (f"; {len(staat.get('wacht', []))} wacht op antwoord" if staat.get("wacht") else "")
     ag.hartslag("actief" if (binnen or terug or kanaal) else ("rust" if stil else "waakt"),
-                taak="luistert op Telegram" if TG_TOKEN else "luistert", detail=detail, nood=nood)
+                taak="luistert op WhatsApp" + (" en Telegram" if TG_TOKEN else ""), detail=detail, nood=nood)
 
 
 if __name__ == "__main__":
