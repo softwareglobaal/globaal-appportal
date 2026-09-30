@@ -2,9 +2,9 @@
 whatsapp.globaal.be (softwareglobaal/globaal-whatsapp).
 
 Mehdi, 30-09-2026: "de berichtgevingen die nu via Telegram komen, moeten via WhatsApp
-komen." Bellen blijft via Twilio naar zijn telefoonnummer. Voorlopig schrijven de agents
-van het UNABO-nummer (zijn keuze: "UNABO nu, later apart"); een eigen agentennummer
-wordt later alleen een andere WA_AFZENDER_FIRMA of WA_AFZENDER_PNID.
+komen." Bellen blijft via Twilio naar zijn telefoonnummer. Sinds 30-09-2026 schrijven de
+agents van hun eigen nummer, UNABO Assistant (+32 460 23 30 42): WA_AFZENDER_PNID in
+mijnagents-data/.env. Zonder die regel valt het terug op het nummer van WA_AFZENDER_FIRMA.
 
 De regel van Meta: een bedrijfsnummer mag vrij schrijven binnen 24 uur nadat Mehdi dat
 nummer iets stuurde. Daarbuiten alleen met een goedgekeurd sjabloon (WA_SJABLOON, bv.
@@ -12,8 +12,9 @@ agent_melding). Een vrij bericht buiten het venster geeft bij Meta geen fout ter
 mislukt achteraf (131047); daarom lees ik het venster vooraf in whatsapp.gesprek, dat de
 WhatsApp-app bij elk binnenkomend bericht bijwerkt.
 
-Wat Mehdi naar het nummer stuurt, komt ook in de gedeelde UNABO-inbox die Office ziet.
-Wat de agents sturen niet: dat gaat buiten de app om.
+Wat Mehdi naar het agentennummer stuurt, bewaart de WhatsApp-app in whatsapp.bericht,
+maar Office ziet het niet: het nummer staat op in_inbox = false (migratie 178). Wat de
+agents sturen, gaat buiten de app om.
 
 Sleutel: META_WA_TOKEN in ~/appportal/.env, dezelfde als de WhatsApp-app. Nooit in code,
 log of bord.
@@ -75,10 +76,12 @@ def instellingen():
     firma = env.get("WA_AFZENDER_FIRMA", "UNAB")
     pnid = env.get("WA_AFZENDER_PNID", "")
     nummer = ""
+    waar = (f"meta_phone_number_id = {_sql_tekst(pnid)}" if pnid else
+            f"firma_code = {_sql_tekst(firma)} and in_inbox and meta_phone_number_id is not null")
     try:
         rij = organisatie._psql(
             "select row_to_json(r) from (select meta_phone_number_id, nummer from whatsapp.nummer "
-            f"where firma_code = {_sql_tekst(firma)} and meta_phone_number_id is not null limit 1) r") or {}
+            f"where {waar} limit 1) r") or {}
         pnid = pnid or rij.get("meta_phone_number_id", "")
         nummer = rij.get("nummer", "")
     except Exception:  # noqa: BLE001

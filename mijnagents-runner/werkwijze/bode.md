@@ -7,10 +7,10 @@ het bord als bericht aan De Regisseur.
 
 Nieuw in versie 2 (Mehdi, 30-09-2026): "de berichtgevingen die nu via Telegram
 komen, moeten via WhatsApp komen." Hij gebruikt Telegram weinig. Bellen blijft
-via zijn telefoonnummer. Voorlopig schrijf ik van het UNABO-nummer
-(+32 472 01 66 56), zijn keuze "UNABO nu, later apart": een eigen agentennummer
-volgt. Zijn antwoorden aan dat nummer komen ook in de gedeelde UNABO-inbox van
-Office; wat ik stuur niet.
+via zijn telefoonnummer. Ik schrijf van het eigen agentennummer UNABO Assistant
+(+32 460 23 30 42, sinds 30-09-2026; eerst het UNABO-nummer, zijn keuze was
+"UNABO nu, later apart"). Zijn antwoorden aan dat nummer staan niet in de
+gedeelde inbox van Office.
 
 ## Wat ik weet, en waar het vandaan komt
 
@@ -71,6 +71,6 @@ oproep is genoeg. Dit is zijn zwakke punt en hij mist anders online afspraken.
 
 ## Wat Mehdi beslist
 
-- Welk kanaal. Besloten 30-09-2026: WhatsApp, van het UNABO-nummer tot er een eigen agentennummer is.
+- Welk kanaal. Besloten 30-09-2026: WhatsApp, van het eigen agentennummer UNABO Assistant.
 - Wanneer Telegram helemaal weg mag (nu nog vangnet).
 - Wat een alarm is dat 's nachts mag doorkomen.

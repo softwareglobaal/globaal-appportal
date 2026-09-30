@@ -2637,9 +2637,14 @@ rol `whatsapp_writer`, Authentik-app `whatsapp` (groepen `whatsapp`, `whatsapp-b
   131047); sjablonen zijn nog niet gebouwd. Media bewaart Meta 30 dagen.
 - **Meetlat**: tab Voorstellen telt ongewijzigd / aangepast / verworpen, met gelijkenis.
 - **De Bode gebruikt dezelfde koppeling** (sinds 30-09-2026, `mijnagents-runner/koppelingen/whatsapp.py`):
-  de meldingen van de agents gaan naar Mehdi via WhatsApp in plaats van Telegram, voorlopig van het
-  UNABO-nummer (`WA_AFZENDER_FIRMA`, standaard UNAB; een eigen agentennummer volgt). Buiten het
-  24-uursvenster alleen met sjabloon `WA_SJABLOON` (`agent_melding`, aan te vragen met
-  `whatsapp_sjabloon.py <waba-id>`); zonder sjabloon valt De Bode terug op Telegram. Mehdi's
-  antwoorden leest De Bode uit `whatsapp.bericht` en zet ze als gesprek op het bord. Wat De Bode
-  stuurt, staat niet in de inbox; wat Mehdi terugstuurt wel.
+  de meldingen van de agents gaan naar Mehdi via WhatsApp in plaats van Telegram, van het eigen
+  agentennummer UNABO Assistant (+32 460 23 30 42, phone number ID 1363238613534658, WABA Unabo;
+  `WA_AFZENDER_PNID` in mijnagents-data/.env; zonder die regel het nummer van `WA_AFZENDER_FIRMA`).
+  Buiten het 24-uursvenster alleen met sjabloon `WA_SJABLOON` (`agent_melding`, aangevraagd
+  30-09-2026 met `whatsapp_sjabloon.py 2219826358578764`); zonder sjabloon valt De Bode terug op
+  Telegram. Mehdi's antwoorden leest De Bode uit `whatsapp.bericht` en zet ze als gesprek op het
+  bord. Het agentennummer staat in het register met `in_inbox = false` (migratie 178): de app
+  bewaart zijn berichten, maar toont ze niet in de inbox en weigert rechtstreekse links (404).
+  Registratie-PIN: `META_ASSISTENT_PIN` in ~/appportal/.env. Dat nummer is ook het Twilio-nummer
+  voor vastzit- en alarmoproepen (`TWILIO_VAN_VAST`); de WhatsApp-code kwam per spraakoproep binnen,
+  sms van Meta bereikt het Twilio-nummer niet.
