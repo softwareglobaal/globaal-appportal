@@ -125,6 +125,32 @@ Twee dingen zijn met opzet zo gebouwd:
 Bijlagen worden benoemd (naam, type, grootte) maar niet ingelezen. Dat is een
 bewuste grens voor versie 1.
 
+## Microsoft-mailboxen (OAuth2)
+
+Microsoft laat op IMAP geen wachtwoord meer toe, ook geen app-wachtwoord
+("Basic authentication is disabled"). Zo'n mailbox krijgt daarom
+`auth: microsoft` en een `oauth_client_id` in plaats van een wachtwoord:
+
+    - adres: iemand@hotmail.com
+      imap_host: outlook.office365.com
+      auth: microsoft
+      oauth_client_id: <Application (client) ID van de app-registratie>
+      personen: [mehdi]
+
+Eenmalig koppelen, waarbij de eigenaar inlogt op microsoft.com/devicelogin:
+
+    docker exec -it appportal-app-post-1 python oauth_koppel.py iemand@hotmail.com
+
+Het refresh token staat daarna in het volume `post-oauth` (`/oauth`), niet in
+het mailboxenbestand, omdat Microsoft het bij gebruik vervangt
+(`oauth_ms.py`). App-registratie in Entra: persoonlijke Microsoft-accounts
+toegestaan, "Allow public client flows" op Yes, Microsoft Graph delegated
+`IMAP.AccessAsUser.All` en `offline_access`, geen client secret.
+
+Versturen en doorsturen kunnen hier nog niet: die loggen op SMTP in met een
+wachtwoord. Staan ze aan bij een Microsoft-mailbox, dan zet de config ze uit
+met een melding.
+
 ## De doorstuuragent
 
 De MCP-tools wachten op een verzoek. Voor post die zonder tussenkomst moet

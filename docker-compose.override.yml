@@ -949,6 +949,10 @@ services:
       # De mailboxen met hun wachtwoorden: één bestand op de VM, buiten git,
       # read-only aangekoppeld. Bewerken met: nano ~/post-config/mailboxen.yaml
       - ${POSTBUS_CONFIG_DIR:-/home/ubuntu/post-config}:/config:ro
+      # Schrijfbaar: refresh tokens van mailboxen met auth: microsoft
+      # (oauth_ms.py). Microsoft vervangt die tokens bij gebruik, dus ze kunnen
+      # niet in het read-only mailboxenbestand. Koppelen: oauth_koppel.py.
+      - post-oauth:/oauth
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3017/healthz')"]
       interval: 2m
@@ -1147,6 +1151,7 @@ volumes:
   contracten-output:
   contracten-input:
   post-agent-state:
+  post-oauth:
   telefoonregister-data:
   sales-data:
   projecten-data:

@@ -253,6 +253,45 @@ def test_lege_rechtenlijst_valt_op():
     print("  ok  een lege lijst geeft een melding")
 
 
+def test_microsoft_mailbox_zonder_wachtwoord():
+    """auth: microsoft logt in met een token, dus geen wachtwoord nodig."""
+    kaal = {"adres": "iemand@hotmail.com", "personen": ["mehdi"],
+            "imap_host": "outlook.office365.com", "auth": "microsoft",
+            "oauth_client_id": "985859b5-176a-4eef-ab70-bb386ad28b6b"}
+    boxen, fouten = ontleed(kaal)
+    gelijk(len(boxen), 1, "de mailbox wordt aanvaard zonder wachtwoord")
+    gelijk(boxen[0]["auth"], "microsoft", "auth wordt gelezen")
+
+
+def test_microsoft_vraagt_client_id():
+    kaal = {"adres": "iemand@hotmail.com", "personen": ["mehdi"],
+            "auth": "microsoft"}
+    boxen, fouten = ontleed(kaal)
+    gelijk(boxen, [], "zonder oauth_client_id geen mailbox")
+    if not any("oauth_client_id" in f for f in fouten):
+        raise AssertionError("de beheerder wordt niet gewaarschuwd")
+    print("  ok  de melding noemt oauth_client_id")
+
+
+def test_microsoft_kan_nog_niet_versturen():
+    kaal = {"adres": "iemand@hotmail.com", "personen": ["mehdi"],
+            "auth": "microsoft", "oauth_client_id": "x",
+            "verzenden": "ja", "doorsturen": ["ap@unabo.be"]}
+    boxen, fouten = ontleed(kaal)
+    gelijk(boxen[0]["verzenden"], False, "versturen valt weg bij microsoft")
+    gelijk(boxen[0]["doorsturen"], [], "doorsturen valt weg bij microsoft")
+
+
+def test_onbekende_auth_valt_op():
+    boxen, fouten = ontleed(rij(auth="google"))
+    gelijk(boxen, [], "een onbekende auth wordt geweigerd")
+
+
+def test_wachtwoord_blijft_standaard():
+    boxen, _ = ontleed(rij())
+    gelijk(boxen[0]["auth"], "wachtwoord", "zonder auth-regel: wachtwoord")
+
+
 def test_onbekende_sleutel_valt_op():
     _, fouten = ontleed(rij(doorstuur=["ap@unabo.be"]))
     if not any("onbekende sleutels" in f for f in fouten):

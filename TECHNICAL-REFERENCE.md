@@ -2457,6 +2457,13 @@ de wijzigfuncties openen een map schrijfbaar.
   veranderd is).
 - Beheerderspagina toont alle mailboxen, de fouten in het bestand (nooit een
   wachtwoord) en een knop die per mailbox echt inlogt op IMAP.
+- **Microsoft-mailboxen via OAuth2** (2026-09-30): Microsoft weigert basic auth
+  op IMAP, ook met app-wachtwoord. Een mailbox met `auth: microsoft` +
+  `oauth_client_id` logt in met XOAUTH2 (`oauth_ms.py`); het refresh token komt
+  eenmalig uit `oauth_koppel.py` (device-code-login, tenant `consumers`) en
+  staat in het schrijfbare volume `post-oauth` (`/oauth`), omdat Microsoft het
+  bij gebruik vervangt. Versturen en doorsturen blijven daar uit (SMTP met
+  wachtwoord); de config zet ze uit met een melding.
 
 ### 14.10 Xelion - de telefooncentrale voor Claude (`xelion.globaal.be`)
 

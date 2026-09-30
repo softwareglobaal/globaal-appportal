@@ -27,6 +27,8 @@ from email.header import decode_header, make_header
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid, parsedate_to_datetime, parseaddr
 
+import oauth_ms
+
 TIMEOUT = 30            # seconden per IMAP-verbinding
 HERGEBRUIK_S = 120      # een verbinding korter dan dit oud gebruiken we opnieuw
 MAX_RESULTATEN = 200    # bovengrens per zoekopdracht
@@ -80,6 +82,11 @@ class _Sessie:
             except Exception:
                 pass
         m = self.mailbox
+        # Microsoft laat geen wachtwoord meer toe op IMAP; zo'n mailbox logt
+        # in met een access token (XOAUTH2). Het token eerst halen, zodat een
+        # verlopen koppeling een duidelijke melding geeft en geen halve sessie.
+        token = (oauth_ms.toegangstoken(m) if m.get("auth") == "microsoft"
+                 else None)
         try:
             M = imaplib.IMAP4_SSL(m["imap_host"], m["imap_poort"],
                                   timeout=TIMEOUT)
@@ -87,15 +94,19 @@ class _Sessie:
             raise ValueError(f"Geen verbinding met {m['imap_host']}:"
                              f"{m['imap_poort']} ({type(e).__name__}: {e})")
         try:
-            M.login(m["gebruiker"], m["wachtwoord"])
+            if token:
+                M.authenticate("XOAUTH2",
+                               lambda _: oauth_ms.xoauth2(m["gebruiker"], token))
+            else:
+                M.login(m["gebruiker"], m["wachtwoord"])
         except imaplib.IMAP4.error as e:
             try:
                 M.logout()
             except Exception:
                 pass
-            raise ValueError(f"Inloggen op {m['adres']} lukt niet: {e}. "
-                             "Controleer gebruiker en wachtwoord in "
-                             "mailboxen.yaml.")
+            hint = ("Koppel opnieuw met oauth_koppel.py." if token else
+                    "Controleer gebruiker en wachtwoord in mailboxen.yaml.")
+            raise ValueError(f"Inloggen op {m['adres']} lukt niet: {e}. {hint}")
         self.M = M
         return M
 

@@ -47,7 +47,13 @@ PAD = os.environ.get("POSTBUS_CONFIG", "/config/mailboxen.yaml")
 # bestand is anders een stille beperking (of erger, een stille verruiming).
 SLEUTELS = {"adres", "naam", "imap_host", "imap_poort", "gebruiker",
             "wachtwoord", "groepen", "personen", "mappen", "schrijven",
-            "smtp_host", "smtp_poort", "doorsturen", "verwijderen", "verzenden"}
+            "smtp_host", "smtp_poort", "doorsturen", "verwijderen", "verzenden",
+            "auth", "oauth_client_id"}
+
+# Inlogmanieren. Standaard een wachtwoord; 'microsoft' = OAuth2 (XOAUTH2) met
+# een refresh token uit oauth_koppel.py, omdat Microsoft op IMAP geen
+# wachtwoord meer toelaat (zie oauth_ms.py).
+AUTH_SOORTEN = {"wachtwoord", "microsoft"}
 
 # Wat als "ja" telt bij schrijven. Staat het er niet, dan is de mailbox
 # alleen-lezen: schrijven is een bewuste keuze per mailbox, geen standaard.
@@ -173,7 +179,18 @@ def _ontleed(ruw):
         if not host:
             fouten.append(f"{waar}: imap_host ontbreekt (ook geen standaard)")
             continue
-        if not wachtwoord or wachtwoord == "CHANGE_ME":
+        auth = str(rij.get("auth") or "wachtwoord").strip().lower()
+        if auth not in AUTH_SOORTEN:
+            fouten.append(f"{waar}: auth '{auth}' bestaat niet (kies uit "
+                          + ", ".join(sorted(AUTH_SOORTEN)) + ")")
+            continue
+        oauth_client_id = str(rij.get("oauth_client_id") or "").strip()
+        if auth == "microsoft":
+            if not oauth_client_id:
+                fouten.append(f"{waar}: auth microsoft vraagt een "
+                              "oauth_client_id")
+                continue
+        elif not wachtwoord or wachtwoord == "CHANGE_ME":
             fouten.append(f"{waar}: wachtwoord is nog niet ingevuld")
             continue
 
@@ -224,6 +241,14 @@ def _ontleed(ruw):
             fouten.append(f"{waar}: doorsturen staat aan, maar er is geen "
                           "smtp_host (ook geen standaard)")
             doorsturen = []
+        # Versturen en doorsturen loggen op SMTP in met een wachtwoord, en dat
+        # laat Microsoft niet toe. Bij een Microsoft-mailbox vallen die twee
+        # rechten daarom weg, met een melding; lezen en ordenen blijven.
+        if auth == "microsoft" and (verzenden or doorsturen):
+            fouten.append(f"{waar}: versturen en doorsturen kunnen nog niet "
+                          "bij auth microsoft (SMTP vraagt een wachtwoord); "
+                          "die rechten zijn uitgezet")
+            verzenden, doorsturen = False, []
 
         gezien.add(adres.lower())
         uit.append({
@@ -242,6 +267,8 @@ def _ontleed(ruw):
             "doorsturen": doorsturen,
             "verwijderen": verwijderen,
             "verzenden": verzenden,
+            "auth": auth,
+            "oauth_client_id": oauth_client_id,
         })
     return uit, fouten
 
