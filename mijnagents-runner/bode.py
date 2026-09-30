@@ -265,7 +265,9 @@ def main():
             for a in agents_met_voorstel:
                 regels.append(f"- {a['open_voorstellen']} voorstel(len) van {a['label']} wachten op je goedkeuring")
         regels.append("Bord: https://mijnagents.globaal.be")
-        kanaal = stuur("\n".join(regels), nood)
+        # Een witregel tussen de punten: op een gsm leest een aaneengesloten lijst te ingepakt
+        # (Shaniel, 30-09-2026). Het sjabloon buiten het venster plat dit toch tot een regel.
+        kanaal = stuur("\n\n".join(regels), nood)
         if kanaal:
             if items:
                 staat["laatste_id"] = max(it["id"] for it in items)
