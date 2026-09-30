@@ -1,6 +1,6 @@
 {
- "versie": "4.20",
- "datum": "2026-09-29",
+ "versie": "4.21",
+ "datum": "2026-09-30",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
   {
@@ -412,7 +412,7 @@
    "nr": 16,
    "naam": "zelfcontrole",
    "wanneer": "werkdagen 07:05",
-   "wat": "de agenda van een week terug tot een week vooruit nakijken tegen het foutenregister: TERUGGEKEERD, NIEUW of BEKEND"
+   "wat": "de agenda van een week terug tot een week vooruit nakijken tegen het foutenregister: TERUGGEKEERD, NIEUW of BEKEND; neemt de controles van de dagcontrole mee"
   }
  ],
  "controle": {
@@ -1216,6 +1216,14 @@
   "filewacht": "elke 10 minuten van 06:00 tot 21:59: loopt een rit uit door file, dan een oproep (file_wacht.py)",
   "de_bode": "elke minuut: belt volgens het belrooster, online 5 minuten vooraf, buiten 5 minuten voor het vertrek (bode.py)",
   "zelfcontrole": "werkdagen om 07:05: de agenda nakijken tegen het foutenregister (zelfcontrole.py)",
-  "weekend": "geen volledige ronde en geen oproepen over vastgelopen afspraken; wel de wijzigingswacht, het kleurherstel, de filewacht en De Bode. Daarom kijkt de ronde van vrijdag voor oproepen tot en met maandag vooruit."
+  "weekend": "geen volledige ronde en geen oproepen over vastgelopen afspraken; wel de wijzigingswacht, het kleurherstel, de filewacht en De Bode. Daarom kijkt de ronde van vrijdag voor oproepen tot en met maandag vooruit.",
+  "dagcontrole": "na elke volledige ronde en elke dag-ronde (--dag), en met de hand: dagcontrole.py --dag JJJJ-MM-DD"
+ },
+ "leren_in_lagen": {
+  "waarom": "Mehdi, 30-09-2026: 'ik begrijp niet waarom je na zoveel tijd nog altijd niet beter wordt ... laat ons kijken hoe we dat in lagen kunnen brengen'. De kennis bestond, maar stond niet voor de agent op het moment van handelen, en niets keek naar de dag zoals Mehdi hem ziet.",
+  "laag_1_voor_de_handeling": "Hook die voor een schrijfactie naar de agenda, Calendly of de server de drie regels toont die erbij horen. Nog te bouwen, na laag 2 en 3.",
+  "laag_2_dagcontrole": "dagcontrole.py na elke ronde en elke wijziging: ritten die overlappen of door een afspraak lopen, een omweg langs huis (minder dan 90 minuten), twee plaatsen tegelijk, een botsing met Lara, !! niet vooraan, een klant zonder naam. Wat Mehdi moet beslissen wordt een vraag in de agenda en een oproep; de zelfcontrole neemt dezelfde controles mee. Claude meldt nooit meer 'klaar' zonder de uitkomst (FR-71).",
+  "laag_3_correcties": "Claude Code-hook op het bericht van Mehdi (claude-hooks/correctie.py): bij een correctiewoord eerst de regel vastleggen in het register met test, het geheugen en de werkwijze. Aanzetten doet Mehdi een keer in ~/.claude/settings.json; de beveiligingslaag van Claude laat Claude dat niet zelf doen.",
+  "laag_4_week": "Elke week een consolidatie die de fouten bundelt tot principes, uitzonderingen opruimt en de skill bijwerkt, met een overzicht voor Mehdi. Beslissing Mehdi 30-09-2026: draait op de server (ANTHROPIC_API_KEY staat al in ~/appportal/.env). Nog te bouwen."
  }
 }

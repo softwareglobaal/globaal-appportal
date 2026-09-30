@@ -2430,6 +2430,20 @@ def vastgelopen(items, nu=None, uren=48):
         namen = ", ".join(f"{(lees_titel(x['titel'])['klant'] or x['titel'])[:25]} om {x['start'][11:16]}" for x in lijst[:4])
         uit.append((f"zoompwd:{dag}", f"Mehdi, {len(lijst)} Zoom-afspraken op {dag[8:10]}-{dag[5:7]} hebben een link zonder wachtwoord "
                     f"({namen}): stuur de klant de uitnodiging vanuit Zoom."))
+    # De dagcontrole (FR-71): wat alleen Mehdi kan beslissen, wordt een vraag in de agenda en een oproep
+    import dagcontrole as _dc
+    for dag in sorted({(x.get("start") or "")[:10] for x in items if (x.get("start") or "")[:10]}):
+        try:
+            d0 = datetime.fromisoformat(dag + "T00:00:00").replace(tzinfo=nu.tzinfo)
+        except ValueError:
+            continue
+        if d0 + timedelta(days=1) < nu or d0 > nu + timedelta(hours=uren):
+            continue
+        for b in _dc.dagcontrole(items, dag):
+            if b["soort"] in _dc.VRAGEN and b["a"].get("id"):
+                s_ = datetime.fromisoformat(b["a"]["start"])
+                if nu < s_ <= nu + timedelta(hours=uren):
+                    uit.append((f"{b['a']['id']}:{b['soort']}", f"Mehdi, {dag[8:10]}-{dag[5:7]}: {b['tekst']}. Zeg wat ik doe."))
     # Zoom zonder wachtkamer: de klant staat meteen binnen (FR-63)
     for a, mid in zoom_zonder_wachtkamer(items, nu, uren):
         s_ = datetime.fromisoformat(a["start"])
@@ -2626,6 +2640,24 @@ def main():
         # eerst de gewone herinneringen, dan de ritten: zo heeft de vertrekmelding het laatste woord
         gezet, al, weg, fout_h = herinneringen_zetten(kort_items, dag_grens)
         rg, ral, rgeen, rfout, rregels = reistijd_zetten(rit_items, dag_grens)
+        # Laag 2 (FR-71): na alle schrijfacties de dag opnieuw inlezen en nakijken zoals Mehdi hem ziet
+        try:
+            import dagcontrole as _dc
+            if DAG_ARG:
+                _off = (datetime.fromisoformat(DAG_ARG).date() - nu_lokaal().date()).days
+                _na = [x for x in afspraken(_off - 1, _off + 2) if not x.get("fout")] + archief_afspraken(_off - 1, _off + 2)
+                _dagen = [DAG_ARG]
+            else:
+                _na = [x for x in afspraken(-1, 8) if not x.get("fout")] + archief_afspraken(-1, 8)
+                _dagen = sorted({x["start"][:10] for x in _na if x["start"][:10] >= vandaag})
+            _tel = 0
+            for _dag in _dagen:
+                for _b in _dc.dagcontrole(_na, _dag):
+                    _tel += 1
+                    print(f"  [dagcontrole] {_dag} {_b['soort']}: {_b['tekst']}", flush=True)
+            print(f"  [dagcontrole] {len(_dagen)} dag(en) nagekeken, {_tel} bevinding(en)", flush=True)
+        except Exception as _e:  # noqa: BLE001
+            print(f"  [dagcontrole] niet gelukt: {type(_e).__name__}: {str(_e)[:120]}", flush=True)
         ag.log(f"dag {vandaag}", "schrijf", f"reistijd: {rg} blok(ken) gemaakt, {ral} bestonden al, {rgeen} zonder adres, {rfout} mislukt", "\n".join(rregels))
         # Een rit die niet berekend raakte mag nooit alleen een cijfer zijn: dan ziet
         # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het

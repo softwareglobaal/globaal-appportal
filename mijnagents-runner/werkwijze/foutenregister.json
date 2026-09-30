@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.4",
+ "versie": "3.5",
  "datum": "26-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -171,6 +171,13 @@
    "les": "Een grens die in de cron zit, geldt niet voor wie het script met de hand start. Zet de grens in de code die de handeling start, niet alleen in de cron.",
    "uit": [
     "FR-59"
+   ]
+  },
+  {
+   "id": "L22",
+   "les": "Controleer wat Mehdi ziet, niet alleen de code: na elke wijziging de hele dag, over alle agenda's heen. Een test op de code bewijst niet dat de dag klopt.",
+   "uit": [
+    "FR-71"
    ]
   }
  ],
@@ -1468,6 +1475,32 @@
    },
    "controle": [],
    "status": "opgelost"
+  },
+  {
+   "id": "FR-71",
+   "datum": "30-09-2026",
+   "gevonden_door": "Mehdi ('ik begrijp niet waarom je na zoveel tijd nog altijd niet beter wordt')",
+   "fout": "Fouten die je alleen ziet als je naar de hele dag kijkt, kwamen pas via Mehdi boven: overlappende ritten (Boechout, 03-10), een omweg langs huis (Belauto, 30-09), een zitting die botst met Lara (23-11), een kine-afspraak die niet in de agenda stond.",
+   "gevolg": "Mehdi vindt de fouten zelf en verliest vertrouwen.",
+   "waarom_niet_gezien": "De tests kijken naar de code en de zelfcontrole draait een keer per dag; niets keek na elke wijziging naar de dag zoals Mehdi hem ziet.",
+   "oorzaak": "Geen controle op dagniveau na elke wijziging.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "Laag 2: dagcontrole.py kijkt na elke ronde en elke wijziging (--dag) elke dag na over alle agenda's heen: ritten die overlappen of door een afspraak lopen, een omweg langs huis, twee plaatsen tegelijk, een botsing met Lara, !! niet vooraan, een klant zonder naam. Wat Mehdi moet beslissen, wordt een vraag in de agenda en een oproep; de zelfcontrole neemt dezelfde controles mee. Claude meldt nooit meer 'klaar' zonder de uitkomst.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de dagcontrole ziet overlappende ritten, een omweg langs huis, twee plaatsen tegelijk, Lara, !! en een klant zonder naam"
+   },
+   "controle": [
+    "rit_overlap",
+    "rit_door_afspraak",
+    "omweg_langs_huis",
+    "buiten_botsing",
+    "lara_botsing",
+    "titel_uitroep",
+    "zonder_klant"
+   ],
+   "status": "bewaakt"
   }
  ]
 }

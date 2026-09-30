@@ -42,7 +42,7 @@ for f in reg["fouten"]:
               f"'{g.get('tekst')}' niet gevonden in {g.get('waar')}")
 
 # elke controle van de zelfcontrole hangt aan een fout in het register
-zc = (HIER / "zelfcontrole.py").read_text(encoding="utf-8")
+zc = (HIER / "zelfcontrole.py").read_text(encoding="utf-8") + "\n" + (HIER / "dagcontrole.py").read_text(encoding="utf-8")
 gebruikt = set(re.findall(r'"controle": "([a-z_]+)"', zc))
 for eerste in re.findall(r'meld\((.*?),\s*[ax],', zc, re.S):      # ook "a" if ... else "b"
     m = re.match(r'\s*"([a-z_]+)"', eerste)

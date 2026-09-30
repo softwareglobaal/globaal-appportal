@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 7.19 (29-09-2026, plus 'in de auto': gesprekken onderweg; eerder plus tussendoor naar huis alleen bij minstens 90 minuten; eerder plus eigen ritten die niet meer kloppen zelf opruimen; eerder plus buiten altijd rood, ook onbevestigd; eerder 28-09-2026, plus !! altijd vooraan en ritten voor elke buitenafspraak tot een jaar vooruit; eerder plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
+Versie 7.20 (30-09-2026, plus de dagcontrole en leren in lagen; eerder 29-09-2026, plus 'in de auto': gesprekken onderweg; eerder plus tussendoor naar huis alleen bij minstens 90 minuten; eerder plus eigen ritten die niet meer kloppen zelf opruimen; eerder plus buiten altijd rood, ook onbevestigd; eerder 28-09-2026, plus !! altijd vooraan en ritten voor elke buitenafspraak tot een jaar vooruit; eerder plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -472,6 +472,18 @@ Per ronde:
 13. Vragen in de agenda zelf: VR vooraan de titel, de vraag in de omschrijving (alleen zonder gasten).
 14. Vastgelopen: een oproep met een zin, alleen vanuit de geplande ronde, werkdagen 08:00-20:00.
 15. Klaarzetten per afdeling, dagplan, werkverslag.
+
+## Leren in lagen (30-09-2026)
+
+Mehdi: "ik begrijp niet waarom je na zoveel tijd nog altijd niet beter wordt". De kennis bestond, maar stond niet
+voor mij op het moment van handelen, en niets keek naar de dag zoals hij hem ziet.
+1. Voor de handeling: de drie regels die bij een schrijfactie horen (hook, nog te bouwen).
+2. Na elke wijziging: de dagcontrole (dagcontrole.py). Ritten die overlappen of door een afspraak lopen, een omweg
+   langs huis, twee plaatsen tegelijk, een botsing met Lara, !! niet vooraan, een klant zonder naam. Wat Mehdi moet
+   beslissen, wordt een vraag in de agenda en een oproep. Claude meldt nooit 'klaar' zonder de uitkomst.
+3. Als Mehdi corrigeert: eerst de regel vastleggen (register met test, geheugen, werkwijze). Hook
+   claude-hooks/correctie.py; aanzetten doet Mehdi in ~/.claude/settings.json.
+4. Elke week consolideren tot principes, op de server (beslissing Mehdi, 30-09-2026; nog te bouwen).
 
 ## Wat ik nooit doe
 

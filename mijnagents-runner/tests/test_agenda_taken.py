@@ -801,6 +801,34 @@ _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("staat 'in de auto' in de afspraak, dan schuift de aankomst niet voor gesprekken onderweg",
       "for _ in range(0 if in_de_auto else 3):" in _src70 and "lopend = [] if in_de_auto else" in _src70)
 
+# De dagcontrole: de dag zoals Mehdi hem ziet, over alle agenda's heen (FR-71)
+import dagcontrole as _D
+_LARA = [k for k, n in W.KALENDERS.items() if n == "Lara"][0]
+_PRIVE = [k for k, n in W.KALENDERS.items() if "prive" in n.lower() and "buiten" not in n.lower()][0]
+_dg = (W.nu_lokaal() + _td(days=1)).date().isoformat()
+def _it(i, titel, van, tot, kal=None, **x):
+    return {"id": i, "titel": titel, "start": f"{_dg}T{van}:00+02:00", "einde": f"{_dg}T{tot}:00+02:00",
+            "kalender": kal or W.WERKAGENDA, **x}
+_dag = [
+    _it("r1", "\U0001F697 Reistijd: thuis \u2192 Mortsel", "07:25", "08:30"),
+    _it("b1", "!! Mehdi: [HINV-LB] Belauto, Antwerpsestraat 129, 2640 Mortsel", "08:30", "09:00"),
+    _it("r2", "\U0001F697 Reistijd: thuis \u2192 Berchem", "08:10", "09:20"),
+    _it("r3", "\U0001F697 Reistijd: Mortsel \u2192 thuis", "09:00", "10:05"),
+    _it("b2", "!! Mehdi: [HINV-LB] Coolblue, Strijdhoflaan 87, 2600 Antwerpen", "09:20", "09:50"),
+    _it("b3", "!! Mehdi: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele", "11:00", "12:00"),
+    _it("b4", "!! Mehdi: [UNAB-KB] BS - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken", "11:30", "12:30"),
+    _it("p1", "!! Mehdi: Ondernemingsrechtbank Leuven, Smoldersplein 5, 3000 Leuven", "14:00", "16:10", _PRIVE),
+    _it("l1", "!! Mehdi: [LARA] Lara ophalen en thuis afzetten", "16:00", "17:00", _LARA),
+    _it("t1", "Mehdi: !! [HARC-PB] Jan Peeters, Kerkstraat 1, 3000 Leuven", "18:00", "19:00"),
+    _it("k1", "Mehdi: [HARC-KO]", "20:00", "20:30"),
+]
+_ds = {b["soort"] for b in _D.dagcontrole(_dag, _dg)}
+_schoon = [_dag[0], _dag[1], _it("r9", "\U0001F697 Reistijd: Mortsel \u2192 thuis", "09:00", "10:05")]
+_zv71 = [s for s, z in W.vastgelopen(_dag, W.nu_lokaal()) if s.endswith(":lara_botsing") or s.endswith(":buiten_botsing")]
+check("de dagcontrole ziet overlappende ritten, een omweg langs huis, twee plaatsen tegelijk, Lara, !! en een klant zonder naam",
+      _ds >= {"rit_overlap", "rit_door_afspraak", "omweg_langs_huis", "buiten_botsing", "lara_botsing", "titel_uitroep", "zonder_klant"}
+      and not _D.dagcontrole(_schoon, _dg) and len(_zv71) >= 2, str((_ds, _zv71)))
+
 # Een postcode is geen projectnummer (FR-58)
 _pc = W.lees_titel("Mehdi: !! [HARC-PB] Hamid, Nieuwstraat 39, 3360 Korbeek-Lo")
 _pc2 = W.lees_titel("!! Mehdi & Catalin: [HARC-KB] 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele")

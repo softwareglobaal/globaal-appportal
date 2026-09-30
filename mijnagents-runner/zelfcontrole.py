@@ -180,6 +180,12 @@ def bevindingen(items, van, tot, nu):
     # een klant met een Zoom-link zonder wachtwoord raakt niet in de vergadering (FR-54)
     for a in W.zoom_zonder_wachtwoord(binnen, nu, uren=24 * 8):
         meld("zoom_zonder_wachtwoord", a, "Zoom-link zonder wachtwoord: de klant kan gevraagd worden om een wachtwoord")
+    # de dagcontrole (FR-71): de dag zoals Mehdi hem ziet, over alle agenda's heen
+    import dagcontrole as D
+    for dag in sorted({a["start"][:10] for a in binnen if a["start"][:10] >= vandaag}):
+        for b in D.dagcontrole(items, dag):
+            _melden = meld          # de namen van deze controles staan in dagcontrole.py (het register leest ze daar)
+            _melden(b["soort"], b["a"], b["tekst"])
     for a, _mid in W.zoom_zonder_wachtkamer(binnen, nu, uren=24 * 8):
         meld("zoom_zonder_wachtkamer", a, "Zoom-meeting zonder wachtkamer: de klant staat meteen binnen, ook voor Mehdi er is")
     # een rit van nul minuten is geen rit: hij verbergt dat het te krap is
