@@ -4,14 +4,15 @@ Draaien (vanuit ~/appportal):
   sh scripts/ak-exec.sh scripts/add-btw-app.py
 
 Idempotent: veilig om opnieuw te draaien. De tegel is open voor de groepen
-admin en btw. Groep btw bevat de gebruikers die de app volgens Joan heeft
-(joan = beheerder, angela = betaler). Wie in btw zit maar geen account in
-btw.gebruiker heeft, krijgt in de app zelf "geen toegang": de app controleert
-dat nog eens.
+admin en btw. Het script zet niemand in de groep btw: wie toegang krijgt,
+beslist Shaniel en zet hij er zelf in (volgens Joans documentatie zijn de
+gebruikers van de app joan = beheerder en angela = betaler). Wie in btw zit
+maar geen account in btw.gebruiker heeft, krijgt in de app zelf "geen
+toegang": de app controleert dat nog eens.
 """
 import os
 
-from authentik.core.models import Application, Group, User
+from authentik.core.models import Application, Group
 from authentik.flows.models import Flow
 from authentik.outposts.models import Outpost
 from authentik.policies.models import PolicyBinding
@@ -21,7 +22,6 @@ BASE_DOMAIN = os.environ.get("BASE_DOMAIN", "globaal.be")
 SLUG = "btw"
 NAME = "BTW dashboard"
 ROLES = ("admin", "btw")
-LEDEN = ("joan", "angela")
 
 auth_flow = Flow.objects.get(slug="default-provider-authorization-implicit-consent")
 inval_flow = Flow.objects.filter(slug="default-provider-invalidation-flow").first()
@@ -52,13 +52,8 @@ for gname in ROLES:
 print(f"group-bindings: {', '.join(ROLES)}")
 
 btw = Group.objects.get(name="btw")
-for naam in LEDEN:
-    u = User.objects.filter(username=naam).first()
-    if u is None:
-        print(f"gebruiker {naam} bestaat niet in Authentik, overgeslagen")
-        continue
-    u.groups.add(btw)
-print("leden btw: " + ", ".join(sorted(u.username for u in btw.users.all())))
+print("leden btw (niet door dit script gezet): "
+      + (", ".join(sorted(u.username for u in btw.users.all())) or "(geen)"))
 
 outpost = Outpost.objects.filter(managed="goauthentik.io/outposts/embedded").first()
 outpost.providers.add(proxy)
