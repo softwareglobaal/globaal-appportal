@@ -33,6 +33,7 @@ from email.utils import formatdate, make_msgid, parseaddr
 
 import config
 import imapbron
+import oauth_ms
 
 # Noodrem: standaard uit. Zet POSTBUS_DOORSTUREN=ja om doorsturen toe te staan.
 JA = {"ja", "yes", "waar", "true", "aan"}
@@ -93,6 +94,52 @@ def _verzondenmap(M):
         if kaal in ("sent", "verzonden", "sent items", "sent messages"):
             return naam
     return None
+
+
+def _afleveren(mailbox, bericht):
+    """Levert een bericht af via SMTP, op de manier die de provider vraagt.
+
+    Standaard: wachtwoord over SSL (one.com, poort 465). Bij auth: microsoft:
+    een access token (XOAUTH2) over STARTTLS op poort 587; Microsoft laat op
+    SMTP geen wachtwoord meer toe. Het token wordt eerst gehaald, zodat een
+    koppeling zonder verzendtoestemming een duidelijke melding geeft.
+    """
+    if mailbox.get("auth") == "microsoft":
+        token = oauth_ms.toegangstoken(mailbox, smtp=True)
+        sasl = oauth_ms.xoauth2(mailbox["gebruiker"], token).decode()
+        with smtplib.SMTP(mailbox["smtp_host"], mailbox["smtp_poort"],
+                          timeout=TIMEOUT) as s:
+            s.ehlo()
+            s.starttls()
+            s.ehlo()
+            s.auth("XOAUTH2", lambda challenge=None: sasl)
+            s.send_message(bericht)
+        return
+    with smtplib.SMTP_SSL(mailbox["smtp_host"], mailbox["smtp_poort"],
+                          timeout=TIMEOUT) as s:
+        s.login(mailbox["gebruiker"], mailbox["wachtwoord"])
+        s.send_message(bericht)
+
+
+def _kopie_in_verzonden(M, mailbox, bericht):
+    """Legt een kopie in Verzonden; True als die er staat.
+
+    SMTP levert alleen af; de map Verzonden vult je mailprogramma normaal
+    zelf. Microsoft doet dat bij SMTP-post zelf al, dus daar leggen we er geen
+    tweede kopie bij.
+    """
+    if mailbox.get("auth") == "microsoft":
+        return True
+    doelmap = _verzondenmap(M)
+    if not doelmap:
+        return False
+    try:
+        ok, _ = M.append(f'"{doelmap}"', "(\\Seen)",
+                         imaplib.Time2Internaldate(time.time()),
+                         bericht.as_bytes())
+        return ok == "OK"
+    except Exception:
+        return False
 
 
 def _samenvatting(bron):
@@ -176,10 +223,9 @@ def doorsturen(mailbox, mapnaam, uid, naar, notitie=None):
                                + ".eml")
 
         try:
-            with smtplib.SMTP_SSL(mailbox["smtp_host"], mailbox["smtp_poort"],
-                                  timeout=TIMEOUT) as s:
-                s.login(mailbox["gebruiker"], mailbox["wachtwoord"])
-                s.send_message(bericht)
+            _afleveren(mailbox, bericht)
+        except ValueError:
+            raise
         except Exception as e:
             raise ValueError(f"Versturen naar {bestemming} mislukte "
                              f"({type(e).__name__}: {e}). Er is niets "
@@ -188,19 +234,9 @@ def doorsturen(mailbox, mapnaam, uid, naar, notitie=None):
         # Nu is het echt de deur uit; pas hier telt het mee voor het dagplafond.
         vandaag = _tel_succes()
 
-        # SMTP levert alleen af; de map Verzonden vult je mailprogramma normaal
-        # zelf. Zonder deze kopie zou een doorsturing door de server nergens in
-        # de mailbox terug te zien zijn, en juist dat is hier het bewijsstuk.
-        doelmap = _verzondenmap(M)
-        bewaard = False
-        if doelmap:
-            try:
-                ok, _ = M.append(f'"{doelmap}"', "(\\Seen)",
-                                 imaplib.Time2Internaldate(time.time()),
-                                 bericht.as_bytes())
-                bewaard = ok == "OK"
-            except Exception:
-                bewaard = False
+        # Zonder kopie in Verzonden zou een doorsturing door de server nergens
+        # in de mailbox terug te zien zijn, en juist dat is hier het bewijsstuk.
+        bewaard = _kopie_in_verzonden(M, mailbox, bericht)
 
     print(f"[postbus] doorgestuurd {mailbox['adres']} {bron_map} uid {uid} "
           f"naar {bestemming}: {onderwerp[:80]}", flush=True)
@@ -249,10 +285,9 @@ def verstuur(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
             van_map=van_map)
 
         try:
-            with smtplib.SMTP_SSL(mailbox["smtp_host"], mailbox["smtp_poort"],
-                                  timeout=TIMEOUT) as s:
-                s.login(mailbox["gebruiker"], mailbox["wachtwoord"])
-                s.send_message(bericht)
+            _afleveren(mailbox, bericht)
+        except ValueError:
+            raise
         except Exception as e:
             raise ValueError(f"Versturen mislukte ({type(e).__name__}: {e}). "
                              "Er is niets vertrokken.")
@@ -262,16 +297,7 @@ def verstuur(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
 
         # Een kopie in Verzonden, zodat de eigenaar in zijn eigen webmail ziet
         # wat er namens hem is vertrokken.
-        doelmap = _verzondenmap(M)
-        bewaard = False
-        if doelmap:
-            try:
-                ok, _ = M.append(f'"{doelmap}"', "(\\Seen)",
-                                 imaplib.Time2Internaldate(time.time()),
-                                 bericht.as_bytes())
-                bewaard = ok == "OK"
-            except Exception:
-                bewaard = False
+        bewaard = _kopie_in_verzonden(M, mailbox, bericht)
 
     print(f"[postbus] verstuurd {mailbox['adres']} naar "
           f"{', '.join(ontvangers)}: {bericht['Subject'][:80]}", flush=True)

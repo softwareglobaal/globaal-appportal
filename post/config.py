@@ -203,9 +203,18 @@ def _ontleed(ruw):
 
         schrijven = _recht(rij.get("schrijven"), "schrijven", fouten, waar)
 
-        smtp_host = str(rij.get("smtp_host")
-                        or standaard.get("smtp_host") or "").strip()
-        smtp_poort = rij.get("smtp_poort", standaard.get("smtp_poort", 465))
+        if auth == "microsoft":
+            # Microsoft-SMTP: eigen server, STARTTLS op 587 en een token in
+            # plaats van een wachtwoord (verzenden._afleveren). De one.com-
+            # standaard uit het standaardblok hoort hier niet bij.
+            smtp_host = str(rij.get("smtp_host")
+                            or "smtp-mail.outlook.com").strip()
+            smtp_poort = rij.get("smtp_poort", 587)
+        else:
+            smtp_host = str(rij.get("smtp_host")
+                            or standaard.get("smtp_host") or "").strip()
+            smtp_poort = rij.get("smtp_poort",
+                                 standaard.get("smtp_poort", 465))
         try:
             smtp_poort = int(smtp_poort)
         except (TypeError, ValueError):
@@ -241,15 +250,6 @@ def _ontleed(ruw):
             fouten.append(f"{waar}: doorsturen staat aan, maar er is geen "
                           "smtp_host (ook geen standaard)")
             doorsturen = []
-        # Versturen en doorsturen loggen op SMTP in met een wachtwoord, en dat
-        # laat Microsoft niet toe. Bij een Microsoft-mailbox vallen die twee
-        # rechten daarom weg, met een melding; lezen en ordenen blijven.
-        if auth == "microsoft" and (verzenden or doorsturen):
-            fouten.append(f"{waar}: versturen en doorsturen kunnen nog niet "
-                          "bij auth microsoft (SMTP vraagt een wachtwoord); "
-                          "die rechten zijn uitgezet")
-            verzenden, doorsturen = False, []
-
         gezien.add(adres.lower())
         uit.append({
             "adres": adres,

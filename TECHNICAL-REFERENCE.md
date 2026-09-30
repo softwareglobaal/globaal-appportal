@@ -2462,8 +2462,11 @@ de wijzigfuncties openen een map schrijfbaar.
   `oauth_client_id` logt in met XOAUTH2 (`oauth_ms.py`); het refresh token komt
   eenmalig uit `oauth_koppel.py` (device-code-login, tenant `consumers`) en
   staat in het schrijfbare volume `post-oauth` (`/oauth`), omdat Microsoft het
-  bij gebruik vervangt. Versturen en doorsturen blijven daar uit (SMTP met
-  wachtwoord); de config zet ze uit met een melding.
+  bij gebruik vervangt. Versturen en doorsturen gaan via
+  `smtp-mail.outlook.com:587` (STARTTLS + XOAUTH2, scope `SMTP.Send`,
+  `verzenden._afleveren`); Microsoft legt zelf de kopie in Verzonden. Het
+  tokenbestand bewaart de gegeven scope, zodat een lees-koppeling bij
+  versturen een duidelijke melding geeft.
 
 ### 14.10 Xelion - de telefooncentrale voor Claude (`xelion.globaal.be`)
 

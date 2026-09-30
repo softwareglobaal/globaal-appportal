@@ -75,11 +75,19 @@ def main():
             print("Microsoft gaf geen refresh token terug; staat offline_access "
                   "bij de API permissions van de app-registratie?")
             sys.exit(1)
+        # Wat Microsoft echt toestond, niet wat we vroegen: geeft de eigenaar
+        # geen toestemming voor versturen, dan leest deze koppeling alleen.
+        toegestaan = str(token.get("scope", ""))
+        scope = (oauth_ms.SCOPE if "SMTP.Send" in toegestaan
+                 else oauth_ms.SCOPE_ALLEEN_IMAP)
         oauth_ms.bewaar(mailbox["adres"], {
             "refresh_token": token["refresh_token"],
+            "scope": scope,
             "gekoppeld_op": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         })
-        print("Gekoppeld, token bewaard. Nu een echte IMAP-login testen...")
+        print("Gekoppeld, token bewaard. Versturen toegestaan: "
+              + ("ja" if scope == oauth_ms.SCOPE else "nee (alleen lezen)"))
+        print("Nu een echte IMAP-login testen...")
         break
     else:
         print("De code is verlopen zonder login. Draai het script opnieuw.")

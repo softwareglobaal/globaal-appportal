@@ -273,13 +273,32 @@ def test_microsoft_vraagt_client_id():
     print("  ok  de melding noemt oauth_client_id")
 
 
-def test_microsoft_kan_nog_niet_versturen():
+def test_microsoft_verstuurt_via_outlook():
+    """Versturen blijft staan, maar via Microsofts eigen SMTP op 587, niet via
+    de one.com-standaard uit het standaardblok."""
     kaal = {"adres": "iemand@hotmail.com", "personen": ["mehdi"],
             "auth": "microsoft", "oauth_client_id": "x",
-            "verzenden": "ja", "doorsturen": ["ap@unabo.be"]}
+            "verzenden": ["mehdi"]}
     boxen, fouten = ontleed(kaal)
-    gelijk(boxen[0]["verzenden"], False, "versturen valt weg bij microsoft")
-    gelijk(boxen[0]["doorsturen"], [], "doorsturen valt weg bij microsoft")
+    gelijk(boxen[0]["verzenden"], ["mehdi"], "versturen blijft aan")
+    gelijk(boxen[0]["smtp_host"], "smtp-mail.outlook.com",
+           "de verzendserver is die van Microsoft")
+    gelijk(boxen[0]["smtp_poort"], 587, "poort 587 (STARTTLS)")
+
+
+def test_koppeling_zonder_verzendtoestemming_weigert_smtp():
+    """Een token van voor de SMTP-uitbreiding mag lezen, niet versturen."""
+    import json
+    import oauth_ms
+    import tempfile
+    with tempfile.TemporaryDirectory() as map_:
+        oauth_ms.MAP = map_
+        with open(oauth_ms.pad("iemand@hotmail.com"), "w") as f:
+            json.dump({"refresh_token": "x"}, f)   # geen 'scope': oud
+        m = {"adres": "iemand@hotmail.com", "oauth_client_id": "x"}
+        weigert(lambda: oauth_ms.toegangstoken(m, smtp=True),
+                "alleen toestemming om te lezen",
+                "versturen met een lees-koppeling wordt duidelijk geweigerd")
 
 
 def test_onbekende_auth_valt_op():

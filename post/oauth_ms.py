@@ -10,7 +10,9 @@ Hoe het loopt:
 1. Eenmalig koppelen met `python oauth_koppel.py <adres>` in de container
    (device-code-login: de eigenaar logt in op microsoft.com/devicelogin). Dat
    levert een refresh token op, en dat komt in POSTBUS_OAUTH_MAP/<adres>.json.
-2. Bij elke IMAP-sessie ruilt deze module het refresh token in voor een access
+   Die koppeling vraagt toestemming voor lezen (IMAP) en versturen (SMTP);
+   in het tokenbestand staat welke van de twee de eigenaar gaf.
+2. Bij elke IMAP- of SMTP-sessie ruilt deze module het refresh token in voor een access
    token (een uur geldig, hier gecachet tot kort voor het verloopt).
    Microsoft geeft daarbij vaak een NIEUW refresh token terug; dat schrijven we
    meteen weg, anders verloopt de koppeling na verloop van tijd.
@@ -33,7 +35,15 @@ TENANT = os.environ.get("POSTBUS_OAUTH_TENANT", "consumers")
 BASIS = f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0"
 TOKEN_URL = BASIS + "/token"
 DEVICE_URL = BASIS + "/devicecode"
-SCOPE = "https://outlook.office.com/IMAP.AccessAsUser.All offline_access"
+# Een token voor lezen (IMAP) en versturen (SMTP) tegelijk: beide horen bij
+# dezelfde resource (outlook.office.com), dus een access token dekt ze allebei.
+SCOPE = ("https://outlook.office.com/IMAP.AccessAsUser.All "
+         "https://outlook.office.com/SMTP.Send offline_access")
+# Koppelingen van voor 30-09-2026 kregen alleen toestemming voor IMAP. Hun
+# tokenbestand heeft geen 'scope'; die vernieuwen we met deze smallere scope,
+# anders weigert Microsoft (toestemming voor SMTP is nooit gegeven).
+SCOPE_ALLEEN_IMAP = ("https://outlook.office.com/IMAP.AccessAsUser.All "
+                     "offline_access")
 TIMEOUT = 30
 MARGE_S = 300  # een access token vijf minuten voor het verloopt al vervangen
 
@@ -77,8 +87,13 @@ def gekoppeld(adres):
     return os.path.exists(pad(adres))
 
 
-def toegangstoken(mailbox):
-    """Een geldig access token voor deze mailbox; vernieuwt als het moet."""
+def toegangstoken(mailbox, smtp=False):
+    """Een geldig access token voor deze mailbox; vernieuwt als het moet.
+
+    smtp=True: het token moet ook mogen versturen. Een koppeling zonder
+    toestemming voor SMTP.Send geeft dan een duidelijke melding in plaats van
+    een onbegrijpelijke weigering van de mailserver.
+    """
     adres = mailbox["adres"].strip().lower()
     client_id = mailbox.get("oauth_client_id")
     if not client_id:
@@ -95,11 +110,17 @@ def toegangstoken(mailbox):
             raise ValueError(
                 f"{adres} is nog niet gekoppeld. De beheerder draait eenmalig "
                 f"in de container: python oauth_koppel.py {adres}")
+        scope = opgeslagen.get("scope") or SCOPE_ALLEEN_IMAP
+        if smtp and "SMTP.Send" not in scope:
+            raise ValueError(
+                f"De koppeling van {adres} geeft alleen toestemming om te "
+                "lezen, niet om te versturen. De beheerder koppelt opnieuw "
+                f"met: python oauth_koppel.py {adres}")
         antwoord = post(TOKEN_URL, {
             "client_id": client_id,
             "grant_type": "refresh_token",
             "refresh_token": opgeslagen["refresh_token"],
-            "scope": SCOPE,
+            "scope": scope,
         })
         if "access_token" not in antwoord:
             raise ValueError(
@@ -119,5 +140,5 @@ def toegangstoken(mailbox):
 
 
 def xoauth2(gebruiker, token):
-    """De SASL-string voor IMAP AUTHENTICATE XOAUTH2."""
+    """De SASL-string voor XOAUTH2 (IMAP AUTHENTICATE en SMTP AUTH)."""
     return f"user={gebruiker}\x01auth=Bearer {token}\x01\x01".encode()

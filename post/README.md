@@ -145,11 +145,14 @@ Het refresh token staat daarna in het volume `post-oauth` (`/oauth`), niet in
 het mailboxenbestand, omdat Microsoft het bij gebruik vervangt
 (`oauth_ms.py`). App-registratie in Entra: persoonlijke Microsoft-accounts
 toegestaan, "Allow public client flows" op Yes, Microsoft Graph delegated
-`IMAP.AccessAsUser.All` en `offline_access`, geen client secret.
+`IMAP.AccessAsUser.All`, `SMTP.Send` en `offline_access`, geen client secret.
 
-Versturen en doorsturen kunnen hier nog niet: die loggen op SMTP in met een
-wachtwoord. Staan ze aan bij een Microsoft-mailbox, dan zet de config ze uit
-met een melding.
+Versturen en doorsturen werken ook, via `smtp-mail.outlook.com:587`
+(STARTTLS) met hetzelfde token; die server en poort zijn de standaard bij
+`auth: microsoft`, de one.com-waarden uit het standaardblok gelden daar niet.
+Een kopie in Verzonden legt Microsoft zelf. Koppelingen van voor de
+SMTP-uitbreiding mogen alleen lezen; opnieuw koppelen vraagt de toestemming
+om te versturen erbij (het tokenbestand bewaart welke scope is gegeven).
 
 ## De doorstuuragent
 
