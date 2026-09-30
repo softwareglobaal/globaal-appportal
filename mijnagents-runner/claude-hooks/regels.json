@@ -1,0 +1,58 @@
+{
+ "versie": "1.0",
+ "datum": "2026-09-30",
+ "waarom": "Laag 1 (FR-72): de drie harde regels die bij een handeling horen, op het moment dat Claude ze nodig heeft. Gedistilleerd uit werkwijze/foutenregister.json. Deze regels en patronen zijn vast (tests/test_leren_in_lagen.py); de weekconsolidatie (laag 4) zet er per categorie hoogstens twee regels van de week bij via Data uit Mehdi/Agendawacht/regels-vooraf.json, maar kan niets weghalen.",
+ "categorieen": [
+  {
+   "naam": "wissen",
+   "bericht": "(?i)\\b(verwijder|verwijderen|wis|wissen|weg ?doen|weghalen)\\b",
+   "opdracht": "(?i)(method=\"DELETE\"|-X DELETE|trash_|delete_event|contact_verwijderen)",
+   "regels": [
+    "Niets verwijderen zonder expliciete ja van Mehdi; alleen eigen ritblokken die niet meer kloppen ruimt de agent zelf op (FR-68).",
+    "Een terugkerende reeks nooit verwijderen: stopzetten met UNTIL.",
+    "Na het wissen nakijken wat er nog staat en het tonen."
+   ]
+  },
+  {
+   "naam": "server",
+   "bericht": "(?i)\\b(server|vm|uitrol|deploy|cron|live zetten)\\b",
+   "opdracht": "(?i)(git (pull|stash|reset|checkout|rebase)|crontab|systemctl|docker compose|git push)",
+   "regels": [
+    "Op de VM alleen git pull --ff-only; nooit autostash of reset, lokale wijzigingen van anderen blijven staan (29-09 compose-conflict).",
+    "Push alleen als elke testsuite '0 fout' meldt, met een keten die echt stopt op een rode test (30-09).",
+    "Lees git log voor je commit (parallelle sessies) en zet nooit een grendel open."
+   ]
+  },
+  {
+   "naam": "calendly",
+   "bericht": "(?i)\\b(calendly|boeking|boekingslink)\\b",
+   "opdracht": "(?i)(api\\.calendly\\.com|event_types|calendly)",
+   "regels": [
+    "Een Calendly-type uitzetten na een ja van Mehdi; verwijderen doet Mehdi zelf.",
+    "Elk boekingskanaal telt alle agenda's (werk, privé, Lara, archief) als bezet (FR-57).",
+    "Nooit een link of uitnodiging naar een klant sturen."
+   ]
+  },
+  {
+   "naam": "mail",
+   "bericht": "(?i)\\b(mail|mailbox|stuur|versturen|antwoord)\\b",
+   "opdracht": "(?i)(versturen|send_message|__reply|__forward|smtp|doorsturen)",
+   "regels": [
+    "Mail lezen zonder als gelezen te markeren; versturen, ondertekenen en verwijderen blijft een menselijke handeling.",
+    "Wachtwoorden, codes en sleutels nooit in de chat of in een titel.",
+    "Bronnen zelf openen en de inhoud verwerken; melden dat iets bestaat is niet af."
+   ]
+  },
+  {
+   "naam": "agenda",
+   "bericht": "(?i)\\b(afspraak|afspraken|agenda|rit|ritten|kleur|titel|morgen|vandaag|overmorgen|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag|om \\d{1,2}[:.u]|bevestigd|verzet)",
+   "opdracht": "(?i)(calendar/v3|/events|agenda_wacht\\.py|create_event|update_event|dagcontrole\\.py)",
+   "regels": [
+    "!! staat altijd vooraan, dan de naam; buiten is altijd rood, ook met ?? (FR-64, FR-67).",
+    "Namen, adres, duur en soort gesprek uit de bron (contract, projectmap, Pipedrive H-Architects) of uit Mehdi's woorden; nooit gokken, ontbrekend eerst zelf zoeken en dan in een zin vragen (FR-58, FR-72: 'telefonisch' gegokt terwijl het Zoom was).",
+    "Na elke wijziging agenda_wacht.py --dag en dagcontrole.py --dag, en de uitkomst tonen voor je 'klaar' zegt; dubbels controleren op de titel, niet met q-zoeken (FR-71)."
+   ]
+  }
+ ],
+ "volgorde": "De meest specifieke categorie eerst: bij een schrijfopdracht krijgt Claude alleen de eerste die past (een DELETE in de agenda is eerst 'wissen')."
+}

@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.16"
+VERSIE = "2.17"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -311,6 +311,11 @@ gezien werd, de oorzaak, de oplossing en de grendel die het voortaan tegenhoudt.
 {len(reg['fouten'])} fouten, {tel['opgelost']} opgelost, {tel['bewaakt']} bewaakt, {tel['open']} open en {tel['vraag']} met een vraag aan Mehdi.</p>
 <p>Elke werkdag om 07:00 kijkt de <b>zelfcontrole</b> in de agenda zelf of klopt wat de agent beweert, van zeven dagen terug tot zeven
 dagen vooruit. Komt een opgeloste fout terug, dan staat TERUGGEKEERD bovenaan op het bord: dan werkt de grendel niet.</p>
+<p><b>Leren in lagen.</b> (1) Voor elke handeling krijgt Claude de drie harde regels die erbij horen (wissen, server,
+Calendly, mail, agenda). (2) Na elke wijziging de dagcontrole. (3) Corrigeert Mehdi, dan komt de regel eerst in het register, met een
+test. (4) Elke zondag om 20:05 leest de server de week na; het overzicht staat maandag als hele-dag-item in de privé-agenda (vrij, zonder
+melding): wat terugkwam, wat op te ruimen is en wat alleen Mehdi kan beslissen. De week kan per onderwerp hoogstens twee regels bijzetten,
+nooit een vaste regel weghalen. Laag 1 en 3 zet Mehdi een keer aan in de instellingen van Claude.</p>
 
 <h2>13. Zijn buren</h2>
 <table><thead><tr><th style="width:26mm">Agent</th><th style="width:30mm">Wanneer</th><th>Wat</th><th>Afspraak</th></tr></thead><tbody>{bu}</tbody></table>

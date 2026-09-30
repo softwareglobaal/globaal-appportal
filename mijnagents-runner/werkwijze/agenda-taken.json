@@ -1,5 +1,5 @@
 {
- "versie": "4.21",
+ "versie": "4.22",
  "datum": "2026-09-30",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -1217,13 +1217,16 @@
   "de_bode": "elke minuut: belt volgens het belrooster, online 5 minuten vooraf, buiten 5 minuten voor het vertrek (bode.py)",
   "zelfcontrole": "werkdagen om 07:05: de agenda nakijken tegen het foutenregister (zelfcontrole.py)",
   "weekend": "geen volledige ronde en geen oproepen over vastgelopen afspraken; wel de wijzigingswacht, het kleurherstel, de filewacht en De Bode. Daarom kijkt de ronde van vrijdag voor oproepen tot en met maandag vooruit.",
-  "dagcontrole": "na elke volledige ronde en elke dag-ronde (--dag), en met de hand: dagcontrole.py --dag JJJJ-MM-DD"
+  "dagcontrole": "na elke volledige ronde en elke dag-ronde (--dag), en met de hand: dagcontrole.py --dag JJJJ-MM-DD",
+  "weekconsolidatie": "zondag om 20:05: de week nalezen en het overzicht op maandag in de privé-agenda zetten; cron om 18:05 en 19:05 UTC, het script kiest zelf het juiste uur (weekconsolidatie.py --ronde)"
  },
  "leren_in_lagen": {
   "waarom": "Mehdi, 30-09-2026: 'ik begrijp niet waarom je na zoveel tijd nog altijd niet beter wordt ... laat ons kijken hoe we dat in lagen kunnen brengen'. De kennis bestond, maar stond niet voor de agent op het moment van handelen, en niets keek naar de dag zoals Mehdi hem ziet.",
-  "laag_1_voor_de_handeling": "Hook die voor een schrijfactie naar de agenda, Calendly of de server de drie regels toont die erbij horen. Nog te bouwen, na laag 2 en 3.",
+  "laag_1_voor_de_handeling": "Claude Code-hook claude-hooks/regels_vooraf.py met de vaste regels in claude-hooks/regels.json (FR-72). Bij het bericht van Mehdi (UserPromptSubmit) krijgt Claude de drie harde regels van hoogstens twee categorieen die passen (wissen, server, calendly, mail, agenda); bij een schrijfopdracht (PreToolUse: Google Agenda, Calendly, git op de server, DELETE) nog eens die van de eerste categorie die past, als herinnering naast het resultaat. De weekconsolidatie zet er per categorie hoogstens twee regels van de week bij (Data uit Mehdi/Agendawacht/regels-vooraf.json, twee weken geldig); een vaste regel of een patroon weghalen kan ze niet. Aanzetten doet Mehdi een keer in ~/.claude/settings.json, samen met laag 3.",
   "laag_2_dagcontrole": "dagcontrole.py na elke ronde en elke wijziging: ritten die overlappen of door een afspraak lopen, een omweg langs huis (minder dan 90 minuten), twee plaatsen tegelijk, een botsing met Lara, !! niet vooraan, een klant zonder naam. Wat Mehdi moet beslissen wordt een vraag in de agenda en een oproep; de zelfcontrole neemt dezelfde controles mee. Claude meldt nooit meer 'klaar' zonder de uitkomst (FR-71).",
   "laag_3_correcties": "Claude Code-hook op het bericht van Mehdi (claude-hooks/correctie.py): bij een correctiewoord eerst de regel vastleggen in het register met test, het geheugen en de werkwijze. Aanzetten doet Mehdi een keer in ~/.claude/settings.json; de beveiligingslaag van Claude laat Claude dat niet zelf doen.",
-  "laag_4_week": "Elke week een consolidatie die de fouten bundelt tot principes, uitzonderingen opruimt en de skill bijwerkt, met een overzicht voor Mehdi. Beslissing Mehdi 30-09-2026: draait op de server (ANTHROPIC_API_KEY staat al in ~/appportal/.env). Nog te bouwen."
+  "laag_4_week": "weekconsolidatie.py op de server, zondag om 20:05 Brusselse tijd (FR-72). Leest het register, de zelfcontrole, het kleurherstel, de dagcontrole over veertien dagen, de commits, deze afspraken en de vaste regels van laag 1, en laat claude-opus-5-5 (gestructureerd antwoord, fallbacks default) een overzicht maken: wat terugkwam, principes, wat op te ruimen is, weekregels voor laag 1 en wat alleen Mehdi kan beslissen. Uitvoer: export/Agendawacht/weekconsolidatie/JJJJ-Www.md en .json (Dropbox: Data uit Mehdi/Agendawacht), regels-vooraf.json voor laag 1, een hele-dag-item op maandag in de privé-agenda (vrij, zonder melding) en een regel op het bord. Het model stelt voor; register, code en werkwijze past een volgende sessie aan, met een test. Een weigering of afgekapt antwoord wordt een fout in het logboek, nooit een leeg overzicht.",
+  "aanzetten": "Mehdi voegt in ~/.claude/settings.json onder \"hooks\" toe: UserPromptSubmit met twee opdrachten (python3 ~/dev/globaal-appportal/mijnagents-runner/claude-hooks/correctie.py en .../claude-hooks/regels_vooraf.py) en PreToolUse met matcher \"Bash|mcp__.*\" en de opdracht .../claude-hooks/regels_vooraf.py; het script kiest zelf of de opdracht erbij hoort (de agenda-MCP heet naar een nummer, niet naar \"calendar\").",
+  "grendel": "tests/test_leren_in_lagen.py (laag 1, 3 en 4) en tests/test_agenda_taken.py (laag 2)."
  }
 }

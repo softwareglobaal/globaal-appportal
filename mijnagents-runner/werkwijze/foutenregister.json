@@ -1,7 +1,7 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.5",
- "datum": "26-09-2026",
+ "versie": "3.6",
+ "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
   "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
@@ -9,7 +9,8 @@
   "Elke werkdag om 07:00 (Brusselse tijd) kijkt zelfcontrole.py in de agenda zelf na of het klopt, van zeven dagen terug tot zeven dagen vooruit. Elke bevinding hangt aan een nummer hieronder.",
   "Komt een fout terug die als opgelost staat, dan meldt de zelfcontrole TERUGGEKEERD, bovenaan: de grendel werkt niet en dat gaat voor alles.",
   "Een bevinding zonder nummer heet NIEUW: die komt hier eerst in, met oorzaak en grendel.",
-  "Claude begint elke sessie aan de Agendawacht met de lessen hieronder en de laatste zelfcontrole, en sluit af met een nieuwe zelfcontrole als bewijs."
+  "Claude begint elke sessie aan de Agendawacht met de lessen hieronder en de laatste zelfcontrole, en sluit af met een nieuwe zelfcontrole als bewijs.",
+  "Elke zondag om 20:05 leest weekconsolidatie.py de week na en zet het overzicht maandag in de privé-agenda; wat het voorstelt (principes, opruimen, weekregels voor laag 1) legt een volgende sessie hier vast, met een test (FR-72)."
  ],
  "statussen": {
   "opgelost": "gerepareerd in de bron, met een grendel; komt ze terug, dan heet ze TERUGGEKEERD",
@@ -178,6 +179,15 @@
    "les": "Controleer wat Mehdi ziet, niet alleen de code: na elke wijziging de hele dag, over alle agenda's heen. Een test op de code bewijst niet dat de dag klopt.",
    "uit": [
     "FR-71"
+   ]
+  },
+  {
+   "id": "L23",
+   "les": "Een regel die alleen in een bestand staat, bereikt de handeling niet: zet hem op het moment van handelen voor Claude (laag 1) en kijk elke week of dezelfde oorzaak in een andere vorm terugkomt (laag 4).",
+   "uit": [
+    "FR-64",
+    "FR-71",
+    "FR-72"
    ]
   }
  ],
@@ -1501,6 +1511,24 @@
     "zonder_klant"
    ],
    "status": "bewaakt"
+  },
+  {
+   "id": "FR-72",
+   "datum": "30-09-2026",
+   "gevonden_door": "Mehdi ('als altijd zoom was waarom nu in eens telefonisch', 28-09; 'ik wil een systeem creëren waardoor je beter en intelligenter wordt', 30-09)",
+   "fout": "Regels die in het register en het geheugen stonden, werden in de sessie toch gebroken: een Zoom-afspraak werd 'telefonisch' (28-09), !! kwam weer na de naam (zelfde oorzaak als FR-64), op de VM liep een git pull met autostash (29-09) en een push ging mee met een rode registertest (30-09).",
+   "gevolg": "Mehdi moet dezelfde fout opnieuw aanwijzen; het register lijkt niets te leren.",
+   "waarom_niet_gezien": "Het register wordt gelezen aan het begin van een sessie, als iemand eraan denkt. Op het moment van handelen staat de regel niet voor Claude, en na een samenvatting van het gesprek is hij weg. Niemand keek per week of dezelfde oorzaak in een andere vorm terugkwam.",
+   "oorzaak": "Kennis stond in bestanden die alleen gelezen worden als iemand eraan denkt, niet op de plaats van de handeling; en er was geen terugblik per week.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "Laag 1: claude-hooks/regels_vooraf.py zet de drie harde regels van de passende categorie (wissen, server, calendly, mail, agenda) voor Claude, bij het bericht van Mehdi en bij elke schrijfopdracht. Laag 4: weekconsolidatie.py op de server, zondag 20:05, laat claude-opus-5-5 de week nalezen (register, zelfcontrole, kleurherstel, dagcontrole, commits, afspraken) en zet het overzicht maandag in de privé-agenda, met hoogstens twee weekregels per categorie voor laag 1; een vaste regel weghalen kan het niet. Het model stelt voor, een sessie legt vast met een test. Open tot Mehdi de hooks aanzet in ~/.claude/settings.json (de beveiligingslaag laat Claude dat niet doen).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_leren_in_lagen.py",
+    "tekst": "een lege week haalt geen vaste regel weg"
+   },
+   "controle": [],
+   "status": "open"
   }
  ]
 }

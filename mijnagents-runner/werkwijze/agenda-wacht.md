@@ -1,6 +1,6 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 7.20 (30-09-2026, plus de dagcontrole en leren in lagen; eerder 29-09-2026, plus 'in de auto': gesprekken onderweg; eerder plus tussendoor naar huis alleen bij minstens 90 minuten; eerder plus eigen ritten die niet meer kloppen zelf opruimen; eerder plus buiten altijd rood, ook onbevestigd; eerder 28-09-2026, plus !! altijd vooraan en ritten voor elke buitenafspraak tot een jaar vooruit; eerder plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
+Versie 7.21 (30-09-2026, plus laag 1 (regels voor de handeling) en laag 4 (de weekconsolidatie); eerder plus de dagcontrole en leren in lagen; eerder 29-09-2026, plus 'in de auto': gesprekken onderweg; eerder plus tussendoor naar huis alleen bij minstens 90 minuten; eerder plus eigen ritten die niet meer kloppen zelf opruimen; eerder plus buiten altijd rood, ook onbevestigd; eerder 28-09-2026, plus !! altijd vooraan en ritten voor elke buitenafspraak tot een jaar vooruit; eerder plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
 Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
 (zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
@@ -450,6 +450,7 @@ Wanneer (Brusselse tijd):
 - Kleurherstel: om :17 en :47, dag en nacht, ook in het weekend, 29 dagen vooruit.
 - Filewacht: elke 10 minuten van 06:00 tot 21:59. De Bode: elke minuut, volgens het belrooster.
 - Zelfcontrole: werkdagen om 07:05.
+- Weekconsolidatie: zondag om 20:05; het overzicht staat maandag als hele-dag-item in de privé-agenda.
 - Weekend: geen volledige ronde en geen oproepen over vastgelopen afspraken. De ronde van vrijdag kijkt
   daarom voor oproepen tot en met maandag vooruit.
 
@@ -477,13 +478,24 @@ Per ronde:
 
 Mehdi: "ik begrijp niet waarom je na zoveel tijd nog altijd niet beter wordt". De kennis bestond, maar stond niet
 voor mij op het moment van handelen, en niets keek naar de dag zoals hij hem ziet.
-1. Voor de handeling: de drie regels die bij een schrijfactie horen (hook, nog te bouwen).
+1. Voor de handeling (FR-72): claude-hooks/regels_vooraf.py zet de drie harde regels van de categorie die past
+   (wissen, server, calendly, mail, agenda) voor Claude, bij het bericht van Mehdi en nog eens bij elke
+   schrijfopdracht. De vaste regels staan in claude-hooks/regels.json, met een test; de week kan er per categorie
+   hoogstens twee bijzetten, nooit een weghalen.
 2. Na elke wijziging: de dagcontrole (dagcontrole.py). Ritten die overlappen of door een afspraak lopen, een omweg
    langs huis, twee plaatsen tegelijk, een botsing met Lara, !! niet vooraan, een klant zonder naam. Wat Mehdi moet
    beslissen, wordt een vraag in de agenda en een oproep. Claude meldt nooit 'klaar' zonder de uitkomst.
 3. Als Mehdi corrigeert: eerst de regel vastleggen (register met test, geheugen, werkwijze). Hook
-   claude-hooks/correctie.py; aanzetten doet Mehdi in ~/.claude/settings.json.
-4. Elke week consolideren tot principes, op de server (beslissing Mehdi, 30-09-2026; nog te bouwen).
+   claude-hooks/correctie.py.
+4. Elke week (FR-72): weekconsolidatie.py op de server, zondag om 20:05. Claude (claude-opus-5-5) leest het register,
+   de zelfcontrole, het kleurherstel, de dagcontrole over veertien dagen, de commits en deze afspraken, en maakt een
+   overzicht: wat terugkwam, principes, wat op te ruimen is, weekregels voor laag 1 en wat alleen Mehdi kan
+   beslissen. Dat staat maandag als hele-dag-item in de privé-agenda (vrij, zonder melding) en volledig in
+   Data uit Mehdi/Agendawacht/weekconsolidatie. Het model stelt voor; een sessie legt vast, met een test.
+
+Laag 1 en 3 zet Mehdi een keer aan in ~/.claude/settings.json (de beveiligingslaag laat Claude dat niet doen):
+UserPromptSubmit met correctie.py en regels_vooraf.py, PreToolUse met matcher "Bash|mcp__.*" en regels_vooraf.py.
+De grendel is tests/test_leren_in_lagen.py.
 
 ## Wat ik nooit doe
 
