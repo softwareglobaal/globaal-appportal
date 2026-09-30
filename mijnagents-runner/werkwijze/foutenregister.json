@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.7",
+ "versie": "3.8",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -196,6 +196,13 @@
    "uit": [
     "FR-54",
     "FR-73"
+   ]
+  },
+  {
+   "id": "L25",
+   "les": "Een vraag aan Mehdi is pas een vraag als de agenda het antwoord niet al geeft: lees eerst de hele dag en week, met de hele-dag-markers.",
+   "uit": [
+    "FR-74"
    ]
   }
  ],
@@ -1552,6 +1559,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een meeting zonder toegangscode is geen Zoom-link zonder wachtwoord"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-74",
+   "datum": "30-09-2026",
+   "gevonden_door": "Mehdi ('dit is echt domme vraag! je ziet dat ik die week in buitenland ben')",
+   "fout": "Claude vroeg Mehdi of het werfbezoek 2145 van maandag 05-10 bewust uit de werkagenda geschrapt was, terwijl 'Mehdi: Buitenland' van 04-10 tot 12-10 in de werkagenda staat.",
+   "gevolg": "Een vraag waarvan het antwoord in de agenda stond; Mehdi verliest tijd en vertrouwen.",
+   "waarom_niet_gezien": "Claude keek alleen naar de reeks van het werfbezoek, niet naar de week. En de dagcontrole van 05-10 had de marker ook niet getoond: ze toonde alleen hele-dag-items die op die dag beginnen.",
+   "oorzaak": "Een marker over meerdere dagen telde alleen op zijn eerste dag, en er was geen regel dat Claude eerst de agenda van die week leest voor hij iets vraagt.",
+   "soort_oorzaak": "code",
+   "oplossing": "dagcontrole.samenvatting toont elke hele-dag-marker die de dag dekt (op_dag), bovenaan. Laag 1 (regels.json, agenda): eerst zelf zoeken, ook de hele week in de agenda; wat daar staat vraag je niet. 'Mehdi: Buitenland' staat bij de markers in agenda-taken.json.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_leren_in_lagen.py",
+    "tekst": "een marker over meerdere dagen staat in de dagcontrole van elke dag die hij dekt"
    },
    "controle": [],
    "status": "opgelost"

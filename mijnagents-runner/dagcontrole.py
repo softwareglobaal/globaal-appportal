@@ -118,13 +118,27 @@ def dagcontrole(items, dag):
     return uit
 
 
+def op_dag(x, dag):
+    """Staat x op deze dag? Een hele-dag-marker over meerdere dagen ('Mehdi: Buitenland' van 04-10 tot 12-10) telt op
+    elke dag die hij dekt, niet alleen op de eerste. Gezien 30-09-2026: Claude vroeg of het werfbezoek van 05-10
+    bewust geschrapt was, terwijl Mehdi die week in het buitenland is; de dagcontrole van 05-10 toonde de marker niet (FR-74)."""
+    s, e = (x.get("start") or "")[:10], (x.get("einde") or "")[:10]
+    return s == dag or bool(x.get("hele_dag") and s <= dag < (e or s))
+
+
 def samenvatting(items, dag):
-    """Leesbare dag plus bevindingen, zoals Claude ze na elke wijziging aan Mehdi toont."""
+    """Leesbare dag plus bevindingen, zoals Claude ze na elke wijziging aan Mehdi toont, met de hele-dag-markers
+    die de dag dekken (buitenland, geen auto, Lara): wat daar staat, vraagt Claude Mehdi niet."""
     W = _w()
     regels = []
-    for x in sorted([x for x in items if (x.get("start") or "")[:10] == dag], key=lambda x: x.get("start", "")):
+    for x in sorted([x for x in items if op_dag(x, dag)], key=lambda x: (not x.get("hele_dag"), x.get("start", ""))):
         naam = W.KALENDERS.get(x.get("kalender"), x.get("_archief") or x.get("kalender", ""))[:10]
-        regels.append(f"  {x['start'][11:16] or 'dag  '}-{(x.get('einde') or '')[11:16]} {naam:10} {x['titel'][:80]}")
+        if x.get("hele_dag"):
+            e = (x.get("einde") or "")[:10]
+            tot = f" (tot {e[8:10]}-{e[5:7]})" if e and e > (datetime.fromisoformat(x["start"][:10]) + timedelta(days=1)).date().isoformat() else ""
+            regels.append(f"  hele dag    {naam:10} {x['titel'][:80]}{tot}")
+        else:
+            regels.append(f"  {x['start'][11:16]}-{(x.get('einde') or '')[11:16]} {naam:10} {x['titel'][:80]}")
     b = dagcontrole(items, dag)
     regels.append(f"  dagcontrole {dag}: " + ("in orde" if not b else f"{len(b)} bevinding(en)"))
     regels += [f"    - {x['soort']}: {x['tekst']}" for x in b]

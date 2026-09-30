@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.18"
+VERSIE = "2.19"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -273,6 +273,8 @@ mogen collega's juist wel buiten plannen. De agent leest de vakanties uit de age
 <ul>
 <li><b>Een hele-dag marker is een signaal aan de collega's</b>, geen afspraak: geen kleur, geen melding, geen rit, geen titelfout.
 '!! Mehdi: Geen buiten afspraken Lara ophalen' (agenda Lara) zegt: die dag geen verre buitenafspraken plannen.</li>
+<li><b>'Mehdi: Buitenland'</b> (werkagenda, over meerdere dagen): Mehdi is weg. Wat in die week wegvalt, zoals een werfbezoek, is
+bewust. De dagcontrole toont zo'n marker op elke dag die hij dekt, en Claude vraagt niet naar wat de agenda al zegt.</li>
 <li><b>Geen auto.</b> Mehdi of Chilton zet een hele-dag marker met 'geen auto' op de werkagenda. De agent maakt die dag geen rit en meldt
 een buitenafspraak die er toch staat, met wie ze zette.</li>
 <li><b>Buitenafspraken en werfbezoeken worden met de hand ingepland</b>, door Mehdi of Chilton. Calendly boekt alleen online.</li>

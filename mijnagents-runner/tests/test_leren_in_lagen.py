@@ -103,6 +103,18 @@ with tempfile.TemporaryDirectory() as d:
     check("laag 1: zonder weekbestand gewoon de vaste regels",
           all(c["week"] == [] and c["regels"] for c in R1.regels(Path(d) / "bestaat-niet.json", nu)))
 
+# ---------- laag 2: de dagcontrole toont de markers (FR-74) ----------
+import dagcontrole as DC2    # noqa: E402
+_mk = [{"id": "b1", "titel": "Mehdi: Buitenland", "start": "2026-10-04", "einde": "2026-10-12", "hele_dag": True, "kalender": W.WERKAGENDA},
+       {"id": "w1", "titel": "!! Mehdi: [HARC-KB] WB 2145 - wekelijks werfbezoek", "start": "2026-10-12T09:30:00+02:00",
+        "einde": "2026-10-12T11:30:00+02:00", "kalender": W.WERKAGENDA}]
+check("laag 2: een marker over meerdere dagen staat in de dagcontrole van elke dag die hij dekt",
+      "Buitenland" in DC2.samenvatting(_mk, "2026-10-05") and "tot 12-10" in DC2.samenvatting(_mk, "2026-10-05")
+      and "Buitenland" in DC2.samenvatting(_mk, "2026-10-11") and "Buitenland" not in DC2.samenvatting(_mk, "2026-10-12"),
+      DC2.samenvatting(_mk, "2026-10-05"))
+check("laag 1: eerst de agenda van de week lezen voor een vraag", "wat daar staat vraag je niet" in alles or
+      "wat daar staat vraag je niet" in json.dumps(json.loads((HIER / "claude-hooks" / "regels.json").read_text(encoding="utf-8")), ensure_ascii=False))
+
 # ---------- laag 3: de correctie-hook ----------
 rc, uit = hook("correctie.py", {"hook_event_name": "UserPromptSubmit", "prompt": "waarom blijf je dezelfde fout maken"})
 check("laag 3: een correctie wordt een opdracht om het vast te zetten",
