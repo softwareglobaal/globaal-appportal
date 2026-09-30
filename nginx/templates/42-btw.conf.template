@@ -1,0 +1,17 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name btw.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # BTW dashboard van Joan (repo softwareglobaal/globaal-btw): FOD-schulden,
+    # betalingen en btw-opvolging per firma. Draait op de host als systemd-dienst
+    # btw-dashboard op 172.17.0.1:8450, alleen bereikbaar via deze vhost. De app
+    # gelooft de X-authentik-*-koppen alleen van het appnet (BTW_AUTHENTIK_PROXY)
+    # en eist daarnaast een eigen account in btw.gebruiker.
+    set $app_upstream http://172.17.0.1:8450;
+    # Brieven en exports opladen; een maandronde of "Laat Claude lezen" duurt.
+    client_max_body_size 25m;
+    proxy_read_timeout 300s;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
