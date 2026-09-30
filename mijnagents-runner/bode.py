@@ -3,7 +3,7 @@
 
 Naar Mehdi: wat de agents voor hem klaarzetten en welke voorstellen wachten,
 gebundeld, via WhatsApp (sinds 30-09-2026, koppelingen/whatsapp.py: de Cloud API
-van Meta, voorlopig van het UNABO-nummer). Mag WhatsApp niet (venster van 24 uur
+van Meta, van het agentennummer UNABO Assistant). Mag WhatsApp niet (venster van 24 uur
 dicht en nog geen sjabloon) of lukt het niet, dan Telegram, dan Zoom-chat. Alleen
 als er iets NIEUWS is; een herinnering aan open voorstellen hoogstens één keer per
 zes uur.
@@ -42,7 +42,7 @@ NIET_OP_TELEGRAM = tuple(x.strip() for x in os.environ.get("BODE_NIET_OP_TELEGRA
 ZOOM_ENV = os.path.expanduser("~/pipedrive-won-deals/.env")
 # Zonder aantal (N10): zolang het venster dicht is en er geen sjabloon is, staat deze nood open.
 WA_NOOD = ("WhatsApp mag je pas schrijven na een bericht van jou: stuur iets naar het agentennummer "
-           "(nu het UNABO-nummer +32 472 01 66 56); tot dan gaat het via Telegram")
+           "(UNABO Assistant, +32 460 23 30 42); tot dan gaat het via Telegram")
 WA_KORT = ("start", "/start", "test", "hallo", "hoi")
 
 
