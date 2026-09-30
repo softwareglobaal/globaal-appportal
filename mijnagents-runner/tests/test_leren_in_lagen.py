@@ -221,6 +221,18 @@ finally:
 check("laag 4: eerste keer een nieuw item, daarna alleen de tekst bijwerken",
       gedaan == [("insert", WC.PRIVE), ("patch", "e1", ["description", "summary"]), ("insert", WC.PRIVE)], str(gedaan))
 
+class Limiet(Exception):
+    pass
+
+
+mis = WC.mislukt_overzicht("2026-W40", Limiet("You have reached your specified workspace API usage limits. "
+                                              "You will regain access on 2026-10-01 at 00:00 UTC."))
+mb = WC.agenda_body("2026-W40", date(2026, 10, 5), mis)
+check("laag 4: een mislukte week komt toch in de agenda, met de volgende stap (Mehdi leest het bord niet)",
+      "mislukt" in mb["summary"] and "console.anthropic.com" in mb["description"] and "2026-10-01" in mb["description"]
+      and mb["transparency"] == "transparent", mb["summary"])
+check("laag 4: een mislukte week zet geen regels voor laag 1", mis["regels_vooraf"] == [])
+
 # ---------- laag 4: de invoer ----------
 inv = WC.invoer(datetime(2026, 10, 4, 20, 5), [])
 ff = {f["id"]: f for f in inv["register"]["fouten"]}

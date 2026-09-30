@@ -291,6 +291,24 @@ def schrijf(week, uit, meta, ronde, proef=False, nu_utc=None):
                                encoding="utf-8")
 
 
+def mislukt_overzicht(week, fout):
+    """Wat Mehdi maandag in de agenda ziet als het model niet bereikbaar was: hij leest het bord niet, dus een
+    mislukte week mag niet stil voorbijgaan (gezien 30-09-2026: de maandlimiet van de API was bereikt)."""
+    tekst = str(fout)
+    m = re.search(r"regain access on (\d{4}-\d{2}-\d{2}) at (\d{2}:\d{2}) UTC", tekst)
+    if "usage limit" in tekst:
+        vraag = ("De gebruikslimiet van de Claude-API is bereikt" + (f" (weer open op {m.group(1)} om {m.group(2)} UTC)" if m else "")
+                 + "; alle agents die de API gebruiken liggen dan stil, niet alleen deze.")
+        stap = ("Verhoog de limiet in console.anthropic.com (Settings, Limits); daarna draait Claude de weekconsolidatie "
+                "met de hand opnieuw.")
+    else:
+        vraag = f"De weekconsolidatie liep niet ({type(fout).__name__})."
+        stap = "Claude kijkt ~/agents/weekconsolidatie.log na, lost het op in de bron en draait ze opnieuw."
+    return {"mislukt": True, "overzicht": f"De weekconsolidatie van {week} liep niet; er is deze week geen overzicht.",
+            "teruggekomen": [], "principes": [], "opruimen": [], "regels_vooraf": [],
+            "voor_mehdi": [{"vraag": vraag, "volgende_stap": stap}]}
+
+
 def agenda_body(week, maandag, uit):
     """Hele dag op maandag, op de privé-agenda. Vrij (transparent), zodat het nooit een Calendly-slot of een
     rit blokkeert (FR-57), en zonder melding."""
@@ -300,8 +318,9 @@ def agenda_body(week, maandag, uit):
     if uit["teruggekomen"]:
         oms += ["Teruggekomen:"] + [f"- {', '.join(x['ids'])}: {x['wat']}" for x in uit["teruggekomen"]] + [""]
     oms.append(f"Volledig overzicht: Data uit Mehdi/Agendawacht/weekconsolidatie/{week}.md")
-    return {"summary": f"Agendawacht weekoverzicht {week}: {len(uit['teruggekomen'])} teruggekomen, "
-                       f"{len(uit['voor_mehdi'])} voor jou",
+    titel = (f"Agendawacht weekoverzicht {week} mislukt: actie voor jou" if uit.get("mislukt") else
+             f"Agendawacht weekoverzicht {week}: {len(uit['teruggekomen'])} teruggekomen, {len(uit['voor_mehdi'])} voor jou")
+    return {"summary": titel,
             "description": "\n".join(oms)[:7500],
             "start": {"date": maandag.isoformat()}, "end": {"date": (maandag + timedelta(days=1)).isoformat()},
             "transparency": "transparent",
@@ -346,6 +365,11 @@ def main():
         if not droog:
             W.ag.log(f"week {week}", "fout", f"weekconsolidatie {week} mislukt: {type(e).__name__}", str(e)[:500])
             W.ag.log_verstuur()
+            try:
+                hoe = in_agenda(week, maandag_na(nu), mislukt_overzicht(week, e), items)
+                print(f"  agenda: {hoe} op maandag {maandag_na(nu).isoformat()}: mislukt, met de volgende stap")
+            except Exception as e2:  # noqa: BLE001
+                print(f"  agenda mislukt: {type(e2).__name__}: {e2}", file=sys.stderr)
         return 1
     uit = schoon(ruw)
     schrijf(week, uit, meta, ronde, proef=droog)
