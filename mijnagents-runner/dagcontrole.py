@@ -70,15 +70,16 @@ def dagcontrole(items, dag):
                                        f"{y['start'][11:16]}-{y['einde'][11:16]} ({y['titel'][:35]})")
     # 2. een rit die door een buitenafspraak loopt (niet ervoor of erna, maar erdoor)
     for x in ritten:
-        for b in buitens:
-            if _overlapt(x, b):
-                if b.get("kalender") in lara and x.get("kalender") not in lara:
-                    # te laat voor Lara: dat beslist Mehdi (gezien 30-09-2026: zitting tot 16:00, Lara om 16:00)
-                    meld("lara_botsing", b, f"de rit {x['start'][11:16]}-{x['einde'][11:16]} ({x['titel'][:35]}) komt te laat "
-                                            f"voor {b['start'][11:16]} {b['titel'][:35]}")
-                else:
-                    meld("rit_door_afspraak", x, f"rit {x['start'][11:16]}-{x['einde'][11:16]} loopt door "
-                                                 f"{b['start'][11:16]} {b['titel'][:40]}")
+        for a in buitens:
+            if not _overlapt(x, a):
+                continue
+            if a.get("kalender") in lara:
+                # te laat voor Lara: dat beslist Mehdi (gezien 30-09-2026: zitting tot 16:00, Lara om 16:00)
+                meld("lara_botsing", a, f"de rit {x['start'][11:16]}-{x['einde'][11:16]} ({x['titel'][:35]}) komt te laat "
+                                        f"voor {a['start'][11:16]} {a['titel'][:35]}")
+            else:
+                meld("rit_door_afspraak", x, f"rit {x['start'][11:16]}-{x['einde'][11:16]} loopt door "
+                                             f"{a['start'][11:16]} {a['titel'][:40]}")
     # 3. omweg langs huis: naar huis en weer weg, terwijl er minder dan 90 minuten tussen twee buitenafspraken zit
     for a, b in zip(buitens, buitens[1:]):
         ea, sb = _tijd(a, "einde"), _tijd(b, "start")
