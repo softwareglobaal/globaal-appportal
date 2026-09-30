@@ -7,6 +7,8 @@ komen de meldingen van De Bode ook door als hij een dag niets stuurde. Mehdi gaf
 30-09-2026 toestemming om het aan te vragen.
 
     whatsapp_sjabloon.py <waba-id>          status tonen; aanvragen als het er nog niet is
+    whatsapp_sjabloon.py <waba-id> --zet    idem, en na goedkeuring WA_SJABLOON zelf zetten
+                                            (voor cron: stil zolang er niets verandert)
 
 Het WABA-ID (WhatsApp Business Account-ID) staat in Meta Business Suite van de portfolio
 UNABO VOF: Instellingen, Accounts, WhatsApp-accounts. Het token kan het niet zelf opzoeken.
@@ -41,14 +43,31 @@ def graph(pad, data=None, **q):
         sys.exit(f"Meta: {fout.get('code')} {fout.get('error_user_msg') or fout.get('message')}")
 
 
+def zet_sjabloon():
+    """WA_SJABLOON=agent_melding in mijnagents-data/.env, als die regel er nog niet is. True als nieuw gezet."""
+    if whatsapp._env().get("WA_SJABLOON"):
+        return False
+    with open(whatsapp.AGENTS_ENV, "a", encoding="utf-8") as f:
+        f.write(f"\n# Sjabloon buiten het 24-uursvenster, door whatsapp_sjabloon.py --zet na goedkeuring\nWA_SJABLOON={NAAM}\n")
+    return True
+
+
 def main():
-    if len(sys.argv) != 2 or not sys.argv[1].isdigit():
+    zet = "--zet" in sys.argv[1:]
+    args = [a for a in sys.argv[1:] if a != "--zet"]
+    if len(args) != 1 or not args[0].isdigit():
         sys.exit(__doc__)
-    waba = sys.argv[1]
+    waba = args[0]
     bestaand = [t for t in graph(f"{waba}/message_templates", fields="name,status,language,category", limit=100)["data"]
                 if t["name"] == NAAM and t["language"] == TAAL]
     if bestaand:
         t = bestaand[0]
+        if zet:
+            if t["status"] == "APPROVED" and zet_sjabloon():
+                print(f"{NAAM} goedgekeurd ({t['category']}): WA_SJABLOON gezet, De Bode gebruikt het vanaf nu")
+            elif t["status"] in ("REJECTED", "PAUSED", "DISABLED"):
+                print(f"{NAAM} staat op {t['status']}: niet gezet, kijk in WhatsApp Manager")
+            return
         print(f"{NAAM} ({TAAL}) bestaat al: {t['status']}, categorie {t['category']}")
         if t["status"] == "APPROVED":
             print("Zet WA_SJABLOON=agent_melding in mijnagents-data/.env; De Bode gebruikt het bij de volgende ronde.")
