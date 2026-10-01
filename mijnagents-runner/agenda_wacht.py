@@ -2402,7 +2402,9 @@ def contact_van(a, info):
     loc = (a.get("locatie") or "").strip()
     straat = (loc if loc and not loc.lower().startswith("http") else
               ((a.get("titel") or "").split(",")[1] if (a.get("titel") or "").count(",") >= 2 else "")).split(",")[0].strip()
-    for soort, term in (("nummer", info.get("nummer") or ""), ("straat", straat), ("naam", naam)):
+    # 'Koen Van den Steen & Laura Vanovertveldt': elke naam apart (gezien 01-10-2026, samen vond Pipedrive niets)
+    namen = [n.strip() for n in re.split(r"\s+(?:&|en|and)\s+", naam) if n.strip()]
+    for soort, term in [("nummer", info.get("nummer") or ""), ("straat", straat)] + [("naam", n) for n in namen]:
         if len(term) < 4:
             continue
         sleutel = (pd, soort, term.lower())
@@ -2424,12 +2426,12 @@ def contact_van(a, info):
                             mails = [m.get("value", "").lower() for m in (p or {}).get("email") or [] if m.get("value")]
                             r = (_naam_schoon(p.get("name")), tel, f"Pipedrive {pd}, deal {x.get('id')}", mails)
                             break
-                elif len(naam.split()) >= 2:
-                    d = pipedrive.get(pd, "/persons/search", {"term": naam, "fields": "name", "limit": 5})
+                elif len(term.split()) >= 2:
+                    d = pipedrive.get(pd, "/persons/search", {"term": term, "fields": "name", "limit": 5})
                     passend = []
                     for it in (d.get("items") if isinstance(d, dict) else d) or []:
                         x = it.get("item", it)
-                        if set(naam.lower().split()) <= set((x.get("name") or "").lower().split()):
+                        if set(term.lower().split()) <= set((x.get("name") or "").lower().split()):
                             tel = next((telefoon_in(t or "") for t in x.get("phones") or [] if telefoon_in(t or "")), "")
                             if tel:
                                 passend.append((_naam_schoon(x.get("name")), tel, f"Pipedrive {pd}, persoon {x.get('id')}",

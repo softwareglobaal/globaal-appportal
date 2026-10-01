@@ -874,6 +874,21 @@ try:
 finally:
     W._vroegere_afspraken, W.pipedrive.get = _o77b
     W._CONTACT.clear()
+_o77d = (W._vroegere_afspraken, W.pipedrive.get)
+W._vroegere_afspraken = lambda: []
+W.pipedrive.get = lambda pd, pad, params=None: (
+    {"items": [{"item": {"id": 7, "name": "Koen van den Steen", "phones": ["0485254799"], "emails": []}}]}
+    if "persons/search" in pad and (params or {}).get("term") == "Koen Van den Steen" else {"items": []})
+W._CONTACT.clear()
+try:
+    _k77 = W.contact_van({"id": "k", "titel": "!! Mehdi: [HARC-PB] Koen Van den Steen & Laura Vanovertveldt, Berthoutstraat 20, 2531 Boechout",
+                          "locatie": "Berthoutstraat 20, 2531 Boechout"},
+                         W.lees_titel("!! Mehdi: [HARC-PB] Koen Van den Steen & Laura Vanovertveldt, Berthoutstraat 20, 2531 Boechout"))
+finally:
+    W._vroegere_afspraken, W.pipedrive.get = _o77d
+    W._CONTACT.clear()
+check("bij twee namen ('Koen ... & Laura ...') zoekt de agent elke naam apart",
+      bool(_k77) and _k77[1] == "0485254799", str(_k77))
 check("alleen een echt nummer ('onbekend' in Pipedrive telt niet), eerst uit vroegere afspraken van dezelfde persoon",
       _n77 and _n77[1] == "0499700230" and _n77[2] == "agenda 29-09-2026" and _o77c is None, str((_n77, _o77c)))
 
