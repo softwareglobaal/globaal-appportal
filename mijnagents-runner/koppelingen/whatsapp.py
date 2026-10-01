@@ -24,11 +24,18 @@ import os
 import re
 import urllib.error
 import urllib.request
+from datetime import date
 
 import organisatie
 
 APPPORTAL_ENV = os.path.expanduser("~/appportal/.env")
 AGENTS_ENV = os.path.expanduser("~/appportal/mijnagents-data/.env")
+# Kostenrem (Shaniel, 01-10-2026: "door een klein foutje heel veel geld"). Alleen
+# sjabloonberichten kosten geld; Meta kent voor WhatsApp geen bestedingsplafond. Daarom
+# telt de code ze per dag en stopt bij WA_SJABLOON_MAX_PER_DAG (standaard 10); daarna
+# valt De Bode terug op Telegram tot de volgende dag. Vrije tekst binnen het venster is gratis.
+TELLER = os.path.expanduser("~/appportal/mijnagents-data/wa_sjablonen.json")
+MAX_SJABLONEN_STANDAARD = 10
 TIMEOUT = 20
 MAX_TEKST = 3900            # Meta laat 4096 tekens toe per tekstbericht
 MAX_PARAM = 900             # een sjabloonparameter: geen regeleinden, samen onder 1024
@@ -129,6 +136,34 @@ def plat(tekst):
     return re.sub(r" {4,}", "   ", " · ".join(delen))[:MAX_PARAM]
 
 
+def sjablonen_vandaag():
+    """Hoeveel sjabloonberichten er vandaag al vertrokken (0 als de teller van gisteren is)."""
+    try:
+        with open(TELLER, encoding="utf-8") as f:
+            t = json.load(f)
+        return int(t.get("n", 0)) if t.get("datum") == date.today().isoformat() else 0
+    except (OSError, ValueError):
+        return 0
+
+
+def _tel_sjabloon():
+    n = sjablonen_vandaag() + 1
+    try:
+        with open(TELLER, "w", encoding="utf-8") as f:
+            json.dump({"datum": date.today().isoformat(), "n": n}, f)
+    except OSError as e:
+        # zonder teller geen rem: dan liever geen betaald bericht
+        raise NietBeschikbaar(f"sjabloonteller niet schrijfbaar ({e.strerror}); geen betaald bericht") from None
+    return n
+
+
+def max_sjablonen():
+    try:
+        return max(0, int(_env().get("WA_SJABLOON_MAX_PER_DAG", MAX_SJABLONEN_STANDAARD)))
+    except ValueError:
+        return MAX_SJABLONEN_STANDAARD
+
+
 def stuur(tekst, kop="je agents"):
     """Naar Mehdi. Binnen het venster vrije tekst, daarbuiten het sjabloon. Geeft het kanaal terug."""
     ins = instellingen()
@@ -142,6 +177,11 @@ def stuur(tekst, kop="je agents"):
                         "type": "text", "text": {"body": stuk, "preview_url": False}})
         return "whatsapp"
     if ins["sjabloon"]:
+        plafond = max_sjablonen()
+        if sjablonen_vandaag() >= plafond:
+            raise NietBeschikbaar(f"dagplafond bereikt: {plafond} betaalde sjabloonberichten vandaag "
+                                  "(WA_SJABLOON_MAX_PER_DAG); morgen weer via WhatsApp")
+        _tel_sjabloon()   # voor het versturen: een fout na de aanvraag telt beter mee dan niet
         _post(ins, {"messaging_product": "whatsapp", "to": naar, "type": "template",
                     "template": {"name": ins["sjabloon"], "language": {"code": ins["taal"]},
                                  "components": [{"type": "body", "parameters": [

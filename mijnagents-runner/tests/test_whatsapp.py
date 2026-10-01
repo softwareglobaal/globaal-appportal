@@ -14,6 +14,9 @@ HIER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import whatsapp as W  # noqa: E402
+import tempfile  # noqa: E402
+
+W.TELLER = os.path.join(tempfile.mkdtemp(), "wa_sjablonen.json")   # nooit de echte teller van de VM
 
 INS = {"pnid": "123", "afzender": "+32470000000", "firma": "QQQQ", "mehdi": "+32470111111",
        "sjabloon": "", "taal": "nl", "versie": "v26.0", "heeft_token": True}
@@ -56,6 +59,23 @@ def test_venster_dicht_met_sjabloon():
 def test_venster_dicht_zonder_sjabloon_stuurt_niets():
     kanaal, bodies = met(False)
     assert kanaal.startswith("niet: ") and "venster" in kanaal and not bodies, (kanaal, bodies)
+
+
+def test_dagplafond_stopt_betaalde_sjablonen():
+    """Kostenrem (01-10-2026): na WA_SJABLOON_MAX_PER_DAG sjablonen op een dag gaat er niets meer
+    via een betaald sjabloon; vrije tekst binnen het venster blijft gratis en telt niet mee."""
+    import tempfile
+    oud_teller, oud_env = W.TELLER, W._env
+    W.TELLER = os.path.join(tempfile.mkdtemp(), "teller.json")
+    W._env = lambda: {"WA_SJABLOON_MAX_PER_DAG": "2"}
+    try:
+        uitslagen = [met(False, "agent_melding")[0] for _ in range(3)]
+        assert uitslagen[:2] == ["whatsapp-sjabloon"] * 2, uitslagen
+        assert uitslagen[2].startswith("niet: ") and "dagplafond" in uitslagen[2], uitslagen
+        assert met(True)[0] == "whatsapp", "vrije tekst binnen het venster mag niet geblokkeerd worden"
+        assert W.sjablonen_vandaag() == 2
+    finally:
+        W.TELLER, W._env = oud_teller, oud_env
 
 
 def test_plat_zonder_regeleinden_en_kort_genoeg():

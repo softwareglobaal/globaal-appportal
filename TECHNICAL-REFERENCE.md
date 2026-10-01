@@ -2657,4 +2657,8 @@ rol `whatsapp_writer`, Authentik-app `whatsapp` (groepen `whatsapp`, `whatsapp-b
   bewaart zijn berichten, maar toont ze niet in de inbox en weigert rechtstreekse links (404).
   Registratie-PIN: `META_ASSISTENT_PIN` in ~/appportal/.env. Dat nummer is ook het Twilio-nummer
   voor vastzit- en alarmoproepen (`TWILIO_VAN_VAST`); de WhatsApp-code kwam per spraakoproep binnen,
-  sms van Meta bereikt het Twilio-nummer niet.
+  sms van Meta bereikt het Twilio-nummer niet. **Kostenrem** (01-10-2026): Meta kent voor WhatsApp
+  geen bestedingsplafond, dus telt de koppeling de betaalde sjabloonberichten per dag
+  (`mijnagents-data/wa_sjablonen.json`) en stopt bij `WA_SJABLOON_MAX_PER_DAG` (standaard 10); daarna
+  Telegram tot de volgende dag. Vrije tekst binnen het venster is gratis en telt niet mee. Is de
+  teller niet schrijfbaar, dan gaat er geen sjabloon weg. De Bode stuurt alleen naar Mehdi.
