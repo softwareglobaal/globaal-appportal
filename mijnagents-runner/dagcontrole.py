@@ -26,7 +26,7 @@ def _w():
     return agenda_wacht
 
 # Soorten die Mehdi moet beslissen; de rest herstelt de agent zelf of is een fout in de agent.
-VRAGEN = {"buiten_botsing", "lara_botsing", "zonder_klant"}
+VRAGEN = {"buiten_botsing", "lara_botsing", "zonder_klant", "tegen_dagmarker"}
 KLANTSOORTEN = {"KB", "KO", "PB", "PO"}
 
 
@@ -115,6 +115,14 @@ def dagcontrole(items, dag):
         if info.get("firma") and info["soort"] in KLANTSOORTEN and not info["nummer"] \
                 and not (info.get("klant") or "").strip(" ,-"):
             meld("zonder_klant", a, "klantafspraak zonder naam: wie is de klant?")
+    # 10. een afspraak tegen een hele-dag-markering van die dag (Geen buiten afspraken Lara ophalen, geen auto, Buitenland,
+    #     geen afspraken): wat die dag niet mag, staat er toch (FR-83, gezien 01-10-2026 voor vrijdag 02-10)
+    markers = W.markeringen_uit(items, dag)
+    for a in afspraken:
+        m = W.markering_tegen(a["titel"], dag, markers)
+        if m:
+            meld("op_vrije_dag" if any(t == m and wat == "alles" for t, wat in markers) else "tegen_dagmarker", a,
+                 f"'{m}' staat die hele dag, en toch staat dit gepland")
     # 9. een klant waar Mehdi naartoe gaat zonder projectnummer, van welke firma ook (FR-80)
     for a in afspraken:
         info = W.lees_titel(a["titel"])

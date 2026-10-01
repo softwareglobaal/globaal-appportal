@@ -949,6 +949,44 @@ check("een gesprek dat bij vertrek al loopt doet hij geparkeerd ter plaatse; 'KB
       and _vp81[0] == "KBC" and "Ladeuzeplein 15, 3000 Leuven" in _vp81[1]["adres"] and W.vaste_plek("kbcx") == (None, None)
       and _c81 and _c81[1] == "016 31 40 00", str((_vp81, _c81)))
 
+# Een hele-dag-markering is een stop: wat die dag niet mag, kan niet geboekt worden zonder ja (FR-83)
+_mk83 = W.markeringen_uit([{"hele_dag": True, "titel": "!! Mehdi: Geen buiten afspraken Lara ophalen", "start": "2026-10-02", "einde": "2026-10-03"},
+                           {"hele_dag": True, "titel": "Mehdi: Buitenland", "start": "2026-10-04", "einde": "2026-10-12"},
+                           {"hele_dag": True, "titel": "geen afspraken", "start": "2026-10-03", "einde": "2026-10-04"}], "2026-10-02")
+_o83 = (W.dagmarkeringen, W.mag_schrijven, __import__("urllib.request").request.urlopen)
+W.dagmarkeringen = lambda dag: _mk83 if dag == "2026-10-02" else []
+W.mag_schrijven = lambda k: True
+__import__("urllib.request").request.urlopen = lambda *x, **y: __import__("io").BytesIO(b"{}")
+_r83 = []
+try:
+    for _t83, _toch in (("!! Mehdi: [HINV-LB] Belauto olie ophalen, Antwerpsestraat 129, 2640 Mortsel", False),
+                        ("Mehdi: [UNABO-PO] Elena Zhidkova", False), ("\U0001F697 Reistijd: thuis \u2192 Mortsel", False),
+                        ("!! Mehdi: [HINV-LB] Belauto olie ophalen, Antwerpsestraat 129, 2640 Mortsel", True)):
+        try:
+            W._insert(W.WERKAGENDA, {"summary": _t83, "start": {"dateTime": "2026-10-02T13:40:00+02:00"}}, "t", toch=_toch)
+            _r83.append("gezet")
+        except W.DagMarkering:
+            _r83.append("geweigerd")
+    try:
+        W._patch({"kalender": W.WERKAGENDA, "id": "x", "titel": "!! Mehdi: [UNAB-KB] BS 46118 - Natasja"},
+                 {"start": {"dateTime": "2026-10-02T09:00:00+02:00"}}, "t")
+        _r83.append("verzet")
+    except W.DagMarkering:
+        _r83.append("verzet geweigerd")
+finally:
+    W.dagmarkeringen, W.mag_schrijven, __import__("urllib.request").request.urlopen = _o83
+import dagcontrole as _D83
+_b83 = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole([
+    {"id": "m", "hele_dag": True, "titel": "!! Mehdi: Geen buiten afspraken Lara ophalen", "start": "2026-10-02", "einde": "2026-10-03", "kalender": "x"},
+    {"id": "k", "titel": "!! Mehdi: [ALGE-LB] KBC ophalen, Mgr. Ladeuzeplein 15, 3000 Leuven", "start": "2026-10-02T10:30:00+02:00",
+     "einde": "2026-10-02T10:45:00+02:00", "kalender": W.WERKAGENDA, "omschrijving": "Tel. KBC: 016 31 40 00"},
+    {"id": "o", "titel": "Mehdi: [UNABO-PO] Elena Zhidkova", "start": "2026-10-02T14:00:00+02:00", "einde": "2026-10-02T14:20:00+02:00",
+     "kalender": W.WERKAGENDA, "omschrijving": "+32 488 40 35 44"}], "2026-10-02") if x["soort"] in ("tegen_dagmarker", "op_vrije_dag")}
+check("een hele-dag-markering is een stop: een buitenafspraak die dag kan niet zonder ja, en de dagcontrole vraagt het",
+      _mk83 == [("!! Mehdi: Geen buiten afspraken Lara ophalen", "buiten")]
+      and _r83 == ["geweigerd", "gezet", "gezet", "gezet", "verzet geweigerd"] and _b83 == {("k", "tegen_dagmarker")}
+      and "tegen_dagmarker" in _D83.VRAGEN, str((_mk83, _r83, _b83)))
+
 # 'In de auto' is geparkeerd ter plaatse, nooit rijdend: een extern gesprek schuift de aankomst altijd naar voren (FR-70, FR-82)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("een extern gesprek gebeurt nooit rijdend, ook niet met 'in de auto' in de afspraak",

@@ -383,6 +383,66 @@ class GeenSchrijfrecht(Exception):
     """Ik probeerde te schrijven in een agenda waar dat niet mag."""
 
 
+class DagMarkering(Exception):
+    """Een afspraak op een dag die een hele-dag-markering afsluit; alleen met een ja van Mehdi (FR-83)."""
+
+
+# Mehdi, 01-10-2026: "Morgen stond er op de agenda geen buitenafspraken, Lara ... je moet echt deterministisch worden ...
+# zodra we een moment willen afspreken, had je eigenlijk moeten kijken". Een hele-dag-markering is een stop, geen
+# achtergrond. Wat elke markering die dag verbiedt:
+DAG_MARKERINGEN = (
+    (re.compile(r"geen\s+buiten\s*-?\s*afspraken", re.I), "buiten"),
+    (re.compile(r"geen\s+auto", re.I), "buiten"),
+    (re.compile(r"\bbuitenland\b", re.I), "buiten"),
+    (re.compile(r"^\W*(?:mehdi\s*:\s*)?geen\s+afspraken\W*$", re.I), "alles"),
+)
+_MARKERS = {}
+
+
+def markeringen_uit(items, dag):
+    """[(titel, wat verboden is)] van de hele-dag-items die deze dag dekken. Pure functie op de items."""
+    uit = []
+    for x in items:
+        if not x.get("hele_dag"):
+            continue
+        s, e = (x.get("start") or "")[:10], (x.get("einde") or "")[:10]
+        if not (s == dag or s <= dag < (e or s)):
+            continue
+        for patroon, wat in DAG_MARKERINGEN:
+            if patroon.search(x.get("titel") or ""):
+                uit.append(((x.get("titel") or "").strip(), wat))
+                break
+    return uit
+
+
+def dagmarkeringen(dag):
+    """De markeringen van een dag over alle agenda's, een keer per dag gelezen."""
+    if dag not in _MARKERS:
+        try:
+            from datetime import date as _d
+            off = (_d.fromisoformat(dag) - nu_lokaal().date()).days
+            _MARKERS[dag] = markeringen_uit([x for x in afspraken(off, off + 1) if not x.get("fout")], dag)
+        except Exception:  # noqa: BLE001
+            _MARKERS[dag] = []
+    return _MARKERS[dag]
+
+
+def markering_tegen(titel, dag, markers=None):
+    """De markering die een afspraak met deze titel op deze dag tegenhoudt, of None. Een rit, een hele-dag-item en Lara
+    zelf (de reden van de markering) tellen niet."""
+    t = (titel or "").strip()
+    if not t or not dag or t.startswith("\U0001F697") or "[LARA]" in t.upper():
+        return None
+    info = lees_titel(t)
+    if info["reistijd"]:
+        return None
+    buiten = info["buiten"] or info["soort"] in BUITEN_SOORTEN
+    for m, wat in (dagmarkeringen(dag) if markers is None else markers):
+        if wat == "alles" or (wat == "buiten" and buiten):
+            return m
+    return None
+
+
 def mag_schrijven(kal):
     """Mandaat van Mehdi, 20-09-2026: uit het archief mag ik lezen, er nooit iets
     nieuws in zetten. Schrijven mag alleen in de agenda's die vandaag in gebruik
@@ -392,11 +452,17 @@ def mag_schrijven(kal):
     return kal in KALENDERS and kal not in gearchiveerd()
 
 
-def _patch(a, body, tok):
+def _patch(a, body, tok, toch=False):
     import urllib.parse
     import urllib.request
     if not mag_schrijven(a["kalender"]):
         raise GeenSchrijfrecht(a["kalender"])
+    # een afspraak naar een dag verzetten die een markering afsluit, kan alleen met een ja van Mehdi (FR-83)
+    if "start" in body and not toch:
+        dag = ((body.get("start") or {}).get("dateTime") or "")[:10]
+        m = markering_tegen(body.get("summary") or a.get("titel"), dag)
+        if m:
+            raise DagMarkering(f"{dag} staat '{m}': '{(body.get('summary') or a.get('titel') or '')[:60]}' kan die dag niet zonder ja van Mehdi")
     # sendUpdates=none: een gast krijgt nooit een mail omdat de agent iets bijzet. Google
     # doet dat standaard ook niet, maar hier staat het expliciet, met een test erop.
     url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
@@ -1745,11 +1811,16 @@ def plaatsnaam(adres):
     return naam.title() if naam.isupper() else naam
 
 
-def _insert(kalender, body, tok):
+def _insert(kalender, body, tok, toch=False):
     import urllib.parse
     import urllib.request
     if not mag_schrijven(kalender):
         raise GeenSchrijfrecht(kalender)
+    # een nieuwe afspraak op een dag die een markering afsluit, kan alleen met een ja van Mehdi (FR-83)
+    dag = ((body.get("start") or {}).get("dateTime") or "")[:10]
+    m = markering_tegen(body.get("summary"), dag) if not toch else None
+    if m:
+        raise DagMarkering(f"{dag} staat '{m}': '{(body.get('summary') or '')[:60]}' kan die dag niet zonder ja van Mehdi")
     url = f"{agenda.API}/calendars/{urllib.parse.quote(kalender, safe='')}/events?sendUpdates=none"
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
                                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})

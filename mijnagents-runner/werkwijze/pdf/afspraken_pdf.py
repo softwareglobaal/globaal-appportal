@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.26"
+VERSIE = "2.27"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -285,6 +285,9 @@ Zo kan Mehdi onderweg bellen als hij later komt, zonder te zoeken.</p>
 
 <h2>9. Hele-dag markers, geen auto, en wie buiten inplant</h2>
 <ul>
+<li><b>Een hele-dag-markering is een stop</b> (Mehdi, 01-10-2026). 'Geen buiten afspraken' (zoals Lara ophalen), 'geen auto' en
+'Buitenland' verbieden buitenafspraken die dag; 'geen afspraken' verbiedt alles. Het systeem weigert zo'n afspraak bij het zetten of
+verzetten; alleen met een ja van Mehdi gaat het toch. Wat er al staat, meldt de dagcontrole als vraag. Mehdi hoeft niets anders te markeren.</li>
 <li><b>Een hele-dag marker is een signaal aan de collega's</b>, geen afspraak: geen kleur, geen melding, geen rit, geen titelfout.
 '!! Mehdi: Geen buiten afspraken Lara ophalen' (agenda Lara) zegt: die dag geen verre buitenafspraken plannen.</li>
 <li><b>'Mehdi: Buitenland'</b> (werkagenda, over meerdere dagen): Mehdi is weg. Wat in die week wegvalt, zoals een werfbezoek, is

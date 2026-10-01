@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.16",
+ "versie": "3.17",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -218,6 +218,14 @@
    "uit": [
     "FR-70",
     "FR-82"
+   ]
+  },
+  {
+   "id": "L28",
+   "les": "Een hele-dag-markering is een stop, geen achtergrond: wat die dag niet mag, kan het systeem niet boeken. Kijken na het handelen is reactief; de grendel zit in de schrijfroute.",
+   "uit": [
+    "FR-74",
+    "FR-83"
    ]
   }
  ],
@@ -1742,6 +1750,27 @@
     "tekst": "een extern gesprek gebeurt nooit rijdend, ook niet met 'in de auto' in de afspraak"
    },
    "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-83",
+   "datum": "01-10-2026",
+   "gevonden_door": "Mehdi ('Morgen stond er op de agenda geen buitenafspraken, Lara ... Die heeft me er niet op attent gemaakt en we hebben nu de agenda volgeboekt ... je moet echt deterministisch worden')",
+   "fout": "Op vrijdag 02-10 stond de hele dag '!! Mehdi: Geen buiten afspraken Lara ophalen'. Claude zette er toch KBC, Belauto, MegaMobile en de post op, en stelde voor Lara over te slaan. Op zaterdag 03-10 staat 'geen afspraken' en Claude zette er de post.",
+   "gevolg": "Een volgeboekte dag die Mehdi niet meer kan annuleren, en een discussie in de familie over Lara.",
+   "waarom_niet_gezien": "De markering stond bovenaan elke dagcontrole die Claude draaide, maar niets behandelde ze als een stop: de dagcontrole kende alleen 'geen auto', en _insert/_patch keken nergens naar. Zelfde patroon als FR-74 (Buitenland): de dag lezen, niet de betekenis.",
+   "oorzaak": "Hele-dag-markeringen waren achtergrond, geen regel in de schrijfroute.",
+   "soort_oorzaak": "code",
+   "oplossing": "DAG_MARKERINGEN in de code: 'Geen buiten afspraken', 'geen auto' en 'Buitenland' verbieden buitenafspraken, 'geen afspraken' verbiedt alles. _insert en _patch (bij een nieuw uur) weigeren zo'n afspraak (DagMarkering), tenzij met toch=True na een ja van Mehdi. De dagcontrole meldt wat er toch staat: tegen_dagmarker is een vraag aan Mehdi, op_vrije_dag een melding. Laag 1 (agenda): een markering is een stop.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een hele-dag-markering is een stop"
+   },
+   "controle": [
+    "tegen_dagmarker",
+    "op_vrije_dag"
+   ],
    "status": "opgelost"
   }
  ]
