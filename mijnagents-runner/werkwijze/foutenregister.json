@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.12",
+ "versie": "3.13",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1658,6 +1658,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "langs huis rekent eerst de geparkeerde gesprekken"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-79",
+   "datum": "01-10-2026",
+   "gevonden_door": "Claude, dagcontrole van 02-10 nadat Mehdi Lara oversloeg",
+   "fout": "De rit Mortsel -> post (02-10) kreeg 15 minuten (15:55-16:10) in plaats van een uur, en de oude rit naar Lara (Mortsel -> Kessel-Lo 14:50-16:00) bleef staan nadat ophalen 'overgeslagen' werd.",
+   "gevolg": "Een rit die onmogelijk kort is, en een overlappende rit naar een afspraak die niet doorgaat.",
+   "waarom_niet_gezien": "De agent hergebruikt een live meting van Google als zijn dagteller op is, maar keek niet of de oude rit van dezelfde plek vertrok. En een eigen rit bleef staan zolang er op die agenda een afspraak op dat uur begon, ook als die afspraak geen rit meer vraagt.",
+   "oorzaak": "Hergebruik van een meting zonder te kijken naar het vertrekpunt; ankerpunten voor ritten bij elke afspraak in plaats van alleen bij afspraken met een rit.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een live rijtijd wordt alleen hergebruikt als de oude rit dezelfde titel (van -> naar) heeft. Alleen afspraken met een rit (buiten) houden een eigen rit vast; de rest ruimt de agent op.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een live rijtijd wordt alleen hergebruikt voor dezelfde rit"
    },
    "controle": [],
    "status": "opgelost"

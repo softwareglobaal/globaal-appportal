@@ -2107,7 +2107,10 @@ def reistijd_zetten(items, alleen_dag=None):
         # rijtijd. Gezien 23-09-2026: de rit naar Genk schoof zo van 10:00 naar 09:45.
         _x = heenblok()
         _oms = (_x or {}).get("omschrijving") or ""
-        if _x and "OSRM" in _oms and "live verkeer Google" in _oms and fh != "live":
+        # alleen voor dezelfde rit: kwam hij vroeger van elders, dan geldt die meting niet (FR-79, gezien 01-10-2026: de
+        # rit naar de post nam de 15 minuten over van 'De Speelkriebel -> post', terwijl hij nu uit Mortsel kwam)
+        if _x and "OSRM" in _oms and "live verkeer Google" in _oms and fh != "live" \
+                and (_x.get("titel") or "").strip() == f"🚗 Reistijd: {van_plaats} → {plaats}":
             heen = int((datetime.fromisoformat(_x["einde"]) - datetime.fromisoformat(_x["start"])).total_seconds() // 60)
             fh = "live"
             rit_start = aankomst - timedelta(minutes=heen)
@@ -2119,7 +2122,8 @@ def reistijd_zetten(items, alleen_dag=None):
         terug_start = einde
         _t = terugblok() if is_laatste else None
         _toms = (_t or {}).get("omschrijving") or ""
-        if _t and "OSRM" in _toms and "live verkeer Google" in _toms and ft != "live":
+        if _t and "OSRM" in _toms and "live verkeer Google" in _toms and ft != "live" \
+                and (_t.get("titel") or "").strip() == f"🚗 Reistijd: {plaats} → thuis":
             terug = int((datetime.fromisoformat(_t["einde"]) - datetime.fromisoformat(_t["start"])).total_seconds() // 60)
             ft = "live"
         if is_laatste and terug:
@@ -2239,9 +2243,13 @@ def reistijd_zetten(items, alleen_dag=None):
     elders = {}          # tijdstip -> agenda's met een afspraak die dan begint of eindigt
     begins_alle, eindes_alle = set(), set()
     for x in items:
-        if "T" in x.get("start", "") and not lees_titel(x["titel"])["reistijd"]:
+        _lx = lees_titel(x["titel"]) if "T" in x.get("start", "") else None
+        # alleen een afspraak die een rit heeft, houdt een rit vast; een afspraak die geen rit meer vraagt (Lara
+        # 'overgeslagen', zonder !!) niet (FR-79, gezien 01-10-2026)
+        if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN):
             grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
             grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
+        if "T" in x.get("start", "") and not _lx["reistijd"]:
             elders.setdefault(datetime.fromisoformat(x["start"]), set()).add(x["kalender"])
             elders.setdefault(datetime.fromisoformat(x["einde"]), set()).add(x["kalender"])
             if extern_gesprek(x):

@@ -899,6 +899,13 @@ check("langs huis rekent eerst de geparkeerde gesprekken, en een oude terugrit o
       and "mijn oude terugrit (ander einde) weggehaald" in _src78 and "dubbele terugrit weggehaald" in _src78
       and not W.via_huis_zinvol(70, 55, 15))
 
+# Een live meting geldt alleen voor dezelfde rit; een afspraak zonder rit houdt geen rit vast (FR-79)
+_src79 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("een live rijtijd wordt alleen hergebruikt voor dezelfde rit, en een afspraak die geen rit meer vraagt houdt er geen vast",
+      '(_x.get("titel") or "").strip() == f"🚗 Reistijd: {van_plaats} → {plaats}"' in _src79
+      and '(_t.get("titel") or "").strip() == f"🚗 Reistijd: {plaats} → thuis"' in _src79
+      and 'if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN):' in _src79)
+
 # 'In de auto': gesprekken onderweg, de aankomst schuift niet (FR-70)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("staat 'in de auto' in de afspraak, dan schuift de aankomst niet voor gesprekken onderweg",
