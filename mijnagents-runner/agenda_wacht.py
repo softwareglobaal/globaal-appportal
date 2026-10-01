@@ -2387,10 +2387,18 @@ def contact_van(a, info):
     """(naam, telefoon, bron) van de klant, prospect of leverancier, uit Pipedrive van de firma: de deal op het
     projectnummer of de straat, dan de persoon op zijn volledige naam. Alleen een treffer die echt past; liever
     geen nummer dan een verkeerd nummer. None als niets gevonden."""
+    naam = re.sub(r"\([^)]*\)", "", (info.get("klant") or "").split(",")[0]).strip(" -:")
+    # eerst de agenda van vroeger: een Calendly-boeking of dossier van dezelfde persoon droeg vaak al het nummer
+    # (gezien 01-10-2026: Nelleke Stropke had 0499700230 in haar afspraak van 29-09, Pipedrive zei 'onbekend')
+    if len(naam.split()) >= 2:
+        for x in _vroegere_afspraken():
+            if x.get("id") != a.get("id") and naam.lower() in (x.get("titel") or "").lower():
+                tel = telefoon_in(f"{x.get('locatie') or ''} {x.get('omschrijving') or ''}")
+                if tel:
+                    return (naam, tel, f"agenda {x['start'][8:10]}-{x['start'][5:7]}-{x['start'][:4]}", list(x.get("deelnemers") or []))
     pd = CONTACT_PD.get(info.get("firma") or "")
     if not pd:
         return None
-    naam = re.sub(r"\([^)]*\)", "", (info.get("klant") or "").split(",")[0]).strip(" -:")
     loc = (a.get("locatie") or "").strip()
     straat = (loc if loc and not loc.lower().startswith("http") else
               ((a.get("titel") or "").split(",")[1] if (a.get("titel") or "").count(",") >= 2 else "")).split(",")[0].strip()
@@ -2410,9 +2418,11 @@ def contact_van(a, info):
                             continue
                         pid = (x.get("person") or {}).get("id")
                         p = pipedrive.get(pd, f"/persons/{pid}") if pid else {}
-                        tel = next((t.get("value", "").strip() for t in (p or {}).get("phone") or [] if (t.get("value") or "").strip()), "")
+                        # alleen een echt nummer: Pipedrive heeft soms 'onbekend' als telefoon (gezien 01-10-2026)
+                        tel = next((telefoon_in(t.get("value") or "") for t in (p or {}).get("phone") or [] if telefoon_in(t.get("value") or "")), "")
                         if tel:
-                            r = (_naam_schoon(p.get("name")), tel, f"Pipedrive {pd}, deal {x.get('id')}")
+                            mails = [m.get("value", "").lower() for m in (p or {}).get("email") or [] if m.get("value")]
+                            r = (_naam_schoon(p.get("name")), tel, f"Pipedrive {pd}, deal {x.get('id')}", mails)
                             break
                 elif len(naam.split()) >= 2:
                     d = pipedrive.get(pd, "/persons/search", {"term": naam, "fields": "name", "limit": 5})
@@ -2420,16 +2430,30 @@ def contact_van(a, info):
                     for it in (d.get("items") if isinstance(d, dict) else d) or []:
                         x = it.get("item", it)
                         if set(naam.lower().split()) <= set((x.get("name") or "").lower().split()):
-                            tel = next((t.strip() for t in x.get("phones") or [] if (t or "").strip()), "")
+                            tel = next((telefoon_in(t or "") for t in x.get("phones") or [] if telefoon_in(t or "")), "")
                             if tel:
-                                passend.append((_naam_schoon(x.get("name")), tel, f"Pipedrive {pd}, persoon {x.get('id')}"))
-                    r = passend[0] if len({t for _, t, _ in passend}) == 1 else None   # twee kandidaten: geen gok
+                                passend.append((_naam_schoon(x.get("name")), tel, f"Pipedrive {pd}, persoon {x.get('id')}",
+                                                [m.lower() for m in x.get("emails") or [] if m]))
+                    r = passend[0] if len({c[1] for c in passend}) == 1 else None   # twee kandidaten: geen gok
             except Exception:  # noqa: BLE001
                 r = None
             _CONTACT[sleutel] = r
         if _CONTACT[sleutel]:
             return _CONTACT[sleutel]
     return None
+
+
+_VROEGER = {"lijst": None}
+
+
+def _vroegere_afspraken():
+    """De afspraken van de laatste zestig dagen, een keer per ronde."""
+    if _VROEGER["lijst"] is None:
+        try:
+            _VROEGER["lijst"] = [x for x in afspraken(-60, 0) if not x.get("fout")]
+        except Exception:  # noqa: BLE001
+            _VROEGER["lijst"] = []
+    return _VROEGER["lijst"]
 
 
 def _volledige_omschrijving(a, tok):
@@ -2460,15 +2484,17 @@ def contact_zetten(items, alleen_dag=None):
             continue
         if telefoon_in(f"{a.get('locatie') or ''} {a.get('omschrijving') or ''}"):
             continue
-        extern = [g for g in a.get("deelnemers") or [] if not any(e in g.lower() for e in EIGEN_ADRESSEN)]
-        if len(extern) > 1:
-            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen nummer gezet, {len(extern)} gasten van buiten")
-            continue
+        extern = [g.lower() for g in a.get("deelnemers") or [] if not any(e in g.lower() for e in EIGEN_ADRESSEN)]
         c = contact_van(a, info)
         if not c:
-            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen telefoonnummer gevonden in Pipedrive")
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen telefoonnummer gevonden (agenda, Pipedrive)")
             continue
-        naam, tel, bron = c
+        naam, tel, bron, mails = c
+        # met meer gasten van buiten zien die elkaars omschrijving: alleen als de persoon zelf gast is (een koppel,
+        # gezien 01-10-2026 bij Koen Van den Steen en Laura Vanovertveldt), anders niet
+        if len(extern) > 1 and not set(mails) & set(extern):
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen nummer gezet, {len(extern)} gasten van buiten")
+            continue
         try:
             oms = _volledige_omschrijving(a, tok)
             if telefoon_in(oms):

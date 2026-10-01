@@ -1,5 +1,5 @@
 {
- "versie": "4.28",
+ "versie": "4.29",
  "datum": "2026-09-30",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -1227,7 +1227,7 @@
  "contactgegevens": {
   "regel": "Elke afspraak met iemand van buiten draagt het telefoonnummer van de betrokken persoon, het adres (buiten) en het projectnummer (klant). Het nummer staat bovenaan de omschrijving: 'Tel. naam: nummer (bron)'.",
   "mehdi": "01-10-2026: 'bij alle afspraken altijd het telefoonnummer van de betrokken persoon ... telefoonnummer, adres en projectnummer moeten altijd in de agenda staan ... zodat zowel ik als mijn agent kunnen bellen'",
-  "agent": "contact_zetten in elke ronde, acht dagen vooruit: zoekt in Pipedrive van de firma (HARC, UNAB, TKNB, ENEF) de deal op projectnummer of straat, dan de persoon op volledige naam; twee kandidaten met een ander nummer is geen nummer. Staat er al een nummer (Calendly-antwoord, dossier), dan verandert er niets. Met meer dan een gast van buiten zet hij niets.",
+  "agent": "contact_zetten in elke ronde, acht dagen vooruit. Bron, in deze volgorde: een vroegere afspraak van dezelfde persoon (zestig dagen terug, bv. een Calendly-dossier), dan Pipedrive van de firma (HARC, UNAB, TKNB, ENEF): de deal op projectnummer of straat, dan de persoon op volledige naam. Alleen een echt nummer telt ('onbekend' niet); twee kandidaten met een ander nummer is geen nummer. Staat er al een nummer in, dan verandert er niets. Met meer gasten van buiten alleen als de gevonden persoon zelf gast is (een koppel).",
   "controle": "de dagcontrole meldt een externe afspraak zonder nummer (zonder_telefoon, FR-77)",
   "claude": "Zet Claude zelf een afspraak, dan zet hij het nummer er meteen bij, uit de bron (contract, Pipedrive, de mail van de klant)."
  }

@@ -1633,7 +1633,7 @@
    "waarom_niet_gezien": "De afspraken vroegen een projectnummer en een adres, nooit een telefoonnummer. Alleen de Calendly-boekingen droegen er toevallig een.",
    "oorzaak": "Geen regel en geen stap die het telefoonnummer van de betrokken persoon in de afspraak zet.",
    "soort_oorzaak": "werkwijze",
-   "oplossing": "contact_zetten in elke ronde: elke afspraak met iemand van buiten (KB, KO, PB, PO, LB, LO, AB, AO, B2B) zonder nummer krijgt bovenaan 'Tel. naam: nummer (bron)' uit Pipedrive van de firma (deal op projectnummer of straat, dan de persoon op volledige naam; twee kandidaten is geen nummer). De volledige omschrijving blijft staan. De dagcontrole meldt een externe afspraak zonder nummer (zonder_telefoon).",
+   "oplossing": "contact_zetten in elke ronde: elke afspraak met iemand van buiten (KB, KO, PB, PO, LB, LO, AB, AO, B2B) zonder nummer krijgt bovenaan 'Tel. naam: nummer (bron)' uit Pipedrive van de firma (deal op projectnummer of straat, dan de persoon op volledige naam; twee kandidaten is geen nummer). De volledige omschrijving blijft staan. De dagcontrole meldt een externe afspraak zonder nummer (zonder_telefoon). Bij de eerste run (01-10) zette de agent 'onbekend' uit Pipedrive als nummer bij Nelleke Stropke; hersteld: alleen een echt nummer telt, en eerst kijkt hij in vroegere afspraken van dezelfde persoon (daar stond 0499700230). Een koppel als gasten (Koen en Laura) krijgt het nummer als de persoon zelf gast is.",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",

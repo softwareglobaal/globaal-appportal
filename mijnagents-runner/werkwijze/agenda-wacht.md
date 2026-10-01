@@ -61,8 +61,8 @@ de code, dan zet ik de afspraak toch klaar en meld ik hem bij "afspraken zonder 
 Mehdi: "ik ben te laat, maar ik ben aan het rijden. Ik kan onmogelijk tijdens het rijden het telefoonnummer van die
 persoon gaan zoeken." Elke afspraak met iemand van buiten draagt het telefoonnummer van de betrokken persoon, het
 adres (buiten) en het projectnummer (klant). Het nummer zet ik bovenaan de omschrijving, 'Tel. naam: nummer (bron)',
-uit Pipedrive van de firma: de deal op projectnummer of straat, dan de persoon op volledige naam. Liever geen nummer
-dan een verkeerd: twee kandidaten met een ander nummer laat ik staan, en de dagcontrole meldt het (FR-77). Staat er
+eerst uit een vroegere afspraak van dezelfde persoon, dan uit Pipedrive van de firma: de deal op projectnummer of straat,
+dan de persoon op volledige naam. Alleen een echt nummer telt ('onbekend' niet). Liever geen nummer dan een verkeerd: twee kandidaten met een ander nummer laat ik staan, en de dagcontrole meldt het (FR-77). Staat er
 al een nummer in (een Calendly-antwoord, een dossier), dan verandert er niets.
 
 ## In een keer goed (mandaat van Mehdi, 23-09-2026)

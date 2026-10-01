@@ -837,8 +837,8 @@ _i77 = [{"id": "c1", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [UNAB-KB] BS 
          "einde": f"{_d77}T21:15:00+02:00", "omschrijving": "<b>Zoom</b><br>link", "deelnemers": []}]
 _o77 = (W.contact_van, W._patch, W._volledige_omschrijving, W.agenda._toegang)
 _p77 = {}
-W.contact_van = lambda a, info: ("Natasja Gerritsen", "+31 640 64 16 34", "Pipedrive unabo, deal 3741") if a["id"] == "c1" else \
-    (("Sven Peeters", "0470 11 22 33", "Pipedrive harchitects, deal 9") if a["id"] in ("c4", "c5") else None)
+W.contact_van = lambda a, info: ("Natasja Gerritsen", "+31 640 64 16 34", "Pipedrive unabo, deal 3741", []) if a["id"] == "c1" else \
+    (("Sven Peeters", "0470 11 22 33", "Pipedrive harchitects, deal 9", []) if a["id"] in ("c4", "c5") else None)
 W._patch = lambda a, body, tok: _p77.__setitem__(a["id"], body["description"])
 W._volledige_omschrijving = lambda a, tok: a["omschrijving"] + (" (rest na 2000 tekens)" if a["id"] == "c1" else "")
 W.agenda._toegang = lambda: "t"
@@ -855,6 +855,27 @@ check("elke afspraak met iemand van buiten krijgt bovenaan het telefoonnummer va
       and _p77.get("c1", "").endswith("(rest na 2000 tekens)")
       and _p77.get("c5", "").startswith("Tel. Sven Peeters: 0470 11 22 33 (Pipedrive harchitects, deal 9)<br><br><b>Zoom</b>")
       and set(_p77) == {"c1", "c5"} and _g77 == 2 and _b77 == {"c4"}, str((_t77, _p77, _g77, _b77, _r77)))
+
+# Alleen een echt nummer, eerst uit vroegere afspraken; een koppel als gasten mag (FR-77)
+_o77b = (W._vroegere_afspraken, W.pipedrive.get)
+W._vroegere_afspraken = lambda: [{"id": "v1", "titel": "Mehdi: [HA-PO] Nelleke Stropke", "start": "2026-09-29T20:00:00+02:00",
+                                  "omschrijving": "Tel.nummer = 0499700230", "deelnemers": []}]
+W.pipedrive.get = lambda pd, pad, params=None: (
+    {"items": [{"item": {"id": 1, "title": "Vossenstraat 2", "person": {"id": 5}}}]} if "deals/search" in pad else
+    {"name": "Nelleke Stropke", "phone": [{"value": "onbekend"}], "email": []} if pad == "/persons/5" else {"items": []})
+W._CONTACT.clear()
+try:
+    _n77 = W.contact_van({"id": "x", "titel": "!! Mehdi: [HARC-PB] Nelleke Stropke, Vossenstraat 2, 3060 Bertem", "locatie": ""},
+                         W.lees_titel("!! Mehdi: [HARC-PB] Nelleke Stropke, Vossenstraat 2, 3060 Bertem"))
+    W._vroegere_afspraken = lambda: []
+    W._CONTACT.clear()
+    _o77c = W.contact_van({"id": "x", "titel": "!! Mehdi: [HARC-PB] Nelleke Stropke, Vossenstraat 2, 3060 Bertem", "locatie": ""},
+                          W.lees_titel("!! Mehdi: [HARC-PB] Nelleke Stropke, Vossenstraat 2, 3060 Bertem"))
+finally:
+    W._vroegere_afspraken, W.pipedrive.get = _o77b
+    W._CONTACT.clear()
+check("alleen een echt nummer ('onbekend' in Pipedrive telt niet), eerst uit vroegere afspraken van dezelfde persoon",
+      _n77 and _n77[1] == "0499700230" and _n77[2] == "agenda 29-09-2026" and _o77c is None, str((_n77, _o77c)))
 
 # 'In de auto': gesprekken onderweg, de aankomst schuift niet (FR-70)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
