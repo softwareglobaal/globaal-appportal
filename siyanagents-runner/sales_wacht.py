@@ -24,6 +24,7 @@ Droogdraaien (toont wat hij zou melden, zet niets op het board):
 import json
 import os
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date, timedelta
@@ -237,6 +238,39 @@ def controle_kanalen(signalen, afdeling):
             })
 
 
+def controle_facturatie(signalen):
+    """Zit er een gat tussen verkocht en gefactureerd (koppeling met facturatiecontrole)?
+
+    Het dashboard toont de gaten al per dienst; deze controle maakt ze proactief:
+    één signaal per dienst met het aantal en de grootste drie, zodat het board niet
+    elke dag per dossier volloopt. De wachttijd (verkocht maar nog niet
+    gefactureerd) zit al in het dashboard; hier wordt niets herrekend.
+    """
+    try:
+        data = haal("/facturatie")
+    except urllib.error.HTTPError as e:
+        if e.code == 503:
+            return  # koppeling (nog) niet ingesteld of platform even weg: geen signaal
+        raise
+    for d in data.get("diensten", []):
+        gaten = d.get("gaten") or []
+        if not gaten:
+            continue
+        som = sum(abs(g["verschil"]) for g in gaten)
+        top = "; ".join(
+            f"{g['werf'] or 'onbekend dossier'} ({g['soort'].lower()}, EUR {round(abs(g['verschil']))})"
+            for g in gaten[:3]
+        )
+        signalen.append({
+            "doel": f"facturatie:{d['dienst']}",
+            "actie": f"{len(gaten)} facturatiegat(en) bij {d['naam']} in {data['jaar']}",
+            "reden": (
+                f"Samen EUR {round(som)} verschil tussen verkoop en facturatie. Grootste: {top}. "
+                "Details per dossier staan in facturatiecontrole."
+            ),
+        })
+
+
 # ---------- naar het board ----------
 
 def meld(body):
@@ -264,6 +298,7 @@ def main(argv):
         ("campagnes", lambda: controle_campagnes(signalen)),
         ("kanalen engineering", lambda: controle_kanalen(signalen, "engineering")),
         ("kanalen energy", lambda: controle_kanalen(signalen, "energy")),
+        ("facturatie", lambda: controle_facturatie(signalen)),
     ]:
         try:
             fn()
