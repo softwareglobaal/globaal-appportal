@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.13",
+ "versie": "3.14",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1678,6 +1678,26 @@
     "tekst": "een live rijtijd wordt alleen hergebruikt voor dezelfde rit"
    },
    "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-80",
+   "datum": "01-10-2026",
+   "gevonden_door": "Mehdi ('ik wil dat voor alle klanten dat ik naar toe ga ongeacht de firma altijd de project nummer erin staat')",
+   "fout": "'!! Mehdi: [UNAB-KB] BS - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken' (01-10) had geen projectnummer, terwijl het TKN-project 46118 bestond.",
+   "gevolg": "Mehdi en de agent kunnen het dossier niet terugvinden vanuit de afspraak.",
+   "waarom_niet_gezien": "De regel 'elke klantafspraak draagt een projectnummer' werd alleen voor H-Architects (JJNN) ingevuld. De TKN-nummers (46118, vanaf 2026 zes cijfers zoals 260009) kende de agent niet, en de titel-lezer las maar vier of vijf cijfers.",
+   "oorzaak": "Het projectnummer was alleen geregeld voor H-Architects; UNABO, TKN-Buro en Energie Efficiënt hadden geen bron.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "projectnummers_zetten in elke ronde: een klantafspraak buiten (KB) zonder nummer krijgt het nummer uit de projectmap van de firma op straat en huisnummer: H-Architects uit de projectmappen (H-A WORK), UNABO, TKN-Buro en Energie Efficiënt uit TKN BURO WORK/1 Projects/<jaar>. Eén kandidaat of niets. Met gasten of een reeks is het een voorstel. De titel-lezer leest vier tot zes cijfers. De dagcontrole meldt een klantafspraak buiten zonder nummer (klant_zonder_nummer).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "elke klant waar Mehdi naartoe gaat krijgt het projectnummer, van welke firma ook"
+   },
+   "controle": [
+    "klant_zonder_nummer"
+   ],
    "status": "opgelost"
   }
  ]

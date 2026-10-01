@@ -1,5 +1,5 @@
 {
- "versie": "4.31",
+ "versie": "4.32",
  "datum": "2026-09-30",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -189,6 +189,15 @@
    "hoe_de_agent": "hij leest de code (hoofdletters), en stelt ze voor uit de woorden in de titel (werfbezoek wordt WB, stabiliteit STA, AI of Automation bij intern AI+AT). Bij eigen afspraken zonder gasten en niet in een reeks vult hij ze zelf in; anders een voorstel op het bord",
    "open": "gelden de UNABO-codes ook voor TKN-Buro en Energie Efficiënt als ze dezelfde dienst doen?",
    "mehdi": "25-09-2026"
+  },
+  "projectnummer_alle_firmas": {
+   "regel": "Elke afspraak bij een klant buiten (KB), van welke firma ook, draagt het projectnummer in de titel: '[FIRMA-KB] TYPE nummer - klant, adres'.",
+   "mehdi": "01-10-2026: 'ik wil dat voor alle klanten dat ik naar toe ga ongeacht de firma altijd de project nummer erin staat'",
+   "nummers": {
+    "HARC": "JJNN uit de projectmap in H-A WORK (bv. 2607)",
+    "UNAB, TKNB, ENEF": "het nummer van TKN-Buro, vooraan de projectmap in TKN BURO WORK/1 Projects/<jaar> (bv. 46118, vanaf 2026 zes cijfers zoals 260009)"
+   },
+   "agent": "projectnummers_zetten in elke ronde: zoekt het nummer op straat en huisnummer in de projectmap van de firma; één kandidaat of niets. Zonder gasten en buiten een reeks zet hij het zelf; anders een voorstel. De dagcontrole meldt een KB zonder nummer (FR-80)."
   }
  },
  "kleuren": {
@@ -1226,7 +1235,7 @@
   "grendel": "tests/test_leren_in_lagen.py (laag 1, 3 en 4) en tests/test_agenda_taken.py (laag 2)."
  },
  "contactgegevens": {
-  "regel": "Elke afspraak met iemand van buiten draagt het telefoonnummer van de betrokken persoon, het adres (buiten) en het projectnummer (klant). Het nummer staat bovenaan de omschrijving: 'Tel. naam: nummer (bron)'.",
+  "regel": "Elke afspraak met iemand van buiten draagt het telefoonnummer van de betrokken persoon, het adres (buiten) en, bij een klant, het projectnummer, van welke firma ook. Het telefoonnummer staat bovenaan de omschrijving: 'Tel. naam: nummer (bron)'.",
   "mehdi": "01-10-2026: 'bij alle afspraken altijd het telefoonnummer van de betrokken persoon ... telefoonnummer, adres en projectnummer moeten altijd in de agenda staan ... zodat zowel ik als mijn agent kunnen bellen'",
   "agent": "contact_zetten in elke ronde, acht dagen vooruit. Bron, in deze volgorde: een vroegere afspraak van dezelfde persoon (zestig dagen terug, bv. een Calendly-dossier), dan Pipedrive van de firma (HARC, UNAB, TKNB, ENEF): de deal op projectnummer of straat, dan de persoon op volledige naam. Alleen een echt nummer telt ('onbekend' niet); twee kandidaten met een ander nummer is geen nummer. Staat er al een nummer in, dan verandert er niets. Met meer gasten van buiten alleen als de gevonden persoon zelf gast is (een koppel).",
   "controle": "de dagcontrole meldt een externe afspraak zonder nummer (zonder_telefoon, FR-77)",

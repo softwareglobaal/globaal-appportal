@@ -318,7 +318,8 @@ def lees_titel(titel):
     # Nieuwstraat 39, 3360 Korbeek-Lo' werd project 3360; op 28-09 werd 'Shaniel, Mechelsesteenweg 1143, 3020
     # Herent' project 1143 en viel het huisnummer uit de belzin (FR-58). In de titelvorm staat het projectnummer
     # altijd voor de eerste komma, het adres erna.
-    mn = re.search(r"\b(\d{4,5})\b", rest.split(",", 1)[0])
+    # vier tot zes cijfers: H-Architects JJNN (2607), TKN-Buro 46118 en vanaf 2026 260009 (FR-80)
+    mn = re.search(r"\b(\d{4,6})\b", rest.split(",", 1)[0])
     if mn:
         uit["nummer"] = mn.group(1)
     kaal = re.sub(rf"\b{uit['nummer']}\b", "", rest, count=1) if uit["nummer"] else rest
@@ -2388,6 +2389,120 @@ def onbevestigd_voorbij(items, vandaag):
 BELVRAGEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-belvragen.json")
 
 
+# Mehdi, 01-10-2026: "ik wil dat voor alle klanten dat ik naar toe ga ongeacht de firma altijd de projectnummer erin
+# staat". H-Architects nummert JJNN in de projectmap (H-A WORK). UNABO, TKN-Buro en Energie Efficiënt laten uitvoeren
+# door TKN-Buro: het nummer staat vooraan de map in TKN BURO WORK/1 Projects/<jaar>, bv. '46118_Barsten & Scheuren_
+# Koning Albertlaan 206, 3620 Lanaken'. Gezien die dag: 'BS - Natasja Gerritsen' had geen nummer (FR-80).
+TKN_PROJECTEN = "/Work/TKN BURO WORK/1 Projects"
+TKN_FIRMAS = ("UNAB", "TKNB", "ENEF")
+_TKN_MAPPEN = {"lijst": None}
+
+
+def _plat_adres(t):
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).split())
+
+
+def straat_nummer(a):
+    """'Koning Albertlaan 206' uit de locatie, anders uit de titel (het stuk na de eerste komma); zonder 'bus'."""
+    loc = (a.get("locatie") or "").strip()
+    bron = loc if loc and not loc.lower().startswith("http") else ",".join((a.get("titel") or "").split(",")[1:2])
+    eerste = re.sub(r"\bbus\s*\w+", "", bron.split(",")[0], flags=re.I).strip()
+    return eerste if re.search(r"[A-Za-zÀ-ÿ].*\d", eerste) else ""
+
+
+def _tkn_mappen():
+    """De projectmappen van TKN-Buro van dit en vorig jaar, een keer per ronde."""
+    if _TKN_MAPPEN["lijst"] is None:
+        uit = []
+        try:
+            import bronnen
+            jaar = nu_lokaal().year
+            for j in (jaar, jaar - 1):
+                uit += [e["name"] for e in (bronnen.lijst(f"{TKN_PROJECTEN}/{j}", recursief=False) or [])
+                        if e.get(".tag", "folder") == "folder"]
+        except Exception:  # noqa: BLE001
+            pass
+        _TKN_MAPPEN["lijst"] = uit
+    return _TKN_MAPPEN["lijst"]
+
+
+def projectnummer_zoeken(a, info):
+    """(nummer, bron) voor een klantafspraak zonder nummer, op straat en huisnummer in de projectmap van de firma.
+    Past er geen of meer dan één nummer, dan None: liever geen nummer dan een verkeerd."""
+    sn = _plat_adres(straat_nummer(a))
+    if not sn or not re.search(r"\d", sn):
+        return None
+    patroon = re.compile(rf"(?<![a-z0-9]){re.escape(sn)}(?![0-9])")
+    kandidaten, bron = set(), ""
+    if info.get("firma") == "HARC":
+        for nr, p in (projectadressen.index() or {}).items():
+            if patroon.search(_plat_adres((p or {}).get("adres"))):
+                kandidaten.add(str(nr))
+                bron = "projectmap H-Architects"
+    elif info.get("firma") in TKN_FIRMAS:
+        for naam in _tkn_mappen():
+            m = re.match(r"^(\d{4,6})_", naam)
+            if m and patroon.search(_plat_adres(naam)):
+                kandidaten.add(m.group(1))
+                bron = "projectmap TKN-Buro"
+    return (kandidaten.pop(), bron) if len(kandidaten) == 1 else None
+
+
+def met_nummer(titel, nr):
+    """'[UNAB-KB] BS - Natasja, ...' wordt '[UNAB-KB] BS 46118 - Natasja, ...'; zonder dienstcode
+    '[UNAB-KB] 46118 - Natasja, ...'."""
+    m = CODE_RE.search(titel)
+    if not m:
+        return titel
+    kop, rest = titel[:m.end()], titel[m.end():]
+    lead = re.match(r"\s*:?\s*", rest).group(0) or " "
+    na = rest.lstrip(" :")
+    mt = TYPE_RE.match(na)
+    if mt:
+        verder = na[mt.end():].lstrip()
+        verder = verder[1:].lstrip() if verder.startswith("-") else verder
+        return f"{kop}{lead}{mt.group(1)} {nr} - {verder}"
+    return f"{kop}{lead}{nr} - {na}"
+
+
+def projectnummers_zetten(items, alleen_dag=None, ook_verleden=False):
+    """Elke klantafspraak buiten (KB), van welke firma ook, draagt het projectnummer in de titel (FR-80). Zonder
+    gasten en buiten een reeks zet ik het zelf; anders is het een voorstel."""
+    tok = agenda._toegang()
+    nu = nu_lokaal().isoformat()
+    gezet, regels = 0, []
+    for a in items:
+        if a.get("hele_dag") or "T" not in a.get("start", "") or a.get("_archief") \
+                or a["titel"].lower().startswith("canceled"):
+            continue
+        if (not ook_verleden and a["start"] < nu[:len(a["start"])]) or (alleen_dag and a["start"][:10] != alleen_dag):
+            continue
+        info = lees_titel(a["titel"])
+        if info["reistijd"] or info["soort"] != "KB" or info["nummer"]:
+            continue
+        r = projectnummer_zoeken(a, info)
+        if not r:
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen projectnummer gevonden op het adres")
+            continue
+        nr, bron = r
+        nieuw = met_nummer(a["titel"], nr)
+        if lees_titel(nieuw)["nummer"] != nr:
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: nummer {nr} gevonden, maar de titel laat zich niet aanvullen")
+            continue
+        extern = [g for g in a.get("deelnemers") or [] if not any(e in g.lower() for e in EIGEN_ADRESSEN)]
+        if extern or a.get("_terugkerend") or a.get("_reeks"):
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: VOORSTEL '{nieuw}' ({bron})")
+            continue
+        try:
+            _patch(a, {"summary": nieuw}, tok)
+            a["titel"] = nieuw
+            gezet += 1
+            regels.append(f"{a['start'][:16]} {nieuw[:70]}: projectnummer {nr} ({bron})")
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: projectnummer niet gezet ({type(e).__name__})")
+    return gezet, regels
+
+
 # Mehdi, 01-10-2026, onderweg en te laat voor barsten en scheuren in Lanaken: "bij alle afspraken altijd het
 # telefoonnummer van de betrokken persoon ... telefoonnummer, adres en projectnummer moeten altijd in de agenda staan
 # ... zodat zowel ik als mijn agent kunnen bellen". Het nummer van Natasja Gerritsen stond alleen in Pipedrive (FR-77).
@@ -2878,6 +2993,8 @@ def main():
         ng += ag_ + ug
         nregels += aregels + uregels
         zg, zregels = zoom_zetten(kort_items, dag_grens)
+        pg, pregels = projectnummers_zetten(kort_items, dag_grens)
+        ag.log(f"dag {vandaag}", "schrijf", f"projectnummer: {pg} in de titel gezet", "\n".join(pregels))
         tg, tregels = contact_zetten(kort_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"telefoon: {tg} nummer(s) bovenaan gezet", "\n".join(tregels))
         ag.log(f"dag {vandaag}", "schrijf", f"titels: {ng} rechtgezet uit vrije tekst; link-notitie: {zg} gezet",

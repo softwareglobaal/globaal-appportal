@@ -906,6 +906,39 @@ check("een live rijtijd wordt alleen hergebruikt voor dezelfde rit, en een afspr
       and 'vast = (x["kalender"], e0) in grenzen or e0 in begins_alle' in _src79
       and 'if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN):' in _src79)
 
+# Elke klant waar Mehdi naartoe gaat draagt het projectnummer, van welke firma ook (FR-80)
+_o80 = (W._tkn_mappen, W.projectadressen.index, W._patch, W.agenda._toegang)
+_p80 = {}
+W._tkn_mappen = lambda: ["46118_Barsten & Scheuren_Koning Albertlaan 206, 3620 Lanaken", "260009_STA_PS_GENTSESTEENWEG 482_IBRAHIM KOCA",
+                         "46004_STA_RO_FP_ HANEWIJK 85 3118 WERCHTER_MAARTEN DANIELS", "46005_STA_Hanewijk 8, 3118 Werchter"]
+W.projectadressen.index = lambda *x, **y: {"2505": {"adres": "Aarschotsesteenweg 252, 3012 Wilsele"}}
+W._patch = lambda a, body, tok: _p80.__setitem__(a["id"], body["summary"])
+W.agenda._toegang = lambda: "t"
+_d80 = (W.nu_lokaal() + _td(days=1)).date().isoformat()
+_i80 = [{"id": "n1", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [UNAB-KB] BS - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken",
+         "locatie": "Koning Albertlaan 206, 3620 Lanaken, België", "start": f"{_d80}T09:00:00+02:00", "einde": f"{_d80}T12:00:00+02:00", "deelnemers": []},
+        {"id": "n2", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [TKNB-KB] STA Ibrahim Koca, Gentsesteenweg 482, 9000 Gent",
+         "locatie": "", "start": f"{_d80}T13:00:00+02:00", "einde": f"{_d80}T14:00:00+02:00", "deelnemers": []},
+        {"id": "n3", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [HARC-KB] WB - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele",
+         "locatie": "", "start": f"{_d80}T15:00:00+02:00", "einde": f"{_d80}T16:00:00+02:00", "deelnemers": []},
+        {"id": "n4", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [UNAB-KB] STA - Daniels, Hanewijk 8, 3118 Werchter",
+         "locatie": "", "start": f"{_d80}T17:00:00+02:00", "einde": f"{_d80}T18:00:00+02:00", "deelnemers": ["klant@x.be"]},
+        {"id": "n5", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [UNAB-KB] STA - Onbekend, Dorpstraat 1, 1000 Brussel",
+         "locatie": "", "start": f"{_d80}T19:00:00+02:00", "einde": f"{_d80}T20:00:00+02:00", "deelnemers": []}]
+try:
+    _g80, _r80 = W.projectnummers_zetten(_i80)
+finally:
+    W._tkn_mappen, W.projectadressen.index, W._patch, W.agenda._toegang = _o80
+import dagcontrole as _D80
+_b80 = {x["a"]["id"] for x in _D80.dagcontrole([dict(x, titel=_p80.get(x["id"], x["titel"])) for x in _i80], _d80) if x["soort"] == "klant_zonder_nummer"}
+check("elke klant waar Mehdi naartoe gaat krijgt het projectnummer, van welke firma ook",
+      _p80.get("n1") == "!! Mehdi: [UNAB-KB] BS 46118 - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken"
+      and _p80.get("n2") == "!! Mehdi: [TKNB-KB] STA 260009 - Ibrahim Koca, Gentsesteenweg 482, 9000 Gent"
+      and _p80.get("n3") == "!! Mehdi: [HARC-KB] WB 2505 - Patrick Carolan, Aarschotsesteenweg 252, 3012 Wilsele"
+      and "n4" not in _p80 and any("VOORSTEL" in r and "46005" in r for r in _r80)
+      and "n5" not in _p80 and _g80 == 3 and _b80 == {"n4", "n5"}
+      and W.lees_titel("!! Mehdi: [TKNB-KB] STA 260009 - Ibrahim Koca, Gentsesteenweg 482")["nummer"] == "260009", str((_p80, _r80, _b80)))
+
 # 'In de auto': gesprekken onderweg, de aankomst schuift niet (FR-70)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("staat 'in de auto' in de afspraak, dan schuift de aankomst niet voor gesprekken onderweg",
