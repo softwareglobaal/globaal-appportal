@@ -2110,7 +2110,7 @@ def reistijd_zetten(items, alleen_dag=None):
         # alleen voor dezelfde rit: kwam hij vroeger van elders, dan geldt die meting niet (FR-79, gezien 01-10-2026: de
         # rit naar de post nam de 15 minuten over van 'De Speelkriebel -> post', terwijl hij nu uit Mortsel kwam)
         if _x and "OSRM" in _oms and "live verkeer Google" in _oms and fh != "live" \
-                and (_x.get("titel") or "").strip() == f"🚗 Reistijd: {van_plaats} → {plaats}":
+                and f"rit {van_plaats} → {plaats})" in _oms:
             heen = int((datetime.fromisoformat(_x["einde"]) - datetime.fromisoformat(_x["start"])).total_seconds() // 60)
             fh = "live"
             rit_start = aankomst - timedelta(minutes=heen)
@@ -2123,7 +2123,7 @@ def reistijd_zetten(items, alleen_dag=None):
         _t = terugblok() if is_laatste else None
         _toms = (_t or {}).get("omschrijving") or ""
         if _t and "OSRM" in _toms and "live verkeer Google" in _toms and ft != "live" \
-                and (_t.get("titel") or "").strip() == f"🚗 Reistijd: {plaats} → thuis":
+                and f"rit {plaats} → thuis)" in _toms:
             terug = int((datetime.fromisoformat(_t["einde"]) - datetime.fromisoformat(_t["start"])).total_seconds() // 60)
             ft = "live"
         if is_laatste and terug:
@@ -2165,8 +2165,8 @@ def reistijd_zetten(items, alleen_dag=None):
                 _patch(x, wijzig, tok)
                 return True
             return False
-        uitleg_h = f"Reistijd voor: {a['titel']} ({heen} min = " + ("live verkeer Google" if fh == "live" else f"vrije rijtijd x filefactor {fh}") + f" + {BUFFER_MIN} min buffer, OSRM; adres uit {bron_adres})"
-        uitleg_t = f"Reistijd na: {a['titel']} ({terug} min = " + ("live verkeer Google" if ft == "live" else f"vrije rijtijd x filefactor {ft}") + f" + {BUFFER_MIN} min buffer, OSRM)"
+        uitleg_h = f"Reistijd voor: {a['titel']} ({heen} min = " + ("live verkeer Google" if fh == "live" else f"vrije rijtijd x filefactor {fh}") + f" + {BUFFER_MIN} min buffer, OSRM; adres uit {bron_adres}; rit {van_plaats} → {plaats})"
+        uitleg_t = f"Reistijd na: {a['titel']} ({terug} min = " + ("live verkeer Google" if ft == "live" else f"vrije rijtijd x filefactor {ft}") + f" + {BUFFER_MIN} min buffer, OSRM; rit {plaats} → thuis)"
         # Een rit hoort bij de afspraak waarvoor je rijdt: zelfde agenda, zelfde kleur. Een
         # rit voor Lara staat roze op de agenda van Lara, een privérit zwart op privé. Rood
         # is alleen voor werk. Anders zien collega's op je werkagenda dat je ergens heen
@@ -2260,8 +2260,13 @@ def reistijd_zetten(items, alleen_dag=None):
                 or (alleen_dag and x["start"][:10] != alleen_dag)):
             continue
         s0, e0 = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"])
-        if (s0 >= nu and (x["kalender"], e0) not in grenzen and (x["kalender"], s0) not in grenzen
-                and e0 not in begins_alle and s0 not in eindes_alle):
+        # een heenrit hangt aan zijn einde (begin van de afspraak of van een geparkeerd gesprek), een terugrit aan
+        # zijn begin; een heenrit die toevallig na een gesprek vertrekt, hangt nergens aan (FR-79, Lara 02-10)
+        if "Reistijd voor:" in (x.get("omschrijving") or ""):
+            vast = (x["kalender"], e0) in grenzen or e0 in begins_alle
+        else:
+            vast = (x["kalender"], s0) in grenzen or s0 in eindes_alle or (x["kalender"], e0) in grenzen
+        if s0 >= nu and not vast:
             # Staat de afspraak intussen op een andere agenda (privé in plaats van werk), dan
             # verhuist mijn rit mee. Gezien 24-09-2026: de ritten voor een privé-afspraak van
             # 23-09 bleven rood op de werkagenda staan, zichtbaar voor collega's.
