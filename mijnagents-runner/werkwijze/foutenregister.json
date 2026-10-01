@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.14",
+ "versie": "3.15",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1698,6 +1698,24 @@
    "controle": [
     "klant_zonder_nummer"
    ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-81",
+   "datum": "01-10-2026",
+   "gevonden_door": "Claude, dagcontrole van 02-10 na het zetten van KBC Ladeuze",
+   "fout": "De rit naar KBC Ladeuze (02-10 10:30) vertrok om 10:10, midden in het gesprek met Benny Desmedt (10:00-10:30, prospect online).",
+   "gevolg": "Een klantgesprek rijdend, wat Mehdi niet wil (alleen geparkeerd, 23-09-2026).",
+   "waarom_niet_gezien": "De agent vervroegde de aankomst alleen voor een gesprek dat tijdens de rit begint. Liep het gesprek al bij vertrek, dan schreef hij alleen 'LET OP' in zijn logboek.",
+   "oorzaak": "Een gesprek dat al loopt bij vertrek werd niet behandeld als reden om eerder aan te komen.",
+   "soort_oorzaak": "code",
+   "oplossing": "Loopt bij het geplande vertrek al een extern gesprek, dan komt hij aan voor het begint en doet het geparkeerd ter plaatse; vertrekken mag na een vorig gesprek, zonder buffer als het moet. Past dat niet, dan blijft de waarschuwing.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een gesprek dat bij vertrek al loopt doet hij geparkeerd ter plaatse"
+   },
+   "controle": [],
    "status": "opgelost"
   }
  ]

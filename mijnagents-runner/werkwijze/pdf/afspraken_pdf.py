@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.24"
+VERSIE = "2.25"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -268,6 +268,10 @@ huis, tot 19:30 geblokkeerd zodat er tijd is om Lara van de les naar huis te bre
 mogen collega's juist wel buiten plannen. De agent leest de vakanties uit de agenda van Lara.</td></tr>
 <tr><td><b>Per schooljaar</b></td><td>De reeksen lopen per schooljaar. Na elk schooljaar worden ze bijgesteld.</td></tr>
 </tbody></table>
+
+<p><b>Vaste plekken</b> (Mehdi, 01-10-2026). 'KBC' is altijd KBC Ladeuze, Mgr. Ladeuzeplein 15, 3000 Leuven (016 31 40 00, weekdagen
+09:00-16:30). Staat zo'n woord in een titel, dan rekent de agent de rit daarheen en zet hij adres en nummer in de afspraak. Loopt er bij
+vertrek nog een klantgesprek, dan kom je aan voor het begint en doe je het geparkeerd ter plaatse.</p>
 
 <p><b>Projectnummer bij elke klant, van welke firma ook</b> (Mehdi, 01-10-2026). Een afspraak bij een klant buiten draagt het
 nummer in de titel: '[FIRMA-KB] TYPE nummer - klant, adres'. H-Architects: JJNN uit de projectmap (bv. 2607). UNABO, TKN-Buro en Energie

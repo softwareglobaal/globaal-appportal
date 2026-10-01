@@ -16,6 +16,7 @@ Elke werkdag om 06:30 en daarna elke twee uur:
 Leest alleen. Verandert nooit een afspraak.
 """
 import json
+from pathlib import Path
 import os
 import re
 import sys
@@ -526,6 +527,23 @@ def plekken():
         lijst = _plekken["lijst"]
     _plekken["lijst"], _plekken["tot"] = lijst, time.time() + 3600
     return lijst
+
+
+def _vaste_plekken():
+    """Wat Mehdi met een woord bedoelt, uit werkwijze/agenda-taken.json (vaste_plekken). Mehdi, 01-10-2026: "als ik KBC
+    kantoor zeg dan is het altijd in de KBC Ladeuze in Leuven". Geen adresboek: alleen wat hij zo vastlegt."""
+    try:
+        return json.loads((Path(__file__).resolve().parent / "werkwijze" / "agenda-taken.json").read_text(encoding="utf-8")).get("vaste_plekken") or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def vaste_plek(tekst):
+    """(woord, plek) als een vaste plek van Mehdi in de tekst staat, anders (None, None)."""
+    for woord, plek in _vaste_plekken().items():
+        if isinstance(plek, dict) and plek.get("adres") and re.search(rf"(?<![\w]){re.escape(woord)}(?![\w])", tekst or "", re.I):
+            return woord, plek
+    return None, None
 
 
 def plek_zoeken(tekst):
@@ -1818,6 +1836,10 @@ def reistijd_zetten(items, alleen_dag=None):
             gevonden, naam = plek_zoeken(a["titel"] + " " + (a.get("omschrijving") or ""))
             if gevonden:
                 adres, fysiek, bron_adres = gevonden, True, f"locatiesysteem ({naam})"
+            else:
+                woord, vp = vaste_plek(a["titel"])
+                if vp:
+                    adres, fysiek, bron_adres = vp["adres"], True, f"vaste plek ({woord})"
         if info["reistijd"] or not (info["buiten"] or info["soort"] in BUITEN_SOORTEN):
             continue
         a["_bron_adres"] = bron_adres
@@ -1834,7 +1856,7 @@ def reistijd_zetten(items, alleen_dag=None):
         # Komt het adres uit de projectmap en staat er geen locatie in de afspraak, dan zet ik het
         # erin, zodat Mehdi (en wie meegaat) kan navigeren. Alleen bij zijn eigen afspraken zonder
         # gasten. Mandaat van Mehdi, 23-09-2026: "in een keer goed zetten".
-        if (bron_adres == "projectmap" and fysiek and not (a.get("locatie") or "").strip()
+        if ((bron_adres == "projectmap" or bron_adres.startswith("vaste plek")) and fysiek and not (a.get("locatie") or "").strip()
                 and _van_mehdi(a) and not a.get("_terugkerend")):
             try:
                 _patch(a, {"location": adres}, tok)
@@ -2084,6 +2106,19 @@ def reistijd_zetten(items, alleen_dag=None):
             heen, fh = rijtijd_min(vertrek_van, doel, aankomst - timedelta(minutes=heen))
         lopend = [] if in_de_auto else [z for z in externe_gesprekken(aankomst - timedelta(minutes=heen), aankomst)
                                         if z[0] < aankomst - timedelta(minutes=heen)]
+        if lopend:
+            # Loopt er bij vertrek al een extern gesprek, dan komt hij aan voor het begint en doet hij het geparkeerd ter
+            # plaatse; vertrekken mag na een vorig gesprek, zonder buffer als het moet (FR-81, gezien 01-10-2026: KBC
+            # Ladeuze 10:30, Benny om 10:00, en de rit vertrok om 10:10, midden in het gesprek)
+            nieuwe = lopend[0][0]
+            h2, f2 = rijtijd_min(vertrek_van, doel, nieuwe - timedelta(minutes=heen))
+            ervoor = [z[1] for z in externe_gesprekken(nieuwe - timedelta(minutes=h2), nieuwe) if z[0] < nieuwe]
+            vroegst = max([t for t in ervoor + [vorige_einde] if t] or [nieuwe - timedelta(minutes=h2)])
+            if nieuwe - vroegst >= timedelta(minutes=h2 - BUFFER_MIN):
+                aankomst, reden_aankomst, heen, fh = nieuwe, lopend[0][2], h2, f2
+                if vroegst > nieuwe - timedelta(minutes=h2):
+                    vorige_einde = vroegst
+                lopend = []
         if lopend:
             regels.append(f"{a['start'][:16]} {a['titel'][:40]}: LET OP, extern gesprek "
                           f"'{lopend[0][2]['titel'][:30]}' loopt nog bij vertrek; rijdend kan dat niet")
@@ -2538,6 +2573,9 @@ def contact_van(a, info):
     """(naam, telefoon, bron) van de klant, prospect of leverancier, uit Pipedrive van de firma: de deal op het
     projectnummer of de straat, dan de persoon op zijn volledige naam. Alleen een treffer die echt past; liever
     geen nummer dan een verkeerd nummer. None als niets gevonden."""
+    woord, vp = vaste_plek(a.get("titel") or "")
+    if vp and telefoon_in(vp.get("tel") or ""):
+        return (vp.get("naam") or woord, telefoon_in(vp["tel"]), f"vaste plek {woord}", [])
     naam = re.sub(r"\([^)]*\)", "", (info.get("klant") or "").split(",")[0]).strip(" -:")
     # eerst de agenda van vroeger: een Calendly-boeking of dossier van dezelfde persoon droeg vaak al het nummer
     # (gezien 01-10-2026: Nelleke Stropke had 0499700230 in haar afspraak van 29-09, Pipedrive zei 'onbekend')

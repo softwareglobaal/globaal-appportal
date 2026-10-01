@@ -273,7 +273,7 @@ check("geen notitie bij bellen, Calendly of terugkerende overleggen",
       'bel(t|len)?' in _zb and 'a.get("_terugkerend")' in _zb and 'bool(a.get("_conferentie"))' in _zb)
 
 check("een adres uit de projectmap komt ook in de afspraak zelf",
-      'bron_adres == "projectmap" and fysiek and not (a.get("locatie") or "").strip()' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+      '(bron_adres == "projectmap" or bron_adres.startswith("vaste plek")) and fysiek and not (a.get("locatie") or "").strip()' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))   # ook een vaste plek (KBC), 01-10-2026
 
 # Aannemer (AB/AO) en ZL = zonder link (23-09-2026).
 _a = W.lees_titel("Mehdi & Pioter: [HARC-AO] 2405 - aannemer van Dorien")
@@ -938,6 +938,15 @@ check("elke klant waar Mehdi naartoe gaat krijgt het projectnummer, van welke fi
       and "n4" not in _p80 and any("VOORSTEL" in r and "46005" in r for r in _r80)
       and "n5" not in _p80 and _g80 == 3 and _b80 == {"n4", "n5"}
       and W.lees_titel("!! Mehdi: [TKNB-KB] STA 260009 - Ibrahim Koca, Gentsesteenweg 482")["nummer"] == "260009", str((_p80, _r80, _b80)))
+
+# Loopt bij vertrek al een extern gesprek, dan aankomen voor het begint (FR-81); vaste plekken van Mehdi (KBC)
+_src81 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+_vp81 = W.vaste_plek("!! Mehdi: [ALGE-LB] KBC ophalen")
+_c81 = W.contact_van({"titel": "!! Mehdi: [ALGE-LB] KBC ophalen", "locatie": ""}, W.lees_titel("!! Mehdi: [ALGE-LB] KBC ophalen"))
+check("een gesprek dat bij vertrek al loopt doet hij geparkeerd ter plaatse; 'KBC' is altijd KBC Ladeuze, met adres en telefoon",
+      "nieuwe = lopend[0][0]" in _src81 and "if nieuwe - vroegst >= timedelta(minutes=h2 - BUFFER_MIN):" in _src81
+      and _vp81[0] == "KBC" and "Ladeuzeplein 15, 3000 Leuven" in _vp81[1]["adres"] and W.vaste_plek("kbcx") == (None, None)
+      and _c81 and _c81[1] == "016 31 40 00", str((_vp81, _c81)))
 
 # 'In de auto': gesprekken onderweg, de aankomst schuift niet (FR-70)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")

@@ -1,5 +1,5 @@
 {
- "versie": "4.32",
+ "versie": "4.33",
  "datum": "2026-09-30",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -812,7 +812,8 @@
   "eigen_ritten_opruimen": "De agent haalt zijn eigen ritblokken weg die niet meer kloppen: een terugrit terwijl er nog een buitenafspraak volgt, of een rit waarvan de afspraak weg of verzet is. Alleen blokken met het autootje en zijn eigen uitleg (OSRM). Een afspraak, een rit die Mehdi zelf zette of iets in het archief raakt hij nooit aan (Mehdi, 29-09-2026). Een tweede eigen heenrit voor dezelfde afspraak haalt hij ook weg (FR-76). Een eigen terugrit op een oud einde van dezelfde afspraak haalt hij ook weg (FR-78). Een afspraak die geen rit meer vraagt (bv. Lara 'overgeslagen', zonder !!) houdt geen rit vast (FR-79).",
   "tussendoor_naar_huis": "Naar huis tussendoor alleen als er na de rit naar huis en de rit terug nog minstens 30 minuten thuis overblijft (en nooit onder 90 minuten tussen twee buitenafspraken); anders rechtstreeks van de ene naar de andere (FR-69, FR-75). Gesprekken die hij eerst geparkeerd doet, schuiven het vertrek op voor de berekening (FR-78).",
   "zonder_adres": "Een buitenafspraak zonder adres krijgt geen rit; de volgende rit vertrekt van de laatste plek die de agent kent, niet van thuis (FR-75). Waar ze is, blijft een vraag aan Mehdi.",
-  "live_meting": "Een live rijtijd van Google wordt alleen hergebruikt voor dezelfde rit (zelfde van en naar); kwam hij vroeger van elders, dan geldt de nieuwe schatting (FR-79)."
+  "live_meting": "Een live rijtijd van Google wordt alleen hergebruikt voor dezelfde rit (zelfde van en naar); kwam hij vroeger van elders, dan geldt de nieuwe schatting (FR-79).",
+  "gesprek_bij_vertrek": "Loopt er bij het geplande vertrek al een extern gesprek, dan komt Mehdi aan voor het begint en doet hij het geparkeerd ter plaatse; vertrekken mag na een vorig gesprek, zonder buffer als het moet (FR-81)."
  },
  "triggers": {
   "ochtend_en_overdag": "de wacht draait op weekdagen om 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30 Brusselse tijd",
@@ -1240,5 +1241,15 @@
   "agent": "contact_zetten in elke ronde, acht dagen vooruit. Bron, in deze volgorde: een vroegere afspraak van dezelfde persoon (zestig dagen terug, bv. een Calendly-dossier), dan Pipedrive van de firma (HARC, UNAB, TKNB, ENEF): de deal op projectnummer of straat, dan de persoon op volledige naam. Alleen een echt nummer telt ('onbekend' niet); twee kandidaten met een ander nummer is geen nummer. Staat er al een nummer in, dan verandert er niets. Met meer gasten van buiten alleen als de gevonden persoon zelf gast is (een koppel).",
   "controle": "de dagcontrole meldt een externe afspraak zonder nummer (zonder_telefoon, FR-77)",
   "claude": "Zet Claude zelf een afspraak, dan zet hij het nummer er meteen bij, uit de bron (contract, Pipedrive, de mail van de klant)."
- }
+ },
+ "vaste_plekken": {
+  "KBC": {
+   "naam": "KBC Ladeuze",
+   "adres": "KBC Bank Leuven Ladeuze, Mgr. Ladeuzeplein 15, 3000 Leuven",
+   "tel": "016 31 40 00",
+   "open": "weekdagen 09:00-16:30",
+   "mehdi": "01-10-2026: 'als ik kbc kantoor zeg dan is het altijd in de KBC Ladeuze in Leuven!'"
+  }
+ },
+ "vaste_plekken_uitleg": "Wat Mehdi met een woord bedoelt. Staat het woord in een titel zonder adres, dan rekent de agent de rit naar die plek, zet hij het adres in de afspraak (zonder gasten) en het telefoonnummer bovenaan. Plekken met een straal en wifi blijven in locatie.globaal.be."
 }
