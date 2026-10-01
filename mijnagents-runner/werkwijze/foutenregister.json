@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.10",
+ "versie": "3.11",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -203,6 +203,13 @@
    "les": "Een vraag aan Mehdi is pas een vraag als de agenda het antwoord niet al geeft: lees eerst de hele dag en week, met de hele-dag-markers.",
    "uit": [
     "FR-74"
+   ]
+  },
+  {
+   "id": "L26",
+   "les": "Wat Mehdi onderweg nodig heeft (telefoon, adres, projectnummer), staat in de afspraak zelf; zoeken kan hij niet terwijl hij rijdt.",
+   "uit": [
+    "FR-77"
    ]
   }
  ],
@@ -1615,6 +1622,26 @@
     "tekst": "een tweede eigen heenrit voor dezelfde afspraak haalt de agent zelf weg"
    },
    "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-77",
+   "datum": "01-10-2026",
+   "gevonden_door": "Mehdi ('ik ben te laat, maar ik ben aan het rijden. Ik kan onmogelijk tijdens het rijden het telefoonnummer van die persoon gaan zoeken')",
+   "fout": "Bij barsten en scheuren van Natasja Gerritsen (01-10 09:00, Lanaken) stond geen telefoonnummer in de afspraak. Mehdi was te laat en kon haar onderweg niet verwittigen; het nummer stond alleen in Pipedrive UNABO (deal 3741).",
+   "gevolg": "Een ontevreden klant, en Mehdi kan niet zelf laten weten dat hij later komt.",
+   "waarom_niet_gezien": "De afspraken vroegen een projectnummer en een adres, nooit een telefoonnummer. Alleen de Calendly-boekingen droegen er toevallig een.",
+   "oorzaak": "Geen regel en geen stap die het telefoonnummer van de betrokken persoon in de afspraak zet.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "contact_zetten in elke ronde: elke afspraak met iemand van buiten (KB, KO, PB, PO, LB, LO, AB, AO, B2B) zonder nummer krijgt bovenaan 'Tel. naam: nummer (bron)' uit Pipedrive van de firma (deal op projectnummer of straat, dan de persoon op volledige naam; twee kandidaten is geen nummer). De volledige omschrijving blijft staan. De dagcontrole meldt een externe afspraak zonder nummer (zonder_telefoon).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "elke afspraak met iemand van buiten krijgt bovenaan het telefoonnummer van de persoon"
+   },
+   "controle": [
+    "zonder_telefoon"
+   ],
    "status": "opgelost"
   }
  ]

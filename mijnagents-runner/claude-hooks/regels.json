@@ -49,7 +49,7 @@
    "opdracht": "(?i)(calendar/v3|/events|agenda_wacht\\.py|create_event|update_event|dagcontrole\\.py)",
    "regels": [
     "!! staat altijd vooraan, dan de naam; buiten is altijd rood, ook met ?? (FR-64, FR-67).",
-    "Namen, adres, duur en soort gesprek uit de bron of uit Mehdi's woorden; nooit gokken. Eerst zelf zoeken, ook de hele week in de agenda (Buitenland, geen auto, Lara): wat daar staat vraag je niet (FR-58, FR-72, FR-74).",
+    "Namen, telefoon, adres, projectnummer, duur en soort gesprek uit de bron of uit Mehdi's woorden; nooit gokken. Eerst zelf zoeken, ook de hele week in de agenda (Buitenland, geen auto, Lara): wat daar staat vraag je niet (FR-58, FR-74, FR-77).",
     "Na elke wijziging agenda_wacht.py --dag en dagcontrole.py --dag, en de uitkomst tonen voor je 'klaar' zegt; dubbels controleren op de titel, niet met q-zoeken (FR-71)."
    ]
   }

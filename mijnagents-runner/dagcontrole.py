@@ -115,6 +115,12 @@ def dagcontrole(items, dag):
         if info.get("firma") and info["soort"] in KLANTSOORTEN and not info["nummer"] \
                 and not (info.get("klant") or "").strip(" ,-"):
             meld("zonder_klant", a, "klantafspraak zonder naam: wie is de klant?")
+    # 8. een afspraak met iemand van buiten zonder telefoonnummer: bij vertraging kan niemand de persoon bellen (FR-77)
+    for a in afspraken:
+        info = W.lees_titel(a["titel"])
+        if info.get("firma") and info["soort"] in W.EXTERNE_SOORTEN and not a.get("_archief") \
+                and not W.telefoon_in(f"{a.get('locatie') or ''} {a.get('omschrijving') or ''}"):
+            meld("zonder_telefoon", a, "geen telefoonnummer in de afspraak: bij vertraging kan niemand de persoon bellen")
     return uit
 
 

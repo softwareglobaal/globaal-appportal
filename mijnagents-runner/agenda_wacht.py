@@ -2352,6 +2352,139 @@ def onbevestigd_voorbij(items, vandaag):
 BELVRAGEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-belvragen.json")
 
 
+# Mehdi, 01-10-2026, onderweg en te laat voor barsten en scheuren in Lanaken: "bij alle afspraken altijd het
+# telefoonnummer van de betrokken persoon ... telefoonnummer, adres en projectnummer moeten altijd in de agenda staan
+# ... zodat zowel ik als mijn agent kunnen bellen". Het nummer van Natasja Gerritsen stond alleen in Pipedrive (FR-77).
+CONTACT_PD = {"HARC": "harchitects", "UNAB": "unabo", "TKNB": "tkn-buro", "ENEF": "energie-efficient"}
+EIGEN_ADRESSEN = ("h-architects", "harchitects", "unabo", "tkn-buro", "h-invest", "elevait", "globaal", "mehdi",
+                  "haprospecties", "zoomafspraken", "haagendalight")
+_TEL_RE = re.compile(r"(?:\+3[1-3][\s.]?|(?<![\d+])0)[1-9](?:[\s./-]?\d){7,10}(?!\d)")
+_CONTACT = {}
+
+
+def telefoon_in(tekst):
+    """Het eerste telefoonnummer in een tekst (+32, +31, +33 of 0...), of ''. Een btw- of ondernemingsnummer, een
+    IBAN of een meeting-ID telt niet."""
+    schoon = re.sub(r"<[^>]+>", " ", tekst or "")
+    for m in _TEL_RE.finditer(schoon):
+        voor = schoon[max(0, m.start() - 16):m.start()].lower()
+        cijfers = re.sub(r"\D", "", m.group(0))
+        if any(w in voor for w in ("btw", "be0", "be ", "ondernemingsnr", "iban", "meeting id", "bestel")):
+            continue
+        if 9 <= len(cijfers) <= 12:
+            return m.group(0).strip()
+    return ""
+
+
+def _naam_schoon(naam):
+    delen = [w for w in (naam or "").split() if w not in ("PA", "KL")]
+    if len(delen) > 2 and delen[-1] == delen[0]:
+        delen = delen[:-1]          # 'Natasja Gerritsen Natasja' wordt 'Natasja Gerritsen'
+    return " ".join(delen)
+
+
+def contact_van(a, info):
+    """(naam, telefoon, bron) van de klant, prospect of leverancier, uit Pipedrive van de firma: de deal op het
+    projectnummer of de straat, dan de persoon op zijn volledige naam. Alleen een treffer die echt past; liever
+    geen nummer dan een verkeerd nummer. None als niets gevonden."""
+    pd = CONTACT_PD.get(info.get("firma") or "")
+    if not pd:
+        return None
+    naam = re.sub(r"\([^)]*\)", "", (info.get("klant") or "").split(",")[0]).strip(" -:")
+    loc = (a.get("locatie") or "").strip()
+    straat = (loc if loc and not loc.lower().startswith("http") else
+              ((a.get("titel") or "").split(",")[1] if (a.get("titel") or "").count(",") >= 2 else "")).split(",")[0].strip()
+    for soort, term in (("nummer", info.get("nummer") or ""), ("straat", straat), ("naam", naam)):
+        if len(term) < 4:
+            continue
+        sleutel = (pd, soort, term.lower())
+        if sleutel not in _CONTACT:
+            r = None
+            try:
+                if soort in ("nummer", "straat"):
+                    d = pipedrive.get(pd, "/deals/search", {"term": term, "fields": "title", "limit": 10})
+                    for it in (d.get("items") if isinstance(d, dict) else d) or []:
+                        x = it.get("item", it)
+                        titel = (x.get("title") or "").lower()
+                        if not (titel.startswith(term.lower()) if soort == "nummer" else term.lower() in titel):
+                            continue
+                        pid = (x.get("person") or {}).get("id")
+                        p = pipedrive.get(pd, f"/persons/{pid}") if pid else {}
+                        tel = next((t.get("value", "").strip() for t in (p or {}).get("phone") or [] if (t.get("value") or "").strip()), "")
+                        if tel:
+                            r = (_naam_schoon(p.get("name")), tel, f"Pipedrive {pd}, deal {x.get('id')}")
+                            break
+                elif len(naam.split()) >= 2:
+                    d = pipedrive.get(pd, "/persons/search", {"term": naam, "fields": "name", "limit": 5})
+                    passend = []
+                    for it in (d.get("items") if isinstance(d, dict) else d) or []:
+                        x = it.get("item", it)
+                        if set(naam.lower().split()) <= set((x.get("name") or "").lower().split()):
+                            tel = next((t.strip() for t in x.get("phones") or [] if (t or "").strip()), "")
+                            if tel:
+                                passend.append((_naam_schoon(x.get("name")), tel, f"Pipedrive {pd}, persoon {x.get('id')}"))
+                    r = passend[0] if len({t for _, t, _ in passend}) == 1 else None   # twee kandidaten: geen gok
+            except Exception:  # noqa: BLE001
+                r = None
+            _CONTACT[sleutel] = r
+        if _CONTACT[sleutel]:
+            return _CONTACT[sleutel]
+    return None
+
+
+def _volledige_omschrijving(a, tok):
+    """De afspraak leest maar 2000 tekens van de omschrijving; voor ik er iets voor zet, haal ik de hele tekst op."""
+    import urllib.parse
+    import urllib.request
+    url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
+           f"{urllib.parse.quote(a['id'], safe='')}")
+    ev = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"}), timeout=30))
+    return ev.get("description") or ""
+
+
+def contact_zetten(items, alleen_dag=None):
+    """Elke afspraak met iemand van buiten krijgt bovenaan het telefoonnummer van de betrokken persoon, zodat Mehdi
+    of de agent onderweg kan bellen (FR-77). Staat er al een nummer in, dan blijft alles zoals het is. Met meer dan
+    een gast van buiten zet ik niets: die zien elkaars omschrijving."""
+    tok = agenda._toegang()
+    nu = nu_lokaal().isoformat()
+    gezet, regels = 0, []
+    for a in items:
+        if a.get("hele_dag") or "T" not in a.get("start", "") or a["start"] < nu[:len(a["start"])] or a.get("_archief"):
+            continue
+        if alleen_dag and a["start"][:10] != alleen_dag:
+            continue
+        info = lees_titel(a["titel"])
+        if info["reistijd"] or info["soort"] not in EXTERNE_SOORTEN or not info.get("firma") \
+                or a["titel"].lower().startswith("canceled"):
+            continue
+        if telefoon_in(f"{a.get('locatie') or ''} {a.get('omschrijving') or ''}"):
+            continue
+        extern = [g for g in a.get("deelnemers") or [] if not any(e in g.lower() for e in EIGEN_ADRESSEN)]
+        if len(extern) > 1:
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen nummer gezet, {len(extern)} gasten van buiten")
+            continue
+        c = contact_van(a, info)
+        if not c:
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen telefoonnummer gevonden in Pipedrive")
+            continue
+        naam, tel, bron = c
+        try:
+            oms = _volledige_omschrijving(a, tok)
+            if telefoon_in(oms):
+                continue
+            regel = f"Tel. {naam or 'klant'}: {tel} ({bron})"
+            html = bool(re.search(r"<(br|a|b|p|div|ul|li)\b", oms, re.I))
+            nieuw = (regel + ("<br><br>" if html else "\n\n") + oms) if oms.strip() else regel
+            _patch(a, {"description": nieuw}, tok)
+            a["omschrijving"] = nieuw[:2000]
+            gezet += 1
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: {regel}")
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: telefoon niet gezet ({type(e).__name__})")
+    return gezet, regels
+
+
 def zoom_zonder_wachtwoord(items, nu=None, uren=48):
     """Online afspraken met een gast waarvan de Zoom-link geen wachtwoord bevat (geen ?pwd= en geen passcode
     in de uitnodiging). Gezien 25-09-2026: Maureen Van De Poel annuleerde met 'ik heb geen wachtwoord voor de
@@ -2681,6 +2814,8 @@ def main():
         ng += ag_ + ug
         nregels += aregels + uregels
         zg, zregels = zoom_zetten(kort_items, dag_grens)
+        tg, tregels = contact_zetten(kort_items, dag_grens)
+        ag.log(f"dag {vandaag}", "schrijf", f"telefoon: {tg} nummer(s) bovenaan gezet", "\n".join(tregels))
         ag.log(f"dag {vandaag}", "schrijf", f"titels: {ng} rechtgezet uit vrije tekst; link-notitie: {zg} gezet",
                "\n".join(nregels + zregels))
         if zregels or [r for r in nregels if "VOORSTEL" in r]:
