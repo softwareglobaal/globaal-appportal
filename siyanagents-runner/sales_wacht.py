@@ -249,8 +249,8 @@ def controle_facturatie(signalen):
     try:
         data = haal("/facturatie")
     except urllib.error.HTTPError as e:
-        if e.code == 503:
-            return  # koppeling (nog) niet ingesteld of platform even weg: geen signaal
+        if e.code in (404, 503):
+            return  # eindpunt nog niet live, koppeling niet ingesteld of platform even weg
         raise
     for d in data.get("diensten", []):
         gaten = d.get("gaten") or []
