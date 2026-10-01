@@ -2095,7 +2095,10 @@ def reistijd_zetten(items, alleen_dag=None):
         # het gesprek met Rem Braspenning, pas om 11:30 de brasserie in.
         # Mehdi, 29-09-2026: "ik moet de afspraken hiervoor in de auto doen zodat ik op tijd daar ben". Staat 'in de auto'
         # in de afspraak, dan doet hij de gesprekken onderweg: ik vervroeg de aankomst niet en waarschuw niet (FR-70).
-        in_de_auto = "in de auto" in f"{a.get('titel') or ''} {a.get('omschrijving') or ''}".lower()
+        # 'In de auto' betekent geparkeerd in de auto, ter plaatse, niet rijdend: een extern Zoom-gesprek kan nooit
+        # onderweg. FR-70 las het als rijdend; Mehdi, 01-10-2026: "extern kan ik niet rijden en op zoom zijn ... ik kan
+        # onmogelijk om 19:30 vertrekken en ook in de auto zitten en niet rijden en op tijd komen" (FR-82).
+        in_de_auto = False
         aankomst, reden_aankomst = start, None
         for _ in range(0 if in_de_auto else 3):
             vertrek = aankomst - timedelta(minutes=heen)

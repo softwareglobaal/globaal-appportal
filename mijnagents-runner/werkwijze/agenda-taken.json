@@ -1,5 +1,5 @@
 {
- "versie": "4.33",
+ "versie": "4.34",
  "datum": "2026-09-30",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -802,7 +802,7 @@
   "google_alleen_dichtbij": "Google live verkeer alleen voor ritten die binnen 48 uur vertrekken; verder vooruit de gratis routeplanner maal de filefactor. Gezien 23-09-2026: de dagteller stond om de middag al op 100/100 door verre ritten, zodat de rit van morgen naar Genk geen echt verkeer kreeg",
   "adres_met_naam": "een adres met een naam vooraan ('Brasserie 360°, Stadsplein 16, 3600 Genk') wordt gezocht zonder die naam als het anders niet lukt",
   "handmatige_thuisrit": "een zelf ingetikte rit naar huis ('Rijden naar huis') telt ook als rit naar huis in de keten",
-  "gesprekken_in_de_auto": "Een extern gesprek tijdens de rit doet Mehdi geparkeerd, behalve als 'in de auto' in de afspraak staat: dan vertrekt de rit gewoon op tijd en belt hij onderweg (29-09-2026).",
+  "gesprekken_in_de_auto": "'In de auto' betekent geparkeerd in de auto, ter plaatse, nooit rijdend. Een extern (Zoom-)gesprek gebeurt nooit onderweg: de aankomst schuift naar voor het gesprek (Mehdi, 01-10-2026; FR-70 las het verkeerd, FR-82).",
   "meting_boven_schatting": "een schatting (gratis routeplanner x filefactor) overschrijft nooit een rit die met live verkeer van Google gemeten is. Gezien 23-09-2026: de rit naar Genk schoof zo van 10:00 naar 09:45 toen de dagteller op was",
   "te_krap": "past de rit niet tussen twee afspraken, dan toont hij de echte rijtijd en dus de late aankomst (geen blok van nul minuten), en komt 'Te krap: je komt te laat' op het bord (FR-37)",
   "rit_volgt_afspraak": "de omschrijving van een rit volgt de titel van zijn afspraak; verhuist de afspraak naar een andere agenda (werk naar privé), dan verhuist de rit mee (FR-25, FR-28)",

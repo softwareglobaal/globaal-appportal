@@ -948,10 +948,10 @@ check("een gesprek dat bij vertrek al loopt doet hij geparkeerd ter plaatse; 'KB
       and _vp81[0] == "KBC" and "Ladeuzeplein 15, 3000 Leuven" in _vp81[1]["adres"] and W.vaste_plek("kbcx") == (None, None)
       and _c81 and _c81[1] == "016 31 40 00", str((_vp81, _c81)))
 
-# 'In de auto': gesprekken onderweg, de aankomst schuift niet (FR-70)
+# 'In de auto' is geparkeerd ter plaatse, nooit rijdend: een extern gesprek schuift de aankomst altijd naar voren (FR-70, FR-82)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
-check("staat 'in de auto' in de afspraak, dan schuift de aankomst niet voor gesprekken onderweg",
-      "for _ in range(0 if in_de_auto else 3):" in _src70 and "lopend = [] if in_de_auto else" in _src70)
+check("een extern gesprek gebeurt nooit rijdend, ook niet met 'in de auto' in de afspraak",
+      "in_de_auto = False" in _src70 and "for _ in range(0 if in_de_auto else 3):" in _src70)
 
 # De dagcontrole: de dag zoals Mehdi hem ziet, over alle agenda's heen (FR-71)
 import dagcontrole as _D

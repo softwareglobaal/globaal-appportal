@@ -20,7 +20,7 @@ snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python",
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
 assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.25"
+VERSIE = "2.26"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -249,7 +249,7 @@ nooit uit een titel. Komt het adres uit de projectmap, dan zet de agent het ook 
 spitsfactor. Plus {snap['buffer']} minuten buffer, naar boven afgerond op vijf. Een schatting overschrijft nooit een echte meting.
 <b>Google heeft een hard plafond van {snap['plafond']} aanvragen per dag</b>; dat gaat alleen omhoog in de code.</li>
 <li><b>De dagcontrole.</b> Na elke ronde en elke wijziging kijkt de agent elke dag na zoals Mehdi hem ziet: ritten die overlappen of door een afspraak lopen, een omweg langs huis, twee plaatsen tegelijk, een botsing met Lara, !! niet vooraan, een klant zonder naam. Wat Mehdi moet beslissen, wordt een vraag in de agenda en een oproep.</li>
-<li><b>'In de auto':</b> staat dat in een buitenafspraak, dan doet Mehdi de gesprekken ervoor onderweg en vertrekt de rit gewoon op tijd.</li>
+<li><b>'In de auto'</b> betekent geparkeerd in de auto, ter plaatse, nooit rijdend. Een klantgesprek op Zoom gebeurt nooit onderweg: je komt aan voor het begint en doet het geparkeerd.</li>
 <li><b>Tussendoor naar huis alleen als het kan:</b> minstens 90 minuten tussen twee buitenafspraken, en na de rit naar huis en terug nog minstens 30 minuten thuis, gerekend vanaf het einde van de gesprekken die Mehdi eerst geparkeerd doet; anders rechtstreeks van de ene naar de andere. Een buitenafspraak zonder adres krijgt geen rit; de volgende rit vertrekt van de laatste plek die de agent kent.</li>
 <li><b>Eigen ritten ruimt de agent zelf op.</b> Een rit die hij zette en die niet meer klopt (de afspraak is weg of verzet, of er volgt nog een buitenafspraak), haalt hij zelf weg. Een afspraak of een rit die Mehdi zelf zette, raakt hij nooit aan.</li>
 <li><b>Afspraak is afspraak:</b> elke buitenafspraak krijgt meteen haar rit heen en terug, tot een jaar vooruit; de agenda van Lara het hele schooljaar.</li>

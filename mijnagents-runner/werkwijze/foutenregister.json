@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.15",
+ "versie": "3.16",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -210,6 +210,14 @@
    "les": "Wat Mehdi onderweg nodig heeft (telefoon, adres, projectnummer), staat in de afspraak zelf; zoeken kan hij niet terwijl hij rijdt.",
    "uit": [
     "FR-77"
+   ]
+  },
+  {
+   "id": "L27",
+   "les": "Een uitzondering mag een harde regel van Mehdi nooit opzijzetten. Twijfel ik hoe een woord bedoeld is, dan kies ik de lezing die de harde regel respecteert.",
+   "uit": [
+    "FR-70",
+    "FR-82"
    ]
   }
  ],
@@ -1499,11 +1507,11 @@
    "waarom_niet_gezien": "De regel 'een extern gesprek tijdens de rit doe je geparkeerd' (23-09) had geen uitzondering.",
    "oorzaak": "Geen manier om te zeggen dat Mehdi onderweg belt.",
    "soort_oorzaak": "werkwijze",
-   "oplossing": "Staat 'in de auto' in de titel of omschrijving van de buitenafspraak, dan vertrekt de rit gewoon op tijd en tellen gesprekken onderweg niet mee.",
+   "oplossing": "Staat 'in de auto' in de titel of omschrijving van de buitenafspraak, dan vertrekt de rit gewoon op tijd en tellen gesprekken onderweg niet mee. VERKEERD BEGREPEN: 'in de auto' betekent geparkeerd ter plaatse, niet rijdend; vervangen door FR-82 (01-10-2026).",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
-    "tekst": "staat 'in de auto' in de afspraak, dan schuift de aankomst niet voor gesprekken onderweg"
+    "tekst": "een extern gesprek gebeurt nooit rijdend"
    },
    "controle": [],
    "status": "opgelost"
@@ -1714,6 +1722,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een gesprek dat bij vertrek al loopt doet hij geparkeerd ter plaatse"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-82",
+   "datum": "01-10-2026",
+   "gevonden_door": "Mehdi ('ik heb je gezegd extern kan ik niet rijden en op zoom zijn! dus ik kan onmogelijk om 19:30 vertrekken en ook in de auto zitten en niet rijden en op tijd komen')",
+   "fout": "Voor Nelleke Stropke (01-10 20:00, Bertem) vertrok de rit om 19:30, tijdens het Zoom-gesprek met Levi Sonck (19:30-20:00); Tim De Bondt om 19:00 ging ervoor. Mehdi zou rijdend moeten zoomen.",
+   "gevolg": "Een onmogelijke planning: rijden en tegelijk een klant op Zoom.",
+   "waarom_niet_gezien": "FR-70 las 'ik moet de afspraken hiervoor in de auto doen zodat ik op tijd daar ben' als rijdend en schakelde de regel 'extern alleen geparkeerd' (23-09) uit zodra 'in de auto' in de afspraak stond.",
+   "oorzaak": "Een woord van Mehdi verkeerd gelezen, en een uitzondering gebouwd die een harde regel opzijzette.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "'In de auto' betekent geparkeerd in de auto, ter plaatse. Een extern gesprek gebeurt nooit rijdend: de aankomst schuift altijd naar voor het gesprek. Voor 01-10: vertrek 18:30, Tim en Levi geparkeerd in Bertem, Nelleke om 20:00.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een extern gesprek gebeurt nooit rijdend, ook niet met 'in de auto' in de afspraak"
    },
    "controle": [],
    "status": "opgelost"
