@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.17",
+ "versie": "3.18",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1771,6 +1771,24 @@
     "tegen_dagmarker",
     "op_vrije_dag"
    ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-84",
+   "datum": "01-10-2026",
+   "gevonden_door": "Mehdi ('Er is een nieuwe afspraak op mijn kalender gekomen voor zaterdag, terwijl ik dacht dat ik zaterdag bezet had gezet')",
+   "fout": "Jordy Scheurmans (TKN-prospect, online) boekte op 30-09 via Calendly voor zaterdag 03-10 10:30, terwijl de hele dag 'geen afspraken' stond.",
+   "gevolg": "Een boeking op een dag die Mehdi had afgesloten.",
+   "waarom_niet_gezien": "De markering stond in Google op Beschikbaar (Google zet een hele-dag-item standaard zo), en Calendly telt alleen Bezet. De week Buitenland stond toevallig op Bezet en bleef leeg. Niemand keek naar die instelling.",
+   "oorzaak": "Een hele-dag-markering op Beschikbaar blokkeert Calendly niet.",
+   "soort_oorzaak": "bron",
+   "oplossing": "markeringen_bezet in elke volledige ronde, 180 dagen vooruit: een markering die alles afsluit ('geen afspraken', 'Buitenland') zet de agent op Bezet. 'Geen buiten afspraken' blijft vrij: online mag die dag. Buitenland sluit nu ook online af (Mehdi: geen online afspraken via de agenda vanuit het buitenland). Zaterdag 03-10 op 01-10 op Bezet gezet.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een markering die alles afsluit ('geen afspraken', Buitenland) zet de agent op Bezet"
+   },
+   "controle": [],
    "status": "opgelost"
   }
  ]

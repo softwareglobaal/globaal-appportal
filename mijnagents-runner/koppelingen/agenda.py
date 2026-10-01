@@ -116,6 +116,8 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 "_gewijzigd": ev.get("updated", ""),
                 # het merk dat de Agendawacht achterlaat (welke kleur zette hij zelf)
                 "_merk": (ev.get("extendedProperties") or {}).get("private") or {},
+                # 'Beschikbaar' in Google (transparent): Calendly telt het niet als bezet (FR-84)
+                "_vrij": ev.get("transparency") == "transparent",
             })
     uit.sort(key=lambda x: x.get("start", ""))
     return uit

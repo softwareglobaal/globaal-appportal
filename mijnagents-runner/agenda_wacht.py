@@ -393,10 +393,29 @@ class DagMarkering(Exception):
 DAG_MARKERINGEN = (
     (re.compile(r"geen\s+buiten\s*-?\s*afspraken", re.I), "buiten"),
     (re.compile(r"geen\s+auto", re.I), "buiten"),
-    (re.compile(r"\bbuitenland\b", re.I), "buiten"),
+    # in het buitenland: geen buitenafspraken en ook geen online boekingen via de agenda (Mehdi, 01-10-2026)
+    (re.compile(r"\bbuitenland\b", re.I), "alles"),
     (re.compile(r"^\W*(?:mehdi\s*:\s*)?geen\s+afspraken\W*$", re.I), "alles"),
 )
 _MARKERS = {}
+
+
+def markeringen_bezet(items, tok=None):
+    """Een markering die alles afsluit ('geen afspraken', 'Buitenland') moet in Google op Bezet staan, anders telt Calendly
+    ze niet. Google zet een hele-dag-item standaard op Beschikbaar. Gezien 01-10-2026: zaterdag 03-10 'geen afspraken'
+    stond op Beschikbaar en Jordy Scheurmans boekte via Calendly om 10:30 (FR-84). Geeft de lijst die ik op Bezet zette."""
+    gezet = []
+    for a in items:
+        if not a.get("hele_dag") or not a.get("_vrij") or a.get("_archief"):
+            continue
+        if any(wat == "alles" and patroon.search(a.get("titel") or "") for patroon, wat in DAG_MARKERINGEN):
+            try:
+                _patch(a, {"transparency": "opaque"}, tok or agenda._toegang())
+                a["_vrij"] = False
+                gezet.append(f"{a['start'][:10]} {a['titel'][:50]}: op Bezet gezet, zodat Calendly die dag niet boekt")
+            except Exception as e:  # noqa: BLE001
+                gezet.append(f"{a['start'][:10]} {a['titel'][:50]}: niet op Bezet gezet ({type(e).__name__})")
+    return gezet
 
 
 def markeringen_uit(items, dag):
@@ -3112,6 +3131,10 @@ def main():
         ng += ag_ + ug
         nregels += aregels + uregels
         zg, zregels = zoom_zetten(kort_items, dag_grens)
+        if not DAG_ARG:
+            mb = markeringen_bezet([x for x in afspraken(0, 180) if x.get("hele_dag") and not x.get("fout")])
+            if mb:
+                ag.log(f"dag {vandaag}", "schrijf", f"markeringen: {len(mb)} op Bezet gezet", "\n".join(mb))
         pg, pregels = projectnummers_zetten(kort_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"projectnummer: {pg} in de titel gezet", "\n".join(pregels))
         tg, tregels = contact_zetten(kort_items, dag_grens)

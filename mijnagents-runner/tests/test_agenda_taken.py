@@ -987,6 +987,24 @@ check("een hele-dag-markering is een stop: een buitenafspraak die dag kan niet z
       and _r83 == ["geweigerd", "gezet", "gezet", "gezet", "verzet geweigerd"] and _b83 == {("k", "tegen_dagmarker")}
       and "tegen_dagmarker" in _D83.VRAGEN, str((_mk83, _r83, _b83)))
 
+# Een markering die alles afsluit, staat op Bezet, anders boekt Calendly erdoor (FR-84)
+_o84 = (W._patch, W.agenda._toegang)
+_p84 = []
+W._patch = lambda a, body, tok, toch=False: _p84.append((a["id"], body))
+W.agenda._toegang = lambda: "t"
+try:
+    _m84 = W.markeringen_bezet([
+        {"id": "z", "hele_dag": True, "_vrij": True, "titel": "geen afspraken", "start": "2026-10-03", "einde": "2026-10-04", "kalender": W.WERKAGENDA},
+        {"id": "b", "hele_dag": True, "_vrij": True, "titel": "Mehdi: Buitenland", "start": "2026-10-04", "einde": "2026-10-12", "kalender": W.WERKAGENDA},
+        {"id": "l", "hele_dag": True, "_vrij": True, "titel": "!! Mehdi: Geen buiten afspraken Lara ophalen", "start": "2026-10-02", "einde": "2026-10-03", "kalender": W.WERKAGENDA},
+        {"id": "k", "hele_dag": True, "_vrij": False, "titel": "geen afspraken", "start": "2026-10-10", "einde": "2026-10-11", "kalender": W.WERKAGENDA},
+        {"id": "v", "hele_dag": True, "_vrij": True, "titel": "Afbetaling Vectorworks", "start": "2026-10-12", "einde": "2026-10-13", "kalender": W.WERKAGENDA}])
+finally:
+    W._patch, W.agenda._toegang = _o84
+check("een markering die alles afsluit ('geen afspraken', Buitenland) zet de agent op Bezet, zodat Calendly die dag niet boekt",
+      [x[0] for x in _p84] == ["z", "b"] and all(x[1] == {"transparency": "opaque"} for x in _p84) and len(_m84) == 2
+      and '"_vrij": ev.get("transparency") == "transparent"' in (HIER / "koppelingen" / "agenda.py").read_text(encoding="utf-8"), str((_p84, _m84)))
+
 # 'In de auto' is geparkeerd ter plaatse, nooit rijdend: een extern gesprek schuift de aankomst altijd naar voren (FR-70, FR-82)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("een extern gesprek gebeurt nooit rijdend, ook niet met 'in de auto' in de afspraak",
