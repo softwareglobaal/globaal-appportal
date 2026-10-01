@@ -1175,7 +1175,10 @@ op `hr` (075, 113) niet bij adres, bank en ID komen; het portaal krijgt hier
 niets en de AI-lagen lezen het niet. `hr_app` mag lezen, toevoegen en wijzigen,
 nooit verwijderen; op `personeel.pa_mutatie` alleen lezen en toevoegen, en een
 trigger weigert daar elke wijziging of wissing. Een nieuw veld in de app =
-een nieuwe migratie: `hr_app` heeft op de VM geen DDL-rechten.
+een nieuwe migratie: `hr_app` heeft op de VM geen DDL-rechten. Migratie 180 voegt
+"werkt ook voor" toe (`personeel.pa_dienstfirma`) en leesrecht voor `hr_app` op
+`kern.persoon_dienstfirma`, zodat de pagina ook de "diensten voor" uit de
+organisatie toont.
 
 ### 13.6 Factuurrouter in git/CI - `globaal-factuurrouter`
 De Factuurrouter (§6A) zit sinds de hernoeming ook in het fundament: repo
