@@ -122,7 +122,7 @@ def dagcontrole(items, dag):
         m = W.markering_tegen(a["titel"], dag, markers)
         if m:
             meld("op_vrije_dag" if any(t == m and wat == "alles" for t, wat in markers) else "tegen_dagmarker", a,
-                 f"'{m}' staat die hele dag, en toch staat dit gepland")
+                 f"{a['start'][11:16]} {a['titel'][:45]}: '{m}' staat die hele dag, en toch staat dit gepland")
     # 9. een klant waar Mehdi naartoe gaat zonder projectnummer, van welke firma ook (FR-80)
     for a in afspraken:
         info = W.lees_titel(a["titel"])
