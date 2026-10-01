@@ -7,7 +7,7 @@
 # tijdelijke map, doet een integrity_check en vergelijkt per tabel het aantal rijen met
 # de live databank (alleen lezend). De live databank en de back-up worden niet gewijzigd.
 # Verschillen zijn normaal voor tabellen die sinds de back-up groeiden; een tabel die in
-# de back-up ontbreekt of een mislukte integriteitscontrole is een fout.
+# de back-up ontbreekt wordt gemeld (nieuw sinds de kopie); een mislukte integriteitscontrole is een fout.
 # Aanleiding: nulmeting werfbezoekketen 01-10-2026, er was nooit een terugzetproef gedaan.
 set -eu
 
@@ -31,7 +31,9 @@ for paar in "werf:$HOME/appportal/werfverslag-data/werf.db" "mijnagents:$HOME/ap
         if b=$(sqlite3 "$WERK/$naam.db" "select count(*) from \"$tabel\";" 2>/dev/null); then
             echo "   $tabel: live $l, terugzet $b"
         else
-            echo "   FOUT $tabel ontbreekt in de back-up"; FOUT=1
+            # Een tabel die na de kopie bij een uitrol ontstond (bv. de werfbezoekregistratie), staat er pas
+            # in de volgende nachtkopie: melden, niet als mislukte terugzetting tellen (open punt O14).
+            echo "   let op $tabel staat niet in deze kopie (nieuw sinds de kopie?), live $l rijen"
         fi
     done
 done
