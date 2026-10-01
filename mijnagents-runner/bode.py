@@ -43,7 +43,7 @@ ZOOM_ENV = os.path.expanduser("~/pipedrive-won-deals/.env")
 # Zonder aantal (N10): zolang het venster dicht is en er geen sjabloon is, staat deze nood open.
 WA_NOOD = ("WhatsApp mag je pas schrijven na een bericht van jou: stuur iets naar het agentennummer "
            "(UNABO Assistant, +32 460 23 30 42); tot dan gaat het via Telegram")
-WA_KORT = ("start", "/start", "test", "hallo", "hoi")
+WA_KORT = ("start", "/start", "test", "hallo", "hoi", "hey", "hi", "hello", "goeiedag", "goedemorgen")
 
 
 def laad_env(pad):
