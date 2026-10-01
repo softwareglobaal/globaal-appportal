@@ -1943,7 +1943,16 @@ def reistijd_zetten(items, alleen_dag=None):
                     terug = vrije_rijtijd_min(thuis, c2) * filefactor(s_volgend) + BUFFER_MIN if c2 and thuis else None
                 except Exception:  # noqa: BLE001
                     heen = terug = None
-                if not via_huis_zinvol((s_volgend - e_).total_seconds() / 60, heen, terug):
+                # een extern gesprek doet hij geparkeerd voor hij vertrekt; dat schuift het vertrek naar huis op (FR-78,
+                # gezien 01-10-2026: na Belauto Mortsel om 14:00 eerst Elena en Lien tot 14:50, dan bleef er thuis niets over)
+                vertrek_thuis = e_
+                if heen is not None:
+                    for _ in range(3):
+                        tijdens = [z for z in externe_gesprekken(vertrek_thuis, vertrek_thuis + timedelta(minutes=heen)) if z[1] > vertrek_thuis]
+                        if not tijdens:
+                            break
+                        vertrek_thuis = max(z[1] for z in tijdens)
+                if not via_huis_zinvol((s_volgend - vertrek_thuis).total_seconds() / 60, heen, terug):
                     regels.append(f"{a_['start'][:16]} {a_['titel'][:40]}: geen tijd om tussendoor naar huis te gaan, "
                                   f"rechtstreeks naar {a_volgend['titel'][:30]}")
                     bureau = None
@@ -2193,6 +2202,20 @@ def reistijd_zetten(items, alleen_dag=None):
                     reistijden.remove(oud_terug) if oud_terug in reistijden else None
                     regels.append(f"{a['start'][:16]} {a['titel'][:44]}: mijn oude rit naar huis weggehaald, "
                                   f"er komt nog een buitenafspraak na")
+                # ook een terugrit van mij die nog op het oude einde staat (gezien 01-10-2026: Lara ophalen eindigde om
+                # 16:10 in plaats van 17:00, en 'De Speelkriebel -> thuis' om 17:00 bleef staan, FR-78)
+                for y in [y for y in reistijden if y is not oud_terug and y["kalender"] == a["kalender"] and _mijn(y)
+                          and y["start"][:10] == a["start"][:10] and f"Reistijd na: {a['titel']} (" in (y.get("omschrijving") or "")]:
+                    if _eigen_rit_weg(y, tok):
+                        reistijden.remove(y)
+                        regels.append(f"{a['start'][:16]} {a['titel'][:44]}: mijn oude terugrit (ander einde) weggehaald")
+            if is_laatste:
+                # precies één terugrit: een tweede eigen terugrit voor deze afspraak (op een oud einde) gaat weg (FR-78)
+                for y in [y for y in reistijden if y is not x and y["kalender"] == a["kalender"] and _mijn(y)
+                          and y["start"][:10] == a["start"][:10] and f"Reistijd na: {a['titel']} (" in (y.get("omschrijving") or "")]:
+                    if _eigen_rit_weg(y, tok):
+                        reistijden.remove(y)
+                        regels.append(f"{a['start'][:16]} {a['titel'][:44]}: dubbele terugrit weggehaald")
             if x:
                 al += 1
                 if bijwerken(x, terug_start, terug_start + timedelta(minutes=terug), uitleg_t, f"🚗 Reistijd: {plaats} → thuis", []):

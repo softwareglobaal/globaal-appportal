@@ -892,6 +892,13 @@ check("bij twee namen ('Koen ... & Laura ...') zoekt de agent elke naam apart",
 check("alleen een echt nummer ('onbekend' in Pipedrive telt niet), eerst uit vroegere afspraken van dezelfde persoon",
       _n77 and _n77[1] == "0499700230" and _n77[2] == "agenda 29-09-2026" and _o77c is None, str((_n77, _o77c)))
 
+# Langs huis telt de geparkeerde gesprekken mee; een oude terugrit van een verschoven afspraak gaat weg (FR-78)
+_src78 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("langs huis rekent eerst de geparkeerde gesprekken, en een oude terugrit op een ander einde haalt de agent weg",
+      "via_huis_zinvol((s_volgend - vertrek_thuis).total_seconds() / 60, heen, terug)" in _src78
+      and "mijn oude terugrit (ander einde) weggehaald" in _src78 and "dubbele terugrit weggehaald" in _src78
+      and not W.via_huis_zinvol(70, 55, 15))
+
 # 'In de auto': gesprekken onderweg, de aankomst schuift niet (FR-70)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("staat 'in de auto' in de afspraak, dan schuift de aankomst niet voor gesprekken onderweg",

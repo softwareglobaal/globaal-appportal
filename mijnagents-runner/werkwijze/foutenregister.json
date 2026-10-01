@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.11",
+ "versie": "3.12",
  "datum": "30-09-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1642,6 +1642,24 @@
    "controle": [
     "zonder_telefoon"
    ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-78",
+   "datum": "01-10-2026",
+   "gevonden_door": "Claude, dagcontrole van 02-10 na het zetten van Belauto, de post en MegaMobile",
+   "fout": "Voor 02-10 rekende de agent na Belauto Mortsel langs huis ('Mortsel -> thuis' 14:50-15:55) terwijl 'thuis -> De Speelkriebel' om 15:45 vertrok, en de oude terugrit van Lara (17:00, van toen ophalen tot 17:00 liep) bleef staan naast de rit naar Mechelen.",
+   "gevolg": "Overlappende ritten en een omweg langs huis die niet bestaat.",
+   "waarom_niet_gezien": "via_huis_zinvol (FR-75) rekende vanaf het einde van de afspraak, niet vanaf het einde van de gesprekken die Mehdi eerst geparkeerd doet. En een terugrit werd alleen herkend als hij op het huidige einde vertrok.",
+   "oorzaak": "Het vertrek naar huis hield geen rekening met geparkeerde gesprekken; oude terugritten op een ander einde werden niet opgeruimd.",
+   "soort_oorzaak": "code",
+   "oplossing": "Langs huis: het vertrek schuift eerst op tot na de externe gesprekken die tijdens de rit zouden vallen, dan pas de 30-minutenregel. Elke eigen terugrit voor dezelfde afspraak die niet de juiste is (ander einde, of de afspraak is niet meer de laatste), haalt de agent weg.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "langs huis rekent eerst de geparkeerde gesprekken"
+   },
+   "controle": [],
    "status": "opgelost"
   }
  ]
