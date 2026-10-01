@@ -2114,11 +2114,18 @@ def reistijd_zetten(items, alleen_dag=None):
             # plaatse; vertrekken mag na een vorig gesprek, zonder buffer als het moet (FR-81, gezien 01-10-2026: KBC
             # Ladeuze 10:30, Benny om 10:00, en de rit vertrok om 10:10, midden in het gesprek)
             nieuwe = lopend[0][0]
-            h2, f2 = rijtijd_min(vertrek_van, doel, nieuwe - timedelta(minutes=heen))
+            for _ in range(3):
+                # past de rit niet tussen een vorig gesprek en dit (ook zonder buffer), kom dan voor dat vorige aan
+                # (gezien 01-10-2026: Tim 19:00-19:20 en Levi 19:30, beide op Zoom, voor Nelleke om 20:00 in Bertem)
+                h2, f2 = rijtijd_min(vertrek_van, doel, nieuwe - timedelta(minutes=heen))
+                vorig = [z for z in externe_gesprekken(nieuwe - timedelta(minutes=h2), nieuwe) if z[0] < nieuwe]
+                if not vorig or nieuwe - max(z[1] for z in vorig) >= timedelta(minutes=h2 - BUFFER_MIN):
+                    break
+                nieuwe = min(z[0] for z in vorig)
             ervoor = [z[1] for z in externe_gesprekken(nieuwe - timedelta(minutes=h2), nieuwe) if z[0] < nieuwe]
             vroegst = max([t for t in ervoor + [vorige_einde] if t] or [nieuwe - timedelta(minutes=h2)])
             if nieuwe - vroegst >= timedelta(minutes=h2 - BUFFER_MIN):
-                aankomst, reden_aankomst, heen, fh = nieuwe, lopend[0][2], h2, f2
+                aankomst, reden_aankomst, heen, fh = nieuwe, next((z[2] for z in externe_gesprekken(nieuwe, nieuwe + timedelta(minutes=1))), lopend[0][2]), h2, f2
                 if vroegst > nieuwe - timedelta(minutes=h2):
                     vorige_einde = vroegst
                 lopend = []

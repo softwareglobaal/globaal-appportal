@@ -945,6 +945,7 @@ _vp81 = W.vaste_plek("!! Mehdi: [ALGE-LB] KBC ophalen")
 _c81 = W.contact_van({"titel": "!! Mehdi: [ALGE-LB] KBC ophalen", "locatie": ""}, W.lees_titel("!! Mehdi: [ALGE-LB] KBC ophalen"))
 check("een gesprek dat bij vertrek al loopt doet hij geparkeerd ter plaatse; 'KBC' is altijd KBC Ladeuze, met adres en telefoon",
       "nieuwe = lopend[0][0]" in _src81 and "if nieuwe - vroegst >= timedelta(minutes=h2 - BUFFER_MIN):" in _src81
+      and "nieuwe = min(z[0] for z in vorig)" in _src81
       and _vp81[0] == "KBC" and "Ladeuzeplein 15, 3000 Leuven" in _vp81[1]["adres"] and W.vaste_plek("kbcx") == (None, None)
       and _c81 and _c81[1] == "016 31 40 00", str((_vp81, _c81)))
 
