@@ -1364,9 +1364,13 @@ compose-service `app-organisatiekosten` op **poort 3130**, nginx-template
 `apps.yaml` + `scripts/app-registreren.py organisatiekosten`, groep gevuld met
 `scripts/organisatiekosten-groep-vullen.py`.
 
-- **Toegang:** `admin` en `db-alles` (Siyan, Mehdi, Angela) zien alles. Later per
-  firma een groep `db-<code>` (bv. `db-tknb`); de app filtert dan aan de
-  serverkant welke firma iemand ziet.
+- **Toegang:** enkel `db-alles` (Siyan, Mehdi, Angela). Bewust geen `admin`: het
+  platform toont individuele lonen (beslissing Siyan 02-10-2026). De app toetst dat
+  zelf af, los van de binding in Authentik.
+- **Koers:** de app haalt elke maand de aankoopkoers van DSB (www.dsb.sr) op
+  (achtergrondtaak, elke 6 uur tot die van de lopende maand er is) en zet ze als
+  afspraak. Lukt dat niet, dan staat er een fout op de pagina Afspraken met een
+  handmatige invoer. Uitzetten: `KOERS_OPHALEN=0`.
 - **Database:** schema `doorbelasting`, eigendom van rol `doorbelasting_app`. De
   app maakt haar tabellen zelf (idempotente `schema.sql`) en vult ze bij de
   eerste start uit `data/bron/` in de app-repo (momentopname van kern en van de

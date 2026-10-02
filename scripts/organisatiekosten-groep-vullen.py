@@ -8,9 +8,11 @@ overgeslagen.
 
 db-alles geeft volledige toegang: het groepsoverzicht en alle firma's. Later
 komt er per firma een groep (db-tknb, ...), die enkel die firma laat zien.
-Siyan staat er expliciet in: niet iedereen met volle toegang zit in admin.
+Siyan staat er expliciet in. Bindingen van andere groepen (zoals admin) gaan weg:
+het platform toont individuele lonen.
 """
 from authentik.core.models import Application, Group, User
+from authentik.policies.models import PolicyBinding
 
 GROEP = "db-alles"
 LEDEN = ("siyan", "angela", "mehdi")
@@ -18,9 +20,16 @@ LEDEN = ("siyan", "angela", "mehdi")
 groep, gemaakt = Group.objects.get_or_create(name=GROEP)
 print(f"groep {GROEP}: {'aangemaakt' if gemaakt else 'bestond al'}")
 
-if Application.objects.filter(slug="organisatiekosten").first() is None:
+app = Application.objects.filter(slug="organisatiekosten").first()
+if app is None:
     raise SystemExit("tegel organisatiekosten bestaat nog niet, "
                      "draai eerst scripts/app-registreren.py organisatiekosten")
+
+# Enkel db-alles mag de tegel zien: er staan individuele lonen in (02-10-2026).
+for b in PolicyBinding.objects.filter(target=app):
+    if b.group and b.group.name != GROEP:
+        print(f"   binding {b.group.name}: verwijderd")
+        b.delete()
 
 for naam in LEDEN:
     u = User.objects.filter(username=naam).first()
