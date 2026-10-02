@@ -1,6 +1,6 @@
 {
- "versie": "4.37",
- "datum": "2026-09-30",
+ "versie": "5.0",
+ "datum": "2026-10-02",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
   {
@@ -54,46 +54,48 @@
   }
  ],
  "titelconventie": {
-  "vorm": "!! Mehdi: [FIRMA-SOORT] TYPE nummer - klant, straat nummer, postcode gemeente",
-  "voorbeeld": "!! Mehdi: [HARC-KB] WB 2310 - werfbezoek Peeters, Dorpstraat 5, 2800 Mechelen",
+  "vorm": "!! Mehdi: [FF-SS] TT nummer - klant, straat nummer, postcode gemeente   (FF firma, SS soort, TT opdracht: telkens twee letters)",
+  "voorbeeld": "!! Mehdi: [UB-KB] BS 46118 - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken",
   "soorten": {
-   "AB": "aannemer buiten",
-   "AO": "aannemer online",
-   "B2B": "professioneel extern, wij nog geen klant",
-   "IN": "intern",
    "KB": "klant buiten",
+   "PB": "prospect buiten (plaatsbezoek)",
    "KO": "klant online",
+   "PO": "prospect online",
    "LB": "leverancier buiten (wij kopen)",
    "LO": "leverancier online (wij kopen)",
-   "PB": "prospect buiten (plaatsbezoek)",
-   "PO": "prospect online"
+   "IN": "intern",
+   "AB": "aannemer buiten",
+   "AO": "aannemer online",
+   "XB": "extern professioneel buiten, wij nog geen klant",
+   "XO": "extern professioneel online, wij nog geen klant"
   },
   "types": {
    "WB": "werfbezoek",
-   "OPL": "oplevering",
-   "PLB": "plaatsbeschrijving",
-   "SCN": "3D-scan",
-   "EPB": "EPB",
-   "VC": "veiligheidscoördinatie",
+   "PL": "plaatsbezoek",
+   "PS": "plaatsbeschrijving",
+   "SC": "scanning, 3D-scan",
    "BS": "barsten en scheuren",
-   "STA": "stabiliteit",
-   "SD": "schetsontwerp",
-   "OPM": "opmeting",
-   "VOPL": "voorlopige oplevering",
-   "DOPL": "definitieve oplevering",
-   "VEN": "ventilatie, ventilatiemeting",
-   "BDT": "blowerdoortest",
-   "VERG": "vergunning of melding zonder architect",
+   "ST": "stabiliteit",
+   "EP": "EPB",
+   "VC": "veiligheidscoördinatie",
+   "OP": "oplevering",
+   "VO": "voorlopige oplevering",
+   "DO": "definitieve oplevering",
+   "OM": "opmeting",
+   "VE": "ventilatie, ventilatiemeting",
+   "BD": "blowerdoortest",
+   "VG": "vergunning of melding zonder architect",
    "FW": "functiewijziging",
-   "REG": "regularisatie",
-   "REN": "3D-rendering",
+   "RG": "regularisatie",
+   "RD": "3D-rendering",
    "LM": "landmeter: opmeting, afpaling, muurovername",
-   "DRA": "drafting, plannen tekenen of digitaliseren",
-   "MST": "meetstaat",
+   "DR": "drafting, plannen tekenen of digitaliseren",
+   "MT": "meetstaat",
+   "SD": "schetsontwerp",
    "KM": "kennismaking",
-   "OFB": "offertebespreking",
-   "BUN": "bundel van meerdere diensten",
-   "AI+AT": "AI en automatisering (interne bespreking)"
+   "OB": "offertebespreking",
+   "BU": "bundel van meerdere diensten",
+   "AI": "AI en automatisering (interne bespreking)"
   },
   "tekens": {
    "!!": "buiten, reistijd nodig. Staat altijd helemaal vooraan, voor de naam; alleen VR gaat er nog voor (Mehdi, 28-09-2026)",
@@ -111,24 +113,71 @@
    "PRIVE": "prive"
   },
   "niet_firma": {
-   "PRIVE": "privé van Mehdi"
+   "PR": "privé van Mehdi",
+   "AL": "algemeen, geen firma",
+   "LA": "Lara (op haar eigen agenda)"
   },
   "oude_codes": {
-   "HA": "HARC",
-   "UNABO": "UNAB",
-   "HB": "HARM",
-   "HARMONIEBOUW": "HARM",
-   "CONTRAX": "CONT",
-   "ENERGIE": "ENEF",
-   "EE": "ENEF",
-   "TKN": "TKNB",
-   "ELEVAIT": "ELEV"
+   "firma": {
+    "HARC": "HA",
+    "UNAB": "UB",
+    "UNABO": "UB",
+    "TKNB": "TK",
+    "TKN": "TK",
+    "ENEF": "EE",
+    "ENERGIE": "EE",
+    "ELEV": "EL",
+    "ELEVAIT": "EL",
+    "HARM": "HB",
+    "HARMONIEBOUW": "HB",
+    "CONT": "CX",
+    "CONTRAX": "CX",
+    "CTX": "CX",
+    "HINV": "HI",
+    "MELO": "ME",
+    "HDSI": "DI",
+    "HDSS": "DS",
+    "BFUT": "BF",
+    "CORE": "CB",
+    "ENST": "ES",
+    "MEDI": "MS",
+    "ORVA": "OR",
+    "QOPP": "QP",
+    "ZIDI": "ZC",
+    "ALGE": "AL",
+    "PRIVE": "PR",
+    "LARA": "LA"
+   },
+   "opdracht": {
+    "OPL": "OP",
+    "PLB": "PS",
+    "SCN": "SC",
+    "EPB": "EP",
+    "STA": "ST",
+    "OPM": "OM",
+    "VOPL": "VO",
+    "DOPL": "DO",
+    "VEN": "VE",
+    "BDT": "BD",
+    "VERG": "VG",
+    "REG": "RG",
+    "REN": "RD",
+    "DRA": "DR",
+    "MST": "MT",
+    "OFB": "OB",
+    "BUN": "BU",
+    "AI+AT": "AI"
+   },
+   "soort": {
+    "B2B": "XB (buiten) of XO (online), alleen als dat vaststaat"
+   },
+   "uitleg": "alleen nog leesbaar; geschreven wordt de nieuwe code (02-10-2026). Vervangt de vierletterregel van 21-09-2026."
   },
   "oude_termen_in_vrije_tekst": {
    "EE": "Energie Efficiënt (ENEF); Mehdi schreef dat los in titels zoals 'AI & EE'"
   },
   "firma_afleiden": "staat er geen firmacode in een interne titel, dan kijkt de agent welke firma's de genoemde mensen gemeen hebben volgens 'diensten voor'. Is dat er precies een, dan stelt hij die voor. Zijn het er meer, dan noemt hij ze allebei en vraagt hij het",
-  "firma_afleiden_uitgebreid": "staat er geen firmacode, dan stelt de agent er een voor: een projectnummer dat in de H-Architects-projectmap staat -> [HARC]; een leverancier uit externe-relaties (boekhouder Nadien/Nadine, Wally) -> [ALGE]; anders de firma van de genoemde personen via 'diensten voor' op organisatie.globaal.be",
+  "firma_afleiden_uitgebreid": "staat er geen firmacode, dan stelt de agent er een voor: een projectnummer dat in de H-Architects-projectmap staat -> [HA]; een leverancier uit externe-relaties (boekhouder Nadien/Nadine, Wally) -> [AL]; anders de firma van de genoemde personen via 'diensten voor' op organisatie.globaal.be",
   "markers": {
    "!!": "buiten",
    "??": "nog niet bevestigd, geel",
@@ -140,50 +189,53 @@
   "projectnummer_ha": "Projectnummers van H-Architects zijn JJNN: JJ is het jaar (25 = 2025, 26 = 2026), NN het volgnummer van dat jaar (2505 is het vijfde project van 2025). Zo nummert alleen H-Architects; de andere firma's hebben een eigen benaming. Een nummer met een projectmap is een klant, want die map ontstaat bij de ondertekening (A13). Mehdi, 24-09-2026 (FR-47)",
   "klant_bron": "de klant van een project komt, in deze volgorde, uit het contractsysteem (contracten.globaal.be), het contract of de CLAUDE.md in de projectmap (H-A WORK), de agenda van vroeger, en pas dan uit Pipedrive. De salesmap is de verkoop, niet het dossier. Een gevonden naam wordt dertig dagen bewaard met zijn bron (mijnagents-data/klanten.json); een rijksregisternummer nooit (FR-46)",
   "activiteiten": {
-   "regel": "de titel zegt ook wat Mehdi gaat doen: [FIRMA-SOORT] ACTIVITEIT nummer - klant, adres. De firma zegt het vak, de activiteit wat er gebeurt",
+   "regel": "de titel zegt ook wat Mehdi gaat doen: [FF-SS] TT nummer - klant, adres. De firma zegt het vak, de activiteit wat er gebeurt",
    "HARC": {
     "WB": "werfbezoek",
-    "VOPL": "voorlopige oplevering",
-    "DOPL": "definitieve oplevering",
-    "OPL": "oplevering zonder meer",
-    "noot": "voorlopig alleen deze vier (Mehdi, 25-09-2026); de andere fases van het contract komen later"
+    "VO": "voorlopige oplevering",
+    "DO": "definitieve oplevering",
+    "OP": "oplevering zonder meer",
+    "noot": "voorlopig alleen deze, nu met plaatsbezoek (Mehdi, 25-09-2026); de andere fases van het contract komen later",
+    "PL": "plaatsbezoek"
    },
    "UNAB": {
-    "EPB": "EPB",
-    "VEN": "ventilatie, ventilatiemeting",
-    "BDT": "blowerdoortest",
-    "STA": "stabiliteit",
+    "EP": "EPB",
+    "VE": "ventilatie, ventilatiemeting",
+    "BD": "blowerdoortest",
+    "ST": "stabiliteit",
     "BS": "barsten en scheuren",
-    "VERG": "vergunning of melding zonder architect",
+    "VG": "vergunning of melding zonder architect",
     "FW": "functiewijziging",
-    "REG": "regularisatie",
-    "PLB": "plaatsbeschrijving",
-    "SCN": "3D-scan",
-    "REN": "3D-rendering",
+    "RG": "regularisatie",
+    "PS": "plaatsbeschrijving",
+    "SC": "scanning, 3D-scan",
+    "RD": "3D-rendering",
     "VC": "veiligheidscoördinatie",
     "LM": "landmeter: opmeting, afpaling, muurovername",
     "SD": "schetsontwerp",
-    "DRA": "drafting, plannen tekenen of digitaliseren",
-    "MST": "meetstaat",
+    "DR": "drafting, plannen tekenen of digitaliseren",
+    "MT": "meetstaat",
     "KM": "kennismaking",
-    "OFB": "offertebespreking",
-    "BUN": "bundel van meerdere diensten"
+    "OB": "offertebespreking",
+    "BU": "bundel van meerdere diensten",
+    "PL": "plaatsbezoek"
    },
    "intern": {
-    "AI+AT": "AI en automatisering: de interne besprekingen daarover, voor elke firma"
+    "AI": "AI en automatisering: de interne besprekingen daarover, voor elke firma"
    },
    "oude_codes": "OPM en de andere codes van voor 25-09 blijven geldig",
    "altijd_buiten": [
-    "BDT",
+    "BD",
     "BS",
-    "DOPL",
+    "DO",
     "LM",
-    "OPL",
-    "OPM",
-    "PLB",
-    "SCN",
-    "VEN",
-    "VOPL",
+    "OM",
+    "OP",
+    "PL",
+    "PS",
+    "SC",
+    "VE",
+    "VO",
     "WB"
    ],
    "hoe_de_agent": "hij leest de code (hoofdletters), en stelt ze voor uit de woorden in de titel (werfbezoek wordt WB, stabiliteit STA, AI of Automation bij intern AI+AT). Bij eigen afspraken zonder gasten en niet in een reeks vult hij ze zelf in; anders een voorstel op het bord",
@@ -198,6 +250,36 @@
     "UNAB, TKNB, ENEF": "het nummer van TKN-Buro, vooraan de projectmap in TKN BURO WORK/1 Projects/<jaar> (bv. 46118, vanaf 2026 zes cijfers zoals 260009)"
    },
    "agent": "projectnummers_zetten in elke ronde: zoekt het nummer op straat en huisnummer in de projectmap van de firma; één kandidaat of niets. Zonder gasten en buiten een reeks zet hij het zelf; anders een voorstel. De dagcontrole meldt een KB zonder nummer (FR-80)."
+  },
+  "codes_twee_letters": {
+   "sinds": "2026-10-02",
+   "mehdi": "'Ik wil de afkortingen van de bedrijven allemaal met twee letters hebben ... de types opdrachten ... ook' (goedgekeurd 02-10-2026)",
+   "bron_firmas": "organisatie.globaal.be, kern.firma.code_agenda (migratie 183). De interne code van vier letters (HARC, UNAB) blijft de sleutel voor boekhouding, Pipedrive en mappen; de contactcode (UN, HA) blijft voor de naamregel van contacten. UnaBo is UB in de agenda en UN in de contacten.",
+   "firmas": {
+    "HA": "H-Architects",
+    "UB": "UnaBo",
+    "TK": "TKN-Buro",
+    "EE": "Energie Efficiënt",
+    "EL": "Elevait NV",
+    "HI": "H-Invest",
+    "HB": "Harmoniebouw",
+    "CX": "Contrax",
+    "ME": "Melodie",
+    "DI": "High Design Studio (India)",
+    "DS": "High Design Studio (SU)",
+    "BF": "Build for Future",
+    "CB": "Corenbo",
+    "ES": "ENSTACO",
+    "MS": "Median Selections & Consultancy",
+    "OR": "Orvantis",
+    "QP": "Qoppa",
+    "ZC": "Zidi Construct",
+    "AL": "Algemeen (geen firma)",
+    "PR": "Privé",
+    "LA": "Lara (op haar eigen agenda)"
+   },
+   "regel": "Elke code heeft precies twee letters en komt maar één keer voor over firma's, soorten en opdrachten heen (test: tests/test_twee_letters.py, ook in de CI).",
+   "schrijven": "De agent schrijft alleen de nieuwe codes, ook bij een bronstoring (vaste lijst in agenda_wacht.py). Oude codes leest hij nog (oude_codes). Eigen afspraken zonder gasten zet hij zelf om; met gasten of van Calendly wordt het een voorstel; een reeks zet hij in de reeks zelf om."
   }
  },
  "kleuren": {
@@ -698,16 +780,17 @@
  "buiten": {
   "wat_bepaalt_het": "twee uitroeptekens vooraan, of een dienst die per definitie buiten gebeurt, of soort KB of PB",
   "diensten_altijd_buiten": [
-   "BDT",
+   "BD",
    "BS",
-   "DOPL",
+   "DO",
    "LM",
-   "OPL",
-   "OPM",
-   "PLB",
-   "SCN",
-   "VEN",
-   "VOPL",
+   "OM",
+   "OP",
+   "PL",
+   "PS",
+   "SC",
+   "VE",
+   "VO",
    "WB"
   ],
   "diensten_niet_automatisch": [
@@ -1135,7 +1218,8 @@
  "klantsoorten_voorstel": {
   "aanleiding": "Mehdi, 22-09-2026: B2B toont een externe professionele partij waar wij nog geen klant van zijn; bij een leverancier zijn we dat al. En bij ONZE klanten moeten we particulier en professioneel onderscheiden; professioneel is wie terugkerende opdrachten geeft",
   "gedaan": "B2B is nu een herkende soort met de kleur lavendel",
-  "nog_te_beslissen": "de splitsing van onze klanten: KB/KO blijft de particuliere klant, en een nieuwe code (voorstel ZB/ZO, van zakelijk) voor de professionele klant met terugkerende opdrachten, kleur blauwbes. Ook nog te beslissen of prospecten op dezelfde manier gesplitst worden"
+  "nog_te_beslissen": "de splitsing van onze klanten: KB/KO blijft de particuliere klant, en een nieuwe code (voorstel ZB/ZO, van zakelijk) voor de professionele klant met terugkerende opdrachten, kleur blauwbes. Ook nog te beslissen of prospecten op dezelfde manier gesplitst worden",
+  "noot_02_10": "ZB/ZO blijft gereserveerd voor dit voorstel; B2B heet sinds 02-10-2026 XB/XO, zodat de betekenis niet botst."
  },
  "hds": {
   "regel": "HDS-afspraken krijgen de code HDSS. HDSI is momenteel niet actief (Mehdi doet niets voor HDSI)",
@@ -1257,15 +1341,27 @@
  "vaste_plekken_uitleg": "Wat Mehdi met een woord bedoelt. Staat het woord in een titel zonder adres, dan rekent de agent de rit naar die plek, zet hij het adres in de afspraak (zonder gasten) en het telefoonnummer bovenaan. Plekken met een straal en wifi blijven in locatie.globaal.be.",
  "calendly_duur": {
   "per_firma": {
-   "TKN": 30,
-   "UNABO": 30
+   "TKNB": 30,
+   "UNAB": 30
   },
   "mehdi": "02-10-2026: TKN-Buro en UNABO voorzien allebei een halfuurtje, 'zodat het voor mij en de klant allemaal conform is'",
   "uitgevoerd": "02-10-2026: UNABO prospect EPB, Plaatsbeschrijving, Scanning, Veiligheidscoörd. en UNABO: Offerte van 20 naar 30 min (TKN stond al op 30)",
-  "controle": "De Calendlywacht meldt elk actief type van TKN of UNABO dat niet op 30 minuten staat."
+  "controle": "De Calendlywacht meldt elk actief type van TKN-Buro of UNABO dat niet op 30 minuten staat; de firma herkent hij aan elke schrijfwijze vooraan de naam (oude en twee letters).",
+  "aliassen": {
+   "TKNB": [
+    "TKN",
+    "TK",
+    "TKNB"
+   ],
+   "UNAB": [
+    "UNABO",
+    "UB",
+    "UNAB"
+   ]
+  }
  },
  "voorstel_twee_letters": {
-  "status": "voorstel, wacht op goedkeuring van Mehdi",
+  "status": "uitgevoerd op 02-10-2026 (goedgekeurd door Mehdi); zie titelconventie.codes_twee_letters",
   "datum": "2026-10-02",
   "mehdi": "02-10-2026: 'Ik wil de afkortingen van de bedrijven allemaal met twee letters hebben ... de types opdrachten ... ook allemaal met twee letters'",
   "titelvorm": "!! Mehdi: [FF-SS] TT nummer - klant, adres   (FF firma, SS soort, TT opdracht; bv. '!! Mehdi: [UB-KB] BS 46118 - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken')",
@@ -1482,7 +1578,7 @@
     "soort": "intern",
     "nu": "IN"
    },
-   "ZB / ZO": {
+   "XB / XO": {
     "soort": "zakelijk extern, nog geen klant",
     "nu": "B2B"
    }
@@ -1493,6 +1589,10 @@
    "de agent leest oude en nieuwe codes, schrijft alleen nog de nieuwe; titels zonder gasten zet hij zelf om, vanaf vandaag",
    "de Calendly-types krijgen de nieuwe code in hun naam",
    "PDF, JSON, werkwijze en tests; het register met een grendel dat er geen code van drie of vier letters terugkomt"
+  ],
+  "correcties_bij_uitvoering": [
+   "UnaBo: UB in de agenda; de contactcode UN blijft voor de contacten (v1.1 p. 9).",
+   "B2B wordt XB/XO, niet ZB/ZO: ZB/ZO blijven vrij voor het open voorstel 'zakelijke klant' (klantsoorten_voorstel)."
   ]
  }
 }

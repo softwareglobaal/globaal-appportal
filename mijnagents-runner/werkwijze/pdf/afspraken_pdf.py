@@ -19,8 +19,15 @@ reg = json.loads((REPO / "werkwijze/foutenregister.json").read_text(encoding="ut
 snap = json.loads(subprocess.run(["ssh", "globaal", "~/agents/.venv/bin/python", "-"],
                                  stdin=open(pathlib.Path(__file__).with_name("momentopname.py")),
                                  capture_output=True, text=True, timeout=180, check=True).stdout)
-assert t["versie"].startswith("4."), t["versie"]
-VERSIE = "2.28"
+assert t["versie"].split(".")[0] in ("4", "5"), t["versie"]
+# De versies komen uit de bronnen zelf, niet uit de tekst: de audit van 02-10-2026 vond hier nog 'werkwijze v7.20'
+# terwijl het bord v7.34 droeg. Datum en commit idem.
+import re as _re
+_ww = (REPO / "werkwijze/agenda-wacht.md").read_text(encoding="utf-8")
+WW_VERSIE = (_re.search(r"Versie ([0-9.]+)", _ww) or [None, "?"])[1]
+COMMIT = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip() or "?"
+BOUWDATUM = __import__("datetime").date.today().strftime("%d-%m-%Y")
+VERSIE = "3.0"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -43,12 +50,12 @@ def bol(k):
 KLEUREN = [
     ("4", "Agenda Lara", "Altijd roze, de kleur van de agenda. Ook buiten, ook de ritten."),
     ("zwart", "Privé-agenda", "Altijd zwart, de kleur van de agenda. Ook buiten, ook de ritten."),
-    ("11", "Werk buiten", "!!, een dienst die per definitie buiten is (WB, OPL, PLB, SCN, OPM, BS), of soort KB, PB, LB of AB. En de rit ervoor en erna. Altijd rood, ook als het nog niet bevestigd is (??)."),
+    ("11", "Werk buiten", "!!, een dienst die per definitie buiten is (WB, PL, OP, VO, DO, PS, SC, OM, BS), of soort KB, PB, LB, AB of XB. En de rit ervoor en erna. Altijd rood, ook als het nog niet bevestigd is (??)."),
     ("5", "Online, nog niet bevestigd", "?? in de titel van een online afspraak. Buiten blijft rood."),
     ("7", "Klant online", "KO"),
     ("6", "Prospect online", "PO"),
     ("3", "Leverancier online", "LO: wij kopen, geld dat buitengaat"),
-    ("1", "B2B", "professioneel extern, wij zijn nog geen klant"),
+    ("1", "Extern professioneel online", "XO (was B2B): een professionele partij waar wij nog geen klant van zijn"),
     ("2", "Aannemer online", "AO: de aannemer van een klant"),
     ("10", "Intern", "IN"),
 ]
@@ -61,21 +68,25 @@ wa = "".join(f"<tr><td><b>{e(w['naam'])}</b></td><td class=kl>{e(w['bestand'])}<
              for w in t["wachten"])
 ag = "".join(f"<tr><td><b>{e(a['naam'])}</b></td><td class=c>{e(a['rol'])}</td><td>{e(a['waarover'])}</td>"
              f"<td class=kl>{e(a.get('wie_schrijft', ''))}</td></tr>" for a in t["agendas"])
-_fl = [(k, su(v)) for k, v in sorted(snap["firmacodes"].items())]
-_fl += [(k, "Algemeen, voor de hele groep") for k in snap["externe_firmas"]]
+_ac = snap.get("agendacodes") or {}
+_fl = sorted([(_ac.get(k, k), su(v)) for k, v in snap["firmacodes"].items()])
+_fl += [(_ac.get(k, k), "Algemeen, voor de hele groep") for k in snap["externe_firmas"]]
 _h = (len(_fl) + 1) // 2
 fi = "".join(f"<tr><td class=c style='width:12mm'><b>{e(a[0])}</b></td><td>{e(a[1])}</td>"
              + (f"<td class=c style='width:12mm'><b>{e(b[0])}</b></td><td>{e(b[1])}</td>" if b else "<td></td><td></td>") + "</tr>"
              for a, b in zip(_fl[:_h], _fl[_h:] + [None]))
 so = "".join(f"<tr><td class=c><b>{e(k)}</b></td><td>{e(v)}</td></tr>" for k, v in t["titelconventie"]["soorten"].items())
 _act = t["titelconventie"]["activiteiten"]
-ty = ("<tr><td colspan=2 class=kl><b>Architectuur (HARC), voorlopig</b></td></tr>"
+ty = ("<tr><td colspan=2 class=kl><b>Architectuur (HA)</b></td></tr>"
       + "".join(f"<tr><td class=c><b>{e(k)}</b></td><td>{e(v)}</td></tr>" for k, v in _act["HARC"].items() if k != "noot")
       + "<tr><td colspan=2 class=kl><b>Intern, elke firma</b></td></tr>"
       + "".join(f"<tr><td class=c><b>{e(k)}</b></td><td>{e(v)}</td></tr>" for k, v in _act["intern"].items())
-      + "<tr><td colspan=2 class=kl><b>UNABO (UNAB), de diensten van unabo.be</b></td></tr>"
+      + "<tr><td colspan=2 class=kl><b>UNABO (UB), de diensten van unabo.be</b></td></tr>"
       + "".join(f"<tr><td class=c><b>{e(k)}</b></td><td>{e(v)}</td></tr>" for k, v in _act["UNAB"].items()))
-ou = ", ".join(f"<code>{e(k)}</code> = <code>{e(v)}</code>" for k, v in t["titelconventie"]["oude_codes"].items())
+_oc = t["titelconventie"]["oude_codes"]
+ou = ("firma's: " + ", ".join(f"<code>{e(k)}</code> = <code>{e(v)}</code>" for k, v in _oc["firma"].items())
+      + "; opdrachten: " + ", ".join(f"<code>{e(k)}</code> = <code>{e(v)}</code>" for k, v in _oc["opdracht"].items())
+      + "; B2B wordt XB of XO, alleen als buiten of online vaststaat")
 tk = "".join(f"<tr><td class=nr>{x['nr']}</td><td><b>{e(x['naam'])}</b></td><td>{e(x['wat'])}</td></tr>" for x in t["taken"])
 op = "".join(f"<tr><td>{e(su(x['wat']))}</td><td class=c>{e(x['wie'])}</td><td class=c>{e(x['wanneer'])}</td><td class=vak></td></tr>"
              for x in t["openstaand"])
@@ -103,12 +114,12 @@ tr{{break-inside:avoid}}
 .regel{{border-left:3px solid #14181f;padding:1mm 0 1mm 3mm;margin:0 0 3mm}}
 .twee{{column-count:2;column-gap:7mm}} .twee table{{break-inside:avoid}}
 </style>
-<div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; 24 september 2026 &nbsp;|&nbsp; versie {VERSIE}, <b>definitief</b> &nbsp;|&nbsp;
-bron: werkwijze/agenda-taken.json v{t['versie']} en werkwijze v7.20 op de server</div>
+<div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; gemaakt {BOUWDATUM} &nbsp;|&nbsp; versie {VERSIE} &nbsp;|&nbsp;
+bron: werkwijze/agenda-taken.json v{t['versie']}, werkwijze v{WW_VERSIE}, commit {COMMIT}</div>
 <h1>De Agendawacht: afspraken, kleuren en taken</h1>
 
 <div class=kader>
-Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.15 en ouder en het voorlopige blad 'nieuwe afspraken' (0.5 tot 0.16).
+Dit document zegt hoe de Agendawacht nu werkt. Het vervangt versie 2.28 en ouder (vier letters) en het voorlopige blad 'nieuwe afspraken'.
 Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de server. De test <code>tests/test_agenda_taken.py</code>
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
@@ -160,7 +171,7 @@ in het dagplan, het belrooster en de botsingen, en als signaal: hoort op werk.</
 <tr><td class=c style="width:14mm"><b>VR</b></td><td><b>Vraag van de agent.</b> Helemaal vooraan, nog voor ZL. De vraag staat in een
 zin bovenaan de omschrijving. Is ze opgelost, dan gaan VR en de zin er vanzelf af.</td></tr>
 <tr><td class=c style="width:14mm"><b>ZL</b></td><td><b>Zonder link.</b> Een online gesprek met een externe partij zonder link. ZL staat
-<b>helemaal vooraan</b>, voor ?? en voor alles: <code>ZL ?? Mehdi en Shaniel: [ELEV-LO] Robby</code>. De agent zet er de notitie
+<b>helemaal vooraan</b>, voor ?? en voor alles: <code>ZL ?? Mehdi en Shaniel: [EL-LO] Robby</code>. De agent zet er de notitie
 'Online. Mehdi stuurt de link naar ...' bij. Staat er later een link, dan gaan ZL en de notitie er weer af. <b>De agent zet zelf nooit
 een link.</b> Niet bij bellen, Calendly-boekingen, intern overleg of terugkerende overleggen.</td></tr>
 <tr><td class=c><b>!!</b></td><td><b>Buiten</b>, op het adres van de afspraak. Er komt een rit voor en na.</td></tr>
@@ -168,28 +179,31 @@ een link.</b> Niet bij bellen, Calendly-boekingen, intern overleg of terugkerend
 doorging.</td></tr></tbody></table>
 <table class=naast><tr><td style="width:50%;padding:0 4mm 0 0;border:0"><h3>De soorten</h3><table><tbody>{so}</tbody></table></td>
 <td style="width:50%;padding:0 0 0 4mm;border:0"><h3>De activiteit: wat Mehdi gaat doen</h3><table><tbody>{ty}</tbody></table></td></tr></table>
-<p class=kl>De titel zegt ook wat Mehdi gaat doen: <b>[FIRMA-SOORT] ACTIVITEIT nummer - klant, adres</b>, bv.
-<code>!! Mehdi: [HARC-KB] VOPL 2505 - Patrick Carolan &amp; Norma Gleeson, ...</code>. De firma zegt het vak, de activiteit wat er gebeurt.
-De agent stelt de code voor uit de woorden in de titel (werfbezoek wordt WB, stabiliteit STA, AI of Automation bij intern AI+AT) en vult
-ze zelf in bij eigen afspraken zonder gasten. Altijd buiten: {", ".join(_act["altijd_buiten"])}. Oudere codes (OPM ...) blijven geldig.</p>
+<p class=kl>De titel zegt ook wat Mehdi gaat doen: <b>[FF-SS] TT nummer - klant, adres</b>, telkens twee letters, bv.
+<code>!! Mehdi: [HA-KB] VO 2505 - Patrick Carolan &amp; Norma Gleeson, ...</code>. De firma zegt het vak, de opdracht wat er gebeurt.
+De agent stelt de code voor uit de woorden in de titel (werfbezoek wordt WB, stabiliteit ST, AI of Automation bij intern AI) en vult
+ze zelf in bij eigen afspraken zonder gasten. Altijd buiten: {", ".join(_act["altijd_buiten"])}. Oude codes (STA, VOPL, AI+AT ...) leest hij nog, hij schrijft ze niet meer.</p>
 <p class=kl>De eerste letter van een soort zegt wie het is (klant, prospect, leverancier, aannemer), de tweede waar: buiten of online.
-Een leverancier (LB/LO): daar zijn wij al klant. B2B: een professionele partij waar wij nog geen klant van zijn.
+Een leverancier (LB/LO): daar zijn wij al klant. XB/XO (was B2B): een professionele partij waar wij nog geen klant van zijn.
+ZB/ZO blijven vrij voor het open voorstel 'zakelijke klant met terugkerende opdrachten'.
 Een aannemer (AB/AO): de aannemer van een klant.</p>
 <h3>De firmacodes</h3>
-<p>Vier letters, van organisatie.globaal.be. Daar kijkt de agent, live. Stand op {__import__('datetime').date.today():%d-%m-%Y}:</p>
+<p><b>Twee letters</b> (Mehdi, 2 oktober 2026), van organisatie.globaal.be: de agendacode (kern.firma.code_agenda). Daar kijkt de agent,
+live. De interne code van vier letters (HARC, UNAB) blijft de sleutel voor boekhouding en koppelingen; de contactcode is voor de naamregel
+van een contact (UnaBo: UB in de agenda, UN in de contacten). Stand op {__import__('datetime').date.today():%d-%m-%Y}:</p>
 <table><tbody>{fi}</tbody></table>
 <ul>
-<li><b>ALGE</b> is voor een leverancier of afspraak die voor de hele groep geldt, niet voor een firma. Externe partijen staan
+<li><b>AL</b> is voor een leverancier of afspraak die voor de hele groep geldt, niet voor een firma. Externe partijen staan
 bewust niet op het dashboard maar in <code>externe-relaties.json</code>: de boekhouder Nadien (ook geschreven Nadine) en Wally
-(AI-software), allebei leverancier, allebei ALGE.</li>
-<li><b>HDS is HDSS.</b> HDSI is momenteel niet actief.</li>
-<li><b>Vanaf 21 september 2026</b> draagt elke nieuwe afspraak de code van vier letters. Oudere afspraken houden hun oude code
-en blijven geldig; de agent vertaalt: {ou}.</li>
+(AI-software), allebei leverancier, allebei AL. Privé is PR, Lara LA (op haar eigen agenda).</li>
+<li><b>HDS is DS</b> (intern HDSS). HDS India is DI.</li>
+<li><b>Sinds 2 oktober 2026</b> draagt elke titel de codes van twee letters (vervangt de vier letters van 21 september). Eigen afspraken
+zonder gasten zet de agent zelf om, een reeks in de reeks zelf; met gasten of van Calendly is het een voorstel. Oude codes leest hij nog: {ou}.</li>
 <li><b>Vrije tekst wordt een code.</b> Mehdi typt bijvoorbeeld <code>!! Mehdi &amp; Catalin: Harchitects-KB 2505</code>; de agent maakt er
-<code>!! Mehdi &amp; Catalin: [HARC-KB] 2505</code> van. Alleen bij zijn eigen afspraken zonder gasten, en alleen als firma en soort
+<code>!! Mehdi &amp; Catalin: [HA-KB] 2505</code> van. Alleen bij zijn eigen afspraken zonder gasten, en alleen als firma en soort
 eenduidig zijn. Anders een voorstel.</li>
-<li><b>Geen firmacode:</b> de agent stelt er een voor. Een projectnummer uit de H-Architects-projectmap wordt HARC; een leverancier uit
-de lijst wordt ALGE; anders de firma waarvoor de genoemde mensen werken ('diensten voor').</li>
+<li><b>Geen firmacode:</b> de agent stelt er een voor. Een projectnummer uit de H-Architects-projectmap wordt HA; een leverancier uit
+de lijst wordt AL; anders de firma waarvoor de genoemde mensen werken ('diensten voor').</li>
 <li><b>Projectnummers van H-Architects zijn JJNN.</b> JJ is het jaar (25 = 2025, 26 = 2026), NN het volgnummer van dat jaar: 2505 is
 het vijfde project van 2025. Zo nummert alleen H-Architects; de andere firma's hebben een eigen benaming. Een nummer met een projectmap is
 een klant, want die map ontstaat bij de ondertekening.</li>
@@ -197,10 +211,10 @@ een klant, want die map ontstaat bij de ondertekening.</li>
 vroeger, en pas dan Pipedrive. De salesmap is de verkoop, niet het dossier. Voorbeeld: 2505 is Patrick Carolan &amp; Norma Gleeson, klant
 sinds april 2025, volgens het contract.</li>
 <li><b>Een titel met een projectnummer is pas volledig met de klant en, buiten, het adres</b>:
-<code>!! Mehdi &amp; Catalin: [HARC-KB] 2505 - Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele</code>. De klant komt uit de bronnen hierboven, het adres uit de agenda of de
+<code>!! Mehdi &amp; Catalin: [HA-KB] 2505 - Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele</code>. De klant komt uit de bronnen hierboven, het adres uit de agenda of de
 projectmap. Zonder gasten vult de agent het zelf aan, ook als een collega de afspraak zette; met
 gasten, van Calendly of in een reeks doet hij een voorstel.</li>
-<li><b>Een firmacode zonder soort</b> ('[HARC] Rechtbank') wordt gemeld. Een gemeente of rechtbank past nog in geen soort; dat staat open.</li>
+<li><b>Een firmacode zonder soort</b> ('[HA] Rechtbank') wordt gemeld. Een gemeente of rechtbank past nog in geen soort; dat staat open.</li>
 </ul>
 
 <h2>5. Kleuren</h2>
@@ -274,7 +288,7 @@ mogen collega's juist wel buiten plannen. De agent leest de vakanties uit de age
 vertrek nog een klantgesprek, dan kom je aan voor het begint en doe je het geparkeerd ter plaatse.</p>
 
 <p><b>Projectnummer bij elke klant, van welke firma ook</b> (Mehdi, 01-10-2026). Een afspraak bij een klant buiten draagt het
-nummer in de titel: '[FIRMA-KB] TYPE nummer - klant, adres'. H-Architects: JJNN uit de projectmap (bv. 2607). UNABO, TKN-Buro en Energie
+nummer in de titel: '[FF-KB] TT nummer - klant, adres'. H-Architects: JJNN uit de projectmap (bv. 2607). UNABO, TKN-Buro en Energie
 Efficiënt: het nummer van TKN-Buro, vooraan de projectmap in TKN BURO WORK (bv. 46118, vanaf 2026 zes cijfers zoals 260009). De agent zoekt
 het op het adres; vindt hij er niet precies één, dan meldt de dagcontrole het.</p>
 

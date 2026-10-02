@@ -105,8 +105,9 @@ def bevindingen(items, van, tot, nu):
                      f"kleur {W.KLEURNAAM.get(a.get('_kleur'), a.get('_kleur') or 'agenda')}, regel zegt {W.KLEURNAAM.get(wens, wens)}")
             if info.get("firma") == "HARC" and info["soort"] in ("PO", "PB") and info["nummer"] in projecten:
                 meld("prospect_met_projectmap", a, "prospect, maar er is een projectmap: is al klant (FR-43)")
-            if info.get("agendacode") and (a.get("_gemaakt") or "")[:10] >= W.KANTELDATUM:
-                meld("oude_code", a, f"[{info['agendacode']}] in een afspraak van na {W.KANTELDATUM}")
+            # sinds 02-10-2026 staat in een titel alleen de code van twee letters (FR-22)
+            if info.get("firma") and W.codes_twee_letters(a["titel"], W._online(a)) != a["titel"]:
+                meld("oude_code", a, f"oude code in de titel; twee letters: '{W.codes_twee_letters(a['titel'], W._online(a))[:60]}'")
             gewenst, _ = W.melding_gewenst(a)
             if gewenst and not eigen:
                 meld("melding_ontbreekt", a, "hoort een melding en heeft er geen")

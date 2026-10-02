@@ -14,8 +14,8 @@ SOORTEN = {
         "label": "Werfverslag",
         "agent": "werfverslag-voorbereider",       # bestaande keten: voorbereider -> schrijver, pagina /werfverslagen
         "afdeling": "h-architects",
-        "firmas": ("HA",),
-        "codes": ("WB", "OPL"),
+        "firmas": ("HA", "HARC"),
+        "codes": ("WB", "OPL", "OP", "VO", "DO", "VOPL", "DOPL"),     # twee letters sinds 02-10-2026, oude blijven leesbaar
         "trefwoorden": ("werfbezoek", "werfverslag", "oplevering", "werf "),
         "basismappen": [],                          # eigen zoeker in werfverslag_voorbereider (STAN-fasen + light)
         "communicatiemap": "_00. Communication",
@@ -27,7 +27,7 @@ SOORTEN = {
         "label": "Veiligheidscoördinatie",
         "agent": "veiligheidscoordinatie-verslag",
         "afdeling": "unabo",
-        "firmas": ("UNABO", "ENERGIE"),
+        "firmas": ("UNABO", "ENERGIE", "UB", "UNAB", "EE", "ENEF"),
         "codes": ("VC",),
         "trefwoorden": ("veiligheidsco", "vc-bezoek", "vc bezoek", "vc werf"),
         "basismappen": ["/Work All/03. Enstaco WORK/3. VC (Veiligheidscoördinatie)",
@@ -53,8 +53,8 @@ SOORTEN = {
         "label": "Plaatsbeschrijving",
         "agent": "plaatsbeschrijving-verslag",
         "afdeling": "unabo",
-        "firmas": ("UNABO", "ENERGIE", "HA"),
-        "codes": ("PLB", "PB"),
+        "firmas": ("UNABO", "ENERGIE", "HA", "UB", "UNAB", "EE", "ENEF", "HARC"),
+        "codes": ("PLB", "PB", "PS"),
         "trefwoorden": ("plaatsbeschrijving", "plaatsbeschr"),
         "basismappen": ["/Work All/02. UNABO/01. U-WORK/07. U-PLAATSBESCHRIJVING",
                         "/Work All/03. Enstaco WORK/4. PB (Plaatsbeschrijving)"],
@@ -77,8 +77,8 @@ SOORTEN = {
         "label": "Barsten en scheuren",
         "agent": "barsten-scheuren-verslag",
         "afdeling": "unabo",
-        "firmas": ("UNABO", "TKN", "ENERGIE"),
-        "codes": ("BS", "STA"),
+        "firmas": ("UNABO", "TKN", "ENERGIE", "UB", "UNAB", "TK", "TKNB", "EE", "ENEF"),
+        "codes": ("BS", "STA", "ST"),
         "trefwoorden": ("barsten", "scheur", "stabiliteit", "bs "),
         "basismappen": ["/Work All/03. Enstaco WORK/7. STA (Stabiliteit)"],
         "communicatiemap": "_00. Communication",
@@ -98,7 +98,7 @@ SOORTEN = {
     },
 }
 
-ONLINE_SOORTEN = ("KO", "PO", "IN")
+ONLINE_SOORTEN = ("KO", "PO", "IN", "LO", "AO", "XO", "B2B")
 
 
 def _online(info, inhoud):

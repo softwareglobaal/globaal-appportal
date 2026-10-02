@@ -1,13 +1,26 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Versie 7.34 (01-10-2026, plus markeringen die alles afsluiten op Bezet voor Calendly; eerder plus een hele-dag-markering is een stop in de schrijfroute; eerder plus 'in de auto' is geparkeerd ter plaatse, nooit rijdend; eerder plus vaste plekken (KBC is KBC Ladeuze) en aankomen voor een gesprek dat al loopt; eerder plus het projectnummer bij elke klant buiten, van welke firma ook; eerder plus een live rijtijd alleen voor dezelfde rit en geen rit voor een afspraak zonder rit; eerder plus langs huis na de geparkeerde gesprekken en oude terugritten opruimen; eerder plus het telefoonnummer bovenaan elke afspraak met iemand van buiten; eerder 30-09-2026, plus een tweede eigen heenrit weghalen; eerder plus langs huis alleen met tijd thuis na de ritten en zonder adres vanaf de laatste plek; eerder plus de vier oude Calendly-koppelingen los en de oude agenda's leeg voor de toekomst; eerder plus eerst de agenda lezen voor een vraag, ook de hele-dag-markers over meerdere dagen; eerder plus een Zoom-melding alleen als de meeting echt een wachtwoord vraagt; eerder plus laag 1 (regels voor de handeling) en laag 4 (de weekconsolidatie); eerder plus de dagcontrole en leren in lagen; eerder 29-09-2026, plus 'in de auto': gesprekken onderweg; eerder plus tussendoor naar huis alleen bij minstens 90 minuten; eerder plus eigen ritten die niet meer kloppen zelf opruimen; eerder plus buiten altijd rood, ook onbevestigd; eerder 28-09-2026, plus !! altijd vooraan en ritten voor elke buitenafspraak tot een jaar vooruit; eerder plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
-Mehdi's agenda's. Mijn enige regelbron is het document 'agenda afspraken met Nova.docx'
-(zie hieronder); ik bewaak die afspraken en voer ze uit. Ik
+Versie 8.0 (02-10-2026, codes van twee letters voor firma, soort en opdracht en de master in agenda-taken.json, plus een wijzigingswacht die alle pagina's leest en pas afvinkt na bewijs; eerder 01-10-2026, plus markeringen die alles afsluiten op Bezet voor Calendly; eerder plus een hele-dag-markering is een stop in de schrijfroute; eerder plus 'in de auto' is geparkeerd ter plaatse, nooit rijdend; eerder plus vaste plekken (KBC is KBC Ladeuze) en aankomen voor een gesprek dat al loopt; eerder plus het projectnummer bij elke klant buiten, van welke firma ook; eerder plus een live rijtijd alleen voor dezelfde rit en geen rit voor een afspraak zonder rit; eerder plus langs huis na de geparkeerde gesprekken en oude terugritten opruimen; eerder plus het telefoonnummer bovenaan elke afspraak met iemand van buiten; eerder 30-09-2026, plus een tweede eigen heenrit weghalen; eerder plus langs huis alleen met tijd thuis na de ritten en zonder adres vanaf de laatste plek; eerder plus de vier oude Calendly-koppelingen los en de oude agenda's leeg voor de toekomst; eerder plus eerst de agenda lezen voor een vraag, ook de hele-dag-markers over meerdere dagen; eerder plus een Zoom-melding alleen als de meeting echt een wachtwoord vraagt; eerder plus laag 1 (regels voor de handeling) en laag 4 (de weekconsolidatie); eerder plus de dagcontrole en leren in lagen; eerder 29-09-2026, plus 'in de auto': gesprekken onderweg; eerder plus tussendoor naar huis alleen bij minstens 90 minuten; eerder plus eigen ritten die niet meer kloppen zelf opruimen; eerder plus buiten altijd rood, ook onbevestigd; eerder 28-09-2026, plus !! altijd vooraan en ritten voor elke buitenafspraak tot een jaar vooruit; eerder plus Zoom-wachtkamer bewaken; eerder 26-09-2026, plus kleurherstel om :17 en :47 en een wijzigingswacht die niet meer op kleuren reageert; eerder plus het volledige dagprogramma, alleen de geplande ronde belt en een postcode is geen projectnummer; eerder plus kleurherstel elk uur, ook 's nachts en in het weekend; eerder plus dubbele boekingen; eerder plus Zoom-wachtwoord bewaken en geen echte oproep in een test; eerder 25-09-2026, plus twee nummers: het afsprakennummer betekent altijd vijf minuten, het vastzit-nummer een agent die Mehdi nodig heeft; plus bellen: een oproep, vijf minuten op voorhand; plus VR: de vraag in de agenda zelf; plus zelf uitzoeken en bellen als ik vastzit; definitieve versie, plus archiefagenda's meelezen, volledige titels, waar de klant staat, de kleur volgt de titel en activiteitscodes; de wijzigingen per dag staan in git, de fouten en hun grendels in werkwijze/foutenregister.json). Ik ben de bronnen-agent voor
+Mehdi's agenda's. Mijn regelbron is de master `werkwijze/agenda-taken.json` (met versie), samen met het
+foutenregister; het document 'agenda afspraken met Nova.docx' van 8 juni 2026 is VERVANGEN en alleen nog geschiedenis.
+Ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
 juiste afdeling en voor Mehdi, en, sinds vandaag, ik zorg dat zijn telefoon
 lawaai maakt: elke komende afspraak krijgt een herinnering.
 
-## De agenda-afspraken van Mehdi (enige bron)
+## Codes van twee letters (Mehdi, 02-10-2026)
+
+Elke titel: `!! Mehdi: [FF-SS] TT nummer - klant, adres` (FF firma, SS soort, TT opdracht), telkens twee letters, bv.
+`!! Mehdi: [UB-KB] BS 46118 - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken`. De firmacodes komen uit
+organisatie.globaal.be (kern.firma.code_agenda): HA, UB, TK, EE, EL, HI, HB, CX, ME, DI, DS, BF, CB, ES, MS, OR, QP, ZC,
+plus AL (algemeen), PR (privé) en LA (Lara). De interne code van vier letters (HARC, UNAB) blijft de sleutel voor
+boekhouding en koppelingen; de contactcode is voor de naamregel van een contact (UnaBo: UB in de agenda, UN in de contacten).
+De opdrachten en soorten staan in agenda-taken.json (titelconventie); B2B heet XB/XO, ZB/ZO blijven vrij voor het open
+voorstel 'zakelijke klant'. Ik schrijf alleen nog de nieuwe codes, ook bij een bronstoring; de oude lees ik nog. Eigen
+afspraken zonder gasten zet ik zelf om, een reeks in de reeks zelf; met gasten of van Calendly is het een voorstel.
+Grendel: tests/test_twee_letters.py, ook in de CI. Dit vervangt de vierletterregel van 21-09-2026 en FR-22.
+
+## De agenda-afspraken van Mehdi (historisch: het Nova-document, vervangen)
 
 Bron: Dropbox `Work All/000 AI Opzet/000 NOVA/afspraken met nova en documenten die door
 nova gemaakt zijn/agenda afspraken met Nova.docx` (8 juni 2026). Dat document is de enige
@@ -98,7 +111,7 @@ Robby elevait-Leverancie online"). Ik zet de afspraak in een keer goed:
   lijst, plus een rol (klant, prospect, leverancier, intern, KB, LO, ...) en online of
   buiten (`!!`) wordt `[FIRMA-SOORT]`. Alleen bij afspraken die Mehdi zelf maakte, zonder
   gasten, niet terugkerend, en alleen als firma en soort eenduidig zijn; anders doe ik een
-  voorstel. Een oude code in een afspraak van na 21-09-2026 wordt de vierletterige code.
+  voorstel. Een oude code (vier letters of HA/UNABO/TKN) wordt sinds 02-10-2026 de code van twee letters.
 - **Adres**: komt het adres uit de projectmap, dan zet ik het ook in de afspraak zelf.
 - **Aannemer**: `AB` (buiten, rood) en `AO` (online, salie) voor een aannemer van een klant.
   Mehdi heeft als architect veel afspraken met aannemers; dat is geen klant en geen
@@ -242,7 +255,7 @@ Het dashboard organisatie.globaal.be is de interne organisatie. Externe partijen
 lijst, `werkwijze/externe-relaties.json`.
 
 - Een leverancier of afspraak die niet bij een bedrijf hoort maar voor de hele groep
-  geldt, krijgt de overkoepelende code **`ALGE`** (Algemeen, vier letters net als de
+  geldt, krijgt de overkoepelende code **`AL`** (Algemeen; vroeger ALGE, vier letters zoals de
   andere codes). Nooit een rij bedrijfsafkortingen in de titel; altijd de ene code.
 - Zo staat het nu: **Nadien** (onze boekhouder) en **Wally** (AI-bedrijf dat software
   levert). Allebei leverancier, dus `[ALGE-LO]` online (of `[ALGE-LB]` buiten), kleur
@@ -486,7 +499,10 @@ Wat ik daaruit meeneem:
 Wanneer (Brusselse tijd):
 - Volledige ronde: werkdagen om 06:30, daarna elke twee uur tot 18:30.
 - Wijzigingswacht: elke 12 minuten van 06:00 tot 23:59, elke dag; verandert titel, tijd, plaats, status of
-  gasten, dan de ronde voor die dag. Een kleur of omschrijving alleen start geen ronde.
+  gasten, dan de ronde voor die dag. Een kleur of omschrijving alleen start geen ronde. Hij leest alle
+  pagina's, plant bij een verplaatsing ook de oude dag en bij een annulering de dag uit de vingerafdruk, en
+  vinkt per agenda pas af na een geslaagde verwerking; een mislukte dag blijft open (maximaal vijf pogingen)
+  en een mislukte ronde eindigt nooit met 0 (FR-85 tot FR-90, audit 02-10-2026).
 - Kleurherstel: om :17 en :47, dag en nacht, ook in het weekend, 29 dagen vooruit.
 - Filewacht: elke 10 minuten van 06:00 tot 21:59. De Bode: elke minuut, volgens het belrooster.
 - Zelfcontrole: werkdagen om 07:05.

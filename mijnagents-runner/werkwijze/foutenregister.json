@@ -1,7 +1,7 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.18",
- "datum": "30-09-2026",
+ "versie": "3.20",
+ "datum": "02-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
   "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
@@ -227,6 +227,18 @@
     "FR-74",
     "FR-83"
    ]
+  },
+  {
+   "id": "L29",
+   "les": "Een stap is pas gedaan als zijn resultaat gecontroleerd is: lees alle pagina's, vink pas af na een geslaagde verwerking, en laat een mislukte stap nooit met 0 eindigen. Stilte is geen bewijs.",
+   "uit": [
+    "FR-85",
+    "FR-86",
+    "FR-87",
+    "FR-88",
+    "FR-89",
+    "FR-90"
+   ]
   }
  ],
  "fouten": [
@@ -391,7 +403,7 @@
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
-    "tekst": "een projectnummer uit de H-A map stelt [HARC] voor"
+    "tekst": "een projectnummer uit de H-A map stelt [HA] voor"
    },
    "controle": [],
    "status": "opgelost"
@@ -630,12 +642,12 @@
    "id": "FR-22",
    "datum": "24-09-2026",
    "gevonden_door": "zelfcontrole (weekcontrole)",
-   "fout": "Zeven nieuwe boekingen deze week dragen nog de oude code ([HA-PO], [UNABO-PO], [TKN-PO]).",
+   "fout": "Zeven nieuwe boekingen deze week dragen nog de oude code ([HA-PO], [UNABO-PO], [TKN-PO]). Sinds 02-10-2026: elke code van drie of vier letters in een titel (HARC, UNABO, TKN, STA, AI+AT) is een oude code.",
    "gevolg": "Werkt, want de agent vertaalt de oude codes, maar twee schrijfwijzen naast elkaar.",
    "waarom_niet_gezien": "Gezien op 23-09; de oplossing ligt buiten de agent.",
    "oorzaak": "De titelsjablonen in Calendly.",
    "soort_oorzaak": "bron",
-   "oplossing": "Mehdi zet de sjablonen om (HA naar HARC, UNABO naar UNAB, TKN naar TKNB). Zoom-dossier leest beide al.",
+   "oplossing": "VERVANGEN 02-10-2026: de norm is nu twee letters (Mehdi, goedgekeurd; kern.firma.code_agenda, migratie 183). De Calendly-sjablonen gaan naar [HA-..], [UB-..], [TK-..], [EE-..] in plaats van HARC/UNAB/TKNB; tot dan zet de agent eigen afspraken zonder gasten zelf om en is een boeking met gasten een voorstel. De zelfcontrole meldt elke titel die niet de codes van twee letters draagt (oude_code). Oorspronkelijk (24-09): HA naar HARC, UNABO naar UNAB, TKN naar TKNB - dat geldt niet meer.",
    "grendel": {
     "soort": "zelfcontrole",
     "waar": "zelfcontrole.py",
@@ -1787,6 +1799,114 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een markering die alles afsluit ('geen afspraken', Buitenland) zet de agent op Bezet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-85",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi",
+   "fout": "De wijzigingswacht (agenda_signaal.py) vroeg per agenda maximaal 250 wijzigingen op en las nextPageToken niet: alles vanaf de 251ste wijziging werd niet gezien.",
+   "gevolg": "Bij een grote wijziging (een reeks verplaatst, een import, een opkuis) kregen dagen op pagina 2 en verder geen wacht; alleen de gewone ronde haalde ze later in.",
+   "waarom_niet_gezien": "Een gewone dag heeft minder dan 250 wijzigingen per twaalf minuten, en geen enkele test bouwde een tweede pagina. Een ontbrekende pagina geeft geen fout, alleen stilte.",
+   "oorzaak": "Paginering ontbrak in de bronlezing; een lezing heette geslaagd na de eerste pagina.",
+   "soort_oorzaak": "code",
+   "oplossing": "Alle pagina's worden gelezen (nextPageToken in de gevraagde velden); een fout op een latere pagina maakt de hele lezing van die agenda mislukt, zodat niets half telt. Test met 260 wijzigingen.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_signaal.py",
+    "tekst": "A4 ook de 251ste wijziging en verder wordt gelezen"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-86",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi",
+   "fout": "De wijzigingswacht schreef het nieuwe gekeken-tijdstip en de vingerafdrukken weg vóór de verwerking en ook na een HTTP-fout.",
+   "gevolg": "Een wijziging kon verdwijnen: na een crash of een mislukte lezing vroeg de volgende ronde vanaf een tijdstip waarop die wijziging al voorbij was.",
+   "waarom_niet_gezien": "De gewone ronde om de twee uur herstelde de meeste gevolgen later, waardoor het verlies niet opviel. Er was één cursor voor alle agenda's, dus een fout op één agenda zette ook de andere vooruit.",
+   "oorzaak": "Afvinken voor bewijs: de bron werd als verwerkt gemarkeerd voordat de verwerking slaagde.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een cursor per agenda die pas vooruitgaat na een volledige lezing en een geslaagde verwerking; een mislukte dag blijft open met zijn pogingen (maximaal 5, daarna opgegeven en gemeld); de stand wordt atomair geschreven (tijdelijk bestand, dan os.replace); een slot voorkomt twee rondes tegelijk.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_signaal.py",
+    "tekst": "A5 na een HTTP-fout gaat de cursor van die agenda niet vooruit"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-87",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi",
+   "fout": "De wijzigingswacht negeerde de exitcode en stderr van agenda_wacht.py: ook een falende verwerking gaf 'wacht gedraaid' en exitcode 0.",
+   "gevolg": "Falen zag eruit als succes. In de logs stond 'wacht gedraaid ... geen uitvoer' zonder dat iemand kon zien of het gelukt was.",
+   "waarom_niet_gezien": "Ik las de log ('wacht gedraaid') en niet de exitcode; een lege uitvoer kan zowel goed als fout zijn.",
+   "oorzaak": "Het resultaat van de onderliggende stap werd niet gecontroleerd.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een exitcode die niet 0 is, of een time-out, heet mislukt: foutregel op stderr met dag en exitcode, de dag blijft open, het script eindigt niet met 0.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_signaal.py",
+    "tekst": "A6 een wacht met exitcode 2 heet mislukt"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-88",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi",
+   "fout": "agenda_wacht.py eindigde met 0 als het slot bezet was (een andere ronde liep) of als de sleutels ontbraken, terwijl er niets verwerkt was.",
+   "gevolg": "De wijzigingswacht vinkte die dag af als geslaagd; de wijziging werd pas in de volgende gewone ronde opgepakt.",
+   "waarom_niet_gezien": "'Niets te doen' en 'niet kunnen doen' gaven dezelfde exitcode.",
+   "oorzaak": "Geen onderscheid tussen overslaan en slagen in de exitcode.",
+   "soort_oorzaak": "code",
+   "oplossing": "Slot bezet: exitcode 75 (EX_TEMPFAIL, opnieuw proberen); sleutels ontbreken: exitcode 78; main() eindigt met sys.exit(main() or 0). De wijzigingswacht houdt de dag dan open.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een bezet slot en ontbrekende sleutels eindigen niet met 0"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-89",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi",
+   "fout": "Bij een verplaatste afspraak plande de wijzigingswacht alleen de nieuwe dag, niet de dag waar ze vandaan kwam (ook niet bij een verhuis naar een andere agenda of een verplaatste reeksinstantie).",
+   "gevolg": "Op de oude dag bleven ritten, een rit naar huis of een dagcontrole staan die bij de afspraak hoorden die er niet meer was.",
+   "waarom_niet_gezien": "De oude dag stond wel in de vorige vingerafdruk, maar werd niet gelezen. De gewone ronde ruimde het later op, binnen acht dagen.",
+   "oorzaak": "te_verwerken() keek alleen naar de nieuwe start.",
+   "soort_oorzaak": "code",
+   "oplossing": "De oude dag uit de vingerafdruk (zelfde agenda, andere agenda, originalStartTime van een reeksinstantie) wordt mee gepland; een oude dag voor het venster niet.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_signaal.py",
+    "tekst": "A7 een verplaatsing op dezelfde agenda plant de oude en de nieuwe dag"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-90",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi",
+   "fout": "Een geschrapte afspraak zonder start werd door de wijzigingswacht overgeslagen. Google garandeert bij een verwijderd item alleen het id.",
+   "gevolg": "Na een annulering bleef de dag ongemoeid: ritten naar een afspraak die niet meer bestond, bleven staan tot de gewone ronde.",
+   "waarom_niet_gezien": "In tests had een verwijderd item altijd nog een start.",
+   "oorzaak": "De annulering werd op de start gezocht in plaats van op het id.",
+   "soort_oorzaak": "code",
+   "oplossing": "De dag wordt opgezocht in de bewaarde vingerafdruk van dat id, met de oude titel in de melding; dezelfde annulering twee keer plant niets meer.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_signaal.py",
+    "tekst": "A8 een geschrapte afspraak zonder start plant de dag uit de vingerafdruk"
    },
    "controle": [],
    "status": "opgelost"

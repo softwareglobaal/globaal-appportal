@@ -37,8 +37,11 @@ def _lees():
 # afspraak staat; code_contact de contactcode van twee letters (HA) voor de naamregel van
 # een contact. Land is een ISO-code (BE, SR, IN). De tweede query is voor een database zonder
 # migratie 175: dan ontbreekt code_contact.
-SQL_FIRMA = ("select json_agg(json_build_object('code', f.code, 'code_contact', f.code_contact, 'naam', f.naam, "
-             "'land', coalesce(f.land,''), 'actief', coalesce(f.actief, false))) from kern.firma f")
+SQL_FIRMA = ("select json_agg(json_build_object('code', f.code, 'code_contact', f.code_contact, 'code_agenda', f.code_agenda, "
+             "'naam', f.naam, 'land', coalesce(f.land,''), 'actief', coalesce(f.actief, false))) from kern.firma f")
+# zonder migratie 183 (code_agenda)
+SQL_FIRMA_VOOR_183 = ("select json_agg(json_build_object('code', f.code, 'code_contact', f.code_contact, 'naam', f.naam, "
+                      "'land', coalesce(f.land,''), 'actief', coalesce(f.actief, false))) from kern.firma f")
 SQL_FIRMA_VOOR_175 = ("select json_agg(json_build_object('code', f.code, 'naam', f.naam, "
                       "'land', coalesce(f.land,''), 'actief', coalesce(f.actief, false))) from kern.firma f")
 
@@ -57,6 +60,11 @@ def _lees_firmas():
     try:
         return _psql(SQL_FIRMA) or []
     except RuntimeError as e:
+        if "code_agenda" in str(e):
+            try:
+                return _psql(SQL_FIRMA_VOOR_183) or []
+            except RuntimeError as e2:
+                e = e2
         if "code_contact" not in str(e):
             raise
         return _psql(SQL_FIRMA_VOOR_175) or []
@@ -71,7 +79,7 @@ def firmas(maximum_uren=24):
     try:
         c = json.load(open(CACHE_FIRMA, encoding="utf-8"))
         if (time.time() - c.get("ts", 0) < maximum_uren * 3600
-                and all("code_contact" in f for f in c["firmas"])):
+                and all("code_contact" in f and "code_agenda" in f for f in c["firmas"])):
             data = c["firmas"]
     except (OSError, ValueError, KeyError):
         pass
@@ -98,6 +106,12 @@ def contactcodes(maximum_uren=24):
     """contactcode -> firmacode (HA -> HARC), voor de naamregel van een contact.
     Leeg als migratie 175 nog niet gedraaid is of de database niet bereikbaar is."""
     return {f["code_contact"]: f["code"] for f in firmas(maximum_uren) if f.get("code_contact")}
+
+
+def agendacodes(maximum_uren=24):
+    """firmacode -> agendacode van twee letters (HARC -> HA, UNAB -> UB), voor de titel van een afspraak
+    (migratie 183, Mehdi 02-10-2026). Leeg als de migratie nog niet gedraaid is of de database niet bereikbaar is."""
+    return {f["code"]: f["code_agenda"] for f in firmas(maximum_uren) if f.get("code") and f.get("code_agenda")}
 
 
 def bronregel(sleutel):

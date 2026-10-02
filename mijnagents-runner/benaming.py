@@ -16,6 +16,9 @@ import re
 AGENDA_NAAR_FIRMA = {
     "HA": "HARC", "UNABO": "UNAB", "TKN": "TKNB", "HB": "HARM", "HARMONIEBOUW": "HARM",
     "CONTRAX": "CONT", "CTX": "CONT", "CX": "CONT", "ENERGIE": "ENEF", "EE": "ENEF", "ELEVAIT": "ELEV",
+    # de agendacodes van twee letters (Mehdi, 02-10-2026; kern.firma.code_agenda, migratie 183)
+    "UB": "UNAB", "TK": "TKNB", "EL": "ELEV", "HI": "HINV", "ME": "MELO", "DI": "HDSI", "DS": "HDSS", "BF": "BFUT",
+    "CB": "CORE", "ES": "ENST", "MS": "MEDI", "OR": "ORVA", "QP": "QOPP", "ZC": "ZIDI",
 }
 SOORT = {"KB": "klant buiten", "PB": "prospect buiten", "KO": "klant online", "PO": "prospect online",
          "KL": "klant", "IN": "intern"}

@@ -15,6 +15,7 @@ import collections
 import datetime
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -161,15 +162,29 @@ def vaste_duur():
 
 
 def duur_afwijkend(types, duur=None):
-    """['naam (20 min, moet 30)'] voor actieve types waarvan de naam met een firma begint en de duur afwijkt."""
+    """['naam (20 min, moet 30)'] voor actieve types van een firma met een vaste duur. De firma herken ik aan elke
+    schrijfwijze vooraan de naam (TKN, TK, TKNB / UNABO, UB, UNAB), zodat een hernoeming naar de codes van twee letters
+    de controle niet stil uitzet (v1.1 p. 9)."""
     duur = vaste_duur() if duur is None else duur
+    alias = firma_aliassen()
     uit = []
     for t in types:
         nm = (t.get("name") or "").strip()
         for firma, minuten in duur.items():
-            if t.get("active") and nm.lower().startswith(firma.lower()) and t.get("duration") != minuten:
+            namen = alias.get(firma, [firma])
+            if t.get("active") and any(re.match(rf"\s*\[?{re.escape(a)}\b", nm, re.I) for a in namen) \
+                    and t.get("duration") != minuten:
                 uit.append(f"{nm} ({t.get('duration')} min, moet {minuten})")
     return uit
+
+
+def firma_aliassen():
+    """firma -> alle schrijfwijzen vooraan een Calendly-naam, uit agenda-taken.json (calendly_duur.aliassen)."""
+    try:
+        pad = os.path.join(os.path.dirname(os.path.abspath(__file__)), "werkwijze", "agenda-taken.json")
+        return (json.load(open(pad, encoding="utf-8")).get("calendly_duur") or {}).get("aliassen") or {}
+    except (OSError, ValueError):
+        return {}
 
 
 def main():

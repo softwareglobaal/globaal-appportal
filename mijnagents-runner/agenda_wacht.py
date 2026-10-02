@@ -132,9 +132,38 @@ EXTERNE_RELATIES = EXTERNE.get("relaties", [])              # Nadien (boekhouder
 # organisatie.globaal.be de norm werden. Ze blijven leesbaar, zodat een afspraak van
 # vorig jaar bij dezelfde firma terechtkomt als een van vandaag. "EE" gebruikte hij
 # voor Energie Efficiënt, ook los in een titel zoals "AI & EE" (20-09-2026).
+# Mehdi, 02-10-2026 (goedgekeurd): in de titel van een afspraak heeft elke firma een code van TWEE letters. De bron
+# is organisatie.globaal.be (kern.firma.code_agenda, migratie 183). Intern blijft de code van vier letters de sleutel
+# (boekhouding, Pipedrive, mappen, bord); in een titel schrijf ik alleen de twee letters, ook bij een bronstoring
+# (dan uit de vaste lijst hieronder). Oude schrijfwijzen (HARC, UNABO, TKN ...) blijven leesbaar. Vervangt de
+# vierletterregel van 21-09-2026 en FR-22.
+VALNET_AGENDACODES = {"HARC": "HA", "UNAB": "UB", "TKNB": "TK", "ENEF": "EE", "ELEV": "EL", "HINV": "HI", "HARM": "HB",
+                      "CONT": "CX", "MELO": "ME", "HDSI": "DI", "HDSS": "DS", "BFUT": "BF", "CORE": "CB", "ENST": "ES",
+                      "MEDI": "MS", "ORVA": "OR", "QOPP": "QP", "ZIDI": "ZC"}
+NIET_FIRMA_CODES = {"ALGE": "AL", "PRIVE": "PR"}      # categorieën, geen firma's (Lara: LA, op haar eigen agenda)
+
+
+def agendacodes():
+    """firmacode (vier letters) -> agendacode (twee letters): de bron, aangevuld met de vaste lijst."""
+    try:
+        uit = organisatie.agendacodes()
+    except Exception:  # noqa: BLE001
+        uit = {}
+    return {**VALNET_AGENDACODES, **{k: v for k, v in (uit or {}).items() if v and len(v) == 2}}
+
+
+AGENDACODES = {**agendacodes(), **NIET_FIRMA_CODES}
+
+
+def titelcode(firma):
+    """De code die in een titel komt: altijd die van twee letters."""
+    return AGENDACODES.get(firma or "", firma or "")
+
+
 AGENDACODE_NAAR_FIRMA = {"HA": "HARC", "UNABO": "UNAB", "HB": "HARM", "HARMONIEBOUW": "HARM",
-                         "CONTRAX": "CONT", "ENERGIE": "ENEF", "EE": "ENEF", "TKN": "TKNB",
-                         "ELEVAIT": "ELEV"}
+                         "CONTRAX": "CONT", "CTX": "CONT", "ENERGIE": "ENEF", "EE": "ENEF", "TKN": "TKNB",
+                         "ELEVAIT": "ELEV",
+                         **{twee: vier for vier, twee in AGENDACODES.items()}}
 
 # PRIVE is geen firma maar hoort wel in een titel te mogen staan.
 NIET_FIRMA = {"PRIVE": "privé van Mehdi"}
@@ -157,27 +186,35 @@ SOORT = {"KB": "klant buiten", "PB": "prospect buiten (plaatsbezoek)", "KO": "kl
          "B2B": "professioneel extern, wij nog geen klant",
          # A van aannemer: als architect heeft Mehdi veel afspraken met aannemers van zijn klanten.
          # Geen klant, geen leverancier: een eigen soort. Mandaat van Mehdi, 23-09-2026.
-         "AB": "aannemer buiten", "AO": "aannemer online"}
+         "AB": "aannemer buiten", "AO": "aannemer online",
+         # Sinds 02-10-2026 twee letters: B2B wordt XB (buiten) of XO (online). ZB/ZO blijven vrij voor het open
+         # voorstel 'zakelijke klant met terugkerende opdrachten' (klantsoorten_voorstel, 22-09-2026).
+         "XB": "extern professioneel buiten, wij nog geen klant", "XO": "extern professioneel online, wij nog geen klant"}
 # Centraal, zodat een nieuwe soort nergens vergeten wordt (23-09-2026).
-BUITEN_SOORTEN = ("PB", "KB", "LB", "AB")             # per definitie buiten
-EXTERN_ONLINE = ("KO", "PO", "LO", "B2B", "AO")       # online met iemand van buiten: alleen geparkeerd
+BUITEN_SOORTEN = ("PB", "KB", "LB", "AB", "XB")       # per definitie buiten
+EXTERN_ONLINE = ("KO", "PO", "LO", "B2B", "AO", "XO")  # online met iemand van buiten: alleen geparkeerd
 # Diensten met een verslagagent (Commandocentrum, 16-09-2026): WB/OPL werfverslag, VC veiligheidscoördinatie,
 # PLB plaatsbeschrijving, BS/STA barsten en scheuren. De code staat na de firmacode, vóór het nummer of de naam.
 # De activiteit: wat Mehdi gaat doen. Beslist op 25-09-2026: voor architectuur voorlopig alleen WB,
 # VOPL, DOPL en OPL; voor UNABO de volledige lijst van de diensten op unabo.be; interne besprekingen
 # over AI en automatisering AI+AT. De oude codes (OPM, SD ...) blijven geldig.
-TYPES = {"WB": "werfbezoek", "OPL": "oplevering", "PLB": "plaatsbeschrijving", "SCN": "3D-scan", "EPB": "EPB",
-         "VC": "veiligheidscoördinatie", "BS": "barsten en scheuren", "STA": "stabiliteit", "SD": "schetsontwerp", "OPM": "opmeting",
-         "VOPL": "voorlopige oplevering", "DOPL": "definitieve oplevering",
-         "VEN": "ventilatie, ventilatiemeting", "BDT": "blowerdoortest", "VERG": "vergunning of melding zonder architect",
-         "FW": "functiewijziging", "REG": "regularisatie", "REN": "3D-rendering", "LM": "landmeter: opmeting, afpaling, muurovername",
-         "DRA": "drafting, plannen tekenen of digitaliseren", "MST": "meetstaat", "KM": "kennismaking", "OFB": "offertebespreking",
-         "BUN": "bundel van meerdere diensten", "AI+AT": "AI en automatisering (interne bespreking)"}
-ACTIVITEITEN = {"HARC": ("WB", "VOPL", "DOPL", "OPL"),
-                "UNAB": ("EPB", "VEN", "BDT", "STA", "BS", "VERG", "FW", "REG", "PLB", "SCN", "REN", "VC", "LM", "SD", "DRA",
-                         "MST", "KM", "OFB", "BUN"),
-                "intern": ("AI+AT",)}
-TYPE_RE = re.compile(r"^\s*(" + "|".join(re.escape(k) for k in sorted(TYPES, key=len, reverse=True)) + r")(?![\w+])")
+# Sinds 02-10-2026 heeft elke opdracht twee letters (Mehdi, goedgekeurd). De oude codes blijven leesbaar en worden
+# bij het lezen omgezet (TYPE_ALIAS); geschreven wordt alleen de nieuwe code.
+TYPES = {"WB": "werfbezoek", "PL": "plaatsbezoek", "PS": "plaatsbeschrijving", "SC": "scanning, 3D-scan",
+         "BS": "barsten en scheuren", "ST": "stabiliteit", "EP": "EPB", "VC": "veiligheidscoördinatie", "OP": "oplevering",
+         "VO": "voorlopige oplevering", "DO": "definitieve oplevering", "OM": "opmeting", "VE": "ventilatie, ventilatiemeting",
+         "BD": "blowerdoortest", "VG": "vergunning of melding zonder architect", "FW": "functiewijziging", "RG": "regularisatie",
+         "RD": "3D-rendering", "LM": "landmeter: opmeting, afpaling, muurovername", "DR": "drafting, plannen tekenen of digitaliseren",
+         "MT": "meetstaat", "SD": "schetsontwerp", "KM": "kennismaking", "OB": "offertebespreking", "BU": "bundel van meerdere diensten",
+         "AI": "AI en automatisering (interne bespreking)"}
+TYPE_ALIAS = {"OPL": "OP", "PLB": "PS", "SCN": "SC", "EPB": "EP", "STA": "ST", "OPM": "OM", "VOPL": "VO", "DOPL": "DO",
+              "VEN": "VE", "BDT": "BD", "VERG": "VG", "REG": "RG", "REN": "RD", "DRA": "DR", "MST": "MT", "OFB": "OB",
+              "BUN": "BU", "AI+AT": "AI"}
+ACTIVITEITEN = {"HARC": ("WB", "VO", "DO", "OP", "PL"),
+                "UNAB": ("EP", "VE", "BD", "ST", "BS", "VG", "FW", "RG", "PS", "SC", "RD", "VC", "LM", "SD", "DR",
+                         "MT", "KM", "OB", "BU", "PL"),
+                "intern": ("AI",)}
+TYPE_RE = re.compile(r"^\s*(" + "|".join(re.escape(k) for k in sorted(set(TYPES) | set(TYPE_ALIAS), key=len, reverse=True)) + r")(?![\w+])")
 # Agenda's met één aard krijgen hun kleur op de agenda zelf, niet per afspraak.
 # Mandaat van Mehdi, 20-09-2026: "voor prive wil ik zwart en de agenda is al zwart
 # gezet zodat altijd zwart komt, en de agent kan controleren. Lara is al flamingo
@@ -194,7 +231,7 @@ AGENDA_VASTE_KLEUR = {
 # Diensten die per definitie buiten gebeuren; daar hoeft Mehdi geen !! meer bij te
 # typen. Beslist 20-09-2026. EPB, VC, STA en SD staan er bewust niet bij: die kunnen
 # evengoed online.
-BUITEN_TYPES = {"WB", "OPL", "VOPL", "DOPL", "PLB", "SCN", "OPM", "BS", "LM", "BDT", "VEN"}
+BUITEN_TYPES = {"WB", "OP", "VO", "DO", "PS", "SC", "OM", "BS", "LM", "BD", "VE", "PL"}
 
 ALLE_CODES = sorted(set(FIRMACODES) | set(EXTERNE_FIRMAS) | set(AGENDACODE_NAAR_FIRMA) | set(NIET_FIRMA), key=len, reverse=True)
 CODE_RE = re.compile(r"\[(" + "|".join(ALLE_CODES) + r")(?:-(" + "|".join(sorted(SOORT, key=len, reverse=True)) + r"))?\]", re.I)
@@ -311,7 +348,8 @@ def lees_titel(titel):
     rest = re.sub(r"^\s*(mehdi|siyan|shelton|angela)[^:]{0,40}:\s*", "", rest, flags=re.I).strip(" -")
     mt = TYPE_RE.match(rest)      # hoofdletters: 'Ren' of 'Kim' als klantnaam is geen code
     if mt:
-        uit["type"] = mt.group(1).upper()
+        uit["type"] = TYPE_ALIAS.get(mt.group(1).upper(), mt.group(1).upper())
+        uit["type_geschreven"] = mt.group(1)
         rest = rest[mt.end():].strip(" -")
     if uit["type"] in BUITEN_TYPES:
         uit["buiten"] = True
@@ -450,7 +488,7 @@ def markering_tegen(titel, dag, markers=None):
     """De markering die een afspraak met deze titel op deze dag tegenhoudt, of None. Een rit, een hele-dag-item en Lara
     zelf (de reden van de markering) tellen niet."""
     t = (titel or "").strip()
-    if not t or not dag or t.startswith("\U0001F697") or "[LARA]" in t.upper():
+    if not t or not dag or t.startswith("\U0001F697") or "[LARA]" in t.upper() or "[LA]" in t.upper():
         return None
     info = lees_titel(t)
     if info["reistijd"]:
@@ -729,7 +767,6 @@ def maker(a):
 # zet de agent GEEN link, alleen de notitie dat Mehdi de link stuurt.
 VASTE_ZOOM = ""
 WERKAGENDA = "mehdiprivewerkagenda@gmail.com"
-KANTELDATUM = "2026-09-21"                            # vanaf hier dragen nieuwe afspraken de vierletterige code
 SOORT_CODES = set(SOORT)
 
 
@@ -808,16 +845,55 @@ def titel_voorstel(titel):
         over = re.sub(r"(?<![\w])" + re.escape(w) + r"(?![\w])", " ", over)
     over = re.sub(r"\s*-\s*(?=\s|$)", " ", over)
     over = re.sub(r"\s+", " ", over).strip(" -,")
-    code = f"[{firma}-{soort}]" if soort else f"[{firma}]"
+    if soort == "B2B":
+        soort = "XB" if waar == "B" else "XO"
+    code = f"[{titelcode(firma)}-{soort}]" if soort else f"[{titelcode(firma)}]"
     nieuw = f"{kop.strip()}: {code}" + (f" {over}" if over else "")
     uitleg = f"firma {firma} uit de tekst" + (f", soort {soort}" if soort else ", soort niet te bepalen")
     return nieuw, firma, soort, uitleg
 
 
+def codes_twee_letters(titel, online=None):
+    """Zet firma-, soort- en opdrachtcode in een titel om naar twee letters: [HARC-KB] WB -> [HA-KB] WB,
+    [UNABO-PO] Stijn - STA -> [UB-PO] Stijn - ST, [TKNB-IN] AI+AT -> [TK-IN] AI. B2B wordt XB of XO, maar alleen
+    als buiten of online vaststaat (online: True/False/None). Geeft de nieuwe titel (of dezelfde)."""
+    m = CODE_RE.search(titel)
+    if not m:
+        return titel
+    info = lees_titel(titel)
+    firma, soort = info.get("firma"), (m.group(2) or "").upper()
+    if soort == "B2B":
+        if "!!" in titel or online is False:
+            soort = "XB"
+        elif online is True:
+            soort = "XO"
+    code = f"[{titelcode(firma)}-{soort}]" if soort else f"[{titelcode(firma)}]"
+    nieuw = titel[:m.start()] + code + titel[m.end():]
+    # het opdrachttype meteen na de code (of na een dubbelpunt): oude code -> nieuwe
+    na = nieuw[m.start() + len(code):]
+    mt = re.match(r"(\s*:?\s*)(" + "|".join(re.escape(k) for k in sorted(TYPE_ALIAS, key=len, reverse=True)) + r")(?![\w+])", na)
+    if mt:
+        na = na[:mt.start(2)] + TYPE_ALIAS[mt.group(2)] + na[mt.end(2):]
+    # ook in titels waar het type na de naam staat: '[UNABO-PO] Stijn Hahn - STA'
+    na = re.sub(r"(\s-\s*)(" + "|".join(re.escape(k) for k in sorted(TYPE_ALIAS, key=len, reverse=True)) + r")(\s*$)",
+                lambda x: x.group(1) + TYPE_ALIAS[x.group(2)] + x.group(3), na)
+    return nieuw[:m.start() + len(code)] + na
+
+
+def _online(a):
+    loc = (a.get("locatie") or "").lower()
+    if loc.startswith("http") or "zoom.us" in loc or re.search(r"zoom\.us/j/", a.get("omschrijving") or ""):
+        return True
+    if loc and not loc.startswith("http"):
+        return False
+    return None
+
+
 def titels_normaliseren(items, alleen_dag=None):
     """Vrije tekst naar de titelcode, alleen voor afspraken die Mehdi zelf maakte, zonder gasten.
     Eenduidig (firma én soort) -> herschrijven. Anders -> een voorstel in de regels.
-    Een oude code in een nieuwe afspraak (na de kanteldatum) -> de vierletterige code."""
+    Een code van drie of vier letters (HARC, UNABO, STA, AI+AT) -> twee letters (Mehdi, 02-10-2026). Met gasten
+    of in een reeks wordt het een voorstel; een reeks zet codes_reeksen in een keer om."""
     tok = agenda._toegang()
     nu = datetime.now().astimezone().isoformat()
     gedaan, regels = 0, []
@@ -831,10 +907,14 @@ def titels_normaliseren(items, alleen_dag=None):
         titel = a["titel"]
         info = lees_titel(titel)
         nieuw = None
-        if info.get("agendacode") and (a.get("_gemaakt") or "")[:10] >= KANTELDATUM and _van_mehdi(a):
-            nieuw = re.sub(r"\[" + re.escape(info["agendacode"]) + r"(?=[-\]])", "[" + info["firma"], titel, count=1, flags=re.I)
-            uitleg = f"oude code {info['agendacode']} in een nieuwe afspraak -> {info['firma']}"
-        elif not info.get("firma"):
+        if info.get("firma"):
+            kandidaat = codes_twee_letters(titel, _online(a))
+            if kandidaat != titel:
+                if _van_mehdi(a) and not a.get("_terugkerend"):
+                    nieuw, uitleg = kandidaat, "codes van twee letters (Mehdi, 02-10-2026)"
+                elif not a.get("_terugkerend"):
+                    regels.append(f"{a['start'][:16]} {titel[:50]}: VOORSTEL '{kandidaat[:70]}' (twee letters; met gasten verander ik de titel niet)")
+        else:
             nieuw, firma, soort, uitleg = titel_voorstel(titel)
             if nieuw and not (firma and soort and _van_mehdi(a) and not a.get("_terugkerend")):
                 regels.append(f"{a['start'][:16]} {titel[:50]}: VOORSTEL '{nieuw[:70]}' ({uitleg})")
@@ -847,6 +927,36 @@ def titels_normaliseren(items, alleen_dag=None):
                 gedaan += 1
             except Exception as e:  # noqa: BLE001
                 regels.append(f"{a['start'][:16]} {titel[:45]}: titel niet gezet ({type(e).__name__})")
+    return gedaan, regels
+
+
+def codes_reeksen(items, droog=False):
+    """Een terugkerende afspraak van Mehdi zelf (zonder gasten) krijgt de codes van twee letters in de reeks zelf, een
+    keer; op de agenda van Lara wordt [LARA] [LA]. Geeft (gezet, regels)."""
+    import urllib.parse
+    import urllib.request
+    tok = agenda._toegang()
+    gedaan, regels, gezien = 0, [], set()
+    for a in items:
+        if not a.get("_reeks") or a["_reeks"] in gezien or a.get("deelnemers") or a.get("_archief") \
+                or not mag_schrijven(a.get("kalender", "")) or (a.get("maker") or WERKAGENDA).lower() != WERKAGENDA:
+            continue
+        gezien.add(a["_reeks"])
+        try:
+            url = f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='@')}/events/{urllib.parse.quote(a['_reeks'])}"
+            reeks = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": "Bearer " + tok}), timeout=30))
+            oud = reeks.get("summary") or ""
+            if reeks.get("attendees"):
+                continue
+            nieuw = re.sub(r"\[LARA\]", "[LA]", oud, flags=re.I) if "[LARA]" in oud.upper() else codes_twee_letters(oud, _online(a))
+            if nieuw == oud:
+                continue
+            if not droog:
+                _patch({"kalender": a["kalender"], "id": a["_reeks"], "titel": oud}, {"summary": nieuw}, tok)
+            gedaan += 1
+            regels.append(f"reeks '{oud[:50]}' -> '{nieuw[:60]}'")
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"reeks {a['titel'][:45]}: niet omgezet ({type(e).__name__})")
     return gedaan, regels
 
 
@@ -1031,13 +1141,14 @@ def _naam_uit_oude_agenda(nr):
 # Welke woorden in een titel naar welke activiteit wijzen (beslist 25-09-2026). Per firma alleen de
 # codes die voor die firma gelden; wijzen de woorden naar meer dan een code, dan geen voorstel.
 ACTIVITEIT_WOORDEN = {
-    "HARC": [(r"voorlopige oplevering", "VOPL"), (r"definitieve oplevering", "DOPL"), (r"\boplevering\b", "OPL"), (r"werfbezoek", "WB")],
-    "UNAB": [(r"stabiliteit", "STA"), (r"barst|scheur", "BS"), (r"\bEPB\b", "EPB"), (r"ventilatie", "VEN"), (r"blower", "BDT"),
-             (r"vergunning|melding", "VERG"), (r"functiewijziging", "FW"), (r"regularisatie", "REG"), (r"plaatsbeschrijving", "PLB"),
-             (r"3D.?scan|scanning", "SCN"), (r"render", "REN"), (r"veiligheid|\bVC\b", "VC"), (r"landmeter|afpaling|muurovername", "LM"),
-             (r"ontwerp|schets", "SD"), (r"drafting", "DRA"), (r"meetstaat", "MST"), (r"kennismaking", "KM"), (r"offerte", "OFB"),
-             (r"bundel", "BUN")],
-    "intern": [(r"\bAI\b|automation|automatisering", "AI+AT")],
+    "HARC": [(r"voorlopige oplevering", "VO"), (r"definitieve oplevering", "DO"), (r"\boplevering\b", "OP"), (r"werfbezoek", "WB"),
+             (r"plaatsbezoek", "PL")],
+    "UNAB": [(r"stabiliteit", "ST"), (r"barst|scheur", "BS"), (r"\bEPB\b", "EP"), (r"ventilatie", "VE"), (r"blower", "BD"),
+             (r"vergunning|melding", "VG"), (r"functiewijziging", "FW"), (r"regularisatie", "RG"), (r"plaatsbeschrijving", "PS"),
+             (r"3D.?scan|scanning", "SC"), (r"render", "RD"), (r"veiligheid|\bVC\b", "VC"), (r"landmeter|afpaling|muurovername", "LM"),
+             (r"ontwerp|schets", "SD"), (r"drafting", "DR"), (r"meetstaat", "MT"), (r"kennismaking", "KM"), (r"offerte", "OB"),
+             (r"bundel", "BU"), (r"plaatsbezoek", "PL")],
+    "intern": [(r"\bAI\b|automation|automatisering", "AI")],
 }
 
 
@@ -1048,16 +1159,16 @@ def activiteit_voorstel(titel, info):
     lijst = ACTIVITEIT_WOORDEN["intern"] if info["soort"] == "IN" else ACTIVITEIT_WOORDEN.get(info["firma"], [])
     rest = CODE_RE.sub(" ", titel)
     codes = {code for rx, code in lijst if re.search(rx, rest, re.I)}
-    if {"VOPL", "OPL"} <= codes or {"DOPL", "OPL"} <= codes:
-        codes.discard("OPL")            # 'voorlopige oplevering' bevat ook 'oplevering'
+    if {"VO", "OP"} <= codes or {"DO", "OP"} <= codes:
+        codes.discard("OP")             # 'voorlopige oplevering' bevat ook 'oplevering'
     return next(iter(codes)) if len(codes) == 1 else ""
 
 
 def met_activiteit(titel, code):
-    """Zet de code meteen na [FIRMA-SOORT]. Bij AI+AT valt een los 'AI' of 'Automation' erna weg."""
+    """Zet de code meteen na [FIRMA-SOORT]. Bij AI valt een los 'AI' of 'Automation' erna weg."""
     nieuw = CODE_RE.sub(lambda m: f"{m.group(0)} {code}", titel, count=1)
-    if code == "AI+AT":
-        nieuw = re.sub(r"(AI\+AT)\s+(AI|Automation|automatisering)\b\s*", r"\1 ", nieuw, count=1, flags=re.I).rstrip()
+    if code == "AI":
+        nieuw = re.sub(r"\b(AI)\s+(AI|Automation|automatisering)\b\s*", r"\1 ", nieuw, count=1, flags=re.I).rstrip()
     return re.sub(r"\s{2,}", " ", nieuw)
 
 
@@ -1123,8 +1234,8 @@ def titel_uit_onderzoek(a):
         for rx, code in ACTIVITEIT_WOORDEN[firma]:
             if re.search(rx, titel, re.I):
                 gevonden.setdefault(code, set()).add(firma)
-    if "VOPL" in gevonden or "DOPL" in gevonden:
-        gevonden.pop("OPL", None)
+    if "VO" in gevonden or "DO" in gevonden:
+        gevonden.pop("OP", None)
     if len(gevonden) != 1:
         return None, ""
     code, firmas = next(iter(gevonden.items()))
@@ -1137,7 +1248,7 @@ def titel_uit_onderzoek(a):
     klant, gewonnen = deal
     buiten = code in BUITEN_TYPES or info["buiten"]
     soort = ("K" if gewonnen else "P") + ("B" if buiten else "O")
-    nieuw = f"{'!! ' if buiten else ''}Mehdi: [{firma}-{soort}] {code} - {klant}, {adres}"
+    nieuw = f"{'!! ' if buiten else ''}Mehdi: [{titelcode(firma)}-{soort}] {code} - {klant}, {adres}"
     return nieuw, f"uitgezocht: activiteit {code}, firma {firma}, klant {klant} ({'getekend' if gewonnen else 'nog niet getekend'}) uit de deal op dit adres"
 
 
@@ -1319,7 +1430,7 @@ def titelfouten(a, info):
                     voorstel = r.get("firma") or "ALGE"
                     break
         if voorstel:
-            fouten.append(f"geen firmacode, wellicht [{voorstel}]")
+            fouten.append(f"geen firmacode, wellicht [{titelcode(voorstel)}]")
         else:
             # 3) staan er namen in die ik ken, dan zegt "diensten voor" op
             # organisatie.globaal.be voor welke firma die mensen werken. Mandaat 20-09-2026.
@@ -1331,7 +1442,7 @@ def titelfouten(a, info):
                 except Exception:  # noqa: BLE001
                     firmas = []
             if len(firmas) == 1:
-                fouten.append(f"geen firmacode, maar de namen wijzen naar [{firmas[0]}]")
+                fouten.append(f"geen firmacode, maar de namen wijzen naar [{titelcode(firmas[0])}]")
             elif firmas:
                 fouten.append("geen firmacode; de namen werken voor " + " of ".join(firmas))
             else:
@@ -1384,7 +1495,7 @@ def kleur_gewenst(a, info):
         return "5"
     if info["soort"] == "AO":
         return "2"    # salie: aannemer online (een aannemer van een klant)
-    if info["soort"] == "B2B":
+    if info["soort"] in ("B2B", "XO"):
         return "1"    # lavendel: professioneel extern, wij nog geen klant (lichter dan leverancier)
     if info["soort"] == "LO":
         return "3"    # druif, paars: geld dat buitengaat
@@ -2858,7 +2969,7 @@ def zoom_zonder_wachtkamer(items, nu=None, uren=48):
     return uit
 
 
-EXTERNE_SOORTEN = {"KB", "KO", "PB", "PO", "LB", "LO", "AB", "AO", "B2B"}
+EXTERNE_SOORTEN = {"KB", "KO", "PB", "PO", "LB", "LO", "AB", "AO", "B2B", "XB", "XO"}
 
 
 def dubbele_boekingen(items, nu=None, uren=48):
@@ -3045,8 +3156,10 @@ def slot_nemen(max_wachten=900):
             return f
         except OSError:
             if time.time() > tot:
+                # niet 0: de wijzigingswacht moet zien dat deze dag NIET verwerkt is en hem opnieuw proberen
+                # (audit 02-10-2026, A6; EX_TEMPFAIL)
                 print("een andere ronde loopt al te lang, ik stop", file=sys.stderr)
-                sys.exit(0)
+                sys.exit(75)
             time.sleep(5)
 
 
@@ -3057,7 +3170,8 @@ def main():
     try:
         if not agenda.beschikbaar():
             ag.hartslag("fout", taak="geen agendatoegang", detail="GOOGLE_AGENDA_* ontbreekt in ~/appportal/.env")
-            return
+            print("geen agendatoegang: GOOGLE_AGENDA_* ontbreekt", file=sys.stderr)
+            return 78                    # niet 0: niets verwerkt (A6)
         items = afspraken(-1, 8)
         fouten = [i for i in items if i.get("fout")]
         items = [i for i in items if not i.get("fout")]
@@ -3137,6 +3251,10 @@ def main():
                 ag.log(f"dag {vandaag}", "schrijf", f"markeringen: {len(mb)} op Bezet gezet", "\n".join(mb))
         pg, pregels = projectnummers_zetten(kort_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"projectnummer: {pg} in de titel gezet", "\n".join(pregels))
+        if not DAG_ARG:
+            rg, rregels = codes_reeksen(kort_items)
+            if rregels:
+                ag.log(f"dag {vandaag}", "schrijf", f"codes van twee letters: {rg} reeks(en) omgezet", "\n".join(rregels))
         tg, tregels = contact_zetten(kort_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"telefoon: {tg} nummer(s) bovenaan gezet", "\n".join(tregels))
         ag.log(f"dag {vandaag}", "schrijf", f"titels: {ng} rechtgezet uit vrije tekst; link-notitie: {zg} gezet",
@@ -3336,4 +3454,4 @@ if __name__ == "__main__":
     # Elke ronde begint met zijn tijdstip. Gezien 24-09-2026: het logboek had geen enkele tijd,
     # zodat niet na te gaan was wanneer iets gebeurde.
     print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · " + (f"dag {DAG_ARG}" if DAG_ARG else "volledige ronde"), flush=True)
-    main()
+    sys.exit(main() or 0)

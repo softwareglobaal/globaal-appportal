@@ -46,9 +46,9 @@ check("de JSON legt uit dat 'diensten voor' telt, niet de werkgever",
       "diensten voor" in taken["bronnen_van_waarheid"]["namen_van_collegas"].get("let_op", ""))
 check("de bron geeft firmacodes", bool(bron), f"{len(bron)} codes gelezen")
 check("de agent gebruikt diezelfde codes", W.FIRMACODES == bron)
-check("elke agendacode wijst naar een bestaande firma",
-      all(v in bron for v in W.AGENDACODE_NAAR_FIRMA.values()),
-      str({k: v for k, v in W.AGENDACODE_NAAR_FIRMA.items() if v not in bron}))
+check("elke agendacode wijst naar een bestaande firma (of de categorie AL/PR)",
+      all(v in bron or v in W.NIET_FIRMA or v in W.EXTERNE_FIRMAS for v in W.AGENDACODE_NAAR_FIRMA.values()),
+      str({k: v for k, v in W.AGENDACODE_NAAR_FIRMA.items() if v not in bron and v not in W.NIET_FIRMA and v not in W.EXTERNE_FIRMAS}))
 check("elke afdeling op het bord hoort bij een bestaande code of is PRIVE",
       all(k in bron or k in W.NIET_FIRMA for k in W.FIRMA_AFDELING),
       str([k for k in W.FIRMA_AFDELING if k not in bron and k not in W.NIET_FIRMA]))
@@ -57,7 +57,7 @@ for code in bron:
 for oudc, nieuwc in W.AGENDACODE_NAAR_FIRMA.items():
     d = W.lees_titel(f"Mehdi: [{oudc}-IN] proef")
     check(f"[{oudc}] hoort bij firma {nieuwc}", d["firma"] == nieuwc and d["agendacode"] == oudc)
-check("soorten gelijk", taken["titelconventie"]["soorten"] == W.SOORT)
+check("soorten gelijk (B2B leest de agent nog, schrijft XB/XO)", taken["titelconventie"]["soorten"] == {k: v for k, v in W.SOORT.items() if k != "B2B"})
 check("types gelijk", taken["titelconventie"]["types"] == W.TYPES)
 
 
@@ -211,10 +211,10 @@ check("de makerslijst is vastgelegd in de JSON", "maker" in json.dumps(taken, en
 def _tf(titel):
     a = {"titel": titel, "kalender": "mehdiprivewerkagenda@gmail.com", "hele_dag": False, "deelnemers": []}
     return W.titelfouten(a, W.lees_titel(titel))
-check("een projectnummer uit de H-A map stelt [HARC] voor",
-      any("HARC" in x for x in _tf("!! Mehdi: 2616 Stad Leuven stedenbouwkundige info")))
-check("een leverancier uit de lijst stelt [ALGE] voor",
-      any("ALGE" in x for x in _tf("?? Mehdi: Nadine Boekhouder")))
+check("een projectnummer uit de H-A map stelt [HA] voor",
+      any("[HA]" in x for x in _tf("!! Mehdi: 2616 Stad Leuven stedenbouwkundige info")))
+check("een leverancier uit de lijst stelt [AL] voor",
+      any("[AL]" in x for x in _tf("?? Mehdi: Nadine Boekhouder")))
 
 # B2B: professioneel extern waar wij nog geen klant van zijn. Mehdi, 22-09-2026.
 _b = W.lees_titel("Mehdi & Siyan: [HA-B2B] Stefan Oosterbaan")
@@ -256,12 +256,12 @@ check("een intern overleg op de agenda-standaard wordt stil gemaakt",
       'elif standaard and (info["soort"] == "IN" or a.get("hele_dag"))' in _bron)
 
 # In één keer goed: vrije tekst naar de titelcode, en de vaste Zoom (23-09-2026).
-check("vrije tekst 'Harchitects-KB 2505' wordt [HARC-KB]",
-      W.titel_voorstel("!! Mehdi & Catalin: Harchitects-KB 2505")[0] == "!! Mehdi & Catalin: [HARC-KB] 2505")
-check("vrije tekst 'elevait-Leverancie online' wordt [ELEV-LO]",
-      W.titel_voorstel("?? Mehdi en Shaniel: Robby elevait-Leverancie online")[0] == "?? Mehdi en Shaniel: [ELEV-LO] Robby")
-check("een leverancier uit de lijst wordt [ALGE-LO]",
-      (W.titel_voorstel("Mehdi: Nadine boekhouder online")[0] or "").startswith("Mehdi: [ALGE-LO]"))
+check("vrije tekst 'Harchitects-KB 2505' wordt [HA-KB] (twee letters, 02-10-2026)",
+      W.titel_voorstel("!! Mehdi & Catalin: Harchitects-KB 2505")[0] == "!! Mehdi & Catalin: [HA-KB] 2505")
+check("vrije tekst 'elevait-Leverancie online' wordt [EL-LO]",
+      W.titel_voorstel("?? Mehdi en Shaniel: Robby elevait-Leverancie online")[0] == "?? Mehdi en Shaniel: [EL-LO] Robby")
+check("een leverancier uit de lijst wordt [AL-LO]",
+      (W.titel_voorstel("Mehdi: Nadine boekhouder online")[0] or "").startswith("Mehdi: [AL-LO]"))
 check("een titel zonder dubbelpunt wordt niet blind herschreven", W.titel_voorstel("Mehdi, (HARC- aanne) Pioter 2405")[0] is None)
 check("de agent zet zelf geen Zoom-link zolang de juiste niet gekend is", W.VASTE_ZOOM == "")
 check("een online gesprek krijgt de notitie dat Mehdi de link stuurt",
@@ -282,7 +282,7 @@ check("[HARC-AB] is aannemer buiten, rood", W.lees_titel("!! Mehdi: [HARC-AB] 24
       and W.kleur_gewenst({"kalender": W.WERKAGENDA}, W.lees_titel("!! Mehdi: [HARC-AB] 2405")) == "11")
 check("de soorten komen uit een centrale lijst", "AB" in W.BUITEN_SOORTEN and "AO" in W.EXTERN_ONLINE)
 check("vrije tekst 'aannemer online' wordt AO",
-      W.titel_voorstel("Mehdi & Pioter: Harchitects aannemer online 2405")[0] == "Mehdi & Pioter: [HARC-AO] 2405")
+      W.titel_voorstel("Mehdi & Pioter: Harchitects aannemer online 2405")[0] == "Mehdi & Pioter: [HA-AO] 2405")
 check("ZL komt helemaal vooraan, ook voor ??", W.met_zl("?? Mehdi en Shaniel: [ELEV-LO] Robby") == "ZL ?? Mehdi en Shaniel: [ELEV-LO] Robby")
 check("een ZL die verder staat, schuift naar voren", W.met_zl("?? ZL Mehdi en Shaniel: [ELEV-LO] Robby") == "ZL ?? Mehdi en Shaniel: [ELEV-LO] Robby")
 check("ZL gaat er weer af", W.zonder_zl("ZL ?? Mehdi en Shaniel: [ELEV-LO] Robby") == "?? Mehdi en Shaniel: [ELEV-LO] Robby")
@@ -401,7 +401,7 @@ import zelfcontrole as Z
 _reg = Z.register()
 _nu = W.nu_lokaal()
 _mo = (_nu + _td(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
-_b = Z.bevindingen([{"titel": "Mehdi: [UNAB-IN] overleg Tom", "start": _mo.isoformat(), "einde": (_mo + _td(hours=1)).isoformat(),
+_b = Z.bevindingen([{"titel": "Mehdi: [UB-IN] overleg Tom", "start": _mo.isoformat(), "einde": (_mo + _td(hours=1)).isoformat(),
                      "kalender": W.WERKAGENDA, "_kleur": "3", "_merk": {}, "_reminders": {"useDefault": False, "overrides": []},
                      "maker": W.WERKAGENDA}], _nu.date().isoformat(), (_nu + _td(days=2)).date().isoformat(), _nu)
 _lara = (_nu + _td(days=1)).replace(hour=16, minute=0, second=0, microsecond=0)
@@ -482,16 +482,16 @@ check("een prospect met een projectmap wordt gemeld als klant", any("projectmap"
 
 # Activiteitscodes (beslist 25-09-2026)
 check("een activiteit wordt gelezen en voorgesteld",
-      W.lees_titel("!! Mehdi: [HARC-KB] VOPL 2505 - Norma Gleeson")["type"] == "VOPL"
+      W.lees_titel("!! Mehdi: [HARC-KB] VOPL 2505 - Norma Gleeson")["type"] == "VO"
       and W.lees_titel("!! Mehdi: [HARC-KB] VOPL 2505")["buiten"]
       and W.lees_titel("Mehdi: [UNAB-PO] Ren Lee")["type"] == ""
-      and W.lees_titel("Mehdi & Siyan: [ELEV-IN] AI+AT")["type"] == "AI+AT"
-      and W.titel_aanvulling({"titel": "Mehdi & Siyan: [ELEV-IN] Automation"}, {})[0] == "Mehdi & Siyan: [ELEV-IN] AI+AT"
-      and W.titel_aanvulling({"titel": "Mehdi, Matthew, Gul & Aqib: [TKNB-IN] AI stabiliteit"}, {})[0] == "Mehdi, Matthew, Gul & Aqib: [TKNB-IN] AI+AT stabiliteit"
-      and W.titel_aanvulling({"titel": "!! Mehdi: [HARC-KB] 2282 voorlopige oplevering"}, {})[0] == "!! Mehdi: [HARC-KB] VOPL 2282 voorlopige oplevering"
-      and W.titel_aanvulling({"titel": "Mehdi: [UNAB-PO] Kian Nazeryan - Stabiliteit"}, {})[0] == "Mehdi: [UNAB-PO] STA Kian Nazeryan - Stabiliteit"
+      and W.lees_titel("Mehdi & Siyan: [ELEV-IN] AI+AT")["type"] == "AI"
+      and W.titel_aanvulling({"titel": "Mehdi & Siyan: [ELEV-IN] Automation"}, {})[0] == "Mehdi & Siyan: [ELEV-IN] AI"
+      and W.titel_aanvulling({"titel": "Mehdi, Matthew, Gul & Aqib: [TKNB-IN] AI stabiliteit"}, {})[0] is None
+      and W.titel_aanvulling({"titel": "!! Mehdi: [HARC-KB] 2282 voorlopige oplevering"}, {})[0] == "!! Mehdi: [HARC-KB] VO 2282 voorlopige oplevering"
+      and W.titel_aanvulling({"titel": "Mehdi: [UNAB-PO] Kian Nazeryan - Stabiliteit"}, {})[0] == "Mehdi: [UNAB-PO] ST Kian Nazeryan - Stabiliteit"
       and W.activiteit_voorstel("!! Mehdi: [HARC-KB] 2505 stabiliteit", W.lees_titel("!! Mehdi: [HARC-KB] 2505 stabiliteit")) == "")
-check("architectuur kent voorlopig alleen WB, VOPL, DOPL en OPL", W.ACTIVITEITEN["HARC"] == ("WB", "VOPL", "DOPL", "OPL"))
+check("architectuur kent WB, VO, DO, OP en PL (twee letters, 02-10-2026)", W.ACTIVITEITEN["HARC"] == ("WB", "VO", "DO", "OP", "PL"))
 
 # Zelf uitzoeken, nooit wissen, bellen als hij vastzit (Mehdi, 25-09-2026)
 _oud_d = W._deal_op_adres
@@ -503,7 +503,7 @@ try:
 finally:
     W._deal_op_adres = _oud_d
 check("een korte titel wordt zelf uitgezocht: activiteit, firma, klant en adres",
-      _o1 == "!! Mehdi: [UNAB-KB] BS - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken" and _o2 is None and _o3 is None, str((_o1, _o2, _o3)))
+      _o1 == "!! Mehdi: [UB-KB] BS - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken" and _o2 is None and _o3 is None, str((_o1, _o2, _o3)))
 import pipedrive as _pd
 _oud_get = _pd.get
 _pd.get = lambda firma, pad, q=None: {"items": [{"item": {"title": "Koning Albertlaan 206, 3620 Lanaken", "status": "won", "person": {"name": "Natasja Gerritsen Natasja"}}}]}
@@ -949,6 +949,11 @@ check("een gesprek dat bij vertrek al loopt doet hij geparkeerd ter plaatse; 'KB
       and _vp81[0] == "KBC" and "Ladeuzeplein 15, 3000 Leuven" in _vp81[1]["adres"] and W.vaste_plek("kbcx") == (None, None)
       and _c81 and _c81[1] == "016 31 40 00", str((_vp81, _c81)))
 
+# Een bezet slot of ontbrekende sleutels is geen geslaagde verwerking (audit 02-10-2026, A6)
+_src_a6 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("een bezet slot en ontbrekende sleutels eindigen niet met 0, zodat de wijzigingswacht opnieuw probeert",
+      "sys.exit(75)" in _src_a6 and "return 78" in _src_a6 and "sys.exit(main() or 0)" in _src_a6)
+
 # Een hele-dag-markering is een stop: wat die dag niet mag, kan niet geboekt worden zonder ja (FR-83)
 _mk83 = W.markeringen_uit([{"hele_dag": True, "titel": "!! Mehdi: Geen buiten afspraken Lara ophalen", "start": "2026-10-02", "einde": "2026-10-03"},
                            {"hele_dag": True, "titel": "Mehdi: Buitenland", "start": "2026-10-04", "einde": "2026-10-12"},
@@ -1010,7 +1015,7 @@ import calendly_wacht as _CW
 _dw = _CW.duur_afwijkend([{"name": "UNABO prospect - EPB", "duration": 20, "active": True}, {"name": "TKN: Prospect", "duration": 30, "active": True},
                           {"name": "UNABO: Offerte", "duration": 20, "active": False}, {"name": "HA: Prospect (Kennismaking)", "duration": 45, "active": True}])
 check("de Calendlywacht meldt een TKN- of UNABO-type dat niet op een halfuur staat",
-      _CW.vaste_duur() == {"TKN": 30, "UNABO": 30} and _dw == ["UNABO prospect - EPB (20 min, moet 30)"], str(_dw))
+      _CW.vaste_duur() == {"TKNB": 30, "UNAB": 30} and _dw == ["UNABO prospect - EPB (20 min, moet 30)"], str(_dw))
 
 # 'In de auto' is geparkeerd ter plaatse, nooit rijdend: een extern gesprek schuift de aankomst altijd naar voren (FR-70, FR-82)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")

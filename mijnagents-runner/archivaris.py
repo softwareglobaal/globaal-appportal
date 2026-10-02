@@ -27,6 +27,9 @@ BORDMAP = os.path.expanduser("~/appportal/mijnagents-data/bord")
 MODEL = os.environ.get("ARCHIVARIS_MODEL", "claude-sonnet-5")
 LABELS = ["HA project", "HA sales", "UNABO sales", "UNABO project", "TKN sales", "TKN project", "Harmoniebouw", "Contrax", "Elevait", "Regie intern", "Prive", "Onbekend"]
 FIRMA = {"HA": "HA", "UNABO": "UNABO", "HB": "Harmoniebouw", "HARMONIEBOUW": "Harmoniebouw", "CONTRAX": "Contrax", "TKN": "TKN", "ELEVAIT": "Elevait", "PRIVE": "Prive"}
+# de agendacodes van twee letters (02-10-2026) en de interne codes van vier letters lezen naar hetzelfde
+FIRMA.update({"UB": "UNABO", "UNAB": "UNABO", "TK": "TKN", "TKNB": "TKN", "HARC": "HA", "HARM": "Harmoniebouw",
+              "CX": "Contrax", "CONT": "Contrax", "EL": "Elevait", "ELEV": "Elevait", "PR": "Prive"})
 DOEL = {"HA project": "projectmap H-A, map 0 Fathom", "HA sales": "salesmap onder o01. Sales", "UNABO sales": "salesmap onder o01. Sales",
         "UNABO project": "projectmap UNABO", "TKN sales": "salesmap onder o01. Sales (TKN-Buro)", "TKN project": "projectmap TKN-Buro",
         "Harmoniebouw": "Harmoniebouw", "Contrax": "Contrax", "Elevait": "Elevait NV (map Elevait in Data uit Mehdi)",
