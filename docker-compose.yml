@@ -387,6 +387,9 @@ services:
       # on the VM set OMV_UPSTREAM=http://host.docker.internal:5000 (real app).
       OMV_UPSTREAM: ${OMV_UPSTREAM:-http://app-omv:3005}
       SSO_SHARED_SECRET: ${SSO_SHARED_SECRET:-}
+      # Kopregel X-BTW-Proxy-Geheim naar btw.<domain> (zie 42-btw.conf.template);
+      # waarde alleen in .env op de VM, gelijk aan BTW_AUTHENTIK_GEHEIM van de app.
+      BTW_PROXY_GEHEIM: ${BTW_PROXY_GEHEIM:-}
     # Lets the nginx container reach host services (the real OMV app on :5000).
     extra_hosts:
       - "host.docker.internal:host-gateway"
