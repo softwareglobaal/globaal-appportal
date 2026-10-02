@@ -27,7 +27,7 @@ _ww = (REPO / "werkwijze/agenda-wacht.md").read_text(encoding="utf-8")
 WW_VERSIE = (_re.search(r"Versie ([0-9.]+)", _ww) or [None, "?"])[1]
 COMMIT = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip() or "?"
 BOUWDATUM = __import__("datetime").date.today().strftime("%d-%m-%Y")
-VERSIE = "3.0"
+VERSIE = "3.1"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -302,7 +302,9 @@ Zo kan Mehdi onderweg bellen als hij later komt, zonder te zoeken.</p>
 <li><b>Een hele-dag-markering is een stop</b> (Mehdi, 01-10-2026). 'Geen buiten afspraken' (zoals Lara ophalen) en 'geen auto'
 verbieden buitenafspraken die dag; 'geen afspraken' en 'Buitenland' verbieden alles. Die twee zet de agent in Google op Bezet, anders boekt
 Calendly erdoor (Google zet een hele-dag-item standaard op Beschikbaar). Het systeem weigert zo'n afspraak bij het zetten of
-verzetten; alleen met een ja van Mehdi gaat het toch. Wat er al staat, meldt de dagcontrole als vraag. Mehdi hoeft niets anders te markeren.</li>
+verzetten; alleen met een ja van Mehdi gaat het toch, en die ja staat dan op de afspraak zelf, zodat ze niet opnieuw gevraagd wordt.
+Wat er al staat, meldt de dagcontrole: tegen 'geen buiten' is het een vraag; op een dag die alles afsluit is het een vraag als een klant,
+Calendly of iemand met gasten het zette, en alleen zichtbaar als Mehdi het zelf plande. Mehdi hoeft niets anders te markeren.</li>
 <li><b>Een hele-dag marker is een signaal aan de collega's</b>, geen afspraak: geen kleur, geen melding, geen rit, geen titelfout.
 '!! Mehdi: Geen buiten afspraken Lara ophalen' (agenda Lara) zegt: die dag geen verre buitenafspraken plannen.</li>
 <li><b>'Mehdi: Buitenland'</b> (werkagenda, over meerdere dagen): Mehdi is weg. Wat in die week wegvalt, zoals een werfbezoek, is

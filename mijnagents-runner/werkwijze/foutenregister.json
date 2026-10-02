@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.20",
+ "versie": "3.22",
  "datum": "02-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -230,14 +230,25 @@
   },
   {
    "id": "L29",
-   "les": "Een stap is pas gedaan als zijn resultaat gecontroleerd is: lees alle pagina's, vink pas af na een geslaagde verwerking, en laat een mislukte stap nooit met 0 eindigen. Stilte is geen bewijs.",
+   "les": "Een stap is pas gedaan als zijn resultaat gecontroleerd is: lees alle pagina's, vink pas af na een geslaagde verwerking, tel pas na een geslaagde patch, lees terug wat je zette, en laat een mislukte stap nooit met 0 eindigen. Onbekend is dicht, niet leeg. Stilte is geen bewijs.",
    "uit": [
     "FR-85",
     "FR-86",
     "FR-87",
     "FR-88",
     "FR-89",
-    "FR-90"
+    "FR-90",
+    "FR-94",
+    "FR-95",
+    "FR-96"
+   ]
+  },
+  {
+   "id": "L30",
+   "les": "Wat Mehdi zelf plant of een ander boekt, is geen fout van de agent. Een conflict wordt een vraag als een ander het zette, blijft zichtbaar als Mehdi het zelf plande, en een ja staat op de afspraak zelf, zodat het niet opnieuw gevraagd wordt.",
+   "uit": [
+    "FR-83",
+    "FR-92"
    ]
   }
  ],
@@ -1773,16 +1784,13 @@
    "waarom_niet_gezien": "De markering stond bovenaan elke dagcontrole die Claude draaide, maar niets behandelde ze als een stop: de dagcontrole kende alleen 'geen auto', en _insert/_patch keken nergens naar. Zelfde patroon als FR-74 (Buitenland): de dag lezen, niet de betekenis.",
    "oorzaak": "Hele-dag-markeringen waren achtergrond, geen regel in de schrijfroute.",
    "soort_oorzaak": "code",
-   "oplossing": "DAG_MARKERINGEN in de code: 'Geen buiten afspraken', 'geen auto' en 'Buitenland' verbieden buitenafspraken, 'geen afspraken' verbiedt alles. _insert en _patch (bij een nieuw uur) weigeren zo'n afspraak (DagMarkering), tenzij met toch=True na een ja van Mehdi. De dagcontrole meldt wat er toch staat: tegen_dagmarker is een vraag aan Mehdi, op_vrije_dag een melding. Laag 1 (agenda): een markering is een stop.",
+   "oplossing": "DAG_MARKERINGEN in de code: 'Geen buiten afspraken', 'geen auto' en 'Buitenland' verbieden buitenafspraken, 'geen afspraken' verbiedt alles. _insert en _patch (bij een nieuw uur) weigeren zo'n afspraak (DagMarkering), tenzij met toch=True na een ja van Mehdi. De dagcontrole meldt wat er toch staat: tegen_dagmarker is een vraag aan Mehdi, op_vrije_dag een melding. Laag 1 (agenda): een markering is een stop. De controle erna (tegen_dagmarker, op_vrije_dag) hangt sinds 02-10-2026 aan FR-92: wat er toch staat, zette een ander of Mehdi zelf.",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een hele-dag-markering is een stop"
    },
-   "controle": [
-    "tegen_dagmarker",
-    "op_vrije_dag"
-   ],
+   "controle": [],
    "status": "opgelost"
   },
   {
@@ -1907,6 +1915,118 @@
     "soort": "test",
     "waar": "tests/test_agenda_signaal.py",
     "tekst": "A8 een geschrapte afspraak zonder start plant de dag uit de vingerafdruk"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-91",
+   "datum": "02-10-2026",
+   "gevonden_door": "Claude, zelfcontrole na de omzetting naar twee letters (TERUGGEKEERD FR-25)",
+   "fout": "Na de omzetting van '[HARC-KB] 2443 - Jenny Michielsen' naar '[HA-KB]' meldde de zelfcontrole dat de rit 'Merksem -> thuis' verwees naar een titel die niet meer bestond.",
+   "gevolg": "Een vals alarm, en erger: de agent zocht een dubbele rit of een rit zonder afspraak op de letterlijke titel, dus na een codewissel kon hij een geldige eigen rit als wees zien en weghalen, of een dubbele missen.",
+   "waarom_niet_gezien": "De omzetting veranderde voor het eerst titels in bulk; tot dan veranderde een titel alleen door Mehdi, en dan ververste de volgende ronde de rit. De tests van de omzetting keken naar titels, niet naar wat aan een titel hangt.",
+   "oorzaak": "Ritten en afspraken werden letterlijk op titel gekoppeld, terwijl dezelfde afspraak twee schrijfwijzen kan hebben (oude en nieuwe code, met of zonder ZL).",
+   "soort_oorzaak": "code",
+   "oplossing": "titel_sleutel() en rit_hoort_bij(): een titel telt na codes_twee_letters en zonder ZL, B2B/XB/XO als een. De agent (heenrit, dubbele heen- en terugrit, rit zonder afspraak) en de zelfcontrole (rit_oude_titel, rit_andere_agenda) koppelen zo.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_twee_letters.py",
+    "tekst": "een rit met de oude code hoort bij de omgezette afspraak"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-92",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi (A13); bevestigd in de zelfcontrole van 02-10-2026: zaterdag 03-10 en de week Buitenland gaven tien keer TERUGGEKEERD FR-83",
+   "fout": "Een afspraak op een dag die Mehdi afsloot ('geen afspraken', Buitenland) heette een teruggekeerde fout van de agent, en werd geen vraag: op_vrije_dag stond niet in VRAGEN.",
+   "gevolg": "De zelfcontrole riep vals alarm over afspraken die Mehdi zelf plande (de post, Jenny Michielsen op zaterdag) of die een klant via Calendly boekte (Jordy Scheurmans), terwijl het echte conflict (een boeking van een ander) niet als vraag bij Mehdi kwam.",
+   "waarom_niet_gezien": "FR-83 zette de grendel in de schrijfroute en hing de controle erna aan dezelfde fout. Maar wat er na die grendel nog op zo'n dag staat, zette niet de agent: dat is een beslissing van Mehdi of een boeking van een ander.",
+   "oorzaak": "Een conflict werd als fout van de agent ingedeeld in plaats van als vraag of als keuze van Mehdi; een ja van Mehdi werd nergens vastgelegd.",
+   "soort_oorzaak": "ontwerp",
+   "oplossing": "Op een dag die alles afsluit: een afspraak van een klant, Calendly of met gasten is op_vrije_dag, een vraag (VR en oproep); een eigen afspraak van Mehdi is eigen_op_vrije_dag, zichtbaar zonder vraag. 'Geen buiten afspraken' en 'geen auto' blijven tegen_dagmarker, een vraag. Een schrijfactie met toch=True (een ja van Mehdi) zet het merk agendawacht_ja op de afspraak, en de dagcontrole vraagt die afspraak niet opnieuw.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een afspraak van een klant of Calendly op een afgesloten dag is een vraag, een eigen afspraak niet"
+   },
+   "controle": [
+    "tegen_dagmarker",
+    "op_vrije_dag",
+    "eigen_op_vrije_dag"
+   ],
+   "status": "bewaakt"
+  },
+  {
+   "id": "FR-93",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi (A13)",
+   "fout": "De signalen over titels die niet kloppen ('Titels: ...') werden aan de lijst 'klaar' toegevoegd nadat die lijst al klaargezet was. Ze gingen nooit weg.",
+   "gevolg": "Mehdi kreeg de detailmelding over foute titels nooit; alleen de algemene nood bleef staan.",
+   "waarom_niet_gezien": "De code zag er correct uit (klaar.append), en een signaal dat niet aankomt, geeft geen fout.",
+   "oorzaak": "Volgorde: toevoegen na versturen.",
+   "soort_oorzaak": "code",
+   "oplossing": "De titelsignalen worden apart klaargezet (ag.klaarzet(titel_signalen)), zoals de ritsignalen.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de titelsignalen worden zelf verstuurd"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-94",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi (A12)",
+   "fout": "Bij een onleesbare bron ging de grendel open: gearchiveerd() gaf bij een fout een lege set, waardoor mag_schrijven() ook een archiefagenda uit de vaste lijst toeliet; dagmarkeringen() telde een fout of een onleesbare agenda als 'geen markering'.",
+   "gevolg": "Bij een storing bij Google kon de agent schrijven in een agenda op ZZ ARCHIEF, of een afspraak zetten op een dag die Mehdi afsloot. In de audit niet vastgesteld als gebeurd, wel als open codepad.",
+   "waarom_niet_gezien": "De commentaarregel zei 'dan raak ik niets aan', maar de code deed het omgekeerde; de tests bootsten alleen een geslaagde lezing na.",
+   "oorzaak": "Onbekend werd als leeg behandeld in plaats van als dicht.",
+   "soort_oorzaak": "code",
+   "oplossing": "gearchiveerd() geeft None bij een fout en mag_schrijven() zegt dan nee; dagmarkeringen() geeft DagMarkering als de lezing faalt of een agenda een fout geeft, en onthoudt dat niet, zodat de volgende keer opnieuw gelezen wordt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een onleesbare bron houdt de grendel dicht"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-95",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi (A14)",
+   "fout": "Het kleurherstel zette 'teruggezet' in HANDKLEUREN voor de patch bij Google, en telde die lijst als het aantal teruggezette kleuren, ook als de patch faalde.",
+   "gevolg": "De teller overdreef het herstel: 'teruggezet' kon kleuren tellen die nog fout stonden, en 'nieuw' (gezet min teruggezet) kon negatief uitvallen.",
+   "waarom_niet_gezien": "Een mislukte patch verscheen alleen op stderr ('kleur mislukt'); het verslag las de lijst.",
+   "oorzaak": "Melden voor het gedaan is.",
+   "soort_oorzaak": "code",
+   "oplossing": "De regel komt pas in HANDKLEUREN na een geslaagde patch.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "kleurherstel telt een mislukte patch niet als teruggezet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-96",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi (A15)",
+   "fout": "markeringen_bezet() draaide alleen in de volledige ronde, niet in de wijzigingsroute (--dag), en las niet terug of Google de markering echt op Bezet zette.",
+   "gevolg": "Een nieuwe blokkade op vrijdagavond of in het weekend bleef tot maandag 06:30 op Beschikbaar; zolang kon Calendly erdoor boeken, zoals bij Jordy Scheurmans (FR-84).",
+   "waarom_niet_gezien": "FR-84 werd opgelost in de route die het vaakst draait op werkdagen; de wijzigingswacht, die juist in het weekend loopt, gebruikt --dag.",
+   "oorzaak": "De oplossing zat maar in een van de twee routes, en een schrijfactie gold als gelukt zonder teruglezen.",
+   "soort_oorzaak": "code",
+   "oplossing": "Ook de wijzigingsroute zet de markeringen van die dag op Bezet; na de patch leest de agent de transparency terug en meldt 'niet op Bezet gezet' als Google nog Beschikbaar zegt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "ook de wijzigingsroute (--dag) zet een nieuwe blokkade op Bezet"
    },
    "controle": [],
    "status": "opgelost"

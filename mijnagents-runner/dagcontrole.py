@@ -26,7 +26,10 @@ def _w():
     return agenda_wacht
 
 # Soorten die Mehdi moet beslissen; de rest herstelt de agent zelf of is een fout in de agent.
-VRAGEN = {"buiten_botsing", "lara_botsing", "zonder_klant", "tegen_dagmarker"}
+# Een afspraak die een klant, Calendly of iemand anders zette op een dag die Mehdi afsloot, is een vraag: de agent
+# kan er zelf niet boeken (grendel in _insert/_patch, FR-83), dus het is geen fout van de agent (audit A13, FR-92).
+# Een eigen afspraak van Mehdi op een dag 'geen afspraken' of Buitenland plande hij zelf: zichtbaar, geen vraag.
+VRAGEN = {"buiten_botsing", "lara_botsing", "zonder_klant", "tegen_dagmarker", "op_vrije_dag"}
 KLANTSOORTEN = {"KB", "KO", "PB", "PO"}
 
 
@@ -119,9 +122,17 @@ def dagcontrole(items, dag):
     #     geen afspraken): wat die dag niet mag, staat er toch (FR-83, gezien 01-10-2026 voor vrijdag 02-10)
     markers = W.markeringen_uit(items, dag)
     for a in afspraken:
+        if W.JA_MERK in (a.get("_merk") or {}):
+            continue          # Mehdi zei ja voor deze dag; dat staat op de afspraak zelf (FR-92)
         m = W.markering_tegen(a["titel"], dag, markers)
-        if m:
-            meld("op_vrije_dag" if any(t == m and wat == "alles" for t, wat in markers) else "tegen_dagmarker", a,
+        if not m:
+            continue
+        alles = any(t == m and wat == "alles" for t, wat in markers)
+        if alles and W._van_mehdi(a):
+            meld("eigen_op_vrije_dag", a, f"{a['start'][11:16]} {a['titel'][:45]}: jouw eigen afspraak op een dag met '{m}'; "
+                                          f"ik laat ze staan en boek er niets bij")
+        else:
+            meld("op_vrije_dag" if alles else "tegen_dagmarker", a,
                  f"{a['start'][11:16]} {a['titel'][:45]}: '{m}' staat die hele dag, en toch staat dit gepland")
     # 9. een klant waar Mehdi naartoe gaat zonder projectnummer, van welke firma ook (FR-80)
     for a in afspraken:

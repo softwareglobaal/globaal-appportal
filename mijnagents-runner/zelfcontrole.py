@@ -147,7 +147,7 @@ def bevindingen(items, van, tot, nu):
             heen = [x for x in ritten if x.get("kalender") == kal and "T" in x.get("einde", "")
                     and (start - timedelta(hours=3) <= datetime.fromisoformat(x["einde"]) <= start
                          or (x["start"][:10] == a["start"][:10]
-                             and f"Reistijd voor: {a['titel']} (" in (x.get("omschrijving") or "")))]
+                             and W.rit_hoort_bij(x, a["titel"], "voor")))]
             if not heen:
                 fysiek = bool(loc.strip()) and not loc.lower().startswith("http")
                 bekend = fysiek or (info["nummer"] and info["nummer"] in W.projectadressen.index()) \
@@ -157,12 +157,12 @@ def bevindingen(items, van, tot, nu):
                 else:
                     meld("buiten_zonder_adres", a, "buiten zonder adres: geen rit mogelijk")
     # ritten die een titel dragen van een afspraak die er zo niet meer staat
-    titels = {W.zonder_zl(a["titel"]).strip() for a in binnen}
+    titels = {W.titel_sleutel(a["titel"]) for a in binnen}      # code-ongevoelig: [HARC-KB] = [HA-KB] (FR-91)
     for x in ritten:
         if x["start"][:10] < vandaag:
             continue
         m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
-        if m and W.zonder_zl(m.group(1)).strip() not in titels:
+        if m and W.titel_sleutel(m.group(1)) not in titels:
             meld("rit_oude_titel", x, f"rit verwijst naar '{m.group(1)[:45]}', die titel bestaat niet meer")
     # een eigen rit hoort op de agenda van zijn afspraak (FR-28, FR-42)
     for x in ritten:
@@ -171,7 +171,7 @@ def bevindingen(items, van, tot, nu):
         m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
         if not m:
             continue
-        bij = [a for a in binnen if a["titel"].strip() == m.group(1).strip() and a["start"][:10] == x["start"][:10]
+        bij = [a for a in binnen if W.titel_sleutel(a["titel"]) == W.titel_sleutel(m.group(1)) and a["start"][:10] == x["start"][:10]
                and not a.get("_archief")]
         if bij and all(a.get("kalender") != x.get("kalender") for a in bij):
             meld("rit_andere_agenda", x, f"de afspraak staat op {W.KALENDERS.get(bij[0]['kalender'], '?')[:20]}, de rit niet")

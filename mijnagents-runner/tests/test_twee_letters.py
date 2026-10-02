@@ -98,6 +98,17 @@ geschreven = [W.titel_voorstel("!! Mehdi & Catalin: Harchitects-KB 2505")[0], W.
 check("wat de agent schrijft, draagt nooit een code van drie of vier letters", all(g and not OUD.search(g) for g in geschreven), str(geschreven))
 check("vrije tekst 'Harchitects-KB 2505' wordt [HA-KB]", geschreven[0] == "!! Mehdi & Catalin: [HA-KB] 2505", str(geschreven[0]))
 
+# Een rit blijft bij zijn afspraak na de omzetting (FR-91): gezien 02-10-2026 leek 'Merksem -> thuis' verweesd
+_rit = {"omschrijving": "Reistijd na: !! Mehdi & Catalin: [HARC-KB] 2443 - Jenny Michielsen, Oudebareellei 104 (55 min = vrije rijtijd)"}
+check("een rit met de oude code hoort bij de omgezette afspraak",
+      W.rit_hoort_bij(_rit, "!! Mehdi & Catalin: [HA-KB] 2443 - Jenny Michielsen, Oudebareellei 104", "na")
+      and not W.rit_hoort_bij(_rit, "!! Mehdi & Catalin: [HA-KB] 2443 - Jenny Michielsen, Oudebareellei 104", "voor")
+      and not W.rit_hoort_bij(_rit, "!! Mehdi: [HA-KB] 2607 - Robin Verlinden", "na"))
+check("dezelfde titel met en zonder ZL, met oude of nieuwe code, en B2B/XO is een titel",
+      W.titel_sleutel("ZL Mehdi: [HARC-KO] 2603 - Lisa Cuppens") == W.titel_sleutel("Mehdi: [HA-KO] 2603 - Lisa Cuppens")
+      and W.titel_sleutel("Mehdi: [HA-B2B] Stefan") == W.titel_sleutel("Mehdi: [HA-XO] Stefan")
+      and W.titel_sleutel("Mehdi: [HA-KO] 2603 - Lisa") != W.titel_sleutel("Mehdi: [UB-KO] 2603 - Lisa"))
+
 # Lara: [LA] telt als Lara voor de dagmarkering
 check("[LA] is Lara: een markering houdt haar niet tegen",
       W.markering_tegen("!! Mehdi: [LA] Lara ophalen", "2026-10-02", [("Geen buiten afspraken", "buiten")]) is None)

@@ -992,11 +992,45 @@ check("een hele-dag-markering is een stop: een buitenafspraak die dag kan niet z
       and _r83 == ["geweigerd", "gezet", "gezet", "gezet", "verzet geweigerd"] and _b83 == {("k", "tegen_dagmarker")}
       and "tegen_dagmarker" in _D83.VRAGEN, str((_mk83, _r83, _b83)))
 
+# Een afspraak op een afgesloten dag (audit A13, FR-92): van een klant of Calendly is het een vraag; een eigen afspraak
+# plande Mehdi zelf (zichtbaar, geen vraag); een ja van Mehdi staat op de afspraak en wordt niet opnieuw gevraagd.
+_b92 = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole([
+    {"id": "m", "hele_dag": True, "titel": "geen afspraken", "start": "2026-10-03", "einde": "2026-10-04", "kalender": W.WERKAGENDA},
+    {"id": "eigen", "titel": "!! Mehdi: [AL-LB] Postkantoor Kessel-Lo, Diestsesteenweg 379, 3010 Kessel-Lo", "start": "2026-10-03T12:15:00+02:00",
+     "einde": "2026-10-03T12:35:00+02:00", "kalender": W.WERKAGENDA, "omschrijving": "Tel. bpost: 02 201 23 45"},
+    {"id": "cal", "titel": "Mehdi: [TK-PO]: Jordy Scheurmans", "start": "2026-10-03T10:30:00+02:00", "einde": "2026-10-03T11:00:00+02:00",
+     "kalender": W.WERKAGENDA, "deelnemers": ["jordy@voorbeeld.be"], "omschrijving": "+32 470 12 34 56"},
+    {"id": "ja", "titel": "!! Mehdi: [HA-KB] 2443 - Jenny Michielsen, Oudebareellei 104, 2170 Merksem", "start": "2026-10-03T17:00:00+02:00",
+     "einde": "2026-10-03T18:00:00+02:00", "kalender": W.WERKAGENDA, "deelnemers": ["catalin@voorbeeld.be"],
+     "_merk": {W.JA_MERK: "2026-10-03"}, "omschrijving": "Tel. Jenny: 0470 12 34 56"}], "2026-10-03")
+    if x["soort"] in ("tegen_dagmarker", "op_vrije_dag", "eigen_op_vrije_dag")}
+check("een afspraak van een klant of Calendly op een afgesloten dag is een vraag, een eigen afspraak niet, een ja wordt niet opnieuw gevraagd",
+      _b92 == {("eigen", "eigen_op_vrije_dag"), ("cal", "op_vrije_dag")} and "op_vrije_dag" in _D83.VRAGEN
+      and "eigen_op_vrije_dag" not in _D83.VRAGEN, str(_b92))
+_o92 = (W.dagmarkeringen, W.mag_schrijven, __import__("urllib.request").request.urlopen)
+_v92 = []
+W.dagmarkeringen = lambda dag: [("geen afspraken", "alles")]
+W.mag_schrijven = lambda k: True
+__import__("urllib.request").request.urlopen = lambda req, **k: (_v92.append(json.loads(req.data)), __import__("io").BytesIO(b"{}"))[1]
+try:
+    W._insert(W.WERKAGENDA, {"summary": "!! Mehdi: [AL-LB] Postkantoor", "start": {"dateTime": "2026-10-03T12:15:00+02:00"}}, "t", toch=True)
+    W._patch({"kalender": W.WERKAGENDA, "id": "x", "titel": "!! Mehdi: [HA-KB] 2443 - Jenny"},
+             {"start": {"dateTime": "2026-10-03T17:00:00+02:00"}}, "t", toch=True)
+finally:
+    W.dagmarkeringen, W.mag_schrijven, __import__("urllib.request").request.urlopen = _o92
+check("een ja van Mehdi (toch=True) staat als merk op de afspraak zelf",
+      len(_v92) == 2 and all(v.get("extendedProperties", {}).get("private", {}).get(W.JA_MERK) == "2026-10-03" for v in _v92), str(_v92))
+_src93 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("de titelsignalen worden zelf verstuurd, niet na het versturen aan klaar toegevoegd",
+      "ag.klaarzet(titel_signalen)" in _src93 and '"titel": f"Titels: {reden}"' in _src93
+      and _src93.index("ag.klaarzet(titel_signalen)") > _src93.index('"titel": f"Titels: {reden}"'))
+
 # Een markering die alles afsluit, staat op Bezet, anders boekt Calendly erdoor (FR-84)
-_o84 = (W._patch, W.agenda._toegang)
+_o84 = (W._patch, W.agenda._toegang, W._transparantie)
 _p84 = []
 W._patch = lambda a, body, tok, toch=False: _p84.append((a["id"], body))
 W.agenda._toegang = lambda: "t"
+W._transparantie = lambda a, tok: "opaque"
 try:
     _m84 = W.markeringen_bezet([
         {"id": "z", "hele_dag": True, "_vrij": True, "titel": "geen afspraken", "start": "2026-10-03", "einde": "2026-10-04", "kalender": W.WERKAGENDA},
@@ -1004,11 +1038,50 @@ try:
         {"id": "l", "hele_dag": True, "_vrij": True, "titel": "!! Mehdi: Geen buiten afspraken Lara ophalen", "start": "2026-10-02", "einde": "2026-10-03", "kalender": W.WERKAGENDA},
         {"id": "k", "hele_dag": True, "_vrij": False, "titel": "geen afspraken", "start": "2026-10-10", "einde": "2026-10-11", "kalender": W.WERKAGENDA},
         {"id": "v", "hele_dag": True, "_vrij": True, "titel": "Afbetaling Vectorworks", "start": "2026-10-12", "einde": "2026-10-13", "kalender": W.WERKAGENDA}])
+    # teruglezen (audit A15): zegt Google nog Beschikbaar, dan heet het niet gelukt en blijft de markering vrij
+    W._transparantie = lambda a, tok: "transparent"
+    _x95 = {"id": "n", "hele_dag": True, "_vrij": True, "titel": "geen afspraken", "start": "2026-10-17", "einde": "2026-10-18", "kalender": W.WERKAGENDA}
+    _m95 = W.markeringen_bezet([_x95])
 finally:
-    W._patch, W.agenda._toegang = _o84
+    W._patch, W.agenda._toegang, W._transparantie = _o84
+_p84 = [x for x in _p84 if x[0] != "n"]
+check("Bezet telt pas als Google het zo teruggeeft; anders 'niet op Bezet gezet' en de markering blijft vrij",
+      len(_m95) == 1 and "niet op Bezet gezet" in _m95[0] and _x95["_vrij"] is True, str(_m95))
+_src96 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("ook de wijzigingsroute (--dag) zet een nieuwe blokkade op Bezet, niet pas maandag",
+      "markeringen_bezet([x for x in (rit_items if DAG_ARG else afspraken(0, 180))" in _src96
+      and "if not DAG_ARG:\n            mb = markeringen_bezet" not in _src96)
 check("een markering die alles afsluit ('geen afspraken', Buitenland) zet de agent op Bezet, zodat Calendly die dag niet boekt",
       [x[0] for x in _p84] == ["z", "b"] and all(x[1] == {"transparency": "opaque"} for x in _p84) and len(_m84) == 2
       and '"_vrij": ev.get("transparency") == "transparent"' in (HIER / "koppelingen" / "agenda.py").read_text(encoding="utf-8"), str((_p84, _m84)))
+
+# Een onleesbare bron houdt de grendel dicht (audit A12, FR-94)
+_o94 = (W.agenda.kalendernamen, W.afspraken)
+W.agenda.kalendernamen = lambda: (_ for _ in ()).throw(OSError("Google onbereikbaar"))
+try:
+    _a94 = (W.gearchiveerd(), W.mag_schrijven(W.WERKAGENDA))
+    W.afspraken = lambda *a, **k: [{"kalender": W.WERKAGENDA, "fout": "HTTP 503"}]
+    W._MARKERS.pop("2026-10-20", None)
+    try:
+        W.dagmarkeringen("2026-10-20")
+        _d94 = "geen fout"
+    except W.DagMarkering as e:
+        _d94 = str(e)
+finally:
+    W.agenda.kalendernamen, W.afspraken = _o94
+check("een onleesbare bron houdt de grendel dicht: archief onbekend is geen schrijfrecht, markeringen onleesbaar is niet schrijven",
+      _a94 == (None, False) and "niet volledig te lezen" in _d94 and "2026-10-20" not in W._MARKERS, str((_a94, _d94)))
+
+# Kleurherstel telt alleen wat lukte (audit A14, FR-95)
+_o95 = (W._patch, W.agenda._toegang)
+W._patch = lambda a, body, tok, toch=False: (_ for _ in ()).throw(OSError("quota"))
+W.agenda._toegang = lambda: "t"
+try:
+    _k95 = W.kleuren_zetten([{"id": "c", "kalender": W.WERKAGENDA, "titel": "Mehdi: [HA-IN] overleg", "start": "2099-01-05T10:00:00+01:00",
+                              "einde": "2099-01-05T11:00:00+01:00", "_kleur": "3", "_merk": {}}])
+finally:
+    W._patch, W.agenda._toegang = _o95
+check("kleurherstel telt een mislukte patch niet als teruggezet", _k95[3] == 1 and W.HANDKLEUREN == [], str((_k95, W.HANDKLEUREN)))
 
 # Calendly: TKN-Buro en UNABO voorzien een halfuur (Mehdi, 02-10-2026)
 import calendly_wacht as _CW

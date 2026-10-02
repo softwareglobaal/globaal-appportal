@@ -240,7 +240,8 @@ CODE_RE = re.compile(r"\[(" + "|".join(ALLE_CODES) + r")(?:-(" + "|".join(sorted
 def kalenders():
     ruw = os.environ.get("AGENDA_KALENDERS", "").strip()
     lijst = [k.strip() for k in ruw.split(",") if k.strip()] or list(KALENDERS)
-    return [k for k in lijst if k not in gearchiveerd()]
+    arch = gearchiveerd()
+    return [k for k in lijst if arch is None or k not in arch]   # lezen mag; schrijven niet (mag_schrijven)
 
 
 
@@ -310,11 +311,12 @@ def afspraken_dag(dag):
 def gearchiveerd():
     """Agenda's die Mehdi op archief heeft gezet: hij koppelt ze eerst los van alle
     andere accounts en zet er dan ZZ ARCHIEF voor. Die laat ik met rust, ook als ze
-    nog in KALENDERS staan. Lukt het opvragen niet, dan raak ik niets aan."""
+    nog in KALENDERS staan. Lukt het opvragen niet, dan weet ik niet wat archief is: None, en mag_schrijven zegt
+    dan nee. Tot 02-10-2026 gaf een fout hier een lege set, en dus schrijfrecht overal (audit A12, FR-94)."""
     try:
         namen = agenda.kalendernamen()
-    except Exception:
-        return set()
+    except Exception:  # noqa: BLE001
+        return None
     return {k for k, naam in namen.items() if naam.strip().upper().startswith(ARCHIEFVOORVOEGSEL)}
 
 
@@ -438,6 +440,16 @@ DAG_MARKERINGEN = (
 _MARKERS = {}
 
 
+def _transparantie(a, tok):
+    """Wat Google nu als transparency van deze afspraak teruggeeft ('opaque' als het veld ontbreekt: dat is de standaard)."""
+    import urllib.parse
+    import urllib.request
+    url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
+           f"{urllib.parse.quote(a['id'], safe='')}?fields=transparency")
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"})
+    return json.load(urllib.request.urlopen(req, timeout=30)).get("transparency") or "opaque"
+
+
 def markeringen_bezet(items, tok=None):
     """Een markering die alles afsluit ('geen afspraken', 'Buitenland') moet in Google op Bezet staan, anders telt Calendly
     ze niet. Google zet een hele-dag-item standaard op Beschikbaar. Gezien 01-10-2026: zaterdag 03-10 'geen afspraken'
@@ -448,7 +460,11 @@ def markeringen_bezet(items, tok=None):
             continue
         if any(wat == "alles" and patroon.search(a.get("titel") or "") for patroon, wat in DAG_MARKERINGEN):
             try:
-                _patch(a, {"transparency": "opaque"}, tok or agenda._toegang())
+                _tok = tok or agenda._toegang()
+                _patch(a, {"transparency": "opaque"}, _tok)
+                # teruglezen: pas Bezet als Google het zo teruggeeft (audit A15)
+                if _transparantie(a, _tok) != "opaque":
+                    raise RuntimeError("Google geeft nog Beschikbaar terug")
                 a["_vrij"] = False
                 gezet.append(f"{a['start'][:10]} {a['titel'][:50]}: op Bezet gezet, zodat Calendly die dag niet boekt")
             except Exception as e:  # noqa: BLE001
@@ -473,14 +489,20 @@ def markeringen_uit(items, dag):
 
 
 def dagmarkeringen(dag):
-    """De markeringen van een dag over alle agenda's, een keer per dag gelezen."""
+    """De markeringen van een dag over alle agenda's, een keer per dag gelezen. Is een agenda die dag niet te lezen,
+    dan weet ik niet of de dag afgesloten is: DagMarkering, dus niet schrijven, en niet onthouden, zodat de volgende
+    keer opnieuw gelezen wordt. Tot 02-10-2026 telde een fout als 'geen markering' (audit A12, FR-94)."""
     if dag not in _MARKERS:
         try:
             from datetime import date as _d
             off = (_d.fromisoformat(dag) - nu_lokaal().date()).days
-            _MARKERS[dag] = markeringen_uit([x for x in afspraken(off, off + 1) if not x.get("fout")], dag)
-        except Exception:  # noqa: BLE001
-            _MARKERS[dag] = []
+            items = afspraken(off, off + 1)
+        except Exception as e:  # noqa: BLE001
+            raise DagMarkering(f"de markeringen van {dag} zijn niet te lezen ({type(e).__name__}): niets geschreven") from e
+        stuk = [x.get("kalender", "?") for x in items if x.get("fout")]
+        if stuk:
+            raise DagMarkering(f"de markeringen van {dag} zijn niet volledig te lezen ({', '.join(KALENDERS.get(k, k)[:20] for k in stuk)}): niets geschreven")
+        _MARKERS[dag] = markeringen_uit(items, dag)
     return _MARKERS[dag]
 
 
@@ -506,7 +528,8 @@ def mag_schrijven(kal):
     zijn, en nooit in iets dat op ZZ ARCHIEF staat. Dit staat hier in de code en
     niet alleen in de rechten bij Google, want de agent draait op het account van
     Mehdi zelf en heeft daar overal schrijfrecht."""
-    return kal in KALENDERS and kal not in gearchiveerd()
+    arch = gearchiveerd()
+    return kal in KALENDERS and arch is not None and kal not in arch
 
 
 def _patch(a, body, tok, toch=False):
@@ -520,6 +543,8 @@ def _patch(a, body, tok, toch=False):
         m = markering_tegen(body.get("summary") or a.get("titel"), dag)
         if m:
             raise DagMarkering(f"{dag} staat '{m}': '{(body.get('summary') or a.get('titel') or '')[:60]}' kan die dag niet zonder ja van Mehdi")
+    elif "start" in body:
+        _ja_stempel(body, ((body.get("start") or {}).get("dateTime") or "")[:10])
     # sendUpdates=none: een gast krijgt nooit een mail omdat de agent iets bijzet. Google
     # doet dat standaard ook niet, maar hier staat het expliciet, met een test erop.
     url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
@@ -611,6 +636,14 @@ KLEURNAAM = {"4": "roze", "6": "oranje", "11": "rood", "7": "blauw", "10": "groe
 # stabiliteit geel, niet door de agent; de ronde erna had dat stil teruggezet, zoals eerder
 # met AI stabiliteit van 30-09. Een kleur die een mens zette, is een vraag, geen fout.
 KLEURMERK = "agendawacht_kleur"
+# Een ja van Mehdi voor een afspraak op een afgesloten dag (toch=True) staat op de afspraak zelf, zodat de
+# dagcontrole het niet opnieuw vraagt (audit A13, FR-92).
+JA_MERK = "agendawacht_ja"
+
+
+def _ja_stempel(body, dag):
+    body.setdefault("extendedProperties", {}).setdefault("private", {})[JA_MERK] = dag or "ja"
+    return body
 
 
 def kleur_actie(a, wens):
@@ -1343,6 +1376,23 @@ def zonder_zl(titel):
     return re.sub(r"(^|\s)ZL\s+", r"\1", titel, count=1)
 
 
+RIT_TITEL_RE = re.compile(r"Reistijd (voor|na): (.+?) \(\d+ min")
+
+
+def titel_sleutel(titel):
+    """Dezelfde afspraak, ook na de omzetting naar twee letters of met en zonder ZL: '[HARC-KB] 2443' en '[HA-KB] 2443'
+    zijn een titel, net als B2B, XB en XO. Gezien 02-10-2026: na de omzetting leek de rit 'Merksem -> thuis' te verwijzen
+    naar een titel die niet meer bestond (FR-91)."""
+    s = codes_twee_letters(zonder_zl(titel or "")).strip()
+    return re.sub(r"-(?:XB|XO)\]", "-B2B]", s)
+
+
+def rit_hoort_bij(rit, titel, richting=None):
+    """Draagt deze rit de titel van deze afspraak in zijn omschrijving ('Reistijd voor: <titel> (..'), ongeacht de code."""
+    m = RIT_TITEL_RE.search(rit.get("omschrijving") or "")
+    return bool(m) and (richting is None or m.group(1) == richting) and titel_sleutel(m.group(2)) == titel_sleutel(titel)
+
+
 def zoom_zetten(items, alleen_dag=None):
     """ZL = zonder link. Een online gesprek met een externe partij zonder link krijgt ZL in de titel
     (zoals !! en ??) en de notitie 'Online. Mehdi stuurt de link naar ...'. Staat er later een link in
@@ -1534,11 +1584,12 @@ def kleuren_zetten(items, alleen_dag=None):
             geen += 1          # geen code in de titel: dat is een fout, geen uitzondering
             continue
         actie = kleur_actie(a, wens)
+        regel = None
         if actie == "herstellen":
             # Iets buiten de agent zette een andere kleur. Ik zet ze terug en meld het, met het
             # tijdstip van die wijziging: zo is te zien wie of wat het doet (FR-20, FR-21).
-            HANDKLEUREN.append(f"{a['start'][:16]} {a['titel'][:55]}: {KLEURNAAM.get(a.get('_kleur'), a.get('_kleur'))} "
-                               f"teruggezet naar {KLEURNAAM.get(wens, wens)} (gewijzigd op {(a.get('_gewijzigd') or '?')[:16]} UTC)")
+            regel = (f"{a['start'][:16]} {a['titel'][:55]}: {KLEURNAAM.get(a.get('_kleur'), a.get('_kleur'))} "
+                     f"teruggezet naar {KLEURNAAM.get(wens, wens)} (gewijzigd op {(a.get('_gewijzigd') or '?')[:16]} UTC)")
         merk = {"extendedProperties": {"private": {KLEURMERK: wens}}}
         try:
             if actie == "goed":
@@ -1550,6 +1601,8 @@ def kleuren_zetten(items, alleen_dag=None):
                 continue
             _patch(a, {"colorId": wens, **merk}, tok)
             gezet += 1
+            if regel:
+                HANDKLEUREN.append(regel)     # pas na een geslaagde patch: 'teruggezet' telt alleen wat lukte (audit A14, FR-95)
         except Exception as e:  # noqa: BLE001
             fout += 1
             print("kleur mislukt:", a["titel"][:40], type(e).__name__, file=sys.stderr)
@@ -1951,6 +2004,8 @@ def _insert(kalender, body, tok, toch=False):
     m = markering_tegen(body.get("summary"), dag) if not toch else None
     if m:
         raise DagMarkering(f"{dag} staat '{m}': '{(body.get('summary') or '')[:60]}' kan die dag niet zonder ja van Mehdi")
+    if toch:
+        _ja_stempel(body, dag)
     url = f"{agenda.API}/calendars/{urllib.parse.quote(kalender, safe='')}/events?sendUpdates=none"
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
                                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
@@ -2255,7 +2310,7 @@ def reistijd_zetten(items, alleen_dag=None):
             for x in reistijden:
                 # mijn rit voor precies deze afspraak, ook als hij te laat aankomt (te krap)
                 if (x["kalender"] == a["kalender"] and _mijn(x) and x["start"][:10] == a["start"][:10]
-                        and f"Reistijd voor: {a['titel']} (" in (x.get("omschrijving") or "")):
+                        and rit_hoort_bij(x, a["titel"], "voor")):
                     return x
             for x in reistijden:
                 if (x["kalender"] == a["kalender"] and "T" in x["start"] and not _mijn(x)
@@ -2434,7 +2489,7 @@ def reistijd_zetten(items, alleen_dag=None):
                 # haal ik die weg. Gezien 30-09-2026: 'Sint-Lambrechts-Woluwe -> Mechelen' stond twee keer, nadat de oude rit
                 # 'thuis -> Mechelen' was herrekend terwijl de nieuwe al bestond (FR-76).
                 for y in [y for y in reistijden if y is not x and y["kalender"] == a["kalender"] and _mijn(y)
-                          and y["start"][:10] == a["start"][:10] and f"Reistijd voor: {a['titel']} (" in (y.get("omschrijving") or "")]:
+                          and y["start"][:10] == a["start"][:10] and rit_hoort_bij(y, a["titel"], "voor")]:
                     if _eigen_rit_weg(y, tok):
                         reistijden.remove(y)
                         regels.append(f"{a['start'][:16]} {a['titel'][:44]}: dubbele heenrit weggehaald")
@@ -2456,14 +2511,14 @@ def reistijd_zetten(items, alleen_dag=None):
                 # ook een terugrit van mij die nog op het oude einde staat (gezien 01-10-2026: Lara ophalen eindigde om
                 # 16:10 in plaats van 17:00, en 'De Speelkriebel -> thuis' om 17:00 bleef staan, FR-78)
                 for y in [y for y in reistijden if y is not oud_terug and y["kalender"] == a["kalender"] and _mijn(y)
-                          and y["start"][:10] == a["start"][:10] and f"Reistijd na: {a['titel']} (" in (y.get("omschrijving") or "")]:
+                          and y["start"][:10] == a["start"][:10] and rit_hoort_bij(y, a["titel"], "na")]:
                     if _eigen_rit_weg(y, tok):
                         reistijden.remove(y)
                         regels.append(f"{a['start'][:16]} {a['titel'][:44]}: mijn oude terugrit (ander einde) weggehaald")
             if is_laatste:
                 # precies één terugrit: een tweede eigen terugrit voor deze afspraak (op een oud einde) gaat weg (FR-78)
                 for y in [y for y in reistijden if y is not x and y["kalender"] == a["kalender"] and _mijn(y)
-                          and y["start"][:10] == a["start"][:10] and f"Reistijd na: {a['titel']} (" in (y.get("omschrijving") or "")]:
+                          and y["start"][:10] == a["start"][:10] and rit_hoort_bij(y, a["titel"], "na")]:
                     if _eigen_rit_weg(y, tok):
                         reistijden.remove(y)
                         regels.append(f"{a['start'][:16]} {a['titel'][:44]}: dubbele terugrit weggehaald")
@@ -2519,7 +2574,7 @@ def reistijd_zetten(items, alleen_dag=None):
             # 23-09 bleven rood op de werkagenda staan, zichtbaar voor collega's.
             m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
             bij = [y for y in items if m and not lees_titel(y["titel"])["reistijd"] and y["start"][:10] == x["start"][:10]
-                   and y["titel"].strip() == m.group(1).strip()]
+                   and titel_sleutel(y["titel"]) == titel_sleutel(m.group(1))]
             if any(y["kalender"] == x["kalender"] for y in bij):
                 continue          # de afspraak staat er nog, op deze agenda (bv. te laat aankomen)
             ander = {y["kalender"] for y in bij} & ((elders.get(e0, set()) | elders.get(s0, set())) - {x["kalender"]})
@@ -3245,10 +3300,11 @@ def main():
         ng += ag_ + ug
         nregels += aregels + uregels
         zg, zregels = zoom_zetten(kort_items, dag_grens)
-        if not DAG_ARG:
-            mb = markeringen_bezet([x for x in afspraken(0, 180) if x.get("hele_dag") and not x.get("fout")])
-            if mb:
-                ag.log(f"dag {vandaag}", "schrijf", f"markeringen: {len(mb)} op Bezet gezet", "\n".join(mb))
+        # Ook in de wijzigingsroute (--dag): een nieuwe blokkade op vrijdagavond of in het weekend wachtte anders tot
+        # maandag 06:30 op Bezet, en zolang boekte Calendly erdoor (audit A15, FR-96)
+        mb = markeringen_bezet([x for x in (rit_items if DAG_ARG else afspraken(0, 180)) if x.get("hele_dag") and not x.get("fout")])
+        if mb:
+            ag.log(f"dag {vandaag}", "schrijf", f"markeringen: {len(mb)} op Bezet gezet", "\n".join(mb))
         pg, pregels = projectnummers_zetten(kort_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"projectnummer: {pg} in de titel gezet", "\n".join(pregels))
         if not DAG_ARG:
@@ -3386,11 +3442,15 @@ def main():
             inf = lees_titel(a.get("titel", ""))
             for reden in titelfouten(a, inf):
                 titel_fouten.setdefault(reden, []).append(f"{a['start'][:16]} {a.get('titel','')[:58]}")
+        # Zelf versturen: 'klaar' is hierboven al klaargezet, wat er daarna bij kwam ging nooit weg (audit A13, FR-93)
+        titel_signalen = []
         for reden, rij in sorted(titel_fouten.items()):
-            klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
-                          "titel": f"Titels: {reden}", "uniek": f"agenda-titel-{reden[:20]}:{vandaag}",
-                          "inhoud": "\n".join("- " + x for x in rij[:40])})
+            titel_signalen.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
+                                   "titel": f"Titels: {reden}", "uniek": f"agenda-titel-{reden[:20]}:{vandaag}",
+                                   "inhoud": "\n".join("- " + x for x in rij[:40])})
             noden.append({"tekst": f"Afspraken met een titel die niet klopt: {reden}", "wie": "mehdi"})
+        if titel_signalen:
+            ag.klaarzet(titel_signalen)
         if niet_conform and "geen firmacode" not in titel_fouten:
             noden.append({"tekst": "Afspraken zonder firmacode in de titel: rechtzetten, anders krijgen ze geen kleur",
                           "wie": "mehdi"})
