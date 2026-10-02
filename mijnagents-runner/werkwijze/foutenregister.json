@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.24",
+ "versie": "3.25",
  "datum": "02-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -264,6 +264,13 @@
    "uit": [
     "FR-99",
     "FR-100"
+   ]
+  },
+  {
+   "id": "L33",
+   "les": "Een bron die draait is nog geen verse bron: meet de laatste geslaagde lezing, niet het proces. En wat uit een andere bron komt, toon je; je zet het niet zelf in de agenda.",
+   "uit": [
+    "FR-101"
    ]
   }
  ],
@@ -2120,6 +2127,27 @@
    },
    "controle": [],
    "status": "opgelost"
+  },
+  {
+   "id": "FR-101",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), A1-A3, op vraag van Mehdi",
+   "fout": "Mail bereikte de agenda niet. Een afspraak die alleen per mail binnenkwam (uitnodiging, bevestiging, herinnering) bleef buiten elke controle: de Agendawacht las alleen Google, postvak.py zette afspraakmails bij 'melding', en Hotmail kwam alleen als koppen via de Mac, waarvan de export sinds 26-09-2026 faalde ('authorization denied').",
+   "gevolg": "Een afspraak uit privémail of een geannuleerde uitnodiging kon ongemerkt ontbreken of blijven staan; een oude Hotmail-kopie leek 'niets nieuws'.",
+   "waarom_niet_gezien": "Een draaiend mailproces gaf 'waakt' terwijl de bron zes dagen oud was; versheid van de bron werd nergens gemeten.",
+   "oorzaak": "Geen keten van mail naar agenda, en Hotmail hing aan de Mac.",
+   "soort_oorzaak": "ontwerp",
+   "oplossing": "koppelingen/post_lezer.py leest in de postcontainer (mailboxconfig en OAuth-token van Hotmail), alleen lezen en met PEEK, alle mappen behalve prullenbak, spam, verzonden en concepten. koppelingen/mail_afspraken.py ontleedt ICS (ook Outlook-tijdzones) of datum en uur uit de tekst, bewaart een register met herkomst (de hoogste SEQUENCE wint; dezelfde uitnodiging via twee mailboxen is een afspraak), vergelijkt met alle agenda's (iCalUID of hetzelfde uur) en houdt per mailbox de laatste geslaagde lezing bij. De volledige ronde zet wat ontbreekt of geannuleerd nog staat als VR-melding in de privé-agenda (hele dag, Beschikbaar, met bron); de agent zet de afspraak zelf nooit en zet op zijn eigen melding 'Opgelost' als het opgelost is (wissen mag de agent alleen zijn eigen ritten, FR-68; een ja van Mehdi kan dat uitbreiden). Dagcontrole: mail_ontbreekt; zelfcontrole: mailbron_oud (ouder dan 26 uur). Inhaalcontrole 15-09 tot 02-10-2026: 10 afspraken uit mail, 8 gekoppeld, 2 uitnodigingen zonder uur, niets ontbrak.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_mail_afspraken.py",
+    "tekst": "dezelfde uitnodiging via twee mailboxen is een afspraak"
+   },
+   "controle": [
+    "mail_ontbreekt",
+    "mailbron_oud"
+   ],
+   "status": "bewaakt"
   }
  ]
 }

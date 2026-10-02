@@ -24,3 +24,4 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_leren_in_lagen.py
       - run: python3 mijnagents-runner/tests/test_agenda_signaal.py
       - run: python3 mijnagents-runner/tests/test_taken.py
+      - run: python3 mijnagents-runner/tests/test_mail_afspraken.py

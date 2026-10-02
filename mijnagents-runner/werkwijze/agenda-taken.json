@@ -1,5 +1,5 @@
 {
- "versie": "5.2",
+ "versie": "5.3",
  "datum": "2026-10-02",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -1594,5 +1594,16 @@
    "UnaBo: UB in de agenda; de contactcode UN blijft voor de contacten (v1.1 p. 9).",
    "B2B wordt XB/XO, niet ZB/ZO: ZB/ZO blijven vrij voor het open voorstel 'zakelijke klant' (klantsoorten_voorstel)."
   ]
+ },
+ "mail_als_bron": {
+  "wat": "mch@h-architects.be en mehdichegini@hotmail.com zijn afsprakenbronnen naast Google (audit 02-10-2026, werkpakket 2, FR-101)",
+  "lezen": "koppelingen/post_lezer.py in de postcontainer: alleen lezen, PEEK, alle mappen behalve prullenbak, spam, verzonden en concepten; Hotmail via het OAuth-token op de server, niet via de Mac",
+  "herkennen": "ICS (METHOD, UID, SEQUENCE, DTSTAMP, RECURRENCE-ID, DTSTART, DTEND, SUMMARY, LOCATION, STATUS); zonder ICS datum en uur uit onderwerp of tekst; zonder uur een controlepunt",
+  "register": "mijnagents-data/afspraken_mail.db: herkomst per mail; sleutel = ICS-UID (+ RECURRENCE-ID); de hoogste SEQUENCE wint; dezelfde uitnodiging via twee mailboxen is een afspraak",
+  "vergelijken": "met alle agenda's: iCalUID, anders hetzelfde uur (5 minuten); statussen gekoppeld, ontbreekt, geannuleerd, geannuleerd_staat_er, zonder_tijd, voorbij",
+  "tonen": "ontbreekt of geannuleerd_staat_er in de komende 14 dagen: VR-melding in de privé-agenda (hele dag, Beschikbaar, met bron en merk agendawacht_mail); het bord krijgt alleen een nood zonder details (privacy); opgelost: de agent zet 'Opgelost' op zijn melding, wissen doet Mehdi (FR-68)",
+  "nooit": "uit mail zelf een afspraak zetten, verplaatsen, annuleren of iets versturen; mail als gelezen markeren of verplaatsen",
+  "versheid": "per mailbox de laatste geslaagde lezing; ouder dan 26 uur meldt de zelfcontrole (mailbron_oud)",
+  "wanneer": "in elke volledige ronde (werkdagen 06:30 en daarna elke twee uur), twee weken terug"
  }
 }

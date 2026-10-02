@@ -235,6 +235,19 @@ def omgeving(nu):
     except Exception as e:  # noqa: BLE001
         uit.append({"controle": "bord_werkwijze_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
                     "tekst": f"de werkwijze op het bord is niet te lezen ({type(e).__name__})", "door": ""})
+    # Een mailbron die achterloopt is onvolledige dekking, geen 'niets gevonden' (audit A1, FR-101): de laatste geslaagde
+    # lezing per mailbox, niet het draaien van een proces
+    try:
+        import mail_afspraken as _MA  # noqa: PLC0415
+        if os.path.exists(_MA.DB):
+            for mb, st in _MA.leesstand().items():
+                laatst = datetime.fromisoformat(st["laatst_gelukt"]) if st["laatst_gelukt"] else None
+                if not laatst or nu - laatst.astimezone(nu.tzinfo) > timedelta(hours=26):
+                    uit.append({"controle": "mailbron_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
+                                "tekst": f"{mb} niet gelezen sinds {st['laatst_gelukt'][:16] or 'nooit'}: {st['laatste_fout'][:100]}", "door": ""})
+    except Exception as e:  # noqa: BLE001
+        uit.append({"controle": "mailbron_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
+                    "tekst": f"leesstand van de mailbronnen niet te lezen ({type(e).__name__})", "door": ""})
     # Een regelwijziging die via het bord binnenkwam, wacht op de ontwikkelaar tot ze als pakket doorgevoerd is (FR-98)
     try:
         import taken as _taken  # noqa: PLC0415

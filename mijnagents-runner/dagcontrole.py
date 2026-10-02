@@ -12,6 +12,7 @@ Wat de agent zelf mag herstellen (ritten, kleuren, !! vooraan) doet de ronde al;
 deze controle. Wat alleen Mehdi kan beslissen (twee plaatsen tegelijk, een botsing met Lara, een klant
 zonder naam) wordt een vraag in de agenda en een oproep (FR-71).
 """
+import os
 import sys
 from datetime import datetime, timedelta
 
@@ -134,6 +135,20 @@ def dagcontrole(items, dag):
         else:
             meld("op_vrije_dag" if alles else "tegen_dagmarker", a,
                  f"{a['start'][11:16]} {a['titel'][:45]}: '{m}' staat die hele dag, en toch staat dit gepland")
+    # 11. een afspraak uit mail (mch@, Hotmail) die niet, of geannuleerd nog, in de agenda staat (FR-101). Alleen het
+    #     register lezen; bestaat het niet (bv. op de Mac of in een test), dan is er niets te melden.
+    try:
+        import mail_afspraken as _MA  # noqa: PLC0415
+        if os.path.exists(_MA.DB):
+            for m in _MA.alle():
+                if m["status"] in ("ontbreekt", "geannuleerd_staat_er") and m["start"][:10] == dag:
+                    a = {"start": m["start"], "titel": m["titel"], "kalender": "", "id": ""}      # geen agenda-item: het ontbreekt
+                    meld("mail_ontbreekt", a, f"{m['start'][11:16]} {m['titel'][:45]}: "
+                         + ("staat in mail, niet in de agenda" if m["status"] == "ontbreekt" else "in mail geannuleerd, staat nog in de agenda")
+                         + f" (bron {m['bron_mailbox']})")
+    except Exception as e:  # noqa: BLE001
+        a = {"start": dag, "titel": "", "kalender": "", "id": ""}
+        meld("mail_ontbreekt", a, f"register van mail niet te lezen ({type(e).__name__})")
     # 9. een klant waar Mehdi naartoe gaat zonder projectnummer, van welke firma ook (FR-80)
     for a in afspraken:
         info = W.lees_titel(a["titel"])

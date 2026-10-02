@@ -118,6 +118,8 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 "_merk": (ev.get("extendedProperties") or {}).get("private") or {},
                 # 'Beschikbaar' in Google (transparent): Calendly telt het niet als bezet (FR-84)
                 "_vrij": ev.get("transparency") == "transparent",
+                # de UID van de uitnodiging (ICS): zo koppelt een afspraak uit mail aan dit item (mail als bron, audit 02-10-2026)
+                "_icaluid": ev.get("iCalUID", ""),
             })
     uit.sort(key=lambda x: x.get("start", ""))
     return uit

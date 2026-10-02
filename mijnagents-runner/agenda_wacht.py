@@ -2047,6 +2047,68 @@ def _eigen_rit_weg(x, tok):
     return True
 
 
+# Mail als afsprakenbron (audit 02-10-2026, werkpakket 2, FR-101). Wat uit mch@ of Hotmail komt en niet in de agenda
+# staat, of in mail geannuleerd is en er nog staat, toont de agent in de privé-agenda (alleen Mehdi ziet die): een
+# hele-dag-melding op Beschikbaar met de bron. Hij zet de afspraak zelf nooit en verplaatst niets. Is het opgelost,
+# dan zet hij op zijn eigen melding 'Opgelost'; weghalen doet Mehdi (alleen eigen ritten mag de agent wissen, FR-68).
+MAILMERK = "agendawacht_mail"
+PRIVE_AGENDA = "mehdipriveagena@gmail.com"
+MAIL_VOORUIT_DAGEN = 14
+
+
+def mail_meldingen(res, bestaande, tok, nu=None):
+    """Zet of ruimt de meldingen voor afspraken uit mail. Geeft regels."""
+    import mail_afspraken as MA  # noqa: PLC0415
+    from datetime import date as _d  # noqa: PLC0415
+    nu = nu or nu_lokaal()
+    grens = (nu + timedelta(days=MAIL_VOORUIT_DAGEN)).date().isoformat()
+    open_ = {MA.sleutel_kort(a): a for a in res if a["status"] in ("ontbreekt", "geannuleerd_staat_er")
+             and a["start"] and nu.date().isoformat() <= a["start"][:10] <= grens}
+    er = {(x.get("_merk") or {}).get(MAILMERK): x for x in bestaande
+          if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(MAILMERK)
+          and not (x.get("_merk") or {}).get(MAILMERK, "").startswith("opgelost:")}
+    regels = []
+    for k, a in open_.items():
+        if k in er:
+            continue
+        uur = a["start"][11:16] if "T" in a["start"] else "hele dag"
+        titel = (f"VR Agendawacht: uit mail, niet in je agenda: {uur} {a['titel'][:60]}" if a["status"] == "ontbreekt"
+                 else f"VR Agendawacht: in mail geannuleerd, staat nog in je agenda: {uur} {a['titel'][:50]}")
+        dag = _d.fromisoformat(a["start"][:10])
+        body = {"summary": titel, "start": {"date": dag.isoformat()}, "end": {"date": (dag + timedelta(days=1)).isoformat()},
+                "transparency": "transparent", "reminders": {"useDefault": False, "overrides": []},
+                "description": (f"Agendawacht vraagt: zeg of ik deze afspraak in je agenda zet, of dat ze niet doorgaat. Ik zet zelf niets.\n\n"
+                                f"Bron: {a['bron_mailbox']}, '{a['bron_onderwerp']}', ontvangen {a['bron_ontvangen'][:16].replace('T', ' ')}, "
+                                f"van {a['bron_afzender']}. Message-ID {a['bron_message_id']}."),
+                "extendedProperties": {"private": {MAILMERK: k}}}
+        try:
+            _insert(PRIVE_AGENDA, body, tok)
+            regels.append(f"{a['start'][:16]} melding gezet ({a['status']})")
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"{a['start'][:16]} melding niet gezet ({type(e).__name__})")
+    for k, x in er.items():
+        if k in open_:
+            continue
+        try:
+            if _eigen_melding_opgelost(x, k, tok, nu):
+                regels.append(f"{x['start'][:10]} melding op opgelost gezet")
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"{x['start'][:10]} melding niet op opgelost gezet ({type(e).__name__})")
+    return regels
+
+
+def _eigen_melding_opgelost(x, k, tok, nu):
+    """Zet alleen een eigen mailmelding (merk van de agent, privé-agenda) op 'Opgelost'. Wissen doet de agent niet."""
+    if x.get("kalender") != PRIVE_AGENDA or (x.get("_merk") or {}).get(MAILMERK) != k or not x.get("id"):
+        return False
+    titel = re.sub(r"^VR Agendawacht:\s*", "", x.get("titel") or "")
+    _patch(x, {"summary": f"Opgelost: {titel}"[:200],
+               "description": f"Opgelost op {nu:%d-%m-%Y %H:%M}: de afspraak staat in de agenda, is geannuleerd of voorbij. "
+                              f"Je mag deze melding weghalen.\n\n" + (x.get("omschrijving") or ""),
+               "extendedProperties": {"private": {MAILMERK: f"opgelost:{k}"}}}, tok)
+    return True
+
+
 def reistijd_zetten(items, alleen_dag=None):
     """Werkwijze: elke komende afspraak buiten (!!, of PB/KB met een adres) krijgt een
     blok 'Reistijd -> plaats' ervoor en 'Reistijd <- plaats' erna, met de rijtijd
@@ -3316,6 +3378,24 @@ def main():
         mb = markeringen_bezet([x for x in (rit_items if DAG_ARG else afspraken(0, 180)) if x.get("hele_dag") and not x.get("fout")])
         if mb:
             ag.log(f"dag {vandaag}", "schrijf", f"markeringen: {len(mb)} op Bezet gezet", "\n".join(mb))
+        mail_noden = []
+        if not DAG_ARG:
+            # Mail als afsprakenbron: mch@ en Hotmail, twee weken terug (FR-101). Een fout is een nood, nooit stilte.
+            try:
+                import mail_afspraken as MA  # noqa: PLC0415
+                _alle = [x for x in afspraken(-14, 120) if not x.get("fout")] + archief_afspraken(-14, 120)
+                mres, mfout = MA.ronde(_alle, (datetime.now() - timedelta(days=14)).date().isoformat())
+                mregels = mail_meldingen(mres, _alle, agenda._toegang())
+                _tel = {s: sum(1 for a in mres if a["status"] == s) for s in ("gekoppeld", "ontbreekt", "geannuleerd_staat_er", "zonder_tijd")}
+                ag.log(f"dag {vandaag}", "schrijf", f"mail als bron: {len(mres)} afspraken uit mail ({_tel})", "\n".join(mregels))
+                if _tel["ontbreekt"] or _tel["geannuleerd_staat_er"]:
+                    mail_noden.append({"tekst": "Afspraken uit mail staan niet (of geannuleerd nog) in de agenda; details in je "
+                                                "privé-agenda", "wie": "mehdi"})
+                for f_ in mfout:
+                    if not f_.get("map"):
+                        mail_noden.append({"tekst": f"Mailbron {f_['mailbox']} niet gelezen: {f_['fout'][:120]}", "wie": "claude"})
+            except Exception as e:  # noqa: BLE001
+                mail_noden.append({"tekst": f"Mail als afsprakenbron mislukt ({type(e).__name__}: {str(e)[:120]})", "wie": "claude"})
         pg, pregels = projectnummers_zetten(kort_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"projectnummer: {pg} in de titel gezet", "\n".join(pregels))
         if not DAG_ARG:
@@ -3426,7 +3506,7 @@ def main():
             pass
         # Norm N10: een nood draagt geen aantal in zijn tekst, anders is elke ronde
         # formeel een nieuwe nood en sluit de lus nooit. Het aantal hoort in het detail.
-        noden = []
+        noden = list(mail_noden)       # wat de mailbron vond (FR-101)
         # Een rit die niet berekend raakte mag nooit alleen een cijfer zijn, anders ziet
         # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
         # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
