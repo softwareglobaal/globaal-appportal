@@ -40,6 +40,13 @@ for f in reg["fouten"]:
     if f["status"] in ("opgelost", "bewaakt"):
         check(f"{f['id']} ({f['status']}) heeft een grendel die bestaat", bestaat,
               f"'{g.get('tekst')}' niet gevonden in {g.get('waar')}")
+        # Een testgrendel is pas een grendel als de tekst in de testcode zelf staat (de naam van een check of het label van
+        # een testgeval), niet in een commentaarregel (audit 02-10-2026, A14: 'de registertest controleert vooral of de
+        # grendeltekst in een bestand voorkomt')
+        if g.get("soort") == "test" and bestaat:
+            regels = [r for r in pad.read_text(encoding="utf-8").splitlines() if g["tekst"] in r]
+            in_code = any(not r.lstrip().startswith("#") and re.search(r'["\'][^"\']*' + re.escape(g["tekst"]), r) for r in regels)
+            check(f"{f['id']}: de grendeltekst staat in testcode, niet alleen in commentaar", in_code, g["tekst"][:60])
 
 # elke controle van de zelfcontrole hangt aan een fout in het register
 zc = (HIER / "zelfcontrole.py").read_text(encoding="utf-8") + "\n" + (HIER / "dagcontrole.py").read_text(encoding="utf-8")
