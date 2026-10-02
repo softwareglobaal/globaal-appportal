@@ -1382,8 +1382,8 @@ RIT_TITEL_RE = re.compile(r"Reistijd (voor|na): (.+?) \(\d+ min")
 def titel_sleutel(titel):
     """Dezelfde afspraak, ook na de omzetting naar twee letters of met en zonder ZL: '[HARC-KB] 2443' en '[HA-KB] 2443'
     zijn een titel, net als B2B, XB en XO. Gezien 02-10-2026: na de omzetting leek de rit 'Merksem -> thuis' te verwijzen
-    naar een titel die niet meer bestond (FR-91)."""
-    s = codes_twee_letters(zonder_zl(titel or "")).strip()
+    naar een titel die niet meer bestond (FR-91). Ook VR (mijn eigen vraagteken, dat komt en gaat) telt niet."""
+    s = codes_twee_letters(zonder_zl(re.sub(r"^\s*VR\s+", "", titel or ""))).strip()
     return re.sub(r"-(?:XB|XO)\]", "-B2B]", s)
 
 
@@ -2063,6 +2063,7 @@ def reistijd_zetten(items, alleen_dag=None):
     reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"]]
     projecten = projectadressen.index()
     buiten = []
+    begonnen = set()      # buitenafspraken van vandaag die al begonnen zijn: vertrekpunt, geen eigen ritten meer (FR-97)
     vrij = lara_vakantiedagen()
     zonder_auto = geen_auto_dagen()
     for a in items:
@@ -2107,8 +2108,15 @@ def reistijd_zetten(items, alleen_dag=None):
             start = datetime.fromisoformat(a["start"]); einde = datetime.fromisoformat(a["einde"])
         except ValueError:
             continue
-        if start < nu or (alleen_dag and a["start"][:10] != alleen_dag):
+        if alleen_dag and a["start"][:10] != alleen_dag:
             continue
+        if start < nu:
+            # Een buitenafspraak van vandaag die al begonnen is, blijft het vertrekpunt van de volgende rit. Gezien
+            # 02-10-2026: om 13:49, negen minuten na het begin van Belauto in Mortsel, verdween Belauto uit de planning,
+            # en de rit 'Mortsel -> Mechelen' om 14:55 werd 'thuis -> Mechelen' van 13:05 tot 14:00 (FR-97).
+            if start.date() != nu.date():
+                continue
+            begonnen.add((a["kalender"], a.get("id"), a["start"]))
         # Komt het adres uit de projectmap en staat er geen locatie in de afspraak, dan zet ik het
         # erin, zodat Mehdi (en wie meegaat) kan navigeren. Alleen bij zijn eigen afspraken zonder
         # gasten. Mandaat van Mehdi, 23-09-2026: "in een keer goed zetten".
@@ -2255,8 +2263,9 @@ def reistijd_zetten(items, alleen_dag=None):
                 vorige_per_dag[dag] = (sleutel, None, None, einde)
 
         if not fysiek:
-            geen_adres += 1
-            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen adres, geen reistijd")
+            if sleutel not in begonnen:
+                geen_adres += 1
+                regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen adres, geen reistijd")
             zonder_plek()
             continue
         doel = coord(adres, cache)
@@ -2275,6 +2284,8 @@ def reistijd_zetten(items, alleen_dag=None):
         else:
             vertrek_van, van_adres, vorige_einde = vorige[1], vorige[2], vorige[3]
         vorige_per_dag[dag] = (sleutel, doel, adres, einde)
+        if sleutel in begonnen:
+            continue          # al begonnen: alleen vertrekpunt; haar ritten raak ik niet meer aan (FR-97)
         is_laatste = naar_huis_na.get(sleutel, True)
         # Gaat de eerstvolgende afspraak al naar huis, zoals "Lara naar huis brengen",
         # dan is dat zelf de terugrit en maak ik er geen tweede. Gezien 20-09-2026.

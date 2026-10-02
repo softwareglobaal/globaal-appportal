@@ -107,6 +107,7 @@ check("een rit met de oude code hoort bij de omgezette afspraak",
 check("dezelfde titel met en zonder ZL, met oude of nieuwe code, en B2B/XO is een titel",
       W.titel_sleutel("ZL Mehdi: [HARC-KO] 2603 - Lisa Cuppens") == W.titel_sleutel("Mehdi: [HA-KO] 2603 - Lisa Cuppens")
       and W.titel_sleutel("Mehdi: [HA-B2B] Stefan") == W.titel_sleutel("Mehdi: [HA-XO] Stefan")
+      and W.titel_sleutel("VR !! Mehdi: [HINV-LB] Belauto") == W.titel_sleutel("!! Mehdi: [HI-LB] Belauto")
       and W.titel_sleutel("Mehdi: [HA-KO] 2603 - Lisa") != W.titel_sleutel("Mehdi: [UB-KO] 2603 - Lisa"))
 
 # Lara: [LA] telt als Lara voor de dagmarkering

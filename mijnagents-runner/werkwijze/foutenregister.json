@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.22",
+ "versie": "3.23",
  "datum": "02-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -249,6 +249,13 @@
    "uit": [
     "FR-83",
     "FR-92"
+   ]
+  },
+  {
+   "id": "L31",
+   "les": "Test ook het midden van de dag: een ronde die draait terwijl Mehdi onderweg is, ziet afspraken die al begonnen zijn. 'Voorbij' betekent niet 'weg'; het is waar hij nu staat.",
+   "uit": [
+    "FR-97"
    ]
   }
  ],
@@ -2027,6 +2034,24 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "ook de wijzigingsroute (--dag) zet een nieuwe blokkade op Bezet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-97",
+   "datum": "02-10-2026",
+   "gevonden_door": "Claude, zelfcontrole na de uitrol van 02-10-2026 (TERUGGEKEERD FR-03, FR-07, FR-25: nieuwe rit 'thuis -> Mechelen' om 13:05)",
+   "fout": "Een buitenafspraak die al begonnen was, viel uit de ritplanning (start < nu). Om 13:49, terwijl Mehdi bij Belauto in Mortsel stond (13:40-14:00), werd de rit 'Mortsel -> Mechelen' 14:55-15:30 voor MegaMobile verschoven naar 'thuis -> Mechelen' 13:05-14:00. 's Ochtends gebeurde hetzelfde na KBC Ladeuze (10:30): de rit naar het werfbezoek 2145 vertrok 'van thuis' en liep door KBC.",
+   "gevolg": "Mehdi zag midden in de dag een rit die in het verleden vertrok, van thuis, terwijl hij onderweg was; de juiste rit na de geparkeerde gesprekken was weg.",
+   "waarom_niet_gezien": "De ritten werden altijd getest en gecontroleerd voor een dag die nog moest beginnen. Een ronde tijdens de dag (de wijzigingswacht met --dag) was nooit nagebootst, en de controles van 's ochtends draaien voor de eerste afspraak.",
+   "oorzaak": "De planning las 'al begonnen' als 'bestaat niet meer' in plaats van als 'hier ben ik nu'.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een buitenafspraak van vandaag die al begonnen is, blijft in de planning als vertrekpunt en anker; haar eigen ritten raakt de agent niet meer aan. Gedragstest met het geval van 02-10-2026 om 13:49 (valt op de oude code, slaagt op de nieuwe). Ook VR telt niet meer mee in de titelsleutel (rit 'Kessel-Lo -> Mortsel').",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "een buitenafspraak die al begonnen is, blijft het vertrekpunt"
    },
    "controle": [],
    "status": "opgelost"

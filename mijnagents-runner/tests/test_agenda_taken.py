@@ -949,6 +949,62 @@ check("een gesprek dat bij vertrek al loopt doet hij geparkeerd ter plaatse; 'KB
       and _vp81[0] == "KBC" and "Ladeuzeplein 15, 3000 Leuven" in _vp81[1]["adres"] and W.vaste_plek("kbcx") == (None, None)
       and _c81 and _c81[1] == "016 31 40 00", str((_vp81, _c81)))
 
+# Een buitenafspraak die al begonnen is, blijft het vertrekpunt van de volgende rit (FR-97). Het geval van 02-10-2026 om
+# 13:49: Belauto in Mortsel loopt (13:40-14:00), daarna Elena en Lien geparkeerd, dan MegaMobile in Mechelen om 15:30.
+from datetime import datetime as _dt97
+_D97 = (W.nu_lokaal() + _td(days=3)).date().isoformat()
+_nu97 = _dt97.fromisoformat(f"{_D97}T13:49:00+02:00")
+_w97 = []
+_i97 = [
+    {"id": "r1", "kalender": W.WERKAGENDA, "titel": "\U0001F697 Reistijd: Kessel-Lo \u2192 Mortsel", "start": f"{_D97}T12:30:00+02:00",
+     "einde": f"{_D97}T13:40:00+02:00", "omschrijving": "Reistijd voor: !! Mehdi: [HI-LB] Belauto onderdelen, Antwerpsestraat 129, 2640 Mortsel "
+     "(60 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM; rit Kessel-Lo \u2192 Mortsel)", "deelnemers": []},
+    {"id": "b", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [HI-LB] Belauto onderdelen, Antwerpsestraat 129, 2640 Mortsel",
+     "locatie": "Antwerpsestraat 129, 2640 Mortsel", "start": f"{_D97}T13:40:00+02:00", "einde": f"{_D97}T14:00:00+02:00", "deelnemers": []},
+    {"id": "e", "kalender": W.WERKAGENDA, "titel": "Mehdi: [UB-PO] Elena Zhidkova - ST", "start": f"{_D97}T14:00:00+02:00",
+     "einde": f"{_D97}T14:20:00+02:00", "deelnemers": ["elena@voorbeeld.be"]},
+    {"id": "l", "kalender": W.WERKAGENDA, "titel": "Mehdi: [UB-PO] Lien Heyse - ST", "start": f"{_D97}T14:30:00+02:00",
+     "einde": f"{_D97}T14:50:00+02:00", "deelnemers": ["lien@voorbeeld.be"]},
+    {"id": "r2", "kalender": W.WERKAGENDA, "titel": "\U0001F697 Reistijd: Mortsel \u2192 Mechelen", "start": f"{_D97}T14:55:00+02:00",
+     "einde": f"{_D97}T15:30:00+02:00", "omschrijving": "Reistijd voor: !! Mehdi: [HA-LB] MegaMobile laptophoes, Onze-Lieve-Vrouwestraat 135, 2800 Mechelen "
+     "(35 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM; rit Mortsel \u2192 Mechelen)", "deelnemers": []},
+    {"id": "m", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [HA-LB] MegaMobile laptophoes, Onze-Lieve-Vrouwestraat 135, 2800 Mechelen",
+     "locatie": "Onze-Lieve-Vrouwestraat 135, 2800 Mechelen", "start": f"{_D97}T15:30:00+02:00", "einde": f"{_D97}T15:50:00+02:00", "deelnemers": []},
+    {"id": "r3", "kalender": W.WERKAGENDA, "titel": "\U0001F697 Reistijd: Mechelen \u2192 thuis", "start": f"{_D97}T15:50:00+02:00",
+     "einde": f"{_D97}T16:25:00+02:00", "omschrijving": "Reistijd na: !! Mehdi: [HA-LB] MegaMobile laptophoes, Onze-Lieve-Vrouwestraat 135, 2800 Mechelen "
+     "(35 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM; rit Mechelen \u2192 thuis)", "deelnemers": []},
+]
+_o97 = {k: getattr(W, k) for k in ("nu_lokaal", "coord", "rijtijd_min", "lara_vakantiedagen", "geen_auto_dagen", "plek_zoeken",
+                                   "_cache_laden", "_cache_bewaren", "_patch", "_insert", "_eigen_rit_weg", "_verplaats", "DAG_ARG")}
+_o97b = (W.agenda._toegang, W.projectadressen.index)
+W.nu_lokaal = lambda: _nu97
+W.coord = lambda adres, cache: ((50.88, 4.72) if adres == W.THUIS else (51.17, 4.45) if "Mortsel" in adres
+                                else (51.03, 4.48) if "Mechelen" in adres else None)
+W.rijtijd_min = lambda van, naar, vertrek: (35, 1.0)
+W.lara_vakantiedagen = lambda: set()
+W.geen_auto_dagen = lambda: set()
+W.plek_zoeken = lambda tekst: (None, None)
+W._cache_laden = lambda: {}
+W._cache_bewaren = lambda c: None
+W._patch = lambda a, body, tok, toch=False: _w97.append(("patch", a.get("id"), body))
+W._insert = lambda kal, body, tok, toch=False: _w97.append(("insert", None, body)) or {}
+W._eigen_rit_weg = lambda x, tok: _w97.append(("weg", x.get("id"), {})) or True
+W._verplaats = lambda x, doel, tok: _w97.append(("verplaats", x.get("id"), {}))
+W.DAG_ARG = _D97
+W.agenda._toegang = lambda: "t"
+W.projectadressen.index = lambda *a, **k: {}
+try:
+    W.reistijd_zetten([dict(x) for x in _i97], _D97)
+finally:
+    for _k, _v in _o97.items():
+        setattr(W, _k, _v)
+    W.agenda._toegang, W.projectadressen.index = _o97b
+_fout97 = [w for w in _w97 if w[1] in ("r1", "b") or w[0] in ("weg", "insert")
+           or "thuis \u2192 Mechelen" in str(w[2].get("summary", ""))
+           or (w[1] == "r2" and "start" in w[2] and w[2]["start"]["dateTime"][11:16] < "14:50")]
+check("een buitenafspraak die al begonnen is, blijft het vertrekpunt: na Belauto in Mortsel geen rit van thuis naar Mechelen",
+      not _fout97, str(_w97))
+
 # Een bezet slot of ontbrekende sleutels is geen geslaagde verwerking (audit 02-10-2026, A6)
 _src_a6 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("een bezet slot en ontbrekende sleutels eindigen niet met 0, zodat de wijzigingswacht opnieuw probeert",
