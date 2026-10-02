@@ -150,6 +150,28 @@ def verzamel(noden):
     return accounts, boekingen
 
 
+def vaste_duur():
+    """De duur die Mehdi per firma vastlegde, uit werkwijze/agenda-taken.json (calendly_duur). Mehdi, 02-10-2026: TKN-Buro
+    en UNABO voorzien allebei een halfuur, 'zodat het voor mij en de klant allemaal conform is'."""
+    try:
+        pad = os.path.join(os.path.dirname(os.path.abspath(__file__)), "werkwijze", "agenda-taken.json")
+        return (json.load(open(pad, encoding="utf-8")).get("calendly_duur") or {}).get("per_firma") or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def duur_afwijkend(types, duur=None):
+    """['naam (20 min, moet 30)'] voor actieve types waarvan de naam met een firma begint en de duur afwijkt."""
+    duur = vaste_duur() if duur is None else duur
+    uit = []
+    for t in types:
+        nm = (t.get("name") or "").strip()
+        for firma, minuten in duur.items():
+            if t.get("active") and nm.lower().startswith(firma.lower()) and t.get("duration") != minuten:
+                uit.append(f"{nm} ({t.get('duration')} min, moet {minuten})")
+    return uit
+
+
 def main():
     ag = bord.Agent(NAAM)
     vandaag = datetime.datetime.now(BRUSSEL).date().isoformat()
@@ -196,6 +218,8 @@ def main():
                 dood.append(f"{nm} ({t.get('duration')} min)")
             if nm not in DOCUMENT_TYPES and nm not in BEWUST_LEEG:
                 signalen.append(f"{a['naam']}: type '{nm}' staat niet in het agenda-document")
+        for afw in duur_afwijkend(a["types"]):
+            signalen.append(f"{a['naam']}: duur wijkt af van de afspraak: {afw}")
         doel = AGENDA_VAN.get(a["naam"], "")
         regels.append(f"{a['naam']}: {len(a['types'])} types, {sum(t_tel.values())} boekingen, "
                       f"{len(dood)} dood" + (f", schrijft naar {doel}" if doel else ""))

@@ -1,5 +1,5 @@
 {
- "versie": "4.36",
+ "versie": "4.37",
  "datum": "2026-09-30",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -1254,5 +1254,245 @@
    "mehdi": "01-10-2026: 'als ik kbc kantoor zeg dan is het altijd in de KBC Ladeuze in Leuven!'"
   }
  },
- "vaste_plekken_uitleg": "Wat Mehdi met een woord bedoelt. Staat het woord in een titel zonder adres, dan rekent de agent de rit naar die plek, zet hij het adres in de afspraak (zonder gasten) en het telefoonnummer bovenaan. Plekken met een straal en wifi blijven in locatie.globaal.be."
+ "vaste_plekken_uitleg": "Wat Mehdi met een woord bedoelt. Staat het woord in een titel zonder adres, dan rekent de agent de rit naar die plek, zet hij het adres in de afspraak (zonder gasten) en het telefoonnummer bovenaan. Plekken met een straal en wifi blijven in locatie.globaal.be.",
+ "calendly_duur": {
+  "per_firma": {
+   "TKN": 30,
+   "UNABO": 30
+  },
+  "mehdi": "02-10-2026: TKN-Buro en UNABO voorzien allebei een halfuurtje, 'zodat het voor mij en de klant allemaal conform is'",
+  "uitgevoerd": "02-10-2026: UNABO prospect EPB, Plaatsbeschrijving, Scanning, Veiligheidscoörd. en UNABO: Offerte van 20 naar 30 min (TKN stond al op 30)",
+  "controle": "De Calendlywacht meldt elk actief type van TKN of UNABO dat niet op 30 minuten staat."
+ },
+ "voorstel_twee_letters": {
+  "status": "voorstel, wacht op goedkeuring van Mehdi",
+  "datum": "2026-10-02",
+  "mehdi": "02-10-2026: 'Ik wil de afkortingen van de bedrijven allemaal met twee letters hebben ... de types opdrachten ... ook allemaal met twee letters'",
+  "titelvorm": "!! Mehdi: [FF-SS] TT nummer - klant, adres   (FF firma, SS soort, TT opdracht; bv. '!! Mehdi: [UB-KB] BS 46118 - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken')",
+  "firmas": {
+   "HA": {
+    "firma": "H-Architects",
+    "nu": "HARC, HA"
+   },
+   "UB": {
+    "firma": "UnaBo",
+    "nu": "UNAB, UNABO"
+   },
+   "TK": {
+    "firma": "TKN-Buro",
+    "nu": "TKNB, TKN"
+   },
+   "EE": {
+    "firma": "Energie Efficiënt",
+    "nu": "ENEF, EE"
+   },
+   "EL": {
+    "firma": "Elevait NV",
+    "nu": "ELEV, ELEVAIT"
+   },
+   "HI": {
+    "firma": "H-Invest",
+    "nu": "HINV"
+   },
+   "HB": {
+    "firma": "Harmoniebouw",
+    "nu": "HARM, HB"
+   },
+   "CX": {
+    "firma": "Contrax",
+    "nu": "CONT, CTX"
+   },
+   "ME": {
+    "firma": "Melodie",
+    "nu": "MELO"
+   },
+   "DI": {
+    "firma": "High Design Studio (India)",
+    "nu": "HDSI"
+   },
+   "DS": {
+    "firma": "High Design Studio (SU)",
+    "nu": "HDSS"
+   },
+   "BF": {
+    "firma": "Build for Future",
+    "nu": "BFUT"
+   },
+   "CB": {
+    "firma": "Corenbo",
+    "nu": "CORE"
+   },
+   "ES": {
+    "firma": "ENSTACO",
+    "nu": "ENST"
+   },
+   "MS": {
+    "firma": "Median Selections & Consultancy",
+    "nu": "MEDI"
+   },
+   "OR": {
+    "firma": "Orvantis",
+    "nu": "ORVA"
+   },
+   "QP": {
+    "firma": "Qoppa",
+    "nu": "QOPP"
+   },
+   "ZC": {
+    "firma": "Zidi Construct",
+    "nu": "ZIDI"
+   },
+   "AL": {
+    "firma": "Algemeen (geen firma)",
+    "nu": "ALGE"
+   },
+   "PR": {
+    "firma": "Privé",
+    "nu": "PRIVE"
+   },
+   "LA": {
+    "firma": "Lara",
+    "nu": "LARA"
+   }
+  },
+  "opdrachten": {
+   "WB": {
+    "opdracht": "werfbezoek",
+    "nu": "WB"
+   },
+   "PL": {
+    "opdracht": "plaatsbezoek",
+    "nu": "(geen)"
+   },
+   "PS": {
+    "opdracht": "plaatsbeschrijving",
+    "nu": "PLB"
+   },
+   "SC": {
+    "opdracht": "scanning, 3D-scan",
+    "nu": "SCN"
+   },
+   "BS": {
+    "opdracht": "barsten en scheuren",
+    "nu": "BS"
+   },
+   "ST": {
+    "opdracht": "stabiliteit",
+    "nu": "STA"
+   },
+   "EP": {
+    "opdracht": "EPB",
+    "nu": "EPB"
+   },
+   "VC": {
+    "opdracht": "veiligheidscoördinatie",
+    "nu": "VC"
+   },
+   "OP": {
+    "opdracht": "oplevering",
+    "nu": "OPL"
+   },
+   "VO": {
+    "opdracht": "voorlopige oplevering",
+    "nu": "VOPL"
+   },
+   "DO": {
+    "opdracht": "definitieve oplevering",
+    "nu": "DOPL"
+   },
+   "OM": {
+    "opdracht": "opmeting",
+    "nu": "OPM"
+   },
+   "VE": {
+    "opdracht": "ventilatie, ventilatiemeting",
+    "nu": "VEN"
+   },
+   "BD": {
+    "opdracht": "blowerdoortest",
+    "nu": "BDT"
+   },
+   "VG": {
+    "opdracht": "vergunning of melding zonder architect",
+    "nu": "VERG"
+   },
+   "FW": {
+    "opdracht": "functiewijziging",
+    "nu": "FW"
+   },
+   "RG": {
+    "opdracht": "regularisatie",
+    "nu": "REG"
+   },
+   "RD": {
+    "opdracht": "3D-rendering",
+    "nu": "REN"
+   },
+   "LM": {
+    "opdracht": "landmeter",
+    "nu": "LM"
+   },
+   "DR": {
+    "opdracht": "drafting, plannen tekenen",
+    "nu": "DRA"
+   },
+   "MT": {
+    "opdracht": "meetstaat",
+    "nu": "MST"
+   },
+   "SD": {
+    "opdracht": "schetsontwerp",
+    "nu": "SD"
+   },
+   "KM": {
+    "opdracht": "kennismaking",
+    "nu": "KM"
+   },
+   "OB": {
+    "opdracht": "offertebespreking",
+    "nu": "OFB"
+   },
+   "BU": {
+    "opdracht": "bundel van diensten",
+    "nu": "BUN"
+   },
+   "AI": {
+    "opdracht": "AI en automatisering",
+    "nu": "AI+AT"
+   }
+  },
+  "soorten": {
+   "KB / KO": {
+    "soort": "klant buiten / online",
+    "nu": "KB / KO"
+   },
+   "PB / PO": {
+    "soort": "prospect buiten / online",
+    "nu": "PB / PO"
+   },
+   "LB / LO": {
+    "soort": "leverancier buiten / online",
+    "nu": "LB / LO"
+   },
+   "AB / AO": {
+    "soort": "aannemer buiten / online",
+    "nu": "AB / AO"
+   },
+   "IN": {
+    "soort": "intern",
+    "nu": "IN"
+   },
+   "ZB / ZO": {
+    "soort": "zakelijk extern, nog geen klant",
+    "nu": "B2B"
+   }
+  },
+  "regel": "Elke code heeft precies twee letters en komt maar één keer voor over firma's, soorten en opdrachten heen (gecontroleerd).",
+  "na_goedkeuring": [
+   "de code van twee letters in organisatie.globaal.be (kern.firma), de enige bron van firmacodes",
+   "de agent leest oude en nieuwe codes, schrijft alleen nog de nieuwe; titels zonder gasten zet hij zelf om, vanaf vandaag",
+   "de Calendly-types krijgen de nieuwe code in hun naam",
+   "PDF, JSON, werkwijze en tests; het register met een grendel dat er geen code van drie of vier letters terugkomt"
+  ]
+ }
 }

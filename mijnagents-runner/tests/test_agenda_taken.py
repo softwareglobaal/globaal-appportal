@@ -1005,6 +1005,13 @@ check("een markering die alles afsluit ('geen afspraken', Buitenland) zet de age
       [x[0] for x in _p84] == ["z", "b"] and all(x[1] == {"transparency": "opaque"} for x in _p84) and len(_m84) == 2
       and '"_vrij": ev.get("transparency") == "transparent"' in (HIER / "koppelingen" / "agenda.py").read_text(encoding="utf-8"), str((_p84, _m84)))
 
+# Calendly: TKN-Buro en UNABO voorzien een halfuur (Mehdi, 02-10-2026)
+import calendly_wacht as _CW
+_dw = _CW.duur_afwijkend([{"name": "UNABO prospect - EPB", "duration": 20, "active": True}, {"name": "TKN: Prospect", "duration": 30, "active": True},
+                          {"name": "UNABO: Offerte", "duration": 20, "active": False}, {"name": "HA: Prospect (Kennismaking)", "duration": 45, "active": True}])
+check("de Calendlywacht meldt een TKN- of UNABO-type dat niet op een halfuur staat",
+      _CW.vaste_duur() == {"TKN": 30, "UNABO": 30} and _dw == ["UNABO prospect - EPB (20 min, moet 30)"], str(_dw))
+
 # 'In de auto' is geparkeerd ter plaatse, nooit rijdend: een extern gesprek schuift de aankomst altijd naar voren (FR-70, FR-82)
 _src70 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("een extern gesprek gebeurt nooit rijdend, ook niet met 'in de auto' in de afspraak",
