@@ -11,6 +11,9 @@ import subprocess
 from collections import Counter
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
+# bij welke afspraken-PDF dit register hoort: uit de bron, niet als vaste tekst (stond tot 02-10-2026 nog op v2.0)
+import re as _re
+AFSPRAKEN_VERSIE = _re.search(r'^VERSIE = "([0-9.]+)"', pathlib.Path(__file__).with_name("afspraken_pdf.py").read_text(encoding="utf-8"), _re.M).group(1)
 UIT = pathlib.Path.home() / "TKN-buro Dropbox/private/0 Chegini Mehdi/Prive met Claude"
 reg = json.loads((REPO / "werkwijze/foutenregister.json").read_text(encoding="utf-8"))
 NAAM = f"Agendawacht - foutenregister v{reg['versie']}"
@@ -76,7 +79,7 @@ tr{{break-inside:avoid}}
 .drie{{display:flex;gap:6mm}} .drie>div{{flex:1}}
 </style>
 <div class=top>Voor Mehdi Chegini &nbsp;|&nbsp; {e(reg['datum'])} &nbsp;|&nbsp; versie {e(reg['versie'])} &nbsp;|&nbsp;
-bron: werkwijze/foutenregister.json op de server &nbsp;|&nbsp; hoort bij 'Agendawacht - afspraken kleuren en taken v2.0'</div>
+bron: werkwijze/foutenregister.json op de server &nbsp;|&nbsp; hoort bij 'Agendawacht - afspraken kleuren en taken v{AFSPRAKEN_VERSIE}'</div>
 <h1>Het foutenregister van de Agendawacht</h1>
 
 <div class=kader>{e(reg['doel'])}<br><br>

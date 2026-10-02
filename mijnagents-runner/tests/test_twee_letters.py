@@ -90,6 +90,22 @@ check("B2B zonder bewijs blijft B2B (geen gok)", W.codes_twee_letters("Mehdi: [H
 check("XO is lavendel zoals B2B, XB rood", W.kleur_gewenst({"kalender": W.WERKAGENDA}, W.lees_titel("Mehdi: [HA-XO] S")) == "1"
       and W.kleur_gewenst({"kalender": W.WERKAGENDA}, W.lees_titel("!! Mehdi: [HA-XB] S")) == "11")
 
+# de master schrijft zelf geen oude code meer voor; alleen de geschiedenis (beslissingen), de tabel oude_codes en de
+# openstaande vragen (die citeren echte titels van toen) mogen ze nog noemen
+_OUD_M = re.compile(r"\[(HARC|UNABO|UNAB|TKNB|TKN|ALGE|ENEF|ELEV|ELEVAIT|HARM|CONT|HINV|PRIVE|LARA)[-\]]")
+def _teksten(x, pad=()):
+    if isinstance(x, dict):
+        for k, v in x.items():
+            yield from _teksten(v, pad + (k,))
+    elif isinstance(x, list):
+        for v in x:
+            yield from _teksten(v, pad)
+    elif isinstance(x, str):
+        yield pad, x
+_regels_oud = [("/".join(p), x[:60]) for p, x in _teksten(taken)
+               if _OUD_M.search(x) and not ({"beslissingen", "oude_codes", "openstaand"} & set(p))]
+check("de master schrijft geen oude code meer voor (buiten geschiedenis, oude_codes en openstaande vragen)", not _regels_oud, str(_regels_oud))
+
 # wat de agent zelf schrijft, draagt nooit een oude code
 OUD = re.compile(r"\[(HARC|UNAB|UNABO|TKNB|TKN|ENEF|ELEV|ELEVAIT|HARM|CONT|HINV|ALGE|PRIVE)[-\]]")
 geschreven = [W.titel_voorstel("!! Mehdi & Catalin: Harchitects-KB 2505")[0], W.titel_voorstel("?? Mehdi en Shaniel: Robby elevait-Leverancie online")[0],

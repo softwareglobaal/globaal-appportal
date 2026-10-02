@@ -1,5 +1,5 @@
 {
- "versie": "5.1",
+ "versie": "5.2",
  "datum": "2026-10-02",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -184,7 +184,7 @@
    "ZL": "zonder link: een online gesprek met een externe partij waar nog geen link in staat. Mehdi stuurt de link zelf. ZL staat ALTIJD HELEMAAL VOORAAN, voor ?? en voor alles, zodat Mehdi het meteen ziet (Mehdi, 23-09-2026). De agent zet ZL en haalt het weg zodra er een link in de afspraak staat"
   },
   "aannemer": "AB/AO: een aannemer van een klant (Mehdi heeft als architect veel afspraken met aannemers). Geen klant, geen leverancier: een eigen soort. Buiten rood, online salie. Mehdi, 23-09-2026",
-  "zonder_soort": "een firmacode zonder soort ('[HARC] Rechtbank') wordt gemeld; een gemeente of rechtbank past nog in geen soort, dat beslist Mehdi (FR-27)",
+  "zonder_soort": "een firmacode zonder soort ('[HA] Rechtbank') wordt gemeld; een gemeente of rechtbank past nog in geen soort, dat beslist Mehdi (FR-27)",
   "volledig": "een titel met een projectnummer is pas volledig met de klant (Pipedrive, de persoon van de deal) en, buiten, het adres: '[FIRMA-SOORT] TYPE nummer - klant, adres'. Zonder gasten en niet terugkerend vult de agent het zelf aan, ook als een collega de afspraak zette; met gasten, van Calendly of in een reeks doet hij een voorstel (FR-41, FR-45)",
   "projectnummer_ha": "Projectnummers van H-Architects zijn JJNN: JJ is het jaar (25 = 2025, 26 = 2026), NN het volgnummer van dat jaar (2505 is het vijfde project van 2025). Zo nummert alleen H-Architects; de andere firma's hebben een eigen benaming. Een nummer met een projectmap is een klant, want die map ontstaat bij de ondertekening (A13). Mehdi, 24-09-2026 (FR-47)",
   "klant_bron": "de klant van een project komt, in deze volgorde, uit het contractsysteem (contracten.globaal.be), het contract of de CLAUDE.md in de projectmap (H-A WORK), de agenda van vroeger, en pas dan uit Pipedrive. De salesmap is de verkoop, niet het dossier. Een gevonden naam wordt dertig dagen bewaard met zijn bron (mijnagents-data/klanten.json); een rijksregisternummer nooit (FR-46)",
@@ -528,7 +528,7 @@
    "wanneer": "voor 28-09"
   },
   {
-   "wat": "Welke soort krijgt een afspraak met een gemeente of rechtbank ('[HARC] 2616 Stad Leuven', '[HARC] Rechtbank')? Voorstel: een eigen soort voor de overheid, buiten en online (FR-27)",
+   "wat": "Welke soort krijgt een afspraak met een gemeente of rechtbank ('[HA] 2616 Stad Leuven', '[HA] Rechtbank')? Voorstel: een eigen soort voor de overheid, buiten en online (FR-27)",
    "wie": "Mehdi",
    "wanneer": "zodra het kan"
   },
@@ -543,7 +543,7 @@
    "wanneer": "nu"
   },
   {
-   "wat": "'Mehdi: 2607' op maandag 28-09 om 20:30: welke firma en soort? Voorstel [HARC], het nummer staat in de H-A-projectmap",
+   "wat": "'Mehdi: 2607' op maandag 28-09 om 20:30: welke firma en soort? Voorstel [HA], het nummer staat in de H-A-projectmap",
    "wie": "Mehdi",
    "wanneer": "voor 28-09"
   },
@@ -848,7 +848,7 @@
   },
   "thuisrit_telt": "Staat er na een buitenafspraak al een rit naar huis in de agenda, dan gaat Mehdi naar huis en vertrekt de volgende rit van thuis. Gezien 21-09-2026: op vrijdag vertrok de rit naar Lara van de griffie, terwijl er om 11:00 al een rit naar huis stond",
   "lara_maandag_vrijdag": {
-   "afspraak": "!! Mehdi: [LARA] Lara ophalen en thuis afzetten, maandag en vrijdag 16:00-17:00, op de agenda van Lara",
+   "afspraak": "!! Mehdi: [LA] Lara ophalen en thuis afzetten, maandag en vrijdag 16:00-17:00, op de agenda van Lara",
    "ophalen": "De Speelkriebel, Jozef Pierrestraat 104, 3010 Kessel-Lo",
    "bron": "de agenda van Lara zelf: 'Lara → Cokido' op 10-08-2026, locatie 'haar school De Speelkriebel'",
    "afzetten": "thuis, Herfstlaan 65",
@@ -866,7 +866,7 @@
   "niet_voor_de_vorige_klaar_is": "een rit vertrekt nooit voor de vorige afspraak gedaan is. Dinsdag is hij tot 17:40 bij oma, dus de rit naar het zwembad begint om 17:40, ook als de rijtijd met buffer langer is. Past de rit zelfs zonder buffer niet, dan meldt de agent 'te krap'",
   "een_rit_een_afspraak": "een heenrit van de agent eindigt op het begin van zijn afspraak, een terugrit begint op haar einde. Zo wordt een rit nooit aan een buurafspraak gekoppeld. Een rit die Mehdi zelf zette binnen drie uur ervoor of erna, telt ook, en dan maakt de agent er geen tweede. Gezien 21-09-2026: de zwemles nam de rit naar oma over",
   "lara_donderdag": {
-   "afspraak": "!! Mehdi: [LARA] Lara ophalen bij oma en thuis afzetten (optioneel), elke donderdag 17:45-18:30, op de agenda van Lara",
+   "afspraak": "!! Mehdi: [LA] Lara ophalen bij oma en thuis afzetten (optioneel), elke donderdag 17:45-18:30, op de agenda van Lara",
    "reeks": "reeks vanaf 2026-09-24 tot 2027-07-01, 34 donderdagen. Mehdi heeft de reeks op 21-09-2026 bevestigd (het ?? weggehaald)",
    "ophalen": "bij oma, Wilselsesteenweg 57, 3010 Leuven (zelfde oma als de dinsdagketen)",
    "afzetten": "thuis, Herfstlaan 65",
@@ -1189,7 +1189,7 @@
   "wat": "externe partijen die bewust niet op organisatie.globaal.be staan: leveranciers en hun contacten",
   "bestand": "werkwijze/externe-relaties.json (de agent leest die; geen kopie hier)",
   "overkoepelende_code": "ALGE = Algemeen, vier letters net als de andere codes, voor een leverancier of afspraak die niet bij een bedrijf hoort maar voor de hele groep geldt",
-  "voorbeelden": "Nadien (onze boekhouder) en Wally (AI-bedrijf dat software levert): allebei leverancier, allebei ALGE. In de titel [ALGE-LO] als het online is, [ALGE-LB] als het buiten is; kleur paars zoals elke leverancier",
+  "voorbeelden": "Nadien (onze boekhouder) en Wally (AI-bedrijf dat software levert): allebei leverancier, allebei AL (vroeger ALGE). In de titel [AL-LO] als het online is, [AL-LB] als het buiten is; kleur paars zoals elke leverancier",
   "waarom_geen_lijst_van_bedrijven": "een leverancier voor meerdere bedrijven krijgt niet een rij afkortingen in de titel (niet leesbaar), maar altijd de ene code ALGE"
  },
  "geen_auto": {
