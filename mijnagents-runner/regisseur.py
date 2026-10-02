@@ -13,16 +13,21 @@ een agent een ronde laten draaien, en een voorstel op het bord zetten voor
 alles wat iets verandert (ook een wijziging van een werkwijze). Hij voert zelf
 niets muterends uit; dat doet de uitvoerder na Mehdi's goedkeuring.
 """
+import fcntl
 import json
 import os
+import sqlite3
 import subprocess
 import sys
+import urllib.error
+import urllib.parse
 import urllib.request
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import contracten_mcp as mcp  # noqa: E402
 import pipedrive  # noqa: E402
+import taken  # noqa: E402
 
 NAAM = "regisseur"
 MODEL = os.environ.get("REGISSEUR_MODEL", "claude-opus-5")
@@ -36,6 +41,9 @@ RUNNERS = {n: os.path.join(HIER, s) for n, s in {
     "plaud-wacht": "plaud_wacht.py", "dagbundelaar": "dagbundelaar.py", "locatie-wacht": "locatie_wacht.py",
     "ontwikkelaar": "ontwikkelaar.py", "levenscoach": "levenscoach.py", "bode": "bode.py"}.items()}
 # icloud-wacht draait op de Mac (launchd), niet hier.
+# De database van het bord, alleen gelezen: zo leest de Regisseur een voorstel terug voor hij succes meldt (A10)
+BORD_DB = os.environ.get("BORD_DB", os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db"))
+TAKEN_SLOT = os.path.expanduser("~/appportal/mijnagents-data/taken.slot")
 
 
 def laad_env(pad):
@@ -100,8 +108,19 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"pad": {"type": "string"}, "params": {"type": "object"}}, "required": ["pad"]}},
     {"name": "agent_ronde", "description": "Laat een agent nu een ronde draaien, optioneel voor één deal (contracten-agent: deal_id). Duurt tot enkele minuten; geeft de laatste regels van zijn uitvoer terug.",
      "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}, "deal_id": {"type": "integer"}, "dag": {"type": "string"}, "droog": {"type": "boolean"}}, "required": ["naam"]}},
-    {"name": "voorstel", "description": "Zet een voorstel op het bord dat Mehdi moet goedkeuren vóór het uitgevoerd wordt. Runbooks: 'werkwijze-bijwerken' (parameters: agent, werkwijze = de volledige nieuwe tekst), 'pipedrive-dealtitel' (deal_id, titel), 'notitie' (tekst). Zonder runbook is het een signaal.",
+    {"name": "voorstel", "description": "Zet een voorstel op het bord dat Mehdi moet goedkeuren vóór het uitgevoerd wordt. Runbooks: 'werkwijze-bijwerken' (parameters: agent, werkwijze = de volledige nieuwe tekst), 'pipedrive-dealtitel' (deal_id, titel), 'notitie' (tekst). Zonder runbook is het een signaal. Geeft het voorstel-ID terug zoals het bord het bewaarde; zonder ID staat er niets.",
      "input_schema": {"type": "object", "properties": {"actie": {"type": "string"}, "reden": {"type": "string"}, "runbook": {"type": "string"}, "parameters": {"type": "object"}}, "required": ["actie", "reden"]}},
+    {"name": "taak_plannen", "description": "Leg een toezegging voor later vast als taak: een agent een ronde laten draaien op een moment in de toekomst "
+                                            "(bv. agenda-wacht met dag, acht dagen voor een afspraak). Geeft het taak-ID terug zoals het opgeslagen "
+                                            "is. Hangt de taak aan een afspraak, geef dan kalender en afspraak-id mee: verplaatst de afspraak, dan "
+                                            "volgt de taak; geschrapt, dan vervalt ze. 'wanneer' in Brusselse tijd (JJJJ-MM-DDTHH:MM) of met tijdzone.",
+     "input_schema": {"type": "object", "properties": {"agent": {"type": "string"}, "wanneer": {"type": "string"}, "reden": {"type": "string"},
+                                                       "dag": {"type": "string"}, "deal_id": {"type": "integer"}, "droog": {"type": "boolean"},
+                                                       "afspraak_kalender": {"type": "string"}, "afspraak_id": {"type": "string"},
+                                                       "afspraak_dag": {"type": "string"}, "toestemming": {"type": "string"}},
+                      "required": ["agent", "wanneer", "reden"]}},
+    {"name": "taken_lijst", "description": "De opgeslagen taken (open en recent), met ID, uitvoertijd, status, pogingen en bewijs. Alleen lezen.",
+     "input_schema": {"type": "object", "properties": {"agent": {"type": "string"}, "alleen_open": {"type": "boolean"}}}},
 ]
 
 
@@ -148,9 +167,108 @@ def voer_tool_uit(naam, inp):
     if naam == "voorstel":
         v = {"actie": inp["actie"][:200], "reden": inp.get("reden", "")[:400], "doel": "",
              "runbook": inp.get("runbook", ""), "parameters": inp.get("parameters") or None}
-        hartslag("waakt", taak="voorstel voor Mehdi", detail=inp["actie"][:100], voorstel=v)
-        return {"ok": True, "boodschap": "voorstel staat op het bord ter goedkeuring"}
+        # Niet via hartslag(): die slikt een fout in, en dan meldde deze tool toch 'staat op het bord' (audit A10)
+        try:
+            bord("/agent-status", {"naam": NAAM, "status": "waakt", "taak": "voorstel voor Mehdi",
+                                   "detail": inp["actie"][:100], "voorstel": v})
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "fout": f"het bord nam het voorstel niet aan ({type(e).__name__}); er staat niets"}
+        terug = voorstel_terug(v)
+        if not terug:
+            return {"ok": False, "fout": "het voorstel is niet terug te vinden op het bord; er staat niets"}
+        return {"ok": True, "voorstel_id": terug["id"], "status": terug["status"],
+                "boodschap": f"voorstel {terug['id']} staat op het bord ({terug['status']})"}
+    if naam == "taak_plannen":
+        params = {"naam": inp["agent"]}
+        for k in ("dag", "deal_id", "droog"):
+            if inp.get(k) not in (None, ""):
+                params[k] = inp[k]
+        if inp["agent"] not in RUNNERS:
+            return {"ok": False, "fout": f"geen runner bekend voor '{inp['agent']}'"}
+        try:
+            t = taken.plannen("agent_ronde", inp["agent"], params, inp["wanneer"], reden=inp.get("reden", ""),
+                              toestemming=inp.get("toestemming", ""), bron="regisseur",
+                              afspraak_kalender=inp.get("afspraak_kalender", ""), afspraak_id=inp.get("afspraak_id", ""),
+                              afspraak_dag=inp.get("afspraak_dag", "") or inp.get("dag", ""))
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "fout": f"taak niet opgeslagen ({type(e).__name__}: {str(e)[:200]})"}
+        return {"ok": True, "taak_id": t["id"], "uitvoeren_op": t["brussel"], "status": t["status"]}
+    if naam == "taken_lijst":
+        rijen = taken.lijst(status=taken.OPEN if inp.get("alleen_open") else None, agent=inp.get("agent"))
+        return {"taken": [{k: r[k] for k in ("id", "agent", "soort", "parameters", "reden", "brussel", "status", "pogingen", "bewijs")}
+                          for r in rijen]}
     return {"fout": f"onbekend gereedschap {naam}"}
+
+
+def voorstel_terug(v):
+    """Leest het voorstel terug uit de database van het bord (alleen lezen): id en status, of None."""
+    try:
+        c = sqlite3.connect(f"file:{BORD_DB}?mode=ro", uri=True, timeout=10)
+        r = c.execute("SELECT id, status FROM voorstel WHERE naam=? AND actie=? AND runbook=? AND COALESCE(parameters,'')=? "
+                      "ORDER BY id DESC LIMIT 1", (NAAM, v["actie"], v.get("runbook", ""),
+                                                   json.dumps(v["parameters"]) if v.get("parameters") else "")).fetchone()
+        c.close()
+        return {"id": r[0], "status": r[1]} if r else None
+    except sqlite3.Error:
+        return None
+
+
+def afspraak_nu(kalender, aid):
+    """De afspraak zoals Google ze nu kent: ('weg', None), ('er', 'JJJJ-MM-DD') of ('onbekend', fout)."""
+    import agenda  # noqa: PLC0415
+    url = f"{agenda.API}/calendars/{urllib.parse.quote(kalender, safe='')}/events/{urllib.parse.quote(aid, safe='')}"
+    try:
+        req = urllib.request.Request(url, headers={"Authorization": "Bearer " + agenda._toegang()})
+        ev = json.load(urllib.request.urlopen(req, timeout=30))
+    except urllib.error.HTTPError as e:
+        return ("weg", None) if e.code in (404, 410) else ("onbekend", f"HTTP {e.code}")
+    except Exception as e:  # noqa: BLE001
+        return ("onbekend", type(e).__name__)
+    if ev.get("status") == "cancelled":
+        return ("weg", None)
+    s = ev.get("start") or {}
+    return ("er", (s.get("dateTime") or s.get("date") or "")[:10])
+
+
+def taken_uitvoeren(nu=None):
+    """Voert de taken uit waarvan het moment gekomen is, een tegelijk (slot). Hangt een taak aan een afspraak, dan eerst
+    herbeoordelen: geschrapt -> vervallen; verplaatst -> de dag volgt. Geslaagd heet pas 'geverifieerd' met exitcode 0
+    en de uitvoer als bewijs; anders een nieuwe poging later, tot het maximum (audit A9)."""
+    try:
+        slot = open(TAKEN_SLOT, "w")
+        fcntl.flock(slot, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return []
+    gedaan = []
+    for t in taken.te_doen(nu):
+        p = dict(t["parameters"])
+        if t["afspraak_kalender"] and t["afspraak_id"]:
+            staat, dag = afspraak_nu(t["afspraak_kalender"], t["afspraak_id"])
+            if staat == "weg":
+                taken.zet(t["id"], "vervallen", "de afspraak is geschrapt; niets uitgevoerd")
+                gedaan.append((t["id"], "vervallen"))
+                continue
+            if staat == "onbekend":
+                taken.zet(t["id"], "wacht-op-bron", f"afspraak niet te lezen ({dag}); later opnieuw", poging=True)
+                gedaan.append((t["id"], "wacht-op-bron"))
+                continue
+            if dag and dag != t["afspraak_dag"]:
+                if p.get("dag"):
+                    p["dag"] = dag
+                taken.zet(t["id"], "gepland", f"afspraak verplaatst van {t['afspraak_dag']} naar {dag}; de taak volgt",
+                          parameters=p, afspraak_dag=dag)
+        taken.zet(t["id"], "bezig", "gestart")
+        try:
+            uit = voer_tool_uit("agent_ronde", p)
+        except Exception as e:  # noqa: BLE001
+            uit = {"exit": -1, "uitvoer": f"{type(e).__name__}: {str(e)[:300]}"}
+        if uit.get("exit") == 0:
+            taken.zet(t["id"], "geverifieerd", f"exit 0\n{uit.get('uitvoer', '')[-1500:]}")
+            gedaan.append((t["id"], "geverifieerd"))
+        else:
+            n = taken.zet(t["id"], "gepland", f"exit {uit.get('exit')}\n{(uit.get('uitvoer') or uit.get('fout') or '')[-1500:]}", poging=True)
+            gedaan.append((t["id"], n["status"]))
+    return gedaan
 
 
 # ------------------------------------------------------------- antwoorden ---
@@ -174,7 +292,9 @@ def antwoord(gesprek, eerder, werkwijze_regisseur):
         "(een werkwijze, een dealtitel, een handeling), dan zet je een voorstel op het bord met het juiste "
         "runbook en zeg je dat het op zijn goedkeuring wacht. Wil hij dat een agent nu iets doet, gebruik "
         "agent_ronde. Beweer niets dat je niet uit het gereedschap haalde; zeg wat je niet kunt en wat "
-        "daarvoor nodig is. Vraagt Mehdi naar de toestand van de agents, loop dan elke agent uit "
+        "daarvoor nodig is. Een toezegging voor later bestaat alleen als je ze met taak_plannen opslaat en het taak-ID "
+        "noemt; een voorstel staat pas op het bord als de tool een voorstel-ID teruggeeft. Zonder ID beloof of bevestig je "
+        "niets. Vraagt Mehdi naar de toestand van de agents, loop dan elke agent uit "
         "agents_overzicht na en noem ze allemaal die op fout of stil staan; vat nooit samen uit je hoofd. "
         "Antwoord in markdown, kort.\n\n"
         "=== JOUW WERKWIJZE (van het bord) ===\n" + (werkwijze_regisseur or "(nog niet uitgeschreven)")
@@ -209,6 +329,9 @@ def main():
     if not TOKEN:
         print("FOUT: geen AGENTS_TOKEN", file=sys.stderr)
         return
+    # eerst de taken waarvan het moment gekomen is (toezeggingen voor later, A9)
+    for tid, st in taken_uitvoeren():
+        print(f"taak {tid}: {st}")
     open_ = bord("/api/gesprek/open").get("open") or []
     if not open_:
         hartslag("waakt", taak="luistert", detail="geen open berichten")

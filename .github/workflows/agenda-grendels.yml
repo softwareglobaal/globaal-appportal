@@ -1,5 +1,6 @@
 # Grendels op De Agendawacht die zonder sleutels draaien: de codes van twee letters (Mehdi, 02-10-2026), het
-# foutenregister, het leren in lagen en de wijzigingswacht (paginering, cursor, exitcode, oude dag, annulering).
+# foutenregister, het leren in lagen, de wijzigingswacht (paginering, cursor, exitcode, oude dag, annulering) en de
+# toezeggingen en voorstellen van de Regisseur (taak-ID, voorstel-ID, regelwijziging).
 # 'Agendawacht - onderzoek en herstelvoorstel v1.1' p. 6-11: CI blokkeert de terugkeer van oude canonieke codes.
 # De tests die Google-sleutels vragen (test_agenda_taken.py) draaien op de server voor elke push.
 name: agenda-grendels
@@ -22,3 +23,4 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_foutenregister.py
       - run: python3 mijnagents-runner/tests/test_leren_in_lagen.py
       - run: python3 mijnagents-runner/tests/test_agenda_signaal.py
+      - run: python3 mijnagents-runner/tests/test_taken.py

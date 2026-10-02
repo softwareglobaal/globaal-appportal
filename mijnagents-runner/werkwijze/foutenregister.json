@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.23",
+ "versie": "3.24",
  "datum": "02-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -256,6 +256,14 @@
    "les": "Test ook het midden van de dag: een ronde die draait terwijl Mehdi onderweg is, ziet afspraken die al begonnen zijn. 'Voorbij' betekent niet 'weg'; het is waar hij nu staat.",
    "uit": [
     "FR-97"
+   ]
+  },
+  {
+   "id": "L32",
+   "les": "Een belofte of een voorstel bestaat pas met een ID dat uit de opslag is teruggelezen. Tekst in een gesprek is geen taak.",
+   "uit": [
+    "FR-99",
+    "FR-100"
    ]
   }
  ],
@@ -2052,6 +2060,63 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "een buitenafspraak die al begonnen is, blijft het vertrekpunt"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-98",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi (A11; ook p. 2: PDF v2.28 noemde werkwijze v7.20, het bord droeg v7.34)",
+   "fout": "Het runbook 'werkwijze-bijwerken' veranderde alleen de tekst op het bord. Voor de Agendawacht, waarvan de regels in code, JSON en tests staan, veranderde daardoor niets aan wat hij doet; bord, repo en PDF liepen uit elkaar.",
+   "gevolg": "Een goedgekeurde regel kon op het bord staan zonder dat de agent hem uitvoerde, en niemand zag dat bord en repo verschilden.",
+   "waarom_niet_gezien": "Het bord is voor de meeste agents de waarheid (norm N6); dat de Agendawacht zijn regels uit code haalt, stond nergens als uitzondering.",
+   "oorzaak": "Een tekstwijziging werd behandeld als een regelwijziging.",
+   "soort_oorzaak": "ontwerp",
+   "oplossing": "Voor agents met regels in code (CODE_GEDREVEN: agenda-wacht) bewaart het runbook de nieuwe tekst en plant het een regelwijziging-taak voor de ontwikkelaar (regel, code, test en PDF als een pakket), in plaats van het bord te overschrijven. De zelfcontrole meldt elke werkdag als bord en repo een andere versie dragen (bord_werkwijze_oud) en zolang een regelwijziging openstaat (regelwijziging_open).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_taken.py",
+    "tekst": "een regelwijziging via het bord wordt een taak voor de ontwikkelaar"
+   },
+   "controle": [
+    "bord_werkwijze_oud",
+    "regelwijziging_open"
+   ],
+   "status": "bewaakt"
+  },
+  {
+   "id": "FR-99",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi (A10)",
+   "fout": "De voorstel-tool van de Regisseur riep hartslag() aan, die elke fout van het bord inslikt, en antwoordde daarna altijd 'ok: True, voorstel staat op het bord'.",
+   "gevolg": "Viel het bord uit, dan bevestigde de Regisseur aan Mehdi een voorstel dat nergens stond.",
+   "waarom_niet_gezien": "De tool gaf nooit een fout terug, dus er was ook nooit een fout te zien.",
+   "oorzaak": "Succes melden zonder terug te lezen.",
+   "soort_oorzaak": "code",
+   "oplossing": "De tool schrijft rechtstreeks naar het bord (een fout is een fout) en leest het voorstel terug uit de database van het bord (alleen lezen); alleen met een voorstel-ID heet het gezet. De opdracht aan het model zegt: zonder ID bevestig je niets.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_taken.py",
+    "tekst": "een voorstel heet pas gezet met een voorstel-ID uit het bord"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-100",
+   "datum": "02-10-2026",
+   "gevonden_door": "audit 'Agendawacht - onderzoek en herstelvoorstel v1.1' (02-10-2026), op vraag van Mehdi (A9)",
+   "fout": "Een toezegging voor later in een gesprek met een agent ('acht dagen ervoor pas ik het aan') had geen opslag: de Regisseur had geen gereedschap voor toekomstig werk met uitvoertijd, status en bewijs.",
+   "gevolg": "Een belofte bleef tekst; Mehdi bleef de laatste controleur.",
+   "waarom_niet_gezien": "Het antwoord klonk als een afspraak; niemand vroeg naar een taak-ID.",
+   "oorzaak": "Er bestond geen duurzame takenlijst.",
+   "soort_oorzaak": "ontwerp",
+   "oplossing": "koppelingen/taken.py (SQLite op de VM): taak met ID, uitvoertijd in UTC en Brusselse weergave, eigenaar, toestemming, status (gepland, bezig, wacht-op-bron, mislukt, geverifieerd, vervallen), pogingen, volgende poging en bewijs; dubbel plannen geeft dezelfde taak. De Regisseur plant met taak_plannen en noemt het taak-ID, en voert de taken uit in zijn minuutronde met een slot: een taak aan een afspraak volgt een verplaatsing en vervalt bij een schrapping; geslaagd heet pas geverifieerd met exitcode 0 en bewijs; mislukt wordt later opnieuw geprobeerd tot vijf keer.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_taken.py",
+    "tekst": "een toezegging voor later is een opgeslagen taak met ID"
    },
    "controle": [],
    "status": "opgelost"

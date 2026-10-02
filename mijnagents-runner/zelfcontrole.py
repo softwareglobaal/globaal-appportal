@@ -222,6 +222,30 @@ def omgeving(nu):
         herstel = json.loads(Path(W.KLEURHERSTEL_LOG).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         herstel = []
+    # Bord en repo dragen dezelfde werkwijze (audit A11, FR-98): staat het bord achter, dan is een regel niet uitgerold;
+    # staat het voor, dan veranderde iemand tekst die de code niet uitvoert.
+    try:
+        import bord as _bord  # noqa: PLC0415
+        v_bord = re.search(r"Versie ([0-9.]+)", _bord.call("/api/agent/agenda-wacht/werkwijze").get("werkwijze") or "")
+        v_repo = re.search(r"Versie ([0-9.]+)", (HIER / "werkwijze" / "agenda-wacht.md").read_text(encoding="utf-8"))
+        if not (v_bord and v_repo) or v_bord.group(1) != v_repo.group(1):
+            uit.append({"controle": "bord_werkwijze_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
+                        "tekst": f"werkwijze op het bord v{v_bord.group(1) if v_bord else '?'}, in de repo v{v_repo.group(1) if v_repo else '?'}: "
+                                 f"werkwijze_naar_bord.py agenda-wacht (eerst het verschil), dan --zet", "door": ""})
+    except Exception as e:  # noqa: BLE001
+        uit.append({"controle": "bord_werkwijze_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
+                    "tekst": f"de werkwijze op het bord is niet te lezen ({type(e).__name__})", "door": ""})
+    # Een regelwijziging die via het bord binnenkwam, wacht op de ontwikkelaar tot ze als pakket doorgevoerd is (FR-98)
+    try:
+        import taken as _taken  # noqa: PLC0415
+        for t in _taken.lijst(status=_taken.OPEN, agent="agenda-wacht"):
+            if t["soort"] == "regelwijziging":
+                uit.append({"controle": "regelwijziging_open", "dag": t["due_at"][:10], "uur": "", "agenda": "", "titel": "",
+                            "tekst": f"regelwijziging taak {t['id']} (tekst in {t['parameters'].get('tekst', '?')}) wacht op een pakket: "
+                                     f"regel, code, test en PDF", "door": ""})
+    except Exception as e:  # noqa: BLE001
+        uit.append({"controle": "regelwijziging_open", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
+                    "tekst": f"de takenlijst is niet te lezen ({type(e).__name__})", "door": ""})
     grens = (nu - timedelta(days=1)).isoformat(timespec="minutes")
     recent = [h for h in herstel if h.get("tijd", "") >= grens and h.get("teruggezet")]
     if recent:
