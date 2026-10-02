@@ -1124,7 +1124,7 @@ services:
   # per land, met bron en redenering per regel. Next.js standalone, eigen schema
   # doorbelasting met rol doorbelasting_app (migratie 176). Eigen repo
   # softwareglobaal/globaal-doorbelasting, uitgecheckt in ./organisatiekosten met
-  # auto-deploy via deploy-stack.sh en cron. Leest geen Octopus in fase 1.
+  # auto-deploy via deploy-stack.sh en cron. Leest Octopus, sales en facturatiecontrole.
   app-organisatiekosten:
     build:
       context: ./organisatiekosten
@@ -1138,6 +1138,13 @@ services:
       # Leeg = de app geeft een fout en de health-check faalt (geen stille terugval op een lokale database).
       DOORBELASTING_DB_URL: ${ORGANISATIEKOSTEN_DB_URL:-}
       DOORBELASTING_GROUPS: ${ORGANISATIEKOSTEN_GROUPS:-db-alles}
+      # Koppelingen, alle drie alleen lezen: Octopus (facturen en grootboek),
+      # het sales-dashboard (agent-API) en facturatiecontrole (/api/koppeling/sales).
+      OCTOPUS_SOFTWARE_HOUSE_ID: ${OCTOPUS_SOFTWARE_HOUSE_ID:-}
+      OCTOPUS_USER: ${OCTOPUS_USER:-}
+      OCTOPUS_PASSWORD: ${OCTOPUS_PASSWORD:-}
+      SALES_AGENT_TOKEN: ${SALES_AGENT_TOKEN:-}
+      KOPPELING_TOKEN: ${KOPPELING_TOKEN:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3130/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 2m
