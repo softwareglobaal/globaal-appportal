@@ -196,6 +196,62 @@ class Felix:
         rijen = [r for r in (_rij(it, reeks) for it in j.get("items") or []) if _zelfde_straat(r["straat"], straat)]
         return _markeer_district(rijen, districten)
 
+    def percelenpas(self, lat, lon, adres, pad=None):
+        """De vergunningen van het perceel volgens de stad (omgeving.antwerpen.be/percelenpas), met printscreen.
+
+        De stad zoekt op het perceel, niet op het huisnummer: ze vindt ook wat in FelixArchief zonder nummer
+        staat ('lot 1') of onder een oude straatnaam (Frans Brandsstraat 11 had dossiers onder de Kapelstraat).
+        Dit is het overzicht op een pagina dat Mehdi wil (03-10-2026).
+        """
+        url = ("https://omgeving.antwerpen.be/percelenpas/vergunningen?" +
+               urllib.parse.urlencode({"x": lat, "y": lon, "searchAddress": adres}))
+        p = self._ctx.new_page()
+        try:
+            p.goto(url, wait_until="domcontentloaded", timeout=60000)
+            p.wait_for_selector("text=Vergunningen", timeout=45000)
+            try:
+                p.wait_for_selector("text=Dossiernummer", timeout=20000)
+            except Exception:
+                pass  # geen vergunningen: de pagina zegt dat zelf, en dat is ook bewijs
+            p.wait_for_timeout(2000)
+            tekst = p.locator("body").inner_text()
+            rijen = p.evaluate("""() => [...document.querySelectorAll('tr')].map(tr =>
+                    [...tr.querySelectorAll('td')].map(c => c.innerText.trim()))""")
+            if pad:
+                p.screenshot(path=pad, full_page=True)
+        finally:
+            p.close()
+        m = re.search(r"\b\d{5}[A-Z]\d{4}/\d{2}[A-Z]\d{3}\b", tekst)
+        vergunningen = []
+        for r in rijen:
+            cellen = [c for c in r if c and c != "Selecteer rij"]
+            if len(cellen) >= 3:
+                vergunningen.append({"onderwerp": cellen[0], "dossiernummer": cellen[1], "type": cellen[2],
+                                     "beslissing": cellen[3] if len(cellen) > 3 else "",
+                                     "datum": cellen[4] if len(cellen) > 4 else ""})
+        return {"capakey": m.group() if m else "", "vergunningen": vergunningen, "url": url}
+
+    def dossier_zoeken(self, dossiernummer):
+        """Een dossiernummer van de percelenpas -> de dossiers in FelixArchief (bouwdossier en plannen).
+
+        Twee vormen: '19654625' staat in het veld Dossiernummer; '214157_329#11928' draagt het inventarisnummer al.
+        """
+        if "#" in dossiernummer:
+            info = self.inventaris(dossiernummer.split("_")[-1])
+            if not info:
+                return []
+            reeks = next((k for k, v in werkgebied()["reeksen"].items() if v == info["reeks"]), "")
+            return [{"reeks": reeks, "inventaris": info["inventaris"], "straat": info["titel"], "nummer": "",
+                     "aanvraag": info["begin"], "omschrijving": "", "status": info["status"]}]
+        rijen = []
+        for reeks in werkgebied()["reeksen"]:
+            j = self.reeks_zoeken(reeks, [_term("Dossiernummer", dossiernummer, "contains")], 1, 20)
+            for it in j.get("items") or []:
+                r = _rij(it, reeks)
+                if re.search(rf"(^|\D){re.escape(dossiernummer)}(\D|$)", r["dossiernummer"]):
+                    rijen.append(r)
+        return rijen
+
     def bestanden(self, inventaris):
         """De bestanden van een digitaal dossier: naam, grootte, adres om te downloaden (na aanmelden)."""
         sleutel = inventaris.replace("#", "_")
