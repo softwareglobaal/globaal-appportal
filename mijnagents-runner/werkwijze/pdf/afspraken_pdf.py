@@ -27,7 +27,7 @@ _ww = (REPO / "werkwijze/agenda-wacht.md").read_text(encoding="utf-8")
 WW_VERSIE = (_re.search(r"Versie ([0-9.]+)", _ww) or [None, "?"])[1]
 COMMIT = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip() or "?"
 BOUWDATUM = __import__("datetime").date.today().strftime("%d-%m-%Y")
-VERSIE = "3.2"
+VERSIE = "3.3"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -163,6 +163,9 @@ De filewacht belt extra zodra de file de buffer van {t['bellen']['buffer_minuten
 <tbody>{ag}</tbody></table>
 <p><b>Mail als bron.</b> {e(t['mail_als_bron']['wat'])}. Lezen: {e(t['mail_als_bron']['lezen'])}. Tonen: {e(t['mail_als_bron']['tonen'])}.
 Nooit: {e(t['mail_als_bron']['nooit'])}. Versheid: {e(t['mail_als_bron']['versheid'])}.</p>
+<p><b>Agendagasten.</b> {e(t['agendagasten']['wat'])}. Bron: {e(t['agendagasten']['bron'])}. Wie: {e(t['agendagasten']['wie'])}
+(firma: {e(', '.join(f"{k}: {', '.join(v)}" for k, v in t['agendagasten']['firma_gasten'].items()))}). Waar: {e(t['agendagasten']['waar'])}.
+{e(t['agendagasten']['zonder_mail'])}. {e(t['agendagasten']['intern'])}. Nooit: {e(t['agendagasten']['nooit'])}.</p>
 <p><b>Toezeggingen.</b> Wat een agent voor later belooft, plant de Regisseur als taak met een ID, uitvoertijd, status en bewijs;
 zonder ID is het geen toezegging, en een voorstel staat pas op het bord met een voorstel-ID. Een nieuwe werkwijze voor de
 Agendawacht via het bord wordt een regelwijziging voor de ontwikkelaar (regel, code, test en PDF samen), geen losse tekst.</p>
