@@ -55,6 +55,34 @@ def _toegang():
     return _token["waarde"]
 
 
+# Leesstand per agenda: laatste poging, laatste geslaagde lezing en fout (nacontrole v1.3, R7). Alleen geschreven als de
+# datamap al bestaat: een test of de Mac maakt nooit een map aan.
+LEESSTAND = os.environ.get("AGENDA_LEESSTAND", os.path.expanduser("~/appportal/mijnagents-data/agenda-leesstand.json"))
+
+
+def leesstand():
+    try:
+        with open(LEESSTAND, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _leesstand_zet(per_kal):
+    if not per_kal or not os.path.isdir(os.path.dirname(LEESSTAND)):
+        return
+    d, nu = leesstand(), datetime.now(timezone.utc).isoformat(timespec="seconds")
+    for kal, fout in per_kal.items():
+        r = d.setdefault(kal, {})
+        r["laatste_poging"], r["fout"] = nu, fout or ""
+        if not fout:
+            r["laatst_gelukt"] = nu
+    tmp = LEESSTAND + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, LEESSTAND)
+
+
 def interne_adressen():
     """De agenda-adressen van collega's en partners (organisatie.globaal.be, migratie 185). Faalt die bron, dan een
     lege set: dan telt elke gast als extern, zoals voor 03-10-2026. Dat is de veilige kant: de agent doet dan minder
@@ -75,6 +103,7 @@ def afspraken(van_dagen=-1, tot_dagen=8):
     uit = []
     gezien = set()
     _intern = interne_adressen()
+    per_kal = {}
     for kal in kalenders():
         # Alle pagina's, niet alleen de eerste 250. Gezien 21-09-2026: de agenda van Lara
         # heeft er over een schooljaar meer, en alles na maart viel stil weg.
@@ -91,6 +120,7 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                     d = json.load(r)
             except urllib.error.HTTPError as e:
                 uit.append({"kalender": kal, "fout": f"{e.code}"})
+                per_kal[kal] = f"HTTP {e.code}"
                 mislukt = True
                 break
             items += d.get("items", [])
@@ -99,6 +129,7 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 break
         if mislukt:
             continue
+        per_kal[kal] = ""
         for ev in items:
             if ev.get("status") == "cancelled":
                 continue
@@ -137,7 +168,13 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 "_vrij": ev.get("transparency") == "transparent",
                 # de UID van de uitnodiging (ICS): zo koppelt een afspraak uit mail aan dit item (mail als bron, audit 02-10-2026)
                 "_icaluid": ev.get("iCalUID", ""),
+                # de oorspronkelijke start van een reeksinstantie, ook na verplaatsing (Google: originalStartTime, R11)
+                "_origineel": (ev.get("originalStartTime") or {}).get("dateTime") or (ev.get("originalStartTime") or {}).get("date") or "",
             })
+    try:
+        _leesstand_zet(per_kal)
+    except OSError:
+        pass
     uit.sort(key=lambda x: x.get("start", ""))
     return uit
 

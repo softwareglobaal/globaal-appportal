@@ -77,6 +77,21 @@ def is_prive(a):
     return bool(a.get("_prive") or a.get("kalender") in PRIVE_KALENDERS)
 
 
+def prive_teksten(items):
+    """De teksten van afspraken uit een privébron (titel, de titel na de kop, klant, plaats): de bordklant maskeert ze
+    in elk bericht (nacontrole v1.3, R1)."""
+    uit = set()
+    for x in items:
+        if not is_prive(x) or x.get("fout"):
+            continue
+        t = (x.get("titel") or "").strip()
+        uit |= {t, re.sub(r"^(VR|ZL|!!|\?\?|\s)+", "", t).strip()}
+        if ":" in t:
+            uit.add(t.split(":", 1)[1].strip())
+        uit.add((x.get("locatie") or "").strip())
+    return {u for u in uit if u}
+
+
 # Wat Mehdi archiveert krijgt "ZZ ARCHIEF" voor de naam, nadat hij de agenda van
 # alle andere accounts heeft losgekoppeld. Tweede grendel naast KALENDERS: ook als
 # zo'n agenda ooit in de lijst hierboven belandt, laat ik hem met rust. 19-09-2026.
@@ -258,7 +273,9 @@ def afspraken(van_dagen=-1, tot_dagen=8):
     controle en de filewacht dezelfde agenda's zien als de agent. Gezien 21-09-2026:
     zij lazen alleen de werkagenda en zoomafspraken, niet Lara en niet privé."""
     os.environ["CONTRACTEN_KALENDERS"] = ",".join(kalenders())   # agenda.kalenders() leest die
-    return agenda.afspraken(van_dagen, tot_dagen)
+    uit = agenda.afspraken(van_dagen, tot_dagen)
+    ag.prive(prive_teksten(uit))          # wat uit een privébron komt, gaat nooit naar het bord (R1)
+    return uit
 
 
 
@@ -550,7 +567,14 @@ def canoniek(titel, online=None):
     """De titel zoals de agent hem schrijft: alleen codes van twee letters. Elke schrijfroute en elk voorstel gaat
     hierdoor, zodat geen enkele route nog HARC of UNABO kan schrijven (nacontrole v1.2, V1, FR-104). B2B wordt alleen
     XB of XO als buiten of online vaststaat."""
-    return codes_twee_letters(titel or "", online) if titel else titel
+    if not titel:
+        return titel
+    nieuw = codes_twee_letters(titel, online)
+    if nieuw != titel and re.search(r"-B2B\]", nieuw):
+        # zonder bewijs van buiten of online geen nieuwe gecodeerde B2B-titel: de bron blijft staan, de vraag XB of XO
+        # komt via het voorstel (nacontrole v1.3, R8)
+        return titel
+    return nieuw
 
 
 def _patch(a, body, tok, toch=False):
@@ -973,7 +997,10 @@ def titels_normaliseren(items, alleen_dag=None):
         nieuw = None
         if info.get("firma"):
             kandidaat = codes_twee_letters(titel, _online(a))
-            if kandidaat != titel:
+            if kandidaat != titel and re.search(r"-B2B\]", kandidaat):
+                regels.append(f"{a['start'][:16]} {titel[:50]}: VOORSTEL buiten of online staat nergens: '{kandidaat.replace('-B2B]', '-XB]')[:60]}' "
+                              f"(buiten) of '{kandidaat.replace('-B2B]', '-XO]')[:60]}' (online)? Ik schrijf niets tot het vaststaat")
+            elif kandidaat != titel:
                 if _van_mehdi(a) and not a.get("_terugkerend"):
                     nieuw, uitleg = kandidaat, "codes van twee letters (Mehdi, 02-10-2026)"
                 elif not a.get("_terugkerend"):
@@ -2155,25 +2182,38 @@ def mail_meldingen(res, bestaande, tok, nu=None):
             regels.append(f"uitnodiging zonder uur: vraag gezet ({a['bron_mailbox']})")
         except Exception as e:  # noqa: BLE001
             regels.append(f"uitnodiging zonder uur: vraag niet gezet ({type(e).__name__})")
+    # Afronden alleen op bewijs: de afspraak staat nu in de agenda, is geannuleerd of voorbij. Een vraag die alleen buiten
+    # het venster van 14 dagen viel, blijft open; verschoof haar afspraak, dan volgt de melding (nacontrole v1.3, R4).
+    per_k = {MA.sleutel_kort(a): a for a in res}
+    redenen = {"gekoppeld": "de afspraak staat nu in de agenda", "geannuleerd": "de afspraak is geannuleerd",
+               "voorbij": "de afspraak is voorbij"}
     for k, x in er.items():
         if k in open_ or k.startswith("z:"):
             continue
+        a = per_k.get(k)
         try:
-            if _eigen_melding_opgelost(x, k, tok, nu):
-                regels.append(f"{x['start'][:10]} melding op opgelost gezet")
+            if a is None:
+                continue                                   # onbekend in het register: niets beweren, niets afronden
+            if a["status"] in MA.VRAAG_STATUSSEN:
+                if a["start"] and (x.get("start") or "")[:10] != a["start"][:10]:
+                    body = _mail_melding_body(a, k, a["start"][:10])
+                    _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description")}, tok)
+                    regels.append(f"{a['start'][:16]} melding bijgewerkt buiten het venster ({a['status']}, blijft open)")
+                continue
+            if a["status"] in redenen and _eigen_melding_opgelost(x, k, tok, nu, redenen[a["status"]]):
+                regels.append(f"{x['start'][:10]} melding op opgelost gezet: {redenen[a['status']]}")
         except Exception as e:  # noqa: BLE001
-            regels.append(f"{x['start'][:10]} melding niet op opgelost gezet ({type(e).__name__})")
+            regels.append(f"{x['start'][:10]} melding niet bijgewerkt ({type(e).__name__})")
     return regels
 
 
-def _eigen_melding_opgelost(x, k, tok, nu):
+def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost"):
     """Zet alleen een eigen mailmelding (merk van de agent, privé-agenda) op 'Opgelost'. Wissen doet de agent niet."""
     if x.get("kalender") != PRIVE_AGENDA or (x.get("_merk") or {}).get(MAILMERK) != k or not x.get("id"):
         return False
     titel = re.sub(r"^VR Agendawacht:\s*", "", x.get("titel") or "")
     _patch(x, {"summary": f"Opgelost: {titel}"[:200],
-               "description": f"Opgelost op {nu:%d-%m-%Y %H:%M}: de afspraak staat in de agenda, is geannuleerd of voorbij. "
-                              f"Je mag deze melding weghalen.\n\n" + (x.get("omschrijving") or ""),
+               "description": f"Opgelost op {nu:%d-%m-%Y %H:%M}: {reden}. Je mag deze melding weghalen.\n\n" + (x.get("omschrijving") or ""),
                "extendedProperties": {"private": {MAILMERK: f"opgelost:{k}"}}}, tok)
     return True
 
@@ -3462,6 +3502,12 @@ def main():
         fouten = [i for i in items if i.get("fout")]
         items = [i for i in items if not i.get("fout")]
         archief = archief_afspraken(-1, 8)     # alleen lezen (FR-39)
+        try:
+            import mail_afspraken as _MA0  # noqa: PLC0415
+            if os.path.exists(_MA0.DB):
+                ag.prive(_MA0.prive_teksten())   # privé uit mail (Hotmail): nooit op het bord (R1)
+        except Exception:  # noqa: BLE001
+            pass
         deals = deals_index()
         vandaag = nu_lokaal().date().isoformat()
         gisteren = (nu_lokaal().date() - timedelta(days=1)).isoformat()
@@ -3548,6 +3594,7 @@ def main():
                 import mail_afspraken as MA  # noqa: PLC0415
                 _alle = [x for x in afspraken(-14, 120) if not x.get("fout")] + archief_afspraken(-14, 120)
                 mres, mfout = MA.ronde(_alle, (datetime.now() - timedelta(days=14)).date().isoformat())
+                ag.prive(MA.prive_teksten())
                 mregels = mail_meldingen(mres, _alle, agenda._toegang())
                 _tel = {s: sum(1 for a in mres if a["status"] == s) for s in ("gekoppeld",) + MA.VRAAG_STATUSSEN + ("zonder_tijd",)}
                 ag.log(f"dag {vandaag}", "schrijf", f"mail als bron: {len(mres)} afspraken uit mail ({_tel})", "\n".join(mregels))

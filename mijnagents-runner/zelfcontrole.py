@@ -365,6 +365,12 @@ def main():
     if "--droog" in sys.argv:
         return 0
     ag = W.ag
+    try:
+        import mail_afspraken as _MA  # noqa: PLC0415
+        if os.path.exists(_MA.DB):
+            ag.prive(_MA.prive_teksten())      # ook privé uit mail gaat door de bordgrens (R1)
+    except Exception:  # noqa: BLE001
+        pass
     gevonden = voor_bord(gevonden)
     ag.log(f"dag {nu.date().isoformat()}", "bevinding",
            f"zelfcontrole: {tel['TERUGGEKEERD']} teruggekeerd, {tel['NIEUW']} nieuw, {tel['BEKEND']} bekend",

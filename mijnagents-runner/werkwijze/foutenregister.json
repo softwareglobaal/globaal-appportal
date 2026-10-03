@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.29",
+ "versie": "3.30",
  "datum": "03-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -283,6 +283,17 @@
     "FR-110",
     "FR-115",
     "FR-117"
+   ]
+  },
+  {
+   "id": "L35",
+   "les": "Een grens hoort waar het bericht de deur uitgaat, niet in een route. En een proef dekt alleen haar eigen geval: verwante gevallen (een tweede bron, een hele dag, de 21ste taak, een andere UID) moeten zelf beproefd worden voor 'afgerond' gezegd wordt.",
+   "uit": [
+    "FR-119",
+    "FR-120",
+    "FR-123",
+    "FR-124",
+    "FR-121"
    ]
   }
  ],
@@ -2468,6 +2479,204 @@
     "soort": "test",
     "waar": "tests/test_nacontrole_v12.py",
     "tekst": "PDF-generator: de registerversie uit de bron"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-119",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R1, rest van V9)",
+   "fout": "Het dagplan (klaarzet), het logboek (log_verstuur) en een botsing werk-Lara/privé droegen letterlijke privétitels naar het bord; voor_bord filterde alleen de zelfcontrole en volgde alleen het eerste item.",
+   "gevolg": "Privé- en Lara-titels en -adressen op een plek die andere agents lezen (niet vastgesteld dat iemand ze zag).",
+   "waarom_niet_gezien": "Ik filterde een route in plaats van de uitgang.",
+   "oorzaak": "Privacy als filter per route, niet als grens van het transport.",
+   "soort_oorzaak": "code",
+   "oplossing": "bord.Agent.prive() en maskeer(): elk bericht naar het bord (hartslag, nood, logboek, klaarzet) gaat door dezelfde grens; agenda_wacht.afspraken() meldt bij elke lezing de teksten van privé- en Lara-afspraken aan, de mailbron die van Hotmail. Proef vangt de volledige uitgaande payload af.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R1 dagplan, logboek, hartslag en een werk-Lara-botsing"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-120",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R2, rest van V9)",
+   "fout": "Dezelfde uitnodiging eerst uit Hotmail (SEQUENCE 1) en daarna uit mch@ (SEQUENCE 2): de rij zakte van prive=1 naar 0 en de dagcontrole toonde de titel.",
+   "gevolg": "Een privétitel kon via een latere werkmail toch zichtbaar worden.",
+   "waarom_niet_gezien": "De upgrade van 03-10 zette alleen oude rijen recht, niet een latere samenvoeging.",
+   "oorzaak": "Het label volgde de laatste bron, niet alle herkomsten.",
+   "soort_oorzaak": "code",
+   "oplossing": "Na elke bewaring: prive=1 als een van de herkomsten (tabel bron) een privémailbox is; het label zakt nooit vanzelf.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R2 dezelfde uitnodiging eerst uit Hotmail"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-121",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R3, rest van V6)",
+   "fout": "Mail-UID u1 ('project Alfa') en agenda-UID u2 ('project Beta') op hetzelfde uur heetten gekoppeld door een gedeeld algemeen woord.",
+   "gevolg": "Een ontbrekende afspraak kon onzichtbaar blijven achter een andere.",
+   "waarom_niet_gezien": "De woordregel gold ook als beide uitnodigingen een eigen, verschillende UID hadden.",
+   "oorzaak": "Identiteit werd niet als tegenbewijs gebruikt.",
+   "soort_oorzaak": "code",
+   "oplossing": "Verschillende expliciete UID's zijn hoogstens een kandidaat, ook met gedeelde woorden.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R3 uitnodiging u1"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-122",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R4, rest van V11)",
+   "fout": "Een mailvraag waarvan de afspraak naar buiten het venster van 14 dagen verhuisde, werd 'Opgelost' met de bewering dat ze in de agenda stond, geannuleerd of voorbij was.",
+   "gevolg": "Mehdi verloor een open vraag zonder dat iets opgelost was.",
+   "waarom_niet_gezien": "Het presentatievenster werd als bewijs van afhandeling gebruikt.",
+   "oorzaak": "Zichtbaarheid en afhandeling werden niet gescheiden.",
+   "soort_oorzaak": "code",
+   "oplossing": "Afronden alleen bij status gekoppeld, geannuleerd of voorbij, met die reden in de melding; een vraag buiten het venster blijft open en volgt haar afspraak.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R4 een vraag die naar 25 oktober"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-123",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R5, rest van V3)",
+   "fout": "Een taak aan een hele-dag-afspraak werd niet herpland: de herberekening eiste een uur in de start. Van 11 naar 21 oktober bleef de taak op 3 oktober en werd ze al voor 21 oktober uitgevoerd.",
+   "gevolg": "Een toezegging te vroeg uitgevoerd.",
+   "waarom_niet_gezien": "De proef van v1.2 gebruikte alleen een getimede afspraak.",
+   "oorzaak": "Twee startvormen, een herberekening.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een datum zonder uur telt bij plannen en herplannen als middernacht in Brussel; de termijn blijft dezelfde.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R5 een hele-dag-afspraak verschuift"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-124",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R6, rest van V3)",
+   "fout": "De Regisseur keek steeds dezelfde eerste twintig open taken na; de 21ste werd nooit opgezocht en bleef op haar oude datum.",
+   "gevolg": "Een vervroegde afspraak kon haar toezegging missen.",
+   "waarom_niet_gezien": "De proef had minder dan twintig taken.",
+   "oorzaak": "Een limiet voor de selectie in plaats van erna.",
+   "soort_oorzaak": "code",
+   "oplossing": "taken.te_herzien(): de open taken die het langst niet nagekeken zijn eerst, hoogstens twintig per minuut; elke open taak komt binnen het uur aan de beurt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R6 met 21 open taken"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-125",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R7, rest van bronroute)",
+   "fout": "bronnen_lees filterde foutrecords weg: een agenda met HTTP 403 verdween uit het antwoord van de Regisseur, zonder dekkingsstatus.",
+   "gevolg": "De Regisseur kon een onvolledige agenda als volledig citeren.",
+   "waarom_niet_gezien": "Alleen gevonden afspraken werden teruggegeven.",
+   "oorzaak": "Dekking en vondsten niet gescheiden.",
+   "soort_oorzaak": "code",
+   "oplossing": "bronnen_lees geeft per agenda status (geslaagd/mislukt), fout, poging en laatste geslaagde lezing (koppelingen/agenda.py houdt een leesstand per agenda bij), en 'volledig' alleen als alles gelezen is.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R7 een agenda die 403 geeft"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-126",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R8, rest van V2)",
+   "fout": "Een al gecodeerde titel 'Mehdi: [HARC-B2B] Fictieve Relatie' zonder locatie werd geschreven als [HA-B2B]: drie tekens soort, en 'codes van twee letters' genoemd.",
+   "gevolg": "Een nieuwe titel met een oude soortcode zonder bewijs van buiten of online.",
+   "waarom_niet_gezien": "De bewijsregel van V2 gold alleen voor vrije tekst.",
+   "oorzaak": "Dezelfde regel niet in alle routes.",
+   "soort_oorzaak": "code",
+   "oplossing": "canoniek() schrijft geen nieuwe gecodeerde B2B-titel (de bron blijft staan); titels_normaliseren maakt er een concreet voorstel van: XB (buiten) of XO (online).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R8 [HARC-B2B] zonder bewijs"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-127",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R9, rest van bron)",
+   "fout": "De master had twee lopende tegenstrijdige Calendly-opdrachten (HA -> HARC en naar UB/TK) en de afspraken-PDF v3.4 drukte ze allebei af.",
+   "gevolg": "Wie de PDF las, kreeg twee strijdige opdrachten.",
+   "waarom_niet_gezien": "De CI sloot 'openstaand' volledig uit van de controle op oude codes.",
+   "oorzaak": "Geen status 'vervangen'.",
+   "soort_oorzaak": "document",
+   "oplossing": "De oude opdracht staat als 'vervangen' met verwijzing; de PDF toont lopende en vervangen taken apart met status; de CI toetst lopende open taken ook op 'X -> HARC'.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R9 geen lopende open taak"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-128",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R10, rest van V7)",
+   "fout": "Een uitnodiging met DTSTART:20260231 werd stil overgeslagen; de mailbox kreeg toch 'volledig' en een nieuwe geslaagde leestijd.",
+   "gevolg": "Een onbruikbare uitnodiging gaf bewijs van volledige verwerking.",
+   "waarom_niet_gezien": "De parser ving ValueError af en liet het deel verdwijnen.",
+   "oorzaak": "Een fout die geen fout heette.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een onleesbaar veld komt als fout bij de afspraak; ics_problemen() maakt er een verwerkingsfout met bericht-ID van; de dekking wordt 'gedeeltelijk', de goede berichten blijven bewaard.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R10 een uitnodiging met DTSTART 31 februari"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-129",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole v1.3 (03-10-2026, op b230268), op vraag van Mehdi (R11, rest van V8)",
+   "fout": "Een annulering voor de reeksinstantie van 5 oktober, die in Google naar 6 oktober verplaatst was, heette 'geannuleerd' terwijl de instantie nog bestond.",
+   "gevolg": "Een afgelaste afspraak bleef staan zonder vraag.",
+   "waarom_niet_gezien": "De vergelijking gebruikte de huidige startdag.",
+   "oorzaak": "De oorspronkelijke identiteit (originalStartTime) ging verloren bij het inlezen.",
+   "soort_oorzaak": "code",
+   "oplossing": "koppelingen/agenda.py bewaart _origineel (originalStartTime); _instantie koppelt RECURRENCE-ID aan die oorspronkelijke start.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v13.py",
+    "tekst": "R11 een annulering voor de instantie van 5 oktober"
    },
    "controle": [],
    "status": "opgelost"

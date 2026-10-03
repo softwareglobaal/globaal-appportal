@@ -27,7 +27,7 @@ _ww = (REPO / "werkwijze/agenda-wacht.md").read_text(encoding="utf-8")
 WW_VERSIE = (_re.search(r"Versie ([0-9.]+)", _ww) or [None, "?"])[1]
 COMMIT = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip() or "?"
 BOUWDATUM = __import__("datetime").date.today().strftime("%d-%m-%Y")
-VERSIE = "3.4"
+VERSIE = "3.5"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 
@@ -88,8 +88,13 @@ ou = ("firma's: " + ", ".join(f"<code>{e(k)}</code> = <code>{e(v)}</code>" for k
       + "; opdrachten: " + ", ".join(f"<code>{e(k)}</code> = <code>{e(v)}</code>" for k, v in _oc["opdracht"].items())
       + "; B2B wordt XB of XO, alleen als buiten of online vaststaat")
 tk = "".join(f"<tr><td class=nr>{x['nr']}</td><td><b>{e(x['naam'])}</b></td><td>{e(x['wat'])}</td></tr>" for x in t["taken"])
-op = "".join(f"<tr><td>{e(su(x['wat']))}</td><td class=c>{e(x['wie'])}</td><td class=c>{e(x['wanneer'])}</td><td class=vak></td></tr>"
-             for x in t["openstaand"])
+# Lopende en vervangen taken apart, met hun status (nacontrole v1.3, R9): een vervangen opdracht is geschiedenis, geen opdracht
+op = "".join(f"<tr><td>{e(su(x['wat']))}</td><td class=c>{e(x['wie'])}</td><td class=c>{e(x['wanneer'])}</td>"
+             f"<td class=c>{e(x.get('status') or 'open')}</td></tr>"
+             for x in t["openstaand"] if (x.get("status") or "open") != "vervangen")
+op_vervangen = "".join(f"<tr><td><s>{e(su(x['wat']))}</s><br><i>vervangen door: {e(x.get('vervangen_door') or '?')}</i></td>"
+                       f"<td class=c>{e(x['wie'])}</td><td class=c>vervangen</td></tr>"
+                       for x in t["openstaand"] if x.get("status") == "vervangen")
 bu = "".join(f"<tr><td><b>{e(x['agent'])}</b></td><td class=kl>{e(x['wanneer'])}</td><td>{e(x['wat'])}</td><td>{e(x['afspraak'])}</td></tr>"
              for x in t["buren"])
 tel = {s: sum(1 for f in reg["fouten"] if f["status"] == s) for s in reg["statussen"]}
@@ -366,8 +371,11 @@ nooit een vaste regel weghalen. Laag 1 en 3 zet Mehdi een keer aan in de instell
 <table><thead><tr><th style="width:26mm">Agent</th><th style="width:30mm">Wanneer</th><th>Wat</th><th>Afspraak</th></tr></thead><tbody>{bu}</tbody></table>
 
 <h2>14. Wat nog openstaat</h2>
-<table><thead><tr><th>Wat</th><th style="width:22mm">Wie</th><th style="width:24mm">Wanneer</th><th style="width:20mm">Gedaan</th></tr></thead>
+<table><thead><tr><th>Wat</th><th style="width:22mm">Wie</th><th style="width:24mm">Wanneer</th><th style="width:22mm">Status</th></tr></thead>
 <tbody>{op}</tbody></table>
+<p><b>Vervangen, alleen als geschiedenis</b> (geen opdracht meer):</p>
+<table><thead><tr><th>Wat</th><th style="width:22mm">Wie</th><th style="width:22mm">Status</th></tr></thead>
+<tbody>{op_vervangen}</tbody></table>
 </html>"""
 assert "Surinam" not in HTML, "de volledige landnaam staat in de PDF"
 h = pathlib.Path("/tmp/agendawacht-afspraken.html")

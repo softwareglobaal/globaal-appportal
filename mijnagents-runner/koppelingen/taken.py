@@ -178,12 +178,22 @@ def herplan(tid, afspraak_start, nu=None):
     if p.get("dag"):
         p["dag"] = str(afspraak_start)[:10]
         sets.append("parameters=?"); args.append(json.dumps(p, ensure_ascii=False))
-    if t.get("offset_s") is not None and "T" in str(afspraak_start):
+    if t.get("offset_s") is not None and afspraak_start:
+        # een hele-dag-afspraak (datum zonder uur) telt als middernacht in Brussel, net als bij het plannen (v1.3, R5)
         sets.append("due_at=?"); args.append(_iso(utc(afspraak_start) + timedelta(seconds=int(t["offset_s"]))))
         sets.append("volgende=?"); args.append("")
     with _db() as c:
         c.execute(f"UPDATE taak SET {', '.join(sets)} WHERE id=?", args + [int(tid)])
     return haal(tid)
+
+
+def te_herzien(grens, n=20):
+    """Open taken aan een afspraak die het langst niet nagekeken zijn (nooit eerst), hoogstens n: elke open taak komt aan
+    de beurt, ook de 21ste (nacontrole v1.3, R6). grens: alleen wat voor dat tijdstip het laatst nagekeken is."""
+    with _db() as c:
+        rijen = c.execute("SELECT * FROM taak WHERE status IN ('gepland','wacht-op-bron') AND afspraak_id != '' "
+                          "AND herpland < ? ORDER BY herpland, id LIMIT ?", (grens, int(n))).fetchall()
+    return [_dict(r) for r in rijen]
 
 
 def nagekeken(tid, nu=None):

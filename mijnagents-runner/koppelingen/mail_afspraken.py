@@ -167,9 +167,27 @@ def ics_afspraken(ics):
             elif naam == "STATUS":
                 ev["status"] = w.strip().upper()
         except ValueError:
+            # een veld dat niet te lezen is (DTSTART:20260231...), is geen stilte: de afspraak draagt de fout (R10)
+            ev.setdefault("fouten", []).append(f"{naam} onleesbaar: {w.strip()[:40]}")
             continue
     for e in uit:
         e["geannuleerd"] = e["method"] == "CANCEL" or e["status"] == "CANCELLED"
+    return uit
+
+
+def ics_problemen(k):
+    """Relevante uitnodigingen in deze mail die niet te gebruiken zijn (een veld onleesbaar, of geen start zonder dat het
+    een annulering is): elk een verwerkingsfout met bron-ID, zodat de dekking niet 'volledig' heet (nacontrole v1.3, R10)."""
+    uit = []
+    for ics in k.get("ics") or []:
+        try:
+            evs = ics_afspraken(ics)
+        except Exception as e:  # noqa: BLE001
+            uit.append(f"ICS niet te ontleden ({type(e).__name__})")
+            continue
+        for e in evs:
+            if e.get("fouten") or (e["uid"] and not e["start"] and not e["geannuleerd"]):
+                uit.append(f"uitnodiging {e['uid'][:30] or '?'} niet te gebruiken: {'; '.join(e.get('fouten') or ['geen start'])}")
     return uit
 
 
@@ -266,6 +284,10 @@ def bewaar(afspraken, nu=None):
             c.execute(f"INSERT OR REPLACE INTO afspraak({','.join(velden)}, status, melding) VALUES({','.join('?' * len(velden))}, 'nieuw', ?)",
                       [int(a[v]) if v == "geannuleerd" else a.get(v, 0 if v == "prive" else "") for v in velden] + [melding])
             gewijzigd += 1
+        # Privacy volgt alle herkomsten: kwam dezelfde afspraak ooit uit een privémailbox, dan blijft ze privé, ook als
+        # een nieuwere werkmail de rij vervangt (nacontrole v1.3, R2). Het label zakt nooit vanzelf.
+        c.execute(f"UPDATE afspraak SET prive=1 WHERE prive=0 AND sleutel IN (SELECT sleutel FROM bron WHERE mailbox IN "
+                  f"({','.join('?' * len(PRIVE))}))", sorted(PRIVE))
     return gewijzigd
 
 
@@ -314,11 +336,16 @@ def _plat_tekst(t):
 
 
 def _instantie(kand, a):
-    """De juiste reeksinstantie: de dag van RECURRENCE-ID, anders de dag van de start."""
-    dag = (a["recurrence_id"] or a["start"] or "")[:10]
+    """De juiste reeksinstantie. Met RECURRENCE-ID: de instantie waarvan de oorspronkelijke start (Google:
+    originalStartTime) die dag is, ook als ze intussen verplaatst werd (nacontrole v1.3, R11); anders de dag van de start."""
+    if a["recurrence_id"]:
+        rid = a["recurrence_id"][:10]
+        return ([x for x in kand if (x.get("_origineel") or "")[:10] == rid]
+                or [x for x in kand if not x.get("_origineel") and (x.get("start") or "")[:10] == rid])
+    dag = (a["start"] or "")[:10]
     if not dag:
         return kand
-    return [x for x in kand if (x.get("start") or "")[:10] == dag] or ([] if a["recurrence_id"] else kand[:1] if len(kand) == 1 else [])
+    return [x for x in kand if (x.get("start") or "")[:10] == dag] or (kand[:1] if len(kand) == 1 else [])
 
 
 def vergelijk(afspraken, items, nu=None):
@@ -367,7 +394,9 @@ def vergelijk(afspraken, items, nu=None):
                         and abs((_iso(x["start"]) - start).total_seconds()) <= 300]
             else:
                 kand = []
-            goed = [x for x in kand if _woorden(a["titel"]) & _woorden(x.get("titel"))]
+            # een andere uitnodiging (een andere expliciete UID) is hoogstens een kandidaat, ook met gedeelde woorden (R3)
+            goed = [x for x in kand if _woorden(a["titel"]) & _woorden(x.get("titel"))
+                    and not (a["ics_uid"] and x.get("_icaluid") and x["_icaluid"] != a["ics_uid"])]
             if goed:
                 a["status"], a["google"] = "gekoppeld", f"{goed[0]['kalender']}|{goed[0]['id']}"
             elif start and start < nu - timedelta(hours=1) or (start is None and a["start"] and a["start"][:10] < nu.date().isoformat()):
@@ -414,6 +443,9 @@ def ronde(items, sinds, nu=None, mailboxen=MAILBOXEN):
     for k in kandidaten:
         try:
             bewaar(uit_kandidaat(k), nu)
+            for p in ics_problemen(k):
+                fouten.append({"mailbox": k.get("mailbox", "?"), "map": k.get("map", ""), "uid": k.get("uid"),
+                               "fout": f"{p}: {(k.get('message_id') or '')[:80]}"})
         except Exception as e:  # noqa: BLE001
             fouten.append({"mailbox": k.get("mailbox", "?"), "map": k.get("map", ""), "uid": k.get("uid"),
                            "fout": f"niet verwerkt ({type(e).__name__}): {(k.get('message_id') or '')[:80]}"})
@@ -429,6 +461,16 @@ def ronde(items, sinds, nu=None, mailboxen=MAILBOXEN):
 
 # statussen die Mehdi moet zien (een melding in de privé-agenda); gekoppeld, voorbij en geannuleerd niet
 VRAAG_STATUSSEN = ("ontbreekt", "afwijkend", "kandidaat", "geannuleerd_staat_er")
+
+
+def prive_teksten():
+    """Titels, onderwerpen, afzenders en plaatsen van privé-afspraken uit mail: de bordklant maskeert ze (R1)."""
+    try:
+        with _db() as c:
+            rijen = c.execute("SELECT titel, bron_onderwerp, bron_afzender, locatie FROM afspraak WHERE prive=1").fetchall()
+    except sqlite3.Error:
+        return set()
+    return {v.strip() for r in rijen for v in r if v and v.strip()}
 
 
 def melding_zet(sleutel, waarde):

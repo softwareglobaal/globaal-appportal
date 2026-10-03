@@ -104,9 +104,13 @@ def _teksten(x, pad=()):
         yield pad, x
 # ook zonder haken: 'de code HDSS' als regel (nacontrole v1.2: de PDF noemde HDSS als zichtbare code)
 _OUD_VRIJ = re.compile(r"\bcode\s+(HARC|UNAB|TKNB|ENEF|ELEV|HARM|CONT|HINV|MELO|HDSI|HDSS|BFUT|CORE|ENST|MEDI|ORVA|QOPP|ZIDI|ALGE)\b")
-_regels_oud = [("/".join(p), x[:60]) for p, x in _teksten(taken)
-               if (_OUD_M.search(x) or _OUD_VRIJ.search(x))
-               and not ({"beslissingen", "oude_codes", "openstaand", "voorstel_twee_letters"} & set(p))]
+# ook een omzetting als opdracht ('HA -> HARC') in een lopende open taak (nacontrole v1.3, R9)
+_OUD_PIJL = re.compile(r"->\s*(HARC|UNAB|TKNB|ENEF|ELEV|HARM|CONT|HINV|MELO|HDSI|HDSS|BFUT|CORE|ENST|MEDI|ORVA|QOPP|ZIDI|ALGE)\b")
+_vervangen = {i for i, o in enumerate(taken.get("openstaand") or []) if o.get("status") == "vervangen"}
+_actief = [(("openstaand", str(i), "wat"), o["wat"]) for i, o in enumerate(taken.get("openstaand") or []) if i not in _vervangen]
+_regels_oud = [("/".join(p), x[:60]) for p, x in list(_teksten({k: v for k, v in taken.items() if k != "openstaand"})) + _actief
+               if (_OUD_M.search(x) or _OUD_VRIJ.search(x) or _OUD_PIJL.search(x))
+               and not ({"beslissingen", "oude_codes", "voorstel_twee_letters"} & set(p))]
 check("de master schrijft geen oude code meer voor (buiten geschiedenis, oude_codes en openstaande vragen)", not _regels_oud, str(_regels_oud))
 
 # wat de agent zelf schrijft, draagt nooit een oude code

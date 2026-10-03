@@ -39,6 +39,30 @@ class Agent:
     def __init__(self, naam):
         self.naam = naam
         self._log = []
+        self._prive = set()
+        self._prive_re = None
+
+    # Privacygrens (nacontrole v1.3, R1): een agent meldt de teksten uit een privébron aan (privé-agenda, Lara,
+    # Hotmail). Elk bericht naar het bord (hartslag, nood, logboek, klaargezet) gaat door maskeer(), welke route ook.
+    PRIVE_NIET = {"mehdi", "mehdi:", "vandaag", "gisteren"}
+
+    def prive(self, teksten):
+        nieuw = {t.strip() for t in teksten if isinstance(t, str) and len(t.strip()) >= 4
+                 and t.strip().lower() not in self.PRIVE_NIET} - self._prive
+        if nieuw:
+            self._prive |= nieuw
+            self._prive_re = re.compile("|".join(re.escape(t) for t in sorted(self._prive, key=len, reverse=True)), re.I)
+
+    def maskeer(self, obj):
+        if self._prive_re is None:
+            return obj
+        if isinstance(obj, str):
+            return self._prive_re.sub("(privé)", obj)
+        if isinstance(obj, list):
+            return [self.maskeer(x) for x in obj]
+        if isinstance(obj, dict):
+            return {k: self.maskeer(v) for k, v in obj.items()}
+        return obj
 
     def hartslag(self, status, taak="", detail="", voorstel=None, nood=None):
         """nood: de volledige lijst van wat de agent nodig heeft of wat bij hem niet
@@ -50,7 +74,7 @@ class Agent:
         if nood is not None:
             p["nood"] = nood
         try:
-            call("/agent-status", p)
+            call("/agent-status", self.maskeer(p))
         except Exception as e:  # noqa: BLE001
             print("hartslag mislukt:", e, file=sys.stderr)
 
@@ -63,7 +87,7 @@ class Agent:
         if not self._log:
             return
         try:
-            call("/api/logboek", {"regels": self._log})
+            call("/api/logboek", {"regels": self.maskeer(self._log)})
         except Exception as e:  # noqa: BLE001
             print("logboek mislukt:", e, file=sys.stderr)
         self._log = []
@@ -86,7 +110,7 @@ class Agent:
         """items: lijst van dicts met voor, soort, titel, en optioneel sleutel, inhoud, verwijzing, uniek."""
         for it in items:
             it.setdefault("van", self.naam)
-        return call("/api/klaarzet", {"items": items}) if items else {"nieuw": 0, "bestaand": 0}
+        return call("/api/klaarzet", {"items": self.maskeer(items)}) if items else {"nieuw": 0, "bestaand": 0}
 
     def ronde(self, taak="ronde", bronnen=None):
         """De standaarddoorgang van een ronde. Zie AGENTNORM.md.

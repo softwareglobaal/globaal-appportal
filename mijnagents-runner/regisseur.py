@@ -225,7 +225,24 @@ def bronnen_lees(van, tot):
     d_van, d_tot = date.fromisoformat(str(van)[:10]), date.fromisoformat(str(tot)[:10])
     d_tot = min(max(d_tot, d_van), d_van + timedelta(days=31))
     vandaag = W.nu_lokaal().date()
-    items = [x for x in W.afspraken((d_van - vandaag).days, (d_tot - vandaag).days + 1) if not x.get("fout")]
+    ruw = W.afspraken((d_van - vandaag).days, (d_tot - vandaag).days + 1)
+    items = [x for x in ruw if not x.get("fout")]
+    # Dekking apart van wat gevonden is: welke agenda gelezen werd en welke niet, met de fout (nacontrole v1.3, R7)
+    nu_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    mislukt = {x["kalender"]: str(x["fout"])[:200] for x in ruw if x.get("fout")}
+    try:
+        gelezen = W.kalenders()
+    except Exception:  # noqa: BLE001
+        gelezen = sorted({x.get("kalender", "") for x in ruw})
+    stand = {}
+    try:
+        import agenda as _A  # noqa: PLC0415
+        stand = _A.leesstand()
+    except Exception:  # noqa: BLE001
+        pass
+    dekking = {W.KALENDERS.get(k, k)[:30]: {"status": "mislukt" if k in mislukt else "geslaagd", "fout": mislukt.get(k, ""),
+                                           "poging": nu_iso, "laatst_gelukt": (stand.get(k) or {}).get("laatst_gelukt", "")}
+               for k in gelezen}
     agenda_ = [{"start": x["start"][:16], "einde": (x.get("einde") or "")[:16], "agenda": W.KALENDERS.get(x["kalender"], "")[:30],
                 "titel": "(privé)" if W.is_prive(x) else x["titel"][:120], "gasten_van_buiten": len(x.get("deelnemers") or []),
                 "collegas": len(x.get("_agendagasten") or [])}
@@ -245,7 +262,9 @@ def bronnen_lees(van, tot):
     except Exception as e:  # noqa: BLE001
         versies = {"fout": f"versies niet te lezen ({type(e).__name__})"}
     open_taken = [{k: x[k] for k in ("id", "agent", "soort", "reden", "brussel", "status", "pogingen")} for x in taken.lijst(status=taken.OPEN)]
-    return {"van": d_van.isoformat(), "tot": d_tot.isoformat(), "agenda": agenda_, "mail": mail, "versies": versies, "open_taken": open_taken}
+    return {"van": d_van.isoformat(), "tot": d_tot.isoformat(),
+            "dekking": {"volledig": not mislukt, "per_agenda": dekking}, "agenda": agenda_,
+            "mail": mail, "versies": versies, "open_taken": open_taken}
 
 
 def voorstel_terug(v):
@@ -316,11 +335,10 @@ def taken_uitvoeren(nu=None):
     nu_t = nu or datetime.now(timezone.utc)
     gedaan = []
     grens = (nu_t - timedelta(minutes=HERCONTROLE_MINUTEN)).isoformat(timespec="seconds")
-    for t in taken.lijst(status=taken.OPEN, n=200)[:20]:
-        if t["afspraak_kalender"] and t["afspraak_id"] and (t.get("herpland") or "") < grens:
-            staat, _ = _afspraak_bijwerken(t, nu)
-            if staat == "weg":
-                gedaan.append((t["id"], "vervallen"))
+    for t in taken.te_herzien(grens, 20):            # wie het langst niet nagekeken is, eerst (R6)
+        staat, _ = _afspraak_bijwerken(t, nu)
+        if staat == "weg":
+            gedaan.append((t["id"], "vervallen"))
     for t in taken.te_doen(nu):
         herpakt = t["status"] == "bezig"
         if t["afspraak_kalender"] and t["afspraak_id"]:
