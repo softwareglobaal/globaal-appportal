@@ -74,7 +74,7 @@ De **juridische entiteit** (rechtspersoon) die contracten sluit, factureert en e
 BTW-/ondernemingsnummer heeft. In grotere organisaties heet dit een *legal entity* - de
 eenheid met eigen boekhouding en juridische scheiding.
 - **Bij ons:** de firma's in `kern.firma` (15 actief op 29-09-2026: H-Architects, Contrax, UnaBo …).
-- Elke firma heeft twee afkortingen: een **agendacode** van vier letters en, als ze klanten heeft, een **contactcode** van twee (zie daar).
+- Elke firma heeft een **agendacode** van twee letters (in de titel van een afspraak), een **interne code** van vier letters (boekhouding, mappen, koppelingen) en, als ze klanten heeft, een **contactcode** van twee (zie daar).
 - *Niet* verwarren met afdeling of team.
 
 ### Afdeling
@@ -323,12 +323,26 @@ Het **ondernemingsnummer** van een firma in de Kruispuntbank van Ondernemingen -
 de sleutel naar officiële bronnen (KBO Public Search, NBB-jaarrekeningen). Staat op
 `kern.firma`; invullen via het firma-beheer in het Organisatie-dashboard.
 
-### Agendacode (firmacode)
-De afkorting van **vier letters** van een firma, bv. HARC, UNAB, TKNB. Staat sinds
-21-09-2026 in de titel van een agenda-afspraak: `[HARC-KB] 2601 Jan Peeters` (mandaat
-Mehdi 23-09-2026, werkwijze van de Agendawacht). Oudere afspraken dragen nog HA,
-UNABO of TKN; die blijven leesbaar. De agents herkennen er een firma mee. Uniek per
-firma; beheerd op organisatie.globaal.be bij Firma's (`kern.firma.code`).
+### Agendacode
+De afkorting van **twee letters** van een firma in de titel van een agenda-afspraak, bv.
+`[HA-KB] WB 2145`, `[UB-PO]`, `[TK-KO]` (Mehdi 02-10-2026, migratie 183,
+`kern.firma.code_agenda`). De agents herkennen er een firma mee; oudere afspraken met
+HARC, UNABO of TKN blijven leesbaar. Uniek per firma; beheerd op organisatie.globaal.be
+bij Firma's.
+- *Niet* verwarren met de contactcode: UnaBo is UB in de agenda en UN in de contacten.
+
+### Interne code (firmacode)
+De afkorting van **vier letters** van een firma, bv. HARC, UNAB, TKNB (`kern.firma.code`).
+De sleutel voor boekhouding, mappen en koppelingen. Stond van 21-09 tot 02-10-2026 in de
+titel van een afspraak; sindsdien staat daar de agendacode.
+
+### Agenda-adres
+Het adres waarmee iemand zijn agenda leest, meestal een Gmail-adres
+(`kern.persoon.email_agenda`, migratie 185, Mehdi 03-10-2026). De Agendawacht zet die
+persoon als gast op de afspraken waar hij bij hoort (zijn naam na "Mehdi" in de titel, of
+de firma waar hij partner is), zonder mail, zodat de afspraak in zijn eigen agenda staat.
+Iemand toevoegen is dit veld invullen op zijn profiel op organisatie.globaal.be.
+- *Niet* verwarren met het werkadres (`email`) of het privé-adres in de HR-laag.
 
 ### Contactcode
 De afkorting van **twee letters** van een firma in de naamregel van een contact in

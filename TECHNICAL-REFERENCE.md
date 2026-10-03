@@ -1408,6 +1408,11 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   `voornaam`/`achternaam`, `email` (citext, uniek), `afdeling_id`, `rol`
   (Lid/Hoofd/Partner/Management), `hr_nummer`, `locatie`, `in_dienst`, en de
   loginkoppeling `authentik_sub` + `authentik_username` (leeg = geen login).
+  `email_agenda` (migratie 185, Mehdi 03-10-2026): het **agenda-adres**, meestal Gmail,
+  waarmee iemand zijn agenda leest; kleine letters (CHECK `persoon_email_agenda_vorm`),
+  uniek als ingevuld, bewerkbaar op het profiel (rol `medewerker_writer`). De Agendawacht
+  zet die persoon zonder mail als gast op de afspraken waar hij bij hoort
+  (`organisatie.agenda_adressen()`); leeg = verschijnt niet vanzelf in zijn agenda.
 - Spoke-schema's (bv. `schuldentracker`, `omv`, **`kosten`** - het kosten-dashboard -
   en **`communicatie`** - het Communicatie-dashboard, §14.5) verwijzen met `persoon_id`
   (UUID, `ON DELETE RESTRICT`) naar `kern.persoon`, zodat een 360°-profiel een gewone
@@ -1462,9 +1467,12 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   al zijn relaties (firma "gevestigd op", pand "op adres"). Invoer via de
   adres-autocomplete; bestaande pand/dossier-teksten zijn gebackfilld.
 - **`kern.firma`** - centrale firmalijst (18 rijen op 29-09-2026, waarvan 15 actief): `id` (uuid), `naam`,
-  `code` (de **agendacode**, ook firmacode genoemd, term sinds migratie 177: uniek, 4
-  hoofdletters; staat sinds 21-09-2026 in de titel van een afspraak, `[HARC-KB]`, en de
-  agents herkennen er een firma mee),
+  `code` (de **interne code**, ook firmacode genoemd: uniek, 4 hoofdletters, HARC; de
+  sleutel voor boekhouding, mappen en koppelingen; stond van 21-09 tot 02-10-2026 in de
+  titel van een afspraak), `code_agenda` (de **agendacode**, migratie 183, Mehdi
+  02-10-2026: 2 hoofdletters, uniek, nooit leeg; staat in de titel van een afspraak,
+  `[HA-KB]`, en de agents herkennen er een firma mee; UnaBo is UB in de agenda en UN in de
+  contacten),
   `code_contact` (de **contactcode**, migratie 175: 2 hoofdletters, uniek als ingevuld,
   voor de naamregel van een contact in Google Contacts en Xelion, bv. `HA5609`; leeg
   voor een firma zonder klanten; De Contactwacht leest ze via
