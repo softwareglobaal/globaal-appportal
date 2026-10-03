@@ -41,6 +41,19 @@ for stuk in os.environ.get("ATRACK_IMEIS", "").split(","):
 _slot = threading.Lock()
 
 
+def schema_klaar():
+    """Zorgt dat de tabel en de kolom `bron` bestaan voor het eerste bericht.
+
+    De webapp beheert het schema, maar die draait in een andere container en kan
+    net herstart zijn zonder dat er al een verzoek binnenkwam. Deze ontvanger
+    schrijft rechtstreeks in dezelfde database, dus hij moet niet aannemen dat
+    iemand anders de migratie al heeft gedraaid: 03-10-2026 stond de ontvanger
+    te luisteren terwijl de kolom nog niet bestond.
+    """
+    import app as webapp          # noqa: PLC0415  (alleen nodig bij het starten)
+    webapp.db().close()
+
+
 def schrijf(bericht):
     """Eén bericht opslaan. Geeft True als het punt er daarna staat.
 
@@ -155,6 +168,7 @@ class Server(socketserver.ThreadingTCPServer):
 if __name__ == "__main__":
     if not TOESTELLEN:
         print("ATRACK_IMEIS is leeg: elk bericht zou geweigerd worden", flush=True)
+    schema_klaar()
     print("luistert op poort %d, database %s, toestellen: %s"
           % (POORT, DB_PAD, ", ".join(TOESTELLEN) or "geen"), flush=True)
     Server(("0.0.0.0", POORT), Verbinding).serve_forever()

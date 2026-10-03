@@ -76,6 +76,26 @@ def test_motor_uit_telt_als_stilstand_en_motor_aan_als_rit():
     assert r["tst"] == 1702359382, r["tst"]
 
 
+def test_de_ontvanger_maakt_zelf_het_schema_klaar():
+    """03-10-2026: de ontvanger stond te luisteren terwijl de kolom bron nog
+    niet bestond, omdat de webapp in een andere container het schema beheert."""
+    import sqlite3 as s
+    pad = os.path.join(tempfile.mkdtemp(), "leeg.db")
+    oud_db, atrack_server.DB_PAD = atrack_server.DB_PAD, pad
+    oud_env = os.environ["LOCATIE_DB"]
+    os.environ["LOCATIE_DB"] = pad
+    try:
+        import importlib
+        importlib.reload(webapp)
+        atrack_server.schema_klaar()
+        kolommen = {r[1] for r in s.connect(pad).execute("PRAGMA table_info(punt)")}
+        assert "bron" in kolommen and "hdop" in kolommen, kolommen
+    finally:
+        atrack_server.DB_PAD = oud_db
+        os.environ["LOCATIE_DB"] = oud_env
+        importlib.reload(webapp)
+
+
 def test_onbekend_toestel_wordt_geweigerd():
     voor = len(rijen())
     terug, wat = atrack_server.verwerk(VREEMD)
