@@ -59,6 +59,13 @@
     color:var(--accent);margin-left:5px;}
   .coord{color:var(--tekst-3);font-size:12px;}
   .wijze{color:var(--tekst-3);font-size:12px;}
+  /* Welke tracker dit zag. Sinds 03-10-2026 meet de auto mee, en later komt
+     het draagbare toestel erbij; zonder dit label is niet te zien of een gat
+     aan het toestel of aan de dag ligt. */
+  .bron{display:inline-block;border:1px solid var(--lijn-sterk);border-radius:4px;
+    padding:0 5px;font-size:11px;color:var(--tekst-2);margin-left:5px;
+    text-transform:uppercase;letter-spacing:0.04em;}
+  .bron.auto{border-color:#b9d2c6;background:#eef6f2;color:var(--bezoek);}
   .voet{margin-top:26px;font-size:12px;color:var(--tekst-3);}
 </style>
 </head>
@@ -117,6 +124,7 @@
             <span class="merk {{ 'bezoek' if s.soort == 'bezoek' else 'rit' }}"></span>
             {% if s.soort == 'bezoek' %}bezoek{% else %}onderweg{% if s.wijze %}
               <span class="wijze">{{ wijzen.get(s.wijze, s.wijze) }}</span>{% endif %}{% endif %}
+            {% for b in s.bronnen or [] %}<span class="bron {{ b }}">{{ b }}</span>{% endfor %}
           </td>
           <td>
             {% if s.soort == 'bezoek' %}

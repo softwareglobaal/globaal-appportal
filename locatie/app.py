@@ -706,6 +706,10 @@ def _bezoek(groep, bekende_plekken, tot=None):
                       and p["ssid"].lower() not in VOERTUIG_WIFI), None),
         "plek": naam,
         "dossier": dossier,
+        # Welke tracker dit gemeten heeft. Vanaf 03-10-2026 zijn er meerdere:
+        # de GPS in de auto, en later het draagbare toestel. Op het dashboard
+        # moet zichtbaar zijn wie wat zag, anders is een gat niet te duiden.
+        "bronnen": sorted({p.get("bron") or "telefoon" for p in groep}),
     }
 
 
@@ -740,6 +744,7 @@ def _rit(spoor, groep, van=None):
         "meter": round(meter),
         "wijze": max(telling, key=telling.get) if telling else None,
         "spoor": [[p["lat"], p["lon"]] for p in spoor],
+        "bronnen": sorted({p.get("bron") or "telefoon" for p in spoor}),
     }
 
 
