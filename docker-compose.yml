@@ -70,6 +70,27 @@ services:
       - "127.0.0.1:3031:3031"
     networks: [appnet]
 
+  # Tweede bron voor hetzelfde logboek: de GPS-tracker in de auto. Die spreekt
+  # @Track over een kale TCP-poort en kan dus niet langs nginx en Authentik,
+  # zoals de telefoon wel doet op /pub. Daarom een eigen container, met
+  # hetzelfde image en dezelfde database; de dagindeling leest beide bronnen
+  # samen. ATRACK_IMEIS is de lijst toestellen die mogen schrijven ("imei:naam"),
+  # want deze poort staat open op het internet.
+  app-locatie-tracker:
+    build: ./locatie
+    container_name: app-locatie-tracker
+    restart: unless-stopped
+    command: ["python3", "atrack_server.py"]
+    environment:
+      LOCATIE_DB: /data/locatie.db
+      ATRACK_POORT: "5027"
+      ATRACK_IMEIS: ${ATRACK_IMEIS:-}
+    volumes:
+      - ./locatie-data:/data
+    ports:
+      - "5027:5027"
+    networks: [appnet]
+
   # Sales/Marketing-agents, afgesplitst van app-agents (siyanagents.globaal.be).
   # Eigen code (./siyanagents), eigen database (siyanagents.db) en eigen
   # afgeschermde secrets (siyanagents-data/.env) — los van de operations-agents.

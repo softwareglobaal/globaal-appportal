@@ -19,4 +19,7 @@ RUN LOCATIE_DB=/tmp/test.db python3 test_dagindeling.py
 # voorbeeldregels uit de handleiding van de fabrikant. Zie test_atrack.py.
 RUN python3 test_atrack.py
 
+# Derde grendel: de ontvanger zelf, inclusief de tweede bron in de database.
+RUN LOCATIE_DB=/tmp/proef.db python3 test_atrack_server.py
+
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3031} --workers 2 --timeout 60 app:app"]

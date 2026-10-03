@@ -53,7 +53,50 @@ LATERE_KOLOMMEN = {
     # zat (4G-router); pas dit veld kan zeggen welke van de twee het was.
     "ontvangen": "INTEGER",
     "gemaakt": "INTEGER",   # created_at van OwnTracks: wanneer het bericht klaarstond
+    # Velden van de tracker in de auto (@Track). De telefoon geeft een
+    # onzekerheid in meter (acc), de tracker geeft een HDOP: dat is iets anders
+    # en mag nooit in acc terechtkomen, anders laat de filter van 250 m alles
+    # door. Zie locatie/atrack.py.
+    "hdop": "INTEGER",       # 1-50, kleiner is beter; 0 = geen fix
+    "satellieten": "INTEGER",
+    "fix": "INTEGER",        # 1 = echte meting, 0 = oude positie herhaald
+    "verzonden": "INTEGER",  # wanneer het toestel het bericht wegstuurde
+    "gebufferd": "INTEGER",  # 1 = nagestuurd nadat het netwerk terug was
 }
+
+
+def _bron_erbij(conn):
+    """Twee bronnen naast elkaar: de telefoon en de tracker in de auto.
+
+    De tabel had het tijdstip als enige sleutel. Dat werkte zolang er één bron
+    was, maar zodra de tracker meet kan hij op dezelfde seconde een punt hebben
+    als de telefoon, en dan verdween er stilletjes een van de twee. De sleutel
+    wordt daarom (bron, tst). Bestaande rijen komen van de telefoon en krijgen
+    'iphone'.
+
+    SQLite kan geen sleutel wijzigen, dus de tabel wordt herbouwd. Dat gebeurt
+    eenmalig, in dezelfde transactie, en de kolommen worden uit de bestaande
+    tabel gelezen zodat later toegevoegde velden vanzelf meegaan.
+    """
+    info = list(conn.execute("PRAGMA table_info(punt)"))
+    if not info or any(r["name"] == "bron" for r in info):
+        return
+    defs, namen = [], []
+    for r in info:
+        stuk = '"%s" %s' % (r["name"], r["type"] or "TEXT")
+        if r["notnull"] and r["name"] not in ("tst",):
+            stuk += " NOT NULL"
+        defs.append(stuk)
+        namen.append('"%s"' % r["name"])
+    defs.append("bron TEXT NOT NULL DEFAULT 'iphone'")
+    kolommen = ", ".join(namen)
+    conn.executescript(
+        "ALTER TABLE punt RENAME TO punt_oud;\n"
+        "CREATE TABLE punt (%s, PRIMARY KEY (bron, tst));\n" % ", ".join(defs) +
+        "INSERT INTO punt (%s, bron) SELECT %s, 'iphone' FROM punt_oud;\n" % (kolommen, kolommen) +
+        "DROP TABLE punt_oud;\n"
+        "CREATE INDEX IF NOT EXISTS punt_tst ON punt(tst);\n"
+        "CREATE INDEX IF NOT EXISTS punt_bron ON punt(bron, tst);")
 
 
 def db():
@@ -80,6 +123,7 @@ def db():
     for kolom, soort in LATERE_KOLOMMEN.items():
         if kolom not in bestaand:
             conn.execute(f"ALTER TABLE punt ADD COLUMN {kolom} {soort}")
+    _bron_erbij(conn)
     conn.commit()
     return conn
 
@@ -299,11 +343,11 @@ def pub():
     conn.execute(
         """INSERT INTO punt (tst, lat, lon, acc, alt, vel, batt, conn, tid, soort, ruw,
                              bs, ssid, bssid, motion, druk, vac, trigger, regios,
-                             gebeurtenis, zone, ontvangen, gemaakt)
+                             gebeurtenis, zone, ontvangen, gemaakt, bron)
            VALUES (:tst, :lat, :lon, :acc, :alt, :vel, :batt, :conn, :tid, :soort, :ruw,
                    :bs, :ssid, :bssid, :motion, :druk, :vac, :trigger, :regios,
-                   :gebeurtenis, :zone, :ontvangen, :gemaakt)
-           ON CONFLICT(tst) DO NOTHING""",
+                   :gebeurtenis, :zone, :ontvangen, :gemaakt, 'iphone')
+           ON CONFLICT(bron, tst) DO NOTHING""",
         {"bs": heel("bs"),
          "ssid": str(data.get("ssid", ""))[:64] or None,
          "bssid": str(data.get("bssid", ""))[:32] or None,
