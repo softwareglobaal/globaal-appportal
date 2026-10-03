@@ -196,41 +196,6 @@ class Felix:
         rijen = [r for r in (_rij(it, reeks) for it in j.get("items") or []) if _zelfde_straat(r["straat"], straat)]
         return _markeer_district(rijen, districten)
 
-    def percelenpas(self, lat, lon, adres, pad=None):
-        """De vergunningen van het perceel volgens de stad (omgeving.antwerpen.be/percelenpas), met printscreen.
-
-        De stad zoekt op het perceel, niet op het huisnummer: ze vindt ook wat in FelixArchief zonder nummer
-        staat ('lot 1') of onder een oude straatnaam (Frans Brandsstraat 11 had dossiers onder de Kapelstraat).
-        Dit is het overzicht op een pagina dat Mehdi wil (03-10-2026).
-        """
-        url = ("https://omgeving.antwerpen.be/percelenpas/vergunningen?" +
-               urllib.parse.urlencode({"x": lat, "y": lon, "searchAddress": adres}))
-        p = self._ctx.new_page()
-        try:
-            p.goto(url, wait_until="domcontentloaded", timeout=60000)
-            p.wait_for_selector("text=Vergunningen", timeout=45000)
-            try:
-                p.wait_for_selector("text=Dossiernummer", timeout=20000)
-            except Exception:
-                pass  # geen vergunningen: de pagina zegt dat zelf, en dat is ook bewijs
-            p.wait_for_timeout(2000)
-            tekst = p.locator("body").inner_text()
-            rijen = p.evaluate("""() => [...document.querySelectorAll('tr')].map(tr =>
-                    [...tr.querySelectorAll('td')].map(c => c.innerText.trim()))""")
-            if pad:
-                p.screenshot(path=pad, full_page=True)
-        finally:
-            p.close()
-        m = re.search(r"\b\d{5}[A-Z]\d{4}/\d{2}[A-Z]\d{3}\b", tekst)
-        vergunningen = []
-        for r in rijen:
-            cellen = [c for c in r if c and c != "Selecteer rij"]
-            if len(cellen) >= 3:
-                vergunningen.append({"onderwerp": cellen[0], "dossiernummer": cellen[1], "type": cellen[2],
-                                     "beslissing": cellen[3] if len(cellen) > 3 else "",
-                                     "datum": cellen[4] if len(cellen) > 4 else ""})
-        return {"capakey": m.group() if m else "", "vergunningen": vergunningen, "url": url}
-
     def dossier_zoeken(self, dossiernummer):
         """Een dossiernummer van de percelenpas -> de dossiers in FelixArchief (bouwdossier en plannen).
 
@@ -304,7 +269,18 @@ class Felix:
     # -- aanmelden en downloaden (Mehdi, 03-10-2026: "als ik elke keer voor elk dossier moet komen inloggen,
     #    dan gaat dat niet werken"). E-mail en wachtwoord staan alleen in ~/appportal/.env op de VM.
 
-    def aanmelden(self, email=None, wachtwoord=None):
+    def aanmelden(self, email=None, wachtwoord=None, pogingen=3):
+        """Aanmelden met tot drie pogingen: de aanmeldknop verschijnt niet altijd op tijd (03-10-2026)."""
+        fout = None
+        for _ in range(pogingen):
+            try:
+                return self._aanmelden_een_keer(email, wachtwoord)
+            except RuntimeError as e:
+                fout = e
+                self.page.wait_for_timeout(5000)
+        raise fout
+
+    def _aanmelden_een_keer(self, email=None, wachtwoord=None):
         """Meldt aan met A-profiel (e-mail en wachtwoord; FelixArchief vraagt het lage zekerheidsniveau).
 
         Elke stap heeft een naam; loopt er een vast, dan zegt de fout welke, met een printscreen erbij.
@@ -325,20 +301,8 @@ class Felix:
             link = p.locator("a", has_text="Meld aan met je A-profiel").first
             link.wait_for(state="attached", timeout=20000)
             p.goto(link.get_attribute("href"), wait_until="domcontentloaded", timeout=60000)  # niet klikken: rechtstreeks
-            stap = "keuze e-mailadres"
-            p.wait_for_url(re.compile(r"authentication\.antwerpen\.be"), timeout=60000)
-            p.locator("text=Met je e-mailadres of gebruikersnaam").first.click(timeout=20000, force=True)
-            stap = "e-mailadres"
-            veld = p.locator("input[type=email], input[name=username], input[autocomplete=username], input[type=text]").first
-            veld.wait_for(timeout=20000)
-            veld.fill(email)
-            stap = "wachtwoord"
-            ww = p.locator("input[type=password]")
-            if not ww.is_visible():
-                p.keyboard.press("Enter")  # e-mail en wachtwoord in twee stappen
-                ww.wait_for(timeout=20000)
-            ww.fill(wachtwoord)
-            p.keyboard.press("Enter")
+            stap = "A-profiel"
+            a_profiel(p, email, wachtwoord)
             stap = "terug naar FelixArchief"
             p.wait_for_url(re.compile(r"felixarchief\.antwerpen\.be"), timeout=60000)
             stap = "verwerken van de aanmelding"
@@ -419,6 +383,33 @@ class Felix:
             p.close()
         return pad
 
+    def overzicht_kaarten(self, inventarissen, pad):
+        """Een beeld met de kaart van elk gevonden dossier uit de zoekresultaten van FelixArchief, onder elkaar.
+
+        Echte printscreens van de site (adres, inventarisnummer, datering, reeks, knop), samengezet tot een beeld:
+        het overzicht op een pagina dat Mehdi wil, zoals zijn collega het maakte (03-10-2026).
+        """
+        import io
+        from PIL import Image
+        stukken = []
+        for inv in inventarissen:
+            self.page.goto(f"{BASIS}/zoekresultaten?bevat={urllib.parse.quote(inv)}&page=1&pageSize=5",
+                           wait_until="domcontentloaded", timeout=90000)
+            kaart = self.page.locator(".searchresult-item", has_text=f"InventarisNr. {inv}").first
+            kaart.wait_for(timeout=45000)
+            self.page.wait_for_timeout(800)
+            stukken.append(Image.open(io.BytesIO(kaart.screenshot())))
+        if not stukken:
+            return None
+        breedte = max(s.width for s in stukken)
+        beeld = Image.new("RGB", (breedte, sum(s.height for s in stukken) + 12 * (len(stukken) - 1)), "white")
+        y = 0
+        for s in stukken:
+            beeld.paste(s, (0, y))
+            y += s.height + 12
+        beeld.save(pad)
+        return pad
+
     def schermafdruk_html(self, html, pad):
         """Een eigen overzicht (tabel, kaart) renderen en vastleggen."""
         p = self._ctx.new_page()
@@ -428,6 +419,26 @@ class Felix:
         finally:
             p.close()
         return pad
+
+
+def a_profiel(p, email=None, wachtwoord=None):
+    """Vult de aanmeldpagina van A-profiel in (authentication.antwerpen.be), voor FelixArchief en de percelenpas.
+
+    Het e-mailadres en wachtwoord komen uit de omgeving van de server; ze verschijnen nergens in tekst.
+    """
+    email = email or os.environ.get("FELIXARCHIEF_EMAIL")
+    wachtwoord = wachtwoord or os.environ.get("FELIXARCHIEF_WACHTWOORD")
+    p.wait_for_url(re.compile(r"authentication\.antwerpen\.be"), timeout=60000)
+    p.locator("text=Met je e-mailadres of gebruikersnaam").first.click(timeout=20000, force=True)
+    veld = p.locator("input[type=email], input[name=username], input[autocomplete=username], input[type=text]").first
+    veld.wait_for(timeout=20000)
+    veld.fill(email)
+    ww = p.locator("input[type=password]")
+    if not ww.is_visible():
+        p.keyboard.press("Enter")  # e-mail en wachtwoord in twee stappen
+        ww.wait_for(timeout=20000)
+    ww.fill(wachtwoord)
+    p.keyboard.press("Enter")
 
 
 def _in(district, districten):
