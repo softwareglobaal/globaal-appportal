@@ -87,8 +87,11 @@ services:
       ATRACK_IMEIS: ${ATRACK_IMEIS:-}
     volumes:
       - ./locatie-data:/data
+    # Buiten op 5000, binnen op 5027. De cloud-firewall van deze machine laat
+    # alleen een vaste reeks poorten door (22, 80, 443, 3000, 3001, 4000, 5000,
+    # 8080); 5027 liep op een timeout. Gemeten op 03-10-2026.
     ports:
-      - "5027:5027"
+      - "5000:5027"
     networks: [appnet]
 
   # Sales/Marketing-agents, afgesplitst van app-agents (siyanagents.globaal.be).
