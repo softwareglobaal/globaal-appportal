@@ -1,0 +1,31 @@
+{
+  "versie": "1.0",
+  "datum": "2026-10-03",
+  "uitleg": "Het werkgebied van FelixArchief (stadsarchief Antwerpen) voor bouwdossiers. Elk project of elke deal met een postcode uit deze lijst zoekt De Felixwacht altijd op, ongeacht firma of soort opdracht. Bewust zonder aantallen: die veranderen, de postcodes niet. Per postcode staan de districtnamen zoals FelixArchief ze in het veld District gebruikt; daarop filtert de zoekopdracht.",
+  "bronnen": {
+    "postcodes": "Basisregisters Vlaanderen, postinfo van gemeente Antwerpen (api.basisregisters.vlaanderen.be/v2/postinfo?gemeentenaam=Antwerpen), gemeten 03-10-2026: vijftien postcodes, Borsbeek inbegrepen sinds de fusie van 01-01-2025.",
+    "districten": "FelixArchief, toegestane waarden van het veld District in de reeks Bouwvergunningen (100#2770) en Plannen van bouwdossiers vanaf 1963 (1224#147), gemeten 02-10-2026."
+  },
+  "reeksen": {
+    "100#2770": "Bouwvergunningen",
+    "1224#147": "Plannen van bouwdossiers vanaf 1963"
+  },
+  "postcodes": {
+    "2000": {"naam": "Antwerpen", "districten": ["Antwerpen"]},
+    "2018": {"naam": "Antwerpen", "districten": ["Antwerpen"]},
+    "2020": {"naam": "Antwerpen", "wijken": ["Kiel"], "districten": ["Antwerpen"]},
+    "2030": {"naam": "Antwerpen", "wijken": ["Luchtbal", "haven"], "districten": ["Antwerpen", "Luchtbal (Antwerpen)", "Oorderen", "Wilmarsdonk", "Oosterweel"]},
+    "2040": {"naam": "Berendrecht, Zandvliet, Lillo", "districten": ["Berendrecht", "Zandvliet", "Lillo", "Berendrecht-Zandvliet-Lillo", "Bezali", "Berendrecht (Antwerpen)", "Zandvliet (Antwerpen)", "Lillo (Antwerpen)", "Berendrecht-Antwerpen", "Berendrecht-Zandvliet-Lillo (Antwerpen)", "Oorderen", "Wilmarsdonk", "Oosterweel"]},
+    "2050": {"naam": "Antwerpen", "wijken": ["Linkeroever"], "districten": ["Antwerpen"]},
+    "2060": {"naam": "Antwerpen", "districten": ["Antwerpen"]},
+    "2100": {"naam": "Deurne", "districten": ["Deurne"]},
+    "2140": {"naam": "Borgerhout", "districten": ["Borgerhout"]},
+    "2150": {"naam": "Borsbeek", "districten": ["Borsbeek"]},
+    "2170": {"naam": "Merksem", "districten": ["Merksem"]},
+    "2180": {"naam": "Ekeren", "districten": ["Ekeren"]},
+    "2600": {"naam": "Berchem", "districten": ["Berchem"]},
+    "2610": {"naam": "Wilrijk", "districten": ["Wilrijk"]},
+    "2660": {"naam": "Hoboken", "districten": ["Hoboken"]}
+  },
+  "buiten_werkgebied": "FelixArchief heeft ook enkele randdossiers onder Kapellen, Mortsel, Burcht (Antwerpen-Zwijndrecht) en Beveren. Die postcodes horen niet bij het werkgebied: daar zoekt de Felixwacht niet standaard."
+}
