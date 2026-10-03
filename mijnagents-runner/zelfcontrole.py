@@ -58,7 +58,7 @@ def bevindingen(items, van, tot, nu):
     def meld(controle, a, tekst):
         uit.append({"controle": controle, "dag": a["start"][:10], "uur": a["start"][11:16],
                     "agenda": W.KALENDERS.get(a.get("kalender"), "")[:20], "titel": a["titel"][:70],
-                    "tekst": tekst, "door": W.maker(a)})
+                    "tekst": tekst, "door": W.maker(a), "prive": W.is_prive(a)})
 
     binnen = [a for a in items if van <= a.get("start", "")[:10] <= tot and not a.get("kalender", "").startswith("en.be#")]
     ritten = [a for a in binnen if W.lees_titel(a["titel"])["reistijd"] and not a.get("_archief")]
@@ -237,12 +237,15 @@ def omgeving(nu):
     # staat het voor, dan veranderde iemand tekst die de code niet uitvoert.
     try:
         import bord as _bord  # noqa: PLC0415
-        v_bord = re.search(r"Versie ([0-9.]+)", _bord.call("/api/agent/agenda-wacht/werkwijze").get("werkwijze") or "")
-        v_repo = re.search(r"Versie ([0-9.]+)", (HIER / "werkwijze" / "agenda-wacht.md").read_text(encoding="utf-8"))
-        if not (v_bord and v_repo) or v_bord.group(1) != v_repo.group(1):
+        t_bord = _bord.call("/api/agent/agenda-wacht/werkwijze").get("werkwijze") or ""
+        t_repo = (HIER / "werkwijze" / "agenda-wacht.md").read_text(encoding="utf-8")
+        v_bord, v_repo = re.search(r"Versie ([0-9.]+)", t_bord), re.search(r"Versie ([0-9.]+)", t_repo)
+        # de inhoud telt, niet alleen het versienummer: dezelfde versie met een andere tekst is ook drift (v1.2, A11)
+        if inhoud_hash(t_bord) != inhoud_hash(t_repo):
             uit.append({"controle": "bord_werkwijze_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
-                        "tekst": f"werkwijze op het bord v{v_bord.group(1) if v_bord else '?'}, in de repo v{v_repo.group(1) if v_repo else '?'}: "
-                                 f"werkwijze_naar_bord.py agenda-wacht (eerst het verschil), dan --zet", "door": ""})
+                        "tekst": f"werkwijze op het bord v{v_bord.group(1) if v_bord else '?'} ({inhoud_hash(t_bord)}), in de repo "
+                                 f"v{v_repo.group(1) if v_repo else '?'} ({inhoud_hash(t_repo)}): werkwijze_naar_bord.py agenda-wacht "
+                                 f"(eerst het verschil), dan --zet", "door": ""})
     except Exception as e:  # noqa: BLE001
         uit.append({"controle": "bord_werkwijze_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
                     "tekst": f"de werkwijze op het bord is niet te lezen ({type(e).__name__})", "door": ""})
@@ -255,10 +258,27 @@ def omgeving(nu):
                 laatst = datetime.fromisoformat(st["laatst_gelukt"]) if st["laatst_gelukt"] else None
                 if not laatst or nu - laatst.astimezone(nu.tzinfo) > timedelta(hours=26):
                     uit.append({"controle": "mailbron_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
-                                "tekst": f"{mb} niet gelezen sinds {st['laatst_gelukt'][:16] or 'nooit'}: {st['laatste_fout'][:100]}", "door": ""})
+                                "tekst": f"{mb} niet volledig gelezen sinds {st['laatst_gelukt'][:16] or 'nooit'}: {st['laatste_fout'][:100]}", "door": ""})
+                elif st.get("dekking") and st["dekking"] != "volledig":
+                    uit.append({"controle": "mailbron_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
+                                "tekst": f"{mb} laatste lezing {st['dekking']}: {st['laatste_fout'][:120]}", "door": ""})
     except Exception as e:  # noqa: BLE001
         uit.append({"controle": "mailbron_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
                     "tekst": f"leesstand van de mailbronnen niet te lezen ({type(e).__name__})", "door": ""})
+    # Wat de wijzigingswacht niet kon afhandelen, blijft staan tot het beoordeeld is (v1.2, A5/A8)
+    try:
+        cp = json.loads(CONTROLEPUNTEN.read_text(encoding="utf-8")) if CONTROLEPUNTEN.exists() else {}
+        for c in cp.get("opgegeven") or []:
+            if not c.get("beoordeeld"):
+                uit.append({"controle": "wijziging_opgegeven", "dag": c.get("dag", ""), "uur": "", "agenda": "", "titel": "",
+                            "tekst": f"de wijzigingswacht gaf {c.get('dag')} op na {c.get('pogingen')} pogingen: {c.get('fout', '')[:100]}", "door": ""})
+        for c in cp.get("onbekend") or []:
+            if not c.get("beoordeeld"):
+                uit.append({"controle": "annulering_onbekend", "dag": (c.get("gezien") or "")[:10], "uur": "", "agenda": "", "titel": "",
+                            "tekst": f"annulering zonder bekende dag op {c.get('kalender', '')[:30]} (id {c.get('id', '')[:20]})", "door": ""})
+    except (OSError, ValueError) as e:
+        uit.append({"controle": "wijziging_opgegeven", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
+                    "tekst": f"controlepunten van de wijzigingswacht niet te lezen ({type(e).__name__})", "door": ""})
     # Een regelwijziging die via het bord binnenkwam, wacht op de ontwikkelaar tot ze als pakket doorgevoerd is (FR-98)
     try:
         import taken as _taken  # noqa: PLC0415
@@ -278,6 +298,23 @@ def omgeving(nu):
                     "tekst": f"iets buiten de agent veranderde {sum(h['teruggezet'] for h in recent)} kleuren in 24 uur; "
                              f"het kleurherstel zette ze terug", "door": ""})
     return uit
+
+
+CONTROLEPUNTEN = Path.home() / "appportal/mijnagents-data/agenda-signaal-controlepunten.json"
+
+
+def voor_bord(gevonden):
+    """Wat naar het bord gaat: van een privé-bevinding (privé-agenda, Lara, Hotmail) alleen de soort, nooit titel of
+    tekst (nacontrole v1.2, V9). De server houdt de details (zelfcontrole.json)."""
+    return [dict(b, titel="(privé)", tekst=f"{b['controle']}: details alleen in de privé-agenda en op de server")
+            if b.get("prive") else b for b in gevonden]
+
+
+def inhoud_hash(tekst):
+    """De inhoud van een werkwijze zonder witruimte aan regeleinden en rond het geheel; dezelfde tekst, dezelfde hash."""
+    import hashlib  # noqa: PLC0415
+    schoon = "\n".join(r.rstrip() for r in (tekst or "").strip().splitlines())
+    return hashlib.sha256(schoon.encode("utf-8")).hexdigest()[:12]
 
 
 def indelen(gevonden, reg):
@@ -328,6 +365,7 @@ def main():
     if "--droog" in sys.argv:
         return 0
     ag = W.ag
+    gevonden = voor_bord(gevonden)
     ag.log(f"dag {nu.date().isoformat()}", "bevinding",
            f"zelfcontrole: {tel['TERUGGEKEERD']} teruggekeerd, {tel['NIEUW']} nieuw, {tel['BEKEND']} bekend",
            "\n".join(f"{b['staat']} {b['register']} {b['dag']} {b['uur']} {b['titel'][:50]}: {b['tekst']}" for b in gevonden[:80]))

@@ -99,8 +99,9 @@ check("zonder uur is het een controlepunt met bron-ID, geen 'ontbreekt'", len(_z
 
 # vergelijken met de agenda
 _a = MA.alle()[0]
-check("gekoppeld op iCalUID, ook als het uur in de agenda anders staat",
-      MA.vergelijk([_a], [{"kalender": "werk", "id": "g1", "start": "2026-10-30T09:00:00+01:00", "_icaluid": _a["ics_uid"]}], nu)[0]["status"] == "gekoppeld")
+check("dezelfde iCalUID op een ander uur is afwijkend (een vraag), niet gekoppeld (nacontrole v1.2, V6)",
+      MA.vergelijk([_a], [{"kalender": "werk", "id": "g1", "start": "2026-10-30T09:00:00+01:00", "_icaluid": _a["ics_uid"]}], nu)[0]["status"] == "afwijkend"
+      and MA.vergelijk([_a], [{"kalender": "werk", "id": "g1", "start": _a["start"], "einde": _a["einde"], "_icaluid": _a["ics_uid"]}], nu)[0]["status"] == "gekoppeld")
 check("gekoppeld op het uur (binnen vijf minuten) als de UID ontbreekt",
       MA.vergelijk([_a], [{"kalender": "prive", "id": "g2", "start": "2026-10-30T15:03:00+01:00"}], nu)[0]["google"] == "prive|g2")
 check("staat ze nergens, dan ontbreekt ze", MA.vergelijk([_a], [], nu)[0]["status"] == "ontbreekt")
@@ -148,7 +149,9 @@ W._patch = lambda a, body, tok, toch=False: _weg.append((a["id"], body))
 try:
     _r1 = W.mail_meldingen([_mis, _ok], [_oud, _vreemd], "t", _nu)
     _r2 = W.mail_meldingen([_mis, _ok], [_oud, _vreemd, {"kalender": W.PRIVE_AGENDA, "id": "n-nieuw", "start": _morgen.date().isoformat(),
-                                                         "hele_dag": True, "_merk": {W.MAILMERK: MA.sleutel_kort(_mis)}}], "t", _nu)
+                                                         "hele_dag": True, "_merk": {W.MAILMERK: MA.sleutel_kort(_mis)},
+                                                         "titel": W._mail_melding_body(_mis, MA.sleutel_kort(_mis), _morgen.date().isoformat())["summary"]}],
+                           "t", _nu)
 finally:
     W._insert, W._patch = _o
 _b = _ins[0][1] if _ins else {}

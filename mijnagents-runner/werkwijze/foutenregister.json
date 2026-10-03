@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.27",
+ "versie": "3.28",
  "datum": "03-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -272,6 +272,17 @@
    "les": "Een bron die draait is nog geen verse bron: meet de laatste geslaagde lezing, niet het proces. En wat uit een andere bron komt, toon je; je zet het niet zelf in de agenda.",
    "uit": [
     "FR-101"
+   ]
+  },
+  {
+   "id": "L34",
+   "les": "Een koppeling, een stand of een telling is pas bewijs als ze identiteit en inhoud toetst: 'gekoppeld' zonder hetzelfde uur, 'gelezen' zonder alles verwerkt, 'gezet' zonder teruglezen, 'zelfde versie' zonder zelfde tekst zijn geen bewijs. Een test die de fout verwacht, bewaakt de fout.",
+   "uit": [
+    "FR-104",
+    "FR-109",
+    "FR-110",
+    "FR-115",
+    "FR-117"
    ]
   }
  ],
@@ -2009,7 +2020,7 @@
    "waarom_niet_gezien": "De commentaarregel zei 'dan raak ik niets aan', maar de code deed het omgekeerde; de tests bootsten alleen een geslaagde lezing na.",
    "oorzaak": "Onbekend werd als leeg behandeld in plaats van als dicht.",
    "soort_oorzaak": "code",
-   "oplossing": "gearchiveerd() geeft None bij een fout en mag_schrijven() zegt dan nee; dagmarkeringen() geeft DagMarkering als de lezing faalt of een agenda een fout geeft, en onthoudt dat niet, zodat de volgende keer opnieuw gelezen wordt.",
+   "oplossing": "gearchiveerd() geeft None bij een fout en mag_schrijven() zegt dan nee (geen schrijfactie op welke agenda ook); dagmarkeringen() geeft DagMarkering als de lezing faalt of een agenda een fout geeft, en onthoudt dat niet. Precies gezegd (nacontrole v1.2): dat blokkeert een nieuwe of verzette afspraak; andere schrijfacties op agenda's die wel leesbaar zijn (titels, kleuren, ritten) gaan door.",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
@@ -2184,6 +2195,279 @@
     "soort": "test",
     "waar": "tests/test_taken.py",
     "tekst": "de uitvoering gebruikt een klok"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-104",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V1)",
+   "fout": "De route die een korte titel aanvult (titel_uit_onderzoek, spoor 1) schreef nog [HARC-KB]; de normalisering liep ervoor en hield dat niet tegen. Een bestaande test verwachtte die fout.",
+   "gevolg": "Een nieuwe titel kon opnieuw vier letters krijgen, het omgekeerde van wat Mehdi goedkeurde.",
+   "waarom_niet_gezien": "De omzetting zat in een route, niet aan de grens waar geschreven wordt; de test controleerde de oude uitkomst.",
+   "oorzaak": "Codes werden op meerdere plaatsen gemaakt, zonder een centrale grens.",
+   "soort_oorzaak": "code",
+   "oplossing": "canoniek(): elke titel die _patch of _insert schrijft en elk voorstel (titel_aanvulling) gaat door codes_twee_letters; spoor 1 gebruikt titelcode(). Gedragsproef: een volledige schrijfroute levert [HA-KB], een tweede ronde verandert niets.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V1 een volledige schrijfroute levert [HA-KB]"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-105",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V2)",
+   "fout": "De vrije-tekstvoorsteller koos zonder bewijs 'online' en schreef 'Mehdi: Harchitects B2B Fictieve Relatie' als [HA-XO].",
+   "gevolg": "Een afspraak kon een verkeerde soort en kleur krijgen, zonder dat iemand het zag.",
+   "waarom_niet_gezien": "De algemene omzetting deed het wel goed; de tweede route had een eigen standaard.",
+   "oorzaak": "Een standaardwaarde in plaats van een bron.",
+   "soort_oorzaak": "code",
+   "oplossing": "titel_voorstel kiest buiten of online alleen uit de tekst, '!!' of de afspraak zelf (adres = buiten, link = online); anders geen soort en een voorstel met beide mogelijkheden.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V2 B2B zonder bewijs van buiten of online"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-106",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V3)",
+   "fout": "Een taak 'acht dagen voor de afspraak' bleef op haar oude uitvoertijd staan als de afspraak verschoof; ze werd zelfs voor de nieuwe dag uitgevoerd op het oude moment.",
+   "gevolg": "Een toezegging kon te vroeg (of te laat) uitgevoerd worden.",
+   "waarom_niet_gezien": "Alleen de dag van de afspraak werd bijgehouden, niet de termijn ten opzichte van haar start.",
+   "oorzaak": "Geen relatieve uitvoerregel.",
+   "soort_oorzaak": "code",
+   "oplossing": "De taak bewaart de start van de afspraak en de termijn (offset); taken.herplan herberekent due_at bij elke verplaatsing, voor de uitvoering en elk uur voor open taken.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V3 de afspraak verschuift van 10 naar 20 oktober"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-107",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V4)",
+   "fout": "Een taak die op 'bezig' bleef staan na een crash, werd nooit meer opgepakt.",
+   "gevolg": "Een toezegging kon stil verdwijnen.",
+   "waarom_niet_gezien": "Alleen 'gepland' en 'wacht-op-bron' werden geselecteerd.",
+   "oorzaak": "Geen lease op een uitvoering.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een uitvoering krijgt een lease van 20 minuten; is die verlopen, dan pakt de Regisseur de taak opnieuw op (een agent-ronde is herhaalbaar).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V4 een taak die na een crash op 'bezig' bleef"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-108",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V5)",
+   "fout": "Twee taken voor verschillende afspraken met dezelfde parameters en hetzelfde uur kregen hetzelfde taak-ID; de annulering van A liet de toezegging voor B vervallen.",
+   "gevolg": "Een toezegging kon verdwijnen door een andere afspraak.",
+   "waarom_niet_gezien": "De sleutel bevatte geen afspraak.",
+   "oorzaak": "Een te smalle identiteit.",
+   "soort_oorzaak": "code",
+   "oplossing": "De sleutel bevat kalender, afspraak-ID, de termijn en de reden.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V5 twee afspraken met dezelfde parameters"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-109",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V6)",
+   "fout": "Mail en agenda werden gekoppeld op dezelfde iCalUID ook bij een ander uur, en zonder UID op elk item rond hetzelfde uur.",
+   "gevolg": "Een gewijzigde of ontbrekende afspraak kon onzichtbaar blijven; 'gekoppeld' bewees niets.",
+   "waarom_niet_gezien": "De eerste test verwachtte 'gekoppeld' bij een afwijkend uur.",
+   "oorzaak": "Identiteit en inhoud werden niet gescheiden.",
+   "soort_oorzaak": "code",
+   "oplossing": "vergelijk(): dezelfde UID en hetzelfde uur (en einde) is gekoppeld, anders afwijkend; zonder UID alleen gekoppeld met gedeelde woorden, anders kandidaat. Afwijkend en kandidaat zijn een vraag in de privé-agenda.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V6 zelfde uitnodiging op een ander uur is afwijkend"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-110",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V7)",
+   "fout": "Een mislukte submap gaf toch een succesvolle leesstand; een fout bij het ontleden kwam nadat de successtand al geschreven was; post_lezer las per map hoogstens 400 berichten en verloor mislukte berichten stil.",
+   "gevolg": "'Niets gevonden' leek dekking terwijl een deel niet gelezen was.",
+   "waarom_niet_gezien": "Succes werd gezet voor het verwerken.",
+   "oorzaak": "Successtand voor bewijs.",
+   "soort_oorzaak": "code",
+   "oplossing": "Volledig gelezen pas na lezen, verwerken en bewaren van alles; anders 'gedeeltelijk' of 'mislukt' met de fouten (map, uid, message-id); een fout bericht houdt de rest niet tegen; afkappen en mislukte berichten worden gemeld; de zelfcontrole toont gedeeltelijke dekking.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V7 een mislukte map of een bericht dat niet ontleedt"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-111",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V8)",
+   "fout": "Een annulering zonder DTSTART (toegestaan, RFC 5546 3.2.5) werd weggegooid; een geannuleerde hele-dag-afspraak die nog in de agenda stond, heette gekoppeld.",
+   "gevolg": "Een afgelaste afspraak kon blijven staan zonder vraag.",
+   "waarom_niet_gezien": "De tests hadden altijd een start.",
+   "oorzaak": "De annulering hing aan de start in plaats van aan de identiteit.",
+   "soort_oorzaak": "code",
+   "oplossing": "De annulering wordt op UID bewaard (de bekende afspraak krijgt geannuleerd); annulering wordt beoordeeld voor de tijdsoort.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V8 een annulering zonder DTSTART"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-112",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V9)",
+   "fout": "De dagcontrole maakte van een ontbrekende privé-afspraak uit Hotmail een bevinding met titel en adres, en de zelfcontrole stuurde die naar het bord.",
+   "gevolg": "Privédetails (bv. medisch) op een plek die andere agents lezen; niet vastgesteld dat iemand ze zag.",
+   "waarom_niet_gezien": "De master beloofde 'alleen een melding zonder details', maar het label ging onderweg verloren.",
+   "oorzaak": "Geen privacylabel door de keten.",
+   "soort_oorzaak": "code",
+   "oplossing": "Het register bewaart 'prive'; de dagcontrole schrijft voor Hotmail geen titel of adres; is_prive() en voor_bord(): van de privé-agenda, Lara en Hotmail gaat alleen de soort naar het bord.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V9 een privé-afspraak uit Hotmail komt zonder titel"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-113",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V10)",
+   "fout": "Een ja van Mehdi voor 3 oktober onderdrukte de conflictvraag ook nadat de afspraak naar 6 oktober verhuisde.",
+   "gevolg": "Een afspraak op een afgesloten dag zonder vraag.",
+   "waarom_niet_gezien": "De stempel werd op aanwezigheid gecontroleerd, niet op de dag.",
+   "oorzaak": "Een ja zonder datum.",
+   "soort_oorzaak": "code",
+   "oplossing": "De dagcontrole slaat alleen over als de ja-stempel precies de dag van de afspraak is.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V10 een ja voor 3 oktober geldt niet meer"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-114",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V11)",
+   "fout": "Een mailmelding met dezelfde sleutel werd overgeslagen, ook als de afspraak naar een andere dag ging; een uitnodiging zonder uur kreeg geen blijvende vraag.",
+   "gevolg": "Een verouderde vraag op de verkeerde dag; een uitnodiging zonder uur verdween.",
+   "waarom_niet_gezien": "Er werd alleen gekeken of er al een melding was.",
+   "oorzaak": "Bestaan in plaats van inhoud.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een bestaande melding wordt bijgewerkt (dag en tekst) als de afspraak verandert; een uitnodiging zonder uur krijgt een keer een vraag op de dag dat de agent ze zag, en het register onthoudt dat.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V11 een mailmelding volgt haar afspraak"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-115",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (V12)",
+   "fout": "Een mislukte teruglezing van Bezet stond in dezelfde lijst als een gelukte, en de hoofdlus telde de lijst als 'op Bezet gezet'.",
+   "gevolg": "Een mislukking telde als succes.",
+   "waarom_niet_gezien": "Een lijst zonder onderscheid.",
+   "oorzaak": "Melden zonder te splitsen.",
+   "soort_oorzaak": "code",
+   "oplossing": "bezet_splitsen(): gezet en mislukt apart; mislukt is een bevinding en een nood tot een volgende ronde het zet.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "V12 een mislukte teruglezing van Bezet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-116",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (A5, A8)",
+   "fout": "Na vijf mislukkingen schoof de wijzigingswacht door met hoogstens twintig lokale vermeldingen; een annulering zonder start en zonder vingerafdruk werd stil afgevinkt.",
+   "gevolg": "Een opgegeven dag of een onbekende annulering kon ongezien blijven.",
+   "waarom_niet_gezien": "Niemand las de lokale lijst.",
+   "oorzaak": "Geen blijvend controlepunt.",
+   "soort_oorzaak": "code",
+   "oplossing": "agenda-signaal-controlepunten.json: opgegeven dagen en onbekende annuleringen blijven staan tot beoordeeld (later slagen telt als beoordeeld); de zelfcontrole toont ze (wijziging_opgegeven, annulering_onbekend).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "A5/A8 een opgegeven dag en een annulering zonder bekende dag blijven staan"
+   },
+   "controle": [
+    "wijziging_opgegeven",
+    "annulering_onbekend"
+   ],
+   "status": "bewaakt"
+  },
+  {
+   "id": "FR-117",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (A11)",
+   "fout": "De borddrift vergeleek alleen versienummers: een verkeerde tekst met hetzelfde versienummer werd niet gezien.",
+   "gevolg": "Een regel op het bord die de agent niet uitvoert.",
+   "waarom_niet_gezien": "De versieregel werd als bewijs van gelijkheid gebruikt.",
+   "oorzaak": "Versie in plaats van inhoud.",
+   "soort_oorzaak": "code",
+   "oplossing": "De zelfcontrole vergelijkt een hash van de inhoud (witruimte telt niet) en toont versie en hash van beide.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "A11 borddrift wordt op inhoud vergeleken"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-118",
+   "datum": "03-10-2026",
+   "gevonden_door": "nacontrole 'Agendawacht - onderzoek en herstelvoorstel v1.2' (02-10-2026, op 3f5374c), op vraag van Mehdi (p. 6, punt 5)",
+   "fout": "De afspraken-PDF v3.2 verwees naar 'foutenregister v1.0' en noemde de interne code HDSS als zichtbare privacycode.",
+   "gevolg": "Een afgeleid document dat de bron tegensprak.",
+   "waarom_niet_gezien": "Vaste tekst in de generator.",
+   "oorzaak": "Tekst in plaats van bron.",
+   "soort_oorzaak": "document",
+   "oplossing": "De generator leest de registerversie uit foutenregister.json en noemt de agendacode DS.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_nacontrole_v12.py",
+    "tekst": "PDF-generator: de registerversie uit de bron"
    },
    "controle": [],
    "status": "opgelost"

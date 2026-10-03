@@ -32,6 +32,7 @@ import agenda_signaal as S          # noqa: E402
 
 # Nooit de echte stand op de VM en nooit de echte wacht, ook niet als een nagemaakte functie ontbreekt
 S.STAND = Path(tempfile.mkdtemp(prefix="signaal-")) / "agenda-signaal.json"
+S.CONTROLEPUNTEN = S.STAND.parent / "controlepunten.json"     # nooit de echte datamap
 S.PYTHON = "/usr/bin/false"
 
 ok = fout = 0
@@ -113,6 +114,7 @@ def t(iso):
 
 def nieuwe_stand():
     S.STAND = Path(tempfile.mkdtemp(prefix="signaal-")) / "agenda-signaal.json"
+    S.CONTROLEPUNTEN = S.STAND.parent / "controlepunten.json"
 
 
 def ronde(google, wacht, kals=("werk",)):

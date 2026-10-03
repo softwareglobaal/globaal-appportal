@@ -1,5 +1,5 @@
 {
- "versie": "5.4",
+ "versie": "5.5",
  "datum": "2026-10-02",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -596,6 +596,27 @@
    "wat": "Harmoniebouw hernoemen naar ZZ ARCHIEF Harmoniebouw, drie collega's zien die naam",
    "wie": "Shaniel",
    "wanneer": "morgen"
+  },
+  {
+   "wat": "Agentnorm N12: de Agendawacht gebruikt de gedeelde ronde (bord.Agent.ronde) nog niet; daardoor gelden de normen voor gedeelde lessen en collega's niet. Pakket: hoofdlus in de gedeelde ronde, met test (nacontrole v1.2).",
+   "wie": "Claude",
+   "wanneer": "voor 10-10-2026",
+   "status": "open",
+   "bewijs": "controle_agenten.py --agent agenda-wacht: N12 gezakt (02-10-2026)"
+  },
+  {
+   "wat": "Mailwacht mail-prive leest Hotmail nog via de Mac-export, die sinds 26-09-2026 faalt (authorization denied); de serverroute via de postcontainer werkt al voor de agenda (FR-101). Taak klaargezet: 'Hotmail-mailwacht naar de serverroute zetten'.",
+   "wie": "Claude",
+   "wanneer": "voor 10-10-2026",
+   "status": "open",
+   "bewijs": "~/Library/Logs/mijnagents/mail-prive.log; koppen.json van 25-09 22:13 UTC"
+  },
+  {
+   "wat": "Calendly-titelsjablonen schrijven nog UNABO/TKN; naar UB/TK zetten met behoud van slugs, duur en routing. Een accountwijziging: alleen met een uitdrukkelijke ja van Mehdi voor precies deze wijziging.",
+   "wie": "Mehdi",
+   "wanneer": "zodra Mehdi ja zegt",
+   "status": "wacht op ja",
+   "bewijs": "boekingen 02-10 en 03-10 met [UNABO-PO] en [TKN-PO]"
   }
  ],
  "beslissingen": [

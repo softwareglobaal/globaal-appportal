@@ -124,7 +124,7 @@ Wat hier staat, staat ook in <code>werkwijze/agenda-taken.json</code> op de serv
 vergelijkt dat bestand met de code en faalt zodra ze uit elkaar lopen. Firma's en mensen komen live van
 <b>organisatie.globaal.be</b>; de agent houdt er geen eigen lijst van bij.<br><br>
 Hoe de regels zo gegroeid zijn, staat niet hier. De fouten, waarom ze niet eerder gezien werden en wat ze nu tegenhoudt,
-staan in een apart document: <b>Agendawacht - foutenregister v1.0</b>.
+staan in een apart document: <b>Agendawacht - foutenregister v{e(reg['versie'])}</b>.
 </div>
 
 <h2>1. De grondregels</h2>
@@ -146,7 +146,7 @@ zelf: <b>VR</b> helemaal vooraan de titel en de vraag in een zin bovenaan de oms
 belt hij een keer (08:00 tot 20:00) met een zin wat Mehdi moet doen.</li>
 <li><b>Hij verwijdert nooit iets.</b> Moet iets weg, dan zegt hij duidelijk wat en waarom, en wacht hij op een ja.</li>
 <li><b>Een grendel gaat nooit open</b>, ook niet even voor een proef. Proefrondes draaien droog.</li>
-<li><b>SU.</b> Klanten en prospecten zien nooit de volledige landnaam; alleen SU of de code HDSS.</li>
+<li><b>SU.</b> Klanten en prospecten zien nooit de volledige landnaam; alleen SU of de agendacode DS.</li>
 <li><b>Het verleden wordt niet herschreven</b>, wel nagekeken. Een fout van gisteren komt in het register.</li>
 </ul>
 
@@ -204,7 +204,7 @@ van een contact (UnaBo: UB in de agenda, UN in de contacten). Stand op {__import
 <li><b>AL</b> is voor een leverancier of afspraak die voor de hele groep geldt, niet voor een firma. Externe partijen staan
 bewust niet op het dashboard maar in <code>externe-relaties.json</code>: de boekhouder Nadien (ook geschreven Nadine) en Wally
 (AI-software), allebei leverancier, allebei AL. Privé is PR, Lara LA (op haar eigen agenda).</li>
-<li><b>HDS is DS</b> (intern HDSS). HDS India is DI.</li>
+<li><b>HDS is DS</b> in de agenda; HDS India is DI.</li>
 <li><b>Sinds 2 oktober 2026</b> draagt elke titel de codes van twee letters (vervangt de vier letters van 21 september). Eigen afspraken
 zonder gasten zet de agent zelf om, een reeks in de reeks zelf; met gasten of van Calendly is het een voorstel. Oude codes leest hij nog: {ou}.</li>
 <li><b>Vrije tekst wordt een code.</b> Mehdi typt bijvoorbeeld <code>!! Mehdi &amp; Catalin: Harchitects-KB 2505</code>; de agent maakt er

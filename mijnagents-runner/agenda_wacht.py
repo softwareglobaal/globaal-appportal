@@ -69,6 +69,14 @@ KALENDERS = {
     "zoomafspraken@gmail.com": "zoomafspraken (sales via Calendly)",
     "en.be#holiday@group.v.calendar.google.com": "Feestdagen BE",
 }
+# Privé: wat hier staat gaat nooit met titel of tekst naar het bord (nacontrole v1.2, V9)
+PRIVE_KALENDERS = {k for k, n in KALENDERS.items() if n == "Lara" or "privé" in n}
+
+
+def is_prive(a):
+    return bool(a.get("_prive") or a.get("kalender") in PRIVE_KALENDERS)
+
+
 # Wat Mehdi archiveert krijgt "ZZ ARCHIEF" voor de naam, nadat hij de agenda van
 # alle andere accounts heeft losgekoppeld. Tweede grendel naast KALENDERS: ook als
 # zo'n agenda ooit in de lijst hierboven belandt, laat ik hem met rust. 19-09-2026.
@@ -450,6 +458,12 @@ def _transparantie(a, tok):
     return json.load(urllib.request.urlopen(req, timeout=30)).get("transparency") or "opaque"
 
 
+def bezet_splitsen(regels):
+    """(gezet, mislukt) uit de regels van markeringen_bezet: een mislukte teruglezing is nooit 'gezet' (v1.2, V12)."""
+    mis = [r for r in regels if "niet op Bezet gezet" in r]
+    return [r for r in regels if r not in mis], mis
+
+
 def markeringen_bezet(items, tok=None):
     """Een markering die alles afsluit ('geen afspraken', 'Buitenland') moet in Google op Bezet staan, anders telt Calendly
     ze niet. Google zet een hele-dag-item standaard op Beschikbaar. Gezien 01-10-2026: zaterdag 03-10 'geen afspraken'
@@ -532,11 +546,20 @@ def mag_schrijven(kal):
     return kal in KALENDERS and arch is not None and kal not in arch
 
 
+def canoniek(titel, online=None):
+    """De titel zoals de agent hem schrijft: alleen codes van twee letters. Elke schrijfroute en elk voorstel gaat
+    hierdoor, zodat geen enkele route nog HARC of UNABO kan schrijven (nacontrole v1.2, V1, FR-104). B2B wordt alleen
+    XB of XO als buiten of online vaststaat."""
+    return codes_twee_letters(titel or "", online) if titel else titel
+
+
 def _patch(a, body, tok, toch=False):
     import urllib.parse
     import urllib.request
     if not mag_schrijven(a["kalender"]):
         raise GeenSchrijfrecht(a["kalender"])
+    if body.get("summary"):
+        body["summary"] = canoniek(body["summary"])
     # een afspraak naar een dag verzetten die een markering afsluit, kan alleen met een ja van Mehdi (FR-83)
     if "start" in body and not toch:
         dag = ((body.get("start") or {}).get("dateTime") or "")[:10]
@@ -827,8 +850,10 @@ def _van_mehdi(a):
     return m in ("", WERKAGENDA) and a.get("kalender") != "zoomafspraken@gmail.com" and not a.get("deelnemers")
 
 
-def titel_voorstel(titel):
-    """Leest vrije tekst en geeft (nieuwe titel of None, firma, soort, uitleg)."""
+def titel_voorstel(titel, online=None):
+    """Leest vrije tekst en geeft (nieuwe titel of None, firma, soort, uitleg). Buiten of online komt uit de tekst
+    ('online', 'buiten', '!!') of uit de afspraak zelf (online: True/False/None). Staat het nergens, dan geen soort
+    en dus een voorstel met beide mogelijkheden, nooit een gok (nacontrole v1.2, V2, FR-105)."""
     if CODE_RE.search(titel) or ":" not in titel:
         return None, None, None, ""
     kop, rest = titel.split(":", 1)
@@ -871,18 +896,24 @@ def titel_voorstel(titel):
     if not firma:
         return None, None, None, ""
     if not waar:
-        waar = "B" if "!!" in titel else "O"
-    soort = soort_code or ("IN" if rol == "IN" else (rol + waar if rol else None))
+        waar = "B" if "!!" in titel else ({True: "O", False: "B"}.get(online))
+    if soort_code == "B2B":
+        rol, soort_code = "X", None
+    soort = soort_code or ("IN" if rol == "IN" else (rol + waar if rol and waar else None))
     over = rest
     for w in sorted(set(weg), key=len, reverse=True):
         over = re.sub(r"(?<![\w])" + re.escape(w) + r"(?![\w])", " ", over)
     over = re.sub(r"\s*-\s*(?=\s|$)", " ", over)
     over = re.sub(r"\s+", " ", over).strip(" -,")
-    if soort == "B2B":
-        soort = "XB" if waar == "B" else "XO"
     code = f"[{titelcode(firma)}-{soort}]" if soort else f"[{titelcode(firma)}]"
     nieuw = f"{kop.strip()}: {code}" + (f" {over}" if over else "")
-    uitleg = f"firma {firma} uit de tekst" + (f", soort {soort}" if soort else ", soort niet te bepalen")
+    if soort:
+        uitleg = f"firma {firma} uit de tekst, soort {soort}"
+    elif rol and rol != "IN":
+        uitleg = (f"firma {firma} uit de tekst; buiten of online staat nergens: [{titelcode(firma)}-{rol}B] (buiten) of "
+                  f"[{titelcode(firma)}-{rol}O] (online)?")
+    else:
+        uitleg = f"firma {firma} uit de tekst, soort niet te bepalen"
     return nieuw, firma, soort, uitleg
 
 
@@ -948,7 +979,7 @@ def titels_normaliseren(items, alleen_dag=None):
                 elif not a.get("_terugkerend"):
                     regels.append(f"{a['start'][:16]} {titel[:50]}: VOORSTEL '{kandidaat[:70]}' (twee letters; met gasten verander ik de titel niet)")
         else:
-            nieuw, firma, soort, uitleg = titel_voorstel(titel)
+            nieuw, firma, soort, uitleg = titel_voorstel(titel, _online(a))
             if nieuw and not (firma and soort and _van_mehdi(a) and not a.get("_terugkerend")):
                 regels.append(f"{a['start'][:16]} {titel[:50]}: VOORSTEL '{nieuw[:70]}' ({uitleg})")
                 nieuw = None
@@ -1254,7 +1285,7 @@ def titel_uit_onderzoek(a):
             code = next((c for rx, c in ACTIVITEIT_WOORDEN["HARC"] if re.search(rx, titel, re.I)), "")
             buiten = info["buiten"] or code in BUITEN_TYPES
             adres = ((a.get("locatie") or "").strip() or kaart.get("adres", "")) if buiten else ""
-            nieuw = (f"{'!! ' if buiten else ''}Mehdi: [HARC-K{'B' if buiten else 'O'}] {code + ' ' if code else ''}{info['nummer']} - {klant}"
+            nieuw = (f"{'!! ' if buiten else ''}Mehdi: [{titelcode('HARC')}-K{'B' if buiten else 'O'}] {code + ' ' if code else ''}{info['nummer']} - {klant}"
                      + (f", {re.sub(r',\s*(Belgi[eë]|Belgium)\s*$', '', adres)}" if adres else ""))
             return nieuw, f"uitgezocht: {info['nummer']} is een H-Architects-project met een projectmap, klant {klant}"
     # Spoor 2: een activiteit met een adres
@@ -1286,6 +1317,12 @@ def titel_uit_onderzoek(a):
 
 
 def titel_aanvulling(a, projecten):
+    """Wat ontbreekt aan een titel, als canonieke titel (twee letters, ook in een voorstel: nacontrole v1.2, V1)."""
+    nieuw, uitleg = _titel_aanvulling(a, projecten)
+    return (canoniek(nieuw, _online(a)) if nieuw else nieuw), uitleg
+
+
+def _titel_aanvulling(a, projecten):
     """Wat ontbreekt aan een titel om conform te zijn? Geeft (nieuwe titel, uitleg) of (None, '').
     - een rit draagt het autootje vooraan (Mehdi, 24-09-2026: 'autootje niet vergeten');
     - '[HARC-..] nummer' zonder klant krijgt ' - klant' uit Pipedrive, en buiten ook het adres
@@ -1340,6 +1377,7 @@ def titels_aanvullen(items, alleen_dag=None):
         if a.get("kalender", "").startswith("en.be#"):
             continue
         nieuw, uitleg = titel_aanvulling(a, projecten)
+        nieuw = canoniek(nieuw, _online(a))
         if not nieuw or nieuw == a["titel"]:
             continue
         zelf = (not a.get("deelnemers") and not a.get("_terugkerend") and a.get("kalender") != "zoomafspraken@gmail.com")
@@ -1999,6 +2037,8 @@ def _insert(kalender, body, tok, toch=False):
     import urllib.request
     if not mag_schrijven(kalender):
         raise GeenSchrijfrecht(kalender)
+    if body.get("summary"):
+        body["summary"] = canoniek(body["summary"])
     # een nieuwe afspraak op een dag die een markering afsluit, kan alleen met een ja van Mehdi (FR-83)
     dag = ((body.get("start") or {}).get("dateTime") or "")[:10]
     m = markering_tegen(body.get("summary"), dag) if not toch else None
@@ -2056,38 +2096,67 @@ PRIVE_AGENDA = "mehdipriveagena@gmail.com"
 MAIL_VOORUIT_DAGEN = 14
 
 
-def mail_meldingen(res, bestaande, tok, nu=None):
-    """Zet of ruimt de meldingen voor afspraken uit mail. Geeft regels."""
-    import mail_afspraken as MA  # noqa: PLC0415
+def _mail_melding_body(a, k, dag):
+    """De melding in de privé-agenda voor een afspraak uit mail (zie MAIL_VRAGEN)."""
     from datetime import date as _d  # noqa: PLC0415
+    uur = a["start"][11:16] if "T" in (a.get("start") or "") else "hele dag"
+    titels = {"ontbreekt": f"VR Agendawacht: uit mail, niet in je agenda: {uur} {a['titel'][:60]}",
+              "geannuleerd_staat_er": f"VR Agendawacht: in mail geannuleerd, staat nog in je agenda: {uur} {a['titel'][:50]}",
+              "afwijkend": f"VR Agendawacht: in mail om {uur}, {a.get('detail') or 'in je agenda anders'}: {a['titel'][:45]}",
+              "kandidaat": f"VR Agendawacht: uit mail om {uur}, {a.get('detail') or 'op dat uur staat iets anders'}: {a['titel'][:40]}",
+              "zonder_tijd": f"VR Agendawacht: uitnodiging zonder uur: {a['bron_onderwerp'][:70]}"}
+    vraag = {"zonder_tijd": "zeg of het een afspraak wordt en wanneer. Ik zet zelf niets.",
+             "ontbreekt": "zeg of ik deze afspraak in je agenda zet, of dat ze niet doorgaat. Ik zet zelf niets."
+             }.get(a["status"], "zeg wat klopt: de mail of de agenda. Ik zet en verander zelf niets.")
+    d = _d.fromisoformat(dag)
+    return {"summary": titels[a["status"]][:200], "start": {"date": d.isoformat()}, "end": {"date": (d + timedelta(days=1)).isoformat()},
+            "transparency": "transparent", "reminders": {"useDefault": False, "overrides": []},
+            "description": (f"Agendawacht vraagt: {vraag}\n\nBron: {a['bron_mailbox']}, '{a['bron_onderwerp']}', ontvangen "
+                            f"{a['bron_ontvangen'][:16].replace('T', ' ')}, van {a['bron_afzender']}. Message-ID {a['bron_message_id']}."),
+            "extendedProperties": {"private": {MAILMERK: k}}}
+
+
+def mail_meldingen(res, bestaande, tok, nu=None):
+    """Zet, werkt bij of rondt af: de meldingen voor afspraken uit mail, in de privé-agenda (alleen Mehdi ziet die).
+    Een melding volgt haar afspraak: verandert de dag of de tekst, dan wordt de bestaande melding bijgewerkt, niet
+    overgeslagen (nacontrole v1.2, V11). Een uitnodiging zonder uur krijgt een keer een blijvende vraag op de dag dat
+    de agent ze zag; die rondt de agent niet zelf af. Geeft regels."""
+    import mail_afspraken as MA  # noqa: PLC0415
     nu = nu or nu_lokaal()
+    vandaag = nu.date().isoformat()
     grens = (nu + timedelta(days=MAIL_VOORUIT_DAGEN)).date().isoformat()
-    open_ = {MA.sleutel_kort(a): a for a in res if a["status"] in ("ontbreekt", "geannuleerd_staat_er")
-             and a["start"] and nu.date().isoformat() <= a["start"][:10] <= grens}
+    open_ = {MA.sleutel_kort(a): a for a in res if a["status"] in MA.VRAAG_STATUSSEN
+             and a["start"] and vandaag <= a["start"][:10] <= grens}
     er = {(x.get("_merk") or {}).get(MAILMERK): x for x in bestaande
           if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(MAILMERK)
           and not (x.get("_merk") or {}).get(MAILMERK, "").startswith("opgelost:")}
     regels = []
     for k, a in open_.items():
-        if k in er:
-            continue
-        uur = a["start"][11:16] if "T" in a["start"] else "hele dag"
-        titel = (f"VR Agendawacht: uit mail, niet in je agenda: {uur} {a['titel'][:60]}" if a["status"] == "ontbreekt"
-                 else f"VR Agendawacht: in mail geannuleerd, staat nog in je agenda: {uur} {a['titel'][:50]}")
-        dag = _d.fromisoformat(a["start"][:10])
-        body = {"summary": titel, "start": {"date": dag.isoformat()}, "end": {"date": (dag + timedelta(days=1)).isoformat()},
-                "transparency": "transparent", "reminders": {"useDefault": False, "overrides": []},
-                "description": (f"Agendawacht vraagt: zeg of ik deze afspraak in je agenda zet, of dat ze niet doorgaat. Ik zet zelf niets.\n\n"
-                                f"Bron: {a['bron_mailbox']}, '{a['bron_onderwerp']}', ontvangen {a['bron_ontvangen'][:16].replace('T', ' ')}, "
-                                f"van {a['bron_afzender']}. Message-ID {a['bron_message_id']}."),
-                "extendedProperties": {"private": {MAILMERK: k}}}
+        body = _mail_melding_body(a, k, a["start"][:10])
+        x = er.get(k)
         try:
-            _insert(PRIVE_AGENDA, body, tok)
-            regels.append(f"{a['start'][:16]} melding gezet ({a['status']})")
+            if x is None:
+                _insert(PRIVE_AGENDA, body, tok)
+                regels.append(f"{a['start'][:16]} melding gezet ({a['status']})")
+            elif (x.get("start") or "")[:10] != a["start"][:10] or (x.get("titel") or "") != body["summary"]:
+                _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description")}, tok)
+                regels.append(f"{a['start'][:16]} melding bijgewerkt ({a['status']}, was {(x.get('start') or '')[:10]})")
         except Exception as e:  # noqa: BLE001
             regels.append(f"{a['start'][:16]} melding niet gezet ({type(e).__name__})")
+    # een uitnodiging zonder uur: een keer een vraag, en het register onthoudt dat (geen dagelijkse herhaling)
+    for a in res:
+        if a["status"] != "zonder_tijd" or a.get("melding") or (a.get("bron_ontvangen") or "")[:10] < (nu - timedelta(days=MAIL_VOORUIT_DAGEN)).date().isoformat():
+            continue
+        k = "z:" + MA.sleutel_kort(a)
+        try:
+            if k not in er:
+                _insert(PRIVE_AGENDA, _mail_melding_body(a, k, vandaag), tok)
+            MA.melding_zet(a["sleutel"], vandaag)
+            regels.append(f"uitnodiging zonder uur: vraag gezet ({a['bron_mailbox']})")
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"uitnodiging zonder uur: vraag niet gezet ({type(e).__name__})")
     for k, x in er.items():
-        if k in open_:
+        if k in open_ or k.startswith("z:"):
             continue
         try:
             if _eigen_melding_opgelost(x, k, tok, nu):
@@ -3465,9 +3534,14 @@ def main():
         # Ook in de wijzigingsroute (--dag): een nieuwe blokkade op vrijdagavond of in het weekend wachtte anders tot
         # maandag 06:30 op Bezet, en zolang boekte Calendly erdoor (audit A15, FR-96)
         mb = markeringen_bezet([x for x in (rit_items if DAG_ARG else afspraken(0, 180)) if x.get("hele_dag") and not x.get("fout")])
-        if mb:
-            ag.log(f"dag {vandaag}", "schrijf", f"markeringen: {len(mb)} op Bezet gezet", "\n".join(mb))
+        mb_ok, mb_mis = bezet_splitsen(mb)
         mail_noden = []
+        if mb_ok:
+            ag.log(f"dag {vandaag}", "schrijf", f"markeringen: {len(mb_ok)} op Bezet gezet", "\n".join(mb_ok))
+        if mb_mis:
+            # mislukt is geen 'gezet': apart gemeld, en open tot een volgende ronde het wel zet (nacontrole v1.2, V12)
+            ag.log(f"dag {vandaag}", "bevinding", f"markeringen: {len(mb_mis)} NIET op Bezet gezet", "\n".join(mb_mis))
+            mail_noden.append({"tekst": "Een markering die alles afsluit staat nog op Beschikbaar: Calendly kan erdoor boeken", "wie": "claude"})
         if not DAG_ARG:
             # Mail als afsprakenbron: mch@ en Hotmail, twee weken terug (FR-101). Een fout is een nood, nooit stilte.
             try:
@@ -3475,14 +3549,13 @@ def main():
                 _alle = [x for x in afspraken(-14, 120) if not x.get("fout")] + archief_afspraken(-14, 120)
                 mres, mfout = MA.ronde(_alle, (datetime.now() - timedelta(days=14)).date().isoformat())
                 mregels = mail_meldingen(mres, _alle, agenda._toegang())
-                _tel = {s: sum(1 for a in mres if a["status"] == s) for s in ("gekoppeld", "ontbreekt", "geannuleerd_staat_er", "zonder_tijd")}
+                _tel = {s: sum(1 for a in mres if a["status"] == s) for s in ("gekoppeld",) + MA.VRAAG_STATUSSEN + ("zonder_tijd",)}
                 ag.log(f"dag {vandaag}", "schrijf", f"mail als bron: {len(mres)} afspraken uit mail ({_tel})", "\n".join(mregels))
-                if _tel["ontbreekt"] or _tel["geannuleerd_staat_er"]:
-                    mail_noden.append({"tekst": "Afspraken uit mail staan niet (of geannuleerd nog) in de agenda; details in je "
-                                                "privé-agenda", "wie": "mehdi"})
-                for f_ in mfout:
-                    if not f_.get("map"):
-                        mail_noden.append({"tekst": f"Mailbron {f_['mailbox']} niet gelezen: {f_['fout'][:120]}", "wie": "claude"})
+                if any(_tel[s] for s in MA.VRAAG_STATUSSEN):
+                    mail_noden.append({"tekst": "Afspraken uit mail kloppen niet met de agenda; details in je privé-agenda", "wie": "mehdi"})
+                for _mb in sorted({f_["mailbox"] for f_ in mfout}):
+                    _stuk = any(not f_.get("map") for f_ in mfout if f_["mailbox"] == _mb)
+                    mail_noden.append({"tekst": f"Mailbron {_mb} {'niet' if _stuk else 'niet volledig'} gelezen; zie de leesstand", "wie": "claude"})
             except Exception as e:  # noqa: BLE001
                 mail_noden.append({"tekst": f"Mail als afsprakenbron mislukt ({type(e).__name__}: {str(e)[:120]})", "wie": "claude"})
         pg, pregels = projectnummers_zetten(kort_items, dag_grens)

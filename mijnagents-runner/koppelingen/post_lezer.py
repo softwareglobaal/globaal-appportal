@@ -78,7 +78,12 @@ for adres in opdracht.get("mailboxen", []):
             with imapbron._Sessie(mb) as M:
                 imapbron._selecteer(M, mapnaam)                      # read-only
                 uids = imapbron.zoek_uids(M, imapbron._criteria(None, None, None, None, opdracht.get("sinds"), None, False))
-                uids = uids[: int(opdracht.get("maximaal", 400))]
+                grens = int(opdracht.get("maximaal", 2000))
+                if len(uids) > grens:
+                    # een afgekapte map is geen volledige dekking: zeggen, niet zwijgen (nacontrole v1.2, V7)
+                    fouten.append({"mailbox": adres, "map": mapnaam, "fout": f"afgekapt: {len(uids)} berichten sinds "
+                                                                            f"{opdracht.get('sinds')}, {grens} gelezen"})
+                uids = uids[:grens]
                 for i in range(0, len(uids), 100):
                     stuk = ",".join(str(u) for u in uids[i:i + 100])
                     ok, data = M.uid("FETCH", stuk, "(BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (SUBJECT FROM LIST-UNSUBSCRIBE)])")
@@ -98,8 +103,15 @@ for adres in opdracht.get("mailboxen", []):
                         ok2, d2 = M.uid("FETCH", um.group(1), "(BODY.PEEK[])")
                         ruw = next((x[1] for x in (d2 or []) if isinstance(x, tuple)), None)
                         if ok2 != "OK" or not ruw:
+                            fouten.append({"mailbox": adres, "map": mapnaam, "uid": int(um.group(1)),
+                                           "fout": f"bericht niet op te halen ({ok2})"})
                             continue
-                        m, ics, tekst = tekst_en_ics(ruw)
+                        try:
+                            m, ics, tekst = tekst_en_ics(ruw)
+                        except Exception as e:  # noqa: BLE001
+                            fouten.append({"mailbox": adres, "map": mapnaam, "uid": int(um.group(1)),
+                                           "fout": f"bericht niet te ontleden ({type(e).__name__})"})
+                            continue
                         uit.append({"mailbox": mb["adres"], "map": mapnaam, "uid": int(um.group(1)),
                                     "message_id": kop(m, "Message-ID"), "van": kop(m, "From"), "onderwerp": kop(m, "Subject"),
                                     "datum": kop(m, "Date"), "ics": ics, "tekst": "" if ics else tekst})

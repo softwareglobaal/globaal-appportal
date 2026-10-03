@@ -43,7 +43,8 @@ nu = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
 # --- A9: een toezegging is een opgeslagen taak met ID ------------------------------------------------------------
 t1 = T.plannen("agent_ronde", "agenda-wacht", {"naam": "agenda-wacht", "dag": "2026-10-10"}, "2026-10-02T15:00",
                reden="acht dagen voor de afspraak de titel nakijken", afspraak_kalender="werk", afspraak_id="ev1", afspraak_dag="2026-10-10")
-t1b = T.plannen("agent_ronde", "agenda-wacht", {"naam": "agenda-wacht", "dag": "2026-10-10"}, "2026-10-02T15:00")
+t1b = T.plannen("agent_ronde", "agenda-wacht", {"naam": "agenda-wacht", "dag": "2026-10-10"}, "2026-10-02T15:00",
+                reden="acht dagen voor de afspraak de titel nakijken", afspraak_kalender="werk", afspraak_id="ev1", afspraak_dag="2026-10-10")
 check("een toezegging voor later is een opgeslagen taak met ID; dezelfde taak twee keer plannen geeft dezelfde taak",
       t1["id"] and t1b["id"] == t1["id"] and len(T.lijst()) == 1, str((t1, t1b)))
 check("zonder tijdzone is het Brusselse tijd: 15:00 in Brussel is 13:00 UTC", t1["due_at"] == "2026-10-02T13:00:00+00:00"

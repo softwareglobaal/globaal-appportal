@@ -15,6 +15,7 @@ niets muterends uit; dat doet de uitvoerder na Mehdi's goedkeuring.
 """
 import fcntl
 import json
+from datetime import datetime, timedelta, timezone
 import os
 import sqlite3
 import subprocess
@@ -121,6 +122,13 @@ TOOLS = [
                       "required": ["agent", "wanneer", "reden"]}},
     {"name": "taken_lijst", "description": "De opgeslagen taken (open en recent), met ID, uitvoertijd, status, pogingen en bewijs. Alleen lezen.",
      "input_schema": {"type": "object", "properties": {"agent": {"type": "string"}, "alleen_open": {"type": "boolean"}}}},
+    {"name": "bronnen_lees", "description": "Alleen lezen, om een antwoord met bewijs te geven: de afspraken van een periode op alle agenda's "
+                                            "(privé en Lara alleen als '(privé)'), de mailbronnen (laatste volledige lezing, dekking, aantallen per "
+                                            "status), de regelversies (agenda-taken.json, werkwijze, foutenregister, commit) en de open taken. "
+                                            "Gebruik dit voor je iets over Mehdi's agenda, mail, regels of een toezegging beweert. Hoogstens 31 dagen.",
+     "input_schema": {"type": "object", "properties": {"van": {"type": "string", "description": "JJJJ-MM-DD"},
+                                                       "tot": {"type": "string", "description": "JJJJ-MM-DD, standaard gelijk aan van"}},
+                      "required": ["van"]}},
 ]
 
 
@@ -185,19 +193,59 @@ def voer_tool_uit(naam, inp):
                 params[k] = inp[k]
         if inp["agent"] not in RUNNERS:
             return {"ok": False, "fout": f"geen runner bekend voor '{inp['agent']}'"}
+        start = ""
+        if inp.get("afspraak_kalender") and inp.get("afspraak_id"):
+            staat, start = afspraak_nu(inp["afspraak_kalender"], inp["afspraak_id"])
+            if staat != "er":
+                return {"ok": False, "fout": f"de afspraak is niet te lezen ({staat}); geen taak gezet"}
         try:
             t = taken.plannen("agent_ronde", inp["agent"], params, inp["wanneer"], reden=inp.get("reden", ""),
                               toestemming=inp.get("toestemming", ""), bron="regisseur",
                               afspraak_kalender=inp.get("afspraak_kalender", ""), afspraak_id=inp.get("afspraak_id", ""),
-                              afspraak_dag=inp.get("afspraak_dag", "") or inp.get("dag", ""))
+                              afspraak_dag=inp.get("afspraak_dag", "") or inp.get("dag", ""), afspraak_start=start)
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "fout": f"taak niet opgeslagen ({type(e).__name__}: {str(e)[:200]})"}
         return {"ok": True, "taak_id": t["id"], "uitvoeren_op": t["brussel"], "status": t["status"]}
+    if naam == "bronnen_lees":
+        return bronnen_lees(inp["van"], inp.get("tot") or inp["van"])
     if naam == "taken_lijst":
         rijen = taken.lijst(status=taken.OPEN if inp.get("alleen_open") else None, agent=inp.get("agent"))
         return {"taken": [{k: r[k] for k in ("id", "agent", "soort", "parameters", "reden", "brussel", "status", "pogingen", "bewijs")}
                           for r in rijen]}
     return {"fout": f"onbekend gereedschap {naam}"}
+
+
+def bronnen_lees(van, tot):
+    """De alleen-lezen bronroute van de Regisseur (nacontrole v1.2): agenda, mailstatus, regelversies, open taken.
+    Privédetails (privé-agenda, Lara, Hotmail) komen er niet in: dit antwoord landt op het bord."""
+    import agenda_wacht as W  # noqa: PLC0415
+    import mail_afspraken as MA  # noqa: PLC0415
+    from collections import Counter  # noqa: PLC0415
+    from datetime import date  # noqa: PLC0415
+    d_van, d_tot = date.fromisoformat(str(van)[:10]), date.fromisoformat(str(tot)[:10])
+    d_tot = min(max(d_tot, d_van), d_van + timedelta(days=31))
+    vandaag = W.nu_lokaal().date()
+    items = [x for x in W.afspraken((d_van - vandaag).days, (d_tot - vandaag).days + 1) if not x.get("fout")]
+    agenda_ = [{"start": x["start"][:16], "einde": (x.get("einde") or "")[:16], "agenda": W.KALENDERS.get(x["kalender"], "")[:30],
+                "titel": "(privé)" if W.is_prive(x) else x["titel"][:120], "gasten_van_buiten": len(x.get("deelnemers") or []),
+                "collegas": len(x.get("_agendagasten") or [])}
+               for x in items if d_van.isoformat() <= x["start"][:10] <= d_tot.isoformat()]
+    try:
+        mail = {"leesstand": {m: {k: v[k] for k in ("laatst_gelukt", "dekking", "laatste_fout") if k in v} for m, v in MA.leesstand().items()},
+                "statussen": dict(Counter(a["status"] for a in MA.alle()))}
+    except Exception as e:  # noqa: BLE001
+        mail = {"fout": f"mailregister niet te lezen ({type(e).__name__})"}
+    ww = os.path.join(HIER, "werkwijze")
+    try:
+        import re as _re  # noqa: PLC0415
+        versies = {"agenda-taken.json": json.load(open(os.path.join(ww, "agenda-taken.json"), encoding="utf-8")).get("versie"),
+                   "werkwijze": (_re.search(r"Versie ([0-9.]+)", open(os.path.join(ww, "agenda-wacht.md"), encoding="utf-8").read()) or [None, "?"])[1],
+                   "foutenregister": json.load(open(os.path.join(ww, "foutenregister.json"), encoding="utf-8")).get("versie"),
+                   "commit": subprocess.run(["git", "-C", HIER, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()}
+    except Exception as e:  # noqa: BLE001
+        versies = {"fout": f"versies niet te lezen ({type(e).__name__})"}
+    open_taken = [{k: x[k] for k in ("id", "agent", "soort", "reden", "brussel", "status", "pogingen")} for x in taken.lijst(status=taken.OPEN)]
+    return {"van": d_van.isoformat(), "tot": d_tot.isoformat(), "agenda": agenda_, "mail": mail, "versies": versies, "open_taken": open_taken}
 
 
 def voorstel_terug(v):
@@ -214,7 +262,8 @@ def voorstel_terug(v):
 
 
 def afspraak_nu(kalender, aid):
-    """De afspraak zoals Google ze nu kent: ('weg', None), ('er', 'JJJJ-MM-DD') of ('onbekend', fout)."""
+    """De afspraak zoals Google ze nu kent: ('weg', None), ('er', start) met start de volledige tijd (of de datum bij een
+    hele dag), of ('onbekend', fout)."""
     import agenda  # noqa: PLC0415
     url = f"{agenda.API}/calendars/{urllib.parse.quote(kalender, safe='')}/events/{urllib.parse.quote(aid, safe='')}"
     try:
@@ -227,37 +276,68 @@ def afspraak_nu(kalender, aid):
     if ev.get("status") == "cancelled":
         return ("weg", None)
     s = ev.get("start") or {}
-    return ("er", (s.get("dateTime") or s.get("date") or "")[:10])
+    return ("er", s.get("dateTime") or s.get("date") or "")
+
+
+HERCONTROLE_MINUTEN = 60      # een open taak aan een afspraak: zo vaak kijk ik of de afspraak verschoof of verviel
+
+
+def _afspraak_bijwerken(t, nu):
+    """Kijkt de afspraak van een taak na. Geeft ('weg'|'onbekend'|'er', de bijgewerkte taak). Verschoof de afspraak,
+    dan verschuift de taak mee (relatieve termijn, V3); geschrapt wordt vervallen."""
+    staat, start = afspraak_nu(t["afspraak_kalender"], t["afspraak_id"])
+    if staat == "weg":
+        return staat, taken.zet(t["id"], "vervallen", "de afspraak is geschrapt; niets uitgevoerd", nu=nu)
+    if staat == "onbekend":
+        return staat, t
+    if start and start != (t.get("afspraak_start") or ""):
+        oud = t.get("afspraak_start") or t.get("afspraak_dag")
+        n = taken.herplan(t["id"], start, nu=nu)
+        taken.zet(t["id"], "gepland" if t["status"] != "bezig" else "bezig",
+                  f"afspraak verplaatst van {str(oud)[:16]} naar {start[:16]}; de taak volgt (uitvoeren op {n['brussel']})", nu=nu)
+        return staat, taken.haal(t["id"])
+    taken.nagekeken(t["id"], nu=nu)
+    return staat, t
 
 
 def taken_uitvoeren(nu=None):
-    """Voert de taken uit waarvan het moment gekomen is, een tegelijk (slot). Hangt een taak aan een afspraak, dan eerst
-    herbeoordelen: geschrapt -> vervallen; verplaatst -> de dag volgt. Geslaagd heet pas 'geverifieerd' met exitcode 0
-    en de uitvoer als bewijs; anders een nieuwe poging later, tot het maximum (audit A9)."""
+    """Voert de taken uit waarvan het moment gekomen is, een tegelijk (slot).
+    - Een taak aan een afspraak: eerst de afspraak nakijken. Geschrapt: vervallen. Verplaatst: de uitvoertijd schuift
+      mee met de termijn ('acht dagen ervoor'); is het dan nog niet zover, dan wacht ze (V3). Open taken die nog niet
+      aan de beurt zijn, kijk ik elk uur na, zodat een verplaatsing naar vroeger ook telt.
+    - Een taak die op 'bezig' bleef staan na een crash, wordt na haar lease opnieuw opgepakt; een agent-ronde is
+      herhaalbaar, dus opnieuw draaien is veilig (V4).
+    - Geslaagd heet pas 'geverifieerd' met exitcode 0 en de uitvoer als bewijs; anders later opnieuw, tot het maximum."""
     try:
         slot = open(TAKEN_SLOT, "w")
         fcntl.flock(slot, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         return []
+    nu_t = nu or datetime.now(timezone.utc)
     gedaan = []
-    for t in taken.te_doen(nu):
-        p = dict(t["parameters"])
-        if t["afspraak_kalender"] and t["afspraak_id"]:
-            staat, dag = afspraak_nu(t["afspraak_kalender"], t["afspraak_id"])
+    grens = (nu_t - timedelta(minutes=HERCONTROLE_MINUTEN)).isoformat(timespec="seconds")
+    for t in taken.lijst(status=taken.OPEN, n=200)[:20]:
+        if t["afspraak_kalender"] and t["afspraak_id"] and (t.get("herpland") or "") < grens:
+            staat, _ = _afspraak_bijwerken(t, nu)
             if staat == "weg":
-                taken.zet(t["id"], "vervallen", "de afspraak is geschrapt; niets uitgevoerd", nu=nu)
+                gedaan.append((t["id"], "vervallen"))
+    for t in taken.te_doen(nu):
+        herpakt = t["status"] == "bezig"
+        if t["afspraak_kalender"] and t["afspraak_id"]:
+            staat, t2 = _afspraak_bijwerken(t, nu)
+            if staat == "weg":
                 gedaan.append((t["id"], "vervallen"))
                 continue
             if staat == "onbekend":
-                taken.zet(t["id"], "wacht-op-bron", f"afspraak niet te lezen ({dag}); later opnieuw", poging=True, nu=nu)
+                taken.zet(t["id"], "wacht-op-bron", "afspraak niet te lezen; later opnieuw", poging=True, nu=nu)
                 gedaan.append((t["id"], "wacht-op-bron"))
                 continue
-            if dag and dag != t["afspraak_dag"]:
-                if p.get("dag"):
-                    p["dag"] = dag
-                taken.zet(t["id"], "gepland", f"afspraak verplaatst van {t['afspraak_dag']} naar {dag}; de taak volgt",
-                          parameters=p, afspraak_dag=dag, nu=nu)
-        taken.zet(t["id"], "bezig", "gestart", nu=nu)
+            if t2["due_at"] > nu_t.isoformat(timespec="seconds"):
+                gedaan.append((t["id"], "verschoven"))
+                continue
+            t = t2
+        p = dict(t["parameters"])
+        taken.zet(t["id"], "bezig", "opnieuw gestart: de vorige uitvoering liep niet af (lease verlopen)" if herpakt else "gestart", nu=nu)
         try:
             uit = voer_tool_uit("agent_ronde", p)
         except Exception as e:  # noqa: BLE001
@@ -294,7 +374,8 @@ def antwoord(gesprek, eerder, werkwijze_regisseur):
         "agent_ronde. Beweer niets dat je niet uit het gereedschap haalde; zeg wat je niet kunt en wat "
         "daarvoor nodig is. Een toezegging voor later bestaat alleen als je ze met taak_plannen opslaat en het taak-ID "
         "noemt; een voorstel staat pas op het bord als de tool een voorstel-ID teruggeeft. Zonder ID beloof of bevestig je "
-        "niets. Vraagt Mehdi naar de toestand van de agents, loop dan elke agent uit "
+        "niets. Gaat de vraag over Mehdi's agenda, mail, regels of een toezegging, lees dan eerst bronnen_lees en citeer "
+        "wat daar staat (versie, tijdstip van de laatste volledige lezing, taak-ID). Vraagt Mehdi naar de toestand van de agents, loop dan elke agent uit "
         "agents_overzicht na en noem ze allemaal die op fout of stil staan; vat nooit samen uit je hoofd. "
         "Antwoord in markdown, kort.\n\n"
         "=== JOUW WERKWIJZE (van het bord) ===\n" + (werkwijze_regisseur or "(nog niet uitgeschreven)")

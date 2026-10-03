@@ -31,6 +31,33 @@ import agenda_wacht as W                      # noqa: E402
 from koppelingen import agenda as A           # noqa: E402
 
 STAND = Path.home() / "appportal/mijnagents-data/agenda-signaal.json"
+# Wat de wacht niet kon afhandelen, blijft zichtbaar tot het beoordeeld is (nacontrole v1.2, A5/A8): een dag die na vijf
+# pogingen opgegeven werd, en een annulering zonder start waarvan de dag onbekend is. De zelfcontrole toont ze.
+CONTROLEPUNTEN = Path.home() / "appportal/mijnagents-data/agenda-signaal-controlepunten.json"
+
+
+def controlepunten():
+    try:
+        d = json.loads(CONTROLEPUNTEN.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        d = {}
+    return {"opgegeven": list(d.get("opgegeven") or []), "onbekend": list(d.get("onbekend") or [])}
+
+
+def controlepunten_bewaren(d):
+    CONTROLEPUNTEN.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONTROLEPUNTEN.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, CONTROLEPUNTEN)
+
+
+def beoordeeld(soort, sleutel, door="claude"):
+    """Zet een controlepunt op beoordeeld (soort 'opgegeven' met de dag, of 'onbekend' met kalender|id)."""
+    d = controlepunten()
+    for c in d[soort]:
+        if (c.get("dag") if soort == "opgegeven" else c.get("sleutel")) == sleutel and not c.get("beoordeeld"):
+            c["beoordeeld"] = f"{datetime.now(timezone.utc).isoformat(timespec='minutes')} door {door}"
+    controlepunten_bewaren(d)
 PYTHON = str(Path.home() / "agents/.venv/bin/python")
 # Een dag waarvoor de wacht faalt, probeer ik zo vaak (een poging per ronde van 12 minuten). Daarna geef ik
 # hem luid op, anders houdt een kapotte dag de cursor van zijn agenda eeuwig vast (audit 02-10-2026, A5).
@@ -107,7 +134,7 @@ def _oude_titel(vorig):
         return ""
 
 
-def te_verwerken(kal, items, oud, vinger, vanaf=""):
+def te_verwerken(kal, items, oud, vinger, vanaf="", onbekend=None):
     """Geeft (dagen, regels) voor de afspraken die echt veranderden, en werkt `vinger` bij.
     Een verplaatste afspraak plant de nieuwe en de oude dag (A7). Een geschrapte afspraak zonder start (Google
     geeft dan alleen id en status) plant de dag uit de bewaarde vingerafdruk (A8). Een oude dag voor `vanaf`
@@ -123,6 +150,9 @@ def te_verwerken(kal, items, oud, vinger, vanaf=""):
         vroeger = vroegere_dagen(kal, ev, oud)
         dag = s or min(vroeger, default="")
         if not dag:
+            # een annulering zonder start en zonder vingerafdruk: de dag is onbekend. Niet stil afvinken (A8).
+            if onbekend is not None and ev.get("status") == "cancelled":
+                onbekend.append({"sleutel": sleutel, "kalender": kal, "id": ev.get("id", ""), "titel": (ev.get("summary") or "")[:80]})
             continue
         vp = vingerafdruk(ev)
         vinger[sleutel] = [vp, dag]
@@ -190,7 +220,7 @@ def ronde(tijd):
     open_ = dict(st.get("open") or {})
     kop = {"Authorization": "Bearer " + A._toegang()}
     vanaf = (nu - timedelta(days=1)).date().isoformat()
-    dagen, wat, niet_gelezen, per_kal = set(), [], [], {}
+    dagen, wat, niet_gelezen, per_kal, onbekend = set(), [], [], {}, []
     oud = st.get("vinger") or {}
     vinger = dict(oud)
     for kal in kals:
@@ -200,7 +230,7 @@ def ronde(tijd):
             print(f"{tijd} {kal[:32]}: {_leesfout(e)}, deze agenda telt deze ronde niet", file=sys.stderr)
             niet_gelezen.append(kal)
             continue
-        per_kal[kal], w_ = te_verwerken(kal, items, oud, vinger, vanaf)
+        per_kal[kal], w_ = te_verwerken(kal, items, oud, vinger, vanaf, onbekend)
         dagen |= per_kal[kal]
         wat += w_
 
@@ -212,11 +242,12 @@ def ronde(tijd):
         print(f"{tijd} geen nieuwe wijziging, {len(open_)} open dag(en) opnieuw")
     else:
         print(tijd, "niets gewijzigd" + (f", maar {len(niet_gelezen)} agenda('s) niet gelezen" if niet_gelezen else ""))
-    gefaald = {}
+    gefaald, geslaagd = {}, set()
     for dag in sorted(dagen | set(open_)):
         gelukt, uitleg = draai_wacht(dag)
         if gelukt:
             open_.pop(dag, None)
+            geslaagd.add(dag)
             print(f"  wacht gedraaid voor {dag}: {uitleg}")
         else:
             gefaald[dag] = uitleg
@@ -241,6 +272,21 @@ def ronde(tijd):
     for kal in per_kal:
         if kal not in vast:
             cursor[kal] = nu.isoformat()
+    # Controlepunten: opgegeven dagen en onbekende annuleringen blijven staan tot ze beoordeeld zijn; een opgegeven dag
+    # die later toch slaagt, is daarmee beoordeeld (resultaatcontrole), met het tijdstip erbij
+    cp = controlepunten()
+    for o in opgegeven[len(st.get("opgegeven") or []):]:
+        cp["opgegeven"].append(dict(o, beoordeeld=""))
+    for c in cp["opgegeven"]:
+        if not c.get("beoordeeld") and c.get("dag") in geslaagd:
+            c["beoordeeld"] = f"{nu.isoformat(timespec='minutes')}: de wacht slaagde later voor deze dag"
+    gekend = {c["sleutel"] for c in cp["onbekend"]}
+    for c in onbekend:
+        if c["sleutel"] not in gekend:
+            cp["onbekend"].append(dict(c, gezien=nu.isoformat(timespec="minutes"), beoordeeld=""))
+            print(f"{tijd} annulering zonder bekende dag: {c['kalender'][:32]} {c['id'][:20]}; controlepunt", file=sys.stderr)
+    if onbekend or len(opgegeven) > len(st.get("opgegeven") or []) or any(c.get("dag") in geslaagd for c in cp["opgegeven"]):
+        controlepunten_bewaren(cp)
     grens = (nu - timedelta(days=2)).date().isoformat()
     vinger = {k: v for k, v in vinger.items() if v[1] >= grens}
     bewaar({"gekeken": nu.isoformat(), "cursor": cursor, "laatste_dagen": sorted(dagen), "vinger": vinger,

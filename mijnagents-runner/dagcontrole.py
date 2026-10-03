@@ -123,8 +123,8 @@ def dagcontrole(items, dag):
     #     geen afspraken): wat die dag niet mag, staat er toch (FR-83, gezien 01-10-2026 voor vrijdag 02-10)
     markers = W.markeringen_uit(items, dag)
     for a in afspraken:
-        if W.JA_MERK in (a.get("_merk") or {}):
-            continue          # Mehdi zei ja voor deze dag; dat staat op de afspraak zelf (FR-92)
+        if (a.get("_merk") or {}).get(W.JA_MERK) == dag:
+            continue          # Mehdi zei ja voor precies deze dag; verplaatst naar een andere dag telt die ja niet (FR-92, V10)
         m = W.markering_tegen(a["titel"], dag, markers)
         if not m:
             continue
@@ -140,12 +140,18 @@ def dagcontrole(items, dag):
     try:
         import mail_afspraken as _MA  # noqa: PLC0415
         if os.path.exists(_MA.DB):
+            wat = {"ontbreekt": "staat in mail, niet in de agenda", "geannuleerd_staat_er": "in mail geannuleerd, staat nog in de agenda",
+                   "afwijkend": "staat in mail op een ander uur dan in de agenda", "kandidaat": "staat in mail; op dat uur staat iets anders"}
             for m in _MA.alle():
-                if m["status"] in ("ontbreekt", "geannuleerd_staat_er") and m["start"][:10] == dag:
-                    a = {"start": m["start"], "titel": m["titel"], "kalender": "", "id": ""}      # geen agenda-item: het ontbreekt
-                    meld("mail_ontbreekt", a, f"{m['start'][11:16]} {m['titel'][:45]}: "
-                         + ("staat in mail, niet in de agenda" if m["status"] == "ontbreekt" else "in mail geannuleerd, staat nog in de agenda")
-                         + f" (bron {m['bron_mailbox']})")
+                if m["status"] in wat and m["start"][:10] == dag:
+                    if m.get("prive") or m["bron_mailbox"] in _MA.PRIVE:
+                        # privé (Hotmail): geen titel en geen adres in een bevinding, die kan naar het bord (V9)
+                        a = {"start": m["start"], "titel": "privé-afspraak uit mail", "kalender": "", "id": "", "_prive": True}
+                        meld("mail_ontbreekt", a, f"{m['start'][11:16]} een privé-afspraak: {wat[m['status']]}; details in je privé-agenda")
+                    else:
+                        a = {"start": m["start"], "titel": m["titel"], "kalender": "", "id": ""}      # geen agenda-item: het ontbreekt
+                        meld("mail_ontbreekt", a, f"{m['start'][11:16]} {m['titel'][:45]}: {wat[m['status']]}"
+                             + (f" ({m['detail']})" if m.get("detail") else "") + f" (bron {m['bron_mailbox']})")
     except Exception as e:  # noqa: BLE001
         a = {"start": dag, "titel": "", "kalender": "", "id": ""}
         meld("mail_ontbreekt", a, f"register van mail niet te lezen ({type(e).__name__})")

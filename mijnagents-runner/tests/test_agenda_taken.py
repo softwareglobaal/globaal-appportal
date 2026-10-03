@@ -437,8 +437,8 @@ try:
 finally:
     W.klant_van_nummer = _oud_k
 check("een titel met projectnummer krijgt de klant en bij buiten het adres",
-      _t1 == "!! Mehdi & Catalin: [HARC-KB] 2505 - Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele"
-      and _t2 is None and _t3 == "Mehdi: [HARC-KO] 2505 - Norma Gleeson" and _t4 is None, str((_t1, _t2, _t3, _t4)))
+      _t1 == "!! Mehdi & Catalin: [HA-KB] 2505 - Norma Gleeson, Aarschotsesteenweg 252, 3012 Wilsele"
+      and _t2 is None and _t3 == "Mehdi: [HA-KO] 2505 - Norma Gleeson" and _t4 is None, str((_t1, _t2, _t3, _t4)))
 _gp9 = []
 _op9, _ot9 = W._patch, W.agenda._toegang
 W._patch = lambda a, body, tok: _gp9.append(a["titel"])
@@ -486,10 +486,10 @@ check("een activiteit wordt gelezen en voorgesteld",
       and W.lees_titel("!! Mehdi: [HARC-KB] VOPL 2505")["buiten"]
       and W.lees_titel("Mehdi: [UNAB-PO] Ren Lee")["type"] == ""
       and W.lees_titel("Mehdi & Siyan: [ELEV-IN] AI+AT")["type"] == "AI"
-      and W.titel_aanvulling({"titel": "Mehdi & Siyan: [ELEV-IN] Automation"}, {})[0] == "Mehdi & Siyan: [ELEV-IN] AI"
+      and W.titel_aanvulling({"titel": "Mehdi & Siyan: [ELEV-IN] Automation"}, {})[0] == "Mehdi & Siyan: [EL-IN] AI"
       and W.titel_aanvulling({"titel": "Mehdi, Matthew, Gul & Aqib: [TKNB-IN] AI stabiliteit"}, {})[0] is None
-      and W.titel_aanvulling({"titel": "!! Mehdi: [HARC-KB] 2282 voorlopige oplevering"}, {})[0] == "!! Mehdi: [HARC-KB] VO 2282 voorlopige oplevering"
-      and W.titel_aanvulling({"titel": "Mehdi: [UNAB-PO] Kian Nazeryan - Stabiliteit"}, {})[0] == "Mehdi: [UNAB-PO] ST Kian Nazeryan - Stabiliteit"
+      and W.titel_aanvulling({"titel": "!! Mehdi: [HARC-KB] 2282 voorlopige oplevering"}, {})[0] == "!! Mehdi: [HA-KB] VO 2282 voorlopige oplevering"
+      and W.titel_aanvulling({"titel": "Mehdi: [UNAB-PO] Kian Nazeryan - Stabiliteit"}, {})[0] == "Mehdi: [UB-PO] ST Kian Nazeryan - Stabiliteit"
       and W.activiteit_voorstel("!! Mehdi: [HARC-KB] 2505 stabiliteit", W.lees_titel("!! Mehdi: [HARC-KB] 2505 stabiliteit")) == "")
 check("architectuur kent WB, VO, DO, OP en PL (twee letters, 02-10-2026)", W.ACTIVITEITEN["HARC"] == ("WB", "VO", "DO", "OP", "PL"))
 
@@ -561,8 +561,8 @@ try:
 finally:
     W.projectadressen.index, W.klant_van_nummer = _oud_i, _oud_k2
 check("een projectnummer met een projectmap wordt een volledige titel, zonder vraag",
-      _p1 == "Mehdi: [HARC-KO] 2607 - Robin Verlinden en Silvie Boudou"
-      and _p2 == "!! Mehdi: [HARC-KB] WB 2607 - Robin Verlinden en Silvie Boudou, Kerkstraat 1, 3000 Leuven", str((_p1, _p2)))
+      _p1 == "Mehdi: [HA-KO] 2607 - Robin Verlinden en Silvie Boudou"
+      and _p2 == "!! Mehdi: [HA-KB] WB 2607 - Robin Verlinden en Silvie Boudou, Kerkstraat 1, 3000 Leuven", str((_p1, _p2)))
 
 # De vraag staat in de agenda zelf (VR), niet in Telegram (25-09-2026)
 _gpv = []
