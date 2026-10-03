@@ -251,42 +251,61 @@ class Felix:
     def aanmelden(self, email=None, wachtwoord=None):
         """Meldt aan met A-profiel (e-mail en wachtwoord; FelixArchief vraagt het lage zekerheidsniveau).
 
-        Vraagt de pagina een tweede factor of een keuze die we niet kennen, dan stoppen we met een duidelijke
-        fout in plaats van te gokken. Geeft de gebruiker terug zoals de site hem kent (zonder rijksregister).
+        Elke stap heeft een naam; loopt er een vast, dan zegt de fout welke, met een printscreen erbij.
+        Vraagt de pagina een tweede factor of iets onbekends, dan stoppen we in plaats van te gokken.
         """
         email = email or os.environ.get("FELIXARCHIEF_EMAIL")
         wachtwoord = wachtwoord or os.environ.get("FELIXARCHIEF_WACHTWOORD")
         if not email or not wachtwoord:
             raise RuntimeError("FELIXARCHIEF_EMAIL en FELIXARCHIEF_WACHTWOORD ontbreken in de omgeving")
         p = self.page
-        p.goto(BASIS + "/", wait_until="domcontentloaded", timeout=60000)
-        self._weiger_cookies()
-        p.get_by_text("Aanmelden", exact=True).first.click(timeout=15000)
-        p.get_by_text("Meld aan met je A-profiel").click(timeout=15000)
-        p.wait_for_url(re.compile(r"authentication\.antwerpen\.be"), timeout=60000)
-        p.get_by_text("Met je e-mailadres of gebruikersnaam").click(timeout=15000)
-        veld = p.locator("input[type=email], input[name=username], input[autocomplete=username], input[type=text]").first
-        veld.wait_for(timeout=20000)
-        veld.fill(email)
-        ww = p.locator("input[type=password]")
-        if not ww.is_visible():
-            p.keyboard.press("Enter")  # het formulier vraagt e-mail en wachtwoord in twee stappen
-            ww.wait_for(timeout=20000)
-        ww.fill(wachtwoord)
-        p.keyboard.press("Enter")
+        stap = "startpagina"
         try:
+            p.goto(BASIS + "/", wait_until="domcontentloaded", timeout=60000)
+            self._weiger_cookies()
+            stap = "aanmeldknop"
+            p.locator("text=Aanmelden").first.click(timeout=20000, force=True)
+            stap = "aanmeldlink A-profiel"
+            link = p.locator("a", has_text="Meld aan met je A-profiel").first
+            link.wait_for(state="attached", timeout=20000)
+            p.goto(link.get_attribute("href"), wait_until="domcontentloaded", timeout=60000)  # niet klikken: rechtstreeks
+            stap = "keuze e-mailadres"
+            p.wait_for_url(re.compile(r"authentication\.antwerpen\.be"), timeout=60000)
+            p.locator("text=Met je e-mailadres of gebruikersnaam").first.click(timeout=20000, force=True)
+            stap = "e-mailadres"
+            veld = p.locator("input[type=email], input[name=username], input[autocomplete=username], input[type=text]").first
+            veld.wait_for(timeout=20000)
+            veld.fill(email)
+            stap = "wachtwoord"
+            ww = p.locator("input[type=password]")
+            if not ww.is_visible():
+                p.keyboard.press("Enter")  # e-mail en wachtwoord in twee stappen
+                ww.wait_for(timeout=20000)
+            ww.fill(wachtwoord)
+            p.keyboard.press("Enter")
+            stap = "terug naar FelixArchief"
             p.wait_for_url(re.compile(r"felixarchief\.antwerpen\.be"), timeout=60000)
-        except Exception:
-            tekst = p.locator("body").inner_text()[:300].replace("\n", " ")
-            raise RuntimeError(f"Aanmelden niet gelukt, de pagina vraagt nog iets: {tekst}")
-        p.wait_for_timeout(3000)
-        gebruiker = p.evaluate("""() => { const u = angular.element(document.body).injector()
-                                 .get('AuthenticationService').getUser() || {};
-                                 return {aangemeld: !!u.loggedIn, naam: (u.firstname||'') + ' ' + (u.lastname||''),
-                                         email: u.emailAdress, erewoord: !!u.honorStatement}; }""")
-        if not gebruiker.get("aangemeld"):
-            raise RuntimeError("Terug op FelixArchief, maar niet aangemeld")
-        return gebruiker
+            stap = "verwerken van de aanmelding"
+            for _ in range(30):  # 'Bezig met aanmelden...' kan even duren
+                p.wait_for_timeout(2000)
+                if "/callback" in p.url:
+                    continue
+                g = p.evaluate("""() => { try { const u = angular.element(document.body).injector()
+                                    .get('AuthenticationService').getUser() || {};
+                                    return {aangemeld: !!u.loggedIn, naam: (u.firstname||'') + ' ' + (u.lastname||''),
+                                            erewoord: !!u.honorStatement}; } catch (e) { return {}; } }""")
+                if g.get("aangemeld"):
+                    return g
+            raise RuntimeError("niet aangemeld na 60 seconden")
+        except Exception as e:
+            pad = os.path.join(os.path.expanduser("~/appportal/mijnagents-data/felix"), "aanmelden-mislukt.png")
+            os.makedirs(os.path.dirname(pad), exist_ok=True)
+            try:
+                p.screenshot(path=pad)
+            except Exception:
+                pass
+            raise RuntimeError(f"Aanmelden vastgelopen bij '{stap}' ({p.url.split('?')[0]}): "
+                               f"{str(e).splitlines()[0][:150]}; printscreen {pad}")
 
     def download(self, url, pad):
         """Een bestand ophalen met de aanmelding van deze browser en bewaren; geeft het aantal bytes."""

@@ -236,7 +236,15 @@ def voer_uit(adres, uitmap=None):
             fouten.append(f"{os.path.basename(args[-1])}: {str(e).splitlines()[0][:160]}")
 
     with fa.Felix() as felix:
+        aanmelding = None
+        if fa.heeft_aanmelding():  # eerst aanmelden, op een verse startpagina; daarna zoeken en downloaden
+            try:
+                aanmelding = felix.aanmelden()
+            except Exception as e:
+                aanmelding = {"fout": str(e)[:300]}
         z = zoektocht(adres, felix)
+        if aanmelding:
+            z["aanmelding"] = aanmelding
         if z["pand"].get("geopunt"):  # echte printscreen van geopunt.be, geen zelfgemaakte kaart
             vastleggen(felix.schermafdruk_geopunt, z["pand"]["geopunt"], os.path.join(uitmap, "01 Geopunt.png"))
         volg = 2
@@ -254,12 +262,14 @@ def voer_uit(adres, uitmap=None):
         for i, r in enumerate(z.get("raak") or [], start=1):
             pad = os.path.join(uitmap, f"{10 + i} {r['aanvraag'][:4]} {r['inventaris']} {REEKSEN.get(r['reeks'], '')}.png")
             vastleggen(felix.schermafdruk_dossier, r["inventaris"], r["reeks"], pad)
-        if z.get("raak") and fa.heeft_aanmelding():
-            try:
-                z["aanmelding"] = felix.aanmelden()
-                z["downloads"] = _downloaden(felix, z, uitmap)
-            except Exception as e:  # zoeken is gelukt; een download die faalt mag dat niet wegvegen
-                z["downloads_fout"] = str(e)[:300]
+        if z.get("raak") and aanmelding:
+            if aanmelding.get("fout"):
+                z["downloads_fout"] = aanmelding["fout"]
+            else:
+                try:
+                    z["downloads"] = _downloaden(felix, z, uitmap)
+                except Exception as e:  # zoeken is gelukt; een download die faalt mag dat niet wegvegen
+                    z["downloads_fout"] = str(e)[:300]
     if fouten:
         z.setdefault("pand", {}).setdefault("opmerkingen", []).extend(f"printscreen niet gelukt: {f}" for f in fouten)
     os.makedirs(os.path.join(uitmap, "_gegevens"), exist_ok=True)  # voor de agent, niet om te lezen
