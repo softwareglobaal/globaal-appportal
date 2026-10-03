@@ -318,6 +318,32 @@ class Felix:
         self.page.screenshot(path=pad, full_page=True)
         return pad
 
+    def schermafdruk_geopunt(self, adres_geopunt, pad):
+        """Echte printscreen van geopunt.be, zoals een mens hem maakt (Mehdi, 03-10-2026: geen zelfgemaakte beelden).
+
+        Geopunt bewaart de locatie niet in de URL: zoeken, het adres kiezen, de kadastrale informatie openen.
+        """
+        p = self._ctx.new_page()
+        try:
+            p.goto("https://www.geopunt.be/kaart", wait_until="domcontentloaded", timeout=60000)
+            try:
+                p.get_by_text("Enkel noodzakelijke cookies aanvaarden").click(timeout=8000)
+            except Exception:
+                pass
+            veld = p.get_by_placeholder("Zoek op de kaart")
+            veld.click(timeout=20000)
+            veld.fill(adres_geopunt)
+            p.get_by_text(adres_geopunt, exact=True).first.click(timeout=20000)
+            try:
+                p.get_by_text("Kadastrale informatie").click(timeout=10000)
+            except Exception:
+                pass
+            p.wait_for_timeout(5000)  # de kaarttegels laden na
+            p.screenshot(path=pad, full_page=False)
+        finally:
+            p.close()
+        return pad
+
     def schermafdruk_html(self, html, pad):
         """Een eigen overzicht (tabel, kaart) renderen en vastleggen."""
         p = self._ctx.new_page()

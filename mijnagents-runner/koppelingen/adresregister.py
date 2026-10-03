@@ -9,7 +9,6 @@ de officiele straatnaam, alle huisnummers op hetzelfde perceel, en de straten di
 Alleen publieke diensten van de Vlaamse overheid, zonder sleutel:
 - geo.api.vlaanderen.be/geolocation/v4   adres -> punt, en punt -> dichtste adressen
 - api.basisregisters.vlaanderen.be/v2    adressen, busnummers, percelen
-- geo.api.vlaanderen.be WMS              GRB-basiskaart, percelen (Adpf), adrespunten
 """
 import json
 import re
@@ -19,11 +18,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 GEOLOC = "https://geo.api.vlaanderen.be/geolocation/v4/Location"
 REGISTER = "https://api.basisregisters.vlaanderen.be/v2"
-WMS = {
-    "basiskaart": ("https://geo.api.vlaanderen.be/GRB-basiskaart/wms", "GRB_BSK"),
-    "percelen": ("https://geo.api.vlaanderen.be/Adpf/wms", "Adpf"),
-    "adressen": ("https://geo.api.vlaanderen.be/Adressenregister/wms", "A_INGEBRUIK"),
-}
 HOEK_AFSTAND_M = 30  # een andere straat binnen deze afstand van het adrespunt: mogelijk hoekpand
 
 
@@ -168,15 +162,3 @@ def pand(adres):
     uit["straten_dichtbij"] = {s: sorted(v) for s, v in dicht.items()}
     uit["hoekpand"] = len(uit["nummers_per_straat"]) > 1 or bool(dicht)
     return uit
-
-
-def kaart_urls(x, y, straal=45, px=900):
-    """WMS-afbeeldingen rond een punt: basiskaart, percelen en adrespunten, in dezelfde uitsnede."""
-    bbox = f"{x - straal},{y - straal},{x + straal},{y + straal}"
-    urls = {}
-    for naam, (dienst, laag) in WMS.items():
-        params = {"SERVICE": "WMS", "VERSION": "1.3.0", "REQUEST": "GetMap", "LAYERS": laag, "STYLES": "",
-                  "CRS": "EPSG:31370", "BBOX": bbox, "WIDTH": px, "HEIGHT": px, "FORMAT": "image/png",
-                  "TRANSPARENT": "FALSE" if naam == "basiskaart" else "TRUE"}
-        urls[naam] = dienst + "?" + urllib.parse.urlencode(params)
-    return urls
