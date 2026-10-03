@@ -111,8 +111,8 @@ def zoektocht(adres, felix):
         z["besluit"] = (f"{soort}. Gevonden: {len(raak)} dossier(s), van {raak[0]['aanvraag'][:4]} tot "
                         f"{raak[-1]['aanvraag'][:4]}; {sum(1 for r in raak if r['status'] == 'leeszaal')} alleen in de leeszaal.")
     elif any(s["naam_in_felix"] for s in z["straten"].values()):
-        z["besluit"] = ("Straat gevonden in FelixArchief, huisnummer niet. De buren en de dossiers zonder "
-                        "nummer staan in het overzicht, als bewijs dat er gezocht is.")
+        z["besluit"] = ("Straat gevonden in FelixArchief, huisnummer niet. De printscreens tonen het; "
+                        "wat er wel in de straat ligt, staat hieronder.")
     else:
         z["besluit"] = "De straat staat in FelixArchief niet onder de officiele naam, ook niet onder de varianten."
     return z
