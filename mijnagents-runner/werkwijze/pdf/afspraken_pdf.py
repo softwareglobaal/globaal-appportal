@@ -27,7 +27,7 @@ _ww = (REPO / "werkwijze/agenda-wacht.md").read_text(encoding="utf-8")
 WW_VERSIE = (_re.search(r"Versie ([0-9.]+)", _ww) or [None, "?"])[1]
 COMMIT = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip() or "?"
 BOUWDATUM = __import__("datetime").date.today().strftime("%d-%m-%Y")
-VERSIE = "3.3"
+VERSIE = "3.4"
 NAAM = f"Agendawacht - afspraken kleuren en taken v{VERSIE}"
 e = html.escape
 

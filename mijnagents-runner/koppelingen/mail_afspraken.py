@@ -74,6 +74,10 @@ def _db():
         for k, soort in kolommen.items():
             if k not in er:
                 c.execute(f"ALTER TABLE {tabel} ADD COLUMN {k} {soort}")
+    # het privacylabel volgt de mailbox, ook voor rijen van voor de kolom bestond (live gezien 03-10-2026: de VME-mail
+    # uit Hotmail stond op 0)
+    c.execute(f"UPDATE afspraak SET prive=1 WHERE prive=0 AND bron_mailbox IN ({','.join('?' * len(PRIVE))})", sorted(PRIVE))
+    c.commit()                    # de upgrade meteen vastleggen: geen open schrijftransactie achterlaten
     return c
 
 

@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.28",
+ "versie": "3.29",
  "datum": "03-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -2352,7 +2352,7 @@
    "waarom_niet_gezien": "De master beloofde 'alleen een melding zonder details', maar het label ging onderweg verloren.",
    "oorzaak": "Geen privacylabel door de keten.",
    "soort_oorzaak": "code",
-   "oplossing": "Het register bewaart 'prive'; de dagcontrole schrijft voor Hotmail geen titel of adres; is_prive() en voor_bord(): van de privé-agenda, Lara en Hotmail gaat alleen de soort naar het bord.",
+   "oplossing": "Het register bewaart 'prive'; de dagcontrole schrijft voor Hotmail geen titel of adres; is_prive() en voor_bord(): van de privé-agenda, Lara en Hotmail gaat alleen de soort naar het bord. Live teruglezing 03-10-2026: een rij van voor de privé-kolom (de VME-mail uit Hotmail) stond op 0; de upgrade van het register zet het label nu ook voor bestaande rijen, meteen gecommit.",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_nacontrole_v12.py",

@@ -264,6 +264,22 @@ def v9():
 proef("V9 een privé-afspraak uit Hotmail komt zonder titel of adres in een bevinding; naar het bord gaat van privé alleen de soort", v9)
 
 
+def v9b():
+    import sqlite3
+    nieuwe_mail_db()
+    c = sqlite3.connect(MA.DB)
+    for s in MA.SCHEMA:                 # een register zoals het er voor de privé-kolom uitzag
+        c.execute(s)
+    c.execute("INSERT INTO afspraak(sleutel, soort, bron_mailbox, bron_message_id) VALUES('zonder|<v@x>', 'zonder_tijd', "
+              "'mehdichegini@hotmail.com', '<v@x>')")
+    c.commit(); c.close()
+    rij = [a for a in MA.alle() if a["sleutel"] == "zonder|<v@x>"]
+    return (len(rij) == 1 and rij[0]["prive"] == 1), rij
+
+
+proef("V9 een rij uit Hotmail van voor het privacylabel krijgt bij de upgrade alsnog het label privé", v9b)
+
+
 # ---------------------------------------------------------------- V10-V12
 def v10():
     items = [{"id": "m", "hele_dag": True, "titel": "geen afspraken", "start": "2026-10-06", "einde": "2026-10-07", "kalender": W.WERKAGENDA},

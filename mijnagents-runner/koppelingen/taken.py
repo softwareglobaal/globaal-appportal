@@ -70,6 +70,7 @@ def _db():
     for k, soort in EXTRA_KOLOMMEN.items():
         if k not in er:
             c.execute(f"ALTER TABLE taak ADD COLUMN {k} {soort}")
+    c.commit()
     return c
 
 
