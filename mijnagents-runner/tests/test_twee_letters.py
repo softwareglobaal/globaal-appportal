@@ -102,8 +102,11 @@ def _teksten(x, pad=()):
             yield from _teksten(v, pad)
     elif isinstance(x, str):
         yield pad, x
+# ook zonder haken: 'de code HDSS' als regel (nacontrole v1.2: de PDF noemde HDSS als zichtbare code)
+_OUD_VRIJ = re.compile(r"\bcode\s+(HARC|UNAB|TKNB|ENEF|ELEV|HARM|CONT|HINV|MELO|HDSI|HDSS|BFUT|CORE|ENST|MEDI|ORVA|QOPP|ZIDI|ALGE)\b")
 _regels_oud = [("/".join(p), x[:60]) for p, x in _teksten(taken)
-               if _OUD_M.search(x) and not ({"beslissingen", "oude_codes", "openstaand"} & set(p))]
+               if (_OUD_M.search(x) or _OUD_VRIJ.search(x))
+               and not ({"beslissingen", "oude_codes", "openstaand", "voorstel_twee_letters"} & set(p))]
 check("de master schrijft geen oude code meer voor (buiten geschiedenis, oude_codes en openstaande vragen)", not _regels_oud, str(_regels_oud))
 
 # wat de agent zelf schrijft, draagt nooit een oude code

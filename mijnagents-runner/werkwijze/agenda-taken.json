@@ -1,5 +1,5 @@
 {
- "versie": "5.5",
+ "versie": "5.6",
  "datum": "2026-10-02",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -1215,7 +1215,7 @@
   "bestand": "werkwijze/externe-relaties.json (de agent leest die; geen kopie hier)",
   "overkoepelende_code": "ALGE = Algemeen, vier letters net als de andere codes, voor een leverancier of afspraak die niet bij een bedrijf hoort maar voor de hele groep geldt",
   "voorbeelden": "Nadien (onze boekhouder) en Wally (AI-bedrijf dat software levert): allebei leverancier, allebei AL (vroeger ALGE). In de titel [AL-LO] als het online is, [AL-LB] als het buiten is; kleur paars zoals elke leverancier",
-  "waarom_geen_lijst_van_bedrijven": "een leverancier voor meerdere bedrijven krijgt niet een rij afkortingen in de titel (niet leesbaar), maar altijd de ene code ALGE"
+  "waarom_geen_lijst_van_bedrijven": "een leverancier voor meerdere bedrijven krijgt niet een rij afkortingen in de titel (niet leesbaar), maar altijd de ene code AL (vroeger ALGE)"
  },
  "geen_auto": {
   "wat": "dagen waarop Mehdi geen auto heeft en dus niet naar buiten kan rijden",
@@ -1247,8 +1247,8 @@
   "noot_02_10": "ZB/ZO blijft gereserveerd voor dit voorstel; B2B heet sinds 02-10-2026 XB/XO, zodat de betekenis niet botst."
  },
  "hds": {
-  "regel": "HDS-afspraken krijgen de code HDSS. HDSI is momenteel niet actief (Mehdi doet niets voor HDSI)",
-  "let_op": "de volledige naam van HDSS nooit tonen aan klanten of prospecten; alleen de code",
+  "regel": "HDS-afspraken krijgen de agendacode DS (interne sleutel HDS-SU, vroeger in de titel). HDS India (DI) is momenteel niet actief (Mehdi doet niets voor HDS India)",
+  "let_op": "de volledige landnaam nooit tonen aan klanten of prospecten; alleen DS of SU",
   "mehdi": "23-09-2026"
  },
  "in_een_keer_goed": {

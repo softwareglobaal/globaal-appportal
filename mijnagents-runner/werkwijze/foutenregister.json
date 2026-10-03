@@ -2463,7 +2463,7 @@
    "waarom_niet_gezien": "Vaste tekst in de generator.",
    "oorzaak": "Tekst in plaats van bron.",
    "soort_oorzaak": "document",
-   "oplossing": "De generator leest de registerversie uit foutenregister.json en noemt de agendacode DS.",
+   "oplossing": "De generator leest de registerversie uit foutenregister.json en noemt de agendacode DS. Ook de master zelf: de regel onder 'hds' schreef nog 'de code HDSS' voor en 'externe_relaties' nog 'de code ALGE' (nu DS en AL); de CI-grendel in tests/test_twee_letters.py vangt een oude code nu ook zonder haken.",
    "grendel": {
     "soort": "test",
     "waar": "tests/test_nacontrole_v12.py",
