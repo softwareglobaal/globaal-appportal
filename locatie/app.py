@@ -124,6 +124,22 @@ def db():
         if kolom not in bestaand:
             conn.execute(f"ALTER TABLE punt ADD COLUMN {kolom} {soort}")
     _bron_erbij(conn)
+    # Wat een tracker stuurt zonder positie: zijn instellingen (ALM), toestelinfo
+    # (INF), een hartslag (HBD), een bevestiging op een commando (ACK). Tot
+    # 03-10-2026 werd dat alleen beantwoord en op 90 tekens in de log gezet, zodat
+    # de teruggelezen instellingen van de tracker niet te lezen waren. Het is ook
+    # het levensteken per toestel als hij stilstaat en geen positie meet.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS toestelbericht (
+            ontvangen INTEGER NOT NULL,    -- wanneer binnengekomen (epoch)
+            bron      TEXT NOT NULL,       -- de naam uit ATRACK_IMEIS
+            soort     TEXT,                -- ALM, INF, HBD, QSS, ...
+            kop       TEXT,                -- RESP, ACK, BUFF
+            verzonden INTEGER,             -- verzendtijd volgens het toestel
+            ruw       TEXT NOT NULL
+        )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS toestelbericht_bron "
+                 "ON toestelbericht(bron, ontvangen)")
     conn.commit()
     return conn
 

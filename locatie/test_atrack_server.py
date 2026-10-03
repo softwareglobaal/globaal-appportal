@@ -119,6 +119,49 @@ def test_bevestiging_komt_pas_na_het_opslaan():
         atrack_server.schrijf = echt
 
 
+def berichten(waar="1=1", *args):
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    try:
+        return [dict(r) for r in conn.execute("SELECT * FROM toestelbericht WHERE " + waar, args)]
+    finally:
+        conn.close()
+
+
+# Teruggelezen instellingen (AT+GTRTO sub 2), vorm uit de handleiding v3.02,
+# 4.4.2. Bewust zo gekozen dat er twee getallen voor de verzendtijd staan.
+ALM = ("+RESP:GTALM,8020090501,864696060004173,GV500CG,0,1,1,CFG,gv500cg,GV500CG,0,0.0,"
+       ",,003F,1,00,1BDEF,,3,0,300,00,1,0,0,0017,0,0,20261003120000,0007$")
+HBD = "+ACK:GTHBD,8020090501,864696060004173,GV500CG,20261003120100,0008$"
+
+
+def test_teruggelezen_instellingen_worden_voluit_bewaard_en_zijn_geen_meting():
+    """03-10-2026: de log kapte op 90 tekens en bewaarde niets, zodat we de
+    echte veldvolgorde van de tracker (protocol 5.01) niet konden nalezen."""
+    voor = len(rijen())
+    terug, wat = atrack_server.verwerk(ALM)
+    assert wat == "geen meting", wat
+    assert terug == "+SACK:0007$", terug
+    assert len(rijen()) == voor, "instellingen mogen nooit als punt (0, 0) belanden"
+    b = berichten("soort = 'ALM'")
+    assert len(b) == 1 and b[0]["ruw"] == ALM and b[0]["bron"] == "auto", b
+    assert b[0]["kop"] == "RESP" and b[0]["verzonden"] == 1791028800, b
+
+
+def test_een_hartslag_wordt_bevestigd_en_als_levensteken_bewaard():
+    terug, wat = atrack_server.verwerk(HBD)
+    assert terug == "+SACK:GTHBD,8020090501,0008$", terug
+    b = berichten("soort = 'HBD'")
+    assert len(b) == 1 and b[0]["kop"] == "ACK", b
+
+
+def test_een_vreemd_toestel_schrijft_ook_geen_toestelbericht():
+    voor = len(berichten())
+    terug, wat = atrack_server.verwerk(ALM.replace("864696060004173", "111111111111111"))
+    assert terug is None and wat == "onbekend toestel"
+    assert len(berichten()) == voor
+
+
 def test_de_poort_neemt_een_echte_verbinding_aan():
     server = atrack_server.Server(("127.0.0.1", 0), atrack_server.Verbinding)
     poort = server.server_address[1]

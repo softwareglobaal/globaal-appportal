@@ -54,11 +54,34 @@ def schema_klaar():
     webapp.db().close()
 
 
+def bewaar_toestelbericht(bericht):
+    """Een bericht zonder positie volledig bewaren, voor het bevestigd wordt.
+
+    Teruggelezen instellingen (ALM) zijn langer dan een logregel en waren
+    anders kwijt. Geeft True als het bericht er daarna staat.
+    """
+    bron = TOESTELLEN.get(bericht.get("imei") or "")
+    if not bron:
+        return False
+    with _slot:
+        conn = sqlite3.connect(DB_PAD, timeout=10)
+        try:
+            conn.execute(
+                """INSERT INTO toestelbericht (ontvangen, bron, soort, kop, verzonden, ruw)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (int(time.time()), bron, bericht.get("soort"), bericht.get("kop"),
+                 bericht.get("verzonden"), bericht["ruw"][:8000]))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+
 def schrijf(bericht):
     """Eén bericht opslaan. Geeft True als het punt er daarna staat.
 
     Niet elk bericht is een meting: een hartslag of een bevestiging heeft geen
-    positie. Die worden wel beantwoord, maar niet bewaard.
+    positie. Die gaan naar de tabel toestelbericht, niet naar punt.
     """
     bron = TOESTELLEN.get(bericht.get("imei") or "")
     if not bron or not bericht.get("positie") or not bericht.get("tst"):
@@ -124,6 +147,8 @@ def verwerk(regel):
     if bericht.get("imei") not in TOESTELLEN:
         return None, "onbekend toestel"
     bewaard = schrijf(bericht)
+    if not bewaard and not bericht.get("positie"):
+        bewaar_toestelbericht(bericht)
     # Bevestigen pas hierna: het toestel mag zijn kopie niet wissen voordat
     # onze database het punt heeft.
     return antwoord(bericht), ("bewaard" if bewaard else "geen meting")
@@ -149,7 +174,10 @@ class Verbinding(socketserver.StreamRequestHandler):
                 if not regel.startswith("+"):
                     continue
                 terug, wat = verwerk(regel)
-                print("%s %s %s" % (time.strftime("%H:%M:%S"), wat, regel[:90]),
+                # Een meting staat al in de database; een bericht zonder positie
+                # (instellingen, bevestiging) komt voluit in de log.
+                print("%s %s %s" % (time.strftime("%H:%M:%S"), wat,
+                                    regel[:90] if wat == "bewaard" else regel),
                       flush=True)
                 if terug:
                     try:

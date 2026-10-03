@@ -42,6 +42,10 @@ GEBEURTENIS = {
 }
 KOP = re.compile(r"^\+(RESP|BUFF|ACK):GT([A-Z]{3}),(.*)\$$", re.S)
 TIJD14 = re.compile(r"^\d{14}$")
+# Berichten die nooit een positie bevatten, wat de vorm ook doet vermoeden. ALM
+# zijn teruggelezen instellingen: eindigen die op twee getallen voor de
+# verzendtijd, dan zag de vormherkenning er een meting op breedte 0, lengte 0 in.
+GEEN_POSITIE = {"ALM", "VER", "CID", "CSQ"}
 
 
 def _epoch(veld):
@@ -106,7 +110,8 @@ def ontleed(regel):
     # Het laatste 14-cijferige veld is de verzendtijd van het toestel zelf.
     bericht["verzonden"] = next((_epoch(v) for v in reversed(velden) if TIJD14.match(v)), None)
 
-    i = _positieblok(velden)
+    # Een bevestiging (+ACK) of een bericht uit GEEN_POSITIE is nooit een meting.
+    i = None if kop == "ACK" or soort in GEEN_POSITIE else _positieblok(velden)
     if i is None:
         bericht["positie"] = False
         return bericht
