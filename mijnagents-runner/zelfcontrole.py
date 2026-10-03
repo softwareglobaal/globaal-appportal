@@ -175,6 +175,17 @@ def bevindingen(items, van, tot, nu):
                and not a.get("_archief")]
         if bij and all(a.get("kalender") != x.get("kalender") for a in bij):
             meld("rit_andere_agenda", x, f"de afspraak staat op {W.KALENDERS.get(bij[0]['kalender'], '?')[:20]}, de rit niet")
+    # een collega of partner die bij een komende eigen afspraak hoort, staat er als gast op (FR-102)
+    try:
+        _mensen, _regels = W.organisatie.agenda_adressen(), W._gastregels()
+    except Exception:  # noqa: BLE001
+        _mensen, _regels = {}, {}
+    for a in binnen:
+        if (_mensen and a.get("_organisator_zelf") and a.get("kalender") == W.WERKAGENDA and not a.get("hele_dag")
+                and "T" in a.get("start", "") and a["start"][:10] >= vandaag and not W.lees_titel(a["titel"])["reistijd"]):
+            mist = W.agendagasten_voor(a["titel"], _regels, _mensen) - set(a.get("_agendagasten") or [])
+            if mist:
+                meld("agendagast_ontbreekt", a, f"hoort als gast op de afspraak, staat er niet: {', '.join(sorted(mist))}")
     # twee klanten tegelijk, op welke agenda ook (FR-57)
     for a, b in W.dubbele_boekingen(binnen, nu, uren=24 * 8):
         meld("dubbele_boeking", a, f"tegelijk met {b['start'][11:16]} {b['titel'][:40]}")

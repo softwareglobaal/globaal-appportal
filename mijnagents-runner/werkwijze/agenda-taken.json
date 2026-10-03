@@ -1,5 +1,5 @@
 {
- "versie": "5.3",
+ "versie": "5.4",
  "datum": "2026-10-02",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -770,6 +770,10 @@
   {
    "datum": "2026-09-26",
    "wat": "'HA: Klant' op light@ vervroegd uitgezet (dubbele boeking 26-09 09:00); alle klanten boeken via Calendly General"
+  },
+  {
+   "datum": "03-10-2026",
+   "wat": "Agendagasten: Catalin (Harmoniebouw, harmoniebouw@gmail.com) en collega's met een agenda-adres op organisatie.globaal.be staan als gast op hun afspraken, zonder mail; ze tellen als intern. Op 03-10 Catalin met uitnodiging toegevoegd aan 2443 Jenny Michielsen (17:00), op Mehdi's vraag."
   }
  ],
  "bron_afkortingen": {
@@ -1605,5 +1609,23 @@
   "nooit": "uit mail zelf een afspraak zetten, verplaatsen, annuleren of iets versturen; mail als gelezen markeren of verplaatsen",
   "versheid": "per mailbox de laatste geslaagde lezing; ouder dan 26 uur meldt de zelfcontrole (mailbron_oud)",
   "wanneer": "in elke volledige ronde (werkdagen 06:30 en daarna elke twee uur), twee weken terug"
+ },
+ "agendagasten": {
+  "wat": "Collega's en partners staan als gast op de afspraken waar ze bij horen, zodat de afspraak in hun eigen agenda staat (Mehdi, 03-10-2026: 'zodat het gewoon op hun agenda verschijnt ... dan hoef ik niet handmatig mails te ontvangen')",
+  "bron": "het agenda-adres per persoon op organisatie.globaal.be (kern.persoon.email_agenda, migratie 185); iemand toevoegen = dat veld invullen bij de persoon. Een adres wordt nooit geraden.",
+  "wie": "zijn naam na 'Mehdi' voor de dubbele punt van de titel ('Mehdi & Catalin:', 'Mehdi, Matthew, Gul & Aqib:', 'Mehdi en Shaniel:'), uniek op voornaam of volledige naam; of de firma van de afspraak volgens firma_gasten",
+  "firma_gasten": {
+   "HARM": [
+    "Catalin"
+   ]
+  },
+  "bijnamen": {
+   "Karam": "Catalin"
+  },
+  "waar": "komende afspraken op de werkagenda die Mehdi zelf organiseert; een reeks in de reeks zelf; volledige ronde twee maanden vooruit, de wijzigingsroute de dag die veranderde",
+  "zonder_mail": "sendUpdates=none: niemand krijgt een mail, ook de klant niet; de afspraak verschijnt in de agenda van de gast (Google: 'Uitnodigingen toevoegen aan mijn agenda')",
+  "intern": "een agendagast telt niet als gast: de afspraak blijft een eigen afspraak (titel, projectnummer, ritten, vragen)",
+  "behouden": "staat een agendagast niet (meer) op een afspraak waar hij hoort, dan zet de agent hem (terug); de zelfcontrole meldt het anders (agendagast_ontbreekt)",
+  "nooit": "een gast weghalen; iemand toevoegen op een afspraak die een ander organiseerde; een adres raden; een mail sturen"
  }
 }

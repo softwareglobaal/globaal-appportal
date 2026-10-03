@@ -245,28 +245,28 @@ def taken_uitvoeren(nu=None):
         if t["afspraak_kalender"] and t["afspraak_id"]:
             staat, dag = afspraak_nu(t["afspraak_kalender"], t["afspraak_id"])
             if staat == "weg":
-                taken.zet(t["id"], "vervallen", "de afspraak is geschrapt; niets uitgevoerd")
+                taken.zet(t["id"], "vervallen", "de afspraak is geschrapt; niets uitgevoerd", nu=nu)
                 gedaan.append((t["id"], "vervallen"))
                 continue
             if staat == "onbekend":
-                taken.zet(t["id"], "wacht-op-bron", f"afspraak niet te lezen ({dag}); later opnieuw", poging=True)
+                taken.zet(t["id"], "wacht-op-bron", f"afspraak niet te lezen ({dag}); later opnieuw", poging=True, nu=nu)
                 gedaan.append((t["id"], "wacht-op-bron"))
                 continue
             if dag and dag != t["afspraak_dag"]:
                 if p.get("dag"):
                     p["dag"] = dag
                 taken.zet(t["id"], "gepland", f"afspraak verplaatst van {t['afspraak_dag']} naar {dag}; de taak volgt",
-                          parameters=p, afspraak_dag=dag)
-        taken.zet(t["id"], "bezig", "gestart")
+                          parameters=p, afspraak_dag=dag, nu=nu)
+        taken.zet(t["id"], "bezig", "gestart", nu=nu)
         try:
             uit = voer_tool_uit("agent_ronde", p)
         except Exception as e:  # noqa: BLE001
             uit = {"exit": -1, "uitvoer": f"{type(e).__name__}: {str(e)[:300]}"}
         if uit.get("exit") == 0:
-            taken.zet(t["id"], "geverifieerd", f"exit 0\n{uit.get('uitvoer', '')[-1500:]}")
+            taken.zet(t["id"], "geverifieerd", f"exit 0\n{uit.get('uitvoer', '')[-1500:]}", nu=nu)
             gedaan.append((t["id"], "geverifieerd"))
         else:
-            n = taken.zet(t["id"], "gepland", f"exit {uit.get('exit')}\n{(uit.get('uitvoer') or uit.get('fout') or '')[-1500:]}", poging=True)
+            n = taken.zet(t["id"], "gepland", f"exit {uit.get('exit')}\n{(uit.get('uitvoer') or uit.get('fout') or '')[-1500:]}", poging=True, nu=nu)
             gedaan.append((t["id"], n["status"]))
     return gedaan
 

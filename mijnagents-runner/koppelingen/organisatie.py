@@ -23,13 +23,28 @@ CONTAINER = os.environ.get("KERN_POSTGRES_CONTAINER", "appportal-postgresql-1")
 DB = os.environ.get("KERN_DB", "appportal")
 SQL = ("select json_agg(json_build_object("
        "'naam', coalesce(p.weergavenaam, p.voornaam||' '||coalesce(p.achternaam,'')), 'voornaam', p.voornaam, 'achternaam', coalesce(p.achternaam,''), "
-       "'email', coalesce(p.email,''), 'afdeling', coalesce(a.naam,''), 'firma', coalesce(f.naam,''), 'firma_code', coalesce(f.code,''), "
+       "'email', coalesce(p.email,''), 'email_agenda', coalesce(p.email_agenda,''), 'afdeling', coalesce(a.naam,''), 'firma', coalesce(f.naam,''), 'firma_code', coalesce(f.code,''), "
        "'rol', coalesce(p.rol,''), 'functie', coalesce(p.functie,''), 'locatie', coalesce(p.locatie,''), 'in_dienst', p.in_dienst, 'diensten_voor', coalesce((select json_agg(df.code order by df.code) from kern.persoon_dienstfirma pd join kern.firma df on df.id = pd.firma_id where pd.persoon_id = p.id), '[]'::json))) "
        "from kern.persoon p left join kern.afdeling a on a.id=p.afdeling_id left join kern.firma f on f.id=p.werkgever_firma_id")
 
 
+# Voor een database zonder migratie 185 (agenda-adres): dezelfde lijst, met een leeg agenda-adres
+SQL_VOOR_185 = SQL.replace("'email_agenda', coalesce(p.email_agenda,''), ", "'email_agenda', '', ")
+
+
 def _lees():
-    return _psql(SQL) or []
+    try:
+        return _psql(SQL) or []
+    except RuntimeError as e:
+        if "email_agenda" not in str(e):
+            raise
+        return _psql(SQL_VOOR_185) or []
+
+
+def agenda_adressen(maximum_uren=24):
+    """{agenda-adres: persoon} van iedereen met een agenda-adres (kern.persoon.email_agenda, migratie 185), ook wie
+    uit dienst is: een oud adres blijft intern, het wordt alleen niet meer uitgenodigd."""
+    return {p["email_agenda"].lower(): p for p in collegas(maximum_uren, alleen_in_dienst=False) if p.get("email_agenda")}
 
 
 # Twee afkortingen per firma (migratie 175, 29-09-2026): code is de agendacode (ook

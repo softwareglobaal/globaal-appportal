@@ -55,6 +55,17 @@ def _toegang():
     return _token["waarde"]
 
 
+def interne_adressen():
+    """De agenda-adressen van collega's en partners (organisatie.globaal.be, migratie 185). Faalt die bron, dan een
+    lege set: dan telt elke gast als extern, zoals voor 03-10-2026. Dat is de veilige kant: de agent doet dan minder
+    aan zo'n afspraak, niet meer."""
+    try:
+        import organisatie  # noqa: PLC0415
+        return set(organisatie.agenda_adressen())
+    except Exception:  # noqa: BLE001
+        return set()
+
+
 def afspraken(van_dagen=-1, tot_dagen=8):
     """Alle afspraken van alle kalenders tussen vandaag+van_dagen en vandaag+tot_dagen.
     Elk item: kalender, id, titel, start, einde, hele_dag, locatie, omschrijving, deelnemers."""
@@ -63,6 +74,7 @@ def afspraken(van_dagen=-1, tot_dagen=8):
     tmax = (nu + timedelta(days=tot_dagen)).replace(hour=0, minute=0, second=0, microsecond=0)
     uit = []
     gezien = set()
+    _intern = interne_adressen()
     for kal in kalenders():
         # Alle pagina's, niet alleen de eerste 250. Gezien 21-09-2026: de agenda van Lara
         # heeft er over een schooljaar meer, en alles na maart viel stil weg.
@@ -102,7 +114,12 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 "start": s.get("dateTime") or s.get("date", ""), "einde": e_.get("dateTime") or e_.get("date", ""),
                 "hele_dag": "date" in s and "dateTime" not in s,
                 "locatie": ev.get("location", ""), "omschrijving": (ev.get("description") or "")[:2000],
-                "deelnemers": [a.get("email", "") for a in ev.get("attendees", []) if a.get("email")],
+                # gasten van buiten; een agendagast (collega of partner met een agenda-adres op organisatie.globaal.be)
+                # telt niet mee: met hem erbij blijft het een eigen afspraak (Mehdi, 03-10-2026)
+                "deelnemers": [a.get("email", "") for a in ev.get("attendees", []) if a.get("email")
+                               and a["email"].lower() not in _intern],
+                "_agendagasten": [a["email"].lower() for a in ev.get("attendees", []) if a.get("email", "").lower() in _intern],
+                "_organisator_zelf": bool((ev.get("organizer") or {}).get("self")),
                 # wie de afspraak heeft aangemaakt (Google: creator). Zo is achteraf te zien
                 # wie iets zette en waarom het ergens staat. Mandaat van Mehdi, 22-09-2026.
                 "maker": (ev.get("creator") or {}).get("email", ""),

@@ -171,5 +171,10 @@ check("de Regisseur voert een regelwijziging nooit zelf uit: ze blijft gepland v
       T.haal(_rw[0]["id"])["status"] == "gepland" and not any(r.get("naam") == "agenda-wacht" and not r.get("dag") for r in _rondes[_voor:]),
       str((T.haal(_rw[0]["id"]), _rondes[_voor:])))
 
+_src = (HIER / "regisseur.py").read_text(encoding="utf-8")
+_blok = _src[_src.index("def taken_uitvoeren"):_src.index("def antwoord(")]
+check("de uitvoering gebruikt een klok: elke taken.zet krijgt het tijdstip van de ronde mee (FR-103)",
+      _blok.count("taken.zet(") == _blok.count("nu=nu)") > 0, str((_blok.count("taken.zet("), _blok.count("nu=nu)"))))
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

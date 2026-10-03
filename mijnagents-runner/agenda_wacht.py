@@ -979,8 +979,8 @@ def codes_reeksen(items, droog=False):
             url = f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='@')}/events/{urllib.parse.quote(a['_reeks'])}"
             reeks = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": "Bearer " + tok}), timeout=30))
             oud = reeks.get("summary") or ""
-            if reeks.get("attendees"):
-                continue
+            if [g for g in reeks.get("attendees") or [] if (g.get("email") or "").lower() not in agenda.interne_adressen()]:
+                continue          # gasten van buiten: een voorstel; een agendagast (collega) telt niet (03-10-2026)
             nieuw = re.sub(r"\[LARA\]", "[LA]", oud, flags=re.I) if "[LARA]" in oud.upper() else codes_twee_letters(oud, _online(a))
             if nieuw == oud:
                 continue
@@ -2107,6 +2107,95 @@ def _eigen_melding_opgelost(x, k, tok, nu):
                               f"Je mag deze melding weghalen.\n\n" + (x.get("omschrijving") or ""),
                "extendedProperties": {"private": {MAILMERK: f"opgelost:{k}"}}}, tok)
     return True
+
+
+# Agendagasten (Mehdi, 03-10-2026: "een systeem waarbij je iemand kunt toevoegen ... zodat het gewoon op hun agenda
+# verschijnt ... dan hoef ik niet handmatig mails te ontvangen"). Collega's en partners met een agenda-adres op
+# organisatie.globaal.be (kern.persoon.email_agenda) staan als gast op de afspraken waar ze bij horen, zonder mail
+# (sendUpdates=none, zoals elke schrijfactie van de agent): de afspraak verschijnt in hun eigen agenda. Wie erbij hoort:
+# zijn naam na 'Mehdi' voor de dubbele punt ('Mehdi & Catalin:', 'Mehdi, Matthew, Gul & Aqib:'), of de firma van de
+# afspraak (Harmoniebouw: Catalin). Alleen op komende afspraken die Mehdi zelf organiseert; nooit iemand weghalen.
+def _gastregels():
+    try:
+        return json.loads((Path(__file__).resolve().parent / "werkwijze" / "agenda-taken.json").read_text(encoding="utf-8")).get("agendagasten") or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def agendagasten_voor(titel, regels=None, mensen=None):
+    """De agenda-adressen die bij deze titel horen. mensen = {adres: persoon} uit organisatie.agenda_adressen().
+    Een naam telt alleen als hij precies een persoon aanwijst; anders geen gok."""
+    regels = _gastregels() if regels is None else regels
+    mensen = organisatie.agenda_adressen() if mensen is None else mensen
+    per_naam = {}
+    for adres, p in mensen.items():
+        if not p.get("in_dienst", True):
+            continue
+        for n in {p.get("voornaam") or "", p.get("naam") or "", f"{p.get('voornaam') or ''} {p.get('achternaam') or ''}"}:
+            if n.strip():
+                per_naam.setdefault(n.strip().lower(), set()).add(adres)
+    for bijnaam, naam in (regels.get("bijnamen") or {}).items():
+        per_naam.setdefault(bijnaam.lower(), set()).update(per_naam.get(naam.lower(), set()))
+    uit = set()
+    t = re.sub(r"^[!?\s]+", "", zonder_zl(re.sub(r"^\s*VR\s+", "", titel or "")))
+    if ":" in t:
+        m = re.match(r"\s*Mehdi\b(.*)$", t.split(":", 1)[0], re.I)
+        if m:
+            for naam in re.split(r"[,&+/]|\ben\b|\band\b", m.group(1), flags=re.I):
+                naam = naam.strip(" !?").lower()
+                if naam and len(per_naam.get(naam, ())) == 1:
+                    uit |= per_naam[naam]
+    for naam in (regels.get("firma_gasten") or {}).get(lees_titel(titel or "").get("firma") or "", []):
+        if len(per_naam.get(naam.lower(), ())) == 1:
+            uit |= per_naam[naam.lower()]
+    return uit
+
+
+def _event(a, tok):
+    import urllib.parse
+    import urllib.request
+    url = f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/{urllib.parse.quote(a['id'], safe='')}"
+    return json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"}), timeout=30))
+
+
+def agendagasten_zetten(items, tok=None, nu=None):
+    """Zet ontbrekende agendagasten op komende afspraken op de werkagenda die Mehdi zelf organiseert, een reeks in de
+    reeks zelf. Bestaande gasten blijven staan; niemand krijgt een mail; daarna teruggelezen. Geeft regels."""
+    mensen = organisatie.agenda_adressen()
+    if not mensen:
+        return []
+    regels_ = _gastregels()
+    nu_iso = (nu or nu_lokaal()).isoformat()
+    uit, reeksen = [], set()
+    for a in items:
+        if (a.get("hele_dag") or a.get("fout") or a.get("_archief") or "T" not in a.get("start", "")
+                or a["start"] < nu_iso[:len(a["start"])] or not a.get("_organisator_zelf")
+                or a.get("kalender") != WERKAGENDA or lees_titel(a["titel"])["reistijd"]):
+            continue
+        ontbreekt = agendagasten_voor(a["titel"], regels_, mensen) - set(a.get("_agendagasten") or [])
+        if not ontbreekt:
+            continue
+        if a.get("_reeks"):
+            if a["_reeks"] in reeksen:
+                continue
+            reeksen.add(a["_reeks"])
+        doel = {"kalender": a["kalender"], "id": a.get("_reeks") or a["id"], "titel": a["titel"]}
+        try:
+            tok = tok or agenda._toegang()
+            bestaand = _event(doel, tok).get("attendees") or []
+            erbij = sorted(ontbreekt - {(g.get("email") or "").lower() for g in bestaand})
+            if not erbij:
+                continue
+            _patch(doel, {"attendees": bestaand + [{"email": e} for e in erbij]}, tok)
+            terug = {(g.get("email") or "").lower() for g in (_event(doel, tok).get("attendees") or [])}
+            wie = ", ".join(mensen[e].get("voornaam") or e for e in erbij)
+            if set(erbij) <= terug:
+                uit.append(f"{a['start'][:16]} {a['titel'][:45]}: {wie} als gast gezet, zonder mail{' (de hele reeks)' if a.get('_reeks') else ''}")
+            else:
+                uit.append(f"{a['start'][:16]} {a['titel'][:45]}: {wie} niet teruggevonden na het zetten")
+        except Exception as e:  # noqa: BLE001
+            uit.append(f"{a['start'][:16]} {a['titel'][:45]}: agendagast niet gezet ({type(e).__name__})")
+    return uit
 
 
 def reistijd_zetten(items, alleen_dag=None):
@@ -3402,6 +3491,14 @@ def main():
             rg, rregels = codes_reeksen(kort_items)
             if rregels:
                 ag.log(f"dag {vandaag}", "schrijf", f"codes van twee letters: {rg} reeks(en) omgezet", "\n".join(rregels))
+        # Agendagasten: collega's en partners op de afspraken waar ze bij horen, zonder mail (Mehdi, 03-10-2026).
+        # Volledige ronde: twee maanden vooruit; de wijzigingsroute: de dag die veranderde.
+        try:
+            gregels = agendagasten_zetten(rit_items if DAG_ARG else [x for x in afspraken(0, 60) if not x.get("fout")])
+        except Exception as e:  # noqa: BLE001
+            gregels = [f"agendagasten niet gezet ({type(e).__name__}: {str(e)[:120]})"]
+        if gregels:
+            ag.log(f"dag {vandaag}", "schrijf", f"agendagasten: {len(gregels)} afspraak/afspraken", "\n".join(gregels))
         tg, tregels = contact_zetten(kort_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"telefoon: {tg} nummer(s) bovenaan gezet", "\n".join(tregels))
         ag.log(f"dag {vandaag}", "schrijf", f"titels: {ng} rechtgezet uit vrije tekst; link-notitie: {zg} gezet",

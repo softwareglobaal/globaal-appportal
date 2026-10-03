@@ -1,7 +1,7 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.25",
- "datum": "02-10-2026",
+ "versie": "3.27",
+ "datum": "03-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
   "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
@@ -253,9 +253,10 @@
   },
   {
    "id": "L31",
-   "les": "Test ook het midden van de dag: een ronde die draait terwijl Mehdi onderweg is, ziet afspraken die al begonnen zijn. 'Voorbij' betekent niet 'weg'; het is waar hij nu staat.",
+   "les": "Test ook het midden van de dag: een ronde die draait terwijl Mehdi onderweg is, ziet afspraken die al begonnen zijn. 'Voorbij' betekent niet 'weg'; het is waar hij nu staat. En test met een vaste klok die overal doorgegeven wordt: een test die alleen vandaag slaagt, is geen grendel.",
    "uit": [
-    "FR-97"
+    "FR-97",
+    "FR-103"
    ]
   },
   {
@@ -2148,6 +2149,44 @@
     "mailbron_oud"
    ],
    "status": "bewaakt"
+  },
+  {
+   "id": "FR-102",
+   "datum": "03-10-2026",
+   "gevonden_door": "Mehdi ('nu moet Catalin zelf gaan kijken naar wat die mensen zelf opbrengen, en dat is ook niet de bedoeling')",
+   "fout": "Catalin (Harmoniebouw) en collega's stonden niet als gast op de afspraken waar ze bij hoorden ('Mehdi & Catalin: [HA-KB] 2443'); ze moesten zelf in Mehdi's agenda gaan kijken. De agent kende geen enkel agenda-adres: in organisatie.globaal.be had niemand behalve Mehdi een e-mailadres.",
+   "gevolg": "Wie mee moest, zag de afspraak niet in zijn eigen agenda; het kantoor in SU kon niet meekijken via Catalins agenda.",
+   "waarom_niet_gezien": "De agent zette zelf nooit gasten (alleen Mehdi), en een gast maakte een afspraak tot 'niet van Mehdi', zodat titels en projectnummers dan bleven liggen.",
+   "oorzaak": "Geen bron voor agenda-adressen en geen regel wie bij een afspraak hoort.",
+   "soort_oorzaak": "ontwerp",
+   "oplossing": "Migratie 185: kern.persoon.email_agenda (Catalin = harmoniebouw@gmail.com, door Mehdi bevestigd), invulbaar op organisatie.globaal.be. agenda_wacht.agendagasten_voor/agendagasten_zetten: naam na 'Mehdi' in de titel of de firma (Harmoniebouw), alleen eigen afspraken op de werkagenda, zonder mail, bestaande gasten blijven, teruggelezen; een reeks in de reeks. koppelingen/agenda.py telt een agendagast niet als gast van buiten. Zelfcontrole: agendagast_ontbreekt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agendagasten.py",
+    "tekst": "een collega na 'Mehdi' in de titel wordt agendagast"
+   },
+   "controle": [
+    "agendagast_ontbreekt"
+   ],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-103",
+   "datum": "03-10-2026",
+   "gevonden_door": "Claude, testketen van 03-10-2026 (test_taken.py: 17 goed, 1 fout; op 02-10 nog groen)",
+   "fout": "taken_uitvoeren(nu) gaf zijn tijdstip niet door aan taken.zet(), dat dan de echte klok nam voor de volgende poging. In de test lag de volgende poging daardoor na het einde van de testperiode zodra de echte dag verschoof.",
+   "gevolg": "Een test die op de ene dag slaagt en op de volgende faalt; in productie geen gevolg (daar is er maar een klok), maar de grendel was onbetrouwbaar.",
+   "waarom_niet_gezien": "De test draaide op de dag zelf, toen de vaste testtijd toevallig vlak bij de echte tijd lag.",
+   "oorzaak": "Twee klokken in een ronde.",
+   "soort_oorzaak": "code",
+   "oplossing": "Elke taken.zet in taken_uitvoeren krijgt nu=nu; nagekeken met een klok een week later (18 goed, 0 fout).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_taken.py",
+    "tekst": "de uitvoering gebruikt een klok"
+   },
+   "controle": [],
+   "status": "opgelost"
   }
  ]
 }
