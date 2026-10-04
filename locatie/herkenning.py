@@ -195,13 +195,18 @@ def beoordeel(verblijf, plek_lijst, project_lijst, correctie_lijst=(), rol="auto
     return uit
 
 
+# Voorbijrijden telt pas dichter bij het adres dan de herkenningsstraal: op 3-10-2026 noemde
+# een rit over de snelweg zes projecten "voorbij" die op 300 m van de ring liggen.
+VOORBIJ_METER = 150
+
+
 def voorbij(spoor, project_lijst):
-    """Projecten waar een rit door hun straal reed zonder te stoppen. Geen bezoek."""
+    """Projecten waar een rit vlak langs reed zonder te stoppen. Geen bezoek, wel context."""
     gezien = {}
     for lat, lon in spoor or []:
         for p in project_lijst:
             if p["sleutel"] in gezien:
                 continue
-            if afstand(lat, lon, p["lat"], p["lon"]) <= (p.get("straal") or PROJECT_STRAAL):
+            if afstand(lat, lon, p["lat"], p["lon"]) <= min(p.get("straal") or PROJECT_STRAAL, VOORBIJ_METER):
                 gezien[p["sleutel"]] = {"sleutel": p["sleutel"], "firma": p.get("firma"), "nummer": p.get("nummer")}
     return list(gezien.values())

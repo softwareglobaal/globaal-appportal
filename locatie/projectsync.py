@@ -191,7 +191,7 @@ def dekking(conn):
                   and r["sleutel"] not in over)
     per_adres = {}
     for r in rijen:
-        if r.get("adres_vingerafdruk"):
+        if r.get("adres_vingerafdruk") and r["geocode_kwaliteit"] != "geen_adres":
             per_adres.setdefault(r["adres_vingerafdruk"], []).append(r["sleutel"])
     # Twee projecten op hetzelfde adres (2603 en 5603 op Provinciebaan 20): de herkenning
     # geeft daar altijd een kandidatenlijst, nooit een gekozen dossier.
