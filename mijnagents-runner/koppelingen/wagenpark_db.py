@@ -201,6 +201,10 @@ def schrijven(register, dashboard):
                                     "omschrijving": (b.get("bron") or "")[:300], "sleutel": _sleutel("b", p, b["naam"], b.get("van"))})
         for a in _activiteiten(dict(wagens.get(p) or {}, plaat=p, open_vragen=v.get("open_vragen") or [])):
             activiteiten.append(dict(a, plaat=p))
+    # Een sleutel maar een keer per invoer: dezelfde km-stand uit factuur en tankkaart, of twee gelijke regels in de bron,
+    # gaven op 05-10-2026 'ON CONFLICT DO UPDATE command cannot affect row a second time'.
+    diensten, kms, bestuurders, activiteiten = ([*{x["sleutel"]: x for x in lijst}.values()]
+                                                for lijst in (diensten, kms, bestuurders, activiteiten))
     sql = f"""
 begin;
 select set_config('app.gebruiker', 'De Wagenparkwacht', true);
