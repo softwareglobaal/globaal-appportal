@@ -2155,6 +2155,16 @@ veldenlijst die per tab aanpasbaar is (de `*_VELDEN`-configs bovenaan `app.py`).
   `scripts/add-panden-dashboard-app.py`: een applicatie zonder provider, want de
   pagina valt al onder de vermogen-proxy. Openstaand: het overzicht uit de database
   laten rekenen (nu geven DSCR, netto huur en vaste lasten NaN).
+- **Wagenpark** op `/wagenpark` (v1.0, 05-10-2026; naar het model van Odoo Fleet,
+  zonder Odoo-server): kanban per status en land, lijst, archief, fiche per wagen
+  met tabs activiteiten, onderhoud en diensten, km, bestuurders, contracten (met
+  opzegdag), kosten, documenten. Migratie 187: `vermogen.voertuig` (→ kern.firma),
+  `voertuig_dienst`, `voertuig_kmstand`, `voertuig_bestuurder` (→ kern.persoon),
+  `voertuig_activiteit`, plus `voertuig_id` op `verzekering` en `lening`. De
+  Wagenparkwacht (`mijnagents-runner/koppelingen/wagenpark_db.py`) schrijft elke
+  ronde in één transactie met een `sleutel` per rij; rijen met bron `manueel` en
+  velden in `voertuig.handmatig` zijn van de mens en blijven staan. Het rapport uit
+  `dashboard.json` van de wacht blijft op `/wagenpark-dashboard` (Wagenpark rapporten).
 - **Schema `vermogen`** (migratie 016): `pand` (eigenaar → kern.firma, aankoop,
   huurcontract, syndicus-link), `verzekering` (soort/opzegtermijn/jaarpremie,
   linkbaar aan pand; `object` = tekst voor bv. auto's zolang die geen entiteit zijn),
