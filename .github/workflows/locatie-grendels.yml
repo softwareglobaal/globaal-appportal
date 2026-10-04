@@ -15,6 +15,7 @@ on:
             ".github/workflows/locatie-grendels.yml"]
 
 jobs:
+  # De tegel draait in python:3.11-slim (locatie/Dockerfile): dezelfde versie hier.
   dagindeling:
     runs-on: ubuntu-latest
     steps:
@@ -33,5 +34,18 @@ jobs:
       - run: python3 locatie/test_herkenning.py
       - run: python3 locatie/test_auto.py
       - run: python3 locatie/test_export.py
+
+  # De wacht draait op de VM onder ~/agents/.venv (Python 3.12), niet in de container (3.11).
+  # Tot 04-10-2026 stond dit in de job hierboven op 3.11, en struikelde de import van
+  # agenda_wacht.py (een backslash in een f-string mag pas vanaf 3.12): de grendel was rood
+  # zonder dat er aan de wacht iets mis was.
+  wacht:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r locatie/requirements.txt
       # de wacht zelf: projectplekken voor Nominatim, startgrens, geen vals alarm, revisies
       - run: python3 mijnagents-runner/tests/test_locatie_wacht.py
