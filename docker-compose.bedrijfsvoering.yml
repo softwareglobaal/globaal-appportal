@@ -1,0 +1,36 @@
+# Additieve overlay. Neem deze mee via COMPOSE_FILE in de lokale stack-.env.
+# Bestaande services en VM-aanpassingen blijven in hun oorspronkelijke bestanden.
+services:
+  app-bedrijfsvoering:
+    build:
+      context: ./bedrijfsvoering
+      dockerfile: Dockerfile.prebuilt
+    image: appportal-bedrijfsvoering
+    restart: unless-stopped
+    environment:
+      PORT: "3140"
+      AUTH_PROVIDER: authentik
+      AUTHENTIK_REQUIRED_GROUP: bedrijfsvoering
+      BEDRIJFSVOERING_PROXY_SECRET: ${BEDRIJFSVOERING_PROXY_SECRET:?Stel BEDRIJFSVOERING_PROXY_SECRET in de stack-.env in}
+      AUTHENTIK_OWNER_UID: ${BEDRIJFSVOERING_OWNER_UID:?Leg de Authentik-proxy-UID van de eigenaar vast in de stack-.env}
+      PUBLIC_ORIGIN: https://bedrijfsvoering.${BASE_DOMAIN:-globaal.be}
+      DATA_DIR: /data
+      COMPANY_SEED_PATH: /config/companies.json
+    volumes:
+      - bedrijfsvoering-data:/data
+      - ./bedrijfsvoering-config/company-seed.json:/config/companies.json:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3140/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    networks: [appnet]
+
+  nginx:
+    environment:
+      BEDRIJFSVOERING_PROXY_SECRET: ${BEDRIJFSVOERING_PROXY_SECRET:?Stel BEDRIJFSVOERING_PROXY_SECRET in de stack-.env in}
+
+volumes:
+  bedrijfsvoering-data:

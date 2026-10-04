@@ -1,0 +1,34 @@
+name: bedrijfsvoering-grendels
+
+on:
+  push:
+    paths:
+      - "apps.yaml"
+      - "docker-compose.bedrijfsvoering.yml"
+      - "nginx/templates/*bedrijfsvoering*"
+      - "nginx/snippets/*bedrijfsvoering*"
+      - "scripts/appcatalogus.py"
+      - "scripts/apps-ontbrekend.py"
+      - "scripts/test_bedrijfsvoering_infra.py"
+      - ".github/workflows/bedrijfsvoering-grendels.yml"
+  pull_request:
+    paths:
+      - "apps.yaml"
+      - "docker-compose.bedrijfsvoering.yml"
+      - "nginx/templates/*bedrijfsvoering*"
+      - "nginx/snippets/*bedrijfsvoering*"
+      - "scripts/appcatalogus.py"
+      - "scripts/apps-ontbrekend.py"
+      - "scripts/test_bedrijfsvoering_infra.py"
+      - ".github/workflows/bedrijfsvoering-grendels.yml"
+
+jobs:
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install PyYAML==6.0.2
+      - run: python3 scripts/test_bedrijfsvoering_infra.py

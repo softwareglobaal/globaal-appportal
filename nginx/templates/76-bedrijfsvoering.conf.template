@@ -1,0 +1,18 @@
+# Het appgeheim wordt alleen voor deze vhost doorgestuurd. De variabele wordt
+# tijdens de containerstart ingevuld uit de omgeving; waarden staan nooit in git.
+map $host $bedrijfsvoering_proxy_geheim {
+    default "";
+    "bedrijfsvoering.${BASE_DOMAIN}" "${BEDRIJFSVOERING_PROXY_SECRET}";
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name bedrijfsvoering.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    set $app_upstream http://app-bedrijfsvoering:3140;
+    client_max_body_size 11m;
+    proxy_read_timeout 120s;
+    include /etc/nginx/snippets/forward-auth-bedrijfsvoering.conf;
+}

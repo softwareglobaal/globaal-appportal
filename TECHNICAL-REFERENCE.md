@@ -116,6 +116,14 @@ Het domein **`globaal.be`** wordt **niet** bij one.com beheerd qua DNS, maar bij
 > regelen - dat willen we hier niet.
 
 ### 3.3 De AppPortal-stack (Docker Compose)
+
+**Globaal Bedrijfsvoering** sluit additief aan via
+`docker-compose.bedrijfsvoering.yml`, `76-bedrijfsvoering.conf.template` en de eigen
+`forward-auth-bedrijfsvoering.conf`. Interne poort 3140, eigen datavolume,
+Authentik-groep `bedrijfsvoering`, proxygeheim en expliciete bedrijfsmandaten.
+De lokale `COMPOSE_FILE` neemt de overlay blijvend mee; `apps.yaml` bevat bewust
+geen `poort` zodat de automatische appgenerator deze service overslaat. Bron,
+uitrol en verificatie: [Authentik-aansluiting v1.0](docs/bedrijfsvoering.md).
 Projectmap op de VM: `~/appportal`. Compose-projectnaam: **`appportal`**
 (daardoor heten de volumes `appportal_*`, los van de mapnaam).
 

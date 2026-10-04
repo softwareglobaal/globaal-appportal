@@ -147,3 +147,11 @@ apps:
     roles: [db-alles]
     status: active
     poort: 3130
+  # Eigen compose-overlay: geen poort opnemen, zodat de automatische
+  # nieuwe-app-generator de bestaande stack-override niet herschrijft.
+  - id: bedrijfsvoering
+    name: Globaal Bedrijfsvoering
+    description: Klanten, offertes, projecten, planning, uren en facturatie per vennootschap
+    subdomain: bedrijfsvoering
+    roles: [bedrijfsvoering]
+    status: active

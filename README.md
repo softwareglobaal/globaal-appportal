@@ -54,6 +54,11 @@ store** to avoid certificate warnings (one import covers all hostnames).
 Only ports 80 and 443 are published; the apps are reachable solely through
 nginx on the internal Docker network.
 
+**Globaal Bedrijfsvoering** gebruikt een eigen additieve compose-overlay en
+Authentik-groep, met expliciete mandaten per vennootschap. Uitrol, duurzame opslag
+en toegang: [Authentik-aansluiting v1.0](docs/bedrijfsvoering.md). De overlay staat
+naast de bestaande VM-configuratie en overschrijft die niet.
+
 ## 2. One-time Authentik configuration
 
 Do these once, in this order. Authentik UI: `https://auth.<BASE_DOMAIN>`,

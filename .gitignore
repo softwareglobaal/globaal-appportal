@@ -60,3 +60,7 @@ awscliv2.zip
 
 # Runtime-data van de mijnagents-app (eigen DB). Nooit in git.
 /mijnagents-data/
+
+# Eigen bedrijfsvoeringrepo en gecontroleerde bedrijfs-/medewerkersbron op VM.
+/bedrijfsvoering/
+/bedrijfsvoering-config/
