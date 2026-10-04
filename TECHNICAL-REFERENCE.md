@@ -123,7 +123,7 @@ Het domein **`globaal.be`** wordt **niet** bij one.com beheerd qua DNS, maar bij
 Authentik-groep `bedrijfsvoering`, proxygeheim en expliciete bedrijfsmandaten.
 De lokale `COMPOSE_FILE` neemt de overlay blijvend mee; `apps.yaml` bevat bewust
 geen `poort` zodat de automatische appgenerator deze service overslaat. Bron,
-uitrol en verificatie: [Authentik-aansluiting v1.0](docs/bedrijfsvoering.md).
+uitrol en verificatie: [Authentik-aansluiting v1.1](docs/bedrijfsvoering.md).
 Projectmap op de VM: `~/appportal`. Compose-projectnaam: **`appportal`**
 (daardoor heten de volumes `appportal_*`, los van de mapnaam).
 

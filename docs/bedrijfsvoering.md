@@ -1,4 +1,4 @@
-# Globaal Bedrijfsvoering: Authentik-aansluiting v1.0
+# Globaal Bedrijfsvoering: Authentik-aansluiting v1.1
 
 De applicatie krijgt een eigen tegel en adres: `https://bedrijfsvoering.globaal.be`.
 De bron staat in de private GitHub-repository
@@ -99,13 +99,14 @@ de UUID naar de proxy-UID en bewaart bestaande instellingen. Het overzicht noemt
 alleen aantallen; geen geheimwaarden. De bedrijfsmomentopname bevat ook inactieve
 firma's met hun status. De beheerbestanden blijven lokaal en worden niet gecommit.
 
-`bedrijfsvoering-toegang.py` voegt actieve interne collega's met e-mailadres uit
+`bedrijfsvoering-toegang.py` voegt actieve interne collega's uit
 de bestaande Authentik-directory toe. Zo kan een collega de tegel gebruiken ook
 wanneer diens koppeling in `kern.persoon` nog ontbreekt. `AnonymousUser`, `akadmin`,
-serviceaccounts, externe accounts, inactieve accounts en accounts zonder e-mail
+serviceaccounts, externe accounts en inactieve accounts
 worden uitgesloten, ook wanneer een centrale profielkoppeling hen noemt. De
 eigenaar moet bovendien exact bij de vastgelegde UUID en naam `mehdi` horen en
-actief en intern zijn, met e-mailadres. Het maakt geen gebruikers
+actief en intern zijn. E-mail is contactmetadata en mag ontbreken, ook bij de
+eigenaar; de geverifieerde UUID en proxy-UID bepalen de identiteit. Het maakt geen gebruikers
 of wachtwoorden en behoudt bestaande groepen. Herhalen voegt geen dubbele
 groepslidmaatschappen toe. Dit script geeft nul bedrijfsmandaten: collega's moeten
 die daarna van de eigenaar ontvangen. Het verwijdert geen oudere toewijzingen;
@@ -149,4 +150,4 @@ positieve procesketen binnen een toegewezen bedrijf, afwijzing van inzage en
 schrijfopdrachten in een ander bedrijf, opslag na herstart en teruglezen van audit.
 Houd niet uitgevoerde proeven zichtbaar en neem het datavolume in de back-up op.
 
-De medewerkerskoppeling in `kern.persoon` bevatte bij live controle slechts zes accounts. De apptegel gebruikt daarom de bestaande Authentik-directory: uitsluitend actieve interne menselijke accounts met e-mail. AnonymousUser, akadmin, serviceaccounts en externe accounts worden uitgesloten. Werkgever, appgroep en globale adminrol worden nooit automatisch vertaald naar bedrijfsmandaten. De eigenaar krijgt via de app-bootstrap expliciete mandaten; overige collegaaccounts blijven pending totdat de eigenaar ze per vennootschap toewijst.
+De medewerkerskoppeling in `kern.persoon` bevatte bij live controle slechts zes accounts. De apptegel gebruikt daarom de bestaande Authentik-directory: uitsluitend actieve interne menselijke accounts. E-mail mag ontbreken; identificatie gebruikt de proxy-UID. AnonymousUser, akadmin, serviceaccounts en externe accounts worden uitgesloten. Werkgever, appgroep en globale adminrol worden nooit automatisch vertaald naar bedrijfsmandaten. De eigenaar krijgt via de app-bootstrap expliciete mandaten; overige collegaaccounts blijven pending totdat de eigenaar ze per vennootschap toewijst.

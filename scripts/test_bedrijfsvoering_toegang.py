@@ -6,6 +6,7 @@ Geen Authentik-installatie, VM, netwerk of echte configuratie wordt benaderd.
 from __future__ import annotations
 
 import contextlib
+import ast
 import io
 import json
 from pathlib import Path
@@ -131,7 +132,6 @@ class BedrijfsvoeringToegang(unittest.TestCase):
             person(4, "servicerunner", kind="service_account"),
             person(5, "externe", kind="external"),
             person(6, "uitdienst", active=False),
-            person(7, "zonderemail", email=""),
         ]
         config = {"owner_sub": OWNER_UUID,
                   "people": [{"sub": user.uuid, "username": user.username} for user in excluded]}
@@ -139,7 +139,26 @@ class BedrijfsvoeringToegang(unittest.TestCase):
         self.assertEqual(summary["eligible"], 1)
         self.assertEqual(summary["added"], 1)
         self.assertEqual(summary["business_memberships_granted"], 0)
+        self.assertEqual(summary["linked_profiles_missing_or_ineligible"], len(excluded))
         self.assert_unassigned(excluded)
+
+    def test_active_colleagues_without_email_get_app_access_and_are_not_missing(self):
+        owner = person(1, "mehdi")
+        without_email = person(2, "zonderemail", email="")
+        without_email_field = person(3, "zondermailveld")
+        del without_email_field.email
+        config = {"owner_sub": OWNER_UUID, "people": [
+            {"sub": without_email.uuid, "username": without_email.username},
+            {"sub": without_email_field.uuid, "username": without_email_field.username},
+            {"sub": person(99, "onbekend").uuid, "username": "onbekend"},
+        ]}
+        summary = run_access([owner, without_email, without_email_field], config)
+        self.assertEqual(summary["eligible"], 3)
+        self.assertEqual(summary["added"], 3)
+        self.assertEqual(summary["linked_profiles_missing_or_ineligible"], 1)
+        self.assertEqual(summary["business_memberships_granted"], 0)
+        self.assertEqual(without_email.ak_groups.ids, {APP_GROUP.pk})
+        self.assertEqual(without_email_field.ak_groups.ids, {APP_GROUP.pk})
 
     def test_repeated_execution_is_idempotent_and_preserves_other_groups(self):
         owner = person(1, "mehdi", groups=[11])
@@ -186,12 +205,33 @@ class BedrijfsvoeringToegang(unittest.TestCase):
                     run_access([owner, colleague])
                 self.assert_unassigned([owner, colleague])
 
-    def test_owner_without_email_blocks_all_assignments(self):
+    def test_exact_verified_owner_without_email_is_eligible(self):
         owner = person(1, "mehdi", email="")
         colleague = person(2, "collega")
-        with self.assertRaisesRegex(RuntimeError, "geen e-mailadres"):
-            run_access([owner, colleague])
-        self.assert_unassigned([owner, colleague])
+        summary = run_access([owner, colleague])
+        self.assertEqual(summary["eligible"], 2)
+        self.assertEqual(summary["added"], 2)
+        self.assertEqual(summary["business_memberships_granted"], 0)
+        self.assertEqual(owner.ak_groups.ids, {APP_GROUP.pk})
+
+    def test_configuration_owner_probe_accepts_exact_active_internal_identity_without_email(self):
+        tree = ast.parse((ROOT / "scripts/bedrijfsvoering-configureren.py").read_text())
+        assignment = next(node for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                          and any(isinstance(target, ast.Name) and target.id == "code"
+                                  for target in node.targets))
+        expression = ast.Expression(body=assignment.value)
+        probe = eval(compile(expression, "configuration_owner_probe", "eval"),
+                     {"owner": [{"sub": OWNER_UUID}]})
+        owner = person(1, "mehdi", email="")
+        owner.uid = "0" * 64
+        models = ModuleType("authentik.core.models")
+        models.User = SimpleNamespace(objects=Query([owner]))
+        output = io.StringIO()
+        with patch.dict(sys.modules, {"authentik.core.models": models}), \
+                contextlib.redirect_stdout(output):
+            exec(probe, {})
+        summary = json.loads(output.getvalue().strip().split(":", 1)[1])
+        self.assertEqual(summary, {"owner_uid": owner.uid})
 
     def test_directory_and_linked_profile_do_not_duplicate_assignment(self):
         owner = person(1, "mehdi")

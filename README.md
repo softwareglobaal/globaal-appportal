@@ -56,7 +56,7 @@ nginx on the internal Docker network.
 
 **Globaal Bedrijfsvoering** gebruikt een eigen additieve compose-overlay en
 Authentik-groep, met expliciete mandaten per vennootschap. Uitrol, duurzame opslag
-en toegang: [Authentik-aansluiting v1.0](docs/bedrijfsvoering.md). De overlay staat
+en toegang: [Authentik-aansluiting v1.1](docs/bedrijfsvoering.md). De overlay staat
 naast de bestaande VM-configuratie en overschrijft die niet.
 
 ## 2. One-time Authentik configuration

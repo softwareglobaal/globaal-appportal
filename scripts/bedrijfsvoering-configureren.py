@@ -25,7 +25,7 @@ def main():
     owner = query("SELECT json_agg(json_build_object('sub',authentik_sub,'username',authentik_username)) FROM kern.persoon WHERE lower(voornaam)='mehdi' AND in_dienst=true AND authentik_sub IS NOT NULL")
     if len(owner or []) != 1 or owner[0]['username'] != 'mehdi':
         raise RuntimeError('De eigenaar is niet eenduidig bevestigd door kern.persoon.')
-    code = "from authentik.core.models import User; import json; u=User.objects.get(uuid=" + repr(owner[0]['sub']) + "); assert u.username=='mehdi' and u.is_active and u.type=='internal' and u.email; print('BEDRIJFSVOERING_META:'+json.dumps({'owner_uid':u.uid}))"
+    code = "from authentik.core.models import User; import json; u=User.objects.get(uuid=" + repr(owner[0]['sub']) + "); assert u.username=='mehdi' and u.is_active and u.type=='internal'; print('BEDRIJFSVOERING_META:'+json.dumps({'owner_uid':u.uid}))"
     result = subprocess.run(BASE + ['exec', '-T', 'authentik-server', 'ak', 'shell', '-c', code], check=True, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     lines = [line for line in result.stdout.splitlines() if line.startswith('BEDRIJFSVOERING_META:')]
     if len(lines) != 1:
