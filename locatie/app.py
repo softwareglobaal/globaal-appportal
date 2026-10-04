@@ -1,25 +1,30 @@
 """
-Locatielogboek: ontvangt de berichten van de OwnTracks-app op Mehdi's iPhone
-en maakt er een dagboek van.
+Locatielogboek: ontvangt de metingen van de trackers en maakt er een dagboek van.
 
-De app op de telefoon stuurt om de zoveel tijd een punt naar /pub. Die route
-passeert de forward-auth van Authentik (een telefoon heeft geen browsersessie)
-en controleert zelf het wachtwoord uit LOCATIE_WACHTWOORD, net zoals de
-agents-tegel dat doet op /agent-status.
+Sinds 3 oktober 2026 meet alleen de tracker in de auto (Queclink GV500CG, eigen
+ontvanger in atrack_server.py). De telefoon (OwnTracks, route /pub) is bewust
+gestopt; de route blijft bestaan en bewaart wat binnenkomt, maar telt niet mee.
+Welke metingen meetellen staat op één plek: bronbeleid.py (startgrens op de
+meettijd, het vastgelegde toestel per bron). Het schema staat in schema.py.
 
-Losse punten zijn nog geen logboek. De dagindeling hieronder plakt ze aan
-elkaar tot bezoeken (je stond ergens stil) en verplaatsingen (je was onderweg),
-zodat het resultaat te vergelijken valt met wat Google Maps oplevert.
+Losse punten zijn nog geen logboek. De dagindeling hieronder plakt ze per spoor
+(per tracker) aan elkaar tot bezoeken (stilstaan op een plek) en verplaatsingen,
+en herkenning.py zegt bij welk project of welke plek een verblijf hoort, en hoe
+zeker. Wat de auto meet bewijst waar de auto stond, niet waar Mehdi was.
 """
 import base64
 import json
 import os
-import sqlite3
 import time
 from datetime import date, datetime, timedelta, timezone
 from math import radians, sin, cos, asin, sqrt
+from urllib.parse import urlparse
 
 from flask import Flask, abort, jsonify, render_template, request
+
+import bronbeleid as B
+import herkenning as H
+import schema
 
 app = Flask(__name__)
 
@@ -28,151 +33,29 @@ WACHTWOORD = os.environ.get("LOCATIE_WACHTWOORD", "").strip()
 # Een bezoek is: minstens zo lang stil binnen zo'n straal.
 STILSTAND_METER = 120
 STILSTAND_MINUTEN = 8
+# Een dag is afgesloten zoveel uur na middernacht: wat de tracker uit zijn buffer
+# naleverde is dan binnen. Tot dan is het dagboek voorlopig.
+AFSLUIT_UREN = 6
 
 
 # --------------------------------------------------------------- database
 
-# Velden die er later bij zijn gekomen. SQLite kan kolommen toevoegen aan een
-# bestaande tabel, dus dit hoeft niet in een migratie: bij het eerste verzoek na
-# een uitrol worden ze stil aangemaakt en blijven de bestaande rijen staan.
-LATERE_KOLOMMEN = {
-    "bs": "INTEGER",        # 1 = niet aan de lader, 2 = laadt, 3 = vol
-    "ssid": "TEXT",         # naam van het wifi-netwerk
-    "bssid": "TEXT",        # hardware-adres van het toegangspunt
-    "motion": "TEXT",       # wat de telefoon zelf zegt: stationary, walking, automotive
-    "druk": "REAL",         # luchtdruk in kPa, onderscheidt verdiepingen
-    "vac": "INTEGER",       # verticale nauwkeurigheid
-    "trigger": "TEXT",      # waarom dit punt verstuurd is (t=timer, u=handmatig, c=zone)
-    "regios": "TEXT",       # geofences waar de telefoon op dat moment in zat
-    "gebeurtenis": "TEXT",  # enter of leave, bij een zone-overgang
-    "zone": "TEXT",         # naam van de zone die betreden of verlaten werd
-    # Wanneer het bericht hier aankwam, naast tst (wanneer het gemeten werd).
-    # Zonder dit verschil is niet te zien of een stilte betekent dat de telefoon
-    # niets mat, of dat hij wel mat maar niets kwijt kon en het later nastuurde.
-    # Op 10-9-2026 viel de stroom stil zodra de telefoon op de wifi van de auto
-    # zat (4G-router); pas dit veld kan zeggen welke van de twee het was.
-    "ontvangen": "INTEGER",
-    "gemaakt": "INTEGER",   # created_at van OwnTracks: wanneer het bericht klaarstond
-    # Velden van de tracker in de auto (@Track). De telefoon geeft een
-    # onzekerheid in meter (acc), de tracker geeft een HDOP: dat is iets anders
-    # en mag nooit in acc terechtkomen, anders laat de filter van 250 m alles
-    # door. Zie locatie/atrack.py.
-    "hdop": "INTEGER",       # 1-50, kleiner is beter; 0 = geen fix
-    "satellieten": "INTEGER",
-    "fix": "INTEGER",        # 1 = echte meting, 0 = oude positie herhaald
-    "verzonden": "INTEGER",  # wanneer het toestel het bericht wegstuurde
-    "gebufferd": "INTEGER",  # 1 = nagestuurd nadat het netwerk terug was
-}
-
-
-def _bron_erbij(conn):
-    """Twee bronnen naast elkaar: de telefoon en de tracker in de auto.
-
-    De tabel had het tijdstip als enige sleutel. Dat werkte zolang er één bron
-    was, maar zodra de tracker meet kan hij op dezelfde seconde een punt hebben
-    als de telefoon, en dan verdween er stilletjes een van de twee. De sleutel
-    wordt daarom (bron, tst). Bestaande rijen komen van de telefoon en krijgen
-    'iphone'.
-
-    SQLite kan geen sleutel wijzigen, dus de tabel wordt herbouwd. Dat gebeurt
-    eenmalig, in dezelfde transactie, en de kolommen worden uit de bestaande
-    tabel gelezen zodat later toegevoegde velden vanzelf meegaan.
-    """
-    info = list(conn.execute("PRAGMA table_info(punt)"))
-    if not info or any(r["name"] == "bron" for r in info):
-        return
-    defs, namen = [], []
-    for r in info:
-        stuk = '"%s" %s' % (r["name"], r["type"] or "TEXT")
-        if r["notnull"] and r["name"] not in ("tst",):
-            stuk += " NOT NULL"
-        defs.append(stuk)
-        namen.append('"%s"' % r["name"])
-    defs.append("bron TEXT NOT NULL DEFAULT 'iphone'")
-    kolommen = ", ".join(namen)
-    conn.executescript(
-        "ALTER TABLE punt RENAME TO punt_oud;\n"
-        "CREATE TABLE punt (%s, PRIMARY KEY (bron, tst));\n" % ", ".join(defs) +
-        "INSERT INTO punt (%s, bron) SELECT %s, 'iphone' FROM punt_oud;\n" % (kolommen, kolommen) +
-        "DROP TABLE punt_oud;\n"
-        "CREATE INDEX IF NOT EXISTS punt_tst ON punt(tst);\n"
-        "CREATE INDEX IF NOT EXISTS punt_bron ON punt(bron, tst);")
-
-
 def db():
-    conn = sqlite3.connect(DB_PAD)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS punt (
-            tst     INTEGER PRIMARY KEY,   -- tijdstip van de telefoon (epoch)
-            lat     REAL NOT NULL,
-            lon     REAL NOT NULL,
-            acc     INTEGER,               -- nauwkeurigheid in meter
-            alt     INTEGER,
-            vel     INTEGER,               -- snelheid km/u
-            batt    INTEGER,
-            conn    TEXT,                  -- w=wifi, m=mobiel, o=offline
-            tid     TEXT,
-            soort   TEXT,                  -- location / transition
-            ruw     TEXT
-        )""")
-    conn.execute("CREATE INDEX IF NOT EXISTS punt_tst ON punt(tst)")
-
-    bestaand = {r["name"] for r in conn.execute("PRAGMA table_info(punt)")}
-    for kolom, soort in LATERE_KOLOMMEN.items():
-        if kolom not in bestaand:
-            conn.execute(f"ALTER TABLE punt ADD COLUMN {kolom} {soort}")
-    _bron_erbij(conn)
-    # Wat een tracker stuurt zonder positie: zijn instellingen (ALM), toestelinfo
-    # (INF), een hartslag (HBD), een bevestiging op een commando (ACK). Tot
-    # 03-10-2026 werd dat alleen beantwoord en op 90 tekens in de log gezet, zodat
-    # de teruggelezen instellingen van de tracker niet te lezen waren. Het is ook
-    # het levensteken per toestel als hij stilstaat en geen positie meet.
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS toestelbericht (
-            ontvangen INTEGER NOT NULL,    -- wanneer binnengekomen (epoch)
-            bron      TEXT NOT NULL,       -- de naam uit ATRACK_IMEIS
-            soort     TEXT,                -- ALM, INF, HBD, QSS, ...
-            kop       TEXT,                -- RESP, ACK, BUFF
-            verzonden INTEGER,             -- verzendtijd volgens het toestel
-            ruw       TEXT NOT NULL
-        )""")
-    conn.execute("CREATE INDEX IF NOT EXISTS toestelbericht_bron "
-                 "ON toestelbericht(bron, ontvangen)")
-    conn.commit()
-    return conn
+    """Een verbinding op een database die zeker op de laatste schemaversie staat."""
+    return schema.verbind(DB_PAD)
 
 
 def plek_db(conn):
     """Plekken met een naam: thuis, kantoor, een werf.
 
-    Herkenning gebeurt op twee manieren, en wifi gaat voor. Een wifi-naam is
-    onmiskenbaar: GPS drijft 's nachts tientallen meters, een netwerknaam niet.
-    Mehdi's huis heeft er twee (6La5Ra en Proximus-Home-829822) en beide wijzen
-    naar hetzelfde adres.
+    Herkenning gebeurt op twee manieren, en wifi gaat voor (alleen de telefoon zag
+    wifi). Een plek met een dossiernummer telt in de herkenning als een ligging van
+    dat project (herkenning.kandidaten). De tabel zelf staat in schema.py.
     """
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS plek (
-            naam    TEXT PRIMARY KEY,
-            lat     REAL,
-            lon     REAL,
-            straal  INTEGER DEFAULT 120,   -- meter
-            wifi    TEXT,                  -- kommagescheiden ssid's
-            soort   TEXT,                  -- thuis, werk, klant, werf, onderweg
-            notitie TEXT
-        )""")
-    # Het dossiernummer van H-Architects hoort in een eigen veld en niet in de
-    # notitie: hierop gaat de agent straks een werfbezoek aan het projectdossier
-    # koppelen, en dan moet het exact te vergelijken zijn.
-    kolommen = {r["name"] for r in conn.execute("PRAGMA table_info(plek)")}
-    if "dossier" not in kolommen:
-        conn.execute("ALTER TABLE plek ADD COLUMN dossier TEXT")
-    conn.commit()
+    return None
 
 
 def plekken(conn):
-    plek_db(conn)
     return [dict(r) for r in conn.execute("SELECT * FROM plek")]
 
 
@@ -196,10 +79,10 @@ def noem_plek(lat, lon, wifis, lijst):
 def _lokaal(tst):
     """Epoch naar Belgische tijd.
 
-    Bewust niet zomaar +2: tussen eind oktober en eind maart is het +1. We
-    laten Python de zone bepalen via de tijdzone-database van de container.
+    Bewust niet zomaar +2: tussen eind oktober en eind maart is het +1. En bewust
+    met de zone uit het bronbeleid, niet die van de container.
     """
-    return datetime.fromtimestamp(tst, tz=timezone.utc).astimezone()
+    return B.lokaal(tst)
 
 
 def afstand(lat1, lon1, lat2, lon2):
@@ -356,14 +239,28 @@ def pub():
             return None
 
     conn = db()
+    ruw = json.dumps(data, ensure_ascii=False)[:4000]
+    nu = int(time.time())
+    # De telefoon is sinds 03-10-2026 uit gebruik (bronbeleid). Wat hij toch stuurt wordt
+    # bewaard, herleidbaar, maar telt nergens mee: het bronbeleid laat bron iphone niet door.
+    conn.execute("""INSERT INTO bericht (ontvangen, laatst_ontvangen, bron, toestel, protocol, soort,
+                                         posities_gemeld, posities_bewaard, verwerking, vingerafdruk, ruw)
+                    VALUES (?, ?, 'iphone', ?, 'owntracks', ?, 1, 1, 'punten', ?, ?)
+                    ON CONFLICT(vingerafdruk) DO UPDATE SET aantal = aantal + 1,
+                                                            laatst_ontvangen = excluded.laatst_ontvangen""",
+                 (nu, nu, str(data.get("tid", ""))[:8] or None, soort, schema.vingerafdruk_bericht(ruw), ruw))
+    bid = conn.execute("SELECT id FROM bericht WHERE vingerafdruk = ?",
+                       (schema.vingerafdruk_bericht(ruw),)).fetchone()[0]
     conn.execute(
         """INSERT INTO punt (tst, lat, lon, acc, alt, vel, batt, conn, tid, soort, ruw,
                              bs, ssid, bssid, motion, druk, vac, trigger, regios,
-                             gebeurtenis, zone, ontvangen, gemaakt, bron)
+                             gebeurtenis, zone, ontvangen, gemaakt, bron,
+                             toestel, berichtsoort, volgnr, bericht_id)
            VALUES (:tst, :lat, :lon, :acc, :alt, :vel, :batt, :conn, :tid, :soort, :ruw,
                    :bs, :ssid, :bssid, :motion, :druk, :vac, :trigger, :regios,
-                   :gebeurtenis, :zone, :ontvangen, :gemaakt, 'iphone')
-           ON CONFLICT(bron, tst) DO NOTHING""",
+                   :gebeurtenis, :zone, :ontvangen, :gemaakt, 'iphone',
+                   :tid, :soort, 0, :bid)
+           ON CONFLICT(bron, tst, berichtsoort, volgnr) DO NOTHING""",
         {"bs": heel("bs"),
          "ssid": str(data.get("ssid", ""))[:64] or None,
          "bssid": str(data.get("bssid", ""))[:32] or None,
@@ -377,12 +274,12 @@ def pub():
          # afstanden, en het werkt ook in de zuinige stand van iOS.
          "gebeurtenis": str(data.get("event", ""))[:8] or None,
          "zone": str(data.get("desc", ""))[:80] or None,
-         "ontvangen": int(time.time()),
+         "ontvangen": nu,
          "gemaakt": heel("created_at"),
          "tst": tst, "lat": lat, "lon": lon, "acc": heel("acc"), "alt": heel("alt"),
          "vel": heel("vel"), "batt": heel("batt"),
          "conn": str(data.get("conn", ""))[:4], "tid": str(data.get("tid", ""))[:8],
-         "soort": soort, "ruw": json.dumps(data, ensure_ascii=False)[:4000]})
+         "soort": soort, "ruw": ruw, "bid": bid})
     # Het antwoord op een meting is de enige weg terug naar de telefoon: hier
     # gaan de zones mee zodra ze veranderd zijn.
     antwoord = []
@@ -402,31 +299,12 @@ def pub():
 # ------------------------------------------- gebeurtenissen en gezondheid
 
 def gezondheid_db(conn):
-    """Losse metingen, elk op een eigen rij.
+    """Losse gezondheidsmetingen en gemelde momenten, elk op een eigen rij.
 
     Bewust niet een kolom per soort meting: dan vraagt elke nieuwe meting een
-    schemawijziging. Zo kan de telefoon morgen slaapduur of hartritmevariatie
-    gaan sturen zonder dat hier iets verandert.
+    schemawijziging. De tabellen staan in schema.py.
     """
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS gezondheid (
-            datum   TEXT NOT NULL,      -- JJJJ-MM-DD, de dag waarop het geldt
-            soort   TEXT NOT NULL,      -- stappen, hartslag_rust, slaap_uren, ...
-            waarde  REAL NOT NULL,
-            eenheid TEXT,
-            bron    TEXT,               -- iphone, watch, handmatig
-            gezet   INTEGER NOT NULL,   -- wanneer binnengekomen (epoch)
-            PRIMARY KEY (datum, soort, bron)
-        )""")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS gebeurtenis (
-            tst     INTEGER NOT NULL,
-            soort   TEXT NOT NULL,      -- rit-start, rit-eind, werkdag-start, ...
-            detail  TEXT,
-            bron    TEXT,
-            PRIMARY KEY (tst, soort)
-        )""")
-    conn.commit()
+    return None
 
 
 @app.route("/gebeurtenis", methods=["POST"])
@@ -552,18 +430,26 @@ def api_plekken():
             conn.execute("DELETE FROM plek WHERE naam=?", (naam,))
             conn.commit(); conn.close()
             return jsonify({"ok": True, "verwijderd": naam})
-        plek_db(conn)
-        conn.execute("""INSERT INTO plek (naam, lat, lon, straal, wifi, soort, notitie, dossier)
-                        VALUES (?,?,?,?,?,?,?,?)
+        # Een werf hoort bij een project: firma plus nummer, want hetzelfde nummer kan
+        # bij twee firma's bestaan. Zonder firma koppelt de herkenning alleen als het
+        # nummer eenduidig is.
+        conn.execute("""INSERT INTO plek (naam, lat, lon, straal, wifi, soort, notitie, dossier,
+                                          firma, project_id, min_minuten)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?)
                         ON CONFLICT(naam) DO UPDATE SET
                           lat=excluded.lat, lon=excluded.lon, straal=excluded.straal,
                           wifi=excluded.wifi, soort=excluded.soort,
-                          notitie=excluded.notitie, dossier=excluded.dossier""",
+                          notitie=excluded.notitie, dossier=excluded.dossier,
+                          firma=excluded.firma, project_id=excluded.project_id,
+                          min_minuten=excluded.min_minuten""",
                      (naam, d.get("lat"), d.get("lon"), int(d.get("straal") or 120),
                       str(d.get("wifi", ""))[:200] or None,
                       str(d.get("soort", ""))[:40] or None,
                       str(d.get("notitie", ""))[:200] or None,
-                      str(d.get("dossier", ""))[:20] or None))
+                      str(d.get("dossier", ""))[:20] or None,
+                      str(d.get("firma", ""))[:12] or None,
+                      str(d.get("project_id", ""))[:40] or None,
+                      int(d["min_minuten"]) if d.get("min_minuten") else None))
         conn.commit()
         uit = plekken(conn)
         conn.close()
@@ -583,9 +469,7 @@ def api_gezondheid(datum):
         (datum,)).fetchall()
     geb = conn.execute(
         "SELECT tst, soort, detail FROM gebeurtenis WHERE tst >= ? AND tst < ? ORDER BY tst",
-        (int(datetime.fromisoformat(datum).astimezone().timestamp()),
-         int((datetime.fromisoformat(datum).astimezone() + timedelta(days=1)).timestamp()))
-    ).fetchall()
+        B.dagranden(datum)).fetchall()
     conn.close()
     return jsonify({
         "datum": datum,
@@ -729,8 +613,24 @@ def _bezoek(groep, bekende_plekken, tot=None):
     }
 
 
+# Na "motor uit" meldt de tracker in de auto niets tot de motor weer aanslaat
+# (spaarstand 1, zie bronbeleid). Die stilte is dus gemeten stilstand en geen
+# onbekende tijd: ligt het eerste punt erna nog in de buurt, dan stond de auto daar.
+# Gemeten 03-10-2026: het eerste punt na het starten lag 115 tot 235 m verder, want
+# het komt pas 30 s na "motor aan". Ligt het verder, dan blijft het een gat.
+PARKEER_METER = 1000
+
+
+def _geparkeerd(voor, na):
+    return (voor.get("gebeurtenis") == "motor uit"
+            and (na["tst"] - voor["tst"]) / 60 >= STILSTAND_MINUTEN
+            and afstand(voor["lat"], voor["lon"], na["lat"], na["lon"]) <= PARKEER_METER)
+
+
 def _is_stop(voor, na):
     """Stond hij stil in de stilte tussen deze twee punten van een rit?"""
+    if _geparkeerd(voor, na):
+        return True
     minuten = (na["tst"] - voor["tst"]) / 60
     meter = afstand(voor["lat"], voor["lon"], na["lat"], na["lon"])
     return (minuten <= GAT_MINUTEN and meter <= STOP_METER
@@ -779,7 +679,7 @@ def _stuk_tussen(spoor, bekende_plekken=()):
     van = None                          # vertrek uit een stop, als de rit daar begint
     x = 1
     while x < len(spoor):
-        if (spoor[x]["tst"] - spoor[x - 1]["tst"]) / 60 > GAT_MINUTEN:
+        if not _is_stop(spoor[x - 1], spoor[x]) and (spoor[x]["tst"] - spoor[x - 1]["tst"]) / 60 > GAT_MINUTEN:
             if x - 1 > begin:
                 uit.append(_rit(spoor[begin:x], spoor[begin:x], van))
             uit.append({
@@ -809,6 +709,8 @@ def _stuk_tussen(spoor, bekende_plekken=()):
             if c > begin:
                 uit.append(_rit(spoor[begin:c + 1], spoor[begin:c + 1], van))
             stop = dict(_bezoek(spoor[c:e + 1], bekende_plekken, tot=tot), stop=True)
+            if _geparkeerd(spoor[x - 1], spoor[x]):
+                stop.update(parkeren=True, bewijs="motor uit om %s" % _lokaal(spoor[x - 1]["tst"]).strftime("%H:%M"))
             if van and stop["van"] < van:
                 stop.update(van=van, minuten=round((stop["tot"] - van) / 60))
             uit.append(stop)
@@ -902,7 +804,9 @@ def _voeg_samen(items):
                               wifi=vorig.get("wifi") or item.get("wifi"),
                               plek=vorig.get("plek") or item.get("plek"),
                               dossier=vorig.get("dossier") or item.get("dossier"),
-                              stop=bool(vorig.get("stop") and item.get("stop")))
+                              stop=bool(vorig.get("stop") and item.get("stop")),
+                              parkeren=bool(vorig.get("parkeren") or item.get("parkeren")),
+                              bewijs=vorig.get("bewijs") or item.get("bewijs"))
             continue
 
         if voor:
@@ -914,11 +818,43 @@ def _voeg_samen(items):
     return uit
 
 
-def dagindeling_zuiver(punten, bekende_plekken):
-    """Bezoeken, ritten en gaten uit losse punten, zonder databasetoegang.
 
-    Los van dagindeling() zodat het tegen echte punten getest kan worden.
+
+def _motor_aan_momenten(punten):
+    """Wanneer de motor aansloeg. Zonder fix is tst de tijd van de laatste fix; het
+    moment zelf is dan de verzendtijd (gemeten 03-10-2026, zie atrack.py)."""
+    uit = []
+    for p in punten:
+        if p.get("gebeurtenis") != "motor aan":
+            continue
+        uit.append(p["verzonden"] if p.get("fix") == 0 and p.get("verzonden") else p["tst"])
+    return sorted(uit)
+
+
+def _parkeren_tot_motor_aan(items, punten):
+    """Een parkeerstop loopt tot de motor aansloeg, niet tot het eerste punt daarna."""
+    aan = _motor_aan_momenten(punten)
+    for s in items:
+        if not s.get("parkeren"):
+            continue
+        m = next((t for t in aan if s["van"] < t < s["tot"]), None)
+        if m:
+            s.update(tot=m, minuten=round((m - s["van"]) / 60),
+                     bewijs=(s.get("bewijs") or "motor uit") + ", motor aan om %s" % _lokaal(m).strftime("%H:%M"))
+
+
+def dagindeling_zuiver(punten, bekende_plekken):
+    """Bezoeken, ritten en gaten uit de punten van één spoor, zonder databasetoegang.
+
+    Los van dagindeling() zodat het tegen nagebootste punten getest kan worden.
     """
+    if not punten:
+        return []
+    origineel = punten
+    # Een punt zonder fix (hdop 0) herhaalt een oude positie. Het blijft bewaard en
+    # zichtbaar, maar bewijst geen aanwezigheid en telt niet mee in een afstand.
+    # Tot 04-10-2026 werden zulke "motor aan"-punten gewoon in de indeling gebruikt.
+    punten = [p for p in punten if p.get("fix") != 0]
     if not punten:
         return []
     # Een punt met een onzekerheid van honderden meters is geen GPS-meting maar
@@ -945,68 +881,223 @@ def dagindeling_zuiver(punten, bekende_plekken):
             break
         resultaat.append(_bezoek(punten[i:j], bekende_plekken))
         vorige_eind = j - 1
+    _parkeren_tot_motor_aan(resultaat, origineel)
     return _voeg_samen(resultaat)
 
 
-def met_open_einde(indeling, punten, datum, nu=None):
-    """Zegt het als een dag in stilte eindigt.
+# Berichten die iets zeggen over de toestand van de auto. VGL en STC volgen een
+# motor uit of aan op de voet en zeggen zelf niets over rijden of staan.
+STAAT_SOORTEN = ("VGF", "VGN", "FRI", "ERI", "STT")
 
-    Op 13-09-2026 kwam het laatste punt om 11:56, daarna twaalf uur niets. Het
-    dagboek eindigde met "rit tot 11:56", wat leest alsof de dag toen gedaan was.
-    Ligt het laatste punt meer dan GAT_MINUTEN voor het einde van de dag (of voor
-    nu, als de dag nog loopt), dan komt er een open gat bij: geen afstand, want
-    waar de telefoon daarna was is onbekend.
+
+def _moment(p):
+    return p["verzonden"] if p.get("fix") == 0 and p.get("verzonden") else p["tst"]
+
+
+def _staat(punten, voor):
+    """('geparkeerd', punt) als de laatste toestandsmelding voor `voor` 'motor uit' was,
+    ('onderweg', punt) bij een andere melding, (None, None) als er geen is (telefoon)."""
+    lijst = [p for p in punten if p.get("berichtsoort") in STAAT_SOORTEN and _moment(p) < voor]
+    if not lijst:
+        return None, None
+    laatste = max(lijst, key=lambda p: (_moment(p), p["tst"]))
+    if laatste.get("gebeurtenis") == "motor uit" and laatste.get("fix") != 0:
+        return "geparkeerd", laatste
+    return "onderweg", laatste
+
+
+def _parkeerstuk(punt, van, tot, **extra):
+    return dict({"soort": "bezoek", "van": int(van), "tot": int(tot), "minuten": round((tot - van) / 60),
+                 "lat": round(punt["lat"], 6), "lon": round(punt["lon"], 6), "punten": 0,
+                 "langste_stilte": round((tot - van) / 60), "wifi": None, "plek": None, "dossier": None,
+                 "bronnen": [punt.get("bron") or "auto"], "parkeren": True}, **extra)
+
+
+def met_open_einde(indeling, punten, datum, nu=None, voorloper=(), extra=()):
+    """Zegt hoe de dag begint en eindigt als daar geen punten liggen.
+
+    Einde: op 13-09-2026 kwam het laatste punt om 11:56, daarna twaalf uur niets, en
+    het dagboek eindigde met "rit tot 11:56". Ligt het laatste punt meer dan
+    GAT_MINUTEN voor het einde van de dag (of voor nu), dan komt er een open gat bij,
+    zonder afstand. Behalve als de auto toen geparkeerd was ('motor uit'): dan staat
+    hij daar tot middernacht of tot nu, en dat is gemeten, geen gat.
+
+    Begin: een dag waarop de auto pas om 21:30 vertrekt (04-10-2026) begint met
+    geparkeerd staan sinds de vorige avond. voorloper zijn de punten van dit spoor
+    voor de dag, uit de actieve reeks; een punt van voor de startgrens komt hier
+    nooit in (bronbeleid), dus een verblijf over de grens krijgt geen ouder bewijs.
+    extra zijn punten zonder fix met een oude meettijd maar een moment in deze dag
+    ("motor aan" na een nacht geparkeerd).
     """
-    if not punten:
-        return indeling
+    begin, eind = B.dagranden(datum)
     nu = time.time() if nu is None else nu
-    einde = datetime.strptime(datum, "%Y-%m-%d").astimezone() + timedelta(days=1)
-    grens = min(einde.timestamp(), nu)
-    laatste = punten[-1]["tst"]
-    if (grens - laatste) / 60 <= GAT_MINUTEN:
-        return indeling
-    return indeling + [{
+    grens = min(eind, nu)
+    if grens <= begin:
+        return list(indeling)
+    uit = list(indeling)
+    geldig = [p for p in punten if p.get("fix") != 0]
+    aan = [m for m in _motor_aan_momenten(list(punten) + list(extra)) if begin <= m < eind]
+
+    staat, p0 = _staat(list(voorloper) + list(extra), begin)
+    if staat == "geparkeerd":
+        eerste = geldig[0] if geldig else None
+        if eerste is None or afstand(p0["lat"], p0["lon"], eerste["lat"], eerste["lon"]) <= PARKEER_METER:
+            tot = eerste["tst"] if eerste else int(grens)
+            bewijs = "motor uit op %s" % _lokaal(p0["tst"]).strftime("%d-%m %H:%M")
+            m = next((t for t in aan if t <= tot), None)
+            if m:
+                tot = m
+                bewijs += ", motor aan om %s" % _lokaal(m).strftime("%H:%M")
+            if tot > begin:
+                stuk = _parkeerstuk(p0, begin, tot, open_begin=True, bewijs=bewijs)
+                if eerste is None and m is None:
+                    stuk.update(open=True, loopt_door=grens >= eind)
+                if uit and uit[0]["soort"] == "bezoek" and \
+                        afstand(uit[0]["lat"], uit[0]["lon"], stuk["lat"], stuk["lon"]) <= SAMENVOEG_METER:
+                    uit[0] = dict(uit[0], van=begin, minuten=round((uit[0]["tot"] - begin) / 60), open_begin=True,
+                                  parkeren=True, bewijs=bewijs + "; " + (uit[0].get("bewijs") or ""))
+                else:
+                    uit.insert(0, stuk)
+    elif staat is None and geldig and (geldig[0]["tst"] - begin) / 60 > GAT_MINUTEN and \
+            any(p.get("berichtsoort") in STAAT_SOORTEN for p in geldig):
+        # Een tracker zonder bekende toestand van daarvoor: zeg dat het begin van de dag
+        # niet gemeten is (de eerste dag van de reeks, of na een lange onderbreking).
+        uit.insert(0, {"soort": "gat", "open_begin": True, "van": begin, "tot": geldig[0]["tst"],
+                       "minuten": round((geldig[0]["tst"] - begin) / 60), "meter": None})
+
+    if not geldig:
+        return uit
+    staat, pl = _staat(list(voorloper) + list(punten) + list(extra), grens)
+    laatste = geldig[-1]
+    if staat == "geparkeerd" and pl["tst"] >= begin and (grens - pl["tst"]) / 60 >= 1:
+        bewijs = "motor uit om %s" % _lokaal(pl["tst"]).strftime("%H:%M")
+        if uit and uit[-1]["soort"] == "bezoek" and \
+                afstand(uit[-1]["lat"], uit[-1]["lon"], pl["lat"], pl["lon"]) <= SAMENVOEG_METER:
+            uit[-1] = dict(uit[-1], tot=int(grens), minuten=round((grens - uit[-1]["van"]) / 60), open=True,
+                           loopt_door=grens >= eind, parkeren=True,
+                           bewijs=uit[-1].get("bewijs") or bewijs)
+        else:
+            stuk = _parkeerstuk(pl, pl["tst"], grens, open=True, loopt_door=grens >= eind, bewijs=bewijs)
+            # Aankomen en uitrollen vlak voor 'motor uit' (een paar punten op de plek) is
+            # geen rit van 0 km maar het begin van het parkeren.
+            while uit and uit[-1]["soort"] == "verplaatsing" and _klein(uit[-1], stuk["lat"], stuk["lon"]):
+                vorig = uit.pop()
+                stuk.update(van=vorig["van"], minuten=round((stuk["tot"] - vorig["van"]) / 60))
+            uit.append(stuk)
+        return uit
+    if (grens - laatste["tst"]) / 60 <= GAT_MINUTEN:
+        return uit
+    return uit + [{
         "soort": "gat", "open": True,
-        "van": laatste, "tot": int(grens),
-        "minuten": round((grens - laatste) / 60),
+        "van": laatste["tst"], "tot": int(grens),
+        "minuten": round((grens - laatste["tst"]) / 60),
         "meter": None,
     }]
 
 
 def dagindeling(punten):
-    """Losse punten omzetten naar bezoeken, verplaatsingen en gaten."""
+    """Losse punten omzetten naar bezoeken, verplaatsingen en gaten, per spoor samen."""
     if not punten:
         return []
-    # Eenmalig ophalen: de lijst is kort, maar hem per bezoek opvragen zou een
-    # databaseverbinding per stuk kosten.
     conn = db()
     bekende_plekken = plekken(conn)
     conn.close()
-    return dagindeling_zuiver(punten, bekende_plekken)
+    uit = []
+    for bron in sorted({p.get("bron") or "iphone" for p in punten}):
+        uit += dagindeling_zuiver([p for p in punten if (p.get("bron") or "iphone") == bron], bekende_plekken)
+    return sorted(uit, key=lambda s: s["van"])
 
 
-def punten_van_dag(datum):
-    """datum als 'JJJJ-MM-DD', in Belgische tijd."""
-    d = datetime.strptime(datum, "%Y-%m-%d")
-    # Dagrand bepalen in de lokale zone van de container (TZ=Europe/Brussels),
-    # zodat een dag loopt van middernacht tot middernacht Belgische tijd.
-    lokaal_begin = datetime(d.year, d.month, d.day).astimezone()
-    begin = int(lokaal_begin.timestamp())
-    eind = int((lokaal_begin + timedelta(days=1)).timestamp())
-    conn = db()
-    rijen = conn.execute(
-        "SELECT * FROM punt WHERE tst >= ? AND tst < ? ORDER BY tst", (begin, eind)
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rijen]
+def verrijk(indeling, plek_lijst, project_lijst, correctie_lijst, rol):
+    """Elk verblijf krijgt zijn herkenning (herkenning.py), elke rit de projecten waar hij voorbijreed."""
+    for s in indeling:
+        if s["soort"] == "bezoek":
+            h = H.beoordeel(s, plek_lijst, project_lijst, correctie_lijst, rol)
+            s["herkenning"] = h
+            p = h.get("project")
+            s["plek"] = h.get("plek") or (p.get("naam") if p else None)
+            s["dossier"] = ("%s %s" % (p.get("firma") or "", p.get("nummer"))).strip() if p else None
+        elif s["soort"] == "verplaatsing":
+            s["voorbij"] = H.voorbij(s.get("spoor"), project_lijst)
+    return indeling
+
+
+def _rijen(conn, sql, args):
+    return [dict(r) for r in conn.execute(sql, args)]
+
+
+def punten_van_dag(datum, conn=None):
+    """De punten van een Belgische kalenderdag, alleen uit de actieve reeks (bronbeleid)."""
+    if not B.dag_toegestaan(datum):
+        return []
+    eigen = conn is None
+    conn = conn or db()
+    begin, eind = B.dagranden(datum)
+    clause, args = B.sql_actief()
+    try:
+        return _rijen(conn, f"SELECT * FROM punt WHERE tst >= ? AND tst < ? AND {clause} ORDER BY tst, volgnr",
+                      [begin, eind] + args)
+    finally:
+        if eigen:
+            conn.close()
+
+
+def dag_gegevens(datum, nu=None, conn=None):
+    """Alles van een dag, per spoor: punten, indeling met herkenning, voorlopig of afgesloten."""
+    nu = time.time() if nu is None else nu
+    if not B.dag_toegestaan(datum):
+        return {"datum": datum, "buiten_reeks": True, "status": "buiten de reeks", "sporen": {}, "punten": [],
+                "grens": B.STARTGRENS}
+    eigen = conn is None
+    conn = conn or db()
+    try:
+        begin, eind = B.dagranden(datum)
+        clause, args = B.sql_actief()
+        alle = punten_van_dag(datum, conn)
+        voor = _rijen(conn, f"SELECT * FROM punt WHERE tst < ? AND {clause} ORDER BY tst DESC LIMIT 200",
+                      [begin] + args)[::-1]
+        extra = _rijen(conn, f"""SELECT * FROM punt WHERE tst < ? AND fix = 0 AND verzonden >= ? AND verzonden < ?
+                                 AND {clause}""", [begin, begin, eind] + args)
+        plek_lijst = plekken(conn)
+        projecten = H.projectplekken(conn)
+        corr = H.correcties(conn)
+        sporen = {}
+        for bron in B.actieve_bronnen():
+            pb = [p for p in alle if p["bron"] == bron]
+            ind = dagindeling_zuiver(pb, plek_lijst)
+            ind = met_open_einde(ind, pb, datum, nu, voorloper=[p for p in voor if p["bron"] == bron],
+                                 extra=[p for p in extra if p["bron"] == bron])
+            verrijk(ind, plek_lijst, projecten, [c for c in corr if c["bron"] == bron], B.rol(bron))
+            for s in ind:
+                s["bron"] = bron
+            sporen[bron] = {"bron": bron, "rol": B.rol(bron), "label": B.BRONNEN[bron].get("label"),
+                            "indeling": ind, "punten": len(pb), "geldig": sum(1 for p in pb if p.get("fix") != 0),
+                            "zonder_fix": sum(1 for p in pb if p.get("fix") == 0)}
+        return {"datum": datum, "status": "afgesloten" if nu >= eind + AFSLUIT_UREN * 3600 else "voorlopig",
+                "begin": begin, "eind": eind, "sporen": sporen, "punten": alle, "grens": B.STARTGRENS}
+    finally:
+        if eigen:
+            conn.close()
+
+
+def hoofdspoor(gegevens):
+    """Het spoor dat de persoon volgt: een actieve tracker met rol persoon, anders de auto.
+    Auto en persoon worden apart ingedeeld; geparkeerde autopunten filteren geen persoonlijke weg."""
+    sporen = gegevens.get("sporen") or {}
+    for bron, sp in sporen.items():
+        if sp["rol"] == "persoon":
+            return sp
+    return next(iter(sporen.values()), None)
 
 
 def dagen_met_data(limiet=60):
+    """De dagen met punten uit de actieve reeks, nieuwste eerst; vandaag staat er altijd bij."""
     conn = db()
-    rijen = conn.execute(
-        "SELECT tst FROM punt ORDER BY tst DESC LIMIT 20000").fetchall()
+    clause, args = B.sql_actief()
+    rijen = conn.execute(f"SELECT tst FROM punt WHERE {clause} ORDER BY tst DESC LIMIT 20000", args).fetchall()
     conn.close()
-    gezien, uit = set(), []
+    gezien, uit = set(), [B.vandaag().isoformat()]
+    gezien.add(uit[0])
     for r in rijen:
         d = _lokaal(r["tst"]).strftime("%Y-%m-%d")
         if d not in gezien:
@@ -1014,63 +1105,249 @@ def dagen_met_data(limiet=60):
             uit.append(d)
             if len(uit) >= limiet:
                 break
-    return uit
+    return sorted(uit, reverse=True)
 
 
 # ------------------------------------------------------------------ web
 
-@app.route("/")
-def index():
-    dagen = dagen_met_data()
-    datum = request.args.get("dag") or (dagen[0] if dagen else
-                                        datetime.now().strftime("%Y-%m-%d"))
-    punten = punten_van_dag(datum)
-    stukken = met_open_einde(dagindeling(punten), punten, datum)
+def _iso(tst):
+    return _lokaal(tst).isoformat() if tst else None
+
+
+def _punt_uit(p):
+    """Alles wat er gemeten is gaat mee naar buiten, zodat het dagboek de volledige
+    meting bevat: ook bron, fix, ontvangst- en verzendtijd (tot 04-10-2026 weggelaten)."""
+    return {"tijd": _iso(p["tst"]), "bron": p.get("bron"), "toestel": B.toestel_kort(p.get("toestel")),
+            "berichtsoort": p.get("berichtsoort"), "gebeurtenis": p.get("gebeurtenis"),
+            "lat": p["lat"], "lon": p["lon"], "fix": p.get("fix"), "geldig": p.get("fix") != 0,
+            "hdop": p.get("hdop"), "satellieten": p.get("satellieten"), "snelheid": p.get("vel"),
+            "ontvangen": _iso(p.get("ontvangen")), "verzonden": _iso(p.get("verzonden")),
+            "nagestuurd": bool(p.get("gebufferd")), "beweging": p.get("motion"),
+            "acc": p.get("acc"), "batt": p.get("batt"),
+            "laadt": p.get("bs") == 2 if p.get("bs") is not None else None,
+            "wifi": p.get("ssid"), "verbinding": p.get("conn"), "hoogte": p.get("alt"),
+            "luchtdruk": p.get("druk"), "aanleiding": p.get("trigger"), "zones": p.get("regios")}
+
+
+def _scherm(datum):
+    import status as S                   # noqa: PLC0415
+    gegevens = dag_gegevens(datum)
+    conn = db()
+    try:
+        stand = S.overzicht(conn)
+    finally:
+        conn.close()
+    sp = hoofdspoor(gegevens)
+    stukken = [dict(s) for s in (sp["indeling"] if sp else [])]
     for s in stukken:
         s["van_tekst"] = _lokaal(s["van"]).strftime("%H:%M")
         s["tot_tekst"] = _lokaal(s["tot"]).strftime("%H:%M")
     km = sum(s.get("meter") or 0 for s in stukken if s["soort"] == "verplaatsing") / 1000
-    laatste = punten[-1] if punten else None
+    return {"gegevens": gegevens, "stand": stand, "stukken": stukken, "km": round(km, 1),
+            "aantal": len(gegevens.get("punten") or []), "spoor": sp}
+
+
+@app.route("/")
+def index():
+    dagen = dagen_met_data()
+    vandaag = B.vandaag().isoformat()
+    datum = request.args.get("dag") or vandaag
+    try:
+        date.fromisoformat(datum)
+    except ValueError:
+        abort(400)
+    sch = _scherm(datum)
     return render_template(
-        "index.html", dagen=dagen, datum=datum, stukken=stukken,
-        wijzen={"automotive": "auto", "cycling": "fiets", "walking": "te voet",
-                "running": "lopend"},
-        aantal=len(punten), km=round(km, 1),
-        batterij=laatste["batt"] if laatste else None,
-        laatste_tijd=_lokaal(laatste["tst"]).strftime("%H:%M") if laatste else None)
+        "index.html" if not request.args.get("deel") else "deel.html",
+        dagen=dagen, datum=datum, vandaag=vandaag, stukken=sch["stukken"], stand=sch["stand"],
+        gegevens=sch["gegevens"], spoor=sch["spoor"],
+        wijzen={"automotive": "auto", "cycling": "fiets", "walking": "te voet", "running": "lopend"},
+        zekerheid={"bevestigd": "bevestigd", "waarschijnlijk": "waarschijnlijk", "kort": "kort gestopt",
+                   "onzeker": "onzeker", "niet_mehdi": "niet Mehdi"},
+        aantal=sch["aantal"], km=sch["km"], eerste_dag=B.eerste_dag(),
+        nu_tekst=B.lokaal(time.time()).strftime("%H:%M:%S"))
 
 
 @app.route("/api/dag/<datum>")
 def api_dag(datum):
-    punten = punten_van_dag(datum)
+    try:
+        date.fromisoformat(datum)
+    except ValueError:
+        abort(400)
+    g = dag_gegevens(datum)
+    sp = hoofdspoor(g)
+    indeling = sp["indeling"] if sp else []
     return jsonify({
-        "datum": datum,
-        # Alles wat de telefoon meestuurde gaat mee naar buiten, zodat het
-        # dagboek in Dropbox de volledige meting bevat en er later aan de
-        # agenda, foto's of facturatie gekoppeld kan worden.
-        "punten": [{"tijd": _lokaal(p["tst"]).isoformat(), "lat": p["lat"],
-                    "lon": p["lon"], "acc": p["acc"], "batt": p["batt"],
-                    "laadt": p["bs"] == 2 if p["bs"] is not None else None,
-                    "wifi": p["ssid"], "beweging": p["motion"],
-                    "verbinding": p["conn"], "hoogte": p["alt"],
-                    "luchtdruk": p["druk"], "aanleiding": p["trigger"],
-                    "zones": p["regios"]}
-                   for p in punten],
-        "indeling": met_open_einde(dagindeling(punten), punten, datum),
+        "datum": datum, "status": g.get("status"), "grens": B.STARTGRENS, "bronbeleid": B.VERSIE,
+        "buiten_reeks": bool(g.get("buiten_reeks")),
+        "punten": [_punt_uit(p) for p in g.get("punten") or []],
+        "indeling": indeling,
+        "sporen": {b: {k: v for k, v in s.items()} for b, s in (g.get("sporen") or {}).items()},
+        # Punten zonder indeling (een enkel punt, of alleen punten zonder fix) gaan apart
+        # mee, zodat een dag met metingen nooit als lege dag wordt overgeslagen.
+        "losse_punten": len(g.get("punten") or []) if not indeling else 0,
     })
+
+
+@app.route("/api/dagboek/<datum>")
+def api_dagboek(datum):
+    """Het dagboek als tekst en als gegevens: dezelfde bron voor VM, bord en export."""
+    import dagboek as D                  # noqa: PLC0415
+    try:
+        date.fromisoformat(datum)
+    except ValueError:
+        abort(400)
+    g = dag_gegevens(datum)
+    conn = db()
+    try:
+        verblijven = [s for sp in (g.get("sporen") or {}).values() for s in sp["indeling"] if s["soort"] == "bezoek"]
+        D.vul_adressen(conn, datum, verblijven, opzoeken=request.args.get("adressen") == "1")
+    finally:
+        conn.close()
+    sp = hoofdspoor(g)
+    return jsonify({"datum": datum, "status": g.get("status"), "grens": B.STARTGRENS, "bronbeleid": B.VERSIE,
+                    "markdown": D.markdown(datum, g), "sporen": g.get("sporen"),
+                    "indeling": sp["indeling"] if sp else [],
+                    "punten": [_punt_uit(p) for p in g.get("punten") or []],
+                    "buiten_reeks": bool(g.get("buiten_reeks"))})
+
+
+@app.route("/api/context")
+def api_context():
+    """Locatiecontext voor agents: alleen projectrelevante verblijven en de bronstatus."""
+    import dagboek as D                  # noqa: PLC0415
+    import status as S                   # noqa: PLC0415
+    datum = request.args.get("dag") or B.vandaag().isoformat()
+    try:
+        date.fromisoformat(datum)
+    except ValueError:
+        abort(400)
+    g = dag_gegevens(datum)
+    conn = db()
+    try:
+        stand = S.overzicht(conn)
+    finally:
+        conn.close()
+    return jsonify(D.context(datum, g, stand))
+
+
+@app.route("/api/status")
+def api_status():
+    import status as S                   # noqa: PLC0415
+    conn = db()
+    try:
+        return jsonify(S.overzicht(conn))
+    finally:
+        conn.close()
+
+
+@app.route("/api/beleid")
+def api_beleid():
+    return jsonify(B.samenvatting())
+
+
+@app.route("/api/projectplekken")
+def api_projectplekken():
+    import projectsync                   # noqa: PLC0415
+    conn = db()
+    try:
+        return jsonify({"projectplekken": H.projectplekken(conn, alles=True), "dekking": projectsync.dekking(conn)})
+    finally:
+        conn.close()
+
+
+def _wie_mag_corrigeren():
+    """De naam van wie een correctie doet, of None.
+
+    Via het portaal zet Authentik de gebruiker in X-authentik-username (de drie
+    telefoonroutes maken die kop leeg in nginx). Zonder portaal: het wachtwoord.
+    """
+    naam = request.headers.get("X-authentik-username", "").strip()
+    if naam:
+        herkomst = request.headers.get("Origin") or request.headers.get("Referer") or ""
+        if herkomst and urlparse(herkomst).netloc != request.host:
+            return None
+        return naam
+    if WACHTWOORD and _wachtwoord_klopt():
+        return "intern"
+    return None
+
+
+def _epoch(waarde):
+    try:
+        return int(float(waarde))
+    except (TypeError, ValueError):
+        return int(datetime.fromisoformat(str(waarde)).timestamp())
+
+
+@app.route("/api/correctie", methods=["GET", "POST"])
+def api_correctie():
+    """Correcties van Mehdi op de herkenning: welk project, geen project, of de auto
+    was niet bij hem. Herleidbaar (wie, wanneer, waarom); intrekken zet een tijdstip,
+    er wordt niets gewist. Bij elke volgende verwerking toegepast."""
+    conn = db()
+    try:
+        if request.method == "GET":
+            return jsonify({"correcties": [dict(r) for r in conn.execute(
+                "SELECT * FROM bezoekcorrectie ORDER BY id DESC LIMIT 500")]})
+        wie = _wie_mag_corrigeren()
+        if not wie:
+            abort(403)
+        d = request.get_json(silent=True) or request.form.to_dict()
+        if d.get("intrekken"):
+            conn.execute("UPDATE bezoekcorrectie SET ingetrokken = ? WHERE id = ? AND ingetrokken IS NULL",
+                         (int(time.time()), int(d["intrekken"])))
+            conn.commit()
+            return jsonify({"ok": True, "ingetrokken": int(d["intrekken"])})
+        wat = str(d.get("wat", ""))
+        bron = str(d.get("bron", ""))
+        if wat not in ("project", "geen_project", "niet_mehdi") or bron not in B.BRONNEN:
+            abort(400)
+        try:
+            van, tot = _epoch(d["van"]), _epoch(d["tot"])
+        except (KeyError, ValueError):
+            abort(400)
+        sleutel = str(d.get("sleutel") or "")[:60] or None
+        if wat == "project" and not sleutel:
+            abort(400)
+        cur = conn.execute("""INSERT INTO bezoekcorrectie (bron, van, tot, wat, sleutel, reden, door, wanneer)
+                              VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                           (bron, van, tot, wat, sleutel, str(d.get("reden", ""))[:300] or None,
+                            str(d.get("door") or wie)[:60], int(time.time())))
+        conn.commit()
+        return jsonify({"ok": True, "id": cur.lastrowid})
+    finally:
+        conn.close()
 
 
 @app.route("/gezond")
 def gezond():
+    """Kort, per actieve bron. Een lege database is 'geen gegevens', nooit '0 min geleden'."""
+    import status as S                   # noqa: PLC0415
     conn = db()
-    rij = conn.execute("SELECT COUNT(*) n, MAX(tst) laatste FROM punt").fetchone()
-    conn.close()
-    laatste = rij["laatste"]
-    return jsonify({
-        "punten": rij["n"],
-        "laatste": _lokaal(laatste).isoformat() if laatste else None,
-        "minuten_geleden": round((time.time() - laatste) / 60) if laatste else None,
-    })
+    try:
+        stand = S.overzicht(conn)
+    finally:
+        conn.close()
+    uit = {"bronbeleid": B.VERSIE, "bronnen": {}}
+    for b in stand["bronnen"]:
+        lg = b.get("laatste_geldige_positie") or {}
+        lo = b.get("laatste_ontvangst") or {}
+        uit["bronnen"][b["bron"]] = {"status": b["status"], "toestand": b.get("toestand"),
+                                    "laatste_ontvangst": lo.get("tijd"), "laatste_geldige_positie": lg.get("tijd"),
+                                    "minuten_geleden": lg.get("minuten_geleden"), "alarm": b.get("alarm")}
+    uit["alarmen"] = stand["alarmen"]
+    return jsonify(uit)
+
+
+@app.route("/health")
+def health():
+    conn = db()
+    try:
+        conn.execute("SELECT 1 FROM punt LIMIT 1").fetchall()
+    finally:
+        conn.close()
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":

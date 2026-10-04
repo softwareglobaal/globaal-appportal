@@ -67,142 +67,137 @@
     text-transform:uppercase;letter-spacing:0.04em;}
   .bron.auto{border-color:#b9d2c6;background:#eef6f2;color:var(--bezoek);}
   .voet{margin-top:26px;font-size:12px;color:var(--tekst-3);}
+
+  .status{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:0 0 16px;}
+  .bronkaart{background:var(--paneel);border:1px solid var(--lijn);border-radius:6px;padding:10px 14px;font-size:12.5px;}
+  .bronkaart .naam{font-weight:600;font-size:13px;}
+  .bronkaart .toestand{display:inline-block;border-radius:4px;padding:0 6px;font-size:11.5px;margin-left:6px;
+    background:#eef2f6;color:var(--accent);}
+  .bronkaart .toestand.alarm{background:#fbecea;color:#9b2c1f;}
+  .bronkaart .toestand.rustig{background:#eef6f2;color:var(--bezoek);}
+  .bronkaart .uitleg{color:var(--tekst-2);margin-top:4px;}
+  .bronkaart dl{display:grid;grid-template-columns:auto 1fr;gap:1px 10px;margin:6px 0 0;}
+  .bronkaart dt{color:var(--tekst-3);} .bronkaart dd{margin:0;}
+  .bronkaart.uit{opacity:.75;}
+  .zeker{display:inline-block;border-radius:4px;padding:0 5px;font-size:11px;margin-left:5px;border:1px solid var(--lijn-sterk);}
+  .zeker.waarschijnlijk,.zeker.bevestigd{background:#eef6f2;border-color:#b9d2c6;color:var(--bezoek);}
+  .zeker.onzeker,.zeker.kort{background:#fdf5e6;border-color:#ead6a8;color:var(--amber);}
+  .kand{color:var(--tekst-2);font-size:12px;}
+  .corr{margin-top:4px;font-size:12px;} .corr select,.corr button{font-size:12px;}
+  .klein{font-size:12px;color:var(--tekst-3);}
+  .taken td,.taken th{padding:6px 10px;font-size:12px;}
+  .ververst{font-size:11.5px;color:var(--tekst-3);}
 </style>
 </head>
 <body>
 <div class="wrap">
-
   <div class="kop">
     <h1>Locatielogboek</h1>
-    <div class="sub">
-      {% if laatste_tijd %}
-        laatste bericht van de telefoon om {{ laatste_tijd }}{% if batterij %}, batterij {{ batterij }}%{% endif %}
-      {% else %}
-        nog geen berichten binnen
-      {% endif %}
-    </div>
+    <div class="sub">Reeks van de tracker in de auto sinds {{ eerste_dag }}. De auto bewijst waar de auto stond, niet waar Mehdi was.</div>
   </div>
-
-  {% if dagen %}
-  <div class="dagen">
-    {% for d in dagen[:14] %}
-      <a href="?dag={{ d }}" {% if d == datum %}class="actief"{% endif %}>{{ d }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  <div class="cijfers">
-    <div class="cijfer"><div class="n">{{ stukken | selectattr('soort','equalto','bezoek') | list | length }}</div><div class="l">bezoeken</div></div>
-    <div class="cijfer"><div class="n">{{ km }}</div><div class="l">kilometer</div></div>
-    <div class="cijfer"><div class="n">{{ aantal }}</div><div class="l">meetpunten</div></div>
-  </div>
-
   <div id="kaart"></div>
-
-  <h2>{{ datum }}</h2>
-  <div class="paneel">
-    {% if stukken %}
-    <table>
-      <thead><tr><th>van</th><th>tot</th><th>duur</th><th>wat</th><th>plaats</th><th>wifi</th></tr></thead>
-      <tbody>
-      {% for s in stukken %}
-        {% if s.soort == 'gat' %}
-        <tr class="gat">
-          <td class="tijd">{{ s.van_tekst }}</td>
-          <td class="tijd">{{ s.tot_tekst }}</td>
-          <td class="duur">{{ s.minuten }} min</td>
-          <td><span class="merk leeg-merk"></span>geen meting</td>
-          <td class="coord" colspan="2">{% if s.open %}sinds het laatste punt komt er niets meer binnen{% else %}telefoon zweeg; {{ (s.meter / 1000) | round(1) }} km hemelsbreed tussen voor en na{% endif %}</td>
-        </tr>
-        {% else %}
-        <tr class="rij" data-lat="{{ s.lat if s.soort == 'bezoek' else s.spoor[0][0] }}"
-                        data-lon="{{ s.lon if s.soort == 'bezoek' else s.spoor[0][1] }}">
-          <td class="tijd">{{ s.van_tekst }}</td>
-          <td class="tijd">{{ s.tot_tekst }}</td>
-          <td class="duur">{{ s.minuten }} min</td>
-          <td>
-            <span class="merk {{ 'bezoek' if s.soort == 'bezoek' else 'rit' }}"></span>
-            {% if s.soort == 'bezoek' %}bezoek{% else %}onderweg{% if s.wijze %}
-              <span class="wijze">{{ wijzen.get(s.wijze, s.wijze) }}</span>{% endif %}{% endif %}
-            {% for b in s.bronnen or [] %}<span class="bron {{ b }}">{{ b }}</span>{% endfor %}
-          </td>
-          <td>
-            {% if s.soort == 'bezoek' %}
-              {% if s.plek %}
-                <span class="plek">{{ s.plek }}</span>
-                {% if s.dossier %}<span class="dossier">{{ s.dossier }}</span>{% endif %}
-                <a class="coord" href="https://maps.google.com/?q={{ s.lat }},{{ s.lon }}"
-                   target="_blank" rel="noopener">kaart</a>
-              {% else %}
-                <a href="https://maps.google.com/?q={{ s.lat }},{{ s.lon }}" target="_blank"
-                   rel="noopener">{{ '%.5f'|format(s.lat) }}, {{ '%.5f'|format(s.lon) }}</a>
-              {% endif %}
-            {% else %}
-              {{ (s.meter / 1000) | round(1) }} km
-            {% endif %}
-          </td>
-          <td class="coord">{{ s.wifi or '' }}{% if s.soort == 'bezoek' and s.langste_stilte and s.langste_stilte > 30 %}<br>stilte {{ s.langste_stilte }} min{% endif %}</td>
-        </tr>
-        {% endif %}
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-      <div class="leeg">Geen punten op deze dag. Staat OwnTracks aan en heeft de app
-      toestemming voor locatie "altijd"?</div>
-    {% endif %}
-  </div>
-
-  <div class="voet">
-    Een bezoek is: minstens 8 minuten binnen 150 meter. Een gat is een stilte van
-    meer dan 30 minuten waarna je elders was; wat er gebeurde is niet gemeten. Ruwe gegevens via
-    <a href="/api/dag/{{ datum }}">/api/dag/{{ datum }}</a>.
-  </div>
-
+  <div id="inhoud">{% include "_inhoud.html" %}</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 (function () {
+  var DAG = {{ datum | tojson }}, VANDAAG = {{ vandaag | tojson }};
   var kaart = L.map('kaart');
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, attribution: '&copy; OpenStreetMap'
   }).addTo(kaart);
+  var laag = L.layerGroup().addTo(kaart);
+  var eersteKeer = true;
 
-  var grenzen = [];
+  function tekst(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
 
-  fetch('/api/dag/{{ datum }}')
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      (d.indeling || []).forEach(function (s) {
-        if (s.soort === 'bezoek') {
-          var m = L.circleMarker([s.lat, s.lon], {
-            radius: 7, color: '#2f7d5a', fillColor: '#2f7d5a', fillOpacity: 0.75, weight: 2
-          }).addTo(kaart);
-          var naam = s.plek ? '<b>' + s.plek + '</b>' + (s.dossier ? ' <code>' + s.dossier + '</code>' : '') + '<br>' : '';
-          m.bindPopup(naam + s.minuten + ' min');
-          grenzen.push([s.lat, s.lon]);
-        } else if (s.spoor && s.spoor.length > 1) {
-          L.polyline(s.spoor, { color: '#3663a0', weight: 3, opacity: 0.8 }).addTo(kaart);
-          s.spoor.forEach(function (p) { grenzen.push(p); });
+  function tekenKaart() {
+    return fetch('/api/dag/' + DAG, {cache: 'no-store'})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        laag.clearLayers();
+        var grenzen = [];
+        (d.indeling || []).forEach(function (s) {
+          if (s.soort === 'bezoek') {
+            var m = L.circleMarker([s.lat, s.lon], {
+              radius: 7, color: '#2f7d5a', fillColor: '#2f7d5a', fillOpacity: 0.75, weight: 2
+            }).addTo(laag);
+            var naam = s.plek ? '<b>' + tekst(s.plek) + '</b>' + (s.dossier ? ' <code>' + tekst(s.dossier) + '</code>' : '') + '<br>' : '';
+            m.bindPopup(naam + s.minuten + ' min');
+            grenzen.push([s.lat, s.lon]);
+          } else if (s.spoor && s.spoor.length > 1) {
+            L.polyline(s.spoor, { color: '#3663a0', weight: 3, opacity: 0.8 }).addTo(laag);
+            s.spoor.forEach(function (p) { grenzen.push(p); });
+          }
+        });
+        // Alleen de eerste keer passend zoomen: bij het verversen blijft de kaart waar je hem zette.
+        // Laadt de pagina in een verborgen tabblad, dan is de kaart 0 breed en zou fitBounds op
+        // het maximum zoomen; dan pas passen zodra de kaart zichtbaar is.
+        if (eersteKeer) {
+          var pas = function () {
+            kaart.invalidateSize();
+            if (grenzen.length) { kaart.fitBounds(grenzen, { padding: [30, 30] }); }
+            else { kaart.setView([50.85, 4.35], 9); }
+          };
+          if (kaart.getContainer().clientWidth > 0) { pas(); }
+          else {
+            var wacht = setInterval(function () {
+              if (kaart.getContainer().clientWidth > 0) { clearInterval(wacht); pas(); }
+            }, 500);
+          }
+          eersteKeer = false;
         }
+      })
+      .catch(function () { if (eersteKeer) { kaart.setView([50.85, 4.35], 9); eersteKeer = false; } });
+  }
+
+  function koppel() {
+    document.querySelectorAll('tr.rij').forEach(function (rij) {
+      rij.addEventListener('click', function (e) {
+        if (e.target.closest('.corr')) return;
+        var lat = parseFloat(rij.dataset.lat), lon = parseFloat(rij.dataset.lon);
+        if (!isNaN(lat) && !isNaN(lon)) kaart.setView([lat, lon], 16);
       });
-
-      if (grenzen.length) {
-        kaart.fitBounds(grenzen, { padding: [30, 30] });
-      } else {
-        kaart.setView([50.85, 4.35], 9);   // België, als er niets is
-      }
-    })
-    .catch(function () { kaart.setView([50.85, 4.35], 9); });
-
-  // Op een rij klikken zoomt de kaart naar dat moment.
-  document.querySelectorAll('tr.rij').forEach(function (rij) {
-    rij.addEventListener('click', function () {
-      var lat = parseFloat(rij.dataset.lat), lon = parseFloat(rij.dataset.lon);
-      if (!isNaN(lat) && !isNaN(lon)) kaart.setView([lat, lon], 16);
     });
-  });
+    document.querySelectorAll('form.corr').forEach(function (f) {
+      f.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var keuze = f.querySelector('select').value;
+        if (!keuze) return;
+        var d = {bron: f.dataset.bron, van: f.dataset.van, tot: f.dataset.tot};
+        if (keuze === 'geen_project' || keuze === 'niet_mehdi') { d.wat = keuze; }
+        else { d.wat = 'project'; d.sleutel = keuze; }
+        d.reden = 'via het dashboard';
+        fetch('/api/correctie', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                 body: JSON.stringify(d), credentials: 'same-origin'})
+          .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+          .then(function () { ververs(); })
+          .catch(function (x) { alert('Correctie niet bewaard (' + x.message + ')'); });
+      });
+    });
+  }
+
+  function ververs() {
+    return fetch('/?dag=' + DAG + '&deel=1', {cache: 'no-store'})
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (html) {
+        // Niet vervangen terwijl iemand een correctie aan het kiezen is.
+        if (document.activeElement && document.activeElement.closest && document.activeElement.closest('.corr')) return;
+        document.getElementById('inhoud').innerHTML = html;
+        koppel();
+        return tekenKaart();
+      })
+      .catch(function () {
+        var v = document.querySelector('.ververst');
+        if (v) v.textContent = 'verversen mislukt, volgende poging over 45 s';
+      });
+  }
+
+  koppel();
+  tekenKaart();
+  // Vandaag ververst zichzelf: kaart, tabel, cijfers en bronstatus, elke 45 seconden.
+  if (DAG === VANDAAG) { setInterval(ververs, 45000); }
 })();
 </script>
 </body>

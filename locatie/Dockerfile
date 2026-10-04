@@ -22,4 +22,13 @@ RUN python3 test_atrack.py
 # Derde grendel: de ontvanger zelf, inclusief de tweede bron in de database.
 RUN LOCATIE_DB=/tmp/proef.db python3 test_atrack_server.py
 
+# Opdracht v1.2 (04-10-2026): het bronbeleid (startgrens, toestel, dagranden, planning),
+# de schema-upgrade, de projectherkenning, de dag van de auto en de export. Eigen
+# proefgegevens; geen netwerk. Faalt er een, dan blijft de vorige container draaien.
+RUN python3 test_bronbeleid.py
+RUN python3 test_schema.py
+RUN python3 test_herkenning.py
+RUN python3 test_auto.py
+RUN python3 test_export.py
+
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3031} --workers 2 --timeout 60 app:app"]

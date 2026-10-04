@@ -17,7 +17,9 @@ from datetime import datetime, timedelta
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+sys.path.insert(0, os.path.join(HIER, "..", "locatie"))
 import bord  # noqa: E402
+import bronbeleid  # noqa: E402  de startgrens van het locatielogboek
 import organisatie  # noqa: E402
 import organisatie  # noqa: E402
 import projectadressen  # noqa: E402
@@ -85,7 +87,13 @@ def afspraak_op(g, lijst):
 
 
 def locatie_op(datum, uur):
-    """Waar was Mehdi rond dat uur volgens het locatiedagboek: tekst of ''."""
+    """Waar was Mehdi rond dat uur volgens het locatiedagboek: tekst of ''.
+
+    Alleen dagen uit de actieve meetreeks (bronbeleid, vanaf 03-10-2026). De dagboeken van
+    de telefoon daarvoor blijven bewaard maar worden niet meer gelezen (opdracht v1.2).
+    Sinds die dag meet de auto: 'waar' is waar de auto stond."""
+    if not bronbeleid.dag_toegestaan(datum):
+        return ""
     pad = os.path.expanduser(f"~/appportal/mijnagents-data/locatielogboek/dagen/{datum}.md")
     try:
         regels = open(pad, encoding="utf-8").read().splitlines()

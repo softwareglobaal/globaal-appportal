@@ -116,6 +116,63 @@ def test_tijd_wordt_als_utc_gelezen_ongeacht_de_klok_van_de_server():
         time.tzset()
 
 
+# Een FRI met drie posities, opgebouwd volgens de veldvolgorde van de handleiding
+# (v3.02, GTFRI: <Number> en daarna het blok nauwkeurigheid..positiemasker, <Number>
+# keer herhaald). Eigen proefwaarden, geen echte meting.
+DRIE = ("+RESP:GTFRI,8020090501,990000000000017,,,10,3,"
+        "1,0.0,180,30.3,4.700000,50.800000,20261004100000,0206,0010,4E84,061D580C,00,"
+        "1,12.0,90,30.0,4.701000,50.801000,20261004100030,0206,0010,4E84,061D580C,00,"
+        "2,40.0,90,30.0,4.705000,50.802000,20261004100100,0206,0010,4E84,061D580C,00,"
+        "0.0,,,,,85,210000,,,,20261004100105,0030$")
+
+
+def test_een_bericht_met_meerdere_posities_wordt_volledig_gelezen():
+    """Tot 04-10-2026 las de ontleder alleen het eerste positieblok."""
+    b = atrack.ontleed(DRIE)
+    assert b["posities_gemeld"] == 3 and b["posities_volledig"], b["posities_gemeld"]
+    assert [round(p["lat"], 6) for p in b["posities"]] == [50.8, 50.801, 50.802]
+    assert [p["tst"] for p in b["posities"]] == [1791108000, 1791108030, 1791108060]
+    assert b["verzonden"] == 1791108065, "de verzendtijd is het laatste 14-cijferige veld"
+    assert b["posities"][2]["hdop"] == 2 and b["posities"][2]["motion"] == "automotive"
+    assert b["lat"] == b["posities"][0]["lat"], "de velden van het eerste blok blijven bovenaan staan"
+
+
+def test_minder_posities_dan_gemeld_wordt_gezegd():
+    """Een bericht dat meer posities belooft dan we herkennen, wordt niet stil afgekapt."""
+    kort = DRIE.replace(",10,3,", ",10,4,")
+    b = atrack.ontleed(kort)
+    assert b["posities_gemeld"] == 4 and len(b["posities"]) == 3 and not b["posities_volledig"], b
+
+
+def test_satellieten_alleen_als_het_masker_dat_zegt():
+    """Masker 00: het volgende veld is de kilometerstand, geen aantal satellieten."""
+    b = atrack.ontleed(DRIE.replace(",00,0.0,,,", ",00,12,,,"))
+    assert b["posities"][2]["satellieten"] is None, b["posities"][2]
+    assert atrack.ontleed(FRI)["satellieten"] == 15, "masker 03 met satellieten moet blijven werken"
+
+
+def test_bewegingsstand_uit_gtstt():
+    """03-10-2026: GTSTT 22 (motor aan, rijdt) kwam op snelheid 0 binnen en werd als stilstand gelezen."""
+    stt = ("+RESP:GTSTT,8020090501,990000000000017,,22,1,0.0,180,30.3,4.700100,50.800100,20261003095317,"
+           "0206,0010,4E84,061D580C,00,20261003095319,002D$")
+    b = atrack.ontleed(stt)
+    assert b["toestand"] == "motor aan, rijdt" and b["posities"][0]["motion"] == "automotive", b
+    b = atrack.ontleed(stt.replace(",,22,", ",,21,"))
+    assert b["toestand"] == "motor aan, stil" and b["posities"][0]["motion"] == "stationary", b
+
+
+def test_motor_aan_zonder_fix_krijgt_het_moment_van_versturen():
+    """03-10-2026: 'motor aan' zonder fix droeg de meettijd van het 'motor uit' ervoor;
+    het werkelijke moment is de verzendtijd (de vertraging was precies de parkeerduur)."""
+    vgn = ("+RESP:GTVGN,8020090501,990000000000017,,00,7,1631,0,0.2,0,2.9,4.700000,50.800000,20261003091749,"
+           "0206,0010,4E84,061D580C,00,,0.0,20261003094501,001E$")
+    b = atrack.ontleed(vgn)
+    assert not b["fix_geldig"] and b["tst"] == 1791019069
+    assert b["moment"] == 1791020701, "het moment is de verzendtijd, niet de oude fix"
+    met_fix = vgn.replace("GTVGN", "GTVGF").replace(",7,1631,0,", ",7,600,1,")
+    assert atrack.ontleed(met_fix)["moment"] == atrack.ontleed(met_fix)["tst"], "met fix is het moment de meettijd"
+
+
 if __name__ == "__main__":
     fouten = 0
     for naam, fn in sorted(globals().items()):

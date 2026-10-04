@@ -1,0 +1,15 @@
+# Planning van het Locatielogboek op de VM (globaal), versie 1.0 (04-10-2026).
+#
+# De VM draait in UTC en Debian-cron kent geen eigen tijdzone (CRON_TZ wordt genegeerd).
+# Daarom staat elke Belgische tijd op beide mogelijke UTC-uren (zomer UTC+2, winter UTC+1)
+# en kijkt het script zelf of het nu het juiste Belgische uur is: --om (een vaste tijd) of
+# --controle (elk uur van 07 tot 22). Tot 04-10-2026 stond het dagboek op 21:30 UTC, dus
+# 23:30 in de zomer en 22:30 in de winter, terwijl de werkwijze 21:30 beloofde.
+#
+# De tijden zelf staan in locatie/bronbeleid.py (PLANNING); locatie/test_bronbeleid.py
+# faalt als dit bestand ze niet in beide seizoenen raakt.
+# Op de VM zetten: mijnagents-runner/planning/locatie_cron_zetten.py (vervangt alleen het blok
+# tussen de merktekens en laat de rest van de crontab staan).
+30 19,20 * * * /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/locatie_wacht.py --om 21:30 >> /home/ubuntu/agents/locatie_wacht.log 2>&1
+5 5-21 * * * /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/locatie_wacht.py --controle >> /home/ubuntu/agents/locatie_wacht.log 2>&1
+15 0,1,6,7,9,10,12,13,15,16,18,19 * * * docker exec app-locatie python3 projectsync.py --om >> /home/ubuntu/agents/locatie_projectsync.log 2>&1

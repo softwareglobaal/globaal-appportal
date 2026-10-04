@@ -5,6 +5,11 @@ locatie-overzicht.py - vat het locatielogboek samen over een periode.
 Leest de dagboeken die locatie-ophalen.py in Dropbox heeft gezet. Werkt dus
 zonder verbinding met de VM: wat er in Dropbox staat is de bron.
 
+Alleen de actieve meetreeks (bronbeleid.py, vanaf 3 oktober 2026). De oude
+dagboeken van de telefoon staan nog in dezelfde map maar tellen niet mee, ook niet
+met --van: oude bewegingsdata wordt nergens meer in een analyse opgenomen. Sinds
+die dag meet de auto: een verblijf is waar de auto stond.
+
 Gebruik:
     locatie-overzicht.py                 alles wat er is
     locatie-overzicht.py --van 2026-09-10
@@ -15,8 +20,11 @@ import argparse
 import glob
 import json
 import os
+import sys
 from collections import defaultdict
-from datetime import datetime
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import bronbeleid as B  # noqa: E402
 
 DAGEN = os.path.expanduser(
     "~/TKN-buro Dropbox/private/0 Chegini Mehdi/Prive met Claude/"
@@ -38,7 +46,8 @@ def main():
     p.add_argument("--plek", help="alleen dagen waarop je hier was")
     a = p.parse_args()
 
-    bestanden = sorted(glob.glob(os.path.join(DAGEN, "*.json")))
+    bestanden = sorted(b for b in glob.glob(os.path.join(DAGEN, "*.json"))
+                       if B.dag_toegestaan(os.path.basename(b)[:10]))
     if a.van:
         bestanden = [b for b in bestanden if os.path.basename(b)[:10] >= a.van]
     if a.tot:
@@ -71,7 +80,8 @@ def main():
         tot["rit"] += len(rit); tot["pnt"] += len(punten)
 
         for s in bez:
-            naam = s.get("plek") or "(naamloos)"
+            h = s.get("herkenning") or {}
+            naam = s.get("plek") or h.get("plek") or s.get("adres") or "(naamloos)"
             per_plek[naam]["min"] += s["minuten"]
             per_plek[naam]["keer"] += 1
             per_plek[naam]["dagen"].add(dag)

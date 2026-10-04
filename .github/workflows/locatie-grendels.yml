@@ -1,12 +1,18 @@
-# Vroege waarschuwing voor de locatietegel. De harde grendel zit in
-# locatie/Dockerfile: daar weigert de uitrol op de VM als deze tests falen.
+# Vroege waarschuwing voor de locatietegel en De Locatiewacht. De harde grendel zit
+# in locatie/Dockerfile: daar weigert de uitrol op de VM als deze tests falen.
+# Opdracht v1.2 (04-10-2026): ook het bronbeleid, de planning van de VM, de
+# projectherkenning, de export en de archivaris (die de dagboeken leest).
 name: locatie-grendels
 
 on:
   push:
-    paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py", "mijnagents-runner/tests/test_locatie_wacht.py"]
+    paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py", "mijnagents-runner/tests/test_locatie_wacht.py",
+            "mijnagents-runner/planning/**", "mijnagents-runner/archivaris.py",
+            ".github/workflows/locatie-grendels.yml"]
   pull_request:
-    paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py", "mijnagents-runner/tests/test_locatie_wacht.py"]
+    paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py", "mijnagents-runner/tests/test_locatie_wacht.py",
+            "mijnagents-runner/planning/**", "mijnagents-runner/archivaris.py",
+            ".github/workflows/locatie-grendels.yml"]
 
 jobs:
   dagindeling:
@@ -18,6 +24,14 @@ jobs:
           python-version: "3.11"
       - run: pip install -r locatie/requirements.txt
       - run: python3 locatie/test_dagindeling.py
-    # draait ook de grendel op mijnagents-runner/locatie_wacht.py, die in de container wordt overgeslagen
-      # de wacht zelf: projectregister voor Nominatim, bouwplaats bij een stilstand, geen belsignaal (24-09-2026)
+      - run: python3 locatie/test_atrack.py
+      - run: LOCATIE_DB=/tmp/proef.db python3 locatie/test_atrack_server.py
+      # bronbeleid: startgrens, toestel, dagranden van 23 en 25 uur, en de cronregels van
+      # mijnagents-runner/planning/locatie.cron in zomer- en wintertijd
+      - run: python3 locatie/test_bronbeleid.py
+      - run: python3 locatie/test_schema.py
+      - run: python3 locatie/test_herkenning.py
+      - run: python3 locatie/test_auto.py
+      - run: python3 locatie/test_export.py
+      # de wacht zelf: projectplekken voor Nominatim, startgrens, geen vals alarm, revisies
       - run: python3 mijnagents-runner/tests/test_locatie_wacht.py

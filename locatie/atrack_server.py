@@ -5,7 +5,7 @@ inlogbeveiliging. Een tracker kan dat niet: hij spreekt zijn eigen protocol over
 een kale TCP-verbinding. Daarom dit tweede, kleine proces naast de webapp. Het
 schrijft in dezelfde database, zodat de dagindeling beide bronnen samen leest.
 
-Vier afspraken die hier worden nagekomen, elk uit een eerdere fout of eis:
+Vijf afspraken die hier worden nagekomen, elk uit een eerdere fout of eis:
 
 1. **Pas bevestigen nadat het punt in de database staat.** Het toestel wacht op
    `+SACK` en stuurt het bericht anders opnieuw. Zouden we meteen bevestigen,
@@ -16,8 +16,18 @@ Vier afspraken die hier worden nagekomen, elk uit een eerdere fout of eis:
    (`+BUFF`) liggen die ver uit elkaar; `gebufferd` markeert dat.
 4. **Alleen bekende toestellen.** De poort staat open op het internet, dus een
    bericht van een onbekend IMEI wordt geteld en weggegooid.
+5. **Elk bericht één keer, herleidbaar.** Het ruwe bericht gaat eerst naar de tabel
+   `bericht` (met toestel, soort, teller en hoe vaak het binnenkwam), daarna elk
+   positieblok als punt met sleutel (bron, tst, berichtsoort, volgnr). Tot
+   04-10-2026 was de sleutel (bron, tst): een "motor aan" zonder fix draagt de
+   meettijd van het "motor uit" ervoor en verdween stil, terwijl de log "bewaard"
+   zei (gemeten: 27 in de log, 5 in de database). "bewaard" betekent nu dat het
+   bericht er na de commit echt staat.
 
-Starten:  ATRACK_IMEIS="869226070029427:auto" python3 atrack_server.py
+Of een punt meetelt (startgrens, toegestaan toestel) beslist niet deze ontvanger
+maar het bronbeleid bij het lezen: hier wordt alles van een bekend toestel bewaard.
+
+Starten:  ATRACK_IMEIS="<imei>:auto" python3 atrack_server.py   (het echte IMEI staat alleen in .env)
 """
 import os
 import socketserver
@@ -31,98 +41,105 @@ import atrack  # noqa: E402
 
 POORT = int(os.environ.get("ATRACK_POORT", "5027"))
 DB_PAD = os.environ.get("LOCATIE_DB", "/data/locatie.db")
-# "imei:naam,imei:naam". De naam komt in de kolom bron te staan.
-TOESTELLEN = {}
-for stuk in os.environ.get("ATRACK_IMEIS", "").split(","):
-    if ":" in stuk:
-        imei, naam = stuk.split(":", 1)
-        TOESTELLEN[imei.strip()] = naam.strip() or "auto"
+# "imei:naam,imei:naam". De naam komt in de kolom bron te staan. Wie hier mag
+# schrijven bepaalt ATRACK_IMEIS; wat daarvan meetelt bepaalt bronbeleid.py.
+import bronbeleid  # noqa: E402
+TOESTELLEN = bronbeleid.toestellen_uit_env()
 
 _slot = threading.Lock()
 
 
 def schema_klaar():
-    """Zorgt dat de tabel en de kolom `bron` bestaan voor het eerste bericht.
+    """Zorgt dat het schema op de laatste versie staat voor het eerste bericht.
 
-    De webapp beheert het schema, maar die draait in een andere container en kan
-    net herstart zijn zonder dat er al een verzoek binnenkwam. Deze ontvanger
-    schrijft rechtstreeks in dezelfde database, dus hij moet niet aannemen dat
-    iemand anders de migratie al heeft gedraaid: 03-10-2026 stond de ontvanger
-    te luisteren terwijl de kolom nog niet bestond.
+    De webapp draait in een andere container en kan net herstart zijn zonder dat er
+    al een verzoek binnenkwam. 03-10-2026 stond de ontvanger te luisteren terwijl een
+    kolom nog niet bestond. De upgrade zelf staat in schema.py: één transactie, met
+    een kopie vooraf, en veilig als de webapp hem tegelijk probeert.
     """
-    import app as webapp          # noqa: PLC0415  (alleen nodig bij het starten)
-    webapp.db().close()
+    import schema                 # noqa: PLC0415
+    return schema.migreer(DB_PAD)
 
 
-def bewaar_toestelbericht(bericht):
-    """Een bericht zonder positie volledig bewaren, voor het bevestigd wordt.
-
-    Teruggelezen instellingen (ALM) zijn langer dan een logregel en waren
-    anders kwijt. Geeft True als het bericht er daarna staat.
-    """
-    bron = TOESTELLEN.get(bericht.get("imei") or "")
-    if not bron:
-        return False
-    with _slot:
-        conn = sqlite3.connect(DB_PAD, timeout=10)
-        try:
-            conn.execute(
-                """INSERT INTO toestelbericht (ontvangen, bron, soort, kop, verzonden, ruw)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (int(time.time()), bron, bericht.get("soort"), bericht.get("kop"),
-                 bericht.get("verzonden"), bericht["ruw"][:8000]))
-            conn.commit()
-            return True
-        finally:
-            conn.close()
+def _verbinding():
+    conn = sqlite3.connect(DB_PAD, timeout=30, isolation_level=None)
+    conn.execute("PRAGMA busy_timeout = 30000")
+    return conn
 
 
 def schrijf(bericht):
-    """Eén bericht opslaan. Geeft True als het punt er daarna staat.
+    """Eén bericht opslaan: het ruwe bericht en elk positieblok erin.
 
-    Niet elk bericht is een meting: een hartslag of een bevestiging heeft geen
-    positie. Die gaan naar de tabel toestelbericht, niet naar punt.
+    Geeft (status, aantal_nieuwe_punten). status is 'bewaard', 'dubbel' (het bericht
+    stond er al: opnieuw verstuurd of uit de buffer), 'geen meting' (geen positie) of
+    'onvolledig' (minder posities gevonden dan het bericht meldt; het ruwe bericht is
+    bewaard, de gevonden posities ook). Gooit een fout als het schrijven mislukt; dan
+    vertrekt er geen bevestiging en stuurt het toestel opnieuw.
     """
+    import schema                 # noqa: PLC0415
     bron = TOESTELLEN.get(bericht.get("imei") or "")
-    if not bron or not bericht.get("positie") or not bericht.get("tst"):
-        return False
-    # Wat de telefoon als motion meestuurt, moet hier afgeleid worden: de
-    # dagindeling breekt een verblijf op 'automotive'. Rijden is het enige wat
-    # deze bron kan zien, en stilstand herkennen we aan de snelheid en aan de
-    # gebeurtenis 'motor uit'.
-    snelheid = bericht.get("snelheid") or 0
-    if bericht.get("gebeurtenis") == "motor uit":
-        motion = "stationary"
-    elif snelheid >= 5 or bericht.get("gebeurtenis") == "motor aan":
-        motion = "automotive"
+    if not bron:
+        return "onbekend toestel", 0
+    ruw = bericht["ruw"]
+    afdruk = schema.vingerafdruk_bericht(ruw)
+    posities = bericht.get("posities") or []
+    nu = int(time.time())
+    if not bericht.get("positie"):
+        verwerking = "geen positie"
+    elif bericht.get("posities_volledig", True):
+        verwerking = "punten"
     else:
-        motion = "stationary"
+        verwerking = "onvolledig: %d van de %d posities herkend" % (len(posities), bericht.get("posities_gemeld") or 0)
 
     with _slot:
-        conn = sqlite3.connect(DB_PAD, timeout=10)
-        conn.row_factory = sqlite3.Row
+        conn = _verbinding()
         try:
-            conn.execute(
-                """INSERT INTO punt (tst, lat, lon, alt, vel, soort, ruw, motion,
-                                     gebeurtenis, ontvangen, bron,
-                                     hdop, satellieten, fix, verzonden, gebufferd)
-                   VALUES (:tst, :lat, :lon, :alt, :vel, 'location', :ruw, :motion,
-                           :gebeurtenis, :ontvangen, :bron,
-                           :hdop, :satellieten, :fix, :verzonden, :gebufferd)
-                   ON CONFLICT(bron, tst) DO NOTHING""",
-                {"tst": bericht["tst"], "lat": bericht["lat"], "lon": bericht["lon"],
-                 "alt": int(bericht["hoogte"]) if bericht.get("hoogte") is not None else None,
-                 "vel": int(snelheid), "ruw": bericht["ruw"][:4000],
-                 "motion": motion, "gebeurtenis": bericht.get("gebeurtenis"),
-                 "ontvangen": int(time.time()), "bron": bron,
-                 "hdop": bericht.get("hdop"), "satellieten": bericht.get("satellieten"),
-                 "fix": 1 if bericht.get("fix_geldig") else 0,
-                 "verzonden": bericht.get("verzonden"),
-                 "gebufferd": 1 if bericht.get("gebufferd") else 0})
-            conn.commit()
-            return True
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                rij = conn.execute("SELECT id FROM bericht WHERE vingerafdruk = ?", (afdruk,)).fetchone()
+                if rij:
+                    conn.execute("UPDATE bericht SET aantal = aantal + 1, laatst_ontvangen = ? WHERE id = ?",
+                                 (nu, rij[0]))
+                    conn.execute("COMMIT")
+                    return "dubbel", 0
+                cur = conn.execute(
+                    """INSERT INTO bericht (ontvangen, laatst_ontvangen, bron, toestel, protocol, kop, soort,
+                                            protocolversie, teller, verzonden, posities_gemeld, verwerking,
+                                            vingerafdruk, ruw)
+                       VALUES (?, ?, ?, ?, 'atrack', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (nu, nu, bron, bericht.get("imei"), bericht.get("kop"), bericht.get("soort"),
+                     bericht.get("protocol"), bericht.get("teller"), bericht.get("verzonden"),
+                     bericht.get("posities_gemeld") or 0, verwerking, afdruk, ruw[:8000]))
+                bid = cur.lastrowid
+                nieuw = 0
+                for volgnr, p in enumerate(posities):
+                    if not p.get("tst") or p.get("lat") is None or p.get("lon") is None:
+                        continue
+                    c = conn.execute(
+                        """INSERT INTO punt (tst, lat, lon, alt, vel, soort, ruw, motion, gebeurtenis, ontvangen,
+                                             bron, hdop, satellieten, fix, verzonden, gebufferd,
+                                             toestel, berichtsoort, volgnr, bericht_id, teller)
+                           VALUES (?, ?, ?, ?, ?, 'location', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           ON CONFLICT(bron, tst, berichtsoort, volgnr) DO NOTHING""",
+                        (p["tst"], p["lat"], p["lon"],
+                         int(p["hoogte"]) if p.get("hoogte") is not None else None,
+                         int(p.get("snelheid") or 0), ruw[:4000], p.get("motion"), bericht.get("gebeurtenis"),
+                         nu, bron, p.get("hdop"), p.get("satellieten"), 1 if p.get("fix_geldig") else 0,
+                         bericht.get("verzonden"), 1 if bericht.get("gebufferd") else 0,
+                         bericht.get("imei"), bericht.get("soort") or "", volgnr, bid, bericht.get("teller")))
+                    nieuw += c.rowcount
+                conn.execute("UPDATE bericht SET posities_bewaard = ? WHERE id = ?", (nieuw, bid))
+                conn.execute("COMMIT")
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
         finally:
             conn.close()
+    if not bericht.get("positie"):
+        return "geen meting", 0
+    if verwerking != "punten":
+        return "onvolledig", nieuw
+    return "bewaard", nieuw
 
 
 def antwoord(bericht):
@@ -140,18 +157,22 @@ def antwoord(bericht):
 
 
 def verwerk(regel):
-    """Eén regel binnen: opslaan waar nodig, en teruggeven wat terug moet."""
+    """Eén regel binnen: opslaan, en teruggeven wat terug moet.
+
+    Een bericht dat al binnen was (opnieuw verstuurd, of nagestuurd uit de buffer)
+    wordt opnieuw bevestigd, anders blijft het toestel het sturen; het wordt niet
+    nog eens bewaard. Een onvolledig ontleed bericht wordt bevestigd omdat het ruwe
+    bericht veilig staat; het staat in `bericht` met verwerking 'onvolledig'.
+    """
     bericht = atrack.ontleed(regel)
     if not bericht:
         return None, "onleesbaar"
     if bericht.get("imei") not in TOESTELLEN:
         return None, "onbekend toestel"
-    bewaard = schrijf(bericht)
-    if not bewaard and not bericht.get("positie"):
-        bewaar_toestelbericht(bericht)
+    wat, _ = schrijf(bericht)
     # Bevestigen pas hierna: het toestel mag zijn kopie niet wissen voordat
-    # onze database het punt heeft.
-    return antwoord(bericht), ("bewaard" if bewaard else "geen meting")
+    # onze database het bericht heeft.
+    return antwoord(bericht), wat
 
 
 class Verbinding(socketserver.StreamRequestHandler):
@@ -174,10 +195,9 @@ class Verbinding(socketserver.StreamRequestHandler):
                 if not regel.startswith("+"):
                     continue
                 terug, wat = verwerk(regel)
-                # Een meting staat al in de database; een bericht zonder positie
-                # (instellingen, bevestiging) komt voluit in de log.
+                # Alles staat voluit in de tabel bericht; de log toont een begin.
                 print("%s %s %s" % (time.strftime("%H:%M:%S"), wat,
-                                    regel[:90] if wat == "bewaard" else regel),
+                                    regel[:90] if wat in ("bewaard", "dubbel") else regel),
                       flush=True)
                 if terug:
                     try:

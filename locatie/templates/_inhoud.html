@@ -1,0 +1,136 @@
+<div class="ververst">{% if datum == vandaag %}vandaag, voorlopig; ververst elke 45 s, laatst {{ nu_tekst }}{% else %}{{ gegevens.status }}{% endif %}</div>
+
+<div class="status">
+{% for b in stand.bronnen %}
+  <div class="bronkaart {% if b.status != 'actief' %}uit{% endif %}">
+    <span class="naam">{{ b.label }}</span>
+    <span class="toestand {% if b.alarm %}alarm{% elif b.toestand in ('geparkeerd', 'in gebruik') %}rustig{% endif %}">{{ b.toestand }}</span>
+    <div class="uitleg">{{ b.uitleg or '' }}</div>
+    {% if b.status == 'actief' %}
+    <dl>
+      <dt>toestel</dt><dd>{{ b.toestel_kort or '—' }}</dd>
+      <dt>laatste ontvangst</dt><dd>{{ b.laatste_ontvangst.tijd if b.laatste_ontvangst else 'geen' }}{% if b.laatste_ontvangst %} ({{ b.laatste_ontvangst.soort }}){% endif %}</dd>
+      <dt>laatste geldige positie</dt><dd>{{ b.laatste_geldige_positie.tijd if b.laatste_geldige_positie else 'geen' }}{% if b.laatste_geldige_positie and b.laatste_geldige_positie.vertraging_s is not none %}, {{ b.laatste_geldige_positie.vertraging_s }} s vertraging{% endif %}</dd>
+      {% if b.vertraging_vandaag and b.vertraging_vandaag.punten %}<dt>vertraging vandaag</dt><dd>mediaan {{ b.vertraging_vandaag.mediaan_s }} s, p95 {{ b.vertraging_vandaag.p95_s }} s</dd>{% endif %}
+      <dt>levensteken</dt><dd>{{ 'geen (rapportagemodus 2)' if not b.levensteken else b.levensteken }}</dd>
+      {% if b.meetmodus %}<dt>meetmodus</dt><dd>rijdend {{ b.meetmodus.rijden }}; motor uit: spaarstand 1{% if not b.meetmodus.teruggelezen %} (nog niet teruggelezen){% endif %}</dd>{% endif %}
+    </dl>
+    {% if b.vraag %}<div class="uitleg">{{ b.vraag }}</div>{% endif %}
+    {% if b.alarm %}<div class="uitleg"><b>{{ b.alarm.titel }}</b>: {{ b.alarm.tekst }}</div>{% endif %}
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+
+{% if dagen %}
+<div class="dagen">
+  {% for d in dagen[:14] %}
+    <a href="?dag={{ d }}" {% if d == datum %}class="actief"{% endif %}>{{ 'vandaag' if d == vandaag else d }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="cijfers">
+  <div class="cijfer"><div class="n">{{ stukken | selectattr('soort','equalto','bezoek') | list | length }}</div><div class="l">verblijven</div></div>
+  <div class="cijfer"><div class="n">{{ km }}</div><div class="l">kilometer</div></div>
+  <div class="cijfer"><div class="n">{{ aantal }}</div><div class="l">meetpunten</div></div>
+  <div class="cijfer"><div class="n">{{ stukken | selectattr('soort','equalto','gat') | list | length }}</div><div class="l">zonder meting</div></div>
+</div>
+
+<h2>{{ datum }}{% if spoor %} · {{ spoor.label }}{% endif %}</h2>
+<div class="paneel">
+  {% if gegevens.buiten_reeks %}
+    <div class="leeg">Deze dag valt voor de start van de meetreeks ({{ eerste_dag }}). Oudere metingen worden niet getoond of herberekend.</div>
+  {% elif stukken %}
+  <table>
+    <thead><tr><th>van</th><th>tot</th><th>duur</th><th>wat</th><th>plaats</th><th>bewijs</th></tr></thead>
+    <tbody>
+    {% for s in stukken %}
+      {% if s.soort == 'gat' %}
+      <tr class="gat">
+        <td class="tijd">{{ s.van_tekst }}</td>
+        <td class="tijd">{{ s.tot_tekst }}</td>
+        <td class="duur">{{ s.minuten }} min</td>
+        <td><span class="merk leeg-merk"></span>geen meting</td>
+        <td class="coord" colspan="2">{% if s.open %}sinds het laatste punt komt er niets meer binnen, en het laatste bericht was geen 'motor uit'{% elif s.open_begin %}voor het eerste punt van de dag is er geen meting{% else %}de tracker zweeg; {{ (s.meter / 1000) | round(1) }} km hemelsbreed tussen voor en na{% endif %}</td>
+      </tr>
+      {% else %}
+      {% set h = s.herkenning or {} %}
+      <tr class="rij" data-lat="{{ s.lat if s.soort == 'bezoek' else s.spoor[0][0] }}"
+                      data-lon="{{ s.lon if s.soort == 'bezoek' else s.spoor[0][1] }}">
+        <td class="tijd">{{ s.van_tekst }}</td>
+        <td class="tijd">{{ s.tot_tekst }}{% if s.open and not s.loopt_door %}…{% endif %}</td>
+        <td class="duur">{{ s.minuten }} min</td>
+        <td>
+          <span class="merk {{ 'bezoek' if s.soort == 'bezoek' else 'rit' }}"></span>
+          {% if s.soort == 'bezoek' %}{{ 'geparkeerd' if s.parkeren else ('stop' if s.stop else 'verblijf') }}{% if s.open and not s.loopt_door %}, nog niet vertrokken{% endif %}{% else %}onderweg{% if s.wijze %}
+            <span class="wijze">{{ wijzen.get(s.wijze, s.wijze) }}</span>{% endif %}{% endif %}
+          <span class="bron {{ s.bron }}">{{ s.bron }}</span>
+        </td>
+        <td>
+          {% if s.soort == 'bezoek' %}
+            {% if h.project %}
+              <span class="plek">{{ h.project.naam or h.project.nummer }}</span>
+              <span class="dossier">{{ h.project.firma }} {{ h.project.nummer }}</span>
+              {% if h.project.link %}<a class="coord" href="{{ h.project.link }}" target="_blank" rel="noopener">project</a>{% endif %}
+            {% elif h.plek or s.plek %}
+              <span class="plek">{{ h.plek or s.plek }}</span>
+            {% else %}
+              <a href="https://maps.google.com/?q={{ s.lat }},{{ s.lon }}" target="_blank"
+                 rel="noopener">{{ '%.5f'|format(s.lat) }}, {{ '%.5f'|format(s.lon) }}</a>
+            {% endif %}
+            {% if h.zekerheid and h.zekerheid != 'geen' %}<span class="zeker {{ h.zekerheid }}">{{ zekerheid.get(h.zekerheid, h.zekerheid) }}</span>{% endif %}
+            {% if h.zekerheid == 'onzeker' %}
+              <div class="kand">kandidaten: {% for k in h.kandidaten %}{{ k.firma or '?' }} {{ k.nummer }} ({{ k.afstand_m }} m){% if not loop.last %}, {% endif %}{% endfor %}</div>
+            {% endif %}
+            {% if h.kandidaten or h.correctie %}
+            <form class="corr" data-bron="{{ s.bron }}" data-van="{{ s.van }}" data-tot="{{ s.tot }}">
+              <select>
+                <option value="">dit was…</option>
+                {% for k in h.kandidaten %}<option value="{{ k.sleutel }}">{{ k.firma or '?' }} {{ k.nummer }}</option>{% endfor %}
+                <option value="geen_project">geen project</option>
+                <option value="niet_mehdi">auto niet bij mij</option>
+              </select>
+              <button type="submit">bewaar</button>
+              {% if h.correctie %}<span class="klein">gecorrigeerd door {{ h.correctie.door }}</span>{% endif %}
+            </form>
+            {% endif %}
+          {% else %}
+            {{ (s.meter / 1000) | round(1) }} km
+            {% if s.voorbij %}<div class="kand">voorbij: {% for v in s.voorbij %}{{ v.firma }} {{ v.nummer }}{% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+          {% endif %}
+        </td>
+        <td class="coord">{{ s.bewijs or '' }}{% if s.soort == 'bezoek' and not s.bewijs %}{{ s.punten }} punten{% endif %}{% if h.reden and h.zekerheid != 'geen' %}<br>{{ h.reden }}{% endif %}</td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% elif aantal %}
+    <div class="leeg">{{ aantal }} losse meetpunt(en) zonder indeling: te weinig om een verblijf of rit te vormen. Zie <a href="/api/dag/{{ datum }}">/api/dag/{{ datum }}</a>.</div>
+  {% else %}
+    <div class="leeg">Geen meting van de actieve tracker op deze dag.</div>
+  {% endif %}
+</div>
+
+<h2>Taken</h2>
+<div class="paneel">
+  <table class="taken">
+    <thead><tr><th>taak</th><th>laatst gelukt</th><th>volgende</th><th>fout</th></tr></thead>
+    <tbody>
+    {% for t in stand.taken %}
+      <tr><td>{{ t.taak }} <span class="klein">{{ t.wat }}</span></td><td>{{ t.laatst_geslaagd or 'nog nooit' }}</td>
+          <td>{{ t.volgende or '' }}</td><td>{{ t.fout or '' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="voet">
+  Projectadressen: {{ stand.projectdekking.projecten }} projecten, {{ stand.projectdekking.bruikbaar }} met een bruikbare geocode
+  {% if stand.projectdekking.niet_gevonden %}, {{ stand.projectdekking.niet_gevonden | length }} niet gevonden{% endif %}
+  {% if stand.projectdekking.geen_adres %}, {{ stand.projectdekking.geen_adres | length }} zonder adres{% endif %}
+  {% if stand.projectdekking.zelfde_adres %}, {{ stand.projectdekking.zelfde_adres | length }} keer meerdere projecten op hetzelfde adres{% endif %}.
+  Een verblijf is minstens 8 minuten binnen 150 meter; na 'motor uit' telt de stilte als geparkeerd tot de motor weer aanslaat.
+  Een gat is een stilte waarvan niet gemeten is wat er gebeurde. Ruwe gegevens via
+  <a href="/api/dag/{{ datum }}">/api/dag/{{ datum }}</a>, status via <a href="/api/status">/api/status</a>.
+</div>

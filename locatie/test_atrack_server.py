@@ -60,8 +60,8 @@ def test_twee_bronnen_op_dezelfde_seconde_blijven_allebei_staan():
     """De oude tabel had het tijdstip als sleutel; dan verdween er een."""
     conn = webapp.db()
     tst = 1691465678                          # zelfde seconde als het FRI-bericht
-    conn.execute("INSERT INTO punt (tst, lat, lon, bron) VALUES (?,?,?, 'iphone') "
-                 "ON CONFLICT(bron, tst) DO NOTHING", (tst, 50.0, 4.0))
+    conn.execute("INSERT INTO punt (tst, lat, lon, bron, berichtsoort) VALUES (?,?,?, 'iphone', 'location') "
+                 "ON CONFLICT(bron, tst, berichtsoort, volgnr) DO NOTHING", (tst, 50.0, 4.0))
     conn.commit()
     conn.close()
     atrack_server.verwerk(FRI)
@@ -183,6 +183,81 @@ def test_de_poort_neemt_een_echte_verbinding_aan():
     finally:
         server.shutdown()
         server.server_close()
+
+
+DRIE = ("+RESP:GTFRI,8020090501,864696060004173,,,10,3,"
+        "1,0.0,180,30.3,4.700000,50.800000,20261004100000,0206,0010,4E84,061D580C,00,"
+        "1,12.0,90,30.0,4.701000,50.801000,20261004100030,0206,0010,4E84,061D580C,00,"
+        "2,40.0,90,30.0,4.705000,50.802000,20261004100100,0206,0010,4E84,061D580C,00,"
+        "0.0,,,,,85,210000,,,,20261004100105,0030$")
+
+
+def ruwe(waar="1=1", *args):
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    try:
+        return [dict(r) for r in conn.execute("SELECT * FROM bericht WHERE " + waar, args)]
+    finally:
+        conn.close()
+
+
+def test_meerdere_posities_worden_allemaal_bewaard_met_een_ruw_bericht():
+    terug, wat = atrack_server.verwerk(DRIE)
+    assert wat == "bewaard" and terug == "+SACK:0030$", (wat, terug)
+    p = rijen("teller = '0030' ORDER BY volgnr")
+    assert [r["volgnr"] for r in p] == [0, 1, 2] and len({r["bericht_id"] for r in p}) == 1, p
+    b = ruwe("teller = '0030'")
+    assert len(b) == 1 and b[0]["posities_gemeld"] == 3 and b[0]["posities_bewaard"] == 3, b
+    assert b[0]["ruw"] == DRIE and b[0]["toestel"] == "864696060004173"
+
+
+def test_een_onvolledig_bericht_wordt_bewaard_en_gemeld():
+    vier = DRIE.replace(",10,3,", ",10,4,").replace(",0030$", ",0031$").replace("2026100410", "2026100412")
+    terug, wat = atrack_server.verwerk(vier)
+    assert wat == "onvolledig" and terug == "+SACK:0031$", (wat, terug)
+    b = ruwe("teller = '0031'")[0]
+    assert b["verwerking"].startswith("onvolledig") and b["ruw"] == vier, b
+
+
+def test_een_dubbel_bericht_wordt_bevestigd_maar_niet_dubbel_bewaard():
+    """Opnieuw verstuurd omdat de bevestiging uitbleef: geen tweede rit."""
+    regel = FRI.replace("20230808033438,01B3$", "20230808033500,01D0$")
+    atrack_server.verwerk(regel)
+    voor = len(rijen())
+    terug, wat = atrack_server.verwerk(regel)
+    assert wat == "dubbel" and terug == "+SACK:01D0$", (wat, terug)
+    assert len(rijen()) == voor
+    assert ruwe("teller = '01D0'")[0]["aantal"] == 2
+
+
+def test_naleveren_uit_de_buffer_bewaart_een_keer_met_de_oorspronkelijke_meettijd():
+    """Netwerk weg: het toestel bewaart en stuurt later met +BUFF. Kwam het origineel
+    toch binnen, dan is het hetzelfde bericht; anders een nieuw punt, eenmaal."""
+    nieuw = ("+BUFF:GTFRI,8020090501,864696060004173,,,10,1,1,30.0,90,30.0,4.710000,50.810000,20261004090000,"
+             "0206,0010,4E84,061D580C,00,0.0,,,,,85,210000,,,,20261004093000,0040$")
+    terug, wat = atrack_server.verwerk(nieuw)
+    assert wat == "bewaard" and terug == "+SACK:0040$"
+    r = rijen("teller = '0040'")
+    assert len(r) == 1 and r[0]["gebufferd"] == 1 and r[0]["tst"] == 1791104400, r
+    assert r[0]["verzonden"] - r[0]["tst"] == 1800
+    # Hetzelfde bericht nog eens, nu als +RESP: geen tweede punt.
+    terug, wat = atrack_server.verwerk(nieuw.replace("+BUFF:", "+RESP:"))
+    assert wat == "dubbel" and len(rijen("teller = '0040'")) == 1
+
+
+def test_motor_aan_zonder_fix_verdwijnt_niet_naast_motor_uit():
+    """03-10-2026: 27 'motor aan' in de log, 5 in de database."""
+    uit = ("+RESP:GTVGF,8020090501,864696060004173,,00,7,600,1,0.0,353,5.9,4.720000,50.820000,20261004110000,"
+           "0206,0010,4E84,061D580C,00,,0.0,20261004110001,0050$")
+    aan = ("+RESP:GTVGN,8020090501,864696060004173,,00,7,1800,0,0.0,353,5.9,4.720000,50.820000,20261004110000,"
+           "0206,0010,4E84,061D580C,00,,0.0,20261004113001,0051$")
+    atrack_server.verwerk(uit)
+    terug, wat = atrack_server.verwerk(aan)
+    assert wat == "bewaard", wat
+    soorten = {r["berichtsoort"] for r in rijen("tst = 1791111600")}
+    assert soorten == {"VGF", "VGN"}, soorten
+    vgn = rijen("berichtsoort = 'VGN' AND tst = 1791111600")[0]
+    assert vgn["fix"] == 0 and vgn["verzonden"] == 1791113401
 
 
 if __name__ == "__main__":

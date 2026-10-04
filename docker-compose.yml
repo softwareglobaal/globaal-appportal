@@ -63,11 +63,27 @@ services:
       # lijst leest de dagindeling een autorit als een bezoek, want de telefoon
       # blijft onderweg aan hetzelfde netwerk hangen.
       LOCATIE_VOERTUIG_WIFI: ${LOCATIE_VOERTUIG_WIFI:-}
+      # Welke toestellen er zijn ("imei:naam"). Het bronbeleid (locatie/bronbeleid.py)
+      # laat alleen het vastgelegde toestel per bron meetellen, vanaf zijn ingang.
+      ATRACK_IMEIS: ${ATRACK_IMEIS:-}
+      # Projectherkenning (projectsync.py): H-A Projecten over het interne netwerk, met
+      # zijn eigen AGENTS_TOKEN (in .env als HA_PROJECTEN_TOKEN), en de index van de
+      # projectmappen (A13) van De Agendawacht, alleen lezen.
+      HA_PROJECTEN_URL: http://app-ha-projecten:3140
+      HA_PROJECTEN_TOKEN: ${HA_PROJECTEN_TOKEN:-}
+      PROJECTMAPPEN_INDEX: /bron/projectadressen.json
       PORT: "3031"
     volumes:
       - ./locatie-data:/data
+      - ./mijnagents-data/projectadressen.json:/bron/projectadressen.json:ro
     ports:
       - "127.0.0.1:3031:3031"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3031/health', timeout=5)"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks: [appnet]
 
   # Tweede bron voor hetzelfde logboek: de GPS-tracker in de auto. Die spreekt

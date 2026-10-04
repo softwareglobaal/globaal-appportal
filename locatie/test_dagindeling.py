@@ -200,16 +200,21 @@ def test_dag_die_in_stilte_eindigt_zegt_dat():
     assert not kort or not kort[-1].get("open")
 
 
-def test_locatiewacht_schrijft_een_gat_niet_als_rit():
-    """13-09-2026: de Locatiewacht schreef een gat van 5 uur als 'verplaatsing 30,1 km'."""
+def test_een_gat_is_nergens_een_rit():
+    """13-09-2026: de Locatiewacht schreef een gat van 5 uur als 'verplaatsing 30,1 km'.
+    Sinds 04-10-2026 maakt dagboek.py het dagboek voor de wacht, het bord en de export;
+    daar moet een gat 'geen meting' blijven, en de wacht moet dat dagboek gebruiken."""
     import re
+    import dagboek
+    regel = dagboek.regel({"soort": "gat", "van": T0, "tot": T0 + 5 * 3600, "minuten": 300, "meter": 30100})
+    assert "geen meting" in regel and "rit" not in regel, regel
     pad = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                        "mijnagents-runner", "locatie_wacht.py")
     if not os.path.exists(pad):
         # In de container staat alleen locatie/; deze grendel draait in de repo en de CI.
         return
     bron = open(pad, encoding="utf-8").read()
-    assert re.search(r'soort"\)\s*==\s*"gat"', bron), "de Locatiewacht behandelt een gat niet apart"
+    assert "/api/dagboek/" in bron, "de Locatiewacht maakt weer een eigen dagboek"
     # 14-09-2026: de server draait in UTC en elke tijd in het dagboek stond twee uur te vroeg.
     assert "datetime.now()" not in bron, "de Locatiewacht gebruikt de klok van de server (UTC)"
     assert re.search(r"fromtimestamp\(int\(epoch\),\s*BRUSSEL\)", bron), "uur() rekent niet naar Belgische tijd"
