@@ -99,22 +99,48 @@ def nominatim(adres):
     return None
 
 
+LABELS = re.compile(r"^\s*((\([^)]*\)|\[[^\]]*\])\s*)+")
+REEKS = re.compile(r"(\b\d+)(?:\s*[-–.]\s*\d+[A-Za-z]?)+(?=\s*,|\s+\d{4}\b|\s*$)")
+LETTER = re.compile(r"(\b\d+)\s*[A-Za-z]{1,2}(?:\s+(?:rechts|links|in|achter|voor|boven|beneden))?(?=\s*,|\s+\d{4}\b|\s*$)",
+                    re.I)
+
+
+def varianten(adres):
+    """De schrijfwijzen die we proberen, de oorspronkelijke eerst. De bron blijft zoals ze is.
+
+    Gemeten bij de eerste synchronisatie (04-10-2026): 39 van de 197 projectadressen kwamen
+    niet terug, omdat de mapnaam labels vooraan draagt ('(INR) (HP) ...', '[INT EPB-VC] ...'),
+    een reeks huisnummers ('95-97-99', '210 - 212', '10.4') of een letter of woord achter het
+    huisnummer ('12A', '127B rechts', '163b in'). Geopunt en Nominatim kennen die vormen niet.
+    """
+    a = re.sub(r"\s+[–-]\s*(?=,|$)", "", LABELS.sub("", adres or "").strip())
+    uit = [adres.strip()] if adres.strip() != a else []
+    for v in (a, REEKS.sub(r"\1", a), LETTER.sub(r"\1", REEKS.sub(r"\1", a))):
+        if v and v not in uit:
+            uit.append(v)
+    return uit
+
+
 def geocodeer(adres):
     """Adres naar {lat, lon, kwaliteit, bron, gevonden}. Gooit niet; een fout is een uitkomst."""
-    if not (adres or "").strip():
+    if not (adres or "").strip() or not re.search(r"\d", adres or ""):
+        # Zonder enig cijfer (geen huisnummer, geen postcode, bv. 'not signed') is het geen adres.
         return {"lat": None, "lon": None, "kwaliteit": "geen_adres", "bron": None, "gevonden": None}
     fouten, beste = [], None
     for zoeker in (geopunt, nominatim):
-        try:
-            uit = zoeker(adres)
-        except Exception as e:  # noqa: BLE001
-            fouten.append(f"{zoeker.__name__}: {type(e).__name__}")
-            continue
-        if uit and uit["kwaliteit"] == "adres":
-            return uit
-        if uit:
-            fouten.append(f"{zoeker.__name__}: alleen {uit['kwaliteit']}")
-            beste = beste or uit
+        for v in varianten(adres):
+            try:
+                uit = zoeker(v)
+            except Exception as e:  # noqa: BLE001
+                fouten.append(f"{zoeker.__name__}: {type(e).__name__}")
+                continue
+            if uit and uit["kwaliteit"] == "adres":
+                if v != adres.strip():
+                    uit["variant"] = v
+                return uit
+            if uit:
+                fouten.append(f"{zoeker.__name__}: alleen {uit['kwaliteit']}")
+                beste = beste or uit
     if beste:
         return beste          # te grof om te herkennen, maar wel zichtbaar in de dekking
     return {"lat": None, "lon": None, "kwaliteit": "niet_gevonden", "bron": None, "gevonden": "; ".join(fouten)}

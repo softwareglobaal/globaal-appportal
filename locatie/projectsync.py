@@ -23,7 +23,7 @@ Een project dat uit de bron verdwijnt wordt niet gewist maar op actief = 0 gezet
 Is een bron onbereikbaar, dan blijft de laatste goede index staan en zegt de
 taakstatus dat, met de ouderdom erbij.
 
-Draaien (op de VM): docker exec app-locatie python3 projectsync.py [--droog] [--om]
+Draaien (op de VM): docker exec app-locatie python3 projectsync.py [--droog] [--om] [--opnieuw]
 """
 import hashlib
 import json
@@ -115,7 +115,8 @@ def verzamel(ha, mappen):
     return uit
 
 
-def synchroniseer(conn, ha=None, mappen=None, ha_fout=None, mappen_fout=None, geocodeer=None, nu=None):
+def synchroniseer(conn, ha=None, mappen=None, ha_fout=None, mappen_fout=None, geocodeer=None, nu=None,
+                  opnieuw=False):
     """Werkt de tabel projectplek bij. Geeft het rapport (dict).
 
     ha/mappen: wat de bron gaf, of None als ze onbereikbaar was (dan ha_fout/mappen_fout).
@@ -134,7 +135,14 @@ def synchroniseer(conn, ha=None, mappen=None, ha_fout=None, mappen_fout=None, ge
         if ha is None and oud.get("bron") == "ha-projecten":
             continue    # H-A Projecten onbereikbaar: zijn laatste goede gegevens blijven staan
         afdruk = adres_vingerafdruk(p["adres"])
-        if oud and oud.get("adres_vingerafdruk") == afdruk and oud.get("geocode_kwaliteit") not in (None, "niet_gevonden"):
+        # Een geocode op huisnummer blijft tot het adres verandert. Een grove of mislukte wordt
+        # hoogstens eens per dag opnieuw geprobeerd (of meteen met opnieuw=True): de zoekdiensten
+        # en onze schrijfwijzen worden beter, en dan hoort de herkenning mee te gaan.
+        oud_genoeg = opnieuw or (nu - (oud.get("geocode_datum") or 0)) > 20 * 3600
+        if oud and oud.get("adres_vingerafdruk") == afdruk and (
+                oud.get("geocode_kwaliteit") == "adres" or
+                (oud.get("geocode_kwaliteit") in ("straat", "gemeente", "geen_adres") and not oud_genoeg) or
+                (oud.get("geocode_kwaliteit") == "niet_gevonden" and not oud_genoeg)):
             geo = {"lat": oud["lat"], "lon": oud["lon"], "kwaliteit": oud["geocode_kwaliteit"],
                    "bron": oud["geocode_bron"], "datum": oud["geocode_datum"]}
             rapport["ongewijzigd"] += 1
@@ -234,7 +242,7 @@ def main():
                           "voorbeeld": list(lijst.values())[:3]}, ensure_ascii=False, indent=1))
         return 0
     try:
-        rapport = synchroniseer(conn, ha, mappen, ha_fout, mappen_fout)
+        rapport = synchroniseer(conn, ha, mappen, ha_fout, mappen_fout, opnieuw="--opnieuw" in sys.argv)
     except BronFout as e:
         zet_taak(conn, "projectsync", False, None, str(e))
         print("mislukt:", e)

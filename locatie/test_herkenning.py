@@ -214,6 +214,37 @@ def test_de_api_van_ha_projecten_moet_de_firma_leveren():
         urllib.request.urlopen = echt
 
 
+def test_schrijfwijzen_uit_de_mapnaam_worden_genormaliseerd():
+    """04-10-2026: 39 van 197 projectadressen kwamen niet terug door labels en nummerreeksen."""
+    import geocode
+    v = geocode.varianten
+    assert v("(INR) (HP) Rembert Dodoensstraat 88, 2800 Mechelen")[0] == "(INR) (HP) Rembert Dodoensstraat 88, 2800 Mechelen"
+    assert "Rembert Dodoensstraat 88, 2800 Mechelen" in v("(INR) (HP) Rembert Dodoensstraat 88, 2800 Mechelen")
+    assert "Welvaartstraat 48, 2000 Antwerpen" in v("(INR)(REVIT)Welvaartstraat 48, 2000 Antwerpen")
+    assert "Langstraat 49, 2270 Herenthout" in v("[INT EPB-VC, EXT ING] Langstraat 49, 2270 Herenthout")
+    assert "Theofiel Van Cauwenberghslei 95, 2900 Schoten" in v("Theofiel Van Cauwenberghslei 95-97-99, 2900 Schoten")
+    assert "Mechelsesteenweg 210, 2830 Willebroek" in v("Mechelsesteenweg 210 - 212, 2830 Willebroek")
+    assert "Schaliënstraat 10, 2000 Antwerpen" in v("Schaliënstraat 10.4, 2000 Antwerpen")
+    assert "Oosterveldlaan 12, 2610 Wilrijk" in v("Oosterveldlaan 12A, 2610 Wilrijk")
+    assert "Meenselstraat 127, 3211 Lubbeek" in v("Meenselstraat 127B rechts, 3211 Lubbeek")
+    assert "Blandenstraat 163, 3053 Haasrode" in v("Blandenstraat 163b in, 3053 Haasrode")
+    assert v("Bondgenotenlaan 1, 3000 Leuven") == ["Bondgenotenlaan 1, 3000 Leuven"]
+    assert geocode.geocodeer("not signed")["kwaliteit"] == "geen_adres", "zonder cijfer is het geen adres"
+
+
+def test_een_mislukte_geocode_wordt_later_opnieuw_geprobeerd():
+    c = db()
+    geo = Geo({})
+    P.synchroniseer(c, ha=[HA[0]], mappen={}, geocodeer=geo, nu=T0)
+    P.synchroniseer(c, ha=[HA[0]], mappen={}, geocodeer=geo, nu=T0 + 3600)
+    assert len(geo.gevraagd) == 1, "binnen de dag niet opnieuw"
+    geo.antwoorden[HA[0]["adres"]] = (WERF[0], WERF[1], "adres")
+    P.synchroniseer(c, ha=[HA[0]], mappen={}, geocodeer=geo, nu=T0 + 21 * 3600)
+    assert len(geo.gevraagd) == 2 and H.projectplekken(c), "na een dag wel, en dan herkent hij"
+    P.synchroniseer(c, ha=[HA[0]], mappen={}, geocodeer=geo, nu=T0 + 50 * 3600)
+    assert len(geo.gevraagd) == 2, "een geocode op huisnummer blijft tot het adres verandert"
+
+
 if __name__ == "__main__":
     fouten = 0
     for naam, fn in sorted(globals().items()):
