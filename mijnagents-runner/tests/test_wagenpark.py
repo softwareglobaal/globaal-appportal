@@ -52,6 +52,21 @@ def test_wagen_naar_de_app():
     assert D.voertuig_rij({"plaat": "2BAS423", "merk_model": "Ford Transit Custom"})["categorie"] == "N1"
 
 
+def test_bouwjaar_uit_het_chassisnummer_gaat_mee_naar_de_app():
+    """Het register kent geen bouwjaar; het dashboard rekent het uit het chassisnummer en dat moet in de app landen."""
+    import wagenpark_db as D
+    vin = "W0VBF8EG3H8101077"  # Opel, positie 10 = H = 2017
+    assert W.bouwjaar_uit_vin(vin, date(2026, 10, 5)) == 2017
+    gezien = []
+    oud, D._psql = D._psql, lambda sql: gezien.append(sql) or "{}"
+    try:
+        D.schrijven({"voertuigen": [{"plaat": "2HHE117", "merk_model": "Opel Astra", "chassis": vin}]},
+                    {"wagens": [{"plaat": "2HHE117", "bouwjaar_vin": 2017}]})
+    finally:
+        D._psql = oud
+    assert '"bouwjaar": 2017' in gezien[0], "het bouwjaar uit het chassisnummer ontbreekt in wat naar de app gaat"
+
+
 def test_signalen_worden_activiteiten_met_vaste_sleutel():
     import wagenpark_db as D
     w = {"plaat": "2BAS423", "termijnen": [{"wat": "keuring", "datum": "2026-09-17", "dagen": -18, "stand": "verlopen"},

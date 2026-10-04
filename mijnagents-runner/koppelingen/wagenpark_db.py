@@ -168,7 +168,8 @@ def schrijven(register, dashboard):
     voertuigen, diensten, kms, bestuurders, activiteiten = [], [], [], [], []
     for v in register["voertuigen"]:
         p = v["plaat"]
-        voertuigen.append(voertuig_rij(v))
+        # het bouwjaar uit het chassisnummer rekent het dashboard, niet het register
+        voertuigen.append(voertuig_rij(dict(v, bouwjaar_vin=(wagens.get(p) or {}).get("bouwjaar_vin"))))
         for o in v.get("onderhoud") or []:
             if not _datum(o.get("datum")) or o.get("herkomst") == "manueel":
                 continue
