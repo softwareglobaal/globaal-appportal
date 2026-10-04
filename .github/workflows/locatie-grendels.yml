@@ -7,11 +7,11 @@ name: locatie-grendels
 on:
   push:
     paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py", "mijnagents-runner/tests/test_locatie_wacht.py",
-            "mijnagents-runner/planning/**", "mijnagents-runner/archivaris.py",
+            "mijnagents-runner/planning/**", "mijnagents-runner/archivaris.py", "mijnagents-runner/levenscoach.py",
             ".github/workflows/locatie-grendels.yml"]
   pull_request:
     paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py", "mijnagents-runner/tests/test_locatie_wacht.py",
-            "mijnagents-runner/planning/**", "mijnagents-runner/archivaris.py",
+            "mijnagents-runner/planning/**", "mijnagents-runner/archivaris.py", "mijnagents-runner/levenscoach.py",
             ".github/workflows/locatie-grendels.yml"]
 
 jobs:
@@ -49,3 +49,5 @@ jobs:
       - run: pip install -r locatie/requirements.txt
       # de wacht zelf: projectplekken voor Nominatim, startgrens, geen vals alarm, revisies
       - run: python3 mijnagents-runner/tests/test_locatie_wacht.py
+      # lezers van het locatielogboek buiten de wacht (controle 05-10-2026)
+      - run: python3 mijnagents-runner/tests/test_levenscoach_grens.py

@@ -13,7 +13,9 @@ from datetime import datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+sys.path.insert(0, os.path.join(HIER, "..", "locatie"))
 import bord  # noqa: E402
+import bronbeleid  # noqa: E402  de startgrens van het locatielogboek (opdracht v1.2)
 
 NAAM = "levenscoach"
 ag = bord.Agent(NAAM)
@@ -51,6 +53,10 @@ def bronnen_van(dagen):
         except ValueError:
             d = {}
         dag = (d.get("datum") or d.get("start") or it.get("sleutel") or "")[:10]
+        # Opdracht v1.2 (Mehdi, 04-10-2026): alleen de reeks van de autotracker vanaf 3-10-2026 telt.
+        # De dagboeken van de telefoon daarvoor staan nog op het bord, maar gaan nooit meer in een spiegel.
+        if (it.get("soort") == "locatie" or it.get("van") == "locatie-wacht") and not bronbeleid.dag_toegestaan(dag):
+            continue
         if dag in uit and it.get("soort") not in ("coaching", "verslag"):
             uit[dag].append({"van": it["van"], "soort": it["soort"], "titel": it["titel"],
                              "inhoud": (inhoud[:12000] if it["soort"] in ("locatie", "dagplan", "gezondheid", "dagbundel") else inhoud[:3000])})
