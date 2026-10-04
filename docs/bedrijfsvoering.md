@@ -83,6 +83,7 @@ cd ~/appportal
 git status --short
 git log -5 --oneline
 python3 scripts/test_bedrijfsvoering_infra.py
+python3 scripts/test_bedrijfsvoering_toegang.py
 python3 scripts/bedrijfsvoering-configureren.py
 docker compose config --quiet
 python3 scripts/app-registreren.py bedrijfsvoering --dry-run
@@ -98,9 +99,13 @@ de UUID naar de proxy-UID en bewaart bestaande instellingen. Het overzicht noemt
 alleen aantallen; geen geheimwaarden. De bedrijfsmomentopname bevat ook inactieve
 firma's met hun status. De beheerbestanden blijven lokaal en worden niet gecommit.
 
-`bedrijfsvoering-toegang.py` voegt uitsluitend actieve interne Authentik-accounts
-toe die via hun UUID aan een centrale medewerker zijn gekoppeld en een
-e-mailadres hebben, plus de gecontroleerde eigenaar. Het maakt geen gebruikers
+`bedrijfsvoering-toegang.py` voegt actieve interne collega's met e-mailadres uit
+de bestaande Authentik-directory toe. Zo kan een collega de tegel gebruiken ook
+wanneer diens koppeling in `kern.persoon` nog ontbreekt. `AnonymousUser`, `akadmin`,
+serviceaccounts, externe accounts, inactieve accounts en accounts zonder e-mail
+worden uitgesloten, ook wanneer een centrale profielkoppeling hen noemt. De
+eigenaar moet bovendien exact bij de vastgelegde UUID en naam `mehdi` horen en
+actief en intern zijn, met e-mailadres. Het maakt geen gebruikers
 of wachtwoorden en behoudt bestaande groepen. Herhalen voegt geen dubbele
 groepslidmaatschappen toe. Dit script geeft nul bedrijfsmandaten: collega's moeten
 die daarna van de eigenaar ontvangen. Het verwijdert geen oudere toewijzingen;
@@ -134,10 +139,14 @@ tegel is geen wijziging aan de oude Flask-portal nodig.
 De infrastructuurgrendel controleert onder meer ontbreken van publieke apppoorten,
 duurzame opslag, exclusieve appgroep, ontbrekende-eigenaarblokkade, gekopieerde
 identiteitskoppen en verwijdering van voormalige Sites-koppen. Dit zijn
-configuratieproeven, geen bewijs dat collega-accounts live werken.
+configuratieproeven, geen bewijs dat collega-accounts live werken. De aparte
+toegangsproeven voeren de echte toewijzingsbron uit met uitsluitend geïsoleerde
+Authentik-modelfixtures en controleren uitsluitingen, eigenaar en idempotentie.
 
 Controleer live apart: TLS, redirect zonder sessie, afwijzing buiten de appgroep,
 aanmelding van eigenaar en collega, ontbreken van bedrijfsinzage zonder mandaat,
 positieve procesketen binnen een toegewezen bedrijf, afwijzing van inzage en
 schrijfopdrachten in een ander bedrijf, opslag na herstart en teruglezen van audit.
 Houd niet uitgevoerde proeven zichtbaar en neem het datavolume in de back-up op.
+
+De medewerkerskoppeling in `kern.persoon` bevatte bij live controle slechts zes accounts. De apptegel gebruikt daarom de bestaande Authentik-directory: uitsluitend actieve interne menselijke accounts met e-mail. AnonymousUser, akadmin, serviceaccounts en externe accounts worden uitgesloten. Werkgever, appgroep en globale adminrol worden nooit automatisch vertaald naar bedrijfsmandaten. De eigenaar krijgt via de app-bootstrap expliciete mandaten; overige collegaaccounts blijven pending totdat de eigenaar ze per vennootschap toewijst.
