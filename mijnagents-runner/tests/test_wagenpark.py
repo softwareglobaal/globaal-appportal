@@ -42,6 +42,36 @@ def test_geen_kost_per_km_over_een_half_gemeten_jaar():
     assert k["km"] == 5000 and not k["km_zeker"] and "per_km" not in k, k
 
 
+def test_wagen_naar_de_app():
+    import wagenpark_db as D
+    r = D.voertuig_rij({"plaat": "2HHE117", "merk_model": "Opel Astra Sports Tourer", "chassis": "W0VBF8EG3H8101077",
+                        "bouwjaar": "2020 (afgeleid uit VIN)", "eerste_inschrijving": "2017-08-14", "keuring_tot": "?",
+                        "firma": "HINV", "gebruik": "Mehdi", "mappen": ["/a", "/b"], "status": "in gebruik"})
+    assert (r["merk"], r["model"], r["categorie"]) == ("Opel", "Astra Sports Tourer", "M1")
+    assert r["bouwjaar"] == 2020 and r["keuring_tot"] is None and r["dropbox_map"] == "/b"
+    assert D.voertuig_rij({"plaat": "2BAS423", "merk_model": "Ford Transit Custom"})["categorie"] == "N1"
+
+
+def test_signalen_worden_activiteiten_met_vaste_sleutel():
+    import wagenpark_db as D
+    w = {"plaat": "2BAS423", "termijnen": [{"wat": "keuring", "datum": "2026-09-17", "dagen": -18, "stand": "verlopen"},
+                                           {"wat": "groene kaart", "datum": "2027-09-01", "dagen": 330, "stand": "ok"}],
+         "vooruitblik": [{"onderdeel": "distributieriem", "stand": "binnenkort", "verwacht": "2026-10-26", "herkomst": "fabrikant", "laatst": None}],
+         "km_nazicht": [{"datum": "2025-12-22", "km": 136556, "bron": "tankkaart"}], "open_vragen": ["Is hij gekeurd?"]}
+    a = D._activiteiten(w)
+    assert [x["soort"] for x in a] == ["signaal", "taak", "taak", "taak"], a
+    assert D._activiteiten(w)[0]["sleutel"] == a[0]["sleutel"], "dezelfde vondst geeft dezelfde sleutel: geen dubbel signaal"
+
+
+def test_wat_een_mens_aanpaste_gaat_voor():
+    import wagenpark_db as D
+    reg = {"voertuigen": [{"plaat": "2HHE117", "status": "onzeker", "gebruik": "Anjeza", "km": [], "onderhoud": []}]}
+    mens = {"2HHE117": {"handmatig": ["status", "bestuurder"], "velden": {"status": "in gebruik", "bestuurder": "Mehdi"},
+                        "km": [{"datum": "2026-10-01", "km": 150000, "bron": "manueel"}], "diensten": [], "bestuurders": []}}
+    v = D.toepassen(reg, mens)["voertuigen"][0]
+    assert (v["status"], v["gebruik"]) == ("in gebruik", "Mehdi") and v["km"][0]["km"] == 150000
+
+
 if __name__ == "__main__":
     fout = 0
     for n, f in sorted(globals().items()):

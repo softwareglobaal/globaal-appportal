@@ -34,6 +34,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import postvak  # noqa: E402
+import wagenpark_db  # noqa: E402
 
 NAAM = "wagenpark-wacht"
 BRUSSEL = ZoneInfo("Europe/Brussels")
@@ -644,6 +645,9 @@ def main():
     if not (droog or forceer) and (nu.hour < 7 or staat.get("laatste_dag") == vandaag.isoformat()):
         return
     register = lees_register() if not droog else (json.load(open(REGISTER)) if os.path.exists(REGISTER) else json.load(open(ZAAD)))
+    # Wat een mens in de wagenpark-app (Vermogen) invoerde of aanpaste, gaat voor (05-10-2026).
+    mens = wagenpark_db.lezen() if not droog else {}
+    register = wagenpark_db.toepassen(register, mens)
     try:
         tijdlijn = json.load(open(TIJDLIJN, encoding="utf-8"))
     except (OSError, ValueError):
@@ -677,8 +681,18 @@ def main():
         json.dump(register, open(os.path.join(EXPORT, "voertuigen.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         r.bron("vermogen.verzekering (autoverzekeringen)", json.dumps(vz, ensure_ascii=False, sort_keys=True, default=str))
         r.bron("wagenpark-onderdelen.json", open(ONDERDELEN, encoding="utf-8").read())
-        json.dump(dashboard(register, tijdlijn, lijst, onbekend, vandaag, vz),
-                  open(os.path.join(EXPORT, "dashboard.json"), "w", encoding="utf-8"), ensure_ascii=False)
+        dash = dashboard(register, tijdlijn, lijst, onbekend, vandaag, vz)
+        json.dump(dash, open(os.path.join(EXPORT, "dashboard.json"), "w", encoding="utf-8"), ensure_ascii=False)
+        # De wagenpark-app in Vermogen (migratie 187): wagens, diensten, km, bestuurders en signalen als activiteiten.
+        app_telling = {}
+        try:
+            app_telling = wagenpark_db.schrijven(register, dash)
+            if not staat.get("leasings_overgenomen"):
+                wagenpark_db.leasings(register)
+                staat["leasings_overgenomen"] = vandaag.isoformat()
+        except Exception as e:  # noqa: BLE001
+            ag.log("app", "schrijf", f"wagenpark-app niet bijgewerkt: {type(e).__name__}: {str(e)[:200]}")
+            r.nood("De wagenpark-app in Vermogen kon niet bijgewerkt worden (zie het werkverslag)", wie="claude-code")
         # Mehdi, 25-09-2026: wagens die er niet meer zijn tellen niet mee (verkocht, geschrapt, buiten gebruik).
         hier = {v["plaat"] for v in register["voertuigen"] if v.get("status") not in WEG}
         te_klasseren = [e for e in tijdlijn.values() if not e.get("geklasseerd") and e.get("plaat") in hier]
@@ -704,7 +718,8 @@ def main():
             r.nood("Open vragen over de wagens staan in Data uit Mehdi/Wagenparkwacht/Wagenpark overzicht.md", wie="mehdi")
         verlopen = [f"{wat} {v['plaat']}" for v, wat, d, dd in lijst if dd < 0]
         r.detail = (f"{sum(1 for v in register['voertuigen'] if v.get('status') == 'in gebruik')} wagens in gebruik; "
-                    f"termijnen: {len(lijst)}, verlopen: {', '.join(verlopen) or 'geen'}; nieuwe post: {n}; te klasseren: {len(te_klasseren)}")
+                    f"termijnen: {len(lijst)}, verlopen: {', '.join(verlopen) or 'geen'}; nieuwe post: {n}; te klasseren: {len(te_klasseren)}"
+                    + (f"; app: {app_telling.get('open_activiteiten', 0)} open activiteiten" if app_telling else ""))
         staat["laatste_dag"] = vandaag.isoformat()
         os.makedirs(DATA, exist_ok=True)
         json.dump(staat, open(STAAT, "w"), ensure_ascii=False)
