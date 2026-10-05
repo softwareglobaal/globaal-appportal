@@ -44,6 +44,13 @@ def _e(n):
     return os.environ.get(n, "").strip()
 
 
+def uit():
+    """BELLEN_UIT in mijnagents-data/.env (of de omgeving): de agents bellen Mehdi niet, langs geen enkele weg
+    (afsprakenbel, alarm, vastzit, Telegram-oproep). Shaniel, 05-10-2026: "zet Mehdi zijn bel agent uit".
+    Ook de grendel voor tests. Weer aan: de regel weghalen."""
+    return bool(_e("BELLEN_UIT"))
+
+
 def _aanmelding():
     """(gebruiker, geheim) voor Basic auth: API key als die er is, anders het Auth Token."""
     if _e("TWILIO_API_KEY_SID") and _e("TWILIO_API_KEY_SECRET"):
@@ -52,6 +59,8 @@ def _aanmelding():
 
 
 def beschikbaar():
+    if uit():
+        return False
     return bool(_e("TWILIO_ACCOUNT_SID") and _e("TWILIO_VAN") and _e("ALARM_NUMMER") and all(_aanmelding()))
 
 
@@ -75,8 +84,8 @@ def twiml(tekst, slot="Details staan op WhatsApp en op het bord."):
 def _niet_in_een_test():
     """In een test belt niets echt, langs welke weg ook. Gezien 25-09-2026: een test stubde bel_afspraak,
     maar een nieuwe weg (bel_vast) belde Mehdi twee keer echt. De grendel zit daarom hier, op het laagste niveau."""
-    if os.environ.get("BELLEN_UIT"):
-        raise RuntimeError("bellen staat uit (test)")
+    if uit():
+        raise RuntimeError("bellen staat uit (BELLEN_UIT)")
 
 
 def bel(tekst, slot="Details staan op WhatsApp en op het bord.", van=None):
@@ -111,7 +120,7 @@ def status(call_sid):
 
 
 def nood():
-    return [] if beschikbaar() else [{"tekst": "Bellen bij een alarm: Twilio-account met nummer, dan TWILIO_ACCOUNT_SID, een API key "
+    return [] if beschikbaar() or uit() else [{"tekst": "Bellen bij een alarm: Twilio-account met nummer, dan TWILIO_ACCOUNT_SID, een API key "
                                                 "(TWILIO_API_KEY_SID en _SECRET), TWILIO_VAN en ALARM_NUMMER in mijnagents-data/.env", "wie": "shaniel"}]
 
 
@@ -162,6 +171,8 @@ VENSTER_MIN = 4  # binnen zoveel minuten na het beltijdstip bellen we nog
 
 
 def callmebot_beschikbaar():
+    if uit():
+        return False
     return bool(os.environ.get("CALLMEBOT_USER", "").strip())
 
 
@@ -245,7 +256,7 @@ def afspraken_bellen(staat, log=None):
 
 
 def nood_afspraken():
-    if afspraak_bellen_beschikbaar():
+    if afspraak_bellen_beschikbaar() or uit():
         return []
     return [{"tekst": "Bellen voor afspraken: gratis via Telegram-oproep. Mehdi: in Telegram een gebruikersnaam zetten "
                       "(Settings > Username), /start sturen naar @CallMeBot_txtbot, en CALLMEBOT_USER=@gebruikersnaam "
