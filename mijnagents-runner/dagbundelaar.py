@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
+import locatiecontext as LC  # noqa: E402  dagboek voor precies de dag, met startgrens (opdracht v1.4)
 
 NAAM = "dagbundelaar"
 ag = bord.Agent(NAAM)
@@ -89,7 +90,11 @@ def main():
         ag.log(f"dag {DAG}", "schrijf", f"bundels klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend; {opgepakt} bronnen als opgepakt gemarkeerd")
         ag.log_verstuur()
         # Werkwijze stap 8: welke bronnen ontbraken, en wat ik nodig heb om ze te krijgen.
-        soorten = {it.get("soort") for it in items if (it.get("sleutel") or "")[:10] == DAG or it.get("soort") == "locatie"}
+        # Een locatiedagboek telt alleen voor precies deze dag en uit de actieve reeks. Tot 05-10-2026
+        # telde elk locatie-item, ook een oud telefoondagboek, en verborg zo een ontbrekend dagboek.
+        soorten = {it.get("soort") for it in items if (it.get("sleutel") or "")[:10] == DAG and it.get("soort") != "locatie"}
+        if LC.dag_heeft_dagboek(DAG, items):
+            soorten.add("locatie")
         nood = []
         for soort, tekst, wie in (("gezondheid", "Apple Watch-gegevens (Gezondheidswacht op de Mac: Health Auto Export en iCloud moeten lopen)", "mehdi"),
                                   ("foto", "Foto's van de dag (iCloud-wacht op de Mac moet om 21:15 gedraaid hebben)", "mehdi"),

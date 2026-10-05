@@ -66,7 +66,8 @@ def projectplekken(conn, alles=False):
 
 
 def plekken(conn):
-    return [dict(r) for r in conn.execute("SELECT * FROM plek")]
+    """De benoemde plekken die mogen herkennen: niet de plekken uit de telefoontijd (actief = 0)."""
+    return [dict(r) for r in conn.execute("SELECT * FROM plek WHERE COALESCE(actief, 1) = 1")]
 
 
 def correcties(conn, bron=None):
@@ -175,6 +176,15 @@ def beoordeel(verblijf, plek_lijst, project_lijst, correctie_lijst=(), rol="auto
     if not kand:
         uit.update(zekerheid="geen", reden="geen bekend project binnen bereik",
                    formulering="%s %s" % (onderwerp, "bij " + naam_plek if naam_plek else "op een plek zonder project"))
+        return uit
+    if naam_plek:
+        # Een verblijf op een benoemde plek zonder dossier (Thuis, kantoor) is daar; een project in de
+        # buurt is dan niet bewezen. Hoogstens onzeker, nooit "mogelijk werfbezoek" (controle 05-10-2026:
+        # een project op 200 m van Thuis gaf elke nacht 'waarschijnlijk').
+        lijst = ", ".join("%s %s (%d m)" % (k.get("firma") or "?", k.get("nummer"), k["afstand_m"]) for k in kand)
+        uit.update(zekerheid="onzeker",
+                   reden="op de benoemde plek %s; project in de buurt niet bewezen" % naam_plek,
+                   formulering="%s bij %s; in de buurt: %s" % (onderwerp, naam_plek, lijst))
         return uit
     if len(kand) > 1:
         lijst = ", ".join("%s %s (%d m)" % (k.get("firma") or "?", k.get("nummer"), k["afstand_m"]) for k in kand)

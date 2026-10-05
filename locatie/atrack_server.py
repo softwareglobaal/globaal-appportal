@@ -30,6 +30,7 @@ maar het bronbeleid bij het lezen: hier wordt alles van een bekend toestel bewaa
 Starten:  ATRACK_IMEIS="<imei>:auto" python3 atrack_server.py   (het echte IMEI staat alleen in .env)
 """
 import os
+import re
 import socketserver
 import sqlite3
 import sys
@@ -67,14 +68,60 @@ def _verbinding():
     return conn
 
 
+IMEI_RE = re.compile(r"(?<!\d)(\d{11})(\d{4})(?!\d)")
+
+
+def gemaskeerd(tekst):
+    """Een toestelidentiteit hoort niet in een gewone log (controle 05-10-2026): alleen de laatste vier cijfers."""
+    return IMEI_RE.sub(lambda m: "…" + m.group(2), tekst or "")
+
+
+def verdacht_reden(conn, bron, bericht, positie):
+    """Waarom dit bericht van een toegelaten IMEI toch niet vertrouwd wordt, of None.
+
+    Het IMEI is geen geheim (het stond in de publieke geschiedenis van de repo), dus dit
+    zijn aanwijzingen, geen authenticatie: een andere protocolversie dan het echte toestel
+    meldt, een toestelnaam die niet klopt (als het beleid er een vastlegt), of een sprong die
+    geen auto kan maken. Verdacht wordt bewaard en getoond, maar telt nergens mee.
+    """
+    import bronbeleid as B         # noqa: PLC0415
+    beleid = B.BRONNEN.get(bron) or {}
+    verwacht = beleid.get("protocolversie")
+    if verwacht and bericht.get("protocol") and bericht["protocol"] != verwacht:
+        return "protocolversie %s, verwacht %s" % (bericht["protocol"], verwacht)
+    naam = beleid.get("toestelnaam_sha256")
+    if naam and B.vingerafdruk(bericht.get("naam") or "") != naam:
+        return "toestelnaam klopt niet"
+    if positie and positie.get("fix_geldig") and positie.get("tst"):
+        vorig = conn.execute(
+            """SELECT tst, lat, lon FROM punt WHERE toestel = ? AND fix = 1 AND verdacht IS NULL AND tst < ?
+               ORDER BY tst DESC LIMIT 1""", (bericht.get("imei"), positie["tst"])).fetchone()
+        if vorig:
+            meter = B_afstand(vorig[1], vorig[2], positie["lat"], positie["lon"])
+            seconden = max(positie["tst"] - vorig[0], 1)
+            if meter > 5000 and meter / seconden * 3.6 > 300:
+                return "sprong van %d km in %d s" % (meter // 1000, seconden)
+    return None
+
+
+def B_afstand(lat1, lon1, lat2, lon2):
+    from math import asin, cos, radians, sin, sqrt  # noqa: PLC0415
+    a = sin(radians(lat2 - lat1) / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6371000 * asin(sqrt(a))
+
+
 def schrijf(bericht):
     """Eén bericht opslaan: het ruwe bericht en elk positieblok erin.
 
-    Geeft (status, aantal_nieuwe_punten). status is 'bewaard', 'dubbel' (het bericht
+    Geeft (status, aantal_nieuwe_punten). status is 'bewaard' (alle posities staan erin),
+    'deels' (het ruwe bericht staat erin, niet alle posities), 'dubbel' (exact dit bericht
     stond er al: opnieuw verstuurd of uit de buffer), 'geen meting' (geen positie) of
-    'onvolledig' (minder posities gevonden dan het bericht meldt; het ruwe bericht is
-    bewaard, de gevonden posities ook). Gooit een fout als het schrijven mislukt; dan
-    vertrekt er geen bevestiging en stuurt het toestel opnieuw.
+    'onvolledig' (minder posities herkend dan het bericht meldt). Gooit een fout als het
+    schrijven mislukt; dan vertrekt er geen bevestiging en stuurt het toestel opnieuw.
+
+    Elk positieblok krijgt sleutel (bericht_id, volgnr): twee verschillende meldingen met
+    dezelfde oude fixtijd blijven twee punten (controle 05-10-2026). De gebeurtenistijd
+    (moment) staat apart van de fixtijd (tst) en de ontvangsttijd.
     """
     import schema                 # noqa: PLC0415
     bron = TOESTELLEN.get(bericht.get("imei") or "")
@@ -84,12 +131,7 @@ def schrijf(bericht):
     afdruk = schema.vingerafdruk_bericht(ruw)
     posities = bericht.get("posities") or []
     nu = int(time.time())
-    if not bericht.get("positie"):
-        verwerking = "geen positie"
-    elif bericht.get("posities_volledig", True):
-        verwerking = "punten"
-    else:
-        verwerking = "onvolledig: %d van de %d posities herkend" % (len(posities), bericht.get("posities_gemeld") or 0)
+    herkend = bericht.get("posities_volledig", True)
 
     with _slot:
         conn = _verbinding()
@@ -97,38 +139,59 @@ def schrijf(bericht):
             conn.execute("BEGIN IMMEDIATE")
             try:
                 rij = conn.execute("SELECT id FROM bericht WHERE vingerafdruk = ?", (afdruk,)).fetchone()
+                if not rij and bericht.get("teller") and bericht.get("verzonden"):
+                    # Dezelfde melding met een andere kop (+RESP of +BUFF) of een kleine afwijking:
+                    # zelfde toestel, soort, teller en verzendtijd is hetzelfde bericht.
+                    rij = conn.execute("""SELECT id FROM bericht WHERE toestel = ? AND soort = ? AND teller = ?
+                                          AND verzonden = ?""",
+                                       (bericht.get("imei"), bericht.get("soort"), bericht["teller"],
+                                        bericht["verzonden"])).fetchone()
                 if rij:
                     conn.execute("UPDATE bericht SET aantal = aantal + 1, laatst_ontvangen = ? WHERE id = ?",
                                  (nu, rij[0]))
                     conn.execute("COMMIT")
                     return "dubbel", 0
+                reden = verdacht_reden(conn, bron, bericht, posities[0] if posities else None)
                 cur = conn.execute(
                     """INSERT INTO bericht (ontvangen, laatst_ontvangen, bron, toestel, protocol, kop, soort,
                                             protocolversie, teller, verzonden, posities_gemeld, verwerking,
-                                            vingerafdruk, ruw)
-                       VALUES (?, ?, ?, ?, 'atrack', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                            vingerafdruk, ruw, verdacht)
+                       VALUES (?, ?, ?, ?, 'atrack', ?, ?, ?, ?, ?, ?, '', ?, ?, ?)""",
                     (nu, nu, bron, bericht.get("imei"), bericht.get("kop"), bericht.get("soort"),
                      bericht.get("protocol"), bericht.get("teller"), bericht.get("verzonden"),
-                     bericht.get("posities_gemeld") or 0, verwerking, afdruk, ruw[:8000]))
+                     bericht.get("posities_gemeld") or 0, afdruk, ruw[:8000], reden))
                 bid = cur.lastrowid
                 nieuw = 0
                 for volgnr, p in enumerate(posities):
                     if not p.get("tst") or p.get("lat") is None or p.get("lon") is None:
                         continue
+                    fix = 1 if p.get("fix_geldig") else 0
+                    moment = p["tst"] if fix else bericht.get("verzonden")     # onbekend blijft onbekend
                     c = conn.execute(
                         """INSERT INTO punt (tst, lat, lon, alt, vel, soort, ruw, motion, gebeurtenis, ontvangen,
                                              bron, hdop, satellieten, fix, verzonden, gebufferd,
-                                             toestel, berichtsoort, volgnr, bericht_id, teller)
-                           VALUES (?, ?, ?, ?, ?, 'location', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                           ON CONFLICT(bron, tst, berichtsoort, volgnr) DO NOTHING""",
+                                             toestel, berichtsoort, volgnr, bericht_id, teller, moment, verdacht)
+                           VALUES (?, ?, ?, ?, ?, 'location', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           ON CONFLICT(bericht_id, volgnr) DO NOTHING""",
                         (p["tst"], p["lat"], p["lon"],
                          int(p["hoogte"]) if p.get("hoogte") is not None else None,
                          int(p.get("snelheid") or 0), ruw[:4000], p.get("motion"), bericht.get("gebeurtenis"),
-                         nu, bron, p.get("hdop"), p.get("satellieten"), 1 if p.get("fix_geldig") else 0,
+                         nu, bron, p.get("hdop"), p.get("satellieten"), fix,
                          bericht.get("verzonden"), 1 if bericht.get("gebufferd") else 0,
-                         bericht.get("imei"), bericht.get("soort") or "", volgnr, bid, bericht.get("teller")))
+                         bericht.get("imei"), bericht.get("soort") or "", volgnr, bid, bericht.get("teller"),
+                         moment, reden))
                     nieuw += c.rowcount
-                conn.execute("UPDATE bericht SET posities_bewaard = ? WHERE id = ?", (nieuw, bid))
+                if not bericht.get("positie"):
+                    verwerking = "geen positie"
+                elif not herkend:
+                    verwerking = "onvolledig: %d van de %d posities herkend" % (len(posities),
+                                                                               bericht.get("posities_gemeld") or 0)
+                elif nieuw < len(posities):
+                    verwerking = "deels: %d van de %d posities bewaard" % (nieuw, len(posities))
+                else:
+                    verwerking = "punten"
+                conn.execute("UPDATE bericht SET posities_bewaard = ?, verwerking = ? WHERE id = ?",
+                             (nieuw, verwerking, bid))
                 conn.execute("COMMIT")
             except BaseException:
                 conn.execute("ROLLBACK")
@@ -137,9 +200,11 @@ def schrijf(bericht):
             conn.close()
     if not bericht.get("positie"):
         return "geen meting", 0
-    if verwerking != "punten":
+    if not herkend:
         return "onvolledig", nieuw
-    return "bewaard", nieuw
+    if nieuw < len(posities):
+        return "deels", nieuw
+    return ("verdacht" if reden else "bewaard"), nieuw
 
 
 def antwoord(bericht):
@@ -195,9 +260,9 @@ class Verbinding(socketserver.StreamRequestHandler):
                 if not regel.startswith("+"):
                     continue
                 terug, wat = verwerk(regel)
-                # Alles staat voluit in de tabel bericht; de log toont een begin.
-                print("%s %s %s" % (time.strftime("%H:%M:%S"), wat,
-                                    regel[:90] if wat in ("bewaard", "dubbel") else regel),
+                # Alles staat voluit in de tabel bericht; de log toont een begin, zonder toestelidentiteit.
+                print("%s %s %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"), wat,
+                                    gemaskeerd(regel[:90] if wat in ("bewaard", "dubbel") else regel)),
                       flush=True)
                 if terug:
                     try:
@@ -218,5 +283,6 @@ if __name__ == "__main__":
         print("ATRACK_IMEIS is leeg: elk bericht zou geweigerd worden", flush=True)
     schema_klaar()
     print("luistert op poort %d, database %s, toestellen: %s"
-          % (POORT, DB_PAD, ", ".join(TOESTELLEN) or "geen"), flush=True)
+          % (POORT, DB_PAD, ", ".join("%s (%s)" % (bronbeleid.toestel_kort(i), n) for i, n in TOESTELLEN.items())
+             or "geen"), flush=True)
     Server(("0.0.0.0", POORT), Verbinding).serve_forever()

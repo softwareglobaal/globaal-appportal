@@ -56,6 +56,7 @@ import agenda  # noqa: E402
 import agenda_wacht as W  # noqa: E402  titelregels, agenda's en adres naar coördinaten, zoals De Agendawacht
 import bord  # noqa: E402
 import bronbeleid as BB  # noqa: E402  dezelfde startgrens en hetzelfde toestel als de tegel
+import status as LS  # noqa: E402  dezelfde ouderdomsregel voor taken als de tegel (tweede slot in controle)
 import dropbox_prive  # noqa: E402
 
 NAAM = "locatie-wacht"
@@ -258,7 +259,7 @@ def maak(dag):
     wcache = W._cache_laden()
     wcache_voor = dict(wcache)
     per_sleutel, per_nummer, dekking = projectindex()
-    db = haal(f"/api/dagboek/{dag}?adressen=1")
+    db = haal(f"/api/dagboek/{dag}")          # leest alleen; verrijken is een aparte stap (verrijk())
     verblijven = verblijven_van(db)
     doorgegaan, niet_gezien, zonder_adres, overig = vergelijk_agenda(dag, verblijven, (per_sleutel, per_nummer), wcache)
     zonder = [v for v in verblijven if not v.get("afspraak") and v.get("zekerheid") != "niet_mehdi"]
@@ -268,6 +269,7 @@ def maak(dag):
               and not v.get("vaste_plek") and int(v.get("minuten", 0)) >= MIN_BEZOEK]
 
     regels = [db["markdown"].rstrip(), "", "## Naast de agenda", ""]
+    versie = db.get("versie") or ""
     regels += ["Doorgegaan volgens de locatie:"] + ([f"- {x}" for x in doorgegaan] or ["- (geen)"])
     regels += ["", "Niet gezien op de plek van de afspraak:"] + ([f"- {x}" for x in niet_gezien] or ["- (geen)"])
     if zonder_adres:
@@ -280,13 +282,16 @@ def maak(dag):
         regels += [lijn(v) for v in twijfel]
     regels += ["", "Elders 20 minuten of meer zonder afspraak, geen vaste plek:"]
     regels += [lijn(v) for v in elders] or ["- (geen)"]
+    # De versie van het dagboek waarop dit agendadeel rust: de export neemt het alleen over bij
+    # dezelfde versie (controle 05-10-2026: dagboek en agendadeel konden uit elkaar lopen).
+    regels += ["", "<!-- dagboekversie %s -->" % versie]
 
     ctx = haal(f"/api/context?dag={dag}")
     for c in ctx.get("verblijven") or []:
         a = epoch_van_iso(c["aankomst"])
         hit = next((v for v in verblijven if v["van"] == a and v.get("afspraak")), None)
         c["afspraak"] = hit["afspraak"] if hit else None
-    return {"volledig": "\n".join(regels) + "\n", "status": db.get("status"), "dekking": dekking,
+    return {"volledig": "\n".join(regels) + "\n", "status": db.get("status"), "versie": versie, "dekking": dekking,
             "verblijven": verblijven, "doorgegaan": doorgegaan, "niet_gezien": niet_gezien,
             "zonder_adres": zonder_adres, "overig": overig, "werf": werf, "twijfel": twijfel, "elders": elders,
             "context": ctx, "wcache": wcache if wcache != wcache_voor else None,
@@ -314,26 +319,34 @@ def schrijf_met_revisie(pad, tekst):
     return uitkomst
 
 
-def te_doen(vandaag=None):
-    """De dagen die (opnieuw) gemaakt moeten worden: vanaf de dag na de laatst afgesloten dag
-    tot vandaag, nooit voor de startgrens, hoogstens INHAAL_MAX_DAGEN. Een gemiste avond wordt
-    zo de volgende avond ingehaald."""
+def lees_stand():
+    try:
+        d = json.load(open(STAND))
+    except (OSError, ValueError):
+        d = {}
+    return {"afgesloten_tot": d.get("afgesloten_tot") or "", "versies": d.get("versies") or {}}
+
+
+def te_doen(vandaag=None, revisies=None):
+    """De dagen die (opnieuw) gemaakt moeten worden, nooit voor de startgrens:
+      - de open dagen na de laatst afgesloten dag, de OUDSTE eerst (hoogstens INHAAL_MAX_DAGEN per
+        ronde; de rest volgt de volgende ronde). Tot 05-10-2026 koos dit de nieuwste.
+      - een al afgesloten dag waarvan het dagboek sindsdien veranderde (late punten, een correctie,
+        nieuwe projectadressen): revisies is {dag: {"versie": ...}} van /api/revisies.
+    """
     vandaag = vandaag or nu().date().isoformat()
-    try:
-        laatst = json.load(open(STAND)).get("afgesloten_tot") or ""
-    except (OSError, ValueError):
-        laatst = ""
-    dagen = [d for d in BB.dagen_vanaf_grens(vandaag) if d > laatst]
-    return dagen[-INHAAL_MAX_DAGEN:]
+    stand = lees_stand()
+    open_ = [d for d in BB.dagen_vanaf_grens(vandaag) if d > stand["afgesloten_tot"]][:INHAAL_MAX_DAGEN]
+    herzien = [d for d, r in (revisies or {}).items()
+               if d <= stand["afgesloten_tot"] and BB.dag_toegestaan(d) and stand["versies"].get(d) != r.get("versie")]
+    return sorted(set(herzien) | set(open_))
 
 
-def stand_bijwerken(afgesloten):
-    """Onthoudt tot welke dag alles afgesloten is (aaneengesloten vanaf de grens)."""
-    try:
-        oud = json.load(open(STAND)).get("afgesloten_tot") or ""
-    except (OSError, ValueError):
-        oud = ""
-    nieuw = oud
+def stand_bijwerken(afgesloten, versies=None):
+    """Onthoudt tot welke dag alles afgesloten is (aaneengesloten vanaf de grens) en welke versie
+    van elk dagboek weggeschreven is. Alleen aanroepen met dagen die echt opgeslagen zijn."""
+    stand = lees_stand()
+    oud, nieuw = stand["afgesloten_tot"], stand["afgesloten_tot"]
     for d in BB.dagen_vanaf_grens(max(afgesloten) if afgesloten else BB.eerste_dag()):
         if d <= oud:
             continue
@@ -341,20 +354,49 @@ def stand_bijwerken(afgesloten):
             nieuw = d
         else:
             break
+    stand["versies"].update(versies or {})
     os.makedirs(MAP, exist_ok=True)
-    json.dump({"afgesloten_tot": nieuw, "bijgewerkt": nu().isoformat()}, open(STAND, "w"))
+    json.dump({"afgesloten_tot": nieuw, "versies": stand["versies"], "bijgewerkt": nu().isoformat()},
+              open(STAND, "w"), indent=0)
     return nieuw
 
 
+def verrijk(dag):
+    """Adressen opzoeken en bezoekdagen tellen, in de tegel (beheer.py verrijk). Netwerk eerst, dan
+    kort schrijven; een leesroute doet dit nooit. Faalt het, dan staat er in het dagboek gewoon
+    een coördinaat in plaats van een adres."""
+    try:
+        r = subprocess.run(["docker", "exec", "app-locatie", "python3", "beheer.py", "verrijk", dag],
+                           capture_output=True, text=True, timeout=300)
+        return r.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def controle():
-    """De bronstatus van de tegel. Alarm alleen volgens het bronbeleid en de meetmodus."""
+    """De bronstatus en de taken van de tegel. Alarm alleen volgens het bronbeleid, de meetmodus en
+    de ouderdom van elke taak. Is de tegel zelf onbereikbaar, dan is dat het alarm (controle
+    05-10-2026: een ConnectionError liet de controle zonder hartslag of signaal crashen)."""
     if not (7 <= nu().hour <= 22):
         return
-    st = haal("/api/status")
+    dag = nu().date().isoformat()
+    try:
+        st = haal("/api/status")
+    except Exception as e:  # noqa: BLE001
+        tekst = "De tegel locatie.globaal.be antwoordt niet (%s). Draait app-locatie?" % type(e).__name__
+        ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": dag, "titel": "Locatietegel onbereikbaar",
+                      "uniek": f"locatie-tegel-onbereikbaar:{dag}", "inhoud": tekst}])
+        ag.log(dag, "fout", tekst)
+        ag.log_verstuur()
+        ag.hartslag("fout", taak="tracker in het oog", detail="tegel onbereikbaar")
+        return
     actief = [b for b in st.get("bronnen", []) if b.get("status") == "actief"]
     stand = "; ".join(f"{b.get('label')}: {b.get('toestand')}" for b in actief) or "geen actieve tracker"
-    alarmen = st.get("alarmen") or []
-    dag = nu().date().isoformat()
+    alarmen = list(st.get("alarmen") or [])
+    # Tweede slot: de ouderdom van projectsync, dagboek en export ook hier uit de taken afleiden,
+    # met dezelfde regel als de tegel, voor het geval de tegel ze niet als alarm meegaf.
+    bekend = {a.get("sleutel") for a in alarmen}
+    alarmen += [a for a in LS.taakalarmen(st.get("taken") or []) if a["sleutel"] not in bekend]
     if alarmen:
         # Geen "stil" in de titel en geen uur in de sleutel: De Bode belt bij "stil" (AGENTNORM v1.3),
         # en met het uur in de sleutel kwam dit tot 24-09-2026 elke twee uur opnieuw.
@@ -363,7 +405,7 @@ def controle():
         for a in alarmen:
             ag.log(dag, "fout", a["tekst"])
         ag.log_verstuur()
-        ag.hartslag("fout", taak="tracker in het oog", detail=stand)
+        ag.hartslag("fout", taak="tracker in het oog", detail=stand + "; " + "; ".join(a["titel"] for a in alarmen))
         taak_melden("controle", False, stand)
     else:
         ag.hartslag("waakt", taak="tracker in het oog", detail=stand)
@@ -371,6 +413,7 @@ def controle():
 
 
 def main():
+    print(nu().strftime("%Y-%m-%dT%H:%M:%S%z"), " ".join(sys.argv[1:]) or "ronde", flush=True)   # tijdstempel per run
     if OM and not BB.binnen_venster(OM):
         return          # de andere van de twee UTC-uren: niet het Belgische uur
     if CONTROLE:
@@ -380,55 +423,60 @@ def main():
         print(f"{DAG} valt voor de start van de meetreeks ({BB.eerste_dag()}): niets te doen.")
         return
     if DROOG:
-        # Samenstellen en tonen: geen dagboek, geen bord, geen stand.
+        # Samenstellen en tonen: alleen leesroutes; geen verrijking, geen dagboek, geen bord, geen stand.
         print(maak(DAG or nu().date().isoformat())["volledig"])
         return
-    dagen = [DAG] if DAG else te_doen()
-    with ag.ronde("dagboek " + (dagen[-1] if dagen else "")) as r:
+    with ag.ronde("dagboek") as r:
         r.bron("bronbeleid", haal("/api/beleid"))
         st = haal("/api/status")
         r.bron("bronstatus", {b["bron"]: b.get("toestand") for b in st.get("bronnen", [])})
-        afgesloten, geschreven, fouten = [], [], []
+        revisies = haal("/api/revisies").get("revisies") or {}
+        dagen = [DAG] if DAG else te_doen(revisies=revisies)
+        afgesloten, versies, geschreven, fouten = [], {}, [], []
         for dag in dagen:
+            verrijk(dag)
             try:
                 d = maak(dag)
+                if d["wcache"] is not None:       # de Agendawacht schrijft in hetzelfde bestand
+                    W._cache_bewaren(d["wcache"])
+                pad = os.path.join(MAP, "dagen", f"{dag}.md")
+                hoe = schrijf_met_revisie(pad, d["volledig"])
+                schrijf_met_revisie(os.path.join(MAP, "context", f"{dag}.json"),
+                                    json.dumps(d["context"], ensure_ascii=False, indent=1) + "\n")
             except Exception as e:  # noqa: BLE001
                 fouten.append(f"{dag}: {type(e).__name__} {str(e)[:120]}")
                 ag.log(f"dag {dag}", "fout", fouten[-1])
                 continue
-            if d["wcache"] is not None:       # de Agendawacht schrijft in hetzelfde bestand
-                W._cache_bewaren(d["wcache"])
-            pad = os.path.join(MAP, "dagen", f"{dag}.md")
-            hoe = schrijf_met_revisie(pad, d["volledig"])
-            schrijf_met_revisie(os.path.join(MAP, "context", f"{dag}.json"),
-                                json.dumps(d["context"], ensure_ascii=False, indent=1) + "\n")
             uit = ag.klaarzet([{"voor": "mehdi", "soort": "locatie", "sleutel": dag,
                                 "titel": f"Locatielogboek {dag}" + (" (voorlopig)" if d["status"] == "voorlopig" else ""),
                                 "uniek": f"locatie:{dag}", "verwijzing": pad, "inhoud": d["volledig"][:20000]}])
             geschreven.append(f"{dag} {hoe}")
+            versies[dag] = d["versie"]
+            # Alleen een opgeslagen dag met een ingestelde tracker telt als afgesloten.
             if d["status"] == "afgesloten":
                 afgesloten.append(dag)
+            elif d["status"] == "niet ingesteld":
+                r.nood("De tracker in de auto staat niet (juist) in ATRACK_IMEIS: geen dag wordt afgesloten",
+                       wie="claude-code")
             ag.log(f"dag {dag}", "bron", f"{len(d['verblijven'])} verblijven; projecten: {', '.join(d['projecten']) or 'geen'}; "
                    f"agenda: {len(d['doorgegaan'])} doorgegaan, {len(d['niet_gezien'])} niet gezien, "
                    f"{len(d['zonder_adres'])} buiten zonder adres, {d['overig']} niet te toetsen")
             ag.log(f"dag {dag}", "bevinding", f"{len(d['werf'])} keer auto bij een project zonder afspraak, "
                    f"{len(d['twijfel'])} met meerdere kandidaten, {len(d['elders'])} elders", d["volledig"])
-            ag.log(f"dag {dag}", "schrijf", f"dagboek {hoe}: {pad} ({d['status']}); klaargezet ({uit.get('nieuw', 0)} nieuw, "
-                   f"{uit.get('bijgewerkt', 0)} bijgewerkt)")
+            ag.log(f"dag {dag}", "schrijf", f"dagboek {hoe}: {pad} ({d['status']}, versie {d['versie']}); klaargezet "
+                   f"({uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt)")
             if d["zonder_adres"]:
                 r.nood("Buitenafspraken zonder adres of bekend projectnummer: de vergelijking met de locatie is daar blind",
                        wie="collega")
-        if not DAG:
-            ag.log("stand", "schrijf", f"afgesloten tot {stand_bijwerken(afgesloten)}")
+        ag.log("stand", "schrijf", f"afgesloten tot {stand_bijwerken(afgesloten if not DAG else [], versies)}")
         sp = dropbox_prive.spiegel_map(MAP, "/Locatie")
         if sp["verstuurd"] or sp["fout"]:
             ag.log("dropbox", "schrijf", f"Dropbox privé: {sp['verstuurd']} bestand(en) verstuurd" + (f"; fout: {sp['fout']}" if sp["fout"] else ""))
         for n in dropbox_prive.nood(wat="het locatielogboek"):
             r.nood(n["tekst"], wie=n["wie"])
-        ps = next((t for t in st.get("taken", []) if t["taak"] == "projectsync"), {})
-        if ps.get("fout") or not ps.get("laatst_geslaagd") or (ps.get("uren_geleden") or 0) > 24:
-            r.nood("De projectadressen zijn niet bijgewerkt (projectsync in app-locatie): de herkenning werkt met een "
-                   "oudere index", wie="claude-code")
+        for a in st.get("alarmen") or []:
+            if a.get("sleutel", "").startswith("locatie-taak-"):
+                r.nood(a["titel"], wie="claude-code")
         dek = st.get("projectdekking") or {}
         r.detail = (f"{', '.join(geschreven) or 'niets geschreven'}; projectplekken {dek.get('bruikbaar', '?')} van "
                     f"{dek.get('projecten', '?')} bruikbaar" + (f"; fouten: {'; '.join(fouten)}" if fouten else ""))

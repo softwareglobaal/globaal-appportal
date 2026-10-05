@@ -76,22 +76,36 @@ def over_ssh(opdracht, pogingen=3, wacht=20):
     raise SystemExit("SSH naar %s mislukt na %d pogingen: %s" % (VM, pogingen, laatste))
 
 
+def haal_api(pad):
+    uit = over_ssh("curl -s -m 240 'http://127.0.0.1:%d%s'" % (POORT, pad))
+    if not uit.strip():
+        raise SystemExit("Geen antwoord van de tegel op %s. Draait app-locatie?" % pad)
+    return json.loads(uit)
+
+
 def haal_dagboek(datum):
-    """Het dagboek van de tegel (één generator), met adressen."""
-    uit = over_ssh("curl -s -m 240 'http://127.0.0.1:%d/api/dagboek/%s?adressen=1'" % (POORT, datum))
+    """Het dagboek van de tegel (één generator). Alleen lezend: adressen komen uit de cache die
+    De Locatiewacht laat vullen."""
+    uit = over_ssh("curl -s -m 240 'http://127.0.0.1:%d/api/dagboek/%s'" % (POORT, datum))
     if not uit.strip():
         raise SystemExit("Geen antwoord van de tegel voor %s. Draait app-locatie?" % datum)
     return json.loads(uit)
 
 
-def agenda_deel(datum):
-    """Het deel 'Naast de agenda' uit het dagboek van De Locatiewacht, of ''."""
+def agenda_deel(datum, versie=None):
+    """Het deel 'Naast de agenda' uit het dagboek van De Locatiewacht, alleen als het op dezelfde
+    versie van het dagboek rust als wat de export nu ophaalt (controle 05-10-2026: dagboek en
+    agendadeel konden uit verschillende revisies komen). Anders een korte melding."""
     try:
         tekst = over_ssh("cat %s/%s.md 2>/dev/null || true" % (WACHT_DAGEN, datum), pogingen=2, wacht=5)
     except SystemExit:
         return ""
     kop = "## Naast de agenda"
-    return tekst[tekst.index(kop):].rstrip() + "\n" if kop in tekst else ""
+    if kop not in tekst:
+        return ""
+    if versie and ("dagboekversie %s" % versie) not in tekst:
+        return kop + "\n\nVolgt na de volgende ronde van De Locatiewacht (het dagboek is intussen herzien).\n"
+    return tekst[tekst.index(kop):].rstrip() + "\n"
 
 
 def taak_melden(gelukt, detail):
@@ -168,28 +182,41 @@ def kopieer_database():
 
 # ------------------------------------------------------------------ dagen
 
-def lees_stand():
+def lees_volledige_stand():
     try:
         with open(STAND, encoding="utf-8") as f:
-            return json.load(f).get("afgesloten_tot") or ""
+            d = json.load(f)
     except (OSError, ValueError):
-        return ""
+        d = {}
+    return {"afgesloten_tot": d.get("afgesloten_tot") or "", "versies": d.get("versies") or {}}
 
 
-def te_doen(a, vandaag=None):
+def lees_stand():
+    return lees_volledige_stand()["afgesloten_tot"]
+
+
+def te_doen(a, vandaag=None, revisies=None):
+    """De dagen voor deze ronde, nooit voor de startgrens:
+      - de open dagen na de laatst afgesloten dag, de OUDSTE eerst (hoogstens INHAAL_MAX per ronde);
+        tot 05-10-2026 koos dit de nieuwste, en de launchd-taak gaf --dagen 2 mee;
+      - een al afgesloten dag waarvan het dagboek sindsdien herzien is (revisies van /api/revisies)."""
     vandaag = vandaag or B.vandaag().isoformat()
     if a.dag:
         return [a.dag] if B.dag_toegestaan(a.dag) else []
     if a.dagen:
         start = (date.fromisoformat(vandaag) - timedelta(days=a.dagen - 1)).isoformat()
         return [d for d in B.dagen_vanaf_grens(vandaag) if d >= start]
-    laatst = lees_stand()
-    return [d for d in B.dagen_vanaf_grens(vandaag) if d > laatst][-INHAAL_MAX:]
+    laatst, versies = lees_stand(), lees_volledige_stand()["versies"]
+    open_ = [d for d in B.dagen_vanaf_grens(vandaag) if d > laatst][:INHAAL_MAX]
+    herzien = [d for d, r in (revisies or {}).items()
+               if d <= laatst and B.dag_toegestaan(d) and versies.get(d) != r.get("versie")]
+    return sorted(set(open_) | set(herzien))
 
 
-def bewaar_stand(afgesloten):
-    oud = lees_stand()
-    nieuw = oud
+def bewaar_stand(afgesloten, versies=None):
+    """Alleen aanroepen met dagen die echt weggeschreven zijn."""
+    stand = lees_volledige_stand()
+    oud = nieuw = stand["afgesloten_tot"]
     for d in B.dagen_vanaf_grens(max(afgesloten) if afgesloten else B.eerste_dag()):
         if d <= oud:
             continue
@@ -197,9 +224,10 @@ def bewaar_stand(afgesloten):
             nieuw = d
         else:
             break
+    stand["versies"].update(versies or {})
     os.makedirs(os.path.dirname(STAND), exist_ok=True)
     with open(STAND, "w", encoding="utf-8") as f:
-        json.dump({"afgesloten_tot": nieuw, "bijgewerkt": datetime.now().isoformat()}, f)
+        json.dump({"afgesloten_tot": nieuw, "versies": stand["versies"], "bijgewerkt": datetime.now().isoformat()}, f)
     return nieuw
 
 
@@ -215,26 +243,34 @@ def main():
     if a.dag and not B.dag_toegestaan(a.dag):
         print("%s valt voor de start van de meetreeks (%s): niets te doen." % (a.dag, B.eerste_dag()))
         return 0
-    datums = te_doen(a)
-    afgesloten, regels, fouten = [], [], []
+    revisies = {}
+    if not a.dag and not a.dagen:
+        try:
+            revisies = haal_api("/api/revisies").get("revisies") or {}
+        except (SystemExit, ValueError) as e:
+            print("   (revisies niet op te halen: %s)" % str(e)[:120], file=sys.stderr)
+    datums = te_doen(a, revisies=revisies)
+    afgesloten, versies, regels, fouten = [], {}, [], []
     for datum in datums:
         try:
             gegevens = haal_dagboek(datum)
-        except (SystemExit, ValueError) as e:
+            js, md = bestanden_voor(datum, gegevens, agenda_deel(datum, gegevens.get("versie")))
+            if js is None:
+                continue
+            h1 = schrijf_met_revisie(os.path.join(DAGEN, "%s.json" % datum), js)
+            h2 = schrijf_met_revisie(os.path.join(DAGEN, "%s.md" % datum), md)
+        except (SystemExit, ValueError, OSError) as e:
             fouten.append("%s: %s" % (datum, str(e)[:120]))
             continue
-        js, md = bestanden_voor(datum, gegevens, agenda_deel(datum))
-        if js is None:
-            continue
-        h1 = schrijf_met_revisie(os.path.join(DAGEN, "%s.json" % datum), js)
-        h2 = schrijf_met_revisie(os.path.join(DAGEN, "%s.md" % datum), md)
         punten = len(gegevens.get("punten") or [])
         regels.append("%s: %s, %d punten, %s/%s" % (datum, gegevens.get("status"), punten, h1, h2))
         print(regels[-1])
+        versies[datum] = gegevens.get("versie")
+        # Alleen een opgeslagen dag met een ingestelde tracker telt als afgesloten.
         if gegevens.get("status") == "afgesloten":
             afgesloten.append(datum)
     if not a.dag and not a.dagen:
-        print("afgesloten tot", bewaar_stand(afgesloten))
+        print("afgesloten tot", bewaar_stand(afgesloten, versies))
     kopie = None if a.geen_kopie else kopieer_database()
     if kopie:
         print("Kopie van de ruwe database: %s (%.1f MB)" % (os.path.basename(kopie), os.path.getsize(kopie) / 1048576))

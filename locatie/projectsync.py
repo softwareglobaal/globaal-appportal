@@ -119,8 +119,14 @@ def synchroniseer(conn, ha=None, mappen=None, ha_fout=None, mappen_fout=None, ge
                   opnieuw=False):
     """Werkt de tabel projectplek bij. Geeft het rapport (dict).
 
-    ha/mappen: wat de bron gaf, of None als ze onbereikbaar was (dan ha_fout/mappen_fout).
-    Een onbereikbare bron verandert niets aan de projecten die van haar kwamen.
+    In twee fasen (controle 05-10-2026: de vorige versie hield tijdens het geocoderen, tot 13 s
+    per adres, een schrijftransactie open, zodat de ontvanger van de tracker 'database is locked'
+    kreeg):
+      1. lezen en geocoderen, zonder dat er een schrijftransactie openstaat;
+      2. de volledige index in één korte transactie publiceren.
+    ha/mappen: wat de bron gaf, of None als ze onbereikbaar was (dan ha_fout/mappen_fout). Een
+    onbereikbare bron verandert niets aan de projecten die van haar kwamen. Kan de geocodedienst
+    niet bereikt worden, dan blijft de vorige coördinaat van dat project staan.
     """
     geocodeer = geocodeer or geocode.geocodeer
     nu = int(nu or time.time())
@@ -128,51 +134,72 @@ def synchroniseer(conn, ha=None, mappen=None, ha_fout=None, mappen_fout=None, ge
         raise BronFout("geen enkele bron bereikbaar: " + "; ".join(x for x in (ha_fout, mappen_fout) if x))
     nieuw = verzamel(ha, mappen)
     gelezen = {b for b, lijst in (("ha-projecten", ha), ("projectmap", mappen)) if lijst is not None}
+    if conn.in_transaction:
+        conn.commit()
     bestaand = {r["sleutel"]: dict(r) for r in conn.execute("SELECT * FROM projectplek")}
-    rapport = {"geocodeerd": 0, "ongewijzigd": 0, "uit_bron": 0, "fouten": []}
+    rapport = {"geocodeerd": 0, "ongewijzigd": 0, "uit_bron": 0, "fouten": [], "dienst_onbereikbaar": []}
+
+    # Fase 1: alles uitrekenen, met het netwerk, zonder slot op de database.
+    plan = []
     for sleutel, p in sorted(nieuw.items()):
         oud = bestaand.get(sleutel) or {}
         if ha is None and oud.get("bron") == "ha-projecten":
             continue    # H-A Projecten onbereikbaar: zijn laatste goede gegevens blijven staan
         afdruk = adres_vingerafdruk(p["adres"])
         # Een geocode op huisnummer blijft tot het adres verandert. Een grove of mislukte wordt
-        # hoogstens eens per dag opnieuw geprobeerd (of meteen met opnieuw=True): de zoekdiensten
-        # en onze schrijfwijzen worden beter, en dan hoort de herkenning mee te gaan.
+        # hoogstens eens per dag opnieuw geprobeerd (of meteen met opnieuw=True); een geocode die
+        # mislukte omdat de dienst onbereikbaar was, bij elke ronde.
         oud_genoeg = opnieuw or (nu - (oud.get("geocode_datum") or 0)) > 20 * 3600
+        kw = oud.get("geocode_kwaliteit")
         if oud and oud.get("adres_vingerafdruk") == afdruk and (
-                oud.get("geocode_kwaliteit") == "adres" or
-                (oud.get("geocode_kwaliteit") in ("straat", "gemeente", "geen_adres") and not oud_genoeg) or
-                (oud.get("geocode_kwaliteit") == "niet_gevonden" and not oud_genoeg)):
-            geo = {"lat": oud["lat"], "lon": oud["lon"], "kwaliteit": oud["geocode_kwaliteit"],
-                   "bron": oud["geocode_bron"], "datum": oud["geocode_datum"]}
+                kw == "adres" or (kw in ("straat", "gemeente", "geen_adres", "niet_gevonden") and not oud_genoeg)):
+            geo = {"lat": oud["lat"], "lon": oud["lon"], "kwaliteit": kw, "bron": oud["geocode_bron"],
+                   "datum": oud["geocode_datum"]}
             rapport["ongewijzigd"] += 1
         else:
             g = geocodeer(p["adres"])
-            geo = {"lat": g.get("lat"), "lon": g.get("lon"), "kwaliteit": g.get("kwaliteit"),
-                   "bron": g.get("bron"), "datum": nu}
-            rapport["geocodeerd"] += 1
-        conn.execute(
-            """INSERT INTO projectplek (sleutel, firma, firma_id, nummer, project_id, naam, adres, adres_bron, bron,
-                                        status, link, adres_vingerafdruk, lat, lon, geocode_bron, geocode_kwaliteit,
-                                        geocode_datum, actief, eerst_gezien, laatst_gezien, bijgewerkt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-               ON CONFLICT(sleutel) DO UPDATE SET
-                 firma=excluded.firma, firma_id=excluded.firma_id, nummer=excluded.nummer,
-                 project_id=excluded.project_id, naam=excluded.naam, adres=excluded.adres,
-                 adres_bron=excluded.adres_bron, bron=excluded.bron, status=excluded.status, link=excluded.link,
-                 adres_vingerafdruk=excluded.adres_vingerafdruk, lat=excluded.lat, lon=excluded.lon,
-                 geocode_bron=excluded.geocode_bron, geocode_kwaliteit=excluded.geocode_kwaliteit,
-                 geocode_datum=excluded.geocode_datum, actief=1, laatst_gezien=excluded.laatst_gezien,
-                 bijgewerkt=excluded.bijgewerkt""",
-            (sleutel, p["firma"], p.get("firma_id"), p["nummer"], p.get("project_id"), p.get("naam"), p["adres"],
-             p.get("adres_bron"), p["bron"], p.get("status"), p.get("link"), afdruk, geo["lat"], geo["lon"],
-             geo["bron"], geo["kwaliteit"], geo["datum"], oud.get("eerst_gezien") or nu, nu, nu))
-    # Wat niet meer in een gelezen bron staat: niet wissen, wel uitzetten.
-    for sleutel, oud in bestaand.items():
-        if sleutel not in nieuw and oud.get("actief") and oud.get("bron") in gelezen:
-            conn.execute("UPDATE projectplek SET actief = 0, bijgewerkt = ? WHERE sleutel = ?", (nu, sleutel))
-            rapport["uit_bron"] += 1
-    conn.commit()
+            if g.get("kwaliteit") == "fout" and oud.get("lat") is not None:
+                # De dienst was onbereikbaar: de vorige coördinaat blijft, de fout staat in het rapport.
+                geo = {"lat": oud["lat"], "lon": oud["lon"], "kwaliteit": kw, "bron": oud["geocode_bron"],
+                       "datum": oud["geocode_datum"]}
+                rapport["dienst_onbereikbaar"].append(sleutel)
+            else:
+                geo = {"lat": g.get("lat"), "lon": g.get("lon"), "kwaliteit": g.get("kwaliteit"),
+                       "bron": g.get("bron"), "datum": nu}
+                rapport["geocodeerd"] += 1
+                if g.get("kwaliteit") == "fout":
+                    rapport["dienst_onbereikbaar"].append(sleutel)
+        plan.append((sleutel, p, afdruk, geo, oud))
+
+    # Fase 2: de volledige index in één korte transactie.
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for sleutel, p, afdruk, geo, oud in plan:
+            conn.execute(
+                """INSERT INTO projectplek (sleutel, firma, firma_id, nummer, project_id, naam, adres, adres_bron, bron,
+                                            status, link, adres_vingerafdruk, lat, lon, geocode_bron, geocode_kwaliteit,
+                                            geocode_datum, actief, eerst_gezien, laatst_gezien, bijgewerkt)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                   ON CONFLICT(sleutel) DO UPDATE SET
+                     firma=excluded.firma, firma_id=excluded.firma_id, nummer=excluded.nummer,
+                     project_id=excluded.project_id, naam=excluded.naam, adres=excluded.adres,
+                     adres_bron=excluded.adres_bron, bron=excluded.bron, status=excluded.status, link=excluded.link,
+                     adres_vingerafdruk=excluded.adres_vingerafdruk, lat=excluded.lat, lon=excluded.lon,
+                     geocode_bron=excluded.geocode_bron, geocode_kwaliteit=excluded.geocode_kwaliteit,
+                     geocode_datum=excluded.geocode_datum, actief=1, laatst_gezien=excluded.laatst_gezien,
+                     bijgewerkt=excluded.bijgewerkt""",
+                (sleutel, p["firma"], p.get("firma_id"), p["nummer"], p.get("project_id"), p.get("naam"), p["adres"],
+                 p.get("adres_bron"), p["bron"], p.get("status"), p.get("link"), afdruk, geo["lat"], geo["lon"],
+                 geo["bron"], geo["kwaliteit"], geo["datum"], oud.get("eerst_gezien") or nu, nu, nu))
+        # Wat niet meer in een gelezen bron staat: niet wissen, wel uitzetten.
+        for sleutel, oud in bestaand.items():
+            if sleutel not in nieuw and oud.get("actief") and oud.get("bron") in gelezen:
+                conn.execute("UPDATE projectplek SET actief = 0, bijgewerkt = ? WHERE sleutel = ?", (nu, sleutel))
+                rapport["uit_bron"] += 1
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
     rapport.update(dekking(conn))
     rapport["bronnen"] = {"ha-projecten": "gelezen" if ha is not None else ("onbereikbaar: " + (ha_fout or "")),
                           "projectmap": "gelezen" if mappen is not None else ("onbereikbaar: " + (mappen_fout or ""))}
@@ -189,6 +216,7 @@ def dekking(conn):
                            and r["sleutel"] not in over)
     grof = sorted(r["sleutel"] for r in rijen if r["geocode_kwaliteit"] in ("straat", "gemeente")
                   and r["sleutel"] not in over)
+    storing = sorted(r["sleutel"] for r in rijen if r["geocode_kwaliteit"] == "fout" and r["sleutel"] not in over)
     per_adres = {}
     for r in rijen:
         if r.get("adres_vingerafdruk") and r["geocode_kwaliteit"] != "geen_adres":
@@ -198,7 +226,7 @@ def dekking(conn):
     dubbel = sorted(sorted(v) for v in per_adres.values() if len(v) > 1)
     return {"projecten": len(rijen), "bruikbaar": len(bruikbaar), "per_bron": {
                 b: sum(1 for r in rijen if r["bron"] == b) for b in sorted({r["bron"] for r in rijen})},
-            "geen_adres": geen_adres, "niet_gevonden": niet_gevonden, "te_grof": grof,
+            "geen_adres": geen_adres, "niet_gevonden": niet_gevonden, "te_grof": grof, "geocode_storing": storing,
             "zelfde_adres": dubbel}
 
 
@@ -249,6 +277,9 @@ def main():
         return 1
     fout = "; ".join(x for x in (ha_fout, mappen_fout) if x) or None
     detail = json.dumps(rapport, ensure_ascii=False)
+    if rapport.get("dienst_onbereikbaar"):
+        fout = "; ".join(x for x in (fout, "geocodedienst onbereikbaar voor %d adres(sen)"
+                                      % len(rapport["dienst_onbereikbaar"])) if x)
     if fout:
         # Deels gelukt: wat bereikbaar was is bijgewerkt, maar de status zegt wat ontbrak.
         zet_taak(conn, "projectsync", False, detail, "deels: " + fout)

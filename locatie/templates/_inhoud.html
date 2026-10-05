@@ -70,7 +70,7 @@
         <td>
           {% if s.soort == 'bezoek' %}
             {% if h.project %}
-              <span class="plek">{{ h.project.naam or h.project.nummer }}</span>
+              <span class="plek">{{ h.project.adres or h.project.nummer }}</span>
               <span class="dossier">{{ h.project.firma }} {{ h.project.nummer }}</span>
               {% if h.project.link %}<a class="coord" href="{{ h.project.link }}" target="_blank" rel="noopener">project</a>{% endif %}
             {% elif h.plek or s.plek %}

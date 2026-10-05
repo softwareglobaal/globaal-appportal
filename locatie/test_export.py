@@ -30,11 +30,13 @@ def zet_doel():
 
 class VM:
     """Nagebootste VM: antwoordt op curl naar /api/dagboek en cat van een wachtdagboek."""
-    def __init__(self, dagboeken, wacht=None):
-        self.dagboeken, self.wacht, self.gevraagd = dagboeken, wacht or {}, []
+    def __init__(self, dagboeken, wacht=None, revisies=None):
+        self.dagboeken, self.wacht, self.gevraagd, self.revisies = dagboeken, wacht or {}, [], revisies or {}
 
     def __call__(self, opdracht, pogingen=3, wacht=20):
         self.gevraagd.append(opdracht)
+        if "/api/revisies" in opdracht:
+            return json.dumps({"revisies": self.revisies})
         if "/api/dagboek/" in opdracht:
             dag = opdracht.split("/api/dagboek/")[1][:10]
             return json.dumps(self.dagboeken.get(dag, {"datum": dag, "status": "afgesloten", "markdown":
@@ -104,6 +106,73 @@ def test_de_databasekopie_draagt_een_datum():
     assert "os.remove" not in bron and "unlink" not in bron, "oude kopieën worden niet gewist"
 
 
+def test_een_grote_achterstand_begint_bij_de_oudste_open_dag():
+    """Controle 05-10-2026: bij meer dan 31 open dagen koos de inhaal de laatste 31."""
+    zet_doel()
+    dagen = E.te_doen(args(), vandaag="2026-11-10")
+    assert dagen[0] == "2026-10-03" and len(dagen) == E.INHAAL_MAX, (dagen[0], len(dagen))
+
+
+def test_na_meerdere_dagen_uitval_worden_alle_dagen_ingehaald_en_gelijk_aan_de_tegel():
+    """Weekenduitval: de Mac draaide niet van 5 tot 9 oktober. Daarna komen alle dagen binnen, de
+    oudste eerst, elk gelijk aan wat de tegel nu zegt."""
+    doel = zet_doel()
+    E.bewaar_stand(["2026-10-03", "2026-10-04"], {"2026-10-03": "a", "2026-10-04": "b"})
+    E.B.vandaag = lambda: __import__("datetime").date(2026, 10, 10)
+    boeken = {d: {"datum": d, "status": "afgesloten", "versie": "v-" + d, "markdown": "# Locatielogboek %s\n" % d,
+                  "punten": [1], "sporen": {}} for d in ("2026-10-0%d" % i for i in range(5, 10))}
+    boeken["2026-10-10"] = dict(boeken["2026-10-05"], datum="2026-10-10", status="voorlopig", versie="v-10")
+    vm = VM(boeken, revisies={"2026-10-03": {"versie": "a"}, "2026-10-04": {"versie": "b"}})
+    E.over_ssh = vm
+    sys.argv = ["x", "--geen-kopie"]
+    E.main()
+    gevraagd = [o.split("/api/dagboek/")[1][:10] for o in vm.gevraagd if "/api/dagboek/" in o]
+    assert gevraagd == ["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10"], gevraagd
+    for d in gevraagd[:-1]:
+        assert json.loads(open(os.path.join(doel, "dagen", "%s.json" % d)).read())["versie"] == "v-" + d
+    assert E.lees_stand() == "2026-10-09"
+
+
+def test_een_late_revisie_van_een_afgesloten_dag_wordt_opnieuw_opgehaald():
+    """Een late meting of correctie voor 5 oktober, terwijl de stand al op 8 oktober stond."""
+    doel = zet_doel()
+    E.bewaar_stand(["2026-10-03", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08"],
+                   {"2026-10-05": "oud"})
+    E.B.vandaag = lambda: __import__("datetime").date(2026, 10, 8)
+    nieuw = {"2026-10-05": {"datum": "2026-10-05", "status": "afgesloten", "versie": "nieuw",
+                            "markdown": "# Locatielogboek 2026-10-05\nherzien\n", "punten": [1, 2], "sporen": {}}}
+    vm = VM(nieuw, revisies={"2026-10-05": {"versie": "nieuw"}})
+    E.over_ssh = vm
+    sys.argv = ["x", "--geen-kopie"]
+    E.main()
+    assert any("/api/dagboek/2026-10-05" in o for o in vm.gevraagd), vm.gevraagd
+    assert "herzien" in open(os.path.join(doel, "dagen", "2026-10-05.md")).read()
+    assert E.lees_volledige_stand()["versies"]["2026-10-05"] == "nieuw"
+
+
+def test_het_agendadeel_komt_alleen_mee_bij_dezelfde_dagboekversie():
+    E.over_ssh = VM({}, {"2026-10-05": "# x\n\n## Naast de agenda\n\n- (geen)\n<!-- dagboekversie v1 -->\n"})
+    assert "dagboekversie v1" in E.agenda_deel("2026-10-05", "v1")
+    assert "Volgt na de volgende ronde" in E.agenda_deel("2026-10-05", "v2")
+
+
+def test_een_dag_zonder_toestelconfiguratie_wordt_niet_afgesloten():
+    zet_doel()
+    E.B.vandaag = lambda: __import__("datetime").date(2026, 10, 4)
+    E.over_ssh = VM({d: {"datum": d, "status": "niet ingesteld", "versie": "x", "markdown": "# x\n", "punten": [],
+                         "sporen": {}} for d in ("2026-10-03", "2026-10-04")})
+    sys.argv = ["x", "--geen-kopie"]
+    E.main()
+    assert E.lees_stand() == ""
+
+
+def test_de_launchd_taak_beperkt_de_export_niet_tot_twee_dagen():
+    plist = os.path.expanduser("~/Library/LaunchAgents/com.mehdi.locatielogboek.plist")
+    if not os.path.exists(plist):
+        return                    # alleen op de Mac van Mehdi
+    assert "--dagen" not in open(plist, encoding="utf-8").read(), "launchd geeft nog --dagen mee"
+
+
 if __name__ == "__main__":
     fouten = 0
     for naam, fn in sorted(globals().items()):
@@ -111,8 +180,8 @@ if __name__ == "__main__":
             try:
                 fn()
                 print("   geslaagd  %s" % naam)
-            except AssertionError as e:
+            except Exception as e:  # noqa: BLE001
                 fouten += 1
-                print("   MISLUKT   %s: %s" % (naam, e))
+                print("   MISLUKT   %s: %s: %s" % (naam, type(e).__name__, e))
     print("%d van de %d grendels mislukt" % (fouten, sum(1 for n in globals() if n.startswith("test_"))))
     sys.exit(1 if fouten else 0)

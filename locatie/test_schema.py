@@ -50,6 +50,11 @@ def test_upgrade_houdt_de_reeks_rij_voor_rij_gelijk():
     v_voor, v_na, kopie = schema.migreer(pad)
     assert (v_voor, v_na) == (0, schema.LAATSTE), (v_voor, v_na)
     c = sqlite3.connect(pad)
+    assert c.execute("SELECT count(*) FROM punt WHERE moment IS NULL").fetchone()[0] == 0, "elk punt een gebeurtenistijd"
+    pk = [r[1] for r in c.execute("PRAGMA table_info(punt)") if r[5]]
+    assert pk == ["bericht_id", "volgnr"] or sorted(pk) == ["bericht_id", "volgnr"], pk
+    c.close()
+    c = sqlite3.connect(pad)
     na = c.execute("SELECT tst, lat, lon, ruw, ontvangen, bron FROM punt ORDER BY tst").fetchall()
     assert voor == na, "de upgrade veranderde de reeks"
     r = c.execute("SELECT toestel, berichtsoort, teller, bericht_id FROM punt WHERE tst = 1791019069").fetchone()
@@ -58,6 +63,9 @@ def test_upgrade_houdt_de_reeks_rij_voor_rij_gelijk():
     assert c.execute("SELECT motion FROM punt WHERE tst = 1791019100").fetchone()[0] == "automotive"
     assert c.execute("SELECT count(*) FROM bericht").fetchone()[0] == 2
     assert c.execute("SELECT naam FROM plek").fetchone()[0] == "Thuis", "de plekken moeten blijven"
+    # Een plek uit de telefoontijd gaat buiten de actieve herkenning, bewaard in plek_historiek (opdracht v1.4).
+    assert c.execute("SELECT actief, herkomst FROM plek WHERE naam = 'Thuis'").fetchone() == (0, "telefoontijd 9-9 tot 3-10-2026")
+    assert c.execute("SELECT count(*) FROM plek_historiek WHERE naam = 'Thuis'").fetchone()[0] == 1
     c.close()
 
 
@@ -122,12 +130,12 @@ def test_een_punt_en_een_gebeurtenis_in_dezelfde_seconde_blijven_allebei():
     pad = oude_database()
     schema.migreer(pad)
     c = sqlite3.connect(pad)
-    for soort in ("VGF", "VGN", "GIN", "FRI"):
-        c.execute("""INSERT INTO punt (tst, lat, lon, bron, berichtsoort, volgnr) VALUES (1791030000, 50.8, 4.7,
-                     'auto', ?, 0) ON CONFLICT(bron, tst, berichtsoort, volgnr) DO NOTHING""", (soort,))
+    for i, soort in enumerate(("VGF", "VGN", "GIN", "FRI", "STT", "STT")):
+        c.execute("""INSERT INTO punt (tst, lat, lon, bron, berichtsoort, volgnr, bericht_id) VALUES (1791030000, 50.8,
+                     4.7, 'auto', ?, 0, ?) ON CONFLICT(bericht_id, volgnr) DO NOTHING""", (soort, 9000 + i))
     c.commit()
     n = c.execute("SELECT count(*) FROM punt WHERE tst = 1791030000").fetchone()[0]
-    assert n == 4, n
+    assert n == 6, "twee statusmeldingen met dezelfde fix horen ook allebei te blijven (controle 05-10-2026)"
     c.close()
 
 

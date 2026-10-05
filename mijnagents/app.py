@@ -738,6 +738,20 @@ def mail_regel():
 # --- dagen: het dagdashboard van de logboek-laag. Per dag wat de Dagbundelaar
 #     samenbracht: uren onderweg, bezoeken, gesprekken en met wie, afspraken,
 #     foto's, lichaam, en de spiegel van De Levenscoach. Alleen beheer.
+LOCATIE_URL = os.environ.get("LOCATIE_URL", "http://app-locatie:3031")
+
+
+def _locatie(pad, standaard=None):
+    """Lezen bij de tegel locatie.globaal.be over het interne netwerk. De locatie hoort uit de
+    dag-API te komen, niet uit het markdown-dagboek van het bord (opdracht v1.4, 05-10-2026)."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(LOCATIE_URL + pad, timeout=10) as r:
+            return json.load(r)
+    except Exception:  # noqa: BLE001
+        return standaard
+
+
 @app.route("/dagen")
 def dagen_pagina():
     if not mag_beslissen():
@@ -767,17 +781,6 @@ def dagen_pagina():
             r["transcripten"] += 1
         elif s == "foto":
             r["fotos"] += int(d.get("aantal") or 0)
-        elif s == "locatie":
-            for regel in (it["inhoud"] or "").splitlines():
-                if regel.startswith("| ") and "| bezoek" in regel:
-                    r["bezoeken"] += 1
-                if regel.startswith("| ") and "verplaatsing" in regel:
-                    try:
-                        r["km"] += float(regel.rsplit("|", 2)[-2].strip().replace(" km", "").replace(",", "."))
-                        m = regel.split("|")[3].strip()
-                        r["onderweg_min"] += (int(m.split("u")[0]) * 60 + int(m.split("u")[1])) if "u" in m else int(m.replace(" min", "") or 0)
-                    except (ValueError, IndexError):
-                        pass
         elif s == "gezondheid":
             r["slaap"] = (d.get("samenvatting") or "")[:160]
         elif s == "coaching" and not it["sleutel"].startswith("week"):
@@ -795,6 +798,14 @@ def dagen_pagina():
         for p in (g["personen"] or "").split(","):
             if p.strip():
                 r["personen"].add(p.strip())
+    # Locatiecijfers uit de dag-API van de tegel: alleen dagen uit de actieve meetreeks (vanaf
+    # 3-10-2026, autotracker), uit dezelfde dagindeling als het dagboek. Oude telefoondagboeken op het
+    # bord tellen niet meer mee; tot 05-10-2026 werden hun tabelregels geteld en het nieuwe formaat niet.
+    for dag, c in ((_locatie("/api/dagcijfers", {}) or {}).get("dagen") or {}).items():
+        r = dagen.setdefault(dag, {"dag": dag, "afspraken": 0, "gesprekken": 0, "gesprek_min": 0, "personen": set(),
+                                   "bezoeken": 0, "km": 0.0, "onderweg_min": 0, "fotos": 0, "slaap": "", "hartslag": "",
+                                   "spiegel": "", "bundels": 0, "signalen": 0, "transcripten": 0})
+        r["bezoeken"], r["km"], r["onderweg_min"] = c.get("verblijven", 0), c.get("km", 0.0), c.get("onderweg_min", 0)
     rijen = sorted(dagen.values(), key=lambda x: x["dag"], reverse=True)[:120]
     for r in rijen:
         r["personen"] = ", ".join(sorted(r["personen"]))[:200]
@@ -869,6 +880,10 @@ def dag_pagina(datum):
             items.append(r)
     def van_soort(*s):
         return [i for i in items if i["soort"] in s]
+    # Een locatiedagboek van voor de startgrens van de meetreeks wordt niet meer getoond (opdracht v1.4).
+    eerste = (_locatie("/api/beleid", {}) or {}).get("eerste_dag") or "9999-12-31"
+    if datum < eerste:
+        items = [i for i in items if i["soort"] != "locatie"]
     gesprekken = conn.execute("SELECT * FROM gesprek_log WHERE datum=? ORDER BY start", (datum,)).fetchall()
     return render_template(
         "dag.html", app_naam=APP_NAAM, datum=datum, mdf=md,

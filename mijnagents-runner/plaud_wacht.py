@@ -23,6 +23,7 @@ import bord  # noqa: E402
 import bronnen  # noqa: E402
 import dropbox_prive  # noqa: E402
 import fathom_wacht as fw  # noqa: E402  (personen_uit_werkwijze, herken, deals_index, veilige_naam)
+import locatiecontext as LC  # noqa: E402  gestructureerde locatiecontext, met startgrens (opdracht v1.4)
 
 NAAM = "plaud-wacht"
 ag = bord.Agent(NAAM)
@@ -67,22 +68,21 @@ def kop_van(tekst):
 
 
 def context_op(start_iso):
-    """Wat de agenda en de locatie zeggen over dat moment (uit de bak klaargezet)."""
+    """Wat de agenda en de locatie zeggen over dat moment.
+
+    De locatie komt uit de gestructureerde context van de tegel (koppelingen/locatiecontext.py):
+    alleen dagen vanaf 3-10-2026, alleen 'auto bij project' met zekerheid en bewijs, nooit Thuis,
+    een rit of een meetgat. Tot 05-10-2026 zocht dit het woord "bezoek" in het markdown-dagboek
+    van het bord: dat las de oude telefoondagboeken en miste het nieuwe formaat (opdracht v1.4)."""
     dag = (start_iso or "")[:10]
-    uur = (start_iso or "")[11:16]
-    afspraken, plek = [], ""
+    afspraken = []
     try:
         for it in bord.call(f"/api/klaarzet?status=alle&n=400").get("items", []):
             if it["soort"] == "afspraak" and it["titel"].startswith(dag):
                 afspraken.append(it["titel"])
-            if it["soort"] == "locatie" and it["sleutel"] == dag:
-                for regel in (it["inhoud"] or "").splitlines():
-                    if regel.startswith("| ") and "bezoek" in regel and uur:
-                        van, tot = regel.split("|")[1].strip(), regel.split("|")[2].strip()
-                        if van <= uur <= tot:
-                            plek = regel.split("|")[5].strip()
     except Exception:  # noqa: BLE001
         pass
+    plek = LC.beschrijf(LC.verblijf_op(start_iso)) if start_iso else ""
     return afspraken, plek
 
 

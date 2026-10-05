@@ -38,30 +38,62 @@ def adres_sleutel(lat, lon):
     return f"{lat:.4f},{lon:.4f}"
 
 
-def vul_adressen(conn, dag, verblijven, opzoeken=False, maximum=25):
-    """Zet bij elk verblijf zonder plek of project een adres, uit de cache of (opzoeken)
-    via Nominatim, en telt op hoeveel dagen er een verblijf op die plek was. Die telling
-    begint bij de actieve reeks: niets geleerd uit de oude telefoonmetingen."""
-    import geocode  # noqa: PLC0415
-    gezocht = 0
+def lees_adressen(conn, verblijven):
+    """Zet bij elk verblijf het adres uit de cache en of het een vaste plek is. Schrijft niets:
+    een leesroute mag de database niet veranderen (controle 05-10-2026)."""
     for s in verblijven:
         if s.get("lat") is None:
             continue
         sleutel = adres_sleutel(s["lat"], s["lon"])
         rij = conn.execute("SELECT adres FROM adrescache WHERE sleutel = ?", (sleutel,)).fetchone()
-        if not rij and opzoeken and gezocht < maximum:
-            gezocht += 1
-            a = geocode.omgekeerd(s["lat"], s["lon"])
-            if a:
-                conn.execute("INSERT OR REPLACE INTO adrescache (sleutel, adres, volledig, bron, gezet) "
-                             "VALUES (?, ?, ?, 'nominatim', ?)", (sleutel, a["adres"], a["volledig"], int(time.time())))
-                rij = (a["adres"],)
         s["adres"] = rij[0] if rij else None
-        if B.dag_toegestaan(dag):
-            conn.execute("INSERT OR IGNORE INTO adresbezoek (sleutel, datum) VALUES (?, ?)", (sleutel, dag))
         n = conn.execute("SELECT count(*) FROM adresbezoek WHERE sleutel = ?", (sleutel,)).fetchone()[0]
         s["vaste_plek"] = n >= VASTE_PLEK_DAGEN
-    conn.commit()
+
+
+def verrijk_adressen(conn, dag, verblijven, opzoeken=None, maximum=25):
+    """De verrijkingstaak: ontbrekende adressen opzoeken en de bezoekdagen tellen.
+
+    Eerst alle netwerkverzoeken, zonder dat er een schrijftransactie openstaat; daarna alles in
+    één korte transactie. Zo blijft de ontvanger van de tracker schrijven terwijl Nominatim
+    traag is (tot 25 vragen van elk een seconde of meer). De telling begint bij de actieve
+    reeks: niets geleerd uit de oude telefoonmetingen. Geeft het aantal nieuwe adressen."""
+    import geocode  # noqa: PLC0415
+    opzoeken = opzoeken or geocode.omgekeerd
+    sleutels = []
+    for s in verblijven:
+        if s.get("lat") is not None:
+            sleutels.append((adres_sleutel(s["lat"], s["lon"]), s["lat"], s["lon"]))
+    bekend = {r[0] for r in conn.execute("SELECT sleutel FROM adrescache")}
+    nieuw = {}
+    for sleutel, lat, lon in sleutels:
+        if sleutel in bekend or sleutel in nieuw or len(nieuw) >= maximum:
+            continue
+        a = opzoeken(lat, lon)
+        if a:
+            nieuw[sleutel] = a
+    nu = int(time.time())
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for sleutel, a in nieuw.items():
+            conn.execute("INSERT OR REPLACE INTO adrescache (sleutel, adres, volledig, bron, gezet) "
+                         "VALUES (?, ?, ?, 'nominatim', ?)", (sleutel, a["adres"], a.get("volledig"), nu))
+        if B.dag_toegestaan(dag):
+            for sleutel, _, _ in sleutels:
+                conn.execute("INSERT OR IGNORE INTO adresbezoek (sleutel, datum) VALUES (?, ?)", (sleutel, dag))
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    return len(nieuw)
+
+
+def versie(dagboek):
+    """Een vingerafdruk van wat een lezer van het dagboek te zien krijgt (tekst en indeling)."""
+    import hashlib  # noqa: PLC0415
+    import json  # noqa: PLC0415
+    kern = {"markdown": dagboek.get("markdown"), "sporen": dagboek.get("sporen"), "status": dagboek.get("status")}
+    return hashlib.sha256(json.dumps(kern, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
 def waar(s):
@@ -149,38 +181,60 @@ def markdown(dag, gegevens):
     return "\n".join(r) + "\n"
 
 
-def context(dag, gegevens, status=None):
-    """De locatiecontext voor agents: alleen projectrelevante verblijven, met tijd en bron.
+POSITIEF = ("waarschijnlijk", "bevestigd")
 
-    Elke regel zegt van wanneer hij is, zodat oude context nooit als huidige locatie
-    gelezen wordt. Onzekere herkenning blijft onzeker.
+
+def positief(s):
+    """Is dit verblijf een positief projectverblijf voor agents? Alleen een verblijf met een
+    project en zekerheid waarschijnlijk of bevestigd. Nooit Thuis of een andere benoemde plek
+    zonder dossier, een rit, een meetgat, of een verblijf dat Mehdi als geen project of
+    'auto niet bij mij' rechtzette (controle 05-10-2026)."""
+    h = s.get("herkenning") or {}
+    if s.get("soort") != "bezoek" or not h.get("project") or h.get("zekerheid") not in POSITIEF:
+        return False
+    # Door Mehdi bevestigd is positief, ook thuis; anders nooit op een benoemde plek zonder dossier.
+    return bool(h.get("correctie")) or not h.get("plek")
+
+
+def context(dag, gegevens, status=None):
+    """De locatiecontext voor agents.
+
+    verblijven: alleen positieve projectverblijven ('auto bij project'), met tijd, bron, rol,
+    zekerheid, reden en bewijs. kandidaten: onzekere of korte projectrelaties, uitdrukkelijk niet
+    positief. Thuis, ritten, meetgaten en rechtgezette verblijven gaan niet mee; ze blijven in
+    het dagboek als bewijs. Elke regel zegt van wanneer hij is, zodat oude context nooit als
+    huidige locatie gelezen wordt. Mehdi's volledige spoor gaat niet mee.
     """
     uit = {"dag": dag, "gemaakt": B.lokaal(time.time()).isoformat(), "status_dag": gegevens.get("status"),
-           "bronbeleid": B.VERSIE, "regel": "auto bij project is geen bewijs dat Mehdi er was",
-           "verblijven": [], "tekst": []}
+           "bronbeleid": B.VERSIE, "grens": B.STARTGRENS,
+           "regel": "auto bij project is geen bewijs dat Mehdi er was",
+           "verblijven": [], "kandidaten": [], "tekst": []}
     if gegevens.get("buiten_reeks"):
         uit["tekst"].append("Geen locatiecontext: de dag valt voor de start van de meetreeks.")
         return uit
     for bron, spoor in (gegevens.get("sporen") or {}).items():
         for s in spoor["indeling"]:
             h = s.get("herkenning") or {}
-            if s["soort"] != "bezoek" or h.get("zekerheid") in (None, "geen"):
+            if s["soort"] != "bezoek" or h.get("correctie") and h.get("zekerheid") != "bevestigd":
                 continue
-            p = h.get("project")
-            item = {"bron": bron, "rol": spoor.get("rol"), "aankomst": B.lokaal(s["van"]).isoformat(),
+            ja = positief(s)
+            if not ja and not (h.get("zekerheid") in ("onzeker", "kort") and not h.get("correctie")):
+                continue
+            p = h.get("project") if ja else None
+            item = {"bron": bron, "rol": spoor.get("rol"), "positief": ja,
+                    "aankomst": B.lokaal(s["van"]).isoformat(),
                     "vertrek": None if s.get("open") and not s.get("loopt_door") else B.lokaal(s["tot"]).isoformat(),
                     "minuten": s["minuten"], "zekerheid": h.get("zekerheid"), "reden": h.get("reden"),
                     "formulering": h.get("formulering"), "aard": h.get("aard"),
-                    "project": p, "kandidaten": h.get("kandidaten") if not p else None,
+                    "project": p, "kandidaten": None if ja else (h.get("kandidaten") or []),
                     "bewijs": s.get("bewijs") or "%d meetpunten" % s.get("punten", 0),
                     "correctie": h.get("correctie")}
-            uit["verblijven"].append(item)
-            wie = (", ".join("%s %s" % (k.get("firma") or "?", k["nummer"]) for k in h.get("kandidaten", []))
-                   if not p else "%s %s" % (p.get("firma") or "", p.get("nummer")))
-            uit["tekst"].append("%s, %s %s, aankomst %s, %s, zekerheid %s, bewijs: %s%s" % (
-                spoor.get("label") or bron, "projectkandidaat" if not p else "project", wie, uur(s["van"]),
-                ("nog ter plaatse" if s.get("open") and not s.get("loopt_door") else "vertrek " + uur(s["tot"])),
-                h.get("zekerheid"), item["bewijs"], (", link: " + p["link"]) if p and p.get("link") else ""))
+            (uit["verblijven"] if ja else uit["kandidaten"]).append(item)
+            if ja:
+                uit["tekst"].append("%s, project %s %s, aankomst %s, %s, zekerheid %s, bewijs: %s%s" % (
+                    spoor.get("label") or bron, p.get("firma") or "", p.get("nummer"), uur(s["van"]),
+                    ("nog ter plaatse" if s.get("open") and not s.get("loopt_door") else "vertrek " + uur(s["tot"])),
+                    h.get("zekerheid"), item["bewijs"], (", link: " + p["link"]) if p.get("link") else ""))
     if status:
         for b in status.get("bronnen", []):
             if b.get("status") == "actief":

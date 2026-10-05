@@ -71,11 +71,12 @@ def test_sql_en_python_zeggen_hetzelfde():
     import sqlite3
     with ProefToestel() as toestellen:
         conn = sqlite3.connect(":memory:")
-        conn.execute("CREATE TABLE punt (bron TEXT, toestel TEXT, tst INTEGER)")
+        conn.execute("CREATE TABLE punt (bron TEXT, toestel TEXT, tst INTEGER, verdacht TEXT)")
         gevallen = [("auto", PROEF, GRENS - 1), ("auto", PROEF, GRENS), ("auto", PROEF, GRENS + 9999),
                     ("auto", "123", GRENS + 5), ("iphone", PROEF, GRENS + 5), ("draagbaar", PROEF, GRENS + 5),
                     ("auto", None, GRENS + 5)]
-        conn.executemany("INSERT INTO punt VALUES (?,?,?)", gevallen)
+        conn.executemany("INSERT INTO punt (bron, toestel, tst) VALUES (?,?,?)", gevallen)
+        conn.execute("INSERT INTO punt VALUES ('auto', ?, ?, 'sprong')", (PROEF, GRENS + 7))
         clause, args = B.sql_actief(toestellen)
         via_sql = set(conn.execute(f"SELECT bron, toestel, tst FROM punt WHERE {clause}", args).fetchall())
         via_python = {g for g in gevallen if B.telt_mee({"bron": g[0], "toestel": g[1], "tst": g[2]})[0]}

@@ -43,7 +43,7 @@ def bron(conn, naam, nu=None, toestellen=None):
             beleid["status"], beleid["status"]), uitleg=beleid.get("reden"))
         return uit
     toestellen = B.toestellen_uit_env() if toestellen is None else toestellen
-    imeis = sorted(i for i, n in toestellen.items() if n == naam and B.toestel_klopt(naam, i))
+    imeis = B.toestellen_van(naam, toestellen)
     uit["meetmodus"] = beleid.get("meetmodus")
     if not imeis:
         uit.update(toestand="niet ingesteld",
@@ -56,11 +56,13 @@ def bron(conn, naam, nu=None, toestellen=None):
     q = ",".join("?" * len(imeis))
     grens = B.ingang(naam)
 
+    # Ontvangst: wanneer de server het laatst iets van dit toestel kreeg. Dat zegt alleen dat de
+    # verbinding werkt, niets over waar of wanneer gemeten is.
     laatste = conn.execute(f"""SELECT id, ontvangen, soort, verzonden FROM bericht
-                               WHERE bron = ? AND toestel IN ({q}) ORDER BY id DESC LIMIT 1""",
+                               WHERE bron = ? AND toestel IN ({q}) ORDER BY ontvangen DESC, id DESC LIMIT 1""",
                            [naam] + imeis).fetchone()
     geldig = conn.execute(f"""SELECT tst, ontvangen, berichtsoort, gebeurtenis, gebufferd FROM punt
-                              WHERE bron = ? AND toestel IN ({q}) AND tst >= ? AND fix = 1
+                              WHERE bron = ? AND toestel IN ({q}) AND tst >= ? AND fix = 1 AND verdacht IS NULL
                               ORDER BY tst DESC LIMIT 1""", [naam] + imeis + [grens]).fetchone()
     if not laatste and not geldig:
         uit.update(toestand="geen gegevens", laatste_ontvangst=None, laatste_geldige_positie=None,
@@ -93,19 +95,36 @@ def bron(conn, naam, nu=None, toestellen=None):
     uit["levensteken"] = _uur(conn.execute(
         f"""SELECT max(ontvangen) FROM bericht WHERE bron = ? AND toestel IN ({q})
             AND COALESCE(posities_gemeld, 0) = 0""", [naam] + imeis).fetchone()[0])
+    verdacht = conn.execute(f"""SELECT count(*), max(ontvangen) FROM bericht WHERE bron = ? AND toestel IN ({q})
+                                AND verdacht IS NOT NULL""", [naam] + imeis).fetchone()
+    uit["verdacht"] = {"aantal": verdacht[0], "laatst": _uur(verdacht[1])}
 
-    uit_id = conn.execute(f"SELECT max(id) FROM bericht WHERE bron = ? AND toestel IN ({q}) AND soort = 'VGF'",
-                          [naam] + imeis).fetchone()[0]
-    gebruik_id = conn.execute(f"""SELECT max(id) FROM bericht WHERE bron = ? AND toestel IN ({q})
-                                  AND soort IN ({','.join('?' * len(IN_GEBRUIK))})""",
-                              [naam] + imeis + list(IN_GEBRUIK)).fetchone()[0]
+    # Toestand: de laatste toestandsmelding volgens het toestel, op gebeurtenistijd (moment), binnen
+    # de grens en van het toegelaten toestel. Nooit op ontvangstvolgorde: een ouder 'motor uit' dat
+    # later uit de buffer komt, maakt een rijdende auto niet geparkeerd (controle 05-10-2026).
+    soorten = ",".join("?" * len(IN_GEBRUIK + ("VGF",)))
+    rijen = conn.execute(f"""SELECT moment, berichtsoort, gebeurtenis, fix, bericht_id FROM punt
+                             WHERE bron = ? AND toestel IN ({q}) AND moment IS NOT NULL AND moment >= ?
+                             AND verdacht IS NULL AND berichtsoort IN ({soorten})
+                             ORDER BY moment DESC, bericht_id DESC LIMIT 5""",
+                         [naam] + imeis + [grens] + list(IN_GEBRUIK + ("VGF",))).fetchall()
     stilte = nu - laatste["ontvangen"]
-    if uit_id and (not gebruik_id or uit_id > gebruik_id):
-        sinds = conn.execute("SELECT ontvangen FROM bericht WHERE id = ?", (uit_id,)).fetchone()[0]
-        uren = (nu - sinds) / 3600
-        uit.update(toestand="geparkeerd", geparkeerd_sinds=_uur(sinds),
-                   uitleg=("geparkeerd sinds %s (motor uit). In spaarstand 1 meldt het toestel pas weer bij "
-                           "vertrek; stilte is hier verwacht en geen storing." % _uur(sinds)))
+    if not rijen:
+        uit.update(toestand="onbekend",
+                   uitleg="geen toestandsmelding met bekende gebeurtenistijd sinds de ingang; de toestand blijft onbekend")
+        return uit
+    hoogste = rijen[0]["moment"]
+    gelijk = [r for r in rijen if r["moment"] == hoogste]
+    uit_soort = {r["berichtsoort"] == "VGF" for r in gelijk}
+    if len(uit_soort) > 1:
+        uit.update(toestand="onbekend",
+                   uitleg="motor uit en motor aan op hetzelfde moment (%s); de volgorde is niet vast te stellen"
+                   % _uur(hoogste))
+    elif rijen[0]["berichtsoort"] == "VGF":
+        uren = (nu - hoogste) / 3600
+        uit.update(toestand="geparkeerd", geparkeerd_sinds=_uur(hoogste),
+                   uitleg=("geparkeerd sinds %s (motor uit, tijd van het toestel). In spaarstand 1 meldt het toestel "
+                           "pas weer bij vertrek; stilte is hier verwacht en geen storing." % _uur(hoogste)))
         if uren > beleid.get("geparkeerd_onbekend_uren", 72):
             uit["vraag"] = ("De auto staat volgens de tracker al %d uur geparkeerd. Of het toestel nog leeft is in "
                             "spaarstand 1 niet te zien; spaarstand 2 (AT+GTCFG veld 9) geeft elke 15 minuten een "
@@ -114,15 +133,49 @@ def bron(conn, naam, nu=None, toestellen=None):
         uit.update(toestand="in gebruik", uitleg="de auto meldt zich; laatste bericht %s" % _uur(laatste["ontvangen"]))
     else:
         uit.update(toestand="geen bericht zonder motor uit",
-                   uitleg=("sinds %s niets meer, en het laatste bericht was geen 'motor uit'. Rijdend komt er elke "
-                           "30 s een punt; wat zonder netwerk gemeten is komt later na." % _uur(laatste["ontvangen"])))
+                   uitleg=("sinds %s niets meer, en de laatste toestandsmelding was geen 'motor uit'. Rijdend komt er "
+                           "elke 30 s een punt; wat zonder netwerk gemeten is komt later na." % _uur(laatste["ontvangen"])))
         if stilte > beleid.get("stil_rijdend_minuten", 60) * 60:
             # Geen "stil" in de titel: daarop belt De Bode (AGENTNORM, hoofdstuk 6).
             uit["alarm"] = {"titel": "Locatietracker valt weg zonder motor uit",
-                            "tekst": ("De tracker in de auto meldt al %d minuten niets, en het laatste bericht "
-                                      "was geen 'motor uit'. Stroom, simkaart of netwerk nakijken."
-                                      % _min(stilte)),
+                            "tekst": ("De tracker in de auto meldt al %d minuten niets, en de laatste toestandsmelding "
+                                      "was geen 'motor uit'. Stroom, simkaart of netwerk nakijken." % _min(stilte)),
                             "sleutel": "locatie-wegval-%s" % naam}
+    if verdacht[0] and verdacht[1] and nu - verdacht[1] < 7 * 86400 and not uit.get("alarm"):
+        uit["alarm"] = {"titel": "Verdachte berichten van de locatietracker",
+                        "tekst": ("Er kwamen %d bericht(en) binnen met het IMEI van de auto die niet kloppen "
+                                  "(protocolversie, toestelnaam of een onmogelijke sprong). Ze tellen niet mee." % verdacht[0]),
+                        "sleutel": "locatie-verdacht-%s" % naam}
+    return uit
+
+
+# Hoe oud een taak mag zijn voor ze een melding geeft (controle 05-10-2026: projectsync 48 uur en
+# export 49 uur oud gaven een geslaagde controle).
+VERSHEID_UREN = 36
+VERSHEID_TITEL = {"projectsync": "Projectadressen van het locatielogboek niet bijgewerkt",
+                  "dagboek": "Locatiedagboek loopt achter",
+                  "export": "Export van het locatielogboek naar Dropbox loopt achter"}
+
+
+def taakalarmen(taken_, nu=None):
+    """Per taak een melding als ze faalde of langer dan VERSHEID_UREN niet meer slaagde."""
+    nu = nu or time.time()
+    uit = []
+    for t in taken_:
+        if t["taak"] not in VERSHEID_TITEL:
+            continue
+        oud = t.get("uren_geleden")
+        if t.get("fout"):
+            reden = "laatste poging mislukt: %s" % t["fout"]
+        elif oud is None:
+            reden = "nog nooit geslaagd"
+        elif oud > VERSHEID_UREN:
+            reden = "laatst geslaagd %s, %d uur geleden" % (t.get("laatst_geslaagd"), oud)
+        else:
+            continue
+        uit.append({"titel": VERSHEID_TITEL[t["taak"]],
+                    "tekst": "%s (%s). %s." % (t.get("wat") or t["taak"], t.get("waar") or "", reden),
+                    "sleutel": "locatie-taak-%s" % t["taak"]})
     return uit
 
 
@@ -130,7 +183,10 @@ def taken(conn, nu=None):
     nu = nu or time.time()
     rijen = {r["taak"]: dict(r) for r in conn.execute("SELECT * FROM taakstatus")}
     rijen.setdefault("ontvangst", {"taak": "ontvangst"})
-    laatste = conn.execute("SELECT max(ontvangen) FROM bericht").fetchone()[0]
+    # Ontvangst van de actieve trackers, niet van de telefoon die uit gebruik is.
+    imeis = [i for b in B.actieve_bronnen() for i in B.toestellen_van(b)]
+    laatste = conn.execute("SELECT max(ontvangen) FROM bericht WHERE toestel IN (%s)" % ",".join("?" * len(imeis)),
+                           imeis).fetchone()[0] if imeis else None
     rijen["ontvangst"].update(laatst_geslaagd=laatste, laatst_geprobeerd=laatste)
     uit = []
     for taak in ("ontvangst", "projectsync", "dagboek", "export", "controle"):
@@ -155,12 +211,19 @@ def overzicht(conn, nu=None, toestellen=None):
     import projectsync  # noqa: PLC0415
     nu = int(nu or time.time())
     bronnen = [bron(conn, b, nu, toestellen) for b in B.BRONNEN]
+    taken_ = taken(conn, nu)
+    dekking = projectsync.dekking(conn)
+    ps = next((t for t in taken_ if t["taak"] == "projectsync"), {})
+    dekking["laatst_geslaagd"], dekking["uren_geleden"], dekking["fout"] = (
+        ps.get("laatst_geslaagd"), ps.get("uren_geleden"), ps.get("fout"))
+    dekking["verouderd"] = bool(ps.get("fout")) or ps.get("uren_geleden") is None or \
+        (ps.get("uren_geleden") or 0) > VERSHEID_UREN
     return {
         "gegenereerd": B.lokaal(nu).isoformat(),
         "beleid": {"versie": B.VERSIE, "startgrens": B.STARTGRENS, "eerste_dag": B.eerste_dag(),
-                   "actief": B.actieve_bronnen()},
+                   "actief": B.actieve_bronnen(), "ingesteld": B.ingesteld(toestellen)},
         "bronnen": bronnen,
-        "alarmen": [b["alarm"] for b in bronnen if b.get("alarm")],
-        "taken": taken(conn, nu),
-        "projectdekking": projectsync.dekking(conn),
+        "alarmen": [b["alarm"] for b in bronnen if b.get("alarm")] + taakalarmen(taken_, nu),
+        "taken": taken_,
+        "projectdekking": dekking,
     }

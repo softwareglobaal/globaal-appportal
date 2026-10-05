@@ -81,11 +81,14 @@ def nominatim(adres):
     pogingen.append({"q": a, "countrycodes": "be,nl"})
     if post and gemeente:
         pogingen.append({"q": f"{straat}, {gemeente}, België", "countrycodes": "be,nl"})
+    laatste_fout, beantwoord = None, False
     for q in pogingen:
         q.update(format="jsonv2", limit=1, addressdetails=1)
         try:
             d = _nominatim("search", q)
-        except Exception:  # noqa: BLE001
+            beantwoord = True
+        except Exception as e:  # noqa: BLE001
+            laatste_fout = e
             continue
         if not d:
             continue
@@ -96,6 +99,8 @@ def nominatim(adres):
         kwaliteit = "adres" if adr.get("house_number") else ("straat" if adr.get("road") else "gemeente")
         return {"lat": float(r["lat"]), "lon": float(r["lon"]), "kwaliteit": kwaliteit, "bron": "nominatim",
                 "gevonden": r.get("display_name", "")[:160]}
+    if not beantwoord and laatste_fout is not None:
+        raise laatste_fout          # geen enkel antwoord: een storing, geen 'niet gevonden'
     return None
 
 
@@ -126,11 +131,12 @@ def geocodeer(adres):
     if not (adres or "").strip() or not re.search(r"\d", adres or ""):
         # Zonder enig cijfer (geen huisnummer, geen postcode, bv. 'not signed') is het geen adres.
         return {"lat": None, "lon": None, "kwaliteit": "geen_adres", "bron": None, "gevonden": None}
-    fouten, beste = [], None
+    fouten, beste, bereikt = [], None, False
     for zoeker in (geopunt, nominatim):
         for v in varianten(adres):
             try:
                 uit = zoeker(v)
+                bereikt = True
             except Exception as e:  # noqa: BLE001
                 fouten.append(f"{zoeker.__name__}: {type(e).__name__}")
                 continue
@@ -143,6 +149,10 @@ def geocodeer(adres):
                 beste = beste or uit
     if beste:
         return beste          # te grof om te herkennen, maar wel zichtbaar in de dekking
+    if not bereikt:
+        # Geen enkele dienst gaf antwoord: dat is een storing, geen 'niet gevonden'. De sync laat dan
+        # de vorige coördinaat staan.
+        return {"lat": None, "lon": None, "kwaliteit": "fout", "bron": None, "gevonden": "; ".join(fouten)}
     return {"lat": None, "lon": None, "kwaliteit": "niet_gevonden", "bron": None, "gevonden": "; ".join(fouten)}
 
 

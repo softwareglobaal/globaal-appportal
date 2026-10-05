@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 sys.path.insert(0, os.path.join(HIER, "..", "locatie"))
 import bord  # noqa: E402
 import bronbeleid  # noqa: E402  de startgrens van het locatielogboek
+import locatiecontext as LC  # noqa: E402  gestructureerde locatiecontext (opdracht v1.4)
 import organisatie  # noqa: E402
 import organisatie  # noqa: E402
 import projectadressen  # noqa: E402
@@ -87,25 +88,16 @@ def afspraak_op(g, lijst):
 
 
 def locatie_op(datum, uur):
-    """Waar was Mehdi rond dat uur volgens het locatiedagboek: tekst of ''.
+    """Waar de auto rond dat uur bij een project stond: (zin, gestructureerd) of ('', None).
 
-    Alleen dagen uit de actieve meetreeks (bronbeleid, vanaf 03-10-2026). De dagboeken van
-    de telefoon daarvoor blijven bewaard maar worden niet meer gelezen (opdracht v1.2).
-    Sinds die dag meet de auto: 'waar' is waar de auto stond."""
+    Uit de gestructureerde context van de tegel (koppelingen/locatiecontext.py), alleen dagen
+    vanaf 3-10-2026. De auto heet de auto: het is de plaats van de auto, geen bewijs dat Mehdi
+    er was. Thuis, een rit, een meetgat of een rechtgezet verblijf geeft niets. Tot 05-10-2026
+    gaf dit de tabelregel uit het markdown-dagboek door, ook "geparkeerd: Thuis" (opdracht v1.4)."""
     if not bronbeleid.dag_toegestaan(datum):
-        return ""
-    pad = os.path.expanduser(f"~/appportal/mijnagents-data/locatielogboek/dagen/{datum}.md")
-    try:
-        regels = open(pad, encoding="utf-8").read().splitlines()
-    except OSError:
-        return ""
-    for r in regels:
-        d = [x.strip() for x in r.split("|")]
-        if len(d) >= 6 and re.match(r"^\d\d:\d\d$", d[1]) and re.match(r"^\d\d:\d\d$", d[2]):
-            van, tot = d[1], d[2]
-            if (van <= uur <= tot) or (tot < van and (uur >= van or uur <= tot)):
-                return f"{d[4]}: {d[5]}"
-    return ""
+        return "", None
+    v = LC.verblijf_op(f"{datum}T{uur}")
+    return LC.beschrijf(v), LC.gestructureerd(v)
 
 
 def correcties(werkwijze):
@@ -133,7 +125,8 @@ def label_met_model(g, tekst, afspraak, locatie, project, regels_mehdi):
               "Contrax, en Elevait NV (opgericht door Mehdi met zijn partners Shaniel, Angela en Siyan: AI-trainingen, AI-toepassingen, "
               "sollicitaties en opbouw van dat bedrijf horen bij het label Elevait, niet bij Regie intern). Je geeft een opgenomen gesprek één label uit de vaste lijst. Regels: inhoud eerst; de agenda-afspraak op dat uur is "
               "een zware toets (code PO/PB = sales, KO/KB = project, IN = intern; de firma in de code is de firma: [TKN-PO] is TKN sales, "
-              "nooit HA sales); de locatie is een toets voor gesprekken buiten; een "
+              "nooit HA sales); 'locatie_auto_op_dat_uur' is waar de AUTO bij een project stond, met zekerheid en bewijs: een "
+              "toets voor gesprekken buiten, nooit bewijs dat Mehdi er persoonlijk was; 'onbekend' zegt niets; een "
               "dossiernummer (26xx, 56xx) maakt het een project, geen sales. 'Regie intern' = Mehdi met collega's (zie de lijst 'collegas': naam, afdeling, firma; uit organisatie.globaal.be) "
               "over organisatie, AI, IT, HR, planning; een collega van TKN-Buro of Harmoniebouw over een klantdossier is wel die firma. "
               "'Prive' = Mehdi alleen, met Angela (partner) of persoonlijk; bij twijfel tussen werk en privé kies Prive. "
@@ -152,7 +145,8 @@ def label_met_model(g, tekst, afspraak, locatie, project, regels_mehdi):
                        "agenda_afspraak_op_dat_uur": ({"titel": afspraak.get("titel"), "firma": afspraak.get("firma"), "soort": afspraak.get("soort"),
                                                        "nummer": afspraak.get("nummer"), "klant": afspraak.get("klant"), "locatie": afspraak.get("locatie"),
                                                        "buiten": afspraak.get("buiten")} if afspraak else None),
-                       "locatie_van_mehdi_op_dat_uur": locatie or "onbekend",
+                       # De plaats van de AUTO, geen bewijs dat Mehdi er was (opdracht v1.4).
+                       "locatie_auto_op_dat_uur": locatie or "onbekend",
                        "projectmap_bij_nummer": project, "regels_van_mehdi": regels_mehdi, "collegas": organisatie.samenvatting(),
                        "transcript_begin": tekst[:5000]}, ensure_ascii=False)
     resp = Anthropic().messages.create(model=MODEL, max_tokens=900, system=system, messages=[{"role": "user", "content": user}],
@@ -239,7 +233,7 @@ def main():
                 weken.add(d["archivaris"].get("week"))
                 continue
             a = afspraak_op(g, lijst)
-            loc = locatie_op(g["datum"], g["start"])
+            loc, loc_context = locatie_op(g["datum"], g["start"])
             nummer = ""
             m = re.search(r"\b((?:26|56)\d\d)\b", f"{g.get('project') or ''} {(a or {}).get('titel') or ''} {(a or {}).get('nummer') or ''}")
             if m:
@@ -253,7 +247,8 @@ def main():
                 tokens += t_
             week = datetime.fromisoformat(g["datum"]).strftime("%G-W%V")
             d["archivaris"] = {**uit, "doelmap": DOEL.get(uit["label"], ""), "datum": g["datum"], "start": g["start"], "week": week,
-                               "agenda_afspraak": (a or {}).get("titel", ""), "locatie": loc, "ts": datetime.now().astimezone().isoformat(), "versie": 2}
+                               "agenda_afspraak": (a or {}).get("titel", ""), "locatie": loc, "locatie_context": loc_context,
+                               "ts": datetime.now().astimezone().isoformat(), "versie": 2}
             json.dump(d, open(gj, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
             gelabeld += 1
             tel[uit["label"]] += 1

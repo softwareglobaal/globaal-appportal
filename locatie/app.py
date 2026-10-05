@@ -55,8 +55,12 @@ def plek_db(conn):
     return None
 
 
-def plekken(conn):
-    return [dict(r) for r in conn.execute("SELECT * FROM plek")]
+def plekken(conn, alles=False):
+    """De benoemde plekken. Voor de verwerking alleen de actieve: een plek uit de telefoontijd
+    (wifi-namen en coördinaten geleerd uit oude metingen) herkent niet meer (opdracht v1.4).
+    alles=True voor de API, zodat De Agendawacht zijn vertrekpunt blijft vinden."""
+    sql = "SELECT * FROM plek" + ("" if alles else " WHERE COALESCE(actief, 1) = 1")
+    return [dict(r) for r in conn.execute(sql)]
 
 
 def noem_plek(lat, lon, wifis, lijst):
@@ -284,7 +288,7 @@ def pub():
     # gaan de zones mee zodra ze veranderd zijn.
     antwoord = []
     try:
-        bericht = zones_te_sturen(conn, plekken(conn))
+        bericht = zones_te_sturen(conn, plekken(conn))   # alleen actieve plekken; de telefoon is uit gebruik
         if bericht:
             antwoord.append(bericht)
             app.logger.info("zones meegestuurd: %d",
@@ -451,25 +455,33 @@ def api_plekken():
                       str(d.get("project_id", ""))[:40] or None,
                       int(d["min_minuten"]) if d.get("min_minuten") else None))
         conn.commit()
-        uit = plekken(conn)
+        uit = plekken(conn, alles=True)
         conn.close()
         return jsonify({"ok": True, "bewaard": naam, "plekken": uit})
 
-    uit = plekken(conn)
+    uit = plekken(conn, alles=True)
     conn.close()
     return jsonify({"plekken": uit})
 
 
 @app.route("/api/gezondheid/<datum>")
 def api_gezondheid(datum):
+    """Gezondheidsmetingen en gemelde momenten van een dag, binnen de startgrens. Gemelde momenten
+    (rit-start en dergelijke) kwamen van de telefoon; alleen die van een actieve bron tellen."""
+    try:
+        date.fromisoformat(datum)
+    except ValueError:
+        abort(400)
+    if not B.dag_toegestaan(datum):
+        return jsonify({"datum": datum, "buiten_reeks": True, "metingen": [], "gebeurtenissen": []})
     conn = db()
-    gezondheid_db(conn)
     rijen = conn.execute(
         "SELECT soort, waarde, eenheid, bron FROM gezondheid WHERE datum=? ORDER BY soort",
         (datum,)).fetchall()
+    actief = B.actieve_bronnen()
     geb = conn.execute(
-        "SELECT tst, soort, detail FROM gebeurtenis WHERE tst >= ? AND tst < ? ORDER BY tst",
-        B.dagranden(datum)).fetchall()
+        "SELECT tst, soort, detail FROM gebeurtenis WHERE tst >= ? AND tst < ? AND bron IN (%s) ORDER BY tst"
+        % ",".join("?" * len(actief)), list(B.dagranden(datum)) + actief).fetchall() if actief else []
     conn.close()
     return jsonify({
         "datum": datum,
@@ -821,14 +833,10 @@ def _voeg_samen(items):
 
 
 def _motor_aan_momenten(punten):
-    """Wanneer de motor aansloeg. Zonder fix is tst de tijd van de laatste fix; het
-    moment zelf is dan de verzendtijd (gemeten 03-10-2026, zie atrack.py)."""
-    uit = []
-    for p in punten:
-        if p.get("gebeurtenis") != "motor aan":
-            continue
-        uit.append(p["verzonden"] if p.get("fix") == 0 and p.get("verzonden") else p["tst"])
-    return sorted(uit)
+    """Wanneer de motor aansloeg: de gebeurtenistijd (moment). Zonder fix is tst de tijd van
+    de laatste fix; het moment is dan de verzendtijd (gemeten 03-10-2026, zie atrack.py).
+    Een melding zonder bekende gebeurtenistijd telt niet."""
+    return sorted(m for m in (_moment(p) for p in punten if p.get("gebeurtenis") == "motor aan") if m is not None)
 
 
 def _parkeren_tot_motor_aan(items, punten):
@@ -891,19 +899,34 @@ STAAT_SOORTEN = ("VGF", "VGN", "FRI", "ERI", "STT")
 
 
 def _moment(p):
-    return p["verzonden"] if p.get("fix") == 0 and p.get("verzonden") else p["tst"]
+    """De gebeurtenistijd van een punt: met fix de meettijd, zonder fix de verzendtijd, anders
+    onbekend (None). De kolom moment (schema 3) gaat voor; zonder die kolom (nagebootste punten)
+    dezelfde regel."""
+    if "moment" in p:
+        return p["moment"]
+    if p.get("fix") == 0:
+        return p.get("verzonden")
+    return p.get("tst")
 
 
 def _staat(punten, voor):
     """('geparkeerd', punt) als de laatste toestandsmelding voor `voor` 'motor uit' was,
-    ('onderweg', punt) bij een andere melding, (None, None) als er geen is (telefoon)."""
-    lijst = [p for p in punten if p.get("berichtsoort") in STAAT_SOORTEN and _moment(p) < voor]
+    ('onderweg', punt) bij een andere melding, (None, None) als er geen is (telefoon) of als
+    de volgorde niet vast te stellen is (twee tegengestelde meldingen op hetzelfde moment).
+
+    Geordend op gebeurtenistijd van het toestel, nooit op ontvangstvolgorde: een ouder
+    'motor uit' dat later uit de buffer komt, maakt een rijdende auto niet geparkeerd."""
+    lijst = [p for p in punten if p.get("berichtsoort") in STAAT_SOORTEN
+             and _moment(p) is not None and _moment(p) < voor]
     if not lijst:
         return None, None
-    laatste = max(lijst, key=lambda p: (_moment(p), p["tst"]))
-    if laatste.get("gebeurtenis") == "motor uit" and laatste.get("fix") != 0:
-        return "geparkeerd", laatste
-    return "onderweg", laatste
+    hoogste = max(_moment(p) for p in lijst)
+    laatste = [p for p in lijst if _moment(p) == hoogste]
+    uit = {p.get("gebeurtenis") == "motor uit" and p.get("fix") != 0 for p in laatste}
+    if len(uit) > 1:
+        return None, None
+    gekozen = max(laatste, key=lambda p: (p.get("bericht_id") or 0, p.get("volgnr") or 0))
+    return ("geparkeerd" if uit.pop() else "onderweg"), gekozen
 
 
 def _parkeerstuk(punt, van, tot, **extra):
@@ -1008,6 +1031,20 @@ def dagindeling(punten):
     return sorted(uit, key=lambda s: s["van"])
 
 
+def bewijs_motor(indeling, punten):
+    """Een verblijf noemt de motormeldingen die erin vallen, op de tijd van het toestel: dat is het
+    sterkste bewijs dat de auto daar stond (controle 05-10-2026: bij HARC 2443 stond enkel
+    '23 meetpunten', terwijl er om 17:14 een 'motor uit' was)."""
+    meldingen = sorted((m, p.get("gebeurtenis")) for p in punten
+                       if p.get("gebeurtenis") in ("motor uit", "motor aan") and (m := _moment(p)) is not None)
+    for s in indeling:
+        if s["soort"] != "bezoek" or s.get("bewijs"):
+            continue
+        binnen = ["%s om %s" % (g, _lokaal(m).strftime("%H:%M")) for m, g in meldingen if s["van"] <= m <= s["tot"]]
+        if binnen:
+            s["bewijs"] = ", ".join(binnen[:4]) + "; %d meetpunten" % s.get("punten", 0)
+
+
 def verrijk(indeling, plek_lijst, project_lijst, correctie_lijst, rol):
     """Elk verblijf krijgt zijn herkenning (herkenning.py), elke rit de projecten waar hij voorbijreed."""
     for s in indeling:
@@ -1015,7 +1052,7 @@ def verrijk(indeling, plek_lijst, project_lijst, correctie_lijst, rol):
             h = H.beoordeel(s, plek_lijst, project_lijst, correctie_lijst, rol)
             s["herkenning"] = h
             p = h.get("project")
-            s["plek"] = h.get("plek") or (p.get("naam") if p else None)
+            s["plek"] = h.get("plek") or (("%s %s" % (p.get("nummer"), p.get("adres") or "")).strip() if p else None)
             s["dossier"] = ("%s %s" % (p.get("firma") or "", p.get("nummer"))).strip() if p else None
         elif s["soort"] == "verplaatsing":
             s["voorbij"] = H.voorbij(s.get("spoor"), project_lijst)
@@ -1035,7 +1072,8 @@ def punten_van_dag(datum, conn=None):
     begin, eind = B.dagranden(datum)
     clause, args = B.sql_actief()
     try:
-        return _rijen(conn, f"SELECT * FROM punt WHERE tst >= ? AND tst < ? AND {clause} ORDER BY tst, volgnr",
+        return _rijen(conn, f"SELECT * FROM punt WHERE tst >= ? AND tst < ? AND {clause} "
+                            f"ORDER BY tst, bericht_id, volgnr",
                       [begin, eind] + args)
     finally:
         if eigen:
@@ -1056,7 +1094,7 @@ def dag_gegevens(datum, nu=None, conn=None):
         alle = punten_van_dag(datum, conn)
         voor = _rijen(conn, f"SELECT * FROM punt WHERE tst < ? AND {clause} ORDER BY tst DESC LIMIT 200",
                       [begin] + args)[::-1]
-        extra = _rijen(conn, f"""SELECT * FROM punt WHERE tst < ? AND fix = 0 AND verzonden >= ? AND verzonden < ?
+        extra = _rijen(conn, f"""SELECT * FROM punt WHERE tst < ? AND fix = 0 AND moment >= ? AND moment < ?
                                  AND {clause}""", [begin, begin, eind] + args)
         plek_lijst = plekken(conn)
         projecten = H.projectplekken(conn)
@@ -1067,13 +1105,20 @@ def dag_gegevens(datum, nu=None, conn=None):
             ind = dagindeling_zuiver(pb, plek_lijst)
             ind = met_open_einde(ind, pb, datum, nu, voorloper=[p for p in voor if p["bron"] == bron],
                                  extra=[p for p in extra if p["bron"] == bron])
+            bewijs_motor(ind, pb + [p for p in extra if p["bron"] == bron])
             verrijk(ind, plek_lijst, projecten, [c for c in corr if c["bron"] == bron], B.rol(bron))
             for s in ind:
                 s["bron"] = bron
             sporen[bron] = {"bron": bron, "rol": B.rol(bron), "label": B.BRONNEN[bron].get("label"),
                             "indeling": ind, "punten": len(pb), "geldig": sum(1 for p in pb if p.get("fix") != 0),
                             "zonder_fix": sum(1 for p in pb if p.get("fix") == 0)}
-        return {"datum": datum, "status": "afgesloten" if nu >= eind + AFSLUIT_UREN * 3600 else "voorlopig",
+        # Een dag is pas afgesloten als de actieve bron een toegelaten toestel heeft: met een lege
+        # toestelconfiguratie is "geen meting" geen uitkomst maar een instelfout (controle 05-10-2026).
+        if not B.ingesteld():
+            status = "niet ingesteld"
+        else:
+            status = "afgesloten" if nu >= eind + AFSLUIT_UREN * 3600 else "voorlopig"
+        return {"datum": datum, "status": status, "ingesteld": B.ingesteld(),
                 "begin": begin, "eind": eind, "sporen": sporen, "punten": alle, "grens": B.STARTGRENS}
     finally:
         if eigen:
@@ -1117,7 +1162,8 @@ def _iso(tst):
 def _punt_uit(p):
     """Alles wat er gemeten is gaat mee naar buiten, zodat het dagboek de volledige
     meting bevat: ook bron, fix, ontvangst- en verzendtijd (tot 04-10-2026 weggelaten)."""
-    return {"tijd": _iso(p["tst"]), "bron": p.get("bron"), "toestel": B.toestel_kort(p.get("toestel")),
+    return {"tijd": _iso(p["tst"]), "fixtijd": _iso(p["tst"]), "gebeurtenistijd": _iso(_moment(p)),
+            "bron": p.get("bron"), "toestel": B.toestel_kort(p.get("toestel")),
             "berichtsoort": p.get("berichtsoort"), "gebeurtenis": p.get("gebeurtenis"),
             "lat": p["lat"], "lon": p["lon"], "fix": p.get("fix"), "geldig": p.get("fix") != 0,
             "hdop": p.get("hdop"), "satellieten": p.get("satellieten"), "snelheid": p.get("vel"),
@@ -1197,19 +1243,66 @@ def api_dagboek(datum):
         date.fromisoformat(datum)
     except ValueError:
         abort(400)
-    g = dag_gegevens(datum)
+    return jsonify(dagboek_uit(datum))
+
+
+def dagboek_uit(datum, nu=None):
+    """Het dagboek van een dag, alleen lezend: adressen komen uit de cache die de verrijkingstaak
+    vult (beheer.py verrijk), nooit uit een netwerkverzoek tijdens het lezen. Met een
+    vingerafdruk van de inhoud, zodat wacht en export een latere revisie herkennen."""
+    import dagboek as D                  # noqa: PLC0415
+    g = dag_gegevens(datum) if nu is None else dag_gegevens(datum, nu=nu)
     conn = db()
     try:
         verblijven = [s for sp in (g.get("sporen") or {}).values() for s in sp["indeling"] if s["soort"] == "bezoek"]
-        D.vul_adressen(conn, datum, verblijven, opzoeken=request.args.get("adressen") == "1")
+        D.lees_adressen(conn, verblijven)
     finally:
         conn.close()
     sp = hoofdspoor(g)
-    return jsonify({"datum": datum, "status": g.get("status"), "grens": B.STARTGRENS, "bronbeleid": B.VERSIE,
-                    "markdown": D.markdown(datum, g), "sporen": g.get("sporen"),
-                    "indeling": sp["indeling"] if sp else [],
-                    "punten": [_punt_uit(p) for p in g.get("punten") or []],
-                    "buiten_reeks": bool(g.get("buiten_reeks"))})
+    uit = {"datum": datum, "status": g.get("status"), "grens": B.STARTGRENS, "bronbeleid": B.VERSIE,
+           "markdown": D.markdown(datum, g), "sporen": g.get("sporen"),
+           "indeling": sp["indeling"] if sp else [],
+           "punten": [_punt_uit(p) for p in g.get("punten") or []],
+           "buiten_reeks": bool(g.get("buiten_reeks"))}
+    uit["versie"] = D.versie(uit)
+    return uit
+
+
+@app.route("/api/revisies")
+def api_revisies():
+    """Per dag van de actieve reeks de vingerafdruk van het dagboek. Wacht en export halen een
+    dag opnieuw op als die verandert, ook als hij al afgesloten was (late punten, een correctie,
+    nieuwe projectadressen). Vanaf ?vanaf=JJJJ-MM-DD, nooit voor de startgrens."""
+    vanaf = request.args.get("vanaf") or B.eerste_dag()
+    try:
+        date.fromisoformat(vanaf)
+    except ValueError:
+        abort(400)
+    dagen = [d for d in B.dagen_vanaf_grens() if d >= vanaf]
+    return jsonify({"revisies": {d: (lambda x: {"versie": x["versie"], "status": x["status"]})(dagboek_uit(d))
+                                 for d in dagen}})
+
+
+@app.route("/api/dagcijfers")
+def api_dagcijfers():
+    """Per dag de cijfers van het hoofdspoor (verblijven, km, minuten onderweg, punten, status),
+    voor het bord. Uit dezelfde dagindeling als de dag-API; dagen voor de grens bestaan niet."""
+    dagen = B.dagen_vanaf_grens()
+    van, tot = request.args.get("van") or dagen[0], request.args.get("tot") or dagen[-1]
+    uit = {}
+    for d in dagen:
+        if not (van <= d <= tot):
+            continue
+        g = dag_gegevens(d)
+        sp = hoofdspoor(g) or {"indeling": [], "punten": 0, "rol": None, "bron": None}
+        ind = sp["indeling"]
+        uit[d] = {"status": g.get("status"), "bron": sp.get("bron"), "rol": sp.get("rol"),
+                  "verblijven": sum(1 for s in ind if s["soort"] == "bezoek"),
+                  "km": round(sum(s.get("meter") or 0 for s in ind if s["soort"] == "verplaatsing") / 1000, 1),
+                  "onderweg_min": sum(s.get("minuten") or 0 for s in ind if s["soort"] == "verplaatsing"),
+                  "zonder_meting_min": sum(s.get("minuten") or 0 for s in ind if s["soort"] == "gat"),
+                  "punten": sp.get("punten", 0)}
+    return jsonify({"grens": B.STARTGRENS, "dagen": uit})
 
 
 @app.route("/api/context")

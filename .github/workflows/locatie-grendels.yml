@@ -8,10 +8,14 @@ on:
   push:
     paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py", "mijnagents-runner/tests/test_locatie_wacht.py",
             "mijnagents-runner/planning/**", "mijnagents-runner/archivaris.py", "mijnagents-runner/levenscoach.py",
+            "mijnagents-runner/plaud_wacht.py", "mijnagents-runner/dagbundelaar.py", "mijnagents-runner/agenda_wacht.py",
+            "mijnagents-runner/fathom_wacht.py", "mijnagents-runner/koppelingen/**", "mijnagents/app.py", "docker-compose.yml",
             ".github/workflows/locatie-grendels.yml"]
   pull_request:
     paths: ["locatie/**", "mijnagents-runner/locatie_wacht.py", "mijnagents-runner/tests/test_locatie_wacht.py",
             "mijnagents-runner/planning/**", "mijnagents-runner/archivaris.py", "mijnagents-runner/levenscoach.py",
+            "mijnagents-runner/plaud_wacht.py", "mijnagents-runner/dagbundelaar.py", "mijnagents-runner/agenda_wacht.py",
+            "mijnagents-runner/fathom_wacht.py", "mijnagents-runner/koppelingen/**", "mijnagents/app.py", "docker-compose.yml",
             ".github/workflows/locatie-grendels.yml"]
 
 jobs:
@@ -34,6 +38,8 @@ jobs:
       - run: python3 locatie/test_herkenning.py
       - run: python3 locatie/test_auto.py
       - run: python3 locatie/test_export.py
+      # opdracht v1.4: geen slot op de database tijdens traag netwerkwerk (trage geocoder, gelijktijdige schrijver)
+      - run: python3 locatie/test_robuust.py
 
   # De wacht draait op de VM onder ~/agents/.venv (Python 3.12), niet in de container (3.11).
   # Tot 04-10-2026 stond dit in de job hierboven op 3.11, en struikelde de import van
@@ -51,3 +57,6 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_locatie_wacht.py
       # lezers van het locatielogboek buiten de wacht (controle 05-10-2026)
       - run: python3 mijnagents-runner/tests/test_levenscoach_grens.py
+      # opdracht v1.4: Plaud, Archivaris, Dagbundelaar en het bord op de gestructureerde context, en de
+      # inventaris die faalt zodra een nieuwe lezer van locatiegegevens geen grens heeft
+      - run: python3 mijnagents-runner/tests/test_locatielezers.py

@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Versie** | **v2.0** (opdracht v1.2 van Mehdi, uitgevoerd 04-10-2026) |
+| **Versie** | **v2.1** (opdracht v1.2, 04-10-2026; aanvulling v1.4 na onafhankelijke controle, 05-10-2026) |
 | **Adres** | https://locatie.globaal.be (Authentik, groep `locatie`) |
 | **Code** | `locatie/` in softwareglobaal/globaal-appportal; De Locatiewacht in `mijnagents-runner/locatie_wacht.py` |
 | **Containers** | `app-locatie` (webapp, poort 3031 op 127.0.0.1) en `app-locatie-tracker` (ontvanger, buiten poort 5000) |
-| **Database** | `locatie-data/locatie.db` (SQLite), schema met versie in `PRAGMA user_version` (`schema.py`) |
+| **Database** | `locatie-data/locatie.db` (SQLite), schema 3, versie in `PRAGMA user_version` (`schema.py`) |
 
 ## Besluit van Mehdi (bronbeleid)
 
@@ -21,7 +21,7 @@ De regel staat op één plek, `bronbeleid.py`, en alle routes gebruiken hem:
 
 | bron | rol | status | telt mee vanaf |
 |---|---|---|---|
-| `auto` (Queclink GV500CG, Opel Astra 2HHE117) | auto | actief | 2026-10-03T00:00:00+02:00 |
+| `auto` (Queclink GV500CG in Mehdi's auto) | auto | actief | 2026-10-03T00:00:00+02:00 |
 | `iphone` (OwnTracks) | persoon | uit gebruik | nooit; ontbreken is normaal, geen alarm |
 | `draagbaar` | persoon | nog niet aangesloten | krijgt een eigen ingang |
 
@@ -48,10 +48,19 @@ project" of "mogelijk werfbezoek".
 ## De ontvanger (`atrack_server.py`, `atrack.py`)
 
 - Eerst het **ruwe bericht** in `bericht` (toestel, soort, protocolversie, teller, verzendtijd, hoe vaak
-  het binnenkwam, vingerafdruk), daarna elk positieblok als **punt** met sleutel
-  `(bron, tst, berichtsoort, volgnr)`, alles in één transactie, en pas dan de bevestiging `+SACK`.
-- Een bericht dat al binnen was (opnieuw verstuurd, of uit de buffer met `+BUFF`) wordt opnieuw
-  bevestigd maar niet opnieuw bewaard; `aantal` telt mee.
+  het binnenkwam, vingerafdruk), daarna elk positieblok als **punt** met sleutel `(bericht_id, volgnr)`,
+  alles in één transactie, en pas dan de bevestiging `+SACK`. Een gebeurtenis is een bericht, geen
+  fix: twee statusmeldingen met dezelfde oude fixtijd blijven twee punten (schema 3, 05-10-2026; met
+  de sleutel `(bron, tst, berichtsoort, volgnr)` viel de tweede GTSTT nog weg).
+- Per punt drie tijden: `tst` (fixtijd, wanneer de positie gemeten is), `moment` (gebeurtenistijd: met
+  fix de fixtijd, zonder fix de verzendtijd, anders onbekend) en `ontvangen` (alleen bewijs van ontvangst).
+- Een bericht dat al binnen was (exact hetzelfde, of dezelfde teller en verzendtijd met kop `+BUFF`)
+  wordt opnieuw bevestigd maar niet opnieuw bewaard; `aantal` telt mee. Worden niet alle posities
+  bewaard, dan heet het `deels`, nooit stil `bewaard`.
+- **Verdacht**: een bericht met het IMEI van de auto maar een andere protocolversie dan het echte
+  toestel, een toestelnaam die niet klopt (zodra die vastligt) of een onmogelijke sprong wordt bewaard
+  en gemarkeerd, telt nergens mee en geeft een alarm. Dat is een aanwijzing, geen authenticatie.
+- De ontvangerlog toont nooit een volledige toestelidentiteit (alleen de laatste vier cijfers).
 - **Meerdere posities per bericht** (FRI en ERI met `<Number>` > 1) worden allemaal gelezen. Vinden we er
   minder dan gemeld, dan staat het bericht in `bericht` met verwerking `onvolledig: ...`.
 - `GTSTT` geeft de bewegingsstand (21 motor aan en stil, 22 motor aan en rijdend). Zonder fix (hdop 0)
@@ -86,8 +95,13 @@ meettijd van het "motor uit" ervoor, en `ON CONFLICT DO NOTHING` gooide ze weg t
   Projecten voor het adres gebruikt). Geen eigen register. Andere firma's: hun eigen projectbron, nog
   aan te sluiten (Pipedrive is bewust niet aangesproken).
 - **Sleutel** `FIRMA:nummer` (bv. `HARC:2604`). Hetzelfde nummer bij twee firma's blijft twee projecten.
-- **Geocode**: Geopunt, dan Nominatim; met adresvingerafdruk, datum, dienst en kwaliteit. Alleen een
-  geocode op huisnummer mag herkennen. Verandert het adres in de bron, dan wordt opnieuw gegeocodeerd.
+- **Geocode**: Geopunt, dan Nominatim, met genormaliseerde schrijfwijzen uit de mapnaam (labels vooraan,
+  nummerreeksen, letters achter het huisnummer); met adresvingerafdruk, datum, dienst en kwaliteit. Alleen
+  een geocode op huisnummer mag herkennen. Verandert het adres, dan opnieuw; een grove of mislukte geocode
+  hoogstens eens per dag opnieuw; een onbereikbare dienst (`fout`) laat de vorige coördinaat staan.
+- **Twee fasen**: eerst lezen en geocoderen zonder schrijftransactie, dan de volledige index in één korte
+  transactie. Tot 05-10-2026 hield de sync tijdens elk geocodeverzoek het schrijfslot vast en kreeg de
+  ontvanger "database is locked" (test_robuust.py met een trage geocoder en een gelijktijdige schrijver).
 - **Uit de bron verdwenen**: `actief = 0`, niet gewist. **Bron onbereikbaar**: de laatste goede index
   blijft staan, de taakstatus zegt wat er misliep en hoe oud de index is.
 - **Override**: wat Mehdi met de hand rechtzet (ligging, straal, minimale duur, uitsluiten) staat apart in
@@ -95,7 +109,12 @@ meettijd van het "motor uit" ervoor, en `ON CONFLICT DO NOTHING` gooide ze weg t
 - **Zekerheid** per verblijf: `bevestigd` (Mehdi), `waarschijnlijk` (één project in bereik, lang genoeg),
   `kort` (korter dan de minimale duur), `onzeker` (meer projecten in bereik: een kandidatenlijst, nooit een
   gekozen dossier), `geen`. Standaard straal 300 m, minimale duur 8 min; korter dan 20 min heet "kort gestopt".
-  Een rit door de straal zonder te stoppen is **voorbijrijden**, geen bezoek.
+  Een rit binnen 150 m van een projectadres zonder te stoppen is **voorbijrijden**, geen bezoek.
+  Een verblijf op een benoemde plek zonder dossier (Thuis) is daar: een project in de buurt is dan
+  hoogstens **onzeker**, nooit "mogelijk werfbezoek".
+- **Plekken uit de telefoontijd** (Thuis en 2604, met wifi-namen en coördinaten uit de metingen van 9-9 tot
+  3-10) staan sinds schema 3 op `actief = 0`, bewaard in `plek_historiek`. Thuis wordt opnieuw bevestigd
+  uit een toegestane adresbron: `beheer.py thuis --adres ... --bron ... --door ...` (Geopunt).
 - **Correcties** (dashboard of `beheer.py correctie`): welk project, geen project, of "auto niet bij mij".
   Herleidbaar (wie, wanneer, waarom), intrekken zet een tijdstip, toegepast bij elke volgende verwerking.
 
@@ -107,7 +126,14 @@ meettijd van het "motor uit" ervoor, en `ON CONFLICT DO NOTHING` gooide ze weg t
 | in gebruik | laatste bericht minder dan 10 min oud | nee |
 | geparkeerd | laatste toestandsmelding was "motor uit" | nee; na 72 uur een vraag (geen levensteken in spaarstand 1) |
 | geen bericht zonder motor uit | stilte zonder "motor uit" ervoor | na 60 min |
+| onbekend | geen toestandsmelding met bekende gebeurtenistijd, of motor uit en aan op hetzelfde moment | nee |
+| niet ingesteld | het toestel van een actieve bron staat niet (juist) in ATRACK_IMEIS; geen dag wordt afgesloten | ja |
 | uit gebruik / nog niet aangesloten | telefoon / draagbare tracker | nooit |
+
+De toestand volgt de **gebeurtenistijd van het toestel**, binnen de grens en van het toegelaten toestel,
+nooit de ontvangstvolgorde: een ouder "motor uit" dat later uit de buffer komt maakt een rijdende auto
+niet geparkeerd. Daarnaast per taak een melding als ze faalt of langer dan **36 uur** niet slaagde
+(projectsync, dagboek, export), en een melding bij verdachte berichten.
 
 Een alarmtitel bevat nooit het woord "stil" (daarop belt De Bode).
 
@@ -117,13 +143,15 @@ Een alarmtitel bevat nooit het woord "stil" (daarop belt De Bode).
 |---|---|
 | `GET /` | dashboard, standaard vandaag, ververst elke 45 s (kaart, tabel, cijfers, bronstatus, taken) |
 | `GET /api/dag/<dag>` | punten (met bron, toestel, fix, hdop, ontvangen, verzonden, nagestuurd), indeling, sporen |
-| `GET /api/dagboek/<dag>?adressen=1` | het dagboek als tekst en gegevens: één generator voor VM, bord en export |
-| `GET /api/context?dag=<dag>` | locatiecontext voor agents: alleen projectrelevante verblijven, met tijd, zekerheid, bewijs, link |
+| `GET /api/dagboek/<dag>` | het dagboek als tekst en gegevens, met een versie: één generator voor VM, bord en export; leest alleen |
+| `GET /api/revisies` | per dag de versie van het dagboek, zodat wacht en export een herziene afgesloten dag opnieuw ophalen |
+| `GET /api/dagcijfers` | per dag verblijven, km, minuten onderweg: voor het bord (`/dagen`) |
+| `GET /api/context?dag=<dag>` | locatiecontext voor agents: `verblijven` alleen positieve projectverblijven (auto bij project, waarschijnlijk of bevestigd), `kandidaten` apart en niet positief; nooit Thuis, rit, gat of rechtgezette verblijven |
 | `GET /api/status` | per bron de stand, de taken met laatste geslaagde en volgende uitvoering, de projectdekking |
 | `GET /api/beleid` | het bronbeleid |
 | `GET /api/projectplekken` | projectplekken met overrides en de dekking |
 | `GET/POST /api/correctie` | correcties; schrijven alleen via het portaal (Authentik) of met het wachtwoord |
-| `GET/POST /api/plekken` | benoemde plekken (Thuis, een werf met dossier en firma) |
+| `GET/POST /api/plekken` | benoemde plekken (Thuis, een werf met dossier en firma), ook de niet-actieve, voor De Agendawacht |
 | `GET /gezond`, `GET /health` | kort, per bron; gezondheidscontrole van de container |
 | `POST /pub` | OwnTracks (uit gebruik): bewaard en herleidbaar, telt niet mee |
 
@@ -136,15 +164,17 @@ het script kijkt zelf of het het juiste Belgische uur is (`--om`, `--controle`).
 
 | taak | wanneer | wat |
 |---|---|---|
-| dagboek | 21:30 | De Locatiewacht: inhalen vanaf de laatst afgesloten dag, agenda erbij, revisies bewaren, klaarzetten |
+| dagboek | 21:30 | De Locatiewacht: verrijken (adressen), inhalen vanaf de oudste open dag, herziene afgesloten dagen opnieuw, agenda erbij, revisies bewaren, klaarzetten |
 | controle | elk uur 07:05 tot 22:05 | bronbewaking |
 | projectsync | 02:15, 08:15, 11:15, 14:15, 17:15, 20:15 | projectadressen uit hun bron (alleen opnieuw geocoderen bij een adreswijziging) |
-| export | 22:45 (Mac, launchd) | dagboek en context naar Dropbox privé, databasekopie met datum |
+| export | 22:45 (Mac, launchd, zonder `--dagen`) | dagboek en agendadeel (alleen bij dezelfde dagboekversie) naar de teammap private, databasekopie met datum |
 
 ## Beheer op de VM
 
     docker exec app-locatie python3 projectsync.py            # projectadressen nu bijwerken
     docker exec app-locatie python3 beheer.py status          # bronstatus en taken
+    docker exec app-locatie python3 beheer.py verrijk 2026-10-05   # adressen opzoeken (netwerk eerst, kort schrijven)
+    docker exec app-locatie python3 beheer.py thuis --adres "..." --bron "..." --door mehdi
     docker exec app-locatie python3 beheer.py correctie auto 2026-10-05T10:00 2026-10-05T11:00 project HARC:2604 --door mehdi --reden "..."
     docker exec app-locatie python3 beheer.py override HARC:2604 --lat .. --lon .. --reden "parking achteraan" --door mehdi
     ~/agents/.venv/bin/python ~/appportal/mijnagents-runner/locatie_wacht.py --droog --dag 2026-10-05
@@ -156,18 +186,46 @@ een draagbare tracker wordt pas vastgelegd na de keuze van het toestel.
 ## Bestanden en bewaren
 
 - Schema-upgrade: eerst een kopie in `locatie-data/backups/locatie-schema<N>-<tijd>.db`, dan één transactie.
-- Mac-export: `Prive met Claude/Locatielogboek/dagen/<dag>.{md,json}`, vorige versies in `dagen/revisies/`,
-  databasekopie per dag in `ruwe-database/locatie-<dag>.db` (oudere kopieën blijven; opruimen beslist Mehdi).
+- Mac-export: `Prive met Claude/Locatielogboek/dagen/<dag>.{md,json}` in de **teammap private** (een
+  teammap, geen persoonlijke map), vorige versies in `dagen/revisies/`, databasekopie per dag in
+  `ruwe-database/locatie-<dag>.db` (oudere kopieën blijven; opruimen beslist Mehdi).
 - De oude bestanden (telefoon 9-9 tot 3-10) staan in `Data uit Mehdi/Locatie/archief/` en als losse
   dagboeken in de mappen `dagen/`; ze worden niet meer gelezen (ook niet door de archivaris en
   `locatie-overzicht.py`).
 
 ## Grendels
 
-Elke build draait ze (Dockerfile) en GitHub Actions ook (`.github/workflows/locatie-grendels.yml`):
-`test_dagindeling`, `test_atrack`, `test_atrack_server`, `test_bronbeleid`, `test_schema`,
-`test_herkenning`, `test_auto`, `test_export`, plus `mijnagents-runner/tests/test_locatie_wacht.py`.
+De Docker-build draait de tests van de tegel: `test_dagindeling`, `test_atrack`, `test_atrack_server`,
+`test_bronbeleid`, `test_schema`, `test_herkenning`, `test_auto`, `test_export`, `test_robuust`. GitHub
+Actions draait die ook, en daarnaast in een tweede job (Python 3.12, zoals de VM) de lezers buiten de tegel:
+`test_locatie_wacht`, `test_levenscoach_grens`, `test_locatielezers` (met de inventaris van elke lezer).
 Eigen proefgegevens en een verzonnen IMEI; de echte meting bevat het thuisadres en hoort niet in git.
+
+## Lezers van locatiegegevens (inventaris)
+
+Elke lezer gebruikt de startgrens; `mijnagents-runner/tests/test_locatielezers.py` faalt zodra er een
+lezer bijkomt die hier niet staat.
+
+| lezer | wat hij leest | datum | toestel | rol |
+|---|---|---|---|---|
+| De Locatiewacht | `/api/dagboek`, `/api/revisies`, `/api/context`, `/api/status`, `/api/projectplekken` | bronbeleid (nooit voor 3-10) | via de tegel (sql_actief) | auto/persoon per spoor |
+| De Archivaris | `koppelingen/locatiecontext.py` | grens | via de tegel | "auto bij project", geen aanwezigheid |
+| De Plaudwacht | `koppelingen/locatiecontext.py` | grens | via de tegel | idem |
+| De Dagbundelaar | `locatiecontext.dag_heeft_dagboek` (precies de dag) | grens | n.v.t. | sluit locatie uit bundels |
+| De Levenscoach | klaarzet-items van soort locatie | `dag_toegestaan` | n.v.t. | alleen voor Mehdi |
+| De Agendawacht | `/api/plekken` (benoemde plekken voor reistijd) | n.v.t. (geen metingen) | n.v.t. | n.v.t. |
+| het bord (`/dagen`, `/dag/<datum>`) | `/api/dagcijfers`, `/api/beleid` | grens | via de tegel | alleen beheer |
+| Mac-export, `locatie-overzicht.py` | `/api/dagboek`, `/api/revisies`; geëxporteerde JSON | `dag_toegestaan` | via de tegel | n.v.t. |
+
+## Toestelbeveiliging
+
+Het IMEI van de tracker is geen geheim meer: het stond in de publieke geschiedenis van deze repo (twee
+commits, verwijderd in 84f1d28). Wie het kent kan berichten als "auto" insturen. Privé zetten van de repo
+stopt verdere openbaarheid, maar trekt bestaande kopieën niet terug. Wat er nu staat is geen
+authenticatie maar beperking van schade: verdachte berichten (andere protocolversie, onmogelijke sprong)
+tellen niet mee en geven een alarm, en de log toont geen identiteit. De echte oplossing hangt af van wat
+het toestel kan; zie `Prive met Claude/Locatielogboek` voor het onderzoek en het proefplan. Niets aan het
+toestel wordt ingesteld zonder Mehdi.
 
 ## Wat Mehdi beslist
 
@@ -183,6 +241,13 @@ Eigen proefgegevens en een verzonnen IMEI; de echte meting bevat het thuisadres 
 actieve reeks; het script blijft voor wie een oude export wil lezen, buiten de verwerking.
 
 ## Versiehistoriek
+
+- **v2.1 (05-10-2026, aanvulling v1.4)**: schema 3 (punt per bericht, gebeurtenistijd, verdacht); toestand
+  op gebeurtenistijd; projectsync en adresverrijking zonder slot tijdens netwerkwerk; leesroutes schrijven
+  niets; context alleen positieve projectverblijven, Thuis hoogstens onzeker; plekken uit de telefoontijd
+  buiten de herkenning; inhaal oudste dag eerst en herziene afgesloten dagen opnieuw (`/api/revisies`);
+  dag niet afgesloten zonder toestelconfiguratie; taakouderdom 36 uur; agents (Plaud, Archivaris,
+  Dagbundelaar, bord) op `koppelingen/locatiecontext.py` en de dag-API; log zonder toestelidentiteit.
 
 - **v2.0 (04-10-2026)**: bronbeleid met startgrens en toestel; ruwe berichten en een sleutel die
   gelijktijdige gebeurtenissen houdt; meerdere posities per bericht; schema met versie en kopie;

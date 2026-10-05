@@ -25,7 +25,7 @@ import time
 
 import atrack
 
-LAATSTE = 2
+LAATSTE = 3
 
 # Velden die er tussen 9-9 en 3-10-2026 bij kwamen (zie de geschiedenis in app.py).
 LATERE_KOLOMMEN = {
@@ -289,7 +289,86 @@ def _vul_berichten(conn):
                          (soort or "location", tid, bid, rowid))
 
 
-MIGRATIES = [(1, _v1), (2, _v2)]
+def moment_sql():
+    """De gebeurtenistijd van een punt, als SQL: met fix de meettijd, zonder fix de verzendtijd
+    (die is dan het moment van de gebeurtenis), anders onbekend (NULL)."""
+    return "CASE WHEN fix = 0 THEN verzonden ELSE tst END"
+
+
+def _v3(conn):
+    """Eén punt per positieblok van één ruw bericht: sleutel (bericht_id, volgnr).
+
+    Gevonden bij de onafhankelijke controle van 05-10-2026: twee verschillende GTSTT-meldingen
+    (stand 22 en 21, eigen teller en verzendtijd) met dezelfde oude fixtijd vielen met de sleutel
+    (bron, tst, berichtsoort, volgnr) samen tot één punt; het tweede ruwe bericht kreeg 0 posities.
+    Een gebeurtenis is een bericht, geen fix. Een exacte herhaling van een bericht blijft één
+    bericht (vingerafdruk in de tabel bericht) en dus één verzameling punten.
+
+    Nieuw: de kolom moment (gebeurtenistijd). Met fix is dat de meettijd, zonder fix de
+    verzendtijd, en is die er niet, dan blijft het onbekend (NULL). Fixtijd (tst), gebeurtenistijd
+    (moment) en ontvangsttijd (ontvangen) staan zo apart.
+    """
+    namen = kolommen(conn, "punt")
+    if "moment" in namen:
+        return
+    if conn.execute("SELECT count(*) FROM punt WHERE bericht_id IS NULL").fetchone()[0]:
+        _vul_berichten(conn)
+    info = list(conn.execute("PRAGMA table_info(punt)"))
+    defs = []
+    for r in info:
+        naam, soort, notnull = r[1], r[2] or "TEXT", r[3]
+        if naam in ("tst", "bericht_id"):
+            defs.append('"%s" INTEGER NOT NULL' % naam)
+        elif naam in ("bron", "berichtsoort", "volgnr"):
+            dflt = {"bron": "'iphone'", "berichtsoort": "''", "volgnr": "0"}[naam]
+            defs.append('"%s" %s NOT NULL DEFAULT %s' % (naam, soort, dflt))
+        else:
+            defs.append('"%s" %s%s' % (naam, soort, " NOT NULL" if notnull else ""))
+    defs.append('"moment" INTEGER')
+    lijst = ", ".join('"%s"' % r[1] for r in info)
+    voor = conn.execute("SELECT count(*) FROM punt").fetchone()[0]
+    conn.execute("ALTER TABLE punt RENAME TO punt_schema2")
+    for idx in ("punt_tst", "punt_bron"):
+        conn.execute("DROP INDEX IF EXISTS %s" % idx)
+    conn.execute("CREATE TABLE punt (%s, PRIMARY KEY (bericht_id, volgnr))" % ", ".join(defs))
+    conn.execute("INSERT INTO punt (%s) SELECT %s FROM punt_schema2" % (lijst, lijst))
+    na = conn.execute("SELECT count(*) FROM punt").fetchone()[0]
+    if na != voor:
+        raise RuntimeError("schema 3: %d punten voor, %d na de ombouw" % (voor, na))
+    conn.execute("UPDATE punt SET moment = %s" % moment_sql())
+    conn.execute("DROP TABLE punt_schema2")
+    conn.execute("CREATE INDEX IF NOT EXISTS punt_tst ON punt(tst)")
+    conn.execute("CREATE INDEX IF NOT EXISTS punt_bron ON punt(bron, tst)")
+    conn.execute("CREATE INDEX IF NOT EXISTS punt_moment ON punt(bron, moment)")
+    # Een bericht met minder punten dan posities heet niet langer stil 'punten'.
+    conn.execute("""UPDATE bericht SET posities_bewaard = (SELECT count(*) FROM punt WHERE punt.bericht_id = bericht.id)
+                    WHERE COALESCE(posities_gemeld, 0) > 0""")
+    conn.execute("""UPDATE bericht SET verwerking = 'deels: ' || posities_bewaard || ' van de ' || posities_gemeld || ' posities'
+                    WHERE COALESCE(posities_gemeld, 0) > 0 AND posities_bewaard < posities_gemeld""")
+    # Plekken uit de telefoontijd (wifi-namen en coördinaten geleerd uit de metingen van 9-9 tot
+    # 3-10-2026) gaan buiten de actieve herkenning, bewaard in plek_historiek. Thuis wordt opnieuw
+    # bevestigd uit een toegestane adresbron (beheer.py thuis), nooit uit oude metingen.
+    for kolom, soort in (("herkomst", "TEXT"), ("actief", "INTEGER NOT NULL DEFAULT 1")):
+        if kolom not in kolommen(conn, "plek"):
+            conn.execute(f"ALTER TABLE plek ADD COLUMN {kolom} {soort}")
+    conn.execute("""CREATE TABLE IF NOT EXISTS plek_historiek (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, naam TEXT, lat REAL, lon REAL, straal INTEGER, wifi TEXT, soort TEXT,
+        notitie TEXT, dossier TEXT, firma TEXT, herkomst TEXT, bewaard INTEGER NOT NULL, reden TEXT NOT NULL)""")
+    conn.execute("""INSERT INTO plek_historiek (naam, lat, lon, straal, wifi, soort, notitie, dossier, firma, herkomst,
+                                                bewaard, reden)
+                    SELECT naam, lat, lon, straal, wifi, soort, notitie, dossier, firma,
+                           'telefoontijd 9-9 tot 3-10-2026', CAST(strftime('%s', 'now') AS INTEGER),
+                           'schema 3: geleerd in de telefoontijd, buiten de actieve herkenning gezet'
+                    FROM plek WHERE herkomst IS NULL""")
+    conn.execute("UPDATE plek SET actief = 0, herkomst = 'telefoontijd 9-9 tot 3-10-2026' WHERE herkomst IS NULL")
+    # Verdachte berichten (plausibiliteit, bronbeleid) blijven bewaard maar tellen niet mee.
+    if "verdacht" not in kolommen(conn, "bericht"):
+        conn.execute("ALTER TABLE bericht ADD COLUMN verdacht TEXT")
+    if "verdacht" not in kolommen(conn, "punt"):
+        conn.execute("ALTER TABLE punt ADD COLUMN verdacht TEXT")
+
+
+MIGRATIES = [(1, _v1), (2, _v2), (3, _v3)]
 
 
 # ------------------------------------------------------------ uitvoeren

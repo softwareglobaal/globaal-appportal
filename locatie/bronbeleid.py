@@ -45,10 +45,16 @@ BRONNEN = {
         "rol": "auto",
         "status": "actief",
         "label": "Tracker in de auto",
-        "toestel": "Queclink GV500CG in de diagnosepoort van de Opel Astra 2HHE117",
+        "toestel": "Queclink GV500CG in de diagnosepoort van Mehdi's auto",
         "protocol": "@Track over TCP, container app-locatie-tracker, buiten poort 5000",
         "ingang": STARTGRENS,
         "toestel_sha256": "6362aeefb2d74833",
+        # Wat het echte toestel meldt (gemeten 03-10-2026). Een bericht met dit IMEI maar een andere
+        # protocolversie of toestelnaam is verdacht: bewaard, niet meegeteld. Het IMEI is geen geheim
+        # (controle 05-10-2026); dit zijn aanwijzingen, geen authenticatie. Die komt pas met beveiligd
+        # transport en een toestelgebonden geheim (zie locatie/README.md, toestelbeveiliging).
+        "protocolversie": "8020090501",
+        "toestelnaam_sha256": None,     # leeg tot de toestelnaam per sms gezet en teruggelezen is
         # Wat het toestel doet, zoals ingesteld per sms op 03-10-2026 (zie
         # 'Data uit Mehdi/Locatie/04 Tracker in de auto, instellen'). De bewaking
         # leest dit: een lange stilte na 'motor uit' is hier verwacht, geen uitval.
@@ -164,6 +170,17 @@ def toestel_kort(toestel):
     return ("…" + t[-4:]) if len(t) > 4 else t
 
 
+def toestellen_van(bron, toestellen=None):
+    """De IMEI's uit ATRACK_IMEIS die onder deze bronnaam staan en bij het beleid horen."""
+    toestellen = toestellen_uit_env() if toestellen is None else toestellen
+    return sorted(i for i, n in toestellen.items() if n == bron and toestel_klopt(bron, i))
+
+
+def ingesteld(toestellen=None):
+    """Heeft elke actieve bron een toegelaten toestel? Zo niet, dan is geen dag 'afgesloten'."""
+    return all(toestellen_van(b, toestellen) for b in actieve_bronnen())
+
+
 def toestel_klopt(bron, toestel):
     beleid = BRONNEN.get(bron) or {}
     verwacht = beleid.get("toestel_sha256")
@@ -207,6 +224,8 @@ def telt_mee(punt):
         return False, "onbekende meettijd"
     if tst < grens:
         return False, "meettijd voor de ingang van de bron"
+    if punt.get("verdacht"):
+        return False, "verdacht bericht: %s" % punt["verdacht"]
     return True, ""
 
 
@@ -223,7 +242,8 @@ def sql_actief(toestellen=None, alias=""):
         imeis = sorted(i for i, naam in toestellen.items() if naam == bron and toestel_klopt(bron, i))
         if not imeis:
             continue
-        delen.append(f"({p}bron = ? AND {p}toestel IN ({','.join('?' * len(imeis))}) AND {p}tst >= ?)")
+        delen.append(f"({p}bron = ? AND {p}toestel IN ({','.join('?' * len(imeis))}) AND {p}tst >= ? "
+                     f"AND {p}verdacht IS NULL)")
         waarden += [bron] + imeis + [ingang(bron)]
     if not delen:
         return "0", []

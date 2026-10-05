@@ -230,19 +230,143 @@ def test_gaat_door_de_ronde():
 
 
 def test_archivaris_leest_geen_dagboek_van_voor_de_grens():
+    """De Archivaris leest geen markdown meer maar de gestructureerde context, met de grens."""
     import archivaris
+    assert archivaris.locatie_op("2026-09-20", "10:30") == ("", None), "oude telefoondagboeken worden niet meer gelezen"
+    bron = open(os.path.join(HIER, "archivaris.py"), encoding="utf-8").read()
+    assert "locatielogboek/dagen" not in bron, "De Archivaris leest weer het markdown-dagboek"
+
+
+def test_een_grote_achterstand_begint_bij_de_oudste_open_dag():
+    """Controle 05-10-2026: bij meer open dagen dan het maximum koos de inhaal de nieuwste."""
+    L.STAND = os.path.join(tempfile.mkdtemp(), "stand.json")
+    dagen = L.te_doen("2026-11-10")
+    assert dagen[0] == "2026-10-03" and len(dagen) == L.INHAAL_MAX_DAGEN, dagen
+
+
+def test_een_afgesloten_dag_met_een_latere_revisie_wordt_opnieuw_gemaakt():
+    L.STAND = os.path.join(tempfile.mkdtemp(), "stand.json")
+    L.MAP = os.path.dirname(L.STAND)
+    L.stand_bijwerken(["2026-10-03", "2026-10-04", "2026-10-05"], {"2026-10-03": "a", "2026-10-04": "b", "2026-10-05": "c"})
+    revisies = {"2026-10-03": {"versie": "a"}, "2026-10-04": {"versie": "b2"}, "2026-10-05": {"versie": "c"},
+                "2026-10-06": {"versie": "d"}}
+    assert L.te_doen("2026-10-06", revisies) == ["2026-10-04", "2026-10-06"]
+    # Een dag van voor de grens in de revisies telt nooit.
+    revisies["2026-10-01"] = {"versie": "x"}
+    assert "2026-10-01" not in L.te_doen("2026-10-06", revisies)
+
+
+class Ronde:
+    def __init__(self):
+        self.noden, self.detail, self.bronnen = [], "", {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def bron(self, naam, inhoud):
+        self.bronnen[naam] = inhoud
+
+    def nood(self, tekst, wie="mehdi"):
+        self.noden.append(tekst)
+
+
+class Agent(Bord):
+    def __init__(self):
+        super().__init__()
+        self.r = Ronde()
+
+    def ronde(self, taak):
+        return self.r
+
+
+def proefronde(status_dag, droog=False):
+    """De wacht volledig, met een nagebootste tegel: wat werd gevraagd, wat verrijkt, wat de stand werd."""
     map_ = tempfile.mkdtemp()
-    echt = os.path.expanduser
-    os.path.expanduser = lambda p: p.replace("~/appportal/mijnagents-data", map_)
+    oud = {k: getattr(L, k) for k in ("MAP", "STAND", "haal", "verrijk", "ag", "taak_melden", "DROOG", "DAG", "OM",
+                                       "CONTROLE", "controle", "nu")}
+    gevraagd, verrijkt = [], []
+
+    def haal(pad):
+        gevraagd.append(pad)
+        if pad.startswith("/api/dagboek/"):
+            return {"status": status_dag, "versie": "v1", "markdown": "# Locatielogboek proef\n", "sporen": {}}
+        if pad.startswith("/api/context"):
+            return {"verblijven": [], "kandidaten": []}
+        if pad == "/api/revisies":
+            return {"revisies": {}}
+        if pad == "/api/projectplekken":
+            return {"projectplekken": [], "dekking": {}}
+        return {"bronnen": [], "alarmen": []}
+    L.MAP, L.STAND = map_, os.path.join(map_, "stand.json")
+    L.haal, L.verrijk, L.ag, L.taak_melden = haal, (lambda dag: verrijkt.append(dag) or True), Agent(), (lambda *a: None)
+    L.DROOG, L.DAG, L.OM, L.CONTROLE, L.controle = droog, ("2026-10-04" if droog else None), None, False, (lambda: None)
+    L.nu = lambda: datetime(2026, 10, 5, 21, 31, tzinfo=BRUSSEL)
+    L.agenda.beschikbaar = lambda: False
+    L.dropbox_prive.spiegel_map = lambda *a: {"verstuurd": 0, "fout": ""}
+    L.dropbox_prive.nood = lambda **k: []
     try:
-        os.makedirs(os.path.join(map_, "locatielogboek", "dagen"))
-        for dag in ("2026-09-20", "2026-10-05"):
-            open(os.path.join(map_, "locatielogboek", "dagen", f"{dag}.md"), "w").write(
-                "| 10:00 | 11:00 | 1u00 | verblijf | ergens |\n")
-        assert archivaris.locatie_op("2026-09-20", "10:30") == "", "oude telefoondagboeken worden niet meer gelezen"
-        assert archivaris.locatie_op("2026-10-05", "10:30") == "verblijf: ergens"
+        L.main()
+        stand = L.lees_stand()
+        noden = L.ag.r.noden
     finally:
-        os.path.expanduser = echt
+        for k, v in oud.items():
+            setattr(L, k, v)
+    return gevraagd, verrijkt, stand, noden, map_
+
+
+def test_droog_vraagt_alleen_leesroutes_en_verrijkt_niet():
+    gevraagd, verrijkt, stand, _, map_ = proefronde("afgesloten", droog=True)
+    assert not verrijkt, "--droog mag de tegel niet laten schrijven"
+    assert all("adressen=1" not in p for p in gevraagd), gevraagd
+    assert not os.path.exists(os.path.join(map_, "dagen")) and stand["afgesloten_tot"] == ""
+
+
+def test_zonder_toestelconfiguratie_sluit_de_wacht_geen_dag_af():
+    _, verrijkt, stand, noden, _ = proefronde("niet ingesteld")
+    assert verrijkt, "de gewone ronde verrijkt elke dag"
+    assert stand["afgesloten_tot"] == "", stand
+    assert any("ATRACK_IMEIS" in n for n in noden), noden
+    _, _, stand, _, _ = proefronde("afgesloten")
+    assert stand["afgesloten_tot"] == "2026-10-05" and stand["versies"]["2026-10-03"] == "v1", stand
+
+
+def test_een_onbereikbare_tegel_geeft_een_signaal_en_een_foute_hartslag():
+    echt_ag, echt_nu, echt_haal = L.ag, L.nu, L.haal
+    L.ag = Bord()
+    L.nu = lambda: datetime(2026, 10, 5, 14, 5, tzinfo=BRUSSEL)
+
+    def weg(pad):
+        raise ConnectionError("geen verbinding")
+    L.haal = weg
+    try:
+        L.controle()
+        assert L.ag.klaar and L.ag.klaar[0]["titel"] == "Locatietegel onbereikbaar", L.ag.klaar
+        assert L.ag.hart[-1][0] == "fout"
+        assert "stil" not in L.ag.klaar[0]["titel"].lower()
+    finally:
+        L.ag, L.nu, L.haal = echt_ag, echt_nu, echt_haal
+
+
+def test_de_controle_meldt_een_verouderde_export_ook_zonder_alarm_van_de_tegel():
+    """Bronproef van de controle (05-10-2026): projectsync 48 uur en export 49 uur oud, en de
+    status gaf geen alarm mee; de controle zei 'waakt'."""
+    echt_ag, echt_nu, echt_haal, echt_taak = L.ag, L.nu, L.haal, L.taak_melden
+    L.ag, L.taak_melden = Bord(), (lambda *a, **k: None)
+    L.nu = lambda: datetime(2026, 10, 5, 14, 5, tzinfo=BRUSSEL)
+    L.haal = lambda pad: {"bronnen": [{"status": "actief", "label": "Auto", "toestand": "geparkeerd"}], "alarmen": [],
+                          "taken": [{"taak": "projectsync", "uren_geleden": 48}, {"taak": "export", "uren_geleden": 49},
+                                    {"taak": "dagboek", "uren_geleden": 3}]}
+    try:
+        L.controle()
+        titels = {k["titel"] for k in L.ag.klaar}
+        assert "Export van het locatielogboek naar Dropbox loopt achter" in titels, titels
+        assert "Projectadressen van het locatielogboek niet bijgewerkt" in titels, titels
+        assert "Locatiedagboek loopt achter" not in titels and L.ag.hart[-1][0] == "fout"
+    finally:
+        L.ag, L.nu, L.haal, L.taak_melden = echt_ag, echt_nu, echt_haal, echt_taak
 
 
 if __name__ == "__main__":
@@ -252,8 +376,8 @@ if __name__ == "__main__":
             try:
                 fn()
                 print("   geslaagd  %s" % naam)
-            except AssertionError as e:
+            except Exception as e:  # noqa: BLE001
                 fouten += 1
-                print("   MISLUKT   %s: %s" % (naam, e))
+                print("   MISLUKT   %s: %s: %s" % (naam, type(e).__name__, e))
     print("%d van de %d grendels mislukt" % (fouten, sum(1 for n in globals() if n.startswith("test_"))))
     sys.exit(1 if fouten else 0)

@@ -47,20 +47,21 @@ _teller = [0]
 
 
 def punt(c, tst, plaats, soort="FRI", geb="vast interval", fix=1, vel=0, motion=None, verzonden=None,
-         bron="auto", toestel=PROEF, dlat=0.0):
+         bron="auto", toestel=PROEF, dlat=0.0, ontvangen=None):
     """Eén punt plus zijn ruwe bericht, zoals de ontvanger het zou bewaren."""
     _teller[0] += 1
     motion = motion or ("automotive" if vel >= 5 else "stationary")
-    c.execute("""INSERT INTO bericht (ontvangen, laatst_ontvangen, bron, toestel, protocol, soort, verzonden,
-                                      posities_gemeld, posities_bewaard, verwerking, vingerafdruk, ruw)
-                 VALUES (?, ?, ?, ?, 'atrack', ?, ?, 1, 1, 'punten', ?, 'proef')""",
-              ((verzonden or tst) + 1, (verzonden or tst) + 1, bron, toestel, soort, verzonden or tst,
-               "v%d" % _teller[0]))
+    ontvangen = ontvangen or (verzonden or tst) + 1
+    cur = c.execute("""INSERT INTO bericht (ontvangen, laatst_ontvangen, bron, toestel, protocol, soort, verzonden,
+                                            posities_gemeld, posities_bewaard, verwerking, vingerafdruk, ruw)
+                       VALUES (?, ?, ?, ?, 'atrack', ?, ?, 1, 1, 'punten', ?, 'proef')""",
+                    (ontvangen, ontvangen, bron, toestel, soort, verzonden or tst, "v%d" % _teller[0]))
     c.execute("""INSERT INTO punt (tst, lat, lon, vel, soort, motion, gebeurtenis, ontvangen, bron, hdop, fix,
-                                   verzonden, gebufferd, toestel, berichtsoort, volgnr, teller)
-                 VALUES (?, ?, ?, ?, 'location', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?)""",
-              (tst, plaats[0] + dlat, plaats[1], vel, motion, geb, (verzonden or tst) + 1, bron, 1 if fix else 0,
-               fix, verzonden or tst, toestel, soort, "%04X" % _teller[0]))
+                                   verzonden, gebufferd, toestel, berichtsoort, volgnr, teller, bericht_id, moment)
+                 VALUES (?, ?, ?, ?, 'location', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?)""",
+              (tst, plaats[0] + dlat, plaats[1], vel, motion, geb, ontvangen, bron, 1 if fix else 0,
+               fix, verzonden or tst, toestel, soort, "%04X" % _teller[0], cur.lastrowid,
+               tst if fix else verzonden))
 
 
 def rit(c, van, tot, a, b, stap=30, **kw):
@@ -323,6 +324,159 @@ def test_het_scherm_opent_op_vandaag_en_ververst_zichzelf():
     assert "<html" not in deel and "Tracker in de auto" in deel
 
 
+def test_een_ouder_motor_uit_uit_de_buffer_maakt_de_auto_niet_geparkeerd():
+    """Controle 05-10-2026: motor aan om 13:00, daarna kwam een motor uit van 12:00 uit de buffer
+    binnen; de status zei 'geparkeerd', sinds de ontvangsttijd."""
+    c = nieuwe_db()
+    punt(c, t(5, 12), WERF, soort="VGF", geb="motor uit", ontvangen=t(5, 12, 0, 1))
+    punt(c, t(5, 13), WERF, soort="VGN", geb="motor aan", vel=0, motion="automotive", ontvangen=t(5, 13, 0, 1))
+    punt(c, t(5, 12, 1), WERF, soort="VGF", geb="motor uit", ontvangen=t(5, 15, 1))   # oud, laat ontvangen
+    c.commit()
+    b = S.bron(c, "auto", nu=t(5, 15, 5))
+    assert b["toestand"] != "geparkeerd", b
+    # En wat het dagboek zegt, volgt dezelfde regel.
+    staat, p = app._staat([dict(r) for r in c.execute("SELECT * FROM punt")], t(5, 16))
+    assert staat == "onderweg", (staat, p)
+
+
+def test_alleen_een_melding_van_voor_de_grens_geeft_geen_toestand():
+    c = nieuwe_db()
+    punt(c, B.moment(B.STARTGRENS) - 600, WERF, soort="VGF", geb="motor uit", ontvangen=t(5, 9))
+    c.commit()
+    b = S.bron(c, "auto", nu=t(5, 10))
+    assert b["toestand"] != "geparkeerd" and b["laatste_geldige_positie"] is None, b
+
+
+def test_tegengestelde_meldingen_op_hetzelfde_moment_geven_onbekend():
+    c = nieuwe_db()
+    punt(c, t(5, 12), WERF, soort="VGF", geb="motor uit")
+    punt(c, t(5, 12), WERF, soort="VGN", geb="motor aan", motion="automotive")
+    c.commit()
+    assert S.bron(c, "auto", nu=t(5, 13))["toestand"] == "onbekend"
+
+
+def test_een_melding_zonder_bekende_gebeurtenistijd_blijft_onbekend():
+    c = nieuwe_db()
+    punt(c, t(5, 12), WERF, soort="VGN", geb="motor aan", fix=0, verzonden=None, motion="automotive")
+    c.execute("UPDATE punt SET verzonden = NULL, moment = NULL")
+    c.commit()
+    assert S.bron(c, "auto", nu=t(5, 13))["toestand"] == "onbekend"
+
+
+def test_taken_die_achterlopen_geven_elk_hun_eigen_melding():
+    """Controle 05-10-2026: projectsync 48 uur en export 49 uur oud gaven een geslaagde controle."""
+    c = nieuwe_db()
+    nu = t(7, 12)
+    for taak, uren in (("projectsync", 48), ("export", 49), ("dagboek", 5)):
+        c.execute("INSERT INTO taakstatus (taak, laatst_geprobeerd, laatst_geslaagd) VALUES (?, ?, ?)",
+                  (taak, nu - uren * 3600, nu - uren * 3600))
+    c.commit()
+    st = S.overzicht(c, nu=nu)
+    sleutels = {a["sleutel"] for a in st["alarmen"]}
+    assert {"locatie-taak-projectsync", "locatie-taak-export"} <= sleutels, sleutels
+    assert "locatie-taak-dagboek" not in sleutels
+    assert st["projectdekking"]["verouderd"] and st["projectdekking"]["uren_geleden"] == 48
+    assert all("stil" not in a["titel"].lower() for a in st["alarmen"])
+
+
+def test_zonder_toestelconfiguratie_wordt_een_dag_niet_afgesloten():
+    """Controle 05-10-2026: met een lege ATRACK_IMEIS werd een dag 'afgesloten' met nul punten."""
+    nieuwe_db()
+    echt = os.environ["ATRACK_IMEIS"]
+    os.environ["ATRACK_IMEIS"] = ""
+    try:
+        g = app.dag_gegevens("2026-10-05", nu=t(7, 12))
+        assert g["status"] == "niet ingesteld" and not g["ingesteld"], g["status"]
+    finally:
+        os.environ["ATRACK_IMEIS"] = echt
+
+
+def test_leesroutes_schrijven_niets():
+    """Controle 05-10-2026: GET /api/dagboek verhoogde adresbezoek; --droog schreef dus ook."""
+    c = nieuwe_db()
+    rit(c, t(5, 8), t(5, 8, 20), THUIS, WERF)
+    parkeer(c, t(5, 8, 21), WERF)
+    c.commit()
+
+    def afdruk():
+        uit = {}
+        for (naam,) in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'"):
+            uit[naam] = c.execute("SELECT count(*), total(rowid) FROM %s" % naam).fetchone()
+        return uit
+    voor = afdruk()
+    klant = app.app.test_client()
+    for url in ("/", "/?deel=1", "/api/dag/2026-10-05", "/api/dagboek/2026-10-05", "/api/dagboek/2026-10-05?adressen=1",
+                "/api/context?dag=2026-10-05", "/api/status", "/gezond", "/api/projectplekken", "/api/revisies",
+                "/api/dagcijfers", "/api/gezondheid/2026-10-05", "/api/beleid", "/health", "/api/correctie"):
+        assert klant.get(url).status_code == 200, url
+    assert afdruk() == voor, "een leesroute veranderde de database"
+
+
+def _project_bij(c, plaats, nummer="9604"):
+    P.synchroniseer(c, ha=[{"firma": "HARC", "nummer": nummer, "project_id": "u" + nummer, "naam": nummer,
+                            "adres": "Werfstraat %s, 3999 Proefdorp" % nummer, "adres_bron": "projectmap (A13)",
+                            "bron": "ha-projecten", "link": "https://ha-projecten.globaal.be/project/" + nummer}],
+                    mappen={}, geocodeer=lambda a: {"lat": plaats[0], "lon": plaats[1], "kwaliteit": "adres",
+                                                    "bron": "proef"})
+
+
+def test_context_geeft_geen_projectbezoek_voor_thuis_of_rechtgezette_verblijven():
+    """Controle 05-10-2026: een project op 200 m van Thuis bleef 'waarschijnlijk', en correcties
+    'geen project' en 'niet Mehdi' bleven als contextverblijf staan."""
+    c = nieuwe_db()
+    _project_bij(c, (THUIS[0] + 0.0018, THUIS[1]))                 # project op ongeveer 200 m van Thuis
+    c.execute("INSERT INTO plek (naam, lat, lon, straal, soort, herkomst, actief) VALUES ('Thuis', ?, ?, 150, 'thuis', "
+              "'proef', 1)", THUIS)
+    rit(c, t(5, 8), t(5, 8, 20), WERF, THUIS)
+    parkeer(c, t(5, 8, 21), THUIS)
+    c.commit()
+    g = app.dag_gegevens("2026-10-05", nu=t(5, 23))
+    thuis = [s for s in g["sporen"]["auto"]["indeling"] if s["soort"] == "bezoek"][-1]
+    assert thuis["herkenning"]["zekerheid"] == "onzeker" and thuis["herkenning"]["plek"] == "Thuis", thuis["herkenning"]
+    ctx = D.context("2026-10-05", g)
+    assert ctx["verblijven"] == [], ctx["verblijven"]
+    # Correcties: geen project en auto niet bij Mehdi leveren geen positief verblijf; bevestigd project wel.
+    c2 = nieuwe_db()
+    _project_bij(c2, WERF)
+    rit(c2, t(5, 8), t(5, 8, 20), THUIS, WERF)
+    parkeer(c2, t(5, 8, 21), WERF)
+    vertrek(c2, t(5, 8, 22), t(5, 10, 30), WERF, VER)
+    c2.commit()
+    assert len(D.context("2026-10-05", app.dag_gegevens("2026-10-05", nu=t(5, 23)))["verblijven"]) == 1
+    for wat in ("geen_project", "niet_mehdi"):
+        c2.execute("UPDATE bezoekcorrectie SET ingetrokken = 1")
+        c2.execute("INSERT INTO bezoekcorrectie (bron, van, tot, wat, door, wanneer) VALUES ('auto', ?, ?, ?, 'mehdi', 1)",
+                   (t(5, 9), t(5, 9, 30), wat))
+        c2.commit()
+        g = app.dag_gegevens("2026-10-05", nu=t(5, 23))
+        ctx = D.context("2026-10-05", g)
+        assert ctx["verblijven"] == [] and ctx["kandidaten"] == [], (wat, ctx)
+        assert "geparkeerd" in D.markdown("2026-10-05", g), "de correctie blijft als bewijs in het dagboek"
+
+
+def test_plekken_uit_de_telefoontijd_herkennen_niet_meer():
+    c = nieuwe_db()
+    c.execute("INSERT INTO plek (naam, lat, lon, straal, soort, wifi, herkomst, actief) VALUES ('Oud', ?, ?, 150, 'thuis', "
+              "'OUDE-WIFI', 'telefoontijd 9-9 tot 3-10-2026', 0)", WERF)
+    rit(c, t(5, 8), t(5, 8, 20), THUIS, WERF)
+    parkeer(c, t(5, 8, 21), WERF)
+    c.commit()
+    ind = app.dag_gegevens("2026-10-05", nu=t(5, 23))["sporen"]["auto"]["indeling"]
+    assert all((s.get("herkenning") or {}).get("plek") != "Oud" for s in ind), "een plek uit de telefoontijd herkent nog"
+    assert [p["naam"] for p in app.app.test_client().get("/api/plekken").get_json()["plekken"]] == ["Oud"], \
+        "de plek blijft bewaard en zichtbaar voor De Agendawacht"
+
+
+def test_het_bewijs_van_een_verblijf_noemt_de_motormeldingen():
+    """Controle 05-10-2026: bij HARC 2443 stond enkel '23 meetpunten' terwijl er een 'motor uit' in viel."""
+    ind = [{"soort": "bezoek", "van": t(5, 10), "tot": t(5, 11), "punten": 23}]
+    punten = [{"gebeurtenis": "motor uit", "fix": 1, "tst": t(5, 10, 5), "moment": t(5, 10, 5)},
+              {"gebeurtenis": "motor aan", "fix": 0, "tst": t(5, 10, 5), "moment": t(5, 10, 50), "verzonden": t(5, 10, 50)},
+              {"gebeurtenis": "motor uit", "fix": 1, "tst": t(5, 12), "moment": t(5, 12)}]
+    app.bewijs_motor(ind, punten)
+    assert ind[0]["bewijs"] == "motor uit om 10:05, motor aan om 10:50; 23 meetpunten", ind[0]
+
+
 if __name__ == "__main__":
     fouten = 0
     for naam, fn in sorted(globals().items()):
@@ -330,8 +484,8 @@ if __name__ == "__main__":
             try:
                 fn()
                 print("   geslaagd  %s" % naam)
-            except AssertionError as e:
+            except Exception as e:  # noqa: BLE001
                 fouten += 1
-                print("   MISLUKT   %s: %s" % (naam, e))
+                print("   MISLUKT   %s: %s: %s" % (naam, type(e).__name__, e))
     print("%d van de %d grendels mislukt" % (fouten, sum(1 for n in globals() if n.startswith("test_"))))
     sys.exit(1 if fouten else 0)

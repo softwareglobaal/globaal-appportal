@@ -30,5 +30,6 @@ RUN python3 test_schema.py
 RUN python3 test_herkenning.py
 RUN python3 test_auto.py
 RUN python3 test_export.py
+RUN python3 test_robuust.py
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3031} --workers 2 --timeout 60 app:app"]

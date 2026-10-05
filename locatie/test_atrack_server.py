@@ -24,6 +24,11 @@ os.environ.setdefault("TZ", "Europe/Brussels")
 
 import app as webapp            # noqa: E402
 import atrack_server            # noqa: E402
+import bronbeleid               # noqa: E402
+
+# De voorbeeldregels komen uit de handleiding (protocol 3.02); het echte toestel meldt 5.01. De
+# protocolcontrole heeft haar eigen test hieronder; voor de opslagtests staat ze uit.
+bronbeleid.BRONNEN["auto"]["protocolversie"] = None
 
 FRI = ("+RESP:GTFRI,8020090302,864696060004173,GV500CG,11985,10,1,1,0.0,0,118.5,"
        "4.700000,50.800000,20230808033438,0460,0001,DF5C,05FE6667,03,15,0,123.5,"
@@ -60,8 +65,8 @@ def test_twee_bronnen_op_dezelfde_seconde_blijven_allebei_staan():
     """De oude tabel had het tijdstip als sleutel; dan verdween er een."""
     conn = webapp.db()
     tst = 1691465678                          # zelfde seconde als het FRI-bericht
-    conn.execute("INSERT INTO punt (tst, lat, lon, bron, berichtsoort) VALUES (?,?,?, 'iphone', 'location') "
-                 "ON CONFLICT(bron, tst, berichtsoort, volgnr) DO NOTHING", (tst, 50.0, 4.0))
+    conn.execute("INSERT INTO punt (tst, lat, lon, bron, berichtsoort, bericht_id) VALUES (?,?,?, 'iphone', 'location', -1) "
+                 "ON CONFLICT(bericht_id, volgnr) DO NOTHING", (tst, 50.0, 4.0))
     conn.commit()
     conn.close()
     atrack_server.verwerk(FRI)
@@ -258,6 +263,65 @@ def test_motor_aan_zonder_fix_verdwijnt_niet_naast_motor_uit():
     assert soorten == {"VGF", "VGN"}, soorten
     vgn = rijen("berichtsoort = 'VGN' AND tst = 1791111600")[0]
     assert vgn["fix"] == 0 and vgn["verzonden"] == 1791113401
+
+
+def test_twee_statusmeldingen_met_dezelfde_oude_fix_blijven_allebei():
+    """Controle 05-10-2026 (ontvanger-tegenproef): GTSTT 22 en 21, eigen teller en verzendtijd,
+    dezelfde oude fixtijd. Met de sleutel (bron, tst, soort, volgnr) bleef er één punt over en
+    heette het tweede bericht toch 'bewaard'."""
+    a = ("+RESP:GTSTT,8020090501,864696060004173,,22,0,0.0,180,1.0,4.900000,50.900000,20261004110000,"
+         "0206,0010,4E84,061D580C,00,20261004113000,5001$")
+    b = a.replace(",22,0,", ",21,0,").replace("20261004113000,5001$", "20261004113100,5002$")
+    ra, rb = atrack_server.verwerk(a), atrack_server.verwerk(b)
+    assert ra == ("+SACK:5001$", "bewaard") and rb == ("+SACK:5002$", "bewaard"), (ra, rb)
+    p = rijen("teller IN ('5001', '5002') ORDER BY teller")
+    assert [r["motion"] for r in p] == ["automotive", "stationary"], p
+    assert [r["moment"] for r in p] == [1791113400, 1791113460], "de gebeurtenistijd is de verzendtijd"
+    assert all(r["tst"] == 1791111600 for r in p), "de fixtijd blijft de oude fix"
+    assert [r["posities_bewaard"] for r in ruwe("teller IN ('5001', '5002') ORDER BY teller")] == [1, 1]
+    # Een exacte herhaling blijft één bericht met één punt, en wordt opnieuw bevestigd.
+    assert atrack_server.verwerk(a) == ("+SACK:5001$", "dubbel")
+    assert len(rijen("teller = '5001'")) == 1 and ruwe("teller = '5001'")[0]["aantal"] == 2
+
+
+def test_dezelfde_melding_met_andere_kop_is_een_herhaling():
+    """+RESP en daarna +BUFF met dezelfde teller en verzendtijd: één bericht."""
+    a = ("+RESP:GTFRI,8020090501,864696060004173,,,10,1,1,0.0,90,30.0,4.910000,50.910000,20261004120000,"
+         "0206,0010,4E84,061D580C,00,0.0,,,,,85,210000,,,,20261004120001,5003$")
+    atrack_server.verwerk(a)
+    terug, wat = atrack_server.verwerk(a.replace("+RESP:", "+BUFF:").replace(",85,", ",84,"))
+    assert (terug, wat) == ("+SACK:5003$", "dubbel"), (terug, wat)
+    assert len(rijen("teller = '5003'")) == 1
+
+
+def test_een_bericht_met_een_andere_protocolversie_is_verdacht():
+    """Het IMEI is geen geheim: een bericht met het IMEI maar niet het profiel van het echte
+    toestel wordt bewaard en gemarkeerd, en telt niet mee."""
+    bronbeleid.BRONNEN["auto"]["protocolversie"] = "8020090501"
+    try:
+        nep = ("+RESP:GTFRI,8020090302,864696060004173,,,10,1,1,0.0,90,30.0,4.920000,50.920000,20261004130000,"
+               "0206,0010,4E84,061D580C,00,0.0,,,,,85,210000,,,,20261004130001,5004$")
+        terug, wat = atrack_server.verwerk(nep)
+        assert wat == "verdacht" and terug == "+SACK:5004$", (wat, terug)
+        r = rijen("teller = '5004'")[0]
+        assert r["verdacht"] and ruwe("teller = '5004'")[0]["verdacht"], r
+        echt = bronbeleid.BRONNEN["auto"]["toestel_sha256"]
+        bronbeleid.BRONNEN["auto"]["toestel_sha256"] = bronbeleid.vingerafdruk("864696060004173")
+        try:
+            ok, reden = bronbeleid.telt_mee(r)
+            assert not ok and reden.startswith("verdacht"), reden
+            clause, _ = bronbeleid.sql_actief({"864696060004173": "auto"})
+            assert "verdacht IS NULL" in clause, clause
+        finally:
+            bronbeleid.BRONNEN["auto"]["toestel_sha256"] = echt
+    finally:
+        bronbeleid.BRONNEN["auto"]["protocolversie"] = None
+
+
+def test_de_log_toont_geen_toestelidentiteit():
+    """Controle 05-10-2026: de ontvanger schreef de toegelaten IMEI's en elke ruwe regel in zijn log."""
+    regel = atrack_server.gemaskeerd(FRI)
+    assert "864696060004173" not in regel and "…4173" in regel, regel
 
 
 if __name__ == "__main__":
