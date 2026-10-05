@@ -10,7 +10,7 @@ import json
 import os
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HIER)
@@ -47,7 +47,7 @@ _teller = [0]
 
 
 def punt(c, tst, plaats, soort="FRI", geb="vast interval", fix=1, vel=0, motion=None, verzonden=None,
-         bron="auto", toestel=PROEF, dlat=0.0, ontvangen=None):
+         bron="auto", toestel=PROEF, dlat=0.0, ontvangen=None, ruw=None):
     """Eén punt plus zijn ruwe bericht, zoals de ontvanger het zou bewaren."""
     _teller[0] += 1
     motion = motion or ("automotive" if vel >= 5 else "stationary")
@@ -57,11 +57,11 @@ def punt(c, tst, plaats, soort="FRI", geb="vast interval", fix=1, vel=0, motion=
                        VALUES (?, ?, ?, ?, 'atrack', ?, ?, 1, 1, 'punten', ?, 'proef')""",
                     (ontvangen, ontvangen, bron, toestel, soort, verzonden or tst, "v%d" % _teller[0]))
     c.execute("""INSERT INTO punt (tst, lat, lon, vel, soort, motion, gebeurtenis, ontvangen, bron, hdop, fix,
-                                   verzonden, gebufferd, toestel, berichtsoort, volgnr, teller, bericht_id, moment)
-                 VALUES (?, ?, ?, ?, 'location', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?)""",
+                                   verzonden, gebufferd, toestel, berichtsoort, volgnr, teller, bericht_id, moment, ruw)
+                 VALUES (?, ?, ?, ?, 'location', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?)""",
               (tst, plaats[0] + dlat, plaats[1], vel, motion, geb, ontvangen, bron, 1 if fix else 0,
                fix, verzonden or tst, toestel, soort, "%04X" % _teller[0], cur.lastrowid,
-               tst if fix else verzonden))
+               tst if fix else verzonden, ruw))
 
 
 def rit(c, van, tot, a, b, stap=30, **kw):
@@ -82,6 +82,18 @@ def vertrek(c, uit_tst, aan_tst, plaats, naar, **kw):
     """Motor aan zonder fix (meettijd van het 'motor uit', moment = verzendtijd), dan rijden."""
     punt(c, uit_tst, plaats, soort="VGN", geb="motor aan", fix=0, verzonden=aan_tst, motion="automotive", **kw)
     rit(c, aan_tst + 30, aan_tst + 30 + 600, (plaats[0] + 0.0015, plaats[1]), naar, **kw)
+
+
+def stt_ruw(code, tst, plaats, verzonden=None):
+    """Een GTSTT zoals het toestel hem stuurt (protocol 5.01), met bewegingsstand `code`."""
+    u = lambda x: datetime.fromtimestamp(x, timezone.utc).strftime("%Y%m%d%H%M%S")  # noqa: E731
+    return (f"+RESP:GTSTT,8020090501,{PROEF},,{code},1,0.0,25,90.1,{plaats[1]:.6f},{plaats[0]:.6f},"
+            f"{u(tst)},0206,0010,4E84,061D580C,00,{u(verzonden or tst)},0358$")
+
+
+def stt(c, tst, plaats, code, fix=1, verzonden=None, **kw):
+    punt(c, tst, plaats, soort="STT", geb="beweging", fix=fix, verzonden=verzonden,
+         ruw=stt_ruw(code, tst, plaats, verzonden), **kw)
 
 
 def soorten(ind):
@@ -476,6 +488,48 @@ def test_het_bewijs_van_een_verblijf_noemt_de_motormeldingen():
     app.bewijs_motor(ind, punten)
     assert ind[0]["bewijs"] == "motor uit om 10:05, motor aan om 10:50; 23 meetpunten", ind[0]
 
+
+
+def test_motor_uit_met_een_stt_11_op_dezelfde_seconde_is_geparkeerd():
+    """Rit van 05-10-2026: GTVGF en GTSTT 11 (motor uit, stil) kwamen op dezelfde seconde. Elke STT
+    telde als 'in gebruik': de tegel zei 'onbekend' en het dagboek liet het parkeren daarna weg."""
+    import atrack
+    assert atrack.motorstand("STT", stt_ruw("11", t(5, 3), WERF)) == "uit"
+    assert atrack.motorstand("STT", stt_ruw("22", t(5, 3), WERF)) == "aan"
+    assert atrack.motorstand("STT", stt_ruw("41", t(5, 3), WERF)) is None, "alleen de bewegingssensor"
+    assert atrack.motorstand("STT") is None and atrack.motorstand("VGL") is None
+    assert atrack.motorstand("VGF") == "uit" and atrack.motorstand("VGN") == "aan"
+    c = nieuwe_db()
+    # Motor aan zonder fix samen met STT 22, een kort rondje, stoppen (STT 21), dan motor uit en
+    # STT 11 op dezelfde seconde.
+    punt(c, t(5, 3, 40), WERF, soort="VGN", geb="motor aan", fix=0, verzonden=t(5, 3, 42, 23), motion="automotive")
+    stt(c, t(5, 3, 40), WERF, "22", fix=0, verzonden=t(5, 3, 42, 23), motion="automotive")
+    rit(c, t(5, 3, 43, 30), t(5, 3, 44, 30), (WERF[0] - 0.003, WERF[1]), WERF)
+    stt(c, t(5, 3, 45, 18), WERF, "21")
+    punt(c, t(5, 3, 45, 48), WERF, soort="VGF", geb="motor uit")
+    stt(c, t(5, 3, 45, 48), WERF, "11")
+    c.commit()
+    b = S.bron(c, "auto", nu=t(5, 3, 49))
+    assert b["toestand"] == "geparkeerd", b
+    staat, p = app._staat([dict(r) for r in c.execute("SELECT * FROM punt")], t(5, 3, 49))
+    assert staat == "geparkeerd" and p["moment"] == t(5, 3, 45, 48), (staat, p)
+    ind = app.dag_gegevens("2026-10-05", nu=t(5, 3, 55))["sporen"]["auto"]["indeling"]
+    assert ind[-1].get("parkeren") and ind[-1].get("open") and "motor uit om 03:45" in ind[-1]["bewijs"], ind[-1]
+    assert any(s["soort"] == "verplaatsing" for s in ind), "het rondje blijft een rit"
+    # Een echte tegenspraak blijft onbekend: motor uit naast STT 21 (motor aan) op dezelfde seconde.
+    c2 = nieuwe_db()
+    punt(c2, t(5, 12), WERF, soort="VGF", geb="motor uit")
+    stt(c2, t(5, 12), WERF, "21")
+    c2.commit()
+    assert S.bron(c2, "auto", nu=t(5, 12, 5))["toestand"] == "onbekend"
+    assert app._staat([dict(r) for r in c2.execute("SELECT * FROM punt")], t(5, 13)) == (None, None)
+    # Een STT 41 na motor uit zegt niets over de motor en verandert de toestand niet.
+    c3 = nieuwe_db()
+    punt(c3, t(5, 12), WERF, soort="VGF", geb="motor uit")
+    stt(c3, t(5, 12, 10), WERF, "41")
+    c3.commit()
+    assert S.bron(c3, "auto", nu=t(5, 12, 15))["toestand"] == "geparkeerd"
+    assert app._staat([dict(r) for r in c3.execute("SELECT * FROM punt")], t(5, 13))[0] == "geparkeerd"
 
 if __name__ == "__main__":
     fouten = 0

@@ -64,6 +64,27 @@ TOESTAND = {"11": "motor uit, stil", "12": "motor uit, in beweging", "21": "moto
             "22": "motor aan, rijdt", "41": "stil", "42": "in beweging", "16": "wegsleep",
             "1A": "wegsleep (vals alarm)"}
 
+# Wat een toestandsmelding over de motor zegt. Eén regel voor de tegel (status.py) en de
+# dagindeling (app.py). Bij GTSTT beslist de stand zelf: eerste cijfer 1 = motor uit, 2 = aan,
+# 4 = alleen de bewegingssensor, en dat zegt niets over de motor.
+# Rit van 05-10-2026: om 03:45:48 kwamen GTVGF en GTSTT 11 op dezelfde seconde. Elke STT telde
+# als 'in gebruik', dus zag de tegel motor uit en aan tegelijk ('onbekend') en liet het dagboek
+# het parkeren daarna weg. GTVGL (ligging bij ontsteking) kwam op 03:43:38 als uit (71) en aan
+# (70) op hetzelfde moment en blijft daarom buiten de toestand.
+MOTOR_AAN = ("FRI", "ERI", "VGN", "STR", "IDN", "IDF")
+
+
+def motorstand(berichtsoort, ruw=None):
+    """'uit', 'aan', of None als de melding niets over de motor zegt."""
+    if berichtsoort == "VGF":
+        return "uit"
+    if berichtsoort in MOTOR_AAN:
+        return "aan"
+    if berichtsoort == "STT" and ruw:
+        code = ((ontleed(ruw) or {}).get("toestand_code") or "").upper()
+        return {"1": "uit", "2": "aan"}.get(code[:1])
+    return None
+
 
 def _epoch(veld):
     """JJJJMMDDUUMMSS in UTC naar epoch. Het toestel meldt altijd in UTC."""

@@ -19,6 +19,7 @@ Nu, per bron uit het bronbeleid:
 import json
 import time
 
+import atrack as A
 import bronbeleid as B
 
 # Berichten die zeggen dat de auto (weer) in gebruik is.
@@ -103,24 +104,26 @@ def bron(conn, naam, nu=None, toestellen=None):
     # de grens en van het toegelaten toestel. Nooit op ontvangstvolgorde: een ouder 'motor uit' dat
     # later uit de buffer komt, maakt een rijdende auto niet geparkeerd (controle 05-10-2026).
     soorten = ",".join("?" * len(IN_GEBRUIK + ("VGF",)))
-    rijen = conn.execute(f"""SELECT moment, berichtsoort, gebeurtenis, fix, bericht_id FROM punt
+    # Wat elke melding over de motor zegt komt uit atrack.motorstand: een GTSTT 11 naast een GTVGF
+    # is eensgezind motor uit (rit van 05-10-2026), een GTSTT 41 zegt niets.
+    rijen = conn.execute(f"""SELECT moment, berichtsoort, gebeurtenis, fix, bericht_id, ruw FROM punt
                              WHERE bron = ? AND toestel IN ({q}) AND moment IS NOT NULL AND moment >= ?
                              AND verdacht IS NULL AND berichtsoort IN ({soorten})
-                             ORDER BY moment DESC, bericht_id DESC LIMIT 5""",
+                             ORDER BY moment DESC, bericht_id DESC LIMIT 20""",
                          [naam] + imeis + [grens] + list(IN_GEBRUIK + ("VGF",))).fetchall()
+    standen = [(r["moment"], s) for r in rijen if (s := A.motorstand(r["berichtsoort"], r["ruw"]))]
     stilte = nu - laatste["ontvangen"]
-    if not rijen:
+    if not standen:
         uit.update(toestand="onbekend",
                    uitleg="geen toestandsmelding met bekende gebeurtenistijd sinds de ingang; de toestand blijft onbekend")
         return uit
-    hoogste = rijen[0]["moment"]
-    gelijk = [r for r in rijen if r["moment"] == hoogste]
-    uit_soort = {r["berichtsoort"] == "VGF" for r in gelijk}
-    if len(uit_soort) > 1:
+    hoogste = standen[0][0]
+    gelijk = {s for m, s in standen if m == hoogste}
+    if len(gelijk) > 1:
         uit.update(toestand="onbekend",
                    uitleg="motor uit en motor aan op hetzelfde moment (%s); de volgorde is niet vast te stellen"
                    % _uur(hoogste))
-    elif rijen[0]["berichtsoort"] == "VGF":
+    elif gelijk == {"uit"}:
         uren = (nu - hoogste) / 3600
         uit.update(toestand="geparkeerd", geparkeerd_sinds=_uur(hoogste),
                    uitleg=("geparkeerd sinds %s (motor uit, tijd van het toestel). In spaarstand 1 meldt het toestel "

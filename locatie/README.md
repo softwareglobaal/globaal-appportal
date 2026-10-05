@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Versie** | **v2.1** (opdracht v1.2, 04-10-2026; aanvulling v1.4 na onafhankelijke controle, 05-10-2026) |
+| **Versie** | **v2.2** (opdracht v1.2, 04-10-2026; aanvulling v1.4 na onafhankelijke controle, 05-10-2026; eerste rit na de uitrol, 05-10-2026) |
 | **Adres** | https://locatie.globaal.be (Authentik, groep `locatie`) |
 | **Code** | `locatie/` in softwareglobaal/globaal-appportal; De Locatiewacht in `mijnagents-runner/locatie_wacht.py` |
 | **Containers** | `app-locatie` (webapp, poort 3031 op 127.0.0.1) en `app-locatie-tracker` (ontvanger, buiten poort 5000) |
@@ -124,7 +124,7 @@ meettijd van het "motor uit" ervoor, en `ON CONFLICT DO NOTHING` gooide ze weg t
 |---|---|---|
 | geen gegevens | nog niets van een actieve bron | ja, expliciet (nooit "0 min geleden") |
 | in gebruik | laatste bericht minder dan 10 min oud | nee |
-| geparkeerd | laatste toestandsmelding was "motor uit" | nee; na 72 uur een vraag (geen levensteken in spaarstand 1) |
+| geparkeerd | laatste toestandsmelding zei "motor uit" (GTVGF, of GTSTT 11/12/16/1A) | nee; na 72 uur een vraag (geen levensteken in spaarstand 1) |
 | geen bericht zonder motor uit | stilte zonder "motor uit" ervoor | na 60 min |
 | onbekend | geen toestandsmelding met bekende gebeurtenistijd, of motor uit en aan op hetzelfde moment | nee |
 | niet ingesteld | het toestel van een actieve bron staat niet (juist) in ATRACK_IMEIS; geen dag wordt afgesloten | ja |
@@ -132,7 +132,9 @@ meettijd van het "motor uit" ervoor, en `ON CONFLICT DO NOTHING` gooide ze weg t
 
 De toestand volgt de **gebeurtenistijd van het toestel**, binnen de grens en van het toegelaten toestel,
 nooit de ontvangstvolgorde: een ouder "motor uit" dat later uit de buffer komt maakt een rijdende auto
-niet geparkeerd. Daarnaast per taak een melding als ze faalt of langer dan **36 uur** niet slaagde
+niet geparkeerd. Wat een melding over de motor zegt, beslist één functie, `atrack.motorstand`: GTVGF is uit,
+GTVGN/FRI/ERI/STR/IDN/IDF zijn aan, bij GTSTT de stand zelf (1x uit, 2x aan, 4x zegt niets). GTVGF en GTSTT 11
+op dezelfde seconde is dus eensgezind motor uit (eerste rit, 05-10-2026). Daarnaast per taak een melding als ze faalt of langer dan **36 uur** niet slaagde
 (projectsync, dagboek, export), en een melding bij verdachte berichten.
 
 Een alarmtitel bevat nooit het woord "stil" (daarop belt De Bode).
@@ -242,6 +244,9 @@ actieve reeks; het script blijft voor wie een oude export wil lezen, buiten de v
 
 ## Versiehistoriek
 
+- **v2.2 (05-10-2026, eerste rit na de uitrol)**: GTVGF en GTSTT 11 op dezelfde seconde gaven 'onbekend' op de
+  tegel en geen parkeren in het dagboek, omdat elke STT als 'in gebruik' telde. Nu één regel
+  (`atrack.motorstand`) voor tegel en dagindeling, met een grendel op het patroon van die rit.
 - **v2.1 (05-10-2026, aanvulling v1.4)**: schema 3 (punt per bericht, gebeurtenistijd, verdacht); toestand
   op gebeurtenistijd; projectsync en adresverrijking zonder slot tijdens netwerkwerk; leesroutes schrijven
   niets; context alleen positieve projectverblijven, Thuis hoogstens onzeker; plekken uit de telefoontijd

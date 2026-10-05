@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 
 from flask import Flask, abort, jsonify, render_template, request
 
+import atrack as A
 import bronbeleid as B
 import herkenning as H
 import schema
@@ -893,8 +894,8 @@ def dagindeling_zuiver(punten, bekende_plekken):
     return _voeg_samen(resultaat)
 
 
-# Berichten die iets zeggen over de toestand van de auto. VGL en STC volgen een
-# motor uit of aan op de voet en zeggen zelf niets over rijden of staan.
+# Berichten die iets zeggen over de toestand van de auto; wat elk zegt (motor uit, aan of niets)
+# beslist atrack.motorstand. VGL en STC volgen een motor uit of aan op de voet.
 STAAT_SOORTEN = ("VGF", "VGN", "FRI", "ERI", "STT")
 
 
@@ -917,16 +918,20 @@ def _staat(punten, voor):
     Geordend op gebeurtenistijd van het toestel, nooit op ontvangstvolgorde: een ouder
     'motor uit' dat later uit de buffer komt, maakt een rijdende auto niet geparkeerd."""
     lijst = [p for p in punten if p.get("berichtsoort") in STAAT_SOORTEN
-             and _moment(p) is not None and _moment(p) < voor]
+             and _moment(p) is not None and _moment(p) < voor and A.motorstand(p.get("berichtsoort"), p.get("ruw"))]
     if not lijst:
         return None, None
     hoogste = max(_moment(p) for p in lijst)
     laatste = [p for p in lijst if _moment(p) == hoogste]
-    uit = {p.get("gebeurtenis") == "motor uit" and p.get("fix") != 0 for p in laatste}
-    if len(uit) > 1:
+    standen = {A.motorstand(p.get("berichtsoort"), p.get("ruw")) for p in laatste}
+    if len(standen) > 1:
         return None, None
-    gekozen = max(laatste, key=lambda p: (p.get("bericht_id") or 0, p.get("volgnr") or 0))
-    return ("geparkeerd" if uit.pop() else "onderweg"), gekozen
+    volgorde = lambda p: (p.get("bericht_id") or 0, p.get("volgnr") or 0)  # noqa: E731
+    # Geparkeerd vraagt een plek: een motor uit zonder fix draagt een oude positie.
+    met_fix = [p for p in laatste if p.get("fix") != 0]
+    if standen == {"uit"} and met_fix:
+        return "geparkeerd", max(met_fix, key=volgorde)
+    return "onderweg", max(laatste, key=volgorde)
 
 
 def _parkeerstuk(punt, van, tot, **extra):
