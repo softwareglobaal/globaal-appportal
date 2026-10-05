@@ -197,6 +197,8 @@ def _drempel_uren(cadans):
     """Hoe lang mag het stil blijven voor het stil te lang is. De cadans is
     vrije tekst, dus we lezen alleen de orde van grootte."""
     c = (cadans or "").lower()
+    if "kwartier" in c or "15 min" in c:
+        return 0.75
     if "maand" in c:
         return 32 * 24
     if "week" in c or "maandag" in c:

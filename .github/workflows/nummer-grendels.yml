@@ -11,11 +11,13 @@ on:
             "mijnagents-runner/fathom_wacht.py", "mijnagents-runner/agenda_wacht.py", "mijnagents-runner/archivaris.py",
             "mijnagents-runner/contactwacht.py", "mijnagents-runner/werkwijze/agenda-taken.json",
             "mijnagents-runner/tests/test_nummerlezer.py", "mijnagents-runner/tests/test_nummeruitgifte.py",
-            "mijnagents-runner/tests/test_benaming.py", ".github/workflows/nummer-grendels.yml"]
+            "mijnagents-runner/tests/test_benaming.py", "mijnagents-runner/tests/test_nummerroutes.py",
+            "mijnagents-runner/koppelingen/bronnen.py", ".github/workflows/nummer-grendels.yml"]
   pull_request:
     paths: ["mijnagents-runner/koppelingen/nummerlezer.py", "mijnagents-runner/koppelingen/pipedrive.py",
             "mijnagents-runner/contracten_agent.py", "mijnagents-runner/benaming.py",
-            "mijnagents-runner/tests/test_nummerlezer.py", "mijnagents-runner/tests/test_nummeruitgifte.py"]
+            "mijnagents-runner/tests/test_nummerlezer.py", "mijnagents-runner/tests/test_nummeruitgifte.py",
+            "mijnagents-runner/tests/test_nummerroutes.py", "mijnagents-runner/koppelingen/bronnen.py"]
 
 jobs:
   grendels:
@@ -28,4 +30,4 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_nummerlezer.py
       - run: python3 mijnagents-runner/tests/test_nummeruitgifte.py
       - run: python3 -m pip install pytest==8.3.3
-      - run: python3 -m pytest -q mijnagents-runner/tests/test_benaming.py
+      - run: python3 -m pytest -q mijnagents-runner/tests/test_benaming.py mijnagents-runner/tests/test_nummerroutes.py

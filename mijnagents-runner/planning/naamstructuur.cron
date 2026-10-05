@@ -1,0 +1,5 @@
+# Namen en mappen, versie 1.0 (05-10-2026). Elke 15 minuten, UTC-onafhankelijk.
+# Dagelijkse dekkingscontrole is onderdeel van Benamingenwacht, met een vaste dagmarker.
+# Eén gedeeld flock voorkomt overlappende rondes; een overgeslagen ronde hervat daarna.
+*/15 * * * * /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/benamingen_wacht.py >> /home/ubuntu/agents/benamingen_wacht.log 2>&1
+7,22,37,52 * * * * /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/mappen_wacht.py >> /home/ubuntu/agents/mappen_wacht.log 2>&1

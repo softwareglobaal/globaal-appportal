@@ -386,9 +386,14 @@ def lees_titel(titel):
     # Herent' project 1143 en viel het huisnummer uit de belzin (FR-58). In de titelvorm staat het projectnummer
     # altijd voor de eerste komma, het adres erna.
     # vier tot zes cijfers: H-Architects JJNN (2607), TKN-Buro 46118 en vanaf 2026 260009 (FR-80)
-    mn = re.search(r"\b(\d{4,6})\b", rest.split(",", 1)[0])
-    if mn:
-        uit["nummer"] = mn.group(1)
+    kandidaten = nummerlezer.lees(t, "agenda_titel")
+    if not kandidaten and not nummerlezer.agendacode_van_titel(t):
+        # Een oude titel zonder codes, bv. 'Mehdi: 2607 werfbezoek', blijft een kandidaat.
+        # De bronbewuste lezer sluit huisnummers, postcodes en kalenderjaren uit.
+        kandidaten = nummerlezer.lees(rest, "vergadertitel")
+    kandidaat = nummerlezer.enig(kandidaten)
+    if kandidaat:
+        uit["nummer"] = kandidaat.nummer
     kaal = re.sub(rf"\b{uit['nummer']}\b", "", rest, count=1) if uit["nummer"] else rest
     uit["klant"] = kaal.strip(" -:").split(" - ")[0][:80]
     uit["conform"] = bool(m) or uit["reistijd"]
@@ -396,6 +401,7 @@ def lees_titel(titel):
 
 
 def deals_index():
+    pipedrive.controleer_bedrijf("harchitects", 10068585)
     items = pipedrive.alles("harchitects", "/deals", {"status": "open"})     # alle pagina's, niet 500
     uit = []
     for x in items:
@@ -406,17 +412,27 @@ def deals_index():
 
 
 def koppel(info, titel, deals):
+    code = nummerlezer.agendacode_van_titel(titel) or info.get("firma") or ""
+    firma = nummerlezer.firma_van_code(code)
+    # Een gelijk nummer bij UB of TK is geen bewijs voor een H-A-deal.
+    if code and firma != "HARC":
+        return None, "geen bewezen H-A-dossierkoppeling"
     if info["nummer"]:
-        for d in deals:
-            if d["nummer"] == info["nummer"]:
-                return d, "projectnummer in de titel"
+        passend = [d for d in deals if d["nummer"] == info["nummer"]]
+        if len(passend) == 1:
+            return passend[0], "projectnummer in de titel"
+        if len(passend) > 1:
+            return None, "meer deals met hetzelfde projectnummer; nakijken"
+        return None, "geen deal met het projectnummer; nakijken"
     delen = {w for w in re.split(r"[^a-z0-9]+", (info["klant"] or titel).lower()) if len(w) > 2}
-    beste, score = None, 0
+    beste, score, gelijk = None, 0, False
     for d in deals:
         s = len(d["delen"] & delen)
         if s > score:
-            beste, score = d, s
-    return (beste, f"naam in de titel ({score} woorden)") if beste and score >= 2 else (None, "")
+            beste, score, gelijk = d, s, False
+        elif s == score and score >= 2:
+            gelijk = True
+    return (beste, f"naam in de titel ({score} woorden)") if beste and score >= 2 and not gelijk else (None, "")
 
 
 ONLINE_MIN = int(os.environ.get("AGENDA_HERINNERING_ONLINE", "5"))

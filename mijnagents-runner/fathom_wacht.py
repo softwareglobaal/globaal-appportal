@@ -90,6 +90,7 @@ def video_link(map_, g):
 
 
 def deals_index():
+    pipedrive.controleer_bedrijf("harchitects", 10068585)
     items = pipedrive.alles("harchitects", "/deals", {"status": "open"})     # alle pagina's, niet 500
     uit = []
     for x in items:
@@ -104,23 +105,36 @@ def deals_index():
 
 def koppel_deal(g, deals):
     titel = g.get("title") or g.get("meeting_title") or ""
+    code = nummerlezer.agendacode_van_titel(titel)
+    if code and nummerlezer.firma_van_code(code) != "HARC":
+        return None, "geen bewezen H-A-dossierkoppeling"
     # een H-A-nummer uit de titel, alleen als er precies een is (geen postcode, huisnummer of jaartal)
-    n = nummerlezer.ha_nummer(titel, "vergadertitel")
+    nummers = {k.nummer for k in nummerlezer.lees(titel, "vergadertitel") if k.firma == "HARC"}
+    if len(nummers) > 1:
+        return None, "meer projectnummers in de titel; nakijken"
+    n = next(iter(nummers), "")
     if n:
-        for d in deals:
-            if d["nummer"] == n:
-                return d, "projectnummer in de titel"
+        passend = [d for d in deals if d["nummer"] == n]
+        if len(passend) == 1:
+            return passend[0], "projectnummer in de titel"
+        if len(passend) > 1:
+            return None, "meer deals met hetzelfde projectnummer; nakijken"
+        return None, "geen deal met het projectnummer; nakijken"
     mails = {(i.get("email") or "").lower() for i in (g.get("calendar_invitees") or []) if isinstance(i, dict)}
-    for d in deals:
-        if d["mails"] & mails:
-            return d, "e-mail van een deelnemer"
+    passend = [d for d in deals if d["mails"] & mails]
+    if len(passend) == 1:
+        return passend[0], "e-mail van een deelnemer"
+    if len(passend) > 1:
+        return None, "meer deals met hetzelfde deelnemersadres; nakijken"
     delen = {w for w in re.split(r"[^a-z0-9]+", titel.lower()) if len(w) > 2}
-    beste, score = None, 0
+    beste, score, gelijk = None, 0, False
     for d in deals:
         s = len(d["delen"] & delen)
         if s > score:
-            beste, score = d, s
-    return (beste, f"naam in de titel ({score} woorden)") if beste and score >= 2 else (None, "")
+            beste, score, gelijk = d, s, False
+        elif s == score and score >= 2:
+            gelijk = True
+    return (beste, f"naam in de titel ({score} woorden)") if beste and score >= 2 and not gelijk else (None, "")
 
 
 # ------------------------------------------------------------- archief ---

@@ -42,7 +42,7 @@ class Nep:
             return {"aantal": self.aantal if self.aantal is not None else len(self.dossiers),
                     "dossiers": [{"project_nummer": n} for n in self.dossiers]}
         if naam == "voorbereidingen":
-            return {"dossiers": [{"nummer": n} for n in self.voorbereidingen]}
+            return {"aantal": len(self.voorbereidingen), "dossiers": [{"nummer": n} for n in self.voorbereidingen]}
         raise AssertionError(naam)
 
     def alles(self, firma, pad, params=None):

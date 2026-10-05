@@ -1,0 +1,51 @@
+{
+  "versie": "1.0",
+  "pagina_budget_per_root": 8,
+  "item_budget_per_agent": 3000,
+  "roots": [
+    {"id": "werk", "pad": "/Work All"},
+    {"id": "agentgegevens", "pad": "/Data uit Mehdi"},
+    {"id": "overkoepelend", "pad": "/0 Chegini Mehdi/Prive met Claude", "namespace_env": "NAAMSTRUCTUUR_OVERKOEPELEND_NS"}
+  ],
+  "profielen": [
+    {"prefix": "/Work All/01. H-A WORK", "firma": "HARC", "profiel": "ha_project"},
+    {"prefix": "/Work All/o01. Sales/000. Offerte aanvraag informatie/01. Mehdi/01. H-Architects Offerte", "firma": "HARC", "profiel": "ha_sales"},
+    {"prefix": "/Work All/o01. Sales/000. Offerte aanvraag informatie/01. Mehdi/02. H-Architects B2B", "firma": "HARC", "profiel": "ha_sales"}
+  ],
+  "regelbron": {
+    "versie": "H-A vaste afspraken v1.7",
+    "pad": "/Work All/01. H-A WORK/_0 Claude reorganisatie/H-A vaste afspraken v1.7.md",
+    "sha256": "6a8ceafef1520bc0e55a9ed256053bb01b40c6fc51c7ddb8bb6a3ed8527821d0"
+  },
+  "ha": {
+    "projectfasen": [
+      "/Work All/01. H-A WORK/0 H-A Standaard projects/0. STAN Voorstudie",
+      "/Work All/01. H-A WORK/0 H-A Standaard projects/1. STAN  Submission",
+      "/Work All/01. H-A WORK/0 H-A Standaard projects/2. STAN permission Awaited",
+      "/Work All/01. H-A WORK/0 H-A Standaard projects/3. STAN Execution Planning",
+      "/Work All/01. H-A WORK/0 H-A Standaard projects/4. STAN Execution Waiting to start",
+      "/Work All/01. H-A WORK/0 H-A Standaard projects/5. STAN Execution ONGOING",
+      "/Work All/01. H-A WORK/0 H-A Standaard projects/6.STAN Ready to Deliver",
+      "/Work All/01. H-A WORK/0 H-A Light projects/1. H-A light Submission",
+      "/Work All/01. H-A WORK/0 H-A Light projects/2. H-A light permission awaited",
+      "/Work All/01. H-A WORK/0 H-A Light projects/3. H-A light permission received",
+      "/Work All/01. H-A WORK/0 H-A Light projects/4. H-A light permission rejected",
+      "/Work All/01. H-A WORK/0 H-A Light projects/5. H-A light SITE VISITS",
+      "/Work All/01. H-A WORK/0 H-A Light projects/6. H-A Light Opzegging"
+    ],
+    "communicatie": "_00. Communication",
+    "kanalen": ["mail", "wapp", "online", "tel", "bezoek", "loket"],
+    "partijen": ["klant", "aannemer", "leverancier", "gemeente", "studie", "intern"],
+    "oude_communicatie": ["10. Communication", "4. Communicatie klant", "2. Client", "1. klant communicatie", "5. Communicatie gemeente", "1. Municipality", "6. Communicatie Intern"],
+    "sales_brondirectories": ["0 Mails", "0 Fathom", "0 Plaud", "0 Xelion"]
+  },
+  "niet_gecontroleerd": [
+    "Pipedrive-dealtitels: geen zelfstandige accountscan; bestaande contract- en agendaroutes blijven verantwoordelijk",
+    "Contactnamen Google/Xelion: geen zelfstandige accountscan",
+    "Agenda: uitsluitend door Agendawacht geïndexeerde afspraken; geen volledige account- of archiefscan",
+    "Gesprekken: uitsluitend geregistreerde Fathom/Plaud-gesprekken met leesbare lokale gesprek.json",
+    "Andere Dropbox-roots en accounts: alleen onderstaande expliciete roots van het bestaande stack-account",
+    "Andere firma's: algemene bestandsnaamcontrole; structuurconventie onbekend zonder bevestigd regelboek",
+    "Bestandsinhoud, officiële adressen, eigenaar en uitvoering: niet uit mapnamen afgeleid"
+  ]
+}

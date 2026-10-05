@@ -89,12 +89,19 @@ def alles(firma, path, params=None, max_paginas=200):
     for _ in range(max_paginas):
         params["start"] = start
         antw = _vraag(firma, "GET", path, params=params)
-        uit.extend(antw.get("data") or [])
-        pag = (antw.get("additional_data") or {}).get("pagination") or {}
-        if not pag.get("more_items_in_collection"):
+        data = antw.get("data") if isinstance(antw, dict) else None
+        pag = (antw.get("additional_data") or {}).get("pagination") if isinstance(antw, dict) else None
+        if not isinstance(pag, dict) or type(pag.get("more_items_in_collection")) is not bool:
+            raise RuntimeError(f"Pipedrive {path}: geen geldige paginering; niet volledig gelezen")
+        if data is None and not pag["more_items_in_collection"]:
+            data = []
+        if not isinstance(data, list) or any(not isinstance(r, dict) for r in data):
+            raise RuntimeError(f"Pipedrive {path}: geen geldige lijst; niet volledig gelezen")
+        uit.extend(data)
+        if not pag["more_items_in_collection"]:
             return uit
         volgend = pag.get("next_start")
-        if not isinstance(volgend, int) or volgend <= start:
+        if type(volgend) is not int or volgend <= start or not data:
             raise RuntimeError(f"Pipedrive {path}: paginering zonder geldige volgende start; niet volledig gelezen")
         start = volgend
     raise RuntimeError(f"Pipedrive {path}: meer dan {max_paginas} pagina's; niet volledig gelezen")

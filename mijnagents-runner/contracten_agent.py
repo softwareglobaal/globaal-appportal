@@ -145,8 +145,8 @@ def uren_sinds(iso):
 
 # -------------------------------------------------------------- bronnen ---
 def deals_in_startfase():
-    d = pipedrive.get(FIRMA, "/deals", {"status": "open", "stage_id": STARTFASE, "limit": 100})
-    items = d if isinstance(d, list) else (d or {}).get("data") or []
+    pipedrive.controleer_bedrijf(FIRMA, H_A_BEDRIJF_ID)
+    items = pipedrive.alles(FIRMA, "/deals", {"status": "open", "stage_id": STARTFASE})
     return [x for x in items if int(x.get("pipeline_id") or PIJPLIJN) == PIJPLIJN]
 
 
@@ -237,6 +237,20 @@ def nummer_uit_titel(titel, jaar_nu=None):
     return nummerlezer.ha_nummer(titel, "pipedrive_titel", jaar_nu)
 
 
+def nummer_van_voorbereiding(voorbereiding, titel_nummer, jaar_nu=None):
+    """Een toegekend nummer blijft gelden, ook als het uit de dealtitel ontbreekt.
+    Bij tegenstrijdige of ongeldige nummers nooit opnieuw nummeren."""
+    bestaand = str(((voorbereiding or {}).get("velden") or {}).get("project_nummer") or "").strip()
+    if not bestaand:
+        return titel_nummer
+    nummer = nummerlezer.ha_nummer(bestaand, "nummerveld", jaar_nu)
+    if not nummer:
+        raise NummerFout(f"voorbereiding bevat geen bevestigd H-A-projectnummer: {bestaand}")
+    if titel_nummer and titel_nummer != nummer:
+        raise NummerFout(f"projectnummer in de titel ({titel_nummer}) wijkt af van de voorbereiding ({nummer}); nakijken")
+    return nummer
+
+
 def mcp_call(naam, **args):
     """Werkwijze stap 13: bij een transportfout één keer opnieuw; een inhoudelijke
     weigering (ToolFout) komt meteen terug, want opnieuw proberen verandert die niet."""
@@ -279,6 +293,37 @@ def contract_mappen(soort, voorvoegsel):
     return [f"{CONTRACTS_PAD}/{naam} Design", f"{CONTRACTS_PAD}/{naam} Signed"]
 
 
+def nummerbron_dashboard(naam):
+    """Lees de volledige MCP-lijst, ook boven 500 rijen. Ontbrekende gegevens zijn geen lege bron.
+    Een veranderende telling of onvolledige paginering blokkeert het nummervoorstel."""
+    offset, totaal, uit = 0, None, []
+    while True:
+        antwoord = mcp.call(naam, limiet=500, offset=offset)
+        if not isinstance(antwoord, dict) or not isinstance(antwoord.get("dossiers"), list):
+            raise NummerFout(f"{naam}: geen geldige dossierlijst; bron niet volledig")
+        aantal = antwoord.get("aantal")
+        if type(aantal) is not int or aantal < 0:
+            raise NummerFout(f"{naam}: geen geldige totaaltelling; bron niet volledig")
+        if totaal is None:
+            totaal = aantal
+        if aantal != totaal or antwoord.get("offset", offset) != offset:
+            raise NummerFout(f"{naam}: telling of paginapositie veranderde; bron niet volledig")
+        rijen = antwoord["dossiers"]
+        if any(not isinstance(r, dict) for r in rijen):
+            raise NummerFout(f"{naam}: ongeldige rij; bron niet volledig")
+        uit.extend(rijen)
+        if len(uit) > totaal:
+            raise NummerFout(f"{naam}: meer rijen dan de totaaltelling; bron niet volledig")
+        volgend = antwoord.get("volgende_offset")
+        if len(uit) == totaal:
+            if volgend is not None:
+                raise NummerFout(f"{naam}: eindpagina meldt nog een vervolg; bron niet volledig")
+            return uit
+        if not rijen or type(volgend) is not int or volgend != offset + len(rijen):
+            raise NummerFout(f"{naam}: {len(uit)} van {totaal} rijen, geen geldige vervolgpagina; niet volledig")
+        offset = volgend
+
+
 def volgend_vrij_nummer(soort="architectuur", jaar=None, bewijs=None):
     """Werkwijze stap 3 (D9): het volgende vrije nummer van de reeks van dit jaar (architectuur, voorstudie,
     addendum: JJ; regularisatie: JJ+30), uit vier bronnen samen: de contractmappen van die reeks in Dropbox,
@@ -311,16 +356,14 @@ def volgend_vrij_nummer(soort="architectuur", jaar=None, bewijs=None):
         if items is None:                       # 409 van Dropbox: de map bestaat (nog) niet
             bewijs["ontbrekende_mappen"].append(pad)
             continue
+        if not isinstance(items, list) or any(not isinstance(e, dict) or not isinstance(e.get("name"), str) for e in items):
+            raise NummerFout(f"contractmap {pad}: geen geldige volledige bestandenlijst")
         for e in items:
             neem(nummerlezer.ha_nummer(e.get("name", ""), "contractbestand", jaar), "contractmappen")
     try:
-        d = mcp.call("dossiers", limiet=500) or {}
-        rijen = d.get("dossiers") or []
-        if int(d.get("aantal") or 0) > len(rijen):
-            raise NummerFout(f"het dashboard gaf {len(rijen)} van {d.get('aantal')} dossiers: niet volledig")
-        for r in rijen:
+        for r in nummerbron_dashboard("dossiers"):
             neem(r.get("project_nummer") or r.get("nummer"), "dashboard")
-        for r in (mcp.call("voorbereidingen") or {}).get("dossiers") or []:
+        for r in nummerbron_dashboard("voorbereidingen"):
             neem(r.get("nummer"), "voorbereidingen")
     except NummerFout:
         raise
@@ -562,6 +605,8 @@ def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None,
 
 # ---------------------------------------------------------------- werk ---
 def verwerk(deal, werkinstructie, staat):
+    # Ook bij een bestaande dossiercode eerst het account vaststellen, voor de eerste MCP-schrijfactie.
+    pipedrive.controleer_bedrijf(FIRMA, H_A_BEDRIJF_ID)
     deal_id = int(deal["id"])
     titel = deal.get("title", "")
     nummer = nummer_uit_titel(titel)
@@ -579,6 +624,7 @@ def verwerk(deal, werkinstructie, staat):
         except mcp.ToolFout as e:
             print("  (droog) niet in voorbereiding:", str(e)[:100])
             voorb = {"deal_id": deal_id, "let_op": "nog niet in voorbereiding"}
+    nummer = nummer_van_voorbereiding(voorb, nummer)
     controle = mcp.call("dossiercontrole", deal_id=deal_id)
     ond = f"deal {deal_id} · {titel}"
     if isinstance(start, dict) and not DROOG:

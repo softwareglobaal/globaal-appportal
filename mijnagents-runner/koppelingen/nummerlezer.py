@@ -58,6 +58,7 @@ STRAATWOORD = re.compile(r"(straat|laan|weg|plein|dreef|steenweg|lei|baan|kaai|k
 # Een dossiercode: twee hoofdletters aan het nummer geplakt (HA2603, UN3782, TK46118, UB260009). Of die
 # twee letters een firma zijn, zegt het register, niet dit patroon.
 DOSSIERCODE = re.compile(r"\b([A-Z]{2})(\d{3,6})\b")
+AGENDACODE = re.compile(r"\[\s*([A-Za-zÀ-ÿ]{2,14})\s*-\s*([A-Za-z]{2})\s*\]")
 TREFWOORD = re.compile(r"\b(?:dossier|project|projectnummer|projectnr\.?|nr\.?)\s*(\d{4,6})\b", re.I)
 
 
@@ -106,6 +107,8 @@ def ha_lezingen(nummer, jaar_nu=None):
 def ha_voorvoegsel(soort, jaar):
     """De twee eerste cijfers van de H-A-reeks voor een volledig jaar (D9): architectuur, voorstudie en
     addendum JJ; regularisatie JJ+30. Een fout als de regel voor dat jaar geen twee cijfers meer geeft."""
+    if soort not in ("architectuur", "voorstudie", "addendum", "regularisatie"):
+        raise ValueError(f"onbekende H-A-contractsoort: {soort}")
     jaar = int(jaar)
     if not 2000 <= jaar <= 2099:
         raise ValueError(f"jaar {jaar} valt buiten de H-A-regel")
@@ -197,6 +200,12 @@ def firma_van_code(code, soort="agenda", register=None):
     if soort == "contact":
         return c["contact"].get(code)
     return c["agenda"].get(code) or c["alias"].get(code)
+
+
+def agendacode_van_titel(tekst):
+    """De geschreven firmacode, ook als hij onbekend is. Onbekend is geen toestemming voor H-A."""
+    m = AGENDACODE.search(tekst or "")
+    return m.group(1).upper() if m else ""
 
 
 # ------------------------------------------------------------------ lezen ---
@@ -298,7 +307,7 @@ def lees(tekst, bron, jaar_nu=None, jaarmap=None, register=None, administratie=N
         return [Kandidaat(m.group(1), None, "", "", lez, bron, reden, False)]
 
     if bron in ("agenda_titel", "vergadertitel"):
-        m = re.search(r"\[\s*([A-Za-zÀ-ÿ]{2,14})\s*-\s*([A-Za-z]{2})\s*\]\s*(?:([A-Z]{2,4})\s+)?(\d{4,6})\b", tekst)
+        m = re.search(AGENDACODE.pattern + r"\s*(?:([A-Z]{2,4})\s+)?(\d{4,6})\b", tekst)
         if m:
             code = m.group(1).upper()
             if code in c["niet_firma"]:
@@ -315,7 +324,7 @@ def lees(tekst, bron, jaar_nu=None, jaarmap=None, register=None, administratie=N
         # vergadertitel zonder agendacode: nummer vooraan, een dossiercode, of een getal midden in de titel
         uit = []
         m = re.match(r"^\s*(\d{4,6})(?=\s|$|\W)", tekst)
-        if m:
+        if m and _midden_ok(tekst, m.start(1), m.end(1), m.group(1), jaar_nu):
             n = m.group(1)
             k = (_ha_kandidaat(n, "", "", bron, "nummer vooraan een vergadertitel", jaar_nu, zeker=False)
                  if len(n) == 4 else None)

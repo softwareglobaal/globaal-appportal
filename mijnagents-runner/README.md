@@ -108,3 +108,14 @@ dus houd de allowlist klein en elk runbook streng in zijn validatie.
 Geen recente hartslag maakt een kaart "stil": `actief` na 60 min, `waakt` na
 150 min, `klaar`/`fout` na 24 uur. Wijzigt de cadans van een agent wezenlijk,
 kijk dan of die drempels (in `app.py`, `STILTE_MIN`) nog kloppen.
+
+## Namen en mappen
+
+Benamingenwacht en Mappenwacht delen één incrementale metadata-index en één
+beheerpagina: `/naamstructuur`. Ze draaien elk kwartier, controleren dagelijks
+de volledige dekking van basis plus wijzigingen en sturen geen externe
+berichten. Namen en structuur worden alleen getoetst binnen expliciete
+Dropbox-roots en bestaande accountrechten. Agenda- en gesprekscontrole betreft
+de reeds geïndexeerde metadata; andere bronnen staan als niet gecontroleerd.
+Installatie, bronversie, grenzen en tests:
+[Namen en mappen - toezicht v1.0](docs/Namen%20en%20mappen%20-%20toezicht%20v1.0.md).

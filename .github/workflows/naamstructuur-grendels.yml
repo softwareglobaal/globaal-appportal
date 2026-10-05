@@ -1,0 +1,21 @@
+name: naamstructuur-grendels
+
+on:
+  push:
+    paths: ["mijnagents/**", "mijnagents-runner/**", ".github/workflows/naamstructuur-grendels.yml"]
+  pull_request:
+    paths: ["mijnagents/**", "mijnagents-runner/**", ".github/workflows/naamstructuur-grendels.yml"]
+
+jobs:
+  grendels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install -r mijnagents/requirements.txt
+      - run: python3 mijnagents-runner/tests/test_naamstructuur.py
+      - run: python3 mijnagents/test_naamstructuur.py
+      - run: python3 mijnagents/test_mail.py
+      - run: python3 mijnagents/test_werfbezoek.py

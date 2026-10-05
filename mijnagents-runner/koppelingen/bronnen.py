@@ -90,8 +90,9 @@ def team_namespace():
 def _koppen(extra=None):
     h = {"Authorization": f"Bearer {_toegang()}"}
     ns = team_namespace()
-    if ns:
-        h["Dropbox-API-Path-Root"] = json.dumps({".tag": "root", "root": ns})
+    if not ns:
+        raise RuntimeError("Dropbox-teamruimte niet vastgesteld; de dossierbron is niet volledig leesbaar")
+    h["Dropbox-API-Path-Root"] = json.dumps({".tag": "root", "root": ns})
     if extra:
         h.update(extra)
     return h
@@ -105,7 +106,15 @@ def _rpc(pad, body):
             return json.load(r)
     except urllib.error.HTTPError as e:
         if e.code == 409:
-            return None
+            # 409 omvat ook geen toegang, een verkeerd padtype en een vervallen cursor.
+            # Alleen een aantoonbaar ontbrekend pad mag als een ontbrekende map gelden.
+            try:
+                fout = json.loads(e.read()).get("error") or {}
+            except (ValueError, AttributeError):
+                fout = {}
+            if (isinstance(fout, dict) and fout.get(".tag") == "path"
+                    and isinstance(fout.get("path"), dict) and fout["path"].get(".tag") == "not_found"):
+                return None
         raise
 
 
@@ -118,11 +127,18 @@ def lijst(pad, recursief=True):
     uit = _rpc("files/list_folder", {"path": pad, "recursive": recursief, "limit": 500})
     if uit is None:
         return None
-    items = list(uit.get("entries", []))
-    while uit.get("has_more"):
+    items = []
+    for _ in range(200):
+        if (not isinstance(uit, dict) or not isinstance(uit.get("entries"), list)
+                or type(uit.get("has_more")) is not bool):
+            raise RuntimeError(f"Dropbox-map {pad}: onvolledige bestandenlijst")
+        items.extend(uit["entries"])
+        if not uit["has_more"]:
+            return items
+        if not isinstance(uit.get("cursor"), str) or not uit["cursor"]:
+            raise RuntimeError(f"Dropbox-map {pad}: vervolgpagina zonder cursor")
         uit = _rpc("files/list_folder/continue", {"cursor": uit["cursor"]})
-        items += uit.get("entries", [])
-    return items
+    raise RuntimeError(f"Dropbox-map {pad}: meer dan 200 pagina's; niet volledig gelezen")
 
 
 def download(pad, maximum=25_000_000):

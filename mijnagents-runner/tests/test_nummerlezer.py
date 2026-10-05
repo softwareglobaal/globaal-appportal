@@ -102,7 +102,7 @@ def test_postcode_huisnummer_datum_en_jaartal_worden_geen_dossier():
     assert lees("Kim Venken 2611", "vergadertitel") == [("HARC", "2611", 2026, "architectuur")]
     assert lees("Meeting 2145 Online Sophie en Nico", "vergadertitel") == [("HARC", "2145", 2021, "architectuur")]
     for tekst in ("Kim Venken, Teststraat 1, 2500 Lier", "Plaatsbezoek Teststraat 1 2500 Lier",
-                  "postcode 2500 Lier", "Teststraat 2503"):
+                  "postcode 2500 Lier", "Teststraat 2503", "2026-09-17 bespreking", "2026 jaarplanning"):
         assert lees(tekst, "vergadertitel") == [], tekst
 
 

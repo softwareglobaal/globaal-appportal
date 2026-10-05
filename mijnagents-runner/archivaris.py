@@ -77,6 +77,15 @@ def afspraken(van, tot):
     return uit
 
 
+def ha_projectnummer(afspraak, project):
+    """Behoud de firmacontext van de afspraak. Een kaal TK-nummer wordt geen H-A-nummer.
+    Bij twee verschillende H-A-kandidaten wordt niets gekozen."""
+    kandidaten = (nummerlezer.lees((afspraak or {}).get("titel") or "", "vergadertitel")
+                  + nummerlezer.lees(project or "", "vergadertitel"))
+    ha = {k.nummer for k in kandidaten if k.firma == "HARC"}
+    return ha.pop() if len(ha) == 1 else ""
+
+
 def afspraak_op(g, lijst):
     s = datetime.fromisoformat(f"{g['datum']}T{g['start']}")
     e = s + timedelta(minutes=max(int(g.get("minuten") or 0), 5))
@@ -235,13 +244,7 @@ def main():
                 continue
             a = afspraak_op(g, lijst)
             loc, loc_context = locatie_op(g["datum"], g["start"])
-            nummer = ""
-            kand = (nummerlezer.lees(str((a or {}).get("nummer") or ""), "nummerveld")
-                    + nummerlezer.lees((a or {}).get("titel") or "", "vergadertitel")
-                    + nummerlezer.lees(g.get("project") or "", "vergadertitel"))
-            ha = {k.nummer for k in kand if k.firma == "HARC"}
-            if len(ha) == 1:                    # twee verschillende H-A-nummers: geen keuze zonder bewijs
-                nummer = ha.pop()
+            nummer = ha_projectnummer(a, g.get("project"))
             project = projecten.get(nummer, {}).get("map", "").split("/")[-1] if nummer else ""
             if c:
                 uit = {"label": c[0], "zekerheid": "hoog", "reden": f"correctie van Mehdi: {c[1] or 'zonder reden'}", "agenda_toets": (a or {}).get("titel", "geen afspraak"),

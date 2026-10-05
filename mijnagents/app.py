@@ -37,6 +37,7 @@ BESLIS_GROEPEN = {"admin", "manager"}
 # Stilte-detectie: een hartslag ouder dan dit (minuten) maakt de kaart "stil".
 # Ruime marges op een uurlijkse cadans, gelijk aan de agents-tegel.
 STILTE_MIN = {"actief": 60, "waakt": 150, "klaar": 1440, "fout": 1440, "rust": 1440}
+STILTE_PER_AGENT = {"benamingen-wacht": 45, "mappen-wacht": 45}
 STATUS_LABEL = {
     "rust": "in rust", "waakt": "waakt", "actief": "actief",
     "klaar": "klaar", "fout": "fout", "stil": "stil", "onbekend": "niet gekoppeld",
@@ -282,7 +283,7 @@ def kaarten():
         else:
             leeftijd = leeftijd_min(s["ts"])
             toestand = s["status"] if s["status"] in STILTE_MIN else "waakt"
-            drempel = STILTE_MIN.get(toestand, 150)
+            drempel = STILTE_PER_AGENT.get(a["naam"], STILTE_MIN.get(toestand, 150))
             if leeftijd is not None and leeftijd > drempel:
                 toestand = "stil"
             taak, detail, ts = s["taak"], s["detail"], s["ts"]
@@ -309,6 +310,50 @@ def api_nood():
 
 
 # ------------------------------------------------------------------- routes ---
+@app.route("/naamstructuur")
+def naamstructuur_pagina():
+    """Volledig naam-/structuurbewijs, alleen bestaand bordbeheer."""
+    if not mag_beslissen():
+        abort(403)
+    data = os.path.join(os.path.dirname(DB_PAD), "naamstructuur")
+    samenvatting = {}
+    try:
+        with open(os.path.join(data, "overzicht.json"), encoding="utf-8") as f:
+            samenvatting = json.load(f)
+    except (OSError, ValueError):
+        pass
+    stand = request.args.get("status", "open")
+    if stand not in ("open", "opgelost in bron", "bron niet meer aanwezig", "alle"):
+        abort(400)
+    try:
+        pagina = max(1, int(request.args.get("pagina", "1")))
+    except ValueError:
+        abort(400)
+    zoeken = request.args.get("q", "").strip()[:200]
+    punten, totaal = [], 0
+    indexpad = os.path.join(data, "index.sqlite3")
+    if os.path.isfile(indexpad):
+        conn = sqlite3.connect(f"file:{indexpad}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        try:
+            where, waarden = [], []
+            if stand != "alle":
+                where.append("status=?")
+                waarden.append(stand)
+            if zoeken:
+                where.append("(pad LIKE ? OR firma LIKE ? OR regel LIKE ? OR identiteit LIKE ?)")
+                waarden.extend(["%" + zoeken + "%"] * 4)
+            filter_sql = " WHERE " + " AND ".join(where) if where else ""
+            totaal = conn.execute("SELECT count(*) FROM bevinding" + filter_sql, waarden).fetchone()[0]
+            punten = [dict(r) for r in conn.execute("SELECT * FROM bevinding" + filter_sql +
+                      " ORDER BY scope,identiteit,agent,regel LIMIT 100 OFFSET ?", waarden + [(pagina - 1) * 100])]
+        finally:
+            conn.close()
+    return render_template("naamstructuur.html", samenvatting=samenvatting, punten=punten,
+                           totaal=totaal, pagina=pagina, stand=stand, zoeken=zoeken,
+                           app_naam=APP_NAAM, gebruiker=gebruiker())
+
+
 @app.route("/")
 def bord():
     ks = kaarten()

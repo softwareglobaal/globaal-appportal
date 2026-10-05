@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Namen en mappen | {{ app_naam }}</title>
+<style>
+:root{color-scheme:dark;--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tekst);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header,main{max-width:1400px;margin:auto;padding:24px}header a,a{color:var(--accent)}h1{font-size:23px}h2{font-size:18px}
+.blok{background:var(--paper);border:1px solid var(--rand);border-radius:12px;padding:18px;margin-bottom:20px}
+.getallen{display:flex;gap:18px;flex-wrap:wrap}.getal{font-size:28px}.zacht,small{color:var(--zacht)}
+.tabel{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;vertical-align:top;border-top:1px solid var(--rand);padding:10px}code{overflow-wrap:anywhere;font-size:12px}td{min-width:90px}
+input,select,button{font:inherit;color:var(--tekst);background:var(--bg);border:1px solid var(--rand);border-radius:6px;padding:8px}form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:220px}
+.waarschuwing{color:#f6c87b}.paginering{display:flex;gap:18px;margin-top:16px}ul{padding-left:20px}
+</style>
+</head>
+<body>
+<header><a href="{{ url_for('bord') }}">Terug naar het bord</a><h1>Namen en mappen</h1>
+<p>Benamingenwacht en Mappenwacht controleren dezelfde bronindex. Voorstellen worden hier beoordeeld; uitvoeren vraagt een afzonderlijk besluit.</p></header>
+<main>
+{% if not samenvatting %}<section class="blok"><p>De eerste ronde heeft nog geen overzicht opgeleverd. Dit betekent dat de dekking nog niet bevestigd is.</p></section>{% else %}
+<section class="blok">
+<div class="getallen">
+{% for agent, n in samenvatting.get('tellingen', {}).items() %}<div><div class="getal">{{ n }}</div>{{ 'Naamvoorstellen' if agent == 'benamingen-wacht' else 'Structuurvoorstellen' }}</div>{% endfor %}
+</div>
+<p class="zacht">Overzicht bijgewerkt: {{ samenvatting.get('gemaakt', '') }}. Planning: elk kwartier, dagelijks dekking en regelbron controleren.</p>
+{% for agent, ronde in samenvatting.get('rondes', {}).items() %}<p><b>{{ agent }}:</b> {{ ronde.get('tijd','') }}, {{ ronde.get('getoetst',0) }} items getoetst.</p>{% endfor %}
+{% set bron = samenvatting.get('regelbron') or {} %}<p class="{{ '' if bron.get('geldig') else 'waarschuwing' }}"><b>Regelbron:</b> {{ bron.get('versie','niet bevestigd') }}. {{ bron.get('status','Nog niet gelezen') }}</p>
+<p class="zacht">H-A-regels gelden alleen voor herkende H-A-dossiers. Een mapnaam bepaalt geen dossierhouder, adresbewijs of toegang.</p>
+</section>
+<section class="blok"><h2>Daadwerkelijk bereik</h2><div class="tabel"><table>
+<thead><tr><th>Bronbereik</th><th>Accountroot</th><th>Metadata</th><th>Dekking</th><th>Nog te toetsen</th><th>Laatste lezing</th><th>Dagcontrole</th></tr></thead>
+<tbody>{% for s in samenvatting.get('scopes',[]) %}<tr><td><code>{{ s['pad'] }}</code></td><td>{{ s['namespace'] }}</td><td>{{ s['items'] }}</td>
+<td class="{{ 'waarschuwing' if not s['compleet'] or s['meer'] or s['fout'] else '' }}">{% if s['fout'] %}{{ s['fout'] }}{% elif not s['compleet'] %}Eerste basis onvolledig{% elif s['meer'] %}Wijzigingspagina's nog te verwerken{% else %}Basis en ontvangen wijzigingen verwerkt{% endif %}</td>
+<td>{{ s['achterstand_naam'] }} namen, {{ s['achterstand_structuur'] }} structuur</td><td>{{ s['gelukt'] or 'geen geslaagde lezing' }}</td><td>{{ s['controle'] or 'nog niet uitgevoerd' }}</td></tr>{% endfor %}</tbody>
+</table></div></section>
+<section class="blok"><h2>Grenzen van deze controle</h2><ul>{% for grens in samenvatting.get('niet_gecontroleerd',[]) %}<li>{{ grens }}</li>{% endfor %}</ul></section>
+{% endif %}
+<section class="blok"><h2>Concrete voorstellen ({{ totaal }})</h2>
+<form method="get"><input name="q" value="{{ zoeken }}" placeholder="Zoek pad, identiteit, firma of regel" aria-label="Zoeken">
+<select name="status" aria-label="Status">{% for s in ['open','opgelost in bron','bron niet meer aanwezig','alle'] %}<option value="{{ s }}" {{ 'selected' if stand == s else '' }}>{{ s }}</option>{% endfor %}</select><button>Toon</button></form>
+<div class="tabel"><table><thead><tr><th>Agent</th><th>Bron en firma</th><th>Identiteit en pad</th><th>Regel</th><th>Voorstel</th><th>Status</th></tr></thead><tbody>
+{% for p in punten %}<tr><td>{{ p['agent'] }}</td><td>{{ p['scope'] }}<br>{{ p['firma'] }}<br><small>{{ p['bron'] }}</small></td><td><code>{{ p['identiteit'] }}</code><br><code>{{ p['pad'] }}</code></td><td>{{ p['regel'] }}</td><td>{{ p['voorstel'] }}</td><td>{{ p['status'] }}<br><small>{{ p['laatste'] }}</small></td></tr>{% else %}<tr><td colspan="6">Geen punten in deze selectie. Alleen een volledige en actuele dekking onderbouwt een geslaagde controle.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="paginering">{% if pagina > 1 %}<a href="{{ url_for('naamstructuur_pagina', pagina=pagina-1, status=stand, q=zoeken) }}">Vorige</a>{% endif %}<span>Pagina {{ pagina }}</span>{% if pagina * 100 < totaal %}<a href="{{ url_for('naamstructuur_pagina', pagina=pagina+1, status=stand, q=zoeken) }}">Volgende</a>{% endif %}</div>
+</section>
+</main></body></html>

@@ -1505,8 +1505,13 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   gelezen zonder jaar of dossierhouder. De Contracten-agent stelt een nieuw H-A-nummer alleen
   voor als de vier bronnen volledig gelezen zijn (Pipedrive alle pagina's, alleen bedrijf-id
   10068585) en meldt een volle reeks in plaats van over te lopen; een reservering per
-  aanvraag bestaat nog niet. Grendels: `tests/test_nummerlezer.py`,
-  `tests/test_nummeruitgifte.py`, workflow `nummer-grendels`.
+  aanvraag bestaat nog niet. Aanvulling 06-10-2026: startfase volledig gepagineerd,
+  accountgrendel vóór elke dashboardbewerking, dashboardpaginering met totaalcontrole,
+  expliciete Dropbox-root en foutonderscheid. Een reeds toegekend nummer uit de
+  voorbereiding blijft gelden; verschil met de dealtitel blokkeert. Agenda, Fathom en
+  Archivaris kiezen bij meerdere kandidaten of verschillende firma's geen eerste
+  dossier. Grendels: `tests/test_nummerlezer.py`, `tests/test_nummeruitgifte.py`,
+  `tests/test_nummerroutes.py`, workflow `nummer-grendels`.
 - **Per-app DB-rollen** (governance): elke app krijgt een eigen rol met **alleen-lezen**
   op `kern` en rechten op enkel het eigen schema. De Medewerkers-app leest via
   **`portal`** en schrijft via de **smalle schrijfrol `medewerker_writer`** (enkel
@@ -2709,3 +2714,32 @@ rol `whatsapp_writer`, Authentik-app `whatsapp` (groepen `whatsapp`, `whatsapp-b
   (`mijnagents-data/wa_sjablonen.json`) en stopt bij `WA_SJABLOON_MAX_PER_DAG` (standaard 10); daarna
   Telegram tot de volgende dag. Vrije tekst binnen het venster is gratis en telt niet mee. Is de
   teller niet schrijfbaar, dan gaat er geen sjabloon weg. De Bode stuurt alleen naar Mehdi.
+
+### 14.12 Namen en mappen: gekoppeld permanent toezicht (05-10-2026)
+
+Twee hostrunners, `mijnagents-runner/benamingen_wacht.py` en `mappen_wacht.py`,
+elk kwartier via `planning/naamstructuur.cron`. Gedeelde ronde en SQLite-index
+in `mijnagents-data/naamstructuur/`; geen Postgres-migratie of nieuwe leesrol.
+Eén beheerpagina in app-mijnagents: `/naamstructuur`, navigatie **Namen en mappen**.
+Volledige namen/paden uitsluitend voor bestaand bordbeheer; neutrale hartslag.
+Regisseur kan beide bestaande runners starten. Een ontbrekende hartslag wordt
+voor deze cadans na 45 minuten als ontbrekend getoond en door de Agentnorm afgekeurd.
+
+Dropbox-metadata uit expliciete roots, met pagineringbudget, transactionele
+cursor, stabiele bevindingidentiteit en gezamenlijke procesvergrendeling.
+Dagelijks worden rootbereikbaarheid, volledige basis plus alle delta-pagina's
+en de bevestigde H-A-bronvingerafdruk gecontroleerd. H-A-regelbron v1.7 staat
+in `werkwijze/naamstructuur-regels.json`; bronwijziging pauzeert H-A-toetsing.
+Andere firma's zonder regelboek blijven onbekend. Agenda en Fathom/Plaud
+betreffen bestaande indexmetadata; geen claim van volledige externe accountscan.
+Overkoepelende teammap krijgt een bevestigde namespace via
+`NAAMSTRUCTUUR_OVERKOEPELEND_NS` in `~/appportal/.env`; zonder mapping is dat
+bereik expliciet niet gecontroleerd. Optionele `NAAMSTRUCTUUR_REGELS` kiest
+een VM-configbestand. Geen geheime waarden in code of uitvoer.
+
+Geen bronmutaties en geen externe Bode-signalen. Idempotente registratie en
+planning: `planning/naamstructuur_installeren.py --zet`, met crontabkopie en
+behoud van andere taken. Docker-build en CI toetsen de beheergrens; aparte
+runnergrendels toetsen hervatten, metadata-dekking, puntidentiteit en naamregels.
+Handleiding en volledige installatiestappen:
+`mijnagents-runner/docs/Namen en mappen - toezicht v1.0.md`.
