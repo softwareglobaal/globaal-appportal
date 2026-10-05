@@ -1145,6 +1145,13 @@ services:
       OCTOPUS_PASSWORD: ${OCTOPUS_PASSWORD:-}
       SALES_AGENT_TOKEN: ${SALES_AGENT_TOKEN:-}
       KOPPELING_TOKEN: ${KOPPELING_TOKEN:-}
+      # Softwares: aantal gebruikers per abonnement, alleen lezen.
+      PIPEDRIVE_TOKEN_UNABO: ${PIPEDRIVE_TOKEN_UNABO:-}
+      PIPEDRIVE_TOKEN_TKNBURO: ${PIPEDRIVE_TOKEN_TKNBURO:-}
+      PIPEDRIVE_TOKEN_ENERGIEEFFICIENT: ${PIPEDRIVE_TOKEN_ENERGIEEFFICIENT:-}
+      PIPEDRIVE_TOKEN_HARCHITECTS: ${PIPEDRIVE_TOKEN_HARCHITECTS:-}
+      PIPEDRIVE_TOKEN_HARMONIEBOUW: ${PIPEDRIVE_TOKEN_HARMONIEBOUW:-}
+      MONDAY_API_TOKEN: ${MONDAY_API_TOKEN:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3130/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 2m
