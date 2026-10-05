@@ -1,0 +1,31 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name bouwsoft.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Bouwsoft-kloon (repo softwareglobaal/globaal-bouwsoft-kloon): de officiele
+    # Bouwsoft API v1 en de schermen nagebouwd, met een fictief testdossier.
+    # Draait op de host als systemd-dienst bouwsoft-kloon op 172.17.0.1:8796.
+    # Upstream bovenaan: de API-location hieronder gebruikt hem ook.
+    set $app_upstream http://172.17.0.1:8796;
+
+    # API v1 gaat BUITEN de forward-auth om, zoals bij het echte Bouwsoft:
+    # een toevoeging meldt zich aan met Clientnr + RefreshToken en krijgt een
+    # Accesstoken; zonder geldige token antwoordt de kloon 401. Tokens maak je
+    # op /ontwikkelaar, en dat scherm zit wel achter de SSO.
+    location /api/ {
+        client_max_body_size 25m;
+        proxy_read_timeout 120s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass $app_upstream;
+    }
+
+    # De schermen: alleen voor de Authentik-groep bouwsoft.
+    client_max_body_size 25m;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
