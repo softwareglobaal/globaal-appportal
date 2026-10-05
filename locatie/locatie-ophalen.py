@@ -243,14 +243,18 @@ def main():
     if a.dag and not B.dag_toegestaan(a.dag):
         print("%s valt voor de start van de meetreeks (%s): niets te doen." % (a.dag, B.eerste_dag()))
         return 0
-    revisies = {}
+    revisies, fouten = {}, []
     if not a.dag and not a.dagen:
         try:
             revisies = haal_api("/api/revisies").get("revisies") or {}
         except (SystemExit, ValueError) as e:
-            print("   (revisies niet op te halen: %s)" % str(e)[:120], file=sys.stderr)
+            # Nacontrole v1.5: dit stond alleen op stderr en de taak meldde 'gelukt', terwijl een
+            # herziene afgesloten dag niet opgehaald werd. De open dagen gaan wel door; de versie van
+            # een gemiste herziening blijft staan, dus de volgende gezonde ronde haalt ze alsnog.
+            fouten.append("revisie-index niet op te halen, herziene afgesloten dagen niet nagekeken: %s"
+                          % str(e)[:120])
     datums = te_doen(a, revisies=revisies)
-    afgesloten, versies, regels, fouten = [], {}, [], []
+    afgesloten, versies, regels = [], {}, []
     for datum in datums:
         try:
             gegevens = haal_dagboek(datum)

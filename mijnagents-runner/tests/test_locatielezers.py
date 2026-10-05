@@ -140,6 +140,24 @@ def test_het_bord_haalt_de_dagcijfers_uit_de_dag_api():
     assert rijen["2026-09-30"]["km"] == 0 and rijen["2026-09-30"]["bezoeken"] == 0, "oude telefoondagboeken tellen niet"
 
 
+def test_een_correctie_komt_binnen_een_lange_run_door():
+    """Nacontrole v1.5: de dagcontext bleef per proces bewaard zonder vervaltijd. Een projectverblijf
+    dat intussen geen_project werd, bleef dan voor de rest van de run een projectbezoek."""
+    klok = [1000.0]
+    LC._klok = lambda: klok[0]
+    try:
+        tegel = met_tegel({"2026-10-03": context_van("2026-10-03", [verblijf("2026-10-03")])})
+        assert LC.verblijf_op("2026-10-03T10:30")["project"]["nummer"] == "9999"
+        tegel.per_dag["2026-10-03"] = context_van("2026-10-03")          # rechtgezet: geen project
+        klok[0] += 30
+        assert LC.verblijf_op("2026-10-03T10:30"), "binnen de vervaltijd uit de cache"
+        klok[0] += LC.CACHE_SECONDEN
+        assert LC.verblijf_op("2026-10-03T10:30") is None, "na de vervaltijd geldt de correctie"
+        assert len(tegel.gevraagd) == 2, tegel.gevraagd
+    finally:
+        LC._klok = __import__("time").monotonic
+
+
 def test_levenscoach_grendel_blijft():
     bron = open(os.path.join(HIER, "levenscoach.py"), encoding="utf-8").read()
     assert "bronbeleid.dag_toegestaan(dag)" in bron

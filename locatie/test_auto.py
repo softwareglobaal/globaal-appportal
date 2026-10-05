@@ -531,6 +531,50 @@ def test_motor_uit_met_een_stt_11_op_dezelfde_seconde_is_geparkeerd():
     assert S.bron(c3, "auto", nu=t(5, 12, 15))["toestand"] == "geparkeerd"
     assert app._staat([dict(r) for r in c3.execute("SELECT * FROM punt")], t(5, 13))[0] == "geparkeerd"
 
+
+def test_het_begin_zonder_gps_heet_motor_aan_route_nog_onbekend():
+    """Rit van 05-10-2026: motor aan om 03:42:23, de eerste geldige meting pas om 03:43:38, de auto
+    toen al een eind verder. Beoordeling v1.6: dat stuk heet 'motor aan, route nog onbekend', de
+    hemelsbrede schatting staat er apart bij en de gemeten afstand verandert niet."""
+    c = nieuwe_db()
+    parkeer(c, t(4, 21, 46), WERF)                                            # motor uit om 21:47
+    punt(c, t(4, 21, 47), WERF, soort="VGN", geb="motor aan", fix=0, verzonden=t(5, 3, 42, 23),
+         motion="automotive")
+    stt(c, t(4, 21, 47), WERF, "22", fix=0, verzonden=t(5, 3, 42, 23), motion="automotive")
+    rit(c, t(5, 3, 43, 38), t(5, 3, 44, 38), (WERF[0] - 0.003, WERF[1]), WERF)
+    punt(c, t(5, 3, 45, 48), WERF, soort="VGF", geb="motor uit")
+    stt(c, t(5, 3, 45, 48), WERF, "11")
+    c.commit()
+    g = app.dag_gegevens("2026-10-05", nu=t(5, 4))
+    ind = g["sporen"]["auto"]["indeling"]
+    ro = [s for s in ind if s.get("route_onbekend")]
+    assert len(ro) == 1 and (ro[0]["van"], ro[0]["tot"]) == (t(5, 3, 42, 23), t(5, 3, 43, 38)), soorten(ind)
+    assert ro[0]["soort"] == "gat" and ro[0]["meter"] is None, ro[0]
+    assert 300 <= ro[0]["geschat_begin"]["meter"] <= 360 and "niet opgeteld" in ro[0]["geschat_begin"]["herkomst"]
+    assert "bewegingsstand 22 (motor aan, rijdt) om 03:42:23" in ro[0]["bewijs"], ro[0]["bewijs"]
+    assert ind[0].get("parkeren") and ind[0]["tot"] == t(5, 3, 42, 23), "geparkeerd tot motor aan, zoals voorheen"
+    # De gemeten afstand is dezelfde als zonder die regel: de schatting telt niet mee.
+    gemeten = sum(s.get("meter") or 0 for s in ind if s["soort"] == "verplaatsing")
+    oud, app.ROUTE_ONBEKEND_S = app.ROUTE_ONBEKEND_S, 10 ** 9
+    try:
+        zonder = app.dag_gegevens("2026-10-05", nu=t(5, 4))["sporen"]["auto"]["indeling"]
+    finally:
+        app.ROUTE_ONBEKEND_S = oud
+    assert gemeten == sum(s.get("meter") or 0 for s in zonder if s["soort"] == "verplaatsing") and gemeten > 0
+    assert not any(s.get("route_onbekend") for s in zonder)
+    md = D.markdown("2026-10-05", g)
+    assert "motor aan, route nog onbekend" in md and "geschat ontbrekend begin 0,3 km" in md, md
+    html = app.app.test_client().get("/?dag=2026-10-05&deel=1")
+    assert html.status_code == 200 and "motor aan, route nog onbekend" in html.get_data(as_text=True)
+    # Een gewoon vertrek: de eerste meting 30 s na motor aan geeft geen extra regel.
+    c2 = nieuwe_db()
+    parkeer(c2, t(4, 21, 46), WERF)
+    punt(c2, t(4, 21, 47), WERF, soort="VGN", geb="motor aan", fix=0, verzonden=t(5, 8), motion="automotive")
+    rit(c2, t(5, 8, 0, 30), t(5, 8, 10), (WERF[0] - 0.001, WERF[1]), VER)
+    c2.commit()
+    ind = app.dag_gegevens("2026-10-05", nu=t(5, 9))["sporen"]["auto"]["indeling"]
+    assert not any(s.get("route_onbekend") for s in ind), soorten(ind)
+
 if __name__ == "__main__":
     fouten = 0
     for naam, fn in sorted(globals().items()):

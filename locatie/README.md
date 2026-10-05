@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Versie** | **v2.2** (opdracht v1.2, 04-10-2026; aanvulling v1.4 na onafhankelijke controle, 05-10-2026; eerste rit na de uitrol, 05-10-2026) |
+| **Versie** | **v2.3** (opdracht v1.2, 04-10-2026; aanvulling v1.4 na onafhankelijke controle, 05-10-2026; eerste rit na de uitrol en nacontroles v1.5/v1.6, 05-10-2026) |
 | **Adres** | https://locatie.globaal.be (Authentik, groep `locatie`) |
 | **Code** | `locatie/` in softwareglobaal/globaal-appportal; De Locatiewacht in `mijnagents-runner/locatie_wacht.py` |
 | **Containers** | `app-locatie` (webapp, poort 3031 op 127.0.0.1) en `app-locatie-tracker` (ontvanger, buiten poort 5000) |
@@ -54,6 +54,8 @@ project" of "mogelijk werfbezoek".
   de sleutel `(bron, tst, berichtsoort, volgnr)` viel de tweede GTSTT nog weg).
 - Per punt drie tijden: `tst` (fixtijd, wanneer de positie gemeten is), `moment` (gebeurtenistijd: met
   fix de fixtijd, zonder fix de verzendtijd, anders onbekend) en `ontvangen` (alleen bewijs van ontvangst).
+  Een positiebericht zonder eigen verzendtijd (het laatste 14-cijferige veld is de meettijd zelf) krijgt
+  geen verzendtijd en de verwerking `onvolledig: geen verzendtijd`; zonder fix blijft het moment onbekend.
 - Een bericht dat al binnen was (exact hetzelfde, of dezelfde teller en verzendtijd met kop `+BUFF`)
   wordt opnieuw bevestigd maar niet opnieuw bewaard; `aantal` telt mee. Worden niet alle posities
   bewaard, dan heet het `deels`, nooit stil `bewaard`.
@@ -84,6 +86,10 @@ meettijd van het "motor uit" ervoor, en `ON CONFLICT DO NOTHING` gooide ze weg t
   motor aanslaat (spaarstand 1), dus die stilte is gemeten stilstand tot "motor aan", zolang het eerste
   punt erna binnen 1 km ligt. Aankomen en uitrollen vlak voor "motor uit" horen bij het parkeren.
 - **Gat**: een stilte waarvan niet gemeten is wat er gebeurde; nooit een verzonnen rit.
+- **Motor aan, route nog onbekend**: komt de eerste geldige meting meer dan 45 s na motor aan, dan staat
+  dat stuk als eigen regel (soort gat, zonder gemeten afstand), met motor aan, de eerste meting en een
+  GTSTT-stand als bewijs. Een hemelsbrede schatting vanaf de parkeerplek staat er apart bij als 'geschat
+  ontbrekend begin' en telt nooit mee in de kilometers of de herkenning (beoordeling v1.6).
 - **Dagrand**: een dag loopt van middernacht tot middernacht Belgische tijd, ook op dagen van 23 en 25
   uur. Een dag kan beginnen met "geparkeerd sinds de vorige avond", maar nooit met een punt van voor de
   startgrens. Vandaag is voorlopig; een dag is afgesloten zes uur na middernacht.
@@ -98,7 +104,9 @@ meettijd van het "motor uit" ervoor, en `ON CONFLICT DO NOTHING` gooide ze weg t
 - **Geocode**: Geopunt, dan Nominatim, met genormaliseerde schrijfwijzen uit de mapnaam (labels vooraan,
   nummerreeksen, letters achter het huisnummer); met adresvingerafdruk, datum, dienst en kwaliteit. Alleen
   een geocode op huisnummer mag herkennen. Verandert het adres, dan opnieuw; een grove of mislukte geocode
-  hoogstens eens per dag opnieuw; een onbereikbare dienst (`fout`) laat de vorige coördinaat staan.
+  hoogstens eens per dag opnieuw; een onbereikbare dienst (`fout`) laat de vorige coördinaat staan. Hoort
+  die bij een ander adres (het bronadres veranderde tijdens de storing), dan heet ze `verouderd`: ze herkent
+  niet, staat onder `geocode_storing` en wordt elke ronde opnieuw geprobeerd.
 - **Twee fasen**: eerst lezen en geocoderen zonder schrijftransactie, dan de volledige index in één korte
   transactie. Tot 05-10-2026 hield de sync tijdens elk geocodeverzoek het schrijfslot vast en kreeg de
   ontvanger "database is locked" (test_robuust.py met een trage geocoder en een gelijktijdige schrijver).
@@ -188,6 +196,10 @@ een draagbare tracker wordt pas vastgelegd na de keuze van het toestel.
 ## Bestanden en bewaren
 
 - Schema-upgrade: eerst een kopie in `locatie-data/backups/locatie-schema<N>-<tijd>.db`, dan één transactie.
+- Mac-export: is de revisie-index (`/api/revisies`) onbereikbaar, dan gaan de open dagen door, maar de taak
+  meldt een fout en eindigt met exitcode 1; de gemiste herziening wordt de volgende ronde opgehaald.
+- Agents: `koppelingen/locatiecontext.py` bewaart een dagcontext hoogstens 120 s, zodat een correctie
+  binnen een lange run doorkomt.
 - Mac-export: `Prive met Claude/Locatielogboek/dagen/<dag>.{md,json}` in de **teammap private** (een
   teammap, geen persoonlijke map), vorige versies in `dagen/revisies/`, databasekopie per dag in
   `ruwe-database/locatie-<dag>.db` (oudere kopieën blijven; opruimen beslist Mehdi).
@@ -244,6 +256,10 @@ actieve reeks; het script blijft voor wie een oude export wil lezen, buiten de v
 
 ## Versiehistoriek
 
+- **v2.3 (05-10-2026, nacontroles v1.5 en v1.6)**: een gewijzigd projectadres tijdens een geocodestoring
+  houdt geen oude coördinaat als 'adres' (`verouderd`, opnieuw geprobeerd); een onbereikbare revisie-index
+  maakt de export 'fout'; een bericht zonder verzendtijd krijgt geen oude fixtijd als gebeurtenistijd; de
+  contextlezer vervalt na 120 s; het begin van een rit zonder GPS heet 'motor aan, route nog onbekend'.
 - **v2.2 (05-10-2026, eerste rit na de uitrol)**: GTVGF en GTSTT 11 op dezelfde seconde gaven 'onbekend' op de
   tegel en geen parkeren in het dagboek, omdat elke STT als 'in gebruik' telde. Nu één regel
   (`atrack.motorstand`) voor tegel en dagindeling, met een grendel op het patroon van die rit.

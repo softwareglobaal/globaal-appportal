@@ -131,6 +131,10 @@ def regel(s):
         zeker = ZEKERHEID.get(h.get("zekerheid"), h.get("zekerheid") or "")
         return f"{tijd} {wat} | {waar(s)} | {zeker} | {bewijs} |"
     if s["soort"] == "gat":
+        if s.get("route_onbekend"):
+            g = s.get("geschat_begin")
+            schatting = ("; %s %s km (%s)" % (g["label"], km(g["meter"]), g["herkomst"])) if g else ""
+            return f"{tijd} motor aan, route nog onbekend | geen geldige GPS-meting{schatting} | | {s.get('bewijs')} |"
         if s.get("open"):
             return f"{tijd} geen meting | sindsdien niets meer binnen | | |"
         if s.get("open_begin"):

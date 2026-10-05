@@ -150,6 +150,41 @@ def test_een_late_revisie_van_een_afgesloten_dag_wordt_opnieuw_opgehaald():
     assert E.lees_volledige_stand()["versies"]["2026-10-05"] == "nieuw"
 
 
+def test_een_onbereikbare_revisie_index_is_een_fout_en_de_herziening_komt_later_alsnog():
+    """Nacontrole v1.5: /api/revisies faalde terwijl een afgesloten dag een nieuwe versie had. De open
+    dagen kwamen binnen, de herziening niet, en toch meldde de taak 'gelukt' met exit 0."""
+    doel = zet_doel()
+    E.bewaar_stand(["2026-10-03", "2026-10-04", "2026-10-05"], {"2026-10-05": "oud"})
+    E.B.vandaag = lambda: __import__("datetime").date(2026, 10, 6)
+    boeken = {"2026-10-05": {"datum": "2026-10-05", "status": "afgesloten", "versie": "nieuw",
+                             "markdown": "# Locatielogboek 2026-10-05\nherzien\n", "punten": [1], "sporen": {}},
+              "2026-10-06": {"datum": "2026-10-06", "status": "voorlopig", "versie": "v6",
+                             "markdown": "# Locatielogboek 2026-10-06\n", "punten": [1], "sporen": {}}}
+
+    class IndexWeg(VM):
+        def __call__(self, opdracht, pogingen=3, wacht=20):
+            if "/api/revisies" in opdracht:
+                self.gevraagd.append(opdracht)
+                raise SystemExit("SSH mislukt (proef)")
+            return VM.__call__(self, opdracht, pogingen, wacht)
+    vm = IndexWeg(boeken, revisies={"2026-10-05": {"versie": "nieuw"}})
+    E.over_ssh = vm
+    sys.argv = ["x", "--geen-kopie"]
+    assert E.main() == 1, "een gemiste revisie-index is geen geslaagde export"
+    melding = [o for o in vm.gevraagd if "beheer.py taak export" in o]
+    assert melding and " fout " in melding[-1] and "revisie-index" in melding[-1], melding
+    assert os.path.exists(os.path.join(doel, "dagen", "2026-10-06.md")), "de open dag gaat wel door"
+    assert not any("/api/dagboek/2026-10-05" in o for o in vm.gevraagd)
+    assert E.lees_volledige_stand()["versies"]["2026-10-05"] == "oud", "de gemiste herziening blijft open"
+    # De index werkt weer: de herziening komt binnen en de taak slaagt.
+    vm = VM(boeken, revisies={"2026-10-05": {"versie": "nieuw"}, "2026-10-06": {"versie": "v6"}})
+    E.over_ssh = vm
+    assert E.main() == 0
+    assert "herzien" in open(os.path.join(doel, "dagen", "2026-10-05.md")).read()
+    assert E.lees_volledige_stand()["versies"]["2026-10-05"] == "nieuw"
+    assert " ok " in [o for o in vm.gevraagd if "beheer.py taak export" in o][-1]
+
+
 def test_het_agendadeel_komt_alleen_mee_bij_dezelfde_dagboekversie():
     E.over_ssh = VM({}, {"2026-10-05": "# x\n\n## Naast de agenda\n\n- (geen)\n<!-- dagboekversie v1 -->\n"})
     assert "dagboekversie v1" in E.agenda_deel("2026-10-05", "v1")

@@ -92,15 +92,44 @@ def test_ontvanger_bevestigt_tijdens_een_trage_adresverrijking():
 
 
 def test_een_storing_bij_de_geocodedienst_houdt_de_goede_coordinaat():
+    """Hetzelfde adres, een grove geocode die opnieuw geprobeerd wordt, en de dienst is weg: de vorige
+    coördinaat en kwaliteit blijven, de storing staat in het rapport."""
     pad = os.path.join(tempfile.mkdtemp(), "storing.db")
     conn = schema.verbind(pad)
-    P.synchroniseer(conn, ha=HA[:1], mappen={}, geocodeer=traag(0))
+    grof = lambda adres: {"lat": 50.9, "lon": 4.6, "kwaliteit": "straat", "bron": "proef"}  # noqa: E731
+    P.synchroniseer(conn, ha=HA[:1], mappen={}, geocodeer=grof)
     weg = lambda adres: {"lat": None, "lon": None, "kwaliteit": "fout", "bron": None}  # noqa: E731
-    gewijzigd = [dict(HA[0], adres="Proefstraat 0 bus 1, 3999 Proefdorp")]
-    rapport = P.synchroniseer(conn, ha=gewijzigd, mappen={}, geocodeer=weg)
+    rapport = P.synchroniseer(conn, ha=HA[:1], mappen={}, geocodeer=weg, opnieuw=True)
     r = conn.execute("SELECT lat, geocode_kwaliteit FROM projectplek WHERE sleutel = 'HARC:9300'").fetchone()
-    assert (r[0], r[1]) == (50.9, "adres"), tuple(r)
+    assert (r[0], r[1]) == (50.9, "straat"), tuple(r)
     assert rapport["dienst_onbereikbaar"] == ["HARC:9300"], rapport
+
+
+def test_een_adreswijziging_tijdens_een_storing_wordt_later_alsnog_geocodeerd():
+    """Nacontrole v1.5: adres A goed, het bronadres wordt B terwijl de dienst weg is, daarna werkt de
+    dienst weer. De oude code bewaarde coördinaat A met kwaliteit 'adres' naast de vingerafdruk van B,
+    en de volgende gezonde ronde riep de geocoder niet meer aan."""
+    for opnieuw in (False, True):
+        conn = schema.verbind(os.path.join(tempfile.mkdtemp(), "wijziging.db"))
+        P.synchroniseer(conn, ha=HA[:1], mappen={}, geocodeer=traag(0))                       # A
+        b = [dict(HA[0], adres="Proefstraat 0 bus 1, 3999 Proefdorp")]
+        weg = lambda adres: {"lat": None, "lon": None, "kwaliteit": "fout", "bron": None}  # noqa: E731
+        rapport = P.synchroniseer(conn, ha=b, mappen={}, geocodeer=weg, opnieuw=opnieuw)       # B, storing
+        r = conn.execute("SELECT lat, geocode_kwaliteit FROM projectplek WHERE sleutel = 'HARC:9300'").fetchone()
+        assert (r[0], r[1]) == (50.9, "verouderd"), (opnieuw, tuple(r))
+        assert rapport["dienst_onbereikbaar"] == ["HARC:9300"] and "HARC:9300" in rapport["geocode_storing"], rapport
+        assert rapport["bruikbaar"] == 0, "een coördinaat van een ander adres herkent niet"
+        import herkenning
+        assert not herkenning.projectplekken(conn), "verouderd is geen bruikbare projectplek"
+        gevraagd = []
+
+        def terug(adres):
+            gevraagd.append(adres)
+            return {"lat": 50.95, "lon": 4.65, "kwaliteit": "adres", "bron": "proef"}
+        rapport = P.synchroniseer(conn, ha=b, mappen={}, geocodeer=terug, opnieuw=opnieuw)    # B, gezond
+        r = conn.execute("SELECT lat, geocode_kwaliteit FROM projectplek WHERE sleutel = 'HARC:9300'").fetchone()
+        assert gevraagd == [b[0]["adres"]] and (r[0], r[1]) == (50.95, "adres"), (opnieuw, gevraagd, tuple(r))
+        assert rapport["geocode_storing"] == [] and rapport["bruikbaar"] == 1, rapport
 
 
 def test_geocode_meldt_een_storing_niet_als_niet_gevonden():

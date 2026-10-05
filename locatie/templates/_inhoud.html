@@ -51,8 +51,8 @@
         <td class="tijd">{{ s.van_tekst }}</td>
         <td class="tijd">{{ s.tot_tekst }}</td>
         <td class="duur">{{ s.minuten }} min</td>
-        <td><span class="merk leeg-merk"></span>geen meting</td>
-        <td class="coord" colspan="2">{% if s.open %}sinds het laatste punt komt er niets meer binnen, en het laatste bericht was geen 'motor uit'{% elif s.open_begin %}voor het eerste punt van de dag is er geen meting{% else %}de tracker zweeg; {{ (s.meter / 1000) | round(1) }} km hemelsbreed tussen voor en na{% endif %}</td>
+        <td><span class="merk leeg-merk"></span>{% if s.route_onbekend %}motor aan, route nog onbekend{% else %}geen meting{% endif %}</td>
+        <td class="coord" colspan="2">{% if s.route_onbekend %}{{ s.bewijs }}{% if s.geschat_begin %}; {{ s.geschat_begin.label }} {{ (s.geschat_begin.meter / 1000) | round(1) }} km hemelsbreed, niet opgeteld{% endif %}{% elif s.open %}sinds het laatste punt komt er niets meer binnen, en het laatste bericht was geen 'motor uit'{% elif s.open_begin %}voor het eerste punt van de dag is er geen meting{% else %}de tracker zweeg; {{ (s.meter / 1000) | round(1) }} km hemelsbreed tussen voor en na{% endif %}</td>
       </tr>
       {% else %}
       {% set h = s.herkenning or {} %}

@@ -229,6 +229,11 @@ def ontleed(regel):
         if k is None:
             break
         indexen.append(k)
+    # Is het laatste 14-cijferige veld de meettijd van een positieblok, dan stond er geen eigen
+    # verzendtijd in het bericht (afgekapt of onvolledig). Nacontrole v1.5: dan werd de oude fixtijd
+    # de verzendtijd, en zonder fix ook de gebeurtenistijd. Onbekend blijft nu onbekend.
+    if laatste in indexen:
+        bericht["verzonden"] = None
     posities = [_positie(velden, k) for k in indexen]
     for p in posities:
         p["motion"] = beweging(bericht, p)
@@ -241,6 +246,6 @@ def ontleed(regel):
         "posities_volledig": len(posities) == gemeld,
         # Het moment van de gebeurtenis. Zonder fix is tst de tijd van de laatste fix
         # (03-10-2026: "motor aan" met de meettijd van het "motor uit" ervoor).
-        "moment": eerste["tst"] if eerste["fix_geldig"] else (bericht.get("verzonden") or eerste["tst"]),
+        "moment": eerste["tst"] if eerste["fix_geldig"] else bericht.get("verzonden"),
     })
     return bericht

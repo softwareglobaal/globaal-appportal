@@ -1036,6 +1036,53 @@ def dagindeling(punten):
     return sorted(uit, key=lambda s: s["van"])
 
 
+# Na motor aan komt de eerste geldige meting gewoonlijk 12 tot 30 s later (gemeten 3 en 4-10-2026).
+# Duurt het langer, dan krijgt dat stuk een eigen regel: op 05-10-2026 kwam de eerste fix pas 75 s
+# na motor aan, en de auto stond toen al een eind verder.
+ROUTE_ONBEKEND_S = 45
+
+
+def route_onbekend(indeling, punten):
+    """Zet tussen een parkeerstop die eindigt bij motor aan en het eerste stuk met een geldige meting
+    een regel 'motor aan, route nog onbekend' (soort gat, zonder gemeten afstand).
+
+    Beoordeling v1.6: motor aan bewijst op zichzelf geen vertrek, en de route ertussen is niet
+    gemeten. Er komen geen punten of lijnen bij en de gemeten afstand verandert niet. Wel staat er
+    apart een schatting: hemelsbreed van de parkeerplek (uit de actieve reeks) tot de eerste geldige
+    meting, met herkomst, als 'geschat ontbrekend begin', nooit opgeteld bij de kilometers. Een GTSTT
+    in dat stuk staat als eigen bewijs in de regel."""
+    aan = set(_motor_aan_momenten(punten))
+    standen = [p for p in punten if p.get("berichtsoort") == "STT" and _moment(p) is not None and p.get("ruw")]
+    uit = []
+    for k, s in enumerate(indeling):
+        uit.append(s)
+        volgende = indeling[k + 1] if k + 1 < len(indeling) else None
+        if not (s.get("parkeren") and s.get("tot") in aan and volgende and volgende["soort"] != "gat"
+                and volgende["van"] - s["tot"] > ROUTE_ONBEKEND_S):
+            continue
+        m, n = s["tot"], volgende["van"]
+        eerste = volgende.get("spoor", [[None, None]])[0] if volgende["soort"] == "verplaatsing" \
+            else [volgende.get("lat"), volgende.get("lon")]
+        bewijs = "motor aan om %s; eerste geldige meting om %s" % (
+            _lokaal(m).strftime("%H:%M:%S"), _lokaal(n).strftime("%H:%M:%S"))
+        for p in standen:
+            if m <= _moment(p) < n:
+                code = (A.ontleed(p["ruw"]) or {}).get("toestand_code")
+                if code in A.TOESTAND:
+                    bewijs += "; bewegingsstand %s (%s) om %s" % (code, A.TOESTAND[code],
+                                                                  _lokaal(_moment(p)).strftime("%H:%M:%S"))
+        stuk = {"soort": "gat", "route_onbekend": True, "van": m, "tot": n, "minuten": round((n - m) / 60),
+                "meter": None, "bewijs": bewijs}
+        if eerste[0] is not None and s.get("lat") is not None:
+            stuk["geschat_begin"] = {
+                "meter": int(round(afstand(s["lat"], s["lon"], eerste[0], eerste[1]) / 10.0) * 10),
+                "label": "geschat ontbrekend begin",
+                "herkomst": "hemelsbreed van de parkeerplek tot de eerste geldige meting; geen gereden weg, "
+                            "niet opgeteld bij de gemeten afstand"}
+        uit.append(stuk)
+    return uit
+
+
 def bewijs_motor(indeling, punten):
     """Een verblijf noemt de motormeldingen die erin vallen, op de tijd van het toestel: dat is het
     sterkste bewijs dat de auto daar stond (controle 05-10-2026: bij HARC 2443 stond enkel
@@ -1111,6 +1158,7 @@ def dag_gegevens(datum, nu=None, conn=None):
             ind = met_open_einde(ind, pb, datum, nu, voorloper=[p for p in voor if p["bron"] == bron],
                                  extra=[p for p in extra if p["bron"] == bron])
             bewijs_motor(ind, pb + [p for p in extra if p["bron"] == bron])
+            ind = route_onbekend(ind, pb + [p for p in extra if p["bron"] == bron])
             verrijk(ind, plek_lijst, projecten, [c for c in corr if c["bron"] == bron], B.rol(bron))
             for s in ind:
                 s["bron"] = bron

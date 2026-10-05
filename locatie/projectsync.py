@@ -159,9 +159,13 @@ def synchroniseer(conn, ha=None, mappen=None, ha_fout=None, mappen_fout=None, ge
         else:
             g = geocodeer(p["adres"])
             if g.get("kwaliteit") == "fout" and oud.get("lat") is not None:
-                # De dienst was onbereikbaar: de vorige coördinaat blijft, de fout staat in het rapport.
-                geo = {"lat": oud["lat"], "lon": oud["lon"], "kwaliteit": kw, "bron": oud["geocode_bron"],
-                       "datum": oud["geocode_datum"]}
+                # De dienst was onbereikbaar: de vorige coördinaat blijft zichtbaar, de fout staat in het
+                # rapport. Hoort ze bij een ander adres (het bronadres veranderde), dan heet ze
+                # 'verouderd': ze herkent niet en wordt elke ronde opnieuw geprobeerd. Nacontrole v1.5:
+                # anders gold coördinaat A blijvend als 'adres' voor het nieuwe adres B.
+                zelfde = oud.get("adres_vingerafdruk") == afdruk
+                geo = {"lat": oud["lat"], "lon": oud["lon"], "kwaliteit": kw if zelfde else "verouderd",
+                       "bron": oud["geocode_bron"], "datum": oud["geocode_datum"]}
                 rapport["dienst_onbereikbaar"].append(sleutel)
             else:
                 geo = {"lat": g.get("lat"), "lon": g.get("lon"), "kwaliteit": g.get("kwaliteit"),
@@ -216,7 +220,8 @@ def dekking(conn):
                            and r["sleutel"] not in over)
     grof = sorted(r["sleutel"] for r in rijen if r["geocode_kwaliteit"] in ("straat", "gemeente")
                   and r["sleutel"] not in over)
-    storing = sorted(r["sleutel"] for r in rijen if r["geocode_kwaliteit"] == "fout" and r["sleutel"] not in over)
+    storing = sorted(r["sleutel"] for r in rijen if r["geocode_kwaliteit"] in ("fout", "verouderd")
+                     and r["sleutel"] not in over)
     per_adres = {}
     for r in rijen:
         if r.get("adres_vingerafdruk") and r["geocode_kwaliteit"] != "geen_adres":

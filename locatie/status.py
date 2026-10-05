@@ -106,19 +106,26 @@ def bron(conn, naam, nu=None, toestellen=None):
     soorten = ",".join("?" * len(IN_GEBRUIK + ("VGF",)))
     # Wat elke melding over de motor zegt komt uit atrack.motorstand: een GTSTT 11 naast een GTVGF
     # is eensgezind motor uit (rit van 05-10-2026), een GTSTT 41 zegt niets.
-    rijen = conn.execute(f"""SELECT moment, berichtsoort, gebeurtenis, fix, bericht_id, ruw FROM punt
-                             WHERE bron = ? AND toestel IN ({q}) AND moment IS NOT NULL AND moment >= ?
-                             AND verdacht IS NULL AND berichtsoort IN ({soorten})
-                             ORDER BY moment DESC, bericht_id DESC LIMIT 20""",
-                         [naam] + imeis + [grens] + list(IN_GEBRUIK + ("VGF",))).fetchall()
-    standen = [(r["moment"], s) for r in rijen if (s := A.motorstand(r["berichtsoort"], r["ruw"]))]
+    # Alle meldingen op het hoogste moment dat iets over de motor zegt, hoeveel het er ook zijn.
+    cur = conn.execute(f"""SELECT moment, berichtsoort, bericht_id, ruw FROM punt
+                           WHERE bron = ? AND toestel IN ({q}) AND moment IS NOT NULL AND moment >= ?
+                           AND verdacht IS NULL AND berichtsoort IN ({soorten})
+                           ORDER BY moment DESC, bericht_id DESC""",
+                       [naam] + imeis + [grens] + list(IN_GEBRUIK + ("VGF",)))
+    hoogste, gelijk = None, set()
+    for r in cur:
+        if hoogste is not None and r["moment"] < hoogste:
+            break
+        s = A.motorstand(r["berichtsoort"], r["ruw"])
+        if s:
+            hoogste = r["moment"]
+            gelijk.add(s)
+    cur.close()
     stilte = nu - laatste["ontvangen"]
-    if not standen:
+    if not gelijk:
         uit.update(toestand="onbekend",
                    uitleg="geen toestandsmelding met bekende gebeurtenistijd sinds de ingang; de toestand blijft onbekend")
         return uit
-    hoogste = standen[0][0]
-    gelijk = {s for m, s in standen if m == hoogste}
     if len(gelijk) > 1:
         uit.update(toestand="onbekend",
                    uitleg="motor uit en motor aan op hetzelfde moment (%s); de volgorde is niet vast te stellen"

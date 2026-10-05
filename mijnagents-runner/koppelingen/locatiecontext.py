@@ -21,6 +21,7 @@ Gebruik:
 import json
 import os
 import sys
+import time
 import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -31,7 +32,11 @@ import bronbeleid  # noqa: E402
 
 LOCATIE = os.environ.get("LOCATIE_URL", "http://127.0.0.1:3031")
 BRUSSEL = ZoneInfo("Europe/Brussels")
+# Hoe lang een opgehaalde dagcontext geldt. Nacontrole v1.5: de cache had geen vervaltijd, zodat een
+# correctie (een projectverblijf wordt geen_project) binnen een lange run niet doorkwam.
+CACHE_SECONDEN = 120
 _cache = {}
+_klok = time.monotonic
 
 
 def _haal(pad):
@@ -44,16 +49,18 @@ def context(dag):
     dag = str(dag or "")[:10]
     if len(dag) != 10 or not bronbeleid.dag_toegestaan(dag):
         return None
-    if dag not in _cache:
-        try:
-            d = _haal(f"/api/context?dag={dag}")
-        except Exception:  # noqa: BLE001
-            return None
-        # Een antwoord zonder bronbeleid of van een andere dag vertrouwen we niet.
-        if d.get("dag") != dag or not d.get("bronbeleid"):
-            return None
-        _cache[dag] = d
-    return _cache[dag]
+    bewaard = _cache.get(dag)
+    if bewaard and _klok() - bewaard[0] < CACHE_SECONDEN:
+        return bewaard[1]
+    try:
+        d = _haal(f"/api/context?dag={dag}")
+    except Exception:  # noqa: BLE001
+        return None
+    # Een antwoord zonder bronbeleid of van een andere dag vertrouwen we niet.
+    if d.get("dag") != dag or not d.get("bronbeleid"):
+        return None
+    _cache[dag] = (_klok(), d)
+    return d
 
 
 def _tijd(moment):

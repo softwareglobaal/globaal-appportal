@@ -132,6 +132,9 @@ def schrijf(bericht):
     posities = bericht.get("posities") or []
     nu = int(time.time())
     herkend = bericht.get("posities_volledig", True)
+    # Een positiebericht zonder eigen verzendtijd (nacontrole v1.5): het ruwe bericht en de punten
+    # blijven, maar zonder fix is de gebeurtenistijd onbekend en telt het niet mee voor de toestand.
+    zonder_tijd = bool(bericht.get("positie")) and bericht.get("verzonden") is None
 
     with _slot:
         conn = _verbinding()
@@ -186,6 +189,9 @@ def schrijf(bericht):
                 elif not herkend:
                     verwerking = "onvolledig: %d van de %d posities herkend" % (len(posities),
                                                                                bericht.get("posities_gemeld") or 0)
+                elif zonder_tijd:
+                    verwerking = "onvolledig: geen verzendtijd" + (
+                        "; gebeurtenistijd onbekend" if any(not p.get("fix_geldig") for p in posities) else "")
                 elif nieuw < len(posities):
                     verwerking = "deels: %d van de %d posities bewaard" % (nieuw, len(posities))
                 else:
@@ -200,7 +206,7 @@ def schrijf(bericht):
             conn.close()
     if not bericht.get("positie"):
         return "geen meting", 0
-    if not herkend:
+    if not herkend or zonder_tijd:
         return "onvolledig", nieuw
     if nieuw < len(posities):
         return "deels", nieuw

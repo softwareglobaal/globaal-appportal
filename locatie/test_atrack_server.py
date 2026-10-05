@@ -265,6 +265,33 @@ def test_motor_aan_zonder_fix_verdwijnt_niet_naast_motor_uit():
     assert vgn["fix"] == 0 and vgn["verzonden"] == 1791113401
 
 
+def test_motor_aan_zonder_fix_en_zonder_verzendtijd_krijgt_geen_oude_tijd():
+    """Nacontrole v1.5: bij een onvolledig bericht zonder eigen verzendtijd werd het laatste
+    14-cijferige veld, de oude fixtijd, de verzendtijd en dus de gebeurtenistijd. Nu blijft die
+    onbekend: het ruwe bericht en het punt staan er, bevestigd, maar het telt niet voor de toestand."""
+    import atrack
+    import status
+    uit = ("+RESP:GTVGF,8020090501,864696060004173,,00,7,600,1,0.0,353,5.9,4.730000,50.830000,20261201120000,"
+           "0206,0010,4E84,061D580C,00,,0.0,20261201120001,0060$")
+    aan = ("+RESP:GTVGN,8020090501,864696060004173,,00,7,1800,0,0.0,353,5.9,4.730000,50.830000,20261201120000,"
+           "0206,0010,4E84,061D580C,00,,0.0,,0061$")
+    assert atrack.ontleed(aan)["verzonden"] is None and atrack.ontleed(aan)["moment"] is None
+    assert atrack.ontleed(uit)["verzonden"] == 1796126401, "een gewoon bericht houdt zijn verzendtijd"
+    atrack_server.verwerk(uit)
+    assert atrack_server.verwerk(aan) == ("+SACK:0061$", "onvolledig")
+    p = rijen("teller = '0061'")
+    assert len(p) == 1 and p[0]["moment"] is None and p[0]["verzonden"] is None and p[0]["tst"] == 1796126400, p
+    assert ruwe("teller = '0061'")[0]["verwerking"] == "onvolledig: geen verzendtijd; gebeurtenistijd onbekend"
+    conn, vorig = webapp.db(), bronbeleid.BRONNEN["auto"].get("toestel_sha256")
+    bronbeleid.BRONNEN["auto"]["toestel_sha256"] = bronbeleid.vingerafdruk("864696060004173")
+    try:
+        b = status.bron(conn, "auto", nu=1796126400 + 3600)
+    finally:
+        bronbeleid.BRONNEN["auto"]["toestel_sha256"] = vorig
+        conn.close()
+    assert b["toestand"] == "geparkeerd", ("een motor aan zonder bekende tijd verandert de toestand niet", b)
+
+
 def test_twee_statusmeldingen_met_dezelfde_oude_fix_blijven_allebei():
     """Controle 05-10-2026 (ontvanger-tegenproef): GTSTT 22 en 21, eigen teller en verzendtijd,
     dezelfde oude fixtijd. Met de sleutel (bron, tst, soort, volgnr) bleef er één punt over en
