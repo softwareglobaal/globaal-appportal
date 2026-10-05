@@ -23,6 +23,7 @@ import bronbeleid  # noqa: E402  de startgrens van het locatielogboek
 import locatiecontext as LC  # noqa: E402  gestructureerde locatiecontext (opdracht v1.4)
 import organisatie  # noqa: E402
 import organisatie  # noqa: E402
+import nummerlezer  # noqa: E402
 import projectadressen  # noqa: E402
 
 DB = os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db")
@@ -235,9 +236,12 @@ def main():
             a = afspraak_op(g, lijst)
             loc, loc_context = locatie_op(g["datum"], g["start"])
             nummer = ""
-            m = re.search(r"\b((?:26|56)\d\d)\b", f"{g.get('project') or ''} {(a or {}).get('titel') or ''} {(a or {}).get('nummer') or ''}")
-            if m:
-                nummer = m.group(1)
+            kand = (nummerlezer.lees(str((a or {}).get("nummer") or ""), "nummerveld")
+                    + nummerlezer.lees((a or {}).get("titel") or "", "vergadertitel")
+                    + nummerlezer.lees(g.get("project") or "", "vergadertitel"))
+            ha = {k.nummer for k in kand if k.firma == "HARC"}
+            if len(ha) == 1:                    # twee verschillende H-A-nummers: geen keuze zonder bewijs
+                nummer = ha.pop()
             project = projecten.get(nummer, {}).get("map", "").split("/")[-1] if nummer else ""
             if c:
                 uit = {"label": c[0], "zekerheid": "hoog", "reden": f"correctie van Mehdi: {c[1] or 'zonder reden'}", "agenda_toets": (a or {}).get("titel", "geen afspraak"),

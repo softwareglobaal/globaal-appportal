@@ -1,6 +1,6 @@
 # Werkwijze van De Contractmaker
 
-Versie 3 (09-09-2026). Dit is het volledige proces dat ik volg, in de volgorde
+Versie 4 (05-10-2026; nummering volgens codering WP1 en WP2a). Versie 3 was van 09-09-2026. Dit is het volledige proces dat ik volg, in de volgorde
 waarin ik het doe. Mehdi bewerkt deze tekst op het agentbord; ik lees hem aan
 het begin van elke ronde. De regels over het contract zelf (welke velden, welke
 keuzewaarden, waar elk gegeven vandaan komt, de nummering, de mapnamen) staan
@@ -48,14 +48,26 @@ transcript telt, nooit de samenvatting van de recorder (D7).
    tenzij het dossier in voorbereiding intussen veranderde (bijvoorbeeld
    omdat Mehdi een keuze maakte of een bijlage toevoegde). Dan meteen opnieuw.
 3. **Het projectnummer nakijken (D9).** Het nummer staat vóór de klantnaam in
-   de dealtitel: 26xx voor architectuur, voorstudie en addendum; 56xx voor
-   regularisatie (jaartal + 30). Ontbreekt het, dan bepaal ik het volgende
-   vrije nummer uit **drie bronnen samen**: de Pipedrive-dealtitels, de
-   dossiers op het dashboard (`dossiers`) en de contractbestanden in Dropbox
-   (`0 H-A Contracts clients/2026 Design` en `2026 Signed`). Het hoogste plus
-   één. Dat zet ik als voorstel op het agentbord. Pas na Mehdi's goedkeuring
-   zet de uitvoerder het nummer in de dealtitel en hernoemt hij de salesmap
-   naar `<nummer> <klantnaam>`. Ik verzin nooit zelf een nummer in een veld.
+   de dealtitel: JJNN voor architectuur, voorstudie en addendum (2026: 26xx,
+   2027: 27xx); (JJ+30)NN voor regularisatie (2026: 56xx, 2027: 57xx, 2030:
+   60xx). Ik lees het met de gedeelde nummerlezer (`koppelingen/nummerlezer.py`),
+   voor elk jaar, nooit uit een los getal. Ontbreekt het, dan bepaal ik het
+   volgende vrije nummer van de reeks van **dit kalenderjaar** uit **vier
+   bronnen samen, elk volledig gelezen**: de contractmappen van die reeks in
+   Dropbox (`<jaar> Design` en `<jaar> Signed`; regularisatie `5600 Design`,
+   `5700 Design`, ...), de dossiers en de voorbereidingen op het dashboard, en
+   alle H-A-deals in Pipedrive (open, gewonnen, verloren; alle pagina's, niet
+   500), alleen in het account met bedrijf-id 10068585. Het hoogste plus één
+   zet ik als voorstel op het agentbord. Pas na Mehdi's goedkeuring zet de
+   uitvoerder het nummer in de dealtitel en hernoemt hij de salesmap naar
+   `<nummer> <klantnaam>`. Ik verzin nooit zelf een nummer in een veld.
+   Kan ik een bron niet volledig lezen, of is de reeks vol (xx99), dan stel ik
+   **geen** nummer voor en meld ik waarom; ik ga nooit over naar een ander
+   formaat (2699 wordt nooit 2700). Alleen het berekende nummer gaat als
+   voorstel naar het agentbord; een nummer dat het taalmodel zelf noemt, negeer
+   ik. Grens: een reservering per aanvraag bestaat nog niet, dus twee rondes
+   tegelijk kunnen hetzelfde voorstel krijgen; Mehdi's bevestiging is de enige
+   rem.
 4. **Het dossier in voorbereiding zetten.** `voorbereiding_starten` met de
    deal (en het nummer als dat er is). Het dashboard vult dan zelf uit
    Pipedrive, Geopunt, GRB en de klantmail. Bestond het dossier al, dan wordt
@@ -493,6 +505,7 @@ hier onderaan bij.
 | 09-09 | intro | Deze werkwijze zei dat ze wint van de Werkinstructie. | Dan bestaan er twee waarheden, en de fout van vandaag (projectmap, nummering, keuzes) bleef staan omdat de werkwijze voorging. | Omgekeerd: de Werkinstructie op het dashboard wint; bij tegenspraak handel ik niet en meld ik. |
 | 09-09 | tabel | Ik beschreef de projectmap als bron voor elke deal ("werfbezoeken: foto's en verslagen"). | Een projectmap ontstaat pas bij de ondertekening (S15) en heet volgens A13 nummer + bouwplaatsadres; vóór die tijd leeft alles in de salesmap. | Tabel en stap 6 rechtgezet; de naamregel A13 staat in de Werkinstructie hoofdstuk 6. |
 | 09-09 | 3 (nummer) | Ik keek voor het volgende vrije nummer naar één bron. | Op 31-08 was 2611 al vergeven in Pipedrive terwijl de contractmap tot 2610 liep; wie één bron leest, deelt een nummer twee keer uit (D9). | Drie bronnen samen: dealtitels, dashboard, contractmappen Design en Signed. |
+| 05-10 | 3 (nummer) | De reeks stond vast op 26/56 en de mappen op 2026 Design/Signed; ik las per status maar 500 deals (H-A had er 791 open op 04-10); een bronfout werd stil overgeslagen en toch kwam er een nummer; bij 2699 werd het 2700; een nummer van het taalmodel ging ongecontroleerd naar het bord. | Vanaf 2027 had ik 26xx blijven uitgeven, regularisaties in de verkeerde map gezocht en bezette nummers kunnen missen. | Codering WP1 en WP2a: reeks en mappen uit het volledige jaar, alle pagina's, een onvolledige bron of volle reeks geeft geen nummer, alleen het berekende nummer gaat naar het bord, grendel op bedrijf-id 10068585. Tests: tests/test_nummeruitgifte.py en tests/test_nummerlezer.py, ook in de CI (nummer-grendels). |
 
 Nog open (kan ik zelf niet oplossen):
 

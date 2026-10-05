@@ -24,6 +24,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import organisatie  # noqa: E402
+import nummerlezer  # noqa: E402
 
 NAAM = "contactwacht"
 ag = bord.Agent(NAAM)
@@ -31,9 +32,10 @@ ag = bord.Agent(NAAM)
 # De index van de contactsync: een doorzoekbare kopie van Google Contacts. Alleen lezen.
 SYNC_DB = os.environ.get("CONTACTSYNC_DB", os.path.expanduser("~/appportal/contactsync-data/sync.db"))
 
-# Een dossier in de naamregel: twee hoofdletters aan het nummer geplakt (HA5609, UN3782).
-# Of die twee letters een firma zijn, zegt organisatie.globaal.be, niet deze code.
-DOSSIER = re.compile(r"\b([A-Z]{2})\d{3,5}\b")
+# Een dossier in de naamregel: twee hoofdletters aan het nummer geplakt (HA5609, UN3782, UB260009).
+# Of die twee letters een firma zijn, zegt organisatie.globaal.be, niet deze code. Het patroon is dat van
+# de gedeelde nummerlezer (codering WP1); tot 05-10-2026 las het maar drie tot vijf cijfers.
+DOSSIER = nummerlezer.DOSSIERCODE
 OUD_HA = re.compile(r"\bH-A\b")
 OUD_KL = re.compile(r"^KL\b")
 
@@ -57,7 +59,7 @@ def meet(pad, codes):
         # de sync zet de status op "gearchiveerd" (niet "archief") en de naam krijgt "[ARCHIEF] " vooraan
         "select display_name from contact_details where coalesce(status, 'actief') != 'gearchiveerd' "
         "and coalesce(display_name, '') not like '[ARCHIEF]%'")]
-    dossiers = [DOSSIER.findall(n) for n in namen]
+    dossiers = [[code for code, _ in DOSSIER.findall(n)] for n in namen]
     return {
         "actief": len(namen),
         "nieuwe_vorm": sum(1 for d in dossiers if d and (not codes or all(c in codes for c in d))),

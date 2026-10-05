@@ -46,6 +46,14 @@ def normaal(v):
 
 
 # ------------------------------------------------------------------ bevries ---
+def _vrij_nummer(soort):
+    """Het vrije nummer zoals de agent het berekent; een bron die niet volledig gelezen is, geeft geen nummer."""
+    try:
+        return ca.volgend_vrij_nummer(soort)
+    except ca.NummerFout:
+        return ""
+
+
 def bevries(deal_id: int):
     deal = ca.pipedrive.get(ca.FIRMA, f"/deals/{deal_id}")
     deal = deal.get("data", deal) if isinstance(deal, dict) else deal
@@ -88,7 +96,7 @@ def bevries(deal_id: int):
                  "person_name": (deal.get("person_id") or {}).get("name") if isinstance(deal.get("person_id"), dict) else deal.get("person_name"),
                  "org_name": (deal.get("org_id") or {}).get("name") if isinstance(deal.get("org_id"), dict) else deal.get("org_name")},
         "voorbereiding": test_voorb, "voorbereiding_volledig": voorb, "controle": controle, "notities": ca.notities(deal_id),
-        "vrij_nummer": "" if ca.nummer_uit_titel(deal.get("title", "")) else ca.volgend_vrij_nummer("56" if soort == "regularisatie" else "26"),
+        "vrij_nummer": "" if ca.nummer_uit_titel(deal.get("title", "")) else _vrij_nummer(soort),
         "bronnen": ca._bronnen_compact(bronnen),
         "werkinstructie": werk.get("markdown", "") if isinstance(werk, dict) else str(werk),
         "werkinstructie_versie": werk.get("versie", "") if isinstance(werk, dict) else "",

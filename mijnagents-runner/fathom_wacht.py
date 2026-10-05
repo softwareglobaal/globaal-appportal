@@ -29,6 +29,7 @@ import organisatie  # noqa: E402
 import organisatie  # noqa: E402
 import fathom  # noqa: E402
 import pipedrive  # noqa: E402
+import nummerlezer  # noqa: E402
 
 NAAM = "fathom-wacht"
 ag = bord.Agent(NAAM)
@@ -89,25 +90,25 @@ def video_link(map_, g):
 
 
 def deals_index():
-    d = pipedrive.get("harchitects", "/deals", {"status": "open", "limit": 500})
-    items = d if isinstance(d, list) else (d or {}).get("data") or []
+    items = pipedrive.alles("harchitects", "/deals", {"status": "open"})     # alle pagina's, niet 500
     uit = []
     for x in items:
         titel = x.get("title", "")
-        m = re.match(r"^\s*((?:26|56)\d\d)\b", titel)
+        nummer = nummerlezer.ha_nummer(titel, "pipedrive_titel")
         p = x.get("person_id") if isinstance(x.get("person_id"), dict) else {}
         mails = {e.get("value", "").lower() for e in (p.get("email") or []) if isinstance(e, dict) and e.get("value")}
-        uit.append({"id": x.get("id"), "titel": titel, "nummer": m.group(1) if m else "", "mails": mails,
+        uit.append({"id": x.get("id"), "titel": titel, "nummer": nummer, "mails": mails,
                     "delen": {w for w in re.split(r"[^a-z0-9]+", titel.lower()) if len(w) > 2 and not w.isdigit()}})
     return uit
 
 
 def koppel_deal(g, deals):
     titel = g.get("title") or g.get("meeting_title") or ""
-    m = re.search(r"\b((?:26|56)\d\d)\b", titel)
-    if m:
+    # een H-A-nummer uit de titel, alleen als er precies een is (geen postcode, huisnummer of jaartal)
+    n = nummerlezer.ha_nummer(titel, "vergadertitel")
+    if n:
         for d in deals:
-            if d["nummer"] == m.group(1):
+            if d["nummer"] == n:
                 return d, "projectnummer in de titel"
     mails = {(i.get("email") or "").lower() for i in (g.get("calendar_invitees") or []) if isinstance(i, dict)}
     for d in deals:

@@ -80,6 +80,35 @@ def get(firma, path, params=None):
     return _vraag(firma, "GET", path, params=params).get("data")
 
 
+def alles(firma, path, params=None, max_paginas=200):
+    """Alle pagina's van een lijst (start/limit en additional_data.pagination), niet alleen de eerste 500.
+    Volledig of een uitzondering: een fout op een pagina is een fout voor het geheel (codering WP2a)."""
+    params = dict(params or {})
+    params.setdefault("limit", 500)
+    start, uit = 0, []
+    for _ in range(max_paginas):
+        params["start"] = start
+        antw = _vraag(firma, "GET", path, params=params)
+        uit.extend(antw.get("data") or [])
+        pag = (antw.get("additional_data") or {}).get("pagination") or {}
+        if not pag.get("more_items_in_collection"):
+            return uit
+        volgend = pag.get("next_start")
+        if not isinstance(volgend, int) or volgend <= start:
+            raise RuntimeError(f"Pipedrive {path}: paginering zonder geldige volgende start; niet volledig gelezen")
+        start = volgend
+    raise RuntimeError(f"Pipedrive {path}: meer dan {max_paginas} pagina's; niet volledig gelezen")
+
+
+def controleer_bedrijf(firma, verwacht):
+    """Grendel: het token van deze firma hoort bij het verwachte Pipedrive-bedrijf (H-Architects: 10068585,
+    zelfde grendel als contract-systeem/webapp/pipedrive.py). Anders een uitzondering en niets gelezen."""
+    gevonden = (_vraag(firma, "GET", "/users/me").get("data") or {}).get("company_id")
+    if gevonden != verwacht:
+        raise RuntimeError(f"Pipedrive-account van '{firma}' is bedrijf {gevonden}, verwacht {verwacht}")
+    return gevonden
+
+
 def lijst(firma, wat, **params):
     """Kortere vorm: lijst('unabo', 'deals', status='open', limit=20)."""
     return get(firma, f"/{wat}", params)

@@ -1,0 +1,31 @@
+# Grendels op de nummering (codering WP1 en WP2a, 05-10-2026): dossiernummers komen uit hun bron via de
+# gedeelde nummerlezer, H-A volgt de bevestigde regel (JJNN en (JJ+30)NN) voor elk jaar, en de
+# Contracten-agent stelt geen nummer voor uit een onvolledige bron of een volle reeks.
+name: nummer-grendels
+
+on:
+  push:
+    paths: ["mijnagents-runner/koppelingen/nummerlezer.py", "mijnagents-runner/koppelingen/pipedrive.py",
+            "mijnagents-runner/contracten_agent.py", "mijnagents-runner/goudstandaard.py",
+            "mijnagents-runner/runbooks/pipedrive_dealtitel.py", "mijnagents-runner/benaming.py",
+            "mijnagents-runner/fathom_wacht.py", "mijnagents-runner/agenda_wacht.py", "mijnagents-runner/archivaris.py",
+            "mijnagents-runner/contactwacht.py", "mijnagents-runner/werkwijze/agenda-taken.json",
+            "mijnagents-runner/tests/test_nummerlezer.py", "mijnagents-runner/tests/test_nummeruitgifte.py",
+            "mijnagents-runner/tests/test_benaming.py", ".github/workflows/nummer-grendels.yml"]
+  pull_request:
+    paths: ["mijnagents-runner/koppelingen/nummerlezer.py", "mijnagents-runner/koppelingen/pipedrive.py",
+            "mijnagents-runner/contracten_agent.py", "mijnagents-runner/benaming.py",
+            "mijnagents-runner/tests/test_nummerlezer.py", "mijnagents-runner/tests/test_nummeruitgifte.py"]
+
+jobs:
+  grendels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 mijnagents-runner/tests/test_nummerlezer.py
+      - run: python3 mijnagents-runner/tests/test_nummeruitgifte.py
+      - run: python3 -m pip install pytest==8.3.3
+      - run: python3 -m pytest -q mijnagents-runner/tests/test_benaming.py

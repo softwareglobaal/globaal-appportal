@@ -1493,6 +1493,20 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   personen via **`persoon.werkgever_firma_id`** ("in dienst bij" - uniselect, FK) en de
   koppeltabel **`kern.persoon_dienstfirma`** ("diensten voor" - multiselect,
   veel-op-veel). Seed: `db/seed-afdeling-firma.sql`.
+- **Gedeelde nummerlezer** (codering WP1 en WP2a, 05-10-2026,
+  `mijnagents-runner/koppelingen/nummerlezer.py`): de agents lezen een dossiernummer altijd
+  samen met zijn bron (Pipedrive-titel, contractbestand, mapnaam H-A of TKN, agendatitel,
+  vergadertitel, factuur, contactnaam, vrije tekst, nummerveld), nooit uit een los getal: een
+  postcode, huisnummer, datum of kaal jaartal wordt geen dossier, en bij twee kandidaten
+  kiest de lezer niets. Firmacodes komen uit `kern.firma` (via `organisatie.firmas()`) en de
+  aliasbron `werkwijze/agenda-taken.json` (oude codes zoals HARMONIEBOUW); een onbekende code
+  blijft onbekend. Alleen voor H-Architects is de nummerregel bevestigd (D9: JJNN,
+  regularisatie (JJ+30)NN, elk jaar, geen ondergrens); nummers van UNAB, TKNB en ENEF worden
+  gelezen zonder jaar of dossierhouder. De Contracten-agent stelt een nieuw H-A-nummer alleen
+  voor als de vier bronnen volledig gelezen zijn (Pipedrive alle pagina's, alleen bedrijf-id
+  10068585) en meldt een volle reeks in plaats van over te lopen; een reservering per
+  aanvraag bestaat nog niet. Grendels: `tests/test_nummerlezer.py`,
+  `tests/test_nummeruitgifte.py`, workflow `nummer-grendels`.
 - **Per-app DB-rollen** (governance): elke app krijgt een eigen rol met **alleen-lezen**
   op `kern` en rechten op enkel het eigen schema. De Medewerkers-app leest via
   **`portal`** en schrijft via de **smalle schrijfrol `medewerker_writer`** (enkel

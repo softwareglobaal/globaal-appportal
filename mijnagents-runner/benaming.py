@@ -9,7 +9,12 @@ en is werk voor het model of voor Mehdi op het dashboard.
 Geen eigen lijsten (norm N6): firmacodes en collega's komen uit `kern` via
 koppelingen/organisatie.py. Dit bestand schrijft niets en hernoemt niets.
 """
+import os
 import re
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "koppelingen"))
+import nummerlezer  # noqa: E402
 
 # Agendacode van Mehdi -> firmacode in kern.firma. De agendacodes zijn van hem
 # (werkwijze van De Agendawacht); de firmacodes staan op organisatie.globaal.be.
@@ -33,7 +38,6 @@ GENERIEK = re.compile(r"^(impromptu (zoom )?meeting|zoom meeting|meeting)$", re.
 CODE = re.compile(r"\[\s*([A-Za-z]+)\s*-\s*([A-Za-z]{2})\s*-?\s*\]")
 PROSPECTIE = re.compile(r"^(?P<naam>[^:]+):\s*(?P<firma>H-Architects|UNABO|UnaBo|TKN[- ]?Buro)\s+Prospections?\s*(?P<rest>\(.*\))?\s*$", re.I)
 FIRMAWOORD = re.compile(r"\b(HA|UNABO|TKN|EE|HB|CONTRAX|CTX)\b")
-PROJECTNR = re.compile(r"\b((?:2[0-9]|5[0-9])\d{2})\b")
 VERBODEN = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
 EIGEN = {"mehdi", "mehdi chegini", "afspraken", "afspraken (mehdi)", "mch"}
 
@@ -66,9 +70,23 @@ def benoem(g, collega_herken=None):
     # 1. de agendacode [FIRMA-SOORT]
     m = CODE.search(titel)
     if m:
-        zet("firma", AGENDA_NAAR_FIRMA.get(m.group(1).upper(), ""), "agendacode in de titel")
+        # firma uit het register en de aliasbron (codering WP1); een onbekende code geeft geen firma
+        zet("firma", nummerlezer.firma_van_code(m.group(1)) or "", "agendacode in de titel")
         uit["soort"] = SOORT.get(m.group(2).upper(), "")
         rest = titel[m.end():]
+        # '[FF-SS] TT nummer - klant, adres' (Agendawacht v8.6): de opdrachtcode en het nummer zijn geen klant
+        tt = re.match(r"^\s*([A-Z]{2,4})(?=\s|$)", rest)
+        if tt and tt.group(1) in nummerlezer.opdrachtcodes():
+            rest = rest[tt.end():]
+        k = nummerlezer.enig(nummerlezer.lees(titel, "agenda_titel"))
+        if k:
+            rest = re.sub(rf"^\s*{k.nummer}\b", "", rest)      # het nummer is geen klant, ook bij een onbekende code
+            if k.firma and k.firma == uit["firma"]:
+                zet("dossier", k.nummer, "projectnummer in de titel")
+        if " - " in rest or "," in rest:
+            # 'klant, adres': het adres hoort niet bij met wie
+            kop, _, staart = rest.strip(" -").partition(" - ")
+            rest = kop.split(",", 1)[0] + (" - " + staart if staart else "")
     # 2. Calendly-vorm "Naam: H-Architects Prospections (second meeting)"
     p = PROSPECTIE.match(titel)
     if p:
@@ -113,12 +131,13 @@ def benoem(g, collega_herken=None):
             zet("firma", AGENDA_NAAR_FIRMA[w.group(1).upper()], "firmawoord in de titel")
             rest = FIRMAWOORD.sub("", rest)
             rest = re.sub(r"\b(Klant|Prospect|Online|Meeting)\b", "", rest, flags=re.I)
-    # 5. projectnummer van H-Architects (26xx, 56xx en ouder)
-    n = PROJECTNR.search(titel)
+    # 5. projectnummer van H-Architects, van elk jaar (gedeelde nummerlezer: geen postcode, huisnummer of
+    #    jaartal; bij twee nummers geen keuze)
+    n = "" if uit["dossier"] else nummerlezer.ha_nummer(titel, "vergadertitel")
     if n and (uit["firma"] in ("", "HARC")):
         zet("firma", "HARC", "projectnummer in de titel")
-        zet("dossier", n.group(1), "projectnummer in de titel")
-        rest = rest.replace(n.group(1), "")
+        zet("dossier", n, "projectnummer in de titel")
+        rest = re.sub(rf"\b{n}\b", "", rest, count=1)
     # 6. wat er van de titel overblijft: "klant - onderwerp"
     rest = _schoon(re.sub(r"\b(Meeting|Online)\b", "", rest, flags=re.I), 90)
     if rest and not GENERIEK.match(titel):
@@ -133,9 +152,9 @@ def benoem(g, collega_herken=None):
         # het "project" van de herkenning is meestal een omschrijving, geen dossier:
         # alleen een nummer of een korte naam telt als dossier, de rest is onderwerp
         project = herk.get("project") or ""
-        pn = PROJECTNR.search(project)
+        pn = nummerlezer.ha_nummer(project, "vergadertitel")
         if pn:
-            zet("dossier", pn.group(1), "projectnummer in de herkenning")
+            zet("dossier", pn, "projectnummer in de herkenning")
         elif project and len(project) <= 32 and len(project.split()) <= 4:
             zet("dossier", project, "herkenning Fathomwacht (project)")
         anderen = [x for x in (herk.get("personen") or []) if not _is_eigen(x)]

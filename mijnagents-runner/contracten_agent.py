@@ -6,7 +6,7 @@ Het proces staat niet hier maar op het agentbord: de WERKWIJZE van de agent
 ronde ophaalt. Het regelboek voor het contract is de Werkinstructie AI op
 contracten.globaal.be, ook elke ronde gelezen; bij tegenspraak wint die.
 De stappen 1 tot 12 in de code volgen de nummering van de werkwijze v2:
-deals in fase Gegevens ontvangen -> herronde-regel -> projectnummer (drie bronnen)
+deals in fase Gegevens ontvangen -> herronde-regel -> projectnummer (vier bronnen, volledig; anders geen)
 -> voorbereiding_starten -> lezen (voorbereiding, veldenschema, dossiercontrole)
 -> bronnen (salesmap, klantmails; projectmap alleen bij een lopend project)
 -> plan (gegevens en keuzes strikt gescheiden) -> invullen met bron -> proef
@@ -29,6 +29,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import contracten_mcp as mcp  # noqa: E402
 import pipedrive  # noqa: E402
+import nummerlezer  # noqa: E402
 import bronnen as bronnen_mod  # noqa: E402
 import herhaalbaar as hh  # noqa: E402
 
@@ -230,9 +231,10 @@ def verzoeken_op_bord(deal_id, titel, gaten):
         print("verzoeken op het bord mislukt:", e, file=sys.stderr)
 
 
-def nummer_uit_titel(titel):
-    m = re.match(r"^\s*((?:26|56)\d\d)\b", titel or "")
-    return m.group(1) if m else ""
+def nummer_uit_titel(titel, jaar_nu=None):
+    """Het H-A-projectnummer vooraan een dealtitel (D9), van elk jaar volgens de bevestigde regel
+    (JJNN en (JJ+30)NN, gedeelde nummerlezer); anders ''."""
+    return nummerlezer.ha_nummer(titel, "pipedrive_titel", jaar_nu)
 
 
 def mcp_call(naam, **args):
@@ -252,44 +254,91 @@ VRIJE_STANDAARD = {"project_beschrijving", "project_omvat_extra_vrije_toevoeging
                    "doorlooptijd_werkdagen", "ereloon_bedrag_euro", "ereloon_percentage", "uurtarief_euro",
                    "betaalschema_bullets", "addendum_aanleiding_omschrijving"}
 
-CONTRACT_MAPPEN = ["/Work All/01. H-Architects ORG/0 H-A Contracts clients/2026 Design",
-                   "/Work All/01. H-Architects ORG/0 H-A Contracts clients/2026 Signed"]
+CONTRACTS_PAD = "/Work All/01. H-Architects ORG/0 H-A Contracts clients"
+# Het H-A-Pipedrive-account; zelfde grendel als contract-systeem/webapp/pipedrive.py (BEDRIJF_ID).
+H_A_BEDRIJF_ID = 10068585
+PIPEDRIVE_STATUSSEN = ("open", "won", "lost")
 
 
-def volgend_vrij_nummer(reeks="26"):
-    """Werkwijze stap 3 (D9): het hoogste nummer uit drie bronnen samen, plus één:
-    de Pipedrive-dealtitels, de dossiers op het dashboard en de contractbestanden
-    in Dropbox (Design en Signed)."""
+def nummervoorstel_toegelaten(voorstel, vrij):
+    """Alleen het berekende vrije nummer mag als voorstel naar het bord, nooit een nummer dat het model zelf
+    koos; zonder berekend nummer (bronfout of volle reeks) gaat er niets (codering WP2a)."""
+    v = str(voorstel or "").strip()
+    return bool(v) and v.lower() != "null" and bool(vrij) and v == str(vrij).strip()
+
+
+class NummerFout(RuntimeError):
+    """Geen vrij nummer: een bron is niet volledig gelezen of de reeks is vol. Dan wordt er niets
+    voorgesteld (codering WP2a): liever geen nummer dan een nummer dat al bezet kan zijn."""
+
+
+def contract_mappen(soort, voorvoegsel):
+    """De Design- en Signed-map van een reeks, zoals het contractsysteem ze kiest (benaming.design_map):
+    architectuur, voorstudie en addendum '20JJ Design'; regularisatie '<voorvoegsel>00 Design' (5600 Design)."""
+    naam = f"{voorvoegsel}00" if soort == "regularisatie" else f"20{voorvoegsel}"
+    return [f"{CONTRACTS_PAD}/{naam} Design", f"{CONTRACTS_PAD}/{naam} Signed"]
+
+
+def volgend_vrij_nummer(soort="architectuur", jaar=None, bewijs=None):
+    """Werkwijze stap 3 (D9): het volgende vrije nummer van de reeks van dit jaar (architectuur, voorstudie,
+    addendum: JJ; regularisatie: JJ+30), uit vier bronnen samen: de contractmappen van die reeks in Dropbox,
+    de dossiers en de voorbereidingen op het dashboard, en alle H-A-deals in Pipedrive (open, gewonnen,
+    verloren; alle pagina's). Het jaar komt uit de kalender of wordt meegegeven, nooit uit een getal in een
+    tekst. Een bron die niet volledig gelezen is, of een volle reeks: NummerFout, geen nummer.
+    Dit is een voorstel: Mehdi bevestigt het via het bord (runbook pipedrive-dealtitel). Twee rondes
+    tegelijk kunnen hetzelfde voorstel krijgen; een reservering bestaat nog niet (WP2b)."""
+    jaar = int(jaar or nummerlezer.jaar_nu_brussel())
+    try:
+        p = nummerlezer.ha_voorvoegsel(soort, jaar)
+    except ValueError as e:
+        raise NummerFout(str(e)) from e
+    van, tot = int(p + "01"), int(p + "99")
+    bewijs = bewijs if bewijs is not None else {}
+    bewijs.update({"reeks": p, "jaar": jaar, "per_bron": {}, "ontbrekende_mappen": []})
     gebruikt = set()
+
+    def neem(nummer, bron):
+        n = str(nummer or "").strip()
+        if len(n) == 4 and n.isdigit() and n.startswith(p):
+            gebruikt.add(n)
+            bewijs["per_bron"][bron] = bewijs["per_bron"].get(bron, 0) + 1
+
+    for pad in contract_mappen(soort, p):
+        try:
+            items = bronnen_mod.lijst(pad, recursief=False)
+        except Exception as e:  # noqa: BLE001
+            raise NummerFout(f"contractmap {pad} niet gelezen: {e}") from e
+        if items is None:                       # 409 van Dropbox: de map bestaat (nog) niet
+            bewijs["ontbrekende_mappen"].append(pad)
+            continue
+        for e in items:
+            neem(nummerlezer.ha_nummer(e.get("name", ""), "contractbestand", jaar), "contractmappen")
     try:
-        for pad in CONTRACT_MAPPEN:
-            for e in bronnen_mod.lijst(pad, recursief=False) or []:
-                n = nummer_uit_titel(e.get("name", ""))
-                if n.startswith(reeks):
-                    gebruikt.add(n)
+        d = mcp.call("dossiers", limiet=500) or {}
+        rijen = d.get("dossiers") or []
+        if int(d.get("aantal") or 0) > len(rijen):
+            raise NummerFout(f"het dashboard gaf {len(rijen)} van {d.get('aantal')} dossiers: niet volledig")
+        for r in rijen:
+            neem(r.get("project_nummer") or r.get("nummer"), "dashboard")
+        for r in (mcp.call("voorbereidingen") or {}).get("dossiers") or []:
+            neem(r.get("nummer"), "voorbereidingen")
+    except NummerFout:
+        raise
     except Exception as e:  # noqa: BLE001
-        print("contractmappen niet gelezen:", e, file=sys.stderr)
+        raise NummerFout(f"dashboard niet gelezen: {e}") from e
     try:
-        for d in (mcp.call("dossiers", limiet=500) or {}).get("dossiers", []):
-            n = str(d.get("project_nummer") or d.get("nummer") or "")
-            if n.startswith(reeks):
-                gebruikt.add(n)
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        for d in (mcp.call("voorbereidingen") or {}).get("dossiers", []):
-            n = str(d.get("nummer") or "")
-            if n.startswith(reeks):
-                gebruikt.add(n)
-    except Exception:  # noqa: BLE001
-        pass
-    for status in ("open", "won", "lost"):
-        d = pipedrive.get(FIRMA, "/deals", {"status": status, "limit": 500})
-        for x in (d if isinstance(d, list) else (d or {}).get("data") or []):
-            n = nummer_uit_titel(x.get("title", ""))
-            if n.startswith(reeks):
-                gebruikt.add(n)
-    hoogste = max((int(n) for n in gebruikt), default=int(reeks + "00"))
+        pipedrive.controleer_bedrijf(FIRMA, H_A_BEDRIJF_ID)
+        for status in PIPEDRIVE_STATUSSEN:
+            deals = pipedrive.alles(FIRMA, "/deals", {"status": status})
+            bewijs.setdefault("deals", {})[status] = len(deals)
+            for x in deals:
+                neem(nummerlezer.ha_nummer(x.get("title", ""), "pipedrive_titel", jaar), f"pipedrive {status}")
+    except Exception as e:  # noqa: BLE001
+        raise NummerFout(f"Pipedrive H-A niet volledig gelezen: {e}") from e
+    hoogste = max((int(n) for n in gebruikt), default=van - 1)
+    bewijs["hoogste"] = hoogste if gebruikt else None
+    if hoogste + 1 > tot:
+        raise NummerFout(f"reeks {p}xx van {jaar} is vol ({tot} is gebruikt): geen nummer en geen ander formaat")
     return str(hoogste + 1)
 
 
@@ -300,7 +349,7 @@ SCHEMA_UITLEG = """Antwoord met UITSLUITEND een JSON-object met deze sleutels:
                 "citaat": "de zin uit die bron waar dit letterlijk in staat, exact overgeschreven (12 tot 300 tekens)"} ],
  "keuzes": {"veld": "waarde", ...},
  "keuzes_bron": "waarop de keuzes steunen, bv. 'Fathom-transcript 06-07-2026'",
- "nummer_voorstel": "26xx of null",
+ "nummer_voorstel": "het aangereikte volgend_vrij_nummer, of null",
  "melding": {
    "vastligt": ["... (met bron)"],
    "nakijken": ["... (afgeleid, waarom)"],
@@ -329,7 +378,7 @@ Regels die je nooit breekt:
   per bronzin, met alleen de velden die die zin bewijst.
 - Bedragen als '50.000,00'; percentages als getal ('14').
 - project_beschrijving volgens de vaste opbouw uit de Werkinstructie (per ruimte, chronologisch, wat de architect doet en wat de klant zelf doet, 'Het project omvat niet'), alleen uit de gesprekken en notities die je kreeg.
-- Geef 'nummer_voorstel' alleen als de dealtitel géén 26xx/56xx-nummer heeft; gebruik dan het aangereikte volgende vrije nummer.
+- Geef 'nummer_voorstel' alleen als de dealtitel géén projectnummer heeft (D9: JJNN, regularisatie (JJ+30)NN); gebruik dan exact het aangereikte volgend_vrij_nummer. Is dat leeg, dan null: verzin nooit een nummer.
 - Is er niets te doen, geef lege lijsten/objecten en zeg dat in 'volgende_stap'.
 """
 
@@ -584,7 +633,13 @@ def verwerk(deal, werkinstructie, staat):
     log(ond, "bron", "gelezen: " + bronnen_mod.samenvatting(bronnen),
         "teksten: " + ", ".join(bestanden) + "\nmails: " + ", ".join(f"{m['datum'][:16]} {m['onderwerp']}" for m in bronnen.get("mails", [])))
 
-    vrij = "" if nummer else volgend_vrij_nummer("56" if soort == "regularisatie" else "26")
+    vrij, nummer_fout = "", ""
+    if not nummer:
+        try:
+            vrij = volgend_vrij_nummer(soort)
+        except NummerFout as e:
+            nummer_fout = str(e)
+            log(ond, "fout", f"geen vrij projectnummer voorgesteld: {nummer_fout[:200]}")
     notitielijst = notities(deal_id)
     schema = veldenschema_voor(soort)
     # Stap 1 van het rapport: één hash over alle invoer. Zelfde hash = zelfde plan,
@@ -627,6 +682,8 @@ def verwerk(deal, werkinstructie, staat):
 
     # toepassen, deterministisch: eerst validatie in code (rapport stap 4), dan schrijven
     fouten, geschreven, geweigerd_lijst = [], [], []
+    if nummer_fout:
+        fouten.append(f"projectnummer: {nummer_fout[:200]}")
     toegelaten = set(((schema.get("master") or {}).get(soort) or {}).get("velden") or []) or None
     teksten = hh.bronteksten(_bronnen_compact(bronnen), notitielijst)
     for post in plan.get("gegevens") or []:
@@ -696,11 +753,15 @@ def verwerk(deal, werkinstructie, staat):
         log(ond, "proef", f"nog geen proef: {str(e)[:200]}")
 
     nummer_voorstel = plan.get("nummer_voorstel") if not nummer else None
+    if nummer_voorstel and str(nummer_voorstel).lower() != "null" and not nummervoorstel_toegelaten(nummer_voorstel, vrij):
+        log(ond, "fout", f"nummervoorstel van het model genegeerd: {nummer_voorstel} is niet het berekende "
+                         f"vrije nummer ({vrij or 'geen: ' + (nummer_fout[:120] or 'onbekend')})")
+        nummer_voorstel = None
     if nummer_voorstel and str(nummer_voorstel).lower() != "null":
         klant = re.sub(r"^\s*\d{4}\s+", "", titel).strip() or "klant"
         hartslag("waakt", taak="projectnummer ter goedkeuring", detail=f"deal {deal_id}",
                  voorstel={"actie": f"Projectnummer {nummer_voorstel} toekennen aan deal {deal_id}",
-                           "doel": f"deal {deal_id}", "reden": "dealtitel zonder 26xx-nummer (D9)",
+                           "doel": f"deal {deal_id}", "reden": "dealtitel zonder projectnummer (D9)",
                            "runbook": "pipedrive-dealtitel",
                            "parameters": {"deal_id": deal_id, "titel": f"{nummer_voorstel} {klant}"}})
     else:

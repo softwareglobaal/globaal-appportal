@@ -32,6 +32,7 @@ import projectadressen  # noqa: E402
 import bord  # noqa: E402
 import zoom  # noqa: E402
 import organisatie  # noqa: E402
+import nummerlezer  # noqa: E402
 import pipedrive  # noqa: E402
 
 NAAM = "agenda-wacht"
@@ -395,13 +396,11 @@ def lees_titel(titel):
 
 
 def deals_index():
-    d = pipedrive.get("harchitects", "/deals", {"status": "open", "limit": 500})
-    items = d if isinstance(d, list) else (d or {}).get("data") or []
+    items = pipedrive.alles("harchitects", "/deals", {"status": "open"})     # alle pagina's, niet 500
     uit = []
     for x in items:
         titel = x.get("title", "")
-        m = re.match(r"^\s*((?:26|56)\d\d)\b", titel)
-        uit.append({"id": x.get("id"), "titel": titel, "nummer": m.group(1) if m else "",
+        uit.append({"id": x.get("id"), "titel": titel, "nummer": nummerlezer.ha_nummer(titel, "pipedrive_titel"),
                     "delen": {w for w in re.split(r"[^a-z0-9]+", titel.lower()) if len(w) > 2 and not w.isdigit()}})
     return uit
 
@@ -3013,9 +3012,9 @@ def projectnummer_zoeken(a, info):
                 bron = "projectmap H-Architects"
     elif info.get("firma") in TKN_FIRMAS:
         for naam in _tkn_mappen():
-            m = re.match(r"^(\d{4,6})_", naam)
-            if m and patroon.search(_plat_adres(naam)):
-                kandidaten.add(m.group(1))
+            k = nummerlezer.lees(naam, "mapnaam_tkn")
+            if k and patroon.search(_plat_adres(naam)):
+                kandidaten.add(k[0].nummer)
                 bron = "projectmap TKN-Buro"
     return (kandidaten.pop(), bron) if len(kandidaten) == 1 else None
 
