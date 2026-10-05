@@ -1152,6 +1152,8 @@ services:
       PIPEDRIVE_TOKEN_HARCHITECTS: ${PIPEDRIVE_TOKEN_HARCHITECTS:-}
       PIPEDRIVE_TOKEN_HARMONIEBOUW: ${PIPEDRIVE_TOKEN_HARMONIEBOUW:-}
       MONDAY_API_TOKEN: ${MONDAY_API_TOKEN:-}
+      # Register van facturatiecontrole (projecten, betaalschijven, fase), alleen lezen.
+      FC_DATA: /fc/data.json
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3130/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 2m
@@ -1159,6 +1161,8 @@ services:
       retries: 3
       start_period: 30s
       start_interval: 5s
+    volumes:
+      - /home/ubuntu/facturatiecontrole/site:/fc:ro
     networks: [appnet]
 
 volumes:
