@@ -1,11 +1,14 @@
 {
-  "versie": "1.0",
+  "versie": "1.1",
+  "verbindingen": {
+    "omv-v2": {"type": "omv-v2", "configpad": "~/appportal/omv-v2-data/.env"}
+  },
   "pagina_budget_per_root": 8,
   "item_budget_per_agent": 3000,
   "roots": [
-    {"id": "werk", "pad": "/Work All"},
-    {"id": "agentgegevens", "pad": "/Data uit Mehdi"},
-    {"id": "overkoepelend", "pad": "/0 Chegini Mehdi/Prive met Claude", "namespace_env": "NAAMSTRUCTUUR_OVERKOEPELEND_NS"}
+    {"id": "werk-omv-v2-v1", "pad": "/Work All", "verbinding": "omv-v2", "namespace": "2560492595"},
+    {"id": "agentgegevens-omv-v2-v1", "pad": "/Data uit Mehdi", "verbinding": "omv-v2", "namespace": "2560492595"},
+    {"id": "overkoepelend-omv-v2-v1", "pad": "/0 Chegini Mehdi/Prive met Claude", "verbinding": "omv-v2", "namespace": "9162849472"}
   ],
   "profielen": [
     {"prefix": "/Work All/01. H-A WORK", "firma": "HARC", "profiel": "ha_project"},
@@ -13,6 +16,8 @@
     {"prefix": "/Work All/o01. Sales/000. Offerte aanvraag informatie/01. Mehdi/02. H-Architects B2B", "firma": "HARC", "profiel": "ha_sales"}
   ],
   "regelbron": {
+    "verbinding": "omv-v2",
+    "namespace": "2560492595",
     "versie": "H-A vaste afspraken v1.7",
     "pad": "/Work All/01. H-A WORK/_0 Claude reorganisatie/H-A vaste afspraken v1.7.md",
     "sha256": "6a8ceafef1520bc0e55a9ed256053bb01b40c6fc51c7ddb8bb6a3ed8527821d0"
@@ -44,7 +49,7 @@
     "Contactnamen Google/Xelion: geen zelfstandige accountscan",
     "Agenda: uitsluitend door Agendawacht geïndexeerde afspraken; geen volledige account- of archiefscan",
     "Gesprekken: uitsluitend geregistreerde Fathom/Plaud-gesprekken met leesbare lokale gesprek.json",
-    "Andere Dropbox-roots en accounts: alleen onderstaande expliciete roots van het bestaande stack-account",
+    "Andere Dropbox-roots en accounts: alleen onderstaande expliciete roots van de bestaande OMV-v2-koppeling",
     "Andere firma's: algemene bestandsnaamcontrole; structuurconventie onbekend zonder bevestigd regelboek",
     "Bestandsinhoud, officiële adressen, eigenaar en uitvoering: niet uit mapnamen afgeleid"
   ]

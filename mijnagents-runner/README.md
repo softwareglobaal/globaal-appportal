@@ -118,4 +118,4 @@ berichten. Namen en structuur worden alleen getoetst binnen expliciete
 Dropbox-roots en bestaande accountrechten. Agenda- en gesprekscontrole betreft
 de reeds geïndexeerde metadata; andere bronnen staan als niet gecontroleerd.
 Installatie, bronversie, grenzen en tests:
-[Namen en mappen - toezicht v1.0](docs/Namen%20en%20mappen%20-%20toezicht%20v1.0.md).
+[Namen en mappen - toezicht v1.1](docs/Namen%20en%20mappen%20-%20toezicht%20v1.1.md).

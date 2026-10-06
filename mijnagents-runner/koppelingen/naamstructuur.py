@@ -1,4 +1,4 @@
-"""Gedeelde metadata-index voor Benamingenwacht en Mappenwacht, versie 1.0.
+"""Gedeelde metadata-index voor Benamingenwacht en Mappenwacht, versie 1.1.
 
 Alleen Dropbox-leesroutes. Elke pagina en cursor worden samen gecommit. Een
 onvolledige basis, ontbrekende bron of verouderd regelboek is geen geslaagde scan.
@@ -11,12 +11,15 @@ import re
 import sqlite3
 import time
 import urllib.request
+import urllib.parse
+import urllib.error
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 REGELS = os.path.join(os.path.dirname(HIER), "werkwijze", "naamstructuur-regels.json")
 DATA = os.path.expanduser("~/appportal/mijnagents-data/naamstructuur")
+_VERBINDINGEN = {}
 
 
 def nu():
@@ -31,29 +34,111 @@ def lees_regels(pad=REGELS):
     with open(pad, encoding="utf-8") as f:
         regels = json.load(f)
     roots = regels["roots"]
+    verbindingen = regels.get("verbindingen") or {}
+    for naam, v in verbindingen.items():
+        if set(v) != {"type", "configpad"} or v["type"] != "omv-v2" or not v["configpad"]:
+            raise ValueError("onbekende verbinding of geheimvelden in bronconfiguratie")
+    for r in roots + [regels["regelbron"]]:
+        if r.get("verbinding") not in verbindingen or not str(r.get("namespace", "")).isdigit():
+            raise ValueError("expliciete verbinding en namespace vereist")
     if len({r["id"] for r in roots}) != len(roots):
         raise ValueError("dubbele rootidentiteit")
     for i, r in enumerate(roots):
         if not r["pad"].startswith("/") or r["pad"] == "/":
             raise ValueError("alleen expliciete Dropbox-roots")
-        if any(r.get("namespace_env", "") == a.get("namespace_env", "") and
+        if any(r["verbinding"] == a["verbinding"] and r["namespace"] == a["namespace"] and
                (onder(r["pad"], a["pad"]) or onder(a["pad"], r["pad"])) for a in roots[:i]):
             raise ValueError("overlappende Dropbox-roots")
     return regels
 
 
+class OMVVerbinding:
+    """Hergebruik van de bestaande OMV-v2-configuratie, geen credentialkopie."""
+    def __init__(self, configpad):
+        self.configpad = os.path.abspath(os.path.expanduser(configpad))
+        self._token = ""
+        self._tot = 0
+
+    def toegang(self):
+        if self._token and time.time() < self._tot:
+            return self._token
+        try:
+            with open(self.configpad, encoding="utf-8") as f:
+                regels = f.read().splitlines()
+            env = {}
+            for regel in regels:
+                if "=" in regel and not regel.lstrip().startswith("#"):
+                    key, value = regel.split("=", 1)
+                    env[key.strip()] = value.strip().strip('"').strip("'")
+            appkey = env["DROPBOX_APP_KEY"]
+            appsecret = env["DROPBOX_APP_SECRET"]
+            tokenpad = os.path.expanduser(env["DROPBOX_TOKEN_FILE"])
+            basis = os.path.dirname(self.configpad)
+            if tokenpad.startswith("/data/"):
+                # De bestaande OMV-v2-container mount omv-v2-data als /data.
+                rel = PurePosixPath(tokenpad).relative_to("/data")
+                if ".." in rel.parts:
+                    raise ValueError("ongeldig tokenbestandpad")
+                tokenpad = os.path.join(basis, str(rel))
+            elif not os.path.isabs(tokenpad):
+                tokenpad = os.path.join(basis, tokenpad)
+            with open(tokenpad, encoding="utf-8") as f:
+                tokens = json.load(f)
+            refresh = tokens["DROPBOX_REFRESH_TOKEN"]
+            if not all(isinstance(v, str) and v.strip() for v in (appkey, appsecret, refresh)):
+                raise ValueError("onvolledig configuratiepaar")
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise RuntimeError("Bestaande OMV-v2-configuratie of tokenbestand niet bruikbaar") from None
+        req = urllib.request.Request("https://api.dropboxapi.com/oauth2/token", urllib.parse.urlencode({
+            "grant_type": "refresh_token", "client_id": appkey.strip(),
+            "client_secret": appsecret.strip(), "refresh_token": refresh.strip()}).encode())
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                uit = json.load(r)
+            token = uit["access_token"]
+            duur = int(uit.get("expires_in", 14400))
+            if not isinstance(token, str) or not token or duur <= 0:
+                raise ValueError("ongeldig authenticatieantwoord")
+        except urllib.error.HTTPError as e:
+            e.close()
+            raise RuntimeError("Bestaande OMV-v2-authenticatie niet beschikbaar") from None
+        except Exception:
+            raise RuntimeError("Bestaande OMV-v2-authenticatie niet beschikbaar") from None
+        # Alleen procesgeheugen; het gedeelde OMV-tokenbestand blijft ongewijzigd.
+        self._token, self._tot = token, time.time() + max(duur - 300, 1)
+        return token
+
+
+def lezer_van(root, regels):
+    naam = root.get("verbinding")
+    config = (regels.get("verbindingen") or {}).get(naam)
+    namespace = root.get("namespace")
+    if not config or config.get("type") != "omv-v2" or not str(namespace or "").isdigit():
+        raise ValueError("bevestigde bronverbinding of namespace ontbreekt")
+    pad = os.path.abspath(os.path.expanduser(config["configpad"]))
+    bron = _VERBINDINGEN.setdefault(pad, OMVVerbinding(pad))
+    return DropboxLezer(namespace, verbinding=naam, toegang=bron.toegang, bronconfig=pad)
+
+
 class DropboxLezer:
-    """Bestaande stack-accountrechten, expliciete namespace, uitsluitend lezen."""
+    """Bestaande bronrechten, expliciete verbinding en namespace, uitsluitend lezen."""
     LEESROUTES = {"files/list_folder", "files/list_folder/continue", "files/get_metadata"}
 
-    def __init__(self, namespace):
+    def __init__(self, namespace, verbinding="stack", toegang=None, bronconfig=""):
         if not namespace or not str(namespace).isdigit():
             raise ValueError("bevestigde Dropbox-namespace ontbreekt")
         self.namespace = str(namespace)
+        self.verbinding = verbinding
+        self.bronconfig = bronconfig
+        self._toegang = toegang
 
     def koppen(self, extra):
-        import bronnen
-        return {"Authorization": "Bearer " + bronnen._toegang(),
+        if self._toegang:
+            token = self._toegang()
+        else:
+            import bronnen
+            token = bronnen._toegang()
+        return {"Authorization": "Bearer " + token,
                 "Dropbox-API-Path-Root": json.dumps(self.pathroot()), **extra}
 
     def pathroot(self):
@@ -88,7 +173,7 @@ def open_db(pad):
       compleet INTEGER DEFAULT 0, meer INTEGER DEFAULT 1, poging TEXT DEFAULT '',
       gelukt TEXT DEFAULT '', fout TEXT DEFAULT '', controle TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS item (
-      scope TEXT, identiteit TEXT, pad TEXT, naam TEXT, soort TEXT, firma TEXT,
+      scope TEXT, identiteit TEXT, pad TEXT, pad_sleutel TEXT, naam TEXT, soort TEXT, firma TEXT,
       profiel TEXT, gegevens TEXT DEFAULT '{}', actief INTEGER DEFAULT 1,
       naam_vuil INTEGER DEFAULT 1, structuur_vuil INTEGER DEFAULT 1,
       PRIMARY KEY(scope,identiteit));
@@ -102,6 +187,28 @@ def open_db(pad):
     CREATE TABLE IF NOT EXISTS instelling (sleutel TEXT PRIMARY KEY, waarde TEXT);
     CREATE TABLE IF NOT EXISTS lokaal_cursor (bron TEXT PRIMARY KEY, ts TEXT DEFAULT '', rij INTEGER DEFAULT 0);
     """)
+    if "verbinding" not in {r[1] for r in c.execute("PRAGMA table_info(scope)")}:
+        c.execute("ALTER TABLE scope ADD COLUMN verbinding TEXT DEFAULT ''")
+    nieuw_padveld = "pad_sleutel" not in {r[1] for r in c.execute("PRAGMA table_info(item)")}
+    if nieuw_padveld:
+        c.execute("ALTER TABLE item ADD COLUMN pad_sleutel TEXT")
+    # SQLite lower() verwerkt alleen ASCII. Dezelfde Python-casefold als de
+    # bronregels geldt ook voor geïndexeerde Unicodepaden, inclusief oude items.
+    # Een migratiemarkering voorkomt een volledige scan bij iedere hartslag.
+    if nieuw_padveld or instelling(c, "pad_sleutel_versie") != 1:
+        laatst = 0
+        while True:
+            rows = c.execute("SELECT rowid,pad FROM item WHERE rowid>? AND pad_sleutel IS NULL ORDER BY rowid LIMIT 1000",
+                             (laatst,)).fetchall()
+            if not rows:
+                break
+            c.executemany("UPDATE item SET pad_sleutel=?,structuur_vuil=1 WHERE rowid=?",
+                          [(str(r["pad"] or "").casefold(), r["rowid"]) for r in rows])
+            laatst = rows[-1]["rowid"]
+            c.commit()
+        instelling(c, "pad_sleutel_versie", 1)
+    c.execute("CREATE INDEX IF NOT EXISTS item_pad_sleutel ON item(scope,pad_sleutel)")
+    c.commit()
     os.chmod(pad, 0o600)
     return c
 
@@ -124,7 +231,7 @@ def profiel_van(pad, regels):
 
 def markeer_ouders(c, scope, pad):
     ouder = str(PurePosixPath(pad).parent).casefold()
-    c.execute("UPDATE item SET structuur_vuil=1 WHERE scope=? AND lower(pad)=?", (scope, ouder))
+    c.execute("UPDATE item SET structuur_vuil=1 WHERE scope=? AND pad_sleutel=?", (scope, ouder))
 
 
 def verwerk_pagina(c, scope, pagina, regels):
@@ -135,8 +242,9 @@ def verwerk_pagina(c, scope, pagina, regels):
         if e.get(".tag") == "deleted":
             # Een Dropbox-tombstone deactiveert alleen metadata, nooit een bronbestand.
             p = pad.casefold()
-            ids = c.execute("SELECT identiteit FROM item WHERE scope=? AND (lower(pad)=? OR substr(lower(pad),1,?)=?)",
-                            (scope["id"], p, len(p) + 1, p + "/")).fetchall()
+            ids = c.execute("SELECT identiteit FROM item WHERE scope=? AND pad_sleutel=? UNION "
+                            "SELECT identiteit FROM item WHERE scope=? AND pad_sleutel>=? AND pad_sleutel<?",
+                            (scope["id"], p, scope["id"], p + "/", p + "0")).fetchall()
             for r in ids:
                 c.execute("UPDATE item SET actief=0 WHERE scope=? AND identiteit=?", (scope["id"], r[0]))
                 c.execute("UPDATE bevinding SET status='bron niet meer aanwezig',laatste=? WHERE scope=? AND identiteit=?",
@@ -148,11 +256,11 @@ def verwerk_pagina(c, scope, pagina, regels):
             raise ValueError("Dropbox-metadata zonder stabiele identiteit")
         oud = c.execute("SELECT pad FROM item WHERE scope=? AND identiteit=?", (scope["id"], identiteit)).fetchone()
         firma, profiel = profiel_van(pad, regels)
-        c.execute("""INSERT INTO item(scope,identiteit,pad,naam,soort,firma,profiel)
-          VALUES(?,?,?,?,?,?,?) ON CONFLICT(scope,identiteit) DO UPDATE SET
-          pad=excluded.pad,naam=excluded.naam,soort=excluded.soort,firma=excluded.firma,
+        c.execute("""INSERT INTO item(scope,identiteit,pad,pad_sleutel,naam,soort,firma,profiel)
+          VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(scope,identiteit) DO UPDATE SET
+          pad=excluded.pad,pad_sleutel=excluded.pad_sleutel,naam=excluded.naam,soort=excluded.soort,firma=excluded.firma,
           profiel=excluded.profiel,actief=1,naam_vuil=1,structuur_vuil=1""",
-                  (scope["id"], identiteit, pad, e["name"], e[".tag"], firma, profiel))
+                  (scope["id"], identiteit, pad, pad.casefold(), e["name"], e[".tag"], firma, profiel))
         markeer_ouders(c, scope["id"], pad)
         if oud and oud[0] != pad:
             markeer_ouders(c, scope["id"], oud[0])
@@ -162,12 +270,15 @@ def synchroniseer(c, root, namespace, rpc, regels, budget=None):
     if not namespace:
         raise ValueError("Dropbox-accountroot niet vastgesteld")
     oud = c.execute("SELECT * FROM scope WHERE id=?", (root["id"],)).fetchone()
+    verbinding = root.get("verbinding", "stack")
     if oud and oud["namespace"] == "niet vastgesteld" and not oud["cursor"]:
-        c.execute("UPDATE scope SET namespace=? WHERE id=?", (namespace, root["id"]))
+        if c.execute("SELECT count(*) FROM item WHERE scope=?", (root["id"],)).fetchone()[0]:
+            raise ValueError("bronbewijs aanwezig; nieuwe indexidentiteit nodig")
+        c.execute("UPDATE scope SET namespace=?,verbinding=? WHERE id=?", (namespace, verbinding, root["id"]))
         oud = c.execute("SELECT * FROM scope WHERE id=?", (root["id"],)).fetchone()
-    if oud and (oud["namespace"] != namespace or oud["pad"] != root["pad"]):
-        raise ValueError("accountroot of bereik gewijzigd; nieuwe indexidentiteit nodig")
-    c.execute("INSERT OR IGNORE INTO scope(id,pad,namespace) VALUES(?,?,?)", (root["id"], root["pad"], namespace))
+    if oud and (oud["namespace"] != namespace or oud["pad"] != root["pad"] or oud["verbinding"] != verbinding):
+        raise ValueError("verbinding, accountroot of bereik gewijzigd; nieuwe indexidentiteit en rescan nodig")
+    c.execute("INSERT OR IGNORE INTO scope(id,pad,namespace,verbinding) VALUES(?,?,?,?)", (root["id"], root["pad"], namespace, verbinding))
     c.commit()
     aantal = 0
     for _ in range(budget or regels["pagina_budget_per_root"]):
@@ -206,7 +317,8 @@ def controleer_regelbron(c, regels, rpc, download, force=False):
     if not force and time.time() - stand.get("ts", 0) < 86400:
         return stand
     bron = regels["regelbron"]
-    stand = {"ts": time.time(), "versie": bron["versie"], "pad": bron["pad"], "geldig": False}
+    stand = {"ts": time.time(), "versie": bron["versie"], "pad": bron["pad"], "geldig": False,
+             "verbinding": bron.get("verbinding"), "namespace": bron.get("namespace")}
     try:
         meta = rpc("files/get_metadata", {"path": bron["pad"]})
         if not meta or meta.get(".tag") != "file" or meta.get("size", 0) > 500000:
@@ -225,9 +337,11 @@ def controleer_regelbron(c, regels, rpc, download, force=False):
 
 def kinderen(c, rij):
     prefix = rij["pad"].rstrip("/") + "/"
-    return [dict(x) for x in c.execute("SELECT * FROM item WHERE scope=? AND actief=1 AND substr(lower(pad),1,?)=?",
-                                     (rij["scope"], len(prefix), prefix.casefold()))
-            if "/" not in x["pad"][len(prefix):]]
+    ondergrens = prefix.casefold()
+    bovengrens = ondergrens[:-1] + "0"
+    return [dict(x) for x in c.execute("SELECT * FROM item WHERE scope=? AND actief=1 AND pad_sleutel>=? AND pad_sleutel<?",
+                                     (rij["scope"], ondergrens, bovengrens))
+            if "/" not in x["pad_sleutel"][len(ondergrens):]]
 
 
 def momentnaam(naam, regels):
@@ -280,26 +394,28 @@ def structuurtoets(c, rij, regels, ha_geldig=True):
         return []
     fouten = []
     naam, parent = rij["naam"], PurePosixPath(rij["pad"]).parent.name
-    kind = kinderen(c, rij)
-    namen = {e["naam"] for e in kind}
     is_project = is_projectmap(rij, regels)
+    is_moment = rij["profiel"] == "ha_project" and parent == regels["ha"]["communicatie"] and momentnaam(naam, regels)
+    bases = [p["prefix"] for p in regels["profielen"] if p["profiel"] == "ha_sales"]
+    is_sales = rij["profiel"] == "ha_sales" and any(str(PurePosixPath(rij["pad"]).parent).casefold() == b.casefold() for b in bases)
+    if not (is_project or is_moment or is_sales):
+        return []
+    namen = {e["naam"] for e in kinderen(c, rij)}
     if is_project:
         if regels["ha"]["communicatie"] not in namen:
             fouten.append(("HA A1", "Centrale communicatiemap ontbreekt. Voorgesteld doel: " + rij["pad"] + "/_00. Communication. Maak eerst een samenvoegvoorstel met bestaande bronmappen; verplaats niets automatisch."))
         if namen & set(regels["ha"]["oude_communicatie"]):
             fouten.append(("HA A1 oude indeling", "Oude communicatie-indeling aanwezig. Laat Benamingenwacht en Mappenwacht samen het doelpad voorstellen; behoud alle bronbestanden."))
-    if rij["profiel"] == "ha_project" and parent == regels["ha"]["communicatie"] and momentnaam(naam, regels):
+    if is_moment:
         if "00 verslag.md" not in namen:
             fouten.append(("HA B1", "Verplicht verslag ontbreekt volgens de volledige metadata-index. Voorgesteld doel: " + rij["pad"] + "/00 verslag.md. Stel verwerking van bestaand momentmateriaal voor, zonder inhoud te verzinnen."))
-    if rij["profiel"] == "ha_sales":
-        bases = [p["prefix"] for p in regels["profielen"] if p["profiel"] == "ha_sales"]
-        if any(str(PurePosixPath(rij["pad"]).parent).casefold() == b.casefold() for b in bases):
-            if "00 DOSSIER.md" not in namen:
-                fouten.append(("HA A14 fiche", "Salesdossier mist 00 DOSSIER.md. Stel een fiche met bewijs en bronnenregister voor."))
-            oud = namen & {"00 Fathom", "0 Xelion recording & transcript"}
-            if oud:
-                doelen = [rij["pad"] + "/" + ("0 Fathom" if n == "00 Fathom" else "0 Xelion") for n in sorted(oud)]
-                fouten.append(("HA A14 bronmap", "Oude bronmapbenaming aangetroffen. Voorgesteld doel: " + "; ".join(doelen) + ". Controleer bestaand doel en doublures; behoud alle bronbestanden."))
+    if is_sales:
+        if "00 DOSSIER.md" not in namen:
+            fouten.append(("HA A14 fiche", "Salesdossier mist 00 DOSSIER.md. Stel een fiche met bewijs en bronnenregister voor."))
+        oud = namen & {"00 Fathom", "0 Xelion recording & transcript"}
+        if oud:
+            doelen = [rij["pad"] + "/" + ("0 Fathom" if n == "00 Fathom" else "0 Xelion") for n in sorted(oud)]
+            fouten.append(("HA A14 bronmap", "Oude bronmapbenaming aangetroffen. Voorgesteld doel: " + "; ".join(doelen) + ". Controleer bestaand doel en doublures; behoud alle bronbestanden."))
     return fouten
 
 
@@ -319,9 +435,11 @@ def toets_index(c, agent, regels, budget=None):
     veld = "naam_vuil" if agent == "benamingen-wacht" else "structuur_vuil"
     ha = bool((instelling(c, "regelbron") or {}).get("geldig"))
     alleen_geldig = "" if ha else " AND i.profiel NOT LIKE 'ha_%'"
+    actief = [r["id"] for r in regels["roots"]] + ["lokaal:agenda", "lokaal:gesprekken"]
+    bronfilter = " AND i.scope IN (" + ",".join("?" for _ in actief) + ")"
     rows = c.execute(f"SELECT i.* FROM item i JOIN scope s ON s.id=i.scope WHERE i.actief=1 AND i.{veld}=1 "
-                     "AND s.fout='' AND (i.scope LIKE 'lokaal:%' OR (s.compleet=1 AND s.meer=0))" + alleen_geldig + " LIMIT ?",
-                     (budget or regels["item_budget_per_agent"],)).fetchall()
+                     "AND s.fout='' AND (i.scope LIKE 'lokaal:%' OR (s.compleet=1 AND s.meer=0))" + alleen_geldig + bronfilter + " LIMIT ?",
+                     actief + [budget or regels["item_budget_per_agent"]]).fetchall()
     gedaan = 0
     for row in rows:
         rij = dict(row)
@@ -400,10 +518,10 @@ def lees_lokale_metadata(c, borddb, budget=1000):
                         except (OSError, ValueError):
                             info = {"title": "", "_niet_leesbaar": True}
                         naam = info.get("title") or info.get("meeting_title") or PurePosixPath(pad).name
-                    c.execute("""INSERT INTO item(scope,identiteit,pad,naam,soort,firma,profiel,gegevens)
-                      VALUES(?,?,?,?,'metadata','onbekend','lokale metadata',?) ON CONFLICT(scope,identiteit)
-                      DO UPDATE SET pad=excluded.pad,naam=excluded.naam,gegevens=excluded.gegevens,actief=1,naam_vuil=1""",
-                              (scope, identiteit, pad, naam, json.dumps(info, ensure_ascii=False)))
+                    c.execute("""INSERT INTO item(scope,identiteit,pad,pad_sleutel,naam,soort,firma,profiel,gegevens)
+                      VALUES(?,?,?,?,?,'metadata','onbekend','lokale metadata',?) ON CONFLICT(scope,identiteit)
+                      DO UPDATE SET pad=excluded.pad,pad_sleutel=excluded.pad_sleutel,naam=excluded.naam,gegevens=excluded.gegevens,actief=1,naam_vuil=1""",
+                              (scope, identiteit, pad, pad.casefold(), naam, json.dumps(info, ensure_ascii=False)))
                     ts, rid = d["ts"], d["rij"]
                     aantal += 1
                 c.execute("INSERT INTO lokaal_cursor VALUES(?,?,?) ON CONFLICT(bron) DO UPDATE SET ts=excluded.ts,rij=excluded.rij", (soort, ts, rid))
@@ -436,14 +554,17 @@ def dagelijkse_dekking(c, regels, lezer_van):
 
 
 def overzicht(c, regels, agent):
-    scopes = [dict(r) for r in c.execute("SELECT id,pad,namespace,compleet,meer,poging,gelukt,fout,controle FROM scope ORDER BY id")]
-    telling = {a: c.execute("SELECT count(*) FROM bevinding WHERE agent=? AND status='open'", (a,)).fetchone()[0]
+    scopes = [dict(r) for r in c.execute("SELECT id,pad,namespace,verbinding,compleet,meer,poging,gelukt,fout,controle FROM scope ORDER BY id")]
+    actief = {r["id"] for r in regels["roots"]} | {"lokaal:agenda", "lokaal:gesprekken"}
+    bronfilter = "scope IN (" + ",".join("?" for _ in actief) + ")"
+    telling = {a: c.execute("SELECT count(*) FROM bevinding WHERE agent=? AND status='open' AND " + bronfilter, [a] + sorted(actief)).fetchone()[0]
                for a in ("benamingen-wacht", "mappen-wacht")}
     for s in scopes:
+        s["ingesteld"] = s["id"] in actief
         s["items"] = c.execute("SELECT count(*) FROM item WHERE scope=? AND actief=1", (s["id"],)).fetchone()[0]
         s["achterstand_naam"] = c.execute("SELECT count(*) FROM item WHERE scope=? AND actief=1 AND naam_vuil=1", (s["id"],)).fetchone()[0]
         s["achterstand_structuur"] = c.execute("SELECT count(*) FROM item WHERE scope=? AND actief=1 AND structuur_vuil=1", (s["id"],)).fetchone()[0]
-    out = {"versie": "1.0", "gemaakt": nu(), "laatste_agent": agent, "scopes": scopes,
+    out = {"versie": "1.1", "gemaakt": nu(), "laatste_agent": agent, "scopes": scopes,
            "regelbron": instelling(c, "regelbron"), "tellingen": telling, "niet_gecontroleerd": regels["niet_gecontroleerd"]}
     for a in ("benamingen-wacht", "mappen-wacht"):
         stand = instelling(c, "ronde:" + a)

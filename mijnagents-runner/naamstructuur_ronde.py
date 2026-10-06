@@ -10,7 +10,6 @@ from contextlib import contextmanager
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord
-import bronnen
 import naamstructuur as N
 import organisatie
 
@@ -30,11 +29,6 @@ def vergrendeling(data):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
-def lezer_van(root):
-    ns = os.environ.get(root["namespace_env"], "") if root.get("namespace_env") else bronnen.team_namespace()
-    return N.DropboxLezer(ns)
-
-
 def werk(agent, r, regels, data):
     c = N.open_db(os.path.join(data, "index.sqlite3"))
     try:
@@ -52,7 +46,7 @@ def werk(agent, r, regels, data):
         gelezen = 0
         if agent == "benamingen-wacht":
             try:
-                ruleclient = lezer_van({})
+                ruleclient = N.lezer_van(regels["regelbron"], regels)
                 bron = N.controleer_regelbron(c, regels, ruleclient.rpc, ruleclient.download, force=gewijzigd != vingerafdruk)
             except Exception:
                 bron = {"geldig": False, "status": "accountroot niet vastgesteld; H-A-toetsing gepauzeerd"}
@@ -63,13 +57,17 @@ def werk(agent, r, regels, data):
                 r.nood("Bevestigd H-A-regelboek niet beschikbaar of gewijzigd", "claude-code")
             for root in regels["roots"]:
                 try:
-                    client = lezer_van(root)
+                    client = N.lezer_van(root, regels)
                     gelezen += N.synchroniseer(c, root, client.namespace, client.rpc, regels)
-                except Exception:
+                except Exception as e:
+                    fout = "Bron niet leesbaar of namespace niet bevestigd"
+                    if isinstance(e, ValueError) and "nieuwe indexidentiteit" in str(e):
+                        fout = "Bronverbinding of accountroot gewijzigd; nieuwe scope-identiteit en rescan nodig"
                     with c:
-                        c.execute("INSERT OR IGNORE INTO scope(id,pad,namespace) VALUES(?,?,'niet vastgesteld')", (root["id"], root["pad"]))
+                        c.execute("INSERT OR IGNORE INTO scope(id,pad,namespace,verbinding) VALUES(?,?,?,?)",
+                                  (root["id"], root["pad"], str(root["namespace"]), root["verbinding"]))
                         c.execute("UPDATE scope SET fout=?,poging=? WHERE id=?",
-                                  ("Bron niet leesbaar of namespace niet bevestigd", N.nu(), root["id"]))
+                                  (fout, N.nu(), root["id"]))
                     r.nood("Dropbox-controlebereik niet volledig bereikbaar", "claude-code")
             try:
                 gelezen += N.lees_lokale_metadata(c, os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db"))
@@ -82,12 +80,12 @@ def werk(agent, r, regels, data):
                     c.execute("UPDATE scope SET fout=?,poging=? WHERE id LIKE 'lokaal:%'",
                               ("Bestaande index niet volledig leesbaar", N.nu()))
                 r.nood("Bestaande agenda- of gespreksindex niet leesbaar", "claude-code")
-            N.dagelijkse_dekking(c, regels, lezer_van)
+            N.dagelijkse_dekking(c, regels, lambda root: N.lezer_van(root, regels))
         getoetst = N.toets_index(c, agent, regels)
         with c:
             N.instelling(c, "ronde:" + agent, {"tijd": N.nu(), "gelezen": gelezen, "getoetst": getoetst})
         verslag = N.overzicht(c, regels, agent)
-        onvolledig = [s for s in verslag["scopes"] if not s["compleet"] or s["meer"] or s["fout"]]
+        onvolledig = [s for s in verslag["scopes"] if s["ingesteld"] and (not s["compleet"] or s["meer"] or s["fout"])]
         if onvolledig:
             r.nood("Metadata-dekking nog niet volledig of actueel", "claude-code")
         if verslag["tellingen"][agent]:

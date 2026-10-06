@@ -29,9 +29,9 @@ input,select,button{font:inherit;color:var(--tekst);background:var(--bg);border:
 <p class="zacht">H-A-regels gelden alleen voor herkende H-A-dossiers. Een mapnaam bepaalt geen dossierhouder, adresbewijs of toegang.</p>
 </section>
 <section class="blok"><h2>Daadwerkelijk bereik</h2><div class="tabel"><table>
-<thead><tr><th>Bronbereik</th><th>Accountroot</th><th>Metadata</th><th>Dekking</th><th>Nog te toetsen</th><th>Laatste lezing</th><th>Dagcontrole</th></tr></thead>
-<tbody>{% for s in samenvatting.get('scopes',[]) %}<tr><td><code>{{ s['pad'] }}</code></td><td>{{ s['namespace'] }}</td><td>{{ s['items'] }}</td>
-<td class="{{ 'waarschuwing' if not s['compleet'] or s['meer'] or s['fout'] else '' }}">{% if s['fout'] %}{{ s['fout'] }}{% elif not s['compleet'] %}Eerste basis onvolledig{% elif s['meer'] %}Wijzigingspagina's nog te verwerken{% else %}Basis en ontvangen wijzigingen verwerkt{% endif %}</td>
+<thead><tr><th>Bronbereik</th><th>Verbinding / namespace</th><th>Metadata</th><th>Dekking</th><th>Nog te toetsen</th><th>Laatste lezing</th><th>Dagcontrole</th></tr></thead>
+<tbody>{% for s in samenvatting.get('scopes',[]) %}<tr><td><code>{{ s['pad'] }}</code></td><td>{{ s.get('verbinding') or ('bestaande lokale index' if s['id'].startswith('lokaal:') else 'verbinding vroeger niet vastgelegd') }}<br>{{ s['namespace'] }}</td><td>{{ s['items'] }}</td>
+<td class="{{ 'waarschuwing' if not s['compleet'] or s['meer'] or s['fout'] else '' }}">{% if not s.get('ingesteld',True) %}Historisch bronbewijs; niet meer ingesteld{% elif s['fout'] %}{{ s['fout'] }}{% elif not s['compleet'] %}Eerste basis onvolledig{% elif s['meer'] %}Wijzigingspagina's nog te verwerken{% else %}Basis en ontvangen wijzigingen verwerkt{% endif %}</td>
 <td>{{ s['achterstand_naam'] }} namen, {{ s['achterstand_structuur'] }} structuur</td><td>{{ s['gelukt'] or 'geen geslaagde lezing' }}</td><td>{{ s['controle'] or 'nog niet uitgevoerd' }}</td></tr>{% endfor %}</tbody>
 </table></div></section>
 <section class="blok"><h2>Grenzen van deze controle</h2><ul>{% for grens in samenvatting.get('niet_gecontroleerd',[]) %}<li>{{ grens }}</li>{% endfor %}</ul></section>

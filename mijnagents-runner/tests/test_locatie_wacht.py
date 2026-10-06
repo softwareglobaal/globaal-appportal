@@ -15,6 +15,7 @@ import re
 import sys
 import tempfile
 from datetime import datetime
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 HIER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,17 +26,19 @@ import locatie_wacht as L  # noqa: E402
 WERF = (50.7000, 4.6000)
 ELDERS = (50.7300, 4.6400)
 BRUSSEL = ZoneInfo("Europe/Brussels")
+# Verzonnen dossiers met geldige JJNN uit 2026. De vroegere 91xx/92xx-fiches
+# vielen buiten de H-A-jaargrens en testten daardoor niet meer de locatiekoppeling.
 PER_SLEUTEL = {
-    "HARC:9145": {"adres": "Werfstraat 9, 3999 Proefdorp", "coord": WERF, "bron": "ha-projecten",
-                  "link": "https://ha-projecten.globaal.be/project/9145", "firma": "HARC", "nummer": "9145"},
-    "HARC:9146": {"adres": "Mapstraat 1, 3998 Mapdorp", "coord": None, "bron": "projectmap", "link": None,
-                  "firma": "HARC", "nummer": "9146"},
+    "HARC:2645": {"adres": "Werfstraat 9, 3999 Proefdorp", "coord": WERF, "bron": "ha-projecten",
+                  "link": "https://ha-projecten.globaal.be/project/2645", "firma": "HARC", "nummer": "2645"},
+    "HARC:2646": {"adres": "Mapstraat 1, 3998 Mapdorp", "coord": None, "bron": "projectmap", "link": None,
+                  "firma": "HARC", "nummer": "2646"},
     "HARC:3999": {"adres": "Postcodestraat 1, 3999 Proefdorp", "coord": ELDERS, "bron": "projectmap",
                   "link": None, "firma": "HARC", "nummer": "3999"},
-    "HARC:9200": {"adres": "A 1, 3999 Proefdorp", "coord": (50.71, 4.61), "bron": "ha-projecten", "link": None,
-                  "firma": "HARC", "nummer": "9200"},
-    "UNAB:9200": {"adres": "B 2, 2000 Antwerpen", "coord": (51.2, 4.4), "bron": "unabo", "link": None,
-                  "firma": "UNAB", "nummer": "9200"},
+    "HARC:2620": {"adres": "A 1, 3999 Proefdorp", "coord": (50.71, 4.61), "bron": "ha-projecten", "link": None,
+                  "firma": "HARC", "nummer": "2620"},
+    "UNAB:2620": {"adres": "B 2, 2000 Antwerpen", "coord": (51.2, 4.4), "bron": "unabo", "link": None,
+                  "firma": "UNAB", "nummer": "2620"},
 }
 PER_NUMMER = {}
 for k, v in PER_SLEUTEL.items():
@@ -60,16 +63,16 @@ class Coord:
 def test_firma_en_projectnummer_gaan_voor_nominatim():
     """21-09-2026: 'WB 2145' met een adres in een deelgemeente gaf 'adres niet gevonden'."""
     L.W.coord = Coord()
-    a = {"titel": "Mehdi: !! [HARC-KB] WB 9145 - wekelijks werfbezoek", "locatie": "Werfstraat 9, 3999 Deelgemeente"}
+    a = {"titel": "Mehdi: !! [HARC-KB] WB 2645 - wekelijks werfbezoek", "locatie": "Werfstraat 9, 3999 Deelgemeente"}
     lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
     assert (lat, lon) == WERF, herkomst
-    assert "HARC 9145" in herkomst, herkomst
+    assert "HARC 2645" in herkomst, herkomst
     assert not L.W.coord.gevraagd, "Nominatim gevraagd terwijl de projectplek het wist"
 
 
 def test_zonder_coordinaat_het_adres_van_de_projectbron():
     L.W.coord = Coord([50.71, 4.61])
-    a = {"titel": "!! Mehdi: 9146 werfbezoek 1", "locatie": ""}
+    a = {"titel": "!! Mehdi: 2646 werfbezoek 1", "locatie": ""}
     lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
     assert (lat, lon) == (50.71, 4.61), herkomst
     assert L.W.coord.gevraagd == ["Mapstraat 1, 3998 Mapdorp"]
@@ -84,12 +87,29 @@ def test_postcode_is_geen_projectnummer():
 
 def test_hetzelfde_nummer_bij_twee_firmas_wordt_niet_gegokt():
     L.W.coord = Coord()
-    a = {"titel": "!! Mehdi: 9200 werfbezoek", "locatie": ""}
+    a = {"titel": "!! Mehdi: 2620 werfbezoek", "locatie": ""}
     lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
     assert lat is None and "meer firma" in herkomst, herkomst
-    a = {"titel": "!! Mehdi: [HARC-KB] WB 9200", "locatie": ""}
+    a = {"titel": "!! Mehdi: [HARC-KB] WB 2620", "locatie": ""}
     lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
-    assert (lat, lon) == (50.71, 4.61) and "HARC 9200" in herkomst, herkomst
+    assert (lat, lon) == (50.71, 4.61) and "HARC 2620" in herkomst, herkomst
+    a = {"titel": "!! Mehdi: [UNABO-KB] BS 2620", "locatie": ""}
+    lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
+    assert (lat, lon) == (51.2, 4.4) and "UNAB 2620" in herkomst, herkomst
+
+
+def test_een_onmogelijk_h_a_nummer_wordt_niet_uit_de_projectbron_gegokt():
+    """Een projectplek maakt 9145 niet alsnog geldig binnen de H-A-jaargrens."""
+    L.W.coord = Coord()
+    a = {"titel": "!! Mehdi: [HARC-KB] WB 9145 werfbezoek", "locatie": ""}
+    plek = dict(PER_SLEUTEL["HARC:2645"], nummer="9145")
+    index = ({"HARC:9145": plek}, {"9145": ["HARC:9145"]})
+    with patch.object(L.W.nummerlezer, "jaar_nu_brussel", return_value=2026):
+        info = L.W.lees_titel(a["titel"])
+        lat, lon, herkomst = L.plek_van_afspraak(a, info, index, {})
+    assert info["firma"] == "HARC" and not info["nummer"], info
+    assert lat is None and lon is None and "geen bekend projectnummer" in herkomst, herkomst
+    assert not L.W.coord.gevraagd, "een ongeldige dossiercode werd toch gegeocodeerd"
 
 
 def dagboek(*verblijven):
@@ -102,13 +122,13 @@ def test_afspraak_op_de_werf_is_doorgegaan_met_de_auto_ter_plaatse():
     L.W.coord = Coord()
     L.agenda.beschikbaar = lambda: True
     L.W.afspraken_dag = lambda dag: [
-        {"titel": "!! Mehdi: [HARC-KB] WB 9145 werfbezoek 1", "start": "2026-10-05T07:00:00+02:00",
+        {"titel": "!! Mehdi: [HARC-KB] WB 2645 werfbezoek 1", "start": "2026-10-05T07:00:00+02:00",
          "einde": "2026-10-05T09:00:00+02:00", "locatie": ""},
         {"titel": "Mehdi: [UNABO-PO] Iemand", "start": "2026-10-05T09:00:00+02:00",
          "einde": "2026-10-05T09:30:00+02:00", "locatie": "https://us06web.zoom.us/j/1"},
         {"titel": "🚗 Reistijd → Proefdorp", "start": "2026-10-05T06:30:00+02:00",
          "einde": "2026-10-05T07:00:00+02:00", "locatie": ""}]
-    project = {"sleutel": "HARC:9145", "firma": "HARC", "nummer": "9145", "link": PER_SLEUTEL["HARC:9145"]["link"]}
+    project = {"sleutel": "HARC:2645", "firma": "HARC", "nummer": "2645", "link": PER_SLEUTEL["HARC:2645"]["link"]}
     aankomst = {"soort": "bezoek", "van": tijd(7, 34), "tot": tijd(8, 5), "minuten": 31, "lat": WERF[0],
                 "lon": WERF[1], "herkenning": {"zekerheid": "waarschijnlijk", "project": project}}
     geparkeerd = dict(aankomst, van=tijd(8, 5), tot=tijd(8, 41), minuten=36, parkeren=True)
@@ -120,12 +140,12 @@ def test_afspraak_op_de_werf_is_doorgegaan_met_de_auto_ter_plaatse():
 
 
 def test_onzekere_herkenning_blijft_een_kandidatenlijst():
-    kand = [{"sleutel": "HARC:9145", "firma": "HARC", "nummer": "9145"},
-            {"sleutel": "HARC:9146", "firma": "HARC", "nummer": "9146"}]
+    kand = [{"sleutel": "HARC:2645", "firma": "HARC", "nummer": "2645"},
+            {"sleutel": "HARC:2646", "firma": "HARC", "nummer": "2646"}]
     v = L.verblijven_van(dagboek({"soort": "bezoek", "van": tijd(10, 0), "tot": tijd(11, 0), "minuten": 60,
                                   "lat": WERF[0], "lon": WERF[1],
                                   "herkenning": {"zekerheid": "onzeker", "project": None, "kandidaten": kand}}))[0]
-    assert v["project"] is None and "een van: HARC 9145, HARC 9146" == v["waar"], v["waar"]
+    assert v["project"] is None and "een van: HARC 2645, HARC 2646" == v["waar"], v["waar"]
 
 
 def test_geen_dag_voor_de_startgrens():

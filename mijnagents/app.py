@@ -340,6 +340,10 @@ def naamstructuur_pagina():
             if stand != "alle":
                 where.append("status=?")
                 waarden.append(stand)
+            actieve_scopes = [s["id"] for s in samenvatting.get("scopes", []) if s.get("ingesteld", True)]
+            if stand == "open" and actieve_scopes:
+                where.append("scope IN (" + ",".join("?" for _ in actieve_scopes) + ")")
+                waarden.extend(actieve_scopes)
             if zoeken:
                 where.append("(pad LIKE ? OR firma LIKE ? OR regel LIKE ? OR identiteit LIKE ?)")
                 waarden.extend(["%" + zoeken + "%"] * 4)

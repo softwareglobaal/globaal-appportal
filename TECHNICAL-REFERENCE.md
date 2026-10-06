@@ -2732,14 +2732,24 @@ en de bevestigde H-A-bronvingerafdruk gecontroleerd. H-A-regelbron v1.7 staat
 in `werkwijze/naamstructuur-regels.json`; bronwijziging pauzeert H-A-toetsing.
 Andere firma's zonder regelboek blijven onbekend. Agenda en Fathom/Plaud
 betreffen bestaande indexmetadata; geen claim van volledige externe accountscan.
-Overkoepelende teammap krijgt een bevestigde namespace via
-`NAAMSTRUCTUUR_OVERKOEPELEND_NS` in `~/appportal/.env`; zonder mapping is dat
-bereik expliciet niet gecontroleerd. Optionele `NAAMSTRUCTUUR_REGELS` kiest
-een VM-configbestand. Geen geheime waarden in code of uitvoer.
+Sinds v1.1 (06-10-2026) gebruiken alle drie bevestigde roots en de H-A-regelbron
+de reeds toegestane `omv-v2`-verbinding: `~/appportal/omv-v2-data/.env`, sleutelnamen
+`DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET`, `DROPBOX_TOKEN_FILE`; refresh uit het
+bestaande JSON-tokenbestand. Tijdelijke authenticatie uitsluitend in geheugen,
+geen credentials kopiëren of tokenbestanden wijzigen. Namespace en verbinding
+staan expliciet in de config en het overzicht. De stack-koppeling heeft een ander
+accountbereik; de privé-koppeling is App-folder en ondersteunt geen namespaceheader.
+Geen nieuwe OAuth-scopes of leesrollen. Verbindings-/accountwissel vereist een
+nieuwe scope-identiteit en rescan; oude bronbewijzen blijven historisch beschikbaar.
+Optionele `NAAMSTRUCTUUR_REGELS` kiest een VM-configbestand zonder credentialwaarden.
+Padindex `(scope,pad_sleutel)` en begrensde kinderranges voorkomen volledige tabelscans per controleitem.
+De Python-casefoldsleutel verwerkt Unicode consequent voor ouders, kinderen en tombstones.
+De lokale SQLite-kolom/index worden idempotent toegevoegd; oude metadata worden eenmalig
+in batches van 1000 teruggevuld, met behoud van bronbewijzen en cursors.
 
 Geen bronmutaties en geen externe Bode-signalen. Idempotente registratie en
 planning: `planning/naamstructuur_installeren.py --zet`, met crontabkopie en
 behoud van andere taken. Docker-build en CI toetsen de beheergrens; aparte
 runnergrendels toetsen hervatten, metadata-dekking, puntidentiteit en naamregels.
 Handleiding en volledige installatiestappen:
-`mijnagents-runner/docs/Namen en mappen - toezicht v1.0.md`.
+`mijnagents-runner/docs/Namen en mappen - toezicht v1.1.md`.
