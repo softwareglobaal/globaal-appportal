@@ -76,7 +76,7 @@ def main():
     verschil = huidig != doel
     # Bestaande cronregels kunnen geheimen bevatten; toon uitsluitend ons eigen blok.
     print("planning wijzigen" if verschil else "planning al gelijk")
-    print("\\n".join([BEGIN] + [r for r in regels if r.strip() and not r.startswith("#")] + [EINDE]))
+    print("\n".join([BEGIN] + [r for r in regels if r.strip() and not r.startswith("#")] + [EINDE]))
     if not a.zet:
         print("Registratie en planning worden pas met --zet toegepast.")
         return 0
@@ -85,7 +85,8 @@ def main():
         map_ = os.path.expanduser("~/agents")
         os.makedirs(map_, exist_ok=True)
         pad = os.path.join(map_, "crontab-voor-naamstructuur-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + ".txt")
-        with open(pad, "x", encoding="utf-8") as f:
+        with os.fdopen(os.open(pad, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600),
+                       "w", encoding="utf-8") as f:
             f.write(meting.stdout)
         subprocess.run(["crontab", "-"], input="\n".join(doel) + "\n", text=True, check=True)
     print("Twee controleagents geregistreerd; planning gezet. Geen bestanden in Dropbox gewijzigd.")
