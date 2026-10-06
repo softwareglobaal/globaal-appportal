@@ -1,6 +1,7 @@
 """Buildgrendel: beheerrechten, veilige tekstweergave en begrensde paginering."""
 import json
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -41,11 +42,42 @@ assert client.get("/naamstructuur?status=niet-bestaand", headers=BEHEER).status_
 assert client.get("/naamstructuur?pagina=abc", headers=BEHEER).status_code == 400
 assert "Namen en mappen" not in client.get("/", headers=ANDER).get_data(as_text=True)
 assert "Namen en mappen" in client.get("/", headers=BEHEER).get_data(as_text=True)
-client.post("/api/agent", json={"naam": "benamingen-wacht", "label": "Benamingenwacht"}, headers={"X-Agents-Token": "verzonnen-testtoken"})
+for naam, label in (("benamingen-wacht", "Benamingenwacht"), ("verzonnen-andere-agent", "Andere testagent")):
+    assert client.post("/api/agent", json={"naam": naam, "label": label, "type": "regie"},
+                       headers={"X-Agents-Token": "verzonnen-testtoken"}).status_code == 200
 with A.app.app_context():
-    oud = (datetime.now(timezone.utc) - timedelta(minutes=46)).isoformat()
+    oud = (datetime.now(timezone.utc) - timedelta(minutes=50)).isoformat()
     A.db().execute("INSERT INTO status(naam,status,ts) VALUES('benamingen-wacht','klaar',?)", (oud,))
+    A.db().execute("INSERT INTO status(naam,status,ts) VALUES('verzonnen-andere-agent','waakt',?)", (oud,))
     A.db().commit()
-with A.app.test_request_context(headers=BEHEER):
-    assert next(k for k in A.kaarten() if k["naam"] == "benamingen-wacht")["toestand"] == "stil"
-print("Naamstructuur: beheergrens, escaping en paginering geslaagd")
+
+
+def controleer_hartslagweergaven(andere_toestand):
+    verwacht = {"benamingen-wacht": "stil", "verzonnen-andere-agent": andere_toestand}
+    with A.app.test_request_context(headers=BEHEER):
+        kaarten = {k["naam"]: k["toestand"] for k in A.kaarten()}
+        for naam, toestand in verwacht.items():
+            assert kaarten[naam] == toestand
+    antwoord = client.get("/api/kantoor", headers=BEHEER)
+    assert antwoord.status_code == 200
+    kantoor = {k["naam"]: k["toestand"] for k in antwoord.get_json()["agents"]}
+    for naam, toestand in verwacht.items():
+        assert kantoor[naam] == toestand
+    for url in ("/kantoor", "/organogram"):
+        antwoord = client.get(url, headers=BEHEER)
+        assert antwoord.status_code == 200
+        for naam, toestand in verwacht.items():
+            kaart = re.search(r'<a\b[^>]*href="/agent/' + re.escape(naam) + r'"[^>]*>(.*?)</a>',
+                             antwoord.get_data(as_text=True), re.S)
+            assert kaart is not None, (url, naam)
+            assert "var(--" + toestand + ")" in kaart[1], (url, naam, toestand)
+
+
+# Toezicht is na 45 minuten stil; een gewone waakagent behoudt 150 minuten.
+controleer_hartslagweergaven("waakt")
+with A.app.app_context():
+    oud = (datetime.now(timezone.utc) - timedelta(minutes=151)).isoformat()
+    A.db().execute("UPDATE status SET ts=? WHERE naam='verzonnen-andere-agent'", (oud,))
+    A.db().commit()
+controleer_hartslagweergaven("stil")
+print("Naamstructuur: beheergrens, escaping, paginering en gelijke hartslagweergaven geslaagd")

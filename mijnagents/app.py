@@ -882,7 +882,8 @@ def _kantoor_gegevens():
         if s:
             leeftijd = leeftijd_min(s["ts"])
             t = s["status"] if s["status"] in STILTE_MIN else "waakt"
-            a["toestand"] = "stil" if (leeftijd is not None and leeftijd > STILTE_MIN.get(t, 150)) else t
+            drempel = STILTE_PER_AGENT.get(a["naam"], STILTE_MIN.get(t, 150))
+            a["toestand"] = "stil" if (leeftijd is not None and leeftijd > drempel) else t
             a["taak"], a["detail"] = s["taak"] or "", (s["detail"] or "")[:90]
         a["prop"] = next((p for k, p in PROPS if k in a["naam"]), "laptop")
         a["kleur"] = sum(ord(c) for c in a["naam"]) % 6
@@ -957,7 +958,8 @@ def organogram():
         if s:
             leeftijd = leeftijd_min(s["ts"])
             t = s["status"] if s["status"] in STILTE_MIN else "waakt"
-            a["toestand"] = "stil" if (leeftijd is not None and leeftijd > STILTE_MIN.get(t, 150)) else t
+            drempel = STILTE_PER_AGENT.get(a["naam"], STILTE_MIN.get(t, 150))
+            a["toestand"] = "stil" if (leeftijd is not None and leeftijd > drempel) else t
     klaar = conn.execute("SELECT voor, COUNT(*) n FROM klaarzet WHERE status='klaar' GROUP BY voor").fetchall()
     return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents,
                            klaar={r["voor"]: r["n"] for r in klaar}, mag_beslissen=mag_beslissen())
