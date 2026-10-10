@@ -2753,3 +2753,22 @@ behoud van andere taken. Docker-build en CI toetsen de beheergrens; aparte
 runnergrendels toetsen hervatten, metadata-dekking, puntidentiteit en naamregels.
 Handleiding en volledige installatiestappen:
 `mijnagents-runner/docs/Namen en mappen - toezicht v1.1.md`.
+
+### 14.13 Salesagent H-Architects: schema `sales` (migratie 190, 11-10-2026)
+
+Rol en schema staan centraal hier, de tabellen in de eigen repo (keuze B van Mehdi,
+11-10-2026). Migratie `190-salesagent.sql` maakt de LOGIN-rol **`salesagent`**
+(geen superuser, geen CREATE op de databank), het schema **`sales`** met die rol als
+eigenaar, `search_path = sales`, en alleen leesrecht op vijf tabellen van
+`communicatie` (`xelion_communicatie`, `xelion_belvolgorde`, `lijn_firma`,
+`gesprek_transcript`, `contact_herkenning`) voor telefoongesprekken op de saleslijnen.
+Geen rechten op `kern` of andere schema's. Het wachtwoord staat alleen in
+`~/appportal/.env` als `SALESAGENT_DB_URL`.
+
+De tabellen en hun migraties staan in de repo `softwareglobaal/salesagent` (`db/NNN_*.sql`,
+op de VM gekloond als `~/appportal/salesagent`, uitgesloten in `.git/info/exclude`). Ze worden
+toegepast door `python -m salesagent.db.migreer` onder de rol `salesagent`: elke migratie in
+een eigen transactie, met een advisory lock en een sha256 per bestand in `sales.migratie`;
+een gewijzigde, al toegepaste migratie stopt de run. Die runner voert nooit schema-, rol- of
+rechtenbeheer uit: wie de rechten verruimt, doet dat met een nieuwe migratie hier.
+Rechtentest: `python -m salesagent.db.rechtentest`. Handleiding: `docs/06` in die repo.
