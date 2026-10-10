@@ -1,6 +1,6 @@
 {
- "versie": "5.7",
- "datum": "2026-10-02",
+ "versie": "5.8",
+ "datum": "2026-10-11",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
   {
@@ -1666,5 +1666,16 @@
   "intern": "een agendagast telt niet als gast: de afspraak blijft een eigen afspraak (titel, projectnummer, ritten, vragen)",
   "behouden": "staat een agendagast niet (meer) op een afspraak waar hij hoort, dan zet de agent hem (terug); de zelfcontrole meldt het anders (agendagast_ontbreekt)",
   "nooit": "een gast weghalen; iemand toevoegen op een afspraak die een ander organiseerde; een adres raden; een mail sturen"
+ },
+ "collegadocument": {
+  "wat": "Het blad dat Mehdi aan de collega's geeft die zijn agenda plannen: welke agenda, de titel, de codes, de telefoon, de hele-dag-stops en de agendagasten",
+  "naam": "Bericht aan de collega's over de agenda's",
+  "versie": "2.0",
+  "sinds": "2026-10-11",
+  "vervangt": "v1.1 van 20-09-2026 (vier en meer letters, zonder soorten, opdrachten, telefoon en agendagasten)",
+  "bron": "werkwijze/pdf/collegas_pdf.py bouwt het uit dit bestand; de firmacodes komen live van organisatie.globaal.be en moeten gelijk zijn aan codes_twee_letters.firmas, anders stopt de bouw",
+  "grendel": "tests/test_collegas_pdf.py (ook in de CI): elk voorbeeld in het blad wordt door de agent zelf gelezen zoals bedoeld, elke code uit de master staat erin, geen oude code als voorbeeld, geen privé- of Lara-adres, nooit de volledige landnaam van SU",
+  "mehdi": "11-10-2026: 'kan je een update geven van mijn pdf dat ik aan mijn collega geef'",
+  "versturen": "Mehdi geeft het zelf door; de agent of Claude verstuurt het niet"
  }
 }
