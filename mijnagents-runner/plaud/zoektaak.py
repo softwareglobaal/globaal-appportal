@@ -18,6 +18,7 @@ pad in een transcript is een aanwijzing, geen autorisatie. Het pad wordt gecontr
 (basismap van de verslagsoort), dossier, bezoekdatum en taak-id. Een bestaand transcript.txt telt
 pas als geleverd als het dezelfde opname is (plaud_id in de kop); een ander wordt nooit overschreven.
 """
+import hashlib
 import json
 import re
 from datetime import datetime, timedelta
@@ -151,21 +152,45 @@ def beoordeel(taak, opnames, beslissingen, bewijs=None):
     return {"uitkomst": "gevonden", "reden": grond, "kandidaten": [o["plaud_id"]], "plaud_id": o["plaud_id"]}
 
 
+def transcript_hash(tekst):
+    return hashlib.sha256((tekst or "").encode("utf-8")).hexdigest()[:16]
+
+
+def _kop(begin):
+    uit = {}
+    for regel in begin.splitlines()[:4]:
+        if ":" in regel:
+            k, _, v = regel.partition(":")
+            uit[k.strip()] = v.strip()
+    return uit
+
+
 def lever(bezoekmap, plaud_id, tekst, dropbox, naam="transcript.txt"):
-    """Zet het transcript in de map en bevestig dat het er staat. dropbox heeft lijst, download en upload
-    (koppelingen/bronnen.py). Geeft {"uitkomst": geleverd|al_geleverd|conflict, "pad"}.
-    In een bezoekmap telt elk transcript*.txt; in een dossiermap alleen een bestand met dezelfde naam."""
-    kop = f"plaud_id: {plaud_id}\n"
+    """Zet het transcript in de map en bevestig id én transcriptversie (nacontrole v1.1, P2-9).
+
+    Bovenaan het bestand: `plaud_id:` en `transcript_hash:`. Uitkomst:
+        al_geleverd    dit id met deze versie staat er al
+        geleverd       nieuw bestand, nagelezen
+        nieuwe_versie  dit id stond er met een andere versie; die blijft onaangeroerd en de nieuwe versie
+                       komt ernaast als `<naam> versie <hash>.txt` (geen overschrijving zonder toestemming)
+        conflict       er staat een transcript van een andere opname: niets geschreven
+    In een bezoekmap telt elk transcript*.txt; in een dossiermap alleen bestanden met dezelfde naamstam."""
+    h = transcript_hash(tekst)
+    kop = f"plaud_id: {plaud_id}\ntranscript_hash: {h}\n"
     stam = "transcript" if naam == "transcript.txt" else naam[:-4]
+    oudere = False
     for e in dropbox.lijst(bezoekmap, recursief=False) or []:
         bestaand = e.get("name") or ""
         if e.get(".tag") == "file" and bestaand.lower().startswith(stam.lower()) and bestaand.lower().endswith(".txt"):
-            begin = dropbox.download(e["path_display"], 600).decode("utf-8", "replace")
-            if f"plaud_id: {plaud_id}" in begin:
-                return {"uitkomst": "al_geleverd", "pad": e["path_display"]}
-            return {"uitkomst": "conflict", "pad": e["path_display"], "reden": "er staat al een ander transcript in de bezoekmap"}
-    pad = dropbox.upload(f"{bezoekmap}/{naam}", (kop + "\n" + tekst).encode("utf-8"))
-    controle = dropbox.download(pad, 600).decode("utf-8", "replace")
-    if f"plaud_id: {plaud_id}" not in controle:
-        raise RuntimeError("levering niet bevestigd: het bestand in de bezoekmap is niet dit transcript")
-    return {"uitkomst": "geleverd", "pad": pad}
+            k = _kop(dropbox.download(e["path_display"], 600).decode("utf-8", "replace"))
+            if k.get("plaud_id") != plaud_id:
+                return {"uitkomst": "conflict", "pad": e["path_display"], "reden": "er staat al een transcript van een andere opname"}
+            if k.get("transcript_hash") == h:
+                return {"uitkomst": "al_geleverd", "pad": e["path_display"], "transcript_hash": h}
+            oudere = True
+    doelnaam = f"{stam} versie {h[:6]}.txt" if oudere else naam
+    pad = dropbox.upload(f"{bezoekmap}/{doelnaam}", (kop + "\n" + tekst).encode("utf-8"))
+    controle = _kop(dropbox.download(pad, 600).decode("utf-8", "replace"))
+    if controle.get("plaud_id") != plaud_id or controle.get("transcript_hash") != h:
+        raise RuntimeError("levering niet bevestigd: het bestand in de map is niet deze opname of niet deze versie")
+    return {"uitkomst": "nieuwe_versie" if oudere else "geleverd", "pad": pad, "transcript_hash": h}

@@ -169,6 +169,7 @@ INVENTARIS = {
     "mijnagents-runner/locatie_wacht.py": "bronbeleid (dag_toegestaan, dagen_vanaf_grens); tegel-API's",
     "mijnagents-runner/archivaris.py": "locatiecontext (grens, alleen positieve autoverblijven)",
     "mijnagents-runner/plaud_wacht.py": "locatiecontext (grens, alleen positieve autoverblijven)",
+    "mijnagents-runner/plaud/dossier.py": "weegt alleen het locatiebewijs dat plaud_wacht via locatiecontext.gestructureerd kreeg; leest zelf niets",
     "mijnagents-runner/dagbundelaar.py": "locatiecontext.dag_heeft_dagboek (precies de dag, grens); sluit locatie uit bundels",
     "mijnagents-runner/levenscoach.py": "bronbeleid.dag_toegestaan op locatie-items",
     "mijnagents-runner/agenda_wacht.py": "leest alleen /api/plekken (benoemde plekken voor reistijd), geen metingen",

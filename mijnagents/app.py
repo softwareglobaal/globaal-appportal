@@ -142,6 +142,19 @@ def init_db():
             opgepakt_ts   TEXT DEFAULT ''
         );
         CREATE UNIQUE INDEX IF NOT EXISTS klaarzet_uniek ON klaarzet(uniek) WHERE uniek<>'';
+        -- Revisies van een al opgepakt item (nacontrole Plaud v1.1, 12-10-2026): de oude versie, wie ze
+        -- oppakte, en of de eerdere verspreiding hersteld is. Alleen voor items die revisie vragen.
+        CREATE TABLE IF NOT EXISTS klaarzet_revisie (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            klaarzet_id   INTEGER NOT NULL,
+            uniek         TEXT NOT NULL,
+            oud_voor      TEXT, oud_titel TEXT, oud_inhoud TEXT, oud_verwijzing TEXT, oud_sleutel TEXT,
+            oud_status    TEXT, opgepakt_door TEXT, opgepakt_ts TEXT,
+            nieuw_voor    TEXT,
+            herstel       TEXT DEFAULT 'te beoordelen: eerdere verspreiding nakijken',
+            ts            TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS klaarzet_revisie_uniek ON klaarzet_revisie(uniek);
         CREATE TABLE IF NOT EXISTS nood (
             id      INTEGER PRIMARY KEY AUTOINCREMENT,
             naam    TEXT NOT NULL,       -- agent
@@ -411,7 +424,7 @@ def api_klaarzet():
     p = request.get_json(silent=True) or {}
     items = p.get("items") if isinstance(p.get("items"), list) else [p]
     conn = db()
-    nieuw, bestaand, bijgewerkt = 0, 0, 0
+    nieuw, bestaand, bijgewerkt, herzien, zakelijk_herzien = 0, 0, 0, 0, 0
     for it in items:
         if not (it.get("van") and it.get("voor") and it.get("soort") and it.get("titel")):
             continue
@@ -419,7 +432,25 @@ def api_klaarzet():
         inhoud = it.get("inhoud")
         if not isinstance(inhoud, str):
             inhoud = json.dumps(inhoud, ensure_ascii=False)
-        oud = conn.execute("SELECT id, voor, titel, inhoud, verwijzing, status FROM klaarzet WHERE uniek=?", (uniek,)).fetchone() if uniek else None
+        oud = conn.execute("SELECT id, voor, titel, inhoud, verwijzing, status, sleutel, opgepakt_door, opgepakt_ts FROM klaarzet WHERE uniek=?",
+                           (uniek,)).fetchone() if uniek else None
+        anders = oud is not None and (oud["voor"], oud["titel"], oud["inhoud"], oud["verwijzing"] or "") != \
+            (it["voor"], it["titel"][:300], inhoud[:60000], (it.get("verwijzing") or "")[:500])
+        if oud and anders and oud["status"] != "klaar" and it.get("revisie"):
+            # Nacontrole Plaud v1.1 (P1-5): een al opgepakt item kreeg een nieuwe beoordeling (bv. privé of
+            # conflict). Niet stil negeren: oude versie vastleggen, nieuwe inhoud zichtbaar maken (status klaar),
+            # en de eerdere verspreiding markeren voor gecontroleerd herstel.
+            conn.execute("INSERT INTO klaarzet_revisie(klaarzet_id, uniek, oud_voor, oud_titel, oud_inhoud, oud_verwijzing, oud_sleutel, "
+                         "oud_status, opgepakt_door, opgepakt_ts, nieuw_voor, ts) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (oud["id"], uniek, oud["voor"], oud["titel"], oud["inhoud"], oud["verwijzing"], oud["sleutel"], oud["status"],
+                          oud["opgepakt_door"], oud["opgepakt_ts"], it["voor"], nu()))
+            conn.execute("UPDATE klaarzet SET voor=?, titel=?, inhoud=?, verwijzing=?, sleutel=?, status='klaar', opgepakt_door='', "
+                         "opgepakt_ts='' WHERE id=?",
+                         (it["voor"], it["titel"][:300], inhoud[:60000], (it.get("verwijzing") or "")[:500],
+                          str(it.get("sleutel") or "")[:120], oud["id"]))
+            herzien += 1
+            zakelijk_herzien += 0 if oud["voor"] == "mehdi" else 1
+            continue
         if oud:
             # Les van 12-09-2026: een item dat nog niet opgepakt is, volgt de bron. Toen de Agendawacht TKN leerde
             # herkennen, bleef de afspraak van Britt Verboven bij h-architects staan omdat de bak nooit bijwerkte.
@@ -438,7 +469,7 @@ def api_klaarzet():
              inhoud[:60000], (it.get("verwijzing") or "")[:500], uniek, nu()))
         nieuw += 1
     conn.commit()
-    return jsonify(ok=True, nieuw=nieuw, bestaand=bestaand, bijgewerkt=bijgewerkt)
+    return jsonify(ok=True, nieuw=nieuw, bestaand=bestaand, bijgewerkt=bijgewerkt, herzien=herzien, zakelijk_herzien=zakelijk_herzien)
 
 
 @app.route("/api/klaarzet")
@@ -453,10 +484,26 @@ def api_klaarzet_lezen():
         q += " AND (voor=? OR voor=?)"; a += [voor, request.args.get("afdeling") or voor]
     if sleutel:
         q += " AND sleutel=?"; a.append(sleutel)
+    if request.args.get("uniek"):
+        q += " AND uniek=?"; a.append(request.args["uniek"])
+    if request.args.get("soort"):
+        q += " AND soort=?"; a.append(request.args["soort"])
     if status != "alle":
         q += " AND status=?"; a.append(status)
     q += " ORDER BY id DESC LIMIT ?"; a.append(min(int(request.args.get("n", 100)), 500))
     return jsonify(items=[dict(r) for r in db().execute(q, a).fetchall()])
+
+
+@app.route("/api/klaarzet/revisies")
+def api_klaarzet_revisies():
+    """Revisies van al opgepakte items, met herstelstatus (nacontrole Plaud v1.1)."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    q, a = "SELECT * FROM klaarzet_revisie WHERE 1=1", []
+    if request.args.get("uniek"):
+        q += " AND uniek=?"; a.append(request.args["uniek"])
+    q += " ORDER BY id DESC LIMIT 200"
+    return jsonify(revisies=[dict(r) for r in db().execute(q, a).fetchall()])
 
 
 @app.route("/api/klaarzet/<int:kid>/opgepakt", methods=["POST"])

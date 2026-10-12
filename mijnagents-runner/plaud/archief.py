@@ -97,12 +97,36 @@ class Index:
         return self.ids.get(contract.canon_id(pid))
 
 
-def _id_van_map(map_):
-    meta = lees_json(Path(map_) / "gesprek.json") or {}
+ONBEKEND = "onbekende eigenaar"
+
+
+def eigenaar(map_):
+    """Wie is eigenaar van deze map? None = vrij (bestaat niet of is leeg), een Plaud-id, of ONBEKEND.
+
+    Een bestaande map met bestanden maar zonder leesbare gesprek.json is níet vrij (nacontrole v1.1, P1-6):
+    tot 12-10-2026 gaf een corrupte of niet te hydrateren gesprek.json id=None, en schreef een andere
+    opname met dezelfde naam erin, met de audio van de eerste. Een online-only gesprek.json wordt bij het
+    lezen door Dropbox opgehaald; lukt dat niet, dan blijft de eigenaar onbekend."""
+    map_ = Path(map_)
+    if not map_.exists():
+        return None
+    if not map_.is_dir():
+        return ONBEKEND
+    bestanden = [p for p in map_.iterdir() if p.name not in (".DS_Store",)]
+    if not bestanden:
+        return None
+    meta = lees_json(map_ / "gesprek.json")
+    if not isinstance(meta, dict):
+        return ONBEKEND
     try:
         return contract.canon_id(meta.get("plaud_id") or "")
     except contract.Herstel:
-        return None
+        return ONBEKEND
+
+
+def _id_van_map(map_):
+    e = eigenaar(map_)
+    return None if e in (None, ONBEKEND) else e
 
 
 def resolve(opname, doel, idx=None, naam=None):
@@ -124,8 +148,11 @@ def resolve(opname, doel, idx=None, naam=None):
     gewoon = doel / (naam or _mapnaam.mapnaam(opname))
     suffix = doel / ("%s [%s]" % (naam, pid[3:9]) if naam else _mapnaam.mapnaam(opname, uniek=True))
     for kandidaat in (gewoon, suffix):
-        ander = _id_van_map(kandidaat) if (kandidaat / "gesprek.json").exists() else None
-        if ander in (None, pid):
+        e = eigenaar(kandidaat)
+        if e == ONBEKEND:
+            raise contract.Herstel(f"map {kandidaat.name} bestaat met een onbekende eigenaar (gesprek.json ontbreekt, "
+                                   "is niet leesbaar of niet op te halen); niets geschreven")
+        if e in (None, pid):
             return kandidaat
     raise contract.Herstel(f"geen vrije map voor {pid}: de naam en de suffixnaam zijn van andere opnames")
 

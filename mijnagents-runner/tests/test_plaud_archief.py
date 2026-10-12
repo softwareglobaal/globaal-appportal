@@ -316,6 +316,102 @@ def test_manifest_toont_echte_toestand_zonder_links():
     shutil.rmtree(d)
 
 
+# ----------------------------------------------------- nacontrole v1.1 (12-10-2026) ---
+def test_bestaande_map_met_onbekende_eigenaar_is_niet_vrij():
+    """P1-6: corrupte metadata naast audio en transcript; een andere opname met dezelfde naam."""
+    d = doel()
+    r = bouw_map.bouw(op(ID1), d, haler=Haler())
+    m = Path(r["map"])
+    (m / "gesprek.json").write_text('{"plaud_id": "of_aaaa', encoding="utf-8")       # niet parsebaar
+    voor = {p.name: p.read_bytes() for p in m.iterdir()}
+    r2 = bouw_map.bouw(op(ID2), d, haler=Haler())
+    assert r2["status"] == "herstel", r2
+    assert {p.name: p.read_bytes() for p in m.iterdir()} == voor, "metadata, audio en transcript blijven ongewijzigd"
+    assert len(list(d.iterdir())) == 1, "geen suffixmap naast een map met onbekende eigenaar"
+    shutil.rmtree(d)
+
+
+def test_map_zonder_metadata_maar_met_bestanden_is_niet_vrij():
+    d = doel()
+    r = bouw_map.bouw(op(ID1), d, haler=Haler())
+    m = Path(r["map"])
+    os.remove(m / "gesprek.json")
+    r2 = bouw_map.bouw(op(ID2), d, haler=Haler())
+    assert r2["status"] == "herstel" and not (m / "gesprek.json").exists(), r2
+    shutil.rmtree(d)
+
+
+def test_id_conflict_wordt_niet_als_compleet_overgeslagen():
+    """P1-7: twee complete mappen voor één id."""
+    d = doel()
+    r = bouw_map.bouw(op(ID1), d, haler=Haler())
+    shutil.copytree(r["map"], str(d / "tweede exemplaar"))
+    doen, tel = H.te_doen([op(ID1)], archief.Index(d), datetime.now(timezone.utc))
+    assert not doen and tel["compleet"] == 0 and tel["conflict"] == 1, tel
+    m = manifest.lees(d) if manifest.bouw(d) else None
+    rec = [o for o in m["opnames"] if o["plaud_id"] == ID1]
+    assert len(rec) == 1 and rec[0]["toestand"] == "conflict" and rec[0]["herstel"], rec
+    shutil.rmtree(d)
+
+
+class SchemaHaler(Haler):
+    def __init__(self, transcript):
+        Haler.__init__(self)
+        self.transcript = transcript
+
+    def __call__(self, url, max_bytes, timeout):
+        if "transcript" in url:
+            return gzip.compress(json.dumps(self.transcript).encode())
+        return AUDIO
+
+
+def test_onbekend_json_is_nooit_een_compleet_transcript():
+    """P2-10: foutobject, onbekend object, verkeerde envelop, niet-lijst data, ongeldige uiting."""
+    for vorm in ({"error": "not ready"}, {"iets": 1}, {"data": {"segments": []}}, {"data": "geen lijst"},
+                 [{"start_time": 0}], ["los"], {"result": [{"content": "x"}]}):
+        d = doel()
+        r = bouw_map.bouw(op(ID1), d, haler=SchemaHaler(vorm))
+        assert r["status"] != "compleet", (vorm, r)
+        t = archief.lees_json(Path(r["map"]) / "gesprek.json")["transcript"]
+        assert t["staat"] == "schemafout" and t.get("volgende_controle"), (vorm, t)
+        shutil.rmtree(d)
+
+
+def test_leeg_transcript_is_een_eigen_bronstatus():
+    d = doel()
+    r = bouw_map.bouw(op(ID1), d, haler=SchemaHaler([]))
+    assert r["status"] != "compleet", r
+    assert archief.lees_json(Path(r["map"]) / "gesprek.json")["transcript"]["staat"] == "leeg"
+    shutil.rmtree(d)
+
+
+def test_token_is_altijd_0600_ook_tijdens_het_schrijven():
+    """P2-11: umask 022, onderschep het moment van vervangen."""
+    import stat as st_
+    import tokenbestand
+    d = doel()
+    pad = d / "plaud" / "token.json"
+    gezien = []
+    echt = os.replace
+
+    def kijk(a, b):
+        gezien.append((st_.S_IMODE(os.stat(a).st_mode), st_.S_IMODE(os.stat(os.path.dirname(a)).st_mode)))
+        return echt(a, b)
+    oud_umask = os.umask(0o022)
+    os.replace = kijk
+    try:
+        tokenbestand.schrijf(pad, {"access_token": "proef", "refresh_token": "proef"})
+        tokenbestand.schrijf(pad, {"access_token": "proef2", "refresh_token": "proef"})
+    finally:
+        os.replace = echt
+        os.umask(oud_umask)
+    assert gezien and all(m == 0o600 for m, _ in gezien), gezien
+    assert all(dm == 0o700 for _, dm in gezien), gezien
+    assert st_.S_IMODE(os.stat(pad).st_mode) == 0o600
+    assert json.loads(pad.read_text())["access_token"] == "proef2"
+    shutil.rmtree(d)
+
+
 if __name__ == "__main__":
     fouten = 0
     for naam, fn in sorted(globals().items()):

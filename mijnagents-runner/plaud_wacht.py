@@ -27,6 +27,7 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +61,8 @@ INVOER_MAX_UUR = 3
 ARCHIEF_OP_MAC = "Data uit Mehdi/Plaud"
 
 OK, INVOER_FOUT, DEELS = 0, 3, 4
+# Versie van de herkenningsopdracht: verandert ze, dan is dat andere modelinput.
+HERKEN_VERSIE = 2
 
 
 def _nu():
@@ -122,10 +125,47 @@ def oude_inbox(bekend):
 
 # -------------------------------------------------------------- context ---
 def klaarzet_items():
+    """De afspraken op het bord. Tot 12-10-2026 waren dit de 500 nieuwste items van álle agents, waardoor een
+    afspraak van tien dagen eerder wegviel (1 oktober: UNAB 46118 overlapte de opname, maar werd niet gezien)."""
     try:
-        return bord.call("/api/klaarzet?status=alle&n=500").get("items", [])
+        items = bord.call("/api/klaarzet?status=alle&soort=afspraak&n=500").get("items", [])
+        return [i for i in items if i.get("soort") == "afspraak"]
     except Exception:  # noqa: BLE001
         return []
+
+
+def verzoeken_beoordelen(verzoeken, opnames, items):
+    """Verzoeken van De Contractmaker (soort verzoek, uniek verzoek:<deal>:<datum>:<soort>) hebben geen
+    bezoekmap en geen tijdvenster. Alleen een opname die een afspraak met de naam van de klant overlapt komt
+    in aanmerking; dezelfde dag alleen is geen bevestiging. Ook dan levert De Plaudwacht niet zelf: de
+    bestemming in de salesmap bevestigt Mehdi (nacontrole v1.1). Geeft uitkomsten."""
+    uit = []
+    for v in verzoeken:
+        m = re.match(r"verzoek:(\d+):(\d{4}-\d{2}-\d{2}):(.+)$", v.get("uniek") or "")
+        klant = (v.get("titel") or "").split(":")[0].strip()
+        if not m or len(klant) < 3:
+            uit.append({"verzoek": v.get("id"), "uitkomst": "onleesbaar", "reden": "geen deal, datum of klantnaam"})
+            continue
+        datum = m.group(2)
+        vensters = []
+        for it in items:
+            i = zoektaak.inhoud_van(it)
+            if (i.get("start") or "")[:10] == datum and klant.lower() in (i.get("titel") or it.get("titel") or "").lower():
+                vensters.append((i["start"], i.get("einde") or i["start"]))
+        if not vensters:
+            uit.append({"verzoek": v.get("id"), "uitkomst": "niet_gevonden", "reden": f"geen afspraak met {klant} op {datum}"})
+            continue
+        kand = []
+        for o in opnames:
+            for a, b_ in vensters:
+                taak = {"inhoud": {"datum": datum, "van_tijd": a, "tot_tijd": b_}}
+                if zoektaak.beoordeel(taak, [o], {}, {}).get("uitkomst") in ("gevonden", "wacht_op_transcript"):
+                    kand.append(o["plaud_id"])
+        tijden = ", ".join(f"{a[11:16]}-{b_[11:16]}" for a, b_ in vensters)
+        uit.append({"verzoek": v.get("id"), "uitkomst": "ter_beoordeling" if kand else "niet_gevonden", "kandidaten": sorted(set(kand)),
+                    "reden": (f"opname overlapt de afspraak met {klant} ({tijden}); Mehdi bevestigt de bestemming" if kand
+                              else f"geen Plaud-opname rond de afspraak met {klant} ({datum} {tijden})")})
+    return uit
 
 
 def context_op(start_iso, duur_minuten=0, items=None):
@@ -172,7 +212,8 @@ def eigen_bewijs(o, uitingen, tekst, items):
     b = (dossier.uit_tekst("titel", o.get("naam_in_plaud") or "", "vergadertitel")
          + (dossier.uit_tekst("openingszin", dossier.openingszin(uitingen) if uitingen else tekst[:600], "vergadertitel") if tekst else [])
          + dossier.uit_agenda(afspraken)
-         + (dossier.uit_tekst("kop", o["kop_dossier"], "nummerveld") if o.get("kop_dossier") else []))
+         # het veld dossier: in een kop is een uitdrukkelijk dossierveld: gecontroleerd, ook al leest de nummerlezer het als los nummer
+         + ([dict(x, zeker=True) for x in dossier.uit_tekst("kop", o["kop_dossier"], "nummerveld")] if o.get("kop_dossier") else []))
     return b, afspraken
 
 
@@ -209,8 +250,24 @@ def _tabel(payload):
 
 
 def _klaarzet(payload):
-    uit = ag.klaarzet([dict(payload)])
-    return f"nieuw {uit.get('nieuw', 0)}, bestaand {uit.get('bestaand', 0)}"
+    """Zet klaar en bevestig de werkelijk opgeslagen versie (nacontrole v1.1, P1-5). Een API die 'bestaand'
+    antwoordt zonder de nieuwe beoordeling op te slaan, is geen geslaagde publicatie. Een item dat al
+    opgepakt was, wordt door het bord als revisie bijgewerkt (klaarzet_revisie); dat geven we door."""
+    uit = ag.klaarzet([dict(payload)]) or {}
+    gelezen = bord.call("/api/klaarzet?" + urllib.parse.urlencode({"uniek": payload["uniek"], "status": "alle", "n": 5})).get("items", [])
+    item = next((i for i in gelezen if i.get("uniek") == payload["uniek"]), None)
+    if not item:
+        raise RuntimeError("klaarzet niet bevestigd: item niet terug te lezen")
+    inhoud = item.get("inhoud") or ""
+    try:
+        inhoud = json.loads(inhoud) if isinstance(inhoud, str) else inhoud
+    except ValueError:
+        pass
+    verwacht = json.loads(json.dumps(payload.get("inhoud"), ensure_ascii=False))
+    if item.get("voor") != payload["voor"] or inhoud != verwacht or (item.get("titel") or "") != payload["titel"][:300]:
+        raise RuntimeError("klaarzet niet bevestigd: de opgeslagen versie wijkt af van de nieuwe beoordeling")
+    return {"bevestigd": True, "id": item.get("id"), "status": item.get("status"),
+            "herzien": int(uit.get("zakelijk_herzien", uit.get("herzien")) or 0), "nieuw": int(uit.get("nieuw") or 0)}
 
 
 def _dossierkopie(payload):
@@ -220,15 +277,15 @@ def _dossierkopie(payload):
     r = zoektaak.lever(f"{salesmap}/0 Plaud", payload["plaud_id"], payload["tekst"], bronnen, naam=payload["naam"])
     if r["uitkomst"] == "conflict":
         raise RuntimeError(r["reden"])
-    return r["pad"]
+    return {"bevestigd": True, "pad": r["pad"], "uitkomst": r["uitkomst"], "transcript_hash": r.get("transcript_hash")}
 
 
 def _bezoekmap(payload):
     r = zoektaak.lever(payload["bezoekmap"], payload["plaud_id"], payload["tekst"], bronnen)
     if r["uitkomst"] == "conflict":
         raise RuntimeError(r["reden"])
-    bord.opgepakt(payload["taak_id"], NAAM)        # pas na de bevestigde levering
-    return r["pad"]
+    bord.opgepakt(payload["taak_id"], NAAM)        # pas na de bevestigde levering (id en transcriptversie)
+    return {"bevestigd": True, "pad": r["pad"], "uitkomst": r["uitkomst"], "transcript_hash": r.get("transcript_hash")}
 
 
 UITVOERDERS = {"tabel": _tabel, "klaarzet": _klaarzet, "dossierkopie": _dossierkopie, "bezoekmap": _bezoekmap}
@@ -257,7 +314,7 @@ def opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort):
     klaar = {"voor": b["voor"], "soort": "transcript", "sleutel": (b["projectnummer"] or "") if b["zekerheid"] != "laag" else "",
              "titel": f"{start[:16].replace('T', ' ')} Plaud: {herk.get('hoofdpersoon') or o.get('naam_in_plaud') or 'opname'} · {herk.get('thema', '')[:60]}"
                       + (" · PRIVÉ" if prive else "") + (" · NAKIJKEN" if b["conflict"] else ""),
-             "uniek": f"plaud:{pid}", "verwijzing": pad_mac,
+             "uniek": f"plaud:{pid}", "verwijzing": pad_mac, "revisie": True,
              "inhoud": {"plaud_id": pid, "datum": start[:10], "start": start[11:16], "dossier": b["dossier"], "firma": b["firma"],
                         "projectnummer": b["projectnummer"], "deal_id": deal["id"] if deal else None, "verslagsoort": verslagsoort,
                         "zekerheid": b["zekerheid"], "conflict": b["conflict"], "redenen": b["redenen"], "prive": prive,
@@ -270,10 +327,16 @@ def opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort):
         uit.append({"sleutel": "dossierkopie", "soort": "dossierkopie",
                     "payload": {"plaud_id": pid, "deal_titel": deal["titel"], "projectnummer": b["projectnummer"],
                                 "naam": f"{start[:10]} Plaud transcript - {wie} [{pid[3:9]}].txt", "tekst": tekst}})
-    if not b["conflict"] and not prive:
+    # Elke zakelijke bestemming, ook de bezoekmap van een zoektaak, volgt dezelfde publicatiebeslissing
+    # (nacontrole v1.1, P1-2). Een afgewezen levering laat de taak open; de reden staat in het logboek.
+    if b["kopie_toegestaan"]:
         for t in taken:
             uit.append({"sleutel": f"bezoekmap:{t['id']}", "soort": "bezoekmap",
                         "payload": {"plaud_id": pid, "taak_id": t["id"], "bezoekmap": zoektaak.inhoud_van(t)["bezoekmap"].rstrip("/"), "tekst": tekst}})
+    else:
+        for t in taken:
+            ag.log(f"taak {t['id']}", "besluit", "transcript niet geleverd: geen zakelijke bestemming toegestaan ("
+                   + ("; ".join(b["redenen"]) or "beslissing") + "); de taak blijft open")
     return uit
 
 
@@ -291,30 +354,45 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
         if z:
             st.setdefault("zoektaken", {})[str(t["id"])] = {"firma": z[0], "nummer": z[1]}
     zoek = [(z["firma"], z["nummer"]) for z in (st.get("zoektaken") or {}).values()]
-    bewijzen = eigen + dossier.uit_locatie(verblijf) + [dossier.bewijs("zoektaak", f, n, "gevalideerde zoektaak") for f, n in zoek]
+    locatie = dossier.uit_locatie(verblijf)
+    bewijzen = eigen + locatie + [dossier.bewijs("zoektaak", f, n, "gevalideerde zoektaak") for f, n in zoek]
     th = staat.hash_van(tekst)
-    vinger = staat.hash_van({"naam": o.get("naam_in_plaud"), "start": o["start_utc"], "transcript": th, "bewijs": bewijzen,
-                             "taken": sorted(t["id"] for t in taken), "regels": dossier.VERSIE})
+    locatiezin = LC.beschrijf(LC.verblijf_op(o["start_utc"]))
+    # Twee vingerafdrukken (nacontrole v1.1, P2-8): wat het model te zien krijgt, en wat de deterministische
+    # beslissing bepaalt. Een andere titel of context is andere modelinput; bronherstel (Pipedrive) alleen
+    # herbeoordeelt zonder nieuwe modelvraag.
+    model_vinger = staat.hash_van({"transcript": th, "naam": o.get("naam_in_plaud"), "start": o["start_utc"],
+                                   "afspraken": afspraken, "locatie": locatiezin, "bewijs": eigen + locatie,
+                                   "toestel": o.get("toestel"), "versie": HERKEN_VERSIE})
+    bekend = None if deals is None else {("HARC", str(d["nummer"])) for d in deals if d.get("nummer")}
+    relevant = sorted({(x["firma"], x["nummer"]) for x in bewijzen})
+    vinger = staat.hash_van({"model": model_vinger, "bewijs": bewijzen, "taken": sorted(t["id"] for t in taken),
+                             "regels": dossier.VERSIE, "bron_bekend": deals is not None,
+                             "bekend": [k for k in relevant if bekend and k in bekend],
+                             "deals": sorted(str(d.get("id")) for d in (deals or []) if ("HARC", str(d.get("nummer"))) in relevant)})
     if st.get("vingerafdruk") == vinger and not staat.open_opdrachten(st):
         return {"uitkomst": "ongewijzigd", "fouten": 0}
     herk = st.get("herkenning") or {}
-    if herk.get("transcript_hash") != th:
+    if herk.get("model_vinger") != model_vinger:
         if budget["over"] <= 0:
             return {"uitkomst": "uitgesteld", "fouten": 0}
         budget["over"] -= 1
-        herk = herken(o, tekst, afspraken, LC.beschrijf(LC.verblijf_op(o["start_utc"])), bewijzen, personen)
+        herk = herken(o, tekst, afspraken, locatiezin, eigen + locatie, personen)
         herk["transcript_hash"] = th
+        herk["model_vinger"] = model_vinger
         st["herkenning"] = herk
         st_obj.bewaar(pid, st)                 # een herstart vraagt het model niet opnieuw
     model = dossier.uit_tekst("model", herk.get("project") or "", "vergadertitel")
-    b = dossier.beslis(bewijzen, herk, model, bekend={str(d["nummer"]) for d in deals if d.get("nummer")})
+    b = dossier.beslis(bewijzen, herk, model, bekend=bekend)
     deal = None
-    if b["firma"] == "HARC" and b["projectnummer"]:
-        passend = [d for d in deals if d.get("nummer") == b["projectnummer"]]
+    if b["firma"] == "HARC" and b["projectnummer"] and deals:
+        passend = [d for d in deals if str(d.get("nummer")) == b["projectnummer"]]
         deal = passend[0] if len(passend) == 1 else None
     st["beslissing"] = b
     st["vingerafdruk"] = vinger
     staat.plan(st, opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort_van(tekst, o.get("naam_in_plaud") or "")))
+    if not b["kopie_toegestaan"]:
+        staat.trek_in(st, "nieuwe beslissing staat geen zakelijke kopie toe: " + ("; ".join(b["redenen"]) or "zie beslissing"))
     st_obj.bewaar(pid, st)                     # eerst vastleggen, dan pas extern schrijven
     gedaan, fouten = staat.voer_uit(st, lambda s: st_obj.bewaar(pid, s), UITVOERDERS)
     ag.log(f"opname {o['start_brussel'][:16]}", "bevinding",
@@ -338,7 +416,14 @@ def toezicht(r, m, status, st_obj, uitkomsten, taken, tellers):
         r.nood("Plaud-aanmelding ontbreekt of is geweigerd: Mehdi meldt één keer aan met plaud_login.py op de Mac", wie="mehdi")
     elif status.get("uitkomst") == "bronfout":
         r.nood("De Plaud-API was bij de laatste ophaling niet bereikbaar", wie="claude-code")
-    vast = [o for s in st_obj.alle().values() for o in staat.open_opdrachten(s) if int(o.get("pogingen") or 0) >= 3]
+    alle = st_obj.alle().values()
+    if m["meta"].get("conflicten"):
+        r.nood("Id-conflict in het Plaud-archief: een opname staat in meer dan één map; Mehdi kiest welke geldt "
+               "(zie 00 reconciliatie.md); niets gepubliceerd", wie="mehdi")
+    if any(staat.te_herstellen(s) for s in alle):
+        r.nood("Een eerder verspreid Plaud-transcript is door een nieuwe beoordeling herzien; het herstelvoorstel staat "
+               "in de staat van De Plaudwacht", wie="mehdi")
+    vast = [o for s in alle for o in staat.open_opdrachten(s) if int(o.get("pogingen") or 0) >= 3]
     if vast:
         r.nood("Publicaties van Plaud-opnames mislukken herhaaldelijk; zie het logboek", wie="claude-code")
     if any(u["uitkomst"] == "conflict" for u in uitkomsten):
@@ -380,18 +465,20 @@ def ronde(r):
     taken = [t for t in open_items if t.get("soort") == "taak"]
     # verzoeken (bv. van De Contractmaker) hebben geen bezoekmap en geen tijdvenster: niet automatisch, wel zichtbaar
     tellers["open_verzoeken"] = len([t for t in open_items if t.get("soort") == "verzoek"])
-    for t in open_items:
-        if t.get("soort") == "verzoek":
-            ag.log(f"verzoek {t.get('id')}", "bevinding", f"verzoek van {t.get('van')} niet automatisch uitgevoerd: {t.get('titel', '')[:120]}")
+    verzoeken = [t for t in open_items if t.get("soort") == "verzoek"]
     items = klaarzet_items()
     per_id, uitkomsten = zoektaken_beoordelen(taken, opnames, st_obj, items)
+    for u in verzoeken_beoordelen(verzoeken, [o for o, _ in opnames], items):
+        ag.log(f"verzoek {u['verzoek']}", "bevinding", f"{u['uitkomst']}: {u['reden']}")
+        if u["uitkomst"] == "ter_beoordeling":
+            r.nood("Een Plaud-opname past bij een verzoek van De Contractmaker; Mehdi bevestigt de bestemming in de salesmap", wie="mehdi")
     import fathom_wacht as fw
     personen = fw.personen_uit_werkwijze(bord.call("/api/agent/fathom-wacht/werkwijze").get("werkwijze") or "")
     try:
         deals = fw.deals_index()
-    except Exception as e:  # noqa: BLE001
-        deals = []
-        ag.log("Plaud", "fout", f"Pipedrive niet gelezen: {type(e).__name__}")
+    except Exception as e:  # noqa: BLE001  onvolledig bewijs, geen definitieve conclusie (nacontrole v1.1, P2-8)
+        deals = None
+        ag.log("Plaud", "fout", f"Pipedrive niet gelezen: {type(e).__name__}; dossierbewijs deze ronde onvolledig")
     budget = {"over": MAX_HERKENNING}
     for o, romp in opnames:
         eigen = per_id.get(o["plaud_id"], [])

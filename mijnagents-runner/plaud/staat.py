@@ -62,7 +62,8 @@ class Staat:
 
 def plan(st, opdrachten):
     """Zet de gewenste publicaties vast. Een opdracht met dezelfde sleutel en payload die al gedaan is,
-    blijft gedaan; een gewijzigde payload wordt opnieuw uitgevoerd."""
+    blijft gedaan; een gewijzigde payload wordt opnieuw uitgevoerd. Wat al uitgevoerd was en nu vervangen
+    wordt, gaat naar st["geschiedenis"]: een eerdere verspreiding verdwijnt nooit stil (nacontrole v1.1)."""
     oud = {o["sleutel"]: o for o in st.get("opdrachten", [])}
     nieuw = []
     for o in opdrachten:
@@ -71,23 +72,58 @@ def plan(st, opdrachten):
         if vorig and vorig.get("hash") == h:
             nieuw.append(vorig)
         else:
+            if vorig and vorig.get("gedaan"):
+                st.setdefault("geschiedenis", []).append({**_zonder_tekst(vorig), "vervangen": _nu()})
             nieuw.append({**o, "hash": h, "gedaan": False, "fout": "", "pogingen": 0, "ts": ""})
     sleutels = {o["sleutel"] for o in nieuw}
-    nieuw += [o for s, o in oud.items() if s not in sleutels and o.get("gedaan")]    # wat gedaan is, blijft geschiedenis
+    nieuw += [o for s, o in oud.items() if s not in sleutels and o.get("gedaan")]    # wat gedaan is, blijft staan
     st["opdrachten"] = nieuw
     return st
 
 
+def _zonder_tekst(o):
+    p = dict(o.get("payload") or {})
+    if "tekst" in p:
+        p["tekst"] = "(%d tekens, hash %s)" % (len(p["tekst"]), hash_van(p["tekst"]))
+    return {**o, "payload": p}
+
+
+def trek_in(st, reden):
+    """Een nieuwe beslissing staat geen zakelijke kopie meer toe. Eerder geleverde dossierkopieën en
+    bezoekmapbestanden blijven staan (niets automatisch verwijderen), maar worden zichtbaar als ingetrokken
+    gemarkeerd met een herstelvoorstel voor Mehdi."""
+    for o in st.get("opdrachten", []) + st.get("geschiedenis", []):
+        if o.get("soort") in ("dossierkopie", "bezoekmap") and o.get("gedaan") and not o.get("ingetrokken"):
+            res = o.get("resultaat")
+            pad = res.get("pad") if isinstance(res, dict) else res
+            o.update(ingetrokken=_nu(), reden_intrekking=reden[:300],
+                     herstel="voorstel: Mehdi beoordeelt %s; niets automatisch verwijderd" % (pad or "het eerder geleverde bestand"))
+    return st
+
+
+def te_herstellen(st):
+    """Revisies en ingetrokken kopieën die nog niet afgehandeld zijn."""
+    uit = [r for r in st.get("revisies", []) if not r.get("afgehandeld")]
+    uit += [o for o in st.get("opdrachten", []) + st.get("geschiedenis", []) if o.get("ingetrokken") and not o.get("afgehandeld")]
+    return uit
+
+
 def voer_uit(st, bewaar, uitvoerders):
     """Voer elke openstaande opdracht uit; na elke stap wordt de staat bewaard. Een fout wordt
-    onthouden en blokkeert de andere opdrachten niet. Geeft (gedaan, fouten)."""
+    onthouden en blokkeert de andere opdrachten niet. Een uitvoerder die een dict teruggeeft met
+    bevestigd=True heeft de opgeslagen versie nagelezen; herzien>0 betekent dat een al opgepakte
+    publicatie als revisie bijgewerkt is. Geeft (gedaan, fouten)."""
     gedaan, fouten = 0, 0
     for o in st.get("opdrachten", []):
         if o.get("gedaan"):
             continue
         try:
-            o["resultaat"] = uitvoerders[o["soort"]](o["payload"])
-            o.update(gedaan=True, fout="", ts=_nu())
+            res = uitvoerders[o["soort"]](o["payload"])
+            o["resultaat"] = res
+            o.update(gedaan=True, fout="", ts=_nu(), bevestigd=bool(isinstance(res, dict) and res.get("bevestigd")))
+            if isinstance(res, dict) and res.get("herzien"):
+                st.setdefault("revisies", []).append({"sleutel": o["sleutel"], "ts": _nu(), "afgehandeld": False,
+                                                      "herstel": "een al opgepakte publicatie is herzien; eerdere verspreiding nakijken"})
             gedaan += 1
         except Exception as e:  # noqa: BLE001
             o.update(fout=f"{type(e).__name__}: {str(e)[:200]}", pogingen=int(o.get("pogingen") or 0) + 1, ts=_nu())

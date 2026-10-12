@@ -8,12 +8,14 @@ on:
     paths: ["mijnagents-runner/plaud/**", "mijnagents-runner/plaud_wacht.py", "mijnagents-runner/fathom_wacht.py",
             "mijnagents-runner/werfverslag_voorbereider.py", "mijnagents-runner/commandocentrum.py",
             "mijnagents-runner/koppelingen/**", "mijnagents-runner/planning/plaud*", "mijnagents-runner/planning/mac/**",
-            "mijnagents-runner/tests/test_plaud_*.py", ".github/workflows/plaud-grendels.yml"]
+            "mijnagents-runner/tests/test_plaud_*.py", "mijnagents/app.py", "mijnagents/test_klaarzet_revisie.py",
+            ".github/workflows/plaud-grendels.yml"]
   pull_request:
     paths: ["mijnagents-runner/plaud/**", "mijnagents-runner/plaud_wacht.py", "mijnagents-runner/fathom_wacht.py",
             "mijnagents-runner/werfverslag_voorbereider.py", "mijnagents-runner/commandocentrum.py",
             "mijnagents-runner/koppelingen/**", "mijnagents-runner/planning/plaud*", "mijnagents-runner/planning/mac/**",
-            "mijnagents-runner/tests/test_plaud_*.py", ".github/workflows/plaud-grendels.yml"]
+            "mijnagents-runner/tests/test_plaud_*.py", "mijnagents/app.py", "mijnagents/test_klaarzet_revisie.py",
+            ".github/workflows/plaud-grendels.yml"]
 
 jobs:
   # De ophaler en het manifest draaien op de Mac met /usr/bin/python3 (3.9).
@@ -36,6 +38,12 @@ jobs:
           python-version: "3.12"
       - run: python3 mijnagents-runner/tests/test_plaud_archief.py
       - run: python3 mijnagents-runner/tests/test_plaud_wacht.py
+      # nacontrole v1.1: dossierbewijs (zekerheid, onafhankelijkheid, bekende dossiers, firma)
+      - run: python3 mijnagents-runner/tests/test_plaud_dossier.py
       # de locatiegrens die De Plaudwacht deelt met de andere lezers
       - run: pip install -r locatie/requirements.txt
       - run: python3 mijnagents-runner/tests/test_locatielezers.py
+      # nacontrole v1.1: correctie na oppakken, tegen de echte klaarzet-API van het bord (Flask, tijdelijke SQLite)
+      - run: pip install -r mijnagents/requirements.txt
+      - run: python3 mijnagents-runner/tests/test_plaud_revisie.py
+      - run: cd mijnagents && python3 test_klaarzet_revisie.py

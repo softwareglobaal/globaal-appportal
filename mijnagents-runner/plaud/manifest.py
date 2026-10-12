@@ -61,6 +61,16 @@ def bouw(doel):
         tellers[st["staat"]] = tellers.get(st["staat"], 0) + 1
         opnames.append(c)
     opnames.sort(key=lambda o: o.get("start_utc") or "", reverse=True)
+    # id-conflict: de opname zelf krijgt herstel en toestand conflict, met alle mappen; nooit stil één map kiezen
+    for pid, mappen in conflicten.items():
+        for c in opnames:
+            if c.get("plaud_id") == pid:
+                tellers[c["toestand"]] = tellers.get(c["toestand"], 1) - 1
+                if not tellers[c["toestand"]]:
+                    tellers.pop(c["toestand"])
+                c.update(toestand="conflict", herstel="id staat in meer dan één map: " + " | ".join(p.name for p in mappen),
+                         mappen=[p.name for p in mappen])
+        tellers["conflict"] = tellers.get("conflict", 0) + 1
     m = {"meta": {"contract": contract.CONTRACT, "versie": contract.VERSIE,
                   "gemaakt": datetime.now(timezone.utc).isoformat(timespec="seconds"), "aantal": len(opnames),
                   "toestanden": tellers, "conflicten": {pid: [p.name for p in ps] for pid, ps in conflicten.items()}},

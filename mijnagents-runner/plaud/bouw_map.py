@@ -50,12 +50,24 @@ def uitpakken(rauw):
     return rauw.decode("utf-8", "replace")
 
 
+class Leeg(ValueError):
+    """Plaud gaf een transcript zonder uitingen: een eigen bronstatus, geen compleet transcript."""
+
+
 def _uitingen(tekst):
+    """Alleen de vorm uit het contract van Plaud (block transaction, trans_result.json): een lijst van
+    uitingen met content (tekst) en start_time (getal). Een foutobject, een onbekende envelop of een
+    ongeldige uiting is een schemafout (nacontrole v1.1, P2-10): tot 12-10-2026 werd {"error": ...} stil
+    een leeg, compleet transcript."""
     data = json.loads(tekst)
-    uit = data if isinstance(data, list) else (data.get("data") or data.get("result") or [])
-    if not isinstance(uit, list) or not all(isinstance(u, dict) for u in uit):
-        raise ValueError("transcript is geen lijst van uitingen")
-    return uit
+    if not isinstance(data, list):
+        raise ValueError("transcript is geen lijst van uitingen (envelop %s)" % ",".join(sorted(data)[:4]) if isinstance(data, dict) else "transcript is geen lijst")
+    if not data:
+        raise Leeg("transcript zonder uitingen")
+    for u in data:
+        if not isinstance(u, dict) or not isinstance(u.get("content"), str) or not isinstance(u.get("start_time"), (int, float)):
+            raise ValueError("ongeldige uiting in het transcript")
+    return data
 
 
 def bouw(op, doel=DOEL, idx=None, haler=None):
@@ -105,7 +117,17 @@ def bouw(op, doel=DOEL, idx=None, haler=None):
             archief.schrijf_json(map_ / "transcript.json", uitingen)
             t = {"staat": "aanwezig", "uitingen": len(uitingen), "laatste_controle": _nu(), "bron": "plaud transaction"}
             res["transcript"] = "%d uitingen" % len(uitingen)
-        except (veilig.OnveiligeLink, veilig.DownloadFout, ValueError, OSError) as e:
+        except Leeg as e:
+            pogingen = int(t.get("pogingen") or 0) + 1
+            t = {"staat": "leeg", "pogingen": pogingen, "laatste_controle": _nu(),
+                 "volgende_controle": contract.volgende_controle(pogingen), "bron": str(e)}
+            res["transcript"] = "leeg (poging %d)" % pogingen
+        except ValueError as e:
+            pogingen = int(t.get("pogingen") or 0) + 1
+            t = {"staat": "schemafout", "pogingen": pogingen, "laatste_controle": _nu(),
+                 "volgende_controle": contract.volgende_controle(pogingen), "bron": str(e)[:160]}
+            res["fouten"].append("transcript: schemafout %s" % str(e)[:120])
+        except (veilig.OnveiligeLink, veilig.DownloadFout, OSError) as e:
             res["fouten"].append("transcript: %s %s" % (type(e).__name__, str(e)[:120]))
     elif huidig in ("aanwezig", "online_only"):
         t = {**t, "staat": "aanwezig"}

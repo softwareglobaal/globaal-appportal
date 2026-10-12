@@ -44,6 +44,7 @@ import archief  # noqa: E402
 import bouw_map  # noqa: E402
 import contract  # noqa: E402
 import lijst  # noqa: E402
+import tokenbestand  # noqa: E402
 
 BASIS = "https://platform.plaud.ai/developer/api"
 VERVERS_URL = BASIS + "/oauth/third-party/access-token/refresh"
@@ -79,8 +80,7 @@ def _lees_bewijs():
 
 
 def _bewaar_bewijs(b):
-    archief.schrijf_json(BEWIJS, b)
-    os.chmod(BEWIJS, 0o600)
+    tokenbestand.schrijf(BEWIJS, b)          # 0600 vanaf het eerste moment, map 0700 (nacontrole v1.1, P2-11)
 
 
 def _curl(args):
@@ -155,13 +155,16 @@ def lijst_alles(b):
 # --------------------------------------------------------------- ronde ---
 def te_doen(opnames, idx, nu):
     """(lijst te bouwen, tellers). Wachtende transcripten alleen als hun volgende controle voorbij is."""
-    t = {"compleet": 0, "wacht_op_transcript": 0, "wacht_nog_niet_aan_de_beurt": 0, "te_bouwen": 0, "herstel": 0}
+    t = {"compleet": 0, "wacht_op_transcript": 0, "wacht_nog_niet_aan_de_beurt": 0, "te_bouwen": 0, "herstel": 0, "conflict": 0}
     doen = []
     for o in opnames:
         try:
             pid = contract.canon_id(o.get("id") or "")
         except contract.Herstel:
             t["herstel"] += 1
+            continue
+        if pid in idx.conflicten:           # één id op twee plaatsen: nooit als compleet overslaan (nacontrole v1.1, P1-7)
+            t["conflict"] += 1
             continue
         m = idx.van(pid)
         st = archief.toestand(m, pid) if m else {"staat": "ontbreekt"}
@@ -195,6 +198,9 @@ def ronde(args):
         meta = lijst.schrijf(DOEL, opnames, bron="plaud-api", volledig=True)
         status["nieuwste_opname"] = meta.get("nieuwste_start")
         status["tellers"]["in_plaud"] = len(opnames)
+        idx_conflicten = archief.Index(DOEL).conflicten
+        if idx_conflicten:
+            status["fouten"].append({"conflict": sorted(idx_conflicten), "reden": "id in meer dan één map; Mehdi kiest"})
         if args.lijst:
             status.update(uitkomst="ok", laatste_ok=_nu().isoformat(timespec="seconds"))
             schrijf_status(status)
@@ -226,6 +232,7 @@ def ronde(args):
                 status["fouten"].append({"plaud_id": res.get("plaud_id"), "status": res["status"], "fouten": res.get("fouten", [])[:3]})
             time.sleep(0.3)
         status["tellers"].update({"gebouwd": goed, "mislukt": fout})
+        fout += tellers.get("conflict", 0)
         status["uitkomst"] = "ok" if not fout else "deels"
         if not fout:
             status["laatste_ok"] = _nu().isoformat(timespec="seconds")

@@ -242,6 +242,40 @@ def bezoeken_in(projectmap):
     return uit
 
 
+def taakdoel(b):
+    """Waar een bron-agent (Plaud, iCloud) de stukken van dit bezoek neerzet.
+
+    Een bezoek dat alleen als los verslag in een verzamelmap bestaat (`4. Werfverslagen`, `1. Werf updates`)
+    heeft geen eigen momentmap. Die verzamelmap is geen bezoekmap: een transcript daarin hoort bij geen enkel
+    bezoek (nacontrole Plaud v1.1, 12-10-2026). Het doel wordt dan een gedateerde momentmap eronder,
+    `<verzamelmap>/JJJJMMDD`, het patroon dat in de light-projecten al bestaat (2416: `4. Werfverslagen/20260427`).
+    De map ontstaat pas bij een echte levering; de bezoekrij op het bord blijft dezelfde."""
+    if b.get("bron_map") == "los verslag" and b.get("datum"):
+        return f'{b["map"].rstrip("/")}/{b["datum"].replace("-", "")}'
+    return b["map"]
+
+
+# Bestemmingen waar een zakelijk transcript voor de werfketen mag staan.
+WERF_BESTEMMING = ("h-architects", NAAM)
+
+
+def transcript_telt(it, d, nummer):
+    """Telt dit klaargezette transcript voor H-Architects-dossier `nummer` (nacontrole Plaud v1.1, P1-3)?
+
+    Gestructureerd (inhoud met firma): alleen firma HARC plus hetzelfde projectnummer, bestemming
+    h-architects, geen privé, geen conflict en zekerheid hoog of middel. Een item voor Mehdi (beoordeling)
+    voedt de werfketen nooit, ook niet bij hetzelfde nummer van een andere firma (UNAB:2531).
+    Oud item zonder schema: alleen het nummer als los woord in sleutel of titel, en niet voor Mehdi,
+    niet privé (veld of PRIVÉ in de titel); geen vrije zoektocht in de inhoud."""
+    if "firma" in d:
+        return (d.get("firma") == "HARC" and str(d.get("projectnummer") or "") == str(nummer)
+                and it.get("voor") in WERF_BESTEMMING and not d.get("prive") and not d.get("conflict")
+                and d.get("zekerheid") in ("hoog", "middel"))
+    if it.get("voor") == "mehdi" or d.get("prive") or "PRIVÉ" in (it.get("titel") or "").upper():
+        return False
+    return bool(re.search(rf"\b{nummer}\b", f'{it.get("sleutel", "")} {it.get("titel", "")}'))
+
+
 def klaargezet(nummer):
     """Wat de andere agents over dit dossier klaarzetten, per soort."""
     try:
@@ -261,8 +295,9 @@ def klaargezet(nummer):
             d = json.loads(inhoud) if inhoud.startswith("{") else {}
         except ValueError:
             d = {}
-        if str(d.get("projectnummer") or "") == str(nummer):
-            per[soort].append(it)
+        if soort == "transcript":
+            if transcript_telt(it, d, nummer):
+                per[soort].append(it)
             continue
         tekst = f'{it.get("sleutel", "")} {it.get("titel", "")} {inhoud[:400]}'
         if soort == "foto" or re.search(rf"\b{nummer}\b", tekst):
@@ -445,10 +480,12 @@ def verwerk(nummer, droog=False):
             uniek = f"werf:{nummer}:{b['datum']}:{voor}"
             # eigen naam: 'soort' is het soort project (standaard, light); overschrijven gaf 'taak-project' op de pagina
             taaksoort = "opdracht" if voor == "werfverslag-schrijver" else "taak"
+            doel = taakdoel(b) if voor in ("plaud-wacht", "icloud-wacht") else b["map"]
             taakrijen.append({"voor": voor, "soort": taaksoort, "sleutel": (f"{nummer}-{b['volgnr']}" if taaksoort == "opdracht" else str(nummer)), "titel": tekst[:300],
-                              "inhoud": {"dossier": nummer, "datum": b["datum"], "adres": adres, "bezoekmap": b["map"], "volgnr": b["volgnr"],
-                                         "nr_label": b["nr_label"], "soort_bezoek": b["soort_bezoek"]},
-                              "verwijzing": b["map"], "uniek": uniek})
+                              "inhoud": {"dossier": nummer, "datum": b["datum"], "adres": adres, "bezoekmap": doel, "volgnr": b["volgnr"],
+                                         "nr_label": b["nr_label"], "soort_bezoek": b["soort_bezoek"],
+                                         **({"verzamelmap": b["map"]} if doel != b["map"] else {})},
+                              "verwijzing": doel, "uniek": uniek})
         alle_taken += taakrijen
         rijen.append({"dossier": str(nummer), "adres": adres, "soort_project": soort, "projectmap": projectmap,
                       "bezoekmap": b["map"], "datum": b["datum"], "volgnr": b["volgnr"],

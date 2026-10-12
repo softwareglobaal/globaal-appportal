@@ -104,3 +104,21 @@ Open:
 - Voorstel voor de Werfverslag voorbereider: een bezoek dat alleen als los verslag in `4. Werfverslagen` of `1. Werf updates` bestaat, krijgt geen Plaud-taak met die verzamelmap als bezoekmap, maar een momentmap met de bezoekdag.
 - Het verzoek van De Contractmaker (Nelleke Stropke, plaatsbezoek 2026-10-01) heeft geen bezoekmap; De Plaudwacht meldt het alleen.
 - 6 mogelijke dubbels en de oude jaarmap `2026/` (4 opnames, ook in het hoofdarchief) staan in `00 reconciliatie.md`; niets verwijderd.
+
+## Nacontrole v1.1 (12-10-2026, avond): wat hersteld is
+
+| Punt | Herstel | Grendel |
+|---|---|---|
+| P1-2 bezoekmap buiten de dossiergrens | bezoekmap alleen bij `kopie_toegestaan`; afgewezen levering laat de taak open | `test_onbekende_afdeling_of_lage_zekerheid_blijft_bij_mehdi`, `test_tegenstrijdige_privevelden_leveren_niets` |
+| P1-3 voorbereider zonder firma/privacy | `transcript_telt`: HARC plus nummer, bestemming h-architects, geen privé/conflict/laag; legacy alleen sleutel of titel | `test_voorbereider_telt_alleen_het_toegestane_harc_transcript` |
+| P1-4 herhaald bouwjaar | zekerheid van de nummerlezer, titel+opening één bron, bekend dossier of gecontroleerde bron | `tests/test_plaud_dossier.py` |
+| P1-5 correctie na oppakken | bord: `klaarzet_revisie` (opt-in `revisie: true`), uitvoerder leest de opgeslagen versie terug | `tests/test_plaud_revisie.py`, `mijnagents/test_klaarzet_revisie.py` (Docker-build) |
+| P1-6 onbekende eigenaar | `archief.eigenaar`: map met bestanden zonder leesbare gesprek.json is niet vrij; herstel, niets geschreven | `test_bestaande_map_met_onbekende_eigenaar_is_niet_vrij` |
+| P1-7 id-conflict | selectie, manifest (toestand conflict + herstel) en VM weigeren; nood | `test_id_conflict_wordt_niet_als_compleet_overgeslagen`, `test_id_conflict_in_het_manifest_publiceert_niets` |
+| P2-8 beslisbronnen | modelvingerafdruk en beslisvingerafdruk apart; Pipedrive-uitval = onvolledig bewijs | `test_pipedrive_herstel_…`, `test_gewijzigde_titel_…` |
+| P2-9 transcriptversie | `transcript_hash` in de kop; nieuwe versie naast de oude | `test_gewijzigd_transcript_wordt_als_nieuwe_versie_geleverd` |
+| P2-10 onbekend JSON | alleen een lijst van uitingen met content en start_time; anders schemafout of leeg, met backoff | `test_onbekend_json_…`, `test_leeg_transcript_…` |
+| P2-11 tokenrechten | `plaud/tokenbestand.py`: 0600 vanaf aanmaak, map 0700 | `test_token_is_altijd_0600_ook_tijdens_het_schrijven` |
+| Agenda niet gezien | afspraken apart opvragen (`soort=afspraak`) | live: opname 1 oktober overlapt UNAB 46118 |
+| Losse verslagen | Plaud-taak krijgt `<verzamelmap>/JJJJMMDD` als doel | `test_los_verslag_krijgt_een_gedateerde_momentmap_als_taakdoel` |
+| Verzoek Contractmaker | alleen een opname die een afspraak met de klant overlapt; Mehdi bevestigt | `test_verzoek_van_de_contractmaker_vraagt_een_overlappende_afspraak` |

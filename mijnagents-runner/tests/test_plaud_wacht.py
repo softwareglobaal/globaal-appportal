@@ -18,6 +18,7 @@ import sys
 import tempfile
 import time
 import types
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -76,7 +77,13 @@ class Wereld:
         P.LC.verblijf_op = lambda moment, ook_kandidaten=False: None
         FW.herken = self.herken
         FW.personen_uit_werkwijze = lambda w: []
-        FW.deals_index = lambda: self.deals
+        self.pipedrive_fout = False
+        FW.deals_index = self._deals
+
+    def _deals(self):
+        if self.pipedrive_fout:
+            raise RuntimeError("Pipedrive niet bereikbaar (proef)")
+        return self.deals
 
     def _faal(self, soort):
         if self.fout.get(soort):
@@ -84,6 +91,11 @@ class Wereld:
             raise RuntimeError(f"geforceerde proeffout bij {soort}")
 
     def call(self, pad, payload=None, method=None):
+        if pad.startswith("/api/klaarzet?") and "uniek=" in pad:
+            uniek = urllib.parse.parse_qs(pad.split("?", 1)[1]).get("uniek", [""])[0]
+            laatste = [dict(k, inhoud=json.dumps(k["inhoud"], ensure_ascii=False), id=i, status="klaar")
+                       for i, k in enumerate(self.klaar) if k.get("uniek") == uniek][-1:]
+            return {"items": laatste}
         if pad.startswith("/api/klaarzet?"):
             return {"items": list(self.agenda)}
         if pad == "/api/gesprekken":
@@ -229,7 +241,7 @@ def test_later_toegevoegde_bezoekmap_wordt_alsnog_geleverd():
     w.taken = [werftaak(102)]
     code, _, _ = w.ronde()
     assert code == P.OK and in_bezoekmap(w) == [f"{BEZOEK}/transcript.txt"] and w.opgepakt == [102]
-    assert len(w.herkend) == 1 and len(w.klaar) == 1
+    assert len(w.herkend) == 1 and len({k["uniek"] for k in w.klaar}) == 1 and w.klaar[-1]["voor"] == "h-architects"
 
 
 def test_een_fout_bij_de_tweede_opname_blokkeert_de_eerste_niet():
@@ -264,8 +276,139 @@ def test_onbekende_afdeling_of_lage_zekerheid_blijft_bij_mehdi():
     w.push()
     w.herkenning[ID1] = {"personen": [], "hoofdpersoon": "", "bedrijf": "", "afdeling": "onbekend", "thema": "", "project": "",
                          "prive": False, "zekerheid": "laag", "waarom": ""}
+    w.taken = [werftaak(601)]                     # een geldige zoektaak maakt de grens niet ruimer (nacontrole v1.1, P1-2)
     w.ronde()
-    assert w.klaar[0]["voor"] == "mehdi" and not w.uploads, (w.klaar[0]["voor"], w.uploads)
+    assert w.klaar[0]["voor"] == "mehdi" and not w.uploads and not w.opgepakt, (w.klaar[0]["voor"], w.uploads, w.opgepakt)
+    assert any("niet geleverd" in l[1] for l in w.logs), "een afgewezen levering laat de taak open met reden"
+
+
+def test_tegenstrijdige_privevelden_leveren_niets():
+    w = Wereld()
+    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.push()
+    w.taken = [werftaak(602)]
+    w.herkenning[ID1] = {"personen": ["Angela"], "hoofdpersoon": "Angela", "bedrijf": "", "afdeling": "prive", "thema": "weekend",
+                         "project": "", "prive": False, "zekerheid": "hoog", "waarom": ""}
+    w.ronde()
+    assert w.klaar[0]["voor"] == "mehdi" and not w.uploads and not w.opgepakt, (w.klaar[0], w.uploads)
+
+
+def test_pipedrive_herstel_geeft_herbeoordeling_zonder_nieuwe_modelvraag():
+    w = Wereld()
+    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00", uitingen=ZONDER_NUMMER)
+    w.push()
+    w.pipedrive_fout = True
+    w.ronde()
+    assert w.klaar[-1]["voor"] == "mehdi", w.klaar[-1]
+    w.pipedrive_fout = False
+    code, tel, _ = w.ronde()
+    assert w.klaar[-1]["voor"] == "h-architects" and w.klaar[-1]["sleutel"] == "2531", (tel, w.klaar[-1])
+    assert len(w.herkend) == 1, "bronherstel vraagt het model niet opnieuw"
+
+
+def test_gewijzigde_titel_bij_gelijk_transcript_herkent_opnieuw():
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.push()
+    w.ronde()
+    w.opname(ID1, "10-08 PRIVE Angela en Mehdi weekend", "2026-10-08T09:05:00")
+    w.push()
+    w.herkenning[ID1] = {"personen": ["Angela"], "hoofdpersoon": "Angela", "bedrijf": "", "afdeling": "prive", "thema": "weekend",
+                         "project": "", "prive": True, "zekerheid": "hoog", "waarom": ""}
+    w.ronde()
+    assert len(w.herkend) == 2, "een andere titel is andere modelinput"
+    assert w.klaar[-1]["voor"] == "mehdi" and w.klaar[-1]["inhoud"]["prive"], w.klaar[-1]
+
+
+def test_gewijzigd_transcript_wordt_als_nieuwe_versie_geleverd():
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.push()
+    w.taken = [werftaak(603)]
+    w.ronde()
+    oud = w.bestanden[f"{BEZOEK}/transcript.txt"]
+    nieuw = OPENING + [{"start_time": 9000, "speaker": "Speaker 1", "content": "Aanvulling na hertranscriptie."}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00", uitingen=nieuw)
+    w.push()
+    w.taken = [werftaak(603)]
+    w.ronde()
+    assert w.bestanden[f"{BEZOEK}/transcript.txt"] == oud, "het bestaande transcript wordt niet overschreven"
+    versies = [p for p in w.bestanden if p.startswith(BEZOEK + "/transcript") and p != f"{BEZOEK}/transcript.txt"]
+    assert len(versies) == 1 and b"Aanvulling na hertranscriptie" in w.bestanden[versies[0]], versies
+    assert b"transcript_hash:" in w.bestanden[versies[0]]
+
+
+def test_voorbereider_telt_alleen_het_toegestane_harc_transcript():
+    import werfverslag_voorbereider as V
+    goed = {"soort": "transcript", "van": "plaud-wacht", "voor": "h-architects", "sleutel": "2531", "titel": "Plaud: werfbezoek",
+            "uniek": "plaud:of_a", "inhoud": json.dumps({"datum": "2026-10-08", "firma": "HARC", "projectnummer": "2531",
+                                                         "prive": False, "conflict": False, "zekerheid": "middel"})}
+    varianten = [dict(goed, uniek="plaud:of_b", inhoud=json.dumps({**json.loads(goed["inhoud"]), "firma": "UNAB"})),
+                 dict(goed, uniek="plaud:of_c", voor="mehdi", inhoud=json.dumps({**json.loads(goed["inhoud"]), "prive": True})),
+                 dict(goed, uniek="plaud:of_d", voor="mehdi", inhoud=json.dumps({**json.loads(goed["inhoud"]), "zekerheid": "laag"})),
+                 dict(goed, uniek="plaud:of_e", voor="mehdi", inhoud=json.dumps({**json.loads(goed["inhoud"]), "conflict": True})),
+                 {"soort": "werfbezoek", "van": "plaud-wacht", "voor": "mehdi", "sleutel": "2531", "titel": "2026-10-08 Plaud: x · PRIVÉ",
+                  "uniek": "plaud:of_f", "inhoud": json.dumps({"datum": "2026-10-08", "prive": True})}]
+    oud_call = V.bord.call
+    V.bord.call = lambda pad, payload=None, method=None: {"items": [goed] + varianten}
+    try:
+        per = V.klaargezet("2531")
+    finally:
+        V.bord.call = oud_call
+    assert [t["uniek"] for t in per["transcript"]] == ["plaud:of_a"], [t["uniek"] for t in per["transcript"]]
+
+
+def test_los_verslag_krijgt_een_gedateerde_momentmap_als_taakdoel():
+    import werfverslag_voorbereider as V
+    los = {"map": "/Work All/01. H-A WORK/0 H-A Light projects/5. H-A light SITE VISITS/2416 Kapellen/4. Uitvoering & werfcontrole/4. Werfverslagen",
+           "datum": "2026-08-22", "bron_map": "los verslag"}
+    doel = V.taakdoel(los)
+    assert doel == los["map"] + "/20260822", doel
+    taak = {"id": 701, "soort": "taak", "van": "werfverslag-voorbereider",
+            "inhoud": json.dumps({"dossier": "2416", "datum": "2026-08-22", "bezoekmap": doel})}
+    assert P.zoektaak.valideer_bezoekmap(taak, P.verslagsoorten.SOORTEN)[0], "het nieuwe doel is een geldige bezoekmap"
+    taak_oud = dict(taak, inhoud=json.dumps({"dossier": "2416", "datum": "2026-08-22", "bezoekmap": los["map"]}))
+    assert not P.zoektaak.valideer_bezoekmap(taak_oud, P.verslagsoorten.SOORTEN)[0], "de verzamelmap blijft ongeldig"
+    gewoon = dict(los, bron_map="_00. communication", map=BEZOEK)
+    assert V.taakdoel(gewoon) == BEZOEK
+
+
+def test_verzoek_van_de_contractmaker_vraagt_een_overlappende_afspraak():
+    """Live 12-10-2026: Nelleke Stropke, plaatsbezoek 1 oktober 20:00-21:00; de enige opname die dag was om 09:31."""
+    w = Wereld()
+    w.opname(ID1, "10-01 Vergadering renovatie woning", "2026-10-01T07:31:00")
+    w.push()
+    w.agenda = [{"soort": "afspraak", "titel": "stropke", "inhoud": json.dumps({"titel": "!! Mehdi: [HARC-PB] Nelleke Stropke, Vossenstraat 2",
+                 "start": "2026-10-01T20:00:00+02:00", "einde": "2026-10-01T21:00:00+02:00", "firma": "HARC"})}]
+    verzoek = {"id": 1935, "soort": "verzoek", "van": "contracten-agent", "sleutel": "14543", "uniek": "verzoek:14543:2026-10-01:plaatsbezoek",
+               "titel": "Nelleke Stropke: bewijs van 2026-10-01 plaatsbezoek ontbreekt", "inhoud": "Dossier Nelleke Stropke (deal 14543)."}
+    w.taken = [verzoek]
+    w.ronde()
+    assert any("niet_gevonden: geen Plaud-opname rond de afspraak met Nelleke Stropke" in l[1] for l in w.logs), w.logs
+    assert not w.uploads and not w.opgepakt
+    w2 = Wereld()
+    w2.opname(ID2, "10-01 Plaatsbezoek", "2026-10-01T18:05:00")              # 20:05 in Brussel
+    w2.push()
+    w2.agenda, w2.taken = w.agenda, [verzoek]
+    code, tel, noden = w2.ronde()
+    assert any("ter_beoordeling" in l[1] for l in w2.logs) and any("Contractmaker" in n for n in noden), (w2.logs, noden)
+    assert not w2.uploads and not w2.opgepakt, "De Plaudwacht levert niet zelf voor een verzoek"
+
+
+def test_id_conflict_in_het_manifest_publiceert_niets():
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    eerste = next(w.archief.glob("*/gesprek.json")).parent
+    tweede = w.archief / "2026-10-08 1105 tweede exemplaar"
+    shutil.copytree(eerste, tweede)
+    (tweede / "transcript.json").write_text(json.dumps(ZONDER_NUMMER))
+    w.push()
+    w.taken = [werftaak(604)]
+    code, tel, noden = w.ronde()
+    assert not w.rijen and not w.klaar and not w.uploads, (w.rijen, w.klaar, w.uploads)
+    assert tel["herstel"] >= 1 and any("conflict" in n.lower() for n in noden), (tel, noden)
 
 
 def test_een_bouwjaar_in_de_titel_is_geen_dossier():
@@ -279,7 +422,7 @@ def test_een_bouwjaar_in_de_titel_is_geen_dossier():
     w.ronde()
     k = w.klaar[0]
     assert k["voor"] == "mehdi" and k["sleutel"] == "" and k["inhoud"]["zekerheid"] == "laag" and not w.uploads, k
-    assert any("niet bekend" in r for r in k["inhoud"]["redenen"]), k["inhoud"]["redenen"]
+    assert any("niet bekend" in r or "genegeerd" in r for r in k["inhoud"]["redenen"]), k["inhoud"]["redenen"]
 
 
 def test_harc_9998_bereikt_de_werfverslagketen_met_een_andere_deal_id():

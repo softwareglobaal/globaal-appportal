@@ -17,6 +17,10 @@ import subprocess
 import threading
 import time
 import urllib.parse
+from pathlib import Path as _P
+import sys as _sys
+_sys.path.insert(0, str(_P(__file__).parent))
+import tokenbestand  # noqa: E402
 from pathlib import Path
 
 CLIENT_ID = "client_f9e0b214-c11f-434b-8b95-c4497d1feb81"   # publieke CLI-client van Plaud
@@ -90,12 +94,7 @@ def main():
     # vervaltijd vastleggen, zodat plaud_haal_alles.py op tijd ververst (verbeteropdracht v1.0, §2)
     if tok.get("expires_in") and not tok.get("expires_at"):
         tok["expires_at"] = int(time.time() * 1000 + float(tok["expires_in"]) * 1000)
-    DOEL.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(DOEL) + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)   # nooit even leesbaar voor anderen
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(json.dumps(tok, indent=1))
-    os.replace(str(DOEL) + ".tmp", DOEL)
-    os.chmod(DOEL, 0o600)
+    tokenbestand.schrijf(DOEL, tok)          # 0600 vanaf het eerste moment, map 0700 (nacontrole v1.1, P2-11)
     print("Aangemeld. Token bewaard in", DOEL)
     print("velden:", ", ".join(tok.keys()))
     return 0
