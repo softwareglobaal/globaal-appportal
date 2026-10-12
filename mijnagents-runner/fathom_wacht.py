@@ -330,7 +330,8 @@ def main():
             bewijzen = dossier.uit_tekst("titel", g.get("title") or g.get("meeting_title") or "")
             if deal and deal.get("nummer") and hoe == "e-mail van een deelnemer":
                 bewijzen.append(dossier.bewijs("deelnemer", "HARC", deal["nummer"], hoe))
-            besl = dossier.beslis(bewijzen, herk, dossier.uit_tekst("model", herk.get("project") or ""))
+            besl = dossier.beslis(bewijzen, herk, dossier.uit_tekst("model", herk.get("project") or ""),
+                                  bekend={str(d["nummer"]) for d in deals if d.get("nummer")})
             if deal and deal.get("nummer") != besl["projectnummer"]:
                 deal = None                 # een deal die niet bij het beslist dossier hoort, krijgt geen kopie
             rij = {"uniek": f"fathom:{gid}", "datum": start[:10], "start": start[11:16], "minuten": duur,
@@ -352,7 +353,7 @@ def main():
                     else:
                         pad = f"{salesmap}/0 Fathom/{naam}"
             voor = besl["voor"]
-            klaar.append({"voor": voor, "soort": "transcript", "sleutel": besl["projectnummer"] or "",
+            klaar.append({"voor": voor, "soort": "transcript", "sleutel": (besl["projectnummer"] or "") if besl["zekerheid"] != "laag" else "",
                           "titel": f"{start} Fathom: {herk.get('hoofdpersoon') or g.get('title')} · {herk.get('thema', '')[:60]}" + (" · PRIVÉ" if prive else ""),
                           "uniek": f"fathom:{gid}", "verwijzing": pad or map_,
                           "inhoud": {**{k: v for k, v in rij.items() if k != "waarom"}, "waarom": herk.get("waarom", ""), "transcript_pad": pad or os.path.join(map_, "transcript.md"),

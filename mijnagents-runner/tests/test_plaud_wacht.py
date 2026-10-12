@@ -268,6 +268,20 @@ def test_onbekende_afdeling_of_lage_zekerheid_blijft_bij_mehdi():
     assert w.klaar[0]["voor"] == "mehdi" and not w.uploads, (w.klaar[0]["voor"], w.uploads)
 
 
+def test_een_bouwjaar_in_de_titel_is_geen_dossier():
+    """Live gezien op 12-10-2026: "Renovatieplan vrijstaande woning 1933" werd HARC:1933 en ging naar h-architects."""
+    w = Wereld()
+    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}]
+    w.opname(ID1, "10-01 Vergadering Renovatieplan vrijstaande woning 1933 - dakvernieuwing", "2026-10-01T07:31:00", uitingen=ZONDER_NUMMER)
+    w.push()
+    w.herkenning[ID1] = {"personen": [], "hoofdpersoon": "eigenaar", "bedrijf": "", "afdeling": "h-architects", "thema": "renovatie",
+                         "project": "", "prive": False, "zekerheid": "middel", "waarom": ""}
+    w.ronde()
+    k = w.klaar[0]
+    assert k["voor"] == "mehdi" and k["sleutel"] == "" and k["inhoud"]["zekerheid"] == "laag" and not w.uploads, k
+    assert any("niet bekend" in r for r in k["inhoud"]["redenen"]), k["inhoud"]["redenen"]
+
+
 def test_harc_9998_bereikt_de_werfverslagketen_met_een_andere_deal_id():
     w = Wereld()
     w.deals = [{"id": 555, "titel": "9998 Proefwerf", "nummer": "9998"}]
@@ -300,6 +314,7 @@ def test_context_alleen_overlappende_agenda_ook_na_teken_6000():
     w = Wereld()
     lang = [{"start_time": 0, "speaker": "Speaker 1", "content": "Goedemorgen."}] + \
            [{"start_time": 70000 + i * 1000, "speaker": "Speaker 2", "content": "ruwbouw " * 40} for i in range(60)]
+    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}, {"id": 778, "titel": "2612 Ander", "nummer": "2612"}]
     w.opname(ID1, "10-08 opname", "2026-10-08T09:05:00", uitingen=lang)
     w.push()
     w.agenda = [{"soort": "afspraak", "titel": "vroeger", "inhoud": json.dumps({"titel": "HA 2612 vroeger", "start": "2026-10-08T08:00:00+02:00",

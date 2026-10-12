@@ -254,7 +254,7 @@ def opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort):
            "thema": herk.get("thema", ""), "project": b["dossier"] or herk.get("project", ""), "prive": prive,
            "zekerheid": b["zekerheid"], "waarom": herk.get("waarom", ""), "archief": pad_mac, "link": pad_mac,
            "opgenomen_door": o.get("opgenomen_door") or "onbekend", "bron": "plaud"}
-    klaar = {"voor": b["voor"], "soort": "transcript", "sleutel": b["projectnummer"] or "",
+    klaar = {"voor": b["voor"], "soort": "transcript", "sleutel": (b["projectnummer"] or "") if b["zekerheid"] != "laag" else "",
              "titel": f"{start[:16].replace('T', ' ')} Plaud: {herk.get('hoofdpersoon') or o.get('naam_in_plaud') or 'opname'} · {herk.get('thema', '')[:60]}"
                       + (" · PRIVÉ" if prive else "") + (" · NAKIJKEN" if b["conflict"] else ""),
              "uniek": f"plaud:{pid}", "verwijzing": pad_mac,
@@ -294,7 +294,7 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
     bewijzen = eigen + dossier.uit_locatie(verblijf) + [dossier.bewijs("zoektaak", f, n, "gevalideerde zoektaak") for f, n in zoek]
     th = staat.hash_van(tekst)
     vinger = staat.hash_van({"naam": o.get("naam_in_plaud"), "start": o["start_utc"], "transcript": th, "bewijs": bewijzen,
-                             "taken": sorted(t["id"] for t in taken)})
+                             "taken": sorted(t["id"] for t in taken), "regels": dossier.VERSIE})
     if st.get("vingerafdruk") == vinger and not staat.open_opdrachten(st):
         return {"uitkomst": "ongewijzigd", "fouten": 0}
     herk = st.get("herkenning") or {}
@@ -307,7 +307,7 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
         st["herkenning"] = herk
         st_obj.bewaar(pid, st)                 # een herstart vraagt het model niet opnieuw
     model = dossier.uit_tekst("model", herk.get("project") or "", "vergadertitel")
-    b = dossier.beslis(bewijzen, herk, model)
+    b = dossier.beslis(bewijzen, herk, model, bekend={str(d["nummer"]) for d in deals if d.get("nummer")})
     deal = None
     if b["firma"] == "HARC" and b["projectnummer"]:
         passend = [d for d in deals if d.get("nummer") == b["projectnummer"]]

@@ -28,6 +28,9 @@ import sys
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HIER), "koppelingen"))
 
+# Versie van de beslisregels: gaat mee in de vingerafdruk van De Plaudwacht, zodat een nieuwe regel
+# bestaande beslissingen opnieuw beoordeelt. 2 (12-10-2026): één bron telt alleen bij een bekend nummer.
+VERSIE = 2
 HARD = ("titel", "kop", "openingszin", "agenda", "zoektaak", "deelnemer")
 FIRMA_AFDELING = {"HARC": "h-architects", "UNAB": "unabo", "TKNB": "tkn", "HARM": "harmoniebouw",
                   "CONT": "contrax", "ELEV": "elevait"}
@@ -72,8 +75,11 @@ def uit_locatie(verblijf):
     return []
 
 
-def beslis(bewijzen, herkenning=None, model=None):
-    """De beslissing: dossier, zekerheid, conflict, route en of een zakelijke kopie mag."""
+def beslis(bewijzen, herkenning=None, model=None, bekend=None):
+    """De beslissing: dossier, zekerheid, conflict, route en of een zakelijke kopie mag.
+
+    bekend: projectnummers die bestaan (bv. uit Pipedrive). Eén harde bron met een onbekend nummer is
+    laag: in "Renovatieplan vrijstaande woning 1933" is 1933 een bouwjaar, geen dossier (12-10-2026)."""
     herkenning = herkenning or {}
     model = model or []
     sleutels = {}
@@ -90,6 +96,9 @@ def beslis(bewijzen, herkenning=None, model=None):
         harde = soorten & set(HARD)
         if "zoektaak" in soorten or len(soorten) >= 2 and harde:
             uit["zekerheid"] = "hoog"
+        elif harde and bekend is not None and nummer not in bekend:
+            uit["zekerheid"] = "laag"
+            uit["redenen"].append("projectnummer %s is niet bekend; één bron volstaat dan niet" % nummer)
         elif harde:
             uit["zekerheid"] = "middel"
         else:
