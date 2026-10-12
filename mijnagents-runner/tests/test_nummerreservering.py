@@ -113,7 +113,7 @@ class Pipedrive:
     """Telt elke schrijfactie; een verliezende uitvoering mag er geen doen."""
 
     def __init__(self):
-        self.puts, self.bedrijf = [], []
+        self.puts, self.bedrijf, self.gelezen = [], [], []
 
     def schrijf(self, firma, methode, pad, body=None, params=None):
         self.puts.append((firma, methode, pad, body))
@@ -124,12 +124,14 @@ class Pipedrive:
         return verwacht
 
 
-def voer(params, nep=None, bord=None):
+def voer(params, nep=None, bord=None, titel_nu="Testklant", deal_gelezen=900101):
     pd = Pipedrive()
     nep = nep or Nep()
     oud = (R.pipedrive.schrijf, R.pipedrive.controleer_bedrijf, R.nummerlezer.jaar_nu_brussel,
-           ca.nummerlezer.jaar_nu_brussel)
+           ca.nummerlezer.jaar_nu_brussel, R.pipedrive.get)
     R.pipedrive.schrijf = pd.schrijf
+    R.pipedrive.get = lambda firma, pad, params=None: (pd.gelezen.append((firma, pad)) or
+                                                       {"id": deal_gelezen, "title": titel_nu})
     R.nummerlezer.jaar_nu_brussel = ca.nummerlezer.jaar_nu_brussel = lambda: 2026
     p = {"deal_id": 900101, "titel": "2621 Testklant", "nummer": "2621", "firma": "harchitects", "_voorstel_id": 31,
          "_bord": bord or (lambda pad: {"ok": True, "nummer": "2621", "deal_id": "900101"}), **params}
@@ -143,7 +145,7 @@ def voer(params, nep=None, bord=None):
             return e, pd
     finally:
         (R.pipedrive.schrijf, R.pipedrive.controleer_bedrijf, R.nummerlezer.jaar_nu_brussel,
-         ca.nummerlezer.jaar_nu_brussel) = oud
+         ca.nummerlezer.jaar_nu_brussel, R.pipedrive.get) = oud
 
 
 def test_runbook_schrijft_na_volledige_controle():
@@ -238,6 +240,54 @@ def test_agent_leest_de_uitkomst_van_de_reservering_terug():
         assert ca.nummervoorstel_op_bord(900101, "2621", "Testklant", "architectuur")["uitkomst"] == "onzeker"
     finally:
         ca.urllib.request.urlopen = oud
+
+
+# ------------------------------------------------- reeds voldaan (12-10-2026) ---
+def test_eigen_gebruik_tegenover_gebruik_door_een_ander():
+    eigen, ander = ("voorbereidingen", "14531"), ("pipedrive open", "99")
+    bestand = ("contractmappen", None)
+    assert ca.gebruik_elders([eigen], 14531) == []
+    assert ca.gebruik_elders([bestand, eigen], 14531) == []               # bestand gebonden aan de eigen deal
+    assert ca.gebruik_elders([bestand], 14531) == [bestand]               # bestand zonder bewezen koppeling
+    assert ca.gebruik_elders([bestand, eigen, ander], 14531) == [ander, bestand]
+
+
+def test_agent_houdt_een_nummer_dat_alleen_de_eigen_deal_draagt():
+    nep = Nep(mappen={"5600 Design": ["5609 Kessel-Losesteenweg 7.docx"]}, reserveringen=[res("5609", 14531, 20)])
+    nep.call = lambda naam, **kw: ({"aantal": 1, "dossiers": [{"nummer": "5609", "deal_id": 14531}]}
+                                   if naam == "voorbereidingen" else {"aantal": 0, "dossiers": []})
+    assert met(nep, lambda: ca.volgend_vrij_nummer("regularisatie", 2026, deal_id=14531)) == "5609"
+    assert met(nep, lambda: ca.volgend_vrij_nummer("regularisatie", 2026, deal_id=777)) == "5610"
+
+
+def test_runbook_titel_staat_er_al_nul_puts():
+    for _ in range(2):                                                    # herhalen: nooit een dubbele actie
+        uit, pd = voer({}, titel_nu="2621 Testklant")
+        assert pd.puts == [] and "reeds voldaan" in uit[0] and "2621 Testklant" in uit[1], uit
+        assert pd.gelezen == [("harchitects", "/deals/900101")]
+
+
+def test_runbook_reconciliatie_alleen_als_alles_klopt():
+    oud_voorstel = lambda pad: {"ok": False, "reconciliatie": True, "nummer": "2621", "deal_id": "900101",
+                                "reden": "geen actieve reservering"}
+    uit, pd = voer({}, bord=oud_voorstel, titel_nu="2621 Testklant")
+    assert pd.puts == [] and "reeds voldaan" in uit[0], uit
+    uit, pd = voer({}, bord=oud_voorstel, titel_nu="Testklant")           # er moet iets geschreven worden
+    assert isinstance(uit, R.NummerConflict) and "Opnieuw voorleggen" in str(uit) and pd.puts == []
+    uit, pd = voer({}, bord=oud_voorstel, titel_nu="2621 Testklant", nep=Nep(fout="pipedrive"))   # onvolledig bewijs
+    assert isinstance(uit, R.NummerConflict) and pd.puts == []
+
+
+def test_runbook_open_voorstel_of_andere_deal_blijft_dicht():
+    open_ = lambda pad: {"ok": False, "nummer": "2621", "deal_id": "900101", "reden": "voorstel staat op 'open'"}
+    uit, pd = voer({}, bord=open_, titel_nu="2621 Testklant")             # geen automatisch akkoord
+    assert isinstance(uit, R.NummerConflict) and pd.puts == []
+    uit, pd = voer({}, titel_nu="2621 Testklant", nep=Nep(deals={"open": ["2621 Andere klant"]}))
+    assert isinstance(uit, R.NummerConflict) and pd.puts == []
+    uit, pd = voer({}, titel_nu="2621 Testklant", deal_gelezen=900999)    # andere deal gelezen
+    assert isinstance(uit, R.NummerConflict) and pd.puts == []
+    uit, pd = voer({}, titel_nu="2621 Andere titel")                      # zelfde nummer, andere titel: gewone PUT
+    assert len(pd.puts) == 1
 
 
 if __name__ == "__main__":

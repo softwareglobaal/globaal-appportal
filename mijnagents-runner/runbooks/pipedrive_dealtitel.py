@@ -8,7 +8,12 @@ goedgekeurd, heeft een actieve reservering en geen andere deal houdt hetzelfde n
 vaste bronnen volledig (contractmappen, dashboard, voorbereidingen, Pipedrive). Een bronfout of een nummer
 dat inmiddels elders gebruikt is, blokkeert met bewijs: dan volgt er geen schrijfactie. Een ander nummer
 wordt een nieuw voorstel voor Mehdi; dit runbook verandert nooit zelf de parameters.
-De uitvoerder geeft _voorstel_id en _bord (de bord-API) mee."""
+De uitvoerder geeft _voorstel_id en _bord (de bord-API) mee.
+
+Reeds voldaan (12-10-2026): staat exact deze titel al op exact deze H-A-deal, dan volgt geen PUT; het runbook
+meldt 'reeds voldaan' met de gelezen titel als bewijs. Een goedgekeurd voorstel van vóór WP2b zonder
+reservering mag alleen zo afgesloten worden (reconciliatie); moet er werkelijk iets geschreven worden, dan
+blokkeert het en noemt het de herstelactie (opnieuw voorleggen op het bord)."""
 import os
 import re
 import sys
@@ -50,8 +55,11 @@ def voer_uit(p):
         controle = bord(f"/api/nummercontrole?voorstel_id={int(vid)}")
     except Exception as e:  # noqa: BLE001
         raise NummerConflict(f"bord niet bereikbaar voor de nummercontrole ({type(e).__name__}): geen schrijfactie") from e
-    if not isinstance(controle, dict) or controle.get("ok") is not True:
-        raise NummerConflict(f"bord blokkeert voorstel {vid}: {(controle or {}).get('reden', 'geen geldige controle')}")
+    if not isinstance(controle, dict):
+        raise NummerConflict(f"bord gaf geen geldige controle voor voorstel {vid}: geen schrijfactie")
+    reconciliatie = controle.get("ok") is not True and controle.get("reconciliatie") is True
+    if controle.get("ok") is not True and not reconciliatie:
+        raise NummerConflict(f"bord blokkeert voorstel {vid}: {controle.get('reden', 'geen geldige controle')}")
     if controle.get("nummer") != nummer or str(controle.get("deal_id")) != str(deal_id):
         raise NummerConflict(f"bord kent voorstel {vid} als nummer {controle.get('nummer')} voor deal "
                              f"{controle.get('deal_id')}, niet {nummer} voor deal {deal_id}: geen schrijfactie")
@@ -62,7 +70,20 @@ def voer_uit(p):
     except ca.NummerFout as e:
         raise NummerConflict(f"nummer {nummer} niet gezet: {e}") from e
     pipedrive.controleer_bedrijf("harchitects", H_A_BEDRIJF_ID)
-    data, kort = pipedrive.schrijf("harchitects", "PUT", f"/deals/{deal_id}", body={"title": titel})
     per_bron = ", ".join(f"{k} {v}" for k, v in sorted((bewijs.get("per_bron") or {}).items()))
+    deal = pipedrive.get("harchitects", f"/deals/{deal_id}") or {}
+    if int(deal.get("id") or 0) != deal_id:
+        raise NummerConflict(f"deal {deal_id} niet gelezen in het H-A-account: geen schrijfactie")
+    huidig = str(deal.get("title") or "").strip()
+    if huidig == titel:
+        return (f"reeds voldaan: deal {deal_id} heet al '{titel}'; geen schrijfactie",
+                f"controle vooraf: bord {'reconciliatie' if reconciliatie else 'ok'} (voorstel {vid}), bronnen volledig "
+                f"gelezen ({per_bron or 'reeks leeg'}); gelezen titel: '{huidig}'")
+    if reconciliatie:
+        raise NummerConflict(
+            f"voorstel {vid} is goedgekeurd zonder reservering (van vóór WP2b) en de titel van deal {deal_id} is "
+            f"'{huidig}', niet '{titel}': geen schrijfactie. Herstel: 'Opnieuw voorleggen' op het bord, dan opnieuw "
+            f"goedkeuren (dat legt de reservering vast).")
+    data, kort = pipedrive.schrijf("harchitects", "PUT", f"/deals/{deal_id}", body={"title": titel})
     return f"dealtitel gezet: {titel}", (f"controle vooraf: bord ok (voorstel {vid}), bronnen volledig gelezen"
-                                         f" ({per_bron or 'reeks leeg'}); antwoord: {str(kort)[:400]}")
+                                         f" ({per_bron or 'reeks leeg'}); vorige titel '{huidig}'; antwoord: {str(kort)[:400]}")

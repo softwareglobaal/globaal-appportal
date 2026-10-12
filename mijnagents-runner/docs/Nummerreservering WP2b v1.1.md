@@ -1,6 +1,6 @@
 # Nummerreservering per voorstel (WP2b)
 
-Versie 1.0, 12-10-2026. Uitgevoerd door Claude voor Mehdi Chegini, op basis van de vervolgopdracht contracten v1.0 (12-10-2026), punt 1. Alleen H-Architects, Pipedrive bedrijf-id 10068585.
+Versie 1.1, 12-10-2026 (v1.0 dezelfde dag: reservering; v1.1: herhaling en reeds voldaan). Uitgevoerd door Claude voor Mehdi Chegini, op basis van de vervolgopdracht contracten v1.0 (12-10-2026), punt 1. Alleen H-Architects, Pipedrive bedrijf-id 10068585.
 
 ## Wat er gebeurde met 2617
 
@@ -34,6 +34,19 @@ Oorzaak: de agent las vier bronnen, maar geen open voorstellen. Het bord ontdubb
    - De agent leest de uitkomst van de reservering terug en meldt het voorstel alleen als het bewaard is.
 6. **Oude voorstellen.** Voorstellen van vóór WP2b (zoals 25, 26 en 27) tellen afgeleid mee als bezet. Er is geen historische migratie. Het groepsregister valt erbuiten.
 
+## Herhaling en reeds voldaan (v1.1)
+
+- **Eigen gebruik tegenover gebruik door een ander** (`contracten_agent.gebruik_elders`):
+  - een vindplaats met een andere deal is van een ander;
+  - een contractbestand zonder deal telt alleen als eigen gebruik als een vindplaats met deal (voorbereiding, dashboard, dealtitel) het nummer aan dezelfde deal bindt en geen enkele aan een andere;
+  - de agent en de controle vóór uitvoering gebruiken dezelfde regel.
+- **Reeds voldaan:** na alle grendels leest het runbook de huidige dealtitel. Is die exact gelijk aan de goedgekeurde titel, dan volgt geen PUT. Het voorstel wordt "uitgevoerd" met als bewijs de gelezen titel. Herhalen geeft opnieuw nul schrijfacties.
+- **Goedgekeurd zonder reservering (van vóór WP2b):** de controle geeft geen groen licht maar "reconciliatie".
+  - Het runbook mag dit alleen afsluiten als de titel al exact klopt en de bronnen volledig gelezen zijn.
+  - Anders blokkeert het, met de herstelactie **Opnieuw voorleggen** (agentpagina, beheer). Die zet het voorstel terug op open, met spoor in het bewijs en de handelingen; opnieuw goedkeuren legt dan de reservering vast. Weigeren geldt alleen voor open voorstellen.
+- **Een open voorstel wordt nooit automatisch goedgekeurd.**
+- **Voorstel 20** (5609 voor deal 14531, open, van vóór WP2b) is gecontroleerd: de dealtitel is al exact "5609 Alexander Craens". Keurt Mehdi het goed, dan sluit de uitvoerder het af als reeds voldaan, zonder schrijfactie. Weigeren mag ook, want het is nog open.
+
 ## Wat Mehdi doet
 
 Op het agentbord kan geen van de drie voorstellen voor 2617 goedgekeurd worden zolang de andere twee open staan.
@@ -46,7 +59,7 @@ Bij Paulina staat het contracttype nog open (architectuur 26xx of regularisatie 
 
 ## Grendels
 
-- **`mijnagents/test_nummerreservering.py`** (34 controles, ook in de Docker-build). Gedekt:
+- **`mijnagents/test_nummerreservering.py`** (44 controles, ook in de Docker-build). Gedekt, naast reconciliatie en Opnieuw voorleggen:
   - opeenvolgende en gelijktijdige aanvragen (8 draden);
   - de unieke index zelf;
   - een goedgekeurd voorstel van een andere deal;
@@ -56,7 +69,7 @@ Bij Paulina staat het contracttype nog open (architectuur 26xx of regularisatie 
   - weigeren, vervangen en mislukken;
   - oude dubbele voorstellen met het geweigerde akkoord;
   - de controle vóór uitvoering.
-- **`mijnagents-runner/tests/test_nummerreservering.py`** (18 controles, workflow `nummer-grendels`). Gedekt:
+- **`mijnagents-runner/tests/test_nummerreservering.py`** (23 controles, workflow `nummer-grendels`). Gedekt, naast reeds voldaan en eigen gebruik:
   - de vijfde bron en de idempotentie per deal;
   - een betwist nummer;
   - een nummer dat na het voorstel elders gebruikt is;

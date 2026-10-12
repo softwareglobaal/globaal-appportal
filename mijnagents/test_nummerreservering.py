@@ -204,5 +204,32 @@ check("lijst voor de agent is volledig", lijst["volledig"] is True and lijst["aa
 check("lijst vereist het token", c.get("/api/nummerreserveringen").status_code == 403)
 check("lijst weigert een andere firma", c.get("/api/nummerreserveringen?firma=unabo", headers=K).status_code == 400)
 
+# 13. reeds voldaan / oud goedgekeurd zonder reservering (12-10-2026)
+leeg()
+oud = oud_voorstel(14531, "5609", status="goedgekeurd")
+nc = c.get(f"/api/nummercontrole?voorstel_id={oud}", headers=K).get_json()
+check("oud goedgekeurd zonder reservering: geen groen licht, alleen reconciliatie", nc["ok"] is False
+      and nc.get("reconciliatie") is True and "opnieuw-voorleggen" in nc.get("herstel", ""), nc)
+open_ = oud_voorstel(14532, "5610")
+nc = c.get(f"/api/nummercontrole?voorstel_id={open_}", headers=K).get_json()
+check("open voorstel: geen reconciliatie, geen uitvoering", nc["ok"] is False and not nc.get("reconciliatie"), nc)
+check("opnieuw voorleggen kan niet voor een open voorstel", c.post(f"/voorstel/{open_}/opnieuw-voorleggen", headers=BEHEER).status_code == 409)
+check("opnieuw voorleggen vraagt beheer", c.post(f"/voorstel/{oud}/opnieuw-voorleggen").status_code == 403)
+c.post("/api/agent", headers=K, json={"naam": "contracten-agent", "label": "De Contractmaker"})
+html = c.get("/agent/contracten-agent", headers=BEHEER).data.decode()
+check("de agentpagina toont Opnieuw voorleggen bij het oude goedgekeurde voorstel",
+      f"/voorstel/{oud}/opnieuw-voorleggen" in html and f"/voorstel/{open_}/opnieuw-voorleggen" not in html)
+r = c.post(f"/voorstel/{oud}/opnieuw-voorleggen", headers=BEHEER)
+rij = rijen("SELECT status, bewijs FROM voorstel WHERE id=?", oud)[0]
+check("opnieuw voorleggen zet het terug op open, met spoor", r.status_code == 302 and rij["status"] == "open"
+      and "opnieuw voorgelegd door mehdi" in rij["bewijs"], rij)
+check("en legt de handeling vast", any(f"voorstel {oud}" in h["wat"] for h in rijen("SELECT wat FROM handeling")))
+r = besluit(c, oud, "goedgekeurd")
+check("opnieuw goedkeuren legt de reservering vast", r.status_code == 302 and rijen(
+    "SELECT 1 FROM nummerreservering WHERE voorstel_id=? AND actief=1", oud))
+nc = c.get(f"/api/nummercontrole?voorstel_id={oud}", headers=K).get_json()
+check("daarna gewoon groen licht", nc["ok"] is True, nc)
+check("met reservering kan niet opnieuw voorgelegd worden", c.post(f"/voorstel/{oud}/opnieuw-voorleggen", headers=BEHEER).status_code == 409)
+
 print(f"\n{ok} geslaagd, {fout} mislukt")
 sys.exit(1 if fout else 0)

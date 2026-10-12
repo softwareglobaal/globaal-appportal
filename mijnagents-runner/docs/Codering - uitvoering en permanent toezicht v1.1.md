@@ -1,6 +1,6 @@
 # Codering: uitvoering en permanent toezicht
 
-Versie 1.0, 06-10-2026. Uitgevoerd door Codex voor Mehdi Chegini.
+Versie 1.1, 12-10-2026 (v1.0 van 06-10-2026, uitgevoerd door Codex voor Mehdi Chegini). v1.1 werkt de stand van WP2b bij.
 
 WP1, WP2a en WP3 zijn in de bestaande systemen hersteld en live gecontroleerd. Benamingenwacht en Mappenwacht zijn geregistreerd op mijnagents.globaal.be en delen één index en het beheeradres https://mijnagents.globaal.be/naamstructuur. De SQL voor het groepsregister blijft uitsluitend in proefpakket v0.2.
 
@@ -62,4 +62,10 @@ Open **Namen en mappen** op het agentbord en beoordeel de concrete voorstellen. 
 
 H-A heeft bevestigde structuurregels. Andere firma's krijgen algemene bestandsnaamcontrole; hun structuurboek moet eerst worden bevestigd. Agenda en gesprekken worden via de bestaande index gecontroleerd; contacten en volledige CRM-accountscans vallen buiten dit bereik.
 
-Atomische dossiernummerreserveringen (WP2b), het groepsregister (WP4) en WP5-WP9 zijn niet uitgerold. Nummeruitgifte blijft een bevestigd voorstel; gelijktijdige aanvragen kunnen hetzelfde voorstel krijgen. Het verbeterde groepsmodel is uitsluitend lokaal op PostgreSQL 17 getest; productie gebruikt 16. De algemene bedrijfsaanbevelingen B1-B7 blijven aanbevelingen.
+**WP2b is uitgerold** (12-10-2026, commit d63c4dc en de afronding daarna; details in *Nummerreservering WP2b v1.1*). Drie dingen apart:
+
+- **Actuele reserveringen:** een open of goedgekeurd dealtitel-voorstel houdt zijn H-A-nummer vast (tabel `nummerreservering`, unieke indexen, `BEGIN IMMEDIATE`). Gelijktijdige aanvragen krijgen nooit hetzelfde nummer. Akkoord en uitvoering controleren opnieuw.
+- **Historische open conflicten:** voorstellen van vóór WP2b worden niet gemigreerd. Ze tellen afgeleid mee als bezet, zodat het conflict zichtbaar blijft. 2617 stond in drie open voorstellen (25, 26, 27); geen van drie kan goedgekeurd worden zolang de andere open staan. Mehdi kiest.
+- **Herhaling:** staat de goedgekeurde titel al exact op de deal, dan sluit de uitvoerder het voorstel af als "reeds voldaan", zonder PUT. Een goedgekeurd voorstel zonder reservering (van vóór WP2b) mag alleen zo afgesloten worden; anders krijgt het de herstelactie *Opnieuw voorleggen*.
+
+Het groepsregister (WP4) en WP5-WP9 zijn niet uitgerold. Het verbeterde groepsmodel is uitsluitend lokaal op PostgreSQL 17 getest; productie gebruikt 16. De algemene bedrijfsaanbevelingen B1-B7 blijven aanbevelingen.

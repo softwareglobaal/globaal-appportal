@@ -1511,7 +1511,9 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   IMMEDIATE`; akkoord controleert opnieuw (409 bij een ander voorstel met hetzelfde
   nummer); het runbook `pipedrive-dealtitel` vraagt vlak vóór de PUT `/api/nummercontrole`
   en leest de vier bronnen opnieuw. Voorstellen van vóór WP2b tellen afgeleid mee als
-  bezet (geen migratie). Agent leest `/api/nummerreserveringen` als vijfde bron.
+  bezet (geen migratie). Agent leest `/api/nummerreserveringen` als vijfde bron. Reeds voldaan: staat de
+  goedgekeurde titel al exact op de deal, dan geen PUT; goedgekeurd zonder reservering alleen via reconciliatie,
+  anders `POST /voorstel/<id>/opnieuw-voorleggen` (beheer). Eigen gebruik: `contracten_agent.gebruik_elders`.
   Grendels `mijnagents/test_nummerreservering.py` (ook in de Docker-build) en
   `tests/test_nummerreservering.py`. Aanvulling 06-10-2026: startfase volledig gepagineerd,
   accountgrendel vóór elke dashboardbewerking, dashboardpaginering met totaalcontrole,

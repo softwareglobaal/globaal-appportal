@@ -191,7 +191,9 @@ def test_runbook_aanvaardt_elk_geldig_h_a_nummer_en_controleert_het_account():
     sys.path.insert(0, os.path.join(HIER, "runbooks"))
     import pipedrive_dealtitel as R
     geschreven, gecontroleerd = [], []
-    oud = (R.pipedrive.schrijf, R.pipedrive.controleer_bedrijf, R.nummerlezer.jaar_nu_brussel, ca.nummer_vrij_voor_uitvoering)
+    oud = (R.pipedrive.schrijf, R.pipedrive.controleer_bedrijf, R.nummerlezer.jaar_nu_brussel, ca.nummer_vrij_voor_uitvoering,
+           R.pipedrive.get)
+    R.pipedrive.get = lambda firma, pad, params=None: {"id": 900001, "title": "Testklant"}   # titel zonder nummer
     R.pipedrive.schrijf = lambda firma, m, pad, body=None, params=None: (geschreven.append((firma, pad, body)), "ok")
     R.pipedrive.controleer_bedrijf = lambda firma, verwacht: gecontroleerd.append((firma, verwacht)) or verwacht
     R.nummerlezer.jaar_nu_brussel = lambda: 2026          # vaste kalender: 2803 blijft ook in 2027 een fout hier
@@ -210,7 +212,8 @@ def test_runbook_aanvaardt_elk_geldig_h_a_nummer_en_controleert_het_account():
             except ValueError:
                 pass
     finally:
-        R.pipedrive.schrijf, R.pipedrive.controleer_bedrijf, R.nummerlezer.jaar_nu_brussel, ca.nummer_vrij_voor_uitvoering = oud
+        (R.pipedrive.schrijf, R.pipedrive.controleer_bedrijf, R.nummerlezer.jaar_nu_brussel, ca.nummer_vrij_voor_uitvoering,
+         R.pipedrive.get) = oud
     assert [b["title"] for _, _, b in geschreven] == ["2465 Testklant", "2703 Testklant", "5603 Testklant"]
     assert gecontroleerd == [("harchitects", 10068585)] * 3
 

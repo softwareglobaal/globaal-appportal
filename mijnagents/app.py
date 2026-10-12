@@ -1025,6 +1025,7 @@ def detail(naam):
     ).fetchall()
     return render_template(
         "detail.html", app_naam=APP_NAAM, a=a, s=s, voorstellen=vs,
+        opnieuw_voorleggen={v["id"] for v in vs if kan_opnieuw_voorleggen(db(), v["id"])},
         mag=_lijst(a["mag"]), grenzen=_lijst(a["grenzen"]), tools=_lijst(a["tools"]),
         mag_beslissen=mag_beslissen(), verslag=verslag, onderwerpen=onderwerpen,
         gekozen=request.args.get("onderwerp", ""),
@@ -1285,8 +1286,20 @@ def nummercontrole(conn, vid, voor_akkoord=False):
         return {**uit, "ok": False, "reden": f"nummer {nummer} staat ook in voorstel "
                 + ", ".join(str(b["voorstel_id"]) for b in uit["elders"]) + " voor een andere deal"}
     if not voor_akkoord and not uit["gereserveerd"]:
-        return {**uit, "ok": False, "reden": "het goedgekeurde voorstel heeft geen actieve reservering"}
+        # Goedgekeurd vóór WP2b, zonder reservering: nooit schrijven. Het runbook mag het alleen afsluiten als
+        # de titel al exact op de deal staat (reconciliatie); anders opnieuw voorleggen.
+        return {**uit, "ok": False, "reconciliatie": True,
+                "reden": "het goedgekeurde voorstel heeft geen actieve reservering (van vóór WP2b): alleen "
+                         "afsluiten als de titel al exact klopt",
+                "herstel": f"Opnieuw voorleggen: POST /voorstel/{vid}/opnieuw-voorleggen (beheer), daarna opnieuw goedkeuren"}
     return {**uit, "ok": True, "reden": ""}
+
+
+def kan_opnieuw_voorleggen(conn, vid):
+    """Alleen een goedgekeurd dealtitel-voorstel zonder actieve reservering (van vóór WP2b) gaat terug naar open."""
+    rij = conn.execute("SELECT runbook, status FROM voorstel WHERE id=?", (vid,)).fetchone()
+    return bool(rij and rij["runbook"] == NUMMER_RUNBOOK and rij["status"] == "goedgekeurd" and not conn.execute(
+        "SELECT 1 FROM nummerreservering WHERE voorstel_id=? AND actief=1", (vid,)).fetchone())
 
 
 def nummervoorstel_goedkeuren(conn, vid, wie):
@@ -1481,6 +1494,31 @@ def besluit(vid):
         (keuze, gebruiker(), nu(), vid),
     )
     reservering_volgt_voorstel(conn, vid, f"{keuze} door {gebruiker()}")
+    conn.commit()
+    return redirect(request.referrer or url_for("bord"))
+
+
+@app.route("/voorstel/<int:vid>/opnieuw-voorleggen", methods=["POST"])
+def opnieuw_voorleggen(vid):
+    """Herstelactie voor een goedgekeurd dealtitel-voorstel zonder reservering (van vóór WP2b): terug naar open,
+    met de geschiedenis in het bewijs en in de handelingen. Opnieuw goedkeuren legt dan de reservering vast en
+    controleert op conflict. Weigeren geldt alleen voor open voorstellen; dit is de weg voor goedgekeurde."""
+    if not mag_beslissen():
+        abort(403)
+    conn = db()
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    if not kan_opnieuw_voorleggen(conn, vid):
+        conn.rollback()
+        return ("<!doctype html><meta charset='utf-8'><p>Alleen een goedgekeurd projectnummervoorstel zonder "
+                "reservering kan opnieuw voorgelegd worden.</p>"), 409
+    v = conn.execute("SELECT naam, actie, besluit_door, besluit_ts, bewijs FROM voorstel WHERE id=?", (vid,)).fetchone()
+    spoor = (f"opnieuw voorgelegd door {gebruiker()} op {nu()}; eerder goedgekeurd door {v['besluit_door']} "
+             f"op {v['besluit_ts']}")
+    conn.execute("UPDATE voorstel SET status='open', besluit_door='', besluit_ts='', bewijs=? WHERE id=?",
+                 (((v["bewijs"] or "") + "\n" + spoor).strip()[:4400], vid))
+    conn.execute("INSERT INTO handeling(naam, wat, ts) VALUES(?,?,?)",
+                 (v["naam"], f"voorstel {vid} '{v['actie']}': {spoor}", nu()))
     conn.commit()
     return redirect(request.referrer or url_for("bord"))
 

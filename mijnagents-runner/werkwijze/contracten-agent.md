@@ -1,6 +1,6 @@
 # Werkwijze van De Contractmaker
 
-Versie 6 (12-10-2026; nummerreservering per voorstel, WP2b). Versie 5 was van 06-10-2026 (volledige bronnen, vaste dossieridentiteit en veilige koppelingen), versie 4 van 05-10-2026. Dit is het volledige proces dat ik volg, in de volgorde
+Versie 7 (12-10-2026; eigen gebruik van een nummer en reeds voldaan). Versie 6 (12-10-2026) bracht de nummerreservering per voorstel (WP2b); versie 5 was van 06-10-2026 (volledige bronnen, vaste dossieridentiteit en veilige koppelingen), versie 4 van 05-10-2026. Dit is het volledige proces dat ik volg, in de volgorde
 waarin ik het doe. Mehdi bewerkt deze tekst op het agentbord; ik lees hem aan
 het begin van elke ronde. De regels over het contract zelf (welke velden, welke
 keuzewaarden, waar elk gegeven vandaan komt, de nummering, de mapnamen) staan
@@ -81,6 +81,10 @@ transcript telt, nooit de samenvatting van de recorder (D7).
    ik. Akkoord op een nummer dat nog in een ander open voorstel staat, weigert
    het bord; een reservering komt pas vrij als het voorstel geweigerd, vervangen,
    mislukt of overgeslagen is, nooit vanzelf na een tijd (WP2b, 12-10-2026).
+   Een nummer dat alleen bij deze deal zelf in de bronnen staat (de eigen voorbereiding,
+   of een contractbestand dat daaraan gebonden is), blijft van deze deal en is geen conflict.
+   Staat de goedgekeurde titel al exact op de deal, dan schrijft de uitvoerder niets en meldt
+   hij 'reeds voldaan'.
 4. **Het dossier in voorbereiding zetten.** `voorbereiding_starten` met de
    deal (en het nummer als dat er is). Het dashboard vult dan zelf uit
    Pipedrive, Geopunt, GRB en de klantmail. Bestond het dossier al, dan wordt

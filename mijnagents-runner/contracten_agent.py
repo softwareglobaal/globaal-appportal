@@ -408,6 +408,18 @@ def _lees_nummerbronnen(soort, jaar, bewijs):
     return p, gebruikt
 
 
+def gebruik_elders(vindplaatsen, deal_id):
+    """Welke vindplaatsen van een nummer horen NIET bij deze deal (WP2b-afronding, 12-10-2026).
+    Een vindplaats met een andere deal is van een ander. Een vindplaats zonder deal (een contractbestand)
+    telt alleen als eigen gebruik als een vindplaats mét deal het nummer aan deze deal bindt en geen enkele
+    het aan een andere deal bindt; anders is ze onbewezen en dus 'elders'."""
+    eigen = str(deal_id) if deal_id is not None else None
+    anders = [(b, d) for b, d in vindplaatsen if d is not None and d != eigen]
+    gebonden = eigen is not None and any(d == eigen for _, d in vindplaatsen)
+    zonder = [(b, d) for b, d in vindplaatsen if d is None]
+    return anders + ([] if gebonden and not anders else zonder)
+
+
 def volgend_vrij_nummer(soort="architectuur", jaar=None, bewijs=None, deal_id=None):
     """Werkwijze stap 3 (D9): het volgende vrije nummer van de reeks van dit jaar (architectuur, voorstudie,
     addendum: JJ; regularisatie: JJ+30), uit vijf bronnen samen: de contractmappen van die reeks in Dropbox,
@@ -450,8 +462,8 @@ def volgend_vrij_nummer(soort="architectuur", jaar=None, bewijs=None, deal_id=No
             raise NummerFout(f"nummer {n} van voorstel {eigen.get('voorstel_id')} staat ook in voorstel "
                              f"{', '.join(str(x) for x in anderen[n])} voor een andere deal; Mehdi beslist op het bord, "
                              f"ik stel geen ander nummer voor")
-        if n not in uit_bronnen:
-            return n
+        if n not in uit_bronnen or not gebruik_elders(gebruikt[n], deal_id):
+            return n                                   # vrij, of alleen in gebruik door deze deal zelf
         if eigen.get("status") == "goedgekeurd":
             raise NummerFout(f"goedgekeurd voorstel {eigen.get('voorstel_id')}: nummer {n} is inmiddels gebruikt "
                              f"({', '.join(b for b, _ in gebruikt[n])}); Mehdi weigert dat voorstel, daarna volgt een nieuw")
@@ -486,7 +498,7 @@ def nummer_vrij_voor_uitvoering(nummer, deal_id, bewijs=None):
     soort, jaar = reeks_van_nummer(nummer)
     bewijs = bewijs if bewijs is not None else {}
     _, gebruikt = _lees_nummerbronnen(soort, jaar, bewijs)
-    elders = [(b, d) for b, d in gebruikt.get(nummer, []) if d != str(deal_id)]
+    elders = gebruik_elders(gebruikt.get(nummer, []), deal_id)
     bewijs["elders"] = elders
     if elders:
         raise NummerFout(f"nummer {nummer} is inmiddels gebruikt: "

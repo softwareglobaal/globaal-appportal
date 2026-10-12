@@ -166,7 +166,10 @@
         <td>{{ v['id'] }}</td>
         <td>{{ v['actie'] }}{% if v['bewijs'] %}<div style="color:var(--zacht);font-size:12px;white-space:pre-wrap">{{ v['bewijs'][:300] }}</div>{% endif %}</td>
         <td>{% if v['runbook'] %}<code>{{ v['runbook'] }}</code>{% elif not v['parameters'] %}<span style="color:var(--zacht)">signaal</span>{% endif %}</td>
-        <td>{{ v['status'] }}</td>
+        <td>{{ v['status'] }}{% if mag_beslissen and v['id'] in opnieuw_voorleggen %}
+          <form method="post" action="{{ url_for('opnieuw_voorleggen', vid=v['id']) }}" style="margin-top:4px">
+            <button type="submit" title="Goedgekeurd zonder reservering (van vóór WP2b): terug naar open, dan opnieuw goedkeuren">Opnieuw voorleggen</button>
+          </form>{% endif %}</td>
         <td>{{ v['ts'][:16] }}</td>
       </tr>
       {% endfor %}
