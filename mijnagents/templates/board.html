@@ -95,12 +95,14 @@
         <b>{{ v['actie'] }}</b>
         {% if not v['parameters'] %}<span class="signaal">— signaal, niet uitvoerbaar</span>{% endif %}
         <div class="van">{{ v['label'] or v['naam'] }}{% if v['reden'] %} · {{ v['reden'] }}{% endif %}</div>
+        {% set nc = nummerconflicten.get(v['id']) %}
+        {% if nc %}<div class="nummerconflict" style="color:var(--fout);margin-top:4px">Nummer {{ nc['nummer'] }} staat ook in voorstel {{ nc['anderen']|join(', ') }} voor een andere deal. Goedkeuren kan pas als er nog maar één voorstel met dit nummer open staat.</div>{% endif %}
       </div>
       {% if mag_beslissen %}
       <div class="knoppen">
         <form method="post" action="{{ url_for('besluit', vid=v['id']) }}">
           <input type="hidden" name="keuze" value="goedgekeurd">
-          <button class="ja" type="submit">Goedkeuren</button>
+          <button class="ja" type="submit"{% if nc %} disabled title="Betwist nummer: eerst de andere voorstellen weigeren"{% endif %}>Goedkeuren</button>
         </form>
         <form method="post" action="{{ url_for('besluit', vid=v['id']) }}">
           <input type="hidden" name="keuze" value="geweigerd">

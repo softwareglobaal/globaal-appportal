@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, url_for
+from markupsafe import escape
 
 app = Flask(__name__)
 
@@ -183,6 +184,24 @@ def init_db():
             wie   TEXT DEFAULT '',
             ts    TEXT NOT NULL
         );
+        -- WP2b (12-10-2026): een H-A-projectnummer dat in een open of goedgekeurd voorstel staat, is bezet.
+        -- De unieke indexen zijn de grendel: twee gelijktijdige voorstellen krijgen nooit hetzelfde nummer,
+        -- en één deal houdt nooit twee nummers tegelijk vast. actief volgt de status van het voorstel.
+        CREATE TABLE IF NOT EXISTS nummerreservering (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            firma       TEXT NOT NULL,
+            reeks       TEXT NOT NULL,
+            nummer      TEXT NOT NULL,
+            deal_id     TEXT NOT NULL,
+            voorstel_id INTEGER NOT NULL,
+            actief      INTEGER NOT NULL DEFAULT 1,
+            ts          TEXT NOT NULL,
+            vrij_ts     TEXT DEFAULT '',
+            vrij_reden  TEXT DEFAULT ''
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS nummerreservering_nummer ON nummerreservering(firma, nummer) WHERE actief=1;
+        CREATE UNIQUE INDEX IF NOT EXISTS nummerreservering_deal ON nummerreservering(firma, deal_id) WHERE actief=1;
+        CREATE INDEX IF NOT EXISTS nummerreservering_voorstel ON nummerreservering(voorstel_id);
         """
     )
     # Latere kolommen op agent: de werkwijze (het volledige proces, door Mehdi
@@ -377,6 +396,7 @@ def bord():
     return render_template(
         "board.html", app_naam=APP_NAAM, groepen=groepering, aantal=len(ks),
         voorstellen=open_voorstellen, mag_beslissen=mag_beslissen(),
+        nummerconflicten=nummerconflicten_op_bord(db()),
         gebruiker=gebruiker(),
         gesprekken=gesprekken_voor("regisseur", 12) if mag_beslissen() else [],
         regisseur_html=md, afdelingen=afdelingen,
@@ -1111,6 +1131,224 @@ def api_logboek():
 
 # --- hartslag: de agent-runner meldt hier zijn status. Deze route passeert de
 #     forward-auth (nginx laat hem door); we toetsen zelf het token. ----------
+# --- projectnummers: reservering per voorstel (WP2b, 12-10-2026) -----------
+# Aanleiding: 2617 stond tegelijk in drie open voorstellen voor drie deals (voorstellen 25, 26 en 27, 05 tot
+# 10-10-2026). De agent las vier bronnen, maar geen open voorstellen, en het bord ontdubbelde alleen per deal.
+# Nu houdt een open of goedgekeurd dealtitel-voorstel zijn nummer vast; de unieke indexen op nummerreservering
+# zijn de grendel, BEGIN IMMEDIATE de gedeelde databankgrendel. Alleen H-Architects. Een reservering komt vrij
+# wanneer het voorstel geweigerd, vervangen, mislukt of overgeslagen is; nooit vanzelf na een tijd.
+NUMMER_RUNBOOK = "pipedrive-dealtitel"
+NUMMER_FIRMA = "harchitects"
+NUMMER_BEZET = ("open", "goedgekeurd")
+
+
+def nummer_uit_parameters(params):
+    """(nummer, deal_id) van een dealtitel-voorstel. Het nummer staat expliciet of vooraan in de titel; staan
+    beide er en verschillen ze, dan is er geen geldig nummer."""
+    if not isinstance(params, dict) or params.get("deal_id") in (None, ""):
+        return None, None
+    deal = str(params.get("deal_id")).strip()
+    m = re.match(r"^(\d{4})\s+\S", str(params.get("titel") or "").strip())
+    uit_titel = m.group(1) if m else ""
+    nummer = str(params.get("nummer") or uit_titel).strip()
+    if not re.fullmatch(r"\d{4}", nummer) or (uit_titel and uit_titel != nummer):
+        return None, deal
+    return nummer, deal
+
+
+def bezette_nummers(conn, firma=NUMMER_FIRMA):
+    """Elk nummer dat een open of goedgekeurd dealtitel-voorstel vasthoudt. Uit de reserveringen, en voor
+    voorstellen van vóór WP2b (zonder reservering) afgeleid uit hun parameters: geen historische migratie,
+    zodat oude dubbele voorstellen zichtbaar blijven als conflict in plaats van stil opgelost."""
+    uit, gedekt = [], set()
+    for r in conn.execute(
+            "SELECT r.nummer, r.deal_id, r.voorstel_id, v.status FROM nummerreservering r "
+            "JOIN voorstel v ON v.id = r.voorstel_id WHERE r.firma=? AND r.actief=1 ORDER BY r.voorstel_id", (firma,)):
+        uit.append({"nummer": r["nummer"], "deal_id": r["deal_id"], "voorstel_id": r["voorstel_id"],
+                    "status": r["status"], "bron": "reservering"})
+        gedekt.add(r["voorstel_id"])
+    if firma != NUMMER_FIRMA:
+        return uit
+    for r in conn.execute("SELECT id, parameters, status FROM voorstel WHERE runbook=? AND status IN (?, ?) "
+                          "ORDER BY id", (NUMMER_RUNBOOK, *NUMMER_BEZET)):
+        if r["id"] in gedekt:
+            continue
+        try:
+            params = json.loads(r["parameters"] or "{}")
+        except ValueError:
+            continue
+        nummer, deal = nummer_uit_parameters(params)
+        if nummer and str(params.get("firma") or NUMMER_FIRMA) == firma:
+            uit.append({"nummer": nummer, "deal_id": deal, "voorstel_id": r["id"], "status": r["status"],
+                        "bron": "voorstel zonder reservering"})
+    return uit
+
+
+def reservering_volgt_voorstel(conn, vid, reden=""):
+    """Geeft de reservering vrij zodra het voorstel niet meer open of goedgekeurd is."""
+    rij = conn.execute("SELECT status FROM voorstel WHERE id=?", (vid,)).fetchone()
+    if rij and rij["status"] not in NUMMER_BEZET:
+        conn.execute("UPDATE nummerreservering SET actief=0, vrij_ts=?, vrij_reden=? WHERE voorstel_id=? AND actief=1",
+                     (nu(), (reden or f"voorstel {rij['status']}")[:300], vid))
+
+
+def _eerder_geweigerd(conn, nummer, deal):
+    for r in conn.execute("SELECT id, parameters FROM voorstel WHERE runbook=? AND status='geweigerd'", (NUMMER_RUNBOOK,)):
+        try:
+            if nummer_uit_parameters(json.loads(r["parameters"] or "{}")) == (nummer, deal):
+                return r["id"]
+        except ValueError:
+            continue
+    return None
+
+
+def nummervoorstel_bewaren(conn, naam, v):
+    """Bewaart een dealtitel-voorstel en reserveert zijn nummer in één transactie onder schrijfgrendel.
+    Uitkomst: gereserveerd (nieuw voorstel), bestaat (zelfde deal en nummer: idempotent), bezet (ander deal
+    houdt het nummer vast), eerder_geweigerd, of geweigerd (ongeldig, andere firma, goedgekeurd voorstel)."""
+    params = v.get("parameters") if isinstance(v.get("parameters"), dict) else {}
+    firma = str(params.get("firma") or NUMMER_FIRMA)
+    if firma != NUMMER_FIRMA:
+        return {"bewaard": False, "uitkomst": "geweigerd",
+                "reden": f"firma '{firma}': deze route reserveert alleen H-Architects-nummers"}
+    nummer, deal = nummer_uit_parameters(params)
+    if not nummer:
+        return {"bewaard": False, "uitkomst": "geweigerd", "reden": "geen geldig projectnummer of geen deal in het voorstel"}
+    params = {**params, "nummer": nummer, "firma": firma}
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        bezet = bezette_nummers(conn)
+        eigen = [b for b in bezet if b["deal_id"] == deal]
+        zelfde = [b for b in eigen if b["nummer"] == nummer]
+        if zelfde:
+            conn.rollback()
+            return {"bewaard": False, "uitkomst": "bestaat", "nummer": nummer, "voorstel_id": zelfde[0]["voorstel_id"],
+                    "status": zelfde[0]["status"]}
+        elders = [b for b in bezet if b["nummer"] == nummer and b["deal_id"] != deal]
+        if elders:
+            conn.rollback()
+            return {"bewaard": False, "uitkomst": "bezet", "nummer": nummer, "bezet_door": elders}
+        geweigerd = _eerder_geweigerd(conn, nummer, deal)
+        if geweigerd:
+            conn.rollback()
+            return {"bewaard": False, "uitkomst": "eerder_geweigerd", "nummer": nummer, "voorstel_id": geweigerd}
+        goedgekeurd = [b for b in eigen if b["status"] == "goedgekeurd"]
+        if goedgekeurd:
+            conn.rollback()
+            return {"bewaard": False, "uitkomst": "geweigerd", "nummer": nummer,
+                    "reden": f"voorstel {goedgekeurd[0]['voorstel_id']} voor deze deal is al goedgekeurd met nummer "
+                             f"{goedgekeurd[0]['nummer']}; een goedgekeurd voorstel verandert niet stilzwijgend"}
+        for b in eigen:   # een open voorstel met een ander nummer voor dezelfde deal vervalt (regel deal 14531)
+            conn.execute("UPDATE voorstel SET status='vervallen', besluit_door='systeem', besluit_ts=?, bewijs=? "
+                         "WHERE id=? AND status='open'", (nu(), f"vervangen door een nieuw voorstel: {v['actie']}", b["voorstel_id"]))
+            reservering_volgt_voorstel(conn, b["voorstel_id"], f"vervangen door nummer {nummer}")
+        vid = conn.execute(
+            "INSERT INTO voorstel(naam,actie,doel,reden,parameters,runbook,ts) VALUES(?,?,?,?,?,?,?)",
+            (naam, v["actie"], v.get("doel", ""), v.get("reden", ""), json.dumps(params), NUMMER_RUNBOOK, nu())).lastrowid
+        conn.execute("INSERT INTO nummerreservering(firma,reeks,nummer,deal_id,voorstel_id,actief,ts) VALUES(?,?,?,?,?,1,?)",
+                     (firma, nummer[:2], nummer, deal, vid, nu()))
+        conn.commit()
+        return {"bewaard": True, "uitkomst": "gereserveerd", "nummer": nummer, "voorstel_id": vid}
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        return {"bewaard": False, "uitkomst": "bezet", "nummer": nummer, "reden": f"grendel: {e}"}
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def nummercontrole(conn, vid, voor_akkoord=False):
+    """Mag dit dealtitel-voorstel (nog) door? Bij akkoord moet het open zijn, bij uitvoering goedgekeurd, en
+    geen andere deal mag hetzelfde nummer vasthouden. Geeft een dict met ok, reden en bewijs."""
+    rij = conn.execute("SELECT id, runbook, parameters, status FROM voorstel WHERE id=?", (vid,)).fetchone()
+    if not rij or rij["runbook"] != NUMMER_RUNBOOK:
+        return {"ok": False, "voorstel_id": vid, "reden": "geen dealtitel-voorstel met dit id"}
+    try:
+        params = json.loads(rij["parameters"] or "{}")
+    except ValueError:
+        params = {}
+    nummer, deal = nummer_uit_parameters(params)
+    uit = {"voorstel_id": vid, "nummer": nummer, "deal_id": deal, "status": rij["status"],
+           "firma": str(params.get("firma") or NUMMER_FIRMA)}
+    if uit["firma"] != NUMMER_FIRMA:
+        return {**uit, "ok": False, "reden": f"firma '{uit['firma']}' valt buiten deze route"}
+    if not nummer:
+        return {**uit, "ok": False, "reden": "geen geldig projectnummer in het voorstel"}
+    verwacht = "open" if voor_akkoord else "goedgekeurd"
+    if rij["status"] != verwacht:
+        return {**uit, "ok": False, "reden": f"voorstel staat op '{rij['status']}', niet op '{verwacht}'"}
+    bezet = bezette_nummers(conn)
+    uit["elders"] = [b for b in bezet if b["nummer"] == nummer and b["voorstel_id"] != vid and b["deal_id"] != deal]
+    uit["gereserveerd"] = bool(conn.execute(
+        "SELECT 1 FROM nummerreservering WHERE voorstel_id=? AND actief=1", (vid,)).fetchone())
+    if uit["elders"]:
+        return {**uit, "ok": False, "reden": f"nummer {nummer} staat ook in voorstel "
+                + ", ".join(str(b["voorstel_id"]) for b in uit["elders"]) + " voor een andere deal"}
+    if not voor_akkoord and not uit["gereserveerd"]:
+        return {**uit, "ok": False, "reden": "het goedgekeurde voorstel heeft geen actieve reservering"}
+    return {**uit, "ok": True, "reden": ""}
+
+
+def nummervoorstel_goedkeuren(conn, vid, wie):
+    """Akkoord op een dealtitel-voorstel: onder schrijfgrendel opnieuw op conflict controleren, de reservering
+    vastleggen (ook voor een voorstel van vóór WP2b) en pas dan goedkeuren. Geeft (ok, controle)."""
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        c = nummercontrole(conn, vid, voor_akkoord=True)
+        if not c["ok"]:
+            conn.rollback()
+            return False, c
+        if not c["gereserveerd"]:
+            conn.execute("INSERT INTO nummerreservering(firma,reeks,nummer,deal_id,voorstel_id,actief,ts) "
+                         "VALUES(?,?,?,?,?,1,?)", (NUMMER_FIRMA, c["nummer"][:2], c["nummer"], c["deal_id"], vid, nu()))
+        conn.execute("UPDATE voorstel SET status='goedgekeurd', besluit_door=?, besluit_ts=? WHERE id=? AND status='open'",
+                     (wie, nu(), vid))
+        conn.commit()
+        return True, c
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        return False, {"ok": False, "voorstel_id": vid, "reden": f"grendel: nummer of deal al gereserveerd ({e})"}
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def nummerconflicten_op_bord(conn):
+    """Per open dealtitel-voorstel de andere voorstellen die hetzelfde nummer vasthouden (zonder klantnamen)."""
+    bezet = bezette_nummers(conn)
+    uit = {}
+    for b in bezet:
+        anderen = [x["voorstel_id"] for x in bezet if x["nummer"] == b["nummer"] and x["deal_id"] != b["deal_id"]]
+        if anderen:
+            uit[b["voorstel_id"]] = {"nummer": b["nummer"], "anderen": anderen}
+    return uit
+
+
+@app.route("/api/nummerreserveringen")
+def api_nummerreserveringen():
+    """Bezette H-A-nummers voor de Contracten-agent (vijfde nummerbron). Token-gated, alleen lezen."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    firma = request.args.get("firma", NUMMER_FIRMA)
+    if firma != NUMMER_FIRMA:
+        return jsonify(fout=f"firma '{firma}' valt buiten de nummerreservering"), 400
+    bezet = bezette_nummers(db())
+    return jsonify(firma=firma, volledig=True, aantal=len(bezet), bezet=bezet)
+
+
+@app.route("/api/nummercontrole")
+def api_nummercontrole():
+    """Controle vlak vóór uitvoering (runbook pipedrive-dealtitel). Token-gated, alleen lezen."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    try:
+        vid = int(request.args.get("voorstel_id", ""))
+    except ValueError:
+        return jsonify(ok=False, reden="voorstel_id vereist"), 400
+    return jsonify(nummercontrole(db(), vid))
+
+
 @app.route("/agent-status", methods=["POST"])
 def agent_status():
     if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
@@ -1143,6 +1381,11 @@ def agent_status():
                 conn.execute("UPDATE nood SET open=0, opgelost_ts=? WHERE id=?", (nu(), nid))
     # Optioneel voorstel meegestuurd (mens-in-de-lus).
     v = p.get("voorstel")
+    if isinstance(v, dict) and v.get("actie") and v.get("runbook") == NUMMER_RUNBOOK:
+        # Een projectnummer gaat langs de reservering (WP2b), in een eigen transactie onder schrijfgrendel.
+        # De agent leest de uitkomst: alleen 'gereserveerd' of 'bestaat' betekent dat het voorstel er staat.
+        conn.commit()
+        return jsonify(ok=True, voorstel=nummervoorstel_bewaren(conn, naam, v))
     if isinstance(v, dict) and v.get("actie"):
         params = v.get("parameters")
         pjson = json.dumps(params) if params else ""
@@ -1221,11 +1464,24 @@ def besluit(vid):
     keuze = request.form.get("keuze")
     if keuze not in ("goedgekeurd", "geweigerd"):
         abort(400)
-    db().execute(
+    conn = db()
+    rij = conn.execute("SELECT runbook FROM voorstel WHERE id=?", (vid,)).fetchone()
+    if keuze == "goedgekeurd" and rij and rij["runbook"] == NUMMER_RUNBOOK:
+        # WP2b: bij akkoord opnieuw op conflict controleren; een betwist nummer wordt niet goedgekeurd.
+        ok, controle = nummervoorstel_goedkeuren(conn, vid, gebruiker())
+        if not ok:
+            terug = request.referrer or url_for("bord")
+            return (f"<!doctype html><meta charset='utf-8'><title>Niet goedgekeurd</title>"
+                    f"<p><b>Voorstel {vid} is niet goedgekeurd.</b> {escape(controle.get('reden', ''))}</p>"
+                    f"<p>Weiger eerst de andere voorstellen met dit nummer, of laat een nieuw nummer voorstellen.</p>"
+                    f"<p><a href='{escape(terug)}'>Terug naar het bord</a></p>"), 409
+        return redirect(request.referrer or url_for("bord"))
+    conn.execute(
         "UPDATE voorstel SET status=?, besluit_door=?, besluit_ts=? WHERE id=? AND status='open'",
         (keuze, gebruiker(), nu(), vid),
     )
-    db().commit()
+    reservering_volgt_voorstel(conn, vid, f"{keuze} door {gebruiker()}")
+    conn.commit()
     return redirect(request.referrer or url_for("bord"))
 
 
@@ -1261,6 +1517,7 @@ def uitvoer_resultaat():
     if p.get("bewijs"):
         bewijs += "\n" + str(p["bewijs"])[:4000]
     conn.execute("UPDATE voorstel SET status=?, bewijs=? WHERE id=?", (nieuw, bewijs, vid))
+    reservering_volgt_voorstel(conn, vid, f"uitvoering {nieuw}")
     conn.execute("INSERT INTO handeling(naam, wat, ts) VALUES(?,?,?)",
                  (v["naam"], f"voorstel {vid} '{v['actie']}': {nieuw}", nu()))
     conn.commit()

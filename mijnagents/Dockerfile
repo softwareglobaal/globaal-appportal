@@ -13,5 +13,8 @@ RUN python3 test_werfbezoek.py
 # Grendel op het maildashboard (/mail): alleen beheer, belangrijk bovenaan, afgehandeld komt niet terug. Zie test_mail.py.
 RUN python3 test_mail.py
 RUN python3 test_naamstructuur.py
+# Grendel op de nummerreservering (WP2b): een open of goedgekeurd dealtitel-voorstel houdt zijn nummer vast;
+# akkoord op een betwist nummer wordt geweigerd. Zie test_nummerreservering.py.
+RUN python3 test_nummerreservering.py
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3022} --workers 2 --timeout 900 app:app"]

@@ -1504,8 +1504,16 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   regularisatie (JJ+30)NN, elk jaar, geen ondergrens); nummers van UNAB, TKNB en ENEF worden
   gelezen zonder jaar of dossierhouder. De Contracten-agent stelt een nieuw H-A-nummer alleen
   voor als de vier bronnen volledig gelezen zijn (Pipedrive alle pagina's, alleen bedrijf-id
-  10068585) en meldt een volle reeks in plaats van over te lopen; een reservering per
-  aanvraag bestaat nog niet. Aanvulling 06-10-2026: startfase volledig gepagineerd,
+  10068585) en meldt een volle reeks in plaats van over te lopen. Reservering per
+  voorstel (WP2b, 12-10-2026): tabel `nummerreservering` in de databank van het bord met
+  unieke indexen op (firma, nummer) en (firma, deal) zolang het voorstel open of
+  goedgekeurd is; het voorstel en zijn reservering worden samen bewaard onder `BEGIN
+  IMMEDIATE`; akkoord controleert opnieuw (409 bij een ander voorstel met hetzelfde
+  nummer); het runbook `pipedrive-dealtitel` vraagt vlak vóór de PUT `/api/nummercontrole`
+  en leest de vier bronnen opnieuw. Voorstellen van vóór WP2b tellen afgeleid mee als
+  bezet (geen migratie). Agent leest `/api/nummerreserveringen` als vijfde bron.
+  Grendels `mijnagents/test_nummerreservering.py` (ook in de Docker-build) en
+  `tests/test_nummerreservering.py`. Aanvulling 06-10-2026: startfase volledig gepagineerd,
   accountgrendel vóór elke dashboardbewerking, dashboardpaginering met totaalcontrole,
   expliciete Dropbox-root en foutonderscheid. Een reeds toegekend nummer uit de
   voorbereiding blijft gelden; verschil met de dealtitel blokkeert. Agenda, Fathom en

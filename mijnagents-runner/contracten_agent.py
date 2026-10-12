@@ -80,6 +80,28 @@ TOKEN = _token_van_dit_bord()
 
 
 # ------------------------------------------------------------- agentbord ---
+def nummervoorstel_op_bord(deal_id, nummer, klant, soort):
+    """Zet het nummervoorstel op het bord en leest de uitkomst van de reservering terug (WP2b):
+    gereserveerd, bestaat, bezet, eerder_geweigerd, geweigerd; bij een netwerkfout 'onzeker'."""
+    payload = {"naam": NAAM, "status": "waakt", "taak": "projectnummer ter goedkeuring", "detail": f"deal {deal_id}",
+               "voorstel": {"actie": f"Projectnummer {nummer} toekennen aan deal {deal_id}",
+                            "doel": f"deal {deal_id}", "reden": "dealtitel zonder projectnummer (D9)",
+                            "runbook": "pipedrive-dealtitel",
+                            "parameters": {"deal_id": deal_id, "titel": f"{nummer} {klant}", "nummer": nummer,
+                                           "firma": FIRMA, "soort": soort}}}
+    if DROOG:
+        return {"uitkomst": "droog"}
+    req = urllib.request.Request(f"{PLATFORM}/agent-status", data=json.dumps(payload).encode(),
+                                 headers={"Content-Type": "application/json", "X-Agents-Token": TOKEN}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            antwoord = json.loads(r.read().decode())
+    except Exception as e:  # noqa: BLE001
+        return {"uitkomst": "onzeker", "reden": f"{type(e).__name__}: {e}"[:200]}
+    v = antwoord.get("voorstel") if isinstance(antwoord, dict) else None
+    return v if isinstance(v, dict) else {"uitkomst": "onzeker", "reden": "het bord gaf geen uitkomst van de reservering"}
+
+
 def hartslag(status, taak="", detail="", voorstel=None, nood=None):
     payload = {"naam": NAAM, "status": status, "taak": taak, "detail": detail}
     if voorstel:
@@ -324,28 +346,33 @@ def nummerbron_dashboard(naam):
         offset = volgend
 
 
-def volgend_vrij_nummer(soort="architectuur", jaar=None, bewijs=None):
-    """Werkwijze stap 3 (D9): het volgende vrije nummer van de reeks van dit jaar (architectuur, voorstudie,
-    addendum: JJ; regularisatie: JJ+30), uit vier bronnen samen: de contractmappen van die reeks in Dropbox,
-    de dossiers en de voorbereidingen op het dashboard, en alle H-A-deals in Pipedrive (open, gewonnen,
-    verloren; alle pagina's). Het jaar komt uit de kalender of wordt meegegeven, nooit uit een getal in een
-    tekst. Een bron die niet volledig gelezen is, of een volle reeks: NummerFout, geen nummer.
-    Dit is een voorstel: Mehdi bevestigt het via het bord (runbook pipedrive-dealtitel). Twee rondes
-    tegelijk kunnen hetzelfde voorstel krijgen; een reservering bestaat nog niet (WP2b)."""
-    jaar = int(jaar or nummerlezer.jaar_nu_brussel())
+def bord_reserveringen():
+    """Vijfde nummerbron (WP2b): de nummers die een open of goedgekeurd voorstel op het agentbord vasthoudt.
+    Onbereikbaar of onvolledig is een fout, geen lege lijst."""
+    req = urllib.request.Request(f"{PLATFORM}/api/nummerreserveringen?firma={FIRMA}",
+                                 headers={"X-Agents-Token": TOKEN})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        data = json.loads(r.read().decode())
+    rijen = data.get("bezet") if isinstance(data, dict) else None
+    if not isinstance(rijen, list) or data.get("volledig") is not True or data.get("aantal") != len(rijen) \
+            or any(not isinstance(x, dict) for x in rijen):
+        raise NummerFout("agentbord: geen volledige lijst van open nummervoorstellen")
+    return rijen
+
+
+def _lees_nummerbronnen(soort, jaar, bewijs):
+    """De vier vaste bronnen, volledig gelezen: {nummer: [(bron, deal_id of None), ...]} binnen de reeks."""
     try:
         p = nummerlezer.ha_voorvoegsel(soort, jaar)
     except ValueError as e:
         raise NummerFout(str(e)) from e
-    van, tot = int(p + "01"), int(p + "99")
-    bewijs = bewijs if bewijs is not None else {}
     bewijs.update({"reeks": p, "jaar": jaar, "per_bron": {}, "ontbrekende_mappen": []})
-    gebruikt = set()
+    gebruikt = {}
 
-    def neem(nummer, bron):
+    def neem(nummer, bron, deal=None):
         n = str(nummer or "").strip()
         if len(n) == 4 and n.isdigit() and n.startswith(p):
-            gebruikt.add(n)
+            gebruikt.setdefault(n, []).append((bron, None if deal in (None, "") else str(deal)))
             bewijs["per_bron"][bron] = bewijs["per_bron"].get(bron, 0) + 1
 
     for pad in contract_mappen(soort, p):
@@ -362,9 +389,9 @@ def volgend_vrij_nummer(soort="architectuur", jaar=None, bewijs=None):
             neem(nummerlezer.ha_nummer(e.get("name", ""), "contractbestand", jaar), "contractmappen")
     try:
         for r in nummerbron_dashboard("dossiers"):
-            neem(r.get("project_nummer") or r.get("nummer"), "dashboard")
+            neem(r.get("project_nummer") or r.get("nummer"), "dashboard", r.get("deal_id"))
         for r in nummerbron_dashboard("voorbereidingen"):
-            neem(r.get("nummer"), "voorbereidingen")
+            neem(r.get("nummer"), "voorbereidingen", r.get("deal_id"))
     except NummerFout:
         raise
     except Exception as e:  # noqa: BLE001
@@ -375,14 +402,96 @@ def volgend_vrij_nummer(soort="architectuur", jaar=None, bewijs=None):
             deals = pipedrive.alles(FIRMA, "/deals", {"status": status})
             bewijs.setdefault("deals", {})[status] = len(deals)
             for x in deals:
-                neem(nummerlezer.ha_nummer(x.get("title", ""), "pipedrive_titel", jaar), f"pipedrive {status}")
+                neem(nummerlezer.ha_nummer(x.get("title", ""), "pipedrive_titel", jaar), f"pipedrive {status}", x.get("id"))
     except Exception as e:  # noqa: BLE001
         raise NummerFout(f"Pipedrive H-A niet volledig gelezen: {e}") from e
+    return p, gebruikt
+
+
+def volgend_vrij_nummer(soort="architectuur", jaar=None, bewijs=None, deal_id=None):
+    """Werkwijze stap 3 (D9): het volgende vrije nummer van de reeks van dit jaar (architectuur, voorstudie,
+    addendum: JJ; regularisatie: JJ+30), uit vijf bronnen samen: de contractmappen van die reeks in Dropbox,
+    de dossiers en de voorbereidingen op het dashboard, alle H-A-deals in Pipedrive (open, gewonnen,
+    verloren; alle pagina's) en de nummers die een open of goedgekeurd voorstel op het agentbord vasthoudt
+    (WP2b). Het jaar komt uit de kalender of wordt meegegeven, nooit uit een getal in een tekst. Een bron die
+    niet volledig gelezen is, of een volle reeks: NummerFout, geen nummer.
+    Met deal_id: heeft die deal al een voorstel met een nummer van deze reeks, dan blijft dat zijn nummer
+    (herhalen is idempotent). Staat dat nummer ook in een voorstel voor een andere deal, dan beslist Mehdi:
+    NummerFout. Is het inmiddels elders gebruikt, dan volgt bij een open voorstel een nieuw nummer (het bord
+    laat het oude vervallen); een goedgekeurd voorstel verandert nooit stilzwijgend: NummerFout.
+    Dit is een voorstel: Mehdi bevestigt het via het bord (runbook pipedrive-dealtitel); het bord reserveert
+    het nummer atomisch bij het bewaren van het voorstel."""
+    jaar = int(jaar or nummerlezer.jaar_nu_brussel())
+    bewijs = bewijs if bewijs is not None else {}
+    p, gebruikt = _lees_nummerbronnen(soort, jaar, bewijs)
+    van, tot = int(p + "01"), int(p + "99")
+    uit_bronnen = set(gebruikt)
+    try:
+        reserveringen = bord_reserveringen()
+    except NummerFout:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise NummerFout(f"agentbord (open nummervoorstellen) niet gelezen: {e}") from e
+    eigen, anderen = None, {}
+    for r in reserveringen:
+        n = str(r.get("nummer") or "").strip()
+        if not (len(n) == 4 and n.isdigit() and n.startswith(p)):
+            continue
+        if deal_id is not None and str(r.get("deal_id")) == str(deal_id):
+            eigen = r
+            continue
+        anderen.setdefault(n, []).append(r.get("voorstel_id"))
+        gebruikt.setdefault(n, []).append(("bord voorstellen", str(r.get("deal_id"))))
+        bewijs["per_bron"]["bord voorstellen"] = bewijs["per_bron"].get("bord voorstellen", 0) + 1
+    if eigen:
+        n = str(eigen["nummer"])
+        bewijs["eigen_voorstel"] = {k: eigen.get(k) for k in ("voorstel_id", "nummer", "status")}
+        if n in anderen:
+            raise NummerFout(f"nummer {n} van voorstel {eigen.get('voorstel_id')} staat ook in voorstel "
+                             f"{', '.join(str(x) for x in anderen[n])} voor een andere deal; Mehdi beslist op het bord, "
+                             f"ik stel geen ander nummer voor")
+        if n not in uit_bronnen:
+            return n
+        if eigen.get("status") == "goedgekeurd":
+            raise NummerFout(f"goedgekeurd voorstel {eigen.get('voorstel_id')}: nummer {n} is inmiddels gebruikt "
+                             f"({', '.join(b for b, _ in gebruikt[n])}); Mehdi weigert dat voorstel, daarna volgt een nieuw")
+        bewijs["eigen_voorstel_elders_gebruikt"] = n
     hoogste = max((int(n) for n in gebruikt), default=van - 1)
     bewijs["hoogste"] = hoogste if gebruikt else None
     if hoogste + 1 > tot:
         raise NummerFout(f"reeks {p}xx van {jaar} is vol ({tot} is gebruikt): geen nummer en geen ander formaat")
     return str(hoogste + 1)
+
+
+def reeks_van_nummer(nummer, jaar_nu=None):
+    """(soort, jaar) van een H-A-nummer, voor dit, vorig of volgend jaar; anders NummerFout."""
+    jaar_nu = int(jaar_nu or nummerlezer.jaar_nu_brussel())
+    for jaar in (jaar_nu, jaar_nu - 1, jaar_nu + 1):
+        for soort in ("architectuur", "regularisatie"):
+            try:
+                if nummerlezer.ha_voorvoegsel(soort, jaar) == str(nummer)[:2]:
+                    return soort, jaar
+            except ValueError:
+                continue
+    raise NummerFout(f"nummer {nummer} hoort bij geen H-A-reeks van {jaar_nu - 1} tot {jaar_nu + 1}")
+
+
+def nummer_vrij_voor_uitvoering(nummer, deal_id, bewijs=None):
+    """Controle vlak vóór de PUT van het runbook pipedrive-dealtitel: de vier vaste bronnen opnieuw volledig
+    lezen; het nummer mag nergens gebruikt zijn, behalve door deze deal zelf. Bronfout of gebruik elders:
+    NummerFout met bewijs, en dan volgt er geen schrijfactie."""
+    nummer = str(nummer or "").strip()
+    if not (len(nummer) == 4 and nummer.isdigit()):
+        raise NummerFout(f"'{nummer}' is geen H-A-projectnummer")
+    soort, jaar = reeks_van_nummer(nummer)
+    bewijs = bewijs if bewijs is not None else {}
+    _, gebruikt = _lees_nummerbronnen(soort, jaar, bewijs)
+    elders = [(b, d) for b, d in gebruikt.get(nummer, []) if d != str(deal_id)]
+    bewijs["elders"] = elders
+    if elders:
+        raise NummerFout(f"nummer {nummer} is inmiddels gebruikt: "
+                         + "; ".join(f"{b}{' deal ' + d if d else ''}" for b, d in elders))
+    return True
 
 
 # ------------------------------------------------------------ taalmodel ---
@@ -682,7 +791,7 @@ def verwerk(deal, werkinstructie, staat):
     vrij, nummer_fout = "", ""
     if not nummer:
         try:
-            vrij = volgend_vrij_nummer(soort)
+            vrij = volgend_vrij_nummer(soort, deal_id=deal_id)
         except NummerFout as e:
             nummer_fout = str(e)
             log(ond, "fout", f"geen vrij projectnummer voorgesteld: {nummer_fout[:200]}")
@@ -805,11 +914,15 @@ def verwerk(deal, werkinstructie, staat):
         nummer_voorstel = None
     if nummer_voorstel and str(nummer_voorstel).lower() != "null":
         klant = re.sub(r"^\s*\d{4}\s+", "", titel).strip() or "klant"
-        hartslag("waakt", taak="projectnummer ter goedkeuring", detail=f"deal {deal_id}",
-                 voorstel={"actie": f"Projectnummer {nummer_voorstel} toekennen aan deal {deal_id}",
-                           "doel": f"deal {deal_id}", "reden": "dealtitel zonder projectnummer (D9)",
-                           "runbook": "pipedrive-dealtitel",
-                           "parameters": {"deal_id": deal_id, "titel": f"{nummer_voorstel} {klant}"}})
+        uitkomst = nummervoorstel_op_bord(deal_id, str(nummer_voorstel), klant, soort)
+        if uitkomst.get("uitkomst") in ("gereserveerd", "bestaat"):
+            log(ond, "besluit", f"nummervoorstel {nummer_voorstel}: {uitkomst['uitkomst']} (voorstel {uitkomst.get('voorstel_id')})")
+        else:
+            # Verloren race, bezet of onzeker: geen voorstel, en de melding zegt dat ook (WP2b).
+            reden = uitkomst.get("reden") or ", ".join(f"voorstel {b.get('voorstel_id')}" for b in uitkomst.get("bezet_door") or [])
+            log(ond, "fout", f"nummervoorstel {nummer_voorstel} niet bewaard: {uitkomst.get('uitkomst')} {reden}"[:300])
+            fouten.append(f"nummervoorstel {nummer_voorstel} niet bewaard ({uitkomst.get('uitkomst')}); volgende ronde opnieuw berekend")
+            nummer_voorstel = None
     else:
         nummer_voorstel = None
 

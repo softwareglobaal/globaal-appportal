@@ -21,7 +21,8 @@ class Nep:
     """Nepbronnen voor volgend_vrij_nummer; elke bron kan falen of onvolledig zijn."""
 
     def __init__(self, mappen=None, dossiers=(), aantal=None, voorbereidingen=(), deals=None,
-                 fout=None, bedrijf=10068585):
+                 fout=None, bedrijf=10068585, reserveringen=()):
+        self.reserveringen = list(reserveringen)
         self.mappen = mappen or {}
         self.dossiers, self.aantal, self.voorbereidingen = list(dossiers), aantal, list(voorbereidingen)
         self.deals = deals or {}
@@ -51,6 +52,11 @@ class Nep:
             raise RuntimeError("Pipedrive HTTP 500 op pagina 2")
         return [{"title": t} for t in self.deals.get(params["status"], [])]
 
+    def bord(self):
+        if self.fout == "bord":
+            raise RuntimeError("agentbord onbereikbaar")
+        return list(self.reserveringen)
+
     def controleer_bedrijf(self, firma, verwacht):
         if self.bedrijf != verwacht:
             raise RuntimeError(f"bedrijf {self.bedrijf}, verwacht {verwacht}")
@@ -58,13 +64,15 @@ class Nep:
 
 
 def met(nep, fn):
-    oud = (ca.bronnen_mod.lijst, ca.mcp.call, ca.pipedrive.alles, ca.pipedrive.controleer_bedrijf)
+    oud = (ca.bronnen_mod.lijst, ca.mcp.call, ca.pipedrive.alles, ca.pipedrive.controleer_bedrijf, ca.bord_reserveringen)
     ca.bronnen_mod.lijst, ca.mcp.call = nep.lijst, nep.call
     ca.pipedrive.alles, ca.pipedrive.controleer_bedrijf = nep.alles, nep.controleer_bedrijf
+    ca.bord_reserveringen = nep.bord
     try:
         return fn()
     finally:
-        ca.bronnen_mod.lijst, ca.mcp.call, ca.pipedrive.alles, ca.pipedrive.controleer_bedrijf = oud
+        (ca.bronnen_mod.lijst, ca.mcp.call, ca.pipedrive.alles, ca.pipedrive.controleer_bedrijf,
+         ca.bord_reserveringen) = oud
 
 
 def fout_bij(nep, **kw):
@@ -183,21 +191,26 @@ def test_runbook_aanvaardt_elk_geldig_h_a_nummer_en_controleert_het_account():
     sys.path.insert(0, os.path.join(HIER, "runbooks"))
     import pipedrive_dealtitel as R
     geschreven, gecontroleerd = [], []
-    oud = (R.pipedrive.schrijf, R.pipedrive.controleer_bedrijf, R.nummerlezer.jaar_nu_brussel)
+    oud = (R.pipedrive.schrijf, R.pipedrive.controleer_bedrijf, R.nummerlezer.jaar_nu_brussel, ca.nummer_vrij_voor_uitvoering)
     R.pipedrive.schrijf = lambda firma, m, pad, body=None, params=None: (geschreven.append((firma, pad, body)), "ok")
     R.pipedrive.controleer_bedrijf = lambda firma, verwacht: gecontroleerd.append((firma, verwacht)) or verwacht
     R.nummerlezer.jaar_nu_brussel = lambda: 2026          # vaste kalender: 2803 blijft ook in 2027 een fout hier
+    ca.nummer_vrij_voor_uitvoering = lambda nummer, deal_id, bewijs=None: True   # broncontrole: zie test_nummerreservering
+
+    def met_bord(titel):   # WP2b: het bord bevestigt het goedgekeurde voorstel voor dit nummer en deze deal
+        return {"deal_id": 900001, "titel": titel, "_voorstel_id": 1,
+                "_bord": lambda pad: {"ok": True, "nummer": titel[:4], "deal_id": "900001"}}
     try:
         for titel in ("2465 Testklant", "2703 Testklant", "5603 Testklant"):
-            R.voer_uit({"deal_id": 900001, "titel": titel})
+            R.voer_uit(met_bord(titel))
         for titel in ("46125 Testklant", "Testklant", "2603", "2803 Testklant"):
             try:
-                R.voer_uit({"deal_id": 900001, "titel": titel})
+                R.voer_uit(met_bord(titel))
                 raise AssertionError(f"runbook aanvaardde '{titel}'")
             except ValueError:
                 pass
     finally:
-        R.pipedrive.schrijf, R.pipedrive.controleer_bedrijf, R.nummerlezer.jaar_nu_brussel = oud
+        R.pipedrive.schrijf, R.pipedrive.controleer_bedrijf, R.nummerlezer.jaar_nu_brussel, ca.nummer_vrij_voor_uitvoering = oud
     assert [b["title"] for _, _, b in geschreven] == ["2465 Testklant", "2703 Testklant", "5603 Testklant"]
     assert gecontroleerd == [("harchitects", 10068585)] * 3
 

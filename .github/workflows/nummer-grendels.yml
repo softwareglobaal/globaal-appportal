@@ -1,4 +1,4 @@
-# Grendels op de nummering (codering WP1 en WP2a, 05-10-2026): dossiernummers komen uit hun bron via de
+# Grendels op de nummering (codering WP1 en WP2a, 05-10-2026; WP2b reservering 12-10-2026): dossiernummers komen uit hun bron via de
 # gedeelde nummerlezer, H-A volgt de bevestigde regel (JJNN en (JJ+30)NN) voor elk jaar, en de
 # Contracten-agent stelt geen nummer voor uit een onvolledige bron of een volle reeks.
 name: nummer-grendels
@@ -12,12 +12,16 @@ on:
             "mijnagents-runner/contactwacht.py", "mijnagents-runner/werkwijze/agenda-taken.json",
             "mijnagents-runner/tests/test_nummerlezer.py", "mijnagents-runner/tests/test_nummeruitgifte.py",
             "mijnagents-runner/tests/test_benaming.py", "mijnagents-runner/tests/test_nummerroutes.py",
-            "mijnagents-runner/koppelingen/bronnen.py", ".github/workflows/nummer-grendels.yml"]
+            "mijnagents-runner/koppelingen/bronnen.py", ".github/workflows/nummer-grendels.yml",
+            "mijnagents-runner/mijnagents_uitvoerder.py", "mijnagents-runner/tests/test_nummerreservering.py",
+            "mijnagents/app.py", "mijnagents/templates/board.html", "mijnagents/test_nummerreservering.py"]
   pull_request:
     paths: ["mijnagents-runner/koppelingen/nummerlezer.py", "mijnagents-runner/koppelingen/pipedrive.py",
             "mijnagents-runner/contracten_agent.py", "mijnagents-runner/benaming.py",
             "mijnagents-runner/tests/test_nummerlezer.py", "mijnagents-runner/tests/test_nummeruitgifte.py",
-            "mijnagents-runner/tests/test_nummerroutes.py", "mijnagents-runner/koppelingen/bronnen.py"]
+            "mijnagents-runner/tests/test_nummerroutes.py", "mijnagents-runner/koppelingen/bronnen.py",
+            "mijnagents-runner/runbooks/pipedrive_dealtitel.py", "mijnagents-runner/tests/test_nummerreservering.py",
+            "mijnagents/app.py", "mijnagents/test_nummerreservering.py"]
 
 jobs:
   grendels:
@@ -29,5 +33,9 @@ jobs:
           python-version: "3.12"
       - run: python3 mijnagents-runner/tests/test_nummerlezer.py
       - run: python3 mijnagents-runner/tests/test_nummeruitgifte.py
+      # WP2b: reservering per voorstel (agent en runbook; bord met een tijdelijke databank)
+      - run: python3 mijnagents-runner/tests/test_nummerreservering.py
+      - run: python3 -m pip install -r mijnagents/requirements.txt
+      - run: cd mijnagents && python3 test_nummerreservering.py
       - run: python3 -m pip install pytest==8.3.3
       - run: python3 -m pytest -q mijnagents-runner/tests/test_benaming.py mijnagents-runner/tests/test_nummerroutes.py

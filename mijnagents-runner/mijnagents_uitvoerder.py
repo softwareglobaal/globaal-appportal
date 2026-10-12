@@ -71,6 +71,9 @@ def main():
             meld(vid, "mislukt", f"runbook '{rb}' staat niet in de allowlist "
                                  f"(wel: {', '.join(sorted(RUNBOEKEN))})")
             continue
+        if rb == "pipedrive-dealtitel":
+            # WP2b: het runbook controleert vlak vóór de PUT op het bord of dit voorstel zijn nummer nog vasthoudt.
+            p = {**p, "_voorstel_id": vid, "_bord": api}
         try:
             detail, bewijs = runbook(p)
             uitvoering = "gelukt"

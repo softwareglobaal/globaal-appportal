@@ -31,6 +31,7 @@ def fictieve_bronnen(monkeypatch):
     monkeypatch.setattr(B, "_rpc", verboden)
     monkeypatch.setattr(P, "schrijf", verboden)
     monkeypatch.setattr(N, "jaar_nu_brussel", lambda: 2026)
+    monkeypatch.setattr(C, "bord_reserveringen", lambda: [])     # WP2b: leeg agentbord, geen netwerk
     register = [
         {"code": "HARC", "code_agenda": "HA", "code_contact": "HA"},
         {"code": "UNAB", "code_agenda": "UB", "code_contact": "UN"},

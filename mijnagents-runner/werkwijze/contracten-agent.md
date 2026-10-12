@@ -1,6 +1,6 @@
 # Werkwijze van De Contractmaker
 
-Versie 5 (06-10-2026; volledige bronnen, vaste dossieridentiteit en veilige koppelingen). Versie 4 was van 05-10-2026. Dit is het volledige proces dat ik volg, in de volgorde
+Versie 6 (12-10-2026; nummerreservering per voorstel, WP2b). Versie 5 was van 06-10-2026 (volledige bronnen, vaste dossieridentiteit en veilige koppelingen), versie 4 van 05-10-2026. Dit is het volledige proces dat ik volg, in de volgorde
 waarin ik het doe. Mehdi bewerkt deze tekst op het agentbord; ik lees hem aan
 het begin van elke ronde. De regels over het contract zelf (welke velden, welke
 keuzewaarden, waar elk gegeven vandaan komt, de nummering, de mapnamen) staan
@@ -54,15 +54,22 @@ transcript telt, nooit de samenvatting van de recorder (D7).
    2027: 27xx); (JJ+30)NN voor regularisatie (2026: 56xx, 2027: 57xx, 2030:
    60xx). Ik lees het met de gedeelde nummerlezer (`koppelingen/nummerlezer.py`),
    voor elk jaar, nooit uit een los getal. Ontbreekt het, dan bepaal ik het
-   volgende vrije nummer van de reeks van **dit kalenderjaar** uit **vier
+   volgende vrije nummer van de reeks van **dit kalenderjaar** uit **vijf
    bronnen samen, elk volledig gelezen**: de contractmappen van die reeks in
    Dropbox (`<jaar> Design` en `<jaar> Signed`; regularisatie `5600 Design`,
-   `5700 Design`, ...), de dossiers en de voorbereidingen op het dashboard, en
+   `5700 Design`, ...), de dossiers en de voorbereidingen op het dashboard,
    alle H-A-deals in Pipedrive (open, gewonnen, verloren; alle pagina's, niet
-   500), alleen in het account met bedrijf-id 10068585. Het hoogste plus één
-   zet ik als voorstel op het agentbord. Pas na Mehdi's goedkeuring zet de
-   uitvoerder het nummer in de dealtitel en hernoemt hij de salesmap naar
-   `<nummer> <klantnaam>`. Ik verzin nooit zelf een nummer in een veld.
+   500), alleen in het account met bedrijf-id 10068585, en de nummers die een
+   open of goedgekeurd voorstel op het agentbord vasthoudt. Het hoogste plus één
+   zet ik als voorstel op het agentbord; het bord reserveert het nummer bij het
+   bewaren, onder grendel, en zegt me of dat lukte (gereserveerd, bestaat, bezet).
+   Alleen dan meld ik het voorstel. Heeft de deal al een voorstel, dan blijft dat
+   zijn nummer. Staat dat nummer ook in een voorstel voor een andere deal, dan
+   stel ik niets nieuws voor: Mehdi beslist op het bord. Pas na Mehdi's goedkeuring
+   zet de uitvoerder het nummer in de dealtitel en hernoemt hij de salesmap naar
+   `<nummer> <klantnaam>`; vlak daarvoor controleert hij het bord en de vier
+   vaste bronnen opnieuw, en bij een conflict of bronfout schrijft hij niets.
+   Ik verzin nooit zelf een nummer in een veld.
    Een nummer dat al in de voorbereiding is vastgelegd, blijft gelden als
    het uit de dealtitel ontbreekt. Verschillen tussen beide bronnen blokkeer
    ik voor controle. Dashboardpagina's lees ik tot het opgegeven totaal klopt;
@@ -71,9 +78,9 @@ transcript telt, nooit de samenvatting van de recorder (D7).
    **geen** nummer voor en meld ik waarom; ik ga nooit over naar een ander
    formaat (2699 wordt nooit 2700). Alleen het berekende nummer gaat als
    voorstel naar het agentbord; een nummer dat het taalmodel zelf noemt, negeer
-   ik. Grens: een reservering per aanvraag bestaat nog niet, dus twee rondes
-   tegelijk kunnen hetzelfde voorstel krijgen; Mehdi's bevestiging is de enige
-   rem.
+   ik. Akkoord op een nummer dat nog in een ander open voorstel staat, weigert
+   het bord; een reservering komt pas vrij als het voorstel geweigerd, vervangen,
+   mislukt of overgeslagen is, nooit vanzelf na een tijd (WP2b, 12-10-2026).
 4. **Het dossier in voorbereiding zetten.** `voorbereiding_starten` met de
    deal (en het nummer als dat er is). Het dashboard vult dan zelf uit
    Pipedrive, Geopunt, GRB en de klantmail. Bestond het dossier al, dan wordt
