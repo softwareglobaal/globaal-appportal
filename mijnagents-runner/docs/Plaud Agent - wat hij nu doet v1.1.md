@@ -122,3 +122,17 @@ Open:
 | Agenda niet gezien | afspraken apart opvragen (`soort=afspraak`) | live: opname 1 oktober overlapt UNAB 46118 |
 | Losse verslagen | Plaud-taak krijgt `<verzamelmap>/JJJJMMDD` als doel | `test_los_verslag_krijgt_een_gedateerde_momentmap_als_taakdoel` |
 | Verzoek Contractmaker | alleen een opname die een afspraak met de klant overlapt; Mehdi bevestigt | `test_verzoek_van_de_contractmaker_vraagt_een_overlappende_afspraak` |
+
+### Stand na de uitrol van de nacontrole (12-10-2026, 22:05)
+
+| Wat | Bewijs |
+|---|---|
+| Commit | `3de1cdd` op GitHub, Mac en VM; CI groen (plaud-, locatie-, agenda-, nummer-, naamstructuurgrendels) |
+| Bord | herbouwd door `deploy.sh` (tree 686d0d3), Docker-build met `test_klaarzet_revisie.py` groen; filters `uniek` en `soort` live; werkwijze 3.1 gezet |
+| Ronde na uitrol | 15 opnames opnieuw beoordeeld, 0 fouten. Opname 1 oktober 09:31 = UNAB:46118 (overlappende afspraak Natasja Gerritsen, zekerheid middel) en gaat naar unabo. De andere 14 hebben geen dossier en staan bij Mehdi |
+| Tweede ronde | 15 ongewijzigd, 15 items en 15 uniek: geen dubbel |
+| Verzoek Stropke | niet gevonden: geen Plaud-opname rond de afspraak van 1 oktober 20:00-21:00 |
+| 109 wachtende transcripten | opnieuw getoetst via de Plaud-koppeling: 2 hebben nu een transcript (11 augustus, 363 en 180 uitingen), bij 107 geeft Plaud nog geen transcript; archief 715 compleet en 107 wachtend |
+| Werftaken | 3 niet gevonden (geen eigen bewijs op de bezoekdag). 3 wachten op de voorbereider (werkdagen vanaf 07:15 UTC), die als doel een gedateerde momentmap meegeeft |
+
+Nog niet bewezen: een echte levering in een bezoekmap en een dossierkopie. Er is nog geen open taak met een opname die het dossierbewijs haalt. De automatische ophaling van een nieuwe opname vraagt eerst de aanmelding van Mehdi.
