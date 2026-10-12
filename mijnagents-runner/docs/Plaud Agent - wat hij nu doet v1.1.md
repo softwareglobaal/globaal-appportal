@@ -82,3 +82,25 @@ Daarna loopt alles elk uur. Zolang de aanmelding ontbreekt, meldt De Plaudwacht 
 `plaud/reconciliatie.py` schrijft `00 reconciliatie.md` in het archief: per Plaud-id gearchiveerd,
 transcript wacht, onvolledig, metadata onvolledig, ontbreekt, mogelijke dubbel, oud VM-archief,
 mogelijk verkeerd gekoppeld, plus de bordtaken met de opnames van die dag. Alleen lezen.
+
+## Stand bij de uitrol (12-10-2026)
+
+| Wat | Bewijs |
+|---|---|
+| Commits | `4f7cbb9` (keten), `c1ce954` (brug vanuit de koppeling), `9b453df` (bouwjaar is geen dossier) |
+| VM | `git pull` naar `9b453df`; `test_plaud_archief`, `test_plaud_wacht`, `test_locatielezers` groen onder `~/agents/.venv` |
+| VM-cron | beheerd blok `# >>> plaud`, `20 * * * *` met `flock -n` en `timeout 3000`; de oude regel zonder slot is vervangen |
+| Mac-launchd | `be.globaal.plaud.ophalen`, elk uur op :05; eerste run: manifest gemaakt en doorgezet, foutcode 2 (aanmelding ontbreekt) |
+| Archief | 822 opnames: 713 compleet, 109 wachten op transcript, 0 onvolledig, 0 id-conflicten |
+| Aanvulling | 26 opnames van 25-09 tot 09-10 via de Plaud-koppeling gebouwd (`plaud/uit_koppeling.py`), alle compleet |
+| Ronde 1 | 15 opnames sinds 01-10 herkend en gepubliceerd (gesprekkentabel en klaarzet), 0 fouten |
+| Gevonden | "woning 1933" werd HARC:1933 voor h-architects; hersteld in `9b453df`, het item is bijgewerkt naar Mehdi zonder sleutel |
+| Ronde 2 | 15 klaarzet-items, 15 uniek: geen dubbel; 14 opnames 0 nieuwe publicaties, het 1933-item bijgewerkt |
+| Zoektaken | 6 open werftaken: 3 niet gevonden (geen eigen bewijs op de bezoekdag), 3 geweigerd (bezoekmap is een verzamelmap zonder bezoekdag) |
+| Bord | werkwijze versie 3 gezet (vorige versie in de versiegeschiedenis); status "waakt"; noden: aanmelding Plaud (Mehdi), ongeldige bezoekmap (claude-code) |
+
+Open:
+- Mehdi meldt één keer aan bij Plaud (`plaud_login.py`); tot dan haalt de Mac niets nieuws en blijven de 109 wachtende transcripten staan.
+- Voorstel voor de Werfverslag voorbereider: een bezoek dat alleen als los verslag in `4. Werfverslagen` of `1. Werf updates` bestaat, krijgt geen Plaud-taak met die verzamelmap als bezoekmap, maar een momentmap met de bezoekdag.
+- Het verzoek van De Contractmaker (Nelleke Stropke, plaatsbezoek 2026-10-01) heeft geen bezoekmap; De Plaudwacht meldt het alleen.
+- 6 mogelijke dubbels en de oude jaarmap `2026/` (4 opnames, ook in het hoofdarchief) staan in `00 reconciliatie.md`; niets verwijderd.
