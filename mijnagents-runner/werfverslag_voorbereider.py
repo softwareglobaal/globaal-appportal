@@ -251,11 +251,22 @@ def klaargezet(nummer):
         return {}
     per = {"afspraak": [], "transcript": [], "foto": []}
     for it in alles:
-        if it["soort"] not in per:
+        # De Plaudwacht zette tot 12-10-2026 sommige transcripten klaar als soort "werfbezoek" (met de
+        # deal-id als sleutel): die telden hier niet. Ze tellen nu als transcript (verbeteropdracht v1.0, §4).
+        soort = "transcript" if it["soort"] == "werfbezoek" else it["soort"]
+        if soort not in per:
             continue
-        tekst = f'{it.get("sleutel", "")} {it.get("titel", "")} {(it.get("inhoud") or "")[:400]}'
-        if it["soort"] == "foto" or re.search(rf"\b{nummer}\b", tekst):
-            per[it["soort"]].append(it)
+        inhoud = it.get("inhoud") or ""
+        try:
+            d = json.loads(inhoud) if inhoud.startswith("{") else {}
+        except ValueError:
+            d = {}
+        if str(d.get("projectnummer") or "") == str(nummer):
+            per[soort].append(it)
+            continue
+        tekst = f'{it.get("sleutel", "")} {it.get("titel", "")} {inhoud[:400]}'
+        if soort == "foto" or re.search(rf"\b{nummer}\b", tekst):
+            per[soort].append(it)
     return per
 
 

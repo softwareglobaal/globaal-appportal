@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+import lijst as _lijst  # noqa: E402
 from mapnaam import mapnaam, belgisch, map_van  # noqa: E402
 
 SP = Path(__file__).parent
@@ -13,7 +14,7 @@ DOEL = Path.home() / "TKN-buro Dropbox" / "Data uit Mehdi" / "Plaud"
 
 
 def main() -> int:
-    lijst = json.loads((SP / "plaud_lijst.json").read_text(encoding="utf-8"))
+    lijst = _lijst.lees(DOEL)["opnames"]          # één lijst, bij het archief (lijst.py)
     lijst.sort(key=lambda o: o["start_at"], reverse=True)
     ontbreekt_map, zonder_audio, zonder_transcript, goed = [], [], [], []
     regels = ["# Plaud-archief: index", "",

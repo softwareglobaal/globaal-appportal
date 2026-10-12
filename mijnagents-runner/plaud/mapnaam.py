@@ -5,12 +5,20 @@ Afspraak 17-09-2026 (Mehdi): geen jaarmap meer, de datum rangschikt zichzelf;
 de naam die Plaud aan de opname geeft blijft staan. Plaud zet er zelf een
 "MM-DD " voor; dat is dubbel met de datum en gaat eraf. Een opname zonder
 eigen titel heet in Plaud alleen een tijdstempel; die krijgt "zonder titel".
+
+Waar een opname staat en of ze compleet is, beslist archief.py (één resolver op
+Plaud-id, verbeteropdracht v1.0 §5). map_van en compleet hieronder zijn alleen nog
+doorgeefluiken voor oudere aanroepers.
+
+Python 3.9-compatibel.
 """
 import re
-from datetime import datetime
-from zoneinfo import ZoneInfo
+import sys
+from pathlib import Path
 
-BRUSSEL = ZoneInfo("Europe/Brussels")
+sys.path.insert(0, str(Path(__file__).parent))
+import contract  # noqa: E402
+
 MAX = 110  # ruim onder de padgrens van Dropbox
 
 # Plaud-tijdstempel als naam: "2026-09-10 14:18:13" of "20260910 141813"
@@ -19,13 +27,12 @@ VOORVOEGSEL = re.compile(r"^\s*\d{1,2}-\d{1,2}\s+")          # "09-17 "
 VERBODEN = re.compile(r'[/\\:*?"<>|\x00-\x1f]')               # Dropbox en macOS
 
 
-def belgisch(start_at_utc: str) -> datetime:
-    """start_at van Plaud is UTC zonder zone-achtervoegsel."""
-    t = datetime.fromisoformat(start_at_utc.replace("Z", "")).replace(tzinfo=ZoneInfo("UTC"))
-    return t.astimezone(BRUSSEL)
+def belgisch(start_at_utc):
+    """Plaud-tijd (UTC, met of zonder zone) naar Brussel."""
+    return contract.brussel(start_at_utc)
 
 
-def titel_van(naam: str) -> str:
+def titel_van(naam):
     n = (naam or "").strip()
     if not n or ALLEEN_TIJD.match(n):
         return "zonder titel"
@@ -35,78 +42,53 @@ def titel_van(naam: str) -> str:
     return n or "zonder titel"
 
 
-def mapnaam(opname: dict, uniek: bool = False) -> str:
+def mapnaam(opname, uniek=False):
     """Met uniek=True komt het korte Plaud-id erachter. Nodig omdat naamloze
     opnames in dezelfde minuut anders dezelfde map zouden krijgen: op
-    17-09-2026 botsten 24 opnames op 10 namen."""
-    t = belgisch(opname["start_at"])
-    naam = f"{t:%Y-%m-%d %H%M} {titel_van(opname.get('name'))}"
-    staart = f" [{(opname.get('id') or '').replace('of_', '')[:6]}]" if uniek else ""
+    17-09-2026 botsten 24 opnames op 10 namen. Accepteert de Plaud-vorm
+    (start_at, name, id) en de contractvorm (start_utc, naam_in_plaud, plaud_id)."""
+    start = opname.get("start_utc") or opname.get("start_at")
+    t = belgisch(start)
+    titel = titel_van(opname.get("name") if opname.get("name") is not None else opname.get("naam_in_plaud"))
+    naam = "%s %s" % (t.strftime("%Y-%m-%d %H%M"), titel)
+    pid = (opname.get("plaud_id") or opname.get("id") or "").replace("of_", "")
+    staart = " [%s]" % pid[:6] if uniek else ""
     if len(naam) + len(staart) > MAX:
         naam = naam[:MAX - len(staart)].rstrip(" ,;-") + "…"
     return naam + staart
 
 
-def map_van(opname: dict, doel) -> "Path":
-    """De map van deze opname: de gewone naam, of de variant met het korte id
-    als de gewone map van een andere opname blijkt te zijn."""
-    from pathlib import Path
-    import json as _json
-    doel = Path(doel)
-    # Eerst op Plaud-id: een map die hernoemd is (benaming, 25-09-2026) heet niet
-    # meer zoals Plaud hem noemt, maar blijft dezelfde opname. Zonder deze stap
-    # haalt een volgende ronde hem opnieuw binnen als dubbel.
-    gevonden = _index(doel).get(opname.get("id"))
-    if gevonden is not None and gevonden.is_dir():
-        return gevonden
-    m = doel / mapnaam(opname)
-    g = m / "gesprek.json"
-    if g.exists():
-        try:
-            if _json.loads(g.read_text(encoding="utf-8")).get("plaud_id") not in (None, opname.get("id")):
-                return doel / mapnaam(opname, uniek=True)
-        except Exception:  # noqa: BLE001
-            pass
-    return m
-
-
-_INDEXEN = {}
+def map_van(opname, doel):
+    import archief
+    return archief.resolve(opname, doel)
 
 
 def _index(doel):
-    """plaud_id -> map, één keer per archief per run opgebouwd uit de gesprek.json-bestanden."""
-    from pathlib import Path
-    import json as _json
-    sleutel = str(doel)
-    if sleutel not in _INDEXEN:
-        uit = {}
-        for g in Path(doel).glob("*/gesprek.json"):
-            try:
-                pid = _json.loads(g.read_text(encoding="utf-8")).get("plaud_id")
-            except Exception:  # noqa: BLE001
-                continue
-            if pid:
-                uit[pid] = g.parent
-                uit[pid.replace("of_", "")] = g.parent
-        _INDEXEN[sleutel] = uit
-    return _INDEXEN[sleutel]
+    """plaud_id (met en zonder 'of_') -> map. Voor benaming_toepassen.py."""
+    import archief
+    ids, _ = archief.index(doel)
+    uit = {}
+    for pid, m in ids.items():
+        uit[pid] = m
+        uit[pid[3:]] = m
+    return uit
 
 
-def compleet(opname: dict, doel) -> bool:
-    """Compleet = de map van deze opname heeft een geluidsopname en een
-    transcript (of het merkbestand dat Plaud er geen heeft)."""
-    m = map_van(opname, doel)
-    if not m.is_dir():
+def compleet(opname, doel):
+    """Strikt: alleen een opname met metadata, transcript, markdown en definitieve audio.
+    Een opname die op haar transcript wacht is níet compleet (zie archief.toestand)."""
+    import archief
+    try:
+        m = archief.resolve(opname, doel)
+    except contract.Herstel:
         return False
-    audio = [p for p in m.glob("opname.*") if p.stat().st_size > 1000]
-    return bool(audio) and ((m / "transcript.json").exists() or (m / "geen-transcript.txt").exists())
+    return archief.toestand(m, opname.get("plaud_id") or opname.get("id"))["staat"] == "compleet"
 
 
 if __name__ == "__main__":
     proef = [
         {"start_at": "2026-09-17T12:14:41", "name": "09-17 Vergadering: Operationele en Financiële Bespreking"},
         {"start_at": "2026-09-10T17:18:13", "name": "2026-09-10 14:18:13"},
-        {"start_at": "2026-09-12T11:00:36", "name": "09-12 Vergadering: Restauratiemaatregelen woning – buitenruimte, constructieve ingrepen, ramen en vergunningen"},
         {"start_at": "2026-01-15T08:16:14", "name": "01-15 Telefoon met KBC"},
     ]
     for p in proef:

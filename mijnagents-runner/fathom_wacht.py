@@ -30,6 +30,8 @@ import organisatie  # noqa: E402
 import fathom  # noqa: E402
 import pipedrive  # noqa: E402
 import nummerlezer  # noqa: E402
+sys.path.insert(0, os.path.join(HIER, "plaud"))
+import dossier  # noqa: E402  dossierbeslissing op bewijs, gedeeld met De Plaudwacht (verbeteropdracht v1.0, §4)
 
 NAAM = "fathom-wacht"
 ag = bord.Agent(NAAM)
@@ -234,9 +236,19 @@ def bewaar(g, tekst, herkenning):
 
 
 # ---------------------------------------------------------- herkennen ---
-def herken(g, tekst, personen, deal, hoe):
+PLAUD_REGEL = (" Dit is een opname uit het gedeelde Plaud-account met meerdere toestellen: wie opnam en of Mehdi erbij was, "
+               "is niet bewezen; leid het alleen af uit wat er gezegd wordt. Het veld 'context' bevat alleen afspraken die het "
+               "opnametijdstip overlappen; een project dat je noemt is een kandidaat, het dossier beslist het bewijs.")
+
+
+def herken(g, tekst, personen, deal, hoe, context=None, bron="fathom"):
     """Met het model: personen, bedrijf, afdeling, thema, project, privé. Deterministische
-    voorkennis (personentabel, Pipedrive) gaat mee; het model vult aan en motiveert."""
+    voorkennis (personentabel, Pipedrive) gaat mee; het model vult aan en motiveert.
+
+    context (verbeteropdracht v1.0, §7): agenda die het opnametijdstip overlapt, locatie,
+    openingszinregel en bronbewijzen als eigen veld. Tot 12-10-2026 plakte De Plaudwacht die achter
+    de tekst en ging bij een lang transcript alles na teken 6000 verloren. Alleen het transcript
+    wordt nog begrensd."""
     from anthropic import Anthropic
     deelnemers = [{"naam": i.get("name"), "email": i.get("email"), "extern": i.get("is_external")} for i in (g.get("calendar_invitees") or [])]
     bekend = []
@@ -250,7 +262,8 @@ def herken(g, tekst, personen, deal, hoe):
         "thema": {"type": "string"}, "project": {"type": "string"}, "prive": {"type": "boolean"},
         "zekerheid": {"type": "string", "enum": ["hoog", "middel", "laag"]}, "waarom": {"type": "string"}},
         "required": ["personen", "hoofdpersoon", "bedrijf", "afdeling", "thema", "project", "prive", "zekerheid", "waarom"]}}
-    system = ("Je herkent voor Mehdi Chegini (H-Architects) een Fathom-gesprek: wie erbij was, welk bedrijf, welke afdeling "
+    system = ("Je herkent voor Mehdi Chegini (H-Architects) een " + ("Plaud-opname" if bron == "plaud" else "Fathom-gesprek")
+              + ": wie erbij was, welk bedrijf, welke afdeling "
               "(h-architects, unabo, harmoniebouw, contrax, tkn, elevait, regie, prive), thema, project of dossier, en of het privé is. "
               "Elevait NV is het bedrijf van Mehdi met zijn partners Shaniel, Angela en Siyan (AI-trainingen en AI-toepassingen); gesprekken over de opbouw van Elevait, AI-trainingen of sollicitaties daar zijn afdeling elevait. TKN-Buro (partner Tom) doet engineering en stabiliteit. "
               "Privé: alleen Mehdi en Angela (zijn partner), Mehdi alleen, of een duidelijk persoonlijk onderwerp; bij twijfel privé. "
@@ -259,11 +272,13 @@ def herken(g, tekst, personen, deal, hoe):
               "De lijst 'collegas' (uit organisatie.globaal.be) zegt wie intern is, bij welke afdeling en firma; een gesprek van Mehdi met "
               "alleen collega's is intern (afdeling regie, of de afdeling van het onderwerp), niet een klant. Weeg personen op afdeling en functie, "
               "niet op firma: partners (Siyan, Shaniel, Angela, Tom, Catalin, Matthias) zitten in meerdere bedrijven, en een deskundige die "
-              "erbij zit (Shaniel als AI/ICT bij een Energy-gesprek) verandert het onderwerp niet. Het thema en de afdeling volgen de inhoud.")
+              "erbij zit (Shaniel als AI/ICT bij een Energy-gesprek) verandert het onderwerp niet. Het thema en de afdeling volgen de inhoud."
+              + (PLAUD_REGEL if bron == "plaud" else ""))
     user = json.dumps({"titel": g.get("title") or g.get("meeting_title"), "start": g.get("recording_start_time"),
                        "opgenomen_door": g.get("recorded_by"), "deelnemers": deelnemers, "herkend_uit_tabel": bekend,
                        "pipedrive_deal": ({"id": deal["id"], "titel": deal["titel"], "hoe": hoe} if deal else None),
-                       "personentabel": personen, "collegas": organisatie.samenvatting(), "transcript_begin": tekst[:6000]}, ensure_ascii=False)
+                       "personentabel": personen, "collegas": organisatie.samenvatting(), "context": context or {},
+                       "transcript_begin": tekst[:6000]}, ensure_ascii=False)
     resp = Anthropic().messages.create(model=MODEL, max_tokens=1200, system=system, messages=[{"role": "user", "content": user}],
                                        tools=[schema], tool_choice={"type": "tool", "name": "herkenning"})
     for b in resp.content:
@@ -310,6 +325,14 @@ def main():
                 pass
             prive = bool(herk.get("prive"))
             prive_n += 1 if prive else 0
+            # dossier op bewijs: titel, of de e-mail van een deelnemer bij een deal met projectnummer;
+            # het project dat het model noemt is een kandidaat, geen bewijs
+            bewijzen = dossier.uit_tekst("titel", g.get("title") or g.get("meeting_title") or "")
+            if deal and deal.get("nummer") and hoe == "e-mail van een deelnemer":
+                bewijzen.append(dossier.bewijs("deelnemer", "HARC", deal["nummer"], hoe))
+            besl = dossier.beslis(bewijzen, herk, dossier.uit_tekst("model", herk.get("project") or ""))
+            if deal and deal.get("nummer") != besl["projectnummer"]:
+                deal = None                 # een deal die niet bij het beslist dossier hoort, krijgt geen kopie
             rij = {"uniek": f"fathom:{gid}", "datum": start[:10], "start": start[11:16], "minuten": duur,
                    "personen": ", ".join(herk.get("personen") or []), "bedrijf": herk.get("bedrijf", ""), "afdeling": herk.get("afdeling", ""),
                    "thema": herk.get("thema", ""), "project": herk.get("project", "") or (deal["titel"] if deal else ""),
@@ -319,7 +342,7 @@ def main():
             logdag.setdefault(start[:10], []).append(rij)
             # kopie naar de salesmap bij een H-A-dossier (nooit overschrijven), niet als privé
             pad = ""
-            if deal and tekst and not prive:
+            if deal and tekst and besl["kopie_toegestaan"]:
                 salesmap = bronnen.zoek_salesmap(re.sub(r"^\s*\d{4}\s+", "", deal["titel"]), deal["nummer"])
                 if salesmap:
                     naam = f"{start[:10]} Fathom transcript - {veilige_naam(g.get('title') or g.get('meeting_title') or hoofd_van(herk))}.md"
@@ -328,11 +351,14 @@ def main():
                         ag.log(f"gesprek {start}", "schrijf", f"kopie naar {pad} (origineel: {map_})")
                     else:
                         pad = f"{salesmap}/0 Fathom/{naam}"
-            voor = "mehdi" if prive or herk.get("afdeling") in ("onbekend", "prive", "regie", "") else herk["afdeling"]
-            klaar.append({"voor": voor, "soort": "transcript", "sleutel": str(deal["id"]) if deal else (herk.get("project") or ""),
+            voor = besl["voor"]
+            klaar.append({"voor": voor, "soort": "transcript", "sleutel": besl["projectnummer"] or "",
                           "titel": f"{start} Fathom: {herk.get('hoofdpersoon') or g.get('title')} · {herk.get('thema', '')[:60]}" + (" · PRIVÉ" if prive else ""),
                           "uniek": f"fathom:{gid}", "verwijzing": pad or map_,
-                          "inhoud": {**{k: v for k, v in rij.items() if k != "waarom"}, "waarom": herk.get("waarom", ""), "transcript_pad": pad or os.path.join(map_, "transcript.md")}})
+                          "inhoud": {**{k: v for k, v in rij.items() if k != "waarom"}, "waarom": herk.get("waarom", ""), "transcript_pad": pad or os.path.join(map_, "transcript.md"),
+                                     "dossier": besl["dossier"], "firma": besl["firma"], "projectnummer": besl["projectnummer"],
+                                     "deal_id": deal["id"] if deal else None, "zekerheid_dossier": besl["zekerheid"],
+                                     "conflict": besl["conflict"], "redenen": besl["redenen"]}})
             ag.log(f"gesprek {start}", "bevinding",
                    f"{herk.get('hoofdpersoon') or g.get('title')} · {herk.get('afdeling')} · {herk.get('thema', '')[:60]}" + (" · privé" if prive else "") + f" · zekerheid {herk.get('zekerheid')}",
                    herk.get("waarom", ""))

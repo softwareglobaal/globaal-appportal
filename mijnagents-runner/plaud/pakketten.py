@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+import lijst as _lijst  # noqa: E402
 from mapnaam import mapnaam, compleet  # noqa: E402
 
 SP = Path(__file__).parent
@@ -17,7 +18,7 @@ PER_PAKKET = int(sys.argv[1]) if len(sys.argv) > 1 else 12
 
 
 def main() -> int:
-    lijst = json.loads((SP / "plaud_lijst.json").read_text(encoding="utf-8"))
+    lijst = _lijst.lees(DOEL)["opnames"]          # één lijst, bij het archief (lijst.py)
     # nieuwste eerst, zodat het recente werk het eerst binnen is
     lijst.sort(key=lambda o: o["start_at"], reverse=True)
     te_doen = []

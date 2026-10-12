@@ -1,156 +1,160 @@
 #!/usr/bin/env python3
-"""Bouwt één Plaud-gespreksmap uit de links die get_file teruggeeft.
+"""Bouwt of herstelt één Plaud-gespreksmap uit de links van Plaud (verbeteropdracht v1.0, §5 en §6).
 
-Invoer: een JSON-bestand met
-  id, name, start_at (UTC), duration (ms), presigned_url, transcript_link
-Optioneel: outline_link, summary_link.
+Invoer: id, presigned_url, transcript_link (optioneel), en zo nodig name, start_at, duration,
+serial_number. Wat ontbreekt wordt aangevuld uit de lijst (lijst.py); verse waarden blijven staan.
 
-Uitvoer in <DOEL>/<JJJJ-MM-DD UUMM titel>/:
-  transcript.md   leesbaar, [HH:MM:SS] Speaker N: tekst
-  transcript.json de ruwe uitingen van Plaud (de bron)
-  gesprek.json    metadata
-  opname.<ext>    de geluidsopname
+De map komt uit archief.resolve: eerst op Plaud-id, dus een hernoemde map blijft dezelfde opname en
+een botsing krijgt een eigen suffixmap. Volgorde, elk bestand atomair:
 
-Afspraak D7: de samenvatting van Plaud halen we niet op. Het verslag schrijft
-het systeem zelf uit het transcript.
+  1. gesprek.json met het contract, zodat het id de map meteen claimt
+  2. transcript.json (de bron) en transcript.md (opnieuw te maken uit de bron)
+  3. de geluidsopname; de extensie volgt uit de inhoud, niet uit de url
+  4. gesprek.json bijgewerkt met de toestand
+
+Zonder transcriptlink is de opname niet "nooit getranscribeerd" maar wacht ze: de volgende
+controle volgt een vaste backoff (contract.WACHT_STAPPEN_UUR).
+
+Het resultaat is gestructureerd en noemt het werkelijke pad. De aanroeper controleert alleen dat
+resultaat en schrijft zelf niets in een map die hij zelf berekende.
+
+Afspraak D7: de samenvatting van Plaud halen we niet op.
+
+Python 3.9-compatibel.
 """
 import gzip
 import json
 import os
-import ssl
 import sys
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from mapnaam import mapnaam, belgisch  # noqa: E402
+import archief  # noqa: E402
+import contract  # noqa: E402
+import lijst  # noqa: E402
+import veilig  # noqa: E402
 
 DOEL = Path(os.environ.get("PLAUD_DOEL", Path.home() / "TKN-buro Dropbox" / "Data uit Mehdi" / "Plaud"))
-CTX = ssl.create_default_context()
-UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"}
+MAX_TRANSCRIPT = 60_000_000
+MAX_AUDIO = 900_000_000
 
 
-def haal(url: str, tijdslimiet: int = 900) -> bytes:
-    """Via curl: de systeem-Python op deze Mac heeft geen bruikbare rootstore."""
-    import subprocess
-    r = subprocess.run(["curl", "-sSL", "--fail", "--max-time", str(tijdslimiet),
-                        "-A", UA["User-Agent"], url], capture_output=True)
-    if r.returncode != 0:
-        raise RuntimeError(f"curl {r.returncode}: {r.stderr.decode('utf-8', 'replace')[:150]}")
-    return r.stdout
+def _nu():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def uitpakken(rauw: bytes) -> str:
+def uitpakken(rauw):
     if rauw[:2] == b"\x1f\x8b":
         return gzip.decompress(rauw).decode("utf-8", "replace")
     return rauw.decode("utf-8", "replace")
 
 
-def klok(ms: int) -> str:
-    s, ms = divmod(int(ms or 0), 1000)
-    u, s = divmod(s, 60)
-    h, u = divmod(u, 60)
-    return f"{h:02d}:{u:02d}:{s:02d}"
+def _uitingen(tekst):
+    data = json.loads(tekst)
+    uit = data if isinstance(data, list) else (data.get("data") or data.get("result") or [])
+    if not isinstance(uit, list) or not all(isinstance(u, dict) for u in uit):
+        raise ValueError("transcript is geen lijst van uitingen")
+    return uit
 
 
-def schrijf_transcript(uitingen: list, kop: dict) -> str:
-    regels = ["---"]
-    for k, v in kop.items():
-        regels.append(f"{k}: {v}")
-    regels += ["---", ""]
-    for u in uitingen:
-        spr = u.get("speaker") or u.get("original_speaker") or "Speaker ?"
-        regels.append(f"[{klok(u.get('start_time'))}] {spr}: {(u.get('content') or '').strip()}")
-    return "\n".join(regels) + "\n"
+def bouw(op, doel=DOEL, idx=None, haler=None):
+    """Bouw of herstel de map van één opname. Geeft een resultaat met het werkelijke pad."""
+    haler = haler or veilig.haal
+    doel = Path(doel)
+    res = {"plaud_id": None, "map": None, "status": "fout", "audio": "", "transcript": "", "fouten": []}
+    try:
+        op = lijst.aanvul(op, doel)
+        pid = contract.canon_id(op.get("id") or op.get("plaud_id") or "")
+        res["plaud_id"] = pid
+        idx = idx or archief.Index(doel)
+        map_ = archief.resolve({**op, "plaud_id": pid}, doel, idx)
+    except contract.Herstel as e:
+        res.update(status="herstel", fouten=[str(e)])
+        return res
+    res["map"] = str(map_)
+    oud = archief.lees_json(map_ / "gesprek.json") or {}
+    vers = {k: v for k, v in op.items() if not k.endswith("_url") and k != "transcript_link"}
+    samen = {**oud, **vers}
+    if op.get("name") is not None:          # verse naam uit Plaud wint van wat er stond
+        samen["naam_in_plaud"] = op["name"]
+    if op.get("start_at"):                  # verse opnametijd wint ook
+        for k in ("start_utc", "start_brussel", "start_belgisch"):
+            samen.pop(k, None)
+    try:
+        c = contract.opname(samen, archiefmap=map_.name, transcript=oud.get("transcript"), audio=oud.get("audio"),
+                            bron=op.get("bron", "plaud-api"))
+    except contract.Herstel as e:
+        res.update(status="herstel", fouten=[str(e)])
+        return res
+    # 1. claim de map met het id, maar laat benaming, herkenning en eerdere velden staan
+    meta = {**oud, **c, "plaud_id": pid}
+    for k in ("benaming", "herkenning"):
+        if k in oud:
+            meta[k] = oud[k]
+    meta.setdefault("opgehaald", _nu())
+    archief.schrijf_json(map_ / "gesprek.json", meta)
+    idx.zet(pid, map_)
 
-
-LIJST = Path(__file__).parent / "plaud_lijst.json"
-
-
-def _vul_aan(op: dict) -> dict:
-    """Naam, starttijd en duur komen uit de opgehaalde Plaud-lijst, niet uit
-    overgetypte tekst: zo kan een tikfout de mapnaam niet meer bepalen."""
-    if not LIJST.exists():
-        return op
-    for r in json.loads(LIJST.read_text(encoding="utf-8")):
-        if r.get("id") == op.get("id"):
-            for k in ("name", "start_at", "duration"):
-                if r.get(k) is not None:
-                    op[k] = r[k]
-            break
-    return op
-
-
-def main(pad_invoer: str) -> int:
-    op = _vul_aan(json.loads(Path(pad_invoer).read_text(encoding="utf-8")))
-    naam = mapnaam(op)
-    map_ = DOEL / naam
-    # Botsing: twee naamloze opnames in dezelfde minuut. Dan het korte id erachter,
-    # anders overschrijft de tweede de eerste of verdwijnt hij achter "bestond al".
-    bestaand = map_ / "gesprek.json"
-    if bestaand.exists():
+    # 2. transcript
+    t = dict(oud.get("transcript") or {})
+    huidig, _ = archief._transcript(map_)
+    if op.get("transcript_link"):
         try:
-            ander = json.loads(bestaand.read_text(encoding="utf-8")).get("plaud_id")
-        except Exception:  # noqa: BLE001
-            ander = None
-        if ander and ander != op.get("id"):
-            naam = mapnaam(op, uniek=True)
-            map_ = DOEL / naam
-    map_.mkdir(parents=True, exist_ok=True)
-    t_bel = belgisch(op["start_at"])
-    duur_min = round((op.get("duration") or 0) / 60000, 1)
-    verslag = {"map": str(map_), "audio": "", "transcript": "", "fouten": []}
-
-    # transcript
-    doel_json = map_ / "transcript.json"
-    if doel_json.exists() and doel_json.stat().st_size > 2:
-        verslag["transcript"] = "bestond al"
-    elif op.get("transcript_link"):
-        try:
-            tekst = uitpakken(haal(op["transcript_link"], 300))
-            data = json.loads(tekst)
-            uitingen = data if isinstance(data, list) else (data.get("data") or data.get("result") or [])
-            doel_json.write_text(json.dumps(uitingen, ensure_ascii=False, indent=1), encoding="utf-8")
-            kop = {"plaud_id": op["id"], "naam_in_plaud": op.get("name", ""),
-                   "start_utc": op["start_at"], "start_belgisch": t_bel.strftime("%Y-%m-%d %H:%M:%S %Z"),
-                   "duur_minuten": duur_min, "uitingen": len(uitingen), "bron": "Plaud (block transaction)"}
-            (map_ / "transcript.md").write_text(schrijf_transcript(uitingen, kop), encoding="utf-8")
-            verslag["transcript"] = f"{len(uitingen)} uitingen"
-        except Exception as e:
-            verslag["fouten"].append(f"transcript: {type(e).__name__} {str(e)[:120]}")
+            uitingen = _uitingen(uitpakken(haler(op["transcript_link"], MAX_TRANSCRIPT, 300)))
+            archief.schrijf_json(map_ / "transcript.json", uitingen)
+            t = {"staat": "aanwezig", "uitingen": len(uitingen), "laatste_controle": _nu(), "bron": "plaud transaction"}
+            res["transcript"] = "%d uitingen" % len(uitingen)
+        except (veilig.OnveiligeLink, veilig.DownloadFout, ValueError, OSError) as e:
+            res["fouten"].append("transcript: %s %s" % (type(e).__name__, str(e)[:120]))
+    elif huidig in ("aanwezig", "online_only"):
+        t = {**t, "staat": "aanwezig"}
+        res["transcript"] = "bestond al"
     else:
-        (map_ / "geen-transcript.txt").write_text(
-            "Deze opname is in Plaud nooit getranscribeerd.\n", encoding="utf-8")
-        verslag["transcript"] = "niet getranscribeerd in Plaud"
+        pogingen = int(t.get("pogingen") or 0) + 1
+        t = {"staat": "wacht", "pogingen": pogingen, "laatste_controle": _nu(),
+             "volgende_controle": contract.volgende_controle(pogingen), "bron": "geen transcriptlink van Plaud"}
+        res["transcript"] = "wacht (poging %d)" % pogingen
+    vers_transcript = res["transcript"].endswith("uitingen")
+    if archief._transcript(map_)[0] == "aanwezig" and (vers_transcript or not (map_ / "transcript.md").exists()):
+        archief.maak_markdown(map_)
 
-    # audio
-    url = op.get("presigned_url") or ""
-    ext = ".ogg" if ".ogg" in url.split("?")[0] else (".mp3" if ".mp3" in url.split("?")[0] else ".m4a" if ".m4a" in url.split("?")[0] else ".ogg")
-    doel_audio = map_ / f"opname{ext}"
-    bestaand = [p for p in map_.glob("opname.*")]
-    if bestaand and bestaand[0].stat().st_size > 1000:
-        verslag["audio"] = f"bestond al ({bestaand[0].stat().st_size // 1000} KB)"
-    elif url:
+    # 3. audio
+    bestand, a = archief._audio(map_)
+    if a in ("aanwezig", "online_only"):
+        res["audio"] = "bestond al" if a == "aanwezig" else "online-only in Dropbox"
+        audio = {"staat": a, "bestand": bestand}
+    elif op.get("presigned_url"):
         try:
-            rauw = haal(url)
-            doel_audio.write_bytes(rauw)
-            verslag["audio"] = f"{len(rauw) // 1000} KB"
-        except Exception as e:
-            verslag["fouten"].append(f"audio: {type(e).__name__} {str(e)[:120]}")
+            rauw = haler(op["presigned_url"], MAX_AUDIO, 1800)
+            ext = veilig.audio_soort(rauw[:512])
+            if not ext:
+                raise ValueError("inhoud is geen herkende audio")
+            if len(rauw) < archief.MIN_AUDIO:
+                raise ValueError("audiobestand te klein")
+            archief.schrijf_atomair(map_ / ("opname" + ext), rauw)
+            audio = {"staat": "aanwezig", "bestand": "opname" + ext}
+            res["audio"] = "%d KB" % (len(rauw) // 1000)
+        except (veilig.OnveiligeLink, veilig.DownloadFout, ValueError, OSError) as e:
+            audio = {"staat": "ontbreekt"}
+            res["fouten"].append("audio: %s %s" % (type(e).__name__, str(e)[:120]))
     else:
-        verslag["fouten"].append("audio: geen presigned_url meegegeven")
+        audio = {"staat": "ontbreekt"}
+        res["fouten"].append("audio: geen link meegegeven")
 
-    (map_ / "gesprek.json").write_text(json.dumps({
-        "plaud_id": op["id"], "naam_in_plaud": op.get("name", ""),
-        "start_utc": op["start_at"], "start_belgisch": t_bel.isoformat(),
-        "duur_minuten": duur_min, "opgehaald": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "bron": "Plaud MCP get_file", "audio_bestand": doel_audio.name if doel_audio.exists() else "",
-    }, ensure_ascii=False, indent=1), encoding="utf-8")
+    # 4. toestand vastleggen
+    meta["transcript"], meta["audio"] = t, audio
+    meta["bijgewerkt"] = _nu()
+    archief.schrijf_json(map_ / "gesprek.json", meta)
+    res["status"] = archief.toestand(map_, pid)["staat"]
+    return res
 
-    print(json.dumps(verslag, ensure_ascii=False))
-    return 1 if verslag["fouten"] else 0
+
+def main(pad_invoer):
+    op = json.loads(Path(pad_invoer).read_text(encoding="utf-8"))
+    res = bouw(op)
+    print(json.dumps(res, ensure_ascii=False))
+    return 0 if res["status"] in ("compleet", "wacht_op_transcript") and not res["fouten"] else 1
 
 
 if __name__ == "__main__":

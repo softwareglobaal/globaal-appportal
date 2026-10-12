@@ -1,0 +1,6 @@
+# De Plaudwacht op de VM, versie 3.0 (verbeteropdracht v1.0, 12-10-2026). Elk uur op :20.
+# flock: nooit twee rondes tegelijk; timeout: een hangende ronde stopt na 50 minuten, zodat de
+# volgende kan lopen en de hartslag niet op 'actief' blijft staan. De invoer komt van de Mac
+# (launchd be.globaal.plaud.ophalen, elk uur op :05, zie planning/mac/).
+# Op de VM zetten: python3 mijnagents-runner/planning/plaud_cron_zetten.py --zet
+20 * * * * /usr/bin/flock -n /tmp/plaud-wacht.lock /usr/bin/timeout 3000 /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/plaud_wacht.py >> /home/ubuntu/agents/plaud_wacht.log 2>&1

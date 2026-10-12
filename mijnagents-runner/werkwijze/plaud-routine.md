@@ -1,3 +1,7 @@
+> **Vervangen op 12-10-2026** (verbeteropdracht Plaud-agent v1.0). Deze routine is nooit ingepland en is
+> niet meer nodig: de Mac haalt Plaud zelf op (`plaud/plaud_haal_alles.py`, launchd `be.globaal.plaud.ophalen`)
+> en De Plaudwacht leest het manifest (werkwijze/plaud-wacht.md, versie 3). Niet inplannen.
+
 # De Plaud-routine (geplande Claude-taak op claude.ai)
 
 Plan dit als terugkerende taak op Mehdi's claude.ai-account, met de connectors

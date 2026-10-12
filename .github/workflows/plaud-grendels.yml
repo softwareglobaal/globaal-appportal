@@ -1,0 +1,41 @@
+# Grendels op de Plaud-keten (verbeteropdracht v1.0, 12-10-2026): opnamecontract, id-resolver en
+# volledigheid, veilige links, één lijst, hervatbare publicaties, dossiergrens, zoektaken met
+# bezoekmapcontrole, context en toezicht. Netwerkvrij: synthetisch archief en nagebootste diensten.
+name: plaud-grendels
+
+on:
+  push:
+    paths: ["mijnagents-runner/plaud/**", "mijnagents-runner/plaud_wacht.py", "mijnagents-runner/fathom_wacht.py",
+            "mijnagents-runner/werfverslag_voorbereider.py", "mijnagents-runner/commandocentrum.py",
+            "mijnagents-runner/koppelingen/**", "mijnagents-runner/planning/plaud*", "mijnagents-runner/planning/mac/**",
+            "mijnagents-runner/tests/test_plaud_*.py", ".github/workflows/plaud-grendels.yml"]
+  pull_request:
+    paths: ["mijnagents-runner/plaud/**", "mijnagents-runner/plaud_wacht.py", "mijnagents-runner/fathom_wacht.py",
+            "mijnagents-runner/werfverslag_voorbereider.py", "mijnagents-runner/commandocentrum.py",
+            "mijnagents-runner/koppelingen/**", "mijnagents-runner/planning/plaud*", "mijnagents-runner/planning/mac/**",
+            "mijnagents-runner/tests/test_plaud_*.py", ".github/workflows/plaud-grendels.yml"]
+
+jobs:
+  # De ophaler en het manifest draaien op de Mac met /usr/bin/python3 (3.9).
+  mac:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - run: python3 mijnagents-runner/tests/test_plaud_archief.py
+
+  # De Plaudwacht draait op de VM onder ~/agents/.venv (Python 3.12).
+  vm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 mijnagents-runner/tests/test_plaud_archief.py
+      - run: python3 mijnagents-runner/tests/test_plaud_wacht.py
+      # de locatiegrens die De Plaudwacht deelt met de andere lezers
+      - run: pip install -r locatie/requirements.txt
+      - run: python3 mijnagents-runner/tests/test_locatielezers.py

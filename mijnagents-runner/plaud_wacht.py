@@ -1,64 +1,73 @@
 #!/usr/bin/env python3
-"""De Plaudwacht (Privé) — Plaud-transcripten die de claude.ai-routine in Dropbox
-zet, herkennen, archiveren, loggen en klaarzetten. Werkwijze v2 op het bord
-(werkwijze/plaud-wacht.md is het zaad); de routine-opdracht staat in
-werkwijze/plaud-routine.md.
+"""De Plaudwacht (Privé), versie 3 (verbeteropdracht v1.0, 12-10-2026).
 
-Elk uur en op verzoek. Leest de inbox en elke map "0 Plaud" in een salesmap;
-herkent met dezelfde herkenning als De Fathomwacht (personentabel, agenda en
-locatie op de starttijd, Pipedrive, openingszin); archief in
-mijnagents-data/plaud; gesprekkentabel (bron plaud); klaarzetten per afdeling.
+Elk uur op de VM. De opnames zelf staan in één archief op de Mac (Dropbox, `Data uit Mehdi/Plaud`),
+opgehaald uit de Plaud-API door plaud/plaud_haal_alles.py. De Mac zet het manifest, de status en per
+opname transcript.json in mijnagents-data/plaud-invoer (plaud/plaud_invoer_push.sh). Ik lees alleen
+dat; geen audio, geen tweede archief, geen getekende links.
+
+Per ronde:
+  1. invoer lezen: manifest en status van de Mac; oude inboxbestanden van de claude.ai-routine alleen
+     als hun Plaud-id niet in het manifest staat, en alleen via het opnamecontract (zonder opnametijd:
+     herstel, nooit de wijzigingsdatum van het bestand)
+  2. zoektaken van het Commandocentrum en de werfverslagvoorbereider: bezoekmap valideren uit de taak,
+     opname zoeken op opnametijd (zie plaud/zoektaak.py)
+  3. per opname: context (alleen overlappende agenda, gestructureerde locatie), herkenning door het
+     model alleen bij een nieuw transcript, dossierbeslissing op bewijs (plaud/dossier.py), dan de
+     publicaties eerst vastleggen in mijnagents-data/plaud-staat/<id>.json en pas daarna uitvoeren:
+     gesprekkentabel, klaarzet, dossierkopie, bezoekmap. Een herstart doet alleen wat open staat.
+  4. toezicht: leeftijd van de invoer, aanmelding op de Mac, wachtende transcripten, open publicaties
+     en de oudste open zoektaak; noden zonder teller (N10)
+
+Een zoektaak gaat pas op opgepakt na een bevestigde levering in de bezoekmap.
+
+Foutcode: 0 alles goed, 3 invoer ontbreekt of is verouderd, 4 een of meer opnames of publicaties mislukt.
 """
-import glob
 import json
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+sys.path.insert(0, os.path.join(HIER, "plaud"))
 import bord  # noqa: E402
 import bronnen  # noqa: E402
-import dropbox_prive  # noqa: E402
-import fathom_wacht as fw  # noqa: E402  (personen_uit_werkwijze, herken, deals_index, veilige_naam)
 import locatiecontext as LC  # noqa: E402  gestructureerde locatiecontext, met startgrens (opdracht v1.4)
+import verslagsoorten  # noqa: E402
+
+import archief  # noqa: E402  (plaud/)
+import context as CTX  # noqa: E402
+import contract  # noqa: E402
+import dossier  # noqa: E402
+import manifest  # noqa: E402
+import staat  # noqa: E402
+import zoektaak  # noqa: E402
 
 NAAM = "plaud-wacht"
 ag = bord.Agent(NAAM)
+DATA = os.path.expanduser(os.environ.get("MIJNAGENTS_DATA", "~/appportal/mijnagents-data"))
+INVOER = os.environ.get("PLAUD_INVOER", os.path.join(DATA, "plaud-invoer"))
+STAAT = os.environ.get("PLAUD_STAAT", os.path.join(DATA, "plaud-staat"))
 INBOX = os.environ.get("PLAUD_INBOX", "/Work All/000 AI Opzet/Mehdi Agents/Plaud inbox")
-ARCHIEF = os.path.expanduser(os.environ.get("PLAUD_ARCHIEF_PAD", "~/appportal/mijnagents-data/plaud"))
-AFDELING_VAN_TITEL = re.compile(r"\[(HA|UNABO|HB|CONTRAX|PRIVE)", re.I)
+# Opnames van vóór deze dag worden niet opnieuw herkend en gepubliceerd (geen volledige herverwerking);
+# voor zoektaken blijven ze vindbaar.
+SINDS = os.environ.get("PLAUD_WACHT_SINDS", "2026-10-01")
+MAX_HERKENNING = int(os.environ.get("PLAUD_MAX_HERKENNING", "15"))
+INVOER_MAX_UUR = 3
+ARCHIEF_OP_MAC = "Data uit Mehdi/Plaud"
+
+OK, INVOER_FOUT, DEELS = 0, 3, 4
 
 
-ALLEEN_TIJD = re.compile(r"^\s*\d{4}[-/ ]?\d{2}[-/ ]?\d{2}[ T]\d{2}[:.]?\d{2}([:.]?\d{2})?\s*$")
-VOORVOEGSEL = re.compile(r"^\s*\d{1,2}-\d{1,2}\s+")
-VERBODEN_TEKEN = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
-
-
-def archiefmap(start, naam_in_plaud):
-    """`JJJJ-MM-DD UUMM <naam in Plaud>`, plat in het archief (Mehdi, 17-09-2026).
-
-    Geen jaarmap meer: de datum rangschikt zichzelf. Plaud zet zelf `MM-DD ` voor
-    zijn titels; dat is dubbel met de datum en gaat eraf. Zelfde regel als
-    `plaud/mapnaam.py`, dat het volledige archief heeft opgehaald; wie er een
-    verandert, verandert ze allebei.
-    """
-    stempel = (start or "")[:16].replace("T", " ").replace(":", "")
-    n = (naam_in_plaud or "").strip()
-    if not n or ALLEEN_TIJD.match(n):
-        n = "zonder titel"
-    else:
-        n = VOORVOEGSEL.sub("", n)
-        n = VERBODEN_TEKEN.sub(" ", n).replace("–", "-")
-        n = re.sub(r"\s+", " ", n).strip(" .-") or "zonder titel"
-    uit = f"{stempel} {n}"
-    return uit[:110].rstrip(" ,;-") + "…" if len(uit) > 110 else uit
+def _nu():
+    return datetime.now(timezone.utc)
 
 
 def kop_van(tekst):
-    """De kopregels uit een routinebestand (plaud_id, account, start, duur_minuten, naam_in_plaud)."""
+    """De kopregels uit een bestand van de oude routine (plaud_id, account, start, duur_minuten, naam_in_plaud, dossier)."""
     uit = {}
     for regel in tekst.splitlines()[:12]:
         m = re.match(r"^\s*([a-z_]+)\s*:\s*(.+?)\s*$", regel)
@@ -67,157 +76,352 @@ def kop_van(tekst):
     return uit
 
 
-def context_op(start_iso):
-    """Wat de agenda en de locatie zeggen over dat moment.
+# --------------------------------------------------------------- invoer ---
+def lees_invoer():
+    """(manifest of None, status van de Mac of {})."""
+    return manifest.lees(INVOER), archief.lees_json(os.path.join(INVOER, "00 status.json")) or {}
 
-    De locatie komt uit de gestructureerde context van de tegel (koppelingen/locatiecontext.py):
-    alleen dagen vanaf 3-10-2026, alleen 'auto bij project' met zekerheid en bewijs, nooit Thuis,
-    een rit of een meetgat. Tot 05-10-2026 zocht dit het woord "bezoek" in het markdown-dagboek
-    van het bord: dat las de oude telefoondagboeken en miste het nieuwe formaat (opdracht v1.4)."""
-    dag = (start_iso or "")[:10]
-    afspraken = []
+
+def uitingen_van(o):
+    data = archief.lees_json(os.path.join(INVOER, (o.get("archief") or {}).get("map") or "-", "transcript.json"))
+    return data if isinstance(data, list) else None
+
+
+def tekst_van(uitingen):
+    def klok(ms):
+        s = int(ms or 0) // 1000
+        return "%02d:%02d:%02d" % (s // 3600, s // 60 % 60, s % 60)
+    return "\n".join(f"[{klok(u.get('start_time'))}] {u.get('speaker') or 'Speaker ?'}: {(u.get('content') or '').strip()}"
+                     for u in uitingen or [])
+
+
+def oude_inbox(bekend):
+    """Bestanden van de oude claude.ai-routine, alleen voor ids die niet in het manifest staan.
+    Geeft (opnames, herstel). Een pad in de kop (bezoekmap:) is een aanwijzing, geen schrijfrecht."""
+    uit, herstel = [], []
+    for e in bronnen.lijst(INBOX, recursief=False) or []:
+        if e.get(".tag") != "file" or not e.get("name", "").lower().endswith((".md", ".txt")) or e["name"].startswith("00 "):
+            continue
+        tekst = bronnen.download(e["path_lower"]).decode("utf-8", "replace")
+        kop = kop_van(tekst)
+        try:
+            c = contract.opname({"plaud_id": kop.get("plaud_id"), "start": kop.get("start"), "duur_minuten": kop.get("duur_minuten"),
+                                 "naam_in_plaud": kop.get("naam_in_plaud") or e["name"], "account": kop.get("account")},
+                                transcript={"staat": "aanwezig"}, bron="oude-inbox")
+        except contract.Herstel as ex:
+            herstel.append({"bestand": e["name"], "reden": str(ex)})
+            continue
+        if c["plaud_id"] in bekend:
+            continue
+        kopregels = set(tekst.splitlines()[:12])
+        romp = "\n".join(r for r in tekst.splitlines() if r not in kopregels or not re.match(r"^\s*[a-z_]+\s*:", r))
+        c.update(toestand="alleen_transcript", bron_bestand=e.get("path_display", ""), kop_dossier=kop.get("dossier", ""))
+        uit.append((c, romp.strip()))
+    return uit, herstel
+
+
+# -------------------------------------------------------------- context ---
+def klaarzet_items():
     try:
-        for it in bord.call(f"/api/klaarzet?status=alle&n=400").get("items", []):
-            if it["soort"] == "afspraak" and it["titel"].startswith(dag):
-                afspraken.append(it["titel"])
+        return bord.call("/api/klaarzet?status=alle&n=500").get("items", [])
     except Exception:  # noqa: BLE001
-        pass
-    plek = LC.beschrijf(LC.verblijf_op(start_iso)) if start_iso else ""
+        return []
+
+
+def context_op(start_iso, duur_minuten=0, items=None):
+    """(overlappende afspraken, locatiezin) op het opnamemoment.
+
+    Afspraken tellen alleen als ze de opname overlappen (plaud/context.py); dezelfde dag op een ander uur
+    is geen bevestiging. De locatie komt uit de gestructureerde context van de tegel (koppelingen/
+    locatiecontext.py): alleen dagen vanaf 3-10-2026, alleen 'auto bij project' met zekerheid en bewijs."""
+    if not start_iso:
+        return [], ""
+    if items is None:
+        items = klaarzet_items()
+    try:
+        t = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+        if not t.tzinfo:
+            t = t.replace(tzinfo=CTX.BRUSSEL)
+        afspraken = CTX.afspraken_op(items, t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), duur_minuten)
+    except ValueError:
+        afspraken = []
+    plek = LC.beschrijf(LC.verblijf_op(start_iso))
     return afspraken, plek
 
 
-def audio_ophalen(map_, kop, start):
-    """Regel van Mehdi (12-09-2026): de geluidsopname hoort bij het transcript. De Plaud-routine
-    zet in de kop een regel `audio_url:` (getekende link van Plaud, 24 uur geldig); wij halen het
-    bestand binnen die tijd op als opname.mp3. Ontbreekt de regel of is de link verlopen, dan
-    melden we dat in het logboek in plaats van te zwijgen."""
-    import urllib.request
-    doel = os.path.join(map_, "opname.mp3")
-    url = (kop.get("audio_url") or "").strip()
-    if os.path.exists(doel) or not url:
-        if not url and not os.path.exists(doel):
-            ag.log(f"opname {start}", "bevinding", "geen audio_url in de kop van het inboxbestand; opname.mp3 ontbreekt (routine op claude.ai moet de link meegeven)")
-        return
-    try:
-        with urllib.request.urlopen(url, timeout=600) as r, open(doel + ".deel", "wb") as f:
-            while True:
-                blok = r.read(1 << 20)
-                if not blok:
-                    break
-                f.write(blok)
-        os.rename(doel + ".deel", doel)
-        ag.log(f"opname {start}", "schrijf", f"opname.mp3 opgehaald ({os.path.getsize(doel) // 1_000_000} MB)")
-    except Exception as ex:  # noqa: BLE001
-        ag.log(f"opname {start}", "fout", f"audio niet opgehaald: {type(ex).__name__} (link verlopen? de routine schrijft een nieuwe bij de volgende ronde)")
+def verslagsoort_van(tekst, titel):
+    t = f"{titel} {tekst[:1500]}".lower()
+    for naam, s in verslagsoorten.SOORTEN.items():
+        if any(w in t for w in s.get("trefwoorden") or ()):
+            return naam
+    return ""
 
 
-def verwerk_bestand(e, bron_map, personen, deals, gezien_ids):
-    tekst = bronnen.download(e["path_lower"]).decode("utf-8", "replace")
-    kop = kop_van(tekst)
-    pid = kop.get("plaud_id") or e.get("id") or e.get("path_lower")
-    if pid in gezien_ids:
-        # al gearchiveerd: alleen nog de audio bijhalen als die ontbreekt en de kop nu een link heeft
-        for gj in glob.glob(os.path.join(ARCHIEF, "*", "*", "gesprek.json")):
-            if json.load(open(gj)).get("plaud_id") == pid and not os.path.exists(os.path.join(os.path.dirname(gj), "opname.mp3")) and kop.get("audio_url"):
-                audio_ophalen(os.path.dirname(gj), kop, kop.get("start", "")[:16])
-        return None
-    start = kop.get("start", "")[:16] or e.get("client_modified", "")[:16]
-    afspraken, plek = context_op(start)
-    g = {"title": kop.get("naam_in_plaud") or e["name"], "meeting_title": kop.get("naam_in_plaud") or e["name"],
-         "recording_start_time": start, "recording_id": pid, "url": e.get("path_display", ""),
-         "recorded_by": {"name": kop.get("account", "mehdi"), "email": ""},
-         "calendar_invitees": [{"name": "Mehdi Chegini", "email": "mch@h-architects.be", "is_external": False}]}
-    deal, hoe = fw.koppel_deal(g, deals)
-    extra = (f"\n\n[context] agenda op {start[:10]}: " + "; ".join(afspraken[:6]) + (f"\n[context] locatie om {start[11:16]}: {plek}" if plek else "")
-             + "\n[regel] Lees de eerste minuut op Mehdi's openingszin (waar, met wie, wat). Sprekers heten 'Speaker N'; herleid ze uit wat ze zeggen.")
-    herk = fw.herken(g, tekst[:6000] + extra, personen, deal, hoe)
-    # archief: plat, met de naam die Plaud aan de opname geeft (afspraak Mehdi 17-09-2026)
-    map_ = os.path.join(ARCHIEF, archiefmap(start, kop.get("naam_in_plaud") or e["name"]))
-    if not os.path.exists(os.path.join(map_, "gesprek.json")):
-        os.makedirs(map_, exist_ok=True)
-        open(os.path.join(map_, "transcript.md"), "w", encoding="utf-8").write(tekst)
-        open(os.path.join(map_, "gesprek.json"), "w", encoding="utf-8").write(json.dumps({"plaud_id": pid, "kop": kop, "bron_bestand": e.get("path_display"), "herkenning": herk}, ensure_ascii=False, indent=1))
-    audio_ophalen(map_, kop, start)
-    duur = int(float(kop.get("duur_minuten") or 0) or 0)
+# ------------------------------------------------------------ zoektaken ---
+def tekst_en_uitingen(o, romp):
+    """(uitingen of None, leesbare tekst). romp: de tekst van een oud inboxbestand, anders None."""
+    if romp is not None:
+        return None, romp
+    uitingen = uitingen_van(o)
+    return uitingen, tekst_van(uitingen) if uitingen else ""
+
+
+def eigen_bewijs(o, uitingen, tekst, items):
+    """(bewijzen, afspraken): bewijs uit de opname zelf, zonder zoektaak, model of locatie."""
+    afspraken, _ = context_op(o["start_utc"], o.get("duur_minuten") or 0, items)
+    b = (dossier.uit_tekst("titel", o.get("naam_in_plaud") or "", "vergadertitel")
+         + (dossier.uit_tekst("openingszin", dossier.openingszin(uitingen) if uitingen else tekst[:600], "vergadertitel") if tekst else [])
+         + dossier.uit_agenda(afspraken)
+         + (dossier.uit_tekst("kop", o["kop_dossier"], "nummerveld") if o.get("kop_dossier") else []))
+    return b, afspraken
+
+
+def zoektaken_beoordelen(taken, opnames, st_obj, items):
+    """(per plaud_id: [taak], uitkomsten). opnames: [(contract, romp)]. Een ongeldige taak levert niets op."""
+    per_id, uitkomsten = {}, []
+    contracten = [o for o, _ in opnames]
+    beslissingen = {o["plaud_id"]: (st_obj.lees(o["plaud_id"]).get("beslissing") or {}) for o in contracten}
+    dagen = {zoektaak.inhoud_van(t).get("datum") for t in taken}
+    bewijs = {}
+    for o, romp in opnames:
+        if o["start_brussel"][:10] in dagen:
+            uitingen, tekst = tekst_en_uitingen(o, romp)
+            bewijs[o["plaud_id"]] = {b["nummer"] for b in eigen_bewijs(o, uitingen, tekst, items)[0]}
+    for t in taken:
+        ok, reden = zoektaak.valideer_bezoekmap(t, verslagsoorten.SOORTEN)
+        if not ok:
+            uitkomsten.append({"taak": t.get("id"), "uitkomst": "ongeldig", "reden": reden})
+            ag.log(f"taak {t.get('id')}", "fout", f"zoektaak niet uitgevoerd: {reden}")
+            continue
+        r = zoektaak.beoordeel(t, contracten, beslissingen, bewijs)
+        r["taak"] = t.get("id")
+        uitkomsten.append(r)
+        ag.log(f"taak {t.get('id')}", "bevinding", f"{r['uitkomst']}: {r['reden']}" + (f" ({', '.join(r['kandidaten'])})" if r.get("kandidaten") else ""))
+        if r["uitkomst"] in ("gevonden", "wacht_op_transcript"):
+            per_id.setdefault(r["plaud_id"], []).append(t)
+    return per_id, uitkomsten
+
+
+# ---------------------------------------------------------- uitvoerders ---
+def _tabel(payload):
+    bord.call("/api/gesprekken", {"rijen": [payload]})
+    return "rij bijgewerkt"
+
+
+def _klaarzet(payload):
+    uit = ag.klaarzet([dict(payload)])
+    return f"nieuw {uit.get('nieuw', 0)}, bestaand {uit.get('bestaand', 0)}"
+
+
+def _dossierkopie(payload):
+    salesmap = bronnen.zoek_salesmap(re.sub(r"^\s*\d{4}\s+", "", payload["deal_titel"]), payload["projectnummer"])
+    if not salesmap:
+        raise RuntimeError("geen salesmap voor dit dossier")
+    r = zoektaak.lever(f"{salesmap}/0 Plaud", payload["plaud_id"], payload["tekst"], bronnen, naam=payload["naam"])
+    if r["uitkomst"] == "conflict":
+        raise RuntimeError(r["reden"])
+    return r["pad"]
+
+
+def _bezoekmap(payload):
+    r = zoektaak.lever(payload["bezoekmap"], payload["plaud_id"], payload["tekst"], bronnen)
+    if r["uitkomst"] == "conflict":
+        raise RuntimeError(r["reden"])
+    bord.opgepakt(payload["taak_id"], NAAM)        # pas na de bevestigde levering
+    return r["pad"]
+
+
+UITVOERDERS = {"tabel": _tabel, "klaarzet": _klaarzet, "dossierkopie": _dossierkopie, "bezoekmap": _bezoekmap}
+
+
+# ------------------------------------------------------------ verwerken ---
+def herken(o, tekst, afspraken, locatie, bewijzen, personen):
+    import fathom_wacht as fw
+    g = {"title": o.get("naam_in_plaud") or "", "meeting_title": o.get("naam_in_plaud") or "",
+         "recording_start_time": o["start_brussel"], "recording_id": o["plaud_id"],
+         "recorded_by": {"name": o.get("opgenomen_door") or "onbekend", "email": ""}, "calendar_invitees": []}
+    ctx = CTX.voor_herkenning(afspraken, locatie, bewijzen, o.get("toestel", "onbekend"), o.get("account", "onbekend"))
+    return fw.herken(g, tekst, personen, None, "", context=ctx, bron="plaud")
+
+
+def opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort):
+    pid, start = o["plaud_id"], o["start_brussel"]
     prive = bool(herk.get("prive"))
-    rij = {"uniek": f"plaud:{pid}", "datum": start[:10], "start": start[11:16], "minuten": duur, "personen": ", ".join(herk.get("personen") or []),
-           "bedrijf": herk.get("bedrijf", ""), "afdeling": herk.get("afdeling", ""), "thema": herk.get("thema", ""),
-           "project": herk.get("project", "") or (deal["titel"] if deal else ""), "prive": prive, "zekerheid": herk.get("zekerheid", ""),
-           "waarom": herk.get("waarom", ""), "archief": map_, "link": e.get("path_display", ""), "opgenomen_door": kop.get("account", "mehdi"), "bron": "plaud"}
-    pad = ""
-    if deal and not prive:
-        salesmap = bronnen.zoek_salesmap(re.sub(r"^\s*\d{4}\s+", "", deal["titel"]), deal["nummer"])
-        if salesmap and not bron_map.startswith(salesmap):
-            naam = f"{start[:10]} Plaud transcript - {fw.veilige_naam(herk.get('hoofdpersoon') or 'gesprek')}.md"
-            if not any(x.get("name") == naam for x in (bronnen.lijst(f"{salesmap}/0 Plaud", recursief=False) or [])):
-                pad = bronnen.upload(f"{salesmap}/0 Plaud/{naam}", tekst.encode("utf-8"))
-                ag.log(f"opname {start}", "schrijf", f"kopie naar {pad} (origineel: {map_})")
-    # Zoekvraag van de Werfverslag voorbereider (00 gezocht.md): staat `bezoekmap:` in de kop, dan hoort het transcript
-    # als transcript.txt in die bezoekmap (regel E5). Nooit overschrijven.
-    if kop.get("bezoekmap") and not prive:
-        bm = kop["bezoekmap"].strip().rstrip("/")
+    map_ = (o.get("archief") or {}).get("map")
+    pad_mac = f"{ARCHIEF_OP_MAC}/{map_}/transcript.md" if map_ else o.get("bron_bestand", "")
+    rij = {"uniek": f"plaud:{pid}", "datum": start[:10], "start": start[11:16], "minuten": int(float(o.get("duur_minuten") or 0)),
+           "personen": ", ".join(herk.get("personen") or []), "bedrijf": herk.get("bedrijf", ""), "afdeling": herk.get("afdeling", ""),
+           "thema": herk.get("thema", ""), "project": b["dossier"] or herk.get("project", ""), "prive": prive,
+           "zekerheid": b["zekerheid"], "waarom": herk.get("waarom", ""), "archief": pad_mac, "link": pad_mac,
+           "opgenomen_door": o.get("opgenomen_door") or "onbekend", "bron": "plaud"}
+    klaar = {"voor": b["voor"], "soort": "transcript", "sleutel": b["projectnummer"] or "",
+             "titel": f"{start[:16].replace('T', ' ')} Plaud: {herk.get('hoofdpersoon') or o.get('naam_in_plaud') or 'opname'} · {herk.get('thema', '')[:60]}"
+                      + (" · PRIVÉ" if prive else "") + (" · NAKIJKEN" if b["conflict"] else ""),
+             "uniek": f"plaud:{pid}", "verwijzing": pad_mac,
+             "inhoud": {"plaud_id": pid, "datum": start[:10], "start": start[11:16], "dossier": b["dossier"], "firma": b["firma"],
+                        "projectnummer": b["projectnummer"], "deal_id": deal["id"] if deal else None, "verslagsoort": verslagsoort,
+                        "zekerheid": b["zekerheid"], "conflict": b["conflict"], "redenen": b["redenen"], "prive": prive,
+                        "afdeling": herk.get("afdeling", ""), "thema": herk.get("thema", ""), "personen": herk.get("personen") or [],
+                        "toestel": o.get("toestel", "onbekend"), "account": o.get("account", "onbekend"),
+                        "opgenomen_door": o.get("opgenomen_door") or "onbekend", "transcript_pad": pad_mac}}
+    uit = [{"sleutel": "tabel", "soort": "tabel", "payload": rij}, {"sleutel": "klaarzet", "soort": "klaarzet", "payload": klaar}]
+    if b["kopie_toegestaan"] and deal and tekst:
+        wie = re.sub(r"[^A-Za-z0-9À-ÿ ,.-]+", " ", herk.get("hoofdpersoon") or "gesprek").strip()[:60]
+        uit.append({"sleutel": "dossierkopie", "soort": "dossierkopie",
+                    "payload": {"plaud_id": pid, "deal_titel": deal["titel"], "projectnummer": b["projectnummer"],
+                                "naam": f"{start[:10]} Plaud transcript - {wie} [{pid[3:9]}].txt", "tekst": tekst}})
+    if not b["conflict"] and not prive:
+        for t in taken:
+            uit.append({"sleutel": f"bezoekmap:{t['id']}", "soort": "bezoekmap",
+                        "payload": {"plaud_id": pid, "taak_id": t["id"], "bezoekmap": zoektaak.inhoud_van(t)["bezoekmap"].rstrip("/"), "tekst": tekst}})
+    return uit
+
+
+def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
+    """Eén opname. Geeft {"uitkomst": gedaan|wacht_op_transcript|uitgesteld|ongewijzigd, "fouten": n}."""
+    pid = o["plaud_id"]
+    st = st_obj.lees(pid)
+    if not tekst:
+        return {"uitkomst": "wacht_op_transcript", "fouten": 0}
+    eigen, afspraken = eigen_bewijs(o, uitingen, tekst, items)
+    verblijf = LC.gestructureerd(LC.verblijf_op(o["start_utc"]))
+    # een eerder geleverde zoektaak blijft bewijs, ook als de taak niet meer open staat
+    for t in taken:
+        z = zoektaak.bewijs_van(t, verslagsoorten.SOORTEN)
+        if z:
+            st.setdefault("zoektaken", {})[str(t["id"])] = {"firma": z[0], "nummer": z[1]}
+    zoek = [(z["firma"], z["nummer"]) for z in (st.get("zoektaken") or {}).values()]
+    bewijzen = eigen + dossier.uit_locatie(verblijf) + [dossier.bewijs("zoektaak", f, n, "gevalideerde zoektaak") for f, n in zoek]
+    th = staat.hash_van(tekst)
+    vinger = staat.hash_van({"naam": o.get("naam_in_plaud"), "start": o["start_utc"], "transcript": th, "bewijs": bewijzen,
+                             "taken": sorted(t["id"] for t in taken)})
+    if st.get("vingerafdruk") == vinger and not staat.open_opdrachten(st):
+        return {"uitkomst": "ongewijzigd", "fouten": 0}
+    herk = st.get("herkenning") or {}
+    if herk.get("transcript_hash") != th:
+        if budget["over"] <= 0:
+            return {"uitkomst": "uitgesteld", "fouten": 0}
+        budget["over"] -= 1
+        herk = herken(o, tekst, afspraken, LC.beschrijf(LC.verblijf_op(o["start_utc"])), bewijzen, personen)
+        herk["transcript_hash"] = th
+        st["herkenning"] = herk
+        st_obj.bewaar(pid, st)                 # een herstart vraagt het model niet opnieuw
+    model = dossier.uit_tekst("model", herk.get("project") or "", "vergadertitel")
+    b = dossier.beslis(bewijzen, herk, model)
+    deal = None
+    if b["firma"] == "HARC" and b["projectnummer"]:
+        passend = [d for d in deals if d.get("nummer") == b["projectnummer"]]
+        deal = passend[0] if len(passend) == 1 else None
+    st["beslissing"] = b
+    st["vingerafdruk"] = vinger
+    staat.plan(st, opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort_van(tekst, o.get("naam_in_plaud") or "")))
+    st_obj.bewaar(pid, st)                     # eerst vastleggen, dan pas extern schrijven
+    gedaan, fouten = staat.voer_uit(st, lambda s: st_obj.bewaar(pid, s), UITVOERDERS)
+    ag.log(f"opname {o['start_brussel'][:16]}", "bevinding",
+           f"{herk.get('hoofdpersoon') or o.get('naam_in_plaud')} · dossier {b['dossier'] or 'geen'} ({b['zekerheid']})"
+           + (" · conflict" if b["conflict"] else "") + (" · privé" if b["prive"] else "") + f" · voor {b['voor']}"
+           + f" · {gedaan} publicatie(s), {fouten} fout", "; ".join(b["redenen"]))
+    return {"uitkomst": "gedaan", "fouten": fouten}
+
+
+# ------------------------------------------------------------- toezicht ---
+def toezicht(r, m, status, st_obj, uitkomsten, taken, tellers):
+    if not m:
+        r.nood("De Plaud-invoer van de Mac ontbreekt op de VM (launchd be.globaal.plaud.ophalen)", wie="claude-code")
+        return INVOER_FOUT
+    code = OK
+    gemaakt = datetime.fromisoformat(m["meta"]["gemaakt"])
+    if _nu() - gemaakt > timedelta(hours=INVOER_MAX_UUR):
+        r.nood("De Plaud-invoer van de Mac is ouder dan drie uur; de Mac haalt niet op of zet niet door", wie="claude-code")
+        code = INVOER_FOUT
+    if status.get("uitkomst") == "authfout":
+        r.nood("Plaud-aanmelding ontbreekt of is geweigerd: Mehdi meldt één keer aan met plaud_login.py op de Mac", wie="mehdi")
+    elif status.get("uitkomst") == "bronfout":
+        r.nood("De Plaud-API was bij de laatste ophaling niet bereikbaar", wie="claude-code")
+    vast = [o for s in st_obj.alle().values() for o in staat.open_opdrachten(s) if int(o.get("pogingen") or 0) >= 3]
+    if vast:
+        r.nood("Publicaties van Plaud-opnames mislukken herhaaldelijk; zie het logboek", wie="claude-code")
+    if any(u["uitkomst"] == "conflict" for u in uitkomsten):
+        r.nood("Een zoektaak voor een bezoek heeft meer passende opnames of tegenstrijdig dossierbewijs; Mehdi kiest", wie="mehdi")
+    if any(u["uitkomst"] == "ongeldig" for u in uitkomsten):
+        r.nood("Een zoektaak voor De Plaudwacht heeft een ongeldige bezoekmap; er is niets geleverd", wie="claude-code")
+    oudste = min((t.get("aangemaakt") or t.get("ts") or "" for t in taken), default="")
+    toest = m["meta"].get("toestanden") or {}
+    tellers.update(manifest=m["meta"]["aantal"], wacht_op_transcript_archief=toest.get("wacht_op_transcript", 0),
+                   onvolledig_archief=toest.get("onvolledig", 0), open_zoektaken=len(taken), oudste_zoektaak=oudste[:10],
+                   aanmelding_mac=status.get("uitkomst", "onbekend"), invoer_van=m["meta"]["gemaakt"][:16])
+    return code
+
+
+def ronde(r):
+    tellers = {"gedaan": 0, "ongewijzigd": 0, "wacht_op_transcript": 0, "uitgesteld": 0, "fout": 0, "fouten": 0, "herstel": 0}
+    m, status = lees_invoer()
+    st_obj = staat.Staat(STAAT)
+    opnames = []
+    for o in (m or {}).get("opnames", []):
+        if o.get("herstel") or not o.get("start_utc"):
+            tellers["herstel"] += 1
+            continue
+        opnames.append((o, None))
+    bekend = {o["plaud_id"] for o, _ in opnames}
+    try:
+        oud, herstel = oude_inbox(bekend)
+    except Exception as e:  # noqa: BLE001  de oude inbox is een terugval, geen voorwaarde
+        oud, herstel = [], []
+        ag.log("Plaud", "fout", f"oude inbox niet gelezen: {type(e).__name__}")
+    opnames += oud
+    tellers["herstel"] += len(herstel)
+    for h in herstel:
+        ag.log("Plaud", "bevinding", f"oud inboxbestand op herstel: {h['bestand']}: {h['reden']}")
+    try:
+        open_items = bord.klaargezet_voor(NAAM, n=200)
+    except Exception:  # noqa: BLE001
+        open_items = []
+    taken = [t for t in open_items if t.get("soort") == "taak"]
+    # verzoeken (bv. van De Contractmaker) hebben geen bezoekmap en geen tijdvenster: niet automatisch, wel zichtbaar
+    tellers["open_verzoeken"] = len([t for t in open_items if t.get("soort") == "verzoek"])
+    for t in open_items:
+        if t.get("soort") == "verzoek":
+            ag.log(f"verzoek {t.get('id')}", "bevinding", f"verzoek van {t.get('van')} niet automatisch uitgevoerd: {t.get('titel', '')[:120]}")
+    items = klaarzet_items()
+    per_id, uitkomsten = zoektaken_beoordelen(taken, opnames, st_obj, items)
+    import fathom_wacht as fw
+    personen = fw.personen_uit_werkwijze(bord.call("/api/agent/fathom-wacht/werkwijze").get("werkwijze") or "")
+    try:
+        deals = fw.deals_index()
+    except Exception as e:  # noqa: BLE001
+        deals = []
+        ag.log("Plaud", "fout", f"Pipedrive niet gelezen: {type(e).__name__}")
+    budget = {"over": MAX_HERKENNING}
+    for o, romp in opnames:
+        eigen = per_id.get(o["plaud_id"], [])
+        if o["start_brussel"][:10] < SINDS and not eigen:
+            continue
         try:
-            if not any(x.get("name") == "transcript.txt" for x in (bronnen.lijst(bm, recursief=False) or [])):
-                bronnen.upload(f"{bm}/transcript.txt", tekst.encode("utf-8"))
-                ag.log(f"opname {start}", "schrijf", f"transcript.txt in de bezoekmap gezet: {bm}")
-        except Exception as ex:  # noqa: BLE001
-            ag.log(f"opname {start}", "fout", f"transcript niet in de bezoekmap: {type(ex).__name__}")
-    voor = "mehdi" if prive or herk.get("afdeling") in ("onbekend", "prive", "regie", "") else herk["afdeling"]
-    soort = "werfbezoek" if re.search(r"werf|plaatsbezoek|oplevering", (herk.get("thema", "") + " " + tekst[:800]).lower()) else "transcript"
-    klaar = {"voor": voor, "soort": soort, "sleutel": str(deal["id"]) if deal else (herk.get("project") or ""),
-             "titel": f"{start} Plaud: {herk.get('hoofdpersoon') or e['name']} · {herk.get('thema', '')[:60]}" + (" · PRIVÉ" if prive else ""),
-             "uniek": f"plaud:{pid}", "verwijzing": pad or e.get("path_display", ""),
-             "inhoud": {**{k: v for k, v in rij.items() if k != "waarom"}, "waarom": herk.get("waarom", ""), "transcript_pad": os.path.join(map_, "transcript.md")}}
-    ag.log(f"opname {start}", "bevinding", f"{herk.get('hoofdpersoon') or e['name']} · {herk.get('afdeling')} · {herk.get('thema', '')[:60]}" + (" · privé" if prive else "") + f" · zekerheid {herk.get('zekerheid')}", herk.get("waarom", ""))
-    return rij, klaar
+            uitingen, tekst = tekst_en_uitingen(o, romp)
+            res = verwerk(o, uitingen, tekst, st_obj, items, personen, deals, eigen, budget)
+        except Exception as e:  # noqa: BLE001  één opname mag de andere niet blokkeren
+            res = {"uitkomst": "fout", "fouten": 1}
+            ag.log(f"opname {o['plaud_id']}", "fout", f"{type(e).__name__}: {str(e)[:200]}")
+        tellers[res["uitkomst"]] = tellers.get(res["uitkomst"], 0) + 1
+        tellers["fouten"] += res["fouten"]
+    code = toezicht(r, m, status, st_obj, uitkomsten, taken, tellers)
+    if tellers["fouten"]:
+        code = code or DEELS
+    if budget["over"] <= 0:
+        ag.log("Plaud", "bevinding", "herkenningsbudget van deze ronde op; de rest volgt in de volgende rondes")
+    ag.log("Plaud", "bron", "ronde: " + ", ".join(f"{k} {v}" for k, v in tellers.items()))
+    r.detail = (f"{tellers['gedaan']} verwerkt, {tellers['wacht_op_transcript']} wachten op transcript, "
+                f"{tellers.get('open_zoektaken', 0)} open zoektaken, invoer van {tellers.get('invoer_van', 'nooit')}")
+    return code, tellers
 
 
 def main():
-    ag.hartslag("actief", taak="Plaud-transcripten verwerken")
-    try:
-        gezien_ids = set()
-        for wortel, _, bestanden in os.walk(ARCHIEF):
-            for b in bestanden:
-                if b == "gesprek.json":
-                    try:
-                        gezien_ids.add(json.load(open(os.path.join(wortel, b))).get("plaud_id"))
-                    except Exception:  # noqa: BLE001
-                        pass
-        personen = fw.personen_uit_werkwijze(bord.call("/api/agent/fathom-wacht/werkwijze").get("werkwijze") or "")
-        deals = fw.deals_index()
-        bronmappen = [INBOX]
-        for basis in bronnen.SALES_BASES:
-            for e in bronnen.lijst(basis, recursief=False) or []:
-                if e.get(".tag") == "folder":
-                    bronmappen.append(f"{e['path_display']}/0 Plaud")
-        rijen, klaar, gezien, nieuw = [], [], 0, 0
-        for map_pad in bronmappen:
-            for e in bronnen.lijst(map_pad, recursief=False) or []:
-                if e.get(".tag") != "file" or not e.get("name", "").lower().endswith((".md", ".txt")) or e["name"].startswith("00 "):
-                    continue
-                gezien += 1
-                uit = verwerk_bestand(e, map_pad, personen, deals, gezien_ids)
-                if uit:
-                    nieuw += 1
-                    rijen.append(uit[0]); klaar.append(uit[1])
-        if rijen:
-            bord.call("/api/gesprekken", {"rijen": rijen})
-        uit = ag.klaarzet(klaar)
-        nood = [] if gezien else [{"tekst": "De Plaud-routine op claude.ai is nog niet ingepland (opdracht: werkwijze/plaud-routine.md); zonder haar zie ik niets", "wie": "mehdi"}]
-        ag.log("Plaud", "bron", f"{gezien} transcriptbestanden in inbox en salesmappen; {nieuw} nieuw verwerkt; {len(personen)} personen in de tabel")
-        ag.log("Plaud", "schrijf", f"gesprekkentabel +{len(rijen)}; klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend")
-        ag.log_verstuur()
-        sp = dropbox_prive.spiegel_map(ARCHIEF, "/Plaud")
-        if sp["verstuurd"] or sp["fout"]:
-            ag.log("Plaud", "schrijf", f"Dropbox privé: {sp['verstuurd']} bestand(en) verstuurd" + (f"; fout: {sp['fout']}" if sp["fout"] else ""))
-        ag.hartslag("waakt" if gezien else "rust", taak="wacht op Plaud-transcripten",
-                    detail=(f"laatste ronde: {gezien} bestanden, {nieuw} nieuw" if gezien else "wacht op de Plaud-routine (claude.ai)"), nood=nood)
-    except Exception as e:  # noqa: BLE001
-        ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
-        ag.log_verstuur()
-        ag.hartslag("fout", taak="ronde mislukt", detail=f"{type(e).__name__}: {str(e)[:120]}")
-        raise
+    with ag.ronde("Plaud-opnames verwerken") as r:
+        code, tellers = ronde(r)
+    print(json.dumps(tellers, ensure_ascii=False))
+    return code
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
