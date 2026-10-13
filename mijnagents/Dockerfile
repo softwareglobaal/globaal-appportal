@@ -19,5 +19,8 @@ RUN python3 test_nummerreservering.py
 # Grendel op revisies (nacontrole Plaud v1.1): een opgepakt item met een nieuwe beoordeling wordt een zichtbare
 # revisie met herstelstatus, nooit stil genegeerd. Zie test_klaarzet_revisie.py.
 RUN python3 test_klaarzet_revisie.py
+# Grendel op de FelixArchief-pagina (felix.<domein>, Shelton): alleen /felix op dat domein, alleen felix of beheer,
+# geen dubbele aanvragen, opslaan alleen op een klik bij een klare zoektocht met projectnummer. Zie test_felix.py.
+RUN python3 test_felix.py
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3022} --workers 2 --timeout 900 app:app"]

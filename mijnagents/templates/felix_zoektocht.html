@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ z.adres }} · FelixArchief</title>
+{% if z.opslaan_wacht %}<meta http-equiv="refresh" content="60">{% endif %}
+<style>
+  :root { --ink:#1c1c1c; --grijs:#6b6b6b; --lijn:#e2ddd5; --fond:#faf8f4; --accent:#1f3d33; --accent-licht:#edf2ef; --rood:#a33a2a; --wit:#fff; --oranje:#a1701a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Helvetica Neue",Arial,sans-serif; color:var(--ink); background:var(--fond); font-size:15px; line-height:1.5; }
+  header { background:var(--accent); color:var(--wit); padding:14px 28px; display:flex; align-items:baseline; gap:18px; flex-wrap:wrap; }
+  header a { color:var(--wit); } header .merk { font-weight:700; letter-spacing:.04em; } header .sub { opacity:.75; font-size:13px; }
+  main { max-width:1180px; margin:28px auto 60px; padding:0 24px; }
+  h1 { font-size:22px; font-weight:600; margin:0 0 6px; }
+  h2 { font-size:15px; font-weight:700; margin:30px 0 10px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); border-bottom:1px solid var(--lijn); padding-bottom:6px; }
+  table { width:100%; border-collapse:collapse; background:var(--wit); }
+  th, td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--lijn); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--grijs); }
+  .controle { background:var(--wit); border:1px solid var(--lijn); padding:6px 18px 14px; }
+  .knop { display:inline-block; background:var(--accent); color:var(--wit); border:0; padding:9px 16px; border-radius:4px; font-size:14px; cursor:pointer; text-decoration:none; font-family:inherit; }
+  .stil { color:var(--grijs); font-size:13px; }
+  .ok { color:#1f6b3d; font-weight:600; } .let_op { color:var(--oranje); font-weight:600; } .fout { color:var(--rood); font-weight:600; }
+  .beelden { display:flex; gap:12px; flex-wrap:wrap; } .beelden a img { max-width:360px; border:1px solid var(--lijn); background:var(--wit); }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <span class="merk"><a href="{{ url_for('felix_pagina') }}">FelixArchief en Percelenpas Antwerpen</a></span>
+  <span class="sub">ingelogd als {{ gebruiker }}</span>
+</header>
+<main>
+<h1>{{ z.project ~ ' ' if z.project }}{{ z.adres }}</h1>
+<p class="stil">Aangevraagd {{ z.ts|felix_tijd }} door {{ z.door }} · klaar {{ z.klaar|felix_tijd }}</p>
+
+<h2>Projectmap</h2>
+{% if z.opgeslagen %}
+  <p><span class="ok">Opgeslagen</span> door {{ z.opgeslagen.door }} op {{ z.opgeslagen.ts|felix_tijd }}: {{ z.opgeslagen.bestanden }} bestanden in
+  <b>{{ z.opgeslagen.pad }}</b>.</p>
+  {% if z.opgeslagen.fouten %}<p class="fout">Niet gelukt: {{ z.opgeslagen.fouten|join('; ') }}</p>{% endif %}
+{% elif z.opslaan_wacht %}<p class="let_op">Wordt opgeslagen. Dat gebeurt binnen 5 minuten; deze pagina ververst vanzelf.</p>
+{% elif z.project %}
+  <form method="post" action="{{ url_for('felix_opslaan', zid=z.id) }}">
+    <button class="knop" type="submit">Opslaan in projectmap {{ z.project }}</button>
+    <span class="stil">in een nieuwe map "FelixArchief {{ (z.klaar or '')[:10] }}"; er wordt niets overschreven</span>
+  </form>
+  {% if z.opslaan_fout %}<p class="fout">{{ z.opslaan_fout }}</p>{% endif %}
+{% else %}<p class="stil">Geen projectnummer bij deze zoektocht: opnieuw opzoeken met projectnummer om op te slaan.</p>{% endif %}
+
+<h2>Controle</h2>
+<div class="controle">{% if controle %}{{ controle|safe }}{% else %}<p class="stil">Geen Controle.md gevonden.</p>{% endif %}</div>
+
+{% if beelden %}
+<h2>Printscreens</h2>
+<div class="beelden">
+  {% for b in beelden %}<a href="{{ url_for('felix_bestand', zid=z.id, rel=b.rel) }}" target="_blank" title="{{ b.rel }}"><img src="{{ url_for('felix_bestand', zid=z.id, rel=b.rel) }}" alt="{{ b.rel }}" loading="lazy"></a>{% endfor %}
+</div>
+{% endif %}
+
+<h2>Bestanden</h2>
+{% if not bestanden %}<p class="stil">Geen bestanden.</p>{% else %}
+<table>
+  <tr><th>Bestand</th><th>Grootte</th><th></th></tr>
+  {% for b in bestanden %}
+  <tr><td><a href="{{ url_for('felix_bestand', zid=z.id, rel=b.rel) }}" target="_blank">{{ b.rel }}</a></td><td>{{ b.bytes|felix_grootte }}</td>
+      <td><a href="{{ url_for('felix_bestand', zid=z.id, rel=b.rel, download=1) }}">downloaden</a></td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Logboek</h2>
+{% if not logboek %}<p class="stil">Nog niets gelogd.</p>{% else %}
+<table>
+  {% for l in logboek %}<tr><td>{{ l.ts|felix_tijd }}</td><td>{{ l.gebeurtenis|replace('_', ' ') }}</td>
+  <td>{{ l.besluit or l.fout or (l.bestanden ~ ' bestanden naar ' ~ l.pad if l.pad) or l.door }}</td></tr>{% endfor %}
+</table>
+{% endif %}
+</main>
+</body>
+</html>

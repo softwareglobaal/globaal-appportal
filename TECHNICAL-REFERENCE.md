@@ -2782,3 +2782,23 @@ een eigen transactie, met een advisory lock en een sha256 per bestand in `sales.
 een gewijzigde, al toegepaste migratie stopt de run. Die runner voert nooit schema-, rol- of
 rechtenbeheer uit: wie de rechten verruimt, doet dat met een nieuwe migratie hier.
 Rechtentest: `python -m salesagent.db.rechtentest`. Handleiding: `docs/06` in die repo.
+
+### 14.14 FelixArchief als eigen tegel: felix.globaal.be (13-10-2026)
+
+De agent FelixArchief en Percelenpas Antwerpen (`mijnagents-runner/felix_wacht.py`, werkwijze
+`werkwijze/felix-wacht.md`) krijgt een eigen pagina voor Shelton, zonder toegang tot Mehdi's bord.
+
+- **Toegang**: tegel `felix` met eigen proxy-provider `felix-proxy` (forward-auth) op felix.globaal.be,
+  vhost `78-felix.conf.template` naar app-mijnagents:3022; groepen admin, manager en **felix**
+  (Shelton). Aanmaken: `scripts/add-felix-app.py` via `ak shell`. De app (`mijnagents/felix_pagina.py`)
+  toont op het felix-domein alleen `/felix`; elk ander pad geeft 404. Beheer kan ook via
+  mijnagents.globaal.be/felix.
+- **Aanvragen zonder goedkeuring van Mehdi** (Shaniel, 13-10-2026). Een bestand, een schrijver, want de
+  container draait als root en de runner als ubuntu: de pagina schrijft `mijnagents-data/felix/aanvragen.jsonl`
+  (alleen toevoegen; soorten zoek en opslaan), de runner schrijft `stand.json` (atomair) en het logboek
+  `log.jsonl`. Resultaten per aanvraag in `felix/zoektochten/<id> <project> <adres>/`.
+- **Cadans**: cron elke 5 minuten met een slot (`ronde.lock`), zodat een lange zoektocht geen tweede ronde krijgt.
+- **Projectmap alleen op een klik**: de runner zoekt de map op het projectnummer (`projectadressen.index`,
+  Work All/01. H-A WORK) en zet alles behalve `_gegevens` in een nieuwe map `FelixArchief <datum>`
+  (`bronnen.upload`, mode add: nooit overschrijven); een tweede klik wordt geweigerd.
+- **Grendels**: `mijnagents/test_felix.py` (in de Docker-build) en `mijnagents-runner/tests/test_felix_aanvragen.py`.

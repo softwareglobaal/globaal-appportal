@@ -2376,6 +2376,10 @@ def testformulier():
 import mcp_bode  # noqa: E402
 mcp_bode.registreer(app, gebruiker, groepen, db, nu)
 
+# FelixArchief als eigen pagina voor Shelton (felix_pagina.py, 13-10-2026): felix.<domein> toont alleen /felix.
+import felix_pagina  # noqa: E402
+felix_pagina.registreer(app, gebruiker, groepen, md, nu)
+
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.environ.get("PORT", 3022)), debug=True)

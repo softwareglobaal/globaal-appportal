@@ -12,7 +12,11 @@ op en downloadt wat digitaal is. Eenvoudig, met twee printscreens (Mehdi, 03-10-
 Gebruik:
   felix_wacht.py --project 3810 --adres "August van de Wielelei 85/101, 2100 Deurne"
   felix_wacht.py --aanmelden-test
-  felix_wacht.py                       de ronde: de wachtrij afwerken
+  felix_wacht.py                       de ronde: aanvragen afwerken (cron, elke 5 minuten)
+
+Aanvragen komen van de pagina felix.globaal.be (Shelton, 13-10-2026; zonder goedkeuring van Mehdi). Een bestand,
+een schrijver: de pagina schrijft aanvragen.jsonl (zoeken en opslaan), deze runner schrijft stand.json en het
+logboek log.jsonl. Opslaan in de projectmap gebeurt alleen op een klik op de pagina.
 
 Een scan of leeszaalreservatie vraagt hij nooit aan: dat beslist Mehdi.
 """
@@ -30,7 +34,11 @@ import felixarchief as fa  # noqa: E402
 
 NAAM = "felix-wacht"
 DATA = os.path.expanduser(os.environ.get("FELIX_DATA", "~/appportal/mijnagents-data/felix"))
-WACHTRIJ = os.path.join(DATA, "wachtrij.jsonl")
+AANVRAGEN = os.path.join(DATA, "aanvragen.jsonl")   # schrijft de pagina (app-mijnagents)
+STAND = os.path.join(DATA, "stand.json")            # schrijft deze runner
+LOGBOEK = os.path.join(DATA, "log.jsonl")           # schrijft deze runner
+ZOEKTOCHTEN = os.path.join(DATA, "zoektochten")
+SLOT = os.path.join(DATA, "ronde.lock")
 REEKSEN = fa.werkgebied()["reeksen"]
 
 
@@ -198,33 +206,156 @@ def voer_uit(adres, uitmap=None, project=None):
     return uitmap, z
 
 
-def ronde():
-    """De ronde voor cron: de adressen uit de wachtrij afwerken."""
-    import bord
-    ag = bord.Agent(NAAM)
-    with ag.ronde("wachtrij FelixArchief") as r:
-        r.bron("werkgebied.json", open(fa.WERKGEBIED, encoding="utf-8").read())
-        wacht = []
-        if os.path.exists(WACHTRIJ):
-            wacht = [json.loads(x) for x in open(WACHTRIJ) if x.strip()]
-        gedaan = 0
-        rest = []
-        for item in wacht:
-            if item.get("klaar"):
-                rest.append(item)
-                continue
+# ---------------------------------------------------------------- aanvragen, stand en logboek
+
+def _nu():
+    return dt.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def lees_aanvragen():
+    """Alle aanvragen van de pagina, oudste eerst. Een kapotte regel wordt overgeslagen, niet de rest."""
+    uit = []
+    try:
+        for regel in open(AANVRAGEN, encoding="utf-8"):
             try:
-                pad, z = voer_uit(item["adres"], project=item.get("project"))
-                item.update(klaar=dt.datetime.now().isoformat(timespec="minutes"), map=pad, besluit=z["besluit"])
-                gedaan += 1
+                a = json.loads(regel)
+            except ValueError:
+                continue
+            if isinstance(a, dict) and a.get("id") and a.get("soort") in ("zoek", "opslaan"):
+                uit.append(a)
+    except OSError:
+        pass
+    return uit
+
+
+def lees_stand():
+    try:
+        s = json.load(open(STAND, encoding="utf-8"))
+    except (OSError, ValueError):
+        s = {}
+    s.setdefault("zoek", {})
+    s.setdefault("opslaan", {})
+    return s
+
+
+def schrijf_stand(s):
+    os.makedirs(DATA, exist_ok=True)
+    tmp = STAND + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(s, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, STAND)   # in een keer: de pagina leest nooit een half bestand
+
+
+def logboek(gebeurtenis, **velden):
+    """Het logboek van alle aanvragen, resultaten en opslagen (Shaniel, 13-10-2026). Alleen toevoegen."""
+    os.makedirs(DATA, exist_ok=True)
+    with open(LOGBOEK, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": _nu(), "gebeurtenis": gebeurtenis, **velden}, ensure_ascii=False) + "\n")
+
+
+def projectmap(project):
+    """De projectmap in Dropbox (H-A WORK, volgens de mapnaam). Eerst de index van vandaag, dan opnieuw gelezen."""
+    import projectadressen
+    for uren in (24, 0):
+        p = (projectadressen.index(maximum_uren=uren) or {}).get(str(project))
+        if p and p.get("map"):
+            return p["map"]
+    return None
+
+
+def opslaan(zoek):
+    """Een afgewerkte zoektocht naar de projectmap, in een nieuwe map 'FelixArchief <datum>'. Nooit overschrijven:
+    bestaat een bestand al, dan krijgt het een nummer (bronnen.upload, mode add). _gegevens gaat niet mee."""
+    import bronnen
+    if not zoek.get("project"):
+        raise ValueError("deze zoektocht heeft geen projectnummer; opzoeken met projectnummer om op te slaan")
+    pm = projectmap(zoek["project"])
+    if not pm:
+        raise ValueError(f"geen projectmap voor {zoek['project']} gevonden in Dropbox (Work All/01. H-A WORK)")
+    bron = os.path.join(ZOEKTOCHTEN, zoek["map"])
+    doel = f"{pm}/FelixArchief {(zoek.get('klaar') or _nu())[:10]}"
+    n, fouten = 0, []
+    for wortel, mappen, bestanden in os.walk(bron):
+        mappen[:] = [m for m in mappen if m != "_gegevens"]
+        for b in sorted(bestanden):
+            rel = os.path.relpath(os.path.join(wortel, b), bron).replace(os.sep, "/")
+            try:
+                with open(os.path.join(wortel, b), "rb") as f:
+                    bronnen.upload(f"{doel}/{rel}", f.read())
+                n += 1
+            except Exception as e:  # een bestand dat faalt, noemen we; de rest gaat door
+                fouten.append(f"{rel}: {str(e)[:120]}")
+    return {"pad": doel, "bestanden": n, "fouten": fouten}
+
+
+def ronde():
+    """De ronde voor cron: eerst de zoekaanvragen, dan de opslagaanvragen. Een ronde tegelijk (slot)."""
+    import fcntl
+    import bord
+    os.makedirs(DATA, exist_ok=True)
+    slot = open(SLOT, "w")
+    try:
+        fcntl.flock(slot, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return   # de vorige ronde zoekt nog
+    ag = bord.Agent(NAAM)
+    with ag.ronde("aanvragen FelixArchief") as r:
+        r.bron("werkgebied.json", open(fa.WERKGEBIED, encoding="utf-8").read())
+        aanvragen = lees_aanvragen()
+        stand = lees_stand()
+        gezocht = opgeslagen = 0
+        for a in aanvragen:
+            if a["soort"] != "zoek" or a["id"] in stand["zoek"]:
+                continue
+            item = {"project": a.get("project", ""), "adres": a["adres"], "door": a.get("door", ""),
+                    "aangevraagd": a.get("ts", ""), "status": "bezig", "start": _nu()}
+            stand["zoek"][a["id"]] = item
+            schrijf_stand(stand)
+            logboek("aanvraag", id=a["id"], door=item["door"], project=item["project"], adres=item["adres"])
+            naam = f"{item['project']} {_veilig(item['adres'])}".strip()
+            try:
+                pad, z = voer_uit(item["adres"], uitmap=os.path.join(ZOEKTOCHTEN, f"{a['id']} {naam}"),
+                                  project=item["project"] or None)
+                item.update(status="klaar", klaar=_nu(), map=os.path.basename(pad), besluit=z["besluit"],
+                            dossiers=len(z.get("raak") or []),
+                            vergunningen=len((z.get("stad") or {}).get("vergunningen") or []))
+                logboek("resultaat", id=a["id"], adres=item["adres"], besluit=z["besluit"], map=item["map"])
+                ag.log(f"zoektocht {a['id']}", "resultaat", f"{item['adres']} (voor {item['door']}): {z['besluit']}")
+                gezocht += 1
             except Exception as e:  # een adres dat faalt mag de rest niet tegenhouden
-                item["fout"] = str(e)[:200]
+                item.update(status="fout", klaar=_nu(), fout=str(e)[:300])
+                logboek("fout", id=a["id"], adres=item["adres"], fout=item["fout"])
                 r.nood("Zoektocht in FelixArchief faalt", wie="claude-code")
-            rest.append(item)
-        if wacht:
-            os.makedirs(DATA, exist_ok=True)
-            open(WACHTRIJ, "w").write("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in rest))
-        r.detail = f"{gedaan} zoektochten gedaan, {sum(1 for x in rest if not x.get('klaar'))} wachten"
+            schrijf_stand(stand)
+        for a in aanvragen:
+            if a["soort"] != "opslaan" or a["id"] in stand["opslaan"]:
+                continue
+            zoek = stand["zoek"].get(a.get("zoek_id", ""))
+            uit = {"zoek_id": a.get("zoek_id", ""), "door": a.get("door", ""), "ts": _nu()}
+            if not zoek or zoek.get("status") != "klaar":
+                uit["fout"] = "zoektocht niet (of nog niet) afgewerkt"
+            elif zoek.get("opgeslagen"):
+                uit["fout"] = f"al opgeslagen in {zoek['opgeslagen']['pad']}"
+            else:
+                try:
+                    res = opslaan(zoek)
+                    uit.update(res)
+                    zoek["opgeslagen"] = {"pad": res["pad"], "bestanden": res["bestanden"], "door": uit["door"], "ts": uit["ts"],
+                                          "fouten": res["fouten"]}
+                    opgeslagen += 1
+                    ag.log(f"zoektocht {uit['zoek_id']}", "opgeslagen",
+                           f"{res['bestanden']} bestanden naar {res['pad']} (door {uit['door']})")
+                except Exception as e:
+                    uit["fout"] = str(e)[:300]
+            if uit.get("fout") and zoek is not None:
+                zoek["opslaan_fout"] = uit["fout"]
+            elif zoek is not None:
+                zoek.pop("opslaan_fout", None)
+            stand["opslaan"][a["id"]] = uit
+            logboek("opgeslagen" if not uit.get("fout") else "opslaan_mislukt", **uit)
+            schrijf_stand(stand)
+        wacht = sum(1 for a in aanvragen if a["soort"] == "zoek" and a["id"] not in stand["zoek"])
+        r.detail = f"{gezocht} zoektochten gedaan, {opgeslagen} opgeslagen, {wacht} wachten"
 
 
 if __name__ == "__main__":

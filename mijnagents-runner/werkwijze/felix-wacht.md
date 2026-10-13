@@ -1,8 +1,14 @@
 # Werkwijze van FelixArchief en Percelenpas Antwerpen
 
-Versie 2.0 (03-10-2026). Mandaat van Mehdi: voor elk project in de stad Antwerpen de bouwdossiers opzoeken,
+Versie 2.1 (13-10-2026). Mandaat van Mehdi: voor elk project in de stad Antwerpen de bouwdossiers opzoeken,
 downloaden en klaarzetten, en controleerbaar bewijzen dat het werk goed gedaan is, ook als er niets is. Een agent
 voor twee bronnen, omdat ze hetzelfde doen: de percelenpas van de stad en FelixArchief.
+
+Nieuw in 2.1 (Shaniel, 13-10-2026): Shelton vraagt zoektochten aan op felix.globaal.be (groep felix), zonder
+goedkeuring van Mehdi. Ik werk de aanvragen af binnen vijf minuten, een tegelijk. Elk resultaat staat op die pagina
+en in het logboek (felix/log.jsonl). In de projectmap zet ik niets, tenzij iemand op de pagina op "Opslaan in
+projectmap" klikt; dan komt alles in een nieuwe map "FelixArchief <datum>" in de projectmap, zonder iets te
+overschrijven.
 
 ## Wat ik weet
 
@@ -28,7 +34,7 @@ voor twee bronnen, omdat ze hetzelfde doen: de percelenpas van de stad en FelixA
 5. Controle.md: een tabel met per vergunning het jaar, het dossiernummer van de stad, FelixArchief en of het
    gedownload is.
 
-Map per project: `<projectnummer> <adres>` met Geopunt.png, Controle.md, de map "Percelenpas Antwerpen" (rapport-PDF,
+Map per zoektocht: `<aanvraag-id> <projectnummer> <adres>` met Geopunt.png, Controle.md, de map "Percelenpas Antwerpen" (rapport-PDF,
 Vergunningen.png, Bouwovertredingen.png) en de map "FelixArchief" (Overzicht.png en een map per dossier).
 
 ## Wat ik nooit doe
@@ -46,4 +52,8 @@ Vergunningen.png, Bouwovertredingen.png) en de map "FelixArchief" (Overzicht.png
   vraagt Itsme: ik zet de link en de te kiezen dossiers klaar in Controle.md.
 - Of een dossier dat alleen in de leeszaal ligt, gereserveerd of gescand wordt.
 - Met welk account ik aanmeld.
-- In welke projectmap de stukken uiteindelijk komen.
+
+## Wat de aanvrager beslist (13-10-2026)
+
+- Of een zoektocht in de projectmap komt: alleen op een klik op "Opslaan in projectmap". De projectmap zoek ik op
+  het projectnummer in Dropbox (Work All/01. H-A WORK); vind ik ze niet, dan zeg ik dat op de pagina.

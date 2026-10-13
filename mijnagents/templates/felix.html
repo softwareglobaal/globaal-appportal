@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FelixArchief</title>
+{% if zoektochten and zoektochten|selectattr('status', 'in', ['wacht', 'bezig'])|list %}<meta http-equiv="refresh" content="60">{% endif %}
+<style>
+  :root { --ink:#1c1c1c; --grijs:#6b6b6b; --lijn:#e2ddd5; --fond:#faf8f4; --accent:#1f3d33; --accent-licht:#edf2ef; --rood:#a33a2a; --wit:#fff; --oranje:#a1701a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Helvetica Neue",Arial,sans-serif; color:var(--ink); background:var(--fond); font-size:15px; line-height:1.5; }
+  header { background:var(--accent); color:var(--wit); padding:14px 28px; display:flex; align-items:baseline; gap:18px; flex-wrap:wrap; }
+  header .merk { font-weight:700; letter-spacing:.04em; } header .sub { opacity:.75; font-size:13px; }
+  main { max-width:1180px; margin:28px auto 60px; padding:0 24px; }
+  h1 { font-size:22px; font-weight:600; margin:0 0 8px; }
+  h2 { font-size:15px; font-weight:700; margin:30px 0 10px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); border-bottom:1px solid var(--lijn); padding-bottom:6px; }
+  p.leid { color:var(--grijs); margin:0 0 16px; max-width:820px; }
+  table { width:100%; border-collapse:collapse; background:var(--wit); }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--lijn); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--grijs); }
+  form.zoek { background:var(--wit); border:1px solid var(--lijn); padding:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  form.zoek label { display:flex; flex-direction:column; font-size:13px; color:var(--grijs); gap:4px; }
+  form.zoek input { font:inherit; padding:8px 10px; border:1px solid var(--lijn); border-radius:4px; }
+  form.zoek .adres input { width:min(520px, 80vw); } form.zoek .project input { width:120px; }
+  .knop { display:inline-block; background:var(--accent); color:var(--wit); border:0; padding:9px 16px; border-radius:4px; font-size:14px; cursor:pointer; text-decoration:none; font-family:inherit; }
+  .knop.klein { padding:4px 10px; font-size:13px; }
+  .stil { color:var(--grijs); font-size:13px; }
+  .ok { color:#1f6b3d; font-weight:600; } .let_op { color:var(--oranje); font-weight:600; } .fout { color:var(--rood); font-weight:600; }
+  .bericht { border-left:3px solid var(--accent); background:var(--wit); padding:8px 12px; margin:0 0 16px; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <span class="merk">FelixArchief en Percelenpas Antwerpen</span>
+  <span class="sub">ingelogd als {{ gebruiker }}</span>
+</header>
+<main>
+<h1>Bouwdossiers opzoeken</h1>
+<p class="leid">Voor een adres in de stad Antwerpen zoekt de agent de vergunningen bij de stad (percelenpas) en de stukken in
+FelixArchief, downloadt wat digitaal is en maakt een controle met printscreens. Een scan of een plaats in de leeszaal vraagt hij
+nooit aan. Opslaan in de projectmap gebeurt pas als je op de knop klikt.</p>
+
+{% if bericht %}<p class="bericht">{{ bericht }}</p>{% endif %}
+
+<form class="zoek" method="post" action="{{ url_for('felix_zoek') }}">
+  <label class="project">Projectnummer (voor de projectmap)<input name="project" inputmode="numeric" placeholder="3810"></label>
+  <label class="adres">Adres<input name="adres" required maxlength="200" placeholder="Kerkstraat 12, 2000 Antwerpen"></label>
+  <button class="knop" type="submit">Opzoeken</button>
+</form>
+
+<h2>Zoektochten</h2>
+{% if not zoektochten %}<p class="stil">Nog geen zoektochten.</p>{% else %}
+<table>
+  <tr><th>Aangevraagd</th><th>Project</th><th>Adres</th><th>Stand</th><th>Resultaat</th><th>Projectmap</th></tr>
+  {% for z in zoektochten %}
+  <tr>
+    <td>{{ z.ts|felix_tijd }}<br><span class="stil">{{ z.door }}</span></td>
+    <td>{{ z.project or '-' }}</td>
+    <td>{% if z.status == 'klaar' %}<a href="{{ url_for('felix_zoektocht', zid=z.id) }}">{{ z.adres }}</a>{% else %}{{ z.adres }}{% endif %}</td>
+    <td>{% if z.status == 'klaar' %}<span class="ok">klaar</span>{% elif z.status == 'fout' %}<span class="fout">fout</span>{% elif z.status == 'bezig' %}<span class="let_op">bezig</span>{% else %}wacht{% endif %}</td>
+    <td>{% if z.status == 'klaar' %}{{ z.besluit }}{% elif z.status == 'fout' %}<span class="stil">{{ z.fout }}</span>{% endif %}</td>
+    <td>
+      {% if z.opgeslagen %}<span class="ok">opgeslagen</span><br><span class="stil">{{ z.opgeslagen.pad }}</span>
+      {% elif z.opslaan_wacht %}<span class="let_op">wordt opgeslagen</span>
+      {% elif z.status == 'klaar' and z.project %}
+        <form method="post" action="{{ url_for('felix_opslaan', zid=z.id) }}"><button class="knop klein" type="submit">Opslaan in projectmap {{ z.project }}</button></form>
+        {% if z.opslaan_fout %}<span class="fout">{{ z.opslaan_fout }}</span>{% endif %}
+      {% elif z.status == 'klaar' %}<span class="stil">geen projectnummer</span>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Logboek</h2>
+{% if not logboek %}<p class="stil">Nog niets gelogd.</p>{% else %}
+<table>
+  <tr><th>Tijd</th><th>Gebeurtenis</th><th>Wat</th></tr>
+  {% for l in logboek %}
+  <tr>
+    <td>{{ l.ts|felix_tijd }}</td>
+    <td>{{ l.gebeurtenis|replace('_', ' ') }}</td>
+    <td>{% if l.gebeurtenis == 'aanvraag' %}{{ l.door }}: {{ l.project ~ ' ' if l.project }}{{ l.adres }}
+        {% elif l.gebeurtenis == 'resultaat' %}{{ l.adres }}: {{ l.besluit }}
+        {% elif l.gebeurtenis == 'fout' %}{{ l.adres }}: {{ l.fout }}
+        {% elif l.gebeurtenis == 'opgeslagen' %}{{ l.door }}: {{ l.bestanden }} bestanden naar {{ l.pad }}
+        {% else %}{{ l.door }}: {{ l.fout }}{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+</main>
+</body>
+</html>
