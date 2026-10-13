@@ -549,7 +549,7 @@ Regels die je nooit breekt:
   letterlijk, dan wordt de post geweigerd. Geen citaat = niet invullen, wel melden. Groepeer per citaat: één post
   per bronzin, met alleen de velden die die zin bewijst.
 - Bedragen als '50.000,00'; percentages als getal ('14').
-- project_beschrijving volgens de vaste opbouw uit de Werkinstructie (per ruimte, chronologisch, wat de architect doet en wat de klant zelf doet, 'Het project omvat niet'), alleen uit de gesprekken en notities die je kreeg.
+- project_beschrijving volgens de vaste opbouw uit de Werkinstructie (per ruimte, chronologisch, wat de architect doet en wat de klant zelf doet), alleen uit de gesprekken en notities die je kreeg. Zonder voorontwerp zijn het wensen en randvoorwaarden van de klant, geen ontwerp: de lijst heet 'Wensen en randvoorwaarden van de Opdrachtgever' (D54). Extra uitsluitingen alleen als 'Buiten het Bouwproject vallen ook ...', nooit een tweede 'Het project omvat niet' naast de lijst van de master; werken die de klant zelf doet zijn een mogelijkheid ('in onderling overleg'), geen uitsluiting (artikel 7.1).
 - Geef 'nummer_voorstel' alleen als de dealtitel géén projectnummer heeft (D9: JJNN, regularisatie (JJ+30)NN); gebruik dan exact het aangereikte volgend_vrij_nummer. Is dat leeg, dan null: verzin nooit een nummer.
 - Is er niets te doen, geef lege lijsten/objecten en zeg dat in 'volgende_stap'.
 """
