@@ -1,0 +1,16 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name verix.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Verix (repo softwareglobaal/globaal-verix, kopie van samadlodi747/VERIX): wapening van predallen
+    # vergelijken met de plannen van de constructeur en de leverancier. Host-dienst verix op 172.17.0.1:8797.
+    # De app heeft geen eigen login: alleen de Authentik-groepen verix en admin (scripts/add-verix-app.py).
+    # Uploads tot 40 MB (app-limiet) en een run kan tot 4 AI-aanroepen na elkaar doen: ruime grenzen.
+    client_max_body_size 50m;
+    proxy_read_timeout 1800s;
+    proxy_send_timeout 1800s;
+    set $app_upstream http://172.17.0.1:8797;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
