@@ -321,3 +321,179 @@ def pas_citaat_toe(post: dict, teksten: list[tuple[str, str]]):
     if not gevonden:
         return bron, f"citaat niet teruggevonden in de bronnen: «{citaat[:80]}»"
     return f"{bron} — citaat ({naam}): «{citaat[:300]}»", ""
+
+
+# ------------------------------------------------- 6. titels en beslissingen ---
+# D53 (dossier 2618, 13-10-2026). Het citaat "De zaakvoerder ... Hij kan aanwezig zijn" stond letterlijk in
+# de aanvraagmail, dus de citaatcontrole liet "vertegenwoordiger_titel = de heer" door, over Mehdi's beslissing
+# "geen titel" heen. Een citaat dat in de bron staat, bewijst nog niet het gegeven. Voor een aanspreektitel
+# eist de code daarom het bewijs zelf, en wat Mehdi besliste of bewust leeg liet, schrijft de agent niet.
+_TITELWOORD = {
+    "man": r"de\s+heer|heer|dhr\.?|mijnheer|meneer|mr\.?|mister|monsieur|herr|pan",
+    "vrouw": r"mevrouw|mevr\.?|mw\.?|mrs\.?|ms\.?|miss|madame|mme\.?|frau|pani",
+}
+# Een aanhef is hoe wij of een ander iemand aanspreken, niet hoe die persoon zich noemt.
+_AANHEF = re.compile(r"\b(?:geachte|beste|lieve|dag|hallo|hoi|dear|hi|hello|cher|ch[eè]re|bonjour|"
+                     r"sehr\s+geehrte[rn]?|liebe[rn]?|szanown[ya]|drog[ia])\s*,?\s*$", re.I)
+_GESLACHT_LABEL = re.compile(r"\b(?:geslacht|sexe|sex|gender|geschlecht|p[łl]e[ćc])\b", re.I)
+_GESLACHT_WOORD = {
+    "man": {"m", "man", "mannelijk", "male", "masculin", "mannlich", "mezczyzna"},
+    "vrouw": {"v", "f", "w", "k", "vrouw", "vrouwelijk", "female", "feminin", "weiblich", "kobieta"},
+}
+_TUSSENVOEGSELS = {"van", "den", "der", "de", "het", "ten", "ter", "le", "la", "du", "des", "von", "zu",
+                   "di", "da", "del", "dos", "el", "al", "bin", "ben"}
+# Zelfde patroon als BESLISSING_MEHDI in contract-systeem webapp/voorbereiding.py (D53). Daar is de
+# lijst 'beschermd' de bron; dit patroon dient alleen zolang een dashboard die lijst nog niet geeft, en om
+# een post te weigeren die zelf een beslissing van Mehdi claimt.
+BESLISSING_MEHDI = re.compile(
+    r"\bbeslissing\s+(?:van\s+)?mehdi\b"
+    r"|\bmehdi\s+(?:besliste|koos|bevestigde)\b"
+    r"|\b(?:beslist|gekozen|vastgelegd|goedgekeurd|bevestigd)\s+door\s+mehdi\b",
+    re.I)
+
+
+def is_titelveld(veld: str) -> bool:
+    return str(veld).endswith("_titel")
+
+
+def _zonder_accent(s: str) -> str:
+    import unicodedata
+    s = str(s or "").replace("ł", "l").replace("Ł", "L")
+    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)).casefold()
+
+
+def _titelsoort(waarde: str):
+    w = _zonder_accent(waarde).strip()
+    for soort, patroon in _TITELWOORD.items():
+        if re.fullmatch(rf"(?:{patroon})", w):
+            return soort
+    return None
+
+
+def _namen_van(veld: str, velden: dict) -> list[str]:
+    """De naamwoorden van de persoon bij dit titelveld: vertegenwoordiger_titel -> vertegenwoordiger_voornaam/_naam."""
+    voor = str(veld)[: -len("titel")]
+    uit = []
+    for deel in (velden.get(voor + "voornaam"), velden.get(voor + "naam")):
+        tekst = re.split(r"[,(]", str(deel or ""))[0]  # "Kovalenko, voorzitter van het bestuur" -> "Kovalenko"
+        for woord in re.findall(r"[^\W\d_]+", _zonder_accent(tekst)):
+            if len(woord) >= 2 and woord not in _TUSSENVOEGSELS:
+                uit.append(woord)
+    return uit
+
+
+def _naam_in(tekst: str, namen: list[str]) -> bool:
+    t = _zonder_accent(tekst)
+    return any(re.search(rf"(?<!\w){re.escape(n)}(?!\w)", t) for n in namen)
+
+
+def _geslacht_in(citaat: str):
+    """'man' of 'vrouw' als het citaat een geslachtsvermelding uit een document draagt (Geslacht: M), anders None."""
+    gevonden = set()
+    for m in _GESLACHT_LABEL.finditer(citaat):
+        for woord in re.findall(r"[^\W\d_]+", _zonder_accent(citaat[m.end():m.end() + 40])):
+            for soort, woorden in _GESLACHT_WOORD.items():
+                if woord in woorden:
+                    gevonden.add(soort)
+                    break
+            else:
+                continue
+            break
+    return gevonden.pop() if len(gevonden) == 1 else None
+
+
+def titel_bewezen(veld: str, waarde, citaat: str, velden: dict | None = None) -> str:
+    """'' als het citaat de aanspreektitel bewijst, anders de reden van weigering (D53).
+
+    Bewezen is: het titelwoord (in eender welke taal, zelfde geslacht) staat in het citaat direct vóór de naam
+    van die persoon en is geen aanhef, of een document vermeldt het geslacht en de naam staat erbij. Nooit
+    bewezen: een voornaam, "hij" of "zij", een aanhef ("Geachte mevrouw X"), een titel bij een andere naam.
+    """
+    w = str(waarde or "").strip()
+    if not w:
+        return ""
+    namen = _namen_van(veld, velden or {})
+    if not namen:
+        return "titel zonder naam van die persoon: niet na te gaan voor wie de bron geldt (D53)"
+    c = str(citaat or "")
+    soort = _titelsoort(w)
+    patroon = _TITELWOORD[soort] if soort else re.escape(_zonder_accent(w))
+    plat = _zonder_accent(c)
+    alleen_aanhef = False
+    for m in re.finditer(rf"(?<!\w)(?:{patroon})(?!\w)", plat):
+        if _AANHEF.search(re.split(r"[\n.;!?]", plat[:m.start()])[-1]):
+            alleen_aanhef = True
+            continue
+        # De naam volgt direct: binnen hetzelfde zinsdeel en de eerste vier woorden; initialen ("S.") tellen
+        # niet als einde. "de heer Jansens, en de zaakvoerder Kovalenko" bewijst niets voor Kovalenko.
+        na = re.sub(r"(?<!\w)[^\W\d_]\.", " ", plat[m.end():m.end() + 80])
+        na = re.split(r"[,;.:!?()\n]", na)[0]
+        if any(woord in namen for woord in re.findall(r"[^\W\d_]+", na)[:4]):
+            return ""
+    if soort and _geslacht_in(c) == soort and _naam_in(c, namen):
+        return ""
+    if alleen_aanhef:
+        return "een aanhef is geen bron voor een aanspreektitel: zo spreken wij iemand aan, niet hoe die zich noemt (D53)"
+    return ("het citaat noemt de titel niet bij de naam van die persoon; een voornaam, naam of 'hij/zij' "
+            "is geen bron voor een aanspreektitel (D53)")
+
+
+def beslissing_van_mehdi(bron) -> bool:
+    return bool(BESLISSING_MEHDI.search(str(bron or "")))
+
+
+def beschermde_velden(voorbereiding: dict) -> dict:
+    """{veld: reden} van wat de agent niet overschrijft (D53): de lijst 'beschermd' van het dashboard (ook de
+    bewust lege velden, die niet in herkomst.gevuld staan), aangevuld uit herkomst.gevuld: bevestigd door de
+    klant, ingevuld in het dashboard, of een beslissing van Mehdi volgens de bron."""
+    v = voorbereiding if isinstance(voorbereiding, dict) else {}
+    uit = {}
+    for b in v.get("beschermd") or []:
+        if isinstance(b, dict) and b.get("sleutel"):
+            uit[b["sleutel"]] = b.get("reden") or "vastgelegd"
+    for g in ((v.get("herkomst") or {}).get("gevuld") or []):
+        if not isinstance(g, dict) or not g.get("sleutel") or g["sleutel"] in uit:
+            continue
+        if beslissing_van_mehdi(g.get("bron")):
+            uit[g["sleutel"]] = "beslissing van Mehdi"
+        elif g.get("soort") in ("klant", "dashboard"):
+            uit[g["sleutel"]] = g.get("zekerheid") or g["soort"]
+    return uit
+
+
+def zonder_beschermd(velden: dict, dossier_velden: dict | None, beschermd: dict | None):
+    """Haalt beschermde velden uit een schrijfactie. Zelfde waarde: stil weg (niets te doen); andere waarde:
+    geweigerd met de reden. Geeft (goed, geweigerd=[(veld, waarde, reden)])."""
+    goed, geweigerd = {}, []
+    nu = dossier_velden or {}
+    for veld, waarde in (velden or {}).items():
+        if veld in (beschermd or {}):
+            if str(nu.get(veld, "")).strip() != str(waarde).strip():
+                geweigerd.append((veld, waarde, f"niet overschreven: {beschermd[veld]} (D53)"))
+            continue
+        goed[veld] = waarde
+    return goed, geweigerd
+
+
+def toets_post(post: dict, teksten, toegelaten: set | None = None, dossier_velden: dict | None = None,
+               beschermd: dict | None = None):
+    """Eén gegevenspost door alle grendels, voor runner en goudstandaard dezelfde: het citaat staat letterlijk in
+    een bron; de post claimt geen beslissing van Mehdi; vorm en veld (valideer_gegevens); een aanspreektitel
+    alleen met bewijs in het citaat; niets wat beschermd is. Geeft (bron_met_citaat, goed, geweigerd)."""
+    velden_ruw = post.get("velden") or {}
+    bron, citaatfout = pas_citaat_toe(post, teksten)
+    if citaatfout:
+        return bron, {}, [(k, w, citaatfout) for k, w in velden_ruw.items()]
+    if beslissing_van_mehdi(post.get("bron")):
+        reden = "de agent legt geen beslissing van Mehdi vast; dat doet alleen Mehdi zelf (D53)"
+        return bron, {}, [(k, w, reden) for k, w in velden_ruw.items()]
+    goed, geweigerd = valideer_gegevens(velden_ruw, bron, toegelaten)
+    citaat = " ".join(str(post.get("citaat") or "").split())
+    namen = dict(dossier_velden or {})
+    namen.update(goed)  # een naam uit dezelfde post telt mee
+    for veld in [k for k in goed if is_titelveld(k)]:
+        reden = titel_bewezen(veld, goed[veld], citaat, namen)
+        if reden:
+            geweigerd.append((veld, goed.pop(veld), reden))
+    goed, weg = zonder_beschermd(goed, dossier_velden, beschermd)
+    return bron, goed, geweigerd + weg

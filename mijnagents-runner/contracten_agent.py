@@ -535,7 +535,15 @@ Regels die je nooit breekt:
 - Gebruik UITSLUITEND veldnamen uit veldenschema.master.<soort> en 'voorbereiding' (exacte sleutels). Een verzonnen veldnaam of een veld van een ander contracttype wordt geweigerd.
 - Bereken of schat NOOIT capa_key_code, project_capakey, oppervlakte_m2 of project_oppervlakte_terrein. Een rijksregisternummer vul je alleen in als het letterlijk in een klantmail van minder dan een jaar oud staat (bron: die mail met datum); anders leeg en bij 'ontbreekt'.
 - Het mandaat is: invullen en een proef maken. Zet daarom voor elk veld en elke keuze die de proef blokkeert (veldenschema.master.<soort>.verplicht en de keuzes van 'voorbereiding') de best onderbouwde waarde uit de gesprekken, transcripten en mails, en meld ze onder 'keuzes_vastgelegd' mét bron zodat Mehdi ze nakijkt. Laat een keuze alleen leeg als de bronnen er echt niets over zeggen; zeg dan bij 'ontbreekt' wat Mehdi moet beslissen.
-- Overschrijf nooit een veld dat als bevestigd door de klant of vastgelegd door Mehdi staat.
+- Overschrijf nooit een veld uit 'beschermde_velden': bevestigd door de klant, ingevuld in het dashboard, of een
+  beslissing van Mehdi (de bron zegt "beslissing Mehdi"). Ook niet als het leeg is: leeg is dan zijn beslissing,
+  bv. geen aanspreektitel. Schrijf zelf nooit "beslissing Mehdi" of "goedgekeurd door Mehdi" in een bron; alleen
+  Mehdi legt een beslissing vast. De code weigert beide (D53).
+- Een aanspreektitel (opdrachtgever_1_titel, opdrachtgever_2_titel, vertegenwoordiger_titel, contactpersoon_titel)
+  zet je alleen als het citaat de titel zelf direct vóór de naam van die persoon bevat (de persoon noemt zichzelf
+  zo, bv. de handtekening "Mevr. Paulina Andrzejczyk"), of een document het geslacht bij die naam vermeldt. Nooit
+  uit een voornaam of naam, nooit uit "hij" of "zij", nooit uit een aanhef ("Geachte mevrouw ...": zo spreken wij
+  iemand aan). Geen zo'n bron: leeg laten, dat is geldig en geen gat (D51, D53). De code weigert elke andere titel.
 - Elke 'gegevens'-post heeft een concrete bron met datum én een letterlijk citaat uit die bron (transcript, mail,
   notitie of document dat je kreeg), exact overgeschreven. De code zoekt het citaat terug; staat het er niet
   letterlijk, dan wordt de post geweigerd. Geen citaat = niet invullen, wel melden. Groepeer per citaat: één post
@@ -627,6 +635,8 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
                  "organisatie": (deal.get("org_id") or {}).get("name") if isinstance(deal.get("org_id"), dict) else deal.get("org_name")},
         "volgend_vrij_nummer": vrij_nummer,
         "voorbereiding": voorbereiding,
+        # D53: ook de bewust lege velden, die niet in herkomst.gevuld staan.
+        "beschermde_velden": hh.beschermde_velden(voorbereiding),
         "veldenschema": veldenschema,
         "dossiercontrole": controle,
         "pipedrive_notities": notitielijst,
@@ -816,7 +826,7 @@ def verwerk(deal, werkinstructie, staat):
     hash_, per_deel = hh.invoerhash({
         "dossier": {"velden": {k: v for k, v in velden.items() if k != "datum_vandaag"},
                     "keuzes": {k.get("veld"): k.get("gekozen") for k in ((voorb or {}).get("keuzes") or []) if isinstance(k, dict)},
-                    "soort": soort},
+                    "soort": soort, "beschermd": hh.beschermde_velden(voorb)},
         "notities": notitielijst, "bronnen": _bronnen_compact(bronnen),
         "werkinstructie": werkinstructie, "werkwijze": WERKWIJZE, "veldenschema": schema,
         "model": MODEL, "vrij_nummer": vrij, "promptversie": SCHEMA_UITLEG})
@@ -853,30 +863,37 @@ def verwerk(deal, werkinstructie, staat):
         fouten.append(f"projectnummer: {nummer_fout[:200]}")
     toegelaten = set(((schema.get("master") or {}).get(soort) or {}).get("velden") or []) or None
     teksten = hh.bronteksten(_bronnen_compact(bronnen), notitielijst)
+    # D53: wat de klant bevestigde, wat in het dashboard staat en wat Mehdi besliste (ook bewust leeg)
+    # schrijf ik niet; het dashboard weigert het ook, maar ik probeer het niet eens.
+    beschermd = hh.beschermde_velden(voorb)
+
+    def weiger(veld, waarde, reden, bron):
+        geweigerd_lijst.append({"veld": veld, "waarde": str(waarde)[:80], "reden": reden, "bron": bron[:80]})
+        fouten.append(f"{veld} geweigerd: {reden[:90]}")
+        log(ond, "geweigerd", f"{veld} = {str(waarde)[:60]}: {reden}")
+
     for post in plan.get("gegevens") or []:
-        velden_ruw = post.get("velden") or {}
-        # Rapport deel 5: eerst het citaat terugzoeken; niet gevonden = hele post geweigerd.
-        bron, citaatfout = hh.pas_citaat_toe(post, teksten)
-        if citaatfout:
-            for veld, waarde in velden_ruw.items():
-                geweigerd_lijst.append({"veld": veld, "waarde": str(waarde)[:80], "reden": citaatfout, "bron": bron[:80]})
-                fouten.append(f"{veld} geweigerd: {citaatfout[:60]}")
-            log(ond, "geweigerd", f"{', '.join(velden_ruw)}: {citaatfout}")
-            continue
-        velden, geweigerd = hh.valideer_gegevens(velden_ruw, bron, toegelaten)
+        # Rapport deel 5 en D53: het citaat staat letterlijk in de bron, de post claimt geen beslissing van
+        # Mehdi, een aanspreektitel heeft zijn bewijs in het citaat, en niets wat beschermd is.
+        bron, velden_post, geweigerd = hh.toets_post(post, teksten, toegelaten, velden, beschermd)
         for veld, waarde, reden in geweigerd:
-            geweigerd_lijst.append({"veld": veld, "waarde": str(waarde)[:80], "reden": reden, "bron": bron[:80]})
-            fouten.append(f"{veld} geweigerd: {reden}")
-            log(ond, "geweigerd", f"{veld} = {str(waarde)[:60]}: {reden}")
-        if not velden:
+            weiger(veld, waarde, reden, bron)
+        if not velden_post:
             continue
         try:
-            mcp_call("gegeven_invullen", deal_id=deal_id, velden=velden, bron=bron)
-            log(ond, "schrijf", f"gegeven_invullen {', '.join(velden)} (bron: {bron[:80]})", velden)
-            geschreven += [f"{k} = {str(v)[:60]} (bron: {bron[:70]})" for k, v in velden.items()]
+            antwoord = mcp_call("gegeven_invullen", deal_id=deal_id, velden=velden_post, bron=bron)
         except mcp.ToolFout as e:
-            fouten.append(f"gegeven_invullen {list(velden)}: {str(e)[:160]}")
-            log(ond, "fout", f"gegeven_invullen {', '.join(velden)} geweigerd: {str(e)[:160]}")
+            fouten.append(f"gegeven_invullen {list(velden_post)}: {str(e)[:160]}")
+            log(ond, "fout", f"gegeven_invullen {', '.join(velden_post)} geweigerd: {str(e)[:160]}")
+            continue
+        # Wat het dashboard niet overschreef, is niet geschreven (blok 0 van de melding moet kloppen).
+        niet = (antwoord.get("niet_overschreven") or {}) if isinstance(antwoord, dict) else {}
+        for veld, info in niet.items():
+            weiger(veld, velden_post.get(veld, ""), f"dashboard: niet overschreven ({(info or {}).get('zekerheid', '')})", bron)
+        velden_post = {k: v for k, v in velden_post.items() if k not in niet}
+        if velden_post:
+            log(ond, "schrijf", f"gegeven_invullen {', '.join(velden_post)} (bron: {bron[:80]})", velden_post)
+            geschreven += [f"{k} = {str(v)[:60]} (bron: {bron[:70]})" for k, v in velden_post.items()]
     # Werkwijze stap 8: keuzes zijn uitsluitend de keuzevelden van het dashboard
     # plus de vrije teksten. Een gegeven dat het model onder 'keuzes' zette gaat
     # niet mee (en staat in het verslag), want keuze_maken weigert het.
@@ -889,16 +906,27 @@ def verwerk(deal, werkinstructie, staat):
     # Vrije tekstvelden: uit het masterschema, plus de vaste lijst van het dashboard.
     vrij_velden = set(((schema.get("master") or {}).get(soort) or {}).get("vrije_velden") or []) | VRIJE_STANDAARD
     keuzes, geweigerd = hh.valideer_keuzes(plan.get("keuzes") or {}, opties, vrij_velden)
-    for veld, waarde, reden in geweigerd:
-        geweigerd_lijst.append({"veld": veld, "waarde": str(waarde)[:80], "reden": reden, "bron": "keuze"})
-        fouten.append(f"keuze {veld} geweigerd: {reden}")
-        log(ond, "geweigerd", f"keuze {veld} = {str(waarde)[:60]}: {reden}")
+    keuzes, weg = hh.zonder_beschermd(keuzes, velden, beschermd)  # D53: ook een keuze die Mehdi maakte
     keuzes_bron = (plan.get("keuzes_bron") or "").strip() or "gesprekken en mails in het dossier"
+    if keuzes and hh.beslissing_van_mehdi(keuzes_bron):
+        weg += [(k, v, "de agent legt geen beslissing van Mehdi vast; dat doet alleen Mehdi zelf (D53)") for k, v in keuzes.items()]
+        keuzes = {}
+    for veld, waarde, reden in geweigerd + weg:
+        geweigerd_lijst.append({"veld": veld, "waarde": str(waarde)[:80], "reden": reden, "bron": "keuze"})
+        fouten.append(f"keuze {veld} geweigerd: {reden[:90]}")
+        log(ond, "geweigerd", f"keuze {veld} = {str(waarde)[:60]}: {reden}")
     if keuzes:
         try:
-            mcp_call("keuze_maken", deal_id=deal_id, keuzes=keuzes, bron=keuzes_bron)
-            log(ond, "schrijf", f"keuze_maken {', '.join(keuzes)} (bron: {keuzes_bron[:80]})", keuzes)
-            geschreven += [f"keuze {k} = {str(v)[:60]} (voorstel, bron: {keuzes_bron[:60]})" for k, v in keuzes.items()]
+            antwoord = mcp_call("keuze_maken", deal_id=deal_id, keuzes=keuzes, bron=keuzes_bron)
+            niet = (antwoord.get("niet_overschreven") or {}) if isinstance(antwoord, dict) else {}
+            for veld in niet:
+                geweigerd_lijst.append({"veld": veld, "waarde": str(keuzes.get(veld, ""))[:80],
+                                        "reden": "dashboard: niet overschreven (keuze van Mehdi)", "bron": "keuze"})
+                fouten.append(f"keuze {veld} geweigerd: dashboard: niet overschreven")
+            keuzes = {k: v for k, v in keuzes.items() if k not in niet}
+            if keuzes:
+                log(ond, "schrijf", f"keuze_maken {', '.join(keuzes)} (bron: {keuzes_bron[:80]})", keuzes)
+                geschreven += [f"keuze {k} = {str(v)[:60]} (voorstel, bron: {keuzes_bron[:60]})" for k, v in keuzes.items()]
         except mcp.ToolFout as e:
             fouten.append(f"keuze_maken: {str(e)[:200]}")
             log(ond, "fout", f"keuze_maken geweigerd: {str(e)[:200]}")

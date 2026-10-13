@@ -1,0 +1,26 @@
+# Grendels op wat de Contracten-agent in een dossier mag schrijven (D53, 13-10-2026): een aanspreektitel alleen
+# uit een expliciete bron, nooit over een beslissing van Mehdi heen (ook niet over een bewust leeg veld), en
+# runner en goudstandaard toetsen elke post met dezelfde functie. Aanleiding: dossier 2618, deal 14566.
+name: contracten-grendels
+
+on:
+  push:
+    paths: ["mijnagents-runner/contracten_agent.py", "mijnagents-runner/goudstandaard.py",
+            "mijnagents-runner/koppelingen/herhaalbaar.py", "mijnagents-runner/werkwijze/contracten-agent.md",
+            "mijnagents-runner/tests/test_titels_en_beslissingen.py", "mijnagents-runner/tests/test_herhaalbaar.py",
+            ".github/workflows/contracten-grendels.yml"]
+  pull_request:
+    paths: ["mijnagents-runner/contracten_agent.py", "mijnagents-runner/goudstandaard.py",
+            "mijnagents-runner/koppelingen/herhaalbaar.py",
+            "mijnagents-runner/tests/test_titels_en_beslissingen.py", "mijnagents-runner/tests/test_herhaalbaar.py"]
+
+jobs:
+  grendels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 mijnagents-runner/tests/test_herhaalbaar.py
+      - run: python3 mijnagents-runner/tests/test_titels_en_beslissingen.py

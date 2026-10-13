@@ -150,15 +150,15 @@ def uitkomst_van(plan: dict, invoer: dict):
     toegelaten = set(((schema.get("master") or {}).get(soort) or {}).get("velden") or []) or None
     gegevens = {}
     teksten = hh.bronteksten(invoer.get("bronnen"), invoer.get("notities"))
+    dossier = invoer["voorbereiding"].get("velden") or {}
+    beschermd = hh.beschermde_velden(invoer["voorbereiding"])
     for post in plan.get("gegevens") or []:
-        bron, citaatfout = hh.pas_citaat_toe(post, teksten)
-        if citaatfout:
-            continue
-        goed, _ = hh.valideer_gegevens(post.get("velden") or {}, bron, toegelaten)
+        _, goed, _ = hh.toets_post(post, teksten, toegelaten, dossier, beschermd)  # dezelfde toets als de runner (D53)
         gegevens.update(goed)
     opties = {k.get("veld"): list(k.get("opties") or []) for k in (invoer["voorbereiding"].get("keuzes") or []) if isinstance(k, dict)}
     vrij = set(((schema.get("master") or {}).get(soort) or {}).get("vrije_velden") or []) | ca.VRIJE_STANDAARD
     keuzes, _ = hh.valideer_keuzes(plan.get("keuzes") or {}, opties, vrij)
+    keuzes, _ = hh.zonder_beschermd(keuzes, dossier, beschermd)
     return gegevens, keuzes
 
 

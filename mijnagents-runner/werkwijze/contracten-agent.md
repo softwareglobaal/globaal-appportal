@@ -1,6 +1,6 @@
 # Werkwijze van De Contractmaker
 
-Versie 7 (12-10-2026; eigen gebruik van een nummer en reeds voldaan). Versie 6 (12-10-2026) bracht de nummerreservering per voorstel (WP2b); versie 5 was van 06-10-2026 (volledige bronnen, vaste dossieridentiteit en veilige koppelingen), versie 4 van 05-10-2026. Dit is het volledige proces dat ik volg, in de volgorde
+Versie 8 (13-10-2026; een aanspreektitel alleen uit een expliciete bron, en wat Mehdi besliste blijft staan, ook leeg: D53). Versie 7 (12-10-2026; eigen gebruik van een nummer en reeds voldaan). Versie 6 (12-10-2026) bracht de nummerreservering per voorstel (WP2b); versie 5 was van 06-10-2026 (volledige bronnen, vaste dossieridentiteit en veilige koppelingen), versie 4 van 05-10-2026. Dit is het volledige proces dat ik volg, in de volgorde
 waarin ik het doe. Mehdi bewerkt deze tekst op het agentbord; ik lees hem aan
 het begin van elke ronde. De regels over het contract zelf (welke velden, welke
 keuzewaarden, waar elk gegeven vandaan komt, de nummering, de mapnamen) staan
@@ -126,7 +126,17 @@ transcript telt, nooit de samenvatting van de recorder (D7).
      klantmail). Bij een professionele opdrachtgever: `bedrijfsnaam`,
      `rechtsvorm`, `ondernemingsnummer`, `maatschappelijke_zetel_adres` uit de
      KBO en `vertegenwoordiger_titel`, `_voornaam`, `_naam`, `_rijksregister`.
+     Een buitenlandse vennootschap (ondernemingsnummer zonder BE vooraan) heeft
+     geen rijksregisternummer voor de vertegenwoordiger; dat blijft leeg (D51).
      Bedragen in de vorm `50.000,00`.
+   - **Een aanspreektitel** (`opdrachtgever_1_titel`, `opdrachtgever_2_titel`,
+     `vertegenwoordiger_titel`, `contactpersoon_titel`) zet ik alleen als mijn
+     citaat de titel zelf direct vóór de naam van die persoon bevat (zijn of
+     haar eigen handtekening, "Mevr. Paulina Andrzejczyk"), of een document het
+     geslacht bij die naam vermeldt. Nooit uit een voornaam of naam, nooit uit
+     "hij" of "zij", nooit uit een aanhef ("Geachte mevrouw ..." is hoe wij
+     iemand aanspreken). Zonder zo'n bron blijft de titel leeg; dat is geldig
+     (D51). De code weigert elke andere titel (`herhaalbaar.toets_post`, D53).
    - **Keuzes** (via `keuze_maken`, met `bron`): `soort`,
      `architectuur_scope` (`wind_waterdicht`, `wind_waterdicht_technieken`,
      `volledige_afwerking`), `ereloon_scenario` (`percentage`, `vast_bedrag`,
@@ -154,7 +164,11 @@ transcript telt, nooit de samenvatting van de recorder (D7).
    "afgeleid, nakijken". `keuze_maken` met de bron; ook dat staat als
    "afgeleid, nakijken" en nooit als beslissing van Mehdi. Wat de klant
    bevestigde of Mehdi op het dashboard vastlegde, blijft staan; het dashboard
-   weigert dat vanzelf en ik gebruik `overschrijf_bevestigd` nooit. Wat
+   weigert dat vanzelf en ik gebruik `overschrijf_bevestigd` nooit. Hetzelfde
+   voor wat Mehdi in een Claude-sessie besliste (de bron zegt "beslissing
+   Mehdi"), ook als hij "leeg" besliste: `voorbereiding` toont die velden onder
+   `beschermd`, ook de lege, en mijn code schrijft ze niet (D53). Zelf schrijf
+   ik nooit "beslissing Mehdi" in een bron. Wat
    geweigerd wordt, meld ik letterlijk.
 10. **De proef maken.** `proef_maken`. Lukt het niet, dan zegt de proef wat nog
    ontbreekt; dat zet ik in mijn melding, in de woorden van de proef.
@@ -482,7 +496,10 @@ er iets fout, lees dan eerst de fiche van die bron: daar staat de redenering.
   in het dossier).
 - Een keuze laten doorgaan voor een beslissing van Mehdi; mijn keuzes zijn
   voorstellen met bron.
-- Overschrijven wat de klant bevestigde of wat Mehdi vastlegde.
+- Overschrijven wat de klant bevestigde of wat Mehdi vastlegde, ook niet een
+  veld dat hij bewust leeg liet.
+- Een aanspreektitel afleiden uit een voornaam, een naam, "hij/zij" of een
+  aanhef.
 - Een deal buiten de fase Gegevens ontvangen aanraken.
 - De samenvatting van een recorder gebruiken als er een transcript is.
 - Klantgegevens op het agentbord zetten waar de groep agents ze ziet.
@@ -525,6 +542,7 @@ hier onderaan bij.
 | 05-10 | 3 (nummer) | De reeks stond vast op 26/56 en de mappen op 2026 Design/Signed; ik las per status maar 500 deals (H-A had er 791 open op 04-10); een bronfout werd stil overgeslagen en toch kwam er een nummer; bij 2699 werd het 2700; een nummer van het taalmodel ging ongecontroleerd naar het bord. | Vanaf 2027 had ik 26xx blijven uitgeven, regularisaties in de verkeerde map gezocht en bezette nummers kunnen missen. | Codering WP1 en WP2a: reeks en mappen uit het volledige jaar, alle pagina's, een onvolledige bron of volle reeks geeft geen nummer, alleen het berekende nummer gaat naar het bord, grendel op bedrijf-id 10068585. Tests: tests/test_nummeruitgifte.py en tests/test_nummerlezer.py, ook in de CI (nummer-grendels). |
 
 | 06-10 | 1, 3 en 4 (bronnen en identiteit) | Een startfase kon na 100 deals stoppen; dashboardlijsten konden worden afgekapt; een foutieve Dropbox-pagina werd soms leeg gelezen; een nummer in de voorbereiding ging verloren als de titel geen nummer meer had. | Een gedeeltelijke lezing werd voor volledig gehouden; de accountgrendel stond te laat in het proces. | Alle pagina's en opgegeven totalen verplicht, Dropbox-fouten blokkeren, account vóór de eerste dashboardbewerking, voorbereiding behoudt het nummer en een conflict stopt de ronde. Grendels: tests/test_nummerroutes.py, test_nummeruitgifte.py en test_nummerlezer.py. |
+| 13-10 | 8 en 9 (plan en invullen) | Bij 2618 (deal 14566) zette ik om 14:32 `vertegenwoordiger_titel = de heer`, met als bron de aanvraagmail ("De zaakvoerder ... Hij kan aanwezig zijn") en de naam Serhii Kovalenko in het proces-verbaal, terwijl Mehdi in een Claude-sessie had gekozen voor geen titel. `opdrachtgever_1_titel` en `contactpersoon_titel` haalde ik uit zijn aanhef "Geachte mevrouw Andrzejczyk". | Een titel uit een voornaam of "hij" is een gok; een aanhef is hoe wij iemand aanspreken. Mijn citaat stond letterlijk in de mail, dus de citaatcontrole liet het door zonder te toetsen of het de titel bewees. En een beslissing van Mehdi uit een Claude-sessie stond als "afgeleid", een leeg veld zag ik niet eens. | D53. Eén toets per post, voor runner en goudstandaard (`herhaalbaar.toets_post`): een titel alleen met de titel bij de naam of een geslacht in een document, geen aanhef; wat `beschermd` is schrijf ik niet; een post die zelf een beslissing van Mehdi claimt, wordt geweigerd. Het dashboard weigert hetzelfde en toont `beschermd`. Grendel: tests/test_titels_en_beslissingen.py, CI contracten-grendels. |
 
 Nog open (kan ik zelf niet oplossen):
 
