@@ -48,7 +48,11 @@ for naam in LEDEN:
     else:
         print("GEEN GEBRUIKER:", naam)
 
-Outpost.objects.filter(managed="goauthentik.io/outposts/embedded").first().providers.add(proxy)
+outpost = Outpost.objects.filter(managed="goauthentik.io/outposts/embedded").first()
+outpost.providers.add(proxy)
+# Zonder save kende de embedded outpost het nieuwe domein na 4 minuten nog niet (auth request 404, nginx 500);
+# na een save pakte hij het binnen 2 minuten op (13-10-2026).
+outpost.save()
 print("APP:", app.slug, "| provider:", "created" if created else "exists", "| roles:", ROLES,
       "| felix-leden:", [u.username for u in felix.users.all()])
 print("FELIX_DONE")
