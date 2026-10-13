@@ -1,0 +1,17 @@
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name hdsbetalingen.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # HDS Betalingen van Joan (repo softwareglobaal/globaal-hds-betalingen, kopie van
+    # joanhds/HDS-Suriname-Finance): openstaande facturen, stukken, berichten en de
+    # bankverwerking onder /bank/. Host-dienst hds-betalingen op 172.17.0.1:8440.
+    # Authentik is de poort (groepen hds-betalingen en admin, scripts/add-hds-betalingen-app.py);
+    # daarna meldt de app zelf aan met haar eigen account (tabel gebruiker).
+    # Bonnen en afschriften opladen; een bankronde of het inlezen van stukken duurt.
+    client_max_body_size 50m;
+    proxy_read_timeout 300s;
+    set $app_upstream http://172.17.0.1:8440;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

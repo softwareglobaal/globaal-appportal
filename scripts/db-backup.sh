@@ -3,6 +3,7 @@
 #
 #  - authentik  : alle Authentik-state (users, groepen, providers, outposts)
 #  - appportal  : de centrale gebruikersdatabase + spokes (kern/kosten/omv/…)
+#  - hds_betalingen : HDS Betalingen van Joan (host-dienst hds-betalingen), sinds 13-10-2026
 #  - werf       : SQLite van de werfverslagapp (werfverslag-data/werf.db), sinds 01-10-2026
 #  - mijnagents : SQLite van het bord (mijnagents-data/mijnagents.db), sinds 01-10-2026
 #    (als werf-DATUM.sqlite.gz; terugzetproef: scripts/terugzetproef-sqlite.sh)
@@ -34,7 +35,7 @@ STAMP=$(date +%Y%m%d-%H%M)
 
 mkdir -p "$BACKUP_DIR"
 
-for db in authentik appportal; do
+for db in authentik appportal hds_betalingen; do
     bestand="$BACKUP_DIR/$db-$STAMP.dump"
     docker compose exec -T postgresql pg_dump -U authentik -d "$db" -Fc > "$bestand"
     echo "$(date '+%F %T') OK  $bestand ($(du -h "$bestand" | cut -f1))"
@@ -77,7 +78,7 @@ if [ -n "$S3_BUCKET" ]; then
         echo "$(date '+%F %T') FOUT off-site: $PASSFILE ontbreekt — geen upload" >&2
         exit 1
     fi
-    for db in authentik appportal; do
+    for db in authentik appportal hds_betalingen; do
         bestand="$BACKUP_DIR/$db-$STAMP.dump"
         gpg --batch --yes --symmetric --cipher-algo AES256 \
             --passphrase-file "$PASSFILE" -o "$bestand.gpg" "$bestand"
