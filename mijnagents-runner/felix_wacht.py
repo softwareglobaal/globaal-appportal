@@ -318,8 +318,12 @@ def ronde():
             vorige = stand["zoek"].get(a["id"])
             # Een timeout is meestal de drukte op de VM of bij de stad (13-10-2026: load 30 tot 100 op 2 vCPU):
             # opnieuw proberen, tot POGINGEN keer. Een andere fout blijft staan.
-            if vorige and not (vorige.get("status") == "fout" and "Timeout" in vorige.get("fout", "")
-                               and vorige.get("pogingen", 1) < POGINGEN):
+            # 'bezig' terwijl ik het slot heb, betekent: de vorige ronde stierf halverwege (gestopt, VM vol).
+            # Die zoektocht telt als een mislukte poging en mag opnieuw.
+            herkansing = vorige and vorige.get("pogingen", 1) < POGINGEN and (
+                vorige.get("status") == "bezig"
+                or (vorige.get("status") == "fout" and "Timeout" in vorige.get("fout", "")))
+            if vorige and not herkansing:
                 continue
             item = {"project": a.get("project", ""), "adres": a["adres"], "door": a.get("door", ""),
                     "aangevraagd": a.get("ts", ""), "status": "bezig", "start": _nu(),
@@ -378,6 +382,11 @@ def ronde():
                                              and "Timeout" in stand["zoek"][a["id"]].get("fout", "")
                                              and stand["zoek"][a["id"]].get("pogingen", 1) < POGINGEN)))
         r.detail = f"{gezocht} zoektochten gedaan, {opgeslagen} opgeslagen, {wacht} wachten"
+        # Zonder taalmodel: geen tokens. Wel de drukte meten, want een browser op een volle VM loopt vast.
+        try:
+            r.detail += f"; load {open('/proc/loadavg').read().split()[0]}"
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":

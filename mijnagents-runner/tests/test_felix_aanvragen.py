@@ -126,5 +126,14 @@ check("een gewone fout wordt niet opnieuw geprobeerd", gezocht.count("fout 1, 20
 log = [json.loads(x)["gebeurtenis"] for x in open(W.LOGBOEK)]
 check("logboek: opnieuw geprobeerd staat erin", log.count("opnieuw") == W.POGINGEN - 1, log)
 
+s = W.lees_stand()
+s["zoek"]["a9"] = {"status": "bezig", "adres": "Kerkstraat 14, 2000 Antwerpen", "pogingen": 1}
+W.schrijf_stand(s)
+aanvraag(id="a9", soort="zoek", project="", adres="Kerkstraat 14, 2000 Antwerpen", door="shelton", ts="t")
+W.ronde()
+s = W.lees_stand()
+check("een ronde die halverwege stierf ('bezig'): de volgende ronde neemt de zoektocht opnieuw",
+      s["zoek"]["a9"]["status"] == "klaar" and s["zoek"]["a9"]["pogingen"] == 2, s["zoek"].get("a9"))
+
 print("%d grendels mislukt" % fouten)
 sys.exit(1 if fouten else 0)
