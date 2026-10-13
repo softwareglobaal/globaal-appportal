@@ -4,5 +4,20 @@ server {
     server_name status.${BASE_DOMAIN};
     include /etc/nginx/snippets/ssl.conf;
     set $app_upstream http://uptime-kuma:3001;
+
+    # Push-monitors: taken buiten de VM (bv. de Brussel-scraper op de
+    # Linux-pc) melden zich hier met een seintje. Die hebben geen
+    # browsersessie, dus alleen deze route passeert de forward-auth; het
+    # geheime push-token in het pad is de toegangscontrole (zo bedoeld door
+    # Uptime-Kuma). Alleen GET, geen body.
+    location ^~ /api/push/ {
+        limit_except GET { deny all; }
+        client_max_body_size 1k;
+        resolver 127.0.0.11 valid=30s;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_pass $app_upstream;
+    }
+
     include /etc/nginx/snippets/forward-auth.conf;
 }
