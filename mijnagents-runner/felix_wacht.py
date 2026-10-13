@@ -114,7 +114,8 @@ def percelen_zoektocht(adres, felix, stadmap=None):
 def _controle_md(z):
     """Een tabel om na te kijken of het werk goed gedaan is (Mehdi, 03-10-2026: controleerbaar, weinig tekst)."""
     stad = z.get("stad") or {}
-    gedownload = {d["inventaris"] for d in z.get("downloads") or [] if d.get("bestanden")}
+    gedownload = {d["inventaris"] for d in z.get("downloads") or [] if d.get("bestanden") and not d.get("mislukt")}
+    deels = {d["inventaris"] for d in z.get("downloads") or [] if d.get("bestanden")}
     r = [f"# {z['adres']}", "", z["besluit"], ""]
     if stad.get("bouwovertredingen"):
         r += [f"Bouwovertredingen (stad): {stad['bouwovertredingen']}", ""]
@@ -128,7 +129,7 @@ def _controle_md(z):
         elif all(d["status"] == "leeszaal" for d in x["felix"]):
             dl = "nee: alleen leeszaal"
         else:
-            dl = "deels" if any(d["inventaris"] in gedownload for d in x["felix"]) else "nee"
+            dl = "deels" if any(d["inventaris"] in deels for d in x["felix"]) else "nee"
         stadnr = x["stad"] or "niet bij de stad"
         onderwerp = (x["onderwerp"] or "")[:45] + (f" ({x['beslissing'].lower()})" if x.get("beslissing") == "Weigering" else "")
         r.append(f"| {x['jaar'] or '?'} | {stadnr} | {onderwerp} | {invs} | {dl} |")
@@ -148,14 +149,20 @@ def _downloaden(felix, z, felixmap):
     (Mehdi, 03-10-2026: "behoud de originele benamingen", geen datums). Leeszaalstukken worden niet aangevraagd."""
     uit = []
     for r in z["raak"]:
-        rij = {"inventaris": r["inventaris"], "status": r["status"], "bestanden": []}
+        rij = {"inventaris": r["inventaris"], "status": r["status"], "bestanden": [], "mislukt": []}
         if r["status"] != "leeszaal":
             for f in felix.bestanden(r["inventaris"]):
                 if f["naam"].lower().endswith(".xml"):  # een verwijzing naar de plannen, geen stuk
                     continue
                 pad = os.path.join(felixmap, r["inventaris"], f["map"], f["naam"])
-                rij["bestanden"].append({"naam": f["naam"], "bytes": felix.download(f["url"], pad)})
+                try:
+                    rij["bestanden"].append({"naam": f["naam"], "bytes": felix.download(f["url"], pad)})
+                except Exception as e:  # een bestand dat FelixArchief weigert, stopt de andere niet (13-10-2026)
+                    rij["mislukt"].append(f"{f['naam']}: {str(e).splitlines()[0][:80]}")
         uit.append(rij)
+    mislukt = [f"{r['inventaris']}/{m}" for r in uit for m in r["mislukt"]]
+    if mislukt:
+        z["downloads_fout"] = f"{len(mislukt)} bestand(en) niet gedownload: " + "; ".join(mislukt[:5])
     return uit
 
 
