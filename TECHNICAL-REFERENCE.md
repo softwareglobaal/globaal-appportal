@@ -2706,7 +2706,9 @@ rol `whatsapp_writer`, Authentik-app `whatsapp` (groepen `whatsapp`, `whatsapp-b
   aan een nummer gekoppeld via `whatsapp.nummer.meta_phone_number_id`.
 - **Omgeving**: `META_WA_TOKEN` (permanente system-user-token), `META_APP_SECRET`, `META_GRAPH_VERSION`.
 - **24-uursvenster**: buiten 24 uur na het laatste klantbericht kan niet vrij verstuurd worden (Meta-fout
-  131047); sjablonen zijn nog niet gebouwd. Media bewaart Meta 30 dagen.
+  131047); dan kiest Office een goedgekeurd sjabloon van de firma (naam `unabo_...`, WABA `WHATSAPP_WABA_ID`,
+  sinds 13-10-2026). Binnen het venster kunnen ook bijlagen mee (foto tot 5 MB, document tot 16 MB), en de
+  agent ziet de laatste drie foto's of pdf's van de klant. Media bewaart Meta 30 dagen.
 - **Meetlat**: tab Voorstellen telt ongewijzigd / aangepast / verworpen, met gelijkenis.
 - **De Bode gebruikt dezelfde koppeling** (sinds 30-09-2026, `mijnagents-runner/koppelingen/whatsapp.py`):
   de meldingen van de agents gaan naar Mehdi via WhatsApp in plaats van Telegram, van het eigen
