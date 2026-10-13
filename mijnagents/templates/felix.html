@@ -83,7 +83,8 @@ nooit aan. Opslaan in de projectmap gebeurt pas als je op de knop klikt.</p>
     <td>{{ l.gebeurtenis|replace('_', ' ') }}</td>
     <td>{% if l.gebeurtenis == 'aanvraag' %}{{ l.door }}: {{ l.project ~ ' ' if l.project }}{{ l.adres }}
         {% elif l.gebeurtenis == 'resultaat' %}{{ l.adres }}: {{ l.besluit }}
-        {% elif l.gebeurtenis == 'fout' %}{{ l.adres }}: {{ l.fout }}
+        {% elif l.gebeurtenis == 'fout' %}{{ l.adres }}: {{ l.fout }}{% if l.poging %} (poging {{ l.poging }}){% endif %}
+        {% elif l.gebeurtenis == 'opnieuw' %}{{ l.adres }}: opnieuw geprobeerd, poging {{ l.poging }}
         {% elif l.gebeurtenis == 'opgeslagen' %}{{ l.door }}: {{ l.bestanden }} bestanden naar {{ l.pad }}
         {% else %}{{ l.door }}: {{ l.fout }}{% endif %}</td>
   </tr>

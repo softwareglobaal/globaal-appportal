@@ -65,6 +65,8 @@ def nep_voer_uit(adres, uitmap=None, project=None):
     gezocht.append(adres)
     if "fout" in adres:
         raise RuntimeError("FelixArchief niet bereikbaar")
+    if "traag" in adres:
+        raise RuntimeError("Page.goto: Timeout 60000ms exceeded.")
     os.makedirs(os.path.join(uitmap, "_gegevens"), exist_ok=True)
     os.makedirs(os.path.join(uitmap, "FelixArchief", "123#4"), exist_ok=True)
     open(os.path.join(uitmap, "Controle.md"), "w").write("# x\n")
@@ -113,6 +115,16 @@ check("opslaan van een mislukte zoektocht: geweigerd", "niet" in s["opslaan"]["o
 check("opgeslagen staat bij de zoektocht", s["zoek"]["a1"]["opgeslagen"]["bestanden"] == 2)
 log = [json.loads(x) for x in open(W.LOGBOEK)]
 check("logboek: opgeslagen en geweigerd", [l["gebeurtenis"] for l in log][-3:] == ["opgeslagen", "opslaan_mislukt", "opslaan_mislukt"], log[-3:])
+
+aanvraag(id="t1", soort="zoek", project="", adres="traag 1, 2000 Antwerpen", door="shelton", ts="t")
+for _ in range(5):
+    W.ronde()
+s = W.lees_stand()
+check("timeout: drie pogingen, dan fout", gezocht.count("traag 1, 2000 Antwerpen") == W.POGINGEN
+      and s["zoek"]["t1"]["status"] == "fout" and s["zoek"]["t1"]["pogingen"] == W.POGINGEN, s["zoek"].get("t1"))
+check("een gewone fout wordt niet opnieuw geprobeerd", gezocht.count("fout 1, 2000 Antwerpen") == 1)
+log = [json.loads(x)["gebeurtenis"] for x in open(W.LOGBOEK)]
+check("logboek: opnieuw geprobeerd staat erin", log.count("opnieuw") == W.POGINGEN - 1, log)
 
 print("%d grendels mislukt" % fouten)
 sys.exit(1 if fouten else 0)

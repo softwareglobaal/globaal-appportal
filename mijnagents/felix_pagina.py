@@ -29,7 +29,7 @@ ZOEKTOCHTEN = os.path.join(DATA, "zoektochten")
 GROEPEN = {"admin", "manager", "felix"}
 PROJECT_RE = re.compile(r"^\d{3,6}$")
 MAX_ADRES = 200
-STATUS_LABEL = {"wacht": "wacht", "bezig": "bezig", "klaar": "klaar", "fout": "fout"}
+POGINGEN = 3   # gelijk aan felix_wacht.POGINGEN: zolang een timeout opnieuw geprobeerd wordt, toont de pagina 'wacht'
 
 
 def _lees_jsonl(pad, laatste=None):
@@ -75,8 +75,11 @@ def zoektochten():
         if a.get("soort") != "zoek":
             continue
         s = stand["zoek"].get(a["id"], {})
+        status = s.get("status", "wacht")
+        if status == "fout" and "Timeout" in s.get("fout", "") and s.get("pogingen", 1) < POGINGEN:
+            status = "wacht"   # de runner probeert het opnieuw (felix_wacht.POGINGEN)
         uit.append({"id": a["id"], "project": a.get("project", ""), "adres": a.get("adres", ""), "door": a.get("door", ""),
-                    "ts": a.get("ts", ""), "status": s.get("status", "wacht"), "besluit": s.get("besluit", ""),
+                    "ts": a.get("ts", ""), "status": status, "besluit": s.get("besluit", ""),
                     "fout": s.get("fout", ""), "klaar": s.get("klaar", ""), "map": s.get("map", ""),
                     "dossiers": s.get("dossiers"), "vergunningen": s.get("vergunningen"),
                     "opgeslagen": s.get("opgeslagen"), "opslaan_fout": s.get("opslaan_fout", ""),

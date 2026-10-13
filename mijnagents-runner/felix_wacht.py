@@ -39,6 +39,7 @@ STAND = os.path.join(DATA, "stand.json")            # schrijft deze runner
 LOGBOEK = os.path.join(DATA, "log.jsonl")           # schrijft deze runner
 ZOEKTOCHTEN = os.path.join(DATA, "zoektochten")
 SLOT = os.path.join(DATA, "ronde.lock")
+POGINGEN = 3   # een zoektocht die op een timeout strandt, gaat zoveel keer mee
 REEKSEN = fa.werkgebied()["reeksen"]
 
 
@@ -312,13 +313,23 @@ def ronde():
         stand = lees_stand()
         gezocht = opgeslagen = 0
         for a in aanvragen:
-            if a["soort"] != "zoek" or a["id"] in stand["zoek"]:
+            if a["soort"] != "zoek":
+                continue
+            vorige = stand["zoek"].get(a["id"])
+            # Een timeout is meestal de drukte op de VM of bij de stad (13-10-2026: load 30 tot 100 op 2 vCPU):
+            # opnieuw proberen, tot POGINGEN keer. Een andere fout blijft staan.
+            if vorige and not (vorige.get("status") == "fout" and "Timeout" in vorige.get("fout", "")
+                               and vorige.get("pogingen", 1) < POGINGEN):
                 continue
             item = {"project": a.get("project", ""), "adres": a["adres"], "door": a.get("door", ""),
-                    "aangevraagd": a.get("ts", ""), "status": "bezig", "start": _nu()}
+                    "aangevraagd": a.get("ts", ""), "status": "bezig", "start": _nu(),
+                    "pogingen": (vorige or {}).get("pogingen", 0) + 1}
             stand["zoek"][a["id"]] = item
             schrijf_stand(stand)
-            logboek("aanvraag", id=a["id"], door=item["door"], project=item["project"], adres=item["adres"])
+            if item["pogingen"] == 1:
+                logboek("aanvraag", id=a["id"], door=item["door"], project=item["project"], adres=item["adres"])
+            else:
+                logboek("opnieuw", id=a["id"], adres=item["adres"], poging=item["pogingen"])
             naam = f"{item['project']} {_veilig(item['adres'])}".strip()
             try:
                 pad, z = voer_uit(item["adres"], uitmap=os.path.join(ZOEKTOCHTEN, f"{a['id']} {naam}"),
@@ -331,8 +342,9 @@ def ronde():
                 gezocht += 1
             except Exception as e:  # een adres dat faalt mag de rest niet tegenhouden
                 item.update(status="fout", klaar=_nu(), fout=str(e)[:300])
-                logboek("fout", id=a["id"], adres=item["adres"], fout=item["fout"])
-                r.nood("Zoektocht in FelixArchief faalt", wie="claude-code")
+                logboek("fout", id=a["id"], adres=item["adres"], fout=item["fout"], poging=item["pogingen"])
+                if not ("Timeout" in item["fout"] and item["pogingen"] < POGINGEN):
+                    r.nood("Zoektocht in FelixArchief faalt", wie="claude-code")
             schrijf_stand(stand)
         for a in aanvragen:
             if a["soort"] != "opslaan" or a["id"] in stand["opslaan"]:
@@ -361,7 +373,10 @@ def ronde():
             stand["opslaan"][a["id"]] = uit
             logboek("opgeslagen" if not uit.get("fout") else "opslaan_mislukt", **uit)
             schrijf_stand(stand)
-        wacht = sum(1 for a in aanvragen if a["soort"] == "zoek" and a["id"] not in stand["zoek"])
+        wacht = sum(1 for a in aanvragen if a["soort"] == "zoek" and (
+            a["id"] not in stand["zoek"] or (stand["zoek"][a["id"]].get("status") == "fout"
+                                             and "Timeout" in stand["zoek"][a["id"]].get("fout", "")
+                                             and stand["zoek"][a["id"]].get("pogingen", 1) < POGINGEN)))
         r.detail = f"{gezocht} zoektochten gedaan, {opgeslagen} opgeslagen, {wacht} wachten"
 
 
