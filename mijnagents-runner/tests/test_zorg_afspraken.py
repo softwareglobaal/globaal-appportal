@@ -111,6 +111,10 @@ _aanvraag = MA.uit_kandidaat(kand("mehdichegini@hotmail.com", "Kinepraktijk Voor
                                   "Afspraakdatum: 04.11.2026 Afspraaktijd: 08:30", mid="<a1@kine>"), PROF)
 check("een onbevestigde aanvraag is een aparte gebeurtenis, geen definitief consult",
       len(_aanvraag) == 1 and (_aanvraag[0]["zorg"] or {}).get("gebeurtenis") == "aanvraag", str(_aanvraag))
+_citaat = MA.uit_kandidaat(kand("mehdichegini@hotmail.com", "Tandpraktijk Voorbeeld <info@tand-voorbeeld.test>", "RE: Afspraak tandarts",
+                                "Dag, uw eerste afspraak is geannuleerd en de andere staat ingepland. Op di 17 mrt 2026 om 18:17 schreef "
+                                "Mo Voorbeeld: kan ik verzetten?", mid="<r1@tand>"), PROF)
+check("een geciteerde antwoordkop ('Op ... om 18:17 schreef') is geen afspraaktijd", _citaat == [], str(_citaat))
 _gezin = MA.uit_kandidaat(kand("mehdichegini@hotmail.com", "Tandpraktijk Voorbeeld <info@tand-voorbeeld.test>", "Afspraak tandarts",
                                "Beste Lisa Voorbeeld Wij bevestigen graag uw afspraak op 18 nov 2026 om 10:00 bij Bea Proef .",
                                mid="<g1@tand>"), PROF)

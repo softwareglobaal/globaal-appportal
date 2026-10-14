@@ -295,6 +295,16 @@ _NAAM_STOP = {"We", "Wij", "Dear", "This", "Hierbij", "Uw", "Graag", "Details", 
 _AANSPREKING = re.compile(r"^(dhr|mevr|mr|mrs|ms|mw|meneer|mevrouw|heer|sir|madam)\.?$", re.I)
 
 
+# een antwoord citeert de vorige mail: 'Op di 17 mrt 2026 om 18:17 schreef ...' is geen afspraaktijd (live gezien 15-10-2026)
+_CITAAT = re.compile(r"(\bOp\s[^.\n]{4,80}?\bschreef\b|\bOn\s[^.\n]{4,80}?\bwrote\b|-{3,}\s*(Oorspronkelijk bericht|Original Message)|"
+                     r"\bVan:\s.{3,120}?\bVerzonden:|\bFrom:\s.{3,120}?\bSent:)", re.I | re.S)
+
+
+def _zonder_citaat(tekst):
+    m = _CITAAT.search(tekst or "")
+    return tekst[:m.start()] if m else (tekst or "")
+
+
 def _zorg_tijden(tekst):
     """Alle datum-en-uur-plekken in de tekst als [(positie, ISO in Brussel)], in volgorde."""
     uit = []
@@ -344,7 +354,7 @@ def zorg_herken(k, profiel):
     anders een dict met gebeurtenis, patient, mehdi, behandelaar, start, einde, locatie, oude_start, ics_uid,
     recurrence_id en problemen. Niets wordt geraden: een eindtijd komt uit de ICS of de meegeleverde agenda-link."""
     onderwerp = re.sub(r"\s+", " ", k.get("onderwerp") or "")
-    tekst = re.sub(r"\s+", " ", k.get("tekst") or "")
+    tekst = re.sub(r"\s+", " ", _zonder_citaat(k.get("tekst") or ""))
     alles = f"{onderwerp}\n{tekst}"
     ev = None
     for ics in k.get("ics") or []:
