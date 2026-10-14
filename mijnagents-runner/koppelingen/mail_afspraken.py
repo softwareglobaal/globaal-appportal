@@ -667,7 +667,10 @@ def _zorg_status(a, items, nu, vorig_google=""):
         return {"status": "afwijkend", "google": f"{oud['kalender']}|{oud['id']}",
                 "detail": f"verzet: in de agenda {(oud.get('start') or '')[:16].replace('T', ' ')}, volgens mail {a['start'][:16].replace('T', ' ')}"}
     if start < nu - timedelta(hours=1):
-        return {"status": "voorbij", "google": "", "detail": "historisch: niet in de agenda gevonden"}
+        # de agent leest de agenda veertien dagen terug: wat ouder is, is niet vergeleken (geen bewering 'niet gevonden')
+        oud_venster = start < nu - timedelta(days=14)
+        return {"status": "voorbij", "google": "",
+                "detail": "historisch, ouder dan het leesvenster (niet vergeleken)" if oud_venster else "historisch: niet in de agenda gevonden"}
     if z.get("gebeurtenis") == "aanvraag":
         return {"status": "zorg_wacht", "google": "", "detail": "wacht op bevestiging van de praktijk"}
     if not a["einde"]:

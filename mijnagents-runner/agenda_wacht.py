@@ -2371,9 +2371,14 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
             x = per_id.get((kal, eid))
             if kal == WERKAGENDA and toekomst:
                 werk_gelinkt[eid] = (a, z, profiel)
-            elif kal == PRIVE_AGENDA and toekomst and x and (x.get("_merk") or {}).get(ZORGMERK) != a["sleutel"]:
+            elif kal == PRIVE_AGENDA and toekomst and x and ((x.get("_merk") or {}).get(ZORGMERK) != a["sleutel"]
+                                                              or (not (x.get("locatie") or "").strip() and a.get("locatie"))):
+                # alleen het merk, en de plaats als die leeg is (uit de bevestiging, geen gok); planning en titel blijven
+                body = {"extendedProperties": {"private": {ZORGMERK: a["sleutel"]}}}
+                if not (x.get("locatie") or "").strip() and a.get("locatie"):
+                    body["location"] = a["locatie"]
                 try:
-                    _patch(x, {"extendedProperties": {"private": {ZORGMERK: a["sleutel"]}}}, tok)   # alleen het merk
+                    _patch(x, body, tok)
                 except Exception:  # noqa: BLE001
                     pass
             st["prive"].append(f"{wat}: staat al in de agenda ({kal[:24]}, {eid}); geen tweede item")
