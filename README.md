@@ -59,6 +59,13 @@ Authentik-groep, met expliciete mandaten per vennootschap. Uitrol, duurzame opsl
 en toegang: [Authentik-aansluiting v1.1](docs/bedrijfsvoering.md). De overlay staat
 naast de bestaande VM-configuratie en overschrijft die niet.
 
+**Werfverslagadapter v2.0 (14-10-2026)** verbindt de expliciete bezoekknoppen,
+Claude Code-opdrachten en het centrale bron- en kostenregister. Identieke invoer
+hergebruikt een taak; alleen een exclusief geclaimde taak kan verwerken.
+Onzekere betaalde uitkomsten blijven geblokkeerd; budget- en bronwacht hervatten
+dezelfde opdracht na hercontrole. Status in deze bron: gereed voor gezamenlijke
+uitrol en livecontrole. Werkwijze en toegangen: [TECHNICAL-REFERENCE §14.15](TECHNICAL-REFERENCE.md#1415-werfverslagadapter-v20-14-10-2026).
+
 ## 2. One-time Authentik configuration
 
 Do these once, in this order. Authentik UI: `https://auth.<BASE_DOMAIN>`,

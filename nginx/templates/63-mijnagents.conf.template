@@ -52,6 +52,21 @@ server {
         proxy_pass $app_upstream;
     }
 
+    # Werf-only werkvoorraad en gelezen dossiercontext; Flask toetst het bestaande agententoken.
+    location ^~ /api/werfopdrachten {
+        client_max_body_size 2m;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass $app_upstream;
+    }
+    location = /api/werf-context {
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass $app_upstream;
+    }
+
     # MCP voor Mehdi's Claude (roep_mehdi, 25-09-2026): zelfde opbouw als de
     # Postbus. /oauth/authorize en /mcp staan buiten de forward-auth (de app
     # controleert zelf het getekende token); /oauth/inloggen staat er WEL

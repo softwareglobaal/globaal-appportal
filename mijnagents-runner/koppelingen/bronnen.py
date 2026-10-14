@@ -145,7 +145,10 @@ def download(pad, maximum=25_000_000):
     req = urllib.request.Request(f"{INHOUD}/2/files/download", method="POST",
                                  headers=_koppen({"Dropbox-API-Arg": json.dumps({"path": pad})}))
     with urllib.request.urlopen(req, timeout=120) as r:
-        return r.read(maximum)
+        data = r.read(maximum + 1)
+        if len(data) > maximum:
+            raise RuntimeError("Dropbox-bestand overschrijdt downloadgrens; geen gedeeltelijke bron teruggegeven")
+        return data
 
 
 def upload(pad, data):

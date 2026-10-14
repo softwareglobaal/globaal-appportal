@@ -2804,3 +2804,41 @@ De agent FelixArchief en Percelenpas Antwerpen (`mijnagents-runner/felix_wacht.p
   Work All/01. H-A WORK) en zet alles behalve `_gegevens` in een nieuwe map `FelixArchief <datum>`
   (`bronnen.upload`, mode add: nooit overschrijven); een tweede klik wordt geweigerd.
 - **Grendels**: `mijnagents/test_felix.py` (in de Docker-build) en `mijnagents-runner/tests/test_felix_aanvragen.py`.
+
+### 14.15 Werfverslagadapter v2.0 (14-10-2026)
+
+De bestaande werfknoppen en schrijver gebruiken nu een getypeerd opdrachtregister
+in `mijnagents.db`. Migratie `mijnagents/werf_migratie_001.py` wordt bij app-start
+éénmaal gevolgd in `werf_schema_migratie`. Bestaande bezoeken, keuzes en proeven
+blijven behouden. `werfopdracht.werfbezoek_id` wijst naar de exacte bezoekrij,
+`werfopdracht.klaarzet_id` naar het eigen werkvoorraaditem en
+`werfopdracht_gebeurtenis.klaarzet_id` naar de opdracht. De algemene klaarzetwerking
+voor andere agents blijft gelijk. Geen Postgres-schema of `kern.definitie`-DDL
+voor deze interne APIvelden.
+
+- **Betaalgrendel:** idempotente invoer, exclusieve claim vóór de schrijver,
+  revisietoets bij keuzes en resultaatopslag. `gelukt` vraagt een opgeslagen
+  resultaat op dezelfde bezoekrij. Een onbekende uitkomst wordt niet herhaald.
+- **Uitstel:** budgetwacht en een nog actieve gedeelde bronanalyse geven een
+  hervatdatum. Dezelfde geautoriseerde opdracht keert terug; de nieuwe claim
+  toetst opnieuw de actuele broncontext en keuzes. Een oude of onbekende
+  bronverwerking blijft voor menselijke controle gesloten.
+- **Bronnen en kosten:** `koppelingen/werfregister.py` gebruikt de afzonderlijke
+  handmatige verwerking in `globaal-werfverslag`. Bronfeiten worden binnen het
+  project hergebruikt op hash en analyserecept; proeven blijven bezoekgebonden.
+  Providerusage, cache en USD-raming blijven onderscheiden van facturen en
+  abonnementsquotum. Geen automatische `VerslagProef`-taak vanuit deze adapter.
+- **Toegang:** bordclaims en de alleen-lezen `/api/werf-context` hebben
+  `AGENTS_TOKEN`; de centrale verwerking heeft het aparte, beperkte
+  `WERFREGISTER_TOKEN`. Namen en plaatsen zijn documentatie, waarden staan
+  uitsluitend in de omgeving. Ingelogde bronpagina's:
+  [agentendashboard](https://mijnagents.globaal.be/werfverslagen) en
+  [werfgroep](https://werf.globaal.be/werfgroep).
+- **Second Brain:** de organisatiegraaf toont alleen vijf SQLite-schemaonderdelen
+  met benoemde relaties, lokale toelichting en de bestaande softwarekleur. Zij
+  leest geen werf-SQLite of verzonnen Postgres-tabellen en bevat geen live
+  dossier- of opdrachtgegevens; dubbelklik opent het bevoegde brondashboard.
+- **Grendels:** `mijnagents/test_werfverwerking.py`, schrijvertests in
+  `mijnagents-runner/tests/test_werfverslag_verwerking.py`, centrale
+  `tests/test_handmatige_verwerking.py` en in de organisatie-repo
+  `test_werfrelaties.py`. Bron gereed; uitrol en livebewijs volgen gezamenlijk.

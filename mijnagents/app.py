@@ -1730,8 +1730,11 @@ init_db()
 # --- werfverslagen: de pagina's van Werfverslag voorbereider en Werfverslag schrijver, in de logica
 #     van het contractsysteem: per dossier en per bezoek een rij met Openen · Keuzes · Bijlagen ·
 #     Proef · Herkomst · Controle. Alleen beheer (dossiernummers en adressen zijn inhoud).
-WERF_KOLOMMEN = ("gegevens", "verslag_md", "proef_pad", "proef_ts", "keuzes", "bijlagen", "proef_info")
-WERF_JSON = {"gegevens": {}, "keuzes": {}, "bijlagen": [], "proef_info": {}, "bronnen": {}, "controles": [], "taken": []}
+import werfopdrachten as werfwerk
+from werf_migratie_001 import toepassen as werf_migreren
+
+WERF_KOLOMMEN = ("gegevens", "verslag_md", "proef_pad", "proef_ts", "keuzes", "bijlagen", "proef_info", "registratie")
+WERF_JSON = {"gegevens": {}, "keuzes": {}, "bijlagen": [], "proef_info": {}, "bronnen": {}, "controles": [], "taken": [], "registratie": {}}
 
 
 def _werfbezoek_tabel(conn):
@@ -1755,8 +1758,131 @@ def _werfbezoek_tabel(conn):
         )""")
     bestaand = {r[1] for r in conn.execute("PRAGMA table_info(werfbezoek)").fetchall()}
     for k in WERF_KOLOMMEN:
-        if k not in bestaand:
+        if k != "registratie" and k not in bestaand:
             conn.execute(f"ALTER TABLE werfbezoek ADD COLUMN {k} TEXT DEFAULT ''")
+    werf_migreren(conn)
+
+
+def _werf_huidige(conn, dossier, volgnr, rij_id=None):
+    q, args = "SELECT * FROM werfbezoek WHERE dossier=? AND volgnr=? AND stand<>?", [dossier, volgnr, WERF_DUBBEL]
+    if rij_id is not None:
+        try:
+            args.append(int(rij_id))
+        except (TypeError, ValueError):
+            raise werfwerk.Conflict("ongeldig bezoekrij-id", 400)
+        q += " AND id=?"
+    rows = conn.execute(q + " ORDER BY id DESC", args).fetchall()
+    if not rows:
+        raise werfwerk.Conflict("bezoek bestaat niet", 404)
+    if len(rows) != 1:
+        raise werfwerk.Conflict("meer dan één bezoekrij; kies de exacte rij via het overzicht")
+    return rows[0]
+
+
+def _werf_fout(exc):
+    return jsonify(ok=False, geclaimd=False, reden=exc.reden), exc.code
+
+
+def _werf_verwerkingen(rij):
+    result = []
+    for fase, veld in (("voorbereid", "gegevens"), ("proef", "proef_info")):
+        meta = (rij.get(veld) or {}).get("_verwerking")
+        if isinstance(meta, dict):
+            items = meta.get("verwerkingen") or [meta]
+            items = [v for v in items if isinstance(v, dict)]
+            hergebruikt = bool(meta.get("hergebruikt", meta.get("cached", False)))
+            nieuw_in = meta.get("nieuwe_tokens_in", meta.get("tokens_in"))
+            nieuw_uit = meta.get("nieuwe_tokens_uit", meta.get("tokens_uit"))
+            if nieuw_in is None:
+                nieuw_in = sum(v.get("nieuwe_tokens_in", 0 if v.get("hergebruikt") else v.get("input_tokens", (v.get("usage") or {}).get("input_tokens", 0))) for v in items)
+            if nieuw_uit is None:
+                nieuw_uit = sum(v.get("nieuwe_tokens_uit", 0 if v.get("hergebruikt") else v.get("output_tokens", (v.get("usage") or {}).get("output_tokens", 0))) for v in items)
+            kosten = [v.get("nieuwe_kosten_usd", 0 if v.get("hergebruikt", v.get("cached", False)) else v.get("cost_usd", v.get("kosten_usd"))) for v in items]
+            kosten = sum(kosten) if kosten and all(isinstance(k, (int, float)) for k in kosten) else None
+            cache = sum((v.get("usage") or {}).get("cache_read_input_tokens", v.get("cache_read_input_tokens", 0)) or 0 for v in items if not v.get("hergebruikt"))
+            result.append({**meta, "fase": fase, "tokens_nieuw_in": 0 if hergebruikt else nieuw_in,
+                           "tokens_nieuw_uit": 0 if hergebruikt else nieuw_uit,
+                           "kosten_nieuw_usd": 0 if hergebruikt else kosten,
+                           "cache_gelezen": cache, "analyse_hergebruikt": hergebruikt})
+    return result
+
+
+@app.route("/api/werfopdrachten")
+def api_werfopdrachten():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    return jsonify(ok=True, opdrachten=werfwerk.lijst(db(), status=request.args.get("status")))
+
+
+@app.route("/api/werfopdrachten/<int:kid>/claim", methods=["POST"])
+def api_werfopdracht_claim(kid):
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    try:
+        lease = int(p.get("lease_seconden", 1800))
+    except (TypeError, ValueError):
+        abort(400)
+    try:
+        return jsonify(werfwerk.claim(db(), kid, str(p.get("door") or "werfverslag-schrijver")[:100], lease))
+    except werfwerk.Conflict as exc:
+        return _werf_fout(exc)
+
+
+@app.route("/api/werfopdrachten/aanvragen", methods=["POST"])
+def api_werfopdracht_aanvragen():
+    """Expliciete commandline-opdracht, dezelfde taakgrendel als de menselijke knop."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    dossier = str(p.get("dossier", ""))
+    try:
+        volgnr = int(p.get("volgnr", 0))
+    except (TypeError, ValueError):
+        abort(400)
+    if not re.fullmatch(r"\d{4}", dossier) or volgnr < 1 or p.get("bron") != "commandline":
+        abort(400)
+    try:
+        r = _werf_huidige(db(), dossier, volgnr, p.get("werfbezoek_id"))
+        opdracht, nieuw = werfwerk.maak(db(), r["id"], p.get("soort"), "werfverslag-schrijver",
+                                      verwacht=p.get("revisie"), bron="commandline")
+        return jsonify(ok=True, opdracht=opdracht, nieuw=nieuw)
+    except werfwerk.Conflict as exc:
+        return _werf_fout(exc)
+
+
+@app.route("/api/werfopdrachten/<int:kid>/resultaat", methods=["POST"])
+def api_werfopdracht_resultaat(kid):
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    try:
+        uit = werfwerk.resultaat(db(), kid, p.get("lease_token"), p.get("status"), p.get("bewijs", ""),
+                                 p.get("veilig_opnieuw") is True, p.get("verwerking"), p.get("hervat_utc"))
+        return jsonify(ok=True, opdracht=uit)
+    except werfwerk.Conflict as exc:
+        return _werf_fout(exc)
+
+
+@app.route("/api/werf-context")
+def api_werf_context():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    dossier = request.args.get("dossier", "")
+    try:
+        volgnr = int(request.args.get("volgnr", ""))
+    except ValueError:
+        abort(400)
+    if not re.fullmatch(r"\d{4}", dossier) or volgnr < 1:
+        abort(400)
+    try:
+        rij = _werf_dict(_werf_huidige(db(), dossier, volgnr, request.args.get("rij_id")))
+    except werfwerk.Conflict as exc:
+        return _werf_fout(exc)
+    registratie = rij.get("registratie") or {}
+    return jsonify(ok=True, dossier=dossier, volgnr=volgnr, project_ref=f"h-architects:{dossier}",
+                   bezoek_id=registratie.get("bezoek_id"), rij=rij,
+                   opdrachten=werfwerk.lijst(db(), bezoek_id=rij["id"], verlopen=False), verwerkingen=_werf_verwerkingen(rij))
 
 
 def _json(v, leeg):
@@ -1857,13 +1983,45 @@ def api_werfbezoek():
                         herkoppeld.append(uit)
         if alleen:
             # gerichte bijwerking (voorbereiding, proef, keuzes): alleen die kolommen, de verificatie blijft staan
-            velden = {k: r.get(k) for k in alleen if k in WERF_KOLOMMEN}
+            velden = {k: r.get(k) for k in alleen if k in WERF_KOLOMMEN or k in {"taken", "controles", "stand"}}
+            if any(k in velden and not isinstance(velden[k], list) for k in ("taken", "controles")):
+                abort(400)
+            if "stand" in velden and not isinstance(velden["stand"], str):
+                abort(400)
             for k, v in velden.items():
                 velden[k] = json.dumps(v, ensure_ascii=False) if not isinstance(v, str) else v
             velden["ts"] = nu()
             zet = ", ".join(f"{k}=?" for k in velden)
-            cur = conn.execute(f"UPDATE werfbezoek SET {zet} WHERE dossier=? AND bezoekmap=? AND datum=?",
-                               (*velden.values(), *sleutel))
+            rij_id = r.get("werfbezoek_id") or r.get("id")
+            if r.get("_opdracht_id") or r.get("_lease_token"):
+                if not conn.in_transaction:
+                    conn.execute("BEGIN IMMEDIATE")
+                try:
+                    op = werfwerk.controleer(conn, int(r.get("_opdracht_id") or 0), r.get("_lease_token"), r.get("_invoer_hash"))
+                    if not rij_id or int(rij_id) != op["werfbezoek_id"]:
+                        raise werfwerk.Conflict("resultaat hoort bij een andere bezoekrij")
+                except (ValueError, TypeError):
+                    conn.rollback()
+                    abort(400)
+                except werfwerk.Conflict as exc:
+                    conn.rollback()
+                    return _werf_fout(exc)
+            if rij_id:
+                cur = conn.execute(f"UPDATE werfbezoek SET {zet} WHERE id=? AND dossier=? AND bezoekmap=? AND datum=?",
+                                   (*velden.values(), int(rij_id), *sleutel))
+            else:
+                cur = conn.execute(f"UPDATE werfbezoek SET {zet} WHERE dossier=? AND bezoekmap=? AND datum=?",
+                                   (*velden.values(), *sleutel))
+            if r.get("_opdracht_id") and cur.rowcount != 1:
+                conn.rollback()
+                return _werf_fout(werfwerk.Conflict("bezoekrij of bronpad gewijzigd tijdens uitvoering"))
+            if r.get("_opdracht_id"):
+                bewijs = (op["soort"] == "voorbereid" and "gegevens" in velden and isinstance(r.get("gegevens"), dict)
+                          and "gegevens" in r["gegevens"] and not r["gegevens"].get("_afgekapt"))
+                bewijs = bewijs or (op["soort"] == "proef" and {"verslag_md", "proef_pad"} <= set(velden)
+                                    and bool(r.get("verslag_md")) and bool(r.get("proef_pad")))
+                if bewijs:
+                    conn.execute("UPDATE werfopdracht SET resultaat_bewaard=? WHERE klaarzet_id=?", (nu(), op["klaarzet_id"]))
             n += cur.rowcount
             continue
         conn.execute(
@@ -1940,6 +2098,8 @@ def api_werfbezoek_lezen():
         q, a = "SELECT * FROM werfbezoek WHERE dossier=?", [request.args["dossier"]]
         if request.args.get("volgnr"):
             q += " AND volgnr=?"; a.append(int(request.args["volgnr"]))
+        if request.args.get("rij_id"):
+            q += " AND id=?"; a.append(int(request.args["rij_id"]))
         # bij hetzelfde volgnummer eerst de levende rij, nooit de dubbel van een verhuisde projectmap:
         # de schrijver neemt rijen[0] en las anders een bezoekmap die niet meer bestaat
         q += " ORDER BY volgnr, (stand=?), id DESC"; a.append(WERF_DUBBEL)
@@ -1970,6 +2130,8 @@ WERF_ACTIE = {
 
 
 def _werf_rij(d, taak_status):
+    d["formulier_revisie"] = werfwerk.revisie(d)
+    d["verwerkingen"] = _werf_verwerkingen(d)
     for t in d["taken"]:
         s = taak_status.get(t.get("uniek"))
         t["status"] = (s["status"] if s else "niet klaargezet")
@@ -2011,6 +2173,22 @@ def _werf_rij(d, taak_status):
     return d
 
 
+def _werf_opdrachtstand(conn, b):
+    opdrachten = werfwerk.lijst(conn, bezoek_id=b["id"], verlopen=False)
+    for op in opdrachten:
+        if op.get("hervat_utc"):
+            op["hervat_belgie"] = datetime.fromisoformat(op["hervat_utc"]).astimezone(ZoneInfo("Europe/Brussels")).strftime("%d-%m-%Y %H:%M")
+    b["opdrachten"] = opdrachten
+    blokkades = [op for op in opdrachten if op["status"] in ("onbekend", "actief")]
+    laatste = blokkades[0] if blokkades else (opdrachten[0] if opdrachten else None)
+    b["opdracht_status"] = laatste["status"] if laatste else ""
+    b["huidige_opdracht"] = laatste
+    if laatste and laatste["status"] in ("onbekend", "fout", "actief", "klaar", "verouderd", "uitgesteld"):
+        b["fase"] = {"onbekend": "uitvoering controleren", "fout": "verwerking mislukt", "actief": "schrijver bezig",
+                     "klaar": "opdracht wacht", "verouderd": "invoer gewijzigd", "uitgesteld": "tijdelijk uitgesteld"}[laatste["status"]]
+    return b
+
+
 @app.route("/werfverslagen")
 def werfverslagen_pagina():
     if not mag_beslissen():
@@ -2018,7 +2196,7 @@ def werfverslagen_pagina():
     conn = db()
     _werfbezoek_tabel(conn)
     taak_status = _taak_status(conn)
-    rijen = [_werf_rij(_werf_dict(r), taak_status) for r in conn.execute("SELECT * FROM werfbezoek WHERE open=1 ORDER BY dossier, datum, volgnr").fetchall()]
+    rijen = [_werf_opdrachtstand(conn, _werf_rij(_werf_dict(r), taak_status)) for r in conn.execute("SELECT * FROM werfbezoek WHERE open=1 ORDER BY dossier, datum, volgnr").fetchall()]
     dossiers = {}
     for d in rijen:
         ds = dossiers.setdefault(d["dossier"], {"dossier": d["dossier"], "adres": d["adres"], "soort": d["soort_project"],
@@ -2040,14 +2218,12 @@ def werfbezoek_pagina(dossier, volgnr):
         abort(403)
     conn = db()
     _werfbezoek_tabel(conn)
-    r = conn.execute("SELECT * FROM werfbezoek WHERE dossier=? AND volgnr=? ORDER BY (stand=?), id DESC LIMIT 1",
-                     (dossier, volgnr, WERF_DUBBEL)).fetchone()
-    if not r:
-        abort(404)
-    b = _werf_rij(_werf_dict(r), _taak_status(conn))
-    open_opdr = [dict(x) for x in conn.execute(
-        "SELECT id, titel, status, ts, van FROM klaarzet WHERE soort='opdracht' AND voor='werfverslag-schrijver' AND sleutel=? ORDER BY id DESC LIMIT 6",
-        (f"{dossier}-{volgnr}",)).fetchall()]
+    try:
+        r = _werf_huidige(conn, dossier, volgnr, request.args.get("rij_id"))
+    except werfwerk.Conflict as exc:
+        return _werf_fout(exc)
+    b = _werf_opdrachtstand(conn, _werf_rij(_werf_dict(r), _taak_status(conn)))
+    open_opdr = b["opdrachten"]
     logboek = [dict(x) for x in conn.execute(
         "SELECT naam, stap, tekst, ts FROM logboek WHERE naam IN ('werfverslag-voorbereider','werfverslag-schrijver') AND onderwerp IN (?, ?) ORDER BY id DESC LIMIT 30",
         (f"{dossier}-{volgnr}", dossier)).fetchall()]
@@ -2064,6 +2240,12 @@ def werfbezoek_keuzes(dossier, volgnr):
     conn = db()
     _werfbezoek_tabel(conn)
     f = request.form
+    try:
+        r = _werf_huidige(conn, dossier, volgnr, f.get("rij_id"))
+        if not f.get("revisie") or werfwerk.revisie(r) != f["revisie"]:
+            raise werfwerk.Conflict("bezoek of keuzes gewijzigd; herlaad de pagina")
+    except werfwerk.Conflict as exc:
+        return _werf_fout(exc)
     aanwezigen = []
     for regel in (f.get("aanwezigen") or "").splitlines():
         delen = [x.strip() for x in regel.split("|")]
@@ -2074,9 +2256,17 @@ def werfbezoek_keuzes(dossier, volgnr):
     keuzes = {"verslagtype": f.get("verslagtype", ""), "taal": f.get("taal", "nl"), "doorlopend": f.get("doorlopend", "ja"),
               "bronnen": f.get("bronnen", "eigen"), "overgang": f.get("overgang", "tweede rondgang"), "waarborg": (f.get("waarborg") or "12")[:3],
               "aanwezigen": aanwezigen, "opmerking": (f.get("opmerking") or "")[:2000], "door": gebruiker(), "ts": nu()}
-    conn.execute("UPDATE werfbezoek SET keuzes=?, ts=? WHERE dossier=? AND volgnr=?", (json.dumps(keuzes, ensure_ascii=False), nu(), dossier, volgnr))
-    conn.commit()
-    return redirect(url_for("werfbezoek_pagina", dossier=dossier, volgnr=volgnr, tab="keuzes"))
+    # De revisiecheck en update gebeuren in dezelfde write-lock, ook met twee browsers.
+    with werfwerk.atomic(conn):
+        huidig = conn.execute("SELECT * FROM werfbezoek WHERE id=?", (r["id"],)).fetchone()
+        if werfwerk.revisie(huidig) != f["revisie"]:
+            return _werf_fout(werfwerk.Conflict("keuzes inmiddels gewijzigd; herlaad de pagina"))
+        oud = {k: v for k, v in _json(huidig["keuzes"], {}).items() if k not in ("ts", "door")}
+        nieuw = {k: v for k, v in keuzes.items() if k not in ("ts", "door")}
+        if oud != nieuw:
+            conn.execute("UPDATE werfbezoek SET keuzes=?,ts=?,keuzes_revisie=keuzes_revisie+1 WHERE id=?",
+                         (json.dumps(keuzes, ensure_ascii=False), nu(), r["id"]))
+    return redirect(url_for("werfbezoek_pagina", dossier=dossier, volgnr=volgnr, rij_id=r["id"], tab="keuzes"))
 
 
 @app.route("/werfverslag/<dossier>/<int:volgnr>/opdracht", methods=["POST"])
@@ -2089,11 +2279,26 @@ def werfbezoek_opdracht(dossier, volgnr):
     if soort not in ("voorbereid", "proef"):
         abort(400)
     conn = db()
-    conn.execute("INSERT INTO klaarzet(van, voor, soort, sleutel, titel, inhoud, verwijzing, uniek, ts) VALUES(?,?,?,?,?,?,?,?,?)",
-                 (f"bord:{gebruiker()}", "werfverslag-schrijver", "opdracht", f"{dossier}-{volgnr}", f"{soort} {dossier} {volgnr}",
-                  json.dumps({"door": gebruiker()}), "", "", nu()))
-    conn.commit()
-    return redirect(url_for("werfbezoek_pagina", dossier=dossier, volgnr=volgnr, tab="proef"))
+    try:
+        r = _werf_huidige(conn, dossier, volgnr, request.form.get("rij_id"))
+        if not request.form.get("revisie"):
+            raise werfwerk.Conflict("herlaad de bezoekpagina vóór een opdracht")
+        werfwerk.maak(conn, r["id"], soort, gebruiker(), request.form["revisie"])
+    except werfwerk.Conflict as exc:
+        return _werf_fout(exc)
+    return redirect(url_for("werfbezoek_pagina", dossier=dossier, volgnr=volgnr, rij_id=r["id"], tab="proef"))
+
+
+@app.route("/werfverslag/<dossier>/<int:volgnr>/opdracht/<int:kid>/opnieuw", methods=["POST"])
+def werfbezoek_opnieuw(dossier, volgnr, kid):
+    if not mag_beslissen():
+        abort(403)
+    try:
+        r = _werf_huidige(db(), dossier, volgnr, request.form.get("rij_id"))
+        werfwerk.opnieuw(db(), kid, r["id"])
+    except werfwerk.Conflict as exc:
+        return _werf_fout(exc)
+    return redirect(url_for("werfbezoek_pagina", dossier=dossier, volgnr=volgnr, rij_id=r["id"], tab="proef"))
 
 
 # --- commandocentrum: één rij per bezoek ter plaatse dat een verslag vraagt (werfverslag, veiligheidscoördinatie,
@@ -2379,6 +2584,10 @@ mcp_bode.registreer(app, gebruiker, groepen, db, nu)
 # FelixArchief als eigen pagina voor Shelton (felix_pagina.py, 13-10-2026): felix.<domein> toont alleen /felix.
 import felix_pagina  # noqa: E402
 felix_pagina.registreer(app, gebruiker, groepen, md, nu)
+
+# Genummerde werfmigraties bij startup; /api/werf-context zelf voert uitsluitend SELECT uit.
+with sqlite3.connect(DB_PAD) as _werf_start:
+    _werfbezoek_tabel(_werf_start)
 
 
 if __name__ == "__main__":

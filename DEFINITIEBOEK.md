@@ -415,6 +415,28 @@ zelf telt niet als dienst.
   Bitwarden met alleen metadata, nooit een geheim. Machineleesbaar:
   `email_dienst`.
 
+## Interne werfregistratie v2.0 (14-10-2026)
+
+Deze technische toelichting betreft SQLite-onderdelen van `mijnagents.db`, geen
+nieuwe bedrijfsbegrippen in de centrale machinebron `kern.definitie`. Er is
+hiervoor geen woordenboek-DDL of Postgres-migratie gemaakt.
+
+- **Werfopdracht:** geautoriseerde voorbereiding of proef voor een exacte
+  bezoekrij, met een vaste invoersignatuur en een exclusieve uitvoeringsclaim.
+- **Opdrachtgebeurtenis:** vastgelegde overgang van die opdracht, bijvoorbeeld
+  klaarzetten, claimen, uitstel of bevestigd resultaat.
+- **Uitgesteld:** de volgende modelaanroep is niet gestart. Dezelfde opdracht
+  wacht tot de hervatdatum en wordt daarna opnieuw op context en rechten getoetst.
+- **Onbekende uitvoering:** de eerdere betaalde uitkomst staat niet vast.
+  Menselijke controle gaat vóór een eventuele nieuwe verwerking.
+- **Bronhergebruik:** opgeslagen bronfeiten met dezelfde hash en hetzelfde
+  analyserecept opnieuw gebruiken. Dit verschilt van de tijdelijke promptcache
+  van de modelprovider.
+
+De Second Brain toont deze tabelonderdelen met het bestaande type **software**
+en eigen hover-toelichting. Live rijen en dossierinhoud blijven op de bevoegde
+werfpagina's. Bronstatus en toegangen: TECHNICAL-REFERENCE §14.15.
+
 ## Vermijden / opletten
 | Niet doen | Wel |
 |---|---|

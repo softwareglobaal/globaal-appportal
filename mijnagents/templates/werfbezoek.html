@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Werfverslag {{ b.dossier }}-{{ b.bronnen.nr_label or b.volgnr }} — {{ app_naam }}</title>
-{% if opdrachten and opdrachten[0].status == 'klaar' %}<meta http-equiv="refresh" content="30">{% endif %}
+<title>Werfverslag {{ b.dossier }}-{{ b.bronnen.nr_label or b.volgnr }}, {{ app_naam }}</title>
 <style>
   :root { --ink:#1c1c1c; --grijs:#6b6b6b; --lijn:#e2ddd5; --fond:#faf8f4; --accent:#1f3d33; --accent-licht:#edf2ef; --rood:#a33a2a; --wit:#fff; }
   * { box-sizing:border-box; }
@@ -56,18 +55,25 @@
   <span class="sub"><a href="{{ url_for('werfverslagen_pagina') }}">&larr; alle dossiers</a> · <a href="{{ url_for('bord') }}">bord</a></span>
 </header>
 <main>
-<h1>{{ b.dossier }}-{{ b.bronnen.nr_label or b.volgnr }} — {{ b.adres }}</h1>
+<h1>{{ b.dossier }}-{{ b.bronnen.nr_label or b.volgnr }}, {{ b.adres }}</h1>
 <p class="stil">{{ 'Plaatsbezoek' if b.bronnen.soort_bezoek == 'plaatsbezoek' else 'Werfbezoek' }} {{ b.bronnen.nr_label or b.volgnr }} van {{ b.datum }}{% if b.bronnen.nr_label and b.bronnen.nr_label != b.volgnr|string %} · rij {{ b.volgnr }} op het bord (telt alle bezoeken door, geen verslagnummer){% endif %} · {{ b.soort_project }}-project · gemeten {{ b.ts[:16].replace('T',' ') }} UTC</p>
 
 <div style="background:{{ '#edf2ef' if b.heeft_proef else ('#fbf3e3' if b.voorbereid else '#f7e8e5') }}; border:1px solid {{ '#1f3d33' if b.heeft_proef else ('#a1701a' if b.voorbereid else '#a33a2a') }}; border-radius:4px; padding:12px 16px; margin:14px 0 6px;">
   <strong style="font-size:16px;">
     {% if b.heeft_proef %}Proef staat klaar in de bezoekmap: nakijken en versturen.{% elif b.voorbereid %}Voorbereid door Werfverslag schrijver: maak je keuzes en laat de proef maken.{% else %}Nog niet voorbereid: Werfverslag schrijver leest de bezoekmap nog uit.{% endif %}
   </strong><br>
-  <span class="stil">{{ b.telling.ok }} in orde · {{ b.telling.let_op }} nakijken · {{ b.telling.fout }} ontbreekt · {{ b.telling.onbekend }} niet meetbaar{% if b.nodig %} — nog nodig: {{ b.nodig|join(', ') }}{% endif %}</span>
+  <span class="stil">{{ b.telling.ok }} in orde · {{ b.telling.let_op }} nakijken · {{ b.telling.fout }} ontbreekt · {{ b.telling.onbekend }} niet meetbaar{% if b.nodig %}, nog nodig: {{ b.nodig|join(', ') }}{% endif %}</span>
   {% if b.heeft_proef %}<br><a class="groteknop" href="#proef" data-blad="proef">Proef openen &rarr;</a>{% endif %}
 </div>
-{% if opdrachten and opdrachten[0].status == 'klaar' %}
-<div class="melding"><strong>Opdracht "{{ opdrachten[0].titel }}" staat klaar voor Werfverslag schrijver.</strong> Hij pakt ze binnen 5 minuten op; deze pagina ververst zichzelf.</div>
+{% if opdrachten %}
+<div class="melding"><strong>Opdracht: {{ b.huidige_opdracht.soort }}, {{ b.huidige_opdracht.status }}.</strong>
+{% if b.opdracht_status == 'onbekend' %}De eerdere uitvoering moet eerst worden gecontroleerd. Er wordt geen betaalde herhaling gestart.
+{% elif b.opdracht_status == 'uitgesteld' %}Uitgesteld tot {{ b.huidige_opdracht.hervat_belgie }} Belgische tijd. {{ b.huidige_opdracht.bewijs }} Daarna wordt dezelfde opdracht opnieuw gecontroleerd.
+{% elif b.opdracht_status == 'actief' %}De schrijver is bezig; een tweede klik start dezelfde invoer niet nog eens.
+{% elif b.opdracht_status == 'fout' %}De verwerking is mislukt. Het bewijs staat hieronder; het eerdere concept blijft bewaard.
+{% elif b.opdracht_status == 'klaar' %}De opdracht wacht op de schrijver.
+{% elif b.opdracht_status == 'verouderd' %}Bronnen of keuzes zijn gewijzigd. Herlaad de pagina vóór een nieuwe opdracht.
+{% else %}Identieke invoer gebruikt de bestaande opdracht.{% endif %}</div>
 {% endif %}
 
 <nav class="tabs">
@@ -138,6 +144,7 @@
 <h2 id="keuzes">2. Keuzes</h2>
 <p class="stil">Jij beslist wat de schrijver niet mag raden. De rest vult het systeem in.</p>
 <form method="post" action="{{ url_for('werfbezoek_keuzes', dossier=b.dossier, volgnr=b.volgnr) }}">
+  <input type="hidden" name="rij_id" value="{{ b.id }}"><input type="hidden" name="revisie" value="{{ b.formulier_revisie }}">
   {% set k = b.keuzes %}
   <div class="rij" style="grid-template-columns:1fr 1fr 1fr 1fr">
     <div class="veld"><label>Verslagtype {% if g.verslagtype_voorstel %}<span class="stil">(voorstel schrijver: {{ g.verslagtype_voorstel }})</span>{% endif %}</label>
@@ -167,9 +174,19 @@
 <div class="blad" id="blad-proef">
 <h2 id="proef" style="color:#c2410c;border-color:#c2410c">3. Proef</h2>
 <p>
-  <form class="inline" method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="soort" value="voorbereid"><button class="knop{{ ' licht' if b.voorbereid else '' }}" type="submit">{{ 'Opnieuw voorbereiden' if b.voorbereid else 'Voorbereiden' }}</button></form>
-  <form class="inline" method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="soort" value="proef"><button class="knop{{ '' if b.voorbereid else ' licht' }}" type="submit">{{ 'Nieuwe proef maken (Word)' if b.heeft_proef else 'Proef maken (Word)' }}</button></form>
+  <form class="inline" method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="rij_id" value="{{ b.id }}"><input type="hidden" name="revisie" value="{{ b.formulier_revisie }}"><input type="hidden" name="soort" value="voorbereid"><button class="knop{{ ' licht' if b.voorbereid else '' }}" type="submit">Voorbereiden</button></form>
+  <form class="inline" method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="rij_id" value="{{ b.id }}"><input type="hidden" name="revisie" value="{{ b.formulier_revisie }}"><input type="hidden" name="soort" value="proef"><button class="knop{{ '' if b.voorbereid else ' licht' }}" type="submit">Proef maken (Word)</button></form>
 </p>
+<p class="stil">Dezelfde bronnen en keuzes gebruiken de bestaande opdracht. Gewijzigde invoer krijgt een nieuwe verwerking.</p>
+{% if b.verwerkingen %}
+<h3>Verwerking en kosten</h3>
+<table><tr><th>Fase</th><th>Nieuwe tokens</th><th>Hergebruik</th><th>Geraamde nieuwe kosten USD</th></tr>
+{% for v in b.verwerkingen %}<tr><td>{{ v.fase }}</td><td>{{ v.tokens_nieuw_in }} in / {{ v.tokens_nieuw_uit }} uit</td><td>{{ 'analyse hergebruikt' if v.analyse_hergebruikt else 'nieuwe analyse' }} · {{ v.cache_gelezen }} promptcache-tokens</td><td>{{ '%.4f'|format(v.kosten_nieuw_usd) if v.kosten_nieuw_usd is not none else 'niet gemeten' }}</td></tr>{% endfor %}
+</table>{% endif %}
+{% if opdrachten %}
+<h3>Opdrachten</h3><table><tr><th>Fase</th><th>Stand</th><th>Bewijs</th><th></th></tr>
+{% for op in opdrachten %}<tr><td>{{ op.soort }} · poging {{ op.poging }}</td><td>{{ op.status }}{% if op.status == 'uitgesteld' %}<br>{{ op.hervat_belgie }} Belgische tijd{% endif %}</td><td>{{ op.bewijs }}</td><td>{% if op.status == 'fout' and op.veilig_opnieuw %}<form method="post" action="{{ url_for('werfbezoek_opnieuw', dossier=b.dossier, volgnr=b.volgnr, kid=op.id) }}"><input type="hidden" name="rij_id" value="{{ b.id }}"><button class="knop" type="submit">Veilige herhaling starten</button></form>{% endif %}</td></tr>{% endfor %}</table>
+{% endif %}
 {% if b.heeft_proef %}
 <div class="melding"><strong>Word-concept:</strong> <code>{{ b.proef_pad }}</code><br>
   <span class="stil">Gemaakt op {{ b.proef_ts }}{% if b.proef_info %} · {{ b.proef_info.verslagtype }} · {{ b.proef_info.punten }} punten · {{ b.proef_info.fotos }} foto's · {{ b.proef_info.docx_kb }} kB{% if b.proef_info.open %} · nog {{ b.proef_info.open.in_te_vullen }} in te vullen, {{ b.proef_info.open.na_te_kijken }} na te kijken, {{ b.proef_info.open.raming_open }} ramingen{% endif %}{% endif %}. Dezelfde tekst staat ernaast als .md. Jij legt er je laag overheen en verstuurt; de agents versturen nooit.</span></div>
@@ -186,6 +203,11 @@
 </div>
 <script>
 (function(){
+  {% if b.opdracht_status in ('klaar','actief','uitgesteld') %}
+  var keuzesGewijzigd=false;
+  document.querySelectorAll('form textarea, form select, form input:not([type=hidden])').forEach(function(el){el.addEventListener('input',function(){keuzesGewijzigd=true;});el.addEventListener('change',function(){keuzesGewijzigd=true;});});
+  setTimeout(function(){if(!keuzesGewijzigd) location.reload();},30000);
+  {% endif %}
   var bladen={analyse:'blad-analyse',keuzes:'blad-keuzes',proef:'blad-proef',werkverslag:'blad-werkverslag'};
   var alias={controle:'analyse',bijlagen:'analyse',herkomst:'analyse'};
   function toon(naam, scrollNaar){

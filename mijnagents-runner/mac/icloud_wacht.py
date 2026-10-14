@@ -14,10 +14,14 @@ Gebruik: icloud_wacht.py [--dag JJJJ-MM-DD] | icloud_wacht.py --taken
 """
 import json
 import os
+import re
 import sqlite3
 import sys
+import uuid
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from pathlib import Path, PurePosixPath
+from zoneinfo import ZoneInfo
 
 NAAM = "icloud-wacht"
 BORD = os.environ.get("MIJNAGENTS_URL", "https://mijnagents.globaal.be")
@@ -64,7 +68,7 @@ def hartslag(status, taak="", detail=""):
 
 
 def fotos_van(dag):
-    d0 = datetime.fromisoformat(dag)
+    d0 = datetime.fromisoformat(dag).replace(tzinfo=ZoneInfo("Europe/Brussels"))
     van = d0.timestamp() - APPLE_EPOCH
     tot = (d0 + timedelta(days=1)).timestamp() - APPLE_EPOCH
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
@@ -76,6 +80,7 @@ def fotos_van(dag):
     for uuid, naam, t, lat, lon, kind in rijen:
         gps = lat is not None and lon is not None and lat > -180 and lon > -180
         uit.append({"uuid": uuid, "bestand": naam, "tijd": datetime.fromtimestamp(t + APPLE_EPOCH).strftime("%H:%M"),
+                    "vastgelegd_utc": datetime.fromtimestamp(t + APPLE_EPOCH, timezone.utc).isoformat(),
                     "lat": round(lat, 5) if gps else None, "lon": round(lon, 5) if gps else None, "video": kind == 1})
     return uit
 
@@ -288,15 +293,18 @@ def exporteer_naar(fotos, doel):
     os.makedirs(doel, exist_ok=True)
     klaar, ontbrekend = 0, []
     for f in fotos:
+        f["geexporteerd"] = False
         ext = os.path.splitext(f["bestand"] or "")[1] or ".jpg"
         f["export"] = f"{f['tijd'].replace(':', '')} {f['uuid'][:8]}{ext}"
         uit = os.path.join(doel, f["export"])
         if os.path.exists(uit) and os.path.getsize(uit) > 0:
+            f["geexporteerd"] = True
             klaar += 1
             continue
         bron = os.path.join(LIB, f["uuid"][0], f"{f['uuid']}{ext}")
         if os.path.exists(bron) and os.path.getsize(bron) > 0:
             shutil.copy2(bron, uit)
+            f["geexporteerd"] = True
             klaar += 1
         else:
             ontbrekend.append(f)
@@ -307,11 +315,12 @@ def exporteer_naar(fotos, doel):
         script = f'tell application "Photos" to export {{media item id "{f["uuid"]}"}} to POSIX file "{tmp}" as alias with using originals'
         r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=300)
         namen = [n for n in os.listdir(tmp) if not n.startswith(".")] if r.returncode == 0 else []
-        if namen:
+        if namen and max(os.path.getsize(os.path.join(tmp, n)) for n in namen) > 0:
             naam = sorted(namen, key=lambda n: os.path.getsize(os.path.join(tmp, n)), reverse=True)[0]
             ext = os.path.splitext(naam)[1] or ".jpg"
             f["export"] = f"{f['tijd'].replace(':', '')} {f['uuid'][:8]}{ext}"
             shutil.move(os.path.join(tmp, naam), os.path.join(doel, f["export"]))
+            f["geexporteerd"] = True
             klaar += 1
         else:
             print("Photos-export mislukt voor", f["uuid"][:8], (r.stderr or "").strip()[:120], file=sys.stderr)
@@ -336,67 +345,158 @@ def jpeg_kopieen(doel, max_px=1800):
     return n
 
 
+def _tijd_met_zone(value):
+    if not isinstance(value, str):
+        raise ValueError("bezoekvenster_ontbreekt")
+    try:
+        result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError("bezoekvenster_ongeldig") from None
+    if result.tzinfo is None:
+        raise ValueError("bezoekvenster_tijdzone_ontbreekt")
+    return result.astimezone(timezone.utc)
+
+
+def taakvenster(d):
+    """Alleen expliciete tijden, geen dag- of agendamarges verzinnen."""
+    start, einde = _tijd_met_zone(d.get("start")), _tijd_met_zone(d.get("einde"))
+    if einde <= start or einde - start > timedelta(days=1):
+        raise ValueError("bezoekvenster_ongeldig")
+    if start.astimezone(ZoneInfo("Europe/Brussels")).date().isoformat() != d.get("datum"):
+        raise ValueError("bezoekvenster_andere_dag")
+    return start, einde
+
+
+def taakdoel(d):
+    """Bind identiteit en schrijflocatie aan één H-Architects-bezoek."""
+    dossier = str(d.get("dossier", ""))
+    if not re.fullmatch(r"[0-9]{4}", dossier) or d.get("project_ref") != "h-architects:" + dossier:
+        raise ValueError("projectidentiteit_ontbreekt")
+    bid = d.get("bezoek_id")
+    try:
+        if not isinstance(bid, str) or str(uuid.UUID(bid)) != bid:
+            raise ValueError
+    except ValueError:
+        raise ValueError("bronregistratie_ontbreekt") from None
+    project, bezoek = d.get("projectmap"), d.get("bezoekmap")
+    if not isinstance(project, str) or not isinstance(bezoek, str):
+        raise ValueError("bezoekmap_ontbreekt")
+    pp, bp = PurePosixPath(project), PurePosixPath(bezoek)
+    if (not pp.is_absolute() or not bp.is_absolute() or ".." in pp.parts or ".." in bp.parts
+            or pp.parts[1:3] != ("Work All", "01. H-A WORK")
+            or not re.search(r"\b" + dossier + r"\b", pp.name.replace("_", " "))
+            or bp == pp or pp not in bp.parents):
+        raise ValueError("bezoekmap_buiten_project")
+    root = Path(DROPBOX_LOKAAL).resolve()
+    projectpad = root.joinpath(*pp.parts[1:]).resolve()
+    doel = root.joinpath(*bp.parts[1:], "fotos").resolve()
+    if root not in projectpad.parents or projectpad not in doel.parents:
+        raise ValueError("bezoekmap_buiten_project")
+    return str(doel)
+
+
+def selecteer(fotos, start, einde, c, straal):
+    """Selectie op [start, einde) en GPS; onbekende tijd/GPS blijft onbeslist."""
+    binnen, onbeslist = [], 0
+    for f in fotos:
+        try:
+            tijd = _tijd_met_zone(f.get("vastgelegd_utc"))
+        except ValueError:
+            onbeslist += 1
+            continue
+        if not start <= tijd < einde:
+            continue
+        lat, lon = f.get("lat"), f.get("lon")
+        if type(lat) not in (int, float) or type(lon) not in (int, float) or not -90 <= lat <= 90 or not -180 <= lon <= 180:
+            onbeslist += 1
+            continue
+        if afstand_m(lat, lon, c[0], c[1]) <= straal:
+            binnen.append(f)
+    return binnen, onbeslist
+
+
 def taken():
-    """Foto-taken van de Werfverslag voorbereider: {dossier, datum, adres, bezoekmap}. Regel: alleen foto's van die dag
-    binnen STRAAL_M van het werfadres; vindt de geocoder het huisnummer niet (straatmidden), dan 600 m en dat wordt gemeld.
-    Nooit privéfoto's: wat buiten de straal valt blijft in Photos."""
+    """Geen afvinkactie zonder volledige levering voor het bevestigde bezoek."""
     lijst = taken_lezen()
     if not lijst:
-        return 0
+        return {"gedaan": 0, "open": 0}
     hartslag("actief", taak=f"{len(lijst)} foto-taak/taken van de voorbereider")
-    regels, gedaan = [], 0
+    regels, gedaan, open_, redenen = [], 0, 0, {}
+
+    def blokkeer(it, code):
+        nonlocal open_
+        open_ += 1
+        redenen[code] = redenen.get(code, 0) + 1
+        regels.append({"naam": NAAM, "onderwerp": "fotoaanvoer", "stap": "fout",
+                       "tekst": "fototaak blijft open", "detail": json.dumps({"regel": code, "klaarzet_id": it.get("id")})})
+
     for it in lijst:
         try:
-            d = json.loads(it.get("inhoud") or "{}")
-        except ValueError:
-            d = {}
-        dag, adres, bezoekmap, dossier = d.get("datum", ""), d.get("adres", ""), d.get("bezoekmap", ""), d.get("dossier", "?")
-        if not (dag and adres and bezoekmap):
-            regels.append({"naam": NAAM, "onderwerp": str(dossier), "stap": "fout", "tekst": f"taak {it['id']} onvolledig (datum, adres of bezoekmap ontbreekt)"})
-            taak_opgepakt(it["id"]); continue
-        c = coord(adres)
+            d = it.get("inhoud")
+            d = json.loads(d) if isinstance(d, str) else d
+            if not isinstance(d, dict):
+                raise ValueError("taakgegevens_ongeldig")
+            start, einde = taakvenster(d)
+            doel = taakdoel(d)
+            straal = d.get("straal_m", min(STRAAL_M, 300))
+            if type(straal) is not int or not 0 < straal <= min(STRAAL_M, 300):
+                raise ValueError("fotostraal_ongeldig")
+            if not isinstance(d.get("adres"), str) or not d["adres"].strip():
+                raise ValueError("werfadres_ontbreekt")
+        except ValueError as exc:
+            codes = {"bezoekvenster_ontbreekt", "bezoekvenster_ongeldig", "bezoekvenster_tijdzone_ontbreekt", "bezoekvenster_andere_dag",
+                     "projectidentiteit_ontbreekt", "bronregistratie_ontbreekt", "bezoekmap_ontbreekt", "bezoekmap_buiten_project", "fotostraal_ongeldig", "werfadres_ontbreekt"}
+            blokkeer(it, str(exc) if str(exc) in codes else "taakgegevens_ongeldig")
+            continue
+        c = coord(d["adres"])
         if not c:
-            regels.append({"naam": NAAM, "onderwerp": str(dossier), "stap": "fout", "tekst": f"{dag}: adres niet gevonden door de geocoder: {adres}", "detail": "Mehdi of de voorbereider geeft coördinaten (00 DOSSIER.md, regel C1)"})
-            taak_opgepakt(it["id"]); continue
-        fotos = [f for f in fotos_van(dag) if f["lat"] is not None]
-        straal = STRAAL_M
-        binnen = [f for f in fotos if afstand_m(f["lat"], f["lon"], c[0], c[1]) <= straal]
+            blokkeer(it, "werfcoordinaten_ontbreken")
+            continue
+        dag = start.astimezone(ZoneInfo("Europe/Brussels")).date()
+        laatste_dag = (einde - timedelta(microseconds=1)).astimezone(ZoneInfo("Europe/Brussels")).date()
+        fotos = []
+        while dag <= laatste_dag:
+            fotos.extend(fotos_van(dag.isoformat()))
+            dag += timedelta(days=1)
+        binnen, onbeslist = selecteer(fotos, start, einde, c, straal)
         if not binnen:
-            straal = 600
-            binnen = [f for f in fotos if afstand_m(f["lat"], f["lon"], c[0], c[1]) <= straal]
-        if not binnen:
-            regels.append({"naam": NAAM, "onderwerp": str(dossier), "stap": "bevinding", "tekst": f"{dag}: geen foto's binnen 600 m van {adres} ({len(fotos)} foto's met GPS die dag); niets geëxporteerd"})
-            taak_opgepakt(it["id"]); continue
-        doel = os.path.join(DROPBOX_LOKAAL, bezoekmap.lstrip("/"), "fotos")
+            blokkeer(it, "fotoselectie_onbeslist" if onbeslist else "fotoselectie_leeg")
+            continue
         n = exporteer_naar(binnen, doel)
+        volledig = type(n) is int and n == len(binnen) and not onbeslist
+        if type(n) is not int or not 0 <= n <= len(binnen):
+            blokkeer(it, "exportresultaat_ongeldig")
+            continue
+        md = ["# Fotoaanvoer " + ("volledig" if volledig else "onvolledig"), "",
+              f"Bezoek {d['bezoek_id']}; {n} van {len(binnen)} geselecteerde foto's geleverd; {onbeslist} foto's niet toewijsbaar.",
+              f"Venster: {d['start']} tot {d['einde']}; vaste straal {straal} m. Geen automatische verruiming."]
+        with open(os.path.join(doel, "00 fotos.md"), "w", encoding="utf-8") as f:
+            f.write("\n".join(md) + "\n")
+        regels.append({"naam": NAAM, "onderwerp": "fotoaanvoer", "stap": "schrijf",
+                       "tekst": f"{n} van {len(binnen)} geselecteerde foto's geleverd; {onbeslist} onbeslist"})
+        if not volledig:
+            blokkeer(it, "fotoselectie_onbeslist" if onbeslist else "fotolevering_gedeeltelijk")
+            continue
         jpeg_kopieen(doel)
-        clat = round(sum(f["lat"] for f in binnen) / len(binnen), 5); clon = round(sum(f["lon"] for f in binnen) / len(binnen), 5)
-        md = [f"# Foto's {dossier} {dag}", "", f"{len(binnen)} foto's van de iPhone binnen {straal} m van {adres} (zwaartepunt {clat}, {clon}); "
-              f"geëxporteerd door de iCloud-wacht op {datetime.now().date().isoformat()}. Bron: iCloud-fotobibliotheek van Mehdi; foto's buiten de straal bleven in Photos.", "",
-              "| tijd | bestand | lat, lon | afstand |", "|---|---|---|---|"]
-        for f in sorted(binnen, key=lambda x: x["tijd"]):
-            md.append(f"| {f['tijd']} | {f.get('export','')} | {f['lat']}, {f['lon']} | {int(afstand_m(f['lat'], f['lon'], c[0], c[1]))} m |")
-        open(os.path.join(doel, "00 fotos.md"), "w", encoding="utf-8").write("\n".join(md) + "\n")
-        regels.append({"naam": NAAM, "onderwerp": str(dossier), "stap": "schrijf",
-                       "tekst": f"{dag}: {n} van {len(binnen)} foto's binnen {straal} m van {adres} geëxporteerd naar {bezoekmap}/fotos (zwaartepunt {clat}, {clon}"
-                               + ("; straal verruimd tot 600 m omdat de geocoder geen huisnummer vond" if straal != STRAAL_M else "") + ")",
-                       "detail": "\n".join(f"{f['tijd']} {f.get('export','')}" for f in binnen)})
-        taak_opgepakt(it["id"]); gedaan += 1
+        taak_opgepakt(it["id"])
+        gedaan += 1
     if regels:
         bord("/api/logboek", {"regels": regels})
-    hartslag("klaar", taak=f"{gedaan} foto-taak/taken uitgevoerd", detail="foto's in de bezoekmap; de voorbereider ziet ze bij zijn volgende ronde")
-    return gedaan
+    hartslag("fout" if open_ else "klaar", taak="fototaken wachten op aanvulling" if open_ else "fototaken volledig geleverd",
+             detail=json.dumps({"gedaan": gedaan, "open": open_, "redenen": redenen}, sort_keys=True))
+    return {"gedaan": gedaan, "open": open_, "redenen": redenen}
 
 
-def main():
+def _werk():
     if "--jpeg" in sys.argv:
         print("jpeg-kopieën:", jpeg_kopieen(sys.argv[sys.argv.index("--jpeg") + 1]))
         return
     if "--taken" in sys.argv:
         if not TOKEN:
             sys.exit("geen token")
-        print("taken:", taken())
-        return
+        uit = taken()
+        print("taken:", json.dumps(uit, sort_keys=True))
+        return 1 if uit["open"] else 0
     if not TOKEN:
         print("geen token in ~/.config/mijnagents/token", file=sys.stderr)
         sys.exit(1)
@@ -429,5 +529,26 @@ def main():
     print(f"{DAG}: {len(fotos)} foto's, {len(groepen)} groepen, {len(afspraken)} werkafspraken, {n_werk} werkfoto's; export {gek} lokaal + {via} via Photos, {nog} ontbrekend; klaargezet {uit.get('nieuw', 0)} nieuw")
 
 
+def main():
+    """Meld een bron-/rechtenfout als fout; geen blijvend actieve hartslag.
+
+    Er wordt bij een exception geen nieuwe export of afvinkactie gestart.
+    Meld alleen foutklasse en vaste diagnose, geen foto's, adres of token.
+    """
+    try:
+        uit = _werk()
+        return uit if isinstance(uit, int) else 0
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 1
+    except Exception as exc:  # noqa: BLE001
+        soort = type(exc).__name__
+        geweigerd = isinstance(exc, PermissionError) or (
+            isinstance(exc, sqlite3.Error) and str(exc).strip().lower() in ("authorization denied", "not authorized"))
+        uitleg = "macOS weigert leestoegang tot de fotobibliotheek; controleer de rechten van de vaste runner" if geweigerd else "bronverwerking niet afgerond; taak blijft open"
+        hartslag("fout", taak="fotoaanvoer geblokkeerd" if geweigerd else "fotoaanvoer mislukt", detail=soort + ": " + uitleg)
+        print("iCloud-wacht: " + soort + "; " + uitleg, file=sys.stderr)
+        return 1
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

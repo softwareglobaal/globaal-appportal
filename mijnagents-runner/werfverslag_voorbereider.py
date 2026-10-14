@@ -22,12 +22,15 @@ import json
 import os
 import re
 import sys
-from datetime import date, datetime
+import uuid
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import bronnen  # noqa: E402
+import werfregister  # noqa: E402
 
 NAAM = "werfverslag-voorbereider"
 LIGHT_BASIS = "/Work All/01. H-A WORK/0 H-A Light projects/5. H-A light SITE VISITS"
@@ -314,6 +317,76 @@ def dag_van(it):
     return (d.get("datum") or d.get("start") or it.get("sleutel") or it.get("titel") or "")[:10]
 
 
+def _inhoud(it):
+    inhoud = it.get("inhoud") or {}
+    if isinstance(inhoud, dict):
+        return inhoud
+    try:
+        waarde = json.loads(inhoud) if isinstance(inhoud, str) else {}
+        return waarde if isinstance(waarde, dict) else {}
+    except ValueError:
+        return {}
+
+
+def bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, bezoek_id):
+    """Expliciet H-A-agendabewijs; bij meerdere bezoeken geen koppeling op alleen dag."""
+    geldig = []
+    for it in bak.get("afspraak", []):
+        d = _inhoud(it)
+        if (it.get("van") != "agenda-wacht" or it.get("voor") != "h-architects"
+                or it.get("status") == "vervallen" or d.get("firma") != "HARC" or str(d.get("nummer") or "") != str(nummer)
+                or d.get("onzeker") is not False or d.get("buiten") is not True or not d.get("agenda")
+                or d.get("type") not in ("WB", "PL", "PLB", "OP", "OPL", "VO", "DO")
+                or d.get("prive") or d.get("geannuleerd") or d.get("status") in ("cancelled", "geannuleerd")):
+            continue
+        try:
+            start = datetime.fromisoformat(d["start"].replace("Z", "+00:00"))
+            einde = datetime.fromisoformat(d["einde"].replace("Z", "+00:00"))
+            if (start.tzinfo is None or einde.tzinfo is None or einde <= start or einde - start > timedelta(days=1)
+                    or start.astimezone(ZoneInfo("Europe/Brussels")).date().isoformat() != bezoek["datum"]):
+                continue
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+        if d.get("datum") and d["datum"] != bezoek["datum"]:
+            continue
+        if d.get("project_ref") and d["project_ref"] != "h-architects:" + str(nummer):
+            continue
+        # Een expliciete bezoek-ID of map wint; nooit de eerste afspraak van een dag kiezen.
+        if d.get("bezoek_id") or d.get("bezoekmap"):
+            if d.get("bezoek_id") and d["bezoek_id"] != bezoek_id:
+                continue
+            if d.get("bezoekmap") and (not isinstance(d["bezoekmap"], str)
+                                      or d["bezoekmap"].casefold() not in (bezoek["map"].casefold(), taakdoel(bezoek).casefold())):
+                continue
+        elif sum(b["datum"] == bezoek["datum"] for b in bezoeken) != 1:
+            continue
+        geldig.append({"start": start.isoformat(), "einde": einde.isoformat(), "agenda_uniek": it.get("uniek"), "agenda": d["agenda"]})
+    if len(geldig) != 1:
+        raise ValueError("bezoekvenster_dubbelzinnig" if len(geldig) > 1 else "bezoekvenster_ontbreekt")
+    return geldig[0]
+
+
+def fototaak(nummer, adres, projectmap, bezoek, bezoeken, bak, registratie):
+    bid = registratie.get("bezoek_id")
+    try:
+        if not isinstance(bid, str) or str(uuid.UUID(bid)) != bid:
+            raise ValueError
+    except ValueError:
+        raise ValueError("bronregistratie_ontbreekt") from None
+    venster = bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, registratie["bezoek_id"])
+    project_ref = "h-architects:" + str(nummer)
+    if registratie.get("project_ref") != project_ref:
+        raise ValueError("projectidentiteit_ontbreekt")
+    doel = taakdoel(bezoek)
+    return {"voor": "icloud-wacht", "soort": "taak", "sleutel": str(nummer),
+            "titel": f"Foto's voor bezoek {registratie['bezoek_id']} van dossier {nummer} binnen het bevestigde venster en 300 m",
+            "inhoud": {"dossier": str(nummer), "project_ref": project_ref, "bezoek_id": registratie["bezoek_id"],
+                       "datum": bezoek["datum"], "adres": adres, "projectmap": projectmap, "bezoekmap": doel,
+                       "volgnr": bezoek["volgnr"], "nr_label": bezoek["nr_label"], "soort_bezoek": bezoek["soort_bezoek"],
+                       "straal_m": 300, **venster}, "verwijzing": doel,
+            "uniek": f"werf:{project_ref}:{registratie['bezoek_id']}:icloud-wacht"}
+
+
 # ------------------------------------------------------- controleposten ---
 def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=None):
     """Geeft (controles, taken, noden). controles: lijst {code, naam, stand, toelichting}.
@@ -438,7 +511,7 @@ def verwerk(nummer, droog=False):
             open_taken[agent] = [it for it in bord.klaargezet_voor(agent, n=300) if it.get("soort") == "taak" and it.get("van") == NAAM]
         except Exception:  # noqa: BLE001
             open_taken[agent] = []
-    rijen, alle_taken, noden, dubbels = [], [], [], []
+    rijen, alle_taken, noden, dubbels, fotowerk = [], [], [], [], []
     # verhuisde projectmap: de rij van het oude pad gaat mee naar het nieuwe, maar alleen als het oude pad echt weg
     # is; staat de bezoekmap op beide plaatsen, dan is het een kopie en beslist Mehdi welke geldt
     verhuisd = verhuisde_rijen(bezoeken, projectmap, alle_rijen)
@@ -463,9 +536,9 @@ def verwerk(nummer, droog=False):
     for b in bezoeken:
         oude = verhuisd.get(b["map"], [])
         controles, taken, n = controleer(nummer, adres, soort, projectmap, b, bak, samengevoegd([bord_rijen.get(b["map"])] + oude))
-        # een taak die intussen vervuld is (foto's of transcript staan in de map) vink ik af, zodat de zoeklijst klopt
+        # Alleen de transcriptzoeklijst; de Mac-provider bezit de foto-uitkomst.
         st = {c["code"]: c["stand"] for c in controles}
-        for code, agent in (("W4", "icloud-wacht"), ("W6", "plaud-wacht")):
+        for code, agent in (("W6", "plaud-wacht"),):
             if st.get(code) == "ok":
                 for it in open_taken.get(agent, []):
                     if it.get("uniek") == f"werf:{nummer}:{b['datum']}:{agent}":
@@ -477,6 +550,8 @@ def verwerk(nummer, droog=False):
         noden += n
         taakrijen = []
         for voor, tekst in taken:
+            if voor == "icloud-wacht":
+                continue  # pas publiceren na de opgeslagen bordrij en vaste bezoekregistratie
             uniek = f"werf:{nummer}:{b['datum']}:{voor}"
             # eigen naam: 'soort' is het soort project (standaard, light); overschrijven gaf 'taak-project' op de pagina
             taaksoort = "opdracht" if voor == "werfverslag-schrijver" else "taak"
@@ -495,20 +570,57 @@ def verwerk(nummer, droog=False):
                       "stand": stand_van(controles)})
         if oude:
             rijen[-1]["vorige_bezoekmappen"] = [r["bezoekmap"] for r in oude]
+        fotowerk.append((b, rijen[-1], any(voor == "icloud-wacht" for voor, _ in taken)))
         # het bezoeknummer (PB1.., 1..) is wat in het verslag komt; de rij telt alle bezoeken door en is alleen het adres op het bord
         ag.log(str(nummer), "bevinding", f"{b['soort_bezoek']} {b['nr_label']} (rij {b['volgnr']}, {b['datum']}): {rijen[-1]['stand']}; "
                + ", ".join(f"{x['code']} {x['stand']}" for x in controles))
     if droog:
         print(json.dumps(rijen, ensure_ascii=False, indent=1))
         return rijen, noden, dubbels
-    if alle_taken:
-        uit = ag.klaarzet(alle_taken)
-        ag.log(str(nummer), "besluit", f"{len(alle_taken)} taak/taken uitgezet bij collega-agents", uit)
     try:
         uit = bord.call("/api/werfbezoek", {"rijen": rijen})
-    except Exception as e:  # noqa: BLE001
-        ag.log(str(nummer), "fout", f"stand niet naar het bord: {e}")
-        uit = {}
+        opgeslagen = bord.call(f"/api/werfbezoek?dossier={nummer}").get("rijen", [])
+    except Exception:  # noqa: BLE001
+        ag.log(str(nummer), "fout", "stand niet op het bord bevestigd; geen bronopdracht gepubliceerd")
+        noden.append({"tekst": f"Dossier {nummer}: bordregistratie niet bevestigd; fotoaanvoer blijft open", "wie": "claude-code"})
+        return rijen, noden, dubbels
+    for b, rij, nodig in fotowerk:
+        passend = [r for r in opgeslagen if r.get("datum") == b["datum"] and (r.get("bezoekmap") or "").casefold() == b["map"].casefold()
+                   and not str(r.get("stand", "")).startswith("dubbel na verhuis")]
+        try:
+            if len(passend) != 1:
+                raise ValueError("bordbezoek_dubbelzinnig")
+            registratie = werfregister.registreer(passend[0], str(nummer), b["volgnr"])
+            rij["registratie"] = registratie
+            bord.call("/api/werfbezoek", {"rijen": [{"dossier": str(nummer), "datum": b["datum"], "bezoekmap": b["map"],
+                       "volgnr": b["volgnr"], "werfbezoek_id": passend[0]["id"], "_alleen": ["registratie"], "registratie": registratie}]})
+            # Ook reeds aanwezige foto's geven de voorbereider geen recht een open taak af te vinken.
+            open_foto = [it for it in open_taken.get("icloud-wacht", [])
+                         if (_inhoud(it).get("bezoek_id") == registratie["bezoek_id"]
+                             or (str(_inhoud(it).get("dossier")) == str(nummer) and _inhoud(it).get("datum") == b["datum"]
+                                 and _inhoud(it).get("bezoekmap") in (b["map"], taakdoel(b))))]
+            for it in open_foto:
+                rij["taken"].append({"voor": "icloud-wacht", "titel": it.get("titel", "Fotoaanvoer nog open"), "uniek": it.get("uniek")})
+                if not (_inhoud(it).get("start") and _inhoud(it).get("einde")):
+                    noden.append({"tekst": f"Dossier {nummer}, bezoek {b['nr_label']}: bestaande fototaak mist bevestigd bezoekvenster en blijft open", "wie": "mehdi"})
+            if nodig:
+                taak = fototaak(nummer, adres, projectmap, b, bezoeken, bak, registratie)
+                alle_taken.append(taak)
+                if not any(t.get("uniek") == taak["uniek"] for t in rij["taken"]):
+                    rij["taken"].append({k: taak[k] for k in ("voor", "titel", "uniek")})
+            if open_foto:
+                for c in rij["controles"]:
+                    if c["code"] == "W4":
+                        c.update(stand="onbekend", toelichting=f"{b['fotos']} foto's aanwezig; fotoaanvoer nog niet volledig bevestigd door de Mac-provider")
+                rij["stand"] = stand_van(rij["controles"])
+            bord.call("/api/werfbezoek", {"rijen": [{"dossier": str(nummer), "datum": b["datum"], "bezoekmap": b["map"],
+                       "volgnr": b["volgnr"], "werfbezoek_id": passend[0]["id"], "_alleen": ["registratie", "taken", "controles", "stand"],
+                       **{k: rij[k] for k in ("registratie", "taken", "controles", "stand")}}]})
+        except (ValueError, werfregister.RegisterFout):
+            noden.append({"tekst": f"Dossier {nummer}, bezoek {b['nr_label']}: geen ondubbelzinnig bevestigd H-A-bezoekvenster of vaste registratie; fototaak blijft open, tijden en identiteit bevestigen", "wie": "mehdi"})
+    if alle_taken:
+        uit_taken = ag.klaarzet(alle_taken)
+        ag.log(str(nummer), "besluit", f"{len(alle_taken)} taak/taken uitgezet bij collega-agents", uit_taken)
     for h in uit.get("herkoppeld") or []:
         if h.get("wat") == "herkoppeld":
             ag.log(str(nummer), "besluit", f"rij {h['id']} met haar gegevens meegenomen naar het nieuwe pad (was {h['van']})")

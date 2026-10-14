@@ -3,6 +3,16 @@
 > Parkeerlijst van afgesproken maar nog niet gebouwde zaken. Bron: Zoom-meetings
 > 2026-07-01 t/m 2026-07-03 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
 
+## Werfverslagadapter v2.0 (14-10-2026)
+
+- [x] Bronwerk: getypeerde werfopdrachten, claim vóór uitvoering, revisie- en
+      resultaatgrendel, veilige budget-/bronwacht en gestructureerde kosten.
+- [x] Second Brain: SQLite-schemaonderdelen en drie opdrachtrelaties met links
+      naar het agentendashboard en de werfgroep; geen fictieve live records.
+- [ ] Gezamenlijke uitrol, ingelogde livecontrole en beperkte parallelle pilot.
+- [ ] Buildwise/NBN-verwerkingsrechten bevestigen vóór beschermde technische
+      publicaties in AI worden verwerkt.
+
 ## ★ EINDDOEL - Eigen draaiboek-platform (meeting 2026-07-03, Mehdi)
 
 > **Noordster, niet nu bouwen.** Visie: een eigen **draaiboek-(playbook-)management**

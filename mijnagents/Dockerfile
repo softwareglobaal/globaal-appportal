@@ -10,6 +10,8 @@ COPY . .
 # als de schrijver de dubbel kan lezen, of als de opruiming iets wist wat nog nergens anders staat. Faalt dit,
 # dan faalt `docker compose build` en blijft de vorige container draaien. Zie test_werfbezoek.py.
 RUN python3 test_werfbezoek.py
+# Migratie, dubbele opdrachten, claims en revisies moeten ook in de productieimage slagen.
+RUN python3 test_werfverwerking.py
 # Grendel op het maildashboard (/mail): alleen beheer, belangrijk bovenaan, afgehandeld komt niet terug. Zie test_mail.py.
 RUN python3 test_mail.py
 RUN python3 test_naamstructuur.py
