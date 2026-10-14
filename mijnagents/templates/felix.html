@@ -27,6 +27,9 @@
   .stil { color:var(--grijs); font-size:13px; }
   .ok { color:#1f6b3d; font-weight:600; } .let_op { color:var(--oranje); font-weight:600; } .fout { color:var(--rood); font-weight:600; }
   .bericht { border-left:3px solid var(--accent); background:var(--wit); padding:8px 12px; margin:0 0 16px; }
+  details.uitleg { background:var(--wit); border:1px solid var(--lijn); padding:10px 16px; margin:0 0 18px; }
+  details.uitleg summary { cursor:pointer; font-weight:600; color:var(--accent); }
+  details.uitleg table { margin:10px 0; } details.uitleg td:first-child { white-space:nowrap; font-weight:600; }
   a { color:var(--accent); }
 </style>
 </head>
@@ -42,6 +45,29 @@ FelixArchief, downloadt wat digitaal is en maakt een controle met printscreens. 
 nooit aan. Opslaan in de projectmap gebeurt pas als je op de knop klikt.</p>
 
 {% if bericht %}<p class="bericht">{{ bericht }}</p>{% endif %}
+
+<details class="uitleg"{% if not zoektochten %} open{% endif %}>
+  <summary>Hoe werkt deze agent en wat mag je verwachten?</summary>
+  <p>De agent is geen chatbot: hij leest geen vragen en geeft geen advies. Hij doet voor elk adres altijd dezelfde vijf stappen.</p>
+  <ol>
+    <li><b>Geopunt</b>: het officiele adres en het perceel, met een printscreen.</li>
+    <li><b>Percelenpas van de stad</b>: alle vergunningen en bouwovertredingen van het perceel, met het PDF-rapport van de stad.</li>
+    <li><b>FelixArchief</b>: elk dossiernummer van de stad opzoeken, en als controle ook op straat en huisnummer.</li>
+    <li><b>Downloaden</b>: wat digitaal is, per dossier, met de originele bestandsnamen.</li>
+    <li><b>Controle</b>: een tabel per vergunning, zodat je ziet of het werk volledig is.</li>
+  </ol>
+  <table>
+    <tr><th>Vraag</th><th>Antwoord</th></tr>
+    <tr><td>Hoe snel?</td><td>Hij begint binnen 5 minuten; een zoektocht duurt meestal een paar minuten. Is de site van de stad traag, dan probeert hij het tot drie keer opnieuw (de stand blijft dan op "wacht").</td></tr>
+    <tr><td>Wat krijg je zeker?</td><td>De vergunningen volgens de stad, het nummer in FelixArchief, printscreens als bewijs en een controletabel.</td></tr>
+    <tr><td>Wat krijg je als het digitaal is?</td><td>Beslissingen en documenten als pdf.</td></tr>
+    <tr><td>Wat krijg je niet?</td><td>Bouwplannen (geweigerd tot de erewoordverklaring van het account aanvaard is), dossiers die alleen in de leeszaal liggen (Mehdi beslist over reserveren of scannen) en dossiers die alleen bij de stad liggen (opvragen met Itsme, de link staat onder de controletabel).</td></tr>
+    <tr><td>Kan je hem iets vragen?</td><td>Nee, alleen een adres en een projectnummer. Vragen over een resultaat stel je aan Shaniel.</td></tr>
+    <tr><td>Waar komt het terecht?</td><td>Op deze pagina en in het logboek. In de projectmap pas als je op "Opslaan in projectmap" klikt.</td></tr>
+  </table>
+  <p class="stil">Voorbeeld: August van de Wielelei 85, 2100 Deurne gaf 5 vergunningen bij de stad (1935 tot 1965) en 6 dossiers in
+  FelixArchief; vier liggen alleen in de leeszaal, het dossier van 1965 is deels gedownload (beslissing en documenten wel, plannen niet).</p>
+</details>
 
 <form class="zoek" method="post" action="{{ url_for('felix_zoek') }}">
   <label class="project">Projectnummer (voor de projectmap)<input name="project" inputmode="numeric" placeholder="3810"></label>
