@@ -109,7 +109,7 @@
    "pcf_code": "3.5",
    "ecode": "A1.2.4",
    "taak": "offertes & tenders ↔ quotes-subpijler",
-   "agents": "offertemeester"
+   "agents": "offertemeester,tenderwachter"
   },
   {
    "sleutel": "sales_bizdev",
@@ -133,7 +133,7 @@
    "pcf_code": "3.5.3",
    "ecode": "A1.3.2",
    "taak": "RFP/RFQ-respons",
-   "agents": "offertemeester"
+   "agents": "offertemeester,tenderwachter"
   },
   {
    "sleutel": "sales_bizdev",
@@ -145,7 +145,7 @@
    "pcf_code": "3.5.3",
    "ecode": "A1.3.3",
    "taak": "bid/no-bid-beslissing",
-   "agents": "offertemeester"
+   "agents": "offertemeester,tenderwachter"
   },
   {
    "sleutel": "sales_bizdev",
@@ -157,7 +157,7 @@
    "pcf_code": "3.5.3",
    "ecode": "A1.3.4",
    "taak": "raamovereenkomsten",
-   "agents": "offertemeester"
+   "agents": "offertemeester,tenderwachter"
   },
   {
    "sleutel": "sales_bizdev",
