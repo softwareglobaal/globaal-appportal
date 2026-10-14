@@ -1,6 +1,6 @@
 {
- "versie": "5.8",
- "datum": "2026-10-11",
+ "versie": "5.9",
+ "datum": "2026-10-15",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
   {
@@ -1645,9 +1645,22 @@
   "register": "mijnagents-data/afspraken_mail.db: herkomst per mail; sleutel = ICS-UID (+ RECURRENCE-ID); de hoogste SEQUENCE wint; dezelfde uitnodiging via twee mailboxen is een afspraak",
   "vergelijken": "met alle agenda's: iCalUID, anders hetzelfde uur (5 minuten); statussen gekoppeld, ontbreekt, geannuleerd, geannuleerd_staat_er, zonder_tijd, voorbij",
   "tonen": "ontbreekt of geannuleerd_staat_er in de komende 14 dagen: VR-melding in de privé-agenda (hele dag, Beschikbaar, met bron en merk agendawacht_mail); het bord krijgt alleen een nood zonder details (privacy); opgelost: de agent zet 'Opgelost' op zijn melding, wissen doet Mehdi (FR-68)",
-  "nooit": "uit mail zelf een afspraak zetten, verplaatsen, annuleren of iets versturen; mail als gelezen markeren of verplaatsen",
+  "nooit": "uit mail zelf een afspraak zetten, verplaatsen, annuleren of iets versturen; mail als gelezen markeren of verplaatsen. Enige uitzondering: zorg_uit_mail (bevestigde kine- en tandartsafspraken van Mehdi zelf)",
   "versheid": "per mailbox de laatste geslaagde lezing; ouder dan 26 uur meldt de zelfcontrole (mailbron_oud)",
-  "wanneer": "in elke volledige ronde (werkdagen 06:30 en daarna elke twee uur), twee weken terug"
+  "wanneer": "in elke volledige ronde (werkdagen 06:30 en daarna elke twee uur), twee weken terug",
+  "herkansing": "Microsoft geeft op IMAP soms 'User is authenticated but not connected'; de lezer probeert dan tot vier keer opnieuw, 15 seconden uit elkaar (gemeten 15-10-2026: de tweede poging lukt). Lukt het niet, dan blijft de dekking mislukt en meldt de zelfcontrole het (FR-131)"
+ },
+ "zorg_uit_mail": {
+  "wat": "Een bevestigde afspraak voor Mehdi zelf bij een beheerde persoonlijke zorgpraktijk (kine, tandarts) wordt een echt blok in de privé-agenda (mehdipriveagena@gmail.com): begin en einde uit de mail, Bezet, de herinnering voor buiten (30 minuten) en daarna de gewone ritten. Een bestaand consult overnemen, geen nieuwe boeking bij de praktijk (opdracht 'kine en tandarts in de privéagenda' v1.0, 14-10-2026; FR-130)",
+  "profielen": "alleen in het privéregister op de server (afspraken_mail.db, tabel zorgpraktijk), nooit in git: naam, exacte afzenders, praktijknamen, adres, telefoon, website, Mehdi's patiëntnamen, behandelaars met hun rol, bewijs en verificatiedatum. Alleen een gelijkend domein of een naam is geen bewijs; een exact afzenderadres uit het profiel wel",
+  "lezen": "de lezer zoekt de zorgafzenders apart op afzender, 300 dagen terug, in alle mappen behalve prullenbak, spam, verzonden en concepten (ook archiefmappen), ook zonder afspraakwoord in het onderwerp of met een List-Unsubscribe; tekst uit text/plain of text/html; begin en einde uit een meegeleverde agenda-link worden als gegevens gelezen, de link wordt nooit geopend",
+  "herkennen": "gebeurtenis (bevestiging, herinnering, aanvraag die nog bevestigd moet worden, verplaatsing met oude en nieuwe tijd, annulering), patiënt, behandelaar (de naam uit de mail is leidend), begin, einde (ICS of agenda-link) en plaats (mail, anders het praktijkadres uit het profiel). Een nieuwsbrief van de praktijk is geen afspraak; de standaardzin over annuleren is geen annulering",
+  "identiteit": "een duurzame sleutel per afspraak (praktijk + eerste bevestigde begin), met ICS-UID, alle bronbericht-ID's en het Google-ID; herinnering, dezelfde mail via MCH en Hotmail en een volgende ronde voegen alleen een bron toe; een verplaatsing wijzigt dezelfde afspraak en bewaart de oude tijd in de historie; een oudere mail draait een nieuwere niet terug",
+  "privé": "altijd privé, ongeacht de ontvangende mailbox; een kine- of tandartstitel geldt overal als privé: nooit met titel, praktijk, behandelaar of plaats naar het bord, collega-agenda's of gedeelde logboeken; het bord krijgt alleen tellingen",
+  "agenda": "staat de afspraak al in een agenda (zelfde uur met een zorgwoord, praktijk, behandelaar of adres, of ons merk agendawacht_zorg), dan koppelen, geen tweede item; staat ze op de werkagenda, dan verhuist ze naar privé met behoud van haar Google-ID, zonder VR en zonder vraag naar firma en klant; een verplaatsing zet hetzelfde item op het nieuwe uur (de oude duur blijft als de mail geen einde noemt)",
+  "open_punt": "geen eindtijd, een andere patiënt (een gezinslid komt nooit vanzelf op Mehdi's agenda), geen leesbare tijd of een onzekere wijziging: een VR-melding in de privé-agenda (zorg_open), geen blok en geen verzonnen tijd of duur",
+  "nooit": "een behandelafspraak verzetten om de agenda passend te maken, een nieuwe afspraak bij de praktijk boeken, gasten toevoegen, mail of uitnodigingen versturen, iets wissen of annuleren zonder ja van Mehdi, of een voorbije afspraak terugboeken (voorbij is historisch gemist, geen bewijs van aanwezigheid)",
+  "wanneer": "in elke volledige ronde, na het lezen van de mail en vóór de gewone mailmeldingen; agenda_wacht.py --zorg doet hetzelfde met de details in een privélog op de server (inhaalcontrole en bewijs)"
  },
  "agendagasten": {
   "wat": "Collega's en partners staan als gast op de afspraken waar ze bij horen, zodat de afspraak in hun eigen agenda staat (Mehdi, 03-10-2026: 'zodat het gewoon op hun agenda verschijnt ... dan hoef ik niet handmatig mails te ontvangen')",

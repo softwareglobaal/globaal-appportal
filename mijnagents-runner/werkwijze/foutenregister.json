@@ -1,7 +1,7 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.30",
- "datum": "03-10-2026",
+ "versie": "3.31",
+ "datum": "15-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
   "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
@@ -294,6 +294,16 @@
     "FR-123",
     "FR-124",
     "FR-121"
+   ]
+  },
+  {
+   "id": "L36",
+   "les": "Een vraag is geen afspraak. Waar Mehdi een vaste soort afspraak uit mail wil overnemen, hoort een beheerd bronprofiel met bewijs, een duurzame identiteit en een teruglezing, en blijft wat niet vaststaat een concreet open punt; een draaiende agent of een register met rijen bewijst geen geslaagde lezing.",
+   "uit": [
+    "FR-130",
+    "FR-131",
+    "FR-132",
+    "FR-133"
    ]
   }
  ],
@@ -2677,6 +2687,78 @@
     "soort": "test",
     "waar": "tests/test_nacontrole_v13.py",
     "tekst": "R11 een annulering voor de instantie van 5 oktober"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-130",
+   "datum": "15-10-2026",
+   "gevonden_door": "Mehdi, opdracht 'kine en tandarts in de privéagenda' v1.0 (14-10-2026, onderzoek door Codex)",
+   "fout": "Bevestigde kine- en tandartsafspraken uit mail kwamen niet als afspraak in de privé-agenda: ook een perfect herkende afspraak om 08:30 werd een vrije hele-dag-vraag op Beschikbaar, zonder herinnering.",
+   "gevolg": "De kine van 30-09 en 14-10 stond in geen enkele agenda; op 14-10 stond alleen een vraag, die na het uur op 'Opgelost' ging omdat de afspraak voorbij was.",
+   "waarom_niet_gezien": "De regel 'uit mail zelf nooit een afspraak zetten' gold voor alles; een VR-item werd als dekking gezien, en 'voorbij' sloot de vraag af zonder bewijs van aanwezigheid.",
+   "oorzaak": "Geen beheerd profiel voor de persoonlijke zorgpraktijken, dus geen mandaat om een bevestigd consult als blok over te nemen.",
+   "soort_oorzaak": "werkwijze",
+   "oplossing": "Smalle uitzondering in master, code en tests: een bevestigde afspraak voor Mehdi bij een beheerd zorgprofiel (privéregister, nooit in git) wordt een echt blok in de privé-agenda (begin en einde uit de mail, Bezet, herinnering, ritten), met duurzame identiteit, koppeling aan wat er al staat, teruglezing en open punt wanneer iets ontbreekt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "een bevestigde zorgafspraak wordt een echt blok in de privé-agenda: Bezet, begin en einde, plaats, herinnering, geen gasten"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-131",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex (14-10-2026), gemeten door Claude (15-10-2026)",
+   "fout": "De Hotmail-lezer faalde met 'User is authenticated but not connected' (14-10 om 10:46 en 15-10 bij de eerste poging).",
+   "gevolg": "Een ronde zonder Hotmail: de kine-herinnering van die dag werd niet gelezen; het register met eerdere rijen leek vers.",
+   "waarom_niet_gezien": "De fout stond in de leesstand, maar een volgende geslaagde ronde verborg ze; niemand mat of het tijdelijk was.",
+   "oorzaak": "Microsoft geeft deze fout af en toe bij het inloggen met XOAUTH2; de lezer probeerde het niet opnieuw. Gemeten 15-10: de tweede poging, 15 seconden later, lukt.",
+   "soort_oorzaak": "bron",
+   "oplossing": "post_lezer.py probeert bij 'not connected' tot vier keer opnieuw, 15 seconden uit elkaar; lukt het niet, dan blijft de dekking mislukt en meldt de zelfcontrole het.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "de lezer zoekt de zorgafzenders apart (ook oude mail en zonder afspraakwoord) en leest HTML en de agenda-link"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-132",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex (14-10-2026), bevestigd door Claude (15-10-2026)",
+   "fout": "Zorgmails werden niet of niet volledig gelezen: een mail met alleen de praktijknaam als onderwerp, een HTML-only bevestiging (de tandarts, de boekingsmails van de kine) en een bevestiging ouder dan veertien dagen (de tandarts van 9 december, bevestigd op 19 mei) vielen buiten de lezer; 'Herinnering' viel na het ophalen alsnog weg.",
+   "gevolg": "Toekomstige afspraken die maanden vooraf bevestigd werden, waren onzichtbaar voor de agent.",
+   "waarom_niet_gezien": "De proeven gebruikten alleen een plattetekstherinnering met datum in het onderwerp.",
+   "oorzaak": "Twee onderwerpfilters, alleen text/plain, de eerste gevonden tijd, en een venster van veertien dagen.",
+   "soort_oorzaak": "code",
+   "oplossing": "De zorgafzenders worden apart opgevraagd op afzender, 300 dagen terug en ook in de archiefmappen; HTML wordt gelezen; gebeurtenis, oude en nieuwe tijd worden onderscheiden; het einde komt uit de ICS of de agenda-link.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "een verplaatsing kiest de nieuwe tijd, wijzigt dezelfde afspraak (zelfde sleutel) en bewaart de oude"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-133",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex (14-10-2026), bevestigd door Claude (15-10-2026)",
+   "fout": "Een zorgbevestiging via MCH kreeg geen privélabel, en het kine-item van 21-10 op de werkagenda kreeg de VR-vraag 'zeg voor welke firma en welke klant'.",
+   "gevolg": "Medische titels konden naar het bord; Mehdi kreeg een zakelijke vraag over een persoonlijke afspraak.",
+   "waarom_niet_gezien": "Privé hing alleen aan de mailbox en de agenda, niet aan wat de afspraak is.",
+   "oorzaak": "Geen herkenning van persoonlijke zorg los van de mailbox of de agenda.",
+   "soort_oorzaak": "code",
+   "oplossing": "Zorgafspraken zijn altijd privé, ongeacht de mailbox; een kine- of tandartstitel geldt overal als privé (nooit naar het bord), krijgt geen firmavraag, en verhuist van werk naar privé met behoud van het Google-ID, zonder VR.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "een kine-item op de werkagenda verhuist naar privé (zelfde Google-ID), zonder VR en zonder firmavraag, geen kopie"
    },
    "controle": [],
    "status": "opgelost"

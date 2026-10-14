@@ -74,8 +74,17 @@ KALENDERS = {
 PRIVE_KALENDERS = {k for k, n in KALENDERS.items() if n == "Lara" or "privé" in n}
 
 
+# Persoonlijke zorg (kine, tandarts) is privé, op welke agenda het ook staat: nooit met titel naar het bord, geen vraag
+# naar firma en klant ('Opdracht kine en tandarts' v1.0, 14-10-2026). 'Kinepolis' is geen kine.
+ZORG_TITEL = re.compile(r"\bkine\b|kinesi|kinésit|tandarts|mondhygi|dentist", re.I)
+
+
+def is_zorg_titel(titel):
+    return bool(ZORG_TITEL.search(titel or ""))
+
+
 def is_prive(a):
-    return bool(a.get("_prive") or a.get("kalender") in PRIVE_KALENDERS)
+    return bool(a.get("_prive") or a.get("kalender") in PRIVE_KALENDERS or is_zorg_titel(a.get("titel")))
 
 
 def prive_teksten(items):
@@ -1544,7 +1553,7 @@ def titelfouten(a, info):
     if info["reistijd"] or a.get("hele_dag"):
         return []
     fouten = []
-    if a.get("kalender", "") not in AGENDA_VASTE_KLEUR and not info.get("firma"):
+    if a.get("kalender", "") not in AGENDA_VASTE_KLEUR and not info.get("firma") and not is_zorg_titel(a.get("titel")):
         # Niet alleen klagen, maar een firma voorstellen waar dat kan. Mandaat van Mehdi,
         # 22-09-2026: los zoveel mogelijk zelf op, van waar het probleem komt.
         voorstel = ""
@@ -2146,9 +2155,12 @@ def _mail_melding_body(a, k, dag):
               "geannuleerd_staat_er": f"VR Agendawacht: in mail geannuleerd, staat nog in je agenda: {uur} {a['titel'][:50]}",
               "afwijkend": f"VR Agendawacht: in mail om {uur}, {a.get('detail') or 'in je agenda anders'}: {a['titel'][:45]}",
               "kandidaat": f"VR Agendawacht: uit mail om {uur}, {a.get('detail') or 'op dat uur staat iets anders'}: {a['titel'][:40]}",
-              "zonder_tijd": f"VR Agendawacht: uitnodiging zonder uur: {a['bron_onderwerp'][:70]}"}
+              "zonder_tijd": f"VR Agendawacht: uitnodiging zonder uur: {a['bron_onderwerp'][:70]}",
+              "zorg_open": f"VR Agendawacht: zorgafspraak uit mail, {a.get('detail') or 'nog niet volledig'}: {uur} {a['titel'][:40]}"}
     vraag = {"zonder_tijd": "zeg of het een afspraak wordt en wanneer. Ik zet zelf niets.",
-             "ontbreekt": "zeg of ik deze afspraak in je agenda zet, of dat ze niet doorgaat. Ik zet zelf niets."
+             "ontbreekt": "zeg of ik deze afspraak in je agenda zet, of dat ze niet doorgaat. Ik zet zelf niets.",
+             "zorg_open": "zeg wat ontbreekt (eindtijd, plaats of voor wie), of laat het staan tot de praktijk het bevestigt. "
+                          "Ik zet het blok pas als het vaststaat en verzin geen duur."
              }.get(a["status"], "zeg wat klopt: de mail of de agenda. Ik zet en verander zelf niets.")
     d = _d.fromisoformat(dag)
     return {"summary": titels[a["status"]][:200], "start": {"date": d.isoformat()}, "end": {"date": (d + timedelta(days=1)).isoformat()},
@@ -2231,6 +2243,205 @@ def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost"):
                "description": f"Opgelost op {nu:%d-%m-%Y %H:%M}: {reden}. Je mag deze melding weghalen.\n\n" + (x.get("omschrijving") or ""),
                "extendedProperties": {"private": {MAILMERK: f"opgelost:{k}"}}}, tok)
     return True
+
+
+# Zorgafspraken uit mail ('Opdracht voor Claude - kine en tandarts in de privéagenda' v1.0, 14-10-2026). Een smalle
+# uitzondering op 'uit mail zet ik niets': een bevestigde afspraak voor Mehdi bij een beheerde persoonlijke zorgpraktijk
+# (profielen in het privéregister, nooit in git) wordt een echt blok in de privé-agenda: begin en einde uit de mail,
+# Bezet, de gewone herinnering voor buiten en daarna de gewone ritten. Het is een bestaand consult overnemen, geen nieuwe
+# boeking bij de praktijk: geen gasten, geen mail, niets verstuurd. Wat al in een agenda staat, wordt gekoppeld (geen
+# tweede item); een kine- of tandartsitem op de werkagenda verhuist naar privé met behoud van zijn Google-ID. Een
+# onbekende eindtijd, een andere patiënt of een onzekere wijziging blijft een open punt. Voorbij wordt nooit
+# teruggeboekt. Niets wordt gewist.
+ZORGMERK = "agendawacht_zorg"
+
+
+def _verplaats_naar(x, doel, tok):
+    """Verhuist een afspraak naar een andere agenda met behoud van haar Google-ID (events.move)."""
+    _verplaats(x, doel, tok)
+
+
+def _lees_event(kal, eid, tok):
+    """De afspraak zoals Google ze bewaarde, of None."""
+    import urllib.parse
+    import urllib.request
+    url = f"{agenda.API}/calendars/{urllib.parse.quote(kal, safe='')}/events/{urllib.parse.quote(eid or '', safe='')}"
+    try:
+        return json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"}), timeout=30))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _zelfde_tijd(a, b):
+    try:
+        return abs((datetime.fromisoformat(a) - datetime.fromisoformat(b)).total_seconds()) <= 60
+    except (TypeError, ValueError):
+        return False
+
+
+def _zorg_body(a, z, profiel):
+    """Het blok voor een bevestigde zorgafspraak: titel '!! [PR] Kine - Naam', plaats, begin en einde uit de mail,
+    Bezet, de herinnering voor buiten, bron in de omschrijving (alleen Mehdi ziet de privé-agenda), merk."""
+    import mail_afspraken as MA  # noqa: PLC0415
+    beh = z.get("behandelaar") or ""
+    kop = ", ".join(x for x in (profiel.get("naam", ""), profiel.get("adres", ""),
+                                f"tel. {profiel['telefoon']}" if profiel.get("telefoon") else "") if x)
+    return {"summary": canoniek(f"!! [PRIVE] {MA.zorg_rol(z, profiel)}" + (f" - {beh}" if beh else "")),
+            "location": a.get("locatie") or profiel.get("adres", ""),
+            "start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
+            "end": {"dateTime": a["einde"], "timeZone": "Europe/Brussels"},
+            "transparency": "opaque",
+            "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": BUITEN_MIN}]},
+            "description": "\n".join([kop,
+                                      "Bevestigde zorgafspraak uit mail, door de Agendawacht in de privé-agenda gezet. Geen nieuwe "
+                                      "boeking bij de praktijk: wijzigen of afzeggen gebeurt bij de praktijk zelf.",
+                                      f"Bron: {a['bron_mailbox']}, '{a['bron_onderwerp']}', ontvangen "
+                                      f"{(a.get('bron_ontvangen') or '')[:16].replace('T', ' ')}, Message-ID {a['bron_message_id']}."]),
+            "extendedProperties": {"private": {ZORGMERK: a["sleutel"]}}}
+
+
+def _zorg_teruglezen(kal, eid, body, tok):
+    """Leest het blok terug: pas als begin, einde, Bezet, plaats en 'geen gasten' kloppen, heet het gezet."""
+    e = _lees_event(kal, eid, tok)
+    if not e:
+        return "niet terug te lezen"
+    fout = []
+    if not _zelfde_tijd((e.get("start") or {}).get("dateTime"), body["start"]["dateTime"]):
+        fout.append("begin")
+    if not _zelfde_tijd((e.get("end") or {}).get("dateTime"), body["end"]["dateTime"]):
+        fout.append("einde")
+    if (e.get("transparency") or "opaque") != "opaque":
+        fout.append("niet Bezet")
+    if e.get("attendees"):
+        fout.append("gasten")
+    if body.get("location") and (e.get("location") or "") != body["location"]:
+        fout.append("plaats")
+    return ", ".join(fout)
+
+
+def _toekomst(start, nu):
+    try:
+        return datetime.fromisoformat(start) > nu
+    except (TypeError, ValueError):
+        return False
+
+
+def zorg_afspraken_zetten(res, items, tok, nu=None):
+    """Zet, koppelt, volgt of verhuist zorgafspraken (zie hierboven). Werkt de status en het Google-ID in res bij, zodat
+    het register ze bewaart en de gewone mailmelding geen tweede vraag zet. Geeft tellingen, 'bord' (zonder namen,
+    praktijk of plaats) en 'prive' (details, alleen voor Mehdi)."""
+    import mail_afspraken as MA  # noqa: PLC0415
+    nu = nu or nu_lokaal()
+    profielen = {p["id"]: p for p in MA.zorgprofielen()}
+    st = {"gezet": 0, "gekoppeld": 0, "verhuisd": 0, "verzet": 0, "open": 0, "voorbij": 0, "wacht": 0, "fout": 0, "prive": []}
+    per_id = {(x.get("kalender"), x.get("id")): x for x in items}
+    werk_gelinkt = {}
+    for a in res:
+        if a.get("soort") != "zorg":
+            continue
+        z = MA._zorg_json(a)
+        profiel = profielen.get(z.get("praktijk"), {})
+        toekomst = _toekomst(a.get("start"), nu)
+        wat = f"{(a.get('start') or '?')[:16].replace('T', ' ')} {a.get('titel', '')}"
+        if a["status"] == "ontbreekt" and toekomst and a.get("einde"):
+            body = _zorg_body(a, z, profiel)
+            try:
+                e = _insert(PRIVE_AGENDA, body, tok)
+            except DagMarkering as ex:
+                st["open"] += 1
+                st["prive"].append(f"{wat}: niet gezet, de dag is afgesloten ({str(ex)[:80]}); beslist Mehdi")
+                continue
+            except Exception as ex:  # noqa: BLE001
+                st["fout"] += 1
+                st["prive"].append(f"{wat}: niet gezet ({type(ex).__name__})")
+                continue
+            probleem = _zorg_teruglezen(PRIVE_AGENDA, e.get("id"), body, tok)
+            a["google"] = f"{PRIVE_AGENDA}|{e.get('id')}"
+            if probleem:
+                a["status"], a["detail"] = "afwijkend", f"teruglezen: {probleem}"
+                st["fout"] += 1
+                st["prive"].append(f"{wat}: gezet maar het teruglezen klopt niet ({probleem})")
+            else:
+                a["status"] = "gezet"
+                st["gezet"] += 1
+                st["prive"].append(f"{wat}: blok gezet in de privé-agenda ({e.get('id')}), teruggelezen")
+        elif a["status"] == "gekoppeld":
+            st["gekoppeld"] += 1
+            kal, _, eid = (a.get("google") or "").partition("|")
+            x = per_id.get((kal, eid))
+            if kal == WERKAGENDA and toekomst:
+                werk_gelinkt[eid] = (a, z, profiel)
+            elif kal == PRIVE_AGENDA and toekomst and x and (x.get("_merk") or {}).get(ZORGMERK) != a["sleutel"]:
+                try:
+                    _patch(x, {"extendedProperties": {"private": {ZORGMERK: a["sleutel"]}}}, tok)   # alleen het merk
+                except Exception:  # noqa: BLE001
+                    pass
+            st["prive"].append(f"{wat}: staat al in de agenda ({kal[:24]}, {eid}); geen tweede item")
+        elif a["status"] == "afwijkend" and toekomst and a.get("google"):
+            kal, _, eid = a["google"].partition("|")
+            x = per_id.get((kal, eid))
+            hist = (z.get("historie") or [])
+            if x and hist and hist[-1].get("naar") == a["start"] and not x.get("hele_dag"):
+                einde = a.get("einde")
+                if not einde:
+                    # de duur van het bestaande item blijft (geen verzonnen duur): einde = nieuw begin + oude duur
+                    duur = datetime.fromisoformat(x["einde"]) - datetime.fromisoformat(x["start"])
+                    einde = (datetime.fromisoformat(a["start"]) + duur).isoformat()
+                try:
+                    _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
+                               "end": {"dateTime": einde, "timeZone": "Europe/Brussels"},
+                               "description": ((x.get("omschrijving") or "").rstrip() + f"\n\nVerzet van {hist[-1]['van'][:16].replace('T', ' ')} "
+                                               f"naar {a['start'][:16].replace('T', ' ')} volgens mail {hist[-1].get('bron', '')}.").strip()}, tok)
+                    a["status"] = "gezet"
+                    st["verzet"] += 1
+                    st["prive"].append(f"{wat}: verzet van {hist[-1]['van'][:16]} (zelfde item {eid})")
+                except Exception as ex:  # noqa: BLE001
+                    st["fout"] += 1
+                    st["prive"].append(f"{wat}: verzetten mislukt ({type(ex).__name__})")
+            else:
+                st["open"] += 1
+                st["prive"].append(f"{wat}: agenda en mail verschillen ({a.get('detail')}); niets veranderd op een gok")
+        elif a["status"] == "zorg_open":
+            st["open"] += 1
+            st["prive"].append(f"{wat}: open punt ({a.get('detail')})")
+        elif a["status"] == "voorbij":
+            st["voorbij"] += 1
+            st["prive"].append(f"{wat}: voorbij en niet in een agenda gevonden (historisch gemist, niet teruggeboekt)")
+        elif a["status"] == "zorg_wacht":
+            st["wacht"] += 1
+    # een kine- of tandartsitem op de werkagenda hoort privé: verhuizen met behoud van het Google-ID, zonder VR en firmavraag
+    for x in items:
+        if x.get("kalender") != WERKAGENDA or x.get("hele_dag") or x.get("deelnemers") or not x.get("id"):
+            continue
+        if not (is_zorg_titel(x.get("titel")) or x["id"] in werk_gelinkt) or not _toekomst(x.get("start"), nu):
+            continue
+        gekoppeld = werk_gelinkt.get(x["id"])
+        if gekoppeld:
+            body = _zorg_body(gekoppeld[0], gekoppeld[1], gekoppeld[2])
+            body = {k: body[k] for k in ("summary", "location", "extendedProperties")}
+            notitie = "Van de werkagenda naar privé verhuisd door de Agendawacht: persoonlijke zorg, geen zakelijke afspraak."
+        else:
+            t = re.sub(r"^\s*((VR|ZL|!!|\?\?)\s+)+", "", x.get("titel") or "")
+            t = re.sub(r"\bmehdi\b\s*:?", "", t, flags=re.I).strip(" :-,")
+            body = {"summary": canoniek(f"!! [PRIVE] {t[:1].upper() + t[1:]}")}
+            notitie = ("Van de werkagenda naar privé verhuisd door de Agendawacht: persoonlijke zorg, geen zakelijke afspraak. "
+                       "Behandelaar en praktijk zijn nog niet door een bronmail bevestigd; de herinnering van de praktijk komt "
+                       "meestal de dag ervoor en wordt dan aan dit item gekoppeld.")
+        oms = "\n".join(r for r in (x.get("omschrijving") or "").splitlines() if not r.startswith("Agendawacht vraagt:")).strip()
+        body["description"] = (oms + "\n\n" + notitie).strip()
+        try:
+            _verplaats_naar(x, PRIVE_AGENDA, tok)
+            _patch(dict(x, kalender=PRIVE_AGENDA), body, tok)
+            st["verhuisd"] += 1
+            st["prive"].append(f"{x['start'][:16].replace('T', ' ')} {x.get('titel', '')[:40]}: van werk naar privé ({x['id']}), "
+                               f"nu '{body['summary']}'")
+        except Exception as ex:  # noqa: BLE001
+            st["fout"] += 1
+            st["prive"].append(f"{x['start'][:16]} verhuizen naar privé mislukt ({type(ex).__name__})")
+    st["bord"] = [f"zorg uit mail: {st['gezet']} blok(ken) gezet, {st['gekoppeld']} al in de agenda, {st['verhuisd']} van werk "
+                  f"naar privé, {st['verzet']} verzet, {st['open']} open punt(en), {st['wacht']} wacht op bevestiging, "
+                  f"{st['voorbij']} voorbij zonder item (historisch), {st['fout']} mislukt"]
+    return st
 
 
 # Agendagasten (Mehdi, 03-10-2026: "een systeem waarbij je iemand kunt toevoegen ... zodat het gewoon op hun agenda
@@ -3363,7 +3574,8 @@ def vastgelopen(items, nu=None, uren=48):
             continue
         wanneer = f"{['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'][start.weekday()]} om {start:%H:%M}"
         kort = re.sub(r"[^\w ]", " ", a["titel"])[:40].strip()
-        if not info.get("firma") and a.get("kalender") == WERKAGENDA:
+        if not info.get("firma") and a.get("kalender") == WERKAGENDA and not is_zorg_titel(a["titel"]):
+            # een kine- of tandartsafspraak is privé, geen zakelijke vraag: de zorgstap zet ze op de privé-agenda
             uit.append((f"{a['id']}:firma", f"Mehdi, de afspraak van {wanneer}, {kort}: zeg voor welke firma en welke klant."))
         elif (info["buiten"] or info["soort"] in BUITEN_SOORTEN) and not (a.get("locatie") or "").strip() \
                 and not (info["nummer"] and info["nummer"] in projecten):
@@ -3610,6 +3822,10 @@ def main():
                 _alle = [x for x in afspraken(-14, 120) if not x.get("fout")] + archief_afspraken(-14, 120)
                 mres, mfout = MA.ronde(_alle, (datetime.now() - timedelta(days=14)).date().isoformat())
                 ag.prive(MA.prive_teksten())
+                # zorgafspraken eerst: een bevestigd consult wordt een echt blok, zodat de gewone melding geen vraag zet
+                zst = zorg_afspraken_zetten(mres, _alle, agenda._toegang())
+                MA.statussen_bewaren(mres)
+                ag.log(f"dag {vandaag}", "schrijf", zst["bord"][0])          # alleen tellingen: niets medisch op het bord
                 mregels = mail_meldingen(mres, _alle, agenda._toegang())
                 _tel = {s: sum(1 for a in mres if a["status"] == s) for s in ("gekoppeld",) + MA.VRAAG_STATUSSEN + ("zonder_tijd",)}
                 ag.log(f"dag {vandaag}", "schrijf", f"mail als bron: {len(mres)} afspraken uit mail ({_tel})", "\n".join(mregels))
@@ -3827,11 +4043,33 @@ def main():
         raise
 
 
+def zorgronde():
+    """--zorg: alleen de mailbron met de zorgstap en de mailmeldingen, met de details op stdout (een privélog op de
+    server, nooit het bord). Voor de inhaalcontrole en het bewijs; belt niet en raakt verder niets."""
+    import mail_afspraken as MA  # noqa: PLC0415
+    _slot = slot_nemen()  # noqa: F841
+    _alle = [x for x in afspraken(-14, 120) if not x.get("fout")] + archief_afspraken(-14, 120)
+    mres, mfout = MA.ronde(_alle, (datetime.now() - timedelta(days=14)).date().isoformat())
+    zst = zorg_afspraken_zetten(mres, _alle, agenda._toegang())
+    MA.statussen_bewaren(mres)
+    mregels = mail_meldingen(mres, _alle, agenda._toegang())
+    for mb, r in sorted(MA.leesstand().items()):
+        print(f"  [leesstand] {mb}: {r.get('dekking')}, laatst gelukt {r.get('laatst_gelukt')}"
+              + (f", fout: {r.get('laatste_fout')[:200]}" if r.get("laatste_fout") else ""))
+    print("  [zorg] " + zst["bord"][0])
+    for regel in zst["prive"] + mregels:
+        print("    " + regel)
+    return 0
+
+
 if __name__ == "__main__":
     if "--kleuren" in sys.argv:          # om :17 en :47, ook 's nachts en in het weekend (FR-21)
         print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · kleurherstel", flush=True)
         kleurherstel()
         sys.exit(0)
+    if "--zorg" in sys.argv:             # zorgafspraken uit mail, met de details in een privélog (opdracht v1.0, 14-10-2026)
+        print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · zorgafspraken uit mail", flush=True)
+        sys.exit(zorgronde())
     if "--ronde" in sys.argv and not is_rondetijd():
         sys.exit(0)          # cron start elk uur; alleen op de ronde-uren (Brusselse tijd) werk ik
     # Elke ronde begint met zijn tijdstip. Gezien 24-09-2026: het logboek had geen enkele tijd,
