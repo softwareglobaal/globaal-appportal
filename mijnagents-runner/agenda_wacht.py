@@ -2411,7 +2411,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
             st["prive"].append(f"{wat}: open punt ({a.get('detail')})")
         elif a["status"] == "voorbij":
             st["voorbij"] += 1
-            st["prive"].append(f"{wat}: voorbij en niet in een agenda gevonden (historisch gemist, niet teruggeboekt)")
+            st["prive"].append(f"{wat}: voorbij, {a.get('detail') or 'historisch'}; niets teruggeboekt")
         elif a["status"] == "zorg_wacht":
             st["wacht"] += 1
     # een kine- of tandartsitem op de werkagenda hoort privé: verhuizen met behoud van het Google-ID, zonder VR en firmavraag

@@ -161,6 +161,13 @@ _v = MA.vergelijk([dict(_h[0], start="2026-10-14T08:30:00+02:00", einde="2026-10
 check("een voorbije afspraak zonder item is historisch gemist: voorbij, geen blok in het verleden",
       _v["status"] == "voorbij" and not _v["google"], str(_v))
 check("zorgstatussen die Mehdi moet zien, staan bij de vraagstatussen", "zorg_open" in MA.VRAAG_STATUSSEN)
+_dhr = MA.uit_kandidaat(kand("mehdichegini@hotmail.com", "Kinepraktijk Voorbeeld <info@kine-voorbeeld.test>",
+                            "Uw Afspraak bij An Proef: Woensdag 12.08.2026 om 08:30", "Beste Dhr. Voorbeeld, graag bevestig ik uw afspraak.",
+                            mid="<d1@kine>"), PROF)
+check("een aanspreking met alleen de familienaam is niet zeker Mehdi", _dhr and (_dhr[0]["zorg"] or {}).get("patient") == "Voorbeeld"
+      and not (_dhr[0]["zorg"] or {}).get("mehdi"), str(_dhr))
+_dv = MA.vergelijk(_dhr, [], nu)[0] if _dhr else {}
+check("een voorbije afspraak met een onzekere patiënt is historisch, geen open punt", _dv.get("status") == "voorbij", str(_dv))
 
 # de agent: echt blok in de privé-agenda, Bezet, met herinnering, geen gasten; teruglezen; tweede ronde geen duplicaat
 import agenda_wacht as W         # noqa: E402

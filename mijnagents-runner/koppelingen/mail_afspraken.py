@@ -291,6 +291,8 @@ _GEBEURTENIS = (
 )
 _AFSPRAAKWOORD_ZORG = re.compile(r"(afspraak|appointment|boeking|booking|consult|therapeut|afspraakdatum)", re.I)
 _NAAM_STOP = {"We", "Wij", "Dear", "This", "Hierbij", "Uw", "Graag", "Details", "Met", "Kind"}
+# een aanspreking is geen naam: 'Beste Dhr. Chegini' is alleen een familienaam, dus niet zeker Mehdi (open punt)
+_AANSPREKING = re.compile(r"^(dhr|mevr|mr|mrs|ms|mw|meneer|mevrouw|heer|sir|madam)\.?$", re.I)
 
 
 def _zorg_tijden(tekst):
@@ -376,10 +378,12 @@ def zorg_herken(k, profiel):
     if m:
         patient = m.group(1).strip()
     else:
-        m = re.search(r"\b(?:Beste|Dear|Geachte)\s+((?:[A-Z][\w'-]+\s?){1,5})", tekst)
+        m = re.search(r"\b(?:Beste|Dear|Geachte)\s+((?:(?:Dhr|Mevr|Mr|Mrs|Ms|Mw)\.?\s+)?(?:[A-Z][\w'-]+\s?){1,5})", tekst)
         delen = (m.group(1).split() if m else [])
         while delen and delen[-1].strip(",.") in _NAAM_STOP:
             delen.pop()
+        while delen and _AANSPREKING.match(delen[0]):
+            delen.pop(0)
         patient = " ".join(d.strip(",.") for d in delen)
     eigen = {_naam_plat(n) for n in profiel.get("patienten") or []}
     behandelaar = next((n for n in (profiel.get("behandelaars") or {}) if _naam_plat(n) in _naam_plat(alles)), "")
@@ -657,20 +661,23 @@ def _zorg_status(a, items, nu, vorig_google=""):
                 "detail": "in mail geannuleerd" if m else ""}
     if not start:
         return {"status": "zorg_open" if recent else "zorg_historisch", "google": "", "detail": "geen datum of uur te lezen"}
+    if start < nu - timedelta(hours=1):
+        # voorbij is historisch, ook als de patiënt niet te lezen was: nooit een open punt of een blok achteraf. De agent
+        # leest de agenda veertien dagen terug: wat ouder is, is niet vergeleken (geen bewering 'niet gevonden').
+        if kand:
+            return {"status": "gekoppeld", "google": f"{kand[0]['kalender']}|{kand[0]['id']}", "detail": "historisch, in de agenda"}
+        oud_venster = start < nu - timedelta(days=14)
+        return {"status": "voorbij", "google": "",
+                "detail": "historisch, ouder dan het leesvenster (niet vergeleken)" if oud_venster else "historisch: niet in de agenda gevonden"}
     if not z.get("mehdi"):
         return {"status": "zorg_open", "google": "", "detail": f"andere patiënt of patiënt niet te lezen ({z.get('patient') or '?'})"}
     if kand:
         m = kand[0]
         return {"status": "gekoppeld", "google": f"{m['kalender']}|{m['id']}", "detail": ""}
     oud = (merk or vorig or [None])[0]
-    if oud and start >= nu - timedelta(hours=1):
+    if oud:
         return {"status": "afwijkend", "google": f"{oud['kalender']}|{oud['id']}",
                 "detail": f"verzet: in de agenda {(oud.get('start') or '')[:16].replace('T', ' ')}, volgens mail {a['start'][:16].replace('T', ' ')}"}
-    if start < nu - timedelta(hours=1):
-        # de agent leest de agenda veertien dagen terug: wat ouder is, is niet vergeleken (geen bewering 'niet gevonden')
-        oud_venster = start < nu - timedelta(days=14)
-        return {"status": "voorbij", "google": "",
-                "detail": "historisch, ouder dan het leesvenster (niet vergeleken)" if oud_venster else "historisch: niet in de agenda gevonden"}
     if z.get("gebeurtenis") == "aanvraag":
         return {"status": "zorg_wacht", "google": "", "detail": "wacht op bevestiging van de praktijk"}
     if not a["einde"]:
