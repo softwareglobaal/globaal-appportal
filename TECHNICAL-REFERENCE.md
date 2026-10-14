@@ -2841,4 +2841,30 @@ voor deze interne APIvelden.
 - **Grendels:** `mijnagents/test_werfverwerking.py`, schrijvertests in
   `mijnagents-runner/tests/test_werfverslag_verwerking.py`, centrale
   `tests/test_handmatige_verwerking.py` en in de organisatie-repo
-  `test_werfrelaties.py`. Bron gereed; uitrol en livebewijs volgen gezamenlijk.
+  `test_werfrelaties.py`. Uitgerold en ingelogd gecontroleerd op 14-10-2026:
+  werfapp `1c23085`, bord/schrijver `d668209`, Second Brain `0b2f524`.
+  De volledige werfapp-suite telt 362 geslaagde en 6 overgeslagen tests; de
+  bordgrendel telt 20 geslaagde tests. De live PDF-motor is beschikbaar.
+- **Aansluiting:** schrijfrecht voor bezoek- en bronmetadata en afzonderlijk
+  leesrecht voor het dashboard zijn uitsluitend toegekend aan H-Architects
+  2145, 2173, 2309, 2324, 2405 en 2416. Geen verzend- of verwijderrecht.
+  29 actieve bezoekrijen hebben een unieke vaste registratie; vijf oude
+  verhuisrijen en alle 549 historische verslagen zijn behouden. De gemeten
+  bestaande bordinhoud bleef gelijk. Tijdens deze uitrol zijn geen nieuwe
+  werfanalyses gestart; de v2-telling begint op nul.
+- **Mac en werkwijze:** de masterbron staat in `~/dev/globaal-werfverslag`.
+  `runner/werfopdracht.py context` haalt alleen een bevoegd bezoekpakket op;
+  `groep --start` opent de Claude Code-agents voor de werfwerkmap. Elk bezoek
+  krijgt een map met het volledige registratie-id, zodat parallelle sessies
+  dezelfde bezoeknummers niet verwarren. Contexts voor 2309 en 2416 zijn met
+  HTTP 200 afzonderlijk opgehaald. De dagelijkse stappen staan in
+  [Werkwijze v2](https://werf.globaal.be/handleiding/werfverslag-werkwijze-v2).
+- **Nog te bevestigen:** de Mac-leescontrole van 14-10-2026 22:08 UTC vond geen
+  Plaud-aanmelding en kon de fotocatalogus niet lezen. De werkelijk gebruikte
+  interpreter is
+  `/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9`.
+  Mehdi voert aanmelding en schijftoegang zelf uit; de leescontrole moet daarna
+  opnieuw groen worden. Oude fototaken zonder bevestigd bezoekvenster blijven
+  open. Buildwise/NBN-verwerkingsrechten en een expliciet gekozen echte
+  proefverwerking staan nog open. Het technische bronnenregister bevat
+  metadata en geeft geen toestemming om beschermde publicaties te verwerken.

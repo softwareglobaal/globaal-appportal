@@ -9,7 +9,14 @@
       resultaatgrendel, veilige budget-/bronwacht en gestructureerde kosten.
 - [x] Second Brain: SQLite-schemaonderdelen en drie opdrachtrelaties met links
       naar het agentendashboard en de werfgroep; geen fictieve live records.
-- [ ] Gezamenlijke uitrol, ingelogde livecontrole en beperkte parallelle pilot.
+- [x] Gezamenlijke uitrol en ingelogde livecontrole: werfapp `1c23085`,
+      bord/schrijver `d668209`, Second Brain `0b2f524`. Twee afzonderlijke
+      Mac-contexts voor 2309 en 2416 opgehaald zonder AI-aanroep.
+- [ ] Bronaanvoer op de Mac afronden: Plaud opnieuw aanmelden en leesbare
+      fotocatalogus bevestigen voor de werkelijk gebruikte Python-runner.
+      Laatste leescontrole 14-10-2026 22:08 UTC was voor beide nog rood.
+- [ ] Eén expliciet gekozen bezoek door de nieuwe werfketen verwerken en de
+      proef, bronherkomst, tokenregistratie en het hergebruik beoordelen.
 - [ ] Buildwise/NBN-verwerkingsrechten bevestigen vóór beschermde technische
       publicaties in AI worden verwerkt.
 
