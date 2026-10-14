@@ -1156,6 +1156,11 @@ services:
       MONDAY_API_TOKEN: ${MONDAY_API_TOKEN:-}
       # Register van facturatiecontrole (projecten, betaalschijven, fase), alleen lezen.
       FC_DATA: /fc/data.json
+      # Kaartafschriften (uitgavenstaten) uit Dropbox voor het softwareoverzicht, alleen lezen.
+      DROPBOX_APP_KEY: ${DROPBOX_APP_KEY:-}
+      DROPBOX_APP_SECRET: ${DROPBOX_APP_SECRET:-}
+      DROPBOX_REFRESH_TOKEN: ${DROPBOX_REFRESH_TOKEN:-}
+      DROPBOX_PATH_ROOT_NS: ${DROPBOX_PATH_ROOT_NS:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3130/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 2m
