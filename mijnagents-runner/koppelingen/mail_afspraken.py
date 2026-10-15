@@ -70,8 +70,8 @@ SCHEMA = ("""CREATE TABLE IF NOT EXISTS afspraak (
 EXTRA_KOLOMMEN = {"afspraak": {"detail": "TEXT NOT NULL DEFAULT ''", "prive": "INTEGER NOT NULL DEFAULT 0",
                                "melding": "TEXT NOT NULL DEFAULT ''", "zorg": "TEXT NOT NULL DEFAULT ''"},
                   "leesstand": {"dekking": "TEXT NOT NULL DEFAULT ''"}}
-# Hoe ver terug de lezer de zorgafzenders opvraagt: een bevestiging komt soms maanden vooraf (de tandarts van
-# 9 december werd op 19 mei bevestigd). Goedkoop, want de lezer zoekt op afzender.
+# Hoe ver terug de lezer de zorgafzenders opvraagt: een bevestiging komt soms maanden vooraf (gemeten: bijna zeven
+# maanden). Goedkoop, want de lezer zoekt op afzender.
 ZORG_DAGEN_TERUG = 300
 
 
@@ -262,8 +262,8 @@ def zorgprofielen():
 
 
 def _zorgprofiel(afzender, profielen):
-    """Alleen een exact afzenderadres uit een beheerd profiel telt; een gelijkend domein niet (info@kineplus.be is
-    een andere praktijk dan info@kineplusleuven.be)."""
+    """Alleen een exact afzenderadres uit een beheerd profiel telt; een gelijkend domein niet (info@praktijk.be kan
+    een heel andere praktijk zijn dan info@praktijkleuven.be)."""
     a = (afzender or "").lower()
     return next((p for p in profielen or [] if a and a in (p.get("afzenders") or [])), None)
 
