@@ -119,7 +119,7 @@ def test_wat_op_25_september_ten_onrechte_doorkwam():
     assert "advocaat" not in t("support@twilio.com", "Request# 29703128 | Regulatory Bundle", "Stevenson Lawrence Lim (Support)")[1]
     assert t("support@octopus.be", "Import rapport")[0] == "melding"
     assert t("info@cluboase.sr", "75 jaar Oase – sport, vriendschap en mooie herinneringen!", automatisch=True)[0] == "melding"
-    assert t("info@kineplusleuven.be", "HERINNERING - Uw afspraak bij KINEPLUSLEUVEN - woensdag 23/09", automatisch=True)[0] == "melding"
+    assert t("info@kine-voorbeeld.test", "HERINNERING - Uw afspraak bij KINEVOORBEELD - woensdag 23/09", automatisch=True)[0] == "melding"
     assert t("alle.ouders@sk.sgarchipel.be", "Nieuwsbrief kinderkuren", lijst=True)[0] in ("melding", "rommel")
 
 

@@ -130,7 +130,11 @@ for adres in opdracht.get("mailboxen", []):
                 # de zorgafzenders: apart, op afzender, sinds zorg_sinds; elk van die berichten is een kandidaat
                 zorg_uids = set()
                 for afz in ZORG_AFZENDERS:
-                    zorg_uids |= set(imapbron.zoek_uids(M, imapbron._criteria(afz, None, None, None, opdracht.get("zorg_sinds"), None, False)))
+                    try:
+                        zorg_uids |= set(imapbron.zoek_uids(M, imapbron._criteria(afz, None, None, None, opdracht.get("zorg_sinds"), None, False)))
+                    except Exception as e:  # noqa: BLE001
+                        # een mislukte zorgzoekactie laat de gewone mail van deze map staan, maar telt als onvolledig (A06)
+                        fouten.append({"mailbox": adres, "map": mapnaam, "fout": f"zorgzoekactie mislukt: {type(e).__name__}"})
                 uids = list(dict.fromkeys(uids + sorted(zorg_uids - set(uids), reverse=True)))
                 for i in range(0, len(uids), 100):
                     stuk = ",".join(str(u) for u in uids[i:i + 100])

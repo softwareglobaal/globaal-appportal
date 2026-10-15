@@ -350,7 +350,7 @@ check("maker herkent een Calendly-boeking aan de inhoud",
       and W.maker({"maker": "haagendalightprojects@gmail.com", "omschrijving": ""}).startswith("account light projects"))
 
 # FR-29 plaatsnaam
-check("LEUVEN wordt Leuven in een ritlabel", W.plaatsnaam("Tessenstraat 3, 3000 LEUVEN") == "Leuven")
+check("LEUVEN wordt Leuven in een ritlabel", W.plaatsnaam("Proefstraat 1, 3000 LEUVEN") == "Leuven")
 
 # FR-27 en FR-30 titelfouten
 _f = W.titelfouten({"kalender": W.WERKAGENDA, "titel": "!! Mehdi: [HARC] 2616 Stad Leuven", "maker": W.WERKAGENDA},

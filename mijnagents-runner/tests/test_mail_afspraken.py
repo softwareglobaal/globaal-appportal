@@ -80,7 +80,7 @@ check("een oudere versie (doorgestuurde oude mail) draait de nieuwere niet terug
       MA.alle()[0]["start"] == "2026-10-30T15:00:00+01:00" and MA.alle()[0]["sequence"] == 1, str(MA.alle()[0]))
 
 # zonder ICS: datum en uur uit onderwerp of tekst
-_t = MA.tijd_uit_tekst("HERINNERING - Uw afspraak bij KINEPLUSLEUVEN - woensdag 30/09/2026  om 08:30", "", "")
+_t = MA.tijd_uit_tekst("HERINNERING - Uw afspraak bij KINEVOORBEELD - woensdag 30/09/2026  om 08:30", "", "")
 check("kinesist: 'woensdag 30/09/2026 om 08:30'", _t == "2026-09-30T08:30:00+02:00", _t)
 _t = MA.tijd_uit_tekst("New Event: Benny Desmedt - 10:00 Fri, 2 Oct 2026 - Besprekingen", "", "")
 check("Calendly: '10:00 Fri, 2 Oct 2026'", _t == "2026-10-02T10:00:00+02:00", _t)
@@ -105,8 +105,8 @@ check("dezelfde iCalUID op een ander uur is afwijkend (een vraag), niet gekoppel
 check("gekoppeld op het uur (binnen vijf minuten) als de UID ontbreekt",
       MA.vergelijk([_a], [{"kalender": "prive", "id": "g2", "start": "2026-10-30T15:03:00+01:00"}], nu)[0]["google"] == "prive|g2")
 check("staat ze nergens, dan ontbreekt ze", MA.vergelijk([_a], [], nu)[0]["status"] == "ontbreekt")
-_kine = MA.uit_kandidaat({"mailbox": "mehdichegini@hotmail.com", "uid": 11, "message_id": "<k@x>", "van": "info@kineplus.be",
-                          "onderwerp": "HERINNERING - Uw afspraak bij KINEPLUSLEUVEN - woensdag 30/09/2026  om 08:30", "datum": "", "ics": [], "tekst": ""})
+_kine = MA.uit_kandidaat({"mailbox": "mehdichegini@hotmail.com", "uid": 11, "message_id": "<k@x>", "van": "info@kine-voorbeeld.test",
+                          "onderwerp": "HERINNERING - Uw afspraak bij KINEVOORBEELD - woensdag 30/09/2026  om 08:30", "datum": "", "ics": [], "tekst": ""})
 check("een afspraak die voorbij is en ontbrak, heet voorbij (geen alarm achteraf)", MA.vergelijk(_kine, [], nu)[0]["status"] == "voorbij")
 _c = MA.ics_afspraken(GOOGLE.replace("METHOD:REQUEST", "METHOD:CANCEL"))
 _ca = MA.uit_kandidaat({"mailbox": "mch@h-architects.be", "uid": 12, "message_id": "<x@x>", "van": "a@b.be", "onderwerp": "Geannuleerd",

@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.31",
+ "versie": "3.32",
  "datum": "15-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -304,6 +304,17 @@
     "FR-131",
     "FR-132",
     "FR-133"
+   ]
+  },
+  {
+   "id": "L37",
+   "les": "Werk dat 'af' heet, krijgt een controle door een tweede AI voor het afgerond is. Codex vond in een ronde vijf echte fouten in de zorgafspraken die Claude's eigen proeven niet vingen: de volgorde van verwerken, valse treffers op zakelijke titels, een annulering zonder tijd, een ingekorte titel langs het masker en het ontbreken van teruglezing.",
+   "uit": [
+    "FR-134",
+    "FR-135",
+    "FR-136",
+    "FR-137",
+    "FR-138"
    ]
   }
  ],
@@ -2759,6 +2770,96 @@
     "soort": "test",
     "waar": "tests/test_zorg_afspraken.py",
     "tekst": "een kine-item op de werkagenda verhuist naar privé (zelfde Google-ID), zonder VR en zonder firmavraag, geen kopie"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-134",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 1 (A01), nagemeten door Claude",
+   "fout": "De lezer gaf de mails nieuwste eerst door: een verplaatsing werd vóór haar oorspronkelijke bevestiging verwerkt, waarna de oude bevestiging een tweede afspraak op het oude uur maakte. Ook twee patiënten op hetzelfde uur vielen samen, en een oude herinnering kon na een verplaatsing een nieuwe rij maken.",
+   "gevolg": "Een blok op een uur dat niet meer gold, of een afspraak van een gezinslid die in die van Mehdi opging.",
+   "waarom_niet_gezien": "De proeven verwerkten de mails in de volgorde waarin ze geschreven waren, niet zoals de lezer ze doorgeeft.",
+   "oorzaak": "Koppelen alleen op praktijk en begintijd, zonder bericht-ID, patiënt of oude tijden, en een verwerkingsvolgorde die van de lezer afhing.",
+   "soort_oorzaak": "code",
+   "oplossing": "Oudste mail eerst; een bericht dat al verwerkt is, voegt alleen een bron toe; koppelen houdt rekening met de patiënt (alle namen van Mehdi tellen als dezelfde); een oude tijd uit de historie koppelt zonder de tijd terug te draaien.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "A01 een verplaatsing die eerst gelezen wordt, geeft geen tweede afspraak op het oude uur"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-135",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 1 (A02), nagemeten door Claude",
+   "fout": "Een zorgwoord volstond: een zakelijke afspraak met een praktijk als klant (EPB voor een tandartspraktijk, een kinepraktijk die verbouwt) gold als privé, kon naar de privé-agenda verhuizen en een zorgafspraak kon eraan koppelen. Ook reeksen en afspraken met collega's konden verhuizen, en bij twee kandidaten op hetzelfde uur werd de eerste genomen.",
+   "gevolg": "Een klantafspraak verdwijnt uit de werkagenda en van het bord; een consult wordt aan het verkeerde item gekoppeld.",
+   "waarom_niet_gezien": "De proeven hadden alleen persoonlijke titels zonder firmacode.",
+   "oorzaak": "Geen onderscheid tussen een zorgwoord in een privétitel en in een zakelijke titel.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een titel met een zakelijke firmacode is nooit persoonlijke zorg en koppelt nooit; verhuizen nooit met gasten, collega's of in een reeks; twee kandidaten zonder ons merk zijn een open punt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "A02 nooit verhuisd: een zakelijke praktijkafspraak, een reeks, een afspraak met een collega"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-136",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 1 (A03 en A04), nagemeten door Claude",
+   "fout": "Een annulering zonder datum of uur werd niet bewaard, een nieuwere bevestiging hief een eerdere annulering niet op, een voorlopige ICS (TENTATIVE) gold als bevestigd, en zonder plaats in de mail kwam het praktijkadres in het blok.",
+   "gevolg": "Mehdi gaat naar een geannuleerd consult, of staat aan de verkeerde vestiging.",
+   "waarom_niet_gezien": "Er was geen proef met een annulering zonder tijd, een herbevestiging of een voorlopige uitnodiging.",
+   "oorzaak": "De herkenning vroeg altijd een tijd; de status hing aan de eerste annulering; de plaats viel terug op het profiel.",
+   "soort_oorzaak": "code",
+   "oplossing": "Annulering of verplaatsing zonder tijd wordt een open punt met een vraag; de nieuwste bevestiging bepaalt of het geannuleerd is; TENTATIVE is een aanvraag; de plaats komt alleen uit de mail. Een verzet blok houdt zijn duur als de mail geen einde noemt, en zegt dat (A04, deels).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "A03 een nieuwere bevestiging heft een eerdere annulering op"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-137",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 1 (A05), nagemeten door Claude",
+   "fout": "Logregels korten titels in ([:40], [:44], [:50] ...); het bordmasker vervangt alleen volledige privéteksten, dus een ingekorte privétitel kon op het bord komen.",
+   "gevolg": "Een stuk van een medische titel in het gedeelde logboek.",
+   "waarom_niet_gezien": "De maskerproeven gebruikten volledige titels.",
+   "oorzaak": "Het masker kende geen ingekorte varianten.",
+   "soort_oorzaak": "code",
+   "oplossing": "prive_teksten geeft ook de ingekorte stukken door aan het masker; een privé-item gaat nooit naar een afdeling op het bord.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "A05 een ingekorte privétitel (titel[:44]) in een logregel wordt gemaskeerd"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-138",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 1 (A06 en A07), nagemeten door Claude",
+   "fout": "Een mislukte zorgzoekactie sloeg ook de gewone mail van die map over, een onleesbaar profiel liet de dekking 'volledig', en alleen een nieuw blok werd teruggelezen: verhuizen, koppelen en verzetten niet.",
+   "gevolg": "Een gemiste mail zonder melding, of een schrijfactie die 'gelukt' heet zonder bewijs.",
+   "waarom_niet_gezien": "Fouten in de zorgroute en de teruglezing van andere schrijfacties waren niet beproefd.",
+   "oorzaak": "De zorgzoekactie zat in dezelfde try als de gewone; zorgprofielen() slikte fouten; geen gemeenschappelijke teruglezing.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een aparte try voor de zorgzoekactie (fout telt als onvolledig); een profielfout maakt de dekking gedeeltelijk; _zorg_nalezen leest na elke schrijfactie terug (agenda, begin, einde, merk, plaats, [PR] zonder vraag, geen gasten, weg van de bronagenda).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "A06 een onleesbaar zorgprofiel: de dekking is gedeeltelijk, niet volledig"
    },
    "controle": [],
    "status": "opgelost"

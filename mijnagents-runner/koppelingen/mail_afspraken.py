@@ -253,12 +253,24 @@ def zorgprofiel_zet(profiel, nu=None):
                   (p["id"], json.dumps(p, ensure_ascii=False), nu))
 
 
+ZORG_FOUT = ""      # laatste fout bij het lezen van de profielen: de ronde meldt de dekking dan gedeeltelijk (Codex A06)
+
+
 def zorgprofielen():
+    global ZORG_FOUT
+    ZORG_FOUT, uit = "", []
     try:
         with _db() as c:
-            return [json.loads(r["profiel"]) for r in c.execute("SELECT profiel FROM zorgpraktijk ORDER BY id").fetchall()]
-    except (sqlite3.Error, ValueError):
+            rijen = c.execute("SELECT id, profiel FROM zorgpraktijk ORDER BY id").fetchall()
+    except sqlite3.Error as e:
+        ZORG_FOUT = f"zorgprofielen niet te lezen ({type(e).__name__})"
         return []
+    for r in rijen:
+        try:
+            uit.append(json.loads(r["profiel"]))
+        except ValueError:
+            ZORG_FOUT = f"zorgprofiel {r['id']} niet te lezen"
+    return uit
 
 
 def _zorgprofiel(afzender, profielen):
@@ -363,11 +375,15 @@ def zorg_herken(k, profiel):
         except Exception:  # noqa: BLE001
             continue
     tijden = _zorg_tijden(alles)
-    if not ev and not (tijden and _AFSPRAAKWOORD_ZORG.search(alles)):
-        return None                                              # nieuwsbrief, informatie: geen afspraak
     gebeurtenis = next((g for g, p in _GEBEURTENIS if p.search(alles)), "onbekend")
+    if not ev and not (tijden and _AFSPRAAKWOORD_ZORG.search(alles)):
+        # een annulering of verplaatsing zonder leesbare tijd verdwijnt niet: ze wordt een open punt (Codex A03)
+        if not (gebeurtenis in ("annulering", "verplaatsing") and _AFSPRAAKWOORD_ZORG.search(alles)):
+            return None                                          # nieuwsbrief, informatie: geen afspraak
     if ev and ev.get("geannuleerd"):
         gebeurtenis = "annulering"
+    elif ev and ev.get("status") == "TENTATIVE":
+        gebeurtenis = "aanvraag"                                 # voorlopig is geen bevestiging (Codex A03)
     start, oude_start = "", ""
     if gebeurtenis == "verplaatsing":
         m = next(p for g, p in _GEBEURTENIS if g == "verplaatsing").search(alles)
@@ -466,7 +482,8 @@ def _zorg_uit_kandidaat(k, profiel):
              "soort": "zorg", "sleutel": f"zorg|{profiel['id']}|{z['start']}" if z["start"] else f"zorg|{profiel['id']}|zonder|{mid}",
              "ics_uid": z["ics_uid"], "recurrence_id": z["recurrence_id"], "sequence": 0, "dtstamp": ontvangen,
              "method": z["gebeurtenis"], "geannuleerd": z["gebeurtenis"] == "annulering", "start": z["start"], "einde": z["einde"],
-             "titel": f"{rol} {z['behandelaar']}".strip(), "locatie": z["locatie"] or profiel.get("adres", ""), "zorg": z}]
+             # de plaats komt alleen uit de mail: een praktijk met meer vestigingen kan elders zijn (Codex A04)
+             "titel": f"{rol} {z['behandelaar']}".strip(), "locatie": z["locatie"], "zorg": z}]
 
 
 def _zorg_json(a):
@@ -487,16 +504,48 @@ def _bewaar_zorg(c, a):
     z = _zorg_json(a)
     pid = z.get("praktijk") or a["sleutel"].split("|")[1]
     like = f"zorg|{pid}|%"
-    doel = None
+    nu_iso = _nu().isoformat(timespec="seconds")
+    # 1. Hetzelfde bericht (ook via de tweede mailbox of in een volgende ronde) is al verwerkt: alleen de bron bijzetten.
+    #    Zo maakt een oude herinnering na een verplaatsing nooit een tweede rij (Codex A01).
+    al = c.execute("SELECT sleutel FROM bron WHERE message_id=? AND sleutel LIKE ? LIMIT 1", (a["bron_message_id"], like)).fetchone()
+    if al:
+        c.execute("INSERT OR IGNORE INTO bron(mailbox,message_id,sleutel,map,imap_uid,ontvangen,afzender,onderwerp,gezien) "
+                  "VALUES(?,?,?,?,?,?,?,?,?)", (a["bron_mailbox"], a["bron_message_id"], al["sleutel"], a.get("map", ""), a.get("imap_uid"),
+                                                a["bron_ontvangen"], a["bron_afzender"], a["bron_onderwerp"], nu_iso))
+        return 0
+    eigen_patient = _naam_plat(z.get("patient") or "")
+
+    def zelfde_patient(r):
+        # twee patiënten op hetzelfde uur blijven twee afspraken; een onbekende patiënt koppelt wel (Codex A01). Alle
+        # namen van Mehdi uit het profiel ('Mohammad Mehdi ...', 'Mehdi ...') zijn dezelfde persoon.
+        rz = _zorg_json(dict(r))
+        p = _naam_plat(rz.get("patient") or "")
+        if not p or not eigen_patient or p == eigen_patient:
+            return True
+        return bool(rz.get("mehdi")) and bool(z.get("mehdi"))
+
+    def zoek(sql, args):
+        return next((r for r in c.execute(sql, args).fetchall() if zelfde_patient(r)), None)
+
+    doel, alias = None, False
     if z.get("gebeurtenis") == "verplaatsing" and z.get("oude_start"):
-        doel = (c.execute("SELECT * FROM afspraak WHERE soort='zorg' AND start=? AND sleutel LIKE ?", (z["oude_start"], like)).fetchone()
-                or c.execute("SELECT * FROM afspraak WHERE sleutel=?", (f"zorg|{pid}|{z['oude_start']}",)).fetchone())
+        doel = (zoek("SELECT * FROM afspraak WHERE soort='zorg' AND start=? AND sleutel LIKE ?", (z["oude_start"], like))
+                or zoek("SELECT * FROM afspraak WHERE sleutel=?", (f"zorg|{pid}|{z['oude_start']}",)))
     if doel is None and a.get("ics_uid"):
-        doel = c.execute("SELECT * FROM afspraak WHERE soort='zorg' AND ics_uid=? AND sleutel LIKE ?", (a["ics_uid"], like)).fetchone()
+        doel = zoek("SELECT * FROM afspraak WHERE soort='zorg' AND ics_uid=? AND sleutel LIKE ?", (a["ics_uid"], like))
     if doel is None and a.get("start"):
-        doel = (c.execute("SELECT * FROM afspraak WHERE soort='zorg' AND start=? AND sleutel LIKE ?", (a["start"], like)).fetchone()
-                or c.execute("SELECT * FROM afspraak WHERE sleutel=?", (a["sleutel"],)).fetchone())
+        doel = zoek("SELECT * FROM afspraak WHERE soort='zorg' AND start=? AND sleutel LIKE ?", (a["start"], like))
+    if doel is None and a.get("start"):
+        # een oude tijd van een afspraak die intussen verplaatst is (tijdalias): koppelen, de tijd niet terugdraaien
+        for r in c.execute("SELECT * FROM afspraak WHERE soort='zorg' AND sleutel LIKE ?", (like,)).fetchall():
+            if zelfde_patient(r) and any(h.get("van") == a["start"] for h in _zorg_json(dict(r)).get("historie") or []):
+                doel, alias = r, True
+                break
+    if doel is None and a.get("start"):
+        doel = zoek("SELECT * FROM afspraak WHERE sleutel=?", (a["sleutel"],))
     sleutel = doel["sleutel"] if doel else a["sleutel"]
+    if doel is None and c.execute("SELECT 1 FROM afspraak WHERE sleutel=?", (sleutel,)).fetchone():
+        sleutel = f"{sleutel}|{hashlib.sha256(eigen_patient.encode()).hexdigest()[:8]}"      # andere patiënt, eigen sleutel
     c.execute("INSERT OR IGNORE INTO bron(mailbox,message_id,sleutel,map,imap_uid,ontvangen,afzender,onderwerp,gezien) "
               "VALUES(?,?,?,?,?,?,?,?,?)", (a["bron_mailbox"], a["bron_message_id"], sleutel, a.get("map", ""), a.get("imap_uid"),
                                             a["bron_ontvangen"], a["bron_afzender"], a["bron_onderwerp"], _nu().isoformat(timespec="seconds")))
@@ -504,7 +553,8 @@ def _bewaar_zorg(c, a):
         velden = ("sleutel", "soort", "ics_uid", "recurrence_id", "sequence", "dtstamp", "method", "geannuleerd", "start", "einde",
                   "titel", "locatie", "bron_mailbox", "bron_message_id", "bron_onderwerp", "bron_ontvangen", "bron_afzender", "prive")
         c.execute(f"INSERT INTO afspraak({','.join(velden)}, status, zorg) VALUES({','.join('?' * len(velden))}, 'nieuw', ?)",
-                  [int(a[v]) if v == "geannuleerd" else a.get(v, "") for v in velden] + [json.dumps(z, ensure_ascii=False)])
+                  [sleutel if v == "sleutel" else int(a[v]) if v == "geannuleerd" else a.get(v, "") for v in velden]
+                  + [json.dumps(z, ensure_ascii=False)])
         return 1
     oud = _zorg_json(dict(doel))
     nieuw = dict(oud)
@@ -515,11 +565,13 @@ def _bewaar_zorg(c, a):
     nieuw["bronnen"] = sorted(set(oud.get("bronnen") or []) | set(z.get("bronnen") or []))
     nieuw["historie"] = list(oud.get("historie") or [])
     start, einde, geannuleerd = doel["start"], doel["einde"], doel["geannuleerd"]
-    nieuwer = (a.get("bron_ontvangen") or "") >= (oud.get("laatst_ontvangen") or "")
+    nieuwer = (a.get("bron_ontvangen") or "") >= (oud.get("laatst_ontvangen") or "") and not alias
     if nieuwer:
         nieuw["laatst_ontvangen"] = a.get("bron_ontvangen") or oud.get("laatst_ontvangen", "")
         if z.get("gebeurtenis") == "annulering":
             geannuleerd = 1
+        elif z.get("gebeurtenis") in ("bevestiging", "herinnering", "verplaatsing"):
+            geannuleerd = 0              # een nieuwere bevestiging heft een eerdere annulering op (Codex A03)
         if z.get("gebeurtenis") != "aanvraag" and oud.get("gebeurtenis") in ("aanvraag", "onbekend", None):
             nieuw["gebeurtenis"] = z.get("gebeurtenis")
         if z.get("gebeurtenis") == "verplaatsing":
@@ -610,7 +662,7 @@ STOPWOORDEN = {"mehd", "afsp", "appo", "meet", "uitn", "invi", "heri", "remi", "
 
 
 def _woorden(tekst):
-    """De betekenisvolle woorden als prefix van vier letters ('kineplusleuven' en 'Kine' delen 'kine')."""
+    """De betekenisvolle woorden als prefix van vier letters ('kinevoorbeeld' en 'Kine' delen 'kine')."""
     return {w[:4] for w in re.findall(r"[a-z0-9]{4,}", _plat_tekst(tekst))} - STOPWOORDEN
 
 
@@ -641,6 +693,10 @@ def _zorgachtig(x, a, z, profiel):
     van de praktijk in titel, plaats of omschrijving."""
     if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]:
         return True
+    # een zakelijke afspraak (firmacode in de titel, bv. EPB voor een tandartspraktijk) is nooit deze zorgafspraak (A02)
+    m = re.search(r"\[([A-Za-z]{2,6})(?:-[A-Za-z0-9]{1,4})?\]", x.get("titel") or "")
+    if m and m.group(1).upper() not in ("PR", "PRIVE", "LA", "LARA"):
+        return False
     tekst = _plat_tekst(" ".join(str(x.get(v) or "") for v in ("titel", "locatie", "omschrijving")))
     woorden = [_plat_tekst(w) for w in (profiel or {}).get("praktijknamen") or []]
     woorden += [_plat_tekst(n) for n in ((profiel or {}).get("behandelaars") or {})]
@@ -665,6 +721,10 @@ def _zorg_status(a, items, nu, vorig_google=""):
     merk = [x for x in items if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]]
     vorig = [x for x in items if vorig_google and f"{x.get('kalender')}|{x.get('id')}" == vorig_google]
     recent = (a.get("bron_ontvangen") or "")[:10] >= (nu - timedelta(days=14)).astimezone(BRUSSEL).date().isoformat()
+    if not start and a["geannuleerd"]:
+        # een annulering zonder datum: niet te zeggen welke afspraak, dus een open punt, nooit stil (Codex A03)
+        return {"status": "zorg_open" if recent else "zorg_historisch", "google": "",
+                "detail": "annulering zonder datum of uur: welke afspraak?"}
     if a["geannuleerd"]:
         m = (kand or merk or vorig or [None])[0]
         return {"status": "geannuleerd_staat_er" if m else "geannuleerd", "google": f"{m['kalender']}|{m['id']}" if m else "",
@@ -681,6 +741,11 @@ def _zorg_status(a, items, nu, vorig_google=""):
                 "detail": "historisch, ouder dan het leesvenster (niet vergeleken)" if oud_venster else "historisch: niet in de agenda gevonden"}
     if not z.get("mehdi"):
         return {"status": "zorg_open", "google": "", "detail": f"andere patiënt of patiënt niet te lezen ({z.get('patient') or '?'})"}
+    eigen = [x for x in kand if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]]
+    if len(kand) > 1 and not eigen:
+        # twee kandidaten op hetzelfde uur: niet raden welke het is (Codex A02)
+        return {"status": "zorg_open", "google": "", "detail": f"{len(kand)} afspraken op dat uur, niet eenduidig te koppelen"}
+    kand = eigen or kand
     if kand:
         m = kand[0]
         return {"status": "gekoppeld", "google": f"{m['kalender']}|{m['id']}", "detail": ""}
@@ -798,6 +863,11 @@ def ronde(items, sinds, nu=None, mailboxen=MAILBOXEN):
         zorg = {"zorg_afzenders": sorted({x for p in profielen for x in p.get("afzenders") or []}),
                 "zorg_sinds": ((nu or _nu()).astimezone(BRUSSEL).date() - timedelta(days=ZORG_DAGEN_TERUG)).isoformat()}
     kandidaten, fouten = lees(sinds, mailboxen, zorg=zorg) if zorg else lees(sinds, mailboxen)
+    if ZORG_FOUT:
+        # een onleesbaar profiel is geen volledige dekking, ook al lukte de rest (Codex A06)
+        fouten += [{"mailbox": m, "map": "zorgprofielen", "fout": ZORG_FOUT} for m in mailboxen]
+    # oudste mail eerst: een bevestiging komt voor haar verplaatsing, zodat die het bestaande item verzet (Codex A01)
+    kandidaten = sorted(kandidaten, key=lambda k: _ontvangen(k.get("datum")) or "")
     for k in kandidaten:
         try:
             bewaar(uit_kandidaat(k, profielen), nu)

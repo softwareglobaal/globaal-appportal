@@ -114,7 +114,7 @@ check("een onbevestigde aanvraag is een aparte gebeurtenis, geen definitief cons
 _citaat = MA.uit_kandidaat(kand("mehdichegini@hotmail.com", "Tandpraktijk Voorbeeld <info@tand-voorbeeld.test>", "RE: Afspraak tandarts",
                                 "Dag, uw eerste afspraak is geannuleerd en de andere staat ingepland. Op di 17 mrt 2026 om 18:17 schreef "
                                 "Mo Voorbeeld: kan ik verzetten?", mid="<r1@tand>"), PROF)
-check("een geciteerde antwoordkop ('Op ... om 18:17 schreef') is geen afspraaktijd", _citaat == [], str(_citaat))
+check("een geciteerde antwoordkop ('Op ... om 18:17 schreef') is geen afspraaktijd", all(not a["start"] for a in _citaat), str(_citaat))
 _gezin = MA.uit_kandidaat(kand("mehdichegini@hotmail.com", "Tandpraktijk Voorbeeld <info@tand-voorbeeld.test>", "Afspraak tandarts",
                                "Beste Lisa Voorbeeld Wij bevestigen graag uw afspraak op 18 nov 2026 om 10:00 bij Bea Proef .",
                                mid="<g1@tand>"), PROF)
@@ -235,8 +235,143 @@ check("een kine-titel op werk krijgt geen vraag naar firma en klant",
 check("een zorgtitel geldt overal als privé: nooit met titel naar het bord", W.is_prive({"kalender": W.WERKAGENDA, "titel": "Tandarts controle"})
       and not W.is_prive({"kalender": W.WERKAGENDA, "titel": "Kinepolis teamuitje"}))
 
+# ---------------------------------------------------------------- Codex-controle ronde 1 (A01 tot A07) ---
+_KM = "Kinepraktijk Voorbeeld <info@kine-voorbeeld.test>"
+_TM = "Tandpraktijk Voorbeeld <info@tand-voorbeeld.test>"
+_o_lees = MA.lees
+
+
+def _ronde_met(kandidaten):
+    MA.lees = lambda sinds, mailboxen=MA.MAILBOXEN, maximaal=2000, zorg=None: (list(kandidaten), [])
+    try:
+        return MA.ronde([], "2026-10-01", nu)
+    finally:
+        MA.lees = _o_lees
+
+
+# A01: de verplaatsing komt (nieuwste eerst) voor de oorspronkelijke bevestiging; dat geeft toch een afspraak op het nieuwe uur
+_bev = kand("mehdichegini@hotmail.com", _KM, "Uw boeking werd geaccepteerd - woensdag 25.11.2026 om 08:30",
+            "Beste Mo Voorbeeld, uw boeking werd geaccepteerd. Afspraakdatum: 25.11.2026 Afspraaktijd: 08:30 Uw therapeut: An Proef",
+            datum="Mon, 02 Nov 2026 10:00:00 +0100", mid="<a01-bev@kine>")
+_verpl = kand("mehdichegini@hotmail.com", _KM, "Uw afspraak werd verplaatst",
+              "Beste Mo Voorbeeld, uw afspraak van 25/11/2026 om 08:30 wordt verplaatst naar 27/11/2026 om 09:00. Uw therapeut: An Proef",
+              datum="Tue, 10 Nov 2026 10:00:00 +0100", mid="<a01-verpl@kine>")
+_ronde_met([_verpl, _bev])
+_nov = [a for a in MA.alle() if a["soort"] == "zorg" and a["start"][:10] in ("2026-11-25", "2026-11-27")]
+check("A01 een verplaatsing die eerst gelezen wordt, geeft geen tweede afspraak op het oude uur",
+      len(_nov) == 1 and _nov[0]["start"].startswith("2026-11-27T09:00"), str([(a["sleutel"], a["start"]) for a in _nov]))
+_oud_herinner = kand("mch@h-architects.be", _KM, "HERINNERING - Uw afspraak bij KINEVOORBEELD - woensdag 25/11/2026 om 08:30",
+                     "Beste Mo Voorbeeld, Patiënt: Mo Voorbeeld Uw therapeut: An Proef Wanneer: woensdag 25/11/2026 om 08:30",
+                     datum="Tue, 03 Nov 2026 10:00:00 +0100", mid="<a01-oud@kine>")
+_ronde_met([_verpl, _bev, _oud_herinner])
+_nov2 = [a for a in MA.alle() if a["soort"] == "zorg" and a["start"][:10] in ("2026-11-25", "2026-11-27")]
+check("A01 een oude herinnering voor het oude uur en een tweede ronde maken geen nieuwe rij (tijdalias, bericht al verwerkt)",
+      len(_nov2) == 1 and _nov2[0]["start"].startswith("2026-11-27T09:00"), str([(a["sleutel"], a["start"]) for a in _nov2]))
+MA.bewaar(MA.uit_kandidaat(kand("mehdichegini@hotmail.com", _TM, "Afspraak tandarts",
+                                "Beste Mohammad Voorbeeld Wij bevestigen graag uw afspraak op 01 dec 2026 om 10:00 bij Bea Proef .",
+                                mid="<a01-mo@tand>"), PROF), nu)
+MA.bewaar(MA.uit_kandidaat(kand("mehdichegini@hotmail.com", _TM, "Afspraak tandarts",
+                                "Beste Lisa Voorbeeld Wij bevestigen graag uw afspraak op 01 dec 2026 om 10:00 bij Bea Proef .",
+                                mid="<a01-lisa@tand>"), PROF), nu)
+_dec = [a for a in MA.alle() if a["soort"] == "zorg" and a["start"].startswith("2026-12-01T10:00")]
+check("A01 twee patiënten op hetzelfde uur blijven twee afspraken", len(_dec) == 2, str([a["sleutel"] for a in _dec]))
+
+# A02: een zakelijke afspraak met een praktijk als klant is geen persoonlijke zorg
+_zak = "[UB-KB] EPB - Tandartspraktijk De Glimlach, Proefstraat 9, 3000 Leuven"
+check("A02 een titel met een firmacode is nooit persoonlijke zorg, wel [PR] en een titel zonder code",
+      not W.is_zorg_titel(_zak) and not W.is_prive({"kalender": W.WERKAGENDA, "titel": _zak})
+      and W.is_zorg_titel("!! [PR] Kine - An Proef") and W.is_zorg_titel("VR !! kine: hand"))
+_tv = (W.nu_lokaal() + timedelta(days=3)).replace(hour=10, minute=0, second=0, microsecond=0).isoformat()
+_niet = [dict(_werk, id="zak", titel=_zak, start=_tv, einde=_tv),
+         dict(_werk, id="reeks", start=_tv, einde=_tv, _terugkerend=True),
+         dict(_werk, id="collega", start=_tv, einde=_tv, _agendagasten=["collega@x.be"])]
+_mov = []
+W._verplaats_naar, W._patch = (lambda x, doel, tok: _mov.append(x["id"])), (lambda a, body, tok, toch=False: None)
+try:
+    W.zorg_afspraken_zetten([], _niet, "t")
+finally:
+    W._verplaats_naar, W._patch = _o_fn[2], _o_fn[1]
+check("A02 nooit verhuisd: een zakelijke praktijkafspraak, een reeks, een afspraak met een collega", _mov == [], str(_mov))
+_twee = [{"kalender": W.PRIVE_AGENDA, "id": "k1", "titel": "Tandarts", "start": "2026-12-09T08:30:00+01:00"},
+         {"kalender": W.WERKAGENDA, "id": "k2", "titel": "tandarts Lara", "start": "2026-12-09T08:30:00+01:00"}]
+_r2k = MA.vergelijk([a for a in MA.alle() if a["start"].startswith("2026-12-09")], _twee, nu)
+check("A02 twee kandidaten op hetzelfde uur: een open punt, niet raden", _r2k and _r2k[0]["status"] == "zorg_open"
+      and "eenduidig" in _r2k[0]["detail"], str([(a["status"], a["detail"]) for a in _r2k]))
+_r2z = MA.vergelijk([a for a in MA.alle() if a["start"].startswith("2026-12-09")],
+                    [{"kalender": W.WERKAGENDA, "id": "z1", "titel": _zak, "start": "2026-12-09T08:30:00+01:00"}], nu)
+check("A02 een zakelijke praktijkafspraak op hetzelfde uur wordt niet gekoppeld", _r2z and _r2z[0]["status"] != "gekoppeld",
+      str([(a["status"], a["google"]) for a in _r2z]))
+
+# A03: annulering zonder tijd, herbevestiging, voorlopige ICS
+_ann = MA.uit_kandidaat(kand("mehdichegini@hotmail.com", _KM, "Uw afspraak werd geannuleerd",
+                             "Beste Mo Voorbeeld, uw afspraak bij ons werd geannuleerd.", mid="<a03-ann@kine>"), PROF)
+check("A03 een annulering zonder tijd verdwijnt niet: een open punt", len(_ann) == 1 and not _ann[0]["start"]
+      and MA.vergelijk(_ann, [], nu)[0]["status"] == "zorg_open", str(_ann))
+for _i, (_ond, _txt, _dat) in enumerate((
+        ("Uw boeking werd geaccepteerd", "Beste Mo Voorbeeld, Afspraakdatum: 10.11.2026 Afspraaktijd: 08:30", "Mon, 26 Oct 2026 10:00:00 +0100"),
+        ("Afspraak geannuleerd", "Beste Mo Voorbeeld, uw afspraak van 10/11/2026 om 08:30 werd geannuleerd.", "Tue, 27 Oct 2026 10:00:00 +0100"),
+        ("Uw boeking werd geaccepteerd", "Beste Mo Voorbeeld, Afspraakdatum: 10.11.2026 Afspraaktijd: 08:30", "Wed, 28 Oct 2026 10:00:00 +0100"))):
+    MA.bewaar(MA.uit_kandidaat(kand("mehdichegini@hotmail.com", _KM, _ond, _txt, datum=_dat, mid=f"<a03-{_i}@kine>"), PROF), nu)
+_her = [a for a in MA.alle() if a["start"].startswith("2026-11-10T08:30")]
+check("A03 een nieuwere bevestiging heft een eerdere annulering op", len(_her) == 1 and not _her[0]["geannuleerd"], str(_her))
+_tent = MA.uit_kandidaat(kand("mehdichegini@hotmail.com", _TM, "Afspraak tandarts", "Beste Mohammad Voorbeeld Afspraak bij Bea Proef .",
+                              ics=[TAND_ICS.replace("STATUS:CONFIRMED", "STATUS:TENTATIVE").replace("AAAA-1111", "TTTT-2222")
+                                   .replace("20261209T07", "20261216T07").replace("20261209T08", "20261216T08")], mid="<a03-t@tand>"), PROF)
+check("A03 een voorlopige afspraak (ICS TENTATIVE) is een aanvraag, geen blok", _tent and (_tent[0]["zorg"] or {}).get("gebeurtenis") == "aanvraag", str(_tent))
+
+# A04: geen praktijkadres als plaats; een verzet blok houdt zijn duur en zegt dat
+check("A04 zonder plaats in de mail blijft de plaats leeg (geen praktijkadres)", _alleen_naam and _alleen_naam[0]["locatie"] == "",
+      str(_alleen_naam))
+_vz_item = {"kalender": W.PRIVE_AGENDA, "id": "vz", "titel": "!! [PR] Kine - An Proef", "start": "2026-11-25T08:30:00+01:00",
+            "einde": "2026-11-25T09:00:00+01:00", "omschrijving": ""}
+_vz = dict(_nov2[0], status="afwijkend", google=f"{W.PRIVE_AGENDA}|vz")
+_vpat = []
+W._patch = lambda a, body, tok, toch=False: _vpat.append(body)
+W._lees_event = lambda kal, eid, tok: {"start": {"dateTime": "2026-11-27T09:00:00+01:00"}, "end": {"dateTime": "2026-11-27T09:30:00+01:00"}}
+try:
+    _rvz = W.zorg_afspraken_zetten([_vz], [_vz_item], "t", W.nu_lokaal().replace(year=2026, month=10, day=15))
+finally:
+    W._patch, W._lees_event = _o_fn[1], _o_fn[3]
+check("A04 een verplaatsing zonder einde verzet hetzelfde blok met zijn oude duur, en zegt dat in de omschrijving",
+      _rvz["verzet"] == 1 and _vpat and _vpat[0]["end"]["dateTime"].startswith("2026-11-27T09:30") and "oude duur" in _vpat[0]["description"],
+      str((_rvz, _vpat)))
+
+# A05: een ingekorte privétitel in een logregel wordt gemaskeerd; privé gaat nooit naar een afdeling
+import bord as _bord  # noqa: E402
+_lang = "!! [PR] Mondhygiëne - Een Heel Lange Naam Voor De Proef Van Het Masker"
+_ag = _bord.Agent("proef-masker")
+_ag.prive(W.prive_teksten([{"kalender": W.PRIVE_AGENDA, "titel": _lang, "locatie": ""}]))
+_regel = _ag.maskeer(f"2026-10-21T08:30 {_lang[:44]}: thuis -> Leuven 20 min")
+check("A05 een ingekorte privétitel (titel[:44]) in een logregel wordt gemaskeerd", _lang[:20] not in _regel and "(privé)" in _regel, _regel)
+check("A05 een privé-item gaat nooit naar een afdeling op het bord",
+      'afdeling != "mehdi" and not is_prive(a)' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+
+# A06: een onleesbaar profiel maakt de dekking gedeeltelijk
+MA._db().execute("INSERT OR REPLACE INTO zorgpraktijk(id, profiel, bijgewerkt) VALUES('stuk', '{niet json', '')").connection.commit()
+_ronde_met([])
+_ls = MA.leesstand()
+check("A06 een onleesbaar zorgprofiel: de dekking is gedeeltelijk, niet volledig",
+      all(_ls.get(m, {}).get("dekking") == "gedeeltelijk" for m in MA.MAILBOXEN), str({m: _ls.get(m, {}).get("dekking") for m in MA.MAILBOXEN}))
+_c6 = MA._db()
+_c6.execute("DELETE FROM zorgpraktijk WHERE id='stuk'")
+_c6.commit()
+
+# A07: na het verhuizen wordt teruggelezen; klopt het niet, dan heet het niet verhuisd
+_w7 = dict(_werk, id="w7", start=_tv, einde=_tv)
+for _lees, _verwacht in (({W.PRIVE_AGENDA: {"summary": "!! [PR] Kine: hand mo", "description": "Van de werkagenda naar privé"},
+                           W.WERKAGENDA: {"status": "cancelled"}}, (1, 0)), ({}, (0, 1))):
+    W._verplaats_naar, W._patch = (lambda x, doel, tok: None), (lambda a, body, tok, toch=False: None)
+    W._lees_event = lambda kal, eid, tok, _l=_lees: _l.get(kal)
+    try:
+        _r7 = W.zorg_afspraken_zetten([], [_w7], "t")
+    finally:
+        W._verplaats_naar, W._patch, W._lees_event = _o_fn[2], _o_fn[1], _o_fn[3]
+    check(f"A07 verhuizen telt alleen na een geslaagde teruglezing ({'gelukt' if _verwacht[0] else 'mislukt'})",
+          (_r7["verhuisd"], _r7["fout"]) == _verwacht, str(_r7))
+
 # de lezer: zorgafzenders apart gezocht, ook HTML, agenda-link en herkansing bij 'not connected'
 _bron = (HIER / "koppelingen" / "post_lezer.py").read_text(encoding="utf-8")
+check("A06 een mislukte zorgzoekactie laat de gewone mail van de map staan en telt als onvolledig", "zorgzoekactie mislukt" in _bron)
 check("de lezer zoekt de zorgafzenders apart (ook oude mail en zonder afspraakwoord) en leest HTML en de agenda-link",
       "zorg_afzenders" in _bron and "_html_naar_tekst" in _bron and "linktijden" in _bron and "not connected" in _bron
       and "BODY.PEEK[]" in _bron and "STORE" not in _bron)

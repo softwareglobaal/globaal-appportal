@@ -80,7 +80,14 @@ ZORG_TITEL = re.compile(r"\bkine\b|kinesi|kinésit|tandarts|mondhygi|dentist", r
 
 
 def is_zorg_titel(titel):
-    return bool(ZORG_TITEL.search(titel or ""))
+    """Een zorgwoord zonder zakelijke firmacode. Met een firmacode is het een zakelijke afspraak met een praktijk als
+    klant (EPB voor een tandartspraktijk, een verbouwing van een kinepraktijk): die blijft zakelijk, wordt niet privé en
+    verhuist nooit (Codex-controle ronde 1, A02). [PR] en Lara tellen als privé."""
+    t = titel or ""
+    if not ZORG_TITEL.search(t):
+        return False
+    m = CODE_RE.search(t)
+    return not m or (m.group(1) or "").upper() in ("PRIVE", "PR", "LA", "LARA")
 
 
 def is_prive(a):
@@ -99,7 +106,21 @@ def prive_teksten(items):
         if ":" in t:
             uit.add(t.split(":", 1)[1].strip())
         uit.add((x.get("locatie") or "").strip())
-    return {u for u in uit if u}
+    return {u for u in met_ingekort(uit) if u}
+
+
+# De logregels korten een titel in ([:40], [:44], [:50] ...); het masker vervangt alleen wat het letterlijk kent.
+# Daarom kent het ook die stukken (Codex-controle ronde 1, A05: een ingekorte privétitel glipte erlangs).
+KORT_LENGTES = (30, 40, 44, 45, 50, 55, 60, 70, 80)
+
+
+def met_ingekort(teksten):
+    uit = set(teksten)
+    for t in list(uit):
+        for n in KORT_LENGTES:
+            if t and len(t) > n:
+                uit.add(t[:n])
+    return uit
 
 
 # Wat Mehdi archiveert krijgt "ZZ ARCHIEF" voor de naam, nadat hij de agenda van
@@ -2199,7 +2220,9 @@ def mail_meldingen(res, bestaande, tok, nu=None):
             regels.append(f"{a['start'][:16]} melding niet gezet ({type(e).__name__})")
     # een uitnodiging zonder uur: een keer een vraag, en het register onthoudt dat (geen dagelijkse herhaling)
     for a in res:
-        if a["status"] != "zonder_tijd" or a.get("melding") or (a.get("bron_ontvangen") or "")[:10] < (nu - timedelta(days=MAIL_VOORUIT_DAGEN)).date().isoformat():
+        # ook een zorgmail zonder datum (een annulering zonder tijd) krijgt een keer een vraag (Codex A03)
+        zonder = a["status"] == "zonder_tijd" or (a["status"] == "zorg_open" and not a.get("start"))
+        if not zonder or a.get("melding") or (a.get("bron_ontvangen") or "")[:10] < (nu - timedelta(days=MAIL_VOORUIT_DAGEN)).date().isoformat():
             continue
         k = "z:" + MA.sleutel_kort(a)
         try:
@@ -2287,7 +2310,7 @@ def _zorg_body(a, z, profiel):
     kop = ", ".join(x for x in (profiel.get("naam", ""), profiel.get("adres", ""),
                                 f"tel. {profiel['telefoon']}" if profiel.get("telefoon") else "") if x)
     return {"summary": canoniek(f"!! [PRIVE] {MA.zorg_rol(z, profiel)}" + (f" - {beh}" if beh else "")),
-            "location": a.get("locatie") or profiel.get("adres", ""),
+            "location": a.get("locatie") or "",          # alleen uit de mail (Codex A04)
             "start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
             "end": {"dateTime": a["einde"], "timeZone": "Europe/Brussels"},
             "transparency": "opaque",
@@ -2316,6 +2339,35 @@ def _zorg_teruglezen(kal, eid, body, tok):
         fout.append("gasten")
     if body.get("location") and (e.get("location") or "") != body["location"]:
         fout.append("plaats")
+    return ", ".join(fout)
+
+
+def _zorg_nalezen(kal, eid, tok, start=None, einde=None, merk=None, plaats=None, titel_pr=False, weg_van=None):
+    """Leest na elke schrijfactie van de zorgstap terug wat Google bewaarde (Codex A07): staat het item op de juiste
+    agenda, kloppen begin, einde, merk en plaats, draagt het [PR] zonder VR of vraag, geen gasten, en staat het niet
+    meer op de agenda waar het vandaan kwam. Geeft de problemen, of '' als alles klopt."""
+    e = _lees_event(kal, eid, tok)
+    if not e or e.get("status") == "cancelled":
+        return f"niet terug te vinden op {kal[:24]}"
+    fout = []
+    if start and not _zelfde_tijd((e.get("start") or {}).get("dateTime"), start):
+        fout.append("begin")
+    if einde and not _zelfde_tijd((e.get("end") or {}).get("dateTime"), einde):
+        fout.append("einde")
+    if merk and ((e.get("extendedProperties") or {}).get("private") or {}).get(ZORGMERK) != merk:
+        fout.append("merk")
+    if plaats and (e.get("location") or "") != plaats:
+        fout.append("plaats")
+    if titel_pr:
+        t = e.get("summary") or ""
+        if "[PR]" not in t or t.startswith("VR") or "Agendawacht vraagt" in (e.get("description") or ""):
+            fout.append("titel of vraag")
+    if e.get("attendees"):
+        fout.append("gasten")
+    if weg_van:
+        oud = _lees_event(weg_van, eid, tok)
+        if oud and oud.get("status") != "cancelled":
+            fout.append(f"staat nog op {weg_van[:24]}")
     return ", ".join(fout)
 
 
@@ -2379,8 +2431,13 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
                     body["location"] = a["locatie"]
                 try:
                     _patch(x, body, tok)
-                except Exception:  # noqa: BLE001
-                    pass
+                    probleem = _zorg_nalezen(PRIVE_AGENDA, eid, tok, merk=a["sleutel"], plaats=body.get("location"))
+                    if probleem:
+                        st["fout"] += 1
+                        st["prive"].append(f"{wat}: koppelmerk gezet maar het teruglezen klopt niet ({probleem})")
+                except Exception as ex:  # noqa: BLE001
+                    st["fout"] += 1
+                    st["prive"].append(f"{wat}: koppelmerk niet gezet ({type(ex).__name__})")
             st["prive"].append(f"{wat}: staat al in de agenda ({kal[:24]}, {eid}); geen tweede item")
         elif a["status"] == "afwijkend" and toekomst and a.get("google"):
             kal, _, eid = a["google"].partition("|")
@@ -2388,18 +2445,26 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
             hist = (z.get("historie") or [])
             if x and hist and hist[-1].get("naar") == a["start"] and not x.get("hele_dag"):
                 einde = a.get("einde")
+                notitie = ""
                 if not einde:
-                    # de duur van het bestaande item blijft (geen verzonnen duur): einde = nieuw begin + oude duur
+                    # Hetzelfde consult op een nieuw uur: het blok verhuist mee en houdt zijn lengte; dat het einde niet in
+                    # de mail stond, staat erbij (Codex A04, deels: een blok op het oude uur laten staan is erger)
                     duur = datetime.fromisoformat(x["einde"]) - datetime.fromisoformat(x["start"])
                     einde = (datetime.fromisoformat(a["start"]) + duur).isoformat()
+                    notitie = " Het einde stond niet in de mail: de oude duur is behouden."
                 try:
                     _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
                                "end": {"dateTime": einde, "timeZone": "Europe/Brussels"},
                                "description": ((x.get("omschrijving") or "").rstrip() + f"\n\nVerzet van {hist[-1]['van'][:16].replace('T', ' ')} "
-                                               f"naar {a['start'][:16].replace('T', ' ')} volgens mail {hist[-1].get('bron', '')}.").strip()}, tok)
-                    a["status"] = "gezet"
-                    st["verzet"] += 1
-                    st["prive"].append(f"{wat}: verzet van {hist[-1]['van'][:16]} (zelfde item {eid})")
+                                               f"naar {a['start'][:16].replace('T', ' ')} volgens mail {hist[-1].get('bron', '')}.{notitie}").strip()}, tok)
+                    probleem = _zorg_nalezen(kal, eid, tok, start=a["start"], einde=einde)
+                    if probleem:
+                        st["fout"] += 1
+                        st["prive"].append(f"{wat}: verzet maar het teruglezen klopt niet ({probleem})")
+                    else:
+                        a["status"] = "gezet"
+                        st["verzet"] += 1
+                        st["prive"].append(f"{wat}: verzet van {hist[-1]['van'][:16]} (zelfde item {eid}), teruggelezen{notitie}")
                 except Exception as ex:  # noqa: BLE001
                     st["fout"] += 1
                     st["prive"].append(f"{wat}: verzetten mislukt ({type(ex).__name__})")
@@ -2416,7 +2481,9 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
             st["wacht"] += 1
     # een kine- of tandartsitem op de werkagenda hoort privé: verhuizen met behoud van het Google-ID, zonder VR en firmavraag
     for x in items:
-        if x.get("kalender") != WERKAGENDA or x.get("hele_dag") or x.get("deelnemers") or not x.get("id"):
+        # nooit verhuizen: een afspraak met gasten (van buiten of collega's), een reeks of een hele dag (Codex A02)
+        if x.get("kalender") != WERKAGENDA or x.get("hele_dag") or x.get("deelnemers") or x.get("_agendagasten") \
+                or x.get("_terugkerend") or not x.get("id"):
             continue
         if not (is_zorg_titel(x.get("titel")) or x["id"] in werk_gelinkt) or not _toekomst(x.get("start"), nu):
             continue
@@ -2437,9 +2504,15 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
         try:
             _verplaats_naar(x, PRIVE_AGENDA, tok)
             _patch(dict(x, kalender=PRIVE_AGENDA), body, tok)
+            probleem = _zorg_nalezen(PRIVE_AGENDA, x["id"], tok, titel_pr=True, weg_van=WERKAGENDA,
+                                     merk=(body.get("extendedProperties") or {}).get("private", {}).get(ZORGMERK))
+            if probleem:
+                st["fout"] += 1
+                st["prive"].append(f"{x['start'][:16]} verhuisd maar het teruglezen klopt niet ({probleem})")
+                continue
             st["verhuisd"] += 1
             st["prive"].append(f"{x['start'][:16].replace('T', ' ')} {x.get('titel', '')[:40]}: van werk naar privé ({x['id']}), "
-                               f"nu '{body['summary']}'")
+                               f"nu '{body['summary']}', teruggelezen")
         except Exception as ex:  # noqa: BLE001
             st["fout"] += 1
             st["prive"].append(f"{x['start'][:16]} verhuizen naar privé mislukt ({type(ex).__name__})")
@@ -3767,7 +3840,7 @@ def main():
                 dagplan.append(regel)
             if dag == gisteren and (info["soort"] in ("KB", "PB", "KO", "PO") or deal):
                 gisteren_lijst.append(regel)
-            if dag >= vandaag and afdeling != "mehdi":
+            if dag >= vandaag and afdeling != "mehdi" and not is_prive(a):    # privé nooit naar een afdeling (A05)
                 per_afdeling[afdeling] = per_afdeling.get(afdeling, 0) + 1
                 klaar.append({"voor": afdeling, "soort": "afspraak", "sleutel": str(deal["id"]) if deal else (info["nummer"] or ""),
                               "titel": f"{dag} {regel}", "uniek": f"agenda:{a['kalender']}:{a['id']}", "verwijzing": a.get("link", ""),
