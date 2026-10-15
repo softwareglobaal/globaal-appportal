@@ -1,5 +1,5 @@
 {
- "versie": "5.10",
+ "versie": "5.11",
  "datum": "2026-10-15",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "agendas": [
@@ -406,6 +406,36 @@
    "naam": "een ronde tegelijk",
    "hoe": "slot_nemen(): de agent neemt een slot voor hij schrijft, een tweede ronde wacht tot de eerste klaar is. Gezien 21-09-2026: een volledige ronde en de wijzigingswacht maakten tegelijk ritten",
    "test": "tests/test_agenda_taken.py"
+  },
+  {
+   "naam": "onbekend is niet leeg",
+   "hoe": "Een bron die niet te lezen is, is onbekend, nooit leeg (FR-94, FR-141, FR-142). Vakantiedagen van Lara of dagen zonder auto onbekend: geen ritten naar buiten of voor Lara. Een agenda niet gelezen: geen ritten opruimen, geen mailvergelijking, geen zorgblok of mailmelding, wel een nood. Een verre agenda niet gelezen: geen verre ritten die ronde. De archieflijst niet gelezen: een nood. Codex-controle ronde 2, 15-10-2026.",
+   "test": "tests/test_codex_ronde2.py"
+  },
+  {
+   "naam": "tijd als tijdstip",
+   "hoe": "Tijden vergelijk ik als tijdstip met tijdzone, nooit als tekst: de VM draait op UTC en in de wintertijdnacht ligt 02:15+01:00 na 02:30+02:00. Google geeft elke agenda in Europe/Brussels terug (FR-148).",
+   "test": "tests/test_codex_ronde2.py"
+  },
+  {
+   "naam": "alleen een echte oproep telt",
+   "hoe": "Een oproep telt pas als gebeld als ze echt vertrok (een call-sid of een Telegram-antwoord); een mislukte start wordt opnieuw geprobeerd en nooit als 'gebeld' gelogd (FR-150). Het belrooster komt uit een lezing na de ritten en neemt de eigen heenrit van de afspraak; een privé-afspraak staat er zonder titel in (FR-143). Alleen een start door cron is gepland (FR-145).",
+   "test": "tests/test_codex_ronde2.py"
+  },
+  {
+   "naam": "eigen rit heeft een merk",
+   "hoe": "Weghalen of verhuizen alleen bij mijn tekst en mijn merk agendawacht_rit gelijk aan het eigen ID (FR-140).",
+   "test": "tests/test_codex_ronde2.py"
+  },
+  {
+   "naam": "agendagasten in een reeks",
+   "hoe": "Een reeks krijgt alleen de collega's uit de titel van de reeks zelf; een naam die alleen in een keer staat, komt alleen op die keer (FR-144).",
+   "test": "tests/test_codex_ronde2.py"
+  },
+  {
+   "naam": "een vraag per betrokken afspraak",
+   "hoe": "Een vraag over meer afspraken (een dubbele boeking) komt als VR in elke eigen afspraak zonder gasten; de belsleutel blijft dezelfde (FR-149).",
+   "test": "tests/test_codex_ronde2.py"
   }
  ],
  "taken": [
@@ -935,7 +965,7 @@
   "autootje": "elke rit draagt het autootje vooraan, ook een rit die iemand met de hand zette; 'naar huis' in een titel is een rit (FR-40)",
   "lara_naar_huis": "dinsdag 19:00 tot 19:30: '🚗 Reistijd: Stadionlaan 4 → thuis (Lara naar huis brengen)', de rit naar huis na de zwemles. Blijft tot 19:30 staan zodat er tijd is om Lara van de les naar huis te brengen; zonder melding (Mehdi, 24-09-2026)",
   "hoe_ver_vooruit": "elke buitenafspraak, tot een jaar vooruit, op elke agenda: afspraak is afspraak (Mehdi, 28-09-2026; vervangt de acht dagen van 21-09). Google Routes alleen binnen 48 uur, daarbuiten OSRM met de filefactor; die rijtijden worden 90 dagen bewaard",
-  "eigen_ritten_opruimen": "De agent haalt zijn eigen ritblokken weg die niet meer kloppen: een terugrit terwijl er nog een buitenafspraak volgt, of een rit waarvan de afspraak weg of verzet is. Alleen blokken met het autootje en zijn eigen uitleg (OSRM). Een afspraak, een rit die Mehdi zelf zette of iets in het archief raakt hij nooit aan (Mehdi, 29-09-2026). Een tweede eigen heenrit voor dezelfde afspraak haalt hij ook weg (FR-76). Een eigen terugrit op een oud einde van dezelfde afspraak haalt hij ook weg (FR-78). Een afspraak die geen rit meer vraagt (bv. Lara 'overgeslagen', zonder !!) houdt geen rit vast (FR-79).",
+  "eigen_ritten_opruimen": "De agent haalt zijn eigen ritblokken weg die niet meer kloppen: een terugrit terwijl er nog een buitenafspraak volgt, of een rit waarvan de afspraak weg of verzet is. Alleen blokken met het autootje en zijn eigen uitleg (OSRM). Een afspraak, een rit die Mehdi zelf zette of iets in het archief raakt hij nooit aan (Mehdi, 29-09-2026). Een tweede eigen heenrit voor dezelfde afspraak haalt hij ook weg (FR-76). Een eigen terugrit op een oud einde van dezelfde afspraak haalt hij ook weg (FR-78). Een afspraak die geen rit meer vraagt (bv. Lara 'overgeslagen', zonder !!) houdt geen rit vast (FR-79). Eigen is sinds 15-10-2026: mijn tekst en mijn merk (extendedProperties agendawacht_rit) met het eigen ID van het blok; een kopie heeft een ander ID en raak ik niet aan. Een oude rit zonder merk werk ik alleen bij; hij krijgt zijn merk zodra hij aan zijn afspraak hangt (FR-140). Is een agenda deze ronde niet gelezen, dan ruim ik geen ritten op (FR-142).",
   "tussendoor_naar_huis": "Naar huis tussendoor alleen als er na de rit naar huis en de rit terug nog minstens 30 minuten thuis overblijft (en nooit onder 90 minuten tussen twee buitenafspraken); anders rechtstreeks van de ene naar de andere (FR-69, FR-75). Gesprekken die hij eerst geparkeerd doet, schuiven het vertrek op voor de berekening (FR-78).",
   "zonder_adres": "Een buitenafspraak zonder adres krijgt geen rit; de volgende rit vertrekt van de laatste plek die de agent kent, niet van thuis (FR-75). Waar ze is, blijft een vraag aan Mehdi.",
   "live_meting": "Een live rijtijd van Google wordt alleen hergebruikt voor dezelfde rit (zelfde van en naar); kwam hij vroeger van elders, dan geldt de nieuwe schatting (FR-79).",
@@ -951,7 +981,7 @@
    "naam": "Agendawacht",
    "bestand": "agenda_wacht.py",
    "wanneer": "werkdagen 06:30, 08:30, 10:30, 12:30, 14:30, 16:30 en 18:30, Brusselse tijd",
-   "wat": "de volledige ronde: de 15 stappen uit de takenlijst. Belt Mehdi alleen vanuit deze geplande ronde"
+   "wat": "de volledige ronde: de 15 stappen uit de takenlijst. Belt Mehdi alleen vanuit deze geplande ronde (gepland = gestart door cron; met de hand, ook met --ronde, belt nooit: FR-145)"
   },
   {
    "naam": "Signaalwacht",
@@ -1274,7 +1304,7 @@
   "titel": "vrije tekst naar de titelcode: een firmanaam (Harchitects, elevait, TKN, ...) of een leverancier uit de lijst, plus een rol (klant, prospect, leverancier, intern, KB, LO, ...) en online of buiten (!!) -> [FIRMA-SOORT]. Alleen bij afspraken die Mehdi zelf maakte, zonder gasten, niet terugkerend, en alleen als firma en soort eenduidig zijn; anders een voorstel",
   "oude_code": "een oude code (HA, UNABO, TKN) in een afspraak gemaakt na 21-09-2026 wordt de vierletterige code",
   "vaste_zoom": "nog niet gekend. Mehdi, 23-09-2026: 'stuur nog geen linken omdat je hebt die niet'. Tot hij de juiste link geeft, zet de agent geen link",
-  "zoom": "een online gesprek met een externe partij zonder link krijgt de notitie 'Online. Mehdi stuurt de link naar ...'. Geen link, niet bij bellen, niet bij Calendly-boekingen, niet bij een intern overleg of een taak zonder iemand anders, niet bij terugkerende overleggen"
+  "zoom": "een online gesprek met een externe partij zonder link krijgt de notitie 'Online. Mehdi stuurt de link naar ...'. Geen link, niet bij bellen, niet bij Calendly-boekingen, niet bij een intern overleg of een taak zonder iemand anders, niet bij terugkerende overleggen Met gasten of door een ander gezet is het een voorstel, nooit zelf geschreven; alleen een vergaderlink (Zoom, Meet, Teams, Whereby, Webex) of conferenceData telt als link, een Calendly-, Dropbox- of Pipedrive-link niet (FR-139, 15-10-2026)."
  },
  "leren": {
   "wat": "Het systeem leert van zijn fouten: elke fout komt in het foutenregister, met waarom ze niet gezien werd, de oorzaak en een grendel. Elke ochtend kijkt de zelfcontrole in de agenda zelf of het klopt.",
@@ -1640,7 +1670,7 @@
  },
  "mail_als_bron": {
   "wat": "mch@h-architects.be en mehdichegini@hotmail.com zijn afsprakenbronnen naast Google (audit 02-10-2026, werkpakket 2, FR-101)",
-  "lezen": "koppelingen/post_lezer.py in de postcontainer: alleen lezen, PEEK, alle mappen behalve prullenbak, spam, verzonden en concepten; Hotmail via het OAuth-token op de server, niet via de Mac",
+  "lezen": "koppelingen/post_lezer.py in de postcontainer: alleen lezen, PEEK, alle mappen behalve prullenbak, spam, verzonden en concepten; Hotmail via het OAuth-token op de server, niet via de Mac Ook de jaarlijkse archiefmappen (Archief.20xx) tellen mee (FR-147). Koppelen zonder gedeelde uitnodigings-ID: het onderwerp voor de eerste komma, twee projectnummers beslissen samen, anders het ene onderwerp helemaal in het andere of twee gedeelde woorden, en alleen bij precies een treffer; anders een kandidaat (FR-146). Is een agenda niet volledig gelezen, dan vergelijk ik niet en blijven de statussen staan (FR-142).",
   "herkennen": "ICS (METHOD, UID, SEQUENCE, DTSTAMP, RECURRENCE-ID, DTSTART, DTEND, SUMMARY, LOCATION, STATUS); zonder ICS datum en uur uit onderwerp of tekst; zonder uur een controlepunt",
   "register": "mijnagents-data/afspraken_mail.db: herkomst per mail; sleutel = ICS-UID (+ RECURRENCE-ID); de hoogste SEQUENCE wint; dezelfde uitnodiging via twee mailboxen is een afspraak",
   "vergelijken": "met alle agenda's: iCalUID, anders hetzelfde uur (5 minuten); statussen gekoppeld, ontbreekt, geannuleerd, geannuleerd_staat_er, zonder_tijd, voorbij",

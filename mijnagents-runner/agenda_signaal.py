@@ -8,7 +8,8 @@ het betreft. Verandert er niets, dan doet het niets en kost het niets.
 
 Afvinken gebeurt pas achteraf (audit 02-10-2026, A5): per agenda een cursor die pas vooruitgaat
 als die agenda volledig gelezen is en elke getroffen dag verwerkt. Een dag waarvoor de wacht
-faalt, blijft open in de stand en komt de volgende ronde terug, tot MAX_POGINGEN keer.
+faalt, blijft open in de stand en komt de volgende ronde terug, tot MAX_POGINGEN keer. Een dag waarvoor het
+rondeslot van de wacht bezet bleef, blijft open zonder dat het als poging telt (Codex A28, 15-10-2026).
 
 Draaien:  ~/agents/.venv/bin/python ~/appportal/mijnagents-runner/agenda_signaal.py
 """
@@ -62,6 +63,14 @@ PYTHON = str(Path.home() / "agents/.venv/bin/python")
 # Een dag waarvoor de wacht faalt, probeer ik zo vaak (een poging per ronde van 12 minuten). Daarna geef ik
 # hem luid op, anders houdt een kapotte dag de cursor van zijn agenda eeuwig vast (audit 02-10-2026, A5).
 MAX_POGINGEN = 5
+# Het dagproces krijgt 900 s, waarvan hooguit SLOT_WACHT op het rondeslot van de wacht. Blijft het slot bezet, dan
+# eindigt het met SLOT_BEZET: dat is geen mislukte poging, de dag blijft open (Codex A28, 15-10-2026). Tot dan wachtte
+# het dagproces tot 900 s op het slot, liep het in de time-out en werd een dag na vijf drukke rondes opgegeven.
+BUDGET = 900
+SLOT_WACHT = 120
+SLOT_BEZET = 75
+# Zoveel rondes na elkaar bezet (12 minuten per ronde) is geen drukte meer: dan zeg ik het luid, opgeven doe ik niet
+BEZET_ALARM = 10
 # nextPageToken moet in de velden staan, anders laat Google het weg en lijkt de eerste pagina alles (A4).
 # originalStartTime geeft de dag waar een reeksinstantie oorspronkelijk stond (A7, A8).
 VELDEN = ("nextPageToken,items(id,summary,status,updated,start/dateTime,start/date,end/dateTime,end/date,"
@@ -152,7 +161,8 @@ def te_verwerken(kal, items, oud, vinger, vanaf="", onbekend=None):
         if not dag:
             # een annulering zonder start en zonder vingerafdruk: de dag is onbekend. Niet stil afvinken (A8).
             if onbekend is not None and ev.get("status") == "cancelled":
-                onbekend.append({"sleutel": sleutel, "kalender": kal, "id": ev.get("id", ""), "titel": (ev.get("summary") or "")[:80]})
+                onbekend.append({"sleutel": sleutel, "kalender": kal, "id": ev.get("id", ""),
+                                 "titel": _toonbare_titel(kal, ev.get("summary") or "")[:80]})
             continue
         vp = vingerafdruk(ev)
         vinger[sleutel] = [vp, dag]
@@ -160,9 +170,15 @@ def te_verwerken(kal, items, oud, vinger, vanaf="", onbekend=None):
             continue
         dagen |= {d for d in vroeger if d >= vanaf} | ({s} if s else set())
         was = sorted(d for d in vroeger if d != dag)
-        titel = ev.get("summary") or _oude_titel(vorig) or "(zonder titel)"
+        titel = _toonbare_titel(kal, ev.get("summary") or _oude_titel(vorig) or "(zonder titel)")
         wat.append(f"{dag} {ev.get('status','')[:9]:<9} {titel[:52]}" + (f" (was {', '.join(was)})" if was else ""))
     return dagen, wat
+
+
+def _toonbare_titel(kal, titel):
+    """Een titel van de privé-agenda, van Lara of een zorgafspraak komt in geen uitvoer: '(privé)'. De lijst komt uit
+    W.kalenders(), dus ook die agenda's (Codex A25, 15-10-2026). Zelfde regel als de agent: W.is_prive."""
+    return "(privé)" if W.is_prive({"kalender": kal, "titel": titel}) else titel
 
 
 def _haal(url, kop):
@@ -192,12 +208,16 @@ def lees_wijzigingen(kal, sinds, nu, kop):
 def draai_wacht(dag):
     """Start de wacht voor een dag. Geeft (gelukt, uitleg). Alleen exitcode 0 is gelukt; een andere exitcode,
     een time-out of een start die niet lukt is mislukt. Audit 02-10-2026 (A6): de exitcode werd genegeerd en
-    een gecrashte wacht stond in het logboek als 'wacht gedraaid'."""
+    een gecrashte wacht stond in het logboek als 'wacht gedraaid'.
+    gelukt is None als het rondeslot bezet bleef (exitcode SLOT_BEZET): niet geprobeerd, geen mislukking (Codex A28,
+    15-10-2026)."""
     try:
-        r = subprocess.run([PYTHON, str(HIER / "agenda_wacht.py"), "--dag", dag],
-                           capture_output=True, text=True, timeout=900)
+        r = subprocess.run([PYTHON, str(HIER / "agenda_wacht.py"), "--dag", dag, "--slot-wacht", str(SLOT_WACHT)],
+                           capture_output=True, text=True, timeout=BUDGET)
     except (subprocess.TimeoutExpired, OSError) as e:
         return False, f"{type(e).__name__}: {str(e)[:150]}"
+    if r.returncode == SLOT_BEZET:
+        return None, f"rondeslot bezet na {SLOT_WACHT} s (exitcode {SLOT_BEZET})"
     if r.returncode != 0:
         fout = [x.strip() for x in (r.stderr or "").splitlines() if x.strip()]
         return False, f"exitcode {r.returncode}: " + (fout[-1][:200] if fout else "geen foutmelding")
@@ -242,13 +262,20 @@ def ronde(tijd):
         print(f"{tijd} geen nieuwe wijziging, {len(open_)} open dag(en) opnieuw")
     else:
         print(tijd, "niets gewijzigd" + (f", maar {len(niet_gelezen)} agenda('s) niet gelezen" if niet_gelezen else ""))
-    gefaald, geslaagd = {}, set()
+    gefaald, geslaagd, bezet = {}, set(), {}
     for dag in sorted(dagen | set(open_)):
+        if bezet:
+            # het slot houdt een ronde van de wacht vast (tot 15 minuten): de overige dagen wachten op de volgende ronde,
+            # anders wacht elke dag nog eens SLOT_WACHT seconden en loopt deze ronde over de volgende heen (A28)
+            bezet[dag] = "niet gestart, het rondeslot was bezet"
+            continue
         gelukt, uitleg = draai_wacht(dag)
         if gelukt:
             open_.pop(dag, None)
             geslaagd.add(dag)
             print(f"  wacht gedraaid voor {dag}: {uitleg}")
+        elif gelukt is None:
+            bezet[dag] = uitleg
         else:
             gefaald[dag] = uitleg
 
@@ -256,6 +283,7 @@ def ronde(tijd):
     for dag, uitleg in sorted(gefaald.items()):
         o = dict(open_.get(dag) or {"pogingen": 0, "kalenders": []})
         o["pogingen"] += 1
+        o.pop("bezet", None)           # de wacht liep echt: de reeks 'bezet na elkaar' is voorbij
         o["kalenders"] = sorted(set(o["kalenders"]) | {k for k, d in per_kal.items() if dag in d})
         o["fout"], o["laatst"] = uitleg[:200], nu.isoformat()
         if o["pogingen"] >= MAX_POGINGEN:
@@ -266,6 +294,23 @@ def ronde(tijd):
             open_[dag] = o
             print(f"{tijd} wacht MISLUKT voor {dag} (poging {o['pogingen']} van {MAX_POGINGEN}, blijft open): {uitleg}",
                   file=sys.stderr)
+
+    # Bezet is geen poging (A28): de dag blijft open en houdt de cursor van zijn agenda vast, de pogingen blijven staan.
+    # Een eigen teller telt de rondes bezet na elkaar; vanaf BEZET_ALARM zeg ik het op stderr en eindigt het script niet 0.
+    alarm = False
+    for dag, uitleg in sorted(bezet.items()):
+        o = dict(open_.get(dag) or {"pogingen": 0, "kalenders": []})
+        o["bezet"] = o.get("bezet", 0) + 1
+        o["kalenders"] = sorted(set(o["kalenders"]) | {k for k, d in per_kal.items() if dag in d})
+        o["laatst"] = nu.isoformat()
+        open_[dag] = o
+        regel = (f"{tijd} wacht voor {dag} niet gestart, {uitleg}: blijft open, telt niet als poging "
+                 f"({o['pogingen']} van {MAX_POGINGEN}), {o['bezet']} keer na elkaar bezet")
+        if o["bezet"] >= BEZET_ALARM:
+            alarm = True
+            print(regel + "; het slot blijft te lang bezet, kijk na welke ronde het vasthoudt", file=sys.stderr)
+        else:
+            print(regel)
 
     # De cursor gaat alleen vooruit voor een agenda die volledig gelezen is en geen open dag meer heeft (A5)
     vast = {k for o in open_.values() for k in o["kalenders"]}
@@ -291,7 +336,7 @@ def ronde(tijd):
     vinger = {k: v for k, v in vinger.items() if v[1] >= grens}
     bewaar({"gekeken": nu.isoformat(), "cursor": cursor, "laatste_dagen": sorted(dagen), "vinger": vinger,
             "open": open_, "opgegeven": opgegeven[-20:]})
-    return 1 if niet_gelezen or gefaald else 0
+    return 1 if niet_gelezen or gefaald or alarm else 0
 
 
 def main():

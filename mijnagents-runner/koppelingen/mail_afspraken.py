@@ -666,6 +666,19 @@ def _woorden(tekst):
     return {w[:4] for w in re.findall(r"[a-z0-9]{4,}", _plat_tekst(tekst))} - STOPWOORDEN
 
 
+def zelfde_onderwerp(mailtitel, agendatitel):
+    """Gaat deze mail over dit agenda-item (op hetzelfde uur, zonder gedeelde uitnodigings-ID)? Een woorddeel volstaat
+    niet: 'Project Alfa' en 'Project Beta' delen 'proj' (Codex A20, 15-10-2026). Ik vergelijk het onderwerp voor de eerste
+    komma (de rest is het adres), twee projectnummers beslissen samen, en anders moet het ene onderwerp helemaal in het
+    andere zitten of moeten twee woorden overeenkomen."""
+    m_all, g_all = _woorden((mailtitel or "").split(",")[0]), _woorden((agendatitel or "").split(",")[0])
+    mn, gn = {w for w in m_all if w.isdigit()}, {w for w in g_all if w.isdigit()}
+    if mn and gn:
+        return bool(mn & gn)
+    m, g = m_all - mn, g_all - gn
+    return bool(m and g and (m <= g or g <= m or len(m & g) >= 2))
+
+
 def _plat_tekst(t):
     import unicodedata  # noqa: PLC0415
     return unicodedata.normalize("NFKD", t or "").encode("ascii", "ignore").decode().lower()
@@ -787,8 +800,9 @@ def vergelijk(afspraken, items, nu=None):
         elif a["geannuleerd"]:
             m = uid_kand[0] if uid_kand else None
             if not m and not a["ics_uid"] and start:
-                m = next((x for x in items if _iso(x.get("start") or "") and abs((_iso(x["start"]) - start).total_seconds()) <= 300
-                          and _woorden(a["titel"]) & _woorden(x.get("titel"))), None)
+                treffers = [x for x in items if _iso(x.get("start") or "") and abs((_iso(x["start"]) - start).total_seconds()) <= 300
+                            and zelfde_onderwerp(a["titel"], x.get("titel"))]
+                m = treffers[0] if len(treffers) == 1 else None      # twijfel wijst geen item aan om te schrappen (Codex A20)
             a["google"] = f"{m['kalender']}|{m['id']}" if m else ""
             a["status"] = "geannuleerd_staat_er" if m else "geannuleerd"
         elif uid_kand:
@@ -812,9 +826,9 @@ def vergelijk(afspraken, items, nu=None):
             else:
                 kand = []
             # een andere uitnodiging (een andere expliciete UID) is hoogstens een kandidaat, ook met gedeelde woorden (R3)
-            goed = [x for x in kand if _woorden(a["titel"]) & _woorden(x.get("titel"))
+            goed = [x for x in kand if zelfde_onderwerp(a["titel"], x.get("titel"))
                     and not (a["ics_uid"] and x.get("_icaluid") and x["_icaluid"] != a["ics_uid"])]
-            if goed:
+            if len(goed) == 1:            # precies een treffer; twee is twijfel, dus een kandidaat (Codex A20)
                 a["status"], a["google"] = "gekoppeld", f"{goed[0]['kalender']}|{goed[0]['id']}"
             elif start and start < nu - timedelta(hours=1) or (start is None and a["start"] and a["start"][:10] < nu.date().isoformat()):
                 a["status"] = "voorbij"
@@ -852,7 +866,7 @@ def lees(sinds, mailboxen=MAILBOXEN, maximaal=2000, zorg=None):
         return [], [{"mailbox": m, "fout": f"{type(e).__name__}: {str(e)[:200]}"} for m in mailboxen]
 
 
-def ronde(items, sinds, nu=None, mailboxen=MAILBOXEN):
+def ronde(items, sinds, nu=None, mailboxen=MAILBOXEN, agenda_onvolledig=()):
     """Een volledige ronde: lezen, verwerken, bewaren, vergelijken met de agenda. Een mailbox heet pas volledig gelezen
     als alle mappen en berichten gelezen, verwerkt en bewaard zijn; een fout in een map, een bericht dat niet te halen
     of te ontleden is, of een afgekapte map maakt de dekking gedeeltelijk (V7). Een fout bericht houdt de andere niet
@@ -882,6 +896,10 @@ def ronde(items, sinds, nu=None, mailboxen=MAILBOXEN):
         stuk = any(not f.get("map") for f in eigen)
         tekst = "; ".join(f"{f.get('map') or 'mailbox'}{(' uid ' + str(f['uid'])) if f.get('uid') else ''}: {f['fout']}" for f in eigen)
         leesstand_zet(m, not eigen, tekst, nu, None if not eigen else ("mislukt" if stuk else "gedeeltelijk"))
+    if agenda_onvolledig:
+        # een agenda die niet gelezen is, kan de uitnodiging bevatten: niet vergelijken, de statussen en Google-ID's van
+        # de laatste volledige vergelijking blijven staan (Codex A15, 15-10-2026)
+        return [], fouten
     afspraken = vergelijk(alle(), items, nu)
     statussen_bewaren(afspraken, nu)
     return afspraken, fouten

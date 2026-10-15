@@ -110,7 +110,7 @@ def afspraken(van_dagen=-1, tot_dagen=8):
         items, pagina, mislukt = [], None, False
         while True:
             params = {"timeMin": tmin.isoformat(), "timeMax": tmax.isoformat(), "singleEvents": "true",
-                      "orderBy": "startTime", "maxResults": 250}
+                      "orderBy": "startTime", "maxResults": 250, "timeZone": "Europe/Brussels"}
             if pagina:
                 params["pageToken"] = pagina
             url = f"{API}/calendars/{urllib.parse.quote(kal, safe='')}/events?" + urllib.parse.urlencode(params)

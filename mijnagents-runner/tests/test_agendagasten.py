@@ -69,6 +69,7 @@ def _nep_patch(a, body, tok, toch=False):
 W.organisatie.agenda_adressen = lambda *x, **k: MENSEN
 W._event, W._patch, W.agenda._toegang = _nep_event, _nep_patch, (lambda: "t")
 _staat["klant"] = {"attendees": [{"email": "klant@voorbeeld.be", "responseStatus": "accepted"}]}
+_staat["reeks1"] = {"attendees": [], "summary": "Mehdi+Matthew: [UB-IN] wekelijks"}
 _morgen = (W.nu_lokaal().date().toordinal() + 1)
 from datetime import date   # noqa: E402
 _d = date.fromordinal(_morgen).isoformat()

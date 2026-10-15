@@ -23,6 +23,10 @@ ENV = os.path.expanduser("~/appportal/mijnagents-data/.env")
 # Een oproep, geen herhaling. Mehdi, 25-09-2026: "meestal neem ik het niet op, dus de agent moet niet drie keer
 # na elkaar bellen. Voor mij is dat meer dan voldoende." Hoger kan alleen hier, in de code.
 POGINGEN = min(int(os.environ.get("ALARM_POGINGEN", "1")), 1)
+# Een start die mislukt (Twilio-fout, geen call-sid) is geen oproep: zo vaak probeer ik opnieuw, een keer per ronde
+# (elke minuut), daarna geef ik het op met een logregel, anders herhaalt een kapotte koppeling eindeloos (Codex A13,
+# 15-10-2026). Voor een afspraak binnen VENSTER_MIN, voor een alarm zonder venster.
+MAX_BELPOGINGEN = 3
 AFGEROND = {"completed", "busy", "no-answer", "failed", "canceled"}
 
 
@@ -127,24 +131,70 @@ def nood():
 def alarm_bellen(staat, alarmen, log=None):
     """Aangeroepen door De Bode bij elke ronde. `staat["bel"]` onthoudt de lopende oproep.
     Nieuw alarm: bellen. Vorige oproep niet opgenomen: opnieuw, tot POGINGEN keer.
-    Geeft een korte tekst voor het detail van de hartslag, of ''."""
+    Geeft een korte tekst voor het detail van de hartslag, of ''.
+    Een start die mislukt (fout of geen call-sid, zie gelukt) is geen oproep en geen poging: de sleutel wordt pas na
+    een echte oproep vastgezet. Tot dan staat het alarm in b["open"] en probeer ik het elke ronde opnieuw, ook als het
+    signaal al gemeld is en niet meer in `alarmen` zit; na MAX_BELPOGINGEN mislukte starts geef ik het op, met een
+    logregel. Vroeger stond de sleutel al vast voor bel() en belde een alarm na een mislukte start nooit meer
+    (Codex A13, 15-10-2026). 'Nooit twee keer voor hetzelfde' blijft gelden voor echte oproepen."""
     if not beschikbaar():
         return ""
     b = staat.setdefault("bel", {"sleutel": "", "sid": "", "pogingen": 0, "laatste_status": ""})
     sleutel = "|".join(str(a.get("id", "")) for a in alarmen) if alarmen else ""
     try:
         if b.get("sid") and b.get("laatste_status") not in AFGEROND:
-            b["laatste_status"] = status(b["sid"])
-        nieuw = bool(sleutel) and sleutel != b.get("sleutel")
-        herhaal = (b.get("sleutel") and b.get("laatste_status") in {"busy", "no-answer", "failed", "canceled"}
+            try:
+                b["laatste_status"] = status(b["sid"])
+            except Exception as e:  # noqa: BLE001
+                # de status niet kunnen lezen mag een nieuw alarm niet tegenhouden
+                if log:
+                    log("alarm", "bellen", f"status van de vorige oproep niet leesbaar: {type(e).__name__}")
+        open_ = b.get("open") or {}
+        nieuw = bool(sleutel) and sleutel not in (b.get("sleutel"), open_.get("sleutel"))
+        herkans = not nieuw and bool(open_.get("sleutel"))
+        herhaal = (not (nieuw or herkans) and b.get("sleutel")
+                   and b.get("laatste_status") in {"busy", "no-answer", "failed", "canceled"}
                    and b.get("pogingen", 0) < POGINGEN)
-        if not (nieuw or herhaal):
+        if not (nieuw or herkans or herhaal):
             return f"oproep {b['laatste_status']}" if b.get("sid") and b.get("laatste_status") else ""
         if nieuw:
-            b.update({"sleutel": sleutel, "pogingen": 0, "titels": [a.get("titel", "")[:80] for a in alarmen][:3]})
-        tekst = "Dit is De Bode van Mehdi Agents met een dringend signaal. " + ". ".join(b.get("titels") or ["Er wacht een dringend signaal"])
-        b["sid"] = bel(tekst, van=van_vast())
-        b["pogingen"] += 1
+            # een eerdere mislukte start die nog openstaat, gaat mee in de tekst van deze oproep
+            doel = {"sleutel": sleutel, "mislukt": 0,
+                    "titels": ([a.get("titel", "")[:80] for a in alarmen] + list(open_.get("titels") or []))[:3]}
+        elif herkans:
+            doel = dict(open_)
+        else:
+            doel = {"sleutel": b["sleutel"], "titels": b.get("titels") or [], "mislukt": 0}
+        tekst = "Dit is De Bode van Mehdi Agents met een dringend signaal. " + ". ".join(doel.get("titels") or ["Er wacht een dringend signaal"])
+        try:
+            sid, fout = bel(tekst, van=van_vast()), ""
+            if not gelukt(sid):
+                fout = "geen call-sid terug"
+        except Exception as e:  # noqa: BLE001
+            sid, fout = "", f"{type(e).__name__}: {str(e)[:120]}"
+        zelfde = doel["sleutel"] == b.get("sleutel")   # herhaling of herkansing van een herhaling: pogingen blijven
+        if fout:
+            doel["mislukt"] = doel.get("mislukt", 0) + 1
+            if doel["mislukt"] < MAX_BELPOGINGEN:
+                b["open"] = doel
+                if log:
+                    log("alarm", "bellen", f"bellen mislukt (start {doel['mislukt']} van {MAX_BELPOGINGEN}), "
+                                           f"volgende ronde opnieuw: {fout}", tekst)
+                return "bellen mislukt"
+            b["open"] = {}
+            if zelfde:
+                b["pogingen"] = POGINGEN
+            else:
+                b.update({"sleutel": doel["sleutel"], "titels": doel.get("titels") or [], "sid": "",
+                          "pogingen": POGINGEN, "laatste_status": "mislukt"})
+            if log:
+                log("alarm", "bellen", f"bellen opgegeven na {doel['mislukt']} mislukte starts, niet gebeld: {fout}", tekst)
+            return "bellen opgegeven"
+        if not zelfde:
+            b.update({"sleutel": doel["sleutel"], "pogingen": 0, "titels": doel.get("titels") or []})
+        b["open"] = {}
+        b["sid"] = sid
+        b["pogingen"] = b.get("pogingen", 0) + 1
         b["laatste_status"] = "queued"
         if log:
             log("alarm", "bellen", f"oproep gestart (poging {b['pogingen']} van {POGINGEN})", tekst)
@@ -211,6 +261,22 @@ def bel_afspraak(tekst, slot="Details staan op WhatsApp en op het bord."):
     return fout
 
 
+def gelukt(res):
+    """Is er echt een oproep vertrokken? res is wat bel_afspraak teruggeeft [(kanaal, resultaat)], of een call-sid van
+    bel(). Een fout ('mislukt: ..'), een lege sid, de wachtmelding van CallMeBot of een lege lijst is geen oproep: dan
+    mag niets als 'gebeld' bewaard worden (Codex A13, 15-10-2026)."""
+    if isinstance(res, str):
+        return res.startswith("CA")
+    for kanaal, v in res or []:
+        v = str(v or "")
+        if kanaal == "twilio":
+            if v.startswith("CA"):
+                return True
+        elif v and not v.startswith("mislukt") and "65 seconds" not in v:
+            return True
+    return False
+
+
 def rooster_schrijven(regels):
     """regels: [{sleutel, tijd (ISO, lokale tijd met zone), tekst, titel}]. Vervangt het rooster."""
     os.makedirs(os.path.dirname(ROOSTER), exist_ok=True)
@@ -218,41 +284,109 @@ def rooster_schrijven(regels):
               open(ROOSTER, "w"), ensure_ascii=False, indent=0)
 
 
-def afspraken_bellen(staat, log=None):
+def _tijd(r):
+    """Het beltijdstip van een roosterregel, met zone; zonder zone (of onleesbaar) None. Een tijd zonder zone is niet
+    te vergelijken met nu en liet vroeger de hele ronde van De Bode crashen (Codex A13, 15-10-2026)."""
+    from datetime import datetime
+    try:
+        t = datetime.fromisoformat(r["tijd"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return t if t.tzinfo else None
+
+
+def _rooster_regels():
+    """De regels uit het belrooster, of None als het niet te lezen is."""
+    try:
+        return json.load(open(ROOSTER)).get("regels", [])
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def te_bellen(staat, nu=None, rooster=None):
+    """Alleen lezen: de roosterregels waarvan het beltijdstip nu is (tot VENSTER_MIN minuten geleden) en die nog niet
+    afgehandeld zijn. afspraken_bellen belt ze; de droge ronde van De Bode toont ze alleen (Codex A19, 15-10-2026)."""
+    from datetime import datetime, timedelta
+    nu = nu or datetime.now().astimezone()
+    rooster = _rooster_regels() if rooster is None else rooster
+    gebeld = staat.get("gebeld", {})
+    uit = []
+    for r in rooster or []:
+        t = _tijd(r)
+        if t and r.get("sleutel") and r["sleutel"] not in gebeld and t <= nu < t + timedelta(minutes=VENSTER_MIN):
+            uit.append(r)
+    return uit
+
+
+def _bewaar(bewaar, staat, log):
+    try:
+        bewaar(staat)
+    except Exception as e:  # noqa: BLE001
+        if log:
+            log("bellen", "afspraak", f"stand na de oproep niet weggeschreven: {type(e).__name__}: {str(e)[:120]}")
+
+
+def afspraken_bellen(staat, log=None, bewaar=None):
     """Elke minuut door De Bode. Belt elke roosterregel waarvan het beltijdstip nu is
-    (tot VENSTER_MIN minuten geleden) en die nog niet gebeld is. Geeft korte tekst of ''."""
+    (tot VENSTER_MIN minuten geleden) en die nog niet afgehandeld is. Geeft korte tekst of ''.
+    staat["gebeld"]: afgehandeld, dus echt gebeld (of opgegeven na MAX_BELPOGINGEN mislukte starts).
+    Een start die mislukt (fout, lege sid, zie gelukt) is geen oproep: niet in "gebeld" en nooit "gebeld voor" in het
+    logboek, wel een teller in staat["belpogingen"]; de volgende minuut opnieuw, binnen VENSTER_MIN en tot
+    MAX_BELPOGINGEN keer, daarna opgegeven met een logregel. "Elke oproep een keer" (werkwijze/bode.md) en "nooit
+    herhaald" (agenda-wacht.md) gaan over een oproep die vertrok en niet opgenomen werd (Codex A13, 15-10-2026).
+    bewaar: callback die de stand na elke poging meteen wegschrijft, zodat een time-out of crash verderop in de ronde
+    geen tweede oproep voor dezelfde afspraak geeft (Codex A26, 15-10-2026)."""
     from datetime import datetime, timedelta
     if not afspraak_bellen_beschikbaar():
         return ""
-    try:
-        rooster = json.load(open(ROOSTER)).get("regels", [])
-    except (OSError, ValueError):
+    rooster = _rooster_regels()
+    if rooster is None:
         return ""
     gebeld = staat.setdefault("gebeld", {})
+    pogingen = staat.setdefault("belpogingen", {})
     nu = datetime.now().astimezone()
     # opruimen: ouder dan twee dagen
     for k in [k for k, v in gebeld.items() if v < (nu - timedelta(days=2)).isoformat()]:
         gebeld.pop(k, None)
-    uit = []
-    for r in rooster:
-        try:
-            t = datetime.fromisoformat(r["tijd"])
-        except (KeyError, ValueError):
-            continue
-        if r["sleutel"] in gebeld or not (t <= nu < t + timedelta(minutes=VENSTER_MIN)):
-            continue
+    # mislukte pogingen voor een regel die niet meer aan de beurt is (venster voorbij, of uit het rooster): niet gebeld
+    nog = {r.get("sleutel") for r in rooster if _tijd(r) and nu < _tijd(r) + timedelta(minutes=VENSTER_MIN)}
+    titels = {r.get("sleutel"): r.get("titel", "") for r in rooster}
+    for k in [k for k in pogingen if k not in nog]:
+        n = pogingen.pop(k)
+        if log and k not in gebeld:
+            log("bellen", "afspraak", f"niet gebeld: belvenster voorbij na {n} mislukte poging(en): {titels.get(k, '')[:80]}")
+    uit, mislukt = [], []
+    for r in te_bellen(staat, nu, rooster):
+        titel = r.get("titel", "")
         res = bel_afspraak(r["tekst"], "Details staan in je agenda.")   # het belrooster komt uit de agenda
         if any("65 seconds" in str(v) for _, v in res):
             # CallMeBot laat maar één oproep per 65 s toe: deze regel volgende minuut opnieuw
             if log:
-                log("bellen", "afspraak", f"even wachten (één oproep per 65 s): {r.get('titel', '')[:60]}")
+                log("bellen", "afspraak", f"even wachten (één oproep per 65 s): {titel[:60]}")
             break
-        gebeld[r["sleutel"]] = nu.isoformat()
         samen = ", ".join(f"{k}: {str(v)[:40]}" for k, v in res)
-        if log:
-            log("bellen", "afspraak", f"gebeld voor: {r.get('titel', '')[:80]}", f"{r['tekst']}\n{samen}")
-        uit.append(r.get("titel", "")[:40])
-    return ("belt: " + "; ".join(uit)) if uit else ""
+        if gelukt(res):
+            gebeld[r["sleutel"]] = nu.isoformat()
+            pogingen.pop(r["sleutel"], None)
+            if log:
+                log("bellen", "afspraak", f"gebeld voor: {titel[:80]}", f"{r['tekst']}\n{samen}")
+            uit.append(titel[:40])
+        else:
+            n = pogingen[r["sleutel"]] = pogingen.get(r["sleutel"], 0) + 1
+            if n >= MAX_BELPOGINGEN:
+                gebeld[r["sleutel"]] = nu.isoformat()   # afgehandeld, anders herhaalt een kapotte koppeling eindeloos
+                pogingen.pop(r["sleutel"], None)
+                if log:
+                    log("bellen", "afspraak", f"bellen opgegeven na {n} mislukte pogingen, niet gebeld: {titel[:80]}",
+                        f"{r['tekst']}\n{samen or 'geen kanaal'}")
+            elif log:
+                log("bellen", "afspraak", f"bellen mislukt (poging {n} van {MAX_BELPOGINGEN}), volgende minuut opnieuw: "
+                                          f"{titel[:80]}", f"{r['tekst']}\n{samen or 'geen kanaal'}")
+            mislukt.append(titel[:40])
+        if bewaar:
+            _bewaar(bewaar, staat, log)
+    delen = (["belt: " + "; ".join(uit)] if uit else []) + (["bellen mislukt: " + "; ".join(mislukt)] if mislukt else [])
+    return "; ".join(delen)
 
 
 def nood_afspraken():

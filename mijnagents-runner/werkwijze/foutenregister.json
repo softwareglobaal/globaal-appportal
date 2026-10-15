@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.32",
+ "versie": "3.33",
  "datum": "15-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -315,6 +315,30 @@
     "FR-136",
     "FR-137",
     "FR-138"
+   ]
+  },
+  {
+   "id": "L38",
+   "les": "Een tweede controle over de hele agent vond 22 punten, 11 hoog. Drie patronen kwamen telkens terug: onbekend behandeld als leeg (een agenda, vakantielijst of archief die niet te lezen was), een argument of tekst als bewijs van herkomst (--ronde, de tekst van een rit), en tijd als tekst (UTC tegenover Brussel). Elke nieuwe stap die leest, schrijft of belt, wordt op die drie nagekeken.",
+   "uit": [
+    "FR-139",
+    "FR-140",
+    "FR-141",
+    "FR-142",
+    "FR-143",
+    "FR-144",
+    "FR-145",
+    "FR-146",
+    "FR-147",
+    "FR-148",
+    "FR-149",
+    "FR-150",
+    "FR-151",
+    "FR-152",
+    "FR-153",
+    "FR-154",
+    "FR-155",
+    "FR-156"
    ]
   }
  ],
@@ -2860,6 +2884,330 @@
     "soort": "test",
     "waar": "tests/test_zorg_afspraken.py",
     "tekst": "A06 een onleesbaar zorgprofiel: de dekking is gedeeltelijk, niet volledig"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-139",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A09, A30), nagemeten door Claude",
+   "fout": "De ZL-stap schreef titel en omschrijving van een afspraak met gasten of een Calendly-boeking, en elke http-link (Dropbox, Pipedrive, een verzetlink van Calendly) gold als vergaderlink.",
+   "gevolg": "De gast zag 'ZL' en de interne notitie in zijn eigen agenda; een online afspraak met alleen een documentlink kreeg geen ZL, of verloor ZL.",
+   "waarom_niet_gezien": "De ZL-proef had alleen een eigen afspraak zonder gasten; een Calendly-boeking ontsnapte toevallig omdat haar annuleerlink als link telde.",
+   "oorzaak": "zoom_zetten filterde niet op gasten, maker of Calendly, en heeft_link zocht naar 'https?://'.",
+   "soort_oorzaak": "code",
+   "oplossing": "Met gasten of door een ander gezet: alleen een voorstel; Calendly (agenda, maker of calendly.com in de omschrijving) nooit; alleen VERGADERLINK_RE of conferenceData telt; de volledige omschrijving wordt gelezen voor ze teruggeschreven wordt. is_calendly geldt ook in titels_normaliseren en titels_aanvullen.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A09 een online afspraak met een gast en zonder link: geen titel of omschrijving gewijzigd, wel een voorstel"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-140",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A10), nagemeten door Claude",
+   "fout": "Een ritblok gold als eigen zodra titel en omschrijving de tekst van de agent droegen; een handmatige kopie van een rit kon zo verhuisd of gewist worden.",
+   "gevolg": "Een rit die Mehdi of een collega bewust kopieerde, kon verdwijnen (wissen is onomkeerbaar).",
+   "waarom_niet_gezien": "Er was alleen een grendel tegen het wissen van afspraken, niet tegen een kopie met dezelfde tekst.",
+   "oorzaak": "is_eigen_rit keek alleen naar tekst; nieuwe ritten kregen geen merk.",
+   "soort_oorzaak": "code",
+   "oplossing": "Elke nieuwe rit krijgt een eigen ID en extendedProperties.private agendawacht_rit = dat ID. Weghalen of verhuizen alleen als merk en ID kloppen. Oude ritten: alleen bijwerken; ze krijgen hun merk zodra ze aan hun afspraak hangen en geen tweeling hebben (hoogstens 60 per ronde).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A10 een kopie met hetzelfde merk maar een ander ID blijft staan"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-141",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A11), nagemeten door Claude",
+   "fout": "Een leesfout bij de vakantiedagen van Lara of de dagen zonder auto werd een uur lang als een geldige lege lijst onthouden.",
+   "gevolg": "Ritten op een vakantiedag of een dag zonder auto, met een verzette herinnering, en de waarschuwing 'buiten op een dag zonder auto' viel weg.",
+   "waarom_niet_gezien": "FR-94 herstelde hetzelfde patroon voor de archieflijst, niet voor deze twee lezers.",
+   "oorzaak": "except: pass, daarna frozenset() in de cache.",
+   "soort_oorzaak": "code",
+   "oplossing": "Beide lezers geven None bij een fout en onthouden niets; reistijd_zetten zet dan geen ritten naar buiten (of geen Lara-ritten) en meldt het; de zelfcontrole verdraagt None.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A11 vakantie- en geen-autodagen niet te lezen: None, geen lege set"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-142",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A15, A16, A17), nagemeten door Claude",
+   "fout": "Een agenda die niet te lezen was, viel stil weg: de mail werd met een halve agenda vergeleken, de archieflijst werd leeg zonder melding, en een foutrecord in de verre lezing stopte de ronde met een KeyError.",
+   "gevolg": "Vals 'ontbreekt' met een VR-melding en een tweede zorgblok; ritten van afspraken in de ongelezen agenda konden als 'zonder afspraak' verhuisd of gewist worden; een hele ronde zonder ritten, belrooster of kleuren.",
+   "waarom_niet_gezien": "Proeven lieten Google altijd volledig antwoorden.",
+   "oorzaak": "Foutrecords werden gefilterd zonder door te geven; 'volledig' bestond alleen per mailbox.",
+   "soort_oorzaak": "code",
+   "oplossing": "ONGELEZEN, ARCHIEF_FOUT en VERRE_FOUT leggen vast wat niet gelezen is. Dan: geen ritten opruimen, geen mailvergelijking (MA.ronde agenda_onvolledig: statussen blijven), geen zorgstap of meldingen, een nood; verre foutrecords gaan nooit naar de ritten.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "NIET opgeruimd als een agenda niet gelezen is"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-143",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A14), nagemeten door Claude",
+   "fout": "Het belrooster werd gebouwd uit de lezing van voor de ritten, en koos de laatste rit binnen drie uur, ook die van een andere afspraak.",
+   "gevolg": "Een oproep te vroeg (het vertrek van een andere afspraak) of te laat (de vaste schatting); De Bode belt een keer, dus die foute oproep was de enige.",
+   "waarom_niet_gezien": "De proef had per afspraak maar een rit.",
+   "oorzaak": "belrooster(items) met items van voor reistijd_zetten; blok[-1] binnen drie uur.",
+   "soort_oorzaak": "code",
+   "oplossing": "Het rooster komt uit een nieuwe, volledige lezing na de ritten; de rit wordt gekoppeld via 'Reistijd voor: <titel>' of een einde op het begin (plus of min vijf minuten). Een privé-afspraak staat zonder titel in het rooster.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A14 een rit van een andere afspraak bepaalt het beltijdstip niet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-144",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A18), nagemeten door Claude",
+   "fout": "Bij een reeks bepaalde de titel van een uitgeklapte keer welke collega gast werd, maar de patch ging naar de hele reeks.",
+   "gevolg": "Een collega die een week in de titel stond, kwam op alle weken in zijn agenda.",
+   "waarom_niet_gezien": "De proef had dezelfde titel in elke keer.",
+   "oorzaak": "agendagasten_voor(a['titel']) met doel _reeks.",
+   "soort_oorzaak": "code",
+   "oplossing": "De reeks krijgt alleen wie in de titel van de reeks zelf staat; een naam die alleen in een keer staat, komt alleen op die keer.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A18 een collega die alleen in de titel van een week staat, komt alleen op die week"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-145",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A19), nagemeten door Claude",
+   "fout": "De belgrendel keek naar het argument --ronde, niet naar wie het proces startte.",
+   "gevolg": "Wie het cron-commando met de hand overnam, kon Mehdi laten bellen op een ronde-uur.",
+   "waarom_niet_gezien": "De FR-59-grendel was een tekstzoekactie in de broncode.",
+   "oorzaak": "if not DAG_ARG and '--ronde' in sys.argv.",
+   "soort_oorzaak": "code",
+   "oplossing": "geplande_start(): '--ronde' en cron bij de voorouders (/proc); de crontab blijft gelijk en de Regisseur geeft nooit --ronde mee.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A19 alleen --ronde mét cron als voorouder is een geplande start; met de hand (ssh) belt nooit"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-146",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A20), nagemeten door Claude",
+   "fout": "Zonder gedeelde uitnodigings-ID volstond een gedeeld woorddeel van vier letters om een mail aan een agenda-item op hetzelfde uur te koppelen.",
+   "gevolg": "'Project Beta' verdween als 'gekoppeld' achter 'Project Alfa'; een annulering wees het verkeerde item aan om te schrappen.",
+   "waarom_niet_gezien": "FR-121 herstelde alleen het geval met twee verschillende UID's.",
+   "oorzaak": "_woorden(a) & _woorden(b) volstond, en de eerste treffer won.",
+   "soort_oorzaak": "code",
+   "oplossing": "zelfde_onderwerp: onderwerp voor de eerste komma, twee projectnummers beslissen samen, anders het ene onderwerp helemaal in het andere of twee gedeelde woorden; gekoppeld of 'staat er' alleen bij precies een treffer, anders een kandidaat.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A20 'Project Beta' tegen 'Project Alfa' op hetzelfde uur is een kandidaat, niet gekoppeld"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-147",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A21), nagemeten door Claude",
+   "fout": "De postlezer sloeg de jaarlijkse archiefmappen over voor gewone afspraakmail, tegen de master in.",
+   "gevolg": "Een uitnodiging die Mehdi zelf naar Archief.20xx verplaatste, werd niet gezien terwijl de dekking 'volledig' bleef.",
+   "waarom_niet_gezien": "Er was geen reden gedocumenteerd; de zorgafzenders lazen die mappen al.",
+   "oorzaak": "archief\\.20\\d\\d in GEEN_AFSPRAAK.",
+   "soort_oorzaak": "code",
+   "oplossing": "GEEN_AFSPRAAK sluit alleen prullenbak, spam, concepten, verzonden en dergelijke uit; GEEN_ZORG is dezelfde regel.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A21 een jaarlijkse archiefmap wordt gelezen voor gewone afspraken; prullenbak en verzonden niet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-148",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A22), nagemeten door Claude",
+   "fout": "Drie stappen vergeleken het begin als tekst met de klok van de server (UTC); andere als tekst met Brusselse tijd.",
+   "gevolg": "Elke dag bleef een afspraak een of twee uur na haar begin 'komend': ZL, een titel of een herinnering op een lopende meeting. In de wintertijdnacht klopte ook de Brusselse tekstvergelijking niet.",
+   "waarom_niet_gezien": "Proeven draaiden op een Mac in Brusselse tijd.",
+   "oorzaak": "a['start'] < datetime.now().astimezone().isoformat()[:n].",
+   "soort_oorzaak": "code",
+   "oplossing": "_voorbij vergelijkt echte tijdstippen met tijdzone (een hele dag per Brusselse datum, onleesbaar telt als voorbij); Google geeft elke agenda in Europe/Brussels terug.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A22 een online afspraak die al 30 minuten bezig is, krijgt geen ZL meer (VM op UTC)"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-149",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A24), nagemeten door Claude",
+   "fout": "vragen_in_agenda nam het deel voor de eerste dubbele punt van de belsleutel als afspraak-ID; bij een dubbele boeking is dat 'dubbel'.",
+   "gevolg": "Twee eigen afspraken tegelijk kregen een oproep maar nooit VR in de agenda.",
+   "waarom_niet_gezien": "De proef had alleen sleutels die met een ID begonnen.",
+   "oorzaak": "sleutel.split(':')[0], met ID's die in de sleutel op 16 tekens afgekapt zijn.",
+   "soort_oorzaak": "code",
+   "oplossing": "_vastgelopen geeft per vraag de volledige ID's; de belsleutels blijven gelijk (geen tweede oproep). Een omschrijving langer dan 1900 tekens wordt volledig gelezen voor ze teruggeschreven wordt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A24 twee eigen afspraken tegelijk (zonder gasten): beide krijgen VR"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-150",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A13), nagemeten door Claude",
+   "fout": "Een mislukte of lege beluitkomst werd als 'gebeld' bewaard, bij een vastgelopen vraag, in De Bode en in de Filewacht.",
+   "gevolg": "Bij een storing van Twilio of CallMeBot werd Mehdi niet gebeld en ook nooit opnieuw; het logboek zei 'gebeld'.",
+   "waarom_niet_gezien": "Proeven bootsten alleen een geslaagde oproep na.",
+   "oorzaak": "Het resultaat van bel_vast of bel_afspraak werd niet beoordeeld.",
+   "soort_oorzaak": "code",
+   "oplossing": "bellen.gelukt(res): een call-sid of een geldig Telegram-antwoord. Alleen dan bewaren; anders opnieuw proberen (vastgelopen: de volgende geplande ronde; het vastzit-nummer valt terug op Telegram, nooit op het afsprakennummer).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "een mislukte start telt niet als gebeld"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-151",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A12), nagemeten door Claude",
+   "fout": "De Filewacht rekende de rit altijd opnieuw vanaf thuis, ook als het ritblok vanaf een vorige buitenafspraak vertrok, en koos het laatste reistijdblok binnen drie uur, ook een terugrit van een andere afspraak.",
+   "gevolg": "Een te late aankomst na een vorige afspraak bleef onopgemerkt, of er kwam een vals filealarm.",
+   "waarom_niet_gezien": "De proef had alleen ritten vanaf thuis.",
+   "oorzaak": "thuis = W.coord(W.THUIS); aankomst = nu + rijtijd.",
+   "soort_oorzaak": "code",
+   "oplossing": "Het heenblok zoals de agent het koppelt (einde op het begin, of 'Reistijd voor: <titel>'); het vertrekpunt uit het blok (thuis of de eerdere buitenafspraak met dat ritlabel); onbekend: niet nagerekend, wel gemeld; vertrek = max(nu, begin van het blok).",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_wachters.py",
+    "tekst": "A12 de rijtijd wordt gevraagd vanaf de vorige buitenafspraak, niet vanaf thuis"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-152",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A23), nagemeten door Claude",
+   "fout": "De stille uren van De Bode gebruikten de klok van de server (UTC).",
+   "gevolg": "In de zomer kwamen berichten tot middernacht door en bleef het tot 09:00 stil; in de winter kwamen ze tot 23:00.",
+   "waarom_niet_gezien": "De proef draaide op een Mac in Brusselse tijd.",
+   "oorzaak": "datetime.now().hour.",
+   "soort_oorzaak": "code",
+   "oplossing": "is_stil() en het uur bovenaan het bericht in Europe/Brussels.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A23 om 20:30 UTC in juli (22:30 Brussel) stuurt De Bode niets zonder alarm"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-153",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A25), nagemeten door Claude",
+   "fout": "De wijzigingswacht en de Filewacht schreven ruwe afspraaktitels naar hun logboeken, ook van de privé-agenda, Lara en zorg; bord.Agent drukte elke tekst ongemaskeerd af; het belrooster bewaarde privé-titels (dat gaat naar Dropbox).",
+   "gevolg": "Privétitels in serverlogboeken en in een gedeelde map, buiten de bordmaskering.",
+   "waarom_niet_gezien": "De maskering zat alleen op de weg naar het bord.",
+   "oorzaak": "print(titel) zonder masker; een eigen bord.Agent zonder privéteksten in de Filewacht.",
+   "soort_oorzaak": "code",
+   "oplossing": "bord.Agent drukt af via maskeer; de wijzigingswacht toont een privé-item als '(privé)'; de Filewacht gebruikt het masker van de agent en zegt 'je afspraak'; het belrooster bewaart 'privé-afspraak'.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_wachters.py",
+    "tekst": "A25 de Filewacht drukt geen privétitel af en zegt 'je afspraak' in de oproep"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-154",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A26), nagemeten door Claude",
+   "fout": "De Bode had geen proceslot, schreef de stand pas aan het eind en niet atomair, en een storing bij Telegram of het bord liet de ronde crashen voor er gebeld werd.",
+   "gevolg": "Twee overlappende minuutrondes konden dezelfde afspraak tweemaal bellen; tijdens een storing belde De Bode voor geen enkele afspraak.",
+   "waarom_niet_gezien": "Elke proef liep een ronde, met werkende kanalen.",
+   "oorzaak": "Geen fcntl-slot; json.dump in een open bestand na alle time-outs; lees_telegram en bord.call zonder try.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een slot per ronde (bezet: overslaan); eerst bellen, met de stand na elke poging atomair op schijf; Telegram, WhatsApp en het bord via veilig(): een storing wordt een nood. Een bericht schuift de leesstand pas op na een geslaagde bordaanroep.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A26 een ronde terwijl de vorige nog loopt, slaat over: niet gebeld en niets geschreven"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-155",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A27, A19), nagemeten door Claude",
+   "fout": "Een droge proef van de Filewacht bewaarde de stand en logde 'Mehdi gebeld'; een met de hand gestarte Filewacht belde echt; De Bode negeerde --droog.",
+   "gevolg": "Een proef maakte de echte Filewacht twintig minuten blind; een proef of een overgenomen commando kon Mehdi bellen.",
+   "waarom_niet_gezien": "Droog was alleen 'niet bellen', zonder controle op bijwerkingen.",
+   "oorzaak": "laatst werd voor de droog-tak gezet en altijd bewaard; geen controle op de herkomst; bode.py las geen argumenten.",
+   "soort_oorzaak": "code",
+   "oplossing": "Proef = --droog of geen geplande start (cron): rekenen en melden, niet bellen, niets bewaren. De Bode met --droog: niets bellen, sturen of bewaren.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_wachters.py",
+    "tekst": "A27 een droge ronde rekent wel, belt niet en laat de stand op schijf ongewijzigd"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-156",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A28), nagemeten door Claude",
+   "fout": "De wijzigingswacht gaf haar dagproces 900 s, terwijl dat tot 900 s op het rondeslot kon wachten; 'slot bezet' telde als mislukte poging en na vijf werd de dag opgegeven.",
+   "gevolg": "Een dag die wijzigde terwijl een lange ronde liep, kon zonder verwerking opgegeven worden, of het proces werd midden in het schrijven gedood.",
+   "waarom_niet_gezien": "De proef had een vrij slot.",
+   "oorzaak": "timeout=900 en exitcode 75 als gewone fout.",
+   "soort_oorzaak": "code",
+   "oplossing": "--slot-wacht 120 binnen het budget van 900 s; exitcode 75 is 'bezet': de dag blijft open zonder poging, een aparte teller, luid na tien rondes.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_wachters.py",
+    "tekst": "A28 exitcode 75: de dag blijft open zonder poging, de volgende dag wacht op de volgende ronde, script 0"
    },
    "controle": [],
    "status": "opgelost"

@@ -78,9 +78,11 @@ def kop(m, veld):
 
 
 # Mappen die geen afspraak dragen; de rest wordt gelezen, want mch@ sorteert mail in submappen (INBOX.Zoom, INBOX.Reizen)
-GEEN_AFSPRAAK = re.compile(r"(trash|spam|junk|drafts|deleted|sent|outbox|notes|sync issues|archief\.20\d\d|concepten|verzonden|prullenbak)", re.I)
-# Voor de zorgafzenders lees ik ook de archiefmappen: een oude bevestiging kan daar liggen
-GEEN_ZORG = re.compile(r"(trash|spam|junk|drafts|deleted|sent|outbox|notes|sync issues|concepten|verzonden|prullenbak)", re.I)
+# De jaarlijkse archiefmappen (Archief.2026) lees ik ook: een uitnodiging die Mehdi zelf daarheen sorteert, telt mee. De
+# master zegt 'alle mappen behalve prullenbak, spam, verzonden en concepten' (Codex A21, 15-10-2026); SINCE houdt oude mail
+# er toch buiten.
+GEEN_AFSPRAAK = re.compile(r"(trash|spam|junk|drafts|deleted|sent|outbox|notes|sync issues|concepten|verzonden|prullenbak)", re.I)
+GEEN_ZORG = GEEN_AFSPRAAK      # de zorgafzenders lazen de archiefmappen al: een oude bevestiging kan daar liggen
 
 
 def antwoorden(data):

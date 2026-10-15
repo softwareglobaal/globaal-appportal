@@ -81,7 +81,8 @@ class Agent:
     def log(self, onderwerp, stap, tekst, detail=""):
         self._log.append({"naam": self.naam, "onderwerp": onderwerp, "stap": stap, "tekst": tekst,
                           "detail": detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False, indent=1)})
-        print(f"  [{stap}] {tekst}")
+        # ook de schermregel door het masker: die komt in de cron-logboeken (Codex A25, 15-10-2026)
+        print(self.maskeer(f"  [{stap}] {tekst}"))
 
     def log_verstuur(self):
         if not self._log:

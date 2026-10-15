@@ -11,8 +11,11 @@ Van Mehdi: wat hij op WhatsApp of Telegram typt wordt een bericht op het bord aa
 De Regisseur, of aan een agent als hij begint met diens naam ("Contractmaker: ...").
 Het antwoord komt terug zodra de agent het op het bord zette.
 Elke minuut. Werkwijze op het bord (werkwijze/bode.md is het zaad).
+Met --droog (regisseur.py, agent_ronde): alleen tonen wat ik zou doen; nooit bellen, niets sturen, het bord en de
+stand niet wijzigen. Cron start zonder argumenten.
 """
 import base64
+import fcntl
 import json
 import os
 import re
@@ -20,6 +23,7 @@ import sys
 import urllib.parse
 import urllib.request
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
@@ -30,6 +34,9 @@ import whatsapp  # noqa: E402
 NAAM = "bode"
 ag = bord.Agent(NAAM)
 STAAT = os.path.expanduser("~/appportal/mijnagents-data/bode.json")
+# De VM draait op UTC; de stille uren en het uur bovenaan een bericht zijn Brusselse tijd (Codex A23, 15-10-2026).
+# Zelf gezet zoals calendly_wacht.py en koppelingen/taken.py: agenda_wacht importeren doet bij het laden een docker-aanroep.
+BRUSSEL = ZoneInfo("Europe/Brussels")
 STIL = (22, 7)
 # "oproep": een agent vraagt uitdrukkelijk om Mehdi te bellen (sinds 26-09-2026 De Mailregisseur bij dringende mail).
 # Dat vervangt voor nieuwe agents het woord "stil" in een signaaltitel, dat vroeger per ongeluk belde.
@@ -147,24 +154,23 @@ def doel_van(tekst, namen):
 
 
 def lees_telegram(staat, namen):
-    """Nieuwe berichten van Mehdi -> gesprek op het bord. Geeft aantal."""
+    """Nieuwe berichten van Mehdi -> gesprek op het bord. Geeft aantal.
+    De offset schuift pas op na een geslaagde bordaanroep: main vangt een storing nu op en schrijft de stand toch weg
+    (Codex A26, 15-10-2026), en dan mag het bericht niet verloren gaan; de volgende ronde leest het opnieuw."""
     if not TG_TOKEN:
         return 0
     d = tg("getUpdates", offset=staat.get("tg_offset", 0), timeout=0, allowed_updates=["message"])
-    n = 0
+    n, aan = 0, "regisseur"
     for u in d.get("result", []):
-        staat["tg_offset"] = u["update_id"] + 1
         m = u.get("message") or {}
-        if str(m.get("chat", {}).get("id")) != str(TG_CHAT):
-            continue
         tekst = (m.get("text") or "").strip()
-        if not tekst or tekst.startswith("/start"):
-            continue
-        aan, vraag = doel_van(tekst, namen)
-        uit = bord.call("/api/gesprek", {"aan": aan, "tekst": vraag, "van": "mehdi (telegram)"})
-        staat.setdefault("wacht", []).append({"id": uit["id"], "aan": uit["aan"]})
-        ag.log(f"bericht {uit['id']}", "bron", f"uit Telegram aan {namen.get(uit['aan'], uit['aan'])}: {vraag[:120]}")
-        n += 1
+        if str(m.get("chat", {}).get("id")) == str(TG_CHAT) and tekst and not tekst.startswith("/start"):
+            aan, vraag = doel_van(tekst, namen)
+            uit = bord.call("/api/gesprek", {"aan": aan, "tekst": vraag, "van": "mehdi (telegram)"})
+            staat.setdefault("wacht", []).append({"id": uit["id"], "aan": uit["aan"]})
+            ag.log(f"bericht {uit['id']}", "bron", f"uit Telegram aan {namen.get(uit['aan'], uit['aan'])}: {vraag[:120]}")
+            n += 1
+        staat["tg_offset"] = u["update_id"] + 1
     if n:
         try:
             stuur_telegram(f"Ontvangen, {namen.get(aan, 'De Regisseur')} kijkt ernaar. Antwoord binnen een paar minuten.")
@@ -187,19 +193,18 @@ def lees_whatsapp(staat, namen, nood):
         return 0
     n, aan = 0, "regisseur"
     for m in nieuw:
-        staat["wa_laatste_id"] = max(staat["wa_laatste_id"], m["id"])
         tekst = (m.get("tekst") or "").strip()
-        if not tekst:
-            continue
-        if tekst.lower() in WA_KORT:
+        if tekst and tekst.lower() in WA_KORT:
             stuur("WhatsApp staat aan: de meldingen van je agents komen voortaan hier. "
                   "Antwoord gewoon; begin met de naam van een agent om hem rechtstreeks te spreken.", nood)
-            continue
-        aan, vraag = doel_van(tekst, namen)
-        uit = bord.call("/api/gesprek", {"aan": aan, "tekst": vraag, "van": "mehdi (whatsapp)"})
-        staat.setdefault("wacht", []).append({"id": uit["id"], "aan": uit["aan"]})
-        ag.log(f"bericht {uit['id']}", "bron", f"uit WhatsApp aan {namen.get(uit['aan'], uit['aan'])}: {vraag[:120]}")
-        n += 1
+        elif tekst:
+            aan, vraag = doel_van(tekst, namen)
+            # gooit het bord een fout, dan blijft wa_laatste_id voor dit bericht staan: volgende ronde opnieuw (A26)
+            uit = bord.call("/api/gesprek", {"aan": aan, "tekst": vraag, "van": "mehdi (whatsapp)"})
+            staat.setdefault("wacht", []).append({"id": uit["id"], "aan": uit["aan"]})
+            ag.log(f"bericht {uit['id']}", "bron", f"uit WhatsApp aan {namen.get(uit['aan'], uit['aan'])}: {vraag[:120]}")
+            n += 1
+        staat["wa_laatste_id"] = max(staat["wa_laatste_id"], m["id"])
     if n:
         stuur(f"Ontvangen, {namen.get(aan, 'De Regisseur')} kijkt ernaar. Antwoord binnen een paar minuten.", nood)
     return n
@@ -227,36 +232,137 @@ def antwoorden_terug(staat, namen, nood):
 
 
 # ------------------------------------------------------------------ main ---
-def main():
-    try:
-        staat = json.load(open(STAAT))
-    except (OSError, ValueError):
-        staat = {"laatste_id": 0, "tg_offset": 0, "wacht": [], "laatste_herinnering": "", "laatste_voorstellen": 0}
-    nood = []
-    namen = agentnamen()
-    binnen = lees_whatsapp(staat, namen, nood) + lees_telegram(staat, namen)
-    terug = antwoorden_terug(staat, namen, nood)
+def is_stil(t=None):
+    """Stille uren (STIL, 22:00 tot 07:00) op Brusselse tijd. De VM draait op UTC: met datetime.now().hour begon de
+    stilte in de zomer pas om middernacht en eindigde ze om 09:00 (Codex A23, 15-10-2026). t: een tijdstip met zone;
+    zonder zone telt het als de klok van deze machine."""
+    uur = (t or datetime.now(BRUSSEL)).astimezone(BRUSSEL).hour
+    return uur >= STIL[0] or uur < STIL[1]
 
-    uur = datetime.now().hour
-    stil = uur >= STIL[0] or uur < STIL[1]
-    items = [it for it in bord.call("/api/klaarzet?voor=mehdi&status=alle&n=200").get("items", [])
+
+def slot_nemen():
+    """Een ronde tegelijk, anders None (het patroon van agenda_signaal.slot_nemen). Cron start mij elke minuut; met
+    time-outs bij Telegram, het bord of Twilio duurt een ronde soms langer, en dan las een tweede ronde dezelfde stand
+    en belde ze opnieuw voor dezelfde afspraak (Codex A26, 15-10-2026)."""
+    os.makedirs(os.path.dirname(STAAT), exist_ok=True)
+    f = open(STAAT + ".lock", "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    return f
+
+
+def bewaar(staat):
+    """Atomair, zoals agenda_signaal.bewaar: eerst een tijdelijk bestand naast de stand, dan os.replace. Vroeger
+    json.dump in een open(STAAT, "w"): een fout of crash midden in het schrijven liet een half bode.json na, de
+    volgende ronde las dat als leeg en belde opnieuw wat al gebeld was (Codex A26, 15-10-2026). Ook de callback die
+    bellen.afspraken_bellen na elke oproep aanroept."""
+    tekst = json.dumps(staat)
+    os.makedirs(os.path.dirname(STAAT), exist_ok=True)
+    tmp = f"{STAAT}.{os.getpid()}.tmp"
+    try:
+        with open(tmp, "w") as f:
+            f.write(tekst)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, STAAT)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def lees_staat():
+    try:
+        return json.load(open(STAAT))
+    except (OSError, ValueError):
+        return {"laatste_id": 0, "tg_offset": 0, "wacht": [], "laatste_herinnering": "", "laatste_voorstellen": 0}
+
+
+def veilig(nood, wat, fn, standaard=0):
+    """fn(), maar een storing bij Telegram, WhatsApp of het bord wordt een nood in plaats van een crash. Vroeger liet
+    een fout in lees_telegram of bord.call main crashen voor er gebeld was (Codex A26, 15-10-2026)."""
+    try:
+        return fn()
+    except Exception as e:  # noqa: BLE001
+        nood.append({"tekst": f"{wat} mislukt: {type(e).__name__}: {str(e)[:100]}", "wie": "claude-code"})
+        return standaard
+
+
+def main(droog=None):
+    """Een ronde onder het slot. droog (standaard: --droog op de opdrachtregel, zoals regisseur.py agent_ronde het
+    meegeeft; cron start zonder argumenten): zie ronde(). Een droge ronde neemt het slot niet, want ze schrijft niets
+    en mag een echte ronde (die belt) niet laten overslaan."""
+    if droog is None:
+        droog = "--droog" in sys.argv
+    if droog:
+        return ronde(droog=True)
+    slot = slot_nemen()
+    if slot is None:
+        print(f"{datetime.now(BRUSSEL):%d-%m %H:%M} de vorige ronde loopt nog, deze slaat over")
+        return
+    try:
+        return ronde()
+    finally:
+        slot.close()
+
+
+def ronde(droog=False):
+    """droog (--droog, zoals regisseur.py agent_ronde het meegeeft): alleen tonen wat ik zou doen. Nooit bellen
+    (afspraken_bellen en alarm_bellen lopen niet), niets sturen, geen berichten van Mehdi op het bord, geen hartslag,
+    en de stand blijft ongewijzigd. Vroeger negeerde ik --droog en belde een proefronde echt (Codex A19, 15-10-2026)."""
+    staat = lees_staat()
+    nood = []
+    # Eerst bellen: dat hangt alleen af van het belrooster op schijf. Een storing bij Telegram of het bord liet main
+    # vroeger crashen voor afspraken_bellen liep, en dan belde ik voor geen enkele afspraak. Na elke oproep staat de
+    # stand meteen op schijf (bewaar), niet pas aan het eind na de time-outs (Codex A26, 15-10-2026).
+    bel_afspraak = ""
+    if droog:
+        for r in bellen.te_bellen(staat):
+            print(f"  (droog) zou bellen voor: {r.get('titel', '')[:80]}")
+    else:
+        bel_afspraak = veilig(nood, "Afspraken bellen", lambda: bellen.afspraken_bellen(staat, log=ag.log, bewaar=bewaar), "")
+    namen = agentnamen()
+    binnen = terug = 0
+    if droog:
+        print("  (droog) berichten van en naar Mehdi blijven liggen")
+    else:
+        binnen = (veilig(nood, "WhatsApp lezen", lambda: lees_whatsapp(staat, namen, nood))
+                  + veilig(nood, "Telegram lezen", lambda: lees_telegram(staat, namen)))
+        terug = veilig(nood, "Antwoorden terugbrengen", lambda: antwoorden_terug(staat, namen, nood))
+
+    stil = is_stil()
+    items = [it for it in veilig(nood, "Het bord lezen", lambda: bord.call("/api/klaarzet?voor=mehdi&status=alle&n=200"), {}).get("items", [])
              if it["id"] > staat.get("laatste_id", 0) and it["soort"] in SOORTEN]
-    agents_met_voorstel = [a for a in bord.call("/api/overzicht").get("agents", []) if a.get("open_voorstellen")]
+    agents_met_voorstel = [a for a in veilig(nood, "Het bord lezen", lambda: bord.call("/api/overzicht"), {}).get("agents", []) if a.get("open_voorstellen")]
     totaal_voorstellen = sum(a["open_voorstellen"] for a in agents_met_voorstel)
     alarm = [it for it in items if it["soort"] == "oproep" or (it["soort"] == "signaal" and "stil" in it["titel"].lower())]
+    # laatste_herinnering blijft naief (klok van de machine), bewaard en vergeleken met datetime.now(): zo blijven
+    # bestaande standen vergelijkbaar. Alleen de stille uren en het uur in het bericht zijn Brussels (A23).
     herinnering_oud = (not staat.get("laatste_herinnering")) or (datetime.now() - datetime.fromisoformat(staat["laatste_herinnering"])).total_seconds() > HERINNERING_UREN * 3600
     herinner = totaal_voorstellen and (totaal_voorstellen != staat.get("laatste_voorstellen", 0) or herinnering_oud)
     kanaal = ""
     # dringend signaal: bellen (Twilio), ook in de stille uren; herhaalt tot er opgenomen wordt
-    bel_detail = bellen.alarm_bellen(staat, alarm, log=ag.log)
-    bel_afspraak = bellen.afspraken_bellen(staat, log=ag.log)
+    bel_detail = ""
+    if droog:
+        if alarm:
+            print(f"  (droog) {len(alarm)} dringend(e) signaal/oproep(en); zou bellen als het nieuw is: "
+                  + "; ".join(it["titel"][:60] for it in alarm[:3]))
+    else:
+        bel_detail = veilig(nood, "Alarm bellen", lambda: bellen.alarm_bellen(staat, alarm, log=ag.log), "")
+        if bel_detail:
+            veilig(nood, "Stand wegschrijven na het alarm", lambda: bewaar(staat), None)
     if bel_afspraak:
         bel_detail = (bel_detail + '; ' if bel_detail else '') + bel_afspraak
     items_tg = [it for it in items if it.get("van") not in NIET_OP_TELEGRAM]
     if items and not items_tg and not herinner:
         staat["laatste_id"] = max(it["id"] for it in items)  # alleen agendazaken: niet sturen, wel als gezien tellen
     if (items_tg or herinner) and (not stil or alarm):
-        regels = [f"Mehdi Agents, {datetime.now().strftime('%H:%M')}:"]
+        regels = [f"Mehdi Agents, {datetime.now(BRUSSEL).strftime('%H:%M')}:"]
         for it in items_tg[-8:]:
             regels.append(f"- {it['soort']}: {it['titel'][:110]} (van {it['van']})")
         if len(items_tg) > 8:
@@ -265,9 +371,12 @@ def main():
             for a in agents_met_voorstel:
                 regels.append(f"- {a['open_voorstellen']} voorstel(len) van {a['label']} wachten op je goedkeuring")
         regels.append("Bord: https://mijnagents.globaal.be")
-        # Een witregel tussen de punten: op een gsm leest een aaneengesloten lijst te ingepakt
-        # (Shaniel, 30-09-2026). Het sjabloon buiten het venster plat dit toch tot een regel.
-        kanaal = stuur("\n\n".join(regels), nood)
+        if droog:
+            print("  (droog) zou sturen:\n" + "\n".join(regels))
+        else:
+            # Een witregel tussen de punten: op een gsm leest een aaneengesloten lijst te ingepakt
+            # (Shaniel, 30-09-2026). Het sjabloon buiten het venster plat dit toch tot een regel.
+            kanaal = stuur("\n\n".join(regels), nood)
         if kanaal:
             if items:
                 staat["laatste_id"] = max(it["id"] for it in items)
@@ -275,7 +384,11 @@ def main():
                 staat["laatste_herinnering"] = datetime.now().isoformat()
                 staat["laatste_voorstellen"] = totaal_voorstellen
             ag.log("bericht", "melding", f"{len(items)} items{', herinnering voorstellen' if herinner else ''} via {kanaal}", "\n".join(regels))
-    json.dump(staat, open(STAAT, "w"))
+    if droog:
+        print(f"  (droog) {len(items)} nieuwe items, {'stille uren' if stil else 'geen stille uren'}; "
+              "niets gebeld, niets gestuurd, bord en stand ongewijzigd" + (f"; nood: {[n['tekst'] for n in nood]}" if nood else ""))
+        return
+    bewaar(staat)
     if not TG_TOKEN:
         nood.append({"tekst": "Telegram niet ingesteld: bot bij BotFather, TELEGRAM_BOT_TOKEN en TELEGRAM_CHAT_ID in mijnagents-data/.env", "wie": "mehdi"})
     nood += bellen.nood() + bellen.nood_afspraken()

@@ -52,8 +52,8 @@ def bevindingen(items, van, tot, nu):
     uit = []
     vandaag = nu.date().isoformat()
     vaste = W.AGENDA_VASTE_KLEUR
-    vrij = W.lara_vakantiedagen() if items else set()
-    zonder_auto = W.geen_auto_dagen() if items else set()
+    vrij = (W.lara_vakantiedagen() if items else None) or set()          # None: niet te lezen (Codex A11); hier alleen melden
+    zonder_auto = (W.geen_auto_dagen() if items else None) or set()
 
     def meld(controle, a, tekst):
         uit.append({"controle": controle, "dag": a["start"][:10], "uur": a["start"][11:16],
