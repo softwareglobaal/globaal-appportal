@@ -2,8 +2,8 @@
 #
 # Bewust NIET achter de Authentik-poort: Zoom moet hier rechtstreeks bij kunnen.
 # De beveiliging zit in de app: Zoom-meldingen dragen een HMAC-handtekening
-# (x-zm-signature), en /next vraagt een Bearer-token dat alleen de pc kent.
-# Host-dienst zoomhook op 172.17.0.1:8798 (code: C:\Tools\fathom-trigger\vm op de pc).
+# (x-zm-signature), en /next en /in-meeting vragen een Bearer-token dat alleen de pc kent.
+# Host-dienst zoomhook op 172.17.0.1:8798 (repo softwareglobaal/globaal-fathom-trigger).
 
 limit_req_zone $binary_remote_addr zone=zoomhook_zone:1m rate=120r/m;
 
@@ -25,10 +25,22 @@ server {
         proxy_pass $zoomhook_upstream;
     }
 
-    # De pc vraagt elke paar seconden of er een meeting klaarstaat.
+    # De pc houdt /next open (long-poll, tot 25 s) tot er een meeting klaarstaat.
     location = /next {
         limit_req zone=zoomhook_zone burst=20 nodelay;
         limit_except GET { deny all; }
+        proxy_read_timeout 60s;
+        proxy_buffering off;
+        proxy_set_header Host $host;
+        set $zoomhook_upstream http://172.17.0.1:8798;
+        proxy_pass $zoomhook_upstream;
+    }
+
+    # De pc meldt dat er net een Zoom-meetingvenster openging (Bearer-token).
+    location = /in-meeting {
+        limit_req zone=zoomhook_zone burst=10 nodelay;
+        limit_except POST { deny all; }
+        client_max_body_size 1k;
         proxy_set_header Host $host;
         set $zoomhook_upstream http://172.17.0.1:8798;
         proxy_pass $zoomhook_upstream;
