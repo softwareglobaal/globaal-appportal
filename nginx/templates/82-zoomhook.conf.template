@@ -1,0 +1,43 @@
+# zoomhook.globaal.be: Zoom-webhook voor de Fathom-trigger van Shaniel.
+#
+# Bewust NIET achter de Authentik-poort: Zoom moet hier rechtstreeks bij kunnen.
+# De beveiliging zit in de app: Zoom-meldingen dragen een HMAC-handtekening
+# (x-zm-signature), en /next vraagt een Bearer-token dat alleen de pc kent.
+# Host-dienst zoomhook op 172.17.0.1:8798 (code: C:\Tools\fathom-trigger\vm op de pc).
+
+limit_req_zone $binary_remote_addr zone=zoomhook_zone:1m rate=120r/m;
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name zoomhook.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location = /zoom/webhook {
+        limit_except POST { deny all; }
+        client_max_body_size 256k;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        set $zoomhook_upstream http://172.17.0.1:8798;
+        proxy_pass $zoomhook_upstream;
+    }
+
+    # De pc vraagt elke paar seconden of er een meeting klaarstaat.
+    location = /next {
+        limit_req zone=zoomhook_zone burst=20 nodelay;
+        limit_except GET { deny all; }
+        proxy_set_header Host $host;
+        set $zoomhook_upstream http://172.17.0.1:8798;
+        proxy_pass $zoomhook_upstream;
+    }
+
+    location = /health {
+        set $zoomhook_upstream http://172.17.0.1:8798;
+        proxy_pass $zoomhook_upstream;
+    }
+
+    location / { return 404; }
+}
