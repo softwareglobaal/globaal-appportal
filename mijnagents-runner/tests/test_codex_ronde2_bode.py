@@ -1,4 +1,4 @@
-"""Grendel op De Bode na de Codex-controle ronde 2 (A13, A19, A23, A26; 15-10-2026).
+"""Grendel op De Bode na de Codex-controle ronde 2 (A13, A19, A23, A26; 15-10-2026) en ronde 3 (A31, A26, A13).
 
 A13: een start die mislukt (Twilio-fout, lege sid) is geen oproep. Niet in 'gebeld', wel een teller in 'belpogingen',
 de volgende minuut opnieuw binnen het belvenster, hoogstens drie keer; voor een alarm telt een mislukte start niet als
@@ -7,6 +7,13 @@ A19: met --droog (regisseur.py, agent_ronde) belt De Bode nooit, stuurt ze niets
 A23: de stille uren (22:00 tot 07:00) en het uur bovenaan een bericht zijn Brusselse tijd, ook op een VM in UTC.
 A26: een ronde tegelijk (slot), de stand atomair en meteen na elke oproep op schijf, en een storing bij Telegram of het
 bord houdt het bellen niet tegen.
+Ronde 3:
+A31: het bord levert nieuwe items dalend; De Bode meldt ze oplopend in groepen van hoogstens acht en schuift laatste_id
+nooit voorbij een item dat geen bericht kreeg. Mislukt het sturen, dan schuift niets op.
+A26: lukt het bewaren na een oproep niet, dan geen volgende oproep in die ronde, een logregel en een nood; het belspoor
+naast de stand zorgt dat een nieuwe ronde dezelfde afspraak niet opnieuw belt.
+A13: van CallMeBot telt alleen een herkend aanvaard-antwoord (gemeten op de VM) als oproep; een fout of een onbekend
+antwoord niet.
 
 Zonder netwerk en sleutels (ook CI): elk kanaal is nagebootst, BELLEN_UIT=1 houdt de echte bel() tegen, en de stand en
 het belrooster staan in een tijdelijke map. Geen echte nummers, namen of sleutels.
@@ -371,6 +378,222 @@ check("A19 met --droog blijft de stand ongewijzigd, gaat er niets naar Mehdi en 
       Path(B.STAAT).read_bytes() == _voor and not verstuurd and not hartslagen,
       f"{Path(B.STAAT).read_bytes()[:200]} {verstuurd[:1]} {hartslagen[:1]}")
 BORD["items"] = []
+
+# ------------------------------------------------------------------ ronde 3: A31 groepen ---
+# De stille uren hangen af van de klok; hier altijd overdag, anders faalt de test 's nachts.
+ECHT_STIL, ECHT_STUUR, ECHT_NIET_TG = B.is_stil, B.stuur, B.NIET_OP_TELEGRAM
+B.is_stil = lambda t=None: False
+B.NIET_OP_TELEGRAM = ("agenda-wacht",)
+B.tg = lambda methode, **p: {"result": []}
+rooster()
+
+
+def klaarzet(ids, agenda=(), oproep=()):
+    """Zoals het bord ze levert: dalend op id (ORDER BY id DESC). agenda: id's van De Agendawacht (niet naar Mehdi);
+    oproep: id's die een oproep zijn (alarm)."""
+    return [{"id": i, "soort": "oproep" if i in oproep else "signaal", "titel": f"Proefitem {i}",
+             "van": "agenda-wacht" if i in agenda else "proef-agent"} for i in sorted(ids, reverse=True)]
+
+
+def zet_stand(laatste_id=100):
+    schone_stand()
+    with open(B.STAAT, "w") as _fs:
+        json.dump({"laatste_id": laatste_id, "tg_offset": 0, "wacht": [], "laatste_herinnering": "",
+                   "laatste_voorstellen": 0}, _fs)
+
+
+def gemeld(i):
+    return any(f"Proefitem {i} " in t for t in verstuurd)
+
+
+def rondes(n, tg_ids):
+    """n rondes van main; per ronde (laatste_id, geen verstuurd item ooit onder laatste_id overgeslagen)."""
+    uit = []
+    for _ in range(n):
+        probeer(B.main)
+        lid = (stand() or {}).get("laatste_id", 0)
+        uit.append((lid, all(gemeld(i) for i in tg_ids if i <= lid)))
+    return uit
+
+
+zet_stand()
+BORD["items"] = klaarzet(range(101, 110))
+verstuurd.clear()
+_r = rondes(3, range(101, 110))
+check("A31 negen nieuwe items: alle negen krijgen uiteindelijk een bericht",
+      all(gemeld(i) for i in range(101, 110)), f"{[i for i in range(101, 110) if not gemeld(i)]} {verstuurd}")
+check("A31 laatste_id staat nooit voorbij een item zonder bericht (na ronde 1 op 108, daarna 109)",
+      [x[0] for x in _r] == [108, 109, 109] and all(x[1] for x in _r), str(_r))
+check("A31 de oudste eerst, hoogstens acht per bericht, en het eerste bericht zegt dat er nog een volgt",
+      len(verstuurd) == 2 and all(t.count("- signaal:") <= 8 for t in verstuurd)
+      and gemeld(101) and "Proefitem 101 " in verstuurd[0] and "Proefitem 109 " in verstuurd[1]
+      and "volgen in het volgende bericht" in verstuurd[0], str(verstuurd))
+
+zet_stand()
+BORD["items"] = klaarzet(range(101, 110))
+verstuurd.clear()
+B.stuur = lambda tekst, nood: ""          # elk kanaal faalt
+probeer(B.main)
+_na_fout = (stand() or {}).get("laatste_id")
+B.stuur = ECHT_STUUR
+_r = rondes(2, range(101, 110))
+check("A31 lukt het sturen niet, dan schuift laatste_id niet op; de volgende rondes sturen alles alsnog",
+      _na_fout == 100 and all(gemeld(i) for i in range(101, 110)) and _r[-1][0] == 109, f"{_na_fout} {_r} {verstuurd}")
+
+# Agendazaken (niet naar Mehdi) tussen de items: als afgehandeld geteld, maar nooit over een item zonder bericht heen.
+_ids, _agenda = range(101, 126), set(range(102, 126, 2))
+_tg = [i for i in _ids if i not in _agenda]
+zet_stand()
+BORD["items"] = klaarzet(_ids, agenda=_agenda)
+verstuurd.clear()
+_r = rondes(3, _tg)
+check("A31 met agendazaken ertussen: elk item voor Mehdi krijgt een bericht, geen agendazaak, laatste_id eindigt op 125",
+      all(gemeld(i) for i in _tg) and not any(gemeld(i) for i in _agenda) and _r[-1][0] == 125, f"{_r} {verstuurd}")
+check("A31 met agendazaken ertussen: na elke ronde is alles onder laatste_id voor Mehdi echt verstuurd",
+      all(x[1] for x in _r) and _r[0][0] == 116, str(_r))
+
+# Twee alarmen aan weerszijden van de groepsgrens: een oproep, niet een tweede omdat de lijst van voren kromp.
+zet_stand()
+BORD["items"] = klaarzet(range(101, 113), oproep={103, 111})
+verstuurd.clear()
+alarm_oproepen.clear()
+BEL_UIT[0] = "CA31"
+rondes(2, range(101, 113))
+check("A31 twee alarmen verdeeld over twee berichten: een oproep, geen tweede voor hetzelfde",
+      len(alarm_oproepen) == 1 and all(gemeld(i) for i in range(101, 113)), f"{len(alarm_oproepen)} {verstuurd}")
+
+# Geen stand (eerste ronde, of een onleesbare bode.json): een bericht met de nieuwste, de rest bewust als gelezen.
+schone_stand()
+BORD["items"] = klaarzet(range(201, 221))
+verstuurd.clear()
+rondes(2, [])
+check("A31 zonder stand: een bericht met de nieuwste acht, de oudere als gelezen (geen tientallen berichten)",
+      len(verstuurd) == 1 and gemeld(220) and gemeld(213) and not gemeld(212)
+      and (stand() or {}).get("laatste_id") == 220, f"{verstuurd} {stand()}")
+
+zet_stand(100)
+BORD["items"] = klaarzet(range(1001, 1001 + B.KLAARZET_N)) if hasattr(B, "KLAARZET_N") else klaarzet(range(1001, 1201))
+hartslagen.clear()
+probeer(B.main)
+check("A31 een volle pagina waarvan zelfs het oudste item nieuw is: een nood (er kunnen items onder vallen)",
+      bool(hartslagen) and any("klaarzet-items" in n["tekst"] for n in (hartslagen[-1].get("nood") or [])),
+      str(hartslagen[-1:])[:300])
+BORD["items"] = []
+B.is_stil, B.NIET_OP_TELEGRAM = ECHT_STIL, ECHT_NIET_TG
+
+# ------------------------------------------------------------------ ronde 3: A26 belspoor ---
+SPOOR = B.belspoor() if hasattr(B, "belspoor") else str(TMP / "bode-gebeld.jsonl")
+
+
+def regel_t(sleutel, tekst):
+    return {**regel(sleutel), "tekst": tekst}
+
+
+def kapotte_bewaar(staat):
+    raise OSError("schijf vol (nagebootst)")
+
+
+rooster(regel_t("proef-a", "Proeftekst A"), regel_t("proef-b", "Proeftekst B"))
+schone_stand()
+if os.path.exists(SPOOR):
+    os.remove(SPOOR)
+oproepen.clear()
+hartslagen.clear()
+logs.clear()
+UITSLAG[0] = [("twilio", "CA81")]
+ECHTE_BEWAAR = B.bewaar
+B.bewaar = kapotte_bewaar
+try:
+    _u, _f = probeer(B.main)
+finally:
+    B.bewaar = ECHTE_BEWAAR
+check("A26 bewaarfout na de eerste oproep: geen tweede oproep in die ronde", oproepen == ["Proeftekst A"], str(oproepen))
+check("A26 de gestopte belronde staat in het logboek en als nood op het bord, zonder crash",
+      _f is None and any("belronde gestopt" in t for t in logs) and bool(hartslagen)
+      and any("niet op schijf" in n["tekst"] for n in (hartslagen[-1].get("nood") or [])), f"{_f} {logs} {hartslagen[-1:]}")
+oproepen.clear()
+_u, _f = probeer(B.main)        # nieuwe ronde; de stand kwam nooit op schijf, het belspoor wel
+check("A26 een nieuwe ronde belt de eerste afspraak niet opnieuw (belspoor), wel de tweede",
+      _f is None and oproepen == ["Proeftekst B"], f"{_f} {oproepen}")
+check("A26 na de nieuwe ronde staan beide afspraken als gebeld in de stand",
+      {"proef-a", "proef-b"} <= set(((stand() or {}).get("gebeld") or {})), str(stand()))
+
+# Ook het spoor niet te schrijven (zijn map is een bestand): niet verder bellen, en de nood zegt dat het onzeker is.
+_geen_map = TMP / "geen-map"
+_geen_map.write_text("bestand, geen map")
+rooster(regel_t("proef-c", "Proeftekst C"), regel_t("proef-d", "Proeftekst D"))
+oproepen.clear()
+_nood = []
+_u, _f = probeer(BEL.afspraken_bellen, {}, log=B.ag.log, bewaar=kapotte_bewaar, nood=_nood,
+                 spoor=str(_geen_map / "spoor.jsonl"))
+check("A26 spoor en stand allebei niet te schrijven: geen tweede oproep, en de nood zegt dat ze opnieuw kan vertrekken",
+      _f is None and oproepen == ["Proeftekst C"] and any("nergens op schijf" in n["tekst"] for n in _nood),
+      f"{_f} {oproepen} {_nood}")
+
+_sp = TMP / "half.jsonl"
+_sp.write_text('{"sleutel": "half')    # crash midden in een regel
+_u, _f = probeer(lambda: BEL.spoor_schrijven(str(_sp), "heel", "2026-10-15T10:00:00+02:00"))
+_l, _fl = probeer(lambda: BEL.spoor_lezen(str(_sp)))
+check("A26 een halve laatste regel in het spoor: de nieuwe regel blijft leesbaar",
+      _f is None and _fl is None and _l == {"heel": "2026-10-15T10:00:00+02:00"}, f"{_f} {_fl} {_l}")
+
+_oud = (datetime.now().astimezone() - timedelta(days=3)).isoformat()
+_vers = datetime.now().astimezone().isoformat()
+_sp2 = TMP / "opruimen.jsonl"
+_sp2.write_text(json.dumps({"sleutel": "oud", "tijd": _oud}) + "\n" + json.dumps({"sleutel": "vers", "tijd": _vers}) + "\n")
+rooster()
+probeer(BEL.afspraken_bellen, {}, log=B.ag.log, spoor=str(_sp2))
+_l, _fl = probeer(lambda: BEL.spoor_lezen(str(_sp2)))
+check("A26 het spoor ruimt regels ouder dan twee dagen op en houdt de rest", _fl is None and _l == {"vers": _vers}, f"{_fl} {_l}")
+
+_sp3 = TMP / "droog.jsonl"
+_sp3.write_text(json.dumps({"sleutel": "proef-e", "tijd": _vers}) + "\n")
+_l, _fl = probeer(lambda: BEL.te_bellen({}, rooster=[regel("proef-e")], spoor=str(_sp3)))
+check("A26 ook de droge ronde (te_bellen) telt het spoor als gebeld", _fl is None and _l == [], f"{_fl} {_l}")
+
+# ------------------------------------------------------------------ ronde 3: A13 CallMeBot ---
+# Gemeten op de VM (15-10-2026, logboek van de filewacht), gebruiker en nummer vervangen door een proefnaam.
+GEMETEN_AANVAARD = ("Checking Authorization for @proefgebruiker... Using bot: @CallMeBot_txtbot Autorization OK "
+                    "User:@proefgebruiker Text to speech:(tekst)")
+GEMETEN_65 = ("ERROR: Two calls to the same user (@proefgebruiker) within 65 seconds is not allowed. This is to prevent "
+              "the bot to overload the resources and colapse.")
+_gel = BEL.gelukt
+check("A13 het gemeten aanvaard-antwoord van CallMeBot telt als oproep", _gel([("telegram-oproep", GEMETEN_AANVAARD)]))
+check("A13 een fout-antwoord van CallMeBot ('Error: user not available') telt niet als gebeld",
+      not _gel([("telegram-oproep", "Error: user not available")]))
+check("A13 een onbekend antwoord van CallMeBot is onzeker en telt niet als gebeld",
+      not _gel([("telegram-oproep", "Onbekend antwoord van de dienst")]))
+check("A13 de gemeten 65-secondenweigering telt niet als gebeld", not _gel([("telegram-oproep", GEMETEN_65)]))
+check("A13 een fout na de autorisatie (in de staart van het antwoord) telt niet als gebeld",
+      not _gel([("telegram-oproep", GEMETEN_AANVAARD + " Error: user not available")]))
+check("A13 het vastzit-nummer (twilio-vast) telt alleen met een call-sid",
+      _gel([("twilio-vast", "CA1")]) and not _gel([("twilio-vast", "")]) and not _gel([("twilio-vast", "mislukt: X")]))
+_oud_user = os.environ.get("CALLMEBOT_USER")
+os.environ["CALLMEBOT_USER"] = "@proef_error"
+_v = _gel([("telegram-oproep", GEMETEN_AANVAARD.replace("@proefgebruiker", "@proef_error"))])
+if _oud_user is None:
+    os.environ.pop("CALLMEBOT_USER", None)
+else:
+    os.environ["CALLMEBOT_USER"] = _oud_user
+check("A13 een gebruikersnaam met een foutwoord erin maakt een aanvaarde oproep niet mislukt", _v)
+
+_tekst = "Mehdi, over vijf minuten online: proefafspraak met een lange zin die CallMeBot herhaalt. " * 3
+_html = ("<html><body><p>Checking Authorization for @proefgebruiker...</p><p>Using bot: @CallMeBot_txtbot</p>"
+         f"<p>Autorization OK</p><p>User:@proefgebruiker</p><p>Text to speech:{_tekst[:300]}</p>"
+         "<p>Language:nl-NL-Standard-B</p><p>Error: user not available</p></body></html>")
+_k, _fk = probeer(lambda: BEL.callmebot_antwoord(_html, _tekst[:300]))
+check("A13 het antwoord van CallMeBot verliest zijn staart niet meer door onze herhaalde tekst",
+      _fk is None and "(tekst)" in _k and "user not available" in _k and len(_k) <= 200 and not _gel([("telegram-oproep", _k)]),
+      f"{_fk} {_k}")
+
+for _antw, _verwacht in (("Onbekend antwoord van de dienst", False), ("Error: user not available", False),
+                         (GEMETEN_AANVAARD, True)):
+    rooster(regel("proef-cmb"))
+    st, UITSLAG[0] = {}, [("telegram-oproep", _antw)]
+    _u, _f = probeer(BEL.afspraken_bellen, st, log=B.ag.log)
+    _ok = ("proef-cmb" in st.get("gebeld", {})) == _verwacht and (st.get("belpogingen", {}).get("proef-cmb") == (None if _verwacht else 1))
+    check(f"A13 afspraken_bellen met CallMeBot-antwoord '{_antw[:40]}': {'gebeld' if _verwacht else 'niet gebeld, poging 1, volgende minuut opnieuw'}",
+          _f is None and _ok, f"{_f} {st}")
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

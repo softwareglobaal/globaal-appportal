@@ -90,8 +90,20 @@ def is_zorg_titel(titel):
     return not m or (m.group(1) or "").upper() in ("PRIVE", "PR", "LA", "LARA")
 
 
+def _toon(a, n=40):
+    """Een titel voor een logregel: een privé-afspraak heet '(privé)' (Codex A25, ronde 3: foutpaden drukten de ruwe
+    titel af in logboeken op de server)."""
+    return "(privé)" if is_prive(a) else (a.get("titel") or "")[:n]
+
+
+PRIVECODE_RE = re.compile(r"\[(?:PR|PRIVE|LA|LARA)(?:-[A-Za-z0-9]{1,4})?\]", re.I)
+
+
 def is_prive(a):
-    return bool(a.get("_prive") or a.get("kalender") in PRIVE_KALENDERS or is_zorg_titel(a.get("titel")))
+    """Privé: uit een privébron, op een privé-agenda of van Lara, een zorgtitel, of een privécode in de titel ([PR], [LA]),
+    op welke agenda ook. Tot 15-10-2026 telde '[PR] etentje' op de werkagenda niet als privé (Codex A05, ronde 3)."""
+    return bool(a.get("_prive") or a.get("kalender") in PRIVE_KALENDERS or is_zorg_titel(a.get("titel"))
+                or PRIVECODE_RE.search(a.get("titel") or ""))
 
 
 def prive_teksten(items):
@@ -700,7 +712,7 @@ def herinneringen_zetten(items, alleen_dag=None):
                         gezet += 1
                 except Exception as e:  # noqa: BLE001
                     fout += 1
-                    print("rit-melding mislukt:", a["titel"][:40], type(e).__name__, file=sys.stderr)
+                    print("rit-melding mislukt:", _toon(a), type(e).__name__, file=sys.stderr)
             continue
         eigen = r.get("overrides") or []
         mijn = len(eigen) == 1 and eigen[0].get("method") == "popup" and eigen[0].get("minutes") in (OVERIG_MIN, BUITEN_MIN, ONLINE_MIN)
@@ -731,7 +743,7 @@ def herinneringen_zetten(items, alleen_dag=None):
                     weg += 1
         except Exception as e:  # noqa: BLE001
             fout += 1
-            print("herinnering mislukt:", a["titel"][:40], type(e).__name__, file=sys.stderr)
+            print("herinnering mislukt:", _toon(a), type(e).__name__, file=sys.stderr)
     return gezet, al, weg, fout
 
 
@@ -947,8 +959,11 @@ def firma_aliassen():
 
 
 def _van_mehdi(a):
+    """Door Mehdi zelf gezet en zonder gasten: geen gast van buiten en geen collega als agendagast. Een collega ziet de
+    titel en de omschrijving ook (Codex A09, ronde 3)."""
     m = (a.get("maker") or "").lower()
-    return m in ("", WERKAGENDA) and a.get("kalender") != "zoomafspraken@gmail.com" and not a.get("deelnemers")
+    return (m in ("", WERKAGENDA) and a.get("kalender") != "zoomafspraken@gmail.com" and not a.get("deelnemers")
+            and not a.get("_agendagasten"))
 
 
 def titel_voorstel(titel, online=None):
@@ -1761,7 +1776,7 @@ def kleuren_zetten(items, alleen_dag=None):
                 HANDKLEUREN.append(regel)     # pas na een geslaagde patch: 'teruggezet' telt alleen wat lukte (audit A14, FR-95)
         except Exception as e:  # noqa: BLE001
             fout += 1
-            print("kleur mislukt:", a["titel"][:40], type(e).__name__, file=sys.stderr)
+            print("kleur mislukt:", _toon(a), type(e).__name__, file=sys.stderr)
     return gezet, goed, geen, fout, vast
 
 
@@ -2202,6 +2217,23 @@ def _rit_tekst(x):
             and ("Reistijd voor:" in oms or "Reistijd na:" in oms))
 
 
+def _afspraak_van_rit(x, items, s0, e0):
+    """De afspraken waar deze rit volgens zijn omschrijving en zijn tijdstip bij hoort: een heenrit eindigt op het begin,
+    een terugrit begint op het einde, en 'Reistijd voor/na: <titel>' noemt de afspraak."""
+    richting = "voor" if "Reistijd voor:" in (x.get("omschrijving") or "") else "na"
+    uit = []
+    for y in items:
+        if "T" not in (y.get("start") or "") or lees_titel(y.get("titel") or "")["reistijd"]:
+            continue
+        try:
+            t = datetime.fromisoformat(y["start"] if richting == "voor" else y["einde"])
+        except (KeyError, ValueError):
+            continue
+        if t == (e0 if richting == "voor" else s0) and rit_hoort_bij(x, y["titel"], richting):
+            uit.append(y)
+    return uit
+
+
 def is_eigen_rit(x):
     """Een ritblok dat de agent zelf maakte: mijn tekst én mijn merk met het eigen ID van het blok. Alleen zo'n blok
     mag hij ooit weghalen of verhuizen. Tot 15-10-2026 volstond de tekst, en een gekopieerd ritblok kon zo verdwijnen
@@ -2389,7 +2421,8 @@ def _zorg_body(a, z, profiel):
 
 
 def _zorg_teruglezen(kal, eid, body, tok):
-    """Leest het blok terug: pas als begin, einde, Bezet, plaats en 'geen gasten' kloppen, heet het gezet."""
+    """Leest het blok terug: pas als begin, einde, Bezet, plaats, 'geen gasten', titel, herinnering en ons merk kloppen,
+    heet het gezet (Codex A07, ronde 3: titel, herinnering en merk werden niet teruggelezen)."""
     e = _lees_event(kal, eid, tok)
     if not e:
         return "niet terug te lezen"
@@ -2404,6 +2437,13 @@ def _zorg_teruglezen(kal, eid, body, tok):
         fout.append("gasten")
     if body.get("location") and (e.get("location") or "") != body["location"]:
         fout.append("plaats")
+    if body.get("summary") and (e.get("summary") or "") != body["summary"]:
+        fout.append("titel")
+    if "reminders" in body and (e.get("reminders") or {}) != body["reminders"]:
+        fout.append("herinnering")
+    merk = ((body.get("extendedProperties") or {}).get("private") or {}).get(ZORGMERK)
+    if merk and ((e.get("extendedProperties") or {}).get("private") or {}).get(ZORGMERK) != merk:
+        fout.append("merk")
     return ", ".join(fout)
 
 
@@ -2728,7 +2768,13 @@ def reistijd_zetten(items, alleen_dag=None):
             continue
         if zonder_auto is None or (vrij is None and a.get("kalender") in AGENDA_VASTE_KLEUR
                                    and AGENDA_VASTE_KLEUR[a["kalender"]].get("naam") == "Lara"):
-            continue                      # de grendelbron is onbekend: geen rit, ook geen gok (Codex A11)
+            # de grendelbron is onbekend: geen rit, ook geen gok (Codex A11). Elke getroffen komende buitenafspraak staat
+            # apart in de meldingen, niet alleen in een algemene logregel (ronde 3)
+            _li = lees_titel(a["titel"])
+            if "T" in a.get("start", "") and not _li["reistijd"] and (_li["buiten"] or _li["soort"] in BUITEN_SOORTEN) \
+                    and not _voorbij(a["start"], nu):
+                regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen rit, grendelbron niet te lezen")
+            continue
         # Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit voor
         # een afspraak op de agenda van Lara op zo'n dag. Mandaat van Mehdi, 22-09-2026.
         if a.get("kalender") in AGENDA_VASTE_KLEUR and AGENDA_VASTE_KLEUR[a["kalender"]].get("naam") == "Lara" \
@@ -3242,9 +3288,11 @@ def reistijd_zetten(items, alleen_dag=None):
             vast = (x["kalender"], s0) in grenzen or s0 in eindes_alle or (x["kalender"], e0) in grenzen
         if vast and s0 >= nu and _rit_tekst(x) and not (x.get("_merk") or {}).get(RITMERK) and gemerkt < RIT_MERKEN_PER_RONDE \
                 and sum(1 for y in reistijden if y.get("kalender") == x["kalender"] and y.get("start") == x["start"]
-                        and y.get("einde") == x["einde"]) == 1:
-            # gecontroleerde overgang (Codex A10): een oude rit die aan zijn afspraak hangt en geen tweeling heeft, krijgt
-            # nu zijn merk. Een rit zonder afspraak of met een tweeling krijgt het nooit vanzelf.
+                        and y.get("einde") == x["einde"]) == 1 and len(_afspraak_van_rit(x, items, s0, e0)) == 1:
+            # gecontroleerde overgang (Codex A10): een oude rit krijgt zijn merk alleen als hij aan precies een afspraak
+            # hangt waarvan zijn omschrijving de titel draagt, op het juiste tijdstip, en geen tweeling heeft. Een tijd die
+            # toevallig past volstaat niet (ronde 3). De rest blijft zonder merk en komt als 'rit zonder afspraak' in de
+            # meldingen zodra hij nergens meer aan hangt.
             try:
                 _patch(x, {"extendedProperties": {"private": {RITMERK: x["id"]}}}, tok)
                 x.setdefault("_merk", {})[RITMERK] = x["id"]
@@ -3341,7 +3389,7 @@ def belrooster(items, vandaag):
             # minuten). Nooit zomaar de laatste rit binnen drie uur: die kan bij een andere afspraak horen (Codex A14).
             venster = [x for x in reistijden if start - timedelta(hours=3) <= datetime.fromisoformat(x["start"]) < start
                        and "Reistijd na:" not in (x.get("omschrijving") or "")]
-            blok = [x for x in venster if rit_hoort_bij(x, a["titel"], "voor")] or \
+            blok = [x for x in venster if x["kalender"] == a["kalender"] and rit_hoort_bij(x, a["titel"], "voor")] or \
                 [x for x in venster if x["kalender"] == a["kalender"]
                  and abs(datetime.fromisoformat(x["einde"]) - start) <= timedelta(minutes=5)]
             # Een oproep betekent altijd: je hebt vijf minuten om iets te doen (Mehdi, 25-09-2026). Buiten dus
@@ -3362,6 +3410,30 @@ def belrooster(items, vandaag):
                        "titel": "privé-afspraak" if prive else a["titel"][:80]})
     regels.sort(key=lambda r: r["tijd"])
     return regels
+
+
+def _rooster_behouden(nieuw, onvolledig, nu=None):
+    """De komende regels van het vorige belrooster voor de agenda's die deze ronde niet gelezen zijn ('archief' staat voor
+    de archiefagenda's). De sleutel van een regel begint met de agenda."""
+    nu = nu or nu_lokaal()
+    try:
+        with open(bellen.ROOSTER) as f:
+            oud = json.load(f).get("regels", [])
+    except (OSError, ValueError, AttributeError):
+        return []
+    al = {r.get("sleutel") for r in nieuw}
+    uit = []
+    for r in oud:
+        kal = (r.get("sleutel") or "").split(":")[0]
+        try:
+            t = datetime.fromisoformat(r["tijd"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if r.get("sleutel") in al or t.tzinfo is None or t < nu - timedelta(minutes=bellen.VENSTER_MIN):
+            continue
+        if kal in onvolledig or ("archief" in onvolledig and kal not in KALENDERS):
+            uit.append(r)
+    return uit
 
 
 def onbevestigd_voorbij(items, vandaag):
@@ -3847,8 +3919,9 @@ def vragen_in_agenda(items, nu=None):
                 open_.setdefault(id_, zin)
     gezet = weg = 0
     for a in items:
-        if a.get("kalender") != WERKAGENDA or a.get("deelnemers") or a.get("_terugkerend") or a.get("_archief"):
-            continue
+        if (a.get("kalender") != WERKAGENDA or a.get("deelnemers") or a.get("_agendagasten") or a.get("_terugkerend")
+                or a.get("_archief")):
+            continue                      # ook geen collega als gast: die ziet titel en omschrijving (Codex A24, ronde 3)
         titel, oms = a["titel"], a.get("omschrijving") or ""
         zin = open_.get(a.get("id"))
         try:
@@ -3867,7 +3940,7 @@ def vragen_in_agenda(items, nu=None):
                 a["titel"] = nieuw
                 weg += 1
         except Exception as e:  # noqa: BLE001
-            print("vraag in agenda mislukt:", titel[:40], type(e).__name__, file=sys.stderr)
+            print("vraag in agenda mislukt:", _toon(a), type(e).__name__, file=sys.stderr)
     return gezet, weg
 
 
@@ -4160,7 +4233,8 @@ def main():
         # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
         # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
         zonder_rit = {"geen adres in de agenda": [], "adres niet gevonden": [], "rijtijd niet berekend": [],
-                      "rit zonder afspraak": [], "buiten op een dag zonder auto": []}
+                      "rit zonder afspraak": [], "buiten op een dag zonder auto": [],
+                      "grendelbron niet te lezen (geen auto of vakantie)": []}
         te_krap = [r[:140] for r in rregels if "TE KRAP" in r]
         for regel in rregels:
             if "geen adres, geen reistijd" in regel:
@@ -4169,6 +4243,8 @@ def main():
                 zonder_rit["geen adres in de agenda"].append(regel.rsplit(": geen adres", 1)[0][:80])
             elif "rit zonder afspraak" in regel:
                 zonder_rit["rit zonder afspraak"].append(regel[:110])
+            elif "grendelbron niet te lezen" in regel:
+                zonder_rit["grendelbron niet te lezen (geen auto of vakantie)"].append(regel[:110])
             elif "BUITEN op een dag zonder auto" in regel:
                 zonder_rit["buiten op een dag zonder auto"].append(regel[:110])
             elif "adres niet gevonden" in regel:
@@ -4178,14 +4254,21 @@ def main():
 
         # Het belrooster komt uit een lezing NA de ritten: een nieuwe rit bepaalt het vertrek (Codex A14). Lukt die
         # lezing niet volledig, dan de lezing van het begin van de ronde, nooit een halve.
+        _onvolledig = set()
         try:
             _ruw_na = afspraken(-1, 8)
             _arch_na = archief_afspraken(-1, 8)
-            _voor_rooster = (items + archief) if (any(x.get("fout") for x in _ruw_na) or ARCHIEF_FOUT) else \
-                [x for x in _ruw_na if not x.get("fout")] + _arch_na
+            if any(x.get("fout") for x in _ruw_na) or ARCHIEF_FOUT:
+                _voor_rooster, _onvolledig = items + archief, set(ONGELEZEN)
+            else:
+                _voor_rooster = [x for x in _ruw_na if not x.get("fout")] + _arch_na
         except Exception:  # noqa: BLE001
-            _voor_rooster = items + archief
+            _voor_rooster, _onvolledig = items + archief, set(ONGELEZEN)
         rooster = belrooster(_voor_rooster, vandaag)
+        if _onvolledig:
+            # een agenda die niet gelezen is: haar komende oproepen uit het vorige rooster blijven staan, anders belt De Bode
+            # niet voor die afspraken (Codex A15, ronde 3)
+            rooster = sorted(rooster + _rooster_behouden(rooster, _onvolledig), key=lambda r: r["tijd"])
         bellen.rooster_schrijven(rooster)
         ag.log(f"dag {vandaag}", "schrijf", f"belrooster: {len(rooster)} oproepen gepland (een oproep per afspraak: online {BEL_ONLINE_MIN} min vooraf, buiten {BEL_ONLINE_MIN} min voor het vertrek)",
                "\n".join(f"{r['tijd'][:16]} bel: {r['titel']}" for r in rooster[:60]))

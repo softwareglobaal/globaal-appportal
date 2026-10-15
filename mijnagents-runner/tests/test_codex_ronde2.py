@@ -400,7 +400,10 @@ check("A10 beide ritten (heen en terug) worden met dat merk aangemaakt", _bron.c
 # overgang: een oude rit die aan zijn afspraak hangt krijgt zijn merk; een oude rit zonder afspraak niet
 _mk, _weg2 = [], []
 _afs = afspraak("a10", "!! Mehdi: [HA-KB] 2601 - X", locatie="Proefstraat 1, 3000 Leuven")
-_oud_vast = {**_tekst, "id": "oudvast", "start": (_later - timedelta(minutes=30)).isoformat(), "einde": _later.isoformat()}
+_oud_vast = {**_tekst, "id": "oudvast", "start": (_later - timedelta(minutes=30)).isoformat(), "einde": _later.isoformat(),
+             "omschrijving": "Reistijd voor: !! Mehdi: [HA-KB] 2601 - X (30 min, OSRM)"}
+_oud_ander = {**_tekst, "id": "oudander", "start": (_later - timedelta(minutes=20)).isoformat(),
+              "einde": _later.isoformat(), "omschrijving": "Reistijd voor: !! Mehdi: [HA-KB] 2699 - Andere (30 min, OSRM)"}
 _oud_los = {**_tekst, "id": "oudlos", "start": (_later + timedelta(days=1)).isoformat(), "einde": (_later + timedelta(days=1, minutes=30)).isoformat()}
 W.ONGELEZEN.clear()
 with vervang((W, "geen_auto_dagen", lambda: frozenset(["2000-01-01"])), (W, "lara_vakantiedagen", lambda: frozenset()),
@@ -409,10 +412,12 @@ with vervang((W, "geen_auto_dagen", lambda: frozenset(["2000-01-01"])), (W, "lar
              (W, "_patch", lambda a, body, tok, toch=False: _mk.append((a.get("id"), body))),
              (W, "_eigen_rit_weg", lambda x, tok: _weg2.append(x["id"]) or True), (W, "_verplaats", lambda *a: _weg2.append("verhuisd")),
              (W, "rijtijd_min", lambda *a, **k: (30, 1.0)), (W.agenda, "_toegang", lambda: "t")):
-    _r10 = veilig(lambda: W.reistijd_zetten([dict(_afs), dict(_oud_vast), dict(_oud_los)]))
+    _r10 = veilig(lambda: W.reistijd_zetten([dict(_afs), dict(_oud_vast), dict(_oud_los), dict(_oud_ander)]))
 _gemerkt = [i for i, b in _mk if "extendedProperties" in b]
 check("A10 overgang: een oude rit die aan zijn afspraak hangt, krijgt zijn merk (eigen ID)",
       ("oudvast", {"extendedProperties": {"private": {_rm: "oudvast"}}}) in _mk, f"{_mk} {_r10}")
+check("A10 overgang (ronde 3): een oude rit die op het juiste uur eindigt maar een andere afspraak noemt, krijgt geen merk",
+      "oudander" not in _gemerkt and "oudander" not in _weg2, f"{_gemerkt} {_weg2}")
 check("A10 overgang: een oude rit zonder afspraak krijgt geen merk en wordt niet weggehaald",
       "oudlos" not in _gemerkt and "oudlos" not in _weg2, f"{_gemerkt} {_weg2}")
 

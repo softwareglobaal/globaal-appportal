@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.33",
+ "versie": "3.34",
  "datum": "15-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -339,7 +339,17 @@
     "FR-154",
     "FR-155",
     "FR-156",
-    "FR-157"
+    "FR-157",
+    "FR-158",
+    "FR-159",
+    "FR-160",
+    "FR-161",
+    "FR-162",
+    "FR-163",
+    "FR-164",
+    "FR-165",
+    "FR-166",
+    "FR-167"
    ]
   }
  ],
@@ -3227,6 +3237,186 @@
     "soort": "test",
     "waar": "tests/test_agenda_taken.py",
     "tekst": "de test ging nergens naar buiten"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-158",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 3 (A01, A02), nagemeten door Claude",
+   "fout": "Een zorgmail zonder leesbare patiënt koppelde op een gelijk uur aan Mehdi's afspraak, en een algemeen zorgwoord op hetzelfde uur volstond om te koppelen.",
+   "gevolg": "Een annulering of verplaatsing voor een gezinslid kon Mehdi's afspraak annuleren of verzetten; zijn eigen consult kon als 'al in de agenda' gelden door 'Tandarts' van iemand anders.",
+   "waarom_niet_gezien": "De herstelling van ronde 1 liet een onbekende patiënt bewust koppelen; Codex toonde het tegenvoorbeeld.",
+   "oorzaak": "zelfde_patient gaf True bij een onbekende patiënt; _zorgachtig was een ja of nee.",
+   "soort_oorzaak": "code",
+   "oplossing": "Onbekende patiënt: alleen dezelfde uitnodigings-UID koppelt, anders een eigen open punt. Een agenda-item koppelt alleen met ons merk, de praktijk, de behandelaar of het adres; alleen een zorgwoord is een vraag; [LA] is nooit Mehdi's afspraak.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "A01 ronde 3: een annulering zonder leesbare patiënt op hetzelfde uur annuleert Mehdi's afspraak niet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-159",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 3 (A05), nagemeten door Claude",
+   "fout": "Een privécode [PR] of [LA] in een titel op de werkagenda telde niet als privé.",
+   "gevolg": "Een privé-afspraak kon in afdelingsuitvoer en ongemaskeerde regels komen.",
+   "waarom_niet_gezien": "is_prive keek naar de agenda en naar zorgwoorden.",
+   "oorzaak": "Geen controle op de privécode.",
+   "soort_oorzaak": "code",
+   "oplossing": "PRIVECODE_RE: [PR], [PRIVE], [LA] of [LARA] maakt een afspraak privé op elke agenda.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde3.py",
+    "tekst": "A05 '[PR]' en '[LA]' op de werkagenda zijn privé, een firmacode niet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-160",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 3 (A10), nagemeten door Claude",
+   "fout": "De overgang naar ritmerken merkte een oude rit als hij op een passend tijdstip eindigde, zonder te toetsen of zijn omschrijving die afspraak noemde.",
+   "gevolg": "Een handmatig gekopieerde rit naast een andere afspraak kon eigendom van de agent worden en later verdwijnen.",
+   "waarom_niet_gezien": "De proef had alleen een passende rit.",
+   "oorzaak": "Alleen de tijd telde (vast).",
+   "soort_oorzaak": "code",
+   "oplossing": "Een merk alleen bij precies een afspraak waarvan de omschrijving de titel draagt, op het juiste tijdstip, zonder tweeling.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2.py",
+    "tekst": "A10 overgang (ronde 3): een oude rit die op het juiste uur eindigt maar een andere afspraak noemt, krijgt geen merk"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-161",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 3 (A11), nagemeten door Claude",
+   "fout": "Een onleesbare geen-autobron hield alle nieuwe ritten naar buiten tegen met alleen een algemene logregel.",
+   "gevolg": "Een komende buitenafspraak bleef zonder rit en niemand zag welke.",
+   "waarom_niet_gezien": "De meldingen keken niet naar die regel.",
+   "oorzaak": "Geen regel per afspraak.",
+   "soort_oorzaak": "code",
+   "oplossing": "Elke getroffen komende buitenafspraak staat in de meldingen onder 'grendelbron niet te lezen'. De blokkade zelf blijft: welke dagen geen auto hebben, is dan onbekend.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde3.py",
+    "tekst": "A11 geen-autodagen onbekend: de buitenafspraak staat apart in de meldingen"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-162",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 3 (A15), nagemeten door Claude",
+   "fout": "Bij een onvolledige lezing schreef de agent een belrooster zonder de afspraken van de ongelezen agenda en overschreef hij het vorige.",
+   "gevolg": "De Bode belde niet voor afspraken op die agenda.",
+   "waarom_niet_gezien": "Het rooster werd altijd vervangen.",
+   "oorzaak": "rooster_schrijven met een halve lijst.",
+   "soort_oorzaak": "code",
+   "oplossing": "_rooster_behouden: de komende regels van het vorige rooster voor de ongelezen agenda's blijven staan.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde3.py",
+    "tekst": "A15 de komende oproep van de ongelezen agenda blijft, die van een gelezen agenda niet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-163",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 3 (A25), nagemeten door Claude",
+   "fout": "De zelfcontrole en foutpaden van de agent (herinnering, rit-melding, kleur, vraag) drukten ruwe privétitels af in logboeken op de server.",
+   "gevolg": "Privétitels in serverlogboeken.",
+   "waarom_niet_gezien": "De maskering van ronde 2 dekte het bord, de wachters en het belrooster, niet deze uitvoer.",
+   "oorzaak": "print(a['titel']) in foutpaden; de zelfcontrole drukte elke bevinding met titel af.",
+   "soort_oorzaak": "code",
+   "oplossing": "_toon(a) geeft '(privé)'; de zelfcontrole toont '(privé)' en maskeert de regel.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde3.py",
+    "tekst": "A25 de zelfcontrole drukt een privé-bevinding af zonder titel"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-164",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 3 (A09, A24, A14, A20, A30, A07, A29), nagemeten door Claude",
+   "fout": "Kleinere restpunten: een collega als agendagast telde niet als gast voor ZL en VR; een rit op titel werd ook op een andere agenda gekozen; een jaartal gold als projectnummer; de zelfcontrole telde elke link als vergaderlink; een nieuw zorgblok werd niet op titel, herinnering en merk teruggelezen; de live tak van test_agenda_taken ging naar buiten zodra er sleutels waren.",
+   "gevolg": "Titels of vragen in een met collega's gedeelde afspraak, een verkeerd vertrek, een valse koppeling, valse meldingen, 'gezet' zonder bewijs, of een test die naar buiten gaat.",
+   "waarom_niet_gezien": "Elk punt had een proef voor het hoofdgeval, niet voor deze rand.",
+   "oorzaak": "Telkens een te ruime controle.",
+   "soort_oorzaak": "code",
+   "oplossing": "_van_mehdi en vragen_in_agenda sluiten _agendagasten uit; rit op titel alleen op dezelfde agenda; jaartallen 2020-2039 tellen niet als nummer; de zelfcontrole gebruikt VERGADERLINK_RE en meldt ZL alleen waar de agent hem zelf zet; _zorg_teruglezen leest titel, herinnering en merk; live alleen met --live.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde3.py",
+    "tekst": "A09 ZL schrijft niet in een afspraak met een collega als gast"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-165",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 3 (A31), nagemeten door Claude",
+   "fout": "Het bord levert nieuwe items aflopend; De Bode stuurde de oudste acht van die selectie en bewaarde het hoogste ID als gelezen.",
+   "gevolg": "Bij meer dan acht nieuwe items kreeg Mehdi de rest nooit te zien.",
+   "waarom_niet_gezien": "De proef had nooit meer dan acht items.",
+   "oorzaak": "items[-8:] met laatste_id = max(id).",
+   "soort_oorzaak": "code",
+   "oplossing": "Oplopend, hoogstens acht per bericht, laatste_id alleen tot het laatst verstuurde of bewust afgehandelde item, niet bij een mislukte verzending; een volle pagina geeft een nood.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A31 negen nieuwe items: alle negen krijgen uiteindelijk een bericht"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-166",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 3 (A26), nagemeten door Claude",
+   "fout": "Een fout bij het bewaren na een aanvaarde oproep werd ingeslikt; De Bode belde verder en na een herstart kon dezelfde oproep opnieuw vertrekken.",
+   "gevolg": "Een dubbele oproep voor dezelfde afspraak.",
+   "waarom_niet_gezien": "De proef bewaarde altijd met succes.",
+   "oorzaak": "_bewaar logde de fout en ging door.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een append-only spoor (bode-gebeld.jsonl, fsync, voor de stand) telt bij het inlezen als gebeld; lukt spoor of stand niet, dan stopt de belronde met een nood.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A26 bewaarfout na de eerste oproep: geen tweede oproep in die ronde"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-167",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 3 (A13), nagemeten door Claude",
+   "fout": "Elk niet-leeg CallMeBot-antwoord behalve twee foutvormen telde als geslaagde oproep.",
+   "gevolg": "'Error: user not available' heette gebeld; Mehdi werd niet gebeld en ook niet opnieuw.",
+   "waarom_niet_gezien": "Er was geen gemeten antwoord als referentie.",
+   "oorzaak": "Een zwarte lijst in plaats van een witte.",
+   "soort_oorzaak": "code",
+   "oplossing": "Alleen een gemeten aanvaard-antwoord ('Autorization OK', 'call queued', 'calling') telt; een foutwoord wint altijd; onbekend is niet gebeld en wordt binnen het venster opnieuw geprobeerd.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A13 een fout-antwoord van CallMeBot ('Error: user not available') telt niet als gebeld"
    },
    "controle": [],
    "status": "opgelost"

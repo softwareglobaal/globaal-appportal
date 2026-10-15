@@ -515,24 +515,28 @@ def _bewaar_zorg(c, a):
         return 0
     eigen_patient = _naam_plat(z.get("patient") or "")
 
-    def zelfde_patient(r):
-        # twee patiënten op hetzelfde uur blijven twee afspraken; een onbekende patiënt koppelt wel (Codex A01). Alle
-        # namen van Mehdi uit het profiel ('Mohammad Mehdi ...', 'Mehdi ...') zijn dezelfde persoon.
+    def zelfde_patient(r, sterk=False):
+        # twee patiënten op hetzelfde uur blijven twee afspraken. Alle namen van Mehdi uit het profiel ('Mohammad Mehdi
+        # ...', 'Mehdi ...') zijn dezelfde persoon. Is de patiënt aan een kant niet te lezen, dan koppelt alleen een
+        # sterke identiteit (dezelfde uitnodigings-UID), nooit een gelijk uur: een herinnering voor een gezinslid op
+        # hetzelfde uur mag Mehdi's afspraak niet verzetten of annuleren (Codex A01, ronde 3). Ze wordt een eigen open punt.
         rz = _zorg_json(dict(r))
         p = _naam_plat(rz.get("patient") or "")
-        if not p or not eigen_patient or p == eigen_patient:
+        if not p or not eigen_patient:
+            return sterk
+        if p == eigen_patient:
             return True
         return bool(rz.get("mehdi")) and bool(z.get("mehdi"))
 
-    def zoek(sql, args):
-        return next((r for r in c.execute(sql, args).fetchall() if zelfde_patient(r)), None)
+    def zoek(sql, args, sterk=False):
+        return next((r for r in c.execute(sql, args).fetchall() if zelfde_patient(r, sterk)), None)
 
     doel, alias = None, False
     if z.get("gebeurtenis") == "verplaatsing" and z.get("oude_start"):
         doel = (zoek("SELECT * FROM afspraak WHERE soort='zorg' AND start=? AND sleutel LIKE ?", (z["oude_start"], like))
                 or zoek("SELECT * FROM afspraak WHERE sleutel=?", (f"zorg|{pid}|{z['oude_start']}",)))
     if doel is None and a.get("ics_uid"):
-        doel = zoek("SELECT * FROM afspraak WHERE soort='zorg' AND ics_uid=? AND sleutel LIKE ?", (a["ics_uid"], like))
+        doel = zoek("SELECT * FROM afspraak WHERE soort='zorg' AND ics_uid=? AND sleutel LIKE ?", (a["ics_uid"], like), sterk=True)
     if doel is None and a.get("start"):
         doel = zoek("SELECT * FROM afspraak WHERE soort='zorg' AND start=? AND sleutel LIKE ?", (a["start"], like))
     if doel is None and a.get("start"):
@@ -672,7 +676,11 @@ def zelfde_onderwerp(mailtitel, agendatitel):
     komma (de rest is het adres), twee projectnummers beslissen samen, en anders moet het ene onderwerp helemaal in het
     andere zitten of moeten twee woorden overeenkomen."""
     m_all, g_all = _woorden((mailtitel or "").split(",")[0]), _woorden((agendatitel or "").split(",")[0])
-    mn, gn = {w for w in m_all if w.isdigit()}, {w for w in g_all if w.isdigit()}
+    # een jaartal (2020-2039) is geen projectnummer: 'overleg 2026' koppelt geen 2614 aan 2615 (Codex A20, ronde 3)
+    jaar = re.compile(r"20[23]\d")
+    mn = {w for w in m_all if w.isdigit() and not jaar.fullmatch(w)}
+    gn = {w for w in g_all if w.isdigit() and not jaar.fullmatch(w)}
+    m_all, g_all = {w for w in m_all if not jaar.fullmatch(w)}, {w for w in g_all if not jaar.fullmatch(w)}
     if mn and gn:
         return bool(mn & gn)
     m, g = m_all - mn, g_all - gn
@@ -702,14 +710,17 @@ _ZORGWOORD = re.compile(r"\bkine\b|kinesi|kinésit|tandarts|mondhygi|dentist", r
 
 
 def _zorgachtig(x, a, z, profiel):
-    """Is dit agenda-item deze zorgafspraak? Ons eigen merk, of een zorgwoord, de praktijk, de behandelaar of het adres
-    van de praktijk in titel, plaats of omschrijving."""
+    """Hoe sterk lijkt dit agenda-item op deze zorgafspraak? 2: ons eigen merk, of de praktijk, de behandelaar of het
+    adres van de praktijk in titel, plaats of omschrijving. 1: alleen een algemeen zorgwoord (kine, tandarts). 0: niet.
+    Alleen 2 koppelt; 1 is een vraag, want 'Tandarts' op dat uur kan de afspraak van iemand anders zijn (Codex A02,
+    ronde 3)."""
     if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]:
-        return True
-    # een zakelijke afspraak (firmacode in de titel, bv. EPB voor een tandartspraktijk) is nooit deze zorgafspraak (A02)
+        return 2
+    # een zakelijke afspraak (firmacode in de titel, bv. EPB voor een tandartspraktijk) is nooit deze zorgafspraak (A02);
+    # een afspraak van Lara ([LA]) is nooit die van Mehdi
     m = re.search(r"\[([A-Za-z]{2,6})(?:-[A-Za-z0-9]{1,4})?\]", x.get("titel") or "")
-    if m and m.group(1).upper() not in ("PR", "PRIVE", "LA", "LARA"):
-        return False
+    if m and m.group(1).upper() not in ("PR", "PRIVE"):
+        return 0
     tekst = _plat_tekst(" ".join(str(x.get(v) or "") for v in ("titel", "locatie", "omschrijving")))
     woorden = [_plat_tekst(w) for w in (profiel or {}).get("praktijknamen") or []]
     woorden += [_plat_tekst(n) for n in ((profiel or {}).get("behandelaars") or {})]
@@ -718,7 +729,9 @@ def _zorgachtig(x, a, z, profiel):
     straat = _plat_tekst(((profiel or {}).get("adres") or "").split(",")[0])
     if straat:
         woorden.append(straat)
-    return bool(_ZORGWOORD.search(tekst)) or any(w and w in tekst for w in woorden)
+    if any(w and w in tekst for w in woorden):
+        return 2
+    return 1 if _ZORGWOORD.search(tekst) else 0
 
 
 def _zorg_status(a, items, nu, vorig_google=""):
@@ -731,6 +744,8 @@ def _zorg_status(a, items, nu, vorig_google=""):
     start = _iso(a["start"]) if a["start"] else None
     kand = [x for x in items if not x.get("hele_dag") and start and _iso(x.get("start") or "")
             and abs((_iso(x["start"]) - start).total_seconds()) <= 300 and _zorgachtig(x, a, z, profiel)]
+    zwak = [x for x in kand if _zorgachtig(x, a, z, profiel) < 2]
+    kand = [x for x in kand if x not in zwak]
     merk = [x for x in items if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]]
     vorig = [x for x in items if vorig_google and f"{x.get('kalender')}|{x.get('id')}" == vorig_google]
     recent = (a.get("bron_ontvangen") or "")[:10] >= (nu - timedelta(days=14)).astimezone(BRUSSEL).date().isoformat()
@@ -758,6 +773,12 @@ def _zorg_status(a, items, nu, vorig_google=""):
     if len(kand) > 1 and not eigen:
         # twee kandidaten op hetzelfde uur: niet raden welke het is (Codex A02)
         return {"status": "zorg_open", "google": "", "detail": f"{len(kand)} afspraken op dat uur, niet eenduidig te koppelen"}
+    if not kand and zwak and not (merk or vorig):
+        # alleen een algemeen zorgwoord op dat uur: misschien deze afspraak, misschien die van iemand anders. Geen tweede
+        # blok en geen stille koppeling, maar een vraag (Codex A02, ronde 3)
+        return {"status": "zorg_open", "google": "",
+                "detail": f"{len(zwak)} afspraken op dat uur, niet eenduidig te koppelen" if len(zwak) > 1 else
+                "op dat uur staat al een zorgafspraak zonder de naam van de praktijk: is dat deze?"}
     kand = eigen or kand
     if kand:
         m = kand[0]

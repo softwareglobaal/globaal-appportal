@@ -386,5 +386,29 @@ _env = " ".join(str(x) for x in (_opdr[0] if _opdr else []))
 check("de ronde vraagt de zorgafzenders op over minstens 300 dagen terug", "zorg_afzenders" in _env and "info@kine-voorbeeld.test" in _env
       and "2025-12-19" in _env, _env[:300])
 
+# Ronde 3 (Codex A01): een mail zonder leesbare patiënt koppelt niet op een gelijk uur aan Mehdi's afspraak
+_bev3 = kand("mehdichegini@hotmail.com", _KM, "Uw boeking werd geaccepteerd - woensdag 16.12.2026 om 09:00",
+             "Beste Mo Voorbeeld, uw boeking werd geaccepteerd. Afspraakdatum: 16.12.2026 Afspraaktijd: 09:00 Uw therapeut: An Proef",
+             mid="<r3-bev@kine>", datum="Wed, 14 Oct 2026 11:00:00 +0200", uid=31)
+_ann3 = kand("mehdichegini@hotmail.com", _KM, "Annulering van uw afspraak bij KINEVOORBEELD",
+             "Uw afspraak bij KINEVOORBEELD op woensdag 16/12/2026 om 09:00 werd geannuleerd. Uw therapeut: An Proef",
+             mid="<r3-ann@kine>", datum="Wed, 14 Oct 2026 12:00:00 +0200", uid=32)
+_ronde_met([_bev3, _ann3])
+_dec = [a for a in MA.alle() if a["soort"] == "zorg" and a["start"].startswith("2026-12-16T09:00")]
+_mo = [a for a in _dec if (MA._zorg_json(a).get("mehdi"))]
+check("A01 ronde 3: een annulering zonder leesbare patiënt op hetzelfde uur annuleert Mehdi's afspraak niet",
+      len(_mo) == 1 and not _mo[0]["geannuleerd"], str([(a["sleutel"][-12:], a["geannuleerd"], MA._zorg_json(a).get("patient")) for a in _dec]))
+
+# Ronde 3 (Codex A02): alleen een algemeen zorgwoord op hetzelfde uur is een vraag, de praktijknaam koppelt, Lara nooit
+_r3 = [a for a in MA.alle() if a["soort"] == "zorg" and a["start"].startswith("2026-12-16T09:00") and MA._zorg_json(a).get("mehdi")]
+_r3s = lambda items: MA.vergelijk(_r3, items, nu)[0]["status"] if _r3 else "geen rij"
+_t3 = "2026-12-16T09:00:00+01:00"
+check("A02 ronde 3: alleen 'Kine' op dat uur koppelt niet stil, het is een vraag",
+      _r3s([{"kalender": W.PRIVE_AGENDA, "id": "g1", "titel": "Kine", "start": _t3}]) == "zorg_open")
+check("A02 ronde 3: de naam van de behandelaar of de praktijk op dat uur koppelt wel",
+      _r3s([{"kalender": W.PRIVE_AGENDA, "id": "g2", "titel": "Kine - An Proef", "start": _t3}]) == "gekoppeld")
+check("A02 ronde 3: een afspraak van Lara ([LA]) op dat uur is nooit die van Mehdi",
+      _r3s([{"kalender": W.WERKAGENDA, "id": "g3", "titel": "[LA] kine An Proef", "start": _t3}]) != "gekoppeld")
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

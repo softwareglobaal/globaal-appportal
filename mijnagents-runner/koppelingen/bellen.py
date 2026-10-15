@@ -231,15 +231,30 @@ def afspraak_bellen_beschikbaar():
 
 
 def bel_telegram(tekst):
-    """Telegram-spraakoproep via CallMeBot; de tekst wordt voorgelezen (twee keer)."""
+    """Telegram-spraakoproep via CallMeBot; de tekst wordt voorgelezen (twee keer). Geeft het antwoord van CallMeBot
+    als korte platte tekst (callmebot_antwoord); of de oproep vertrok, beslist gelukt()."""
     _niet_in_een_test()
+    voorlezen = tekst[:300]
     # de gebruiker (+32... of @naam) mag niet URL-gecodeerd worden: CallMeBot leest %2B verkeerd
-    q = urllib.parse.urlencode({"text": tekst[:300], "lang": os.environ.get("CALLMEBOT_STEM", "nl-NL-Standard-B"), "rpt": "2", "timeout": "40"})
-    import re
+    q = urllib.parse.urlencode({"text": voorlezen, "lang": os.environ.get("CALLMEBOT_STEM", "nl-NL-Standard-B"), "rpt": "2", "timeout": "40"})
     with urllib.request.urlopen(f"https://api.callmebot.com/start.php?user={os.environ['CALLMEBOT_USER'].strip()}&{q}", timeout=60) as r:
         h = r.read().decode(errors="replace")
-    h = re.sub(r"<script.*?</script>|<style.*?</style>", "", h, flags=re.S)
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", h)).strip()[:200]
+    return callmebot_antwoord(h, voorlezen)
+
+
+def callmebot_antwoord(h, voorlezen=""):
+    """Het HTML-antwoord van CallMeBot als platte tekst van hoogstens 200 tekens. CallMeBot herhaalt onze tekst midden
+    in zijn antwoord ('Text to speech:...'); die vervang ik door '(tekst)', en bij een lang antwoord houd ik begin en
+    staart. Vroeger knipte ik gewoon op 200 tekens: dan bleef alleen de autorisatie plus onze eigen tekst over en viel
+    weg wat er na de tekst over de oproep zelf staat (gemeten op de VM, Codex A13 ronde 3, 15-10-2026)."""
+    import html
+    import re
+    h = re.sub(r"<script.*?</script>|<style.*?</style>", "", h or "", flags=re.S | re.I)
+    h = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", h))).strip()
+    v = re.sub(r"\s+", " ", voorlezen or "").strip()
+    if v:
+        h = h.replace(v, "(tekst)")
+    return h if len(h) <= 200 else f"{h[:95]} ... {h[-100:]}"
 
 
 def bel_afspraak(tekst, slot="Details staan op WhatsApp en op het bord."):
@@ -261,18 +276,46 @@ def bel_afspraak(tekst, slot="Details staan op WhatsApp en op het bord."):
     return fout
 
 
+# Wat CallMeBot antwoordt, gemeten in de logboeken op de VM (15-10-2026, telefoonnummer en gebruiker weggelaten):
+#   aanvaard: "Checking Authorization for <gebruiker>... Using bot: @<bot> Autorization OK User:<gebruiker>
+#              Text to speech:<onze tekst>"   (CallMeBot schrijft zelf "Autorization")
+#   geweigerd: "ERROR: Two calls to the same user (<gebruiker>) within 65 seconds is not allowed. ..."
+# "call queued" en "calling" zijn de woorden die CallMeBot voor een vertrekkende oproep gebruikt; een foutwoord wint
+# altijd, ook na "Autorization OK" (een weigering na de autorisatie staat in de staart van het antwoord).
+CALLMEBOT_AANVAARD = ("autorization ok", "authorization ok", "call queued", "calling")
+CALLMEBOT_FOUT = ("error", "not allowed", "not available", "not authori", "unauthori", "denied", "invalid", "fail",
+                  "65 seconds", "mislukt")
+
+
+def callmebot_aanvaard(antwoord):
+    """Zegt het antwoord van CallMeBot (bel_telegram) uitdrukkelijk dat de oproep vertrok? Alleen een herkend
+    aanvaard-antwoord zonder foutwoord telt. Onbekend is onzeker: niet gebeld, en afspraken_bellen probeert opnieuw
+    binnen het belvenster. Vroeger telde elk niet-leeg antwoord behalve twee foutvormen, ook 'Error: user not
+    available' (Codex A13 ronde 3, 15-10-2026). De gebruiker zelf (CALLMEBOT_USER) staat in het antwoord en telt niet
+    mee, anders kon een naam met 'error' of 'fail' erin een echte oproep als mislukt laten tellen."""
+    t = str(antwoord or "").lower()
+    gebruiker = os.environ.get("CALLMEBOT_USER", "").strip().lower()
+    if gebruiker:
+        t = t.replace(gebruiker, " ")
+    if t.startswith("mislukt") or any(w in t for w in CALLMEBOT_FOUT):
+        return False
+    return any(w in t for w in CALLMEBOT_AANVAARD)
+
+
 def gelukt(res):
-    """Is er echt een oproep vertrokken? res is wat bel_afspraak teruggeeft [(kanaal, resultaat)], of een call-sid van
-    bel(). Een fout ('mislukt: ..'), een lege sid, de wachtmelding van CallMeBot of een lege lijst is geen oproep: dan
-    mag niets als 'gebeld' bewaard worden (Codex A13, 15-10-2026)."""
+    """Is er echt een oproep vertrokken? res is wat bel_afspraak of bel_vast teruggeeft [(kanaal, resultaat)], of een
+    call-sid van bel(). Twilio ('twilio', 'twilio-vast'): alleen een call-sid (CA...). CallMeBot ('telegram-oproep'):
+    alleen een herkend aanvaard-antwoord (callmebot_aanvaard). Een fout ('mislukt: ..'), een lege sid, een onbekend
+    antwoord, een onbekend kanaal of een lege lijst is geen oproep: dan mag niets als 'gebeld' bewaard worden
+    (Codex A13, 15-10-2026; onbekend is onzeker sinds ronde 3)."""
     if isinstance(res, str):
         return res.startswith("CA")
     for kanaal, v in res or []:
         v = str(v or "")
-        if kanaal == "twilio":
+        if str(kanaal).startswith("twilio"):
             if v.startswith("CA"):
                 return True
-        elif v and not v.startswith("mislukt") and "65 seconds" not in v:
+        elif kanaal == "telegram-oproep" and callmebot_aanvaard(v):
             return True
     return False
 
@@ -303,13 +346,14 @@ def _rooster_regels():
         return None
 
 
-def te_bellen(staat, nu=None, rooster=None):
+def te_bellen(staat, nu=None, rooster=None, spoor=None):
     """Alleen lezen: de roosterregels waarvan het beltijdstip nu is (tot VENSTER_MIN minuten geleden) en die nog niet
-    afgehandeld zijn. afspraken_bellen belt ze; de droge ronde van De Bode toont ze alleen (Codex A19, 15-10-2026)."""
+    afgehandeld zijn. afspraken_bellen belt ze; de droge ronde van De Bode toont ze alleen (Codex A19, 15-10-2026).
+    spoor: het belspoor (spoor_lezen); wat daarin staat is afgehandeld, ook als de stand het niet weet (A26)."""
     from datetime import datetime, timedelta
     nu = nu or datetime.now().astimezone()
     rooster = _rooster_regels() if rooster is None else rooster
-    gebeld = staat.get("gebeld", {})
+    gebeld = {**spoor_lezen(spoor), **staat.get("gebeld", {})}
     uit = []
     for r in rooster or []:
         t = _tijd(r)
@@ -318,15 +362,80 @@ def te_bellen(staat, nu=None, rooster=None):
     return uit
 
 
+# ---------------------------------------------------------------- belspoor (A26) ---
+# Een tweede, append-only bewijs naast de stand: een JSON-regel {sleutel, tijd} per afgehandelde afspraak, met flush en
+# fsync, geschreven VOOR de stand. Waarom zo: de stand is een heel JSON-bestand dat atomair vervangen wordt; lukt dat
+# niet (schijf vol, rechten), dan wist de volgende ronde niet dat er gebeld was en vertrok dezelfde oproep opnieuw.
+# Een regel achteraan een bestand bijschrijven is de kleinste schrijfactie die er is, raakt niets wat er al staat, en
+# een halve laatste regel (crash midden in het schrijven) valt bij het lezen gewoon weg. Lukt ook dat niet, dan belt
+# De Bode niet verder (afspraken_bellen) (Codex A26 ronde 3, 15-10-2026).
+
+def spoor_lezen(pad):
+    """{sleutel: tijd} uit het belspoor; geen pad of geen bestand: {}. Onleesbare regels tellen niet."""
+    uit = {}
+    if not pad:
+        return uit
+    try:
+        with open(pad, encoding="utf-8", errors="replace") as f:
+            for regel in f:
+                try:
+                    d = json.loads(regel)
+                    uit[str(d["sleutel"])] = str(d["tijd"])
+                except (ValueError, KeyError, TypeError):
+                    continue
+    except OSError:
+        pass
+    return uit
+
+
+def spoor_schrijven(pad, sleutel, tijd):
+    """Een regel achteraan het belspoor, met flush en fsync. Staat er nog een halve regel achteraan (crash), dan eerst
+    een regeleinde, anders plakt de nieuwe regel eraan vast en is ook hij onleesbaar. Gooit bij een fout."""
+    os.makedirs(os.path.dirname(pad) or ".", exist_ok=True)
+    with open(pad, "a+b") as f:
+        f.seek(0, os.SEEK_END)
+        heel = True
+        if f.tell():
+            f.seek(-1, os.SEEK_END)
+            heel = f.read(1) == b"\n"
+        f.write((b"" if heel else b"\n") + json.dumps({"sleutel": sleutel, "tijd": tijd}, ensure_ascii=False).encode() + b"\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _spoor_opruimen(pad, spoor, grens):
+    """Regels ouder dan grens (ISO) uit het spoor, atomair zoals bode.bewaar; alleen als er zulke regels zijn. Lukt het
+    niet, dan blijft het spoor zoals het was: opruimen is huishouden, geen bewijs."""
+    if not pad or not any(t < grens for t in spoor.values()):
+        return
+    tmp = f"{pad}.{os.getpid()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            for k, t in spoor.items():
+                if t >= grens:
+                    f.write(json.dumps({"sleutel": k, "tijd": t}, ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, pad)
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
 def _bewaar(bewaar, staat, log):
+    """bewaar(staat); True als het lukte. Een fout wordt een logregel; wat erop volgt beslist afspraken_bellen."""
     try:
         bewaar(staat)
+        return True
     except Exception as e:  # noqa: BLE001
         if log:
             log("bellen", "afspraak", f"stand na de oproep niet weggeschreven: {type(e).__name__}: {str(e)[:120]}")
+        return False
 
 
-def afspraken_bellen(staat, log=None, bewaar=None):
+def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
     """Elke minuut door De Bode. Belt elke roosterregel waarvan het beltijdstip nu is
     (tot VENSTER_MIN minuten geleden) en die nog niet afgehandeld is. Geeft korte tekst of ''.
     staat["gebeld"]: afgehandeld, dus echt gebeld (of opgegeven na MAX_BELPOGINGEN mislukte starts).
@@ -335,7 +444,11 @@ def afspraken_bellen(staat, log=None, bewaar=None):
     MAX_BELPOGINGEN keer, daarna opgegeven met een logregel. "Elke oproep een keer" (werkwijze/bode.md) en "nooit
     herhaald" (agenda-wacht.md) gaan over een oproep die vertrok en niet opgenomen werd (Codex A13, 15-10-2026).
     bewaar: callback die de stand na elke poging meteen wegschrijft, zodat een time-out of crash verderop in de ronde
-    geen tweede oproep voor dezelfde afspraak geeft (Codex A26, 15-10-2026)."""
+    geen tweede oproep voor dezelfde afspraak geeft (Codex A26, 15-10-2026).
+    spoor: pad van het belspoor (zie boven). Wat erin staat telt als gebeld; elke afgehandelde afspraak komt er eerst in.
+    Staat een afgehandelde afspraak niet volledig op schijf (spoor of stand mislukt), dan stopt de belronde: geen
+    volgende oproep, een logregel en een nood in de lijst nood. Vroeger slikte _bewaar de fout in en belde de lus
+    verder; na een herstart ontbrak het bewijs en kon dezelfde oproep opnieuw vertrekken (Codex A26 ronde 3)."""
     from datetime import datetime, timedelta
     if not afspraak_bellen_beschikbaar():
         return ""
@@ -345,6 +458,10 @@ def afspraken_bellen(staat, log=None, bewaar=None):
     gebeld = staat.setdefault("gebeld", {})
     pogingen = staat.setdefault("belpogingen", {})
     nu = datetime.now().astimezone()
+    sp = spoor_lezen(spoor)
+    for k, t in sp.items():
+        gebeld.setdefault(k, t)
+    _spoor_opruimen(spoor, sp, (nu - timedelta(days=2)).isoformat())
     # opruimen: ouder dan twee dagen
     for k in [k for k, v in gebeld.items() if v < (nu - timedelta(days=2)).isoformat()]:
         gebeld.pop(k, None)
@@ -355,8 +472,9 @@ def afspraken_bellen(staat, log=None, bewaar=None):
         n = pogingen.pop(k)
         if log and k not in gebeld:
             log("bellen", "afspraak", f"niet gebeld: belvenster voorbij na {n} mislukte poging(en): {titels.get(k, '')[:80]}")
-    uit, mislukt = [], []
-    for r in te_bellen(staat, nu, rooster):
+    uit, mislukt, gestopt = [], [], ""
+    beurt = te_bellen(staat, nu, rooster)
+    for i, r in enumerate(beurt):
         titel = r.get("titel", "")
         res = bel_afspraak(r["tekst"], "Details staan in je agenda.")   # het belrooster komt uit de agenda
         if any("65 seconds" in str(v) for _, v in res):
@@ -364,7 +482,8 @@ def afspraken_bellen(staat, log=None, bewaar=None):
             if log:
                 log("bellen", "afspraak", f"even wachten (één oproep per 65 s): {titel[:60]}")
             break
-        samen = ", ".join(f"{k}: {str(v)[:40]}" for k, v in res)
+        # 160 tekens: bij een onbekend antwoord van CallMeBot moet in het logboek staan wat er wel kwam (A13 ronde 3)
+        samen = ", ".join(f"{k}: {str(v)[:160]}" for k, v in res)
         if gelukt(res):
             gebeld[r["sleutel"]] = nu.isoformat()
             pogingen.pop(r["sleutel"], None)
@@ -383,9 +502,35 @@ def afspraken_bellen(staat, log=None, bewaar=None):
                 log("bellen", "afspraak", f"bellen mislukt (poging {n} van {MAX_BELPOGINGEN}), volgende minuut opnieuw: "
                                           f"{titel[:80]}", f"{r['tekst']}\n{samen or 'geen kanaal'}")
             mislukt.append(titel[:40])
-        if bewaar:
-            _bewaar(bewaar, staat, log)
-    delen = (["belt: " + "; ".join(uit)] if uit else []) + (["bellen mislukt: " + "; ".join(mislukt)] if mislukt else [])
+        # spoor_ok en stand_ok: True gelukt, False mislukt, None niet van toepassing (geen spoor of geen callback)
+        afgehandeld = r["sleutel"] in gebeld
+        spoor_ok = None
+        if afgehandeld and spoor:
+            try:
+                spoor_schrijven(spoor, r["sleutel"], gebeld[r["sleutel"]])
+                spoor_ok = True
+            except Exception as e:  # noqa: BLE001
+                spoor_ok = False
+                if log:
+                    log("bellen", "afspraak", f"belspoor niet bijgeschreven: {type(e).__name__}: {str(e)[:120]}")
+        stand_ok = _bewaar(bewaar, staat, log) if bewaar else None
+        if afgehandeld and False in (spoor_ok, stand_ok):
+            # onzeker bewijs: geen volgende oproep in deze ronde (A26 ronde 3)
+            wacht = len(beurt) - i - 1
+            bewijs = ("het belspoor houdt haar vast, ze wordt niet opnieuw gebeld" if spoor_ok else
+                      "de stand houdt haar vast" if stand_ok else
+                      "ze staat nergens op schijf en kan opnieuw gebeld worden")
+            gestopt = f"belronde gestopt: {'stand' if stand_ok is False else 'belspoor'} niet weggeschreven"
+            if log:
+                log("bellen", "afspraak", f"{gestopt} na de oproep voor {titel[:60]}; {bewijs}; geen volgende oproep "
+                                          f"deze ronde ({wacht} wacht(en) tot de volgende minuut)", samen)
+            if nood is not None:
+                nood.append({"tekst": f"Afspraken bellen: na een oproep kon {'de stand' if stand_ok is False else 'het belspoor'} "
+                                      f"niet op schijf (mijnagents-data); {bewijs}. Ik bel per ronde hoogstens een "
+                                      "afspraak tot dat weer lukt: schijfruimte en rechten nakijken", "wie": "claude-code"})
+            break
+    delen = ((["belt: " + "; ".join(uit)] if uit else []) + (["bellen mislukt: " + "; ".join(mislukt)] if mislukt else [])
+             + ([gestopt] if gestopt else []))
     return "; ".join(delen)
 
 

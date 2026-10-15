@@ -7,9 +7,10 @@ Hermetisch (Codex A29, 15-10-2026): draait zonder netwerk, docker, SSH en sleute
 Python 3.12). De test start met een lege omgeving en een lege HOME, zet elke socketverbinding en docker/ssh dicht en
 bootst de bronnen na: kern.firma (organisatie.globaal.be), Google Agenda (toegang, agendanamen, afspraken, de agenda
 van Lara), de Dropbox-projectmappen, locatie.globaal.be en de kaartdienst. Een poging om toch naar buiten te gaan
-wordt geteld en laat de test falen. Wat echt live Google nodig heeft, draait alleen met de Google-agendasleutels
-(GOOGLE_AGENDA_REFRESH_TOKEN en de client, uit de omgeving of ~/appportal/.env) en wordt apart geteld; zonder
-sleutels staat er 'overgeslagen zonder sleutels'.
+wordt geteld en laat de test falen. Wat echt live Google nodig heeft, draait alleen op uitdrukkelijk verzoek
+(`test_agenda_taken.py --live`) en met de Google-agendasleutels (uit de omgeving of ~/appportal/.env), en wordt apart
+geteld. Zonder --live gaat de test nooit naar buiten, ook niet als er sleutels zijn (Codex A29, ronde 3); dan staat er
+'overgeslagen zonder sleutels'.
 """
 import atexit
 import io
@@ -44,7 +45,7 @@ def _live_sleutels():
     return uit if all(uit.values()) else {}
 
 
-LIVE = _live_sleutels()
+LIVE = _live_sleutels() if "--live" in sys.argv else {}      # alleen op uitdrukkelijk verzoek naar buiten (A29, ronde 3)
 
 # Een lege omgeving en een lege HOME: geen sleutels, geen instellingen van de server, en niets wordt gelezen uit of
 # geschreven naar ~/appportal/mijnagents-data (op de VM is dat de echte data van de agent).
@@ -734,9 +735,9 @@ check("de klant komt uit de deal op dat adres, zonder dubbele voornaam", _dl == 
 _bel = []
 _oud_b = (W.bellen.afspraak_bellen_beschikbaar, W.bellen.bel_afspraak, W.BELVRAGEN)
 W.bellen.afspraak_bellen_beschikbaar = lambda: True
-W.bellen.bel_afspraak = lambda tekst, *r: _bel.append(tekst) or [("proef", "ok")]
+W.bellen.bel_afspraak = lambda tekst, *r: _bel.append(tekst) or [("twilio", "CA0002")]     # een echte oproep heeft een call-sid (A13)
 _oud_vast = W.bellen.bel_vast
-W.bellen.bel_vast = lambda tekst, *r: _bel.append(tekst) or [("proef-vast", "ok")]
+W.bellen.bel_vast = lambda tekst, *r: _bel.append(tekst) or [("twilio-vast", "CA0001")]
 W.BELVRAGEN = os.path.join(_THUIS, "belvragen-test.json")
 import os as _os2
 if _os2.path.exists(W.BELVRAGEN):

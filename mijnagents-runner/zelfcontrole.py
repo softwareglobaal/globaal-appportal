@@ -115,12 +115,14 @@ def bevindingen(items, van, tot, nu):
                 meld("melding_niet_stil", a, "intern overleg rinkelt op de agendastandaard")
             if kal == W.WERKAGENDA and not a.get("_terugkerend") and info.get("firma") \
                     and info["soort"] in W.EXTERN_ONLINE and not buitenachtig:
-                link = bool(a.get("_conferentie")) or bool(re.search(r"https?://", f"{loc} {oms}"))
+                # dezelfde regel als de agent: alleen een vergaderlink telt (Codex A30, ronde 3)
+                link = bool(a.get("_conferentie")) or bool(W.VERGADERLINK_RE.search(f"{loc} {oms}"))
                 zl = W._heeft_zl(a["titel"])
                 bel = re.search(r"\bbel(t|len)?\b|telefo", f"{a['titel']} {oms}", re.I)
                 if link and zl:
                     meld("zl", a, "ZL terwijl er een link in staat")
-                elif not link and not zl and not bel:
+                elif not link and not zl and not bel and W._van_mehdi(a) and not W.is_calendly(a):
+                    # met gasten of bij Calendly zet de agent ZL niet zelf (FR-139): dan is het geen fout
                     meld("zl", a, "extern online zonder link en zonder ZL")
                 elif zl and not a["titel"].startswith("ZL "):
                     meld("zl", a, "ZL staat niet vooraan")
@@ -353,7 +355,9 @@ def main():
     print(f"=== {nu:%Y-%m-%d %H:%M} Brussel · zelfcontrole {van} tot {tot}: {len(items)} afspraken, "
           f"{tel['TERUGGEKEERD']} teruggekeerd, {tel['NIEUW']} nieuw, {tel['BEKEND']} bekend")
     for b in gevonden:
-        print(f"  {b['staat']:<12} {b['register'] or '-':<7} {b['dag'][5:]} {b['uur']} {b['controle']:<22} {b['titel'][:48]} | {b['tekst'][:70]}")
+        # een privé-afspraak nooit met titel of tekst in het logboek op de server (Codex A25, ronde 3)
+        titel = "(privé)" if b.get("prive") else b["titel"][:48]
+        print(W.ag.maskeer(f"  {b['staat']:<12} {b['register'] or '-':<7} {b['dag'][5:]} {b['uur']} {b['controle']:<22} {titel} | {b['tekst'][:70]}"))
     try:
         oud = json.loads(STAND.read_text())
     except (OSError, ValueError):

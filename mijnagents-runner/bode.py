@@ -42,6 +42,10 @@ STIL = (22, 7)
 # Dat vervangt voor nieuwe agents het woord "stil" in een signaaltitel, dat vroeger per ongeluk belde.
 SOORTEN = ("signaal", "coaching", "verslag", "dagplan", "dagbundel", "oproep")
 HERINNERING_UREN = 6
+# Hoogstens zoveel items in een bericht; de rest volgt de volgende ronde, een minuut later (Codex A31, 15-10-2026).
+PER_BERICHT = 8
+# Zoveel klaarzet-items vraag ik per ronde op; het bord levert de nieuwste eerst (mijnagents/app.py, /api/klaarzet).
+KLAARZET_N = 200
 # Mehdi, 25-09-2026: "stuur mij geen domme berichten over mijn agenda op mijn Telegram; heel mijn ding is
 # visueel gemaakt". Wat deze agents klaarzetten blijft op het bord en in de agenda zelf, maar gaat niet naar
 # Telegram. Een oproep (belrooster, vastzitten) blijft wel gewoon werken.
@@ -283,6 +287,62 @@ def lees_staat():
         return {"laatste_id": 0, "tg_offset": 0, "wacht": [], "laatste_herinnering": "", "laatste_voorstellen": 0}
 
 
+def belspoor():
+    """Het belspoor naast de stand (bode-gebeld.jsonl): een regel per afgehandelde afspraakoproep, zie bellen.py. Lukt
+    het wegschrijven van de stand na een oproep niet, dan weet de volgende ronde via dit spoor toch dat er gebeld is
+    (Codex A26 ronde 3, 15-10-2026)."""
+    return os.path.splitext(STAAT)[0] + "-gebeld.jsonl"
+
+
+def nieuwe_items(bord_items, staat, nood):
+    """De nieuwe klaarzet-items (id boven laatste_id, soort in SOORTEN), OPLOPEND op id. Het bord levert ze dalend
+    (ORDER BY id DESC); vroeger nam ik daarvan items[-8:], de oudste acht, maar bewaarde ik het hoogste id als gelezen:
+    het negende en verdere kregen nooit een bericht (Codex A31, 15-10-2026). Een volle pagina waarvan zelfs het oudste
+    item nog nieuw is, kan nieuwe items missen die eronder vallen (het bord kent geen 'vanaf id'): dat wordt een nood."""
+    laatste = staat.get("laatste_id", 0)
+    if laatste and len(bord_items) >= KLAARZET_N and min(it["id"] for it in bord_items) > laatste:
+        nood.append({"tekst": f"Meer dan {KLAARZET_N} nieuwe klaarzet-items voor Mehdi sinds de vorige ronde: de oudste "
+                              "haalt De Bode niet op en ze krijgen geen bericht; kijk het bord na", "wie": "claude-code"})
+    return sorted((it for it in bord_items if it["id"] > laatste and it["soort"] in SOORTEN), key=lambda it: it["id"])
+
+
+def melding_groep(items, eerste=False):
+    """Welke nieuwe items in dit bericht gaan, en tot welk id ze na een geslaagde verzending als gelezen tellen.
+    items: oplopend (nieuwe_items). Geeft (groep, tot, rest):
+      groep  hoogstens PER_BERICHT items voor Mehdi, de oudste eerst;
+      tot    het id tot waar alles verstuurd of bewust afgehandeld is: de groep, plus de agendazaken
+             (NIET_OP_TELEGRAM, die gaan niet naar Mehdi) ertussen en erna, tot het eerste item dat niet meer in de
+             groep past. Nooit voorbij een item dat niet verstuurd is: dat komt de volgende ronde (Codex A31);
+      rest   hoeveel items voor Mehdi na deze groep nog wachten.
+    eerste: er is nog geen laatste_id (eerste ronde, of een onleesbare bode.json). Dan de nieuwste PER_BERICHT en de
+    rest bewust als gelezen; anders kwam heel de geschiedenis van het bord in tientallen berichten terug."""
+    voor_mehdi = [it for it in items if it.get("van") not in NIET_OP_TELEGRAM]
+    if eerste:
+        return voor_mehdi[-PER_BERICHT:], (items[-1]["id"] if items else 0), max(0, len(voor_mehdi) - PER_BERICHT)
+    groep, tot = [], 0
+    for it in items:
+        if it.get("van") not in NIET_OP_TELEGRAM:
+            if len(groep) == PER_BERICHT:
+                break
+            groep.append(it)
+        tot = it["id"]
+    return groep, tot, len(voor_mehdi) - len(groep)
+
+
+def nog_niet_gebeld(staat, alarm):
+    """De alarmen waarvoor nog geen oproep liep of openstaat. Sinds De Bode in groepen meldt (A31) blijft een alarm dat
+    niet in de eerste groep zat een ronde langer nieuw; de lijst krimpt dan van voren, alarm_bellen zag een andere
+    sleutel ('5|11' werd '11') en zou opnieuw bellen voor hetzelfde signaal. Item-id's lopen op: wat niet hoger is dan
+    het hoogste id in de sleutel van de vorige of de openstaande oproep, was al aan de beurt (Codex A31, 15-10-2026)."""
+    b = staat.get("bel") or {}
+    gehad = 0
+    for s in (b.get("sleutel"), (b.get("open") or {}).get("sleutel")):
+        for d in str(s or "").split("|"):
+            if d.strip().isdigit():
+                gehad = max(gehad, int(d))
+    return [it for it in alarm if int(it.get("id") or 0) > gehad]
+
+
 def veilig(nood, wat, fn, standaard=0):
     """fn(), maar een storing bij Telegram, WhatsApp of het bord wordt een nood in plaats van een crash. Vroeger liet
     een fout in lees_telegram of bord.call main crashen voor er gebeld was (Codex A26, 15-10-2026)."""
@@ -322,10 +382,11 @@ def ronde(droog=False):
     # stand meteen op schijf (bewaar), niet pas aan het eind na de time-outs (Codex A26, 15-10-2026).
     bel_afspraak = ""
     if droog:
-        for r in bellen.te_bellen(staat):
+        for r in bellen.te_bellen(staat, spoor=belspoor()):
             print(f"  (droog) zou bellen voor: {r.get('titel', '')[:80]}")
     else:
-        bel_afspraak = veilig(nood, "Afspraken bellen", lambda: bellen.afspraken_bellen(staat, log=ag.log, bewaar=bewaar), "")
+        bel_afspraak = veilig(nood, "Afspraken bellen", lambda: bellen.afspraken_bellen(
+            staat, log=ag.log, bewaar=bewaar, nood=nood, spoor=belspoor()), "")
     namen = agentnamen()
     binnen = terug = 0
     if droog:
@@ -336,8 +397,10 @@ def ronde(droog=False):
         terug = veilig(nood, "Antwoorden terugbrengen", lambda: antwoorden_terug(staat, namen, nood))
 
     stil = is_stil()
-    items = [it for it in veilig(nood, "Het bord lezen", lambda: bord.call("/api/klaarzet?voor=mehdi&status=alle&n=200"), {}).get("items", [])
-             if it["id"] > staat.get("laatste_id", 0) and it["soort"] in SOORTEN]
+    items = nieuwe_items(veilig(nood, "Het bord lezen", lambda: bord.call(
+        f"/api/klaarzet?voor=mehdi&status=alle&n={KLAARZET_N}"), {}).get("items", []), staat, nood)
+    eerste = not staat.get("laatste_id")
+    groep, tot, rest = melding_groep(items, eerste)
     agents_met_voorstel = [a for a in veilig(nood, "Het bord lezen", lambda: bord.call("/api/overzicht"), {}).get("agents", []) if a.get("open_voorstellen")]
     totaal_voorstellen = sum(a["open_voorstellen"] for a in agents_met_voorstel)
     alarm = [it for it in items if it["soort"] == "oproep" or (it["soort"] == "signaal" and "stil" in it["titel"].lower())]
@@ -353,20 +416,20 @@ def ronde(droog=False):
             print(f"  (droog) {len(alarm)} dringend(e) signaal/oproep(en); zou bellen als het nieuw is: "
                   + "; ".join(it["titel"][:60] for it in alarm[:3]))
     else:
-        bel_detail = veilig(nood, "Alarm bellen", lambda: bellen.alarm_bellen(staat, alarm, log=ag.log), "")
+        bel_detail = veilig(nood, "Alarm bellen", lambda: bellen.alarm_bellen(staat, nog_niet_gebeld(staat, alarm), log=ag.log), "")
         if bel_detail:
             veilig(nood, "Stand wegschrijven na het alarm", lambda: bewaar(staat), None)
     if bel_afspraak:
         bel_detail = (bel_detail + '; ' if bel_detail else '') + bel_afspraak
-    items_tg = [it for it in items if it.get("van") not in NIET_OP_TELEGRAM]
-    if items and not items_tg and not herinner:
-        staat["laatste_id"] = max(it["id"] for it in items)  # alleen agendazaken: niet sturen, wel als gezien tellen
-    if (items_tg or herinner) and (not stil or alarm):
+    if items and not groep:
+        staat["laatste_id"] = max(staat.get("laatste_id", 0), tot)  # alleen agendazaken: niet sturen, wel als gezien tellen
+    if (groep or herinner) and (not stil or alarm):
         regels = [f"Mehdi Agents, {datetime.now(BRUSSEL).strftime('%H:%M')}:"]
-        for it in items_tg[-8:]:
+        for it in groep:
             regels.append(f"- {it['soort']}: {it['titel'][:110]} (van {it['van']})")
-        if len(items_tg) > 8:
-            regels.append(f"- en nog {len(items_tg) - 8} andere")
+        if rest:
+            regels.append(f"- en nog {rest} oudere, die staan op het bord" if eerste else
+                          f"- en nog {rest}, die volgen in het volgende bericht")
         if herinner:
             for a in agents_met_voorstel:
                 regels.append(f"- {a['open_voorstellen']} voorstel(len) van {a['label']} wachten op je goedkeuring")
@@ -379,16 +442,20 @@ def ronde(droog=False):
             kanaal = stuur("\n\n".join(regels), nood)
         if kanaal:
             if items:
-                staat["laatste_id"] = max(it["id"] for it in items)
+                # alleen tot het laatst verstuurde of bewust afgehandelde item; mislukt het sturen, dan schuift niets op
+                staat["laatste_id"] = max(staat.get("laatste_id", 0), tot)
             if herinner:
                 staat["laatste_herinnering"] = datetime.now().isoformat()
                 staat["laatste_voorstellen"] = totaal_voorstellen
-            ag.log("bericht", "melding", f"{len(items)} items{', herinnering voorstellen' if herinner else ''} via {kanaal}", "\n".join(regels))
+            ag.log("bericht", "melding", f"{len(groep)} van {len(items)} items{', herinnering voorstellen' if herinner else ''} "
+                                         f"via {kanaal}", "\n".join(regels))
     if droog:
         print(f"  (droog) {len(items)} nieuwe items, {'stille uren' if stil else 'geen stille uren'}; "
               "niets gebeld, niets gestuurd, bord en stand ongewijzigd" + (f"; nood: {[n['tekst'] for n in nood]}" if nood else ""))
         return
-    bewaar(staat)
+    # Een stand die niet op schijf kan, mag de hartslag niet tegenhouden: anders bereikt de nood van afspraken_bellen
+    # (belronde gestopt, A26 ronde 3) het bord nooit. Het belspoor houdt een gevoerde oproep intussen vast.
+    veilig(nood, "Stand wegschrijven", lambda: bewaar(staat), None)
     if not TG_TOKEN:
         nood.append({"tekst": "Telegram niet ingesteld: bot bij BotFather, TELEGRAM_BOT_TOKEN en TELEGRAM_CHAT_ID in mijnagents-data/.env", "wie": "mehdi"})
     nood += bellen.nood() + bellen.nood_afspraken()
