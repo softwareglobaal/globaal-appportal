@@ -2540,7 +2540,12 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
             st["gekoppeld"] += 1
             kal, _, eid = (a.get("google") or "").partition("|")
             x = per_id.get((kal, eid))
-            if kal == WERKAGENDA and toekomst:
+            if x and MA._ander_zorgitem(x, a):
+                # het item draagt het merk of de uitnodiging van een andere afspraak: nooit verhuizen of overschrijven
+                # (Codex A02, ronde 4 en 6)
+                st["fout"] += 1
+                st["prive"].append(f"{wat}: het gekoppelde item hoort bij een andere afspraak of uitnodiging, niets gewijzigd")
+            elif kal == WERKAGENDA and toekomst:
                 werk_gelinkt[eid] = (a, z, profiel)
             elif (x and (x.get("_merk") or {}).get(ZORGMERK) not in (None, "", a["sleutel"])):
                 # het item draagt het merk van een andere zorgafspraak: nooit overschrijven (Codex A02, ronde 4)
@@ -2781,9 +2786,10 @@ def reistijd_zetten(items, alleen_dag=None):
             _li = lees_titel(a["titel"])
             if "T" in a.get("start", "") and not _li["reistijd"] and (_li["buiten"] or _li["soort"] in BUITEN_SOORTEN) \
                     and not _voorbij(a["start"], nu) and (not alleen_dag or a["start"][:10] == alleen_dag) \
-                    and not any(x.get("kalender") == a.get("kalender") and (x.get("start") or "")[:10] == a["start"][:10]
+                    and not any(x.get("kalender") == a.get("kalender") and _zelfde_tijd(x.get("einde"), a["start"])
                                 and rit_hoort_bij(x, a["titel"], "voor") for x in reistijden):
-                # alleen de gevraagde dag, en niet als er die dag op dezelfde agenda al een rit staat (Codex A11, ronde 4 en 5)
+                # alleen de gevraagde dag, en niet als er op dezelfde agenda al een heenrit eindigt op het begin van deze
+                # afspraak (Codex A11, ronde 4 tot 6)
                 regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen rit, grendelbron niet te lezen")
             continue
         # Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit voor
@@ -3437,15 +3443,22 @@ def _nakijken(regels, tok=None):
     Niet te lezen telt als weg: De Bode belt nooit op basis van een regel die niet nagekeken is (Codex A15). Geeft
     (goede regels, aantal weggevallen)."""
     goed, weg = [], 0
+    vandaag = nu_lokaal().date().isoformat()
     for r in regels:
         kal, eid, begin = _regel_delen(r)
         try:
             ev = _event({"kalender": kal, "id": eid}, tok or agenda._toegang())
-            klopt = ev.get("status") != "cancelled" and _zelfde_tijd((ev.get("start") or {}).get("dateTime"), begin)
+            ev_start = (ev.get("start") or {}).get("dateTime")
+            klopt = ev.get("status") != "cancelled" and _zelfde_tijd(ev_start, begin)
+            # ook de inhoud opnieuw beoordelen: een afspraak die intern of privé werd, krijgt geen oude oproeptekst (ronde 6)
+            vers = belrooster([{"id": eid, "kalender": kal, "titel": ev.get("summary") or "", "start": ev_start or "",
+                                "einde": (ev.get("end") or {}).get("dateTime") or "", "locatie": ev.get("location") or "",
+                                "hele_dag": "date" in (ev.get("start") or {}), "_terugkerend": bool(ev.get("recurringEventId"))}],
+                              vandaag) if klopt else []
         except Exception:  # noqa: BLE001
-            klopt = False
-        if klopt:
-            goed.append(r)
+            vers = []
+        if vers:
+            goed.append({**r, "tekst": vers[0]["tekst"], "titel": vers[0]["titel"]})
         else:
             weg += 1
     return goed, weg
@@ -3486,7 +3499,10 @@ def rooster_maken(items, archief, vandaag, noden, tok=None):
     try:
         ruw, arch = afspraken(-1, 8), archief_afspraken(-1, 8)
         stuk = {x["kalender"] for x in ruw if x.get("fout")} | ({"archief"} if ARCHIEF_FOUT else set())
-        voor = (items + archief) if stuk else [x for x in ruw if not x.get("fout")] + arch
+        # per agenda: wat de tweede keer gelezen is, komt uit de tweede lezing; alleen een agenda die toen faalde, uit de
+        # eerste (en die wordt hieronder nagekeken). Vroeger viel het hele rooster terug op de eerste lezing (ronde 6).
+        voor = [x for x in ruw if not x.get("fout")] + ([] if ARCHIEF_FOUT else arch) + \
+            [x for x in items + archief if x.get("kalender") in stuk or ("archief" in stuk and x.get("_archief"))]
     except Exception:  # noqa: BLE001
         voor, stuk = items + archief, {"*"}
     rooster = belrooster(voor, vandaag)

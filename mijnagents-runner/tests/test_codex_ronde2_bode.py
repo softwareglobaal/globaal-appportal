@@ -527,9 +527,8 @@ oproepen.clear()
 _nood = []
 _u, _f = probeer(BEL.afspraken_bellen, {}, log=B.ag.log, bewaar=kapotte_bewaar, nood=_nood,
                  spoor=str(_geen_map / "spoor.jsonl"))
-check("A26 spoor en stand allebei niet te schrijven: geen tweede oproep, en de nood zegt dat ze opnieuw kan vertrekken",
-      _f is None and oproepen == ["Proeftekst C"] and any("nergens op schijf" in n["tekst"] for n in _nood),
-      f"{_f} {oproepen} {_nood}")
+check("A26 ronde 6: het belspoor is niet te schrijven: geen enkele oproep zonder duurzaam record, wel een nood",
+      _f is None and oproepen == [] and any("niet te schrijven" in n["tekst"] for n in _nood), f"{_f} {oproepen} {_nood}")
 
 _sp = TMP / "half.jsonl"
 _sp.write_text('{"sleutel": "half')    # crash midden in een regel
@@ -658,6 +657,45 @@ for ronde in (1, 2):
 check("A34 zonder stand: een recent alarm dat nog niet in het spoor staat, wordt gebeld", len(_r1) == 1, str(_r1))
 check("A34 het alarm staat daarna in het belspoor en wordt na nog een verlies van de stand niet opnieuw gebeld",
       "alarm:403" in BEL.spoor_lezen(SPOOR) and alarm_oproepen == [], f"{alarm_oproepen} {BEL.spoor_lezen(SPOOR)}")
+BORD["items"] = []
+B.is_stil, B.NIET_OP_TELEGRAM = ECHT_STIL, ECHT_NIET_TG
+
+# ------------------------------------------------------------------ ronde 6: A26, A34, A36 ---
+# A26: een vorige ronde stierf na de start van een oproep ('bezig' in het spoor): niet blind opnieuw bellen, wel melden
+_sp6 = str(TMP / "spoor-r6.jsonl")
+probeer(BEL.spoor_schrijven, _sp6, "proef-g", datetime.now().astimezone().isoformat(), bezig=True)
+rooster(regel_t("proef-g", "Proeftekst G"))
+UITSLAG[0] = [("twilio", "CA61")]
+oproepen.clear()
+_nood = []
+_u, _f = probeer(BEL.afspraken_bellen, {}, log=B.ag.log, bewaar=lambda st: True, nood=_nood, spoor=_sp6)
+check("A26 ronde 6: een oproep die onderbroken werd na haar start, wordt niet herhaald en wel gemeld",
+      _f is None and oproepen == [] and any("onderbroken" in n["tekst"] for n in _nood), f"{_f} {oproepen} {_nood}")
+check("A26 ronde 6: elke oproep krijgt eerst een duurzaam 'bezig'-record in het spoor",
+      "bezig" in (BEL.spoor_schrijven.__code__.co_varnames))
+
+# A34: een alarm dat pas bij een herkansing lukt, komt ook in het spoor
+if os.path.exists(SPOOR):
+    os.remove(SPOOR)
+zet_stand(500)
+rooster()
+B.is_stil, B.NIET_OP_TELEGRAM = (lambda t=None: False), ("agenda-wacht",)
+BORD["items"] = [{**it, "ts": datetime.now(_tz.utc).replace(tzinfo=None).isoformat(timespec="seconds")} for it in klaarzet([601], oproep=(601,))]
+BEL_UIT[0] = ""                              # de eerste start geeft geen call-sid: mislukt
+probeer(B.main)
+BORD["items"] = []
+BEL_UIT[0] = "CA36"
+probeer(B.main)                              # herkansing: te_alarm is leeg, de oproep lukt
+check("A34 ronde 6: een alarm dat bij een herkansing lukt, staat in het belspoor", "alarm:601" in BEL.spoor_lezen(SPOOR),
+      str(BEL.spoor_lezen(SPOOR)))
+
+# A36: zonder stand en een volle bordpagina: een nood
+schone_stand()
+BORD["items"] = klaarzet(range(2001, 2001 + B.KLAARZET_N))
+hartslagen.clear()
+probeer(B.main)
+check("A36 zonder stand en een volle bordpagina: een nood dat een oproep erbuiten kan vallen",
+      bool(hartslagen) and any("volle pagina" in n["tekst"] for n in (hartslagen[-1].get("nood") or [])), str(hartslagen[-1:])[:300])
 BORD["items"] = []
 B.is_stil, B.NIET_OP_TELEGRAM = ECHT_STIL, ECHT_NIET_TG
 

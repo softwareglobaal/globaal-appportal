@@ -444,5 +444,20 @@ _s35 = MA.vergelijk([_a35], [{"kalender": W.PRIVE_AGENDA, "id": "g6", "titel": "
                               "_icaluid": "andere@extern.test"}], nu)[0]["status"] if _a35 else "geen rij"
 check("A35 een zorgitem met een andere externe uitnodiging op hetzelfde uur: een open punt, niet 'ontbreekt'", _s35 == "zorg_open", _s35)
 
+# Ronde 6 (Codex A02, A35): de UID gaat voor het eigen merk; een conflict op het nieuwe uur blokkeert verzetten
+check("A02 ronde 6: een item met ons merk maar een andere externe uitnodiging is een conflict, geen koppeling",
+      MA._zorgachtig({"titel": "Kine - An Proef", "_merk": {MA.ZORGMERK: "s"}, "_icaluid": "ander@extern.test"},
+                     {"sleutel": "s", "ics_uid": "uid-1@extern.test"}, {}, KINE) == -1)
+if _a35:
+    _a6 = {**_a35, "google": f"{W.PRIVE_AGENDA}|oud6"}
+    _s6 = MA.vergelijk([_a6], [{"kalender": W.PRIVE_AGENDA, "id": "oud6", "titel": "Kine - An Proef", "start": "2026-12-16T08:00:00+01:00",
+                                "_merk": {MA.ZORGMERK: _a6["sleutel"]}},
+                               {"kalender": W.PRIVE_AGENDA, "id": "ander6", "titel": "Kine - An Proef", "start": _t3,
+                                "_icaluid": "andere@extern.test"}], nu)[0]["status"]
+else:
+    _s6 = "geen rij"
+check("A35 ronde 6: een eigen item op het oude uur en een andere afspraak op het nieuwe uur: een vraag, niet verzetten",
+      _s6 == "zorg_open", _s6)
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

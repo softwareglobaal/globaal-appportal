@@ -395,7 +395,16 @@ def _spoor_regels(pad):
 
 def spoor_lezen(pad):
     """{sleutel: tijd} van de afgehandelde oproepen in het belspoor (regels zonder 'poging')."""
-    return {str(d["sleutel"]): str(d["tijd"]) for d in _spoor_regels(pad) if not d.get("poging")}
+    return {str(d["sleutel"]): str(d["tijd"]) for d in _spoor_regels(pad) if not d.get("poging") and not d.get("bezig")}
+
+
+def spoor_bezig(pad):
+    """{sleutel: tijd} van oproepen waarvan het laatste record in het spoor 'bezig' is: de oproep kan vertrokken zijn maar
+    de uitkomst kwam nooit op schijf (een crash midden in de ronde). Die bel ik niet blind opnieuw (Codex A26, ronde 6)."""
+    laatst = {}
+    for d in _spoor_regels(pad):
+        laatst[str(d["sleutel"])] = d
+    return {k: str(d["tijd"]) for k, d in laatst.items() if d.get("bezig")}
 
 
 def spoor_pogingen(pad):
@@ -403,12 +412,12 @@ def spoor_pogingen(pad):
     stand die niet weg te schrijven is (Codex A26, ronde 5)."""
     uit = {}
     for d in _spoor_regels(pad):
-        if d.get("poging"):
+        if d.get("poging") and not d.get("bezig"):
             uit[str(d["sleutel"])] = max(uit.get(str(d["sleutel"]), 0), int(d["poging"]))
     return uit
 
 
-def spoor_schrijven(pad, sleutel, tijd, poging=None):
+def spoor_schrijven(pad, sleutel, tijd, poging=None, bezig=False):
     """Een regel achteraan het belspoor, met flush en fsync. Staat er nog een halve regel achteraan (crash), dan eerst
     een regeleinde, anders plakt de nieuwe regel eraan vast en is ook hij onleesbaar. Gooit bij een fout."""
     os.makedirs(os.path.dirname(pad) or ".", exist_ok=True)
@@ -418,7 +427,7 @@ def spoor_schrijven(pad, sleutel, tijd, poging=None):
         if f.tell():
             f.seek(-1, os.SEEK_END)
             heel = f.read(1) == b"\n"
-        d = {"sleutel": sleutel, "tijd": tijd, **({"poging": int(poging)} if poging else {})}
+        d = {"sleutel": sleutel, "tijd": tijd, **({"poging": int(poging)} if poging else {}), **({"bezig": True} if bezig else {})}
         f.write((b"" if heel else b"\n") + json.dumps(d, ensure_ascii=False).encode() + b"\n")
         f.flush()
         os.fsync(f.fileno())
@@ -477,6 +486,9 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
     from datetime import datetime, timedelta
     if not afspraak_bellen_beschikbaar():
         return ""
+    if spoor:
+        # opruimen los van het rooster: ook zonder rooster groeit het spoor (alarmen) (Codex A37, ronde 6)
+        _spoor_opruimen(spoor, (datetime.now().astimezone() - timedelta(days=2)).isoformat())
     rooster = _rooster_regels()
     if rooster is None:
         return ""
@@ -484,7 +496,7 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
     pogingen = staat.setdefault("belpogingen", {})
     nu = datetime.now().astimezone()
     try:
-        sp, sp_pog = spoor_lezen(spoor), spoor_pogingen(spoor)
+        sp, sp_pog, sp_bezig = spoor_lezen(spoor), spoor_pogingen(spoor), spoor_bezig(spoor)
     except OSError as e:
         # een spoor dat er is maar niet te lezen valt, kan een gevoerde oproep bevatten: deze ronde niet bellen (A33)
         if log:
@@ -498,7 +510,15 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
     for k, n in sp_pog.items():
         if k not in gebeld:
             pogingen[k] = max(pogingen.get(k, 0), n)
-    _spoor_opruimen(spoor, (nu - timedelta(days=2)).isoformat())
+    for k, t in sp_bezig.items():
+        if k not in gebeld:
+            # onderbroken: misschien gebeld. Niet opnieuw, wel melden (Codex A26, ronde 6)
+            gebeld[k] = t
+            if log:
+                log("bellen", "afspraak", "mogelijk gebeld: een vorige ronde werd onderbroken na de start van de oproep; niet herhaald")
+            if nood is not None:
+                nood.append({"tekst": "Afspraken bellen: een oproep werd onderbroken na haar start (mogelijk gebeld) en wordt niet "
+                                      "herhaald; kijk na of Mehdi ze kreeg", "wie": "claude-code"})
     # opruimen: ouder dan twee dagen
     for k in [k for k, v in gebeld.items() if v < (nu - timedelta(days=2)).isoformat()]:
         gebeld.pop(k, None)
@@ -513,6 +533,18 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
     beurt = te_bellen(staat, nu, rooster)
     for i, r in enumerate(beurt):
         titel = r.get("titel", "")
+        if spoor:
+            try:
+                # eerst een duurzaam 'bezig': crasht de ronde na de start, dan belt de volgende ronde niet blind opnieuw (A26)
+                spoor_schrijven(spoor, r["sleutel"], nu.isoformat(), bezig=True)
+            except Exception as e:  # noqa: BLE001
+                gestopt = "belronde gestopt: belspoor niet te schrijven voor de oproep"
+                if log:
+                    log("bellen", "afspraak", f"{gestopt} ({type(e).__name__}); niet gebeld deze ronde")
+                if nood is not None:
+                    nood.append({"tekst": "Afspraken bellen: het belspoor is niet te schrijven; ik bel niet tot dat weer lukt "
+                                          "(schijfruimte en rechten van mijnagents-data nakijken)", "wie": "claude-code"})
+                break
         res = bel_afspraak(r["tekst"], "Details staan in je agenda.")   # het belrooster komt uit de agenda
         if any("65 seconds" in str(v) for _, v in res):
             # CallMeBot laat maar één oproep per 65 s toe: deze regel volgende minuut opnieuw

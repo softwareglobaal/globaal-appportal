@@ -239,5 +239,34 @@ with vervang((W, "geen_auto_dagen", lambda: None), (W, "lara_vakantiedagen", lam
 check("A11 ronde 5: een rit met dezelfde titel op een andere agenda onderdrukt de melding 'geen rit' niet",
       isinstance(_r11c, tuple) and any("grendelbron niet te lezen" in x and "2601" in x for x in _r11c[4]), str(_r11c)[:300])
 
+# A15 (ronde 6): faalt agenda B in de tweede lezing, dan komt agenda A uit de verse lezing, en de inhoud wordt herbeoordeeld
+_X = {**afspraak("X6", "Mehdi: [HA-PO] Xavier Proef"), "kalender": W.WERKAGENDA}
+_Y = {**afspraak("Y6", "Mehdi: [HA-PO] Yara Proef"), "kalender": "b@agenda.test"}
+_kijk6, _n6 = [], []
+W.ONGELEZEN.clear()
+W.ARCHIEF_FOUT = ""
+with vervang((W, "afspraken", lambda v, t: [{"kalender": "b@agenda.test", "fout": "HTTP 503"}]), (W, "archief_afspraken", lambda v, t: []),
+             (W, "_event", lambda a, tok: _kijk6.append(a["id"]) or {"status": "confirmed", "start": {"dateTime": _Y["start"]},
+                                                                     "end": {"dateTime": _Y["einde"]}, "summary": _Y["titel"]}),
+             (W.agenda, "_toegang", lambda: "t")):
+    _r6 = veilig(lambda: W.rooster_maken([dict(_X), dict(_Y)], [], W.nu_lokaal().date().isoformat(), _n6))
+check("A15 ronde 6: een afspraak op de wel gelezen agenda die er de tweede keer niet meer staat, krijgt geen oproep",
+      isinstance(_r6, list) and [x["sleutel"].split(":")[1] for x in _r6] == ["Y6"] and _kijk6 == ["Y6"], f"{_r6} {_kijk6}")
+with vervang((W, "afspraken", lambda v, t: [{"kalender": "b@agenda.test", "fout": "HTTP 503"}]), (W, "archief_afspraken", lambda v, t: []),
+             (W, "_event", lambda a, tok: {"status": "confirmed", "start": {"dateTime": _Y["start"]}, "end": {"dateTime": _Y["einde"]},
+                                           "summary": "Mehdi: [HA-IN] intern overleg"}), (W.agenda, "_toegang", lambda: "t")):
+    _r6b = veilig(lambda: W.rooster_maken([dict(_Y)], [], W.nu_lokaal().date().isoformat(), []))
+check("A15 ronde 6: een afspraak die intussen intern werd, krijgt geen oude oproep", _r6b == [], str(_r6b))
+
+# A11 (ronde 6): twee afspraken met dezelfde titel op dezelfde dag: de rit van de eerste dekt de tweede niet
+_b11b = {**_b11, "id": "b11b", "start": (_later + timedelta(hours=3)).isoformat(), "einde": (_later + timedelta(hours=4)).isoformat()}
+with vervang((W, "geen_auto_dagen", lambda: None), (W, "lara_vakantiedagen", lambda: frozenset()), (W, "_cache_laden", lambda: {}),
+             (W, "_cache_bewaren", lambda c: None), (W, "coord", lambda *a, **k: (50.88, 4.70)), (W.projectadressen, "index", lambda: {}),
+             (W, "_insert", lambda *a, **k: {}), (W, "_patch", lambda *a, **k: None), (W.agenda, "_toegang", lambda: "t"),
+             (W, "_eigen_rit_weg", lambda *a: False), (W, "_verplaats", lambda *a: None)):
+    _r11d = veilig(lambda: W.reistijd_zetten([dict(_b11), dict(_b11b), dict(_rit10)]))
+check("A11 ronde 6: de rit van de eerste afspraak dekt de tweede met dezelfde titel niet",
+      isinstance(_r11d, tuple) and sum(1 for x in _r11d[4] if "grendelbron niet te lezen" in x) == 1, str(_r11d)[:300])
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

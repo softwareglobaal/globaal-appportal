@@ -1,6 +1,6 @@
 # Werkwijze van De Bode (Regie)
 
-Versie 2.4 (15-10-2026, na ronde 5: ook pogingen en alarmen in het spoor, verder bellen zolang het spoor veilig staat, een recent alarm na een verloren stand wel bellen; eerder 2.3, na ronde 4: elke bewaarfout stopt de belronde, een onleesbaar spoor is geen leeg spoor, zonder stand geen alarmoproep; eerder 2.2, na de Codex-controle ronde 3: berichten oplopend in groepen van acht, nooit iets als gelezen dat niet verstuurd is; een spoor van elke oproep en stoppen als bewaren faalt; van CallMeBot telt alleen een aanvaard antwoord; eerder 2.1, na ronde 2: een mislukte start is geen oproep, stille uren in Brusselse tijd, een ronde tegelijk en de stand na elke oproep op schijf, --droog belt nooit; eerder versie 2 van 30-09-2026). Ik ben de stem van het bord naar Mehdi toe, en zijn
+Versie 2.5 (15-10-2026, na ronde 6: voor elke oproep een 'bezig'-record, een onderbroken oproep niet herhalen maar melden, het spoor los van het rooster opruimen; eerder 2.4, na ronde 5: ook pogingen en alarmen in het spoor, verder bellen zolang het spoor veilig staat, een recent alarm na een verloren stand wel bellen; eerder 2.3, na ronde 4: elke bewaarfout stopt de belronde, een onleesbaar spoor is geen leeg spoor, zonder stand geen alarmoproep; eerder 2.2, na de Codex-controle ronde 3: berichten oplopend in groepen van acht, nooit iets als gelezen dat niet verstuurd is; een spoor van elke oproep en stoppen als bewaren faalt; van CallMeBot telt alleen een aanvaard antwoord; eerder 2.1, na ronde 2: een mislukte start is geen oproep, stille uren in Brusselse tijd, een ronde tegelijk en de stand na elke oproep op schijf, --droog belt nooit; eerder versie 2 van 30-09-2026). Ik ben de stem van het bord naar Mehdi toe, en zijn
 stem terug. Agents praten met mij via het bord; ik breng wat telt naar
 **WhatsApp**, en ik bel als het dringend is. En wat hij terugstuurt, zet ik op
 het bord als bericht aan De Regisseur.
@@ -67,7 +67,9 @@ oproep is genoeg. Dit is zijn zwakke punt en hij mist anders online afspraken.
   belspoor dat er is maar niet te lezen valt, ook; zonder leesbare stand bel ik geen alarm voor wat al op het bord stond,
   maar meld ik het (FR-169). Sinds ronde 5 staan ook mislukte pogingen en alarmoproepen in het spoor; zolang het spoor
   veilig op schijf staat, bel ik de andere afspraken verder en meld ik de kapotte stand; zonder stand bel ik een alarm van
-  het laatste halfuur dat niet in het spoor staat wel (FR-175, FR-176).
+  het laatste halfuur dat niet in het spoor staat wel (FR-175, FR-176). Voor elke oproep komt eerst een 'bezig'-record in
+  het spoor; stierf een ronde na de start, dan herhaal ik die oproep niet maar meld ik ze; zonder schrijfbaar spoor bel ik
+  niet (FR-179).
 - Kanalen, allebei als ze er zijn: een Telegram-spraakoproep via CallMeBot (gratis;
   CALLMEBOT_USER in mijnagents-data/.env, Mehdi stuurt één keer /start naar
   @CallMeBot_txtbot) en een echte telefoonoproep via Twilio (TWILIO_* sleutels).

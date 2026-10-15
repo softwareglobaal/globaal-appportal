@@ -300,6 +300,10 @@ def nieuwe_items(bord_items, staat, nood):
     het negende en verdere kregen nooit een bericht (Codex A31, 15-10-2026). Een volle pagina waarvan zelfs het oudste
     item nog nieuw is, kan nieuwe items missen die eronder vallen (het bord kent geen 'vanaf id'): dat wordt een nood."""
     laatste = staat.get("laatste_id", 0)
+    if not laatste and len(bord_items) >= KLAARZET_N:
+        # zonder stand en een volle pagina: een recent alarm kan onder de pagina vallen (Codex A36, ronde 6)
+        nood.append({"tekst": f"De Bode had geen leesbare stand en het bord gaf een volle pagina ({KLAARZET_N}): een oproep of "
+                              "dringend signaal kan erbuiten vallen; kijk het bord na", "wie": "claude-code"})
     if laatste and len(bord_items) >= KLAARZET_N and min(it["id"] for it in bord_items) > laatste:
         nood.append({"tekst": f"Meer dan {KLAARZET_N} nieuwe klaarzet-items voor Mehdi sinds de vorige ronde: de oudste "
                               "haalt De Bode niet op en ze krijgen geen bericht; kijk het bord na", "wie": "claude-code"})
@@ -450,9 +454,12 @@ def ronde(droog=False):
             te_alarm = [it for it in nog_niet_gebeld(staat, alarm) if str(it.get("id")) not in al_gebeld]
         bel_detail = veilig(nood, "Alarm bellen", lambda: bellen.alarm_bellen(staat, te_alarm, log=ag.log), "")
         if str(bel_detail).startswith("belt"):
-            for it in te_alarm:
+            # de werkelijk gebelde alarmen staan in de sleutel van de oproep, ook bij een herkansing waar te_alarm leeg is
+            # (Codex A34, ronde 6)
+            gebeld_ids = [d for d in str((staat.get("bel") or {}).get("sleutel") or "").split("|") if d.strip()]
+            for aid in gebeld_ids or [str(it.get("id")) for it in te_alarm]:
                 veilig(nood, "Belspoor bijschrijven (alarm)",
-                       lambda it=it: bellen.spoor_schrijven(belspoor(), f"alarm:{it.get('id')}", datetime.now().astimezone().isoformat()), None)
+                       lambda aid=aid: bellen.spoor_schrijven(belspoor(), f"alarm:{aid}", datetime.now().astimezone().isoformat()), None)
         if bel_detail:
             veilig(nood, "Stand wegschrijven na het alarm", lambda: bewaar(staat), None)
     if bel_afspraak:

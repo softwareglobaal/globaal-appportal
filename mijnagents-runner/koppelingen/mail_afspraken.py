@@ -728,6 +728,8 @@ def _zorgachtig(x, a, z, profiel):
     Alleen 2 koppelt; 1 is een vraag, want 'Tandarts' op dat uur kan de afspraak van iemand anders zijn (Codex A02,
     ronde 3)."""
     eigen_merk = (x.get("_merk") or {}).get(ZORGMERK)
+    if _uid_conflict(x, a):
+        return -1          # de UID gaat voor het merk: ook met ons merk is een andere uitnodiging een conflict (A02, ronde 6)
     if eigen_merk == a["sleutel"]:
         return 2
     # het merk van een andere zorgafspraak, of de uitnodiging van een andere externe afzender (geen door Google gemaakte
@@ -792,6 +794,10 @@ def _zorg_status(a, items, nu, vorig_google=""):
     if not z.get("mehdi"):
         return {"status": "zorg_open", "google": "", "detail": f"andere patiënt of patiënt niet te lezen ({z.get('patient') or '?'})"}
     eigen = [x for x in kand if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]]
+    if conflict:
+        # een zorgitem van een andere afspraak of uitnodiging op dit uur: ook als er een oud eigen item is, nooit verzetten
+        # naar dat bezette uur of stil koppelen, maar een vraag (Codex A35, ronde 6)
+        return {"status": "zorg_open", "google": "", "detail": "op dat uur staat een zorgafspraak van een andere afspraak of uitnodiging: welke is het?"}
     if len(kand) > 1 and not eigen:
         # twee kandidaten op hetzelfde uur: niet raden welke het is (Codex A02)
         return {"status": "zorg_open", "google": "", "detail": f"{len(kand)} afspraken op dat uur, niet eenduidig te koppelen"}
