@@ -338,7 +338,8 @@
     "FR-153",
     "FR-154",
     "FR-155",
-    "FR-156"
+    "FR-156",
+    "FR-157"
    ]
   }
  ],
@@ -3208,6 +3209,24 @@
     "soort": "test",
     "waar": "tests/test_codex_ronde2_wachters.py",
     "tekst": "A28 exitcode 75: de dag blijft open zonder poging, de volgende dag wacht op de volgende ronde, script 0"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-157",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 2 (A29), nagemeten door Claude",
+   "fout": "test_agenda_taken.py, waar 76 grendels uit het register naar wijzen, draaide niet in de CI en zonder netwerk crashte hij na 97 controles; de FR-59-grendel was een tekstzoekactie.",
+   "gevolg": "Een groene CI bevestigde de meeste toezeggingen niet; een fout in ritten, bellen of titels kon ongemerkt terugkomen.",
+   "waarom_niet_gezien": "Het commentaar in de workflow zei dat de test op de server draaide voor elke push, maar daar zat niets achter.",
+   "oorzaak": "Live afhankelijkheden (Google, docker psql, Dropbox, OSRM) in de test.",
+   "soort_oorzaak": "proces",
+   "oplossing": "De test is hermetisch: lege omgeving en thuismap, netwerk, docker en ssh dicht met een slotcontrole, nagebootste bronnen; de live Lara-proef draait alleen met sleutels. FR-59 is een gedragstest op geplande_start. De test draait in de CI.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_taken.py",
+    "tekst": "de test ging nergens naar buiten"
    },
    "controle": [],
    "status": "opgelost"

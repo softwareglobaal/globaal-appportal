@@ -2,18 +2,146 @@
 
 De JSON is de afspraak met Mehdi. Deze test faalt zodra iemand een agenda, een
 code of een kleurregel in de code verandert zonder de afspraak bij te werken.
+
+Hermetisch (Codex A29, 15-10-2026): draait zonder netwerk, docker, SSH en sleutels, ook in de CI (GitHub Actions,
+Python 3.12). De test start met een lege omgeving en een lege HOME, zet elke socketverbinding en docker/ssh dicht en
+bootst de bronnen na: kern.firma (organisatie.globaal.be), Google Agenda (toegang, agendanamen, afspraken, de agenda
+van Lara), de Dropbox-projectmappen, locatie.globaal.be en de kaartdienst. Een poging om toch naar buiten te gaan
+wordt geteld en laat de test falen. Wat echt live Google nodig heeft, draait alleen met de Google-agendasleutels
+(GOOGLE_AGENDA_REFRESH_TOKEN en de client, uit de omgeving of ~/appportal/.env) en wordt apart geteld; zonder
+sleutels staat er 'overgeslagen zonder sleutels'.
 """
+import atexit
+import io
 import json
 import os
+import shutil
+import socket
+import subprocess
 import sys
+import tempfile
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
+HIER = Path(__file__).resolve().parent.parent
+
+# ------------------------------------------------------------------------------ hermetisch (Codex A29) ----
+_LIVE_NAMEN = ("GOOGLE_AGENDA_CLIENT_ID", "GOOGLE_AGENDA_CLIENT_SECRET", "GOOGLE_AGENDA_REFRESH_TOKEN")
+
+
+def _live_sleutels():
+    """De Google-agendasleutels voor de live controles: uit de omgeving, anders uit ~/appportal/.env (zoals agenda.py
+    ze leest). Alleen hier bewaard, nooit getoond; de rest van de test ziet ze niet."""
+    uit = {n: os.environ.get(n, "").strip() for n in _LIVE_NAMEN}
+    try:
+        for regel in open(os.path.expanduser("~/appportal/.env"), encoding="utf-8"):
+            k, _, v = regel.strip().partition("=")
+            if k.strip() in uit and not uit[k.strip()]:
+                uit[k.strip()] = v.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return uit if all(uit.values()) else {}
+
+
+LIVE = _live_sleutels()
+
+# Een lege omgeving en een lege HOME: geen sleutels, geen instellingen van de server, en niets wordt gelezen uit of
+# geschreven naar ~/appportal/mijnagents-data (op de VM is dat de echte data van de agent).
+for _n in list(os.environ):
+    if _n not in ("PATH", "LANG", "LANGUAGE", "TZ", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT", "TERM") \
+            and not _n.startswith(("LC_", "PYTHON")):
+        del os.environ[_n]
+_THUIS = tempfile.mkdtemp(prefix="agenda-taken-proef-")
+atexit.register(shutil.rmtree, _THUIS, True)
+os.environ["HOME"] = _THUIS
 os.environ["BELLEN_UIT"] = "1"      # een test belt nooit echt (FR-55)
 
-HIER = Path(__file__).resolve().parent.parent
+# Netwerk, docker en ssh dicht. Elke poging wordt onthouden; op het einde moet die lijst leeg zijn.
+NETWERK = []
+_ECHT = {"connect": socket.socket.connect, "connect_ex": socket.socket.connect_ex,
+         "getaddrinfo": socket.getaddrinfo, "popen": subprocess.Popen.__init__, "urlopen": urllib.request.urlopen}
+
+
+def _poging(wat):
+    """Onthoudt een poging naar buiten, met de testregel die ze uitlokte (zo is meteen te zien welk blok een
+    nabootsing mist)."""
+    regel = next((f.lineno for f in reversed(__import__("traceback").extract_stack()) if f.filename == __file__
+                  and f.name not in ("_poging", "_dicht", "_dicht_dns", "_dicht_popen")), "?")
+    NETWERK.append(f"{wat} (testregel {regel})")
+
+
+def _dicht(self, adres, *a, **k):
+    _poging(f"verbinding {str(adres)[:60]}")
+    raise OSError(f"netwerk dicht in de test: {adres}")
+
+
+def _dicht_dns(host, *a, **k):
+    _poging(f"dns {host}")
+    raise socket.gaierror(f"netwerk dicht in de test: {host}")
+
+
+def _dicht_popen(self, args, *a, **k):
+    cmd = os.path.basename(str(args[0] if isinstance(args, (list, tuple)) else str(args).split()[0]))
+    if cmd in ("docker", "ssh", "scp", "rsync", "psql", "curl", "wget"):
+        _poging(f"commando {cmd}")
+        raise FileNotFoundError(f"{cmd} is dicht in de test")
+    return _ECHT["popen"](self, args, *a, **k)
+
+
+def netwerk_dicht(dicht=True):
+    socket.socket.connect = _dicht if dicht else _ECHT["connect"]
+    socket.socket.connect_ex = _dicht if dicht else _ECHT["connect_ex"]
+    socket.getaddrinfo = _dicht_dns if dicht else _ECHT["getaddrinfo"]
+    subprocess.Popen.__init__ = _dicht_popen if dicht else _ECHT["popen"]
+
+
+netwerk_dicht()
+
 sys.path.insert(0, str(HIER))
 sys.path.insert(0, str(HIER / "koppelingen"))
-import agenda_wacht as W
+import organisatie as O  # noqa: E402
+
+# kern.firma zoals organisatie.globaal.be hem teruggeeft (migraties 160, 175 en 183). De firmacodes worden bij het
+# importeren van agenda_wacht gelezen, dus deze nabootsing staat ervoor. MEDI staat in de bron en niet in het vangnet
+# van de agent (VALNET_FIRMAS): zo bewijst 'de agent gebruikt diezelfde codes' dat hij de bron leest.
+FIRMA_PROEF = [
+    {"code": c, "code_contact": cc, "code_agenda": ca, "naam": naam, "land": land, "actief": True}
+    for c, cc, ca, naam, land in (
+        ("BFUT", None, "BF", "Build for Future", "BE"), ("CONT", "CX", "CX", "Contrax", "BE"),
+        ("CORE", None, "CB", "Corenbo", "BE"), ("ELEV", "EL", "EL", "Elevait NV", "BE"),
+        ("ENEF", "EE", "EE", "Energie Efficiënt", "BE"), ("ENST", None, "ES", "ENSTACO", "BE"),
+        ("HARC", "HA", "HA", "H-Architects", "BE"), ("HARM", "HB", "HB", "Harmoniebouw", "BE"),
+        ("HDSI", None, "DI", "High Design Studio (India)", "IN"), ("HDSS", None, "DS", "High Design Studio (Suriname)", "SR"),
+        ("HINV", None, "HI", "H-Invest", "BE"), ("MEDI", None, "MS", "Median Selections & Consultancy", "SR"),
+        ("MELO", None, "ME", "Melodie", "BE"), ("ORVA", None, "OR", "Orvantis", "BE"), ("QOPP", None, "QP", "Qoppa", "BE"),
+        ("TKNB", "TK", "TK", "TKN-Buro", "BE"), ("UNAB", "UN", "UB", "UnaBo", "BE"), ("ZIDI", None, "ZC", "Zidi Construct", "BE"))]
+
+
+def _psql_proef(sql):
+    """In plaats van 'docker exec ... psql': de firma's uit FIRMA_PROEF, geen collega's (een lege kern.persoon)."""
+    if "kern.persoon" in sql:
+        return []
+    if "from kern.firma" in sql:
+        return [dict(f) for f in FIRMA_PROEF]
+    raise RuntimeError("deze vraag kent de proef niet")
+
+
+O._psql = _psql_proef
+import agenda_wacht as W  # noqa: E402
+
+# Google Agenda, Dropbox, locatie.globaal.be en de kaartdienst, nagebootst voor de hele test. Een blok dat iets anders
+# nodig heeft, zet het zelf en zet daarna deze nabootsing terug.
+_ECHT.update(toegang=W.agenda._toegang, lara=W.lara_vakantiedagen, geen_auto=W.geen_auto_dagen)
+W.agenda._toegang = lambda: "tok-proef"
+W.lara_vakantiedagen = lambda: frozenset()                         # een gewone schoolweek (het Lara-blok leest echt)
+W.geen_auto_dagen = lambda: frozenset()                            # de auto is er elke dag
+W.agenda.kalendernamen = lambda: {**dict(W.KALENDERS), "archief-proef@group.calendar.google.com": "ZZ ARCHIEF proef"}
+W.agenda.afspraken = lambda van_dagen=-1, tot_dagen=8: []          # een lege agenda
+W.projectadressen.index = lambda *a, **k: {}                       # geen projectmappen
+W.plekken = lambda: []                                             # locatie.globaal.be: geen benoemde plekken
+W._nominatim = lambda params: None                                 # de kaartdienst vindt niets
+LIVE_CONTROLES = []      # (naam, functie die (voorwaarde, extra) geeft): alleen met sleutels, apart geteld
 
 taken = json.loads((HIER / "werkwijze" / "agenda-taken.json").read_text(encoding="utf-8"))
 ok = fout = 0
@@ -32,7 +160,6 @@ def check(naam, voorwaarde, extra=""):
 adressen = {a["adres"] for a in taken["agendas"]}
 check("elke agenda uit de JSON staat in KALENDERS", adressen == set(W.KALENDERS),
       f"alleen in JSON: {adressen - set(W.KALENDERS)} | alleen in code: {set(W.KALENDERS) - adressen}")
-import organisatie as O
 
 bron = O.firmacodes()
 check("de JSON houdt GEEN kopie van de firmalijst bij",
@@ -183,14 +310,89 @@ check("Nadien (boekhouder) en Wally (AI-software) staan in de lijst",
 check("ALGE staat niet op het dashboard (bewust een aparte lijst)", "ALGE" not in W.FIRMACODES)
 
 # Tijdens een schoolvakantie of feestdag geen Lara-ophaling en geen rit. Mehdi, 22-09-2026.
-_vak = W.lara_vakantiedagen()
-check("de agent leest de schoolvakanties uit de agenda van Lara", len(_vak) > 30)
+# Hermetisch (A29): de agenda van Lara is een nagebootst Google-antwoord van twee pagina's; de echte functie leest het.
+# De echte agenda van Lara lezen is een live controle (onderaan, alleen met sleutels).
+from datetime import timedelta as _td185
 _lara = next((k for k, v in W.AGENDA_VASTE_KLEUR.items() if v.get("naam") == "Lara"), None)
-_dag = sorted(_vak)[0] if _vak else "2026-10-26"
-_items = [{"kalender": _lara, "titel": "Mehdi: !! [LARA] Lara ophalen en thuis afzetten",
-           "start": _dag + "T16:00:00+02:00", "einde": _dag + "T17:00:00+02:00", "locatie": "De Speelkriebel, 3010 Kessel-Lo", "id": "t", "hele_dag": False}]
-_g, _al, _geen, _fout, _reg = W.reistijd_zetten(_items, _dag)
+_v185 = W.nu_lokaal().date()
+
+
+def _hd185(titel, van, tot):
+    """Een hele-dag-item van vandaag+van tot vandaag+tot (het einde telt niet mee, zoals bij Google)."""
+    return {"summary": titel, "start": {"date": (_v185 + _td185(days=van)).isoformat()},
+            "end": {"date": (_v185 + _td185(days=tot)).isoformat()}}
+
+
+_lara_paginas = [
+    {"items": [_hd185("Herfstvakantie", 7, 16), _hd185("Kerstvakantie", 60, 75), _hd185("Zwemles", 3, 4),
+               {"summary": "Vakantiekamp infoavond", "start": {"dateTime": f"{_v185 + _td185(days=5)}T19:00:00+02:00"},
+                "end": {"dateTime": f"{_v185 + _td185(days=5)}T20:00:00+02:00"}}], "nextPageToken": "p2"},
+    {"items": [_hd185("Krokusvakantie", 120, 129), _hd185("Feestdag", 150, 151)]}]
+_vak_verwacht = {(_v185 + _td185(days=i)).isoformat() for v, t in ((7, 16), (60, 75), (120, 129), (150, 151)) for i in range(v, t)}
+
+
+def _google185(req, timeout=0, **k):
+    url = getattr(req, "full_url", str(req))
+    q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+    if f"/calendars/{urllib.parse.quote(_lara, safe='')}/events" in url:
+        return io.BytesIO(json.dumps(_lara_paginas[1 if q.get("pageToken") == ["p2"] else 0]).encode())
+    if f"/calendars/{urllib.parse.quote(W.WERKAGENDA, safe='')}/events" in url and q.get("q") == ["geen auto"]:
+        return io.BytesIO(b'{"items": []}')
+    raise OSError(f"deze Google-vraag kent de proef niet: {url[:80]}")
+
+
+_rit185 = []
+_o185 = {k: getattr(W, k) for k in ("coord", "rijtijd_min", "_cache_laden", "_cache_bewaren", "_patch", "_insert",
+                                    "_eigen_rit_weg", "_verplaats", "lara_vakantiedagen", "geen_auto_dagen")}
+_ou185 = urllib.request.urlopen
+urllib.request.urlopen = _google185
+W.lara_vakantiedagen, W.geen_auto_dagen = _ECHT["lara"], _ECHT["geen_auto"]     # de echte functies, op het nagebootste antwoord
+W._lara_vrij["tot"] = W._geen_auto["tot"] = 0.0
+W.coord = lambda adres, cache: (50.88, 4.72) if adres == W.THUIS else (50.89, 4.73) if "Kessel-Lo" in adres else None
+W.rijtijd_min = lambda van, naar, vertrek: (15, 1.0)
+W._cache_laden = lambda: {}
+W._cache_bewaren = lambda c: None
+W._patch = lambda a, body, tok, toch=False: None
+W._insert = lambda kal, body, tok, toch=False: _rit185.append(body.get("summary", "")) or {"id": "rit-proef"}
+W._eigen_rit_weg = lambda x, tok: True
+W._verplaats = lambda x, doel, tok: None
+
+
+def _lara185(dag):
+    return [{"kalender": _lara, "titel": "Mehdi: !! [LARA] Lara ophalen en thuis afzetten", "start": dag + "T16:00:00+02:00",
+             "einde": dag + "T17:00:00+02:00", "locatie": "De Speelkriebel, 3010 Kessel-Lo", "id": "t", "hele_dag": False}]
+
+
+try:
+    _vak = W.lara_vakantiedagen()
+    _dag = sorted(_vak)[0] if _vak else "2026-10-26"
+    _g, _al, _geen, _fout, _reg = W.reistijd_zetten(_lara185(_dag), _dag)
+    # tegenproef: dezelfde afspraak op een schooldag (zelfde weekdag, twee weken later) krijgt wel een rit, anders zou
+    # 'geen rit op een vakantiedag' ook groen zijn als de nabootsing elke rit tegenhield
+    _school = (_v185 + _td185(days=21)).isoformat()
+    _g2 = W.reistijd_zetten(_lara185(_school), _school)[0]
+finally:
+    urllib.request.urlopen = _ou185
+    for _k, _v in _o185.items():
+        setattr(W, _k, _v)
+    W._lara_vrij["tot"] = W._geen_auto["tot"] = 0.0
+check("de agent leest de schoolvakanties uit de agenda van Lara", _vak is not None and len(_vak) > 30 and _vak == _vak_verwacht,
+      str(sorted(set(_vak or ()) ^ _vak_verwacht)[:6]))
 check("geen Lara-rit op een vakantiedag", _g == 0 and _al == 0)
+check("op een schooldag krijgt dezelfde Lara-afspraak wel een rit (tegenproef)", _g2 >= 1 and len(_rit185) >= 1,
+      str((_g2, _rit185)))
+
+
+def _live_lara():
+    W._lara_vrij["tot"] = 0.0
+    try:
+        v = _ECHT["lara"]()
+    finally:
+        W._lara_vrij["tot"] = 0.0
+    return v is not None and len(v) > 30, ("niet te lezen" if v is None else f"{len(v)} dagen gelezen")
+
+
+LIVE_CONTROLES.append(("de agent leest de schoolvakanties uit de echte agenda van Lara (meer dan 30 dagen)", _live_lara))
 check("de schoolvakantie-regel staat in de JSON", "schoolvakantie" in json.dumps(taken.get("reistijd", {})) or "vakantie" in json.dumps(taken))
 
 # Geen auto: de agent leest de marker en maakt geen rit op zo'n dag. Mehdi, 22-09-2026.
@@ -211,8 +413,16 @@ check("de makerslijst is vastgelegd in de JSON", "maker" in json.dumps(taken, en
 def _tf(titel):
     a = {"titel": titel, "kalender": "mehdiprivewerkagenda@gmail.com", "hele_dag": False, "deelnemers": []}
     return W.titelfouten(a, W.lees_titel(titel))
+# Hermetisch (A29): de H-A-projectmappen (Dropbox) zijn nagebootst; 2616 staat erin, 2699 niet.
+_pi405 = W.projectadressen.index
+W.projectadressen.index = lambda *a, **k: {"2616": {"adres": "Proefstraat 1, 3000 Leuven", "gemeente": "Leuven", "map": "x"}}
+try:
+    _f405 = _tf("!! Mehdi: 2616 Stad Leuven stedenbouwkundige info")
+    _f405b = _tf("!! Mehdi: 2699 Stad Leuven stedenbouwkundige info")
+finally:
+    W.projectadressen.index = _pi405
 check("een projectnummer uit de H-A map stelt [HA] voor",
-      any("[HA]" in x for x in _tf("!! Mehdi: 2616 Stad Leuven stedenbouwkundige info")))
+      any("[HA]" in x for x in _f405) and not any("[HA]" in x for x in _f405b), str((_f405, _f405b)))
 check("een leverancier uit de lijst stelt [AL] voor",
       any("[AL]" in x for x in _tf("?? Mehdi: Nadine Boekhouder")))
 
@@ -229,7 +439,14 @@ check("Google alleen voor ritten binnen 48 uur",
 
 # Een naam vooraan in het adres, en een handmatige rit naar huis (23-09-2026).
 _c = {}
-check("een adres met een naam vooraan wordt gevonden", bool(W.coord("Brasserie 360°, Stadsplein 16, 3600 Genk", _c)))
+# Hermetisch (A29): de kaartdienst struikelt over de naam vooraan, zoals op 23-09-2026; alleen de straat zelf vindt hij.
+_nom232 = W._nominatim
+W._nominatim = lambda params: None if "brasserie" in json.dumps(params).lower() else [50.965, 5.501]
+try:
+    _gk232 = W.coord("Brasserie 360°, Stadsplein 16, 3600 Genk", _c)
+finally:
+    W._nominatim = _nom232
+check("een adres met een naam vooraan wordt gevonden", bool(_gk232))
 check("een handmatige 'Rijden naar huis' telt als rit naar huis",
       r'\bnaar huis\b' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
 
@@ -464,7 +681,7 @@ check("de opdrachtgevers uit een contract, zonder rijksregisternummer",
 import contracten_mcp as _cm
 _oud_call, _oud_cache, _oud_idx = _cm.call, W.KLANTEN_CACHE, W.projectadressen.index
 _cm.call = lambda naam, **a: {"dossiers": [{"project_nummer": "2615", "klant": "KD Sports Turnhout"}, {"project_nummer": "2607", "klant": "Robin Verlinden en Silvie Boudou"}]}
-W.KLANTEN_CACHE = "/tmp/klanten-test.json"
+W.KLANTEN_CACHE = os.path.join(_THUIS, "klanten-test.json")      # eigen map: parallelle runs botsen niet
 W.projectadressen.index = lambda *a, **k: {"5520": {"adres": "Korte Albertstraat 2, 2300 Turnhout", "map": ""}}
 W._KLANTEN.clear()
 try:
@@ -520,7 +737,7 @@ W.bellen.afspraak_bellen_beschikbaar = lambda: True
 W.bellen.bel_afspraak = lambda tekst, *r: _bel.append(tekst) or [("proef", "ok")]
 _oud_vast = W.bellen.bel_vast
 W.bellen.bel_vast = lambda tekst, *r: _bel.append(tekst) or [("proef-vast", "ok")]
-W.BELVRAGEN = "/tmp/belvragen-test.json"
+W.BELVRAGEN = os.path.join(_THUIS, "belvragen-test.json")
 import os as _os2
 if _os2.path.exists(W.BELVRAGEN):
     _os2.remove(W.BELVRAGEN)
@@ -544,7 +761,8 @@ _ur68.urlopen = lambda req, timeout=30: _del.append((req.get_method(), req.full_
 W.mag_schrijven = lambda k: k == W.WERKAGENDA
 try:
     _w1 = W._eigen_rit_weg({"id": "r1", "kalender": W.WERKAGENDA, "titel": "\U0001F697 Reistijd: Boechout \u2192 thuis",
-                            "omschrijving": "Reistijd na: X (65 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM)"}, "tok")
+                            "omschrijving": "Reistijd na: X (65 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM)",
+                            "_merk": {W.RITMERK: "r1"}}, "tok")      # eigen rit: tekst en merk (Codex A10)
     _w2 = W._eigen_rit_weg({"id": "a1", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [HARC-KB] 2505 - klant", "omschrijving": "OSRM"}, "tok")
     _w3 = W._eigen_rit_weg({"id": "m1", "kalender": W.WERKAGENDA, "titel": "\U0001F697 naar oma", "omschrijving": "zelf gezet"}, "tok")
 finally:
@@ -714,13 +932,13 @@ _wk = (HIER / "werkwijze" / "agenda-wacht.md").read_text(encoding="utf-8")
 check("de takenlijst noemt elke stap die de agent echt doet",
       not _tk_mist and "Een afspraak verplaatsen, verwijderen of een titel veranderen" not in _wk, str(_tk_mist))
 
-# Alleen de geplande ronde belt; vrijdag kijkt tot en met maandag vooruit (FR-59)
-_src59 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
-_i59 = _src59.index("gebeld = bel_als_vastgelopen(items + archief)")
+# Alleen de geplande ronde belt; vrijdag kijkt tot en met maandag vooruit (FR-59). Gedrag, geen tekst (Codex A19, A29):
+# gepland is '--ronde' met cron bij de voorouders; wie het commando met de hand overneemt (ssh, terminal) belt niet.
 _vr = W.nu_lokaal()
 _vrijdag = _vr + _td(days=(4 - _vr.weekday()) % 7)
 check("alleen de geplande ronde belt, en vrijdag kijkt tot maandag vooruit",
-      'if not DAG_ARG and "--ronde" in sys.argv:' in _src59[_i59 - 500:_i59]
+      W.geplande_start(["--ronde"], ["sh", "cron"]) and not W.geplande_start(["--ronde"], ["bash", "sshd"])
+      and not W.geplande_start([], ["sh", "cron"])
       and W.belvenster_uren(_vrijdag) >= 72 and W.belvenster_uren(_vrijdag + _td(days=3)) == 48)
 
 # Een busnummer en een opmerking tussen haakjes (FR-61)
@@ -958,7 +1176,8 @@ _w97 = []
 _i97 = [
     {"id": "r1", "kalender": W.WERKAGENDA, "titel": "\U0001F697 Reistijd: Kessel-Lo \u2192 Mortsel", "start": f"{_D97}T12:30:00+02:00",
      "einde": f"{_D97}T13:40:00+02:00", "omschrijving": "Reistijd voor: !! Mehdi: [HI-LB] Belauto onderdelen, Antwerpsestraat 129, 2640 Mortsel "
-     "(60 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM; rit Kessel-Lo \u2192 Mortsel)", "deelnemers": []},
+     "(60 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM; rit Kessel-Lo \u2192 Mortsel)", "deelnemers": [],
+     "_merk": {W.RITMERK: "r1"}},      # eigen rit: tekst en merk met het eigen ID (Codex A10, 15-10-2026)
     {"id": "b", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [HI-LB] Belauto onderdelen, Antwerpsestraat 129, 2640 Mortsel",
      "locatie": "Antwerpsestraat 129, 2640 Mortsel", "start": f"{_D97}T13:40:00+02:00", "einde": f"{_D97}T14:00:00+02:00", "deelnemers": []},
     {"id": "e", "kalender": W.WERKAGENDA, "titel": "Mehdi: [UB-PO] Elena Zhidkova - ST", "start": f"{_D97}T14:00:00+02:00",
@@ -967,20 +1186,24 @@ _i97 = [
      "einde": f"{_D97}T14:50:00+02:00", "deelnemers": ["lien@voorbeeld.be"]},
     {"id": "r2", "kalender": W.WERKAGENDA, "titel": "\U0001F697 Reistijd: Mortsel \u2192 Mechelen", "start": f"{_D97}T14:55:00+02:00",
      "einde": f"{_D97}T15:30:00+02:00", "omschrijving": "Reistijd voor: !! Mehdi: [HA-LB] MegaMobile laptophoes, Onze-Lieve-Vrouwestraat 135, 2800 Mechelen "
-     "(35 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM; rit Mortsel \u2192 Mechelen)", "deelnemers": []},
+     "(35 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM; rit Mortsel \u2192 Mechelen)", "deelnemers": [],
+     "_merk": {W.RITMERK: "r2"}},
     {"id": "m", "kalender": W.WERKAGENDA, "titel": "!! Mehdi: [HA-LB] MegaMobile laptophoes, Onze-Lieve-Vrouwestraat 135, 2800 Mechelen",
      "locatie": "Onze-Lieve-Vrouwestraat 135, 2800 Mechelen", "start": f"{_D97}T15:30:00+02:00", "einde": f"{_D97}T15:50:00+02:00", "deelnemers": []},
     {"id": "r3", "kalender": W.WERKAGENDA, "titel": "\U0001F697 Reistijd: Mechelen \u2192 thuis", "start": f"{_D97}T15:50:00+02:00",
      "einde": f"{_D97}T16:25:00+02:00", "omschrijving": "Reistijd na: !! Mehdi: [HA-LB] MegaMobile laptophoes, Onze-Lieve-Vrouwestraat 135, 2800 Mechelen "
-     "(35 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM; rit Mechelen \u2192 thuis)", "deelnemers": []},
+     "(35 min = vrije rijtijd x filefactor 1.0 + 10 min buffer, OSRM; rit Mechelen \u2192 thuis)", "deelnemers": [],
+     "_merk": {W.RITMERK: "r3"}},
 ]
 _o97 = {k: getattr(W, k) for k in ("nu_lokaal", "coord", "rijtijd_min", "lara_vakantiedagen", "geen_auto_dagen", "plek_zoeken",
-                                   "_cache_laden", "_cache_bewaren", "_patch", "_insert", "_eigen_rit_weg", "_verplaats", "DAG_ARG")}
+                                   "_cache_laden", "_cache_bewaren", "_patch", "_insert", "_eigen_rit_weg", "_verplaats", "DAG_ARG",
+                                   "vrije_rijtijd_min")}
 _o97b = (W.agenda._toegang, W.projectadressen.index)
 W.nu_lokaal = lambda: _nu97
 W.coord = lambda adres, cache: ((50.88, 4.72) if adres == W.THUIS else (51.17, 4.45) if "Mortsel" in adres
                                 else (51.03, 4.48) if "Mechelen" in adres else None)
 W.rijtijd_min = lambda van, naar, vertrek: (35, 1.0)
+W.vrije_rijtijd_min = lambda van, naar: 25.0      # OSRM nagebootst (A29): 25 min vrij + 10 buffer = de 35 hierboven
 W.lara_vakantiedagen = lambda: set()
 W.geen_auto_dagen = lambda: set()
 W.plek_zoeken = lambda tekst: (None, None)
@@ -1223,5 +1446,48 @@ check("de kleuren worden elk uur vier weken vooruit teruggezet, ook in het weeke
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 
-print(f"\n{ok} goed, {fout} fout")
-sys.exit(1 if fout else 0)
+# Hermetisch (A29): geen enkele controle ging naar buiten. Faalt dit, dan raakt een controle een bron die nog niet
+# nagebootst is; zet de nabootsing erbij, anders is die controle in de CI geen echte controle.
+check("de test ging nergens naar buiten (geen netwerk, docker of SSH)", not NETWERK, str(sorted(set(NETWERK))[:10]))
+
+# Live: alleen met de Google-agendasleutels, apart geteld
+live_ok = live_fout = overgeslagen = 0
+if LIVE:
+    _oe = {n: os.environ.get(n) for n in _LIVE_NAMEN}
+    _ot = W.agenda._toegang
+    netwerk_dicht(False)
+    os.environ.update(LIVE)
+    W.agenda._toegang = _ECHT["toegang"]
+    W.agenda._token.update(waarde="", tot=0.0)
+    _ou = urllib.request.urlopen
+    urllib.request.urlopen = _ECHT["urlopen"]
+    try:
+        for _naam, _f in LIVE_CONTROLES:
+            try:
+                _goed, _extra = _f()
+            except Exception as e:  # noqa: BLE001
+                _goed, _extra = False, type(e).__name__
+            if _goed:
+                live_ok += 1
+                print(f"  ok   (live) {_naam}")
+            else:
+                live_fout += 1
+                print(f"  FOUT (live) {_naam} {_extra}")
+    finally:
+        urllib.request.urlopen = _ou
+        W.agenda._toegang = _ot
+        W.agenda._token.update(waarde="", tot=0.0)
+        for _n, _v in _oe.items():
+            if _v is None:
+                os.environ.pop(_n, None)
+            else:
+                os.environ[_n] = _v
+        netwerk_dicht(True)
+else:
+    for _naam, _f in LIVE_CONTROLES:
+        overgeslagen += 1
+        print(f"  overgeslagen zonder sleutels: {_naam}")
+
+print(f"\n{ok} goed, {fout} fout, {overgeslagen} overgeslagen zonder sleutels"
+      + (f" | live: {live_ok} goed, {live_fout} fout" if LIVE else ""))
+sys.exit(1 if fout or live_fout else 0)
