@@ -106,10 +106,19 @@ _ro = os.path.join(TMP, "belrooster.json")
 _t = (W.nu_lokaal() + timedelta(hours=3)).isoformat()
 json.dump({"regels": [{"sleutel": "ongelezen@agenda.test:x1:" + _t, "tijd": _t, "tekst": "t", "titel": "a"},
                       {"sleutel": W.WERKAGENDA + ":x2:" + _t, "tijd": _t, "tekst": "t", "titel": "b"}]}, open(_ro, "w"))
-with vervang((W.bellen, "ROOSTER", _ro)):
+_ok_ev = lambda a, tok: {"status": "confirmed", "start": {"dateTime": _t}}
+with vervang((W.bellen, "ROOSTER", _ro), (W, "_event", _ok_ev), (W.agenda, "_toegang", lambda: "t")):
     _beh = veilig(lambda: W._rooster_behouden([], {"ongelezen@agenda.test"}))
 check("A15 de komende oproep van de ongelezen agenda blijft, die van een gelezen agenda niet",
       isinstance(_beh, list) and [r["sleutel"].split(":")[1] for r in _beh] == ["x1"], str(_beh))
+_later_t = (W.nu_lokaal() + timedelta(hours=5)).isoformat()
+for naam, ev in (("geschrapt", lambda a, tok: {"status": "cancelled", "start": {"dateTime": _t}}),
+                 ("verzet", lambda a, tok: {"status": "confirmed", "start": {"dateTime": _later_t}}),
+                 ("niet te lezen", lambda a, tok: (_ for _ in ()).throw(OSError("503")))):
+    with vervang((W.bellen, "ROOSTER", _ro), (W, "_event", ev), (W.agenda, "_toegang", lambda: "t")):
+        _beh = veilig(lambda: W._rooster_behouden([], {"ongelezen@agenda.test"}))
+    check(f"A15 ronde 4: een behouden oproep voor een afspraak die {naam} is, valt weg en telt als onzeker",
+          _beh == [] and getattr(W, "ROOSTER_ONZEKER", 0) == 1, f"{_beh} {getattr(W, 'ROOSTER_ONZEKER', None)}")
 check("A15 de ronde vult het rooster aan bij een onvolledige lezing", "_rooster_behouden(rooster, _onvolledig)" in _bron)
 
 # A20: een jaartal is geen projectnummer
@@ -154,6 +163,42 @@ check("A07 een zorgblok zonder titel, herinnering of merk heet niet 'gezet'",
 _tt = (HIER / "tests" / "test_agenda_taken.py").read_text(encoding="utf-8")
 check("A29 test_agenda_taken gaat alleen met --live naar buiten, ook als er sleutels zijn",
       'LIVE = _live_sleutels() if "--live" in sys.argv else {}' in _tt)
+
+# ------------------------------------------------------------------ ronde 4 ---
+# A10: een rit hoort alleen bij een afspraak op zijn eigen agenda
+_e0 = _later
+_rit10 = {"id": "r10", "kalender": W.WERKAGENDA, "titel": "\U0001F697 Reistijd: thuis → Leuven", "start": (_e0 - timedelta(minutes=30)).isoformat(),
+          "einde": _e0.isoformat(), "omschrijving": "Reistijd voor: !! Mehdi: [HA-KB] 2601 - X (30 min, OSRM)"}
+_elders = {**afspraak("y10", "!! Mehdi: [HA-KB] 2601 - X"), "kalender": "andere@agenda.test"}
+check("A10 ronde 4: een rit op agenda A hoort niet bij een afspraak met dezelfde titel op agenda B",
+      veilig(lambda: W._afspraak_van_rit(_rit10, [_elders], _e0 - timedelta(minutes=30), _e0)) == [])
+
+# A11: geen 'geen rit'-melding als er al een rit staat, of buiten de gevraagde dag
+_b11 = afspraak("b11", "!! Mehdi: [HA-KB] 2601 - X", locatie="Proefstraat 1, 3000 Leuven")
+with vervang((W, "geen_auto_dagen", lambda: None), (W, "lara_vakantiedagen", lambda: frozenset()), (W, "_cache_laden", lambda: {}),
+             (W, "_cache_bewaren", lambda c: None), (W, "coord", lambda *a, **k: (50.88, 4.70)), (W.projectadressen, "index", lambda: {}),
+             (W, "_insert", lambda *a, **k: {}), (W, "_patch", lambda *a, **k: None), (W.agenda, "_toegang", lambda: "t"),
+             (W, "_eigen_rit_weg", lambda *a: False), (W, "_verplaats", lambda *a: None)):
+    _r11a = veilig(lambda: W.reistijd_zetten([dict(_b11), dict(_rit10)]))
+    _r11b = veilig(lambda: W.reistijd_zetten([dict(_b11)], alleen_dag="2000-01-01"))
+check("A11 ronde 4: een buitenafspraak die al een rit heeft, staat niet als 'geen rit' in de meldingen",
+      isinstance(_r11a, tuple) and not any("grendelbron niet te lezen" in x and "2601" in x for x in _r11a[4]), str(_r11a)[:300])
+check("A11 ronde 4: buiten de gevraagde dag geen melding", isinstance(_r11b, tuple) and not any("grendelbron niet te lezen" in x for x in _r11b[4]))
+
+# A25: een rit die naar een verdwenen privé-afspraak verwijst, herhaalt die titel niet; de tekst van een privé-bevinding ook niet
+_zr = veilig(lambda: Z.bevindingen([{**_rit10, "omschrijving": "Reistijd voor: [PR] Proefconsult geheim (30 min, OSRM)"}],
+                                   _later.date().isoformat(), _later.date().isoformat(), W.nu_lokaal()))
+check("A25 ronde 4: een rit naar een verdwenen privé-afspraak noemt die titel niet",
+      isinstance(_zr, list) and not any("Proefconsult" in b["tekst"] for b in _zr), str(_zr)[:300])
+_zo = io.StringIO()
+with redirect_stdout(_zo), vervang((W, "afspraken", lambda v, t: [afspraak("pz", "Mehdi: [PR] x")]),
+                                   (W, "archief_afspraken", lambda v, t: []), (Z, "omgeving", lambda nu: []),
+                                   (Z, "bevindingen", lambda items, van, tot, nu: [{"controle": "titel", "dag": items[0]["start"][:10],
+                                    "uur": "14:00", "agenda": "", "titel": "x", "tekst": "Proefconsult geheim", "door": "", "prive": True}]),
+                                   (Z, "STAND", Path(TMP) / "zelfcontrole2.json")):
+    veilig(lambda: Z.main())
+check("A25 ronde 4: de zelfcontrole drukt ook de tekst van een privé-bevinding niet af", "Proefconsult" not in _zo.getvalue(),
+      _zo.getvalue()[-200:])
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

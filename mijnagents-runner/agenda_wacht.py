@@ -2229,7 +2229,7 @@ def _afspraak_van_rit(x, items, s0, e0):
             t = datetime.fromisoformat(y["start"] if richting == "voor" else y["einde"])
         except (KeyError, ValueError):
             continue
-        if t == (e0 if richting == "voor" else s0) and rit_hoort_bij(x, y["titel"], richting):
+        if y.get("kalender") == x.get("kalender") and t == (e0 if richting == "voor" else s0) and rit_hoort_bij(x, y["titel"], richting):
             uit.append(y)
     return uit
 
@@ -2542,6 +2542,10 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
             x = per_id.get((kal, eid))
             if kal == WERKAGENDA and toekomst:
                 werk_gelinkt[eid] = (a, z, profiel)
+            elif (x and (x.get("_merk") or {}).get(ZORGMERK) not in (None, "", a["sleutel"])):
+                # het item draagt het merk van een andere zorgafspraak: nooit overschrijven (Codex A02, ronde 4)
+                st["fout"] += 1
+                st["prive"].append(f"{wat}: het gekoppelde item draagt het merk van een andere zorgafspraak, niets gewijzigd")
             elif kal == PRIVE_AGENDA and toekomst and x and ((x.get("_merk") or {}).get(ZORGMERK) != a["sleutel"]
                                                               or (not (x.get("locatie") or "").strip() and a.get("locatie"))):
                 # alleen het merk, en de plaats als die leeg is (uit de bevestiging, geen gok); planning en titel blijven
@@ -2772,7 +2776,9 @@ def reistijd_zetten(items, alleen_dag=None):
             # apart in de meldingen, niet alleen in een algemene logregel (ronde 3)
             _li = lees_titel(a["titel"])
             if "T" in a.get("start", "") and not _li["reistijd"] and (_li["buiten"] or _li["soort"] in BUITEN_SOORTEN) \
-                    and not _voorbij(a["start"], nu):
+                    and not _voorbij(a["start"], nu) and (not alleen_dag or a["start"][:10] == alleen_dag) \
+                    and not any(rit_hoort_bij(x, a["titel"], "voor") for x in reistijden):
+                # alleen de gevraagde dag, en niet als er al een rit staat (Codex A11, ronde 4)
                 regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen rit, grendelbron niet te lezen")
             continue
         # Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit voor
@@ -3412,9 +3418,16 @@ def belrooster(items, vandaag):
     return regels
 
 
-def _rooster_behouden(nieuw, onvolledig, nu=None):
+ROOSTER_ONZEKER = 0      # oproepen uit het vorige rooster die niet te verifiëren waren en dus wegvielen (Codex A15)
+
+
+def _rooster_behouden(nieuw, onvolledig, nu=None, tok=None):
     """De komende regels van het vorige belrooster voor de agenda's die deze ronde niet gelezen zijn ('archief' staat voor
-    de archiefagenda's). De sleutel van een regel begint met de agenda."""
+    de archiefagenda's). De sleutel van een regel is agenda:id:begin. Elke regel wordt eerst nagekeken tegen het item zelf:
+    geschrapt, verzet of niet te lezen valt weg (en telt in ROOSTER_ONZEKER), zodat De Bode nooit belt voor een afspraak
+    die er zo niet meer staat (Codex A15, ronde 4)."""
+    global ROOSTER_ONZEKER
+    ROOSTER_ONZEKER = 0
     nu = nu or nu_lokaal()
     try:
         with open(bellen.ROOSTER) as f:
@@ -3431,8 +3444,19 @@ def _rooster_behouden(nieuw, onvolledig, nu=None):
             continue
         if r.get("sleutel") in al or t.tzinfo is None or t < nu - timedelta(minutes=bellen.VENSTER_MIN):
             continue
-        if kal in onvolledig or ("archief" in onvolledig and kal not in KALENDERS):
+        if not (kal in onvolledig or ("archief" in onvolledig and kal not in KALENDERS)):
+            continue
+        delen = (r.get("sleutel") or "").split(":", 2)
+        eid, begin = (delen[1], delen[2]) if len(delen) == 3 else ("", "")
+        try:
+            ev = _event({"kalender": kal, "id": eid}, tok or agenda._toegang())
+            klopt = ev.get("status") != "cancelled" and _zelfde_tijd((ev.get("start") or {}).get("dateTime"), begin)
+        except Exception:  # noqa: BLE001
+            klopt = False
+        if klopt:
             uit.append(r)
+        else:
+            ROOSTER_ONZEKER += 1
     return uit
 
 
@@ -4269,6 +4293,9 @@ def main():
             # een agenda die niet gelezen is: haar komende oproepen uit het vorige rooster blijven staan, anders belt De Bode
             # niet voor die afspraken (Codex A15, ronde 3)
             rooster = sorted(rooster + _rooster_behouden(rooster, _onvolledig), key=lambda r: r["tijd"])
+            if ROOSTER_ONZEKER:
+                mail_noden.append({"tekst": f"{ROOSTER_ONZEKER} oproep(en) van een agenda die niet gelezen is, vielen weg: de afspraak "
+                                            "kon niet nagekeken worden (verzet, geschrapt of onleesbaar); kijk ze zelf na", "wie": "mehdi"})
         bellen.rooster_schrijven(rooster)
         ag.log(f"dag {vandaag}", "schrijf", f"belrooster: {len(rooster)} oproepen gepland (een oproep per afspraak: online {BEL_ONLINE_MIN} min vooraf, buiten {BEL_ONLINE_MIN} min voor het vertrek)",
                "\n".join(f"{r['tijd'][:16]} bel: {r['titel']}" for r in rooster[:60]))

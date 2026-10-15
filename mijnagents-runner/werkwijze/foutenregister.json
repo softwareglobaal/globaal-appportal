@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.34",
+ "versie": "3.35",
  "datum": "15-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -349,7 +349,12 @@
     "FR-164",
     "FR-165",
     "FR-166",
-    "FR-167"
+    "FR-167",
+    "FR-168",
+    "FR-169",
+    "FR-170",
+    "FR-171",
+    "FR-172"
    ]
   }
  ],
@@ -3417,6 +3422,96 @@
     "soort": "test",
     "waar": "tests/test_codex_ronde2_bode.py",
     "tekst": "A13 een fout-antwoord van CallMeBot ('Error: user not available') telt niet als gebeld"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-168",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 4 (A01, A02), nagemeten door Claude",
+   "fout": "Een zorgblok met het merk van een andere zorgafspraak of de uitnodiging van een andere externe afzender koppelde nog als de praktijknaam klopte; twee mails zonder patiënt op hetzelfde uur kregen dezelfde sleutel.",
+   "gevolg": "Een verkeerde koppeling (en een overschreven merk), of een mail die niet verwerkt werd.",
+   "waarom_niet_gezien": "De herstelling van ronde 3 dekte het hoofdgeval, niet deze rand.",
+   "oorzaak": "Alleen tekst telde; de sleutel hing aan de (lege) patiëntnaam.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een ander merk of een andere externe UID is nooit dezelfde afspraak; de merkstap overschrijft nooit een ander merk; zonder patiënt hangt de sleutel aan het bronbericht.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "A02 ronde 4: een item met het merk van een andere zorgafspraak koppelt niet, ook met de praktijknaam"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-169",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 4 (A26, A33, A32), nagemeten door Claude",
+   "fout": "De Bode belde verder na een onzekere poging met een bewaarfout, las een onleesbaar belspoor als leeg, en zag zonder stand historische alarmen als nieuw.",
+   "gevolg": "Een dubbele oproep of een alarmoproep voor een oud signaal.",
+   "waarom_niet_gezien": "De herstelling van ronde 3 dekte het hoofdgeval, niet deze rand.",
+   "oorzaak": "Alleen een afgehandelde oproep stopte de ronde; except OSError gaf een leeg spoor; geen alarmgrens zonder stand.",
+   "soort_oorzaak": "code",
+   "oplossing": "Elke bewaarfout stopt de belronde met een nood; een spoor dat er is maar niet te lezen valt, stopt de ronde; zonder stand geen alarmoproep, wel een nood.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A33 een onleesbaar belspoor: geen oproep, de belronde stopt met een nood"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-170",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 4 (A15), nagemeten door Claude",
+   "fout": "Een behouden oproep uit het vorige belrooster werd niet nagekeken: een verzette of geschrapte afspraak op een ongelezen agenda kon nog een oproep geven.",
+   "gevolg": "Een oproep op het oude moment.",
+   "waarom_niet_gezien": "De herstelling van ronde 3 dekte het hoofdgeval, niet deze rand.",
+   "oorzaak": "Het vorige rooster werd blind overgenomen.",
+   "soort_oorzaak": "code",
+   "oplossing": "Elke behouden regel wordt nagekeken tegen het agenda-item zelf (events.get): geschrapt, verzet of onleesbaar valt weg, met een nood.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde3.py",
+    "tekst": "A15 ronde 4: een behouden oproep voor een afspraak die"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-171",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 4 (A25), nagemeten door Claude",
+   "fout": "De zelfcontrole drukte de tekst van een privé-bevinding af, en een rit naar een verdwenen privé-afspraak herhaalde die titel.",
+   "gevolg": "Een privétitel in het serverlog die niet meer in het masker zat.",
+   "waarom_niet_gezien": "De herstelling van ronde 3 dekte het hoofdgeval, niet deze rand.",
+   "oorzaak": "Alleen de titel werd gemaskeerd.",
+   "soort_oorzaak": "code",
+   "oplossing": "De tekst van een privé-bevinding is '(privé)'; een oude ritverwijzing naar een privé-titel ook.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde3.py",
+    "tekst": "A25 ronde 4: een rit naar een verdwenen privé-afspraak noemt die titel niet"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-172",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 4 (A10, A11), nagemeten door Claude",
+   "fout": "De overgang naar ritmerken keek niet naar de agenda van de afspraak; de melding 'geen rit, grendelbron niet te lezen' kwam ook bij een afspraak die al een rit had of buiten de gevraagde dag.",
+   "gevolg": "Een merk op een rit van een andere agenda; valse meldingen.",
+   "waarom_niet_gezien": "De herstelling van ronde 3 dekte het hoofdgeval, niet deze rand.",
+   "oorzaak": "Te ruime voorwaarden.",
+   "soort_oorzaak": "code",
+   "oplossing": "Dezelfde agenda vereist; de melding alleen op de gevraagde dag en zonder bestaande heenrit.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde3.py",
+    "tekst": "A10 ronde 4: een rit op agenda A hoort niet bij een afspraak met dezelfde titel op agenda B"
    },
    "controle": [],
    "status": "opgelost"

@@ -165,7 +165,9 @@ def bevindingen(items, van, tot, nu):
             continue
         m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
         if m and W.titel_sleutel(m.group(1)) not in titels:
-            meld("rit_oude_titel", x, f"rit verwijst naar '{m.group(1)[:45]}', die titel bestaat niet meer")
+            # de oude titel kan die van een privé-afspraak zijn (zorg, [PR]): dan niet herhalen (Codex A25, ronde 4)
+            oud = "(privé)" if W.is_prive({"titel": m.group(1)}) else m.group(1)[:45]
+            meld("rit_oude_titel", x, f"rit verwijst naar '{oud}', die titel bestaat niet meer")
     # een eigen rit hoort op de agenda van zijn afspraak (FR-28, FR-42)
     for x in ritten:
         if x["start"][:10] < vandaag or "OSRM" not in (x.get("omschrijving") or ""):
@@ -357,7 +359,8 @@ def main():
     for b in gevonden:
         # een privé-afspraak nooit met titel of tekst in het logboek op de server (Codex A25, ronde 3)
         titel = "(privé)" if b.get("prive") else b["titel"][:48]
-        print(W.ag.maskeer(f"  {b['staat']:<12} {b['register'] or '-':<7} {b['dag'][5:]} {b['uur']} {b['controle']:<22} {titel} | {b['tekst'][:70]}"))
+        tekst = "(privé)" if b.get("prive") else b["tekst"][:70]       # ook de tekst van een privé-bevinding niet (ronde 4)
+        print(W.ag.maskeer(f"  {b['staat']:<12} {b['register'] or '-':<7} {b['dag'][5:]} {b['uur']} {b['controle']:<22} {titel} | {tekst}"))
     try:
         oud = json.loads(STAND.read_text())
     except (OSError, ValueError):

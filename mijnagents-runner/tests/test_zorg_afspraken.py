@@ -410,5 +410,24 @@ check("A02 ronde 3: de naam van de behandelaar of de praktijk op dat uur koppelt
 check("A02 ronde 3: een afspraak van Lara ([LA]) op dat uur is nooit die van Mehdi",
       _r3s([{"kalender": W.WERKAGENDA, "id": "g3", "titel": "[LA] kine An Proef", "start": _t3}]) != "gekoppeld")
 
+# Ronde 4 (Codex A02): het merk van een andere zorgafspraak of een andere externe uitnodiging koppelt nooit
+check("A02 ronde 4: een item met het merk van een andere zorgafspraak koppelt niet, ook met de praktijknaam",
+      _r3s([{"kalender": W.PRIVE_AGENDA, "id": "g4", "titel": "Kine - An Proef", "start": _t3, "_merk": {MA.ZORGMERK: "zorg|ander|x"}}]) != "gekoppeld")
+check("A02 ronde 4: een andere externe uitnodigings-ID is een andere afspraak; een eigen Google-item niet",
+      MA._zorgachtig({"titel": "Kine - An Proef", "_icaluid": "uid-ander@extern.test"}, {"sleutel": "s", "ics_uid": "uid-1@extern.test"}, {}, KINE) == 0
+      and MA._zorgachtig({"titel": "Kine - An Proef", "_icaluid": "abc@google.com"}, {"sleutel": "s", "ics_uid": "uid-1@extern.test"}, {}, KINE) == 2)
+
+# Ronde 4 (Codex A01): twee mails zonder leesbare patiënt op hetzelfde uur worden elk een eigen open punt
+_bev4 = kand("mehdichegini@hotmail.com", _KM, "Uw boeking werd geaccepteerd - woensdag 23.12.2026 om 09:00",
+             "Beste Mo Voorbeeld, uw boeking werd geaccepteerd. Afspraakdatum: 23.12.2026 Afspraaktijd: 09:00 Uw therapeut: An Proef",
+             mid="<r4-bev@kine>", datum="Wed, 14 Oct 2026 13:00:00 +0200", uid=41)
+_onb = [kand("mehdichegini@hotmail.com", _KM, "Annulering van uw afspraak bij KINEVOORBEELD",
+             "Uw afspraak bij KINEVOORBEELD op woensdag 23/12/2026 om 09:00 werd geannuleerd. Uw therapeut: An Proef",
+             mid=f"<r4-onb{i}@kine>", datum=f"Wed, 14 Oct 2026 1{4 + i}:00:00 +0200", uid=42 + i) for i in range(2)]
+_fouten4 = _ronde_met([_bev4] + _onb)[1]
+_rijen4 = [a for a in MA.alle() if a["soort"] == "zorg" and a["start"].startswith("2026-12-23T09:00")]
+check("A01 ronde 4: twee mails zonder leesbare patiënt op hetzelfde uur: elk een eigen rij, geen fout",
+      len(_rijen4) == 3 and not any("niet verwerkt" in f.get("fout", "") for f in _fouten4), f"{len(_rijen4)} {_fouten4}")
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

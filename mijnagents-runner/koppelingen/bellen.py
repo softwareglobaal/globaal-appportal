@@ -353,7 +353,10 @@ def te_bellen(staat, nu=None, rooster=None, spoor=None):
     from datetime import datetime, timedelta
     nu = nu or datetime.now().astimezone()
     rooster = _rooster_regels() if rooster is None else rooster
-    gebeld = {**spoor_lezen(spoor), **staat.get("gebeld", {})}
+    try:
+        gebeld = {**spoor_lezen(spoor), **staat.get("gebeld", {})}
+    except OSError:
+        return []          # een onleesbaar spoor: niets is zeker aan de beurt (A33); afspraken_bellen meldt het
     uit = []
     for r in rooster or []:
         t = _tijd(r)
@@ -371,7 +374,8 @@ def te_bellen(staat, nu=None, rooster=None, spoor=None):
 # De Bode niet verder (afspraken_bellen) (Codex A26 ronde 3, 15-10-2026).
 
 def spoor_lezen(pad):
-    """{sleutel: tijd} uit het belspoor; geen pad of geen bestand: {}. Onleesbare regels tellen niet."""
+    """{sleutel: tijd} uit het belspoor; geen pad of geen bestand: {}. Onleesbare regels tellen niet. Een bestand dat er
+    is maar niet te lezen valt (rechten, schijffout), gooit: dat is geen leeg spoor (Codex A33, ronde 4)."""
     uit = {}
     if not pad:
         return uit
@@ -383,8 +387,8 @@ def spoor_lezen(pad):
                     uit[str(d["sleutel"])] = str(d["tijd"])
                 except (ValueError, KeyError, TypeError):
                     continue
-    except OSError:
-        pass
+    except (FileNotFoundError, NotADirectoryError):
+        pass               # er is (nog) geen spoor: leeg
     return uit
 
 
@@ -458,7 +462,16 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
     gebeld = staat.setdefault("gebeld", {})
     pogingen = staat.setdefault("belpogingen", {})
     nu = datetime.now().astimezone()
-    sp = spoor_lezen(spoor)
+    try:
+        sp = spoor_lezen(spoor)
+    except OSError as e:
+        # een spoor dat er is maar niet te lezen valt, kan een gevoerde oproep bevatten: deze ronde niet bellen (A33)
+        if log:
+            log("bellen", "afspraak", f"belronde gestopt: belspoor onleesbaar ({type(e).__name__}); niet gebeld deze ronde")
+        if nood is not None:
+            nood.append({"tekst": f"Afspraken bellen: het belspoor is onleesbaar ({type(e).__name__}); ik bel niet tot het weer te "
+                                  "lezen is (rechten en schijf van mijnagents-data nakijken)", "wie": "claude-code"})
+        return "belronde gestopt: belspoor onleesbaar"
     for k, t in sp.items():
         gebeld.setdefault(k, t)
     _spoor_opruimen(spoor, sp, (nu - timedelta(days=2)).isoformat())
@@ -514,10 +527,12 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
                 if log:
                     log("bellen", "afspraak", f"belspoor niet bijgeschreven: {type(e).__name__}: {str(e)[:120]}")
         stand_ok = _bewaar(bewaar, staat, log) if bewaar else None
-        if afgehandeld and False in (spoor_ok, stand_ok):
-            # onzeker bewijs: geen volgende oproep in deze ronde (A26 ronde 3)
+        if (afgehandeld and spoor_ok is False) or stand_ok is False:
+            # onzeker bewijs: geen volgende oproep in deze ronde (A26 ronde 3). Ook na een onzekere of mislukte poging: dan
+            # gaat bij een herstart de pogingenteller verloren (Codex A26, ronde 4)
             wacht = len(beurt) - i - 1
-            bewijs = ("het belspoor houdt haar vast, ze wordt niet opnieuw gebeld" if spoor_ok else
+            bewijs = ("de oproep was onzeker of mislukt en de pogingenteller staat niet op schijf" if not afgehandeld else
+                      "het belspoor houdt haar vast, ze wordt niet opnieuw gebeld" if spoor_ok else
                       "de stand houdt haar vast" if stand_ok else
                       "ze staat nergens op schijf en kan opnieuw gebeld worden")
             gestopt = f"belronde gestopt: {'stand' if stand_ok is False else 'belspoor'} niet weggeschreven"

@@ -416,7 +416,13 @@ def ronde(droog=False):
             print(f"  (droog) {len(alarm)} dringend(e) signaal/oproep(en); zou bellen als het nieuw is: "
                   + "; ".join(it["titel"][:60] for it in alarm[:3]))
     else:
-        bel_detail = veilig(nood, "Alarm bellen", lambda: bellen.alarm_bellen(staat, nog_niet_gebeld(staat, alarm), log=ag.log), "")
+        # zonder leesbare stand weet ik niet welke alarmen al gebeld zijn: de items op het bord kunnen historisch zijn.
+        # Niet automatisch bellen, wel melden (Codex A32, ronde 4). De volgende rondes kennen weer een laatste_id.
+        te_alarm = [] if eerste else nog_niet_gebeld(staat, alarm)
+        if eerste and alarm:
+            nood.append({"tekst": f"De Bode had geen leesbare stand: {len(alarm)} oproep- of stil-signaal(en) op het bord niet "
+                                  "gebeld, want ze kunnen al gebeld zijn; kijk het bord na", "wie": "claude-code"})
+        bel_detail = veilig(nood, "Alarm bellen", lambda: bellen.alarm_bellen(staat, te_alarm, log=ag.log), "")
         if bel_detail:
             veilig(nood, "Stand wegschrijven na het alarm", lambda: bewaar(staat), None)
     if bel_afspraak:

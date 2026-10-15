@@ -549,7 +549,9 @@ def _bewaar_zorg(c, a):
         doel = zoek("SELECT * FROM afspraak WHERE sleutel=?", (a["sleutel"],))
     sleutel = doel["sleutel"] if doel else a["sleutel"]
     if doel is None and c.execute("SELECT 1 FROM afspraak WHERE sleutel=?", (sleutel,)).fetchone():
-        sleutel = f"{sleutel}|{hashlib.sha256(eigen_patient.encode()).hexdigest()[:8]}"      # andere patiënt, eigen sleutel
+        # andere patiënt: een eigen sleutel. Zonder leesbare patiënt het bronbericht, anders kregen twee zulke mails op
+        # hetzelfde uur dezelfde sleutel en faalde de tweede (Codex A01, ronde 4)
+        sleutel = f"{sleutel}|{hashlib.sha256((eigen_patient or a.get('bron_message_id') or '').encode()).hexdigest()[:8]}"
     c.execute("INSERT OR IGNORE INTO bron(mailbox,message_id,sleutel,map,imap_uid,ontvangen,afzender,onderwerp,gezien) "
               "VALUES(?,?,?,?,?,?,?,?,?)", (a["bron_mailbox"], a["bron_message_id"], sleutel, a.get("map", ""), a.get("imap_uid"),
                                             a["bron_ontvangen"], a["bron_afzender"], a["bron_onderwerp"], _nu().isoformat(timespec="seconds")))
@@ -714,8 +716,15 @@ def _zorgachtig(x, a, z, profiel):
     adres van de praktijk in titel, plaats of omschrijving. 1: alleen een algemeen zorgwoord (kine, tandarts). 0: niet.
     Alleen 2 koppelt; 1 is een vraag, want 'Tandarts' op dat uur kan de afspraak van iemand anders zijn (Codex A02,
     ronde 3)."""
-    if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]:
+    eigen_merk = (x.get("_merk") or {}).get(ZORGMERK)
+    if eigen_merk == a["sleutel"]:
         return 2
+    # het merk van een andere zorgafspraak, of de uitnodiging van een andere externe afzender (geen door Google gemaakte
+    # UID van een eigen item), is een andere afspraak: nooit koppelen, ook niet met de praktijknaam (Codex A02, ronde 4)
+    if eigen_merk:
+        return 0
+    if a.get("ics_uid") and x.get("_icaluid") and x["_icaluid"] != a["ics_uid"] and not x["_icaluid"].endswith("@google.com"):
+        return 0
     # een zakelijke afspraak (firmacode in de titel, bv. EPB voor een tandartspraktijk) is nooit deze zorgafspraak (A02);
     # een afspraak van Lara ([LA]) is nooit die van Mehdi
     m = re.search(r"\[([A-Za-z]{2,6})(?:-[A-Za-z0-9]{1,4})?\]", x.get("titel") or "")

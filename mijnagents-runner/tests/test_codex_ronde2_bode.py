@@ -595,5 +595,41 @@ for _antw, _verwacht in (("Onbekend antwoord van de dienst", False), ("Error: us
     check(f"A13 afspraken_bellen met CallMeBot-antwoord '{_antw[:40]}': {'gebeld' if _verwacht else 'niet gebeld, poging 1, volgende minuut opnieuw'}",
           _f is None and _ok, f"{_f} {st}")
 
+# ------------------------------------------------------------------ ronde 4: A26, A33, A32 ---
+# A26: een onzekere poging en een bewaarfout: ook dan stoppen, want de pogingenteller staat niet op schijf
+rooster(regel_t("proef-e", "Proeftekst E"), regel_t("proef-f", "Proeftekst F"))
+UITSLAG[0] = [("telegram-oproep", "een antwoord dat niemand kent")]
+oproepen.clear()
+_nood = []
+_sp4 = str(TMP / "spoor-r4.jsonl")
+_u, _f = probeer(BEL.afspraken_bellen, {}, log=B.ag.log, bewaar=kapotte_bewaar, nood=_nood, spoor=_sp4)
+check("A26 ronde 4: een onzekere poging en een bewaarfout: geen volgende oproep, en een nood over de onzekere oproep",
+      _f is None and oproepen == ["Proeftekst E"] and any("onzeker of mislukt" in n["tekst"] for n in _nood), f"{_f} {oproepen} {_nood}")
+
+# A33: een spoor dat er is maar niet te lezen valt, is geen leeg spoor: niet bellen, wel melden
+_onleesbaar = TMP / "spoor-is-een-map"
+_onleesbaar.mkdir(exist_ok=True)
+UITSLAG[0] = [("twilio", "CA91")]
+oproepen.clear()
+_nood = []
+_u, _f = probeer(BEL.afspraken_bellen, {}, log=B.ag.log, bewaar=lambda st: True, nood=_nood, spoor=str(_onleesbaar))
+check("A33 een onleesbaar belspoor: geen oproep, de belronde stopt met een nood",
+      _f is None and oproepen == [] and any("onleesbaar" in n["tekst"] for n in _nood), f"{_f} {oproepen} {_nood}")
+
+# A32: zonder leesbare stand belt De Bode geen alarm voor items die al op het bord stonden
+schone_stand()
+rooster()
+B.is_stil, B.NIET_OP_TELEGRAM = (lambda t=None: False), ("agenda-wacht",)
+BORD["items"] = klaarzet(range(301, 306), oproep=(303,))
+alarm_oproepen.clear()
+hartslagen.clear()
+BEL_UIT[0] = "CA32"
+probeer(B.main)
+check("A32 zonder stand: een oproep-item op het bord geeft geen alarmoproep, wel een nood",
+      alarm_oproepen == [] and bool(hartslagen) and any("geen leesbare stand" in n["tekst"] for n in (hartslagen[-1].get("nood") or [])),
+      f"{alarm_oproepen} {hartslagen[-1:]}")
+BORD["items"] = []
+B.is_stil, B.NIET_OP_TELEGRAM = ECHT_STIL, ECHT_NIET_TG
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
