@@ -22,7 +22,7 @@ import re
 import sys
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -329,6 +329,21 @@ def melding_groep(items, eerste=False):
     return groep, tot, len(voor_mehdi) - len(groep)
 
 
+ALARM_RECENT_MIN = 30      # zonder stand: een alarm van het laatste halfuur is nieuw genoeg om te bellen (A34)
+
+
+def is_recent(item, nu=None):
+    """Is dit bord-item van de laatste ALARM_RECENT_MIN minuten? Het bord zet ts (ISO); zonder zone is het UTC (de server).
+    Onleesbaar telt als niet recent: dan meld ik het in plaats van te bellen."""
+    try:
+        t = datetime.fromisoformat(str(item.get("ts") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return (nu or datetime.now(timezone.utc)) - t <= timedelta(minutes=ALARM_RECENT_MIN)
+
+
 def nog_niet_gebeld(staat, alarm):
     """De alarmen waarvoor nog geen oproep liep of openstaat. Sinds De Bode in groepen meldt (A31) blijft een alarm dat
     niet in de eerste groep zat een ronde langer nieuw; de lijst krimpt dan van voren, alarm_bellen zag een andere
@@ -418,11 +433,26 @@ def ronde(droog=False):
     else:
         # zonder leesbare stand weet ik niet welke alarmen al gebeld zijn: de items op het bord kunnen historisch zijn.
         # Niet automatisch bellen, wel melden (Codex A32, ronde 4). De volgende rondes kennen weer een laatste_id.
-        te_alarm = [] if eerste else nog_niet_gebeld(staat, alarm)
-        if eerste and alarm:
-            nood.append({"tekst": f"De Bode had geen leesbare stand: {len(alarm)} oproep- of stil-signaal(en) op het bord niet "
-                                  "gebeld, want ze kunnen al gebeld zijn; kijk het bord na", "wie": "claude-code"})
+        # Het belspoor houdt ook alarmoproepen bij ('alarm:<id>'): wat daar staat, bel ik nooit opnieuw. Zonder stand bel ik
+        # alleen een alarm dat recent is (ALARM_RECENT_MIN) en niet in het spoor staat; een ouder item meld ik (Codex A34,
+        # ronde 5: na een verloren stand werd ook een zojuist binnengekomen alarm niet gebeld en daarna nooit meer).
+        al_gebeld = veilig(nood, "Belspoor lezen", lambda: {k.split(":", 1)[1] for k in bellen.spoor_lezen(belspoor())
+                                                              if k.startswith("alarm:")}, None)
+        if al_gebeld is None:
+            te_alarm = []                  # een onleesbaar spoor: niets is zeker nieuw (A33)
+        elif eerste:
+            te_alarm = [it for it in alarm if str(it.get("id")) not in al_gebeld and is_recent(it)]
+            oud = [it for it in alarm if str(it.get("id")) not in al_gebeld and not is_recent(it)]
+            if oud:
+                nood.append({"tekst": f"De Bode had geen leesbare stand: {len(oud)} ouder(e) oproep- of stil-signaal(en) op het bord "
+                                      "niet gebeld, want ze kunnen al gebeld zijn; kijk het bord na", "wie": "claude-code"})
+        else:
+            te_alarm = [it for it in nog_niet_gebeld(staat, alarm) if str(it.get("id")) not in al_gebeld]
         bel_detail = veilig(nood, "Alarm bellen", lambda: bellen.alarm_bellen(staat, te_alarm, log=ag.log), "")
+        if str(bel_detail).startswith("belt"):
+            for it in te_alarm:
+                veilig(nood, "Belspoor bijschrijven (alarm)",
+                       lambda it=it: bellen.spoor_schrijven(belspoor(), f"alarm:{it.get('id')}", datetime.now().astimezone().isoformat()), None)
         if bel_detail:
             veilig(nood, "Stand wegschrijven na het alarm", lambda: bewaar(staat), None)
     if bel_afspraak:

@@ -507,14 +507,15 @@ try:
     _u, _f = probeer(B.main)
 finally:
     B.bewaar = ECHTE_BEWAAR
-check("A26 bewaarfout na de eerste oproep: geen tweede oproep in die ronde", oproepen == ["Proeftekst A"], str(oproepen))
-check("A26 de gestopte belronde staat in het logboek en als nood op het bord, zonder crash",
-      _f is None and any("belronde gestopt" in t for t in logs) and bool(hartslagen)
-      and any("niet op schijf" in n["tekst"] for n in (hartslagen[-1].get("nood") or [])), f"{_f} {logs} {hartslagen[-1:]}")
+# ronde 5: staat het spoor veilig op schijf, dan gaat de volgende oproep door; anders verhongert ze achter een kapotte stand
+check("A26 ronde 5: bewaarfout maar het spoor staat veilig: de tweede oproep gaat door", oproepen == ["Proeftekst A", "Proeftekst B"],
+      str(oproepen))
+check("A26 ronde 5: de kapotte stand staat als nood op het bord, zonder crash",
+      _f is None and bool(hartslagen) and any("stand kon niet weg" in n["tekst"] for n in (hartslagen[-1].get("nood") or [])),
+      f"{_f} {hartslagen[-1:]}")
 oproepen.clear()
 _u, _f = probeer(B.main)        # nieuwe ronde; de stand kwam nooit op schijf, het belspoor wel
-check("A26 een nieuwe ronde belt de eerste afspraak niet opnieuw (belspoor), wel de tweede",
-      _f is None and oproepen == ["Proeftekst B"], f"{_f} {oproepen}")
+check("A26 een nieuwe ronde belt geen van beide opnieuw (belspoor)", _f is None and oproepen == [], f"{_f} {oproepen}")
 check("A26 na de nieuwe ronde staan beide afspraken als gebeld in de stand",
       {"proef-a", "proef-b"} <= set(((stand() or {}).get("gebeld") or {})), str(stand()))
 
@@ -603,8 +604,14 @@ oproepen.clear()
 _nood = []
 _sp4 = str(TMP / "spoor-r4.jsonl")
 _u, _f = probeer(BEL.afspraken_bellen, {}, log=B.ag.log, bewaar=kapotte_bewaar, nood=_nood, spoor=_sp4)
-check("A26 ronde 4: een onzekere poging en een bewaarfout: geen volgende oproep, en een nood over de onzekere oproep",
-      _f is None and oproepen == ["Proeftekst E"] and any("onzeker of mislukt" in n["tekst"] for n in _nood), f"{_f} {oproepen} {_nood}")
+check("A26 ronde 5: een onzekere poging en een bewaarfout met een veilig spoor: de volgende gaat door, de poging staat in het spoor",
+      _f is None and oproepen == ["Proeftekst E", "Proeftekst F"] and BEL.spoor_pogingen(_sp4).get("proef-e") == 1
+      and BEL.spoor_pogingen(_sp4).get("proef-f") == 1, f"{_f} {oproepen} {BEL.spoor_pogingen(_sp4) if hasattr(BEL, 'spoor_pogingen') else '-'}")
+oproepen.clear()
+_u, _f = probeer(BEL.afspraken_bellen, {}, log=B.ag.log, bewaar=kapotte_bewaar, nood=_nood, spoor=_sp4)
+check("A26 ronde 5: de tweede ronde kent de pogingen uit het spoor en probeert beide afspraken (niemand verhongert)",
+      _f is None and oproepen == ["Proeftekst E", "Proeftekst F"] and BEL.spoor_pogingen(_sp4).get("proef-e") == 2,
+      f"{_f} {oproepen} {BEL.spoor_pogingen(_sp4) if hasattr(BEL, 'spoor_pogingen') else '-'}")
 
 # A33: een spoor dat er is maar niet te lezen valt, is geen leeg spoor: niet bellen, wel melden
 _onleesbaar = TMP / "spoor-is-een-map"
@@ -628,6 +635,29 @@ probeer(B.main)
 check("A32 zonder stand: een oproep-item op het bord geeft geen alarmoproep, wel een nood",
       alarm_oproepen == [] and bool(hartslagen) and any("geen leesbare stand" in n["tekst"] for n in (hartslagen[-1].get("nood") or [])),
       f"{alarm_oproepen} {hartslagen[-1:]}")
+BORD["items"] = []
+B.is_stil, B.NIET_OP_TELEGRAM = ECHT_STIL, ECHT_NIET_TG
+
+# ------------------------------------------------------------------ ronde 5: A34 ---
+# Na een verloren stand: een recent alarm (laatste halfuur) dat niet in het belspoor staat, wordt wel gebeld en komt in
+# het spoor; na nog een verlies van de stand niet opnieuw.
+from datetime import timezone as _tz          # noqa: E402
+_nu_ts = datetime.now(_tz.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+if os.path.exists(SPOOR):
+    os.remove(SPOOR)
+B.is_stil, B.NIET_OP_TELEGRAM = (lambda t=None: False), ("agenda-wacht",)
+for ronde in (1, 2):
+    schone_stand()                          # de stand is weg
+    rooster()
+    BORD["items"] = [{**it, "ts": _nu_ts} for it in klaarzet(range(401, 404), oproep=(403,))]
+    alarm_oproepen.clear()
+    BEL_UIT[0] = "CA34"
+    probeer(B.main)
+    if ronde == 1:
+        _r1 = list(alarm_oproepen)
+check("A34 zonder stand: een recent alarm dat nog niet in het spoor staat, wordt gebeld", len(_r1) == 1, str(_r1))
+check("A34 het alarm staat daarna in het belspoor en wordt na nog een verlies van de stand niet opnieuw gebeld",
+      "alarm:403" in BEL.spoor_lezen(SPOOR) and alarm_oproepen == [], f"{alarm_oproepen} {BEL.spoor_lezen(SPOOR)}")
 BORD["items"] = []
 B.is_stil, B.NIET_OP_TELEGRAM = ECHT_STIL, ECHT_NIET_TG
 

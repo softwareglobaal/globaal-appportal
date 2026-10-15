@@ -711,6 +711,17 @@ ZORGMERK = "agendawacht_zorg"
 _ZORGWOORD = re.compile(r"\bkine\b|kinesi|kinésit|tandarts|mondhygi|dentist", re.I)
 
 
+def _uid_conflict(x, a):
+    """Draagt het item de uitnodiging van een andere externe afzender (geen door Google gemaakte UID van een eigen item)?"""
+    return bool(a.get("ics_uid") and x.get("_icaluid") and x["_icaluid"] != a["ics_uid"] and not x["_icaluid"].endswith("@google.com"))
+
+
+def _ander_zorgitem(x, a):
+    """Het merk van een andere zorgafspraak of een andere externe uitnodiging: nooit dit item wijzigen (Codex A02, ronde 5)."""
+    m = (x.get("_merk") or {}).get(ZORGMERK)
+    return bool(m and m != a["sleutel"]) or _uid_conflict(x, a)
+
+
 def _zorgachtig(x, a, z, profiel):
     """Hoe sterk lijkt dit agenda-item op deze zorgafspraak? 2: ons eigen merk, of de praktijk, de behandelaar of het
     adres van de praktijk in titel, plaats of omschrijving. 1: alleen een algemeen zorgwoord (kine, tandarts). 0: niet.
@@ -721,10 +732,8 @@ def _zorgachtig(x, a, z, profiel):
         return 2
     # het merk van een andere zorgafspraak, of de uitnodiging van een andere externe afzender (geen door Google gemaakte
     # UID van een eigen item), is een andere afspraak: nooit koppelen, ook niet met de praktijknaam (Codex A02, ronde 4)
-    if eigen_merk:
-        return 0
-    if a.get("ics_uid") and x.get("_icaluid") and x["_icaluid"] != a["ics_uid"] and not x["_icaluid"].endswith("@google.com"):
-        return 0
+    if eigen_merk or _uid_conflict(x, a):
+        return -1          # een andere afspraak: nooit koppelen; wel een conflict, zie _zorg_status (A35, ronde 5)
     # een zakelijke afspraak (firmacode in de titel, bv. EPB voor een tandartspraktijk) is nooit deze zorgafspraak (A02);
     # een afspraak van Lara ([LA]) is nooit die van Mehdi
     m = re.search(r"\[([A-Za-z]{2,6})(?:-[A-Za-z0-9]{1,4})?\]", x.get("titel") or "")
@@ -753,10 +762,14 @@ def _zorg_status(a, items, nu, vorig_google=""):
     start = _iso(a["start"]) if a["start"] else None
     kand = [x for x in items if not x.get("hele_dag") and start and _iso(x.get("start") or "")
             and abs((_iso(x["start"]) - start).total_seconds()) <= 300 and _zorgachtig(x, a, z, profiel)]
-    zwak = [x for x in kand if _zorgachtig(x, a, z, profiel) < 2]
-    kand = [x for x in kand if x not in zwak]
+    # -1: een zorgitem van een andere afspraak (ander merk of andere uitnodiging) op dit uur: een conflict, geen tweede blok
+    # (Codex A35, ronde 5); 1: alleen een zorgwoord (een vraag); 2: koppelen
+    conflict = [x for x in kand if _zorgachtig(x, a, z, profiel) < 0]
+    zwak = [x for x in kand if _zorgachtig(x, a, z, profiel) == 1]
+    kand = [x for x in kand if x not in zwak and x not in conflict]
     merk = [x for x in items if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]]
-    vorig = [x for x in items if vorig_google and f"{x.get('kalender')}|{x.get('id')}" == vorig_google]
+    # een oude verwijzing die intussen naar een item van een andere afspraak wijst, telt niet (Codex A02, ronde 5)
+    vorig = [x for x in items if vorig_google and f"{x.get('kalender')}|{x.get('id')}" == vorig_google and not _ander_zorgitem(x, a)]
     recent = (a.get("bron_ontvangen") or "")[:10] >= (nu - timedelta(days=14)).astimezone(BRUSSEL).date().isoformat()
     if not start and a["geannuleerd"]:
         # een annulering zonder datum: niet te zeggen welke afspraak, dus een open punt, nooit stil (Codex A03)
@@ -782,6 +795,8 @@ def _zorg_status(a, items, nu, vorig_google=""):
     if len(kand) > 1 and not eigen:
         # twee kandidaten op hetzelfde uur: niet raden welke het is (Codex A02)
         return {"status": "zorg_open", "google": "", "detail": f"{len(kand)} afspraken op dat uur, niet eenduidig te koppelen"}
+    if not kand and conflict and not (merk or vorig):
+        return {"status": "zorg_open", "google": "", "detail": "op dat uur staat een zorgafspraak van een andere afspraak of uitnodiging: welke is het?"}
     if not kand and zwak and not (merk or vorig):
         # alleen een algemeen zorgwoord op dat uur: misschien deze afspraak, misschien die van iemand anders. Geen tweede
         # blok en geen stille koppeling, maar een vraag (Codex A02, ronde 3)

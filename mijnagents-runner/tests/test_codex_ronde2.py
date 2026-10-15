@@ -269,7 +269,8 @@ _rb = {r["sleutel"].split(":")[1]: r["tijd"][11:16] for r in W.belrooster([_A, _
 check("A14 een rit van een andere afspraak bepaalt het beltijdstip niet", _rb.get("A") == "08:25" and _rb.get("B") != "08:25", str(_rb))
 _rb = {r["sleutel"].split(":")[1]: r["tijd"][11:16] for r in W.belrooster([_A, _B, _ritA, _ritB], _d.date().isoformat())}
 check("A14 met de eigen rit van B: vijf minuten voor het vertrek van die rit", _rb.get("B") == "10:10", str(_rb))
-check("A14 het belrooster komt uit een lezing na de ritten", "rooster = belrooster(_voor_rooster, vandaag)" in _bron)
+check("A14 het belrooster komt uit een lezing na de ritten (rooster_maken leest opnieuw)",
+      "rooster = rooster_maken(" in _bron and "ruw, arch = afspraken(-1, 8), archief_afspraken(-1, 8)" in _bron)
 _pr = W.belrooster([{**afspraak("P", "[PR] Proefconsult"), "kalender": "mehdipriveagena@gmail.com", "locatie": "Proefstraat 1, 3000 Leuven"}],
                    _later.date().isoformat())
 check("A25 een privé-afspraak staat zonder titel in het belrooster (dat gaat naar Dropbox)",

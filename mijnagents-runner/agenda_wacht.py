@@ -2566,7 +2566,11 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
             kal, _, eid = a["google"].partition("|")
             x = per_id.get((kal, eid))
             hist = (z.get("historie") or [])
-            if x and hist and hist[-1].get("naar") == a["start"] and not x.get("hele_dag"):
+            if x and MA._ander_zorgitem(x, a):
+                # het item draagt intussen het merk of de uitnodiging van een andere afspraak: nooit wijzigen (A02, ronde 5)
+                st["open"] += 1
+                st["prive"].append(f"{wat}: het item op het oude uur hoort bij een andere afspraak, niets verzet; open punt")
+            elif x and hist and hist[-1].get("naar") == a["start"] and not x.get("hele_dag"):
                 einde = a.get("einde")
                 notitie = ""
                 if not einde:
@@ -2777,8 +2781,9 @@ def reistijd_zetten(items, alleen_dag=None):
             _li = lees_titel(a["titel"])
             if "T" in a.get("start", "") and not _li["reistijd"] and (_li["buiten"] or _li["soort"] in BUITEN_SOORTEN) \
                     and not _voorbij(a["start"], nu) and (not alleen_dag or a["start"][:10] == alleen_dag) \
-                    and not any(rit_hoort_bij(x, a["titel"], "voor") for x in reistijden):
-                # alleen de gevraagde dag, en niet als er al een rit staat (Codex A11, ronde 4)
+                    and not any(x.get("kalender") == a.get("kalender") and (x.get("start") or "")[:10] == a["start"][:10]
+                                and rit_hoort_bij(x, a["titel"], "voor") for x in reistijden):
+                # alleen de gevraagde dag, en niet als er die dag op dezelfde agenda al een rit staat (Codex A11, ronde 4 en 5)
                 regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen rit, grendelbron niet te lezen")
             continue
         # Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit voor
@@ -3421,11 +3426,34 @@ def belrooster(items, vandaag):
 ROOSTER_ONZEKER = 0      # oproepen uit het vorige rooster die niet te verifiëren waren en dus wegvielen (Codex A15)
 
 
+def _regel_delen(r):
+    """(agenda, id, begin) uit de sleutel van een roosterregel (agenda:id:begin)."""
+    delen = (r.get("sleutel") or "").split(":", 2)
+    return tuple(delen) if len(delen) == 3 else ("", "", "")
+
+
+def _nakijken(regels, tok=None):
+    """Houdt alleen de roosterregels waarvan het item er nog zo staat (events.get): niet geschrapt en op hetzelfde begin.
+    Niet te lezen telt als weg: De Bode belt nooit op basis van een regel die niet nagekeken is (Codex A15). Geeft
+    (goede regels, aantal weggevallen)."""
+    goed, weg = [], 0
+    for r in regels:
+        kal, eid, begin = _regel_delen(r)
+        try:
+            ev = _event({"kalender": kal, "id": eid}, tok or agenda._toegang())
+            klopt = ev.get("status") != "cancelled" and _zelfde_tijd((ev.get("start") or {}).get("dateTime"), begin)
+        except Exception:  # noqa: BLE001
+            klopt = False
+        if klopt:
+            goed.append(r)
+        else:
+            weg += 1
+    return goed, weg
+
+
 def _rooster_behouden(nieuw, onvolledig, nu=None, tok=None):
     """De komende regels van het vorige belrooster voor de agenda's die deze ronde niet gelezen zijn ('archief' staat voor
-    de archiefagenda's). De sleutel van een regel is agenda:id:begin. Elke regel wordt eerst nagekeken tegen het item zelf:
-    geschrapt, verzet of niet te lezen valt weg (en telt in ROOSTER_ONZEKER), zodat De Bode nooit belt voor een afspraak
-    die er zo niet meer staat (Codex A15, ronde 4)."""
+    de archiefagenda's), elk nagekeken tegen het item zelf; wat wegvalt telt in ROOSTER_ONZEKER (Codex A15, ronde 3 en 4)."""
     global ROOSTER_ONZEKER
     ROOSTER_ONZEKER = 0
     nu = nu or nu_lokaal()
@@ -3435,29 +3463,46 @@ def _rooster_behouden(nieuw, onvolledig, nu=None, tok=None):
     except (OSError, ValueError, AttributeError):
         return []
     al = {r.get("sleutel") for r in nieuw}
-    uit = []
+    kandidaten = []
     for r in oud:
-        kal = (r.get("sleutel") or "").split(":")[0]
+        kal = _regel_delen(r)[0]
         try:
             t = datetime.fromisoformat(r["tijd"])
         except (KeyError, TypeError, ValueError):
             continue
         if r.get("sleutel") in al or t.tzinfo is None or t < nu - timedelta(minutes=bellen.VENSTER_MIN):
             continue
-        if not (kal in onvolledig or ("archief" in onvolledig and kal not in KALENDERS)):
-            continue
-        delen = (r.get("sleutel") or "").split(":", 2)
-        eid, begin = (delen[1], delen[2]) if len(delen) == 3 else ("", "")
-        try:
-            ev = _event({"kalender": kal, "id": eid}, tok or agenda._toegang())
-            klopt = ev.get("status") != "cancelled" and _zelfde_tijd((ev.get("start") or {}).get("dateTime"), begin)
-        except Exception:  # noqa: BLE001
-            klopt = False
-        if klopt:
-            uit.append(r)
-        else:
-            ROOSTER_ONZEKER += 1
-    return uit
+        if kal in onvolledig or ("archief" in onvolledig and kal not in KALENDERS):
+            kandidaten.append(r)
+    goed, ROOSTER_ONZEKER = _nakijken(kandidaten, tok)
+    return goed
+
+
+def rooster_maken(items, archief, vandaag, noden, tok=None):
+    """Het belrooster, uit een lezing NA de ritten: een nieuwe rit bepaalt het vertrek (Codex A14). Lukt die tweede lezing
+    niet helemaal, dan de lezing van het begin van de ronde; de regels van de agenda's die de tweede keer faalden, worden dan
+    eerst nagekeken tegen het item zelf (Codex A15, ronde 5: een intussen geschrapte afspraak hield zo haar oproep). Een
+    agenda die al bij het begin niet gelezen was, houdt haar nagekeken regels uit het vorige rooster (ronde 3 en 4)."""
+    try:
+        ruw, arch = afspraken(-1, 8), archief_afspraken(-1, 8)
+        stuk = {x["kalender"] for x in ruw if x.get("fout")} | ({"archief"} if ARCHIEF_FOUT else set())
+        voor = (items + archief) if stuk else [x for x in ruw if not x.get("fout")] + arch
+    except Exception:  # noqa: BLE001
+        voor, stuk = items + archief, {"*"}
+    rooster = belrooster(voor, vandaag)
+    weg = 0
+    if stuk:
+        te_kijken = [r for r in rooster if "*" in stuk or _regel_delen(r)[0] in stuk
+                     or ("archief" in stuk and _regel_delen(r)[0] not in KALENDERS)]
+        goed, weg = _nakijken(te_kijken, tok)
+        rooster = [r for r in rooster if r not in te_kijken] + goed
+        if ONGELEZEN:
+            rooster += _rooster_behouden(rooster, set(ONGELEZEN), tok=tok)
+            weg += ROOSTER_ONZEKER
+    if weg:
+        noden.append({"tekst": f"{weg} oproep(en) vielen weg: de agenda was niet volledig te lezen en de afspraak kon niet "
+                               "nagekeken worden (verzet, geschrapt of onleesbaar); kijk ze zelf na", "wie": "mehdi"})
+    return sorted(rooster, key=lambda r: r["tijd"])
 
 
 def onbevestigd_voorbij(items, vandaag):
@@ -4276,26 +4321,7 @@ def main():
             elif "rijtijd niet berekend" in regel:
                 zonder_rit["rijtijd niet berekend"].append(regel[:110])
 
-        # Het belrooster komt uit een lezing NA de ritten: een nieuwe rit bepaalt het vertrek (Codex A14). Lukt die
-        # lezing niet volledig, dan de lezing van het begin van de ronde, nooit een halve.
-        _onvolledig = set()
-        try:
-            _ruw_na = afspraken(-1, 8)
-            _arch_na = archief_afspraken(-1, 8)
-            if any(x.get("fout") for x in _ruw_na) or ARCHIEF_FOUT:
-                _voor_rooster, _onvolledig = items + archief, set(ONGELEZEN)
-            else:
-                _voor_rooster = [x for x in _ruw_na if not x.get("fout")] + _arch_na
-        except Exception:  # noqa: BLE001
-            _voor_rooster, _onvolledig = items + archief, set(ONGELEZEN)
-        rooster = belrooster(_voor_rooster, vandaag)
-        if _onvolledig:
-            # een agenda die niet gelezen is: haar komende oproepen uit het vorige rooster blijven staan, anders belt De Bode
-            # niet voor die afspraken (Codex A15, ronde 3)
-            rooster = sorted(rooster + _rooster_behouden(rooster, _onvolledig), key=lambda r: r["tijd"])
-            if ROOSTER_ONZEKER:
-                mail_noden.append({"tekst": f"{ROOSTER_ONZEKER} oproep(en) van een agenda die niet gelezen is, vielen weg: de afspraak "
-                                            "kon niet nagekeken worden (verzet, geschrapt of onleesbaar); kijk ze zelf na", "wie": "mehdi"})
+        rooster = rooster_maken(items, archief, vandaag, mail_noden)
         bellen.rooster_schrijven(rooster)
         ag.log(f"dag {vandaag}", "schrijf", f"belrooster: {len(rooster)} oproepen gepland (een oproep per afspraak: online {BEL_ONLINE_MIN} min vooraf, buiten {BEL_ONLINE_MIN} min voor het vertrek)",
                "\n".join(f"{r['tijd'][:16]} bel: {r['titel']}" for r in rooster[:60]))

@@ -119,7 +119,36 @@ for naam, ev in (("geschrapt", lambda a, tok: {"status": "cancelled", "start": {
         _beh = veilig(lambda: W._rooster_behouden([], {"ongelezen@agenda.test"}))
     check(f"A15 ronde 4: een behouden oproep voor een afspraak die {naam} is, valt weg en telt als onzeker",
           _beh == [] and getattr(W, "ROOSTER_ONZEKER", 0) == 1, f"{_beh} {getattr(W, 'ROOSTER_ONZEKER', None)}")
-check("A15 de ronde vult het rooster aan bij een onvolledige lezing", "_rooster_behouden(rooster, _onvolledig)" in _bron)
+# A15 en A29 (ronde 5): het belrooster van de ronde, als gedrag in plaats van tekst
+_A15 = afspraak("A15", "Mehdi: [HA-PO] Jan Proef")
+_kijk = []
+
+
+def _rm(tweede, ev):
+    _kijk.clear()
+    noden = []
+    W.ONGELEZEN.clear()
+    W.ARCHIEF_FOUT = ""
+
+    def _ev(a, tok):
+        _kijk.append(a["id"])
+        return ev(a)
+    with vervang((W, "afspraken", lambda v, t: list(tweede)), (W, "archief_afspraken", lambda v, t: []), (W, "_event", _ev),
+                 (W.agenda, "_toegang", lambda: "t")):
+        r = veilig(lambda: W.rooster_maken([dict(_A15)], [], W.nu_lokaal().date().isoformat(), noden))
+    return r, noden
+
+
+_r, _n = _rm([dict(_A15)], lambda a: {"status": "confirmed", "start": {"dateTime": _A15["start"]}})
+check("A15 ronde 5: de tweede lezing lukt: het rooster komt eruit, zonder nakijken", isinstance(_r, list)
+      and [x["sleutel"].split(":")[1] for x in _r] == ["A15"] and _kijk == [] and _n == [], f"{_r} {_kijk} {_n}")
+_r, _n = _rm([{"kalender": W.WERKAGENDA, "fout": "HTTP 503"}], lambda a: {"status": "cancelled", "start": {"dateTime": _A15["start"]}})
+check("A15 ronde 5: de tweede lezing faalt en de afspraak is intussen geschrapt: geen oproep, wel een nood",
+      isinstance(_r, list) and _r == [] and _kijk == ["A15"] and any("vielen weg" in n["tekst"] for n in _n), f"{_r} {_kijk} {_n}")
+_r, _n = _rm([{"kalender": W.WERKAGENDA, "fout": "HTTP 503"}], lambda a: {"status": "confirmed", "start": {"dateTime": _A15["start"]}})
+check("A15 ronde 5: de tweede lezing faalt maar de afspraak staat er nog zo: de oproep blijft",
+      isinstance(_r, list) and [x["sleutel"].split(":")[1] for x in _r] == ["A15"] and _n == [], f"{_r} {_n}")
+check("A15 de ronde schrijft het rooster uit rooster_maken", "rooster = rooster_maken(items, archief, vandaag, mail_noden)" in _bron)
 
 # A20: een jaartal is geen projectnummer
 check("A20 'Project 2615 overleg 2026' koppelt niet aan 'Project 2614 overleg 2026'; hetzelfde nummer wel",
@@ -199,6 +228,16 @@ with redirect_stdout(_zo), vervang((W, "afspraken", lambda v, t: [afspraak("pz",
     veilig(lambda: Z.main())
 check("A25 ronde 4: de zelfcontrole drukt ook de tekst van een privé-bevinding niet af", "Proefconsult" not in _zo.getvalue(),
       _zo.getvalue()[-200:])
+
+# A11 (ronde 5): een rit met dezelfde titel op een andere agenda onderdrukt de melding niet
+_rit_ander = {**_rit10, "id": "r11", "kalender": "andere@agenda.test"}
+with vervang((W, "geen_auto_dagen", lambda: None), (W, "lara_vakantiedagen", lambda: frozenset()), (W, "_cache_laden", lambda: {}),
+             (W, "_cache_bewaren", lambda c: None), (W, "coord", lambda *a, **k: (50.88, 4.70)), (W.projectadressen, "index", lambda: {}),
+             (W, "_insert", lambda *a, **k: {}), (W, "_patch", lambda *a, **k: None), (W.agenda, "_toegang", lambda: "t"),
+             (W, "_eigen_rit_weg", lambda *a: False), (W, "_verplaats", lambda *a: None)):
+    _r11c = veilig(lambda: W.reistijd_zetten([dict(_b11), dict(_rit_ander)]))
+check("A11 ronde 5: een rit met dezelfde titel op een andere agenda onderdrukt de melding 'geen rit' niet",
+      isinstance(_r11c, tuple) and any("grendelbron niet te lezen" in x and "2601" in x for x in _r11c[4]), str(_r11c)[:300])
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

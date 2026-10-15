@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.35",
+ "versie": "3.36",
  "datum": "15-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -354,7 +354,11 @@
     "FR-169",
     "FR-170",
     "FR-171",
-    "FR-172"
+    "FR-172",
+    "FR-173",
+    "FR-174",
+    "FR-175",
+    "FR-176"
    ]
   }
  ],
@@ -3403,7 +3407,7 @@
    "grendel": {
     "soort": "test",
     "waar": "tests/test_codex_ronde2_bode.py",
-    "tekst": "A26 bewaarfout na de eerste oproep: geen tweede oproep in die ronde"
+    "tekst": "A26 een nieuwe ronde belt geen van beide opnieuw (belspoor)"
    },
    "controle": [],
    "status": "opgelost"
@@ -3512,6 +3516,78 @@
     "soort": "test",
     "waar": "tests/test_codex_ronde3.py",
     "tekst": "A10 ronde 4: een rit op agenda A hoort niet bij een afspraak met dezelfde titel op agenda B"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-173",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 5 (A02, A35), nagemeten door Claude",
+   "fout": "Een oude verwijzing van zorgafspraak A die intussen naar een item met het merk van B wees, gaf 'afwijkend' en verzette B; een zorgitem met een andere externe uitnodiging viel uit de kandidaten, zodat de mail 'ontbreekt' werd en er een tweede blok kwam.",
+   "gevolg": "Het blok van een andere afspraak verzet, of een dubbel blok.",
+   "waarom_niet_gezien": "De herstelling van ronde 4 dekte het hoofdgeval, niet deze rand.",
+   "oorzaak": "Alleen de nieuwe kandidaten werden op merk en UID getoetst, en een conflict telde als niets.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een oude verwijzing telt alleen zonder ander merk of andere externe UID, en de zorgstap wijzigt zo'n item nooit; een conflict op hetzelfde uur is een open punt.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "A35 een zorgitem met een andere externe uitnodiging op hetzelfde uur: een open punt, niet 'ontbreekt'"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-174",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 5 (A15, A29), nagemeten door Claude",
+   "fout": "Lukte de eerste agendalezing en faalde de tweede, dan schreef de agent het rooster uit de eerste lezing zonder nakijken; de proef zocht tekst in main.",
+   "gevolg": "Een oproep voor een afspraak die intussen geschrapt was.",
+   "waarom_niet_gezien": "De herstelling van ronde 4 dekte het hoofdgeval, niet deze rand.",
+   "oorzaak": "Het nakijken gold alleen voor behouden regels uit het vorige rooster.",
+   "soort_oorzaak": "code",
+   "oplossing": "rooster_maken: de regels van elke agenda die in de tweede lezing faalde, worden nagekeken tegen het item; de proef draait het echte pad.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde3.py",
+    "tekst": "A15 ronde 5: de tweede lezing faalt en de afspraak is intussen geschrapt: geen oproep, wel een nood"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-175",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 5 (A26), nagemeten door Claude",
+   "fout": "Bij een onzekere poging en een blijvende bewaarfout kwam de poging niet in het spoor; elke ronde probeerde dezelfde eerste afspraak en stopte, zodat een tweede afspraak buiten haar venster viel.",
+   "gevolg": "Een gemiste oproep achter een kapotte stand.",
+   "waarom_niet_gezien": "De herstelling van ronde 4 dekte het hoofdgeval, niet deze rand.",
+   "oorzaak": "Het spoor hield alleen afgehandelde oproepen bij, en elke bewaarfout stopte de ronde.",
+   "soort_oorzaak": "code",
+   "oplossing": "Ook mislukte en onzekere pogingen komen met hun nummer in het spoor; staat het spoor veilig, dan gaan de andere oproepen door en is de kapotte stand een nood; alleen zonder veilig spoor stopt de ronde.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A26 ronde 5: de tweede ronde kent de pogingen uit het spoor en probeert beide afspraken (niemand verhongert)"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-176",
+   "datum": "15-10-2026",
+   "gevonden_door": "Codex-controle ronde 5 (A34, A11), nagemeten door Claude",
+   "fout": "Na verlies van de stand werd ook een zojuist binnengekomen alarm niet gebeld en daarna nooit meer; een rit met dezelfde titel op een andere agenda onderdrukte de melding 'geen rit'.",
+   "gevolg": "Een gemist alarm; een gemiste melding.",
+   "waarom_niet_gezien": "De herstelling van ronde 4 dekte het hoofdgeval, niet deze rand.",
+   "oorzaak": "Geen duurzaam spoor voor alarmen; de ritcontrole keek niet naar agenda en dag.",
+   "soort_oorzaak": "code",
+   "oplossing": "Alarmoproepen komen in het belspoor ('alarm:<id>'); zonder stand wordt een alarm van het laatste halfuur dat niet in het spoor staat gebeld, een ouder gemeld; de ritcontrole eist dezelfde agenda en dag.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A34 zonder stand: een recent alarm dat nog niet in het spoor staat, wordt gebeld"
    },
    "controle": [],
    "status": "opgelost"

@@ -414,7 +414,7 @@ check("A02 ronde 3: een afspraak van Lara ([LA]) op dat uur is nooit die van Meh
 check("A02 ronde 4: een item met het merk van een andere zorgafspraak koppelt niet, ook met de praktijknaam",
       _r3s([{"kalender": W.PRIVE_AGENDA, "id": "g4", "titel": "Kine - An Proef", "start": _t3, "_merk": {MA.ZORGMERK: "zorg|ander|x"}}]) != "gekoppeld")
 check("A02 ronde 4: een andere externe uitnodigings-ID is een andere afspraak; een eigen Google-item niet",
-      MA._zorgachtig({"titel": "Kine - An Proef", "_icaluid": "uid-ander@extern.test"}, {"sleutel": "s", "ics_uid": "uid-1@extern.test"}, {}, KINE) == 0
+      MA._zorgachtig({"titel": "Kine - An Proef", "_icaluid": "uid-ander@extern.test"}, {"sleutel": "s", "ics_uid": "uid-1@extern.test"}, {}, KINE) < 1
       and MA._zorgachtig({"titel": "Kine - An Proef", "_icaluid": "abc@google.com"}, {"sleutel": "s", "ics_uid": "uid-1@extern.test"}, {}, KINE) == 2)
 
 # Ronde 4 (Codex A01): twee mails zonder leesbare patiënt op hetzelfde uur worden elk een eigen open punt
@@ -428,6 +428,21 @@ _fouten4 = _ronde_met([_bev4] + _onb)[1]
 _rijen4 = [a for a in MA.alle() if a["soort"] == "zorg" and a["start"].startswith("2026-12-23T09:00")]
 check("A01 ronde 4: twee mails zonder leesbare patiënt op hetzelfde uur: elk een eigen rij, geen fout",
       len(_rijen4) == 3 and not any("niet verwerkt" in f.get("fout", "") for f in _fouten4), f"{len(_rijen4)} {_fouten4}")
+
+# Ronde 5 (Codex A02): een oude verwijzing die nu naar een item van een andere afspraak wijst, telt niet
+_a5 = dict(_r3[0]) if _r3 else {}
+if _a5:
+    _a5["google"] = f"{W.PRIVE_AGENDA}|g5"
+    _v5 = MA.vergelijk([_a5], [{"kalender": W.PRIVE_AGENDA, "id": "g5", "titel": "Kine - An Proef", "start": "2026-12-16T11:00:00+01:00",
+                                "_merk": {MA.ZORGMERK: "zorg|ander|y"}}], nu)[0]
+check("A02 ronde 5: een oude verwijzing naar een item met een ander zorgmerk geeft geen 'afwijkend' (niets verzetten)",
+      bool(_a5) and _v5["status"] != "afwijkend", str(_v5.get("status") if _a5 else "geen rij"))
+
+# Ronde 5 (Codex A35): een zorgitem op hetzelfde uur met een andere uitnodiging is een conflict, geen tweede blok
+_a35 = {**_r3[0], "ics_uid": "uid-1@extern.test", "einde": "2026-12-16T09:30:00+01:00", "google": ""} if _r3 else {}
+_s35 = MA.vergelijk([_a35], [{"kalender": W.PRIVE_AGENDA, "id": "g6", "titel": "Kine - An Proef", "start": _t3,
+                              "_icaluid": "andere@extern.test"}], nu)[0]["status"] if _a35 else "geen rij"
+check("A35 een zorgitem met een andere externe uitnodiging op hetzelfde uur: een open punt, niet 'ontbreekt'", _s35 == "zorg_open", _s35)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
