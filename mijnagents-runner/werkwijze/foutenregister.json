@@ -1126,7 +1126,7 @@
    "id": "FR-42",
    "datum": "24-09-2026",
    "gevonden_door": "Mehdi",
-   "fout": "De ritten naar de kine van 23-09 stonden rood op de werkagenda, de kine zelf zwart op privé.",
+   "fout": "De ritten naar een privé-afspraak van 23-09 stonden rood op de werkagenda, de afspraak zelf zwart op privé.",
    "gevolg": "De kleur van de rit en die van de afspraak kwamen niet overeen; collega's zagen de rit.",
    "waarom_niet_gezien": "Claude verhuisde op 23-09 de afspraak naar privé en liet de ritten staan. De regel 'rit verhuist mee' (FR-28) werkt alleen vooruit.",
    "oorzaak": "Een handeling van Claude die de helft deed.",
