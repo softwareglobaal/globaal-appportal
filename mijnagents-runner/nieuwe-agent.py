@@ -32,6 +32,7 @@ Zonder --naam vraagt hij alles interactief op. Het token komt uit
 import argparse
 import os
 import re
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -130,28 +131,41 @@ def stand_op_bord(naam):
     return "bestaat" if tekst.strip() else "onaf"
 
 
+def _lees(pad):
+    try:
+        with open(pad, encoding="utf-8") as f:
+            return f.read()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 def herstel(naam, pad=None, werkwijze=None):
     """Hoe je de werkwijze op een kaart zonder (de juiste) werkwijze zet: een handeling, na nakijken van die
-    kaart. Codex NA26: het zaad in werkwijze/ is niet vanzelf de tekst die net is goedgekeurd; wijkt het af,
-    dan eerst de goedgekeurde tekst erin, anders zet --zet oude regels."""
+    kaart. Alleen de tekst die deze generator net goedkeurde, mag op het bord. Codex NA26: het zaad in
+    werkwijze/ is niet vanzelf die tekst; wijkt het af, dan eerst de goedgekeurde tekst erin. Codex NA30: is de
+    bron intussen veranderd, dan geen herstel, maar opnieuw controleren (hetzelfde commando; het hervat nooit)."""
     try:
         op_bord = bord.Agent(naam).werkwijze_lezen().strip()
         print(f"Op het bord staat nu: {f'een werkwijze van {len(op_bord)} tekens' if op_bord else 'geen werkwijze'}.")
     except bord.WerkwijzeOnbekend as e:
         print(f"Wat er nu op het bord staat, is onbekend ({e}).")
     zaad = os.path.join(RUNNERMAP, "werkwijze", f"{naam}.md")
-    try:
-        with open(zaad, encoding="utf-8") as f:
-            zaad_tekst = f.read()
-    except OSError:
-        zaad_tekst = None
+    if werkwijze is None or not pad:
+        print("Zet de werkwijze pas als ze door de generator gecontroleerd is: draai hem met --werkwijze <bestand>.")
+        print("Is het de kaart van een andere agent, kies dan een andere naam.")
+        return
+    bron = os.path.abspath(os.path.expanduser(pad))
+    bron_nu = _lees(bron)
+    if bron_nu is None or bron_nu.strip() != werkwijze.strip():
+        print(f"De werkwijze in {bron} is veranderd sinds de controle. Geen herstel met een tekst die niemand nakeek:")
+        print("draai hetzelfde commando opnieuw; het controleert de nieuwe tekst en zegt dan hoe je ze zet.")
+        return
     print("Is dat de kaart van deze aanmaak, zet de werkwijze dan zelf, na het verschil te bekijken:")
-    if werkwijze is not None and (zaad_tekst is None or zaad_tekst.strip() != werkwijze.strip()):
+    zaad_tekst = _lees(zaad)
+    if os.path.realpath(bron) != os.path.realpath(zaad) and (zaad_tekst is None or zaad_tekst.strip() != werkwijze.strip()):
         if zaad_tekst is not None:
             print(f"  LET OP: {zaad} is niet de werkwijze die je meegaf; zonder de stap hieronder zet --zet die tekst.")
-        print(f"  cp '{os.path.abspath(os.path.expanduser(pad or '<jouw werkwijze>.md'))}' '{zaad}'")
-    elif werkwijze is None and zaad_tekst is None:
-        print(f"  cp <jouw werkwijze>.md '{zaad}'")
+        print(f"  cp {shlex.quote(bron)} {shlex.quote(zaad)}")
     print(f"  {VENV} {os.path.join(HIER, 'werkwijze_naar_bord.py')} {naam}          (toont het verschil)")
     print(f"  {VENV} {os.path.join(HIER, 'werkwijze_naar_bord.py')} {naam} --zet    (zet de werkwijze)")
     print("Is het de kaart van een andere agent, kies dan een andere naam.")

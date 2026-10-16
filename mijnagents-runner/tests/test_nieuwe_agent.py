@@ -71,10 +71,11 @@ class Antwoord:
 class NepBord:
     """Wat er op het bord staat, en elke oproep die binnenkwam."""
 
-    def __init__(self, agents=None, faal_werkwijze_zetten=False):
+    def __init__(self, agents=None, faal_werkwijze_zetten=False, bij_falen=None):
         self.agents = agents or {}          # naam -> {"kaart": dict, "werkwijze": str}
         self.oproepen = []
         self.faal_werkwijze_zetten = faal_werkwijze_zetten
+        self.bij_falen = bij_falen          # gebeurt net voor het zetten van de werkwijze faalt
 
     def urlopen(self, req, timeout=None):
         pad = urllib.parse.urlsplit(req.full_url).path
@@ -95,6 +96,8 @@ class NepBord:
                 return Antwoord({"naam": naam, "werkwijze": self.agents[naam]["werkwijze"]})
             if self.faal_werkwijze_zetten:
                 self.faal_werkwijze_zetten = False
+                if self.bij_falen:
+                    self.bij_falen()
                 raise urllib.error.URLError("verbinding verbroken")
             if self.agents[naam]["werkwijze"].strip() and not data.get("overschrijf"):
                 return Antwoord({"ok": False, "reden": "werkwijze bestaat al op het bord; niet overschreven"})
@@ -249,9 +252,70 @@ def test_herstel_zet_nooit_een_ander_zaad_dan_de_goedgekeurde_tekst():
         assert code not in (0, None)
         uit = p.uitvoer
         assert "is niet de werkwijze die je meegaf" in uit, uit
-        cp = uit.index(f"cp '{p.ww}' '{zaad}'")
-        assert cp < uit.index("werkwijze_naar_bord.py post-wacht --zet"), "eerst de goedgekeurde tekst in het zaad, dan zetten"
+        import shlex
+        regels = uit.splitlines()
+        cp = next(i for i, r in enumerate(regels) if r.strip().startswith("cp "))
+        assert shlex.split(regels[cp]) == ["cp", p.ww, zaad], regels[cp]
+        zet = next(i for i, r in enumerate(regels) if "werkwijze_naar_bord.py post-wacht --zet" in r)
+        assert cp < zet, "eerst de goedgekeurde tekst in het zaad, dan zetten"
         assert "geen werkwijze" in uit, "het herstel toont wat er nu op het bord staat"
+    finally:
+        p.weg()
+
+
+def _zaad_als_bron(p):
+    """De gedocumenteerde aanroep: --werkwijze werkwijze/<naam>.md, dus bron en zaad zijn hetzelfde bestand."""
+    os.makedirs(os.path.join(p.map, "werkwijze"), exist_ok=True)
+    zaad = os.path.join(p.map, "werkwijze", "post-wacht.md")
+    shutil.copy(p.ww, zaad)
+    return zaad
+
+
+def test_herstel_met_het_zaad_als_bron_kopieert_niets():
+    nb = NepBord(faal_werkwijze_zetten=True)
+    p = Proef(nb)
+    try:
+        zaad = _zaad_als_bron(p)
+        code = p.draai(*KAART, "--werkwijze", zaad)
+        assert code not in (0, None)
+        assert "cp " not in p.uitvoer, "een bestand naar zichzelf kopieren is geen herstel"
+        assert "werkwijze_naar_bord.py post-wacht --zet" in p.uitvoer, p.uitvoer
+    finally:
+        p.weg()
+
+
+def test_herstel_zet_geen_tekst_die_na_de_controle_veranderde():
+    """Codex NA30: verandert de bron na de controle (een andere sessie bewerkt werkwijze/post-wacht.md), dan
+    geen --zet met die ongecontroleerde tekst, maar opnieuw controleren."""
+    p = Proef()
+    try:
+        zaad = _zaad_als_bron(p)
+
+        def bewerk():
+            with open(zaad, "a", encoding="utf-8") as f:
+                f.write("\n- en nog een regel die niemand nakeek\n")
+
+        p.bord.faal_werkwijze_zetten, p.bord.bij_falen = True, bewerk
+        code = p.draai(*KAART, "--werkwijze", zaad)
+        assert code not in (0, None)
+        assert "veranderd sinds de controle" in p.uitvoer, p.uitvoer
+        assert "--zet" not in p.uitvoer and "cp " not in p.uitvoer, p.uitvoer
+    finally:
+        p.weg()
+
+
+def test_herstel_quoteert_paden():
+    """Codex NA31: een apostrof in het pad brak het cp-commando."""
+    nb = NepBord(faal_werkwijze_zetten=True)
+    p = Proef(nb)
+    try:
+        bron = os.path.join(p.map, "Mehdi's post.md")
+        shutil.copy(p.ww, bron)
+        code = p.draai(*KAART, "--werkwijze", bron)
+        assert code not in (0, None)
+        regel = next(r for r in p.uitvoer.splitlines() if r.strip().startswith("cp "))
+        import shlex
+        assert shlex.split(regel) == ["cp", bron, os.path.join(p.map, "werkwijze", "post-wacht.md")], regel
     finally:
         p.weg()
 
