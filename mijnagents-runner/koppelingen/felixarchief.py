@@ -194,15 +194,17 @@ class Felix:
         """
         getal = str(_getal(nummer) or nummer)
         rijen = []
-        for pagina in range(1, MAX_PAGINAS + 1):  # alle pagina's, niet alleen de eerste honderd (Codex FX21)
+        for pagina in range(1, MAX_PAGINAS + 2):  # alle pagina's (FX21); een volle laatste pagina: de volgende beslist (FX24)
             j = self.reeks_zoeken(reeks, [_term("Huidige_Straatnaam", straat, "contains"),
                                           _term("Huidig_Huisnummer", getal, "contains")], pagina, PAGINA)
             items = j.get("items") or []
+            if pagina > MAX_PAGINAS:
+                if items:
+                    self.afgekapt.append(f"{straat} {nummer} ({werkgebied()['reeksen'].get(reeks, reeks)}): meer dan {MAX_PAGINAS * PAGINA} treffers")
+                break
             rijen += [r for r in (_rij(it, reeks) for it in items) if _zelfde_straat(r["straat"], straat)]
             if len(items) < PAGINA:
                 break
-        else:
-            self.afgekapt.append(f"{straat} {nummer} ({werkgebied()['reeksen'].get(reeks, reeks)}): meer dan {MAX_PAGINAS * PAGINA} treffers")
         return _markeer_district(rijen, districten)
 
     def dossier_zoeken(self, dossiernummer, punt=None):
@@ -251,14 +253,16 @@ class Felix:
         rijen = []
         termen = [_term("Dossiernummer", tekst, "contains")] + ([_term("Dossiernummer", extra, "contains")] if extra else [])
         for reeks in werkgebied()["reeksen"]:
-            for pagina in range(1, paginas + 1):
+            for pagina in range(1, paginas + 2):
                 j = self.reeks_zoeken(reeks, termen, pagina, 50)
                 items = j.get("items") or []
+                if pagina > paginas:  # een volle laatste pagina is pas afgekapt als er nog een volgende is (FX24)
+                    if items:
+                        self.afgekapt.append(f"dossiernummer {tekst}: meer dan {paginas * 50} treffers")
+                    break
                 rijen += [r for r in (_rij(it, reeks) for it in items) if past(r["dossiernummer"])]
                 if len(items) < 50:
                     break
-            else:
-                self.afgekapt.append(f"dossiernummer {tekst}: meer dan {paginas * 50} treffers")
         return rijen
 
     def bestanden(self, inventaris):

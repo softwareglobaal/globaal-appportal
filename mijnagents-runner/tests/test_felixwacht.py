@@ -142,8 +142,8 @@ class _NepPagina:
                 return "Perceel 11344A0430/00H014\nDossiernummer"
         return _L()
     def evaluate(self, script, *a, **k):
-        if ".length" in script:  # de wachtlus telt de gevulde rijen
-            return 1
+        if ".length" in script:  # de wachtlus telt de rijen van de vergunningentabel
+            return 1 if "table-checkbox" in script else 0
         return [["Selecteer rij", "bouwen van een appartementsgebouw", "19654625", "Stedenbouwkundige vergunningen", "Vergunning", ""]]
     def screenshot(self, **k):
         raise RuntimeError("Page.screenshot: Timeout 30000ms exceeded.")
@@ -249,6 +249,30 @@ check("een bevestigde weigering geldt voor het hele dossier, met het jaartal", _
 _zz = {"raak": [{"inventaris": "1#1", "status": "download"}], "onvolledig": []}
 FW._downloaden(_NepFelix2(None, []), _zz, tempfile.mkdtemp())
 check("een digitaal dossier zonder bestanden is onvolledig (Codex FX19)", _zz["onvolledig"] and _zz["downloads"][0]["mislukt"], _zz)
+
+
+
+class _NepFelix3(_NepFelix2):
+    """Eerst een tijdelijke 500, daarna lukt het: het eerste bestand verdient een herkansing (Codex FX23)."""
+    def __init__(self, bestanden):
+        super().__init__(None, bestanden)
+        self.pogingen = 0
+    def download(self, url, pad, grootte=None):
+        if url.endswith("1"):
+            self.pogingen += 1
+            if self.pogingen == 1:
+                raise FA.BestandFout(500)
+        self.gedownload.append(url)
+        return 10
+
+
+_nf = _NepFelix3(_b)
+_zz = {"raak": [{"inventaris": "1#1", "status": "na aanmelden"}], "onvolledig": []}
+FW._downloaden(_nf, _zz, tempfile.mkdtemp())
+check("een tijdelijke fout op het eerste bestand krijgt een herkansing (Codex FX23)", _nf.pogingen == 2
+      and len(_zz["downloads"][0]["bestanden"]) == 2 and not _zz["downloads"][0]["mislukt"], _zz["downloads"])
+check("de wachtlus van de percelenpas telt alleen de vergunningentabel (Codex FX22)",
+      "table-checkbox" in open(PP.__file__).read().split("rijen_klaar = ")[1][:200])
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

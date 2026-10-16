@@ -231,17 +231,23 @@ def _downloaden(felix, z, felixmap):
         vrij = felix.rechten(stukken[0]["url"]) if stukken else None
         if vrij is not None and not vrij["vrij"]:
             eerste = stukken[0]
-            try:
-                rij["bestanden"].append({"naam": eerste["naam"], "bytes": felix.download(
-                    eerste["url"], os.path.join(felixmap, r["inventaris"], eerste["map"], eerste["naam"]), eerste.get("grootte"))})
-                stukken = stukken[1:]  # FelixArchief gaf het toch: de rest gewoon proberen
-            except fa.Beschermd as e:  # alleen een bevestigde weigering geldt voor het hele dossier (Codex FX17)
-                rij["beschermd"] = [f["naam"] for f in stukken]
-                rij["reden"] = str(e)
+            beschermd = False
+            for poging in range(2):  # ook het eerste bestand krijgt een herkansing (Codex FX23)
+                try:
+                    rij["bestanden"].append({"naam": eerste["naam"], "bytes": felix.download(
+                        eerste["url"], os.path.join(felixmap, r["inventaris"], eerste["map"], eerste["naam"]), eerste.get("grootte"))})
+                    break
+                except fa.Beschermd as e:  # alleen een bevestigde weigering geldt voor het hele dossier (Codex FX17)
+                    rij["beschermd"] = [f["naam"] for f in stukken]
+                    rij["reden"] = str(e)
+                    beschermd = True
+                    break
+                except Exception as e:  # een gewone fout: na de herkansing mislukt dit bestand, de rest proberen we
+                    if poging == 1:
+                        rij["mislukt"].append(f"{eerste['naam']}: {str(e).splitlines()[0][:80]}")
+            if beschermd:
                 continue
-            except Exception as e:  # een gewone fout op het eerste bestand: dat bestand mislukt, de rest proberen we
-                rij["mislukt"].append(f"{eerste['naam']}: {str(e).splitlines()[0][:80]}")
-                stukken = stukken[1:]
+            stukken = stukken[1:]
         for f in stukken:
             pad = os.path.join(felixmap, r["inventaris"], f["map"], f["naam"])
             for poging in range(2):

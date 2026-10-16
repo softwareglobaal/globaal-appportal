@@ -96,8 +96,9 @@ def lees(ctx, lat, lon, adres, map_=None):
             for _ in range(45):
                 tekst = p.locator("body").inner_text()
                 m = re.search(r"\b\d{5}[A-Z]\d{4}/\d{2}[A-Z]\d{3}\b", tekst)
-                rijen_klaar = p.evaluate("""() => [...document.querySelectorAll('tr')].filter(tr =>
-                        [...tr.querySelectorAll('td')].some(c => /\\d{4,}/.test(c.innerText))).length""")
+                # Alleen rijen van de vergunningentabel tellen: die dragen een selectievakje table-checkbox<nr> (FX22).
+                rijen_klaar = p.evaluate("""() => document.querySelectorAll(
+                        'tr input[id^="table-checkbox"]:not(#table-checkbox-all)').length""")
                 if m and (rijen_klaar > 0 or "geen vergunningen" in tekst):  # gevulde rijen of de nulmelding (Codex FX18)
                     break
                 p.wait_for_timeout(2000)
@@ -105,7 +106,8 @@ def lees(ctx, lat, lon, adres, map_=None):
                 raise RuntimeError("perceel of tabel niet geladen na 90 seconden")
             p.wait_for_timeout(1500)
             uit["capakey"] = m.group()
-            for cellen in p.evaluate("""() => [...document.querySelectorAll('tr')].map(tr =>
+            for cellen in p.evaluate("""() => [...document.querySelectorAll('tr')].filter(tr =>
+                    tr.querySelector('input[id^="table-checkbox"]:not(#table-checkbox-all)')).map(tr =>
                     [...tr.querySelectorAll('td')].map(c => c.innerText.trim()))"""):
                 c = [x for x in cellen if x and x != "Selecteer rij"]
                 if len(c) >= 3:
