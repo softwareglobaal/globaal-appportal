@@ -15,7 +15,8 @@ import urllib.parse
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
 BASIS = "https://felixarchief.antwerpen.be"
-PAGINA = 100  # 500 per pagina gaf een 500-fout (03-10-2026), 100 loopt
+PAGINA = 100
+MAX_PAGINAS = 10  # 500 per pagina gaf een 500-fout (03-10-2026), 100 loopt
 WERKGEBIED = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "felix", "werkgebied.json")
 
 
@@ -106,6 +107,7 @@ class Felix:
 
     def __init__(self, headless=True):
         self.headless = headless
+        self.afgekapt = []  # zoekopdrachten die meer treffers hadden dan we lazen: maakt een zoektocht onvolledig
 
     def __enter__(self):
         from playwright.sync_api import sync_playwright
@@ -191,9 +193,16 @@ class Felix:
         meeneemt (185, 285) filtert raakt() eruit.
         """
         getal = str(_getal(nummer) or nummer)
-        j = self.reeks_zoeken(reeks, [_term("Huidige_Straatnaam", straat, "contains"),
-                                      _term("Huidig_Huisnummer", getal, "contains")], 1, PAGINA)
-        rijen = [r for r in (_rij(it, reeks) for it in j.get("items") or []) if _zelfde_straat(r["straat"], straat)]
+        rijen = []
+        for pagina in range(1, MAX_PAGINAS + 1):  # alle pagina's, niet alleen de eerste honderd (Codex FX21)
+            j = self.reeks_zoeken(reeks, [_term("Huidige_Straatnaam", straat, "contains"),
+                                          _term("Huidig_Huisnummer", getal, "contains")], pagina, PAGINA)
+            items = j.get("items") or []
+            rijen += [r for r in (_rij(it, reeks) for it in items) if _zelfde_straat(r["straat"], straat)]
+            if len(items) < PAGINA:
+                break
+        else:
+            self.afgekapt.append(f"{straat} {nummer} ({werkgebied()['reeksen'].get(reeks, reeks)}): meer dan {MAX_PAGINAS * PAGINA} treffers")
         return _markeer_district(rijen, districten)
 
     def dossier_zoeken(self, dossiernummer, punt=None):
@@ -215,7 +224,14 @@ class Felix:
                      "aanvraag": info["begin"], "omschrijving": "", "status": info["status"], "dossiernummer": ""}]
         rijen = self._dossiernummer_bevat(dossiernummer, lambda dn: re.search(
             rf"(^|\D){re.escape(dossiernummer)}(\D|$)", dn))
-        if rijen or not schrijfwijze_mogelijk(dossiernummer):
+        if rijen:
+            if punt:  # de stad koppelde dit nummer zelf aan het perceel; ligt het adres in FelixArchief ver weg, dan melden we dat
+                for r in rijen:
+                    r["afstand_m"] = _afstand_tot(f"{r['straat']} {r['nummer']}".strip(), punt)
+                    if r["afstand_m"] is not None and r["afstand_m"] > AFSTAND_MAX:
+                        r["let_op"] = f"adres in FelixArchief ({r['straat']} {r['nummer']}) ligt {r['afstand_m']} m van het perceel"
+            return rijen
+        if not schrijfwijze_mogelijk(dossiernummer):
             return rijen
         jaar, volg = dossiernummer[:4], dossiernummer[4:].lstrip("0")
         kandidaten = self._dossiernummer_bevat(volg, lambda dn: past_schrijfwijze(dn, jaar, volg), extra=jaar)
@@ -241,6 +257,8 @@ class Felix:
                 rijen += [r for r in (_rij(it, reeks) for it in items) if past(r["dossiernummer"])]
                 if len(items) < 50:
                     break
+            else:
+                self.afgekapt.append(f"dossiernummer {tekst}: meer dan {paginas * 50} treffers")
         return rijen
 
     def bestanden(self, inventaris):

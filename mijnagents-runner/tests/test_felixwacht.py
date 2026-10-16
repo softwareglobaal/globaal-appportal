@@ -141,7 +141,9 @@ class _NepPagina:
                     return "x\nBouwovertredingen\nEr zijn geen gekende bouwovertredingen voor dit perceel.\nVeelgestelde vragen"
                 return "Perceel 11344A0430/00H014\nDossiernummer"
         return _L()
-    def evaluate(self, *a, **k):
+    def evaluate(self, script, *a, **k):
+        if ".length" in script:  # de wachtlus telt de gevulde rijen
+            return 1
         return [["Selecteer rij", "bouwen van een appartementsgebouw", "19654625", "Stedenbouwkundige vergunningen", "Vergunning", ""]]
     def screenshot(self, **k):
         raise RuntimeError("Page.screenshot: Timeout 30000ms exceeded.")
@@ -214,6 +216,39 @@ except FA.Beschermd as e:
 except FA.BestandFout as e:
     _uit = "fout: " + str(e)
 check("een 500 bij een vrij dossier is een serverfout, niet 'beschermd' (Codex FX15)", _uit == "fout: 500", _uit)
+
+
+
+class _NepFelix2:
+    """Voor _downloaden: een dossier dat niet vrij is, met een gewone fout op het eerste bestand (Codex FX17)."""
+    def __init__(self, fout, bestanden):
+        self.fout, self.lijst, self.gedownload = fout, bestanden, []
+    def bestanden(self, inv):
+        return self.lijst
+    def rechten(self, url):
+        return {"vrij": False, "vrij_vanaf": "2091-01-01"}
+    def download(self, url, pad, grootte=None):
+        if self.fout and not self.gedownload and url.endswith("1"):
+            raise self.fout
+        self.gedownload.append(url)
+        return 10
+
+
+_b = [{"naam": "001.pdf", "map": "", "url": "/api/files/x?f=1", "grootte": 10},
+      {"naam": "002.pdf", "map": "", "url": "/api/files/x?f=2", "grootte": 10}]
+_zz = {"raak": [{"inventaris": "1#1", "status": "na aanmelden"}], "onvolledig": []}
+FW._downloaden(_NepFelix2(FA.BestandFout(500), _b), _zz, tempfile.mkdtemp())
+_d = _zz["downloads"][0]
+check("een gewone fout op het eerste bestand maakt niet alles 'beschermd' (Codex FX17)",
+      not _d["beschermd"] and len(_d["mislukt"]) == 1 and len(_d["bestanden"]) == 1, _d)
+_zz = {"raak": [{"inventaris": "1#1", "status": "na aanmelden"}], "onvolledig": []}
+FW._downloaden(_NepFelix2(FA.Beschermd("auteursrecht tot 2091"), _b), _zz, tempfile.mkdtemp())
+_d = _zz["downloads"][0]
+check("een bevestigde weigering geldt voor het hele dossier, met het jaartal", _d["beschermd"] == ["001.pdf", "002.pdf"]
+      and _d["reden"] == "auteursrecht tot 2091" and not _d["mislukt"], _d)
+_zz = {"raak": [{"inventaris": "1#1", "status": "download"}], "onvolledig": []}
+FW._downloaden(_NepFelix2(None, []), _zz, tempfile.mkdtemp())
+check("een digitaal dossier zonder bestanden is onvolledig (Codex FX19)", _zz["onvolledig"] and _zz["downloads"][0]["mislukt"], _zz)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

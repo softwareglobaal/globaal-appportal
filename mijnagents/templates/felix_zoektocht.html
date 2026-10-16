@@ -40,12 +40,13 @@
   <b>{{ z.opgeslagen.pad }}</b>.</p>
   {% if z.opgeslagen.fouten %}<p class="fout">Niet gelukt: {{ z.opgeslagen.fouten|join('; ') }}</p>{% endif %}
 {% elif z.opslaan_wacht %}<p class="let_op">Wordt opgeslagen. Dat gebeurt binnen 5 minuten; deze pagina ververst vanzelf.</p>
-{% elif z.project %}
+{% elif z.project and z.status in ['klaar', 'onvolledig'] %}
   <form method="post" action="{{ url_for('felix_opslaan', zid=z.id) }}">
     <button class="knop" type="submit">Opslaan in projectmap {{ z.project }}</button>
     <span class="stil">in een nieuwe map "FelixArchief {{ (z.klaar or '')[:10] }}"; er wordt niets overschreven</span>
   </form>
   {% if z.opslaan_fout %}<p class="fout">{{ z.opslaan_fout }}</p>{% endif %}
+{% elif z.project %}<p class="stil">Opslaan kan zodra de zoektocht klaar is (nu: {{ z.status }}).</p>
 {% else %}<p class="stil">Geen projectnummer bij deze zoektocht: opnieuw opzoeken met projectnummer om op te slaan.</p>{% endif %}
 
 <h2>Controle</h2>

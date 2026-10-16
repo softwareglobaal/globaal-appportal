@@ -96,7 +96,9 @@ def lees(ctx, lat, lon, adres, map_=None):
             for _ in range(45):
                 tekst = p.locator("body").inner_text()
                 m = re.search(r"\b\d{5}[A-Z]\d{4}/\d{2}[A-Z]\d{3}\b", tekst)
-                if m and ("Dossiernummer" in tekst or "geen vergunningen" in tekst):
+                rijen_klaar = p.evaluate("""() => [...document.querySelectorAll('tr')].filter(tr =>
+                        [...tr.querySelectorAll('td')].some(c => /\\d{4,}/.test(c.innerText))).length""")
+                if m and (rijen_klaar > 0 or "geen vergunningen" in tekst):  # gevulde rijen of de nulmelding (Codex FX18)
                     break
                 p.wait_for_timeout(2000)
             else:

@@ -160,6 +160,7 @@ def _controle_md(z):
     r += ["| Jaar | Dossier stad | Onderwerp | FelixArchief | Gedownload |", "|---|---|---|---|---|"]
     for x in z.get("rijen") or []:
         invs = ", ".join(d["inventaris"] + (f" ({d['straat']} {d['nummer']}, {d.get('afstand_m')} m)" if d.get("via") else "")
+                         + (" (let op: ander adres)" if d.get("let_op") else "")
                          for d in x["felix"]) or "niet in FelixArchief"
         digitaal = [d for d in x["felix"] if d["status"] != "leeszaal"]
         stukken = [dl.get(d["inventaris"]) for d in digitaal]
@@ -193,6 +194,9 @@ def _controle_md(z):
     if beschermd:
         r += ["", "Alleen online te bekijken na aanmelden (auteursrecht): " + ", ".join(
             f"[{i}]({fa.BASIS}/detailpagina?invnr={i.replace('#', '_')})" for i in beschermd)]
+    meldingen = [d["let_op"] for x in z.get("rijen") or [] for d in x["felix"] if d.get("let_op")]
+    if meldingen:
+        r += [""] + [f"Let op: {m}" for m in meldingen]
     if z.get("onvolledig"):
         r += [""] + [f"Let op: {f}" for f in z["onvolledig"]]
     if z.get("duur"):
@@ -219,6 +223,9 @@ def _downloaden(felix, z, felixmap):
             rij["mislukt"].append(f"lijst van bestanden: {str(e).splitlines()[0][:80]}")
             continue
         stukken = [f for f in lijst if not f["naam"].lower().endswith(".xml")]  # xml: een verwijzing, geen stuk
+        if not stukken:  # een digitaal dossier zonder bestanden is niet 'volledig' (Codex FX19)
+            rij["mislukt"].append("FelixArchief toont geen bestanden voor dit digitale dossier")
+            continue
         # Auteursrecht een keer per dossier vragen, niet per bestand (17-10-2026: 9 minuten voor Grotesteenweg 459).
         # Is het dossier niet vrij en weigert FelixArchief het eerste bestand, dan geldt dat voor alle bestanden.
         vrij = felix.rechten(stukken[0]["url"]) if stukken else None
@@ -228,10 +235,13 @@ def _downloaden(felix, z, felixmap):
                 rij["bestanden"].append({"naam": eerste["naam"], "bytes": felix.download(
                     eerste["url"], os.path.join(felixmap, r["inventaris"], eerste["map"], eerste["naam"]), eerste.get("grootte"))})
                 stukken = stukken[1:]  # FelixArchief gaf het toch: de rest gewoon proberen
-            except (fa.Beschermd, fa.BestandFout):
+            except fa.Beschermd as e:  # alleen een bevestigde weigering geldt voor het hele dossier (Codex FX17)
                 rij["beschermd"] = [f["naam"] for f in stukken]
-                rij["reden"] = f"auteursrecht tot {vrij['vrij_vanaf'][:4]}"
+                rij["reden"] = str(e)
                 continue
+            except Exception as e:  # een gewone fout op het eerste bestand: dat bestand mislukt, de rest proberen we
+                rij["mislukt"].append(f"{eerste['naam']}: {str(e).splitlines()[0][:80]}")
+                stukken = stukken[1:]
         for f in stukken:
             pad = os.path.join(felixmap, r["inventaris"], f["map"], f["naam"])
             for poging in range(2):
@@ -299,6 +309,8 @@ def voer_uit(adres, uitmap=None, project=None):
             z["duur"]["downloaden"] = round(time.time() - t1)
         if aanmelding:
             z["aanmelding"] = {k: aanmelding.get(k) for k in ("aangemeld", "erewoord", "fout") if k in aanmelding}
+        if felix.afgekapt:  # meer treffers dan gelezen: niet 'volledig' (Codex FX21)
+            z["onvolledig"] += [f"zoekopdracht afgekapt: {a}" for a in felix.afgekapt]
     z.setdefault("duur", {})["totaal"] = round(time.time() - t0)
     z["volledig"] = not z.get("onvolledig")
     os.makedirs(os.path.join(uitmap, "_gegevens"), exist_ok=True)  # voor de agent, niet om te lezen
@@ -443,6 +455,8 @@ def ronde():
             else:
                 logboek("opnieuw", id=a["id"], adres=item["adres"], poging=item["pogingen"])
             naam = f"{item['project']} {_veilig(item['adres'])}".strip()
+            if item["pogingen"] > 1:  # een herkansing schrijft in een eigen map: oud en nieuw bewijs mengen niet (FX20)
+                naam += f" (poging {item['pogingen']})"
             try:
                 pad, z = voer_uit(item["adres"], uitmap=os.path.join(ZOEKTOCHTEN, f"{a['id']} {naam}"),
                                   project=item["project"] or None)
