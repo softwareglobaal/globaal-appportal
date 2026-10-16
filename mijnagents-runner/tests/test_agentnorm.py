@@ -255,6 +255,7 @@ def test_na09_bordfout_stopt_de_ronde_zonder_getal_in_de_nood():
     nb = BordNabootsing(werkwijze=_http(502), open_noden=[])
     _gestopt(nb, "Werkwijze niet gelezen: bordfout", "claude-code")
     assert "HTTP 502" not in nb.statussen()[-1]["nood"][0]["tekst"]
+    assert "HTTP 502" in nb.statussen()[-1]["detail"], "de HTTP-code hoort wel in het detail (Codex NA18)"
 
 
 def test_na09_onleesbaar_antwoord_is_niet_leeg():
@@ -311,20 +312,81 @@ def test_ronde_die_halverwege_breekt_sluit_geen_open_noden():
     assert [n["tekst"] for n in laatste["nood"]] == ["Oude nood", "Nieuwe nood"], laatste["nood"]
 
 
-def test_verouderde_werkwijze_aanroep_blijft_werken_maar_zegt_het():
-    """agenda-wacht, archivaris, fathom-wacht en levenscoach roepen ag.werkwijze() nog rechtstreeks aan. Die
-    blijven draaien zoals voorheen, maar het cron-logboek zegt nu dat het regelboek niet gelezen is."""
-    nb = BordNabootsing(werkwijze=urllib.error.URLError("weg"))
+def _oude_runner(ag, gedaan):
+    """Zoals archivaris, fathom-wacht en levenscoach: hartslag, dan in een try de werkwijze lezen en werken;
+    bij een fout een fouthartslag en opnieuw opwerpen."""
+    ag.hartslag("actief", taak="oude ronde")
+    try:
+        regels = ag.werkwijze()
+        gedaan.append(regels)
+    except Exception as e:  # noqa: BLE001
+        ag.hartslag("fout", taak="ronde mislukt", detail=f"{type(e).__name__}: {str(e)[:120]}")
+        raise
+
+
+def test_na11_oude_runners_werken_niet_zonder_regelboek():
+    """Codex NA11: agenda-wacht, archivaris, fathom-wacht en levenscoach lezen hun werkwijze nog buiten de ronde
+    met ag.werkwijze(). Die gaf bij een leesfout een lege tekst, en de Archivaris labelde dan zonder Mehdi's
+    correcties. Nu stopt ook hun werk, met dezelfde nood en een fouthartslag."""
+    for werkwijze, nood, wie in ((urllib.error.URLError("weg"), "Werkwijze niet gelezen: bord onbereikbaar", "claude-code"),
+                                 (_http(404), "Werkwijze niet gelezen: agent staat niet op het bord", "claude-code"),
+                                 ("", "Werkwijze leeg op het bord", "mehdi")):
+        nb = BordNabootsing(werkwijze=werkwijze, open_noden=[])
+        echt, bord.call = bord.call, nb.call
+        gedaan = []
+        try:
+            try:
+                with redirect_stderr(io.StringIO()):
+                    _oude_runner(bord.Agent("proefagent"), gedaan)
+                gestopt = False
+            except bord.RondeGestopt:
+                gestopt = True
+        finally:
+            bord.call = echt
+        assert gestopt and not gedaan, f"de oude runner werkte door zonder regelboek: {gedaan!r}"
+        assert nb.statussen()[-1]["status"] == "fout"
+        met_nood = [s for s in nb.statussen() if s.get("nood")]
+        assert met_nood and {"tekst": nood, "wie": wie} in met_nood[-1]["nood"], nb.statussen()
+    nb = BordNabootsing(werkwijze="# Regels\n\nRegel een.")
     echt, bord.call = bord.call, nb.call
     try:
-        fout = io.StringIO()
-        with redirect_stderr(fout):
-            assert bord.Agent("proefagent").werkwijze() == ""
-        assert "werkwijze niet gelezen" in fout.getvalue() and "bord onbereikbaar" in fout.getvalue()
-        nb.werkwijze = "# Regels\n\nRegel een."
         assert bord.Agent("proefagent").werkwijze() == "# Regels\n\nRegel een."
     finally:
         bord.call = echt
+
+
+def test_na15_fout_in_de_startfase_blijft_niet_op_actief():
+    """Codex NA15: een fout na de hartslag 'actief' maar voor het werk (lessen.json met de verkeerde vorm,
+    een stuk collega-lijst) liet de agent op actief staan, want __exit__ draait dan niet."""
+    import json as _json
+    import types
+    nb = BordNabootsing()
+    echt_json = bord.json
+    bord.json = types.SimpleNamespace(loads=lambda s: [], dumps=_json.dumps)   # geldige JSON, verkeerde vorm
+    try:
+        r = ronde_met(nb)
+    finally:
+        bord.json = echt_json
+    assert r.lessen == [] and nb.statussen()[-1]["status"] in ("klaar", "waakt"), \
+        "een lessenboek met de verkeerde vorm hoort de ronde niet te breken (de Normwacht meldt N13)"
+
+    nb = BordNabootsing()
+    echt_tekst = bord.collega_tekst
+
+    def stuk(lijst):
+        raise ValueError("collega-lijst stuk")
+
+    bord.collega_tekst = stuk
+    try:
+        try:
+            ronde_met(nb)
+            gebroken = False
+        except ValueError:
+            gebroken = True
+    finally:
+        bord.collega_tekst = echt_tekst
+    assert gebroken, "de fout hoort door te gaan, niet opgeslokt te worden"
+    assert nb.statussen()[-1]["status"] == "fout", f"bleef op {nb.statussen()[-1]['status']} staan (N11)"
 
 
 GOEDE_WERKWIJZE = """# De Proefagent
@@ -356,6 +418,11 @@ def test_sectie_punten_en_grenzen_lezen_de_werkwijze():
     assert len(nooit) == 3 and mehdi == ["wat er met een melding gebeurt"]
     assert bord.grenzen("Wat ik nooit doe: niets. Wat Mehdi beslist: alles.") == ([], []), \
         "zonder koppen en punten zijn er geen grenzen om toe te passen"
+    # Codex NA17: een kop die over allebei gaat, telt voor geen van beide
+    assert bord.grenzen("## Wat ik beslist nooit doe\n- iets\n") == ([], [])
+    assert bord.grenzen("## Wat ik nooit doe\n- a\n\n## Wat de klant beslist\n- b\n") == (["a"], []), \
+        "de tweede kop gaat over wat Mehdi beslist, niet over een ander"
+    assert bord.grenzen("## 7. Wat ik nooit doe\n- a\n\n## 8. Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
 
 
 def _sjabloon_werk():

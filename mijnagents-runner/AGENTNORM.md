@@ -139,10 +139,19 @@ Onbekend is niet leeg: kon het bord de werkwijze niet geven, dan krijgt de agent
 nood "Werkwijze niet gelezen: <reden>" (voor claude-code); is ze leeg, dan "Werkwijze
 leeg op het bord" (voor Mehdi). De hartslag "fout" laat N11 en de Normwacht het zien.
 Er gaat geen kennis mee, want er is niets gelezen, en de noden die al open stonden
-blijven open: of die intussen opgelost zijn, weet deze ronde niet. Vier oudere
-runners (agenda-wacht, archivaris, fathom-wacht, levenscoach) lezen hun werkwijze
-nog buiten de ronde met `ag.werkwijze()`; die geeft voor hen nog een lege tekst bij
-een leesfout, maar zegt het in het cron-logboek. Ze horen door de ronde te gaan.
+blijven open: of die intussen opgelost zijn, weet deze ronde niet. Dezelfde regel
+geldt in `ag.werkwijze()`, waarmee vier oudere runners (agenda-wacht, archivaris,
+fathom-wacht, levenscoach) hun werkwijze nog buiten de ronde lezen: ook hun werk
+stopt (Codex NA11). Ze horen alsnog door de ronde te gaan.
+
+Open, gemeten op 16-10-2026: zes plekken lezen een werkwijze nog met eigen code en
+maken van onbekend een lege tekst: `contracten_agent.py` (`werkwijze_van_bord`),
+`regisseur.py`, `plaud_wacht.py` en `zoom_wacht.py` (de personentabel van
+fathom-wacht), `mac/mail_wacht.py` en `zelfcontrole.py`. Die horen
+`ag.werkwijze()` of `werkwijze_lezen()` te gebruiken. En weet de ronde de open
+noden niet, dan stuurt ze geen lijst; de nieuwe nood staat dan alleen in het
+detail van de fouthartslag. Een nood toevoegen zonder de lijst te vervangen,
+vraagt een route op het bord (Codex NA16).
 
 Een werkwijze die alleen gelezen wordt, is decoratie. `bord.sectie(r.werkwijze,
 "kop")`, `bord.punten(...)` en `bord.grenzen(r.werkwijze)` lezen een deel van het
@@ -252,15 +261,23 @@ Zo doet de generator het sinds v1.9 (`tests/test_nieuwe_agent.py`, in de CI):
   en of de naam nog vrij is op het bord en geen eigen runner heeft. Weet het bord
   dat niet, dan maakt hij niets: onbekend is niet vrij. Daarna schrijft hij het
   skelet, registreert hij, zet hij de werkwijze en leest hij die terug. Breekt een
-  stap na de registratie, dan maakt hetzelfde commando het af.
+  stap na de registratie, dan maakt hetzelfde commando het af, maar alleen als het
+  skelet van die poging er ongewijzigd staat en de kaart op het bord dezelfde is;
+  een lege kaart van een ander neemt hij niet over (Codex NA13).
 - **`--eerste-ronde`** weigert een runner die nog het skelet is, draait de runner
-  een keer en toetst de agent met `controle_agenten.py`. Pas als elke norm slaagt,
-  krijg je de cron-regel. Het werkverslag naast de voorbeelden van Mehdi leggen
-  blijft een menselijke stap.
-- **Wat nog niet kan:** het bord zet een kaart bij de registratie meteen op actief
-  (`POST /api/agent` in `mijnagents/app.py`). Wat tot na de eerste ronde wacht, is
-  de cron. Een kaart die pas na die ronde actief wordt, vraagt een wijziging aan het
-  bord en aan `controle_agenten.py`.
+  een keer en toetst de agent met `controle_agenten.py`. Hartslag en gemelde kennis
+  moeten van die ronde zijn, niet van een eerdere (Codex NA14), en de ronde moet op
+  klaar of waakt eindigen. Pas als elke norm slaagt, krijg je de cron-regel. Het
+  werkverslag naast de voorbeelden van Mehdi leggen blijft een menselijke stap.
+- **Wat nog niet kan (open, vraagt een wijziging aan het bord):**
+  - het bord zet een kaart bij de registratie meteen op actief (`POST /api/agent`
+    in `mijnagents/app.py`); wat tot na de eerste ronde wacht, is alleen de cron.
+    Een kaart die pas na die ronde actief wordt, vraagt het bord en
+    `controle_agenten.py` (dat alleen actieve kaarten toetst) (Codex NA12);
+  - de registratie is een bijwerking als de naam al bestaat; tussen de vraag "is
+    de naam vrij" en de registratie kan een andere sessie dezelfde naam aanmaken.
+    Alleen een registratie die op het bord zelf weigert wat bestaat, sluit dat
+    (Codex NA13).
 
 De controlerondes met Codex na de bouw volgen de stopregel uit de werkafspraken:
 twee rondes zonder vooruitgang betekent eerst het ontwerp herbekijken, en live gaat

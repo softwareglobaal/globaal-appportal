@@ -19,7 +19,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from contextlib import redirect_stdout, redirect_stderr
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 RUNNER = os.path.dirname(HIER)
@@ -83,6 +83,10 @@ class NepBord:
         if pad == "/api/agent" and req.get_method() == "POST":
             self.agents.setdefault(data["naam"], {"werkwijze": ""})["kaart"] = data
             return Antwoord({"ok": True, "naam": data["naam"]})
+        if pad == "/api/agents":
+            return Antwoord([{"naam": n, "actief": 1, **{v: (a.get("kaart") or {}).get(v, "")
+                                                      for v in ("label", "type", "rol", "cadans")}}
+                             for n, a in self.agents.items()])
         if pad.startswith("/api/agent/") and pad.endswith("/werkwijze"):
             naam = pad.split("/")[3]
             if naam not in self.agents:
@@ -281,6 +285,29 @@ def test_breuk_na_registratie_maakt_hetzelfde_commando_af():
         p.weg()
 
 
+def test_lege_kaart_van_een_ander_wordt_niet_overgenomen():
+    """Codex NA13: een kaart zonder werkwijze is niet vanzelf de eigen afgebroken poging. Zonder het skelet van
+    die poging hier, of met een andere kaart op het bord, raakt de generator ze niet."""
+    for runner_er, kaart in ((False, {"naam": "post-wacht", "label": "De Postwacht", "type": "h-architects",
+                                      "rol": "sorteert nieuwe post op info@", "cadans": "elk uur"}),
+                             (True, {"naam": "post-wacht", "label": "Iets anders", "type": "regie",
+                                     "rol": "een andere agent", "cadans": "elke dag"})):
+        nb = NepBord(agents={"post-wacht": {"kaart": dict(kaart), "werkwijze": ""}})
+        p = Proef(nb)
+        try:
+            if runner_er:
+                with open(os.path.join(RUNNER, "_sjabloon_agent.py"), encoding="utf-8") as f:
+                    skelet = f.read().replace("%%NAAM%%", "post-wacht").replace("%%LABEL%%", "post-wacht")
+                with open(p.runner(), "w", encoding="utf-8") as f:
+                    f.write(skelet)
+            code = p.draai(*KAART, "--werkwijze", p.ww)
+            assert code not in (0, None), f"exitcode {code}: een lege kaart van een ander hoort niet overgenomen"
+            assert not nb.registraties(), f"de kaart werd overschreven: {nb.registraties()}"
+            assert nb.agents["post-wacht"]["kaart"] == kaart and nb.agents["post-wacht"]["werkwijze"] == ""
+        finally:
+            p.weg()
+
+
 def test_bord_dat_niet_antwoordt_is_geen_vrije_naam():
     """Onbekend is niet vrij: weet het bord niet of de naam bestaat, dan wordt er niets aangemaakt."""
     class WegBord(NepBord):
@@ -299,13 +326,35 @@ def test_bord_dat_niet_antwoordt_is_geen_vrije_naam():
 
 
 # --- de eerste ronde --------------------------------------------------------------------------------------
+# Codex NA14 en NA19: de runner draait echt (een proefrunner als los proces), en wat het bord toont moet van
+# die ronde zijn. De opstelling hangt niet af van de generator zelf, zodat ze ook tegen een oudere versie draait.
 
-def _nu():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+KENNIS = ("werkwijze op het bord: 900 tekens, abcdef12\ngedeelde lessen: 10 tekens, abcdef12\n"
+          "collega's op het bord: 10 tekens, abcdef12")
+
+# Doet wat een echte ronde op het bord achterlaat: hartslag en gemelde kennis, nu. (ag.ronde( staat hier voor N12.)
+RUNNER_VERS = """import os, sqlite3  # ag.ronde(
+from datetime import datetime, timedelta, timezone
+nu = datetime.now(timezone.utc).isoformat()
+con = sqlite3.connect(os.environ["PROEF_DB"])
+con.execute("update status set status=?, ts=? where naam='post-wacht'", (os.environ.get("PROEF_STATUS", "klaar"), nu))
+con.execute("update agent set kennis=?, kennis_ts=? where naam='post-wacht'", (os.environ.get("PROEF_KENNIS", %r), nu))
+con.commit()
+""" % KENNIS
+
+# Eindigt met code 0 en doet niets: wat het bord toont, is van een eerdere ronde. (ag.ronde( in commentaar.)
+RUNNER_LUI = "print('niets gedaan')  # ag.ronde(\n"
+
+RUNNER_FAALT = "raise SystemExit(1)  # ag.ronde(\n"
 
 
-def _bord_db(map_, status="klaar"):
-    """Een bord-databank met de nieuwe agent zoals hij er na een geslaagde eerste ronde hoort te staan."""
+def _toen(uren):
+    return (datetime.now(timezone.utc) - timedelta(hours=uren)).isoformat()
+
+
+def _bord_db(map_):
+    """Het bord zoals het er voor de eerste ronde uitziet: de kaart, en hartslag en kennis van twee uur geleden.
+    Op zich halen die alle normen; alleen een verse ronde maakt het verschil."""
     db = os.path.join(map_, "mijnagents.db")
     con = sqlite3.connect(db)
     con.executescript("""
@@ -318,87 +367,111 @@ def _bord_db(map_, status="klaar"):
     """)
     con.execute("INSERT INTO agent VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?)",
                 ("post-wacht", "De Postwacht", "h-architects", "sorteert post", "lezen en labelen",
-                 '["post labelen"]', '["nooit verwijderen"]', "elk uur", "[]", "mehdi", _nu(), WERKWIJZE.strip(),
-                 "werkwijze op het bord: 900 tekens, abcdef12\ngedeelde lessen: 10 tekens, abcdef12\n"
-                 "collega's op het bord: 10 tekens, abcdef12", _nu(), "werkwijze op het bord", "VM"))
-    con.execute("INSERT INTO status VALUES(?,?,?,?,?,?)", ("post-wacht", status, "ronde", "", None, _nu()))
+                 '["post labelen"]', '["nooit verwijderen"]', "elk uur", "[]", "mehdi", _toen(3), WERKWIJZE.strip(),
+                 KENNIS, _toen(2), "werkwijze op het bord", "VM"))
+    con.execute("INSERT INTO status VALUES(?,?,?,?,?,?)", ("post-wacht", "klaar", "ronde", "", None, _toen(2)))
     con.commit()
     con.close()
     return db
 
 
-def _eerste_ronde_proef(werk_ingevuld=True, ronde_code=0, status="klaar", met_agent=True):
-    nb = NepBord(agents={"post-wacht": {"kaart": {}, "werkwijze": WERKWIJZE.strip()}})
-    p = Proef(nb)
-    code = p.mod.skelet("post-wacht")
-    if werk_ingevuld:
-        code = code.replace(p.mod.SKELET, "werk() ingevuld")
+def _eerste_ronde_proef(runner_code, met_agent=True):
+    p = Proef(NepBord(agents={"post-wacht": {"kaart": {}, "werkwijze": WERKWIJZE.strip()}}))
     with open(p.runner(), "w", encoding="utf-8") as f:
-        f.write(code)
+        f.write(runner_code)
     os.makedirs(os.path.join(p.map, "werkwijze"))
     shutil.copy(os.path.join(RUNNER, "werkwijze", "lessen.json"), os.path.join(p.map, "werkwijze", "lessen.json"))
-    db = _bord_db(p.map, status)
+    db = _bord_db(p.map)
     if not met_agent:
         con = sqlite3.connect(db)
         con.execute("DELETE FROM agent")
         con.commit()
         con.close()
-    p.gedraaid = []
-    p.mod.draai = lambda pad: (p.gedraaid.append(pad), ronde_code)[1]
-    p.mod.controle_agenten.DB = db
+    os.environ["PROEF_DB"] = db
+    os.environ.pop("PROEF_STATUS", None)
+    os.environ.pop("PROEF_KENNIS", None)
+    ca = getattr(p.mod, "controle_agenten", None)
+    if ca is not None:
+        ca.DB = db
     return p
 
 
 def test_eerste_ronde_geeft_de_cron_pas_als_de_controle_slaagt():
-    p = _eerste_ronde_proef()
+    p = _eerste_ronde_proef(RUNNER_VERS)
     try:
         code = p.draai("--eerste-ronde", "post-wacht", "--cron", "5 * * * *")
         assert code == 0, p.uitvoer
-        assert p.gedraaid == [p.runner()], "de eerste ronde hoort de runner zelf te draaien"
         assert "5 * * * *" in p.uitvoer and ">> ~/agents/post-wacht.log" in p.uitvoer, p.uitvoer
     finally:
         p.weg()
 
 
-def test_eerste_ronde_weigert_het_skelet():
-    p = _eerste_ronde_proef(werk_ingevuld=False)
+def test_eerste_ronde_die_niets_deed_gaat_niet_op_de_cron():
+    """Codex NA14: een runner die met code 0 niets doet, haalde de controle op de hartslag en de kennis van een
+    eerdere ronde. Nu moet wat het bord toont van deze ronde zijn."""
+    p = _eerste_ronde_proef(RUNNER_LUI)
     try:
         code = p.draai("--eerste-ronde", "post-wacht")
         assert code not in (0, None)
-        assert not p.gedraaid, "een skelet hoort niet te draaien"
-        assert ">> ~/agents/" not in p.uitvoer
+        assert "van deze ronde" in p.uitvoer and ">> ~/agents/" not in p.uitvoer, p.uitvoer
+    finally:
+        p.weg()
+
+
+def test_eerste_ronde_weigert_het_skelet():
+    with open(os.path.join(RUNNER, "_sjabloon_agent.py"), encoding="utf-8") as f:
+        skelet = f.read().replace("%%NAAM%%", "post-wacht").replace("%%LABEL%%", "post-wacht")
+    p = _eerste_ronde_proef(skelet)
+    try:
+        code = p.draai("--eerste-ronde", "post-wacht")
+        assert code not in (0, None)
+        assert "skelet" in p.uitvoer and ">> ~/agents/" not in p.uitvoer, p.uitvoer
     finally:
         p.weg()
 
 
 def test_eerste_ronde_die_faalt_gaat_niet_op_de_cron():
-    p = _eerste_ronde_proef(ronde_code=1)
+    p = _eerste_ronde_proef(RUNNER_FAALT)
     try:
         code = p.draai("--eerste-ronde", "post-wacht")
         assert code not in (0, None)
-        assert ">> ~/agents/" not in p.uitvoer
+        assert "code 1" in p.uitvoer and ">> ~/agents/" not in p.uitvoer, p.uitvoer
     finally:
         p.weg()
 
 
-def test_eerste_ronde_met_gezakte_norm_gaat_niet_op_de_cron():
-    """De ronde liep, maar de agent staat op fout (N11): niet op de cron."""
-    p = _eerste_ronde_proef(status="fout")
+def test_eerste_ronde_die_op_fout_eindigt_gaat_niet_op_de_cron():
+    p = _eerste_ronde_proef(RUNNER_VERS)
+    os.environ["PROEF_STATUS"] = "fout"
     try:
         code = p.draai("--eerste-ronde", "post-wacht")
         assert code not in (0, None)
-        assert "N11" in p.uitvoer and ">> ~/agents/" not in p.uitvoer, p.uitvoer
+        assert "fout" in p.uitvoer and ">> ~/agents/" not in p.uitvoer, p.uitvoer
     finally:
+        os.environ.pop("PROEF_STATUS", None)
+        p.weg()
+
+
+def test_eerste_ronde_met_gezakte_norm_gaat_niet_op_de_cron():
+    """De ronde liep en is vers, maar ze las de gedeelde lessen niet (N13): niet op de cron."""
+    p = _eerste_ronde_proef(RUNNER_VERS)
+    os.environ["PROEF_KENNIS"] = "werkwijze op het bord: 900 tekens, abcdef12\ncollega's op het bord: 10 tekens, abcdef12"
+    try:
+        code = p.draai("--eerste-ronde", "post-wacht")
+        assert code not in (0, None)
+        assert "N13" in p.uitvoer and ">> ~/agents/" not in p.uitvoer, p.uitvoer
+    finally:
+        os.environ.pop("PROEF_KENNIS", None)
         p.weg()
 
 
 def test_eerste_ronde_zonder_agent_in_de_controle_is_geen_groen_licht():
     """'0 agents getoetst, 0 gezakt' is geen geslaagde controle."""
-    p = _eerste_ronde_proef(met_agent=False)
+    p = _eerste_ronde_proef(RUNNER_VERS, met_agent=False)
     try:
         code = p.draai("--eerste-ronde", "post-wacht")
         assert code not in (0, None)
-        assert ">> ~/agents/" not in p.uitvoer
+        assert "niet als actieve agent" in p.uitvoer and ">> ~/agents/" not in p.uitvoer, p.uitvoer
     finally:
         p.weg()
 

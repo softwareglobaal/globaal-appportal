@@ -34,6 +34,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
@@ -128,6 +129,21 @@ def stand_op_bord(naam):
     return "bestaat" if tekst.strip() else "onaf"
 
 
+def kaart_is_deze(agent):
+    """Is de kaart op het bord die van deze aanmaak (zelfde label, afdeling, rol en cadans)? None als het
+    bord het niet kan zeggen."""
+    try:
+        rijen = bord.call("/api/agents")
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(rijen, list):
+        return None
+    rij = next((r for r in rijen if isinstance(r, dict) and r.get("naam") == agent["naam"]), None)
+    if rij is None:
+        return None
+    return all((rij.get(v) or "") == (agent.get(v) or "") for v in ("label", "type", "rol", "cadans"))
+
+
 def maak(agent, werkwijze, cron):
     naam = agent.get("naam") or ""
     fouten = controleer(agent, werkwijze)
@@ -148,12 +164,24 @@ def maak(agent, werkwijze, cron):
         print(f"Niet aangemaakt: {naam} staat al op het bord, met een werkwijze. Een bestaande agent breid je uit.")
         return 2
     doel, code = runnerpad(naam), skelet(naam)
-    if os.path.exists(doel):
+    runner_er = os.path.exists(doel)
+    if runner_er:
         with open(doel, encoding="utf-8") as f:
             if f.read() != code:
                 print(f"Niet aangemaakt: {doel} bestaat al, met eigen code.")
                 return 2
-    else:
+    if stand == "onaf":
+        # Codex NA13: een kaart zonder werkwijze is niet vanzelf de eigen afgebroken poging. Hervatten mag alleen
+        # als het skelet van die poging hier ongewijzigd staat en de kaart op het bord deze kaart is.
+        zelfde = kaart_is_deze(agent) if runner_er else False
+        if zelfde is None:
+            print(f"Niet aangemaakt: het bord kon niet zeggen of de kaart van {naam} van deze aanmaak is.")
+            return 1
+        if not zelfde:
+            print(f"Niet aangemaakt: {naam} staat al op het bord, zonder werkwijze, maar niet als een afgebroken "
+                  "aanmaak van dit commando. Kijk die kaart eerst na.")
+            return 2
+    if not runner_er:
         with open(doel, "w", encoding="utf-8") as f:
             f.write(code)
         os.chmod(doel, 0o755)
@@ -201,6 +229,38 @@ def toets(naam):
         con.close()
 
 
+def _tijd(ts):
+    try:
+        d = datetime.fromisoformat(str(ts).strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def vers_na(naam, begin):
+    """Codex NA14: hoort wat het bord over deze agent weet bij de ronde die net draaide? Zijn hartslag en zijn
+    gemelde kennis moeten van na het begin zijn, en de ronde moet afgelopen zijn. (vers, waarom niet)."""
+    con = sqlite3.connect(f"file:{controle_agenten.DB}?mode=ro", uri=True)
+    try:
+        st = con.execute("select status, ts from status where naam=?", (naam,)).fetchone()
+        ke = con.execute("select kennis_ts from agent where naam=?", (naam,)).fetchone()
+    finally:
+        con.close()
+    grens = begin - timedelta(seconds=1)
+
+    def van_deze_ronde(ts):
+        t = _tijd(ts)
+        return t is not None and t >= grens
+
+    if not st or not van_deze_ronde(st[1]):
+        return False, "geen hartslag van deze ronde op het bord"
+    if st[0] not in ("klaar", "waakt"):
+        return False, f"de ronde eindigde op '{st[0]}', niet op klaar of waakt"
+    if not ke or not van_deze_ronde(ke[0]):
+        return False, "deze ronde meldde niet welk regelboek ze las (N4)"
+    return True, ""
+
+
 def eerste_ronde(naam, cron):
     doel = runnerpad(naam)
     if not os.path.exists(doel):
@@ -219,6 +279,7 @@ def eerste_ronde(naam, cron):
         return 1
 
     print(f"Eerste ronde van {naam}:")
+    begin = datetime.now(timezone.utc)
     code = draai(doel)
     if code != 0:
         print(f"De eerste ronde eindigde met code {code}. Niet op de cron; kijk de noden en het werkverslag na.")
@@ -226,6 +287,10 @@ def eerste_ronde(naam, cron):
     uitslag = toets(naam)
     if not uitslag or len(uitslag) != 1:
         print(f"Niet op de cron: de controle vond {naam} niet als actieve agent op het bord.")
+        return 1
+    vers, waarom = vers_na(naam, begin)
+    if not vers:
+        print(f"Niet op de cron: {waarom}. Wat het bord toont, is van een eerdere ronde.")
         return 1
     gezakt = [t for t in uitslag[0]["toetsen"] if t["ok"] is False]
     for t in uitslag[0]["toetsen"]:
