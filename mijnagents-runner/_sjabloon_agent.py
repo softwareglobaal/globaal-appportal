@@ -77,8 +77,9 @@ def werk(r):
     """
     nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
     if not nooit or not mehdi_beslist:
-        # Zonder grenzen geen werk: wie niet weet wat hij nooit doet, wordt vroeg of laat te vrij (N2).
-        r.nood("Werkwijze zegt niet wat ik nooit doe of wat Mehdi beslist", wie="mehdi")
+        # Zonder grenzen geen werk: wie niet weet wat hij nooit doet, wordt vroeg of laat te vrij (N2). De vaste vorm:
+        # onder "## Wat ik nooit doe" en "## Wat Mehdi beslist" alleen punten, voor elk codeblok (bord.grenzen).
+        r.nood("Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist", wie="mehdi")
         r.detail = "geen werk gedaan, grenzen ontbreken in de werkwijze"
         return
     r.detail = (f"skelet, werk() nog in te vullen; werkwijze toegepast: {len(nooit)} grenzen, "

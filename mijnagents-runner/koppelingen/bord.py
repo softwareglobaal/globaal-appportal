@@ -53,25 +53,28 @@ class WerkwijzeOnbekend(RondeGestopt):
 
 def _buiten_codeblokken(tekst):
     """De regels van een werkwijze die buiten een codeblok en buiten HTML-commentaar staan, met tabs als vier
-    kolommen. Een kop of punt in een codeblok of commentaar is een voorbeeld, geen regel (Codex NA32, NA33).
-    Een hek telt met hooguit drie spaties ervoor; een tab ervoor maakt het ingesprongen tekst, geen hek."""
+    kolommen. Een hek telt met hooguit drie spaties ervoor, en sluit alleen met een hek van hetzelfde teken en
+    dezelfde lengte, zoals Python-Markdown op het bord (Codex NA32, NA33, NA35). Voor het gewone lezen van een
+    sectie; de grenscontrole (grenzen) is strenger en stopt bij het eerste codeblok of stuk HTML."""
     regels, hek, commentaar = [], None, False
     for regel in (tekst or "").splitlines():
         regel = regel.expandtabs(4)
         if commentaar:
-            commentaar = "-->" not in regel
+            if "-->" in regel:
+                commentaar = regel.rfind("<!--") > regel.rfind("-->")
             continue
         if hek is not None:
-            if re.match(r"^ {0,3}" + re.escape(hek[0]) + "{" + str(len(hek)) + r",}\s*$", regel):
+            if re.match(r"^ {0,3}" + re.escape(hek) + r"[ ]*$", regel):
                 hek = None
             continue
         m = re.match(r"^ {0,3}(`{3,}|~{3,})", regel)
         if m:
             hek = m.group(1)
             continue
-        if regel.lstrip().startswith("<!--"):
-            commentaar = "-->" not in regel.split("<!--", 1)[1]
-            continue
+        if "<!--" in regel:
+            commentaar = regel.rfind("<!--") > regel.rfind("-->")
+            if regel.lstrip().startswith("<!--"):
+                continue
         regels.append(regel)
     return regels
 
@@ -121,15 +124,46 @@ KOP_NOOIT = re.compile(r"^(?:\d+[.)]\s*)?wat ik nooit doe(?:\s*[(:].*)?$")
 KOP_MEHDI = re.compile(r"^(?:\d+[.)]\s*)?wat mehdi beslist(?:\s*[(:].*)?$")
 
 
+def _strikte_punten(regels, kop):
+    """De punten onder de kop, alleen als er onder die kop niets anders staat dan punten op kolom 0 ("- " of
+    "* ") en lege regels. Lopende tekst, een tussenkop, iets ingesprongens of een scheidingslijn: dan geen
+    grenzen, want hoe het bord dat toont, is niet zeker (Codex NA34, NA37)."""
+    niveau, uit = None, []
+    for regel in regels:
+        m = re.match(r"^(#{1,6})\s+(.*)$", regel)
+        if niveau is None:
+            if m and kop.match(m.group(2).strip().lower()):
+                niveau = len(m.group(1))
+            continue
+        if m:
+            if len(m.group(1)) <= niveau:
+                break
+            return []
+        if not regel.strip():
+            continue
+        p = re.match(r"^[-*] +(\S.*)$", regel)
+        if not p or re.match(r"^([-*])( *\1){2,} *$", regel):
+            return []
+        uit.append(p.group(1).strip())
+    return uit
+
+
 def grenzen(werkwijze):
-    """Norm N2 als regels: de punten onder de afgesproken koppen "## Wat ik nooit doe" en "## Wat Mehdi beslist",
-    eventueel genummerd ("## 7. Wat ik nooit doe") of met een toevoeging tussen haakjes. Alleen die twee koppen
-    tellen: een kop die over allebei gaat, of over wat een ander nooit doet ("Wat ik weet over wat de klant nooit
-    doet"), is geen grens van de agent (Codex NA17, NA22, NA27). Zo staan ze in alle werkwijzen op het bord. De
-    generator eist ze voor hij registreert, het sjabloon past ze elke ronde toe."""
-    nooit = _sectie_waar(werkwijze, lambda k: bool(KOP_NOOIT.match(k.strip())))
-    mehdi = _sectie_waar(werkwijze, lambda k: bool(KOP_MEHDI.match(k.strip())))
-    return punten(nooit), punten(mehdi)
+    """Norm N2 als regels: de punten onder de afgesproken koppen "## Wat ik nooit doe" en "## Wat Mehdi beslist"
+    (eventueel genummerd, of met een toevoeging tussen haakjes). Een kop over wat een ander nooit doet, of over
+    allebei, telt niet (Codex NA17, NA22, NA27).
+
+    Bewust een strikte vorm in plaats van een nabootsing van Markdown (stopregel na Codex NA32 tot NA37): de
+    werkwijze wordt gelezen tot het eerste codeblok, stuk HTML of commentaar, en onder elke kop staan alleen
+    punten en lege regels. Wat daar niet in past, geeft geen grenzen. Zo kan een twijfelgeval alleen geweigerd
+    worden, nooit aanvaard. De generator eist de grenzen voor hij registreert, het sjabloon past ze elke ronde toe."""
+    regels = []
+    for regel in (werkwijze or "").splitlines():
+        regel = regel.expandtabs(4)
+        if "<!--" in regel or re.match(r"^\s*(`{3,}|~{3,}|<)", regel):
+            break
+        regels.append(regel.rstrip())
+    return _strikte_punten(regels, KOP_NOOIT), _strikte_punten(regels, KOP_MEHDI)
 
 
 class Agent:

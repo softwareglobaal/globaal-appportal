@@ -113,9 +113,11 @@ def controleer(agent, werkwijze):
                 fouten.append(f"werkwijze {code}: {uitleg}")
         nooit, mehdi_beslist = bord.grenzen(werkwijze)
         if not nooit:
-            fouten.append('werkwijze: de kop "## Wat ik nooit doe" met punten ("- ...", op kolom 0) eronder')
+            fouten.append('werkwijze: de kop "## Wat ik nooit doe" met daaronder alleen punten ("- " of "* ", op kolom 0), '
+                          'voor elk codeblok of stuk HTML')
         if not mehdi_beslist:
-            fouten.append('werkwijze: de kop "## Wat Mehdi beslist" met punten ("- ...", op kolom 0) eronder')
+            fouten.append('werkwijze: de kop "## Wat Mehdi beslist" met daaronder alleen punten ("- " of "* ", op kolom 0), '
+                          'voor elk codeblok of stuk HTML')
     return fouten
 
 

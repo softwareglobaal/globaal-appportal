@@ -436,51 +436,67 @@ Ik lees en ik meld.
 ## Wat ik nooit doe
 - nooit iets verwijderen
 - nooit iets versturen
-
-### Een onderdeel van nooit
-- ook dit telt mee
+* nooit iets betalen
 
 ## Wat Mehdi beslist
 - wat er met een melding gebeurt
 
 ## Bronnen
 - het bord
+
+```
+## Wat ik nooit doe
+- dit voorbeeld na de grenzen stoort niet
+```
 """
 
+MET_TUSSENKOP = "## Wat ik nooit doe\n- a\n- b\n\n### Een onderdeel\n- c\n\n## Bronnen\n- d\n"
 
-def test_sectie_punten_en_grenzen_lezen_de_werkwijze():
-    assert bord.punten(bord.sectie(GOEDE_WERKWIJZE, "nooit")) == [
-        "nooit iets verwijderen", "nooit iets versturen", "ook dit telt mee"], "een lagere kop hoort bij de sectie"
+
+def test_sectie_en_punten_lezen_een_deel_van_de_werkwijze():
+    """De gewone lezer, voor wat een agent uit zijn werkwijze haalt: een lagere kop hoort bij de sectie,
+    codeblokken en commentaar tellen niet, een sluithek moet even lang zijn als het openingshek (NA35)."""
+    assert bord.punten(bord.sectie(MET_TUSSENKOP, "nooit")) == ["a", "b", "c"]
     assert bord.sectie(GOEDE_WERKWIJZE, "Mehdi beslist") == "- wat er met een melding gebeurt"
     assert bord.sectie(GOEDE_WERKWIJZE, "bestaat niet") == ""
-    nooit, mehdi = bord.grenzen(GOEDE_WERKWIJZE)
-    assert len(nooit) == 3 and mehdi == ["wat er met een melding gebeurt"]
-    assert bord.grenzen("Wat ik nooit doe: niets. Wat Mehdi beslist: alles.") == ([], []), \
-        "zonder koppen en punten zijn er geen grenzen om toe te passen"
-    # Codex NA17: een kop die over allebei gaat, telt voor geen van beide
-    assert bord.grenzen("## Wat ik beslist nooit doe\n- iets\n") == ([], [])
-    assert bord.grenzen("## Wat ik nooit doe\n- a\n\n## Wat de klant beslist\n- b\n") == (["a"], []), \
-        "de tweede kop gaat over wat Mehdi beslist, niet over een ander"
-    assert bord.grenzen("## 7. Wat ik nooit doe\n- a\n\n## 8. Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
-    # Codex NA22: een kop over wat een ander nooit doet, is geen grens van de agent
-    assert bord.grenzen("## Wat de klant nooit doet\n- a\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
-    assert bord.grenzen("## Wat collega's nooit doen\n- a\n") == ([], [])
-    # Codex NA27: alleen de afgesproken koppen tellen, eventueel genummerd of met een toevoeging tussen haakjes
-    assert bord.grenzen("## Wat ik weet over wat de klant nooit doet\n- a\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
-    assert bord.grenzen("## Wat ik nooit doe (sinds 16-10-2026)\n- a\n\n## 3) Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
-    # Codex NA32: een kop of punt in een codeblok is een voorbeeld, geen regel
-    assert bord.grenzen("```\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
-    assert bord.grenzen("## Wat ik nooit doe\n- a\n```\n- in code\n```\n- b\n\n## Wat Mehdi beslist\n- c\n") == (["a", "b"], ["c"])
-    assert bord.grenzen("~~~~\n```\n## Wat ik nooit doe\n- x\n~~~~\n## Wat ik nooit doe\n- y\n## Wat Mehdi beslist\n- z\n") == (["y"], ["z"])
-    # Codex NA33: een tab voor een hek maakt er ingesprongen tekst van; het codeblok sluit dan niet
-    assert bord.grenzen("```\n## Wat ik nooit doe\n- a\n\t```\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
-    assert bord.grenzen("\t```\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
-    # Codex NA34 en de strikte vorm: alleen punten op kolom 0 tellen, niet in ingesprongen code of commentaar
-    assert bord.grenzen("## Wat ik nooit doe\n\n    - a\n\n## Wat Mehdi beslist\n\n    - b\n") == ([], [])
-    assert bord.grenzen("<!--\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n-->\n") == ([], [])
-    assert bord.grenzen("<!-- uitleg -->\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
-    assert bord.grenzen("## Wat ik nooit doe\n- - -\n1. genummerd\n## Wat Mehdi beslist\n* b\n") == ([], ["b"]), \
-        "een scheidingslijn en een genummerde regel zijn geen grens in de strikte vorm"
+    assert bord.sectie("## Bronnen\n\n    - ingesprongen\n", "Bronnen") == "    - ingesprongen", \
+        "de inspringing blijft staan (NA34)"
+    assert bord.sectie("```\n## Bronnen\n- a\n````\n", "Bronnen") == "", "vier backticks sluiten drie niet (NA35)"
+    assert bord.sectie("<!-- klaar --> <!--\n## Bronnen\n- a\n-->\n", "Bronnen") == "", \
+        "een commentaar dat op dezelfde regel opnieuw opent (NA36)"
+
+
+def test_grenzen_alleen_in_de_strikte_vorm():
+    """Codex NA17 tot NA37 en de stopregel: de grenzen staan onder de twee afgesproken koppen, met daaronder alleen
+    punten ("- " of "* " op kolom 0) en lege regels, voor elk codeblok of stuk HTML. Wat daar niet in past, geeft
+    geen grenzen: een twijfelgeval wordt geweigerd, nooit aanvaard."""
+    g = bord.grenzen
+    assert g(GOEDE_WERKWIJZE) == (["nooit iets verwijderen", "nooit iets versturen", "nooit iets betalen"],
+                                  ["wat er met een melding gebeurt"])
+    assert g("Wat ik nooit doe: niets. Wat Mehdi beslist: alles.") == ([], [])
+    # NA17, NA22, NA27: alleen de afgesproken koppen, eventueel genummerd of met een toevoeging tussen haakjes
+    assert g("## Wat ik beslist nooit doe\n- iets\n") == ([], [])
+    assert g("## Wat ik nooit doe\n- a\n\n## Wat de klant beslist\n- b\n") == (["a"], [])
+    assert g("## 7. Wat ik nooit doe\n- a\n\n## 8. Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
+    assert g("## Wat de klant nooit doet\n- a\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
+    assert g("## Wat collega's nooit doen\n- a\n") == ([], [])
+    assert g("## Wat ik weet over wat de klant nooit doet\n- a\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
+    assert g("## Wat ik nooit doe (sinds 16-10-2026)\n- a\n\n## 3) Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
+    # NA32, NA33, NA35, NA36: na het eerste codeblok, stuk HTML of commentaar telt niets meer
+    assert g("```\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
+    assert g("## Wat ik nooit doe\n- a\n```\n- in code\n```\n- b\n\n## Wat Mehdi beslist\n- c\n") == (["a"], [])
+    assert g("```\n## Wat ik nooit doe\n- a\n\t```\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
+    assert g("\t```\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n") == ([], [])
+    assert g("```\n## Wat ik nooit doe\n- a\n````\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
+    assert g("<!-- klaar --> <!--\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n-->\n") == ([], [])
+    assert g("<!-- uitleg -->\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n") == ([], [])
+    assert g("<div>\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n</div>\n") == ([], [])
+    # NA34, NA37: onder de kop alleen punten op kolom 0 en lege regels
+    assert g("## Wat ik nooit doe\n\n    - a\n\n## Wat Mehdi beslist\n\n    - b\n") == ([], [])
+    assert g("## Wat ik nooit doe\nToelichting\n- niets verwijderen\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
+    assert g("## Wat ik nooit doe\n- a\n### meer\n- c\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
+    assert g("## Wat ik nooit doe\n- - -\n## Wat Mehdi beslist\n* b\n") == ([], ["b"])
+    assert g("## Wat ik nooit doe\n1. genummerd\n## Wat Mehdi beslist\n* b\n") == ([], ["b"])
 
 
 def _sjabloon_werk():
@@ -501,7 +517,7 @@ def test_sjabloon_past_de_werkwijze_toe():
 
     nb = BordNabootsing(werkwijze="# Werkwijze\n\nIk doe maar wat, zonder grenzen.")
     r = ronde_met(nb, werk)
-    assert nb.statussen()[-1]["nood"] == [{"tekst": "Werkwijze zegt niet wat ik nooit doe of wat Mehdi beslist",
+    assert nb.statussen()[-1]["nood"] == [{"tekst": "Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist",
                                            "wie": "mehdi"}], nb.statussen()[-1]["nood"]
     assert "geen werk gedaan" in r.detail
 

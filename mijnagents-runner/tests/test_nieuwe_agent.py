@@ -353,6 +353,20 @@ def test_punten_in_ingesprongen_code_worden_geweigerd():
         p.weg()
 
 
+def test_tekst_tussen_kop_en_punten_wordt_geweigerd():
+    """Codex NA37: na lopende tekst zonder witregel toont het bord "- ..." als gewone tekst, niet als punt."""
+    p = Proef()
+    try:
+        with open(p.ww, "w", encoding="utf-8") as f:
+            f.write(WERKWIJZE.replace("## Wat ik nooit doe\n", "## Wat ik nooit doe\nToelichting bij mijn grenzen.\n"))
+        code = p.draai(*KAART, "--werkwijze", p.ww)
+        assert code not in (0, None), p.uitvoer
+        _niets_geschreven(p)
+        assert "alleen punten" in p.uitvoer, p.uitvoer
+    finally:
+        p.weg()
+
+
 def test_te_korte_werkwijze_wordt_geweigerd():
     p = Proef()
     try:
