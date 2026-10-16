@@ -274,5 +274,29 @@ check("een tijdelijke fout op het eerste bestand krijgt een herkansing (Codex FX
 check("de wachtlus van de percelenpas telt alleen de vergunningentabel (Codex FX22)",
       "table-checkbox" in open(PP.__file__).read().split("rijen_klaar = ")[1][:200])
 
+
+
+class _NepPaginaTraag(_NepPagina):
+    """De sectie bouwovertredingen toont alleen de inleiding, nog geen uitkomst (Codex FX25)."""
+    def locator(self, *a, **k):
+        p = self
+        class _L:
+            def inner_text(self_):
+                if "bouwovertredingen" in p.url:
+                    return "x\nBouwovertredingen\nDit wordt vastgelegd in een proces-verbaal.\nVeelgestelde vragen"
+                return "Perceel 11344A0430/00H014\nDossiernummer"
+        return _L()
+
+
+class _NepContextTraag:
+    def new_page(self):
+        return _NepPaginaTraag()
+
+
+_stad = PP.lees(_NepContextTraag(), 51.2, 4.47, "August Van de Wielelei 85, 2100 Antwerpen")
+check("zonder uitkomst bij de bouwovertredingen is die sectie niet gelezen (Codex FX25)",
+      not _stad["gelezen"]["bouwovertredingen"] and any("bouwovertredingen" in f for f in _stad["fouten"]), _stad)
+check("de vergunningen blijven wel gelezen", _stad["gelezen"]["vergunningen"] and len(_stad["vergunningen"]) == 1)
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

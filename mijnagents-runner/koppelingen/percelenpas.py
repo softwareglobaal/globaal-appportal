@@ -15,6 +15,8 @@ import re
 import urllib.parse
 
 BASIS = "https://omgeving.antwerpen.be/percelenpas"
+UITKOMST_GEEN = "Er zijn geen gekende bouwovertredingen"
+UITKOMST_WEL = "Vastgestelde bouwovertredingen"
 
 
 def url(sectie, lat, lon, adres):
@@ -131,9 +133,15 @@ def lees(ctx, lat, lon, adres, map_=None):
 
         try:
             p.goto(url("bouwovertredingen", lat, lon, adres), wait_until="domcontentloaded", timeout=90000)
-            p.wait_for_selector("text=proces-verbaal", timeout=60000)
-            p.wait_for_timeout(1500)
-            samen, lijst = bouwovertredingen_uit_tekst(_sectietekst(p, "Bouwovertredingen"))
+            # 'proces-verbaal' staat al in de inleiding: wachten op een uitkomst voor dit perceel (Codex FX25).
+            for _ in range(45):
+                sectie = _sectietekst(p, "Bouwovertredingen")
+                if UITKOMST_GEEN in sectie or UITKOMST_WEL in sectie:
+                    break
+                p.wait_for_timeout(2000)
+            else:
+                raise RuntimeError("geen uitkomst voor de bouwovertredingen na 90 seconden")
+            samen, lijst = bouwovertredingen_uit_tekst(sectie)
             uit["bouwovertredingen"], uit["bouwovertredingen_lijst"] = samen, lijst
             uit["gelezen"]["bouwovertredingen"] = True
             if map_ and _printscreen(p, os.path.join(map_, "Bouwovertredingen.png"), uit["fouten"]):
