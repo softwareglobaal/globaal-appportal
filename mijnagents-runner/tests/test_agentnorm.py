@@ -382,6 +382,18 @@ def test_na23_misvormde_noodlijst_is_onbekend():
     assert nb.statussen()[-1]["status"] == "fout", f"bleef op {nb.statussen()[-1]['status']} staan (N11)"
 
 
+def test_na28_nood_met_een_vreemde_eigenaar_is_onbekend():
+    """Codex NA28: een nood met wie als lijst gold als goed gevormd en kreeg stil de eigenaar mehdi."""
+    nb = BordNabootsing(open_noden=[{"naam": "proefagent", "tekst": "Iets", "wie": []}])
+    echt, bord.call = bord.call, nb.call
+    try:
+        assert bord.Agent("proefagent").open_noden() is None
+        nb.open_noden = [{"naam": "proefagent", "tekst": "Iets", "wie": None}, {"naam": "proefagent", "tekst": "Ook"}]
+        assert bord.Agent("proefagent").open_noden() == [{"tekst": "Iets", "wie": "mehdi"}, {"tekst": "Ook", "wie": "mehdi"}]
+    finally:
+        bord.call = echt
+
+
 def test_na15_fout_in_de_startfase_blijft_niet_op_actief():
     """Codex NA15: een fout na de hartslag 'actief' maar voor het werk (lessen.json met de verkeerde vorm,
     een stuk collega-lijst) liet de agent op actief staan, want __exit__ draait dan niet."""
@@ -453,6 +465,9 @@ def test_sectie_punten_en_grenzen_lezen_de_werkwijze():
     # Codex NA22: een kop over wat een ander nooit doet, is geen grens van de agent
     assert bord.grenzen("## Wat de klant nooit doet\n- a\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
     assert bord.grenzen("## Wat collega's nooit doen\n- a\n") == ([], [])
+    # Codex NA27: alleen de afgesproken koppen tellen, eventueel genummerd of met een toevoeging tussen haakjes
+    assert bord.grenzen("## Wat ik weet over wat de klant nooit doet\n- a\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
+    assert bord.grenzen("## Wat ik nooit doe (sinds 16-10-2026)\n- a\n\n## 3) Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
 
 
 def _sjabloon_werk():

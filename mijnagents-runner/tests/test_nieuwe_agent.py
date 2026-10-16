@@ -123,6 +123,7 @@ class Proef:
         self._omgeving = {k: os.environ.get(k) for k in ("AGENTS_TOKEN", "PROEF_DB", "PROEF_STATUS", "PROEF_KENNIS")}
         self._ca = getattr(self.mod, "controle_agenten", None)
         self._ca_db = self._ca.DB if self._ca is not None else None
+        self._ca_runner = self._ca.RUNNER if self._ca is not None else None
 
     def draai(self, *argv):
         echt_urlopen, echt_token = urllib.request.urlopen, bord.TOKEN
@@ -161,7 +162,7 @@ class Proef:
             else:
                 os.environ[k] = v
         if self._ca is not None:
-            self._ca.DB = self._ca_db
+            self._ca.DB, self._ca.RUNNER = self._ca_db, self._ca_runner   # Codex NA29
         shutil.rmtree(self.map, ignore_errors=True)
 
 
@@ -215,7 +216,42 @@ def test_werkwijze_zonder_de_koppen_van_n2_wordt_geweigerd():
         code = p.draai(*KAART, "--werkwijze", p.ww)
         assert code not in (0, None)
         _niets_geschreven(p)
-        assert "nooit doet" in p.uitvoer and "Mehdi beslist" in p.uitvoer, p.uitvoer
+        assert "Wat ik nooit doe" in p.uitvoer and "Wat Mehdi beslist" in p.uitvoer, p.uitvoer
+    finally:
+        p.weg()
+
+
+def test_kop_over_wat_een_ander_nooit_doet_wordt_geweigerd():
+    """Codex NA27: "Wat ik weet over wat de klant nooit doet" is geen grens van de agent."""
+    p = Proef()
+    try:
+        with open(p.ww, "w", encoding="utf-8") as f:
+            f.write(WERKWIJZE.replace("## Wat ik nooit doe", "## Wat ik weet over wat de klant nooit doet"))
+        code = p.draai(*KAART, "--werkwijze", p.ww)
+        assert code not in (0, None)
+        _niets_geschreven(p)
+        assert "Wat ik nooit doe" in p.uitvoer, p.uitvoer
+    finally:
+        p.weg()
+
+
+def test_herstel_zet_nooit_een_ander_zaad_dan_de_goedgekeurde_tekst():
+    """Codex NA26: breekt het zetten van de werkwijze en staat er in werkwijze/ een oudere versie, dan zou het
+    herstel die oudere regels zetten. Het herstel zegt dat, en zet eerst de goedgekeurde tekst erin."""
+    nb = NepBord(faal_werkwijze_zetten=True)
+    p = Proef(nb)
+    try:
+        os.makedirs(os.path.join(p.map, "werkwijze"))
+        zaad = os.path.join(p.map, "werkwijze", "post-wacht.md")
+        with open(zaad, "w", encoding="utf-8") as f:
+            f.write("# Oude versie\n\n## Wat ik nooit doe\n- iets anders\n")
+        code = p.draai(*KAART, "--werkwijze", p.ww)
+        assert code not in (0, None)
+        uit = p.uitvoer
+        assert "is niet de werkwijze die je meegaf" in uit, uit
+        cp = uit.index(f"cp '{p.ww}' '{zaad}'")
+        assert cp < uit.index("werkwijze_naar_bord.py post-wacht --zet"), "eerst de goedgekeurde tekst in het zaad, dan zetten"
+        assert "geen werkwijze" in uit, "het herstel toont wat er nu op het bord staat"
     finally:
         p.weg()
 

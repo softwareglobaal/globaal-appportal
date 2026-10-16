@@ -237,8 +237,9 @@ cd ~/appportal/mijnagents-runner && ~/agents/.venv/bin/python nieuwe-agent.py --
 ```
 
 De werkwijze die je meegeeft moet zelf al door N1, N2, N8 en N9 komen, met punten
-onder twee aparte koppen: een over wat de agent zelf nooit doet ("## Wat ik nooit
-doe") en een over wat Mehdi beslist ("## Wat Mehdi beslist"). De generator weigert
+onder de twee afgesproken koppen "## Wat ik nooit doe" en "## Wat Mehdi beslist"
+(eventueel genummerd, of met een toevoeging tussen haakjes). Een kop over wat een
+ander nooit doet, telt niet. De generator weigert
 anders, voor er iets op schijf of op het bord staat. Daarna:
 
 - laat de runner elke ronde melden wat hij las (N4);
@@ -265,7 +266,8 @@ Zo doet de generator het sinds v1.9 (`tests/test_nieuwe_agent.py`, in de CI):
   dat niet, dan maakt hij niets: onbekend is niet vrij. Daarna schrijft hij het
   skelet, registreert hij, zet hij de werkwijze en leest hij die terug. Breekt een
   stap na de registratie, dan staat de kaart er zonder werkwijze en zegt hij hoe je
-  ze zet (`werkwijze_naar_bord.py <naam>`, dan `--zet`). Zelf hervat hij nooit: een
+  ze zet: de goedgekeurde tekst in `werkwijze/<naam>.md` (hij waarschuwt als daar een
+  andere tekst staat), `werkwijze_naar_bord.py <naam>`, dan `--zet`. Zelf hervat hij nooit: een
   kaart zonder werkwijze is niet vanzelf de zijne, en het bord toont te weinig om
   dat te herkennen (Codex NA13 en NA20).
 - **`--eerste-ronde`** weigert een runner die nog het skelet is, draait de runner

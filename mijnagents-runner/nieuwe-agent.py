@@ -112,9 +112,9 @@ def controleer(agent, werkwijze):
                 fouten.append(f"werkwijze {code}: {uitleg}")
         nooit, mehdi_beslist = bord.grenzen(werkwijze)
         if not nooit:
-            fouten.append('werkwijze: een kop over wat hij nooit doet ("## Wat ik nooit doe") met punten eronder')
+            fouten.append('werkwijze: de kop "## Wat ik nooit doe" met punten eronder')
         if not mehdi_beslist:
-            fouten.append('werkwijze: een kop over wat Mehdi beslist ("## Wat Mehdi beslist") met punten eronder')
+            fouten.append('werkwijze: de kop "## Wat Mehdi beslist" met punten eronder')
     return fouten
 
 
@@ -130,18 +130,34 @@ def stand_op_bord(naam):
     return "bestaat" if tekst.strip() else "onaf"
 
 
-def herstel(naam):
-    """Hoe je de werkwijze op een kaart zonder werkwijze zet: een handeling, na nakijken van die kaart."""
+def herstel(naam, pad=None, werkwijze=None):
+    """Hoe je de werkwijze op een kaart zonder (de juiste) werkwijze zet: een handeling, na nakijken van die
+    kaart. Codex NA26: het zaad in werkwijze/ is niet vanzelf de tekst die net is goedgekeurd; wijkt het af,
+    dan eerst de goedgekeurde tekst erin, anders zet --zet oude regels."""
+    try:
+        op_bord = bord.Agent(naam).werkwijze_lezen().strip()
+        print(f"Op het bord staat nu: {f'een werkwijze van {len(op_bord)} tekens' if op_bord else 'geen werkwijze'}.")
+    except bord.WerkwijzeOnbekend as e:
+        print(f"Wat er nu op het bord staat, is onbekend ({e}).")
     zaad = os.path.join(RUNNERMAP, "werkwijze", f"{naam}.md")
+    try:
+        with open(zaad, encoding="utf-8") as f:
+            zaad_tekst = f.read()
+    except OSError:
+        zaad_tekst = None
     print("Is dat de kaart van deze aanmaak, zet de werkwijze dan zelf, na het verschil te bekijken:")
-    if not os.path.exists(zaad):
-        print(f"  cp <jouw werkwijze>.md {zaad}")
+    if werkwijze is not None and (zaad_tekst is None or zaad_tekst.strip() != werkwijze.strip()):
+        if zaad_tekst is not None:
+            print(f"  LET OP: {zaad} is niet de werkwijze die je meegaf; zonder de stap hieronder zet --zet die tekst.")
+        print(f"  cp '{os.path.abspath(os.path.expanduser(pad or '<jouw werkwijze>.md'))}' '{zaad}'")
+    elif werkwijze is None and zaad_tekst is None:
+        print(f"  cp <jouw werkwijze>.md '{zaad}'")
     print(f"  {VENV} {os.path.join(HIER, 'werkwijze_naar_bord.py')} {naam}          (toont het verschil)")
     print(f"  {VENV} {os.path.join(HIER, 'werkwijze_naar_bord.py')} {naam} --zet    (zet de werkwijze)")
     print("Is het de kaart van een andere agent, kies dan een andere naam.")
 
 
-def maak(agent, werkwijze, cron):
+def maak(agent, werkwijze, cron, pad=None):
     naam = agent.get("naam") or ""
     fouten = controleer(agent, werkwijze)
     if fouten:
@@ -171,7 +187,7 @@ def maak(agent, werkwijze, cron):
         # Codex NA13 en NA20: een kaart zonder werkwijze is niet vanzelf een eigen afgebroken aanmaak, en het bord
         # toont te weinig om dat te herkennen. De generator hervat dus nooit zelf; hij zegt hoe je de werkwijze zet.
         print(f"Niet aangemaakt: {naam} staat al op het bord, zonder werkwijze.")
-        herstel(naam)
+        herstel(naam, pad, werkwijze)
         return 2
     if not runner_er:
         with open(doel, "w", encoding="utf-8") as f:
@@ -188,11 +204,11 @@ def maak(agent, werkwijze, cron):
         terug = bord.Agent(naam).werkwijze_lezen()
     except Exception as e:  # noqa: BLE001  elke fout hier laat een kaart zonder werkwijze achter
         print(f"LET OP: {naam} staat op het bord, maar zonder werkwijze ({type(e).__name__}: {e}).")
-        herstel(naam)
+        herstel(naam, pad, werkwijze)
         return 1
     if terug.strip() != werkwijze.strip():
         print(f"LET OP: de werkwijze die op het bord staat voor {naam}, is niet de tekst die je meegaf.")
-        herstel(naam)
+        herstel(naam, pad, werkwijze)
         return 1
 
     print(f"Aangemaakt: {naam} staat op het bord met zijn werkwijze ({len(terug.strip())} tekens).")
@@ -347,7 +363,7 @@ def main(argv=None):
         for f in [fout] + controleer(agent, None):
             print(f"  - {f}")
         return 2
-    return maak(agent, werkwijze, cron)
+    return maak(agent, werkwijze, cron, pad)
 
 
 if __name__ == "__main__":

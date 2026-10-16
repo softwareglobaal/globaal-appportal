@@ -79,14 +79,18 @@ def punten(tekst):
     return [m.group(1).strip() for m in re.finditer(r"^\s*(?:[-*]|\d+[.)])\s+(.+)$", tekst or "", re.M)]
 
 
+KOP_NOOIT = re.compile(r"^(?:\d+[.)]\s*)?wat ik nooit doe(?:\s*[(:].*)?$")
+KOP_MEHDI = re.compile(r"^(?:\d+[.)]\s*)?wat mehdi beslist(?:\s*[(:].*)?$")
+
+
 def grenzen(werkwijze):
-    """Norm N2 als regels: de punten onder de kop over wat de agent zelf nooit doet ("## Wat ik nooit doe")
-    en onder de kop over wat Mehdi beslist ("## Wat Mehdi beslist"). Twee aparte koppen: een kop die over
-    allebei gaat ("Wat ik beslist nooit doe") telt voor geen van beide (Codex NA17), en een kop over wat een
-    ander nooit doet ("Wat de klant nooit doet") is geen grens van de agent (Codex NA22). De generator eist ze
-    voor hij registreert, het sjabloon past ze elke ronde toe."""
-    nooit = _sectie_waar(werkwijze, lambda k: "nooit" in k and re.search(r"\bik\b", k) and "beslis" not in k)
-    mehdi = _sectie_waar(werkwijze, lambda k: "mehdi" in k and "beslis" in k and "nooit" not in k)
+    """Norm N2 als regels: de punten onder de afgesproken koppen "## Wat ik nooit doe" en "## Wat Mehdi beslist",
+    eventueel genummerd ("## 7. Wat ik nooit doe") of met een toevoeging tussen haakjes. Alleen die twee koppen
+    tellen: een kop die over allebei gaat, of over wat een ander nooit doet ("Wat ik weet over wat de klant nooit
+    doet"), is geen grens van de agent (Codex NA17, NA22, NA27). Zo staan ze in alle werkwijzen op het bord. De
+    generator eist ze voor hij registreert, het sjabloon past ze elke ronde toe."""
+    nooit = _sectie_waar(werkwijze, lambda k: bool(KOP_NOOIT.match(k.strip())))
+    mehdi = _sectie_waar(werkwijze, lambda k: bool(KOP_MEHDI.match(k.strip())))
     return punten(nooit), punten(mehdi)
 
 
@@ -209,7 +213,7 @@ class Agent:
             return None
         mijn = [r for r in rijen if r.get("naam") == self.naam]
         if not all(isinstance(r.get("tekst"), str) and r["tekst"].strip()
-                   and isinstance(r.get("wie") or "", str) for r in mijn):
+                   and (r.get("wie") is None or isinstance(r.get("wie"), str)) for r in mijn):  # NA28
             return None
         return [{"tekst": r["tekst"], "wie": r.get("wie") or "mehdi"} for r in mijn]
 
