@@ -38,6 +38,10 @@ def _sectietekst(p, titel):
     return tekst[i + len(titel) + 2: j if j > 0 else None].strip() if i >= 0 else ""
 
 
+# Ontwerpregel (Codex-rondes 5 en 6, stopregel, 17-10-2026): de percelenpas laadt in stukken. Een uitkomst geldt pas
+# als ze expliciet is (rijen, de nulmelding, of de kop met overtredingen met nummer) en twee keer na elkaar gelijk.
+
+
 def bouwovertredingen_uit_tekst(tekst):
     """De sectietekst -> (samenvatting, lijst van overtredingen met omschrijving, dossiernummer, registratienummer).
 
@@ -94,18 +98,21 @@ def lees(ctx, lat, lon, adres, map_=None):
             _cookies_weigeren(p)
             # De inleiding staat er meteen, het perceel en de tabel komen later (17-10-2026: na 15 s nog een lege
             # tabel en geen perceel, terwijl hetzelfde adres eerder 5 vergunningen gaf). Wachten op beide.
-            m = None
+            m, vorige = None, None
             for _ in range(45):
                 tekst = p.locator("body").inner_text()
                 m = re.search(r"\b\d{5}[A-Z]\d{4}/\d{2}[A-Z]\d{3}\b", tekst)
                 # Alleen rijen van de vergunningentabel tellen: die dragen een selectievakje table-checkbox<nr> (FX22).
                 rijen_klaar = p.evaluate("""() => document.querySelectorAll(
                         'tr input[id^="table-checkbox"]:not(#table-checkbox-all)').length""")
-                if m and (rijen_klaar > 0 or "geen vergunningen" in tekst):  # gevulde rijen of de nulmelding (Codex FX18)
+                stand = (m.group() if m else None, rijen_klaar, "geen vergunningen" in tekst)
+                uitkomst = m and (rijen_klaar > 0 or "geen vergunningen" in tekst)  # rijen of de nulmelding (FX18)
+                if uitkomst and stand == vorige:  # stabiel: twee keer na elkaar hetzelfde (ontwerpronde 7)
                     break
+                vorige = stand if uitkomst else None
                 p.wait_for_timeout(2000)
             else:
-                raise RuntimeError("perceel of tabel niet geladen na 90 seconden")
+                raise RuntimeError("perceel of tabel niet stabiel geladen na 90 seconden")
             p.wait_for_timeout(1500)
             uit["capakey"] = m.group()
             for cellen in p.evaluate("""() => [...document.querySelectorAll('tr')].filter(tr =>
@@ -134,14 +141,19 @@ def lees(ctx, lat, lon, adres, map_=None):
         try:
             p.goto(url("bouwovertredingen", lat, lon, adres), wait_until="domcontentloaded", timeout=90000)
             # 'proces-verbaal' staat al in de inleiding: wachten op een uitkomst voor dit perceel (Codex FX25).
+            # Een uitkomst is 'geen gekend', of de kop met minstens een overtreding met nummer: de kop alleen kan er
+            # staan voor de dossierregels geladen zijn (Codex FX26). 'onbekend' telt nooit als gelezen.
+            vorige = None
             for _ in range(45):
                 sectie = _sectietekst(p, "Bouwovertredingen")
-                if UITKOMST_GEEN in sectie or UITKOMST_WEL in sectie:
+                samen, lijst = bouwovertredingen_uit_tekst(sectie)
+                uitkomst = samen == "geen gekend" or (UITKOMST_WEL in sectie and lijst)
+                if uitkomst and sectie == vorige:  # stabiel: twee keer na elkaar dezelfde uitkomst (ontwerpronde 7)
                     break
+                vorige = sectie if uitkomst else None
                 p.wait_for_timeout(2000)
             else:
-                raise RuntimeError("geen uitkomst voor de bouwovertredingen na 90 seconden")
-            samen, lijst = bouwovertredingen_uit_tekst(sectie)
+                raise RuntimeError("geen volledige, stabiele uitkomst voor de bouwovertredingen na 90 seconden")
             uit["bouwovertredingen"], uit["bouwovertredingen_lijst"] = samen, lijst
             uit["gelezen"]["bouwovertredingen"] = True
             if map_ and _printscreen(p, os.path.join(map_, "Bouwovertredingen.png"), uit["fouten"]):

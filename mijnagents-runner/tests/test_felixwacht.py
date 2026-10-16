@@ -298,5 +298,58 @@ check("zonder uitkomst bij de bouwovertredingen is die sectie niet gelezen (Code
       not _stad["gelezen"]["bouwovertredingen"] and any("bouwovertredingen" in f for f in _stad["fouten"]), _stad)
 check("de vergunningen blijven wel gelezen", _stad["gelezen"]["vergunningen"] and len(_stad["vergunningen"]) == 1)
 
+
+
+class _NepPaginaKop(_NepPagina):
+    """Alleen de kop 'Vastgestelde bouwovertredingen', nog zonder dossierregels (Codex FX26)."""
+    def locator(self, *a, **k):
+        p = self
+        class _L:
+            def inner_text(self_):
+                if "bouwovertredingen" in p.url:
+                    return "x\nBouwovertredingen\nInleiding.\nVastgestelde bouwovertredingen\nVeelgestelde vragen"
+                return "Perceel 11344A0430/00H014\nDossiernummer"
+        return _L()
+
+
+class _NepContextKop:
+    def new_page(self):
+        return _NepPaginaKop()
+
+
+_stad = PP.lees(_NepContextKop(), 51.2, 4.47, "Grotesteenweg 459, 2600 Antwerpen")
+check("de kop zonder dossierregels is geen uitkomst (Codex FX26)",
+      not _stad["gelezen"]["bouwovertredingen"] and any("bouwovertredingen" in f for f in _stad["fouten"]), _stad)
+
+
+
+class _NepPaginaLadend(_NepPagina):
+    """De lijst bouwovertredingen laadt in stukken: eerst een, daarna twee (ontwerpronde 7)."""
+    def __init__(self):
+        super().__init__()
+        self.lezingen = 0
+    def locator(self, *a, **k):
+        p = self
+        class _L:
+            def inner_text(self_):
+                if "bouwovertredingen" not in p.url:
+                    return "Perceel 11303C0256/00E012\nDossiernummer"
+                p.lezingen += 1
+                een = "Werken zonder vergunning\nDossiernummer: 202410548\nRegistratienummer: 11002_2024_11491"
+                twee = een + "\nWerken in strijd met vergunning\nDossiernummer: 202410548\nRegistratienummer: 11002_2024_11492"
+                lijst = een if p.lezingen == 1 else twee
+                return "x\nBouwovertredingen\nInleiding.\nVastgestelde bouwovertredingen\n" + lijst + "\nVeelgestelde vragen"
+        return _L()
+
+
+class _NepContextLadend:
+    def new_page(self):
+        return _NepPaginaLadend()
+
+
+_stad = PP.lees(_NepContextLadend(), 51.18, 4.43, "Grotesteenweg 459, 2600 Antwerpen")
+check("een lijst die nog laadt, wordt pas aanvaard als ze stabiel is: twee overtredingen, niet een",
+      _stad["gelezen"]["bouwovertredingen"] and len(_stad["bouwovertredingen_lijst"]) == 2, _stad["bouwovertredingen_lijst"])
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
