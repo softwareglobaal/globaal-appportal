@@ -17,6 +17,9 @@ import urllib.parse
 BASIS = "https://omgeving.antwerpen.be/percelenpas"
 UITKOMST_GEEN = "Er zijn geen gekende bouwovertredingen"
 UITKOMST_WEL = "Vastgestelde bouwovertredingen"
+# Een scherm dat twee keer hetzelfde toont, bewijst niet dat de stad klaar is met laden (Codex-ronde 7): zonder
+# bronantwoord tonen we wat het scherm zegt, maar is het resultaat onvolledig.
+NIET_BEVESTIGD = "{} alleen van het scherm gelezen: het bronantwoord van de stad kwam niet binnen, dus niet bevestigd"
 
 
 def url(sectie, lat, lon, adres):
@@ -83,11 +86,35 @@ def _printscreen(p, pad, fouten):
 
 
 def _layer_tile(antwoord):
-    """Het deel van het bronantwoord met de gegevens van het perceel (content-with-gis-by-slug)."""
+    """Het deel van het bronantwoord met de gegevens van het perceel (content-with-gis-by-slug).
+
+    {} als de stad uitdrukkelijk niets heeft: dan is de inhoud een lege lijst (gemeten 17-10-2026 bij Wielelei 85 en
+    Frans Brandsstraat 11, geen bouwovertredingen). None bij een vorm die we niet kennen: dan lezen we het scherm en
+    is het resultaat onvolledig.
+    """
     try:
-        return antwoord["fields"]["content"]["content"][0]["value"]["layerTile"] or {}
-    except (KeyError, IndexError, TypeError):
+        inhoud = antwoord["fields"]["content"]["content"]
+    except (KeyError, TypeError):
         return None
+    if not isinstance(inhoud, list):
+        return None
+    if not inhoud:
+        return {}
+    for blok in inhoud:
+        waarde = blok.get("value") if isinstance(blok, dict) else None
+        if isinstance(waarde, dict) and isinstance(waarde.get("layerTile"), dict):
+            return waarde["layerTile"]
+    return None
+
+
+def _is_bronantwoord(r, sectie):
+    """Het antwoord van de stad voor deze sectie: de aanvraag noemt de sectie ('"url":"/percelenpas/<sectie>"')."""
+    if "content-with-gis-by-slug" not in r.url:
+        return False
+    try:
+        return f"/percelenpas/{sectie}" in (r.request.post_data or "")
+    except Exception:
+        return False
 
 
 def vergunningen_uit_bron(tile):
@@ -118,11 +145,11 @@ def bouwovertredingen_uit_bron(tile):
     return (f"{len(lijst)} vastgesteld" if lijst else "geen gekend"), lijst
 
 
-def _open_met_bron(p, adres_url):
-    """Een sectie openen en het bronantwoord van de stad opvangen (content-with-gis-by-slug), of None."""
+def _open_met_bron(p, sectie, adres_url):
+    """Een sectie openen en het bronantwoord van de stad voor die sectie opvangen, of None."""
     tile = None
     try:
-        with p.expect_response(lambda r: "content-with-gis-by-slug" in r.url, timeout=90000) as antw:
+        with p.expect_response(lambda r: _is_bronantwoord(r, sectie), timeout=90000) as antw:
             p.goto(adres_url, wait_until="domcontentloaded", timeout=90000)
         if antw.value.status == 200:
             tile = _layer_tile(antw.value.json())
@@ -138,7 +165,8 @@ def lees(ctx, lat, lon, adres, map_=None):
 
     De gegevens komen uit het bronantwoord van de stad (een JSON per sectie), niet uit het scherm: een scherm laadt in
     stukken en een tussenstand leek volledig (Codex-rondes 5 tot 7, 17-10-2026). Alleen als het bronantwoord niet
-    binnenkomt, lezen we het scherm met de regel 'expliciet en twee keer gelijk', en zeggen we dat erbij.
+    binnenkomt, lezen we het scherm met de regel 'expliciet en twee keer gelijk', zeggen we dat erbij en is het
+    resultaat onvolledig.
     """
     uit = {"url": url("vergunningen", lat, lon, adres), "capakey": "", "vergunningen": [], "bouwovertredingen": "",
            "bouwovertredingen_lijst": [], "bewijs": [], "fouten": [], "bron": {},
@@ -148,7 +176,7 @@ def lees(ctx, lat, lon, adres, map_=None):
     p = ctx.new_page()
     try:
         try:
-            tile = _open_met_bron(p, uit["url"])
+            tile = _open_met_bron(p, "vergunningen", uit["url"])
             p.wait_for_selector("text=Toelatingen die voor 1962", timeout=60000)
             _cookies_weigeren(p)
             if tile is not None:
@@ -157,6 +185,7 @@ def lees(ctx, lat, lon, adres, map_=None):
             else:
                 uit["vergunningen"] = _vergunningen_van_scherm(p)
                 uit["bron"]["vergunningen"] = "scherm (bronantwoord niet ontvangen)"
+                uit["fouten"].append(NIET_BEVESTIGD.format("vergunningen"))
             uit["gelezen"]["vergunningen"] = True
             uit["capakey"] = _capakey(p)
         except Exception as e:
@@ -175,13 +204,14 @@ def lees(ctx, lat, lon, adres, map_=None):
                 uit["fouten"].append(f"PDF-rapport van de stad niet gelukt: {str(e).splitlines()[0][:150]}")
 
         try:
-            tile = _open_met_bron(p, url("bouwovertredingen", lat, lon, adres))
+            tile = _open_met_bron(p, "bouwovertredingen", url("bouwovertredingen", lat, lon, adres))
             if tile is not None:
                 samen, lijst = bouwovertredingen_uit_bron(tile)
                 uit["bron"]["bouwovertredingen"] = "bronantwoord van de stad"
             else:
                 samen, lijst = _bouwovertredingen_van_scherm(p)
                 uit["bron"]["bouwovertredingen"] = "scherm (bronantwoord niet ontvangen)"
+                uit["fouten"].append(NIET_BEVESTIGD.format("bouwovertredingen"))
             uit["bouwovertredingen"], uit["bouwovertredingen_lijst"] = samen, lijst
             uit["gelezen"]["bouwovertredingen"] = True
             if map_:

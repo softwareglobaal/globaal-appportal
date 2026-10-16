@@ -368,12 +368,16 @@ check("een toelating voor 1962 krijgt '<id>_<inventaris>' zoals de stad toont",
 
 
 class _NepAntwoord:
-    def __init__(self, data):
+    """Het antwoord volgt de sectie die na het openen geladen is, zoals op de echte site (niet de vorige sectie)."""
+    def __init__(self, pagina, leeg=()):
         self.value = self
         self.status = 200
-        self._data = data
+        self._p, self._leeg = pagina, leeg
     def json(self):
-        return {"fields": {"content": {"content": [{"value": {"layerTile": self._data}}]}}}
+        sectie = "bouwovertredingen" if "/bouwovertredingen" in self._p.url else "vergunningen"
+        if sectie in self._leeg:  # zo antwoordt de stad als er niets is (Wielelei 85, 17-10-2026)
+            return {"fields": {"title": "x", "content": {"title": "x", "content": []}}}
+        return {"fields": {"content": {"content": [{"value": {"layerTile": _bron[sectie]}}]}}}
     def __enter__(self):
         return self
     def __exit__(self, *a):
@@ -382,12 +386,11 @@ class _NepAntwoord:
 
 class _NepPaginaBron(_NepPagina):
     """Een pagina waarvan het scherm leeg blijft, maar het bronantwoord volledig is."""
+    leeg = ()
     def expect_response(self, *a, **k):
-        return _NepAntwoord(_bron["bouwovertredingen"] if "bouwovertredingen" in (self.url or "") or self._volgende == "b"
-                            else _bron["vergunningen"])
+        return _NepAntwoord(self, self.leeg)
     def goto(self, url, **k):
         self.url = url
-    _volgende = "v"
 
 
 class _NepContextBron:
@@ -398,8 +401,39 @@ class _NepContextBron:
 _stad = PP.lees(_NepContextBron(), 51.18, 4.43, "Grotesteenweg 459, 2600 Antwerpen")
 check("lees() gebruikt het bronantwoord en zegt dat (vergunningen)", _stad["bron"].get("vergunningen") == "bronantwoord van de stad"
       and len(_stad["vergunningen"]) == 3, _stad["bron"])
+check("lees() leest elke sectie uit haar eigen bronantwoord: twee bouwovertredingen, geen fout",
+      _stad["bron"].get("bouwovertredingen") == "bronantwoord van de stad" and _stad["bouwovertredingen"] == "2 vastgesteld"
+      and not _stad["fouten"], (_stad["bouwovertredingen"], _stad["fouten"]))
 _stad2 = PP.lees(_NepContext(), 51.2, 4.47, "August Van de Wielelei 85, 2100 Antwerpen")
 check("zonder bronantwoord valt lees() terug op het scherm, en zegt dat", "scherm" in _stad2["bron"].get("vergunningen", ""), _stad2["bron"])
+check("zonder bronantwoord is het resultaat onvolledig: twee gelijke schermen bewijzen niets (Codex-ronde 7)",
+      any("niet bevestigd" in f for f in _stad2["fouten"]), _stad2["fouten"])
+
+
+class _NepContextBronLeeg:
+    def new_page(self):
+        p = _NepPaginaBron()
+        p.leeg = ("bouwovertredingen",)
+        return p
+
+
+_stad3 = PP.lees(_NepContextBronLeeg(), 51.22, 4.48, "August Van de Wielelei 85, 2100 Antwerpen")
+check("een lege inhoud van de stad is een uitdrukkelijk 'geen gekend', geen terugval op het scherm",
+      _stad3["bouwovertredingen"] == "geen gekend" and _stad3["bron"].get("bouwovertredingen") == "bronantwoord van de stad"
+      and not _stad3["fouten"], (_stad3["bouwovertredingen"], _stad3["bron"], _stad3["fouten"]))
+check("een onbekende vorm van het bronantwoord is geen 'geen gekend'", PP._layer_tile({"fields": {"x": 1}}) is None
+      and PP._layer_tile({"fields": {"content": {"content": [{"value": {"iets": 1}}]}}}) is None)
+
+
+class _R:
+    def __init__(self, url, post):
+        self.url, self.request = url, type("Q", (), {"post_data": post})()
+
+
+check("alleen het bronantwoord van de eigen sectie telt",
+      PP._is_bronantwoord(_R("https://x/content-with-gis-by-slug", '{"url":"/percelenpas/bouwovertredingen"}'), "bouwovertredingen")
+      and not PP._is_bronantwoord(_R("https://x/content-with-gis-by-slug", '{"url":"/percelenpas/vergunningen"}'), "bouwovertredingen")
+      and not PP._is_bronantwoord(_R("https://x/andere", '{"url":"/percelenpas/vergunningen"}'), "vergunningen"))
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
