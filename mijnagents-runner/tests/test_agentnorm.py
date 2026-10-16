@@ -468,6 +468,10 @@ def test_sectie_punten_en_grenzen_lezen_de_werkwijze():
     # Codex NA27: alleen de afgesproken koppen tellen, eventueel genummerd of met een toevoeging tussen haakjes
     assert bord.grenzen("## Wat ik weet over wat de klant nooit doet\n- a\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
     assert bord.grenzen("## Wat ik nooit doe (sinds 16-10-2026)\n- a\n\n## 3) Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
+    # Codex NA32: een kop of punt in een codeblok is een voorbeeld, geen regel
+    assert bord.grenzen("```\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
+    assert bord.grenzen("## Wat ik nooit doe\n- a\n```\n- in code\n```\n- b\n\n## Wat Mehdi beslist\n- c\n") == (["a", "b"], ["c"])
+    assert bord.grenzen("~~~~\n```\n## Wat ik nooit doe\n- x\n~~~~\n## Wat ik nooit doe\n- y\n## Wat Mehdi beslist\n- z\n") == (["y"], ["z"])
 
 
 def _sjabloon_werk():

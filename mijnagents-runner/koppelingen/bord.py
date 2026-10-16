@@ -51,11 +51,28 @@ class WerkwijzeOnbekend(RondeGestopt):
         super().__init__(f"{soort} ({reden})" if reden else soort)
 
 
+def _buiten_codeblokken(tekst):
+    """De regels van een Markdown-tekst die niet in een codeblok (``` of ~~~) staan. Een kop of punt in een
+    codeblok is een voorbeeld, geen regel (Codex NA32)."""
+    regels, hek = [], None
+    for regel in (tekst or "").splitlines():
+        m = re.match(r"^\s{0,3}(`{3,}|~{3,})", regel)
+        if hek is None and m:
+            hek = m.group(1)[0] * len(m.group(1))
+            continue
+        if hek is not None:
+            if re.match(r"^\s{0,3}" + re.escape(hek[0]) + "{" + str(len(hek)) + r",}\s*$", regel):
+                hek = None
+            continue
+        regels.append(regel)
+    return regels
+
+
 def _sectie_waar(tekst, past):
     """De tekst onder de eerste kop waarvoor past(koptekst) waar is, tot de volgende kop van hetzelfde of
-    een hoger niveau."""
+    een hoger niveau. Codeblokken tellen niet mee."""
     niveau, regels = None, []
-    for regel in (tekst or "").splitlines():
+    for regel in _buiten_codeblokken(tekst):
         m = re.match(r"^(#{1,6})\s+(.*)$", regel)
         if niveau is None:
             if m and past(m.group(2).lower()):
@@ -76,7 +93,8 @@ def sectie(tekst, kop):
 
 def punten(tekst):
     """De opsommingspunten uit een stuk werkwijze ("- ...", "* ..." of "1. ..."), zonder het teken ervoor."""
-    return [m.group(1).strip() for m in re.finditer(r"^\s*(?:[-*]|\d+[.)])\s+(.+)$", tekst or "", re.M)]
+    return [m.group(1).strip() for m in re.finditer(r"^\s*(?:[-*]|\d+[.)])\s+(.+)$",
+                                                   "\n".join(_buiten_codeblokken(tekst)), re.M)]
 
 
 KOP_NOOIT = re.compile(r"^(?:\d+[.)]\s*)?wat ik nooit doe(?:\s*[(:].*)?$")

@@ -320,6 +320,22 @@ def test_herstel_quoteert_paden():
         p.weg()
 
 
+def test_koppen_alleen_in_een_codeblok_worden_geweigerd():
+    """Codex NA32: een werkwijze met de twee koppen alleen in een codeblok heeft geen echte grenzen."""
+    p = Proef()
+    try:
+        boven, rest = WERKWIJZE.split("## Wat ik nooit doe", 1)
+        grens, bronnen = rest.split("## Bronnen", 1)
+        with open(p.ww, "w", encoding="utf-8") as f:
+            f.write(boven + "```\n## Wat ik nooit doe" + grens + "```\n\n## Bronnen" + bronnen)
+        code = p.draai(*KAART, "--werkwijze", p.ww)
+        assert code not in (0, None), p.uitvoer
+        _niets_geschreven(p)
+        assert "Wat ik nooit doe" in p.uitvoer and "Wat Mehdi beslist" in p.uitvoer, p.uitvoer
+    finally:
+        p.weg()
+
+
 def test_te_korte_werkwijze_wordt_geweigerd():
     p = Proef()
     try:
