@@ -36,27 +36,38 @@ class WerfFrontendTest(unittest.TestCase):
         finally:
             fixture.tearDown()
 
-    def test_conceptlink_naar_de_werfapp_en_een_vreemde_url_niet(self):
-        """De schrijver zet de werfapp-verwijzing in proef_info; het bord toont alleen een link naar werf.globaal.be."""
+    def test_conceptlink_uit_het_id_en_eerlijke_stand(self):
+        """De link wordt opgebouwd uit het verslag-ID naar https://werf.globaal.be; een bewaarde url telt niet (CX4-9).
+        Een oudere proef zonder concept en een proces-verbaal krijgen elk hun eigen stand (CX4-12)."""
         import json
         fixture = fixture_module.WerfVerwerkingTest("test_gelukt_zonder_bewaard_resultaat_kan_niet")
         A, BEHEER = fixture_module.A, fixture_module.BEHEER
         fixture.setUp()
         try:
-            for url, zichtbaar in (("https://werf.globaal.be/verslag/7/bewerken", True), ("https://elders.example/verslag/7", False)):
-                with self.subTest(url=url), A.app.app_context():
-                    info = {"punten": 3, "fotos": 1, "werfapp": {"id": 7, "nummer": "2309-1", "url": url, "nieuw": True}}
+            gevallen = [
+                ({"werfapp": {"id": 7, "nummer": "2309-1", "url": "https://elders.example/verslag/7"}}, "https://werf.globaal.be/verslag/7/bewerken", "concept in de werfapp"),
+                ({"werfapp": {"id": "7\"><script>", "nummer": "x"}}, None, "oudere proef"),
+                ({"punten": 3}, None, "oudere proef"),
+                ({"verslagtype": "voorlopige_oplevering"}, None, "Word-sjabloon van de oplevering"),
+                ({"werfapp": {"fout": "geen vast bezoek (registratie) voor deze bordrij; niets aangemaakt", "status": 0}}, None, "geen concept in de werfapp: geen vast bezoek"),
+            ]
+            for info, link, stand in gevallen:
+                with self.subTest(info=info), A.app.app_context():
                     A.db().execute("UPDATE werfbezoek SET proef_pad='/proef/2309-1 werfverslag (concept).docx', proef_ts='2026-10-16', proef_info=? WHERE id=1",
                                    (json.dumps(info),))
                     A.db().commit()
-                for pagina in ("/werfverslag/2309/1?rij_id=1", "/werfverslagen"):
-                    html = fixture.client.get(pagina, headers=BEHEER).get_data(as_text=True)
-                    self.assertEqual(url in html, zichtbaar, pagina)
-                html = fixture.client.get("/werfverslag/2309/1?rij_id=1", headers=BEHEER).get_data(as_text=True)
-                self.assertIn("Maak concept", html)
-                if zichtbaar:
-                    self.assertIn("Verslag 2309-1 openen", html)
-                    self.assertIn("concept in de werfapp", fixture.client.get("/werfverslagen", headers=BEHEER).get_data(as_text=True))
+                pagina = fixture.client.get("/werfverslag/2309/1?rij_id=1", headers=BEHEER).get_data(as_text=True)
+                overzicht = fixture.client.get("/werfverslagen", headers=BEHEER).get_data(as_text=True)
+                self.assertNotIn("elders.example", pagina + overzicht)
+                self.assertNotIn("<script>\"", pagina + overzicht)
+                self.assertIn("Maak concept", pagina)
+                if link:
+                    self.assertIn(link, pagina)
+                    self.assertIn(link, overzicht)
+                else:
+                    self.assertNotIn("werf.globaal.be/verslag/", pagina + overzicht)
+                self.assertIn(stand, overzicht)
+                self.assertNotIn("niets, nakijken en versturen", overzicht)
         finally:
             fixture.tearDown()
 

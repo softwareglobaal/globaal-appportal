@@ -136,6 +136,30 @@ def eigen_tekst(naam):
                                      and not re.search(r"niet getranscribeerd|geen opname", laag))
 
 
+# Eigen fotomappen (gemeten 16-10-2026 op de live bezoekmappen): "fotos" (export van de iCloud-wacht) en "fotos icloud mehdi".
+# Niet: "4. foto's" (projectstructuur), foto's in de wortel (herkomst onbekend), "foto niet gebruiken", of een "fotos"-map
+# dieper in een submap van derden (CX4-3, CX4-8).
+EIGEN_FOTOMAP = re.compile(r"^fotos(\s.*\bmehdi\b.*)?$", re.I)
+
+
+def eigen_bestand(bezoekmap, pad, naam):
+    """Herkomst op plaats en naam: een eigen tekst staat in de wortel van de bezoekmap (of is 00 fotos.md in een eigen
+    fotomap), een eigen foto staat rechtstreeks in een eigen fotomap. Geeft 'tekst', 'foto' of None."""
+    wortel = (bezoekmap or "").rstrip("/").lower() + "/"
+    if not pad.lower().startswith(wortel):
+        return None
+    delen = pad[len(wortel):].split("/")
+    laag = naam.lower()
+    if len(delen) == 1:
+        return "tekst" if eigen_tekst(naam) else None
+    if len(delen) == 2 and EIGEN_FOTOMAP.match(delen[0].strip()):
+        if laag.endswith((".jpg", ".jpeg", ".heic", ".png")):
+            return "foto"
+        if laag == "00 fotos.md":
+            return "tekst"
+    return None
+
+
 def bronkeuze(rij):
     """Regel van Mehdi (14-09-2026): een verslag bevat alleen wat hij zelf zag, fotografeerde en ter plaatse besprak.
     Standaard dus 'eigen', ook zonder bewaarde keuzes; 'alle' alleen als hij op de bezoekpagina 'alles' koos (CX3-5)."""
@@ -159,7 +183,7 @@ def lees_bezoekmap(bezoekmap, alleen_eigen=False):
         if laag.startswith(".") or "(concept)" in laag:
             continue
         in_fotos = "/fotos/" in pad.lower()
-        if alleen_eigen and not (eigen_tekst(naam) or in_fotos or laag.endswith((".mp3", ".m4a", ".wav"))):
+        if alleen_eigen and not (eigen_bestand(bezoekmap, pad, naam) or laag.endswith((".mp3", ".m4a", ".wav"))):
             continue
         if in_fotos and laag.endswith(".heic") and (laag[:-5] + ".jpg") in namen:
             continue  # de jpeg-kopie telt, niet het HEIC-origineel
@@ -637,28 +661,43 @@ def proef(ag, dossier, volgnr):
     n_punten = sum(len(c["punten"]) for c in verslag["categorieen"])
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"proef gezet: {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {n_punten} punten, "
            f"{len(beelden)} foto's) en {os.path.basename(pad_md)} in de bezoekmap; open: {telling} ({usage.input_tokens}+{usage.output_tokens} tokens)")
-    werf = naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx)
-    _bewaar(rij, dossier, volgnr, verslag_md=md, proef_pad=pad_docx, proef_ts=vandaag,
-            proef_info={"verslagtype": verslagtype, "taal": taal, "punten": n_punten, "fotos": len(beelden), "open": telling, "docx_kb": len(docx) // 1024,
-                        "dekking": gegevens["dekking"], "beeldanalyse": "niet uitgevoerd", "hergebruikt": bool(getattr(usage, "hergebruikt", False)),
-                        "werfapp": werf, "_verwerking": getattr(usage, "verwerking", {})})
+    info = {"verslagtype": verslagtype, "taal": taal, "punten": n_punten, "fotos": len(beelden), "open": telling, "docx_kb": len(docx) // 1024,
+            "dekking": gegevens["dekking"], "beeldanalyse": "niet uitgevoerd", "hergebruikt": bool(getattr(usage, "hergebruikt", False)),
+            "_verwerking": getattr(usage, "verwerking", {})}
+    # Eerst de betaalde proef op de bordrij bewaren, dan pas de brug: wat de brug ook doet, de proef en haar markdown
+    # (de invoer voor --naar-werfapp) zijn er (CX4-4).
+    _bewaar(rij, dossier, volgnr, verslag_md=md, proef_pad=pad_docx, proef_ts=vandaag, proef_info=info)
+    _bewaar(rij, dossier, volgnr, proef_info=dict(info, werfapp=naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx)))
     return pad_docx, md
+
+
+def _vast_bezoek(rij, dossier, volgnr):
+    """Het vaste bezoek van deze bordrij, vers uit het bezoekregister (dezelfde idempotente registratie als bij elke betaalde
+    stap); lukt dat niet, dan de bewaarde registratie van de rij. Zonder bezoek maakt de brug niets (CX4-1)."""
+    try:
+        return register.registreer(rij, dossier, volgnr)
+    except register.RegisterFout:
+        reg = rij.get("registratie")
+        return reg if isinstance(reg, dict) else {}
 
 
 def naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx):
     """De proef als conceptverslag in de werfapp, waar Mehdi naleest en verstuurt. Een fout hier laat de Word-proef
     staan: de reden komt op de bordrij en in het logboek, er wordt niets opnieuw betaald."""
-    vorige = (rij.get("proef_info") or {}).get("werfapp") or {}
     try:
-        r = werfapp.concept(verslag, rij, fotos, proef_pad=pad_docx, vorige=vorige if vorige.get("id") else None)
+        r = werfapp.concept(verslag, dict(rij, registratie=_vast_bezoek(rij, dossier, volgnr)), fotos, proef_pad=pad_docx)
     except werfapp.WerfappFout as ex:
         ag.log(f"{dossier}-{volgnr}", "fout" if ex.status not in (0, 409) else "bevinding", f"geen concept in de werfapp: {ex.fout}")
-        bewaard = {k: vorige[k] for k in ("id", "nummer", "url") if vorige.get("id") and vorige.get(k)}
-        return {"fout": ex.fout, "status": ex.status, **bewaard}
+        return {"fout": ex.fout, "status": ex.status}
+    except Exception as ex:  # noqa: BLE001 - een fout in de brug mag de betaalde proef nooit doen mislukken
+        ag.log(f"{dossier}-{volgnr}", "fout", f"geen concept in de werfapp: {type(ex).__name__}")
+        return {"fout": f"interne fout in de brug ({type(ex).__name__}); de Word-proef staat in de bezoekmap", "status": -1}
     wat = "concept gezet" if r["nieuw"] else "concept bestond al en blijft zoals het is"
     mis = r.get("fotos_niet_gevonden") or []
+    verwacht = f"{dossier}-{verslag.get('bezoek')}"
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"werfapp: {wat}: verslag {r['nummer']}" + (" (project nieuw aangemaakt)" if r["project_nieuw"] else "")
-           + (f"; {len(mis)} genoemde foto('s) niet als jpg/png in de bezoekmap: {', '.join(mis[:10])}" if mis else ""))
+           + (f"; let op: het bezoek had al verslag {r['nummer']}, niet {verwacht}" if r["nummer"] != verwacht else "")
+           + (f"; {len(mis)} genoemde foto('s) niet als jpg/png in een eigen fotomap: {', '.join(mis[:10])}" if mis else ""))
     uit = {k: r[k] for k in ("id", "nummer", "url", "nieuw")}
     if mis:
         uit["fotos_niet_gevonden"] = mis[:50]

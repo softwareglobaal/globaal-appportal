@@ -177,7 +177,7 @@
   <form class="inline" method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="rij_id" value="{{ b.id }}"><input type="hidden" name="revisie" value="{{ b.formulier_revisie }}"><input type="hidden" name="soort" value="voorbereid"><button class="knop licht" type="submit">Alleen voorbereiden</button></form>
   <form class="inline" method="post" action="{{ url_for('werfbezoek_opdracht', dossier=b.dossier, volgnr=b.volgnr) }}"><input type="hidden" name="rij_id" value="{{ b.id }}"><input type="hidden" name="revisie" value="{{ b.formulier_revisie }}"><input type="hidden" name="soort" value="proef"><button class="knop" type="submit">Maak concept</button></form>
 </p>
-<p class="stil">Eén klik volstaat: <em>Maak concept</em> analyseert de bezoekmap (wat al betaald is wordt hergebruikt), schrijft het verslag en zet het als concept in de werfapp, met de Word-versie in de bezoekmap. Zonder bewaarde keuzes gelden alleen je eigen opname, notities en foto's. Binnen vijf minuten staat de link hieronder. Dezelfde bronnen en keuzes gebruiken de bestaande opdracht; gewijzigde invoer krijgt een nieuwe verwerking.</p>
+<p class="stil">Eén klik volstaat: <em>Maak concept</em> analyseert de bezoekmap (een proces-verbaal van oplevering blijft een Word-sjabloon) (wat al betaald is wordt hergebruikt), schrijft het verslag en zet het als concept in de werfapp, met de Word-versie in de bezoekmap. Zonder bewaarde keuzes gelden alleen je eigen opname, notities en foto's. Binnen vijf minuten staat de link hieronder. Dezelfde bronnen en keuzes gebruiken de bestaande opdracht; gewijzigde invoer krijgt een nieuwe verwerking.</p>
 {% if b.verwerkingen %}
 <h3>Verwerking en kosten</h3>
 <table><tr><th>Fase</th><th>Nieuwe tokens</th><th>Hergebruik</th><th>Geraamde nieuwe kosten USD</th></tr>
@@ -189,11 +189,15 @@
 {% endif %}
 {% if b.heeft_proef %}
 {% set wa = (b.proef_info or {}).get('werfapp') or {} %}
-{% if wa.id and wa.url and (wa.url.startswith('https://werf.globaal.be/') or wa.url.startswith('http://127.0.0.1:')) %}
-<div class="melding"><strong>Concept in de werfapp:</strong> <a class="knop" href="{{ wa.url }}" target="_blank" rel="noopener">Verslag {{ wa.nummer }} openen</a><br>
-  <span class="stil">Daar lees je na, pas je aan en klik je zelf Versturen. Een nieuwe proef overschrijft dit concept nooit.</span>{% if wa.fout %}<br><span class="stil">Laatste poging: {{ wa.fout }}</span>{% endif %}</div>
-{% elif wa.fout %}
-<div class="melding"><strong>Geen concept in de werfapp:</strong> {{ wa.fout }}</div>
+{% if (wa.get('id')|int(0)) > 0 %}
+<div class="melding"><strong>Concept in de werfapp:</strong> <a class="knop" href="https://werf.globaal.be/verslag/{{ wa.get('id')|int }}/bewerken" target="_blank" rel="noopener">Verslag {{ wa.get('nummer') or '' }} openen</a><br>
+  <span class="stil">Daar lees je na, pas je aan en klik je zelf Versturen. Een nieuwe proef overschrijft dit concept nooit.</span>{% if wa.get('fout') %}<br><span class="stil">Laatste poging: {{ wa.get('fout') }}</span>{% endif %}</div>
+{% elif wa.get('fout') %}
+<div class="melding"><strong>Geen concept in de werfapp:</strong> {{ wa.get('fout') }}</div>
+{% elif (b.proef_info or {}).get('verslagtype') in ('voorlopige_oplevering', 'definitieve_oplevering') %}
+<div class="melding"><strong>Proces-verbaal van oplevering:</strong> blijft voorlopig een Word-sjabloon in de bezoekmap; de rondgang vul je zelf in.</div>
+{% else %}
+<div class="melding"><strong>Nog geen concept in de werfapp:</strong> deze proef is van vóór de brug (16-10-2026). Doorzetten kost geen tokens: <code>werfverslag_schrijver.py --naar-werfapp {{ b.dossier }} {{ b.bronnen.nr_label or b.volgnr }}</code>.</div>
 {% endif %}
 <div class="melding"><strong>Word-concept:</strong> <code>{{ b.proef_pad }}</code><br>
   <span class="stil">Gemaakt op {{ b.proef_ts }}{% if b.proef_info %} · {{ b.proef_info.verslagtype }} · {{ b.proef_info.punten }} punten · {{ b.proef_info.fotos }} foto's · {{ b.proef_info.docx_kb }} kB{% if b.proef_info.open %} · nog {{ b.proef_info.open.in_te_vullen }} in te vullen, {{ b.proef_info.open.na_te_kijken }} na te kijken, {{ b.proef_info.open.raming_open }} ramingen{% endif %}{% endif %}. Dezelfde tekst staat ernaast als .md. Jij legt er je laag overheen en verstuurt; de agents versturen nooit.</span></div>

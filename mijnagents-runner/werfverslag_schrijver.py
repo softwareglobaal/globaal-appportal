@@ -108,10 +108,13 @@ def main():
         d, n = a.naar_werfapp
         ag.hartslag("actief", taak=f"concept in de werfapp {d}-{n}")
         try:
-            print(wp.werfapp_uit_proef(ag, d, int(n)))
-            ag.hartslag("klaar", taak=f"concept in de werfapp {d}-{n}")
+            uit = wp.werfapp_uit_proef(ag, d, int(n))
+            print(uit)
+            ag.hartslag("klaar", taak=f"concept in de werfapp {d}-{n}" + (" niet gelukt" if uit.get("fout") or not uit.get("id") else ""))
         finally:
             ag.log_verstuur()
+        if uit.get("fout") or not uit.get("id"):
+            sys.exit(1)  # geen concept: een foutstatus, de proef blijft staan (CX4-13)
         return
     if a.voorbereid or a.proef:
         d, n = a.voorbereid or a.proef

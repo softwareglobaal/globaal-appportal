@@ -2151,14 +2151,22 @@ def _werf_rij(d, taak_status):
     # wat nog nodig is, in de woorden van het contractdashboard
     nodig = []
     werf = (d["proef_info"] or {}).get("werfapp") or {}
-    d["werfapp"] = werf if isinstance(werf, dict) else {}
+    d["werfapp"] = dict(werf) if isinstance(werf, dict) else {}
+    vid = d["werfapp"].get("id")
+    if not (isinstance(vid, int) and not isinstance(vid, bool) and vid > 0):
+        d["werfapp"].pop("id", None)   # alleen een echt verslag-ID telt als concept (de link wordt eruit opgebouwd)
     if not d["heeft_proef"]:
         nodig.append("jouw klik: Maak concept")   # één klik; Voorbereiden en Keuzes zijn niet verplicht (eigen bronnen standaard)
     else:
+        pv = (d["proef_info"] or {}).get("verslagtype") in ("voorlopige_oplevering", "definitieve_oplevering")
         if d["werfapp"].get("id"):
             nodig.append("nalezen en versturen in de werfapp")
         elif d["werfapp"].get("fout"):
             nodig.append(f"geen concept in de werfapp: {d['werfapp']['fout']}")
+        elif pv:
+            nodig.append("Word-sjabloon van de oplevering invullen")
+        else:
+            nodig.append("oudere proef, nog niet in de werfapp (doorzetten zonder tokens)")  # CX4-12: nooit 'niets'
         op = (d["proef_info"] or {}).get("open") or {}
         if isinstance(op, dict) and any(op.values()):
             nodig.append(f"nakijken: {op.get('in_te_vullen', 0)} in te vullen, {op.get('na_te_kijken', 0)} na te kijken")

@@ -34,7 +34,7 @@
 <main>
 <h1>Werfverslagen</h1>
 <p class="leid">Per dossier en per werfbezoek: van de bronnen in de bezoekmap tot het concept-werfverslag. Wat er nog moet komen staat erbij.
-Werfverslag voorbereider verifieert (controle), geeft door aan Werfverslag schrijver (voorbereiding en proef); jij maakt de keuzes en kijkt de proef na.</p>
+Werfverslag voorbereider verifieert (controle) en start niets dat tokens kost. Jij klikt per bezoek <em>Maak concept</em>; Werfverslag schrijver zet het verslag als concept in de werfapp, waar je naleest en zelf verstuurt.</p>
 
 {% if not dossiers %}<p class="stil">Nog geen dossiers. Vraag De Regisseur een dossier te volgen, of: <code>werfverslag_voorbereider.py --project 2309</code>.</p>{% endif %}
 
@@ -52,7 +52,7 @@ Werfverslag voorbereider verifieert (controle), geeft door aan Werfverslag schri
       {% elif b.fase == 'te vervolledigen' %}<span class="let_op">te vervolledigen</span>
       {% elif b.fase == 'te controleren' %}<span class="ok">te controleren</span>
       {% else %}<span class="ok">{{ b.fase }}</span>{% endif %}
-      {% if b.werfapp and b.werfapp.id and b.werfapp.url and b.werfapp.url.startswith('https://werf.globaal.be/') %}<br><a href="{{ b.werfapp.url }}" target="_blank" rel="noopener">verslag {{ b.werfapp.nummer }} openen</a>{% endif %}
+      {% if b.werfapp and (b.werfapp.get('id')|int(0)) > 0 %}<br><a href="https://werf.globaal.be/verslag/{{ b.werfapp.get('id')|int }}/bewerken" target="_blank" rel="noopener">verslag {{ b.werfapp.get('nummer') or '' }} openen</a>{% endif %}
       <br><span class="stil">{{ b.telling.ok }} ✓ · {{ b.telling.fout }} ✗ · {{ b.telling.onbekend }} ?</span>
       {% for v in b.verwerkingen %}<br><span class="stil">{{ v.fase }}: {{ v.tokens_nieuw_in }} in / {{ v.tokens_nieuw_uit }} uit · {{ '%.4f'|format(v.kosten_nieuw_usd) if v.kosten_nieuw_usd is not none else 'niet gemeten' }} USD nieuw{% if v.analyse_hergebruikt %} · analyse hergebruikt{% endif %}</span>{% endfor %}
     </td>
@@ -79,7 +79,7 @@ gegevens, keuzes en proef staan nu op de rij van het nieuwe pad. Opruimen staat 
 <h2>De agents</h2>
 <table>
   <tr><th>Agent</th><th>Stand</th><th>Laatste taak</th></tr>
-  {% for naam, label in [('werfverslag-voorbereider', 'Werfverslag voorbereider (verifieert, geeft door)'), ('werfverslag-schrijver', 'Werfverslag schrijver (voorbereidt, schrijft de proef)')] %}
+  {% for naam, label in [('werfverslag-voorbereider', 'Werfverslag voorbereider (verifieert)'), ('werfverslag-schrijver', 'Werfverslag schrijver (concept in de werfapp, op jouw klik)')] %}
   {% set s = status.get(naam) %}
   <tr><td><a href="{{ url_for('detail', naam=naam) }}" style="color:var(--accent)">{{ label }}</a></td>
       <td>{% if s %}{{ s.status }} <span class="stil">{{ s.ts[:16].replace('T',' ') }} UTC</span>{% else %}<span class="stil">nog geen ronde</span>{% endif %}</td>

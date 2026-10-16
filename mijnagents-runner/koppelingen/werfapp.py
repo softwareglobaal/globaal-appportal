@@ -2,7 +2,8 @@
 
 Een proef wordt daar een conceptverslag met de punten per categorie, de eigen foto's als Dropbox-verwijzing en de
 herkomst. Mehdi leest het daar na, past aan en klikt zelf Versturen. De brug verstuurt nooit en overschrijft nooit:
-per bordrij hooguit één concept; bestaat dat al, dan blijft het zoals Mehdi het achterliet.
+per vast bezoek (bezoek_id) hooguit één concept; bestaat dat al, dan geeft de werfapp het terug zoals Mehdi het achterliet.
+Zonder vast bezoek of tegen een werfapp die niet kan koppelen, maakt de brug niets (CX4-1, CX4-11).
 
 Toegang: hetzelfde AGENTS_TOKEN als het bord (koppelingen/bord.py leest het uit mijnagents-data/.env); de werfapp
 krijgt het uit hetzelfde bestand (docker-compose.override.yml, app-werfverslag). Naam en plaats, nooit de waarde.
@@ -29,11 +30,30 @@ class WerfappFout(RuntimeError):
         super().__init__(f"werfapp {status}: {fout}")
 
 
+PRODUCTIE = "https://werf.globaal.be"
+
+
 def basis():
-    url = (os.environ.get("WERFAPP_URL") or "https://werf.globaal.be").rstrip("/")
-    if not (url.startswith("https://") or url.startswith("http://127.0.0.1:")):
-        raise WerfappFout(0, "werfapp vereist HTTPS of de lokale testserver")
+    """Het token gaat alleen naar de exacte productie-origin of een lokale testserver (CX4-9), nooit naar een lookalike."""
+    url = (os.environ.get("WERFAPP_URL") or PRODUCTIE).rstrip("/")
+    if url != PRODUCTIE and not re.fullmatch(r"http://127\.0\.0\.1:[0-9]{2,5}", url):
+        raise WerfappFout(0, f"werfapp alleen op {PRODUCTIE} of http://127.0.0.1:<poort>")
     return url
+
+
+def conceptlink(vid):
+    return f"{basis()}/verslag/{int(vid)}/bewerken"
+
+
+_KAN = {}
+
+
+def kan_koppelen():
+    """De werfapp meldt bezoek_koppeling in GET /api/v1/ (W41). Een oudere werfapp negeert bezoek_id en zou een ongekoppeld
+    concept maken; dan maakt de brug niets (CX4-11)."""
+    if basis() not in _KAN:
+        _KAN[basis()] = int((call("/") or {}).get("bezoek_koppeling") or 0) >= 1
+    return _KAN[basis()]
 
 
 class _GeenRedirect(urllib.request.HTTPRedirectHandler):
@@ -47,15 +67,23 @@ def call(pad, payload=None, method=None):
                                  headers={"X-Agents-Token": getattr(bord, "TOKEN", ""), "Content-Type": "application/json"})
     try:
         with urllib.request.build_opener(_GeenRedirect()).open(req, timeout=45) as r:
-            return json.loads(r.read().decode("utf-8"))
+            ruw = r.read()
     except urllib.error.HTTPError as ex:
         try:
             body = json.loads(ex.read().decode("utf-8"))
         except (ValueError, UnicodeError):
             body = {}
         raise WerfappFout(ex.code, body.get("fout") or "verzoek geweigerd") from None
-    except (urllib.error.URLError, TimeoutError) as ex:
+    except (urllib.error.URLError, TimeoutError, OSError) as ex:
         raise WerfappFout(0, f"niet bereikbaar ({type(ex).__name__})") from None
+    try:
+        antwoord = json.loads(ruw.decode("utf-8"))
+    except (ValueError, UnicodeError):
+        raise WerfappFout(0, "antwoord is geen JSON (loginpagina of proxy?)") from None
+    if not isinstance(antwoord, (dict, list)):
+        raise WerfappFout(0, "onverwacht antwoord")
+    return antwoord
+
 
 
 def volgnummer(nr_label):
@@ -148,33 +176,25 @@ def _project(dossier, adres):
     return call(f"/projecten/{dossier}"), True
 
 
-def _bestaand(vid):
-    try:
-        v = call(f"/verslagen/{int(vid)}")
-    except WerfappFout as ex:
-        if ex.status == 404:
-            return None
-        raise
-    return v
-
-
-def concept(verslag, rij, fotos, proef_pad="", vorige=None):
-    """Zet de proef als conceptverslag in de werfapp. Geeft {id, nummer, url, nieuw, project_nieuw}.
-    vorige: de werfapp-verwijzing die de bordrij al draagt; bestaat dat verslag nog, dan komt er geen tweede."""
+def concept(verslag, rij, fotos, proef_pad=""):
+    """Zet de proef als conceptverslag in de werfapp. Geeft {id, nummer, url, nieuw, project_nieuw, fotos_niet_gevonden}.
+    Vereist een vast bezoek van hetzelfde project in rij['registratie']: de werfapp koppelt het verslag eraan en geeft bij
+    elke herhaling (tweede klik, cron, verloren antwoord, --naar-werfapp) hetzelfde concept terug (W41, CX4-1/2)."""
     if verslag.get("soort_bezoek") == "plaatsbezoek" or not volgnummer(verslag.get("bezoek")):
         raise WerfappFout(0, "plaatsbezoek zonder werfverslagnummer: blijft een Word-proef (A7/A8)")
-    if vorige and vorige.get("id"):
-        v = _bestaand(vorige["id"])
-        if v and str((v.get("project") or {}).get("nummer") or v.get("project_nummer") or verslag["dossier"]) == str(verslag["dossier"]):
-            return {"id": v["id"], "nummer": v.get("nummer"), "url": basis() + f"/verslag/{v['id']}/bewerken", "nieuw": False, "project_nieuw": False,
-                    "fotos_niet_gevonden": ontbrekende_fotos(verslag, fotos)}
+    body = payload(verslag, rij, fotos, proef_pad)
+    if not body.get("bezoek_id"):
+        raise WerfappFout(0, "geen vast bezoek (registratie) voor deze bordrij; niets aangemaakt")
+    if not kan_koppelen():
+        raise WerfappFout(0, "de werfapp kan nog geen bezoek koppelen (oudere versie); niets aangemaakt")
     _, project_nieuw = _project(verslag["dossier"], verslag.get("adres") or rij.get("adres"))
     try:
-        r = call("/verslagen", payload(verslag, rij, fotos, proef_pad))
+        r = call("/verslagen", body)
     except WerfappFout as ex:
         if ex.status == 409:
-            raise WerfappFout(409, f"verslag {verslag['dossier']}-{verslag['bezoek']} bestaat al in de werfapp; "
-                                   "niets aangemaakt, kijk het daar na") from None
+            raise WerfappFout(409, f"{ex.fout}; niets aangemaakt, kijk het na in de werfapp") from None
         raise
-    return {"id": r["id"], "nummer": r["nummer"], "url": basis() + r["url"], "nieuw": not r.get("bestond"), "project_nieuw": project_nieuw,
+    if "bestond" not in r or not isinstance(r.get("id"), int):
+        raise WerfappFout(0, "onverwacht antwoord van de werfapp (geen bezoekkoppeling bevestigd)")
+    return {"id": r["id"], "nummer": r.get("nummer"), "url": conceptlink(r["id"]), "nieuw": not r["bestond"], "project_nieuw": project_nieuw,
             "fotos_niet_gevonden": ontbrekende_fotos(verslag, fotos)}
