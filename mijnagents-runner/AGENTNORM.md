@@ -153,11 +153,10 @@ noden niet, dan stuurt ze geen lijst; de nieuwe nood staat dan alleen in het
 detail van de fouthartslag. Een nood toevoegen zonder de lijst te vervangen,
 vraagt een route op het bord (Codex NA16).
 
-Een werkwijze die alleen gelezen wordt, is decoratie. `bord.sectie(r.werkwijze,
-"kop")`, `bord.punten(...)` en `bord.grenzen(r.werkwijze)` lezen een deel van het
-regelboek, zodat de code de regels van het bord toepast en geen kopie bijhoudt. Het
-sjabloon toont het: zonder punten onder de koppen over wat hij nooit doet en wat
-Mehdi beslist, doet het geen werk en meldt het een nood.
+Een werkwijze die alleen gelezen wordt, is decoratie. `bord.grenzen(r.werkwijze)` geeft
+de punten onder "## Wat ik nooit doe" en "## Wat Mehdi beslist", zodat de code de
+grenzen van het bord toepast en geen kopie bijhoudt. Het sjabloon toont het: zonder
+die grenzen in de vaste vorm (hoofdstuk 8) doet het geen werk en meldt het een nood.
 
 `r.nood()` haalt een aantal vooraan uit de tekst weg en weigert dubbels, zodat
 dezelfde nood morgen dezelfde nood is (N10). Het aantal zet je in `r.detail`.
@@ -238,12 +237,16 @@ cd ~/appportal/mijnagents-runner && ~/agents/.venv/bin/python nieuwe-agent.py --
 
 De werkwijze die je meegeeft moet zelf al door N1, N2, N8 en N9 komen, met punten
 onder de twee afgesproken koppen "## Wat ik nooit doe" en "## Wat Mehdi beslist"
-(eventueel genummerd, of met een toevoeging tussen haakjes), in de vaste vorm: onder
-elk van die twee koppen alleen punten (regels die op kolom 0 met "- " of "* "
-beginnen) en lege regels, en beide voor het eerste codeblok, stuk HTML of
-commentaar. Een kop over wat een ander nooit doet, telt niet. Dat is bewust een
-kleine, strikte vorm in plaats van een nabootsing van Markdown: wat er niet in past,
-wordt geweigerd, nooit aanvaard (Codex NA17 tot NA38, stopregel). Ze geldt voor
+(eventueel genummerd, of met een toevoeging tussen haakjes), in de vaste vorm: elke
+kop staat er een keer, met een witregel ervoor; eronder alleen punten (regels die op
+kolom 0 met "- " of "* " beginnen, gewone tekst zonder opmaak of HTML) en lege
+regels; en elke sectie is afgesloten door een volgende kop of het einde van de
+tekst, voor het eerste codeblok, stuk HTML of commentaar. Een kop over wat een ander
+nooit doet, telt niet. Dat is bewust een kleine, strikte vorm in plaats van een
+nabootsing van Markdown: wat er niet in past, wordt geweigerd, nooit aanvaard (Codex
+NA17 tot NA42, stopregel). Een proef in de CI legt met de Markdown-weergave van het
+bord (Python-Markdown 3.11.1, zoals `md()` in `mijnagents/app.py`) vast dat wat
+`bord.grenzen` aanvaardt, op het bord precies zo als kop met lijstpunten staat. Ze geldt voor
 nieuwe agents en voor wie het sjabloon gebruikt; bestaande werkwijzen hoeven ze niet
 te hebben, want die lopen niet door `bord.grenzen`. De generator weigert
 anders, voor er iets op schijf of op het bord staat. Daarna:

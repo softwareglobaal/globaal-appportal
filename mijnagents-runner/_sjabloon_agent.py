@@ -60,8 +60,8 @@ def werk(r):
 
     Een werkwijze die alleen gelezen wordt, is decoratie (N12). Pas ze toe:
 
-      - een code-agent leest de regels die hij toepast uit de werkwijze, nooit uit
-        een kopie in zijn code: bord.sectie(r.werkwijze, "kop") en bord.punten(...);
+      - een code-agent leest de regels die hij toepast uit r.werkwijze, nooit uit een
+        kopie in zijn code; zijn grenzen geeft bord.grenzen(r.werkwijze), zoals hieronder;
       - een taalmodel-agent krijgt ze letterlijk in zijn opdracht, met zijn collega's:
             opdracht = "\\n\\n".join([r.werkwijze, bord.collega_tekst(r.collegas), taak])
       - wat onder "nooit" staat, doet hij nooit; wat onder "Mehdi beslist" staat, doet

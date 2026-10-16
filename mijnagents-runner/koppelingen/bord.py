@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -51,98 +52,58 @@ class WerkwijzeOnbekend(RondeGestopt):
         super().__init__(f"{soort} ({reden})" if reden else soort)
 
 
-def _buiten_codeblokken(tekst):
-    """De regels van een werkwijze die buiten een codeblok en buiten HTML-commentaar staan, met tabs als vier
-    kolommen. Een hek telt met hooguit drie spaties ervoor, en sluit alleen met een hek van hetzelfde teken en
-    dezelfde lengte, zoals Python-Markdown op het bord (Codex NA32, NA33, NA35). Voor het gewone lezen van een
-    sectie; de grenscontrole (grenzen) is strenger en stopt bij het eerste codeblok of stuk HTML."""
-    regels, hek, commentaar = [], None, False
-    for regel in (tekst or "").splitlines():
-        regel = regel.expandtabs(4)
-        if commentaar:
-            if "-->" in regel:
-                commentaar = regel.rfind("<!--") > regel.rfind("-->")
-            continue
-        if hek is not None:
-            if re.match(r"^ {0,3}" + re.escape(hek) + r"[ ]*$", regel):
-                hek = None
-            continue
-        m = re.match(r"^ {0,3}(`{3,}|~{3,})", regel)
-        if m:
-            hek = m.group(1)
-            continue
-        if "<!--" in regel:
-            commentaar = regel.rfind("<!--") > regel.rfind("-->")
-            if regel.lstrip().startswith("<!--"):
-                continue
-        regels.append(regel)
-    return regels
-
-
-def _sectie_waar(tekst, past):
-    """De regels onder de eerste kop waarvoor past(koptekst) waar is, tot de volgende kop van hetzelfde of
-    een hoger niveau. Alleen een kop op kolom 0 telt, codeblokken en commentaar niet. De inspringing blijft
-    staan: een ingesprongen regel is geen punt (Codex NA34)."""
-    niveau, regels = None, []
-    for regel in _buiten_codeblokken(tekst):
-        m = re.match(r"^(#{1,6})\s+(.*)$", regel)
-        if niveau is None:
-            if m and past(m.group(2).lower()):
-                niveau = len(m.group(1))
-            continue
-        if m and len(m.group(1)) <= niveau:
-            break
-        regels.append(regel.rstrip())
-    while regels and not regels[0].strip():
-        regels.pop(0)
-    while regels and not regels[-1].strip():
-        regels.pop()
-    return "\n".join(regels)
-
-
-def sectie(tekst, kop):
-    """De tekst onder de eerste kop die `kop` bevat (hoofdletters tellen niet), tot de volgende kop van
-    hetzelfde of een hoger niveau. Leeg als die kop er niet is. Zo leest een agent een deel van zijn
-    werkwijze, bijvoorbeeld sectie(r.werkwijze, "Bronnen"), in plaats van een kopie in zijn code te houden."""
-    return _sectie_waar(tekst, lambda k: kop.lower() in k)
-
-
-def punten(tekst):
-    """De opsommingspunten uit een stuk werkwijze: regels die op kolom 0 met "- " of "* " beginnen, buiten
-    codeblokken en commentaar, zonder het teken ervoor. Bewust een kleine, strikte vorm in plaats van alle
-    Markdown: wat er niet in past, telt niet, zodat een twijfelgeval geweigerd wordt en nooit aanvaard
-    (stopregel na Codex NA32 tot NA34). Een scheidingslijn als "- - -" is geen punt."""
-    uit = []
-    for regel in _buiten_codeblokken(tekst):
-        m = re.match(r"^[-*] +(\S.*)$", regel)
-        if m and not re.match(r"^([-*])( *\1){2,} *$", regel):
-            uit.append(m.group(1).strip())
-    return uit
-
-
 KOP_NOOIT = re.compile(r"^(?:\d+[.)]\s*)?wat ik nooit doe(?:\s*[(:].*)?$")
 KOP_MEHDI = re.compile(r"^(?:\d+[.)]\s*)?wat mehdi beslist(?:\s*[(:].*)?$")
+# Een punt is gewone tekst: letters, cijfers, spaties en leestekens, zonder opmaak of HTML die iets kan verbergen
+# of anders tonen (Codex NA40), en het begint niet zelf als een lijst ("- a", "1. a").
+_LETTER = r"[^\W_]"                                   # letters en cijfers, ook met accent, zonder _
+_EERSTE = rf"(?:{_LETTER}|[(\"'‘“])"
+_VERDER = rf"(?:{_LETTER}|[ .,;:()'\"/%@+?!’‘“”…€-])*"
+PUNT = re.compile(rf"^[-*] +((?![-*+]\s|\d+[.)]){_EERSTE}{_VERDER})$")
+# Alleen een gewoon regeleinde scheidt regels; Python-Markdown op het bord kent geen andere (Codex NA39).
+VREEMDE_SCHEIDING = re.compile("[\u2028\u2029\x0b\x0c\x1c\x1d\x1e\x85]")
+
+
+def _zonder_opmaak(regel):
+    """Een regel zoals een lezer hem als kop zou herkennen: zonder onzichtbare tekens, zonder #, >, lijsttekens of
+    nummer vooraan en zonder # achteraan, in kleine letters."""
+    regel = "".join(c for c in regel if unicodedata.category(c) != "Cf").strip()
+    regel = re.sub(r"^(?:[>#*+\-\s]|\d+[.)])+", "", regel)
+    return re.sub(r"[\s#]+$", "", regel).lower()
+
+
+def _kop(regel):
+    """(niveau, koptekst) zoals Python-Markdown een kop leest: # op kolom 0, een spatie erna is niet nodig, # achteraan
+    valt weg. None als het geen kop is."""
+    m = re.match(r"^(#{1,6})(.*)$", regel)
+    if not m:
+        return None
+    return len(m.group(1)), re.sub(r"#+\s*$", "", m.group(2)).strip().lower()
 
 
 def _strikte_punten(regels, kop):
-    """De punten onder de kop, alleen als er onder die kop niets anders staat dan punten op kolom 0 ("- " of
-    "* ") en lege regels. Lopende tekst, een tussenkop, iets ingesprongens of een scheidingslijn: dan geen
-    grenzen, want hoe het bord dat toont, is niet zeker (Codex NA34, NA37)."""
+    """De punten onder de kop, alleen als de kop de eerste regel is of een lege regel voor zich heeft, en er onder
+    die kop niets anders staat dan punten en lege regels. Lopende tekst, een tussenkop, iets ingesprongens, een
+    scheidingslijn of een punt met opmaak: dan geen grenzen, want hoe het bord dat toont, is niet zeker (Codex
+    NA34, NA37, NA40; de proef tegen de weergave van het bord vond de lege regel voor de kop)."""
     niveau, uit = None, []
-    for regel in regels:
-        m = re.match(r"^(#{1,6})\s+(.*)$", regel)
+    for i, regel in enumerate(regels):
+        k = _kop(regel)
         if niveau is None:
-            if m and kop.match(m.group(2).strip().lower()):
-                niveau = len(m.group(1))
+            if k and kop.match(k[1]):
+                if i and regels[i - 1].strip():
+                    # zonder lege regel ervoor kan het bord de kop bij een eerder lijstpunt trekken
+                    return []
+                niveau = k[0]
             continue
-        if m:
-            if len(m.group(1)) <= niveau:
+        if k:
+            if k[0] <= niveau:
                 break
             return []
         if not regel.strip():
             continue
-        p = re.match(r"^[-*] +(\S.*)$", regel)
-        if not p or re.match(r"^([-*])( *\1){2,} *$", regel):
+        p = PUNT.match(regel)
+        if not p:
             return []
         uit.append(p.group(1).strip())
     return uit
@@ -153,17 +114,35 @@ def grenzen(werkwijze):
     (eventueel genummerd, of met een toevoeging tussen haakjes). Een kop over wat een ander nooit doet, of over
     allebei, telt niet (Codex NA17, NA22, NA27).
 
-    Bewust een strikte vorm in plaats van een nabootsing van Markdown (stopregel na Codex NA32 tot NA37): de
-    werkwijze wordt gelezen tot het eerste codeblok, stuk HTML of commentaar, en onder elke kop staan alleen
-    punten en lege regels. Wat daar niet in past, geeft geen grenzen. Zo kan een twijfelgeval alleen geweigerd
-    worden, nooit aanvaard. De generator eist de grenzen voor hij registreert, het sjabloon past ze elke ronde toe."""
+    Bewust een vaste, strikte vorm in plaats van een nabootsing van Markdown (stopregel na Codex NA32 tot NA42):
+    gelezen wordt tot de eerste regel met een codeblok (``` of ~~~) of met HTML (een "<" ergens), en elke
+    grenssectie is daarvoor afgesloten door een volgende kop of het einde van de tekst; de kop staat er een keer,
+    met een witregel ervoor; onder de kop staan alleen punten ("- " of "* " op kolom 0, gewone tekst) en lege
+    regels; alleen een gewoon regeleinde scheidt regels. Wat daar niet in past, geeft geen grenzen: een twijfelgeval wordt geweigerd, nooit aanvaard.
+    tests/test_agentnorm.py legt met de Markdown-weergave van het bord vast dat wat hier aanvaard wordt, daar zo
+    als kop met lijstpunten staat. De generator eist de grenzen, het sjabloon past ze elke ronde toe."""
+    tekst = (werkwijze or "").replace("\r\n", "\n").replace("\r", "\n")
+    if VREEMDE_SCHEIDING.search(tekst):
+        return [], []
     regels = []
-    for regel in (werkwijze or "").splitlines():
+    for regel in tekst.split("\n"):
         regel = regel.expandtabs(4)
-        if "<!--" in regel or re.match(r"^\s*(`{3,}|~{3,}|<)", regel):
+        if "<" in regel or re.match(r"^\s*(`{3,}|~{3,})", regel):
+            # Wat hier begint, kan het bord nog bij het laatste punt van een open sectie trekken (na een witregel
+            # loopt een lijst door). Een sectie die hier nog open is, telt dus niet: ze moet afgesloten zijn door
+            # een volgende kop of door het einde van de tekst.
+            regels.append("\x00")
             break
         regels.append(regel.rstrip())
-    return _strikte_punten(regels, KOP_NOOIT), _strikte_punten(regels, KOP_MEHDI)
+    uit = []
+    for kop in (KOP_NOOIT, KOP_MEHDI):
+        # De kop staat er maar een keer: twee regels die er als die kop uitzien, ook in code, een citaat of een
+        # lijst, kunnen op het bord twee keer dezelfde kop geven, en dan is niet zeker welke de mens leest.
+        if sum(1 for r in tekst.split("\n") if kop.match(_zonder_opmaak(r))) != 1:
+            uit.append([])
+        else:
+            uit.append(_strikte_punten(regels, kop))
+    return uit[0], uit[1]
 
 
 class Agent:

@@ -445,26 +445,9 @@ Ik lees en ik meld.
 - het bord
 
 ```
-## Wat ik nooit doe
 - dit voorbeeld na de grenzen stoort niet
 ```
 """
-
-MET_TUSSENKOP = "## Wat ik nooit doe\n- a\n- b\n\n### Een onderdeel\n- c\n\n## Bronnen\n- d\n"
-
-
-def test_sectie_en_punten_lezen_een_deel_van_de_werkwijze():
-    """De gewone lezer, voor wat een agent uit zijn werkwijze haalt: een lagere kop hoort bij de sectie,
-    codeblokken en commentaar tellen niet, een sluithek moet even lang zijn als het openingshek (NA35)."""
-    assert bord.punten(bord.sectie(MET_TUSSENKOP, "nooit")) == ["a", "b", "c"]
-    assert bord.sectie(GOEDE_WERKWIJZE, "Mehdi beslist") == "- wat er met een melding gebeurt"
-    assert bord.sectie(GOEDE_WERKWIJZE, "bestaat niet") == ""
-    assert bord.sectie("## Bronnen\n\n    - ingesprongen\n", "Bronnen") == "    - ingesprongen", \
-        "de inspringing blijft staan (NA34)"
-    assert bord.sectie("```\n## Bronnen\n- a\n````\n", "Bronnen") == "", "vier backticks sluiten drie niet (NA35)"
-    assert bord.sectie("<!-- klaar --> <!--\n## Bronnen\n- a\n-->\n", "Bronnen") == "", \
-        "een commentaar dat op dezelfde regel opnieuw opent (NA36)"
-
 
 def test_grenzen_alleen_in_de_strikte_vorm():
     """Codex NA17 tot NA37 en de stopregel: de grenzen staan onder de twee afgesproken koppen, met daaronder alleen
@@ -484,7 +467,9 @@ def test_grenzen_alleen_in_de_strikte_vorm():
     assert g("## Wat ik nooit doe (sinds 16-10-2026)\n- a\n\n## 3) Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
     # NA32, NA33, NA35, NA36: na het eerste codeblok, stuk HTML of commentaar telt niets meer
     assert g("```\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
-    assert g("## Wat ik nooit doe\n- a\n```\n- in code\n```\n- b\n\n## Wat Mehdi beslist\n- c\n") == (["a"], [])
+    assert g("## Wat ik nooit doe\n- a\n```\n- in code\n```\n- b\n\n## Wat Mehdi beslist\n- c\n") == ([], []), \
+        "een sectie die nog open is bij het eerste codeblok, telt niet"
+    assert g("## Wat ik nooit doe\n- a\n\n## Wat Mehdi beslist\n- b\n\n## Bronnen\n```\nx\n```\n") == (["a"], ["b"])
     assert g("```\n## Wat ik nooit doe\n- a\n\t```\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
     assert g("\t```\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n") == ([], [])
     assert g("```\n## Wat ik nooit doe\n- a\n````\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
@@ -494,9 +479,17 @@ def test_grenzen_alleen_in_de_strikte_vorm():
     # NA34, NA37: onder de kop alleen punten op kolom 0 en lege regels
     assert g("## Wat ik nooit doe\n\n    - a\n\n## Wat Mehdi beslist\n\n    - b\n") == ([], [])
     assert g("## Wat ik nooit doe\nToelichting\n- niets verwijderen\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
-    assert g("## Wat ik nooit doe\n- a\n### meer\n- c\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
-    assert g("## Wat ik nooit doe\n- - -\n## Wat Mehdi beslist\n* b\n") == ([], ["b"])
-    assert g("## Wat ik nooit doe\n1. genummerd\n## Wat Mehdi beslist\n* b\n") == ([], ["b"])
+    assert g("## Wat ik nooit doe\n- a\n### meer\n- c\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
+    assert g("## Wat ik nooit doe\n- - -\n\n## Wat Mehdi beslist\n* b\n") == ([], ["b"])
+    assert g("## Wat ik nooit doe\n1. genummerd\n\n## Wat Mehdi beslist\n* b\n") == ([], ["b"])
+    # NA39, NA40: alleen een gewoon regeleinde, en een punt is gewone tekst
+    assert g("## Wat ik nooit doe\u2028- nooit wissen\n\n## Wat Mehdi beslist\n- b\n") == ([], [])
+    assert g("## Wat ik nooit doe\n- <span style='display:none'>nooit wissen</span>\n\n## Wat Mehdi beslist\n- b\n") == ([], []), \
+        "bij de eerste < stopt het lezen; wat erna komt, telt niet"
+    assert g("## Wat ik nooit doe\n- _a_\n- [a](b)\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
+    # gevonden door de proef tegen de weergave van het bord: een witregel voor de kop, en de kop maar een keer
+    assert g("* x\n    - a\n## Wat ik nooit doe\n- b\n") == ([], [])
+    assert g("## Wat ik nooit doe ##\n```\n```\n\n## Wat ik nooit doe\n- b\n") == ([], [])
 
 
 def _sjabloon_werk():
@@ -520,6 +513,127 @@ def test_sjabloon_past_de_werkwijze_toe():
     assert nb.statussen()[-1]["nood"] == [{"tekst": "Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist",
                                            "wie": "mehdi"}], nb.statussen()[-1]["nood"]
     assert "geen werk gedaan" in r.detail
+
+
+# --- wat grenzen() aanvaardt, staat zo op het bord (Codex NA32 tot NA42) ----------------------------------------
+# Het bord toont een werkwijze met Python-Markdown (mijnagents/app.py, md(): extensies tables en fenced_code). Deze
+# proef legt de belofte van de vaste vorm vast tegen die echte weergave: voor duizenden gegenereerde, lastige
+# werkwijzen geldt dat wat grenzen() aanvaardt, op het bord als kop met precies die lijstpunten staat. Een geval dat
+# grenzen() weigert, is geen fout (een weigering is goedkoop); een aanvaarding die het bord anders toont, wel.
+
+def _bordweergave(tekst):
+    import markdown
+    return markdown.markdown(tekst, extensions=["tables", "fenced_code"])
+
+
+def _blokken(html):
+    """De blokken op het hoogste niveau: (tag, tekst, li-teksten, of er iets anders dan tekst of <p> in een li zat)."""
+    from html.parser import HTMLParser
+
+    class Lezer(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.blokken, self.diepte, self.huidig = [], 0, None
+            self.koppen, self.in_kop = [], None      # elke kop, op welke diepte ook
+
+        def handle_starttag(self, tag, attrs):
+            if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+                self.koppen.append("")
+                self.in_kop = self.diepte
+            if self.diepte == 0:
+                self.huidig = {"tag": tag, "tekst": "", "li": [], "vreemd": False}
+            elif self.huidig is not None:
+                if self.huidig["tag"] in ("ul", "ol") and self.diepte == 1 and tag == "li":
+                    self.huidig["li"].append("")
+                elif not (self.diepte == 2 and tag == "p"):
+                    self.huidig["vreemd"] = True
+            if tag not in ("br", "hr", "img", "input", "meta", "link"):
+                self.diepte += 1
+
+        def handle_startendtag(self, tag, attrs):
+            if self.huidig is not None and self.diepte > 0:
+                self.huidig["vreemd"] = True
+
+        def handle_endtag(self, tag):
+            if tag in ("br", "hr", "img", "input", "meta", "link"):
+                return
+            self.diepte = max(0, self.diepte - 1)
+            if tag in ("h1", "h2", "h3", "h4", "h5", "h6") and self.in_kop == self.diepte:
+                self.in_kop = None
+            if self.diepte == 0 and self.huidig is not None:
+                self.blokken.append(self.huidig)
+                self.huidig = None
+
+        def handle_data(self, data):
+            if self.in_kop is not None and self.koppen:
+                self.koppen[-1] += data
+            if self.huidig is None:
+                return
+            if self.huidig["tag"] in ("ul", "ol"):
+                if self.huidig["li"]:
+                    self.huidig["li"][-1] += data
+            else:
+                self.huidig["tekst"] += data
+
+    lezer = Lezer()
+    lezer.feed(html)
+    return lezer.blokken, lezer.koppen
+
+
+def _zichtbaar(tekst):
+    import unicodedata
+    return "".join(c for c in tekst if unicodedata.category(c) != "Cf").strip().lower()
+
+
+def _zo_op_het_bord(tekst, kop, punten_):
+    """Op het bord staat precies een kop die zo heet (op welke diepte ook), op het hoogste niveau, en direct
+    daarna een lijst met precies deze punten, zonder opmaak erin."""
+    blokken, koppen = _blokken(_bordweergave(tekst))
+    if sum(1 for k in koppen if kop.match(_zichtbaar(k))) != 1:
+        return False
+    for i, b in enumerate(blokken):
+        if b["tag"] in ("h1", "h2", "h3", "h4", "h5", "h6") and kop.match(_zichtbaar(b["tekst"])):
+            if i + 1 >= len(blokken) or blokken[i + 1]["tag"] != "ul" or blokken[i + 1]["vreemd"]:
+                return False
+            return [li.strip() for li in blokken[i + 1]["li"]] == punten_
+    return False
+
+
+def test_wat_grenzen_aanvaardt_staat_zo_op_het_bord():
+    try:
+        import markdown  # noqa: F401
+    except ImportError:
+        assert not os.environ.get("CI"), "markdown ontbreekt in de CI: deze grendel hoort daar te draaien"
+        print("  (overgeslagen: markdown niet geinstalleerd)")
+        return
+    import random
+    koppen = ["## Wat ik nooit doe", "## Wat Mehdi beslist", "## 7. Wat ik nooit doe", "### Wat Mehdi beslist",
+              "## Bronnen", "# Titel", "## Wat de klant nooit doet", "## Wat ik nooit doe ##", "﻿## Wat ik nooit doe",
+              "#### Wat ik nooit doe (vast)"]
+    punten_ = ["- nooit iets verwijderen", "* nooit versturen", "- a", "-\tb", "- - a", "- 1. a", "1. a", "- _a_",
+               "- *a*", "- <span style='display:none'>x</span>", "- [a](b)", "- &#8203;", "- ​", "- a  ",
+               "- (info@x.be)", "    - a", "  - a", "- \"x\"", "- a\\", "- x | y", "+ a", "- ok, 100% zeker!"]
+    anders = ["", "", "", "", "Toelichting", "```", "````", " ```", "\t```", "~~~", "<!--", "-->", "<!-- x -->",
+              "<pre>", "</pre>", "<div>", "</div>", "> citaat", "[a]: http://x", "===", "---", "- - -", "| a | b |",
+              "|---|---|", " ", "x - a", "\r", "<span style='display:none'>", "    code", "\\- a"]
+    rnd = random.Random(1610)
+    aanvaard = 0
+    for _ in range(6000):
+        regels = [rnd.choice(koppen if r < 0.2 else punten_ if r < 0.6 else anders)
+                  for r in (rnd.random() for _ in range(rnd.randint(3, 14)))]
+        if rnd.random() < 0.8:
+            for kop in ("## Wat ik nooit doe", "## Wat Mehdi beslist"):
+                plaats = rnd.randint(0, len(regels))
+                regels[plaats:plaats] = (["", kop] if rnd.random() < 0.7 else [kop]) + \
+                    [rnd.choice(punten_[:3]) for _ in range(rnd.randint(0, 3))]
+        tekst = "\n".join(regels) + rnd.choice(["", "\n"])
+        nooit, mehdi = bord.grenzen(tekst)
+        for kop, lijst in ((bord.KOP_NOOIT, nooit), (bord.KOP_MEHDI, mehdi)):
+            if lijst:
+                aanvaard += 1
+                assert _zo_op_het_bord(tekst, kop, lijst), \
+                    f"grenzen() aanvaardt {lijst!r}, maar het bord toont het anders:\n{tekst!r}\n{_bordweergave(tekst)}"
+    assert aanvaard > 300, f"de proef aanvaardde te weinig gevallen om iets te bewijzen ({aanvaard})"
 
 
 if __name__ == "__main__":
