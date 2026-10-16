@@ -63,15 +63,24 @@ case "$1" in
           *) echo "$id" ;;
         esac ;;
       tag)
+        if [ "${4##*:}" = latest ]; then
+          n=$(( $(cat "$S/teller-latest" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$S/teller-latest"
+          [ "$(cat "$HOME/tag-latest-faalt-bij" 2>/dev/null)" = "$n" ] && exit 1
+        fi
         if faalt "tag-${4##*:}"; then exit 1; fi
         id=$(id_van "$3") && [ -n "$id" ] || exit 1
         echo "$id" > "$S/tag-${4##*:}"
-        if faalt wissel-bij-tag; then echo sha256:ander > "$S/draait"; fi ;;
+        if faalt wissel-bij-tag; then echo sha256:ander > "$S/draait"; fi
+        if [ "${4##*:}" = latest ] && faalt tag-latest-half; then exit 1; fi ;;
       *) exit 1 ;;
     esac ;;
   build)
-    boom=; ctx=
-    for a in "$@"; do case "$a" in mijnagents.tree=*) boom=${a#mijnagents.tree=} ;; esac; ctx=$a; done
+    boom=; ctx=; tag=; vorig=
+    for a in "$@"; do
+      [ "$vorig" = -t ] && tag=${a##*:}
+      case "$a" in mijnagents.tree=*) boom=${a#mijnagents.tree=} ;; esac
+      vorig=$a; ctx=$a
+    done
     if [ -f "$HOME/bouw-wacht" ]; then
       touch "$HOME/bouw-bezig"
       while [ ! -f "$HOME/ga" ]; do sleep 0.05; done
@@ -79,11 +88,12 @@ case "$1" in
     if faalt bouw-hangt; then sleep 60; fi
     if [ -f "$HOME/bouw-achtergrond" ]; then sleep 30 >/dev/null 2>&1 & echo $! > "$HOME/achtergrond.pid"; fi
     if faalt bouw-breekt-oud; then grep -vx 'sha256:oud' "$HOME/gezond" > "$HOME/gezond.tmp"; mv "$HOME/gezond.tmp" "$HOME/gezond"; fi
+    if faalt wissel-tijdens-bouw; then echo sha256:ander > "$S/draait"; fi
     if faalt bouw-faalt; then exit 1; fi
     ls -A "$ctx" > "$S/gebouwd-lijst"
     cp "$ctx/inhoud" "$S/gebouwd-inhoud"
     if [ -f "$HOME/bouw-zonder-label" ]; then echo > "$S/label-$boom"; else echo "$boom" > "$S/label-$boom"; fi
-    echo "sha256:$boom" > "$S/tag-latest" ;;
+    echo "sha256:$boom" > "$S/tag-$tag" ;;
   compose)
     case "$*" in
       *--no-build*--force-recreate*)
@@ -268,8 +278,10 @@ class BordDeployTest(unittest.TestCase):
         r = self.draai()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.data(".built"), "nieuw")
+        self.assertEqual(self.data(".built_id"), "sha256:nieuw")
         self.assertEqual(self.lees("staat/draait"), "sha256:nieuw")
         self.assertEqual(self.lees("staat/label-nieuw"), "nieuw")
+        self.assertIn("build -t appportal-app-mijnagents:kandidaat", self.docker())
         self.assertEqual(self.lees("staat/tag-vorige"), "sha256:oud")
         self.assertIsNone(self.data(".mislukt"))
         self.assertIsNone(self.data(".herstel"))
@@ -376,10 +388,10 @@ class BordDeployTest(unittest.TestCase):
                 self.zet(vlag, "1")
                 r = self.draai()
                 self.assertEqual(r.returncode, 1)
-                self.assertIn("zonder kopie van de databank start de nieuwe image niet", r.stdout)
+                self.assertIn("geen wissel in deze ronde: zonder kopie van de databank", r.stdout)
                 self.assertNotIn("compose up", self.docker())
+                self.assertNotIn(":latest", self.docker())  # :latest en de container niet aangeraakt (BU-17)
                 self.assertEqual(self.lees("staat/draait"), "sha256:oud")
-                self.assertEqual(self.lees("staat/tag-latest"), "sha256:oud")  # :latest terug op wat draait
                 self.assertEqual(self.kopieen(), [])  # geen half, corrupt of leeg bestand achtergelaten
                 self.assertIsNone(self.data(".mislukt"))
                 self.assertIsNone(self.data(".herstel"))
@@ -389,11 +401,24 @@ class BordDeployTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.data(".built"), "nieuw")
 
-    def test_te_weinig_ruimte_voor_de_kopie_start_niet(self):
-        r = self.draai(BORD_KOPIE_MIN_VRIJ_MB=str(10 ** 12))
+    def test_kopiefout_laat_een_eerdere_herstelmarkering_staan(self):
+        self.zet("staat/draait", "sha256:kapot")
+        self.zet("staat/tag-latest", "sha256:kapot")
+        self.gezond("sha256:nieuw")  # ook de oude image is niet gezond: het herstel uit .herstel mislukt
+        self.zet("appportal/mijnagents-data/.herstel", "sha256:oud vorig 1")
+        self.zet("kopie-faalt", "1")
+        r = self.draai()
         self.assertEqual(r.returncode, 1)
-        self.assertIn("te weinig vrije ruimte", r.stdout)
-        self.assertNotIn("compose up", self.docker())
+        self.assertIn("HERSTEL MISLUKT", r.stdout)
+        self.assertIn("geen wissel in deze ronde: zonder kopie van de databank", r.stdout)
+        self.assertEqual(self.data(".herstel"), "sha256:oud vorig 1")  # het herstel blijft voorrang houden
+
+    def test_te_weinig_ruimte_voor_de_kopie_bouwt_niet(self):
+        for _ in range(2):  # twee rondes na elkaar: geen herhaald bouwwerk (BU-18)
+            r = self.draai(BORD_KOPIE_MIN_VRIJ_MB=str(10 ** 12))
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("te weinig vrije ruimte", r.stdout)
+        self.assertNotIn(" build ", self.docker())
         self.assertEqual(self.lees("staat/draait"), "sha256:oud")
 
     def test_zonder_databank_geen_bouw(self):
@@ -435,6 +460,7 @@ class BordDeployTest(unittest.TestCase):
         r = self.draai()
         self.assertEqual(r.returncode, 1)
         self.assertEqual(self.lees("staat/draait"), "sha256:oud")
+        self.assertNotIn(":latest", self.docker())  # :latest en de container onaangeroerd (BU-17)
         self.assertNotIn("--force-recreate", self.docker())  # niets te herstarten: de container draaide de oude image
         self.assertEqual(self.mislukt()[0], "nieuw")
         self.assertIsNone(self.data(".herstel"))
@@ -532,6 +558,33 @@ class BordDeployTest(unittest.TestCase):
         self.assertIn("kon niet als appportal-app-mijnagents:vorige bewaard worden", r.stdout)
         self.assertNotIn(" build ", self.docker())
 
+    def test_wisseltag_faalt_raakt_het_bord_niet(self):
+        self.gezond("sha256:oud", "sha256:nieuw")
+        for vlag in ("tag-latest.1", "tag-latest-half.1"):  # niet getagd, of getagd met een foutcode (bv. tijdslimiet)
+            with self.subTest(vlag=vlag):
+                self.zet(vlag, "1")
+                r = self.draai()
+                self.assertEqual(r.returncode, 1)
+                self.assertIn("geen wissel in deze ronde", r.stdout)
+                self.assertNotIn("compose up", self.docker())
+                self.assertEqual(self.lees("staat/tag-latest"), "sha256:oud")
+                self.assertEqual(self.lees("staat/draait"), "sha256:oud")
+                self.assertIsNone(self.data(".herstel"))
+                self.assertIsNone(self.data(".mislukt"))
+        r = self.draai()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.data(".built"), "nieuw")
+
+    def test_andere_image_na_de_bouw_geeft_geen_wissel(self):
+        self.gezond("sha256:oud", "sha256:nieuw", "sha256:ander")
+        self.zet("wissel-tijdens-bouw.1", "1")  # iemand startte tijdens de bouw een andere image
+        r = self.draai()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("de draaiende image is tijdens de bouw veranderd", r.stdout)
+        self.assertNotIn("compose up", self.docker())
+        self.assertEqual(self.lees("staat/draait"), "sha256:ander")
+        self.assertIsNone(self.data(".mislukt"))
+
     def test_tagfout_voor_de_bouw_bouwt_niet_en_blokkeert_niet(self):
         self.gezond("sha256:oud", "sha256:nieuw")
         self.zet("tag-vorige.1", "1")
@@ -546,7 +599,7 @@ class BordDeployTest(unittest.TestCase):
         self.assertEqual(self.data(".built"), "nieuw")
 
     def test_tagfout_bij_de_terugrol_wordt_de_volgende_ronde_hersteld(self):
-        self.zet("tag-latest.1", "1")
+        self.zet("tag-latest-faalt-bij", "2")  # de eerste :latest-tag is de wissel, de tweede de terugrol
         r = self.draai()
         self.assertEqual(r.returncode, 1)
         self.assertIn("terugzetten mislukt", r.stdout)
@@ -593,6 +646,7 @@ class BordDeployTest(unittest.TestCase):
         r = self.draai()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.data(".built"), "nieuw")
+        self.assertEqual(self.data(".built_id"), "sha256:nieuw")
         self.assertEqual(self.lees("staat/draait"), "sha256:nieuw")
         self.assertIsNone(self.data(".herstel"))
         self.assertNotIn(" build ", self.docker())
@@ -633,7 +687,7 @@ class BordDeployTest(unittest.TestCase):
         self.assertIn("LET OP: /gezondheid faalt", r.stdout)
         self.assertEqual(self.draai().stdout, "")  # dezelfde toestand: geen nieuwe regel
         self.gezond("sha256:oud")
-        self.assertIn("weer gezond", self.draai().stdout)
+        self.assertIn("weer in orde", self.draai().stdout)
         self.assertNotIn(" build ", self.docker())
         self.assertNotIn(" tag ", self.docker())
 
@@ -645,16 +699,60 @@ class BordDeployTest(unittest.TestCase):
         self.assertEqual(self.data(".built"), "nieuw")
         self.alleen_inspectie("")
 
-    def test_gezonde_maar_verkeerde_image_wordt_opgemerkt_en_rechtgezet(self):
+    def test_verkeerde_image_wordt_gemeld_en_niet_overschreven(self):
         self.zet("appportal/mijnagents-data/.built", "nieuw")  # .built zegt nieuw, maar de oude image draait (BU-11)
-        self.zet("staat/label-oud", "oud")
+        self.zet("staat/label-oud", "oud")  # bv. een bewuste handmatige terugrol (BU-15)
         self.gezond("sha256:oud", "sha256:nieuw")
         r = self.draai()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("LET OP: de container draait sha256:oud met revisie oud, maar .built zei nieuw", r.stdout)
-        self.assertEqual(self.lees("staat/draait"), "sha256:nieuw")  # in dezelfde ronde bewaakt uitgerold
+        self.assertIn("LET OP: de container draait revisie oud, .built zegt nieuw", r.stdout)
+        self.assertEqual(self.lees("staat/draait"), "sha256:oud")
         self.assertEqual(self.data(".built"), "nieuw")
-        self.assertIn(" build ", self.docker())
+        self.alleen_inspectie("")
+        self.assertEqual(self.draai().stdout, "")  # dezelfde afwijking: geen nieuwe regel
+
+    def test_zelfde_label_ander_image_id_wordt_gemeld(self):
+        self.zet("appportal/mijnagents-data/.built", "nieuw")
+        self.zet("appportal/mijnagents-data/.built_id", "sha256:nieuw")
+        self.zet("staat/draait", "sha256:nieuw2")  # een tweede bouw van dezelfde tree (BU-16)
+        self.zet("staat/label-nieuw2", "nieuw")
+        self.gezond("sha256:nieuw2")
+        r = self.draai()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("LET OP: de container draait sha256:nieuw2, .built zegt revisie nieuw op sha256:nieuw", r.stdout)
+        self.alleen_inspectie("")
+
+    def test_ongezonde_image_met_het_head_label_tijdens_afkoeling_wordt_niet_gemarkeerd(self):
+        self.zet("appportal/mijnagents-data/.mislukt", f"nieuw {int(time.time())} 1")
+        self.zet("staat/draait", "sha256:nieuw")  # van buitenaf gestart, met het label van HEAD (BU-14)
+        self.zet("staat/label-nieuw", "nieuw")
+        self.gezond("sha256:oud")
+        r = self.draai()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.data(".built"), "oud")
+        self.assertIn("LET OP: de container draait revisie nieuw, .built zegt oud; /gezondheid faalt", r.stdout)
+        self.alleen_inspectie("")
+
+    def test_image_van_het_oude_script_zonder_label_geeft_geen_vals_alarm(self):
+        self.weg("staat/label-oud")
+        self.zet("appportal/mijnagents-data/.built", "nieuw")
+        r = self.draai()
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+
+    def test_pauze_doet_niets_tot_ze_opgeheven_is(self):
+        self.gezond("sha256:oud", "sha256:nieuw")
+        self.zet("appportal/mijnagents-data/.pauze", "")
+        self.zet("appportal/mijnagents-data/.herstel", "sha256:oud nieuw 1")
+        r = self.draai()
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("gepauzeerd", r.stdout)
+        self.assertEqual(self.draai().stdout, "")  # een keer gemeld
+        self.assertEqual(self.docker(), "")
+        self.assertEqual(self.data(".herstel"), "sha256:oud nieuw 1")
+        self.weg("appportal/mijnagents-data/.pauze")
+        r = self.draai()
+        self.assertIn("pauze opgeheven", r.stdout)
+        self.assertEqual(self.data(".built"), "nieuw")
 
     def test_vorige_ook_ongezond_blijft_herstellen_maar_een_nieuwe_revisie_mag(self):
         self.zet("bouw-breekt-oud.1", "1")  # tijdens de bouw valt ook de oude image om

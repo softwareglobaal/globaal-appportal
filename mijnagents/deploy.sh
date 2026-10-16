@@ -1,36 +1,40 @@
 #!/bin/sh
 # Auto-deploy van Mehdi's agent-omgeving (mijnagents.globaal.be), cron elke 2 min op de VM:
 #   */2 * * * * sh /home/ubuntu/appportal/mijnagents/deploy.sh >> /home/ubuntu/deploy-mijnagents.log 2>&1
-# Bouwt het bord alleen opnieuw als de map mijnagents/ in HEAD veranderde (tree-hash in .built). Dit script trekt
-# ~/appportal niet bij: de git pull op de VM is een aparte stap.
+# Bouwt het bord alleen opnieuw als de map mijnagents/ in HEAD veranderde (tree-hash in .built, het nagekeken image-ID in
+# .built_id). Dit script trekt ~/appportal niet bij: de git pull op de VM is een aparte stap.
 #
-# Bewaakt sinds 16-10-2026 (Codex CX7-1, CX8-1, CX9-1/2/3, CX10 en BU-1 tot BU-13), naar het voorbeeld van de werfapp:
-# - Eén uitrol tegelijk: flock over het hele script. Wie het bord met de hand opnieuw opbouwt, neemt hetzelfde slot:
-#     flock ~/appportal/mijnagents-data/.deploy.lock docker compose up -d ... app-mijnagents
+# Bewaakt sinds 16-10-2026 (Codex CX7-1, CX8-1, CX9-1/2/3, CX10 en BU-1 tot BU-18), naar het voorbeeld van de werfapp:
+# - Eén uitrol tegelijk: flock over het hele script.
+# - Pauze: zolang ~/appportal/mijnagents-data/.pauze bestaat, doet het script niets (geen uitrol, herstel of bewaking).
+#   Wie het bord met de hand terugzet of herbouwt, pauzeert eerst onder hetzelfde slot en heft de pauze daarna bewust op:
+#     flock ~/appportal/mijnagents-data/.deploy.lock touch ~/appportal/mijnagents-data/.pauze
+#     rm ~/appportal/mijnagents-data/.pauze
 # - Elke docker-aanroep heeft een tijdslimiet (KILL 10 s na TERM) en krijgt het slot (fd 9) niet mee.
 # - Gebouwd wordt precies de vastgelegde commit: git archive van HEAD:mijnagents naar een eigen map, los van de
-#   werkboom (geen genegeerde of niet vastgelegde bestanden, een git pull tijdens de bouw verandert niets). De image
-#   draagt de tree-hash als label mijnagents.tree.
+#   werkboom. De image draagt de tree-hash als label mijnagents.tree en de commit als org.opencontainers.image.revision.
 # - CI-grendel: mijnagents/deploy_ci.py eist een geslaagde run van bord-grendels op main voor exact deze commit.
 #   Rood, lopend, ontbrekend of GitHub onbereikbaar: geen bouw, de volgende ronde kijkt opnieuw.
-# - Zonder bestaande mijnagents.db geen bouw. Direct vóór het vervangen van de container een kopie (sqlite3 .backup,
-#   integrity_check, minstens één actieve agent, gzip) in ~/backups/voor-uitrol/; mislukt ze, dan start de nieuwe image
-#   niet. De terugrol hieronder zet alleen de image terug, niet de databank. Terugzetten gebeurt met de hand, met het
-#   bord gestopt (zie scripts/terugzetproef-sqlite.sh). De kopieën vallen onder de rotatie van scripts/db-backup.sh.
-# - Vóór de bouw wordt de image van het draaiende, gezonde bord bewaard als :vorige (eerst het ID, dan gezondheid voor
-#   precies dat ID, dan de tag, dan nacontrole). Lukt dat niet, dan geen bouw.
-# - .built verschuift pas als /gezondheid drie keer na elkaar een volledig JSON-antwoord met "ok": true en minstens één
-#   actieve agent geeft, en de container de nieuwe image draait (met het juiste label).
-# - Faalt de bouw, de start of de gezondheid, dan gaat de vorige image terug in dienst (--force-recreate als de container
-#   een andere image draait), en ook die wordt op gezondheid en image nagekeken.
-# - .herstel bestaat zolang het bord een niet-nagekeken image kan draaien. Een volgende ronde kijkt eerst wat er echt
-#   draait: de nieuwe revisie gezond (dan alsnog .built), de vorige image gezond (dan niets), anders terugzetten. Lukt
-#   dat herstel niet, dan is er geen gezond bord te beschermen en mag een nieuwere revisie wel gebouwd worden.
+# - Voor de bouw: een bestaande, leesbare mijnagents.db en ruimte voor een kopie; de image van het draaiende, gezonde bord
+#   als :vorige (eerst het ID, dan gezondheid voor dat ID, dan de tag, dan nacontrole). Anders geen bouw.
+# - De bouw krijgt de tag :kandidaat. :latest en de container blijven onaangeroerd tot de wissel; een mislukte bouw raakt
+#   het draaiende bord dus niet.
+# - Direct voor de wissel een kopie van de databank (sqlite3 .backup, integrity_check, minstens één actieve agent, gzip)
+#   in ~/backups/voor-uitrol/, en de nacontrole dat nog dezelfde image draait. Mislukt een van beide: geen wissel.
+#   De terugrol zet alleen de image terug, niet de databank; terugzetten gebeurt met de hand, met het bord gestopt
+#   (zie scripts/terugzetproef-sqlite.sh). De kopieën vallen onder de rotatie van scripts/db-backup.sh (14 dagen).
+# - De wissel: :kandidaat wordt :latest, de container start opnieuw. .built verschuift pas als /gezondheid drie keer na
+#   elkaar een volledig JSON-antwoord met "ok": true en minstens één actieve agent geeft, op precies die image.
+# - Faalt de start of de gezondheid, dan gaat de vorige image terug in dienst en ook die wordt nagekeken.
+# - .herstel bestaat alleen rond de wissel. Een volgende ronde kijkt eerst wat er echt draait: de nieuwe revisie gezond
+#   (dan alsnog .built), de vorige image gezond (dan :latest terug), anders terugzetten. Lukt dat herstel niet, dan is er
+#   geen gezond bord te beschermen en mag een nieuwere revisie wel gebouwd worden.
 # - Een mislukte revisie komt in .mislukt (revisie, tijdstip, aantal pogingen) en wacht: 30 min na de eerste poging,
 #   daarna telkens het dubbele, hoogstens 6 uur. Een nieuwe revisie wacht niet. Meteen opnieuw (zichtbare vrijgave):
 #     rm ~/appportal/mijnagents-data/.mislukt
-# - Zonder nieuwe revisie kijkt elke ronde of de container draait wat .built zegt (anders volgt .built de werkelijkheid
-#   en wordt HEAD opnieuw uitgerold) en één keer naar /gezondheid, met een logregel als dat verandert.
+# - Zonder uitrol neemt het script alleen waar: draait de container niet het image-ID uit .built_id (of, zonder
+#   .built_id, niet de revisie uit .built), of faalt /gezondheid, dan één logregel bij elke verandering (.afwijking).
+#   Het verandert dan niets: een handmatige toestand blijft staan tot een nieuwe revisie of een bewuste ingreep.
 # Images blijven bewaard; opruimen gebeurt alleen na een expliciete beslissing.
 # Tests: mijnagents/test_bord_deploy.py en test_deploy_ci.py, in de CI via .github/workflows/bord-grendels.yml.
 set -eu
@@ -93,28 +97,30 @@ gezond() {
   done
 }
 
-# bewaak: zonder uitrol nagaan dat de container draait wat .built zegt (BU-11) en één probe doen. Draait er iets anders,
-# dan volgt .built de werkelijkheid (het label, of "onbekend") en rolt deze of de volgende ronde de revisie van HEAD uit.
-# Een regel in het log alleen als de toestand verandert.
+# bewaak: zonder uitrol alleen waarnemen (BU-11, BU-14, BU-15, BU-16). Vergelijkt het draaiende image-ID met .built_id
+# (of, voor een uitrol van voor 16-10-2026 zonder .built_id, het label met .built) en doet één probe. Een afwijking komt
+# één keer in het log en in .afwijking; .built verandert niet en er wordt niets uitgerold, herstart of teruggezet.
 bewaak() {
+  afw=
   R_ID=$(draait)
-  # alleen handelen op een geslaagde inspectie: een haperende docker zet .built niet om
-  if [ -n "$R_ID" ] && R_BOOM=$(dk 60 image inspect -f '{{index .Config.Labels "mijnagents.tree"}}' "$R_ID" 2>/dev/null); then
-    R_BOOM=${R_BOOM:-onbekend}  # een image zonder label (van voor 16-10-2026, of met de hand gebouwd)
-    if [ "$R_BOOM" != "$OUD" ]; then
-      log "LET OP: de container draait $R_ID met revisie $R_BOOM, maar .built zei $OUD; .built volgt nu wat draait"
-      schrijf "$DATA/.built" "$R_BOOM" || log "kon .built niet schrijven"
-      OUD=$R_BOOM
+  B_ID=$(cat "$DATA/.built_id" 2>/dev/null || true)
+  if [ -n "$R_ID" ]; then
+    if [ -n "$B_ID" ]; then
+      [ "$R_ID" = "$B_ID" ] || afw="de container draait $R_ID, .built zegt revisie $OUD op $B_ID"
+    elif R_BOOM=$(dk 60 image inspect -f '{{index .Config.Labels "mijnagents.tree"}}' "$R_ID" 2>/dev/null) \
+         && [ -n "$R_BOOM" ] && [ "$R_BOOM" != "$OUD" ]; then
+      afw="de container draait revisie $R_BOOM, .built zegt $OUD"
     fi
   fi
-  if probe; then
-    if [ -f "$DATA/.ongezond" ]; then
-      rm -f "$DATA/.ongezond"
-      log "het bord is weer gezond (revisie $OUD)"
+  probe || afw="${afw:+$afw; }/gezondheid faalt"
+  if [ "$afw" != "$(cat "$DATA/.afwijking" 2>/dev/null || true)" ]; then
+    if [ -n "$afw" ]; then
+      schrijf "$DATA/.afwijking" "$afw" || true
+      log "LET OP: $afw; de uitrol verandert hier niets aan, nakijken op de server"
+    else
+      rm -f "$DATA/.afwijking"
+      log "weer in orde: de container draait wat .built zegt ($OUD) en /gezondheid slaagt"
     fi
-  elif [ ! -f "$DATA/.ongezond" ]; then
-    : > "$DATA/.ongezond"
-    log "LET OP: /gezondheid faalt bij een ongewijzigde revisie ($OUD); de uitrol doet daar niets aan, nakijken op de server"
   fi
 }
 
@@ -134,15 +140,20 @@ herstel() {
 
 # kopie_databank: sqlite3 .backup (consistent, ook met een open WAL), integrity_check, minstens één actieve agent, gzip.
 # De terugrol zet alleen de image terug; deze kopie is het herstelpunt voor de databank (met de hand terugzetten).
-kopie_databank() {
+# ruimte_ok: genoeg vrije ruimte voor een kopie (twee keer de databank, kopie en gzip, plus marge)
+ruimte_ok() {
   mkdir -p "$KOPIE_MAP" || return 1
-  KOPIE="$KOPIE_MAP/mijnagents-voor-uitrol-$(date -u +%Y%m%dT%H%M%SZ)-$(echo "$NIEUW" | cut -c1-12).sqlite"
-  nodig=$(( $(wc -c < "$DB") / 512 + KOPIE_MIN_VRIJ_MB * 1024 ))  # KB: twee keer de databank (kopie en gzip) plus marge
+  nodig=$(( $(wc -c < "$DB") / 512 + KOPIE_MIN_VRIJ_MB * 1024 ))  # KB
   vrij=$(df -Pk "$KOPIE_MAP" | awk 'NR == 2 { print $4 }')
   if [ "${vrij:-0}" -lt "$nodig" ]; then
     log "te weinig vrije ruimte voor een kopie van de databank ($vrij KB vrij, $nodig KB nodig)"
     return 1
   fi
+}
+
+kopie_databank() {
+  ruimte_ok || return 1
+  KOPIE="$KOPIE_MAP/mijnagents-voor-uitrol-$(date -u +%Y%m%dT%H%M%SZ)-$(echo "$NIEUW" | cut -c1-12).sqlite"
   agents=
   if timeout -k 10 600 sqlite3 -readonly "$DB" ".backup '$KOPIE'" 9>&- \
      && [ "$(timeout -k 10 600 sqlite3 "$KOPIE" 'PRAGMA integrity_check;' 9>&-)" = ok ] \
@@ -186,6 +197,27 @@ markeer_mislukt() {
       "meteen opnieuw: rm $DATA/.mislukt"
 }
 
+# mislukt <reden>: de revisie faalde voor de wissel; container en :latest zijn niet aangeraakt
+mislukt() {
+  log "UITROL MISLUKT bij $1 (revisie $NIEUW, commit $SHA, poging $N); het bord draait ongewijzigd door"
+  markeer_mislukt "$NIEUW" "$N"
+  exit 1
+}
+
+# afbreken <reden>: geen wissel in deze ronde en geen .mislukt (de revisie zelf faalde niet). De container wordt niet
+# aangeraakt (BU-17); alleen een halverwege mislukte wisseltag gaat terug. Een .herstel uit een eerdere ronde blijft staan.
+afbreken() {
+  if [ -n "$LATEST_VOOR" ] && [ "$(image_van "$IMG:latest")" != "$LATEST_VOOR" ]; then
+    dk 60 image tag "$LATEST_VOOR" "$IMG:latest" 2>/dev/null || log "kon $IMG:latest niet terugzetten op $LATEST_VOOR"
+  fi
+  if [ "$HERSTEL_GESCHREVEN" = 1 ] && { [ -z "$LATEST_VOOR" ] || [ "$(image_van "$IMG:latest")" = "$LATEST_VOOR" ]; }; then
+    rm -f "$DATA/.herstel"
+  fi
+  log "geen wissel in deze ronde: $1; het bord draait ongewijzigd door, de volgende ronde probeert opnieuw"
+  exit 1
+}
+
+# terug <reden>: de revisie faalde na de wissel; de vorige image gaat terug in dienst
 terug() {
   log "UITROL MISLUKT bij $1 (revisie $NIEUW, commit $SHA, poging $N)"
   markeer_mislukt "$NIEUW" "$N"
@@ -201,6 +233,18 @@ terug() {
   fi
   exit 1
 }
+
+if [ -f "$DATA/.pauze" ]; then
+  if [ ! -f "$DATA/.pauze_gemeld" ]; then
+    : > "$DATA/.pauze_gemeld"
+    log "gepauzeerd: geen uitrol, herstel of bewaking tot rm $DATA/.pauze"
+  fi
+  exit 0
+fi
+if [ -f "$DATA/.pauze_gemeld" ]; then
+  rm -f "$DATA/.pauze_gemeld"
+  log "pauze opgeheven: de uitrol loopt weer"
+fi
 
 SHA=$(git rev-parse HEAD) || SHA=
 NIEUW=
@@ -223,7 +267,7 @@ fi
 if [ ! -f "$DATA/.herstel" ]; then
   if [ "$NIEUW" = "$OUD" ] || afkoelen; then
     bewaak
-    if [ "$NIEUW" = "$OUD" ] || afkoelen; then exit 0; fi
+    exit 0
   fi
 fi
 
@@ -233,11 +277,11 @@ if ! dk 60 version --format '{{.Server.Version}}' >/dev/null 2>&1; then
 fi
 
 # Een onderbroken ronde gaat voor: eerst kijken wat er echt draait.
-STATUS=0
+STATUS=0; HERSTEL_GESCHREVEN=0; LATEST_VOOR=; VORIGE=
 if [ -f "$DATA/.herstel" ]; then
   R_ID=$(draait)
   if [ -n "$R_ID" ] && [ "$(boom_van "$R_ID")" = "$H_REV" ] && gezond "$R_ID"; then
-    schrijf "$DATA/.built" "$H_REV"
+    schrijf "$DATA/.built" "$H_REV" && schrijf "$DATA/.built_id" "$R_ID"
     rm -f "$DATA/.herstel" "$DATA/.mislukt"
     OUD=$H_REV
     log "een vorige ronde stopte na een gezonde uitrol van $H_REV; nu als gebouwd gemarkeerd"
@@ -253,7 +297,7 @@ if [ -f "$DATA/.herstel" ]; then
       rm -f "$DATA/.herstel"
       if [ "$OUD" = "$H_REV" ]; then  # .built mag niet de revisie noemen die niet draait (BU-10)
         OUD=$(boom_van "$H_ID"); OUD=${OUD:-onbekend}
-        schrijf "$DATA/.built" "$OUD" || log "kon .built niet schrijven"
+        { schrijf "$DATA/.built" "$OUD" && schrijf "$DATA/.built_id" "$H_ID"; } || log "kon .built niet schrijven"
       fi
       log "hersteld: $H_ID draait en is gezond; .built is $OUD"
     else
@@ -284,9 +328,14 @@ if ! git archive --format=tar -o "$BRON.tar" "$NIEUW" || ! tar -xf "$BRON.tar" -
   exit 1
 fi
 
-# Zonder de bestaande databank geen uitrol: het nieuwe bord zou een lege aanmaken (BU-12).
+# Voorwaarden voor de bouw: de bestaande databank (zonder haar zou het nieuwe bord een lege aanmaken, BU-12) en ruimte
+# voor de kopie (BU-18).
 if [ ! -f "$DB" ] || [ ! -r "$DB" ]; then
   log "de databank $DB ontbreekt of is niet leesbaar; geen uitrol in deze ronde"
+  exit 1
+fi
+if ! ruimte_ok; then
+  log "geen uitrol in deze ronde: geen ruimte voor de kopie van de databank"
   exit 1
 fi
 
@@ -307,30 +356,34 @@ else
   fi
 fi
 
-if [ -n "$VORIGE" ] && ! schrijf "$DATA/.herstel" "$VORIGE $NIEUW $N"; then
-  log "kon .herstel niet schrijven; geen bouw in deze ronde"
-  exit 1
+# De bouw als :kandidaat (BU-17): :latest en de container blijven onaangeroerd tot de wissel.
+dk "$BOUW_LIMIET" build -t "$IMG:kandidaat" --label "mijnagents.tree=$NIEUW" \
+  --label "org.opencontainers.image.revision=$SHA" "$BRON" || mislukt "het bouwen"
+KANDIDAAT=$(image_van "$IMG:kandidaat")
+if [ -z "$KANDIDAAT" ] || [ "$(boom_van "$KANDIDAAT")" != "$NIEUW" ]; then
+  mislukt "de bouw (de image draagt revisie $NIEUW niet)"
 fi
-dk "$BOUW_LIMIET" build -t "$IMG:latest" --label "mijnagents.tree=$NIEUW" \
-  --label "org.opencontainers.image.revision=$SHA" "$BRON" || terug "het bouwen"
-NIEUW_ID=$(image_van "$IMG:latest")
-if [ -z "$NIEUW_ID" ] || [ "$(boom_van "$NIEUW_ID")" != "$NIEUW" ]; then
-  terug "de bouw (de image draagt revisie $NIEUW niet)"
+
+# Direct voor de wissel: een kopie van de databank (BU-13) en de nacontrole dat nog dezelfde image draait.
+kopie_databank || afbreken "zonder kopie van de databank"
+if [ -n "$VORIGE" ] && [ ! -f "$DATA/.herstel" ] && [ "$(draait)" != "$VORIGE" ]; then
+  afbreken "de draaiende image is tijdens de bouw veranderd"
 fi
-# Kopie direct vóór het vervangen van de container (BU-13). Mislukt ze, dan start de nieuwe image niet: :latest gaat
-# terug naar de draaiende image en de volgende ronde probeert opnieuw (geen .mislukt: de revisie zelf faalde niet).
-if ! kopie_databank; then
-  if [ -n "$VORIGE" ] && herstel "$VORIGE"; then
-    rm -f "$DATA/.herstel"
-  fi
-  log "geen uitrol in deze ronde: zonder kopie van de databank start de nieuwe image niet"
-  exit 1
+
+# De wissel.
+if [ -n "$VORIGE" ]; then
+  schrijf "$DATA/.herstel" "$VORIGE $NIEUW $N" || afbreken "kon .herstel niet schrijven"
+  HERSTEL_GESCHREVEN=1
+fi
+LATEST_VOOR=$(image_van "$IMG:latest")
+if ! dk 60 image tag "$KANDIDAAT" "$IMG:latest" || [ "$(image_van "$IMG:latest")" != "$KANDIDAAT" ]; then
+  afbreken "de tag $IMG:latest kon niet naar de kandidaat wijzen"
 fi
 dk "$START_LIMIET" compose up -d --no-build --force-recreate "$DIENST" || terug "het starten"
-gezond "$NIEUW_ID" || terug "de gezondheidscontrole"
-if ! schrijf "$DATA/.built" "$NIEUW"; then
+gezond "$KANDIDAAT" || terug "de gezondheidscontrole"
+if ! schrijf "$DATA/.built" "$NIEUW" || ! schrijf "$DATA/.built_id" "$KANDIDAAT"; then
   log "kon .built niet schrijven; de volgende ronde ziet de gezonde nieuwe image en markeert dan"
   exit 1
 fi
-rm -f "$DATA/.mislukt" "$DATA/.herstel" "$DATA/.ongezond"
-log "deployed ($NIEUW, commit $SHA), gezond op $NIEUW_ID"
+rm -f "$DATA/.mislukt" "$DATA/.herstel" "$DATA/.afwijking"
+log "deployed ($NIEUW, commit $SHA), gezond op $KANDIDAAT"
