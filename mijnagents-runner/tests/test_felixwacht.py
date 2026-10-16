@@ -351,5 +351,55 @@ _stad = PP.lees(_NepContextLadend(), 51.18, 4.43, "Grotesteenweg 459, 2600 Antwe
 check("een lijst die nog laadt, wordt pas aanvaard als ze stabiel is: twee overtredingen, niet een",
       _stad["gelezen"]["bouwovertredingen"] and len(_stad["bouwovertredingen_lijst"]) == 2, _stad["bouwovertredingen_lijst"])
 
+
+
+# het bronantwoord van de stad (echte gegevens van Grotesteenweg 459, 17-10-2026): volledig, niet het scherm
+_bron = json.load(open(os.path.join(HIER, "percelenpas_grotesteenweg459.json"), encoding="utf-8"))
+_v = PP.vergunningen_uit_bron(_bron["vergunningen"])
+check("de vergunningen komen uit het bronantwoord, met 197317935 van 13-11-1973",
+      any(x["dossiernummer"] == "197317935" and x["datum"] == "13/11/1973" for x in _v) and len(_v) == 3, _v)
+_s, _l = PP.bouwovertredingen_uit_bron(_bron["bouwovertredingen"])
+check("de bouwovertredingen komen uit het bronantwoord: twee, met omschrijving", _s == "2 vastgesteld" and len(_l) == 2
+      and _l[1]["omschrijving"].endswith("in strijd met vergunning") and _l[1]["registratienummer"] == "11002_2024_11492", _l)
+check("een leeg bronantwoord betekent 'geen gekend'", PP.bouwovertredingen_uit_bron({"subLayerItems": []}) == ("geen gekend", []))
+check("een toelating voor 1962 krijgt '<id>_<inventaris>' zoals de stad toont",
+      PP.vergunningen_uit_bron({"subLayerItems": [{"permits": [{"fileNumber": "214157", "inventoryNumber": "329#11928"}]}]})[0]["dossiernummer"]
+      == "214157_329#11928")
+
+
+class _NepAntwoord:
+    def __init__(self, data):
+        self.value = self
+        self.status = 200
+        self._data = data
+    def json(self):
+        return {"fields": {"content": {"content": [{"value": {"layerTile": self._data}}]}}}
+    def __enter__(self):
+        return self
+    def __exit__(self, *a):
+        return False
+
+
+class _NepPaginaBron(_NepPagina):
+    """Een pagina waarvan het scherm leeg blijft, maar het bronantwoord volledig is."""
+    def expect_response(self, *a, **k):
+        return _NepAntwoord(_bron["bouwovertredingen"] if "bouwovertredingen" in (self.url or "") or self._volgende == "b"
+                            else _bron["vergunningen"])
+    def goto(self, url, **k):
+        self.url = url
+    _volgende = "v"
+
+
+class _NepContextBron:
+    def new_page(self):
+        return _NepPaginaBron()
+
+
+_stad = PP.lees(_NepContextBron(), 51.18, 4.43, "Grotesteenweg 459, 2600 Antwerpen")
+check("lees() gebruikt het bronantwoord en zegt dat (vergunningen)", _stad["bron"].get("vergunningen") == "bronantwoord van de stad"
+      and len(_stad["vergunningen"]) == 3, _stad["bron"])
+_stad2 = PP.lees(_NepContext(), 51.2, 4.47, "August Van de Wielelei 85, 2100 Antwerpen")
+check("zonder bronantwoord valt lees() terug op het scherm, en zegt dat", "scherm" in _stad2["bron"].get("vergunningen", ""), _stad2["bron"])
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
