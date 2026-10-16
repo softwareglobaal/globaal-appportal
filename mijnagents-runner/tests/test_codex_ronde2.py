@@ -168,8 +168,11 @@ with vervang((W, "_patch", lambda a, body, tok, toch=False: vr.append((a["id"], 
 check("A24 twee eigen afspraken tegelijk (zonder gasten): beide krijgen VR", sorted(i for i, t in vr if t.startswith("VR ")) ==
       ["eigen-klantafspraak-een-lang-id", "eigen-prospectafspraak-twee-lang-id"], str(vr))
 with vervang((W.projectadressen, "index", lambda: {}), (W.zoom, "beschikbaar", lambda *x, **k: False)):
+    # Vaste klok: _later is overmorgen 14:00 en vastgelopen kijkt 48 uur vooruit. Zonder nu viel de afspraak voor
+    # 14:00 buiten het venster en faalde deze toets alleen 's ochtends (CI 16-10-2026).
     _sl = [k for k, _ in W.vastgelopen([afspraak("eigen-klantafspraak-een-lang-id", "Mehdi: [HA-KO] 2601 - Jan Proef"),
-                                         afspraak("eigen-prospectafspraak-twee-lang-id", "Mehdi: [HA-PO] Piet Proef")])]
+                                         afspraak("eigen-prospectafspraak-twee-lang-id", "Mehdi: [HA-PO] Piet Proef")],
+                                        nu=_later - timedelta(days=1))]
 check("A24 de belsleutel blijft dezelfde (geen tweede oproep voor dezelfde vraag)",
       _sl == ["dubbel:" + ":".join(sorted(["eigen-klantafspraak-een-lang-id"[:16], "eigen-prospectafspraak-twee-lang-id"[:16]]))], str(_sl))
 
