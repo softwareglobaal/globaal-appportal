@@ -292,9 +292,12 @@ Zo doet de generator het sinds v1.9 (`tests/test_nieuwe_agent.py`, in de CI):
     Een kaart die pas na die ronde actief wordt, vraagt het bord en
     `controle_agenten.py` (dat alleen actieve kaarten toetst) (Codex NA12);
   - de registratie is een bijwerking als de naam al bestaat; tussen de vraag "is
-    de naam vrij" en de registratie kan een andere sessie dezelfde naam aanmaken.
-    Alleen een registratie die op het bord zelf weigert wat bestaat, sluit dat
-    (Codex NA13).
+    de naam vrij" en de registratie kan een andere sessie dezelfde naam aanmaken,
+    en dan werkt `POST /api/agent` die kaart bij (rol, mandaat, grenzen, actief).
+    Alleen een registratie die op het bord zelf weigert wat bestaat (alleen nieuw,
+    409 als de naam bestaat), sluit dat (Codex NA13 en NA47, ernst middel; risico
+    aanvaard door Mehdi op 17-10-2026: "Uitrollen met NA47 open. Ik aanvaard dat
+    risico"). Het speelt alleen als twee aanmaken van dezelfde naam tegelijk lopen.
 
 De controlerondes met Codex na de bouw volgen de stopregel uit de werkafspraken:
 twee rondes zonder vooruitgang betekent eerst het ontwerp herbekijken, en live gaat
