@@ -355,6 +355,33 @@ def test_na11_oude_runners_werken_niet_zonder_regelboek():
         bord.call = echt
 
 
+def test_na23_misvormde_noodlijst_is_onbekend():
+    """Codex NA23: een antwoord van /api/nood met de verkeerde vorm (tekst als lijst) liet de ronde breken met een
+    TypeError en de agent op actief staan. Nu is zo'n lijst onbekend: geen noodlijst, wel de fouthartslag."""
+    krom = [{"naam": "proefagent", "tekst": ["geen", "tekst"], "wie": "mehdi"}]
+    nb = BordNabootsing(werkwijze=_http(500), open_noden=krom)
+    begonnen, fout = ronde_die_moet_stoppen(nb)
+    assert not begonnen and isinstance(fout, bord.RondeGestopt), fout
+    laatste = nb.statussen()[-1]
+    assert laatste["status"] == "fout" and "nood" not in laatste, laatste
+
+    nb = BordNabootsing(open_noden=krom)
+    echt_tekst = bord.collega_tekst
+
+    def stuk(lijst):
+        raise ValueError("collega-lijst stuk")
+
+    bord.collega_tekst = stuk
+    try:
+        try:
+            ronde_met(nb)
+        except ValueError:
+            pass
+    finally:
+        bord.collega_tekst = echt_tekst
+    assert nb.statussen()[-1]["status"] == "fout", f"bleef op {nb.statussen()[-1]['status']} staan (N11)"
+
+
 def test_na15_fout_in_de_startfase_blijft_niet_op_actief():
     """Codex NA15: een fout na de hartslag 'actief' maar voor het werk (lessen.json met de verkeerde vorm,
     een stuk collega-lijst) liet de agent op actief staan, want __exit__ draait dan niet."""
@@ -423,6 +450,9 @@ def test_sectie_punten_en_grenzen_lezen_de_werkwijze():
     assert bord.grenzen("## Wat ik nooit doe\n- a\n\n## Wat de klant beslist\n- b\n") == (["a"], []), \
         "de tweede kop gaat over wat Mehdi beslist, niet over een ander"
     assert bord.grenzen("## 7. Wat ik nooit doe\n- a\n\n## 8. Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
+    # Codex NA22: een kop over wat een ander nooit doet, is geen grens van de agent
+    assert bord.grenzen("## Wat de klant nooit doet\n- a\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
+    assert bord.grenzen("## Wat collega's nooit doen\n- a\n") == ([], [])
 
 
 def _sjabloon_werk():

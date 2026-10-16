@@ -16,8 +16,9 @@ Twee stappen, met een controle voor en na (Codex NA08, 16-10-2026):
         --cadans "elk uur" --mag "post labelen" --grens "nooit verwijderen" \\
         --werkwijze werkwijze/post-wacht.md
 
-   Breekt een stap nadat er iets op het bord kwam, draai dan hetzelfde commando
-   opnieuw: het maakt de kaart af zonder iets dubbel te zetten.
+   Breekt een stap nadat de kaart op het bord kwam, dan zegt hij hoe je de
+   werkwijze zet (werkwijze_naar_bord.py). Zelf hervat hij nooit: een kaart zonder
+   werkwijze is niet vanzelf de zijne.
 
 2. De eerste ronde, als werk() is ingevuld. De runner draait een keer en de agent
    wordt getoetst aan de norm (controle_agenten.py). Pas als dat slaagt, krijg je
@@ -34,7 +35,7 @@ import re
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
@@ -118,8 +119,8 @@ def controleer(agent, werkwijze):
 
 
 def stand_op_bord(naam):
-    """vrij (de naam is nog niet in gebruik), onaf (een kaart zonder werkwijze: een eerdere poging stopte
-    halverwege) of bestaat. Kan het bord het niet zeggen, dan WerkwijzeOnbekend: onbekend is niet vrij."""
+    """vrij (de naam is nog niet in gebruik), onaf (een kaart zonder werkwijze) of bestaat. Kan het bord het
+    niet zeggen, dan WerkwijzeOnbekend: onbekend is niet vrij."""
     try:
         tekst = bord.Agent(naam).werkwijze_lezen()
     except bord.WerkwijzeOnbekend as e:
@@ -129,19 +130,15 @@ def stand_op_bord(naam):
     return "bestaat" if tekst.strip() else "onaf"
 
 
-def kaart_is_deze(agent):
-    """Is de kaart op het bord die van deze aanmaak (zelfde label, afdeling, rol en cadans)? None als het
-    bord het niet kan zeggen."""
-    try:
-        rijen = bord.call("/api/agents")
-    except Exception:  # noqa: BLE001
-        return None
-    if not isinstance(rijen, list):
-        return None
-    rij = next((r for r in rijen if isinstance(r, dict) and r.get("naam") == agent["naam"]), None)
-    if rij is None:
-        return None
-    return all((rij.get(v) or "") == (agent.get(v) or "") for v in ("label", "type", "rol", "cadans"))
+def herstel(naam):
+    """Hoe je de werkwijze op een kaart zonder werkwijze zet: een handeling, na nakijken van die kaart."""
+    zaad = os.path.join(RUNNERMAP, "werkwijze", f"{naam}.md")
+    print("Is dat de kaart van deze aanmaak, zet de werkwijze dan zelf, na het verschil te bekijken:")
+    if not os.path.exists(zaad):
+        print(f"  cp <jouw werkwijze>.md {zaad}")
+    print(f"  {VENV} {os.path.join(HIER, 'werkwijze_naar_bord.py')} {naam}          (toont het verschil)")
+    print(f"  {VENV} {os.path.join(HIER, 'werkwijze_naar_bord.py')} {naam} --zet    (zet de werkwijze)")
+    print("Is het de kaart van een andere agent, kies dan een andere naam.")
 
 
 def maak(agent, werkwijze, cron):
@@ -171,22 +168,18 @@ def maak(agent, werkwijze, cron):
                 print(f"Niet aangemaakt: {doel} bestaat al, met eigen code.")
                 return 2
     if stand == "onaf":
-        # Codex NA13: een kaart zonder werkwijze is niet vanzelf de eigen afgebroken poging. Hervatten mag alleen
-        # als het skelet van die poging hier ongewijzigd staat en de kaart op het bord deze kaart is.
-        zelfde = kaart_is_deze(agent) if runner_er else False
-        if zelfde is None:
-            print(f"Niet aangemaakt: het bord kon niet zeggen of de kaart van {naam} van deze aanmaak is.")
-            return 1
-        if not zelfde:
-            print(f"Niet aangemaakt: {naam} staat al op het bord, zonder werkwijze, maar niet als een afgebroken "
-                  "aanmaak van dit commando. Kijk die kaart eerst na.")
-            return 2
+        # Codex NA13 en NA20: een kaart zonder werkwijze is niet vanzelf een eigen afgebroken aanmaak, en het bord
+        # toont te weinig om dat te herkennen. De generator hervat dus nooit zelf; hij zegt hoe je de werkwijze zet.
+        print(f"Niet aangemaakt: {naam} staat al op het bord, zonder werkwijze.")
+        herstel(naam)
+        return 2
     if not runner_er:
         with open(doel, "w", encoding="utf-8") as f:
             f.write(code)
         os.chmod(doel, 0o755)
 
-    # Vanaf hier komt er iets op het bord. Breekt een stap, dan maakt hetzelfde commando het af (stand onaf).
+    # Vanaf hier komt er iets op het bord. Breekt een stap, dan staat de kaart er zonder (de juiste) werkwijze;
+    # de generator zegt dan hoe je ze zet, want zelf hervatten kan hij niet veilig (Codex NA20).
     try:
         bord.call("/api/agent", agent)
         uit = bord.call(f"/api/agent/{naam}/werkwijze", {"werkwijze": werkwijze})
@@ -195,10 +188,11 @@ def maak(agent, werkwijze, cron):
         terug = bord.Agent(naam).werkwijze_lezen()
     except Exception as e:  # noqa: BLE001  elke fout hier laat een kaart zonder werkwijze achter
         print(f"LET OP: {naam} staat op het bord, maar zonder werkwijze ({type(e).__name__}: {e}).")
-        print("Draai hetzelfde commando opnieuw; het maakt de kaart af zonder iets dubbel te zetten.")
+        herstel(naam)
         return 1
     if terug.strip() != werkwijze.strip():
         print(f"LET OP: de werkwijze die op het bord staat voor {naam}, is niet de tekst die je meegaf.")
+        herstel(naam)
         return 1
 
     print(f"Aangemaakt: {naam} staat op het bord met zijn werkwijze ({len(terug.strip())} tekens).")
@@ -246,7 +240,7 @@ def vers_na(naam, begin):
         ke = con.execute("select kennis_ts from agent where naam=?", (naam,)).fetchone()
     finally:
         con.close()
-    grens = begin - timedelta(seconds=1)
+    grens = begin   # Codex NA21: geen marge; het bord en de generator lopen op dezelfde klok (de VM)
 
     def van_deze_ronde(ts):
         t = _tijd(ts)

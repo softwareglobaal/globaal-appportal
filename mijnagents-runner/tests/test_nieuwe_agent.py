@@ -120,6 +120,9 @@ class Proef:
         spec.loader.exec_module(self.mod)
         if hasattr(self.mod, "RUNNERMAP"):
             self.mod.RUNNERMAP = self.map
+        self._omgeving = {k: os.environ.get(k) for k in ("AGENTS_TOKEN", "PROEF_DB", "PROEF_STATUS", "PROEF_KENNIS")}
+        self._ca = getattr(self.mod, "controle_agenten", None)
+        self._ca_db = self._ca.DB if self._ca is not None else None
 
     def draai(self, *argv):
         echt_urlopen, echt_token = urllib.request.urlopen, bord.TOKEN
@@ -151,6 +154,14 @@ class Proef:
         return os.path.join(self.map, "post_wacht.py")
 
     def weg(self):
+        """Opruimen en de omgeving terugzetten zoals ze was (Codex NA25)."""
+        for k, v in self._omgeving.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        if self._ca is not None:
+            self._ca.DB = self._ca_db
         shutil.rmtree(self.map, ignore_errors=True)
 
 
@@ -269,18 +280,21 @@ def test_volledige_kaart_wordt_aangemaakt_en_teruggelezen_zonder_cron():
         p.weg()
 
 
-def test_breuk_na_registratie_maakt_hetzelfde_commando_af():
-    """Valt het bord weg net na de registratie, dan zegt de generator dat, en maakt hetzelfde commando het af."""
+def test_breuk_na_registratie_zegt_hoe_je_de_werkwijze_zet():
+    """Valt het bord weg net na de registratie, dan zegt de generator dat, met het commando om de werkwijze te
+    zetten. Hetzelfde commando opnieuw hervat niet: het herkent de kaart niet als de zijne (Codex NA20)."""
     nb = NepBord(faal_werkwijze_zetten=True)
     p = Proef(nb)
     try:
         code = p.draai(*KAART, "--werkwijze", p.ww)
         assert code not in (0, None), "een kaart zonder werkwijze is geen geslaagde aanmaak"
-        assert "opnieuw" in p.uitvoer, p.uitvoer
+        assert "werkwijze_naar_bord.py post-wacht" in p.uitvoer and "--zet" in p.uitvoer, p.uitvoer
         assert nb.agents["post-wacht"]["werkwijze"] == ""
+        registraties = len([o for o in nb.oproepen if o[1] == "/api/agent"])
         code = p.draai(*KAART, "--werkwijze", p.ww)
-        assert code == 0, p.uitvoer
-        assert nb.agents["post-wacht"]["werkwijze"] == WERKWIJZE.strip()
+        assert code not in (0, None), "de generator hervat niet zelf"
+        assert len([o for o in nb.oproepen if o[1] == "/api/agent"]) == registraties, "de kaart werd opnieuw geregistreerd"
+        assert "werkwijze_naar_bord.py post-wacht" in p.uitvoer, p.uitvoer
     finally:
         p.weg()
 
@@ -291,7 +305,11 @@ def test_lege_kaart_van_een_ander_wordt_niet_overgenomen():
     for runner_er, kaart in ((False, {"naam": "post-wacht", "label": "De Postwacht", "type": "h-architects",
                                       "rol": "sorteert nieuwe post op info@", "cadans": "elk uur"}),
                              (True, {"naam": "post-wacht", "label": "Iets anders", "type": "regie",
-                                     "rol": "een andere agent", "cadans": "elke dag"})):
+                                     "rol": "een andere agent", "cadans": "elke dag"}),
+                             # Codex NA20: dezelfde zichtbare velden, het skelet hier, maar een ander mandaat
+                             (True, {"naam": "post-wacht", "label": "De Postwacht", "type": "h-architects",
+                                     "rol": "sorteert nieuwe post op info@", "cadans": "elk uur",
+                                     "mandaat": "iets heel anders"})):
         nb = NepBord(agents={"post-wacht": {"kaart": dict(kaart), "werkwijze": ""}})
         p = Proef(nb)
         try:
@@ -411,6 +429,24 @@ def test_eerste_ronde_die_niets_deed_gaat_niet_op_de_cron():
     eerdere ronde. Nu moet wat het bord toont van deze ronde zijn."""
     p = _eerste_ronde_proef(RUNNER_LUI)
     try:
+        code = p.draai("--eerste-ronde", "post-wacht")
+        assert code not in (0, None)
+        assert "van deze ronde" in p.uitvoer and ">> ~/agents/" not in p.uitvoer, p.uitvoer
+    finally:
+        p.weg()
+
+
+def test_eerste_ronde_aanvaardt_geen_hartslag_van_net_voor_de_start():
+    """Codex NA21: met een marge van een seconde haalde een runner die niets deed de controle op een hartslag van
+    een fractie voor de start. Nu telt alleen wat na de start op het bord kwam."""
+    p = _eerste_ronde_proef(RUNNER_LUI)
+    try:
+        nu = datetime.now(timezone.utc).isoformat()
+        con = sqlite3.connect(os.environ["PROEF_DB"])
+        con.execute("update status set ts=? where naam='post-wacht'", (nu,))
+        con.execute("update agent set kennis_ts=? where naam='post-wacht'", (nu,))
+        con.commit()
+        con.close()
         code = p.draai("--eerste-ronde", "post-wacht")
         assert code not in (0, None)
         assert "van deze ronde" in p.uitvoer and ">> ~/agents/" not in p.uitvoer, p.uitvoer

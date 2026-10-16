@@ -237,8 +237,9 @@ cd ~/appportal/mijnagents-runner && ~/agents/.venv/bin/python nieuwe-agent.py --
 ```
 
 De werkwijze die je meegeeft moet zelf al door N1, N2, N8 en N9 komen, met punten
-onder een kop over wat hij nooit doet en een over wat Mehdi beslist. De generator
-weigert anders, voor er iets op schijf of op het bord staat. Daarna:
+onder twee aparte koppen: een over wat de agent zelf nooit doet ("## Wat ik nooit
+doe") en een over wat Mehdi beslist ("## Wat Mehdi beslist"). De generator weigert
+anders, voor er iets op schijf of op het bord staat. Daarna:
 
 - laat de runner elke ronde melden wat hij las (N4);
 - laat hem noden schrijven met een eigenaar en een besluit, niet als logregel (N7);
@@ -252,7 +253,9 @@ Twee eisen aan de doorgang zelf, sinds v1.8:
   achter (Codex NA08, 16-10-2026).
 - **Actief pas na een gecontroleerde eerste ronde.** De eerste ronde draait, de
   controle hierboven slaagt, het werkverslag is gelezen en tegen de voorbeelden van
-  Mehdi gelegd. Pas dan gaat de agent actief en op de cron.
+  Mehdi gelegd. Pas dan gaat de agent actief en op de cron. Dat is de norm; vandaag
+  zet het bord een kaart al bij de registratie op actief, en wacht alleen de cron
+  (zie "Wat nog niet kan" hieronder).
 
 Zo doet de generator het sinds v1.9 (`tests/test_nieuwe_agent.py`, in de CI):
 
@@ -261,9 +264,10 @@ Zo doet de generator het sinds v1.9 (`tests/test_nieuwe_agent.py`, in de CI):
   en of de naam nog vrij is op het bord en geen eigen runner heeft. Weet het bord
   dat niet, dan maakt hij niets: onbekend is niet vrij. Daarna schrijft hij het
   skelet, registreert hij, zet hij de werkwijze en leest hij die terug. Breekt een
-  stap na de registratie, dan maakt hetzelfde commando het af, maar alleen als het
-  skelet van die poging er ongewijzigd staat en de kaart op het bord dezelfde is;
-  een lege kaart van een ander neemt hij niet over (Codex NA13).
+  stap na de registratie, dan staat de kaart er zonder werkwijze en zegt hij hoe je
+  ze zet (`werkwijze_naar_bord.py <naam>`, dan `--zet`). Zelf hervat hij nooit: een
+  kaart zonder werkwijze is niet vanzelf de zijne, en het bord toont te weinig om
+  dat te herkennen (Codex NA13 en NA20).
 - **`--eerste-ronde`** weigert een runner die nog het skelet is, draait de runner
   een keer en toetst de agent met `controle_agenten.py`. Hartslag en gemelde kennis
   moeten van die ronde zijn, niet van een eerdere (Codex NA14), en de ronde moet op

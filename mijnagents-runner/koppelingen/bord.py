@@ -80,11 +80,12 @@ def punten(tekst):
 
 
 def grenzen(werkwijze):
-    """Norm N2 als regels: de punten onder de kop over wat de agent nooit doet ("## Wat ik nooit doe") en
-    onder de kop over wat Mehdi beslist ("## Wat Mehdi beslist"). Twee aparte koppen: een kop die over
-    allebei gaat ("Wat ik beslist nooit doe") telt voor geen van beide (Codex NA17). De generator eist ze
+    """Norm N2 als regels: de punten onder de kop over wat de agent zelf nooit doet ("## Wat ik nooit doe")
+    en onder de kop over wat Mehdi beslist ("## Wat Mehdi beslist"). Twee aparte koppen: een kop die over
+    allebei gaat ("Wat ik beslist nooit doe") telt voor geen van beide (Codex NA17), en een kop over wat een
+    ander nooit doet ("Wat de klant nooit doet") is geen grens van de agent (Codex NA22). De generator eist ze
     voor hij registreert, het sjabloon past ze elke ronde toe."""
-    nooit = _sectie_waar(werkwijze, lambda k: "nooit" in k and "beslis" not in k)
+    nooit = _sectie_waar(werkwijze, lambda k: "nooit" in k and re.search(r"\bik\b", k) and "beslis" not in k)
     mehdi = _sectie_waar(werkwijze, lambda k: "mehdi" in k and "beslis" in k and "nooit" not in k)
     return punten(nooit), punten(mehdi)
 
@@ -197,15 +198,20 @@ class Agent:
         return bestaand + [n for n in nieuw if n["tekst"] not in teksten]
 
     def open_noden(self):
-        """Mijn noden die nu open staan op het bord, of None als dat onbekend is."""
+        """Mijn noden die nu open staan op het bord, of None als dat onbekend is. Een antwoord dat niet de
+        verwachte vorm heeft, is onbekend, ook als maar een rij afwijkt (Codex NA23)."""
         try:
-            rijen = call("/api/nood").get("nood")
+            antwoord = call("/api/nood")
         except Exception:  # noqa: BLE001
             return None
-        if not isinstance(rijen, list):
+        rijen = antwoord.get("nood") if isinstance(antwoord, dict) else None
+        if not isinstance(rijen, list) or not all(isinstance(r, dict) for r in rijen):
             return None
-        return [{"tekst": r["tekst"], "wie": r.get("wie") or "mehdi"}
-                for r in rijen if isinstance(r, dict) and r.get("naam") == self.naam and r.get("tekst")]
+        mijn = [r for r in rijen if r.get("naam") == self.naam]
+        if not all(isinstance(r.get("tekst"), str) and r["tekst"].strip()
+                   and isinstance(r.get("wie") or "", str) for r in mijn):
+            return None
+        return [{"tekst": r["tekst"], "wie": r.get("wie") or "mehdi"} for r in mijn]
 
     def kennis(self, tekst, bron=""):
         """Norm N4: melden welk regelboek ik deze ronde las, zodat achteraf te zien is
