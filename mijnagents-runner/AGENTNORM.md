@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.7, 26-09-2026 (een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.8, 16-10-2026 (hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -52,9 +52,7 @@ Twee regels die hieruit volgen:
 | **N8** | Geen sleutel, token of wachtwoord in de werkwijze | Een werkwijze wordt geëxporteerd naar Dropbox en gelezen door elke sessie. |
 | **N9** | Geen gedachtestreepjes in de werkwijze | Afspraak van 04-07-2026. Teksten horen menselijk te lezen. |
 | **N10** | Een nood draagt geen aantal in zijn tekst | Noden zijn declaratief: elke ronde stuurt een agent de hele lijst, en wat er niet meer in staat geldt als opgelost. Staat er een teller in de tekst ("11 afspraken zonder code"), dan is elke ronde formeel een nieuwe nood en sluit de lus nooit. Zo verzamelde de Agendawacht dertig identieke regels. Het aantal hoort in het detail. |
-
 | **N11** | Verse hartslag, niet in fout en niet vastgelopen | Zes agents draaien op de Mac van Mehdi. Slaapt die laptop, dan gaat hun ronde niet door en merkt niemand het. Op 20-09-2026 stonden acht agents stil zonder dat iemand het wist: het commandocentrum 39 uur (cadans: elk kwartier), de dagbundelaar 54 uur, de wisprwacht zestien uur op fout, de icloudwacht achttien uur vastgelopen in dezelfde ronde. Stil vallen mag, ongemerkt stil vallen niet. |
-
 | **N12** | De runner gaat door de gedeelde ronde (`with ag.ronde(...)`) | Dit is het minimum. Wie zijn eigen doorgang bouwt vergeet er altijd een: gemeten op 20-09-2026 haalden vier van de 39 runners hun werkwijze van het bord op, en meldde er precies een welk regelboek hij las. De werkwijze was voor de rest decoratie: een tekst die beschrijft wat de code zou moeten doen, die niemand naast de code legt. |
 | **N13** | Hij las in zijn laatste ronde de gedeelde lessen (`werkwijze/lessen.json`) | Wat een agent leert, hoort elke agent te weten. Tot 24-09-2026 had alleen de Agendawacht een foutenregister (47 fouten, 14 lessen) en las geen enkele andere agent het. Dezelfde dag stelde de werfverslag-voorbereider voor om "dubbele rijen op te ruimen" van dossier 2145, en Mehdi las dat als "2145 verwijderen", terwijl het net het eerste testdossier van het nieuwe communicatiesysteem is. Die les (L15: zeg eerst wat blijft) gold voor elke agent die voorstellen schrijft, en niemand anders kende ze. De ronde leest de lessen nu mee als bron; deze toets kijkt of ze in de gemelde kennis van de agent staan. |
 | **N14** | Hij las in zijn laatste ronde de lijst van actieve collega's van het bord | Mehdi, 25-09-2026: "zorg ervoor dat alle agents van elkaar op de hoogte zijn, en dat is momenteel niet het geval". Tot die dag wist geen agent wie er nog meer draaide, dus zette niemand iets klaar voor een collega die het beter kon, en vroeg elke agent alles aan Mehdi. De ronde haalt de lijst elke ronde levend van het bord (`/api/agents`), nooit uit een kopie, en geeft ze door als `r.collegas`; een taalmodel-agent krijgt `bord.collega_tekst(r.collegas)` in zijn opdracht. Hoort iets bij een collega, dan zet hij het voor die agent klaar (`klaarzet`, `voor: <naam>`). |
@@ -187,6 +185,20 @@ draait vanzelf uit de meldingen verdwijnt.
 
 ## 8. Een nieuwe agent die meteen slaagt
 
+Een agent die meteen slaagt, begint niet bij de generator maar bij de inhoud. De
+fasen van idee tot live staan in de Werkafspraken Claude en Codex (hoogste versie,
+punt 4a; aanvaard door Mehdi op 16-10-2026). In het kort:
+
+| voor de generator | waarom |
+|---|---|
+| Mehdi spreekt de opdrachtkaart in: probleem, bron, wat hij wil zien, wat nooit, wat hij beslist, met een goed en een verkeerd voorbeeld | zonder doel en grenzen haalt een werkwijze N1 en N2 alleen op papier |
+| keuze uitbreiden of nieuw staat op papier en Mehdi bevestigt ze; nieuw alleen bij een eigen mandaat, ritme of toegangsgrens | twee agents voor hetzelfde onderwerp is N6 in het groot |
+| een kleine bronproef, alleen lezend, gegroepeerd in soorten | op 25-09-2026 werden 34 mailwachters voorgesteld op basis van aantallen; de meting toonde iets heel anders |
+| Codex leest het ontwerp voor de bouw, alleen lezend | de meeste latere fouten bij de Agendawacht waren ontwerpfouten (les L38) |
+| de voorbeelden van Mehdi worden tests: verwacht resultaat en foutgevallen | dat is het opstartbewijs; zonder voorbeeld weet niemand wanneer de agent goed werkt |
+
+Dan de generator:
+
 ```
 python3 ~/appportal/mijnagents-runner/nieuwe-agent.py --naam post-wacht --label "Postwacht" \
   --type h-architects --rol "sorteert nieuwe post op info@" --cadans "elk uur" \
@@ -198,6 +210,20 @@ De werkwijze die je meegeeft moet zelf al door N1, N2, N8 en N9 komen. Daarna:
 - laat de runner elke ronde melden wat hij las (N4);
 - laat hem noden schrijven met een eigenaar en een besluit, niet als logregel (N7);
 - draai `controle_agenten.py --agent <naam> --uitleg` voor je hem op de cron zet.
+
+Twee eisen aan de doorgang zelf, sinds v1.8:
+
+- **Controle voor registratie.** Naam, label, rol, mandaat, minstens een grens en
+  een werkwijze die N1 en N2 haalt, worden gecontroleerd voor er iets op het bord
+  komt. Een generator die eerst registreert en dan pas faalt, laat een halve kaart
+  achter (Codex NA08, 16-10-2026).
+- **Actief pas na een gecontroleerde eerste ronde.** De eerste ronde draait, de
+  controle hierboven slaagt, het werkverslag is gelezen en tegen de voorbeelden van
+  Mehdi gelegd. Pas dan gaat de agent actief en op de cron.
+
+De controlerondes met Codex na de bouw volgen de stopregel uit de werkafspraken:
+twee rondes zonder vooruitgang betekent eerst het ontwerp herbekijken, en live gaat
+alleen zonder open punten van ernst hoog of middel.
 
 ## 9. De chatkant
 
