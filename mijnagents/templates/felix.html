@@ -58,7 +58,7 @@ nooit aan. Opslaan in de projectmap gebeurt pas als je op de knop klikt.</p>
   </ol>
   <table>
     <tr><th>Vraag</th><th>Antwoord</th></tr>
-    <tr><td>Hoe snel?</td><td>Hij begint binnen 5 minuten; een zoektocht duurt meestal een paar minuten. Is de site van de stad traag, dan probeert hij het tot drie keer opnieuw (de stand blijft dan op "wacht").</td></tr>
+    <tr><td>Hoe snel?</td><td>Hij begint binnen 5 minuten; een zoektocht duurt meestal 5 tot 15 minuten (FelixArchief antwoordt traag). Is de site van de stad traag, dan probeert hij het tot drie keer opnieuw (de stand blijft dan op "wacht").</td></tr>
     <tr><td>Wat krijg je zeker?</td><td>De vergunningen volgens de stad, het nummer in FelixArchief, printscreens als bewijs en een controletabel.</td></tr>
     <tr><td>Wat krijg je als het digitaal is?</td><td>Beslissingen en documenten als pdf.</td></tr>
     <tr><td>Wat krijg je niet?</td><td>Bouwplannen (geweigerd tot de erewoordverklaring van het account aanvaard is), dossiers die alleen in de leeszaal liggen (Mehdi beslist over reserveren of scannen) en dossiers die alleen bij de stad liggen (opvragen met Itsme, de link staat onder de controletabel).</td></tr>
@@ -83,7 +83,7 @@ nooit aan. Opslaan in de projectmap gebeurt pas als je op de knop klikt.</p>
   <tr>
     <td>{{ z.ts|felix_tijd }}<br><span class="stil">{{ z.door }}</span></td>
     <td>{{ z.project or '-' }}</td>
-    <td>{% if z.status in ['klaar', 'onvolledig'] %}<a href="{{ url_for('felix_zoektocht', zid=z.id) }}">{{ z.adres }}</a>{% else %}{{ z.adres }}{% endif %}</td>
+    <td>{% if z.map %}<a href="{{ url_for('felix_zoektocht', zid=z.id) }}">{{ z.adres }}</a>{% else %}{{ z.adres }}{% endif %}</td>
     <td>{% if z.status == 'klaar' %}<span class="ok">klaar</span>{% elif z.status == 'onvolledig' %}<span class="let_op">onvolledig</span>{% elif z.status == 'fout' %}<span class="fout">fout</span>{% elif z.status == 'bezig' %}<span class="let_op">bezig</span>{% else %}wacht{% endif %}</td>
     <td>{% if z.status in ['klaar', 'onvolledig'] %}{{ z.besluit }}{% if z.onvolledig %}<br><span class="let_op">Ontbreekt: {{ z.onvolledig[0] }}{% if z.onvolledig|length > 1 %} (en {{ z.onvolledig|length - 1 }} meer){% endif %}</span>{% endif %}{% elif z.status == 'fout' %}<span class="stil">{{ z.fout }}</span>{% endif %}</td>
     <td>

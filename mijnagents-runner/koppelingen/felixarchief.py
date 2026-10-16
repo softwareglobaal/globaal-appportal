@@ -218,7 +218,7 @@ class Felix:
         if rijen or not schrijfwijze_mogelijk(dossiernummer):
             return rijen
         jaar, volg = dossiernummer[:4], dossiernummer[4:].lstrip("0")
-        kandidaten = self._dossiernummer_bevat(volg, lambda dn: past_schrijfwijze(dn, jaar, volg))
+        kandidaten = self._dossiernummer_bevat(volg, lambda dn: past_schrijfwijze(dn, jaar, volg), extra=jaar)
         uit = []
         for r in kandidaten:
             r["via"] = f"andere schrijfwijze: {r['dossiernummer'].split('#')[0].strip()}"
@@ -229,12 +229,14 @@ class Felix:
             uit.append(r)
         return uit
 
-    def _dossiernummer_bevat(self, tekst, past, paginas=3):
-        """Alle dossiers waarvan het veld Dossiernummer 'tekst' bevat en 'past', in beide reeksen, met paginering."""
+    def _dossiernummer_bevat(self, tekst, past, paginas=10, extra=None):
+        """Alle dossiers waarvan het veld Dossiernummer 'tekst' (en 'extra') bevat en 'past', in beide reeksen,
+        met paginering tot paginas x 50 (Codex FX03)."""
         rijen = []
+        termen = [_term("Dossiernummer", tekst, "contains")] + ([_term("Dossiernummer", extra, "contains")] if extra else [])
         for reeks in werkgebied()["reeksen"]:
             for pagina in range(1, paginas + 1):
-                j = self.reeks_zoeken(reeks, [_term("Dossiernummer", tekst, "contains")], pagina, 50)
+                j = self.reeks_zoeken(reeks, termen, pagina, 50)
                 items = j.get("items") or []
                 rijen += [r for r in (_rij(it, reeks) for it in items) if past(r["dossiernummer"])]
                 if len(items) < 50:
@@ -357,6 +359,24 @@ class Felix:
             const uit = [r.status, r.headers.get('content-type') || '']; try { await r.body.cancel(); } catch (e) {}
             return uit; }""", url)
 
+    def rechten(self, url):
+        """Het auteursrecht van het dossier achter een bestands-URL, volgens FelixArchief (copyRightFree).
+
+        Alleen dit veld bewijst auteursrecht; een status 500 alleen bewijst niets (Codex FX15, 17-10-2026). Gemeten:
+        627#31611 (vrij vanaf 2091), 961#3952 (2093) en 3290#1260 (2134) geven 500; 627#23624 (vrij) geeft 200.
+        """
+        m = re.search(r"/files/([^?/]+)", url or "")
+        if not m:
+            return None
+        try:
+            v = ((self.api(f"inventorypieces/{m.group(1)}?include=inventorynumber").get("inventorynumber") or {})
+                 .get("fields") or {})
+        except Exception:
+            return None
+        if "copyRightFree" not in v:
+            return None
+        return {"vrij": bool(v.get("copyRightFree")), "vrij_vanaf": v.get("copyRightFreeFrom") or ""}
+
     def download(self, url, pad, grootte=None):
         """Een bestand rechtstreeks naar schijf, met de aanmelding van deze browser; geeft het aantal bytes.
 
@@ -365,12 +385,14 @@ class Felix:
         500: dat mag alleen online bekeken worden en wordt Beschermd, geen fout.
         """
         status, soort = self.status_bestand(url)
-        if status in (401, 403):
-            raise Beschermd(f"status {status}")
+        if status in (401, 403, 500):
+            vrij = self.rechten(url)
+            if vrij is not None and not vrij["vrij"]:  # FelixArchief zegt zelf: auteursrecht (gemeten 17-10-2026)
+                raise Beschermd(f"auteursrecht tot {vrij['vrij_vanaf'][:4]}")
         if status >= 400:
             raise BestandFout(status)
         os.makedirs(os.path.dirname(pad), exist_ok=True)
-        if "pdf" in soort or "zip" in soort or "octet-stream" in soort:
+        if "pdf" in soort or "zip" in soort or "octet-stream" in soort or not grootte or grootte > 8_000_000:
             p = self._ctx.new_page()
             try:
                 with p.expect_download(timeout=300000) as d:
@@ -382,8 +404,6 @@ class Felix:
             finally:
                 p.close()
             return os.path.getsize(pad)
-        if grootte and grootte > 8_000_000:
-            raise BestandFout(f"te groot voor de omweg via het geheugen ({grootte} bytes, {soort})")
         import base64  # een klein beeldbestand: Chrome toont het in plaats van het te downloaden
         b64 = self.page.evaluate("""async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('status ' + r.status);
             const buf = new Uint8Array(await r.arrayBuffer()); let s = '';
@@ -434,9 +454,10 @@ class Felix:
                 except Exception:
                     veld.press("ArrowDown")
                     veld.press("Enter")
-                p.get_by_text("Kadastrale informatie").wait_for(timeout=30000)  # het adrespaneel staat open
+                p.get_by_text("Kadastrale informatie").first.wait_for(timeout=30000)  # het adrespaneel staat open
+                p.get_by_text(adres_geopunt).first.wait_for(timeout=15000)  # en het toont het gevraagde adres
                 try:
-                    p.get_by_text("Kadastrale informatie").click(timeout=10000)
+                    p.get_by_text("Kadastrale informatie").first.click(timeout=10000)
                 except Exception:
                     pass
                 p.wait_for_timeout(5000)  # de kaarttegels laden na
@@ -470,6 +491,11 @@ class Felix:
                     stukken.append(Image.open(io.BytesIO(kaart.screenshot(timeout=60000))))
                     break
                 except Exception:
+                    try:  # een gecrashte pagina laat anders alle volgende kaarten mislukken (Codex FX07)
+                        self.page.close()
+                    except Exception:
+                        pass
+                    self.page = self._ctx.new_page()
                     if poging == 1:
                         ontbreekt.append(inv)
         if not stukken:
@@ -546,6 +572,10 @@ def _afstand_tot(adres, punt):
         return None
     if not loc:
         return None
+    gezocht = re.match(r"(.*?)\s+(\d+\w*)", adres.strip())
+    if gezocht and (not _zelfde_straat(loc.get("straat") or "", gezocht.group(1))
+                    or _getal(loc.get("huisnummer")) != _getal(gezocht.group(2))):
+        return None  # Geopunt gaf een ander adres dan gevraagd (Codex FX16): geen afstand, dus geen bewijs
     dy = (loc["lat"] - punt[0]) * 111_320
     dx = (loc["lon"] - punt[1]) * 111_320 * math.cos(math.radians(punt[0]))
     return round(math.hypot(dx, dy))

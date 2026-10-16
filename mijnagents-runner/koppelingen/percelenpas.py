@@ -90,13 +90,19 @@ def lees(ctx, lat, lon, adres, map_=None):
             p.goto(uit["url"], wait_until="domcontentloaded", timeout=90000)
             p.wait_for_selector("text=Toelatingen die voor 1962", timeout=60000)
             _cookies_weigeren(p)
-            try:
-                p.wait_for_selector("text=Dossiernummer", timeout=15000)
-            except Exception:
-                pass  # geen vergunningen: de pagina zegt dat zelf
+            # De inleiding staat er meteen, het perceel en de tabel komen later (17-10-2026: na 15 s nog een lege
+            # tabel en geen perceel, terwijl hetzelfde adres eerder 5 vergunningen gaf). Wachten op beide.
+            m = None
+            for _ in range(45):
+                tekst = p.locator("body").inner_text()
+                m = re.search(r"\b\d{5}[A-Z]\d{4}/\d{2}[A-Z]\d{3}\b", tekst)
+                if m and ("Dossiernummer" in tekst or "geen vergunningen" in tekst):
+                    break
+                p.wait_for_timeout(2000)
+            else:
+                raise RuntimeError("perceel of tabel niet geladen na 90 seconden")
             p.wait_for_timeout(1500)
-            m = re.search(r"\b\d{5}[A-Z]\d{4}/\d{2}[A-Z]\d{3}\b", p.locator("body").inner_text())
-            uit["capakey"] = m.group() if m else ""
+            uit["capakey"] = m.group()
             for cellen in p.evaluate("""() => [...document.querySelectorAll('tr')].map(tr =>
                     [...tr.querySelectorAll('td')].map(c => c.innerText.trim()))"""):
                 c = [x for x in cellen if x and x != "Selecteer rij"]
@@ -111,7 +117,7 @@ def lees(ctx, lat, lon, adres, map_=None):
                 uit["bewijs"].append(os.path.join(map_, "Vergunningen.png"))
             try:  # het volledige rapport van de stad, via de knop PDF
                 with p.expect_download(timeout=180000) as d:
-                    p.get_by_role("button", name="PDF").click(timeout=15000)
+                    p.get_by_role("button", name="PDF").click(timeout=60000)
                 naam = d.value.suggested_filename or f"rapport_{uit['capakey'].replace('/', '_')}.pdf"
                 pad = os.path.join(map_, naam)
                 d.value.save_as(pad)
@@ -131,5 +137,8 @@ def lees(ctx, lat, lon, adres, map_=None):
         except Exception as e:
             uit["fouten"].append(f"bouwovertredingen van de stad niet gelezen: {str(e).splitlines()[0][:150]}")
     finally:
-        p.close()
+        try:
+            p.close()
+        except Exception:
+            pass  # een fout bij het sluiten mag het gelezen resultaat niet wegvegen (Codex FX04)
     return uit

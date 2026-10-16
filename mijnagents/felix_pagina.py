@@ -158,7 +158,7 @@ def registreer(app, gebruiker, groepen, md, nu):
                 return redirect(url_for("felix_pagina", bericht="Deze zoektocht staat al in de wachtrij."))
         _voeg_toe({"id": secrets.token_hex(4), "soort": "zoek", "project": project, "adres": adres,
                    "door": gebruiker(), "ts": nu()})
-        return redirect(url_for("felix_pagina", bericht="Aangevraagd. De agent begint binnen 5 minuten; een zoektocht duurt een paar minuten."))
+        return redirect(url_for("felix_pagina", bericht="Aangevraagd. De agent begint binnen 5 minuten; een zoektocht duurt meestal 5 tot 15 minuten."))
 
     def _zoek_of_404(zid):
         z = next((x for x in zoektochten() if x["id"] == zid), None)

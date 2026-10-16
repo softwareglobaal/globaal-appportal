@@ -139,7 +139,7 @@ class _NepPagina:
             def inner_text(self_):
                 if "bouwovertredingen" in p.url:
                     return "x\nBouwovertredingen\nEr zijn geen gekende bouwovertredingen voor dit perceel.\nVeelgestelde vragen"
-                return "Perceel 11344A0430/00H014"
+                return "Perceel 11344A0430/00H014\nDossiernummer"
         return _L()
     def evaluate(self, *a, **k):
         return [["Selecteer rij", "bouwen van een appartementsgebouw", "19654625", "Stedenbouwkundige vergunningen", "Vergunning", ""]]
@@ -172,10 +172,48 @@ _z = {"adres": "Grotesteenweg 459, 2600 Antwerpen", "besluit": "x", "onvolledig"
                     {"inventaris": "3290#1260", "status": "na aanmelden", "bestanden": [], "mislukt": [], "beschermd": ["002_Plan.pdf"]}]}
 _md = FW._controle_md(_z)
 check("een beschermd dossier staat als 'alleen online bekijken', niet als 'nee'", "alleen online bekijken (auteursrecht)" in _md, _md)
-check("een half gedownloade vergunning staat als 'deels' met de tellingen", "deels: 3290#376 1 van 1; 3290#1260 0 van 1" in _md, _md)
+check("een half gedownloade vergunning zegt per dossier ja of alleen online", "deels: 3290#376 ja; 3290#1260 alleen online" in _md, _md)
 check("een volledige zoektocht zegt 'Volledig.'", "**Volledig.**" in _md)
 _z["onvolledig"] = ["Geopunt.png niet gelukt"]
 check("een onvolledige zoektocht zegt het bovenaan", "**Onvolledig:**" in FW._controle_md(_z))
+_z2 = {"adres": "x", "besluit": "x", "onvolledig": [], "stad": {}, "downloads": [],
+       "rijen": [{"jaar": "1965", "stad": "19654625", "onderwerp": "x", "beslissing": "",
+                  "felix": [{"inventaris": "627#23624", "status": "download"}]}]}
+check("zonder downloadregel is een digitaal dossier niet 'ja' (Codex FX12)", "| ja |" not in FW._controle_md(_z2), FW._controle_md(_z2))
+_z2["downloads"] = [{"inventaris": "627#23624", "status": "download", "bestanden": [{"naam": "a.pdf"}], "mislukt": [], "beschermd": []}]
+check("met een geslaagde downloadregel wel 'ja'", "| ja |" in FW._controle_md(_z2))
+_z2["downloads"][0].update(bestanden=[], beschermd=["a.pdf"], reden="auteursrecht tot 2091")
+check("beschermd toont het jaartal van FelixArchief", "alleen online bekijken (auteursrecht tot 2091)" in FW._controle_md(_z2), FW._controle_md(_z2))
+
+
+class _NepFelix:
+    """Een FelixArchief die een 500 geeft; het auteursrecht beslist of dat 'beschermd' of 'mislukt' wordt (Codex FX15)."""
+    def __init__(self, vrij):
+        self.vrij = vrij
+    def status_bestand(self, url):
+        return 500, "application/pdf"
+    def rechten(self, url):
+        return {"vrij": self.vrij, "vrij_vanaf": "2091-01-01T00:00:00" if not self.vrij else "1900-01-01"}
+
+
+_f = _NepFelix(vrij=False)
+try:
+    FA.Felix.download(_f, "/api/files/627_31611?type=master&filename=002_Plan.pdf", "/tmp/x.pdf")
+    _uit = "geen fout"
+except FA.Beschermd as e:
+    _uit = "beschermd: " + str(e)
+except FA.BestandFout as e:
+    _uit = "fout: " + str(e)
+check("een 500 met auteursrecht volgens FelixArchief is 'beschermd', met jaartal", _uit == "beschermd: auteursrecht tot 2091", _uit)
+_f = _NepFelix(vrij=True)
+try:
+    FA.Felix.download(_f, "/api/files/627_23624?type=master&filename=001_Beslissing.pdf", "/tmp/x.pdf")
+    _uit = "geen fout"
+except FA.Beschermd as e:
+    _uit = "beschermd: " + str(e)
+except FA.BestandFout as e:
+    _uit = "fout: " + str(e)
+check("een 500 bij een vrij dossier is een serverfout, niet 'beschermd' (Codex FX15)", _uit == "fout: 500", _uit)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

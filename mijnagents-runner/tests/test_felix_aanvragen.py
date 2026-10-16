@@ -150,8 +150,21 @@ check("onvolledig door een timeout gaat opnieuw mee, tot drie keer", gezocht.cou
       and s["zoek"]["h1"]["pogingen"] == W.POGINGEN, s["zoek"].get("h1"))
 aanvraag(id="o9", soort="opslaan", zoek_id="h1", door="shelton", ts="t")
 W.ronde()
-check("een onvolledige zoektocht mag in de projectmap, met zijn Controle.md", not W.lees_stand()["opslaan"]["o9"].get("fout")
-      or "projectmap" in W.lees_stand()["opslaan"]["o9"].get("fout", ""), W.lees_stand()["opslaan"].get("o9"))
+check("een onvolledige zoektocht mag in de projectmap (de poort weigert ze niet als 'niet afgewerkt')",
+      "niet (of nog niet) afgewerkt" not in W.lees_stand()["opslaan"]["o9"].get("fout", ""), W.lees_stand()["opslaan"].get("o9"))
+_s = W.lees_stand()
+_s["zoek"]["h2"] = {"status": "onvolledig", "adres": "half 2, 2000 Antwerpen", "pogingen": 1, "map": "h2 vorig",
+                    "besluit": "vorig besluit", "onvolledig": ["Geopunt.png niet gelukt: Timeout"]}
+W.schrijf_stand(_s)
+aanvraag(id="h2", soort="zoek", project="", adres="half 2, 2000 Antwerpen", door="shelton", ts="t")
+_oud = W.voer_uit
+def _faal(*a, **k):
+    raise RuntimeError("Page.goto: Timeout 60000ms exceeded.")
+W.voer_uit = _faal
+W.ronde()
+W.voer_uit = _oud
+check("een mislukte herkansing houdt het vorige deelresultaat bereikbaar (Codex FX14)",
+      W.lees_stand()["zoek"]["h2"].get("map") == "h2 vorig", W.lees_stand()["zoek"].get("h2"))
 
 print("%d grendels mislukt" % fouten)
 sys.exit(1 if fouten else 0)

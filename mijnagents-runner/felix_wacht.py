@@ -50,6 +50,11 @@ def _veilig(tekst):
 
 # ---------------------------------------------------------------- de eenvoudige weg: het perceel
 
+def _eerste_nummer(tekst):
+    m = re.match(r"\d+\w*", (tekst or "").strip())
+    return m.group() if m else ""
+
+
 def _jaar(tekst):
     m = re.search(r"(1[89]\d\d|20\d\d)", tekst or "")
     return m.group() if m else ""
@@ -72,6 +77,7 @@ def percelen_zoektocht(adres, felix, stadmap=None):
          "onvolledig": [], "duur": {}}
     if not loc:
         z["besluit"] = "Geopunt vindt dit adres niet."
+        z["onvolledig"].append("adres niet gevonden in Geopunt: kijk de schrijfwijze na")  # niet 'volledig' (Codex FX13)
         return z
     if not fa.districten_voor(loc["postcode"]):
         z["besluit"] = f"Postcode {loc['postcode']} valt buiten het werkgebied (stad Antwerpen)."
@@ -108,14 +114,21 @@ def percelen_zoektocht(adres, felix, stadmap=None):
         straten = dict(pand.get("nummers_per_straat") or {})
         for s, dichtbij in (pand.get("straten_dichtbij") or {}).items():  # hoekpand: Grotesteenweg 459 en Lysenstraat 2
             straten.setdefault(s, sorted({nr for _, nr in dichtbij if nr}))
+        op_perceel = set(pand.get("nummers_per_straat") or {})
         for straat, nummers in straten.items():
             for reeks in REEKSEN:
                 for nr in nummers:
                     for r in felix.nummer_dossiers(reeks, straat, nr):
-                        if r["inventaris"] not in gezien and fa.raakt(r["nummer"], nummers):
-                            gezien.add(r["inventaris"])
-                            z["rijen"].append({"jaar": _jaar(r["aanvraag"]), "stad": "", "onderwerp": r["omschrijving"],
-                                               "beslissing": "", "felix": [r], "alleen_felix": True})
+                        if r["inventaris"] in gezien or not fa.raakt(r["nummer"], nummers):
+                            continue
+                        if straat not in op_perceel:  # hoekstraat: alleen als het adres echt naast het perceel ligt (FX16)
+                            r["afstand_m"] = fa._afstand_tot(f"{straat} {_eerste_nummer(r['nummer'])}", punt)
+                            if r["afstand_m"] is None or r["afstand_m"] > fa.AFSTAND_MAX:
+                                continue
+                            r["via"] = f"hoekstraat {straat}"
+                        gezien.add(r["inventaris"])
+                        z["rijen"].append({"jaar": _jaar(r["aanvraag"]), "stad": "", "onderwerp": r["omschrijving"],
+                                           "beslissing": "", "felix": [r], "alleen_felix": True})
     except Exception as e:
         z["onvolledig"].append(f"controle in FelixArchief op straat en nummer niet gelukt: {str(e).splitlines()[0][:150]}")
     z["duur"]["controle"] = round(time.time() - t2)
@@ -148,19 +161,26 @@ def _controle_md(z):
     for x in z.get("rijen") or []:
         invs = ", ".join(d["inventaris"] + (f" ({d['straat']} {d['nummer']}, {d.get('afstand_m')} m)" if d.get("via") else "")
                          for d in x["felix"]) or "niet in FelixArchief"
-        stukken = [dl.get(d["inventaris"]) for d in x["felix"]]
+        digitaal = [d for d in x["felix"] if d["status"] != "leeszaal"]
+        stukken = [dl.get(d["inventaris"]) for d in digitaal]
         if not x["felix"]:
             tekst = "nee: opvragen bij de stad (Itsme)"
-        elif all(d["status"] == "leeszaal" for d in x["felix"]):
+        elif not digitaal:
             tekst = "nee: alleen leeszaal"
-        elif stukken and all(s and s["bestanden"] and not s["mislukt"] and not s["beschermd"] for s in stukken if s):
-            tekst = "ja"
-        elif any(s and s["beschermd"] for s in stukken) and not any(s and s["bestanden"] for s in stukken):
-            tekst = "nee: alleen online bekijken (auteursrecht)"
+        elif all(s and s["bestanden"] and not s["mislukt"] and not s["beschermd"] for s in stukken):
+            tekst = "ja"  # elk digitaal dossier heeft een geslaagde downloadregel, niet een lege reeks (Codex FX12)
+        elif all(s and s["beschermd"] and not s["bestanden"] and not s["mislukt"] for s in stukken):
+            tekst = "nee: alleen online bekijken (" + "; ".join(sorted({s.get("reden", "auteursrecht") for s in stukken})) + ")"
         elif any(s and s["bestanden"] for s in stukken):
-            tekst = "deels: " + "; ".join(
-                f"{s['inventaris']} {len(s['bestanden'])} van {len(s['bestanden']) + len(s['mislukt']) + len(s['beschermd'])}"
-                for s in stukken if s)
+            def _per(s):
+                if not s:
+                    return "niet geprobeerd"
+                if s["bestanden"] and not s["mislukt"] and not s["beschermd"]:
+                    return "ja"
+                if s["beschermd"] and not s["bestanden"] and not s["mislukt"]:
+                    return "alleen online"
+                return f"{len(s['bestanden'])} van {len(s['bestanden']) + len(s['mislukt']) + len(s['beschermd'])}"
+            tekst = "deels: " + "; ".join(f"{d['inventaris']} {_per(s)}" for d, s in zip(digitaal, stukken))
         else:
             tekst = "nee"
         stadnr = x["stad"] or "niet bij de stad"
@@ -198,21 +218,31 @@ def _downloaden(felix, z, felixmap):
         except Exception as e:
             rij["mislukt"].append(f"lijst van bestanden: {str(e).splitlines()[0][:80]}")
             continue
-        for f in lijst:
-            if f["naam"].lower().endswith(".xml"):  # een verwijzing naar de plannen, geen stuk
+        stukken = [f for f in lijst if not f["naam"].lower().endswith(".xml")]  # xml: een verwijzing, geen stuk
+        # Auteursrecht een keer per dossier vragen, niet per bestand (17-10-2026: 9 minuten voor Grotesteenweg 459).
+        # Is het dossier niet vrij en weigert FelixArchief het eerste bestand, dan geldt dat voor alle bestanden.
+        vrij = felix.rechten(stukken[0]["url"]) if stukken else None
+        if vrij is not None and not vrij["vrij"]:
+            eerste = stukken[0]
+            try:
+                rij["bestanden"].append({"naam": eerste["naam"], "bytes": felix.download(
+                    eerste["url"], os.path.join(felixmap, r["inventaris"], eerste["map"], eerste["naam"]), eerste.get("grootte"))})
+                stukken = stukken[1:]  # FelixArchief gaf het toch: de rest gewoon proberen
+            except (fa.Beschermd, fa.BestandFout):
+                rij["beschermd"] = [f["naam"] for f in stukken]
+                rij["reden"] = f"auteursrecht tot {vrij['vrij_vanaf'][:4]}"
                 continue
+        for f in stukken:
             pad = os.path.join(felixmap, r["inventaris"], f["map"], f["naam"])
             for poging in range(2):
                 try:
                     rij["bestanden"].append({"naam": f["naam"], "bytes": felix.download(f["url"], pad, f.get("grootte"))})
                     break
-                except fa.Beschermd:
+                except fa.Beschermd as e:  # FelixArchief zegt zelf: niet vrij (copyRightFree), dus alleen online
                     rij["beschermd"].append(f["naam"])
+                    rij["reden"] = str(e)
                     break
-                except fa.BestandFout as e:
-                    if r["status"] == "na aanmelden" and str(e) == "500":  # auteursrecht: FelixArchief geeft hier 500
-                        rij["beschermd"].append(f["naam"])
-                        break
+                except fa.BestandFout as e:  # een 500 zonder bewijs van auteursrecht is een serverfout (Codex FX15)
                     if poging == 1:
                         rij["mislukt"].append(f"{f['naam']}: status {e}")
                 except Exception as e:  # een bestand dat faalt, stopt de andere niet (13-10-2026)
@@ -403,6 +433,9 @@ def ronde():
             item = {"project": a.get("project", ""), "adres": a["adres"], "door": a.get("door", ""),
                     "aangevraagd": a.get("ts", ""), "status": "bezig", "start": _nu(),
                     "pogingen": (vorige or {}).get("pogingen", 0) + 1}
+            for k in ("map", "besluit", "onvolledig", "dossiers", "vergunningen"):  # het vorige deelresultaat blijft
+                if (vorige or {}).get(k):                                         # bereikbaar tijdens een herkansing
+                    item[k] = vorige[k]                                           # (Codex FX14)
             stand["zoek"][a["id"]] = item
             schrijf_stand(stand)
             if item["pogingen"] == 1:
