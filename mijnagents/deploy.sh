@@ -4,7 +4,7 @@
 # Bouwt het bord alleen opnieuw als de map mijnagents/ in HEAD veranderde (tree-hash in .built). Dit script trekt
 # ~/appportal niet bij: de git pull op de VM is een aparte stap.
 #
-# Bewaakt sinds 16-10-2026 (Codex CX7-1, CX8-1, CX9-1/2/3, CX10 en BU-1 tot BU-9), naar het voorbeeld van de werfapp:
+# Bewaakt sinds 16-10-2026 (Codex CX7-1, CX8-1, CX9-1/2/3, CX10 en BU-1 tot BU-13), naar het voorbeeld van de werfapp:
 # - Eén uitrol tegelijk: flock over het hele script. Wie het bord met de hand opnieuw opbouwt, neemt hetzelfde slot:
 #     flock ~/appportal/mijnagents-data/.deploy.lock docker compose up -d ... app-mijnagents
 # - Elke docker-aanroep heeft een tijdslimiet (KILL 10 s na TERM) en krijgt het slot (fd 9) niet mee.
@@ -13,13 +13,14 @@
 #   draagt de tree-hash als label mijnagents.tree.
 # - CI-grendel: mijnagents/deploy_ci.py eist een geslaagde run van bord-grendels op main voor exact deze commit.
 #   Rood, lopend, ontbrekend of GitHub onbereikbaar: geen bouw, de volgende ronde kijkt opnieuw.
-# - Vóór de bouw een kopie van mijnagents.db (sqlite3 .backup, integrity_check, gzip) in ~/backups/voor-uitrol/. De
-#   terugrol hieronder zet alleen de image terug, niet de databank. Terugzetten gebeurt met de hand, met het bord gestopt
-#   (zie scripts/terugzetproef-sqlite.sh). De kopieën vallen onder de rotatie van scripts/db-backup.sh (14 dagen).
+# - Zonder bestaande mijnagents.db geen bouw. Direct vóór het vervangen van de container een kopie (sqlite3 .backup,
+#   integrity_check, minstens één actieve agent, gzip) in ~/backups/voor-uitrol/; mislukt ze, dan start de nieuwe image
+#   niet. De terugrol hieronder zet alleen de image terug, niet de databank. Terugzetten gebeurt met de hand, met het
+#   bord gestopt (zie scripts/terugzetproef-sqlite.sh). De kopieën vallen onder de rotatie van scripts/db-backup.sh.
 # - Vóór de bouw wordt de image van het draaiende, gezonde bord bewaard als :vorige (eerst het ID, dan gezondheid voor
 #   precies dat ID, dan de tag, dan nacontrole). Lukt dat niet, dan geen bouw.
-# - .built verschuift pas als /gezondheid drie keer na elkaar een volledig JSON-antwoord met "ok": true geeft en de
-#   container de nieuwe image draait (met het juiste label).
+# - .built verschuift pas als /gezondheid drie keer na elkaar een volledig JSON-antwoord met "ok": true en minstens één
+#   actieve agent geeft, en de container de nieuwe image draait (met het juiste label).
 # - Faalt de bouw, de start of de gezondheid, dan gaat de vorige image terug in dienst (--force-recreate als de container
 #   een andere image draait), en ook die wordt op gezondheid en image nagekeken.
 # - .herstel bestaat zolang het bord een niet-nagekeken image kan draaien. Een volgende ronde kijkt eerst wat er echt
@@ -28,7 +29,8 @@
 # - Een mislukte revisie komt in .mislukt (revisie, tijdstip, aantal pogingen) en wacht: 30 min na de eerste poging,
 #   daarna telkens het dubbele, hoogstens 6 uur. Een nieuwe revisie wacht niet. Meteen opnieuw (zichtbare vrijgave):
 #     rm ~/appportal/mijnagents-data/.mislukt
-# - Zonder nieuwe revisie kijkt elke ronde één keer naar /gezondheid en schrijft een regel als dat verandert.
+# - Zonder nieuwe revisie kijkt elke ronde of de container draait wat .built zegt (anders volgt .built de werkelijkheid
+#   en wordt HEAD opnieuw uitgerold) en één keer naar /gezondheid, met een logregel als dat verandert.
 # Images blijven bewaard; opruimen gebeurt alleen na een expliciete beslissing.
 # Tests: mijnagents/test_bord_deploy.py en test_deploy_ci.py, in de CI via .github/workflows/bord-grendels.yml.
 set -eu
@@ -63,14 +65,15 @@ boom_van() { dk 60 image inspect -f '{{index .Config.Labels "mijnagents.tree"}}'
 draait() { dk 60 container inspect -f '{{.Image}}' "$DIENST" 2>/dev/null || true; }
 # schrijf <bestand> <inhoud>: in één keer, zodat een afgebroken ronde geen half bestand achterlaat
 schrijf() { printf '%s\n' "$2" > "$1.tmp" && mv -f "$1.tmp" "$1"; }
-# ok_json <antwoord>: een volledig JSON-object met "ok": true (booleaans)
+# ok_json <antwoord>: een volledig JSON-object met "ok": true (booleaans) en minstens één actieve agent; een bord op een
+# lege of verkeerde databank geeft ook "ok": true, maar met 0 agents (BU-12)
 ok_json() {
   printf '%s' "$1" | python3 -c 'import json, sys
 try:
     d = json.loads(sys.stdin.read())
 except ValueError:
     sys.exit(1)
-sys.exit(0 if isinstance(d, dict) and d.get("ok") is True else 1)'
+sys.exit(0 if isinstance(d, dict) and d.get("ok") is True and type(d.get("agents")) is int and d["agents"] >= 1 else 1)'
 }
 probe() { antw=$(curl -fsS -m 5 "$URL" 2>/dev/null) && ok_json "$antw"; }
 
@@ -90,8 +93,20 @@ gezond() {
   done
 }
 
-# bewaak: zonder uitrol één probe; een regel in het log alleen als de toestand verandert
+# bewaak: zonder uitrol nagaan dat de container draait wat .built zegt (BU-11) en één probe doen. Draait er iets anders,
+# dan volgt .built de werkelijkheid (het label, of "onbekend") en rolt deze of de volgende ronde de revisie van HEAD uit.
+# Een regel in het log alleen als de toestand verandert.
 bewaak() {
+  R_ID=$(draait)
+  # alleen handelen op een geslaagde inspectie: een haperende docker zet .built niet om
+  if [ -n "$R_ID" ] && R_BOOM=$(dk 60 image inspect -f '{{index .Config.Labels "mijnagents.tree"}}' "$R_ID" 2>/dev/null); then
+    R_BOOM=${R_BOOM:-onbekend}  # een image zonder label (van voor 16-10-2026, of met de hand gebouwd)
+    if [ "$R_BOOM" != "$OUD" ]; then
+      log "LET OP: de container draait $R_ID met revisie $R_BOOM, maar .built zei $OUD; .built volgt nu wat draait"
+      schrijf "$DATA/.built" "$R_BOOM" || log "kon .built niet schrijven"
+      OUD=$R_BOOM
+    fi
+  fi
   if probe; then
     if [ -f "$DATA/.ongezond" ]; then
       rm -f "$DATA/.ongezond"
@@ -115,6 +130,31 @@ herstel() {
   dk "$START_LIMIET" compose up -d --no-build --force-recreate "$DIENST" \
     || log "docker compose up --force-recreate faalde; de gezondheidscontrole beslist"
   gezond "$1"
+}
+
+# kopie_databank: sqlite3 .backup (consistent, ook met een open WAL), integrity_check, minstens één actieve agent, gzip.
+# De terugrol zet alleen de image terug; deze kopie is het herstelpunt voor de databank (met de hand terugzetten).
+kopie_databank() {
+  mkdir -p "$KOPIE_MAP" || return 1
+  KOPIE="$KOPIE_MAP/mijnagents-voor-uitrol-$(date -u +%Y%m%dT%H%M%SZ)-$(echo "$NIEUW" | cut -c1-12).sqlite"
+  nodig=$(( $(wc -c < "$DB") / 512 + KOPIE_MIN_VRIJ_MB * 1024 ))  # KB: twee keer de databank (kopie en gzip) plus marge
+  vrij=$(df -Pk "$KOPIE_MAP" | awk 'NR == 2 { print $4 }')
+  if [ "${vrij:-0}" -lt "$nodig" ]; then
+    log "te weinig vrije ruimte voor een kopie van de databank ($vrij KB vrij, $nodig KB nodig)"
+    return 1
+  fi
+  agents=
+  if timeout -k 10 600 sqlite3 -readonly "$DB" ".backup '$KOPIE'" 9>&- \
+     && [ "$(timeout -k 10 600 sqlite3 "$KOPIE" 'PRAGMA integrity_check;' 9>&-)" = ok ] \
+     && agents=$(timeout -k 10 60 sqlite3 "$KOPIE" 'SELECT COUNT(*) FROM agent WHERE actief=1;' 9>&-) \
+     && [ "${agents:-0}" -ge 1 ] 2>/dev/null \
+     && timeout -k 10 600 gzip -f "$KOPIE" 9>&-; then
+    log "kopie van de databank ($agents actieve agents): $KOPIE.gz"
+    return 0
+  fi
+  rm -f "$KOPIE"
+  log "kopie van de databank mislukt of onvolledig (actieve agents: ${agents:-?})"
+  return 1
 }
 
 # wachttijd <poging>: afkoeling na die poging, verdubbeld per poging, hoogstens AFKOELING_MAX seconden
@@ -183,7 +223,7 @@ fi
 if [ ! -f "$DATA/.herstel" ]; then
   if [ "$NIEUW" = "$OUD" ] || afkoelen; then
     bewaak
-    exit 0
+    if [ "$NIEUW" = "$OUD" ] || afkoelen; then exit 0; fi
   fi
 fi
 
@@ -201,16 +241,18 @@ if [ -f "$DATA/.herstel" ]; then
     rm -f "$DATA/.herstel" "$DATA/.mislukt"
     OUD=$H_REV
     log "een vorige ronde stopte na een gezonde uitrol van $H_REV; nu als gebouwd gemarkeerd"
-  elif [ -n "$R_ID" ] && [ "$R_ID" = "$H_ID" ] && gezond "$H_ID"; then
-    rm -f "$DATA/.herstel"
-    log "een vorige ronde stopte voor de nieuwe image draaide; de vorige image $H_ID draait gezond"
   else
-    log "een vorige ronde liet revisie $H_REV niet nagekeken achter; eerst terug naar $H_ID"
-    markeer_mislukt "$H_REV" "$H_N"
+    if [ -n "$R_ID" ] && [ "$R_ID" = "$H_ID" ] && gezond "$H_ID"; then
+      log "een vorige ronde stopte voor de nieuwe image draaide; de vorige image $H_ID draait gezond"
+    else
+      log "een vorige ronde liet revisie $H_REV niet nagekeken achter; eerst terug naar $H_ID"
+      markeer_mislukt "$H_REV" "$H_N"
+    fi
+    # herstel zet ook :latest terug op $H_ID en kijkt na; draait $H_ID al gezond, dan zonder nieuwe container (BU-10)
     if herstel "$H_ID"; then
       rm -f "$DATA/.herstel"
-      if [ "$OUD" = "$H_REV" ]; then
-        OUD=$(boom_van "$H_ID"); OUD=${OUD:-teruggezet}
+      if [ "$OUD" = "$H_REV" ]; then  # .built mag niet de revisie noemen die niet draait (BU-10)
+        OUD=$(boom_van "$H_ID"); OUD=${OUD:-onbekend}
         schrijf "$DATA/.built" "$OUD" || log "kon .built niet schrijven"
       fi
       log "hersteld: $H_ID draait en is gezond; .built is $OUD"
@@ -242,25 +284,10 @@ if ! git archive --format=tar -o "$BRON.tar" "$NIEUW" || ! tar -xf "$BRON.tar" -
   exit 1
 fi
 
-# Kopie van de databank vóór de bouw: de terugrol zet alleen de image terug.
-if [ -f "$DB" ]; then
-  mkdir -p "$KOPIE_MAP"
-  KOPIE="$KOPIE_MAP/mijnagents-voor-uitrol-$(date -u +%Y%m%dT%H%M%SZ)-$(echo "$NIEUW" | cut -c1-12).sqlite"
-  nodig=$(( $(wc -c < "$DB") / 512 + KOPIE_MIN_VRIJ_MB * 1024 ))  # KB: twee keer de databank (kopie en gzip) plus marge
-  vrij=$(df -Pk "$KOPIE_MAP" | awk 'NR == 2 { print $4 }')
-  if [ "${vrij:-0}" -lt "$nodig" ]; then
-    log "te weinig vrije ruimte voor een kopie van de databank ($vrij KB vrij, $nodig KB nodig); geen uitrol in deze ronde"
-    exit 1
-  fi
-  if timeout -k 10 600 sqlite3 -readonly "$DB" ".backup '$KOPIE'" 9>&- \
-     && [ "$(timeout -k 10 600 sqlite3 "$KOPIE" 'PRAGMA integrity_check;' 9>&-)" = ok ] \
-     && timeout -k 10 600 gzip -f "$KOPIE" 9>&-; then
-    log "kopie van de databank: $KOPIE.gz"
-  else
-    rm -f "$KOPIE"
-    log "kopie van de databank mislukt; geen uitrol in deze ronde"
-    exit 1
-  fi
+# Zonder de bestaande databank geen uitrol: het nieuwe bord zou een lege aanmaken (BU-12).
+if [ ! -f "$DB" ] || [ ! -r "$DB" ]; then
+  log "de databank $DB ontbreekt of is niet leesbaar; geen uitrol in deze ronde"
+  exit 1
 fi
 
 # Terugrolimage: het draaiende bord als het gezond is, anders de laatst bekende goede image.
@@ -289,6 +316,15 @@ dk "$BOUW_LIMIET" build -t "$IMG:latest" --label "mijnagents.tree=$NIEUW" \
 NIEUW_ID=$(image_van "$IMG:latest")
 if [ -z "$NIEUW_ID" ] || [ "$(boom_van "$NIEUW_ID")" != "$NIEUW" ]; then
   terug "de bouw (de image draagt revisie $NIEUW niet)"
+fi
+# Kopie direct vóór het vervangen van de container (BU-13). Mislukt ze, dan start de nieuwe image niet: :latest gaat
+# terug naar de draaiende image en de volgende ronde probeert opnieuw (geen .mislukt: de revisie zelf faalde niet).
+if ! kopie_databank; then
+  if [ -n "$VORIGE" ] && herstel "$VORIGE"; then
+    rm -f "$DATA/.herstel"
+  fi
+  log "geen uitrol in deze ronde: zonder kopie van de databank start de nieuwe image niet"
+  exit 1
 fi
 dk "$START_LIMIET" compose up -d --no-build --force-recreate "$DIENST" || terug "het starten"
 gezond "$NIEUW_ID" || terug "de gezondheidscontrole"
