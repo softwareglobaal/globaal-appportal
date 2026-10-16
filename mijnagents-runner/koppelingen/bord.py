@@ -1,10 +1,12 @@
 """Gedeelde bord-client voor de runners van Mehdi Agents: hartslag, werkverslag,
 klaarzetten en lezen wat klaargezet is. Token uit mijnagents-data/.env."""
 import hashlib
+import http.client
 import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -33,6 +35,48 @@ def call(pad, payload=None, method=None):
                                  headers={"Content-Type": "application/json", "X-Agents-Token": TOKEN})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read().decode() or "{}")
+
+
+class RondeGestopt(RuntimeError):
+    """De ronde stopte voor het werk begon, omdat de agent zijn regelboek niet heeft (Codex NA09, 16-10-2026)."""
+
+
+class WerkwijzeOnbekend(RondeGestopt):
+    """De werkwijze kon niet gelezen worden. Onbekend is niet leeg: wie zijn regelboek niet kon lezen,
+    werkt niet alsof er geen regels zijn. `soort` zegt waarom, zonder getal erin (N10)."""
+
+    def __init__(self, soort, reden=""):
+        self.soort = soort
+        self.reden = reden
+        super().__init__(f"{soort} ({reden})" if reden else soort)
+
+
+def sectie(tekst, kop):
+    """De tekst onder de eerste kop die `kop` bevat (hoofdletters tellen niet), tot de volgende kop van
+    hetzelfde of een hoger niveau. Leeg als die kop er niet is. Zo leest een agent een deel van zijn
+    werkwijze, bijvoorbeeld sectie(r.werkwijze, "nooit"), in plaats van een kopie in zijn code te houden."""
+    niveau, regels = None, []
+    for regel in (tekst or "").splitlines():
+        m = re.match(r"^(#{1,6})\s+(.*)$", regel)
+        if niveau is None:
+            if m and kop.lower() in m.group(2).lower():
+                niveau = len(m.group(1))
+            continue
+        if m and len(m.group(1)) <= niveau:
+            break
+        regels.append(regel)
+    return "\n".join(regels).strip()
+
+
+def punten(tekst):
+    """De opsommingspunten uit een stuk werkwijze ("- ...", "* ..." of "1. ..."), zonder het teken ervoor."""
+    return [m.group(1).strip() for m in re.finditer(r"^\s*(?:[-*]|\d+[.)])\s+(.+)$", tekst or "", re.M)]
+
+
+def grenzen(werkwijze):
+    """Norm N2 als regels: de punten onder de kop over wat de agent nooit doet en onder de kop over wat
+    Mehdi beslist. De generator eist ze voor hij registreert, het sjabloon past ze elke ronde toe."""
+    return punten(sectie(werkwijze, "nooit")), punten(sectie(werkwijze, "beslist"))
 
 
 class Agent:
@@ -93,11 +137,43 @@ class Agent:
             print("logboek mislukt:", e, file=sys.stderr)
         self._log = []
 
-    def werkwijze(self):
+    def werkwijze_lezen(self):
+        """De werkwijze zoals ze nu op het bord staat. Een lege tekst is een antwoord en komt terug;
+        kon het bord niet antwoorden, dan WerkwijzeOnbekend, nooit een lege tekst (NA09)."""
         try:
-            return call(f"/api/agent/{self.naam}/werkwijze").get("werkwijze") or ""
-        except Exception:  # noqa: BLE001
+            antwoord = call(f"/api/agent/{self.naam}/werkwijze")
+        except urllib.error.HTTPError as e:
+            soort = {403: "geen toegang tot het bord", 404: "agent staat niet op het bord"}.get(e.code, "bordfout")
+            raise WerkwijzeOnbekend(soort, f"HTTP {e.code}") from e
+        except (OSError, http.client.HTTPException) as e:
+            raise WerkwijzeOnbekend("bord onbereikbaar", type(e).__name__) from e
+        except ValueError as e:
+            raise WerkwijzeOnbekend("onleesbaar antwoord van het bord", type(e).__name__) from e
+        tekst = antwoord.get("werkwijze") if isinstance(antwoord, dict) else None
+        if not isinstance(tekst, str):
+            raise WerkwijzeOnbekend("onleesbaar antwoord van het bord", "geen werkwijze in het antwoord")
+        return tekst
+
+    def werkwijze(self):
+        """Verouderd, alleen nog voor de runners van voor de ronde (agenda-wacht, archivaris, fathom-wacht,
+        levenscoach): geeft "" als het bord niet antwoordt, zodat zij blijven draaien zoals voorheen. Dat
+        onderscheidt onbekend niet van leeg; het cron-logboek zegt het wel. Nieuwe code gaat door de ronde."""
+        try:
+            return self.werkwijze_lezen()
+        except WerkwijzeOnbekend as e:
+            print(f"werkwijze niet gelezen ({e}); verouderde aanroep werkt verder zonder regelboek", file=sys.stderr)
             return ""
+
+    def open_noden(self):
+        """Mijn noden die nu open staan op het bord, of None als dat onbekend is."""
+        try:
+            rijen = call("/api/nood").get("nood")
+        except Exception:  # noqa: BLE001
+            return None
+        if not isinstance(rijen, list):
+            return None
+        return [{"tekst": r["tekst"], "wie": r.get("wie") or "mehdi"}
+                for r in rijen if isinstance(r, dict) and r.get("naam") == self.naam and r.get("tekst")]
 
     def kennis(self, tekst, bron=""):
         """Norm N4: melden welk regelboek ik deze ronde las, zodat achteraf te zien is
@@ -127,6 +203,9 @@ class Agent:
                 r.detail = f"{n} afspraken bekeken"
 
         bronnen: extra regelboeken als {naam: inhoud}, bovenop de werkwijze.
+
+        Is de werkwijze op het bord onbekend of leeg, dan stopt de ronde voor het werk begint:
+        een nood, hartslag "fout" en RondeGestopt (NA09). Zonder regelboek werkt geen agent.
         """
         return Ronde(self, taak, bronnen or {})
 
@@ -168,11 +247,35 @@ class Ronde:
             f"{naam}: {len(inhoud or '')} tekens, {hashlib.sha256((inhoud or '').encode()).hexdigest()[:8]}"
             for naam, inhoud in self._bronnen.items())
 
+    def _noden_naar_bord(self):
+        """De noden voor een ronde die niet afliep. Wat al open stond blijft open, want of het intussen
+        opgelost is, weet deze ronde niet; is ook dat onbekend, dan geen lijst, zodat het bord niets sluit."""
+        bestaand = self.agent.open_noden()
+        if bestaand is None:
+            return None
+        teksten = {n["tekst"] for n in bestaand}
+        return bestaand + [n for n in self._noden if n["tekst"] not in teksten]
+
+    def _stop(self, tekst, wie, oorzaak):
+        """NA09: zonder regelboek geen ronde. Een nood met een eigenaar, hartslag op fout zodat N11 en de
+        Normwacht het zien, en stoppen voor het werk begint. Geen kennis: er is niets gelezen."""
+        self.nood(tekst, wie=wie)
+        self.agent.log_verstuur()
+        self.agent.hartslag("fout", taak=self.taak, detail=f"{tekst}; ronde gestopt voor het werk",
+                            nood=self._noden_naar_bord())
+        raise RondeGestopt(tekst) from oorzaak
+
     def __enter__(self):
         self.agent.hartslag("actief", taak=self.taak)
-        self.werkwijze = self.agent.werkwijze()
-        if self.werkwijze:
-            self._bronnen.setdefault("werkwijze op het bord", self.werkwijze)
+        # NA09 (Codex, 16-10-2026): tot dan gaf een leesfout een lege werkwijze en werkte de agent gewoon
+        # door zonder regelboek, zonder dat iemand het zag. Onbekend is niet leeg, en leeg is geen regelboek.
+        try:
+            self.werkwijze = self.agent.werkwijze_lezen()
+        except WerkwijzeOnbekend as e:
+            self._stop(f"Werkwijze niet gelezen: {e.soort}", "claude-code", e)
+        if not self.werkwijze.strip():
+            self._stop("Werkwijze leeg op het bord", "mehdi", None)
+        self._bronnen.setdefault("werkwijze op het bord", self.werkwijze)
         # Norm N13: wat een agent leert, leest elke agent. De gedeelde lessen gaan elke
         # ronde mee als bron, zodat ze in de kennis staan en een taalmodel ze in zijn
         # opdracht krijgt. Ontbreekt het bestand, dan breekt de ronde niet: dat meldt de
@@ -198,9 +301,10 @@ class Ronde:
         self.agent.kennis(self._kennis(), bron=", ".join(self._bronnen) or "geen")
         self.agent.log_verstuur()
         if fout is not None:
-            # N11: nooit blijven hangen op "actief". Een ronde die breekt meldt dat.
+            # N11: nooit blijven hangen op "actief". Een ronde die breekt meldt dat, en sluit geen noden
+            # die ze niet meer kon nakijken.
             self.agent.hartslag("fout", taak=self.taak,
-                                detail=f"{type(fout).__name__}: {str(fout)[:180]}", nood=self._noden)
+                                detail=f"{type(fout).__name__}: {str(fout)[:180]}", nood=self._noden_naar_bord())
             return False
         self.agent.hartslag("klaar" if not self._noden else "waakt",
                             taak=self.taak, detail=self.detail, nood=self._noden)

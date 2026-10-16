@@ -8,8 +8,11 @@ Gemeten op 20-09-2026, en de reden dat dit bestaat: van de 39 runners haalden er
 vier hun werkwijze van het bord op, en meldde er een enkele welk regelboek hij
 las. De werkwijze was voor de rest decoratie.
 """
+import io
 import os
 import sys
+import urllib.error
+from contextlib import redirect_stderr
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 RUNNER = os.path.dirname(HIER)
@@ -18,16 +21,28 @@ import bord  # noqa: E402
 
 
 class BordNabootsing:
-    """Vangt op wat een ronde naar het bord stuurt, zonder netwerk."""
+    """Vangt op wat een ronde naar het bord stuurt, zonder netwerk.
 
-    def __init__(self, werkwijze="# Werkwijze\n\nWat ik nooit doe: niets.\nWat Mehdi beslist: alles."):
+    werkwijze: de tekst op het bord, of een uitzondering die het lezen ervan opwerpt, of een dict als
+    rauw antwoord. open_noden: wat /api/nood teruggeeft (None = het bord weet het niet, een uitzondering)."""
+
+    def __init__(self, werkwijze="# Werkwijze\n\nWat ik nooit doe: niets.\nWat Mehdi beslist: alles.", open_noden=None):
         self.werkwijze = werkwijze
+        self.open_noden = open_noden
         self.gestuurd = []
 
     def call(self, pad, payload=None, method=None):
         self.gestuurd.append((pad, payload))
         if "werkwijze" in pad:
+            if isinstance(self.werkwijze, Exception):
+                raise self.werkwijze
+            if isinstance(self.werkwijze, dict):
+                return self.werkwijze
             return {"werkwijze": self.werkwijze}
+        if pad == "/api/nood":
+            if self.open_noden is None:
+                raise OSError("geen noden te lezen")
+            return {"nood": self.open_noden}
         if pad == "/api/agents":
             return [{"naam": "proefagent", "label": "De Proefagent", "type": "regie", "rol": "ik zelf", "actief": 1},
                     {"naam": "bode", "label": "De Bode", "type": "regie", "rol": "brengt wat telt naar Mehdi", "actief": 1},
@@ -187,3 +202,197 @@ def test_n14_bord_dat_niet_antwoordt_breekt_de_ronde_niet():
     r = ronde_met(nb)
     assert r.collegas == [], "zonder bord hoort de lijst leeg te zijn"
     assert nb.statussen()[-1]["status"] in ("klaar", "waakt"), "een ontbrekende collega-lijst mag de ronde niet breken"
+
+
+# --- NA09 (Codex, 16-10-2026): zonder regelboek geen ronde --------------------------------------------
+# Tot dan gaf bord.werkwijze() bij elke leesfout een lege tekst, en liep de ronde gewoon door: een agent
+# kon zonder regelboek werken zonder dat iemand het zag. Onbekend is niet leeg, en leeg is geen regelboek.
+
+def _http(code):
+    return urllib.error.HTTPError("http://127.0.0.1:3022/api/agent/proefagent/werkwijze", code, "proef", None, None)
+
+
+def ronde_die_moet_stoppen(nb):
+    """(werk begonnen, uitzondering) voor een ronde op deze nabootsing."""
+    echt, bord.call = bord.call, nb.call
+    begonnen = []
+    try:
+        ag = bord.Agent("proefagent")
+        try:
+            with redirect_stderr(io.StringIO()):
+                with ag.ronde("proef"):
+                    begonnen.append(True)
+        except bord.RondeGestopt as e:
+            return begonnen, e
+        return begonnen, None
+    finally:
+        bord.call = echt
+
+
+def _gestopt(nb, soort_nood, wie):
+    begonnen, fout = ronde_die_moet_stoppen(nb)
+    assert not begonnen, "het werk begon zonder regelboek: precies wat NA09 verbiedt"
+    assert fout is not None, "de ronde hoort te stoppen met RondeGestopt"
+    laatste = nb.statussen()[-1]
+    assert laatste["status"] == "fout", f"status na een ronde zonder regelboek is {laatste['status']}, hoort fout (N11)"
+    assert soort_nood in laatste["detail"], f"de reden staat niet in het detail: {laatste['detail']}"
+    assert {"tekst": soort_nood, "wie": wie} in laatste["nood"], f"nood ontbreekt of heeft de verkeerde eigenaar: {laatste['nood']}"
+    assert not nb.kennis(), "een ronde die niets las, meldt geen kennis (anders slaagt N4 voor niets)"
+
+
+def test_na09_agent_niet_op_het_bord_stopt_de_ronde():
+    _gestopt(BordNabootsing(werkwijze=_http(404), open_noden=[]),
+             "Werkwijze niet gelezen: agent staat niet op het bord", "claude-code")
+
+
+def test_na09_geen_toegang_stopt_de_ronde():
+    _gestopt(BordNabootsing(werkwijze=_http(403), open_noden=[]),
+             "Werkwijze niet gelezen: geen toegang tot het bord", "claude-code")
+
+
+def test_na09_bordfout_stopt_de_ronde_zonder_getal_in_de_nood():
+    """De HTTP-code hoort in het detail, niet in de noodtekst: anders is een 502 morgen een andere nood (N10)."""
+    nb = BordNabootsing(werkwijze=_http(502), open_noden=[])
+    _gestopt(nb, "Werkwijze niet gelezen: bordfout", "claude-code")
+    assert "HTTP 502" not in nb.statussen()[-1]["nood"][0]["tekst"]
+
+
+def test_na09_onleesbaar_antwoord_is_niet_leeg():
+    """Een antwoord zonder werkwijze erin (of een lege body: {}) is onbekend, geen lege werkwijze."""
+    _gestopt(BordNabootsing(werkwijze={}, open_noden=[]),
+             "Werkwijze niet gelezen: onleesbaar antwoord van het bord", "claude-code")
+
+
+def test_na09_lege_werkwijze_stopt_de_ronde():
+    for leeg in ("", "  \n\t"):
+        _gestopt(BordNabootsing(werkwijze=leeg, open_noden=[]), "Werkwijze leeg op het bord", "mehdi")
+
+
+def test_na09_bord_onbereikbaar_stopt_en_sluit_niets():
+    """Is het bord weg, dan weet de ronde ook niet welke noden open staan: dan stuurt ze geen lijst, zodat
+    het bord niets sluit. De fout-hartslag wordt wel geprobeerd."""
+    nb = BordNabootsing(werkwijze=urllib.error.URLError("verbinding geweigerd"))
+    begonnen, fout = ronde_die_moet_stoppen(nb)
+    assert not begonnen and isinstance(fout, bord.RondeGestopt)
+    laatste = nb.statussen()[-1]
+    assert laatste["status"] == "fout" and "bord onbereikbaar" in laatste["detail"]
+    assert "nood" not in laatste, "zonder de open noden te kennen mag de ronde geen noodlijst sturen (die sluit alles)"
+
+
+def test_na09_open_noden_blijven_open_bij_een_stop():
+    """Onbekend is niet opgelost: de noden die al open stonden, gaan mee; die van een andere agent niet."""
+    nb = BordNabootsing(werkwijze=_http(500), open_noden=[
+        {"naam": "proefagent", "tekst": "Postvak niet leesbaar", "wie": "claude-code"},
+        {"naam": "andere-agent", "tekst": "Iets anders", "wie": "mehdi"}])
+    ronde_die_moet_stoppen(nb)
+    teksten = [n["tekst"] for n in nb.statussen()[-1]["nood"]]
+    assert teksten == ["Postvak niet leesbaar", "Werkwijze niet gelezen: bordfout"], teksten
+
+
+def test_ronde_die_halverwege_breekt_sluit_geen_open_noden():
+    """Dezelfde regel voor een ronde die breekt: wat ze niet meer kon nakijken, blijft open."""
+    nb = BordNabootsing(open_noden=[{"naam": "proefagent", "tekst": "Oude nood", "wie": "mehdi"}])
+
+    def breek(r):
+        r.nood("Nieuwe nood", wie="claude-code")
+        raise ValueError("halverwege stuk")
+
+    echt, bord.call = bord.call, nb.call
+    try:
+        try:
+            with bord.Agent("proefagent").ronde("proef") as r:
+                breek(r)
+        except ValueError:
+            pass
+    finally:
+        bord.call = echt
+    laatste = nb.statussen()[-1]
+    assert laatste["status"] == "fout"
+    assert [n["tekst"] for n in laatste["nood"]] == ["Oude nood", "Nieuwe nood"], laatste["nood"]
+
+
+def test_verouderde_werkwijze_aanroep_blijft_werken_maar_zegt_het():
+    """agenda-wacht, archivaris, fathom-wacht en levenscoach roepen ag.werkwijze() nog rechtstreeks aan. Die
+    blijven draaien zoals voorheen, maar het cron-logboek zegt nu dat het regelboek niet gelezen is."""
+    nb = BordNabootsing(werkwijze=urllib.error.URLError("weg"))
+    echt, bord.call = bord.call, nb.call
+    try:
+        fout = io.StringIO()
+        with redirect_stderr(fout):
+            assert bord.Agent("proefagent").werkwijze() == ""
+        assert "werkwijze niet gelezen" in fout.getvalue() and "bord onbereikbaar" in fout.getvalue()
+        nb.werkwijze = "# Regels\n\nRegel een."
+        assert bord.Agent("proefagent").werkwijze() == "# Regels\n\nRegel een."
+    finally:
+        bord.call = echt
+
+
+GOEDE_WERKWIJZE = """# De Proefagent
+
+## Wat ik doe
+Ik lees en ik meld.
+
+## Wat ik nooit doe
+- nooit iets verwijderen
+- nooit iets versturen
+
+### Een onderdeel van nooit
+- ook dit telt mee
+
+## Wat Mehdi beslist
+- wat er met een melding gebeurt
+
+## Bronnen
+- het bord
+"""
+
+
+def test_sectie_punten_en_grenzen_lezen_de_werkwijze():
+    assert bord.punten(bord.sectie(GOEDE_WERKWIJZE, "nooit")) == [
+        "nooit iets verwijderen", "nooit iets versturen", "ook dit telt mee"], "een lagere kop hoort bij de sectie"
+    assert bord.sectie(GOEDE_WERKWIJZE, "Mehdi beslist") == "- wat er met een melding gebeurt"
+    assert bord.sectie(GOEDE_WERKWIJZE, "bestaat niet") == ""
+    nooit, mehdi = bord.grenzen(GOEDE_WERKWIJZE)
+    assert len(nooit) == 3 and mehdi == ["wat er met een melding gebeurt"]
+    assert bord.grenzen("Wat ik nooit doe: niets. Wat Mehdi beslist: alles.") == ([], []), \
+        "zonder koppen en punten zijn er geen grenzen om toe te passen"
+
+
+def _sjabloon_werk():
+    code = open(os.path.join(RUNNER, "_sjabloon_agent.py"), encoding="utf-8").read()
+    ns = {"__name__": "sjabloonproef", "__file__": os.path.join(RUNNER, "sjabloonproef.py")}
+    exec(compile(code.replace("%%NAAM%%", "proefagent").replace("%%LABEL%%", "proefagent"), "sjabloon", "exec"), ns)
+    return ns["werk"]
+
+
+def test_sjabloon_past_de_werkwijze_toe():
+    """Het sjabloon toont hoe een agent zijn werkwijze toepast: het leest zijn grenzen uit het regelboek
+    van het bord, en zonder grenzen doet het geen werk maar meldt het een nood (NA09)."""
+    werk = _sjabloon_werk()
+    nb = BordNabootsing(werkwijze=GOEDE_WERKWIJZE)
+    r = ronde_met(nb, werk)
+    assert "3 grenzen" in r.detail and "1 beslissingen voor Mehdi" in r.detail, r.detail
+    assert nb.statussen()[-1]["nood"] == [], "met grenzen in de werkwijze hoort er geen nood te zijn"
+
+    nb = BordNabootsing(werkwijze="# Werkwijze\n\nIk doe maar wat, zonder grenzen.")
+    r = ronde_met(nb, werk)
+    assert nb.statussen()[-1]["nood"] == [{"tekst": "Werkwijze zegt niet wat ik nooit doe of wat Mehdi beslist",
+                                           "wie": "mehdi"}], nb.statussen()[-1]["nood"]
+    assert "geen werk gedaan" in r.detail
+
+
+if __name__ == "__main__":
+    import traceback
+    goed = fout = 0
+    for naam, f in sorted(globals().items()):
+        if naam.startswith("test_") and callable(f):
+            try:
+                with redirect_stderr(io.StringIO()):
+                    f()
+                goed += 1
+            except Exception:  # noqa: BLE001
+                fout += 1
+                print(f"FOUT {naam}")
+                traceback.print_exc()
+    print(f"{goed} goed, {fout} fout")
+    sys.exit(1 if fout else 0)

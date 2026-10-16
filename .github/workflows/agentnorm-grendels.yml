@@ -1,0 +1,22 @@
+# Grendels op de Agentnorm (mijnagents-runner/AGENTNORM.md): de gedeelde ronde in koppelingen/bord.py, het sjabloon
+# en de generator nieuwe-agent.py. Codex NA08 en NA09 (16-10-2026): zonder regelboek geen ronde, en een nieuwe agent
+# wordt eerst gecontroleerd en gaat pas op de cron na een gecontroleerde eerste ronde. Tot dan draaide
+# test_agentnorm.py in geen enkele workflow.
+name: agentnorm-grendels
+
+on:
+  push:
+    paths: ["mijnagents-runner/**", ".github/workflows/agentnorm-grendels.yml"]
+  pull_request:
+    paths: ["mijnagents-runner/**", ".github/workflows/agentnorm-grendels.yml"]
+
+jobs:
+  grendels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 mijnagents-runner/tests/test_agentnorm.py
+      - run: python3 mijnagents-runner/tests/test_nieuwe_agent.py

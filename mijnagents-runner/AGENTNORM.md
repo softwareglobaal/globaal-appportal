@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.8, 16-10-2026 (hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.9, 16-10-2026 (NA08 en NA09 in de code: zonder regelboek geen ronde, en de generator controleert eerst en geeft de cron pas na een gecontroleerde eerste ronde; v1.8 16-10-2026 hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -128,9 +128,27 @@ Wat de ronde zelf doet:
 |---|---|
 | hartslag op "actief" met de taak | hartslag op "klaar", of "waakt" als er noden zijn |
 | de werkwijze van het bord ophalen en doorgeven als `r.werkwijze` | melden welke regelboeken hij las, met een vingerafdruk van acht tekens per bron (N4) |
+| is de werkwijze onbekend (bord onbereikbaar, geen toegang, niet op het bord, onleesbaar) of leeg, dan stopt de ronde voor het werk begint: een nood, hartslag "fout" en `RondeGestopt` | |
 | de gedeelde lessen lezen (`r.lessen`, N13) en de collega's van het bord (`r.collegas`, N14) | |
 | | het werkverslag versturen |
-| | breekt de ronde, dan hartslag "fout" met de foutmelding, nooit blijven hangen op "actief" (N11) |
+| | breekt de ronde, dan hartslag "fout" met de foutmelding, nooit blijven hangen op "actief" (N11); noden die al open stonden blijven open |
+
+**Zonder regelboek geen ronde** (Codex NA09, 16-10-2026). Tot dan gaf een leesfout
+een lege werkwijze en werkte de agent gewoon door, zonder dat iemand het zag.
+Onbekend is niet leeg: kon het bord de werkwijze niet geven, dan krijgt de agent de
+nood "Werkwijze niet gelezen: <reden>" (voor claude-code); is ze leeg, dan "Werkwijze
+leeg op het bord" (voor Mehdi). De hartslag "fout" laat N11 en de Normwacht het zien.
+Er gaat geen kennis mee, want er is niets gelezen, en de noden die al open stonden
+blijven open: of die intussen opgelost zijn, weet deze ronde niet. Vier oudere
+runners (agenda-wacht, archivaris, fathom-wacht, levenscoach) lezen hun werkwijze
+nog buiten de ronde met `ag.werkwijze()`; die geeft voor hen nog een lege tekst bij
+een leesfout, maar zegt het in het cron-logboek. Ze horen door de ronde te gaan.
+
+Een werkwijze die alleen gelezen wordt, is decoratie. `bord.sectie(r.werkwijze,
+"kop")`, `bord.punten(...)` en `bord.grenzen(r.werkwijze)` lezen een deel van het
+regelboek, zodat de code de regels van het bord toepast en geen kopie bijhoudt. Het
+sjabloon toont het: zonder punten onder de koppen over wat hij nooit doet en wat
+Mehdi beslist, doet het geen werk en meldt het een nood.
 
 `r.nood()` haalt een aantal vooraan uit de tekst weg en weigert dubbels, zodat
 dezelfde nood morgen dezelfde nood is (N10). Het aantal zet je in `r.detail`.
@@ -200,12 +218,18 @@ punt 4a; aanvaard door Mehdi op 16-10-2026). In het kort:
 Dan de generator:
 
 ```
-python3 ~/appportal/mijnagents-runner/nieuwe-agent.py --naam post-wacht --label "Postwacht" \
-  --type h-architects --rol "sorteert nieuwe post op info@" --cadans "elk uur" \
+cd ~/appportal/mijnagents-runner && ~/agents/.venv/bin/python nieuwe-agent.py --naam post-wacht \
+  --label "De Postwacht" --type h-architects --rol "sorteert nieuwe post op info@" \
+  --mandaat "lezen en labelen, nooit verwijderen" --cadans "elk uur" \
   --mag "post labelen" --grens "nooit verwijderen" --werkwijze werkwijze/post-wacht.md
+
+# werk() invullen, dan:
+~/agents/.venv/bin/python nieuwe-agent.py --eerste-ronde post-wacht --cron "0 * * * *"
 ```
 
-De werkwijze die je meegeeft moet zelf al door N1, N2, N8 en N9 komen. Daarna:
+De werkwijze die je meegeeft moet zelf al door N1, N2, N8 en N9 komen, met punten
+onder een kop over wat hij nooit doet en een over wat Mehdi beslist. De generator
+weigert anders, voor er iets op schijf of op het bord staat. Daarna:
 
 - laat de runner elke ronde melden wat hij las (N4);
 - laat hem noden schrijven met een eigenaar en een besluit, niet als logregel (N7);
@@ -220,6 +244,23 @@ Twee eisen aan de doorgang zelf, sinds v1.8:
 - **Actief pas na een gecontroleerde eerste ronde.** De eerste ronde draait, de
   controle hierboven slaagt, het werkverslag is gelezen en tegen de voorbeelden van
   Mehdi gelegd. Pas dan gaat de agent actief en op de cron.
+
+Zo doet de generator het sinds v1.9 (`tests/test_nieuwe_agent.py`, in de CI):
+
+- **Aanmaken** controleert eerst naam, label, rol, mandaat, cadans, minstens een mag
+  en een grens (N3) en de werkwijze (N1, N2, N8, N9 en de twee koppen met punten),
+  en of de naam nog vrij is op het bord en geen eigen runner heeft. Weet het bord
+  dat niet, dan maakt hij niets: onbekend is niet vrij. Daarna schrijft hij het
+  skelet, registreert hij, zet hij de werkwijze en leest hij die terug. Breekt een
+  stap na de registratie, dan maakt hetzelfde commando het af.
+- **`--eerste-ronde`** weigert een runner die nog het skelet is, draait de runner
+  een keer en toetst de agent met `controle_agenten.py`. Pas als elke norm slaagt,
+  krijg je de cron-regel. Het werkverslag naast de voorbeelden van Mehdi leggen
+  blijft een menselijke stap.
+- **Wat nog niet kan:** het bord zet een kaart bij de registratie meteen op actief
+  (`POST /api/agent` in `mijnagents/app.py`). Wat tot na de eerste ronde wacht, is
+  de cron. Een kaart die pas na die ronde actief wordt, vraagt een wijziging aan het
+  bord en aan `controle_agenten.py`.
 
 De controlerondes met Codex na de bouw volgen de stopregel uit de werkafspraken:
 twee rondes zonder vooruitgang betekent eerst het ontwerp herbekijken, en live gaat
