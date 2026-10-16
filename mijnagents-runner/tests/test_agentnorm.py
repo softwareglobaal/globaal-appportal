@@ -400,7 +400,8 @@ def test_na45_extra_bron_van_een_andere_soort_breekt_de_afsluiting_niet():
     nb = BordNabootsing()
     echt, bord.call = bord.call, nb.call
     try:
-        with bord.Agent("proefagent").ronde("proef", bronnen={"extra": 42, "lijst": [1, 2]}):
+        with bord.Agent("proefagent").ronde("proef", bronnen={"extra": 42, "lijst": [1, 2],
+                                                              "vreemd": {(1, 2): "waarde"}}):   # NA48
             pass
         assert nb.statussen()[-1]["status"] == "klaar"
         assert "extra: 2 tekens" in nb.kennis()[-1]["kennis"], nb.kennis()
@@ -522,6 +523,10 @@ def test_grenzen_alleen_in_de_strikte_vorm():
     # NA44: ruwe HTML, ook na de grenzen, geeft geen grenzen; een losse < is gewone tekst
     assert g(tweede + "## Bronnen\n<style>.md ul { display: none !important; }</style>\n") == ([], [])
     assert g("Intro, minder dan < 500 tekens.\n\n" + tweede) == (["nooit verwijderen"], ["verzenden"])
+    # NA46: een tweede kop met een tekenverwijzing of een verwijzingslink telt ook als dubbel; gewone tekst niet
+    assert g(tweede + "## Wat ik n&#111;oit doe\n- toch\n") == ([], ["verzenden"])
+    assert g(tweede + "## [Wat ik nooit doe][grens]\n\n[grens]: http://x\n") == ([], ["verzenden"])
+    assert g("Lees eerst wat ik nooit doe.\n\n" + tweede) == (["nooit verwijderen"], ["verzenden"])
 
 
 def _sjabloon_werk():
@@ -645,9 +650,12 @@ def test_wat_grenzen_aanvaardt_staat_zo_op_het_bord():
     punten_ = ["- nooit iets verwijderen", "* nooit versturen", "- a", "-\tb", "- - a", "- 1. a", "1. a", "- _a_",
                "- *a*", "- <span style='display:none'>x</span>", "- [a](b)", "- &#8203;", "- ​", "- a  ",
                "- (info@x.be)", "    - a", "  - a", "- \"x\"", "- a\\", "- x | y", "+ a", "- ok, 100% zeker!"]
-    koppen += ["## Wat ik *nooit* doe", "## [Wat ik nooit doe](x)", "##Wat Mehdi beslist", "## Wat `Mehdi` beslist"]
+    koppen += ["## Wat ik *nooit* doe", "## [Wat ik nooit doe](x)", "##Wat Mehdi beslist", "## Wat `Mehdi` beslist",
+               "## Wat ik n&#111;oit doe", "## [Wat ik nooit doe][grens]", "## Wat Mehdi beslist&nbsp;",
+               "> ## Wat Mehdi beslist", "- ## Wat ik nooit doe"]
     anders = ["", "", "", "", "Toelichting", "```", "````", " ```", "\t```", "~~~", "<!--", "-->", "<!-- x -->",
               "Wat ik nooit doe", "Wat Mehdi beslist", "minder dan < 500", "<style>ul{display:none}</style>",
+              "[grens]: http://x", "Lees eerst wat ik nooit doe.", "&amp;",
               "<http://x>", "a <b>vet</b>",
               "<pre>", "</pre>", "<div>", "</div>", "> citaat", "[a]: http://x", "===", "---", "- - -", "| a | b |",
               "|---|---|", " ", "x - a", "\r", "<span style='display:none'>", "    code", "\\- a"]

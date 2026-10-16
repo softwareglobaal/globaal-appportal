@@ -1,6 +1,7 @@
 """Gedeelde bord-client voor de runners van Mehdi Agents: hartslag, werkverslag,
 klaarzetten en lezen wat klaargezet is. Token uit mijnagents-data/.env."""
 import hashlib
+import html
 import http.client
 import json
 import os
@@ -60,22 +61,29 @@ _LETTER = r"[^\W_]"                                   # letters en cijfers, ook 
 _EERSTE = rf"(?:{_LETTER}|[(\"'‘“])"
 _VERDER = rf"(?:{_LETTER}|[ .,;:()'\"/%@+?!’‘“”…€-])*"
 PUNT = re.compile(rf"^[-*] +((?![-*+]\s|\d+[.)]){_EERSTE}{_VERDER})$")
+KOP_WOORDEN = {KOP_NOOIT.pattern: "wat ik nooit doe", KOP_MEHDI.pattern: "wat mehdi beslist"}
 # Ruwe HTML, waar ook in de werkwijze: een tag, commentaar of declaratie (Codex NA36, NA44).
 HTML = re.compile(r"<[A-Za-z/!?]")
 # Alleen een gewoon regeleinde scheidt regels; Python-Markdown op het bord kent geen andere (Codex NA39).
 VREEMDE_SCHEIDING = re.compile("[\u2028\u2029\x0b\x0c\x1c\x1d\x1e\x85]")
 
 
-def _zonder_opmaak(regel):
-    """Een regel zoals een lezer hem als kop zou zien: zonder onzichtbare tekens, zonder #, >, lijsttekens of
-    nummer vooraan, zonder # achteraan, zonder inline-opmaak (*, _, `, ~, \\, [ ] en de doelen van links), met
-    enkelvoudige spaties en in kleine letters (Codex NA43: "## Wat ik *nooit* doe" toont het bord als dezelfde kop)."""
-    regel = "".join(c for c in regel if unicodedata.category(c) != "Cf").strip()
-    regel = re.sub(r"^(?:[>#*+\-\s]|\d+[.)])+", "", regel)
-    regel = re.sub(r"\]\([^)]*\)", "]", regel)
-    regel = re.sub(r"[*_`~\\\[\]]", "", regel)
-    regel = re.sub(r"[\s#]+$", "", regel)
-    return re.sub(r"\s+", " ", regel).lower()
+def _letters(regel):
+    """De zichtbare woorden van een regel: tekenverwijzingen omgezet (&#111; is o), onzichtbare tekens, linkdoelen en
+    verwijzingslabels weg, alleen letters, cijfers en enkelvoudige spaties, in kleine letters (Codex NA43, NA46)."""
+    regel = html.unescape(regel)
+    regel = "".join(c for c in regel if unicodedata.category(c) != "Cf")
+    regel = re.sub(r"\]\s*(\([^)]*\)|\[[^\]]*\])", "]", regel)
+    regel = "".join(c if c.isalnum() else " " for c in regel)
+    return re.sub(r"\s+", " ", regel).strip().lower()
+
+
+def _kopachtig(regels, i):
+    """Kan het bord deze regel als kop tonen: een # vooraan (ook na >, een lijstteken of spaties), of een regel
+    die gevolgd wordt door een onderstreping met = of -."""
+    if re.match(r"^(?:[>*+\-\s]|\d+[.)])*#", regels[i]):
+        return True
+    return i + 1 < len(regels) and bool(re.match(r"^\s{0,3}(=+|-+)\s*$", regels[i + 1])) and bool(regels[i].strip())
 
 
 def _kop(regel):
@@ -144,9 +152,12 @@ def grenzen(werkwijze):
         regels.append(regel.rstrip())
     uit = []
     for kop in (KOP_NOOIT, KOP_MEHDI):
-        # De kop staat er maar een keer: twee regels die er als die kop uitzien, ook in code, een citaat, een lijst
-        # of met opmaak, kunnen op het bord twee keer dezelfde kop geven, en dan is niet zeker welke de mens leest.
-        if sum(1 for r in tekst.split("\n") if kop.match(_zonder_opmaak(r))) != 1:
+        # De kop staat er maar een keer: twee regels die het bord als die kop kan tonen, ook in code, een citaat, een
+        # lijst, met opmaak, een tekenverwijzing of een link, geven twee keer dezelfde kop, en dan is niet zeker welke
+        # de mens leest. Ruim geteld: elke kopachtige regel waarin de woorden van de kop staan (Codex NA43, NA46).
+        alle = tekst.split("\n")
+        woorden = KOP_WOORDEN[kop.pattern]
+        if sum(1 for i in range(len(alle)) if _kopachtig(alle, i) and woorden in _letters(alle[i])) != 1:
             uit.append([])
         else:
             uit.append(_strikte_punten(regels, kop))
@@ -326,8 +337,12 @@ class Ronde:
 
     def bron(self, naam, inhoud):
         """Een regelboek dat ik deze ronde gelezen heb. Gaat mee als kennis."""
-        self._bronnen[str(naam)] = inhoud if isinstance(inhoud, str) else json.dumps(inhoud, ensure_ascii=False,
-                                                                                     default=str)
+        if not isinstance(inhoud, str):
+            try:
+                inhoud = json.dumps(inhoud, ensure_ascii=False, default=str)
+            except (TypeError, ValueError):   # Codex NA48: bijvoorbeeld een tuple als sleutel
+                inhoud = repr(inhoud)
+        self._bronnen[str(naam)] = inhoud
 
     def nood(self, tekst, wie="mehdi"):
         """Wat ik nodig heb of wat bij mij niet werkt.
