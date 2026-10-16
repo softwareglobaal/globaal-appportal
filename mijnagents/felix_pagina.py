@@ -76,11 +76,14 @@ def zoektochten():
             continue
         s = stand["zoek"].get(a["id"], {})
         status = s.get("status", "wacht")
-        if status == "fout" and "Timeout" in s.get("fout", "") and s.get("pogingen", 1) < POGINGEN:
+        opnieuw = any("Timeout" in m or "Target crashed" in m for m in (s.get("onvolledig") or []))
+        if s.get("pogingen", 1) < POGINGEN and ((status == "fout" and "Timeout" in s.get("fout", ""))
+                                                 or (status == "onvolledig" and opnieuw)):
             status = "wacht"   # de runner probeert het opnieuw (felix_wacht.POGINGEN)
         uit.append({"id": a["id"], "project": a.get("project", ""), "adres": a.get("adres", ""), "door": a.get("door", ""),
                     "ts": a.get("ts", ""), "status": status, "besluit": s.get("besluit", ""),
                     "fout": s.get("fout", ""), "klaar": s.get("klaar", ""), "map": s.get("map", ""),
+                    "onvolledig": s.get("onvolledig") or [],
                     "dossiers": s.get("dossiers"), "vergunningen": s.get("vergunningen"),
                     "opgeslagen": s.get("opgeslagen"), "opslaan_fout": s.get("opslaan_fout", ""),
                     "opslaan_wacht": a["id"] in opslaan_wacht})
@@ -194,7 +197,7 @@ def registreer(app, gebruiker, groepen, md, nu):
         eis()
         zelfde_herkomst()
         z = _zoek_of_404(zid)
-        if z["status"] != "klaar":
+        if z["status"] not in ("klaar", "onvolledig"):   # onvolledig mag ook mee, met zijn Controle.md
             return redirect(url_for("felix_zoektocht", zid=zid))
         if not z["project"]:
             return redirect(url_for("felix_pagina", bericht="Zonder projectnummer weet de agent niet in welke projectmap het moet."))

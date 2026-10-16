@@ -90,5 +90,92 @@ _spec.loader.exec_module(FW)
 check("'#' blijft in een mapnaam (627#23624)", "627#23624" in FW._veilig("627#23624 bouwen: koepel?"))
 check("'85/101' wordt '85 bus 101' in een mapnaam", "85 bus 101" in FW._veilig("August van de Wielelei 85/101, 2100 Deurne"))
 
+# 17-10-2026, Codex-ronde 1 (FX01, FX03, FX04, FX11) en de metingen op Grotesteenweg 459
+import percelenpas as PP  # noqa: E402
+_tekst = """Een bouwovertreding is wanneer iemand zich niet aan de bouwvoorschriften houdt.
+
+Vastgestelde bouwovertredingen
+
+Is er een bouwovertreding? Vraag meer info via Stel je vraag > Bouwovertreding.
+
+Uitvoeren van vergunningsplichtige werken zonder vergunning
+
+Dossiernummer: 202410548
+
+Registratienummer: 11002_2024_11491
+
+Uitvoeren van vergunningsplichtige werken in strijd met vergunning
+
+Dossiernummer: 202410548
+
+Registratienummer: 11002_2024_11492"""
+_s, _l = PP.bouwovertredingen_uit_tekst(_tekst)
+check("twee bouwovertredingen worden er twee, met omschrijving (Grotesteenweg 459)", len(_l) == 2 and _l[0]["omschrijving"].startswith("Uitvoeren")
+      and _l[1]["registratienummer"] == "11002_2024_11492", str(_l))
+check("geen bouwovertreding blijft 'geen gekend'", PP.bouwovertredingen_uit_tekst(
+    "Hieronder vind je of er bouwovertredingen gekend zijn.\nEr zijn geen gekende bouwovertredingen voor dit perceel.") == ("geen gekend", []))
+check("197317935 kan als jaar 1973 en volgnummer 17935 staan", FA.schrijfwijze_mogelijk("197317935"))
+check("BE/1973/B/17935 past bij 197317935", FA.past_schrijfwijze("BE/1973/B/17935", "1973", "17935"))
+check("18/17935-71662 (1943) past niet", not FA.past_schrijfwijze("18/17935-71662", "1973", "17935"))
+check("ZBE/2008/B/0376 past bij 2008 en 376 (voorloopnullen)", FA.past_schrijfwijze("ZBE/2008/B/0376 # 20083154", "2008", "376"))
+check("214157_329#11928 is geen jaar plus volgnummer", not FA.schrijfwijze_mogelijk("214157_329#11928"))
+
+
+class _NepPagina:
+    """Een pagina van de percelenpas waarvan de printscreen faalt (13-10-2026, August van de Wielelei 85/101)."""
+    def __init__(self):
+        self.url = ""
+    def goto(self, url, **k):
+        self.url = url
+    def wait_for_selector(self, *a, **k):
+        return None
+    def wait_for_timeout(self, *a):
+        return None
+    def get_by_role(self, *a, **k):
+        raise RuntimeError("geen knop")
+    def locator(self, *a, **k):
+        p = self
+        class _L:
+            def inner_text(self_):
+                if "bouwovertredingen" in p.url:
+                    return "x\nBouwovertredingen\nEr zijn geen gekende bouwovertredingen voor dit perceel.\nVeelgestelde vragen"
+                return "Perceel 11344A0430/00H014"
+        return _L()
+    def evaluate(self, *a, **k):
+        return [["Selecteer rij", "bouwen van een appartementsgebouw", "19654625", "Stedenbouwkundige vergunningen", "Vergunning", ""]]
+    def screenshot(self, **k):
+        raise RuntimeError("Page.screenshot: Timeout 30000ms exceeded.")
+    def expect_download(self, **k):
+        raise RuntimeError("geen download")
+    def close(self):
+        return None
+
+
+class _NepContext:
+    def new_page(self):
+        return _NepPagina()
+
+
+import tempfile  # noqa: E402
+_stad = PP.lees(_NepContext(), 51.2, 4.47, "August Van de Wielelei 85, 2100 Antwerpen", tempfile.mkdtemp())
+check("een printscreen die faalt, wist de gelezen vergunningen niet (Codex FX04)", len(_stad["vergunningen"]) == 1
+      and _stad["gelezen"]["vergunningen"] and _stad["capakey"] == "11344A0430/00H014", str(_stad)[:200])
+check("en de fout staat erbij", any("Vergunningen.png" in f for f in _stad["fouten"]), _stad["fouten"])
+
+_z = {"adres": "Grotesteenweg 459, 2600 Antwerpen", "besluit": "x", "onvolledig": [], "stad": {"bouwovertredingen": "geen gekend"},
+      "rijen": [{"jaar": "1967", "stad": "196716992", "onderwerp": "Verbouwingswerken", "beslissing": "",
+                 "felix": [{"inventaris": "961#3952", "status": "na aanmelden"}]},
+                {"jaar": "2008", "stad": "20083154", "onderwerp": "verbouwen", "beslissing": "",
+                 "felix": [{"inventaris": "3290#376", "status": "download"}, {"inventaris": "3290#1260", "status": "na aanmelden"}]}],
+      "downloads": [{"inventaris": "961#3952", "status": "na aanmelden", "bestanden": [], "mislukt": [], "beschermd": ["001_Kaft.pdf"]},
+                    {"inventaris": "3290#376", "status": "download", "bestanden": [{"naam": "a.pdf"}], "mislukt": [], "beschermd": []},
+                    {"inventaris": "3290#1260", "status": "na aanmelden", "bestanden": [], "mislukt": [], "beschermd": ["002_Plan.pdf"]}]}
+_md = FW._controle_md(_z)
+check("een beschermd dossier staat als 'alleen online bekijken', niet als 'nee'", "alleen online bekijken (auteursrecht)" in _md, _md)
+check("een half gedownloade vergunning staat als 'deels' met de tellingen", "deels: 3290#376 1 van 1; 3290#1260 0 van 1" in _md, _md)
+check("een volledige zoektocht zegt 'Volledig.'", "**Volledig.**" in _md)
+_z["onvolledig"] = ["Geopunt.png niet gelukt"]
+check("een onvolledige zoektocht zegt het bovenaan", "**Onvolledig:**" in FW._controle_md(_z))
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

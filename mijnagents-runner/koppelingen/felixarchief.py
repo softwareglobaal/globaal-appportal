@@ -196,10 +196,15 @@ class Felix:
         rijen = [r for r in (_rij(it, reeks) for it in j.get("items") or []) if _zelfde_straat(r["straat"], straat)]
         return _markeer_district(rijen, districten)
 
-    def dossier_zoeken(self, dossiernummer):
+    def dossier_zoeken(self, dossiernummer, punt=None):
         """Een dossiernummer van de percelenpas -> de dossiers in FelixArchief (bouwdossier en plannen).
 
-        Twee vormen: '19654625' staat in het veld Dossiernummer; '214157_329#11928' draagt het inventarisnummer al.
+        Drie vormen:
+        - '214157_329#11928' draagt het inventarisnummer al;
+        - '19654625' staat letterlijk in het veld Dossiernummer ('DE/1965/B/23624 # 19654625');
+        - '197317935' staat er niet letterlijk in, wel als 'BE/1973/B/17935' (Grotesteenweg 459, gemeten 17-10-2026:
+          het dossier lag onder de hoekstraat, Lysenstraat 2). Dan zoeken we jaar en volgnummer apart, en een kandidaat
+          telt pas als zijn adres binnen AFSTAND_MAX meter van het perceel (punt = (lat, lon)) ligt.
         """
         if "#" in dossiernummer:
             info = self.inventaris(dossiernummer.split("_")[-1])
@@ -207,14 +212,33 @@ class Felix:
                 return []
             reeks = next((k for k, v in werkgebied()["reeksen"].items() if v == info["reeks"]), "")
             return [{"reeks": reeks, "inventaris": info["inventaris"], "straat": info["titel"], "nummer": "",
-                     "aanvraag": info["begin"], "omschrijving": "", "status": info["status"]}]
+                     "aanvraag": info["begin"], "omschrijving": "", "status": info["status"], "dossiernummer": ""}]
+        rijen = self._dossiernummer_bevat(dossiernummer, lambda dn: re.search(
+            rf"(^|\D){re.escape(dossiernummer)}(\D|$)", dn))
+        if rijen or not schrijfwijze_mogelijk(dossiernummer):
+            return rijen
+        jaar, volg = dossiernummer[:4], dossiernummer[4:].lstrip("0")
+        kandidaten = self._dossiernummer_bevat(volg, lambda dn: past_schrijfwijze(dn, jaar, volg))
+        uit = []
+        for r in kandidaten:
+            r["via"] = f"andere schrijfwijze: {r['dossiernummer'].split('#')[0].strip()}"
+            if punt:
+                r["afstand_m"] = _afstand_tot(f"{r['straat']} {r['nummer']}".strip(), punt)
+                if r["afstand_m"] is None or r["afstand_m"] > AFSTAND_MAX:
+                    continue  # zelfde jaar en volgnummer, maar elders in de stad: niet ons perceel
+            uit.append(r)
+        return uit
+
+    def _dossiernummer_bevat(self, tekst, past, paginas=3):
+        """Alle dossiers waarvan het veld Dossiernummer 'tekst' bevat en 'past', in beide reeksen, met paginering."""
         rijen = []
         for reeks in werkgebied()["reeksen"]:
-            j = self.reeks_zoeken(reeks, [_term("Dossiernummer", dossiernummer, "contains")], 1, 20)
-            for it in j.get("items") or []:
-                r = _rij(it, reeks)
-                if re.search(rf"(^|\D){re.escape(dossiernummer)}(\D|$)", r["dossiernummer"]):
-                    rijen.append(r)
+            for pagina in range(1, paginas + 1):
+                j = self.reeks_zoeken(reeks, [_term("Dossiernummer", tekst, "contains")], pagina, 50)
+                items = j.get("items") or []
+                rijen += [r for r in (_rij(it, reeks) for it in items) if past(r["dossiernummer"])]
+                if len(items) < 50:
+                    break
         return rijen
 
     def bestanden(self, inventaris):
@@ -327,21 +351,47 @@ class Felix:
             raise RuntimeError(f"Aanmelden vastgelopen bij '{stap}' ({p.url.split('?')[0]}): "
                                f"{str(e).splitlines()[0][:150]}; printscreen {pad}")
 
-    def download(self, url, pad):
-        """Een bestand ophalen met de aanmelding van deze browser en bewaren; geeft het aantal bytes."""
-        import base64
-        b64 = self.page.evaluate("""async (url) => {
-            const r = await fetch(url);
-            if (!r.ok) throw new Error('status ' + r.status);
-            const buf = new Uint8Array(await r.arrayBuffer());
-            let s = ''; for (let i = 0; i < buf.length; i += 32768) s += String.fromCharCode.apply(null, buf.subarray(i, i + 32768));
-            return btoa(s);
-        }""", url)
-        data = base64.b64decode(b64)
+    def status_bestand(self, url):
+        """Status en soort van een bestand, zonder het te lezen (de server negeert Range; we breken af)."""
+        return self.page.evaluate("""async (u) => { const r = await fetch(u, {headers: {Range: 'bytes=0-0'}});
+            const uit = [r.status, r.headers.get('content-type') || '']; try { await r.body.cancel(); } catch (e) {}
+            return uit; }""", url)
+
+    def download(self, url, pad, grootte=None):
+        """Een bestand rechtstreeks naar schijf, met de aanmelding van deze browser; geeft het aantal bytes.
+
+        Een PDF van 14 MB via het geheugen (base64) deed Chrome crashen (13-10-2026). Nu: een eigen tabblad, waar Chrome
+        de PDF als download bewaart (getest 17-10-2026: 14 MB in 10 seconden). Een stuk met auteursrecht geeft 403 of
+        500: dat mag alleen online bekeken worden en wordt Beschermd, geen fout.
+        """
+        status, soort = self.status_bestand(url)
+        if status in (401, 403):
+            raise Beschermd(f"status {status}")
+        if status >= 400:
+            raise BestandFout(status)
         os.makedirs(os.path.dirname(pad), exist_ok=True)
+        if "pdf" in soort or "zip" in soort or "octet-stream" in soort:
+            p = self._ctx.new_page()
+            try:
+                with p.expect_download(timeout=300000) as d:
+                    try:
+                        p.goto(BASIS + url, timeout=300000)
+                    except Exception:
+                        pass  # 'Download is starting' is precies wat we willen
+                d.value.save_as(pad)
+            finally:
+                p.close()
+            return os.path.getsize(pad)
+        if grootte and grootte > 8_000_000:
+            raise BestandFout(f"te groot voor de omweg via het geheugen ({grootte} bytes, {soort})")
+        import base64  # een klein beeldbestand: Chrome toont het in plaats van het te downloaden
+        b64 = self.page.evaluate("""async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('status ' + r.status);
+            const buf = new Uint8Array(await r.arrayBuffer()); let s = '';
+            for (let i = 0; i < buf.length; i += 32768) s += String.fromCharCode.apply(null, buf.subarray(i, i + 32768));
+            return btoa(s); }""", url)
         with open(pad, "wb") as f:
-            f.write(data)
-        return len(data)
+            f.write(base64.b64decode(b64))
+        return os.path.getsize(pad)
 
     def schermafdruk_dossier(self, inventaris, reeks, pad):
         """Printscreen van de detailpagina van een gevonden dossier: het bewijs van wat raak was."""
@@ -357,50 +407,73 @@ class Felix:
         self.page.screenshot(path=pad, full_page=True)
         return pad
 
-    def schermafdruk_geopunt(self, adres_geopunt, pad):
+    def schermafdruk_geopunt(self, adres_geopunt, pad, pogingen=2):
         """Echte printscreen van geopunt.be, zoals een mens hem maakt (Mehdi, 03-10-2026: geen zelfgemaakte beelden).
 
         Geopunt bewaart de locatie niet in de URL: zoeken, het adres kiezen, de kadastrale informatie openen.
+        De klik op de suggestie liep in 2 van 3 zoektochten in een timeout (13-10-2026): nu wachten we op de lijst,
+        kiezen we met het toetsenbord als klikken niet lukt, en controleren we dat het adrespaneel openging.
         """
-        p = self._ctx.new_page()
-        try:
-            p.goto("https://www.geopunt.be/kaart", wait_until="domcontentloaded", timeout=60000)
+        fout = None
+        for _ in range(pogingen):
+            p = self._ctx.new_page()
             try:
-                p.get_by_text("Enkel noodzakelijke cookies aanvaarden").click(timeout=8000)
-            except Exception:
-                pass
-            veld = p.get_by_placeholder("Zoek op de kaart")
-            veld.click(timeout=20000)
-            veld.fill(adres_geopunt)
-            p.get_by_text(adres_geopunt, exact=True).first.click(timeout=20000)
-            try:
-                p.get_by_text("Kadastrale informatie").click(timeout=10000)
-            except Exception:
-                pass
-            p.wait_for_timeout(5000)  # de kaarttegels laden na
-            p.screenshot(path=pad, full_page=False)
-        finally:
-            p.close()
-        return pad
+                p.goto("https://www.geopunt.be/kaart", wait_until="domcontentloaded", timeout=90000)
+                try:
+                    p.get_by_text("Enkel noodzakelijke cookies aanvaarden").click(timeout=8000)
+                except Exception:
+                    pass
+                veld = p.get_by_placeholder("Zoek op de kaart")
+                veld.wait_for(timeout=45000)
+                veld.click(timeout=20000)
+                veld.fill(adres_geopunt)
+                suggestie = p.get_by_text(adres_geopunt, exact=True).first
+                try:
+                    suggestie.wait_for(timeout=30000)
+                    suggestie.click(timeout=15000)
+                except Exception:
+                    veld.press("ArrowDown")
+                    veld.press("Enter")
+                p.get_by_text("Kadastrale informatie").wait_for(timeout=30000)  # het adrespaneel staat open
+                try:
+                    p.get_by_text("Kadastrale informatie").click(timeout=10000)
+                except Exception:
+                    pass
+                p.wait_for_timeout(5000)  # de kaarttegels laden na
+                p.screenshot(path=pad, full_page=False, timeout=60000)
+                return pad
+            except Exception as e:
+                fout = e
+            finally:
+                p.close()
+        raise fout
 
     def overzicht_kaarten(self, inventarissen, pad):
         """Een beeld met de kaart van elk gevonden dossier uit de zoekresultaten van FelixArchief, onder elkaar.
 
         Echte printscreens van de site (adres, inventarisnummer, datering, reeks, knop), samengezet tot een beeld:
-        het overzicht op een pagina dat Mehdi wil, zoals zijn collega het maakte (03-10-2026).
+        het overzicht op een pagina dat Mehdi wil, zoals zijn collega het maakte (03-10-2026). Elke kaart krijgt een
+        herkansing; een kaart die toch faalt, ontbreekt en wordt teruggegeven (Codex FX07, 17-10-2026).
+        Geeft (pad of None, lijst van ontbrekende inventarisnummers).
         """
         import io
         from PIL import Image
-        stukken = []
+        stukken, ontbreekt = [], []
         for inv in inventarissen:
-            self.page.goto(f"{BASIS}/zoekresultaten?bevat={urllib.parse.quote(inv)}&page=1&pageSize=5",
-                           wait_until="domcontentloaded", timeout=90000)
-            kaart = self.page.locator(".searchresult-item", has_text=f"InventarisNr. {inv}").first
-            kaart.wait_for(timeout=45000)
-            self.page.wait_for_timeout(800)
-            stukken.append(Image.open(io.BytesIO(kaart.screenshot())))
+            for poging in range(2):
+                try:
+                    self.page.goto(f"{BASIS}/zoekresultaten?bevat={urllib.parse.quote(inv)}&page=1&pageSize=5",
+                                   wait_until="domcontentloaded", timeout=90000)
+                    kaart = self.page.locator(".searchresult-item", has_text=f"InventarisNr. {inv}").first
+                    kaart.wait_for(timeout=45000)
+                    self.page.wait_for_timeout(800)
+                    stukken.append(Image.open(io.BytesIO(kaart.screenshot(timeout=60000))))
+                    break
+                except Exception:
+                    if poging == 1:
+                        ontbreekt.append(inv)
         if not stukken:
-            return None
+            return None, ontbreekt
         breedte = max(s.width for s in stukken)
         beeld = Image.new("RGB", (breedte, sum(s.height for s in stukken) + 12 * (len(stukken) - 1)), "white")
         y = 0
@@ -408,7 +481,7 @@ class Felix:
             beeld.paste(s, (0, y))
             y += s.height + 12
         beeld.save(pad)
-        return pad
+        return pad, ontbreekt
 
     def schermafdruk_html(self, html, pad):
         """Een eigen overzicht (tabel, kaart) renderen en vastleggen."""
@@ -439,6 +512,43 @@ def a_profiel(p, email=None, wachtwoord=None):
         ww.wait_for(timeout=20000)
     ww.fill(wachtwoord)
     p.keyboard.press("Enter")
+
+
+AFSTAND_MAX = 100  # meter: een dossier met een andere schrijfwijze telt pas als zijn adres zo dicht bij het perceel ligt
+
+
+class Beschermd(Exception):
+    """Een stuk met auteursrecht: FelixArchief laat het alleen online bekijken, na aanmelden. Geen fout van ons."""
+
+
+class BestandFout(Exception):
+    """Een bestand dat FelixArchief niet gaf, om een andere reden dan auteursrecht."""
+
+
+def schrijfwijze_mogelijk(dossiernummer):
+    """'197317935' -> jaar 1973 en volgnummer 17935: kan in FelixArchief als 'BE/1973/B/17935' staan."""
+    return bool(re.fullmatch(r"(19\d\d|20[0-3]\d)\d{2,6}", dossiernummer or ""))
+
+
+def past_schrijfwijze(dossiernummer_felix, jaar, volg):
+    """Draagt het veld Dossiernummer van FelixArchief dit jaar en dit volgnummer, als eigen stukken ('/1973/B/17935')?"""
+    dn = dossiernummer_felix or ""
+    return bool(re.search(rf"(^|\D){jaar}(\D|$)", dn) and re.search(rf"(^|\D)0*{re.escape(volg)}(\D|$)", dn))
+
+
+def _afstand_tot(adres, punt):
+    """Afstand in meter tussen een adres (via Geopunt) en een punt (lat, lon); None als Geopunt het niet vindt."""
+    import math
+    import adresregister
+    try:
+        loc = adresregister.lokaliseer(adres + ", Antwerpen")
+    except Exception:
+        return None
+    if not loc:
+        return None
+    dy = (loc["lat"] - punt[0]) * 111_320
+    dx = (loc["lon"] - punt[1]) * 111_320 * math.cos(math.radians(punt[0]))
+    return round(math.hypot(dx, dy))
 
 
 def _in(district, districten):

@@ -83,16 +83,16 @@ nooit aan. Opslaan in de projectmap gebeurt pas als je op de knop klikt.</p>
   <tr>
     <td>{{ z.ts|felix_tijd }}<br><span class="stil">{{ z.door }}</span></td>
     <td>{{ z.project or '-' }}</td>
-    <td>{% if z.status == 'klaar' %}<a href="{{ url_for('felix_zoektocht', zid=z.id) }}">{{ z.adres }}</a>{% else %}{{ z.adres }}{% endif %}</td>
-    <td>{% if z.status == 'klaar' %}<span class="ok">klaar</span>{% elif z.status == 'fout' %}<span class="fout">fout</span>{% elif z.status == 'bezig' %}<span class="let_op">bezig</span>{% else %}wacht{% endif %}</td>
-    <td>{% if z.status == 'klaar' %}{{ z.besluit }}{% elif z.status == 'fout' %}<span class="stil">{{ z.fout }}</span>{% endif %}</td>
+    <td>{% if z.status in ['klaar', 'onvolledig'] %}<a href="{{ url_for('felix_zoektocht', zid=z.id) }}">{{ z.adres }}</a>{% else %}{{ z.adres }}{% endif %}</td>
+    <td>{% if z.status == 'klaar' %}<span class="ok">klaar</span>{% elif z.status == 'onvolledig' %}<span class="let_op">onvolledig</span>{% elif z.status == 'fout' %}<span class="fout">fout</span>{% elif z.status == 'bezig' %}<span class="let_op">bezig</span>{% else %}wacht{% endif %}</td>
+    <td>{% if z.status in ['klaar', 'onvolledig'] %}{{ z.besluit }}{% if z.onvolledig %}<br><span class="let_op">Ontbreekt: {{ z.onvolledig[0] }}{% if z.onvolledig|length > 1 %} (en {{ z.onvolledig|length - 1 }} meer){% endif %}</span>{% endif %}{% elif z.status == 'fout' %}<span class="stil">{{ z.fout }}</span>{% endif %}</td>
     <td>
       {% if z.opgeslagen %}<span class="ok">opgeslagen</span><br><span class="stil">{{ z.opgeslagen.pad }}</span>
       {% elif z.opslaan_wacht %}<span class="let_op">wordt opgeslagen</span>
-      {% elif z.status == 'klaar' and z.project %}
+      {% elif z.status in ['klaar', 'onvolledig'] and z.project %}
         <form method="post" action="{{ url_for('felix_opslaan', zid=z.id) }}"><button class="knop klein" type="submit">Opslaan in projectmap {{ z.project }}</button></form>
         {% if z.opslaan_fout %}<span class="fout">{{ z.opslaan_fout }}</span>{% endif %}
-      {% elif z.status == 'klaar' %}<span class="stil">geen projectnummer</span>{% endif %}
+      {% elif z.status in ['klaar', 'onvolledig'] %}<span class="stil">geen projectnummer</span>{% endif %}
     </td>
   </tr>
   {% endfor %}

@@ -36,33 +36,79 @@ def _sectietekst(p, titel):
     return tekst[i + len(titel) + 2: j if j > 0 else None].strip() if i >= 0 else ""
 
 
+def bouwovertredingen_uit_tekst(tekst):
+    """De sectietekst -> (samenvatting, lijst van overtredingen met omschrijving, dossiernummer, registratienummer).
+
+    Grotesteenweg 459 (13-10-2026) had er twee; de oude code bewaarde alleen de laatste regel, een registratienummer.
+    """
+    regels = [r.strip() for r in (tekst or "").splitlines() if r.strip()]
+    if any(r.startswith("Er zijn geen gekende bouwovertredingen") for r in regels):
+        return "geen gekend", []
+    if "Vastgestelde bouwovertredingen" in regels:
+        regels = regels[regels.index("Vastgestelde bouwovertredingen") + 1:]
+    lijst, huidig = [], None
+    for r in regels:
+        if r.startswith("Is er een bouwovertreding?"):
+            continue
+        m = re.match(r"(Dossiernummer|Registratienummer):\s*(.+)", r)
+        if m and huidig is not None:
+            huidig[m.group(1).lower()] = m.group(2).strip()
+        elif not m:
+            huidig = {"omschrijving": r}
+            lijst.append(huidig)
+    lijst = [x for x in lijst if x.get("dossiernummer") or x.get("registratienummer")]
+    if not lijst:
+        return ("onbekend: " + " ".join(regels)[:200]) if regels else "onbekend", []
+    return f"{len(lijst)} vastgesteld", lijst
+
+
+def _printscreen(p, pad, fouten):
+    """Een printscreen die mislukt, wordt een melding; de gegevens van de pagina blijven (Codex FX04, 17-10-2026)."""
+    for volledig in (True, False):
+        try:
+            p.screenshot(path=pad, full_page=volledig, timeout=60000)
+            return pad
+        except Exception as e:
+            fout = str(e).splitlines()[0][:150]
+    fouten.append(f"{os.path.basename(pad)} niet gelukt: {fout}")
+    return None
+
+
 def lees(ctx, lat, lon, adres, map_=None):
-    """Vergunningen en bouwovertredingen van het perceel. Met map_: printscreens en het PDF-rapport van de stad."""
+    """Vergunningen en bouwovertredingen van het perceel. Met map_: printscreens en het PDF-rapport van de stad.
+
+    Elke stap staat los: wat gelezen is, blijft, ook als een printscreen of de PDF faalt. 'gelezen' zegt welke
+    gegevens er volledig zijn; wat ontbreekt staat in 'fouten'.
+    """
     uit = {"url": url("vergunningen", lat, lon, adres), "capakey": "", "vergunningen": [], "bouwovertredingen": "",
-           "bewijs": [], "fouten": []}
+           "bouwovertredingen_lijst": [], "bewijs": [], "fouten": [], "gelezen": {"vergunningen": False, "bouwovertredingen": False}}
+    if map_:
+        os.makedirs(map_, exist_ok=True)
     p = ctx.new_page()
     try:
-        p.goto(uit["url"], wait_until="domcontentloaded", timeout=60000)
-        p.wait_for_selector("text=Toelatingen die voor 1962", timeout=45000)
-        _cookies_weigeren(p)
         try:
-            p.wait_for_selector("text=Dossiernummer", timeout=15000)
-        except Exception:
-            pass  # geen vergunningen: de pagina zegt dat zelf
-        p.wait_for_timeout(1500)
-        m = re.search(r"\b\d{5}[A-Z]\d{4}/\d{2}[A-Z]\d{3}\b", p.locator("body").inner_text())
-        uit["capakey"] = m.group() if m else ""
-        for cellen in p.evaluate("""() => [...document.querySelectorAll('tr')].map(tr =>
-                [...tr.querySelectorAll('td')].map(c => c.innerText.trim()))"""):
-            c = [x for x in cellen if x and x != "Selecteer rij"]
-            if len(c) >= 3:
-                uit["vergunningen"].append({"onderwerp": c[0], "dossiernummer": c[1], "type": c[2],
-                                            "beslissing": c[3] if len(c) > 3 else "", "datum": c[4] if len(c) > 4 else ""})
-        if map_:
-            os.makedirs(map_, exist_ok=True)
-            pad = os.path.join(map_, "Vergunningen.png")
-            p.screenshot(path=pad, full_page=True)
-            uit["bewijs"].append(pad)
+            p.goto(uit["url"], wait_until="domcontentloaded", timeout=90000)
+            p.wait_for_selector("text=Toelatingen die voor 1962", timeout=60000)
+            _cookies_weigeren(p)
+            try:
+                p.wait_for_selector("text=Dossiernummer", timeout=15000)
+            except Exception:
+                pass  # geen vergunningen: de pagina zegt dat zelf
+            p.wait_for_timeout(1500)
+            m = re.search(r"\b\d{5}[A-Z]\d{4}/\d{2}[A-Z]\d{3}\b", p.locator("body").inner_text())
+            uit["capakey"] = m.group() if m else ""
+            for cellen in p.evaluate("""() => [...document.querySelectorAll('tr')].map(tr =>
+                    [...tr.querySelectorAll('td')].map(c => c.innerText.trim()))"""):
+                c = [x for x in cellen if x and x != "Selecteer rij"]
+                if len(c) >= 3:
+                    uit["vergunningen"].append({"onderwerp": c[0], "dossiernummer": c[1], "type": c[2],
+                                                "beslissing": c[3] if len(c) > 3 else "", "datum": c[4] if len(c) > 4 else ""})
+            uit["gelezen"]["vergunningen"] = True
+        except Exception as e:
+            uit["fouten"].append(f"vergunningen van de stad niet gelezen: {str(e).splitlines()[0][:150]}")
+        if map_ and uit["gelezen"]["vergunningen"]:
+            if _printscreen(p, os.path.join(map_, "Vergunningen.png"), uit["fouten"]):
+                uit["bewijs"].append(os.path.join(map_, "Vergunningen.png"))
             try:  # het volledige rapport van de stad, via de knop PDF
                 with p.expect_download(timeout=180000) as d:
                     p.get_by_role("button", name="PDF").click(timeout=15000)
@@ -73,14 +119,17 @@ def lees(ctx, lat, lon, adres, map_=None):
             except Exception as e:
                 uit["fouten"].append(f"PDF-rapport van de stad niet gelukt: {str(e).splitlines()[0][:150]}")
 
-        p.goto(url("bouwovertredingen", lat, lon, adres), wait_until="domcontentloaded", timeout=60000)
-        p.wait_for_selector("text=proces-verbaal", timeout=45000)
-        p.wait_for_timeout(1500)
-        uit["bouwovertredingen"] = _sectietekst(p, "Bouwovertredingen").split("\n")[-1].strip()
-        if map_:
-            pad = os.path.join(map_, "Bouwovertredingen.png")
-            p.screenshot(path=pad, full_page=True)
-            uit["bewijs"].append(pad)
+        try:
+            p.goto(url("bouwovertredingen", lat, lon, adres), wait_until="domcontentloaded", timeout=90000)
+            p.wait_for_selector("text=proces-verbaal", timeout=60000)
+            p.wait_for_timeout(1500)
+            samen, lijst = bouwovertredingen_uit_tekst(_sectietekst(p, "Bouwovertredingen"))
+            uit["bouwovertredingen"], uit["bouwovertredingen_lijst"] = samen, lijst
+            uit["gelezen"]["bouwovertredingen"] = True
+            if map_ and _printscreen(p, os.path.join(map_, "Bouwovertredingen.png"), uit["fouten"]):
+                uit["bewijs"].append(os.path.join(map_, "Bouwovertredingen.png"))
+        except Exception as e:
+            uit["fouten"].append(f"bouwovertredingen van de stad niet gelezen: {str(e).splitlines()[0][:150]}")
     finally:
         p.close()
     return uit

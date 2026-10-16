@@ -57,40 +57,58 @@ def _jaar(tekst):
 
 def percelen_zoektocht(adres, felix, stadmap=None):
     """Geopunt -> percelenpas van de stad (op perceel) -> elk dossiernummer in FelixArchief, en de controle omgekeerd:
-    wat FelixArchief op straat en huisnummer vindt en de stad niet kent.
+    wat FelixArchief op straat en huisnummer vindt en de stad niet kent, ook in de hoekstraat.
 
     De stad is leidend voor welke vergunningen er bestaan (ook recente en bouwovertredingen); FelixArchief voor de
-    stukken zelf (Mehdi en analyse, 03-10-2026).
+    stukken zelf (Mehdi en analyse, 03-10-2026). Een stap die faalt, veegt de andere niet weg: wat ontbreekt, staat
+    in z['onvolledig'] (Codex FX04 en FX11, 17-10-2026).
     """
+    import time
     import percelenpas
+    t0 = time.time()
     zonder_bus, _ = adresregister.splits_bus(adres)
     loc = adresregister.lokaliseer(zonder_bus)
-    z = {"adres": adres, "tijd": dt.datetime.now().isoformat(timespec="minutes"), "pand": loc or {}, "rijen": []}
+    z = {"adres": adres, "tijd": dt.datetime.now().isoformat(timespec="minutes"), "pand": loc or {}, "rijen": [],
+         "onvolledig": [], "duur": {}}
     if not loc:
         z["besluit"] = "Geopunt vindt dit adres niet."
         return z
     if not fa.districten_voor(loc["postcode"]):
         z["besluit"] = f"Postcode {loc['postcode']} valt buiten het werkgebied (stad Antwerpen)."
         return z
+    punt = (loc["lat"], loc["lon"])
     try:
         stad = percelenpas.lees(felix._ctx, loc["lat"], loc["lon"], loc["geopunt"], stadmap)
     except Exception as e:
         stad = {"vergunningen": [], "fouten": [f"percelenpas niet bereikbaar: {str(e).splitlines()[0][:150]}"],
-                "capakey": "", "bouwovertredingen": "", "bewijs": [], "url": ""}
+                "capakey": "", "bouwovertredingen": "", "bouwovertredingen_lijst": [], "bewijs": [], "url": "",
+                "gelezen": {"vergunningen": False, "bouwovertredingen": False}}
     z["stad"] = stad
+    z["onvolledig"] += stad.get("fouten") or []
+    z["duur"]["stad"] = round(time.time() - t0)
 
+    t1 = time.time()
     gezien = set()
     for v in stad["vergunningen"]:
-        felix_rijen = felix.dossier_zoeken(v["dossiernummer"])
+        try:
+            felix_rijen = felix.dossier_zoeken(v["dossiernummer"], punt)
+        except Exception as e:
+            felix_rijen = []
+            z["onvolledig"].append(f"FelixArchief niet doorzocht voor {v['dossiernummer']}: {str(e).splitlines()[0][:120]}")
         gezien.update(r["inventaris"] for r in felix_rijen)
         z["rijen"].append({"jaar": _jaar(v["datum"]) or (_jaar(felix_rijen[0]["aanvraag"]) if felix_rijen else ""),
                            "stad": v["dossiernummer"], "onderwerp": v["onderwerp"], "beslissing": v["beslissing"],
                            "felix": felix_rijen})
+    z["duur"]["dossiernummers"] = round(time.time() - t1)
 
-    # controle omgekeerd: FelixArchief op straat en huisnummer van het perceel ('bevat', beide reeksen)
+    # controle omgekeerd: FelixArchief op straat en huisnummer, ook de straten van het perceel en de hoekstraat
+    t2 = time.time()
     try:
         pand = adresregister.pand(zonder_bus)
-        for straat, nummers in (pand.get("nummers_per_straat") or {}).items():
+        straten = dict(pand.get("nummers_per_straat") or {})
+        for s, dichtbij in (pand.get("straten_dichtbij") or {}).items():  # hoekpand: Grotesteenweg 459 en Lysenstraat 2
+            straten.setdefault(s, sorted({nr for _, nr in dichtbij if nr}))
+        for straat, nummers in straten.items():
             for reeks in REEKSEN:
                 for nr in nummers:
                     for r in felix.nummer_dossiers(reeks, straat, nr):
@@ -99,7 +117,8 @@ def percelen_zoektocht(adres, felix, stadmap=None):
                             z["rijen"].append({"jaar": _jaar(r["aanvraag"]), "stad": "", "onderwerp": r["omschrijving"],
                                                "beslissing": "", "felix": [r], "alleen_felix": True})
     except Exception as e:
-        stad["fouten"].append(f"controle in FelixArchief op straat en nummer niet gelukt: {str(e).splitlines()[0][:150]}")
+        z["onvolledig"].append(f"controle in FelixArchief op straat en nummer niet gelukt: {str(e).splitlines()[0][:150]}")
+    z["duur"]["controle"] = round(time.time() - t2)
 
     z["rijen"].sort(key=lambda r: (r["jaar"] or "9999", r["stad"]))
     z["raak"] = sorted((d for r in z["rijen"] for d in r["felix"]), key=lambda d: (d["aanvraag"] or "9999", d["inventaris"]))
@@ -107,6 +126,8 @@ def percelen_zoektocht(adres, felix, stadmap=None):
     alleen_felix = sum(1 for r in z["rijen"] if r.get("alleen_felix"))
     z["besluit"] = (f"Perceel {stad['capakey'] or 'onbekend'}: {len(stad['vergunningen'])} vergunningen bij de stad, "
                     f"{len(z['raak'])} dossiers in FelixArchief; {alleen_stad} alleen bij de stad, {alleen_felix} alleen in FelixArchief.")
+    if not (stad.get("gelezen") or {}).get("vergunningen"):
+        z["besluit"] = "Onvolledig: de vergunningen van de stad konden niet gelezen worden. " + z["besluit"]
     return z
 
 
@@ -115,75 +136,105 @@ def percelen_zoektocht(adres, felix, stadmap=None):
 def _controle_md(z):
     """Een tabel om na te kijken of het werk goed gedaan is (Mehdi, 03-10-2026: controleerbaar, weinig tekst)."""
     stad = z.get("stad") or {}
-    gedownload = {d["inventaris"] for d in z.get("downloads") or [] if d.get("bestanden") and not d.get("mislukt")}
-    deels = {d["inventaris"] for d in z.get("downloads") or [] if d.get("bestanden")}
-    r = [f"# {z['adres']}", "", z["besluit"], ""]
-    if stad.get("bouwovertredingen"):
-        r += [f"Bouwovertredingen (stad): {stad['bouwovertredingen']}", ""]
+    dl = {d["inventaris"]: d for d in z.get("downloads") or []}
+    r = [f"# {z['adres']}", "", z["besluit"], "",
+         "**Volledig.**" if not z.get("onvolledig") else f"**Onvolledig:** {len(z['onvolledig'])} punt(en), zie onderaan.", ""]
+    if stad.get("bouwovertredingen") or stad.get("bouwovertredingen_lijst"):
+        r.append(f"Bouwovertredingen (stad): {stad.get('bouwovertredingen') or ''}")
+        r += [f"- {b.get('omschrijving', '')} (dossier {b.get('dossiernummer', '?')}, registratie {b.get('registratienummer', '?')})"
+              for b in stad.get("bouwovertredingen_lijst") or []]
+        r.append("")
     r += ["| Jaar | Dossier stad | Onderwerp | FelixArchief | Gedownload |", "|---|---|---|---|---|"]
     for x in z.get("rijen") or []:
-        invs = ", ".join(d["inventaris"] for d in x["felix"]) or "niet in FelixArchief"
+        invs = ", ".join(d["inventaris"] + (f" ({d['straat']} {d['nummer']}, {d.get('afstand_m')} m)" if d.get("via") else "")
+                         for d in x["felix"]) or "niet in FelixArchief"
+        stukken = [dl.get(d["inventaris"]) for d in x["felix"]]
         if not x["felix"]:
-            dl = "nee: opvragen bij de stad (Itsme)"
-        elif all(d["inventaris"] in gedownload for d in x["felix"]):
-            dl = "ja"
+            tekst = "nee: opvragen bij de stad (Itsme)"
         elif all(d["status"] == "leeszaal" for d in x["felix"]):
-            dl = "nee: alleen leeszaal"
+            tekst = "nee: alleen leeszaal"
+        elif stukken and all(s and s["bestanden"] and not s["mislukt"] and not s["beschermd"] for s in stukken if s):
+            tekst = "ja"
+        elif any(s and s["beschermd"] for s in stukken) and not any(s and s["bestanden"] for s in stukken):
+            tekst = "nee: alleen online bekijken (auteursrecht)"
+        elif any(s and s["bestanden"] for s in stukken):
+            tekst = "deels: " + "; ".join(
+                f"{s['inventaris']} {len(s['bestanden'])} van {len(s['bestanden']) + len(s['mislukt']) + len(s['beschermd'])}"
+                for s in stukken if s)
         else:
-            dl = "deels" if any(d["inventaris"] in deels for d in x["felix"]) else "nee"
+            tekst = "nee"
         stadnr = x["stad"] or "niet bij de stad"
         onderwerp = (x["onderwerp"] or "")[:45] + (f" ({x['beslissing'].lower()})" if x.get("beslissing") == "Weigering" else "")
-        r.append(f"| {x['jaar'] or '?'} | {stadnr} | {onderwerp} | {invs} | {dl} |")
+        r.append(f"| {x['jaar'] or '?'} | {stadnr} | {onderwerp} | {invs} | {tekst} |")
     if any(not x["felix"] for x in z.get("rijen") or []):
         r += ["", f"Opvragen bij de stad: {stad.get('url', '')} , vink de dossiers zonder FelixArchief aan, "
                   "Dossiers opvragen, aanmelden met Itsme."]
-    fouten = (stad.get("fouten") or []) + (z.get("printscreen_fouten") or [])
-    if z.get("downloads_fout"):
-        fouten.append(f"downloaden: {z['downloads_fout']}")
-    if fouten:
-        r += [""] + [f"Let op: {f}" for f in fouten]
+    beschermd = [f"{d['inventaris']}" for d in z.get("downloads") or [] if d.get("beschermd")]
+    if beschermd:
+        r += ["", "Alleen online te bekijken na aanmelden (auteursrecht): " + ", ".join(
+            f"[{i}]({fa.BASIS}/detailpagina?invnr={i.replace('#', '_')})" for i in beschermd)]
+    if z.get("onvolledig"):
+        r += [""] + [f"Let op: {f}" for f in z["onvolledig"]]
+    if z.get("duur"):
+        r += ["", "Duur (s): " + ", ".join(f"{k} {v}" for k, v in z["duur"].items())]
     return "\n".join(r) + "\n"
 
 
 def _downloaden(felix, z, felixmap):
     """Elk digitaal dossier in een map met het FelixArchief-nummer, de bestanden met hun originele naam
-    (Mehdi, 03-10-2026: "behoud de originele benamingen", geen datums). Leeszaalstukken worden niet aangevraagd."""
-    uit = []
+    (Mehdi, 03-10-2026: "behoud de originele benamingen", geen datums). Leeszaalstukken worden niet aangevraagd.
+
+    Per bestand: gedownload, beschermd (auteursrecht: alleen online bekijken) of mislukt na een herkansing.
+    De lijst wordt meteen in z gezet, zodat een fout halverwege niets wegveegt (Codex FX11, 17-10-2026).
+    """
+    uit = z.setdefault("downloads", [])
     for r in z["raak"]:
-        rij = {"inventaris": r["inventaris"], "status": r["status"], "bestanden": [], "mislukt": []}
-        if r["status"] != "leeszaal":
-            for f in felix.bestanden(r["inventaris"]):
-                if f["naam"].lower().endswith(".xml"):  # een verwijzing naar de plannen, geen stuk
-                    continue
-                pad = os.path.join(felixmap, r["inventaris"], f["map"], f["naam"])
-                try:
-                    rij["bestanden"].append({"naam": f["naam"], "bytes": felix.download(f["url"], pad)})
-                except Exception as e:  # een bestand dat FelixArchief weigert, stopt de andere niet (13-10-2026)
-                    rij["mislukt"].append(f"{f['naam']}: {str(e).splitlines()[0][:80]}")
+        rij = {"inventaris": r["inventaris"], "status": r["status"], "bestanden": [], "mislukt": [], "beschermd": []}
         uit.append(rij)
+        if r["status"] == "leeszaal":
+            continue
+        try:
+            lijst = felix.bestanden(r["inventaris"])
+        except Exception as e:
+            rij["mislukt"].append(f"lijst van bestanden: {str(e).splitlines()[0][:80]}")
+            continue
+        for f in lijst:
+            if f["naam"].lower().endswith(".xml"):  # een verwijzing naar de plannen, geen stuk
+                continue
+            pad = os.path.join(felixmap, r["inventaris"], f["map"], f["naam"])
+            for poging in range(2):
+                try:
+                    rij["bestanden"].append({"naam": f["naam"], "bytes": felix.download(f["url"], pad, f.get("grootte"))})
+                    break
+                except fa.Beschermd:
+                    rij["beschermd"].append(f["naam"])
+                    break
+                except fa.BestandFout as e:
+                    if r["status"] == "na aanmelden" and str(e) == "500":  # auteursrecht: FelixArchief geeft hier 500
+                        rij["beschermd"].append(f["naam"])
+                        break
+                    if poging == 1:
+                        rij["mislukt"].append(f"{f['naam']}: status {e}")
+                except Exception as e:  # een bestand dat faalt, stopt de andere niet (13-10-2026)
+                    if poging == 1:
+                        rij["mislukt"].append(f"{f['naam']}: {str(e).splitlines()[0][:80]}")
     mislukt = [f"{r['inventaris']}/{m}" for r in uit for m in r["mislukt"]]
     if mislukt:
-        z["downloads_fout"] = f"{len(mislukt)} bestand(en) niet gedownload: " + "; ".join(mislukt[:5])
+        z["onvolledig"].append(f"{len(mislukt)} bestand(en) niet gedownload: " + "; ".join(mislukt[:5]))
     return uit
 
 
 def voer_uit(adres, uitmap=None, project=None):
     """Een adres opzoeken en downloaden. Map '<project> <adres>' met Geopunt.png, Controle.md,
-    'Percelenpas Antwerpen' (rapport-PDF, Vergunningen, Bouwovertredingen) en 'FelixArchief' (Overzicht en dossiers)."""
+    'Percelenpas Antwerpen' (rapport-PDF, Vergunningen, Bouwovertredingen) en 'FelixArchief' (Overzicht en dossiers).
+    z['volledig'] zegt of alles lukte; anders staat in z['onvolledig'] wat ontbreekt."""
+    import time
     naam = f"{project} {_veilig(adres)}" if project else _veilig(adres)
     uitmap = uitmap or os.path.join(DATA, "zoektochten", naam)
     stadmap = os.path.join(uitmap, "Percelenpas Antwerpen")
     felixmap = os.path.join(uitmap, "FelixArchief")
     os.makedirs(felixmap, exist_ok=True)
-    fouten = []
-
-    def vastleggen(functie, *args):
-        """Een printscreen die mislukt, wordt een opmerking; de zoektocht gaat door."""
-        try:
-            functie(*args)
-        except Exception as e:
-            fouten.append(f"{os.path.basename(args[-1])}: {str(e).splitlines()[0][:160]}")
-
+    t0 = time.time()
     with fa.Felix() as felix:
         aanmelding = None
         if fa.heeft_aanmelding():  # eerst aanmelden, op een verse startpagina
@@ -194,20 +245,32 @@ def voer_uit(adres, uitmap=None, project=None):
         z = percelen_zoektocht(adres, felix, stadmap)
         geopunt = (z.get("pand") or {}).get("geopunt")
         if geopunt:
-            vastleggen(felix.schermafdruk_geopunt, geopunt, os.path.join(uitmap, "Geopunt.png"))
+            try:
+                felix.schermafdruk_geopunt(geopunt, os.path.join(uitmap, "Geopunt.png"))
+            except Exception as e:
+                z["onvolledig"].append(f"Geopunt.png niet gelukt: {str(e).splitlines()[0][:150]}")
         if z.get("raak"):
-            vastleggen(felix.overzicht_kaarten, [d["inventaris"] for d in z["raak"]], os.path.join(felixmap, "Overzicht.png"))
+            try:
+                _, ontbreekt = felix.overzicht_kaarten([d["inventaris"] for d in z["raak"]], os.path.join(felixmap, "Overzicht.png"))
+                if ontbreekt:
+                    z["onvolledig"].append("Overzicht.png zonder " + ", ".join(ontbreekt))
+            except Exception as e:
+                z["onvolledig"].append(f"Overzicht.png niet gelukt: {str(e).splitlines()[0][:150]}")
+            t1 = time.time()
             if aanmelding and aanmelding.get("fout"):
-                z["downloads_fout"] = aanmelding["fout"]
+                z["onvolledig"].append(f"niet gedownload, aanmelden mislukt: {aanmelding['fout']}")
             elif aanmelding:
                 try:
-                    z["downloads"] = _downloaden(felix, z, felixmap)
+                    _downloaden(felix, z, felixmap)
                 except Exception as e:  # zoeken is gelukt; een download die faalt mag dat niet wegvegen
-                    z["downloads_fout"] = str(e)[:300]
+                    z["onvolledig"].append(f"downloaden onderbroken: {str(e).splitlines()[0][:200]}")
             else:
-                z["downloads_fout"] = "geen aanmelding op de server"
-    if fouten:
-        z["printscreen_fouten"] = fouten
+                z["onvolledig"].append("niet gedownload: geen aanmelding op de server")
+            z["duur"]["downloaden"] = round(time.time() - t1)
+        if aanmelding:
+            z["aanmelding"] = {k: aanmelding.get(k) for k in ("aangemeld", "erewoord", "fout") if k in aanmelding}
+    z.setdefault("duur", {})["totaal"] = round(time.time() - t0)
+    z["volledig"] = not z.get("onvolledig")
     os.makedirs(os.path.join(uitmap, "_gegevens"), exist_ok=True)  # voor de agent, niet om te lezen
     json.dump(z, open(os.path.join(uitmap, "_gegevens", "resultaat.json"), "w"), ensure_ascii=False, indent=1, default=str)
     open(os.path.join(uitmap, "Controle.md"), "w").write(_controle_md(z))
@@ -296,6 +359,17 @@ def opslaan(zoek):
     return {"pad": doel, "bestanden": n, "fouten": fouten}
 
 
+def _timeout_in(meldingen):
+    return any("Timeout" in m or "Target crashed" in m for m in (meldingen or []))
+
+
+def _opnieuw(s):
+    """Gaat deze zoektocht nog eens mee? Bij een timeout of een gecrashte browser, tot POGINGEN keer."""
+    return s.get("pogingen", 1) < POGINGEN and (
+        (s.get("status") == "fout" and "Timeout" in s.get("fout", ""))
+        or (s.get("status") == "onvolledig" and _timeout_in(s.get("onvolledig"))))
+
+
 def ronde():
     """De ronde voor cron: eerst de zoekaanvragen, dan de opslagaanvragen. Een ronde tegelijk (slot)."""
     import fcntl
@@ -322,7 +396,8 @@ def ronde():
             # Die zoektocht telt als een mislukte poging en mag opnieuw.
             herkansing = vorige and vorige.get("pogingen", 1) < POGINGEN and (
                 vorige.get("status") == "bezig"
-                or (vorige.get("status") == "fout" and "Timeout" in vorige.get("fout", "")))
+                or (vorige.get("status") == "fout" and "Timeout" in vorige.get("fout", ""))
+                or (vorige.get("status") == "onvolledig" and _timeout_in(vorige.get("onvolledig"))))
             if vorige and not herkansing:
                 continue
             item = {"project": a.get("project", ""), "adres": a["adres"], "door": a.get("door", ""),
@@ -338,7 +413,9 @@ def ronde():
             try:
                 pad, z = voer_uit(item["adres"], uitmap=os.path.join(ZOEKTOCHTEN, f"{a['id']} {naam}"),
                                   project=item["project"] or None)
-                item.update(status="klaar", klaar=_nu(), map=os.path.basename(pad), besluit=z["besluit"],
+                # Onvolledig is geen klaar (Codex FX11, 17-10-2026): de pagina toont het in oranje, met wat ontbreekt.
+                item.update(status="klaar" if z.get("volledig") else "onvolledig", klaar=_nu(), map=os.path.basename(pad),
+                            besluit=z["besluit"], onvolledig=(z.get("onvolledig") or [])[:6], duur=(z.get("duur") or {}).get("totaal"),
                             dossiers=len(z.get("raak") or []),
                             vergunningen=len((z.get("stad") or {}).get("vergunningen") or []))
                 logboek("resultaat", id=a["id"], adres=item["adres"], besluit=z["besluit"], map=item["map"])
@@ -355,7 +432,7 @@ def ronde():
                 continue
             zoek = stand["zoek"].get(a.get("zoek_id", ""))
             uit = {"zoek_id": a.get("zoek_id", ""), "door": a.get("door", ""), "ts": _nu()}
-            if not zoek or zoek.get("status") != "klaar":
+            if not zoek or zoek.get("status") not in ("klaar", "onvolledig"):
                 uit["fout"] = "zoektocht niet (of nog niet) afgewerkt"
             elif zoek.get("opgeslagen"):
                 uit["fout"] = f"al opgeslagen in {zoek['opgeslagen']['pad']}"
@@ -378,9 +455,7 @@ def ronde():
             logboek("opgeslagen" if not uit.get("fout") else "opslaan_mislukt", **uit)
             schrijf_stand(stand)
         wacht = sum(1 for a in aanvragen if a["soort"] == "zoek" and (
-            a["id"] not in stand["zoek"] or (stand["zoek"][a["id"]].get("status") == "fout"
-                                             and "Timeout" in stand["zoek"][a["id"]].get("fout", "")
-                                             and stand["zoek"][a["id"]].get("pogingen", 1) < POGINGEN)))
+            a["id"] not in stand["zoek"] or _opnieuw(stand["zoek"][a["id"]])))
         r.detail = f"{gezocht} zoektochten gedaan, {opgeslagen} opgeslagen, {wacht} wachten"
         # Zonder taalmodel: geen tokens. Wel de drukte meten, want een browser op een volle VM loopt vast.
         try:

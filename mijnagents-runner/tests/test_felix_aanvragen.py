@@ -72,7 +72,10 @@ def nep_voer_uit(adres, uitmap=None, project=None):
     open(os.path.join(uitmap, "Controle.md"), "w").write("# x\n")
     open(os.path.join(uitmap, "FelixArchief", "123#4", "plan.pdf"), "wb").write(b"%PDF")
     open(os.path.join(uitmap, "_gegevens", "resultaat.json"), "w").write("{}")
-    return uitmap, {"besluit": "Perceel X: 1 vergunning", "raak": [{}], "stad": {"vergunningen": [{}]}}
+    if "half" in adres:  # de printscreen van Geopunt liep in een timeout: onvolledig, niet klaar (Codex FX11)
+        return uitmap, {"besluit": "Perceel X: 1 vergunning", "raak": [{}], "stad": {"vergunningen": [{}]}, "volledig": False,
+                        "onvolledig": ["Geopunt.png niet gelukt: Locator.click: Timeout 20000ms exceeded."]}
+    return uitmap, {"besluit": "Perceel X: 1 vergunning", "raak": [{}], "stad": {"vergunningen": [{}]}, "volledig": True}
 
 
 W.voer_uit = nep_voer_uit
@@ -134,6 +137,21 @@ W.ronde()
 s = W.lees_stand()
 check("een ronde die halverwege stierf ('bezig'): de volgende ronde neemt de zoektocht opnieuw",
       s["zoek"]["a9"]["status"] == "klaar" and s["zoek"]["a9"]["pogingen"] == 2, s["zoek"].get("a9"))
+
+aanvraag(id="h1", soort="zoek", project="3810", adres="half 1, 2000 Antwerpen", door="shelton", ts="t")
+W.ronde()
+s = W.lees_stand()
+check("onvolledig is niet klaar, en zegt wat ontbreekt", s["zoek"]["h1"]["status"] == "onvolledig"
+      and "Geopunt" in s["zoek"]["h1"]["onvolledig"][0], s["zoek"].get("h1"))
+for _ in range(4):
+    W.ronde()
+s = W.lees_stand()
+check("onvolledig door een timeout gaat opnieuw mee, tot drie keer", gezocht.count("half 1, 2000 Antwerpen") == W.POGINGEN
+      and s["zoek"]["h1"]["pogingen"] == W.POGINGEN, s["zoek"].get("h1"))
+aanvraag(id="o9", soort="opslaan", zoek_id="h1", door="shelton", ts="t")
+W.ronde()
+check("een onvolledige zoektocht mag in de projectmap, met zijn Controle.md", not W.lees_stand()["opslaan"]["o9"].get("fout")
+      or "projectmap" in W.lees_stand()["opslaan"]["o9"].get("fout", ""), W.lees_stand()["opslaan"].get("o9"))
 
 print("%d grendels mislukt" % fouten)
 sys.exit(1 if fouten else 0)
