@@ -60,16 +60,22 @@ _LETTER = r"[^\W_]"                                   # letters en cijfers, ook 
 _EERSTE = rf"(?:{_LETTER}|[(\"'‘“])"
 _VERDER = rf"(?:{_LETTER}|[ .,;:()'\"/%@+?!’‘“”…€-])*"
 PUNT = re.compile(rf"^[-*] +((?![-*+]\s|\d+[.)]){_EERSTE}{_VERDER})$")
+# Ruwe HTML, waar ook in de werkwijze: een tag, commentaar of declaratie (Codex NA36, NA44).
+HTML = re.compile(r"<[A-Za-z/!?]")
 # Alleen een gewoon regeleinde scheidt regels; Python-Markdown op het bord kent geen andere (Codex NA39).
 VREEMDE_SCHEIDING = re.compile("[\u2028\u2029\x0b\x0c\x1c\x1d\x1e\x85]")
 
 
 def _zonder_opmaak(regel):
-    """Een regel zoals een lezer hem als kop zou herkennen: zonder onzichtbare tekens, zonder #, >, lijsttekens of
-    nummer vooraan en zonder # achteraan, in kleine letters."""
+    """Een regel zoals een lezer hem als kop zou zien: zonder onzichtbare tekens, zonder #, >, lijsttekens of
+    nummer vooraan, zonder # achteraan, zonder inline-opmaak (*, _, `, ~, \\, [ ] en de doelen van links), met
+    enkelvoudige spaties en in kleine letters (Codex NA43: "## Wat ik *nooit* doe" toont het bord als dezelfde kop)."""
     regel = "".join(c for c in regel if unicodedata.category(c) != "Cf").strip()
     regel = re.sub(r"^(?:[>#*+\-\s]|\d+[.)])+", "", regel)
-    return re.sub(r"[\s#]+$", "", regel).lower()
+    regel = re.sub(r"\]\([^)]*\)", "]", regel)
+    regel = re.sub(r"[*_`~\\\[\]]", "", regel)
+    regel = re.sub(r"[\s#]+$", "", regel)
+    return re.sub(r"\s+", " ", regel).lower()
 
 
 def _kop(regel):
@@ -115,19 +121,21 @@ def grenzen(werkwijze):
     allebei, telt niet (Codex NA17, NA22, NA27).
 
     Bewust een vaste, strikte vorm in plaats van een nabootsing van Markdown (stopregel na Codex NA32 tot NA42):
-    gelezen wordt tot de eerste regel met een codeblok (``` of ~~~) of met HTML (een "<" ergens), en elke
+    een werkwijze met ruwe HTML (een tag, commentaar) geeft geen grenzen, want het bord zet die onbewerkt op de
+    pagina; gelezen wordt tot de eerste regel met een codeblok (``` of ~~~), en elke
     grenssectie is daarvoor afgesloten door een volgende kop of het einde van de tekst; de kop staat er een keer,
     met een witregel ervoor; onder de kop staan alleen punten ("- " of "* " op kolom 0, gewone tekst) en lege
     regels; alleen een gewoon regeleinde scheidt regels. Wat daar niet in past, geeft geen grenzen: een twijfelgeval wordt geweigerd, nooit aanvaard.
     tests/test_agentnorm.py legt met de Markdown-weergave van het bord vast dat wat hier aanvaard wordt, daar zo
     als kop met lijstpunten staat. De generator eist de grenzen, het sjabloon past ze elke ronde toe."""
     tekst = (werkwijze or "").replace("\r\n", "\n").replace("\r", "\n")
-    if VREEMDE_SCHEIDING.search(tekst):
+    if VREEMDE_SCHEIDING.search(tekst) or HTML.search(tekst):
+        # Codex NA44: het bord zet ruwe HTML onbewerkt op de pagina; ook na de grenzen kan ze die verbergen
         return [], []
     regels = []
     for regel in tekst.split("\n"):
         regel = regel.expandtabs(4)
-        if "<" in regel or re.match(r"^\s*(`{3,}|~{3,})", regel):
+        if re.match(r"^\s*(`{3,}|~{3,})", regel):
             # Wat hier begint, kan het bord nog bij het laatste punt van een open sectie trekken (na een witregel
             # loopt een lijst door). Een sectie die hier nog open is, telt dus niet: ze moet afgesloten zijn door
             # een volgende kop of door het einde van de tekst.
@@ -136,8 +144,8 @@ def grenzen(werkwijze):
         regels.append(regel.rstrip())
     uit = []
     for kop in (KOP_NOOIT, KOP_MEHDI):
-        # De kop staat er maar een keer: twee regels die er als die kop uitzien, ook in code, een citaat of een
-        # lijst, kunnen op het bord twee keer dezelfde kop geven, en dan is niet zeker welke de mens leest.
+        # De kop staat er maar een keer: twee regels die er als die kop uitzien, ook in code, een citaat, een lijst
+        # of met opmaak, kunnen op het bord twee keer dezelfde kop geven, en dan is niet zeker welke de mens leest.
         if sum(1 for r in tekst.split("\n") if kop.match(_zonder_opmaak(r))) != 1:
             uit.append([])
         else:
@@ -311,12 +319,15 @@ class Ronde:
         self.taak = taak
         self.detail = ""
         self.werkwijze = ""
-        self._bronnen = dict(bronnen)
+        self._bronnen = {}
         self._noden = []
+        for naam, inhoud in dict(bronnen).items():
+            self.bron(naam, inhoud)
 
     def bron(self, naam, inhoud):
         """Een regelboek dat ik deze ronde gelezen heb. Gaat mee als kennis."""
-        self._bronnen[naam] = inhoud if isinstance(inhoud, str) else json.dumps(inhoud, ensure_ascii=False)
+        self._bronnen[str(naam)] = inhoud if isinstance(inhoud, str) else json.dumps(inhoud, ensure_ascii=False,
+                                                                                     default=str)
 
     def nood(self, tekst, wie="mehdi"):
         """Wat ik nodig heb of wat bij mij niet werkt.
@@ -385,8 +396,11 @@ class Ronde:
             self._bronnen.setdefault("collega's op het bord", collega_tekst(self.collegas))
 
     def __exit__(self, soort, fout, spoor):
-        self.agent.kennis(self._kennis(), bron=", ".join(self._bronnen) or "geen")
-        self.agent.log_verstuur()
+        try:
+            self.agent.kennis(self._kennis(), bron=", ".join(self._bronnen) or "geen")
+            self.agent.log_verstuur()
+        except Exception as e:  # noqa: BLE001  Codex NA45: de laatste hartslag gaat altijd uit (N11)
+            print(f"kennis of werkverslag niet verstuurd: {type(e).__name__}: {e}", file=sys.stderr)
         if fout is not None:
             # N11: nooit blijven hangen op "actief". Een ronde die breekt meldt dat, en sluit geen noden
             # die ze niet meer kon nakijken.

@@ -394,6 +394,30 @@ def test_na28_nood_met_een_vreemde_eigenaar_is_onbekend():
         bord.call = echt
 
 
+def test_na45_extra_bron_van_een_andere_soort_breekt_de_afsluiting_niet():
+    """Codex NA45: een extra bron die geen tekst is, liet __exit__ breken voor de laatste hartslag; de agent bleef
+    op actief. Nu wordt elke bron als tekst bewaard, en breekt het melden van kennis, dan gaat de hartslag toch uit."""
+    nb = BordNabootsing()
+    echt, bord.call = bord.call, nb.call
+    try:
+        with bord.Agent("proefagent").ronde("proef", bronnen={"extra": 42, "lijst": [1, 2]}):
+            pass
+        assert nb.statussen()[-1]["status"] == "klaar"
+        assert "extra: 2 tekens" in nb.kennis()[-1]["kennis"], nb.kennis()
+        ag = bord.Agent("proefagent")
+
+        def stuk(*a, **k):
+            raise RuntimeError("kennis stuk")
+
+        ag.kennis = stuk
+        with redirect_stderr(io.StringIO()):
+            with ag.ronde("proef"):
+                pass
+        assert nb.statussen()[-1]["status"] == "klaar", "de laatste hartslag hoort ook uit te gaan als kennis breekt"
+    finally:
+        bord.call = echt
+
+
 def test_na15_fout_in_de_startfase_blijft_niet_op_actief():
     """Codex NA15: een fout na de hartslag 'actief' maar voor het werk (lessen.json met de verkeerde vorm,
     een stuk collega-lijst) liet de agent op actief staan, want __exit__ draait dan niet."""
@@ -485,11 +509,19 @@ def test_grenzen_alleen_in_de_strikte_vorm():
     # NA39, NA40: alleen een gewoon regeleinde, en een punt is gewone tekst
     assert g("## Wat ik nooit doe\u2028- nooit wissen\n\n## Wat Mehdi beslist\n- b\n") == ([], [])
     assert g("## Wat ik nooit doe\n- <span style='display:none'>nooit wissen</span>\n\n## Wat Mehdi beslist\n- b\n") == ([], []), \
-        "bij de eerste < stopt het lezen; wat erna komt, telt niet"
+        "ruwe HTML ergens in de werkwijze: geen grenzen"
     assert g("## Wat ik nooit doe\n- _a_\n- [a](b)\n\n## Wat Mehdi beslist\n- b\n") == ([], ["b"])
     # gevonden door de proef tegen de weergave van het bord: een witregel voor de kop, en de kop maar een keer
     assert g("* x\n    - a\n## Wat ik nooit doe\n- b\n") == ([], [])
     assert g("## Wat ik nooit doe ##\n```\n```\n\n## Wat ik nooit doe\n- b\n") == ([], [])
+    # NA43: een tweede kop met opmaak, als link of als setext-kop telt als dubbel
+    tweede = "## Wat ik nooit doe\n- nooit verwijderen\n\n## Wat Mehdi beslist\n- verzenden\n\n"
+    assert g(tweede + "## Wat ik *nooit* doe\n- toch verwijderen\n") == ([], ["verzenden"])
+    assert g(tweede + "## [Wat ik nooit doe](x)\n") == ([], ["verzenden"])
+    assert g(tweede + "## Bronnen\n\nWat ik nooit doe\n===\n") == ([], ["verzenden"])
+    # NA44: ruwe HTML, ook na de grenzen, geeft geen grenzen; een losse < is gewone tekst
+    assert g(tweede + "## Bronnen\n<style>.md ul { display: none !important; }</style>\n") == ([], [])
+    assert g("Intro, minder dan < 500 tekens.\n\n" + tweede) == (["nooit verwijderen"], ["verzenden"])
 
 
 def _sjabloon_werk():
@@ -613,7 +645,10 @@ def test_wat_grenzen_aanvaardt_staat_zo_op_het_bord():
     punten_ = ["- nooit iets verwijderen", "* nooit versturen", "- a", "-\tb", "- - a", "- 1. a", "1. a", "- _a_",
                "- *a*", "- <span style='display:none'>x</span>", "- [a](b)", "- &#8203;", "- ​", "- a  ",
                "- (info@x.be)", "    - a", "  - a", "- \"x\"", "- a\\", "- x | y", "+ a", "- ok, 100% zeker!"]
+    koppen += ["## Wat ik *nooit* doe", "## [Wat ik nooit doe](x)", "##Wat Mehdi beslist", "## Wat `Mehdi` beslist"]
     anders = ["", "", "", "", "Toelichting", "```", "````", " ```", "\t```", "~~~", "<!--", "-->", "<!-- x -->",
+              "Wat ik nooit doe", "Wat Mehdi beslist", "minder dan < 500", "<style>ul{display:none}</style>",
+              "<http://x>", "a <b>vet</b>",
               "<pre>", "</pre>", "<div>", "</div>", "> citaat", "[a]: http://x", "===", "---", "- - -", "| a | b |",
               "|---|---|", " ", "x - a", "\r", "<span style='display:none'>", "    code", "\\- a"]
     rnd = random.Random(1610)

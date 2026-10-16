@@ -240,8 +240,10 @@ onder de twee afgesproken koppen "## Wat ik nooit doe" en "## Wat Mehdi beslist"
 (eventueel genummerd, of met een toevoeging tussen haakjes), in de vaste vorm: elke
 kop staat er een keer, met een witregel ervoor; eronder alleen punten (regels die op
 kolom 0 met "- " of "* " beginnen, gewone tekst zonder opmaak of HTML) en lege
-regels; en elke sectie is afgesloten door een volgende kop of het einde van de
-tekst, voor het eerste codeblok, stuk HTML of commentaar. Een kop over wat een ander
+regels; elke sectie is afgesloten door een volgende kop of het einde van de tekst,
+voor het eerste codeblok; en de werkwijze bevat nergens ruwe HTML of commentaar,
+want het bord zet die onbewerkt op de pagina, waar ze de grenzen kan verbergen
+(Codex NA44). Een kop over wat een ander
 nooit doet, telt niet. Dat is bewust een kleine, strikte vorm in plaats van een
 nabootsing van Markdown: wat er niet in past, wordt geweigerd, nooit aanvaard (Codex
 NA17 tot NA42, stopregel). Een proef in de CI legt met de Markdown-weergave van het
