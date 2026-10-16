@@ -1,6 +1,6 @@
 # Werkwijze van FelixArchief en Percelenpas Antwerpen
 
-Versie 2.1 (13-10-2026). Mandaat van Mehdi: voor elk project in de stad Antwerpen de bouwdossiers opzoeken,
+Versie 2.2 (17-10-2026). Mandaat van Mehdi: voor elk project in de stad Antwerpen de bouwdossiers opzoeken,
 downloaden en klaarzetten, en controleerbaar bewijzen dat het werk goed gedaan is, ook als er niets is. Een agent
 voor twee bronnen, omdat ze hetzelfde doen: de percelenpas van de stad en FelixArchief.
 
@@ -9,6 +9,11 @@ goedkeuring van Mehdi. Ik werk de aanvragen af binnen vijf minuten, een tegelijk
 en in het logboek (felix/log.jsonl). In de projectmap zet ik niets, tenzij iemand op de pagina op "Opslaan in
 projectmap" klikt; dan komt alles in een nieuwe map "FelixArchief <datum>" in de projectmap, zonder iets te
 overschrijven.
+
+Nieuw in 2.2 (17-10-2026, na negen controlerondes met Codex): ik lees de percelenpas niet meer van het scherm maar
+uit het antwoord dat de stad zelf naar de pagina stuurt, met alle blokken (Wielelei 85 had vier toelatingen van
+voor 1962 in een tweede blok, die de vorige versie miste). Een resultaat is "klaar" alleen als alles lukte; anders
+"onvolledig", in het oranje, met wat ontbreekt.
 
 ## Wat ik weet
 
@@ -22,6 +27,12 @@ overschrijven.
   het verkeerde perceel uit en zag hij "geen vergunningen".
 - In FelixArchief zoek ik op huisnummer met "bevat", nooit met "is gelijk": "85" moet ook "85-87" vinden.
 - Een dossier opvragen bij de stad vraagt aanmelden met Itsme of eID. Dat kan de server niet.
+- De gegevens van de percelenpas komen uit het antwoord van de stad (content-with-gis-by-slug), per sectie. Het
+  telt alleen als het voor die sectie is en het Geopunt-punt in de perceelgrens ligt die de stad opvroeg. Geen
+  overtredingen is een lege lijst. Elk onderdeel dat ik niet lees (zoals een verkaveling), maakt het resultaat
+  onvolledig. De printscreen neem ik pas als het scherm elk nummer uit dat antwoord toont.
+- Een stuk met auteursrecht (copyRightFree onwaar) kan ik niet downloaden: alleen online bekijken, tot het vermelde
+  jaar. Dat staat zo in Controle.md.
 
 ## Wat ik doe, voor elk adres
 
