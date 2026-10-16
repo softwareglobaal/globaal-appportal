@@ -70,7 +70,19 @@ def runtime(monkeypatch):
         return deepcopy(cache[sleutel]), usage
 
     register.verwerk = verwerk
-    for n, m in (("bord", bord), ("bronnen", bronnen), ("werfregister", register)):
+    register.RegisterFout = type("RegisterFout", (RuntimeError,), {})
+    register.registreer = lambda rij, d, n: {"bezoek_id": f"bezoek-{rij.get('id')}", "project_ref": f"h-architects:{d}"}
+    werf = ModuleType("werfapp")  # nooit het netwerk op: de brug zelf zit in test_werfapp_brug.py
+
+    class WerfappFout(RuntimeError):
+        def __init__(self, status, fout):
+            self.status, self.fout = status, fout
+            super().__init__(fout)
+
+    werf.WerfappFout, werf.concepten, werf.rijen = WerfappFout, [], []
+    werf.concept = lambda verslag, rij, fotos, **kw: werf.concepten.append((verslag, kw)) or werf.rijen.append(rij) or {
+        "id": 5, "nummer": f"{verslag['dossier']}-{verslag['bezoek']}", "url": "/verslag/5/bewerken", "nieuw": True, "project_nieuw": False}
+    for n, m in (("bord", bord), ("bronnen", bronnen), ("werfregister", register), ("werfapp", werf)):
         monkeypatch.setitem(sys.modules, n, m)
     p = laad("werfverslag_proef", monkeypatch)
     p.vraag_gegevens = lambda *args, **kwargs: (gegevens(), SimpleNamespace(input_tokens=20, output_tokens=10))
@@ -78,7 +90,7 @@ def runtime(monkeypatch):
            "keuzes": {"bronnen": "eigen", "doorlopend": "nee"}, "bronnen": {"nr_label": "1"}, "gegevens": {}}
     writes = []
     bord.call = lambda pad, payload=None, **kwargs: {"rijen": [deepcopy(rij)]} if payload is None else writes.append((pad, payload)) or {"ok": True}
-    return SimpleNamespace(p=p, bord=bord, bronnen=bronnen, register=register, calls=calls, rij=rij, writes=writes)
+    return SimpleNamespace(p=p, bord=bord, bronnen=bronnen, register=register, werf=werf, calls=calls, rij=rij, writes=writes)
 
 
 def test_volledige_segmenten_en_harde_bundelgrens(runtime):
@@ -214,6 +226,121 @@ def test_eigen_bronnen_en_menselijke_correctie_in_proef_zonder_hele_bundel(runti
     assert "factuur-derde.pdf" not in bericht
     assert "123 EUR" not in bericht
     assert "Door Mehdi bevestigd" in bericht
+    # De proef gaat als concept naar de werfapp en de verwijzing staat op de bordrij.
+    assert runtime.werf.concepten and runtime.werf.concepten[0][0]["bezoek"] == "1"
+    assert runtime.werf.concepten[0][1] == {"proef_pad": "/proef/bezoek/9999-1 werfverslag (concept).docx", "bronnen": ["transcript.txt"]}
+    assert runtime.werf.rijen[0]["registratie"] == {"bezoek_id": "bezoek-47", "project_ref": "h-architects:9999"}  # CX4-1: vers geregistreerd
+    # CX4-4: de proef stond al op de bordrij vóór de brug draaide
+    eerste = next(i for i, w in enumerate(runtime.writes) if w[1]["rijen"][0].get("proef_pad"))
+    assert "werfapp" not in runtime.writes[eerste][1]["rijen"][0]["proef_info"]
+    info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert info["werfapp"] == {"id": 5, "nummer": "9999-1", "url": "/verslag/5/bewerken", "nieuw": True}
+
+
+def test_werfappfout_laat_de_proef_staan_en_noemt_de_reden(runtime, monkeypatch):
+    p = runtime.p
+    p.lees_bezoekmap = lambda *args, **kwargs: ([{"naam": "transcript.txt", "pad": "/proef/transcript.txt", "tekst": "eigen"}], [], [])
+    p.vraag_verslag = lambda *args, **kwargs: ({"status_nl": "x", "status_en": "", "aanwezigen": [], "categorieen": [], "raming": [],
+                                                 "acties": [], "volgend": "", "akkoord": []}, SimpleNamespace(input_tokens=1, output_tokens=1))
+    monkeypatch.setattr(p.sjab, "naar_markdown", lambda *args: "# Concept")
+    monkeypatch.setattr(p.sjab, "naar_docx", lambda *args: b"word")
+    monkeypatch.setattr(p.sjab, "telling_open", lambda *args: {})
+    p.bronnen.upload = lambda pad, data: pad
+
+    def weigert(*args, **kwargs):
+        raise runtime.werf.WerfappFout(409, "verslag 9999-1 bestaat al in de werfapp")
+
+    runtime.werf.concept = weigert
+    pad, _ = p.proef(Agent(), "9999", 1)
+    assert pad.endswith(".docx")
+    info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert info["werfapp"] == {"fout": "verslag 9999-1 bestaat al in de werfapp", "status": 409}
+    # ook een onverwachte fout in de brug laat de betaalde proef staan
+    runtime.werf.concept = lambda *a, **k: {}["stuk"]
+    pad, _ = p.proef(Agent(), "9999", 1)
+    info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert pad.endswith(".docx") and info["werfapp"]["status"] == -1 and "KeyError" in info["werfapp"]["fout"]
+
+
+def test_bestaande_proef_naar_de_werfapp_zonder_claude(runtime):
+    p, rij = runtime.p, runtime.rij
+    verslag = {"dossier": "9999", "bezoek": "2", "soort_bezoek": "werfbezoek", "adres": "Proefstraat 1", "datum": "2026-10-14", "opgemaakt": "2026-10-15",
+               "verslagtype": "werfverslag", "status_nl": "Ruwbouw", "aanwezigen": [], "acties": [], "akkoord": [], "volgend": "",
+               "categorieen": [{"naam": "Algemeen", "punten": [{"nummer": "1.1", "titel": "Werfbezoeken", "tekst_nl": "Kantoortekst", "vlag": ""}]},
+                               {"naam": "Ruwbouw", "punten": [{"nummer": "2.2", "titel": "Latei", "tekst_nl": "Ontbreekt", "vlag": "dringend", "fotos": ["a.jpg"]}]}]}
+    with pytest.raises(RuntimeError, match="geen bewaarde proef"):
+        p.werfapp_uit_proef(Agent(), "9999", 1)
+    rij.update(verslag_md=p.sjab.naar_markdown(verslag), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 2})
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [{"naam": "a.jpg", "pad": "/proef/bezoek/fotos/a.jpg"}], [])
+    p.vraag_verslag = p.vraag_gegevens = lambda *a, **k: pytest.fail("geen modelaanroep: deze route kost geen tokens")
+    uit = p.werfapp_uit_proef(Agent(), "9999", 1)
+    assert uit["nummer"] == "9999-2" and runtime.calls == []
+    (v, kw), = runtime.werf.concepten
+    assert [pt["titel"] for c in v["categorieen"] for pt in c["punten"]] == ["Werfbezoeken", "Latei"]
+    assert v["categorieen"][0]["punten"][0]["doorlopend"] is True and not v["categorieen"][1]["punten"][0].get("doorlopend")
+    assert kw["proef_pad"].endswith(".docx")
+    assert kw["bronnen"] == []   # een bestaande proef: de bronlijst stond niet in de markdown
+    info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert info["punten"] == 2 and info["werfapp"]["nummer"] == "9999-2"
+
+
+def test_eigen_tekst_alleen_de_naamvormen_van_mehdis_eigen_hulpmiddelen(runtime):
+    """CX5-4: elke vorm die live voorkomt (synthetische titels), en wat van derden kan komen."""
+    eigen = ["transcript.txt", "transcript.docx", "00 verslag.md", "00 fotos.md", "05-07 Vergadering_ dak en goten-transcript.txt",
+             "06-24 Vergadering_ terras — afvoer-transcript.docx", "20260820 2173 Vergadering_ gevel en dak-transcript.txt",
+             "2026-06-16 Plaud transcript.txt", "Transcript.TXT"]
+    derden = ["derden-transcript.txt", "transcript aannemer.txt", "verslag transcript aannemer.docx", "aannemer transcript.docx",
+              "transcript.pdf", "05-07-transcript.txt", "opname niet getranscribeerd.md", "00 verslag aannemer.md", "notities.md"]
+    assert [n for n in eigen if not runtime.p.eigen_tekst(n)] == []
+    assert [n for n in derden if runtime.p.eigen_tekst(n)] == []
+
+
+def test_eigen_bestand_op_plaats_en_naam(runtime):
+    """CX4-3/CX4-8, met de vormen die op 16-10-2026 live in de bezoekmappen staan."""
+    e, m = runtime.p.eigen_bestand, "/Work All/x/_00. Communicatie/20260507 werfbezoek"
+    gevallen = {
+        "transcript.txt": "tekst", "05-07 Vergadering_ dak-transcript.txt": "tekst", "2026-06-16 Plaud transcript.txt": "tekst",
+        "00 verslag.md": "tekst", "fotos/IMG_1.jpg": "foto", "fotos/IMG_1.HEIC": "foto", "fotos/00 fotos.md": "tekst",
+        "fotos icloud mehdi/IMG_2.jpg": "foto", "Fotos iCloud Mehdi/IMG_3.png": "foto",
+        "offerte aannemer.pdf": None, "IMG_9.jpg": None, "4. foto's/IMG_4.jpg": None, "foto niet gebruiken/IMG_5.jpg": None,
+        "aannemer/fotos/IMG_6.jpg": None, "aannemer/transcript.txt": None, "fotos/sub/IMG_7.jpg": None, "fotos/verslag.docx": None,
+        "opname niet getranscribeerd.md": None, "opname.mp3": "opname", "video.MOV": "opname", "derden/opname.mp3": None,
+    }
+    for rel, verwacht in gevallen.items():
+        assert e(m, f"{m}/{rel}", rel.rsplit("/", 1)[-1]) == verwacht, rel
+    assert e(m, "/Work All/ander bezoek/transcript.txt", "transcript.txt") is None
+    assert e(m.upper(), f"{m}/transcript.txt", "transcript.txt") == "tekst"  # Dropbox geeft hoofdletters wisselend terug
+
+
+def test_oude_registratie_alleen_van_deze_bordrij_en_link_blijft_bij_fout(runtime):
+    p, rij = runtime.p, runtime.rij
+    fout = type("RegisterFoutProef", (runtime.register.RegisterFout,), {})
+
+    def faalt(*a):
+        raise fout("register onbereikbaar")
+
+    runtime.register.registreer = faalt
+    rij["registratie"] = {"bezoek_id": "oud", "bordrij_id": 12, "project_ref": "h-architects:9999"}   # van een andere rij (CX5-2)
+    assert p._vast_bezoek(rij, "9999", 1) == {}
+    rij["registratie"] = {"bezoek_id": "eigen", "bordrij_id": 47, "project_ref": "h-architects:9999"}
+    assert p._vast_bezoek(rij, "9999", 1)["bezoek_id"] == "eigen"
+    rij["proef_info"] = {"werfapp": {"id": 7, "nummer": "9999-1"}}
+
+    def weigert(*a, **k):
+        raise runtime.werf.WerfappFout(409, "bezet")
+
+    runtime.werf.concept = weigert
+    uit = p.naar_werfapp(Agent(), "9999", 1, rij, {"bezoek": "1", "dossier": "9999"}, [], "/p.docx")
+    assert uit == {"fout": "bezet", "status": 409, "id": 7, "nummer": "9999-1"}   # CX5-3: de bevestigde link blijft zichtbaar
+    rij["proef_info"] = {"werfapp": {"id": 7, "nummer": "9999-1", "verstuurd": True}}
+    uit = p.naar_werfapp(Agent(), "9999", 1, rij, {"bezoek": "1", "dossier": "9999"}, [], "/p.docx")
+    assert uit["verstuurd"] is True and uit["id"] == 7   # CX6-2: de verzendstatus gaat bij een fout niet verloren
+
+
+def test_dubbele_fotonamen_vallen_uit_beide_kanalen(runtime):
+    f = runtime.p.zonder_dubbele_namen([{"naam": "IMG_1.jpg", "pad": "/m/fotos/IMG_1.jpg"}, {"naam": "IMG_1.jpg", "pad": "/m/fotos icloud mehdi/IMG_1.jpg"},
+                                         {"naam": "IMG_2.jpg", "pad": "/m/fotos/IMG_2.jpg"}])
+    assert [x["naam"] for x in f] == ["IMG_2.jpg"]
 
 
 def test_conflicterende_bronnen_behouden_en_zichtbaar(runtime):

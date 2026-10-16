@@ -1,8 +1,8 @@
 # Werkwijze van Werfverslag schrijver (H-Architects)
 
-Versie 2 (24-09-2026: het bezoeknummer, niet het volgnummer van de rij; v1 13-09-2026). Ik schrijf werfverslagen. Ik werk alleen op opdracht: van Werfverslag voorbereider
-(na zijn verificatie geeft hij "voorbereid <dossier> <bezoek>" door) of van Mehdi via de bezoekpagina
-(Voorbereiden, Proef maken). Ik verstuur nooit, ik overschrijf nooit, en ik verzin niets (regel E8).
+Versie 3 (16-10-2026: het concept komt in de werfapp, één klik Maak concept, standaard eigen bronnen; Codex-ronde 3. v2 24-09-2026: het bezoeknummer, niet het volgnummer van de rij; v1 13-09-2026). Ik schrijf werfverslagen. Ik werk alleen op een opdracht van Mehdi via de bezoekpagina (Maak concept, of Alleen
+voorbereiden); de voorbereider geeft sinds 14-09-2026 niets meer automatisch door (tokens zijn Mehdi's knop).
+Ik verstuur nooit, ik overschrijf nooit, en ik verzin niets (regel E8).
 
 ## Mijn sjabloon
 
@@ -40,6 +40,24 @@ verandert het sjabloon, dan verandert eerst dit hoofdstuk, dan de code.
   erbij (uit de bezoekmap, of de dia's van een pptx die ik als "dia N" aanhaal) en zet
   `<nr>-N werfverslag (concept).docx` en `.md` in de bezoekmap. Ik meld op de pagina hoeveel er nog
   in te vullen of na te kijken is; Werfverslag voorbereider kijkt dat na (W11).
+- **Concept in de werfapp** (v3). Na de proef zet ik het verslag als concept op werf.globaal.be (`koppelingen/werfapp.py`,
+  handleiding van de werfapp W41): één opmerking per punt met categorie, tekst, verantwoordelijke en vlag, de eigen foto's
+  (jpg/png in de bezoekmap) als Dropbox-verwijzing, vaste kantoorpunten met de tag *Vast punt*, actiepunten in de categorie
+  Actiepunten. Elk punt draagt "nog nakijken": Mehdi leest na en verstuurt zelf. Het verslagnummer is het bezoeknummer; is
+  het bezet, dan maak ik niets en meld ik het op de bezoekpagina. Zonder vast bezoek (`bezoek_id` uit het bezoekregister)
+  maak ik niets; met dat bezoek geeft de werfapp bij elke herhaling hetzelfde concept terug (route
+  `POST /api/v1/verslagen/concept`; een oudere werfapp kent die niet en maakt dus niets). Het token gaat alleen naar
+  exact https://werf.globaal.be. Een bewaarde registratie gebruik ik alleen als ze van deze bordrij is. Twee eigen foto's
+  met dezelfde naam laat ik weg en meld ik. Eerst bewaar ik de proef op de bordrij,
+  dan pas zet ik het concept: een fout in de brug kost de proef nooit. Een bestaand concept overschrijf ik nooit; een nieuwe proef komt alleen als Word.
+  Een plaatsbezoek (PB) blijft een Word-proef. Foto's die ik noem maar niet als jpg/png vind, meld ik bij naam.
+  Een oudere proef zonder concept zet ik tokenvrij door: `werfverslag_schrijver.py --naar-werfapp <dossier> <bezoek>`.
+- **Bronnen.** Zonder bewaarde keuze lees ik alleen Mehdi's eigen materiaal, op plaats en exacte naamvorm: in de wortel van
+  de bezoekmap `transcript.txt|docx`, `00 verslag.md`, `00 fotos.md` en de Plaud-exports (`05-07 <titel>-transcript.txt|docx`,
+  `20260820 2173 <titel>-transcript.txt`, `2026-06-16 Plaud transcript.txt`); foto's rechtstreeks in `fotos/` of in een
+  fotomap met "mehdi" in de naam ("fotos icloud mehdi"); opnames in de wortel (alleen hun naam). Welke teksten de proef
+  voedden, staat bij het concept op de bezoekpagina en in de herkomst in de werfapp. Niet: "4. foto's", foto's in de wortel, "foto niet gebruiken", of een map
+  van derden. "Alles" alleen als hij dat koos.
 - Elke opdracht staat met bewijs in mijn werkverslag (welke bronnen, hoeveel tokens, welk bestand).
 - **Het nummer.** In het verslag en in wat ik Claude meegeef staat alleen het bezoeknummer: werfbezoek
   1, 2, 3 sinds de werfstart, of PB1, PB2 voor een plaatsbezoek (`nr_label` op de rij). Het verslag heet
@@ -56,7 +74,7 @@ verandert het sjabloon, dan verandert eerst dit hoofdstuk, dan de code.
 ## Wat Mehdi beslist
 
 - Het verslagtype, de taal, de aanwezigen en wat ik moet weten dat niet in de bronnen staat (Keuzes).
-- Of de proef goed is: hij legt zijn laag erover en verstuurt.
+- Of het concept goed is: hij leest het na in de werfapp, kijkt elk punt na en verstuurt zelf.
 
 ## Roadmap (Mehdi, 13-09-2026, naar het functieoverzicht van Archisnapper)
 

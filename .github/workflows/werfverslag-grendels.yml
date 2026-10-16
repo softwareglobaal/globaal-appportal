@@ -22,4 +22,4 @@ jobs:
       - run: python mijnagents-runner/tests/test_werfverslag_nummer.py
       - run: python mijnagents-runner/tests/test_icloud_status.py
       - run: python mijnagents-runner/tests/test_werf_fotoproducent.py
-      - run: pytest -q mijnagents-runner/tests/test_werfverslag_verwerking.py
+      - run: pytest -q mijnagents-runner/tests/test_werfverslag_verwerking.py mijnagents-runner/tests/test_werfapp_brug.py
