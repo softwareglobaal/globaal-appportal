@@ -10,6 +10,7 @@ Gebruik:
     werfverslag_schrijver.py --opdrachten          # cron elke 5 min: opdrachten uit de bak uitvoeren
     werfverslag_schrijver.py --voorbereid 2309 1   # handmatig
     werfverslag_schrijver.py --proef 2309 1
+    werfverslag_schrijver.py --naar-werfapp 2309 1   # bestaande proef als concept in de werfapp, zonder Claude
 """
 import argparse
 import os
@@ -88,6 +89,8 @@ def main():
     p.add_argument("--voorbereid", nargs=2, metavar=("DOSSIER", "BEZOEK"))
     p.add_argument("--proef", nargs=2, metavar=("DOSSIER", "BEZOEK"))
     p.add_argument("--herlayout", nargs=2, metavar=("DOSSIER", "BEZOEK"), help="Word opnieuw opmaken uit de bewaarde proef, zonder Claude")
+    p.add_argument("--naar-werfapp", nargs=2, metavar=("DOSSIER", "BEZOEK"),
+                   help="een bestaande proef als concept in de werfapp zetten, zonder Claude (geen tokens); een bestaand concept blijft")
     a = p.parse_args()
     if a.opdrachten:
         print("opdrachten:", opdrachten())
@@ -98,6 +101,15 @@ def main():
         try:
             print(wp.herlayout(ag, d, int(n)))
             ag.hartslag("klaar", taak=f"nieuwe opmaak {d}-{n} klaar")
+        finally:
+            ag.log_verstuur()
+        return
+    if a.naar_werfapp:
+        d, n = a.naar_werfapp
+        ag.hartslag("actief", taak=f"concept in de werfapp {d}-{n}")
+        try:
+            print(wp.werfapp_uit_proef(ag, d, int(n)))
+            ag.hartslag("klaar", taak=f"concept in de werfapp {d}-{n}")
         finally:
             ag.log_verstuur()
         return

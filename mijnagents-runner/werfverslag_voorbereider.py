@@ -447,7 +447,7 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
     elif br.get("proef_pad"):
         post("W7", "verslag of concept", "ok", f"proef van Werfverslag schrijver: {os.path.basename(br['proef_pad'])}")
     else:
-        post("W7", "verslag of concept", "ontbreekt", "nog geen verslag; Werfverslag schrijver maakt de proef na Keuzes en Proef op de bezoekpagina")
+        post("W7", "verslag of concept", "ontbreekt", "nog geen verslag; Werfverslag schrijver maakt het concept na Mehdi's klik Maak concept op de bezoekpagina")
     if br.get("proef_pad"):
         info = br.get("proef_info") or {}
         if isinstance(info, str):
@@ -457,14 +457,16 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
                 info = {}
         op = info.get("open") or {}
         n_open = sum(int(x or 0) for x in op.values()) if isinstance(op, dict) else 0
-        post("W11", "proef nagekeken", "ok" if n_open == 0 else "onbekend",
+        # CX3-16: dit is een automatische telling van open plaatshouders, geen menselijke lezing. Mehdi leest na in de
+        # werfapp (nakijken per punt; versturen kan pas als alles nagekeken is).
+        post("W11", "proef zonder open plaatshouders", "ok" if n_open == 0 else "onbekend",
              f"{info.get('punten', '?')} punten, {info.get('fotos', '?')} foto's; nog {op.get('in_te_vullen', '?')} in te vullen, "
              f"{op.get('na_te_kijken', '?')} na te kijken, {op.get('raming_open', '?')} ramingen open" if isinstance(op, dict) else "geen telling")
     elif not (br.get("gegevens") or {}).get("gegevens") if isinstance(br.get("gegevens"), dict) else not br.get("gegevens"):
         # Regel van Mehdi (13-09-2026): geen voorbereiding en geen proef zonder zijn knop; elke stap kost tokens.
-        post("W11", "voorbereiding door de schrijver", "onbekend", "wacht op Mehdi: knop Voorbereiden op de bezoekpagina (kost tokens, dus nooit automatisch)")
+        post("W11", "voorbereiding door de schrijver", "onbekend", "wacht op Mehdi: knop Maak concept op de bezoekpagina (kost tokens, dus nooit automatisch)")
     else:
-        post("W11", "voorbereiding door de schrijver", "ok", "gegevens met herkomst staan op de bezoekpagina; Keuzes en Proef zijn aan Mehdi")
+        post("W11", "voorbereiding door de schrijver", "ok", "gegevens met herkomst staan op de bezoekpagina; Maak concept is aan Mehdi")
     # W8 verslagnummer
     if bezoek.get("soort_bezoek") == "plaatsbezoek":
         post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek['nr_label']}: plaatsbezoek vóór de werfstart, geen werfverslagnummer (A7/A8)")

@@ -70,7 +70,17 @@ def runtime(monkeypatch):
         return deepcopy(cache[sleutel]), usage
 
     register.verwerk = verwerk
-    for n, m in (("bord", bord), ("bronnen", bronnen), ("werfregister", register)):
+    werf = ModuleType("werfapp")  # nooit het netwerk op: de brug zelf zit in test_werfapp_brug.py
+
+    class WerfappFout(RuntimeError):
+        def __init__(self, status, fout):
+            self.status, self.fout = status, fout
+            super().__init__(fout)
+
+    werf.WerfappFout, werf.concepten = WerfappFout, []
+    werf.concept = lambda verslag, rij, fotos, **kw: werf.concepten.append((verslag, kw)) or {
+        "id": 5, "nummer": f"{verslag['dossier']}-{verslag['bezoek']}", "url": "/verslag/5/bewerken", "nieuw": True, "project_nieuw": False}
+    for n, m in (("bord", bord), ("bronnen", bronnen), ("werfregister", register), ("werfapp", werf)):
         monkeypatch.setitem(sys.modules, n, m)
     p = laad("werfverslag_proef", monkeypatch)
     p.vraag_gegevens = lambda *args, **kwargs: (gegevens(), SimpleNamespace(input_tokens=20, output_tokens=10))
@@ -78,7 +88,7 @@ def runtime(monkeypatch):
            "keuzes": {"bronnen": "eigen", "doorlopend": "nee"}, "bronnen": {"nr_label": "1"}, "gegevens": {}}
     writes = []
     bord.call = lambda pad, payload=None, **kwargs: {"rijen": [deepcopy(rij)]} if payload is None else writes.append((pad, payload)) or {"ok": True}
-    return SimpleNamespace(p=p, bord=bord, bronnen=bronnen, register=register, calls=calls, rij=rij, writes=writes)
+    return SimpleNamespace(p=p, bord=bord, bronnen=bronnen, register=register, werf=werf, calls=calls, rij=rij, writes=writes)
 
 
 def test_volledige_segmenten_en_harde_bundelgrens(runtime):
@@ -214,6 +224,51 @@ def test_eigen_bronnen_en_menselijke_correctie_in_proef_zonder_hele_bundel(runti
     assert "factuur-derde.pdf" not in bericht
     assert "123 EUR" not in bericht
     assert "Door Mehdi bevestigd" in bericht
+    # De proef gaat als concept naar de werfapp en de verwijzing staat op de bordrij.
+    assert runtime.werf.concepten and runtime.werf.concepten[0][0]["bezoek"] == "1"
+    info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert info["werfapp"] == {"id": 5, "nummer": "9999-1", "url": "/verslag/5/bewerken", "nieuw": True}
+
+
+def test_werfappfout_laat_de_proef_staan_en_noemt_de_reden(runtime, monkeypatch):
+    p = runtime.p
+    p.lees_bezoekmap = lambda *args, **kwargs: ([{"naam": "transcript.txt", "pad": "/proef/transcript.txt", "tekst": "eigen"}], [], [])
+    p.vraag_verslag = lambda *args, **kwargs: ({"status_nl": "x", "status_en": "", "aanwezigen": [], "categorieen": [], "raming": [],
+                                                 "acties": [], "volgend": "", "akkoord": []}, SimpleNamespace(input_tokens=1, output_tokens=1))
+    monkeypatch.setattr(p.sjab, "naar_markdown", lambda *args: "# Concept")
+    monkeypatch.setattr(p.sjab, "naar_docx", lambda *args: b"word")
+    monkeypatch.setattr(p.sjab, "telling_open", lambda *args: {})
+    p.bronnen.upload = lambda pad, data: pad
+
+    def weigert(*args, **kwargs):
+        raise runtime.werf.WerfappFout(409, "verslag 9999-1 bestaat al in de werfapp")
+
+    runtime.werf.concept = weigert
+    pad, _ = p.proef(Agent(), "9999", 1)
+    assert pad.endswith(".docx")
+    info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert info["werfapp"] == {"fout": "verslag 9999-1 bestaat al in de werfapp", "status": 409}
+
+
+def test_bestaande_proef_naar_de_werfapp_zonder_claude(runtime):
+    p, rij = runtime.p, runtime.rij
+    verslag = {"dossier": "9999", "bezoek": "2", "soort_bezoek": "werfbezoek", "adres": "Proefstraat 1", "datum": "2026-10-14", "opgemaakt": "2026-10-15",
+               "verslagtype": "werfverslag", "status_nl": "Ruwbouw", "aanwezigen": [], "acties": [], "akkoord": [], "volgend": "",
+               "categorieen": [{"naam": "Algemeen", "punten": [{"nummer": "1.1", "titel": "Werfbezoeken", "tekst_nl": "Kantoortekst", "vlag": ""}]},
+                               {"naam": "Ruwbouw", "punten": [{"nummer": "2.2", "titel": "Latei", "tekst_nl": "Ontbreekt", "vlag": "dringend", "fotos": ["a.jpg"]}]}]}
+    with pytest.raises(RuntimeError, match="geen bewaarde proef"):
+        p.werfapp_uit_proef(Agent(), "9999", 1)
+    rij.update(verslag_md=p.sjab.naar_markdown(verslag), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 2})
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [{"naam": "a.jpg", "pad": "/proef/bezoek/fotos/a.jpg"}], [])
+    p.vraag_verslag = p.vraag_gegevens = lambda *a, **k: pytest.fail("geen modelaanroep: deze route kost geen tokens")
+    uit = p.werfapp_uit_proef(Agent(), "9999", 1)
+    assert uit["nummer"] == "9999-2" and runtime.calls == []
+    (v, kw), = runtime.werf.concepten
+    assert [pt["titel"] for c in v["categorieen"] for pt in c["punten"]] == ["Werfbezoeken", "Latei"]
+    assert v["categorieen"][0]["punten"][0]["doorlopend"] is True and not v["categorieen"][1]["punten"][0].get("doorlopend")
+    assert kw["proef_pad"].endswith(".docx")
+    info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert info["punten"] == 2 and info["werfapp"]["nummer"] == "9999-2"
 
 
 def test_conflicterende_bronnen_behouden_en_zichtbaar(runtime):

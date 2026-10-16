@@ -2123,7 +2123,7 @@ WERF_ACTIE = {
     "W4": "iCloud-wacht: foto's van die dag binnen 300 m klaarzetten; of foto's van de klant in de bezoekmap zetten",
     "W5": "Plaudwacht: opname van die dag koppelen; geen opname = verslag uit geheugen (E8)",
     "W6": "Plaudwacht: transcript maken of ophalen",
-    "W7": "Keuzes bewaren en Proef maken; Werfverslag schrijver schrijft het concept",
+    "W7": "jouw klik: Maak concept; Werfverslag schrijver zet het concept in de werfapp",
     "W9": "Mailwacht: verzending aan de klant terugvinden",
     "W11": "Werfverslag schrijver bereidt voor (opdracht staat klaar), daarna Keuzes en Proef",
 }
@@ -2150,13 +2150,15 @@ def _werf_rij(d, taak_status):
     d["heeft_keuzes"] = bool(d["keuzes"])
     # wat nog nodig is, in de woorden van het contractdashboard
     nodig = []
-    if not d["voorbereid"]:
-        nodig.append("voorbereiding door de schrijver")
-    elif not d["heeft_keuzes"]:
-        nodig.append("keuzes van Mehdi")
+    werf = (d["proef_info"] or {}).get("werfapp") or {}
+    d["werfapp"] = werf if isinstance(werf, dict) else {}
     if not d["heeft_proef"]:
-        nodig.append("proef")
+        nodig.append("jouw klik: Maak concept")   # één klik; Voorbereiden en Keuzes zijn niet verplicht (eigen bronnen standaard)
     else:
+        if d["werfapp"].get("id"):
+            nodig.append("nalezen en versturen in de werfapp")
+        elif d["werfapp"].get("fout"):
+            nodig.append(f"geen concept in de werfapp: {d['werfapp']['fout']}")
         op = (d["proef_info"] or {}).get("open") or {}
         if isinstance(op, dict) and any(op.values()):
             nodig.append(f"nakijken: {op.get('in_te_vullen', 0)} in te vullen, {op.get('na_te_kijken', 0)} na te kijken")
@@ -2164,7 +2166,9 @@ def _werf_rij(d, taak_status):
         if c["status"] == "fout" and c["nummer"] in ("W4", "W5", "W6"):
             nodig.append(c["titel"])
     d["nodig"] = nodig
-    if d["heeft_proef"]:
+    if d["heeft_proef"] and d["werfapp"].get("id"):
+        d["fase"] = "concept in de werfapp"
+    elif d["heeft_proef"]:
         d["fase"] = "proef klaar, nakijken"
     elif d["voorbereid"]:
         d["fase"] = "te controleren"

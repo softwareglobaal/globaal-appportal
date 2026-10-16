@@ -49,6 +49,7 @@ import bord  # noqa: E402
 import bronnen  # noqa: E402
 import werfextractie as extractie  # noqa: E402
 import werfregister as register  # noqa: E402
+import werfapp  # noqa: E402
 import sjabloon_werfverslag as sjab  # noqa: E402
 import sjabloon_oplevering as pv  # noqa: E402
 
@@ -124,6 +125,22 @@ def pdf_tekst(b, max_blz=None):
 
 
 EIGEN_TEKSTEN = ("transcript.txt", "00 verslag.md", "00 fotos.md")
+# Zelfde herkenning als de voorbereider (TRANSCRIPT_PAT): de Plaudwacht en de skill noemen een transcript ook
+# "2026-06-16 Plaud transcript.txt" of "05-07 Vergadering_ ...-transcript.docx" (gemeten 16-10-2026, CX3-9).
+EIGEN_PAT = re.compile(r"transcri|00 verslag|00 fotos", re.I)
+
+
+def eigen_tekst(naam):
+    laag = naam.lower()
+    return laag in EIGEN_TEKSTEN or (laag.endswith((".txt", ".md", ".docx")) and bool(EIGEN_PAT.search(naam))
+                                     and not re.search(r"niet getranscribeerd|geen opname", laag))
+
+
+def bronkeuze(rij):
+    """Regel van Mehdi (14-09-2026): een verslag bevat alleen wat hij zelf zag, fotografeerde en ter plaatse besprak.
+    Standaard dus 'eigen', ook zonder bewaarde keuzes; 'alle' alleen als hij op de bezoekpagina 'alles' koos (CX3-5)."""
+    k = str((rij.get("keuzes") or {}).get("bronnen") or "").strip().lower()
+    return "alle" if k in ("alles", "alle") else "eigen"
 
 
 def lees_bezoekmap(bezoekmap, alleen_eigen=False):
@@ -142,7 +159,7 @@ def lees_bezoekmap(bezoekmap, alleen_eigen=False):
         if laag.startswith(".") or "(concept)" in laag:
             continue
         in_fotos = "/fotos/" in pad.lower()
-        if alleen_eigen and not (laag in EIGEN_TEKSTEN or in_fotos or laag.endswith((".mp3", ".m4a", ".wav"))):
+        if alleen_eigen and not (eigen_tekst(naam) or in_fotos or laag.endswith((".mp3", ".m4a", ".wav"))):
             continue
         if in_fotos and laag.endswith(".heic") and (laag[:-5] + ".jpg") in namen:
             continue  # de jpeg-kopie telt, niet het HEIC-origineel
@@ -422,7 +439,7 @@ def _voorbereid_bronnen(ag, dossier, volgnr, rij, teksten, fotos, opnames):
     werk = [(bron, extractie.segmenten(bron)) for bron in teksten]
     if not werk:
         raise extractie.BronLeesFout("geen leesbaar transcript of document; geen feitenvoorbereiding mogelijk")
-    beleid = (rij.get("keuzes") or {}).get("bronnen") or "alle"
+    beleid = bronkeuze(rij)
     resultaten, verwerkingen, dekking = [], [], []
     tokens_in = tokens_uit = cache_lezen = cache_schrijven = 0
     for bron, segmenten in werk:
@@ -477,7 +494,7 @@ def _voorbereid_bronnen(ag, dossier, volgnr, rij, teksten, fotos, opnames):
 def voorbereid(ag, dossier, volgnr):
     rij = _rij(dossier, volgnr)
     ag.log(f"{dossier}-{volgnr}", "bron", f"bezoekmap lezen: {rij['bezoekmap']}")
-    eigen = (rij.get("keuzes") or {}).get("bronnen") == "eigen"
+    eigen = bronkeuze(rij) == "eigen"
     teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=eigen)
     nr, soort_bezoek = bezoeknummer(rij, volgnr)
     ag.log(f"{dossier}-{volgnr}", "bron", f"{soort_bezoek} {nr} (rij {volgnr}): {len(teksten)} tekstbron(nen), {len(fotos)} foto's, {len(opnames)} opname(s) gelezen"
@@ -551,7 +568,7 @@ def _nummer_punten(verslag, bezoek, doorlopend):
 def proef(ag, dossier, volgnr):
     rij = _rij(dossier, volgnr)
     keuzes = rij.get("keuzes") or {}
-    eigen = keuzes.get("bronnen") == "eigen"
+    eigen = bronkeuze(rij) == "eigen"
     teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=eigen)
     # De oude brede voorbereiding kan derdenfeiten bevatten. Herbouw uit de actuele
     # toegestane segmentcache, zonder een tweede volledige modelanalyse of bordupdate.
@@ -594,7 +611,7 @@ def proef(ag, dossier, volgnr):
     if OPDRACHT.get():
         _rij(dossier, volgnr)
     uit, usage = register.verwerk(rij, dossier, volgnr, "proef", inp, MODEL, "werfproef-feiten-1", "werfverslag-1", taal,
-                                  keuzes.get("bronnen") or "alle", extractie.manifest(teksten, fotos, opnames),
+                                  bronkeuze(rij), extractie.manifest(teksten, fotos, opnames),
                                   lambda: vraag_verslag(kop, feiten, hoofdkeuzes, fotolijst(fotos), max_tokens=8000), 8000)
     extractie.valideer(uit, VERSLAG_SCHEMA["input_schema"])
     if keuzes.get("aanwezigen"):
@@ -620,11 +637,57 @@ def proef(ag, dossier, volgnr):
     n_punten = sum(len(c["punten"]) for c in verslag["categorieen"])
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"proef gezet: {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {n_punten} punten, "
            f"{len(beelden)} foto's) en {os.path.basename(pad_md)} in de bezoekmap; open: {telling} ({usage.input_tokens}+{usage.output_tokens} tokens)")
+    werf = naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx)
     _bewaar(rij, dossier, volgnr, verslag_md=md, proef_pad=pad_docx, proef_ts=vandaag,
             proef_info={"verslagtype": verslagtype, "taal": taal, "punten": n_punten, "fotos": len(beelden), "open": telling, "docx_kb": len(docx) // 1024,
                         "dekking": gegevens["dekking"], "beeldanalyse": "niet uitgevoerd", "hergebruikt": bool(getattr(usage, "hergebruikt", False)),
-                        "_verwerking": getattr(usage, "verwerking", {})})
+                        "werfapp": werf, "_verwerking": getattr(usage, "verwerking", {})})
     return pad_docx, md
+
+
+def naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx):
+    """De proef als conceptverslag in de werfapp, waar Mehdi naleest en verstuurt. Een fout hier laat de Word-proef
+    staan: de reden komt op de bordrij en in het logboek, er wordt niets opnieuw betaald."""
+    vorige = (rij.get("proef_info") or {}).get("werfapp") or {}
+    try:
+        r = werfapp.concept(verslag, rij, fotos, proef_pad=pad_docx, vorige=vorige if vorige.get("id") else None)
+    except werfapp.WerfappFout as ex:
+        ag.log(f"{dossier}-{volgnr}", "fout" if ex.status not in (0, 409) else "bevinding", f"geen concept in de werfapp: {ex.fout}")
+        bewaard = {k: vorige[k] for k in ("id", "nummer", "url") if vorige.get("id") and vorige.get(k)}
+        return {"fout": ex.fout, "status": ex.status, **bewaard}
+    wat = "concept gezet" if r["nieuw"] else "concept bestond al en blijft zoals het is"
+    mis = r.get("fotos_niet_gevonden") or []
+    ag.log(f"{dossier}-{volgnr}", "schrijf", f"werfapp: {wat}: verslag {r['nummer']}" + (" (project nieuw aangemaakt)" if r["project_nieuw"] else "")
+           + (f"; {len(mis)} genoemde foto('s) niet als jpg/png in de bezoekmap: {', '.join(mis[:10])}" if mis else ""))
+    uit = {k: r[k] for k in ("id", "nummer", "url", "nieuw")}
+    if mis:
+        uit["fotos_niet_gevonden"] = mis[:50]
+    return uit
+
+
+def werfapp_uit_proef(ag, dossier, volgnr):
+    """Een bestaande proef (de bewaarde markdown) als concept in de werfapp, zonder Claude: geen tokens. Voor proeven van
+    vóór de brug (16-10-2026) en na een mislukte poging. Een concept dat al bestaat, blijft zoals Mehdi het achterliet."""
+    rij = _rij(dossier, volgnr)
+    md = rij.get("verslag_md") or ""
+    if not md.strip() or not rij.get("proef_pad"):
+        raise RuntimeError("geen bewaarde proef (verslag_md) om door te zetten; eerst Maak concept")
+    v = sjab.van_markdown(md)
+    if str(v.get("dossier") or "") != str(dossier):
+        raise RuntimeError("de bewaarde proef hoort niet bij dit dossier")
+    v["datum"] = v.get("datum") or rij["datum"]
+    v["adres"] = v.get("adres") or rij.get("adres", "")
+    vaste = {titel for _, titel, _, _ in sjab.DOORLOPEND}
+    for cat in v["categorieen"]:
+        for p in cat["punten"]:
+            if p.get("titel") in vaste and str(p.get("nummer", "")).startswith("1."):
+                p["doorlopend"] = True   # de markdown bewaart de vlag niet; de titel en het nummer 1.x wel
+    _, fotos, _ = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(bronkeuze(rij) == "eigen"))
+    werf = naar_werfapp(ag, dossier, volgnr, rij, v, fotos, rij["proef_pad"])
+    info = dict(rij.get("proef_info") or {})
+    info["werfapp"] = werf
+    _bewaar(rij, dossier, volgnr, proef_info=info)
+    return werf
 
 
 def herlayout(ag, dossier, volgnr):
@@ -636,7 +699,7 @@ def herlayout(ag, dossier, volgnr):
     v = sjab.van_markdown(md)
     v.setdefault("datum", rij["datum"]); v.setdefault("adres", rij.get("adres", "")); v.setdefault("opgemaakt", date.today().isoformat())
     keuzes = rij.get("keuzes") or {}
-    teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(keuzes.get("bronnen") == "eigen"))
+    teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(bronkeuze(rij) == "eigen"))
     beelden = _fotos_verzamelen(teksten, fotos, v)
     docx = sjab.naar_docx(v, beelden)
     naam = f"{dossier}-{v.get('bezoek') or bezoeknummer(rij, volgnr)[0]} {'verslag plaatsbezoek' if v.get('soort_bezoek') == 'plaatsbezoek' else 'werfverslag'} (concept)"
