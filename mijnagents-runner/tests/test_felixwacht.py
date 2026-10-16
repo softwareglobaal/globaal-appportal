@@ -353,76 +353,51 @@ check("een lijst die nog laadt, wordt pas aanvaard als ze stabiel is: twee overt
 
 
 
-# het bronantwoord van de stad (echte gegevens van Grotesteenweg 459, 17-10-2026): volledig, niet het scherm
-_bron = json.load(open(os.path.join(HIER, "percelenpas_grotesteenweg459.json"), encoding="utf-8"))
-_v = PP.vergunningen_uit_bron(_bron["vergunningen"])
+# het bronantwoord van de stad: echte aanvraag en echt antwoord, gemeten 17-10-2026 (alleen fields.content bewaard)
+_g = json.load(open(os.path.join(HIER, "percelenpas_grotesteenweg459_bron.json"), encoding="utf-8"))
+_w = json.load(open(os.path.join(HIER, "percelenpas_wielelei85_bron.json"), encoding="utf-8"))
+_v = PP.vergunningen_uit_bron(PP._layer_tile(_g["vergunningen"]["antwoord"]))
 check("de vergunningen komen uit het bronantwoord, met 197317935 van 13-11-1973",
       any(x["dossiernummer"] == "197317935" and x["datum"] == "13/11/1973" for x in _v) and len(_v) == 3, _v)
-_s, _l = PP.bouwovertredingen_uit_bron(_bron["bouwovertredingen"])
+_s, _l = PP.bouwovertredingen_uit_bron(PP._layer_tile(_g["bouwovertredingen"]["antwoord"]))
 check("de bouwovertredingen komen uit het bronantwoord: twee, met omschrijving", _s == "2 vastgesteld" and len(_l) == 2
       and _l[1]["omschrijving"].endswith("in strijd met vergunning") and _l[1]["registratienummer"] == "11002_2024_11492", _l)
-check("een leeg bronantwoord betekent 'geen gekend'", PP.bouwovertredingen_uit_bron({"subLayerItems": []}) == ("geen gekend", []))
-check("een toelating voor 1962 krijgt '<id>_<inventaris>' zoals de stad toont",
+_vw = PP.vergunningen_uit_bron(PP._layer_tile(_w["vergunningen"]["antwoord"]))
+check("alle blokken tellen: Wielelei 85 heeft 5 vergunningen, 4 toelatingen voor 1962 staan in een tweede blok",
+      len(_vw) == 5 and sum(x["type"] == "Toelating voor 1962" for x in _vw) == 4, [x["dossiernummer"] for x in _vw])
+check("het inventarisnummer staat er een keer: 214157_329#11928, niet dubbel",
+      any(x["dossiernummer"] == "214157_329#11928" for x in _vw) and not any(x["dossiernummer"].count("#") > 1 for x in _vw))
+check("lege inhoud, zoals de stad ze echt stuurt, is 'geen gekend'",
+      PP._layer_tile(_w["bouwovertredingen"]["antwoord"]) == {} and PP.bouwovertredingen_uit_bron({}) == ("geen gekend", []))
+check("de echte antwoorden geven geen vals alarm", not any(PP.ontbrekend_in_bron(PP._layer_tile(d[s]["antwoord"]), s)
+      for d in (_g, _w) for s in ("vergunningen", "bouwovertredingen")))
+check("een toelating zonder inventaris in fileNumber krijgt '<id>_<inventaris>'",
       PP.vergunningen_uit_bron({"subLayerItems": [{"permits": [{"fileNumber": "214157", "inventoryNumber": "329#11928"}]}]})[0]["dossiernummer"]
       == "214157_329#11928")
 
-
-class _NepAntwoord:
-    """Het antwoord volgt de sectie die na het openen geladen is, zoals op de echte site (niet de vorige sectie)."""
-    def __init__(self, pagina, leeg=()):
-        self.value = self
-        self.status = 200
-        self._p, self._leeg = pagina, leeg
-    def json(self):
-        sectie = "bouwovertredingen" if "/bouwovertredingen" in self._p.url else "vergunningen"
-        if sectie in self._leeg:  # zo antwoordt de stad als er niets is (Wielelei 85, 17-10-2026)
-            return {"fields": {"title": "x", "content": {"title": "x", "content": []}}}
-        return {"fields": {"content": {"content": [{"value": {"layerTile": _bron[sectie]}}]}}}
-    def __enter__(self):
-        return self
-    def __exit__(self, *a):
-        return False
+# Codex FX28: alleen de gemeten lege vorm is 'geen'; een halve of onbekende vorm niet
+_blok = lambda tile: {"value": {"layerTile": tile}}  # noqa: E731
+_inh = lambda *b: {"fields": {"content": {"content": list(b)}}}  # noqa: E731
+check("een layerTile zonder subLayerItems is geen 'geen gekend'", PP._layer_tile(_inh(_blok({}))) is None
+      and PP._layer_tile(_inh(_blok({"subLayerItems": []}))) is None)
+check("een blok zonder layerTile naast een goed blok maakt het geheel onbekend",
+      PP._layer_tile(_inh(_blok({"subLayerItems": [{"permits": [{"fileNumber": "1"}]}]}), {"value": {"iets": 1}})) is None)
+check("een onbekende vorm van het antwoord is geen 'geen gekend'", PP._layer_tile({"fields": {"x": 1}}) is None)
+_half = {"subLayerItems": [{"subItemTitle": "Uitvoeren zonder vergunning"}]}
+check("een overtreding zonder dossiergegevens telt mee en wordt gemeld",
+      PP.bouwovertredingen_uit_bron(_half)[0] == "1 vastgesteld" and PP.ontbrekend_in_bron(_half, "bouwovertredingen"))
+check("een verkaveling (allotmentPermits) die we niet lezen, wordt gemeld",
+      PP.ontbrekend_in_bron({"subLayerItems": [{"subItemTitle": "Verkavelingen", "allotmentPermits": [{"fileNumber": "1"}]}]}, "vergunningen"))
 
 
-class _NepPaginaBron(_NepPagina):
-    """Een pagina waarvan het scherm leeg blijft, maar het bronantwoord volledig is."""
-    leeg = ()
-    def expect_response(self, *a, **k):
-        return _NepAntwoord(self, self.leeg)
-    def goto(self, url, **k):
-        self.url = url
-
-
-class _NepContextBron:
-    def new_page(self):
-        return _NepPaginaBron()
-
-
-_stad = PP.lees(_NepContextBron(), 51.18, 4.43, "Grotesteenweg 459, 2600 Antwerpen")
-check("lees() gebruikt het bronantwoord en zegt dat (vergunningen)", _stad["bron"].get("vergunningen") == "bronantwoord van de stad"
-      and len(_stad["vergunningen"]) == 3, _stad["bron"])
-check("lees() leest elke sectie uit haar eigen bronantwoord: twee bouwovertredingen, geen fout",
-      _stad["bron"].get("bouwovertredingen") == "bronantwoord van de stad" and _stad["bouwovertredingen"] == "2 vastgesteld"
-      and not _stad["fouten"], (_stad["bouwovertredingen"], _stad["fouten"]))
-_stad2 = PP.lees(_NepContext(), 51.2, 4.47, "August Van de Wielelei 85, 2100 Antwerpen")
-check("zonder bronantwoord valt lees() terug op het scherm, en zegt dat", "scherm" in _stad2["bron"].get("vergunningen", ""), _stad2["bron"])
-check("zonder bronantwoord is het resultaat onvolledig: twee gelijke schermen bewijzen niets (Codex-ronde 7)",
-      any("niet bevestigd" in f for f in _stad2["fouten"]), _stad2["fouten"])
-
-
-class _NepContextBronLeeg:
-    def new_page(self):
-        p = _NepPaginaBron()
-        p.leeg = ("bouwovertredingen",)
-        return p
-
-
-_stad3 = PP.lees(_NepContextBronLeeg(), 51.22, 4.48, "August Van de Wielelei 85, 2100 Antwerpen")
-check("een lege inhoud van de stad is een uitdrukkelijk 'geen gekend', geen terugval op het scherm",
-      _stad3["bouwovertredingen"] == "geen gekend" and _stad3["bron"].get("bouwovertredingen") == "bronantwoord van de stad"
-      and not _stad3["fouten"], (_stad3["bouwovertredingen"], _stad3["bron"], _stad3["fouten"]))
-check("een onbekende vorm van het bronantwoord is geen 'geen gekend'", PP._layer_tile({"fields": {"x": 1}}) is None
-      and PP._layer_tile({"fields": {"content": {"content": [{"value": {"iets": 1}}]}}}) is None)
+# Codex FX27: het antwoord telt alleen voor de eigen sectie en het perceel van het Geopunt-adres
+_vk = [{"x": 51.0 + a, "y": 4.0 + b} for a, b in ((-0.0001, -0.00015), (0.0001, -0.00015), (0.0001, 0.00015), (-0.0001, 0.00015))]
+check("het Geopunt-punt ligt in de perceelgrens die de stad opvroeg (Grotesteenweg 459 en Wielelei 85)",
+      PP._binnen(_g["punt"], _g["vergunningen"]["aanvraag"]["geometry"]) and PP._binnen(_w["punt"], _w["vergunningen"]["aanvraag"]["geometry"]))
+check("een ander perceel telt niet: Wielelei ligt niet in de grens van Grotesteenweg",
+      not PP._binnen(_w["punt"], _g["vergunningen"]["aanvraag"]["geometry"]))
+check("2 m buiten de rand telt nog (marge 3 m), 10 m niet",
+      PP._binnen((51.0001 + 2 / 110540, 4.0), _vk) and not PP._binnen((51.0001 + 10 / 110540, 4.0), _vk))
 
 
 class _R:
@@ -430,10 +405,103 @@ class _R:
         self.url, self.request = url, type("Q", (), {"post_data": post})()
 
 
-check("alleen het bronantwoord van de eigen sectie telt",
-      PP._is_bronantwoord(_R("https://x/content-with-gis-by-slug", '{"url":"/percelenpas/bouwovertredingen"}'), "bouwovertredingen")
-      and not PP._is_bronantwoord(_R("https://x/content-with-gis-by-slug", '{"url":"/percelenpas/vergunningen"}'), "bouwovertredingen")
-      and not PP._is_bronantwoord(_R("https://x/andere", '{"url":"/percelenpas/vergunningen"}'), "vergunningen"))
+_bu = "https://omgeving.antwerpen.be/passthroughapi/content/content-with-gis-by-slug"
+check("alleen het bronantwoord van precies de eigen sectie telt",
+      PP._is_bronantwoord(_R(_bu, '{"url": "/percelenpas/bouwovertredingen"}'), "bouwovertredingen")
+      and not PP._is_bronantwoord(_R(_bu, '{"url": "/percelenpas/vergunningen"}'), "bouwovertredingen")
+      and not PP._is_bronantwoord(_R(_bu, '{"url": "/percelenpas/bouwovertredingen-archief"}'), "bouwovertredingen")
+      and not PP._is_bronantwoord(_R("https://x/andere", '{"url": "/percelenpas/vergunningen"}'), "vergunningen"))
+
+
+class _NepResp:
+    def __init__(self, aanvraag, antwoord):
+        self.url, self.status, self._a = _bu, 200, antwoord
+        self.request = type("Q", (), {"post_data": json.dumps(aanvraag)})()
+    def json(self):
+        return self._a
+
+
+class _NepVangst:
+    """Zoals Playwright: het filter van lees() beslist welk antwoord telt; past er geen, dan een timeout."""
+    def __init__(self, pagina, filter_):
+        self._p, self._f = pagina, filter_
+    def __enter__(self):
+        return self
+    def __exit__(self, soort, *a):
+        if soort:
+            return False
+        r = self._p.antwoord_voor(self._p.url)
+        if not self._f(r):
+            raise TimeoutError('Timeout 90000ms exceeded while waiting for event "response"')
+        self.value = r
+        return False
+
+
+class _NepPaginaBron(_NepPagina):
+    """Een pagina met de echte aanvraag en het echte antwoord van de geladen sectie; het scherm blijft leeg."""
+    data, sectie_fout, perceel_fout = _g, False, False
+    def expect_response(self, filter_, **k):
+        return _NepVangst(self, filter_)
+    def antwoord_voor(self, url):
+        sectie = "bouwovertredingen" if "/bouwovertredingen" in url else "vergunningen"
+        if self.sectie_fout:  # de stad antwoordt met de andere sectie
+            sectie = "vergunningen" if sectie == "bouwovertredingen" else "bouwovertredingen"
+        aanvraag = dict(self.data[sectie]["aanvraag"])
+        if self.perceel_fout:  # de stad antwoordt voor een perceel 100 m verder
+            aanvraag["geometry"] = [{"x": h["x"] + 0.0009, "y": h["y"]} for h in aanvraag["geometry"]]
+        return _NepResp(aanvraag, self.data[sectie]["antwoord"])
+
+
+def _ctx_bron(**instellingen):
+    class _C:
+        def new_page(self):
+            p = _NepPaginaBron()
+            for k, v in instellingen.items():
+                setattr(p, k, v)
+            return p
+    return _C()
+
+
+_stad = PP.lees(_ctx_bron(), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
+check("lees() gebruikt het bronantwoord en zegt dat (vergunningen)", _stad["bron"].get("vergunningen") == "bronantwoord van de stad"
+      and len(_stad["vergunningen"]) == 3, _stad["bron"])
+check("lees() leest elke sectie uit haar eigen bronantwoord: twee bouwovertredingen, geen fout",
+      _stad["bron"].get("bouwovertredingen") == "bronantwoord van de stad" and _stad["bouwovertredingen"] == "2 vastgesteld"
+      and not _stad["fouten"], (_stad["bouwovertredingen"], _stad["fouten"]))
+_stad3 = PP.lees(_ctx_bron(data=_w), *_w["punt"], "August Van de Wielelei 85, 2100 Antwerpen")
+check("Wielelei 85 via lees(): 5 vergunningen, 'geen gekend' uit de bron, geen fout",
+      len(_stad3["vergunningen"]) == 5 and _stad3["bouwovertredingen"] == "geen gekend"
+      and _stad3["bron"].get("bouwovertredingen") == "bronantwoord van de stad" and not _stad3["fouten"],
+      (len(_stad3["vergunningen"]), _stad3["bouwovertredingen"], _stad3["fouten"]))
+_stad4 = PP.lees(_ctx_bron(sectie_fout=True), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
+check("een antwoord van een andere sectie telt niet: terugval op het scherm en onvolledig",
+      "scherm" in _stad4["bron"].get("bouwovertredingen", "") and any("niet bevestigd" in f for f in _stad4["fouten"]), _stad4["fouten"])
+_stad5 = PP.lees(_ctx_bron(perceel_fout=True), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
+check("een antwoord voor een ander perceel telt niet en wordt zo gemeld",
+      "scherm" in _stad5["bron"].get("vergunningen", "") and any("ander perceel" in f for f in _stad5["fouten"]), _stad5["fouten"])
+_stad2 = PP.lees(_NepContext(), 51.2, 4.47, "August Van de Wielelei 85, 2100 Antwerpen")
+check("zonder bronantwoord valt lees() terug op het scherm, en zegt dat", "scherm" in _stad2["bron"].get("vergunningen", ""), _stad2["bron"])
+check("zonder bronantwoord is het resultaat onvolledig: twee gelijke schermen bewijzen niets (Codex-ronde 7)",
+      any("niet bevestigd" in f for f in _stad2["fouten"]), _stad2["fouten"])
+
+
+class _NepScherm:
+    def __init__(self, teksten):
+        self._t = list(teksten)
+    def locator(self, *a, **k):
+        s = self
+        class _L:
+            def inner_text(self_):
+                return s._t.pop(0) if len(s._t) > 1 else s._t[0]
+        return _L()
+    def wait_for_timeout(self, *a):
+        return None
+
+
+check("de printscreen wacht tot het scherm toont wat de stad doorgaf (Codex FX29)",
+      PP._scherm_volgt_bron(_NepScherm(["laadt", "202410548 11002_2024_11491", "202410548 11002_2024_11491 11002_2024_11492"]),
+                            ["202410548", "11002_2024_11491", "11002_2024_11492"]))
+check("toont het scherm het nooit, dan zegt de controle nee", not PP._scherm_volgt_bron(_NepScherm(["laadt"]), ["202410548"], 3))
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -1,0 +1,319 @@
+{
+ "adres": "August Van de Wielelei 85, 2100 Antwerpen",
+ "punt": [
+  51.21954450420093,
+  4.479184399282249
+ ],
+ "gemeten": "2026-10-17",
+ "vergunningen": {
+  "aanvraag": {
+   "url": "/percelenpas/vergunningen",
+   "geometry": [
+    {
+     "x": 51.21988,
+     "y": 4.479128
+    },
+    {
+     "x": 51.219874,
+     "y": 4.479131
+    },
+    {
+     "x": 51.219673,
+     "y": 4.479233
+    },
+    {
+     "x": 51.219639,
+     "y": 4.479251
+    },
+    {
+     "x": 51.219627,
+     "y": 4.479257
+    },
+    {
+     "x": 51.219492,
+     "y": 4.479326
+    },
+    {
+     "x": 51.219407,
+     "y": 4.479369
+    },
+    {
+     "x": 51.219366,
+     "y": 4.479165
+    },
+    {
+     "x": 51.21945,
+     "y": 4.479122
+    },
+    {
+     "x": 51.219599,
+     "y": 4.479046
+    },
+    {
+     "x": 51.219668,
+     "y": 4.479011
+    },
+    {
+     "x": 51.219715,
+     "y": 4.478987
+    },
+    {
+     "x": 51.219833,
+     "y": 4.478927
+    },
+    {
+     "x": 51.219885,
+     "y": 4.478901
+    },
+    {
+     "x": 51.219886,
+     "y": 4.478903
+    },
+    {
+     "x": 51.219897,
+     "y": 4.478956
+    },
+    {
+     "x": 51.219899,
+     "y": 4.478971
+    },
+    {
+     "x": 51.2199,
+     "y": 4.478974
+    },
+    {
+     "x": 51.219913,
+     "y": 4.479039
+    },
+    {
+     "x": 51.219926,
+     "y": 4.479105
+    },
+    {
+     "x": 51.21988,
+     "y": 4.479128
+    }
+   ],
+   "district": "DEURNE"
+  },
+  "antwoord": {
+   "fields": {
+    "content": {
+     "title": null,
+     "content": [
+      {
+       "value": {
+        "itemTitle": {
+         "textType": "h3",
+         "text": "Stedenbouwkundige vergunningen"
+        },
+        "itemDescription": "<p>Intro bij stedebouwkundige vergunningen</p>",
+        "layerTile": {
+         "subLayerItems": [
+          {
+           "subItemTitle": "Stedenbouwkundige vergunningen",
+           "permits": [
+            {
+             "fileNumber": "19654625",
+             "fileId": "228853",
+             "decisionDate": "-124070400000",
+             "decisionDateUnix": -124070400000,
+             "decisionDateString": "",
+             "subject": "bouwen van een appartementsgebouw met autobergplaatsen",
+             "cleanSubject": "bouwen van een appartementsgebouw met autobergplaatsen",
+             "decision": "Vergunning",
+             "type": "Stedenbouwkundige vergunningen",
+             "inventoryNumber": null
+            }
+           ],
+           "showItems": "False",
+           "showAllotmentPermits": "False",
+           "showConstructionPermits": "False",
+           "showPermits": "True"
+          }
+         ],
+         "showSubLayerItems": "True"
+        }
+       },
+       "multiple": false,
+       "componentType": "layerItem"
+      },
+      {
+       "value": {
+        "itemTitle": {
+         "textType": "h3",
+         "text": "Archief vergunningen"
+        },
+        "itemDescription": "<p>Intro bij archief vergunningen</p>",
+        "layerTile": {
+         "subLayerItems": [
+          {
+           "subItemTitle": "Toelating voor 1962",
+           "permits": [
+            {
+             "fileNumber": "214157_329#11928",
+             "fileId": "214157_329#11928",
+             "decisionDate": "1935-01-01",
+             "decisionDateUnix": -1104537600000,
+             "decisionDateString": "",
+             "subject": "bouwen koepel (enkel plan in dossier)",
+             "cleanSubject": "bouwen koepel (enkel plan in dossier)",
+             "decision": null,
+             "type": "Toelating voor 1962",
+             "inventoryNumber": "329#11928"
+            },
+            {
+             "fileNumber": "214150_329#12768",
+             "fileId": "214150_329#12768",
+             "decisionDate": "1935-01-01",
+             "decisionDateUnix": -1104537600000,
+             "decisionDateString": "",
+             "subject": "bouwen houten duivenhok (enkel plan in dossier)",
+             "cleanSubject": "bouwen houten duivenhok (enkel plan in dossier)",
+             "decision": null,
+             "type": "Toelating voor 1962",
+             "inventoryNumber": "329#12768"
+            },
+            {
+             "fileNumber": "258982_329#18797",
+             "fileId": "258982_329#18797",
+             "decisionDate": "1946-01-01",
+             "decisionDateUnix": -757382400000,
+             "decisionDateString": "",
+             "subject": "herstelling",
+             "cleanSubject": "herstelling",
+             "decision": null,
+             "type": "Toelating voor 1962",
+             "inventoryNumber": "329#18797"
+            },
+            {
+             "fileNumber": "258986_329#18999",
+             "fileId": "258986_329#18999",
+             "decisionDate": "1946-01-01",
+             "decisionDateUnix": -757382400000,
+             "decisionDateString": "",
+             "subject": "voorgevel",
+             "cleanSubject": "voorgevel",
+             "decision": null,
+             "type": "Toelating voor 1962",
+             "inventoryNumber": "329#18999"
+            }
+           ],
+           "showItems": "False",
+           "showAllotmentPermits": "False",
+           "showConstructionPermits": "False",
+           "showPermits": "True"
+          }
+         ],
+         "showSubLayerItems": "True"
+        }
+       },
+       "multiple": false,
+       "componentType": "layerItem"
+      }
+     ]
+    }
+   }
+  }
+ },
+ "bouwovertredingen": {
+  "aanvraag": {
+   "url": "/percelenpas/bouwovertredingen",
+   "geometry": [
+    {
+     "x": 51.21988,
+     "y": 4.479128
+    },
+    {
+     "x": 51.219874,
+     "y": 4.479131
+    },
+    {
+     "x": 51.219673,
+     "y": 4.479233
+    },
+    {
+     "x": 51.219639,
+     "y": 4.479251
+    },
+    {
+     "x": 51.219627,
+     "y": 4.479257
+    },
+    {
+     "x": 51.219492,
+     "y": 4.479326
+    },
+    {
+     "x": 51.219407,
+     "y": 4.479369
+    },
+    {
+     "x": 51.219366,
+     "y": 4.479165
+    },
+    {
+     "x": 51.21945,
+     "y": 4.479122
+    },
+    {
+     "x": 51.219599,
+     "y": 4.479046
+    },
+    {
+     "x": 51.219668,
+     "y": 4.479011
+    },
+    {
+     "x": 51.219715,
+     "y": 4.478987
+    },
+    {
+     "x": 51.219833,
+     "y": 4.478927
+    },
+    {
+     "x": 51.219885,
+     "y": 4.478901
+    },
+    {
+     "x": 51.219886,
+     "y": 4.478903
+    },
+    {
+     "x": 51.219897,
+     "y": 4.478956
+    },
+    {
+     "x": 51.219899,
+     "y": 4.478971
+    },
+    {
+     "x": 51.2199,
+     "y": 4.478974
+    },
+    {
+     "x": 51.219913,
+     "y": 4.479039
+    },
+    {
+     "x": 51.219926,
+     "y": 4.479105
+    },
+    {
+     "x": 51.21988,
+     "y": 4.479128
+    }
+   ],
+   "district": "DEURNE"
+  },
+  "antwoord": {
+   "fields": {
+    "content": {
+     "title": null,
+     "content": []
+    }
+   }
+  }
+ }
+}
