@@ -292,12 +292,40 @@ def test_eigen_bestand_op_plaats_en_naam(runtime):
         "fotos icloud mehdi/IMG_2.jpg": "foto", "Fotos iCloud Mehdi/IMG_3.png": "foto",
         "offerte aannemer.pdf": None, "IMG_9.jpg": None, "4. foto's/IMG_4.jpg": None, "foto niet gebruiken/IMG_5.jpg": None,
         "aannemer/fotos/IMG_6.jpg": None, "aannemer/transcript.txt": None, "fotos/sub/IMG_7.jpg": None, "fotos/verslag.docx": None,
-        "opname niet getranscribeerd.md": None,
+        "opname niet getranscribeerd.md": None, "opname.mp3": "opname", "video.MOV": "opname", "derden/opname.mp3": None,
     }
     for rel, verwacht in gevallen.items():
         assert e(m, f"{m}/{rel}", rel.rsplit("/", 1)[-1]) == verwacht, rel
     assert e(m, "/Work All/ander bezoek/transcript.txt", "transcript.txt") is None
     assert e(m.upper(), f"{m}/transcript.txt", "transcript.txt") == "tekst"  # Dropbox geeft hoofdletters wisselend terug
+
+
+def test_oude_registratie_alleen_van_deze_bordrij_en_link_blijft_bij_fout(runtime):
+    p, rij = runtime.p, runtime.rij
+    fout = type("RegisterFoutProef", (runtime.register.RegisterFout,), {})
+
+    def faalt(*a):
+        raise fout("register onbereikbaar")
+
+    runtime.register.registreer = faalt
+    rij["registratie"] = {"bezoek_id": "oud", "bordrij_id": 12, "project_ref": "h-architects:9999"}   # van een andere rij (CX5-2)
+    assert p._vast_bezoek(rij, "9999", 1) == {}
+    rij["registratie"] = {"bezoek_id": "eigen", "bordrij_id": 47, "project_ref": "h-architects:9999"}
+    assert p._vast_bezoek(rij, "9999", 1)["bezoek_id"] == "eigen"
+    rij["proef_info"] = {"werfapp": {"id": 7, "nummer": "9999-1"}}
+
+    def weigert(*a, **k):
+        raise runtime.werf.WerfappFout(409, "bezet")
+
+    runtime.werf.concept = weigert
+    uit = p.naar_werfapp(Agent(), "9999", 1, rij, {"bezoek": "1", "dossier": "9999"}, [], "/p.docx")
+    assert uit == {"fout": "bezet", "status": 409, "id": 7, "nummer": "9999-1"}   # CX5-3: de bevestigde link blijft zichtbaar
+
+
+def test_dubbele_fotonamen_vallen_uit_beide_kanalen(runtime):
+    f = runtime.p.zonder_dubbele_namen([{"naam": "IMG_1.jpg", "pad": "/m/fotos/IMG_1.jpg"}, {"naam": "IMG_1.jpg", "pad": "/m/fotos icloud mehdi/IMG_1.jpg"},
+                                         {"naam": "IMG_2.jpg", "pad": "/m/fotos/IMG_2.jpg"}])
+    assert [x["naam"] for x in f] == ["IMG_2.jpg"]
 
 
 def test_conflicterende_bronnen_behouden_en_zichtbaar(runtime):

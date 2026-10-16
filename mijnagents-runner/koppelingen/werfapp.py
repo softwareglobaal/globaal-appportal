@@ -3,7 +3,8 @@
 Een proef wordt daar een conceptverslag met de punten per categorie, de eigen foto's als Dropbox-verwijzing en de
 herkomst. Mehdi leest het daar na, past aan en klikt zelf Versturen. De brug verstuurt nooit en overschrijft nooit:
 per vast bezoek (bezoek_id) hooguit één concept; bestaat dat al, dan geeft de werfapp het terug zoals Mehdi het achterliet.
-Zonder vast bezoek of tegen een werfapp die niet kan koppelen, maakt de brug niets (CX4-1, CX4-11).
+Zonder vast bezoek, of tegen een werfapp zonder de conceptroute POST /api/v1/verslagen/concept (een oudere versie
+antwoordt 404), maakt de brug niets (CX4-1, CX4-11, CX5-6).
 
 Toegang: hetzelfde AGENTS_TOKEN als het bord (koppelingen/bord.py leest het uit mijnagents-data/.env); de werfapp
 krijgt het uit hetzelfde bestand (docker-compose.override.yml, app-werfverslag). Naam en plaats, nooit de waarde.
@@ -43,17 +44,6 @@ def basis():
 
 def conceptlink(vid):
     return f"{basis()}/verslag/{int(vid)}/bewerken"
-
-
-_KAN = {}
-
-
-def kan_koppelen():
-    """De werfapp meldt bezoek_koppeling in GET /api/v1/ (W41). Een oudere werfapp negeert bezoek_id en zou een ongekoppeld
-    concept maken; dan maakt de brug niets (CX4-11)."""
-    if basis() not in _KAN:
-        _KAN[basis()] = int((call("/") or {}).get("bezoek_koppeling") or 0) >= 1
-    return _KAN[basis()]
 
 
 class _GeenRedirect(urllib.request.HTTPRedirectHandler):
@@ -185,16 +175,16 @@ def concept(verslag, rij, fotos, proef_pad=""):
     body = payload(verslag, rij, fotos, proef_pad)
     if not body.get("bezoek_id"):
         raise WerfappFout(0, "geen vast bezoek (registratie) voor deze bordrij; niets aangemaakt")
-    if not kan_koppelen():
-        raise WerfappFout(0, "de werfapp kan nog geen bezoek koppelen (oudere versie); niets aangemaakt")
     _, project_nieuw = _project(verslag["dossier"], verslag.get("adres") or rij.get("adres"))
     try:
-        r = call("/verslagen", body)
+        r = call("/verslagen/concept", body)   # een werfapp zonder deze route maakt niets: 404 (CX5-6)
     except WerfappFout as ex:
         if ex.status == 409:
             raise WerfappFout(409, f"{ex.fout}; niets aangemaakt, kijk het na in de werfapp") from None
+        if ex.status == 404 and "project" not in (ex.fout or ""):
+            raise WerfappFout(404, "de werfapp kent de conceptroute nog niet (oudere versie); niets aangemaakt") from None
         raise
     if "bestond" not in r or not isinstance(r.get("id"), int):
         raise WerfappFout(0, "onverwacht antwoord van de werfapp (geen bezoekkoppeling bevestigd)")
     return {"id": r["id"], "nummer": r.get("nummer"), "url": conceptlink(r["id"]), "nieuw": not r["bestond"], "project_nieuw": project_nieuw,
-            "fotos_niet_gevonden": ontbrekende_fotos(verslag, fotos)}
+            "verstuurd": bool(r.get("verstuurd")), "fotos_niet_gevonden": ontbrekende_fotos(verslag, fotos)}

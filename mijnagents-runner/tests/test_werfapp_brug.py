@@ -68,7 +68,6 @@ REG = dict(RIJ, registratie={"bezoek_id": "b-1", "project_ref": "h-architects:99
 @pytest.fixture(autouse=True)
 def schone_cache(monkeypatch):
     monkeypatch.delenv("WERFAPP_URL", raising=False)
-    monkeypatch.setattr(werfapp, "_KAN", {})
 
 
 def nep(antwoorden, gezien):
@@ -95,24 +94,25 @@ def test_plaatsbezoek_krijgt_geen_werfverslagnummer(monkeypatch):
 
 def test_zonder_vast_bezoek_of_tegen_een_oude_werfapp_niets(monkeypatch):
     gezien = []
-    monkeypatch.setattr(werfapp, "call", nep({("GET", "/"): {"versie": 1}}, gezien))
+    oud = {("GET", "/projecten/9999"): {"nummer": "9999"}, ("POST", "/verslagen/concept"): werfapp.WerfappFout(404, "niet gevonden")}
+    monkeypatch.setattr(werfapp, "call", nep(oud, gezien))
     with pytest.raises(werfapp.WerfappFout, match="geen vast bezoek"):
         werfapp.concept(VERSLAG, RIJ, FOTOS)                        # CX4-1: geen registratie, geen aanroep
     assert gezien == []
     with pytest.raises(werfapp.WerfappFout, match="oudere versie"):
-        werfapp.concept(VERSLAG, REG, FOTOS)                        # CX4-11: werfapp zonder bezoek_koppeling
-    assert gezien == [("GET", "/")]
+        werfapp.concept(VERSLAG, REG, FOTOS)                        # CX5-6: een oude werfapp kent de conceptroute niet
+    assert ("POST", "/verslagen") not in gezien                     # nooit de oude route die bezoek_id negeert
 
 
 def test_herhaling_geeft_hetzelfde_concept_en_een_antwoord_zonder_koppeling_is_fout(monkeypatch):
     gezien = []
-    ok = {("GET", "/"): {"bezoek_koppeling": 1}, ("GET", "/projecten/9999"): {"nummer": "9999"},
-          ("POST", "/verslagen"): {"ok": True, "id": 12, "nummer": "9999-3", "url": "/verslag/12/bewerken", "bestond": True}}
+    ok = {("GET", "/projecten/9999"): {"nummer": "9999"},
+          ("POST", "/verslagen/concept"): {"ok": True, "id": 12, "nummer": "9999-3", "url": "/verslag/12/bewerken", "bestond": True, "verstuurd": True}}
     monkeypatch.setattr(werfapp, "call", nep(ok, gezien))
     r = werfapp.concept(VERSLAG, REG, FOTOS)
-    assert r["id"] == 12 and r["nieuw"] is False and r["url"] == "https://werf.globaal.be/verslag/12/bewerken"
+    assert r["id"] == 12 and r["nieuw"] is False and r["url"] == "https://werf.globaal.be/verslag/12/bewerken" and r["verstuurd"] is True
     zonder = dict(ok)
-    zonder[("POST", "/verslagen")] = {"ok": True, "id": 13, "nummer": "9999-3", "url": "/x"}
+    zonder[("POST", "/verslagen/concept")] = {"ok": True, "id": 13, "nummer": "9999-3", "url": "/x"}
     monkeypatch.setattr(werfapp, "call", nep(zonder, gezien))
     with pytest.raises(werfapp.WerfappFout, match="geen bezoekkoppeling"):
         werfapp.concept(VERSLAG, REG, FOTOS)
@@ -123,8 +123,6 @@ def test_nummer_bezet_maakt_niets_en_project_wordt_aangemaakt(monkeypatch):
 
     def call(pad, payload=None, method=None):
         gezien.append(("POST" if payload is not None else "GET", pad))
-        if pad == "/":
-            return {"bezoek_koppeling": 1}
         if pad == "/projecten/9999":
             if not bestaat:
                 raise werfapp.WerfappFout(404, "onbekend project")
@@ -132,7 +130,7 @@ def test_nummer_bezet_maakt_niets_en_project_wordt_aangemaakt(monkeypatch):
         if pad == "/projecten":
             bestaat.append(payload)
             return {"ok": True, "id": 1}
-        if pad == "/verslagen":
+        if pad == "/verslagen/concept":
             raise werfapp.WerfappFout(409, "verslag 9999-3 bestaat al")
         pytest.fail(pad)
 
@@ -140,7 +138,7 @@ def test_nummer_bezet_maakt_niets_en_project_wordt_aangemaakt(monkeypatch):
     with pytest.raises(werfapp.WerfappFout, match="niets aangemaakt") as ex:
         werfapp.concept(VERSLAG, REG, FOTOS)
     assert ex.value.status == 409 and bestaat == [{"nummer": "9999", "naam": "Proefstraat 1, 3000 Leuven"}]
-    assert gezien == [("GET", "/"), ("GET", "/projecten/9999"), ("POST", "/projecten"), ("GET", "/projecten/9999"), ("POST", "/verslagen")]
+    assert gezien == [("GET", "/projecten/9999"), ("POST", "/projecten"), ("GET", "/projecten/9999"), ("POST", "/verslagen/concept")]
 
 
 def test_html_of_omleiding_wordt_een_werfappfout(monkeypatch):

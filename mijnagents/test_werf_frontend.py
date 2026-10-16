@@ -47,6 +47,8 @@ class WerfFrontendTest(unittest.TestCase):
             gevallen = [
                 ({"werfapp": {"id": 7, "nummer": "2309-1", "url": "https://elders.example/verslag/7"}}, "https://werf.globaal.be/verslag/7/bewerken", "concept in de werfapp"),
                 ({"werfapp": {"id": "7\"><script>", "nummer": "x"}}, None, "oudere proef"),
+                ({"werfapp": {"id": 8, "nummer": "2309-1", "verstuurd": True}}, "https://werf.globaal.be/verslag/8/bewerken", "verstuurd vanuit de werfapp"),
+                ({"werfapp": {"id": "7", "nummer": "2309-1"}}, None, "oudere proef"),   # CX5-10: ook de detailpagina toont geen link uit een tekst-ID
                 ({"punten": 3}, None, "oudere proef"),
                 ({"verslagtype": "voorlopige_oplevering"}, None, "Word-sjabloon van de oplevering"),
                 ({"werfapp": {"fout": "geen vast bezoek (registratie) voor deze bordrij; niets aangemaakt", "status": 0}}, None, "geen concept in de werfapp: geen vast bezoek"),

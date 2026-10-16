@@ -110,7 +110,8 @@ def main():
         try:
             uit = wp.werfapp_uit_proef(ag, d, int(n))
             print(uit)
-            ag.hartslag("klaar", taak=f"concept in de werfapp {d}-{n}" + (" niet gelukt" if uit.get("fout") or not uit.get("id") else ""))
+            mislukt = bool(uit.get("fout")) or not uit.get("id")
+            ag.hartslag("fout" if mislukt else "klaar", taak=f"concept in de werfapp {d}-{n}" + (f": {uit.get('fout')}" if mislukt else ""))
         finally:
             ag.log_verstuur()
         if uit.get("fout") or not uit.get("id"):

@@ -2159,7 +2159,9 @@ def _werf_rij(d, taak_status):
         nodig.append("jouw klik: Maak concept")   # één klik; Voorbereiden en Keuzes zijn niet verplicht (eigen bronnen standaard)
     else:
         pv = (d["proef_info"] or {}).get("verslagtype") in ("voorlopige_oplevering", "definitieve_oplevering")
-        if d["werfapp"].get("id"):
+        if d["werfapp"].get("id") and d["werfapp"].get("verstuurd"):
+            nodig.append("niets meer, verstuurd")   # CX5-9
+        elif d["werfapp"].get("id"):
             nodig.append("nalezen en versturen in de werfapp")
         elif d["werfapp"].get("fout"):
             nodig.append(f"geen concept in de werfapp: {d['werfapp']['fout']}")
@@ -2174,7 +2176,9 @@ def _werf_rij(d, taak_status):
         if c["status"] == "fout" and c["nummer"] in ("W4", "W5", "W6"):
             nodig.append(c["titel"])
     d["nodig"] = nodig
-    if d["heeft_proef"] and d["werfapp"].get("id"):
+    if d["heeft_proef"] and d["werfapp"].get("id") and d["werfapp"].get("verstuurd"):
+        d["fase"] = "verstuurd vanuit de werfapp"
+    elif d["heeft_proef"] and d["werfapp"].get("id"):
         d["fase"] = "concept in de werfapp"
     elif d["heeft_proef"]:
         d["fase"] = "proef klaar, nakijken"

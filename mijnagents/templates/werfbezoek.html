@@ -60,7 +60,7 @@
 
 <div style="background:{{ '#edf2ef' if b.heeft_proef else ('#fbf3e3' if b.voorbereid else '#f7e8e5') }}; border:1px solid {{ '#1f3d33' if b.heeft_proef else ('#a1701a' if b.voorbereid else '#a33a2a') }}; border-radius:4px; padding:12px 16px; margin:14px 0 6px;">
   <strong style="font-size:16px;">
-    {% if ((b.proef_info or {}).get('werfapp') or {}).get('id') %}Concept staat in de werfapp: nalezen, aanpassen en zelf versturen (tabblad Proef).{% elif b.heeft_proef %}Word-proef staat in de bezoekmap, nog geen concept in de werfapp: zie tabblad Proef.{% elif b.voorbereid %}Voorbereid: klik Maak concept op het tabblad Proef.{% else %}Wacht op jouw klik: Maak concept op het tabblad Proef. Er start niets vanzelf.{% endif %}
+    {% if (b.werfapp or {}).get('verstuurd') %}Verslag is verstuurd vanuit de werfapp.{% elif (b.werfapp or {}).get('id') %}Concept staat in de werfapp: nalezen, aanpassen en zelf versturen (tabblad Proef).{% elif b.heeft_proef %}Word-proef staat in de bezoekmap, nog geen concept in de werfapp: zie tabblad Proef.{% elif b.voorbereid %}Voorbereid: klik Maak concept op het tabblad Proef.{% else %}Wacht op jouw klik: Maak concept op het tabblad Proef. Er start niets vanzelf.{% endif %}
   </strong><br>
   <span class="stil">{{ b.telling.ok }} in orde · {{ b.telling.let_op }} nakijken · {{ b.telling.fout }} ontbreekt · {{ b.telling.onbekend }} niet meetbaar{% if b.nodig %}, nog nodig: {{ b.nodig|join(', ') }}{% endif %}</span>
   {% if b.heeft_proef %}<br><a class="groteknop" href="#proef" data-blad="proef">Proef openen &rarr;</a>{% endif %}
@@ -188,7 +188,7 @@
 {% for op in opdrachten %}<tr><td>{{ op.soort }} · poging {{ op.poging }}</td><td>{{ op.status }}{% if op.status == 'uitgesteld' %}<br>{{ op.hervat_belgie }} Belgische tijd{% endif %}</td><td>{{ op.bewijs }}</td><td>{% if op.status == 'fout' and op.veilig_opnieuw %}<form method="post" action="{{ url_for('werfbezoek_opnieuw', dossier=b.dossier, volgnr=b.volgnr, kid=op.id) }}"><input type="hidden" name="rij_id" value="{{ b.id }}"><button class="knop" type="submit">Veilige herhaling starten</button></form>{% endif %}</td></tr>{% endfor %}</table>
 {% endif %}
 {% if b.heeft_proef %}
-{% set wa = (b.proef_info or {}).get('werfapp') or {} %}
+{% set wa = b.werfapp or {} %}
 {% if (wa.get('id')|int(0)) > 0 %}
 <div class="melding"><strong>Concept in de werfapp:</strong> <a class="knop" href="https://werf.globaal.be/verslag/{{ wa.get('id')|int }}/bewerken" target="_blank" rel="noopener">Verslag {{ wa.get('nummer') or '' }} openen</a><br>
   <span class="stil">Daar lees je na, pas je aan en klik je zelf Versturen. Een nieuwe proef overschrijft dit concept nooit.</span>{% if wa.get('fout') %}<br><span class="stil">Laatste poging: {{ wa.get('fout') }}</span>{% endif %}</div>

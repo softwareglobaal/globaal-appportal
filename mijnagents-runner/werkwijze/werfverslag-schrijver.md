@@ -45,8 +45,10 @@ verandert het sjabloon, dan verandert eerst dit hoofdstuk, dan de code.
   (jpg/png in de bezoekmap) als Dropbox-verwijzing, vaste kantoorpunten met de tag *Vast punt*, actiepunten in de categorie
   Actiepunten. Elk punt draagt "nog nakijken": Mehdi leest na en verstuurt zelf. Het verslagnummer is het bezoeknummer; is
   het bezet, dan maak ik niets en meld ik het op de bezoekpagina. Zonder vast bezoek (`bezoek_id` uit het bezoekregister)
-  maak ik niets; met dat bezoek geeft de werfapp bij elke herhaling hetzelfde concept terug. Het token gaat alleen naar
-  exact https://werf.globaal.be, en pas als de werfapp `bezoek_koppeling` meldt. Eerst bewaar ik de proef op de bordrij,
+  maak ik niets; met dat bezoek geeft de werfapp bij elke herhaling hetzelfde concept terug (route
+  `POST /api/v1/verslagen/concept`; een oudere werfapp kent die niet en maakt dus niets). Het token gaat alleen naar
+  exact https://werf.globaal.be. Een bewaarde registratie gebruik ik alleen als ze van deze bordrij is. Twee eigen foto's
+  met dezelfde naam laat ik weg en meld ik. Eerst bewaar ik de proef op de bordrij,
   dan pas zet ik het concept: een fout in de brug kost de proef nooit. Een bestaand concept overschrijf ik nooit; een nieuwe proef komt alleen als Word.
   Een plaatsbezoek (PB) blijft een Word-proef. Foto's die ik noem maar niet als jpg/png vind, meld ik bij naam.
   Een oudere proef zonder concept zet ik tokenvrij door: `werfverslag_schrijver.py --naar-werfapp <dossier> <bezoek>`.

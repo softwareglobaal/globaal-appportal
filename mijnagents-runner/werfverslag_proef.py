@@ -139,6 +139,7 @@ def eigen_tekst(naam):
 # Eigen fotomappen (gemeten 16-10-2026 op de live bezoekmappen): "fotos" (export van de iCloud-wacht) en "fotos icloud mehdi".
 # Niet: "4. foto's" (projectstructuur), foto's in de wortel (herkomst onbekend), "foto niet gebruiken", of een "fotos"-map
 # dieper in een submap van derden (CX4-3, CX4-8).
+OPNAME_EXT = (".mp3", ".m4a", ".wav", ".mp4", ".mov")   # zoals de voorbereider (werfverslag_voorbereider.OPNAME_EXT)
 EIGEN_FOTOMAP = re.compile(r"^fotos(\s.*\bmehdi\b.*)?$", re.I)
 
 
@@ -151,6 +152,8 @@ def eigen_bestand(bezoekmap, pad, naam):
     delen = pad[len(wortel):].split("/")
     laag = naam.lower()
     if len(delen) == 1:
+        if laag.endswith(OPNAME_EXT):
+            return "opname"   # opname in de wortel (Plaud-export); alleen de naam gaat mee, geen audio (CX5-4)
         return "tekst" if eigen_tekst(naam) else None
     if len(delen) == 2 and EIGEN_FOTOMAP.match(delen[0].strip()):
         if laag.endswith((".jpg", ".jpeg", ".heic", ".png")):
@@ -158,6 +161,15 @@ def eigen_bestand(bezoekmap, pad, naam):
         if laag == "00 fotos.md":
             return "tekst"
     return None
+
+
+def zonder_dubbele_namen(fotos):
+    """Twee eigen foto's met dezelfde naam (bv. fotos/IMG_1.jpg en fotos icloud mehdi/IMG_1.jpg) zijn dubbelzinnig: Word en
+    werfapp zouden elk een andere kiezen. Beide vallen weg en worden als niet gevonden gemeld (CX5-5)."""
+    tel = {}
+    for f in fotos:
+        tel[f.get("naam")] = tel.get(f.get("naam"), 0) + 1
+    return [f for f in fotos if tel.get(f.get("naam")) == 1]
 
 
 def bronkeuze(rij):
@@ -183,14 +195,14 @@ def lees_bezoekmap(bezoekmap, alleen_eigen=False):
         if laag.startswith(".") or "(concept)" in laag:
             continue
         in_fotos = "/fotos/" in pad.lower()
-        if alleen_eigen and not (eigen_bestand(bezoekmap, pad, naam) or laag.endswith((".mp3", ".m4a", ".wav"))):
+        if alleen_eigen and not eigen_bestand(bezoekmap, pad, naam):
             continue
         if in_fotos and laag.endswith(".heic") and (laag[:-5] + ".jpg") in namen:
             continue  # de jpeg-kopie telt, niet het HEIC-origineel
         try:
             if laag.endswith((".jpg", ".jpeg", ".heic", ".png")):
                 fotos.append({"naam": naam, "pad": pad, "file_id": e.get("id", ""), "grootte": e.get("size", 0), "rev": e.get("rev", ""), "content_hash": e.get("content_hash", "")})
-            elif laag.endswith((".mp3", ".mp4", ".m4a", ".wav")):
+            elif laag.endswith(OPNAME_EXT):
                 opnames.append(naam)
             elif laag.endswith((".docx", ".pptx", ".pdf", ".md", ".txt")):
                 if e.get("size", 0) > 50_000_000:
@@ -213,7 +225,7 @@ def lees_bezoekmap(bezoekmap, alleen_eigen=False):
         except Exception as ex:  # noqa: BLE001
             reden = str(ex) if isinstance(ex, extractie.BronLeesFout) else type(ex).__name__
             teksten.append({"naam": naam, "pad": pad, "tekst": "", "rev": e.get("rev", ""), "leesfout": reden})
-    return teksten, fotos, opnames
+    return teksten, zonder_dubbele_namen(fotos), opnames
 
 
 EIGEN_REGEL = (" KEUZE VAN MEHDI: gebruik uitsluitend zijn eigen materiaal van dit bezoek: het transcript van het gesprek ter plaatse "
@@ -678,20 +690,26 @@ def _vast_bezoek(rij, dossier, volgnr):
         return register.registreer(rij, dossier, volgnr)
     except register.RegisterFout:
         reg = rij.get("registratie")
-        return reg if isinstance(reg, dict) else {}
+        # alleen een registratie die aantoonbaar van deze bordrij en dit project is (CX5-2); anders geen bezoek
+        if isinstance(reg, dict) and reg.get("bordrij_id") == rij.get("id") and reg.get("project_ref") == f"h-architects:{dossier}":
+            return reg
+        return {}
 
 
 def naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx):
     """De proef als conceptverslag in de werfapp, waar Mehdi naleest en verstuurt. Een fout hier laat de Word-proef
     staan: de reden komt op de bordrij en in het logboek, er wordt niets opnieuw betaald."""
+    oud = (rij.get("proef_info") or {}).get("werfapp") or {}
+    # alleen ter weergave: een eerder bevestigd concept blijft zichtbaar naast de fout (CX5-3); beslissen doet de werfapp
+    bewaard = {k: oud[k] for k in ("id", "nummer") if isinstance(oud.get("id"), int) and oud["id"] > 0 and oud.get(k)}
     try:
         r = werfapp.concept(verslag, dict(rij, registratie=_vast_bezoek(rij, dossier, volgnr)), fotos, proef_pad=pad_docx)
     except werfapp.WerfappFout as ex:
         ag.log(f"{dossier}-{volgnr}", "fout" if ex.status not in (0, 409) else "bevinding", f"geen concept in de werfapp: {ex.fout}")
-        return {"fout": ex.fout, "status": ex.status}
+        return {"fout": ex.fout, "status": ex.status, **bewaard}
     except Exception as ex:  # noqa: BLE001 - een fout in de brug mag de betaalde proef nooit doen mislukken
         ag.log(f"{dossier}-{volgnr}", "fout", f"geen concept in de werfapp: {type(ex).__name__}")
-        return {"fout": f"interne fout in de brug ({type(ex).__name__}); de Word-proef staat in de bezoekmap", "status": -1}
+        return {"fout": f"interne fout in de brug ({type(ex).__name__}); de Word-proef staat in de bezoekmap", "status": -1, **bewaard}
     wat = "concept gezet" if r["nieuw"] else "concept bestond al en blijft zoals het is"
     mis = r.get("fotos_niet_gevonden") or []
     verwacht = f"{dossier}-{verslag.get('bezoek')}"
@@ -699,6 +717,8 @@ def naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx):
            + (f"; let op: het bezoek had al verslag {r['nummer']}, niet {verwacht}" if r["nummer"] != verwacht else "")
            + (f"; {len(mis)} genoemde foto('s) niet als jpg/png in een eigen fotomap: {', '.join(mis[:10])}" if mis else ""))
     uit = {k: r[k] for k in ("id", "nummer", "url", "nieuw")}
+    if r.get("verstuurd"):
+        uit["verstuurd"] = True   # het bezoek heeft al een verstuurd verslag: geen concept meer (CX5-9)
     if mis:
         uit["fotos_niet_gevonden"] = mis[:50]
     return uit
