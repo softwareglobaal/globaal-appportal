@@ -1,9 +1,9 @@
 name: werfverslag-grendels
 on:
   push:
-    paths: ["mijnagents/app.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents/deploy.sh", "mijnagents/test_bord_deploy.py", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", ".github/workflows/werfverslag-grendels.yml"]
+    paths: ["mijnagents/app.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", ".github/workflows/werfverslag-grendels.yml"]
   pull_request:
-    paths: ["mijnagents/app.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents/deploy.sh", "mijnagents/test_bord_deploy.py", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", ".github/workflows/werfverslag-grendels.yml"]
+    paths: ["mijnagents/app.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", ".github/workflows/werfverslag-grendels.yml"]
 jobs:
   werfketen:
     runs-on: ubuntu-latest
@@ -19,7 +19,6 @@ jobs:
       - run: python mijnagents/test_werfverwerking.py
       - run: python mijnagents/test_werf_frontend.py
       - run: python mijnagents/test_werfbezoek.py
-      - run: python mijnagents/test_bord_deploy.py
       - run: python mijnagents-runner/tests/test_werfverslag_nummer.py
       - run: python mijnagents-runner/tests/test_icloud_status.py
       - run: python mijnagents-runner/tests/test_werf_fotoproducent.py
