@@ -238,8 +238,10 @@ cd ~/appportal/mijnagents-runner && ~/agents/.venv/bin/python nieuwe-agent.py --
 
 De werkwijze die je meegeeft moet zelf al door N1, N2, N8 en N9 komen, met punten
 onder de twee afgesproken koppen "## Wat ik nooit doe" en "## Wat Mehdi beslist"
-(eventueel genummerd, of met een toevoeging tussen haakjes). Een kop over wat een
-ander nooit doet, telt niet. De generator weigert
+(eventueel genummerd, of met een toevoeging tussen haakjes), en de punten als regels
+die op kolom 0 met "- " beginnen. Een kop over wat een ander nooit doet, en een kop
+of punt in een codeblok of commentaar, telt niet. Dat is bewust een kleine, strikte
+vorm: wat er niet in past, wordt geweigerd, nooit aanvaard. De generator weigert
 anders, voor er iets op schijf of op het bord staat. Daarna:
 
 - laat de runner elke ronde melden wat hij las (N4);

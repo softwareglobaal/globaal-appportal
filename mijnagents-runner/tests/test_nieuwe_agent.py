@@ -336,6 +336,23 @@ def test_koppen_alleen_in_een_codeblok_worden_geweigerd():
         p.weg()
 
 
+def test_punten_in_ingesprongen_code_worden_geweigerd():
+    """Codex NA34: punten die alleen als ingesprongen code onder de koppen staan, zijn geen grenzen."""
+    p = Proef()
+    try:
+        tekst = WERKWIJZE.replace("- nooit een bericht verwijderen\n- nooit iets versturen namens iemand\n",
+                                  "\n    - nooit een bericht verwijderen\n").replace(
+            "- welke labels er bestaan\n- wat er met twijfelgevallen gebeurt\n", "\n    - welke labels er bestaan\n")
+        assert tekst != WERKWIJZE
+        with open(p.ww, "w", encoding="utf-8") as f:
+            f.write(tekst)
+        code = p.draai(*KAART, "--werkwijze", p.ww)
+        assert code not in (0, None), p.uitvoer
+        _niets_geschreven(p)
+    finally:
+        p.weg()
+
+
 def test_te_korte_werkwijze_wordt_geweigerd():
     p = Proef()
     try:

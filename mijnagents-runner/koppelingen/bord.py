@@ -52,25 +52,34 @@ class WerkwijzeOnbekend(RondeGestopt):
 
 
 def _buiten_codeblokken(tekst):
-    """De regels van een Markdown-tekst die niet in een codeblok (``` of ~~~) staan. Een kop of punt in een
-    codeblok is een voorbeeld, geen regel (Codex NA32)."""
-    regels, hek = [], None
+    """De regels van een werkwijze die buiten een codeblok en buiten HTML-commentaar staan, met tabs als vier
+    kolommen. Een kop of punt in een codeblok of commentaar is een voorbeeld, geen regel (Codex NA32, NA33).
+    Een hek telt met hooguit drie spaties ervoor; een tab ervoor maakt het ingesprongen tekst, geen hek."""
+    regels, hek, commentaar = [], None, False
     for regel in (tekst or "").splitlines():
-        m = re.match(r"^\s{0,3}(`{3,}|~{3,})", regel)
-        if hek is None and m:
-            hek = m.group(1)[0] * len(m.group(1))
+        regel = regel.expandtabs(4)
+        if commentaar:
+            commentaar = "-->" not in regel
             continue
         if hek is not None:
-            if re.match(r"^\s{0,3}" + re.escape(hek[0]) + "{" + str(len(hek)) + r",}\s*$", regel):
+            if re.match(r"^ {0,3}" + re.escape(hek[0]) + "{" + str(len(hek)) + r",}\s*$", regel):
                 hek = None
+            continue
+        m = re.match(r"^ {0,3}(`{3,}|~{3,})", regel)
+        if m:
+            hek = m.group(1)
+            continue
+        if regel.lstrip().startswith("<!--"):
+            commentaar = "-->" not in regel.split("<!--", 1)[1]
             continue
         regels.append(regel)
     return regels
 
 
 def _sectie_waar(tekst, past):
-    """De tekst onder de eerste kop waarvoor past(koptekst) waar is, tot de volgende kop van hetzelfde of
-    een hoger niveau. Codeblokken tellen niet mee."""
+    """De regels onder de eerste kop waarvoor past(koptekst) waar is, tot de volgende kop van hetzelfde of
+    een hoger niveau. Alleen een kop op kolom 0 telt, codeblokken en commentaar niet. De inspringing blijft
+    staan: een ingesprongen regel is geen punt (Codex NA34)."""
     niveau, regels = None, []
     for regel in _buiten_codeblokken(tekst):
         m = re.match(r"^(#{1,6})\s+(.*)$", regel)
@@ -80,8 +89,12 @@ def _sectie_waar(tekst, past):
             continue
         if m and len(m.group(1)) <= niveau:
             break
-        regels.append(regel)
-    return "\n".join(regels).strip()
+        regels.append(regel.rstrip())
+    while regels and not regels[0].strip():
+        regels.pop(0)
+    while regels and not regels[-1].strip():
+        regels.pop()
+    return "\n".join(regels)
 
 
 def sectie(tekst, kop):
@@ -92,9 +105,16 @@ def sectie(tekst, kop):
 
 
 def punten(tekst):
-    """De opsommingspunten uit een stuk werkwijze ("- ...", "* ..." of "1. ..."), zonder het teken ervoor."""
-    return [m.group(1).strip() for m in re.finditer(r"^\s*(?:[-*]|\d+[.)])\s+(.+)$",
-                                                   "\n".join(_buiten_codeblokken(tekst)), re.M)]
+    """De opsommingspunten uit een stuk werkwijze: regels die op kolom 0 met "- " of "* " beginnen, buiten
+    codeblokken en commentaar, zonder het teken ervoor. Bewust een kleine, strikte vorm in plaats van alle
+    Markdown: wat er niet in past, telt niet, zodat een twijfelgeval geweigerd wordt en nooit aanvaard
+    (stopregel na Codex NA32 tot NA34). Een scheidingslijn als "- - -" is geen punt."""
+    uit = []
+    for regel in _buiten_codeblokken(tekst):
+        m = re.match(r"^[-*] +(\S.*)$", regel)
+        if m and not re.match(r"^([-*])( *\1){2,} *$", regel):
+            uit.append(m.group(1).strip())
+    return uit
 
 
 KOP_NOOIT = re.compile(r"^(?:\d+[.)]\s*)?wat ik nooit doe(?:\s*[(:].*)?$")

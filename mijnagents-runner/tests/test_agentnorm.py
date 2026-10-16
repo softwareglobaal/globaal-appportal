@@ -472,6 +472,15 @@ def test_sectie_punten_en_grenzen_lezen_de_werkwijze():
     assert bord.grenzen("```\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
     assert bord.grenzen("## Wat ik nooit doe\n- a\n```\n- in code\n```\n- b\n\n## Wat Mehdi beslist\n- c\n") == (["a", "b"], ["c"])
     assert bord.grenzen("~~~~\n```\n## Wat ik nooit doe\n- x\n~~~~\n## Wat ik nooit doe\n- y\n## Wat Mehdi beslist\n- z\n") == (["y"], ["z"])
+    # Codex NA33: een tab voor een hek maakt er ingesprongen tekst van; het codeblok sluit dan niet
+    assert bord.grenzen("```\n## Wat ik nooit doe\n- a\n\t```\n## Wat Mehdi beslist\n- b\n```\n") == ([], [])
+    assert bord.grenzen("\t```\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
+    # Codex NA34 en de strikte vorm: alleen punten op kolom 0 tellen, niet in ingesprongen code of commentaar
+    assert bord.grenzen("## Wat ik nooit doe\n\n    - a\n\n## Wat Mehdi beslist\n\n    - b\n") == ([], [])
+    assert bord.grenzen("<!--\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n-->\n") == ([], [])
+    assert bord.grenzen("<!-- uitleg -->\n## Wat ik nooit doe\n- a\n## Wat Mehdi beslist\n- b\n") == (["a"], ["b"])
+    assert bord.grenzen("## Wat ik nooit doe\n- - -\n1. genummerd\n## Wat Mehdi beslist\n* b\n") == ([], ["b"]), \
+        "een scheidingslijn en een genummerde regel zijn geen grens in de strikte vorm"
 
 
 def _sjabloon_werk():
