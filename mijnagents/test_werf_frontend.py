@@ -70,6 +70,9 @@ class WerfFrontendTest(unittest.TestCase):
                     self.assertNotIn("werf.globaal.be/verslag/", pagina + overzicht)
                 self.assertIn(stand, overzicht)
                 self.assertNotIn("niets, nakijken en versturen", overzicht)
+                if info.get("werfapp", {}).get("verstuurd"):
+                    self.assertIn("Verstuurd vanuit de werfapp", pagina)
+                    self.assertNotIn("klik je zelf Versturen", pagina)   # CX6-5
         finally:
             fixture.tearDown()
 

@@ -125,15 +125,18 @@ def pdf_tekst(b, max_blz=None):
 
 
 EIGEN_TEKSTEN = ("transcript.txt", "00 verslag.md", "00 fotos.md")
-# Zelfde herkenning als de voorbereider (TRANSCRIPT_PAT): de Plaudwacht en de skill noemen een transcript ook
-# "2026-06-16 Plaud transcript.txt" of "05-07 Vergadering_ ...-transcript.docx" (gemeten 16-10-2026, CX3-9).
-EIGEN_PAT = re.compile(r"transcri|00 verslag|00 fotos", re.I)
+# Alleen de exacte naamvormen die Mehdi's eigen hulpmiddelen maken (gemeten op alle live bezoekmappen, 16-10-2026):
+# de Plaudwacht en de skill ("transcript.txt", "transcript.docx", "00 verslag.md"), de iCloud-wacht ("00 fotos.md") en de
+# Plaud-export ("05-07 <titel>-transcript.txt|docx", "20260820 2173 <titel>-transcript.txt", "2026-06-16 Plaud transcript.txt").
+# Een bestand van derden met "transcript" ergens in de naam ("derden-transcript.txt") valt erbuiten (CX3-9, CX5-4).
+EIGEN_NAMEN = (re.compile(r"(transcript\.(txt|docx)|00 verslag\.md|00 fotos\.md)", re.I),
+               re.compile(r"\d{2}-\d{2} .+-transcript\.(txt|docx)", re.I),
+               re.compile(r"\d{8} \d{4} .+-transcript\.(txt|docx)", re.I),
+               re.compile(r"\d{4}-\d{2}-\d{2} plaud transcript\.(txt|docx)", re.I))
 
 
 def eigen_tekst(naam):
-    laag = naam.lower()
-    return laag in EIGEN_TEKSTEN or (laag.endswith((".txt", ".md", ".docx")) and bool(EIGEN_PAT.search(naam))
-                                     and not re.search(r"niet getranscribeerd|geen opname", laag))
+    return any(p.fullmatch(naam.strip()) for p in EIGEN_NAMEN)
 
 
 # Eigen fotomappen (gemeten 16-10-2026 op de live bezoekmappen): "fotos" (export van de iCloud-wacht) en "fotos icloud mehdi".
@@ -674,12 +677,14 @@ def proef(ag, dossier, volgnr):
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"proef gezet: {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {n_punten} punten, "
            f"{len(beelden)} foto's) en {os.path.basename(pad_md)} in de bezoekmap; open: {telling} ({usage.input_tokens}+{usage.output_tokens} tokens)")
     info = {"verslagtype": verslagtype, "taal": taal, "punten": n_punten, "fotos": len(beelden), "open": telling, "docx_kb": len(docx) // 1024,
+            "bronnen": [t["naam"] for t in teksten][:50],   # welke teksten de proef voedden, zichtbaar op de bezoekpagina (CX5-4)
             "dekking": gegevens["dekking"], "beeldanalyse": "niet uitgevoerd", "hergebruikt": bool(getattr(usage, "hergebruikt", False)),
             "_verwerking": getattr(usage, "verwerking", {})}
     # Eerst de betaalde proef op de bordrij bewaren, dan pas de brug: wat de brug ook doet, de proef en haar markdown
     # (de invoer voor --naar-werfapp) zijn er (CX4-4).
     _bewaar(rij, dossier, volgnr, verslag_md=md, proef_pad=pad_docx, proef_ts=vandaag, proef_info=info)
-    _bewaar(rij, dossier, volgnr, proef_info=dict(info, werfapp=naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx)))
+    _bewaar(rij, dossier, volgnr, proef_info=dict(info, werfapp=naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx,
+                                                                         bronnen=info["bronnen"])))
     return pad_docx, md
 
 
@@ -696,14 +701,14 @@ def _vast_bezoek(rij, dossier, volgnr):
         return {}
 
 
-def naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx):
+def naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx, bronnen=()):
     """De proef als conceptverslag in de werfapp, waar Mehdi naleest en verstuurt. Een fout hier laat de Word-proef
     staan: de reden komt op de bordrij en in het logboek, er wordt niets opnieuw betaald."""
     oud = (rij.get("proef_info") or {}).get("werfapp") or {}
     # alleen ter weergave: een eerder bevestigd concept blijft zichtbaar naast de fout (CX5-3); beslissen doet de werfapp
-    bewaard = {k: oud[k] for k in ("id", "nummer") if isinstance(oud.get("id"), int) and oud["id"] > 0 and oud.get(k)}
+    bewaard = {k: oud[k] for k in ("id", "nummer", "verstuurd") if isinstance(oud.get("id"), int) and oud["id"] > 0 and oud.get(k)}
     try:
-        r = werfapp.concept(verslag, dict(rij, registratie=_vast_bezoek(rij, dossier, volgnr)), fotos, proef_pad=pad_docx)
+        r = werfapp.concept(verslag, dict(rij, registratie=_vast_bezoek(rij, dossier, volgnr)), fotos, proef_pad=pad_docx, bronnen=list(bronnen))
     except werfapp.WerfappFout as ex:
         ag.log(f"{dossier}-{volgnr}", "fout" if ex.status not in (0, 409) else "bevinding", f"geen concept in de werfapp: {ex.fout}")
         return {"fout": ex.fout, "status": ex.status, **bewaard}
@@ -742,7 +747,7 @@ def werfapp_uit_proef(ag, dossier, volgnr):
             if p.get("titel") in vaste and str(p.get("nummer", "")).startswith("1."):
                 p["doorlopend"] = True   # de markdown bewaart de vlag niet; de titel en het nummer 1.x wel
     _, fotos, _ = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(bronkeuze(rij) == "eigen"))
-    werf = naar_werfapp(ag, dossier, volgnr, rij, v, fotos, rij["proef_pad"])
+    werf = naar_werfapp(ag, dossier, volgnr, rij, v, fotos, rij["proef_pad"], bronnen=(rij.get("proef_info") or {}).get("bronnen") or [])
     info = dict(rij.get("proef_info") or {})
     info["werfapp"] = werf
     _bewaar(rij, dossier, volgnr, proef_info=info)

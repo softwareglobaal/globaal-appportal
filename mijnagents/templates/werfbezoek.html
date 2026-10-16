@@ -190,8 +190,9 @@
 {% if b.heeft_proef %}
 {% set wa = b.werfapp or {} %}
 {% if (wa.get('id')|int(0)) > 0 %}
-<div class="melding"><strong>Concept in de werfapp:</strong> <a class="knop" href="https://werf.globaal.be/verslag/{{ wa.get('id')|int }}/bewerken" target="_blank" rel="noopener">Verslag {{ wa.get('nummer') or '' }} openen</a><br>
-  <span class="stil">Daar lees je na, pas je aan en klik je zelf Versturen. Een nieuwe proef overschrijft dit concept nooit.</span>{% if wa.get('fout') %}<br><span class="stil">Laatste poging: {{ wa.get('fout') }}</span>{% endif %}</div>
+<div class="melding"><strong>{{ 'Verstuurd vanuit de werfapp' if wa.get('verstuurd') else 'Concept in de werfapp' }}:</strong> <a class="knop" href="https://werf.globaal.be/verslag/{{ wa.get('id')|int }}/bewerken" target="_blank" rel="noopener">Verslag {{ wa.get('nummer') or '' }} openen</a><br>
+  <span class="stil">{% if wa.get('verstuurd') %}De werfapp meldde dit verslag als verstuurd.{% else %}Daar lees je na, pas je aan en klik je zelf Versturen. Een nieuwe proef overschrijft dit concept nooit.{% endif %} Dit is de laatst bevestigde stand bij de laatste proef; de werfapp zelf is leidend.</span>
+  {% if (b.proef_info or {}).get('bronnen') %}<br><span class="stil">Gebruikte eigen bronnen: {{ (b.proef_info or {}).get('bronnen')|join(', ') }}</span>{% endif %}{% if wa.get('fout') %}<br><span class="stil">Laatste poging: {{ wa.get('fout') }}</span>{% endif %}</div>
 {% elif wa.get('fout') %}
 <div class="melding"><strong>Geen concept in de werfapp:</strong> {{ wa.get('fout') }}</div>
 {% elif (b.proef_info or {}).get('verslagtype') in ('voorlopige_oplevering', 'definitieve_oplevering') %}

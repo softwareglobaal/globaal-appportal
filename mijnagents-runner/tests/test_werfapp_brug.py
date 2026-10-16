@@ -33,7 +33,8 @@ RIJ = {"id": 47, "dossier": "9999", "datum": "2026-10-14", "adres": "Proefstraat
 
 
 def test_punten_worden_opmerkingen_met_eigen_fotos_en_open_status():
-    body = werfapp.payload(VERSLAG, RIJ, FOTOS, proef_pad="/Work All/proef/bezoek/9999-3 werfverslag (concept).docx")
+    body = werfapp.payload(VERSLAG, RIJ, FOTOS, proef_pad="/Work All/proef/bezoek/9999-3 werfverslag (concept).docx", bronnen=["transcript.txt"])
+    assert body["bron"]["detail"]["bronnen"] == ["transcript.txt"] and body["bron"]["detail"]["fotos"] == 2
     assert body["project"] == "9999" and body["volgnummer"] == 3 and body["door"] == "werfverslag-schrijver"
     latei, spouw, actie = body["opmerkingen"]
     assert latei["categorie"] == "Ruwbouw" and latei["status"] is None and latei["tags"] == ["Dringend"]

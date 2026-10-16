@@ -52,9 +52,11 @@ verandert het sjabloon, dan verandert eerst dit hoofdstuk, dan de code.
   dan pas zet ik het concept: een fout in de brug kost de proef nooit. Een bestaand concept overschrijf ik nooit; een nieuwe proef komt alleen als Word.
   Een plaatsbezoek (PB) blijft een Word-proef. Foto's die ik noem maar niet als jpg/png vind, meld ik bij naam.
   Een oudere proef zonder concept zet ik tokenvrij door: `werfverslag_schrijver.py --naar-werfapp <dossier> <bezoek>`.
-- **Bronnen.** Zonder bewaarde keuze lees ik alleen Mehdi's eigen materiaal, op plaats en naam: een tekst met "transcri",
-  "00 verslag" of "00 fotos" in de naam in de wortel van de bezoekmap, en foto's rechtstreeks in `fotos/` of in een fotomap
-  met "mehdi" in de naam ("fotos icloud mehdi"). Niet: "4. foto's", foto's in de wortel, "foto niet gebruiken", of een map
+- **Bronnen.** Zonder bewaarde keuze lees ik alleen Mehdi's eigen materiaal, op plaats en exacte naamvorm: in de wortel van
+  de bezoekmap `transcript.txt|docx`, `00 verslag.md`, `00 fotos.md` en de Plaud-exports (`05-07 <titel>-transcript.txt|docx`,
+  `20260820 2173 <titel>-transcript.txt`, `2026-06-16 Plaud transcript.txt`); foto's rechtstreeks in `fotos/` of in een
+  fotomap met "mehdi" in de naam ("fotos icloud mehdi"); opnames in de wortel (alleen hun naam). Welke teksten de proef
+  voedden, staat bij het concept op de bezoekpagina en in de herkomst in de werfapp. Niet: "4. foto's", foto's in de wortel, "foto niet gebruiken", of een map
   van derden. "Alles" alleen als hij dat koos.
 - Elke opdracht staat met bewijs in mijn werkverslag (welke bronnen, hoeveel tokens, welk bestand).
 - **Het nummer.** In het verslag en in wat ik Claude meegeef staat alleen het bezoeknummer: werfbezoek

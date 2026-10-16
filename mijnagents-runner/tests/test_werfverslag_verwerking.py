@@ -228,7 +228,7 @@ def test_eigen_bronnen_en_menselijke_correctie_in_proef_zonder_hele_bundel(runti
     assert "Door Mehdi bevestigd" in bericht
     # De proef gaat als concept naar de werfapp en de verwijzing staat op de bordrij.
     assert runtime.werf.concepten and runtime.werf.concepten[0][0]["bezoek"] == "1"
-    assert runtime.werf.concepten[0][1] == {"proef_pad": "/proef/bezoek/9999-1 werfverslag (concept).docx"}
+    assert runtime.werf.concepten[0][1] == {"proef_pad": "/proef/bezoek/9999-1 werfverslag (concept).docx", "bronnen": ["transcript.txt"]}
     assert runtime.werf.rijen[0]["registratie"] == {"bezoek_id": "bezoek-47", "project_ref": "h-architects:9999"}  # CX4-1: vers geregistreerd
     # CX4-4: de proef stond al op de bordrij vóór de brug draaide
     eerste = next(i for i, w in enumerate(runtime.writes) if w[1]["rijen"][0].get("proef_pad"))
@@ -279,8 +279,20 @@ def test_bestaande_proef_naar_de_werfapp_zonder_claude(runtime):
     assert [pt["titel"] for c in v["categorieen"] for pt in c["punten"]] == ["Werfbezoeken", "Latei"]
     assert v["categorieen"][0]["punten"][0]["doorlopend"] is True and not v["categorieen"][1]["punten"][0].get("doorlopend")
     assert kw["proef_pad"].endswith(".docx")
+    assert kw["bronnen"] == []   # een bestaande proef: de bronlijst stond niet in de markdown
     info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
     assert info["punten"] == 2 and info["werfapp"]["nummer"] == "9999-2"
+
+
+def test_eigen_tekst_alleen_de_naamvormen_van_mehdis_eigen_hulpmiddelen(runtime):
+    """CX5-4: elke vorm die live voorkomt (synthetische titels), en wat van derden kan komen."""
+    eigen = ["transcript.txt", "transcript.docx", "00 verslag.md", "00 fotos.md", "05-07 Vergadering_ dak en goten-transcript.txt",
+             "06-24 Vergadering_ terras — afvoer-transcript.docx", "20260820 2173 Vergadering_ gevel en dak-transcript.txt",
+             "2026-06-16 Plaud transcript.txt", "Transcript.TXT"]
+    derden = ["derden-transcript.txt", "transcript aannemer.txt", "verslag transcript aannemer.docx", "aannemer transcript.docx",
+              "transcript.pdf", "05-07-transcript.txt", "opname niet getranscribeerd.md", "00 verslag aannemer.md", "notities.md"]
+    assert [n for n in eigen if not runtime.p.eigen_tekst(n)] == []
+    assert [n for n in derden if runtime.p.eigen_tekst(n)] == []
 
 
 def test_eigen_bestand_op_plaats_en_naam(runtime):
@@ -320,6 +332,9 @@ def test_oude_registratie_alleen_van_deze_bordrij_en_link_blijft_bij_fout(runtim
     runtime.werf.concept = weigert
     uit = p.naar_werfapp(Agent(), "9999", 1, rij, {"bezoek": "1", "dossier": "9999"}, [], "/p.docx")
     assert uit == {"fout": "bezet", "status": 409, "id": 7, "nummer": "9999-1"}   # CX5-3: de bevestigde link blijft zichtbaar
+    rij["proef_info"] = {"werfapp": {"id": 7, "nummer": "9999-1", "verstuurd": True}}
+    uit = p.naar_werfapp(Agent(), "9999", 1, rij, {"bezoek": "1", "dossier": "9999"}, [], "/p.docx")
+    assert uit["verstuurd"] is True and uit["id"] == 7   # CX6-2: de verzendstatus gaat bij een fout niet verloren
 
 
 def test_dubbele_fotonamen_vallen_uit_beide_kanalen(runtime):

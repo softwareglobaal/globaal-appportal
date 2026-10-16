@@ -131,7 +131,7 @@ def _ja(w):
     return str(w).strip().lower() in ("ja", "yes", "true", "1", "x", "aanwezig")
 
 
-def payload(verslag, rij, fotos, proef_pad=""):
+def payload(verslag, rij, fotos, proef_pad="", bronnen=()):
     """De body voor POST /api/v1/verslagen. Zuiver: geen netwerk, testbaar."""
     status = (verslag.get("status_nl") or "").strip()
     if (verslag.get("status_en") or "").strip():
@@ -142,7 +142,8 @@ def payload(verslag, rij, fotos, proef_pad=""):
             "status_werf": status or None, "inleiding": inleiding, "opmerkingen": opmerkingen(verslag, fotos), "door": DOOR,
             "bron": {"soort": "werfverslag-proef", "verwijzing": proef_pad or rij.get("bezoekmap") or "", "agent": DOOR,
                      "detail": {"bordrij": rij.get("id"), "bezoek": verslag.get("bezoek"), "verslagtype": verslag.get("verslagtype"),
-                                "fotos_niet_gevonden": ontbrekende_fotos(verslag, fotos)}}}
+                                "fotos_niet_gevonden": ontbrekende_fotos(verslag, fotos), "bronnen": list(bronnen)[:50],
+                                "fotos": len(fotos)}}}
     if reg.get("bezoek_id") and reg.get("project_ref") == f"h-architects:{verslag['dossier']}":
         body["bezoek_id"] = reg["bezoek_id"]   # de werfapp koppelt en geeft bij herhaling hetzelfde verslag terug (CX3-4)
     nr = volgnummer(verslag.get("bezoek"))
@@ -166,13 +167,13 @@ def _project(dossier, adres):
     return call(f"/projecten/{dossier}"), True
 
 
-def concept(verslag, rij, fotos, proef_pad=""):
+def concept(verslag, rij, fotos, proef_pad="", bronnen=()):
     """Zet de proef als conceptverslag in de werfapp. Geeft {id, nummer, url, nieuw, project_nieuw, fotos_niet_gevonden}.
     Vereist een vast bezoek van hetzelfde project in rij['registratie']: de werfapp koppelt het verslag eraan en geeft bij
     elke herhaling (tweede klik, cron, verloren antwoord, --naar-werfapp) hetzelfde concept terug (W41, CX4-1/2)."""
     if verslag.get("soort_bezoek") == "plaatsbezoek" or not volgnummer(verslag.get("bezoek")):
         raise WerfappFout(0, "plaatsbezoek zonder werfverslagnummer: blijft een Word-proef (A7/A8)")
-    body = payload(verslag, rij, fotos, proef_pad)
+    body = payload(verslag, rij, fotos, proef_pad, bronnen)
     if not body.get("bezoek_id"):
         raise WerfappFout(0, "geen vast bezoek (registratie) voor deze bordrij; niets aangemaakt")
     _, project_nieuw = _project(verslag["dossier"], verslag.get("adres") or rij.get("adres"))
@@ -182,7 +183,7 @@ def concept(verslag, rij, fotos, proef_pad=""):
         if ex.status == 409:
             raise WerfappFout(409, f"{ex.fout}; niets aangemaakt, kijk het na in de werfapp") from None
         if ex.status == 404 and "project" not in (ex.fout or ""):
-            raise WerfappFout(404, "de werfapp kent de conceptroute nog niet (oudere versie); niets aangemaakt") from None
+            raise WerfappFout(404, "de werfapp kent de conceptroute nog niet (oudere versie); geen verslag aangemaakt") from None
         raise
     if "bestond" not in r or not isinstance(r.get("id"), int):
         raise WerfappFout(0, "onverwacht antwoord van de werfapp (geen bezoekkoppeling bevestigd)")
