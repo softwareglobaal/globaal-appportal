@@ -665,6 +665,99 @@ finally:
 check("voer_uit gebruikt de eindcontrole: stappen die zwijgen, maken de zoektocht onvolledig, ook in Controle.md",
       not _zv["volledig"] and any("perceel" in o for o in _zv["onvolledig"])
       and "**Onvolledig:**" in open(os.path.join(_um, "Controle.md")).read(), _zv["onvolledig"])
+class _NepGeopuntLoc:
+    def __init__(self, ok=True):
+        self.ok, self.first = ok, self
+    def wait_for(self, **k):
+        if not self.ok:
+            raise TimeoutError("Locator.wait_for: Timeout 15000ms exceeded. locator resolved to hidden <div>")
+    def click(self, **k):
+        return None
+    def fill(self, *a):
+        return None
+    def press(self, *a):
+        return None
+
+
+class _NepGeopunt:
+    """geopunt.be zoals gemeten op 17-10-2026: het eerste element met het adres is een verborgen lijstitem."""
+    adres = "Grotesteenweg 459, 2600 Antwerpen"
+    def goto(self, *a, **k):
+        return None
+    def get_by_placeholder(self, *a, **k):
+        return _NepGeopuntLoc()
+    def get_by_text(self, tekst, exact=False):
+        return _NepGeopuntLoc(ok=not (tekst == self.adres and not exact))  # .first van het adres: verborgen
+    def locator(self, sel):
+        return _NepGeopuntLoc(ok=self.adres in sel and "visible=true" in sel)
+    def wait_for_timeout(self, *a):
+        return None
+    def screenshot(self, path, **k):
+        open(path, "w").write("x")
+    def close(self):
+        return None
+
+
+_fg = FA.Felix.__new__(FA.Felix)
+_fg._ctx = type("C", (), {"new_page": lambda self: _NepGeopunt()})()
+_gp = os.path.join(tempfile.mkdtemp(), "Geopunt.png")
+try:
+    _gpok = _fg.schermafdruk_geopunt("Grotesteenweg 459, 2600 Antwerpen", _gp) == _gp and os.path.exists(_gp)
+except Exception as e:
+    _gpok = e
+check("Geopunt.png lukt als het eerste element met het adres verborgen is (gemeten op geopunt.be, 17-10-2026)", _gpok is True, _gpok)
+
+class _NepFelixStart:
+    """De startpagina van FelixArchief zoals op 17-10-2026: de cookiemelding verschijnt pas na de eerste weigering en
+    vangt dan de klik op 'Aanmelden' op. Pas als ze weg is, opent de klik het menu met de A-profiel-link."""
+    def __init__(self):
+        self.url, self.melding, self.weigeringen, self.menu = "", False, 0, False
+    def goto(self, url, **k):
+        self.url = url
+        if "a-profiel" in url:
+            raise RuntimeError("tot hier volstaat de proef")
+    def get_by_text(self, tekst, exact=False):
+        pagina = self
+        class _L:
+            def click(self_, **k):
+                if tekst == "Weiger alles":
+                    pagina.weigeringen += 1
+                    if pagina.weigeringen == 1:
+                        pagina.melding = True  # te vroeg geweigerd: de melding komt nog
+                        raise TimeoutError("geen banner")
+                    pagina.melding = False
+        return _L()
+    def locator(self, sel, has_text=None):
+        pagina = self
+        class _L:
+            first = None
+            def click(self_, **k):
+                if not pagina.melding:
+                    pagina.menu = True
+            def wait_for(self_, **k):
+                if not pagina.menu:
+                    raise TimeoutError("link niet gevonden")
+            def get_attribute(self_, naam):
+                return "https://login.antwerpen.be/a-profiel"
+        l = _L()
+        l.first = l
+        return l
+    def screenshot(self, **k):
+        return None
+
+
+_fs = FA.Felix.__new__(FA.Felix)
+_fs.page = _NepFelixStart()
+os.environ.setdefault("FELIXARCHIEF_EMAIL", "test@voorbeeld.test")
+os.environ.setdefault("FELIXARCHIEF_WACHTWOORD", "testwaarde")
+try:
+    _fs._aanmelden_een_keer()
+    _stap = "geen fout"
+except RuntimeError as e:
+    _stap = str(e)
+check("een cookiemelding die laat verschijnt, houdt het aanmelden niet tegen (gemeten 17-10-2026)",
+      "'A-profiel'" in _stap or "a-profiel" in _stap, _stap[:160])
+
 _kort = os.path.join(tempfile.mkdtemp(), "kort.pdf")
 open(_kort, "wb").write(b"x" * 10)
 try:

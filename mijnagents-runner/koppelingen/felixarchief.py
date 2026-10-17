@@ -129,9 +129,9 @@ class Felix:
         finally:
             self._pw.stop()
 
-    def _weiger_cookies(self):
+    def _weiger_cookies(self, wacht=5000):
         try:
-            self.page.get_by_text("Weiger alles", exact=True).click(timeout=5000)
+            self.page.get_by_text("Weiger alles", exact=True).click(timeout=wacht)
         except Exception:
             pass  # geen banner: niets te doen
 
@@ -344,9 +344,15 @@ class Felix:
             p.goto(BASIS + "/", wait_until="domcontentloaded", timeout=60000)
             self._weiger_cookies()
             stap = "aanmeldknop"
-            p.locator("text=Aanmelden").first.click(timeout=20000, force=True)
-            stap = "aanmeldlink A-profiel"
             link = p.locator("a", has_text="Meld aan met je A-profiel").first
+            for _ in range(4):  # de cookiemelding kan pas na de eerste weigering verschijnen en vangt dan de klik op
+                p.locator("text=Aanmelden").first.click(timeout=20000, force=True)  # (gemeten 17-10-2026)
+                try:
+                    link.wait_for(state="attached", timeout=8000)
+                    break
+                except Exception:
+                    self._weiger_cookies(wacht=3000)
+            stap = "aanmeldlink A-profiel"
             link.wait_for(state="attached", timeout=20000)
             p.goto(link.get_attribute("href"), wait_until="domcontentloaded", timeout=60000)  # niet klikken: rechtstreeks
             stap = "A-profiel"
@@ -477,7 +483,9 @@ class Felix:
                     veld.press("ArrowDown")
                     veld.press("Enter")
                 p.get_by_text("Kadastrale informatie").first.wait_for(timeout=30000)  # het adrespaneel staat open
-                p.get_by_text(adres_geopunt).first.wait_for(timeout=15000)  # en het toont het gevraagde adres
+                # en het toont het gevraagde adres. Het eerste element met die tekst is een verborgen lijstitem van de
+                # suggesties; alleen het zichtbare telt (17-10-2026: zo faalde Geopunt.png bij elk adres).
+                p.locator(f'text="{adres_geopunt}" >> visible=true').first.wait_for(timeout=15000)
                 try:
                     p.get_by_text("Kadastrale informatie").first.click(timeout=10000)
                 except Exception:
