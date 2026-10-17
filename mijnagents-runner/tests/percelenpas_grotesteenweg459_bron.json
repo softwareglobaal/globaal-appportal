@@ -6,246 +6,382 @@
  ],
  "gemeten": "2026-10-17",
  "vergunningen": {
-  "aanvraag": {
-   "url": "/percelenpas/vergunningen",
-   "geometry": [
-    {
-     "x": 51.182949,
-     "y": 4.43076
-    },
-    {
-     "x": 51.182949,
-     "y": 4.430758
-    },
-    {
-     "x": 51.182937,
-     "y": 4.430686
-    },
-    {
-     "x": 51.182902,
-     "y": 4.430476
-    },
-    {
-     "x": 51.182883,
-     "y": 4.430361
-    },
-    {
-     "x": 51.182911,
-     "y": 4.43034
-    },
-    {
-     "x": 51.182936,
-     "y": 4.430321
-    },
-    {
-     "x": 51.182943,
-     "y": 4.430361
-    },
-    {
-     "x": 51.182993,
-     "y": 4.430662
-    },
-    {
-     "x": 51.183005,
-     "y": 4.430736
-    },
-    {
-     "x": 51.183003,
-     "y": 4.430737
-    },
-    {
-     "x": 51.182949,
-     "y": 4.43076
-    }
-   ],
-   "district": "BERCHEM"
+  "parcelinfo": {
+   "aanvraag": {
+    "x": "51.18293797211791",
+    "y": "4.4305158241686255",
+    "searchAddress": "Grotesteenweg 459, 2600 Antwerpen",
+    "buffer": -0.5
+   },
+   "antwoord": {
+    "geometry": [
+     {
+      "x": 51.182949,
+      "y": 4.43076
+     },
+     {
+      "x": 51.182949,
+      "y": 4.430758
+     },
+     {
+      "x": 51.182937,
+      "y": 4.430686
+     },
+     {
+      "x": 51.182902,
+      "y": 4.430476
+     },
+     {
+      "x": 51.182883,
+      "y": 4.430361
+     },
+     {
+      "x": 51.182911,
+      "y": 4.43034
+     },
+     {
+      "x": 51.182936,
+      "y": 4.430321
+     },
+     {
+      "x": 51.182943,
+      "y": 4.430361
+     },
+     {
+      "x": 51.182993,
+      "y": 4.430662
+     },
+     {
+      "x": 51.183005,
+      "y": 4.430736
+     },
+     {
+      "x": 51.183003,
+      "y": 4.430737
+     },
+     {
+      "x": 51.182949,
+      "y": 4.43076
+     }
+    ],
+    "capaKey": "11303C0256/00E012",
+    "shapeArea": 190.50197625893958,
+    "address": "Grotesteenweg 459, 2600 Antwerpen",
+    "district": "BERCHEM",
+    "addresses": [],
+    "riskType": "NORISK"
+   }
   },
-  "antwoord": {
-   "fields": {
-    "content": {
-     "title": null,
-     "content": [
-      {
-       "value": {
-        "itemTitle": {
-         "textType": "h3",
-         "text": "Stedenbouwkundige vergunningen"
+  "inhoud": {
+   "aanvraag": {
+    "url": "/percelenpas/vergunningen",
+    "geometry": [
+     {
+      "x": 51.182949,
+      "y": 4.43076
+     },
+     {
+      "x": 51.182949,
+      "y": 4.430758
+     },
+     {
+      "x": 51.182937,
+      "y": 4.430686
+     },
+     {
+      "x": 51.182902,
+      "y": 4.430476
+     },
+     {
+      "x": 51.182883,
+      "y": 4.430361
+     },
+     {
+      "x": 51.182911,
+      "y": 4.43034
+     },
+     {
+      "x": 51.182936,
+      "y": 4.430321
+     },
+     {
+      "x": 51.182943,
+      "y": 4.430361
+     },
+     {
+      "x": 51.182993,
+      "y": 4.430662
+     },
+     {
+      "x": 51.183005,
+      "y": 4.430736
+     },
+     {
+      "x": 51.183003,
+      "y": 4.430737
+     },
+     {
+      "x": 51.182949,
+      "y": 4.43076
+     }
+    ],
+    "district": "BERCHEM"
+   },
+   "antwoord": {
+    "fields": {
+     "content": {
+      "title": null,
+      "content": [
+       {
+        "value": {
+         "itemTitle": {
+          "textType": "h3",
+          "text": "Stedenbouwkundige vergunningen"
+         },
+         "itemDescription": "<p>Intro bij stedebouwkundige vergunningen</p>",
+         "layerTile": {
+          "subLayerItems": [
+           {
+            "subItemTitle": "Stedenbouwkundige vergunningen",
+            "permits": [
+             {
+              "fileNumber": "20083154",
+              "fileId": "36842",
+              "decisionDate": "1222387200000",
+              "decisionDateUnix": 1222387200000,
+              "decisionDateString": "26/09/2008",
+              "subject": "verbouwen winkel en twee appartementen tot winkel en drie appartementen",
+              "cleanSubject": "verbouwen winkel en twee appartementen tot winkel en drie appartementen",
+              "decision": "Vergunning",
+              "type": "Stedenbouwkundige vergunningen",
+              "inventoryNumber": null
+             },
+             {
+              "fileNumber": "197317935",
+              "fileId": "203169",
+              "decisionDate": "121996800000",
+              "decisionDateUnix": 121996800000,
+              "decisionDateString": "13/11/1973",
+              "subject": "Verbouwingswerken",
+              "cleanSubject": "Verbouwingswerken",
+              "decision": "Vergunning",
+              "type": "Stedenbouwkundige vergunningen",
+              "inventoryNumber": null
+             },
+             {
+              "fileNumber": "196716992",
+              "fileId": "220188",
+              "decisionDate": "-51494400000",
+              "decisionDateUnix": -51494400000,
+              "decisionDateString": "",
+              "subject": "Verbouwingswerken",
+              "cleanSubject": "Verbouwingswerken",
+              "decision": "Vergunning",
+              "type": "Stedenbouwkundige vergunningen",
+              "inventoryNumber": null
+             }
+            ],
+            "showItems": "False",
+            "showAllotmentPermits": "False",
+            "showConstructionPermits": "False",
+            "showPermits": "True"
+           }
+          ],
+          "showSubLayerItems": "True"
+         }
         },
-        "itemDescription": "<p>Intro bij stedebouwkundige vergunningen</p>",
-        "layerTile": {
-         "subLayerItems": [
-          {
-           "subItemTitle": "Stedenbouwkundige vergunningen",
-           "permits": [
-            {
-             "fileNumber": "20083154",
-             "fileId": "36842",
-             "decisionDate": "1222387200000",
-             "decisionDateUnix": 1222387200000,
-             "decisionDateString": "26/09/2008",
-             "subject": "verbouwen winkel en twee appartementen tot winkel en drie appartementen",
-             "cleanSubject": "verbouwen winkel en twee appartementen tot winkel en drie appartementen",
-             "decision": "Vergunning",
-             "type": "Stedenbouwkundige vergunningen",
-             "inventoryNumber": null
-            },
-            {
-             "fileNumber": "197317935",
-             "fileId": "203169",
-             "decisionDate": "121996800000",
-             "decisionDateUnix": 121996800000,
-             "decisionDateString": "13/11/1973",
-             "subject": "Verbouwingswerken",
-             "cleanSubject": "Verbouwingswerken",
-             "decision": "Vergunning",
-             "type": "Stedenbouwkundige vergunningen",
-             "inventoryNumber": null
-            },
-            {
-             "fileNumber": "196716992",
-             "fileId": "220188",
-             "decisionDate": "-51494400000",
-             "decisionDateUnix": -51494400000,
-             "decisionDateString": "",
-             "subject": "Verbouwingswerken",
-             "cleanSubject": "Verbouwingswerken",
-             "decision": "Vergunning",
-             "type": "Stedenbouwkundige vergunningen",
-             "inventoryNumber": null
-            }
-           ],
-           "showItems": "False",
-           "showAllotmentPermits": "False",
-           "showConstructionPermits": "False",
-           "showPermits": "True"
-          }
-         ],
-         "showSubLayerItems": "True"
-        }
-       },
-       "multiple": false,
-       "componentType": "layerItem"
-      }
-     ]
+        "multiple": false,
+        "componentType": "layerItem"
+       }
+      ]
+     }
     }
    }
   }
  },
  "bouwovertredingen": {
-  "aanvraag": {
-   "url": "/percelenpas/bouwovertredingen",
-   "geometry": [
-    {
-     "x": 51.182949,
-     "y": 4.43076
-    },
-    {
-     "x": 51.182949,
-     "y": 4.430758
-    },
-    {
-     "x": 51.182937,
-     "y": 4.430686
-    },
-    {
-     "x": 51.182902,
-     "y": 4.430476
-    },
-    {
-     "x": 51.182883,
-     "y": 4.430361
-    },
-    {
-     "x": 51.182911,
-     "y": 4.43034
-    },
-    {
-     "x": 51.182936,
-     "y": 4.430321
-    },
-    {
-     "x": 51.182943,
-     "y": 4.430361
-    },
-    {
-     "x": 51.182993,
-     "y": 4.430662
-    },
-    {
-     "x": 51.183005,
-     "y": 4.430736
-    },
-    {
-     "x": 51.183003,
-     "y": 4.430737
-    },
-    {
-     "x": 51.182949,
-     "y": 4.43076
-    }
-   ],
-   "district": "BERCHEM"
+  "parcelinfo": {
+   "aanvraag": {
+    "x": "51.18293797211791",
+    "y": "4.4305158241686255",
+    "searchAddress": "Grotesteenweg 459, 2600 Antwerpen",
+    "buffer": -0.5
+   },
+   "antwoord": {
+    "geometry": [
+     {
+      "x": 51.182949,
+      "y": 4.43076
+     },
+     {
+      "x": 51.182949,
+      "y": 4.430758
+     },
+     {
+      "x": 51.182937,
+      "y": 4.430686
+     },
+     {
+      "x": 51.182902,
+      "y": 4.430476
+     },
+     {
+      "x": 51.182883,
+      "y": 4.430361
+     },
+     {
+      "x": 51.182911,
+      "y": 4.43034
+     },
+     {
+      "x": 51.182936,
+      "y": 4.430321
+     },
+     {
+      "x": 51.182943,
+      "y": 4.430361
+     },
+     {
+      "x": 51.182993,
+      "y": 4.430662
+     },
+     {
+      "x": 51.183005,
+      "y": 4.430736
+     },
+     {
+      "x": 51.183003,
+      "y": 4.430737
+     },
+     {
+      "x": 51.182949,
+      "y": 4.43076
+     }
+    ],
+    "capaKey": "11303C0256/00E012",
+    "shapeArea": 190.50197625893958,
+    "address": "Grotesteenweg 459, 2600 Antwerpen",
+    "district": "BERCHEM",
+    "addresses": [],
+    "riskType": "NORISK"
+   }
   },
-  "antwoord": {
-   "fields": {
-    "content": {
-     "title": null,
-     "content": [
-      {
-       "value": {
-        "itemTitle": {
-         "textType": "h3",
-         "text": "Vastgestelde bouwovertredingen"
+  "inhoud": {
+   "aanvraag": {
+    "url": "/percelenpas/bouwovertredingen",
+    "geometry": [
+     {
+      "x": 51.182949,
+      "y": 4.43076
+     },
+     {
+      "x": 51.182949,
+      "y": 4.430758
+     },
+     {
+      "x": 51.182937,
+      "y": 4.430686
+     },
+     {
+      "x": 51.182902,
+      "y": 4.430476
+     },
+     {
+      "x": 51.182883,
+      "y": 4.430361
+     },
+     {
+      "x": 51.182911,
+      "y": 4.43034
+     },
+     {
+      "x": 51.182936,
+      "y": 4.430321
+     },
+     {
+      "x": 51.182943,
+      "y": 4.430361
+     },
+     {
+      "x": 51.182993,
+      "y": 4.430662
+     },
+     {
+      "x": 51.183005,
+      "y": 4.430736
+     },
+     {
+      "x": 51.183003,
+      "y": 4.430737
+     },
+     {
+      "x": 51.182949,
+      "y": 4.43076
+     }
+    ],
+    "district": "BERCHEM"
+   },
+   "antwoord": {
+    "fields": {
+     "content": {
+      "title": null,
+      "content": [
+       {
+        "value": {
+         "itemTitle": {
+          "textType": "h3",
+          "text": "Vastgestelde bouwovertredingen"
+         },
+         "itemDescription": "<p>Is er een bouwovertreding? Vraag meer info via Stel je vraag &gt; Bouwovertreding.</p>",
+         "layerTile": {
+          "subLayerItems": [
+           {
+            "subItemTitle": "Uitvoeren van vergunningsplichtige werken zonder vergunning",
+            "constructionViolations": [
+             {
+              "violations": [
+               {
+                "value": "Dossiernummer: 202410548"
+               },
+               {
+                "value": "Registratienummer: 11002_2024_11491"
+               }
+              ]
+             }
+            ],
+            "showItems": "False",
+            "showAllotmentPermits": "False",
+            "showConstructionPermits": "True",
+            "showPermits": "False"
+           },
+           {
+            "subItemTitle": "Uitvoeren van vergunningsplichtige werken in strijd met vergunning",
+            "constructionViolations": [
+             {
+              "violations": [
+               {
+                "value": "Dossiernummer: 202410548"
+               },
+               {
+                "value": "Registratienummer: 11002_2024_11492"
+               }
+              ]
+             }
+            ],
+            "showItems": "False",
+            "showAllotmentPermits": "False",
+            "showConstructionPermits": "True",
+            "showPermits": "False"
+           }
+          ],
+          "showSubLayerItems": "True"
+         }
         },
-        "itemDescription": "<p>Is er een bouwovertreding? Vraag meer info via Stel je vraag &gt; Bouwovertreding.</p>",
-        "layerTile": {
-         "subLayerItems": [
-          {
-           "subItemTitle": "Uitvoeren van vergunningsplichtige werken zonder vergunning",
-           "constructionViolations": [
-            {
-             "violations": [
-              {
-               "value": "Dossiernummer: 202410548"
-              },
-              {
-               "value": "Registratienummer: 11002_2024_11491"
-              }
-             ]
-            }
-           ],
-           "showItems": "False",
-           "showAllotmentPermits": "False",
-           "showConstructionPermits": "True",
-           "showPermits": "False"
-          },
-          {
-           "subItemTitle": "Uitvoeren van vergunningsplichtige werken in strijd met vergunning",
-           "constructionViolations": [
-            {
-             "violations": [
-              {
-               "value": "Dossiernummer: 202410548"
-              },
-              {
-               "value": "Registratienummer: 11002_2024_11492"
-              }
-             ]
-            }
-           ],
-           "showItems": "False",
-           "showAllotmentPermits": "False",
-           "showConstructionPermits": "True",
-           "showPermits": "False"
-          }
-         ],
-         "showSubLayerItems": "True"
-        }
-       },
-       "multiple": false,
-       "componentType": "layerItem"
-      }
-     ]
+        "multiple": false,
+        "componentType": "layerItem"
+       }
+      ]
+     }
     }
    }
   }

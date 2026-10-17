@@ -11,14 +11,15 @@ Dossiers opvragen bij de stad vraagt aanmelden met Itsme of eID (hoger zekerheid
 de server niet. Die stap zetten we klaar voor Mehdi.
 """
 import json
-import math
 import os
 import re
 import urllib.parse
+from collections import Counter
 
 BASIS = "https://omgeving.antwerpen.be/percelenpas"
 UITKOMST_GEEN = "Er zijn geen gekende bouwovertredingen"
 UITKOMST_WEL = "Vastgestelde bouwovertredingen"
+CAPAKEY = r"\d{5}[A-Z]\d{4}/\d{2}[A-Z_]\d{3}"
 # Een scherm dat twee keer hetzelfde toont, bewijst niet dat de stad klaar is met laden (Codex-ronde 7): zonder
 # bronantwoord tonen we wat het scherm zegt, maar is het resultaat onvolledig.
 NIET_BEVESTIGD = "{} alleen van het scherm gelezen: {}, dus niet bevestigd"
@@ -95,8 +96,8 @@ def _layer_tile(antwoord):
     van voor 1962; wie alleen het eerste blok las, zag 1 van de 5 (gemeten 17-10-2026).
 
     {} als de stad uitdrukkelijk niets heeft: de inhoud is dan een lege lijst (Wielelei 85 en Frans Brandsstraat 11,
-    geen bouwovertredingen). None bij elke andere vorm, ook een blok zonder layerTile of zonder subLayerItems: dan
-    lezen we het scherm en is het resultaat onvolledig (Codex FX28).
+    geen bouwovertredingen). None bij elke andere vorm: het antwoord wordt in zijn geheel afgewezen, nooit stil
+    gefilterd (Codex FX28, rondes 8 en 9).
     """
     try:
         inhoud = antwoord["fields"]["content"]["content"]
@@ -112,7 +113,9 @@ def _layer_tile(antwoord):
         tile = waarde.get("layerTile") if isinstance(waarde, dict) else None
         if not isinstance(tile, dict) or not isinstance(tile.get("subLayerItems"), list) or not tile["subLayerItems"]:
             return None
-        subs += [s for s in tile["subLayerItems"] if isinstance(s, dict)]
+        if not all(isinstance(s, dict) for s in tile["subLayerItems"]):
+            return None
+        subs += tile["subLayerItems"]
     return {"subLayerItems": subs}
 
 
@@ -126,11 +129,13 @@ def _is_bronantwoord(r, sectie):
         return False
 
 
-def _binnen(punt, veelhoek, marge_m=3.0):
-    """Ligt het Geopunt-punt (lat, lon) in het perceel dat de stad opvroeg, of op minder dan marge_m van de rand?
+def _is_perceelinfo(r):
+    return urllib.parse.urlparse(r.url).path.endswith("/passthroughapi/parcelinfo")
 
-    De stad stuurt de perceelgrens mee in de aanvraag als [{"x": lat, "y": lon}, ...] (gemeten 17-10-2026).
-    """
+
+def _binnen(punt, veelhoek):
+    """Ligt het Geopunt-punt (lat, lon) strikt binnen de perceelgrens [{"x": lat, "y": lon}, ...]? Zonder marge: een
+    punt op of buiten de grens is geen bevestiging (Codex FX27, ronde 9)."""
     try:
         hoeken = [(float(h["x"]), float(h["y"])) for h in veelhoek]
     except (KeyError, TypeError, ValueError):
@@ -142,24 +147,43 @@ def _binnen(punt, veelhoek, marge_m=3.0):
     for (x1, y1), (x2, y2) in zip(hoeken, hoeken[1:] + hoeken[:1]):
         if (y1 > lon) != (y2 > lon) and lat < (x2 - x1) * (lon - y1) / (y2 - y1) + x1:
             binnen = not binnen
-    if binnen:
-        return True
-    fy, fx = 110540.0, 111320.0 * math.cos(math.radians(lat))  # meter per graad breedte en lengte
-    for (x1, y1), (x2, y2) in zip(hoeken, hoeken[1:] + hoeken[:1]):
-        ax, ay, bx, by = (y1 - lon) * fx, (x1 - lat) * fy, (y2 - lon) * fx, (x2 - lat) * fy
-        dx, dy = bx - ax, by - ay
-        k = max(0.0, min(1.0, -(ax * dx + ay * dy) / (dx * dx + dy * dy))) if dx or dy else 0.0
-        if math.hypot(ax + k * dx, ay + k * dy) <= marge_m:
-            return True
-    return False
+    return binnen
 
 
-def _zelfde_perceel(r, punt):
-    """Hoort het antwoord bij het perceel van het Geopunt-adres? Elk ander perceel telt niet (Codex FX27)."""
+def _grens_van(r):
     try:
-        return _binnen(punt, json.loads(r.request.post_data or "{}").get("geometry") or [])
+        return json.loads(r.request.post_data or "{}").get("geometry")
     except Exception:
-        return False
+        return None
+
+
+def _perceel_uit(r, punt):
+    """(perceel, reden) uit het antwoord waarop de stad de pagina bouwt: POST /passthroughapi/parcelinfo met onze
+    Geopunt-coordinaten; het antwoord geeft capaKey, de perceelgrens en het adres (gemeten 17-10-2026). Die grens
+    gaat daarna naar de inhoudsaanvraag. Zo hangen adres, perceel en inhoud aantoonbaar aan elkaar.
+
+    Het Adressenregister is hiervoor geen maatstaf: het schrijft 11303C0256-00E012 en kende bij Frans Brandsstraat 11
+    een ander nummer (00N002) dan de stad (00A003), met hetzelfde grondperceel.
+    """
+    try:
+        if r.status != 200:
+            return None, f"het perceel van de stad gaf status {r.status}"
+        vraag, a = json.loads(r.request.post_data or "{}"), r.json()
+    except Exception:
+        return None, "het perceel van de stad was niet te lezen"
+    try:
+        zelfde_punt = abs(float(vraag.get("x")) - punt[0]) < 1e-9 and abs(float(vraag.get("y")) - punt[1]) < 1e-9
+    except (TypeError, ValueError):
+        zelfde_punt = False
+    if not zelfde_punt:
+        return None, "de stad zocht het perceel op een ander punt dan het Geopunt-adres"
+    capakey = str((a or {}).get("capaKey") or "")
+    if not re.fullmatch(CAPAKEY, capakey):
+        return None, "de stad gaf geen geldig perceelnummer"
+    if not _binnen(punt, a.get("geometry") or []):
+        return None, "het Geopunt-punt ligt niet binnen het perceel van de stad"
+    return {"capakey": capakey, "geometry": a["geometry"], "adres": a.get("address") or "",
+            "adressen": a.get("addresses") or []}, ""
 
 
 def vergunningen_uit_bron(tile):
@@ -177,16 +201,12 @@ def vergunningen_uit_bron(tile):
 
 
 def bouwovertredingen_uit_bron(tile):
-    """(samenvatting, lijst) uit het bronantwoord: per overtreding de omschrijving, het dossier en de registratie.
-
-    Een onderdeel zonder dossiergegevens telt mee met zijn omschrijving; ontbrekend_in_bron() meldt het.
-    """
+    """(samenvatting, lijst) uit het bronantwoord: per overtreding de omschrijving, het dossier en de registratie."""
     lijst = []
     for sub in (tile or {}).get("subLayerItems") or []:
-        groepen = sub.get("constructionViolations") or [{}]
-        for cv in groepen:
+        for cv in sub.get("constructionViolations") or []:
             item = {"omschrijving": sub.get("subItemTitle") or ""}
-            for w in (cv.get("violations") if isinstance(cv, dict) else None) or []:
+            for w in cv.get("violations") or []:
                 m = re.match(r"(Dossiernummer|Registratienummer):\s*(.+)", str(w.get("value") or ""))
                 if m:
                     item[m.group(1).lower()] = m.group(2).strip()
@@ -199,13 +219,11 @@ VERWACHT = {"vergunningen": "permits", "bouwovertredingen": "constructionViolati
 
 
 def ontbrekend_in_bron(tile, sectie):
-    """Wat de stad doorgeeft maar wij niet volledig lezen. Elk punt maakt het resultaat onvolledig (Codex FX28).
-
-    De stad toont per onderdeel tot vier lijsten (main.js, 17-10-2026); wij lezen er per sectie een.
-    """
+    """Wat in het bronantwoord niet de vorm heeft die we volledig lezen. Een enkel punt en het hele antwoord wordt
+    afgewezen (Codex FX28). De stad toont per onderdeel tot vier lijsten (main.js, 17-10-2026); wij lezen er een."""
     sleutel, uit = VERWACHT[sectie], []
     for sub in (tile or {}).get("subLayerItems") or []:
-        titel = (sub.get("subItemTitle") or "zonder titel")[:80]
+        titel = str(sub.get("subItemTitle") or "zonder titel")[:80]
         rijen = sub.get(sleutel)
         if not isinstance(rijen, list) or not rijen:
             uit.append(f"onderdeel '{titel}' zonder {sleutel}")
@@ -214,49 +232,87 @@ def ontbrekend_in_bron(tile, sectie):
         if andere:
             uit.append(f"onderdeel '{titel}' heeft ook {', '.join(andere)}")
         for r in rijen:
-            if sectie == "vergunningen" and not (r.get("fileNumber") or r.get("inventoryNumber")):
+            if not isinstance(r, dict):
+                uit.append(f"een rij in '{titel}' is geen gegevensblok")
+            elif sectie == "vergunningen" and not (r.get("fileNumber") or r.get("inventoryNumber")):
                 uit.append(f"vergunning zonder dossiernummer in '{titel}'")
-            if sectie == "bouwovertredingen" and not any(
-                    re.match(r"(Dossiernummer|Registratienummer):\s*\S", str(w.get("value") or ""))
-                    for w in (r.get("violations") if isinstance(r, dict) else None) or []):
-                uit.append(f"overtreding zonder dossier- of registratienummer in '{titel}'")
+            elif sectie == "bouwovertredingen":
+                w = r.get("violations")
+                if not isinstance(w, list) or not all(isinstance(x, dict) for x in w) or not any(
+                        re.match(r"(Dossiernummer|Registratienummer):\s*\S", str(x.get("value") or "")) for x in w):
+                    uit.append(f"overtreding zonder dossier- of registratienummer in '{titel}'")
     return uit
 
 
 def _open_met_bron(p, sectie, adres_url, punt):
-    """Een sectie openen en het bronantwoord van de stad voor die sectie en dit perceel opvangen.
+    """Een sectie openen en de twee antwoorden van de stad opvangen: het perceel (parcelinfo) en de inhoud.
 
-    Geeft (tile, reden): tile is None als er geen bruikbaar antwoord is, en reden zegt dan waarom.
+    Geeft (tile, perceel, reden). tile is alleen gevuld als de inhoud over precies de grens van dat perceel gaat, het
+    Geopunt-punt erbinnen ligt en de vorm volledig gekend is; anders zegt reden waarom niet.
     """
-    tile, reden = None, "het bronantwoord van de stad kwam niet binnen"
+    tile, perceel, reden = None, None, "het bronantwoord van de stad kwam niet binnen"
     try:
-        with p.expect_response(lambda r: _is_bronantwoord(r, sectie), timeout=90000) as antw:
+        with p.expect_response(_is_perceelinfo, timeout=90000) as pi, \
+                p.expect_response(lambda r: _is_bronantwoord(r, sectie), timeout=90000) as antw:
             p.goto(adres_url, wait_until="domcontentloaded", timeout=90000)
+        perceel, reden = _perceel_uit(pi.value, punt)
         r = antw.value
-        if r.status != 200:
+        if perceel is None:
+            pass
+        elif r.status != 200:
             reden = f"het bronantwoord van de stad gaf status {r.status}"
-        elif not _zelfde_perceel(r, punt):
-            reden = "het bronantwoord van de stad hoort bij een ander perceel dan het Geopunt-adres"
+        elif _grens_van(r) != perceel["geometry"]:
+            reden = "het bronantwoord van de stad gaat over een andere perceelgrens"
         else:
             tile = _layer_tile(r.json())
+            vorm = ontbrekend_in_bron(tile, sectie) if tile else []
             if tile is None:
                 reden = "het bronantwoord van de stad heeft een vorm die we niet kennen"
+            elif vorm:
+                tile, reden = None, "het bronantwoord van de stad heeft delen die we niet lezen: " + "; ".join(vorm[:3])
     except Exception:
         pass
     if not (p.url or "").startswith(adres_url.split("?")[0]):  # opvangen faalde voor het openen: toch openen,
         p.goto(adres_url, wait_until="domcontentloaded", timeout=90000)  # anders leest de terugval de vorige pagina
-    return tile, reden
+    return tile, perceel, reden
 
 
-def _scherm_volgt_bron(p, sleutels, seconden=30):
-    """Toont het scherm alles wat de stad doorgaf? Pas dan is de printscreen een bewijs (Codex FX29).
+def _tabelrijen(p):
+    """De rijen van de vergunningentabel op het scherm: onderwerp, dossiernummer, type, beslissing, datum."""
+    uit = []
+    for cellen in p.evaluate("""() => [...document.querySelectorAll('tr')].filter(tr =>
+            tr.querySelector('input[id^="table-checkbox"]:not(#table-checkbox-all)')).map(tr =>
+            [...tr.querySelectorAll('td')].map(c => c.innerText.trim()))"""):
+        c = [x for x in cellen if x and x != "Selecteer rij"]
+        if len(c) >= 3:
+            uit.append({"onderwerp": c[0], "dossiernummer": c[1], "type": c[2],
+                        "beslissing": c[3] if len(c) > 3 else "", "datum": c[4] if len(c) > 4 else ""})
+    return uit
 
-    De tabel van de stad pagineert niet (main.js, 17-10-2026), dus elk dossiernummer staat op het scherm.
+
+def _scherm_rijen(p, sectie):
+    if sectie == "vergunningen":
+        return [r["dossiernummer"] for r in _tabelrijen(p)]
+    samen, lijst = bouwovertredingen_uit_tekst(_sectietekst(p, "Bouwovertredingen"))
+    return [(x.get("dossiernummer", ""), x.get("registratienummer", "")) for x in lijst] if lijst else (
+        [] if samen == "geen gekend" else None)
+
+
+def _scherm_gelijk(p, sectie, verwacht, seconden=30):
+    """Toont het scherm van de stad precies de rijen uit de bron, als multiset (ook nul en dubbele nummers)?
+
+    Pas dan klopt de bron met wat een mens ziet en is de printscreen een bewijs (Codex FX29). De tabel pagineert niet
+    (main.js, 17-10-2026). Bij nul bouwovertredingen moet het scherm dat ook zeggen; bij nul vergunningen kan het
+    scherm geen rij tonen die de bron niet kent.
     """
+    doel = Counter(verwacht)
     for _ in range(seconden):
-        tekst = p.locator("body").inner_text()
-        if all(s in tekst for s in sleutels):
-            return True
+        try:
+            rijen = _scherm_rijen(p, sectie)
+            if rijen is not None and Counter(rijen) == doel:
+                return True
+        except Exception:
+            pass
         p.wait_for_timeout(1000)
     return False
 
@@ -264,20 +320,22 @@ def _scherm_volgt_bron(p, sleutels, seconden=30):
 def lees(ctx, lat, lon, adres, map_=None):
     """Vergunningen en bouwovertredingen van het perceel. Met map_: printscreens en het PDF-rapport van de stad.
 
-    De gegevens komen uit het bronantwoord van de stad (een JSON per sectie), niet uit het scherm: een scherm laadt in
-    stukken en een tussenstand leek volledig (Codex-rondes 5 tot 7, 17-10-2026). Het antwoord telt alleen voor de
-    eigen sectie en het perceel van het Geopunt-adres (Codex FX27). Komt er geen bruikbaar antwoord, dan lezen we het
-    scherm met de regel 'expliciet en twee keer gelijk', zeggen we dat erbij en is het resultaat onvolledig.
+    De gegevens komen uit de antwoorden van de stad zelf, niet uit het scherm: een scherm laadt in stukken en een
+    tussenstand leek volledig (Codex-rondes 5 tot 7, 17-10-2026). Ze tellen alleen als de keten sluit: onze
+    Geopunt-coordinaten, het perceel van de stad, de grens van dat perceel, de inhoud voor die grens, en een scherm dat
+    dezelfde rijen toont (ontwerpronde 10). Elke controle die slaagt, staat in 'controles'; wat niet slaagt, in
+    'fouten'. Zonder bruikbaar antwoord lezen we het scherm, zeggen we dat erbij en is het resultaat onvolledig.
     """
     uit = {"url": url("vergunningen", lat, lon, adres), "capakey": "", "vergunningen": [], "bouwovertredingen": "",
-           "bouwovertredingen_lijst": [], "bewijs": [], "fouten": [], "bron": {},
-           "gelezen": {"vergunningen": False, "bouwovertredingen": False}}
+           "bouwovertredingen_lijst": [], "bewijs": [], "fouten": [], "bron": {}, "perceel": None,
+           "controles": {}, "gelezen": {"vergunningen": False, "bouwovertredingen": False}}
+    c, percelen = uit["controles"], {}
     if map_:
         os.makedirs(map_, exist_ok=True)
     p = ctx.new_page()
     try:
         try:
-            tile, reden = _open_met_bron(p, "vergunningen", uit["url"], (lat, lon))
+            tile, percelen["vergunningen"], reden = _open_met_bron(p, "vergunningen", uit["url"], (lat, lon))
             try:
                 p.wait_for_selector("text=Toelatingen die voor 1962", timeout=60000)
             except Exception:
@@ -287,19 +345,19 @@ def lees(ctx, lat, lon, adres, map_=None):
             if tile is not None:
                 uit["vergunningen"] = vergunningen_uit_bron(tile)
                 uit["bron"]["vergunningen"] = "bronantwoord van de stad"
-                uit["fouten"] += [f"vergunningen, niet volledig gelezen: {x}" for x in ontbrekend_in_bron(tile, "vergunningen")]
+                c["vergunningen_bron"] = True
+                c["vergunningen_scherm"] = _scherm_gelijk(p, "vergunningen", [v["dossiernummer"] for v in uit["vergunningen"]])
+                if not c["vergunningen_scherm"]:
+                    uit["fouten"].append("vergunningen: het scherm van de stad toonde na 30 s niet dezelfde rijen als de bron")
             else:
                 uit["vergunningen"] = _vergunningen_van_scherm(p)
                 uit["bron"]["vergunningen"] = f"scherm ({reden})"
                 uit["fouten"].append(NIET_BEVESTIGD.format("vergunningen", reden))
             uit["gelezen"]["vergunningen"] = True
-            uit["capakey"] = _capakey(p)
+            uit["capakey"] = percelen["vergunningen"]["capakey"] if percelen["vergunningen"] else _capakey(p)
         except Exception as e:
             uit["fouten"].append(f"vergunningen van de stad niet gelezen: {str(e).splitlines()[0][:150]}")
         if map_ and uit["gelezen"]["vergunningen"]:
-            if uit["bron"]["vergunningen"] == "bronantwoord van de stad" and not _scherm_volgt_bron(
-                    p, [v["dossiernummer"] for v in uit["vergunningen"]] or ["geen vergunningen"]):
-                uit["fouten"].append("Vergunningen.png: het scherm toonde na 30 s nog niet alles wat de stad doorgaf")
             if _printscreen(p, os.path.join(map_, "Vergunningen.png"), uit["fouten"]):
                 uit["bewijs"].append(os.path.join(map_, "Vergunningen.png"))
             try:  # het volledige rapport van de stad, via de knop PDF
@@ -313,25 +371,24 @@ def lees(ctx, lat, lon, adres, map_=None):
                 uit["fouten"].append(f"PDF-rapport van de stad niet gelukt: {str(e).splitlines()[0][:150]}")
 
         try:
-            tile, reden = _open_met_bron(p, "bouwovertredingen", url("bouwovertredingen", lat, lon, adres), (lat, lon))
+            tile, percelen["bouwovertredingen"], reden = _open_met_bron(
+                p, "bouwovertredingen", url("bouwovertredingen", lat, lon, adres), (lat, lon))
             if tile is not None:
                 samen, lijst = bouwovertredingen_uit_bron(tile)
                 uit["bron"]["bouwovertredingen"] = "bronantwoord van de stad"
-                uit["fouten"] += [f"bouwovertredingen, niet volledig gelezen: {x}"
-                                  for x in ontbrekend_in_bron(tile, "bouwovertredingen")]
+                c["bouwovertredingen_bron"] = True
+                c["bouwovertredingen_scherm"] = _scherm_gelijk(p, "bouwovertredingen", [
+                    (x.get("dossiernummer", ""), x.get("registratienummer", "")) for x in lijst])
+                if not c["bouwovertredingen_scherm"]:
+                    uit["fouten"].append("bouwovertredingen: het scherm van de stad toonde na 30 s niet dezelfde rijen als de bron")
             else:
                 samen, lijst = _bouwovertredingen_van_scherm(p)
                 uit["bron"]["bouwovertredingen"] = f"scherm ({reden})"
                 uit["fouten"].append(NIET_BEVESTIGD.format("bouwovertredingen", reden))
             uit["bouwovertredingen"], uit["bouwovertredingen_lijst"] = samen, lijst
             uit["gelezen"]["bouwovertredingen"] = True
-            if map_:
-                sleutels = [x[k] for x in lijst for k in ("dossiernummer", "registratienummer") if x.get(k)]
-                if uit["bron"]["bouwovertredingen"] == "bronantwoord van de stad" and not _scherm_volgt_bron(
-                        p, sleutels or [UITKOMST_GEEN]):
-                    uit["fouten"].append("Bouwovertredingen.png: het scherm toonde na 30 s nog niet alles wat de stad doorgaf")
-                if _printscreen(p, os.path.join(map_, "Bouwovertredingen.png"), uit["fouten"]):
-                    uit["bewijs"].append(os.path.join(map_, "Bouwovertredingen.png"))
+            if map_ and _printscreen(p, os.path.join(map_, "Bouwovertredingen.png"), uit["fouten"]):
+                uit["bewijs"].append(os.path.join(map_, "Bouwovertredingen.png"))
         except Exception as e:
             uit["fouten"].append(f"bouwovertredingen van de stad niet gelezen: {str(e).splitlines()[0][:150]}")
     finally:
@@ -339,12 +396,18 @@ def lees(ctx, lat, lon, adres, map_=None):
             p.close()
         except Exception:
             pass  # een fout bij het sluiten mag het gelezen resultaat niet wegvegen (Codex FX04)
+
+    pv, pb = percelen.get("vergunningen"), percelen.get("bouwovertredingen")
+    c["perceel"] = bool(pv and pb and pv["capakey"] == pb["capakey"] and pv["geometry"] == pb["geometry"])
+    if pv and pb and not c["perceel"]:
+        uit["fouten"].append("de twee secties van de stad gaan over een ander perceel")
+    uit["perceel"] = {k: v for k, v in pv.items() if k != "geometry"} if pv else None
     return uit
 
 
 def _capakey(p):
     for _ in range(30):
-        m = re.search(r"\b\d{5}[A-Z]\d{4}/\d{2}[A-Z]\d{3}\b", p.locator("body").inner_text())
+        m = re.search(r"\b" + CAPAKEY + r"\b", p.locator("body").inner_text())
         if m:
             return m.group()
         p.wait_for_timeout(2000)
@@ -366,15 +429,7 @@ def _vergunningen_van_scherm(p):
         p.wait_for_timeout(2000)
     else:
         raise RuntimeError("tabel niet stabiel geladen na 90 seconden")
-    uit = []
-    for cellen in p.evaluate("""() => [...document.querySelectorAll('tr')].filter(tr =>
-            tr.querySelector('input[id^="table-checkbox"]:not(#table-checkbox-all)')).map(tr =>
-            [...tr.querySelectorAll('td')].map(c => c.innerText.trim()))"""):
-        c = [x for x in cellen if x and x != "Selecteer rij"]
-        if len(c) >= 3:
-            uit.append({"onderwerp": c[0], "dossiernummer": c[1], "type": c[2],
-                        "beslissing": c[3] if len(c) > 3 else "", "datum": c[4] if len(c) > 4 else ""})
-    return uit
+    return _tabelrijen(p)
 
 
 def _bouwovertredingen_van_scherm(p):

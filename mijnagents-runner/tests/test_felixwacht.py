@@ -353,76 +353,86 @@ check("een lijst die nog laadt, wordt pas aanvaard als ze stabiel is: twee overt
 
 
 
-# het bronantwoord van de stad: echte aanvraag en echt antwoord, gemeten 17-10-2026 (alleen fields.content bewaard)
+# De keten van de stad, met echte aanvragen en antwoorden (gemeten 17-10-2026, alleen fields.content bewaard):
+# parcelinfo (onze coordinaten -> perceelnummer en grens), daarna de inhoud voor die grens, per sectie.
 _g = json.load(open(os.path.join(HIER, "percelenpas_grotesteenweg459_bron.json"), encoding="utf-8"))
 _w = json.load(open(os.path.join(HIER, "percelenpas_wielelei85_bron.json"), encoding="utf-8"))
-_v = PP.vergunningen_uit_bron(PP._layer_tile(_g["vergunningen"]["antwoord"]))
+_inh = lambda d, s: d[s]["inhoud"]["antwoord"]  # noqa: E731
+_v = PP.vergunningen_uit_bron(PP._layer_tile(_inh(_g, "vergunningen")))
 check("de vergunningen komen uit het bronantwoord, met 197317935 van 13-11-1973",
       any(x["dossiernummer"] == "197317935" and x["datum"] == "13/11/1973" for x in _v) and len(_v) == 3, _v)
-_s, _l = PP.bouwovertredingen_uit_bron(PP._layer_tile(_g["bouwovertredingen"]["antwoord"]))
+_s, _l = PP.bouwovertredingen_uit_bron(PP._layer_tile(_inh(_g, "bouwovertredingen")))
 check("de bouwovertredingen komen uit het bronantwoord: twee, met omschrijving", _s == "2 vastgesteld" and len(_l) == 2
       and _l[1]["omschrijving"].endswith("in strijd met vergunning") and _l[1]["registratienummer"] == "11002_2024_11492", _l)
-_vw = PP.vergunningen_uit_bron(PP._layer_tile(_w["vergunningen"]["antwoord"]))
+_vw = PP.vergunningen_uit_bron(PP._layer_tile(_inh(_w, "vergunningen")))
 check("alle blokken tellen: Wielelei 85 heeft 5 vergunningen, 4 toelatingen voor 1962 staan in een tweede blok",
       len(_vw) == 5 and sum(x["type"] == "Toelating voor 1962" for x in _vw) == 4, [x["dossiernummer"] for x in _vw])
 check("het inventarisnummer staat er een keer: 214157_329#11928, niet dubbel",
       any(x["dossiernummer"] == "214157_329#11928" for x in _vw) and not any(x["dossiernummer"].count("#") > 1 for x in _vw))
 check("lege inhoud, zoals de stad ze echt stuurt, is 'geen gekend'",
-      PP._layer_tile(_w["bouwovertredingen"]["antwoord"]) == {} and PP.bouwovertredingen_uit_bron({}) == ("geen gekend", []))
-check("de echte antwoorden geven geen vals alarm", not any(PP.ontbrekend_in_bron(PP._layer_tile(d[s]["antwoord"]), s)
+      PP._layer_tile(_inh(_w, "bouwovertredingen")) == {} and PP.bouwovertredingen_uit_bron({}) == ("geen gekend", []))
+check("de echte antwoorden geven geen vals alarm", not any(PP.ontbrekend_in_bron(PP._layer_tile(_inh(d, s)), s)
       for d in (_g, _w) for s in ("vergunningen", "bouwovertredingen")))
 check("een toelating zonder inventaris in fileNumber krijgt '<id>_<inventaris>'",
       PP.vergunningen_uit_bron({"subLayerItems": [{"permits": [{"fileNumber": "214157", "inventoryNumber": "329#11928"}]}]})[0]["dossiernummer"]
       == "214157_329#11928")
 
-# Codex FX28: alleen de gemeten lege vorm is 'geen'; een halve of onbekende vorm niet
+# Codex FX28: alleen de gemeten lege vorm is 'geen'; een afwijkend antwoord wordt in zijn geheel afgewezen
 _blok = lambda tile: {"value": {"layerTile": tile}}  # noqa: E731
-_inh = lambda *b: {"fields": {"content": {"content": list(b)}}}  # noqa: E731
-check("een layerTile zonder subLayerItems is geen 'geen gekend'", PP._layer_tile(_inh(_blok({}))) is None
-      and PP._layer_tile(_inh(_blok({"subLayerItems": []}))) is None)
+_vorm = lambda *b: {"fields": {"content": {"content": list(b)}}}  # noqa: E731
+check("een layerTile zonder subLayerItems is geen 'geen gekend'", PP._layer_tile(_vorm(_blok({}))) is None
+      and PP._layer_tile(_vorm(_blok({"subLayerItems": []}))) is None)
 check("een blok zonder layerTile naast een goed blok maakt het geheel onbekend",
-      PP._layer_tile(_inh(_blok({"subLayerItems": [{"permits": [{"fileNumber": "1"}]}]}), {"value": {"iets": 1}})) is None)
+      PP._layer_tile(_vorm(_blok({"subLayerItems": [{"permits": [{"fileNumber": "1"}]}]}), {"value": {"iets": 1}})) is None)
+check("een onderdeel dat geen gegevensblok is, wordt niet stil weggefilterd (Codex ronde 9)",
+      PP._layer_tile(_vorm(_blok({"subLayerItems": [{"permits": [{"fileNumber": "1"}]}, "x"]}))) is None)
 check("een onbekende vorm van het antwoord is geen 'geen gekend'", PP._layer_tile({"fields": {"x": 1}}) is None)
-_half = {"subLayerItems": [{"subItemTitle": "Uitvoeren zonder vergunning"}]}
-check("een overtreding zonder dossiergegevens telt mee en wordt gemeld",
-      PP.bouwovertredingen_uit_bron(_half)[0] == "1 vastgesteld" and PP.ontbrekend_in_bron(_half, "bouwovertredingen"))
+check("een overtreding zonder dossiergegevens of met rijen die geen blok zijn, wordt gemeld",
+      PP.ontbrekend_in_bron({"subLayerItems": [{"subItemTitle": "x"}]}, "bouwovertredingen")
+      and PP.ontbrekend_in_bron({"subLayerItems": [{"constructionViolations": [{"violations": ["Dossiernummer: 1"]}]}]}, "bouwovertredingen")
+      and PP.ontbrekend_in_bron({"subLayerItems": [{"permits": ["19654625"]}]}, "vergunningen"))
 check("een verkaveling (allotmentPermits) die we niet lezen, wordt gemeld",
       PP.ontbrekend_in_bron({"subLayerItems": [{"subItemTitle": "Verkavelingen", "allotmentPermits": [{"fileNumber": "1"}]}]}, "vergunningen"))
 
-
-# Codex FX27: het antwoord telt alleen voor de eigen sectie en het perceel van het Geopunt-adres
+# Codex FX27: het perceel. Strikt binnen de grens, en de keten parcelinfo -> inhoud moet sluiten
 _vk = [{"x": 51.0 + a, "y": 4.0 + b} for a, b in ((-0.0001, -0.00015), (0.0001, -0.00015), (0.0001, 0.00015), (-0.0001, 0.00015))]
-check("het Geopunt-punt ligt in de perceelgrens die de stad opvroeg (Grotesteenweg 459 en Wielelei 85)",
-      PP._binnen(_g["punt"], _g["vergunningen"]["aanvraag"]["geometry"]) and PP._binnen(_w["punt"], _w["vergunningen"]["aanvraag"]["geometry"]))
+check("het Geopunt-punt ligt in de perceelgrens van de stad (Grotesteenweg 459 en Wielelei 85)",
+      PP._binnen(_g["punt"], _g["vergunningen"]["parcelinfo"]["antwoord"]["geometry"])
+      and PP._binnen(_w["punt"], _w["vergunningen"]["parcelinfo"]["antwoord"]["geometry"]))
 check("een ander perceel telt niet: Wielelei ligt niet in de grens van Grotesteenweg",
-      not PP._binnen(_w["punt"], _g["vergunningen"]["aanvraag"]["geometry"]))
-check("2 m buiten de rand telt nog (marge 3 m), 10 m niet",
-      PP._binnen((51.0001 + 2 / 110540, 4.0), _vk) and not PP._binnen((51.0001 + 10 / 110540, 4.0), _vk))
-
-
-class _R:
-    def __init__(self, url, post):
-        self.url, self.request = url, type("Q", (), {"post_data": post})()
-
-
-_bu = "https://omgeving.antwerpen.be/passthroughapi/content/content-with-gis-by-slug"
-check("alleen het bronantwoord van precies de eigen sectie telt",
-      PP._is_bronantwoord(_R(_bu, '{"url": "/percelenpas/bouwovertredingen"}'), "bouwovertredingen")
-      and not PP._is_bronantwoord(_R(_bu, '{"url": "/percelenpas/vergunningen"}'), "bouwovertredingen")
-      and not PP._is_bronantwoord(_R(_bu, '{"url": "/percelenpas/bouwovertredingen-archief"}'), "bouwovertredingen")
-      and not PP._is_bronantwoord(_R("https://x/andere", '{"url": "/percelenpas/vergunningen"}'), "vergunningen"))
+      not PP._binnen(_w["punt"], _g["vergunningen"]["parcelinfo"]["antwoord"]["geometry"]))
+check("geen marge meer: 2 m buiten de rand telt niet (Codex ronde 9)", PP._binnen((51.0, 4.0), _vk)
+      and not PP._binnen((51.0001 + 2 / 110540, 4.0), _vk))
+check("de grens van parcelinfo is exact de grens in de inhoudsaanvraag (echte gegevens, beide secties)",
+      all(d[s]["parcelinfo"]["antwoord"]["geometry"] == d[s]["inhoud"]["aanvraag"]["geometry"]
+          for d in (_g, _w) for s in ("vergunningen", "bouwovertredingen")))
 
 
 class _NepResp:
-    def __init__(self, aanvraag, antwoord):
-        self.url, self.status, self._a = _bu, 200, antwoord
+    def __init__(self, url, aanvraag, antwoord, status=200):
+        self.url, self.status, self._a = url, status, antwoord
         self.request = type("Q", (), {"post_data": json.dumps(aanvraag)})()
     def json(self):
         return self._a
 
 
+_PI = "https://omgeving.antwerpen.be/passthroughapi/parcelinfo"
+_BU = "https://omgeving.antwerpen.be/passthroughapi/content/content-with-gis-by-slug"
+_pi = lambda d, **k: _NepResp(_PI, {**d["vergunningen"]["parcelinfo"]["aanvraag"], **k}, d["vergunningen"]["parcelinfo"]["antwoord"])  # noqa: E731
+_perceel, _ = PP._perceel_uit(_pi(_g), _g["punt"])
+check("parcelinfo geeft het perceelnummer van de stad, voor ons Geopunt-punt", _perceel and _perceel["capakey"] == "11303C0256/00E012"
+      and _perceel["adres"] == "Grotesteenweg 459, 2600 Antwerpen", _perceel)
+check("parcelinfo voor een ander punt telt niet", PP._perceel_uit(_pi(_g, x="51.19"), _g["punt"])[0] is None)
+check("parcelinfo waarvan de grens het punt niet bevat, telt niet", PP._perceel_uit(_pi(_g), _w["punt"])[0] is None)
+check("alleen het bronantwoord van precies de eigen sectie telt",
+      PP._is_bronantwoord(_NepResp(_BU, {"url": "/percelenpas/bouwovertredingen"}, {}), "bouwovertredingen")
+      and not PP._is_bronantwoord(_NepResp(_BU, {"url": "/percelenpas/vergunningen"}, {}), "bouwovertredingen")
+      and not PP._is_bronantwoord(_NepResp(_BU, {"url": "/percelenpas/bouwovertredingen-archief"}, {}), "bouwovertredingen")
+      and not PP._is_bronantwoord(_NepResp(_PI, {"url": "/percelenpas/vergunningen"}, {}), "vergunningen"))
+
+
 class _NepVangst:
-    """Zoals Playwright: het filter van lees() beslist welk antwoord telt; past er geen, dan een timeout."""
+    """Zoals Playwright: het filter van lees() kiest het antwoord; past er geen, dan een timeout."""
     def __init__(self, pagina, filter_):
         self._p, self._f = pagina, filter_
     def __enter__(self):
@@ -430,26 +440,55 @@ class _NepVangst:
     def __exit__(self, soort, *a):
         if soort:
             return False
-        r = self._p.antwoord_voor(self._p.url)
-        if not self._f(r):
-            raise TimeoutError('Timeout 90000ms exceeded while waiting for event "response"')
-        self.value = r
-        return False
+        for r in self._p.antwoorden_voor(self._p.url):
+            if self._f(r):
+                self.value = r
+                return False
+        raise TimeoutError('Timeout 90000ms exceeded while waiting for event "response"')
 
 
 class _NepPaginaBron(_NepPagina):
-    """Een pagina met de echte aanvraag en het echte antwoord van de geladen sectie; het scherm blijft leeg."""
-    data, sectie_fout, perceel_fout = _g, False, False
+    """Een pagina met de echte keten van de stad; het scherm toont de bron, tenzij een fout is ingesteld."""
+    data, sectie_fout, perceel_fout, grens_fout, punt_fout, scherm_fout, extra_onderdeel = _g, False, False, False, False, False, None
     def expect_response(self, filter_, **k):
         return _NepVangst(self, filter_)
-    def antwoord_voor(self, url):
-        sectie = "bouwovertredingen" if "/bouwovertredingen" in url else "vergunningen"
-        if self.sectie_fout:  # de stad antwoordt met de andere sectie
-            sectie = "vergunningen" if sectie == "bouwovertredingen" else "bouwovertredingen"
-        aanvraag = dict(self.data[sectie]["aanvraag"])
-        if self.perceel_fout:  # de stad antwoordt voor een perceel 100 m verder
-            aanvraag["geometry"] = [{"x": h["x"] + 0.0009, "y": h["y"]} for h in aanvraag["geometry"]]
-        return _NepResp(aanvraag, self.data[sectie]["antwoord"])
+    def _sectie(self):
+        return "bouwovertredingen" if "/bouwovertredingen" in self.url else "vergunningen"
+    def antwoorden_voor(self, url):
+        s = self._sectie()
+        andere = "vergunningen" if s == "bouwovertredingen" else "bouwovertredingen"
+        pi = json.loads(json.dumps(self.data[s]["parcelinfo"]))
+        inh = json.loads(json.dumps(self.data[andere if self.sectie_fout else s]["inhoud"]))
+        verder = lambda g: [{"x": h["x"] + 0.0009, "y": h["y"]} for h in g]  # noqa: E731  (100 m verder)
+        if self.perceel_fout:  # de stad bouwt de pagina op een ander perceel
+            pi["antwoord"]["geometry"] = inh["aanvraag"]["geometry"] = verder(pi["antwoord"]["geometry"])
+        if self.grens_fout:  # de inhoud gaat over een andere grens dan het perceel
+            inh["aanvraag"]["geometry"] = verder(inh["aanvraag"]["geometry"])
+        if self.punt_fout:  # de stad zocht op een ander punt
+            pi["aanvraag"]["x"] = str(float(pi["aanvraag"]["x"]) + 0.001)
+        if self.extra_onderdeel and s == "vergunningen":
+            inh["antwoord"]["fields"]["content"]["content"][0]["value"]["layerTile"]["subLayerItems"].append(self.extra_onderdeel)
+        return [_NepResp(_PI, pi["aanvraag"], pi["antwoord"]), _NepResp(_BU, inh["aanvraag"], inh["antwoord"])]
+    def _bron(self):
+        return PP._layer_tile(self.data[self._sectie()]["inhoud"]["antwoord"])
+    def evaluate(self, script, *a, **k):
+        rijen = [["Selecteer rij", v["onderwerp"], v["dossiernummer"], v["type"], v["beslissing"], v["datum"]]
+                 for v in PP.vergunningen_uit_bron(self._bron())] if self._sectie() == "vergunningen" else []
+        if self.scherm_fout:
+            rijen = rijen[:-1]
+        return len(rijen) if ".length" in script else rijen
+    def locator(self, *a, **k):
+        p = self
+        class _L:
+            def inner_text(self_):
+                if p._sectie() == "vergunningen":
+                    return "Perceel 99999X9999/99X999\nToelatingen die voor 1962"
+                _, lijst = PP.bouwovertredingen_uit_bron(p._bron())
+                regels = [f"{x['omschrijving']}\nDossiernummer: {x['dossiernummer']}\nRegistratienummer: {x['registratienummer']}"
+                          for x in lijst]
+                midden = ("Vastgestelde bouwovertredingen\n" + "\n".join(regels)) if lijst else PP.UITKOMST_GEEN + " voor dit perceel."
+                return "x\nBouwovertredingen\nInleiding.\n" + midden + "\nVeelgestelde vragen"
+        return _L()
 
 
 def _ctx_bron(**instellingen):
@@ -462,46 +501,118 @@ def _ctx_bron(**instellingen):
     return _C()
 
 
+_GOED = {"perceel": True, "vergunningen_bron": True, "vergunningen_scherm": True,
+         "bouwovertredingen_bron": True, "bouwovertredingen_scherm": True}
 _stad = PP.lees(_ctx_bron(), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
-check("lees() gebruikt het bronantwoord en zegt dat (vergunningen)", _stad["bron"].get("vergunningen") == "bronantwoord van de stad"
-      and len(_stad["vergunningen"]) == 3, _stad["bron"])
-check("lees() leest elke sectie uit haar eigen bronantwoord: twee bouwovertredingen, geen fout",
-      _stad["bron"].get("bouwovertredingen") == "bronantwoord van de stad" and _stad["bouwovertredingen"] == "2 vastgesteld"
-      and not _stad["fouten"], (_stad["bouwovertredingen"], _stad["fouten"]))
+check("lees() sluit de keten voor Grotesteenweg 459: 3 vergunningen, 2 overtredingen, alle controles, geen fout",
+      len(_stad["vergunningen"]) == 3 and _stad["bouwovertredingen"] == "2 vastgesteld" and _stad["controles"] == _GOED
+      and not _stad["fouten"], (_stad["controles"], _stad["fouten"]))
+check("het perceelnummer komt uit parcelinfo, niet uit de paginatekst", _stad["capakey"] == "11303C0256/00E012", _stad["capakey"])
 _stad3 = PP.lees(_ctx_bron(data=_w), *_w["punt"], "August Van de Wielelei 85, 2100 Antwerpen")
-check("Wielelei 85 via lees(): 5 vergunningen, 'geen gekend' uit de bron, geen fout",
-      len(_stad3["vergunningen"]) == 5 and _stad3["bouwovertredingen"] == "geen gekend"
-      and _stad3["bron"].get("bouwovertredingen") == "bronantwoord van de stad" and not _stad3["fouten"],
-      (len(_stad3["vergunningen"]), _stad3["bouwovertredingen"], _stad3["fouten"]))
-_stad4 = PP.lees(_ctx_bron(sectie_fout=True), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
-check("een antwoord van een andere sectie telt niet: terugval op het scherm en onvolledig",
-      "scherm" in _stad4["bron"].get("bouwovertredingen", "") and any("niet bevestigd" in f for f in _stad4["fouten"]), _stad4["fouten"])
-_stad5 = PP.lees(_ctx_bron(perceel_fout=True), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
-check("een antwoord voor een ander perceel telt niet en wordt zo gemeld",
-      "scherm" in _stad5["bron"].get("vergunningen", "") and any("ander perceel" in f for f in _stad5["fouten"]), _stad5["fouten"])
+check("Wielelei 85 via lees(): 5 vergunningen, 'geen gekend' uit de bron, alle controles",
+      len(_stad3["vergunningen"]) == 5 and _stad3["bouwovertredingen"] == "geen gekend" and _stad3["controles"] == _GOED
+      and not _stad3["fouten"], (len(_stad3["vergunningen"]), _stad3["controles"], _stad3["fouten"]))
+for _naam, _inst, _woord in (("een antwoord van een andere sectie", {"sectie_fout": True}, "kwam niet binnen"),
+                             ("een pagina op een ander perceel", {"perceel_fout": True}, "niet binnen het perceel"),
+                             ("inhoud voor een andere grens dan het perceel", {"grens_fout": True}, "andere perceelgrens"),
+                             ("parcelinfo op een ander punt", {"punt_fout": True}, "ander punt"),
+                             ("een onderdeel dat we niet lezen", {"extra_onderdeel": {"subItemTitle": "Verkavelingen",
+                                                                   "allotmentPermits": [{"fileNumber": "1"}]}}, "niet lezen")):
+    _s = PP.lees(_ctx_bron(**_inst), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
+    check(f"{_naam} telt niet: scherm, onvolledig, met de reden", any(_woord in f and "niet bevestigd" in f for f in _s["fouten"])
+          and _s["controles"] != _GOED, (_s["controles"], _s["fouten"]))
+_s = PP.lees(_ctx_bron(scherm_fout=True), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
+check("een scherm met een rij minder dan de bron: controle mislukt en gemeld (Codex FX29)",
+      _s["controles"].get("vergunningen_scherm") is False and any("niet dezelfde rijen" in f for f in _s["fouten"]), _s["fouten"])
 _stad2 = PP.lees(_NepContext(), 51.2, 4.47, "August Van de Wielelei 85, 2100 Antwerpen")
-check("zonder bronantwoord valt lees() terug op het scherm, en zegt dat", "scherm" in _stad2["bron"].get("vergunningen", ""), _stad2["bron"])
-check("zonder bronantwoord is het resultaat onvolledig: twee gelijke schermen bewijzen niets (Codex-ronde 7)",
-      any("niet bevestigd" in f for f in _stad2["fouten"]), _stad2["fouten"])
+check("zonder bronantwoord valt lees() terug op het scherm, onvolledig en zonder controles",
+      "scherm" in _stad2["bron"].get("vergunningen", "") and any("niet bevestigd" in f for f in _stad2["fouten"])
+      and not _stad2["controles"].get("perceel"), (_stad2["bron"], _stad2["controles"]))
 
 
 class _NepScherm:
-    def __init__(self, teksten):
-        self._t = list(teksten)
-    def locator(self, *a, **k):
-        s = self
-        class _L:
-            def inner_text(self_):
-                return s._t.pop(0) if len(s._t) > 1 else s._t[0]
-        return _L()
+    def __init__(self, rijen):
+        self._r = list(rijen)
+    def evaluate(self, *a, **k):
+        r = self._r.pop(0) if len(self._r) > 1 else self._r[0]
+        return [["Selecteer rij", "x", nr, "t"] for nr in r]
     def wait_for_timeout(self, *a):
         return None
 
 
-check("de printscreen wacht tot het scherm toont wat de stad doorgaf (Codex FX29)",
-      PP._scherm_volgt_bron(_NepScherm(["laadt", "202410548 11002_2024_11491", "202410548 11002_2024_11491 11002_2024_11492"]),
-                            ["202410548", "11002_2024_11491", "11002_2024_11492"]))
-check("toont het scherm het nooit, dan zegt de controle nee", not PP._scherm_volgt_bron(_NepScherm(["laadt"]), ["202410548"], 3))
+check("het scherm mag laden: pas gelijk als alle rijen er zijn", PP._scherm_gelijk(_NepScherm([[], ["1"], ["1", "2"]]), "vergunningen", ["1", "2"]))
+check("multiset: een dubbel nummer telt twee keer", not PP._scherm_gelijk(_NepScherm([["1"]]), "vergunningen", ["1", "1"], 3)
+      and PP._scherm_gelijk(_NepScherm([["1", "1"]]), "vergunningen", ["1", "1"], 3))
+check("een rij op het scherm die de bron niet kent, is ook geen gelijk", not PP._scherm_gelijk(_NepScherm([["1", "2"]]), "vergunningen", ["1"], 3))
+
+
+# Ontwerpronde 10: de eindcontrole eist per stap een positief bewijs; een stap die zwijgt, telt als niet geslaagd
+import shutil  # noqa: E402
+_map = tempfile.mkdtemp()
+for _f in ("Geopunt.png", "Percelenpas Antwerpen/Vergunningen.png", "Percelenpas Antwerpen/Bouwovertredingen.png",
+           "Percelenpas Antwerpen/rapport_11303C0256_00E012.pdf", "FelixArchief/Overzicht.png"):
+    os.makedirs(os.path.dirname(os.path.join(_map, _f)), exist_ok=True)
+    open(os.path.join(_map, _f), "w").write("x")
+
+
+def _volledige_z():
+    return {"onvolledig": [], "pand": {"lat": 51.18}, "doorzocht": ["197317935"], "controle_omgekeerd": True,
+            "register": {"percelen": ["11303C0256-00E012"], "opmerkingen": []},
+            "stad": {"controles": dict(_GOED), "fouten": [], "vergunningen": [{"dossiernummer": "197317935"}]},
+            "raak": [{"inventaris": "961#3571", "status": "na aanmelden"}, {"inventaris": "100#1", "status": "leeszaal"}],
+            "downloads": [{"inventaris": "961#3571", "bestanden": [{"naam": "a.pdf"}], "mislukt": [], "beschermd": []}]}
+
+
+check("met elk bewijs: geen open punten", FW.eindcontrole(_volledige_z(), _map) == [], FW.eindcontrole(_volledige_z(), _map))
+_gevallen = [
+    ("zonder perceelcontrole", lambda z: z["stad"]["controles"].pop("perceel"), "perceel"),
+    ("een scherm dat niet gelijk was", lambda z: z["stad"]["controles"].update(vergunningen_scherm=False), "scherm"),
+    ("een vergunning die FelixArchief niet beantwoordde", lambda z: z.update(doorzocht=[]), "197317935"),
+    ("een omgekeerde controle die niet afrondde", lambda z: z.pop("controle_omgekeerd"), "straat en nummer"),
+    ("een opmerking van het Adressenregister (Codex FX30)", lambda z: z["register"]["opmerkingen"].append("Perceel niet op te halen: 503"), "Adressenregister"),
+    ("een digitaal dossier zonder downloadregel", lambda z: z.update(downloads=[]), "961#3571"),
+    ("een download met een mislukt bestand", lambda z: z["downloads"][0]["mislukt"].append("a.pdf: 500"), "961#3571"),
+    ("een fout van de percelenpas", lambda z: z["stad"]["fouten"].append("PDF-rapport van de stad niet gelukt"), "PDF-rapport"),
+]
+for _naam, _wijzig, _woord in _gevallen:
+    _z = _volledige_z()
+    _wijzig(_z)
+    _o = FW.eindcontrole(_z, _map)
+    check(f"eindcontrole: {_naam} is een open punt", any(_woord in o for o in _o), _o)
+for _f in ("Geopunt.png", "Percelenpas Antwerpen/Bouwovertredingen.png", "FelixArchief/Overzicht.png"):
+    _m2 = tempfile.mkdtemp()
+    shutil.copytree(_map, _m2, dirs_exist_ok=True)
+    os.remove(os.path.join(_m2, _f))
+    check(f"eindcontrole: zonder {os.path.basename(_f)} op schijf is het onvolledig",
+          any(os.path.basename(_f) in o for o in FW.eindcontrole(_volledige_z(), _m2)))
+_z = _volledige_z()
+_z["onvolledig"] = ["Geopunt.png niet gelukt: x"]
+check("eindcontrole: wat een stap zelf meldde, blijft staan", FW.eindcontrole(_z, _map)[0] == "Geopunt.png niet gelukt: x")
+
+
+class _NepFelixVU:
+    afgekapt = []
+    def __enter__(self):
+        return self
+    def __exit__(self, *a):
+        return False
+    def schermafdruk_geopunt(self, adres, pad):
+        open(pad, "w").write("x")
+
+
+_oud = (FW.fa.Felix, FW.fa.heeft_aanmelding, FW.percelen_zoektocht)
+FW.fa.Felix, FW.fa.heeft_aanmelding = _NepFelixVU, (lambda: False)
+FW.percelen_zoektocht = lambda adres, felix, stadmap=None: {"adres": adres, "onvolledig": [], "pand": {"lat": 51.18, "geopunt": "x"},
+                                                           "besluit": "x", "rijen": [], "raak": [], "stad": {}, "duur": {}}
+try:
+    _um, _zv = FW.voer_uit("Grotesteenweg 459, 2600 Antwerpen", tempfile.mkdtemp())
+finally:
+    FW.fa.Felix, FW.fa.heeft_aanmelding, FW.percelen_zoektocht = _oud
+check("voer_uit gebruikt de eindcontrole: stappen die zwijgen, maken de zoektocht onvolledig, ook in Controle.md",
+      not _zv["volledig"] and any("perceel" in o for o in _zv["onvolledig"])
+      and "**Onvolledig:**" in open(os.path.join(_um, "Controle.md")).read(), _zv["onvolledig"])
+check("buiten het werkgebied volstaan Geopunt en het bewijs daarvan",
+      FW.eindcontrole({"onvolledig": [], "pand": {"lat": 51.3}, "buiten_werkgebied": True}, _map) == [])
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

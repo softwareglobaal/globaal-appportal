@@ -81,6 +81,7 @@ def percelen_zoektocht(adres, felix, stadmap=None):
         return z
     if not fa.districten_voor(loc["postcode"]):
         z["besluit"] = f"Postcode {loc['postcode']} valt buiten het werkgebied (stad Antwerpen)."
+        z["buiten_werkgebied"] = True
         return z
     punt = (loc["lat"], loc["lon"])
     try:
@@ -88,16 +89,18 @@ def percelen_zoektocht(adres, felix, stadmap=None):
     except Exception as e:
         stad = {"vergunningen": [], "fouten": [f"percelenpas niet bereikbaar: {str(e).splitlines()[0][:150]}"],
                 "capakey": "", "bouwovertredingen": "", "bouwovertredingen_lijst": [], "bewijs": [], "url": "",
-                "gelezen": {"vergunningen": False, "bouwovertredingen": False}}
+                "controles": {}, "gelezen": {"vergunningen": False, "bouwovertredingen": False}}
     z["stad"] = stad
     z["onvolledig"] += stad.get("fouten") or []
     z["duur"]["stad"] = round(time.time() - t0)
 
     t1 = time.time()
     gezien = set()
+    z["doorzocht"] = []  # alleen wat FelixArchief zonder fout beantwoordde (eindcontrole)
     for v in stad["vergunningen"]:
         try:
             felix_rijen = felix.dossier_zoeken(v["dossiernummer"], punt)
+            z["doorzocht"].append(v["dossiernummer"])
         except Exception as e:
             felix_rijen = []
             z["onvolledig"].append(f"FelixArchief niet doorzocht voor {v['dossiernummer']}: {str(e).splitlines()[0][:120]}")
@@ -111,6 +114,7 @@ def percelen_zoektocht(adres, felix, stadmap=None):
     t2 = time.time()
     try:
         pand = adresregister.pand(zonder_bus)
+        z["register"] = {"percelen": pand.get("percelen") or [], "opmerkingen": pand.get("opmerkingen") or []}
         straten = dict(pand.get("nummers_per_straat") or {})
         for s, dichtbij in (pand.get("straten_dichtbij") or {}).items():  # hoekpand: Grotesteenweg 459 en Lysenstraat 2
             straten.setdefault(s, sorted({nr for _, nr in dichtbij if nr}))
@@ -129,6 +133,7 @@ def percelen_zoektocht(adres, felix, stadmap=None):
                         gezien.add(r["inventaris"])
                         z["rijen"].append({"jaar": _jaar(r["aanvraag"]), "stad": "", "onderwerp": r["omschrijving"],
                                            "beslissing": "", "felix": [r], "alleen_felix": True})
+        z["controle_omgekeerd"] = True
     except Exception as e:
         z["onvolledig"].append(f"controle in FelixArchief op straat en nummer niet gelukt: {str(e).splitlines()[0][:150]}")
     z["duur"]["controle"] = round(time.time() - t2)
@@ -145,6 +150,66 @@ def percelen_zoektocht(adres, felix, stadmap=None):
 
 
 # ---------------------------------------------------------------- bewijs en controle
+
+def _bestand(pad):
+    try:
+        return os.path.getsize(pad) > 0
+    except OSError:
+        return False
+
+
+def eindcontrole(z, uitmap):
+    """De open punten van een zoektocht. Volledig alleen als elke verplichte stap aantoonbaar slaagde.
+
+    Ontwerpronde 10 met Codex (17-10-2026): 'volledig' was de standaard en elk foutpad moest zelf onthouden iets te
+    melden; dat lekte. Nu eist deze functie per stap een positief bewijs (een vlag die alleen bij slagen gezet wordt,
+    of het bestand op schijf). Een stap die niets zegt, telt als niet geslaagd. Wat de stappen zelf meldden, blijft.
+    """
+    open_ = list(dict.fromkeys(z.get("onvolledig") or []))
+
+    def eis(ok, tekst):
+        if not ok and tekst not in open_:
+            open_.append(tekst)
+
+    eis((z.get("pand") or {}).get("lat") is not None, "adres niet bevestigd door Geopunt")
+    eis(_bestand(os.path.join(uitmap, "Geopunt.png")), "Geopunt.png ontbreekt")
+    if z.get("buiten_werkgebied") or (z.get("pand") or {}).get("lat") is None:
+        return open_
+
+    stad = z.get("stad") or {}
+    c = stad.get("controles") or {}
+    eis(c.get("perceel") is True, "perceel van de stad niet bevestigd (Geopunt-punt, perceelgrens, beide secties)")
+    for s in ("vergunningen", "bouwovertredingen"):
+        eis(c.get(f"{s}_bron") is True, f"{s} van de stad niet uit het bronantwoord gelezen")
+        eis(c.get(f"{s}_scherm") is True, f"{s}: het scherm van de stad toont niet hetzelfde als de bron")
+    for f in stad.get("fouten") or []:
+        eis(False, f)
+    stadmap = os.path.join(uitmap, "Percelenpas Antwerpen")
+    for naam in ("Vergunningen.png", "Bouwovertredingen.png"):
+        eis(_bestand(os.path.join(stadmap, naam)), f"{naam} ontbreekt")
+    eis(any(f.startswith("rapport_") and f.endswith(".pdf") and _bestand(os.path.join(stadmap, f))
+            for f in (os.listdir(stadmap) if os.path.isdir(stadmap) else [])), "het PDF-rapport van de stad ontbreekt")
+
+    doorzocht = set(z.get("doorzocht") or [])
+    for v in stad.get("vergunningen") or []:
+        eis(v["dossiernummer"] in doorzocht, f"FelixArchief niet doorzocht voor {v['dossiernummer']}")
+    eis(z.get("controle_omgekeerd") is True, "controle in FelixArchief op straat en nummer niet afgerond")
+    for o in (z.get("register") or {}).get("opmerkingen") or []:  # Codex FX30: geen stille meldingen
+        eis(False, f"Adressenregister: {o}")
+
+    raak = z.get("raak") or []
+    if raak:
+        eis(_bestand(os.path.join(uitmap, "FelixArchief", "Overzicht.png")), "Overzicht.png ontbreekt")
+    rijen = {r["inventaris"]: r for r in z.get("downloads") or []}
+    for d in raak:
+        if d.get("status") == "leeszaal":
+            continue
+        r = rijen.get(d["inventaris"])
+        eis(bool(r and not r["mislukt"] and (r["bestanden"] or r["beschermd"])),
+            f"{d['inventaris']} niet gedownload en niet als beschermd bevestigd")
+    return open_
+
+
 
 def _controle_md(z):
     """Een tabel om na te kijken of het werk goed gedaan is (Mehdi, 03-10-2026: controleerbaar, weinig tekst)."""
@@ -293,7 +358,7 @@ def voer_uit(adres, uitmap=None, project=None):
         if geopunt:
             try:
                 felix.schermafdruk_geopunt(geopunt, os.path.join(uitmap, "Geopunt.png"))
-            except Exception as e:
+            except Exception as e:  # het bestand zelf is het bewijs: de eindcontrole kijkt of het er is
                 z["onvolledig"].append(f"Geopunt.png niet gelukt: {str(e).splitlines()[0][:150]}")
         if z.get("raak"):
             try:
@@ -318,7 +383,8 @@ def voer_uit(adres, uitmap=None, project=None):
         if felix.afgekapt:  # meer treffers dan gelezen: niet 'volledig' (Codex FX21)
             z["onvolledig"] += [f"zoekopdracht afgekapt: {a}" for a in felix.afgekapt]
     z.setdefault("duur", {})["totaal"] = round(time.time() - t0)
-    z["volledig"] = not z.get("onvolledig")
+    z["onvolledig"] = eindcontrole(z, uitmap)  # een uitkomst voor status, Controle.md en de pagina
+    z["volledig"] = not z["onvolledig"]
     os.makedirs(os.path.join(uitmap, "_gegevens"), exist_ok=True)  # voor de agent, niet om te lezen
     json.dump(z, open(os.path.join(uitmap, "_gegevens", "resultaat.json"), "w"), ensure_ascii=False, indent=1, default=str)
     open(os.path.join(uitmap, "Controle.md"), "w").write(_controle_md(z))
