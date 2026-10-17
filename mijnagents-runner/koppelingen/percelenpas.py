@@ -304,15 +304,18 @@ def _open_met_bron(p, sectie, adres_url, punt):
 
 
 def _tabelrijen(p):
-    """De rijen van de vergunningentabel op het scherm: onderwerp, dossiernummer, type, beslissing, datum."""
+    """De rijen van de vergunningentabel op het scherm: onderwerp, dossiernummer, type, beslissing, datum.
+
+    Lege cellen blijven op hun plaats: een leeg besluit met een datum mag de datum niet naar het besluit schuiven
+    (Codex FX38). Alleen de cel met het vinkje ('Selecteer rij') valt weg.
+    """
     uit = []
     for cellen in p.evaluate("""() => [...document.querySelectorAll('tr')].filter(tr =>
             tr.querySelector('input[id^="table-checkbox"]:not(#table-checkbox-all)')).map(tr =>
-            [...tr.querySelectorAll('td')].map(c => c.innerText.trim()))"""):
-        c = [x for x in cellen if x and x != "Selecteer rij"]
-        if len(c) >= 3:
-            uit.append({"onderwerp": c[0], "dossiernummer": c[1], "type": c[2],
-                        "beslissing": c[3] if len(c) > 3 else "", "datum": c[4] if len(c) > 4 else ""})
+            [...tr.querySelectorAll('td')].filter(c => !c.querySelector('input')).map(c => c.innerText.trim()))"""):
+        c = list(cellen[1:] if cellen and cellen[0] == "Selecteer rij" else cellen) + [""] * 5
+        if c[1]:
+            uit.append({"onderwerp": c[0], "dossiernummer": c[1], "type": c[2], "beslissing": c[3], "datum": c[4]})
     return uit
 
 

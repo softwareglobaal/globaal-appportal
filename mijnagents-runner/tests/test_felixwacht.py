@@ -570,6 +570,16 @@ check("hetzelfde nummer met een ander besluit op het scherm is niet gelijk (Code
 check("nul vergunningen telt pas als het scherm het zegt, niet zolang het leeg is (Codex FX31)",
       not PP._scherm_gelijk(_NepScherm([[]]), "vergunningen", [], 3)
       and PP._scherm_gelijk(_NepScherm([[]], "Er zijn geen vergunningen voor dit perceel."), "vergunningen", [], 3))
+class _NepTabel:
+    def evaluate(self, *a, **k):
+        return [["Selecteer rij", "herstelling", "258982_329#18797", "Toelating voor 1962", "", "12/03/1950"],
+                ["bouwen", "1", "Stedenbouwkundige vergunningen", "Vergunning", ""]]
+
+
+_tr = PP._tabelrijen(_NepTabel())
+check("lege cellen blijven op hun plaats: een datum schuift niet naar het besluit (Codex FX38)",
+      _tr[0]["beslissing"] == "" and _tr[0]["datum"] == "12/03/1950" and _tr[1]["dossiernummer"] == "1"
+      and _tr[1]["beslissing"] == "Vergunning", _tr)
 check("een rij op het scherm die de bron niet kent, is ook geen gelijk", not PP._scherm_gelijk(_NepScherm([["1", "2"]]), "vergunningen", _rv("1"), 3))
 
 
