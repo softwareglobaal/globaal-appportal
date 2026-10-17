@@ -596,6 +596,8 @@ _gevallen = [
     ("een stuk dat stil overgeslagen werd", lambda z: z["downloads"][0].update(aantal=2), "niet volledig gedownload"),
     ("een bestand korter dan FelixArchief opgeeft, ook als bytes klopt (Codex FX33)",
      lambda z: z["downloads"][0]["bestanden"][0].update(grootte=100), "op schijf"),
+    ("een opgave van 0 bytes bij een bestand van 1 byte (Codex FX35)", lambda z: z["downloads"][0]["bestanden"][0].update(grootte=0), "op schijf"),
+    ("een bestand zonder opgave van FelixArchief (Codex FX35)", lambda z: z["downloads"][0]["bestanden"][0].pop("grootte"), "op schijf"),
 ]
 for _naam, _wijzig, _woord in _gevallen:
     _z = _volledige_z()
@@ -643,6 +645,12 @@ except FA.BestandFout:
     _gevangen = True
 check("een download die korter is dan de opgave van FelixArchief, is een fout (Codex FX33)",
       _gevangen and FA._volledig_op_schijf(_kort, 10) == 10 and FA._volledig_op_schijf(_kort, None) == 10)
+try:
+    FA._volledig_op_schijf(_kort, 0)
+    _gevangen = False
+except FA.BestandFout:
+    _gevangen = True
+check("een opgave van 0 bytes telt ook: 10 bytes op schijf is dan een fout (Codex FX35)", _gevangen)
 check("buiten het werkgebied volstaan Geopunt en het bewijs daarvan",
       FW.eindcontrole({"onvolledig": [], "pand": {"lat": 51.3}, "buiten_werkgebied": True}, _map) == [])
 

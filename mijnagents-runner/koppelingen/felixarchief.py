@@ -580,7 +580,7 @@ def _volledig_op_schijf(pad, grootte):
     is dus geen geslaagde download (Codex FX33).
     """
     n = os.path.getsize(pad)
-    if grootte and n != int(grootte):
+    if grootte is not None and n != int(grootte):  # ook een opgave van 0 telt (Codex FX35)
         raise BestandFout(f"onvolledig ({n} van {grootte} bytes)")
     return n
 

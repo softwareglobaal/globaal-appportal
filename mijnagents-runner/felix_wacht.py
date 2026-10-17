@@ -209,8 +209,10 @@ def eindcontrole(z, uitmap):
                  and len(r["bestanden"]) + len(r["beschermd"]) == r.get("aantal")),
             f"{d['inventaris']} niet volledig gedownload en niet als beschermd bevestigd")
         for b in (r or {}).get("bestanden") or []:  # het bestand op schijf is het bewijs, niet de lijst (Codex FX30)
-            maten = [int(m) for m in (b.get("grootte"), b.get("bytes")) if m]  # de opgave van FelixArchief is exact (FX33)
-            eis(_bestand(b.get("pad") or "") and all(os.path.getsize(b["pad"]) == m for m in maten),
+            # de opgave van FelixArchief is exact (FX33); elke opgave telt, ook 0, en zonder opgave is er geen bewijs (FX35)
+            maten = [int(m) for m in (b.get("grootte"), b.get("bytes")) if m is not None]
+            eis(_bestand(b.get("pad") or "") and b.get("grootte") is not None
+                and all(os.path.getsize(b["pad"]) == m for m in maten),
                 f"{d['inventaris']}/{b['naam']} staat niet volledig op schijf")
     return open_
 
