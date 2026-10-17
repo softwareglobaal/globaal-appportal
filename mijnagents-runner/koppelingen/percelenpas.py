@@ -264,6 +264,9 @@ def ontbrekend_in_bron(tile, sectie):
                 if not isinstance(w, list) or not w or not all(isinstance(x, dict) and re.match(
                         r"(Dossiernummer|Registratienummer):\s*\S", str(x.get("value") or "")) for x in w):
                     uit.append(f"overtreding met een regel die geen dossier- of registratienummer is in '{titel}'")
+                elif any(sum(str(x.get("value") or "").startswith(s + ":") for x in w) > 1
+                         for s in ("Dossiernummer", "Registratienummer")):  # we bewaren er een per soort (Codex FX32)
+                    uit.append(f"overtreding met meer dan een dossier- of registratienummer in '{titel}'")
     return uit
 
 

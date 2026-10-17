@@ -394,6 +394,10 @@ check("een overtreding zonder dossiergegevens of met rijen die geen blok zijn, w
 check("een overtreding met een tweede, onbekende regel wordt gemeld, niet stil weggelaten (Codex ronde 11)",
       PP.ontbrekend_in_bron({"subLayerItems": [{"subItemTitle": "x", "constructionViolations": [{"violations": [
           {"value": "Dossiernummer: 202410548"}, {"value": "Proces-verbaal: PV/2024/1"}]}]}]}, "bouwovertredingen"))
+check("twee dossiernummers in een overtreding: het antwoord wordt afgewezen, niet een stil bewaard (Codex FX32)",
+      PP.ontbrekend_in_bron({"subLayerItems": [{"subItemTitle": "x", "constructionViolations": [{"violations": [
+          {"value": "Dossiernummer: 111"}, {"value": "Dossiernummer: 222"}]}]}]}, "bouwovertredingen")
+      and not PP.ontbrekend_in_bron(PP._layer_tile(_inh(_g, "bouwovertredingen")), "bouwovertredingen"))
 check("een verkaveling (allotmentPermits) die we niet lezen, wordt gemeld",
       PP.ontbrekend_in_bron({"subLayerItems": [{"subItemTitle": "Verkavelingen", "allotmentPermits": [{"fileNumber": "1"}]}]}, "vergunningen"))
 
@@ -573,7 +577,7 @@ def _volledige_z():
             "stad": {"controles": dict(_GOED), "fouten": [], "vergunningen": [{"dossiernummer": "197317935"}]},
             "raak": [{"inventaris": "961#3571", "status": "na aanmelden"}, {"inventaris": "100#1", "status": "leeszaal"}],
             "downloads": [{"inventaris": "961#3571", "aantal": 1, "mislukt": [], "beschermd": [],
-                           "bestanden": [{"naam": "a.pdf", "bytes": 1, "pad": os.path.join(_map, "FelixArchief/961#3571/a.pdf")}]}]}
+                           "bestanden": [{"naam": "a.pdf", "bytes": 1, "grootte": 1, "pad": os.path.join(_map, "FelixArchief/961#3571/a.pdf")}]}]}
 
 
 check("met elk bewijs: geen open punten", FW.eindcontrole(_volledige_z(), _map) == [], FW.eindcontrole(_volledige_z(), _map))
@@ -590,6 +594,8 @@ _gevallen = [
      lambda z: z["downloads"][0]["bestanden"][0].update(pad=os.path.join(_map, "weg.pdf")), "op schijf"),
     ("een bestand op schijf dat korter is dan gedownload", lambda z: z["downloads"][0]["bestanden"][0].update(bytes=999), "op schijf"),
     ("een stuk dat stil overgeslagen werd", lambda z: z["downloads"][0].update(aantal=2), "niet volledig gedownload"),
+    ("een bestand korter dan FelixArchief opgeeft, ook als bytes klopt (Codex FX33)",
+     lambda z: z["downloads"][0]["bestanden"][0].update(grootte=100), "op schijf"),
 ]
 for _naam, _wijzig, _woord in _gevallen:
     _z = _volledige_z()
@@ -628,6 +634,15 @@ finally:
 check("voer_uit gebruikt de eindcontrole: stappen die zwijgen, maken de zoektocht onvolledig, ook in Controle.md",
       not _zv["volledig"] and any("perceel" in o for o in _zv["onvolledig"])
       and "**Onvolledig:**" in open(os.path.join(_um, "Controle.md")).read(), _zv["onvolledig"])
+_kort = os.path.join(tempfile.mkdtemp(), "kort.pdf")
+open(_kort, "wb").write(b"x" * 10)
+try:
+    FA._volledig_op_schijf(_kort, 100)
+    _gevangen = False
+except FA.BestandFout:
+    _gevangen = True
+check("een download die korter is dan de opgave van FelixArchief, is een fout (Codex FX33)",
+      _gevangen and FA._volledig_op_schijf(_kort, 10) == 10 and FA._volledig_op_schijf(_kort, None) == 10)
 check("buiten het werkgebied volstaan Geopunt en het bewijs daarvan",
       FW.eindcontrole({"onvolledig": [], "pand": {"lat": 51.3}, "buiten_werkgebied": True}, _map) == [])
 

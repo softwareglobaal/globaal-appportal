@@ -72,6 +72,8 @@ def nep_voer_uit(adres, uitmap=None, project=None):
     open(os.path.join(uitmap, "Controle.md"), "w").write("# x\n")
     open(os.path.join(uitmap, "FelixArchief", "123#4", "plan.pdf"), "wb").write(b"%PDF")
     open(os.path.join(uitmap, "_gegevens", "resultaat.json"), "w").write("{}")
+    if "zeven" in adres:  # zeven open punten: de pagina moet ze alle zeven kennen (Codex FX34)
+        return uitmap, {"besluit": "x", "raak": [], "stad": {}, "volledig": False, "onvolledig": [f"punt {i}" for i in range(7)]}
     if "half" in adres:  # de printscreen van Geopunt liep in een timeout: onvolledig, niet klaar (Codex FX11)
         return uitmap, {"besluit": "Perceel X: 1 vergunning", "raak": [{}], "stad": {"vergunningen": [{}]}, "volledig": False,
                         "onvolledig": ["Geopunt.png niet gelukt: Locator.click: Timeout 20000ms exceeded."]}
@@ -143,6 +145,10 @@ W.ronde()
 s = W.lees_stand()
 check("onvolledig is niet klaar, en zegt wat ontbreekt", s["zoek"]["h1"]["status"] == "onvolledig"
       and "Geopunt" in s["zoek"]["h1"]["onvolledig"][0], s["zoek"].get("h1"))
+aanvraag(id="z7", soort="zoek", project="3810", adres="zeven 1, 2000 Antwerpen", door="shelton", ts="t")
+W.ronde()
+s = W.lees_stand()
+check("alle open punten blijven bewaard, niet de eerste zes (Codex FX34)", len(s["zoek"]["z7"]["onvolledig"]) == 7, s["zoek"].get("z7"))
 for _ in range(4):
     W.ronde()
 s = W.lees_stand()

@@ -209,7 +209,8 @@ def eindcontrole(z, uitmap):
                  and len(r["bestanden"]) + len(r["beschermd"]) == r.get("aantal")),
             f"{d['inventaris']} niet volledig gedownload en niet als beschermd bevestigd")
         for b in (r or {}).get("bestanden") or []:  # het bestand op schijf is het bewijs, niet de lijst (Codex FX30)
-            eis(_bestand(b.get("pad") or "") and (not b.get("bytes") or os.path.getsize(b["pad"]) == b["bytes"]),
+            maten = [int(m) for m in (b.get("grootte"), b.get("bytes")) if m]  # de opgave van FelixArchief is exact (FX33)
+            eis(_bestand(b.get("pad") or "") and all(os.path.getsize(b["pad"]) == m for m in maten),
                 f"{d['inventaris']}/{b['naam']} staat niet volledig op schijf")
     return open_
 
@@ -305,7 +306,7 @@ def _downloaden(felix, z, felixmap):
             for poging in range(2):  # ook het eerste bestand krijgt een herkansing (Codex FX23)
                 try:
                     pad = os.path.join(felixmap, r["inventaris"], eerste["map"], eerste["naam"])
-                    rij["bestanden"].append({"naam": eerste["naam"], "pad": pad,
+                    rij["bestanden"].append({"naam": eerste["naam"], "pad": pad, "grootte": eerste.get("grootte"),
                                              "bytes": felix.download(eerste["url"], pad, eerste.get("grootte"))})
                     break
                 except fa.Beschermd as e:  # alleen een bevestigde weigering geldt voor het hele dossier (Codex FX17)
@@ -323,7 +324,8 @@ def _downloaden(felix, z, felixmap):
             pad = os.path.join(felixmap, r["inventaris"], f["map"], f["naam"])
             for poging in range(2):
                 try:
-                    rij["bestanden"].append({"naam": f["naam"], "pad": pad, "bytes": felix.download(f["url"], pad, f.get("grootte"))})
+                    rij["bestanden"].append({"naam": f["naam"], "pad": pad, "grootte": f.get("grootte"),
+                                             "bytes": felix.download(f["url"], pad, f.get("grootte"))})
                     break
                 except fa.Beschermd as e:  # FelixArchief zegt zelf: niet vrij (copyRightFree), dus alleen online
                     rij["beschermd"].append(f["naam"])
@@ -540,7 +542,7 @@ def ronde():
                                   project=item["project"] or None)
                 # Onvolledig is geen klaar (Codex FX11, 17-10-2026): de pagina toont het in oranje, met wat ontbreekt.
                 item.update(status="klaar" if z.get("volledig") else "onvolledig", klaar=_nu(), map=os.path.basename(pad),
-                            besluit=z["besluit"], onvolledig=(z.get("onvolledig") or [])[:6], duur=(z.get("duur") or {}).get("totaal"),
+                            besluit=z["besluit"], onvolledig=z.get("onvolledig") or [], duur=(z.get("duur") or {}).get("totaal"),
                             dossiers=len(z.get("raak") or []),
                             vergunningen=len((z.get("stad") or {}).get("vergunningen") or []))
                 logboek("resultaat", id=a["id"], adres=item["adres"], besluit=z["besluit"], map=item["map"])

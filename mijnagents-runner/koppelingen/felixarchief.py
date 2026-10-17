@@ -425,7 +425,7 @@ class Felix:
                 d.value.save_as(pad)
             finally:
                 p.close()
-            return os.path.getsize(pad)
+            return _volledig_op_schijf(pad, grootte)
         import base64  # een klein beeldbestand: Chrome toont het in plaats van het te downloaden
         b64 = self.page.evaluate("""async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('status ' + r.status);
             const buf = new Uint8Array(await r.arrayBuffer()); let s = '';
@@ -433,7 +433,7 @@ class Felix:
             return btoa(s); }""", url)
         with open(pad, "wb") as f:
             f.write(base64.b64decode(b64))
-        return os.path.getsize(pad)
+        return _volledig_op_schijf(pad, grootte)
 
     def schermafdruk_dossier(self, inventaris, reeks, pad):
         """Printscreen van de detailpagina van een gevonden dossier: het bewijs van wat raak was."""
@@ -571,6 +571,18 @@ class Beschermd(Exception):
 
 class BestandFout(Exception):
     """Een bestand dat FelixArchief niet gaf, om een andere reden dan auteursrecht."""
+
+
+def _volledig_op_schijf(pad, grootte):
+    """Het aantal bytes op schijf, of BestandFout als het niet de grootte is die FelixArchief opgeeft.
+
+    Die opgave is exact: 8 van 8 bestanden waren op de byte gelijk (gemeten 17-10-2026). Een afgebroken download
+    is dus geen geslaagde download (Codex FX33).
+    """
+    n = os.path.getsize(pad)
+    if grootte and n != int(grootte):
+        raise BestandFout(f"onvolledig ({n} van {grootte} bytes)")
+    return n
 
 
 def schrijfwijze_mogelijk(dossiernummer):
