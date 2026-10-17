@@ -2,17 +2,23 @@
 # het werkgebied van FelixArchief (vijftien postcodes, zonder aantallen), 'wie 85 zoekt, vindt 85-87'
 # (de fout van 02-10 bij August Van de Wielelei 85 in Deurne), het districtveld sluit niets uit, en de
 # mapnamen houden inventarisnummer en busnummer leesbaar. Zonder net en zonder sleutels.
+# Sinds 17-10-2026 (Codex-rondes 1 tot 19) ook: de percelenpas uit de keten van de stad (echte antwoorden als
+# testgegevens), de eindcontrole, de aanvragen en statussen, en de Felix-pagina.
 name: felix-grendels
 
 on:
   push:
     paths: ["mijnagents-runner/felix_wacht.py", "mijnagents-runner/felix/**", "mijnagents-runner/koppelingen/felixarchief.py",
-            "mijnagents-runner/koppelingen/adresregister.py", "mijnagents-runner/tests/test_felixwacht.py",
-            ".github/workflows/felix-grendels.yml"]
+            "mijnagents-runner/koppelingen/adresregister.py", "mijnagents-runner/koppelingen/percelenpas.py",
+            "mijnagents-runner/tests/test_felixwacht.py", "mijnagents-runner/tests/test_felix_aanvragen.py",
+            "mijnagents-runner/tests/percelenpas_*_bron.json", "mijnagents/felix_pagina.py",
+            "mijnagents/templates/felix*.html", "mijnagents/test_felix.py", ".github/workflows/felix-grendels.yml"]
   pull_request:
     paths: ["mijnagents-runner/felix_wacht.py", "mijnagents-runner/felix/**", "mijnagents-runner/koppelingen/felixarchief.py",
-            "mijnagents-runner/koppelingen/adresregister.py", "mijnagents-runner/tests/test_felixwacht.py",
-            ".github/workflows/felix-grendels.yml"]
+            "mijnagents-runner/koppelingen/adresregister.py", "mijnagents-runner/koppelingen/percelenpas.py",
+            "mijnagents-runner/tests/test_felixwacht.py", "mijnagents-runner/tests/test_felix_aanvragen.py",
+            "mijnagents-runner/tests/percelenpas_*_bron.json", "mijnagents/felix_pagina.py",
+            "mijnagents/templates/felix*.html", "mijnagents/test_felix.py", ".github/workflows/felix-grendels.yml"]
 
 jobs:
   grendels:
@@ -23,3 +29,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 mijnagents-runner/tests/test_felixwacht.py
+      - run: python3 mijnagents-runner/tests/test_felix_aanvragen.py
+      - run: pip install -r mijnagents/requirements.txt
+      - run: python3 mijnagents/test_felix.py
