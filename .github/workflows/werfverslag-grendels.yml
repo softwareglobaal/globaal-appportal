@@ -1,9 +1,9 @@
 name: werfverslag-grendels
 on:
   push:
-    paths: ["mijnagents/app.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", ".github/workflows/werfverslag-grendels.yml"]
+    paths: ["mijnagents/app.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", "mijnagents-runner/werkwijze/werfverslag-*.md", "mijnagents-runner/werkwijze_naar_bord.py", ".github/workflows/werfverslag-grendels.yml"]
   pull_request:
-    paths: ["mijnagents/app.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", ".github/workflows/werfverslag-grendels.yml"]
+    paths: ["mijnagents/app.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", "mijnagents-runner/werkwijze/werfverslag-*.md", "mijnagents-runner/werkwijze_naar_bord.py", ".github/workflows/werfverslag-grendels.yml"]
 jobs:
   werfketen:
     runs-on: ubuntu-latest
@@ -22,4 +22,10 @@ jobs:
       - run: python mijnagents-runner/tests/test_werfverslag_nummer.py
       - run: python mijnagents-runner/tests/test_icloud_status.py
       - run: python mijnagents-runner/tests/test_werf_fotoproducent.py
-      - run: pytest -q mijnagents-runner/tests/test_werfverslag_verwerking.py
+      - run: python mijnagents-runner/tests/test_werf_cli_11.py
+      - run: python mijnagents-runner/tests/test_werfregistratie_11.py
+      - run: python mijnagents-runner/tests/test_werf_rondes_11.py
+      - run: python mijnagents-runner/tests/test_werf_mandaat_11.py
+      - run: python mijnagents-runner/tests/test_werf_hernoeming_12.py
+      - run: pytest -q mijnagents-runner/tests/test_werfketen_controles_11.py
+      - run: pytest -q mijnagents-runner/tests/test_werfverslag_verwerking.py mijnagents-runner/tests/test_werfapp_brug.py

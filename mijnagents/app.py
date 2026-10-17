@@ -1111,10 +1111,10 @@ def werkwijze_opslaan(naam):
 def api_werkwijze(naam):
     if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
         abort(403)
-    a = db().execute("SELECT werkwijze FROM agent WHERE naam=?", (naam,)).fetchone()
+    a = db().execute("SELECT werkwijze,mandaat FROM agent WHERE naam=?", (naam,)).fetchone()
     if not a:
         abort(404)
-    return jsonify(naam=naam, werkwijze=a["werkwijze"] or "")
+    return jsonify(naam=naam, werkwijze=a["werkwijze"] or "", mandaat=a["mandaat"] or "")
 
 
 @app.route("/api/agent/<naam>/werkwijze", methods=["POST"])
@@ -1132,7 +1132,14 @@ def api_werkwijze_zetten(naam):
         return jsonify(ok=False, reden="werkwijze bestaat al op het bord; niet overschreven")
     conn.execute("INSERT INTO werkwijze_versie(naam, tekst, wie, ts) VALUES(?,?,?,?)",
                  (naam, a["werkwijze"] or "", "vorige versie", nu()))
-    conn.execute("UPDATE agent SET werkwijze=? WHERE naam=?", ((p.get("werkwijze") or "").strip(), naam))
+    tekst = (p.get("werkwijze") or "").strip()
+    mandaat = p.get("mandaat")
+    if mandaat is not None and (not isinstance(mandaat, str) or not mandaat.strip() or len(mandaat) > 2000):
+        abort(400)
+    if mandaat is None:
+        conn.execute("UPDATE agent SET werkwijze=? WHERE naam=?", (tekst, naam))
+    else:
+        conn.execute("UPDATE agent SET werkwijze=?,mandaat=? WHERE naam=?", (tekst, mandaat.strip(), naam))
     conn.commit()
     return jsonify(ok=True)
 
@@ -1840,12 +1847,13 @@ def api_werfopdracht_aanvragen():
         volgnr = int(p.get("volgnr", 0))
     except (TypeError, ValueError):
         abort(400)
-    if not re.fullmatch(r"\d{4}", dossier) or volgnr < 1 or p.get("bron") != "commandline":
+    reden = str(p.get("reden") or "").strip()
+    if not re.fullmatch(r"\d{4}", dossier) or volgnr < 1 or p.get("bron") != "commandline" or not reden:
         abort(400)
     try:
         r = _werf_huidige(db(), dossier, volgnr, p.get("werfbezoek_id"))
         opdracht, nieuw = werfwerk.maak(db(), r["id"], p.get("soort"), "werfverslag-schrijver",
-                                      verwacht=p.get("revisie"), bron="commandline")
+                                      verwacht=p.get("revisie"), bron="commandline", reden=reden)
         return jsonify(ok=True, opdracht=opdracht, nieuw=nieuw)
     except werfwerk.Conflict as exc:
         return _werf_fout(exc)
@@ -2117,14 +2125,17 @@ def _taak_status(conn):
 
 
 # Vertaling van de standen van de agent naar de tekens van de dossiercontrole (contractsysteem).
-WERF_STAND = {"ok": "ok", "ontbreekt": "fout", "onbekend": "onbekend", "nvt": "onbekend"}
+WERF_STAND = {"ok": "ok", "let_op": "let_op", "ontbreekt": "fout", "onbekend": "onbekend", "nvt": "onbekend"}
 WERF_ACTIE = {
     "W1": "Agendawacht: afspraak van die dag zoeken en klaarzetten",
+    "W2": "Locatiewacht: GPS-dagboek met bezoekvenster; anders foto met GPS of opname-start",
+    "W3": "Projectmap en bezoekmap controleren",
     "W4": "iCloud-wacht: foto's van die dag binnen 300 m klaarzetten; of foto's van de klant in de bezoekmap zetten",
     "W5": "Plaudwacht: opname van die dag koppelen; geen opname = verslag uit geheugen (E8)",
     "W6": "Plaudwacht: transcript maken of ophalen",
-    "W7": "Keuzes bewaren en Proef maken; Werfverslag schrijver schrijft het concept",
-    "W9": "Mailwacht: verzending aan de klant terugvinden",
+    "W7": "jouw klik: Maak concept; Werfverslag schrijver zet het concept in de werfapp",
+    "W9": "Verzendbewijs in de werfapp nakijken",
+    "W12": "Getekend contract en werfopvolging in het contract-dashboard nakijken",
     "W11": "Werfverslag schrijver bereidt voor (opdracht staat klaar), daarna Keuzes en Proef",
 }
 
@@ -2141,7 +2152,8 @@ def _werf_rij(d, taak_status):
         st = WERF_STAND.get(c["stand"], "onbekend")
         d["controle_rijen"].append({"nummer": c["code"], "titel": c["naam"], "status": st, "bevinding": c["toelichting"],
                                     "actie": WERF_ACTIE.get(c["code"], "") if st != "ok" else ""})
-    d["telling"] = {k: sum(1 for c in d["controle_rijen"] if c["status"] == k) for k in ("ok", "let_op", "fout", "onbekend")}
+    d["telling"] = {k: sum(1 for c in d["controle_rijen"] if c["nummer"] != "NODIG" and c["status"] == k)
+                     for k in ("ok", "let_op", "fout", "onbekend")}
     g = d["gegevens"] or {}
     for x in g.get("gegevens", []):
         x["status"] = {"zeker": "ok", "na te kijken": "let_op", "ontbreekt": "fout"}.get(x.get("zekerheid"), "onbekend")
@@ -2150,21 +2162,37 @@ def _werf_rij(d, taak_status):
     d["heeft_keuzes"] = bool(d["keuzes"])
     # wat nog nodig is, in de woorden van het contractdashboard
     nodig = []
-    if not d["voorbereid"]:
-        nodig.append("voorbereiding door de schrijver")
-    elif not d["heeft_keuzes"]:
-        nodig.append("keuzes van Mehdi")
+    werf = (d["proef_info"] or {}).get("werfapp") or {}
+    d["werfapp"] = dict(werf) if isinstance(werf, dict) else {}
+    vid = d["werfapp"].get("id")
+    if not (isinstance(vid, int) and not isinstance(vid, bool) and vid > 0):
+        d["werfapp"].pop("id", None)   # alleen een echt verslag-ID telt als concept (de link wordt eruit opgebouwd)
     if not d["heeft_proef"]:
-        nodig.append("proef")
+        nodig.append("jouw klik: Maak concept")   # één klik; Voorbereiden en Keuzes zijn niet verplicht (eigen bronnen standaard)
     else:
+        pv = (d["proef_info"] or {}).get("verslagtype") in ("voorlopige_oplevering", "definitieve_oplevering")
+        if d["werfapp"].get("id") and d["werfapp"].get("verstuurd"):
+            nodig.append("niets meer, verstuurd")   # CX5-9
+        elif d["werfapp"].get("id"):
+            nodig.append("nalezen en versturen in de werfapp")
+        elif d["werfapp"].get("fout"):
+            nodig.append(f"geen concept in de werfapp: {d['werfapp']['fout']}")
+        elif pv:
+            nodig.append("Word-sjabloon van de oplevering invullen")
+        else:
+            nodig.append("oudere proef, nog niet in de werfapp (doorzetten zonder tokens)")  # CX4-12: nooit 'niets'
         op = (d["proef_info"] or {}).get("open") or {}
         if isinstance(op, dict) and any(op.values()):
             nodig.append(f"nakijken: {op.get('in_te_vullen', 0)} in te vullen, {op.get('na_te_kijken', 0)} na te kijken")
     for c in d["controle_rijen"]:
-        if c["status"] == "fout" and c["nummer"] in ("W4", "W5", "W6"):
-            nodig.append(c["titel"])
+        if c["nummer"] == "NODIG":
+            nodig.append(c["bevinding"])
     d["nodig"] = nodig
-    if d["heeft_proef"]:
+    if d["heeft_proef"] and d["werfapp"].get("id") and d["werfapp"].get("verstuurd"):
+        d["fase"] = "verstuurd vanuit de werfapp"
+    elif d["heeft_proef"] and d["werfapp"].get("id"):
+        d["fase"] = "concept in de werfapp"
+    elif d["heeft_proef"]:
         d["fase"] = "proef klaar, nakijken"
     elif d["voorbereid"]:
         d["fase"] = "te controleren"

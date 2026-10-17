@@ -1,5 +1,6 @@
 """Render echte bezoekpagina's en laat V8 hun inline scripts parsen vóór uitrol."""
 import re
+import json
 import shutil
 import subprocess
 import unittest
@@ -8,6 +9,31 @@ import test_werfverwerking as fixture_module
 
 
 class WerfFrontendTest(unittest.TestCase):
+    def test_bezoekpagina_toont_onbewezen_posten_en_wacht_op_de_klik(self):
+        fixture = fixture_module.WerfVerwerkingTest("test_gelukt_zonder_bewaard_resultaat_kan_niet")
+        A, BEHEER = fixture_module.A, fixture_module.BEHEER
+        fixture.setUp()
+        try:
+            controles = [
+                {"code": "W1", "naam": "afspraak in de agenda", "stand": "let_op",
+                 "toelichting": "bevestigd door foto's/opname, niet door de agenda"},
+                {"code": "W12", "naam": "getekend contract en werfopvolging", "stand": "ontbreekt",
+                 "toelichting": "geen getekend contract bewezen"},
+                {"code": "NODIG", "naam": "Nog te verzamelen", "stand": "let_op",
+                 "toelichting": "W12 getekend contract en werfopvolging"},
+            ]
+            with A.app.app_context():
+                A.db().execute("UPDATE werfbezoek SET controles=? WHERE id=1", (json.dumps(controles),))
+                A.db().commit()
+            pagina = fixture.client.get("/werfverslag/2309/1?rij_id=1", headers=BEHEER).get_data(as_text=True)
+            self.assertIn("Wacht op jouw klik Voorbereiden of Proef maken", pagina)
+            self.assertIn("Controle (W1 tot W12 en nog te verzamelen)", pagina)
+            self.assertIn("W12 getekend contract en werfopvolging", pagina)
+            self.assertIn("1 ontbreekt", pagina)
+            self.assertIn("1 nakijken", pagina)
+        finally:
+            fixture.tearDown()
+
     def test_gerenderde_scripts_alle_opdrachtstanden(self):
         node = shutil.which("node")
         self.assertIsNotNone(node, "Node/V8 is vereist voor de frontend-uitrolcontrole")
@@ -33,6 +59,46 @@ class WerfFrontendTest(unittest.TestCase):
                         self.assertEqual(parsed.returncode, 0, parsed.stderr)
                     if status in ("klaar", "actief", "uitgesteld") and "rij_id" in url:
                         self.assertIn("keuzesGewijzigd", html)
+        finally:
+            fixture.tearDown()
+
+    def test_conceptlink_uit_het_id_en_eerlijke_stand(self):
+        """De link wordt opgebouwd uit het verslag-ID naar https://werf.globaal.be; een bewaarde url telt niet (CX4-9).
+        Een oudere proef zonder concept en een proces-verbaal krijgen elk hun eigen stand (CX4-12)."""
+        import json
+        fixture = fixture_module.WerfVerwerkingTest("test_gelukt_zonder_bewaard_resultaat_kan_niet")
+        A, BEHEER = fixture_module.A, fixture_module.BEHEER
+        fixture.setUp()
+        try:
+            gevallen = [
+                ({"werfapp": {"id": 7, "nummer": "2309-1", "url": "https://elders.example/verslag/7"}}, "https://werf.globaal.be/verslag/7/bewerken", "concept in de werfapp"),
+                ({"werfapp": {"id": "7\"><script>", "nummer": "x"}}, None, "oudere proef"),
+                ({"werfapp": {"id": 8, "nummer": "2309-1", "verstuurd": True}}, "https://werf.globaal.be/verslag/8/bewerken", "verstuurd vanuit de werfapp"),
+                ({"werfapp": {"id": "7", "nummer": "2309-1"}}, None, "oudere proef"),   # CX5-10: ook de detailpagina toont geen link uit een tekst-ID
+                ({"punten": 3}, None, "oudere proef"),
+                ({"verslagtype": "voorlopige_oplevering"}, None, "Word-sjabloon van de oplevering"),
+                ({"werfapp": {"fout": "geen vast bezoek (registratie) voor deze bordrij; niets aangemaakt", "status": 0}}, None, "geen concept in de werfapp: geen vast bezoek"),
+            ]
+            for info, link, stand in gevallen:
+                with self.subTest(info=info), A.app.app_context():
+                    A.db().execute("UPDATE werfbezoek SET proef_pad='/proef/2309-1 werfverslag (concept).docx', proef_ts='2026-10-16', proef_info=? WHERE id=1",
+                                   (json.dumps(info),))
+                    A.db().commit()
+                pagina = fixture.client.get("/werfverslag/2309/1?rij_id=1", headers=BEHEER).get_data(as_text=True)
+                overzicht = fixture.client.get("/werfverslagen", headers=BEHEER).get_data(as_text=True)
+                self.assertNotIn("elders.example", pagina + overzicht)
+                self.assertNotIn("<script>\"", pagina + overzicht)
+                self.assertIn("Maak concept", pagina)
+                if link:
+                    self.assertIn(link, pagina)
+                    self.assertIn(link, overzicht)
+                else:
+                    self.assertNotIn("werf.globaal.be/verslag/", pagina + overzicht)
+                self.assertIn(stand, overzicht)
+                self.assertNotIn("niets, nakijken en versturen", overzicht)
+                if info.get("werfapp", {}).get("verstuurd"):
+                    self.assertIn("Verstuurd vanuit de werfapp", pagina)
+                    self.assertNotIn("klik je zelf Versturen", pagina)   # CX6-5
         finally:
             fixture.tearDown()
 

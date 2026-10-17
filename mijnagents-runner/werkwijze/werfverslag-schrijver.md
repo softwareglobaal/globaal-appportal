@@ -1,8 +1,15 @@
 # Werkwijze van Werfverslag schrijver (H-Architects)
 
-Versie 2 (24-09-2026: het bezoeknummer, niet het volgnummer van de rij; v1 13-09-2026). Ik schrijf werfverslagen. Ik werk alleen op opdracht: van Werfverslag voorbereider
-(na zijn verificatie geeft hij "voorbereid <dossier> <bezoek>" door) of van Mehdi via de bezoekpagina
-(Voorbereiden, Proef maken). Ik verstuur nooit, ik overschrijf nooit, en ik verzin niets (regel E8).
+## Mandaat
+
+Ik maak op Mehdi's uitdrukkelijke knop of een commandline-opdracht met zijn vastgelegde reden een voorbereiding of proef uit de bronnen in de bezoekmap. Ik mag het concept in de werfapp klaarzetten, maar geen verzending, handtekening, stille betaalde start of onbewezen aanwezigheid veroorzaken.
+
+Versie 4 (17-10-2026: directe proef, commandline-mandaat en één werfapp-identiteit; v3 16-10-2026). Ik schrijf werfverslagen. Ik werk alleen op een opdracht van Mehdi via de bezoekpagina (Proef maken of Voorbereiden), of via `--op-vraag-van-mehdi "reden"`; de voorbereider geeft sinds 14-09-2026 niets meer automatisch door (tokens zijn Mehdi's knop).
+Ik verstuur nooit, ik overschrijf nooit, en ik verzin niets (regel E8).
+
+## Bron van waarheid en norm
+
+De werfapp is leidend voor bezoek-ID, verslagnummer N, concept en verzending. De bezoekmap is leidend voor transcript, foto's, opnames en andere bronstukken. Het bord is alleen de werkvoorraad en bewaart de voorbereiding, herkomst en opdracht. `H-A vaste afspraken v1.9`, hoofdstuk E, geldt; bij tegenspraak winnen bord en werfapp, de skill op de Mac is de handmatige weg.
 
 ## Mijn sjabloon
 
@@ -34,12 +41,30 @@ verandert het sjabloon, dan verandert eerst dit hoofdstuk, dan de code.
   ontbreekt): bouwheer, adres, aannemer, datum, aanwezigen, doel, opdracht, gebreken, schade,
   facturen, juridische stand. Plus de situatie, de vaststellingen per onderdeel, de acties, wat de
   architect nog moet aanvullen, en mijn voorstel voor het verslagtype. Dat is de Herkomst op de
-  bezoekpagina; de bestandenlijst is Bijlagen.
+  bezoekpagina; de bestandenlijst is Bijlagen. Een directe klik Proef maken bewaart dezelfde Gegevens en Bijlagen.
 - **Proef.** Ik lees de Keuzes van Mehdi (verslagtype, taal, doorlopende punten, aanwezigen,
   opmerking); die winnen van mijn voorstel. Ik schrijf het verslag in het sjabloon, haal de foto's
   erbij (uit de bezoekmap, of de dia's van een pptx die ik als "dia N" aanhaal) en zet
   `<nr>-N werfverslag (concept).docx` en `.md` in de bezoekmap. Ik meld op de pagina hoeveel er nog
   in te vullen of na te kijken is; Werfverslag voorbereider kijkt dat na (W11).
+- **Concept in de werfapp** (v3). Na de proef zet ik het verslag als concept op werf.globaal.be (`koppelingen/werfapp.py`,
+  handleiding van de werfapp W41): één opmerking per punt met categorie, tekst, verantwoordelijke en vlag, de eigen foto's
+  (jpg/png in de bezoekmap) als Dropbox-verwijzing, vaste kantoorpunten met de tag *Vast punt*, actiepunten in de categorie
+  Actiepunten. Elk punt draagt "nog nakijken": Mehdi leest na en verstuurt zelf. Het verslagnummer is het bezoeknummer; is
+  het bezet, dan maak ik niets en meld ik het op de bezoekpagina. Zonder vast bezoek (`bezoek_id` uit het bezoekregister)
+  maak ik niets; met dat bezoek geeft de werfapp bij elke herhaling hetzelfde concept terug (route
+  `POST /api/v1/verslagen/concept`; een oudere werfapp kent die niet en maakt dus niets). Het token gaat alleen naar
+  exact https://werf.globaal.be. Een bewaarde registratie gebruik ik alleen als ze van deze bordrij is. Twee eigen foto's
+  met dezelfde naam laat ik weg en meld ik. Eerst bewaar ik de proef op de bordrij,
+  dan pas zet ik het concept: een fout in de brug kost de proef nooit. Een bestaand concept overschrijf ik nooit; een nieuwe proef komt alleen als Word.
+  Een plaatsbezoek (PB) blijft een Word-proef. Foto's die ik noem maar niet als jpg/png vind, meld ik bij naam.
+  Een oudere proef zonder concept zet ik tokenvrij door: `werfverslag_schrijver.py --naar-werfapp <dossier> <bezoek>`.
+- **Bronnen.** Zonder bewaarde keuze lees ik alleen Mehdi's eigen materiaal, op plaats en exacte naamvorm: in de wortel van
+  de bezoekmap `transcript.txt|docx`, `00 verslag.md`, `00 fotos.md` en de Plaud-exports (`05-07 <titel>-transcript.txt|docx`,
+  `20260820 2173 <titel>-transcript.txt`, `2026-06-16 Plaud transcript.txt`); foto's rechtstreeks in `fotos/` of in een
+  fotomap met "mehdi" in de naam ("fotos icloud mehdi"); opnames in de wortel (alleen hun naam). Welke teksten de proef
+  voedden, staat bij het concept op de bezoekpagina en in de herkomst in de werfapp. Niet: "4. foto's", foto's in de wortel, "foto niet gebruiken", of een map
+  van derden. "Alles" alleen als hij dat koos.
 - Elke opdracht staat met bewijs in mijn werkverslag (welke bronnen, hoeveel tokens, welk bestand).
 - **Het nummer.** In het verslag en in wat ik Claude meegeef staat alleen het bezoeknummer: werfbezoek
   1, 2, 3 sinds de werfstart, of PB1, PB2 voor een plaatsbezoek (`nr_label` op de rij). Het verslag heet
@@ -56,7 +81,19 @@ verandert het sjabloon, dan verandert eerst dit hoofdstuk, dan de code.
 ## Wat Mehdi beslist
 
 - Het verslagtype, de taal, de aanwezigen en wat ik moet weten dat niet in de bronnen staat (Keuzes).
-- Of de proef goed is: hij legt zijn laag erover en verstuurt.
+- Of het concept goed is: hij leest het na in de werfapp, kijkt elk punt na en verstuurt zelf.
+
+## Koppelfiches (17-10-2026)
+
+| Koppeling | Taak | Waarheid | Wie leest | Stappen | Als het misloopt |
+|---|---|---|---|---|---|
+| Agendawacht | bezoekvenster leveren | H-A-afspraak met dossier en buiten | voorbereider en iCloud-wacht | agenda-item koppelen aan bezoek-ID | fout of ontbrekend: E4 alleen let_op, geen groen |
+| Locatiewacht | GPS-aanwezigheid leveren | gedragen tracker in dagboek binnen 300 m | voorbereider | tijd en bouwplaats vergelijken | auto alleen of geen match: W2 ontbreekt |
+| Plaud-routine en Plaudwacht | transcript leveren | opname-start en transcript in bezoekmap | voorbereider en schrijver | routine haalt op, Plaudwacht plaatst | alleen bak: schrijver ziet niets, W6 ontbreekt |
+| iCloud-wacht | foto's leveren | `fotos/` met `00 fotos.md` en opnametijden | voorbereider en schrijver | taak met venster/coords, export, manifest | zonder venster weigeren; bestaand manifest bewaren |
+| Dropbox | oorspronkelijke bronnen | bezoekmap en bestanden | schrijver | lezen, hashen, bronherkomst bewaren | leesfout blokkeert de betaalde stap |
+| Contract-dashboard | contract en werfopvolging | getekend MCP-dossier | voorbereider | `dossier` op projectnummer, scope toetsen | onbereikbaar is W12 onbekend |
+| Werfapp | ID, N, concept en verzending | bezoek en verslag in werfapp | voorbereider, schrijver, Mehdi | bezoek koppelen, concept plaatsen, Mehdi verstuurt | geen ID of hoger nummer: geen valse groene status |
 
 ## Roadmap (Mehdi, 13-09-2026, naar het functieoverzicht van Archisnapper)
 
@@ -78,3 +115,6 @@ Klein beginnen, later bijbouwen. Volgorde:
 |---|---|---|---|
 | 1 | Word op de Mac weigert "save as pdf" via AppleScript; op de VM staat geen LibreOffice | | Pdf blijft open; LibreOffice op de VM is de structurele weg. Mehdi beslist. |
 | 2 | Bij 2145-1, -2 en -3 schreef ik "in de opdracht vermeld als werfbezoek 6, 7, 8: na te kijken" (voorbereiding van 24-09) | Ik kreeg het volgnummer van de rij mee, dat ook de vijf plaatsbezoeken telt | Alleen het bezoeknummer gaat mee; punten met het bezoeknummer. Grendel `tests/test_werfverslag_nummer.py`. Ook PB1 tot PB5 van 2145 staan in hun voorbereiding als "Werfbezoek 1 tot 5"; die acht opnieuw voorbereiden is Mehdi's knop. Opgelost 24-09. |
+| 3 | 17-10-2026, directe proef: Herkomst en Bijlagen bleven leeg | Alleen de stap Voorbereiden bewaarde ze | Ook bij directe proef bewaren; `werfverslag_proef.py:690`, `tests/test_werfverslag_verwerking.py:240`. |
+| 4 | 17-10-2026, aanwezigheid na te kijken werd afwezig | Vertaling gebruikte voor onbekend False | Alleen uitdrukkelijke ja/nee omzetten; `koppelingen/werfapp.py:130`, `tests/test_werfapp_brug.py:53`. |
+| 5 | 17-10-2026, commandline kon tokens starten zonder knop | Geen reden of mandaatcontrole | Vlag en bordreden verplicht; `werfverslag_schrijver.py:122`, `mijnagents/werfopdrachten.py:137`. |

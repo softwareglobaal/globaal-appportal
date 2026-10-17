@@ -6,8 +6,8 @@ Hij verzamelt zelf niets en schrijft zelf geen verslag. Hij:
   2. zoekt de projectmap in Dropbox (standaard- én light-projecten);
   3. leest de bezoekmappen (Site Reports, Werfverslagen, momentmappen) en inventariseert
      per bezoek wat er ligt: foto's, opname, transcript, verslag, notities;
-  4. verifieert per bezoek de controleposten W1-W9 tegen wat de andere agents klaarzetten
-     (Agendawacht, Plaudwacht, Fathomwacht, iCloud-wacht);
+  4. verifieert per bezoek W1-W12 tegen agenda, locatie, bezoekmap, contract en werfapp;
+     twijfel blijft zichtbaar als let_op, ontbreekt of onbekend;
   5. zet voor elke ontbrekende bron een taak klaar voor de agent die ze kan leveren
      (klaarzet soort `taak`), en meldt wat geen enkele agent kan als nood;
   6. schrijft de stand naar zijn pagina op het bord (/werfverslagen).
@@ -19,9 +19,11 @@ Gebruik:
 """
 import argparse
 import json
+import math
 import os
 import re
 import sys
+import urllib.request
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -31,6 +33,11 @@ sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import bronnen  # noqa: E402
 import werfregister  # noqa: E402
+import werfregistratie  # noqa: E402
+import locatiecontext as LC  # noqa: E402  (de enige lezer van locatiegegevens: grens en rol)
+import werfapp  # noqa: E402
+import werfnamen  # noqa: E402  (dezelfde naamregel voor eigen transcripten als de schrijver)
+import contracten_mcp  # noqa: E402
 
 NAAM = "werfverslag-voorbereider"
 LIGHT_BASIS = "/Work All/01. H-A WORK/0 H-A Light projects/5. H-A light SITE VISITS"
@@ -55,6 +62,7 @@ DATUM_PAT = re.compile(r"(20\d{2})[-_. ]?(\d{2})[-_. ]?(\d{2})")
 AGENDAWACHT_SINDS = "2026-09-09"
 
 ag = bord.Agent(NAAM)
+vooraf_koppelen = werfregistratie.koppel_voor_nummering
 DOSSIERS_PAD = os.path.expanduser("~/appportal/mijnagents-data/werfverslag_dossiers.json")
 
 
@@ -100,6 +108,50 @@ def verhuisde_rijen(bezoeken, projectmap, bord_rijen):
         if oud:
             uit[b["map"]] = sorted(oud, key=lambda r: r.get("id") or 0)
     return uit
+
+
+def _is_dubbel(r):
+    return str(r.get("stand", "")).startswith("dubbel")
+
+
+def hernoemde_rijen(bezoeken, projectmap, bord_rijen, bestaat, al=()):
+    """De bezoekmap kreeg binnen dezelfde projectmap een andere naam (2145 en 2405, oktober 2026: de
+    communicatiemap ging naar de naamregel `JJJJ-MM-DD UUMM HARC nummer - met wie - onderwerp`).
+
+    Een rij hoort bij een bezoek van nu als: dezelfde datum, het oude pad ligt in dezelfde projectmap, het
+    oude pad bestaat niet meer, en er is precies één bezoek op die datum in de projectmap. Twee bezoeken op
+    dezelfde dag: geen koppeling (de rij gaat dan naar verdwenen_rijen en Mehdi kijkt). Rijen die al als
+    verhuis herkend zijn (al) of die al dubbel staan, tellen niet.
+    """
+    pm = projectmap.lower() + "/"
+    per_dag = {}
+    for b in bezoeken:
+        per_dag.setdefault(b["datum"], []).append(b)
+    gezien = {id(r) for oude in al for r in oude}
+    huidig = {b["map"].lower() for b in bezoeken}
+    uit = {}
+    for r in sorted(bord_rijen, key=lambda r: r.get("id") or 0):
+        pad = r.get("bezoekmap") or ""
+        kandidaten = per_dag.get(r.get("datum"), [])
+        if (id(r) in gezien or _is_dubbel(r) or not pad or pad.lower() in huidig
+                or not pad.lower().startswith(pm) or len(kandidaten) != 1 or bestaat(pad)):
+            continue
+        uit.setdefault(kandidaten[0]["map"], []).append(r)
+    return uit
+
+
+def verdwenen_rijen(bezoeken, bord_rijen, bestaat, gekoppeld=()):
+    """Rijen waarvan de bezoekmap niet meer bestaat en die bij geen bezoek van nu horen: die mogen hun oude
+    stand (bv. 'klaar voor verslag') niet houden. Niets wordt gewist; ze krijgen een eerlijke stand."""
+    gezien = {id(r) for oude in gekoppeld for r in oude}
+    huidig = {b["map"].lower() for b in bezoeken}
+    return [r for r in bord_rijen
+            if r.get("bezoekmap") and id(r) not in gezien and not _is_dubbel(r)
+            and r["bezoekmap"].lower() not in huidig and not str(r.get("stand", "")).startswith("bezoekmap niet meer gevonden")
+            and not bestaat(r["bezoekmap"])]
+
+
+VERDWENEN = "bezoekmap niet meer gevonden; nakijken"
 
 
 def samengevoegd(rijen):
@@ -154,6 +206,17 @@ def datum_uit(naam):
         return ""
 
 
+def opnametijd_uit_naam(naam, dag):
+    """Een expliciete datum en uur in de naam, nooit de Dropbox-wijzigingsdatum."""
+    m = re.search(r"(20\d{2})[-_. ]?(\d{2})[-_. ]?(\d{2})[ T_-]+(\d{2})[:.]?(\d{2})\b", naam)
+    if not m or "-".join(m.groups()[:3]) != dag:
+        return None
+    try:
+        return datetime(*map(int, m.groups()), tzinfo=ZoneInfo("Europe/Brussels")).isoformat()
+    except ValueError:
+        return None
+
+
 def adres_uit_mapnaam(naam):
     """`2416 [ INT - EPB, ING, VC] Julien Breugelmansstraat 16, 2950 Kapellen` -> adres."""
     n = re.sub(r"^\s*\d{4}\s*", "", naam)
@@ -199,7 +262,7 @@ def bezoeken_in(projectmap):
         if "communicat" in rel and ("bezoek" not in naam or any(x in naam for x in ("leverancier", "toonzaal", "online", "tel "))):
             continue
         if True:
-            mappen[pad] = {"map": pad, "datum": d, "fotos": 0, "opnames": [], "transcripten": [],
+            mappen[pad] = {"map": pad, "datum": d, "fotos": 0, "foto_bestanden": [], "foto_manifest": "", "foto_manifest_versies": [], "opnames": [], "opname_starts": [], "transcripten": [], "transcript_bestanden": [],
                            "verslagen": [], "notities": [], "bestanden": 0, "bron_map": rel.strip("/").split("/")[0]}
     # losse verslagen buiten een bezoekmap (bv. `1. Werf updates/Werf update 2 - ... - 2026-06-02.docx`)
     losse = []
@@ -223,10 +286,19 @@ def bezoeken_in(projectmap):
         eigenaar["bestanden"] += 1
         if laag.endswith(FOTO_EXT):
             eigenaar["fotos"] += 1
+            eigenaar["foto_bestanden"].append(pad)
+        elif laag == "00 fotos.md" and pad.lower().startswith(eigenaar["map"].lower() + "/fotos/"):
+            eigenaar["foto_manifest"] = pad
+        elif re.fullmatch(r"00 fotos \d{8}t\d{12}\.md", laag) and pad.lower().startswith(eigenaar["map"].lower() + "/fotos/"):
+            eigenaar["foto_manifest_versies"].append(pad)
         elif laag.endswith(OPNAME_EXT):
             eigenaar["opnames"].append(naam)
+            start = opnametijd_uit_naam(naam, eigenaar["datum"])
+            if start:
+                eigenaar["opname_starts"].append(start)
         elif TRANSCRIPT_PAT.search(naam) and laag.endswith((".md", ".txt", ".docx")) and not re.search(r"niet getranscribeerd|geen opname|00 fotos", laag):
             eigenaar["transcripten"].append(naam)
+            eigenaar["transcript_bestanden"].append(pad)
         elif VERSLAG_PAT.search(naam) and laag.endswith((".docx", ".pdf", ".md")):
             eigenaar["verslagen"].append(naam)
         elif laag.endswith((".docx", ".pdf", ".md", ".txt", ".xlsx", ".pptx")):
@@ -236,8 +308,8 @@ def bezoeken_in(projectmap):
         if doel:
             doel["verslagen"].append(os.path.basename(v["pad"]))
         else:
-            mappen[v["pad"]] = {"map": os.path.dirname(v["pad"]), "datum": v["datum"], "fotos": 0, "opnames": [],
-                                "transcripten": [], "verslagen": [os.path.basename(v["pad"])], "notities": [],
+            mappen[v["pad"]] = {"map": os.path.dirname(v["pad"]), "datum": v["datum"], "fotos": 0, "foto_bestanden": [], "foto_manifest": "", "foto_manifest_versies": [], "opnames": [], "opname_starts": [],
+                                "transcripten": [], "transcript_bestanden": [], "verslagen": [os.path.basename(v["pad"])], "notities": [],
                                 "bestanden": 1, "bron_map": "los verslag"}
     uit = sorted(mappen.values(), key=lambda m: (m["datum"], m["map"]))
     for i, m in enumerate(uit, 1):
@@ -328,6 +400,190 @@ def _inhoud(it):
         return {}
 
 
+def tijdstip(waarde):
+    try:
+        t = datetime.fromisoformat(str(waarde).replace("Z", "+00:00"))
+        return t if t.tzinfo is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def foto_momenten(bak, dag):
+    """Alleen tijd en GPS uit de iCloud-wacht, niet een titel met dezelfde bezoekdag."""
+    uit = []
+    for it in bak.get("foto", []):
+        if it.get("van") != "icloud-wacht" or dag_van(it) != dag:
+            continue
+        d = _inhoud(it)
+        for f in d.get("fotos") or []:
+            t = tijdstip(f.get("vastgelegd_utc") or f.get("tijdstip"))
+            if t and isinstance(f.get("lat"), (int, float)) and isinstance(f.get("lon"), (int, float)):
+                uit.append((t, f["lat"], f["lon"]))
+        if not d.get("fotos"):
+            t = tijdstip(d.get("vastgelegd_utc") or d.get("tijdstip"))
+            if t and isinstance(d.get("lat"), (int, float)) and isinstance(d.get("lon"), (int, float)):
+                uit.append((t, d["lat"], d["lon"]))
+    return uit
+
+
+def opname_momenten(bezoek, bak=None):
+    """Alleen expliciete opname-start; een bestandsdatum is geen opnametijd."""
+    tijden = list(bezoek.get("opname_starts", []))
+    for it in (bak or {}).get("transcript", []):
+        if it.get("van") == "plaud-wacht" and dag_van(it) == bezoek["datum"]:
+            d = _inhoud(it)
+            tijden.append(d.get("opname_start") or d.get("start_at"))
+    return [t for t in (tijdstip(x) for x in tijden) if t]
+
+
+def e4_venster(bezoek, bak, nummer=None, adres=""):
+    fotos = foto_momenten(bak, bezoek["datum"])
+    if fotos:
+        coord = projectcoordinaten(nummer, adres, bak) if nummer and adres else None
+        fotos = [(t, lat, lon) for t, lat, lon in fotos if coord and afstand_m(*coord, lat, lon) <= 300]
+    momenten = [x[0] for x in fotos] + opname_momenten(bezoek, bak)
+    if not momenten:
+        return None
+    return {"start": (min(momenten) - timedelta(minutes=15)).astimezone(ZoneInfo("Europe/Brussels")).isoformat(),
+            "einde": (max(momenten) + timedelta(minutes=60)).astimezone(ZoneInfo("Europe/Brussels")).isoformat(),
+            "reden": "E4, geen afspraak"}
+
+
+def venster_voor(nummer, bezoek, bezoeken, bak, bezoek_id="", adres=""):
+    try:
+        return bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, bezoek_id)
+    except ValueError:
+        return e4_venster(bezoek, bak, nummer, adres)
+
+
+def in_venster(t, venster):
+    return bool(t and venster and tijdstip(venster.get("start")) <= t < tijdstip(venster.get("einde")))
+
+
+def afstand_m(lat1, lon1, lat2, lon2):
+    p = math.pi / 180
+    a = 0.5 - math.cos((lat2 - lat1) * p) / 2 + math.cos(lat1 * p) * math.cos(lat2 * p) * (1 - math.cos((lon2 - lon1) * p)) / 2
+    return 12742000 * math.asin(min(1, math.sqrt(max(0, a))))
+
+
+def projectcoordinaten(nummer, adres, bak):
+    """Een expliciet coördinaat bij hetzelfde H-A-projectadres; onbekend blijft onbekend."""
+    # Een foto meldt haar eigen GPS-plek; die mag niet tegelijk de bouwplaats bepalen.
+    for it in bak.get("afspraak", []):
+        d = _inhoud(it)
+        if it.get("van") != "agenda-wacht" or it.get("soort", "afspraak") != "afspraak" or d.get("firma") != "HARC":
+            continue
+        plek = d.get("bouwplaats") if isinstance(d.get("bouwplaats"), dict) else d
+        if (str(d.get("nummer") or d.get("projectnummer") or "") == str(nummer)
+                and str(plek.get("adres") or "").casefold() == adres.casefold()
+                and isinstance(plek.get("lat"), (int, float)) and isinstance(plek.get("lon"), (int, float))):
+            return plek["lat"], plek["lon"]
+    # De tegel koppelt verblijven aan exact deze projectplekken (binnen 300 m); via de gedeelde lezer.
+    return LC.projectplek("HARC", nummer)
+
+
+def aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster):
+    """W2: was Mehdi ter plaatse? Geeft (stand, toelichting).
+
+    Persoonlijk bewijs (ok): een foto met GPS binnen 300 m in het venster, een opname met start in het
+    venster, of een verblijf van de gedragen tracker bij dit project. Alleen de auto bij het project
+    is let_op: dat bewijst waar de auto stond, niet waar Mehdi was. Locatie komt uitsluitend via
+    locatiecontext (startgrens van de meetreeks, alleen positieve projectverblijven).
+    """
+    if not venster:
+        return "ontbreekt", "geen bezoekvenster om aanwezigheid in te toetsen"
+    coord = projectcoordinaten(nummer, adres, bak) if bak.get("foto") else None
+    if coord and any(in_venster(t, venster) and afstand_m(*coord, lat, lon) <= 300
+                     for t, lat, lon in foto_momenten(bak, bezoek["datum"])):
+        return "ok", "foto met GPS van de iCloud-wacht binnen 300 m in het bezoekvenster"
+    if any(in_venster(t, venster) for t in opname_momenten(bezoek, bak)):
+        return "ok", "opname met start in het bezoekvenster"
+    verblijven = LC.verblijven_in_venster(venster["start"], venster["einde"], "HARC", nummer)
+    persoon = [x for x in verblijven if x.get("rol") != "auto"]
+    if persoon:
+        return "ok", "gedragen tracker bij het project: " + LC.beschrijf(persoon[0])
+    if verblijven:
+        return "let_op", "alleen de auto stond bij het project (" + LC.beschrijf(verblijven[0]) + ")"
+    return "ontbreekt", "geen GPS-foto, opname of projectverblijf binnen het venster"
+
+
+def fotobewijs(bezoek, venster):
+    paden = bezoek.get("foto_bestanden") or []
+    in_map = [p for p in paden if p.lower().startswith(bezoek["map"].lower() + "/fotos/")]
+    bruikbaar = [p for p in in_map if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
+    canoniek = bezoek.get("foto_manifest")
+    manifest = max(bezoek.get("foto_manifest_versies") or [canoniek or ""])
+    if not bruikbaar or not canoniek or not venster:
+        return "let_op" if paden else "ontbreekt"
+    try:
+        inhoud = bronnen.download(manifest, maximum=100_000).decode("utf-8")
+    except (OSError, UnicodeError, ValueError, AttributeError, TypeError):
+        return "let_op"
+    # De iCloud-wacht schrijft per geleverd bestand de opnametijd; een vensterregel alleen bewijst dat niet.
+    tijden = {naam: tijdstip(t) for t, naam in re.findall(r"(?m)^- (\S+T\S+) \| ([^\r\n|]+)$", inhoud)}
+    def opname_tijd(p):
+        naam = os.path.basename(p)
+        return tijden.get(naam) or tijden.get(os.path.splitext(naam)[0] + ".HEIC") or tijden.get(os.path.splitext(naam)[0] + ".heic")
+    if not tijden or any(not in_venster(opname_tijd(p), venster) for p in bruikbaar):
+        return "let_op"
+    return "ok"
+
+
+def contractbewijs(nummer):
+    """Groen uitsluitend bij een getekend dossier met expliciete werfopvolging."""
+    mcp_ontbreekt = False
+    try:
+        d = contracten_mcp.call("dossier", project_nummer=str(nummer), soort="architectuur")
+    except contracten_mcp.ToolFout as ex:
+        mcp_ontbreekt = "Geen dossier gevonden" in str(ex)
+        d = None
+    except Exception:  # noqa: BLE001
+        d = None
+    if d is None:
+        try:
+            d = werfapp.call(f"/projecten/{nummer}")
+        except Exception:  # noqa: BLE001
+            if mcp_ontbreekt:
+                # Een project van vóór het contractsysteem (bv. 2173, 2021) staat er nooit in: dat is
+                # onbekend, geen ontbrekend contract. Het getekende contract ligt dan in de projectmap.
+                return "onbekend", "project niet in het contractdashboard (vermoedelijk van vóór het systeem); bekijk het getekende contract in de projectmap"
+            return "onbekend", "contract-dashboard en werfapp niet bereikbaar"
+    if not isinstance(d, dict):
+        return "onbekend", "contractantwoord is niet toetsbaar"
+    metadata = d.get("dossier") if isinstance(d.get("dossier"), dict) else d
+    if not any(k in metadata for k in ("stand", "status", "velden", "keuzes")):
+        return "onbekend", "geen contractgegevens in het antwoord"
+    velden = d.get("velden") or metadata.get("velden") or metadata
+    keuzes = d.get("keuzes") or metadata.get("keuzes") or velden
+    if not isinstance(velden, dict) or not isinstance(keuzes, dict):
+        return "onbekend", "contractvelden zijn niet toetsbaar"
+    stand = str(metadata.get("stand") or metadata.get("status") or "").lower()
+    scope = keuzes.get("architectuur_scope") or velden.get("architectuur_scope")
+    opvolging = keuzes.get("werfopvolging_keuze") or velden.get("werfopvolging_keuze")
+    if stand != "getekend" or not scope or str(opvolging).lower() not in ("ja", "inbegrepen", "true", "1"):
+        return "ontbreekt", "geen getekend contract met uitdrukkelijke werfopvolging bewezen"
+    return "ok", "getekend contract; werfopvolging inbegrepen"
+
+
+def werfapp_bezoeken(nummer):
+    teller = []
+    try:
+        project = werfapp.call(f"/projecten/{nummer}")
+        if isinstance(project, dict):
+            if re.fullmatch(r"\d+", str(project.get("werfbezoek_teller") or "")):
+                teller = [{"werfbezoek_teller": project["werfbezoek_teller"]}]
+            if isinstance(project.get("verslagen"), list):
+                return project["verslagen"] + teller  # inclusief ArchiSnapper-historiek en verzendgeschiedenis
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        antwoord = werfapp.call(f"/projecten/{nummer}/bezoeken")
+        bezoeken = antwoord if isinstance(antwoord, list) else antwoord.get("bezoeken") or []
+        return bezoeken + teller
+    except Exception:  # noqa: BLE001
+        return teller or None
+
+
 def bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, bezoek_id):
     """Expliciet H-A-agendabewijs; bij meerdere bezoeken geen koppeling op alleen dag."""
     geldig = []
@@ -360,7 +616,9 @@ def bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, bezoek_id):
                 continue
         elif sum(b["datum"] == bezoek["datum"] for b in bezoeken) != 1:
             continue
-        geldig.append({"start": start.isoformat(), "einde": einde.isoformat(), "agenda_uniek": it.get("uniek"), "agenda": d["agenda"]})
+        geldig.append({"start": start.astimezone(ZoneInfo("Europe/Brussels")).isoformat(),
+                       "einde": einde.astimezone(ZoneInfo("Europe/Brussels")).isoformat(),
+                       "agenda_uniek": it.get("uniek"), "agenda": d["agenda"]})
     if len(geldig) != 1:
         raise ValueError("bezoekvenster_dubbelzinnig" if len(geldig) > 1 else "bezoekvenster_ontbreekt")
     return geldig[0]
@@ -373,22 +631,29 @@ def fototaak(nummer, adres, projectmap, bezoek, bezoeken, bak, registratie):
             raise ValueError
     except ValueError:
         raise ValueError("bronregistratie_ontbreekt") from None
-    venster = bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, registratie["bezoek_id"])
+    venster = venster_voor(nummer, bezoek, bezoeken, bak, registratie["bezoek_id"], adres)
+    if not venster:
+        raise ValueError("bezoekvenster_ontbreekt")
+    coord = projectcoordinaten(nummer, adres, bak)
+    if not coord:
+        raise ValueError("werfcoordinaten_ontbreken")
     project_ref = "h-architects:" + str(nummer)
     if registratie.get("project_ref") != project_ref:
         raise ValueError("projectidentiteit_ontbreekt")
     doel = taakdoel(bezoek)
+    vensternaam = "E4-terugvalvenster" if venster.get("reden") == "E4, geen afspraak" else "H-A-bezoekvenster"
     return {"voor": "icloud-wacht", "soort": "taak", "sleutel": str(nummer),
-            "titel": f"Foto's voor bezoek {registratie['bezoek_id']} van dossier {nummer} binnen het bevestigde venster en 300 m",
+            "titel": f"Foto's voor bezoek {registratie['bezoek_id']} van dossier {nummer} binnen het {vensternaam} en 300 m",
             "inhoud": {"dossier": str(nummer), "project_ref": project_ref, "bezoek_id": registratie["bezoek_id"],
                        "datum": bezoek["datum"], "adres": adres, "projectmap": projectmap, "bezoekmap": doel,
                        "volgnr": bezoek["volgnr"], "nr_label": bezoek["nr_label"], "soort_bezoek": bezoek["soort_bezoek"],
-                       "straal_m": 300, **venster}, "verwijzing": doel,
+                       "lat": coord[0], "lon": coord[1], "straal": 300, "straal_m": 300, **venster,
+                       "bezoeksleutel": f"{nummer}:{bezoek['datum']}:{doel}"}, "verwijzing": doel,
             "uniek": f"werf:{project_ref}:{registratie['bezoek_id']}:icloud-wacht"}
 
 
 # ------------------------------------------------------- controleposten ---
-def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=None):
+def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=None, bezoeken=None):
     """Geeft (controles, taken, noden). controles: lijst {code, naam, stand, toelichting}.
     stand in ok | ontbreekt | onbekend | nvt."""
     d = bezoek["datum"]
@@ -397,22 +662,33 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
     def post(code, naam, stand, toel=""):
         c.append({"code": code, "naam": naam, "stand": stand, "toelichting": toel})
 
-    # W1 agenda
-    afspraken = [a for a in bak.get("afspraak", []) if dag_van(a) == d]
-    if afspraken:
-        post("W1", "afspraak in de agenda", "ok", afspraken[0].get("titel", "")[:120])
-    elif d < AGENDAWACHT_SINDS:
-        post("W1", "afspraak in de agenda", "onbekend", f"bezoek van vóór {AGENDAWACHT_SINDS}: de Agendawacht kijkt nog niet terug in de tijd")
-        noden.append({"tekst": f"Agendawacht kan geen afspraken van vóór {AGENDAWACHT_SINDS} bevestigen; een ronde met --dag over het verleden is nodig", "wie": "claude-code"})
-    else:
-        post("W1", "afspraak in de agenda", "ontbreekt", "geen afspraak met dit nummer op die dag klaargezet")
-        taken.append(("agenda-wacht", f"Zoek in alle agenda's de afspraak van dossier {nummer} op {d} ({adres}) en zet ze klaar met sleutel {nummer}"))
-    # W2 projectmap, W3 bezoekmap
-    post("W2", "projectmap gevonden", "ok" if projectmap else "ontbreekt", f"{soort_project}: {projectmap}" if projectmap else "")
-    post("W3", "bezoekmap", "ok", bezoek["map"])
+    br = dict(bord_rij or {})
+    # De koppeling uit deze ronde is al vastgelegd vóór de bordrij wordt bijgewerkt.
+    # Een oud bordpad mag een agenda-item met het nieuwe bezoek-ID niet afwijzen.
+    if bezoek.get("registratie"):
+        br["registratie"] = bezoek["registratie"]
+    try:
+        venster = bevestigd_fotovenster(nummer, bezoek, bezoeken or [bezoek], bak,
+                                         (br.get("registratie") or {}).get("bezoek_id", ""))
+        post("W1", "afspraak in de agenda", "ok", "H-A-afspraak, dossier en buitenvenster bevestigd")
+    except ValueError:
+        venster = e4_venster(bezoek, bak, nummer, adres)
+        if venster:
+            post("W1", "afspraak in de agenda", "let_op", "bevestigd door foto's/opname, niet door de agenda")
+        elif d < AGENDAWACHT_SINDS:
+            post("W1", "afspraak in de agenda", "onbekend", f"bezoek van vóór {AGENDAWACHT_SINDS}: geen agendabewijs")
+        else:
+            post("W1", "afspraak in de agenda", "ontbreekt", "geen geldige H-A-buitenafspraak met dit dossier en venster")
+            taken.append(("agenda-wacht", f"Zoek in alle agenda's de H-A-buitenafspraak van dossier {nummer} op {d} ({adres})"))
+    # W2 aanwezigheid, W3 de mappen.
+    w2_stand, w2_toel = aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster)
+    post("W2", "aanwezigheid", w2_stand, w2_toel)
+    post("W3", "projectmap en bezoekmap", "ok" if projectmap and bezoek.get("map") and bezoek.get("bron_map") != "los verslag" else "ontbreekt",
+         f"{soort_project}: {projectmap}; {bezoek.get('map', '')}")
     # W4 foto's
-    if bezoek["fotos"]:
-        post("W4", "foto's", "ok", f"{bezoek['fotos']} in de bezoekmap")
+    foto_stand = fotobewijs(bezoek, venster)
+    if foto_stand != "ontbreekt":
+        post("W4", "foto's", foto_stand, f"{bezoek['fotos']} foto('s); alleen fotos/ met tijdsbewijs in 00 fotos.md is volledig")
     else:
         fotos = [f for f in bak.get("foto", []) if dag_van(f) == d]
         if fotos:
@@ -431,23 +707,27 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
     else:
         post("W5", "opname", "ontbreekt", "geen opname in de map en geen transcript van die dag klaargezet")
         taken.append(("plaud-wacht", f"Zoek een Plaud-opname van {d} voor dossier {nummer} ({adres}) en zet het transcript klaar met sleutel {nummer}"))
-    if bezoek["transcripten"]:
-        post("W6", "transcript", "ok", "; ".join(bezoek["transcripten"])[:160])
+    directe_transcripten = [p for p in bezoek.get("transcript_bestanden", [])
+                           if os.path.dirname(p).casefold() == bezoek["map"].casefold()
+                           and (werfnamen.eigen_transcript(os.path.basename(p))
+                                or os.path.basename(p).lower() == "01 transcript.md")]
+    if directe_transcripten:
+        post("W6", "transcript", "ok", "; ".join(os.path.basename(p) for p in directe_transcripten)[:160])
     elif transcripten_bak:
-        post("W6", "transcript", "ok", f"klaargezet door {transcripten_bak[0].get('van')}: {transcripten_bak[0].get('titel', '')[:100]}")
+        post("W6", "transcript", "ontbreekt", "transcript staat alleen in de klaarzetbak, nog niet in de bezoekmap")
+        taken.append(("plaud-wacht", f"Plaats het transcript in de bezoekmap {taakdoel(bezoek)} voor dossier {nummer}"))
     elif bezoek["opnames"]:
         post("W6", "transcript", "ontbreekt", "opname zonder transcript in de map")
         taken.append(("plaud-wacht", f"Transcript maken/ophalen van de opname in {bezoek['map']} (dossier {nummer}, {d})"))
     else:
-        post("W6", "transcript", "ontbreekt", "geen opname, dus geen transcript")
+        post("W6", "transcript", "ontbreekt", "geen eigen transcript in de bezoekmap (naamvormen in koppelingen/werfnamen.py)")
     # W7 verslag; W11 nacontrole van de proef van Werfverslag schrijver
-    br = bord_rij or {}
     if bezoek["verslagen"]:
         post("W7", "verslag of concept", "ok", "; ".join(bezoek["verslagen"])[:160])
     elif br.get("proef_pad"):
         post("W7", "verslag of concept", "ok", f"proef van Werfverslag schrijver: {os.path.basename(br['proef_pad'])}")
     else:
-        post("W7", "verslag of concept", "ontbreekt", "nog geen verslag; Werfverslag schrijver maakt de proef na Keuzes en Proef op de bezoekpagina")
+        post("W7", "verslag of concept", "ontbreekt", "nog geen verslag; Werfverslag schrijver maakt het concept na Mehdi's klik Maak concept op de bezoekpagina")
     if br.get("proef_pad"):
         info = br.get("proef_info") or {}
         if isinstance(info, str):
@@ -457,21 +737,47 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
                 info = {}
         op = info.get("open") or {}
         n_open = sum(int(x or 0) for x in op.values()) if isinstance(op, dict) else 0
-        post("W11", "proef nagekeken", "ok" if n_open == 0 else "onbekend",
+        # CX3-16: dit is een automatische telling van open plaatshouders, geen menselijke lezing. Mehdi leest na in de
+        # werfapp (nakijken per punt; versturen kan pas als alles nagekeken is).
+        post("W11", "proef zonder open plaatshouders", "ok" if n_open == 0 else "onbekend",
              f"{info.get('punten', '?')} punten, {info.get('fotos', '?')} foto's; nog {op.get('in_te_vullen', '?')} in te vullen, "
              f"{op.get('na_te_kijken', '?')} na te kijken, {op.get('raming_open', '?')} ramingen open" if isinstance(op, dict) else "geen telling")
     elif not (br.get("gegevens") or {}).get("gegevens") if isinstance(br.get("gegevens"), dict) else not br.get("gegevens"):
         # Regel van Mehdi (13-09-2026): geen voorbereiding en geen proef zonder zijn knop; elke stap kost tokens.
-        post("W11", "voorbereiding door de schrijver", "onbekend", "wacht op Mehdi: knop Voorbereiden op de bezoekpagina (kost tokens, dus nooit automatisch)")
+        post("W11", "voorbereiding door de schrijver", "onbekend", "wacht op Mehdi: knop Maak concept op de bezoekpagina (kost tokens, dus nooit automatisch)")
     else:
-        post("W11", "voorbereiding door de schrijver", "ok", "gegevens met herkomst staan op de bezoekpagina; Keuzes en Proef zijn aan Mehdi")
+        post("W11", "voorbereiding door de schrijver", "ok", "gegevens met herkomst staan op de bezoekpagina; Maak concept is aan Mehdi")
     # W8 verslagnummer
+    app_bezoeken = werfapp_bezoeken(nummer)
     if bezoek.get("soort_bezoek") == "plaatsbezoek":
         post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek['nr_label']}: plaatsbezoek vóór de werfstart, geen werfverslagnummer (A7/A8)")
+    elif app_bezoeken is None:
+        post("W8", "verslagnummer", "onbekend", "werfapp kent dit project niet of is niet bereikbaar; nummer niet geijkt")
     else:
-        post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek.get('nr_label', bezoek['volgnr'])} (werfbezoek {bezoek.get('nr_label', bezoek['volgnr'])} sinds de werfstart)")
+        nummers = [int(str(v.get("volgnummer") or v.get("werfbezoek_teller") or v.get("weergave_nummer")))
+                   for v in app_bezoeken if isinstance(v, dict)
+                   and re.fullmatch(r"\d+", str(v.get("volgnummer") or v.get("werfbezoek_teller") or v.get("weergave_nummer") or ""))]
+        lokaal = int(bezoek.get("werfnr") or 0)
+        if not nummers:
+            post("W8", "verslagnummer", "onbekend", "werfapp gaf geen toetsbaar bezoeknummer")
+        else:
+            hoogste = max(nummers)
+            post("W8", "verslagnummer", "let_op" if hoogste > lokaal else "ok",
+                 "nummer wijkt af van de werfapp" if hoogste > lokaal else f"{nummer}-{bezoek.get('nr_label', bezoek['volgnr'])}; geijkt op de werfapp")
     # W9 verstuurd
-    post("W9", "verstuurd aan de klant", "onbekend", "alleen uit de mail af te lezen; de Mailwacht mch@ koppelt nog niet aan dossiers")
+    app_id = ((br.get("proef_info") or {}).get("werfapp") or {}).get("id") if isinstance(br.get("proef_info"), dict) else None
+    nummer_app = f"{nummer}-{bezoek.get('nr_label', bezoek['volgnr'])}"
+    bewijs = [v for v in app_bezoeken or [] if isinstance(v, dict)
+              and (v.get("bezoek_id") and v.get("bezoek_id") == (br.get("registratie") or {}).get("bezoek_id")
+                   or app_id is not None and v.get("id") == app_id or v.get("nummer") == nummer_app)]
+    verzonden = any(v.get("status") == "verzonden" or v.get("verstuurd") is True
+                   or v.get("verzonden") is True
+                   or isinstance(v.get("verzonden"), list) and any(isinstance(z, dict) and (z.get("status") or "verstuurd") == "verstuurd"
+                                                              for z in v["verzonden"]) for v in bewijs)
+    post("W9", "verstuurd aan de klant", "ok" if verzonden else "onbekend",
+         "werfapp bevestigt verzonden verslag" if verzonden else "geen verzendbewijs uit de werfapp")
+    contract_stand, contract_toel = contractbewijs(nummer)
+    post("W12", "getekend contract en werfopvolging", contract_stand, contract_toel)
     if bezoek["notities"]:
         post("W10", "notities in de map", "ok", "; ".join(bezoek["notities"])[:160])
     return c, taken, noden
@@ -479,10 +785,20 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
 
 def stand_van(controles):
     s = {x["code"]: x["stand"] for x in controles}
-    bronnen_ok = all(s.get(k) == "ok" for k in ("W4", "W5", "W6"))
+    bronnen_ok = all(s.get(k) not in (None, "ontbreekt", "fout") for k in ("W2", "W3", "W4", "W5", "W6", "W12")) and s.get("W1") in ("ok", "let_op")
     if s.get("W7") == "ok":
         return "verslag aanwezig" if bronnen_ok else "verslag aanwezig, bronnen onvolledig"
     return "klaar voor verslag" if bronnen_ok else "te verzamelen"
+
+
+def ontbrekende_posten(controles):
+    nodig = ("W1", "W2", "W3", "W4", "W5", "W6", "W12")
+    return [f"{x['code']} {x['naam']}" for x in controles
+            if x["code"] in nodig and (x["stand"] in ("ontbreekt", "fout") or (x["code"] == "W1" and x["stand"] not in ("ok", "let_op")))]
+
+
+def bezoeksleutel(nummer, bezoek):
+    return f"{nummer}:{bezoek['datum']}:{taakdoel(bezoek)}"
 
 
 # ------------------------------------------------------------- de ronde ---
@@ -496,22 +812,30 @@ def verwerk(nummer, droog=False):
     ag.log(str(nummer), "bron", f"projectmap ({soort}): {projectmap}", {"adres": adres})
     bezoeken = bezoeken_in(projectmap)
     werfstart = (dossiers_lezen().get(str(nummer)) or {}).get("werfstart", "")
-    bezoeken = nummer_bezoeken(bezoeken, werfstart)
-    ag.log(str(nummer), "bevinding", f"{len(bezoeken)} bezoek(en) in de mappen: " + ", ".join(f"{b['nr_label']} {b['datum']}" for b in bezoeken)
-           + (f"; werfstart {werfstart}" if werfstart else "; geen werfstart bekend"))
-    bak = klaargezet(nummer)
     try:
         alle_rijen = bord.call(f"/api/werfbezoek?dossier={nummer}").get("rijen", [])
     except Exception:  # noqa: BLE001
         alle_rijen = []
+    if not droog and bezoeken:
+        try:
+            bezoeken = vooraf_koppelen(bezoeken, str(nummer), projectmap, werfstart, alle_rijen)
+        except werfregister.RegisterFout as ex:
+            ag.log(str(nummer), "fout", f"werfapp-identiteit vóór nummering niet bevestigd: {ex}")
+            for b in bezoeken:
+                if not b.get("registratie"):
+                    b["registratie_blokkade"] = True
+    bezoeken = nummer_bezoeken(bezoeken, werfstart)
+    ag.log(str(nummer), "bevinding", f"{len(bezoeken)} bezoek(en) in de mappen: " + ", ".join(f"{b['nr_label']} {b['datum']}" for b in bezoeken)
+           + (f"; werfstart {werfstart}" if werfstart else "; geen werfstart bekend"))
+    bak = klaargezet(nummer)
     bord_rijen = {r.get("bezoekmap"): r for r in alle_rijen}
     open_taken = {}
-    for agent in ("icloud-wacht", "plaud-wacht"):
+    for agent in ("icloud-wacht", "plaud-wacht", "agenda-wacht"):
         try:
             open_taken[agent] = [it for it in bord.klaargezet_voor(agent, n=300) if it.get("soort") == "taak" and it.get("van") == NAAM]
         except Exception:  # noqa: BLE001
             open_taken[agent] = []
-    rijen, alle_taken, noden, dubbels, fotowerk = [], [], [], [], []
+    rijen, alle_taken, noden, dubbels, fotowerk, gesloten_ids = [], [], [], [], [], set()
     # verhuisde projectmap: de rij van het oude pad gaat mee naar het nieuwe, maar alleen als het oude pad echt weg
     # is; staat de bezoekmap op beide plaatsen, dan is het een kopie en beslist Mehdi welke geldt
     verhuisd = verhuisde_rijen(bezoeken, projectmap, alle_rijen)
@@ -523,6 +847,14 @@ def verwerk(nummer, droog=False):
                                    f"als onder {projectmap.split('/')[-2]}; Mehdi zegt welke geldt", "wie": "mehdi"})
             verhuisd[mp] = [r for r in oude if r not in nog]
     verhuisd = {k: v for k, v in verhuisd.items() if v}
+    # Kan niet worden nagegaan of een map bestaat, dan doen we niets: geen koppeling en geen "verdwenen".
+    bestaat = getattr(bronnen, "bestaat", None) or (lambda _pad: True)
+    hernoemd = hernoemde_rijen(bezoeken, projectmap, alle_rijen, bestaat, verhuisd.values())
+    for mp, oude in hernoemd.items():
+        verhuisd.setdefault(mp, []).extend(oude)
+        ag.log(str(nummer), "bevinding", f"bezoekmap hernoemd: {', '.join(os.path.basename(r['bezoekmap']) for r in oude)} "
+               f"heet nu {os.path.basename(mp)}; de rij gaat mee")
+    verdwenen = verdwenen_rijen(bezoeken, alle_rijen, bestaat, verhuisd.values())
     if verhuisd:
         ag.log(str(nummer), "bevinding", f"projectmap verhuisd: {len(verhuisd)} bezoekmap(pen) hebben een rij op het oude pad "
                f"({next(iter(verhuisd.values()))[0]['projectmap'].split('/')[-2]}); die rij gaat mee naar het nieuwe pad")
@@ -535,15 +867,17 @@ def verwerk(nummer, droog=False):
         ag.log(str(nummer), "bevinding", "nog geen bezoekmap; dossier wordt gevolgd tot het eerste bezoek")
     for b in bezoeken:
         oude = verhuisd.get(b["map"], [])
-        controles, taken, n = controleer(nummer, adres, soort, projectmap, b, bak, samengevoegd([bord_rijen.get(b["map"])] + oude))
-        # Alleen de transcriptzoeklijst; de Mac-provider bezit de foto-uitkomst.
+        controles, taken, n = controleer(nummer, adres, soort, projectmap, b, bak,
+                                         samengevoegd([bord_rijen.get(b["map"])] + oude), bezoeken)
         st = {c["code"]: c["stand"] for c in controles}
-        for code, agent in (("W6", "plaud-wacht"),):
+        for code, agent in (("W6", "plaud-wacht"), ("W4", "icloud-wacht")):
             if st.get(code) == "ok":
                 for it in open_taken.get(agent, []):
-                    if it.get("uniek") == f"werf:{nummer}:{b['datum']}:{agent}":
+                    if (_inhoud(it).get("bezoeksleutel") == bezoeksleutel(nummer, b)
+                            and it.get("id") not in gesloten_ids):
                         try:
                             bord.opgepakt(it["id"], NAAM)
+                            gesloten_ids.add(it["id"])
                             ag.log(str(nummer), "besluit", f"taak voor {agent} ({b['datum']}) afgevinkt: bron staat in de map")
                         except Exception:  # noqa: BLE001
                             pass
@@ -552,18 +886,23 @@ def verwerk(nummer, droog=False):
         for voor, tekst in taken:
             if voor == "icloud-wacht":
                 continue  # pas publiceren na de opgeslagen bordrij en vaste bezoekregistratie
-            uniek = f"werf:{nummer}:{b['datum']}:{voor}"
+            uniek = f"werf:{bezoeksleutel(nummer, b)}:{voor}"
             # eigen naam: 'soort' is het soort project (standaard, light); overschrijven gaf 'taak-project' op de pagina
             taaksoort = "opdracht" if voor == "werfverslag-schrijver" else "taak"
             doel = taakdoel(b) if voor in ("plaud-wacht", "icloud-wacht") else b["map"]
             taakrijen.append({"voor": voor, "soort": taaksoort, "sleutel": (f"{nummer}-{b['volgnr']}" if taaksoort == "opdracht" else str(nummer)), "titel": tekst[:300],
                               "inhoud": {"dossier": nummer, "datum": b["datum"], "adres": adres, "bezoekmap": doel, "volgnr": b["volgnr"],
                                          "nr_label": b["nr_label"], "soort_bezoek": b["soort_bezoek"],
+                                         "bezoeksleutel": bezoeksleutel(nummer, b),
                                          **({"verzamelmap": b["map"]} if doel != b["map"] else {})},
                               "verwijzing": doel, "uniek": uniek})
-        alle_taken += taakrijen
+        alle_taken += [t for t in taakrijen if not any(o.get("uniek") == t["uniek"] for o in open_taken.get(t["voor"], []))]
+        ontbrekend = ontbrekende_posten(controles)
+        if ontbrekend:
+            controles.append({"code": "NODIG", "naam": "Nog te verzamelen", "stand": "let_op", "toelichting": ", ".join(ontbrekend)})
         rijen.append({"dossier": str(nummer), "adres": adres, "soort_project": soort, "projectmap": projectmap,
                       "bezoekmap": b["map"], "datum": b["datum"], "volgnr": b["volgnr"],
+                      "registratie": b.get("registratie") or {},
                       "bronnen": {**{k: b[k] for k in ("fotos", "opnames", "transcripten", "verslagen", "notities", "bestanden", "bron_map")},
                                   "nr_label": b["nr_label"], "soort_bezoek": b["soort_bezoek"], "werfstart": werfstart},
                       "controles": controles, "taken": [{"voor": t["voor"], "titel": t["titel"], "uniek": t["uniek"]} for t in taakrijen],
@@ -574,8 +913,13 @@ def verwerk(nummer, droog=False):
         # het bezoeknummer (PB1.., 1..) is wat in het verslag komt; de rij telt alle bezoeken door en is alleen het adres op het bord
         ag.log(str(nummer), "bevinding", f"{b['soort_bezoek']} {b['nr_label']} (rij {b['volgnr']}, {b['datum']}): {rijen[-1]['stand']}; "
                + ", ".join(f"{x['code']} {x['stand']}" for x in controles))
+    for r in verdwenen:
+        noden.append({"tekst": f"Dossier {nummer}: de bezoekmap van {r.get('datum')} ({os.path.basename(r['bezoekmap'])}) bestaat niet "
+                               "meer en hoort bij geen bezoek van nu; Mehdi kijkt of het bezoek nog bestaat", "wie": "mehdi"})
     if droog:
         print(json.dumps(rijen, ensure_ascii=False, indent=1))
+        if verdwenen:
+            print("verdwenen:", json.dumps([{"id": r.get("id"), "datum": r.get("datum"), "bezoekmap": r["bezoekmap"]} for r in verdwenen], ensure_ascii=False))
         return rijen, noden, dubbels
     try:
         uit = bord.call("/api/werfbezoek", {"rijen": rijen})
@@ -590,34 +934,42 @@ def verwerk(nummer, droog=False):
         try:
             if len(passend) != 1:
                 raise ValueError("bordbezoek_dubbelzinnig")
+            if b.get("registratie_blokkade"):
+                raise werfregister.RegisterFout("werfapp-identiteit niet ondubbelzinnig bevestigd")
             registratie = werfregister.registreer(passend[0], str(nummer), b["volgnr"])
             rij["registratie"] = registratie
             bord.call("/api/werfbezoek", {"rijen": [{"dossier": str(nummer), "datum": b["datum"], "bezoekmap": b["map"],
                        "volgnr": b["volgnr"], "werfbezoek_id": passend[0]["id"], "_alleen": ["registratie"], "registratie": registratie}]})
-            # Ook reeds aanwezige foto's geven de voorbereider geen recht een open taak af te vinken.
             open_foto = [it for it in open_taken.get("icloud-wacht", [])
-                         if (_inhoud(it).get("bezoek_id") == registratie["bezoek_id"]
+                         if it.get("id") not in gesloten_ids and
+                         (_inhoud(it).get("bezoeksleutel") == bezoeksleutel(nummer, b)
+                             or _inhoud(it).get("bezoek_id") == registratie["bezoek_id"]
                              or (str(_inhoud(it).get("dossier")) == str(nummer) and _inhoud(it).get("datum") == b["datum"]
                                  and _inhoud(it).get("bezoekmap") in (b["map"], taakdoel(b))))]
             for it in open_foto:
                 rij["taken"].append({"voor": "icloud-wacht", "titel": it.get("titel", "Fotoaanvoer nog open"), "uniek": it.get("uniek")})
                 if not (_inhoud(it).get("start") and _inhoud(it).get("einde")):
-                    noden.append({"tekst": f"Dossier {nummer}, bezoek {b['nr_label']}: bestaande fototaak mist bevestigd bezoekvenster en blijft open", "wie": "mehdi"})
-            if nodig:
+                    noden.append({"tekst": f"Dossier {nummer}, bezoek {b['nr_label']}: bestaande fototaak mist bezoekvenster en blijft open", "wie": "collega"})
+            if nodig and not open_foto:
                 taak = fototaak(nummer, adres, projectmap, b, bezoeken, bak, registratie)
-                alle_taken.append(taak)
+                if not any(t.get("uniek") == taak["uniek"] for t in open_taken.get("icloud-wacht", [])):
+                    alle_taken.append(taak)
                 if not any(t.get("uniek") == taak["uniek"] for t in rij["taken"]):
                     rij["taken"].append({k: taak[k] for k in ("voor", "titel", "uniek")})
-            if open_foto:
-                for c in rij["controles"]:
-                    if c["code"] == "W4":
-                        c.update(stand="onbekend", toelichting=f"{b['fotos']} foto's aanwezig; fotoaanvoer nog niet volledig bevestigd door de Mac-provider")
-                rij["stand"] = stand_van(rij["controles"])
             bord.call("/api/werfbezoek", {"rijen": [{"dossier": str(nummer), "datum": b["datum"], "bezoekmap": b["map"],
                        "volgnr": b["volgnr"], "werfbezoek_id": passend[0]["id"], "_alleen": ["registratie", "taken", "controles", "stand"],
                        **{k: rij[k] for k in ("registratie", "taken", "controles", "stand")}}]})
         except (ValueError, werfregister.RegisterFout):
             noden.append({"tekst": f"Dossier {nummer}, bezoek {b['nr_label']}: geen ondubbelzinnig bevestigd H-A-bezoekvenster of vaste registratie; fototaak blijft open, tijden en identiteit bevestigen", "wie": "mehdi"})
+    for r in verdwenen:
+        try:
+            bord.call("/api/werfbezoek", {"rijen": [{"dossier": str(nummer), "datum": r["datum"], "bezoekmap": r["bezoekmap"],
+                       "volgnr": r.get("volgnr") or 0, "werfbezoek_id": r["id"], "_alleen": ["stand", "controles"], "stand": VERDWENEN,
+                       "controles": [{"code": "W3", "naam": "projectmap en bezoekmap", "stand": "ontbreekt",
+                                      "toelichting": "deze bezoekmap bestaat niet meer en hoort bij geen bezoek van nu"}]}]})
+            ag.log(str(nummer), "besluit", f"rij {r['id']}: bezoekmap bestaat niet meer; stand '{VERDWENEN}' (niets gewist)")
+        except Exception as ex:  # noqa: BLE001
+            ag.log(str(nummer), "fout", f"rij {r.get('id')}: stand 'verdwenen' niet bevestigd: {ex}")
     if alle_taken:
         uit_taken = ag.klaarzet(alle_taken)
         ag.log(str(nummer), "besluit", f"{len(alle_taken)} taak/taken uitgezet bij collega-agents", uit_taken)
@@ -718,7 +1070,7 @@ def main():
     if not bronnen.dropbox_beschikbaar():
         ag.hartslag("fout", taak="geen Dropbox", detail="DROPBOX_APP_KEY/SECRET/REFRESH_TOKEN ontbreken",
                     nood=[{"tekst": "Dropbox-sleutels van de stack ontbreken in ~/appportal/.env", "wie": "mehdi"}])
-        return
+        raise RuntimeError("Dropbox niet beschikbaar; werfverslagronde gestopt")
     totaal, noden, standen, dubbels = 0, [], {}, []
     for n in nummers:
         try:
@@ -731,11 +1083,6 @@ def main():
         dubbels += db
         for r in rijen:
             standen[r["stand"]] = standen.get(r["stand"], 0) + 1
-    # vaste noden: wat structureel nog ontbreekt om zonder mens te werken
-    noden += [
-        {"tekst": "Agendawacht, Plaudwacht en iCloud-wacht lezen mijn taken (klaarzet soort taak) nog niet; Werfverslag schrijver leest zijn opdrachten wel", "wie": "claude-code"},
-        {"tekst": "Verstuurd-status (W9) vraagt een koppeling mail -> dossier bij de Mailwacht mch@", "wie": "claude-code"},
-    ]
     # dubbels weg, volgorde behouden
     gezien, uniek = set(), []
     for x in noden:
@@ -756,5 +1103,11 @@ def main():
     print(f"klaar: {len(nummers)} dossier(s), {totaal} bezoek(en); {detail}")
 
 
+def run():
+    with ag.ronde("werfbezoeken verifiëren") as ronde:
+        main()
+        ronde.detail = "bezoekcontroles en bronopdrachten bijgewerkt"
+
+
 if __name__ == "__main__":
-    main()
+    run()
