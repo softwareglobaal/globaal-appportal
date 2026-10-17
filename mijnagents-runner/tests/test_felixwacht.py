@@ -391,6 +391,9 @@ check("een overtreding zonder dossiergegevens of met rijen die geen blok zijn, w
       PP.ontbrekend_in_bron({"subLayerItems": [{"subItemTitle": "x"}]}, "bouwovertredingen")
       and PP.ontbrekend_in_bron({"subLayerItems": [{"constructionViolations": [{"violations": ["Dossiernummer: 1"]}]}]}, "bouwovertredingen")
       and PP.ontbrekend_in_bron({"subLayerItems": [{"permits": ["19654625"]}]}, "vergunningen"))
+check("een overtreding met een tweede, onbekende regel wordt gemeld, niet stil weggelaten (Codex ronde 11)",
+      PP.ontbrekend_in_bron({"subLayerItems": [{"subItemTitle": "x", "constructionViolations": [{"violations": [
+          {"value": "Dossiernummer: 202410548"}, {"value": "Proces-verbaal: PV/2024/1"}]}]}]}, "bouwovertredingen"))
 check("een verkaveling (allotmentPermits) die we niet lezen, wordt gemeld",
       PP.ontbrekend_in_bron({"subLayerItems": [{"subItemTitle": "Verkavelingen", "allotmentPermits": [{"fileNumber": "1"}]}]}, "vergunningen"))
 
@@ -403,6 +406,9 @@ check("een ander perceel telt niet: Wielelei ligt niet in de grens van Grotestee
       not PP._binnen(_w["punt"], _g["vergunningen"]["parcelinfo"]["antwoord"]["geometry"]))
 check("geen marge meer: 2 m buiten de rand telt niet (Codex ronde 9)", PP._binnen((51.0, 4.0), _vk)
       and not PP._binnen((51.0001 + 2 / 110540, 4.0), _vk))
+check("een punt op de grens of op een hoek is geen bevestiging (Codex ronde 11)",
+      not PP._binnen((51.0001, 4.0), _vk) and not PP._binnen((51.0001, 4.00015), _vk) and not PP._binnen((51.0, 4.00015), _vk)
+      and not PP._binnen((51.0001 - 0.05 / 110540, 4.0), _vk) and PP._binnen((51.0001 - 1 / 110540, 4.0), _vk))
 check("de grens van parcelinfo is exact de grens in de inhoudsaanvraag (echte gegevens, beide secties)",
       all(d[s]["parcelinfo"]["antwoord"]["geometry"] == d[s]["inhoud"]["aanvraag"]["geometry"]
           for d in (_g, _w) for s in ("vergunningen", "bouwovertredingen")))
@@ -550,7 +556,7 @@ check("een rij op het scherm die de bron niet kent, is ook geen gelijk", not PP.
 import shutil  # noqa: E402
 _map = tempfile.mkdtemp()
 for _f in ("Geopunt.png", "Percelenpas Antwerpen/Vergunningen.png", "Percelenpas Antwerpen/Bouwovertredingen.png",
-           "Percelenpas Antwerpen/rapport_11303C0256_00E012.pdf", "FelixArchief/Overzicht.png"):
+           "Percelenpas Antwerpen/rapport_11303C0256_00E012.pdf", "FelixArchief/Overzicht.png", "FelixArchief/961#3571/a.pdf"):
     os.makedirs(os.path.dirname(os.path.join(_map, _f)), exist_ok=True)
     open(os.path.join(_map, _f), "w").write("x")
 
@@ -560,7 +566,8 @@ def _volledige_z():
             "register": {"percelen": ["11303C0256-00E012"], "opmerkingen": []},
             "stad": {"controles": dict(_GOED), "fouten": [], "vergunningen": [{"dossiernummer": "197317935"}]},
             "raak": [{"inventaris": "961#3571", "status": "na aanmelden"}, {"inventaris": "100#1", "status": "leeszaal"}],
-            "downloads": [{"inventaris": "961#3571", "bestanden": [{"naam": "a.pdf"}], "mislukt": [], "beschermd": []}]}
+            "downloads": [{"inventaris": "961#3571", "aantal": 1, "mislukt": [], "beschermd": [],
+                           "bestanden": [{"naam": "a.pdf", "bytes": 1, "pad": os.path.join(_map, "FelixArchief/961#3571/a.pdf")}]}]}
 
 
 check("met elk bewijs: geen open punten", FW.eindcontrole(_volledige_z(), _map) == [], FW.eindcontrole(_volledige_z(), _map))
@@ -573,6 +580,10 @@ _gevallen = [
     ("een digitaal dossier zonder downloadregel", lambda z: z.update(downloads=[]), "961#3571"),
     ("een download met een mislukt bestand", lambda z: z["downloads"][0]["mislukt"].append("a.pdf: 500"), "961#3571"),
     ("een fout van de percelenpas", lambda z: z["stad"]["fouten"].append("PDF-rapport van de stad niet gelukt"), "PDF-rapport"),
+    ("een gedownload bestand dat niet op schijf staat (Codex FX30)",
+     lambda z: z["downloads"][0]["bestanden"][0].update(pad=os.path.join(_map, "weg.pdf")), "op schijf"),
+    ("een bestand op schijf dat korter is dan gedownload", lambda z: z["downloads"][0]["bestanden"][0].update(bytes=999), "op schijf"),
+    ("een stuk dat stil overgeslagen werd", lambda z: z["downloads"][0].update(aantal=2), "niet volledig gedownload"),
 ]
 for _naam, _wijzig, _woord in _gevallen:
     _z = _volledige_z()

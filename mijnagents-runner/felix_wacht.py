@@ -205,8 +205,12 @@ def eindcontrole(z, uitmap):
         if d.get("status") == "leeszaal":
             continue
         r = rijen.get(d["inventaris"])
-        eis(bool(r and not r["mislukt"] and (r["bestanden"] or r["beschermd"])),
-            f"{d['inventaris']} niet gedownload en niet als beschermd bevestigd")
+        eis(bool(r and not r["mislukt"] and (r["bestanden"] or r["beschermd"])
+                 and len(r["bestanden"]) + len(r["beschermd"]) == r.get("aantal")),
+            f"{d['inventaris']} niet volledig gedownload en niet als beschermd bevestigd")
+        for b in (r or {}).get("bestanden") or []:  # het bestand op schijf is het bewijs, niet de lijst (Codex FX30)
+            eis(_bestand(b.get("pad") or "") and (not b.get("bytes") or os.path.getsize(b["pad"]) == b["bytes"]),
+                f"{d['inventaris']}/{b['naam']} staat niet volledig op schijf")
     return open_
 
 
@@ -288,6 +292,7 @@ def _downloaden(felix, z, felixmap):
             rij["mislukt"].append(f"lijst van bestanden: {str(e).splitlines()[0][:80]}")
             continue
         stukken = [f for f in lijst if not f["naam"].lower().endswith(".xml")]  # xml: een verwijzing, geen stuk
+        rij["aantal"] = len(stukken)  # elk stuk eindigt gedownload, beschermd of mislukt (eindcontrole)
         if not stukken:  # een digitaal dossier zonder bestanden is niet 'volledig' (Codex FX19)
             rij["mislukt"].append("FelixArchief toont geen bestanden voor dit digitale dossier")
             continue
@@ -299,8 +304,9 @@ def _downloaden(felix, z, felixmap):
             beschermd = False
             for poging in range(2):  # ook het eerste bestand krijgt een herkansing (Codex FX23)
                 try:
-                    rij["bestanden"].append({"naam": eerste["naam"], "bytes": felix.download(
-                        eerste["url"], os.path.join(felixmap, r["inventaris"], eerste["map"], eerste["naam"]), eerste.get("grootte"))})
+                    pad = os.path.join(felixmap, r["inventaris"], eerste["map"], eerste["naam"])
+                    rij["bestanden"].append({"naam": eerste["naam"], "pad": pad,
+                                             "bytes": felix.download(eerste["url"], pad, eerste.get("grootte"))})
                     break
                 except fa.Beschermd as e:  # alleen een bevestigde weigering geldt voor het hele dossier (Codex FX17)
                     rij["beschermd"] = [f["naam"] for f in stukken]
@@ -317,7 +323,7 @@ def _downloaden(felix, z, felixmap):
             pad = os.path.join(felixmap, r["inventaris"], f["map"], f["naam"])
             for poging in range(2):
                 try:
-                    rij["bestanden"].append({"naam": f["naam"], "bytes": felix.download(f["url"], pad, f.get("grootte"))})
+                    rij["bestanden"].append({"naam": f["naam"], "pad": pad, "bytes": felix.download(f["url"], pad, f.get("grootte"))})
                     break
                 except fa.Beschermd as e:  # FelixArchief zegt zelf: niet vrij (copyRightFree), dus alleen online
                     rij["beschermd"].append(f["naam"])

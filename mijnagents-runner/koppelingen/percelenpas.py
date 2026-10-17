@@ -11,6 +11,7 @@ Dossiers opvragen bij de stad vraagt aanmelden met Itsme of eID (hoger zekerheid
 de server niet. Die stap zetten we klaar voor Mehdi.
 """
 import json
+import math
 import os
 import re
 import urllib.parse
@@ -133,14 +134,35 @@ def _is_perceelinfo(r):
     return urllib.parse.urlparse(r.url).path.endswith("/passthroughapi/parcelinfo")
 
 
+RAND_M = 0.1  # een punt dichter dan 10 cm bij de perceelgrens ligt erop, niet erin
+
+
+def _afstand_tot_rand(punt, hoeken):
+    """Kleinste afstand in meter van het punt tot een zijde van de veelhoek (lokaal vlak, ruim nauwkeurig op 100 m)."""
+    lat, lon = punt
+    fy, fx = 110540.0, 111320.0 * math.cos(math.radians(lat))  # meter per graad breedte en lengte
+    kleinste = float("inf")
+    for (x1, y1), (x2, y2) in zip(hoeken, hoeken[1:] + hoeken[:1]):
+        ax, ay, bx, by = (y1 - lon) * fx, (x1 - lat) * fy, (y2 - lon) * fx, (x2 - lat) * fy
+        dx, dy = bx - ax, by - ay
+        k = max(0.0, min(1.0, -(ax * dx + ay * dy) / (dx * dx + dy * dy))) if (dx or dy) else 0.0
+        kleinste = min(kleinste, math.hypot(ax + k * dx, ay + k * dy))
+    return kleinste
+
+
 def _binnen(punt, veelhoek):
-    """Ligt het Geopunt-punt (lat, lon) strikt binnen de perceelgrens [{"x": lat, "y": lon}, ...]? Zonder marge: een
-    punt op of buiten de grens is geen bevestiging (Codex FX27, ronde 9)."""
+    """Ligt het Geopunt-punt (lat, lon) strikt binnen de perceelgrens [{"x": lat, "y": lon}, ...]?
+
+    Zonder marge naar buiten, en een punt op de grens (minder dan RAND_M ervan) is geen bevestiging: het kan evengoed
+    bij het buurperceel horen (Codex FX27, rondes 9 en 11).
+    """
     try:
         hoeken = [(float(h["x"]), float(h["y"])) for h in veelhoek]
     except (KeyError, TypeError, ValueError):
         return False
     if len(hoeken) < 3:
+        return False
+    if _afstand_tot_rand(punt, hoeken) < RAND_M:
         return False
     lat, lon = punt
     binnen = False
@@ -237,10 +259,10 @@ def ontbrekend_in_bron(tile, sectie):
             elif sectie == "vergunningen" and not (r.get("fileNumber") or r.get("inventoryNumber")):
                 uit.append(f"vergunning zonder dossiernummer in '{titel}'")
             elif sectie == "bouwovertredingen":
-                w = r.get("violations")
-                if not isinstance(w, list) or not all(isinstance(x, dict) for x in w) or not any(
-                        re.match(r"(Dossiernummer|Registratienummer):\s*\S", str(x.get("value") or "")) for x in w):
-                    uit.append(f"overtreding zonder dossier- of registratienummer in '{titel}'")
+                w = r.get("violations")  # elke regel moet een dossier- of registratienummer zijn (Codex FX28, ronde 11)
+                if not isinstance(w, list) or not w or not all(isinstance(x, dict) and re.match(
+                        r"(Dossiernummer|Registratienummer):\s*\S", str(x.get("value") or "")) for x in w):
+                    uit.append(f"overtreding met een regel die geen dossier- of registratienummer is in '{titel}'")
     return uit
 
 
