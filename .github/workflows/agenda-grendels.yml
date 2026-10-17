@@ -39,4 +39,6 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_codex_ronde2_bode.py
       - run: python3 mijnagents-runner/tests/test_codex_ronde2_wachters.py
       - run: python3 mijnagents-runner/tests/test_codex_ronde3.py
+      # H1-1, driehoeksoverleg C2, 17-10-2026: geen titel-PATCH zonder bewezen recht.
+      - run: python3 mijnagents-runner/tests/test_geen_onbevoegde_patch.py
       - run: python3 mijnagents-runner/tests/test_agenda_taken.py
