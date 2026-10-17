@@ -129,7 +129,7 @@ def nood():
                                                 "(TWILIO_API_KEY_SID en _SECRET), TWILIO_VAN en ALARM_NUMMER in mijnagents-data/.env", "wie": "shaniel"}]
 
 
-def alarm_bellen(staat, alarmen, log=None):
+def alarm_bellen(staat, alarmen, log=None, spoor=None, nood=None):
     """Aangeroepen door De Bode bij elke ronde. `staat["bel"]` onthoudt de lopende oproep.
     Nieuw alarm: bellen. Vorige oproep niet opgenomen: opnieuw, tot POGINGEN keer.
     Geeft een korte tekst voor het detail van de hartslag, of ''.
@@ -166,6 +166,24 @@ def alarm_bellen(staat, alarmen, log=None):
             doel = dict(open_)
         else:
             doel = {"sleutel": b["sleutel"], "titels": b.get("titels") or [], "mislukt": 0}
+        ids = [aid for aid in str(doel["sleutel"]).split("|") if aid]
+        nu = __import__("datetime").datetime.now().astimezone().isoformat()
+        if spoor:
+            try:
+                al = spoor_lezen(spoor)
+                bezig = spoor_bezig(spoor)
+                if any(f"alarm:{aid}" in al or f"alarm:{aid}" in bezig for aid in ids):
+                    if any(f"alarm:{aid}" in bezig for aid in ids) and nood is not None:
+                        nood.append({"tekst": "Alarm bellen: een eerdere oproep is onderbroken en mogelijk vertrokken; kijk dit na",
+                                     "wie": "claude-code"})
+                    return "alarm mogelijk gebeld" if any(f"alarm:{aid}" in bezig for aid in ids) else ""
+                for aid in ids:
+                    spoor_schrijven(spoor, f"alarm:{aid}", nu, bezig=True)
+            except OSError as e:
+                if nood is not None:
+                    nood.append({"tekst": f"Alarm bellen: belspoor niet te schrijven of te lezen ({type(e).__name__}); niet gebeld",
+                                 "wie": "claude-code"})
+                return "alarm belspoor onbruikbaar"
         tekst = "Dit is De Bode van Mehdi Agents met een dringend signaal. " + ". ".join(doel.get("titels") or ["Er wacht een dringend signaal"])
         try:
             sid, fout = bel(tekst, van=van_vast()), ""
@@ -173,6 +191,16 @@ def alarm_bellen(staat, alarmen, log=None):
                 fout = "geen call-sid terug"
         except Exception as e:  # noqa: BLE001
             sid, fout = "", f"{type(e).__name__}: {str(e)[:120]}"
+        if spoor:
+            try:
+                for aid in ids:
+                    spoor_schrijven(spoor, f"alarm:{aid}", nu,
+                                    poging=doel.get("mislukt", 0) + 1 if fout else None)
+            except OSError as e:
+                if nood is not None:
+                    nood.append({"tekst": f"Alarm bellen: uitkomst niet in belspoor bewaard ({type(e).__name__}); mogelijk gebeld, kijk na",
+                                 "wie": "claude-code"})
+                return "alarm belspoor onbruikbaar"
         zelfde = doel["sleutel"] == b.get("sleutel")   # herhaling of herkansing van een herhaling: pogingen blijven
         if fout:
             doel["mislukt"] = doel.get("mislukt", 0) + 1
@@ -408,7 +436,7 @@ def te_bellen(staat, nu=None, rooster=None, spoor=None):
     nu = nu or datetime.now().astimezone()
     rooster = _rooster_regels() if rooster is None else rooster
     try:
-        gebeld = {**spoor_lezen(spoor), **staat.get("gebeld", {})}
+        gebeld = {**spoor_lezen(spoor), **spoor_bezig(spoor), **staat.get("gebeld", {})}
     except OSError:
         return []          # een onleesbaar spoor: niets is zeker aan de beurt (A33); afspraken_bellen meldt het
     uit = []
@@ -448,8 +476,12 @@ def _spoor_regels(pad):
 
 
 def spoor_lezen(pad):
-    """{sleutel: tijd} van de afgehandelde oproepen in het belspoor (regels zonder 'poging')."""
-    return {str(d["sleutel"]): str(d["tijd"]) for d in _spoor_regels(pad) if not d.get("poging") and not d.get("bezig")}
+    """{sleutel: tijd} waarvan het laatste record een afgehandelde oproep of gemelde onderbreking is."""
+    laatst = {}
+    for d in _spoor_regels(pad):
+        laatst[str(d["sleutel"])] = d
+    return {k: str(d["tijd"]) for k, d in laatst.items()
+            if not d.get("poging") and not d.get("bezig") and not d.get("wacht")}
 
 
 def spoor_bezig(pad):
@@ -471,7 +503,7 @@ def spoor_pogingen(pad):
     return uit
 
 
-def spoor_schrijven(pad, sleutel, tijd, poging=None, bezig=False):
+def spoor_schrijven(pad, sleutel, tijd, poging=None, bezig=False, wacht=False, gemeld=False):
     """Een regel achteraan het belspoor, met flush en fsync. Staat er nog een halve regel achteraan (crash), dan eerst
     een regeleinde, anders plakt de nieuwe regel eraan vast en is ook hij onleesbaar. Gooit bij een fout."""
     os.makedirs(os.path.dirname(pad) or ".", exist_ok=True)
@@ -481,7 +513,9 @@ def spoor_schrijven(pad, sleutel, tijd, poging=None, bezig=False):
         if f.tell():
             f.seek(-1, os.SEEK_END)
             heel = f.read(1) == b"\n"
-        d = {"sleutel": sleutel, "tijd": tijd, **({"poging": int(poging)} if poging else {}), **({"bezig": True} if bezig else {})}
+        d = {"sleutel": sleutel, "tijd": tijd, **({"poging": int(poging)} if poging else {}),
+             **({"bezig": True} if bezig else {}), **({"wacht": True} if wacht else {}),
+             **({"gemeld": True} if gemeld else {})}
         f.write((b"" if heel else b"\n") + json.dumps(d, ensure_ascii=False).encode() + b"\n")
         f.flush()
         os.fsync(f.fileno())
@@ -568,6 +602,14 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
         if k not in gebeld:
             # onderbroken: misschien gebeld. Niet opnieuw, wel melden (Codex A26, ronde 6)
             gebeld[k] = t
+            if spoor:
+                try:
+                    spoor_schrijven(spoor, k, t, gemeld=True)
+                except OSError as e:
+                    if nood is not None:
+                        nood.append({"tekst": f"Afspraken bellen: onderbreking niet duurzaam gemeld ({type(e).__name__}); "
+                                              "belronde gestopt", "wie": "claude-code"})
+                    return "belronde gestopt: onderbreking niet duurzaam gemeld"
             if log:
                 log("bellen", "afspraak", "mogelijk gebeld: een vorige ronde werd onderbroken na de start van de oproep; niet herhaald")
             if nood is not None:
@@ -669,8 +711,16 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
                                           "(schijfruimte en rechten van mijnagents-data nakijken)", "wie": "claude-code"})
                 break
         res = bel_afspraak(r["tekst"], "Details staan in je agenda.")   # het belrooster komt uit de agenda
-        if any("65 seconds" in str(v) for _, v in res):
+        if not gelukt(res) and any("65 seconds" in str(v) for _, v in res):
             # CallMeBot laat maar één oproep per 65 s toe: deze regel volgende minuut opnieuw
+            if spoor:
+                try:
+                    spoor_schrijven(spoor, r["sleutel"], nu.isoformat(), wacht=True)
+                except OSError as e:
+                    if nood is not None:
+                        nood.append({"tekst": f"Afspraken bellen: weigering niet in belspoor bewaard ({type(e).__name__}); "
+                                              "belronde gestopt", "wie": "claude-code"})
+                    return "belronde gestopt: weigering niet bewaard"
             if log:
                 log("bellen", "afspraak", f"even wachten (één oproep per 65 s): {titel[:60]}")
             break

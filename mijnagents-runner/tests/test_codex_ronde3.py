@@ -268,5 +268,43 @@ with vervang((W, "geen_auto_dagen", lambda: None), (W, "lara_vakantiedagen", lam
 check("A11 ronde 6: de rit van de eerste afspraak dekt de tweede met dezelfde titel niet",
       isinstance(_r11d, tuple) and sum(1 for x in _r11d[4] if "grendelbron niet te lezen" in x) == 1, str(_r11d)[:300])
 
+_a40 = afspraak("a40", "!! [HA-KB] 2601 - Proefproject", locatie="Proefstraat 1, 3000 Leuven")
+_r40 = {**afspraak("rit40", "🚗 Reistijd: thuis → Proefstraat"),
+        "start": (_later - timedelta(minutes=40)).isoformat(), "einde": _later.isoformat(),
+        "omschrijving": f"Reistijd voor: {_a40['titel']} (40 min, proef)"}
+_oud40 = W.belrooster([{**_a40, "titel": "!! [HA-PO] Proefgesprek", "locatie": ""}], _later.date().isoformat())
+
+
+def _event40(a, tok):
+    x = _r40 if a["id"] == "rit40" else _a40
+    return {"status": "confirmed", "summary": x["titel"], "location": x.get("locatie", ""),
+            "start": {"dateTime": x["start"]}, "end": {"dateTime": x["einde"]}}
+
+
+with vervang((W, "_event", _event40), (W.agenda, "_toegang", lambda: "t")):
+    _nieuw40 = veilig(lambda: W._nakijken(_oud40, **({"ritten": [_r40]} if "ritten" in W._nakijken.__code__.co_varnames else {})))
+    _schat40_n = []
+    _schat40 = veilig(lambda: W._nakijken(_oud40, **({"noden": _schat40_n} if "noden" in W._nakijken.__code__.co_varnames else {})))
+
+
+def _event40_verzet(a, tok):
+    e = _event40(a, tok)
+    if a["id"] == "rit40":
+        e["start"]["dateTime"] = (_later - timedelta(minutes=50)).isoformat()
+    return e
+
+
+with vervang((W, "_event", _event40_verzet), (W.agenda, "_toegang", lambda: "t")):
+    _rit_verzet40 = veilig(lambda: W._nakijken(_oud40, **({"ritten": [_r40]} if "ritten" in W._nakijken.__code__.co_varnames else {})))
+check("A40 online naar buiten gebruikt geverifieerd vertrek als beltijd",
+      isinstance(_nieuw40, tuple) and len(_nieuw40[0]) == 1
+      and _nieuw40[0][0]["tijd"] == (_later - timedelta(minutes=45)).isoformat(), str(_nieuw40))
+check("A40 zonder verifieerbare rit geldt de vaste schatting met een onzekerheidsmelding",
+      isinstance(_schat40, tuple) and _schat40[0][0]["tijd"] == (_later - timedelta(minutes=W.BEL_BUITEN_MIN + W.BEL_ONLINE_MIN)).isoformat()
+      and bool(_schat40_n), f"{_schat40} {_schat40_n}")
+check("A40 verzet reistijdblok verandert de beltijd naar het actuele vertrek",
+      isinstance(_rit_verzet40, tuple) and _rit_verzet40[0][0]["tijd"] == (_later - timedelta(minutes=55)).isoformat(),
+      str(_rit_verzet40))
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -1,7 +1,7 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.38",
- "datum": "17-10-2026",
+ "versie": "3.39",
+ "datum": "19-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
   "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
@@ -362,13 +362,22 @@
     "FR-177",
     "FR-178",
     "FR-179",
-    "FR-180"
+    "FR-180",
+    "FR-184",
+    "FR-185",
+    "FR-186",
+    "FR-187",
+    "FR-188"
    ]
   },
   {
    "id": "L39",
    "les": "Een afzegging is een eigen bericht, niet een gewone herinnering. Controleer de afspraak op het belmoment; thuis is geen reisbestemming en een invulnaam uit een deal is geen persoon. Onzekere gegevens blijven een vraag aan Mehdi.",
-   "uit": ["FR-181", "FR-182", "FR-183"]
+   "uit": [
+    "FR-181",
+    "FR-182",
+    "FR-183"
+   ]
   }
  ],
  "fouten": [
@@ -3683,7 +3692,11 @@
    "oorzaak": "Geen actuele afzegcontrole voor de vertrekoproep en geen afzonderlijke afzegmelding. Het precieze tijdstip waarop de afzegtekst in Google beschikbaar kwam is onbekend.",
    "soort_oorzaak": "code",
    "oplossing": "Google-item vlak voor de oproep lezen; bij afzegging geen vertrekoproep en een afzonderlijke melding; bij bronfout eenmalig waarschuwen vanaf het vaste nummer. Voorwaardelijke zinnen en later herroepen afzegzinnen tellen niet. Een mislukte afzegmelding blijft open.",
-   "grendel": {"soort": "test", "waar": "tests/test_agenda_signaal.py", "tekst": "A9 een mislukte afzegmelding blijft open en wordt de volgende ronde opnieuw geprobeerd"},
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agenda_signaal.py",
+    "tekst": "A9 een mislukte afzegmelding blijft open en wordt de volgende ronde opnieuw geprobeerd"
+   },
    "controle": [],
    "status": "opgelost"
   },
@@ -3697,7 +3710,11 @@
    "oorzaak": "De reis- en markerregels herkenden het bekende thuisadres niet.",
    "soort_oorzaak": "code",
    "oplossing": "Het thuisadres uitsluiten van buitenconflict, ritplanning en vertrekoproep; de titel mag intern blijven.",
-   "grendel": {"soort": "test", "waar": "tests/test_annulering_en_thuis.py", "tekst": "Herfstlaan is thuis en heeft geen vertrekmelding"},
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_annulering_en_thuis.py",
+    "tekst": "Herfstlaan is thuis en heeft geen vertrekmelding"
+   },
    "controle": [],
    "status": "opgelost"
   },
@@ -3711,7 +3728,101 @@
    "oorzaak": "Een testdeal met een invulnaam op Mehdi's thuisadres won van de bekende partnerkoppeling.",
    "soort_oorzaak": "code",
    "oplossing": "Bekende partner en thuisadres gaan voor op een adresdeal; invulnamen zijn geen bewijs. Een titel met alleen een activiteit mag worden aangevuld, maar als Mehdi daarnaast een naam of inhoudswoord schreef mag een andere persoon uit een adresdeal zijn titel niet overschrijven.",
-   "grendel": {"soort": "test", "waar": "tests/test_annulering_en_thuis.py", "tekst": "Catalin blijft Harmoniebouw zonder klantgok"},
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_annulering_en_thuis.py",
+    "tekst": "Catalin blijft Harmoniebouw zonder klantgok"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-184",
+   "datum": "17-10-2026",
+   "gevonden_door": "Codex en Gemini, overleg ronde 7",
+   "fout": "65-secondenweigering bleef als bezige oproep in het spoor staan.",
+   "gevolg": "Volgende ronde sloeg de afspraak over.",
+   "waarom_niet_gezien": "De eerdere proeven dekten deze overgang niet.",
+   "oorzaak": "Een bevestigde weigering kreeg geen afsluitend spoorrecord.",
+   "soort_oorzaak": "code",
+   "oplossing": "Schrijf een duurzaam wacht-record zonder poging; bij schrijffout stopt de ronde met een nood.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A38 na 65 seconden weigering belt de volgende ronde dezelfde afspraak"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-185",
+   "datum": "17-10-2026",
+   "gevonden_door": "Codex en Gemini, overleg ronde 7",
+   "fout": "Alarmoproep vertrok voordat een duurzaam spoorrecord bestond.",
+   "gevolg": "Na een crash of standverlies kon hetzelfde alarm opnieuw bellen.",
+   "waarom_niet_gezien": "De eerdere proeven dekten deze overgang niet.",
+   "oorzaak": "Het spoor werd pas na terugkeer uit alarm_bellen aangevuld.",
+   "soort_oorzaak": "code",
+   "oplossing": "Schrijf per alarm-ID bezig vóór de API-aanroep en de uitkomst erna; blokkeer en meld een onzekere start.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A39 crash na aanvaarding belt alarm na standverlies niet opnieuw"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-186",
+   "datum": "17-10-2026",
+   "gevonden_door": "Codex en Gemini, overleg ronde 7",
+   "fout": "Nagekeken roosterregel behield een oude beltijd.",
+   "gevolg": "Een gewijzigde buitenafspraak kon te laat worden gebeld.",
+   "waarom_niet_gezien": "De eerdere proeven dekten deze overgang niet.",
+   "oorzaak": "Alleen tekst en titel werden uit het actuele item herberekend.",
+   "soort_oorzaak": "code",
+   "oplossing": "Herbereken tijd met actuele afspraak en geverifieerde rit; meld de vaste schatting bij onzekerheid.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde3.py",
+    "tekst": "A40 online naar buiten gebruikt geverifieerd vertrek als beltijd"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-187",
+   "datum": "17-10-2026",
+   "gevonden_door": "Codex en Gemini, overleg ronde 7",
+   "fout": "Een oud zorgmerk koppelde een item met een andere externe UID.",
+   "gevolg": "Een ander item kon onterecht als afwijkend of nog aanwezig na annulering verschijnen.",
+   "waarom_niet_gezien": "De eerdere proeven dekten deze overgang niet.",
+   "oorzaak": "De merkselectie filterde UID-conflicten niet.",
+   "soort_oorzaak": "code",
+   "oplossing": "Filter merk op niet-conflicterende externe UID.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_zorg_afspraken.py",
+    "tekst": "A41 gemerkt item met andere externe UID geeft geen geannuleerd_staat_er"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-188",
+   "datum": "17-10-2026",
+   "gevonden_door": "Codex en Gemini, overleg ronde 7",
+   "fout": "Droge belselectie en noodmelding behandelden een bezige oproep verschillend.",
+   "gevolg": "De droge ronde toonde een oproep die niet zou vertrekken; een verloren stand kon de nood elke minuut herhalen.",
+   "waarom_niet_gezien": "De eerdere proeven dekten deze overgang niet.",
+   "oorzaak": "te_bellen las spoor_bezig niet en de melding kreeg geen duurzaam ontvangstrecord.",
+   "soort_oorzaak": "code",
+   "oplossing": "Neem spoor_bezig mee in de selectie en schrijf na melding een duurzaam gemeld-record.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_codex_ronde2_bode.py",
+    "tekst": "A42 onderbroken oproep wordt ook bij verloren stand maar eenmaal gemeld"
+   },
    "controle": [],
    "status": "opgelost"
   }

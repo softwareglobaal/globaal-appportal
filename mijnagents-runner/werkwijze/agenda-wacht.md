@@ -1,5 +1,9 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.17 (19-10-2026): slotronde na het driehoeksoverleg van ronde 7. Een nagekeken beltijd volgt het
+actuele item en een geverifieerde heenrit; een zorgmerk met een andere externe UID koppelt niet; een
+65-secondenweigering of een alarm laat geen bezige oproep achter. Bewijs en grendels: FR-184 t/m FR-188.
+
 Aanvulling v8.16 (18-10-2026): E1b laat mij oude dagen op vraag alleen lezend terugkijken.
 Ik zet het agendabewijs op het bord; oude afspraken, ritten, kleuren en gasten blijven onaangeraakt.
 
@@ -31,6 +35,8 @@ Ik bewaak die afspraken en voer ze uit. Ik
 lees de negen agenda's, koppel afspraken aan dossiers, zet ze klaar voor de
 juiste afdeling en voor Mehdi, en, sinds vandaag, ik zorg dat zijn telefoon
 lawaai maakt: elke komende afspraak krijgt een herinnering.
+
+Bij een tweede, onvolledige agendalezing herbereken ik de beltijd uit de actuele afspraak en de verifieerbare heenrit. Zonder verifieerbare rit gebruik ik de vaste reistijdschatting en meld ik de onzekerheid. Een zorgmerk koppelt nooit een andere externe uitnodiging.
 
 ## Codes van twee letters (Mehdi, 02-10-2026)
 
