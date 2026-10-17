@@ -1,0 +1,34 @@
+# Grendels op het bord van mijnagents en zijn uitrol (16-10-2026, Codex CX7-1 tot CX10 en BU-1 tot BU-9).
+# Draait bij elke push naar main, zonder padfilter: mijnagents/deploy.sh bouwt op de VM pas als deze workflow voor exact
+# de commit op de VM geslaagd is (mijnagents/deploy_ci.py). Test alle bordtests in mijnagents/, de uitrol zelf met dash,
+# util-linux flock en coreutils timeout zoals op de VM, en shellcheck op deploy.sh.
+name: bord-grendels
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths: ["mijnagents/**", ".github/workflows/bord-grendels.yml"]
+
+jobs:
+  bord:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # zoals python:3.11-slim in mijnagents/Dockerfile
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: pip install -r mijnagents/requirements.txt
+      - name: echte dash, flock en timeout (geen vervangers uit de test)
+        run: command -v dash flock timeout && readlink -f /bin/sh
+      - run: shellcheck -s sh -S warning mijnagents/deploy.sh
+      - name: alle bordtests
+        run: |
+          set -e
+          for t in mijnagents/test_*.py; do
+            echo "== $t"
+            python "$t"
+          done
