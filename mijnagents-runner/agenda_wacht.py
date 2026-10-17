@@ -15,6 +15,7 @@ Elke werkdag om 06:30 en daarna elke twee uur:
   5. werkverslag op het bord.
 Leest alleen. Verandert nooit een afspraak.
 """
+import argparse
 import json
 from pathlib import Path
 import os
@@ -312,12 +313,13 @@ def kalenders():
 
 
 
-def afspraken(van_dagen=-1, tot_dagen=8):
+def afspraken(van_dagen=-1, tot_dagen=8, alleen_lezen=False):
     """De afspraken van precies de agenda's die de Agendawacht leest. Eén plek, zodat de
     controle en de filewacht dezelfde agenda's zien als de agent. Gezien 21-09-2026:
     zij lazen alleen de werkagenda en zoomafspraken, niet Lara en niet privé."""
     os.environ["CONTRACTEN_KALENDERS"] = ",".join(kalenders())   # agenda.kalenders() leest die
-    uit = agenda.afspraken(van_dagen, tot_dagen)
+    uit = agenda.afspraken(van_dagen, tot_dagen, schrijf_leesstand=False) if alleen_lezen \
+        else agenda.afspraken(van_dagen, tot_dagen)
     ag.prive(prive_teksten(uit))          # wat uit een privébron komt, gaat nooit naar het bord (R1)
     return uit
 
@@ -328,7 +330,7 @@ VERRE_FOUT = []        # foutrecords van de verre lezing: nooit als afspraak ver
 ONGELEZEN = set()      # agenda's die deze ronde niet gelezen zijn: dan ruim ik geen ritten op (Codex A15, A17)
 
 
-def archief_afspraken(van_dagen=-1, tot_dagen=8):
+def archief_afspraken(van_dagen=-1, tot_dagen=8, alleen_lezen=False):
     """De afspraken in een archiefagenda (naam begint met ZZ ARCHIEF), alleen om te lezen.
     Gezien 24-09-2026: Calendly boekte nog in 'ZZ ARCHIEF haagendalightprojects' (5520 Downs,
     2603 Lisa Cuppens) en niemand zag ze. Ze komen in het dagplan, het belrooster en de
@@ -346,7 +348,8 @@ def archief_afspraken(van_dagen=-1, tot_dagen=8):
         return []
     os.environ["CONTRACTEN_KALENDERS"] = ",".join(ids)
     try:
-        ruw = agenda.afspraken(van_dagen, tot_dagen)
+        ruw = agenda.afspraken(van_dagen, tot_dagen, schrijf_leesstand=False) if alleen_lezen \
+            else agenda.afspraken(van_dagen, tot_dagen)
     finally:
         os.environ["CONTRACTEN_KALENDERS"] = ",".join(kalenders())
     stuk = sorted({namen.get(a["kalender"], a["kalender"]) for a in ruw if a.get("fout")})
@@ -387,11 +390,11 @@ def verre_afspraken():
     return uit
 
 
-def afspraken_dag(dag):
+def afspraken_dag(dag, alleen_lezen=False):
     """Alle afspraken van één dag, ook verder dan acht dagen. Zo werkt een wijziging op
     een verre dag (een reeks van Lara in november) ook de rit bij."""
     offset = (datetime.fromisoformat(dag).date() - datetime.now().date()).days
-    ruw = afspraken(offset - 1, offset + 2)
+    ruw = afspraken(offset - 1, offset + 2, alleen_lezen=True) if alleen_lezen else afspraken(offset - 1, offset + 2)
     ONGELEZEN.update(a["kalender"] for a in ruw if a.get("fout"))      # niet stil laten vallen (Codex A17)
     return [a for a in ruw if not a.get("fout") and a.get("start", "")[:10] == dag]
 
@@ -502,6 +505,21 @@ def koppel(info, titel, deals):
         elif s == score and score >= 2:
             gelijk = True
     return (beste, f"naam in de titel ({score} woorden)") if beste and score >= 2 and not gelijk else (None, "")
+
+
+def afspraak_klaarzetitem(a, info, afdeling, kal, regel, deal, hoe, terugkijken=False):
+    """Hetzelfde borditem in de gewone ronde en bij alleen lezend terugkijken."""
+    dag = a["start"][:10]
+    inhoud = {"datum": dag, "start": a["start"], "einde": a["einde"], "titel": a["titel"], "agenda": kal,
+              "firma": info["firma"], "soort": info["soort"], "type": info["type"], "nummer": info["nummer"],
+              "klant": info["klant"], "buiten": info["buiten"], "onzeker": info["onzeker"],
+              "locatie": a["locatie"], "deelnemers": a["deelnemers"], "gezet_door": maker(a),
+              "deal_id": deal["id"] if deal else None, "koppeling": hoe, "omschrijving": a["omschrijving"][:800]}
+    if terugkijken:
+        inhoud["terugkijken"] = True
+    return {"voor": afdeling, "soort": "afspraak", "sleutel": str(deal["id"]) if deal else (info["nummer"] or ""),
+            "titel": f"{dag} {regel}", "uniek": f"agenda:{a['kalender']}:{a['id']}", "verwijzing": a.get("link", ""),
+            "inhoud": inhoud}
 
 
 ONLINE_MIN = int(os.environ.get("AGENDA_HERINNERING_ONLINE", "5"))
@@ -4348,6 +4366,133 @@ def slot_nemen(max_wachten=None):
             time.sleep(5)
 
 
+def terugkijkdag(dag, deals):
+    """Lees een oude dag en zet alleen afspraken op het bord; raak geen Google-schrijfroutes aan."""
+    ONGELEZEN.clear()
+    items = afspraken_dag(dag, alleen_lezen=True)
+    offset = (datetime.fromisoformat(dag).date() - datetime.now().date()).days
+    archief = [a for a in archief_afspraken(offset - 1, offset + 2, alleen_lezen=True)
+              if a.get("start", "")[:10] == dag]
+    if ONGELEZEN or ARCHIEF_FOUT:
+        raise RuntimeError("agenda van terugkijkdag niet volledig gelezen")
+    klaar, gezien = [], set()
+    for a in items + archief:
+        identiteit = (a.get("kalender"), a.get("id"), a.get("start"))
+        if identiteit in gezien:
+            continue
+        gezien.add(identiteit)
+        if is_prive(a):
+            continue
+        info = lees_titel(a["titel"])
+        if info["reistijd"] or a["kalender"] == "en.be#holiday@group.v.calendar.google.com":
+            continue
+        kal = KALENDERS.get(a["kalender"], a["kalender"])
+        afdeling = (FIRMA_AFDELING.get(info["firma"]) or KALENDER_AFDELING.get(kal) or "mehdi") \
+            if not info["firma_conflict"] else "mehdi"
+        if afdeling == "mehdi":
+            continue
+        deal, hoe = koppel(info, a["titel"], deals) if afdeling == "h-architects" else (None, "")
+        oms = ", ".join(x for x in (SOORT.get(info["soort"], ""), TYPES.get(info["type"], ""),
+                                    "buiten + reistijd" if info["buiten"] else "",
+                                    "niet bevestigd" if info["onzeker"] else "") if x)
+        regel = f"{'hele dag' if a['hele_dag'] else a['start'][11:16]} {a['titel']}" + \
+                (f" [{oms}]" if oms else "") + (f" · deal {deal['id']}" if deal else "")
+        klaar.append(afspraak_klaarzetitem(a, info, afdeling, kal, regel, deal, hoe, terugkijken=True))
+    ag.klaarzet(klaar)
+    ag.log(dag, "bron", f"{len(klaar)} zakelijke afspraak/afspraken alleen lezend teruggekeken")
+    ag.log_verstuur()
+    return len(klaar)
+
+
+def _kalenderdag(waarde):
+    """Alleen de precieze ISO-vorm van een bestaande kalenderdag."""
+    try:
+        return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", waarde) and
+                    datetime.fromisoformat(waarde).date().isoformat() == waarde)
+    except (TypeError, ValueError):
+        return False
+
+
+def _oude_dag(waarde):
+    """Een kalenderdag in het verleden; een ongeldige datum mag geen taak afvinken."""
+    return _kalenderdag(waarde) and waarde < nu_lokaal().date().isoformat()
+
+
+def terugkijken(dagen):
+    geldig = list(dict.fromkeys(d for d in dagen if _oude_dag(d)))
+    for dag in dagen:
+        if dag not in geldig:
+            print(f"terugkijken overgeslagen: {dag} is geen oude kalenderdag")
+    if not geldig:
+        return 0
+    deals = deals_index()
+    for dag in geldig:
+        terugkijkdag(dag, deals)
+    return len(geldig)
+
+
+def terugkijktaken():
+    """Hoogstens veertig verschillende oude dagen per ronde; vink alleen geslaagde dagen af."""
+    taken = [it for it in bord.klaargezet_voor(NAAM, n=500)
+             if it.get("soort") == "taak" and it.get("voor") == NAAM and it.get("van") == "werfverslag-voorbereider"
+             and isinstance(_inhoud_terugkijktaak(it).get("terugkijken"), str)]
+    per_dag = {}
+    for it in taken:
+        dag = _inhoud_terugkijktaak(it)["terugkijken"]
+        if not _kalenderdag(dag):
+            continue
+        per_dag.setdefault(dag, []).append(it)
+    vandaag = nu_lokaal().date().isoformat()
+    for dag, items in per_dag.items():
+        if dag >= vandaag:
+            for it in items:
+                bord.opgepakt(it["id"], NAAM)
+            ag.log(dag, "besluit", "terugkijktaak overgeslagen; de gewone ronde leest vandaag of later")
+    oude_dagen = sorted(d for d in per_dag if _oude_dag(d))[:40]
+    if oude_dagen:
+        deals = deals_index()
+        for dag in oude_dagen:
+            terugkijkdag(dag, deals)
+            for it in per_dag[dag]:
+                bord.opgepakt(it["id"], NAAM)
+    ag.log_verstuur()
+    return len(oude_dagen)
+
+
+def _inhoud_terugkijktaak(it):
+    inhoud = it.get("inhoud") or {}
+    if isinstance(inhoud, dict):
+        return inhoud
+    try:
+        waarde = json.loads(inhoud)
+        return waarde if isinstance(waarde, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def terugkijkstand(argv):
+    """Eigen commandolijn; onbekende vlaggen kunnen nooit in de schrijvende ronde belanden."""
+    p = argparse.ArgumentParser(description="Agendawacht: alleen lezend terugkijken op vraag")
+    keuze = p.add_mutually_exclusive_group(required=True)
+    keuze.add_argument("--terugkijken", nargs="+", metavar="JJJJ-MM-DD")
+    keuze.add_argument("--taken", action="store_true")
+    a = p.parse_args(argv)
+    if a.terugkijken and not all(_oude_dag(d) for d in a.terugkijken):
+        print("terugkijken vraagt bestaande kalenderdagen vóór vandaag", file=sys.stderr)
+        return 2
+    ag.werkwijze()
+    if not agenda.beschikbaar():
+        print("geen agendatoegang: GOOGLE_AGENDA_* ontbreekt", file=sys.stderr)
+        return 78
+    if a.taken:
+        print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · terugkijktaken", flush=True)
+        terugkijktaken()
+    else:
+        print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · alleen lezend terugkijken", flush=True)
+        terugkijken(a.terugkijken)
+    return 0
+
+
 def main():
     _slot = slot_nemen()  # noqa: F841  blijft open tot het einde van de ronde
     werkwijze = ag.werkwijze()
@@ -4402,13 +4547,7 @@ def main():
                 gisteren_lijst.append(regel)
             if dag >= vandaag and afdeling != "mehdi" and not is_prive(a):    # privé nooit naar een afdeling (A05)
                 per_afdeling[afdeling] = per_afdeling.get(afdeling, 0) + 1
-                klaar.append({"voor": afdeling, "soort": "afspraak", "sleutel": str(deal["id"]) if deal else (info["nummer"] or ""),
-                              "titel": f"{dag} {regel}", "uniek": f"agenda:{a['kalender']}:{a['id']}", "verwijzing": a.get("link", ""),
-                              "inhoud": {"datum": dag, "start": a["start"], "einde": a["einde"], "titel": a["titel"], "agenda": kal,
-                                         "firma": info["firma"], "soort": info["soort"], "type": info["type"], "nummer": info["nummer"],
-                                         "klant": info["klant"], "buiten": info["buiten"], "onzeker": info["onzeker"],
-                                         "locatie": a["locatie"], "deelnemers": a["deelnemers"], "gezet_door": maker(a),
-                                         "deal_id": deal["id"] if deal else None, "koppeling": hoe, "omschrijving": a["omschrijving"][:800]}})
+                klaar.append(afspraak_klaarzetitem(a, info, afdeling, kal, regel, deal, hoe))
         tekst = "Vandaag:\n" + ("\n".join("- " + r for r in dagplan) or "- niets in de agenda") + \
                 "\n\nGisteren, klantcontact waar een verslag of opname bij hoort:\n" + ("\n".join("- " + r for r in gisteren_lijst) or "- niets")
         klaar.append({"voor": "mehdi", "soort": "dagplan", "sleutel": vandaag, "titel": f"Dagplan {vandaag}", "uniek": f"dagplan:{vandaag}", "inhoud": tekst})
@@ -4737,6 +4876,8 @@ def zorgronde():
 
 
 if __name__ == "__main__":
+    if "--terugkijken" in sys.argv or "--taken" in sys.argv:
+        sys.exit(terugkijkstand(sys.argv[1:]))
     if "--kleuren" in sys.argv:          # om :17 en :47, ook 's nachts en in het weekend (FR-21)
         print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · kleurherstel", flush=True)
         kleurherstel()

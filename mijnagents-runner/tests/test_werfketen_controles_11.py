@@ -121,15 +121,17 @@ def test_w2_gedragen_tracker_bij_het_project_is_aanwezigheid(buiten, monkeypatch
     assert posten(bezoek(), buiten)["W2"]["stand"] == "ok"
 
 
-def test_w2_alleen_de_auto_bij_het_project_is_let_op(buiten, monkeypatch):
+def test_w2_alleen_de_auto_bij_het_project_is_ok(buiten, monkeypatch):
     monkeypatch.setattr(v.LC, "context", lambda dag: {"dag": dag, "bronbeleid": {}, "verblijven": [verblijf("auto")]})
     w2 = posten(bezoek(), buiten)["W2"]
-    assert w2["stand"] == "let_op" and "auto" in w2["toelichting"]
+    assert w2["stand"] == "ok" and "auto bij het project; Mehdi gaat altijd met de auto, E1b" in w2["toelichting"]
 
 
 def test_w2_verblijf_buiten_het_venster_of_bij_een_ander_project_telt_niet(buiten, monkeypatch):
     for vb in (verblijf("tracker", "2026-10-14T08:00:00+02:00", "2026-10-14T09:00:00+02:00"),
-               verblijf("tracker", nummer="9998")):
+               verblijf("tracker", nummer="9998"),
+               verblijf("auto", "2026-10-14T08:00:00+02:00", "2026-10-14T09:00:00+02:00"),
+               verblijf("auto", nummer="9998")):
         monkeypatch.setattr(v.LC, "context", lambda dag, vb=vb: {"dag": dag, "bronbeleid": {}, "verblijven": [vb]})
         assert posten(bezoek(), buiten)["W2"]["stand"] == "ontbreekt"
 

@@ -90,7 +90,7 @@ class FotoProducent(unittest.TestCase):
         with patch.dict(sys.modules, {"bord": bord, "bronnen": bronnen, "werfregister": register}):
             spec.loader.exec_module(self.v)
         self.v.zoek_projectmap = lambda nummer: (PROJECT, "standaard")
-        self.v.bezoeken_in = lambda project: deepcopy(self.bezoeken)
+        self.v.bezoeken_in = lambda project, nummer=None: deepcopy(self.bezoeken)
         self.v.dossiers_lezen = lambda: {}
         self.v.klaargezet = lambda nummer: deepcopy(self.bak)
         self.v.projectcoordinaten = lambda nummer, adres, bak: (51.0, 4.0)

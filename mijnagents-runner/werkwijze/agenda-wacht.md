@@ -1,5 +1,8 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.16 (18-10-2026): E1b laat mij oude dagen op vraag alleen lezend terugkijken.
+Ik zet het agendabewijs op het bord; oude afspraken, ritten, kleuren en gasten blijven onaangeraakt.
+
 Aanvulling v8.15 (17-10-2026): een expliciete annulering krijgt een eigen melding vanaf het vaste agentnummer
 met "afgezegd, niet vertrekken". De vijfminutenoproep leest het Google-item vlak voor het bellen opnieuw; kan
 dat niet, dan klinkt geen vertrekoproep maar eenmaal een waarschuwing vanaf het vaste agentnummer. Mislukte
@@ -643,6 +646,19 @@ Per ronde:
 13. Vragen in de agenda zelf: VR vooraan de titel, de vraag in de omschrijving (alleen zonder gasten).
 14. Vastgelopen: een oproep met een zin, alleen vanuit de geplande ronde, werkdagen 08:00-20:00.
 15. Klaarzetten per afdeling, dagplan, werkverslag.
+
+## Terugkijken op vraag (E1b, 18-10-2026)
+
+`--terugkijken JJJJ-MM-DD [JJJJ-MM-DD ...]` leest oude dagen uit de actieve en archiefagenda's.
+`--taken` leest de terugkijktaken van Werfverslag voorbereider, hoogstens veertig verschillende
+oude dagen per ronde. Alleen een volledig gelezen dag krijgt afspraakitems met dezelfde agendasleutel
+en `terugkijken: true`; daarna vink ik de taken van die dag af. Vandaag en toekomstige dagen horen
+bij de gewone ronde. Deze stand wijzigt geen afspraak, kleur, rit, gast, Zoom of melding en belt niet.
+De planning staat in `planning/agenda-terugkijken.cron` en loopt elke twee uur om :40.
+
+| Datum | Oorzaak | Herstel | Grendel |
+|---|---|---|---|
+| 18-10-2026 | Oude buitenafspraken stonden niet in de klaarzetbak; `--dag` zou ook oude agenda's wijzigen | `--terugkijken` en `--taken` lezen terug en zetten alleen bordbewijs klaar | `tests/test_agenda_terugkijken.py` |
 
 ## Leren in lagen (30-09-2026)
 
