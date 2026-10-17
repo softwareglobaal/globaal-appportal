@@ -176,19 +176,25 @@ def open_db(pad):
       scope TEXT, identiteit TEXT, pad TEXT, pad_sleutel TEXT, naam TEXT, soort TEXT, firma TEXT,
       profiel TEXT, gegevens TEXT DEFAULT '{}', actief INTEGER DEFAULT 1,
       naam_vuil INTEGER DEFAULT 1, structuur_vuil INTEGER DEFAULT 1,
+      ha_gezien TEXT DEFAULT '',
       PRIMARY KEY(scope,identiteit));
     CREATE INDEX IF NOT EXISTS item_pad ON item(scope,pad);
     CREATE INDEX IF NOT EXISTS item_naam_vuil ON item(naam_vuil,actief);
     CREATE INDEX IF NOT EXISTS item_structuur_vuil ON item(structuur_vuil,actief);
+    CREATE INDEX IF NOT EXISTS item_ha_naam_vuil ON item(naam_vuil,actief) WHERE profiel GLOB 'ha_*';
+    CREATE INDEX IF NOT EXISTS item_ha_structuur_vuil ON item(structuur_vuil,actief) WHERE profiel GLOB 'ha_*';
     CREATE TABLE IF NOT EXISTS bevinding (
       agent TEXT, scope TEXT, identiteit TEXT, regel TEXT, bron TEXT, firma TEXT,
       naam TEXT, pad TEXT, voorstel TEXT, status TEXT DEFAULT 'open',
       eerste TEXT, laatste TEXT, PRIMARY KEY(agent,scope,identiteit,regel));
+    CREATE INDEX IF NOT EXISTS bevinding_scope_identiteit ON bevinding(scope,identiteit);
     CREATE TABLE IF NOT EXISTS instelling (sleutel TEXT PRIMARY KEY, waarde TEXT);
     CREATE TABLE IF NOT EXISTS lokaal_cursor (bron TEXT PRIMARY KEY, ts TEXT DEFAULT '', rij INTEGER DEFAULT 0);
     """)
     if "verbinding" not in {r[1] for r in c.execute("PRAGMA table_info(scope)")}:
         c.execute("ALTER TABLE scope ADD COLUMN verbinding TEXT DEFAULT ''")
+    if "ha_gezien" not in {r[1] for r in c.execute("PRAGMA table_info(item)")}:
+        c.execute("ALTER TABLE item ADD COLUMN ha_gezien TEXT DEFAULT ''")
     nieuw_padveld = "pad_sleutel" not in {r[1] for r in c.execute("PRAGMA table_info(item)")}
     if nieuw_padveld:
         c.execute("ALTER TABLE item ADD COLUMN pad_sleutel TEXT")
@@ -208,6 +214,12 @@ def open_db(pad):
             c.commit()
         instelling(c, "pad_sleutel_versie", 1)
     c.execute("CREATE INDEX IF NOT EXISTS item_pad_sleutel ON item(scope,pad_sleutel)")
+    nieuwe_overzichtindex = "item_scope_actief_profiel_vuil" not in {
+        r[1] for r in c.execute("PRAGMA index_list(item)")}
+    c.execute("CREATE INDEX IF NOT EXISTS item_scope_actief_profiel_vuil "
+              "ON item(scope,actief,profiel,naam_vuil,structuur_vuil)")
+    if nieuwe_overzichtindex:
+        c.execute("ANALYZE item")
     c.commit()
     os.chmod(pad, 0o600)
     return c
@@ -222,6 +234,75 @@ def instelling(c, sleutel, waarde=None):
     return json.loads(rij[0]) if rij else None
 
 
+def regelvingerafdruk(waarde):
+    return hashlib.sha256(json.dumps(waarde, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def hercontrole_regels(c, regels):
+    """H1-4, driehoeksoverleg C2, 17-10-2026: hercontrole per geraakt deel."""
+    delen = {"ha": regels["ha"], "regelbron": regels["regelbron"]}
+    delen.update({"root:" + r["id"]: r for r in regels["roots"]})
+    delen.update({"profiel:" + p["prefix"].casefold(): p for p in regels["profielen"]})
+    # Administratieve velden veranderen geen toets; onbekende regels raken mogelijk alles.
+    bekend = {"ha", "regelbron", "roots", "profielen", "versie", "verbindingen",
+              "pagina_budget_per_root", "item_budget_per_agent", "niet_gecontroleerd"}
+    delen["overig"] = {k: v for k, v in regels.items() if k not in bekend}
+    nieuw = {k: regelvingerafdruk(v) for k, v in delen.items()}
+    oud = instelling(c, "regelvingerafdrukken")
+    if oud is None:
+        # De oude formule gebruikte json.dumps zonder ensure_ascii=False.
+        oude_globale = hashlib.sha256(json.dumps(regels, sort_keys=True).encode()).hexdigest()
+        gelijk = instelling(c, "regelsvingerafdruk") == oude_globale
+        with c:
+            if not gelijk:
+                c.execute("UPDATE item SET naam_vuil=1,structuur_vuil=1")
+            instelling(c, "regelvingerafdrukken", nieuw)
+            c.execute("DELETE FROM instelling WHERE sleutel='regelsvingerafdruk'")
+        return not gelijk
+    geraakt = {k for k in set(oud) | set(nieuw) if oud.get(k) != nieuw.get(k)}
+    if not geraakt:
+        return False
+    with c:
+        if "overig" in geraakt:
+            # Onbekende semantische regel: het bereik is niet te bewijzen; alles vuil.
+            c.execute("UPDATE item SET naam_vuil=1,structuur_vuil=1")
+        if "ha" in geraakt or "regelbron" in geraakt:
+            c.execute("UPDATE item SET naam_vuil=1,structuur_vuil=1 WHERE profiel GLOB 'ha_*'")
+        for sleutel in geraakt:
+            if sleutel.startswith("root:"):
+                c.execute("UPDATE item SET naam_vuil=1,structuur_vuil=1 WHERE scope=?", (sleutel[5:],))
+        prefixes = {k[8:] for k in geraakt if k.startswith("profiel:")}
+        if prefixes:
+            for p in set(prefixes):
+                rows = c.execute("SELECT scope,identiteit,pad FROM item WHERE pad_sleutel=? OR (pad_sleutel>=? AND pad_sleutel<?)",
+                                 (p, p + "/", p + "0")).fetchall()
+                for rij in rows:
+                    firma, profiel = profiel_van(rij["pad"], regels)
+                    c.execute("UPDATE item SET firma=?,profiel=?,naam_vuil=1,structuur_vuil=1 WHERE scope=? AND identiteit=?",
+                              (firma, profiel, rij["scope"], rij["identiteit"]))
+        instelling(c, "regelvingerafdrukken", nieuw)
+    return bool(geraakt)
+
+
+def ha_bereiken(regels):
+    """H1-4, driehoeksoverleg C2, 17-10-2026: aparte prefixcursors, bestaande item-ID's.
+
+    De Work All-cursor blijft staan. Zijn pagina's slaan H-A-rijen over; de
+    prefixcursor schrijft die rijen onder dezelfde Work All-scope. Daardoor
+    blijven bestaande bevindingen bruikbaar en kan een prefix apart voltooid zijn.
+    """
+    uit = []
+    for p in regels["profielen"]:
+        if not p["profiel"].startswith("ha_"):
+            continue
+        root = next((r for r in regels["roots"] if r.get("verbinding") == regels["regelbron"]["verbinding"]
+                     and r.get("namespace") == regels["regelbron"]["namespace"] and onder(p["prefix"], r["pad"])), None)
+        if root:
+            sleutel = hashlib.sha256(p["prefix"].casefold().encode()).hexdigest()[:16]
+            uit.append(({**root, "id": "ha:" + root["id"] + ":" + sleutel, "pad": p["prefix"]}, root["id"]))
+    return uit
+
+
 def profiel_van(pad, regels):
     for p in sorted(regels["profielen"], key=lambda p: len(p["prefix"]), reverse=True):
         if onder(pad, p["prefix"]):
@@ -234,39 +315,78 @@ def markeer_ouders(c, scope, pad):
     c.execute("UPDATE item SET structuur_vuil=1 WHERE scope=? AND pad_sleutel=?", (scope, ouder))
 
 
-def verwerk_pagina(c, scope, pagina, regels):
+def verwerk_pagina(c, scope, pagina, regels, opslag_scope=None, overslaan=(), eerste_ha_lezing=False):
+    opslag = opslag_scope or scope["id"]
+    aantal = 0
     for e in pagina["entries"]:
         pad = e.get("path_display") or e.get("path_lower") or ""
         if not pad or not onder(pad, scope["pad"]):
             raise ValueError("Dropbox-item buiten de ingestelde root")
+        if any(onder(pad, prefix) for prefix in overslaan):
+            continue
+        aantal += 1
         if e.get(".tag") == "deleted":
             # Een Dropbox-tombstone deactiveert alleen metadata, nooit een bronbestand.
             p = pad.casefold()
             ids = c.execute("SELECT identiteit FROM item WHERE scope=? AND pad_sleutel=? UNION "
                             "SELECT identiteit FROM item WHERE scope=? AND pad_sleutel>=? AND pad_sleutel<?",
-                            (scope["id"], p, scope["id"], p + "/", p + "0")).fetchall()
+                            (opslag, p, opslag, p + "/", p + "0")).fetchall()
             for r in ids:
-                c.execute("UPDATE item SET actief=0 WHERE scope=? AND identiteit=?", (scope["id"], r[0]))
+                c.execute("UPDATE item SET actief=0 WHERE scope=? AND identiteit=?", (opslag, r[0]))
                 c.execute("UPDATE bevinding SET status='bron niet meer aanwezig',laatste=? WHERE scope=? AND identiteit=?",
-                          (nu(), scope["id"], r[0]))
-            markeer_ouders(c, scope["id"], pad)
+                          (nu(), opslag, r[0]))
+            markeer_ouders(c, opslag, pad)
             continue
         identiteit = e.get("id")
         if not identiteit or e.get(".tag") not in ("file", "folder"):
             raise ValueError("Dropbox-metadata zonder stabiele identiteit")
-        oud = c.execute("SELECT pad FROM item WHERE scope=? AND identiteit=?", (scope["id"], identiteit)).fetchone()
+        oud = c.execute("SELECT pad,naam,soort,firma,profiel,actief FROM item WHERE scope=? AND identiteit=?",
+                        (opslag, identiteit)).fetchone()
         firma, profiel = profiel_van(pad, regels)
-        c.execute("""INSERT INTO item(scope,identiteit,pad,pad_sleutel,naam,soort,firma,profiel)
-          VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(scope,identiteit) DO UPDATE SET
+        # H1-4, driehoeksoverleg C2, 17-10-2026: een bestaande Work All-rij
+        # blijft bruikbaar; ongewijzigde metadata vraagt geen tweede toets.
+        if oud and (oud["pad"], oud["naam"], oud["soort"], oud["firma"], oud["profiel"], oud["actief"]) == (
+                pad, e["name"], e[".tag"], firma, profiel, 1):
+            if eerste_ha_lezing:
+                c.execute("UPDATE item SET ha_gezien=? WHERE scope=? AND identiteit=?",
+                          (scope["id"], opslag, identiteit))
+            continue
+        c.execute("""INSERT INTO item(scope,identiteit,pad,pad_sleutel,naam,soort,firma,profiel,ha_gezien)
+          VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(scope,identiteit) DO UPDATE SET
           pad=excluded.pad,pad_sleutel=excluded.pad_sleutel,naam=excluded.naam,soort=excluded.soort,firma=excluded.firma,
-          profiel=excluded.profiel,actief=1,naam_vuil=1,structuur_vuil=1""",
-                  (scope["id"], identiteit, pad, pad.casefold(), e["name"], e[".tag"], firma, profiel))
-        markeer_ouders(c, scope["id"], pad)
-        if oud and oud[0] != pad:
-            markeer_ouders(c, scope["id"], oud[0])
+          profiel=excluded.profiel,ha_gezien=excluded.ha_gezien,actief=1,naam_vuil=1,structuur_vuil=1""",
+                  (opslag, identiteit, pad, pad.casefold(), e["name"], e[".tag"], firma, profiel,
+                   scope["id"] if eerste_ha_lezing else ""))
+        markeer_ouders(c, opslag, pad)
+        if oud and oud["pad"] != pad:
+            markeer_ouders(c, opslag, oud["pad"])
+    return aantal
 
 
-def synchroniseer(c, root, namespace, rpc, regels, budget=None):
+def sluit_eerste_ha_lezing(c, bereik, opslag):
+    """Ruim alleen na het laatste geldige eerste H-A-blad oude indexrijen op."""
+    prefix = bereik["pad"].casefold()
+    grens = (opslag, prefix, prefix + "/", prefix + "0", bereik["id"])
+    laatst = 0
+    while True:
+        rows = c.execute("SELECT rowid,identiteit,pad FROM item WHERE scope=? AND actief=1 "
+                         "AND (pad_sleutel=? OR (pad_sleutel>=? AND pad_sleutel<?)) "
+                         "AND COALESCE(ha_gezien,'')<>? AND rowid>? ORDER BY rowid LIMIT 1000",
+                         grens + (laatst,)).fetchall()
+        if not rows:
+            break
+        moment = nu()
+        c.executemany("UPDATE bevinding SET status='bron niet meer aanwezig',laatste=? "
+                      "WHERE scope=? AND identiteit=?",
+                      [(moment, opslag, r["identiteit"]) for r in rows])
+        c.executemany("UPDATE item SET actief=0 WHERE rowid=?", [(r["rowid"],) for r in rows])
+        ouders = {str(PurePosixPath(r["pad"]).parent).casefold() for r in rows}
+        c.executemany("UPDATE item SET structuur_vuil=1 WHERE scope=? AND pad_sleutel=?",
+                      [(opslag, ouder) for ouder in ouders])
+        laatst = rows[-1]["rowid"]
+
+
+def synchroniseer(c, root, namespace, rpc, regels, budget=None, opslag_scope=None, overslaan=()):
     if not namespace:
         raise ValueError("Dropbox-accountroot niet vastgesteld")
     oud = c.execute("SELECT * FROM scope WHERE id=?", (root["id"],)).fetchone()
@@ -286,6 +406,13 @@ def synchroniseer(c, root, namespace, rpc, regels, budget=None):
         c.execute("UPDATE scope SET poging=? WHERE id=?", (nu(), s["id"]))
         c.commit()
         try:
+            # H1-4, driehoeksoverleg C2, 17-10-2026: de prefixmap zelf staat
+            # niet in list_folder; lees haar eenmaal via dezelfde cursorstart.
+            zelf = None
+            if opslag_scope and not s["cursor"]:
+                zelf = rpc("files/get_metadata", {"path": s["pad"]})
+                if not isinstance(zelf, dict) or zelf.get(".tag") != "folder" or not zelf.get("id"):
+                    raise RuntimeError("H-A-prefix niet leesbaar")
             if s["cursor"]:
                 pagina = rpc("files/list_folder/continue", {"cursor": s["cursor"]})
             else:
@@ -296,11 +423,17 @@ def synchroniseer(c, root, namespace, rpc, regels, budget=None):
                     or type(pagina.get("has_more")) is not bool):
                 raise RuntimeError("Dropbox-bereik of cursor niet leesbaar; basis blijft onvolledig")
             with c:
-                verwerk_pagina(c, s, pagina, regels)
+                eerste = bool(opslag_scope and not s["compleet"])
+                if zelf:
+                    aantal += verwerk_pagina(c, s, {"entries": [zelf]}, regels, opslag_scope,
+                                             eerste_ha_lezing=eerste)
+                aantal += verwerk_pagina(c, s, pagina, regels, opslag_scope, overslaan,
+                                         eerste_ha_lezing=eerste)
                 meer = bool(pagina.get("has_more"))
+                if eerste and not meer:
+                    sluit_eerste_ha_lezing(c, s, opslag_scope)
                 c.execute("UPDATE scope SET cursor=?,meer=?,compleet=?,gelukt=?,fout='' WHERE id=?",
                           (pagina["cursor"], int(meer), int(s["compleet"] or not meer), nu(), s["id"]))
-            aantal += len(pagina["entries"])
             if not meer:
                 break
         except Exception as e:
@@ -313,16 +446,53 @@ def synchroniseer(c, root, namespace, rpc, regels, budget=None):
 
 
 def controleer_regelbron(c, regels, rpc, download, force=False):
-    stand = instelling(c, "regelbron") or {}
-    if not force and time.time() - stand.get("ts", 0) < 86400:
-        return stand
+    vorige = instelling(c, "regelbron") or {}
     bron = regels["regelbron"]
     stand = {"ts": time.time(), "versie": bron["versie"], "pad": bron["pad"], "geldig": False,
              "verbinding": bron.get("verbinding"), "namespace": bron.get("namespace")}
     try:
+        # H1-4, driehoeksoverleg C2, 17-10-2026: een nieuwere versie naast
+        # het vastgepinde boek maakt de inhoudelijke keuze onbevestigd.
+        map_pad = str(PurePosixPath(bron["pad"]).parent)
+        naam = PurePosixPath(bron["pad"]).name
+        match = re.fullmatch(r"(.+ v)(\d+(?:\.\d+)*)\.md", naam, re.I)
+        if not match:
+            raise ValueError("vastgepinde versie niet herkenbaar")
+        gepind = tuple(int(x) for x in match[2].split("."))
+        hoogste = gepind
+        vervolg = None
+        while True:
+            pagina = (rpc("files/list_folder/continue", {"cursor": vervolg}) if vervolg else
+                      rpc("files/list_folder", {"path": map_pad, "recursive": False, "limit": 500}))
+            if (not isinstance(pagina, dict) or not isinstance(pagina.get("entries"), list)
+                    or type(pagina.get("has_more")) is not bool):
+                raise RuntimeError("regelboekmap niet leesbaar")
+            for e in pagina["entries"]:
+                n = e.get("name", "")
+                kandidaat = re.fullmatch(re.escape(match[1]) + r"(\d+(?:\.\d+)*)\.md", n, re.I)
+                if e.get(".tag") == "file" and kandidaat:
+                    versie = tuple(int(x) for x in kandidaat[1].split("."))
+                    if versie > hoogste:
+                        hoogste = versie
+            if not pagina["has_more"]:
+                break
+            vervolg = pagina.get("cursor")
+            if not vervolg:
+                raise RuntimeError("regelboekmapcursor ontbreekt")
+        if hoogste > gepind:
+            gevonden = match[1] + ".".join(str(x) for x in hoogste)
+            stand["gevonden"] = gevonden
+            stand["status"] = f"{gevonden} gevonden, niet bevestigd; vastgepind {bron['versie']}"
+            with c:
+                instelling(c, "regelbron", stand)
+            return stand
         meta = rpc("files/get_metadata", {"path": bron["pad"]})
         if not meta or meta.get(".tag") != "file" or meta.get("size", 0) > 500000:
             raise ValueError("regelboek niet beschikbaar")
+        if (not force and vorige.get("geldig") and vorige.get("rev") and
+                vorige["rev"] == meta.get("rev") and vorige.get("pad") == bron["pad"] and
+                vorige.get("sha256") == bron["sha256"] and time.time() - vorige.get("ts", 0) < 86400):
+            return vorige
         inhoud = download(bron["pad"], maximum=500001)
         stand["sha256"] = hashlib.sha256(inhoud).hexdigest()
         stand["rev"] = meta.get("rev", "")
@@ -434,12 +604,35 @@ def zet_bevindingen(c, agent, rij, fouten, bron):
 def toets_index(c, agent, regels, budget=None):
     veld = "naam_vuil" if agent == "benamingen-wacht" else "structuur_vuil"
     ha = bool((instelling(c, "regelbron") or {}).get("geldig"))
-    alleen_geldig = "" if ha else " AND i.profiel NOT LIKE 'ha_%'"
+    alleen_geldig = "" if ha else " AND i.profiel NOT GLOB 'ha_*'"
     actief = [r["id"] for r in regels["roots"]] + ["lokaal:agenda", "lokaal:gesprekken"]
     bronfilter = " AND i.scope IN (" + ",".join("?" for _ in actief) + ")"
-    rows = c.execute(f"SELECT i.* FROM item i JOIN scope s ON s.id=i.scope WHERE i.actief=1 AND i.{veld}=1 "
-                     "AND s.fout='' AND (i.scope LIKE 'lokaal:%' OR (s.compleet=1 AND s.meer=0))" + alleen_geldig + bronfilter + " LIMIT ?",
-                     actief + [budget or regels["item_budget_per_agent"]]).fetchall()
+    bereiken = ha_bereiken(regels)
+    ha_filter = ""
+    ha_params = []
+    if bereiken:
+        voorwaarden = []
+        for b, opslag in bereiken:
+            p = b["pad"].casefold()
+            voorwaarden.append("(i.scope=? AND (i.pad_sleutel=? OR (i.pad_sleutel>=? AND i.pad_sleutel<?)) "
+                               "AND EXISTS(SELECT 1 FROM scope h WHERE h.id=? AND h.compleet=1 AND h.meer=0 AND h.fout=''))")
+            ha_params.extend((opslag, p, p + "/", p + "0", b["id"]))
+        ha_filter = " AND (i.profiel NOT GLOB 'ha_*' OR (" + " OR ".join(voorwaarden) + "))"
+        dekking = "(i.scope LIKE 'lokaal:%' OR (i.profiel NOT GLOB 'ha_*' AND s.compleet=1 AND s.meer=0) OR i.profiel GLOB 'ha_*')"
+        bron_ok = "(s.fout='' OR i.profiel GLOB 'ha_*')"
+    else:
+        dekking = "(i.scope LIKE 'lokaal:%' OR (s.compleet=1 AND s.meer=0))"
+        bron_ok = "s.fout=''"
+    basis = (f"SELECT i.* FROM item i JOIN scope s ON s.id=i.scope WHERE i.actief=1 AND i.{veld}=1 "
+             "AND " + bron_ok + " AND " + dekking + alleen_geldig + bronfilter + ha_filter)
+    limiet = budget or regels["item_budget_per_agent"]
+    # H1-4, driehoeksoverleg C2, 17-10-2026: twee begrensde queries geven
+    # H-A voorrang zonder alle vuile items voor één globale sortering te lezen.
+    rows = c.execute(basis + " AND i.profiel GLOB 'ha_*' ORDER BY i.rowid LIMIT ?",
+                     actief + ha_params + [limiet]).fetchall() if ha else []
+    if len(rows) < limiet:
+        rows += c.execute(basis + " AND i.profiel NOT GLOB 'ha_*' ORDER BY i.rowid LIMIT ?",
+                          actief + ha_params + [limiet - len(rows)]).fetchall()
     gedaan = 0
     for row in rows:
         rij = dict(row)
@@ -556,14 +749,23 @@ def dagelijkse_dekking(c, regels, lezer_van):
 def overzicht(c, regels, agent):
     scopes = [dict(r) for r in c.execute("SELECT id,pad,namespace,verbinding,compleet,meer,poging,gelukt,fout,controle FROM scope ORDER BY id")]
     actief = {r["id"] for r in regels["roots"]} | {"lokaal:agenda", "lokaal:gesprekken"}
+    bereiken = ha_bereiken(regels)
+    ingestelde_bereiken = actief | {b["id"] for b, _ in bereiken}
     bronfilter = "scope IN (" + ",".join("?" for _ in actief) + ")"
     telling = {a: c.execute("SELECT count(*) FROM bevinding WHERE agent=? AND status='open' AND " + bronfilter, [a] + sorted(actief)).fetchone()[0]
                for a in ("benamingen-wacht", "mappen-wacht")}
     for s in scopes:
-        s["ingesteld"] = s["id"] in actief
-        s["items"] = c.execute("SELECT count(*) FROM item WHERE scope=? AND actief=1", (s["id"],)).fetchone()[0]
-        s["achterstand_naam"] = c.execute("SELECT count(*) FROM item WHERE scope=? AND actief=1 AND naam_vuil=1", (s["id"],)).fetchone()[0]
-        s["achterstand_structuur"] = c.execute("SELECT count(*) FROM item WHERE scope=? AND actief=1 AND structuur_vuil=1", (s["id"],)).fetchone()[0]
+        s["ingesteld"] = s["id"] in ingestelde_bereiken
+        # Virtuele H-A-bereiken bezitten de cursor; items blijven in Work All.
+        opslag = next((ouder for b, ouder in bereiken if b["id"] == s["id"]), s["id"])
+        prefix = next((b["pad"].casefold() for b, _ in bereiken if b["id"] == s["id"]), None)
+        grens = " AND (pad_sleutel=? OR (pad_sleutel>=? AND pad_sleutel<?))" if prefix else ""
+        args = (opslag, prefix, prefix + "/", prefix + "0") if prefix else (opslag,)
+        if not prefix and any(ouder == s["id"] for _, ouder in bereiken):
+            grens = " AND profiel NOT GLOB 'ha_*'"
+        s["items"] = c.execute("SELECT count(*) FROM item WHERE scope=? AND actief=1" + grens, args).fetchone()[0]
+        s["achterstand_naam"] = c.execute("SELECT count(*) FROM item WHERE scope=? AND actief=1 AND naam_vuil=1" + grens, args).fetchone()[0]
+        s["achterstand_structuur"] = c.execute("SELECT count(*) FROM item WHERE scope=? AND actief=1 AND structuur_vuil=1" + grens, args).fetchone()[0]
     out = {"versie": "1.1", "gemaakt": nu(), "laatste_agent": agent, "scopes": scopes,
            "regelbron": instelling(c, "regelbron"), "tellingen": telling, "niet_gecontroleerd": regels["niet_gecontroleerd"]}
     for a in ("benamingen-wacht", "mappen-wacht"):
