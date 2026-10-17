@@ -99,10 +99,10 @@ def test_zonder_bewijs_een_terugkijktaak_per_dossier_en_dag(bron, monkeypatch):
     monkeypatch.setattr(V.ag, "klaarzet", lambda items: taken.extend(items) or {"nieuw": len(items)})
     rijen, _, _ = V.verwerk("2145")
     assert [r["bezoekmap"] for r in rijen] == [OUD]
-    terug = [t for t in taken if t["voor"] == "agenda-wacht" and t["uniek"].startswith("werf:terugkijken:")]
-    assert len(terug) == 1
-    assert terug[0]["uniek"] == "werf:terugkijken:2145:2026-06-06"
-    assert terug[0]["inhoud"] == {"terugkijken": "2026-06-06", "dossier": "2145"}
+    terug = {t["uniek"]: t for t in taken if t["voor"] == "agenda-wacht" and t["uniek"].startswith("werf:terugkijken:")}
+    # één taak per dossier en dag: de kandidaat van 06-06 en (sinds 18-10) ook het naambezoek van 05-06
+    assert set(terug) == {"werf:terugkijken:2145:2026-06-06", "werf:terugkijken:2145:2026-06-05"}
+    assert terug["werf:terugkijken:2145:2026-06-06"]["inhoud"] == {"terugkijken": "2026-06-06", "dossier": "2145"}
 
 
 def test_na_terugkijken_geen_nieuwe_taak_ook_als_geen_buitenafspraak(bron, monkeypatch):
@@ -123,9 +123,13 @@ def test_w1_afdeling_bewijst_ha_ook_zonder_firmacode_en_type(bron):
     bak = {"afspraak": [dict(afspraak(), inhoud=json.dumps(d))]}
     venster = V.bevestigd_fotovenster("2145", b, [b], bak, "")
     assert venster["start"] == "2026-06-06T10:00:00+02:00"
+    # E1b: elke buitenafspraak met dit nummer telt, ook een overleg ter plaatse zonder type
     d["titel"] = "!! Mehdi: 2145 overleg"
+    assert V.bevestigd_fotovenster("2145", b, [b], {"afspraak": [dict(afspraak(), inhoud=json.dumps(d))]}, "")
+    d["type"] = "KO"   # een ingevuld type dat geen bezoektype is, blijft geweigerd
     with pytest.raises(ValueError, match="bezoekvenster_ontbreekt"):
         V.bevestigd_fotovenster("2145", b, [b], {"afspraak": [dict(afspraak(), inhoud=json.dumps(d))]}, "")
+    d["type"] = ""
     d["titel"] = "!! Mehdi: 9999 plaatsbezoek"
     d["nummer"] = "9999"
     with pytest.raises(ValueError, match="bezoekvenster_ontbreekt"):
@@ -163,3 +167,31 @@ def test_oude_firmacode_ha_telt_als_h_architects(bron):
     ha = afspraak()
     ha["inhoud"] = json.dumps(dict(json.loads(ha["inhoud"]), firma="HA"))
     assert V.kandidaatbewijs(kandidaat, {"afspraak": [ha]}, "2145") is not None
+
+
+def test_dezelfde_afspraak_twee_keer_in_de_bak_is_een_venster(bron):
+    b = next(x for x in V.bezoeken_in(PM, "2145") if x["map"] == NIEUW)
+    basis = dict(json.loads(afspraak()["inhoud"]), agenda="H-Architects", onzeker=False)
+    een = dict(afspraak(), uniek="agenda:k:een", inhoud=json.dumps(basis))
+    twee = dict(afspraak(), uniek="agenda:andere-kalender:zelfde", inhoud=json.dumps(dict(basis, firma="HA")))
+    assert V.bevestigd_fotovenster("2145", b, [b], {"afspraak": [een, twee]}, "")["start"] == "2026-06-06T10:00:00+02:00"
+
+
+def test_naambezoek_van_een_oude_dag_zonder_afspraak_vraagt_terugkijken(bron, monkeypatch):
+    monkeypatch.setattr(V, "klaargezet", lambda nr: {"afspraak": []})
+    taken = []
+    monkeypatch.setattr(V.ag, "klaarzet", lambda items: taken.extend(items) or {"nieuw": len(items)})
+    V.verwerk("2145")
+    uniek = {t["uniek"] for t in taken if t["voor"] == "agenda-wacht"}
+    assert any(u.startswith("werf:terugkijken:2145:") for u in uniek)
+    assert not any("Zoek in alle agenda" in (t.get("titel") or "") for t in taken)
+
+
+def test_w2_voor_de_gps_meetreeks_is_onbekend_niet_ontbreekt(monkeypatch):
+    monkeypatch.setattr(V.LC.bronbeleid, "dag_toegestaan", lambda dag: False)
+    monkeypatch.setattr(V.LC, "verblijven_in_venster", lambda *a: [])
+    b = {"datum": "2026-06-06", "map": "/x", "opname_starts": []}
+    venster = {"start": "2026-06-06T10:00:00+02:00", "einde": "2026-06-06T11:00:00+02:00"}
+    assert V.aanwezigheidsbewijs("2145", "Proefstraat 1", b, {"foto": []}, venster)[0] == "onbekend"
+    monkeypatch.setattr(V.LC.bronbeleid, "dag_toegestaan", lambda dag: True)
+    assert V.aanwezigheidsbewijs("2145", "Proefstraat 1", b, {"foto": []}, venster)[0] == "ontbreekt"
