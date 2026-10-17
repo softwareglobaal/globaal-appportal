@@ -28,7 +28,7 @@ WAT DEZE HERSTELRONDE ONDERSTEUNT (uitdrukkelijk):
 
 Gebruik:
     lees(tekst, bron, jaar_nu=None, jaarmap=None, register=None) -> [Kandidaat]
-    ha_nummer(tekst, bron, jaar_nu=None)  -> '2603' of '' (een H-A-nummer, alleen als er precies een is)
+    ha_nummer(tekst, bron, jaar_nu=None, register=None, bekend=None) -> '2603' of '' (zeker of bevestigd)
     ha_lezingen('5603', 2026)              -> ((2026, 'regularisatie'),)
     ha_voorvoegsel('regularisatie', 2027)  -> '57'
 """
@@ -371,10 +371,19 @@ def lees(tekst, bron, jaar_nu=None, jaarmap=None, register=None, administratie=N
     return uit
 
 
-def ha_nummer(tekst, bron, jaar_nu=None, register=None):
-    """Het H-A-nummer in deze tekst, alleen als er precies een is; anders ''."""
-    nummers = {k.nummer for k in lees(tekst, bron, jaar_nu, register=register) if k.firma == "HARC"}
-    return nummers.pop() if len(nummers) == 1 else ""
+def ha_nummer(tekst, bron, jaar_nu=None, register=None, bekend=None):
+    """Eén H-A-kandidaat: zeker uit de bron, of bevestigd als (firma, nummer).
+
+    H1-2, driehoeksoverleg C2, 17-10-2026: None betekent dat de bron met bestaande
+    dossiers niet gelezen is; een los nummer mag dan geen dossier worden.
+    """
+    kandidaten = [k for k in lees(tekst, bron, jaar_nu, register=register) if k.firma == "HARC"]
+    # H1-2b, driehoeksoverleg C3, 17-10-2026: dezelfde vermelding telt eenmaal, zoals vóór H1.
+    sleutels = {(k.firma, k.nummer) for k in kandidaten}
+    if len(sleutels) != 1:
+        return ""
+    nummer = kandidaten[0].nummer
+    return nummer if any(k.zeker for k in kandidaten) or (bekend is not None and ("HARC", nummer) in bekend) else ""
 
 
 def enig(kandidaten, firma=None):

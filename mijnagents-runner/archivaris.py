@@ -77,13 +77,22 @@ def afspraken(van, tot):
     return uit
 
 
-def ha_projectnummer(afspraak, project):
+def ha_projectnummer(afspraak, project, bekend=None):
     """Behoud de firmacontext van de afspraak. Een kaal TK-nummer wordt geen H-A-nummer.
     Bij twee verschillende H-A-kandidaten wordt niets gekozen."""
-    kandidaten = (nummerlezer.lees((afspraak or {}).get("titel") or "", "vergadertitel")
-                  + nummerlezer.lees(project or "", "vergadertitel"))
+    titel = (afspraak or {}).get("titel") or ""
+    project = project or ""
+    code = nummerlezer.agendacode_van_titel(titel)
+    if code and nummerlezer.firma_van_code(code) != "HARC":
+        return ""  # H1-2, driehoeksoverleg C2, 17-10-2026: een andere agendafirma gaat voor.
+    kandidaten = nummerlezer.lees(titel, "vergadertitel") + nummerlezer.lees(project, "vergadertitel")
     ha = {k.nummer for k in kandidaten if k.firma == "HARC"}
-    return ha.pop() if len(ha) == 1 else ""
+    if len(ha) != 1:
+        return ""
+    # H1-2, driehoeksoverleg C2, 17-10-2026: gebruik de bewijsregel van de nummerlezer.
+    nummer = ha.pop()
+    return nummer if any(nummerlezer.ha_nummer(tekst, "vergadertitel", bekend=bekend) == nummer
+                         for tekst in (titel, project)) else ""
 
 
 def afspraak_op(g, lijst):
@@ -244,7 +253,8 @@ def main():
                 continue
             a = afspraak_op(g, lijst)
             loc, loc_context = locatie_op(g["datum"], g["start"])
-            nummer = ha_projectnummer(a, g.get("project"))
+            # H1-2, driehoeksoverleg C2, 17-10-2026: de H-A-projectindex bevestigt firma én nummer.
+            nummer = ha_projectnummer(a, g.get("project"), {("HARC", str(n)) for n in projecten})
             project = projecten.get(nummer, {}).get("map", "").split("/")[-1] if nummer else ""
             if c:
                 uit = {"label": c[0], "zekerheid": "hoog", "reden": f"correctie van Mehdi: {c[1] or 'zonder reden'}", "agenda_toets": (a or {}).get("titel", "geen afspraak"),

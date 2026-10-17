@@ -9,12 +9,16 @@ on:
             "mijnagents-runner/werfverslag_voorbereider.py", "mijnagents-runner/commandocentrum.py",
             "mijnagents-runner/koppelingen/**", "mijnagents-runner/planning/plaud*", "mijnagents-runner/planning/mac/**",
             "mijnagents-runner/tests/test_plaud_*.py", "mijnagents/app.py", "mijnagents/test_klaarzet_revisie.py",
+            "mijnagents-runner/tests/test_dossierbewijs_zeker.py", "mijnagents-runner/benaming.py",
+            "mijnagents-runner/archivaris.py", "mijnagents-runner/contracten_agent.py",
             ".github/workflows/plaud-grendels.yml"]
   pull_request:
     paths: ["mijnagents-runner/plaud/**", "mijnagents-runner/plaud_wacht.py", "mijnagents-runner/fathom_wacht.py",
             "mijnagents-runner/werfverslag_voorbereider.py", "mijnagents-runner/commandocentrum.py",
             "mijnagents-runner/koppelingen/**", "mijnagents-runner/planning/plaud*", "mijnagents-runner/planning/mac/**",
             "mijnagents-runner/tests/test_plaud_*.py", "mijnagents/app.py", "mijnagents/test_klaarzet_revisie.py",
+            "mijnagents-runner/tests/test_dossierbewijs_zeker.py", "mijnagents-runner/benaming.py",
+            "mijnagents-runner/archivaris.py", "mijnagents-runner/contracten_agent.py",
             ".github/workflows/plaud-grendels.yml"]
 
 jobs:
@@ -40,6 +44,8 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_plaud_wacht.py
       # nacontrole v1.1: dossierbewijs (zekerheid, onafhankelijkheid, bekende dossiers, firma)
       - run: python3 mijnagents-runner/tests/test_plaud_dossier.py
+      # H1-2, driehoeksoverleg C2, 17-10-2026: bewijs op firma plus nummer.
+      - run: python3 mijnagents-runner/tests/test_dossierbewijs_zeker.py
       # de locatiegrens die De Plaudwacht deelt met de andere lezers
       - run: pip install -r locatie/requirements.txt
       - run: python3 mijnagents-runner/tests/test_locatielezers.py
