@@ -129,6 +129,33 @@ check("opruimen wist de dubbel", weg["gewist"] == [oud_id] and oud_id not in {x[
 kopie = [json.loads(x) for x in open(A.WERF_GEWIST)] if os.path.exists(A.WERF_GEWIST) else []
 check("de gewiste rij staat volledig in de kopie", kopie and kopie[-1]["rij"]["id"] == oud_id and kopie[-1]["rij"]["gegevens"])
 
+# 3b. hernoemde bezoekmap (oktober 2026): ander pad binnen dezelfde projectmap. Alleen een rij die het bord zelf als
+#     dubbel markeerde, en alleen als de rij die blijft de enige levende rij van die dag is.
+leeg_db()
+HERNOEMD = "/_00. Communication/2026-06-06 1030 HARC 2145 - klant - ramen"
+c.post("/api/werfbezoek", json={"rijen": [rij(NIEUW)]}, headers=K)
+c.post("/api/werfbezoek", json={"rijen": [rij(NIEUW, rel=HERNOEMD)]}, headers=K)
+c.post("/api/werfbezoek", json={"rijen": [rij(NIEUW, rel=HERNOEMD, vorige_bezoekmappen=[NIEUW + BEZOEK])]}, headers=K)
+rijen = rijen_db()
+oud_h = next(x["id"] for x in rijen if x["bezoekmap"] == NIEUW + BEZOEK)
+blijft_h = next(x["id"] for x in rijen if x["bezoekmap"] == NIEUW + HERNOEMD)
+check("na de hernoeming staat de oude rij als dubbel", next(x["stand"] for x in rijen if x["id"] == oud_h) == A.WERF_DUBBEL)
+weg_h = c.post("/api/werfbezoek/opruimen", json={"paren": [[oud_h, blijft_h]]}, headers=K).get_json()
+check("opruimen wist de dubbel van een hernoemde map", weg_h["gewist"] == [oud_h], weg_h)
+leeg_db()
+c.post("/api/werfbezoek", json={"rijen": [rij(NIEUW), rij(NIEUW, rel=HERNOEMD), rij(NIEUW, rel="/_00. Communication/2026-06-06 1500 HARC 2145 - aannemer - x")]}, headers=K)
+c.post("/api/werfbezoek", json={"rijen": [rij(NIEUW, rel=HERNOEMD, vorige_bezoekmappen=[NIEUW + BEZOEK])]}, headers=K)
+rijen = rijen_db()
+oud_h = next(x["id"] for x in rijen if x["bezoekmap"] == NIEUW + BEZOEK)
+blijft_h = next(x["id"] for x in rijen if x["bezoekmap"] == NIEUW + HERNOEMD)
+twee = c.post("/api/werfbezoek/opruimen", json={"paren": [[oud_h, blijft_h]]}, headers=K).get_json()
+check("bij twee levende rijen op die dag wist het bord niets", not twee["gewist"], twee)
+leeg_db()
+c.post("/api/werfbezoek", json={"rijen": [rij(NIEUW), rij(NIEUW, rel=HERNOEMD)]}, headers=K)
+rijen = rijen_db()
+niet = c.post("/api/werfbezoek/opruimen", json={"paren": [[rijen[0]["id"], rijen[1]["id"]]]}, headers=K).get_json()
+check("een rij die het bord niet als dubbel markeerde, blijft staan", not niet["gewist"], niet)
+
 # 4. een voorstel dat elke ronde terugkomt, staat maar één keer op het bord
 leeg_db()
 v = {"actie": "Dubbele werfbezoek-rijen opruimen", "runbook": "werfbezoek-dubbels", "parameters": {"sleutel": "werfbezoek-dubbels", "paren": [[1, 2]]}}
