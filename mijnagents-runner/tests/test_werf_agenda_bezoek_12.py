@@ -140,3 +140,26 @@ def test_afspraak_van_een_andere_firma_of_afdeling_herkent_geen_ha_bezoek(bron):
     andere = dict(afspraak(), voor="unabo")
     assert V.kandidaatbewijs(kandidaat, {"afspraak": [andere]}, "2145") is None
     assert V.kandidaatbewijs(kandidaat, {"afspraak": [afspraak()]}, "2145") is not None
+
+
+def test_bak_bladert_per_soort_terug_tot_de_oude_afspraak(monkeypatch):
+    oud = dict(afspraak(), id=447, uniek="agenda:k:oud")
+    recent = [dict(afspraak(nummer="9998"), id=3000 - i, uniek=f"agenda:k:{i}") for i in range(500)]
+    gevraagd = []
+
+    def bord(pad, data=None):
+        gevraagd.append(pad)
+        if "soort=afspraak" not in pad:
+            return {"items": []}
+        return {"items": [oud]} if "tot_id=2501" in pad else {"items": recent}
+    monkeypatch.setattr(V.bord, "call", bord)
+    items = V.bak_items()
+    assert 447 in [it["id"] for it in items] and any("tot_id=2501" in p for p in gevraagd)
+    assert len([it for it in items if it["id"] == 447]) == 1
+
+
+def test_oude_firmacode_ha_telt_als_h_architects(bron):
+    kandidaat = next(x for x in V.bezoeken_in(PM, "2145") if x["map"] == NIEUW)
+    ha = afspraak()
+    ha["inhoud"] = json.dumps(dict(json.loads(ha["inhoud"]), firma="HA"))
+    assert V.kandidaatbewijs(kandidaat, {"afspraak": [ha]}, "2145") is not None
