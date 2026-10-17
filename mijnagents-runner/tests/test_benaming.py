@@ -34,7 +34,8 @@ def test_ee_met_collega_ertussen():
 
 
 def test_projectnummer_is_het_dossier():
-    b = benaming.benoem({"title": "Meeting 2145 Online Sophie en Nico"}, herken)
+    # H1-2, driehoeksoverleg C2, 17-10-2026: een ongecodeerde titel vraagt een bekende H-A-deal.
+    b = benaming.benoem({"title": "Meeting 2145 Online Sophie en Nico"}, herken, bekend={("HARC", "2145")})
     assert b["firma"] == "HARC" and b["dossier"] == "2145" and b["met_wie"] == "Sophie en Nico"
 
 

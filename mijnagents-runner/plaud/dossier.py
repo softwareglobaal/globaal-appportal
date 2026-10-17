@@ -91,7 +91,8 @@ def uit_locatie(verblijf):
 def _bekend(bekend, firma, nummer):
     if not bekend:
         return False
-    return (firma, nummer) in bekend or nummer in bekend          # oude aanroepers gaven alleen nummers
+    # H1-2, driehoeksoverleg C2, 17-10-2026: een kaal nummer bewijst geen firma.
+    return (firma, nummer) in bekend
 
 
 def beslis(bewijzen, herkenning=None, model=None, bekend=None):

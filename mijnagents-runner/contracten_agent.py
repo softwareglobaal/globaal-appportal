@@ -265,7 +265,9 @@ def nummer_van_voorbereiding(voorbereiding, titel_nummer, jaar_nu=None):
     bestaand = str(((voorbereiding or {}).get("velden") or {}).get("project_nummer") or "").strip()
     if not bestaand:
         return titel_nummer
-    nummer = nummerlezer.ha_nummer(bestaand, "nummerveld", jaar_nu)
+    # H1-2, driehoeksoverleg C2, 17-10-2026: dit is het gestructureerde H-A-veld van de voorbereiding,
+    # geen vrije titel. Valideer de bevestigde nummerregel zonder het veld als een externe deal te vermommen.
+    nummer = bestaand if nummerlezer.ha_lezingen(bestaand, jaar_nu) else ""
     if not nummer:
         raise NummerFout(f"voorbereiding bevat geen bevestigd H-A-projectnummer: {bestaand}")
     if titel_nummer and titel_nummer != nummer:

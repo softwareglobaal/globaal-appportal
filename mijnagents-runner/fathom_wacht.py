@@ -110,11 +110,12 @@ def koppel_deal(g, deals):
     code = nummerlezer.agendacode_van_titel(titel)
     if code and nummerlezer.firma_van_code(code) != "HARC":
         return None, "geen bewezen H-A-dossierkoppeling"
-    # een H-A-nummer uit de titel, alleen als er precies een is (geen postcode, huisnummer of jaartal)
+    # H1-2, driehoeksoverleg C2, 17-10-2026: een onzeker getal telt alleen bij een bestaande H-A-deal.
     nummers = {k.nummer for k in nummerlezer.lees(titel, "vergadertitel") if k.firma == "HARC"}
     if len(nummers) > 1:
         return None, "meer projectnummers in de titel; nakijken"
-    n = next(iter(nummers), "")
+    bekend = {("HARC", str(d["nummer"])) for d in deals if d.get("nummer")}
+    n = nummerlezer.ha_nummer(titel, "vergadertitel", bekend=bekend)
     if n:
         passend = [d for d in deals if d["nummer"] == n]
         if len(passend) == 1:
@@ -330,8 +331,9 @@ def main():
             bewijzen = dossier.uit_tekst("titel", g.get("title") or g.get("meeting_title") or "")
             if deal and deal.get("nummer") and hoe == "e-mail van een deelnemer":
                 bewijzen.append(dossier.bewijs("deelnemer", "HARC", deal["nummer"], hoe))
+            # H1-2, driehoeksoverleg C2, 17-10-2026: dezelfde firmacomposiet als in koppel_deal.
             besl = dossier.beslis(bewijzen, herk, dossier.uit_tekst("model", herk.get("project") or ""),
-                                  bekend={str(d["nummer"]) for d in deals if d.get("nummer")})
+                                  bekend={("HARC", str(d["nummer"])) for d in deals if d.get("nummer")})
             if deal and deal.get("nummer") != besl["projectnummer"]:
                 deal = None                 # een deal die niet bij het beslist dossier hoort, krijgt geen kopie
             rij = {"uniek": f"fathom:{gid}", "datum": start[:10], "start": start[11:16], "minuten": duur,

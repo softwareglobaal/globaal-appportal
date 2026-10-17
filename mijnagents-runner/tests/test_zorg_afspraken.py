@@ -219,9 +219,9 @@ check("de bordregels van de zorgstap noemen geen praktijk, behandelaar of plaats
 # een kine-item dat op werk staat, wordt privé, zonder firmavraag, met behoud van het Google-ID
 _werk = {"kalender": W.WERKAGENDA, "id": "werk-kine", "titel": "VR !! kine: hand mo", "start": "2026-10-21T08:30:00+02:00",
          "einde": "2026-10-21T09:00:00+02:00", "omschrijving": "Agendawacht vraagt: zeg voor welke firma en welke klant.\n\n",
-         "locatie": "", "hele_dag": False, "deelnemers": []}
+         "locatie": "", "hele_dag": False, "deelnemers": [], "maker": W.WERKAGENDA}
 _ins, _pat, _mov = [], [], []
-W._insert, W._patch, W._verplaats_naar, W._lees_event = _nep_insert, (lambda a, body, tok, toch=False: _pat.append((a["id"], body))), \
+W._insert, W._patch, W._verplaats_naar, W._lees_event = _nep_insert, (lambda a, body, tok, **vlaggen: _pat.append((a["id"], body))), \
     (lambda x, doel, tok: _mov.append((x["id"], doel))), (lambda kal, eid, tok: None)
 try:
     _r3 = W.zorg_afspraken_zetten([], [_werk], "t", W.nu_lokaal().replace(year=2026, month=10, day=15))
@@ -360,7 +360,7 @@ _c6.commit()
 _w7 = dict(_werk, id="w7", start=_tv, einde=_tv)
 for _lees, _verwacht in (({W.PRIVE_AGENDA: {"summary": "!! [PR] Kine: hand mo", "description": "Van de werkagenda naar privé"},
                            W.WERKAGENDA: {"status": "cancelled"}}, (1, 0)), ({}, (0, 1))):
-    W._verplaats_naar, W._patch = (lambda x, doel, tok: None), (lambda a, body, tok, toch=False: None)
+    W._verplaats_naar, W._patch = (lambda x, doel, tok: None), (lambda a, body, tok, **vlaggen: None)
     W._lees_event = lambda kal, eid, tok, _l=_lees: _l.get(kal)
     try:
         _r7 = W.zorg_afspraken_zetten([], [_w7], "t")

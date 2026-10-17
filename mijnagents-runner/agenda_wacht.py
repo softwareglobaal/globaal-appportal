@@ -419,12 +419,17 @@ def lees_titel(titel):
     # als gewone afspraak, zonder autootje en met de melding van de agenda.
     # Een opmerking tussen haakjes maakt van een afspraak geen rit: '[TKNB-IN] Tom bellen (onderweg naar
     # Aalst)' kreeg op 26-09-2026 het autootje en rood (FR-61).
+    # H1-1, driehoeksoverleg C2, 17-10-2026: alle codes lezen; de eerste is geen bewijs van een firma.
+    firmas = list(dict.fromkeys(AGENDACODE_NAAR_FIRMA.get(m.group(1).upper(), m.group(1).upper())
+                               for m in CODE_RE.finditer(t)))
+    conflict = len(firmas) > 1
     uit = {"reistijd": bool(re.search(r"reistijd|\brijden naar\b|\bonderweg naar\b|\bnaar huis\b",
                                       re.sub(r"\([^)]*\)", "", t), re.I))
                        or t.startswith("🚗"),
-           "buiten": "!!" in t, "onzeker": "??" in t, "firma": "", "soort": "", "type": "", "nummer": "", "klant": ""}
+           "buiten": "!!" in t, "onzeker": "??" in t, "firma": "", "firmas": firmas,
+           "firma_conflict": conflict, "soort": "", "type": "", "nummer": "", "klant": ""}
     m = CODE_RE.search(t)
-    if m:
+    if m and not conflict:
         gevonden = m.group(1).upper()
         uit["firma"] = AGENDACODE_NAAR_FIRMA.get(gevonden, gevonden)
         uit["agendacode"] = gevonden if gevonden in AGENDACODE_NAAR_FIRMA else ""
@@ -458,7 +463,7 @@ def lees_titel(titel):
         uit["nummer"] = kandidaat.nummer
     kaal = re.sub(rf"\b{uit['nummer']}\b", "", rest, count=1) if uit["nummer"] else rest
     uit["klant"] = kaal.strip(" -:").split(" - ")[0][:80]
-    uit["conform"] = bool(m) or uit["reistijd"]
+    uit["conform"] = (bool(m) and not conflict) or uit["reistijd"]
     return uit
 
 
@@ -474,6 +479,8 @@ def deals_index():
 
 
 def koppel(info, titel, deals):
+    if info.get("firma_conflict"):
+        return None, "meer firmacodes in de titel; geen dossierkoppeling"
     code = nummerlezer.agendacode_van_titel(titel) or info.get("firma") or ""
     firma = nummerlezer.firma_van_code(code)
     # Een gelijk nummer bij UB of TK is geen bewijs voor een H-A-deal.
@@ -523,6 +530,10 @@ def melding_gewenst(a):
 
 class GeenSchrijfrecht(Exception):
     """Ik probeerde te schrijven in een agenda waar dat niet mag."""
+
+
+class TitelVoorstel(Exception):
+    """De titel heeft geen bewezen schrijfrecht; de voorgestelde titel staat in het verslag."""
 
 
 class DagMarkering(Exception):
@@ -654,13 +665,135 @@ def canoniek(titel, online=None):
     return nieuw
 
 
-def _patch(a, body, tok, toch=False):
+def _eigen_accounts():
+    """H1-1c, driehoeksoverleg C4, 17-10-2026: de twee eigen agenda-accounts, geen firma- of groepsagenda's."""
+    return {adres.strip().lower() for adres in (WERKAGENDA, PRIVE_AGENDA)}
+
+
+def _eigen_hulpblok(a, nieuw, eigen_rit=False):
+    """C5: maker, gasten, merk en titelovergang bewijzen samen een eigen mail- of ritblok."""
+    merk = a.get("_merk") or {}
+    maker = a.get("maker")
+    if (not isinstance(merk, dict) or not isinstance(maker, str) or maker.strip().lower() not in _eigen_accounts()
+            or a.get("deelnemers") or a.get("_agendagasten")):
+        return False
+    mailmerk = merk.get(MAILMERK)
+    geldig_mailmerk = isinstance(mailmerk, str) and bool(re.fullmatch(r"(?:z:|opgelost:)?[0-9a-f]{16}", mailmerk))
+    oude_titel = a.get("titel") or ""
+    rittitel = nieuw.lstrip().startswith("🚗")
+    mailovergang = (oude_titel.startswith("VR Agendawacht:")
+                    and (nieuw.startswith("VR Agendawacht:") or nieuw.startswith("Opgelost:")))
+    return (bool(a.get("id")) and merk.get(RITMERK) == a["id"] and _rit_tekst(a) and rittitel
+            or a.get("kalender") == PRIVE_AGENDA and geldig_mailmerk and mailovergang
+            or eigen_rit and "OSRM" in (a.get("omschrijving") or "") and rittitel)
+
+
+def _titel_patch_reden(a, nieuw, eigen_rit=False, eigen_zorgverhuis=False, alleen_vr=False,
+                       uit_onderzoek=False):
+    """H1-1c, driehoeksoverleg C4, 17-10-2026: alleen bewezen maker, gasten en route geven titelrecht."""
+    oud = a.get("titel")
+    if not isinstance(oud, str) or not isinstance(nieuw, str) or "deelnemers" not in a:
+        return "gasten, maker, omschrijving of oude titel niet volledig bekend"
+    if not isinstance(a["deelnemers"], list) or any(not isinstance(g, str) for g in a["deelnemers"]):
+        return "gasten, maker of omschrijving niet volledig bekend"
+    if any(g.strip().lower() not in _eigen_accounts() for g in a["deelnemers"]):
+        return "externe gast"
+    merk = a.get("_merk") or {}
+    heeft_hulpmerk = isinstance(merk, dict) and any(merk.get(k) for k in (RITMERK, MAILMERK, ZORGMERK))
+    if (a["deelnemers"] or a.get("_agendagasten")) and (heeft_hulpmerk or eigen_rit or eigen_zorgverhuis):
+        return "eigen blok met gasten"
+    maker = a.get("maker")
+    if not isinstance(maker, str) or not maker.strip():
+        return "maker onbekend"
+    if maker.strip().lower() not in _eigen_accounts():
+        return "door een ander gemaakt"
+    mailmerk = merk.get(MAILMERK) if isinstance(merk, dict) else None
+    if (a.get("kalender") == PRIVE_AGENDA and isinstance(mailmerk, str)
+            and re.fullmatch(r"(?:z:|opgelost:)?[0-9a-f]{16}", mailmerk)
+            and not ((oud.startswith("VR Agendawacht:"))
+                     and (nieuw.startswith("VR Agendawacht:") or nieuw.startswith("Opgelost:")))):
+        return "mailblok zonder verwachte titelovergang"
+    if ((isinstance(merk, dict) and a.get("id") and merk.get(RITMERK) == a["id"] and _rit_tekst(a)
+         or eigen_rit and "OSRM" in (a.get("omschrijving") or ""))
+            and not nieuw.lstrip().startswith("🚗")):
+        return "ritblok zonder rittitel"
+    eigen = not eigen_zorgverhuis and _eigen_hulpblok(a, nieuw, eigen_rit)
+    if eigen:
+        return ""
+    if not isinstance(a.get("omschrijving"), str):
+        return "omschrijving onbekend"
+    if eigen_zorgverhuis and (a.get("_titel_bronkalender") != WERKAGENDA
+                              or a.get("kalender") != PRIVE_AGENDA):
+        return "geen zorgverhuizing van werk naar privé"
+    # De oude vraagroute zette VR ook op een Calendly-omschrijving. Precies die prefixwijziging
+    # blijft mogelijk onder haar bestaande kalender-, gast- en reeksvoorwaarden.
+    vr_alleen = (a.get("kalender") == WERKAGENDA and not a.get("_agendagasten")
+                 and not a.get("_terugkerend") and not a.get("_archief")
+                 and alleen_vr)
+    if vr_alleen:
+        return ""
+    if (a.get("kalender") == WERKAGENDA and oud.startswith("VR ") != nieuw.startswith("VR ")
+            and not (uit_onderzoek and oud.startswith("VR ") and not nieuw.startswith("VR "))):
+        return "VR met andere titelwijziging"
+    if is_calendly(a):
+        return "Calendly-boeking"
+    oud_info, nieuw_info = lees_titel(oud), lees_titel(nieuw)
+    if oud_info["firma_conflict"] or nieuw_info["firma_conflict"]:
+        return "meer verschillende firmacodes in de titel"
+    if eigen_zorgverhuis and nieuw_info["firma"] != "PRIVE":
+        return "zorgverhuizing zonder privécode"
+    if oud_info["firma"] and oud_info["firma"] != nieuw_info["firma"]:
+        if eigen_zorgverhuis:
+            return ""
+        return "firmawissel"
+    return ""
+
+
+def _reeks_als_afspraak(a, reeks):
+    """H1-1, driehoeksoverleg C2, 17-10-2026: de gelezen reeks met haar echte gast- en makerbewijs."""
+    gasten = reeks.get("attendees", [])
+    intern = {e.strip().lower() for e in agenda.interne_adressen() if isinstance(e, str)}
+    deelnemers = [g.get("email") if isinstance(g, dict) else None for g in gasten] if isinstance(gasten, list) else [None]
+    deelnemers = [g for g in deelnemers if not isinstance(g, str) or g.strip().lower() not in intern]
+    deelnemers += a["deelnemers"] if isinstance(a.get("deelnemers"), list) else [None]
+    creator = reeks.get("creator") or {}
+    maker_reeks = creator.get("email") if isinstance(creator, dict) else None
+    maker_a = a.get("maker")
+    maker_bekend = (maker_a if maker_a.strip().lower() in CALENDLY_ACCOUNTS else maker_reeks) \
+        if isinstance(maker_a, str) else None
+    oms_reeks = reeks.get("description") or ""
+    omschrijving = (oms_reeks + "\n" + a["omschrijving"]
+                    if isinstance(oms_reeks, str) and isinstance(a.get("omschrijving"), str) else None)
+    return {"kalender": a["kalender"], "id": a["_reeks"], "titel": reeks.get("summary") or "",
+            "deelnemers": deelnemers,
+            "_agendagasten": list(a.get("_agendagasten") or []),
+            "maker": maker_bekend,
+            "omschrijving": omschrijving}
+
+
+def _patch(a, body, tok, toch=False, eigen_rit=False, eigen_zorgverhuis=False, uit_onderzoek=False):
     import urllib.parse
     import urllib.request
     if not mag_schrijven(a["kalender"]):
         raise GeenSchrijfrecht(a["kalender"])
+    # sendUpdates=none: een gast krijgt nooit een mail omdat de agent iets bijzet. Google
+    # doet dat standaard ook niet, maar hier staat het expliciet, met een test erop.
+    url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
+           f"{urllib.parse.quote(a['id'], safe='')}?sendUpdates=none")
+    aangevraagd = body.get("summary")
     if body.get("summary"):
         body["summary"] = canoniek(body["summary"])
+    # H1-1, driehoeksoverleg C2, 17-10-2026: elke route loopt hierlangs, ook reeksen en eigen meldingen.
+    if "summary" in body and (body["summary"] != a.get("titel") or "titel" not in a):
+        alleen_vr = (isinstance(aangevraagd, str) and isinstance(a.get("titel"), str)
+                    and (aangevraagd == "VR " + a["titel"] or a["titel"] == "VR " + aangevraagd))
+        reden = _titel_patch_reden(a, body["summary"], eigen_rit=eigen_rit,
+                                   eigen_zorgverhuis=eigen_zorgverhuis, alleen_vr=alleen_vr,
+                                   uit_onderzoek=uit_onderzoek)
+        if reden:
+            ag.log("titelwijziging", "voorstel", "VOORSTEL: titel niet gewijzigd",
+                   f"{_toon(a)} -> {str(body['summary'])[:90]} ({reden})")
+            raise TitelVoorstel(reden)
     # een afspraak naar een dag verzetten die een markering afsluit, kan alleen met een ja van Mehdi (FR-83)
     if "start" in body and not toch:
         dag = ((body.get("start") or {}).get("dateTime") or "")[:10]
@@ -670,10 +803,6 @@ def _patch(a, body, tok, toch=False):
             raise DagMarkering(f"{dag} staat '{m}': '{(body.get('summary') or a.get('titel') or '')[:60]}' kan die dag niet zonder ja van Mehdi")
     elif "start" in body:
         _ja_stempel(body, ((body.get("start") or {}).get("dateTime") or "")[:10])
-    # sendUpdates=none: een gast krijgt nooit een mail omdat de agent iets bijzet. Google
-    # doet dat standaard ook niet, maar hier staat het expliciet, met een test erop.
-    url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
-           f"{urllib.parse.quote(a['id'], safe='')}?sendUpdates=none")
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PATCH",
                                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
     urllib.request.urlopen(req, timeout=30)
@@ -1043,6 +1172,9 @@ def codes_twee_letters(titel, online=None):
     if not m:
         return titel
     info = lees_titel(titel)
+    # H1-1b, driehoeksoverleg C3, 17-10-2026: twee firma's hebben geen canonieke gekozen firma.
+    if info["firma_conflict"]:
+        return titel
     firma, soort = info.get("firma"), (m.group(2) or "").upper()
     if soort == "B2B":
         if "!!" in titel or online is False:
@@ -1123,21 +1255,30 @@ def codes_reeksen(items, droog=False):
     tok = agenda._toegang()
     gedaan, regels, gezien = 0, [], set()
     for a in items:
-        if not a.get("_reeks") or a["_reeks"] in gezien or a.get("deelnemers") or a.get("_archief") \
-                or not mag_schrijven(a.get("kalender", "")) or (a.get("maker") or WERKAGENDA).lower() != WERKAGENDA:
+        if not a.get("_reeks") or a["_reeks"] in gezien or a.get("_archief") \
+                or not mag_schrijven(a.get("kalender", "")):
             continue
         gezien.add(a["_reeks"])
+        # H1-1b, driehoeksoverleg C3, 17-10-2026: bekend verbod vraagt geen GET van de reeks.
+        if a.get("deelnemers") or is_calendly(a):
+            reden = "externe gast" if a.get("deelnemers") else "Calendly-boeking"
+            regels.append(f"reeks '{a['titel'][:50]}': VOORSTEL (titel niet gewijzigd; {reden})")
+            continue
         try:
             url = f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='@')}/events/{urllib.parse.quote(a['_reeks'])}"
             reeks = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": "Bearer " + tok}), timeout=30))
             oud = reeks.get("summary") or ""
-            if [g for g in reeks.get("attendees") or [] if (g.get("email") or "").lower() not in agenda.interne_adressen()]:
-                continue          # gasten van buiten: een voorstel; een agendagast (collega) telt niet (03-10-2026)
             nieuw = re.sub(r"\[LARA\]", "[LA]", oud, flags=re.I) if "[LARA]" in oud.upper() else codes_twee_letters(oud, _online(a))
             if nieuw == oud:
                 continue
+            reeks_a = _reeks_als_afspraak(a, reeks)
+            if not isinstance(reeks_a["maker"], str) or reeks_a["maker"].strip().lower() not in _eigen_accounts():
+                # H1-1, driehoeksoverleg C2, 17-10-2026: ook een reeks van een ander wordt zichtbaar als voorstel.
+                regels.append(f"reeks '{oud[:50]}': VOORSTEL '{nieuw[:60]}' (door een ander gemaakt)")
+                ag.log("titelwijziging", "voorstel", "VOORSTEL: titel niet gewijzigd", regels[-1])
+                continue
             if not droog:
-                _patch({"kalender": a["kalender"], "id": a["_reeks"], "titel": oud}, {"summary": nieuw}, tok)
+                _patch(reeks_a, {"summary": nieuw}, tok)
             gedaan += 1
             regels.append(f"reeks '{oud[:50]}' -> '{nieuw[:60]}'")
         except Exception as e:  # noqa: BLE001
@@ -1167,13 +1308,19 @@ def uitroep_vooraan(items, alleen_dag=None):
     gedaan, regels, reeksen = 0, [], set()
     for a in items:
         if a.get("hele_dag") or "T" not in a.get("start", "") or _voorbij(a["start"], nu) \
-                or a.get("_archief") or a.get("deelnemers") or not mag_schrijven(a.get("kalender", "")):
+                or a.get("_archief") or not mag_schrijven(a.get("kalender", "")):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
             continue
         nieuw = tekens_vooraan(a["titel"])
         if nieuw == a["titel"]:
             continue
+        # H1-1b, driehoeksoverleg C3, 17-10-2026: ook hier geen reeks-GET bij bekende weigering.
+        if a.get("deelnemers") or is_calendly(a):
+            reden = "externe gast" if a.get("deelnemers") else "Calendly-boeking"
+            regels.append(f"{a['start'][:16]} {a['titel'][:45]}: VOORSTEL '{nieuw[:60]}' ({reden})")
+            continue
+        voorgesteld = nieuw
         try:
             if a.get("_reeks"):
                 if a["_reeks"] not in reeksen:
@@ -1182,7 +1329,8 @@ def uitroep_vooraan(items, alleen_dag=None):
                     reeks = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": "Bearer " + tok}), timeout=30))
                     nieuw_reeks = tekens_vooraan(reeks.get("summary") or "")
                     if nieuw_reeks != (reeks.get("summary") or ""):
-                        _patch({"kalender": a["kalender"], "id": a["_reeks"]}, {"summary": nieuw_reeks}, tok)
+                        voorgesteld = nieuw_reeks
+                        _patch(_reeks_als_afspraak(a, reeks), {"summary": nieuw_reeks}, tok)
                         regels.append(f"reeks '{(reeks.get('summary') or '')[:50]}' -> '{nieuw_reeks[:60]}'")
                         gedaan += 1
             else:
@@ -1190,6 +1338,8 @@ def uitroep_vooraan(items, alleen_dag=None):
                 regels.append(f"{a['start'][:16]} '{a['titel'][:50]}' -> '{nieuw[:60]}'")
                 gedaan += 1
             a["titel"] = nieuw
+        except TitelVoorstel as e:
+            regels.append(f"{a['start'][:16]} {a['titel'][:45]}: VOORSTEL '{voorgesteld[:60]}' ({e})")
         except Exception as e:  # noqa: BLE001
             regels.append(f"{a['start'][:16]} {a['titel'][:45]}: !! niet vooraan gezet ({type(e).__name__})")
     return gedaan, regels
@@ -1398,7 +1548,7 @@ def titel_uit_onderzoek(a):
     schrijven wat ik ga doen, dit is je werk'. Lukt een stap niet, dan geen titel: dan vraagt de agent het."""
     titel = a["titel"]
     info = lees_titel(titel)
-    if info.get("firma") or info["reistijd"] or a.get("hele_dag"):
+    if info.get("firma") or info["firma_conflict"] or info["reistijd"] or a.get("hele_dag"):
         return None, ""
     # Een bekende partner op het thuisadres is geen prospect van een willekeurige deal
     # die toevallig hetzelfde adres bevat. De koppeling partner -> firma staat in de master.
@@ -1535,10 +1685,17 @@ def titels_aanvullen(items, alleen_dag=None):
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: VOORSTEL '{nieuw[:90]}' ({uitleg})")
             continue
         try:
-            _patch(a, {"summary": nieuw}, tok)
+            # De enige gecombineerde VR-oplossing komt uit het herhaalbaar onderzoeksresultaat.
+            onderzoek = False
+            if a["titel"].startswith("VR ") and not nieuw.startswith("VR "):
+                gevonden, _ = titel_uit_onderzoek(a)
+                onderzoek = bool(gevonden) and canoniek(gevonden, _online(a)) == nieuw
+            _patch(a, {"summary": nieuw}, tok, uit_onderzoek=onderzoek)
             regels.append(f"{a['start'][:16]} '{a['titel'][:45]}' -> '{nieuw[:80]}' ({uitleg})")
             a["titel"] = nieuw
             gedaan += 1
+        except TitelVoorstel as e:
+            regels.append(f"{a['start'][:16]} {a['titel'][:45]}: VOORSTEL '{nieuw[:90]}' ({e})")
         except Exception as e:  # noqa: BLE001
             regels.append(f"{a['start'][:16]} {a['titel'][:45]}: titel niet aangevuld ({type(e).__name__})")
     return gedaan, regels
@@ -1663,6 +1820,8 @@ def zoom_zetten(items, alleen_dag=None):
 
 def titelfouten(a, info):
     """De fouten die Mehdi hard wil zien. Geeft een lijst met korte redenen."""
+    if info["firma_conflict"]:
+        return ["meer verschillende firmacodes: " + ", ".join(info["firmas"])]
     if info["reistijd"] or a.get("hele_dag"):
         return []
     fouten = []
@@ -1735,6 +1894,8 @@ def kleur_gewenst(a, info):
       daarna blauw voor klant online, oranje voor prospect online, groen voor intern.
     - Een titel zonder code krijgt geen kleur en is een fout, geen uitzondering.
     """
+    if info.get("firma_conflict"):
+        return ""   # H1-1, driehoeksoverleg C2, 17-10-2026: ook een rit met twee firma's behoudt zijn kleur.
     if a.get("kalender", "") in AGENDA_VASTE_KLEUR:
         return ""   # die agenda heeft een vaste kleur, per afspraak niets zetten
     if info["reistijd"]:
@@ -2664,9 +2825,15 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
                        "meestal de dag ervoor en wordt dan aan dit item gekoppeld.")
         oms = "\n".join(r for r in (x.get("omschrijving") or "").splitlines() if not r.startswith("Agendawacht vraagt:")).strip()
         body["description"] = (oms + "\n\n" + notitie).strip()
+        verhuisd_item = dict(x, kalender=PRIVE_AGENDA, _titel_bronkalender=x["kalender"])
+        reden = _titel_patch_reden(verhuisd_item, canoniek(body["summary"]), eigen_zorgverhuis=True)
+        if reden:
+            st["open"] += 1
+            st["prive"].append(f"{x['start'][:16]}: VOORSTEL zorgafspraak naar privé te verhuizen ({reden})")
+            continue
         try:
             _verplaats_naar(x, PRIVE_AGENDA, tok)
-            _patch(dict(x, kalender=PRIVE_AGENDA), body, tok)
+            _patch(verhuisd_item, body, tok, eigen_zorgverhuis=True)
             probleem = _zorg_nalezen(PRIVE_AGENDA, x["id"], tok, titel_pr=True, weg_van=WERKAGENDA,
                                      merk=(body.get("extendedProperties") or {}).get("private", {}).get(ZORGMERK))
             if probleem:
@@ -2833,6 +3000,8 @@ def reistijd_zetten(items, alleen_dag=None):
                 and a.get("start", "")[:10] in vrij:
             continue
         info = lees_titel(a["titel"])
+        if info["firma_conflict"]:
+            continue          # H1-1, driehoeksoverleg C2, 17-10-2026: geen rit uit een dubbelzinnige firma.
         # Geen auto die dag: geen rit. Staat er toch een buitenafspraak, dan is dat een
         # waarschuwing (collega die het vergat), geen gewone rit. Mandaat van Mehdi, 22-09-2026.
         if a.get("start", "")[:10] in zonder_auto and not lees_titel(a["titel"])["reistijd"]:
@@ -3232,7 +3401,7 @@ def reistijd_zetten(items, alleen_dag=None):
             if melding is not None and (r.get("useDefault", True) or (r.get("overrides") or []) != melding):
                 wijzig["reminders"] = {"useDefault": False, "overrides": melding}
             if wijzig:
-                _patch(x, wijzig, tok)
+                _patch(x, wijzig, tok, eigen_rit=True)
                 return True
             return False
         uitleg_h = f"Reistijd voor: {a['titel']} ({heen} min = " + ("live verkeer Google" if fh == "live" else f"vrije rijtijd x filefactor {fh}") + f" + {BUFFER_MIN} min buffer, OSRM; adres uit {bron_adres}; rit {van_plaats} → {plaats})"
@@ -3689,8 +3858,9 @@ def projectnummers_zetten(items, alleen_dag=None, ook_verleden=False):
         if lees_titel(nieuw)["nummer"] != nr:
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: nummer {nr} gevonden, maar de titel laat zich niet aanvullen")
             continue
-        extern = [g for g in a.get("deelnemers") or [] if not any(e in g.lower() for e in EIGEN_ADRESSEN)]
-        if extern or a.get("_terugkerend") or a.get("_reeks"):
+        extern = [g for g in a.get("deelnemers") or [] if not isinstance(g, str)
+                  or g.strip().lower() not in _eigen_accounts()]
+        if extern or a.get("_agendagasten") or a.get("_terugkerend") or a.get("_reeks"):
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: VOORSTEL '{nieuw}' ({bron})")
             continue
         try:
@@ -3698,6 +3868,8 @@ def projectnummers_zetten(items, alleen_dag=None, ook_verleden=False):
             a["titel"] = nieuw
             gezet += 1
             regels.append(f"{a['start'][:16]} {nieuw[:70]}: projectnummer {nr} ({bron})")
+        except TitelVoorstel as e:
+            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: VOORSTEL '{nieuw}' ({e})")
         except Exception as e:  # noqa: BLE001
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: projectnummer niet gezet ({type(e).__name__})")
     return gezet, regels
@@ -4211,7 +4383,8 @@ def main():
                 continue
             kal = KALENDERS.get(a["kalender"], a["kalender"])
             dag = a["start"][:10]
-            afdeling = FIRMA_AFDELING.get(info["firma"]) or KALENDER_AFDELING.get(kal) or "mehdi"
+            afdeling = (FIRMA_AFDELING.get(info["firma"]) or KALENDER_AFDELING.get(kal) or "mehdi") \
+                if not info["firma_conflict"] else "mehdi"
             deal, hoe = (None, "")
             if afdeling == "h-architects":
                 deal, hoe = koppel(info, a["titel"], deals)
@@ -4330,11 +4503,12 @@ def main():
         ag.log(f"dag {vandaag}", "schrijf", f"telefoon: {tg} nummer(s) bovenaan gezet", "\n".join(tregels))
         ag.log(f"dag {vandaag}", "schrijf", f"titels: {ng} rechtgezet uit vrije tekst; link-notitie: {zg} gezet",
                "\n".join(nregels + zregels))
-        if zregels or [r for r in nregels if "VOORSTEL" in r]:
+        voorstellen = [r for r in nregels + pregels if "VOORSTEL" in r]
+        if zregels or voorstellen:
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
                           "titel": "Link doorsturen of titel nakijken",
                           "uniek": f"agenda-zoom-titel:{vandaag}:{dag_grens or 'alle'}",
-                          "inhoud": "\n".join("- " + r for r in (zregels + [r for r in nregels if "VOORSTEL" in r])[:30])}])
+                          "inhoud": "\n".join("- " + r for r in (zregels + voorstellen)[:30])}])
         # eerst de gewone herinneringen, dan de ritten: zo heeft de vertrekmelding het laatste woord
         gezet, al, weg, fout_h = herinneringen_zetten(kort_items, dag_grens)
         rg, ral, rgeen, rfout, rregels = reistijd_zetten(rit_items, dag_grens)
@@ -4421,7 +4595,6 @@ def main():
             _, routes_gebruikt = routes_vandaag()
             ag.log(f"dag {vandaag}", "bron", f"Google Routes: {routes_gebruikt} van {ROUTES_DAGLIMIET} aanroepen vandaag"
                    + (" (plafond bereikt, reistijden verder op de filefactor)" if ROUTES_GESTOPT else ""))
-        ag.log_verstuur()
         # Norm N4: melden welk regelboek ik deze ronde las, zodat achteraf te zien is
         # welke versie van de regels gold toen ik iets deed.
         try:
@@ -4517,6 +4690,8 @@ def main():
                            f"{len(niet_conform)} zonder code; "
                            f"{len(onvolledig)} zonder adres; {onderweg}",
                     nood=noden)
+        # H1-1, driehoeksoverleg C2, 17-10-2026: ook vragen en de vastgelopen-oproep horen bij dit rondeverslag.
+        ag.log_verstuur()
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
         ag.log_verstuur()

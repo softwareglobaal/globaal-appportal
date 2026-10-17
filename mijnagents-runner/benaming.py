@@ -53,9 +53,10 @@ def _is_eigen(naam):
     return n in EIGEN or n.startswith("afspraken") or n.startswith("mehdi")
 
 
-def benoem(g, collega_herken=None):
+def benoem(g, collega_herken=None, bekend=None):
     """g = gesprek.json van Fathom. collega_herken(naam) -> collega-dict of None
-    (koppelingen.organisatie.herken). Geeft de delen, de bron per deel en wat ontbreekt."""
+    (koppelingen.organisatie.herken). bekend bevat bestaande dossiers als (firma, nummer).
+    Geeft de delen, de bron per deel en wat ontbreekt."""
     titel = (g.get("title") or g.get("meeting_title") or "").strip()
     herk = g.get("herkenning") or {}
     uit = {"firma": "", "dossier": "", "met_wie": "", "onderwerp": "", "soort": "", "prive": bool(herk.get("prive")),
@@ -66,7 +67,13 @@ def benoem(g, collega_herken=None):
             uit[deel] = _schoon(waarde) if deel != "firma" else waarde
             uit["bron"][deel] = bron
 
+    def zonder_kandidaatgetallen(tekst, kandidaten):
+        for nummer in {k.nummer for k in kandidaten}:
+            tekst = re.sub(rf"\b{re.escape(nummer)}\b", "", tekst)
+        return tekst
+
     rest = titel
+    onbevestigd_projectnummer = False
     # 1. de agendacode [FIRMA-SOORT]
     m = CODE.search(titel)
     if m:
@@ -133,11 +140,16 @@ def benoem(g, collega_herken=None):
             rest = re.sub(r"\b(Klant|Prospect|Online|Meeting)\b", "", rest, flags=re.I)
     # 5. projectnummer van H-Architects, van elk jaar (gedeelde nummerlezer: geen postcode, huisnummer of
     #    jaartal; bij twee nummers geen keuze)
-    n = "" if uit["dossier"] else nummerlezer.ha_nummer(titel, "vergadertitel")
+    # H1-2, driehoeksoverleg C2, 17-10-2026: een los getal vraagt bevestiging op firma én nummer.
+    titel_kandidaten = [k for k in nummerlezer.lees(titel, "vergadertitel") if k.firma == "HARC"]
+    n = "" if uit["dossier"] else nummerlezer.ha_nummer(titel, "vergadertitel", bekend=bekend)
     if n and (uit["firma"] in ("", "HARC")):
         zet("firma", "HARC", "projectnummer in de titel")
         zet("dossier", n, "projectnummer in de titel")
-        rest = re.sub(rf"\b{n}\b", "", rest, count=1)
+    elif titel_kandidaten and not uit["dossier"]:
+        onbevestigd_projectnummer = True
+    # H1-2b, driehoeksoverleg C3, 17-10-2026: ook een afgewezen kandidaat is geen gesprekspartner.
+    rest = zonder_kandidaatgetallen(rest, titel_kandidaten)
     # 6. wat er van de titel overblijft: "klant - onderwerp"
     rest = _schoon(re.sub(r"\b(Meeting|Online)\b", "", rest, flags=re.I), 90)
     if rest and not GENERIEK.match(titel):
@@ -152,14 +164,21 @@ def benoem(g, collega_herken=None):
         # het "project" van de herkenning is meestal een omschrijving, geen dossier:
         # alleen een nummer of een korte naam telt als dossier, de rest is onderwerp
         project = herk.get("project") or ""
-        pn = nummerlezer.ha_nummer(project, "vergadertitel")
-        if pn:
+        project_kandidaten = [k for k in nummerlezer.lees(project, "vergadertitel") if k.firma == "HARC"]
+        pn = nummerlezer.ha_nummer(project, "vergadertitel", bekend=bekend)
+        if pn and uit["firma"] in ("", "HARC"):
+            zet("firma", "HARC", "projectnummer in de herkenning")
             zet("dossier", pn, "projectnummer in de herkenning")
-        elif project and len(project) <= 32 and len(project.split()) <= 4:
+        elif (project and not project_kandidaten
+              and len(project) <= 32 and len(project.split()) <= 4):
+            # H1-2, driehoeksoverleg C2, 17-10-2026: een afgewezen nummer is ook geen korte projectnaam.
             zet("dossier", project, "herkenning Fathomwacht (project)")
+        elif project_kandidaten and not uit["dossier"]:
+            onbevestigd_projectnummer = True
         anderen = [x for x in (herk.get("personen") or []) if not _is_eigen(x)]
         zet("met_wie", " & ".join(anderen[:2]), "herkenning Fathomwacht (personen)")
-        zet("onderwerp", project if (project and not uit["dossier"] == _schoon(project)) else "", "herkenning Fathomwacht (project)")
+        project_onderwerp = _schoon(zonder_kandidaatgetallen(project, project_kandidaten))
+        zet("onderwerp", project_onderwerp if (project and not uit["dossier"] == _schoon(project)) else "", "herkenning Fathomwacht (project)")
         zet("onderwerp", (herk.get("thema") or "").split(":")[0], "herkenning Fathomwacht (thema)")
     # 8. een collega als gesprekspartner: intern, en zijn firma als er maar een is
     if collega_herken and uit["met_wie"] and not uit["dossier"]:
@@ -170,10 +189,12 @@ def benoem(g, collega_herken=None):
             if len(dv) == 1:
                 zet("firma", dv[0], "collega werkt voor een firma (kern)")
     # sales zonder dossier: de naam is het dossier (regel van Mehdi)
-    if uit["firma"] and uit["met_wie"] and not uit["dossier"]:
+    if uit["firma"] and uit["met_wie"] and not uit["dossier"] and not onbevestigd_projectnummer:
         zet("dossier", uit["met_wie"], "naam van de persoon (sales zonder dossier)")
 
     uit["ontbreekt"] = [d for d in ("firma", "dossier", "met_wie", "onderwerp") if not uit[d]]
+    if onbevestigd_projectnummer and not uit["dossier"]:
+        uit["ontbreekt"].append("projectnummer niet bevestigd")
     if uit["prive"]:
         uit["ontbreekt"] = [d for d in uit["ontbreekt"] if d not in ("firma", "dossier")]
     sterk = {"agendacode in de titel", "Calendly-titel", "projectnummer in de titel", "firmawoord vooraan in de titel"}

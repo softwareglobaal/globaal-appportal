@@ -36,29 +36,31 @@ def werk(agent, r, regels, data):
         r.bron("firmaregister kern via bestaande organisatiekoppeling", organisatie.firmas())
         if not r.werkwijze:
             raise RuntimeError("werkwijze niet beschikbaar op het bord")
-        gewijzigd = N.instelling(c, "regelsvingerafdruk")
-        import hashlib
-        vingerafdruk = hashlib.sha256(json.dumps(regels, sort_keys=True).encode()).hexdigest()
-        if gewijzigd != vingerafdruk:
-            with c:
-                c.execute("UPDATE item SET naam_vuil=1,structuur_vuil=1")
-                N.instelling(c, "regelsvingerafdruk", vingerafdruk)
+        regels_gewijzigd = N.hercontrole_regels(c, regels)
         gelezen = 0
         if agent == "benamingen-wacht":
             try:
                 ruleclient = N.lezer_van(regels["regelbron"], regels)
-                bron = N.controleer_regelbron(c, regels, ruleclient.rpc, ruleclient.download, force=gewijzigd != vingerafdruk)
+                dagmoment = N.instelling(c, "dagcontrole") != N.nu()[:10]
+                bron = N.controleer_regelbron(c, regels, ruleclient.rpc, ruleclient.download,
+                                              force=regels_gewijzigd or dagmoment)
             except Exception:
                 bron = {"geldig": False, "status": "accountroot niet vastgesteld; H-A-toetsing gepauzeerd"}
                 with c:
                     N.instelling(c, "regelbron", bron)
             r.bron("H-A regelbroncontrole", bron)
             if not bron.get("geldig"):
-                r.nood("Bevestigd H-A-regelboek niet beschikbaar of gewijzigd", "claude-code")
+                if bron.get("gevonden"):
+                    r.nood(f"{bron['gevonden']} gevonden, niet bevestigd; vastgepind "
+                           f"{bron['versie']}. Welke versie geldt?", "mehdi")
+                else:
+                    r.nood("Bevestigd H-A-regelboek niet beschikbaar of gewijzigd", "claude-code")
+            ha_bereiken = N.ha_bereiken(regels)
             for root in regels["roots"]:
                 try:
                     client = N.lezer_van(root, regels)
-                    gelezen += N.synchroniseer(c, root, client.namespace, client.rpc, regels)
+                    overslaan = [h["pad"] for h, opslag in ha_bereiken if opslag == root["id"]]
+                    gelezen += N.synchroniseer(c, root, client.namespace, client.rpc, regels, overslaan=overslaan)
                 except Exception as e:
                     fout = "Bron niet leesbaar of namespace niet bevestigd"
                     if isinstance(e, ValueError) and "nieuwe indexidentiteit" in str(e):
@@ -69,6 +71,18 @@ def werk(agent, r, regels, data):
                         c.execute("UPDATE scope SET fout=?,poging=? WHERE id=?",
                                   (fout, N.nu(), root["id"]))
                     r.nood("Dropbox-controlebereik niet volledig bereikbaar", "claude-code")
+            for bereik, opslag in ha_bereiken:
+                try:
+                    client = N.lezer_van(bereik, regels)
+                    gelezen += N.synchroniseer(c, bereik, client.namespace, client.rpc, regels,
+                                                 opslag_scope=opslag)
+                except Exception:
+                    with c:
+                        c.execute("INSERT OR IGNORE INTO scope(id,pad,namespace,verbinding) VALUES(?,?,?,?)",
+                                  (bereik["id"], bereik["pad"], str(bereik["namespace"]), bereik["verbinding"]))
+                        c.execute("UPDATE scope SET fout=?,poging=? WHERE id=?",
+                                  ("H-A-bereik niet leesbaar", N.nu(), bereik["id"]))
+                    r.nood("H-A-metadata niet volledig bereikbaar", "claude-code")
             try:
                 gelezen += N.lees_lokale_metadata(c, os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db"))
             except Exception:
@@ -98,6 +112,9 @@ def werk(agent, r, regels, data):
             json.dump(verslag, f, ensure_ascii=False, indent=2)
         os.chmod(tijdelijk, 0o600)
         os.replace(tijdelijk, doel)
+        stand = (verslag.get("regelbron") or {}).get("status", "nog niet gecontroleerd")
+        print(f"Naamstructuur: {gelezen} gelezen, {getoetst} getoetst, "
+              f"{verslag['tellingen'][agent]} open punten; regelbron: {stand}")
     finally:
         c.close()
 
