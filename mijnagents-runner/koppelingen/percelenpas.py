@@ -19,6 +19,7 @@ from collections import Counter
 
 BASIS = "https://omgeving.antwerpen.be/percelenpas"
 UITKOMST_GEEN = "Er zijn geen gekende bouwovertredingen"
+GEEN_VERGUNNINGEN = "Er zijn geen vergunningen voor dit perceel"  # fields.noResults van de stad (gemeten 17-10-2026)
 UITKOMST_WEL = "Vastgestelde bouwovertredingen"
 CAPAKEY = r"\d{5}[A-Z]\d{4}/\d{2}[A-Z_]\d{3}"
 # Een scherm dat twee keer hetzelfde toont, bewijst niet dat de stad klaar is met laden (Codex-ronde 7): zonder
@@ -313,8 +314,9 @@ def _tabelrijen(p):
 
 
 def _scherm_rijen(p, sectie):
-    if sectie == "vergunningen":
-        return [r["dossiernummer"] for r in _tabelrijen(p)]
+    if sectie == "vergunningen":  # nul rijen telt pas als het scherm het zegt, niet zolang het nog leeg is (FX31)
+        rijen = [r["dossiernummer"] for r in _tabelrijen(p)]
+        return rijen if rijen else ([] if GEEN_VERGUNNINGEN in p.locator("body").inner_text() else None)
     samen, lijst = bouwovertredingen_uit_tekst(_sectietekst(p, "Bouwovertredingen"))
     return [(x.get("dossiernummer", ""), x.get("registratienummer", "")) for x in lijst] if lijst else (
         [] if samen == "geen gekend" else None)
@@ -324,8 +326,7 @@ def _scherm_gelijk(p, sectie, verwacht, seconden=30):
     """Toont het scherm van de stad precies de rijen uit de bron, als multiset (ook nul en dubbele nummers)?
 
     Pas dan klopt de bron met wat een mens ziet en is de printscreen een bewijs (Codex FX29). De tabel pagineert niet
-    (main.js, 17-10-2026). Bij nul bouwovertredingen moet het scherm dat ook zeggen; bij nul vergunningen kan het
-    scherm geen rij tonen die de bron niet kent.
+    (main.js, 17-10-2026). Bij nul rijen moet het scherm dat uitdrukkelijk zeggen, met de tekst van de stad.
     """
     doel = Counter(verwacht)
     for _ in range(seconden):

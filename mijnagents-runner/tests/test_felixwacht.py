@@ -537,8 +537,11 @@ check("zonder bronantwoord valt lees() terug op het scherm, onvolledig en zonder
 
 
 class _NepScherm:
-    def __init__(self, rijen):
-        self._r = list(rijen)
+    def __init__(self, rijen, tekst=""):
+        self._r, self._t = list(rijen), tekst
+    def locator(self, *a, **k):
+        s = self
+        return type("L", (), {"inner_text": lambda self_: s._t})()
     def evaluate(self, *a, **k):
         r = self._r.pop(0) if len(self._r) > 1 else self._r[0]
         return [["Selecteer rij", "x", nr, "t"] for nr in r]
@@ -549,6 +552,9 @@ class _NepScherm:
 check("het scherm mag laden: pas gelijk als alle rijen er zijn", PP._scherm_gelijk(_NepScherm([[], ["1"], ["1", "2"]]), "vergunningen", ["1", "2"]))
 check("multiset: een dubbel nummer telt twee keer", not PP._scherm_gelijk(_NepScherm([["1"]]), "vergunningen", ["1", "1"], 3)
       and PP._scherm_gelijk(_NepScherm([["1", "1"]]), "vergunningen", ["1", "1"], 3))
+check("nul vergunningen telt pas als het scherm het zegt, niet zolang het leeg is (Codex FX31)",
+      not PP._scherm_gelijk(_NepScherm([[]]), "vergunningen", [], 3)
+      and PP._scherm_gelijk(_NepScherm([[]], "Er zijn geen vergunningen voor dit perceel."), "vergunningen", [], 3))
 check("een rij op het scherm die de bron niet kent, is ook geen gelijk", not PP._scherm_gelijk(_NepScherm([["1", "2"]]), "vergunningen", ["1"], 3))
 
 
