@@ -224,13 +224,37 @@ class WerfVerwerkingTest(unittest.TestCase):
     def test_commandline_zelfde_grendel_geen_bordimpersonatie(self):
         payload = {"dossier": "2309", "volgnr": 1, "soort": "voorbereid", "bron": "commandline"}
         self.assertEqual(self.client.post("/api/werfopdrachten/aanvragen", json=payload).status_code, 403)
+        self.assertEqual(self.client.post("/api/werfopdrachten/aanvragen", headers=TOKEN, json=payload).status_code, 400)
+        payload["reden"] = "Mehdi vroeg de voorbereiding via de commandline"
         first = self.client.post("/api/werfopdrachten/aanvragen", headers=TOKEN, json=payload).get_json()
         second = self.client.post("/api/werfopdrachten/aanvragen", headers=TOKEN, json=payload).get_json()
         self.assertTrue(first["nieuw"])
         self.assertFalse(second["nieuw"])
         self.assertEqual(first["opdracht"]["id"], second["opdracht"]["id"])
+        self.assertEqual(first["opdracht"]["bron"], {"soort": "commandline", "reden": payload["reden"]})
         with A.app.app_context():
             self.assertEqual(A.db().execute("SELECT van FROM klaarzet").fetchone()[0], "commandline:werfverslag-schrijver")
+
+    def test_commandline_mengt_geen_nieuwe_reden_in_een_bestaande_opdracht(self):
+        payload = {"dossier": "2309", "volgnr": 1, "soort": "voorbereid", "bron": "commandline", "reden": "Eerste reden van Mehdi"}
+        eerste = self.client.post("/api/werfopdrachten/aanvragen", headers=TOKEN, json=payload)
+        self.assertEqual(eerste.status_code, 200)
+        payload["reden"] = "Andere reden van Mehdi"
+        tweede = self.client.post("/api/werfopdrachten/aanvragen", headers=TOKEN, json=payload)
+        self.assertEqual(tweede.status_code, 409)
+        op = self.client.get("/api/werfopdrachten", headers=TOKEN).get_json()["opdrachten"][0]
+        self.assertEqual(op["bron"], {"soort": "commandline", "reden": "Eerste reden van Mehdi"})
+
+    def test_werkwijze_zaad_zet_ook_mandaat_op_agentkaart(self):
+        with A.app.app_context():
+            A.db().execute("INSERT INTO agent(naam,label,aangemaakt) VALUES(?,?,?)",
+                           ("werfverslag-dashboard", "Werfverslag dashboard", A.nu()))
+            A.db().commit()
+        inhoud = {"werkwijze": "## Mandaat\n\nIk toon de bewezen stand.",
+                  "mandaat": "Ik toon de bewezen stand.", "overschrijf": True}
+        self.assertEqual(self.client.post("/api/agent/werfverslag-dashboard/werkwijze", headers=TOKEN, json=inhoud).status_code, 200)
+        antwoord = self.client.get("/api/agent/werfverslag-dashboard/werkwijze", headers=TOKEN).get_json()
+        self.assertEqual(antwoord["mandaat"], inhoud["mandaat"])
 
     def test_budgetuitstel_vereist_tijdzone_en_veilige_claim(self):
         op = self.maak()

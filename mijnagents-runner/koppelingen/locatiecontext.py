@@ -124,6 +124,52 @@ def gestructureerd(v):
             if v.get("rol") == "auto" else "plaats van de gedragen tracker"}
 
 
+def projectplek(firma, nummer):
+    """De vastgelegde plek van een project (lat, lon) uit /api/projectplekken, of None.
+
+    Dezelfde plekken waarmee de tegel een verblijf binnen 300 m aan een project koppelt. Alleen een
+    actieve, niet-uitgesloten plek met een geocode op adres of een override, en alleen als er precies
+    één is: anders is het onbekend. Dit zijn projectplaatsen, geen metingen van Mehdi.
+    """
+    try:
+        data = _haal("/api/projectplekken")
+    except Exception:  # noqa: BLE001
+        return None
+    plekken = [p for p in data.get("projectplekken") or [] if p.get("sleutel") == "%s:%s" % (firma, nummer)
+               and p.get("actief") and not p.get("uitgesloten")
+               and p.get("geocode_kwaliteit") in ("adres", "override")
+               and isinstance(p.get("lat"), (int, float)) and isinstance(p.get("lon"), (int, float))]
+    return (plekken[0]["lat"], plekken[0]["lon"]) if len(plekken) == 1 else None
+
+
+def verblijven_in_venster(start, einde, firma, nummer):
+    """De positieve projectverblijven bij dit project die het venster [start, einde) raken.
+
+    Alleen uit de actieve meetreeks (context houdt de grens), alleen positieve verblijven met dit
+    project. Elk verblijf draagt zijn rol: 'auto' bewijst waar de auto stond, niet waar Mehdi was.
+    """
+    try:
+        van, tot = _tijd(start), _tijd(einde)
+    except (TypeError, ValueError):
+        return []
+    d = context(van.astimezone(BRUSSEL).date().isoformat())
+    if not d:
+        return []
+    uit = []
+    for v in d.get("verblijven") or []:
+        p = v.get("project") or {}
+        if not v.get("positief") or p.get("firma") != firma or str(p.get("nummer")) != str(nummer):
+            continue
+        try:
+            a = _tijd(v["aankomst"])
+            b = _tijd(v["vertrek"]) if v.get("vertrek") else datetime.now(BRUSSEL)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if a < tot and b > van:
+            uit.append(v)
+    return uit
+
+
 def dag_heeft_dagboek(dag, items):
     """Staat er op het bord een locatiedagboek voor precies deze dag, uit de actieve reeks?"""
     dag = str(dag or "")[:10]

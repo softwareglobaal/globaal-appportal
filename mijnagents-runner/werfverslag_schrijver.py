@@ -8,8 +8,9 @@ in de bezoekmap. Hij verstuurt nooit en overschrijft nooit.
 
 Gebruik:
     werfverslag_schrijver.py --opdrachten          # cron elke 5 min: opdrachten uit de bak uitvoeren
-    werfverslag_schrijver.py --voorbereid 2309 1   # handmatig
-    werfverslag_schrijver.py --proef 2309 1
+    werfverslag_schrijver.py --voorbereid 2309 1 --op-vraag-van-mehdi "reden"
+    werfverslag_schrijver.py --proef 2309 1 --op-vraag-van-mehdi "reden"
+    werfverslag_schrijver.py --naar-werfapp 2309 1   # bestaande proef als concept in de werfapp, zonder Claude
 """
 import argparse
 import os
@@ -87,7 +88,10 @@ def main():
     p.add_argument("--opdrachten", action="store_true")
     p.add_argument("--voorbereid", nargs=2, metavar=("DOSSIER", "BEZOEK"))
     p.add_argument("--proef", nargs=2, metavar=("DOSSIER", "BEZOEK"))
+    p.add_argument("--op-vraag-van-mehdi", metavar="REDEN", help="expliciete opdracht van Mehdi voor een betaalde commandline-stap")
     p.add_argument("--herlayout", nargs=2, metavar=("DOSSIER", "BEZOEK"), help="Word opnieuw opmaken uit de bewaarde proef, zonder Claude")
+    p.add_argument("--naar-werfapp", nargs=2, metavar=("DOSSIER", "BEZOEK"),
+                   help="een bestaande proef als concept in de werfapp zetten, zonder Claude (geen tokens); een bestaand concept blijft")
     a = p.parse_args()
     if a.opdrachten:
         print("opdrachten:", opdrachten())
@@ -101,10 +105,29 @@ def main():
         finally:
             ag.log_verstuur()
         return
+    if a.naar_werfapp:
+        d, n = a.naar_werfapp
+        ag.hartslag("actief", taak=f"concept in de werfapp {d}-{n}")
+        try:
+            uit = wp.werfapp_uit_proef(ag, d, int(n))
+            print(uit)
+            mislukt = bool(uit.get("fout")) or not uit.get("id")
+            ag.hartslag("fout" if mislukt else "klaar", taak=f"concept in de werfapp {d}-{n}" + (f": {uit.get('fout')}" if mislukt else ""))
+        finally:
+            ag.log_verstuur()
+        if uit.get("fout") or not uit.get("id"):
+            sys.exit(1)  # geen concept: een foutstatus, de proef blijft staan (CX4-13)
+        return
     if a.voorbereid or a.proef:
+        reden = (a.op_vraag_van_mehdi or "").strip()
+        if not reden:
+            p.error("--voorbereid en --proef vereisen --op-vraag-van-mehdi met de reden; er start geen betaalde verwerking")
         d, n = a.voorbereid or a.proef
         soort = "voorbereid" if a.voorbereid else "proef"
-        antwoord = bord.call("/api/werfopdrachten/aanvragen", {"dossier": d, "volgnr": int(n), "soort": soort, "bron": "commandline"})
+        ag.log(f"{d}-{n}", "besluit", f"commandline-opdracht {soort} op vraag van Mehdi: {reden[:500]}")
+        ag.log_verstuur()
+        antwoord = bord.call("/api/werfopdrachten/aanvragen", {"dossier": d, "volgnr": int(n), "soort": soort,
+                                                             "bron": "commandline", "reden": reden[:500]})
         opdracht = antwoord["opdracht"]
         if opdracht["status"] == "klaar":
             print("opdrachten uitgevoerd:", opdrachten(alleen_id=opdracht["id"]))
@@ -114,5 +137,11 @@ def main():
     p.print_help()
 
 
+def run():
+    with ag.ronde("werfverslag-opdrachten uitvoeren") as ronde:
+        main()
+        ronde.detail = "opdrachten en bewijs in het werkverslag bijgewerkt"
+
+
 if __name__ == "__main__":
-    main()
+    run()
