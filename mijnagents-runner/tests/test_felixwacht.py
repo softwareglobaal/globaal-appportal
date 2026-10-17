@@ -486,6 +486,8 @@ class _NepPaginaBron(_NepPagina):
                  for v in PP.vergunningen_uit_bron(self._bron())] if self._sectie() == "vergunningen" else []
         if self.scherm_fout:
             rijen = rijen[:-1]
+        if getattr(self, "besluit_fout", False) and rijen:
+            rijen[0][4] = "Weigering"
         return len(rijen) if ".length" in script else rijen
     def locator(self, *a, **k):
         p = self
@@ -531,6 +533,9 @@ for _naam, _inst, _woord in (("een antwoord van een andere sectie", {"sectie_fou
     _s = PP.lees(_ctx_bron(**_inst), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
     check(f"{_naam} telt niet: scherm, onvolledig, met de reden", any(_woord in f and "niet bevestigd" in f for f in _s["fouten"])
           and _s["controles"] != _GOED, (_s["controles"], _s["fouten"]))
+_s = PP.lees(_ctx_bron(besluit_fout=True), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
+check("een scherm met hetzelfde nummer maar een ander besluit: controle mislukt (Codex FX36)",
+      _s["controles"].get("vergunningen_scherm") is False and _s["controles"].get("bouwovertredingen_scherm") is True, _s["controles"])
 _s = PP.lees(_ctx_bron(scherm_fout=True), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
 check("een scherm met een rij minder dan de bron: controle mislukt en gemeld (Codex FX29)",
       _s["controles"].get("vergunningen_scherm") is False and any("niet dezelfde rijen" in f for f in _s["fouten"]), _s["fouten"])
@@ -538,6 +543,9 @@ _stad2 = PP.lees(_NepContext(), 51.2, 4.47, "August Van de Wielelei 85, 2100 Ant
 check("zonder bronantwoord valt lees() terug op het scherm, onvolledig en zonder controles",
       "scherm" in _stad2["bron"].get("vergunningen", "") and any("niet bevestigd" in f for f in _stad2["fouten"])
       and not _stad2["controles"].get("perceel"), (_stad2["bron"], _stad2["controles"]))
+
+
+_rv = lambda *nrs: [PP.rij_sleutel("vergunningen", {"onderwerp": "x", "dossiernummer": nr, "type": "t"}) for nr in nrs]  # noqa: E731
 
 
 class _NepScherm:
@@ -553,13 +561,16 @@ class _NepScherm:
         return None
 
 
-check("het scherm mag laden: pas gelijk als alle rijen er zijn", PP._scherm_gelijk(_NepScherm([[], ["1"], ["1", "2"]]), "vergunningen", ["1", "2"]))
-check("multiset: een dubbel nummer telt twee keer", not PP._scherm_gelijk(_NepScherm([["1"]]), "vergunningen", ["1", "1"], 3)
-      and PP._scherm_gelijk(_NepScherm([["1", "1"]]), "vergunningen", ["1", "1"], 3))
+check("het scherm mag laden: pas gelijk als alle rijen er zijn", PP._scherm_gelijk(_NepScherm([[], ["1"], ["1", "2"]]), "vergunningen", _rv("1", "2")))
+check("multiset: een dubbel nummer telt twee keer", not PP._scherm_gelijk(_NepScherm([["1"]]), "vergunningen", _rv("1", "1"), 3)
+      and PP._scherm_gelijk(_NepScherm([["1", "1"]]), "vergunningen", _rv("1", "1"), 3))
+check("hetzelfde nummer met een ander besluit op het scherm is niet gelijk (Codex FX36)",
+      not PP._scherm_gelijk(_NepScherm([["1"]]), "vergunningen",
+                            [PP.rij_sleutel("vergunningen", {"onderwerp": "x", "dossiernummer": "1", "type": "t", "beslissing": "Weigering"})], 3))
 check("nul vergunningen telt pas als het scherm het zegt, niet zolang het leeg is (Codex FX31)",
       not PP._scherm_gelijk(_NepScherm([[]]), "vergunningen", [], 3)
       and PP._scherm_gelijk(_NepScherm([[]], "Er zijn geen vergunningen voor dit perceel."), "vergunningen", [], 3))
-check("een rij op het scherm die de bron niet kent, is ook geen gelijk", not PP._scherm_gelijk(_NepScherm([["1", "2"]]), "vergunningen", ["1"], 3))
+check("een rij op het scherm die de bron niet kent, is ook geen gelijk", not PP._scherm_gelijk(_NepScherm([["1", "2"]]), "vergunningen", _rv("1"), 3))
 
 
 # Ontwerpronde 10: de eindcontrole eist per stap een positief bewijs; een stap die zwijgt, telt als niet geslaagd
@@ -598,6 +609,8 @@ _gevallen = [
      lambda z: z["downloads"][0]["bestanden"][0].update(grootte=100), "op schijf"),
     ("een opgave van 0 bytes bij een bestand van 1 byte (Codex FX35)", lambda z: z["downloads"][0]["bestanden"][0].update(grootte=0), "op schijf"),
     ("een bestand zonder opgave van FelixArchief (Codex FX35)", lambda z: z["downloads"][0]["bestanden"][0].pop("grootte"), "op schijf"),
+    ("een bestand dat helemaal niet op schijf staat, ook bij opgave 0", lambda z: z["downloads"][0]["bestanden"][0].update(
+        grootte=0, bytes=0, pad=os.path.join(_map, "bestaat-niet.pdf")), "op schijf"),
 ]
 for _naam, _wijzig, _woord in _gevallen:
     _z = _volledige_z()
@@ -610,6 +623,12 @@ for _f in ("Geopunt.png", "Percelenpas Antwerpen/Bouwovertredingen.png", "FelixA
     os.remove(os.path.join(_m2, _f))
     check(f"eindcontrole: zonder {os.path.basename(_f)} op schijf is het onvolledig",
           any(os.path.basename(_f) in o for o in FW.eindcontrole(_volledige_z(), _m2)))
+_z = _volledige_z()
+open(os.path.join(_map, "FelixArchief/961#3571/leeg.txt"), "w").close()
+_z["downloads"][0]["bestanden"].append({"naam": "leeg.txt", "bytes": 0, "grootte": 0, "pad": os.path.join(_map, "FelixArchief/961#3571/leeg.txt")})
+_z["downloads"][0]["aantal"] = 2
+check("een leeg bestand dat FelixArchief ook als leeg opgeeft, is geen vals alarm (Codex FX37)", FW.eindcontrole(_z, _map) == [],
+      FW.eindcontrole(_z, _map))
 _z = _volledige_z()
 _z["onvolledig"] = ["Geopunt.png niet gelukt: x"]
 check("eindcontrole: wat een stap zelf meldde, blijft staan", FW.eindcontrole(_z, _map)[0] == "Geopunt.png niet gelukt: x")

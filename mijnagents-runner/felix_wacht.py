@@ -211,7 +211,7 @@ def eindcontrole(z, uitmap):
         for b in (r or {}).get("bestanden") or []:  # het bestand op schijf is het bewijs, niet de lijst (Codex FX30)
             # de opgave van FelixArchief is exact (FX33); elke opgave telt, ook 0, en zonder opgave is er geen bewijs (FX35)
             maten = [int(m) for m in (b.get("grootte"), b.get("bytes")) if m is not None]
-            eis(_bestand(b.get("pad") or "") and b.get("grootte") is not None
+            eis(os.path.isfile(b.get("pad") or "") and b.get("grootte") is not None  # 0 = 0 mag (Codex FX37)
                 and all(os.path.getsize(b["pad"]) == m for m in maten),
                 f"{d['inventaris']}/{b['naam']} staat niet volledig op schijf")
     return open_

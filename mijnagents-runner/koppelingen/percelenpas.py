@@ -316,17 +316,26 @@ def _tabelrijen(p):
     return uit
 
 
+VELDEN = {"vergunningen": ("onderwerp", "dossiernummer", "type", "beslissing", "datum"),
+          "bouwovertredingen": ("omschrijving", "dossiernummer", "registratienummer")}
+
+
+def rij_sleutel(sectie, rij):
+    """Een rij als vergelijkbaar geheel: elk veld dat de stad toont, met samengevoegde witruimte (Codex FX36). Gemeten
+    17-10-2026: bij 13 vergunningen en 2 overtredingen waren scherm en bron zo op elk veld gelijk."""
+    return tuple(" ".join(str(rij.get(k) or "").split()) for k in VELDEN[sectie])
+
+
 def _scherm_rijen(p, sectie):
     if sectie == "vergunningen":  # nul rijen telt pas als het scherm het zegt, niet zolang het nog leeg is (FX31)
-        rijen = [r["dossiernummer"] for r in _tabelrijen(p)]
+        rijen = [rij_sleutel(sectie, r) for r in _tabelrijen(p)]
         return rijen if rijen else ([] if GEEN_VERGUNNINGEN in p.locator("body").inner_text() else None)
     samen, lijst = bouwovertredingen_uit_tekst(_sectietekst(p, "Bouwovertredingen"))
-    return [(x.get("dossiernummer", ""), x.get("registratienummer", "")) for x in lijst] if lijst else (
-        [] if samen == "geen gekend" else None)
+    return [rij_sleutel(sectie, x) for x in lijst] if lijst else ([] if samen == "geen gekend" else None)
 
 
 def _scherm_gelijk(p, sectie, verwacht, seconden=30):
-    """Toont het scherm van de stad precies de rijen uit de bron, als multiset (ook nul en dubbele nummers)?
+    """Toont het scherm van de stad precies de rijen uit de bron, veld per veld en als multiset (ook nul en dubbel)?
 
     Pas dan klopt de bron met wat een mens ziet en is de printscreen een bewijs (Codex FX29). De tabel pagineert niet
     (main.js, 17-10-2026). Bij nul rijen moet het scherm dat uitdrukkelijk zeggen, met de tekst van de stad.
@@ -372,7 +381,7 @@ def lees(ctx, lat, lon, adres, map_=None):
                 uit["vergunningen"] = vergunningen_uit_bron(tile)
                 uit["bron"]["vergunningen"] = "bronantwoord van de stad"
                 c["vergunningen_bron"] = True
-                c["vergunningen_scherm"] = _scherm_gelijk(p, "vergunningen", [v["dossiernummer"] for v in uit["vergunningen"]])
+                c["vergunningen_scherm"] = _scherm_gelijk(p, "vergunningen", [rij_sleutel("vergunningen", v) for v in uit["vergunningen"]])
                 if not c["vergunningen_scherm"]:
                     uit["fouten"].append("vergunningen: het scherm van de stad toonde na 30 s niet dezelfde rijen als de bron")
             else:
@@ -403,8 +412,7 @@ def lees(ctx, lat, lon, adres, map_=None):
                 samen, lijst = bouwovertredingen_uit_bron(tile)
                 uit["bron"]["bouwovertredingen"] = "bronantwoord van de stad"
                 c["bouwovertredingen_bron"] = True
-                c["bouwovertredingen_scherm"] = _scherm_gelijk(p, "bouwovertredingen", [
-                    (x.get("dossiernummer", ""), x.get("registratienummer", "")) for x in lijst])
+                c["bouwovertredingen_scherm"] = _scherm_gelijk(p, "bouwovertredingen", [rij_sleutel("bouwovertredingen", x) for x in lijst])
                 if not c["bouwovertredingen_scherm"]:
                     uit["fouten"].append("bouwovertredingen: het scherm van de stad toonde na 30 s niet dezelfde rijen als de bron")
             else:

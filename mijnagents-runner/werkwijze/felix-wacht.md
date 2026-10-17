@@ -12,8 +12,11 @@ overschrijven.
 
 Nieuw in 2.2 (17-10-2026, na negen controlerondes met Codex): ik lees de percelenpas niet meer van het scherm maar
 uit het antwoord dat de stad zelf naar de pagina stuurt, met alle blokken (Wielelei 85 had vier toelatingen van
-voor 1962 in een tweede blok, die de vorige versie miste). Een resultaat is "klaar" alleen als alles lukte; anders
-"onvolledig", in het oranje, met wat ontbreekt.
+voor 1962 in een tweede blok, die de vorige versie miste). Een resultaat is "klaar" alleen als een eindcontrole voor
+elke verplichte stap een bewijs vindt: Geopunt, het perceel van de stad, beide secties uit de bron en gelijk aan het
+scherm, elk dossiernummer doorzocht in FelixArchief, de controle op straat en nummer, en elk digitaal dossier op schijf
+in de grootte die FelixArchief opgeeft (of als beschermd bevestigd). Anders "onvolledig", in het oranje, met alle
+open punten.
 
 ## Wat ik weet
 
@@ -27,10 +30,11 @@ voor 1962 in een tweede blok, die de vorige versie miste). Een resultaat is "kla
   het verkeerde perceel uit en zag hij "geen vergunningen".
 - In FelixArchief zoek ik op huisnummer met "bevat", nooit met "is gelijk": "85" moet ook "85-87" vinden.
 - Een dossier opvragen bij de stad vraagt aanmelden met Itsme of eID. Dat kan de server niet.
-- De gegevens van de percelenpas komen uit het antwoord van de stad (content-with-gis-by-slug), per sectie. Het
-  telt alleen als het voor die sectie is en het Geopunt-punt in de perceelgrens ligt die de stad opvroeg. Geen
-  overtredingen is een lege lijst. Elk onderdeel dat ik niet lees (zoals een verkaveling), maakt het resultaat
-  onvolledig. De printscreen neem ik pas als het scherm elk nummer uit dat antwoord toont.
+- De gegevens van de percelenpas komen uit de antwoorden van de stad, per sectie: eerst het perceel (parcelinfo, met
+  onze Geopunt-coordinaten: perceelnummer en grens), dan de inhoud voor precies die grens (content-with-gis-by-slug).
+  Het Geopunt-punt moet strikt binnen het perceel liggen en beide secties over hetzelfde perceel gaan. Geen
+  overtredingen is een lege lijst. Een antwoord dat ik niet volledig lees (zoals een verkaveling), wijs ik in zijn
+  geheel af: dan lees ik het scherm en is het resultaat onvolledig. Het scherm moet dezelfde rijen tonen als de bron.
 - Een stuk met auteursrecht (copyRightFree onwaar) kan ik niet downloaden: alleen online bekijken, tot het vermelde
   jaar. Dat staat zo in Controle.md.
 
