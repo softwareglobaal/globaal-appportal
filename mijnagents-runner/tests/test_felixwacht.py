@@ -539,6 +539,30 @@ check("een scherm met hetzelfde nummer maar een ander besluit: controle mislukt 
 _s = PP.lees(_ctx_bron(scherm_fout=True), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
 check("een scherm met een rij minder dan de bron: controle mislukt en gemeld (Codex FX29)",
       _s["controles"].get("vergunningen_scherm") is False and any("niet dezelfde rijen" in f for f in _s["fouten"]), _s["fouten"])
+class _NepPaginaTraag1(_NepPaginaBron):
+    """De stad antwoordt de eerste keer niet binnen 90 s, de tweede keer wel."""
+    keren = 0
+    def expect_response(self, filter_, **k):
+        if filter_ is PP._is_perceelinfo:
+            self.keren += 1
+        if self.keren == 1:
+            class _Traag:
+                def __enter__(self_):
+                    return self_
+                def __exit__(self_, soort, *a):
+                    if soort:
+                        return False
+                    raise TimeoutError('Timeout 90000ms exceeded while waiting for event "response"')
+            return _Traag()
+        return _NepVangst(self, filter_)
+
+
+_st = PP.lees(type("C", (), {"new_page": lambda self: _NepPaginaTraag1()})(), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
+check("een stad die de eerste keer niet antwoordt: de sectie gaat nog een keer open en leest dan de bron",
+      _st["bron"].get("vergunningen") == "bronantwoord van de stad" and not _st["fouten"], (_st["bron"], _st["fouten"]))
+_s = PP.lees(_ctx_bron(sectie_fout=True), *_g["punt"], "Grotesteenweg 459, 2600 Antwerpen")
+check("blijft het antwoord weg, dan noemt de melding de oorzaak, zodat de ronde bij 'Timeout' later opnieuw zoekt",
+      any("Timeout" in f and "niet bevestigd" in f for f in _s["fouten"]), _s["fouten"])
 _stad2 = PP.lees(_NepContext(), 51.2, 4.47, "August Van de Wielelei 85, 2100 Antwerpen")
 check("zonder bronantwoord valt lees() terug op het scherm, onvolledig en zonder controles",
       "scherm" in _stad2["bron"].get("vergunningen", "") and any("niet bevestigd" in f for f in _stad2["fouten"])

@@ -276,28 +276,32 @@ def _open_met_bron(p, sectie, adres_url, punt):
     Geeft (tile, perceel, reden). tile is alleen gevuld als de inhoud over precies de grens van dat perceel gaat, het
     Geopunt-punt erbinnen ligt en de vorm volledig gekend is; anders zegt reden waarom niet.
     """
-    tile, perceel, reden = None, None, "het bronantwoord van de stad kwam niet binnen"
-    try:
-        with p.expect_response(_is_perceelinfo, timeout=90000) as pi, \
-                p.expect_response(lambda r: _is_bronantwoord(r, sectie), timeout=90000) as antw:
-            p.goto(adres_url, wait_until="domcontentloaded", timeout=90000)
-        perceel, reden = _perceel_uit(pi.value, punt)
-        r = antw.value
-        if perceel is None:
-            pass
-        elif r.status != 200:
-            reden = f"het bronantwoord van de stad gaf status {r.status}"
-        elif _grens_van(r) != perceel["geometry"]:
-            reden = "het bronantwoord van de stad gaat over een andere perceelgrens"
-        else:
-            tile = _layer_tile(r.json())
-            vorm = ontbrekend_in_bron(tile, sectie) if tile else []
-            if tile is None:
-                reden = "het bronantwoord van de stad heeft een vorm die we niet kennen"
-            elif vorm:
-                tile, reden = None, "het bronantwoord van de stad heeft delen die we niet lezen: " + "; ".join(vorm[:3])
-    except Exception:
-        pass
+    for poging in range(2):  # een trage stad: de sectie nog een keer openen (gemeten 17-10-2026: eenmaal 90 s niets)
+        tile, perceel, reden, opnieuw = None, None, "het bronantwoord van de stad kwam niet binnen", False
+        try:
+            with p.expect_response(_is_perceelinfo, timeout=90000) as pi, \
+                    p.expect_response(lambda r: _is_bronantwoord(r, sectie), timeout=90000) as antw:
+                p.goto(adres_url, wait_until="domcontentloaded", timeout=90000)
+            perceel, reden = _perceel_uit(pi.value, punt)
+            r = antw.value
+            if perceel is None:
+                pass
+            elif r.status != 200:
+                reden = f"het bronantwoord van de stad gaf status {r.status}"
+            elif _grens_van(r) != perceel["geometry"]:
+                reden = "het bronantwoord van de stad gaat over een andere perceelgrens"
+            else:
+                tile = _layer_tile(r.json())
+                vorm = ontbrekend_in_bron(tile, sectie) if tile else []
+                if tile is None:
+                    reden = "het bronantwoord van de stad heeft een vorm die we niet kennen"
+                elif vorm:
+                    tile, reden = None, "het bronantwoord van de stad heeft delen die we niet lezen: " + "; ".join(vorm[:3])
+        except Exception as e:  # de oorzaak in de melding: bij 'Timeout' neemt de ronde de zoektocht later opnieuw
+            reden = f"het bronantwoord van de stad kwam niet binnen ({type(e).__name__}: {str(e).splitlines()[0][:80]})"
+            opnieuw = True
+        if not opnieuw:
+            break
     if not (p.url or "").startswith(adres_url.split("?")[0]):  # opvangen faalde voor het openen: toch openen,
         p.goto(adres_url, wait_until="domcontentloaded", timeout=90000)  # anders leest de terugval de vorige pagina
     return tile, perceel, reden
