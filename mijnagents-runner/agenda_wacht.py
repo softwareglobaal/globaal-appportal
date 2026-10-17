@@ -3438,7 +3438,7 @@ def _regel_delen(r):
     return tuple(delen) if len(delen) == 3 else ("", "", "")
 
 
-def _nakijken(regels, tok=None):
+def _nakijken(regels, tok=None, ritten=(), noden=None):
     """Houdt alleen de roosterregels waarvan het item er nog zo staat (events.get): niet geschrapt en op hetzelfde begin.
     Niet te lezen telt als weg: De Bode belt nooit op basis van een regel die niet nagekeken is (Codex A15). Geeft
     (goede regels, aantal weggevallen)."""
@@ -3450,21 +3450,45 @@ def _nakijken(regels, tok=None):
             ev = _event({"kalender": kal, "id": eid}, tok or agenda._toegang())
             ev_start = (ev.get("start") or {}).get("dateTime")
             klopt = ev.get("status") != "cancelled" and _zelfde_tijd(ev_start, begin)
+            item = {"id": eid, "kalender": kal, "titel": ev.get("summary") or "", "start": ev_start or "",
+                    "einde": (ev.get("end") or {}).get("dateTime") or "", "locatie": ev.get("location") or "",
+                    "hele_dag": "date" in (ev.get("start") or {}), "_terugkerend": bool(ev.get("recurringEventId"))}
+            rit_actueel = []
+            for rit in ritten:
+                if rit.get("kalender") != kal or not rit.get("id") or not rit.get("start") or not rit.get("einde"):
+                    continue
+                try:
+                    if abs(datetime.fromisoformat(rit["einde"]) - datetime.fromisoformat(ev_start)) > timedelta(minutes=5):
+                        continue
+                    rv = _event({"kalender": kal, "id": rit["id"]}, tok or agenda._toegang())
+                    rit_vers = {**rit, "titel": rv.get("summary") or "", "omschrijving": rv.get("description") or "",
+                                "start": (rv.get("start") or {}).get("dateTime") or "",
+                                "einde": (rv.get("end") or {}).get("dateTime") or ""}
+                    if (rv.get("status") != "cancelled" and rit_vers["start"] and rit_vers["einde"]
+                            and lees_titel(rit_vers["titel"])["reistijd"]
+                            and abs(datetime.fromisoformat(rit_vers["einde"]) - datetime.fromisoformat(ev_start))
+                            <= timedelta(minutes=5)):
+                        rit_actueel.append(rit_vers)
+                except Exception:  # noqa: BLE001
+                    pass
             # ook de inhoud opnieuw beoordelen: een afspraak die intern of privé werd, krijgt geen oude oproeptekst (ronde 6)
-            vers = belrooster([{"id": eid, "kalender": kal, "titel": ev.get("summary") or "", "start": ev_start or "",
-                                "einde": (ev.get("end") or {}).get("dateTime") or "", "locatie": ev.get("location") or "",
-                                "hele_dag": "date" in (ev.get("start") or {}), "_terugkerend": bool(ev.get("recurringEventId"))}],
-                              vandaag) if klopt else []
+            vers = belrooster([item] + rit_actueel, vandaag) if klopt else []
+            info = lees_titel(item["titel"])
+            if vers and not rit_actueel and (item["locatie"] and not item["locatie"].lower().startswith("http")
+                                            or info["buiten"] or info["soort"] in ("KB", "PB")):
+                if noden is not None:
+                    noden.append({"tekst": "Beltijd met vaste reistijdschatting berekend: actueel reistijdblok niet "
+                                          "te verifiëren; kijk het vertrek na", "wie": "mehdi"})
         except Exception:  # noqa: BLE001
             vers = []
         if vers:
-            goed.append({**r, "tekst": vers[0]["tekst"], "titel": vers[0]["titel"]})
+            goed.append({**r, "tekst": vers[0]["tekst"], "titel": vers[0]["titel"], "tijd": vers[0]["tijd"]})
         else:
             weg += 1
     return goed, weg
 
 
-def _rooster_behouden(nieuw, onvolledig, nu=None, tok=None):
+def _rooster_behouden(nieuw, onvolledig, nu=None, tok=None, ritten=(), noden=None):
     """De komende regels van het vorige belrooster voor de agenda's die deze ronde niet gelezen zijn ('archief' staat voor
     de archiefagenda's), elk nagekeken tegen het item zelf; wat wegvalt telt in ROOSTER_ONZEKER (Codex A15, ronde 3 en 4)."""
     global ROOSTER_ONZEKER
@@ -3487,7 +3511,7 @@ def _rooster_behouden(nieuw, onvolledig, nu=None, tok=None):
             continue
         if kal in onvolledig or ("archief" in onvolledig and kal not in KALENDERS):
             kandidaten.append(r)
-    goed, ROOSTER_ONZEKER = _nakijken(kandidaten, tok)
+    goed, ROOSTER_ONZEKER = _nakijken(kandidaten, tok, ritten, noden)
     return goed
 
 
@@ -3510,10 +3534,11 @@ def rooster_maken(items, archief, vandaag, noden, tok=None):
     if stuk:
         te_kijken = [r for r in rooster if "*" in stuk or _regel_delen(r)[0] in stuk
                      or ("archief" in stuk and _regel_delen(r)[0] not in KALENDERS)]
-        goed, weg = _nakijken(te_kijken, tok)
+        goed, weg = _nakijken(te_kijken, tok, voor, noden)
         rooster = [r for r in rooster if r not in te_kijken] + goed
         if ONGELEZEN:
-            rooster += _rooster_behouden(rooster, set(ONGELEZEN), tok=tok)
+            rooster += _rooster_behouden(rooster, set(ONGELEZEN), tok=tok,
+                                         ritten=items + archief, noden=noden)
             weg += ROOSTER_ONZEKER
     if weg:
         noden.append({"tekst": f"{weg} oproep(en) vielen weg: de agenda was niet volledig te lezen en de afspraak kon niet "

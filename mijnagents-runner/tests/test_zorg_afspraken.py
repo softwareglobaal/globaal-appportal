@@ -459,5 +459,19 @@ else:
 check("A35 ronde 6: een eigen item op het oude uur en een andere afspraak op het nieuwe uur: een vraag, niet verzetten",
       _s6 == "zorg_open", _s6)
 
+_a41 = {**_a35, "google": ""} if _a35 else {}
+_vreemd41 = {"kalender": W.PRIVE_AGENDA, "id": "vreemd41", "titel": "Kine - An Proef",
+              "start": "2026-12-16T08:00:00+01:00", "_merk": {MA.ZORGMERK: _a41.get("sleutel")},
+              "_icaluid": "andere-uitnodiging@extern.test"}
+if _a41:
+    _s41a = MA.vergelijk([_a41], [_vreemd41], nu)[0]["status"]
+    _s41b = MA.vergelijk([{**_a41, "geannuleerd": 1}], [_vreemd41], nu)[0]["status"]
+else:
+    _s41a = _s41b = "geen rij"
+check("A41 gemerkt item met andere externe UID geeft geen afwijkend bij verzet",
+      _s41a != "afwijkend", _s41a)
+check("A41 gemerkt item met andere externe UID geeft geen geannuleerd_staat_er",
+      _s41b != "geannuleerd_staat_er", _s41b)
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

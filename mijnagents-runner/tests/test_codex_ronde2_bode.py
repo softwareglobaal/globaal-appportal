@@ -689,6 +689,92 @@ probeer(B.main)                              # herkansing: te_alarm is leeg, de 
 check("A34 ronde 6: een alarm dat bij een herkansing lukt, staat in het belspoor", "alarm:601" in BEL.spoor_lezen(SPOOR),
       str(BEL.spoor_lezen(SPOOR)))
 
+# Slotronde: duurzame overgangen vóór en na een oproep.
+_sp38 = str(TMP / "spoor-a38.jsonl")
+rooster(regel_t("proef-a38", "Proeftekst A38"))
+UITSLAG[0] = [("telegram-oproep", GEMETEN_65)]
+oproepen.clear()
+_n38 = []
+BEL.afspraken_bellen({}, spoor=_sp38, nood=_n38)
+UITSLAG[0] = [("twilio", "CA38")]
+_st38 = {}
+BEL.afspraken_bellen(_st38, spoor=_sp38, nood=_n38)
+check("A38 na 65 seconden weigering belt de volgende ronde dezelfde afspraak",
+      len(oproepen) == 2 and "proef-a38" in _st38.get("gebeld", {}) and not _n38
+      and not BEL.spoor_bezig(_sp38) and BEL.spoor_pogingen(_sp38) == {},
+      f"{oproepen} {_st38} {_n38}")
+
+_sp39 = str(TMP / "spoor-a39.jsonl")
+_alarm39 = [{"id": 3901, "titel": "Proefalarm"}]
+_echt_bel39 = BEL.bel
+alarm_oproepen.clear()
+
+
+def _crash_na_aanvaarding(*a, **k):
+    alarm_oproepen.append("aanvaard")
+    raise SystemExit("crash na aanvaarding nagebootst")
+
+
+BEL.bel = _crash_na_aanvaarding
+
+
+def _alarm39_bellen(st, items, pad, noden):
+    # De oude versie kende spoor nog niet; de proef meet dan haar bestaande belroute.
+    kw = {"spoor": pad, "nood": noden} if "spoor" in BEL.alarm_bellen.__code__.co_varnames else {}
+    return BEL.alarm_bellen(st, items, **kw)
+
+
+try:
+    try:
+        _alarm39_bellen({}, _alarm39, _sp39, [])
+    except SystemExit:
+        pass
+finally:
+    BEL.bel = _echt_bel39
+_n39 = []
+BEL_UIT[0] = "CA39"
+probeer(_alarm39_bellen, {}, _alarm39, _sp39, _n39)
+check("A39 crash na aanvaarding belt alarm na standverlies niet opnieuw",
+      alarm_oproepen == ["aanvaard"] and "alarm:3901" in BEL.spoor_bezig(_sp39)
+      and any("onderbroken" in n["tekst"] for n in _n39), f"{alarm_oproepen} {_n39}")
+_echt_spoor39 = B.belspoor
+_echt_stil39, _echt_niet_tg39 = B.is_stil, B.NIET_OP_TELEGRAM
+schone_stand()
+BORD["items"] = [{**it, "ts": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")}
+                 for it in klaarzet([3901], oproep=(3901,))]
+B.belspoor = lambda: _sp39
+B.is_stil, B.NIET_OP_TELEGRAM = (lambda t=None: False), ("agenda-wacht",)
+alarm_oproepen.clear()
+hartslagen.clear()
+try:
+    _u39, _f39 = probeer(B.main)
+finally:
+    B.belspoor = _echt_spoor39
+    B.is_stil, B.NIET_OP_TELEGRAM = _echt_stil39, _echt_niet_tg39
+    BORD["items"] = []
+check("A39 De Bode meldt onzeker alarm na standverlies zonder tweede oproep",
+      _f39 is None and alarm_oproepen == [] and bool(hartslagen)
+      and any("onderbroken" in n["tekst"] for n in (hartslagen[-1].get("nood") or [])),
+      f"{_f39} {alarm_oproepen} {hartslagen[-1:]}")
+_n39b = []
+alarm_oproepen.clear()
+probeer(_alarm39_bellen, {}, _alarm39, str(_geen_map / "alarm.jsonl"), _n39b)
+check("A39 onschrijfbaar spoor verhindert alarmoproep en geeft nood",
+      alarm_oproepen == [] and any("belspoor" in n["tekst"] for n in _n39b), f"{alarm_oproepen} {_n39b}")
+
+_sp42 = str(TMP / "spoor-a42.jsonl")
+BEL.spoor_schrijven(_sp42, "proef-a42", datetime.now().astimezone().isoformat(), bezig=True)
+rooster(regel_t("proef-a42", "Proeftekst A42"))
+check("A42 droge selectie slaat een onderbroken oproep over",
+      BEL.te_bellen({}, rooster=[regel("proef-a42")], spoor=_sp42) == [])
+_n42a, _n42b = [], []
+oproepen.clear()
+BEL.afspraken_bellen({}, spoor=_sp42, nood=_n42a)
+BEL.afspraken_bellen({}, spoor=_sp42, nood=_n42b)
+check("A42 onderbroken oproep wordt ook bij verloren stand maar eenmaal gemeld",
+      oproepen == [] and len(_n42a) == 1 and _n42b == []
+      and any(d.get("gemeld") for d in BEL._spoor_regels(_sp42)), f"{oproepen} {_n42a} {_n42b}")
+
 # A36: zonder stand en een volle bordpagina: een nood
 schone_stand()
 BORD["items"] = klaarzet(range(2001, 2001 + B.KLAARZET_N))

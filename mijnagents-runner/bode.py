@@ -440,8 +440,15 @@ def ronde(droog=False):
         # Het belspoor houdt ook alarmoproepen bij ('alarm:<id>'): wat daar staat, bel ik nooit opnieuw. Zonder stand bel ik
         # alleen een alarm dat recent is (ALARM_RECENT_MIN) en niet in het spoor staat; een ouder item meld ik (Codex A34,
         # ronde 5: na een verloren stand werd ook een zojuist binnengekomen alarm niet gebeld en daarna nooit meer).
-        al_gebeld = veilig(nood, "Belspoor lezen", lambda: {k.split(":", 1)[1] for k in bellen.spoor_lezen(belspoor())
-                                                              if k.startswith("alarm:")}, None)
+        alarm_spoor = veilig(nood, "Belspoor lezen", lambda: (bellen.spoor_lezen(belspoor()),
+                                                               bellen.spoor_bezig(belspoor())), None)
+        al_gebeld = ({k.split(":", 1)[1] for deel in alarm_spoor for k in deel if k.startswith("alarm:")}
+                     if alarm_spoor is not None else None)
+        if alarm_spoor is not None:
+            onzeker = [it for it in alarm if f"alarm:{it.get('id')}" in alarm_spoor[1]]
+            if onzeker:
+                nood.append({"tekst": f"De Bode: {len(onzeker)} alarmoproep(en) mogelijk vertrokken en onderbroken; "
+                                      "niet herhaald, kijk ze na", "wie": "claude-code"})
         if al_gebeld is None:
             te_alarm = []                  # een onleesbaar spoor: niets is zeker nieuw (A33)
         elif eerste:
@@ -452,14 +459,8 @@ def ronde(droog=False):
                                       "niet gebeld, want ze kunnen al gebeld zijn; kijk het bord na", "wie": "claude-code"})
         else:
             te_alarm = [it for it in nog_niet_gebeld(staat, alarm) if str(it.get("id")) not in al_gebeld]
-        bel_detail = veilig(nood, "Alarm bellen", lambda: bellen.alarm_bellen(staat, te_alarm, log=ag.log), "")
-        if str(bel_detail).startswith("belt"):
-            # de werkelijk gebelde alarmen staan in de sleutel van de oproep, ook bij een herkansing waar te_alarm leeg is
-            # (Codex A34, ronde 6)
-            gebeld_ids = [d for d in str((staat.get("bel") or {}).get("sleutel") or "").split("|") if d.strip()]
-            for aid in gebeld_ids or [str(it.get("id")) for it in te_alarm]:
-                veilig(nood, "Belspoor bijschrijven (alarm)",
-                       lambda aid=aid: bellen.spoor_schrijven(belspoor(), f"alarm:{aid}", datetime.now().astimezone().isoformat()), None)
+        bel_detail = veilig(nood, "Alarm bellen", lambda: bellen.alarm_bellen(staat, te_alarm, log=ag.log,
+                                                                              spoor=belspoor(), nood=nood), "")
         if bel_detail:
             veilig(nood, "Stand wegschrijven na het alarm", lambda: bewaar(staat), None)
     if bel_afspraak:

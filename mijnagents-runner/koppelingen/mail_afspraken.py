@@ -769,7 +769,7 @@ def _zorg_status(a, items, nu, vorig_google=""):
     conflict = [x for x in kand if _zorgachtig(x, a, z, profiel) < 0]
     zwak = [x for x in kand if _zorgachtig(x, a, z, profiel) == 1]
     kand = [x for x in kand if x not in zwak and x not in conflict]
-    merk = [x for x in items if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]]
+    merk = [x for x in items if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"] and not _uid_conflict(x, a)]
     # een oude verwijzing die intussen naar een item van een andere afspraak wijst, telt niet (Codex A02, ronde 5)
     vorig = [x for x in items if vorig_google and f"{x.get('kalender')}|{x.get('id')}" == vorig_google and not _ander_zorgitem(x, a)]
     recent = (a.get("bron_ontvangen") or "")[:10] >= (nu - timedelta(days=14)).astimezone(BRUSSEL).date().isoformat()
