@@ -16,6 +16,7 @@ jobs:
           python-version: "3.12"
       - run: python3 -m pip install -r mijnagents/requirements.txt
       - run: python3 mijnagents-runner/tests/test_naamstructuur.py
+      - run: python3 mijnagents-runner/tests/test_regelbron_en_ha_voorrang.py
       - run: python3 mijnagents/test_naamstructuur.py
       - run: python3 mijnagents/test_mail.py
       - run: python3 mijnagents/test_werfbezoek.py
