@@ -110,6 +110,50 @@ def verhuisde_rijen(bezoeken, projectmap, bord_rijen):
     return uit
 
 
+def _is_dubbel(r):
+    return str(r.get("stand", "")).startswith("dubbel")
+
+
+def hernoemde_rijen(bezoeken, projectmap, bord_rijen, bestaat, al=()):
+    """De bezoekmap kreeg binnen dezelfde projectmap een andere naam (2145 en 2405, oktober 2026: de
+    communicatiemap ging naar de naamregel `JJJJ-MM-DD UUMM HARC nummer - met wie - onderwerp`).
+
+    Een rij hoort bij een bezoek van nu als: dezelfde datum, het oude pad ligt in dezelfde projectmap, het
+    oude pad bestaat niet meer, en er is precies één bezoek op die datum in de projectmap. Twee bezoeken op
+    dezelfde dag: geen koppeling (de rij gaat dan naar verdwenen_rijen en Mehdi kijkt). Rijen die al als
+    verhuis herkend zijn (al) of die al dubbel staan, tellen niet.
+    """
+    pm = projectmap.lower() + "/"
+    per_dag = {}
+    for b in bezoeken:
+        per_dag.setdefault(b["datum"], []).append(b)
+    gezien = {id(r) for oude in al for r in oude}
+    huidig = {b["map"].lower() for b in bezoeken}
+    uit = {}
+    for r in sorted(bord_rijen, key=lambda r: r.get("id") or 0):
+        pad = r.get("bezoekmap") or ""
+        kandidaten = per_dag.get(r.get("datum"), [])
+        if (id(r) in gezien or _is_dubbel(r) or not pad or pad.lower() in huidig
+                or not pad.lower().startswith(pm) or len(kandidaten) != 1 or bestaat(pad)):
+            continue
+        uit.setdefault(kandidaten[0]["map"], []).append(r)
+    return uit
+
+
+def verdwenen_rijen(bezoeken, bord_rijen, bestaat, gekoppeld=()):
+    """Rijen waarvan de bezoekmap niet meer bestaat en die bij geen bezoek van nu horen: die mogen hun oude
+    stand (bv. 'klaar voor verslag') niet houden. Niets wordt gewist; ze krijgen een eerlijke stand."""
+    gezien = {id(r) for oude in gekoppeld for r in oude}
+    huidig = {b["map"].lower() for b in bezoeken}
+    return [r for r in bord_rijen
+            if r.get("bezoekmap") and id(r) not in gezien and not _is_dubbel(r)
+            and r["bezoekmap"].lower() not in huidig and not str(r.get("stand", "")).startswith("bezoekmap niet meer gevonden")
+            and not bestaat(r["bezoekmap"])]
+
+
+VERDWENEN = "bezoekmap niet meer gevonden; nakijken"
+
+
 def samengevoegd(rijen):
     """Eén bordrij uit de rij van het nieuwe pad en die van het oude: wat de schrijver al deed (gegevens, proef)
     telt ook in de controle van deze ronde, ook al staat het nog op de oude rij."""
@@ -803,6 +847,14 @@ def verwerk(nummer, droog=False):
                                    f"als onder {projectmap.split('/')[-2]}; Mehdi zegt welke geldt", "wie": "mehdi"})
             verhuisd[mp] = [r for r in oude if r not in nog]
     verhuisd = {k: v for k, v in verhuisd.items() if v}
+    # Kan niet worden nagegaan of een map bestaat, dan doen we niets: geen koppeling en geen "verdwenen".
+    bestaat = getattr(bronnen, "bestaat", None) or (lambda _pad: True)
+    hernoemd = hernoemde_rijen(bezoeken, projectmap, alle_rijen, bestaat, verhuisd.values())
+    for mp, oude in hernoemd.items():
+        verhuisd.setdefault(mp, []).extend(oude)
+        ag.log(str(nummer), "bevinding", f"bezoekmap hernoemd: {', '.join(os.path.basename(r['bezoekmap']) for r in oude)} "
+               f"heet nu {os.path.basename(mp)}; de rij gaat mee")
+    verdwenen = verdwenen_rijen(bezoeken, alle_rijen, bestaat, verhuisd.values())
     if verhuisd:
         ag.log(str(nummer), "bevinding", f"projectmap verhuisd: {len(verhuisd)} bezoekmap(pen) hebben een rij op het oude pad "
                f"({next(iter(verhuisd.values()))[0]['projectmap'].split('/')[-2]}); die rij gaat mee naar het nieuwe pad")
@@ -861,8 +913,13 @@ def verwerk(nummer, droog=False):
         # het bezoeknummer (PB1.., 1..) is wat in het verslag komt; de rij telt alle bezoeken door en is alleen het adres op het bord
         ag.log(str(nummer), "bevinding", f"{b['soort_bezoek']} {b['nr_label']} (rij {b['volgnr']}, {b['datum']}): {rijen[-1]['stand']}; "
                + ", ".join(f"{x['code']} {x['stand']}" for x in controles))
+    for r in verdwenen:
+        noden.append({"tekst": f"Dossier {nummer}: de bezoekmap van {r.get('datum')} ({os.path.basename(r['bezoekmap'])}) bestaat niet "
+                               "meer en hoort bij geen bezoek van nu; Mehdi kijkt of het bezoek nog bestaat", "wie": "mehdi"})
     if droog:
         print(json.dumps(rijen, ensure_ascii=False, indent=1))
+        if verdwenen:
+            print("verdwenen:", json.dumps([{"id": r.get("id"), "datum": r.get("datum"), "bezoekmap": r["bezoekmap"]} for r in verdwenen], ensure_ascii=False))
         return rijen, noden, dubbels
     try:
         uit = bord.call("/api/werfbezoek", {"rijen": rijen})
@@ -904,6 +961,15 @@ def verwerk(nummer, droog=False):
                        **{k: rij[k] for k in ("registratie", "taken", "controles", "stand")}}]})
         except (ValueError, werfregister.RegisterFout):
             noden.append({"tekst": f"Dossier {nummer}, bezoek {b['nr_label']}: geen ondubbelzinnig bevestigd H-A-bezoekvenster of vaste registratie; fototaak blijft open, tijden en identiteit bevestigen", "wie": "mehdi"})
+    for r in verdwenen:
+        try:
+            bord.call("/api/werfbezoek", {"rijen": [{"dossier": str(nummer), "datum": r["datum"], "bezoekmap": r["bezoekmap"],
+                       "volgnr": r.get("volgnr") or 0, "werfbezoek_id": r["id"], "_alleen": ["stand", "controles"], "stand": VERDWENEN,
+                       "controles": [{"code": "W3", "naam": "projectmap en bezoekmap", "stand": "ontbreekt",
+                                      "toelichting": "deze bezoekmap bestaat niet meer en hoort bij geen bezoek van nu"}]}]})
+            ag.log(str(nummer), "besluit", f"rij {r['id']}: bezoekmap bestaat niet meer; stand '{VERDWENEN}' (niets gewist)")
+        except Exception as ex:  # noqa: BLE001
+            ag.log(str(nummer), "fout", f"rij {r.get('id')}: stand 'verdwenen' niet bevestigd: {ex}")
     if alle_taken:
         uit_taken = ag.klaarzet(alle_taken)
         ag.log(str(nummer), "besluit", f"{len(alle_taken)} taak/taken uitgezet bij collega-agents", uit_taken)
