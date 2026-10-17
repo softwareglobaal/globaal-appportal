@@ -15,6 +15,7 @@ opneemt doet De Bode (elke 5 minuten, maximaal POGINGEN keer)."""
 import base64
 import json
 import os
+import re
 import urllib.parse
 import urllib.request
 from xml.sax.saxutils import escape
@@ -217,7 +218,60 @@ def alarm_bellen(staat, alarmen, log=None):
 # elke minuut en belt op het moment zelf.
 
 ROOSTER = os.path.expanduser("~/appportal/mijnagents-data/belrooster.json")
+AFZEGSPOOR = os.path.expanduser("~/appportal/mijnagents-data/agenda-annulering-gebeld.jsonl")
 VENSTER_MIN = 4  # binnen zoveel minuten na het beltijdstip bellen we nog
+
+
+def afzegging_tekst(event):
+    """Vrije tekst telt alleen met een uitspraak over de afspraak, niet met een annuleerlink."""
+    oms = event.get("description") or event.get("omschrijving") or ""
+    afzegging = re.search(
+        r"\b(?:call|afspraak|meeting|gesprek)\b[^.\n]{0,100}"
+        r"\b(?:niet (?:kunnen |kan |zal )?doorgaan|kan niet doorgaan|"
+        r"gaat niet door|(?:is|werd) afgezegd|(?:is|werd) geannuleerd)\b",
+        oms, re.I)
+    if not afzegging:
+        return False
+    # Een latere, expliciete bevestiging in dezelfde omschrijving herroept de afzegzin.
+    vervolg = oms[afzegging.end():]
+    bevestigd = re.search(r"\b(?:call|afspraak|meeting|gesprek)\b[^.\n]{0,100}"
+                           r"\b(?:gaat (?:toch |wel )?door|is (?:alsnog |opnieuw )?bevestigd|is confirmed)\b",
+                           vervolg, re.I)
+    return not bool(bevestigd)
+
+
+def afgezegd(event):
+    """Alleen expliciet bewijs. Een Calendly-'Cancel:' link is geen annulering."""
+    return ((event.get("status") or "").lower() == "cancelled"
+            or (event.get("_eigen_reactie") or "").lower() == "declined"
+            or any(a.get("self") and a.get("responseStatus") == "declined"
+                   for a in event.get("attendees") or [])
+            or afzegging_tekst(event))
+
+
+def belafspraak_actueel(regel):
+    """Lees het Google-item vlak voor een vertrekoproep; onbekend is geen toestemming om te bellen."""
+    from koppelingen import agenda
+    delen = (regel.get("sleutel") or "").split(":", 2)
+    if len(delen) != 3:
+        return False, "ongeldige roostersleutel"
+    kal, eid, begin = delen
+    url = (f"{agenda.API}/calendars/{urllib.parse.quote(kal, safe='')}/events/"
+           f"{urllib.parse.quote(eid, safe='')}")
+    try:
+        req = urllib.request.Request(url, headers={"Authorization": "Bearer " + agenda._toegang()})
+        with urllib.request.urlopen(req, timeout=15) as antwoord:
+            event = json.load(antwoord)
+        actueel = (event.get("start") or {}).get("dateTime") or ""
+        from datetime import datetime
+        zelfde = bool(actueel) and datetime.fromisoformat(actueel) == datetime.fromisoformat(begin)
+        if afgezegd(event):
+            return False, "afgezegd"
+        if not zelfde:
+            return False, "afspraak verplaatst of verdwenen"
+        return True, ""
+    except Exception as e:  # noqa: BLE001
+        return False, f"agenda niet te verifiëren ({type(e).__name__})"
 
 
 def callmebot_beschikbaar():
@@ -533,6 +587,75 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
     beurt = te_bellen(staat, nu, rooster)
     for i, r in enumerate(beurt):
         titel = r.get("titel", "")
+        actueel, reden = belafspraak_actueel(r)
+        if not actueel:
+            if reden == "afgezegd":
+                # Het afsprakenummer betekent voor Mehdi altijd "over vijf minuten vertrekken".
+                # Een afzegging wordt daarom met het andere nummer en met de reden uitgesproken.
+                if r["sleutel"] in spoor_lezen(AFZEGSPOOR):
+                    gebeld[r["sleutel"]] = nu.isoformat()
+                    if spoor:
+                        spoor_schrijven(spoor, r["sleutel"], nu.isoformat())
+                    if bewaar:
+                        _bewaar(bewaar, staat, log)
+                    continue
+                melding = f"Mehdi, deze afspraak is afgezegd. Niet vertrekken: {titel[:80]}."
+                if spoor:
+                    try:
+                        spoor_schrijven(spoor, r["sleutel"], nu.isoformat(), bezig=True)
+                    except OSError:
+                        if nood is not None:
+                            nood.append({"tekst": "Afzegging: belspoor niet te schrijven; oproep tegengehouden",
+                                         "wie": "claude-code"})
+                        break
+                uitkomst = bel_vast(melding, "De afzegging staat in je agenda.")
+                gelukt_ = gelukt(uitkomst)
+                if gelukt_:
+                    gebeld[r["sleutel"]] = nu.isoformat()
+                    pogingen.pop(r["sleutel"], None)
+                    try:
+                        spoor_schrijven(AFZEGSPOOR, r["sleutel"], nu.isoformat())
+                    except OSError:
+                        if nood is not None:
+                            nood.append({"tekst": "Afzegging gebeld maar gezamenlijk belspoor niet opgeslagen",
+                                         "wie": "claude-code"})
+                else:
+                    n = pogingen[r["sleutel"]] = pogingen.get(r["sleutel"], 0) + 1
+                    if n >= MAX_BELPOGINGEN:
+                        gebeld[r["sleutel"]] = nu.isoformat()
+                        pogingen.pop(r["sleutel"], None)
+                    if nood is not None:
+                        nood.append({"tekst": "Afzegging gevonden maar belstart mislukt: " + titel[:80],
+                                     "wie": "claude-code"})
+                if spoor:
+                    try:
+                        spoor_schrijven(spoor, r["sleutel"], nu.isoformat(),
+                                       poging=None if r["sleutel"] in gebeld else n)
+                    except OSError:
+                        if nood is not None:
+                            nood.append({"tekst": "Afgezegde afspraak: belspoor niet opgeslagen", "wie": "claude-code"})
+                if bewaar:
+                    _bewaar(bewaar, staat, log)
+            elif nood is not None:
+                nood.append({"tekst": "Vertrekoproep tegengehouden: " + reden + ": " + titel[:80],
+                             "wie": "claude-code"})
+            if reden.startswith("agenda niet te verifiëren"):
+                onzeker = r["sleutel"] + ":onzeker"
+                try:
+                    eerder = onzeker in spoor_lezen(AFZEGSPOOR) or onzeker in spoor_bezig(AFZEGSPOOR)
+                    if not eerder:
+                        spoor_schrijven(AFZEGSPOOR, onzeker, nu.isoformat(), bezig=True)
+                        res = bel_vast("Mehdi, ik kan je afspraak van zo meteen niet controleren. "
+                                       "Kijk nu zelf in je agenda. Ik geef geen vertrekbevestiging.")
+                        spoor_schrijven(AFZEGSPOOR, onzeker, nu.isoformat(),
+                                       poging=1 if not gelukt(res) else None)
+                except OSError:
+                    if nood is not None:
+                        nood.append({"tekst": "Agenda onleesbaar en waarschuwing niet bevestigd: " + titel[:80],
+                                     "wie": "claude-code"})
+            if log:
+                log("bellen", "afspraak", f"vertrekoproep overgeslagen: {reden}: {titel[:80]}")
+            continue
         if spoor:
             try:
                 # eerst een duurzaam 'bezig': crasht de ronde na de start, dan belt de volgende ronde niet blind opnieuw (A26)

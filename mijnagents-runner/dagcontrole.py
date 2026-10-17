@@ -125,7 +125,7 @@ def dagcontrole(items, dag):
     for a in afspraken:
         if (a.get("_merk") or {}).get(W.JA_MERK) == dag:
             continue          # Mehdi zei ja voor precies deze dag; verplaatst naar een andere dag telt die ja niet (FR-92, V10)
-        m = W.markering_tegen(a["titel"], dag, markers)
+        m = W.markering_tegen(a["titel"], dag, markers, locatie=a.get("locatie") or "")
         if not m:
             continue
         alles = any(t == m and wat == "alles" for t, wat in markers)

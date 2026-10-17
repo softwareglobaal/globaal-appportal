@@ -133,6 +133,9 @@ def afspraken(van_dagen=-1, tot_dagen=8):
         for ev in items:
             if ev.get("status") == "cancelled":
                 continue
+            from koppelingen import bellen
+            if bellen.afgezegd(ev):
+                continue
             # Een uitnodiging staat op elke agenda die ze kreeg (bv. Contrax en
             # mehdiprivewerkagenda) met hetzelfde id: één keer tellen, anders
             # botst een afspraak met zichzelf (gemeten 17-09-2026).

@@ -1,7 +1,7 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.37",
- "datum": "15-10-2026",
+ "versie": "3.38",
+ "datum": "17-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
   "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
@@ -364,6 +364,11 @@
     "FR-179",
     "FR-180"
    ]
+  },
+  {
+   "id": "L39",
+   "les": "Een afzegging is een eigen bericht, niet een gewone herinnering. Controleer de afspraak op het belmoment; thuis is geen reisbestemming en een invulnaam uit een deal is geen persoon. Onzekere gegevens blijven een vraag aan Mehdi.",
+   "uit": ["FR-181", "FR-182", "FR-183"]
   }
  ],
  "fouten": [
@@ -3665,6 +3670,48 @@
     "waar": "tests/test_codex_ronde2_bode.py",
     "tekst": "A34 ronde 6: een alarm dat bij een herkansing lukt, staat in het belspoor"
    },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-181",
+   "datum": "17-10-2026",
+   "gevonden_door": "Mehdi, logboek van de vijfminutenoproep en Google-afspraak",
+   "fout": "De agent belde om 08:55 voor de afspraak van 09:00 met Tim De Decker alsof die doorging, terwijl de agenda later een expliciete afzegtekst bevatte.",
+   "gevolg": "Mehdi haastte zich onnodig naar zijn pc en hoorde niet dat de afspraak afgezegd was.",
+   "waarom_niet_gezien": "Het belrooster keek alleen naar het eerder gelezen schema; de wijzigingsvingerafdruk negeerde de omschrijving.",
+   "oorzaak": "Geen actuele afzegcontrole voor de vertrekoproep en geen afzonderlijke afzegmelding. Het precieze tijdstip waarop de afzegtekst in Google beschikbaar kwam is onbekend.",
+   "soort_oorzaak": "code",
+   "oplossing": "Google-item vlak voor de oproep lezen; bij afzegging geen vertrekoproep en een afzonderlijke melding; bij bronfout eenmalig waarschuwen vanaf het vaste nummer. Voorwaardelijke zinnen en later herroepen afzegzinnen tellen niet. Een mislukte afzegmelding blijft open.",
+   "grendel": {"soort": "test", "waar": "tests/test_agenda_signaal.py", "tekst": "A9 een mislukte afzegmelding blijft open en wordt de volgende ronde opnieuw geprobeerd"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-182",
+   "datum": "17-10-2026",
+   "gevonden_door": "Mehdi, agenda en logboek",
+   "fout": "Een gesprek op Herfstlaan 65 kreeg een buitenconflict en twee ritten van thuis naar thuis.",
+   "gevolg": "Mehdi zag een onnodige vraag, reistijd en een vertrekoproep voor een gesprek bij hem thuis.",
+   "waarom_niet_gezien": "Buiten werd alleen uit de titelcode en een ingevulde locatie afgeleid.",
+   "oorzaak": "De reis- en markerregels herkenden het bekende thuisadres niet.",
+   "soort_oorzaak": "code",
+   "oplossing": "Het thuisadres uitsluiten van buitenconflict, ritplanning en vertrekoproep; de titel mag intern blijven.",
+   "grendel": {"soort": "test", "waar": "tests/test_annulering_en_thuis.py", "tekst": "Herfstlaan is thuis en heeft geen vertrekmelding"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-183",
+   "datum": "17-10-2026",
+   "gevonden_door": "Mehdi, oorspronkelijke titel en agentlogboek",
+   "fout": "De korte titel 'mehdi: catalin offerte dorin' werd naar UNABO en de invulnaam Voornaam Achternaam omgezet.",
+   "gevolg": "Een afspraak met Catalin van Harmoniebouw leek een onbekende prospect; VR stond als onduidelijke vraag vooraan.",
+   "waarom_niet_gezien": "De Pipedrive-zoekroute nam een deal op hetzelfde adres voor bewijs van de gesprekspartner.",
+   "oorzaak": "Een testdeal met een invulnaam op Mehdi's thuisadres won van de bekende partnerkoppeling.",
+   "soort_oorzaak": "code",
+   "oplossing": "Bekende partner en thuisadres gaan voor op een adresdeal; invulnamen zijn geen bewijs. Een titel met alleen een activiteit mag worden aangevuld, maar als Mehdi daarnaast een naam of inhoudswoord schreef mag een andere persoon uit een adresdeal zijn titel niet overschrijven.",
+   "grendel": {"soort": "test", "waar": "tests/test_annulering_en_thuis.py", "tekst": "Catalin blijft Harmoniebouw zonder klantgok"},
    "controle": [],
    "status": "opgelost"
   }

@@ -86,6 +86,9 @@ def nep_bord(pad, payload=None, method=None):
 
 B.bord.call = nep_bord
 BEL = B.bellen
+# Deze suite controleert de belpogingen; de nieuwe Google-controle is afzonderlijk
+# getest in test_annulering_en_thuis.py en krijgt hier een bevestigde nepafspraak.
+BEL.belafspraak_actueel = lambda regel: (True, "")
 ECHT = {n: getattr(BEL, n) for n in ("afspraken_bellen", "alarm_bellen", "bel_afspraak", "bel")}
 BEL.afspraak_bellen_beschikbaar = lambda: True
 BEL.beschikbaar = lambda: True

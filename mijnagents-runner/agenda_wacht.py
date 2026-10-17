@@ -614,7 +614,7 @@ def dagmarkeringen(dag):
     return _MARKERS[dag]
 
 
-def markering_tegen(titel, dag, markers=None):
+def markering_tegen(titel, dag, markers=None, locatie=""):
     """De markering die een afspraak met deze titel op deze dag tegenhoudt, of None. Een rit, een hele-dag-item en Lara
     zelf (de reden van de markering) tellen niet."""
     t = (titel or "").strip()
@@ -623,7 +623,7 @@ def markering_tegen(titel, dag, markers=None):
     info = lees_titel(t)
     if info["reistijd"]:
         return None
-    buiten = info["buiten"] or info["soort"] in BUITEN_SOORTEN
+    buiten = (info["buiten"] or info["soort"] in BUITEN_SOORTEN) and not is_thuis_adres(locatie)
     for m, wat in (dagmarkeringen(dag) if markers is None else markers):
         if wat == "alles" or (wat == "buiten" and buiten):
             return m
@@ -664,7 +664,8 @@ def _patch(a, body, tok, toch=False):
     # een afspraak naar een dag verzetten die een markering afsluit, kan alleen met een ja van Mehdi (FR-83)
     if "start" in body and not toch:
         dag = ((body.get("start") or {}).get("dateTime") or "")[:10]
-        m = markering_tegen(body.get("summary") or a.get("titel"), dag)
+        m = markering_tegen(body.get("summary") or a.get("titel"), dag,
+                           locatie=body.get("location") or a.get("locatie") or "")
         if m:
             raise DagMarkering(f"{dag} staat '{m}': '{(body.get('summary') or a.get('titel') or '')[:60]}' kan die dag niet zonder ja van Mehdi")
     elif "start" in body:
@@ -1377,7 +1378,11 @@ def _deal_op_adres(firma, adres):
                 naam = [w for w in naam if w not in ("PA", "KL")]
                 if len(naam) > 2 and naam[-1] == naam[0]:
                     naam = naam[:-1]
-                uit = (" ".join(naam), x.get("status") == "won")
+                klant = " ".join(naam)
+                # Een testdeal met een invulsjabloon is geen bewijs van de gesprekspartner.
+                if re.search(r"\b(?:voornaam\s+achternaam|first\s+name\s+last\s+name)\b", klant, re.I):
+                    continue
+                uit = (klant, x.get("status") == "won")
                 if uit[1]:
                     break
     except Exception:  # noqa: BLE001
@@ -1394,6 +1399,22 @@ def titel_uit_onderzoek(a):
     titel = a["titel"]
     info = lees_titel(titel)
     if info.get("firma") or info["reistijd"] or a.get("hele_dag"):
+        return None, ""
+    # Een bekende partner op het thuisadres is geen prospect van een willekeurige deal
+    # die toevallig hetzelfde adres bevat. De koppeling partner -> firma staat in de master.
+    if is_thuis_adres(a.get("locatie") or "") and not info["nummer"]:
+        gevonden = []
+        for firma, namen in (_gastregels().get("firma_gasten") or {}).items():
+            for naam in namen:
+                if re.search(r"\b" + re.escape(naam) + r"\b", titel, re.I):
+                    gevonden.append((firma, naam))
+        if len(gevonden) == 1:
+            firma, naam = gevonden[0]
+            rest = re.sub(r"\b" + re.escape(naam) + r"\b", "", titel.split(":", 1)[-1],
+                          count=1, flags=re.I).strip(" ,:-")
+            rest = rest[:1].upper() + rest[1:] if rest else "overleg"
+            nieuw = f"Mehdi & {naam}: [{titelcode(firma)}-IN] {rest}"
+            return nieuw, f"bekende partner {naam} van {firma}; thuis is geen buitenafspraak"
         return None, ""
     # Spoor 1: een H-Architects-projectnummer (JJNN) met een projectmap. De map ontstaat bij de ondertekening,
     # dus klant; zonder !! is het achter het bureau (online). Gezien 25-09-2026: 'Mehdi: 2607' kreeg een vraag
@@ -1430,6 +1451,15 @@ def titel_uit_onderzoek(a):
     if not deal or not deal[0]:
         return None, ""
     klant, gewonnen = deal
+    # Een titel met enkel de activiteit kan uit de unieke adresdeal worden aangevuld.
+    # Schreef Mehdi daarnaast een naam/ander inhoudswoord, dan mag een andere
+    # persoon uit een deal op hetzelfde adres zijn woorden niet overschrijven.
+    eigen_woorden = re.sub(r"^\s*(?:!!\s*)?mehdi\s*[:;,]?\s*", "", titel, flags=re.I)
+    for rx, _ in ACTIVITEIT_WOORDEN[firma]:
+        eigen_woorden = re.sub(rx, "", eigen_woorden, flags=re.I)
+    eigen_woorden = re.sub(r"\b(?:en|met|voor|de|het|een)\b", "", eigen_woorden, flags=re.I)
+    if re.search(r"[A-Za-zÀ-ÿ]", eigen_woorden) and not re.search(r"\b" + re.escape(klant) + r"\b", titel, re.I):
+        return None, ""
     buiten = code in BUITEN_TYPES or info["buiten"]
     soort = ("K" if gewonnen else "P") + ("B" if buiten else "O")
     nieuw = f"{'!! ' if buiten else ''}Mehdi: [{titelcode(firma)}-{soort}] {code} - {klant}, {adres}"
@@ -2176,7 +2206,7 @@ def _insert(kalender, body, tok, toch=False):
         body["summary"] = canoniek(body["summary"])
     # een nieuwe afspraak op een dag die een markering afsluit, kan alleen met een ja van Mehdi (FR-83)
     dag = ((body.get("start") or {}).get("dateTime") or "")[:10]
-    m = markering_tegen(body.get("summary"), dag) if not toch else None
+    m = markering_tegen(body.get("summary"), dag, locatie=body.get("location") or "") if not toch else None
     if m:
         raise DagMarkering(f"{dag} staat '{m}': '{(body.get('summary') or '')[:60]}' kan die dag niet zonder ja van Mehdi")
     if toch:
@@ -2780,6 +2810,10 @@ def reistijd_zetten(items, alleen_dag=None):
     for a in items:
         if a.get("hele_dag") or a.get("kalender", "").startswith("en.be#"):
             continue
+        adres = a.get("locatie") or ""
+        if is_thuis_adres(adres):
+            # Ook bij een onleesbare grendel of een dag zonder auto is thuis geen buitenrit.
+            continue
         if zonder_auto is None or (vrij is None and a.get("kalender") in AGENDA_VASTE_KLEUR
                                    and AGENDA_VASTE_KLEUR[a["kalender"]].get("naam") == "Lara"):
             # de grendelbron is onbekend: geen rit, ook geen gok (Codex A11). Elke getroffen komende buitenafspraak staat
@@ -2805,7 +2839,6 @@ def reistijd_zetten(items, alleen_dag=None):
             if info["buiten"] or info["soort"] in BUITEN_SOORTEN:
                 regels.append(f"{a['start'][:16]} {a['titel'][:50]}: BUITEN op een dag zonder auto (door {maker(a)})")
             continue
-        adres = a.get("locatie") or ""
         fysiek = bool(adres) and not adres.lower().startswith("http")
         bron_adres = "agenda"
         if not fysiek and info["nummer"] and info["nummer"] in projecten:
@@ -3393,7 +3426,8 @@ def belrooster(items, vandaag):
     reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"] and "T" in x["start"]]
     regels = []
     for a in items:
-        if a.get("hele_dag") or a.get("_terugkerend") or a["start"][:10] < vandaag or a.get("kalender", "").startswith("en.be#"):
+        if (a.get("hele_dag") or a.get("_terugkerend") or a["start"][:10] < vandaag
+                or a.get("kalender", "").startswith("en.be#") or bellen.afgezegd(a)):
             continue
         kal = KALENDERS.get(a["kalender"], "")
         info = lees_titel(a["titel"])
@@ -3401,7 +3435,8 @@ def belrooster(items, vandaag):
             continue
         start = datetime.fromisoformat(a["start"])
         adres = a.get("locatie") or ""
-        buiten = info["buiten"] or info["soort"] in ("KB", "PB") or (adres and not adres.lower().startswith("http"))
+        buiten = (info["buiten"] or info["soort"] in ("KB", "PB")
+                  or (adres and not adres.lower().startswith("http"))) and not is_thuis_adres(adres)
         if buiten:
             # de heenrit van DEZE afspraak: zijn omschrijving noemt haar, of hij eindigt op haar begin (plus of min vijf
             # minuten). Nooit zomaar de laatste rit binnen drie uur: die kan bij een andere afspraak horen (Codex A14).
@@ -3420,7 +3455,7 @@ def belrooster(items, vandaag):
             hoe = f"over {BEL_ONLINE_MIN} minuten vertrekken"
         else:
             beltijd = start - timedelta(minutes=BEL_ONLINE_MIN)
-            hoe = f"over {BEL_ONLINE_MIN} minuten online"
+            hoe = f"over {BEL_ONLINE_MIN} minuten " + ("thuis" if is_thuis_adres(adres) else "online")
         prive = is_prive(a)       # het rooster gaat naar Dropbox: een privé-titel nooit (Codex A25)
         klant = "je privé-afspraak" if prive else (info["klant"] or a["titel"][:60])
         tekst = f"Mehdi, {hoe}: {klant}, om {start.strftime('%H:%M')}." + (" De link staat in je agenda." if not buiten else " Adres staat in je agenda.")
@@ -3450,10 +3485,11 @@ def _nakijken(regels, tok=None):
         try:
             ev = _event({"kalender": kal, "id": eid}, tok or agenda._toegang())
             ev_start = (ev.get("start") or {}).get("dateTime")
-            klopt = ev.get("status") != "cancelled" and _zelfde_tijd(ev_start, begin)
+            klopt = not bellen.afgezegd(ev) and _zelfde_tijd(ev_start, begin)
             # ook de inhoud opnieuw beoordelen: een afspraak die intern of privé werd, krijgt geen oude oproeptekst (ronde 6)
             vers = belrooster([{"id": eid, "kalender": kal, "titel": ev.get("summary") or "", "start": ev_start or "",
                                 "einde": (ev.get("end") or {}).get("dateTime") or "", "locatie": ev.get("location") or "",
+                                "omschrijving": ev.get("description") or "",
                                 "hele_dag": "date" in (ev.get("start") or {}), "_terugkerend": bool(ev.get("recurringEventId"))}],
                               vandaag) if klopt else []
         except Exception:  # noqa: BLE001
@@ -3558,6 +3594,12 @@ _TKN_MAPPEN = {"lijst": None}
 
 def _plat_adres(t):
     return " ".join(re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).split())
+
+
+def is_thuis_adres(adres):
+    """Alleen het bekende thuisadres, ook als Google nog ', België' toevoegt."""
+    adres, thuis = _plat_adres(adres), _plat_adres(THUIS)
+    return bool(adres and thuis and (adres == thuis or adres.startswith(thuis + " ")))
 
 
 def straat_nummer(a):

@@ -35,6 +35,7 @@ STAND = Path.home() / "appportal/mijnagents-data/agenda-signaal.json"
 # Wat de wacht niet kon afhandelen, blijft zichtbaar tot het beoordeeld is (nacontrole v1.2, A5/A8): een dag die na vijf
 # pogingen opgegeven werd, en een annulering zonder start waarvan de dag onbekend is. De zelfcontrole toont ze.
 CONTROLEPUNTEN = Path.home() / "appportal/mijnagents-data/agenda-signaal-controlepunten.json"
+ANNULERING_SPOOR = W.bellen.AFZEGSPOOR
 
 
 def controlepunten():
@@ -73,8 +74,8 @@ SLOT_BEZET = 75
 BEZET_ALARM = 10
 # nextPageToken moet in de velden staan, anders laat Google het weg en lijkt de eerste pagina alles (A4).
 # originalStartTime geeft de dag waar een reeksinstantie oorspronkelijk stond (A7, A8).
-VELDEN = ("nextPageToken,items(id,summary,status,updated,start/dateTime,start/date,end/dateTime,end/date,"
-          "originalStartTime/dateTime,originalStartTime/date,location,attendees/email)")
+VELDEN = ("nextPageToken,items(id,summary,status,updated,description,start/dateTime,start/date,end/dateTime,end/date,"
+          "originalStartTime/dateTime,originalStartTime/date,location,attendees(email,responseStatus,self))")
 
 
 def vorige():
@@ -116,7 +117,66 @@ def vingerafdruk(ev):
     schrijfactie startte de ronde opnieuw, elke 12 minuten voor 15 dagen, en het Google-plafond was om
     09:00 op (FR-62)."""
     return json.dumps([ev.get("summary"), ev.get("status"), ev.get("start"), ev.get("end"), ev.get("location"),
-                       sorted((g.get("email") or "") for g in ev.get("attendees") or [])], ensure_ascii=False)
+                       sorted((g.get("email") or "") for g in ev.get("attendees") or []),
+                       W.bellen.afgezegd(ev)], ensure_ascii=False)
+
+
+def annulering_kandidaat(kal, ev, vorig, nu):
+    """Een nieuwe, expliciete afzegging met een herleidbaar tijdstip; geen herhaalde eigen wijziging."""
+    if not (ev.get("status") == "cancelled" or W.bellen.afzegging_tekst(ev)):
+        return None
+    oud = []
+    if vorig:
+        try:
+            oud = json.loads(vorig[0])
+        except (ValueError, TypeError):
+            pass
+    if len(oud) > 1 and (oud[1] == "cancelled" or (len(oud) > 6 and oud[6])):
+        return None
+    start = (ev.get("start") or {}).get("dateTime")
+    if not start and len(oud) > 2:
+        start = (oud[2] or {}).get("dateTime")
+    try:
+        begint = datetime.fromisoformat(start)
+    except (TypeError, ValueError):
+        return None
+    if not (nu - timedelta(hours=2) <= begint <= nu + timedelta(days=30)):
+        return None
+    titel = _toonbare_titel(kal, ev.get("summary") or _oude_titel(vorig) or "afspraak")
+    return {"sleutel": f"{kal}:{ev.get('id', '')}:{start}", "titel": titel[:80], "start": begint}
+
+
+def meld_annulering(kandidaat, nu):
+    """Bel vanaf het vaste nummer; het afsprakenummer blijft exclusief voor vertrek."""
+    sleutel = kandidaat["sleutel"]
+    try:
+        if sleutel in W.bellen.spoor_lezen(ANNULERING_SPOOR):
+            return True
+        if sleutel in W.bellen.spoor_bezig(ANNULERING_SPOOR):
+            print(f"afzegging mogelijk gebeld, handmatige controle nodig: {sleutel}", file=sys.stderr)
+            return False
+        W.bellen.spoor_schrijven(ANNULERING_SPOOR, sleutel, nu.isoformat(), bezig=True)
+    except OSError as e:
+        print(f"afzegging niet gebeld: belspoor onleesbaar ({type(e).__name__})", file=sys.stderr)
+        return False
+    tijd = kandidaat["start"].astimezone(W.TIJDZONE).strftime("%d-%m om %H:%M")
+    tekst = f"Mehdi, afspraak {tijd} is afgezegd. Niet vertrekken. {kandidaat['titel']}."
+    uitkomst = W.bellen.bel_vast(tekst, "Controleer je agenda of mail.")
+    if not W.bellen.gelukt(uitkomst):
+        # Er is zeker geen oproep gestart; sluit het 'bezig'-record af als mislukte poging.
+        try:
+            W.bellen.spoor_schrijven(ANNULERING_SPOOR, sleutel, nu.isoformat(), poging=1)
+        except OSError:
+            print(f"afzegging niet gebeld: belspoor niet af te sluiten ({sleutel})", file=sys.stderr)
+        print(f"afzegging mogelijk niet gemeld: {sleutel}", file=sys.stderr)
+        return False
+    try:
+        W.bellen.spoor_schrijven(ANNULERING_SPOOR, sleutel, nu.isoformat())
+    except OSError:
+        print(f"afzegging gebeld, maar belspoor niet afgemaakt: {sleutel}", file=sys.stderr)
+        return False
+    print(f"afzegging gemeld: {tijd} {kandidaat['titel']}")
+    return True
 
 
 def _dag(tijd):
@@ -241,6 +301,7 @@ def ronde(tijd):
     kop = {"Authorization": "Bearer " + A._toegang()}
     vanaf = (nu - timedelta(days=1)).date().isoformat()
     dagen, wat, niet_gelezen, per_kal, onbekend = set(), [], [], {}, []
+    annuleringen = dict(st.get("annulering_open") or {})
     oud = st.get("vinger") or {}
     vinger = dict(oud)
     for kal in kals:
@@ -251,8 +312,26 @@ def ronde(tijd):
             niet_gelezen.append(kal)
             continue
         per_kal[kal], w_ = te_verwerken(kal, items, oud, vinger, vanaf, onbekend)
+        for ev in items:
+            kandidaat = annulering_kandidaat(kal, ev, oud.get(f"{kal}|{ev.get('id', '')}"), nu)
+            if kandidaat:
+                annuleringen[kandidaat["sleutel"]] = {**kandidaat, "start": kandidaat["start"].isoformat()}
         dagen |= per_kal[kal]
         wat += w_
+
+    melding_mislukt = False
+    for sleutel, kandidaat in list(annuleringen.items()):
+        try:
+            kandidaat["start"] = datetime.fromisoformat(kandidaat["start"])
+            gemeld = meld_annulering(kandidaat, nu)
+        except (TypeError, ValueError, KeyError):
+            gemeld = False
+        if gemeld:
+            annuleringen.pop(sleutel, None)
+        else:
+            kandidaat["start"] = (kandidaat["start"].isoformat() if isinstance(kandidaat.get("start"), datetime)
+                                  else kandidaat.get("start", ""))
+            melding_mislukt = True
 
     if dagen:
         print(f"{tijd} {len(wat)} wijziging(en) op {len(dagen)} dag(en):")
@@ -335,8 +414,8 @@ def ronde(tijd):
     grens = (nu - timedelta(days=2)).date().isoformat()
     vinger = {k: v for k, v in vinger.items() if v[1] >= grens}
     bewaar({"gekeken": nu.isoformat(), "cursor": cursor, "laatste_dagen": sorted(dagen), "vinger": vinger,
-            "open": open_, "opgegeven": opgegeven[-20:]})
-    return 1 if niet_gelezen or gefaald or alarm else 0
+            "open": open_, "opgegeven": opgegeven[-20:], "annulering_open": annuleringen})
+    return 1 if niet_gelezen or gefaald or alarm or melding_mislukt else 0
 
 
 def main():

@@ -354,9 +354,32 @@ g.items["werk"] = [ev("x2", dag(4))]
 ronde(g, w)
 g.items["werk"] = [{"id": "x2", "status": "cancelled", "updated": nu_iso(1)}]
 w2 = NepWacht()
+meldingen = []
+oorspronkelijke_melder = S.meld_annulering
+S.meld_annulering = lambda kandidaat, nu: meldingen.append(kandidaat) or True
 rc, uit, _ = ronde(g, w2)
-check("A8 in een echte ronde krijgt de dag van een geschrapte afspraak de wacht", w2.dagen == [dag(4)] and rc == 0,
-      str((w2.dagen, uit)))
+S.meld_annulering = oorspronkelijke_melder
+check("A8 in een echte ronde krijgt de dag van een geschrapte afspraak de wacht en Mehdi een afzegmelding",
+      w2.dagen == [dag(4)] and rc == 0 and len(meldingen) == 1,
+      str((w2.dagen, uit, meldingen)))
+
+# --- A9: een mislukte afzegmelding blijft open en wordt opnieuw geprobeerd ------------------------------
+nieuwe_stand()
+g, w = NepGoogle(), NepWacht()
+g.items["werk"] = [ev("herkans", dag(2))]
+ronde(g, w)
+g.items["werk"] = [ev("herkans", dag(2), bijgewerkt=nu_iso(1),
+                       description="Deze afspraak gaat niet door.")]
+meldingen = []
+S.meld_annulering = lambda kandidaat, nu: (meldingen.append(kandidaat), len(meldingen) > 1)[1]
+rc1, _, _ = ronde(g, NepWacht())
+open1 = stand().get("annulering_open")
+rc2, _, _ = ronde(g, NepWacht())
+open2 = stand().get("annulering_open")
+S.meld_annulering = oorspronkelijke_melder
+check("A9 een mislukte afzegmelding blijft open en wordt de volgende ronde opnieuw geprobeerd",
+      rc1 == 1 and len(open1) == 1 and rc2 == 0 and not open2 and len(meldingen) == 2,
+      str((rc1, open1, rc2, open2, meldingen)))
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

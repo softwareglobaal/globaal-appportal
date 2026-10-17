@@ -1,5 +1,16 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.15 (17-10-2026): een expliciete annulering krijgt een eigen melding vanaf het vaste agentnummer
+met "afgezegd, niet vertrekken". De vijfminutenoproep leest het Google-item vlak voor het bellen opnieuw; kan
+dat niet, dan klinkt geen vertrekoproep maar eenmaal een waarschuwing vanaf het vaste agentnummer. Mislukte
+afzegmeldingen blijven open. Een annuleerlink of voorwaardelijke zin is geen annulering; een latere expliciete
+bevestiging herroept de afzegzin.
+Herfstlaan 65 is Mehdi's thuis: geen rit thuis-naar-thuis, geen buitenconflict en geen vertrekoproep. Bij een korte
+titel met Catalin gebruikt de agent de bekende Harmoniebouw-koppeling; een deal met een invulnaam telt niet.
+Een adresdeal buiten thuis kan een titel met alleen een activiteit aanvullen. Schreef Mehdi daarnaast een naam of
+ander inhoudswoord, dan mag de adresdeal zijn woorden niet overschrijven. Zonder voldoende bewijs vraagt de agent
+Mehdi. Bewijs en grendels: FR-181 t/m FR-183 in foutenregister.json.
+
 Aanvulling v8.14 (17-10-2026): aan het einde van iedere ronde leest de agent
 `locatie.globaal.be/api/beweging` zonder cache. Zijn interne status zegt hoogstens
 "auto beweegt; persoon niet vastgesteld" zolang de persoonlijke GL320MG niet
