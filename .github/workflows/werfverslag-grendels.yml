@@ -28,4 +28,5 @@ jobs:
       - run: python mijnagents-runner/tests/test_werf_mandaat_11.py
       - run: python mijnagents-runner/tests/test_werf_hernoeming_12.py
       - run: pytest -q mijnagents-runner/tests/test_werfketen_controles_11.py
+      - run: pytest -q mijnagents-runner/tests/test_werf_agenda_bezoek_12.py
       - run: pytest -q mijnagents-runner/tests/test_werfverslag_verwerking.py mijnagents-runner/tests/test_werfapp_brug.py

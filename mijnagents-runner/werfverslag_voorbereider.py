@@ -58,7 +58,8 @@ OPNAME_EXT = (".mp3", ".m4a", ".wav", ".mp4", ".mov")
 VERSLAG_PAT = re.compile(r"werf ?(verslag|update|rapport)|site ?report|verslag", re.I)
 TRANSCRIPT_PAT = re.compile(r"transcri|00 verslag", re.I)
 DATUM_PAT = re.compile(r"(20\d{2})[-_. ]?(\d{2})[-_. ]?(\d{2})")
-# De Agendawacht zet pas klaar sinds deze dag; oudere bezoeken kan hij (nog) niet bevestigen.
+MOMENT_VORM_RE = re.compile(r"^(20\d{2}-\d{2}-\d{2}) (\d{2})(\d{2}) HARC (\d{4,6}) - ")
+# De gewone Agendawachtronde zet sinds deze dag klaar; oudere dagen krijgen E1b-terugkijkbewijs op vraag.
 AGENDAWACHT_SINDS = "2026-09-09"
 
 ag = bord.Agent(NAAM)
@@ -238,8 +239,8 @@ def zoek_projectmap(nummer):
     return None, ""
 
 
-def bezoeken_in(projectmap):
-    """Per bezoek een dict: map, datum, en de bestanden erin naar soort."""
+def bezoeken_in(projectmap, nummer=None):
+    """Bezoeken en nieuwe momentmappen als kandidaten, met hun bestanden naar soort."""
     items = bronnen.lijst(projectmap, recursief=True) or []
     mappen = {}
     for e in items:
@@ -249,7 +250,8 @@ def bezoeken_in(projectmap):
         rel = pad[len(projectmap):].lower()
         if not any(a in rel for a in BEZOEK_ANKERS):
             continue
-        naam = e.get("name", "").lower()
+        echte_naam = e.get("name", "")
+        naam = echte_naam.lower()
         delen = rel.strip("/").split("/")
         d = datum_uit(naam)
         if not d or any(a in naam for a in ("foto", "photo", "mail", "offerte", "factu")):
@@ -257,13 +259,26 @@ def bezoeken_in(projectmap):
         # een datummap ónder een fotomap is een fotoreeks van het bezoek, geen bezoek
         if any(("foto" in s or "photo" in s) for s in delen[:-1]):
             continue
-        # in de communicatiemap telt alleen een momentmap (A3/A7) van een werf- of plaatsbezoek:
-        # naam bevat 'bezoek', maar niet leverancier, toonzaal, online of tel
-        if "communicat" in rel and ("bezoek" not in naam or any(x in naam for x in ("leverancier", "toonzaal", "online", "tel "))):
-            continue
-        if True:
-            mappen[pad] = {"map": pad, "datum": d, "fotos": 0, "foto_bestanden": [], "foto_manifest": "", "foto_manifest_versies": [], "opnames": [], "opname_starts": [], "transcripten": [], "transcript_bestanden": [],
-                           "verslagen": [], "notities": [], "bestanden": 0, "bron_map": rel.strip("/").split("/")[0]}
+        moment = MOMENT_VORM_RE.match(echte_naam)
+        moment_uur = None
+        if moment and moment.group(1) == d and moment.group(4) == str(nummer):
+            try:
+                moment_uur = datetime(int(d[:4]), int(d[5:7]), int(d[8:10]), int(moment.group(2)),
+                                      int(moment.group(3)), tzinfo=ZoneInfo("Europe/Brussels")).isoformat()
+            except ValueError:
+                pass
+        # De oude expliciete bezoeknaam blijft gelden. Een nieuwe naam is alleen kandidaat;
+        # pas na agenda- of projectverblijfbewijs komt ze in de bezoekrijen.
+        if "communicat" in rel:
+            if "bezoek" in naam:
+                if any(x in naam for x in ("leverancier", "toonzaal", "online", "tel ")):
+                    continue
+            elif moment_uur is None:
+                continue
+        mappen[pad] = {"map": pad, "datum": d, "fotos": 0, "foto_bestanden": [], "foto_manifest": "", "foto_manifest_versies": [], "opnames": [], "opname_starts": [], "transcripten": [], "transcript_bestanden": [],
+                       "verslagen": [], "notities": [], "bestanden": 0, "bron_map": rel.strip("/").split("/")[0]}
+        if "communicat" in rel and "bezoek" not in naam:
+            mappen[pad]["kandidaat_uur"] = moment_uur
     # losse verslagen buiten een bezoekmap (bv. `1. Werf updates/Werf update 2 - ... - 2026-06-02.docx`)
     losse = []
     for e in items:
@@ -279,6 +294,11 @@ def bezoeken_in(projectmap):
                 eigenaar = mappen[mp]
                 break
         if eigenaar is None:
+            # Een los verslag onder een onbewezen momentmap mag die map niet via de
+            # oude regel voor losse verslagen alsnog als bezoek binnenbrengen.
+            if "communicat" in pad.lower() and any(MOMENT_VORM_RE.match(deel) and "bezoek" not in deel.lower()
+                                                  for deel in pad.split("/")):
+                continue
             if VERSLAG_PAT.search(naam) and laag.endswith((".docx", ".pdf", ".md")) and datum_uit(naam) \
                     and any(a in pad.lower() for a in BEZOEK_ANKERS):
                 losse.append({"pad": pad, "datum": datum_uit(naam)})
@@ -408,6 +428,39 @@ def tijdstip(waarde):
         return None
 
 
+def kandidaatbewijs(bezoek, bak, nummer):
+    """E1b: een nieuwe momentnaam bewijst zelf geen bezoek; tijd en project moeten kloppen."""
+    moment = tijdstip(bezoek.get("kandidaat_uur"))
+    if not moment:
+        return None
+    for it in bak.get("afspraak", []):
+        d = _inhoud(it)
+        if (it.get("van") != "agenda-wacht" or it.get("voor") != "h-architects"
+                or (d.get("firma") or "") not in ("HARC", "")
+                or it.get("soort") != "afspraak" or it.get("status") == "vervallen"
+                or str(d.get("nummer") or "") != str(nummer) or d.get("buiten") is not True
+                or d.get("geannuleerd") or d.get("status") in ("cancelled", "geannuleerd")
+                or d.get("prive") or (d.get("datum") and d["datum"] != bezoek["datum"])):
+            continue
+        start, einde = tijdstip(d.get("start")), tijdstip(d.get("einde"))
+        if (not start or not einde or einde <= start or einde - start > timedelta(days=1)
+                or start.astimezone(ZoneInfo("Europe/Brussels")).date().isoformat() != bezoek["datum"]):
+            continue
+        if start - timedelta(minutes=30) <= moment <= einde + timedelta(minutes=60):
+            return "agenda", d.get("titel") or it.get("titel") or "H-A-buitenafspraak"
+    verblijven = LC.verblijven_in_venster((moment - timedelta(minutes=15)).isoformat(),
+                                          (moment + timedelta(minutes=60)).isoformat(), "HARC", nummer)
+    if verblijven:
+        return "gps", LC.beschrijf(verblijven[0])
+    return None
+
+
+def teruggekeken_op_dag(bak, dag):
+    """Een eerdere terugblik op deze dag herhalen levert geen nieuw agendabewijs op."""
+    return any(it.get("van") == "agenda-wacht" and _inhoud(it).get("terugkijken") is True
+               and dag_van(it) == dag for it in bak.get("afspraak", []))
+
+
 def foto_momenten(bak, dag):
     """Alleen tijd en GPS uit de iCloud-wacht, niet een titel met dezelfde bezoekdag."""
     uit = []
@@ -485,10 +538,9 @@ def projectcoordinaten(nummer, adres, bak):
 def aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster):
     """W2: was Mehdi ter plaatse? Geeft (stand, toelichting).
 
-    Persoonlijk bewijs (ok): een foto met GPS binnen 300 m in het venster, een opname met start in het
-    venster, of een verblijf van de gedragen tracker bij dit project. Alleen de auto bij het project
-    is let_op: dat bewijst waar de auto stond, niet waar Mehdi was. Locatie komt uitsluitend via
-    locatiecontext (startgrens van de meetreeks, alleen positieve projectverblijven).
+    Een foto met GPS, opname-start of projectverblijf in het venster telt. Volgens E1b
+    telt ook de auto bij het project als aanwezigheid van Mehdi. Locatie komt uitsluitend
+    via locatiecontext (startgrens van de meetreeks, alleen positieve projectverblijven).
     """
     if not venster:
         return "ontbreekt", "geen bezoekvenster om aanwezigheid in te toetsen"
@@ -503,7 +555,7 @@ def aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster):
     if persoon:
         return "ok", "gedragen tracker bij het project: " + LC.beschrijf(persoon[0])
     if verblijven:
-        return "let_op", "alleen de auto stond bij het project (" + LC.beschrijf(verblijven[0]) + ")"
+        return "ok", "auto bij het project; Mehdi gaat altijd met de auto, E1b (" + LC.beschrijf(verblijven[0]) + ")"
     return "ontbreekt", "geen GPS-foto, opname of projectverblijf binnen het venster"
 
 
@@ -589,10 +641,15 @@ def bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, bezoek_id):
     geldig = []
     for it in bak.get("afspraak", []):
         d = _inhoud(it)
-        if (it.get("van") != "agenda-wacht" or it.get("voor") != "h-architects"
-                or it.get("status") == "vervallen" or d.get("firma") != "HARC" or str(d.get("nummer") or "") != str(nummer)
+        if (it.get("van") != "agenda-wacht" or it.get("soort") != "afspraak"
+                or it.get("status") == "vervallen"
+                # Altijd de afdeling H-Architects; de firma is HARC, of leeg bij een titel zonder code (E1b). Een andere
+                # firma (UNAB, ...) of een andere afdeling is nooit H-A-bewijs (tests/test_werf_fotoproducent.py).
+                or it.get("voor") != "h-architects" or (d.get("firma") or "") not in ("HARC", "")
+                or str(d.get("nummer") or "") != str(nummer)
                 or d.get("onzeker") is not False or d.get("buiten") is not True or not d.get("agenda")
-                or d.get("type") not in ("WB", "PL", "PLB", "OP", "OPL", "VO", "DO")
+                or (d.get("type") not in ("WB", "PL", "PLB", "OP", "OPL", "VO", "DO")
+                    and not (not d.get("type") and re.search(r"bezoek", d.get("titel") or it.get("titel") or "", re.I)))
                 or d.get("prive") or d.get("geannuleerd") or d.get("status") in ("cancelled", "geannuleerd")):
             continue
         try:
@@ -810,7 +867,28 @@ def verwerk(nummer, droog=False):
         return [], [{"tekst": f"Dossier {nummer}: geen projectmap gevonden; Mehdi geeft het pad", "wie": "mehdi"}], []
     adres = adres_uit_mapnaam(os.path.basename(projectmap))
     ag.log(str(nummer), "bron", f"projectmap ({soort}): {projectmap}", {"adres": adres})
-    bezoeken = bezoeken_in(projectmap)
+    bezoeken = bezoeken_in(projectmap, nummer)
+    bak = klaargezet(nummer)
+    terugkijk_taken, bewezen = [], []
+    taakdagen = set()
+    vandaag = datetime.now(ZoneInfo("Europe/Brussels")).date().isoformat()
+    for b in bezoeken:
+        if "kandidaat_uur" not in b:
+            bewezen.append(b)
+            continue
+        bewijs = kandidaatbewijs(b, bak, nummer)
+        if bewijs:
+            b["herkend_via"], b["herkenning_bewijs"] = bewijs
+            bewezen.append(b)
+        elif b["datum"] < vandaag and b["datum"] not in taakdagen and not teruggekeken_op_dag(bak, b["datum"]):
+            taakdagen.add(b["datum"])
+            terugkijk_taken.append({"voor": "agenda-wacht", "soort": "taak", "sleutel": str(nummer),
+                                   "titel": f"Kijk alleen lezend terug op {b['datum']} voor dossier {nummer}",
+                                   "inhoud": {"terugkijken": b["datum"], "dossier": str(nummer)},
+                                   "uniek": f"werf:terugkijken:{nummer}:{b['datum']}"})
+    bezoeken = bewezen
+    for i, b in enumerate(bezoeken, 1):
+        b["volgnr"] = i
     werfstart = (dossiers_lezen().get(str(nummer)) or {}).get("werfstart", "")
     try:
         alle_rijen = bord.call(f"/api/werfbezoek?dossier={nummer}").get("rijen", [])
@@ -827,7 +905,6 @@ def verwerk(nummer, droog=False):
     bezoeken = nummer_bezoeken(bezoeken, werfstart)
     ag.log(str(nummer), "bevinding", f"{len(bezoeken)} bezoek(en) in de mappen: " + ", ".join(f"{b['nr_label']} {b['datum']}" for b in bezoeken)
            + (f"; werfstart {werfstart}" if werfstart else "; geen werfstart bekend"))
-    bak = klaargezet(nummer)
     bord_rijen = {r.get("bezoekmap"): r for r in alle_rijen}
     open_taken = {}
     for agent in ("icloud-wacht", "plaud-wacht", "agenda-wacht"):
@@ -835,7 +912,9 @@ def verwerk(nummer, droog=False):
             open_taken[agent] = [it for it in bord.klaargezet_voor(agent, n=300) if it.get("soort") == "taak" and it.get("van") == NAAM]
         except Exception:  # noqa: BLE001
             open_taken[agent] = []
-    rijen, alle_taken, noden, dubbels, fotowerk, gesloten_ids = [], [], [], [], [], set()
+    rijen, alle_taken, noden, dubbels, fotowerk, gesloten_ids = [], [
+        t for t in terugkijk_taken if not any(o.get("uniek") == t["uniek"] for o in open_taken["agenda-wacht"])
+    ], [], [], [], set()
     # verhuisde projectmap: de rij van het oude pad gaat mee naar het nieuwe, maar alleen als het oude pad echt weg
     # is; staat de bezoekmap op beide plaatsen, dan is het een kopie en beslist Mehdi welke geldt
     verhuisd = verhuisde_rijen(bezoeken, projectmap, alle_rijen)
@@ -904,7 +983,9 @@ def verwerk(nummer, droog=False):
                       "bezoekmap": b["map"], "datum": b["datum"], "volgnr": b["volgnr"],
                       "registratie": b.get("registratie") or {},
                       "bronnen": {**{k: b[k] for k in ("fotos", "opnames", "transcripten", "verslagen", "notities", "bestanden", "bron_map")},
-                                  "nr_label": b["nr_label"], "soort_bezoek": b["soort_bezoek"], "werfstart": werfstart},
+                                  "nr_label": b["nr_label"], "soort_bezoek": b["soort_bezoek"], "werfstart": werfstart,
+                                  **({"herkend_via": b["herkend_via"], "herkenning_bewijs": b["herkenning_bewijs"]}
+                                     if b.get("herkend_via") else {})},
                       "controles": controles, "taken": [{"voor": t["voor"], "titel": t["titel"], "uniek": t["uniek"]} for t in taakrijen],
                       "stand": stand_van(controles)})
         if oude:

@@ -94,7 +94,7 @@ def interne_adressen():
         return set()
 
 
-def afspraken(van_dagen=-1, tot_dagen=8):
+def afspraken(van_dagen=-1, tot_dagen=8, schrijf_leesstand=True):
     """Alle afspraken van alle kalenders tussen vandaag+van_dagen en vandaag+tot_dagen.
     Elk item: kalender, id, titel, start, einde, hele_dag, locatie, omschrijving, deelnemers."""
     nu = datetime.now(timezone.utc)
@@ -174,10 +174,11 @@ def afspraken(van_dagen=-1, tot_dagen=8):
                 # de oorspronkelijke start van een reeksinstantie, ook na verplaatsing (Google: originalStartTime, R11)
                 "_origineel": (ev.get("originalStartTime") or {}).get("dateTime") or (ev.get("originalStartTime") or {}).get("date") or "",
             })
-    try:
-        _leesstand_zet(per_kal)
-    except OSError:
-        pass
+    if schrijf_leesstand:
+        try:
+            _leesstand_zet(per_kal)
+        except OSError:
+            pass
     uit.sort(key=lambda x: x.get("start", ""))
     return uit
 

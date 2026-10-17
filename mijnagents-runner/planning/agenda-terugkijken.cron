@@ -1,0 +1,1 @@
+40 */2 * * * /usr/bin/flock -n /tmp/agenda-terugkijken.lock /usr/bin/timeout 6000 /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/agenda_wacht.py --taken >> /home/ubuntu/agents/agenda_terugkijken.log 2>&1
