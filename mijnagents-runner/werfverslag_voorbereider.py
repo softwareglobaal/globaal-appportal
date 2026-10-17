@@ -377,6 +377,17 @@ BAK_SOORTEN = ("afspraak", "transcript", "werfbezoek", "foto")
 BAK_PAGINAS = 12     # per soort hoogstens 12 x 500 items terug
 
 
+def afspraak_op_dag(bak, nummer, dag):
+    """Staat er voor die dag al een H-A-afspraak met dit nummer in de bak (gewone ronde of terugkijken)?"""
+    for it in bak.get("afspraak", []):
+        d = _inhoud(it)
+        if (it.get("van") == "agenda-wacht" and it.get("voor") == "h-architects"
+                and str(d.get("nummer") or "") == str(nummer)
+                and (d.get("datum") or str(d.get("start") or "")[:10]) == dag):
+            return True
+    return False
+
+
 def bak_items():
     """Alle items van de soorten die de voorbereider leest, per soort en terugbladerend.
 
@@ -576,7 +587,10 @@ def aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster):
     telt ook de auto bij het project als aanwezigheid van Mehdi. Locatie komt uitsluitend
     via locatiecontext (startgrens van de meetreeks, alleen positieve projectverblijven).
     """
+    voor_meetreeks = not LC.bronbeleid.dag_toegestaan(bezoek["datum"])
     if not venster:
+        if voor_meetreeks:
+            return "onbekend", "vóór de GPS-meetreeks (03-10-2026) en zonder agendavenster"
         return "ontbreekt", "geen bezoekvenster om aanwezigheid in te toetsen"
     coord = projectcoordinaten(nummer, adres, bak) if bak.get("foto") else None
     if coord and any(in_venster(t, venster) and afstand_m(*coord, lat, lon) <= 300
@@ -590,6 +604,10 @@ def aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster):
         return "ok", "gedragen tracker bij het project: " + LC.beschrijf(persoon[0])
     if verblijven:
         return "ok", "auto bij het project; Mehdi gaat altijd met de auto, E1b (" + LC.beschrijf(verblijven[0]) + ")"
+    if voor_meetreeks:
+        # Toen bestond de GPS-meting nog niet: dat is niet gekeken, geen bewijs van afwezigheid. Mehdi gaat altijd met de
+        # auto; de buitenafspraak in de agenda (W1) is voor die dagen het bewijs (E1b, 18-10-2026).
+        return "onbekend", "vóór de GPS-meetreeks (03-10-2026); de buitenafspraak in de agenda (W1) is het bewijs"
     return "ontbreekt", "geen GPS-foto, opname of projectverblijf binnen het venster"
 
 
@@ -682,8 +700,8 @@ def bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, bezoek_id):
                 or it.get("voor") != "h-architects" or (d.get("firma") or "") not in HA_FIRMA
                 or str(d.get("nummer") or "") != str(nummer)
                 or d.get("onzeker") is not False or d.get("buiten") is not True or not d.get("agenda")
-                or (d.get("type") not in ("WB", "PL", "PLB", "OP", "OPL", "VO", "DO")
-                    and not (not d.get("type") and re.search(r"bezoek", d.get("titel") or it.get("titel") or "", re.I)))
+                # E1b: elke buitenafspraak met dit nummer telt; een ingevuld type moet wel een bezoektype zijn.
+                or (d.get("type") and d.get("type") not in ("WB", "PL", "PLB", "OP", "OPL", "VO", "DO"))
                 or d.get("prive") or d.get("geannuleerd") or d.get("status") in ("cancelled", "geannuleerd")):
             continue
         try:
@@ -710,6 +728,12 @@ def bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, bezoek_id):
         geldig.append({"start": start.astimezone(ZoneInfo("Europe/Brussels")).isoformat(),
                        "einde": einde.astimezone(ZoneInfo("Europe/Brussels")).isoformat(),
                        "agenda_uniek": it.get("uniek"), "agenda": d["agenda"]})
+    # Dezelfde afspraak staat soms twee keer in de bak (21-09-2026: één keer met firma HA, één keer met HARC):
+    # hetzelfde tijdvak is hetzelfde bewijs, geen dubbelzinnigheid.
+    per_venster = {}
+    for g in geldig:
+        per_venster.setdefault((g["start"], g["einde"]), g)
+    geldig = list(per_venster.values())
     if len(geldig) != 1:
         raise ValueError("bezoekvenster_dubbelzinnig" if len(geldig) > 1 else "bezoekvenster_ontbreekt")
     return geldig[0]
@@ -770,7 +794,6 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
             post("W1", "afspraak in de agenda", "onbekend", f"bezoek van vóór {AGENDAWACHT_SINDS}: geen agendabewijs")
         else:
             post("W1", "afspraak in de agenda", "ontbreekt", "geen geldige H-A-buitenafspraak met dit dossier en venster")
-            taken.append(("agenda-wacht", f"Zoek in alle agenda's de H-A-buitenafspraak van dossier {nummer} op {d} ({adres})"))
     # W2 aanwezigheid, W3 de mappen.
     w2_stand, w2_toel = aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster)
     post("W2", "aanwezigheid", w2_stand, w2_toel)
@@ -909,6 +932,15 @@ def verwerk(nummer, droog=False):
     for b in bezoeken:
         if "kandidaat_uur" not in b:
             bewezen.append(b)
+            # Ook een bezoek dat al aan zijn naam herkend is, heeft voor W1 de agenda van die dag nodig. Staat er voor
+            # een oude dag niets in de bak, dan kijkt de Agendawacht alleen lezend terug (E1b, 18-10-2026).
+            if (b["datum"] < vandaag and b["datum"] not in taakdagen and not teruggekeken_op_dag(bak, b["datum"])
+                    and not afspraak_op_dag(bak, nummer, b["datum"])):
+                taakdagen.add(b["datum"])
+                terugkijk_taken.append({"voor": "agenda-wacht", "soort": "taak", "sleutel": str(nummer),
+                                       "titel": f"Kijk alleen lezend terug op {b['datum']} voor dossier {nummer}",
+                                       "inhoud": {"terugkijken": b["datum"], "dossier": str(nummer)},
+                                       "uniek": f"werf:terugkijken:{nummer}:{b['datum']}"})
             continue
         bewijs = kandidaatbewijs(b, bak, nummer)
         if bewijs:
