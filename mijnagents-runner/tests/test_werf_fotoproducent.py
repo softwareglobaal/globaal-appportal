@@ -15,6 +15,7 @@ import uuid
 from zoneinfo import ZoneInfo
 
 HIER = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(HIER))
 PROJECT = "/Work All/01. H-A WORK/0 H-A Standaard projects/5. STAN/9999 Fictief"
 
 
@@ -33,7 +34,7 @@ class FotoProducent(unittest.TestCase):
 
     def setUp(self):
         self.events, self.gepubliceerd, self.afgevinkt = [], [], []
-        self.rows, self.open_foto = {}, []
+        self.rows, self.open_foto, self.open_plaud = {}, [], []
         self.bezoeken = [self.bezoek()]
         self.bak = {"afspraak": [self.afspraak()], "foto": [], "transcript": []}
         bord, bronnen, register = ModuleType("bord"), ModuleType("bronnen"), ModuleType("werfregister")
@@ -67,7 +68,7 @@ class FotoProducent(unittest.TestCase):
 
         bord.call = call
         bord.opgepakt = lambda kid, naam: self.afgevinkt.append((kid, naam))
-        bord.klaargezet_voor = lambda naam, **kwargs: self.open_foto if naam == "icloud-wacht" else []
+        bord.klaargezet_voor = lambda naam, **kwargs: self.open_foto if naam == "icloud-wacht" else self.open_plaud if naam == "plaud-wacht" else []
 
         outer = self
 
@@ -92,6 +93,10 @@ class FotoProducent(unittest.TestCase):
         self.v.bezoeken_in = lambda project: deepcopy(self.bezoeken)
         self.v.dossiers_lezen = lambda: {}
         self.v.klaargezet = lambda nummer: deepcopy(self.bak)
+        self.v.projectcoordinaten = lambda nummer, adres, bak: (51.0, 4.0)
+        self.v.vooraf_koppelen = lambda bezoeken, *args: bezoeken
+        self.v.contractbewijs = lambda nummer: ("onbekend", "fictief contractdashboard")
+        self.v.werfapp_bezoeken = lambda nummer: []
 
     def fotos(self):
         return [t for t in self.gepubliceerd if t["voor"] == "icloud-wacht"]
@@ -110,6 +115,7 @@ class FotoProducent(unittest.TestCase):
         self.assertEqual(d["start"], "2026-10-14T11:00:00+02:00")
         self.assertEqual(d["einde"], "2026-10-14T12:00:00+02:00")
         self.assertEqual(d["straal_m"], 300)
+        self.assertEqual((d["lat"], d["lon"]), (51.0, 4.0))
         self.assertEqual(str(uuid.UUID(d["bezoek_id"])), d["bezoek_id"])
         self.assertIn(d["bezoek_id"], self.fotos()[0]["uniek"])
 
@@ -135,8 +141,8 @@ class FotoProducent(unittest.TestCase):
         rijen, noden, _ = self.v.verwerk("9999")
         self.assertEqual(self.afgevinkt, [])
         self.assertEqual(self.fotos(), [])
-        self.assertTrue(any("mist bevestigd bezoekvenster" in n["tekst"] for n in noden))
-        self.assertEqual(next(c for c in rijen[0]["controles"] if c["code"] == "W4")["stand"], "onbekend")
+        self.assertTrue(any("mist bezoekvenster" in n["tekst"] for n in noden))
+        self.assertEqual(next(c for c in rijen[0]["controles"] if c["code"] == "W4")["stand"], "ontbreekt")
 
     def test_meerdere_bezoeken_dezelfde_dag_krijgen_aparte_identiteit_en_venster(self):
         self.bezoeken = [self.bezoek("1"), self.bezoek("2")]
@@ -147,6 +153,45 @@ class FotoProducent(unittest.TestCase):
         self.assertEqual(len({t["uniek"] for t in self.fotos()}), 2)
         self.assertEqual(len({t["inhoud"]["bezoek_id"] for t in self.fotos()}), 2)
         self.assertEqual({t["inhoud"]["start"] for t in self.fotos()}, {"2026-10-14T11:00:00+02:00", "2026-10-14T14:00:00+02:00"})
+
+    def test_zonder_afspraak_krijgt_fototaak_e4_venster_uit_fototijd(self):
+        self.bak["afspraak"] = []
+        self.bak["foto"] = [{"van": "icloud-wacht", "soort": "foto", "sleutel": "2026-10-14",
+                             "inhoud": json.dumps({"datum": "2026-10-14", "fotos": [
+                                 {"vastgelegd_utc": "2026-10-14T09:30:00Z", "lat": 51.0, "lon": 4.0}]})}]
+        self.v.verwerk("9999")
+        self.assertEqual(len(self.fotos()), 1)
+        d = self.fotos()[0]["inhoud"]
+        self.assertEqual(d["reden"], "E4, geen afspraak")
+        self.assertEqual(d["start"], "2026-10-14T11:15:00+02:00")
+        self.assertEqual(d["einde"], "2026-10-14T12:30:00+02:00")
+
+    def test_zonder_afspraak_krijgt_fototaak_e4_venster_uit_opnamestart(self):
+        self.bak["afspraak"] = []
+        self.bezoeken[0]["opname_starts"] = ["2026-10-14T11:30:00+02:00"]
+        self.v.verwerk("9999")
+        self.assertEqual(len(self.fotos()), 1)
+        d = self.fotos()[0]["inhoud"]
+        self.assertEqual(d["reden"], "E4, geen afspraak")
+        self.assertEqual(d["start"], "2026-10-14T11:15:00+02:00")
+        self.assertEqual(d["einde"], "2026-10-14T12:30:00+02:00")
+
+    def test_bron_in_map_sluit_alleen_taak_van_dezelfde_bezoeksleutel(self):
+        b = self.bezoeken[0]
+        b["fotos"] = 1
+        b["foto_bestanden"] = [b["map"] + "/fotos/1130 a.jpg"]
+        b["foto_manifest"] = b["map"] + "/fotos/00 fotos.md"
+        b["transcript_bestanden"] = [b["map"] + "/transcript.txt"]
+        self.v.bronnen.download = lambda *a, **kw: b"- 2026-10-14T11:30:00+02:00 | 1130 a.jpg\n"
+        sleutel = self.v.bezoeksleutel("9999", b)
+        self.open_foto = [{"id": 13, "van": self.v.NAAM, "soort": "taak", "uniek": "zelfde",
+                           "inhoud": json.dumps({"bezoeksleutel": sleutel})},
+                          {"id": 14, "van": self.v.NAAM, "soort": "taak", "uniek": "ander",
+                           "inhoud": json.dumps({"bezoeksleutel": "9999:2026-10-14:/ander"})}]
+        self.open_plaud = [{"id": 15, "van": self.v.NAAM, "soort": "taak", "uniek": "zelfde-plaud",
+                            "inhoud": json.dumps({"bezoeksleutel": sleutel})}]
+        self.v.verwerk("9999")
+        self.assertEqual(set(self.afgevinkt), {(13, self.v.NAAM), (15, self.v.NAAM)})
 
     def test_meerdere_bezoeken_zonder_expliciete_binding_niet_op_dag_samenvoegen(self):
         self.bezoeken = [self.bezoek("1"), self.bezoek("2")]

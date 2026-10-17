@@ -16,6 +16,8 @@ misschien zelf heeft bijgewerkt: kijk dus altijd eerst naar het verschil.
 import argparse
 import difflib
 import os
+import re
+from pathlib import Path
 import sys
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -31,8 +33,16 @@ def genormaliseerd(s):
     return "\n".join(r.rstrip() for r in (s or "").strip().splitlines())
 
 
+def mandaat_uit(tekst):
+    """De eerste alinea onder ## Mandaat is ook de kaarttekst op het bord."""
+    m = re.search(r"(?ms)^## Mandaat\s*\n\s*(.+?)(?=\n\s*\n|\n## |\Z)", tekst)
+    if not m:
+        return ""
+    return " ".join(m.group(1).split())
+
+
 def haal_bord(naam):
-    return bord.call(f"/api/agent/{naam}/werkwijze").get("werkwijze") or ""
+    return bord.call(f"/api/agent/{naam}/werkwijze")
 
 
 def agents():
@@ -43,9 +53,11 @@ def verschil(naam, toon=True):
     p = zaadpad(naam)
     if not os.path.exists(p):
         return None
-    zaad = genormaliseerd(open(p, encoding="utf-8").read())
-    opbord = genormaliseerd(haal_bord(naam))
-    if zaad == opbord:
+    zaad = genormaliseerd(Path(p).read_text(encoding="utf-8"))
+    kaart = haal_bord(naam)
+    opbord = genormaliseerd(kaart.get("werkwijze"))
+    mandaat = mandaat_uit(zaad)
+    if zaad == opbord and (not mandaat or mandaat == genormaliseerd(kaart.get("mandaat"))):
         return False
     if toon:
         for regel in difflib.unified_diff(opbord.splitlines(), zaad.splitlines(),
@@ -56,8 +68,11 @@ def verschil(naam, toon=True):
 
 
 def zet(naam):
-    tekst = open(zaadpad(naam), encoding="utf-8").read()
-    uit = bord.call(f"/api/agent/{naam}/werkwijze", {"werkwijze": tekst, "overschrijf": True})
+    tekst = Path(zaadpad(naam)).read_text(encoding="utf-8")
+    inhoud = {"werkwijze": tekst, "overschrijf": True}
+    if mandaat_uit(tekst):
+        inhoud["mandaat"] = mandaat_uit(tekst)
+    uit = bord.call(f"/api/agent/{naam}/werkwijze", inhoud)
     return uit.get("ok"), uit.get("reden", "")
 
 

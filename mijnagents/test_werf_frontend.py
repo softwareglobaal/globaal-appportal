@@ -1,5 +1,6 @@
 """Render echte bezoekpagina's en laat V8 hun inline scripts parsen vóór uitrol."""
 import re
+import json
 import shutil
 import subprocess
 import unittest
@@ -8,6 +9,31 @@ import test_werfverwerking as fixture_module
 
 
 class WerfFrontendTest(unittest.TestCase):
+    def test_bezoekpagina_toont_onbewezen_posten_en_wacht_op_de_klik(self):
+        fixture = fixture_module.WerfVerwerkingTest("test_gelukt_zonder_bewaard_resultaat_kan_niet")
+        A, BEHEER = fixture_module.A, fixture_module.BEHEER
+        fixture.setUp()
+        try:
+            controles = [
+                {"code": "W1", "naam": "afspraak in de agenda", "stand": "let_op",
+                 "toelichting": "bevestigd door foto's/opname, niet door de agenda"},
+                {"code": "W12", "naam": "getekend contract en werfopvolging", "stand": "ontbreekt",
+                 "toelichting": "geen getekend contract bewezen"},
+                {"code": "NODIG", "naam": "Nog te verzamelen", "stand": "let_op",
+                 "toelichting": "W12 getekend contract en werfopvolging"},
+            ]
+            with A.app.app_context():
+                A.db().execute("UPDATE werfbezoek SET controles=? WHERE id=1", (json.dumps(controles),))
+                A.db().commit()
+            pagina = fixture.client.get("/werfverslag/2309/1?rij_id=1", headers=BEHEER).get_data(as_text=True)
+            self.assertIn("Wacht op jouw klik Voorbereiden of Proef maken", pagina)
+            self.assertIn("Controle (W1 tot W12 en nog te verzamelen)", pagina)
+            self.assertIn("W12 getekend contract en werfopvolging", pagina)
+            self.assertIn("1 ontbreekt", pagina)
+            self.assertIn("1 nakijken", pagina)
+        finally:
+            fixture.tearDown()
+
     def test_gerenderde_scripts_alle_opdrachtstanden(self):
         node = shutil.which("node")
         self.assertIsNotNone(node, "Node/V8 is vereist voor de frontend-uitrolcontrole")

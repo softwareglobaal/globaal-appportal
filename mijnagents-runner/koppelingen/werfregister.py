@@ -13,6 +13,7 @@ import re
 import urllib.error
 import urllib.request
 import uuid
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -112,6 +113,23 @@ def registreer(rij, dossier, volgnr):
     soort = (rij.get("bronnen") or {}).get("soort_bezoek") or "werfbezoek"
     if soort not in ("werfbezoek", "plaatsbezoek", "oplevering", "overig"):
         soort = "overig"
+    # Het werfapp-bezoek is de identiteit. Een verhuis van de projectmap kan de bordrij-ID wijzigen;
+    # hetzelfde project, bezoektype en nummer mag daardoor geen tweede appbezoek krijgen.
+    bewaard = rij.get("registratie") or {}
+    if isinstance(bewaard, dict) and bewaard.get("bezoek_id") and bewaard.get("project_ref") == project:
+        return dict(bewaard, bordrij_id=rij["id"])
+    overzicht = call("/bezoeken?" + urllib.parse.urlencode({"project": project, "limiet": 500}))
+    if overzicht.get("meer"):
+        raise RegisterFout("meer dan 500 werfapp-bezoeken; identiteit niet ondubbelzinnig")
+    kandidaten = [b for b in overzicht.get("bezoeken") or [] if b.get("project_ref") == project
+                  and b.get("bezoektype") == soort and str(b.get("weergave_nummer") or "") == str(nr)
+                  and (not (b.get("gepland") or {}).get("dag") or (b["gepland"]["dag"] == rij.get("datum")))]
+    if len(kandidaten) > 1:
+        raise RegisterFout("meerdere werfapp-bezoeken met hetzelfde project en nummer; geen tweede bezoek aangemaakt")
+    if kandidaten:
+        b = kandidaten[0]
+        return {"bezoek_id": b["bezoek_id"], "project_ref": project, "bron": "werfapp", "bordrij_id": rij["id"],
+                "status": b.get("status"), "revisie": b.get("revisie")}
     inhoud = {"alias": {"systeem": "bord", "account_ref": "mijnagents", "objecttype": "werfbezoek",
                          "externe_id": "rij:" + str(rij["id"]),
                          "weergave": {"rijvolgnr": str(volgnr), "datum": str(rij.get("datum") or "")}},

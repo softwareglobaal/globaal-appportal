@@ -440,7 +440,8 @@ def _rij(dossier, volgnr):
         raise RuntimeError("opdracht verwijst naar een andere bezoekrij; geen verwerking")
     if context:
         opdracht = context["opdracht"]
-        if _claim_invoer(rijen[0], opdracht["soort"]) != opdracht["invoer"]:
+        opgeslagen_invoer = {k: v for k, v in opdracht["invoer"].items() if k != "bron"}
+        if _claim_invoer(rijen[0], opdracht["soort"]) != opgeslagen_invoer:
             raise extractie.BronLeesFout("bezoek, bronnen of keuzes gewijzigd sinds de claim; geen nieuwe modelaanroep")
     return rijen[0]
 
@@ -612,6 +613,9 @@ def proef(ag, dossier, volgnr):
     # De oude brede voorbereiding kan derdenfeiten bevatten. Herbouw uit de actuele
     # toegestane segmentcache, zonder een tweede volledige modelanalyse of bordupdate.
     gegevens = _voorbereid_bronnen(ag, dossier, volgnr, rij, teksten, fotos, opnames)
+    bijlagen = [{"naam": t["naam"], "pad": t["pad"], "soort": "document", "tekens": len(t["tekst"])} for t in teksten] + \
+               [{"naam": f["naam"], "pad": f["pad"], "soort": "foto", "grootte": f["grootte"]} for f in fotos] + \
+               [{"naam": o, "soort": "opname"} for o in opnames]
     verslagtype = keuzes.get("verslagtype") or gegevens.get("verslagtype_voorstel") or "werfverslag"
     if verslagtype in pv.SOORTEN:
         # proces-verbaal van oplevering: het sjabloon met de gekende gegevens ingevuld, zonder Claude; Mehdi vult de rondgang in
@@ -630,7 +634,8 @@ def proef(ag, dossier, volgnr):
         pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
         md = f"# {pv.SOORTEN[verslagtype]} {dossier} {rij.get('adres','')}\n\nWord-sjabloon ingevuld met de gekende gegevens; de rondgang, de gebrekenlijst en de handtekeningen vult Mehdi in. Bestand: {os.path.basename(pad_docx)}\n"
         ag.log(f"{dossier}-{volgnr}", "schrijf", f"proces-verbaal klaargezet: {os.path.basename(pad_docx)} ({len(docx)//1024} kB), zonder Claude")
-        _bewaar(rij, dossier, volgnr, verslag_md=md, proef_pad=pad_docx, proef_ts=date.today().isoformat(),
+        _bewaar(rij, dossier, volgnr, gegevens=gegevens, bijlagen=bijlagen,
+                verslag_md=md, proef_pad=pad_docx, proef_ts=date.today().isoformat(),
                 proef_info={"verslagtype": verslagtype, "taal": "nl", "punten": 0, "fotos": 0, "open": sjab.telling_open(md), "docx_kb": len(docx)//1024, "layout": "HA-master"})
         return pad_docx, md
     taal = keuzes.get("taal") or "nl"
@@ -682,7 +687,8 @@ def proef(ag, dossier, volgnr):
             "_verwerking": getattr(usage, "verwerking", {})}
     # Eerst de betaalde proef op de bordrij bewaren, dan pas de brug: wat de brug ook doet, de proef en haar markdown
     # (de invoer voor --naar-werfapp) zijn er (CX4-4).
-    _bewaar(rij, dossier, volgnr, verslag_md=md, proef_pad=pad_docx, proef_ts=vandaag, proef_info=info)
+    _bewaar(rij, dossier, volgnr, gegevens=gegevens, bijlagen=bijlagen,
+            verslag_md=md, proef_pad=pad_docx, proef_ts=vandaag, proef_info=info)
     _bewaar(rij, dossier, volgnr, proef_info=dict(info, werfapp=naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx,
                                                                          bronnen=info["bronnen"])))
     return pad_docx, md

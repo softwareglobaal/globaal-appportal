@@ -237,6 +237,23 @@ def test_eigen_bronnen_en_menselijke_correctie_in_proef_zonder_hele_bundel(runti
     assert info["werfapp"] == {"id": 5, "nummer": "9999-1", "url": "/verslag/5/bewerken", "nieuw": True}
 
 
+def test_directe_proef_bewaart_gegevens_en_bijlagen_op_bezoekpagina(runtime, monkeypatch):
+    p = runtime.p
+    p.lees_bezoekmap = lambda *args, **kwargs: ([{"naam": "transcript.txt", "pad": "/proef/bezoek/transcript.txt",
+                                                 "tekst": "Eigen vaststelling ter plaatse."}], [], [])
+    p.vraag_verslag = lambda *args, **kwargs: ({"status_nl": "Ter plaatse", "status_en": "", "aanwezigen": [],
+                                                "categorieen": [], "raming": [], "acties": [], "volgend": "", "akkoord": []},
+                                               SimpleNamespace(input_tokens=30, output_tokens=10))
+    monkeypatch.setattr(p.sjab, "naar_markdown", lambda *args: "# Concept")
+    monkeypatch.setattr(p.sjab, "naar_docx", lambda *args: b"fictieve word")
+    monkeypatch.setattr(p.sjab, "telling_open", lambda *args: {})
+    p.bronnen.upload = lambda pad, data: pad
+    p.proef(Agent(), "9999", 1)
+    opgeslagen = [w[1]["rijen"][0] for w in runtime.writes if w[1]["rijen"][0].get("proef_pad")]
+    assert opgeslagen and opgeslagen[0]["gegevens"]["gegevens"][0]["waarde"] == "Proef BV"
+    assert opgeslagen[0]["bijlagen"][0]["naam"] == "transcript.txt"
+
+
 def test_werfappfout_laat_de_proef_staan_en_noemt_de_reden(runtime, monkeypatch):
     p = runtime.p
     p.lees_bezoekmap = lambda *args, **kwargs: ([{"naam": "transcript.txt", "pad": "/proef/transcript.txt", "tekst": "eigen"}], [], [])
@@ -470,9 +487,11 @@ def test_cli_gebruikt_getypeerde_opdracht_in_plaats_van_betaalde_bypass(runtime,
     schrijver = laad("werfverslag_schrijver", monkeypatch)
     schrijver.opdrachten = lambda alleen_id=None: opgehaald.append(alleen_id) or 1
     runtime.p.voorbereid = runtime.p.proef = lambda *args: pytest.fail("CLI mag niet rechtstreeks een betaalde functie aanroepen")
-    monkeypatch.setattr(sys, "argv", ["werfverslag_schrijver.py", argument, "9999", "1"])
+    monkeypatch.setattr(sys, "argv", ["werfverslag_schrijver.py", argument, "9999", "1",
+                                    "--op-vraag-van-mehdi", "Mehdi vroeg deze proef"])
     schrijver.main()
-    assert verzoeken == [("/api/werfopdrachten/aanvragen", {"dossier": "9999", "volgnr": 1, "soort": soort, "bron": "commandline"})]
+    assert verzoeken == [("/api/werfopdrachten/aanvragen", {"dossier": "9999", "volgnr": 1, "soort": soort,
+                                                          "bron": "commandline", "reden": "Mehdi vroeg deze proef"})]
     assert opgehaald == [81]
 
 
@@ -499,7 +518,8 @@ spec.loader.exec_module(register)
 kop = dienst('werf_schrijver', ['h-architects:9999'])
 def call(pad, payload=None):
     with app.test_client() as client:
-        response = client.post('/api/v1' + pad, json=payload, headers=kop)
+        response = (client.post('/api/v1' + pad, json=payload, headers=kop) if payload is not None
+                    else client.get('/api/v1' + pad, headers=kop))
         assert response.status_code in (200, 201), (response.status_code, response.json)
         return response.json
 register.call = call
@@ -521,7 +541,7 @@ assert len(calls) == 1
 assert not u1.hergebruikt and u2.hergebruikt and u3.hergebruikt
 assert u2.input_tokens == u2.output_tokens == 0
 assert db.q1("SELECT COUNT(*) n FROM verwerking WHERE taaktype='handmatig:bron-feiten'")['n'] == 1
-assert db.q1('SELECT COUNT(*) n FROM bezoek')['n'] == 2
+assert db.q1('SELECT COUNT(*) n FROM bezoek')['n'] == 1  # twee bordrijen, één vast appbezoek
 assert db.q1('SELECT COUNT(*) n FROM bron')['n'] == 1
 assert db.q1("SELECT COUNT(*) n FROM bron_versie WHERE bewaring='geverifieerd'")['n'] == 0
 print('echte registerclient: één betaalde fakeproviderstart, projectcache, geen mediahashclaim')

@@ -128,7 +128,14 @@ def opmerkingen(verslag, fotos):
 
 
 def _ja(w):
-    return str(w).strip().lower() in ("ja", "yes", "true", "1", "x", "aanwezig")
+    if isinstance(w, bool):
+        return w
+    waarde = str(w).strip().lower()
+    if waarde in ("ja", "yes", "true", "1", "x", "aanwezig"):
+        return True
+    if waarde in ("nee", "no", "false", "0", "afwezig"):
+        return False
+    return None
 
 
 def payload(verslag, rij, fotos, proef_pad="", bronnen=()):

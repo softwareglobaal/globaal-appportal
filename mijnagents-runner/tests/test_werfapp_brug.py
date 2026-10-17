@@ -50,6 +50,13 @@ def test_punten_worden_opmerkingen_met_eigen_fotos_en_open_status():
     assert "bezoek_id" not in body  # zonder registratie geen koppeling
 
 
+def test_onbekende_aanwezigheid_blijft_onbekend_in_payload():
+    v = dict(VERSLAG, aanwezigen=[{"naam": "Piet", "aanwezig": "na te kijken"},
+                                {"naam": "Sara", "aanwezig": ""}, {"naam": "Jan", "aanwezig": "nee"}])
+    aanwezig = werfapp.payload(v, RIJ, [])["aanwezigen"]
+    assert [p["aanwezig"] for p in aanwezig] == [None, None, False]
+
+
 def test_bezoek_id_alleen_uit_een_registratie_van_hetzelfde_project():
     goed = dict(RIJ, registratie={"bezoek_id": "b-1", "project_ref": "h-architects:9999"})
     assert werfapp.payload(VERSLAG, goed, FOTOS)["bezoek_id"] == "b-1"
@@ -195,6 +202,8 @@ def test_ketentest_tegen_de_echte_werfapp():
     python = backend / ".venv/bin/python"
     if not python.exists():
         pytest.skip("ketentest vraagt de naastgelegen werfapp-testvenv")
+    if not any("verslagen/concept" in pad.read_text(encoding="utf-8") for pad in (backend / "app").rglob("*.py")):
+        pytest.skip("naastgelegen werfapp mist de conceptroute uit PR #3")
     script = r'''
 import importlib.util, os, sys, tempfile
 from pathlib import Path

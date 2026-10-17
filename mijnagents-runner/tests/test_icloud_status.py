@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Geen foto-I/O/export/netwerk: geweigerde bron blijft als fout zichtbaar."""
 import importlib.util
+from datetime import timedelta
 import json
 import os
 import re
@@ -12,6 +13,7 @@ import unittest
 from unittest.mock import patch
 import urllib.error
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 
 class ICloudStatus(unittest.TestCase):
@@ -130,6 +132,34 @@ class ICloudStatus(unittest.TestCase):
         self.assertEqual(self.afgevinkt, [])
         self.assertEqual(self.lezingen, [])
         self.assertIn("bezoekvenster_ontbreekt", self.statussen[-1][1]["detail"])
+
+    def test_e4_terugvalvenster_wordt_aanvaard_en_reden_staat_in_manifest(self):
+        data = self.inhoud(start="2026-10-14T11:15:00+02:00", einde="2026-10-14T12:30:00+02:00",
+                           reden="E4, geen afspraak", lat=50.0, lon=4.0)
+        code, exports, _ = self.fake_run([self.foto("e4", "2026-10-14T09:30:00Z")], inhoud=data)
+        self.assertEqual(code, 0)
+        self.assertEqual(exports, [["e4"]])
+        tekst = (Path(self.module.taakdoel(data)) / "00 fotos.md").read_text()
+        self.assertIn("E4, geen afspraak", tekst)
+
+    def test_e4_bij_middernacht_houdt_het_volledige_terugvalvenster(self):
+        d = self.inhoud(start="2026-10-13T23:50:00+02:00", einde="2026-10-14T01:05:00+02:00",
+                        reden="E4, geen afspraak")
+        start, einde = self.module.taakvenster(d)
+        self.assertEqual((start + timedelta(minutes=15)).astimezone(ZoneInfo("Europe/Brussels")).date().isoformat(), d["datum"])
+        self.assertEqual((einde - timedelta(minutes=60)).astimezone(ZoneInfo("Europe/Brussels")).date().isoformat(), d["datum"])
+
+    def test_bestaand_fotomanifest_blijft_bewaard_bij_nieuwe_ronde(self):
+        data = self.inhoud(lat=50.0, lon=4.0)
+        doel = Path(self.module.taakdoel(data))
+        doel.mkdir(parents=True, exist_ok=True)
+        (doel / "00 fotos.md").write_text("oude meting\n")
+        code, _, _ = self.fake_run([self.foto("nieuw")], inhoud=data)
+        self.assertEqual(code, 0)
+        self.assertEqual((doel / "00 fotos.md").read_text(), "oude meting\n")
+        versies = list(doel.glob("00 fotos *.md"))
+        self.assertEqual(len(versies), 1)
+        self.assertIn("Venster:", versies[0].read_text())
 
     def test_geen_gps_of_tijd_blijft_onbeslist_en_wordt_niet_geexporteerd(self):
         code, exports, _ = self.fake_run([self.foto("goed"), self.foto("geen_gps", lat=None)])

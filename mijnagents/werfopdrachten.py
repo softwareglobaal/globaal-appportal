@@ -72,6 +72,7 @@ def _public(rij):
     r["id"] = r.pop("klaarzet_id")
     r.pop("lease_hash", None)
     r["invoer"] = _json(r["invoer"])
+    r["bron"] = r["invoer"].get("bron") or {"soort": "bord"}
     r["verwerking"] = _json(r["verwerking"])
     r["veilig_opnieuw"] = bool(r["veilig_opnieuw"])
     if r["status"] == "actief" and r["lease_tot"] < nu():
@@ -127,11 +128,14 @@ def lijst(conn, bezoek_id=None, status=None, verlopen=True):
     return [_public(r) for r in conn.execute(q + " ORDER BY klaarzet_id DESC", args)]
 
 
-def maak(conn, bezoek_id, soort, door, verwacht=None, bron="bord"):
+def maak(conn, bezoek_id, soort, door, verwacht=None, bron="bord", reden=""):
     if soort not in ("voorbereid", "proef"):
         raise Conflict("ongeldige opdrachtsoort", 400)
     if bron not in ("bord", "commandline"):
         raise Conflict("ongeldige opdrachtbron", 400)
+    reden = str(reden or "").strip()
+    if bron == "commandline" and not reden:
+        raise Conflict("commandline-opdracht vereist de reden van Mehdi", 400)
     with atomic(conn):
         r = conn.execute("SELECT * FROM werfbezoek WHERE id=?", (bezoek_id,)).fetchone()
         if not r:
@@ -143,16 +147,22 @@ def maak(conn, bezoek_id, soort, door, verwacht=None, bron="bord"):
         oud = conn.execute("SELECT * FROM werfopdracht WHERE werfbezoek_id=? AND soort=? AND invoer_hash=?",
                            (bezoek_id, soort, signature)).fetchone()
         if oud:
+            if bron == "commandline":
+                vastgelegd = (json.loads(oud["invoer"] or "{}").get("bron") or {})
+                if vastgelegd != {"soort": "commandline", "reden": reden[:500]}:
+                    raise Conflict("identieke opdracht bestaat al met een andere bron of reden; gebruik de bestaande opdracht", 409)
+                _event(conn, oud["klaarzet_id"], oud["status"], {"bron": "commandline", "reden": reden[:500], "hergebruikt": True})
             return _public(oud), False
+        snapshot["bron"] = {"soort": bron, "reden": reden[:500] if bron == "commandline" else ""}
         ts = nu()
         cur = conn.execute("INSERT INTO klaarzet(van,voor,soort,sleutel,titel,inhoud,verwijzing,uniek,ts) VALUES(?,?,?,?,?,?,?,?,?)", (
             f"{bron}:{door}", "werfverslag-schrijver", "opdracht", f"{r['dossier']}-{r['volgnr']}",
-            f"{soort} {r['dossier']} {r['volgnr']}", json.dumps({"door": door, "werfbezoek_id": bezoek_id}),
+            f"{soort} {r['dossier']} {r['volgnr']}", json.dumps({"door": door, "werfbezoek_id": bezoek_id, "bron": snapshot["bron"]}),
             "", f"werf:{bezoek_id}:{soort}:{signature}", ts))
         kid = cur.lastrowid
         conn.execute("INSERT INTO werfopdracht(klaarzet_id,werfbezoek_id,soort,invoer_hash,invoer) VALUES(?,?,?,?,?)",
                      (kid, bezoek_id, soort, signature, json.dumps(snapshot, ensure_ascii=False)))
-        _event(conn, kid, "klaar")
+        _event(conn, kid, "klaar", {"bron": snapshot["bron"]})
         return _public(_opdracht(conn, kid)), True
 
 

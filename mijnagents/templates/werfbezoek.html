@@ -60,7 +60,7 @@
 
 <div style="background:{{ '#edf2ef' if b.heeft_proef else ('#fbf3e3' if b.voorbereid else '#f7e8e5') }}; border:1px solid {{ '#1f3d33' if b.heeft_proef else ('#a1701a' if b.voorbereid else '#a33a2a') }}; border-radius:4px; padding:12px 16px; margin:14px 0 6px;">
   <strong style="font-size:16px;">
-    {% if (b.werfapp or {}).get('verstuurd') %}Verslag is verstuurd vanuit de werfapp.{% elif (b.werfapp or {}).get('id') %}Concept staat in de werfapp: nalezen, aanpassen en zelf versturen (tabblad Proef).{% elif b.heeft_proef %}Word-proef staat in de bezoekmap, nog geen concept in de werfapp: zie tabblad Proef.{% elif b.voorbereid %}Voorbereid: klik Maak concept op het tabblad Proef.{% else %}Wacht op jouw klik: Maak concept op het tabblad Proef. Er start niets vanzelf.{% endif %}
+    {% if (b.werfapp or {}).get('verstuurd') %}Verslag is verstuurd vanuit de werfapp.{% elif (b.werfapp or {}).get('id') %}Concept staat in de werfapp: nalezen, aanpassen en zelf versturen (tabblad Proef).{% elif b.heeft_proef %}Word-proef staat in de bezoekmap, nog geen concept in de werfapp: zie tabblad Proef.{% elif b.voorbereid %}Voorbereid: wacht op jouw klik Proef maken.{% else %}Wacht op jouw klik Voorbereiden of Proef maken. Er start niets vanzelf.{% endif %}
   </strong><br>
   <span class="stil">{{ b.telling.ok }} in orde · {{ b.telling.let_op }} nakijken · {{ b.telling.fout }} ontbreekt · {{ b.telling.onbekend }} niet meetbaar{% if b.nodig %}, nog nodig: {{ b.nodig|join(', ') }}{% endif %}</span>
   {% if b.heeft_proef %}<br><a class="groteknop" href="#proef" data-blad="proef">Proef openen &rarr;</a>{% endif %}
@@ -87,7 +87,7 @@
 <div class="blad" id="blad-analyse">
 <h2 id="analyse">1. Analyse</h2>
 <p class="stil">Wat de Werfverslag voorbereider verifieerde en wat de Werfverslag schrijver uit de bezoekmap haalde. Rood = ontbreekt, vraagteken = niet meetbaar.</p>
-<h3 id="controle">Controle (W1 tot W11)</h3>
+<h3 id="controle">Controle (W1 tot W12 en nog te verzamelen)</h3>
 <table>
   <tr><th style="width:34px;"></th><th style="width:44px;">Nr</th><th>Controle</th><th>Bevinding</th></tr>
   {% for c in b.controle_rijen %}
@@ -136,7 +136,7 @@
 </table>{% endif %}
 {% if g.ontbreekt %}<h4>Wat de architect nog moet aanvullen</h4><ul>{% for x in g.ontbreekt %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
 {% else %}
-<p class="stil">Nog geen gegevens. Er start niets vanzelf (tokens): klik op het tabblad Proef <em>Maak concept</em>, of eerst alleen <em>Voorbereiden</em> als je de analyse wil zien.</p>
+<p class="stil">Nog geen gegevens: wacht op jouw klik <em>Voorbereiden</em> of <em>Proef maken</em> op het tabblad Proef. Er start niets vanzelf (tokens).</p>
 {% endif %}
 
 </div>

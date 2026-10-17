@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Bestaande bordbezoeken aansluiten op vaste IDs; geen AI, samenvoeging of verwijdering."""
 import argparse
+import hashlib
 import json
 import os
 import sys
+import urllib.parse
 from collections import Counter
 from datetime import datetime, timezone
 
@@ -11,6 +13,66 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord
 import werfregister
+
+
+def koppel_voor_nummering(bezoeken, dossier, projectmap, werfstart, bord_rijen):
+    """Koppel het app-ID vóór de definitieve N-nummering op het bord.
+
+    Eerst een bestaand bord-ID bij hetzelfde relatieve bezoekpad (ook na een faseverhuis),
+    dan een ondubbelzinnig appbezoek met dezelfde datum, soort en kandidaatnummer. Alleen
+    als beide ontbreken, ontstaat een appbezoek met een stabiele alias voor de momentmap.
+    Een datum zonder nummer of pad is nooit genoeg om twee bezoeken samen te voegen.
+    """
+    project = "h-architects:" + str(dossier)
+    overzicht = werfregister.call("/bezoeken?" + urllib.parse.urlencode({"project": project, "limiet": 500}))
+    if overzicht.get("meer"):
+        raise werfregister.RegisterFout("werfapp-bezoeklijst is onvolledig; geen nieuwe bezoek-ID's aangemaakt")
+    app = overzicht.get("bezoeken") or []
+    pb = wb = 0
+    for bezoek in sorted(bezoeken, key=lambda b: (b["datum"], b["map"])):
+        soort = "plaatsbezoek" if werfstart and bezoek["datum"] < werfstart else "werfbezoek"
+        if soort == "plaatsbezoek":
+            pb += 1; kandidaat = f"PB{pb}"
+        else:
+            wb += 1; kandidaat = str(wb)
+        relatief = bezoek["map"][len(projectmap):].casefold() if bezoek["map"].startswith(projectmap + "/") else bezoek["map"].casefold()
+        oud = [r.get("registratie") for r in bord_rijen
+               if r.get("datum") == bezoek["datum"] and isinstance(r.get("registratie"), dict)
+               and r["registratie"].get("project_ref") == project and r["registratie"].get("bezoek_id")
+               and ((r.get("bezoekmap") or "").casefold() == bezoek["map"].casefold()
+                    or (r.get("projectmap") and (r.get("bezoekmap") or "").casefold().startswith(r["projectmap"].casefold() + "/")
+                        and r["bezoekmap"][len(r["projectmap"]):].casefold() == relatief))]
+        ids = {r["bezoek_id"] for r in oud}
+        if len(ids) > 1:
+            raise werfregister.RegisterFout("bordrijen na verhuis verwijzen naar verschillende werfapp-bezoeken")
+        if ids:
+            bezoek["registratie"] = dict(oud[0], bron="werfapp")
+            continue
+        match = [r for r in app if r.get("project_ref") == project and r.get("bezoektype") == soort
+                 and str(r.get("weergave_nummer") or "") == kandidaat
+                 and (not (r.get("gepland") or {}).get("dag") or r["gepland"]["dag"] == bezoek["datum"])]
+        if len(match) > 1:
+            raise werfregister.RegisterFout("meerdere werfapp-bezoeken voor hetzelfde bezoeknummer; geen tweede bezoek aangemaakt")
+        if match:
+            b = match[0]
+            bezoek["registratie"] = {"bezoek_id": b["bezoek_id"], "project_ref": project, "bron": "werfapp",
+                                      "status": b.get("status"), "revisie": b.get("revisie")}
+            continue
+        alias = "moment:" + str(dossier) + ":" + bezoek["datum"] + ":" + hashlib.sha256(relatief.encode()).hexdigest()[:20]
+        inhoud = {"alias": {"systeem": "bord", "account_ref": "mijnagents", "objecttype": "werfbezoek", "externe_id": alias,
+                             "weergave": {"datum": bezoek["datum"], "bezoekmap": relatief}},
+                  "project_ref": project, "project_zekerheid": "zeker", "bezoektype": soort,
+                  "status": "onzeker", "gepland": None}
+        antwoord = werfregister.call("/bezoeken/upsert", {"schema_version": 1,
+            "idempotency_key": "werfadapter:" + werfregister._hash(inhoud), **inhoud})
+        b = antwoord.get("bezoek") or {}
+        if not b.get("bezoek_id") or b.get("project_ref") != project:
+            raise werfregister.RegisterFout("werfapp bevestigde geen bezoek-ID voor de momentmap")
+        bezoek["registratie"] = {"bezoek_id": b["bezoek_id"], "project_ref": project, "bron": "werfapp",
+                                  "status": b.get("status"), "revisie": b.get("revisie")}
+        app.append({"bezoek_id": b["bezoek_id"], "project_ref": project, "bezoektype": soort,
+                    "weergave_nummer": None, "gepland": {"dag": bezoek["datum"]}})
+    return bezoeken
 
 
 def rijen():
@@ -22,24 +84,29 @@ def rijen():
 
 
 def aansluiten(items, toepassen=False):
+    """Bepaal eerst de vaste app-identiteit; het bordrijvolgnummer is alleen een adres op het bord."""
     groepen = Counter((r["dossier"], r["volgnr"]) for r in items if not r.get("stand", "").startswith("dubbel na verhuis"))
     rapport = {"versie": 1, "gemeten_utc": datetime.now(timezone.utc).isoformat(), "toegepast": toepassen,
                "aantal_bordrijen": len(items), "dossiers": sorted({r["dossier"] for r in items}),
                "ambigue_rijvolgnummers": sum(n > 1 for n in groepen.values()), "rijen": []}
     for rij in items:
+        registratie = None
+        if toepassen and not rij.get("stand", "").startswith("dubbel na verhuis"):
+            registratie = werfregister.registreer(rij, rij["dossier"], rij["volgnr"])
         d = {"bordrij_id": rij["id"], "dossier": rij["dossier"], "rijvolgnr": rij["volgnr"],
+             "bezoek_id": registratie["bezoek_id"] if registratie else (rij.get("registratie") or {}).get("bezoek_id"),
              "status": "verhuisdubbel_behouden" if rij.get("stand", "").startswith("dubbel na verhuis") else "klaar_voor_registratie",
              "dubbele_rijvolgnr": groepen[(rij["dossier"], rij["volgnr"])] > 1,
              "gegevens_behouden": bool(rij.get("gegevens")), "keuzes_behouden": bool(rij.get("keuzes")),
              "proef_behouden": bool(rij.get("proef_pad"))}
-        if toepassen and d["status"] != "verhuisdubbel_behouden":
-            registratie = werfregister.registreer(rij, rij["dossier"], rij["volgnr"])
+        if registratie:
             bord.call("/api/werfbezoek", {"rijen": [{"dossier": rij["dossier"], "datum": rij["datum"],
                        "bezoekmap": rij["bezoekmap"], "volgnr": rij["volgnr"], "werfbezoek_id": rij["id"],
                        "_alleen": ["registratie"], "registratie": registratie}]})
             d.update(status="geregistreerd", bezoek_id=registratie["bezoek_id"])
         rapport["rijen"].append(d)
     rapport["geregistreerd"] = sum(r["status"] == "geregistreerd" for r in rapport["rijen"])
+    rapport["unieke_werfapp_bezoeken"] = len({r["bezoek_id"] for r in rapport["rijen"] if r.get("bezoek_id")})
     return rapport
 
 

@@ -358,11 +358,15 @@ def _tijd_met_zone(value):
 
 
 def taakvenster(d):
-    """Alleen expliciete tijden, geen dag- of agendamarges verzinnen."""
+    """Alleen expliciete tijden, ook bij E4; zonder venster blijft de taak open."""
     start, einde = _tijd_met_zone(d.get("start")), _tijd_met_zone(d.get("einde"))
-    if einde <= start or einde - start > timedelta(days=1):
+    e4 = d.get("reden") == "E4, geen afspraak"
+    if einde <= start or einde - start > timedelta(days=1, minutes=75 if e4 else 0):
         raise ValueError("bezoekvenster_ongeldig")
-    if start.astimezone(ZoneInfo("Europe/Brussels")).date().isoformat() != d.get("datum"):
+    eerste = start + timedelta(minutes=15) if e4 else start
+    laatste = einde - timedelta(minutes=60) if e4 else start
+    if (laatste < eerste or eerste.astimezone(ZoneInfo("Europe/Brussels")).date().isoformat() != d.get("datum")
+            or laatste.astimezone(ZoneInfo("Europe/Brussels")).date().isoformat() != d.get("datum")):
         raise ValueError("bezoekvenster_andere_dag")
     return start, einde
 
@@ -448,7 +452,7 @@ def taken():
                      "projectidentiteit_ontbreekt", "bronregistratie_ontbreekt", "bezoekmap_ontbreekt", "bezoekmap_buiten_project", "fotostraal_ongeldig", "werfadres_ontbreekt"}
             blokkeer(it, str(exc) if str(exc) in codes else "taakgegevens_ongeldig")
             continue
-        c = coord(d["adres"])
+        c = (d.get("lat"), d.get("lon")) if isinstance(d.get("lat"), (int, float)) and isinstance(d.get("lon"), (int, float)) else coord(d["adres"])
         if not c:
             blokkeer(it, "werfcoordinaten_ontbreken")
             continue
@@ -469,8 +473,15 @@ def taken():
             continue
         md = ["# Fotoaanvoer " + ("volledig" if volledig else "onvolledig"), "",
               f"Bezoek {d['bezoek_id']}; {n} van {len(binnen)} geselecteerde foto's geleverd; {onbeslist} foto's niet toewijsbaar.",
-              f"Venster: {d['start']} tot {d['einde']}; vaste straal {straal} m. Geen automatische verruiming."]
-        with open(os.path.join(doel, "00 fotos.md"), "w", encoding="utf-8") as f:
+              f"Venster: {d['start']} tot {d['einde']}; vaste straal {straal} m. Geen automatische verruiming.",
+              f"Reden venster: {d.get('reden') or 'H-A-afspraak van de Agendawacht'}.", "",
+              "## Geleverde foto's en opnametijden"]
+        md.extend(f"- {f['vastgelegd_utc']} | {f.get('export') or f.get('bestand')}" for f in binnen if f.get("geexporteerd"))
+        manifest = os.path.join(doel, "00 fotos.md")
+        if os.path.exists(manifest):
+            stempel = datetime.now(ZoneInfo("Europe/Brussels")).strftime("%Y%m%dT%H%M%S%f")
+            manifest = os.path.join(doel, f"00 fotos {stempel}.md")
+        with open(manifest, "x", encoding="utf-8") as f:
             f.write("\n".join(md) + "\n")
         regels.append({"naam": NAAM, "onderwerp": "fotoaanvoer", "stap": "schrijf",
                        "tekst": f"{n} van {len(binnen)} geselecteerde foto's geleverd; {onbeslist} onbeslist"})
