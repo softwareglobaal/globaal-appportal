@@ -96,7 +96,7 @@ def test_w3_los_verslag_zonder_eigen_bezoekmap_is_ontbrekend(buiten):
 
 
 def test_foto_gps_mag_niet_zelf_het_bouwplaatsadres_bepalen(monkeypatch):
-    monkeypatch.setattr(v.urllib.request, "urlopen", lambda *a, **kw: (_ for _ in ()).throw(OSError("fictieve locatiedienst uit")))
+    monkeypatch.setattr(v.LC, "projectplek", lambda firma, nummer: None)
     foto_item = {"van": "icloud-wacht", "soort": "foto",
                  "inhoud": json.dumps({"firma": "HARC", "nummer": "9999",
                                         "bouwplaats": {"adres": "Werfstraat 1", "lat": 51.0, "lon": 4.0}})}
@@ -104,40 +104,52 @@ def test_foto_gps_mag_niet_zelf_het_bouwplaatsadres_bepalen(monkeypatch):
     assert v.projectcoordinaten("9999", "Werfstraat 1", {"afspraak": [dict(foto_item, van="agenda-wacht", soort="afspraak")]}) == (51.0, 4.0)
 
 
-def test_w2_locatiewacht_eist_gps_binnen_300_meter_en_venster(buiten):
-    verblijf = {"aankomst": "2026-10-14T11:30:00+02:00", "rol": "persoon", "lat": 51.0, "lon": 4.0,
-                "project": {"firma": "HARC", "nummer": "9999", "afstand_m": 0}}
-    inhoud = {"datum": "2026-10-14", "nummer": "9999",
-              "bouwplaats": {"adres": "Werfstraat 1", "lat": 51.0, "lon": 4.0}, "verblijven": [verblijf]}
-    buiten["locatie"] = [{"van": "locatie-wacht", "soort": "locatie", "sleutel": "2026-10-14", "inhoud": json.dumps(inhoud)}]
+def test_projectcoordinaten_uit_de_tegel_alleen_via_de_gedeelde_lezer(monkeypatch):
+    gevraagd = []
+    monkeypatch.setattr(v.LC, "projectplek", lambda firma, nummer: gevraagd.append((firma, nummer)) or (50.5, 4.5))
+    assert v.projectcoordinaten("9999", "Werfstraat 1", {"afspraak": []}) == (50.5, 4.5)
+    assert gevraagd == [("HARC", "9999")]
+
+
+def verblijf(rol, aankomst="2026-10-14T11:05:00+02:00", vertrek="2026-10-14T11:40:00+02:00", nummer="9999"):
+    return {"aankomst": aankomst, "vertrek": vertrek, "rol": rol, "positief": True, "zekerheid": "waarschijnlijk",
+            "bewijs": "fictief", "project": {"firma": "HARC", "nummer": nummer}}
+
+
+def test_w2_gedragen_tracker_bij_het_project_is_aanwezigheid(buiten, monkeypatch):
+    monkeypatch.setattr(v.LC, "context", lambda dag: {"dag": dag, "bronbeleid": {}, "verblijven": [verblijf("tracker")]})
     assert posten(bezoek(), buiten)["W2"]["stand"] == "ok"
-    inhoud["verblijven"][0]["lat"] = 51.01
-    buiten["locatie"][0]["inhoud"] = json.dumps(inhoud)
-    assert posten(bezoek(), buiten)["W2"]["stand"] == "ontbreekt"
 
 
-def test_w2_gps_verblijf_dat_voor_het_venster_begint_maar_erin_doorloopt(buiten):
-    verblijf = {"aankomst": "2026-10-14T10:55:00+02:00", "vertrek": "2026-10-14T11:20:00+02:00",
-                "rol": "persoon", "project": {"firma": "HARC", "nummer": "9999", "afstand_m": 20}}
-    buiten["locatie"] = [{"van": "locatie-wacht", "soort": "locatie", "sleutel": "2026-10-14",
-                          "inhoud": json.dumps({"datum": "2026-10-14", "verblijven": [verblijf]})}]
+def test_w2_alleen_de_auto_bij_het_project_is_let_op(buiten, monkeypatch):
+    monkeypatch.setattr(v.LC, "context", lambda dag: {"dag": dag, "bronbeleid": {}, "verblijven": [verblijf("auto")]})
+    w2 = posten(bezoek(), buiten)["W2"]
+    assert w2["stand"] == "let_op" and "auto" in w2["toelichting"]
+
+
+def test_w2_verblijf_buiten_het_venster_of_bij_een_ander_project_telt_niet(buiten, monkeypatch):
+    for vb in (verblijf("tracker", "2026-10-14T08:00:00+02:00", "2026-10-14T09:00:00+02:00"),
+               verblijf("tracker", nummer="9998")):
+        monkeypatch.setattr(v.LC, "context", lambda dag, vb=vb: {"dag": dag, "bronbeleid": {}, "verblijven": [vb]})
+        assert posten(bezoek(), buiten)["W2"]["stand"] == "ontbreekt"
+
+
+def test_w2_verblijf_dat_voor_het_venster_begint_maar_erin_doorloopt(buiten, monkeypatch):
+    vb = verblijf("tracker", "2026-10-14T10:55:00+02:00", "2026-10-14T11:20:00+02:00")
+    monkeypatch.setattr(v.LC, "context", lambda dag: {"dag": dag, "bronbeleid": {}, "verblijven": [vb]})
     assert posten(bezoek(), buiten)["W2"]["stand"] == "ok"
-    verblijf["rol"] = "auto"
-    buiten["locatie"][0]["inhoud"] = json.dumps({"datum": "2026-10-14", "verblijven": [verblijf]})
-    assert posten(bezoek(), buiten)["W2"]["stand"] == "ontbreekt"
 
 
-def test_w2_leest_gestructureerde_context_bij_markdown_van_de_locatiewacht(buiten, monkeypatch):
-    verblijf = {"aankomst": "2026-10-14T11:05:00+02:00", "vertrek": "2026-10-14T11:20:00+02:00",
-                "rol": "tracker", "positief": True,
-                "project": {"firma": "HARC", "nummer": "9999", "afstand_m": 25}}
-    with tempfile.TemporaryDirectory() as mapnaam:
-        pad = Path(mapnaam) / "context.json"
-        pad.write_text(json.dumps({"dag": "2026-10-14", "verblijven": [verblijf]}))
-        monkeypatch.setattr(v.os.path, "expanduser", lambda *_: str(pad))
-        buiten["locatie"] = [{"van": "locatie-wacht", "soort": "locatie", "sleutel": "2026-10-14",
-                              "inhoud": "# Locatielogboek 2026-10-14"}]
-        assert posten(bezoek(), buiten)["W2"]["stand"] == "ok"
+def test_w2_dag_voor_de_meetreeks_geeft_geen_locatie(monkeypatch):
+    monkeypatch.setattr(v.LC.bronbeleid, "dag_toegestaan", lambda dag: False)
+    monkeypatch.setattr(v.LC, "_haal", lambda pad: (_ for _ in ()).throw(AssertionError("mag de tegel niet vragen")))
+    assert v.LC.verblijven_in_venster("2026-09-01T10:00:00+02:00", "2026-09-01T11:00:00+02:00", "HARC", "9999") == []
+
+
+def test_w2_foto_met_gps_in_het_venster_is_aanwezigheid(buiten, monkeypatch):
+    monkeypatch.setattr(v.LC, "context", lambda dag: None)
+    buiten["foto"] = [foto()]
+    assert posten(bezoek(), buiten)["W2"]["stand"] == "ok"
 
 
 def test_w4_wortelfoto_en_alleen_heic_blijven_let_op(buiten):

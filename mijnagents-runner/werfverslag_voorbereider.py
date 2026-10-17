@@ -34,6 +34,7 @@ import bord  # noqa: E402
 import bronnen  # noqa: E402
 import werfregister  # noqa: E402
 import werfregistratie  # noqa: E402
+import locatiecontext as LC  # noqa: E402  (de enige lezer van locatiegegevens: grens en rol)
 import werfapp  # noqa: E402
 import contracten_mcp  # noqa: E402
 
@@ -312,7 +313,7 @@ def klaargezet(nummer):
     except Exception as e:  # noqa: BLE001
         ag.log(str(nummer), "fout", f"bord niet bereikbaar: {e}")
         return {}
-    per = {"afspraak": [], "transcript": [], "foto": [], "locatie": []}
+    per = {"afspraak": [], "transcript": [], "foto": []}
     for it in alles:
         # De Plaudwacht zette tot 12-10-2026 sommige transcripten klaar als soort "werfbezoek" (met de
         # deal-id als sleutel): die telden hier niet. Ze tellen nu als transcript (verbeteropdracht v1.0, §4).
@@ -329,7 +330,7 @@ def klaargezet(nummer):
                 per[soort].append(it)
             continue
         tekst = f'{it.get("sleutel", "")} {it.get("titel", "")} {inhoud[:400]}'
-        if soort in ("foto", "locatie") or re.search(rf"\b{nummer}\b", tekst):
+        if soort == "foto" or re.search(rf"\b{nummer}\b", tekst):
             per[soort].append(it)
     return per
 
@@ -423,68 +424,42 @@ def afstand_m(lat1, lon1, lat2, lon2):
 def projectcoordinaten(nummer, adres, bak):
     """Een expliciet coördinaat bij hetzelfde H-A-projectadres; onbekend blijft onbekend."""
     # Een foto meldt haar eigen GPS-plek; die mag niet tegelijk de bouwplaats bepalen.
-    for it in bak.get("afspraak", []) + bak.get("locatie", []):
+    for it in bak.get("afspraak", []):
         d = _inhoud(it)
-        if ((it.get("van"), it.get("soort")) not in (("agenda-wacht", "afspraak"), ("locatie-wacht", "locatie"))
-                or d.get("firma") != "HARC"):
+        if it.get("van") != "agenda-wacht" or it.get("soort", "afspraak") != "afspraak" or d.get("firma") != "HARC":
             continue
         plek = d.get("bouwplaats") if isinstance(d.get("bouwplaats"), dict) else d
         if (str(d.get("nummer") or d.get("projectnummer") or "") == str(nummer)
                 and str(plek.get("adres") or "").casefold() == adres.casefold()
                 and isinstance(plek.get("lat"), (int, float)) and isinstance(plek.get("lon"), (int, float))):
             return plek["lat"], plek["lon"]
-    # De Locatiewacht gebruikt exact deze projectplekken om een GPS-verblijf binnen 300 m te herkennen.
-    try:
-        with urllib.request.urlopen("http://127.0.0.1:3031/api/projectplekken", timeout=5) as r:
-            data = json.load(r)
-        plekken = [p for p in data.get("projectplekken") or [] if p.get("sleutel") == "HARC:" + str(nummer)
-                   and p.get("actief") and not p.get("uitgesloten")
-                   and p.get("geocode_kwaliteit") in ("adres", "override")
-                   and isinstance(p.get("lat"), (int, float)) and isinstance(p.get("lon"), (int, float))]
-        if len(plekken) == 1:
-            return plekken[0]["lat"], plekken[0]["lon"]
-    except (OSError, ValueError, TypeError):
-        pass
-    return None
+    # De tegel koppelt verblijven aan exact deze projectplekken (binnen 300 m); via de gedeelde lezer.
+    return LC.projectplek("HARC", nummer)
 
 
 def aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster):
+    """W2: was Mehdi ter plaatse? Geeft (stand, toelichting).
+
+    Persoonlijk bewijs (ok): een foto met GPS binnen 300 m in het venster, een opname met start in het
+    venster, of een verblijf van de gedragen tracker bij dit project. Alleen de auto bij het project
+    is let_op: dat bewijst waar de auto stond, niet waar Mehdi was. Locatie komt uitsluitend via
+    locatiecontext (startgrens van de meetreeks, alleen positieve projectverblijven).
+    """
     if not venster:
-        return None
-    coord = projectcoordinaten(nummer, adres, bak) if bak.get("locatie") or bak.get("foto") else None
-    if coord:
-        for it in bak.get("locatie", []):
-            if it.get("van") != "locatie-wacht" or it.get("soort") != "locatie" or dag_van(it) != bezoek["datum"]:
-                continue
-            inhoud = _inhoud(it)
-            verblijven = inhoud.get("verblijven") or []
-            if not verblijven:
-                try:
-                    pad = os.path.expanduser(f"~/appportal/mijnagents-data/locatielogboek/context/{bezoek['datum']}.json")
-                    with open(pad, encoding="utf-8") as f:
-                        context = json.load(f)
-                    verblijven = context.get("verblijven") or [] if context.get("dag") == bezoek["datum"] else []
-                except (OSError, ValueError):
-                    verblijven = []
-            for plek in verblijven:
-                t = tijdstip(plek.get("aankomst") or plek.get("start"))
-                vertrek = tijdstip(plek.get("vertrek") or plek.get("einde"))
-                overlap = in_venster(t, venster) or bool(t and vertrek and t < tijdstip(venster["einde"])
-                                                         and vertrek > tijdstip(venster["start"]))
-                project = plek.get("project") or {}
-                afstand = (afstand_m(*coord, plek["lat"], plek["lon"])
-                           if isinstance(plek.get("lat"), (int, float)) and isinstance(plek.get("lon"), (int, float))
-                           else project.get("afstand_m"))
-                if (plek.get("rol") not in (None, "auto") and overlap
-                        and project.get("firma") == "HARC" and str(project.get("nummer")) == str(nummer)
-                        and isinstance(afstand, (int, float)) and afstand <= 300):
-                    return "GPS-dagboek van de Locatiewacht binnen 300 m"
+        return "ontbreekt", "geen bezoekvenster om aanwezigheid in te toetsen"
+    coord = projectcoordinaten(nummer, adres, bak) if bak.get("foto") else None
     if coord and any(in_venster(t, venster) and afstand_m(*coord, lat, lon) <= 300
                      for t, lat, lon in foto_momenten(bak, bezoek["datum"])):
-        return "foto met GPS van de iCloud-wacht in het bezoekvenster"
+        return "ok", "foto met GPS van de iCloud-wacht binnen 300 m in het bezoekvenster"
     if any(in_venster(t, venster) for t in opname_momenten(bezoek, bak)):
-        return "opname met start in het bezoekvenster"
-    return None
+        return "ok", "opname met start in het bezoekvenster"
+    verblijven = LC.verblijven_in_venster(venster["start"], venster["einde"], "HARC", nummer)
+    persoon = [x for x in verblijven if x.get("rol") != "auto"]
+    if persoon:
+        return "ok", "gedragen tracker bij het project: " + LC.beschrijf(persoon[0])
+    if verblijven:
+        return "let_op", "alleen de auto stond bij het project (" + LC.beschrijf(verblijven[0]) + ")"
+    return "ontbreekt", "geen GPS-foto, opname of projectverblijf binnen het venster"
 
 
 def fotobewijs(bezoek, venster):
@@ -659,8 +634,8 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
             post("W1", "afspraak in de agenda", "ontbreekt", "geen geldige H-A-buitenafspraak met dit dossier en venster")
             taken.append(("agenda-wacht", f"Zoek in alle agenda's de H-A-buitenafspraak van dossier {nummer} op {d} ({adres})"))
     # W2 aanwezigheid, W3 de mappen.
-    aanwezigheid = aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster)
-    post("W2", "aanwezigheid", "ok" if aanwezigheid else "ontbreekt", aanwezigheid or "geen GPS-dagboek, GPS-foto of opname binnen het venster")
+    w2_stand, w2_toel = aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster)
+    post("W2", "aanwezigheid", w2_stand, w2_toel)
     post("W3", "projectmap en bezoekmap", "ok" if projectmap and bezoek.get("map") and bezoek.get("bron_map") != "los verslag" else "ontbreekt",
          f"{soort_project}: {projectmap}; {bezoek.get('map', '')}")
     # W4 foto's
