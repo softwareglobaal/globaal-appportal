@@ -246,3 +246,29 @@ def test_zonder_blokkerend_bewijs_niet_klaar(post):
     next(p for p in c if p["code"] == post)["stand"] = "ontbreekt"
     assert v.stand_van(c) == "te verzamelen"
     assert post in v.ontbrekende_posten(c)[0]
+
+
+def test_w6_plaud_exporttranscript_in_de_map_telt_zoals_bij_de_schrijver(buiten):
+    b = bezoek()
+    naam = "20260820 2173 Vergadering_ Renovatie eengezinswoning-transcript.txt"
+    b.update(transcripten=[naam], transcript_bestanden=[b["map"] + "/" + naam])
+    assert posten(b, buiten)["W6"]["stand"] == "ok"
+    import werfverslag_proef as proef
+    assert proef.eigen_tekst(naam) and v.werfnamen.eigen_transcript(naam)
+
+
+def test_w6_transcript_van_derden_telt_niet(buiten):
+    b = bezoek()
+    naam = "derden-transcript.txt"
+    b.update(transcripten=[naam], transcript_bestanden=[b["map"] + "/" + naam])
+    assert posten(b, buiten)["W6"]["stand"] == "ontbreekt"
+
+
+def test_w12_project_van_voor_het_contractsysteem_is_onbekend_niet_ontbreekt(monkeypatch):
+    class Fout(Exception):
+        pass
+    monkeypatch.setattr(v.contracten_mcp, "ToolFout", Fout)
+    monkeypatch.setattr(v.contracten_mcp, "call", lambda *a, **kw: (_ for _ in ()).throw(Fout("Geen dossier gevonden voor '2173'")))
+    monkeypatch.setattr(v.werfapp, "call", lambda *a, **kw: (_ for _ in ()).throw(OSError("project onbekend")))
+    stand, toel = v.contractbewijs("2173")
+    assert stand == "onbekend" and "vóór het systeem" in toel

@@ -50,6 +50,7 @@ import bronnen  # noqa: E402
 import werfextractie as extractie  # noqa: E402
 import werfregister as register  # noqa: E402
 import werfapp  # noqa: E402
+import werfnamen  # noqa: E402
 import sjabloon_werfverslag as sjab  # noqa: E402
 import sjabloon_oplevering as pv  # noqa: E402
 
@@ -125,18 +126,9 @@ def pdf_tekst(b, max_blz=None):
 
 
 EIGEN_TEKSTEN = ("transcript.txt", "00 verslag.md", "00 fotos.md")
-# Alleen de exacte naamvormen die Mehdi's eigen hulpmiddelen maken (gemeten op alle live bezoekmappen, 16-10-2026):
-# de Plaudwacht en de skill ("transcript.txt", "transcript.docx", "00 verslag.md"), de iCloud-wacht ("00 fotos.md") en de
-# Plaud-export ("05-07 <titel>-transcript.txt|docx", "20260820 2173 <titel>-transcript.txt", "2026-06-16 Plaud transcript.txt").
-# Een bestand van derden met "transcript" ergens in de naam ("derden-transcript.txt") valt erbuiten (CX3-9, CX5-4).
-EIGEN_NAMEN = (re.compile(r"(transcript\.(txt|docx)|00 verslag\.md|00 fotos\.md)", re.I),
-               re.compile(r"\d{2}-\d{2} .+-transcript\.(txt|docx)", re.I),
-               re.compile(r"\d{8} \d{4} .+-transcript\.(txt|docx)", re.I),
-               re.compile(r"\d{4}-\d{2}-\d{2} plaud transcript\.(txt|docx)", re.I))
-
-
-def eigen_tekst(naam):
-    return any(p.fullmatch(naam.strip()) for p in EIGEN_NAMEN)
+# De naamvormen van Mehdi's eigen materiaal staan in koppelingen/werfnamen.py: dezelfde regel als de voorbereider (W6).
+EIGEN_NAMEN = werfnamen.EIGEN_NAMEN
+eigen_tekst = werfnamen.eigen_tekst
 
 
 # Eigen fotomappen (gemeten 16-10-2026 op de live bezoekmappen): "fotos" (export van de iCloud-wacht) en "fotos icloud mehdi".
