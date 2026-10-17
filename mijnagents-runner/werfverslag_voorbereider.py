@@ -36,6 +36,7 @@ import werfregister  # noqa: E402
 import werfregistratie  # noqa: E402
 import locatiecontext as LC  # noqa: E402  (de enige lezer van locatiegegevens: grens en rol)
 import werfapp  # noqa: E402
+import werfnamen  # noqa: E402  (dezelfde naamregel voor eigen transcripten als de schrijver)
 import contracten_mcp  # noqa: E402
 
 NAAM = "werfverslag-voorbereider"
@@ -499,7 +500,9 @@ def contractbewijs(nummer):
             d = werfapp.call(f"/projecten/{nummer}")
         except Exception:  # noqa: BLE001
             if mcp_ontbreekt:
-                return "ontbreekt", "geen architectuurcontract bij dit projectnummer"
+                # Een project van vóór het contractsysteem (bv. 2173, 2021) staat er nooit in: dat is
+                # onbekend, geen ontbrekend contract. Het getekende contract ligt dan in de projectmap.
+                return "onbekend", "project niet in het contractdashboard (vermoedelijk van vóór het systeem); bekijk het getekende contract in de projectmap"
             return "onbekend", "contract-dashboard en werfapp niet bereikbaar"
     if not isinstance(d, dict):
         return "onbekend", "contractantwoord is niet toetsbaar"
@@ -662,7 +665,8 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
         taken.append(("plaud-wacht", f"Zoek een Plaud-opname van {d} voor dossier {nummer} ({adres}) en zet het transcript klaar met sleutel {nummer}"))
     directe_transcripten = [p for p in bezoek.get("transcript_bestanden", [])
                            if os.path.dirname(p).casefold() == bezoek["map"].casefold()
-                           and os.path.basename(p).lower() in ("transcript.txt", "transcript.docx", "01 transcript.md")]
+                           and (werfnamen.eigen_transcript(os.path.basename(p))
+                                or os.path.basename(p).lower() == "01 transcript.md")]
     if directe_transcripten:
         post("W6", "transcript", "ok", "; ".join(os.path.basename(p) for p in directe_transcripten)[:160])
     elif transcripten_bak:
@@ -672,7 +676,7 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
         post("W6", "transcript", "ontbreekt", "opname zonder transcript in de map")
         taken.append(("plaud-wacht", f"Transcript maken/ophalen van de opname in {bezoek['map']} (dossier {nummer}, {d})"))
     else:
-        post("W6", "transcript", "ontbreekt", "geen opname, dus geen transcript")
+        post("W6", "transcript", "ontbreekt", "geen eigen transcript in de bezoekmap (naamvormen in koppelingen/werfnamen.py)")
     # W7 verslag; W11 nacontrole van de proef van Werfverslag schrijver
     if bezoek["verslagen"]:
         post("W7", "verslag of concept", "ok", "; ".join(bezoek["verslagen"])[:160])
@@ -704,7 +708,7 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
     if bezoek.get("soort_bezoek") == "plaatsbezoek":
         post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek['nr_label']}: plaatsbezoek vóór de werfstart, geen werfverslagnummer (A7/A8)")
     elif app_bezoeken is None:
-        post("W8", "verslagnummer", "onbekend", "werfapp niet bereikbaar; nummer niet geijkt")
+        post("W8", "verslagnummer", "onbekend", "werfapp kent dit project niet of is niet bereikbaar; nummer niet geijkt")
     else:
         nummers = [int(str(v.get("volgnummer") or v.get("werfbezoek_teller") or v.get("weergave_nummer")))
                    for v in app_bezoeken if isinstance(v, dict)
