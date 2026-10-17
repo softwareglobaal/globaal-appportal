@@ -140,7 +140,9 @@ def annulering_kandidaat(kal, ev, vorig, nu):
         begint = datetime.fromisoformat(start)
     except (TypeError, ValueError):
         return None
-    if not (nu - timedelta(hours=2) <= begint <= nu + timedelta(days=30)):
+    # Geen historische afzegging bellen bij een eerste uitrol of een herlezing:
+    # alleen een afspraak die nog moet beginnen krijgt een proactieve oproep.
+    if not (nu <= begint <= nu + timedelta(days=30)):
         return None
     titel = _toonbare_titel(kal, ev.get("summary") or _oude_titel(vorig) or "afspraak")
     return {"sleutel": f"{kal}:{ev.get('id', '')}:{start}", "titel": titel[:80], "start": begint}

@@ -380,6 +380,9 @@ S.meld_annulering = oorspronkelijke_melder
 check("A9 een mislukte afzegmelding blijft open en wordt de volgende ronde opnieuw geprobeerd",
       rc1 == 1 and len(open1) == 1 and rc2 == 0 and not open2 and len(meldingen) == 2,
       str((rc1, open1, rc2, open2, meldingen)))
+verlopen = ev("verlopen", dag(-1), description="De afspraak gaat niet door.")
+check("A9 een historische afzegging veroorzaakt bij uitrol geen late oproep",
+      S.annulering_kandidaat("werk", verlopen, None, datetime.now(timezone.utc)) is None)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
