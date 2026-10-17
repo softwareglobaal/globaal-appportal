@@ -172,13 +172,14 @@ INVENTARIS = {
     "mijnagents-runner/plaud/dossier.py": "weegt alleen het locatiebewijs dat plaud_wacht via locatiecontext.gestructureerd kreeg; leest zelf niets",
     "mijnagents-runner/dagbundelaar.py": "locatiecontext.dag_heeft_dagboek (precies de dag, grens); sluit locatie uit bundels",
     "mijnagents-runner/levenscoach.py": "bronbeleid.dag_toegestaan op locatie-items",
-    "mijnagents-runner/agenda_wacht.py": "leest alleen /api/plekken (benoemde plekken voor reistijd), geen metingen",
+    "mijnagents-runner/agenda_wacht.py": "leest /api/plekken en ongecachete beweging via koppelingen/beweging.py",
     "mijnagents-runner/koppelingen/locatiecontext.py": "de lezer zelf: bronbeleid, alleen /api/context",
+    "mijnagents-runner/koppelingen/beweging.py": "alleen /api/beweging, valideert geldigheid en rol, geen coördinaten",
     "mijnagents/app.py": "/api/dagcijfers en /api/beleid van de tegel; oude locatie-items niet getoond",
     "mijnagents-runner/planning/locatie_cron_zetten.py": "planning, leest geen gegevens",
 }
 PATRONEN = re.compile(r"soort\"\]? ?[!=]= ?\"locatie\"|\"soort\"\) ?== ?\"locatie\"|locatielogboek/dagen|/api/dag|"
-                      r"/api/context|:3031|locatiecontext|locatie_op\(|/api/dagboek|/api/dagcijfers|/api/plekken")
+                      r"/api/context|/api/beweging|:3031|locatiecontext|locatie_op\(|/api/dagboek|/api/dagcijfers|/api/plekken")
 
 
 def test_elke_lezer_van_locatiegegevens_staat_in_de_inventaris():
@@ -195,7 +196,7 @@ def test_elke_lezer_van_locatiegegevens_staat_in_de_inventaris():
     onbekend = gevonden - set(INVENTARIS)
     assert not onbekend, "lezer(s) van locatiegegevens zonder grens in de inventaris: %s" % sorted(onbekend)
     for pad in INVENTARIS:
-        if pad.endswith(("agenda_wacht.py", "locatie_cron_zetten.py", "mijnagents/app.py")):
+        if pad.endswith(("agenda_wacht.py", "locatie_cron_zetten.py", "mijnagents/app.py", "koppelingen/beweging.py")):
             continue
         bron = open(os.path.join(REPO, pad), encoding="utf-8").read()
         assert "bronbeleid" in bron or "locatiecontext" in bron or "import locatiecontext" in bron, pad

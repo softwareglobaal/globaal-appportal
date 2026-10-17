@@ -29,6 +29,7 @@ RUN python3 test_bronbeleid.py
 RUN python3 test_schema.py
 RUN python3 test_herkenning.py
 RUN python3 test_auto.py
+RUN python3 test_live_beweging.py
 RUN python3 test_export.py
 RUN python3 test_robuust.py
 

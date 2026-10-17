@@ -34,6 +34,7 @@ import zoom  # noqa: E402
 import organisatie  # noqa: E402
 import nummerlezer  # noqa: E402
 import pipedrive  # noqa: E402
+import beweging as locatiebeweging  # noqa: E402
 
 NAAM = "agenda-wacht"
 ag = bord.Agent(NAAM)
@@ -4468,10 +4469,11 @@ def main():
         if fouten:
             noden.append({"tekst": "Agenda's die ik niet kan lezen: " + ", ".join(f["kalender"][:30] for f in fouten),
                           "wie": "mehdi"})
+        onderweg = locatiebeweging.kort(locatiebeweging.lees())
         ag.hartslag("waakt", taak="agenda in het oog",
                     detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; "
                            f"{len(niet_conform)} zonder code; "
-                           f"{len(onvolledig)} zonder adres",
+                           f"{len(onvolledig)} zonder adres; {onderweg}",
                     nood=noden)
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Versie** | **v2.3** (opdracht v1.2, 04-10-2026; aanvulling v1.4 na onafhankelijke controle, 05-10-2026; eerste rit na de uitrol en nacontroles v1.5/v1.6, 05-10-2026) |
+| **Versie** | **v2.4** (17-10-2026: actueel bewegingssignaal voor De Agendawacht, twee bronnen strikt gescheiden; eerdere broncontrole v2.3 van 05-10-2026) |
 | **Adres** | https://locatie.globaal.be (Authentik, groep `locatie`) |
 | **Code** | `locatie/` in softwareglobaal/globaal-appportal; De Locatiewacht in `mijnagents-runner/locatie_wacht.py` |
 | **Containers** | `app-locatie` (webapp, poort 3031 op 127.0.0.1) en `app-locatie-tracker` (ontvanger, buiten poort 5000) |
@@ -33,6 +33,36 @@ Projectadressen en projectkennis volgen hun eigen bron, ongeacht de ouderdom van
 
 De tracker in de auto **bewijst waar de auto stond, niet waar Mehdi was**. Overal staat daarom "auto bij
 project" of "mogelijk werfbezoek".
+
+## Actuele beweging voor De Agendawacht
+
+`GET /api/beweging` rekent bij elk verzoek direct met de opgeslagen punten, zonder dagboekcache of cron.
+Het antwoord bevat geen coördinaten of toestelcode. Het geeft voor `auto` hoogstens `auto_beweegt` en voor
+een actieve bron met rol `persoon` hoogstens `onderweg` (formulering van de agent: **volgens de gedragen
+tracker waarschijnlijk onderweg**). Een rijdende auto wordt nooit bewijs over Mehdi. Twee verschillende,
+verse punten met een goede fix, aannemelijke snelheid en verplaatsing zijn nodig; een oud, gebufferd,
+verdacht of traag ontvangen punt telt niet. Een positief oordeel vervalt vanzelf na 120 seconden voor
+de auto en voorlopig 180 seconden voor de gedragen tracker. Bij twijfel zegt de API `onbekend`.
+
+De Agendawacht leest dit oordeel ongecachet aan het einde van iedere ronde via
+`mijnagents-runner/koppelingen/beweging.py` en zet alleen een neutrale zin in zijn interne status.
+De normale Agendawacht draait op werkdagen vanaf 06:30 om de twee uur en bij relevante
+agendawijzigingen; dit is dus **geen continue melding of agenda-aanpassing**. Het endpoint zelf is
+direct na ontvangst van nieuwe GPS-punten actueel. Er gaat geen positie naar de agenda of het bord.
+
+De toekomstige GL320MG krijgt pas de rol `persoon` na een fysieke proef: berichtformaat en fix,
+rapportage bij beweging en stilstand, vertraging, buffering, batterij en bereikbaarheid meten.
+Een eerste proefinstelling is een bewegingsgebeurtenis plus een punt per minuut tijdens beweging
+en een veel rustiger ritme bij stilstand. Dat is nog geen toestelcommando of bewezen batterijduur;
+de [Queclink-productfiche](https://www.queclink.com/wp-content/uploads/2022/01/GL320MG-20220128.pdf)
+bevestigt alleen dat tijds-/afstandsrapportage en bewegingsdetectie instelbaar zijn. De echte
+instelling volgt uit de gemeten vertraging en looptijd, met een proef voor nasturen na netwerkuitval.
+Daarna het echte IMEI alleen in `ATRACK_IMEIS` op de VM zetten, de vingerafdruk en ingangsdatum in
+`bronbeleid.py` vastleggen, een passende stiltealarmgrens afleiden en beide containers herstarten.
+De 180 seconden zijn een veilige startgrens voor het oordeel, geen bewezen rapportageritme van de GL320MG.
+De bestaande ontvanger gebruikt nog onbeveiligd TCP en de toestelcode alleen is geen sterke
+authenticatie; beveiligd transport en toestelgebonden authenticatie moeten vóór persoonlijk gebruik
+worden gevalideerd. Geen sleutels in deze handleiding of de repo.
 
 ## Hoe het loopt
 
@@ -158,6 +188,7 @@ Een alarmtitel bevat nooit het woord "stil" (daarop belt De Bode).
 | `GET /api/dagcijfers` | per dag verblijven, km, minuten onderweg: voor het bord (`/dagen`) |
 | `GET /api/context?dag=<dag>` | locatiecontext voor agents: `verblijven` alleen positieve projectverblijven (auto bij project, waarschijnlijk of bevestigd), `kandidaten` apart en niet positief; nooit Thuis, rit, gat of rechtgezette verblijven |
 | `GET /api/status` | per bron de stand, de taken met laatste geslaagde en volgende uitvoering, de projectdekking |
+| `GET /api/beweging` | direct berekend actueel bewegingssignaal zonder coördinaten; auto en persoon blijven gescheiden |
 | `GET /api/beleid` | het bronbeleid |
 | `GET /api/projectplekken` | projectplekken met overrides en de dekking |
 | `GET/POST /api/correctie` | correcties; schrijven alleen via het portaal (Authentik) of met het wachtwoord |
@@ -189,9 +220,9 @@ het script kijkt zelf of het het juiste Belgische uur is (`--om`, `--controle`).
     docker exec app-locatie python3 beheer.py override HARC:2604 --lat .. --lon .. --reden "parking achteraan" --door mehdi
     ~/agents/.venv/bin/python ~/appportal/mijnagents-runner/locatie_wacht.py --droog --dag 2026-10-05
 
-Een tweede tracker aansluiten: een regel in `bronbeleid.BRONNEN` (status actief, ingang, vingerafdruk van
-het IMEI), het IMEI in `ATRACK_IMEIS`, de grendels laten draaien en uitrollen. Het ontvangstprotocol van
-een draagbare tracker wordt pas vastgelegd na de keuze van het toestel.
+Een tweede tracker aansluiten: volg eerst de fysieke proef en beveiligingscontrole hierboven. Zet pas
+dan status actief, ingang en vingerafdruk in `bronbeleid.BRONNEN`, het IMEI in `ATRACK_IMEIS`, draai
+de grendels en rol uit. De GL320MG is gekozen, maar zijn werkelijke @Track-berichten zijn nog niet gemeten.
 
 ## Bestanden en bewaren
 
@@ -212,7 +243,8 @@ een draagbare tracker wordt pas vastgelegd na de keuze van het toestel.
 De Docker-build draait de tests van de tegel: `test_dagindeling`, `test_atrack`, `test_atrack_server`,
 `test_bronbeleid`, `test_schema`, `test_herkenning`, `test_auto`, `test_export`, `test_robuust`. GitHub
 Actions draait die ook, en daarnaast in een tweede job (Python 3.12, zoals de VM) de lezers buiten de tegel:
-`test_locatie_wacht`, `test_levenscoach_grens`, `test_locatielezers` (met de inventaris van elke lezer).
+`test_locatie_wacht`, `test_levenscoach_grens`, `test_locatielezers` (met de inventaris van elke lezer),
+`test_live_beweging` en `test_agenda_beweging`.
 Eigen proefgegevens en een verzonnen IMEI; de echte meting bevat het thuisadres en hoort niet in git.
 
 ## Lezers van locatiegegevens (inventaris)
@@ -227,7 +259,7 @@ lezer bijkomt die hier niet staat.
 | De Plaudwacht | `koppelingen/locatiecontext.py` | grens | via de tegel | idem |
 | De Dagbundelaar | `locatiecontext.dag_heeft_dagboek` (precies de dag) | grens | n.v.t. | sluit locatie uit bundels |
 | De Levenscoach | klaarzet-items van soort locatie | `dag_toegestaan` | n.v.t. | alleen voor Mehdi |
-| De Agendawacht | `/api/plekken` (benoemde plekken voor reistijd) | n.v.t. (geen metingen) | n.v.t. | n.v.t. |
+| De Agendawacht | `/api/plekken` voor reistijd en `/api/beweging` voor de interne status | bronbeleid via de tegel | via de tegel | auto is geen persoonsbewijs |
 | het bord (`/dagen`, `/dag/<datum>`) | `/api/dagcijfers`, `/api/beleid` | grens | via de tegel | alleen beheer |
 | Mac-export, `locatie-overzicht.py` | `/api/dagboek`, `/api/revisies`; geëxporteerde JSON | `dag_toegestaan` | via de tegel | n.v.t. |
 

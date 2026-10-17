@@ -37,6 +37,7 @@ jobs:
       - run: python3 locatie/test_schema.py
       - run: python3 locatie/test_herkenning.py
       - run: python3 locatie/test_auto.py
+      - run: python3 locatie/test_live_beweging.py
       - run: python3 locatie/test_export.py
       # opdracht v1.4: geen slot op de database tijdens traag netwerkwerk (trage geocoder, gelijktijdige schrijver)
       - run: python3 locatie/test_robuust.py
@@ -60,3 +61,4 @@ jobs:
       # opdracht v1.4: Plaud, Archivaris, Dagbundelaar en het bord op de gestructureerde context, en de
       # inventaris die faalt zodra een nieuwe lezer van locatiegegevens geen grens heeft
       - run: python3 mijnagents-runner/tests/test_locatielezers.py
+      - run: python3 mijnagents-runner/tests/test_agenda_beweging.py

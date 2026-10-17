@@ -1162,6 +1162,16 @@ subdiscipline-statistieken.
 
 ## Locatielogboek (locatie.globaal.be, gebouwd 2026-09-09)
 
+- [ ] **GL320MG als tweede, gedragen bron aansluiten zodra hij er is.** Controleer op een echte rit
+      het @Track-berichtformaat, de vertraging bij bewegen en stoppen, buffer, batterij en SIM.
+      Leg daarna pas de toestelvingerafdruk, ingangsdatum en de gemeten stiltealarmgrens vast.
+      De actuele lees-API en de koppeling met De Agendawacht staan in `locatie/README.md` v2.4;
+      zonder actieve gedragen bron zegt die nooit dat Mehdi onderweg is.
+- [ ] **Ontvanger beveiligen vóór persoonsgebruik.** De huidige @Track-poort spreekt onbeveiligd
+      TCP en de toestelcode is geen voldoende authenticatie. Valideer wat beide toestellen
+      daadwerkelijk voor TLS en een toestelgebonden geheim ondersteunen, en rol dat uit zonder
+      de bestaande autotracker te verliezen.
+
 > Achtergrond: Google Maps bewaart de tijdlijn sinds eind 2024 alleen nog op het
 > toestel zelf, zonder koppeling en zonder cloudkopie. Wie een dagelijks logboek
 > wil, moet het zelf verzamelen. De tegel doet dat via OwnTracks op Mehdi's

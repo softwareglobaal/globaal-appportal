@@ -72,6 +72,12 @@ def bron(conn, naam, nu=None, toestellen=None):
                           "tekst": "Van de actieve bron %s is nog geen enkel bericht binnengekomen." % naam,
                           "sleutel": "locatie-geen-gegevens-%s" % naam})
         return uit
+    if not laatste:
+        # Een oudere/importreeks kan een punt zonder herleidbaar bericht bevatten.
+        # Daaruit volgt geen bewijs dat de ontvanger nu nog bereikbaar is.
+        uit.update(toestand="onbekend", laatste_ontvangst=None, laatste_geldige_positie=None,
+                   uitleg="er zijn punten maar geen herleidbare ontvangstberichten")
+        return uit
 
     uit["laatste_ontvangst"] = {"tijd": _uur(laatste["ontvangen"]), "tst": laatste["ontvangen"],
                                 "minuten_geleden": _min(nu - laatste["ontvangen"]), "soort": laatste["soort"]}
@@ -99,6 +105,24 @@ def bron(conn, naam, nu=None, toestellen=None):
     verdacht = conn.execute(f"""SELECT count(*), max(ontvangen) FROM bericht WHERE bron = ? AND toestel IN ({q})
                                 AND verdacht IS NOT NULL""", [naam] + imeis).fetchone()
     uit["verdacht"] = {"aantal": verdacht[0], "laatst": _uur(verdacht[1])}
+
+    if beleid["rol"] == "persoon":
+        # Een gedragen tracker heeft geen motorcontact. FRI/VGN en de autoteksten hieronder
+        # mogen zijn stilte nooit als een auto met draaiende motor beoordelen. Een alarmgrens
+        # wordt pas gezet nadat zijn echte rapportageritme op het toestel is gemeten.
+        uit.update(toestand="laatst ontvangen", uitleg="laatste bericht %s; actuele beweging staat apart in /api/beweging"
+                   % _uur(laatste["ontvangen"]))
+        grens_min = beleid.get("stil_persoon_minuten")
+        if grens_min and nu - laatste["ontvangen"] > grens_min * 60:
+            uit.update(toestand="geen recent bericht",
+                       alarm={"titel": "Draagbare locatietracker meldt zich niet",
+                              "tekst": "De gedragen tracker heeft al %d minuten niets gemeld." % _min(nu - laatste["ontvangen"]),
+                              "sleutel": "locatie-wegval-%s" % naam})
+        if verdacht[0] and verdacht[1] and nu - verdacht[1] < 7 * 86400 and not uit.get("alarm"):
+            uit["alarm"] = {"titel": "Verdachte berichten van de draagbare locatietracker",
+                            "tekst": "%d verdachte bericht(en) van de gedragen tracker; ze tellen niet mee." % verdacht[0],
+                            "sleutel": "locatie-verdacht-%s" % naam}
+        return uit
 
     # Toestand: de laatste toestandsmelding volgens het toestel, op gebeurtenistijd (moment), binnen
     # de grens en van het toegelaten toestel. Nooit op ontvangstvolgorde: een ouder 'motor uit' dat

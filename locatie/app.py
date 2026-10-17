@@ -1387,6 +1387,17 @@ def api_status():
         conn.close()
 
 
+@app.route("/api/beweging")
+def api_beweging():
+    """Vers oordeel voor de agenda-agent, zonder coördinaten of dagboekcache."""
+    import live_beweging as L          # noqa: PLC0415
+    conn = db()
+    try:
+        return jsonify(L.overzicht(conn))
+    finally:
+        conn.close()
+
+
 @app.route("/api/beleid")
 def api_beleid():
     return jsonify(B.samenvatting())
