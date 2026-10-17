@@ -2077,7 +2077,14 @@ def api_werfbezoek_opruimen():
         elif (oud["dossier"], oud["datum"]) != (blijft["dossier"], blijft["datum"]):
             reden = "ander dossier of andere datum"
         elif _werf_rel(oud) is None or _werf_rel(oud) != _werf_rel(blijft):
-            reden = "geen verhuisde bezoekmap (ander pad binnen de projectmap)"
+            # Een hernoemde bezoekmap (de communicatiemap kreeg in oktober 2026 een nieuwe naamregel) heeft een ander
+            # pad binnen de projectmap. Die mag alleen weg als het bord de oude rij zelf als dubbel markeerde en de rij
+            # die blijft de enige levende rij van dat dossier op die dag is.
+            levend = [x["id"] for x in conn.execute(
+                "SELECT id FROM werfbezoek WHERE dossier=? AND datum=? AND stand<>?",
+                (oud["dossier"], oud["datum"], WERF_DUBBEL)).fetchall()]
+            if not (oud["stand"] == WERF_DUBBEL and levend == [blijft_id]):
+                reden = "geen verhuisde of hernoemde bezoekmap (ander pad, en niet de enige levende rij van die dag)"
         else:
             kwijt = [k for k in WERF_KOLOMMEN if not _werf_leeg(oud[k]) and _werf_leeg(blijft[k])]
             if kwijt:
