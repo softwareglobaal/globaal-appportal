@@ -371,10 +371,44 @@ def transcript_telt(it, d, nummer):
     return bool(re.search(rf"\b{nummer}\b", f'{it.get("sleutel", "")} {it.get("titel", "")}'))
 
 
+# H-Architects in een agendatitel: HARC, de oudere code HA ("[HA-KB]"), of leeg bij een titel zonder code (E1b).
+HA_FIRMA = ("HARC", "HA", "")
+BAK_SOORTEN = ("afspraak", "transcript", "werfbezoek", "foto")
+BAK_PAGINAS = 12     # per soort hoogstens 12 x 500 items terug
+
+
+def bak_items():
+    """Alle items van de soorten die de voorbereider leest, per soort en terugbladerend.
+
+    Tot 18-10-2026 las hij alleen de laatste 500 items van de hele bak (alle agents samen). De afspraak
+    van 2145 werfbezoek 1 (15-09, item 447) viel daardoor weg terwijl de bak boven de 2.900 zat, en W1
+    bleef 'ontbreekt'. Nu per soort, met tot_id, tot een pagina korter is dan 500.
+    """
+    gezien, uit = set(), []
+    for soort in BAK_SOORTEN:
+        tot = None
+        for _ in range(BAK_PAGINAS):
+            pad = f"/api/klaarzet?status=alle&soort={soort}&n=500" + (f"&tot_id={tot}" if tot else "")
+            items = bord.call(pad).get("items", [])
+            for it in items:
+                if it.get("soort") != soort:
+                    continue
+                k = it.get("id") or it.get("uniek") or json.dumps(it, sort_keys=True, default=str)
+                if k in gezien:
+                    continue
+                gezien.add(k)
+                uit.append(it)
+            ids = [it["id"] for it in items if isinstance(it.get("id"), int)]
+            if len(items) < 500 or not ids:
+                break
+            tot = min(ids)
+    return uit
+
+
 def klaargezet(nummer):
     """Wat de andere agents over dit dossier klaarzetten, per soort."""
     try:
-        alles = bord.call("/api/klaarzet?status=alle&n=500").get("items", [])
+        alles = bak_items()
     except Exception as e:  # noqa: BLE001
         ag.log(str(nummer), "fout", f"bord niet bereikbaar: {e}")
         return {}
@@ -436,7 +470,7 @@ def kandidaatbewijs(bezoek, bak, nummer):
     for it in bak.get("afspraak", []):
         d = _inhoud(it)
         if (it.get("van") != "agenda-wacht" or it.get("voor") != "h-architects"
-                or (d.get("firma") or "") not in ("HARC", "")
+                or (d.get("firma") or "") not in HA_FIRMA
                 or it.get("soort") != "afspraak" or it.get("status") == "vervallen"
                 or str(d.get("nummer") or "") != str(nummer) or d.get("buiten") is not True
                 or d.get("geannuleerd") or d.get("status") in ("cancelled", "geannuleerd")
@@ -645,7 +679,7 @@ def bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, bezoek_id):
                 or it.get("status") == "vervallen"
                 # Altijd de afdeling H-Architects; de firma is HARC, of leeg bij een titel zonder code (E1b). Een andere
                 # firma (UNAB, ...) of een andere afdeling is nooit H-A-bewijs (tests/test_werf_fotoproducent.py).
-                or it.get("voor") != "h-architects" or (d.get("firma") or "") not in ("HARC", "")
+                or it.get("voor") != "h-architects" or (d.get("firma") or "") not in HA_FIRMA
                 or str(d.get("nummer") or "") != str(nummer)
                 or d.get("onzeker") is not False or d.get("buiten") is not True or not d.get("agenda")
                 or (d.get("type") not in ("WB", "PL", "PLB", "OP", "OPL", "VO", "DO")

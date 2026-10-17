@@ -490,6 +490,10 @@ def api_klaarzet_lezen():
         q += " AND soort=?"; a.append(request.args["soort"])
     if status != "alle":
         q += " AND status=?"; a.append(status)
+    # Terugbladeren: tot_id geeft de items met een kleiner id (de werfvoorbereider las tot 18-10-2026 alleen de
+    # laatste 500 van de hele bak, zodat de afspraak van een bezoek van een maand geleden er al uit viel).
+    if (request.args.get("tot_id") or "").isdigit():
+        q += " AND id<?"; a.append(int(request.args["tot_id"]))
     q += " ORDER BY id DESC LIMIT ?"; a.append(min(int(request.args.get("n", 100)), 500))
     return jsonify(items=[dict(r) for r in db().execute(q, a).fetchall()])
 
