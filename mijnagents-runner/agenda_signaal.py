@@ -228,7 +228,17 @@ def te_verwerken(kal, items, oud, vinger, vanaf="", onbekend=None):
             continue
         vp = vingerafdruk(ev)
         vinger[sleutel] = [vp, dag]
-        if (vorig or [None])[0] == vp:
+        vorig_vp = (vorig or [None])[0]
+        # Migratie van de oude vingerafdruk met zes velden: geen volledige dagronde
+        # enkel omdat annulering als zevende veld is toegevoegd.
+        if vorig_vp:
+            try:
+                oude_waarden = json.loads(vorig_vp)
+                if isinstance(oude_waarden, list) and len(oude_waarden) == 6:
+                    vorig_vp = json.dumps(oude_waarden + [False], ensure_ascii=False)
+            except (TypeError, ValueError):
+                pass
+        if vorig_vp == vp:
             continue
         dagen |= {d for d in vroeger if d >= vanaf} | ({s} if s else set())
         was = sorted(d for d in vroeger if d != dag)

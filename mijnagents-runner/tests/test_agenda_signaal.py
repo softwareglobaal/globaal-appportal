@@ -146,6 +146,9 @@ _d2, _ = S.te_verwerken("werk", [dict(_e, colorId="3", description="x")], dict(_
 _d3, _ = S.te_verwerken("werk", [ev("r1", dag(4), titel="\U0001F697 Reistijd: thuis → Herent")], {}, {})
 check("een nieuwe afspraak plant zijn dag, een kleurwissel niets, een eigen ritblok niets",
       _d1 == {dag(4)} and not _d2 and not _d3, str((_d1, _d2, _d3)))
+_oud6 = json.dumps(json.loads(S.vingerafdruk(_e))[:6], ensure_ascii=False)
+_migratie, _ = S.te_verwerken("werk", [_e], {"werk|e1": [_oud6, dag(4)]}, {}, vanaf=dag(0))
+check("A9 een oude vingerafdruk zonder annuleringsveld start geen onnodige dagronde", not _migratie, str(_migratie))
 
 # --- A4: alle pagina's ---------------------------------------------------------------------------------
 nieuwe_stand()

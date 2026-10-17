@@ -5,6 +5,8 @@ met "afgezegd, niet vertrekken". De vijfminutenoproep leest het Google-item vlak
 dat niet, dan klinkt geen vertrekoproep maar eenmaal een waarschuwing vanaf het vaste agentnummer. Mislukte
 afzegmeldingen blijven open. Een annuleerlink of voorwaardelijke zin is geen annulering; een latere expliciete
 bevestiging herroept de afzegzin.
+De bestaande zesdelige wijzigingsvingerafdruk wordt bij vergelijking gelezen als een oude versie zonder
+annulering; daardoor start de nieuwe code geen dagronde voor een afspraak die verder niet veranderde.
 Herfstlaan 65 is Mehdi's thuis: geen rit thuis-naar-thuis, geen buitenconflict en geen vertrekoproep. Bij een korte
 titel met Catalin gebruikt de agent de bekende Harmoniebouw-koppeling; een deal met een invulnaam telt niet.
 Een adresdeal buiten thuis kan een titel met alleen een activiteit aanvullen. Schreef Mehdi daarnaast een naam of
