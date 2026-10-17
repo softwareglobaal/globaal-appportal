@@ -270,10 +270,11 @@ class Felix:
         for reeks in werkgebied()["reeksen"]:
             j = self.reeks_zoeken(reeks, termen, 1, PAGINA_DOSSIER)
             totaal = j.get("amountOfResults")
-            if isinstance(totaal, int) and totaal > maximum:
+            pagina, items = 1, j.get("items") or []
+            if isinstance(totaal, int) and totaal > maximum:  # de eerste pagina telt wel mee (Codex FX39)
+                rijen += [r for r in (_rij(it, reeks) for it in items) if past(r["dossiernummer"])]
                 self.afgekapt.append(f"dossiernummer {naam}: {totaal} treffers, meer dan {maximum}")
                 continue
-            pagina, items = 1, j.get("items") or []
             while True:
                 rijen += [r for r in (_rij(it, reeks) for it in items) if past(r["dossiernummer"])]
                 if len(items) < PAGINA_DOSSIER or (isinstance(totaal, int) and pagina * PAGINA_DOSSIER >= totaal):
@@ -371,7 +372,7 @@ class Felix:
             for _ in range(30):
                 g = self._gebruiker()
                 if g.get("aangemeld"):
-                    return g
+                    return _eigen_account(g, email)
                 if knop.is_visible():
                     break
                 p.wait_for_timeout(1000)
@@ -399,7 +400,7 @@ class Felix:
                     continue
                 g = self._gebruiker()
                 if g.get("aangemeld"):
-                    return g
+                    return _eigen_account(g, email)
             raise RuntimeError("niet aangemeld na 60 seconden")
         except Exception as e:
             pad = os.path.join(os.path.expanduser("~/appportal/mijnagents-data/felix"), "aanmelden-mislukt.png")
@@ -417,7 +418,8 @@ class Felix:
             return self.page.evaluate("""() => { try { const u = angular.element(document.body).injector()
                                 .get('AuthenticationService').getUser() || {};
                                 return {aangemeld: !!u.loggedIn, naam: (u.firstname||'') + ' ' + (u.lastname||''),
-                                        erewoord: !!u.honorStatement}; } catch (e) { return {}; } }""") or {}
+                                        email: u.emailAdress || '', erewoord: !!u.honorStatement};
+                                } catch (e) { return {}; } }""") or {}
         except Exception:
             return {}
 
@@ -617,6 +619,14 @@ class Beschermd(Exception):
     """Een stuk met auteursrecht: FelixArchief laat het alleen online bekijken, na aanmelden. Geen fout van ons."""
 
 
+def _eigen_account(g, email):
+    """Aangemeld telt alleen als het het account uit FELIXARCHIEF_EMAIL is (Codex FX40): FelixArchief geeft het
+    e-mailadres van de aangemelde gebruiker (emailAdress, gemeten 17-10-2026). Het adres zelf komt in geen melding."""
+    if (g.get("email") or "").strip().lower() != (email or "").strip().lower():
+        raise RuntimeError("aangemeld als een ander account dan dat uit FELIXARCHIEF_EMAIL")
+    return {k: v for k, v in g.items() if k != "email"}
+
+
 class BestandFout(Exception):
     """Een bestand dat FelixArchief niet gaf, om een andere reden dan auteursrecht."""
 
@@ -636,8 +646,9 @@ def _volledig_op_schijf(pad, grootte):
 def schrijfwijze_mogelijk(dossiernummer):
     """'197317935' -> jaar 1973 en volgnummer 17935: kan in FelixArchief als 'BE/1973/B/17935' staan.
 
-    Alleen tot en met 2010: die notatie 'XX/<jaar>/B/<volgnummer>' bestaat van 1965 tot 2006 duizenden keren per jaar,
-    in 2010 nog enkele keren en vanaf 2013 niet meer (gemeten 17-10-2026, beide reeksen). Recente dossiers dragen het
+    Alleen tot en met 2010: die notatie 'XX/<jaar>/B/<volgnummer>' bestaat van 1965 tot 2009 duizenden keren per jaar,
+    in 2010 nog een keer echt (ZWI/2010/B/2602) en in 2011, 2012, 2013, 2017 en 2020 niet meer (de enkele treffers
+    zijn een andere notatie, zoals '18/58165-12011/B/'; gemeten 17-10-2026, beide reeksen). Recente dossiers dragen het
     nummer van de stad letterlijk (20135065 -> 3562#5065), en dat vindt de letterlijke zoekvraag al. Zoeken naar een
     notatie die niet bestaat, kostte voor 2017945 en 20172314 samen meer dan tien minuten en een fout 500.
     """

@@ -713,7 +713,7 @@ class _NepFelixStart:
     def __init__(self, aangemeld=False):
         self.url, self.melding, self.weigeringen, self.menu, self.aangemeld = "", False, 0, False, aangemeld
     def evaluate(self, *a, **k):
-        return {"aangemeld": self.aangemeld, "naam": "Mohammad Chegini"} if self.aangemeld else {}
+        return {"aangemeld": True, "naam": "Mohammad Chegini", "email": self.aangemeld} if self.aangemeld else {}
     def wait_for_timeout(self, *a):
         return None
     def goto(self, url, **k):
@@ -769,14 +769,21 @@ except RuntimeError as e:
     _stap = str(e)
 check("een cookiemelding die laat verschijnt of een knop die nog niet zichtbaar is, houdt het aanmelden niet tegen (17-10-2026)",
       "'A-profiel'" in _stap or "a-profiel" in _stap, _stap[:160])
-_fs2 = FA.Felix.__new__(FA.Felix)
-_fs2.page = _NepFelixStart(aangemeld=True)
-try:
-    _g2 = _fs2._aanmelden_een_keer()
-except RuntimeError as e:
-    _g2 = str(e)
+def _al_aangemeld(als):
+    f = FA.Felix.__new__(FA.Felix)
+    f.page = _NepFelixStart(aangemeld=als)
+    try:
+        return f._aanmelden_een_keer("Agent@Voorbeeld.test", "testwaarde")
+    except RuntimeError as e:
+        return str(e)
+
+
+_g2 = _al_aangemeld("agent@voorbeeld.test")
 check("al aangemeld (na een half gelukte poging): geslaagd, geen zoektocht naar een knop die er niet meer is",
-      isinstance(_g2, dict) and _g2.get("aangemeld"), _g2)
+      isinstance(_g2, dict) and _g2.get("aangemeld") and "email" not in _g2, _g2)
+_g3 = _al_aangemeld("iemand.anders@voorbeeld.test")
+check("aangemeld als een ander account telt niet, en het adres staat niet in de melding (Codex FX40)",
+      isinstance(_g3, str) and "ander account" in _g3 and "iemand.anders" not in _g3, _g3)
 
 class _NepZoek:
     """FelixArchief-zoeken: 'totaal' treffers voor de brede vraag, met of zonder amountOfResults; de precieze notatie
@@ -818,6 +825,10 @@ check("150 treffers: drie pagina's van 50 per reeks", len(_z3._dossiernummer_bev
 _z4, _n4 = _zoeker(700, met_aantal=False)
 _z4._dossiernummer_bevat("945", lambda dn: True)
 check("zonder aantal en nog een volle pagina na 500: afgekapt", len(_z4.afgekapt) == 2, _z4.afgekapt)
+_z7, _n7 = _zoeker(1788)
+_r7 = _z7._dossiernummer_bevat("945", lambda dn: dn == "X/1/3", extra="2006")
+check("te breed, maar een passende rij op pagina 1 telt wel mee, en afgekapt blijft gemeld (Codex FX39)",
+      [r["dossiernummer"] for r in _r7] == ["X/1/3", "X/1/3"] and len(_z7.afgekapt) == 2, (_r7, _z7.afgekapt))
 _z5, _n5 = _zoeker(1788)
 _r5 = FA.Felix.dossier_zoeken(_z5, "2006945")
 check("de precieze notatie vindt het dossier ook als de brede vraag te breed is",
