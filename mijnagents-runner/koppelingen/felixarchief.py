@@ -16,6 +16,7 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
 BASIS = "https://felixarchief.antwerpen.be"
 PAGINA = 100
+PAGINA_DOSSIER = 50  # een brede vraag op het veld Dossiernummer gaf met 100 per pagina al een 500 (17-10-2026)
 MAX_PAGINAS = 10  # 500 per pagina gaf een 500-fout (03-10-2026), 100 loopt
 WERKGEBIED = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "felix", "werkgebied.json")
 
@@ -236,9 +237,18 @@ class Felix:
         if not schrijfwijze_mogelijk(dossiernummer):
             return rijen
         jaar, volg = dossiernummer[:4], dossiernummer[4:].lstrip("0")
-        kandidaten = self._dossiernummer_bevat(volg, lambda dn: past_schrijfwijze(dn, jaar, volg), extra=jaar)
+        past = lambda dn: past_schrijfwijze(dn, jaar, volg)  # noqa: E731
+        # De gekende notatie precies ('BE/1973/B/17935', ook met voorloopnullen zoals 'WI/1973/B/0234'): snel en raak,
+        # ook als de brede vraag hieronder te breed is. FelixArchief negeert losse schuine strepen, maar zoekt
+        # '1973/B/17935' als geheel (gemeten 17-10-2026: 1 treffer per reeks).
+        kandidaten = {}
+        for notatie in dict.fromkeys([f"{jaar}/B/{volg}", f"{jaar}/B/{volg.zfill(4)}", f"{jaar}/B/{volg.zfill(5)}"]):
+            for r in self._dossiernummer_bevat(notatie, past):
+                kandidaten.setdefault(r["inventaris"], r)
+        for r in self._dossiernummer_bevat(volg, past, extra=jaar):  # elke andere notatie met jaar en volgnummer
+            kandidaten.setdefault(r["inventaris"], r)
         uit = []
-        for r in kandidaten:
+        for r in kandidaten.values():
             r["via"] = f"andere schrijfwijze: {r['dossiernummer'].split('#')[0].strip()}"
             if punt:
                 r["afstand_m"] = _afstand_tot(f"{r['straat']} {r['nummer']}".strip(), punt)
@@ -247,22 +257,32 @@ class Felix:
             uit.append(r)
         return uit
 
-    def _dossiernummer_bevat(self, tekst, past, paginas=10, extra=None):
-        """Alle dossiers waarvan het veld Dossiernummer 'tekst' (en 'extra') bevat en 'past', in beide reeksen,
-        met paginering tot paginas x 50 (Codex FX03)."""
-        rijen = []
+    def _dossiernummer_bevat(self, tekst, past, extra=None, maximum=500):
+        """Alle dossiers waarvan het veld Dossiernummer 'tekst' (en 'extra') bevat en 'past', in beide reeksen.
+
+        Eerst het aantal treffers (de eerste pagina geeft amountOfResults). Boven 'maximum' zijn ze niet allemaal te
+        lezen: dat melden we meteen als afgekapt (Codex FX03, FX21). Vroeger lazen we eerst tien trage pagina's:
+        voor 2017945 (jaar 2017, volgnummer 945) 14 vragen van gemiddeld 50 s en dan een 500 op de diepte (gemeten
+        17-10-2026, Frans Brandsstraat 11: 31 minuten voor de dossiernummers).
+        """
+        rijen, naam = [], f"{extra} + {tekst}" if extra else tekst
         termen = [_term("Dossiernummer", tekst, "contains")] + ([_term("Dossiernummer", extra, "contains")] if extra else [])
         for reeks in werkgebied()["reeksen"]:
-            for pagina in range(1, paginas + 2):
-                j = self.reeks_zoeken(reeks, termen, pagina, 50)
-                items = j.get("items") or []
-                if pagina > paginas:  # een volle laatste pagina is pas afgekapt als er nog een volgende is (FX24)
-                    if items:
-                        self.afgekapt.append(f"dossiernummer {tekst}: meer dan {paginas * 50} treffers")
-                    break
+            j = self.reeks_zoeken(reeks, termen, 1, PAGINA_DOSSIER)
+            totaal = j.get("amountOfResults")
+            if isinstance(totaal, int) and totaal > maximum:
+                self.afgekapt.append(f"dossiernummer {naam}: {totaal} treffers, meer dan {maximum}")
+                continue
+            pagina, items = 1, j.get("items") or []
+            while True:
                 rijen += [r for r in (_rij(it, reeks) for it in items) if past(r["dossiernummer"])]
-                if len(items) < 50:
+                if len(items) < PAGINA_DOSSIER or (isinstance(totaal, int) and pagina * PAGINA_DOSSIER >= totaal):
                     break
+                if pagina * PAGINA_DOSSIER >= maximum:  # geen aantal gekregen en nog een volle pagina: niet alles gelezen
+                    self.afgekapt.append(f"dossiernummer {naam}: meer dan {maximum} treffers")
+                    break
+                pagina += 1
+                items = self.reeks_zoeken(reeks, termen, pagina, PAGINA_DOSSIER).get("items") or []
         return rijen
 
     def bestanden(self, inventaris):
@@ -345,8 +365,21 @@ class Felix:
             self._weiger_cookies()
             stap = "aanmeldknop"
             link = p.locator("a", has_text="Meld aan met je A-profiel").first
+            knop = p.locator("text=Aanmelden >> visible=true").first
+            # De startpagina bouwt wisselend traag op (soms na 4 s nog geen knop), en na een half gelukte poging is de
+            # agent al aangemeld: dan is er geen knop meer en is dat geslaagd (gemeten 17-10-2026, printscreen met naam).
+            for _ in range(30):
+                g = self._gebruiker()
+                if g.get("aangemeld"):
+                    return g
+                if knop.is_visible():
+                    break
+                p.wait_for_timeout(1000)
+            else:
+                raise RuntimeError("geen aanmeldknop en niet aangemeld na 30 seconden")
             for _ in range(4):  # de cookiemelding kan pas na de eerste weigering verschijnen en vangt dan de klik op
-                p.locator("text=Aanmelden").first.click(timeout=20000, force=True)  # (gemeten 17-10-2026)
+                knop.wait_for(state="visible", timeout=30000)  # meteen klikken op het eerste element gaf 'not visible'
+                knop.click(timeout=20000, force=True)
                 try:
                     link.wait_for(state="attached", timeout=8000)
                     break
@@ -364,10 +397,7 @@ class Felix:
                 p.wait_for_timeout(2000)
                 if "/callback" in p.url:
                     continue
-                g = p.evaluate("""() => { try { const u = angular.element(document.body).injector()
-                                    .get('AuthenticationService').getUser() || {};
-                                    return {aangemeld: !!u.loggedIn, naam: (u.firstname||'') + ' ' + (u.lastname||''),
-                                            erewoord: !!u.honorStatement}; } catch (e) { return {}; } }""")
+                g = self._gebruiker()
                 if g.get("aangemeld"):
                     return g
             raise RuntimeError("niet aangemeld na 60 seconden")
@@ -380,6 +410,16 @@ class Felix:
                 pass
             raise RuntimeError(f"Aanmelden vastgelopen bij '{stap}' ({p.url.split('?')[0]}): "
                                f"{str(e).splitlines()[0][:150]}; printscreen {pad}")
+
+    def _gebruiker(self):
+        """Wie FelixArchief als aangemeld ziet (de Angular-dienst van de site), of {} als dat (nog) niet te lezen is."""
+        try:
+            return self.page.evaluate("""() => { try { const u = angular.element(document.body).injector()
+                                .get('AuthenticationService').getUser() || {};
+                                return {aangemeld: !!u.loggedIn, naam: (u.firstname||'') + ' ' + (u.lastname||''),
+                                        erewoord: !!u.honorStatement}; } catch (e) { return {}; } }""") or {}
+        except Exception:
+            return {}
 
     def status_bestand(self, url):
         """Status en soort van een bestand, zonder het te lezen (de server negeert Range; we breken af)."""
@@ -594,8 +634,14 @@ def _volledig_op_schijf(pad, grootte):
 
 
 def schrijfwijze_mogelijk(dossiernummer):
-    """'197317935' -> jaar 1973 en volgnummer 17935: kan in FelixArchief als 'BE/1973/B/17935' staan."""
-    return bool(re.fullmatch(r"(19\d\d|20[0-3]\d)\d{2,6}", dossiernummer or ""))
+    """'197317935' -> jaar 1973 en volgnummer 17935: kan in FelixArchief als 'BE/1973/B/17935' staan.
+
+    Alleen tot en met 2010: die notatie 'XX/<jaar>/B/<volgnummer>' bestaat van 1965 tot 2006 duizenden keren per jaar,
+    in 2010 nog enkele keren en vanaf 2013 niet meer (gemeten 17-10-2026, beide reeksen). Recente dossiers dragen het
+    nummer van de stad letterlijk (20135065 -> 3562#5065), en dat vindt de letterlijke zoekvraag al. Zoeken naar een
+    notatie die niet bestaat, kostte voor 2017945 en 20172314 samen meer dan tien minuten en een fout 500.
+    """
+    return bool(re.fullmatch(r"(19\d\d|200\d|2010)\d{2,6}", dossiernummer or ""))
 
 
 def past_schrijfwijze(dossiernummer_felix, jaar, volg):

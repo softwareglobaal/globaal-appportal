@@ -710,8 +710,12 @@ check("Geopunt.png lukt als het eerste element met het adres verborgen is (gemet
 class _NepFelixStart:
     """De startpagina van FelixArchief zoals op 17-10-2026: de cookiemelding verschijnt pas na de eerste weigering en
     vangt dan de klik op 'Aanmelden' op. Pas als ze weg is, opent de klik het menu met de A-profiel-link."""
-    def __init__(self):
-        self.url, self.melding, self.weigeringen, self.menu = "", False, 0, False
+    def __init__(self, aangemeld=False):
+        self.url, self.melding, self.weigeringen, self.menu, self.aangemeld = "", False, 0, False, aangemeld
+    def evaluate(self, *a, **k):
+        return {"aangemeld": self.aangemeld, "naam": "Mohammad Chegini"} if self.aangemeld else {}
+    def wait_for_timeout(self, *a):
+        return None
     def goto(self, url, **k):
         self.url = url
         if "a-profiel" in url:
@@ -732,9 +736,17 @@ class _NepFelixStart:
         class _L:
             first = None
             def click(self_, **k):
+                if "Aanmelden" in sel and "visible=true" not in sel:  # het eerste element is soms nog niet zichtbaar
+                    raise RuntimeError("Locator.click: Element is not visible")
                 if not pagina.melding:
                     pagina.menu = True
+            def is_visible(self_):
+                return "Aanmelden" in sel and not pagina.aangemeld
             def wait_for(self_, **k):
+                if "Aanmelden" in sel:
+                    if pagina.aangemeld:
+                        raise TimeoutError("geen knop: al aangemeld")
+                    return None  # de zichtbare knop is er
                 if not pagina.menu:
                     raise TimeoutError("link niet gevonden")
             def get_attribute(self_, naam):
@@ -755,8 +767,67 @@ try:
     _stap = "geen fout"
 except RuntimeError as e:
     _stap = str(e)
-check("een cookiemelding die laat verschijnt, houdt het aanmelden niet tegen (gemeten 17-10-2026)",
+check("een cookiemelding die laat verschijnt of een knop die nog niet zichtbaar is, houdt het aanmelden niet tegen (17-10-2026)",
       "'A-profiel'" in _stap or "a-profiel" in _stap, _stap[:160])
+_fs2 = FA.Felix.__new__(FA.Felix)
+_fs2.page = _NepFelixStart(aangemeld=True)
+try:
+    _g2 = _fs2._aanmelden_een_keer()
+except RuntimeError as e:
+    _g2 = str(e)
+check("al aangemeld (na een half gelukte poging): geslaagd, geen zoektocht naar een knop die er niet meer is",
+      isinstance(_g2, dict) and _g2.get("aangemeld"), _g2)
+
+class _NepZoek:
+    """FelixArchief-zoeken: 'totaal' treffers voor de brede vraag, met of zonder amountOfResults; de precieze notatie
+    '2017/B/0945' geeft een dossier. Telt de vragen."""
+    def __init__(self, totaal, met_aantal=True):
+        self.totaal, self.met_aantal, self.vragen, self.afgekapt = totaal, met_aantal, 0, []
+    def reeks_zoeken(self, reeks, termen, pagina=1, grootte=100):
+        self.vragen += 1
+        tekst = termen[0]["searchTerm"]
+        rij = lambda dn, inv="1#1": {"inventoryNumber": inv, "itemRows": [  # noqa: E731
+            {"fieldName": "Dossiernummer", "dataValue": dn}, {"fieldName": "Huidige_Straatnaam", "dataValue": "Frans Brandsstraat"},
+            {"fieldName": "Huidig_Huisnummer", "dataValue": "11"}]}
+        if "/B/" in tekst or len(termen) == 1 and tekst in ("2017945", "2006945"):  # precieze en letterlijke vraag: smal
+            items = [rij("BZ/2006/B/0945", "9#945")] if tekst == "2006/B/0945" else []
+            return {"amountOfResults": len(items), "items": items}
+        rest = max(0, min(grootte, self.totaal - (pagina - 1) * grootte))
+        uit = {"items": [rij(f"X/{pagina}/{i}") for i in range(rest)]}
+        if self.met_aantal:
+            uit["amountOfResults"] = self.totaal
+        return uit
+
+
+def _zoeker(totaal, met_aantal=True):
+    z = FA.Felix.__new__(FA.Felix)
+    nep = _NepZoek(totaal, met_aantal)
+    z.reeks_zoeken, z.afgekapt = nep.reeks_zoeken, nep.afgekapt
+    return z, nep
+
+
+_z1, _n1 = _zoeker(1788)
+_z1._dossiernummer_bevat("945", lambda dn: False, extra="2017")
+check("te breed: na een vraag per reeks meteen afgekapt, niet tien trage pagina's (gemeten 17-10-2026: 31 minuten)",
+      _n1.vragen == 2 and len(_z1.afgekapt) == 2 and "1788" in _z1.afgekapt[0], (_n1.vragen, _z1.afgekapt))
+_z2, _n2 = _zoeker(500)
+_r2 = _z2._dossiernummer_bevat("945", lambda dn: True, extra="2017")
+check("precies 500 treffers: alles gelezen, niet afgekapt", len(_r2) == 1000 and not _z2.afgekapt and _n2.vragen == 20, (_n2.vragen, _z2.afgekapt))
+_z3, _n3 = _zoeker(150)
+check("150 treffers: drie pagina's van 50 per reeks", len(_z3._dossiernummer_bevat("945", lambda dn: True)) == 300 and _n3.vragen == 6, _n3.vragen)
+_z4, _n4 = _zoeker(700, met_aantal=False)
+_z4._dossiernummer_bevat("945", lambda dn: True)
+check("zonder aantal en nog een volle pagina na 500: afgekapt", len(_z4.afgekapt) == 2, _z4.afgekapt)
+_z5, _n5 = _zoeker(1788)
+_r5 = FA.Felix.dossier_zoeken(_z5, "2006945")
+check("de precieze notatie vindt het dossier ook als de brede vraag te breed is",
+      [r["inventaris"] for r in _r5] == ["9#945"] and _z5.afgekapt, (_r5, _z5.afgekapt))
+check("na 2010 bestaat de notatie jaar/B/volgnummer niet meer: geen schrijfwijze-zoektocht (gemeten 17-10-2026)",
+      not FA.schrijfwijze_mogelijk("2017945") and not FA.schrijfwijze_mogelijk("20172314")
+      and FA.schrijfwijze_mogelijk("197317935") and FA.schrijfwijze_mogelijk("20102602") and FA.schrijfwijze_mogelijk("2006945"))
+_z6, _n6 = _zoeker(1788)
+check("2017945: alleen de letterlijke vraag, geen trage brede vraag", FA.Felix.dossier_zoeken(_z6, "2017945") == []
+      and _n6.vragen == 2 and not _z6.afgekapt, (_n6.vragen, _z6.afgekapt))
 
 _kort = os.path.join(tempfile.mkdtemp(), "kort.pdf")
 open(_kort, "wb").write(b"x" * 10)
