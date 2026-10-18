@@ -1,5 +1,9 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.18 (19-10-2026): Catalin (Harmoniebouw) krijgt eenmaal een uitnodiging met mail bij een afspraak
+ter plaatse met fysiek adres (besluit Mehdi 18-10-2026); online, intern en reeksen blijven zonder mail. Zie de
+alinea bij de agendagasten.
+
 Aanvulling v8.17 (19-10-2026): slotronde na het driehoeksoverleg van ronde 7. Een nagekeken beltijd volgt het
 actuele item en een geverifieerde heenrit; een zorgmerk met een andere externe UID koppelt niet; een
 65-secondenweigering of een alarm laat geen bezige oproep achter. Bewijs en grendels: FR-184 t/m FR-188.
@@ -496,10 +500,17 @@ niet, en dat gaat voor alles. NIEUW komt eerst in het register.
 
 Agendagasten (Mehdi, 03-10-2026, FR-102): wie een agenda-adres heeft op organisatie.globaal.be (kern.persoon.email_agenda),
 zet ik als gast op de komende afspraken waar hij bij hoort: zijn naam na 'Mehdi' voor de dubbele punt ('Mehdi & Catalin:'),
-of de firma van de afspraak (Harmoniebouw: Catalin, ook 'Karam'). Zonder mail: de afspraak verschijnt in zijn agenda.
+of de firma van de afspraak (Harmoniebouw: Catalin, ook 'Karam'). Normaal zonder mail: de afspraak verschijnt in zijn agenda.
 Alleen op afspraken die Mehdi zelf organiseert op de werkagenda, een reeks in de reeks zelf; nooit iemand weghalen, nooit
 een adres raden. Een agendagast telt niet als gast van buiten: de afspraak blijft een eigen afspraak. Iemand toevoegen is
 zijn agenda-adres invullen bij de persoon op organisatie.globaal.be.
+
+Besluit 18-10-2026: Catalin (`harmoniebouw@gmail.com`) krijgt eenmaal een uitnodiging voor een komende afspraak ter
+plaatse op de werkagenda die Mehdi zelf organiseert. Een fysiek adres staat in de plaats, of in een buitentitel met
+`!!`, een buitendienst of soort KB/PB/LB/AB/XB. Bij een online, interne of privé-afspraak, een afspraak zonder adres of een
+reeks verstuur ik niets; een reeks meld ik als voorstel. De aparte uitnodigingsroute bewaart zijn adres als
+`agendawacht_uitgenodigd` in de private agenda-eigenschappen. Ik lees daarna gast en merk terug. Alle andere
+agenda-wijzigingen blijven zonder mail.
 
 Mail als afsprakenbron (audit 02-10-2026, FR-101): in elke volledige ronde lees ik mch@h-architects.be en
 mehdichegini@hotmail.com, twee weken terug, alleen lezen (via de postdienst op de server, Hotmail met zijn eigen

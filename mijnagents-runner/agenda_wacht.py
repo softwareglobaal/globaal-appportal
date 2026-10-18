@@ -794,8 +794,8 @@ def _patch(a, body, tok, toch=False, eigen_rit=False, eigen_zorgverhuis=False, u
     import urllib.request
     if not mag_schrijven(a["kalender"]):
         raise GeenSchrijfrecht(a["kalender"])
-    # sendUpdates=none: een gast krijgt nooit een mail omdat de agent iets bijzet. Google
-    # doet dat standaard ook niet, maar hier staat het expliciet, met een test erop.
+    # Gewone wijzigingen blijven stil (sendUpdates=none); alleen _uitnodiging_patch is de toegestane uitnodigingsroute.
+    # Google doet dit standaard ook niet, maar hier staat het expliciet, met een test erop.
     url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
            f"{urllib.parse.quote(a['id'], safe='')}?sendUpdates=none")
     aangevraagd = body.get("summary")
@@ -2872,8 +2872,9 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
 
 # Agendagasten (Mehdi, 03-10-2026: "een systeem waarbij je iemand kunt toevoegen ... zodat het gewoon op hun agenda
 # verschijnt ... dan hoef ik niet handmatig mails te ontvangen"). Collega's en partners met een agenda-adres op
-# organisatie.globaal.be (kern.persoon.email_agenda) staan als gast op de afspraken waar ze bij horen, zonder mail
-# (sendUpdates=none, zoals elke schrijfactie van de agent): de afspraak verschijnt in hun eigen agenda. Wie erbij hoort:
+# organisatie.globaal.be (kern.persoon.email_agenda) staan als gast op de afspraken waar ze bij horen. Gewone wijzigingen
+# blijven stil. Sinds 18-10-2026 krijgt de toegestane partner eenmalig een uitnodiging voor een afspraak ter plaatse.
+# Wie erbij hoort:
 # zijn naam na 'Mehdi' voor de dubbele punt ('Mehdi & Catalin:', 'Mehdi, Matthew, Gul & Aqib:'), of de firma van de
 # afspraak (Harmoniebouw: Catalin). Alleen op komende afspraken die Mehdi zelf organiseert; nooit iemand weghalen.
 def _gastregels():
@@ -2919,28 +2920,75 @@ def _event(a, tok):
     return json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"}), timeout=30))
 
 
+UITNODIGMERK = "agendawacht_uitgenodigd"
+_TITELADRES = re.compile(r",\s*[^,]+\s+\d+[A-Za-z]?\s*,\s*\d{4}\s+[^,]+")
+_VIRTUELE_PLAATS = re.compile(r"https?://|www\.|\b(?:zoom|teams|online|videogesprek|videovergadering|google meet)\b", re.I)
+
+
+def _ter_plaatse_voor_uitnodiging(a):
+    """Alleen een bewezen fysieke afspraak. Een buitencode zonder enig adres is onvoldoende."""
+    info = lees_titel(a.get("titel") or "")
+    if (is_prive(a) or info["reistijd"] or info["soort"] in EXTERN_ONLINE + ("IN",)
+            or a.get("_conferentie") or _online(a) is True):
+        return False
+    buiten = info["buiten"] or info["soort"] in BUITEN_SOORTEN
+    plaats = (a.get("locatie") or "").strip()
+    if plaats:
+        return (not _VIRTUELE_PLAATS.search(plaats) and not VERGADERLINK_RE.search(plaats)
+                and (buiten or bool(re.search(r"\d", plaats))))
+    return bool(buiten and _TITELADRES.search(a.get("titel") or ""))
+
+
+def _uitnodiging_patch(a, body, tok):
+    """Enige mailroute: de toegestane gast op een eigen, komende fysieke afspraak uitnodigen."""
+    import urllib.parse
+    import urllib.request
+    adres = ((body.get("extendedProperties") or {}).get("private") or {}).get(UITNODIGMERK)
+    toegestaan = {e.lower() for e in _gastregels().get("uitnodigen_ter_plaatse") or []}
+    gasten = {(g.get("email") or "").lower() for g in body.get("attendees") or []}
+    if (a.get("kalender") != WERKAGENDA or not a.get("_organisator_zelf") or a.get("_reeks")
+            or a.get("hele_dag") or _voorbij(a.get("start") or "", nu_lokaal().isoformat())
+            or not _ter_plaatse_voor_uitnodiging(a) or adres not in toegestaan or adres not in gasten):
+        raise ValueError("geen toegestane uitnodiging ter plaatse")
+    if not mag_schrijven(a["kalender"]):
+        raise GeenSchrijfrecht(a["kalender"])
+    url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
+           f"{urllib.parse.quote(a['id'], safe='')}?sendUpdates=all")
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PATCH",
+                                 headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+    urllib.request.urlopen(req, timeout=30)
+
+
 def agendagasten_zetten(items, tok=None, nu=None):
     """Zet ontbrekende agendagasten op komende afspraken op de werkagenda die Mehdi zelf organiseert, een reeks in de
-    reeks zelf. Bestaande gasten blijven staan; niemand krijgt een mail; daarna teruggelezen. Geeft regels."""
-    mensen = organisatie.agenda_adressen()
-    if not mensen:
-        return []
+    reeks zelf. Bestaande gasten blijven staan; alleen de toegestane partner krijgt eenmaal een uitnodiging ter plaatse.
+    Na schrijven worden gast en uitnodigingsmerk teruggelezen. Geeft regels."""
+    mensen = organisatie.agenda_adressen() or {}
     regels_ = _gastregels()
+    if not mensen and not regels_.get("uitnodigen_ter_plaatse"):
+        return []
     nu_iso = (nu or nu_lokaal()).isoformat()
-    uit, reeksen = [], {}
+    uit, reeksen, voorgestelde_reeksen = [], {}, set()
     for a in items:
         if (a.get("hele_dag") or a.get("fout") or a.get("_archief") or "T" not in a.get("start", "")
                 or _voorbij(a["start"], nu_iso) or not a.get("_organisator_zelf")
                 or a.get("kalender") != WERKAGENDA or lees_titel(a["titel"])["reistijd"]):
             continue
-        ontbreekt = agendagasten_voor(a["titel"], regels_, mensen) - set(a.get("_agendagasten") or [])
-        if not ontbreekt:
+        gewenst = agendagasten_voor(a["titel"], regels_, mensen)
+        ontbreekt = gewenst - set(a.get("_agendagasten") or [])
+        mag_uitnodigen = _ter_plaatse_voor_uitnodiging(a)
+        uitnodig_adressen = {e.lower() for e in regels_.get("uitnodigen_ter_plaatse") or []}
+        gasten_in_overzicht = set(a.get("_agendagasten") or []) | {
+            e.lower() for e in a.get("deelnemers") or []}
+        uitnodig_kandidaten = uitnodig_adressen & (gasten_in_overzicht | gewenst)
+        uitnodig_kandidaten.discard((a.get("_merk") or {}).get(UITNODIGMERK))
+        if not ontbreekt and not (mag_uitnodigen and uitnodig_kandidaten):
             continue
         hier = {"kalender": a["kalender"], "id": a["id"], "titel": a["titel"]}
         try:
             tok = tok or agenda._toegang()
             doelen = []
-            if a.get("_reeks"):
+            if a.get("_reeks") and ontbreekt:
                 # De reeks krijgt alleen wie in de titel van de reeks zelf staat. Een naam die alleen in de titel van
                 # deze ene keer staat, komt alleen op deze keer, niet op alle weken (Codex A18, 15-10-2026).
                 if a["_reeks"] not in reeksen:
@@ -2950,7 +2998,7 @@ def agendagasten_zetten(items, tok=None, nu=None):
                         doelen.append((reeks, reeksen[a["_reeks"]] & ontbreekt, " (de hele reeks)"))
                 if ontbreekt - reeksen[a["_reeks"]]:
                     doelen.append((hier, ontbreekt - reeksen[a["_reeks"]], " (alleen deze keer)"))
-            else:
+            elif ontbreekt:
                 doelen.append((hier, ontbreekt, ""))
             for doel, nodig, waar in doelen:
                 bestaand = _event(doel, tok).get("attendees") or []
@@ -2961,11 +3009,39 @@ def agendagasten_zetten(items, tok=None, nu=None):
                 terug = {(g.get("email") or "").lower() for g in (_event(doel, tok).get("attendees") or [])}
                 wie = ", ".join(mensen[e].get("voornaam") or e for e in erbij)
                 if set(erbij) <= terug:
-                    uit.append(f"{a['start'][:16]} {a['titel'][:45]}: {wie} als gast gezet, zonder mail{waar}")
+                    uit.append(f"{a['start'][:16]} {_toon(a, 45)}: {wie} als gast gezet, zonder mail{waar}")
                 else:
-                    uit.append(f"{a['start'][:16]} {a['titel'][:45]}: {wie} niet teruggevonden na het zetten")
+                    uit.append(f"{a['start'][:16]} {_toon(a, 45)}: {wie} niet teruggevonden na het zetten")
+            if mag_uitnodigen and uitnodig_kandidaten:
+                vers = _event(hier, tok)
+                gasten = {(g.get("email") or "").lower() for g in vers.get("attendees") or []}
+                kandidaten = uitnodig_adressen & (gasten | gewenst)
+                if a.get("_reeks"):
+                    if kandidaten and a["_reeks"] not in voorgestelde_reeksen:
+                        uit.append(f"{a['start'][:16]} {_toon(a, 45)}: VOORSTEL: uitnodiging voor partner in een reeks; "
+                                   "de reeks blijft zonder mail")
+                        voorgestelde_reeksen.add(a["_reeks"])
+                    continue
+                privaat = ((vers.get("extendedProperties") or {}).get("private") or {})
+                for adres in sorted(uitnodig_adressen & gasten):
+                    if privaat.get(UITNODIGMERK) == adres:
+                        continue
+                    if privaat.get(UITNODIGMERK):
+                        uit.append(f"{a['start'][:16]} {_toon(a, 45)}: ander uitnodigingsmerk; geen tweede uitnodiging")
+                        continue
+                    body = {"attendees": vers.get("attendees") or [],
+                            "extendedProperties": {"private": {**privaat, UITNODIGMERK: adres}}}
+                    _uitnodiging_patch(a, body, tok)
+                    terug = _event(hier, tok)
+                    terug_gasten = {(g.get("email") or "").lower() for g in terug.get("attendees") or []}
+                    terug_merk = ((terug.get("extendedProperties") or {}).get("private") or {}).get(UITNODIGMERK)
+                    wie = mensen.get(adres, {}).get("voornaam") or adres
+                    if adres in terug_gasten and terug_merk == adres:
+                        uit.append(f"{a['start'][:16]} {_toon(a, 45)}: uitnodiging aan {wie}, gast en merk teruggelezen")
+                    else:
+                        uit.append(f"{a['start'][:16]} {_toon(a, 45)}: uitnodiging aan {wie} niet bevestigd bij teruglezen")
         except Exception as e:  # noqa: BLE001
-            uit.append(f"{a['start'][:16]} {a['titel'][:45]}: agendagast niet gezet ({type(e).__name__})")
+            uit.append(f"{a['start'][:16]} {_toon(a, 45)}: agendagast of uitnodiging mislukt ({type(e).__name__})")
     return uit
 
 
