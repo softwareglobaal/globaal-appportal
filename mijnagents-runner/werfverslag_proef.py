@@ -53,6 +53,7 @@ import werfapp  # noqa: E402
 import werfnamen  # noqa: E402
 import sjabloon_werfverslag as sjab  # noqa: E402
 import sjabloon_oplevering as pv  # noqa: E402
+from naslag.naslag import naslag_voor_punten  # noqa: E402
 
 OPDRACHT = contextvars.ContextVar("werfverslag_opdracht", default=None)
 
@@ -284,6 +285,7 @@ SYSTEEM_VOORBEREID = """Je bent de voorbereider van werfverslagen van H-Architec
 werfbezoek en haalt er de gegevens uit. Regel E8 van het kantoor: je verzint niets. Wat niet in de bronnen staat,
 krijgt waarde "(in te vullen)" en zekerheid "ontbreekt". Wat je afleidt maar niet letterlijk leest, krijgt "na te
 kijken". Elke waarde krijgt de bron (bestandsnaam, en waar in het bestand). Namen van externen: de firmanaam.
+Naslag van Buildwise en NBN is auteursrechtelijk beschermd: citeer kort met bron (TV-nummer, uitgever, jaar, pagina), kopieer geen alinea's, stuur geen pdf door; vermeld bij een TV ouder dan 2010 dat een opvolger na te kijken is.
 Datums als JJJJ-MM-DD. Schrijf in het Nederlands, zakelijk, zonder emoji. Vul minstens deze velden in: """ + ", ".join(VELDEN)
 
 CATEGORIEEN = ["Algemeen", "Veiligheidscoördinatie", "EPB", "Afbraak", "Ruwbouw", "Dakwerken", "Buitenschrijnwerk",
@@ -310,6 +312,7 @@ VERSLAG_SCHEMA = {
                     "tekst_nl": {"type": "string"},
                     "tekst_en": {"type": "string", "description": "leeg als geen Engels gevraagd"},
                     "verantwoordelijke": {"type": "string"},
+                    "naslag": {"type": "string", "description": "optionele korte bronverwijzing met TV-nummer, uitgever, jaar en pagina"},
                     "fotos": {"type": "array", "items": {"type": "string"}, "description": "bijschriften: 'dia 14' voor een pptx-dia, of een bestandsnaam uit de bezoekmap"},
                 }, "required": ["titel", "datum", "vlag", "tekst_nl", "tekst_en", "verantwoordelijke", "fotos"]}},
             }, "required": ["naam", "punten"]}},
@@ -341,6 +344,8 @@ Regels:
 - Bij een werfverslag voor lopende werken komen de doorlopende punten (omgevingsloket, werfbezoeken, orde en netheid,
   facturatie, veiligheidscoördinatie, EPB) er automatisch bij; jij schrijft ze niet.
 - Nederlands, zakelijk, geen emoji, geen kastlijntjes (gewoon koppelteken). Engels alleen als de keuzes dat vragen.
+- Naslag van Buildwise en NBN is auteursrechtelijk beschermd: citeer kort met bron (TV-nummer, uitgever, jaar, pagina), kopieer geen alinea's, stuur geen pdf door; vermeld bij een TV ouder dan 2010 dat een opvolger na te kijken is.
+- Naslag is alleen toelichting bij wat ter plaatse is vastgesteld (opname en foto's): het veld naslag verwijst naar de regel waaraan de vaststelling getoetst wordt. Nooit een vaststelling, gebrek, eis of maat toevoegen die niet uit de eigen bronnen komt, ook niet als de naslag dat suggereert.
 - Volg de keuzes van Mehdi (verslagtype, taal, aanwezigen, categorieën) als die gegeven zijn; ze winnen van je eigen inschatting."""
 
 
@@ -523,6 +528,15 @@ def _voorbereid_bronnen(ag, dossier, volgnr, rij, teksten, fotos, opnames):
     return uit
 
 
+def _naslagblok(rij, gegevens):
+    keuzes = rij.get("keuzes") or {}
+    # De bezoekpagina heeft nog geen afzonderlijke naslagkeuze.
+    opmerking_nee = re.search(r"(?im)^\s*naslag\s*:\s*nee\s*$", str(keuzes.get("opmerking") or ""))
+    if str(keuzes.get("naslag") or "ja").strip().lower() == "nee" or (not keuzes.get("naslag") and opmerking_nee):
+        return ""
+    return naslag_voor_punten(gegevens.get("onderdelen") or [])
+
+
 def voorbereid(ag, dossier, volgnr):
     rij = _rij(dossier, volgnr)
     ag.log(f"{dossier}-{volgnr}", "bron", f"bezoekmap lezen: {rij['bezoekmap']}")
@@ -533,6 +547,7 @@ def voorbereid(ag, dossier, volgnr):
            + (" (keuze van Mehdi: alleen eigen opname en foto's)" if eigen else ""),
            [t["naam"] + f" ({len(t['tekst'])} tekens)" for t in teksten])
     uit = _voorbereid_bronnen(ag, dossier, volgnr, rij, teksten, fotos, opnames)
+    uit["naslag"] = _naslagblok(rij, uit)
     bijlagen = [{"naam": t["naam"], "pad": t["pad"], "soort": "document", "tekens": len(t["tekst"])} for t in teksten] + \
                [{"naam": f["naam"], "pad": f["pad"], "soort": "foto", "grootte": f["grootte"]} for f in fotos] + \
                [{"naam": o, "soort": "opname"} for o in opnames]
@@ -605,6 +620,7 @@ def proef(ag, dossier, volgnr):
     # De oude brede voorbereiding kan derdenfeiten bevatten. Herbouw uit de actuele
     # toegestane segmentcache, zonder een tweede volledige modelanalyse of bordupdate.
     gegevens = _voorbereid_bronnen(ag, dossier, volgnr, rij, teksten, fotos, opnames)
+    gegevens["naslag"] = _naslagblok(rij, gegevens)
     bijlagen = [{"naam": t["naam"], "pad": t["pad"], "soort": "document", "tekens": len(t["tekst"])} for t in teksten] + \
                [{"naam": f["naam"], "pad": f["pad"], "soort": "foto", "grootte": f["grootte"]} for f in fotos] + \
                [{"naam": o, "soort": "opname"} for o in opnames]
@@ -641,14 +657,15 @@ def proef(ag, dossier, volgnr):
         kop += EIGEN_REGEL
     ag.log(f"{dossier}-{volgnr}", "besluit", f"proef van {soort_bezoek} {nr_label} (rij {volgnr}) als {verslagtype}, taal {taal}, "
            f"keuzes: {', '.join(k for k in keuzes if keuzes[k]) or 'geen'}")
-    feiten = {k: v for k, v in gegevens.items() if k != "_verwerking"}
+    feiten = {k: v for k, v in gegevens.items() if k not in ("_verwerking", "naslag")}
     hoofdkeuzes = {k: v for k, v in keuzes.items() if k not in ("door", "ts")}
-    inp = {"kop": kop, "gegevens": feiten, "keuzes": hoofdkeuzes, "fotolijst": fotolijst(fotos)}
+    proef_bundel = fotolijst(fotos) + ("\n\n" + gegevens["naslag"] if gegevens["naslag"] else "")
+    inp = {"kop": kop, "gegevens": feiten, "keuzes": hoofdkeuzes, "fotolijst": proef_bundel}
     if OPDRACHT.get():
         _rij(dossier, volgnr)
     uit, usage = register.verwerk(rij, dossier, volgnr, "proef", inp, MODEL, "werfproef-feiten-1", "werfverslag-1", taal,
                                   bronkeuze(rij), extractie.manifest(teksten, fotos, opnames),
-                                  lambda: vraag_verslag(kop, feiten, hoofdkeuzes, fotolijst(fotos), max_tokens=8000), 8000)
+                                  lambda: vraag_verslag(kop, feiten, hoofdkeuzes, proef_bundel, max_tokens=8000), 8000)
     extractie.valideer(uit, VERSLAG_SCHEMA["input_schema"])
     if keuzes.get("aanwezigen"):
         uit["aanwezigen"] = keuzes["aanwezigen"]

@@ -146,7 +146,7 @@
 <form method="post" action="{{ url_for('werfbezoek_keuzes', dossier=b.dossier, volgnr=b.volgnr) }}">
   <input type="hidden" name="rij_id" value="{{ b.id }}"><input type="hidden" name="revisie" value="{{ b.formulier_revisie }}">
   {% set k = b.keuzes %}
-  <div class="rij" style="grid-template-columns:1fr 1fr 1fr 1fr">
+  <div class="rij" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr">
     <div class="veld"><label>Verslagtype {% if g.verslagtype_voorstel %}<span class="stil">(voorstel schrijver: {{ g.verslagtype_voorstel }})</span>{% endif %}</label>
       <select name="verslagtype">
         <option value="" {{ 'selected' if not k.verslagtype }}>volg het voorstel van de schrijver</option>
@@ -157,6 +157,8 @@
       </select></div>
     <div class="veld"><label>Bronnen</label>
       <select name="bronnen"><option value="eigen" {{ 'selected' if k.bronnen!='alles' }}>alleen mijn eigen opname en foto's van het bezoek</option><option value="alles" {{ 'selected' if k.bronnen=='alles' }}>alles in de bezoekmap, ook documenten van derden</option></select></div>
+    <div class="veld"><label>Naslag Buildwise (toelichting bij de punten, met bron)</label>
+      <select name="naslag"><option value="ja" {{ 'selected' if k.naslag!='nee' }}>ja, citeren met TV-nummer en pagina</option><option value="nee" {{ 'selected' if k.naslag=='nee' }}>nee, alleen eigen vaststellingen</option></select></div>
     <div class="veld"><label>Taal</label>
       <select name="taal"><option value="nl" {{ 'selected' if k.taal!='nl+en' }}>Nederlands</option><option value="nl+en" {{ 'selected' if k.taal=='nl+en' }}>Nederlands en Engels (zoals Archisnapper)</option></select></div>
     <div class="veld"><label>Doorlopende punten (omgevingsloket, werfbezoeken, netheid, facturatie, veiligheid, EPB)</label>

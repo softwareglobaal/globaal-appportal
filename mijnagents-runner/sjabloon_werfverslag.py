@@ -225,6 +225,9 @@ def naar_markdown(v):
             if p.get("verantwoordelijke"):
                 r.append("")
                 r.append(f"Verantwoordelijke: {p['verantwoordelijke']}")
+            if p.get("naslag"):
+                r.append("")
+                r.append(f"Naslag: {p['naslag']}")
             if p.get("fotos"):
                 r.append("")
                 r.append("Foto's: " + ", ".join(p["fotos"]))
@@ -309,12 +312,14 @@ def van_markdown(md):
         m = re.match(r"\*\*(\S+) (.*?)\*\* - ([^-]+?)(?: - (OK|Belangrijk|Dringend))?\s*$", rg)
         if m and cat is not None:
             punt = {"nummer": m.group(1), "titel": m.group(2), "datum": datum_iso(m.group(3)), "vlag": VLAG_TERUG.get((m.group(4) or "").lower(), ""),
-                    "tekst_nl": "", "tekst_en": "", "verantwoordelijke": "", "fotos": []}
+                    "tekst_nl": "", "tekst_en": "", "verantwoordelijke": "", "naslag": "", "fotos": []}
             cat["punten"].append(punt); continue
         if punt is None or not rg.strip():
             continue
         if rg.startswith("Verantwoordelijke: "):
             punt["verantwoordelijke"] = rg[len("Verantwoordelijke: "):].strip()
+        elif rg.startswith("Naslag: "):
+            punt["naslag"] = rg[len("Naslag: "):].strip()
         elif rg.startswith("Foto's: "):
             punt["fotos"] = [x.strip() for x in rg[len("Foto's: "):].split(",") if x.strip()]
         elif rg.startswith("*") and rg.endswith("*") and punt["tekst_nl"]:
@@ -494,6 +499,10 @@ def naar_docx(v, fotos=None, master=MASTER):
                 r = q.add_run(pt["verantwoordelijke"]); r.font.size = Pt(9)
             else:
                 alinea(na=4)
+            if pt.get("naslag"):
+                q = alinea(na=4)
+                r = q.add_run("Naslag: "); r.font.size = Pt(9); r.font.color.rgb = BLAUW_LABEL; r.bold = True
+                r = q.add_run(pt["naslag"]); r.font.size = Pt(9)
     k = 4
     if v.get("raming"):
         h1(f"{k}. Raming van de herstelkosten"); k += 1

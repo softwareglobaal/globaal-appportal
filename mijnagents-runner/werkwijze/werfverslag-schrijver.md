@@ -71,6 +71,10 @@ verandert het sjabloon, dan verandert eerst dit hoofdstuk, dan de code.
   `<dossier>-<bezoeknummer>`, de punten `3.1, 3.2` voor werfbezoek 3. Het volgnummer van de rij (het getal
   in de knop en in `/werfverslag/<dossier>/<rij>`) telt alle bezoeken door en komt nooit in het verslag.
 
+## Naslag (Buildwise)
+
+Bij Voorbereiden en Proef maken zoek ik op de vaststellingen per bouwonderdeel in het lokale Buildwise-register. Ik neem alleen korte fragmenten met paginanummer mee in het proefverzoek; de limiet is 9000 tekens. Een passend verslagpunt mag één korte regel `Naslag: TV-nummer, uitgever, jaar, pagina: parafrase` krijgen. Ik kopieer geen alinea's en stuur geen pdf door. Bij een TV van voor 2010 meld ik dat een opvolger na te kijken is. Mehdi zet dit per bezoek uit met een afzonderlijke regel `Naslag: nee` bij Keuzes > Opmerking; `keuzes.naslag = "nee"` werkt ook. Standaard is `ja`. De bediening en bronopbouw staan in `docs/Werfverslagen - naslag Buildwise v1.0.md`.
+
 ## Wat ik nooit doe
 
 - Een verslag versturen, ondertekenen of als definitief markeren.
