@@ -93,7 +93,8 @@ koppelingen/uitschrijven.py, bovenop de rollen); het is geen klant (we mailden d
 enkel postvak van de mailwachten, en het stuurde nooit iets belangrijks of werd nooit beantwoord), geen eigen domein, geen gratis maildienst, en Mehdi zette de afzender niet op
 belangrijk of houden; de mail heeft precies een officiele knop (een kop List-Unsubscribe met een https-adres en List-Unsubscribe-Post
 One-Click), die knop is ondertekend door precies de handtekening van de afzender die onze eigen
-mailserver goedkeurde. De knop mag bij een verzendbedrijf staan (Mehdi, 20-10-2026), maar alleen als een handtekening van
+mailserver goedkeurde. De knop staat op het domein van de afzender of bij een bekend verzendbedrijf (Mehdi, 20-10-2026; lijst
+PLATFORMEN), en alleen als een handtekening van
 de afzender zelf hem dekt; een handtekening van alleen het verzendbedrijf, of een afzender op een domein van een
 verzendbedrijf, telt niet. Dan stuur ik een POST naar precies dat adres, via een vooraf gecontroleerd publiek IP, zonder doorverwijzing
 te volgen, met een tijdslimiet. Een keer per afzender en knop; na een fout zonder antwoord pas na een dag opnieuw,

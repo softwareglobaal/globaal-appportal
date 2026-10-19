@@ -269,7 +269,7 @@ def _nieuwsbrief(van="news@brand.be", knop="https://unsub.brand.be/u?t=GEHEIM", 
     return dict({"van": van, "van_naam": "Brand", "onderwerp": onderwerp, "map": "INBOX.Opgeruimd", "message_id": "<n1@brand.be>",
                  "datum": datetime.fromisoformat("2026-10-15T10:00:00+02:00"),
                  "list_unsubscribe": f"<mailto:unsub@brand.be>, <{knop}>", "list_unsubscribe_post": post,
-                 "authentication_results": [AR_ONE], "dkim_signatures": [DKIM_BRAND]}, **k)
+                 "authentication_results": [AR_ONE], "dkim_signatures": [DKIM_BRAND], "uitschrijfkoppen": (1, 1)}, **k)
 
 
 def test_uitschrijven_alleen_de_officiele_knop():
@@ -373,6 +373,12 @@ def test_uitschrijven_alleen_een_ondertekende_knop_van_de_afzender():
                  dkim_signatures=[DKIM_BRAND.replace(":list-unsubscribe:list-unsubscribe-post", ""), dkim_esp])
     assert U.beoordeel(beide, "rommel", "", eigen, bekend, veilig, True)[0] is None, \
         "de afzender ondertekende wel, maar niet de knop; alleen het verzendbedrijf dekte hem"
+    # derde toets X1: een knop bij een willekeurig ander domein niet, ook niet als de afzender hem ondertekende
+    assert U.beoordeel(_nieuwsbrief(knop="https://unsub.ander-bedrijf.be/u"), "rommel", "", eigen, bekend, veilig, True) == \
+        (None, "knop niet bij de afzender of een bekend verzendbedrijf")
+    assert U.beoordeel(_nieuwsbrief(knop="https://x.sendgrid.net/u"), "rommel", "", eigen, bekend, veilig, True)[0], "SendGrid wel"
+    zonder_telling = {k: v for k, v in _nieuwsbrief().items() if k != "uitschrijfkoppen"}
+    assert U.beoordeel(zonder_telling, "rommel", "", eigen, bekend, veilig, True)[0] is None, "zonder telling: weigeren (K3)"
     platform = dict(alleen_esp, van="nieuws@klant.mcsv.net")
     assert U.beoordeel(platform, "rommel", "", eigen, bekend, veilig, True) == (None, "afzender op een domein van een verzendbedrijf")
     assert U.beoordeel(_nieuwsbrief(knop="https://unsub.mybank-mail.com/u"), "rommel", "", eigen, bekend, veilig, True)[0] is None, \

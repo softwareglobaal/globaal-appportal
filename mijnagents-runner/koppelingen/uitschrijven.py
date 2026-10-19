@@ -97,14 +97,17 @@ BESCHERMD = [
     "notar", "notaire", "advoca", "avocat", "lawyer", "deurwaarder", "huissier", "gerecht", "rechtbank", "tribunal",
     "boekhoud", "accountant", "comptab", "architect.be", "orde van architecten",
 ]
-# Domeinen van verzendbedrijven: een afzender daarop is niet "de afzender zelf", en hun handtekening alleen telt niet.
+# Domeinen van verzendbedrijven: een afzender daarop is niet "de afzender zelf", hun handtekening alleen telt niet, en een
+# knop mag alleen op het domein van de afzender of op een van deze staan (Mehdi 20-10-2026, derde toets X1).
 PLATFORMEN = ("sendgrid.net", "sendgrid.com", "list-manage.com", "mailchimp.com", "mcsv.net", "mcdlv.net", "rsgsv.net",
               "mailchimpapp.net", "mandrillapp.com", "amazonses.com", "mailgun.org", "mailgun.net", "mailjet.com",
               "sparkpostmail.com", "sendinblue.com", "brevo.com", "sib-mail.com", "hubspotemail.net", "hubspot.com",
               "hs-email.net", "klaviyomail.com", "klaviyo.com", "exacttarget.com", "salesforce.com", "mktomail.com",
               "marketo.com", "constantcontact.com", "rs6.net", "campaign-archive.com", "mailerlite.com", "mlsend.com",
               "createsend.com", "cmail19.com", "cmail20.com", "emarsys.net", "postmarkapp.com", "mailpro.com",
-              "activehosted.com", "acems1.com", "getresponse.com", "aweber.com", "substack.com", "beehiiv.com")
+              "activehosted.com", "acems1.com", "getresponse.com", "aweber.com", "substack.com", "beehiiv.com",
+              "mailchi.mp", "convertkit.com", "ck.page", "sendpulse.com", "moosend.com", "sendfox.com", "omnisend.com",
+              "flexmail.eu", "selligent.com", "slgnt.eu", "eloqua.com", "en25.com", "pardot.com")
 ANTWOORD_OF_DOORGESTUURD = re.compile(r"^\s*(re|antw|aw|fw|fwd|tr|wg|doorst)\s*:", re.I)
 KLANT_DAGEN = 730           # wie we in twee jaar mailden, vanuit welk postvak ook, is een klant (X3, K2)
 KLANT_PLAFOND = 20000       # zoveel verzonden berichten per map; meer is niet volledig gelezen, en dan niemand uitschrijven
@@ -356,7 +359,7 @@ def beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerende=False):
         return None, "klant: we mailden dit adres of domein"
     if postvak.zelfde_domein(dom, veilig, True):
         return None, "klant: ooit belangrijk, gewoon, met gevolg of beantwoord"
-    if tuple(b.get("uitschrijfkoppen") or (1, 1)) != (1, 1):
+    if tuple(b.get("uitschrijfkoppen") or ()) != (1, 1):  # zonder telling: weigeren (derde toets K3)
         # DKIM dekt alleen de onderste van twee gelijke koppen; een tussenpersoon kan er een boven zetten (RFC 8058: een)
         return None, "niet precies een uitschrijfkop"
     url = knop(b.get("list_unsubscribe"), b.get("list_unsubscribe_post"))
@@ -374,6 +377,10 @@ def beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerende=False):
         return None, "afzender op een domein van een verzendbedrijf"
     if not any(hoofddomein(d) == hoofddomein(dom) for d in domeinen):
         return None, "de afzender ondertekende de knop niet zelf"
+    knophost = (urllib.parse.urlsplit(url).hostname or "").lower()
+    if hoofddomein(knophost) != hoofddomein(dom) and not postvak.zelfde_domein(knophost, PLATFORMEN):
+        # derde toets X1 (3-0): Mehdi stond een knop bij een verzendbedrijf toe, niet bij een willekeurig ander domein
+        return None, "knop niet bij de afzender of een bekend verzendbedrijf"
     return url, ""
 
 
