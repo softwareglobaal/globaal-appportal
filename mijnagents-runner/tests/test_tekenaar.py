@@ -315,6 +315,24 @@ class Controle(Basis):
         self.assertLessEqual(len(json.dumps(item["inhoud"], ensure_ascii=False)), tk.MAX_INHOUD)
         self.assertIn("werkverslag", item["inhoud"]["meer_projecten"])
 
+    def test_nummer_in_stukjes_is_geen_bladcode(self):
+        # DT35: een nummer in korte stukjes mag niet als reeks codevelden doorglippen; de hele naam wordt getoetst.
+        for naam, verwacht in (("BA_Proefstraat 1, 3120 Tremelo_G_N_049_9_123_456.pdf", "G_N_(vrije tekst).pdf"),
+                               ("BA_Proefstraat 1, 3120 Tremelo_G_N_84_03_21_411_65.pdf", "G_N_(vrije tekst).pdf"),
+                               ("BA_Proefstraat 1, 3120 Tremelo_P_N_1_00_versie01022027_gelijkvloers.pdf",
+                                "P_N_1_00_versie01022027_gelijkvloers.pdf"),
+                               ("BA_Proefstraat 1, 3120 Tremelo_P_N_1_00_verdieping 2026.pdf", "P_N_1_00_verdieping 2026.pdf")):
+            self.assertEqual(tk.bladcode(naam), verwacht, naam)
+        for label in (tk.bladcode(f"BA_x, 3120 Tremelo_G_N_{n}.pdf") for n in ("0_4_9_9_1_2_3", "04_99_12_34", "A_049_912_345")):
+            self.assertFalse(tk.gevoelig(label), label)
+        # de reden van een dubbele bladcode gaat in algemene woorden naar het bord
+        nep = NepNormcontrole()
+        nep.controleer_set = lambda namen, regularisatie=None, nieuw=None: {"uitkomsten": {"bladnummers": {
+            "status": "FOUT", "reden": "P N deelset 1 volgnummer Tom", "artikel": ""}}, "oordeel": "FOUT", "deelsets": {}}
+        st = self.stand_met_basis()
+        sets = tk.set_bevindingen(nep, st, [{"id": "id:proef0001", "hash": "h1", "pad": P1, "uitslag": {}}])
+        self.assertNotIn("Tom", json.dumps(sets))
+
     def test_andere_setmelding_eigen_uniek(self):
         # DT32: twee meldingen die alleen in de reden van een set verschillen, krijgen elk hun eigen uniek.
         m = {"id": "id:proef0003", "hash": "h3", "pad": P3, "uitslag": {"fout_reden": {}}}
@@ -343,7 +361,7 @@ class Controle(Basis):
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_Tom.pdf"), "G_N_(vrije tekst).pdf")   # DT17
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_gevel 0478123456.pdf"), "G_N_(vrije tekst).pdf")  # DT27
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_P_N_verdieping 2.pdf"), "P_N_verdieping 2.pdf")
-        for nummer in ("0499-123-456", "0499 12 34 56", "84.03.21-411.65", "+32 499 12 34 56"):           # DT31
+        for nummer in ("0499-123-456", "0499 12 34 56", "84.03.21-411.65", "+32 499 12 34 56", "0499 (123) 456"):  # DT31, DT35
             self.assertEqual(tk.bladcode(f"BA_Proefstraat 1, 3120 Tremelo_G_N_gevel {nummer}.pdf"), "G_N_(vrije tekst).pdf",
                              nummer)
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo TB_N_Terreinprofiel.pdf"), "TB_N_Terreinprofiel.pdf")

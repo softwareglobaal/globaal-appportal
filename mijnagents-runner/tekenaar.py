@@ -308,14 +308,22 @@ def projectnummer(pad):
     return f"zonder nummer {hashlib.sha256(map_.lower().encode()).hexdigest()[:6]}", os.path.basename(map_)
 
 
+GEVOELIG = re.compile(r"\d[\d\s._()/+-]*\d")
+
+
+def gevoelig(tekst):
+    """Staat er een cijferreeks van vijf of meer cijfers in, ook in stukjes met spaties, punten, liggende streepjes,
+    haakjes of plustekens ("0499 (123) 456", "049_9_123_456", "84.03.21-411.65")? Dan kan het een telefoon- of
+    rijksregisternummer zijn (Codex DT31, DT35). Een versie (versieDDMMJJJJ) telt niet."""
+    zonder_versie = re.sub(r"versie\d{8}", " ", tekst or "", flags=re.I)
+    return any(len(re.sub(r"\D", "", r)) >= 5 for r in GEVOELIG.findall(zonder_versie))
+
+
 def toegelaten(tekst):
     """Mag deze vrije tekst van een bladnaam naar het bord: alleen woorden uit TEKENWOORDEN, getallen en korte codes
     (V3, A, 00). Een naam of een adres valt erbuiten (Codex DT10, DT21)."""
-    # DT31: een reeks cijfers met scheidingstekens ("0499-123-456", "84.03.21-411.65") telt als een getal; vanaf vijf
-    # cijfers kan het een telefoon- of rijksregisternummer zijn
-    for reeks in re.findall(r"\d[\d\s./-]*\d|\d", tekst or ""):
-        if len(re.sub(r"\D", "", reeks)) >= 5:
-            return False
+    if gevoelig(tekst):
+        return False
     for woord in re.findall(r"[^\W\d_]+(?:'[^\W\d_]+)?|\w+", tekst or ""):
         w = woord.lower()
         # getallen tot vier cijfers (een niveau, een jaar); een langer getal kan een telefoon- of rijksregisternummer
@@ -341,10 +349,16 @@ def bladcode(naam):
     delen = stam.split("_")
     vast = [delen[0]] if m else []
     rest = delen[1:] if m else delen
-    # Alleen wat de loketcodering is: toestand (B, V, N, T), deelset en volgnummer (cijfers, of een hoofdletter als
-    # gevel- of snedeletter), versie. Een kort woord zoals een voornaam is geen code (Codex DT17).
-    while rest and re.fullmatch(r"[BNVT]{1,4}|\d{1,3}|[A-Z]'?|[A-Z]\d|versie\d{8}", rest[0]):
-        vast.append(rest.pop(0))
+    # Alleen wat de loketcodering is, elk veld hoogstens een keer en in volgorde: toestand (B, V, N, T), deelset
+    # (cijfers), volgnummer (cijfers, of een hoofdletter als gevel- of snedeletter), versie. Een kort woord zoals een
+    # voornaam is geen code (Codex DT17), en een nummer in stukjes geen reeks codevelden (DT35).
+    for veld in (r"[BNVT]{1,4}", r"\d{1,3}", r"\d{1,3}|[A-Z]'?|[A-Z]\d", r"versie\d{8}"):
+        if rest and re.fullmatch(veld, rest[0]):
+            vast.append(rest.pop(0))
+    if gevoelig(stam):
+        # DT35: de hele zichtbare naam getoetst; staat er ergens een lang nummer, dan alleen soort en toestand
+        kop = [d for d in vast[:2] if not re.search(r"\d", d)]
+        return "_".join(kop + ["(vrije tekst)"]) + ext
     vrij = "_".join(rest)
     if vrij and not toegelaten(vrij):
         vrij = "(vrije tekst)"
@@ -554,7 +568,10 @@ def set_bevindingen(nc, st, meldingen):
         namen = sorted(set(namen) | nieuw)
         regularisatie = nc.is_regularisatie(projectnummer(map_ + "/x.pdf")[1])
         s = nc.controleer_set(namen, regularisatie=regularisatie, nieuw=sorted(nieuw))
-        fout = [(k, v["reden"]) for k, v in s["uitkomsten"].items() if v["status"] == "FOUT" and k != "gewest"]
+        # De reden van een dubbele bladcode noemt volgnummers uit de bestandsnaam; naar het bord gaat ze in algemene
+        # woorden (Codex DT35). De reden voor B, V en N komt uit vaste namen (grondplan, gevel ...).
+        fout = [(k, "dezelfde bladcode op meer dan een blad in deze map, met een nieuw blad erbij" if k == "bladnummers"
+                 else v["reden"]) for k, v in s["uitkomsten"].items() if v["status"] == "FOUT" and k != "gewest"]
         if fout:
             uit[map_] = fout
     return uit
