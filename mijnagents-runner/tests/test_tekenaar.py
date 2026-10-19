@@ -161,6 +161,17 @@ class Selectie(Basis):
         self.assertEqual((nieuw, weg), (0, 1))
         self.assertEqual(set(st["bekend"]), {"id:proef0001", "id:proef0003"})   # light niet volledig: blijft
 
+    def test_volledige_lijst_ruimt_geen_map_zonder_toegang_op(self):
+        # DT20: een map die de koppeling niet meer mag lezen, is niet leeg; wat daar wachtte, blijft wachten.
+        st = self.stand_met_basis()
+        dicht = f"{S}/H-A Oud"
+        tk.selecteer(st, {"wijzigingen": [plan(1, P1, "h1"), plan(5, dicht + "/9800 x/BA_x_P_N.pdf", "h5")]})
+        self.assertEqual(st["wachtrij"], ["id:proef0001", "id:proef0005"])
+        tk.selecteer(st, {"volledig": {"standaard": True}, "wijzigingen": [plan(1, P1, "h1")],
+                          "geen_toegang": [{"basis": "standaard", "pad": dicht}]})
+        self.assertIn("id:proef0005", st["bekend"])
+        self.assertEqual(st["gezien"]["h5"]["status"], "wacht")
+
     def test_mappen_zonder_toegang_worden_gemeld(self):
         st = tk.lege_stand()
         tk.selecteer(st, {"volledig": {"standaard": True, "light": True},
@@ -175,10 +186,11 @@ class Selectie(Basis):
         self.assertEqual(tk.projectnummer(P1)[0], "9901")
         self.assertEqual(tk.projectnummer(P3)[0], "9902")
         self.assertEqual(tk.projectnummer(f"{L}/1. H-A light Submission/3.H-A light Subm/BA_x_P_N.pdf")[0], "zonder nummer")
-        self.assertEqual(tk.blad_label(P1), "9901 / 3. Bouwaanvraag / 2. PDF / P_N_1_00_gelijkvloers.pdf")
+        self.assertEqual(tk.blad_label(P1), "9901 / P_N_1_00_gelijkvloers.pdf")      # geen mapnamen (DT21)
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_Legende.pdf"), "Legende.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo.pdf"), "blad zonder tekeningsoort in de naam")
-        self.assertEqual(tk.map_label(os.path.dirname(P1)), "9901 / 3. Bouwaanvraag / 2. PDF")
+        self.assertEqual(tk.map_labels([os.path.dirname(P1), os.path.dirname(P2) + "/oud"]),
+                         {os.path.dirname(P1): "9901 map 1", os.path.dirname(P2) + "/oud": "9901 map 2"})
 
 
 class Controle(Basis):
@@ -238,7 +250,7 @@ class Controle(Basis):
         self.assertEqual((projecten["9901"]["nieuwe_bladen"], projecten["9901"]["met_fout"]), (2, 1))
         self.assertEqual([f["wat"] for f in projecten["9901"]["fouten"]], ["meetlijn", "persoonsgegevens"])
         self.assertEqual(projecten["9901"]["fouten"][0]["voorbeeld"], ["G_N_1_A_voorgevel.pdf"])
-        self.assertEqual(projecten["9902"]["set"], ["dubbele bladcode: dubbel"])
+        self.assertEqual(projecten["9902"]["set"], ["9902 map 1: dubbele bladcode: dubbel"])
         tekst = json.dumps(item, ensure_ascii=False)
         for adres in ("Proefstraat", "Proeflaan", "3120", "1000 Brussel"):
             self.assertNotIn(adres, tekst)                        # DT10
@@ -279,16 +291,17 @@ class Controle(Basis):
         # DT10: een submap of vrije tekst met een naam of adres gaat niet naar het bord.
         pad = f"{S}/2. STAN permission Awaited/{PROJECT}/4. Opmeting Janssens/BA_Proefstraat 1, 3120 Tremelo_G_N_1_A_gevel Janssens.pdf"
         label = tk.blad_label(pad)
-        self.assertEqual(label, "9901 / (map) / G_N_1_A_(vrije tekst).pdf")
-        self.assertEqual(tk.blad_label(P2.replace("2. PDF", "6. Latest PDF for Mehdi")),
-                         "9901 / 3. Bouwaanvraag / 6. Latest PDF for Mehdi / G_N_1_A_voorgevel.pdf")
+        self.assertEqual(label, "9901 / G_N_1_A_(vrije tekst).pdf")
+        self.assertEqual(tk.blad_label(P2.replace("2. PDF", "6. Latest PDF for Mehdi")), "9901 / G_N_1_A_voorgevel.pdf")
+        self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_P_N_voor Mehdi.pdf"), "P_N_(vrije tekst).pdf")  # DT21
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_P_N Garage.pdf"), "P_N Garage.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_Kerkstraat 5_G_N.pdf"), "G_N.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_Tom.pdf"), "G_N_(vrije tekst).pdf")   # DT17
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo TB_N_Terreinprofiel.pdf"), "TB_N_Terreinprofiel.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_1_A'_gevel.pdf"), "G_N_1_A'_gevel.pdf")
-        self.assertTrue(tk.toegelaten("V3 2026-10-13"))
+        self.assertTrue(tk.toegelaten("Voorgevel 2"))
         self.assertFalse(tk.toegelaten("Peeters"))
+        self.assertFalse(tk.toegelaten("Latest PDF for Mehdi"))
 
     def test_aan_de_beurt(self):
         nu = datetime(2026, 10, 26, 10, 0, tzinfo=timezone.utc)
@@ -547,6 +560,47 @@ class Ronde(Basis):
         self.assertEqual(self.draai(), 0)
         self.assertEqual(len([r for r in self.nep.logboek if r["onderwerp"].startswith("project 9901")]), 1)
         self.assertEqual(len(self.nep.klaarzet), 1)
+
+    def test_herhaling_stuurt_dezelfde_melding_ook_na_een_weekgrens(self):
+        # DT22: de melding wordt een keer opgebouwd en bewaard; een herhaling in een andere week of met een andere
+        # projectmap stuurt exact hetzelfde, en een al opgepakt signaal met dezelfde inhoud telt als ontvangen.
+        tk.bewaar_stand(self.stand_met_basis())
+        self.lijst["wijzigingen"] = [plan(2, P2, "h2")]
+        self.nep.faal = {"/api/logboek"}
+        self.assertEqual(self.draai("--nu"), "breuk")
+        bewaard = tk.lees_stand()["uitgaand"]
+        self.assertTrue(bewaard and bewaard["item"]["uniek"] in self.nep.klaarzet)
+        self.nep.klaarzet[bewaard["item"]["uniek"]]["status"] = "opgepakt"
+        oud_week = tk.week
+        tk.week = lambda t=None: "2026-W44"
+        self.addCleanup(setattr, tk, "week", oud_week)
+        self.nep.faal = set()
+        self.lijst["wijzigingen"] = [plan(7, P1, "h7")]                # intussen een nieuw plan erbij
+        self.assertEqual(self.draai(), 0)
+        st = tk.lees_stand()
+        self.assertEqual((st["uitgaand"], st["te_melden"]), (None, []))
+        verslag = [r for r in self.nep.logboek if r["onderwerp"].startswith("project 9901")]
+        self.assertEqual(len({r["onderwerp"] for r in verslag}), 2)       # twee meldingen, elk een keer
+        self.assertEqual(len(verslag), 2)
+
+    def test_deels_bestaand_verslag_wordt_aangevuld(self):
+        # DT23: staat maar een deel van het verslag op het bord, dan gaat het ontbrekende deel, niet alles en niet niets.
+        st = self.stand_met_basis()
+        st["te_melden"] = [{"id": f"id:proefd{i:03d}", "hash": f"d{i}", "pad": P2.replace("9901", f"{9000 + i}"),
+                            "uitslag": tk.onbekend("x"), "commit": "abc1234"} for i in range(2)]
+        st["uitgaand"] = tk.bouw_melding(st, NepNormcontrole(), "2026-W43", "abc1234")
+        tk.bewaar_stand(st)
+        self.nep.logboek.append(st["uitgaand"]["regels"][0])
+        self.assertEqual(self.draai(), 0)
+        self.assertEqual(len([r for r in self.nep.logboek if "(verslag " in r["onderwerp"]]), 2)
+        self.assertTrue(all("normcontrole abc1234" in r["tekst"] for r in st["uitgaand"]["regels"]))   # DT24
+
+    def test_zonder_token_toch_herhaal(self):
+        # DT25: ook een ronde die op het token strandt, wordt de volgende start herhaald.
+        self.assertEqual(self.draai(), 0)
+        os.remove(tk.TOKEN_PAD)
+        self.assertEqual(self.draai("--nu"), 2)
+        self.assertTrue(tk.lees_stand()["herhaal"])
 
     def test_afgekapt_signaal_telt_niet_als_ontvangen(self):
         # DT16: houdt het bord maar een deel van de inhoud, dan blijft de melding staan.
