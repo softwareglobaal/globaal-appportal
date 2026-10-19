@@ -262,6 +262,14 @@ class Controle(Basis):
         self.assertTrue(tk.aan_de_beurt(st, nu))                         # DT06: een melding wacht op het bord
 
 
+class Ssh(unittest.TestCase):
+    def test_socketpad_past_in_een_unix_socket(self):
+        # %C wordt 40 tekens, ssh plakt er bij het aanmaken 17 achter; macOS laat 104 toe (gemeten 19-10-2026).
+        lengte = len(tk.SSH_SOCKET.replace("%C", "x" * 40)) + 17
+        self.assertLess(len(os.path.expanduser("~/.ssh/tekenaar-")) + 40 + 17, 104)
+        self.assertLess(lengte, 104)
+
+
 class Regelboek(Basis):
     def test_normcontrole_komt_uit_origin_main(self):
         bron = os.path.join(self.tmp.name, "bron")

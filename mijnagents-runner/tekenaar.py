@@ -58,6 +58,7 @@ DROPBOX = os.path.expanduser("~/TKN-buro Dropbox")
 BORD_PUBLIEK = "https://mijnagents.globaal.be"
 HULP = "~/agents/.venv/bin/python ~/appportal/mijnagents-runner/koppelingen/ba_plannen.py"
 HULP_VERSIE = "3"
+SSH_SOCKET = os.path.expanduser("~/.ssh/tekenaar-%C")
 # De archiefcontrole van oktober 2026 (overleg/archiefcontrole-2026-10.md in de brug) mat de jongste versie van elk blad
 # tot 18-10-2026: wat daarvoor laatst gewijzigd is, telt als vrijgesteld (basis), niet als stuk voor stuk gecontroleerd.
 BASISDATUM = "2026-10-18T00:00:00+00:00"
@@ -273,9 +274,10 @@ def map_label(map_pad):
 def vm(opdracht, invoer=None, timeout=600):
     """Een opdracht van ba_plannen.py op de VM. Geeft (code, stdout als bytes, stderr). Een gedeelde ssh-verbinding
     (ControlMaster, een minuut open na de laatste opdracht) houdt honderd plannen in een ronde onder de paar minuten."""
-    buiten_dropbox(WERKMAP)
+    # De socket in ~/.ssh met een korte naam: macOS laat 104 tekens toe en ssh plakt er bij het aanmaken nog 17 achter
+    # (gemeten 19-10-2026: in de werkmap werd het pad te lang en faalde elke aanroep).
     r = subprocess.run(["/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30",
-                        "-o", "ControlMaster=auto", "-o", f"ControlPath={os.path.join(WERKMAP, 's-%C')}",
+                        "-o", "ControlMaster=auto", "-o", f"ControlPath={SSH_SOCKET}",
                         "-o", "ControlPersist=60", VM, f"{HULP} {opdracht}"],
                        input=invoer, capture_output=True, timeout=timeout)
     return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace").strip()[-300:]
