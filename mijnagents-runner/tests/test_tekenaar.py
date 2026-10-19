@@ -168,17 +168,24 @@ class Controle(Basis):
     def test_signaal_alleen_bij_fout(self):
         ok = (P1, {"oordeel": "LET OP", "fout": [], "fout_soorten": []})
         self.assertIsNone(tk.signaal([ok], {}, "2026-W43", "abc1234"))
-        fout = (P2, {"oordeel": "FOUT", "fout": ["meetlijn: 5 m gemeten 25 mm"], "fout_soorten": ["meetlijn"]})
+        fout = (P2, {"oordeel": "FOUT", "fout": ["meetlijn: 5 m gemeten 25 mm"], "fout_soorten": ["meetlijn"],
+                     "fout_reden": {"meetlijn": "5 m gemeten 25 mm"}})
         item = tk.signaal([ok, fout], {os.path.dirname(P3): [("bladnummers", "dubbel")]}, "2026-W43", "abc1234")
         self.assertEqual((item["voor"], item["soort"], item["uniek"]), ("mehdi", "signaal", "tekenaar-normcontrole-2026-W43"))
         self.assertIn("9901", item["titel"])
         self.assertIn("9902", item["titel"])
         self.assertNotIn("stil", item["titel"].lower())
-        self.assertLessEqual(len(item["titel"]), 160)
+        self.assertLessEqual(len(item["titel"]), 110)          # De Bode toont 110 tekens
         self.assertTrue(any("Teken-agent-map" in v for v in item["inhoud"]["voorstel"]))
         projecten = {p["project"]: p for p in item["inhoud"]["projecten"]}
-        self.assertEqual(projecten["9901"]["bladen"][0]["fouten"], ["meetlijn: 5 m gemeten 25 mm"])
+        self.assertEqual((projecten["9901"]["nieuwe_bladen"], projecten["9901"]["met_fout"]), (2, 1))
+        self.assertEqual(projecten["9901"]["fouten"], [{"wat": "meetlijn", "bladen": 1, "voorbeeld": [os.path.basename(P2)],
+                                                        "reden": "5 m gemeten 25 mm"}])
         self.assertEqual(projecten["9902"]["set"], ["dubbele bladcode: dubbel"])
+        # Veel bladen met dezelfde fout: een regel per soort, hoogstens drie voorbeelden.
+        veel = [(P2.replace("voorgevel", f"gevel{i}"), fout[1]) for i in range(40)]
+        f = tk.signaal(veel, {}, "2026-W43", "abc1234")["inhoud"]["projecten"][0]["fouten"]
+        self.assertEqual((len(f), f[0]["bladen"], len(f[0]["voorbeeld"])), (1, 40, 3))
 
 
 class NepBord:

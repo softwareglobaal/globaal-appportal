@@ -323,9 +323,9 @@ def beoordeel(nc, pdf, pad):
     for k, v in r["uitkomsten"].items():
         if v["status"] in per:
             per[v["status"]].append(f"{LABEL.get(k, k)}: {v['reden']}")
-    fouten = [k for k, v in r["uitkomsten"].items() if v["status"] == "FOUT"]
+    fout_reden = {k: v["reden"] for k, v in r["uitkomsten"].items() if v["status"] == "FOUT"}
     return {"oordeel": r.get("oordeel"), "fout": per["FOUT"], "onbekend": per["ONBEKEND"], "let_op": per["LET OP"],
-            "fout_soorten": fouten}
+            "fout_soorten": list(fout_reden), "fout_reden": fout_reden}
 
 
 def set_bevindingen(nc, st, nieuwe_ids):
@@ -348,34 +348,57 @@ def set_bevindingen(nc, st, nieuwe_ids):
 
 def signaal(gecontroleerd, sets, wk, commit):
     """Een klaarzet-item voor Mehdi (soort signaal) als er een bruikbare bevinding is: een FOUT op een nieuw blad of in
-    de set van zijn map. Anders None. Het uniek draagt de week, geen aantal (N10): een herhaalde ronde in dezelfde week
-    zet niets dubbel klaar. LET OP en ONBEKEND blijven in het werkverslag."""
+    de set van zijn map. Anders None. Gebundeld per project en per soort fout, met hoogstens drie voorbeelden; de lijst
+    per blad staat in het werkverslag. Het uniek draagt de week, geen aantal (N10): een herhaalde ronde in dezelfde
+    week zet niets dubbel klaar. LET OP en na te kijken blijven in het werkverslag."""
     projecten = {}
+
+    def project(nr):
+        return projecten.setdefault(nr, {"project": nr, "mappen": set(), "met_fout": 0, "fouten": {}, "set": []})
+
+    per_project = {}
+    for pad, _ in gecontroleerd:
+        nr = projectnummer(pad)[0]
+        per_project[nr] = per_project.get(nr, 0) + 1
     for pad, uitslag in gecontroleerd:
-        if uitslag.get("fout"):
-            nr, _ = projectnummer(pad)
-            projecten.setdefault(nr, {"project": nr, "bladen": [], "set": [], "soorten": set()})
-            projecten[nr]["bladen"].append({"blad": kort_pad(pad), "fouten": uitslag["fout"]})
-            projecten[nr]["soorten"].update(uitslag["fout_soorten"])
+        if not uitslag.get("fout"):
+            continue
+        p = project(projectnummer(pad)[0])
+        p["met_fout"] += 1
+        p["mappen"].add(kort_pad(os.path.dirname(pad)))
+        for soort, reden in (uitslag.get("fout_reden") or {}).items():
+            f = p["fouten"].setdefault(soort, {"wat": LABEL.get(soort, soort), "bladen": 0, "voorbeeld": [], "reden": reden})
+            f["bladen"] += 1
+            if len(f["voorbeeld"]) < 3:
+                f["voorbeeld"].append(os.path.basename(pad))
     for m, fout in sets.items():
-        nr, _ = projectnummer(m + "/x.pdf")
-        projecten.setdefault(nr, {"project": nr, "bladen": [], "set": [], "soorten": set()})
-        projecten[nr]["set"].extend(f"{LABEL.get(k, k)}: {reden}" for k, reden in fout)
-        projecten[nr]["soorten"].update(k for k, _ in fout)
+        p = project(projectnummer(m + "/x.pdf")[0])
+        p["mappen"].add(kort_pad(m))
+        p["set"].extend(f"{LABEL.get(k, k)}: {reden}" for k, reden in fout)
+        for k, _ in fout:
+            p["fouten"].setdefault(k, {"wat": LABEL.get(k, k), "bladen": 0, "voorbeeld": [], "reden": "zie set"})
     if not projecten:
         return None
-    soorten = sorted({s for p in projecten.values() for s in p["soorten"]})
+    soorten = sorted({s for p in projecten.values() for s in p["fouten"]})
     nrs = sorted(projecten)
-    titel = (f"De Tekenaar: normfouten in nieuwe bouwaanvraagplannen van {', '.join(nrs[:4])}"
-             f"{' en meer' if len(nrs) > 4 else ''} ({', '.join(LABEL.get(s, s) for s in soorten[:3])})")
+    titel = f"Normfouten in nieuwe BA-plannen van {', '.join(nrs[:4])}{' en meer' if len(nrs) > 4 else ''}"
+    extra = f" ({', '.join(LABEL.get(s, s) for s in soorten[:3])})"
+    if len(titel + extra) <= 110:           # De Bode toont 110 tekens op Telegram
+        titel += extra
     titel = re.sub(r"(?i)stil", "rustig", titel)   # "stil" in een signaaltitel laat De Bode bellen (AGENTNORM 6)
+    uit = []
+    for n in nrs:
+        p = projecten[n]
+        uit.append({"project": n, "mappen": sorted(p["mappen"])[:3], "nieuwe_bladen": per_project.get(n, 0),
+                    "met_fout": p["met_fout"], "fouten": sorted(p["fouten"].values(), key=lambda f: -f["bladen"]),
+                    "set": p["set"]})
     return {"voor": "mehdi", "soort": "signaal", "sleutel": wk, "uniek": f"tekenaar-normcontrole-{wk}",
-            "titel": titel[:160],
-            "inhoud": {"week": wk,
-                       "projecten": [{k: v for k, v in projecten[n].items() if k != "soorten"} for n in nrs],
+            "titel": titel[:110],
+            "inhoud": {"week": wk, "projecten": uit,
                        "voorstel": ["Per project de bladen met een FOUT verbeteren in een kopie in de Teken-agent-map, "
                                     "nooit in de projectmap; Mehdi zegt welk project eerst en geeft vrij."]
                        + [f"{LABEL.get(s, s)}: {VOORSTEL[s]}" for s in soorten if s in VOORSTEL],
+                       "werkverslag": "de lijst per blad staat in het werkverslag van De Tekenaar op het bord",
                        "regelboek": f"normcontrole uit globaal-vectorworks-brug, commit {commit or 'onbekend'}"}}
 
 
@@ -410,7 +433,7 @@ def controleer_wachtrij(nc, st, bewaar=True, maximum=MAX_PER_RONDE, haal=None):
                     uitslag = beoordeel(nc, pdf, b["pad"])
                 except Exception as e:  # noqa: BLE001  een kapotte PDF stopt de ronde niet
                     uitslag = {"oordeel": "ONBEKEND", "fout": [], "onbekend": [f"blad niet te lezen: {type(e).__name__}"],
-                               "let_op": [], "fout_soorten": []}
+                               "let_op": [], "fout_soorten": [], "fout_reden": {}}
                 finally:
                     with contextlib.suppress(FileNotFoundError):
                         os.remove(pdf)
