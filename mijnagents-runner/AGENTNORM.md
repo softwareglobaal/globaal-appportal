@@ -153,6 +153,13 @@ noden niet, dan stuurt ze geen lijst; de nieuwe nood staat dan alleen in het
 detail van de fouthartslag. Een nood toevoegen zonder de lijst te vervangen,
 vraagt een route op het bord (Codex NA16).
 
+Een runner op de Mac kan ook door de ronde (sinds 19-10-2026, De Tekenaar, `tekenaar.py`). De publieke ingang van
+het bord laat alleen hartslag, klaarzet, gesprekken en logboek door, niet de werkwijze, de kennis, de noden of de
+collega's. Daarom praat zo'n runner met het bord via een ssh-tunnel naar 127.0.0.1:3022 op de VM, met het token uit
+`~/.config/mijnagents/token`, en vraagt hij na de ronde met `koppelingen/bordstand.py` (alleen lezen) of hartslag en
+kennis echt aankwamen. Zijn runner staat in deze repo, dus meet de controle ook N5 en N12 tot N14. De oudere
+Mac-wachten in `mac/` doen dat nog niet.
+
 Een werkwijze die alleen gelezen wordt, is decoratie. `bord.grenzen(r.werkwijze)` geeft
 de punten onder "## Wat ik nooit doe" en "## Wat Mehdi beslist", zodat de code de
 grenzen van het bord toepast en geen kopie bijhoudt. Het sjabloon toont het: zonder
