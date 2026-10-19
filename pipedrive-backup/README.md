@@ -68,8 +68,21 @@ Pipedrive geeft per firma een dagbudget aan API-tokens (60.000 tot 240.000,
 reset rond middernacht) dat we delen met het sales-dashboard, de Pipedrive-MCP,
 de won-deals-poller en de leadmeldingen (samen bij H-Architects ongeveer 35.000
 per dag). Gemeten 19-10-2026: een lijstpagina kost 20 tokens, een bijlage 20.
-De VM-run kost per nacht 4.000 (Energie Efficiënt) tot 25.000 (H-Architects:
-49.000 bestanden in pagina's van 100 en 23.000 mailthreads in pagina's van 50).
+De VM-run kost per nacht 2.800 (Energie Efficiënt) tot 33.000 tokens
+(H-Architects: 49.000 bestanden in pagina's van 100 en 41.000 mailthreads in
+pagina's van 50) en duurt voor alle vijf samen ongeveer 20 minuten.
+
+Eerste volledige run 19-10-2026, id voor id nagelopen tegen de v2-API van
+Pipedrive (deals, personen, organisaties, activiteiten, producten): niets
+ontbrak, niets extra.
+
+| Firma | Deals | Personen | Organisaties | Activiteiten | Notities | Bestanden | Mailthreads |
+|---|---|---|---|---|---|---|---|
+| H-Architects | 6.403 | 13.950 | 3.171 | 6.463 | 8.379 | 49.127 | 41.078 |
+| UNABO | 1.106 | 7.044 | 5.178 | 63 | 4.016 | 25.198 | 8.832 |
+| TKN-Tekenwerk | 677 | 7.577 | 5.475 | 3 | 901 | 3.881 | 2.662 |
+| Energie Efficiënt | 798 | 6.593 | 4.734 | 46 | 1.018 | 1.631 | 3.011 |
+| HarmonieBOUW | 2.030 | 8.219 | 5.346 | 13 | 2.755 | 7.031 | 6.510 |
 
 Bijlagen stoppen zodra er nog 35% van het dagbudget over is (`RESERVE`,
 instelbaar met `--reserve`) en gaan de volgende nacht verder. Een download
