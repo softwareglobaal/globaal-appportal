@@ -1,0 +1,21 @@
+# Grendels op De Tekenaar (tekenaar.py, op de Mac van Mehdi, en koppelingen/ba_plannen.py op de VM). Ontwerplezing
+# Codex DT01, DT02 en DT05 (18-10-2026): nieuw is een inhoud die hij nog niet zag, een signaal alleen bij een FOUT en
+# een per week, de werkmap nooit in Dropbox, elke ronde door de gedeelde ag.ronde, en het hulpscript leest alleen
+# BA-plannen onder de twee projectmappen. De normcontrole zelf heeft haar tests in softwareglobaal/globaal-vectorworks-brug.
+name: tekenaar-grendels
+
+on:
+  push:
+    paths: ["mijnagents-runner/**", ".github/workflows/tekenaar-grendels.yml"]
+  pull_request:
+    paths: ["mijnagents-runner/**", ".github/workflows/tekenaar-grendels.yml"]
+
+jobs:
+  grendels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 mijnagents-runner/tests/test_tekenaar.py

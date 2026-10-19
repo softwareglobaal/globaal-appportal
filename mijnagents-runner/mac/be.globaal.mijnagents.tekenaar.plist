@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- De Tekenaar (tekenaar.py): elke dag om 10:00 en bij het aanmelden. De runner werkt alleen als de ronde van deze
+     week nog niet gelukt is; zo haalt hij een week in die de Mac verslapen heeft. Slaapt de Mac om 10:00, dan start
+     launchd hem bij het ontwaken. Python 3.14 van python.org: daar staat PyMuPDF voor de normcontrole.
+     Aanzetten:  cp mac/be.globaal.mijnagents.tekenaar.plist ~/Library/LaunchAgents/ &&
+                 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/be.globaal.mijnagents.tekenaar.plist
+     Uitzetten:  launchctl bootout gui/$(id -u)/be.globaal.mijnagents.tekenaar -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>be.globaal.mijnagents.tekenaar</string>
+  <key>ProgramArguments</key><array>
+    <string>/Library/Frameworks/Python.framework/Versions/3.14/bin/python3</string>
+    <string>/Users/mehdichegini/dev/globaal-appportal/mijnagents-runner/tekenaar.py</string>
+  </array>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+  <key>RunAtLoad</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/tekenaar.log</string>
+  <key>StandardErrorPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/tekenaar.log</string>
+</dict></plist>
