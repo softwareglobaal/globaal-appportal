@@ -172,6 +172,24 @@ class Selectie(Basis):
         self.assertIn("id:proef0005", st["bekend"])
         self.assertEqual(st["gezien"]["h5"]["status"], "wacht")
 
+    def test_toegangsverlies_uit_een_deellijst(self):
+        # DT28: in een deellijst komen 'weg' en 'geen toegang' voor dezelfde map samen; het wachtende plan blijft,
+        # wordt niet opgehaald en blokkeert de ronde niet. Komt er weer een plan uit die map, dan is de toegang terug.
+        st = self.stand_met_basis()
+        dicht = f"{S}/H-A Oud"
+        tk.selecteer(st, {"wijzigingen": [plan(1, P1, "h1"), plan(5, dicht + "/9800 x/BA_x_P_N.pdf", "h5")]})
+        tk.selecteer(st, {"volledig": {"standaard": False}, "wijzigingen": [{"soort": "weg", "pad": dicht.lower()}],
+                          "geen_toegang": [{"basis": "standaard", "pad": dicht}]})
+        self.assertIn("id:proef0005", st["bekend"])
+        self.assertEqual(tk.blinde_vlekken(st), [dicht])
+        self.assertEqual(tk.verwerkbaar(st), ["id:proef0001"])
+        tk.controleer_wachtrij(NepNormcontrole(), st, haal=nep_haal)
+        self.assertEqual((tk.verwerkbaar(st), st["wachtrij"]), ([], ["id:proef0005"]))
+        self.assertTrue(tk.aan_de_beurt(dict(st, te_melden=[], laatste_ronde=tk.nu_utc().isoformat())) is False)
+        tk.selecteer(st, {"wijzigingen": [plan(6, dicht + "/9800 x/BA_x_G_N.pdf", "h6")]})
+        self.assertEqual(tk.blinde_vlekken(st), [])
+        self.assertEqual(set(tk.verwerkbaar(st)), {"id:proef0005", "id:proef0006"})
+
     def test_mappen_zonder_toegang_worden_gemeld(self):
         st = tk.lege_stand()
         tk.selecteer(st, {"volledig": {"standaard": True, "light": True},
@@ -185,7 +203,12 @@ class Selectie(Basis):
     def test_projectnummer_en_labels_zonder_adres(self):
         self.assertEqual(tk.projectnummer(P1)[0], "9901")
         self.assertEqual(tk.projectnummer(P3)[0], "9902")
-        self.assertEqual(tk.projectnummer(f"{L}/1. H-A light Submission/3.H-A light Subm/BA_x_P_N.pdf")[0], "zonder nummer")
+        zonder = tk.projectnummer(f"{L}/1. H-A light Submission/3.H-A light Subm/BA_x_P_N.pdf")[0]
+        self.assertRegex(zonder, r"^zonder nummer [0-9a-f]{6}$")
+        # DT30: twee mappen zonder nummer krijgen elk hun eigen code, zonder hun naam
+        ander = tk.projectnummer(f"{L}/1. H-A light Submission/Klant Peeters/BA_x_P_N.pdf")[0]
+        self.assertNotEqual(zonder, ander)
+        self.assertNotIn("Peeters", tk.blad_label(f"{L}/1. H-A light Submission/Klant Peeters/BA_x_P_N.pdf"))
         self.assertEqual(tk.blad_label(P1), "9901 / P_N_1_00_gelijkvloers.pdf")      # geen mapnamen (DT21)
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_Legende.pdf"), "Legende.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo.pdf"), "blad zonder tekeningsoort in de naam")
@@ -297,6 +320,8 @@ class Controle(Basis):
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_P_N Garage.pdf"), "P_N Garage.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_Kerkstraat 5_G_N.pdf"), "G_N.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_Tom.pdf"), "G_N_(vrije tekst).pdf")   # DT17
+        self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_gevel 0478123456.pdf"), "G_N_(vrije tekst).pdf")  # DT27
+        self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_P_N_verdieping 2.pdf"), "P_N_verdieping 2.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo TB_N_Terreinprofiel.pdf"), "TB_N_Terreinprofiel.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_1_A'_gevel.pdf"), "G_N_1_A'_gevel.pdf")
         self.assertTrue(tk.toegelaten("Voorgevel 2"))
@@ -594,6 +619,21 @@ class Ronde(Basis):
         self.assertEqual(self.draai(), 0)
         self.assertEqual(len([r for r in self.nep.logboek if "(verslag " in r["onderwerp"]]), 2)
         self.assertTrue(all("normcontrole abc1234" in r["tekst"] for r in st["uitgaand"]["regels"]))   # DT24
+
+    def test_veel_meldingen_in_meerdere_delen(self):
+        # DT29: na een storing wachten 150 plannen uit 150 projecten; elke melding houdt het verslag onder de 300 regels
+        # die het bord teruggeeft, en alles wordt bevestigd.
+        st = self.stand_met_basis()
+        st["te_melden"] = [{"id": f"id:proefm{i:03d}", "hash": f"m{i}", "pad": P2.replace("9901", f"{7000 + i}"),
+                            "uitslag": tk.onbekend("x"), "commit": "abc1234"} for i in range(150)]
+        tk.bewaar_stand(st)
+        self.assertEqual(self.draai(), 0)
+        merken = {r["onderwerp"].rsplit("(verslag ", 1)[1] for r in self.nep.logboek if "(verslag " in r["onderwerp"]}
+        self.assertEqual(len(merken), 2)
+        for merk in merken:
+            self.assertLess(len([r for r in self.nep.logboek if merk in r["onderwerp"]]), 300)
+        self.assertEqual(len([r for r in self.nep.logboek if r["onderwerp"].startswith("project 7")]), 150)
+        self.assertEqual(tk.lees_stand()["te_melden"], [])
 
     def test_zonder_token_toch_herhaal(self):
         # DT25: ook een ronde die op het token strandt, wordt de volgende start herhaald.

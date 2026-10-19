@@ -70,6 +70,7 @@ BASISDATUM = "2026-10-18T00:00:00+00:00"
 # zolang de Mac op dag zes of zeven aan staat.
 RITME = timedelta(days=6) - timedelta(hours=2)
 MAX_PER_RONDE = 150
+MAX_PER_MELDING = 100       # plannen per melding: het werkverslag blijft ruim onder de 300 regels die het bord teruggeeft
 ID = re.compile(r"^id:[A-Za-z0-9_-]{6,}$")
 BASISMAPPEN = ("0 H-A Standaard projects", "0 H-A Light projects")
 SOORTEN = "O|ML|P|S|G|T|L|I|IB|PB|LB|SB|GB|TB|D|C|F|3D|V"
@@ -189,11 +190,29 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
     bekend, gezien, wacht = st["bekend"], st["gezien"], st["wachtrij"]
     nieuw = weg = 0
     gezien_ids = set()
+    # Mappen zonder toegang voor de stack (Codex DT20, DT28): een volledige lijst van een basismap vervangt wat er
+    # stond, een deellijst voegt toe. Een plan in zo'n map is niet weg, het wacht op toegang.
+    toegang = st.setdefault("geen_toegang", {})
+    volledig_lijst = lijst.get("volledig") or {}
+    for basis in ("standaard", "light"):
+        nu_dicht = sorted(g["pad"] for g in lijst.get("geen_toegang", []) if g.get("basis") == basis)
+        if volledig_lijst.get(basis):
+            toegang[basis] = nu_dicht
+        elif nu_dicht:
+            toegang[basis] = sorted(set(toegang.get(basis, [])) | set(nu_dicht))
+    for w in lijst.get("wijzigingen", []):
+        if w.get("soort") == "bestand":   # een plan dat weer zichtbaar is onder een dichte map: de toegang is terug
+            q = (w.get("pad") or "").lower()
+            for basis, paden in toegang.items():
+                toegang[basis] = [d for d in paden if not q.startswith(d.lower() + "/")]
+    dicht = [d.lower() for d in blinde_vlekken(st)]
     for w in lijst.get("wijzigingen", []):
         if w.get("soort") == "weg":
             p = (w.get("pad") or "").lower()
             for i, b in list(bekend.items()):
                 q = (b.get("pad") or "").lower()
+                if any(q.startswith(d + "/") for d in dicht):
+                    continue
                 if p and (q == p or q.startswith(p + "/")):
                     del bekend[i]
                     weg += 1
@@ -212,8 +231,7 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
         gezien[sleutel] = {"status": "wacht", "gewijzigd": w.get("gewijzigd")}
         wacht.append(w["id"])
         nieuw += 1
-    dicht = [(g.get("pad") or "").lower() for g in lijst.get("geen_toegang", [])]
-    for basis, volledig in (lijst.get("volledig") or {}).items():
+    for basis, volledig in volledig_lijst.items():
         if volledig:      # Codex DT11: een volledige lijst ruimt op wat er niet meer staat
             for i, b in list(bekend.items()):
                 q = (b.get("pad") or "").lower()
@@ -224,12 +242,18 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
                     weg += 1
     herstel_wachtrij(st)
     st["cursors"].update(lijst.get("cursors") or {})
-    # Gedeelde mappen zonder toegang voor de stack: alleen een volledige lijst ziet ze, en die vervangt wat er stond.
-    toegang = st.setdefault("geen_toegang", {})
-    for basis, volledig in (lijst.get("volledig") or {}).items():
-        if volledig:
-            toegang[basis] = sorted(g["pad"] for g in lijst.get("geen_toegang", []) if g.get("basis") == basis)
     return nieuw, weg
+
+
+def wacht_op_toegang(st, ident):
+    """Staat dit plan in een map zonder toegang? Dan wordt het niet opgehaald en blokkeert het de ronde niet (DT28)."""
+    q = (st["bekend"].get(ident, {}).get("pad") or "").lower()
+    return any(q.startswith(d.lower() + "/") for d in blinde_vlekken(st))
+
+
+def verwerkbaar(st):
+    """De plannen in de wachtrij die nu op te halen zijn."""
+    return [i for i in st["wachtrij"] if not wacht_op_toegang(st, i)]
 
 
 def blinde_vlekken(st):
@@ -265,7 +289,10 @@ def projectnummer(pad):
                 if m:
                     return m.group(1), x
             break
-    return "zonder nummer", os.path.basename(os.path.dirname(pad or ""))
+    # Codex DT30: twee mappen zonder nummer mogen niet hetzelfde label krijgen; een korte vaste code per map, zonder
+    # de mapnaam zelf (die kan een naam of adres dragen)
+    map_ = os.path.dirname(pad or "")
+    return f"zonder nummer {hashlib.sha256(map_.lower().encode()).hexdigest()[:6]}", os.path.basename(map_)
 
 
 def toegelaten(tekst):
@@ -273,7 +300,9 @@ def toegelaten(tekst):
     (V3, A, 00). Een naam of een adres valt erbuiten (Codex DT10, DT21)."""
     for woord in re.findall(r"[^\W\d_]+(?:'[^\W\d_]+)?|\w+", tekst or ""):
         w = woord.lower()
-        if w in TEKENWOORDEN or re.fullmatch(r"\d+|[a-z]?\d+[a-z]?", w):
+        # getallen tot vier cijfers (een niveau, een jaar); een langer getal kan een telefoon- of rijksregisternummer
+        # zijn (Codex DT27)
+        if w in TEKENWOORDEN or re.fullmatch(r"\d{1,4}|[a-z]?\d{1,3}[a-z]?", w):
             continue
         return False
     return True
@@ -604,7 +633,7 @@ def controleer_wachtrij(nc, st, bewaar=True, maximum=None, haal=None, commit="")
     werk = tempfile.mkdtemp(prefix="ronde-", dir=buiten_dropbox(WERKMAP))
     verdwenen = 0
     try:
-        for ident in list(st["wachtrij"])[:maximum]:
+        for ident in verwerkbaar(st)[:maximum]:
             b = st["bekend"].get(ident)
             if b is None or st["gezien"].get(b["hash"], {}).get("status") != "wacht":
                 continue
@@ -689,7 +718,7 @@ def bouw_melding(st, nc, wk, commit):
     """Een uitgaande melding voor wat nu te melden is: signaal en werkverslag, een keer opgebouwd en in de stand
     bewaard. Een herhaling stuurt precies dezelfde melding opnieuw, ook na een weekgrens of met een andere stand van de
     projectmap (Codex DT22, DT26)."""
-    meldingen = list(st["te_melden"])
+    meldingen = list(st["te_melden"])[:MAX_PER_MELDING]       # DT29: hoogstens zoveel plannen per melding
     sets = set_bevindingen(nc, st, meldingen)
     item = signaal(meldingen, sets, wk, commit)
     if item:
@@ -736,7 +765,7 @@ def meld(st, nc, wk, commit):
     """Eerst een bewaarde melding die nog niet bevestigd was, dan een nieuwe voor wat er sindsdien bijkwam. Pas na
     bevestiging gaan de plannen uit te_melden (DT06). Geeft (signalen, sets met een fout)."""
     signalen, sets = 0, 0
-    for _ in range(2):
+    for _ in range(50):
         if not st.get("uitgaand"):
             if not st["te_melden"]:
                 break
@@ -774,24 +803,25 @@ def werk(r, st, wk):
     verdwenen = controleer_wachtrij(nc, st, commit=commit)
     meldingen = list(st["te_melden"])
     signalen, sets = meld(st, nc, wk, commit)
-    if st["wachtrij"]:
+    if verwerkbaar(st):
         # DT07: de ronde is niet af; launchd start me morgen opnieuw en dan gaat de wachtrij verder.
         r.nood("Meer nieuwe plannen dan een ronde aankan; de rest volgt bij de volgende start", wie="claude-code")
     tel = {s: sum(1 for m in meldingen if m["uitslag"]["oordeel"] == s) for s in ("FOUT", "ONBEKEND", "LET OP", "OK")}
     blind = blinde_vlekken(st)
     r.detail = (f"week {wk}: {len(meldingen)} nieuwe of gewijzigde BA-plannen gecontroleerd (FOUT {tel['FOUT']}, "
                 f"na te kijken {tel['ONBEKEND']}, let op {tel['LET OP']}, OK {tel['OK']}); {sets} sets met een fout; "
-                f"{'signaal voor Mehdi' if signalen else 'geen signaal'}; {len(st['wachtrij'])} in de wachtrij; "
+                f"{'signaal voor Mehdi' if signalen else 'geen signaal'}; {len(verwerkbaar(st))} in de wachtrij, "
+                f"{len(st['wachtrij']) - len(verwerkbaar(st))} wachten op toegang; "
                 f"{len(st['bekend'])} plannen in de projectmappen, {nieuw} met nieuwe inhoud, {weg + verdwenen} weg; "
                 f"normcontrole origin/main {commit}{'' if opgehaald else ' (GitHub niet bereikt)'}"
                 + (f"; gedeelde mappen zonder toegang: {len(blind)}" if blind else ""))
-    return not st["wachtrij"]
+    return not verwerkbaar(st)
 
 
 def aan_de_beurt(st, nu=None):
     """Een ronde is aan de beurt als de vorige gelukte ronde zes dagen oud is, of als er nog plannen of meldingen
     wachten (inhaalronde)."""
-    if st.get("wachtrij") or st.get("te_melden") or st.get("uitgaand") or st.get("herhaal") or not st.get("laatste_ronde"):
+    if verwerkbaar(st) or st.get("te_melden") or st.get("uitgaand") or st.get("herhaal") or not st.get("laatste_ronde"):
         return True
     try:
         vorige = datetime.fromisoformat(st["laatste_ronde"])
