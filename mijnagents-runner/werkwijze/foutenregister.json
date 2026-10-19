@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.39",
+ "versie": "3.40",
  "datum": "19-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -3823,6 +3823,24 @@
     "soort": "test",
     "waar": "tests/test_codex_ronde2_bode.py",
     "tekst": "A42 onderbroken oproep wordt ook bij verloren stand maar eenmaal gemeld"
+   },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-189",
+   "datum": "19-10-2026",
+   "gevonden_door": "Codex, driehoeksoverleg 9d",
+   "fout": "De uitnodigingsroute kon naast de toegestane partner ook andere gasten mailen.",
+   "gevolg": "Een klant of collega op dezelfde afspraak kon ongevraagd een Google-uitnodiging krijgen.",
+   "waarom_niet_gezien": "De uitnodigingsproeven controleerden de partner en het merk, maar geen tweede gast op hetzelfde event.",
+   "oorzaak": "De route stuurde de volledige gastenlijst met sendUpdates=all zonder de body en het verse event op andere gasten te toetsen.",
+   "soort_oorzaak": "code",
+   "oplossing": "Weiger de mailroute bij een andere gast of resource; zet de partner stil, meld een voorstel en bewaar het merk tot een veilige latere ronde.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agendagasten.py",
+    "tekst": "H1 partner met klant: geen mail, partner stil en voorstel zonder merk"
    },
    "controle": [],
    "status": "opgelost"

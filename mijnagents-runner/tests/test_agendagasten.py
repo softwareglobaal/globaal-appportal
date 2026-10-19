@@ -279,10 +279,11 @@ check("al gemarkeerde partner leest het item niet en stuurt niets",
 
 if _inv_oud is not None:
     import urllib.request as _ur
-    _open_oud, _mag_oud = _ur.urlopen, W.mag_schrijven
+    _open_oud, _mag_oud, _lees_oud = _ur.urlopen, W.mag_schrijven, W._event
     _verzoeken = []
     _ur.urlopen = lambda req, timeout=0: (_verzoeken.append(req), type("R", (), {"read": lambda s: b"{}"})())[1]
     W.mag_schrijven = lambda kal: True
+    W._event = lambda a, tok: {"attendees": [{"email": _partner}]}
     _afgewezen = []
     try:
         W._uitnodiging_patch(_item("proef"),
@@ -297,12 +298,94 @@ if _inv_oud is not None:
             except ValueError:
                 _afgewezen.append(True)
     finally:
-        _ur.urlopen, W.mag_schrijven = _open_oud, _mag_oud
+        _ur.urlopen, W.mag_schrijven, W._event = _open_oud, _mag_oud, _lees_oud
     check("alleen de aparte schrijffunctie doet één API PATCH met sendUpdates=all en het merk",
           len(_verzoeken) == 1 and "sendUpdates=all" in _verzoeken[0].full_url
           and json.loads(_verzoeken[0].data)["extendedProperties"]["private"]["agendawacht_uitgenodigd"] == _partner)
     check("de aparte schrijffunctie weigert online, een reeks en een ander adres zelf",
           len(_afgewezen) == 3 and len(_verzoeken) == 1)
+
+# Driehoeksoverleg 9d: ook een reeds aanwezige gast, een tegelijk toegevoegde collega en een resource
+# mogen nooit via sendUpdates=all meekrijgen. De tweede GET bootst een wijziging vlak voor de mailroute na.
+if _inv_oud is not None:
+    _open_oud, _mag_oud, _lees_oud, _patch_oud, _mensen_oud, _voor_oud, _toegang_oud = (
+        _ur.urlopen, W.mag_schrijven, W._event, W._patch, W.organisatie.agenda_adressen,
+        W.agendagasten_voor, W.agenda._toegang)
+    _mail, _stil = [], []
+    _staat = {
+        "klant": {"attendees": [{"email": _partner}, {"email": "klant@voorbeeld.test"}]},
+        "nieuw": {"attendees": [{"email": "klant@voorbeeld.test"}]},
+        "collega": {"attendees": []},
+        "alleen": {"attendees": [{"email": _partner}, {"email": W.WERKAGENDA, "organizer": True}]},
+        "resource": {"attendees": [{"email": _partner}, {"email": "zaal@voorbeeld.test", "resource": True}]},
+        "vers": {"attendees": [{"email": _partner}]},
+    }
+    _lezingen = {}
+
+    def _lees_veilig(a, tok):
+        eid = a["id"]
+        _lezingen[eid] = _lezingen.get(eid, 0) + 1
+        if eid == "vers" and _lezingen[eid] == 2:
+            _staat[eid]["attendees"].append({"email": "klant@voorbeeld.test"})
+        return copy.deepcopy(_staat[eid])
+
+    def _patch_veilig(a, body, tok, **_kwargs):
+        _stil.append((a["id"], copy.deepcopy(body)))
+        _staat[a["id"]]["attendees"] = copy.deepcopy(body["attendees"])
+
+    def _mail_veilig(req, timeout=0):
+        body = json.loads(req.data)
+        _mail.append((req.full_url, body))
+        _staat[req.full_url.split("/events/")[-1].split("?")[0]]["extendedProperties"] = body["extendedProperties"]
+        return type("R", (), {"read": lambda s: b"{}"})()
+
+    _voor_veilig = lambda titel, regels=None, mensen=None: (
+        {_partner, _ander} if "twee gasten" in titel else {_partner} if "partner erbij" in titel else set())
+    try:
+        _ur.urlopen, W.mag_schrijven, W._event, W._patch = _mail_veilig, (lambda kal: True), _lees_veilig, _patch_veilig
+        W.organisatie.agenda_adressen = lambda *x, **k: {
+            _partner: {"voornaam": "Partner", "naam": "Partner", "in_dienst": True},
+            _ander: {"voornaam": "Collega", "naam": "Collega", "in_dienst": True}}
+        W.agendagasten_voor, W.agenda._toegang = _voor_veilig, (lambda: "proef")
+        _regels_veilig = W.agendagasten_zetten([
+            _item("klant"), _item("nieuw", titel="!! [HA-KB] partner erbij", _agendagasten=[]),
+            _item("collega", titel="!! [HA-KB] twee gasten", _agendagasten=[]),
+            _item("alleen"), _item("resource"), _item("vers")])
+        _mail_eerste = list(_mail)
+        _staat_eerste = copy.deepcopy(_staat)
+        _regels_later = W.agendagasten_zetten([_item("klant")])
+        _staat["klant"]["attendees"] = [{"email": _partner}]
+        _regels_na_verwijderen = W.agendagasten_zetten([_item("klant")])
+        W.agendagasten_zetten([_item("klant")])
+    finally:
+        (_ur.urlopen, W.mag_schrijven, W._event, W._patch, W.organisatie.agenda_adressen,
+         W.agendagasten_voor, W.agenda._toegang) = (
+            _open_oud, _mag_oud, _lees_oud, _patch_oud, _mensen_oud, _voor_oud, _toegang_oud)
+    _mail_ids_eerste = [url.split("/events/")[-1].split("?")[0] for url, _body in _mail_eerste]
+    _mail_ids_alle = [url.split("/events/")[-1].split("?")[0] for url, _body in _mail]
+    check("H1 partner met klant: geen mail, partner stil en voorstel zonder merk",
+          "klant" not in _mail_ids_eerste and "nieuw" not in _mail_ids_eerste
+          and any(eid == "nieuw" and _partner in {g["email"] for g in body["attendees"]} for eid, body in _stil)
+          and all(W.UITNODIGMERK not in (_staat_eerste[eid].get("extendedProperties") or {}).get("private", {})
+                  for eid in ("klant", "nieuw"))
+          and sum("VOORSTEL" in r and "andere gasten" in r for r in _regels_veilig) >= 2,
+          str(_mail_ids_eerste))
+    check("H1 partner en ontbrekende collega in dezelfde ronde blijven zonder mail",
+          "collega" not in _mail_ids_eerste and any(eid == "collega" and
+          {_partner, _ander} <= {g["email"] for g in body["attendees"]} for eid, body in _stil)
+          and W.UITNODIGMERK not in (_staat["collega"].get("extendedProperties") or {}).get("private", {}),
+          str(_mail_ids_eerste))
+    check("H1 alleen partner en Mehdi als organisator: precies één mail",
+          _mail_ids_eerste.count("alleen") == 1 and
+          _staat["alleen"]["extendedProperties"]["private"][W.UITNODIGMERK] == _partner,
+          str(_mail_ids_eerste))
+    check("H1 resource en nieuwe klant vlak voor mailroute: geen mail en voorstel",
+          not {"resource", "vers"} & set(_mail_ids_eerste)
+          and sum("VOORSTEL" in r and "andere gasten" in r for r in _regels_veilig) >= 4,
+          str(_mail_ids_eerste))
+    check("H1 na verdwijnen klant volgt eenmaal een uitnodiging",
+          _mail_ids_alle.count("klant") == 1 and not any("uitnodiging aan" in r for r in _regels_later)
+          and any("uitnodiging aan" in r for r in _regels_na_verwijderen), str(_mail_ids_alle))
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

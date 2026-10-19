@@ -2449,7 +2449,8 @@ def _afspraak_van_rit(x, items, s0, e0):
 def is_eigen_rit(x):
     """Een ritblok dat de agent zelf maakte: mijn tekst én mijn merk met het eigen ID van het blok. Alleen zo'n blok
     mag hij ooit weghalen of verhuizen. Tot 15-10-2026 volstond de tekst, en een gekopieerd ritblok kon zo verdwijnen
-    (Codex A10). Een oude rit zonder merk werk ik nog bij; hij krijgt zijn merk zodra hij aan zijn afspraak hangt."""
+    (Codex A10). Een oude rit zonder merk wordt niet bijgewerkt: eerst krijgt hij het merk via de gecontroleerde
+    overgang, als hij aantoonbaar aan precies één afspraak hangt."""
     return _rit_tekst(x) and bool(x.get("id")) and (x.get("_merk") or {}).get(RITMERK) == x.get("id")
 
 
@@ -3106,19 +3107,44 @@ def duur_ter_plaatse_zetten(items, tok=None, nu=None):
     return gezet, regels
 
 
+class AndereUitnodigingsgast(ValueError):
+    """De mailpatch zou ook een niet-toegestane gast bereiken."""
+
+
+def _uitnodiging_alleen_partner(attendees, toegestaan):
+    """Ook een resource zonder adres is een andere gast; organisator en Mehdi zelf tellen niet mee."""
+    for gast in attendees or []:
+        if not isinstance(gast, dict) or gast.get("resource"):
+            return False
+        adres = (gast.get("email") or "").strip().lower()
+        if not (gast.get("self") or gast.get("organizer") or adres == WERKAGENDA.lower()
+                or adres in toegestaan):
+            return False
+    return True
+
+
 def _uitnodiging_patch(a, body, tok):
     """Enige mailroute: de toegestane gast op een eigen, komende fysieke afspraak uitnodigen."""
     import urllib.parse
     import urllib.request
     adres = ((body.get("extendedProperties") or {}).get("private") or {}).get(UITNODIGMERK)
     toegestaan = {e.lower() for e in _gastregels().get("uitnodigen_ter_plaatse") or []}
-    gasten = {(g.get("email") or "").lower() for g in body.get("attendees") or []}
+    if not _uitnodiging_alleen_partner(body.get("attendees"), toegestaan):
+        raise AndereUitnodigingsgast("andere gasten in uitnodigingsbody")
+    gasten = {(g.get("email") or "").strip().lower() for g in body.get("attendees") or []}
     if (a.get("kalender") != WERKAGENDA or not a.get("_organisator_zelf") or a.get("_reeks")
             or a.get("hele_dag") or _voorbij(a.get("start") or "", nu_lokaal().isoformat())
             or not _ter_plaatse_voor_uitnodiging(a) or adres not in toegestaan or adres not in gasten):
         raise ValueError("geen toegestane uitnodiging ter plaatse")
     if not mag_schrijven(a["kalender"]):
         raise GeenSchrijfrecht(a["kalender"])
+    # Een collega of klant kan tussen het maken van de body en deze PATCH zijn toegevoegd.
+    vers = _event(a, tok)
+    verse_gasten = vers.get("attendees") or []
+    if not _uitnodiging_alleen_partner(verse_gasten, toegestaan):
+        raise AndereUitnodigingsgast("andere gasten in vers event")
+    if adres not in {(g.get("email") or "").strip().lower() for g in verse_gasten}:
+        raise ValueError("toegestane gast ontbreekt in vers event")
     url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
            f"{urllib.parse.quote(a['id'], safe='')}?sendUpdates=all")
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PATCH",
@@ -3196,9 +3222,18 @@ def agendagasten_zetten(items, tok=None, nu=None):
                     if privaat.get(UITNODIGMERK):
                         uit.append(f"{a['start'][:16]} {_toon(a, 45)}: ander uitnodigingsmerk; geen tweede uitnodiging")
                         continue
+                    voorstel = (f"{a['start'][:16]} {_toon(a, 45)}: VOORSTEL: Catalin staat erop zonder mail: "
+                                 "er staan andere gasten op; stuur de uitnodiging met de hand")
+                    if not _uitnodiging_alleen_partner(vers.get("attendees"), uitnodig_adressen):
+                        uit.append(voorstel)
+                        continue
                     body = {"attendees": vers.get("attendees") or [],
                             "extendedProperties": {"private": {**privaat, UITNODIGMERK: adres}}}
-                    _uitnodiging_patch(a, body, tok)
+                    try:
+                        _uitnodiging_patch(a, body, tok)
+                    except AndereUitnodigingsgast:
+                        uit.append(voorstel)
+                        continue
                     terug = _event(hier, tok)
                     terug_gasten = {(g.get("email") or "").lower() for g in terug.get("attendees") or []}
                     terug_merk = ((terug.get("extendedProperties") or {}).get("private") or {}).get(UITNODIGMERK)
@@ -3390,6 +3425,21 @@ def reistijd_zetten(items, alleen_dag=None, nu=None):
                 uit.append((xs, xe, x))
         return sorted(uit, key=lambda z: z[0])
 
+    def keten_tussen_eindes(grens, aankomst, doel):
+        """Eindes van echte getimede afspraken tussen de vorige buitenplek en de volgende aankomst."""
+        uit = []
+        for x in items:
+            if (x is doel or x.get("hele_dag") or is_eigen_rit(x) or bellen.afgezegd(x)
+                    or "T" not in x.get("start", "") or "T" not in x.get("einde", "")):
+                continue
+            try:
+                xs, xe = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"])
+            except (ValueError, TypeError):
+                continue
+            if xe > nu and grens < xe and xs < aankomst:
+                uit.append(xe)
+        return uit
+
     naar_huis_na = {}
     for rij in per_dag.values():
         for i, (s_, e_, a_, *_r) in enumerate(rij):
@@ -3528,10 +3578,21 @@ def reistijd_zetten(items, alleen_dag=None, nu=None):
                     return x
             return None
         bestaand_heen = heenblok()
-        keten_gat = (bool(keten_einde) and is_eigen_rit(bestaand_heen or {})
-                     and (datetime.fromisoformat(bestaand_heen["start"]) != keten_einde
-                          or (bestaand_heen.get("_merk") or {}).get(KETENMERK) != keten_einde.isoformat()
-                          or not (bestaand_heen.get("_merk") or {}).get(VERTREKMERK)))
+        keten_gat = False
+        if keten_einde and is_eigen_rit(bestaand_heen or {}):
+            merk = bestaand_heen.get("_merk") or {}
+            try:
+                echt_vertrek = datetime.fromisoformat(merk[VERTREKMERK])
+            except (KeyError, ValueError, TypeError):
+                echt_vertrek = None
+            grenzen = keten_tussen_eindes(keten_einde, datetime.fromisoformat(bestaand_heen["einde"]), a)
+            gewenst_begin = max([keten_einde] + [e for e in grenzen if echt_vertrek and e <= echt_vertrek])
+            keten_gat = (datetime.fromisoformat(bestaand_heen["start"]) != gewenst_begin
+                         or merk.get(KETENMERK) != keten_einde.isoformat()
+                         or not echt_vertrek
+                         or not (datetime.fromisoformat(bestaand_heen["start"]) <= echt_vertrek
+                                 <= datetime.fromisoformat(bestaand_heen["einde"]))
+                         or any(e > echt_vertrek for e in grenzen))
         if (bestaand_heen and (terugblok() or not is_laatste) and not keten_gat
                 and (nu.hour >= 8 or start > nu + timedelta(days=8)) and not DAG_ARG):
             al += 2 if is_laatste else 1
@@ -3596,6 +3657,12 @@ def reistijd_zetten(items, alleen_dag=None, nu=None):
             regels.append(f"{a['start'][:16]} {a['titel'][:40]}: aankomst {aankomst:%H:%M} in plaats van "
                           f"{start:%H:%M}, want '{reden_aankomst['titel'][:30]}' doe je geparkeerd, niet rijdend")
         rit_start = aankomst - timedelta(minutes=heen)
+        tussen_eindes = keten_tussen_eindes(keten_einde, aankomst, a) if keten_einde else []
+        if keten_einde:
+            # Een afspraak die na het geplande vertrek eindigt, gaat door de bestaande TE KRAP-route.
+            later = [e for e in tussen_eindes if e > rit_start]
+            if later:
+                vorige_einde = max([e for e in [vorige_einde] if e] + later)
         if vorige_einde and rit_start < vorige_einde:
             ruimte = (aankomst - vorige_einde).total_seconds() / 60
             if ruimte < heen - BUFFER_MIN:
@@ -3624,7 +3691,8 @@ def reistijd_zetten(items, alleen_dag=None, nu=None):
             if vorige_einde and rit_start < vorige_einde:
                 rit_start = vorige_einde
         laatste_vertrek = rit_start
-        blok_start = keten_einde if keten_einde and keten_einde < laatste_vertrek else rit_start
+        blok_start = (max([keten_einde] + [e for e in tussen_eindes if e <= laatste_vertrek])
+                      if keten_einde and keten_einde < laatste_vertrek else rit_start)
         wacht_min = int((laatste_vertrek - blok_start).total_seconds() // 60)
         vertrek_min = int((start - laatste_vertrek).total_seconds() // 60)
         # Terug: valt er een extern gesprek tijdens de rit naar huis, dan doet hij het eerst

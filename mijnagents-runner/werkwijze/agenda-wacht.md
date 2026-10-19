@@ -1,10 +1,11 @@
 # Werkwijze van De Agendawacht (Privé)
 
-Aanvulling v8.19 (19-10-2026): barsten en scheuren ter plaatse krijgen altijd twee uur. Een eigen werkafspraak
+Aanvulling v8.20 (19-10-2026): barsten en scheuren ter plaatse krijgen altijd twee uur. Een eigen werkafspraak
 zonder gasten of reeks wordt verlengd als het verlengde stuk vrij is; anders komt een VR-vraag of een bevinding in
-het werkverslag. Een bewust opnieuw ingekorte afspraak met `agendawacht_duur` blijft zo. Bij een rechtstreekse
-ketenrit begint het bezette blok op het einde van de vorige buitenafspraak. `agendawacht_vertrek` bewaart het echte
-laatste vertrek voor bellen en de melding. Zo blijft er tussen twee afspraken geen boekbaar gat.
+het werkverslag. Een bewust opnieuw ingekorte afspraak met `agendawacht_duur` blijft zo. De uitnodigingsroute mailt
+alleen als de partner de enige niet-eigen gast is, en een rechtstreekse ketenrit begint na de laatste getimede
+tussenafspraak op een gelezen agenda of, als die ontbreekt, na de vorige buitenafspraak. `agendawacht_vertrek`
+bewaart het echte laatste vertrek voor bellen en de melding.
 
 Aanvulling v8.18 (19-10-2026): Catalin (Harmoniebouw) krijgt eenmaal een uitnodiging met mail bij een afspraak
 ter plaatse met fysiek adres (besluit Mehdi 18-10-2026); online, intern en reeksen blijven zonder mail. Zie de
@@ -173,8 +174,8 @@ Robby elevait-Leverancie online"). Ik zet de afspraak in een keer goed:
   lezen is, behandel ik als onbekend. Dan zet ik geen ritten naar buiten (of voor Lara), ruim ik geen ritten op,
   vergelijk ik de mail niet met de agenda (de statussen blijven staan) en zet ik geen zorgblok of mailmelding; wel een nood.
 - **Een rit is van mij** als hij mijn tekst draagt én mijn merk `agendawacht_rit` met zijn eigen ID. Alleen zo'n rit haal
-  ik weg of verhuis ik; een kopie heeft een ander ID. Een oude rit zonder merk werk ik alleen bij; hij krijgt zijn merk
-  zodra hij aan zijn afspraak hangt.
+  ik weg, verhuis ik of werk ik bij; een kopie heeft een ander ID. Een oude rit zonder merk krijgt eerst het merk via
+  de gecontroleerde overgang zodra hij aantoonbaar aan precies één afspraak hangt.
 - **ZL** zet of haal ik alleen zelf weg op een eigen afspraak zonder gasten; met gasten of door een ander gezet is het een
   voorstel, en bij Calendly nooit. Alleen een vergaderlink (Zoom, Meet, Teams, Whereby, Webex) telt als link.
 - **Agendagasten in een reeks**: alleen wie in de titel van de reeks zelf staat; een naam in een keer komt op die keer.
@@ -352,8 +353,9 @@ geen reistijd, geen titelfout. Ik laat hem staan, ook als ik een week leegmaak.
 
 ## Reistijd en botsingen (mandaat van Mehdi, 11-09-2026)
 
-- Bij een rit rechtstreeks van de vorige buitenafspraak begint het blok op het einde van die afspraak, ook als er
-  wachttijd tot het laatste vertrek is. De ritomschrijving noemt die wachttijd; `agendawacht_keten_vanaf` en
+- Bij een rit rechtstreeks van de vorige buitenafspraak begint het blok na de laatste getimede tussenafspraak op een
+  gelezen agenda, anders op het einde van de vorige buitenafspraak, ook als er wachttijd tot het laatste vertrek is.
+  De ritomschrijving noemt die wachttijd; `agendawacht_keten_vanaf` en
   `agendawacht_vertrek` staan naast het ritmerk. Het belrooster leest het echte vertrek uit het merk, ook na
   nacontrole. Een Google-herinnering op een rit kan alleen vóór het blokbegin afgaan: bij wachttijd is de rit stil en
   geeft de afspraak de vertrekmelding vijf minuten vóór het echte vertrek. Vanaf thuis blijft de tijd thuis vrij.
@@ -406,12 +408,15 @@ geen reistijd, geen titelfout. Ik laat hem staan, ook als ik een week leegmaak.
 - Een adres met een naam vooraan (`Brasserie 360°, Stadsplein 16, 3600 Genk`) zoek ik
   zonder die naam als het anders niet lukt.
 - Een zelf ingetikte **"Rijden naar huis"** telt ook als rit naar huis in de keten.
-- **Gesprekken in de auto** (mandaat van Mehdi, 23-09-2026): een intern overleg mag hij
-  online voeren tijdens het rijden. Een **extern** gesprek (klant, prospect, leverancier,
+- **Gesprekken in de auto** (mandaat van Mehdi, 23-09-2026): een getimed intern overleg tussen twee bezoeken
+  onderbreekt het ketenblok. Een **extern** gesprek (klant, prospect, leverancier,
   B2B, Calendly) alleen **geparkeerd, nooit rijdend**. Valt er een tijdens de heenrit, dan
   komt hij aan voor het begint en doet hij het ter plaatse in de auto; de rit eindigt dan op
   het begin van dat gesprek. Op de terugweg vertrekt hij pas na het gesprek. Voorbeeld
   Genk 24-09: vertrek 10:00, aankomst 11:00, 11:00-11:20 Rem Braspenning, 11:30 brasserie.
+  Bekende beperking voor een volgende ronde: eindigt een geparkeerd extern gesprek om 13:50 na een rit die om
+  13:20 aankwam voor een bezoek om 14:15, dan kan 13:50-14:15 nog boekbaar blijven; de nacontrole kan bij zo'n
+  vroeg eindigende rit ook het belmoment verkeerd terugrekenen.
 - **Nooit twee rondes tegelijk.** Ik neem een slot voor ik schrijf; een tweede ronde
   wacht. Op 21-09-2026 maakten twee rondes tegelijk ritten.
 - **Dinsdag, elke week vanaf 22-09-2026, op de agenda van Lara**: 17:10 rit thuis
@@ -521,7 +526,9 @@ plaatse op de werkagenda die Mehdi zelf organiseert. Een fysiek adres staat in d
 `!!`, een buitendienst of soort KB/PB/LB/AB/XB. Bij een online, interne of privé-afspraak, een afspraak zonder adres of een
 reeks verstuur ik niets; een reeks meld ik als voorstel. De aparte uitnodigingsroute bewaart zijn adres als
 `agendawacht_uitgenodigd` in de private agenda-eigenschappen. Ik lees daarna gast en merk terug. Alle andere
-agenda-wijzigingen blijven zonder mail.
+agenda-wijzigingen blijven zonder mail. Staan een klant, collega of resource ook op de afspraak, dan zet ik Catalin
+stil als gast, zonder uitnodigingsmerk, en stel ik voor de uitnodiging met de hand te versturen; verdwijnen die gasten,
+dan kan de eenmalige uitnodiging nog volgen.
 
 Mail als afsprakenbron (audit 02-10-2026, FR-101): in elke volledige ronde lees ik mch@h-architects.be en
 mehdichegini@hotmail.com, twee weken terug, alleen lezen (via de postdienst op de server, Hotmail met zijn eigen
@@ -600,11 +607,13 @@ Wat ik daaruit meeneem:
   de activiteit uit de woorden, de firma uit de activiteit, klant en soort uit de deal op dat adres. Zit ik vast
   bij een afspraak binnen 48 uur, dan bel ik Mehdi een keer (08:00-20:00) met een zin wat hij moet doen.
 - Barsten en scheuren ter plaatse duren twee uur vanaf het bestaande begin. Ik herken `barst` en `scheur` als
-  woordbegin in titel, plaats of omschrijving, ook in samenstellingen. Een eigen toekomstige werkafspraak zonder
+  woordbegin in titel, plaats of omschrijving, ook in samenstellingen; de omschrijving telt met opzet mee omdat bij
+  een UNABO-bezoek "barsten en scheuren" vaak alleen daar staat. Een eigen toekomstige werkafspraak zonder
   gasten of reeks verleng ik als het verlengde stuk vrij is; gemerkte eigen ritten herbereken ik daarna. Ik schrijf
   `agendawacht_duur=120`, zet de vaste regel onderaan de omschrijving en lees terug. Een botsing wordt een VR-vraag,
-  een afspraak zonder titelrecht een bevinding in het werkverslag. Een afspraak die daarna bewust korter gemaakt
-  wordt en het merk behoudt, laat ik staan zonder nieuwe vraag.
+  een afspraak zonder titelrecht een bevinding in het werkverslag. Een afspraak die al korter stond vóór het merk,
+  verleng ik één keer; een latere inkorting door Mehdi met behoud van het merk laat ik staan zonder nieuwe vraag.
+  Een geparkeerd gesprek binnen een ketenblok is aanvaard.
 - Ik verwijder nooit een afspraak. Moet iets weg, dan zeg ik duidelijk wat en waarom en wacht ik op een ja.
 - Twee afspraken met iemand van buiten tegelijk, op welke agenda ook: binnen 48 uur bel ik Mehdi een keer met een
   zin. Elk boekingskanaal moet alle agenda's als bezet meetellen; er is nog een: Calendly General (FR-57).
