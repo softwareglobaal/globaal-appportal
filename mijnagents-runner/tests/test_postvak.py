@@ -377,6 +377,10 @@ def test_uitschrijven_alleen_een_ondertekende_knop_van_de_afzender():
     assert U.beoordeel(_nieuwsbrief(knop="https://unsub.ander-bedrijf.be/u"), "rommel", "", eigen, bekend, veilig, True) == \
         (None, "knop niet bij de afzender of een bekend verzendbedrijf")
     assert U.beoordeel(_nieuwsbrief(knop="https://x.sendgrid.net/u"), "rommel", "", eigen, bekend, veilig, True)[0], "SendGrid wel"
+    for host in ("a.klaviyo.kmail-lists.com", "x.mjt.lu", "t.hubspotemail-eu1.net"):
+        assert U.beoordeel(_nieuwsbrief(knop=f"https://{host}/u"), "rommel", "", eigen, bekend, veilig, True)[0], host
+    assert U.beoordeel(_nieuwsbrief(knop="https://www.flyingblue.com/u"), "rommel", "", eigen, bekend, veilig, True)[0] is None, \
+        "een ander domein van hetzelfde bedrijf is geen verzendbedrijf"
     zonder_telling = {k: v for k, v in _nieuwsbrief().items() if k != "uitschrijfkoppen"}
     assert U.beoordeel(zonder_telling, "rommel", "", eigen, bekend, veilig, True)[0] is None, "zonder telling: weigeren (K3)"
     platform = dict(alleen_esp, van="nieuws@klant.mcsv.net")

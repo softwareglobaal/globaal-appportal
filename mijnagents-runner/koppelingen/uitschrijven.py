@@ -107,7 +107,11 @@ PLATFORMEN = ("sendgrid.net", "sendgrid.com", "list-manage.com", "mailchimp.com"
               "createsend.com", "cmail19.com", "cmail20.com", "emarsys.net", "postmarkapp.com", "mailpro.com",
               "activehosted.com", "acems1.com", "getresponse.com", "aweber.com", "substack.com", "beehiiv.com",
               "mailchi.mp", "convertkit.com", "ck.page", "sendpulse.com", "moosend.com", "sendfox.com", "omnisend.com",
-              "flexmail.eu", "selligent.com", "slgnt.eu", "eloqua.com", "en25.com", "pardot.com")
+              "flexmail.eu", "selligent.com", "slgnt.eu", "eloqua.com", "en25.com", "pardot.com",
+              # gezien in de postvakken op 20-10-2026 (droge run): Klaviyo, Mailjet, HubSpot EU, Qualtrics, Prezly,
+              # Bloomreach, Acoustic, Shopify
+              "kmail-lists.com", "mjt.lu", "hubspotemail-eu1.net", "qemailserver.com", "qualtrics.com", "prezly.com",
+              "prezlymail.com", "exponea.com", "emlmkt.com", "spmta.com", "shopifyemail.com", "shopifyapps.com")
 ANTWOORD_OF_DOORGESTUURD = re.compile(r"^\s*(re|antw|aw|fw|fwd|tr|wg|doorst)\s*:", re.I)
 KLANT_DAGEN = 730           # wie we in twee jaar mailden, vanuit welk postvak ook, is een klant (X3, K2)
 KLANT_PLAFOND = 20000       # zoveel verzonden berichten per map; meer is niet volledig gelezen, en dan niemand uitschrijven
