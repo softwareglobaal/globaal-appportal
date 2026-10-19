@@ -21,14 +21,21 @@ De soorten, van stil naar luid:
   koud      een mens die we niet kennen, zonder aanvraag (koude verkoop): alleen geteld
   melding   automatisch bericht zonder gevolg (pakje, bestelling): alleen geteld
   actie     automatisch bericht met gevolg (betaling mislukt, e-Box): zeven dagen op de lijst
-  midden    een bekend contact, een lopend gesprek of een aanvraag: opvolgen na twee werkdagen
+  midden    een bekend contact, een lopend gesprek of een aanvraag: opvolgen na een werkdag
   hoog      een mens met een rol of woord met gevolg (bank, overheid, aanmaning): meteen opvolgen
+
+Een bron voor wat openstaat (driehoeksoverleg 19-10-2026, 3-0): elke wacht geeft per bericht zijn opvolging door aan
+de bord-tabel mailbericht (/api/mail): open, onzeker, beantwoord, doorgezet, wacht, verlopen of geen. Wat Mehdi op
+/mail beslist (afgehandeld, doorgezet, ruis) staat ernaast en overschrijft de wacht nooit. Het maildashboard, De
+Mailregisseur, zijn 08:00-bericht en het werkverslag van de wacht tellen alleen daaruit. Beantwoord betekent: een
+verzonden bericht verwijst in zijn draad (In-Reply-To of References) naar dit bericht, uit welk postvak ook.
 """
 import email
 import json
 import os
 import re
 import sys
+import urllib.parse
 from datetime import datetime, timedelta
 from email.utils import parseaddr, parsedate_to_datetime
 from zoneinfo import ZoneInfo
@@ -40,7 +47,7 @@ os.environ.setdefault("POSTBUS_CONFIG", os.path.expanduser("~/post-config/mailbo
 BRUSSEL = ZoneInfo("Europe/Brussels")
 WACHTEN = os.path.join(RUNNER, "werkwijze", "mailwachten.json")
 
-OPVOLGEN_NA_WERKDAGEN = 2   # een gewoon bericht zonder antwoord wordt na zoveel werkdagen een opvolgpunt
+OPVOLGEN_NA_WERKDAGEN = 1   # een gewoon bericht zonder antwoord wordt na zoveel werkdagen een opvolgpunt (2 tot 19-10-2026)
 TERUG_DAGEN = 30            # zover kijken we terug: naar berichten die op antwoord wachten, en voor de cijfers
 ACTIE_DAGEN = 7             # zolang blijft een automatisch bericht met gevolg op de lijst
 BEKEND_DAGEN = 180          # wie we in deze periode mailden, is een bekend contact
@@ -75,7 +82,14 @@ MELDING_AFZENDERS = ["noreply", "no-reply", "donotreply", "robot@", "notificatio
                      "mailer-daemon", "postmaster", "bpost", "dpdgroup", "postnl", "shopify", "zendesk", "sales@one.com",
                      "statement", "billing@", "invoice@", "facturatie@"]
 MELDING_ONDERWERPEN = ["order overview", "order is being processed", "bestelling", "verzending", "pakje", "pakket",
-                       "statement", "welcome to", "password", "wachtwoord", "import rapport", "uitgavenstaat"]
+                       "statement", "welcome to", "password", "wachtwoord", "import rapport", "uitgavenstaat",
+                       # 19-10-2026: kwamen boven toen gewone mail na een werkdag op de lijst kwam (KLM, stadsarchief)
+                       "boeking is bevestigd", "check-in is begonnen", "uw download van"]
+# De kopieermachine (Konica Minolta bizhub C258) mailt scans als "Message from KM_C258". Gemeten 19-10-2026: 38 berichten
+# in mailbericht, 11 van de 26 berichten van een eigen domein bij mch@ in twee weken. Alleen op het exacte adres, niet op
+# het onderwerp (dat kan iedereen nabootsen). Een collega die een scan doorstuurt ("Fwd: Message from KM_C258") is een
+# mens en blijft een gewoon bericht.
+SCANNERS = ("scan@harmoniebouw.be",)
 # Automatische antwoorden. Vooraan in het onderwerp: afwezigheid. Overal: ontvangstbevestigingen van een loket.
 AUTO_BEGIN = re.compile(r"^\s*(automatisch antwoord|automatic reply|auto(matic)?[- ]?reply|out of office|afwezig|absence|"
                         r"r[ée]ponse automatique|automatische antwort)", re.I)
@@ -90,6 +104,10 @@ NIET_BEZORGD = re.compile(r"(undeliver|niet (be)?bezorgd|onbestelbaar|delivery (
 # Een afzender die zich voordoet als bank of overheid vanaf een gratis mailadres is verdacht:
 # nooit doorgeven als belangrijk, wel tellen. Gezien 25-09-2026: "My MINFIN" van een gmail-adres.
 GRATIS = ("gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "live.com", "icloud.com")
+# Gratis maildiensten en providers: een heel domein daarvan raakt iedereen. Nooit automatisch opruimen op zo'n domein
+# (zelfde lijst als MAIL_GEEN_DOMEIN op het bord, zonder de eigen groep).
+GRATIS_DIENSTEN = ("gmail.com", "googlemail.com", "hotmail.com", "hotmail.be", "outlook.com", "outlook.be", "live.com",
+                   "live.be", "yahoo.com", "icloud.com", "me.com", "telenet.be", "skynet.be", "proximus.be")
 VERDACHTE_NAMEN = ["minfin", "fod financi", "belastingdienst", "kbc", "belfius", "ing ", "itsme", "politie", "bpost"]
 GESPREK = re.compile(r"^\s*(re|antw|aw|sv|fw|fwd|tr)\s*:", re.I)
 # Dringend: hiervoor mag De Mailregisseur De Bode vragen Mehdi te bellen (Mehdi, 26-09-2026: "voor de urgente zaken kan
@@ -110,6 +128,7 @@ DATA = os.path.expanduser("~/appportal/mijnagents-data")
 REGELMAP = os.path.join(RUNNER, "mailregels")   # sorteerregels per postvak; ook de Mac-tools lezen hier (26-9-2026)
 SORTEER_DAGEN = 3           # de nieuwe mail van zoveel dagen wordt elke ronde gesorteerd, zoals de ochtendtaak van 24-9
 BRON_VERS_UREN = 3          # een kopie van de Mac die ouder is dan dit, meld ik als niet vers
+VERZONDEN_PLAFOND = 5000    # zoveel verzonden berichten per map lees ik hoogstens; meer is niet volledig gelezen
 
 
 def mappen_van(adres):
@@ -226,6 +245,15 @@ def automatisch_antwoord(onderwerp):
     return bool(AUTO_BEGIN.match(o) or AUTO_OVERAL.search(o))
 
 
+def automatisch(b):
+    """Is dit een automatisch bericht (geen mens)? Volgens de bron zelf ('automatisch', Mail op de Mac), de afzender
+    (noreply, scan@, ...) of het onderwerp (bestelling, pakje, de kopieermachine)."""
+    van, naam = (b.get("van") or "").lower(), (b.get("van_naam") or "").lower()
+    o = schoon(b.get("onderwerp")).lower()
+    return (bool(b.get("automatisch")) or any(a in van or a in naam for a in MELDING_AFZENDERS)
+            or any(m in o for m in MELDING_ONDERWERPEN) or van in SCANNERS)
+
+
 def regel_voor(regels, postvak_adres, van):
     """De beslissing van Mehdi over deze afzender (op het maildashboard): 'belangrijk', 'ruis' of 'opruimen',
     of ''. Een regel op het adres gaat voor een regel op het domein (@domein); een regel voor dit postvak
@@ -261,14 +289,12 @@ def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel=""):
         return "melding", "herinnering aan een afspraak"
     rol = next((r for r, delen in ROLLEN.items() if any(d in f"{van} {naam} {o}" for d in delen)), "")
     woord = _woord(o)
-    automatisch = (bool(b.get("automatisch")) or any(a in van or a in naam for a in MELDING_AFZENDERS)
-                   or any(m in o for m in MELDING_ONDERWERPEN))
     reclame = any(d in van for d in ROMMEL_DOMEINEN) or any(w in o for w in ROMMEL)
     if reclame and not woord:
         return "rommel", "reclame, nieuwsbrief of afmelding"
     if b.get("lijst") and rol not in HOOG_ROLLEN and not woord:
         return "melding", "mailinglijst of nieuwsbrief"
-    if automatisch:
+    if automatisch(b):
         return ("actie", f"automatisch, woord '{woord}'") if woord else ("melding", "automatisch bericht")
     if rol in HOOG_ROLLEN or woord:
         return "hoog", ", ".join(x for x in (f"rol {rol}" if rol else "", f"woord '{woord}'" if woord else "") if x)
@@ -298,23 +324,106 @@ def _datum(b):
         return None
 
 
-def beantwoord(van_adres, na, verzonden, afwezig=None):
-    """Is er na dit moment iets verstuurd naar deze afzender, vanuit een van de postvakken van de firma?
-    Een afwezigheidsbericht van die afzender na dit moment telt ook: dan heeft iemand hem gemaild,
-    misschien vanuit een postvak dat ik niet lees (gezien 23-09-2026 bij KBC Verzekeringen)."""
-    if afwezig and any(d >= na for d in afwezig.get(van_adres, [])):
-        return True
+# Beantwoord via de draad (driehoeksoverleg 19-10-2026, 3-0). Tot dan gold "na de ontvangst iets verstuurd naar dat
+# adres" als beantwoord, los van het onderwerp: een belangrijk bericht verdween van de lijst zodra iemand die afzender
+# om een andere reden mailde. Nu sluit alleen een verzonden bericht dat rechtstreeks op dit bericht antwoordt
+# (In-Reply-To). References bevat de hele draad: een antwoord op een later bericht in dezelfde draad zegt niet dat deze
+# vraag beantwoord is, dus dat wordt onzeker (ontwerptoets 19-10-2026, Claude O5, 3-0).
+VOORVOEGSEL = re.compile(r"^\s*((re|antw|aw|sv|fw|fwd|tr|wg|doorgestuurd|forwarded)\s*(\[\d+\])?\s*:\s*)+", re.I)
+DOORGESTUURD = re.compile(r"^\s*(fw|fwd|tr|wg|doorgestuurd|forwarded)\s*:", re.I)
+MSGID = re.compile(r"<[^<>\s]+>")
+
+
+def kern(onderwerp):
+    """Het onderwerp zonder Re:, Antw:, Fwd: en dergelijke, in kleine letters, met enkele spaties."""
+    return VOORVOEGSEL.sub("", schoon(onderwerp)).strip().lower()
+
+
+def wie_is(b):
+    """De sleutels waarmee een antwoord naar dit bericht kan verwijzen: de Message-ID, of de hash van Mail op de Mac."""
+    k = {m.lower() for m in MSGID.findall(b.get("message_id") or "")}
+    if b.get("draad"):
+        k.add("#" + str(b["draad"]))
+    return k
+
+
+def antwoordt_op(s):
+    """Waarop dit (verzonden) bericht rechtstreeks antwoordt: In-Reply-To. Van de Mac komt alleen de reeks verwijzingen
+    (message_references, in de volgorde van de kop); de laatste daarvan is volgens RFC 5322 het bericht waarop geantwoord
+    wordt."""
+    k = {m.lower() for m in MSGID.findall(s.get("in_antwoord_op") or "")}
+    if s.get("verwijst"):
+        k.add("#" + str(list(s["verwijst"])[-1]))
+    return k
+
+
+def in_draad(s):
+    """Alles waarnaar dit bericht in zijn draad verwijst: In-Reply-To en References (of de hashes van de Mac)."""
+    k = {m.lower() for m in MSGID.findall(" ".join([s.get("in_antwoord_op") or ""] + list(s.get("verwijzingen") or [])))}
+    return k | {"#" + str(h) for h in s.get("verwijst") or []}
+
+
+def antwoord_index(verzonden):
+    """Een keer per ronde: de verzonden post, op rechtstreeks antwoord, op draad en op ontvanger."""
+    antw, draad, aan = {}, {}, {}
     for s in verzonden:
         d = _datum(s)
-        if d and d >= na and any(van_adres == _adres(a) for a in (s.get("aan") or []) + (s.get("cc") or [])):
-            return True
-    return False
+        if not d:
+            continue
+        for k in antwoordt_op(s):
+            antw.setdefault(k, []).append((d, s))
+        for k in in_draad(s):
+            draad.setdefault(k, []).append((d, s))
+        for a in (s.get("aan") or []) + (s.get("cc") or []):
+            if _adres(a):
+                aan.setdefault(_adres(a), []).append((d, kern(s.get("onderwerp")), s))
+    return {"antw": antw, "draad": draad, "aan": aan}
 
 
-def ronde(naam, ag, r, nu=None, regels=None):
+def _eerste(index, sleutels):
+    return sorted({id(s): (ds, s) for k in sleutels for ds, s in index.get(k, [])}.values(), key=lambda x: x[0])
+
+
+def antwoord(b, d, index, afwezig=None):
+    """(opvolging, door, wanneer, naar) voor een ontvangen bericht b met datum d.
+      beantwoord  een verzonden bericht antwoordt rechtstreeks op b (In-Reply-To); door = het postvak dat antwoordde,
+                  ook een ander dan dat van b
+      doorgezet   idem, maar doorgestuurd (Fwd:, TR:, ...); naar = de eerste ontvanger
+      onzeker     geen rechtstreeks antwoord, maar een verzonden bericht noemt b in zijn draad (References), of na d ging
+                  er een mail met hetzelfde onderwerp naar die afzender, of hij stuurde een afwezigheidsbericht op zo'n
+                  mail: misschien beantwoord; blijft op de lijst, met wie en wanneer
+      open        anders. Een ander onderwerp naar dezelfde afzender sluit niets."""
+    sleutels = wie_is(b)
+    rechtstreeks = _eerste(index["antw"], sleutels)
+    antw = [(ds, s) for ds, s in rechtstreeks if not DOORGESTUURD.match(schoon(s.get("onderwerp")))]
+    if antw:
+        ds, s = antw[0]
+        return "beantwoord", (s.get("van") or "").lower(), ds.isoformat(), ""
+    if rechtstreeks:
+        ds, s = rechtstreeks[0]
+        naar = next((_adres(a) for a in (s.get("aan") or []) if _adres(a)), "")
+        return "doorgezet", (s.get("van") or "").lower(), ds.isoformat(), naar
+    in_dezelfde = _eerste(index["draad"], sleutels)
+    if in_dezelfde:
+        ds, s = in_dezelfde[0]
+        return "onzeker", (s.get("van") or "").lower(), ds.isoformat(), ""
+    van, onder = (b.get("van") or "").lower(), kern(b.get("onderwerp"))
+    if len(onder) >= 4:
+        for ds, k, s in sorted(index["aan"].get(van, []), key=lambda x: x[0]):
+            if ds >= d and k == onder:
+                return "onzeker", (s.get("van") or "").lower(), ds.isoformat(), ""
+        for ds, ond in sorted((afwezig or {}).get(van, [])):
+            if ds >= d and onder in kern(ond):
+                return "onzeker", "afwezigheidsbericht van de afzender", ds.isoformat(), ""
+    return "open", "", "", ""
+
+
+def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
     """Een ronde van mailwacht `naam`. `ag` is de bord.Agent (of iets met log), `r` de lopende Ronde.
-    Geeft (items voor de Mailregisseur, telling, rijen voor de gesprekkentabel, alle beoordeelde berichten
-    voor het maildashboard)."""
+    `oude`: wat volgens het bord voor deze wacht openstaat (/api/mail/open); wat ouder is dan mijn venster, toets ik ook
+    aan de verzonden post, zodat een laat antwoord het nog sluit. `veilig`: domeinen die volgens het bord ooit iets
+    belangrijks stuurden of beantwoord werden (/api/mail/veilig); die ruim ik nooit automatisch op.
+    Geeft (wat openstaat, telling, rijen voor de gesprekkentabel, alle beoordeelde berichten voor het maildashboard)."""
     nu = nu or datetime.now(BRUSSEL)
     cfg = wachten()[naam]
     r.bron("mailwachten.json", json.dumps(cfg, ensure_ascii=False, sort_keys=True))
@@ -322,21 +431,38 @@ def ronde(naam, ag, r, nu=None, regels=None):
     sinds = (nu - timedelta(days=TERUG_DAGEN)).date().isoformat()
     tel = {s: 0 for s in ("hoog", "midden", "actie", "melding", "koud", "rommel", "verdacht")}
     tel["open"] = 0
-    verzonden = []
+    # De verzonden post van elk postvak dat kan antwoorden. Is die niet volledig gelezen (een map onleesbaar, of meer dan
+    # het plafond), dan zegt het bord een eerder gevonden antwoord niet af (verzonden_volledig) en ruim ik geen reclame op:
+    # een contact dat ik niet zag, is nog geen onbekende (ontwerptoets 19-10-2026, Codex O1 en O3).
+    verzonden, onvolledig = [], []
     for adres in dict.fromkeys(cfg.get("antwoord_vanuit", []) + cfg["postvakken"]):
         mb = postvak(adres)
         if not mb:
+            onvolledig.append(f"{adres} staat niet in de postbus")
             continue
+        gelezen = False
         for m in VERZONDEN:
             if mb.get("mappen") and m not in mb["mappen"]:
                 continue
             try:
-                verzonden += koppen(adres, m, sinds=(nu - timedelta(days=BEKEND_DAGEN)).date().isoformat(), plafond=1500)
+                deel = koppen(adres, m, sinds=(nu - timedelta(days=BEKEND_DAGEN)).date().isoformat(), plafond=VERZONDEN_PLAFOND)
             except Exception:  # noqa: BLE001
-                pass  # niet elk postvak heeft elke variant van Verzonden
+                continue  # niet elk postvak heeft elke variant van Verzonden
+            gelezen = True
+            verzonden += deel
+            if len(deel) >= VERZONDEN_PLAFOND:
+                onvolledig.append(f"{adres} {m}: meer dan {VERZONDEN_PLAFOND} verzonden berichten in {BEKEND_DAGEN} dagen")
+        if not gelezen:
+            onvolledig.append(f"{adres}: geen map Verzonden leesbaar")
+    if onvolledig:
+        r.nood("Verzonden post niet volledig gelezen: gevonden antwoorden blijven staan, reclame wordt niet opgeruimd",
+               wie="claude-code")
+        ag.log("verzonden", "bron", "; ".join(onvolledig))
     bekend = frozenset(_adres(a) for s in verzonden for a in (s.get("aan") or []) + (s.get("cc") or []) if _adres(a))
     tel["verzonden_gelezen"], tel["bekende_contacten"] = len(verzonden), len(bekend)
-    items, rijen, alle = [], [], []
+    tel["verzonden_volledig"] = not onvolledig
+    index = antwoord_index(verzonden)
+    rijen, alle = [], []
     for adres in cfg["postvakken"]:
         mb = postvak(adres)
         if not mb:
@@ -356,19 +482,36 @@ def ronde(naam, ag, r, nu=None, regels=None):
         afwezig = {}
         for b in berichten:
             if automatisch_antwoord(b.get("onderwerp")) and _datum(b):
-                afwezig.setdefault(b.get("van", ""), []).append(_datum(b))
+                afwezig.setdefault((b.get("van") or "").lower(), []).append((_datum(b), b.get("onderwerp") or ""))
         for b in berichten:
             d = _datum(b)
             if not d:
                 continue
-            soort, waarom = trieer(b, eigen, bekend, regel_voor(regels, adres, b.get("van")))
+            regel = regel_voor(regels, adres, b.get("van"))
+            soort, waarom = trieer(b, eigen, bekend, regel)
             ond = schoon(b.get("onderwerp"))
-            antw = (soort in ("hoog", "midden") and _domein(b.get("van", "")) not in eigen
-                    and beantwoord(b.get("van", ""), d, verzonden, afwezig))
+            wacht = werkdagen_tussen(d, nu)
+            opvolging, door, wanneer, naar = "geen", "", "", ""
+            if soort == "actie":
+                opvolging = "verlopen" if d < nu - timedelta(days=ACTIE_DAGEN) else "open"
+            elif soort in ("hoog", "midden"):
+                # Eigen domein: alleen een automatisch bericht is geen opvolgpunt; een collega die iets vraagt wel (19-10-2026).
+                if _domein(b.get("van", "")) in eigen and automatisch(b) and regel != "belangrijk":
+                    opvolging = "geen"
+                else:
+                    opvolging, door, wanneer, naar = antwoord(b, d, index, afwezig)
+                    if opvolging in ("open", "onzeker") and soort == "midden" and wacht < OPVOLGEN_NA_WERKDAGEN:
+                        opvolging = "wacht"
+            dringend = bool(soort in ("hoog", "actie") and DRINGEND.search(f"{ond} {b.get('van_naam') or ''}"))
             alle.append({"uniek": f"{adres}:{(b.get('message_id') or b.get('uid'))}"[:250], "wacht": naam, "postvak": adres,
                          "map": b.get("map_") or "", "datum": d.isoformat(), "van": (b.get("van") or "").lower(),
                          "van_naam": (b.get("van_naam") or "")[:120], "onderwerp": ond[:300], "soort": soort,
-                         "waarom": kort_waarom(waarom), "lijst": 1 if b.get("lijst") else 0, "beantwoord": 1 if antw else 0})
+                         "waarom": kort_waarom(waarom), "mailinglijst": 1 if b.get("lijst") else 0,
+                         "beantwoord": 1 if opvolging in ("beantwoord", "doorgezet") else 0,
+                         "message_id": (b.get("message_id") or "")[:250], "opvolging": opvolging,
+                         "antwoord_door": door[:120], "antwoord_ts": wanneer, "antwoord_naar": naar[:120],
+                         "stap": stap(soort, opvolging, door, wanneer, naar), "dringend": 1 if dringend else 0,
+                         "werkdagen": wacht, "regel": regel, "auto_opruimen": ""})
             if d >= nu - timedelta(days=1):
                 tel[soort] += 1
                 if soort in ("hoog", "midden", "actie"):
@@ -378,32 +521,98 @@ def ronde(naam, ag, r, nu=None, regels=None):
                                   "afdeling": cfg.get("afdeling", ""), "thema": ond[:90], "project": "", "prive": 0,
                                   "zekerheid": "middel", "waarom": f"{soort}; {waarom}", "archief": "", "link": "",
                                   "opgenomen_door": adres, "bron": "mail"})
-            wacht = werkdagen_tussen(d, nu)
-            if soort == "actie":
-                if d < nu - timedelta(days=ACTIE_DAGEN):
-                    continue
-            elif soort == "hoog":
-                if _domein(b.get("van", "")) in eigen or beantwoord(b.get("van", ""), d, verzonden, afwezig):
-                    continue
-            elif soort == "midden":
-                if (wacht < OPVOLGEN_NA_WERKDAGEN or _domein(b.get("van", "")) in eigen
-                        or beantwoord(b.get("van", ""), d, verzonden, afwezig)):
-                    continue
-            else:
-                continue
-            tel["open"] += 1
-            mid = (b.get("message_id") or f"{adres}:{b['uid']}")[:150]
-            items.append({"voor": "mail-regisseur", "soort": "mail", "sleutel": cfg.get("firma", ""),
-                          "titel": f"{cfg.get('firma', '')}: {(b.get('van_naam') or b.get('van') or '').strip()[:40]} · {ond[:80]}",
-                          "uniek": f"opvolgen:{naam}:{mid}",
-                          "inhoud": {"postvak": adres, "van": b.get("van"), "van_naam": b.get("van_naam"), "onderwerp": ond,
-                                     "datum": d.isoformat(), "uid": b.get("uid"), "soort": soort, "waarom": waarom,
-                                     "werkdagen_zonder_antwoord": wacht,
-                                     "dringend": bool(soort in ("hoog", "actie") and DRINGEND.search(f"{ond} {b.get('van_naam') or ''}")),
-                                     "voorstel": {"actie": "nakijken en regelen (automatisch bericht, geen antwoord mogelijk)",
-                                                  "hoog": "beantwoorden of regelen",  # het waarom staat er al naast
-                                                  "midden": "beantwoorden of doorzetten naar wie het opvolgt"}[soort]}})
+    # Een open punt ouder dan mijn venster: komt er nog een antwoord, dan sluit het ook (ontwerptoets 19-10-2026, Codex O4).
+    mijn = {a.lower() for a in cfg["postvakken"]}
+    gezien = {a["uniek"] for a in alle}
+    for p in oude or []:
+        if p.get("uniek") in gezien or (p.get("postvak") or "").lower() not in mijn or (p.get("datum_iso") or "") >= sinds:
+            continue
+        try:
+            d = datetime.fromisoformat(p["datum_iso"]).astimezone(BRUSSEL)
+        except (KeyError, TypeError, ValueError):
+            continue
+        opvolging, door, wanneer, naar = antwoord({"message_id": p.get("message_id"), "van": p.get("van"),
+                                                   "onderwerp": p.get("onderwerp")}, d, index)
+        if opvolging == "open" or p.get("soort") not in ("hoog", "midden"):
+            continue
+        alle.append({"uniek": p["uniek"], "wacht": naam, "postvak": p["postvak"], "map": p.get("map") or "",
+                     "datum": p["datum_iso"], "van": p.get("van") or "", "van_naam": p.get("van_naam") or "",
+                     "onderwerp": p.get("onderwerp") or "", "soort": p["soort"], "waarom": p.get("waarom") or "",
+                     "mailinglijst": 0, "beantwoord": 1 if opvolging in ("beantwoord", "doorgezet") else 0,
+                     "message_id": p.get("message_id") or "", "opvolging": opvolging, "antwoord_door": door[:120],
+                     "antwoord_ts": wanneer, "antwoord_naar": naar[:120], "stap": stap(p["soort"], opvolging, door, wanneer, naar),
+                     "dringend": 1 if p.get("dringend") else 0, "werkdagen": werkdagen_tussen(d, nu), "regel": "",
+                     "auto_opruimen": ""})
+    if tel["verzonden_volledig"]:
+        for a in rommel_kandidaten(alle, eigen, bekend, veilig):
+            a["auto_opruimen"] = "kandidaat"
+    items = [a for a in alle if a["opvolging"] in ("open", "onzeker")]
+    items.sort(key=lambda a: ({"hoog": 0, "actie": 1, "midden": 2}.get(a["soort"], 9), -a["werkdagen"], a["datum"]))
+    tel["open"] = len(items)
+    tel["rommel_kandidaten"] = sum(1 for a in alle if a["auto_opruimen"])
     return items, tel, rijen, alle
+
+
+STAP = {"actie": "nakijken en regelen (automatisch bericht, geen antwoord mogelijk)",
+        "hoog": "beantwoorden of regelen",
+        "midden": "beantwoorden of doorzetten naar wie het opvolgt"}
+
+
+def _dag(ts):
+    try:
+        return datetime.fromisoformat(ts).astimezone(BRUSSEL).strftime("%d-%m")
+    except (TypeError, ValueError):
+        return ""
+
+
+def stap(soort, opvolging, door="", wanneer="", naar=""):
+    """De volgende stap in woorden, zoals Mehdi ze op /mail en in het overzicht van De Mailregisseur leest."""
+    if opvolging == "open":
+        return STAP.get(soort, "")
+    if opvolging == "onzeker":
+        wie = door if "@" in door else (door or "iemand")
+        return (f"nakijken: {wie} op {_dag(wanneer)} bij dezelfde afzender, hetzelfde onderwerp maar zonder draad; "
+                "is het daarmee geregeld, klik Afgehandeld")
+    if opvolging == "doorgezet":
+        return f"opvolgen bij {naar or 'wie het kreeg'}"
+    if opvolging == "wacht":
+        return "nog geen werkdag oud; komt op de lijst als er morgen geen antwoord is"
+    return ""
+
+
+# Rommel naar Opgeruimd (driehoeksoverleg 19-10-2026, 3-0): alleen de soort rommel, met een exacte domeinvergelijking.
+# De lijsten bovenaan zoeken op een stuk tekst ("ing.be" zat in valoprojectontwikkeling.be, "law" in Lawrence); voor
+# verplaatsen geldt daarom een tweede, strikte toets op het hele domein. Nooit verwijderen; terugzetten kan op /mail.
+def zelfde_domein(dom, lijst, beide=False):
+    """Is dit domein (exact) een van de lijst, of een subdomein ervan? Nooit een stuk van een woord: valoprojectontwikkeling.be
+    is geen ing.be. Met beide=True telt ook het omgekeerde (news.kbc.be tegenover kbc.be): voor wat ik nooit wil raken."""
+    dom = (dom or "").lower().strip(".")
+    return any(dom == x or dom.endswith("." + x) or (beide and x.endswith("." + dom))
+               for x in (y.lower().strip(".") for y in lijst) if x)
+
+
+def rommel_kandidaten(alle, eigen=(), bekend=frozenset(), veilig=frozenset()):
+    """De berichten die de wacht naar Opgeruimd mag zetten: soort rommel volgens de regels (niet omdat Mehdi de afzender
+    op ruis zette: ruis is tellen, niet verplaatsen), in INBOX, met een Message-ID, geen regel van Mehdi op de afzender,
+    minstens twee rommelberichten van hetzelfde domein in dit venster, en een afzenderdomein dat geen eigen domein en
+    geen gratis maildienst is, dat we het laatste half jaar nooit mailden, dat in dit venster geen belangrijk, gewoon of
+    actiebericht stuurde, en dat volgens het bord nooit iets belangrijks stuurde of beantwoord werd (`veilig`)."""
+    gemaild = {_domein(a) for a in bekend if _domein(a)}
+    belangrijk = {_domein(a["van"]) for a in alle if a["soort"] in ("hoog", "midden", "actie")} | set(veilig or ())
+    per_domein = {}
+    for a in alle:
+        if a["soort"] == "rommel":
+            per_domein[_domein(a["van"])] = per_domein.get(_domein(a["van"]), 0) + 1
+    uit = []
+    for a in alle:
+        dom = _domein(a["van"])
+        if (a["soort"] != "rommel" or a.get("regel") or a.get("map") != "INBOX" or not MSGID.search(a.get("message_id") or "")
+                or per_domein.get(dom, 0) < 2
+                or not dom or zelfde_domein(dom, eigen, True) or zelfde_domein(dom, GRATIS_DIENSTEN)
+                or zelfde_domein(dom, gemaild, True) or zelfde_domein(dom, belangrijk, True)):
+            continue
+        uit.append(a)
+    return uit
 
 
 def kort_waarom(w):
@@ -428,37 +637,34 @@ class _DroogAgent:
         print("  [log]", " | ".join(str(x)[:160] for x in a[:3]))
 
 
-def afsluiten(naam, items, bord, ag, nu):
-    """Wat ik vorige keer klaarzette en nu niet meer meld, is beantwoord of afgelopen: dan haal ik
-    het van de lijst van de Mailregisseur. Een bericht ouder dan mijn venster laat ik staan, want
-    daarvan weet ik niet of het beantwoord is; wat blijft staan, wordt niet vergeten."""
-    nu_uniek = {it["uniek"] for it in items}
-    grens = (nu - timedelta(days=TERUG_DAGEN - 1)).isoformat()
-    n = 0
-    for it in bord.klaargezet_voor("mail-regisseur", n=500):
-        if it.get("van") != naam or it.get("uniek") in nu_uniek:
-            continue
-        try:
-            datum = json.loads(it.get("inhoud") or "{}").get("datum", "")
-        except ValueError:
-            datum = ""
-        if datum and datum >= grens:
-            bord.opgepakt(it["id"], f"{naam}: beantwoord of afgelopen")
-            n += 1
-    if n:
-        ag.log("opvolgen", "schrijf", f"{n} opvolgpunten beantwoord of afgelopen, van de lijst gehaald")
-    return n
-
-
 def droog(naam):
-    """Alleen lezen en tonen wat er klaargezet zou worden, niets naar het bord."""
+    """Alleen lezen en tonen wat openstaat en wat naar Opgeruimd zou gaan, niets naar het bord en niets verplaatst."""
     nu = datetime.now(BRUSSEL)
     r = _Droog()
-    items, tel, _, _ = ronde(naam, _DroogAgent(), r, nu)
+    oude, veilig, gelezen = [], frozenset(), False
+    try:  # alleen lezen van het bord, zoals de echte ronde
+        sys.path.insert(0, HIER)
+        import bord  # noqa: E402
+        oude = bord.call("/api/mail/open?" + urllib.parse.urlencode({"wacht": naam})).get("punten", [])
+        veilig = frozenset(bord.call("/api/mail/veilig").get("domeinen", []))
+        gelezen = True
+    except Exception as e:  # noqa: BLE001
+        print(f"  (bord niet gelezen: {type(e).__name__}; ik toon geen reclame om op te ruimen)")
+    items, tel, _, alle = ronde(naam, _DroogAgent(), r, nu, None, oude, veilig)
+    if not gelezen:
+        for a in alle:
+            a["auto_opruimen"] = ""
     print(json.dumps(tel, ensure_ascii=False))
-    for it in items:
-        i = it["inhoud"]
-        print(f"  opvolgen: {i['datum'][:10]} ({i['werkdagen_zonder_antwoord']} wd) {i['soort']:6} {it['titel'][:105]}  [{i['waarom']}]")
+    for a in items:
+        print(f"  {a['opvolging']:8} {a['datum'][:10]} ({a['werkdagen']} wd) {a['soort']:6} {a['van'][:40]} · {a['onderwerp'][:70]}"
+              f"  [{a['waarom']}]")
+    for a in alle:
+        if a["opvolging"] in ("beantwoord", "doorgezet"):
+            print(f"  {a['opvolging']:8} {a['datum'][:10]} {a['soort']:6} {a['van'][:40]} · {a['onderwerp'][:60]} "
+                  f"door {a['antwoord_door']} {a['antwoord_ts'][:16]}")
+    for a in alle:
+        if a["auto_opruimen"]:
+            print(f"  opruimen? {a['datum'][:10]} {a['van'][:45]} · {a['onderwerp'][:70]}")
     for t, w in r.noden:
         print(f"  nood ({w}): {t}")
     return items, tel
@@ -596,6 +802,65 @@ def aan_de_beurt(nu=None):
     return 7 <= nu.hour < 21
 
 
+def rommel_echt(nu, cfg=None):
+    """Verplaatst de wacht rommel echt, of toont hij alleen wat hij zou verplaatsen? Mailwachten.json, 'rommel_opruimen':
+    tot 'echt_vanaf' alleen tonen (de proefweek van 19 tot 26-10-2026), daarna echt."""
+    try:
+        vanaf = ((cfg or wachten()).get("rommel_opruimen") or {}).get("echt_vanaf") or ""
+    except (OSError, ValueError):
+        return False
+    return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", vanaf)) and nu.date().isoformat() >= vanaf
+
+
+def verplaats_op_id(mb, mids, van_map, naar_map):
+    """Verplaatst de berichten met deze Message-ID's van van_map naar naar_map (UID MOVE), zoals rommel naar Opgeruimd en
+    terug naar INBOX. Elke treffer krijgt eerst een controle op zijn echte Message-ID. Alleen als de postbus dit postvak
+    laat schrijven; nooit naar een prullenbak (imapbron weigert dat); niets verwijderd, niets als gelezen gemarkeerd.
+    Een Message-ID die niet precies een keer in van_map staat, slaat hij over: nooit gokken (ontwerptoets 19-10-2026,
+    Claude O4). Geeft de Message-ID's die verplaatst werden."""
+    mids = [m for m in dict.fromkeys(mids) if MSGID.fullmatch((m or "").strip())]
+    if not mb or mb.get("bron") or not mb.get("schrijven") or not mids:
+        return []
+    _, imapbron = _postbus()
+    imapbron._bestemming_ok(naar_map)
+    gevonden = {}
+    with imapbron._Sessie(mb) as M:
+        if naar_map.lower() not in [n.lower() for _, n in imapbron._lijst_mappen(M)]:
+            M.create(f'"{naar_map}"')
+            M.subscribe(f'"{naar_map}"')
+        if "MOVE" not in imapbron.capabilities(M):
+            raise ValueError("deze mailserver kan niet verplaatsen (geen MOVE)")
+        imapbron._selecteer_schrijfbaar(M, van_map)
+        for mid in mids:
+            uids = imapbron.zoek_uids(M, [b"HEADER", b"Message-ID", imapbron._q(mid.strip())])[:5]
+            echt = [uid for uid, (_prefix, ruw) in imapbron._fetch_koppen(M, uids).items()
+                    if imapbron._kop(email.message_from_bytes(ruw).get("Message-ID")).strip().lower() == mid.strip().lower()]
+            if len(echt) == 1:
+                gevonden[mid] = echt
+        uids = [u for lijst in gevonden.values() for u in lijst]
+        if uids:
+            ok, gegevens = M.uid("MOVE", ",".join(str(u) for u in uids), f'"{naar_map}"')
+            if ok != "OK":
+                raise ValueError(f"verplaatsen naar {naar_map} mislukt: " + imapbron._leesbaar(gegevens))
+    return list(gevonden)
+
+
+def staat_in(mb, mids, mapnaam):
+    """Welke van deze Message-ID's staan (alleen lezen) in deze map? Voor de bevestiging van terugzetten: stond het al in
+    INBOX, dan is het teruggezet, ook als de melding daarvan de vorige keer niet aankwam (ontwerptoets 19-10-2026, Codex O13)."""
+    mids = [m for m in dict.fromkeys(mids) if MSGID.fullmatch((m or "").strip())]
+    if not mb or mb.get("bron") or not mids:
+        return []
+    _, imapbron = _postbus()
+    uit = []
+    with imapbron._Sessie(mb) as M:
+        imapbron._selecteer(M, mapnaam)
+        for mid in mids:
+            if imapbron.zoek_uids(M, [b"HEADER", b"Message-ID", imapbron._q(mid.strip())]):
+                uit.append(mid)
+    return uit
+
+
 def werk(naam, ag, r):
     """Het werk van een mailwacht binnen zijn ronde (de runner opent de ronde: N12)."""
     sys.path.insert(0, HIER)
@@ -610,7 +875,19 @@ def werk(naam, ag, r):
         ag.log("regels", "bron", f"regels van het maildashboard niet gelezen: {type(e).__name__}")
     regels = {((x.get("postvak") or "*").lower(), (x.get("wie") or "").lower()): x.get("actie") for x in lijst}
     r.bron("mailregels", json.dumps(sorted(f"{k[0]} {k[1]} {v}" for k, v in regels.items()), ensure_ascii=False))
-    items, tel, rijen, alle = ronde(naam, ag, r, nu, regels)
+    # Wat volgens het bord openstaat (ook ouder dan mijn venster) en welke domeinen nooit automatisch opgeruimd worden.
+    try:
+        oude = bord.call("/api/mail/open?" + urllib.parse.urlencode({"wacht": naam})).get("punten", [])
+        veilig = frozenset(bord.call("/api/mail/veilig").get("domeinen", []))
+        gelezen_bord = True
+    except Exception as e:  # noqa: BLE001
+        oude, veilig, gelezen_bord = [], frozenset(), False
+        ag.log("bord", "bron", f"/api/mail/open of /api/mail/veilig niet gelezen: {type(e).__name__}: {str(e)[:120]}")
+    r.bron("mail-veilig", json.dumps(sorted(veilig)))
+    items, tel, rijen, alle = ronde(naam, ag, r, nu, regels, oude, veilig)
+    if not gelezen_bord:  # zonder de lijst van het bord weet ik niet welke domeinen veilig zijn: niets opruimen
+        for a in alle:
+            a["auto_opruimen"] = ""
     opgeruimd, postvakken = [], []
     for adres in cfg["postvakken"]:
         mb = postvak(adres)
@@ -645,25 +922,77 @@ def werk(naam, ag, r):
     tel["gesorteerd"] = len(gesorteerd)
     if gesorteerd:
         ag.log(f"dag {nu.date().isoformat()}", "sorteren", f"{len(gesorteerd)} berichten uit de INBOX gesorteerd", "\n".join(gesorteerd))
+    # Terugzetten: wat Mehdi op /mail uit Opgeruimd terugvroeg, op Message-ID terug naar INBOX.
+    teruggezet = []
     try:
-        bord.call("/api/mail", {"wacht": naam, "rijen": alle, "opgeruimd": opgeruimd, "postvakken": postvakken,
-                                "verplaatst": verplaatst})
+        terug = bord.call("/api/mail/terug?" + urllib.parse.urlencode({"wacht": naam})).get("berichten", [])
+    except Exception as e:  # noqa: BLE001
+        terug = []
+        ag.log("terugzetten", "bron", f"/api/mail/terug: {type(e).__name__}: {str(e)[:120]}")
+    for adres in cfg["postvakken"]:
+        vraag = {t.get("message_id"): t.get("uniek") for t in terug if t.get("postvak") == adres and t.get("message_id")}
+        if not vraag:
+            continue
+        mb = postvak(adres)
+        try:
+            gedaan = set(verplaats_op_id(mb, list(vraag), opruimmap(mb), "INBOX"))
+            gedaan |= set(staat_in(mb, [m for m in vraag if m not in gedaan], "INBOX"))
+            teruggezet += [vraag[mid] for mid in gedaan]
+        except Exception as e:  # noqa: BLE001
+            r.nood(f"Terugzetten naar de inbox van {adres} lukte niet", wie="claude-code")
+            ag.log("terugzetten", "fout", f"{adres}: {type(e).__name__}: {str(e)[:160]}")
+    tel["teruggezet"] = len(teruggezet)
+    # Rommel naar Opgeruimd (19-10-2026): de eerste week alleen tonen, daarna echt (rommel_echt). Wat de sorteerregels deze
+    # ronde al verplaatsten, laat ik.
+    echt = rommel_echt(nu)
+    al_weg = {v["uniek"] for v in verplaatst} | set(opgeruimd)
+    kan = {pv["postvak"] for pv in postvakken if pv["schrijven"]}  # hotmail (een bestand van de Mac) kan ik niet opruimen
+    kandidaten = [a for a in alle if a["auto_opruimen"] and a["uniek"] not in al_weg and a["postvak"] in kan]
+    for a in alle:
+        a["auto_opruimen"] = ""
+    for a in kandidaten:
+        a["auto_opruimen"] = "droog"
+    if echt:
+        for adres in cfg["postvakken"]:
+            deze = {a["message_id"]: a for a in kandidaten if a["postvak"] == adres}
+            if not deze:
+                continue
+            mb = postvak(adres)
+            try:
+                weg = set(verplaats_op_id(mb, list(deze), "INBOX", opruimmap(mb)))
+            except Exception as e:  # noqa: BLE001
+                weg = set()
+                r.nood(f"Rommel naar Opgeruimd in {adres} lukte niet", wie="claude-code")
+                ag.log("rommel", "fout", f"{adres}: {type(e).__name__}: {str(e)[:160]}")
+            for mid, a in deze.items():
+                a["auto_opruimen"] = "verplaatst" if mid in weg else ""
+                if mid in weg:
+                    opgeruimd.append(a["uniek"])
+        kandidaten = [a for a in kandidaten if a["auto_opruimen"] == "verplaatst"]
+    tel["rommel_opruimen"] = len(kandidaten)
+    if kandidaten:
+        ag.log(f"dag {nu.date().isoformat()}", "rommel",
+               f"{len(kandidaten)} reclameberichten {'naar Opgeruimd verplaatst' if echt else 'zou ik naar Opgeruimd zetten (proefweek, niets verplaatst)'}",
+               "\n".join(f"{a['postvak']} | {a['van']} | {a['onderwerp'][:80]}" for a in kandidaten))
+    # Een bron: het bord bewaart elk bericht met zijn opvolging en geeft terug hoeveel er voor mij openstaat. Dat getal
+    # staat in mijn werkverslag, hetzelfde als op /mail en bij De Mailregisseur.
+    open_bord = None
+    try:
+        antw = bord.call("/api/mail", {"wacht": naam, "rijen": alle, "opgeruimd": opgeruimd, "postvakken": postvakken,
+                                       "verplaatst": verplaatst, "teruggezet": teruggezet,
+                                       "verzonden_volledig": tel["verzonden_volledig"]})
+        open_bord = antw.get("open")
     except Exception as e:  # noqa: BLE001
         r.nood("Het maildashboard kreeg de berichten van deze ronde niet", wie="claude-code")
         ag.log("dashboard", "schrijf", f"/api/mail: {type(e).__name__}: {str(e)[:120]}")
-    for it in items:
-        it["van"] = naam
-        if "stil" in it["titel"].lower():  # het woord stil laat De Bode bellen (AGENTNORM 6)
-            it["titel"] = re.sub("stil", "st.l", it["titel"], flags=re.I)
-    uit = ag.klaarzet(items) if items else {"nieuw": 0}
-    afsluiten(naam, items, bord, ag, nu)
     if rijen:
         try:
             bord.call("/api/gesprekken", {"rijen": rijen})
         except Exception as e:  # noqa: BLE001
             ag.log("gesprekken", "schrijf", f"gesprekkentabel niet bijgewerkt: {type(e).__name__}")
     r.detail = (f"laatste 24 u: hoog {tel['hoog']}, gewoon {tel['midden']}, actie {tel['actie']}, meldingen {tel['melding']}, "
-                f"koud {tel['koud']}, rommel {tel['rommel']}, verdacht {tel['verdacht']}; op de lijst van de "
-                f"Mailregisseur: {tel['open']} (nieuw {uit.get('nieuw', 0)}); gesorteerd {tel['gesorteerd']}, opgeruimd {tel['opgeruimd']}")
+                f"koud {tel['koud']}, rommel {tel['rommel']}, verdacht {tel['verdacht']}; op te volgen (zoals op /mail): "
+                f"{'onbekend' if open_bord is None else open_bord}; gesorteerd {tel['gesorteerd']}, opgeruimd {tel['opgeruimd']}, "
+                f"reclame {'naar Opgeruimd' if echt else 'voor Opgeruimd (proefweek)'} {tel['rommel_opruimen']}, teruggezet {tel['teruggezet']}")
     ag.log(f"dag {nu.date().isoformat()}", "ronde", r.detail,
-           "\n".join(f"{i['inhoud']['datum'][:16]} {i['inhoud']['soort']} {i['titel']}" for i in items[:80]))
+           "\n".join(f"{a['datum'][:16]} {a['soort']} {a['opvolging']} {a['van']} · {a['onderwerp'][:90]}" for a in items[:80]))

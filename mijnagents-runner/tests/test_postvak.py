@@ -41,13 +41,49 @@ def test_wat_gevolg_heeft_komt_erdoor():
     assert postvak.trieer(kop("daniel@lucvandewiel.be", "Schoten, Laaglandlei 3A"), EIGEN, bekend)[0] == "midden"
 
 
-def test_antwoord_en_afwezigheid_tellen_als_beantwoord():
-    na = datetime.fromisoformat("2026-09-14T10:00:00+02:00")
-    verzonden = [{"datum": "2026-09-15T09:00:00+02:00", "aan": ["Vincent <vincent@verz.kbc.be>"], "cc": []}]
-    assert postvak.beantwoord("vincent@verz.kbc.be", na, verzonden)
-    assert not postvak.beantwoord("iemand@anders.be", na, verzonden)
-    afwezig = {"x@kbc.be": [datetime.fromisoformat("2026-09-23T22:00:00+00:00")]}
-    assert postvak.beantwoord("x@kbc.be", na, [], afwezig)
+def _verzonden(van, aan, onderwerp, datum, in_reply_to="", refs=()):
+    return {"van": van, "aan": [aan], "cc": [], "onderwerp": onderwerp, "datum": datum, "in_antwoord_op": in_reply_to,
+            "verwijzingen": list(refs)}
+
+
+def test_beantwoord_alleen_via_de_draad():
+    """19-10-2026 (driehoeksoverleg, 3-0): tot dan sloot elk bericht naar dezelfde afzender het punt, ook over iets anders.
+    Een belangrijke mail verdween zo van de lijst zodra Mehdi die persoon om een andere reden mailde."""
+    na = datetime.fromisoformat("2026-10-14T10:00:00+02:00")
+    b = {"van": "vincent@verz.kbc.be", "onderwerp": "Schorsing polis Kangoo", "message_id": "<vraag@kbc>"}
+    idx = postvak.antwoord_index([_verzonden("mch@h-architects.be", "Vincent <vincent@verz.kbc.be>",
+                                             "Andere vraag over de bestelwagen", "2026-10-15T09:00:00+02:00")])
+    assert postvak.antwoord(b, na, idx)[0] == "open", "een ander onderwerp naar dezelfde afzender sluit het punt niet"
+    idx = postvak.antwoord_index([_verzonden("info@h-invest.be", "vincent@verz.kbc.be", "Re: Schorsing polis Kangoo",
+                                             "2026-10-15T09:00:00+02:00", "<vraag@kbc>")])
+    st, door, wanneer, _ = postvak.antwoord(b, na, idx)
+    assert (st, door) == ("beantwoord", "info@h-invest.be") and wanneer.startswith("2026-10-15"), \
+        "een antwoord vanuit een ander postvak sluit het wel, met wie en wanneer"
+    idx = postvak.antwoord_index([_verzonden("mch@h-architects.be", "boekhouding@h-invest.be", "Fwd: Schorsing polis Kangoo",
+                                             "2026-10-15T09:00:00+02:00", "<vraag@kbc>")])
+    assert postvak.antwoord(b, na, idx)[0::3] == ("doorgezet", "boekhouding@h-invest.be")
+    idx = postvak.antwoord_index([_verzonden("mch@h-architects.be", "vincent@verz.kbc.be", "Re: Schorsing polis Kangoo",
+                                             "2026-10-16T09:00:00+02:00", "<later@kbc>", ["<vraag@kbc>", "<later@kbc>"])])
+    assert postvak.antwoord(b, na, idx)[0] == "onzeker", "alleen in References: een antwoord op een later bericht in de draad"
+    idx = postvak.antwoord_index([_verzonden("mch@h-architects.be", "vincent@verz.kbc.be", "RE: schorsing  polis Kangoo",
+                                             "2026-10-15T09:00:00+02:00")])
+    assert postvak.antwoord(b, na, idx)[:2] == ("onzeker", "mch@h-architects.be"), "zelfde onderwerp zonder draad: nakijken"
+    assert postvak.antwoord(b, datetime.fromisoformat("2026-10-16T10:00:00+02:00"), idx)[0] == "open", "verstuurd voor de vraag"
+    afwezig = {"vincent@verz.kbc.be": [(datetime.fromisoformat("2026-10-15T09:00:00+02:00"),
+                                        "Automatisch antwoord: RE: Schorsing polis Kangoo")]}
+    assert postvak.antwoord(b, na, postvak.antwoord_index([]), afwezig)[0] == "onzeker"
+    assert postvak.antwoord(b, na, postvak.antwoord_index([]), {"vincent@verz.kbc.be": [
+        (datetime.fromisoformat("2026-10-15T09:00:00+02:00"), "Automatisch antwoord: offerte")]})[0] == "open"
+
+
+def test_hotmail_draad_met_de_hashes_van_de_mac():
+    """Mail op de Mac geeft de draad als hashes (message_references); de laatste is het bericht waarop geantwoord wordt."""
+    na = datetime.fromisoformat("2026-10-14T10:00:00+02:00")
+    b = {"van": "x@kbc.be", "onderwerp": "Herinnering", "draad": "123"}
+    s = {"van": "mehdichegini@hotmail.com", "aan": ["x@kbc.be"], "cc": [], "onderwerp": "Re: Herinnering",
+         "datum": "2026-10-15T09:00:00+00:00", "verwijst": ["99", "123"]}
+    assert postvak.antwoord(b, na, postvak.antwoord_index([s]))[0] == "beantwoord"
+    assert postvak.antwoord(b, na, postvak.antwoord_index([dict(s, verwijst=["123", "456"])]))[0] == "onzeker"
 
 
 def test_een_domein_op_ing_be_is_nog_geen_bank():
@@ -100,11 +136,155 @@ def test_hotmail_uit_het_bestand_van_de_mac(tmp_path=None):
         items, tel, _, alle = postvak.ronde("mail-prive", postvak._DroogAgent(), r, nu)
     finally:
         postvak.WACHTEN = oud
-    assert [i["inhoud"]["van"] for i in items] == ["info@kbc.be"]
+    assert [i["van"] for i in items] == ["info@kbc.be"]
     assert tel["bekende_contacten"] == 1
     assert any("niet vers" in t for t, _w in r.noden), r.noden
     assert [a["van"] for a in alle] == ["info@kbc.be"], "elk beoordeeld bericht gaat naar het dashboard, eigen post niet"
     assert alle[0]["soort"] == "hoog" and alle[0]["beantwoord"] == 0 and alle[0]["uniek"] == "mehdichegini@hotmail.com:<a@kbc>"
+    assert alle[0]["opvolging"] == "open" and alle[0]["message_id"] == "<a@kbc>" and "mailinglijst" in alle[0]
+
+
+def _ronde(berichten, nu, eigen=("h-architects.be", "harmoniebouw.be", "globaal.be"), oude=None, veilig=frozenset()):
+    """Een ronde van een wacht op een bestand (zoals hotmail van de Mac): zonder postbus en zonder netwerk."""
+    import json
+    import tempfile
+    d = tempfile.mkdtemp()
+    json.dump({"gemaakt": nu.isoformat(), "berichten": berichten}, open(os.path.join(d, "koppen.json"), "w"))
+    cfg = {"bronnen": {"proef@h-architects.be": os.path.join(d, "koppen.json")},
+           "mail-proef": {"firma": "MCH", "postvakken": ["proef@h-architects.be"], "antwoord_vanuit": [], "eigen_domeinen": list(eigen)}}
+    json.dump(cfg, open(os.path.join(d, "mailwachten.json"), "w"))
+    oud = postvak.WACHTEN
+    postvak.WACHTEN = os.path.join(d, "mailwachten.json")
+    try:
+        r = postvak._Droog()
+        items, tel, _, alle = postvak.ronde("mail-proef", postvak._DroogAgent(), r, nu, None, oude, veilig)
+    finally:
+        postvak.WACHTEN = oud
+    return {a["onderwerp"]: a for a in alle}, items, tel, r
+
+
+def _in(uid, van, onderwerp, datum, mid=None, **k):
+    return dict({"map": "INBOX", "uid": uid, "datum": datum, "van": van, "van_naam": van.split("@")[0], "onderwerp": onderwerp,
+                 "message_id": mid or f"<{uid}@proef>", "aan": [], "cc": []}, **k)
+
+
+def _uit(uid, aan, onderwerp, datum, antwoord_op=None):
+    return {"map": "Sent", "uid": uid, "datum": datum, "van": "proef@h-architects.be", "van_naam": "", "onderwerp": onderwerp,
+            "message_id": f"<s{uid}@proef>", "aan": [aan], "cc": [], "verwijst": [], "in_antwoord_op": antwoord_op or ""}
+
+
+def test_drempels_eigen_domein_en_kopieermachine():
+    """19-10-2026: gewone mail na een werkdag; eigen domein alleen uit bij een automatisch bericht; de kopieermachine is
+    automatisch (op het exacte adres), een collega die een scan doorstuurt niet."""
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")          # maandag
+    alle, items, tel, _ = _ronde([
+        _uit(90, "klant@bouwheer.be", "Offerte", "2026-09-01T09:00:00+02:00"),
+        _in(1, "klant@bouwheer.be", "Vraag over de offerte", "2026-10-16T10:00:00+02:00"),       # vrijdag: 1 werkdag
+        _in(2, "klant@bouwheer.be", "Nog een vraag", "2026-10-19T09:00:00+02:00"),               # vandaag
+        _in(3, "shaniel@h-architects.be", "Vraag over dossier 2145", "2026-10-16T10:00:00+02:00"),
+        _in(4, "scan@harmoniebouw.be", "Message from KM_C258", "2026-10-16T10:00:00+02:00"),
+        _in(5, "angela@globaal.be", "Fwd: Message from KM_C258", "2026-10-16T10:00:00+02:00"),
+        _in(6, "noreply@h-architects.be", "Uw bestelling", "2026-10-16T10:00:00+02:00"),
+        _in(7, "iemand@vreemd.be", "Message from KM_C258", "2026-10-16T10:00:00+02:00"),
+    ], nu)
+    assert alle["Vraag over de offerte"]["opvolging"] == "open", "gewone mail van vrijdag staat maandag op de lijst"
+    assert alle["Nog een vraag"]["opvolging"] == "wacht", "van vandaag nog niet"
+    assert alle["Vraag over dossier 2145"]["opvolging"] == "open", "een collega die iets vraagt, is een opvolgpunt"
+    assert alle["Message from KM_C258"]["soort"] in ("melding", "koud") and alle["Message from KM_C258"]["opvolging"] == "geen"
+    assert postvak.automatisch({"van": "scan@harmoniebouw.be", "onderwerp": "Message from KM_C258"})
+    assert not postvak.automatisch({"van": "iemand@vreemd.be", "onderwerp": "Message from KM_C258"}), "het onderwerp alleen niet"
+    assert alle["Fwd: Message from KM_C258"]["opvolging"] == "open", "Angela die een scan doorstuurt"
+    assert alle["Uw bestelling"]["opvolging"] == "geen"
+    assert postvak.OPVOLGEN_NA_WERKDAGEN == 1
+    assert tel["open"] == len(items) == 3
+
+
+def test_beantwoord_in_de_ronde_en_oude_punten():
+    """De ronde gebruikt de draad; een open punt ouder dan het venster sluit ook nog als er laat een antwoord komt."""
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")
+    alle, items, tel, _ = _ronde([
+        _in(1, "x@kbc.be", "Schorsing polis", "2026-10-14T10:00:00+02:00", "<v1@kbc>"),
+        _in(2, "x@kbc.be", "Herinnering premie", "2026-10-14T11:00:00+02:00", "<v2@kbc>"),
+        _uit(91, "x@kbc.be", "Re: Schorsing polis", "2026-10-15T09:00:00+02:00", "<v1@kbc>"),
+        _uit(92, "x@kbc.be", "Iets anders", "2026-10-15T09:30:00+02:00"),
+        _uit(93, "notaris@notaris.be", "Re: Akte", "2026-10-18T09:00:00+02:00", "<oud@notaris>"),
+    ], nu, oude=[{"uniek": "proef@h-architects.be:<oud@notaris>", "postvak": "proef@h-architects.be", "van": "notaris@notaris.be",
+                  "onderwerp": "Akte", "datum_iso": "2026-09-01T10:00:00+02:00", "soort": "hoog", "message_id": "<oud@notaris>"}])
+    assert alle["Schorsing polis"]["opvolging"] == "beantwoord" and alle["Schorsing polis"]["antwoord_door"] == "proef@h-architects.be"
+    assert alle["Herinnering premie"]["opvolging"] == "open", "Iets anders naar KBC sluit de herinnering niet"
+    assert alle["Akte"]["opvolging"] == "beantwoord" and alle["Akte"]["uniek"] == "proef@h-architects.be:<oud@notaris>"
+    assert tel["verzonden_volledig"]
+
+
+def test_rommel_naar_opgeruimd_alleen_met_exacte_domeinen():
+    """19-10-2026: alleen rommel, met een exacte domeinvergelijking; 'ing.be' zat ooit in valoprojectontwikkeling.be."""
+    def r(van, mid, soort="rommel", **k):
+        return dict({"van": van, "soort": soort, "map": "INBOX", "message_id": mid, "regel": ""}, **k)
+    alle = [r("promo@winkel.be", "<1@w>"), r("promo@winkel.be", "<2@w>"),
+            r("news@valoprojectontwikkeling.be", "<3@v>"), r("news@valoprojectontwikkeling.be", "<4@v>"),
+            r("news@ing.be", "<5@i>"), r("news@ing.be", "<6@i>"),
+            r("eens@alleen.be", "<7@a>"),
+            r("deals@bank.be", "<8@b>"), r("deals@bank.be", "<9@b>"), r("x@bank.be", "<10@b>", soort="hoog"),
+            r("a@gmail.com", "<11@g>"), r("b@gmail.com", "<12@g>"),
+            r("x@h-architects.be", "<13@h>"), r("y@h-architects.be", "<14@h>"),
+            r("promo@ander.be", "<15@a>", map="INBOX.Nieuwsbrieven"), r("promo@ander.be", "<16@a>"),
+            r("ruis@lijst.be", "<17@l>", regel="ruis"), r("ruis@lijst.be", "<18@l>", regel="ruis"),
+            r("nieuws.kbc.be@mail.kbc.be", "<19@k>"), r("info@mail.kbc.be", "<20@k>"),
+            r("promo@geenid.be", ""), r("promo@geenid.be", "x")]
+    bekend = frozenset({"klant@ing.be"})
+    uit = {a["message_id"] for a in postvak.rommel_kandidaten(alle, ("h-architects.be",), bekend, frozenset({"kbc.be"}))}
+    assert uit == {"<1@w>", "<2@w>", "<3@v>", "<4@v>", "<16@a>"}, uit  # <15@a> staat al in Nieuwsbrieven, maar telt mee als tweede
+    assert postvak.zelfde_domein("mail.kbc.be", ["kbc.be"]) and not postvak.zelfde_domein("mail-kbc.be", ["kbc.be"])
+    assert not postvak.zelfde_domein("valoprojectontwikkeling.be", ["ing.be"])
+    assert postvak.zelfde_domein("kbc.be", ["news.kbc.be"], beide=True)
+
+
+def test_rommel_proefweek_en_nooit_verwijderen():
+    """De eerste week alleen tonen (tot echt_vanaf), daarna echt; de pagina noemt dezelfde dag. Nooit EXPUNGE of \\Deleted."""
+    import re
+    cfg = postvak.wachten()
+    vanaf = cfg["rommel_opruimen"]["echt_vanaf"]
+    assert vanaf >= "2026-10-26", "de proefweek begon op 19-10-2026 en duurt een week"
+    assert not postvak.rommel_echt(datetime.fromisoformat("2026-10-25T20:00:00+02:00"), cfg)
+    assert postvak.rommel_echt(datetime.fromisoformat(vanaf + "T07:00:00+02:00"), cfg)
+    html = open(os.path.join(os.path.dirname(HIER), "mijnagents", "templates", "mail.html"), encoding="utf-8").read()
+    d = date.fromisoformat(vanaf)
+    assert f"set echt_vanaf = '{d.strftime('%d-%m-%Y')}'" in html, "/mail noemt een andere dag dan mailwachten.json"
+    bron = open(os.path.join(HIER, "koppelingen", "postvak.py"), encoding="utf-8").read()
+    assert not re.search(r"EXPUNGE|\\\\Deleted|\+FLAGS|\"STORE\"|smtplib", bron), "verplaatsen, nooit verwijderen of markeren"
+    assert postvak.verplaats_op_id({"adres": "x@y.be", "schrijven": False}, ["<a@b>"], "INBOX", "INBOX.Opgeruimd") == []
+    assert postvak.verplaats_op_id({"adres": "h@hotmail.com", "bron": "/x", "schrijven": True}, ["<a@b>"], "INBOX", "X") == []
+
+
+def test_mch_antwoordt_ook_vanuit_andere_postvakken():
+    """19-10-2026: antwoord_vanuit voor mch@ was leeg; met de draad kan een extra postvak alleen sluiten wat echt beantwoord is."""
+    cfg = postvak.wachten()
+    assert {"info@h-architects.be", "info@h-invest.be"} <= set(cfg["mail-mch"]["antwoord_vanuit"])
+
+
+def test_de_mailregisseur_leest_dezelfde_lijst():
+    """De Mailregisseur telt wat het bord als open geeft; het 08:00-bericht noemt hetzelfde getal; een oproep houdt zijn
+    oude sleutel; bellen alleen op een vast moment; een oproep voor mail die niet meer openstaat, gaat weg."""
+    import mail_regisseur as M
+    cfg = {"mail-mch": {"firma": "MCH"}, "mail-hinv": {"firma": "HINV"}}
+    open_punten = [{"uniek": "mch@h-architects.be:<a>", "wacht": "mail-mch", "soort": "midden", "werkdagen": 3, "stap": "x",
+                    "datum_iso": "2026-10-14T10:00:00+02:00", "klaarzet_id": None, "dringend": False},
+                   {"uniek": "info@h-invest.be:<b>", "wacht": "mail-hinv", "soort": "hoog", "werkdagen": 1, "stap": "y",
+                    "datum_iso": "2026-10-16T10:00:00+02:00", "klaarzet_id": 812, "dringend": True}]
+    lijst = M.punten(open_punten, cfg)
+    assert [i["firma"] for i in lijst] == ["HINV", "MCH"]
+    assert lijst[0]["oproep"] == "mailoproep:812" and lijst[1]["oproep"] == "mailoproep:mch@h-architects.be:<a>"
+    assert M.titel_0800(lijst, "x").startswith("Mail: 2 op te volgen, waarvan 1 belangrijk")
+    klaar = [{"id": 1, "soort": "oproep", "uniek": "mailoproep:812"}, {"id": 2, "soort": "oproep", "uniek": "mailoproep:999"},
+             {"id": 3, "soort": "oproep", "uniek": "afspraak:5"}, {"id": 4, "soort": "signaal", "uniek": "mailoproep:7"}]
+    assert [i["id"] for i in M.oude_oproepen(lijst, klaar)] == [2]
+    assert M.moment(datetime.fromisoformat("2026-10-19T22:00:00+02:00"), {}) == "", "een ronde om 22:00 is geen moment"
+    assert M.moment(datetime.fromisoformat("2026-10-19T08:05:00+02:00"), {}) == "08:00"
+    assert M.moment(datetime.fromisoformat("2026-10-18T08:05:00+02:00"), {}) == "", "zondag"
+    bron = open(os.path.join(HIER, "mail_regisseur.py"), encoding="utf-8").read()
+    assert 'x.get("dringend") and echt' in bron and "klaargezet_voor(NAAM" not in bron
+    dag = open(os.path.join(HIER, "dagbundelaar.py"), encoding="utf-8").read()
+    assert '"mail-regisseur" in (it.get("van"), it.get("voor"))' in dag, "de Dagbundelaar laat mail liggen"
 
 
 def test_wat_op_25_september_ten_onrechte_doorkwam():
@@ -121,6 +301,11 @@ def test_wat_op_25_september_ten_onrechte_doorkwam():
     assert t("info@cluboase.sr", "75 jaar Oase – sport, vriendschap en mooie herinneringen!", automatisch=True)[0] == "melding"
     assert t("info@kine-voorbeeld.test", "HERINNERING - Uw afspraak bij KINEVOORBEELD - woensdag 23/09", automatisch=True)[0] == "melding"
     assert t("alle.ouders@sk.sgarchipel.be", "Nieuwsbrief kinderkuren", lijst=True)[0] in ("melding", "rommel")
+    bekend = frozenset({"klm_royal_dutch_airlines@infos-klm.com", "stadsarchief@antwerpen.be"})
+    for van, ond in (("klm_royal_dutch_airlines@infos-klm.com", "Uw boeking is bevestigd"),
+                     ("klm_royal_dutch_airlines@infos-klm.com", "Check-in is begonnen!"),
+                     ("stadsarchief@antwerpen.be", "Uw download van inventarisnummer 956#595 staat klaar")):
+        assert postvak.trieer(kop(van, ond), EIGEN, bekend)[0] == "melding", (van, ond)  # 19-10-2026, droge ronde mch@
 
 
 def test_wat_op_25_september_terecht_doorkwam_blijft():
@@ -181,7 +366,7 @@ def test_sorteren_door_de_wacht():
     bode = open(os.path.join(HIER, "bode.py"), encoding="utf-8").read()
     assert '"oproep")' in bode and 'it["soort"] == "oproep"' in bode, "De Bode belt bij een oproep"
     regisseur = open(os.path.join(HIER, "mail_regisseur.py"), encoding="utf-8").read()
-    assert '"soort": "oproep"' in regisseur and 'f"mailoproep:{i.get(\'id\')}"' in regisseur, "een oproep per bericht"
+    assert '"soort": "oproep"' in regisseur and '"uniek": i["oproep"]' in regisseur, "een oproep per bericht"
 
 
 def test_werkdagen_tellen_het_weekend_niet():

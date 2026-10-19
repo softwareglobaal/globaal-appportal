@@ -4,8 +4,9 @@
 Mandaat van Mehdi, 25-09-2026: "een regisseur van de e-mails die de antwoorden geeft aan de
 hoofdregisseur, anders ga ik al die e-mails vergeten. Geen spam, geen rommelinformatie."
 
-Elke mailwacht (koppelingen/postvak.py) zet per bericht dat opvolging vraagt een item klaar
-voor mail-regisseur. Ik lees die lijst drie keer per werkdag, maak er per firma een overzicht
+Elke mailwacht (koppelingen/postvak.py) geeft per bericht zijn opvolging door aan het bord (tabel mailbericht). Sinds
+19-10-2026 (driehoeksoverleg, 3-0) lees ik wat openstaat daar, via /api/mail/open: dezelfde lijst als op /mail en in
+het werkverslag van de wachten, een bron. Ik lees die lijst drie keer per werkdag, maak er per firma een overzicht
 van (hoog eerst, dan wat het langst wacht) en:
   - schrijf het in mijn werkverslag, waar De Regisseur het leest (agent_verslag);
   - zet het klaar voor De Regisseur;
@@ -52,20 +53,31 @@ def moment(nu, staat):
     return ""
 
 
-def punten(items):
-    """De klaargezette items, gelezen en gesorteerd: per firma, hoog eerst, dan wat het langst wacht."""
+def punten(open_punten, cfg):
+    """Wat het bord als open geeft (/api/mail/open), per firma, hoog eerst, dan wat het langst wacht. De firma komt uit
+    mailwachten.json (de wacht die het bericht las). Elk punt houdt zijn sleutel voor een oproep: wat voor 19-10-2026 al
+    een klaarzet-item was, houdt mailoproep:<id>, zodat De Bode nooit twee keer belt voor hetzelfde bericht."""
     uit = []
-    for it in items:
-        try:
-            i = json.loads(it.get("inhoud") or "{}")
-        except ValueError:
-            continue
-        i["firma"] = it.get("sleutel") or ""
-        i["wacht"] = it.get("van") or ""
-        i["id"] = it.get("id")
+    for p in open_punten:
+        i = dict(p)
+        w = cfg.get(i.get("wacht") or "")
+        i["firma"] = w.get("firma", "") if isinstance(w, dict) else ""
+        i["werkdagen_zonder_antwoord"] = int(i.get("werkdagen") or 0)
+        i["voorstel"] = i.get("stap") or ""
+        i["datum"] = i.get("datum_iso") or ""
+        i["oproep"] = f"mailoproep:{i['klaarzet_id']}" if i.get("klaarzet_id") else f"mailoproep:{i.get('uniek')}"
         uit.append(i)
-    uit.sort(key=lambda i: (i["firma"], VOLGORDE.get(i.get("soort"), 9), -int(i.get("werkdagen_zonder_antwoord") or 0)))
+    uit.sort(key=lambda i: (i["firma"], VOLGORDE.get(i.get("soort"), 9), -i["werkdagen_zonder_antwoord"]))
     return uit
+
+
+def lees_open(cfg):
+    """De open punten van het bord, de enige telling (een bron, 19-10-2026)."""
+    antw = bord.call("/api/mail/open")
+    lijst = punten(antw.get("punten", []), cfg)
+    if len(lijst) != antw.get("aantal", len(lijst)):
+        raise ValueError(f"het bord gaf {antw.get('aantal')} als aantal maar {len(lijst)} punten")
+    return lijst
 
 
 def overzicht(lijst, nu):
@@ -81,14 +93,29 @@ def overzicht(lijst, nu):
             firma = i["firma"]
             regels += ["", f"## {FIRMANAMEN.get(firma, firma)}", ""]
         wd = int(i.get("werkdagen_zonder_antwoord") or 0)
+        twijfel = " Mogelijk al beantwoord, nakijken." if i.get("opvolging") == "onzeker" else ""
         regels.append(f"- {i.get('soort')}: {i.get('van_naam') or i.get('van')}, {i.get('onderwerp', '')[:100]} "
-                      f"({i.get('datum', '')[:10]}, {wd} werkdagen, {i.get('postvak')}). Voorstel: {i.get('voorstel')}.")
+                      f"({i.get('datum', '')[:10]}, {wd} werkdagen, {i.get('postvak')}). Voorstel: {i.get('voorstel')}.{twijfel}")
     return "\n".join(regels)
 
 
 def dringend(lijst):
     return [i for i in lijst if i.get("soort") in ("hoog", "actie")
             or int(i.get("werkdagen_zonder_antwoord") or 0) >= 5]
+
+
+def titel_0800(lijst, samen):
+    """Het 08:00-bericht noemt het aantal open punten, hetzelfde getal als de tegel Op te volgen op /mail."""
+    hoog = sum(1 for i in lijst if i.get("soort") == "hoog")
+    return f"Mail: {len(lijst)} op te volgen, waarvan {hoog} belangrijk ({samen}); lijst op mijnagents.globaal.be/mail"
+
+
+def oude_oproepen(lijst, klaargezet):
+    """Oproepen die nog niet gebeld zijn (klaar) voor een bericht dat niet meer openstaat: die haal ik weg, zodat De Bode
+    niet belt over mail die intussen beantwoord of afgehandeld is (ontwerptoets 19-10-2026, Codex O6)."""
+    nog = {i["oproep"] for i in lijst if i.get("dringend")}
+    return [it for it in klaargezet if it.get("soort") == "oproep" and str(it.get("uniek") or "").startswith("mailoproep:")
+            and it.get("uniek") not in nog]
 
 
 def main():
@@ -98,19 +125,21 @@ def main():
         staat = json.load(open(STAAT))
     except (OSError, ValueError):
         staat = {}
-    m = moment(nu, staat) or (nu.strftime("%H:%M") if (forceer or droog) else "")
+    echt = moment(nu, staat)  # een van mijn vaste momenten op een werkdag: alleen dan laat ik bellen
+    m = echt or (nu.strftime("%H:%M") if (forceer or droog) else "")
     if not m:
         return
     if droog:
-        lijst = punten(bord.klaargezet_voor(NAAM, n=500))
+        lijst = lees_open(postvak.wachten())
         print(overzicht(lijst, nu))
-        print(f"\ndringend: {len(dringend(lijst))}")
+        print(f"\nop te volgen: {len(lijst)}; dringend: {len(dringend(lijst))}; "
+              f"zou bellen voor: {len([i for i in lijst if i.get('dringend')]) if echt else 0} (alleen op een vast moment)")
         return
     ag = bord.Agent(NAAM)
     with ag.ronde(f"mail bundelen ({m})") as r:
         cfg = postvak.wachten()
         r.bron("mailwachten.json", json.dumps(cfg, ensure_ascii=False, sort_keys=True))
-        lijst = punten(bord.klaargezet_voor(NAAM, n=500))
+        lijst = lees_open(cfg)
         tekst = overzicht(lijst, nu)
         vandaag = nu.date().isoformat()
         os.makedirs(UIT, exist_ok=True)
@@ -125,30 +154,36 @@ def main():
                   "uniek": f"mailregisseur:{vandaag}:{m}", "inhoud": tekst}]
         d = dringend(lijst)
         # Dringend (postvak.DRINGEND: deurwaarder, ingebrekestelling, laatste aanmaning, schorsing, ...): De Bode laten
-        # bellen, een keer per bericht, op een van mijn momenten (werkdagen 08:00, 12:30, 17:00). Nooit het woord stil.
-        for i in (x for x in lijst if x.get("dringend")):
+        # bellen, een keer per bericht, alleen op een van mijn vaste momenten (werkdagen 08:00, 12:30, 17:00), nooit bij een
+        # ronde met --nu daarbuiten (ontwerptoets 19-10-2026, Claude O8). Nooit het woord stil.
+        for i in (x for x in lijst if x.get("dringend") and echt):
             # een oproep per bericht (uniek op het item), dus nooit twee keer gebeld voor hetzelfde; De Bode bundelt
             # wat tegelijk binnenkomt in een gesprek
             items.append({"voor": "mehdi", "soort": "oproep", "sleutel": vandaag,
                           "titel": re.sub("stil", "st.l", f"Dringende mail van {i.get('van_naam') or i.get('van')}: "
                                                           f"{i.get('onderwerp', '')[:90]}", flags=re.I)[:280],
-                          "uniek": f"mailoproep:{i.get('id')}",
+                          "uniek": i["oproep"],
                           "inhoud": f"{FIRMANAMEN.get(i['firma'], i['firma'])}, {i.get('postvak')}: {i.get('van_naam') or i.get('van')}, "
                                     f"{i.get('onderwerp', '')[:140]} ({i.get('werkdagen_zonder_antwoord')} werkdagen zonder antwoord). "
                                     "Staat op mijnagents.globaal.be/mail."})
         if m == MOMENTEN[0] and d:
             # Een bericht per dag, zonder aantal in de sleutel (N10), zonder het woord stil (AGENTNORM 6).
             items.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
-                          "titel": f"Mail: {len(d)} zaken wachten op jou ({samen}); overzicht bij De Mailregisseur",
+                          "titel": titel_0800(lijst, samen),
                           "uniek": f"mailregisseur:{vandaag}",
                           "inhoud": "\n".join(f"- {FIRMANAMEN.get(i['firma'], i['firma'])}: {i.get('van_naam') or i.get('van')}, "
                                               f"{i.get('onderwerp', '')[:90]} ({i.get('werkdagen_zonder_antwoord')} wd)" for i in d[:15])})
         ag.klaarzet(items)
+        try:
+            for it in oude_oproepen(lijst, bord.klaargezet_voor("mehdi", n=500)):
+                bord.opgepakt(it["id"], f"{NAAM}: niet meer open, niet bellen")
+        except Exception as e:  # noqa: BLE001
+            ag.log("oproepen", "fout", f"oude oproepen niet nagekeken: {type(e).__name__}: {str(e)[:120]}")
         zonder = [z["postvak"] for z in cfg.get("zonder_wacht", [])]
         if zonder:
             r.nood("Postvakken zonder mailwacht: " + ", ".join(zonder) + ". Wat nodig is staat in werkwijze/mailwachten.json",
                    wie="mehdi")
-        r.detail = f"{m}: {len(lijst)} op de lijst ({samen}), dringend {len(d)}"
+        r.detail = f"{m}: {len(lijst)} op te volgen, zoals op /mail ({samen}), dringend {len(d)}"
         staat.setdefault(vandaag, {})[m] = nu.isoformat()
         for k in [k for k in staat if k < vandaag]:
             staat.pop(k)

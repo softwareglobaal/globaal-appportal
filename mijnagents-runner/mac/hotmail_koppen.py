@@ -61,20 +61,21 @@ def lees():
     ontvangers = {}
     uit = []
     # automated_conversation: Mail markeert zelf wat automatisch verstuurd is (2); list_id_hash: een mailinglijst.
+    # message_id: de hash die Mail van de Message-ID maakt; message_references verwijst met diezelfde hash naar de draad.
     vraag = ("SELECT m.ROWID, m.mailbox, m.date_received, a.address, a.comment, m.subject_prefix, s.subject, g.message_id_header, "
-             "m.automated_conversation, m.list_id_hash "
+             "m.automated_conversation, m.list_id_hash, m.message_id "
              "FROM messages m LEFT JOIN addresses a ON m.sender=a.ROWID LEFT JOIN subjects s ON m.subject=s.ROWID "
              "LEFT JOIN message_global_data g ON m.global_message_id=g.ROWID "
              f"WHERE m.deleted=0 AND m.mailbox IN ({','.join('?' * len(mappen))}) AND m.date_received >= ?")
     grens_verzonden = (nu - timedelta(days=VERZONDEN_DAGEN)).timestamp()
-    for rid, mbox, ts, van, naam, prefix, ond, mid, auto, lijst in c.execute(vraag, (*mappen, grens_verzonden)):
+    for rid, mbox, ts, van, naam, prefix, ond, mid, auto, lijst, draad in c.execute(vraag, (*mappen, grens_verzonden)):
         kaart = mappen[mbox]
         if kaart == "INBOX" and ts < (nu - timedelta(days=ONTVANGEN_DAGEN)).timestamp():
             continue
         uit.append({"map": kaart, "uid": rid, "datum": datetime.fromtimestamp(ts, timezone.utc).isoformat(),
                     "van": (van or "").lower(), "van_naam": naam or "", "aan": [], "cc": [],
                     "onderwerp": ((prefix or "") + (ond or "")).strip(), "message_id": mid or "",
-                    "automatisch": auto == 2, "lijst": bool(lijst)})
+                    "automatisch": auto == 2, "lijst": bool(lijst), "draad": str(draad) if draad else "", "verwijst": []})
     ids = [b["uid"] for b in uit]
     for i in range(0, len(ids), 500):
         deel = ids[i:i + 500]
@@ -82,7 +83,17 @@ def lees():
                 "SELECT r.message, a.address, a.comment, r.type FROM recipients r JOIN addresses a ON r.address=a.ROWID "
                 f"WHERE r.message IN ({','.join('?' * len(deel))}) ORDER BY r.position", deel):
             ontvangers.setdefault(msg, []).append((f"{naam} <{adres}>" if naam else adres, soort))
+    # De draad (19-10-2026): waarnaar een bericht verwijst (In-Reply-To en References, als hash). De wacht stelt er
+    # "beantwoord" mee vast, in plaats van "iets verstuurd naar hetzelfde adres".
+    verwijst = {}
+    for i in range(0, len(ids), 500):
+        deel = ids[i:i + 500]
+        # In de volgorde van de kop (ROWID): de laatste is het bericht waarop geantwoord wordt (In-Reply-To).
+        for msg, ref in c.execute(f"SELECT message, reference FROM message_references WHERE message IN ({','.join('?' * len(deel))}) "
+                                  "ORDER BY message, ROWID", deel):
+            verwijst.setdefault(msg, []).append(str(ref))
     for b in uit:
+        b["verwijst"] = verwijst.get(b["uid"], [])
         for tekst, soort in ontvangers.get(b["uid"], []):
             (b["cc"] if soort == 1 else b["aan"]).append(tekst)
     return {"gemaakt": nu.isoformat(), "adres": ADRES, "account": acc, "berichten": uit}

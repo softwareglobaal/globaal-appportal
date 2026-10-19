@@ -43,8 +43,10 @@ def main():
             except ValueError:
                 d = {}
             dag = (d.get("datum") or d.get("start") or it.get("sleutel") or "")[:10]
-            if it.get("soort") in ("dagplan", "dagbundel", "signaal"):
+            if it.get("soort") in ("dagplan", "dagbundel", "signaal", "oproep"):
                 continue
+            if "mail-regisseur" in (it.get("van"), it.get("voor")):
+                continue  # mail volgt De Mailregisseur op; tot 19-10-2026 haalde ik hier elke nacht opvolgpunten weg (37 stuks)
             if it.get("soort") == "locatie" or it.get("van") == "locatie-wacht":
                 continue  # het bewegingslogboek is alleen voor Mehdi; nooit in een bundel voor een afdeling
             if dag == DAG or (it.get("soort") == "transcript" and (d.get("start") or "")[:10] == DAG):

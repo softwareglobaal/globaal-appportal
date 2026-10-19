@@ -305,7 +305,7 @@ def _fetch_koppen(M, uids):
     reeks = ",".join(str(u) for u in uids)
     ok, gegevens = M.uid("FETCH", reeks,
                          "(UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS "
-                         "(FROM TO CC SUBJECT DATE MESSAGE-ID)])")
+                         "(FROM TO CC SUBJECT DATE MESSAGE-ID IN-REPLY-TO REFERENCES)])")
     if ok != "OK":
         raise ValueError("Koppen ophalen mislukt: " + _leesbaar(gegevens))
     uit, laatste = {}, None
@@ -361,6 +361,9 @@ def lijst(mailbox, mapnaam, van=None, aan=None, onderwerp=None, bevat=None,
             "bytes": int(grootte.group(1)) if grootte else None,
             "gelezen": "\\Seen" in vlaggenlijst,
             "message_id": _kop(kop.get("Message-ID")),
+            # De draad: waarop dit bericht antwoordt. De mailwachten stellen er "beantwoord" mee vast (19-10-2026).
+            "in_antwoord_op": _kop(kop.get("In-Reply-To")),
+            "verwijzingen": re.findall(r"<[^<>\s]+>", _kop(kop.get("References"))),
         })
 
     return {
