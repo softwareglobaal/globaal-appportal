@@ -201,6 +201,34 @@ class Selectie(Basis):
         self.assertIn("id:proef0005", st["bekend"])
         self.assertEqual((st["wachtrij"], tk.verwerkbaar(st)), (["id:proef0005"], []))
 
+    def test_heropende_map_wordt_opnieuw_gelezen(self):
+        # DT37: terwijl de map dicht was, verdween een V-blad; bij heropening haalt een volledige herlijst het weg, zodat
+        # de set-controle het ontbrekende V-blad ziet.
+        st = self.stand_met_basis()
+        dicht = f"{S}/3. STAN permission received/9903 Oefenstraat 3, 9000 Gent (reg)"
+        v, b = dicht + "/BA_x_P_V_1_00_gelijkvloers.pdf", dicht + "/BA_x_P_B_1_00_gelijkvloers.pdf"
+        tk.selecteer(st, {"wijzigingen": [plan(10, v, "hv"), plan(11, b, "hb")]})
+        tk.selecteer(st, {"wijzigingen": [{"soort": "dicht", "basis": "standaard", "pad": dicht},
+                                          {"soort": "weg", "pad": v.lower()}]})
+        self.assertIn("id:proef0010", st["bekend"])                       # dicht: niet weg
+        lijsten = [{"volledig": {"standaard": False}, "cursors": {"standaard": "c9"},
+                    "wijzigingen": [{"soort": "map", "pad": dicht.lower()}]},
+                   {"volledig": {"standaard": True}, "cursors": {"standaard": "c10"},
+                    "wijzigingen": [plan(11, b, "hb"), plan(12, dicht + "/BA_x_P_N_1_00_gelijkvloers.pdf", "hn")]}]
+        gevraagd = []
+        oud = tk.lijst_van_vm
+        tk.lijst_van_vm = lambda c: (gevraagd.append(dict(c)), lijsten.pop(0))[1]
+        self.addCleanup(setattr, tk, "lijst_van_vm", oud)
+        st["cursors"] = {"standaard": "c8"}
+        tk.bijwerken(st)
+        self.assertEqual(gevraagd, [{"standaard": "c8"}, {}])             # tweede keer zonder cursor: volledig
+        self.assertNotIn("id:proef0010", st["bekend"])
+        self.assertEqual((st.get("herlijst"), st["cursors"]), ([], {"standaard": "c10"}))
+        nep = NepNormcontrole()
+        sets = tk.set_bevindingen(nep, st, [{"id": "id:proef0012", "hash": "hn", "pad": dicht + "/BA_x_P_N_1_00_gelijkvloers.pdf",
+                                             "uitslag": {}}])
+        self.assertEqual(list(sets.values()), [[("toestanden", "regularisatie onvolledig: grondplan zonder V")]])
+
     def test_mappen_zonder_toegang_worden_gemeld(self):
         st = tk.lege_stand()
         tk.selecteer(st, {"volledig": {"standaard": True, "light": True},
@@ -361,7 +389,8 @@ class Controle(Basis):
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_Tom.pdf"), "G_N_(vrije tekst).pdf")   # DT17
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_gevel 0478123456.pdf"), "G_N_(vrije tekst).pdf")  # DT27
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_P_N_verdieping 2.pdf"), "P_N_verdieping 2.pdf")
-        for nummer in ("0499-123-456", "0499 12 34 56", "84.03.21-411.65", "+32 499 12 34 56", "0499 (123) 456"):  # DT31, DT35
+        for nummer in ("0499-123-456", "0499 12 34 56", "84.03.21-411.65", "+32 499 12 34 56", "0499 (123) 456",
+                       "0499–123–456", "0499:123:456", "0499,123,456", "0499·123·456", "0499\u00a0123\u00a0456"):  # DT31, DT35, DT36
             self.assertEqual(tk.bladcode(f"BA_Proefstraat 1, 3120 Tremelo_G_N_gevel {nummer}.pdf"), "G_N_(vrije tekst).pdf",
                              nummer)
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo TB_N_Terreinprofiel.pdf"), "TB_N_Terreinprofiel.pdf")

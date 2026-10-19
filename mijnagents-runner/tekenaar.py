@@ -205,7 +205,12 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
 
     def open_(pad):
         for basis, paden in toegang.items():
-            toegang[basis] = [d for d in paden if not (pad == d.lower() or pad.startswith(d.lower() + "/"))]
+            blijft = [d for d in paden if not (pad == d.lower() or pad.startswith(d.lower() + "/"))]
+            if len(blijft) != len(paden) and not volledig_lijst.get(basis):
+                # DT37: wat er in de map gebeurde terwijl ze dicht was (een verwijderd blad), weet de Mac niet; een
+                # volledige herlijst van die basismap in dezelfde ronde zet het recht, voor de set-controle
+                st["herlijst"] = sorted(set(st.get("herlijst") or []) | {basis})
+            toegang[basis] = blijft
 
     for w in lijst.get("wijzigingen", []):
         if w.get("soort") == "dicht":
@@ -258,6 +263,20 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
     return nieuw, weg
 
 
+def bijwerken(st, basisdatum=BASISDATUM):
+    """De lijst van de VM verwerken; ging er een map zonder toegang weer open, dan meteen een volledige lijst van die
+    basismap (DT37). Geeft (nieuw, weg, lijst)."""
+    lijst = lijst_van_vm(st["cursors"])
+    nieuw, weg = selecteer(st, lijst, basisdatum)
+    if st.get("herlijst"):
+        for basis in st["herlijst"]:
+            st["cursors"].pop(basis, None)
+        st["herlijst"] = []
+        n2, w2 = selecteer(st, lijst_van_vm(st["cursors"]), basisdatum)
+        nieuw, weg = nieuw + n2, weg + w2
+    return nieuw, weg, lijst
+
+
 def wacht_op_toegang(st, ident):
     """Staat dit plan in een map zonder toegang? Dan wordt het niet opgehaald en blokkeert het de ronde niet (DT28)."""
     q = (st["bekend"].get(ident, {}).get("pad") or "").lower()
@@ -308,15 +327,13 @@ def projectnummer(pad):
     return f"zonder nummer {hashlib.sha256(map_.lower().encode()).hexdigest()[:6]}", os.path.basename(map_)
 
 
-GEVOELIG = re.compile(r"\d[\d\s._()/+-]*\d")
-
-
 def gevoelig(tekst):
-    """Staat er een cijferreeks van vijf of meer cijfers in, ook in stukjes met spaties, punten, liggende streepjes,
-    haakjes of plustekens ("0499 (123) 456", "049_9_123_456", "84.03.21-411.65")? Dan kan het een telefoon- of
-    rijksregisternummer zijn (Codex DT31, DT35). Een versie (versieDDMMJJJJ) telt niet."""
-    zonder_versie = re.sub(r"versie\d{8}", " ", tekst or "", flags=re.I)
-    return any(len(re.sub(r"\D", "", r)) >= 5 for r in GEVOELIG.findall(zonder_versie))
+    """Staat er een nummer van vijf of meer cijfers in, hoe ook geschreven? Elk stuk tekst zonder letters telt als een
+    reeks, welke tekens er ook tussen de cijfers staan ("0499 (123) 456", "049_9_123_456", "0499–123–456",
+    "0499:123:456", "84.03.21-411.65"): het kan een telefoon- of rijksregisternummer zijn (Codex DT31, DT35, DT36).
+    Een versie (versieDDMMJJJJ) telt niet."""
+    zonder_versie = re.sub(r"versie\d{8}", "x", tekst or "", flags=re.I)
+    return any(len(re.sub(r"\D", "", r)) >= 5 for r in re.findall(r"[^A-Za-zÀ-ÿ]+", zonder_versie))
 
 
 def toegelaten(tekst):
@@ -844,8 +861,7 @@ def werk(r, st, wk):
         r.detail = "geen lijst gelezen: een hulpscript op de VM ontbreekt"
         return False
     nc = normcontrole(nc_pad)
-    lijst = lijst_van_vm(st["cursors"])
-    nieuw, weg = selecteer(st, lijst)
+    nieuw, weg, _ = bijwerken(st)
     bewaar_stand(st)          # cursor en wachtrij samen: een onderbroken ronde gaat volgende keer verder
     verdwenen = controleer_wachtrij(nc, st, commit=commit)
     meldingen = list(st["te_melden"])
@@ -889,8 +905,7 @@ def droog(st, sinds=None):
         return 1
     _, commit, nc_pad, _ = regelboek()
     nc = normcontrole(nc_pad)
-    lijst = lijst_van_vm(st["cursors"])
-    nieuw, weg = selecteer(st, lijst, basisdatum=f"{sinds}T00:00:00+00:00" if sinds else BASISDATUM)
+    nieuw, weg, lijst = bijwerken(st, basisdatum=f"{sinds}T00:00:00+00:00" if sinds else BASISDATUM)
     tel = {}
     for g in st["gezien"].values():
         tel[g["status"]] = tel.get(g["status"], 0) + 1
