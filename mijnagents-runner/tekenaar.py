@@ -40,6 +40,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
@@ -60,6 +61,7 @@ HULP = "~/agents/.venv/bin/python ~/appportal/mijnagents-runner/koppelingen/ba_p
 HULP_VERSIE = "3"
 BORDSTAND = "~/agents/.venv/bin/python ~/appportal/mijnagents-runner/koppelingen/bordstand.py"
 MAX_DETAIL = 15000          # het bord kapt het detail van een logboekregel af op 20.000 tekens (mijnagents/app.py)
+MAX_INHOUD = 50000          # en de inhoud van een klaarzet-item op 60.000 (Codex DT16)
 SSH_SOCKET = os.path.expanduser("~/.ssh/tekenaar-%C")
 # De archiefcontrole van oktober 2026 (overleg/archiefcontrole-2026-10.md in de brug) mat de jongste versie van elk blad
 # tot 18-10-2026: wat daarvoor laatst gewijzigd is, telt als vrijgesteld (basis), niet als stuk voor stuk gecontroleerd.
@@ -282,7 +284,8 @@ def toegelaten(tekst):
 def bladcode(naam):
     """De bestandsnaam zonder 'BA_' en zonder voorwerp-ID (daar staat het adres in): 'P_N_1_00_gelijkvloers.pdf'. Wat
     na de tekeningsoort komt, gaat alleen mee als het uit toegelaten woorden bestaat; anders '(vrije tekst)'."""
-    m = re.match(rf"^BA_.+?_((?:{SOORTEN})_.*)$", naam or "", re.I)
+    m = re.match(rf"^BA_.+?_((?:{SOORTEN})_.*)$", naam or "", re.I) \
+        or re.match(rf"^BA_.+?\s((?:{SOORTEN})_[BNVT]{{1,4}}(?:_.*|\.pdf))$", naam or "")   # spatie voor de soort
     if m:
         code = m.group(1)
     else:
@@ -293,7 +296,9 @@ def bladcode(naam):
     delen = stam.split("_")
     vast = [delen[0]] if m else []
     rest = delen[1:] if m else delen
-    while rest and re.fullmatch(r"[BNVT]{1,4}|\d{1,3}|[0-9A-Za-z]{1,3}'?|versie\d{8}", rest[0], re.I):
+    # Alleen wat de loketcodering is: toestand (B, V, N, T), deelset en volgnummer (cijfers, of een hoofdletter als
+    # gevel- of snedeletter), versie. Een kort woord zoals een voornaam is geen code (Codex DT17).
+    while rest and re.fullmatch(r"[BNVT]{1,4}|\d{1,3}|[A-Z]'?|[A-Z]\d|versie\d{8}", rest[0]):
         vast.append(rest.pop(0))
     vrij = "_".join(rest)
     if vrij and not toegelaten(vrij):
@@ -443,13 +448,15 @@ def regelboek():
     werkmap: een half bewerkte versie van een andere sessie raakt de weekronde niet. Geeft (bronnen voor N4, commit,
     pad van de normcontrole in de werkmap, of GitHub bereikt werd)."""
     opgehaald = git("fetch", "-q", "origin", "main")[0] == 0
-    code, commit = git("rev-parse", "--short", "origin/main", timeout=20)
+    code, volledig = git("rev-parse", "origin/main^{commit}", timeout=20)
     if code != 0:
         raise RuntimeError(f"de brug-repo heeft geen origin/main: {BRUG}")
-    commit = commit.decode().strip()
+    volledig = volledig.decode().strip()
+    commit = volledig[:7]
     bronnen = {}
     for pad in ("gereedschap/normcontrole.py", "kennis/normenboek-B01-checklist.md"):
-        code, inhoud_ = git("show", f"origin/main:{pad}", timeout=20)
+        # beide bestanden van precies dezelfde commit, niet van de naam origin/main die intussen kan verschuiven (DT19)
+        code, inhoud_ = git("show", f"{volledig}:{pad}", timeout=20)
         if code != 0:
             raise RuntimeError(f"{pad} niet in origin/main van de brug")
         bronnen[os.path.basename(pad)] = inhoud_.decode("utf-8")
@@ -571,16 +578,23 @@ def signaal(meldingen, sets, wk, commit):
                     "met_fout": p["met_fout"],
                     "fouten": sorted(p["fouten"].values(), key=lambda f: (f["wat"] in SJABLOONFOUT, -f["bladen"])),
                     "set": p["set"], "na_te_kijken": p["na_te_kijken"][:10]})
-    return {"voor": "mehdi", "soort": "signaal", "sleutel": wk, "uniek": f"tekenaar-normcontrole-{wk}-{vinger}",
-            "titel": titel[:110],
-            "inhoud": {"week": wk, "projecten": uit,
-                       "voorstel": ["Per project de bladen met een FOUT verbeteren in een kopie in de Teken-agent-map, "
-                                    "nooit in de projectmap; Mehdi zegt welk project eerst en geeft vrij."]
-                       + (["Wat na te kijken is (te groot of onleesbaar), bekijkt Mehdi zelf in het origineel."]
-                          if any(p["na_te_kijken"] for p in projecten.values()) else [])
-                       + [f"{LABEL.get(s, s)}: {VOORSTEL[s]}" for s in soorten if s in VOORSTEL],
-                       "werkverslag": "de lijst per blad staat in het werkverslag van De Tekenaar op het bord",
-                       "regelboek": f"normcontrole uit globaal-vectorworks-brug, origin/main {commit or 'onbekend'}"}}
+    inhoud_ = {"week": wk, "projecten": uit,
+               "voorstel": ["Per project de bladen met een FOUT verbeteren in een kopie in de Teken-agent-map, "
+                            "nooit in de projectmap; Mehdi zegt welk project eerst en geeft vrij."]
+               + (["Wat na te kijken is (te groot of onleesbaar), bekijkt Mehdi zelf in het origineel."]
+                  if any(p["na_te_kijken"] for p in projecten.values()) else [])
+               + [f"{LABEL.get(s, s)}: {VOORSTEL[s]}" for s in soorten if s in VOORSTEL],
+               "werkverslag": "de lijst per blad staat in het werkverslag van De Tekenaar op het bord"}
+    # DT16: het bord kapt de inhoud af op 60.000 tekens; de laatste projecten gaan dan alleen in het werkverslag.
+    weg = 0
+    while len(json.dumps(inhoud_, ensure_ascii=False)) > MAX_INHOUD and len(inhoud_["projecten"]) > 1:
+        inhoud_["projecten"].pop()
+        weg += 1
+        inhoud_["meer_projecten"] = f"nog {weg} projecten met een bevinding staan alleen in het werkverslag"
+    # Het uniek is de vingerafdruk van de bevindingen, zonder week en zonder commit: dezelfde bevindingen worden nooit
+    # twee keer gemeld, ook niet na een ronde die over een weekgrens heen herhaald wordt; nieuwe wel (N10, DT14).
+    return {"voor": "mehdi", "soort": "signaal", "sleutel": wk, "uniek": f"tekenaar-normcontrole-{vinger}",
+            "titel": titel[:110], "inhoud": inhoud_}
 
 
 # ------------------------------------------------------------------ ronde ---
@@ -625,7 +639,7 @@ def controleer_wachtrij(nc, st, bewaar=True, maximum=None, haal=None):
     return verdwenen
 
 
-def werkverslag(meldingen, sets, blind, wk):
+def werkverslag(meldingen, sets, blind, wk, merk=""):
     """De regels voor het logboek op het bord: per project de bladen met oordeel en bevindingen (DT10: labels zonder
     adres), de sets met een fout en de mappen zonder toegang."""
     per_project = {}
@@ -646,20 +660,21 @@ def werkverslag(meldingen, sets, blind, wk):
                             for s in ("FOUT", "ONBEKEND", "LET OP", "OK"))
         # DT13: het bord kapt het detail af op 20.000 tekens; in stukken, elk onder MAX_DETAIL, op een hele regel
         stukken, stuk = [], []
-        for regel in tekst:
-            if stuk and len("\n".join(stuk + [regel])) > MAX_DETAIL:
-                stukken.append(stuk)
-                stuk = []
-            stuk.append(regel[:MAX_DETAIL])
+        for lang in tekst:
+            for regel in (lang[i:i + MAX_DETAIL] for i in range(0, max(len(lang), 1), MAX_DETAIL)):  # DT13: niets afknippen
+                if stuk and len("\n".join(stuk + [regel])) > MAX_DETAIL:
+                    stukken.append(stuk)
+                    stuk = []
+                stuk.append(regel)
         stukken.append(stuk)
         for i, stuk in enumerate(stukken, 1):
             deel = f" (deel {i} van {len(stukken)})" if len(stukken) > 1 else ""
-            regels.append({"naam": NAAM, "onderwerp": f"project {nr}", "stap": "controle",
+            regels.append({"naam": NAAM, "onderwerp": f"project {nr}{f' (verslag {merk})' if merk else ''}", "stap": "controle",
                            "tekst": f"{len(lijst)} nieuwe of gewijzigde bladen; oordeel: {telling}{deel}",
                            "detail": "\n".join(stuk)})
     if blind:
         # Geen nood: of de stack daar mag lezen, is een keuze van Mehdi; een nood zou elke ronde open blijven (N7).
-        regels.append({"naam": NAAM, "onderwerp": f"week {wk}", "stap": "bron",
+        regels.append({"naam": NAAM, "onderwerp": f"week {wk}{f' (verslag {merk})' if merk else ''}", "stap": "bron",
                        "tekst": "mappen zonder toegang voor de stack: daar ziet De Tekenaar geen nieuwe plannen",
                        "detail": "\n".join(os.path.basename(p) if toegelaten(os.path.basename(p)) else "(map)"
                                             for p in blind)})
@@ -667,24 +682,36 @@ def werkverslag(meldingen, sets, blind, wk):
 
 
 def meld(st, nc, wk, commit):
-    """Werkverslag en signaal naar het bord, rechtstreeks, zodat een fout de ronde breekt en te_melden blijft staan
-    (Codex DT06): de volgende ronde meldt het dan opnieuw. Pas na bevestiging gaat te_melden leeg. Geeft (signaal of
+    """Signaal en werkverslag naar het bord, rechtstreeks, zodat een fout de ronde breekt en te_melden blijft staan
+    (Codex DT06); de volgende ronde meldt het dan opnieuw. Beide worden teruggelezen voor te_melden leeg gaat: het
+    signaal op zijn uniek (de volledige inhoud, DT16), het werkverslag op zijn kenmerk in het onderwerp (elke regel,
+    DT13). Staat het werkverslag er al (een verloren antwoord), dan gaat het niet nog eens (DT15). Geeft (signaal of
     None, sets)."""
     meldingen = list(st["te_melden"])
     sets = set_bevindingen(nc, st, meldingen) if meldingen else {}
-    # Eerst het signaal: zijn uniek maakt het herhaalbaar zonder dubbel bericht. Dan het werkverslag, dat het bord
-    # niet ontdubbelt: breekt het signaal, dan staat er nog geen verslag dat de volgende ronde zou herhalen (DT15).
     item = signaal(meldingen, sets, wk, commit)
     if item:
         item["van"] = NAAM
-        uit = bord.call("/api/klaarzet", {"items": ag.maskeer([item])})
-        if not isinstance(uit, dict) or (uit.get("nieuw", 0) + uit.get("bestaand", 0)) < 1:
-            raise RuntimeError(f"het bord bevestigde het signaal niet: {str(uit)[:100]}")
-    regels = werkverslag(meldingen, sets, blinde_vlekken(st), wk)
+        bord.call("/api/klaarzet", {"items": ag.maskeer([item])})
+        terug = bord.call("/api/klaarzet?" + urllib.parse.urlencode({"uniek": item["uniek"], "status": "alle", "n": 5}))
+        rijen = (terug or {}).get("items") or []
+        try:
+            ontvangen = json.loads(rijen[0]["inhoud"]) if rijen else None
+        except (ValueError, KeyError, TypeError):
+            ontvangen = None
+        if ontvangen != ag.maskeer(item["inhoud"]):
+            raise RuntimeError("het bord heeft het signaal niet volledig ontvangen")
+    merk = hashlib.sha256(json.dumps([m.get("hash") or m["id"] for m in meldingen] + [wk],
+                                     ensure_ascii=False).encode()).hexdigest()[:8]
+    regels = werkverslag(meldingen, sets, blinde_vlekken(st), wk, merk)
     if regels:
-        uit = bord.call("/api/logboek", {"regels": ag.maskeer(regels)})
-        if not isinstance(uit, dict) or uit.get("geschreven") != len(regels):     # DT13: ontvangst nagaan
-            raise RuntimeError(f"het bord schreef niet elke regel van het werkverslag: {str(uit)[:100]}")
+        def op_het_bord():
+            terug = bord.call(f"/api/logboek/{NAAM}?" + urllib.parse.urlencode({"onderwerp": f"(verslag {merk})", "n": 300}))
+            return len((terug or {}).get("regels") or [])
+        if op_het_bord() == 0:
+            uit = bord.call("/api/logboek", {"regels": ag.maskeer(regels)})
+            if not isinstance(uit, dict) or uit.get("geschreven") != len(regels) or op_het_bord() != len(regels):
+                raise RuntimeError(f"het bord schreef niet elke regel van het werkverslag: {str(uit)[:100]}")
     st["te_melden"] = []
     bewaar_stand(st)
     return item, sets
@@ -722,14 +749,15 @@ def werk(r, st, wk):
                 f"{'een signaal voor Mehdi' if item else 'geen signaal'}; {len(st['wachtrij'])} in de wachtrij; "
                 f"{len(st['bekend'])} plannen in de projectmappen, {nieuw} met nieuwe inhoud, {weg + verdwenen} weg; "
                 f"normcontrole origin/main {commit}{'' if opgehaald else ' (GitHub niet bereikt)'}"
-                + (f"; niet leesbaar: {', '.join(os.path.basename(p) for p in blind)}" if blind else ""))
+                + (f"; niet leesbaar: {', '.join(os.path.basename(p) if toegelaten(os.path.basename(p)) else '(map)' for p in blind)}"
+                   if blind else ""))
     return not st["wachtrij"]
 
 
 def aan_de_beurt(st, nu=None):
     """Een ronde is aan de beurt als de vorige gelukte ronde zes dagen oud is, of als er nog plannen of meldingen
     wachten (inhaalronde)."""
-    if st.get("wachtrij") or st.get("te_melden") or not st.get("laatste_ronde"):
+    if st.get("wachtrij") or st.get("te_melden") or st.get("herhaal") or not st.get("laatste_ronde"):
         return True
     try:
         vorige = datetime.fromisoformat(st["laatste_ronde"])
@@ -806,6 +834,10 @@ def main(argv=None):
         wk = week()
         gelukt = False
         begin = nu_utc()
+        if st is not None:
+            # DT18: een ronde die begint en niet slaagt, moet de volgende start opnieuw, ook kort na een gelukte ronde
+            st["herhaal"] = True
+            bewaar_stand(st)
         try:
             if st is None:
                 ronde_zonder_stand(token, stand_fout)
@@ -829,7 +861,7 @@ def main(argv=None):
             if not ja:
                 print(f"ronde niet bevestigd door het bord: {waarom}", file=sys.stderr)
                 return 1
-            st["laatste_week"], st["laatste_ronde"] = wk, nu_utc().isoformat(timespec="seconds")
+            st["laatste_week"], st["laatste_ronde"], st["herhaal"] = wk, nu_utc().isoformat(timespec="seconds"), False
             bewaar_stand(st)
         print(f"{datetime.now().isoformat(timespec='seconds')} De Tekenaar: ronde {wk} {'gelukt' if gelukt else 'niet af'}")
         return 0 if gelukt else 1

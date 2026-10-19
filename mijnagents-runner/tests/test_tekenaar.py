@@ -29,6 +29,7 @@ import sys
 import tempfile
 import unittest
 import urllib.error
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -225,7 +226,7 @@ class Controle(Basis):
                 "fout_reden": {"persoonsgegevens": "rijksregisternummer", "meetlijn": "5 m gemeten 25 mm"}}}
         item = tk.signaal([ok, fout], {os.path.dirname(P3): [("bladnummers", "dubbel")]}, "2026-W43", "abc1234")
         self.assertEqual((item["voor"], item["soort"]), ("mehdi", "signaal"))
-        self.assertRegex(item["uniek"], r"^tekenaar-normcontrole-2026-W43-[0-9a-f]{8}$")
+        self.assertRegex(item["uniek"], r"^tekenaar-normcontrole-[0-9a-f]{8}$")      # zonder week en zonder aantal
         self.assertIn("9901", item["titel"])
         self.assertIn("9902", item["titel"])
         self.assertTrue(item["titel"].endswith(", persoonsgegevens)"), item["titel"])   # sjabloonfout achteraan
@@ -254,6 +255,17 @@ class Controle(Basis):
         b = {"id": "id:proef0002", "hash": "h2b", "pad": P2, "uitslag": {"fout_reden": {"schaal": "y"}}}
         self.assertNotEqual(tk.signaal([a], {}, "2026-W43", "c")["uniek"], tk.signaal([b], {}, "2026-W43", "c")["uniek"])
 
+    def test_groot_signaal_blijft_onder_de_grens_van_het_bord(self):
+        # DT16: 150 projecten met elk drie fouten; de inhoud blijft onder MAX_INHOUD, de rest staat in het werkverslag.
+        veel = []
+        for n in range(150):
+            pad = P2.replace("9901", f"{8000 + n}")
+            veel.append({"id": f"id:proefg{n:03d}", "hash": f"g{n}", "pad": pad,
+                         "uitslag": {"fout_reden": {"meetlijn": "m" * 150, "schaal": "s" * 150, "eenheid": "e" * 150}}})
+        item = tk.signaal(veel, {}, "2026-W43", "c")
+        self.assertLessEqual(len(json.dumps(item["inhoud"], ensure_ascii=False)), tk.MAX_INHOUD)
+        self.assertIn("werkverslag", item["inhoud"]["meer_projecten"])
+
     def test_te_groot_of_onleesbaar_gaat_naar_het_signaal(self):
         # DT07: niet gecontroleerd is een bruikbare bevinding; Mehdi kijkt het zelf na.
         m = {"id": "id:proefgroot", "hash": "h4", "pad": P1, "uitslag": tk.onbekend("plan groter dan 80 MB", True)}
@@ -272,6 +284,9 @@ class Controle(Basis):
                          "9901 / 3. Bouwaanvraag / 6. Latest PDF for Mehdi / G_N_1_A_voorgevel.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_P_N Garage.pdf"), "P_N Garage.pdf")
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_Kerkstraat 5_G_N.pdf"), "G_N.pdf")
+        self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_Tom.pdf"), "G_N_(vrije tekst).pdf")   # DT17
+        self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo TB_N_Terreinprofiel.pdf"), "TB_N_Terreinprofiel.pdf")
+        self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_1_A'_gevel.pdf"), "G_N_1_A'_gevel.pdf")
         self.assertTrue(tk.toegelaten("V3 2026-10-13"))
         self.assertFalse(tk.toegelaten("Peeters"))
 
@@ -334,18 +349,28 @@ class NepBord:
         self.oproepen = []
         self.faal = set()
         self.stand = {"status": None, "ts": None, "kennis_ts": None}
+        self.klaarzet, self.logboek = {}, []      # zoals het bord: klaarzet ontdubbeld op uniek, inhoud tot 60.000
+        self.knip = 60000
 
     def __call__(self, pad, payload=None, method=None):
-        if pad in self.faal:
+        route, _, vraag = pad.partition("?")
+        if route in self.faal or pad in self.faal:
             raise urllib.error.URLError("bord weg")
         self.oproepen.append((pad, payload))
         nu = datetime.now(timezone.utc).isoformat()
+        q = dict(urllib.parse.parse_qsl(vraag))
         if pad == "/agent-status":
             self.stand.update(status=payload["status"], ts=nu)
         if pad == "/api/agent/tekenaar/kennis":
             self.stand["kennis_ts"] = nu
         if pad == "/api/logboek":
+            self.logboek += payload["regels"]
             return {"ok": True, "geschreven": len(payload["regels"])}
+        if route == "/api/logboek/tekenaar":
+            return {"regels": [r for r in self.logboek if q.get("onderwerp", "") in r["onderwerp"]]}
+        if route == "/api/klaarzet" and payload is None:
+            rij = self.klaarzet.get(q.get("uniek"))
+            return {"items": [rij] if rij else []}
         if pad == "/api/agent/tekenaar/werkwijze":
             return {"werkwijze": self.werkwijze}
         if pad == "/api/agents":
@@ -353,7 +378,12 @@ class NepBord:
         if pad == "/api/nood":
             return {"nood": []}
         if pad == "/api/klaarzet":
-            return {"nieuw": len(payload["items"]), "bestaand": 0}
+            nieuw = 0
+            for it in payload["items"]:
+                if it["uniek"] not in self.klaarzet:
+                    nieuw += 1
+                    self.klaarzet[it["uniek"]] = dict(it, inhoud=json.dumps(it["inhoud"], ensure_ascii=False)[:self.knip])
+            return {"nieuw": nieuw, "bestaand": len(payload["items"]) - nieuw}
         return {"ok": True}
 
     def van(self, pad):
@@ -421,7 +451,7 @@ class Ronde(Basis):
         self.assertEqual(len(items), 1)
         self.assertEqual((items[0]["van"], items[0]["soort"]), ("tekenaar", "signaal"))
         verslag = [r for p in self.nep.van("/api/logboek") for r in p["regels"]]
-        self.assertTrue(any(r["onderwerp"] == "project 9901" for r in verslag))
+        self.assertTrue(any(r["onderwerp"].startswith("project 9901") for r in verslag))
         self.assertIn("FOUT 2", self.nep.van("/agent-status")[-1]["detail"])
         alles = json.dumps(self.nep.oproepen, ensure_ascii=False)
         for adres in ("Proefstraat", "3120 Tremelo"):
@@ -435,6 +465,7 @@ class Ronde(Basis):
         self.nep.faal = {"/api/logboek"}
         self.assertEqual(self.draai("--nu"), "breuk")
         st = tk.lees_stand()
+        self.assertTrue(st["herhaal"])
         self.assertEqual([m["id"] for m in st["te_melden"]], ["id:proef0002"])
         self.assertIsNone(st["laatste_ronde"])
         self.assertEqual(st["gezien"]["h2"]["status"], "gecontroleerd")
@@ -445,7 +476,7 @@ class Ronde(Basis):
         # uniek, dus het bord ontdubbelt het. Het werkverslag staat er een keer.
         items = [i for p in self.nep.van("/api/klaarzet") for i in p["items"]]
         self.assertEqual(len({i["uniek"] for i in items}), 1)
-        self.assertEqual(len([r for p in self.nep.van("/api/logboek") for r in p["regels"] if r["onderwerp"] == "project 9901"]), 1)
+        self.assertEqual(len([r for p in self.nep.van("/api/logboek") for r in p["regels"] if r["onderwerp"].startswith("project 9901")]), 1)
         self.assertEqual(tk.lees_stand()["te_melden"], [])
 
     def test_volle_wachtrij_houdt_de_ronde_open(self):
@@ -477,7 +508,7 @@ class Ronde(Basis):
         tk.bewaar_stand(self.stand_met_basis())
         self.lijst["wijzigingen"] = [plan(i, P2.replace("voorgevel", f"gevel{i}"), f"h{i}") for i in range(1, 151)]
         self.assertEqual(self.draai("--nu"), 0)
-        regels = [r for p in self.nep.van("/api/logboek") for r in p["regels"] if r["onderwerp"] == "project 9901"]
+        regels = [r for p in self.nep.van("/api/logboek") for r in p["regels"] if r["onderwerp"].startswith("project 9901")]
         self.assertGreater(len(regels), 1)
         self.assertTrue(all(len(r["detail"]) <= tk.MAX_DETAIL for r in regels))
         self.assertEqual(sum(r["detail"].count("FOUT  9901") for r in regels), 150)
@@ -487,11 +518,54 @@ class Ronde(Basis):
         st["te_melden"] = [{"id": "id:proef0001", "hash": "h1", "pad": P1, "uitslag": tk.onbekend("x")}]
         tk.bewaar_stand(st)
         echt = self.nep.__call__
-        self.nep_call = lambda pad, payload=None, method=None: ({"ok": True, "geschreven": 0} if pad == "/api/logboek"
-                                                               else echt(pad, payload, method))
-        bord.call = self.nep_call
+        bord.call = lambda pad, payload=None, method=None: ({"ok": True, "geschreven": 0} if pad == "/api/logboek"
+                                                           else echt(pad, payload, method))
         self.assertEqual(self.draai(), 1)
         self.assertEqual(len(tk.lees_stand()["te_melden"]), 1)
+        # Een lange regel wordt in stukken gezet, niet afgeknipt.
+        lang = {"id": "id:proef0003", "hash": "h3", "pad": P1, "uitslag": tk.onbekend("x" * 21012)}
+        stukken = [r["detail"] for r in tk.werkverslag([lang], {}, [], "2026-W43")]
+        self.assertEqual(sum(len(d) for d in stukken) - sum(d.count("\n") for d in stukken), len("ONBEKEND  ") +
+                         len(tk.blad_label(P1)) + len("    na te kijken: ") + 21012)
+        self.assertTrue(all(len(d) <= tk.MAX_DETAIL for d in stukken))
+
+    def test_verloren_antwoord_geeft_geen_dubbel_verslag(self):
+        # DT15: het bord schreef het verslag, maar het antwoord ging verloren; de volgende ronde stuurt het niet opnieuw.
+        tk.bewaar_stand(self.stand_met_basis())
+        self.lijst["wijzigingen"] = [plan(2, P2, "h2")]
+        echt = self.nep.__call__
+
+        def kwijt(pad, payload=None, method=None):
+            uit = echt(pad, payload, method)
+            if pad == "/api/logboek":
+                raise urllib.error.URLError("antwoord kwijt")
+            return uit
+        bord.call = kwijt
+        self.assertEqual(self.draai("--nu"), "breuk")
+        bord.call = self.nep
+        self.lijst["wijzigingen"] = []
+        self.assertEqual(self.draai(), 0)
+        self.assertEqual(len([r for r in self.nep.logboek if r["onderwerp"].startswith("project 9901")]), 1)
+        self.assertEqual(len(self.nep.klaarzet), 1)
+
+    def test_afgekapt_signaal_telt_niet_als_ontvangen(self):
+        # DT16: houdt het bord maar een deel van de inhoud, dan blijft de melding staan.
+        tk.bewaar_stand(self.stand_met_basis())
+        self.lijst["wijzigingen"] = [plan(2, P2, "h2")]
+        self.nep.knip = 200
+        self.assertEqual(self.draai("--nu"), 1)
+        self.assertEqual(len(tk.lees_stand()["te_melden"]), 1)
+
+    def test_mislukte_ronde_kort_na_een_gelukte_wordt_herhaald(self):
+        # DT18: een gelukte ronde gisteren, vandaag een --nu die breekt: morgen probeert hij opnieuw.
+        self.assertEqual(self.draai(), 0)
+        tk.hulp_versie = lambda: None
+        self.assertEqual(self.draai("--nu"), 1)
+        st = tk.lees_stand()
+        self.assertTrue(st["herhaal"] and tk.aan_de_beurt(st))
+        tk.hulp_versie = lambda: tk.HULP_VERSIE
+        self.assertEqual(self.draai(), 0)
+        self.assertFalse(tk.lees_stand()["herhaal"])
 
     def test_zonder_hulpscript_op_de_vm_een_nood(self):
         tk.hulp_versie = lambda: None
