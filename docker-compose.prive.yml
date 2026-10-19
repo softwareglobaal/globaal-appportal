@@ -1,0 +1,33 @@
+# Privé-uitgaven van Mehdi (prive.globaal.be). Additieve overlay zoals
+# docker-compose.bedrijfsvoering.yml, zodat docker-compose.override.yml niet
+# geraakt wordt. Op de VM staat dit bestand in COMPOSE_FILE (~/appportal/.env).
+# Eigen repo softwareglobaal/globaal-prive, uitgecheckt in ./prive met
+# auto-deploy via prive/deploy-stack.sh en cron. Alleen de Authentik-groep
+# prive-mehdi komt binnen; de app toetst dat zelf nog eens.
+services:
+  app-prive:
+    build:
+      context: ./prive
+      dockerfile: app/Dockerfile
+    image: appportal-prive
+    restart: unless-stopped
+    environment:
+      PORT: "3041"
+      PRIVE_DB_URL: ${PRIVE_DB_URL:-}
+      PRIVE_GROUPS: ${PRIVE_GROUPS:-prive-mehdi}
+      PRIVE_SECRET_KEY: ${PRIVE_SECRET_KEY:-}
+      PRIVE_DATA_DIR: /data
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+    volumes:
+      - prive-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3041/healthz', timeout=5)"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    networks: [appnet]
+
+volumes:
+  prive-data:

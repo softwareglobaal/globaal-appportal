@@ -97,6 +97,12 @@ apps:
     subdomain: boekhouding-dashboard
     roles: [admin, manager, boekhouding]
     status: active
+  - id: prive
+    name: Privé-uitgaven
+    description: Persoonlijke uitgaven, vaste lasten en betaalplanning van Mehdi
+    subdomain: prive
+    roles: [prive-mehdi]
+    status: active
   - id: quickbooks
     name: QuickBooks
     description: Boekhouding HDS via QuickBooks Online
