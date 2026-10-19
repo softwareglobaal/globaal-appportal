@@ -64,3 +64,7 @@ awscliv2.zip
 # Eigen bedrijfsvoeringrepo en gecontroleerde bedrijfs-/medewerkersbron op VM.
 /bedrijfsvoering/
 /bedrijfsvoering-config/
+
+# Gedeelde 3D-scans (web-scan.globaal.be/<token>/): foto's van klantpanden,
+# alleen op de VM, nooit in git. Bron: eigen-matterport/tools/deelversie.py.
+/websites/scan/
