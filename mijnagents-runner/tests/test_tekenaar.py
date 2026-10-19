@@ -389,7 +389,7 @@ class Controle(Basis):
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_Tom.pdf"), "G_N_(vrije tekst).pdf")   # DT17
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_G_N_gevel 0478123456.pdf"), "G_N_(vrije tekst).pdf")  # DT27
         self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_P_N_verdieping 2.pdf"), "P_N_verdieping 2.pdf")
-        for nummer in ("0499-123-456", "0499 12 34 56", "84.03.21-411.65", "+32 499 12 34 56", "0499 (123) 456",
+        for nummer in ("0499-123-456", "0499 12 34 56", "00.01.02-003.04", "+32 499 12 34 56", "0499 (123) 456",
                        "0499–123–456", "0499:123:456", "0499,123,456", "0499·123·456", "0499\u00a0123\u00a0456"):  # DT31, DT35, DT36
             self.assertEqual(tk.bladcode(f"BA_Proefstraat 1, 3120 Tremelo_G_N_gevel {nummer}.pdf"), "G_N_(vrije tekst).pdf",
                              nummer)

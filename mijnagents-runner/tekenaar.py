@@ -330,7 +330,7 @@ def projectnummer(pad):
 def gevoelig(tekst):
     """Staat er een nummer van vijf of meer cijfers in, hoe ook geschreven? Elk stuk tekst zonder letters telt als een
     reeks, welke tekens er ook tussen de cijfers staan ("0499 (123) 456", "049_9_123_456", "0499–123–456",
-    "0499:123:456", "84.03.21-411.65"): het kan een telefoon- of rijksregisternummer zijn (Codex DT31, DT35, DT36).
+    "0499:123:456", "00.01.02-003.04"): het kan een telefoon- of rijksregisternummer zijn (Codex DT31, DT35, DT36).
     Een versie (versieDDMMJJJJ) telt niet."""
     zonder_versie = re.sub(r"versie\d{8}", "x", tekst or "", flags=re.I)
     return any(len(re.sub(r"\D", "", r)) >= 5 for r in re.findall(r"[^A-Za-zÀ-ÿ]+", zonder_versie))
