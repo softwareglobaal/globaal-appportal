@@ -1,4 +1,4 @@
--- 193: rol en schema voor de privé-uitgaven van Mehdi (prive.globaal.be).
+-- 194: rol en schema voor de privé-uitgaven van Mehdi (prive.globaal.be).
 --
 -- Driehoeksoverleg P1, 19-10-2026 (punt X1/K1, 3-0): aparte app, eigen schema met eigen rol, alleen Mehdi.
 -- Deze migratie maakt alleen de rol, het schema en de rechten. De tabellen staan in de repo
