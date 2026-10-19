@@ -1553,7 +1553,8 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   gearchiveerd, leads, personen, organisaties, activiteiten, notities, producten,
   bestanden, mailthreads, velden, ...). VM 01:30 UTC: JSON + Excel in
   `~/backups/pipedrive/` en GPG-versleuteld naar `s3://$S3_BACKUP_BUCKET/pipedrive/`.
-  Linux-pc 02:00 UTC: hetzelfde plus alle bijlagen (ca. 85 GB, past niet op de VM).
+  Linux-pc 02:00 UTC: alle bijlagen (ca. 85 GB, past niet op de VM), zonder de
+  gegevens zelf om het Pipedrive-API-budget te sparen.
   Bewaking: Kuma-push 62/63 en `laatst-gelukt` in `scripts/gezondheid.py`. Details,
   API-budget en terugzetten: `pipedrive-backup/README.md`.
 

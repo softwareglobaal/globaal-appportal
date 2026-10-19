@@ -11,10 +11,13 @@ Aanleiding: de Pipedrive-storing van 18-10-2026 (opdracht Shaniel 19-10-2026).
 |---|---|---|---|
 | VM `~/backups/pipedrive/` | alle gegevens, zonder bijlagen | 01:30 UTC | elke run 30 dagen, daarna de eerste van elke maand 12 maanden |
 | S3 `globaal-db-backups-2026/pipedrive/<firma>/` | dezelfde gegevens, GPG-versleuteld | direct na de VM-run | 30 dagen (lifecycle van de bucket) |
-| Linux-pc kantoor `~/backups/pipedrive/` | alle gegevens plus alle bijlagen (ca. 85 GB) | 02:00 UTC | runs als op de VM; bijlagen blijven staan en groeien aan |
+| Linux-pc kantoor `~/backups/pipedrive/` | alle bijlagen (ca. 85 GB) plus de bestandenlijst | 02:00 UTC | bijlagen blijven staan en groeien aan |
 
 De bijlagen passen niet op de VM (71 GB vrij), daarom staan ze op de Linux-pc
-(914 GB schijf). Per run en per firma:
+(914 GB schijf). De pc haalt bewust alleen de bijlagen op (`--alleen-bijlagen`):
+de gegevens staan al op de VM en op S3, en een tweede volledige ophaling zou
+bij H-Architects 15.000 API-tokens per dag kosten die nu naar bijlagen gaan.
+Per run en per firma:
 
 ```
 <STAMP>/<firma>/data/<soort>.json.gz        volledige API-records, alle velden
@@ -41,9 +44,12 @@ Bewust niet, en dat staat ook in elk manifest onder `niet_meegenomen`:
   onderwerp, deelnemers en fragment zitten er wel in);
 - volgers en notitie-reacties (een gebruiker per administratie).
 
-Projecten en taken geven HTTP 402 (geen add-on); dat staat per run onder
-`niet_beschikbaar`. Bestanden die in Pipedrive alleen een link zijn (Google
-Drive en dergelijke) worden met hun link bewaard, niet als bestand.
+Projecten en taken geven bij de meeste firma's HTTP 402 (geen add-on); dat
+staat per run onder `niet_beschikbaar`. Bijlagen staan in het manifest in vier
+groepen: binnen, `uitgesteld` (budget, volgende nacht), `mislukt` (met reden,
+geeft een waarschuwing), `extern` (in Pipedrive alleen een link naar Google
+Drive en dergelijke, de link staat in `bestanden.json`) en `verwijderd` (in
+Pipedrive gewist voordat de backup het had).
 
 ## Controles
 
@@ -58,13 +64,19 @@ Drive en dergelijke) worden met hun link bewaard, niet als bestand.
 
 ## API-budget
 
-Pipedrive geeft per firma een dagbudget aan API-tokens (60.000 tot 240.000) dat
-we delen met het sales-dashboard, de Pipedrive-MCP en de won-deals-poller. Een
-run met alleen gegevens kost 4.000 tot 15.000 tokens. Een bijlage kost 20
-tokens; de bijlagen stoppen zodra er nog 35% van het dagbudget over is
-(`RESERVE`) en gaan de volgende nacht verder. Daardoor duurt de eerste volledige
-binnenhaal van de bijlagen voor H-Architects (48.600 bestanden) ongeveer twee
-weken en voor UNABO (25.000) ongeveer een week; de andere firma's de eerste nacht.
+Pipedrive geeft per firma een dagbudget aan API-tokens (60.000 tot 240.000,
+reset rond middernacht) dat we delen met het sales-dashboard, de Pipedrive-MCP,
+de won-deals-poller en de leadmeldingen (samen bij H-Architects ongeveer 35.000
+per dag). Gemeten 19-10-2026: een lijstpagina kost 20 tokens, een bijlage 20.
+De VM-run kost per nacht 4.000 (Energie Efficiënt) tot 25.000 (H-Architects:
+49.000 bestanden in pagina's van 100 en 23.000 mailthreads in pagina's van 50).
+
+Bijlagen stoppen zodra er nog 35% van het dagbudget over is (`RESERVE`,
+instelbaar met `--reserve`) en gaan de volgende nacht verder. Een download
+geeft zelf geen budgetstand terug; het script telt 20 per bijlage en haalt
+elke 100 bijlagen de echte stand op. De eerste volledige binnenhaal duurt
+daardoor voor H-Architects (48.600 bestanden) ongeveer twee tot drie weken, voor
+UNABO (25.000) ongeveer een week en voor de andere firma's een tot twee nachten.
 
 ## Bewaking
 
@@ -93,7 +105,7 @@ Linux-pc (unbuntu, geen git-toegang tot deze repo: het script wordt gekopieerd):
 scp pipedrive-backup/backup.py unbuntu@192.168.1.56:pipedrive-backup/backup.py
 python3 -m venv ~/pipedrive-backup/.venv && ~/pipedrive-backup/.venv/bin/pip install openpyxl
 crontab -e
-0 2 * * * /usr/bin/flock -n /tmp/pipedrive-backup.lock $HOME/pipedrive-backup/.venv/bin/python $HOME/pipedrive-backup/backup.py --zonder-offsite --env $HOME/pipedrive-backup/pipedrive.env --doel $HOME/backups/pipedrive >> $HOME/backups/pipedrive/backup.log 2>&1
+0 2 * * * /usr/bin/flock -n /tmp/pipedrive-backup.lock $HOME/pipedrive-backup/.venv/bin/python $HOME/pipedrive-backup/backup.py --alleen-bijlagen --zonder-offsite --env $HOME/pipedrive-backup/pipedrive.env --doel $HOME/backups/pipedrive >> $HOME/backups/pipedrive/backup.log 2>&1
 ```
 `~/pipedrive-backup/pipedrive.env` (600) bevat de vijf `PIPEDRIVE_TOKEN_*`
 (kopie van de VM, rechtstreeks overgezet, nooit via chat) en de push-URL.
@@ -109,5 +121,6 @@ Na een tokenrotatie in `~/appportal/.env` dus ook dit bestand bijwerken.
   gpg -d --batch --passphrase-file ~/.backup-passphrase <firma>/<STAMP>.tar.gz.gpg | tar xz
   ```
 - Handmatig een run: `--firma <naam>` (herhaalbaar), `--zonder-bijlagen`,
-  `--zonder-offsite`, `--zonder-excel`, `--werkers N` (gelijktijdige downloads,
-  standaard 8; vanaf kantoor is een enkele download traag).
+  `--alleen-bijlagen`, `--zonder-offsite`, `--zonder-excel`, `--reserve 0.35`,
+  `--werkers N` (gelijktijdige downloads, standaard 8; vanaf kantoor haalt een
+  enkele stroom 0,5 MB/s, acht samen ongeveer 4 MB/s).

@@ -43,6 +43,7 @@ import socket
 import subprocess
 import sys
 import tarfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -52,6 +53,8 @@ from concurrent.futures import ThreadPoolExecutor
 FIRMAS = ["harchitects", "unabo", "tknburo", "energieefficient", "harmoniebouw"]
 API = "https://api.pipedrive.com"
 RESERVE = 0.35          # dit deel van het dagbudget blijft voor de apps
+KOSTEN_DOWNLOAD = 20    # tokens per bijlage (gemeten 19-10-2026); de download zelf
+                        # geeft geen budgetstand terug, dus we tellen zelf mee
 RETENTIE_DAGEN = 30     # elke run blijft 30 dagen, daarna een per maand
 RETENTIE_MAANDEN = 12
 GEZAKT_DREMPEL = 0.95   # minder dan 95% van gisteren = waarschuwing
@@ -146,6 +149,8 @@ class Pipedrive:
         self.rest = None
         self.rest_begin = None
         self.aanroepen = 0
+        self.downloads = 0
+        self.slot = threading.Lock()
 
     def _kop(self, accept="application/json"):
         return {"x-api-token": self.token, "Accept": accept, "User-Agent": "globaal-pipedrive-backup/1.0"}
@@ -275,6 +280,13 @@ class Pipedrive:
                 f.write(blok)
                 h.update(blok)
                 grootte += len(blok)
+        with self.slot:
+            self.downloads += 1
+            if self.rest is not None:
+                self.rest -= KOSTEN_DOWNLOAD
+            ververs = self.downloads % 100 == 0
+        if ververs:
+            self.get("/v1/users/me")  # echte budgetstand, de schatting kan afwijken
         if verwacht and grootte != verwacht:
             os.remove(tmp)
             raise ApiFout("grootte", pad, f"{grootte} bytes ontvangen, {verwacht} verwacht")
@@ -330,8 +342,9 @@ def backup_firma(firma, token, rundir, basis, opties, vorige):
         m["resultaat"] = "FOUT"
         return m, data
 
-    # 1. Kernlijsten
-    for naam, pad, params, paginering, verplicht, limiet in KERN:
+    # 1. Kernlijsten (op de pc alleen de bestandenlijst: de gegevens staan al op VM en S3)
+    soorten = [s for s in KERN if s[0] == "bestanden"] if opties.alleen_bijlagen else KERN
+    for naam, pad, params, paginering, verplicht, limiet in soorten:
         voor = pd.rest
         t0 = time.time()
         try:
@@ -363,6 +376,12 @@ def backup_firma(firma, token, rundir, basis, opties, vorige):
         if uniek + zonder_id != len(items):
             m["waarschuwingen"].append(f"{naam}: {len(items) - uniek - zonder_id} dubbele records in de paginering")
         log(f"  {firma:16} {naam:20} {len(items):>7}  ({paginas} pag., {kosten} tokens)")
+
+    if opties.alleen_bijlagen:
+        m["niet_meegenomen"] = {"gegevens": "--alleen-bijlagen: de gegevens zelf staan in de VM-backup en op S3"}
+        if not opties.zonder_bijlagen and "bestanden" in data:
+            m["bijlagen"] = haal_bijlagen(pd, firma, data["bestanden"], basis, m, opties.werkers)
+        return sluit_firma_af(m, pd, vorige), data
 
     # 2. Controle: deals tegen de samenvatting van Pipedrive zelf
     try:
@@ -427,11 +446,14 @@ def backup_firma(firma, token, rundir, basis, opties, vorige):
 
     # 5. Bijlagen
     if opties.zonder_bijlagen:
-        m["bijlagen"] = {"overgeslagen": "uitgezet met --zonder-bijlagen"}
+        m["bijlagen"] = {"uitgezet": "--zonder-bijlagen: de bijlagen staan in de backup op de Linux-pc"}
     else:
         m["bijlagen"] = haal_bijlagen(pd, firma, data.get("bestanden", []), basis, m, opties.werkers)
+    return sluit_firma_af(m, pd, vorige), data
 
-    # 6. Vergelijking met de vorige geslaagde run: grote dalingen melden
+
+def sluit_firma_af(m, pd, vorige):
+    # Vergelijking met de vorige geslaagde run: grote dalingen melden
     if vorige:
         for naam in GEVOELIGE_SOORTEN_VOOR_DALING:
             oud = ((vorige.get("soorten") or {}).get(naam) or {}).get("aantal")
@@ -447,14 +469,18 @@ def backup_firma(firma, token, rundir, basis, opties, vorige):
         m["resultaat"] = "FOUT"
     elif m["waarschuwingen"]:
         m["resultaat"] = "WAARSCHUWING"
-    return m, data
+    return m
 
 
 def haal_bijlagen(pd, firma, bestanden, basis, m, werkers):
     doelmap = os.path.join(basis, "bestanden", firma)
     os.makedirs(doelmap, exist_ok=True)
+    # extern = in Pipedrive alleen een link (Google Drive e.d.): er is geen bestand,
+    # de link staat in bestanden.json. verwijderd = in Pipedrive gewist voor we het
+    # hadden. Beide zijn geen fout van de backup en staan met naam in het manifest.
+    # mislukt = echte downloadfout, die geeft een waarschuwing.
     stand = {"totaal": len(bestanden), "nieuw": 0, "al_aanwezig": 0, "uitgesteld": 0,
-             "bytes_nieuw": 0, "overgeslagen": []}
+             "bytes_nieuw": 0, "extern": [], "verwijderd": [], "mislukt": []}
     taken = []
     for f in bestanden:
         fid = f.get("id")
@@ -465,14 +491,12 @@ def haal_bijlagen(pd, firma, bestanden, basis, m, werkers):
         if os.path.exists(doel) and (not verwacht or os.path.getsize(doel) == verwacht):
             stand["al_aanwezig"] += 1
             continue
-        if f.get("active_flag") is False:
-            stand["overgeslagen"].append({"id": fid, "naam": naam, "reden": "verwijderd in Pipedrive, niet meer te downloaden"})
-            continue
         locatie = f.get("remote_location") or "s3"
         if locatie != "s3":
-            stand["overgeslagen"].append({"id": fid, "naam": naam,
-                                          "reden": f"extern bestand ({locatie}), alleen de link staat in bestanden.json",
-                                          "url": f.get("url")})
+            stand["extern"].append({"id": fid, "naam": naam, "locatie": locatie, "url": f.get("url")})
+            continue
+        if f.get("active_flag") is False:
+            stand["verwijderd"].append({"id": fid, "naam": naam})
             continue
         taken.append((fid, naam, verwacht, map_, doel))
 
@@ -501,15 +525,15 @@ def haal_bijlagen(pd, firma, bestanden, basis, m, werkers):
             elif uitkomst == "uitgesteld":
                 stand["uitgesteld"] += 1
             else:
-                stand["overgeslagen"].append({"id": taak[0], "naam": taak[1], "reden": extra})
+                stand["mislukt"].append({"id": taak[0], "naam": taak[1], "reden": extra})
     if stand["uitgesteld"]:
         m["waarschuwingen"].append(
-            f"bijlagen: {stand['uitgesteld']} uitgesteld om het API-budget voor de apps te sparen; volgende nacht verder")
-    if stand["overgeslagen"]:
-        m["waarschuwingen"].append(f"bijlagen: {len(stand['overgeslagen'])} niet binnengehaald, reden per bestand in manifest")
+            f"bijlagen: {stand['uitgesteld']} nog niet binnen (API-budget voor de apps gespaard); volgende nacht verder")
+    if stand["mislukt"]:
+        m["waarschuwingen"].append(f"bijlagen: {len(stand['mislukt'])} downloads mislukt, reden per bestand in manifest")
     log(f"  {firma:16} {'bijlagen':20} {stand['nieuw']:>7} nieuw, {stand['al_aanwezig']} al aanwezig, "
-        f"{len(stand['overgeslagen'])} niet te halen, {stand['uitgesteld']} uitgesteld "
-        f"({stand['bytes_nieuw'] / 1e6:.1f} MB)")
+        f"{stand['uitgesteld']} uitgesteld, {len(stand['mislukt'])} mislukt, {len(stand['extern'])} externe links, "
+        f"{len(stand['verwijderd'])} verwijderd in Pipedrive ({stand['bytes_nieuw'] / 1e6:.1f} MB)")
     return stand
 
 
@@ -777,15 +801,21 @@ def kuma(url, ok, tekst):
 # ---------------------------------------------------------------- hoofd
 
 def main():
+    global RESERVE
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--firma", action="append", choices=FIRMAS)
     ap.add_argument("--doel", default=os.path.expanduser("~/backups/pipedrive"))
     ap.add_argument("--env", default=os.path.expanduser("~/appportal/.env"))
     ap.add_argument("--zonder-bijlagen", action="store_true")
+    ap.add_argument("--alleen-bijlagen", action="store_true",
+                    help="alleen bestandenlijst en bijlagen (Linux-pc); de gegevens doet de VM")
     ap.add_argument("--zonder-offsite", action="store_true")
     ap.add_argument("--zonder-excel", action="store_true")
     ap.add_argument("--werkers", type=int, default=8, help="gelijktijdige bijlage-downloads")
+    ap.add_argument("--reserve", type=float, default=RESERVE,
+                    help="deel van het dagbudget dat voor de apps blijft (standaard 0.35)")
     opties = ap.parse_args()
+    RESERVE = opties.reserve
 
     basis = opties.doel
     os.makedirs(basis, mode=0o700, exist_ok=True)
@@ -830,7 +860,7 @@ def main():
             m, data = backup_firma(firma, token, rundir, basis, opties, vorige)
         except Exception as e:  # onverwacht: zichtbaar maken, andere firma's laten doorgaan
             m, data = {"firma": firma, "resultaat": "FOUT", "fouten": [f"onverwachte fout: {e!r}"]}, {}
-        if data and not opties.zonder_excel:
+        if data and not opties.zonder_excel and not opties.alleen_bijlagen:
             try:
                 m["excel"] = schrijf_excel(
                     os.path.join(rundir, firma, f"{firma}-pipedrive-{stamp[:8]}.xlsx"), firma, m, data)
