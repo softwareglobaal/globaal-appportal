@@ -1693,6 +1693,7 @@
    "controle": [
     "rit_overlap",
     "rit_door_afspraak",
+    "boekbaar_gat_in_keten",
     "omweg_langs_huis",
     "buiten_botsing",
     "lara_botsing",

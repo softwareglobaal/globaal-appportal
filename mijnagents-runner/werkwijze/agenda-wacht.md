@@ -1,5 +1,11 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.19 (19-10-2026): barsten en scheuren ter plaatse krijgen altijd twee uur. Een eigen werkafspraak
+zonder gasten of reeks wordt verlengd als het verlengde stuk vrij is; anders komt een VR-vraag of een bevinding in
+het werkverslag. Een bewust opnieuw ingekorte afspraak met `agendawacht_duur` blijft zo. Bij een rechtstreekse
+ketenrit begint het bezette blok op het einde van de vorige buitenafspraak. `agendawacht_vertrek` bewaart het echte
+laatste vertrek voor bellen en de melding. Zo blijft er tussen twee afspraken geen boekbaar gat.
+
 Aanvulling v8.18 (19-10-2026): Catalin (Harmoniebouw) krijgt eenmaal een uitnodiging met mail bij een afspraak
 ter plaatse met fysiek adres (besluit Mehdi 18-10-2026); online, intern en reeksen blijven zonder mail. Zie de
 alinea bij de agendagasten.
@@ -346,6 +352,11 @@ geen reistijd, geen titelfout. Ik laat hem staan, ook als ik een week leegmaak.
 
 ## Reistijd en botsingen (mandaat van Mehdi, 11-09-2026)
 
+- Bij een rit rechtstreeks van de vorige buitenafspraak begint het blok op het einde van die afspraak, ook als er
+  wachttijd tot het laatste vertrek is. De ritomschrijving noemt die wachttijd; `agendawacht_keten_vanaf` en
+  `agendawacht_vertrek` staan naast het ritmerk. Het belrooster leest het echte vertrek uit het merk, ook na
+  nacontrole. Een Google-herinnering op een rit kan alleen vóór het blokbegin afgaan: bij wachttijd is de rit stil en
+  geeft de afspraak de vertrekmelding vijf minuten vóór het echte vertrek. Vanaf thuis blijft de tijd thuis vrij.
 - Elke komende afspraak **buiten** krijgt een rit ervoor en, na de laatste van de
   dag, een rit naar huis: `🚗 Reistijd: van → naar`. **De rit staat op dezelfde
   agenda en in dezelfde kleur als de afspraak waarvoor Mehdi rijdt** (mandaat van
@@ -588,6 +599,12 @@ Wat ik daaruit meeneem:
 - Het uitzoeken is mijn werk. Een korte titel ('mehdi; barsten en scheuren' met een adres) zoek ik zelf uit:
   de activiteit uit de woorden, de firma uit de activiteit, klant en soort uit de deal op dat adres. Zit ik vast
   bij een afspraak binnen 48 uur, dan bel ik Mehdi een keer (08:00-20:00) met een zin wat hij moet doen.
+- Barsten en scheuren ter plaatse duren twee uur vanaf het bestaande begin. Ik herken `barst` en `scheur` als
+  woordbegin in titel, plaats of omschrijving, ook in samenstellingen. Een eigen toekomstige werkafspraak zonder
+  gasten of reeks verleng ik als het verlengde stuk vrij is; gemerkte eigen ritten herbereken ik daarna. Ik schrijf
+  `agendawacht_duur=120`, zet de vaste regel onderaan de omschrijving en lees terug. Een botsing wordt een VR-vraag,
+  een afspraak zonder titelrecht een bevinding in het werkverslag. Een afspraak die daarna bewust korter gemaakt
+  wordt en het merk behoudt, laat ik staan zonder nieuwe vraag.
 - Ik verwijder nooit een afspraak. Moet iets weg, dan zeg ik duidelijk wat en waarom en wacht ik op een ja.
 - Twee afspraken met iemand van buiten tegelijk, op welke agenda ook: binnen 48 uur bel ik Mehdi een keer met een
   zin. Elk boekingskanaal moet alle agenda's als bezet meetellen; er is nog een: Calendly General (FR-57).

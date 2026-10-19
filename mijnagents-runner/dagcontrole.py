@@ -84,6 +84,20 @@ def dagcontrole(items, dag):
             else:
                 meld("rit_door_afspraak", x, f"rit {x['start'][11:16]}-{x['einde'][11:16]} loopt door "
                                              f"{a['start'][11:16]} {a['titel'][:40]}")
+    # Een rechtstreekse rit bezet ook de wachttijd vanaf de vorige buitenafspraak. Het agentmerk bewaart die grens;
+    # een routeomschrijving of een vergelijkbare titel bewijst geen herkomst (L38).
+    for x in ritten:
+        if not W.is_eigen_rit(x):
+            continue
+        try:
+            grens = datetime.fromisoformat((x.get("_merk") or {}).get(W.KETENMERK) or "")
+            begin = _tijd(x, "start")
+        except ValueError:
+            continue
+        if begin and begin > grens and any(_tijd(a, "einde") == grens for a in buitens):
+            meld("boekbaar_gat_in_keten", x,
+                 f"boekbaar gat in een keten: vorige buitenafspraak eindigt {grens:%H:%M}, "
+                 f"rit begint pas {begin:%H:%M}")
     # 3. omweg langs huis: naar huis en weer weg, terwijl er minder dan 90 minuten tussen twee buitenafspraken zit
     for a, b in zip(buitens, buitens[1:]):
         ea, sb = _tijd(a, "einde"), _tijd(b, "start")

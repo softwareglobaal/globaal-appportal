@@ -1,9 +1,14 @@
 {
- "versie": "5.15",
- "datum": "2026-10-18",
+ "versie": "5.16",
+ "datum": "2026-10-19",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "annulering": "Een expliciete afzegging in Google of de afspraakomschrijving wordt met het vaste agentnummer gemeld: afgezegd, niet vertrekken. Vlak voor de vijfminutenoproep wordt de afspraak opnieuw gelezen; bij onleesbare agenda geen vertrekoproep maar eenmaal een waarschuwing vanaf het vaste agentnummer. Een mislukte afzegmelding blijft open voor herkansing. Een annuleerlink of een voorwaardelijke zin op zichzelf is geen afzegging; een latere expliciete bevestiging heft een afzegzin op.",
  "thuisafspraak": "Herfstlaan 65, 3010 Leuven is Mehdi's thuis: geen reis van thuis naar thuis, geen buitenconflict of vertrekoproep. Bij Catalin geldt de bekende koppeling met Harmoniebouw; een deal met invulnaam Voornaam Achternaam is geen bewijs voor een klanttitel. Als Mehdi naast de activiteit een naam of inhoudswoord invoerde, mag een andere persoon uit een adresdeal zijn titel niet overschrijven. Bij onvoldoende zekerheid vraagt de agent Mehdi.",
+ "duur_ter_plaatse": {
+  "trefwoorden": ["barst", "scheur"],
+  "minuten": 120,
+  "regel": "Voor barsten en scheuren voorziet Mehdi ter plaatse altijd twee uur. De agent verlengt een toekomstige eigen werkafspraak zonder gasten of reeks als het verlengde stuk vrij is. Een eigen gemerkte rit rekent hij daarna opnieuw. Bij een botsing vraagt hij het via VR; zonder titel- of schrijfrecht meldt hij het in het werkverslag. Een gemerkte afspraak die Mehdi weer inkort, blijft bewust kort en krijgt geen nieuwe vraag."
+ },
  "agendas": [
   {
    "rol": "werk",
@@ -676,6 +681,14 @@
  ],
  "beslissingen": [
   {
+   "datum": "2026-10-19",
+   "wat": "voor de barsten en scheuren voorzie ter plaatse altijd 2 uur! zodat ik het ook weet"
+  },
+  {
+   "datum": "2026-10-19",
+   "wat": "hou er rekening als je tussen twee events niks zet dat men mij kan boeken!"
+  },
+  {
    "datum": "2026-09-23",
    "wat": "nieuwe soort AB/AO voor aannemers (buiten rood, online salie). Nieuwe marker ZL (zonder link) naast !! en ??: de agent zet hem bij een online gesprek met een externe partij zonder link, en haalt hem weg zodra er een link staat. Mehdi stuurt de link zelf"
   },
@@ -912,7 +925,7 @@
    "hard": "100 is een plafond, geen instelling: de omgeving kan het alleen verlagen. Verhogen kan alleen in de code (ROUTES_PLAFOND), met een commit die Mehdi ziet. Proefrondes draaien droog (FR-01, FR-17)"
   },
   "dubbel": "zie een_rit_een_afspraak",
-  "ketening": "Na een buitenafspraak gaat de rit rechtstreeks naar de volgende buitenafspraak, niet naar huis. Naar huis gaat hij: na de laatste buitenafspraak van de dag; als er al een rit naar huis in de agenda staat; en voorlopig als er tussen twee buitenafspraken een afspraak achter het bureau staat (afspraak C). In dat laatste geval rekent de agent dat hij naar huis gaat, zoals op maandag 21-09-2026, en stelt hij de vraag: klopt dat, of doe je het vanuit de auto? Gaat de volgende afspraak zelf naar huis, zoals 'Lara naar huis brengen', dan is die de terugrit",
+  "ketening": "Na een buitenafspraak gaat de rit rechtstreeks naar de volgende buitenafspraak, niet naar huis. Die ketenrit begint op het einde van de vorige afspraak, ook als Mehdi nog wacht voor het laatste vertrek: anders is het gat boekbaar via Calendly General. Het laatste vertrek staat als agendawacht_vertrek in het private merk; de wachttijd en het vertrekuur staan in de omschrijving. Beltijd en vertrekmelding volgen het laatste vertrek. Naar huis gaat hij: na de laatste buitenafspraak van de dag; als er al een rit naar huis in de agenda staat; en voorlopig als er tussen twee buitenafspraken een afspraak achter het bureau staat (afspraak C). In dat laatste geval rekent de agent dat hij naar huis gaat, zoals op maandag 21-09-2026, en stelt hij de vraag: klopt dat, of doe je het vanuit de auto? Gaat de volgende afspraak zelf naar huis, zoals 'Lara naar huis brengen', dan is die de terugrit",
   "adres_zoeken": "eerst het adres in de agenda, dan het projectnummer in de projectmap, dan de benoemde plekken uit locatie.globaal.be. Een plek telt alleen als haar naam als heel woord in de titel staat. Thuis is het vertrekpunt en nooit een bestemming die uit een titel komt: in 'Lara ophalen en thuis afzetten' gebeurt het ophalen niet thuis. Vindt de agent geen adres, dan zet hij geen rit en meldt hij het; hij gokt geen plaats",
   "het_uur_is_aankomst": "Het uur van een afspraak is het uur dat Mehdi er MOET ZIJN, niet het uur dat hij vertrekt. De rit ligt dus altijd VOOR de afspraak, nooit tijdens en nooit erna. Gezien op 20-09-2026: de zwemles van Lara begint om 18:00 en er stond een rit naar huis om 18:00. Dat kan niet.",
   "keten_voorbeeld": "dinsdag: thuis 17:10, oma 17:30 tot 17:40, rijden 17:40, zwembad 18:00 tot 19:00, daarna brengt hij Lara zelf naar huis",

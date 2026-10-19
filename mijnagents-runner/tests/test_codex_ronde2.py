@@ -400,7 +400,9 @@ _nr = veilig(lambda: W._nieuwe_rit())
 check("A10 een nieuwe rit krijgt een eigen ID (base32hex) en een merk met datzelfde ID",
       isinstance(_nr, dict) and _nr["extendedProperties"]["private"][_rm] == _nr["id"] and _re.fullmatch(r"[a-v0-9]{5,1024}", _nr["id"]),
       str(_nr))
-check("A10 beide ritten (heen en terug) worden met dat merk aangemaakt", _bron.count("**_nieuwe_rit()}, tok)") == 2)
+check("A10 beide ritten (heen en terug) worden met dat merk aangemaakt",
+      "heen_privaat = _nieuwe_rit()" in _bron and "**heen_privaat}, tok)" in _bron
+      and "**_nieuwe_rit()}, tok)" in _bron)
 # overgang: een oude rit die aan zijn afspraak hangt krijgt zijn merk; een oude rit zonder afspraak niet
 _mk, _weg2 = [], []
 _afs = afspraak("a10", "!! Mehdi: [HA-KB] 2601 - X", locatie="Proefstraat 1, 3000 Leuven")

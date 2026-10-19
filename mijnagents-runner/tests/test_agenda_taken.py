@@ -608,7 +608,8 @@ check("een handmatige rit krijgt de rit-melding, niet de agendastandaard",
 
 # FR-25 de rit volgt de titel van zijn afspraak
 check("een rit neemt de nieuwe titel van zijn afspraak over",
-      'tekst.split(" (", 1)[0] not in (x.get("omschrijving") or "")' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+      'if tekst != (x.get("omschrijving") or ""):' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+      and 'wijzig["description"] = tekst' in (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
 
 # FR-28 een rit verhuist mee met zijn afspraak
 check("een eigen rit verhuist mee als zijn afspraak naar een andere agenda gaat",

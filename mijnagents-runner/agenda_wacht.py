@@ -2409,6 +2409,8 @@ def _verplaats(x, doel, tok):
 
 
 RITMERK = "agendawacht_rit"
+VERTREKMERK = "agendawacht_vertrek"
+KETENMERK = "agendawacht_keten_vanaf"
 RIT_MERKEN_PER_RONDE = 60      # oude ritten krijgen hun merk geleidelijk, zodat de eerste ronde niet uitloopt
 
 
@@ -2449,6 +2451,23 @@ def is_eigen_rit(x):
     mag hij ooit weghalen of verhuizen. Tot 15-10-2026 volstond de tekst, en een gekopieerd ritblok kon zo verdwijnen
     (Codex A10). Een oude rit zonder merk werk ik nog bij; hij krijgt zijn merk zodra hij aan zijn afspraak hangt."""
     return _rit_tekst(x) and bool(x.get("id")) and (x.get("_merk") or {}).get(RITMERK) == x.get("id")
+
+
+def _rit_vertrek(x):
+    """Echt laatste vertrek van een eigen rit, uit het Google-merk en binnen de blokgrenzen.
+
+    Bij oude en handmatige ritten blijft het blokbegin het enige bekende vertrekmoment.
+    """
+    begin = datetime.fromisoformat(x["start"])
+    if is_eigen_rit(x):
+        try:
+            vertrek = datetime.fromisoformat((x.get("_merk") or {}).get(VERTREKMERK) or "")
+            einde = datetime.fromisoformat(x["einde"])
+            if begin <= vertrek <= einde:
+                return vertrek
+        except (ValueError, TypeError, KeyError):
+            pass
+    return begin
 
 
 def _eigen_rit_weg(x, tok):
@@ -2939,6 +2958,154 @@ def _ter_plaatse_voor_uitnodiging(a):
     return bool(buiten and _TITELADRES.search(a.get("titel") or ""))
 
 
+DUURMERK = "agendawacht_duur"
+
+
+def _duurregel():
+    """Lees de duur uit de master; bij een onleesbare regel verandert er geen afspraak."""
+    try:
+        regel = json.loads((Path(__file__).resolve().parent / "werkwijze" / "agenda-taken.json")
+                           .read_text(encoding="utf-8"))["duur_ter_plaatse"]
+        minuten = int(regel["minuten"])
+        woorden = regel["trefwoorden"]
+        if minuten > 0 and isinstance(woorden, list) and all(isinstance(w, str) and w for w in woorden):
+            return minuten, re.compile(r"(?<!\w)(?:" + "|".join(re.escape(w) for w in woorden) + r")", re.I)
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None, None
+
+
+def _duur_doel(a, minuten, patroon):
+    """Woordbegin in titel, locatie of omschrijving, uitsluitend bij een bewezen afspraak ter plaatse."""
+    if (not minuten or not patroon or a.get("hele_dag") or a.get("fout") or a.get("_archief")
+            or "T" not in (a.get("start") or "") or "T" not in (a.get("einde") or "")
+            or not _ter_plaatse_voor_uitnodiging(a)):
+        return None
+    if not patroon.search(" ".join(str(a.get(k) or "") for k in ("titel", "locatie", "omschrijving"))):
+        return None
+    try:
+        begin, einde = datetime.fromisoformat(a["start"]), datetime.fromisoformat(a["einde"])
+        return begin + timedelta(minutes=minuten) if 0 < (einde - begin).total_seconds() < minuten * 60 else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _duur_botsing(a, items, doel):
+    """Kijk alleen naar het verlengde stuk. Eigen gemerkte ritten rekent reistijd_zetten opnieuw."""
+    einde = datetime.fromisoformat(a["einde"])
+    dag = einde.date()
+    while datetime.combine(dag, datetime.min.time(), tzinfo=einde.tzinfo) < doel:
+        marker = markering_tegen(a["titel"], dag.isoformat(), markeringen_uit(items, dag.isoformat()),
+                                 locatie=a.get("locatie") or "")
+        if marker:
+            return f"dagmarkering '{marker}'"
+        dag += timedelta(days=1)
+    for x in items:
+        if (x is a or (x.get("kalender"), x.get("id")) == (a.get("kalender"), a.get("id"))
+                or x.get("fout") or x.get("hele_dag") or is_eigen_rit(x)
+                or "T" not in (x.get("start") or "") or "T" not in (x.get("einde") or "")):
+            continue
+        try:
+            if datetime.fromisoformat(x["start"]) < doel and einde < datetime.fromisoformat(x["einde"]):
+                return f"andere afspraak om {x['start'][11:16]}"
+        except (ValueError, TypeError):
+            continue
+    return ""
+
+
+def _duur_vr_mogelijk(a):
+    """Een duurvraag mag alleen via de bestaande, bewezen titelroute in de afspraak komen."""
+    titel = a.get("titel") or ""
+    nieuw = titel[3:] if titel.startswith("VR ") else "VR " + titel
+    if not (a.get("kalender") == WERKAGENDA and _van_mehdi(a) and not a.get("_reeks")
+            and not a.get("_terugkerend") and not a.get("_archief")
+            and not _titel_patch_reden(a, nieuw, alleen_vr=True)):
+        return False
+    try:
+        return mag_schrijven(a["kalender"])
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def duur_ter_plaatse_zetten(items, tok=None, nu=None):
+    """Verleng eigen werkafspraken over barsten of scheuren tot twee uur en lees elke wijziging terug.
+
+    Een botsing wordt via _vastgelopen een VR-vraag. Zonder titelrecht komt de bevinding in het werkverslag.
+    Geeft (aantal teruggelezen wijzigingen, bevindingen).
+    """
+    nu = nu or nu_lokaal()
+    minuten, patroon = _duurregel()
+    if not minuten:
+        return 0, ["Duur ter plaatse: masterregel niet leesbaar; geen afspraak gewijzigd"]
+    gezet, regels = 0, []
+    for a in items:
+        doel = _duur_doel(a, minuten, patroon)
+        if not doel or (a.get("_merk") or {}).get(DUURMERK) == str(minuten):
+            continue
+        begin = datetime.fromisoformat(a["start"])
+        if begin <= nu:
+            continue
+        tekst = (f"Barsten en scheuren ter plaatse: 2 uur voorzien, nu "
+                 f"{int((datetime.fromisoformat(a['einde']) - begin).total_seconds() // 60)} min; "
+                 f"verleng tot {doel:%H:%M}")
+        eigen = (a.get("kalender") == WERKAGENDA and _van_mehdi(a) and not a.get("_reeks")
+                 and not a.get("_terugkerend") and not is_calendly(a))
+        if not eigen:
+            regels.append(f"{a['start'][:16]} {_toon(a, 45)}: NOOD: {tekst}; gasten, maker, agenda of reeks laten geen eigen verlenging toe")
+            continue
+        botsing = _duur_botsing(a, items, doel)
+        if botsing:
+            label = "VRAAG" if _duur_vr_mogelijk(a) else "NOOD"
+            regels.append(f"{a['start'][:16]} {_toon(a, 45)}: {label}: {tekst} ({botsing})")
+            continue
+        try:
+            tok = tok or agenda._toegang()
+            if not mag_schrijven(a["kalender"]):
+                raise GeenSchrijfrecht(a["kalender"])
+            vers = _event(a, tok)
+            ev_begin = (vers.get("start") or {}).get("dateTime")
+            ev_einde = (vers.get("end") or {}).get("dateTime")
+            privaat = ((vers.get("extendedProperties") or {}).get("private") or {})
+            if privaat.get(DUURMERK) == str(minuten):
+                a["_merk"] = privaat
+                continue
+            if vers.get("status") == "cancelled":
+                continue
+            if not _zelfde_tijd(ev_begin, a["start"]) or not _zelfde_tijd(ev_einde, a["einde"]):
+                # Een andere schrijver was sneller. Bewaar de verse duur zodat de vraagroute geen oud uur gebruikt.
+                if _zelfde_tijd(ev_begin, a["start"]) and ev_einde:
+                    a["einde"] = ev_einde
+                    a["_merk"] = privaat
+                    a["omschrijving"] = vers.get("description") or ""
+                    if datetime.fromisoformat(ev_einde) >= doel:
+                        continue
+                regels.append(f"{a['start'][:16]} {_toon(a, 45)}: NOOD: afspraak intussen verzet; duur opnieuw nakijken")
+                continue
+            if vers.get("attendees") or vers.get("recurringEventId"):
+                regels.append(f"{a['start'][:16]} {_toon(a, 45)}: NOOD: {tekst}; intussen gasten of een reeks")
+                continue
+            oms = vers.get("description") or ""
+            zin = f"Duur 2 uur: vaste regel van Mehdi voor barsten en scheuren ter plaatse (Agendawacht, {nu:%d-%m-%Y})"
+            if not any(r.startswith("Duur 2 uur: vaste regel van Mehdi voor barsten en scheuren ter plaatse")
+                       for r in oms.splitlines()):
+                oms = oms.rstrip() + ("\n" if oms.strip() else "") + zin
+            _patch(a, {"end": {"dateTime": doel.isoformat()}, "description": oms,
+                       "extendedProperties": {"private": {**privaat, DUURMERK: str(minuten)}}}, tok)
+            terug = _event(a, tok)
+            terug_einde = (terug.get("end") or {}).get("dateTime")
+            terug_privaat = ((terug.get("extendedProperties") or {}).get("private") or {})
+            if (not _zelfde_tijd(terug_einde, doel.isoformat()) or terug_privaat.get(DUURMERK) != str(minuten)
+                    or zin not in (terug.get("description") or "")):
+                raise RuntimeError("verlenging niet bevestigd bij teruglezen")
+            a["einde"] = terug_einde
+            a["omschrijving"] = terug.get("description") or ""
+            a["_merk"] = terug_privaat
+            gezet += 1
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"{a['start'][:16]} {_toon(a, 45)}: NOOD: {tekst}; verlengen mislukt ({type(e).__name__})")
+    return gezet, regels
+
+
 def _uitnodiging_patch(a, body, tok):
     """Enige mailroute: de toegestane gast op een eigen, komende fysieke afspraak uitnodigen."""
     import urllib.parse
@@ -3045,7 +3212,7 @@ def agendagasten_zetten(items, tok=None, nu=None):
     return uit
 
 
-def reistijd_zetten(items, alleen_dag=None):
+def reistijd_zetten(items, alleen_dag=None, nu=None):
     """Werkwijze: elke komende afspraak buiten (!!, of PB/KB met een adres) krijgt een
     blok 'Reistijd -> plaats' ervoor en 'Reistijd <- plaats' erna, met de rijtijd
     vanaf thuis (of de vorige buitenafspraak van die dag) plus buffer, rood, op
@@ -3056,7 +3223,7 @@ def reistijd_zetten(items, alleen_dag=None):
     tok = agenda._toegang()
     cache = _cache_laden()
     thuis = coord(THUIS, cache)
-    nu = nu_lokaal()
+    nu = nu or nu_lokaal()
     gemaakt, al, geen_adres, fout, regels = 0, 0, 0, 0, []
     reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"]]
     projecten = projectadressen.index()
@@ -3303,6 +3470,7 @@ def reistijd_zetten(items, alleen_dag=None):
                           f"ik reken de rit vanaf thuis")
         else:
             vertrek_van, van_adres, vorige_einde = vorige[1], vorige[2], vorige[3]
+        keten_einde = vorige_einde  # onveranderlijke grens, ook als er tussendoor een extern gesprek is
         vorige_per_dag[dag] = (sleutel, doel, adres, einde)
         if sleutel in begonnen:
             continue          # al begonnen: alleen vertrekpunt; haar ritten raak ik niet meer aan (FR-97)
@@ -3359,7 +3527,12 @@ def reistijd_zetten(items, alleen_dag=None):
                         and einde <= datetime.fromisoformat(x["start"]) <= einde + timedelta(hours=3)):
                     return x
             return None
-        if (heenblok() and (terugblok() or not is_laatste)
+        bestaand_heen = heenblok()
+        keten_gat = (bool(keten_einde) and is_eigen_rit(bestaand_heen or {})
+                     and (datetime.fromisoformat(bestaand_heen["start"]) != keten_einde
+                          or (bestaand_heen.get("_merk") or {}).get(KETENMERK) != keten_einde.isoformat()
+                          or not (bestaand_heen.get("_merk") or {}).get(VERTREKMERK)))
+        if (bestaand_heen and (terugblok() or not is_laatste) and not keten_gat
                 and (nu.hour >= 8 or start > nu + timedelta(days=8)) and not DAG_ARG):
             al += 2 if is_laatste else 1
             continue
@@ -3444,12 +3617,16 @@ def reistijd_zetten(items, alleen_dag=None):
         # rit naar de post nam de 15 minuten over van 'De Speelkriebel -> post', terwijl hij nu uit Mortsel kwam)
         if _x and "OSRM" in _oms and "live verkeer Google" in _oms and fh != "live" \
                 and f"rit {van_plaats} → {plaats})" in _oms:
-            heen = int((datetime.fromisoformat(_x["einde"]) - datetime.fromisoformat(_x["start"])).total_seconds() // 60)
+            # Een ketenblok omvat ook wachttijd; alleen vanaf het gemerkte vertrek is er rijtijd.
+            heen = int((datetime.fromisoformat(_x["einde"]) - _rit_vertrek(_x)).total_seconds() // 60)
             fh = "live"
             rit_start = aankomst - timedelta(minutes=heen)
             if vorige_einde and rit_start < vorige_einde:
                 rit_start = vorige_einde
-        vertrek_min = int((start - rit_start).total_seconds() // 60)
+        laatste_vertrek = rit_start
+        blok_start = keten_einde if keten_einde and keten_einde < laatste_vertrek else rit_start
+        wacht_min = int((laatste_vertrek - blok_start).total_seconds() // 60)
+        vertrek_min = int((start - laatste_vertrek).total_seconds() // 60)
         # Terug: valt er een extern gesprek tijdens de rit naar huis, dan doet hij het eerst
         # geparkeerd en vertrekt hij daarna.
         terug_start = einde
@@ -3469,36 +3646,59 @@ def reistijd_zetten(items, alleen_dag=None):
                 regels.append(f"{a['start'][:16]} {a['titel'][:40]}: vertrek naar huis pas {terug_start:%H:%M}, "
                               f"eerst een extern gesprek geparkeerd")
 
-        def eigen(x):
-            return "OSRM" in (x.get("omschrijving") or "")
-
-        def bijwerken(x, s, e, tekst, titel, melding=None):
+        def bijwerken(x, s, e, tekst, titel, melding=None, vertrek=None, keten_vanaf=None):
             """Een blok dat ik zelf maakte, pas ik aan als de rijtijd meer dan 10 min verschilt,
             en altijd als titel of kleur niet meer klopt met de afspraak waarvoor ik rijd."""
-            if not eigen(x):
+            if not is_eigen_rit(x):
                 return False
-            duur_oud = (datetime.fromisoformat(x["einde"]) - datetime.fromisoformat(x["start"])).total_seconds() / 60
+            oud_vertrek = _rit_vertrek(x) if vertrek else datetime.fromisoformat(x["start"])
+            duur_oud = (datetime.fromisoformat(x["einde"]) - oud_vertrek).total_seconds() / 60
             wijzig = {}
-            begint_te_vroeg = bool(vorige_einde) and datetime.fromisoformat(x["start"]) < vorige_einde
-            if (abs(duur_oud - (e - s).total_seconds() / 60) >= 10 or datetime.fromisoformat(x["einde"]) != e
-                    or begint_te_vroeg):
+            begint_te_vroeg = (bool(vorige_einde) and datetime.fromisoformat(x["start"]) < vorige_einde
+                                and not (keten_vanaf and datetime.fromisoformat(x["start"]) == keten_vanaf))
+            doel_duur = (e - (vertrek or s)).total_seconds() / 60
+            keten_begin_fout = keten_vanaf is not None and datetime.fromisoformat(x["start"]) != s
+            if (abs(duur_oud - doel_duur) >= 10 or datetime.fromisoformat(x["einde"]) != e
+                    or begint_te_vroeg or keten_begin_fout):
                 wijzig.update({"start": {"dateTime": s.isoformat()}, "end": {"dateTime": e.isoformat()}, "description": tekst})
             if x.get("titel") != titel:
                 wijzig["summary"] = titel
-            if tekst.split(" (", 1)[0] not in (x.get("omschrijving") or ""):
-                # de afspraak kreeg een andere titel ("Harchitects-KB 2505" werd "[HARC-KB] 2505"):
-                # de rit zegt anders nog waarvoor hij vroeger was. Gezien 24-09-2026.
+            if tekst != (x.get("omschrijving") or ""):
                 wijzig["description"] = tekst
             if (x.get("_kleur") or "") != rit_kleur.get("colorId", ""):
                 wijzig["colorId"] = rit_kleur.get("colorId") or None
             r = x.get("_reminders") or {}
             if melding is not None and (r.get("useDefault", True) or (r.get("overrides") or []) != melding):
                 wijzig["reminders"] = {"useDefault": False, "overrides": melding}
+            privaat = dict(x.get("_merk") or {})
+            if vertrek is not None:
+                privaat[VERTREKMERK] = vertrek.isoformat()
+            if keten_vanaf is not None:
+                privaat[KETENMERK] = keten_vanaf.isoformat()
+            else:
+                privaat.pop(KETENMERK, None)
+            if privaat != (x.get("_merk") or {}):
+                wijzig["extendedProperties"] = {"private": privaat}
             if wijzig:
                 _patch(x, wijzig, tok, eigen_rit=True)
+                if "start" in wijzig:
+                    x["start"], x["einde"] = s.isoformat(), e.isoformat()
+                if "summary" in wijzig:
+                    x["titel"] = titel
+                if "description" in wijzig:
+                    x["omschrijving"] = tekst
+                if "colorId" in wijzig:
+                    x["_kleur"] = rit_kleur.get("colorId") or ""
+                if "reminders" in wijzig:
+                    x["_reminders"] = wijzig["reminders"]
+                if "extendedProperties" in wijzig:
+                    x["_merk"] = privaat
                 return True
             return False
         uitleg_h = f"Reistijd voor: {a['titel']} ({heen} min = " + ("live verkeer Google" if fh == "live" else f"vrije rijtijd x filefactor {fh}") + f" + {BUFFER_MIN} min buffer, OSRM; adres uit {bron_adres}; rit {van_plaats} → {plaats})"
+        if keten_einde and wacht_min:
+            uitleg_h += (f" ({heen} min rijden, waarvan {wacht_min} min wachten voor vertrek zodat er niet geboekt "
+                         f"kan worden; vertrek uiterlijk {laatste_vertrek:%H:%M})")
         uitleg_t = f"Reistijd na: {a['titel']} ({terug} min = " + ("live verkeer Google" if ft == "live" else f"vrije rijtijd x filefactor {ft}") + f" + {BUFFER_MIN} min buffer, OSRM; rit {plaats} → thuis)"
         # Een rit hoort bij de afspraak waarvoor je rijdt: zelfde agenda, zelfde kleur. Een
         # rit voor Lara staat roze op de agenda van Lara, een privérit zwart op privé. Rood
@@ -3508,13 +3708,15 @@ def reistijd_zetten(items, alleen_dag=None):
         # controleur het nooit oneens kunnen zijn.
         _wens = kleur_gewenst({"kalender": a["kalender"]}, {"reistijd": True})
         rit_kleur = {"colorId": _wens} if _wens else {}
-        kleur = {**rit_kleur, "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 5}]}}
+        # Een Google-herinnering op een blok kan alleen vóór zijn begin afgaan. Bij wachttijd staat daarom de
+        # vertrekmelding op de afspraak zelf; de rit krijgt geen te vroege herinnering.
+        heen_melding = [] if wacht_min else [{"method": "popup", "minutes": 5}]
         try:
             x = heenblok()
             if x:
                 al += 1
-                if bijwerken(x, rit_start, aankomst, uitleg_h, f"🚗 Reistijd: {van_plaats} → {plaats}",
-                             [{"method": "popup", "minutes": 5}]):
+                if bijwerken(x, blok_start, aankomst, uitleg_h, f"🚗 Reistijd: {van_plaats} → {plaats}",
+                             heen_melding, laatste_vertrek, keten_einde):
                     gemaakt += 1
                 # Een afspraak heeft precies één heenrit. Staat er nog een tweede eigen heenrit voor dezelfde afspraak, dan
                 # haal ik die weg. Gezien 30-09-2026: 'Sint-Lambrechts-Woluwe -> Mechelen' stond twee keer, nadat de oude rit
@@ -3525,8 +3727,14 @@ def reistijd_zetten(items, alleen_dag=None):
                         reistijden.remove(y)
                         regels.append(f"{a['start'][:16]} {a['titel'][:44]}: dubbele heenrit weggehaald")
             else:
-                _insert(a["kalender"], {"summary": f"🚗 Reistijd: {van_plaats} → {plaats}", "start": {"dateTime": rit_start.isoformat()},
-                                        "end": {"dateTime": aankomst.isoformat()}, "description": uitleg_h, **kleur, **_nieuwe_rit()}, tok)
+                heen_privaat = _nieuwe_rit()
+                heen_privaat["extendedProperties"]["private"][VERTREKMERK] = laatste_vertrek.isoformat()
+                if keten_einde:
+                    heen_privaat["extendedProperties"]["private"][KETENMERK] = keten_einde.isoformat()
+                _insert(a["kalender"], {"summary": f"🚗 Reistijd: {van_plaats} → {plaats}", "start": {"dateTime": blok_start.isoformat()},
+                                        "end": {"dateTime": aankomst.isoformat()}, "description": uitleg_h,
+                                        **rit_kleur, "reminders": {"useDefault": False, "overrides": heen_melding},
+                                        **heen_privaat}, tok)
                 gemaakt += 1
             x = terugblok() if is_laatste else None
             if not is_laatste:
@@ -3682,8 +3890,8 @@ BEL_BUITEN_MIN = int(os.environ.get("AGENDA_BEL_BUITEN", "30"))
 
 def belrooster(items, vandaag):
     """Regel van Mehdi (11-09-2026): voor elke afspraak effectief gebeld worden, een gemiste
-    oproep volstaat. Online: BEL_ONLINE_MIN minuten vooraf. Buiten: op het vertrekmoment
-    (start van mijn reistijdblok), anders BEL_BUITEN_MIN vooraf. Niet voor intern (IN),
+    oproep volstaat. Online: BEL_ONLINE_MIN minuten vooraf. Buiten: op het gemerkte echte
+    vertrekmoment van mijn rit, anders BEL_BUITEN_MIN vooraf. Niet voor intern (IN),
     terugkerend, hele dag, reistijd, Lara, feestdagen."""
     from datetime import timedelta
     reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"] and "T" in x["start"]]
@@ -3703,7 +3911,9 @@ def belrooster(items, vandaag):
         if buiten:
             # de heenrit van DEZE afspraak: zijn omschrijving noemt haar, of hij eindigt op haar begin (plus of min vijf
             # minuten). Nooit zomaar de laatste rit binnen drie uur: die kan bij een andere afspraak horen (Codex A14).
-            venster = [x for x in reistijden if start - timedelta(hours=3) <= datetime.fromisoformat(x["start"]) < start
+            venster = [x for x in reistijden if (start - timedelta(hours=3) <= datetime.fromisoformat(x["start"]) < start
+                       or (is_eigen_rit(x) and (x.get("_merk") or {}).get(KETENMERK)
+                           and x["start"][:10] == a["start"][:10] and datetime.fromisoformat(x["start"]) < start))
                        and "Reistijd na:" not in (x.get("omschrijving") or "")]
             blok = [x for x in venster if x["kalender"] == a["kalender"] and rit_hoort_bij(x, a["titel"], "voor")] or \
                 [x for x in venster if x["kalender"] == a["kalender"]
@@ -3713,7 +3923,7 @@ def belrooster(items, vandaag):
             # Zonder reistijdblok ken ik het vertrek niet: dan reken ik BEL_BUITEN_MIN rijden en bel ik ook
             # vijf minuten voor dat vertrek. Het afsprakennummer betekent altijd vijf minuten, nooit dertig
             # (Mehdi, 25-09-2026: "als hij belt, altijd vijf minuten van tevoren").
-            vertrek = datetime.fromisoformat(blok[-1]["start"]) if blok else start - timedelta(minutes=BEL_BUITEN_MIN)
+            vertrek = _rit_vertrek(blok[-1]) if blok else start - timedelta(minutes=BEL_BUITEN_MIN)
             beltijd = vertrek - timedelta(minutes=BEL_ONLINE_MIN)
             hoe = f"over {BEL_ONLINE_MIN} minuten vertrekken"
         else:
@@ -3763,7 +3973,8 @@ def _nakijken(regels, tok=None, ritten=(), noden=None):
                     rv = _event({"kalender": kal, "id": rit["id"]}, tok or agenda._toegang())
                     rit_vers = {**rit, "titel": rv.get("summary") or "", "omschrijving": rv.get("description") or "",
                                 "start": (rv.get("start") or {}).get("dateTime") or "",
-                                "einde": (rv.get("end") or {}).get("dateTime") or ""}
+                                "einde": (rv.get("end") or {}).get("dateTime") or "",
+                                "_merk": ((rv.get("extendedProperties") or {}).get("private") or {})}
                     if (rv.get("status") != "cancelled" and rit_vers["start"] and rit_vers["einde"]
                             and lees_titel(rit_vers["titel"])["reistijd"]
                             and abs(datetime.fromisoformat(rit_vers["einde"]) - datetime.fromisoformat(ev_start))
@@ -4259,6 +4470,7 @@ def _vastgelopen(items, nu=None, uren=48):
     niet uit de sleutel halen (Codex A24, 15-10-2026)."""
     nu = nu or nu_lokaal()
     projecten = projectadressen.index()
+    duur_minuten, duur_patroon = _duurregel()
     uit = []
     for a in items:
         if a.get("hele_dag") or "T" not in a.get("start", "") or a.get("kalender") in AGENDA_VASTE_KLEUR \
@@ -4273,6 +4485,14 @@ def _vastgelopen(items, nu=None, uren=48):
         info = lees_titel(a["titel"])
         if info["reistijd"]:
             continue
+        doel = _duur_doel(a, duur_minuten, duur_patroon)
+        if (doel and not (a.get("_merk") or {}).get(DUURMERK) == str(duur_minuten)
+                and _duur_botsing(a, items, doel) and _duur_vr_mogelijk(a)):
+            huidig = int((datetime.fromisoformat(a["einde"]) - start).total_seconds() // 60)
+            uit.append((f"{a['id']}:duur_ter_plaatse",
+                        f"Mehdi, voor de afspraak van {start:%d-%m %H:%M}: "
+                        f"Barsten en scheuren ter plaatse: 2 uur voorzien, nu {huidig} min; verleng tot {doel:%H:%M}.",
+                        [a["id"]]))
         wanneer = f"{['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'][start.weekday()]} om {start:%H:%M}"
         kort = re.sub(r"[^\w ]", " ", a["titel"])[:40].strip()
         if not info.get("firma") and a.get("kalender") == WERKAGENDA and not is_zorg_titel(a["titel"]):
@@ -4351,6 +4571,15 @@ def vragen_in_agenda(items, nu=None):
                 _patch(a, {"summary": "VR " + titel, "description": VR_REGEL + zin.split(": ", 1)[-1] + ("\n\n" + schoon if schoon else "")}, tok)
                 a["titel"] = "VR " + titel
                 gezet += 1
+            elif zin and titel.startswith("VR ") and oms.startswith(VR_REGEL):
+                gewenst = VR_REGEL + zin.split(": ", 1)[-1]
+                if oms.split("\n", 1)[0] != gewenst:
+                    if len(oms) >= 1900:
+                        oms = _volledige_omschrijving(a, tok)
+                    nieuw_oms = re.sub(rf"^{VR_REGEL}[^\n]*", lambda _m: gewenst, oms, count=1)
+                    _patch(a, {"description": nieuw_oms}, tok)
+                    a["omschrijving"] = nieuw_oms
+                    gezet += 1
             elif not zin and (titel.startswith("VR ") or oms.startswith(VR_REGEL)):
                 nieuw = titel[3:] if titel.startswith("VR ") else titel
                 if len(oms) >= 1900:
@@ -4739,6 +4968,11 @@ def main():
             gregels = [f"agendagasten niet gezet ({type(e).__name__}: {str(e)[:120]})"]
         if gregels:
             ag.log(f"dag {vandaag}", "schrijf", f"agendagasten: {len(gregels)} afspraak/afspraken", "\n".join(gregels))
+        # De duur staat vóór de ritten: een nieuw einde verandert de keten en de terugrit.
+        dg, dregels = duur_ter_plaatse_zetten(kort_items)
+        ag.log(f"dag {vandaag}", "schrijf", f"duur ter plaatse: {dg} afspraak/afspraken op 2 uur gezet en teruggelezen")
+        if dregels:
+            ag.log(f"dag {vandaag}", "bevinding", f"duur ter plaatse: {len(dregels)} open punt(en)", "\n".join(dregels))
         tg, tregels = contact_zetten(kort_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"telefoon: {tg} nummer(s) bovenaan gezet", "\n".join(tregels))
         ag.log(f"dag {vandaag}", "schrijf", f"titels: {ng} rechtgezet uit vrije tekst; link-notitie: {zg} gezet",
