@@ -24,10 +24,10 @@ controleert bestaande sets. Hij bereidt voor en stelt voor; Mehdi kijkt na als a
    staat. Daarna de set van zijn map: geen dubbele bladcode bij een nieuw blad, en bij een regularisatie (een V-blad,
    of de projectmap zegt reg of regularisatie) elke tekeningsoort in B, V en N. Een plan dat te groot of onleesbaar
    is, wordt na te kijken, nooit weggelaten.
-4. Werkverslag per project op het bord, met projectnummer, submap en bladcode; geen adressen of namen. Bij een FOUT
+4. Werkverslag per project op het bord, met projectnummer en bladcode; geen mapnamen, adressen of namen. Bij een FOUT
    op een nieuw blad of in de set van zijn map: een signaal voor Mehdi, gebundeld per project en per soort fout, met
    een voorgesteld vervolg. Een fout uit het sjabloon (het titelblok) komt achteraan. LET OP en na te kijken blijven
-   in het werkverslag. Een melding geldt pas als gedaan als het bord ze ontving.
+   in het werkverslag. Een melding geldt pas als gedaan als het bord ze ontving; een herhaling stuurt dezelfde melding.
 5. Ritme: zes dagen na de vorige gelukte ronde, of eerder als er nog plannen of meldingen wachten. Ook zonder nieuwe
    plannen een hartslag. Heeft de Mac geslapen, dan haalt hij de ronde in bij de volgende start.
 
