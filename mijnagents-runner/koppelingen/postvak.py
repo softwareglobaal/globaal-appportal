@@ -482,6 +482,7 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
     bekend = frozenset(_adres(a) for s in verzonden for a in (s.get("aan") or []) + (s.get("cc") or []) if _adres(a))
     tel["verzonden_gelezen"], tel["bekende_contacten"] = len(verzonden), len(bekend)
     tel["verzonden_volledig"] = not onvolledig
+    tel["_bekend"] = bekend  # voor het uitschrijven (uitschrijven.py); gaat nooit naar het bord
     index = antwoord_index(verzonden)
     rijen, alle, volledig = [], [], set()
     for adres in cfg["postvakken"]:
@@ -691,7 +692,7 @@ def droog(naam):
     if not gelezen:
         for a in alle:
             a["auto_opruimen"] = ""
-    print(json.dumps(tel, ensure_ascii=False))
+    print(json.dumps({k: v for k, v in tel.items() if not k.startswith("_")}, ensure_ascii=False))
     for a in items:
         print(f"  {a['opvolging']:8} {a['datum'][:10]} ({a['werkdagen']} wd) {a['soort']:6} {a['van'][:40]} · {a['onderwerp'][:70]}"
               f"  [{a['waarom']}]")
@@ -1026,6 +1027,17 @@ def werk(naam, ag, r):
     except Exception as e:  # noqa: BLE001
         r.nood("Het maildashboard kreeg de berichten van deze ronde niet", wie="claude-code")
         ag.log("dashboard", "schrijf", f"/api/mail: {type(e).__name__}: {str(e)[:120]}")
+    # Uitschrijven via de officiele knop (RFC 8058), op beslissing van Mehdi 20-10-2026; alle regels in uitschrijven.py.
+    tel["uitgeschreven"] = 0
+    try:
+        import uitschrijven  # noqa: E402
+        gedaan = uitschrijven.ronde(naam, cfg, ag, r, nu, tel["_bekend"], veilig, regels,
+                                    tel["verzonden_volledig"] and gelezen_bord, bord)
+        tel["uitgeschreven"] = sum(1 for g in gedaan if g["uitslag"] == "aanvaard")
+        tel["uitschrijfpogingen"] = len(gedaan)
+    except Exception as e:  # noqa: BLE001
+        r.nood("Uitschrijven lukte niet", wie="claude-code")
+        ag.log("uitschrijven", "fout", f"{type(e).__name__}: {str(e)[:160]}")
     if rijen:
         try:
             bord.call("/api/gesprekken", {"rijen": rijen})
@@ -1034,6 +1046,7 @@ def werk(naam, ag, r):
     r.detail = (f"laatste 24 u: hoog {tel['hoog']}, gewoon {tel['midden']}, actie {tel['actie']}, meldingen {tel['melding']}, "
                 f"koud {tel['koud']}, rommel {tel['rommel']}, verdacht {tel['verdacht']}; op te volgen (zoals op /mail): "
                 f"{'onbekend' if open_bord is None else open_bord}; gesorteerd {tel['gesorteerd']}, opgeruimd {tel['opgeruimd']}, "
-                f"reclame {'naar Opgeruimd' if echt else 'voor Opgeruimd (proefweek)'} {tel['rommel_opruimen']}, teruggezet {tel['teruggezet']}")
+                f"reclame {'naar Opgeruimd' if echt else 'voor Opgeruimd (proefweek)'} {tel['rommel_opruimen']}, teruggezet {tel['teruggezet']}, "
+                f"uitgeschreven {tel['uitgeschreven']} (pogingen {tel.get('uitschrijfpogingen', 0)})")
     ag.log(f"dag {nu.date().isoformat()}", "ronde", r.detail,
            "\n".join(f"{a['datum'][:16]} {a['soort']} {a['opvolging']} {a['van']} · {a['onderwerp'][:90]}" for a in items[:80]))

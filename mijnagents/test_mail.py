@@ -16,6 +16,9 @@ import sqlite3
 import sys
 import tempfile
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+A_BRUSSEL = ZoneInfo("Europe/Brussels")
 
 MAP = tempfile.mkdtemp()
 os.environ["AGENTS_DB"] = os.path.join(MAP, "test.db")
@@ -52,7 +55,8 @@ def check(naam, voorwaarde, extra=""):
         print(f"  FOUT {naam} {extra}")
 
 
-VANDAAG = datetime.now(timezone.utc).replace(hour=10, minute=0, second=0, microsecond=0)
+# Middag in Brussel: rond middernacht viel 'vandaag' in UTC op een andere dag dan op de pagina (gezien 20-10-2026 00:05).
+VANDAAG = datetime.now(A_BRUSSEL).replace(hour=12, minute=0, second=0, microsecond=0)
 
 
 def bericht(uniek, soort, van, postvak="mch@h-architects.be", dagen_terug=0, onderwerp="x", **extra):
@@ -284,6 +288,25 @@ check("de overgang opnieuw draaien verandert niets", na2 == na and vorige2, (na,
 check("een kapot klaarzet-item blokkeert de overgang niet en wordt gemeld", onplaatsbaar == [kid_kapot], onplaatsbaar)
 check("een uniek zonder Message-ID wordt het juiste bericht",
       rij("mch@h-architects.be:77")["onderwerp"] == "Zonder Message-ID")
+
+# --- logboek uitschrijven (Mehdi, 20-10-2026): op /mail, nooit de URL van de knop, nooit dubbel
+U = {"gebeurtenis": "g1", "ts": VANDAAG.isoformat(), "postvak": "melodiebvba@gmail.com", "van": "news@brand.be",
+     "onderwerp": "Najaarsactie", "map": "Opgeruimd", "message_id": "<n1@brand.be>", "knop_domein": "brand.be",
+     "uitslag": "aanvaard", "code": 200}
+check("zonder token geen logboek", c.post("/api/mail/uitschrijving", json={"regels": [U]}).status_code == 403)
+c.post("/api/mail/uitschrijving", headers=K, json={"wacht": "mail-melo", "regels": [
+    U, U, dict(U, gebeurtenis="g2", knop_domein="brand.be/u?t=GEHEIM"), dict(U, gebeurtenis="g3", uitslag="weet niet"),
+    dict(U, gebeurtenis="g4", van="info@shop.be", postvak="mch@h-architects.be", map="INBOX.Opgeruimd", uitslag="geweigerd", code=410)]})
+log = c.get("/api/mail/uitschrijvingen?n=50", headers=K).get_json()["uitschrijvingen"]
+check("dezelfde gebeurtenis twee keer gestuurd telt een keer", sorted(x["gebeurtenis"] for x in log) == ["g1", "g4"], log)
+check("een knop met een pad of sleutel wordt geweigerd: alleen het domein", "GEHEIM" not in str(log))
+check("de wachten en De Mailregisseur lezen het logboek alleen met token", c.get("/api/mail/uitschrijvingen").status_code == 403)
+html = c.get("/mail?periode=7", headers=BEHEER).get_data(as_text=True)
+blok = html.split('id="uitgeschreven"')[1].split("</section>")[0]
+check("het blok Uitgeschreven toont afzender, onderwerp, knop en uitslag",
+      all(x in blok for x in ("news@brand.be", "Najaarsactie", "brand.be", "aanvaard (200)", "geweigerd (410)")))
+check("bij Gmail een link naar het bericht", "mail.google.com/mail/u/0/#search/rfc822msgid%3An1%40brand.be" in blok)
+check("bij one.com de map", "map INBOX.Opgeruimd" in blok)
 
 check("het bord heeft een knop Mail voor beheer", "/mail" in c.get("/", headers=BEHEER).get_data(as_text=True))
 check("het bord toont die knop niet aan anderen", 'href="/mail"' not in c.get("/", headers=ANDER).get_data(as_text=True))

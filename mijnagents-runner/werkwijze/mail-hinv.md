@@ -1,6 +1,6 @@
 # Werkwijze van De Mailwacht info@ H-Invest
 
-Versie 1.4 (19-10-2026, driehoeksoverleg 3-0: een bron voor wat openstaat, beantwoord via de draad, gewone mail na een werkdag, collega's tellen mee, reclame naar Opgeruimd; 1.3 26-09-2026; 1.2 dezelfde nacht). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
+Versie 1.5 (20-10-2026: uitschrijven via de officiele knop, beslissing van Mehdi). Versie 1.4 (19-10-2026, driehoeksoverleg 3-0: een bron voor wat openstaat, beantwoord via de draad, gewone mail na een werkdag, collega's tellen mee, reclame naar Opgeruimd; 1.3 26-09-2026; 1.2 dezelfde nacht). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
 zodat elke agent apart kan toezien en de belangrijke e-mails kan opvolgen, zodat het niet allemaal bij mij komt en
 ik niet alles moet onthouden. Geen spam, geen rommelinformatie." En op 26-09-2026: "ik wil een overzicht hebben
 zodat we het aantal mails onder controle krijgen, en ik wil de mails opschonen, er is te veel rommel en ruis."
@@ -81,10 +81,31 @@ verplaatsen, op het maildashboard en in mijn werkverslag; daarna verplaats ik ec
 zet Mehdi een bericht terug met een klik (Niet opruimen of Terugzetten): de afzender komt op houden, en wat al in
 Opgeruimd stond, zet ik bij mijn volgende ronde op Message-ID terug in de inbox.
 
+## Uitschrijven
+
+Mehdi, 20-10-2026: "Uitschrijven mag meteen automatisch, zonder lijst vooraf. Alleen via de officiele uitschrijfknop,
+nooit via links in de tekst of mailto, en nooit bij bank, overheid, verzekeraar, notaris of klant. Zet wel elk
+uitschrijven in een logboek dat ik op het dashboard zie." Elke ronde lees ik daarvoor alleen de koppen van de mail van
+dertig dagen in mijn mappen en in Opgeruimd en Nieuwsbrieven (uitschrijven in werkwijze/mailwachten.json). Ik schrijf
+een afzender uit als alles klopt: de mail is reclame (of koud, maar dan van een afzender die al minstens twee keer en
+langer dan een week mailt); er staat geen bank, overheid, verzekeraar, notaris, boekhouder, advocaat of deurwaarder in
+afzender, naam of onderwerp; het is geen klant (we mailden dat adres of domein nooit, en het stuurde nooit iets
+belangrijks of werd nooit beantwoord), geen eigen domein, geen gratis maildienst, en Mehdi zette de afzender niet op
+belangrijk of houden; de mail heeft de officiele knop (List-Unsubscribe met een https-adres en List-Unsubscribe-Post
+One-Click), die knop is ondertekend door de afzender volgens onze eigen mailserver, en hij hoort bij het domein van de
+afzender. Dan stuur ik een POST naar precies dat adres, via een vooraf gecontroleerd publiek IP, zonder doorverwijzing
+te volgen, met een tijdslimiet. Een keer per afzender en knop; na een fout zonder antwoord pas na een dag opnieuw,
+hoogstens drie keer; hoogstens vijf per ronde. Elke poging staat in het logboek op het maildashboard (blok
+Uitgeschreven: wanneer, postvak, afzender, onderwerp, het domein van de knop, de uitslag) en op de VM; de volledige link
+van de knop bewaar ik nergens, want die bevat persoonlijke sleutels. Lees ik de verzonden post of het bord niet
+volledig, dan schrijf ik die ronde niemand uit.
+
 ## Wat ik nooit doe
 
 - Ik stuur Mehdi nooit zelf een bericht over een mail. Dat doet De Mailregisseur, hoogstens een keer per dag.
-- Ik verwijder nooit iets, markeer niets als gelezen, stuur niets door en verstuur niets.
+- Ik verwijder nooit iets, markeer niets als gelezen, stuur niets door en verstuur geen mail.
+- Ik schrijf nooit uit via een link in de tekst, via mailto of met een gewone klik (GET); alleen met de officiele
+  knop, en nooit bij bank, overheid, verzekeraar, notaris, boekhouder, advocaat, deurwaarder, een klant of verdachte mail.
 - Ik verplaats alleen volgens de sorteerregels van mijn postvak, de afzenders die Mehdi op opruimen zette, en reclame
   naar Opgeruimd (na de proefweek); nooit naar een prullenbak.
 - Ik ruim nooit automatisch iets anders op dan reclame, en nooit van een eigen domein, een gratis maildienst, een

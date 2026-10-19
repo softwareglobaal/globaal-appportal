@@ -220,6 +220,31 @@
     {% else %}<div class="notitie">Geen reclame om op te ruimen in deze periode.</div>{% endif %}
   </section>
 
+  <section class="paneel" id="uitgeschreven">
+    <div class="kop"><h2>Uitgeschreven</h2><small>{{ periodes[periode][0]|lower }}; de wachten doen dit zelf, via de officiële uitschrijfknop</small></div>
+    <p class="lede" style="margin-bottom:12px">Alleen via de officiële knop in de kop van de mail (one-click), nooit via een link in de tekst of een mail.
+      Nooit bij bank, overheid, verzekeraar, notaris, boekhouder, advocaat of deurwaarder, nooit bij een klant of iemand die we mailden, nooit bij verdachte mail.
+      Een keer per afzender. Er wordt niets verwijderd.</p>
+    {% if uitgeschreven %}
+    <div class="tabelwrap"><table class="tabel stapel uitschrijflog">
+      <thead><tr><th>Wanneer</th><th>Postvak</th><th>Afzender</th><th>Onderwerp</th><th>Knop</th><th>Uitslag</th><th>Bericht</th></tr></thead>
+      <tbody>
+      {% for x in uitgeschreven %}
+      <tr>
+        <td class="nw">{{ x['wanneer'] }}</td>
+        <td class="nw">{{ x['postvak'] }}</td>
+        <td>{{ x['van'] }}</td>
+        <td>{{ x['onderwerp'] }}</td>
+        <td class="nw">{{ x['knop_domein'] }}</td>
+        <td class="nw"><span class="chip {{ 'goed' if x['uitslag'] == 'aanvaard' else ('let' if x['uitslag'] in ('geweigerd', 'fout') else '') }}">{{ x['uitslag'] }}{% if x['code'] %} ({{ x['code'] }}){% endif %}</span>{% if x['reden'] %}<small>{{ x['reden'] }}</small>{% endif %}</td>
+        <td>{% if x['link'] %}<a href="{{ x['link'] }}" target="_blank" rel="noopener">openen in Gmail</a>{% else %}<small title="{{ x['message_id'] }}">map {{ x['map'] }}</small>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<div class="notitie">Nog niemand uitgeschreven in deze periode.</div>{% endif %}
+  </section>
+
   <section class="paneel" id="opschonen">
     <div class="kop"><h2>Opschonen</h2><small>wie stuurt de meeste ruis, {{ periodes[periode][0]|lower }}</small></div>
     <p class="lede" style="margin-bottom:12px">Opruimen zet alle mail van die afzender uit de inbox in de map Opgeruimd, ook wat later komt.

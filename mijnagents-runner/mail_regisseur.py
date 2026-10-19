@@ -22,7 +22,8 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+import urllib.parse
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -52,6 +53,29 @@ def moment(nu, staat):
         if t <= nu and (nu - t).total_seconds() < 90 * 60:
             return "" if staat.get(nu.date().isoformat(), {}).get(m) else m
     return ""
+
+
+def uitschrijvingen(nu):
+    """Het logboek uitschrijven van de laatste 24 uur (Mehdi, 20-10-2026: in een logboek op het dashboard). Ik noem het
+    aantal in mijn overzicht; Mehdi krijgt er geen apart bericht over."""
+    try:
+        rijen = bord.call("/api/mail/uitschrijvingen?" + urllib.parse.urlencode(
+            {"sinds": (nu - timedelta(hours=24)).isoformat(), "n": 5000})).get("uitschrijvingen", [])
+    except Exception:  # noqa: BLE001
+        return None
+    tel = {}
+    for x in rijen:
+        tel[x.get("uitslag")] = tel.get(x.get("uitslag"), 0) + 1
+    return tel
+
+
+def uitschrijfzin(tel):
+    if tel is None:
+        return "Uitgeschreven de laatste 24 uur: onbekend (logboek niet gelezen)."
+    if not tel:
+        return "Uitgeschreven de laatste 24 uur: niemand."
+    return ("Uitgeschreven de laatste 24 uur via de officiele knop: " + ", ".join(f"{k} {v}" for k, v in sorted(tel.items()))
+            + ". Het logboek staat op mijnagents.globaal.be/mail, blok Uitgeschreven.")
 
 
 def mag_bellen(nu, staat, forceer=False):
@@ -151,7 +175,8 @@ def main():
         cfg = postvak.wachten()
         r.bron("mailwachten.json", json.dumps(cfg, ensure_ascii=False, sort_keys=True))
         lijst = lees_open(cfg)
-        tekst = overzicht(lijst, nu)
+        uit = uitschrijvingen(nu)
+        tekst = overzicht(lijst, nu) + "\n\n" + uitschrijfzin(uit)
         vandaag = nu.date().isoformat()
         os.makedirs(UIT, exist_ok=True)
         with open(os.path.join(UIT, f"{vandaag}.md"), "w", encoding="utf-8") as f:
@@ -194,7 +219,8 @@ def main():
         if zonder:
             r.nood("Postvakken zonder mailwacht: " + ", ".join(zonder) + ". Wat nodig is staat in werkwijze/mailwachten.json",
                    wie="mehdi")
-        r.detail = f"{m}: {len(lijst)} op te volgen, zoals op /mail ({samen}), dringend {len(d)}"
+        r.detail = (f"{m}: {len(lijst)} op te volgen, zoals op /mail ({samen}), dringend {len(d)}; uitgeschreven 24 u: "
+                    f"{'onbekend' if uit is None else (sum(uit.values()) or 0)}")
         staat.setdefault(vandaag, {})[m] = nu.isoformat()
         for k in [k for k in staat if k < vandaag]:
             staat.pop(k)

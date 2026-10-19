@@ -19,6 +19,7 @@ import json
 import re
 import os
 import sqlite3
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -624,6 +625,13 @@ def _mail_tabellen(conn):
             door TEXT DEFAULT '', ts TEXT, actief INTEGER DEFAULT 1, UNIQUE(postvak, wie));
         CREATE TABLE IF NOT EXISTS mailpostvak (
             postvak TEXT PRIMARY KEY, wacht TEXT, schrijven INTEGER DEFAULT 0, ts TEXT);
+        CREATE TABLE IF NOT EXISTS mailuitschrijving (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, wacht TEXT, postvak TEXT, van TEXT, domein TEXT DEFAULT '',
+            onderwerp TEXT DEFAULT '', map TEXT DEFAULT '', message_id TEXT DEFAULT '', datum TEXT DEFAULT '',
+            knop_domein TEXT DEFAULT '', uitslag TEXT, code INTEGER DEFAULT 0, reden TEXT DEFAULT '',
+            gebeurtenis TEXT);
+        CREATE INDEX IF NOT EXISTS mailuitschrijving_ts ON mailuitschrijving(ts);
+        CREATE UNIQUE INDEX IF NOT EXISTS mailuitschrijving_id ON mailuitschrijving(gebeurtenis);
     """)
     kol = {r[1] for r in conn.execute("PRAGMA table_info(mailbericht)").fetchall()}
     if "lijst" in kol and "mailinglijst" not in kol:
@@ -829,6 +837,61 @@ def api_mail_terug():
         "SELECT uniek, postvak, message_id FROM mailbericht WHERE terug=1 AND wacht=?", (request.args.get("wacht", ""),)).fetchall()])
 
 
+# Uitschrijven via de officiele knop (RFC 8058). Mehdi, 20-10-2026: "Uitschrijven mag meteen automatisch, zonder lijst
+# vooraf. Alleen via de officiele uitschrijfknop ... Zet wel elk uitschrijven in een logboek dat ik op het dashboard zie."
+# De wachten doen het (mijnagents-runner/koppelingen/uitschrijven.py); het bord bewaart het logboek. Nooit de volledige
+# URL van de knop: die bevat persoonlijke sleutels. Een veld dat op een URL lijkt, weigert het bord.
+MAIL_UITSLAGEN = ("aanvaard", "geweigerd", "fout", "overgeslagen")
+
+
+@app.route("/api/mail/uitschrijving", methods=["POST"])
+def api_mail_uitschrijving():
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    conn = db()
+    _mail_tabellen(conn)
+    n = 0
+    for r in p.get("regels") or []:
+        knop = str(r.get("knop_domein") or "").lower()[:120]
+        gid = str(r.get("gebeurtenis") or "")[:40]
+        if (r.get("uitslag") not in MAIL_UITSLAGEN or not r.get("van") or not gid or "/" in knop or ":" in knop or "?" in knop
+                or "=" in knop):
+            continue
+        van = str(r.get("van")).lower()[:200]
+        # een vaste id per poging: dezelfde regel opnieuw sturen (de wacht stuurt na wat het bord miste) telt nooit dubbel
+        conn.execute("INSERT OR IGNORE INTO mailuitschrijving(ts, wacht, postvak, van, domein, onderwerp, map, message_id, datum, "
+                     "knop_domein, uitslag, code, reden, gebeurtenis) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                     (str(r.get("ts") or nu())[:40], (p.get("wacht") or r.get("wacht") or "")[:60], str(r.get("postvak") or "")[:120],
+                      van, van.rsplit("@", 1)[-1] if "@" in van else "", str(r.get("onderwerp") or "")[:300],
+                      str(r.get("map") or "")[:120], str(r.get("message_id") or "")[:250], str(r.get("datum") or "")[:40],
+                      knop, r["uitslag"], int(r.get("code") or 0), str(r.get("reden") or "")[:200], gid))
+        n += 1
+    conn.commit()
+    return jsonify(ok=True, regels=n)
+
+
+@app.route("/api/mail/uitschrijvingen")
+def api_mail_uitschrijvingen():
+    """Het logboek, voor de wachten (een keer per adres) en De Mailregisseur (het aantal in zijn overzicht)."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    conn = db()
+    _mail_tabellen(conn)
+    conn.commit()
+    sinds = request.args.get("sinds", "")
+    n = max(1, min(int(request.args.get("n", "100") or 100), 20000))  # standaard de laatste 100 (G5)
+    rijen = conn.execute("SELECT * FROM mailuitschrijving WHERE ts>=? ORDER BY ts DESC LIMIT ?", (sinds, n)).fetchall()
+    return jsonify(uitschrijvingen=[dict(r) for r in rijen])
+
+
+def _mail_link(postvak, message_id):
+    """Een link naar het bericht in de webmail, als die bestaat: Gmail zoekt op Message-ID; one.com kan dat niet."""
+    if "gmail.com" in (postvak or "") and message_id:
+        return "https://mail.google.com/mail/u/0/#search/" + urllib.parse.quote("rfc822msgid:" + message_id.strip("<>"), safe="")
+    return ""
+
+
 def _mail_status(r):
     """De status van een bericht in woorden: het besluit van Mehdi gaat voor de opvolging van de wacht."""
     b, o = r["besluit"] or "", r["opvolging"] or ""
@@ -974,6 +1037,17 @@ def mail_pagina():
         a.append(postvak)
     reclame = sorted((_mailpunt(r) for r in conn.execute(f"SELECT * FROM mailbericht WHERE {w} LIMIT 300", a).fetchall()),
                      key=lambda p: p["datum_iso"], reverse=True)
+    # Het logboek uitschrijven (Mehdi, 20-10-2026), in deze periode.
+    w, a = "ts>=?", [van_dag]
+    if postvak:
+        w += " AND postvak=?"
+        a.append(postvak)
+    uitgeschreven = []
+    for r in conn.execute(f"SELECT * FROM mailuitschrijving WHERE {w} ORDER BY ts DESC LIMIT 500", a).fetchall():
+        x = dict(r)
+        x["wanneer"] = _brussel(x["ts"], dag=True)
+        x["link"] = _mail_link(x["postvak"], x["message_id"])
+        uitgeschreven.append(x)
 
     per_soort, per_dag, per_postvak, (opgeruimd, gesorteerd), ruis = _mail_cijfers(conn, van_dag, postvak)
     _, grafiek_per_dag, _, _, _ = _mail_cijfers(conn, grafiek_dagen[0], postvak)
@@ -996,7 +1070,7 @@ def mail_pagina():
            "verdacht": per_soort.get("verdacht", 0), "opgeruimd": opgeruimd, "gesorteerd": gesorteerd,
            "opruim_regels": sum(1 for r in regels if r["actie"] == "opruimen")}
     return render_template("mail.html", app_naam=APP_NAAM, wachten=wachten, open_alle=open_alle, open_per=open_per,
-                           afgesloten=afgesloten, reclame=reclame, labels=labels, status=status,
+                           afgesloten=afgesloten, reclame=reclame, uitgeschreven=uitgeschreven, labels=labels, status=status,
                            noden=noden, kpi=kpi, periode=periode, periodes=MAIL_PERIODES, postvak=postvak,
                            postvakken=postvakken, wacht_van=wacht_van, per_postvak=per_postvak, soorten=MAIL_SOORTEN,
                            ruis=ruis, regels=regels, acties=MAIL_ACTIES, gratis=MAIL_GEEN_DOMEIN, grafiek=_grafiek(grafiek_per_dag, grafiek_dagen),
