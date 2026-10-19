@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.join(RUNNER, "koppelingen"))
 sys.path.insert(0, RUNNER)
 import bord  # noqa: E402
 import ba_plannen  # noqa: E402
+import bordstand  # noqa: E402
 import tekenaar as tk  # noqa: E402
 
 S = "/Work All/01. H-A WORK/0 H-A Standaard projects"
@@ -247,6 +248,33 @@ class Controle(Basis):
         self.assertEqual(tk.signaal(veel, {}, "2026-W43", "x")["uniek"], tk.signaal(veel, {}, "2026-W43", "y")["uniek"])
         self.assertNotEqual(tk.signaal(veel, {}, "2026-W43", "x")["uniek"], tk.signaal(veel[:5], {}, "2026-W43", "x")["uniek"])
 
+    def test_gewijzigd_blad_met_dezelfde_id_geeft_een_nieuw_signaal(self):
+        # DT14: dezelfde Dropbox-id, nieuwe inhoud en een andere fout in dezelfde week: een ander uniek.
+        a = {"id": "id:proef0002", "hash": "h2", "pad": P2, "uitslag": {"fout_reden": {"meetlijn": "x"}}}
+        b = {"id": "id:proef0002", "hash": "h2b", "pad": P2, "uitslag": {"fout_reden": {"schaal": "y"}}}
+        self.assertNotEqual(tk.signaal([a], {}, "2026-W43", "c")["uniek"], tk.signaal([b], {}, "2026-W43", "c")["uniek"])
+
+    def test_te_groot_of_onleesbaar_gaat_naar_het_signaal(self):
+        # DT07: niet gecontroleerd is een bruikbare bevinding; Mehdi kijkt het zelf na.
+        m = {"id": "id:proefgroot", "hash": "h4", "pad": P1, "uitslag": tk.onbekend("plan groter dan 80 MB", True)}
+        item = tk.signaal([m], {}, "2026-W43", "c")
+        self.assertTrue(item["titel"].startswith("Na te kijken: nieuwe BA-plannen van 9901"))
+        self.assertEqual(item["inhoud"]["projecten"][0]["na_te_kijken"], ["P_N_1_00_gelijkvloers.pdf: plan groter dan 80 MB"])
+        gewoon = {"id": "id:proefscan", "hash": "h5", "pad": P1, "uitslag": tk.onbekend("scan")}
+        self.assertIsNone(tk.signaal([gewoon], {}, "2026-W43", "c"))      # een scan blijft in het werkverslag
+
+    def test_namen_en_adressen_in_mappen_en_vrije_tekst_vallen_weg(self):
+        # DT10: een submap of vrije tekst met een naam of adres gaat niet naar het bord.
+        pad = f"{S}/2. STAN permission Awaited/{PROJECT}/4. Opmeting Janssens/BA_Proefstraat 1, 3120 Tremelo_G_N_1_A_gevel Janssens.pdf"
+        label = tk.blad_label(pad)
+        self.assertEqual(label, "9901 / (map) / G_N_1_A_(vrije tekst).pdf")
+        self.assertEqual(tk.blad_label(P2.replace("2. PDF", "6. Latest PDF for Mehdi")),
+                         "9901 / 3. Bouwaanvraag / 6. Latest PDF for Mehdi / G_N_1_A_voorgevel.pdf")
+        self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_P_N Garage.pdf"), "P_N Garage.pdf")
+        self.assertEqual(tk.bladcode("BA_Proefstraat 1, 3120 Tremelo_Kerkstraat 5_G_N.pdf"), "G_N.pdf")
+        self.assertTrue(tk.toegelaten("V3 2026-10-13"))
+        self.assertFalse(tk.toegelaten("Peeters"))
+
     def test_aan_de_beurt(self):
         nu = datetime(2026, 10, 26, 10, 0, tzinfo=timezone.utc)
         st = tk.lege_stand()
@@ -305,11 +333,19 @@ class NepBord:
         self.werkwijze = werkwijze
         self.oproepen = []
         self.faal = set()
+        self.stand = {"status": None, "ts": None, "kennis_ts": None}
 
     def __call__(self, pad, payload=None, method=None):
         if pad in self.faal:
             raise urllib.error.URLError("bord weg")
         self.oproepen.append((pad, payload))
+        nu = datetime.now(timezone.utc).isoformat()
+        if pad == "/agent-status":
+            self.stand.update(status=payload["status"], ts=nu)
+        if pad == "/api/agent/tekenaar/kennis":
+            self.stand["kennis_ts"] = nu
+        if pad == "/api/logboek":
+            return {"ok": True, "geschreven": len(payload["regels"])}
         if pad == "/api/agent/tekenaar/werkwijze":
             return {"werkwijze": self.werkwijze}
         if pad == "/api/agents":
@@ -331,6 +367,7 @@ class Ronde(Basis):
             self.nep = NepBord(f.read())
         self.lijst = {"cursors": {"standaard": "c2", "light": "c3"}, "wijzigingen": []}
         vervang = {"call": (bord, self.nep), "tunnel": (tk, self._tunnel), "hulp_versie": (tk, lambda: tk.HULP_VERSIE),
+                   "bord_stand": (tk, lambda: dict(self.nep.stand)),
                    "lijst_van_vm": (tk, lambda c: json.loads(json.dumps(self.lijst))), "haal_van_vm": (tk, nep_haal),
                    "normcontrole": (tk, lambda pad: NepNormcontrole()),
                    "regelboek": (tk, lambda: ({"normcontrole.py": "code", "normenboek-B01-checklist.md": "lijst",
@@ -404,7 +441,11 @@ class Ronde(Basis):
         self.nep.faal = set()
         self.lijst["wijzigingen"] = []                             # de cursor is al verder: niets nieuws in de lijst
         self.assertEqual(self.draai(), 0)                          # aan de beurt omdat er een melding wacht
-        self.assertEqual(len([i for p in self.nep.van("/api/klaarzet") for i in p["items"]]), 1)
+        # Het signaal ging de eerste keer al mee (eerst het signaal, dan het verslag, DT15); de tweede keer met hetzelfde
+        # uniek, dus het bord ontdubbelt het. Het werkverslag staat er een keer.
+        items = [i for p in self.nep.van("/api/klaarzet") for i in p["items"]]
+        self.assertEqual(len({i["uniek"] for i in items}), 1)
+        self.assertEqual(len([r for p in self.nep.van("/api/logboek") for r in p["regels"] if r["onderwerp"] == "project 9901"]), 1)
         self.assertEqual(tk.lees_stand()["te_melden"], [])
 
     def test_volle_wachtrij_houdt_de_ronde_open(self):
@@ -421,6 +462,36 @@ class Ronde(Basis):
         self.lijst["wijzigingen"] = []
         self.assertEqual(self.draai(), 0)
         self.assertEqual(tk.lees_stand()["wachtrij"], [])
+
+    def test_kennis_niet_op_het_bord_is_geen_gedane_ronde(self):
+        # DT09: de gedeelde ronde slikt een mislukte kennismelding; de runner vraagt het bord na en vinkt niets af.
+        self.nep.faal = {"/api/agent/tekenaar/kennis"}
+        self.assertEqual(self.draai(), 1)
+        self.assertIsNone(tk.lees_stand()["laatste_ronde"])
+        self.nep.faal = set()
+        self.assertEqual(self.draai(), 0)
+        self.assertIsNotNone(tk.lees_stand()["laatste_ronde"])
+
+    def test_werkverslag_in_stukken_en_ontvangst(self):
+        # DT13: 150 bladen geven meer dan 20.000 tekens; in stukken onder de grens, en een onvolledige ontvangst breekt.
+        tk.bewaar_stand(self.stand_met_basis())
+        self.lijst["wijzigingen"] = [plan(i, P2.replace("voorgevel", f"gevel{i}"), f"h{i}") for i in range(1, 151)]
+        self.assertEqual(self.draai("--nu"), 0)
+        regels = [r for p in self.nep.van("/api/logboek") for r in p["regels"] if r["onderwerp"] == "project 9901"]
+        self.assertGreater(len(regels), 1)
+        self.assertTrue(all(len(r["detail"]) <= tk.MAX_DETAIL for r in regels))
+        self.assertEqual(sum(r["detail"].count("FOUT  9901") for r in regels), 150)
+        self.assertIn("(deel 1 van", regels[0]["tekst"])
+        self.lijst["wijzigingen"] = []
+        st = self.stand_met_basis()
+        st["te_melden"] = [{"id": "id:proef0001", "hash": "h1", "pad": P1, "uitslag": tk.onbekend("x")}]
+        tk.bewaar_stand(st)
+        echt = self.nep.__call__
+        self.nep_call = lambda pad, payload=None, method=None: ({"ok": True, "geschreven": 0} if pad == "/api/logboek"
+                                                               else echt(pad, payload, method))
+        bord.call = self.nep_call
+        self.assertEqual(self.draai(), 1)
+        self.assertEqual(len(tk.lees_stand()["te_melden"]), 1)
 
     def test_zonder_hulpscript_op_de_vm_een_nood(self):
         tk.hulp_versie = lambda: None
@@ -481,6 +552,26 @@ class Hulpscript(unittest.TestCase):
         self.assertEqual(uit["wijzigingen"][0]["hash"], "h")
         self.assertEqual(uit["wijzigingen"][2]["pad"], S.lower() + "/9800 weg v1.2")   # DT11: map met een punt
         self.assertEqual(uit["geen_toegang"], [{"basis": "standaard", "pad": S + "/oud"}])
+
+    def test_bordstand_leest_alleen(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as d:
+            db = os.path.join(d, "mijnagents.db")
+            con = sqlite3.connect(db)
+            con.execute("create table status(naam, status, ts)")
+            con.execute("create table agent(naam, kennis_ts)")
+            con.execute("insert into status values('tekenaar', 'klaar', '2026-10-19T15:00:00+00:00')")
+            con.execute("insert into agent values('tekenaar', '2026-10-19T15:00:01+00:00')")
+            con.commit()
+            con.close()
+            self.assertEqual(bordstand.stand("tekenaar", db), {"status": "klaar", "ts": "2026-10-19T15:00:00+00:00",
+                                                               "kennis_ts": "2026-10-19T15:00:01+00:00"})
+            self.assertEqual(bordstand.stand("andere", db), {"status": None, "ts": None, "kennis_ts": None})
+            with self.assertRaises(ValueError):
+                bordstand.stand("x'; drop table agent; --", db)
+            with self.assertRaises(sqlite3.OperationalError):          # mode=ro: schrijven kan niet
+                c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+                c.execute("delete from agent")
 
     def test_haal_alleen_ba_plannen_in_de_projectmappen(self):
         def meta(naam, pad, grootte=10):
