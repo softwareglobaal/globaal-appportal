@@ -2440,7 +2440,8 @@ daarna pas structuur in aanbrengen.
 - **MCP-endpoint `https://angela.sr/mcp`** (sinds 2026-08-27): Angela beheert
   de site via Claude Chat (custom connector), naar het patroon van het
   Vermogens-dashboard (14.6). De platform-inhoud (verhalen, jobs, columns,
-  woord van de week, sterk/zwak, lopende band) staat daarvoor in
+  woord van de week, sterk/zwak, lopende band, en sinds migratie 193 ook
+  events en bedrijven) staat daarvoor in
   **`items.platform_inhoud`** (migratie 135, jsonb `velden` per `soort`;
   de app zaait een lege tabel met de voorbeeldinhoud, advisory lock
   421700135). Code: `angela-site/app/mcp_server.py` (alleen beheer-rol,
