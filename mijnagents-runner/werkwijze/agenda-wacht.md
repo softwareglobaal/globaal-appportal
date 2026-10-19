@@ -5,7 +5,8 @@ zonder gasten of reeks wordt verlengd als het verlengde stuk vrij is; anders kom
 het werkverslag. Een bewust opnieuw ingekorte afspraak met `agendawacht_duur` blijft zo. De uitnodigingsroute mailt
 alleen als de partner de enige niet-eigen gast is, en een rechtstreekse ketenrit begint na de laatste getimede
 tussenafspraak op een gelezen agenda of, als die ontbreekt, na de vorige buitenafspraak. `agendawacht_vertrek`
-bewaart het echte laatste vertrek voor bellen en de melding.
+bewaart het echte laatste vertrek voor bellen en de melding. Een intern overleg op de werkagenda zonder fysieke
+plek houdt een ketenrit niet tegen en geeft geen TE KRAP: dat mag tijdens het rijden (mandaat 23-09-2026, A49).
 
 Aanvulling v8.18 (19-10-2026): Catalin (Harmoniebouw) krijgt eenmaal een uitnodiging met mail bij een afspraak
 ter plaatse met fysiek adres (besluit Mehdi 18-10-2026); online, intern en reeksen blijven zonder mail. Zie de

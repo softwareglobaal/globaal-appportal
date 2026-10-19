@@ -325,7 +325,8 @@ class Planregels(unittest.TestCase):
     def test_tussenafspraak_na_vertrek_geeft_te_krap_zonder_ritoverlap(self):
         a = afspraak("a", "!! [HA-KB] proef A", "12:30", "13:00", locatie=PLAATSEN[0])
         b = afspraak("b", "!! [HA-KB] proef B", "14:15", "15:00", locatie=PLAATSEN[1])
-        overleg = afspraak("overleg", "[HA-IN] intern overleg", "13:10", "13:40", locatie="")
+        overleg = afspraak("overleg", "[LA-IN] taak", "13:10", "13:40", kalender=next(
+            k for k, v in W.KALENDERS.items() if v == "Lara"), locatie="")
         items = [a, b, overleg]
         self.p2(items)
         basis = W.rijtijd_min
@@ -341,6 +342,29 @@ class Planregels(unittest.TestCase):
         self.assertGreaterEqual(heen_b["start"], overleg["einde"])
         self.assertEqual(heen_b["_merk"]["agendawacht_vertrek"], heen_b["start"])
         self.assertGreater(heen_b["einde"], b["start"])
+
+    def test_intern_overleg_tijdens_ketenrit_houdt_vertrek_en_geeft_geen_te_krap(self):
+        # A49, overleg 9e: een intern overleg mag tijdens het rijden (mandaat Mehdi 23-09-2026)
+        a = afspraak("a", "!! [HA-KB] proef A", "12:30", "13:00", locatie=PLAATSEN[0])
+        b = afspraak("b", "!! [HA-KB] proef B", "14:15", "15:00", locatie=PLAATSEN[1])
+        overleg = afspraak("overleg", "[HA-IN] intern overleg", "13:10", "13:40", locatie="")
+        items = [a, b, overleg]
+        schrijver = self.p2(items)
+        basis = W.rijtijd_min
+
+        def rijtijd(van, naar, vertrek):
+            return (45, "proef") if van == (1, 1) and naar == (2, 2) else basis(van, naar, vertrek)
+
+        with patch.object(W, "rijtijd_min", rijtijd), patch.object(W, "BUFFER_MIN", 0):
+            _gemaakt, _al, _geen, fouten, regels = self.rit_zetten(items)
+            self.assertEqual(fouten, 0)
+            self.assertFalse(any("TE KRAP" in regel for regel in regels), regels)
+            heen_b = next(x for x in items if "Reistijd voor: " + b["titel"] in x.get("omschrijving", ""))
+            self.assertEqual((heen_b["start"], heen_b["einde"]), (tijd("13:00"), tijd("14:15")))
+            self.assertEqual(heen_b["_merk"]["agendawacht_vertrek"], tijd("13:30"))
+            aantal = len(schrijver.patches)
+            self.assertEqual(self.rit_zetten(items)[0], 0)
+            self.assertEqual(len(schrijver.patches), aantal, schrijver.patches[aantal:])
 
     def test_dagcontrole_meldt_boekbaar_gat_in_gemerkte_keten(self):
         a = afspraak("a", "!! [HA-KB] proef A", "12:30", "13:00")

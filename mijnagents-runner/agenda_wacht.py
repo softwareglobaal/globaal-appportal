@@ -3425,12 +3425,22 @@ def reistijd_zetten(items, alleen_dag=None, nu=None):
                 uit.append((xs, xe, x))
         return sorted(uit, key=lambda z: z[0])
 
-    def keten_tussen_eindes(grens, aankomst, doel):
-        """Eindes van echte getimede afspraken tussen de vorige buitenplek en de volgende aankomst."""
+    def rijdend_toegestaan(x):
+        """Een intern overleg op een werkagenda zonder fysieke plek mag tijdens het rijden (mandaat Mehdi 23-09-2026);
+        het houdt een ketenrit dus niet tegen. Lara en privé tellen altijd als echte afspraak."""
+        ix = lees_titel(x.get("titel") or "")
+        plek = (x.get("locatie") or "").strip().lower()
+        return (ix["soort"] == "IN" and not ix["buiten"] and not ix["reistijd"]
+                and x.get("kalender") not in PRIVE_KALENDERS and (not plek or plek.startswith("http")))
+
+    def keten_tussen_eindes(grens, aankomst, doel, rijdend_vrij=False):
+        """Eindes van echte getimede afspraken tussen de vorige buitenplek en de volgende aankomst. Met rijdend_vrij
+        tellen interne overleggen die tijdens het rijden mogen niet mee."""
         uit = []
         for x in items:
             if (x is doel or x.get("hele_dag") or is_eigen_rit(x) or bellen.afgezegd(x)
-                    or "T" not in x.get("start", "") or "T" not in x.get("einde", "")):
+                    or "T" not in x.get("start", "") or "T" not in x.get("einde", "")
+                    or (rijdend_vrij and rijdend_toegestaan(x))):
                 continue
             try:
                 xs, xe = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"])
@@ -3587,6 +3597,8 @@ def reistijd_zetten(items, alleen_dag=None, nu=None):
                 echt_vertrek = None
             grenzen = keten_tussen_eindes(keten_einde, datetime.fromisoformat(bestaand_heen["einde"]), a)
             gewenst_begin = max([keten_einde] + [e for e in grenzen if echt_vertrek and e <= echt_vertrek])
+            grenzen = keten_tussen_eindes(keten_einde, datetime.fromisoformat(bestaand_heen["einde"]), a,
+                                          rijdend_vrij=True)
             keten_gat = (datetime.fromisoformat(bestaand_heen["start"]) != gewenst_begin
                          or merk.get(KETENMERK) != keten_einde.isoformat()
                          or not echt_vertrek
@@ -3660,7 +3672,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None):
         tussen_eindes = keten_tussen_eindes(keten_einde, aankomst, a) if keten_einde else []
         if keten_einde:
             # Een afspraak die na het geplande vertrek eindigt, gaat door de bestaande TE KRAP-route.
-            later = [e for e in tussen_eindes if e > rit_start]
+            later = [e for e in keten_tussen_eindes(keten_einde, aankomst, a, rijdend_vrij=True) if e > rit_start]
             if later:
                 vorige_einde = max([e for e in [vorige_einde] if e] + later)
         if vorige_einde and rit_start < vorige_einde:
