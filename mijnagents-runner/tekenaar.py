@@ -17,6 +17,7 @@ week een hartslag, ook zonder nieuwe plannen (N11).
     tekenaar.py            de ronde van deze week, als die nog niet gelukt is
     tekenaar.py --nu       een ronde, ook als deze week al gelukt is
     tekenaar.py --droog    lijst en controle tonen; niets naar het bord, de stand blijft gelijk
+    tekenaar.py --droog --sinds 2026-10-05   idem, alsof alles vanaf die dag nieuw is (proef op echte plannen)
 
 Hij leest alleen. Hij schrijft niets in Dropbox: de PDF's gaan naar een werkmap buiten Dropbox en worden na de controle
 gewist; zijn stand (wat al bekeken is) staat in ~/Library/Application Support/mijnagents/tekenaar/.
@@ -50,7 +51,7 @@ TOKEN_PAD = os.path.expanduser("~/.config/mijnagents/token")
 DROPBOX = os.path.expanduser("~/TKN-buro Dropbox")
 BORD_PUBLIEK = "https://mijnagents.globaal.be"
 HULP = "~/agents/.venv/bin/python ~/appportal/mijnagents-runner/koppelingen/ba_plannen.py"
-HULP_VERSIE = "1"
+HULP_VERSIE = "2"
 # De archiefcontrole van oktober 2026 (overleg/archiefcontrole-2026-10.md in de brug) mat alles tot 18-10-2026: wat
 # daarvoor laatst gewijzigd is, telt als bekeken. Zo bouwt de eerste ronde daarop voort in plaats van alles opnieuw.
 BASISDATUM = "2026-10-18T00:00:00+00:00"
@@ -89,8 +90,8 @@ def lege_stand():
     """bekend: de BA-plannen die nu in de projectmappen staan, per Dropbox-id (pad en inhoud), voor de set-controle.
     gezien: elke inhoud (content_hash) die De Tekenaar al kent: basis (archiefcontrole), wacht of gecontroleerd. Nieuw
     is een inhoud die hij nog niet zag; een kopie of een verplaatst plan (een project dat van fasemap verandert) niet."""
-    return {"versie": 1, "cursors": {}, "bekend": {}, "gezien": {}, "wachtrij": [], "laatste_week": None,
-            "laatste_ronde": None}
+    return {"versie": 1, "cursors": {}, "bekend": {}, "gezien": {}, "wachtrij": [], "geen_toegang": {},
+            "laatste_week": None, "laatste_ronde": None}
 
 
 def lees_stand(pad=None):
@@ -158,7 +159,17 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
         nieuw += 1
     herstel_wachtrij(st)
     st["cursors"].update(lijst.get("cursors") or {})
+    # Gedeelde mappen zonder toegang voor de stack: alleen een volledige lijst ziet ze, en die vervangt wat er stond.
+    toegang = st.setdefault("geen_toegang", {})
+    for basis, volledig in (lijst.get("volledig") or {}).items():
+        if volledig:
+            toegang[basis] = sorted(g["pad"] for g in lijst.get("geen_toegang", []) if g.get("basis") == basis)
     return nieuw, weg
+
+
+def blinde_vlekken(st):
+    """De mappen onder de projectmappen die De Tekenaar niet kan lezen (gedeeld, zonder toegang voor de stack)."""
+    return sorted(p for paden in (st.get("geen_toegang") or {}).values() for p in paden)
 
 
 def herstel_wachtrij(st):
@@ -451,6 +462,11 @@ def werk(r, st, wk):
         ag.log(f"project {nr}", "controle", f"{len(bladen)} nieuwe of gewijzigde bladen; oordeel: "
                + ", ".join(f"{s} {sum(1 for _, u in bladen if u['oordeel'] == s)}" for s in ("FOUT", "ONBEKEND", "LET OP", "OK")),
                "\n".join(regels))
+    blind = blinde_vlekken(st)
+    if blind:
+        # Geen nood: of de stack daar mag lezen, is een keuze van Mehdi; een nood zou elke ronde open blijven (N7).
+        ag.log(f"week {wk}", "bron", "mappen zonder toegang voor de stack: daar ziet De Tekenaar geen nieuwe plannen",
+               "\n".join(kort_pad(p) for p in blind))
     item = signaal(gecontroleerd, sets, wk, commit)
     if item:
         uit = ag.klaarzet([item])
@@ -463,24 +479,26 @@ def werk(r, st, wk):
                 f"na te kijken {tel['ONBEKEND']}, let op {tel['LET OP']}, OK {tel['OK']}); {len(sets)} sets met een fout; "
                 f"{'een signaal voor Mehdi' if item else 'geen signaal'}; {len(st['wachtrij'])} in de wachtrij; "
                 f"{len(st['bekend'])} plannen in de projectmappen, {nieuw} met nieuwe inhoud, {weg + verdwenen} weg; "
-                f"normcontrole {commit or 'onbekend'}")
+                f"normcontrole {commit or 'onbekend'}"
+                + (f"; niet leesbaar: {', '.join(kort_pad(p) for p in blind)}" if blind else ""))
     return True
 
 
-def droog(st):
-    """Lijst en controle tonen zonder bord en zonder de stand te bewaren."""
+def droog(st, sinds=None):
+    """Lijst en controle tonen zonder bord en zonder de stand te bewaren. sinds: een andere basisdatum (alleen hier),
+    om de ronde op echte recente plannen te proberen."""
     if hulp_versie() != HULP_VERSIE:
         print("Het hulpscript ba_plannen.py staat niet (of in een andere versie) op de VM: git pull in ~/appportal.")
         return 1
     nc = normcontrole()
     lijst = lijst_van_vm(st["cursors"])
-    nieuw, weg = selecteer(st, lijst)
+    nieuw, weg = selecteer(st, lijst, basisdatum=f"{sinds}T00:00:00+00:00" if sinds else BASISDATUM)
     tel = {}
     for g in st["gezien"].values():
         tel[g["status"]] = tel.get(g["status"], 0) + 1
     print(f"lijst: {len(lijst.get('wijzigingen', []))} wijzigingen (volledig: {lijst.get('volledig')}); "
           f"{len(st['bekend'])} BA-plannen in de projectmappen, inhoud {tel}; {nieuw} nieuw, {weg} weg; "
-          f"wachtrij {len(st['wachtrij'])}")
+          f"wachtrij {len(st['wachtrij'])}; zonder toegang: {blinde_vlekken(st)}")
     gecontroleerd, ids, verdwenen = controleer_wachtrij(nc, st, bewaar=False, maximum=int(os.environ.get("TEKENAAR_DROOG_MAX", "20")))
     for pad, u in gecontroleerd:
         print(f"{u['oordeel']:8} {projectnummer(pad)[0]}  {os.path.basename(pad)}")
@@ -498,7 +516,10 @@ def main(argv=None):
     p = argparse.ArgumentParser(description="De Tekenaar: wekelijkse normcontrole van nieuwe bouwaanvraagplannen.")
     p.add_argument("--nu", action="store_true", help="een ronde, ook als deze week al gelukt is")
     p.add_argument("--droog", action="store_true", help="tonen, niets naar het bord, stand ongewijzigd")
+    p.add_argument("--sinds", help="alleen met --droog: alles vanaf deze dag (JJJJ-MM-DD) telt als nieuw")
     a = p.parse_args(argv)
+    if a.sinds and (not a.droog or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", a.sinds)):
+        p.error("--sinds alleen met --droog, als JJJJ-MM-DD")
     os.makedirs(os.path.dirname(STAND), mode=0o700, exist_ok=True)
     with open(os.path.join(os.path.dirname(STAND), ".slot"), "w") as slot:
         try:
@@ -508,7 +529,7 @@ def main(argv=None):
             return 0
         st = lees_stand()
         if a.droog:
-            return droog(st)
+            return droog(lege_stand() if a.sinds else st, a.sinds)
         wk = week()
         if st.get("laatste_week") == wk and not a.nu:
             return 0            # de ronde van deze week is al gelukt; launchd start me dagelijks voor de inhaalronde

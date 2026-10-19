@@ -7,8 +7,10 @@ dit script op de VM wat er in de twee projectmappen staat, en haalt hij de PDF's
 (koppelingen/bronnen.py). Er komt geen sleutel op de Mac.
 
     ba_plannen.py lijst      stdin: {"cursors": {"standaard": c, "light": c}} (zonder cursor: alles opnieuw)
-                             stdout: {"versie", "cursors", "wijzigingen": [...], "volledig": {...}}; de wijzigingen
-                             in de volgorde van Dropbox: {"soort": "bestand", id, pad, hash, ...} of {"soort": "weg", pad}
+                             stdout: {"versie", "cursors", "wijzigingen": [...], "volledig": {...}, "geen_toegang"};
+                             de wijzigingen in de volgorde van Dropbox: {"soort": "bestand", id, pad, hash, ...} of
+                             {"soort": "weg", pad}; geen_toegang: gedeelde mappen die het token van de stack niet mag
+                             lezen (alleen bij een volledige lijst), zodat de Mac die blinde vlek kan melden
     ba_plannen.py haal <id>  de PDF op stdout; alleen een BA_*.pdf onder een van de twee projectmappen
     ba_plannen.py versie     de versie van dit script, zodat de Mac weet of de VM bij is
 
@@ -24,7 +26,7 @@ import urllib.error
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bronnen  # noqa: E402
 
-VERSIE = "1"
+VERSIE = "2"
 BASISSEN = {"standaard": "/Work All/01. H-A WORK/0 H-A Standaard projects",
             "light": "/Work All/01. H-A WORK/0 H-A Light projects"}
 MAX_BYTES = 80_000_000
@@ -50,7 +52,7 @@ def lijst(cursors, rpc=None):
     """Alles wat sinds de cursor veranderde, per basismap; zonder (bruikbare) cursor de volledige lijst. Een cursor die
     Dropbox weigert (409, bijvoorbeeld reset), geeft ook de volledige lijst: die is altijd juist."""
     rpc = rpc or bronnen._rpc
-    uit = {"versie": VERSIE, "cursors": {}, "wijzigingen": [], "volledig": {}}
+    uit = {"versie": VERSIE, "cursors": {}, "wijzigingen": [], "volledig": {}, "geen_toegang": []}
     for sleutel, basis in BASISSEN.items():
         antwoord, volledig = None, False
         if cursors.get(sleutel):
@@ -71,6 +73,10 @@ def lijst(cursors, rpc=None):
             for e in antwoord["entries"]:
                 if e.get(".tag") == "file" and is_ba_pdf(e.get("name")):
                     uit["wijzigingen"].append(bestand(e))
+                elif e.get(".tag") == "folder" and (e.get("sharing_info") or {}).get("no_access"):
+                    # gemeten 19-10-2026: "H-A Mehdi(Oude projecten voor de facturatie)" (352 BA-plannen) is een
+                    # gedeelde map zonder toegang voor de stack; list_folder gaat er niet in
+                    uit["geen_toegang"].append({"basis": sleutel, "pad": e.get("path_display") or e.get("path_lower")})
                 elif e.get(".tag") == "deleted" and (is_ba_pdf(e.get("name")) or "." not in (e.get("name") or ".")):
                     # een weggehaald BA-plan of een weggehaalde map (verwijderd of verplaatst); andere bestanden niet
                     uit["wijzigingen"].append({"soort": "weg", "pad": e.get("path_lower") or ""})

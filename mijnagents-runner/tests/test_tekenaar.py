@@ -128,6 +128,16 @@ class Selectie(Basis):
         self.assertEqual(st["wachtrij"], [])
         self.assertNotIn("h2", st["gezien"])                        # komt ze terug, dan is ze nieuw
 
+    def test_mappen_zonder_toegang_worden_gemeld(self):
+        st = tk.lege_stand()
+        tk.selecteer(st, {"volledig": {"standaard": True, "light": True},
+                          "geen_toegang": [{"basis": "standaard", "pad": S + "/H-A Mehdi(oud)"}]})
+        self.assertEqual(tk.blinde_vlekken(st), [S + "/H-A Mehdi(oud)"])
+        tk.selecteer(st, {"volledig": {"standaard": False, "light": False}, "geen_toegang": []})
+        self.assertEqual(tk.blinde_vlekken(st), [S + "/H-A Mehdi(oud)"])     # een deellijst ziet de map niet
+        tk.selecteer(st, {"volledig": {"standaard": True}, "geen_toegang": []})
+        self.assertEqual(tk.blinde_vlekken(st), [])                          # toegang gekregen
+
     def test_projectnummer_en_pad(self):
         self.assertEqual(tk.projectnummer(P1)[0], "9901")
         self.assertEqual(tk.projectnummer(P3)[0], "9902")
@@ -282,7 +292,9 @@ class Hulpscript(unittest.TestCase):
                 {".tag": "file", "id": "id:aaaaaa1", "name": "BA_x_P_N.pdf", "path_display": S + "/9901 x/BA_x_P_N.pdf",
                  "content_hash": "h", "server_modified": "2026-10-19T08:00:00Z"},
                 {".tag": "file", "id": "id:aaaaaa2", "name": "plan.pdf", "path_display": S + "/9901 x/plan.pdf"},
-                {".tag": "folder", "id": "id:aaaaaa3", "name": "9901 x"}], "has_more": True, "cursor": "s1"},
+                {".tag": "folder", "id": "id:aaaaaa3", "name": "9901 x"},
+                {".tag": "folder", "id": "id:aaaaaa4", "name": "oud", "path_display": S + "/oud",
+                 "sharing_info": {"no_access": True, "read_only": True}}], "has_more": True, "cursor": "s1"},
             ("files/list_folder/continue", "s1"): {"entries": [
                 {".tag": "deleted", "name": "oud.dwg", "path_lower": S.lower() + "/oud.dwg"},
                 {".tag": "deleted", "name": "9800 weg", "path_lower": S.lower() + "/9800 weg"}],
@@ -303,6 +315,7 @@ class Hulpscript(unittest.TestCase):
         self.assertEqual([w["soort"] for w in uit["wijzigingen"]], ["bestand", "weg"])
         self.assertEqual(uit["wijzigingen"][0]["hash"], "h")
         self.assertEqual(uit["wijzigingen"][1]["pad"], S.lower() + "/9800 weg")
+        self.assertEqual(uit["geen_toegang"], [{"basis": "standaard", "pad": S + "/oud"}])
 
     def test_haal_alleen_ba_plannen_in_de_projectmappen(self):
         def meta(naam, pad):
