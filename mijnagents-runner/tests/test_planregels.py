@@ -366,6 +366,22 @@ class Planregels(unittest.TestCase):
             self.assertEqual(self.rit_zetten(items)[0], 0)
             self.assertEqual(len(schrijver.patches), aantal, schrijver.patches[aantal:])
 
+    def test_dagcontrole_telt_een_gat_vol_met_een_tussenafspraak_niet(self):
+        # live 22-10-2026: een Zoom tussen het einde van de buitenafspraak en het vertrek bezet het gat zelf
+        a = afspraak("a", "!! [HA-KB] proef A", "12:30", "13:00")
+        b = afspraak("b", "!! [PR] proef B", "14:15", "16:15", kalender=W.PRIVE_AGENDA, locatie=PLAATSEN[1])
+        rit = {"id": "rittest", "kalender": W.PRIVE_AGENDA, "titel": "🚗 Reistijd: plek A → plek B",
+               "start": tijd("13:15"), "einde": tijd("14:15"),
+               "omschrijving": "Reistijd voor: !! [PR] proef B (60 min, OSRM)",
+               "_merk": {"agendawacht_rit": "rittest", "agendawacht_vertrek": tijd("13:15"),
+                         "agendawacht_keten_vanaf": tijd("13:00")}}
+        zoom = afspraak("zoom", "[HA-KO] proefgesprek", "12:55", "13:15", locatie="https://zoom.us/j/1")
+        bevindingen = D.dagcontrole([a, b, rit, zoom], DAG)
+        self.assertFalse(any(x["soort"] == "boekbaar_gat_in_keten" for x in bevindingen), bevindingen)
+        kort = afspraak("kort", "[HA-KO] proefgesprek", "13:00", "13:05", locatie="https://zoom.us/j/1")
+        bevindingen = D.dagcontrole([a, b, rit, kort], DAG)
+        self.assertTrue(any(x["soort"] == "boekbaar_gat_in_keten" for x in bevindingen))
+
     def test_dagcontrole_meldt_boekbaar_gat_in_gemerkte_keten(self):
         a = afspraak("a", "!! [HA-KB] proef A", "12:30", "13:00")
         b = afspraak("b", "!! [PR] proef B", "14:15", "16:15", kalender=W.PRIVE_AGENDA, locatie=PLAATSEN[1])

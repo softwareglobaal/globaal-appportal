@@ -86,15 +86,30 @@ def dagcontrole(items, dag):
                                              f"{a['start'][11:16]} {a['titel'][:40]}")
     # Een rechtstreekse rit bezet ook de wachttijd vanaf de vorige buitenafspraak. Het agentmerk bewaart die grens;
     # een routeomschrijving of een vergelijkbare titel bewijst geen herkomst (L38).
+    # Een getimede tussenafspraak (ook een geparkeerd gesprek) bezet het gat zelf; alleen onbedekte tijd is boekbaar.
+    ketenmerk = getattr(W, "KETENMERK", "agendawacht_keten_vanaf")   # ook tijdens een uitrol met een oudere agent
+    afgezegd = getattr(getattr(W, "bellen", None), "afgezegd", None)
+
+    def onbedekt(van, tot):
+        t = van
+        for s0, e0 in sorted((_tijd(a, "start"), _tijd(a, "einde")) for a in afspraken
+                             if _tijd(a, "start") and _tijd(a, "einde") and a.get("status") != "cancelled"
+                             and not (afgezegd and afgezegd(a))):
+            if s0 > t:
+                break
+            t = max(t, e0)
+        return t < tot
+
     for x in ritten:
         if not W.is_eigen_rit(x):
             continue
         try:
-            grens = datetime.fromisoformat((x.get("_merk") or {}).get(W.KETENMERK) or "")
+            grens = datetime.fromisoformat((x.get("_merk") or {}).get(ketenmerk) or "")
             begin = _tijd(x, "start")
         except ValueError:
             continue
-        if begin and begin > grens and any(_tijd(a, "einde") == grens for a in buitens):
+        if (begin and begin > grens and any(_tijd(a, "einde") == grens for a in buitens)
+                and onbedekt(grens, begin)):
             meld("boekbaar_gat_in_keten", x,
                  f"boekbaar gat in een keten: vorige buitenafspraak eindigt {grens:%H:%M}, "
                  f"rit begint pas {begin:%H:%M}")
