@@ -212,9 +212,13 @@ def kort_pad(pad):
 
 # ----------------------------------------------------------- VM via ssh ---
 def vm(opdracht, invoer=None, timeout=600):
-    """Een opdracht van ba_plannen.py op de VM. Geeft (code, stdout als bytes, stderr)."""
+    """Een opdracht van ba_plannen.py op de VM. Geeft (code, stdout als bytes, stderr). Een gedeelde ssh-verbinding
+    (ControlMaster, een minuut open na de laatste opdracht) houdt honderd plannen in een ronde onder de paar minuten."""
+    os.makedirs(WERKMAP, mode=0o700, exist_ok=True)
     r = subprocess.run(["/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30",
-                        VM, f"{HULP} {opdracht}"], input=invoer, capture_output=True, timeout=timeout)
+                        "-o", "ControlMaster=auto", "-o", f"ControlPath={os.path.join(WERKMAP, 's-%C')}",
+                        "-o", "ControlPersist=60", VM, f"{HULP} {opdracht}"],
+                       input=invoer, capture_output=True, timeout=timeout)
     return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace").strip()[-300:]
 
 
@@ -379,7 +383,11 @@ def signaal(gecontroleerd, sets, wk, commit):
             p["fouten"].setdefault(k, {"wat": LABEL.get(k, k), "bladen": 0, "voorbeeld": [], "reden": "zie set"})
     if not projecten:
         return None
-    soorten = sorted({s for p in projecten.values() for s in p["fouten"]})
+    gewicht = {}
+    for p in projecten.values():
+        for k, f in p["fouten"].items():
+            gewicht[k] = gewicht.get(k, 0) + max(1, f["bladen"])
+    soorten = sorted(gewicht, key=lambda k: (-gewicht[k], k))     # de meest voorkomende fout eerst
     nrs = sorted(projecten)
     titel = f"Normfouten in nieuwe BA-plannen van {', '.join(nrs[:4])}{' en meer' if len(nrs) > 4 else ''}"
     extra = f" ({', '.join(LABEL.get(s, s) for s in soorten[:3])})"

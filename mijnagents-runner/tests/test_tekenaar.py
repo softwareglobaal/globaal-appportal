@@ -186,6 +186,10 @@ class Controle(Basis):
         veel = [(P2.replace("voorgevel", f"gevel{i}"), fout[1]) for i in range(40)]
         f = tk.signaal(veel, {}, "2026-W43", "abc1234")["inhoud"]["projecten"][0]["fouten"]
         self.assertEqual((len(f), f[0]["bladen"], len(f[0]["voorbeeld"])), (1, 40, 3))
+        # De titel noemt de meest voorkomende fouten, niet de eerste in het alfabet.
+        anders = (P1, {"oordeel": "FOUT", "fout": ["bestandsnaam: x"], "fout_soorten": ["bestandsnaam"],
+                       "fout_reden": {"bestandsnaam": "x"}})
+        self.assertIn("(meetlijn, bestandsnaam)", tk.signaal(veel + [anders], {}, "2026-W43", "abc1234")["titel"])
 
 
 class NepBord:
