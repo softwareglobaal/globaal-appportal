@@ -25,7 +25,9 @@ ADRES = "mehdichegini@hotmail.com"
 INDEX = os.path.expanduser("~/Library/Mail/V10/MailData/Envelope Index")
 ACCOUNTS = os.path.expanduser("~/Library/Accounts/Accounts4.sqlite")
 DOEL = "~/appportal/mijnagents-data/hotmail/koppen.json"
-ONTVANGEN_DAGEN, VERZONDEN_DAGEN = 30, 180
+# Verzonden post twee jaar terug: wie Mehdi vanuit hotmail mailde, is een klant en wordt nooit uitgeschreven
+# (koppelingen/uitschrijven.py, ooit_gemaild; resultaattoets 20-10-2026). De wacht zelf kijkt 180 dagen terug.
+ONTVANGEN_DAGEN, VERZONDEN_DAGEN = 30, 730
 # Mappen van het account die geen binnengekomen post zijn.
 NIET_BINNEN = ("Sent%20Items", "Deleted%20Items", "Junk%20Email", "Drafts", "Outbox", "Sync%20Issues",
                "Conversation%20History", "Archive", "Archiveren")
@@ -96,7 +98,7 @@ def lees():
         b["verwijst"] = verwijst.get(b["uid"], [])
         for tekst, soort in ontvangers.get(b["uid"], []):
             (b["cc"] if soort == 1 else b["aan"]).append(tekst)
-    return {"gemaakt": nu.isoformat(), "adres": ADRES, "account": acc, "berichten": uit}
+    return {"gemaakt": nu.isoformat(), "adres": ADRES, "account": acc, "verzonden_dagen": VERZONDEN_DAGEN, "berichten": uit}
 
 
 def main():

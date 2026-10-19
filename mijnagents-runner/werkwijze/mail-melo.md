@@ -91,7 +91,7 @@ dan een week mailt, en het is geen antwoord, doorgestuurd bericht of aanvraag; e
 boekhouder, advocaat of deurwaarder in afzender, naam, onderwerp of het adres van de knop (de lijst BESCHERMD in
 koppelingen/uitschrijven.py, bovenop de rollen); het is geen klant (we mailden dat adres of domein de laatste twee jaar nooit, vanuit geen
 enkel postvak van de mailwachten, en het stuurde nooit iets belangrijks of werd nooit beantwoord), geen eigen domein, geen gratis maildienst, en Mehdi zette de afzender niet op
-belangrijk of houden; de mail heeft de officiele knop (List-Unsubscribe met een https-adres en List-Unsubscribe-Post
+belangrijk of houden; de mail heeft precies een officiele knop (een kop List-Unsubscribe met een https-adres en List-Unsubscribe-Post
 One-Click), die knop is ondertekend door precies de handtekening van de afzender die onze eigen
 mailserver goedkeurde, en hij hoort bij het domein van de
 afzender. Dan stuur ik een POST naar precies dat adres, via een vooraf gecontroleerd publiek IP, zonder doorverwijzing

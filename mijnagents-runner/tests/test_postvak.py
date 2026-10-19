@@ -384,6 +384,9 @@ def test_uitschrijven_nooit_bij_bank_overheid_verzekeraar_notaris_of_klant():
     assert nee(_nieuwsbrief(onderwerp="Re: uw offerte met korting")), "een antwoord"
     assert nee(_nieuwsbrief(onderwerp="TR: gratis plaatsbezoek")), "doorgestuurd"
     assert nee(_nieuwsbrief(onderwerp="Offerteaanvraag renovatie: ontdek ons voorstel")), "een aanvraag"
+    # tweede toets: DKIM dekt alleen de onderste van twee gelijke koppen; een tussenpersoon zet er een boven
+    assert nee(_nieuwsbrief(uitschrijfkoppen=(2, 1))) and nee(_nieuwsbrief(uitschrijfkoppen=(1, 2))), "precies een uitschrijfkop"
+    assert not nee(_nieuwsbrief(uitschrijfkoppen=(1, 1)))
     assert nee(_nieuwsbrief(van="info@brand.be", van_naam="Brand Verzekeringen")), "verzekering in de naam"
     assert nee(_nieuwsbrief(onderwerp="Uw notaris informeert")), "notaris in het onderwerp"
     assert nee(_nieuwsbrief(van="news@fod.belgium.be")), "overheid"
@@ -443,15 +446,28 @@ def test_uitschrijven_klant_is_wie_we_in_twee_jaar_mailden_vanuit_elk_postvak():
     def koppen(adres, m, sinds=None, maximaal=200, plafond=1000):
         gevraagd.append((adres, m, sinds, plafond))
         return [{"aan": [f"Klant <klant@{adres.split('@')[1]}>"], "cc": []}]
+    mac = os.path.join(tempfile.mkdtemp(), "koppen.json")
+
+    def hotmail(dagen=730, gemaakt=nu):
+        json.dump({"gemaakt": gemaakt.isoformat(), "verzonden_dagen": dagen, "berichten": [
+            {"map": "Sent", "aan": ["Vriend <klant@prive.be>"], "cc": []}, {"map": "INBOX", "aan": ["x@reclame.be"]}]},
+            open(mac, "w"))
+    hotmail()
     oud_pv, oud_mn = postvak.postvak, postvak.mapnamen
-    postvak.postvak = lambda a: {"adres": a, "bron": "/mac.json"} if "hotmail" in a else {"adres": a}
+    postvak.postvak = lambda a: {"adres": a, "bron": mac} if "hotmail" in a else {"adres": a}
     postvak.mapnamen = lambda mb: {"inbox", "inbox.sent"}
     try:
         pad = os.path.join(tempfile.mkdtemp(), "ooit.json")
         ooit = U.ooit_gemaild(nu, cfg_alles, koppen, pad)
-        assert ooit == {"klant@h-architects.be", "klant@h-invest.be"}
+        assert ooit == {"klant@h-architects.be", "klant@h-invest.be", "klant@prive.be"}, \
+            "tweede toets X1: wie Mehdi alleen vanuit hotmail mailde, is ook een klant"
         assert {a for a, *_ in gevraagd} == {"a@h-architects.be", "mch@h-architects.be", "b@h-invest.be"}, \
-            "elk postvak van elke wacht en de antwoordpostvakken; hotmail (bestand van de Mac) niet"
+            "elk postvak van elke wacht en de antwoordpostvakken via de postbus; hotmail uit het bestand van de Mac"
+        for kort_of_oud in (dict(dagen=180), dict(gemaakt=nu - timedelta(days=8))):
+            hotmail(**kort_of_oud)
+            assert U.ooit_gemaild(nu, cfg_alles, koppen, os.path.join(tempfile.mkdtemp(), "h.json")) is None, \
+                ("hotmail-bestand zonder twee jaar verzonden post of ouder dan een week: niemand uitschrijven", kort_of_oud)
+        hotmail()
         assert all(s == "2024-10-20" and p == U.KLANT_PLAFOND for _, _, s, p in gevraagd), "twee jaar terug"
         gevraagd.clear()
         assert U.ooit_gemaild(nu, cfg_alles, koppen, pad) == ooit and not gevraagd, "een keer per dag gelezen"

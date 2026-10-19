@@ -99,6 +99,7 @@ ANTWOORD_OF_DOORGESTUURD = re.compile(r"^\s*(re|antw|aw|fw|fwd|tr|wg|doorst)\s*:
 KLANT_DAGEN = 730           # wie we in twee jaar mailden, vanuit welk postvak ook, is een klant (X3, K2)
 KLANT_PLAFOND = 20000       # zoveel verzonden berichten per map; meer is niet volledig gelezen, en dan niemand uitschrijven
 KLANT_CACHE = os.path.join(postvak.DATA, "mail-ooit-gemaild.json")
+BRON_MAX_DAGEN = 7          # het hotmail-bestand van de Mac mag hoogstens zo oud zijn voor de klantenlijst
 BEZIG_ONDERBROKEN_MIN = 10  # een 'bezig' zonder uitslag die ouder is, was een onderbroken poging (X4, K3)
 
 
@@ -255,8 +256,9 @@ def terugkerend(berichten_van, nu):
 def ooit_gemaild(nu, cfg_alles=None, koppen=None, pad=KLANT_CACHE):
     """Elk adres waarnaar we in KLANT_DAGEN mailden, vanuit elk postvak van elke wacht: een klant van H-Invest die mch@
     ooit mailde, is ook bij info@ H-Architects een klant (X3, K2). Een keer per dag gelezen en bewaard. None als het niet
-    volledig gelezen is: dan schrijft geen enkele wacht iemand uit. Hotmail (een bestand van de Mac) schrijft zelf niet
-    uit en wordt hier overgeslagen."""
+    volledig gelezen is: dan schrijft geen enkele wacht iemand uit. Hotmail komt uit het bestand van de Mac
+    (mac/hotmail_koppen.py): dat moet twee jaar verzonden post bevatten en hoogstens BRON_MAX_DAGEN oud zijn (tweede
+    toets 20-10-2026, X1: wie Mehdi alleen vanuit hotmail mailde, is ook een klant)."""
     vandaag = nu.date().isoformat()
     try:
         with open(pad, encoding="utf-8") as f:
@@ -278,6 +280,16 @@ def ooit_gemaild(nu, cfg_alles=None, koppen=None, pad=KLANT_CACHE):
         if not mb:
             return None
         if mb.get("bron"):
+            try:
+                with open(mb["bron"], encoding="utf-8") as f:
+                    d = json.load(f)
+                gemaakt = datetime.fromisoformat(d["gemaakt"])
+            except (OSError, ValueError, KeyError, TypeError):
+                return None
+            if int(d.get("verzonden_dagen") or 0) < KLANT_DAGEN or nu - gemaakt > timedelta(days=BRON_MAX_DAGEN):
+                return None
+            uit |= {postvak._adres(a) for s in d.get("berichten", []) if s.get("map") == "Sent"
+                    for a in (s.get("aan") or []) + (s.get("cc") or []) if postvak._adres(a)}
             continue
         try:
             bestaand = postvak.mapnamen(mb)
@@ -334,6 +346,9 @@ def beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerende=False):
         return None, "klant: we mailden dit adres of domein"
     if postvak.zelfde_domein(dom, veilig, True):
         return None, "klant: ooit belangrijk, gewoon, met gevolg of beantwoord"
+    if tuple(b.get("uitschrijfkoppen") or (1, 1)) != (1, 1):
+        # DKIM dekt alleen de onderste van twee gelijke koppen; een tussenpersoon kan er een boven zetten (RFC 8058: een)
+        return None, "niet precies een uitschrijfkop"
     url = knop(b.get("list_unsubscribe"), b.get("list_unsubscribe_post"))
     if not url:
         return None, "geen one-click-knop"
@@ -477,6 +492,8 @@ def koppen_lezen(mb, mappen, sinds):
                                 "message_id": imapbron._kop(k.get("Message-ID")), "datum": _datum(k.get("Date")),
                                 "list_unsubscribe": k.get("List-Unsubscribe") or "",
                                 "list_unsubscribe_post": k.get("List-Unsubscribe-Post") or "",
+                                "uitschrijfkoppen": (len(k.get_all("List-Unsubscribe") or []),
+                                                     len(k.get_all("List-Unsubscribe-Post") or [])),
                                 "authentication_results": [str(x) for x in (k.get_all("Authentication-Results") or [])],
                                 "dkim_signatures": [str(x) for x in (k.get_all("DKIM-Signature") or [])]})
     return uit
