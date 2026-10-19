@@ -258,8 +258,9 @@ def test_een_kapotte_verzonden_map_is_onvolledig():
 
 # --- Uitschrijven via de officiele knop (Mehdi, 20-10-2026; ontwerptoets C1-C9, G1-G5, K1-K8) ---
 
-AR_ONE = "mx3.cst.mailpod8-cph3.one.com; spf=pass smtp.mailfrom=x; dkim=pass header.d=brand.be header.s=s1 header.a=rsa-sha256"
-DKIM_BRAND = "v=1; a=rsa-sha256; d=brand.be; s=s1; h=from:to:subject:list-unsubscribe:list-unsubscribe-post; bh=x; b=y"
+AR_ONE = ("mx3.cst.mailpod8-cph3.one.com; spf=pass smtp.mailfrom=x; dkim=pass header.d=brand.be header.s=s1 "
+          "header.a=rsa-sha256 header.b=AbCdEfGh")
+DKIM_BRAND = "v=1; a=rsa-sha256; d=brand.be; s=s1; h=from:to:subject:list-unsubscribe:list-unsubscribe-post; bh=x; b=AbCdEfGh IjKl"
 
 
 def _nieuwsbrief(van="news@brand.be", knop="https://unsub.brand.be/u?t=GEHEIM", post="List-Unsubscribe=One-Click",
@@ -339,26 +340,50 @@ def test_uitschrijven_raakt_nooit_de_vm_of_het_netwerk():
 def test_uitschrijven_alleen_een_ondertekende_knop_van_de_afzender():
     import uitschrijven as U
     assert U.ondertekend([AR_ONE], [DKIM_BRAND]) == {"brand.be"}
-    assert U.ondertekend(["mx.google.com; dkim=pass header.d=brand.be"], [DKIM_BRAND]) == {"brand.be"}
+    gmail = "mx.google.com; dkim=pass header.i=@brand.be header.s=s1 header.b=AbCdEfGh; spf=pass (google.com: domain of x)"
+    assert U.ondertekend([gmail], [DKIM_BRAND]) == {"brand.be"}, "Gmail schrijft header.i=@domein (gezien 20-10-2026)"
     assert not U.ondertekend(["mx.evil.com; dkim=pass header.d=brand.be", AR_ONE], [DKIM_BRAND]), "alleen onze eigen server, bovenaan"
     assert not U.ondertekend([AR_ONE.replace("dkim=pass", "dkim=fail")], [DKIM_BRAND])
     assert not U.ondertekend([AR_ONE], [DKIM_BRAND.replace(":list-unsubscribe-post", "")]), "de handtekening dekt de knop niet"
+    assert not U.ondertekend([AR_ONE.replace(" header.b=AbCdEfGh", "")], [DKIM_BRAND]), "zonder header.b niet te koppelen"
+    # X1: de echte handtekening dekt de knop niet; een tussenpersoon voegt een vervalste tweede toe die dat wel beweert.
+    echt = DKIM_BRAND.replace(":list-unsubscribe:list-unsubscribe-post", "")
+    vals_zelfde_begin = DKIM_BRAND.replace("b=AbCdEfGh IjKl", "b=AbCdEfGhVALS")
+    ar_twee = AR_ONE + "; dkim=fail header.d=brand.be header.s=s1 header.b=AbCdEfGh"
+    assert not U.ondertekend([ar_twee], [echt, vals_zelfde_begin]), "X1: dezelfde sleutel faalde ook"
+    assert not U.ondertekend([AR_ONE], [echt, vals_zelfde_begin]), "X1: twee handtekeningen bij een resultaat"
+    vals_ander_begin = DKIM_BRAND.replace("b=AbCdEfGh IjKl", "b=ZzZzZzZz")
+    assert not U.ondertekend([AR_ONE], [echt, vals_ander_begin]), "X1: de geslaagde handtekening is niet die van de knop"
+    assert not U.ondertekend([AR_ONE], [DKIM_BRAND.replace("s=s1", "s=s2")]), "andere selector"
     eigen, bekend, veilig = ("h-architects.be",), frozenset(), frozenset()
-    assert U.beoordeel(_nieuwsbrief(), "rommel", "", eigen, bekend, veilig)[0] == "https://unsub.brand.be/u?t=GEHEIM"
+    assert U.beoordeel(_nieuwsbrief(), "rommel", "", eigen, bekend, veilig, True)[0] == "https://unsub.brand.be/u?t=GEHEIM"
     andere = _nieuwsbrief(van="news@ander.be")
-    assert U.beoordeel(andere, "rommel", "", eigen, bekend, veilig) == (None, "handtekening of knop hoort niet bij de afzender")
+    assert U.beoordeel(andere, "rommel", "", eigen, bekend, veilig, True) == (None, "handtekening of knop hoort niet bij de afzender")
     esp = _nieuwsbrief(knop="https://us1.list-manage.com/u")
-    assert U.beoordeel(esp, "rommel", "", eigen, bekend, veilig)[0] is None, "K1: de knop hoort bij het domein van de handtekening"
+    assert U.beoordeel(esp, "rommel", "", eigen, bekend, veilig, True)[0] is None, "K1: de knop hoort bij het domein van de handtekening"
     assert U.hoofddomein("nieuws.kmoinsider.be") == "kmoinsider.be" and U.hoofddomein("mail.bedrijf.co.uk") == "bedrijf.co.uk"
+    assert U.hoofddomein("mail.bedrijf.com.pl") == "bedrijf.com.pl" and U.hoofddomein("x.firma.co.th") == "firma.co.th", "K5"
 
 
 def test_uitschrijven_nooit_bij_bank_overheid_verzekeraar_notaris_of_klant():
     import uitschrijven as U
     eigen = ("h-architects.be",)
 
-    def nee(b, soort="rommel", regel="", bekend=frozenset(), veilig=frozenset(), terug=False):
+    def nee(b, soort="rommel", regel="", bekend=frozenset(), veilig=frozenset(), terug=True):
         return U.beoordeel(b, soort, regel, eigen, bekend, veilig, terug)[0] is None
+    assert not nee(_nieuwsbrief()), "een gewone nieuwsbrief van een terugkerende verzender mag (anders test hieronder niets)"
     assert nee(_nieuwsbrief(van="nieuws@kbc.be")), "bank, ook als het reclame is"
+    # X2, K1: banken, verzekeraars en overheid met een naam die niet in postvak.ROLLEN staat
+    for van, naam in (("news@keytrade.be", "Keytrade"), ("promo@brand.be", "Beobank"), ("info@brand.be", "Allianz Benelux"),
+                      ("news@brand.be", "AP Assurances"), ("info@mobilit.fgov.be", "Mobilit"), ("news@brand.be", "Triodos"),
+                      ("news@brand.be", "Partena ziekenfonds"), ("news@brand.be", "Notaire Dupont")):
+        assert nee(_nieuwsbrief(van=van, van_naam=naam)), (van, naam)
+    assert nee(_nieuwsbrief(knop="https://unsub.mybank.be/u")), "ook de knop van een bank via een verzendbedrijf"
+    # X3, K2: een klant
+    assert nee(_nieuwsbrief(), terug=False), "ook rommel alleen van een terugkerende verzender: een klant mailt een eerste keer"
+    assert nee(_nieuwsbrief(onderwerp="Re: uw offerte met korting")), "een antwoord"
+    assert nee(_nieuwsbrief(onderwerp="TR: gratis plaatsbezoek")), "doorgestuurd"
+    assert nee(_nieuwsbrief(onderwerp="Offerteaanvraag renovatie: ontdek ons voorstel")), "een aanvraag"
     assert nee(_nieuwsbrief(van="info@brand.be", van_naam="Brand Verzekeringen")), "verzekering in de naam"
     assert nee(_nieuwsbrief(onderwerp="Uw notaris informeert")), "notaris in het onderwerp"
     assert nee(_nieuwsbrief(van="news@fod.belgium.be")), "overheid"
@@ -371,7 +396,7 @@ def test_uitschrijven_nooit_bij_bank_overheid_verzekeraar_notaris_of_klant():
     assert nee(_nieuwsbrief(van="iemand@gmail.com")), "gratis maildienst"
     for soort in ("hoog", "midden", "actie", "melding", "verdacht"):
         assert nee(_nieuwsbrief(), soort=soort), soort
-    assert nee(_nieuwsbrief(), soort="koud"), "koud alleen van een terugkerende verzender (K4)"
+    assert nee(_nieuwsbrief(), soort="koud", terug=False), "koud alleen van een terugkerende verzender (K4)"
     assert not nee(_nieuwsbrief(), soort="koud", terug=True)
     ikea = _nieuwsbrief(van="noreply@order.email.ikea.com", onderwerp="Je bestelling is verzonden")
     assert postvak.trieer(ikea, eigen)[0] == "melding" and nee(ikea, soort="melding"), "een bestelling nooit (K7)"
@@ -404,6 +429,46 @@ def test_uitschrijven_een_keer_per_afzender_en_knop():
     assert U.mag_poging("a@x.be", "ander.be", staat, nu), "een andere knop van dezelfde afzender is een andere lijst (C5)"
 
 
+def test_uitschrijven_klant_is_wie_we_in_twee_jaar_mailden_vanuit_elk_postvak():
+    import json
+    import tempfile
+    import uitschrijven as U
+    nu = datetime.fromisoformat("2026-10-20T10:00:00+02:00")
+    cfg_alles = {"_uitleg": "x", "uitschrijven": {"aan": True},
+                 "mail-a": {"postvakken": ["a@h-architects.be"], "antwoord_vanuit": ["mch@h-architects.be"]},
+                 "mail-b": {"postvakken": ["b@h-invest.be"], "antwoord_vanuit": []},
+                 "mail-prive": {"postvakken": ["p@hotmail.com"]}}
+    gevraagd = []
+
+    def koppen(adres, m, sinds=None, maximaal=200, plafond=1000):
+        gevraagd.append((adres, m, sinds, plafond))
+        return [{"aan": [f"Klant <klant@{adres.split('@')[1]}>"], "cc": []}]
+    oud_pv, oud_mn = postvak.postvak, postvak.mapnamen
+    postvak.postvak = lambda a: {"adres": a, "bron": "/mac.json"} if "hotmail" in a else {"adres": a}
+    postvak.mapnamen = lambda mb: {"inbox", "inbox.sent"}
+    try:
+        pad = os.path.join(tempfile.mkdtemp(), "ooit.json")
+        ooit = U.ooit_gemaild(nu, cfg_alles, koppen, pad)
+        assert ooit == {"klant@h-architects.be", "klant@h-invest.be"}
+        assert {a for a, *_ in gevraagd} == {"a@h-architects.be", "mch@h-architects.be", "b@h-invest.be"}, \
+            "elk postvak van elke wacht en de antwoordpostvakken; hotmail (bestand van de Mac) niet"
+        assert all(s == "2024-10-20" and p == U.KLANT_PLAFOND for _, _, s, p in gevraagd), "twee jaar terug"
+        gevraagd.clear()
+        assert U.ooit_gemaild(nu, cfg_alles, koppen, pad) == ooit and not gevraagd, "een keer per dag gelezen"
+        assert json.load(open(pad))["dag"] == "2026-10-20"
+        vol = lambda adres, m, sinds=None, maximaal=200, plafond=1000: [{"aan": ["x@y.be"]}] * plafond  # noqa: E731
+        assert U.ooit_gemaild(nu, cfg_alles, vol, os.path.join(tempfile.mkdtemp(), "v.json")) is None, "plafond: niet volledig"
+
+        def kapot(*a, **k):
+            raise OSError("imap")
+        assert U.ooit_gemaild(nu, cfg_alles, kapot, os.path.join(tempfile.mkdtemp(), "k.json")) is None
+        postvak.mapnamen = lambda mb: {"inbox"}
+        assert U.ooit_gemaild(nu, cfg_alles, koppen, os.path.join(tempfile.mkdtemp(), "g.json")) is None, \
+            "geen map Verzonden: niet volledig"
+    finally:
+        postvak.postvak, postvak.mapnamen = oud_pv, oud_mn
+
+
 def test_uitschrijven_ronde_logboek_plafond_en_grendels():
     import json
     import socket
@@ -411,7 +476,10 @@ def test_uitschrijven_ronde_logboek_plafond_en_grendels():
     import uitschrijven as U
     nu = datetime.fromisoformat("2026-10-20T10:00:00+02:00")
     log = os.path.join(tempfile.mkdtemp(), "uit.jsonl")
+    # terugkerend: per afzender twee nieuwsbrieven, de eerste ouder dan zeven dagen
     brieven = [_nieuwsbrief(van=f"news{i}@brand.be", message_id=f"<n{i}@brand.be>") for i in range(7)]
+    brieven += [_nieuwsbrief(van=f"news{i}@brand.be", message_id=f"<o{i}@brand.be>",
+                             datum=datetime.fromisoformat("2026-10-01T10:00:00+02:00")) for i in range(7)]
     gepost, naar_bord = [], []
 
     class Bord:
@@ -434,7 +502,15 @@ def test_uitschrijven_ronde_logboek_plafond_en_grendels():
     U.instellingen = lambda cfg_alles=None: {"aan": True, "per_ronde": 5, "extra_mappen": ["INBOX.Opgeruimd"]}
     try:
         r = postvak._Droog()
-        args = dict(lezen=lambda mb, mappen, sinds: brieven, posten=posten, opzoeken=dns, logpad=log)
+        args = dict(lezen=lambda mb, mappen, sinds: brieven, posten=posten, opzoeken=dns, logpad=log,
+                    klanten=lambda nu: frozenset())
+        geen_klantenlijst = dict(args, klanten=lambda nu: None, logpad=os.path.join(tempfile.mkdtemp(), "k.jsonl"))
+        assert U.ronde("mail-proef", cfg, postvak._DroogAgent(), r, nu, frozenset(), frozenset(), {}, True, Bord(),
+                       **geen_klantenlijst) == [] and not gepost, "X3: zonder volledige klantenlijst van twee jaar niemand"
+        assert U.ronde("mail-proef", cfg, postvak._DroogAgent(), r, nu, frozenset(), frozenset(), {}, True, Bord(),
+                       **dict(args, klanten=lambda nu: frozenset({"jan@brand.be"}),
+                              logpad=os.path.join(tempfile.mkdtemp(), "j.jsonl"))) == [] and not gepost, \
+            "X3: een domein dat we ooit (binnen twee jaar, vanuit elk postvak) mailden, is een klant"
         gedaan = U.ronde("mail-proef", cfg, postvak._DroogAgent(), r, nu, frozenset(), frozenset(), {}, True, Bord(), **args)
         assert len(gedaan) == 5 and len(gepost) == 5, "hoogstens vijf per ronde"
         assert all(g["uitslag"] == "aanvaard" and g["knop_domein"] == "brand.be" for g in gedaan)
@@ -451,6 +527,20 @@ def test_uitschrijven_ronde_logboek_plafond_en_grendels():
         open(kapot, "w").write("{niet leesbaar\n")
         U.ronde("mail-proef", cfg, postvak._DroogAgent(), r, nu, frozenset(), frozenset(), {}, True, Bord(), **dict(args, logpad=kapot))
         assert len(gepost) == 7 and any("onleesbaar" in t for t, _ in r.noden), "onleesbaar logboek: stilstaan en melden (K5)"
+        # X4, K3: de wacht stopte tussen POST en uitslag; de volgende ronde zet dat als fout 'onderbroken' op het bord
+        stop = os.path.join(tempfile.mkdtemp(), "stop.jsonl")
+        open(stop, "w").write(json.dumps({"gebeurtenis": "g-stop", "ts": (nu - timedelta(hours=1)).isoformat(), "wacht": "mail-proef",
+                                          "van": "x@brand.be", "knop_domein": "brand.be", "uitslag": "bezig"}) + "\n"
+                              + json.dumps({"gebeurtenis": "g-nu", "ts": (nu - timedelta(minutes=1)).isoformat(),
+                                            "wacht": "mail-proef", "van": "y@brand.be", "knop_domein": "brand.be",
+                                            "uitslag": "bezig"}) + "\n")
+        naar_bord.clear()
+        U.ronde("mail-proef", cfg, postvak._DroogAgent(), r, nu, frozenset(), frozenset(), {}, True, Bord(),
+                **dict(args, logpad=stop, klanten=lambda nu: None))
+        verstuurd = [x for d in naar_bord for x in d["regels"]]
+        assert [(x["gebeurtenis"], x["uitslag"]) for x in verstuurd] == [("g-stop", "fout")] and "onderbroken" in verstuurd[0]["reden"], \
+            "een onderbroken poging komt op /mail, ook als er deze ronde niemand uitgeschreven wordt; een poging van net niet"
+        assert not U.mag_poging("x@brand.be", "brand.be", U.staat_per_sleutel(U.lees_log(stop)), nu), "en telt als een fout"
         U.instellingen = lambda cfg_alles=None: {"aan": False, "per_ronde": 5, "extra_mappen": []}
         assert U.ronde("mail-proef", cfg, postvak._DroogAgent(), r, nu, frozenset(), frozenset(), {}, True, Bord(),
                        **dict(args, logpad=os.path.join(tempfile.mkdtemp(), "y.jsonl"))) == []

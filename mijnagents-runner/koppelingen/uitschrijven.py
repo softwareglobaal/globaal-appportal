@@ -26,6 +26,16 @@ Wanneer (ontwerptoets 19/20-10-2026, elke regel heeft een test in tests/test_pos
   - een keer per afzender en knop (C5): na een antwoord (aanvaard of geweigerd) nooit meer; een fout zonder antwoord,
     of een poging die stopte tussen POST en logboek, mag na 24 uur opnieuw, hoogstens drie keer (K5);
   - hoogstens per_ronde pogingen per wacht per ronde; geen doorverwijzing gevolgd; tijdslimiet 10 seconden.
+Resultaattoets 20-10-2026 (run 20261020-001828, 3-0 of 2-0-1), daarom ook:
+  - de geslaagde handtekening is dezelfde die de knop dekt: domein, selector en het begin van b= uit Authentication-Results
+    horen bij precies een DKIM-Signature, en geen enkel ander resultaat met die sleutel faalde (X1); Gmail schrijft
+    header.i=@domein in plaats van header.d=;
+  - een eigen lijst beschermde namen alleen voor het uitschrijven (BESCHERMD: elke bank, verzekeraar, overheid,
+    ziekenfonds, sociaal secretariaat, notaris, advocaat, deurwaarder), ook in het domein van de knop (X2, K1);
+  - klant: wie we in twee jaar mailden vanuit welk postvak van welke wacht ook (ooit_gemaild, een keer per dag gelezen);
+    ook rommel alleen van een terugkerende verzender; nooit bij Re:, Fw: of een aanvraagwoord (X3, K2);
+  - een poging die stopte tussen POST en uitslag, komt als fout "onderbroken" op het bord (X4, K3);
+  - een onbekend tweedelig domeinsuffix (com.pl, co.th) maakt het hoofddomein langer, nooit korter (K5).
 Logboek: op het bord (tabel mailuitschrijving, /mail, blok Uitgeschreven), met een vaste gebeurtenis-id zodat opnieuw
 sturen nooit dubbel telt (C6), en als grendel in mijnagents-data/mail-uitschrijven.jsonl op de VM; wat het bord nog
 niet heeft, stuurt de volgende ronde na. Nooit de URL van de knop: die bevat persoonlijke sleutels; alleen het
@@ -62,6 +72,34 @@ KOPPEN = ("(UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID LIST-UNSUB
 # vooral .be, .nl, .com; een onbekend geval maakt het hoofddomein langer, nooit korter, en dus strenger.
 DUBBEL = {"co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "co.nz", "com.br", "co.za", "com.sr",
           "co.jp", "com.tr", "com.mx", "com.cn", "co.in", "com.sg", "com.hk"}
+# Een landendomein met zo'n tweede deel is ook een suffix van twee delen (com.pl, co.th, gov.br), K5.
+GENERIEK = {"com", "net", "org", "co", "gov", "edu", "ac", "or", "ne", "go", "gob", "gouv", "mil", "nom", "ltd", "plc",
+            "sch", "biz", "info"}
+# Alleen voor het uitschrijven, bovenop postvak.ROLLEN: liever te veel uitgesloten dan een bank, verzekeraar, overheid of
+# beroep van vertrouwen uitgeschreven (resultaattoets X2, K1). Een stuk tekst volstaat, in afzender, naam, onderwerp en knop.
+BESCHERMD = [
+    # banken en betalen
+    "bank", "banque", "keytrade", "beobank", "triodos", "nagelmackers", "fintro", "vdk", "cbc.be", "europabank", "bpost",
+    "paypal", "stripe", "mollie", "payconiq", "bancontact", "worldline", "visa", "mastercard", "american express", "amex",
+    "krediet", "credit", "lening", "leasing",
+    # verzekeraars
+    "assur", "verzeker", "insurance", "allianz", "ethias", "axa", "baloise", "vivium", "federale", "dvv", "p&v", "dkv",
+    "aginsurance", "@ag.be", ".ag.be", "corona direct", "yuzzu",
+    # overheid en sociaal
+    "fgov", ".gov", "gouv", "overheid", "belgium.be", "vlaanderen.be", "brussels", "wallonie", "gemeente", "stad.",
+    "commune", "provincie", "province", "politie", "police", "justitie", "justice", "belasting", "fisc", "tax", "minfin",
+    "rsz", "onss", "riziv", "inami", "kbo", "e-box", "ebox", "itsme", "csam", "vlabel", "omgevingsloket", "kadaster",
+    "mutualit", "ziekenfonds", "cm.be", "solidaris", "helan", "partena", "securex", "acerta", "liantis", "sd worx",
+    "sdworx", "attentia", "mensura", "ucm", "pensioen", "pension", "kinderbijslag", "groeipakket",
+    # beroepen van vertrouwen
+    "notar", "notaire", "advoca", "avocat", "lawyer", "deurwaarder", "huissier", "gerecht", "rechtbank", "tribunal",
+    "boekhoud", "accountant", "comptab", "architect.be", "orde van architecten",
+]
+ANTWOORD_OF_DOORGESTUURD = re.compile(r"^\s*(re|antw|aw|fw|fwd|tr|wg|doorst)\s*:", re.I)
+KLANT_DAGEN = 730           # wie we in twee jaar mailden, vanuit welk postvak ook, is een klant (X3, K2)
+KLANT_PLAFOND = 20000       # zoveel verzonden berichten per map; meer is niet volledig gelezen, en dan niemand uitschrijven
+KLANT_CACHE = os.path.join(postvak.DATA, "mail-ooit-gemaild.json")
+BEZIG_ONDERBROKEN_MIN = 10  # een 'bezig' zonder uitslag die ouder is, was een onderbroken poging (X4, K3)
 
 
 def instellingen(cfg_alles=None):
@@ -77,7 +115,7 @@ def instellingen(cfg_alles=None):
 def hoofddomein(host):
     """Het geregistreerde domein: nieuws.kmoinsider.be -> kmoinsider.be, mail.bedrijf.co.uk -> bedrijf.co.uk."""
     delen = [d for d in (host or "").lower().strip(".").split(".") if d]
-    if len(delen) >= 3 and ".".join(delen[-2:]) in DUBBEL:
+    if len(delen) >= 3 and (".".join(delen[-2:]) in DUBBEL or (len(delen[-1]) == 2 and delen[-2] in GENERIEK)):
         return ".".join(delen[-3:])
     return ".".join(delen[-2:])
 
@@ -137,34 +175,72 @@ def _eigen_server(dienst):
     return dienst == "mx.google.com" or dienst.endswith(".one.com")
 
 
+def _dkim_resultaten(boven):
+    """De dkim-resultaten uit een Authentication-Results: [(uitslag, domein, selector, begin van b=)]. Gmail schrijft het
+    domein als header.i=@domein, one.com als header.d=domein."""
+    uit = []
+    for deel in boven.split(";")[1:]:
+        deel = deel.strip()
+        m = re.match(r"dkim=(\w+)", deel, re.I)
+        if not m:
+            continue
+        d = re.search(r"header\.d=([^\s;]+)", deel, re.I) or re.search(r"header\.i=[^\s;@]*@([^\s;]+)", deel, re.I)
+        s = re.search(r"header\.s=([^\s;]+)", deel, re.I)
+        b = re.search(r"header\.b=([^\s;]+)", deel, re.I)
+        uit.append((m.group(1).lower(), d.group(1).lower() if d else "", s.group(1).lower() if s else "", b.group(1) if b else ""))
+    return uit
+
+
+def _tags(handtekening):
+    """De tags van een DKIM-Signature: {'d': ..., 's': ..., 'h': ..., 'b': ...}, zonder witruimte (b= is gevouwen)."""
+    t = {}
+    for deel in (handtekening or "").split(";"):
+        k, _, v = deel.partition("=")
+        k = k.strip().lower()
+        if k and k not in t:
+            t[k] = re.sub(r"\s", "", v)
+    return t
+
+
 def ondertekend(authentication_results, dkim_signatures):
-    """De domeinen D waarvoor de knop ondertekend is: de bovenste Authentication-Results (die zet onze eigen server; een
-    afzender kan er alleen onder schrijven) komt van one.com of Gmail en zegt dkim=pass voor D, en een DKIM-Signature met
-    d=D dekt in h= list-unsubscribe en list-unsubscribe-post. Leeg als dat niet zo is."""
+    """De domeinen D waarvoor de knop ondertekend is. De bovenste Authentication-Results (die zet onze eigen server; een
+    afzender kan er alleen onder schrijven) komt van one.com of Gmail en zegt dkim=pass voor D met selector S en een begin
+    B van de handtekening. Precies een DKIM-Signature heeft d=D, s=S en een b= die met B begint, geen ander resultaat met
+    die D, S en B faalde, en die ene handtekening dekt in h= list-unsubscribe en list-unsubscribe-post (X1: een tweede,
+    vervalste handtekening die de knop beweert te dekken, telt niet). Leeg als dat niet zo is."""
     if not authentication_results:
         return set()
     boven = " ".join((authentication_results[0] or "").split())
     if not _eigen_server(boven.split(";", 1)[0]):
         return set()
-    goed = {m.group(1).lower() for m in re.finditer(r"dkim=pass\b[^;]*?header\.d=([^\s;]+)", boven, re.I)}
+    resultaten = _dkim_resultaten(boven)
+    handtekeningen = [_tags(s) for s in dkim_signatures or []]
     uit = set()
-    for s in dkim_signatures or []:
-        s = " ".join((s or "").split())
-        d = re.search(r"(?:^|;)\s*d=([^;\s]+)", s)
-        h = re.search(r"(?:^|;)\s*h=([^;]+)", s)
-        if d and h and d.group(1).lower() in goed:
-            velden = {x.strip().lower() for x in h.group(1).split(":")}
-            if {"list-unsubscribe", "list-unsubscribe-post"} <= velden:
-                uit.add(d.group(1).lower())
+    for uitslag, d, s, b in resultaten:
+        if uitslag != "pass" or not (d and s and len(b) >= 6):
+            continue
+        if any(u != "pass" and (dd, ss, bb) == (d, s, b) for u, dd, ss, bb in resultaten):
+            continue  # dezelfde sleutel faalde ook: welke handtekening geslaagd is, is niet te zeggen
+        passend = [t for t in handtekeningen if t.get("d", "").lower() == d and t.get("s", "").lower() == s
+                   and t.get("b", "").startswith(b)]
+        if len(passend) != 1:
+            continue
+        velden = {x.strip().lower() for x in passend[0].get("h", "").split(":")}
+        if {"list-unsubscribe", "list-unsubscribe-post"} <= velden:
+            uit.add(d)
     return uit
 
 
-def rol_of_dringend(van, naam, onderwerp):
-    """Een rol uit postvak.ROLLEN of een dringend woord: dan nooit uitschrijven. Een stuk tekst volstaat hier."""
-    tekst = f"{van} {naam} {onderwerp}".lower()
+def rol_of_dringend(van, naam, onderwerp, knophost=""):
+    """Een rol uit postvak.ROLLEN, een beschermde naam (BESCHERMD) of een dringend woord: dan nooit uitschrijven. Een
+    stuk tekst volstaat hier; ook het domein van de knop telt (een bank die via een verzendbedrijf mailt)."""
+    tekst = f"{van} {naam} {onderwerp} {knophost}".lower()
     rol = next((r for r, delen in postvak.ROLLEN.items() if any(d in tekst for d in delen)), "")
     if rol:
         return f"rol {rol}"
+    beschermd = next((w for w in BESCHERMD if w in tekst), "")
+    if beschermd:
+        return f"beschermd ({beschermd})"
     if postvak.DRINGEND.search(onderwerp or ""):
         return "dringend"
     return ""
@@ -176,17 +252,77 @@ def terugkerend(berichten_van, nu):
     return len(data) >= KOUD_MIN_BERICHTEN and min(data) <= nu - timedelta(days=KOUD_MIN_DAGEN)
 
 
+def ooit_gemaild(nu, cfg_alles=None, koppen=None, pad=KLANT_CACHE):
+    """Elk adres waarnaar we in KLANT_DAGEN mailden, vanuit elk postvak van elke wacht: een klant van H-Invest die mch@
+    ooit mailde, is ook bij info@ H-Architects een klant (X3, K2). Een keer per dag gelezen en bewaard. None als het niet
+    volledig gelezen is: dan schrijft geen enkele wacht iemand uit. Hotmail (een bestand van de Mac) schrijft zelf niet
+    uit en wordt hier overgeslagen."""
+    vandaag = nu.date().isoformat()
+    try:
+        with open(pad, encoding="utf-8") as f:
+            c = json.load(f)
+        if c.get("dag") == vandaag and c.get("volledig") is True:
+            return frozenset(c.get("adressen") or [])
+    except (OSError, ValueError):
+        pass
+    koppen = koppen or postvak.koppen
+    cfg_alles = cfg_alles or postvak.wachten()
+    adressen = []
+    for cfg in cfg_alles.values():
+        if isinstance(cfg, dict) and cfg.get("postvakken"):
+            adressen += list(cfg["postvakken"]) + list(cfg.get("antwoord_vanuit") or [])
+    sinds = (nu - timedelta(days=KLANT_DAGEN)).date().isoformat()
+    uit = set()
+    for adres in dict.fromkeys(adressen):
+        mb = postvak.postvak(adres)
+        if not mb:
+            return None
+        if mb.get("bron"):
+            continue
+        try:
+            bestaand = postvak.mapnamen(mb)
+        except Exception:  # noqa: BLE001
+            return None
+        gelezen = False
+        for m in postvak.VERZONDEN:
+            if (mb.get("mappen") and m not in mb["mappen"]) or (bestaand is not None and m.lower() not in bestaand):
+                continue
+            try:
+                deel = koppen(adres, m, sinds=sinds, maximaal=1000, plafond=KLANT_PLAFOND)
+            except Exception:  # noqa: BLE001
+                return None
+            if len(deel) >= KLANT_PLAFOND:
+                return None
+            gelezen = True
+            uit |= {postvak._adres(a) for s in deel for a in (s.get("aan") or []) + (s.get("cc") or []) if postvak._adres(a)}
+        if not gelezen:
+            return None
+    try:
+        os.makedirs(os.path.dirname(pad), exist_ok=True)
+        tmp = f"{pad}.{os.getpid()}.tmp"  # twee wachten tegelijk schrijven elk hun eigen bestand
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"dag": vandaag, "volledig": True, "adressen": sorted(uit)}, f)
+        os.replace(tmp, pad)
+    except OSError:
+        pass  # dan lees ik morgen opnieuw; het resultaat van nu blijft geldig
+    return frozenset(uit)
+
+
 def beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerende=False):
     """(url, '') als dit bericht mag leiden tot uitschrijven, anders (None, reden)."""
     van = (b.get("van") or "").lower()
     dom = postvak._domein(van)
-    if soort == "koud" and not terugkerende:
-        return None, "koud en geen terugkerende verzender"
+    onderwerp = b.get("onderwerp") or ""
     if soort not in ("rommel", "koud"):
         return None, f"soort {soort}"
+    if not terugkerende:
+        return None, f"{soort} en geen terugkerende verzender"  # ook rommel: een klant mailt een eerste keer (K2)
     if regel in ("belangrijk", "houden"):
         return None, f"regel {regel} van Mehdi"
-    reden = rol_of_dringend(van, b.get("van_naam") or "", b.get("onderwerp") or "")
+    if ANTWOORD_OF_DOORGESTUURD.match(onderwerp) or any(w in onderwerp.lower() for w in postvak.AANVRAAG):
+        return None, "antwoord, doorgestuurd of aanvraag"
+    knophost = (urllib.parse.urlsplit(knop(b.get("list_unsubscribe"), b.get("list_unsubscribe_post")) or "").hostname or "")
+    reden = rol_of_dringend(van, b.get("van_naam") or "", onderwerp, knophost)
     if reden:
         return None, reden
     if not dom or postvak.zelfde_domein(dom, eigen, True):
@@ -389,8 +525,27 @@ def kandidaten(cfg, nu, bekend, veilig, regels, staat, lezen=koppen_lezen, inst=
     return uit, redenen
 
 
+def onderbroken(lokaal, van_bord, naam, nu):
+    """Pogingen van deze wacht met alleen 'bezig' en geen uitslag, ouder dan BEZIG_ONDERBROKEN_MIN: de wacht stopte
+    tussen POST en logboek. Misschien is er uitgeschreven; Mehdi ziet ze als fout 'onderbroken' (X4, K3)."""
+    klaar = {x.get("gebeurtenis") for x in lokaal + van_bord if x.get("uitslag") != "bezig"}
+    uit = []
+    for x in lokaal:
+        if x.get("uitslag") != "bezig" or x.get("wacht") != naam or not x.get("gebeurtenis") or x["gebeurtenis"] in klaar:
+            continue
+        try:
+            oud = nu - datetime.fromisoformat(x.get("ts") or "") >= timedelta(minutes=BEZIG_ONDERBROKEN_MIN)
+        except ValueError:
+            oud = True
+        if oud:
+            klaar.add(x["gebeurtenis"])
+            uit.append(dict(x, uitslag="fout", code=0, reden="onderbroken: onzeker of het uitschrijven lukte",
+                            ts=nu.isoformat()))
+    return uit
+
+
 def ronde(naam, cfg, ag, r, nu, bekend, veilig, regels, klaar_voor, bord, lezen=koppen_lezen, posten=post,
-          opzoeken=socket.getaddrinfo, logpad=LOG):
+          opzoeken=socket.getaddrinfo, logpad=LOG, klanten=ooit_gemaild):
     """Een ronde uitschrijven voor wacht `naam`. `klaar_voor` is False als de verzonden post of de lijst van het bord
     niet volledig gelezen is: dan niets. Geeft de logregels van deze ronde (zonder URL)."""
     inst = instellingen()
@@ -408,17 +563,25 @@ def ronde(naam, cfg, ag, r, nu, bekend, veilig, regels, klaar_voor, bord, lezen=
     except Exception as e:  # noqa: BLE001
         ag.log("uitschrijven", "bron", f"logboek van het bord niet gelezen: {type(e).__name__}; deze ronde niets")
         return []
+    for f in onderbroken(lokaal, van_bord, naam, nu):
+        schrijf_log(f, logpad)
+        lokaal.append(f)
+    ooit = klanten(nu)
+    if ooit is None:
+        ag.log("uitschrijven", "bron", f"verzonden post van {KLANT_DAGEN} dagen niet volledig gelezen: deze ronde niemand")
     # Wat lokaal staat maar nog niet op het bord (het bord was onbereikbaar), stuur ik na; de id voorkomt dubbels.
     op_bord = {x.get("gebeurtenis") for x in van_bord}
     na = [x for x in lokaal if x.get("uitslag") in ("aanvaard", "geweigerd", "fout", "overgeslagen")
           and x.get("gebeurtenis") and x.get("gebeurtenis") not in op_bord and x.get("wacht") == naam]
     staat = staat_per_sleutel(lokaal + van_bord)
-    try:
-        kand, redenen = kandidaten(cfg, nu, bekend, veilig, regels, staat, lezen, inst)
-    except Exception as e:  # noqa: BLE001
-        r.nood("Uitschrijfkoppen niet leesbaar", wie="claude-code")
-        ag.log("uitschrijven", "bron", f"{type(e).__name__}: {str(e)[:160]}")
-        return []
+    kand, redenen = {}, {}
+    if ooit is not None:  # zonder volledige klantenlijst geen nieuwe poging; wat het bord mist, gaat wel nog mee
+        try:
+            kand, redenen = kandidaten(cfg, nu, bekend | ooit, veilig, regels, staat, lezen, inst)
+        except Exception as e:  # noqa: BLE001
+            r.nood("Uitschrijfkoppen niet leesbaar", wie="claude-code")
+            ag.log("uitschrijven", "bron", f"{type(e).__name__}: {str(e)[:160]}")
+            kand = {}
     gedaan = []
     volgorde = sorted(kand.values(), key=lambda x: x[0]["datum"] or nu, reverse=True)
     for b, url, adres in volgorde[:inst["per_ronde"]]:
@@ -470,7 +633,11 @@ def droog(naam):
     except Exception as e:  # noqa: BLE001
         print(f"  (logboek van het bord niet gelezen: {type(e).__name__})")
         van_bord = []
-    kand, redenen = kandidaten(cfg, nu, tel["_bekend"], veilig, regels, staat_per_sleutel(lokaal + van_bord))
+    ooit = ooit_gemaild(nu)
+    if ooit is None:
+        print(f"  (verzonden post van {KLANT_DAGEN} dagen niet volledig gelezen: de echte ronde zou niemand uitschrijven)")
+    kand, redenen = kandidaten(cfg, nu, tel["_bekend"] | (ooit or frozenset()), veilig, regels,
+                               staat_per_sleutel(lokaal + van_bord))
     print(f"{naam}: verzonden volledig {tel['verzonden_volledig']}; {len(kand)} zou ik uitschrijven "
           f"(hoogstens {instellingen()['per_ronde']} per ronde)")
     for b, url, adres in sorted(kand.values(), key=lambda x: x[0]["datum"] or nu, reverse=True):
