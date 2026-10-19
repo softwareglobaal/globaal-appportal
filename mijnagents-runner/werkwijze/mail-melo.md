@@ -1,6 +1,6 @@
 # Werkwijze van De Mailwacht Melodie
 
-Versie 1.6 (20-10-2026: resultaattoets van het uitschrijven, strenger bij banken, verzekeraars, overheid en klanten). Versie 1.5 (20-10-2026: uitschrijven via de officiele knop, beslissing van Mehdi). Versie 1.4 (19-10-2026, driehoeksoverleg 3-0: een bron voor wat openstaat, beantwoord via de draad, gewone mail na een werkdag, collega's tellen mee, reclame naar Opgeruimd; 1.3 26-09-2026; 1.2 dezelfde nacht). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
+Versie 1.7 (20-10-2026: ook de knop van een verzendbedrijf, als de afzender zelf ondertekende). Versie 1.6 (20-10-2026: resultaattoets van het uitschrijven, strenger bij banken, verzekeraars, overheid en klanten). Versie 1.5 (20-10-2026: uitschrijven via de officiele knop, beslissing van Mehdi). Versie 1.4 (19-10-2026, driehoeksoverleg 3-0: een bron voor wat openstaat, beantwoord via de draad, gewone mail na een werkdag, collega's tellen mee, reclame naar Opgeruimd; 1.3 26-09-2026; 1.2 dezelfde nacht). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
 zodat elke agent apart kan toezien en de belangrijke e-mails kan opvolgen, zodat het niet allemaal bij mij komt en
 ik niet alles moet onthouden. Geen spam, geen rommelinformatie." En op 26-09-2026: "ik wil een overzicht hebben
 zodat we het aantal mails onder controle krijgen, en ik wil de mails opschonen, er is te veel rommel en ruis."
@@ -93,8 +93,9 @@ koppelingen/uitschrijven.py, bovenop de rollen); het is geen klant (we mailden d
 enkel postvak van de mailwachten, en het stuurde nooit iets belangrijks of werd nooit beantwoord), geen eigen domein, geen gratis maildienst, en Mehdi zette de afzender niet op
 belangrijk of houden; de mail heeft precies een officiele knop (een kop List-Unsubscribe met een https-adres en List-Unsubscribe-Post
 One-Click), die knop is ondertekend door precies de handtekening van de afzender die onze eigen
-mailserver goedkeurde, en hij hoort bij het domein van de
-afzender. Dan stuur ik een POST naar precies dat adres, via een vooraf gecontroleerd publiek IP, zonder doorverwijzing
+mailserver goedkeurde. De knop mag bij een verzendbedrijf staan (Mehdi, 20-10-2026), maar alleen als een handtekening van
+de afzender zelf hem dekt; een handtekening van alleen het verzendbedrijf, of een afzender op een domein van een
+verzendbedrijf, telt niet. Dan stuur ik een POST naar precies dat adres, via een vooraf gecontroleerd publiek IP, zonder doorverwijzing
 te volgen, met een tijdslimiet. Een keer per afzender en knop; na een fout zonder antwoord pas na een dag opnieuw,
 hoogstens drie keer; hoogstens vijf per ronde. Elke poging staat in het logboek op het maildashboard (blok
 Uitgeschreven: wanneer, postvak, afzender, onderwerp, het domein van de knop, de uitslag) en op de VM; de volledige link

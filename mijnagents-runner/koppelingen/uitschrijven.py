@@ -36,6 +36,8 @@ Resultaattoets 20-10-2026 (run 20261020-001828, 3-0 of 2-0-1), daarom ook:
     ook rommel alleen van een terugkerende verzender; nooit bij Re:, Fw: of een aanvraagwoord (X3, K2);
   - een poging die stopte tussen POST en uitslag, komt als fout "onderbroken" op het bord (X4, K3);
   - een onbekend tweedelig domeinsuffix (com.pl, co.th) maakt het hoofddomein langer, nooit korter (K5).
+Mehdi, 20-10-2026 (grens uit de tweede toets): de knop mag bij een verzendbedrijf staan als de afzender de mail zelf
+ondertekende en er precies een uitschrijfknop in staat; alle andere regels blijven (zie beoordeel, PLATFORMEN).
 Logboek: op het bord (tabel mailuitschrijving, /mail, blok Uitgeschreven), met een vaste gebeurtenis-id zodat opnieuw
 sturen nooit dubbel telt (C6), en als grendel in mijnagents-data/mail-uitschrijven.jsonl op de VM; wat het bord nog
 niet heeft, stuurt de volgende ronde na. Nooit de URL van de knop: die bevat persoonlijke sleutels; alleen het
@@ -95,6 +97,14 @@ BESCHERMD = [
     "notar", "notaire", "advoca", "avocat", "lawyer", "deurwaarder", "huissier", "gerecht", "rechtbank", "tribunal",
     "boekhoud", "accountant", "comptab", "architect.be", "orde van architecten",
 ]
+# Domeinen van verzendbedrijven: een afzender daarop is niet "de afzender zelf", en hun handtekening alleen telt niet.
+PLATFORMEN = ("sendgrid.net", "sendgrid.com", "list-manage.com", "mailchimp.com", "mcsv.net", "mcdlv.net", "rsgsv.net",
+              "mailchimpapp.net", "mandrillapp.com", "amazonses.com", "mailgun.org", "mailgun.net", "mailjet.com",
+              "sparkpostmail.com", "sendinblue.com", "brevo.com", "sib-mail.com", "hubspotemail.net", "hubspot.com",
+              "hs-email.net", "klaviyomail.com", "klaviyo.com", "exacttarget.com", "salesforce.com", "mktomail.com",
+              "marketo.com", "constantcontact.com", "rs6.net", "campaign-archive.com", "mailerlite.com", "mlsend.com",
+              "createsend.com", "cmail19.com", "cmail20.com", "emarsys.net", "postmarkapp.com", "mailpro.com",
+              "activehosted.com", "acems1.com", "getresponse.com", "aweber.com", "substack.com", "beehiiv.com")
 ANTWOORD_OF_DOORGESTUURD = re.compile(r"^\s*(re|antw|aw|fw|fwd|tr|wg|doorst)\s*:", re.I)
 KLANT_DAGEN = 730           # wie we in twee jaar mailden, vanuit welk postvak ook, is een klant (X3, K2)
 KLANT_PLAFOND = 20000       # zoveel verzonden berichten per map; meer is niet volledig gelezen, en dan niemand uitschrijven
@@ -355,9 +365,15 @@ def beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerende=False):
     domeinen = ondertekend(b.get("authentication_results"), b.get("dkim_signatures"))
     if not domeinen:
         return None, "knop niet ondertekend"
-    knophost = (urllib.parse.urlsplit(url).hostname or "").lower()
-    if not any(hoofddomein(d) == hoofddomein(dom) and hoofddomein(knophost) == hoofddomein(d) for d in domeinen):
-        return None, "handtekening of knop hoort niet bij de afzender"
+    # Mehdi, 20-10-2026: "uitschrijven mag ook via de knop van een verzendbedrijf, maar alleen als de afzender de mail
+    # zelf ondertekende en er precies een uitschrijfknop in staat." De knop mag dus op een ander domein staan (Mailchimp,
+    # SendGrid), als een handtekening van de afzender zelf hem dekt (X1 koppelt die aan precies die handtekening); een
+    # handtekening van alleen het verzendbedrijf telt niet, en een afzender op een domein van een verzendbedrijf is niet
+    # "de afzender zelf" (tweede toets, K3).
+    if postvak.zelfde_domein(dom, PLATFORMEN, True):
+        return None, "afzender op een domein van een verzendbedrijf"
+    if not any(hoofddomein(d) == hoofddomein(dom) for d in domeinen):
+        return None, "de afzender ondertekende de knop niet zelf"
     return url, ""
 
 

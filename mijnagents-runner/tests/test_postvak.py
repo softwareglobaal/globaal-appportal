@@ -358,9 +358,25 @@ def test_uitschrijven_alleen_een_ondertekende_knop_van_de_afzender():
     eigen, bekend, veilig = ("h-architects.be",), frozenset(), frozenset()
     assert U.beoordeel(_nieuwsbrief(), "rommel", "", eigen, bekend, veilig, True)[0] == "https://unsub.brand.be/u?t=GEHEIM"
     andere = _nieuwsbrief(van="news@ander.be")
-    assert U.beoordeel(andere, "rommel", "", eigen, bekend, veilig, True) == (None, "handtekening of knop hoort niet bij de afzender")
-    esp = _nieuwsbrief(knop="https://us1.list-manage.com/u")
-    assert U.beoordeel(esp, "rommel", "", eigen, bekend, veilig, True)[0] is None, "K1: de knop hoort bij het domein van de handtekening"
+    assert U.beoordeel(andere, "rommel", "", eigen, bekend, veilig, True) == (None, "de afzender ondertekende de knop niet zelf")
+    # Mehdi, 20-10-2026: de knop mag bij een verzendbedrijf staan, als de afzender zelf ondertekende en er een knop is
+    esp = _nieuwsbrief(knop="https://us1.list-manage.com/unsubscribe/post?u=GEHEIM")
+    assert U.beoordeel(esp, "rommel", "", eigen, bekend, veilig, True)[0] == "https://us1.list-manage.com/unsubscribe/post?u=GEHEIM"
+    assert U.beoordeel(dict(esp, uitschrijfkoppen=(2, 1)), "rommel", "", eigen, bekend, veilig, True)[0] is None, \
+        "maar nooit met twee uitschrijfkoppen"
+    ar_esp = "mx3.cst.mailpod8-cph3.one.com; dkim=pass header.d=mcsv.net header.s=k2 header.b=QrStUvWx"
+    dkim_esp = "v=1; d=mcsv.net; s=k2; h=from:subject:list-unsubscribe:list-unsubscribe-post; bh=x; b=QrStUvWxYz"
+    alleen_esp = dict(esp, authentication_results=[ar_esp], dkim_signatures=[dkim_esp])
+    assert U.beoordeel(alleen_esp, "rommel", "", eigen, bekend, veilig, True) == (None, "de afzender ondertekende de knop niet zelf"), \
+        "een handtekening van alleen het verzendbedrijf telt niet"
+    beide = dict(esp, authentication_results=[AR_ONE + "; " + ar_esp.split("; ", 1)[1]],
+                 dkim_signatures=[DKIM_BRAND.replace(":list-unsubscribe:list-unsubscribe-post", ""), dkim_esp])
+    assert U.beoordeel(beide, "rommel", "", eigen, bekend, veilig, True)[0] is None, \
+        "de afzender ondertekende wel, maar niet de knop; alleen het verzendbedrijf dekte hem"
+    platform = dict(alleen_esp, van="nieuws@klant.mcsv.net")
+    assert U.beoordeel(platform, "rommel", "", eigen, bekend, veilig, True) == (None, "afzender op een domein van een verzendbedrijf")
+    assert U.beoordeel(_nieuwsbrief(knop="https://unsub.mybank-mail.com/u"), "rommel", "", eigen, bekend, veilig, True)[0] is None, \
+        "een knop bij een verzendbedrijf van een bank blijft beschermd"
     assert U.hoofddomein("nieuws.kmoinsider.be") == "kmoinsider.be" and U.hoofddomein("mail.bedrijf.co.uk") == "bedrijf.co.uk"
     assert U.hoofddomein("mail.bedrijf.com.pl") == "bedrijf.com.pl" and U.hoofddomein("x.firma.co.th") == "firma.co.th", "K5"
 
