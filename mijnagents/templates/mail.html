@@ -41,12 +41,16 @@
   .tabel td.nw{white-space:nowrap}
   .tabel td.naam{min-width:230px}
   .ruisrij .knoppen{flex-wrap:nowrap}
-  .opvolglijst td.volgende{color:var(--inkt-zacht);font-size:12.5px;min-width:170px}
-  .opvolglijst td.status{min-width:140px}
+  table.opvolglijst{table-layout:fixed;width:100%}
+  .opvolglijst td{overflow-wrap:anywhere;vertical-align:top}
+  .opvolglijst td.status .chip{white-space:normal;display:inline-block;line-height:1.35;height:auto}
+  .opvolglijst td.volgende{color:var(--inkt-zacht);font-size:12.5px}
   .opvolglijst tr.onzeker td{background:rgba(255,214,140,.12)}
   .opvolglijst .knoppen{flex-direction:column;align-items:stretch;gap:4px}
   .opvolglijst .knoppen button{width:100%}
   @media (max-width:1100px){
+    table.opvolglijst{table-layout:auto}
+    table.stapel colgroup{display:none}
     table.stapel thead{display:none}
     table.stapel tr{display:block;border-bottom:1px solid var(--lijn);padding:8px 0}
     table.stapel td{display:inline-block;border:0;padding:3px 12px;vertical-align:top}
@@ -92,7 +96,7 @@
     <div class="paneel kpi"><span class="label">Binnengekomen</span><div class="groot">{{ kpi.totaal }}</div>
       <div class="delta">gemiddeld {{ kpi.per_dag }} per dag</div></div>
     <div class="paneel kpi kritiek"><span class="label">Belangrijk</span><div class="groot">{{ kpi.hoog }}</div>
-      <div class="delta">{{ kpi.hoog_open }} nog zonder antwoord</div></div>
+      <div class="delta">{{ kpi.hoog_open }} belangrijke staan nog open, ook van vroeger</div></div>
     <div class="paneel kpi {{ 'let' if kpi.lang }}" id="tegel-open"><span class="label">Op te volgen</span><div class="groot">{{ kpi.open }}</div>
       <div class="delta">{{ kpi.lang }} langer dan 5 werkdagen{% if kpi.onzeker %}; {{ kpi.onzeker }} mogelijk beantwoord{% endif %}</div></div>
     <div class="paneel kpi"><span class="label">Ruis</span><div class="groot">{{ kpi.ruis_pct }}<small>%</small></div>
@@ -135,6 +139,8 @@
     <div class="kop"><h2>Op te volgen</h2><small>belangrijk bovenaan, dan wat het langst wacht; een antwoord in de draad sluit het vanzelf</small></div>
     {% if open_alle %}
     <div class="tabelwrap"><table class="tabel stapel opvolglijst">
+      <colgroup><col style="width:112px"><col style="width:15%"><col style="width:13%"><col><col style="width:14%">
+        <col style="width:96px"><col style="width:15%"><col style="width:124px"></colgroup>
       <thead><tr><th>Ontvangen</th><th>Afzender</th><th>Postvak</th><th>Onderwerp</th><th>Status</th><th class="num">Wacht</th><th>Volgende stap</th><th></th></tr></thead>
       <tbody>
       {% for p in open_alle %}{% set i = loop.index %}
