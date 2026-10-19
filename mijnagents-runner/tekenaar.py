@@ -58,7 +58,7 @@ TOKEN_PAD = os.path.expanduser("~/.config/mijnagents/token")
 DROPBOX = os.path.expanduser("~/TKN-buro Dropbox")
 BORD_PUBLIEK = "https://mijnagents.globaal.be"
 HULP = "~/agents/.venv/bin/python ~/appportal/mijnagents-runner/koppelingen/ba_plannen.py"
-HULP_VERSIE = "3"
+HULP_VERSIE = "4"
 BORDSTAND = "~/agents/.venv/bin/python ~/appportal/mijnagents-runner/koppelingen/bordstand.py"
 MAX_DETAIL = 15000          # het bord kapt het detail van een logboekregel af op 20.000 tekens (mijnagents/app.py)
 MAX_INHOUD = 50000          # en de inhoud van een klaarzet-item op 60.000 (Codex DT16)
@@ -190,28 +190,37 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
     bekend, gezien, wacht = st["bekend"], st["gezien"], st["wachtrij"]
     nieuw = weg = 0
     gezien_ids = set()
-    # Mappen zonder toegang voor de stack (Codex DT20, DT28): een volledige lijst van een basismap vervangt wat er
-    # stond, een deellijst voegt toe. Een plan in zo'n map is niet weg, het wacht op toegang.
+    # Mappen zonder toegang voor de stack (Codex DT20, DT28, DT33), in de volgorde van Dropbox: een volledige lijst
+    # van een basismap begint met een lege lijst dichte mappen en meldt ze opnieuw; 'dicht' sluit een map, 'map' (een
+    # leesbare map in een deellijst) of een plan dat eronder zichtbaar wordt, opent ze. Wat onder een dichte map staat,
+    # is niet weg: het wacht op toegang.
     toegang = st.setdefault("geen_toegang", {})
     volledig_lijst = lijst.get("volledig") or {}
-    for basis in ("standaard", "light"):
-        nu_dicht = sorted(g["pad"] for g in lijst.get("geen_toegang", []) if g.get("basis") == basis)
-        if volledig_lijst.get(basis):
-            toegang[basis] = nu_dicht
-        elif nu_dicht:
-            toegang[basis] = sorted(set(toegang.get(basis, [])) | set(nu_dicht))
+    for basis, volledig in volledig_lijst.items():
+        if volledig:
+            toegang[basis] = []
+
+    def dicht():
+        return [d.lower() for d in blinde_vlekken(st)]
+
+    def open_(pad):
+        for basis, paden in toegang.items():
+            toegang[basis] = [d for d in paden if not (pad == d.lower() or pad.startswith(d.lower() + "/"))]
+
     for w in lijst.get("wijzigingen", []):
-        if w.get("soort") == "bestand":   # een plan dat weer zichtbaar is onder een dichte map: de toegang is terug
-            q = (w.get("pad") or "").lower()
-            for basis, paden in toegang.items():
-                toegang[basis] = [d for d in paden if not q.startswith(d.lower() + "/")]
-    dicht = [d.lower() for d in blinde_vlekken(st)]
-    for w in lijst.get("wijzigingen", []):
+        if w.get("soort") == "dicht":
+            basis = w.get("basis") or basis_van(w.get("pad")) or "standaard"
+            toegang[basis] = sorted(set(toegang.get(basis, [])) | {w["pad"]})
+            continue
+        if w.get("soort") == "map":
+            open_((w.get("pad") or "").lower())
+            continue
         if w.get("soort") == "weg":
             p = (w.get("pad") or "").lower()
+            gesloten = dicht()
             for i, b in list(bekend.items()):
                 q = (b.get("pad") or "").lower()
-                if any(q.startswith(d + "/") for d in dicht):
+                if any(q.startswith(d + "/") for d in gesloten):
                     continue
                 if p and (q == p or q.startswith(p + "/")):
                     del bekend[i]
@@ -220,6 +229,9 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
         if w.get("soort") != "bestand" or not ID.match(w.get("id") or "") \
                 or not is_ba_pdf(os.path.basename(w.get("pad") or "")):
             continue
+        q = (w.get("pad") or "").lower()
+        if any(q.startswith(d + "/") for d in dicht()):
+            open_(q)
         sleutel = inhoud(w)
         bekend[w["id"]] = {"hash": sleutel, "pad": w["pad"]}
         gezien_ids.add(w["id"])
@@ -231,11 +243,12 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
         gezien[sleutel] = {"status": "wacht", "gewijzigd": w.get("gewijzigd")}
         wacht.append(w["id"])
         nieuw += 1
+    gesloten = dicht()
     for basis, volledig in volledig_lijst.items():
         if volledig:      # Codex DT11: een volledige lijst ruimt op wat er niet meer staat
             for i, b in list(bekend.items()):
                 q = (b.get("pad") or "").lower()
-                if any(q.startswith(d + "/") for d in dicht):
+                if any(q.startswith(d + "/") for d in gesloten):
                     continue  # DT20: een map zonder toegang is niet leeg; wat daar wacht, blijft wachten
                 if basis_van(b.get("pad")) == basis and i not in gezien_ids:
                     del bekend[i]
@@ -298,6 +311,11 @@ def projectnummer(pad):
 def toegelaten(tekst):
     """Mag deze vrije tekst van een bladnaam naar het bord: alleen woorden uit TEKENWOORDEN, getallen en korte codes
     (V3, A, 00). Een naam of een adres valt erbuiten (Codex DT10, DT21)."""
+    # DT31: een reeks cijfers met scheidingstekens ("0499-123-456", "84.03.21-411.65") telt als een getal; vanaf vijf
+    # cijfers kan het een telefoon- of rijksregisternummer zijn
+    for reeks in re.findall(r"\d[\d\s./-]*\d|\d", tekst or ""):
+        if len(re.sub(r"\D", "", reeks)) >= 5:
+            return False
     for woord in re.findall(r"[^\W\d_]+(?:'[^\W\d_]+)?|\w+", tekst or ""):
         w = woord.lower()
         # getallen tot vier cijfers (een niveau, een jaar); een langer getal kan een telefoon- of rijksregisternummer
@@ -616,8 +634,13 @@ def signaal(meldingen, sets, wk, commit):
         inhoud_["projecten"].pop()
         weg += 1
         inhoud_["meer_projecten"] = f"nog {weg} projecten met een bevinding staan alleen in het werkverslag"
-    # Het uniek is de vingerafdruk van de bevindingen, zonder week en zonder commit: dezelfde bevindingen worden nooit
-    # twee keer gemeld, ook niet na een ronde die over een weekgrens heen herhaald wordt; nieuwe wel (N10, DT14).
+    # Het uniek is de vingerafdruk van alle gemelde plannen (inhoud en bevindingen) en van de volledige signaaltekst,
+    # met de redenen van de sets, zonder week en zonder commit: dezelfde melding nooit twee keer, een andere melding
+    # altijd een eigen uniek (N10, DT14, DT32).
+    vinger = hashlib.sha256(json.dumps(
+        {"plannen": sorted([m.get("hash") or m["id"], sorted((m["uitslag"].get("fout_reden") or {}).items()),
+                            bool(m["uitslag"].get("niet_gecontroleerd"))] for m in meldingen),
+         "titel": titel[:110], "inhoud": inhoud_}, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:12]
     return {"voor": "mehdi", "soort": "signaal", "sleutel": wk, "uniek": f"tekenaar-normcontrole-{vinger}",
             "titel": titel[:110], "inhoud": inhoud_}
 
@@ -745,20 +768,27 @@ def verstuur(melding):
             ontvangen = None
         if ontvangen != (item["titel"], item["inhoud"]):
             raise RuntimeError("het bord heeft het signaal niet volledig ontvangen")
-    regels = melding.get("regels") or []
-    if regels:
-        def op_het_bord():
-            terug = bord.call(f"/api/logboek/{NAAM}?" + urllib.parse.urlencode(
-                {"onderwerp": f"(verslag {melding['merk']})", "n": 300}))
-            return {(r.get("onderwerp"), r.get("tekst"), r.get("detail")) for r in (terug or {}).get("regels") or []}
-        ontbrekend = [r for r in regels if (r["onderwerp"], r["tekst"], r["detail"]) not in op_het_bord()]
-        if ontbrekend:
-            uit = bord.call("/api/logboek", {"regels": ontbrekend})
-            if not isinstance(uit, dict) or uit.get("geschreven") != len(ontbrekend):
-                raise RuntimeError(f"het bord schreef niet elke regel van het werkverslag: {str(uit)[:100]}")
-            staat = op_het_bord()
-            if any((r["onderwerp"], r["tekst"], r["detail"]) not in staat for r in regels):
-                raise RuntimeError("het werkverslag staat niet volledig op het bord")
+    schrijf_verslag(melding.get("regels") or [], melding["merk"])
+
+
+def schrijf_verslag(regels, merk):
+    """Werkverslag naar het bord: eerst kijken welke regels met dit kenmerk er al staan, alleen de ontbrekende sturen
+    (een verloren antwoord geeft geen dubbel verslag, DT15), en daarna moet elke regel er staan (DT13, DT23)."""
+    if not regels:
+        return
+
+    def op_het_bord():
+        terug = bord.call(f"/api/logboek/{NAAM}?" + urllib.parse.urlencode({"onderwerp": f"(verslag {merk})", "n": 300}))
+        return {(r.get("onderwerp"), r.get("tekst"), r.get("detail")) for r in (terug or {}).get("regels") or []}
+
+    ontbrekend = [r for r in regels if (r["onderwerp"], r["tekst"], r["detail"]) not in op_het_bord()]
+    if ontbrekend:
+        uit = bord.call("/api/logboek", {"regels": ontbrekend})
+        if not isinstance(uit, dict) or uit.get("geschreven") != len(ontbrekend):
+            raise RuntimeError(f"het bord schreef niet elke regel van het werkverslag: {str(uit)[:100]}")
+        staat = op_het_bord()
+        if any((r["onderwerp"], r["tekst"], r["detail"]) not in staat for r in regels):
+            raise RuntimeError("het werkverslag staat niet volledig op het bord")
 
 
 def meld(st, nc, wk, commit):
@@ -815,6 +845,10 @@ def werk(r, st, wk):
                 f"{len(st['bekend'])} plannen in de projectmappen, {nieuw} met nieuwe inhoud, {weg + verdwenen} weg; "
                 f"normcontrole origin/main {commit}{'' if opgehaald else ' (GitHub niet bereikt)'}"
                 + (f"; gedeelde mappen zonder toegang: {len(blind)}" if blind else ""))
+    # DT34: elke ronde een eigen regel in het werkverslag, ook zonder nieuwe plannen, langs dezelfde gecontroleerde weg
+    merk = hashlib.sha256(f"{NAAM} {nu_utc().isoformat()}".encode()).hexdigest()[:8]
+    schrijf_verslag([ag.maskeer({"naam": NAAM, "onderwerp": f"ronde {wk} (verslag {merk})", "stap": "ronde",
+                                 "tekst": r.detail[:1000], "detail": ""})], merk)
     return not verwerkbaar(st)
 
 

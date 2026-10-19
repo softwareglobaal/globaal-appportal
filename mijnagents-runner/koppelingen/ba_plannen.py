@@ -8,9 +8,9 @@ dit script op de VM wat er in de twee projectmappen staat, en haalt hij de PDF's
 
     ba_plannen.py lijst      stdin: {"cursors": {"standaard": c, "light": c}} (zonder cursor: alles opnieuw)
                              stdout: {"versie", "cursors", "wijzigingen": [...], "volledig": {...}, "geen_toegang"};
-                             de wijzigingen in de volgorde van Dropbox: {"soort": "bestand", id, pad, hash, ...} of
-                             {"soort": "weg", pad}; geen_toegang: gedeelde mappen die het token van de stack niet mag
-                             lezen (alleen bij een volledige lijst), zodat de Mac die blinde vlek kan melden
+                             de wijzigingen in de volgorde van Dropbox: {"soort": "bestand", id, pad, hash, ...},
+                             {"soort": "weg", pad}, {"soort": "dicht", basis, pad} (een gedeelde map die het token van
+                             de stack niet mag lezen) of, in een deellijst, {"soort": "map", pad} (een leesbare map)
     ba_plannen.py haal <id>  de PDF op stdout; alleen een BA_*.pdf onder een van de twee projectmappen
                              (uitgang 4: geen BA-plan of niet meer daar; 5: groter dan de grens)
     ba_plannen.py versie     de versie van dit script, zodat de Mac weet of de VM bij is
@@ -27,7 +27,7 @@ import urllib.error
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bronnen  # noqa: E402
 
-VERSIE = "3"
+VERSIE = "4"
 BASISSEN = {"standaard": "/Work All/01. H-A WORK/0 H-A Standaard projects",
             "light": "/Work All/01. H-A WORK/0 H-A Light projects"}
 MAX_BYTES = 80_000_000
@@ -76,8 +76,14 @@ def lijst(cursors, rpc=None):
                     uit["wijzigingen"].append(bestand(e))
                 elif e.get(".tag") == "folder" and (e.get("sharing_info") or {}).get("no_access"):
                     # gemeten 19-10-2026: "H-A Mehdi(Oude projecten voor de facturatie)" (352 BA-plannen) is een
-                    # gedeelde map zonder toegang voor de stack; list_folder gaat er niet in
-                    uit["geen_toegang"].append({"basis": sleutel, "pad": e.get("path_display") or e.get("path_lower")})
+                    # gedeelde map zonder toegang voor de stack; list_folder gaat er niet in. In de volgorde van Dropbox
+                    # doorgegeven, zodat de Mac weet wat er voor en na het toegangsverlies gebeurde (Codex DT33).
+                    pad = e.get("path_display") or e.get("path_lower")
+                    uit["geen_toegang"].append({"basis": sleutel, "pad": pad})
+                    uit["wijzigingen"].append({"soort": "dicht", "basis": sleutel, "pad": pad})
+                elif e.get(".tag") == "folder" and not volledig:
+                    # in een deellijst: een map die (weer) leesbaar is; de Mac opent ze als ze dicht stond
+                    uit["wijzigingen"].append({"soort": "map", "pad": e.get("path_lower") or ""})
                 elif e.get(".tag") == "deleted":
                     # elk weggehaald pad (verwijderd of verplaatst): een map kan een punt in de naam hebben, dus niet
                     # filteren op de naam (Codex DT11); de Mac haalt weg wat eronder stond
