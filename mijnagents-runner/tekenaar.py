@@ -5,26 +5,32 @@ Waarom op de Mac: daar staat het gereedschap van De Tekenaar (repo globaal-vecto
 PyMuPDF), naast Vectorworks. Waarom toch via de VM:
   - het bord laat buiten de VM alleen hartslag, klaarzet en logboek door (nginx, 63-mijnagents); de werkwijze, de
     kennis, de noden en de collega's niet. Daarom praat deze runner met het bord via een ssh-tunnel naar
-    127.0.0.1:3022 op de VM, zoals de runners daar, met het token uit ~/.config/mijnagents/token. Zo gaat ook deze
-    ronde door de gedeelde ag.ronde (N4, N10 tot N14);
+    127.0.0.1:3022 op de VM, zoals de runners daar, met het token uit ~/.config/mijnagents/token (dat de andere
+    Mac-agents ook gebruiken). Zo gaat ook deze ronde door de gedeelde ag.ronde (N4, N10 tot N14);
   - de Mac heeft geen Dropbox-sleutel en zijn lokale Dropbox toont online-only bestanden als 0 bytes. De lijst en de
     PDF's komen van koppelingen/ba_plannen.py op de VM (ssh, zoals mac/hotmail_koppen.py), met de sleutel van de stack.
 
-launchd (mac/be.globaal.mijnagents.tekenaar.plist) start hem elke dag om 10:00 en bij het aanmelden. Hij werkt alleen
-als de ronde van deze week nog niet gelukt is: zo haalt hij een week in die de Mac verslapen heeft, en geeft hij elke
-week een hartslag, ook zonder nieuwe plannen (N11).
+De normcontrole komt uit GitHub (origin/main van de brug), niet uit de werkmap: een andere sessie die daar half
+bewerkt, raakt de weekronde niet.
 
-    tekenaar.py            de ronde van deze week, als die nog niet gelukt is
-    tekenaar.py --nu       een ronde, ook als deze week al gelukt is
+launchd (mac/be.globaal.mijnagents.tekenaar.plist) start hem elke dag om 10:00 en bij het aanmelden. Hij werkt als de
+vorige gelukte ronde zes dagen oud is, of als er nog plannen of meldingen wachten. Zo haalt hij in wat de Mac verslapen
+heeft, geeft hij elke week een hartslag ook zonder nieuwe plannen (N11), en meldt hij binnen zeven dagen wat hij las (N4).
+
+    tekenaar.py            de ronde, als die aan de beurt is
+    tekenaar.py --nu       een ronde, ook als de vorige net gelukt is
     tekenaar.py --droog    lijst en controle tonen; niets naar het bord, de stand blijft gelijk
     tekenaar.py --droog --sinds 2026-10-05   idem, alsof alles vanaf die dag nieuw is (proef op echte plannen)
 
 Hij leest alleen. Hij schrijft niets in Dropbox: de PDF's gaan naar een werkmap buiten Dropbox en worden na de controle
-gewist; zijn stand (wat al bekeken is) staat in ~/Library/Application Support/mijnagents/tekenaar/.
+gewist; zijn stand (wat al bekeken is) staat in ~/Library/Application Support/mijnagents/tekenaar/. Naar het bord gaan
+projectnummer, submap en bladcode, nooit de projectmap of de voorwerp-ID: daar staan adressen en namen in.
 """
 import argparse
 import contextlib
 import fcntl
+import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -35,7 +41,7 @@ import sys
 import tempfile
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
@@ -51,29 +57,38 @@ TOKEN_PAD = os.path.expanduser("~/.config/mijnagents/token")
 DROPBOX = os.path.expanduser("~/TKN-buro Dropbox")
 BORD_PUBLIEK = "https://mijnagents.globaal.be"
 HULP = "~/agents/.venv/bin/python ~/appportal/mijnagents-runner/koppelingen/ba_plannen.py"
-HULP_VERSIE = "2"
-# De archiefcontrole van oktober 2026 (overleg/archiefcontrole-2026-10.md in de brug) mat alles tot 18-10-2026: wat
-# daarvoor laatst gewijzigd is, telt als bekeken. Zo bouwt de eerste ronde daarop voort in plaats van alles opnieuw.
+HULP_VERSIE = "3"
+# De archiefcontrole van oktober 2026 (overleg/archiefcontrole-2026-10.md in de brug) mat de jongste versie van elk blad
+# tot 18-10-2026: wat daarvoor laatst gewijzigd is, telt als vrijgesteld (basis), niet als stuk voor stuk gecontroleerd.
 BASISDATUM = "2026-10-18T00:00:00+00:00"
+# Zes dagen (min een marge voor de duur van een ronde): zo valt de volgende ronde altijd binnen de zeven dagen van N4,
+# zolang de Mac op dag zes of zeven aan staat.
+RITME = timedelta(days=6) - timedelta(hours=2)
 MAX_PER_RONDE = 150
 ID = re.compile(r"^id:[A-Za-z0-9_-]{6,}$")
 BASISMAPPEN = ("0 H-A Standaard projects", "0 H-A Light projects")
+SOORTEN = "O|ML|P|S|G|T|L|I|IB|PB|LB|SB|GB|TB|D|C|F|3D|V"
 
 # Wat een fout betekent en wat De Tekenaar voorstelt; het besluit blijft bij Mehdi (werkwijze, "Wat Mehdi beslist").
 LABEL = {"meetlijn": "meetlijn", "persoonsgegevens": "persoonsgegevens", "eenheid": "eenheid", "schaal": "schaal",
          "bestandsnaam": "bestandsnaam", "voorwerp_id": "voorwerp-ID", "gewest": "gewest", "noordpijl": "noordpijl",
          "ruimtefuncties": "ruimtebenamingen", "snede_aangeduid": "plaats van de snede", "maataanduiding": "maatcijfers",
-         "toestanden": "toestanden B, V en N", "bladnummers": "dubbele bladcode", "dxf_maten": "maten DXF"}
+         "toestanden": "toestanden B, V en N", "bladnummers": "dubbele bladcode", "dxf_maten": "maten DXF",
+         "dxf_maatlabels": "maatlabels DXF"}
 VOORSTEL = {
     "meetlijn": "schaalbalk laten volgen met de schaal van het blad (sjabloonherstel in de TODO van De Tekenaar)",
-    "persoonsgegevens": "titelblok zonder bouwheer en rijksregisternummer opnieuw afdrukken (besluit 18-10-2026)",
     "eenheid": "de eenheid (maten in centimeter) op het blad zetten",
     "schaal": "een normschaal vermelden (1/50, 1/100, 1/200 ...)",
     "bestandsnaam": "de naam volgens de loketcodering zetten voor het indienen",
     "gewest": "het normenboek B01 niet toepassen; Mehdi beslist welke regels gelden",
     "toestanden": "de vergunde toestand toevoegen of de samenvoeging uitdrukkelijk melden",
     "bladnummers": "de volgnummers herschikken zodat elke bladcode een keer voorkomt",
+    "persoonsgegevens": "een keer het titelblok in het sjabloon herstellen (zonder bouwheer en rijksregisternummer, "
+                        "besluit 18-10-2026); dan verdwijnt deze fout op elk nieuw blad",
 }
+# Een fout die uit het sjabloon komt en op bijna elk blad staat: in de titel van het signaal gaan andere fouten voor
+# (ontwerplezing Codex, weekronde 19-10-2026). Per blad blijft ze zichtbaar in het werkverslag.
+SJABLOONFOUT = {"persoonsgegevens"}
 
 
 def nu_utc():
@@ -85,13 +100,24 @@ def week(t=None):
     return f"{j}-W{w:02d}"
 
 
+# ------------------------------------------------------------ werkmappen ---
+def buiten_dropbox(pad):
+    """Een map voor De Tekenaar zelf, gecontroleerd voor ze bestaat: nooit in Dropbox (geen projectmap)."""
+    echt = os.path.realpath(pad)
+    if echt == os.path.realpath(DROPBOX) or echt.startswith(os.path.realpath(DROPBOX) + os.sep):
+        raise RuntimeError(f"map ligt in Dropbox; geweigerd: {pad}")
+    os.makedirs(pad, mode=0o700, exist_ok=True)
+    return pad
+
+
 # ------------------------------------------------------------------ stand ---
 def lege_stand():
     """bekend: de BA-plannen die nu in de projectmappen staan, per Dropbox-id (pad en inhoud), voor de set-controle.
     gezien: elke inhoud (content_hash) die De Tekenaar al kent: basis (archiefcontrole), wacht of gecontroleerd. Nieuw
-    is een inhoud die hij nog niet zag; een kopie of een verplaatst plan (een project dat van fasemap verandert) niet."""
-    return {"versie": 1, "cursors": {}, "bekend": {}, "gezien": {}, "wachtrij": [], "geen_toegang": {},
-            "laatste_week": None, "laatste_ronde": None}
+    is een inhoud die hij nog niet zag; een kopie of een verplaatst plan (een project dat van fasemap verandert) niet.
+    te_melden: gecontroleerde plannen waarvan werkverslag en signaal het bord nog niet bevestigd hebben."""
+    return {"versie": 1, "cursors": {}, "bekend": {}, "gezien": {}, "wachtrij": [], "te_melden": [],
+            "geen_toegang": {}, "laatste_week": None, "laatste_ronde": None}
 
 
 def lees_stand(pad=None):
@@ -101,9 +127,13 @@ def lees_stand(pad=None):
             st = json.load(f)
     except FileNotFoundError:
         return lege_stand()
+    except ValueError as e:
+        raise RuntimeError(f"stand onleesbaar: {type(e).__name__}") from e
     if not isinstance(st, dict) or st.get("versie") != 1 or not all(
             isinstance(st.get(k), t) for k, t in (("bekend", dict), ("gezien", dict), ("wachtrij", list), ("cursors", dict))):
-        raise RuntimeError(f"stand onleesbaar: {pad}")
+        raise RuntimeError("stand onleesbaar: onverwachte vorm")
+    st.setdefault("te_melden", [])
+    st.setdefault("geen_toegang", {})
     return st
 
 
@@ -111,7 +141,7 @@ def bewaar_stand(st, pad=None):
     """Atomair: eerst een tijdelijk bestand ernaast, dan os.replace, zodat een onderbroken ronde nooit een halve stand
     achterlaat."""
     pad = pad or STAND
-    os.makedirs(os.path.dirname(pad), mode=0o700, exist_ok=True)
+    buiten_dropbox(os.path.dirname(pad))
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(pad), prefix=".stand-")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(st, f, ensure_ascii=False)
@@ -128,13 +158,20 @@ def inhoud(b):
     return b.get("hash") or f"{b.get('id')}@{b.get('rev')}"
 
 
+def basis_van(pad):
+    p = (pad or "").lower()
+    return next((k for k, b in (("standaard", BASISMAPPEN[0]), ("light", BASISMAPPEN[1])) if "/" + b.lower() + "/" in p), None)
+
+
 def selecteer(st, lijst, basisdatum=BASISDATUM):
     """Verwerkt de wijzigingen van ba_plannen.py in de stand, in de volgorde van Dropbox. Een plan is nieuw als De
     Tekenaar zijn inhoud nog niet zag. Bij de allereerste lijst telt een plan dat voor de basisdatum laatst gewijzigd
-    is als bekeken (archiefcontrole van oktober 2026). Geeft (nieuw, weg)."""
+    is als vrijgesteld (archiefcontrole van oktober 2026). Een volledige lijst van een projectmap vervangt wat hij van
+    die map kende: wat er niet meer in staat, is weg. Geeft (nieuw, weg)."""
     eerste = not st["gezien"]
     bekend, gezien, wacht = st["bekend"], st["gezien"], st["wachtrij"]
     nieuw = weg = 0
+    gezien_ids = set()
     for w in lijst.get("wijzigingen", []):
         if w.get("soort") == "weg":
             p = (w.get("pad") or "").lower()
@@ -149,6 +186,7 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
             continue
         sleutel = inhoud(w)
         bekend[w["id"]] = {"hash": sleutel, "pad": w["pad"]}
+        gezien_ids.add(w["id"])
         if sleutel in gezien:
             continue
         if eerste and (w.get("gewijzigd") or "") and w["gewijzigd"].replace("Z", "+00:00") < basisdatum:
@@ -157,6 +195,12 @@ def selecteer(st, lijst, basisdatum=BASISDATUM):
         gezien[sleutel] = {"status": "wacht", "gewijzigd": w.get("gewijzigd")}
         wacht.append(w["id"])
         nieuw += 1
+    for basis, volledig in (lijst.get("volledig") or {}).items():
+        if volledig:      # Codex DT11: een volledige lijst ruimt op wat er niet meer staat
+            for i, b in list(bekend.items()):
+                if basis_van(b.get("pad")) == basis and i not in gezien_ids:
+                    del bekend[i]
+                    weg += 1
     herstel_wachtrij(st)
     st["cursors"].update(lijst.get("cursors") or {})
     # Gedeelde mappen zonder toegang voor de stack: alleen een volledige lijst ziet ze, en die vervangt wat er stond.
@@ -189,8 +233,9 @@ def herstel_wachtrij(st):
     st["wachtrij"] = rij
 
 
+# ------------------------------------------------------- paden en labels ---
 def projectnummer(pad):
-    """Het projectnummer: de eerste map onder de fasemap die met vier cijfers begint; anders 'zonder nummer'."""
+    """(nummer, projectmap): de eerste map onder de fasemap die met vier cijfers begint; anders 'zonder nummer'."""
     delen = (pad or "").split("/")
     for i, d in enumerate(delen):
         if d in BASISMAPPEN:
@@ -202,19 +247,33 @@ def projectnummer(pad):
     return "zonder nummer", os.path.basename(os.path.dirname(pad or ""))
 
 
-def kort_pad(pad):
-    """Het pad vanaf de projectmappen, zodat Mehdi het bestand terugvindt."""
-    for b in BASISMAPPEN:
-        if "/" + b + "/" in pad:
-            return pad.split("/" + b + "/", 1)[1]
-    return pad
+def bladcode(naam):
+    """De bestandsnaam zonder 'BA_' en zonder voorwerp-ID (daar staat het adres in): 'P_N_1_00_gelijkvloers.pdf'."""
+    m = re.match(rf"^BA_.+?_((?:{SOORTEN})_.*)$", naam or "", re.I)
+    if m:
+        return m.group(1)
+    rest = re.sub(r"^BA_.*?\b[1-9]\d{3}\s+[^_]*_?", "", naam or "", flags=re.I)
+    return rest if rest and rest != naam and not rest.lower().startswith("ba_") else "blad zonder tekeningsoort in de naam"
+
+
+def blad_label(pad):
+    """Wat er van een plan naar het bord gaat (Codex DT10): projectnummer, de submappen onder de projectmap en de
+    bladcode, zonder projectmap en voorwerp-ID. Genoeg om het plan terug te vinden, zonder adres of naam."""
+    nr, projectmap = projectnummer(pad)
+    delen = (pad or "").split("/")
+    sub = delen[delen.index(projectmap) + 1:-1] if projectmap in delen and nr != "zonder nummer" else []
+    return " / ".join([nr] + sub + [bladcode(os.path.basename(pad or ""))])
+
+
+def map_label(map_pad):
+    return blad_label(map_pad + "/x.pdf").rsplit(" / ", 1)[0]
 
 
 # ----------------------------------------------------------- VM via ssh ---
 def vm(opdracht, invoer=None, timeout=600):
     """Een opdracht van ba_plannen.py op de VM. Geeft (code, stdout als bytes, stderr). Een gedeelde ssh-verbinding
     (ControlMaster, een minuut open na de laatste opdracht) houdt honderd plannen in een ronde onder de paar minuten."""
-    os.makedirs(WERKMAP, mode=0o700, exist_ok=True)
+    buiten_dropbox(WERKMAP)
     r = subprocess.run(["/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30",
                         "-o", "ControlMaster=auto", "-o", f"ControlPath={os.path.join(WERKMAP, 's-%C')}",
                         "-o", "ControlPersist=60", VM, f"{HULP} {opdracht}"],
@@ -235,17 +294,20 @@ def lijst_van_vm(cursors):
 
 
 def haal_van_vm(ident, doel):
-    """Schrijft de PDF naar doel. Geeft True, of False als Dropbox het bestand niet (meer) als BA-plan kent."""
+    """Schrijft de PDF naar doel. Geeft 'ok', 'weg' (Dropbox kent het niet meer als BA-plan in de projectmappen) of
+    'te_groot' (boven de grens van ba_plannen.py). Elke andere fout breekt de ronde: dan probeert de volgende het opnieuw."""
     if not ID.match(ident):
         raise ValueError("geen Dropbox-id")
     code, uit, fout = vm(f"haal {ident}", timeout=300)
-    if code == 4 or (code == 1 and ("PermissionError" in fout or "geen BA-plan" in fout)):
-        return False
+    if code == 4:
+        return "weg"
+    if code == 5:
+        return "te_groot"
     if code != 0 or not uit.startswith(b"%PDF"):
         raise RuntimeError(f"ophalen van een plan mislukt (code {code}): {fout}")
     with open(doel, "wb") as f:
         f.write(uit)
-    return True
+    return "ok"
 
 
 @contextlib.contextmanager
@@ -293,35 +355,44 @@ def hartslag_publiek(token, detail):
 
 
 # --------------------------------------------------------------- controle ---
-def normcontrole():
-    pad = os.path.join(BRUG, "gereedschap")
-    if pad not in sys.path:
-        sys.path.insert(0, pad)
-    import normcontrole as nc  # noqa: PLC0415
-    return nc
+def git(*args, timeout=60):
+    r = subprocess.run(["git", "-C", BRUG, *args], capture_output=True, timeout=timeout)
+    return r.returncode, r.stdout
 
 
 def regelboek():
-    """Wat De Tekenaar deze ronde toepast, naast zijn werkwijze op het bord: de normcontrole en de checklist van het
-    normenboek, met de commit van de brug (N4)."""
+    """De normcontrole en de checklist van het normenboek zoals ze op GitHub staan (origin/main van de brug), niet de
+    werkmap: een half bewerkte versie van een andere sessie raakt de weekronde niet. Geeft (bronnen voor N4, commit,
+    pad van de normcontrole in de werkmap, of GitHub bereikt werd)."""
+    opgehaald = git("fetch", "-q", "origin", "main")[0] == 0
+    code, commit = git("rev-parse", "--short", "origin/main", timeout=20)
+    if code != 0:
+        raise RuntimeError(f"de brug-repo heeft geen origin/main: {BRUG}")
+    commit = commit.decode().strip()
     bronnen = {}
-    for naam in ("gereedschap/normcontrole.py", "kennis/normenboek-B01-checklist.md"):
-        with open(os.path.join(BRUG, naam), encoding="utf-8") as f:
-            bronnen[os.path.basename(naam)] = f.read()
-    try:
-        commit = subprocess.run(["git", "-C", BRUG, "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
-                                timeout=20).stdout.strip()
-        vuil = subprocess.run(["git", "-C", BRUG, "status", "--porcelain", "--", "gereedschap", "kennis"],
-                              capture_output=True, text=True, timeout=20).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        commit, vuil = "", ""
-    bronnen["globaal-vectorworks-brug"] = f"commit {commit or 'onbekend'}{', met lokale wijzigingen' if vuil else ''}"
-    return bronnen, commit, bool(vuil)
+    for pad in ("gereedschap/normcontrole.py", "kennis/normenboek-B01-checklist.md"):
+        code, inhoud_ = git("show", f"origin/main:{pad}", timeout=20)
+        if code != 0:
+            raise RuntimeError(f"{pad} niet in origin/main van de brug")
+        bronnen[os.path.basename(pad)] = inhoud_.decode("utf-8")
+    bronnen["globaal-vectorworks-brug"] = f"origin/main {commit}{'' if opgehaald else ', GitHub niet bereikt: laatst opgehaald'}"
+    map_ = buiten_dropbox(os.path.join(WERKMAP, f"normcontrole-{commit}"))
+    nc_pad = os.path.join(map_, "normcontrole.py")
+    with open(nc_pad, "w", encoding="utf-8") as f:
+        f.write(bronnen["normcontrole.py"])
+    return bronnen, commit, nc_pad, opgehaald
+
+
+def normcontrole(nc_pad):
+    spec = importlib.util.spec_from_file_location("normcontrole_tekenaar", nc_pad)
+    nc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(nc)
+    return nc
 
 
 def beoordeel(nc, pdf, pad):
     """De normcontrole van een blad: oordeel en de bevindingen per soort, zonder inhoud uit het plan."""
-    nr, map_naam = projectnummer(pad)
+    _, map_naam = projectnummer(pad)
     r = nc.controleer_pdf(pdf, naam=os.path.basename(pad), map_naam=map_naam)
     per = {"FOUT": [], "ONBEKEND": [], "LET OP": []}
     for k, v in r["uitkomsten"].items():
@@ -332,52 +403,58 @@ def beoordeel(nc, pdf, pad):
             "fout_soorten": list(fout_reden), "fout_reden": fout_reden}
 
 
-def set_bevindingen(nc, st, nieuwe_ids):
+def onbekend(reden):
+    return {"oordeel": "ONBEKEND", "fout": [], "onbekend": [reden], "let_op": [], "fout_soorten": [], "fout_reden": {}}
+
+
+def set_bevindingen(nc, st, meldingen):
     """Per map met een nieuw blad: de set over alle bekende bladen in die map (bladnummers alleen met een nieuw blad,
-    B/V/N bij een regularisatie). Geeft {map: [bevinding, ...]} voor wat FOUT is."""
+    B/V/N bij een regularisatie). Een regularisatie herkent hij ook aan de projectmap ('(reg)', '(regularisatie)'),
+    niet alleen aan een V-blad (Codex DT08). Geeft {map: [(soort, reden)]} voor wat FOUT is."""
     mappen = {}
-    for i in nieuwe_ids:
-        b = st["bekend"].get(i)
-        if b:
-            mappen.setdefault(os.path.dirname(b["pad"]), set()).add(os.path.basename(b["pad"]))
+    for m in meldingen:
+        mappen.setdefault(os.path.dirname(m["pad"]), set()).add(os.path.basename(m["pad"]))
     uit = {}
-    for m, nieuw in mappen.items():
-        namen = [os.path.basename(b["pad"]) for b in st["bekend"].values() if os.path.dirname(b["pad"]) == m]
-        s = nc.controleer_set(namen, nieuw=sorted(nieuw))
+    for map_, nieuw in mappen.items():
+        namen = [os.path.basename(b["pad"]) for b in st["bekend"].values() if os.path.dirname(b["pad"]) == map_]
+        namen = sorted(set(namen) | nieuw)
+        regularisatie = nc.is_regularisatie(projectnummer(map_ + "/x.pdf")[1])
+        s = nc.controleer_set(namen, regularisatie=regularisatie, nieuw=sorted(nieuw))
         fout = [(k, v["reden"]) for k, v in s["uitkomsten"].items() if v["status"] == "FOUT" and k != "gewest"]
         if fout:
-            uit[m] = fout
+            uit[map_] = fout
     return uit
 
 
-def signaal(gecontroleerd, sets, wk, commit):
+def signaal(meldingen, sets, wk, commit):
     """Een klaarzet-item voor Mehdi (soort signaal) als er een bruikbare bevinding is: een FOUT op een nieuw blad of in
     de set van zijn map. Anders None. Gebundeld per project en per soort fout, met hoogstens drie voorbeelden; de lijst
-    per blad staat in het werkverslag. Het uniek draagt de week, geen aantal (N10): een herhaalde ronde in dezelfde
-    week zet niets dubbel klaar. LET OP en na te kijken blijven in het werkverslag."""
-    projecten = {}
+    per blad staat in het werkverslag. Een fout uit het sjabloon (op bijna elk blad) komt in de titel na de andere.
+    Het uniek draagt de week en een vingerafdruk van de gemelde plannen, geen aantal (N10): dezelfde melding twee keer
+    klaarzetten (een herhaalde ronde) geeft geen tweede bericht; nieuwe bevindingen wel."""
+    projecten, per_project = {}, {}
 
     def project(nr):
         return projecten.setdefault(nr, {"project": nr, "mappen": set(), "met_fout": 0, "fouten": {}, "set": []})
 
-    per_project = {}
-    for pad, _ in gecontroleerd:
-        nr = projectnummer(pad)[0]
+    for m in meldingen:
+        nr = projectnummer(m["pad"])[0]
         per_project[nr] = per_project.get(nr, 0) + 1
-    for pad, uitslag in gecontroleerd:
-        if not uitslag.get("fout"):
+    for m in meldingen:
+        u = m["uitslag"]
+        if not u.get("fout_reden"):
             continue
-        p = project(projectnummer(pad)[0])
+        p = project(projectnummer(m["pad"])[0])
         p["met_fout"] += 1
-        p["mappen"].add(kort_pad(os.path.dirname(pad)))
-        for soort, reden in (uitslag.get("fout_reden") or {}).items():
+        p["mappen"].add(map_label(os.path.dirname(m["pad"])))
+        for soort, reden in u["fout_reden"].items():
             f = p["fouten"].setdefault(soort, {"wat": LABEL.get(soort, soort), "bladen": 0, "voorbeeld": [], "reden": reden})
             f["bladen"] += 1
             if len(f["voorbeeld"]) < 3:
-                f["voorbeeld"].append(os.path.basename(pad))
-    for m, fout in sets.items():
-        p = project(projectnummer(m + "/x.pdf")[0])
-        p["mappen"].add(kort_pad(m))
+                f["voorbeeld"].append(bladcode(os.path.basename(m["pad"])))
+    for map_, fout in sets.items():
+        p = project(projectnummer(map_ + "/x.pdf")[0])
+        p["mappen"].add(map_label(map_))
         p["set"].extend(f"{LABEL.get(k, k)}: {reden}" for k, reden in fout)
         for k, _ in fout:
             p["fouten"].setdefault(k, {"wat": LABEL.get(k, k), "bladen": 0, "voorbeeld": [], "reden": "zie set"})
@@ -387,132 +464,167 @@ def signaal(gecontroleerd, sets, wk, commit):
     for p in projecten.values():
         for k, f in p["fouten"].items():
             gewicht[k] = gewicht.get(k, 0) + max(1, f["bladen"])
-    soorten = sorted(gewicht, key=lambda k: (-gewicht[k], k))     # de meest voorkomende fout eerst
+    soorten = sorted(gewicht, key=lambda k: (k in SJABLOONFOUT, -gewicht[k], k))
     nrs = sorted(projecten)
     titel = f"Normfouten in nieuwe BA-plannen van {', '.join(nrs[:4])}{' en meer' if len(nrs) > 4 else ''}"
     extra = f" ({', '.join(LABEL.get(s, s) for s in soorten[:3])})"
     if len(titel + extra) <= 110:           # De Bode toont 110 tekens op Telegram
         titel += extra
     titel = re.sub(r"(?i)stil", "rustig", titel)   # "stil" in een signaaltitel laat De Bode bellen (AGENTNORM 6)
+    vinger = hashlib.sha256(json.dumps(sorted([m["id"] for m in meldingen if m["uitslag"].get("fout_reden")]
+                                              + sorted(sets)), ensure_ascii=False).encode()).hexdigest()[:8]
     uit = []
     for n in nrs:
         p = projecten[n]
         uit.append({"project": n, "mappen": sorted(p["mappen"])[:3], "nieuwe_bladen": per_project.get(n, 0),
-                    "met_fout": p["met_fout"], "fouten": sorted(p["fouten"].values(), key=lambda f: -f["bladen"]),
+                    "met_fout": p["met_fout"],
+                    "fouten": sorted(p["fouten"].values(), key=lambda f: (f["wat"] in SJABLOONFOUT, -f["bladen"])),
                     "set": p["set"]})
-    return {"voor": "mehdi", "soort": "signaal", "sleutel": wk, "uniek": f"tekenaar-normcontrole-{wk}",
+    return {"voor": "mehdi", "soort": "signaal", "sleutel": wk, "uniek": f"tekenaar-normcontrole-{wk}-{vinger}",
             "titel": titel[:110],
             "inhoud": {"week": wk, "projecten": uit,
                        "voorstel": ["Per project de bladen met een FOUT verbeteren in een kopie in de Teken-agent-map, "
                                     "nooit in de projectmap; Mehdi zegt welk project eerst en geeft vrij."]
                        + [f"{LABEL.get(s, s)}: {VOORSTEL[s]}" for s in soorten if s in VOORSTEL],
                        "werkverslag": "de lijst per blad staat in het werkverslag van De Tekenaar op het bord",
-                       "regelboek": f"normcontrole uit globaal-vectorworks-brug, commit {commit or 'onbekend'}"}}
+                       "regelboek": f"normcontrole uit globaal-vectorworks-brug, origin/main {commit or 'onbekend'}"}}
 
 
 # ------------------------------------------------------------------ ronde ---
-def veilige_werkmap():
-    """Een eigen tijdelijke map buiten Dropbox: De Tekenaar schrijft nooit in een projectmap."""
-    os.makedirs(WERKMAP, mode=0o700, exist_ok=True)
-    werk = tempfile.mkdtemp(prefix="ronde-", dir=WERKMAP)
-    if os.path.realpath(werk).startswith(os.path.realpath(DROPBOX) + os.sep):
-        shutil.rmtree(werk, ignore_errors=True)
-        raise RuntimeError("werkmap ligt in Dropbox; geweigerd")
-    return werk
-
-
-def controleer_wachtrij(nc, st, bewaar=True, maximum=MAX_PER_RONDE, haal=None):
-    """Haalt en controleert de plannen uit de wachtrij, een voor een, en bewaart de stand na elk plan. Geeft
-    (gecontroleerd: [(pad, uitslag)], ids van de gecontroleerde plannen, aantal verdwenen)."""
+def controleer_wachtrij(nc, st, bewaar=True, maximum=None, haal=None):
+    """Haalt en controleert de plannen uit de wachtrij, een voor een, en bewaart de stand na elk plan. Elk
+    gecontroleerd plan gaat naar te_melden tot het bord werkverslag en signaal bevestigt (Codex DT06). Een plan dat te
+    groot of onleesbaar is, wordt een melding 'na te kijken', nooit stil weggelaten (DT07). Geeft het aantal
+    verdwenen plannen."""
     haal = haal or haal_van_vm
-    werk = veilige_werkmap()
-    gecontroleerd, ids, verdwenen = [], [], 0
+    maximum = MAX_PER_RONDE if maximum is None else maximum
+    werk = tempfile.mkdtemp(prefix="ronde-", dir=buiten_dropbox(WERKMAP))
+    verdwenen = 0
     try:
         for ident in list(st["wachtrij"])[:maximum]:
             b = st["bekend"].get(ident)
             if b is None or st["gezien"].get(b["hash"], {}).get("status") != "wacht":
                 continue
             pdf = os.path.join(werk, "blad.pdf")
-            if not haal(ident, pdf):
-                del st["bekend"][ident]          # Dropbox kent het niet meer als BA-plan in de projectmappen
+            stand = haal(ident, pdf)
+            if stand == "weg":
+                del st["bekend"][ident]
                 verdwenen += 1
             else:
-                try:
-                    uitslag = beoordeel(nc, pdf, b["pad"])
-                except Exception as e:  # noqa: BLE001  een kapotte PDF stopt de ronde niet
-                    uitslag = {"oordeel": "ONBEKEND", "fout": [], "onbekend": [f"blad niet te lezen: {type(e).__name__}"],
-                               "let_op": [], "fout_soorten": [], "fout_reden": {}}
-                finally:
-                    with contextlib.suppress(FileNotFoundError):
-                        os.remove(pdf)
+                if stand == "te_groot":
+                    uitslag = onbekend("plan groter dan de grens van 80 MB: niet automatisch gecontroleerd, nakijken")
+                else:
+                    try:
+                        uitslag = beoordeel(nc, pdf, b["pad"])
+                    except Exception as e:  # noqa: BLE001  een kapotte PDF stopt de ronde niet, maar wordt gemeld
+                        uitslag = onbekend(f"blad niet te lezen ({type(e).__name__}): nakijken")
+                    finally:
+                        with contextlib.suppress(FileNotFoundError):
+                            os.remove(pdf)
                 st["gezien"][b["hash"]] = {"status": "gecontroleerd", "oordeel": uitslag["oordeel"],
                                            "fout": uitslag["fout_soorten"], "ts": nu_utc().isoformat(timespec="seconds")}
-                gecontroleerd.append((b["pad"], uitslag))
-                ids.append(ident)
+                st["te_melden"].append({"id": ident, "pad": b["pad"], "uitslag": uitslag})
             herstel_wachtrij(st)
             if bewaar:
                 bewaar_stand(st)
     finally:
         shutil.rmtree(werk, ignore_errors=True)
-    return gecontroleerd, ids, verdwenen
+    return verdwenen
+
+
+def werkverslag(meldingen, sets, blind, wk):
+    """De regels voor het logboek op het bord: per project de bladen met oordeel en bevindingen (DT10: labels zonder
+    adres), de sets met een fout en de mappen zonder toegang."""
+    per_project = {}
+    for m in meldingen:
+        per_project.setdefault(projectnummer(m["pad"])[0], []).append(m)
+    regels = []
+    for nr, lijst in sorted(per_project.items()):
+        tekst = []
+        for m in lijst:
+            u = m["uitslag"]
+            tekst.append(f"{u['oordeel']}  {blad_label(m['pad'])}")
+            tekst += [f"    FOUT {x}" for x in u["fout"]] + [f"    na te kijken: {x}" for x in u["onbekend"]] \
+                + [f"    let op: {x}" for x in u["let_op"]]
+        for map_, fout in sets.items():
+            if projectnummer(map_ + "/x.pdf")[0] == nr:
+                tekst += [f"set {map_label(map_)}: FOUT {LABEL.get(k, k)}: {reden}" for k, reden in fout]
+        telling = ", ".join(f"{s} {sum(1 for m in lijst if m['uitslag']['oordeel'] == s)}"
+                            for s in ("FOUT", "ONBEKEND", "LET OP", "OK"))
+        regels.append({"naam": NAAM, "onderwerp": f"project {nr}", "stap": "controle",
+                       "tekst": f"{len(lijst)} nieuwe of gewijzigde bladen; oordeel: {telling}", "detail": "\n".join(tekst)})
+    if blind:
+        # Geen nood: of de stack daar mag lezen, is een keuze van Mehdi; een nood zou elke ronde open blijven (N7).
+        regels.append({"naam": NAAM, "onderwerp": f"week {wk}", "stap": "bron",
+                       "tekst": "mappen zonder toegang voor de stack: daar ziet De Tekenaar geen nieuwe plannen",
+                       "detail": "\n".join(os.path.basename(p) for p in blind)})
+    return regels
+
+
+def meld(st, nc, wk, commit):
+    """Werkverslag en signaal naar het bord, rechtstreeks, zodat een fout de ronde breekt en te_melden blijft staan
+    (Codex DT06): de volgende ronde meldt het dan opnieuw. Pas na bevestiging gaat te_melden leeg. Geeft (signaal of
+    None, sets)."""
+    meldingen = list(st["te_melden"])
+    sets = set_bevindingen(nc, st, meldingen) if meldingen else {}
+    regels = werkverslag(meldingen, sets, blinde_vlekken(st), wk)
+    if regels:
+        bord.call("/api/logboek", {"regels": ag.maskeer(regels)})
+    item = signaal(meldingen, sets, wk, commit)
+    if item:
+        item["van"] = NAAM
+        bord.call("/api/klaarzet", {"items": ag.maskeer([item])})
+    st["te_melden"] = []
+    bewaar_stand(st)
+    return item, sets
 
 
 def werk(r, st, wk):
+    """Een ronde. Geeft True als alles af is: lijst gelezen, wachtrij leeg en elke melding door het bord bevestigd."""
     nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
     if not nooit or not mehdi_beslist:
         r.nood("Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist", wie="mehdi")
         r.detail = "geen werk gedaan, grenzen ontbreken in de werkwijze"
         return False
-    bronnen, commit, vuil = regelboek()
-    for naam, inhoud in bronnen.items():
-        r.bron(naam, inhoud)
+    bronnen, commit, nc_pad, opgehaald = regelboek()
+    for naam, tekst in bronnen.items():
+        r.bron(naam, tekst)
     if hulp_versie() != HULP_VERSIE:
         r.nood("Hulpscript ba_plannen.py staat niet of in een andere versie op de VM: git pull in ~/appportal",
                wie="claude-code")
         r.detail = "geen lijst gelezen: het hulpscript op de VM ontbreekt"
         return False
-    nc = normcontrole()
+    nc = normcontrole(nc_pad)
     lijst = lijst_van_vm(st["cursors"])
     nieuw, weg = selecteer(st, lijst)
     bewaar_stand(st)          # cursor en wachtrij samen: een onderbroken ronde gaat volgende keer verder
-    gecontroleerd, ids, verdwenen = controleer_wachtrij(nc, st)
-    sets = set_bevindingen(nc, st, ids)
-    tel = {s: sum(1 for _, u in gecontroleerd if u["oordeel"] == s) for s in ("FOUT", "ONBEKEND", "LET OP", "OK")}
-    per_project = {}
-    for pad, u in gecontroleerd:
-        per_project.setdefault(projectnummer(pad)[0], []).append((pad, u))
-    for nr, bladen in sorted(per_project.items()):
-        regels = []
-        for pad, u in bladen:
-            regels.append(f"{u['oordeel']}  {kort_pad(pad)}")
-            regels += [f"    FOUT {x}" for x in u["fout"]] + [f"    na te kijken: {x}" for x in u["onbekend"]] \
-                + [f"    let op: {x}" for x in u["let_op"]]
-        for m, fout in sets.items():
-            if projectnummer(m + "/x.pdf")[0] == nr:
-                regels += [f"set {kort_pad(m)}: FOUT {LABEL.get(k, k)}: {reden}" for k, reden in fout]
-        ag.log(f"project {nr}", "controle", f"{len(bladen)} nieuwe of gewijzigde bladen; oordeel: "
-               + ", ".join(f"{s} {sum(1 for _, u in bladen if u['oordeel'] == s)}" for s in ("FOUT", "ONBEKEND", "LET OP", "OK")),
-               "\n".join(regels))
-    blind = blinde_vlekken(st)
-    if blind:
-        # Geen nood: of de stack daar mag lezen, is een keuze van Mehdi; een nood zou elke ronde open blijven (N7).
-        ag.log(f"week {wk}", "bron", "mappen zonder toegang voor de stack: daar ziet De Tekenaar geen nieuwe plannen",
-               "\n".join(kort_pad(p) for p in blind))
-    item = signaal(gecontroleerd, sets, wk, commit)
-    if item:
-        uit = ag.klaarzet([item])
-        ag.log(f"week {wk}", "signaal", f"signaal voor Mehdi klaargezet ({uit.get('nieuw', 0)} nieuw)", item["titel"])
+    verdwenen = controleer_wachtrij(nc, st)
+    meldingen = list(st["te_melden"])
+    item, sets = meld(st, nc, wk, commit)
     if st["wachtrij"]:
-        r.nood("Meer nieuwe plannen dan een ronde aankan; de rest volgt in de volgende ronde", wie="claude-code")
-    if vuil:
-        r.nood("Normcontrole draait met lokale wijzigingen in de brug-repo: committen en pushen", wie="claude-code")
-    r.detail = (f"week {wk}: {len(gecontroleerd)} nieuwe of gewijzigde BA-plannen gecontroleerd (FOUT {tel['FOUT']}, "
+        # DT07: de ronde is niet af; launchd start me morgen opnieuw en dan gaat de wachtrij verder.
+        r.nood("Meer nieuwe plannen dan een ronde aankan; de rest volgt bij de volgende start", wie="claude-code")
+    tel = {s: sum(1 for m in meldingen if m["uitslag"]["oordeel"] == s) for s in ("FOUT", "ONBEKEND", "LET OP", "OK")}
+    blind = blinde_vlekken(st)
+    r.detail = (f"week {wk}: {len(meldingen)} nieuwe of gewijzigde BA-plannen gecontroleerd (FOUT {tel['FOUT']}, "
                 f"na te kijken {tel['ONBEKEND']}, let op {tel['LET OP']}, OK {tel['OK']}); {len(sets)} sets met een fout; "
                 f"{'een signaal voor Mehdi' if item else 'geen signaal'}; {len(st['wachtrij'])} in de wachtrij; "
                 f"{len(st['bekend'])} plannen in de projectmappen, {nieuw} met nieuwe inhoud, {weg + verdwenen} weg; "
-                f"normcontrole {commit or 'onbekend'}"
-                + (f"; niet leesbaar: {', '.join(kort_pad(p) for p in blind)}" if blind else ""))
-    return True
+                f"normcontrole origin/main {commit}{'' if opgehaald else ' (GitHub niet bereikt)'}"
+                + (f"; niet leesbaar: {', '.join(os.path.basename(p) for p in blind)}" if blind else ""))
+    return not st["wachtrij"]
+
+
+def aan_de_beurt(st, nu=None):
+    """Een ronde is aan de beurt als de vorige gelukte ronde zes dagen oud is, of als er nog plannen of meldingen
+    wachten (inhaalronde)."""
+    if st.get("wachtrij") or st.get("te_melden") or not st.get("laatste_ronde"):
+        return True
+    try:
+        vorige = datetime.fromisoformat(st["laatste_ronde"])
+    except ValueError:
+        return True
+    return (nu or nu_utc()) - vorige >= RITME
 
 
 def droog(st, sinds=None):
@@ -521,7 +633,8 @@ def droog(st, sinds=None):
     if hulp_versie() != HULP_VERSIE:
         print("Het hulpscript ba_plannen.py staat niet (of in een andere versie) op de VM: git pull in ~/appportal.")
         return 1
-    nc = normcontrole()
+    _, commit, nc_pad, _ = regelboek()
+    nc = normcontrole(nc_pad)
     lijst = lijst_van_vm(st["cursors"])
     nieuw, weg = selecteer(st, lijst, basisdatum=f"{sinds}T00:00:00+00:00" if sinds else BASISDATUM)
     tel = {}
@@ -529,47 +642,62 @@ def droog(st, sinds=None):
         tel[g["status"]] = tel.get(g["status"], 0) + 1
     print(f"lijst: {len(lijst.get('wijzigingen', []))} wijzigingen (volledig: {lijst.get('volledig')}); "
           f"{len(st['bekend'])} BA-plannen in de projectmappen, inhoud {tel}; {nieuw} nieuw, {weg} weg; "
-          f"wachtrij {len(st['wachtrij'])}; zonder toegang: {blinde_vlekken(st)}")
-    gecontroleerd, ids, verdwenen = controleer_wachtrij(nc, st, bewaar=False, maximum=int(os.environ.get("TEKENAAR_DROOG_MAX", "20")))
-    for pad, u in gecontroleerd:
-        print(f"{u['oordeel']:8} {projectnummer(pad)[0]}  {os.path.basename(pad)}")
-        for x in u["fout"]:
-            print(f"         FOUT {x}")
-    sets = set_bevindingen(nc, st, ids)
-    for m, fout in sets.items():
-        print(f"set {kort_pad(m)}: {fout}")
-    item = signaal(gecontroleerd, sets, week(), "droog")
+          f"wachtrij {len(st['wachtrij'])}; zonder toegang: {blinde_vlekken(st)}; normcontrole {commit}")
+    controleer_wachtrij(nc, st, bewaar=False, maximum=int(os.environ.get("TEKENAAR_DROOG_MAX", "20")))
+    meldingen = st["te_melden"]
+    sets = set_bevindingen(nc, st, meldingen)
+    for regel in werkverslag(meldingen, sets, blinde_vlekken(st), week()):
+        print(f"[{regel['onderwerp']}] {regel['tekst']}\n{regel['detail']}")
+    item = signaal(meldingen, sets, week(), commit)
     print("signaal:", json.dumps(item, ensure_ascii=False, indent=1) if item else "geen")
     return 0
 
 
+def ronde_zonder_stand(token, reden):
+    """De stand is onleesbaar: geen werk, wel een fout zichtbaar op het bord (hartslag en nood)."""
+    with tunnel() as url:
+        bord.PLATFORM, bord.TOKEN = url, token
+        with ag.ronde("normcontrole nieuwe BA-plannen") as r:
+            r.nood("Stand van De Tekenaar onleesbaar; nakijken voor de volgende ronde", wie="claude-code")
+            r.detail = f"geen ronde: {reden}"
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description="De Tekenaar: wekelijkse normcontrole van nieuwe bouwaanvraagplannen.")
-    p.add_argument("--nu", action="store_true", help="een ronde, ook als deze week al gelukt is")
+    p.add_argument("--nu", action="store_true", help="een ronde, ook als de vorige net gelukt is")
     p.add_argument("--droog", action="store_true", help="tonen, niets naar het bord, stand ongewijzigd")
     p.add_argument("--sinds", help="alleen met --droog: alles vanaf deze dag (JJJJ-MM-DD) telt als nieuw")
     a = p.parse_args(argv)
     if a.sinds and (not a.droog or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", a.sinds)):
         p.error("--sinds alleen met --droog, als JJJJ-MM-DD")
-    os.makedirs(os.path.dirname(STAND), mode=0o700, exist_ok=True)
-    with open(os.path.join(os.path.dirname(STAND), ".slot"), "w") as slot:
+    with open(os.path.join(buiten_dropbox(os.path.dirname(STAND)), ".slot"), "w") as slot:
         try:
             fcntl.flock(slot, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print("er loopt al een ronde")
             return 0
-        st = lees_stand()
+        try:
+            st = lees_stand()
+        except RuntimeError as e:
+            st, stand_fout = None, str(e)
         if a.droog:
+            if st is None:
+                print(stand_fout)
+                return 1
             return droog(lege_stand() if a.sinds else st, a.sinds)
-        wk = week()
-        if st.get("laatste_week") == wk and not a.nu:
-            return 0            # de ronde van deze week is al gelukt; launchd start me dagelijks voor de inhaalronde
+        if st is not None and not a.nu and not aan_de_beurt(st):
+            return 0            # de vorige ronde is jonger dan zes dagen; launchd start me dagelijks voor de inhaalronde
         try:
             token = open(TOKEN_PAD).read().strip()
         except OSError:
             print(f"geen token in {TOKEN_PAD}", file=sys.stderr)
             return 2
+        wk = week()
+        gelukt = False
         try:
+            if st is None:
+                ronde_zonder_stand(token, stand_fout)
+                return 1
             with tunnel() as url:
                 bord.PLATFORM, bord.TOKEN = url, token
                 with ag.ronde("normcontrole nieuwe BA-plannen") as r:
@@ -585,7 +713,7 @@ def main(argv=None):
         if gelukt:
             st["laatste_week"], st["laatste_ronde"] = wk, nu_utc().isoformat(timespec="seconds")
             bewaar_stand(st)
-        print(f"{datetime.now().isoformat(timespec='seconds')} De Tekenaar: ronde {wk} {'gelukt' if gelukt else 'met nood'}")
+        print(f"{datetime.now().isoformat(timespec='seconds')} De Tekenaar: ronde {wk} {'gelukt' if gelukt else 'niet af'}")
         return 0 if gelukt else 1
 
 

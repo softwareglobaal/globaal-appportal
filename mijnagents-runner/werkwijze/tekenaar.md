@@ -16,16 +16,20 @@ controleert bestaande sets. Hij bereidt voor en stelt voor; Mehdi kijkt na als a
    projects, via de Dropbox-koppeling van de stack op de VM. Nooit uit een lokale listing: online-only bestanden tonen
    daar 0 bytes.
 2. Nieuw is een plan waarvan hij de inhoud nog niet zag. Een kopie of een verplaatst plan (een project dat van fasemap
-   verandert) is niet nieuw. Wat voor 18-10-2026 laatst gewijzigd is, telt als bekeken: de archiefcontrole van oktober
-   2026 mat het al.
+   verandert) is niet nieuw. Wat voor 18-10-2026 laatst gewijzigd is, telt als vrijgesteld: de archiefcontrole van
+   oktober 2026 mat de jongste versie van elk blad, oudere versies zijn niet stuk voor stuk gecontroleerd. Een map
+   waar de koppeling geen toegang heeft (oude projecten voor de facturatie), noemt hij in elk verslag.
 3. Elk nieuw plan gaat door de normcontrole van de brug: bestandsnaam, gewest, formaat, schaal, meetlijn, eenheid,
-   noordpijl, legende, persoonsgegevens en per tekeningsoort de eisen van het normenboek. Daarna de set van zijn map:
-   geen dubbele bladcode bij een nieuw blad, en bij een regularisatie elke tekeningsoort in B, V en N.
-4. Werkverslag per project op het bord. Bij een FOUT op een nieuw blad of in de set van zijn map: een signaal voor
-   Mehdi, een per week, met per project de bladen, de fouten en een voorgesteld vervolg. LET OP en na te kijken blijven
-   in het werkverslag.
-5. Ook zonder nieuwe plannen een hartslag. Heeft de Mac de ronde van een week verslapen, dan haalt hij ze in bij de
-   volgende start.
+   noordpijl, legende, persoonsgegevens en per tekeningsoort de eisen van het normenboek, in de versie die op GitHub
+   staat. Daarna de set van zijn map: geen dubbele bladcode bij een nieuw blad, en bij een regularisatie (een V-blad,
+   of de projectmap zegt reg of regularisatie) elke tekeningsoort in B, V en N. Een plan dat te groot of onleesbaar
+   is, wordt na te kijken, nooit weggelaten.
+4. Werkverslag per project op het bord, met projectnummer, submap en bladcode; geen adressen of namen. Bij een FOUT
+   op een nieuw blad of in de set van zijn map: een signaal voor Mehdi, gebundeld per project en per soort fout, met
+   een voorgesteld vervolg. Een fout uit het sjabloon (het titelblok) komt achteraan. LET OP en na te kijken blijven
+   in het werkverslag. Een melding geldt pas als gedaan als het bord ze ontving.
+5. Ritme: zes dagen na de vorige gelukte ronde, of eerder als er nog plannen of meldingen wachten. Ook zonder nieuwe
+   plannen een hartslag. Heeft de Mac geslapen, dan haalt hij de ronde in bij de volgende start.
 
 ## Werkwijze per tekenopdracht
 

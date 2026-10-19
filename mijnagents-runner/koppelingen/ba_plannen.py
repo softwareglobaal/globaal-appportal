@@ -12,6 +12,7 @@ dit script op de VM wat er in de twee projectmappen staat, en haalt hij de PDF's
                              {"soort": "weg", pad}; geen_toegang: gedeelde mappen die het token van de stack niet mag
                              lezen (alleen bij een volledige lijst), zodat de Mac die blinde vlek kan melden
     ba_plannen.py haal <id>  de PDF op stdout; alleen een BA_*.pdf onder een van de twee projectmappen
+                             (uitgang 4: geen BA-plan of niet meer daar; 5: groter dan de grens)
     ba_plannen.py versie     de versie van dit script, zodat de Mac weet of de VM bij is
 
 Alleen files/list_folder, files/list_folder/continue, files/get_metadata en files/download: nooit schrijven,
@@ -26,7 +27,7 @@ import urllib.error
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bronnen  # noqa: E402
 
-VERSIE = "2"
+VERSIE = "3"
 BASISSEN = {"standaard": "/Work All/01. H-A WORK/0 H-A Standaard projects",
             "light": "/Work All/01. H-A WORK/0 H-A Light projects"}
 MAX_BYTES = 80_000_000
@@ -77,8 +78,9 @@ def lijst(cursors, rpc=None):
                     # gemeten 19-10-2026: "H-A Mehdi(Oude projecten voor de facturatie)" (352 BA-plannen) is een
                     # gedeelde map zonder toegang voor de stack; list_folder gaat er niet in
                     uit["geen_toegang"].append({"basis": sleutel, "pad": e.get("path_display") or e.get("path_lower")})
-                elif e.get(".tag") == "deleted" and (is_ba_pdf(e.get("name")) or "." not in (e.get("name") or ".")):
-                    # een weggehaald BA-plan of een weggehaalde map (verwijderd of verplaatst); andere bestanden niet
+                elif e.get(".tag") == "deleted":
+                    # elk weggehaald pad (verwijderd of verplaatst): een map kan een punt in de naam hebben, dus niet
+                    # filteren op de naam (Codex DT11); de Mac haalt weg wat eronder stond
                     uit["wijzigingen"].append({"soort": "weg", "pad": e.get("path_lower") or ""})
             if not antwoord["has_more"]:
                 break
@@ -90,6 +92,10 @@ def lijst(cursors, rpc=None):
     return uit
 
 
+class TeGroot(ValueError):
+    """Het plan is groter dan MAX_BYTES: de Mac meldt het als na te kijken in plaats van het weg te laten (DT07)."""
+
+
 def haal(ident, rpc=None, download=None):
     """De inhoud van een BA-plan, na controle dat het een BA_*.pdf onder een projectmap is."""
     rpc, download = rpc or bronnen._rpc, download or bronnen.download
@@ -99,7 +105,7 @@ def haal(ident, rpc=None, download=None):
     if not meta or meta.get(".tag") != "file" or not is_ba_pdf(meta.get("name")) or not onder_basis(meta.get("path_lower")):
         raise PermissionError("geen BA-plan in de projectmappen")
     if (meta.get("size") or 0) > MAX_BYTES:
-        raise ValueError("bestand groter dan de grens")
+        raise TeGroot("bestand groter dan de grens")
     return download(meta["path_lower"], maximum=MAX_BYTES)
 
 
@@ -118,6 +124,9 @@ def main(argv):
     if argv[:1] == ["haal"] and len(argv) == 2:
         try:
             data = haal(argv[1])
+        except TeGroot as e:
+            print(f"{type(e).__name__}: {e}", file=sys.stderr)
+            return 5          # te groot: de Mac meldt het als na te kijken
         except (ValueError, PermissionError) as e:
             print(f"{type(e).__name__}: {e}", file=sys.stderr)
             return 4          # geen BA-plan (meer) onder de projectmappen: de Mac schrapt het uit zijn wachtrij
