@@ -1548,6 +1548,14 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
   niets lezen/wissen) en de bucket ruimt zelf op (lifecycle 30 dagen). Vereist awscli +
   gnupg + `aws configure`; terugzetten
   met `pg_restore` (voorbeeld in de scriptkop). Off-site kopie (S3) is een open punt.
+- **Pipedrive-backup (sinds 19-10-2026):** `pipedrive-backup/backup.py` haalt elke
+  nacht alle gegevens van de vijf Pipedrive-administraties op (deals ook verwijderd en
+  gearchiveerd, leads, personen, organisaties, activiteiten, notities, producten,
+  bestanden, mailthreads, velden, ...). VM 01:30 UTC: JSON + Excel in
+  `~/backups/pipedrive/` en GPG-versleuteld naar `s3://$S3_BACKUP_BUCKET/pipedrive/`.
+  Linux-pc 02:00 UTC: hetzelfde plus alle bijlagen (ca. 85 GB, past niet op de VM).
+  Bewaking: Kuma-push 62/63 en `laatst-gelukt` in `scripts/gezondheid.py`. Details,
+  API-budget en terugzetten: `pipedrive-backup/README.md`.
 
 ### 14.2 Organisatie-dashboard (`organisatie.globaal.be`) - medewerkers + firma's
 > Het oude adres `medewerkers.globaal.be` blijft werken via een nginx-**301** naar

@@ -3,6 +3,18 @@
 > Parkeerlijst van afgesproken maar nog niet gebouwde zaken. Bron: Zoom-meetings
 > 2026-07-01 t/m 2026-07-03 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
 
+## Pipedrive-backup (19-10-2026)
+
+- [x] Nachtelijke backup van alle vijf administraties: VM + S3 (gegevens) en
+      Linux-pc (gegevens + bijlagen), zie `pipedrive-backup/README.md`.
+- [ ] Eerste volledige binnenhaal van de bijlagen nakijken: H-Architects
+      (48.600 bestanden) duurt door het API-budget ongeveer twee weken, UNABO
+      ongeveer een week. Klaar als `uitgesteld` in het manifest 0 is.
+- [ ] Uptime-Kuma heeft geen meldkanaal: monitors 62/63 worden rood, maar
+      niemand krijgt een bericht.
+- [ ] Eventueel: wijzigingsgeschiedenis per record incrementeel meenemen
+      (alleen records met een nieuwe `update_time`, 20 tokens per record).
+
 ## Werfverslagadapter v2.0 (14-10-2026)
 
 - [x] Bronwerk: getypeerde werfopdrachten, claim vóór uitvoering, revisie- en

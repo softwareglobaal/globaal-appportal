@@ -59,6 +59,10 @@ PROCES_CHECKS = [
      "log": "/home/ubuntu/ontwikkeling-verzamel.log", "max_uur": 3},
     {"naam": "db-backup (dagelijks 03:15)",
      "log": "/home/ubuntu/backups/backup.log", "max_uur": 27},
+    # Dit bestand wordt alleen bij een GESLAAGDE run geraakt (niet het log),
+    # zodat een falende Pipedrive-backup hier ook als stil zichtbaar wordt.
+    {"naam": "pipedrive-backup (dagelijks 01:30)",
+     "log": "/home/ubuntu/backups/pipedrive/laatst-gelukt", "max_uur": 27},
     {"naam": "hr-ververs (weekdagen 05:20)",
      "log": "/home/ubuntu/hr-ververs.log", "max_uur": 75},
     {"naam": "sync-sales (weekdagen 06:45)",
