@@ -33,6 +33,7 @@ import postvak  # noqa: E402
 NAAM = "mail-regisseur"
 BRUSSEL = ZoneInfo("Europe/Brussels")
 MOMENTEN = ("08:00", "12:30", "17:00")
+BELVENSTER_MIN = 15  # bellen alleen zo kort na een vast moment, en nooit bij --nu (resultaattoets 19-10-2026, C2)
 STAAT = os.path.expanduser("~/appportal/mijnagents-data/mail-regisseur.json")
 UIT = os.path.expanduser("~/appportal/mijnagents-data/export/Mailregisseur")  # komt via de Mac-sync in Data uit Mehdi
 VOLGORDE = {"hoog": 0, "actie": 1, "midden": 2}
@@ -51,6 +52,16 @@ def moment(nu, staat):
         if t <= nu and (nu - t).total_seconds() < 90 * 60:
             return "" if staat.get(nu.date().isoformat(), {}).get(m) else m
     return ""
+
+
+def mag_bellen(nu, staat, forceer=False):
+    """Mag deze ronde De Bode laten bellen? Alleen een gewone ronde (geen --nu) op een werkdag, binnen een kwartier na
+    08:00, 12:30 of 17:00. Een ronde om 18:29 hoort nog bij het moment van 17:00 voor het overzicht, maar belt niet."""
+    m = moment(nu, staat)
+    if forceer or not m:
+        return False
+    uur, minuut = map(int, m.split(":"))
+    return (nu - nu.replace(hour=uur, minute=minuut, second=0, microsecond=0)).total_seconds() < BELVENSTER_MIN * 60
 
 
 def punten(open_punten, cfg):
@@ -125,8 +136,8 @@ def main():
         staat = json.load(open(STAAT))
     except (OSError, ValueError):
         staat = {}
-    echt = moment(nu, staat)  # een van mijn vaste momenten op een werkdag: alleen dan laat ik bellen
-    m = echt or (nu.strftime("%H:%M") if (forceer or droog) else "")
+    echt = mag_bellen(nu, staat, forceer)  # alleen dan laat ik bellen
+    m = moment(nu, staat) or (nu.strftime("%H:%M") if (forceer or droog) else "")
     if not m:
         return
     if droog:

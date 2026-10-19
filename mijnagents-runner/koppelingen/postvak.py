@@ -139,19 +139,34 @@ def mappen_van(adres):
         return ["INBOX"]
 
 
-def koppen_mappen(adres, mappen, sinds, ag=None, plafond=1000):
-    """Koppen uit meerdere mappen; een map die niet bestaat of niet leesbaar is, wordt overgeslagen en gelogd."""
+def koppen_mappen(adres, mappen, sinds, ag=None, plafond=1000, fouten=None):
+    """Koppen uit meerdere mappen; een map die niet bestaat of niet leesbaar is, wordt overgeslagen en gelogd. Wat niet
+    volledig gelezen werd (onleesbaar, of het plafond bereikt), komt in `fouten`."""
     uit, gelukt = [], 0
     for m in mappen:
         try:
-            uit += [dict(b, map_=m) for b in koppen(adres, m, sinds=sinds, plafond=plafond)]
+            deel = koppen(adres, m, sinds=sinds, plafond=plafond)
+            uit += [dict(b, map_=m) for b in deel]
             gelukt += 1
+            if fouten is not None and len(deel) >= plafond:
+                fouten.append(f"{adres} {m}: meer dan {plafond} berichten")
         except Exception as e:  # noqa: BLE001
+            if fouten is not None:
+                fouten.append(f"{adres} {m}: {type(e).__name__}")
             if ag:
                 ag.log("mappen", "bron", f"{adres} {m} niet leesbaar: {type(e).__name__}")
     if not gelukt:
         raise LookupError(f"geen enkele map van {adres} leesbaar")
     return uit
+
+
+def mapnamen(mb):
+    """De mappen van een postvak in kleine letters (alleen lezen); None voor een bestand van de Mac."""
+    if mb.get("bron"):
+        return None
+    _, imapbron = _postbus()
+    with imapbron._Sessie(mb) as M:
+        return {n.lower() for _, n in imapbron._lijst_mappen(M)}
 
 
 def _postbus():
@@ -441,13 +456,19 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
             onvolledig.append(f"{adres} staat niet in de postbus")
             continue
         gelezen = False
+        try:
+            bestaand = mapnamen(mb)
+        except Exception as e:  # noqa: BLE001
+            onvolledig.append(f"{adres}: mappenlijst niet leesbaar ({type(e).__name__})")
+            continue
         for m in VERZONDEN:
-            if mb.get("mappen") and m not in mb["mappen"]:
-                continue
+            if (mb.get("mappen") and m not in mb["mappen"]) or (bestaand is not None and m.lower() not in bestaand):
+                continue  # niet elk postvak heeft elke variant van Verzonden
             try:
                 deel = koppen(adres, m, sinds=(nu - timedelta(days=BEKEND_DAGEN)).date().isoformat(), plafond=VERZONDEN_PLAFOND)
-            except Exception:  # noqa: BLE001
-                continue  # niet elk postvak heeft elke variant van Verzonden
+            except Exception as e:  # noqa: BLE001
+                onvolledig.append(f"{adres} {m}: bestaat maar is niet leesbaar ({type(e).__name__})")  # resultaattoets K2
+                continue
             gelezen = True
             verzonden += deel
             if len(deel) >= VERZONDEN_PLAFOND:
@@ -462,7 +483,7 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
     tel["verzonden_gelezen"], tel["bekende_contacten"] = len(verzonden), len(bekend)
     tel["verzonden_volledig"] = not onvolledig
     index = antwoord_index(verzonden)
-    rijen, alle = [], []
+    rijen, alle, volledig = [], [], set()
     for adres in cfg["postvakken"]:
         mb = postvak(adres)
         if not mb:
@@ -471,8 +492,11 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
         oud = bron_uren_oud(mb, nu)
         if mb.get("bron") and (oud is None or oud > BRON_VERS_UREN):
             r.nood(f"De kopie van {adres} van de Mac is niet vers: de Mac slaapt, of Mail staat uit", wie="mehdi")
+        fouten = []
         try:
-            berichten = koppen_mappen(adres, mappen_van(adres), sinds, ag)
+            berichten = koppen_mappen(adres, mappen_van(adres), sinds, ag, fouten=fouten)
+            if not fouten and not (mb.get("bron") and (oud is None or oud > BRON_VERS_UREN)):
+                volledig.add(adres.lower())
         except Exception as e:  # noqa: BLE001
             r.nood(f"{adres} niet leesbaar via de postbus", wie="claude-code")
             ag.log("inbox", "bron", f"{adres}: {type(e).__name__}: {str(e)[:120]}")
@@ -485,8 +509,8 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
                 afwezig.setdefault((b.get("van") or "").lower(), []).append((_datum(b), b.get("onderwerp") or ""))
         for b in berichten:
             d = _datum(b)
-            if not d:
-                continue
+            if not d or not (b.get("message_id") or b.get("uid")):
+                continue  # zonder datum of zonder sleutel kan ik het niet volgen (resultaattoets K5)
             regel = regel_voor(regels, adres, b.get("van"))
             soort, waarom = trieer(b, eigen, bekend, regel)
             ond = schoon(b.get("onderwerp"))
@@ -515,17 +539,24 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
             if d >= nu - timedelta(days=1):
                 tel[soort] += 1
                 if soort in ("hoog", "midden", "actie"):
-                    rijen.append({"uniek": f"mail:{(b.get('message_id') or f'{adres}:{b['uid']}')[:150]}",
+                    sleutel = b.get("message_id") or f"{adres}:{b.get('uid')}"
+                    rijen.append({"uniek": f"mail:{sleutel[:150]}",
                                   "datum": d.strftime("%Y-%m-%d"), "start": d.strftime("%H:%M"), "minuten": 0,
                                   "personen": (b.get("van_naam") or b.get("van") or "")[:80], "bedrijf": _domein(b.get("van", "")),
                                   "afdeling": cfg.get("afdeling", ""), "thema": ond[:90], "project": "", "prive": 0,
                                   "zekerheid": "middel", "waarom": f"{soort}; {waarom}", "archief": "", "link": "",
                                   "opgenomen_door": adres, "bron": "mail"})
     # Een open punt ouder dan mijn venster: komt er nog een antwoord, dan sluit het ook (ontwerptoets 19-10-2026, Codex O4).
+    # Een open punt binnen mijn venster dat ik niet meer zie terwijl ik het postvak volledig las, is verplaatst of
+    # verwijderd: dan 'verdwenen', zichtbaar bij Afgesloten met Toch open (resultaattoets 19-10-2026, K4, 2-1).
     mijn = {a.lower() for a in cfg["postvakken"]}
     gezien = {a["uniek"] for a in alle}
     for p in oude or []:
-        if p.get("uniek") in gezien or (p.get("postvak") or "").lower() not in mijn or (p.get("datum_iso") or "") >= sinds:
+        if p.get("uniek") in gezien or (p.get("postvak") or "").lower() not in mijn:
+            continue
+        if (p.get("datum_iso") or "") >= sinds:
+            if (p.get("postvak") or "").lower() in volledig and p.get("soort") in ("hoog", "midden", "actie"):
+                alle.append(_rij_van_punt(p, naam, "verdwenen", werkdagen_tussen(_datum({"datum": p["datum_iso"]}) or nu, nu)))
             continue
         try:
             d = datetime.fromisoformat(p["datum_iso"]).astimezone(BRUSSEL)
@@ -535,14 +566,7 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
                                                    "onderwerp": p.get("onderwerp")}, d, index)
         if opvolging == "open" or p.get("soort") not in ("hoog", "midden"):
             continue
-        alle.append({"uniek": p["uniek"], "wacht": naam, "postvak": p["postvak"], "map": p.get("map") or "",
-                     "datum": p["datum_iso"], "van": p.get("van") or "", "van_naam": p.get("van_naam") or "",
-                     "onderwerp": p.get("onderwerp") or "", "soort": p["soort"], "waarom": p.get("waarom") or "",
-                     "mailinglijst": 0, "beantwoord": 1 if opvolging in ("beantwoord", "doorgezet") else 0,
-                     "message_id": p.get("message_id") or "", "opvolging": opvolging, "antwoord_door": door[:120],
-                     "antwoord_ts": wanneer, "antwoord_naar": naar[:120], "stap": stap(p["soort"], opvolging, door, wanneer, naar),
-                     "dringend": 1 if p.get("dringend") else 0, "werkdagen": werkdagen_tussen(d, nu), "regel": "",
-                     "auto_opruimen": ""})
+        alle.append(_rij_van_punt(p, naam, opvolging, werkdagen_tussen(d, nu), door, wanneer, naar))
     if tel["verzonden_volledig"]:
         for a in rommel_kandidaten(alle, eigen, bekend, veilig):
             a["auto_opruimen"] = "kandidaat"
@@ -551,6 +575,17 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
     tel["open"] = len(items)
     tel["rommel_kandidaten"] = sum(1 for a in alle if a["auto_opruimen"])
     return items, tel, rijen, alle
+
+
+def _rij_van_punt(p, naam, opvolging, wacht, door="", wanneer="", naar=""):
+    """Een rij voor het bord uit een punt dat het bord gaf (/api/mail/open): alleen de opvolging verandert."""
+    return {"uniek": p["uniek"], "wacht": naam, "postvak": p["postvak"], "map": p.get("map") or "",
+            "datum": p["datum_iso"], "van": p.get("van") or "", "van_naam": p.get("van_naam") or "",
+            "onderwerp": p.get("onderwerp") or "", "soort": p["soort"], "waarom": p.get("waarom") or "",
+            "mailinglijst": 0, "beantwoord": 1 if opvolging in ("beantwoord", "doorgezet") else 0,
+            "message_id": p.get("message_id") or "", "opvolging": opvolging, "antwoord_door": door[:120],
+            "antwoord_ts": wanneer, "antwoord_naar": naar[:120], "stap": stap(p["soort"], opvolging, door, wanneer, naar),
+            "dringend": 1 if p.get("dringend") else 0, "werkdagen": wacht, "regel": "", "auto_opruimen": ""}
 
 
 STAP = {"actie": "nakijken en regelen (automatisch bericht, geen antwoord mogelijk)",
@@ -577,6 +612,8 @@ def stap(soort, opvolging, door="", wanneer="", naar=""):
         return f"opvolgen bij {naar or 'wie het kreeg'}"
     if opvolging == "wacht":
         return "nog geen werkdag oud; komt op de lijst als er morgen geen antwoord is"
+    if opvolging == "verdwenen":
+        return "niet meer in de mappen die ik lees (verplaatst of verwijderd); moet het toch opgevolgd worden, klik Toch open"
     return ""
 
 
@@ -737,11 +774,12 @@ def gmailnaam(mb, mapnaam):
     return mapnaam
 
 
-def sorteer(mb, regelpad, nu, dagen=SORTEER_DAGEN, doe=True):
+def sorteer(mb, regelpad, nu, dagen=SORTEER_DAGEN, doe=True, houden=frozenset()):
     """Past het regelbestand toe op de INBOX, zoals sorteren.py --sinds 3d --nieuwe-reclame --doe op de Mac: de nieuwe
     mail van de laatste dagen, en wat in INBOX ouder is dan een jaar naar het jaararchief. Alleen UID MOVE: niets
     verwijderd, niets als gelezen gemarkeerd. Alleen als de postbus dit postvak laat schrijven.
     doe=False: alleen tonen wat er zou gebeuren (ook zonder schrijfrecht). dagen=None: de hele INBOX (eenmalig opruimen).
+    houden: afzenders die Mehdi op /mail terugzette of op Niet opruimen zette; die gaan nooit naar Opgeruimd (19-10-2026).
     Geeft [(message_id, afzender, onderwerp, naar, reden)]."""
     if not mb or mb.get("bron") or (doe and not mb.get("schrijven")) or not regelpad or not os.path.exists(regelpad):
         return []
@@ -777,6 +815,8 @@ def sorteer(mb, regelpad, nu, dagen=SORTEER_DAGEN, doe=True):
                 rij = {"addr": adres.lower(), "name": naam, "subject": imapbron._kop(kop.get("Subject"))[:120],
                        "datum": datum, "unsub": bool(kop.get("List-Unsubscribe"))}
                 doel, reden = s.bestemming(rij, regels, True, grens)
+                if doel and "opgeruimd" in doel.lower() and any(past(rij["addr"], h) for h in houden):
+                    doel = None
                 if doel:
                     doel = gmailnaam(mb, doel)
                     per_doel.setdefault(doel, []).append(m.group(1).decode())
@@ -912,8 +952,9 @@ def werk(naam, ag, r):
             r.nood(f"{adres} heeft sorteerregels, maar de postbus laat dit postvak niet schrijven", wie="mehdi")
             continue
         r.bron(os.path.basename(pad), open(pad, encoding="utf-8").read())
+        houden = frozenset(wie for (pv, wie), actie in regels.items() if actie == "houden" and pv in (adres.lower(), "*"))
         try:
-            for mid, van, ond, naar, reden in sorteer(mb, pad, nu):
+            for mid, van, ond, naar, reden in sorteer(mb, pad, nu, houden=houden):
                 gesorteerd.append(f"{van} | {ond[:70]} -> {naar} ({reden})")
                 verplaatst.append({"uniek": f"{adres}:{mid}", "naar": naar})
         except Exception as e:  # noqa: BLE001

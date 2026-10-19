@@ -576,7 +576,7 @@ MAIL_RUIS = ("melding", "koud", "rommel", "verdacht")
 MAIL_ACTIES = {"belangrijk": "Belangrijk", "ruis": "Ruis (tellen, niet tonen)", "opruimen": "Opruimen",
                "houden": "Nooit automatisch opruimen"}
 MAIL_OPEN = ("open", "onzeker")             # opvolging van de wacht die openstaat, zolang Mehdi niets besliste
-MAIL_BESLUITEN = ("afgehandeld", "doorgezet", "ruis")
+MAIL_BESLUITEN = ("afgehandeld", "doorgezet", "ruis", "open")   # open: Toch open, ook als de wacht het afsloot
 MAIL_PERIODES = {"vandaag": ("Vandaag", 0), "7": ("7 dagen", 6), "30": ("30 dagen", 29)}
 # Een regel op een heel domein kan hier niet: gratis maildiensten (dan raak je iedereen) en de eigen groep.
 MAIL_GEEN_DOMEIN = ("gmail.com", "googlemail.com", "hotmail.com", "hotmail.be", "outlook.com", "outlook.be", "live.com",
@@ -628,15 +628,30 @@ def _mail_tabellen(conn):
     kol = {r[1] for r in conn.execute("PRAGMA table_info(mailbericht)").fetchall()}
     if "lijst" in kol and "mailinglijst" not in kol:
         # 'lijst' betekende mailinglijst (een kop List-Unsubscribe), niet de opvolglijst (19-10-2026).
-        conn.execute("ALTER TABLE mailbericht RENAME COLUMN lijst TO mailinglijst")
-    for k, soort in (("naar", "TEXT DEFAULT ''"),            # waar de wacht het naartoe sorteerde
+        try:
+            conn.execute("ALTER TABLE mailbericht RENAME COLUMN lijst TO mailinglijst")
+        except sqlite3.OperationalError as e:  # de andere gunicorn-werker was net eerst
+            if "no such column" not in str(e) and "duplicate column" not in str(e):
+                raise
+    nieuw = (("naar", "TEXT DEFAULT ''"),                    # waar de wacht het naartoe sorteerde
                      ("message_id", "TEXT DEFAULT ''"), ("opvolging", "TEXT DEFAULT ''"), ("antwoord_door", "TEXT DEFAULT ''"),
                      ("antwoord_ts", "TEXT DEFAULT ''"), ("antwoord_naar", "TEXT DEFAULT ''"), ("stap", "TEXT DEFAULT ''"),
                      ("dringend", "INTEGER DEFAULT 0"), ("besluit", "TEXT DEFAULT ''"), ("besluit_door", "TEXT DEFAULT ''"),
                      ("besluit_ts", "TEXT DEFAULT ''"), ("auto_opruimen", "TEXT DEFAULT ''"), ("terug", "INTEGER DEFAULT 0"),
-                     ("klaarzet_id", "INTEGER")):
-        if k not in kol:
-            conn.execute(f"ALTER TABLE mailbericht ADD COLUMN {k} {soort}")
+             ("klaarzet_id", "INTEGER"))
+    if any(k not in kol for k, _ in nieuw):
+        # Twee gunicorn-werkers kunnen dit tegelijk zien: onder een slot, en daarna de kolommen opnieuw lezen
+        # (resultaattoets 19-10-2026, C4).
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            kol = {r[1] for r in conn.execute("PRAGMA table_info(mailbericht)").fetchall()}
+            for k, soort in nieuw:
+                if k not in kol:
+                    conn.execute(f"ALTER TABLE mailbericht ADD COLUMN {k} {soort}")
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
     conn.execute("CREATE INDEX IF NOT EXISTS mailbericht_open ON mailbericht(opvolging, besluit)")
 
 
@@ -645,18 +660,23 @@ def _mail_overgang(conn):
     keer, in een transactie, via eenmalig_mail_een_bron.py (ontwerptoets 19-10-2026). Idempotent: elk item dat nog klaar staat,
     wordt open in mailbericht en daarna opgepakt; een open punt ouder dan het venster van de wachten blijft zo open (niets
     vergeten). Het id van elk item, ook van een opgepakt, gaat naar klaarzet_id, zodat De Mailregisseur voor een bericht
-    waarvoor De Bode al belde dezelfde oproepsleutel houdt (mailoproep:<id>) en niet opnieuw belt."""
+    waarvoor De Bode al belde dezelfde oproepsleutel houdt (mailoproep:<id>) en niet opnieuw belt.
+    Geeft de ids van items die ze niet kan plaatsen (onleesbare inhoud, geen postvak): die blijven klaar staan en worden
+    gemeld, nooit stil weggelaten (resultaattoets 19-10-2026, K3)."""
     try:
         items = conn.execute("SELECT * FROM klaarzet WHERE voor='mail-regisseur' ORDER BY id").fetchall()
     except sqlite3.OperationalError:
-        return  # nog geen klaarzet-tabel
+        return []  # nog geen klaarzet-tabel
+    onplaatsbaar = []
     for it in items:
         try:
             i = json.loads(it["inhoud"] or "{}")
         except ValueError:
-            continue
-        pv, delen = (i.get("postvak") or "").lower(), (it["uniek"] or "").split(":", 2)
-        if not pv or len(delen) < 3:
+            i = None
+        pv, delen = ((i or {}).get("postvak") or "").lower(), (it["uniek"] or "").split(":", 2)
+        if not isinstance(i, dict) or not pv or len(delen) < 3:
+            if it["status"] == "klaar":
+                onplaatsbaar.append(it["id"])
             continue
         mid = delen[2]
         uniek = (mid if mid.lower().startswith(pv + ":") else f"{pv}:{mid}")[:250]
@@ -685,6 +705,7 @@ def _mail_overgang(conn):
              1 if i.get("dringend") else 0, it["id"]))
         conn.execute("UPDATE klaarzet SET status='opgepakt', opgepakt_door=?, opgepakt_ts=? WHERE id=?",
                      ("mail: overgezet naar mailbericht (een bron, 19-10-2026)", nu(), it["id"]))
+    return onplaatsbaar
 
 
 @app.route("/api/mail", methods=["POST"])
@@ -818,10 +839,13 @@ def _mail_status(r):
         return f"doorgezet (aangeduid door {r['besluit_door'] or 'Mehdi'} op {_brussel(r['besluit_ts'])})"
     if b == "ruis":
         return "ruis"
+    if b == "open":
+        return f"open (weer opengezet door {r['besluit_door'] or 'Mehdi'} op {_brussel(r['besluit_ts'])})"
     return {"open": "open", "onzeker": f"mogelijk beantwoord ({door or 'onbekend'}, {wanneer}), nakijken",
             "beantwoord": f"beantwoord door {door} op {wanneer}",
             "doorgezet": f"doorgezet naar {r['antwoord_naar'] or '?'} door {door} op {wanneer}",
             "wacht": "nieuw, nog geen werkdag", "verlopen": "verlopen (automatisch bericht, ouder dan 7 dagen)",
+            "verdwenen": "niet meer in het postvak (verplaatst of verwijderd)",
             "geen": "geen opvolging"}.get(o, o or "nog niet beoordeeld")
 
 
@@ -844,9 +868,9 @@ def _mail_volgorde(p):
 
 
 def _mail_open(conn, wacht="", postvak=""):
-    """De enige telling van wat openstaat: geen besluit van Mehdi, en de wacht zegt open of onzeker. /mail, De
-    Mailregisseur, zijn 08:00-bericht en het werkverslag van de wachten lezen alleen dit (test_mail.py)."""
-    w, a = f"besluit='' AND opvolging IN ({','.join('?' * len(MAIL_OPEN))})", list(MAIL_OPEN)
+    """De enige telling van wat openstaat: geen besluit van Mehdi en de wacht zegt open of onzeker, of Mehdi zette het
+    weer open. /mail, De Mailregisseur, zijn 08:00-bericht en het werkverslag van de wachten lezen alleen dit (test_mail.py)."""
+    w, a = f"((besluit='' AND opvolging IN ({','.join('?' * len(MAIL_OPEN))})) OR besluit='open')", list(MAIL_OPEN)
     if wacht:
         w += " AND wacht=?"
         a.append(wacht)
@@ -935,7 +959,8 @@ def mail_pagina():
     # wat verliep (een automatisch bericht ouder dan 7 dagen), zodat niets stil verdwijnt (ontwerptoets, Claude O6).
     # Een actie verloopt pas na 7 dagen: die toon ik als ze in de periode verliep, niet als ze erin binnenkwam.
     verliep = (vandaag - timedelta(days=MAIL_PERIODES[periode][1] + 7)).isoformat()
-    w, a = ("soort IN ('hoog','midden','actie') AND ((dag>=? AND (besluit<>'' OR opvolging IN ('beantwoord','doorgezet'))) "
+    w, a = ("soort IN ('hoog','midden','actie') AND ((dag>=? AND (besluit IN ('afgehandeld','doorgezet','ruis') "
+            "OR (besluit='' AND opvolging IN ('beantwoord','doorgezet','verdwenen')))) "
             "OR (dag>=? AND opvolging='verlopen' AND besluit=''))", [van_dag, verliep])
     if postvak:
         w += " AND postvak=?"

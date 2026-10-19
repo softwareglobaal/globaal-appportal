@@ -216,6 +216,46 @@ def test_beantwoord_in_de_ronde_en_oude_punten():
     assert tel["verzonden_volledig"]
 
 
+def test_verdwenen_en_zonder_sleutel():
+    """Resultaattoets 19-10-2026: een open punt binnen het venster dat niet meer in het volledig gelezen postvak staat, wordt
+    'verdwenen' (K4); een bericht zonder Message-ID en zonder uid wordt overgeslagen (K5)."""
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")
+    weg = {"uniek": "proef@h-architects.be:<weg@x>", "postvak": "proef@h-architects.be", "van": "klant@bouwheer.be",
+           "onderwerp": "Verplaatst door Mehdi", "datum_iso": "2026-10-14T10:00:00+02:00", "soort": "midden",
+           "message_id": "<weg@x>"}
+    alle, items, tel, _ = _ronde([_in(1, "klant@bouwheer.be", "Nog hier", "2026-10-14T10:00:00+02:00"),
+                                  dict(_in(2, "x@kbc.be", "Zonder sleutel", "2026-10-14T10:00:00+02:00"), uid=None, message_id="")],
+                                 nu, oude=[weg])
+    assert alle["Verplaatst door Mehdi"]["opvolging"] == "verdwenen"
+    assert "Zonder sleutel" not in alle
+    assert "Verplaatst door Mehdi" not in [i["onderwerp"] for i in items], "verdwenen telt niet als open"
+
+
+def test_een_kapotte_verzonden_map_is_onvolledig():
+    """Resultaattoets K2: een map Verzonden die bestaat maar niet te lezen is, maakt de lezing onvolledig."""
+    oud_koppen, oud_postvak, oud_namen = postvak.koppen, postvak.postvak, postvak.mapnamen
+    def koppen(adres, m, sinds=None, plafond=1000):
+        if m == "INBOX.Sent":
+            raise OSError("time-out")
+        return []
+    postvak.koppen = koppen
+    postvak.postvak = lambda a: {"adres": a}
+    postvak.mapnamen = lambda mb: {"inbox", "inbox.sent"}
+    try:
+        import json
+        import tempfile
+        d = tempfile.mkdtemp()
+        json.dump({"mail-proef": {"postvakken": ["p@h-architects.be"], "antwoord_vanuit": [], "eigen_domeinen": []}},
+                  open(os.path.join(d, "mailwachten.json"), "w"))
+        oud = postvak.WACHTEN
+        postvak.WACHTEN = os.path.join(d, "mailwachten.json")
+        r = postvak._Droog()
+        _, tel, _, _ = postvak.ronde("mail-proef", postvak._DroogAgent(), r, datetime.fromisoformat("2026-10-19T15:00:00+02:00"))
+    finally:
+        postvak.koppen, postvak.postvak, postvak.mapnamen, postvak.WACHTEN = oud_koppen, oud_postvak, oud_namen, oud
+    assert not tel["verzonden_volledig"] and any("niet volledig" in t for t, _ in r.noden)
+
+
 def test_rommel_naar_opgeruimd_alleen_met_exacte_domeinen():
     """19-10-2026: alleen rommel, met een exacte domeinvergelijking; 'ing.be' zat ooit in valoprojectontwikkeling.be."""
     def r(van, mid, soort="rommel", **k):
@@ -281,6 +321,10 @@ def test_de_mailregisseur_leest_dezelfde_lijst():
     assert M.moment(datetime.fromisoformat("2026-10-19T22:00:00+02:00"), {}) == "", "een ronde om 22:00 is geen moment"
     assert M.moment(datetime.fromisoformat("2026-10-19T08:05:00+02:00"), {}) == "08:00"
     assert M.moment(datetime.fromisoformat("2026-10-18T08:05:00+02:00"), {}) == "", "zondag"
+    assert M.mag_bellen(datetime.fromisoformat("2026-10-19T08:05:00+02:00"), {})
+    assert not M.mag_bellen(datetime.fromisoformat("2026-10-19T08:05:00+02:00"), {}, forceer=True), "--nu belt nooit"
+    assert not M.mag_bellen(datetime.fromisoformat("2026-10-19T18:29:00+02:00"), {}), "18:29 hoort bij 17:00 maar belt niet"
+    assert not M.mag_bellen(datetime.fromisoformat("2026-10-19T22:00:00+02:00"), {}, forceer=True)
     bron = open(os.path.join(HIER, "mail_regisseur.py"), encoding="utf-8").read()
     assert 'x.get("dringend") and echt' in bron and "klaargezet_voor(NAAM" not in bron
     dag = open(os.path.join(HIER, "dagbundelaar.py"), encoding="utf-8").read()
@@ -360,6 +404,9 @@ def test_sorteren_door_de_wacht():
         assert pad and os.path.exists(pad), adres
     assert postvak.sorteer({"adres": "x@y.be", "schrijven": False}, postvak.sorteerregels_van("info@h-invest.be"),
                            datetime.now(postvak.BRUSSEL)) == [], "zonder schrijfrecht verplaatst de wacht niets"
+    werk = open(os.path.join(HIER, "koppelingen", "postvak.py"), encoding="utf-8").read()
+    assert 'any(past(rij["addr"], h) for h in houden)' in werk and "sorteer(mb, pad, nu, houden=houden)" in werk, \
+        "wat Mehdi terugzette, zet de sortering niet opnieuw in Opgeruimd"
     assert postvak.gmailnaam({"imap_host": "imap.gmail.com"}, "INBOX.Bank en verzekering") == "Bank en verzekering"
     assert postvak.gmailnaam({"imap_host": "imap.gmail.com"}, "INBOX.Archief.2025") == "Archief/2025"
     assert postvak.gmailnaam({"imap_host": "imap.one.com"}, "INBOX.Opgeruimd") == "INBOX.Opgeruimd"

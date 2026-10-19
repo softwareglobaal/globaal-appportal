@@ -31,8 +31,8 @@ hoog belang eerst en daarna wat het langst wacht. Elk punt krijgt een voorstel: 
   op te volgen is en hoeveel daarvan belangrijk: hetzelfde getal als de tegel Op te volgen op het maildashboard. Niets
   te melden: geen bericht.
 - Bij dringende mail zonder antwoord (deurwaarder, ingebrekestelling, laatste aanmaning, schorsing, tuchtprocedure)
-  vraag ik De Bode Mehdi te bellen, een keer per bericht, alleen op een vast moment (werkdagen 08:00, 12:30, 17:00),
-  nooit bij een ronde met --nu daarbuiten. Een oproep die nog niet gebeld is voor mail die intussen niet meer openstaat,
+  vraag ik De Bode Mehdi te bellen, een keer per bericht, alleen in het kwartier na een vast moment (werkdagen 08:00,
+  12:30, 17:00), en nooit bij een ronde met --nu. Een oproep die nog niet gebeld is voor mail die intussen niet meer openstaat,
   haal ik weg.
 - Het overzicht van de dag staat ook in Dropbox, Data uit Mehdi/Mailregisseur/<datum>.md.
 

@@ -156,6 +156,11 @@ check("na een besluit zakken alle tellingen samen", (antw["open"] + antw_melo["o
 check("afgehandeld staat bij afgesloten met wie", "afgehandeld door mehdi op" in html.split('id="afgesloten"')[1].split("</section>")[0])
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<a@kbc>", "actie": "terug"})
 check("terugzetten maakt het weer open", c.get("/api/mail/open", headers=K).get_json()["aantal"] == 4)
+c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<antw@x>", "actie": "open"})
+check("Toch open zet een door de wacht afgesloten bericht weer op de lijst, ook als de wacht het beantwoord blijft noemen",
+      c.get("/api/mail/open", headers=K).get_json()["aantal"] == 5
+      and "weer opengezet door mehdi" in c.get("/mail", headers=BEHEER).get_data(as_text=True))
+c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<antw@x>", "actie": "terug"})
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "ruis"})
 check("Ruis op een open punt sluit het en zet de afzender op ruis in dat postvak",
       [(x["postvak"], x["wie"], x["actie"]) for x in c.get("/api/mailregels", headers=K).get_json()["regels"]]
@@ -249,29 +254,34 @@ c.post("/api/klaarzet", headers=K, json={"items": [
     punt("opvolgen:mail-mch:<oud@x>", "hoog", "Oud open punt", OUD, dringend=True),
     punt("opvolgen:mail-mch:<gezien@x>", "hoog", "Al gezien", VANDAAG.isoformat()),
     punt("opvolgen:mail-mch:<mehdi@x>", "hoog", "Door Mehdi afgehandeld", VANDAAG.isoformat()),
-    punt("opvolgen:mail-mch:mch@h-architects.be:77", "midden", "Zonder Message-ID", OUD)]})
+    punt("opvolgen:mail-mch:mch@h-architects.be:77", "midden", "Zonder Message-ID", OUD),
+    dict(punt("opvolgen:mail-mch:<kapot@x>", "hoog", "Kapot", OUD), inhoud="geen json")]})
 with A.app.app_context():
     con = A.db()
     kid_oud = con.execute("SELECT id FROM klaarzet WHERE uniek='opvolgen:mail-mch:<oud@x>'").fetchone()[0]
     kid_mehdi = con.execute("SELECT id FROM klaarzet WHERE uniek='opvolgen:mail-mch:<mehdi@x>'").fetchone()[0]
+    kid_kapot = con.execute("SELECT id FROM klaarzet WHERE uniek='opvolgen:mail-mch:<kapot@x>'").fetchone()[0]
     con.execute("UPDATE klaarzet SET status='opgepakt', opgepakt_door='mehdi: afgehandeld op het bord', opgepakt_ts=? WHERE id=?",
                 (A.nu(), kid_mehdi))
     con.commit()
 check("voor de overgang telt een klaarzet-item niet als open (geen tweede bron)",
       "Oud open punt" not in [p["onderwerp"] for p in c.get("/api/mail/open", headers=K).get_json()["punten"]])
-voor, na, vorige = OVERGANG.overzetten(droog=True)
-check("een droge overgang bewaart niets", vorige is None and
+voor, na, vorige, _ = OVERGANG.overzetten(droog=True)
+with A.app.app_context():
+    _kol = {r[1] for r in A.db().execute("PRAGMA table_info(mailmeta)").fetchall()}
+check("een droge overgang bewaart niets, ook geen merker", not _kol and vorige is None and
       c.get("/api/mail/open", headers=K).get_json()["aantal"] == voor["open in mailbericht (_mail_open)"])
-voor, na, vorige = OVERGANG.overzetten()
+voor, na, vorige, onplaatsbaar = OVERGANG.overzetten()
 punten = {p["onderwerp"]: p for p in c.get("/api/mail/open", headers=K).get_json()["punten"]}
 check("de overgang zet elk open klaarzet-item open in mailbericht, ook ouder dan het venster",
       {"Oud open punt", "Al gezien", "Zonder Message-ID"} <= set(punten), list(punten))
-check("en geen klaarzet-item voor mail-regisseur blijft klaar", na["klaarzet klaar voor mail-regisseur"] == 0, na)
+check("en alleen het kapotte klaarzet-item blijft klaar", na["klaarzet klaar voor mail-regisseur"] == 1, na)
 check("een al gebeld bericht houdt zijn sleutel voor een oproep", punten["Oud open punt"]["klaarzet_id"] == kid_oud)
 check("wat Mehdi op het oude bord afhandelde, blijft afgehandeld",
       "Door Mehdi afgehandeld" not in punten and rij("mch@h-architects.be:<mehdi@x>")["besluit"] == "afgehandeld")
-voor2, na2, vorige2 = OVERGANG.overzetten()
+voor2, na2, vorige2, _ = OVERGANG.overzetten()
 check("de overgang opnieuw draaien verandert niets", na2 == na and vorige2, (na, na2))
+check("een kapot klaarzet-item blokkeert de overgang niet en wordt gemeld", onplaatsbaar == [kid_kapot], onplaatsbaar)
 check("een uniek zonder Message-ID wordt het juiste bericht",
       rij("mch@h-architects.be:77")["onderwerp"] == "Zonder Message-ID")
 

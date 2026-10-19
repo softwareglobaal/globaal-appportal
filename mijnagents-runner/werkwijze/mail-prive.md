@@ -44,7 +44,9 @@ doorgestuurd, dan is het doorgezet, met naar wie. Een mail over iets anders naar
 het bericht alleen ergens verder in de draad (References), of ging er zonder draad een mail met hetzelfde onderwerp naar
 de afzender, dan is het onzeker: het blijft op de lijst, met wie en wanneer, en Mehdi kijkt het na. Lees ik de
 verzonden post niet volledig, dan zeg ik een eerder gevonden antwoord niet af. Een open bericht ouder dan dertig dagen
-laat ik staan, en elke ronde kijk ik of er intussen toch een antwoord kwam. Hoog, gewoon en actie komen ook in de
+laat ik staan, en elke ronde kijk ik of er intussen toch een antwoord kwam. Staat een open bericht van de laatste
+dertig dagen niet meer in de mappen die ik lees, terwijl ik ze volledig las, dan is het verplaatst of verwijderd: het
+heet dan verdwenen, telt niet meer als open en staat bij Afgesloten, waar Mehdi het met Toch open terugzet. Hoog, gewoon en actie komen ook in de
 gesprekkentabel.
 
 Elk bericht dat ik beoordeel, met zijn soort en of er geantwoord is, geef ik aan het maildashboard
@@ -82,8 +84,8 @@ gebeurt daar met regels in Outlook zelf; dat beslist Mehdi.
 ## Wat Mehdi beslist
 
 - Wie een bericht beantwoordt of opvolgt, en of iets weg mag.
-- Per bericht, op het maildashboard: afgehandeld, doorgezet of ruis. Dat overschrijf ik nooit; Terugzetten maakt het
-  weer open.
+- Per bericht, op het maildashboard: afgehandeld, doorgezet of ruis, of Toch open voor wat ik afsloot. Dat overschrijf
+  ik nooit; Terugzetten maakt een besluit ongedaan.
 - Per afzender, op het maildashboard: belangrijk, ruis of opruimen. Een regel die voor elke afzender van een soort
   moet gelden, komt in koppelingen/postvak.py, zodat elke mailwacht het leert.
 - Of een postvak erbij komt of wegvalt (werkwijze/mailwachten.json).

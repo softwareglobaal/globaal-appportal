@@ -41,10 +41,11 @@
   .tabel td.nw{white-space:nowrap}
   .tabel td.naam{min-width:230px}
   .ruisrij .knoppen{flex-wrap:nowrap}
-  .opvolglijst td.stap{color:var(--inkt-zacht);font-size:12.5px;min-width:180px}
-  .opvolglijst td.status{min-width:150px}
+  .opvolglijst td.volgende{color:var(--inkt-zacht);font-size:12.5px;min-width:170px}
+  .opvolglijst td.status{min-width:140px}
   .opvolglijst tr.onzeker td{background:rgba(255,214,140,.12)}
-  .opvolglijst .knoppen{flex-wrap:nowrap}
+  .opvolglijst .knoppen{flex-direction:column;align-items:stretch;gap:4px}
+  .opvolglijst .knoppen button{width:100%}
   @media (max-width:1100px){
     table.stapel thead{display:none}
     table.stapel tr{display:block;border-bottom:1px solid var(--lijn);padding:8px 0}
@@ -144,7 +145,7 @@
         <td><b style="font-weight:600">{{ p['onderwerp'] }}</b><small>{{ p['waarom'] }}</small></td>
         <td class="status">{% if p['opvolging'] == 'onzeker' %}<span class="chip let">{{ p['status'] }}</span>{% else %}{{ p['status'] }}{% endif %}</td>
         <td class="num nw"><span class="chip {{ 'kritiek' if p['werkdagen'] >= 5 else '' }}">{{ p['werkdagen'] }} werkdag{{ '' if p['werkdagen'] == 1 else 'en' }}</span></td>
-        <td class="stap">{{ p['stap'] }}</td>
+        <td class="volgende">{{ p['stap'] }}</td>
         <td><div class="knoppen">
           {% for actie, naam, stijl in (('afgehandeld', 'Afgehandeld', 'knop-donker'), ('doorgezet', 'Doorgezet', 'knop-licht'), ('ruis', 'Ruis', 'knop-stil')) %}
           <form method="post" action="{{ url_for('mail_besluit') }}"{% if actie == 'ruis' %} onsubmit='return confirm({{ (p["van"] ~ " voortaan als ruis tellen in " ~ p["postvak"] ~ "? Er wordt niets verplaatst of verwijderd.")|tojson }})'{% endif %}>
@@ -161,7 +162,7 @@
   </section>
 
   <section class="paneel" id="afgesloten">
-    <div class="kop"><h2>Afgesloten</h2><small>{{ periodes[periode][0]|lower }}: beantwoord, doorgezet, afgehandeld, ruis of verlopen; met wie en wanneer</small></div>
+    <div class="kop"><h2>Afgesloten</h2><small>{{ periodes[periode][0]|lower }}: beantwoord, doorgezet, afgehandeld, ruis, verlopen of niet meer in het postvak; met wie en wanneer</small></div>
     {% if afgesloten %}
     <div class="tabelwrap"><table class="tabel stapel">
       <thead><tr><th>Ontvangen</th><th>Afzender</th><th>Postvak</th><th>Onderwerp</th><th>Status</th><th></th></tr></thead>
@@ -173,10 +174,10 @@
         <td class="nw">{{ p['postvak'] }}</td>
         <td>{{ p['onderwerp'] }}</td>
         <td class="status">{{ p['status'] }}</td>
-        <td>{% if p['besluit'] %}<form method="post" action="{{ url_for('mail_besluit') }}">
-          <input type="hidden" name="uniek" value="{{ p['uniek'] }}"><input type="hidden" name="actie" value="terug">
+        <td><form method="post" action="{{ url_for('mail_besluit') }}">
+          <input type="hidden" name="uniek" value="{{ p['uniek'] }}"><input type="hidden" name="actie" value="{{ 'terug' if p['besluit'] else 'open' }}">
           <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
-          <button class="knop-stil knop-klein">Terugzetten</button></form>{% endif %}</td>
+          <button class="knop-stil knop-klein">{{ 'Terugzetten' if p['besluit'] else 'Toch open' }}</button></form></td>
       </tr>
       {% endfor %}
       </tbody>
