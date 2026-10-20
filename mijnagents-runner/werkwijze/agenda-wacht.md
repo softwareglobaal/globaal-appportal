@@ -1,5 +1,14 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.21 (20-10-2026): een komende eigen zorgafspraak zonder plaats krijgt bij één ondubbelzinnig
+geverifieerd profiel het praktijkadres, ook zonder bronmail en ook na de verhuizing naar privé. Een verborgen merk
+legt de herkomst vast; een latere mail mag die plaats vervangen, maar een handmatige plaats blijft staan en een
+afwijking wordt een open punt. Bij twijfel vraagt de agenda om een adres; een huisbezoek gebruikt nooit het
+praktijkadres en krijgt geen rit. Een buitenafspraak zonder bruikbaar adres krijgt VR op werk, privé of Lara, en
+anders een stabiele nood. Een onleesbaar postvak wordt na twee mislukte rondes over twee uur, of bij een afhankelijke
+zorgafspraak binnen 24 uur direct, een nood voor Mehdi met de herstelstap; hooguit een herhaling na 24 uur.
+Een benoemde fysieke plek zonder huisnummer telt mee voor reistijd; als de kaart de plek niet vindt, volgt een VR-vraag of stabiele nood tot het adres is verbeterd.
+
 Aanvulling v8.20 (19-10-2026): barsten en scheuren ter plaatse krijgen altijd twee uur. Een eigen werkafspraak
 zonder gasten of reeks wordt verlengd als het verlengde stuk vrij is; anders komt een VR-vraag of een bevinding in
 het werkverslag. Een bewust opnieuw ingekorte afspraak met `agendawacht_duur` blijft zo. De uitnodigingsroute mailt
@@ -544,8 +553,12 @@ uit een privébron, en een afspraak die ooit uit Hotmail kwam, blijft privé. Ee
 (gekoppeld, geannuleerd of voorbij), nooit omdat ze buiten het venster van veertien dagen valt. Twee verschillende
 uitnodigingen koppelen nooit, een onbruikbare uitnodiging maakt de dekking gedeeltelijk, en een verplaatste
 reeksinstantie herken ik aan haar oorspronkelijke start. De afspraak zelf zet ik nooit. Is het opgelost, dan zet ik 'Opgelost' op mijn melding;
-weghalen doet Mehdi (wissen mag ik alleen mijn eigen ritten). Een mailbron die langer
-dan 26 uur niet gelezen werd, meldt de zelfcontrole. Geeft Microsoft 'User is authenticated but not connected', dan
+weghalen doet Mehdi (wissen mag ik alleen mijn eigen ritten). Een mislukte volledige lezing bouwt een foutreeks op;
+na twee rondes over minstens twee uur komt een nood voor Mehdi, en direct bij een afhankelijke zorgafspraak binnen
+24 uur. De hersteltekst geeft het complete Mac Terminal commando met het echte postvakadres ingevuld
+en zegt dat Microsoft een code toont waarmee Mehdi zich aanmeldt; het kan ook
+tijdelijk zijn. Na succes begint de foutreeks opnieuw.
+Geeft Microsoft 'User is authenticated but not connected', dan
 probeer ik tot vier keer opnieuw, 15 seconden uit elkaar; lukt het niet, dan blijft de dekking mislukt (FR-131).
 
 Zorgafspraken uit mail (opdracht 'kine en tandarts in de privéagenda' v1.0, 14-10-2026, FR-130 tot FR-133): de enige
@@ -565,10 +578,17 @@ geen verzonnen duur. Voorbij is historisch gemist, ik boek niets terug in het ve
 als de mail via MCH kwam: naar het bord gaan alleen tellingen. `agenda_wacht.py --zorg` doet hetzelfde met de details
 in een privélog op de server.
 
+Een eigen zorgafspraak zonder plaats mag ook zonder mail het adres van precies één geverifieerd profiel van die
+zorgsoort krijgen, of van de ene praktijk die ondubbelzinnig in titel of omschrijving staat. Dat geldt alleen voor
+Mehdi als patiënt en organisator, zonder gasten of reeks. Het private merk `agendawacht_zorgplaats` bevat profiel-id
+en adres-hash; de omschrijving krijgt één bronzin zonder naam of behandelaar. Een latere mail mag alleen een
+overeenkomende gemerkte plaats vervangen. Bij twijfel komt VR, bij huisbezoek geen praktijkadres of rit. Na het
+teruglezen maakt de gewone reistijdroute in dezelfde ronde de ritten.
+
 Na de Codex-controle (ronde 1, A01 tot A08, FR-134 tot FR-138): ik verwerk de mails oudste eerst en een bericht maar
 een keer; twee patiënten op hetzelfde uur blijven twee afspraken; een titel met een zakelijke firmacode (een praktijk
 als klant) is nooit persoonlijke zorg; twee kandidaten op hetzelfde uur zijn een vraag; een annulering zonder tijd ook;
-de nieuwste bevestiging beslist of iets geannuleerd is; de plaats komt alleen uit de mail; na elke schrijfactie lees ik
+de nieuwste bevestiging beslist of iets geannuleerd is; de mailplaats gaat voor een gemerkte profielplaats; na elke schrijfactie lees ik
 terug; en het bordmasker kent ook de ingekorte stukken van privétitels.
 
 Toezeggingen en regelwijzigingen (audit 02-10-2026, FR-98 tot FR-100): wat ik voor later beloof, plant de Regisseur

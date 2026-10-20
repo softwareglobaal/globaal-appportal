@@ -1,7 +1,7 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.40",
- "datum": "19-10-2026",
+ "versie": "3.41",
+ "datum": "20-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
   "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
@@ -3842,6 +3842,48 @@
     "waar": "tests/test_agendagasten.py",
     "tekst": "H1 partner met klant: geen mail, partner stil en voorstel zonder merk"
    },
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-190",
+   "datum": "20-10-2026",
+   "gevonden_door": "Mehdi, driehoeksoverleg 13",
+   "fout": "Een zorgafspraak zonder bronmail bleef zonder plaats.",
+   "gevolg": "Er kwam geen navigeerbaar adres en geen rit.",
+   "waarom_niet_gezien": "De bestaande zorgproeven begonnen bij een ontvangen mail.",
+   "oorzaak": "Het geverifieerde zorgprofiel werd alleen voor herkenning gebruikt.",
+   "soort_oorzaak": "code",
+   "oplossing": "Vul bij een eigen komende zorgafspraak een eenduidige profielplaats in met verborgen herkomstmerk en lees terug.",
+   "grendel": {"soort": "test", "waar": "tests/test_zorg_plaats.py", "tekst": "test_zorg_profieladres_uniek_en_gemerkt"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-191",
+   "datum": "20-10-2026",
+   "gevonden_door": "Mehdi, driehoeksoverleg 13",
+   "fout": "Een buitenafspraak zonder adres bleef stil op privé en Lara.",
+   "gevolg": "Mehdi zag niet in de titel dat hij een adres moest invullen.",
+   "waarom_niet_gezien": "De vraagroute schreef VR alleen op de werkagenda.",
+   "oorzaak": "De kalendergrens sloot eigen privé- en Lara-items uit.",
+   "soort_oorzaak": "code",
+   "oplossing": "Zet VR op schrijfbare eigen items en geef anders een stabiele nood; sluit de vraag na een adres.",
+   "grendel": {"soort": "test", "waar": "tests/test_zorg_plaats.py", "tekst": "test_buiten_zonder_adres_vr_prive_lara_of_nood"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-192",
+   "datum": "20-10-2026",
+   "gevonden_door": "Mehdi, driehoeksoverleg 13",
+   "fout": "Een onleesbaar postvak bereikte Mehdi niet tijdig.",
+   "gevolg": "Een zorgmail kon ontbreken zonder snelle melding met herstelstap.",
+   "waarom_niet_gezien": "De eerdere zelfcontrole wachtte 26 uur en kende geen herstelcommando.",
+   "oorzaak": "Er was geen duurzaam foutreeksgeheugen met meldingsdrempel.",
+   "soort_oorzaak": "code",
+   "oplossing": "Meld na twee mislukte rondes over twee uur, of direct bij een afhankelijke afspraak binnen 24 uur; herhaal hooguit na 24 uur en wis bij succes.",
+   "grendel": {"soort": "test", "waar": "tests/test_zorg_plaats.py", "tekst": "test_mailbron_blijvend_herkoppelen"},
    "controle": [],
    "status": "opgelost"
   }

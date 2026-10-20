@@ -69,7 +69,10 @@ SCHEMA = ("""CREATE TABLE IF NOT EXISTS afspraak (
 # kolommen die later bijkwamen (nacontrole v1.2): een bestaand register krijgt ze erbij, niets gaat verloren
 EXTRA_KOLOMMEN = {"afspraak": {"detail": "TEXT NOT NULL DEFAULT ''", "prive": "INTEGER NOT NULL DEFAULT 0",
                                "melding": "TEXT NOT NULL DEFAULT ''", "zorg": "TEXT NOT NULL DEFAULT ''"},
-                  "leesstand": {"dekking": "TEXT NOT NULL DEFAULT ''"}}
+                  "leesstand": {"dekking": "TEXT NOT NULL DEFAULT ''",
+                                "eerste_fout": "TEXT NOT NULL DEFAULT ''",
+                                "fout_rondes": "INTEGER NOT NULL DEFAULT 0",
+                                "laatste_nood": "TEXT NOT NULL DEFAULT ''"}}
 # Hoe ver terug de lezer de zorgafzenders opvraagt: een bevestiging komt soms maanden vooraf (gemeten: bijna zeven
 # maanden). Goedkoop, want de lezer zoekt op afzender.
 ZORG_DAGEN_TERUG = 300
@@ -361,6 +364,16 @@ def _plaats_netjes(loc):
     return re.sub(r"\b(\d{4}) ([A-Z]{3,})\b", lambda m: f"{m.group(1)} {m.group(2).title()}", loc)
 
 
+def zorg_locatie_is_adres(loc):
+    """Een vrije LOCATION/Waar-zin is geen navigatieadres. Huisbezoek blijft thuis."""
+    loc = (loc or "").strip()
+    if re.search(r"\b(huisbezoek|aan[-\s]+huis|thuis)\b", loc, re.I) or loc.lower().startswith(("http:", "https:")):
+        return False
+    return bool(re.search(r"\b[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{2,60}\s+\d{1,4}[a-zA-Z]?\b", loc)
+                or re.search(r"\b\d{4}\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ -]+\b", loc)
+                or re.fullmatch(r"\s*-?\d+\.\d+\s*,\s*-?\d+\.\d+\s*", loc))
+
+
 def zorg_herken(k, profiel):
     """Lees een mail van een beheerde zorgpraktijk. Geeft None voor een bericht zonder afspraak (een nieuwsbrief),
     anders een dict met gebeurtenis, patient, mehdi, behandelaar, start, einde, locatie, oude_start, ics_uid,
@@ -400,6 +413,8 @@ def zorg_herken(k, profiel):
     if not plaats:
         m = re.search(r"\bWaar:\s*(.+?)\s+(?:Toevoegen|Indien|Google Agenda|$)", tekst)
         plaats = m.group(1) if m else ""
+    if not zorg_locatie_is_adres(plaats):
+        plaats = ""
     m = re.search(r"Pati[eë]nt:\s*(.+?)\s+(?:Uw therapeut|Wanneer|Waar|$)", tekst)
     if m:
         patient = m.group(1).strip()
@@ -641,10 +656,39 @@ def leesstand_zet(mailbox, gelukt, fout="", nu=None, dekking=None):
     with _db() as c:
         c.execute("INSERT OR IGNORE INTO leesstand(mailbox) VALUES(?)", (mailbox,))
         if gelukt:
-            c.execute("UPDATE leesstand SET laatst_gelukt=?, laatste_poging=?, laatste_fout='', dekking='volledig' WHERE mailbox=?",
+            c.execute("UPDATE leesstand SET laatst_gelukt=?, laatste_poging=?, laatste_fout='', dekking='volledig', "
+                      "eerste_fout='', fout_rondes=0, laatste_nood='' WHERE mailbox=?",
                       (nu, nu, mailbox))
         else:
-            c.execute("UPDATE leesstand SET laatste_poging=?, laatste_fout=?, dekking=? WHERE mailbox=?", (nu, fout[:500], dekking, mailbox))
+            oud = c.execute("SELECT eerste_fout, fout_rondes FROM leesstand WHERE mailbox=?", (mailbox,)).fetchone()
+            onleesbaar = dekking == "mislukt"
+            eerste = (oud["eerste_fout"] or nu) if onleesbaar else oud["eerste_fout"]
+            rondes = oud["fout_rondes"] + 1 if onleesbaar else oud["fout_rondes"]
+            c.execute("UPDATE leesstand SET laatste_poging=?, laatste_fout=?, dekking=?, eerste_fout=?, fout_rondes=? "
+                      "WHERE mailbox=?", (nu, fout[:500], dekking, eerste, rondes, mailbox))
+
+
+def mailbron_nood(mailbox, afhankelijk=False, nu=None):
+    """Houd de nood open met dezelfde tekst; na 24 uur geeft een nieuwe tijdstempel een herinnering."""
+    nu = nu or _nu()
+    with _db() as c:
+        st = c.execute("SELECT eerste_fout, fout_rondes, laatste_nood, dekking FROM leesstand WHERE mailbox=?",
+                       (mailbox,)).fetchone()
+        if not st or st["dekking"] != "mislukt" or not st["eerste_fout"]:
+            return None
+        eerste = datetime.fromisoformat(st["eerste_fout"])
+        laatst = datetime.fromisoformat(st["laatste_nood"]) if st["laatste_nood"] else None
+        oud_genoeg = st["fout_rondes"] >= 2 and nu - eerste >= timedelta(hours=2)
+        if not (afhankelijk or oud_genoeg or laatst):
+            return None
+        if not laatst or nu - laatst >= timedelta(hours=24):
+            laatst = nu
+            c.execute("UPDATE leesstand SET laatste_nood=? WHERE mailbox=?", (nu.isoformat(timespec="seconds"), mailbox))
+    return {"tekst": f"Postvak {mailbox} niet te lezen; dit kan ook tijdelijk zijn. "
+                     f"Typ op je Mac in Terminal: `ssh -t globaal 'docker exec -it appportal-app-post-1 "
+                     f"python oauth_koppel.py {mailbox}'`. "
+                     f"Microsoft toont daarna een code; meld je daarmee aan. Melding {laatst:%d-%m-%Y %H:%M}.",
+            "wie": "mehdi"}
 
 
 def leesstand():

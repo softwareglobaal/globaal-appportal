@@ -517,7 +517,7 @@ class Rondeverslag:
         pass
 
 
-def vragen(items):
+def vragen(items, **_kwargs):
     volgorde.append(("stap", "vragen"))
     return 1, 0
 
@@ -528,7 +528,9 @@ def bellen(items):
 
 
 dummy = {"ag": Rondeverslag(), "vragen_in_agenda": vragen, "bel_als_vastgelopen": bellen,
-         "kort_items": [], "items": [], "archief": [], "vandaag": "2026-10-17", "DAG_ARG": None,
+         "kort_items": [], "rit_items": [], "niet_op_kaart": set(),
+         "adres_vraag_noden": lambda _items, **_kwargs: [], "items": [], "archief": [],
+         "vandaag": "2026-10-17", "DAG_ARG": None,
          "geplande_start": lambda: True, "HANDKLEUREN": [], "open_na": [], "ROUTES_GESTOPT": False,
          "fouten": [], "noden": [], "locatiebeweging": SimpleNamespace(kort=lambda x: "", lees=lambda: {}),
          "dagplan": [], "gekoppeld": 0, "niet_conform": [], "onvolledig": []}

@@ -16,6 +16,7 @@ Elke werkdag om 06:30 en daarna elke twee uur:
 Leest alleen. Verandert nooit een afspraak.
 """
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import os
@@ -745,9 +746,10 @@ def _titel_patch_reden(a, nieuw, eigen_rit=False, eigen_zorgverhuis=False, allee
         return "geen zorgverhuizing van werk naar privé"
     # De oude vraagroute zette VR ook op een Calendly-omschrijving. Precies die prefixwijziging
     # blijft mogelijk onder haar bestaande kalender-, gast- en reeksvoorwaarden.
-    vr_alleen = (a.get("kalender") == WERKAGENDA and not a.get("_agendagasten")
-                 and not a.get("_terugkerend") and not a.get("_archief")
-                 and alleen_vr)
+    vr_kalender = (a.get("kalender") == WERKAGENDA or
+                   a.get("kalender") in PRIVE_KALENDERS and a.get("_organisator_zelf") is True)
+    vr_alleen = (vr_kalender and not a.get("_agendagasten") and not a.get("_terugkerend")
+                 and not a.get("_reeks") and not a.get("_archief") and alleen_vr)
     if vr_alleen:
         return ""
     if (a.get("kalender") == WERKAGENDA and oud.startswith("VR ") != nieuw.startswith("VR ")
@@ -2604,6 +2606,104 @@ def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost"):
 # onbekende eindtijd, een andere patiënt of een onzekere wijziging blijft een open punt. Voorbij wordt nooit
 # teruggeboekt. Niets wordt gewist.
 ZORGMERK = "agendawacht_zorg"
+ZORGPLAATSMERK = "agendawacht_zorgplaats"
+ZORGPLAATSZIN = "Adres uit het geverifieerde zorgprofiel (Agendawacht, {dag})"
+
+
+def _zorg_huisbezoek(a):
+    return bool(re.search(r"\b(huisbezoek|aan[-\s]+huis|thuis)\b",
+                          " ".join(str(a.get(k) or "") for k in ("titel", "omschrijving", "locatie")), re.I))
+
+
+def _zorg_profielmerk(p):
+    adres = " ".join((p.get("adres") or "").casefold().split())
+    return f"{p['id']}:{hashlib.sha256(adres.encode()).hexdigest()[:16]}"
+
+
+def _zorgplaats_merk_klopt(a):
+    merk = (a.get("_merk") or {}).get(ZORGPLAATSMERK) or ""
+    adres = " ".join((a.get("locatie") or "").casefold().split())
+    return bool(merk and adres and merk.rpartition(":")[2] == hashlib.sha256(adres.encode()).hexdigest()[:16])
+
+
+def _zorg_profiel_kiezen(a, profielen, nu):
+    """Een gecontroleerd profiel en een eigen patiënt; vrije omschrijving bewijst nooit de herkomst van de plaats."""
+    import mail_afspraken as MA  # noqa: PLC0415
+    if not (a.get("kalender") == PRIVE_AGENDA and a.get("id") and is_zorg_titel(a.get("titel"))
+            and _toekomst(a.get("start"), nu) and not a.get("hele_dag")
+            and not a.get("deelnemers") and not a.get("_agendagasten")
+            and not a.get("_terugkerend") and not a.get("_reeks")
+            and a.get("_organisator_zelf") is True
+            and (a.get("maker") or "").strip().lower() in _eigen_accounts()
+            and not _zorg_huisbezoek(a)):
+        return None
+    t = a.get("titel") or ""
+    soort = "kine" if re.search(r"\bkine\b|kinesi|kinésit", t, re.I) else "tandarts" if re.search(r"tandarts|mondhygi|dentist", t, re.I) else ""
+    def geverifieerd(p):
+        try:
+            return datetime.fromisoformat(str(p.get("geverifieerd") or "")).date() <= nu.date()
+        except ValueError:
+            return False
+    kandidaten = [p for p in profielen if p.get("soort") == soort and p.get("id") and geverifieerd(p)
+                  and p.get("bewijs") and MA.zorg_locatie_is_adres(p.get("adres")) and p.get("patienten")]
+    tekst = MA._plat_tekst(" ".join(str(a.get(k) or "") for k in ("titel", "omschrijving")))
+    expliciet = re.search(r"\b(?:pati[eë]nt|patient)\s*:\s*([^\n,;.]+)",
+                         " ".join(str(a.get(k) or "") for k in ("titel", "omschrijving")), re.I)
+    if expliciet:
+        naam = MA._plat_tekst(expliciet.group(1))
+        kandidaten = [p for p in kandidaten if naam in {MA._plat_tekst(n) for n in p.get("patienten") or []}]
+    if len(kandidaten) == 1:
+        return kandidaten[0]
+    treffers = [p for p in kandidaten if any(re.search(r"(?<!\w)" + re.escape(MA._plat_tekst(naam)) + r"(?!\w)", tekst)
+                for naam in [p.get("naam"), *(p.get("praktijknamen") or [])] if naam and len(MA._plat_tekst(naam)) >= 5)]
+    return treffers[0] if len(treffers) == 1 else None
+
+
+def zorg_profielplaatsen_zetten(items, tok, nu=None, profielen=None):
+    """Vult een ontbrekende privé-zorgplaats uit precies één geverifieerd profiel, met verborgen herkomstbewijs."""
+    import mail_afspraken as MA  # noqa: PLC0415
+    nu = nu or nu_lokaal()
+    profielen = MA.zorgprofielen() if profielen is None else profielen
+    gezet, open_ = 0, []
+    for a in items:
+        if not _toekomst(a.get("start"), nu) or a.get("kalender") != PRIVE_AGENDA or not is_zorg_titel(a.get("titel")):
+            continue
+        if _zorg_huisbezoek(a) or (a.get("locatie") or "").strip():
+            continue
+        p = _zorg_profiel_kiezen(a, profielen, nu)
+        if not p:
+            continue                         # de adresvraag loopt via vragen_in_agenda; nooit een profiel raden
+        merk = _zorg_profielmerk(p)
+        try:
+            oms = a.get("omschrijving") or ""
+            if len(oms) >= 1900:
+                oms = _volledige_omschrijving(a, tok)
+            zin = ZORGPLAATSZIN.format(dag=nu.strftime("%d-%m-%Y"))
+            body = {"location": p["adres"], "description": (oms.rstrip() + "\n\n" + zin).strip(),
+                    "extendedProperties": {"private": {**(a.get("_merk") or {}), ZORGPLAATSMERK: merk}}}
+            _patch(a, body, tok)
+            e = _lees_event(a["kalender"], a["id"], tok)
+            if not e or (e.get("location") or "") != p["adres"] or zin not in (e.get("description") or "") \
+                    or ((e.get("extendedProperties") or {}).get("private") or {}).get(ZORGPLAATSMERK) != merk:
+                open_.append(f"{a['id']}: profielplaats niet teruggelezen")
+                continue
+            a["locatie"], a["omschrijving"], a["_merk"] = p["adres"], body["description"], body["extendedProperties"]["private"]
+            gezet += 1
+        except Exception as ex:  # noqa: BLE001
+            open_.append(f"{a['id']}: profielplaats niet gezet ({type(ex).__name__})")
+    return gezet, open_
+
+
+def _mailbron_zorg_afhankelijk(mailbox, items, nu=None):
+    """De persoonlijke postbron kan nog een bevestiging of wijziging voor een nabij consult bevatten."""
+    import mail_afspraken as MA  # noqa: PLC0415
+    if mailbox not in MA.PRIVE:
+        return False
+    nu = nu or nu_lokaal()
+    return any(a.get("kalender") in (WERKAGENDA, PRIVE_AGENDA) and is_zorg_titel(a.get("titel"))
+               and _toekomst(a.get("start"), nu)
+               and datetime.fromisoformat(a["start"]) <= nu + timedelta(hours=24)
+               for a in items if "T" in (a.get("start") or ""))
 
 
 def _verplaats_naar(x, doel, tok):
@@ -2727,7 +2827,7 @@ def _toekomst(start, nu):
         return False
 
 
-def zorg_afspraken_zetten(res, items, tok, nu=None):
+def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
     """Zet, koppelt, volgt of verhuist zorgafspraken (zie hierboven). Werkt de status en het Google-ID in res bij, zodat
     het register ze bewaart en de gewone mailmelding geen tweede vraag zet. Geeft tellingen, 'bord' (zonder namen,
     praktijk of plaats) en 'prive' (details, alleen voor Mehdi)."""
@@ -2781,18 +2881,41 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
                 # het item draagt het merk van een andere zorgafspraak: nooit overschrijven (Codex A02, ronde 4)
                 st["fout"] += 1
                 st["prive"].append(f"{wat}: het gekoppelde item draagt het merk van een andere zorgafspraak, niets gewijzigd")
-            elif kal == PRIVE_AGENDA and toekomst and x and ((x.get("_merk") or {}).get(ZORGMERK) != a["sleutel"]
-                                                              or (not (x.get("locatie") or "").strip() and a.get("locatie"))):
-                # alleen het merk, en de plaats als die leeg is (uit de bevestiging, geen gok); planning en titel blijven
-                body = {"extendedProperties": {"private": {ZORGMERK: a["sleutel"]}}}
-                if not (x.get("locatie") or "").strip() and a.get("locatie"):
-                    body["location"] = a["locatie"]
+            elif kal == PRIVE_AGENDA and toekomst and x:
+                plaats = (x.get("locatie") or "").strip()
+                mailplaats = a.get("locatie") if MA.zorg_locatie_is_adres(a.get("locatie")) else ""
+                profielmerk = (x.get("_merk") or {}).get(ZORGPLAATSMERK)
+                gemerkt = _zorgplaats_merk_klopt(x)
+                if mailplaats and plaats and plaats != mailplaats and not gemerkt:
+                    st["open"] += 1
+                    a["status"], a["detail"] = "zorg_open", "plaats in mail wijkt af van handmatig gezette plaats"
+                    st["prive"].append(f"{wat}: mailplaats wijkt af van de handmatige plaats; open punt, niets gewijzigd")
+                    continue
+                # Mail heeft voorrang op een aantoonbaar door ons ingevulde profielplaats. Bij gelijke plaats is de
+                # mail daarna de bron; het profielmerk verdwijnt. Een afwijkende handmatige plaats blijft staan.
+                privaat = {**(x.get("_merk") or {}), ZORGMERK: a["sleutel"]}
+                if profielmerk and (gemerkt or not plaats):
+                    privaat[ZORGPLAATSMERK] = None
+                body = {"extendedProperties": {"private": privaat}}
+                if mailplaats and (not plaats or (gemerkt and plaats != mailplaats)):
+                    body["location"] = mailplaats
+                if ((x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"] and "location" not in body
+                        and not (profielmerk and (gemerkt or not plaats))):
+                    continue
                 try:
                     _patch(x, body, tok)
                     probleem = _zorg_nalezen(PRIVE_AGENDA, eid, tok, merk=a["sleutel"], plaats=body.get("location"))
+                    if profielmerk and (gemerkt or not plaats):
+                        terug = _lees_event(PRIVE_AGENDA, eid, tok)
+                        if ((terug or {}).get("extendedProperties") or {}).get("private", {}).get(ZORGPLAATSMERK):
+                            probleem = (probleem + ", profielmerk").strip(", ")
                     if probleem:
                         st["fout"] += 1
                         st["prive"].append(f"{wat}: koppelmerk gezet maar het teruglezen klopt niet ({probleem})")
+                    else:
+                        x["_merk"] = {k: v for k, v in privaat.items() if v is not None}
+                        if "location" in body:
+                            x["locatie"] = body["location"]
                 except Exception as ex:  # noqa: BLE001
                     st["fout"] += 1
                     st["prive"].append(f"{wat}: koppelmerk niet gezet ({type(ex).__name__})")
@@ -2853,6 +2976,15 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
         if gekoppeld:
             body = _zorg_body(gekoppeld[0], gekoppeld[1], gekoppeld[2])
             body = {k: body[k] for k in ("summary", "location", "extendedProperties")}
+            if (x.get("locatie") or "").strip() and body["location"] and x["locatie"] != body["location"] \
+                    and not _zorgplaats_merk_klopt(x):
+                body["location"] = x["locatie"]
+                gekoppeld[0]["status"] = "zorg_open"
+                gekoppeld[0]["detail"] = "plaats in mail wijkt af van handmatig gezette plaats"
+                st["open"] += 1
+                st["prive"].append(f"{x['start'][:16]}: mailplaats wijkt af van handmatige plaats; open punt")
+            elif (x.get("locatie") or "").strip() and not body["location"]:
+                body["location"] = x["locatie"]
             notitie = "Van de werkagenda naar privé verhuisd door de Agendawacht: persoonlijke zorg, geen zakelijke afspraak."
         else:
             t = re.sub(r"^\s*((VR|ZL|!!|\?\?)\s+)+", "", x.get("titel") or "")
@@ -2879,14 +3011,25 @@ def zorg_afspraken_zetten(res, items, tok, nu=None):
                 st["prive"].append(f"{x['start'][:16]} verhuisd maar het teruglezen klopt niet ({probleem})")
                 continue
             st["verhuisd"] += 1
+            if bijwerken_items:
+                # De volledige ronde gebruikt dezelfde itemlijst voor reistijd; het doel is pas na teruglezen zeker.
+                x["kalender"], x["titel"], x["omschrijving"] = PRIVE_AGENDA, body["summary"], body["description"]
+                if "location" in body:
+                    x["locatie"] = body["location"]
+                if "extendedProperties" in body:
+                    x["_merk"] = body["extendedProperties"]["private"]
             st["prive"].append(f"{x['start'][:16].replace('T', ' ')} {x.get('titel', '')[:40]}: van werk naar privé ({x['id']}), "
                                f"nu '{body['summary']}', teruggelezen")
         except Exception as ex:  # noqa: BLE001
             st["fout"] += 1
             st["prive"].append(f"{x['start'][:16]} verhuizen naar privé mislukt ({type(ex).__name__})")
+    profiel_gezet, profiel_open = zorg_profielplaatsen_zetten(items, tok, nu, list(profielen.values()))
+    st["profielplaats"] = profiel_gezet
+    st["fout"] += len(profiel_open)
+    st["prive"].extend(profiel_open)
     st["bord"] = [f"zorg uit mail: {st['gezet']} blok(ken) gezet, {st['gekoppeld']} al in de agenda, {st['verhuisd']} van werk "
                   f"naar privé, {st['verzet']} verzet, {st['open']} open punt(en), {st['wacht']} wacht op bevestiging, "
-                  f"{st['voorbij']} voorbij zonder item (historisch), {st['fout']} mislukt"]
+                  f"{st['voorbij']} voorbij zonder item (historisch), {st['profielplaats']} profielplaatsen, {st['fout']} mislukt"]
     return st
 
 
@@ -3247,18 +3390,21 @@ def agendagasten_zetten(items, tok=None, nu=None):
     return uit
 
 
-def reistijd_zetten(items, alleen_dag=None, nu=None):
+def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     """Werkwijze: elke komende afspraak buiten (!!, of PB/KB met een adres) krijgt een
     blok 'Reistijd -> plaats' ervoor en 'Reistijd <- plaats' erna, met de rijtijd
     vanaf thuis (of de vorige buitenafspraak van die dag) plus buffer, rood, op
     dezelfde agenda. Bestaat er al een reistijdblok binnen drie uur voor of na,
     dan niets. De afspraak zelf krijgt een herinnering op het vertrekmoment plus 5.
-    Geeft (gemaakt, al, geen_adres, fout, regels)."""
+    Geeft (gemaakt, al, geen_adres, fout, regels); niet_op_kaart ontvangt de
+    afspraak-identiteiten waarvan coord() de bestemming niet vond."""
     from datetime import timedelta
     tok = agenda._toegang()
     cache = _cache_laden()
     thuis = coord(THUIS, cache)
     nu = nu or nu_lokaal()
+    if niet_op_kaart is not None:
+        niet_op_kaart.clear()
     gemaakt, al, geen_adres, fout, regels = 0, 0, 0, 0, []
     reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"]]
     projecten = projectadressen.index()
@@ -3274,7 +3420,8 @@ def reistijd_zetten(items, alleen_dag=None, nu=None):
         if a.get("hele_dag") or a.get("kalender", "").startswith("en.be#"):
             continue
         adres = a.get("locatie") or ""
-        if is_thuis_adres(adres):
+        if (is_thuis_adres(adres) or _huisbezoek_locatie(adres)
+                or is_zorg_titel(a.get("titel")) and _zorg_huisbezoek(a)):
             # Ook bij een onleesbare grendel of een dag zonder auto is thuis geen buitenrit.
             continue
         if zonder_auto is None or (vrij is None and a.get("kalender") in AGENDA_VASTE_KLEUR
@@ -3304,7 +3451,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None):
             if info["buiten"] or info["soort"] in BUITEN_SOORTEN:
                 regels.append(f"{a['start'][:16]} {a['titel'][:50]}: BUITEN op een dag zonder auto (door {maker(a)})")
             continue
-        fysiek = bool(adres) and not adres.lower().startswith("http")
+        fysiek = _bruikbare_locatie(adres)
         bron_adres = "agenda"
         if not fysiek and info["nummer"] and info["nummer"] in projecten:
             adres, fysiek, bron_adres = projecten[info["nummer"]]["adres"], True, "projectmap"
@@ -3519,6 +3666,8 @@ def reistijd_zetten(items, alleen_dag=None, nu=None):
         if not (doel and thuis):
             geen_adres += 1
             regels.append(f"{a['start'][:16]} {a['titel'][:50]}: adres niet gevonden ({adres[:40]})")
+            if not doel and start > nu and niet_op_kaart is not None:
+                niet_op_kaart.add((a.get("kalender"), a.get("id"), a.get("start")))
             zonder_plek()
             continue
         vorige_einde = None   # gezet als hij rechtstreeks van de vorige afspraak komt
@@ -4181,6 +4330,20 @@ def is_thuis_adres(adres):
     return bool(adres and thuis and (adres == thuis or adres.startswith(thuis + " ")))
 
 
+def _huisbezoek_locatie(locatie):
+    return bool(re.search(r"\b(huisbezoek|aan[-\s]+huis|thuis)\b", locatie or "", re.I))
+
+
+def _bruikbare_locatie(locatie):
+    """Een ingevulde agenda-plaats mag door coord() als naam of adres worden gezocht."""
+    tekst = (locatie or "").strip()
+    if (not tekst or _huisbezoek_locatie(tekst)
+            or re.search(r"\b(?:[a-z][a-z0-9+.-]*://|www\.|[a-z0-9.-]+\.[a-z]{2,}/)\S*", tekst, re.I)
+            or re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", tekst, re.I)):
+        return False
+    return True
+
+
 def straat_nummer(a):
     """'Koning Albertlaan 206' uit de locatie, anders uit de titel (het stuk na de eerste komma); zonder 'bus'."""
     loc = (a.get("locatie") or "").strip()
@@ -4544,6 +4707,46 @@ def vastgelopen(items, nu=None, uren=48):
     return [(sleutel, zin) for sleutel, zin, _ in _vastgelopen(items, nu, uren)]
 
 
+def _adresvragen(items, nu=None, uren=24 * RIT_VOORUIT_ALLES, projecten=None, niet_op_kaart=None):
+    """Elke komende buitenafspraak zonder bestemming of met een niet vindbare kaartplaats."""
+    nu = nu or nu_lokaal()
+    projecten = projectadressen.index() if projecten is None else projecten
+    uit = []
+    for a in items:
+        if (a.get("hele_dag") or _huisbezoek_locatie(a.get("locatie"))
+                or is_zorg_titel(a.get("titel")) and _zorg_huisbezoek(a)):
+            continue
+        try:
+            start = datetime.fromisoformat(a.get("start") or "")
+        except ValueError:
+            continue
+        if not nu < start <= nu + timedelta(hours=uren):
+            continue
+        info = lees_titel(a.get("titel") or "")
+        if info["reistijd"] or not (info["buiten"] or info["soort"] in BUITEN_SOORTEN):
+            continue
+        niet_gevonden = (a.get("kalender"), a.get("id"), a.get("start")) in (niet_op_kaart or ())
+        if not niet_gevonden:
+            if is_thuis_adres(a.get("locatie") or "") or _bruikbare_locatie(a.get("locatie")):
+                continue
+            if info["nummer"] and info["nummer"] in projecten and _bruikbare_locatie(projecten[info["nummer"]].get("adres")):
+                continue
+            try:
+                plek, _ = plek_zoeken((a.get("titel") or "") + " " + (a.get("omschrijving") or ""))
+                woord, vast = vaste_plek(a.get("titel") or "") if not plek else (None, None)
+            except Exception:  # noqa: BLE001
+                plek = vast = None
+            if plek or vast and _bruikbare_locatie(vast.get("adres")):
+                continue
+        id_ = a.get("id") or hashlib.sha256(f"{a.get('kalender')}|{a.get('start')}|{a.get('titel')}".encode()).hexdigest()[:16]
+        zin = (f"Mehdi, het adres van de buitenafspraak van {start:%d-%m %H:%M} vind ik niet op de kaart; "
+               "schrijf het zoals op de kaart (straat nummer, postcode gemeente)." if niet_gevonden else
+               f"Mehdi, de buitenafspraak van {start:%d-%m %H:%M}: zet het adres erin.")
+        uit.append((f"{id_}:adres",
+                    zin, [a.get("id")]))
+    return uit
+
+
 def _vastgelopen(items, nu=None, uren=48):
     """Zoals vastgelopen, met per vraag de volledige ID's van de betrokken afspraken. Een sleutel als 'dubbel:..',
     'zoompwd:<dag>' of 'wachtkamer:<meeting>' begint niet met een afspraak-ID, dus vragen_in_agenda kan de afspraak
@@ -4578,9 +4781,7 @@ def _vastgelopen(items, nu=None, uren=48):
         if not info.get("firma") and a.get("kalender") == WERKAGENDA and not is_zorg_titel(a["titel"]):
             # een kine- of tandartsafspraak is privé, geen zakelijke vraag: de zorgstap zet ze op de privé-agenda
             uit.append((f"{a['id']}:firma", f"Mehdi, de afspraak van {wanneer}, {kort}: zeg voor welke firma en welke klant.", [a["id"]]))
-        elif (info["buiten"] or info["soort"] in BUITEN_SOORTEN) and not (a.get("locatie") or "").strip() \
-                and not (info["nummer"] and info["nummer"] in projecten):
-            uit.append((f"{a['id']}:adres", f"Mehdi, de afspraak buiten van {wanneer}, {kort}: zet het adres erin.", [a["id"]]))
+    uit.extend(_adresvragen(items, nu, uren, projecten))
     # Twee klanten tegelijk: een zin per paar, wat Mehdi moet doen
     for a, b in dubbele_boekingen(items, nu, uren):
         s_ = datetime.fromisoformat(a["start"])
@@ -4625,20 +4826,38 @@ AGENDA_SLOT = "Details staan in je agenda."     # Mehdi leest Telegram niet voor
 VR_REGEL = "Agendawacht vraagt: "
 
 
-def vragen_in_agenda(items, nu=None):
+def _vraag_teruggelezen(a, tok, titel, oms):
+    e = _lees_event(a.get("kalender"), a.get("id"), tok)
+    return bool(e and (e.get("summary") or "") == canoniek(titel) and (e.get("description") or "") == oms)
+
+
+def vragen_in_agenda(items, nu=None, niet_op_kaart=None):
     """Mehdi, 25-09-2026: 'ik lees de telegram niet voor de agenda ... de agenda zelf op een oogopslag geeft mij
     veel meer inzicht'. Wat de agent van hem nodig heeft, staat daarom in de afspraak zelf: VR (vraag) helemaal
     vooraan de titel en de vraag in een zin bovenaan de omschrijving. Opgelost: VR en de zin gaan er weer af.
-    Alleen bij eigen afspraken op de werkagenda zonder gasten en niet in een reeks. Geeft (gezet, weg)."""
+    Ook een eigen buitenafspraak op privé of Lara krijgt VR. Geeft (gezet, weg)."""
+    nu = nu or nu_lokaal()
     tok = agenda._toegang()
     open_ = {}
     for _, zin, ids in _vastgelopen(items, nu, uren=24 * 8):
         for id_ in ids:
             if id_:
                 open_.setdefault(id_, zin)
+    adresvragen = _adresvragen(items, nu, niet_op_kaart=niet_op_kaart)
+    adres_ids = {id_ for _, _, ids in adresvragen for id_ in ids}
+    for _, zin, ids in adresvragen:
+        for id_ in ids:
+            open_[id_] = zin
     gezet = weg = 0
     for a in items:
-        if (a.get("kalender") != WERKAGENDA or a.get("deelnemers") or a.get("_agendagasten") or a.get("_terugkerend")
+        eigen = (a.get("maker") or "").strip().lower() in _eigen_accounts()
+        ander = a.get("kalender") in PRIVE_KALENDERS
+        sluit_adres = ((a.get("titel") or "").startswith("VR ")
+                       and any(s in (a.get("omschrijving") or "").split("\n", 1)[0]
+                               for s in ("zet het adres erin", "vind ik niet op de kaart")))
+        if (a.get("kalender") != WERKAGENDA and not ander or ander and a.get("id") not in adres_ids and not sluit_adres
+                or ander and (a.get("_organisator_zelf") is not True or not eigen)
+                or a.get("deelnemers") or a.get("_agendagasten") or a.get("_terugkerend") or a.get("_reeks")
                 or a.get("_archief")):
             continue                      # ook geen collega als gast: die ziet titel en omschrijving (Codex A24, ronde 3)
         titel, oms = a["titel"], a.get("omschrijving") or ""
@@ -4648,8 +4867,12 @@ def vragen_in_agenda(items, nu=None):
                 if len(oms) >= 1900:
                     oms = _volledige_omschrijving(a, tok)   # de lezing kapt af op 2000 tekens: nooit een ingekorte tekst terugschrijven
                 schoon = re.sub(rf"^{VR_REGEL}[^\n]*\n*", "", oms)
-                _patch(a, {"summary": "VR " + titel, "description": VR_REGEL + zin.split(": ", 1)[-1] + ("\n\n" + schoon if schoon else "")}, tok)
+                nieuw_oms = VR_REGEL + zin.split(": ", 1)[-1] + ("\n\n" + schoon if schoon else "")
+                _patch(a, {"summary": "VR " + titel, "description": nieuw_oms}, tok)
+                if ander and not _vraag_teruggelezen(a, tok, "VR " + titel, nieuw_oms):
+                    raise RuntimeError("VR niet teruggelezen")
                 a["titel"] = "VR " + titel
+                a["omschrijving"] = nieuw_oms
                 gezet += 1
             elif zin and titel.startswith("VR ") and oms.startswith(VR_REGEL):
                 gewenst = VR_REGEL + zin.split(": ", 1)[-1]
@@ -4658,18 +4881,39 @@ def vragen_in_agenda(items, nu=None):
                         oms = _volledige_omschrijving(a, tok)
                     nieuw_oms = re.sub(rf"^{VR_REGEL}[^\n]*", lambda _m: gewenst, oms, count=1)
                     _patch(a, {"description": nieuw_oms}, tok)
+                    if ander and not _vraag_teruggelezen(a, tok, titel, nieuw_oms):
+                        raise RuntimeError("VR-tekst niet teruggelezen")
                     a["omschrijving"] = nieuw_oms
                     gezet += 1
             elif not zin and (titel.startswith("VR ") or oms.startswith(VR_REGEL)):
                 nieuw = titel[3:] if titel.startswith("VR ") else titel
                 if len(oms) >= 1900:
                     oms = _volledige_omschrijving(a, tok)
-                _patch(a, {"summary": nieuw, "description": re.sub(rf"^{VR_REGEL}[^\n]*\n*", "", oms)}, tok)
+                nieuw_oms = re.sub(rf"^{VR_REGEL}[^\n]*\n*", "", oms)
+                _patch(a, {"summary": nieuw, "description": nieuw_oms}, tok)
+                if ander and not _vraag_teruggelezen(a, tok, nieuw, nieuw_oms):
+                    raise RuntimeError("opgeloste VR niet teruggelezen")
                 a["titel"] = nieuw
+                a["omschrijving"] = nieuw_oms
                 weg += 1
         except Exception as e:  # noqa: BLE001
             print("vraag in agenda mislukt:", _toon(a), type(e).__name__, file=sys.stderr)
     return gezet, weg
+
+
+def adres_vraag_noden(items, nu=None, niet_op_kaart=None):
+    """Een stabiele nood voor een adresvraag die niet zichtbaar in de afspraak kon worden gezet."""
+    vragen = _adresvragen(items, nu, niet_op_kaart=niet_op_kaart)
+    per_id = {a.get("id"): a for a in items}
+    uit = []
+    for sleutel, zin, ids in vragen:
+        a = per_id.get(ids[0])
+        if not a or not ((a.get("titel") or "").startswith("VR ")
+                      and (a.get("omschrijving") or "").startswith(VR_REGEL)
+                      and any(s in (a.get("omschrijving") or "").split("\n", 1)[0]
+                              for s in ("zet het adres erin", "vind ik niet op de kaart"))):
+            uit.append({"tekst": f"{zin} VR niet mogelijk ({sleutel})", "wie": "mehdi"})
+    return uit
 
 
 def belvenster_uren(nu):
@@ -5000,6 +5244,7 @@ def main():
         mb = markeringen_bezet([x for x in (rit_items if DAG_ARG else afspraken(0, 180)) if x.get("hele_dag") and not x.get("fout")])
         mb_ok, mb_mis = bezet_splitsen(mb)
         mail_noden = []
+        zorgstap_gedaan = False
         if mb_ok:
             ag.log(f"dag {vandaag}", "schrijf", f"markeringen: {len(mb_ok)} op Bezet gezet", "\n".join(mb_ok))
         if mb_mis:
@@ -5013,11 +5258,16 @@ def main():
                 _alle, _stuk = _agenda_voor_mail()
                 mres, mfout = MA.ronde(_alle, (datetime.now() - timedelta(days=14)).date().isoformat(), agenda_onvolledig=_stuk)
                 ag.prive(MA.prive_teksten())
+                for _mb in sorted({f_["mailbox"] for f_ in mfout}):
+                    _nood = MA.mailbron_nood(_mb, afhankelijk=_mailbron_zorg_afhankelijk(_mb, rit_items), nu=nu_lokaal())
+                    if _nood:
+                        mail_noden.append(_nood)
                 if _stuk:
                     # een onvolledige agenda is geen bewijs dat iets ontbreekt: niets vergelijken, niets zetten (Codex A15)
                     raise _Onvolledig(f"{len(_stuk)} agenda('s) niet gelezen: mail niet met de agenda vergeleken")
                 # zorgafspraken eerst: een bevestigd consult wordt een echt blok, zodat de gewone melding geen vraag zet
-                zst = zorg_afspraken_zetten(mres, _alle, agenda._toegang())
+                zst = zorg_afspraken_zetten(mres, rit_items, agenda._toegang(), bijwerken_items=True)
+                zorgstap_gedaan = True
                 MA.statussen_bewaren(mres)
                 ag.log(f"dag {vandaag}", "schrijf", zst["bord"][0])          # alleen tellingen: niets medisch op het bord
                 mregels = mail_meldingen(mres, _alle, agenda._toegang())
@@ -5027,13 +5277,17 @@ def main():
                     mail_noden.append({"tekst": "Afspraken uit mail kloppen niet met de agenda; details in je privé-agenda", "wie": "mehdi"})
                 for _mb in sorted({f_["mailbox"] for f_ in mfout}):
                     _stuk = any(not f_.get("map") for f_ in mfout if f_["mailbox"] == _mb)
-                    mail_noden.append({"tekst": f"Mailbron {_mb} {'niet' if _stuk else 'niet volledig'} gelezen; zie de leesstand", "wie": "claude"})
+                    if not _stuk:
+                        mail_noden.append({"tekst": f"Mailbron {_mb} niet volledig gelezen; zie de leesstand", "wie": "claude"})
             except _Onvolledig as e:
                 mail_noden.append({"tekst": f"Mail als afsprakenbron: {e}", "wie": "claude"})
-                for _mb in sorted({f_["mailbox"] for f_ in mfout}):
-                    mail_noden.append({"tekst": f"Mailbron {_mb} niet volledig gelezen; zie de leesstand", "wie": "claude"})
             except Exception as e:  # noqa: BLE001
                 mail_noden.append({"tekst": f"Mail als afsprakenbron mislukt ({type(e).__name__}: {str(e)[:120]})", "wie": "claude"})
+        if not zorgstap_gedaan:
+            # Ook de dagroute of een onvolledige mailvergelijking mag een reeds bestaande privé-afspraak herstellen.
+            _pg, _po = zorg_profielplaatsen_zetten(rit_items, agenda._toegang())
+            if _po:
+                mail_noden.append({"tekst": "Profielplaats zorgafspraak niet teruggelezen", "wie": "mehdi"})
         pg, pregels = projectnummers_zetten(kort_items, dag_grens)
         ag.log(f"dag {vandaag}", "schrijf", f"projectnummer: {pg} in de titel gezet", "\n".join(pregels))
         if not DAG_ARG:
@@ -5065,7 +5319,8 @@ def main():
                           "inhoud": "\n".join("- " + r for r in (zregels + voorstellen)[:30])}])
         # eerst de gewone herinneringen, dan de ritten: zo heeft de vertrekmelding het laatste woord
         gezet, al, weg, fout_h = herinneringen_zetten(kort_items, dag_grens)
-        rg, ral, rgeen, rfout, rregels = reistijd_zetten(rit_items, dag_grens)
+        niet_op_kaart = set()
+        rg, ral, rgeen, rfout, rregels = reistijd_zetten(rit_items, dag_grens, niet_op_kaart=niet_op_kaart)
         # Laag 2 (FR-71): na alle schrijfacties de dag opnieuw inlezen en nakijken zoals Mehdi hem ziet
         try:
             import dagcontrole as _dc
@@ -5216,7 +5471,8 @@ def main():
             noden.append({"tekst": "Herinneringen konden niet gezet worden", "wie": "claude-code"})
         if in_archief:
             noden.append({"tekst": "Er wordt nog geboekt in een archiefagenda: het Calendly-kanaal omzetten naar werk", "wie": "mehdi"})
-        vg, vw = vragen_in_agenda(kort_items)
+        vg, vw = vragen_in_agenda(rit_items, niet_op_kaart=niet_op_kaart)
+        noden.extend(adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart))
         if vg or vw:
             ag.log(f"dag {vandaag}", "schrijf", f"vragen in de agenda: {vg} gezet (VR), {vw} opgelost")
         if not DAG_ARG and geplande_start():
