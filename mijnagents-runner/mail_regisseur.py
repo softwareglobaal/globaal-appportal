@@ -10,8 +10,10 @@ het werkverslag van de wachten, een bron. Ik lees die lijst drie keer per werkda
 van (hoog eerst, dan wat het langst wacht) en:
   - schrijf het in mijn werkverslag, waar De Regisseur het leest (agent_verslag);
   - zet het klaar voor De Regisseur;
-  - stuur Mehdi hoogstens een signaal per dag, om 08:00, en alleen als er iets van hoog belang
-    of een automatisch bericht met gevolg op hem wacht.
+  - stuur Mehdi twee keer per dag een update over het systeem, om 08:00 en 17:00, ook in het weekend (Mehdi,
+    20-10-2026: "ik wil update 2 keer per dag ... de systeem en niet elke individuele mails ... we focusen nu op mch,
+    mehdichegini@hotmail.com, melodie"): per postvak van de focus wat binnenkwam, wat belangrijk was, wat openstaat en
+    of de wacht werkt, uit /api/mail/stand. Die update vervangt het 08:00-signaal van vroeger.
 Ik lees geen mail zelf, verstuur niets en beantwoord niets.
 
     mail_regisseur.py            een ronde, als het een van mijn momenten is
@@ -34,6 +36,10 @@ import postvak  # noqa: E402
 NAAM = "mail-regisseur"
 BRUSSEL = ZoneInfo("Europe/Brussels")
 MOMENTEN = ("08:00", "12:30", "17:00")
+UPDATES = ("08:00", "17:00")  # de update aan Mehdi, elke dag, ook in het weekend (20-10-2026)
+KORT = {"mch@h-architects.be": "mch@", "mehdichegini@hotmail.com": "hotmail", "melodiebvba@gmail.com": "Melodie",
+        "info@h-architects.be": "info@ H-A", "info@h-invest.be": "info@ H-Invest"}
+RONDE_OUD_UREN = 3  # een wacht zonder ronde in zoveel uur, meld ik als storing
 BELVENSTER_MIN = 15  # bellen alleen zo kort na een vast moment, en nooit bij --nu (resultaattoets 19-10-2026, C2)
 STAAT = os.path.expanduser("~/appportal/mijnagents-data/mail-regisseur.json")
 UIT = os.path.expanduser("~/appportal/mijnagents-data/export/Mailregisseur")  # komt via de Mac-sync in Data uit Mehdi
@@ -44,10 +50,11 @@ FIRMANAMEN = {"HINV": "info@ H-Invest", "MCH": "mch@ (Mehdi)", "PRIV": "hotmail 
 
 
 def moment(nu, staat):
-    """Het moment dat nu aan de beurt is (binnen 90 minuten na het tijdstip, nog niet gedaan), of ''."""
-    if nu.weekday() >= 5:
-        return ""
+    """Het moment dat nu aan de beurt is (binnen 90 minuten na het tijdstip, nog niet gedaan), of ''. In het weekend
+    alleen de momenten van de update (08:00 en 17:00)."""
     for m in reversed(MOMENTEN):
+        if nu.weekday() >= 5 and m not in UPDATES:
+            continue
         uur, minuut = map(int, m.split(":"))
         t = nu.replace(hour=uur, minute=minuut, second=0, microsecond=0)
         if t <= nu and (nu - t).total_seconds() < 90 * 60:
@@ -82,7 +89,7 @@ def mag_bellen(nu, staat, forceer=False):
     """Mag deze ronde De Bode laten bellen? Alleen een gewone ronde (geen --nu) op een werkdag, binnen een kwartier na
     08:00, 12:30 of 17:00. Een ronde om 18:29 hoort nog bij het moment van 17:00 voor het overzicht, maar belt niet."""
     m = moment(nu, staat)
-    if forceer or not m:
+    if forceer or not m or nu.weekday() >= 5:
         return False
     uur, minuut = map(int, m.split(":"))
     return (nu - nu.replace(hour=uur, minute=minuut, second=0, microsecond=0)).total_seconds() < BELVENSTER_MIN * 60
@@ -139,10 +146,75 @@ def dringend(lijst):
             or int(i.get("werkdagen_zonder_antwoord") or 0) >= 5]
 
 
-def titel_0800(lijst, samen):
-    """Het 08:00-bericht noemt het aantal open punten, hetzelfde getal als de tegel Op te volgen op /mail."""
-    hoog = sum(1 for i in lijst if i.get("soort") == "hoog")
-    return f"Mail: {len(lijst)} op te volgen, waarvan {hoog} belangrijk ({samen}); lijst op mijnagents.globaal.be/mail"
+def vorige_update(nu, m):
+    """Vanaf wanneer de update telt: de vorige update (08:00 telt vanaf 17:00 de dag ervoor, 17:00 vanaf 08:00)."""
+    uur, minuut = map(int, m.split(":"))
+    t = nu.replace(hour=uur, minute=minuut, second=0, microsecond=0)
+    i = UPDATES.index(m) if m in UPDATES else 0
+    vorig = UPDATES[i - 1]
+    vu, vm = map(int, vorig.split(":"))
+    v = t.replace(hour=vu, minute=vm)
+    return v if v < t else v - timedelta(days=1)
+
+
+def storingen(stand, nu):
+    """Per postvak van de focus: werkt de wacht? Een open nood, een fout of geen ronde in RONDE_OUD_UREN uur is een storing."""
+    uit = {}
+    for a in stand.get("focus", []):
+        w = stand.get("wachten", {}).get(stand.get("postvakken", {}).get(a, {}).get("wacht", ""), {})
+        reden = list(w.get("noden", []))
+        if not w:
+            reden.append("geen wacht op het bord")
+        elif w.get("status") == "fout":
+            reden.append("de laatste ronde liep fout")
+        try:
+            laatst = datetime.fromisoformat(w.get("laatste_ronde") or "")
+            if (nu - laatst).total_seconds() > RONDE_OUD_UREN * 3600:
+                reden.append(f"geen ronde sinds {laatst.astimezone(BRUSSEL).strftime('%d-%m %H:%M')}")
+        except (TypeError, ValueError):
+            if w:
+                reden.append("nog geen ronde gezien")
+        if reden:
+            uit[a] = reden
+    return uit
+
+
+def titel_update(m, stand, storing):
+    """De titel die Mehdi op zijn gsm leest (De Bode toont 110 tekens): de cijfers van de focus, hetzelfde als /mail.
+    Nooit het woord stil: dat laat De Bode bellen (AGENTNORM 6)."""
+    pv = stand.get("postvakken", {})
+    focus = stand.get("focus", [])
+    som = lambda k: sum(pv.get(a, {}).get(k, 0) for a in focus)  # noqa: E731
+    t = (f"Mail {m}: {som('binnen')} nieuw, {som('belangrijk')} belangrijk; op te volgen "
+         + ", ".join(f"{KORT.get(a, a)} {pv.get(a, {}).get('open', 0)}" for a in focus)
+         + ("; storing " + ", ".join(KORT.get(a, a) for a in storing) if storing else "; wachten werken"))
+    if len(t) + 28 <= 110:
+        t += "; mijnagents.globaal.be/mail"
+    return re.sub("stil", "st.l", t, flags=re.I)
+
+
+def inhoud_update(m, stand, storing, d, sinds):
+    """De update voluit, op het bord en in mijn verslag: per postvak van de focus, dan de rest in een regel."""
+    pv = stand.get("postvakken", {})
+    focus = stand.get("focus", [])
+    regels = [f"Update {m}, mail sinds {sinds.strftime('%d-%m %H:%M')}. Focus: {', '.join(focus)}.", ""]
+    for a in focus:
+        x = pv.get(a, {})
+        regels.append(f"- {KORT.get(a, a)}: {x.get('binnen', 0)} nieuw, waarvan {x.get('belangrijk', 0)} belangrijk en "
+                      f"{x.get('ruis', 0)} reclame of meldingen; {x.get('gesorteerd', 0)} uit de inbox gesorteerd, "
+                      f"{x.get('uitgeschreven', 0)} keer uitgeschreven. Nu {x.get('open', 0)} op te volgen "
+                      f"({x.get('open_belangrijk', 0)} belangrijk, {x.get('lang', 0)} langer dan 5 werkdagen). "
+                      + ("Storing: " + "; ".join(storing[a]) + "." if a in storing else "De wacht werkt."))
+    rest = [a for a in pv if a not in focus and (pv[a].get("open") or pv[a].get("binnen"))]
+    if rest:
+        regels += ["", "Buiten de focus: " + ", ".join(f"{KORT.get(a, a)} {pv[a].get('open', 0)} op te volgen" for a in rest) + "."]
+    dr = [i for i in d if i.get("postvak") in focus]
+    if dr:
+        regels += ["", "Wacht het langst of is belangrijk:"] + [
+            f"- {KORT.get(i.get('postvak'), i.get('postvak'))}: {i.get('van_naam') or i.get('van')}, {i.get('onderwerp', '')[:90]} "
+            f"({i.get('werkdagen_zonder_antwoord')} wd)" for i in dr[:10]]
+    regels += ["", "Alles op mijnagents.globaal.be/mail (standaard de focus; Alle postvakken voor de rest)."]
+    return re.sub("stil", "st.l", "\n".join(regels), flags=re.I)
 
 
 def oude_oproepen(lijst, klaargezet):
@@ -202,13 +274,20 @@ def main():
                           "inhoud": f"{FIRMANAMEN.get(i['firma'], i['firma'])}, {i.get('postvak')}: {i.get('van_naam') or i.get('van')}, "
                                     f"{i.get('onderwerp', '')[:140]} ({i.get('werkdagen_zonder_antwoord')} werkdagen zonder antwoord). "
                                     "Staat op mijnagents.globaal.be/mail."})
-        if m == MOMENTEN[0] and d:
-            # Een bericht per dag, zonder aantal in de sleutel (N10), zonder het woord stil (AGENTNORM 6).
-            items.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
-                          "titel": titel_0800(lijst, samen),
-                          "uniek": f"mailregisseur:{vandaag}",
-                          "inhoud": "\n".join(f"- {FIRMANAMEN.get(i['firma'], i['firma'])}: {i.get('van_naam') or i.get('van')}, "
-                                              f"{i.get('onderwerp', '')[:90]} ({i.get('werkdagen_zonder_antwoord')} wd)" for i in d[:15])})
+        if m in UPDATES:
+            # De update over het systeem, twee keer per dag (20-10-2026); zonder aantal in de sleutel (N10), zonder het
+            # woord stil (AGENTNORM 6). Lukt de stand niet, dan zeg ik dat in de update in plaats van te zwijgen.
+            sinds = vorige_update(nu, m)
+            try:
+                stand = bord.call("/api/mail/stand?" + urllib.parse.urlencode({"sinds": sinds.isoformat()}))
+                storing = storingen(stand, nu)
+                titel, inhoud = titel_update(m, stand, storing), inhoud_update(m, stand, storing, d, sinds)
+            except Exception as e:  # noqa: BLE001
+                titel = f"Mail {m}: update niet gelukt, de stand van het bord kon ik niet lezen; kijk op mijnagents.globaal.be/mail"
+                inhoud = f"{type(e).__name__}: {str(e)[:200]}"
+                r.nood(f"De update van {m} kon /api/mail/stand niet lezen: {type(e).__name__}", wie="claude-code")
+            items.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": titel[:280],
+                          "uniek": f"mailupdate:{vandaag}:{m}", "inhoud": inhoud})
         ag.klaarzet(items)
         try:
             for it in oude_oproepen(lijst, bord.klaargezet_voor("mehdi", n=500)):

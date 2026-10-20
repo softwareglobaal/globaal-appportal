@@ -651,13 +651,14 @@ def test_de_mailregisseur_leest_dezelfde_lijst():
     lijst = M.punten(open_punten, cfg)
     assert [i["firma"] for i in lijst] == ["HINV", "MCH"]
     assert lijst[0]["oproep"] == "mailoproep:812" and lijst[1]["oproep"] == "mailoproep:mch@h-architects.be:<a>"
-    assert M.titel_0800(lijst, "x").startswith("Mail: 2 op te volgen, waarvan 1 belangrijk")
     klaar = [{"id": 1, "soort": "oproep", "uniek": "mailoproep:812"}, {"id": 2, "soort": "oproep", "uniek": "mailoproep:999"},
              {"id": 3, "soort": "oproep", "uniek": "afspraak:5"}, {"id": 4, "soort": "signaal", "uniek": "mailoproep:7"}]
     assert [i["id"] for i in M.oude_oproepen(lijst, klaar)] == [2]
     assert M.moment(datetime.fromisoformat("2026-10-19T22:00:00+02:00"), {}) == "", "een ronde om 22:00 is geen moment"
     assert M.moment(datetime.fromisoformat("2026-10-19T08:05:00+02:00"), {}) == "08:00"
-    assert M.moment(datetime.fromisoformat("2026-10-18T08:05:00+02:00"), {}) == "", "zondag"
+    assert M.moment(datetime.fromisoformat("2026-10-18T08:05:00+02:00"), {}) == "08:00", "zondag: de update van 08:00"
+    assert M.moment(datetime.fromisoformat("2026-10-18T12:35:00+02:00"), {}) == "", "zondag geen 12:30"
+    assert not M.mag_bellen(datetime.fromisoformat("2026-10-18T08:05:00+02:00"), {}), "in het weekend belt de regisseur niet"
     assert M.mag_bellen(datetime.fromisoformat("2026-10-19T08:05:00+02:00"), {})
     assert not M.mag_bellen(datetime.fromisoformat("2026-10-19T08:05:00+02:00"), {}, forceer=True), "--nu belt nooit"
     assert not M.mag_bellen(datetime.fromisoformat("2026-10-19T18:29:00+02:00"), {}), "18:29 hoort bij 17:00 maar belt niet"
@@ -666,6 +667,38 @@ def test_de_mailregisseur_leest_dezelfde_lijst():
     assert 'x.get("dringend") and echt' in bron and "klaargezet_voor(NAAM" not in bron
     dag = open(os.path.join(HIER, "dagbundelaar.py"), encoding="utf-8").read()
     assert '"mail-regisseur" in (it.get("van"), it.get("voor"))' in dag, "de Dagbundelaar laat mail liggen"
+
+
+def test_de_update_twee_keer_per_dag():
+    """Mehdi, 20-10-2026: "ik wil update 2 keer per dag ... de systeem en niet elke individuele mails ... we focusen nu op
+    mch, mehdichegini@hotmail.com, melodie". Om 08:00 en 17:00, elke dag; de cijfers van de focus uit /api/mail/stand;
+    een wacht die niet werkt, staat erin; de sleutel heeft geen aantal (N10); nooit het woord stil (dat belt)."""
+    import mail_regisseur as M
+    assert M.UPDATES == ("08:00", "17:00")
+    za = datetime.fromisoformat("2026-10-24T17:05:00+02:00")
+    assert M.vorige_update(za, "17:00") == datetime.fromisoformat("2026-10-24T08:00:00+02:00")
+    assert M.vorige_update(datetime.fromisoformat("2026-10-26T08:05:00+01:00"), "08:00").strftime("%d %H:%M") == "25 17:00"
+    nu = datetime.fromisoformat("2026-10-20T17:05:00+02:00")
+    focus = ["mch@h-architects.be", "mehdichegini@hotmail.com", "melodiebvba@gmail.com"]
+    tel = lambda w, n, o: {"wacht": w, "binnen": n, "belangrijk": 1, "ruis": 2, "gesorteerd": 1, "uitgeschreven": 0,  # noqa: E731
+                           "open": o, "open_belangrijk": 0, "lang": 0}
+    stand = {"focus": focus, "postvakken": {"mch@h-architects.be": tel("mail-mch", 10, 4),
+                                            "mehdichegini@hotmail.com": tel("mail-prive", 3, 2),
+                                            "melodiebvba@gmail.com": tel("mail-melo", 2, 1),
+                                            "info@h-invest.be": tel("mail-hinv", 5, 7)},
+             "wachten": {"mail-mch": {"status": "klaar", "laatste_ronde": "2026-10-20T15:00:00+00:00", "noden": []},
+                         "mail-prive": {"status": "waakt", "laatste_ronde": "2026-10-20T15:00:00+00:00",
+                                        "noden": ["De kopie van hotmail van de Mac is niet vers"]},
+                         "mail-melo": {"status": "klaar", "laatste_ronde": "2026-10-20T09:00:00+00:00", "noden": []}}}
+    storing = M.storingen(stand, nu)
+    assert set(storing) == {"mehdichegini@hotmail.com", "melodiebvba@gmail.com"}, storing
+    titel = M.titel_update("17:00", stand, storing)
+    assert titel.startswith("Mail 17:00: 15 nieuw, 3 belangrijk; op te volgen mch@ 4, hotmail 2, Melodie 1; storing hotmail, Melodie")
+    assert len(titel) <= 110 and "stil" not in titel.lower()
+    inhoud = M.inhoud_update("17:00", stand, storing, [], M.vorige_update(nu, "17:00"))
+    assert "info@ H-Invest 7 op te volgen" in inhoud and "niet vers" in inhoud and "stil" not in inhoud.lower()
+    bron = open(os.path.join(HIER, "mail_regisseur.py"), encoding="utf-8").read()
+    assert '"uniek": f"mailupdate:{vandaag}:{m}"' in bron and "if m in UPDATES:" in bron
 
 
 def test_wat_op_25_september_ten_onrechte_doorkwam():

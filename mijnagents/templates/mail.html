@@ -80,11 +80,12 @@
   <div class="werkbalk">
     <div class="seg">
       {% for k, (naam, _d) in periodes.items() %}
-      <a class="{{ 'actief' if k == periode }}" href="{{ url_for('mail_pagina', periode=k, postvak=postvak or None) }}">{{ naam }}</a>
+      <a class="{{ 'actief' if k == periode }}" href="{{ url_for('mail_pagina', periode=k, postvak=None if postvak == 'focus' else postvak) }}">{{ naam }}</a>
       {% endfor %}
     </div>
     <div class="seg">
-      <a class="{{ 'actief' if not postvak }}" href="{{ url_for('mail_pagina', periode=periode) }}">Alle postvakken</a>
+      <a class="{{ 'actief' if postvak == 'focus' }}" href="{{ url_for('mail_pagina', periode=periode) }}" title="{{ focus|join(', ') }}">Focus: mch@, hotmail, Melodie</a>
+      <a class="{{ 'actief' if postvak == 'alle' }}" href="{{ url_for('mail_pagina', periode=periode, postvak='alle') }}">Alle postvakken</a>
       {% for a in postvakken|sort %}
       <a class="{{ 'actief' if a == postvak }}" href="{{ url_for('mail_pagina', periode=periode, postvak=a) }}">{{ a.split('@')[0] }}@{{ a.split('@')[1].split('.')[0] }}</a>
       {% endfor %}

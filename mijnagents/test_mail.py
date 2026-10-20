@@ -15,6 +15,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+import urllib.parse
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -307,6 +308,47 @@ check("het blok Uitgeschreven toont afzender, onderwerp, knop en uitslag",
       all(x in blok for x in ("news@brand.be", "Najaarsactie", "brand.be", "aanvaard (200)", "geweigerd (410)")))
 check("bij Gmail een link naar het bericht", "mail.google.com/mail/u/0/#search/rfc822msgid%3An1%40brand.be" in blok)
 check("bij one.com de map", "map INBOX.Opgeruimd" in blok)
+
+# --- focus (Mehdi, 20-10-2026: "we focusen nu op mch, mehdichegini@hotmail.com, melodie"): /mail toont standaard die drie,
+# ?postvak=alle alles; en de stand voor de update van 08:00 en 17:00 telt hetzelfde open als /mail
+c.post("/api/agent", json={"naam": "mail-hinv", "label": "De Mailwacht info@ H-Invest", "type": "mail", "rol": "x"}, headers=K)
+c.post("/api/mail", headers=K, json={"wacht": "mail-hinv", "postvakken": [{"postvak": "info@h-invest.be", "wacht": "mail-hinv", "schrijven": 1}],
+                                      "rijen": [bericht("<h@x>", "hoog", "boekhouder@octopus.be", postvak="info@h-invest.be",
+                                                        onderwerp="Vraag van de boekhouder")]})
+alle_api = c.get("/api/mail/open", headers=K).get_json()["aantal"]
+hinv_open = len([p for p in c.get("/api/mail/open", headers=K).get_json()["punten"] if p["postvak"] == "info@h-invest.be"])
+focus_html = c.get("/mail", headers=BEHEER).get_data(as_text=True)
+alle_html = c.get("/mail?postvak=alle", headers=BEHEER).get_data(as_text=True)
+t_focus, k_focus, _ = tellingen(focus_html)
+t_alle, k_alle, _ = tellingen(alle_html)
+check("standaard toont /mail de focus: info@h-invest telt niet mee in de tegel en de kolom Open",
+      hinv_open == 1 and (t_focus, k_focus) == (alle_api - 1, alle_api - 1), (t_focus, k_focus, alle_api))
+check("de focus toont het bericht van info@h-invest niet", "Vraag van de boekhouder" not in focus_html)
+check("Alle postvakken toont alles, hetzelfde getal als /api/mail/open", (t_alle, k_alle) == (alle_api, alle_api)
+      and "Vraag van de boekhouder" in alle_html, (t_alle, k_alle, alle_api))
+check("de knop Focus staat aan als standaard", 'class="actief" href="/mail?periode=7"' in focus_html or
+      'class="actief" href="/mail"' in focus_html.replace("?periode=7", ""))
+r = c.post("/mail/besluit", headers=BEHEER, data={"uniek": "info@h-invest.be:<h@x>", "actie": "afgehandeld", "periode": "7", "filter": "alle"})
+check("na een besluit blijft de keuze Alle postvakken", "postvak=alle" in r.headers.get("Location", ""), r.headers.get("Location"))
+c.post("/mail/besluit", headers=BEHEER, data={"uniek": "info@h-invest.be:<h@x>", "actie": "terug"})
+check("zonder token geen stand", c.get("/api/mail/stand").status_code == 403)
+stand = c.get("/api/mail/stand?sinds=" + urllib.parse.quote((VANDAAG - timedelta(days=3)).isoformat()), headers=K).get_json()
+check("de stand noemt dezelfde focus als /mail", stand["focus"] == list(A.MAIL_FOCUS) == ["mch@h-architects.be",
+      "mehdichegini@hotmail.com", "melodiebvba@gmail.com"], stand["focus"])
+check("de stand telt open per postvak zoals /api/mail/open",
+      sum(x["open"] for x in stand["postvakken"].values()) == alle_api and stand["postvakken"]["info@h-invest.be"]["open"] == 1,
+      {k: v["open"] for k, v in stand["postvakken"].items()})
+with A.app.app_context():
+    _verwacht = sum(1 for (d,) in A.db().execute("SELECT datum FROM mailbericht WHERE postvak='mch@h-architects.be'").fetchall()
+                    if datetime.fromisoformat(d) >= VANDAAG - timedelta(days=3))
+check("binnen telt alleen wat na sinds kwam (mch@: zonder die van 6, 9 en 40 dagen)",
+      stand["postvakken"]["mch@h-architects.be"]["binnen"] == _verwacht and 0 < _verwacht < 20,
+      (stand["postvakken"]["mch@h-architects.be"], _verwacht))
+check("een postvak zonder mail staat er toch, met nul (hotmail)", stand["postvakken"]["mehdichegini@hotmail.com"]["binnen"] == 0)
+check("uitgeschreven telt alleen wat aanvaard werd", stand["postvakken"]["melodiebvba@gmail.com"]["uitgeschreven"] == 1
+      and stand["postvakken"]["mch@h-architects.be"]["uitgeschreven"] == 0, stand["postvakken"]["melodiebvba@gmail.com"])
+check("de stand geeft per wacht de laatste ronde en de open noden", "mail-mch" in stand["wachten"]
+      and "noden" in stand["wachten"]["mail-mch"])
 
 check("het bord heeft een knop Mail voor beheer", "/mail" in c.get("/", headers=BEHEER).get_data(as_text=True))
 check("het bord toont die knop niet aan anderen", 'href="/mail"' not in c.get("/", headers=ANDER).get_data(as_text=True))
