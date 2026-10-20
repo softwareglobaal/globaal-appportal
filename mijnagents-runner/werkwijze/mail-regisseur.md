@@ -1,6 +1,6 @@
 # Werkwijze van De Mailregisseur
 
-Versie 1.6 (20-10-2026: opgevolgd tot opgelost; de update telt vanaf de vorige geslaagde update, haalt een gemiste update in en noemt geen losse mails, na de toets van Codex). Versie 1.5 (20-10-2026, Mehdi: "ik wil update 2 keer per dag ... de systeem en niet elke individuele mails ... we focusen nu op mch, mehdichegini@hotmail.com, melodie": een update om 08:00 en 17:00, elke dag, in plaats van het 08:00-signaal). Versie 1.4 (20-10-2026: het aantal uitschrijvingen in het overzicht). Versie 1.3 (19-10-2026, driehoeksoverleg 3-0: een bron voor wat openstaat, oproepen alleen op een vast moment; 1.2 26-09-2026; 1.1 en 1.0 op 25-09-2026). Mandaat van Mehdi: "een regisseur van de e-mails aanstellen, die de antwoorden geeft aan de
+Versie 1.7 (20-10-2026: tweede toets van Codex verwerkt: een mislukte update wordt ingehaald, een punt dat liep blijft lopen als de wacht het anders indeelt). Versie 1.6 (20-10-2026: opgevolgd tot opgelost; de update telt vanaf de vorige geslaagde update, haalt een gemiste update in en noemt geen losse mails, na de toets van Codex). Versie 1.5 (20-10-2026, Mehdi: "ik wil update 2 keer per dag ... de systeem en niet elke individuele mails ... we focusen nu op mch, mehdichegini@hotmail.com, melodie": een update om 08:00 en 17:00, elke dag, in plaats van het 08:00-signaal). Versie 1.4 (20-10-2026: het aantal uitschrijvingen in het overzicht). Versie 1.3 (19-10-2026, driehoeksoverleg 3-0: een bron voor wat openstaat, oproepen alleen op een vast moment; 1.2 26-09-2026; 1.1 en 1.0 op 25-09-2026). Mandaat van Mehdi: "een regisseur van de e-mails aanstellen, die de antwoorden geeft aan de
 hoofdregisseur. Dit is heel belangrijk, anders ga ik al die e-mails vergeten. Geen spam, geen rommelinformatie."
 
 ## Wat ik doe
@@ -35,7 +35,8 @@ hoog belang eerst en daarna wat het langst wacht. Elk punt krijgt een voorstel: 
   tegel Op te volgen, loopt dezelfde als de tegel Loopt. Nieuw telt wat het bord sinds de vorige geslaagde update voor
   het eerst zag, dus nooit twee keer en ook wat een wacht later ophaalt (hotmail als de Mac sliep). Mislukken alle
   rondes rond 08:00 of 17:00, dan haal ik de update later die dag in (tot de volgende update, of tot 21:00); bellen doet
-  zo'n late ronde nooit. De titel past op een gsm (110 tekens): eerst wat open is, wat loopt en of de wachten werken.
+  zo'n late ronde nooit. Kan ik de stand niet lezen, dan meld ik dat een keer en probeer ik het de volgende ronde
+  opnieuw. Een verlopen bericht dat weer open staat, laat nooit opnieuw bellen. De titel past op een gsm (110 tekens): eerst wat open is, wat loopt en of de wachten werken.
   Het geheel staat op het bord, met cijfers, zonder losse mails. Ook als er niets te melden is, komt de update.
 - Opgevolgd tot opgelost (Mehdi, 20-10-2026: "er moet een systeem zijn dat ik weet dat een mail opgevolgd wordt tot
   het volledig gedaan/opgelost is"; gekozen: pas weg na Opgelost). Een antwoord of doorsturen zet een punt op Loopt,

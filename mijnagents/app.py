@@ -761,6 +761,21 @@ def api_mail():
                                (r["uniek"][:250],)).fetchone()
             if oud and oud["opvolging"] in ("beantwoord", "doorgezet"):
                 opv, antw = oud["opvolging"], [oud["antwoord_door"], oud["antwoord_ts"], oud["antwoord_naar"], oud["stap"]]
+        soort = (r.get("soort") or "")[:20]
+        # Eenmaal begonnen opvolging blijft tot een besluit of tot het bericht verdwenen is (opgevolgd tot opgelost,
+        # 20-10-2026; Codex-toets f750f0c, 5): deelt de wacht een punt dat open stond of liep later anders in (een
+        # ruisregel voor de afzender, een strengere regel, een gewoon bericht dat weer 'wacht' heet), dan blijft het met
+        # zijn soort en opvolging staan tot iemand Opgelost of Ruis klikt.
+        vorig = conn.execute("SELECT soort, opvolging, besluit, antwoord_door, antwoord_ts, antwoord_naar, stap FROM mailbericht "
+                             "WHERE uniek=?", (r["uniek"][:250],)).fetchone()
+        loopt_of_open = (*MAIL_OPEN, *MAIL_LOOPT)
+        if (opv is not None and vorig and not vorig["besluit"] and vorig["soort"] in MAIL_OPVOLG
+                and vorig["opvolging"] in loopt_of_open):
+            if soort not in MAIL_OPVOLG:
+                soort = vorig["soort"]
+            if opv not in (*loopt_of_open, "verdwenen"):
+                opv = vorig["opvolging"]
+                antw = [vorig["antwoord_door"], vorig["antwoord_ts"], vorig["antwoord_naar"], vorig["stap"]]
         conn.execute(
             "INSERT INTO mailbericht(uniek,wacht,postvak,map,datum,dag,van,van_naam,domein,onderwerp,soort,waarom,mailinglijst,"
             "beantwoord,ts,message_id,opvolging,antwoord_door,antwoord_ts,antwoord_naar,stap,dringend,auto_opruimen,gezien) "
@@ -776,7 +791,7 @@ def api_mail():
             "THEN mailbericht.auto_opruimen ELSE excluded.auto_opruimen END",
             (r["uniek"][:250], (wacht or r.get("wacht") or "")[:60], r["postvak"][:120], (r.get("map") or "")[:120],
              r["datum"][:40], dag, van, (r.get("van_naam") or "")[:120], van.rsplit("@", 1)[-1] if "@" in van else "",
-             (r.get("onderwerp") or "")[:300], (r.get("soort") or "")[:20], (r.get("waarom") or "")[:200],
+             (r.get("onderwerp") or "")[:300], soort, (r.get("waarom") or "")[:200],
              1 if lijst else 0, 1 if (r.get("beantwoord") or opv in ("beantwoord", "doorgezet")) else 0, nu(),
              (r.get("message_id") or "")[:250], opv, *antw, 1 if r.get("dringend") else 0, (r.get("auto_opruimen") or "")[:20], nu()))
         n += 1
@@ -835,6 +850,13 @@ def api_mail_stand():
     except ValueError:
         sinds = datetime.now(BRUSSEL) - timedelta(hours=24)
     sinds = sinds if sinds.tzinfo else sinds.replace(tzinfo=BRUSSEL)
+    # tot: de grens die De Mailregisseur ook als vorige update bewaart, zodat wat tussen zijn klok en deze vraag binnenkwam
+    # niet in twee updates telt (Codex-toets f750f0c, 7)
+    try:
+        tot = datetime.fromisoformat(request.args.get("tot", ""))
+        tot = tot if tot.tzinfo else tot.replace(tzinfo=BRUSSEL)
+    except ValueError:
+        tot = datetime.now(timezone.utc) + timedelta(days=1)
     van_dag = (sinds.astimezone(BRUSSEL).date() - timedelta(days=1)).isoformat()
 
     def na(ts):
@@ -842,7 +864,8 @@ def api_mail_stand():
             t = datetime.fromisoformat(ts or "")
         except ValueError:
             return False
-        return (t if t.tzinfo else t.replace(tzinfo=timezone.utc)) >= sinds
+        t = t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+        return sinds <= t < tot
 
     wacht_van = {r["postvak"]: r["wacht"] for r in conn.execute("SELECT postvak, wacht FROM mailpostvak").fetchall()}
     stand = {}
@@ -882,7 +905,7 @@ def api_mail_stand():
     for r in conn.execute("SELECT naam, tekst FROM nood WHERE open=1 AND naam LIKE 'mail-%' ORDER BY id").fetchall():
         if r["naam"] in wachten:
             wachten[r["naam"]]["noden"].append(r["tekst"])
-    return jsonify(sinds=sinds.isoformat(), focus=list(MAIL_FOCUS), postvakken=stand, wachten=wachten)
+    return jsonify(sinds=sinds.isoformat(), tot=tot.isoformat(), focus=list(MAIL_FOCUS), postvakken=stand, wachten=wachten)
 
 
 @app.route("/api/mail/veilig")
@@ -1139,8 +1162,11 @@ def mail_pagina():
     # Wat loopt (geantwoord of doorgezet, nog niet opgelost), en afgesloten in deze periode: opgelost of ruis (een klik,
     # wie en wanneer), of niet meer in het postvak (20-10-2026: niets anders sluit nog vanzelf).
     loopt = _mail_loopt(conn, postvak=keuze)
-    w, a = ("soort IN ('hoog','midden','actie') AND dag>=? AND (besluit IN ('afgehandeld','ruis') "
-            "OR (besluit='' AND opvolging='verdwenen'))", [van_dag])
+    # Een besluit telt op de dag dat het genomen werd: wie vandaag een oude mail op Opgelost zet, ziet hem hier (Codex-toets
+    # f750f0c, 11); besluit_ts is UTC, een dag marge vangt de tijdzone op.
+    w, a = ("soort IN ('hoog','midden','actie') AND ((besluit IN ('afgehandeld','ruis') AND (dag>=? OR besluit_ts>=?)) "
+            "OR (besluit='' AND opvolging='verdwenen' AND dag>=?))",
+            [van_dag, (datetime.fromisoformat(van_dag) - timedelta(days=1)).date().isoformat(), van_dag])
     pw, pa = _postvak_waar(keuze)
     w, a = w + pw, a + pa
     afgesloten = sorted((_mailpunt(r) for r in conn.execute(f"SELECT * FROM mailbericht WHERE {w} LIMIT 500", a).fetchall()),

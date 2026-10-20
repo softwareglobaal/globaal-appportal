@@ -273,13 +273,16 @@ def main():
             per_firma[i["firma"]] = per_firma.get(i["firma"], 0) + 1
         samen = ", ".join(f"{FIRMANAMEN.get(k, k)} {v}" for k, v in sorted(per_firma.items())) or "niets"
         ag.log(f"dag {vandaag}", "overzicht", f"{m}: wacht op opvolging: {samen}", tekst)
+        update_mislukt = False
         items = [{"voor": "regisseur", "soort": "verslag", "sleutel": vandaag, "titel": f"Mail {vandaag} {m}: {samen}",
                   "uniek": f"mailregisseur:{vandaag}:{m}", "inhoud": tekst}]
         d = dringend(lijst)
         # Dringend (postvak.DRINGEND: deurwaarder, ingebrekestelling, laatste aanmaning, schorsing, ...): De Bode laten
         # bellen, een keer per bericht, alleen op een van mijn vaste momenten (werkdagen 08:00, 12:30, 17:00), nooit bij een
         # ronde met --nu daarbuiten (ontwerptoets 19-10-2026, Claude O8). Nooit het woord stil.
-        for i in (x for x in lijst if x.get("dringend") and echt):
+        # Een verlopen bericht dat sinds 20-10-2026 weer open staat (opgevolgd tot opgelost), laat nooit nieuw bellen: was het
+        # dringend, dan was er al een oproep toen het binnenkwam (Codex-toets f750f0c, 6).
+        for i in (x for x in lijst if x.get("dringend") and echt and x.get("opvolging") != "verlopen"):
             # een oproep per bericht (uniek op het item), dus nooit twee keer gebeld voor hetzelfde; De Bode bundelt
             # wat tegelijk binnenkomt in een gesprek
             items.append({"voor": "mehdi", "soort": "oproep", "sleutel": vandaag,
@@ -292,24 +295,29 @@ def main():
         if m in UPDATES:
             # De update over het systeem, twee keer per dag (20-10-2026); zonder aantal in de sleutel (N10), zonder het
             # woord stil (AGENTNORM 6). Lukt de stand niet, dan zeg ik dat in de update in plaats van te zwijgen.
-            # Vanaf de vorige geslaagde update, zodat niets twee keer of nooit telt (Codex-toets 20-10-2026, 1 en 2).
+            # Van de vorige geslaagde update tot nu, met dezelfde grens als bewaard wordt, zodat niets twee keer of nooit
+            # telt, ook niet na een lange storing (Codex-toetsen 20-10-2026: 1, 2, 7, 8).
             try:
                 sinds = datetime.fromisoformat(staat.get("_laatste_update", ""))
-                if not (nu - timedelta(days=3) < sinds < nu):
-                    raise ValueError("te oud")
+                if not sinds < nu:
+                    raise ValueError("in de toekomst")
             except (TypeError, ValueError):
                 sinds = vorige_update(nu, m)
             try:
-                stand = bord.call("/api/mail/stand?" + urllib.parse.urlencode({"sinds": sinds.isoformat()}))
+                stand = bord.call("/api/mail/stand?" + urllib.parse.urlencode({"sinds": sinds.isoformat(), "tot": nu.isoformat()}))
                 storing = storingen(stand, nu)
                 titel, inhoud = titel_update(m, stand, storing), inhoud_update(m, stand, storing, sinds)
+                items.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": titel[:280],
+                              "uniek": f"mailupdate:{vandaag}:{m}", "inhoud": inhoud})
                 staat["_laatste_update"] = nu.isoformat()
             except Exception as e:  # noqa: BLE001
-                titel = f"Mail {m}: update niet gelukt, de stand van het bord kon ik niet lezen; kijk op mijnagents.globaal.be/mail"
-                inhoud = f"{type(e).__name__}: {str(e)[:200]}"
+                # Een keer melden dat het niet lukte (eigen sleutel), en het moment niet als gedaan bewaren: de volgende
+                # ronde probeert het opnieuw, en die update komt dan nog (Codex-toets f750f0c, 10).
+                update_mislukt = True
+                items.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "uniek": f"mailupdate:{vandaag}:{m}:fout",
+                              "titel": f"Mail {m}: update niet gelukt, ik probeer het opnieuw; kijk intussen op mijnagents.globaal.be/mail",
+                              "inhoud": f"{type(e).__name__}: {str(e)[:200]}"})
                 r.nood(f"De update van {m} kon /api/mail/stand niet lezen: {type(e).__name__}", wie="claude-code")
-            items.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": titel[:280],
-                          "uniek": f"mailupdate:{vandaag}:{m}", "inhoud": inhoud})
         ag.klaarzet(items)
         try:
             for it in oude_oproepen(lijst, bord.klaargezet_voor("mehdi", n=500)):
@@ -322,7 +330,8 @@ def main():
                    wie="mehdi")
         r.detail = (f"{m}: {len(lijst)} op te volgen, zoals op /mail ({samen}), dringend {len(d)}; uitgeschreven 24 u: "
                     f"{'onbekend' if uit is None else (sum(uit.values()) or 0)}")
-        staat.setdefault(vandaag, {})[m] = nu.isoformat()
+        if not update_mislukt:
+            staat.setdefault(vandaag, {})[m] = nu.isoformat()
         for k in [k for k in staat if k[:1].isdigit() and k < vandaag]:  # _laatste_update blijft
             staat.pop(k)
         json.dump(staat, open(STAAT, "w"), ensure_ascii=False)

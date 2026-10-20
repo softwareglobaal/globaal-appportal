@@ -710,6 +710,11 @@ def test_de_update_twee_keer_per_dag():
     bron = open(os.path.join(HIER, "mail_regisseur.py"), encoding="utf-8").read()
     assert '"uniek": f"mailupdate:{vandaag}:{m}"' in bron and "if m in UPDATES:" in bron
     assert 'staat["_laatste_update"] = nu.isoformat()' in bron, "de volgende update telt vanaf de vorige geslaagde"
+    # Codex-toets f750f0c: dezelfde grens voor telling en bewaring (7), geen limiet van drie dagen (8), een mislukte update
+    # wordt een keer gemeld en later ingehaald (10), een weer open verlopen bericht belt nooit (6)
+    assert '"tot": nu.isoformat()' in bron and "timedelta(days=3) < sinds" not in bron
+    assert ':fout"' in bron and "if not update_mislukt:" in bron
+    assert 'x.get("opvolging") != "verlopen"' in bron
     assert "onderwerp" not in bron[bron.index("def inhoud_update"):bron.index("def oude_oproepen")], "geen losse mails in de update"
     stand["wachten"]["mail-mch"]["actief"] = 0
     assert "de wacht staat uit" in M.storingen(stand, nu)["mch@h-architects.be"]

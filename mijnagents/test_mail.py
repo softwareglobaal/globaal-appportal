@@ -198,6 +198,17 @@ c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [dict(MCH[3],
 check("met een volledige lezing volgt de wacht de draad", rij("mch@h-architects.be:<antw@x>")["opvolging"] == "open")
 c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [MCH[3]]})
 
+# --- eenmaal begonnen opvolging blijft (Codex-toets f750f0c, 5): een punt dat loopt of open staat, verdwijnt niet als de
+# wacht het later anders indeelt; alleen een besluit of 'verdwenen' haalt het weg
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [dict(MCH[3], soort="rommel", opvolging="geen", antwoord_door="",
+                                                                          antwoord_ts="")]})
+_r = rij("mch@h-architects.be:<antw@x>")
+check("een punt dat loopt, blijft lopen als de wacht het later als rommel ziet",
+      (_r["soort"], _r["opvolging"], _r["antwoord_door"]) == ("hoog", "beantwoord", "info@h-invest.be"), _r)
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [dict(MCH[0], soort="midden", opvolging="wacht")]})
+check("een open punt blijft open als de wacht het weer 'wacht' noemt", rij("mch@h-architects.be:<a@kbc>")["opvolging"] == "open")
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [MCH[0], MCH[3]]})
+
 # --- De Mailregisseur leest hetzelfde, met de sleutel voor een oproep
 punten = c.get("/api/mail/open", headers=K).get_json()["punten"]
 check("De Mailregisseur krijgt per punt wacht, soort, stap en dringend", all(
@@ -370,6 +381,14 @@ _alle = c.get("/mail?postvak=alle", headers=BEHEER).get_data(as_text=True)
 check("de stand telt Loopt zoals de tegel Loopt op Alle postvakken",
       sum(x["loopt"] for x in stand["postvakken"].values())
       == int(_alle.split('id="tegel-loopt"')[1].split('class="groot">')[1].split("<")[0]) > 0)
+_leeg = c.get("/api/mail/stand?" + urllib.parse.urlencode({"sinds": (VANDAAG - timedelta(days=3)).isoformat(),
+                                                             "tot": (VANDAAG - timedelta(days=2)).isoformat()}), headers=K).get_json()
+check("tot is de bovengrens: wat het bord daarna zag, telt pas in de volgende update (Codex-toets f750f0c, 7)",
+      sum(x["binnen"] for x in _leeg["postvakken"].values()) == 0, {k: x["binnen"] for k, x in _leeg["postvakken"].items()})
+c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<oudactie@x>", "actie": "afgehandeld"})
+check("wie vandaag een mail van 9 dagen oud op Opgelost zet, ziet hem bij Afgesloten van 7 dagen (Codex-toets f750f0c, 11)",
+      "Betaling mislukt" in c.get("/mail?periode=7", headers=BEHEER).get_data(as_text=True).split('id="afgesloten"')[1].split("</section>")[0])
+c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<oudactie@x>", "actie": "terug"})
 check("de stand geeft per wacht de laatste ronde en de open noden", "mail-mch" in stand["wachten"]
       and "noden" in stand["wachten"]["mail-mch"])
 
