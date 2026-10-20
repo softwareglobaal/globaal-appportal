@@ -579,6 +579,19 @@ class ZorgPlaats(unittest.TestCase):
 
 
 
+
+class RitblokIsGeenConsult(unittest.TestCase):
+    def test_handmatig_ritblok_met_zorgwoord_krijgt_geen_profielplaats(self):
+        nu = datetime(2026, 10, 20, 9, 0, tzinfo=W.nu_lokaal().tzinfo)
+        rit = {"id": "ritoud", "kalender": W.PRIVE_AGENDA, "titel": "\U0001F697 Reistijd \u2192 Tandarts",
+               "start": "2026-12-09T08:10:00+01:00", "einde": "2026-12-09T08:30:00+01:00", "locatie": "",
+               "omschrijving": "", "_organisator_zelf": True, "maker": sorted(W._eigen_accounts())[0]}
+        profiel = {"id": "proef-tand", "naam": "Proefpraktijk Tand", "soort": "tandarts",
+                   "adres": "Proeflaan 9, 3000 Leuven", "geverifieerd": "2026-10-01", "bewijs": "proef",
+                   "patienten": ["Mehdi"], "aan_huis": False}
+        self.assertIsNone(W._zorg_profiel_kiezen(rit, [profiel], nu))
+
+
 class KaartstoringNietWegschrijven(unittest.TestCase):
     """Een storing van de kaartdienst is vals maar geen JSON-waarde: niemand mag coord() rauw in een structuur zetten."""
 

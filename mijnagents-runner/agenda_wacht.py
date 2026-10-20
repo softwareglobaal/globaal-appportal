@@ -2740,6 +2740,7 @@ def _zorg_profiel_nooit_aan_huis(a, profielen=None, nu=None):
 def _zorg_profiel_kiezen(a, profielen, nu):
     """Een gecontroleerd profiel en een eigen patiënt; vrije omschrijving bewijst nooit de herkomst van de plaats."""
     if not (a.get("kalender") == PRIVE_AGENDA and a.get("id") and is_zorg_titel(a.get("titel"))
+            and not lees_titel(a.get("titel") or "")["reistijd"]    # een ritblok "Reistijd -> Tandarts" is geen consult
             and _toekomst(a.get("start"), nu) and not a.get("hele_dag")
             and not a.get("deelnemers") and not a.get("_agendagasten")
             and not a.get("_terugkerend") and not a.get("_reeks")
