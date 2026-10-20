@@ -54,8 +54,8 @@ transcript telt, nooit de samenvatting van de recorder (D7).
    de standaard architectuur van het klaarzetten; dat is geen beslissing. Staat
    er al een nummer, dan legt de reeks de soort vast: 56xx is regularisatie. Past
    de soort niet bij de reeks (en is het geen addendum, dat het nummer van zijn
-   project volgt), dan stop ik voor die deal vóór elke verdere schrijfactie en
-   meld ik het op de deal: Mehdi beslist. Zonder nummer
+   project volgt), dan stop ik voor die deal vóór elke schrijfactie, ook vóór
+   `voorbereiding_starten`, en meld ik het op de deal: Mehdi beslist. Zonder nummer
    stel ik de soort voor uit de bronnen, met `keuze_maken` en een bron met een
    letterlijk citaat dat de opdracht zelf beschrijft: **regularisatie** als de
    opdracht het vergunnen van een bestaande, niet-vergunde toestand is (een
@@ -72,8 +72,11 @@ transcript telt, nooit de samenvatting van de recorder (D7).
    dashboard weigert het ook. Pas als de soort vastligt, bereken ik het nummer,
    uit de reeks van die soort. Verandert de soort in deze ronde, dan plan ik
    opnieuw met de velden van de master van die soort; een nummer uit de reeks
-   van de oude soort gaat nooit naar het bord. Wil het tweede plan de soort nog
-   eens anders, dan stel ik geen nummer voor en beslist Mehdi. Een andere
+   van de oude soort gaat nooit naar het bord. Wijst mijn plan op een andere
+   soort en gaat die wissel niet door (geen letterlijk bewijs, of Mehdi koos de
+   soort), dan stel ik geen nummer voor tot de soort vastligt. Wil het tweede
+   plan de soort nog eens anders, dan voer ik van dat plan niets uit en beslist
+   Mehdi. Een andere
    dealtitel geldt als nieuws: dan doe ik de deal opnieuw, ook binnen 24 uur.
 
    Het projectnummer nakijken (D9). Het nummer staat vóór de klantnaam in

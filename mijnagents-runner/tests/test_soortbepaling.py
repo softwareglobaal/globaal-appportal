@@ -113,7 +113,7 @@ class Record:
         return self
 
 
-def ronde(titel, soort, plannen, beschermd=(), droog=False, citaat_ok=True, vers=True, agent_staat=None):
+def ronde(titel, soort, plannen, beschermd=(), droog=False, citaat_ok=True, vers=True, agent_staat=None, controle=None):
     """Eén verwerk-ronde met nagemaakte koppelingen. Geeft (uitkomst, gebeurtenissen)."""
     gebeurd = []
     staat = {"soort": soort}
@@ -132,7 +132,7 @@ def ronde(titel, soort, plannen, beschermd=(), droog=False, citaat_ok=True, vers
         if naam in ("voorbereiding", "voorbereiding_starten"):
             return voorbereiding()
         if naam == "dossiercontrole":
-            return {"controles": [{"nummer": "C4", "status": "ok", "bewijs": "/sales/Ingrid Schmitz"}]}
+            return controle or {"controles": [{"nummer": "C4", "status": "ok", "bewijs": "/sales/Ingrid Schmitz"}]}
         if naam == "tijdlijn":
             return {"momenten": []}
         if naam == "proef_maken":
@@ -244,9 +244,10 @@ check("2618 met een PV: het nummer houdt de soort architectuur, geen wissel",
 print("\n6. de grenzen uit de Codex-controle van 20-10-2026")
 staat = {}
 uit, g = ronde("2618 Paulina Andrzejczyk", "regularisatie", [gewoon_plan], agent_staat=staat)
-check("2: soort regularisatie op een 26xx-nummer stopt de deal vóór plan, invullen en proef",
+check("2: soort regularisatie op een 26xx-nummer stopt de deal vóór elke schrijfactie, ook voorbereiding_starten",
       uit.get("gestopt") is True and not any(e[0] in ("plan", "bord") for e in g)
-      and not any(e[0] == "mcp" and e[1] in ("gegeven_invullen", "keuze_maken", "proef_maken", "tijdlijn") for e in g), g)
+      and not any(e[0] == "mcp" and e[1] in ("voorbereiding_starten", "gegeven_invullen", "keuze_maken", "proef_maken",
+                                             "tijdlijn") for e in g), g)
 check("   en zegt het op de deal, met de reden", any(e[0] == "notitie" and "spreken elkaar tegen" in e[1] for e in g), g)
 check("   en onthoudt titel en stempel, zodat ik pas terugkom als er iets verandert",
       staat.get(str(DEAL["id"]), {}).get("titel") == "2618 Paulina Andrzejczyk"
@@ -255,7 +256,9 @@ check("   en onthoudt titel en stempel, zodat ik pas terugkom als er iets verand
 
 def wil_architectuur_terug(voorb, vrij):
     p = wil_regularisatie(voorb, vrij)
-    p["keuzes"] = {"soort": "architectuur"}
+    p["keuzes"] = {"soort": "architectuur", "ereloon_minimum_keuze": "nee"}
+    p["gegevens"] = [{"velden": {"ereloon_regularisatie": "3.500,00"}, "bron": "Fathom-transcript 15-10-2026",
+                      "citaat": "het zou in 3.500 euro exclusief BTW kosten, als forfait"}]
     p["nummer_voorstel"] = vrij
     return p
 
@@ -264,12 +267,35 @@ uit, g = ronde("Ingrid Schmitz", "architectuur", [wil_regularisatie, wil_archite
 check("5: wil het tweede plan de soort weer anders, dan geen nummer op het bord en een melding",
       not any(e[0] == "bord" for e in g) and any(e[0] == "notitie" and "Mehdi beslist" in e[1] for e in g)
       and len([e for e in g if e[0] == "plan"]) == 2, g)
+check("5: en van dat tegenstrijdige plan wordt niets uitgevoerd: geen gegevens, geen keuzes, geen proef",
+      not any(e[0] == "mcp" and e[1] in ("gegeven_invullen", "proef_maken") for e in g)
+      and not any(e[0] == "mcp" and e[1] == "keuze_maken" and "ereloon_minimum_keuze" in (e[2].get("keuzes") or {})
+                  for e in g), g)
+
+
+def wil_regularisatie_met_nummer(voorb, vrij):
+    p = wil_regularisatie(voorb, vrij)
+    p["nummer_voorstel"] = vrij
+    return p
+
+
+uit, g = ronde("Ingrid Schmitz", "architectuur", [wil_regularisatie_met_nummer], beschermd=("soort",))
+check("10: Mehdi koos architectuur, het plan wil regularisatie en herhaalt 2621: dat nummer gaat niet naar het bord",
+      not any(e[0] == "bord" for e in g) and any(e[0] == "notitie" and "geen nummer" in e[1] for e in g), g)
 
 _, g1 = ronde("Ingrid Schmitz", "architectuur", [gewoon_plan], droog=True, vers=False)
 _, g2 = ronde("Ingrid Schmitz (regularisatie)", "architectuur", [gewoon_plan], droog=True, vers=False)
 h1 = [e[1] for e in g1 if e[0] == "hash"]
 h2 = [e[1] for e in g2 if e[0] == "hash"]
 check("3: een andere dealtitel geeft een andere planhash (alles wat het model ziet, telt)", h1 and h2 and h1 != h2, (h1, h2))
+c_a = {"controles": [{"nummer": "C4", "status": "ok", "bewijs": "/sales/Ingrid Schmitz"}], "uitgevoerd_op": "20-10-2026 om 18:00"}
+c_b = dict(c_a, uitgevoerd_op="20-10-2026 om 18:30")
+c_c = dict(c_a, controles=c_a["controles"] + [{"nummer": "C8", "status": "fout", "titel": "Ereloon", "bevinding": "geen"}])
+hs = []
+for c in (c_a, c_b, c_c):
+    _, gx = ronde("Ingrid Schmitz", "architectuur", [gewoon_plan], droog=True, vers=False, controle=c)
+    hs.append([e[1] for e in gx if e[0] == "hash"])
+check("3: de dossiercontrole telt mee in de hash, haar tijdstip niet", hs[0] == hs[1] and hs[0] != hs[2], hs)
 oud_dg = ca.dossier_gewijzigd
 ca.dossier_gewijzigd = lambda d, s: False
 nu_iso = ca.datetime.now(ca.timezone.utc).isoformat()

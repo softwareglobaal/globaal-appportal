@@ -784,6 +784,22 @@ def soort_voorstellen(deal_id, nieuw, bron, voorb, ond):
     return mcp_call("voorbereiding", deal_id=deal_id), True, f"keuze soort = {nieuw} (voorstel, bron: {bron[:90]})"
 
 
+def stop_bij_conflict(deal_id, titel, voorb, conflict, staat, ond):
+    """D63, Codex-controle 1 en 2 (20-10-2026): past de soort niet bij de reeks van het nummer, dan schrijf ik voor
+    deze deal niets meer (ook geen voorbereiding_starten) en meld ik het op de deal; Mehdi beslist. Stempel en titel
+    bewaren, zodat ik pas terugkom als hij iets veranderde (of na 24 uur). Droog: alleen het verslag."""
+    log(ond, "fout", f"soort: {conflict}; deze deal gestopt vóór elke schrijfactie")
+    if not DROOG:
+        notitie_bijwerken(deal_id, "<b>Contracten-agent</b> — " + datetime.now().strftime("%d-%m-%Y %H:%M")
+                          + "<br><br><b>Gestopt: soort en projectnummer spreken elkaar tegen (D63)</b><br>- "
+                          + conflict + "<br>- Kies de juiste soort met Keuzes op contracten.globaal.be, of laat "
+                          "het nummer aanpassen; daarna ga ik verder.")
+        staat[str(deal_id)] = {"laatst": datetime.now(timezone.utc).isoformat(), "proef": "", "fouten": 1,
+                               "stempel": vingerafdruk(voorb), "titel": titel, "conflict": conflict[:200]}
+    log_verstuur()
+    return {"proef": "", "fouten": [f"soort: {conflict}"], "gestopt": True}
+
+
 def verwerk(deal, werkinstructie, staat):
     # Ook bij een bestaande dossiercode eerst het account vaststellen, voor de eerste MCP-schrijfactie.
     pipedrive.controleer_bedrijf(FIRMA, H_A_BEDRIJF_ID)
@@ -791,6 +807,19 @@ def verwerk(deal, werkinstructie, staat):
     titel = deal.get("title", "")
     nummer = nummer_uit_titel(titel)
     print(f"--- deal {deal_id} '{titel}'")
+    ond = f"deal {deal_id} · {titel}"
+    # D63 (Codex-controle 2, punt 2): bestaat het dossier al, dan eerst toetsen of soort en nummer bij elkaar
+    # passen, vóór voorbereiding_starten er iets in schrijft.
+    try:
+        bestaand = mcp.call("voorbereiding", deal_id=deal_id)
+    except mcp.ToolFout:
+        bestaand = None
+    if isinstance(bestaand, dict) and bestaand.get("velden") is not None:
+        b_nummer = nummer or str((bestaand.get("velden") or {}).get("project_nummer") or "").strip()
+        _, conflict = soortbepaling.soort_bij_nummer(soort_van_nummer(b_nummer), bestaand.get("soort") or "architectuur",
+                                                     "soort" in hh.beschermde_velden(bestaand))
+        if conflict:
+            return stop_bij_conflict(deal_id, titel, bestaand, conflict, staat, ond)
 
     start_args = {"deal_id": deal_id}
     if nummer:
@@ -806,7 +835,6 @@ def verwerk(deal, werkinstructie, staat):
             voorb = {"deal_id": deal_id, "let_op": "nog niet in voorbereiding"}
     nummer = nummer_van_voorbereiding(voorb, nummer)
     controle = mcp.call("dossiercontrole", deal_id=deal_id)
-    ond = f"deal {deal_id} · {titel}"
     if isinstance(start, dict) and not DROOG:
         log(ond, "bron", f"dossier in voorbereiding gezet ({'bestond al' if start.get('bestond_al') else 'nieuw'}), "
                          f"{len((voorb or {}).get('velden') or {})} velden, ontbreekt: {', '.join((voorb or {}).get('ontbreekt') or []) or 'niets'}")
@@ -823,18 +851,7 @@ def verwerk(deal, werkinstructie, staat):
     voorstel, conflict = soortbepaling.soort_bij_nummer(nummer_soort, (voorb or {}).get("soort") or "architectuur",
                                                         beschermd_soort)
     if conflict:
-        # Codex-controle 2 (20-10-2026): niet verder schrijven in een soort die niet bij het nummer past; Mehdi
-        # beslist. Stempel en titel bewaren, zodat ik pas terugkom als hij iets veranderde (of na 24 uur).
-        log(ond, "fout", f"soort: {conflict}; ronde voor deze deal gestopt")
-        if not DROOG:
-            notitie_bijwerken(deal_id, "<b>Contracten-agent</b> — " + datetime.now().strftime("%d-%m-%Y %H:%M")
-                              + "<br><br><b>Gestopt: soort en projectnummer spreken elkaar tegen (D63)</b><br>- "
-                              + conflict + "<br>- Kies de juiste soort met Keuzes op contracten.globaal.be, of laat "
-                              "het nummer aanpassen; daarna ga ik verder.")
-            staat[str(deal_id)] = {"laatst": datetime.now(timezone.utc).isoformat(), "proef": "", "fouten": 1,
-                                   "stempel": vingerafdruk(voorb), "titel": titel, "conflict": conflict[:200]}
-        log_verstuur()
-        return {"proef": "", "fouten": [f"soort: {conflict}"], "gestopt": True}
+        return stop_bij_conflict(deal_id, titel, voorb, conflict, staat, ond)
     if voorstel:
         voorb, gelukt, regel = soort_voorstellen(deal_id, voorstel, f"projectnummer {nummer} in de dealtitel of de "
                                                  f"voorbereiding: de reeks {nummer[:2]}xx is {voorstel} (D9, D63)", voorb, ond)
@@ -914,8 +931,13 @@ def verwerk(deal, werkinstructie, staat):
             "werkinstructie": werkinstructie, "werkwijze": WERKWIJZE, "veldenschema": schema,
             "model": MODEL, "vrij_nummer": vrij, "promptversie": SCHEMA_UITLEG,
             # Codex-controle 3: alles wat het model ziet, ook de deal zelf en de soortsignalen.
-            "deal": {"titel": titel, "organisatie": (deal.get("org_id") or {}).get("name")
-                     if isinstance(deal.get("org_id"), dict) else deal.get("org_name")},
+            "deal": {"titel": titel, "waarde": deal.get("value"),
+                     "persoon": (deal.get("person_id") or {}).get("name") if isinstance(deal.get("person_id"), dict)
+                     else deal.get("person_name"),
+                     "organisatie": (deal.get("org_id") or {}).get("name") if isinstance(deal.get("org_id"), dict)
+                     else deal.get("org_name")},
+            # De dossiercontrole zonder haar tijdstip: anders zou elke ronde een andere hash geven.
+            "dossiercontrole": {k: v for k, v in (controle or {}).items() if k != "uitgevoerd_op"},
             "soortsignalen": sigs})
         record.zet(invoerhash=hash_, hashes=per_deel, dossier_stempel=vingerafdruk(voorb), model_gevraagd=MODEL,
                    werkinstructie_hash=per_deel.get("werkinstructie"), werkwijze_hash=per_deel.get("werkwijze"),
@@ -945,6 +967,7 @@ def verwerk(deal, werkinstructie, staat):
     vrij, nummer_fout, schema, hash_, plan, tokens = nummer_en_plan(soort, voorb)
     # D63: stelt het model met bewijs een andere soort voor, dan eerst die soort, dan het nummer uit haar reeks,
     # dan het plan met de velden van haar master. Eén keer per ronde; een tweede wissel volgt niet.
+    plan_tegenspraak = False
     nieuw = str((plan.get("keuzes") or {}).get("soort") or "").strip()
     if nieuw and nieuw != soort:
         mag, reden = soortbepaling.wissel_toegelaten(nieuw, soort, beschermd_soort, nummer_soort)
@@ -952,14 +975,19 @@ def verwerk(deal, werkinstructie, staat):
         if mag:
             bron_soort, citaatfout = soortbepaling.toets_bewijs(plan.get("soort_bewijs"), deal, notitielijst, bronnen)
             if citaatfout:
-                mag, reden = False, f"zonder bewijs ({citaatfout}); geen nummer tot de soort vastligt"
-                plan["nummer_voorstel"] = None
+                mag, reden = False, f"zonder bewijs ({citaatfout})"
         (plan.get("keuzes") or {}).pop("soort", None)
         if not mag:
-            log(ond, "geweigerd", f"soortwissel {soort} -> {nieuw}: {reden}")
-            vooraf_fouten.append(f"soort {nieuw} niet voorgesteld: {reden}")
+            # Codex-controle 2, punt 10: het plan wijst op een andere soort dan die waarvoor het nummer berekend
+            # is; zolang dat niet opgelost is, gaat er geen nummer naar het bord (ook niet als Mehdi de soort koos).
+            plan["nummer_voorstel"] = None
+            log(ond, "geweigerd", f"soortwissel {soort} -> {nieuw}: {reden}; geen nummer")
+            vooraf_fouten.append(f"soort {nieuw} niet voorgesteld: {reden}; geen nummer tot de soort vastligt")
         else:
             voorb_nieuw, gelukt, regel = soort_voorstellen(deal_id, nieuw, bron_soort, voorb, ond)
+            if not gelukt:
+                plan["nummer_voorstel"] = None
+                vooraf_fouten.append(f"soort {nieuw} niet vastgelegd; geen nummer tot de soort vastligt")
             if gelukt:
                 vooraf_geschreven += [regel] if regel else []
                 record.zet(soortwissel={"van": soort, "naar": nieuw, "bron": bron_soort[:300], "eerste_plan": plan,
@@ -973,10 +1001,13 @@ def verwerk(deal, werkinstructie, staat):
                 tokens += eerste_tokens
                 tweede = str((plan.get("keuzes") or {}).pop("soort", "") or "").strip()
                 if tweede and tweede != soort:
-                    # Codex-controle 5: het tweede plan spreekt de wissel tegen. Geen nummer; Mehdi beslist.
-                    plan["nummer_voorstel"] = None
-                    log(ond, "geweigerd", f"tweede soortwissel {soort} -> {tweede}: tegenspraak, geen nummer")
-                    vooraf_fouten.append(f"soort: het plan wil na {soort} opnieuw {tweede}; geen nummer, Mehdi beslist")
+                    # Codex-controle 1 en 2, punt 5: het tweede plan spreekt de wissel tegen. Dan voer ik van dat
+                    # plan niets uit (geen gegevens, geen keuzes, geen proef, geen nummer); Mehdi beslist.
+                    plan.update({"nummer_voorstel": None, "gegevens": [], "keuzes": {}})
+                    plan_tegenspraak = True
+                    log(ond, "geweigerd", f"tweede soortwissel {soort} -> {tweede}: tegenspraak, niets uitgevoerd")
+                    vooraf_fouten.append(f"soort: het plan wil na {soort} opnieuw {tweede}; niets uitgevoerd, "
+                                         "geen proef en geen nummer. Mehdi beslist")
     velden = (voorb or {}).get("velden") or {}
     if DROOG:
         log_verstuur()
@@ -1057,15 +1088,17 @@ def verwerk(deal, werkinstructie, staat):
             fouten.append(f"keuze_maken: {str(e)[:200]}")
             log(ond, "fout", f"keuze_maken geweigerd: {str(e)[:200]}")
     proef = ""
-    if tijdlijn_gaten and str(velden.get("tijdlijn_aanvaard", "")).lower() != "ja":
+    geen_proef = ""
+    if plan_tegenspraak:
+        geen_proef = "het plan sprak de soort tegen (D63)"
+        log(ond, "proef", f"geen proef: {geen_proef}")
+    elif tijdlijn_gaten and str(velden.get("tijdlijn_aanvaard", "")).lower() != "ja":
+        geen_proef = "tijdlijn niet volledig (D37)"
         fouten.append(f"proef: tijdlijn heeft {len(tijdlijn_gaten)} gat(en) zonder bewijs (D37); verzoeken staan op het bord")
         log(ond, "proef", f"geen proef: tijdlijn heeft {len(tijdlijn_gaten)} gat(en) zonder bewijs (D37)")
-        p = None
-    else:
-        p = True
     try:
-        if p is None:
-            raise mcp.ToolFout("tijdlijn niet volledig (D37)")
+        if geen_proef:
+            raise mcp.ToolFout(geen_proef)
         p = mcp_call("proef_maken", deal_id=deal_id)
         proef = p.get("docx", "") if isinstance(p, dict) else ""
         log(ond, "proef", f"proef gemaakt: {proef}")
