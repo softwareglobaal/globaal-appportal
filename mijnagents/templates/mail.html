@@ -75,9 +75,7 @@
 <body>
 {% macro kort(a) %}{{ a.split('@')[0] }}@{{ a.split('@')[1].split('.')[0] if '@' in a else '' }}{% endmacro %}
 {% macro gesch(p) %}<details class="gesch"><summary>Geschiedenis</summary><ul>
-  <li>{{ p['datum'] }}: binnengekomen{% if p['map'] %} in {{ p['map'] }}{% endif %}</li>
-  {% if p['antwoord_door'] %}<li>{{ p['antwoord_wanneer'] }}: {{ 'doorgestuurd' if p['opvolging'] == 'doorgezet' else ('mogelijk beantwoord' if p['opvolging'] == 'onzeker' else 'beantwoord') }} door {{ p['antwoord_door'] }}</li>{% endif %}
-  {% for w, a, d in geschiedenis.get(p['uniek'], []) %}<li>{{ w }}: {{ a }} door {{ d }}</li>{% endfor %}
+  {% for w, tekst in geschiedenis.get(p['uniek'], []) %}<li>{{ w }}: {{ tekst }}</li>{% endfor %}
   <li>nu: {{ p['status'] }}</li>
 </ul></details>{% endmacro %}
 <div class="scene"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
@@ -174,10 +172,12 @@
             <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
             <button class="{{ stijl }} knop-klein">{{ naam }}</button></form>
           {% endfor %}
-          <form method="post" action="{{ url_for('mail_besluit') }}" onsubmit='return confirm({{ ("Helemaal weg: alle mail van " ~ p["van"] ~ " in " ~ p["postvak"] ~ " naar Opgeruimd, ook wat later komt, en uitschrijven via de officiele knop als die er is. Er wordt niets verwijderd; terugdraaien kan bij Jouw regels.")|tojson }})'>
+          {% if postvakken.get(p['postvak'], {}).get('schrijven') %}
+          <form method="post" action="{{ url_for('mail_besluit') }}" onsubmit='return confirm({{ ("Helemaal weg: alle mail van " ~ p["van"] ~ " in " ~ p["postvak"] ~ " naar Opgeruimd, ook wat later komt (behalve een aanmaning, ingebrekestelling of deurwaarder), en uitschrijven via de officiele knop als die er is. Er wordt niets verwijderd; Terugzetten haalt de regel weg, maar een uitschrijving die al gebeurde, blijft.")|tojson }})'>
             <input type="hidden" name="uniek" value="{{ p['uniek'] }}"><input type="hidden" name="actie" value="weg">
             <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
             <button class="knop-weg knop-klein" title="Uitschrijven en alles van deze afzender opruimen, ook later">Helemaal weg</button></form>
+          {% else %}<small title="De server kan in dit postvak niet opruimen of uitschrijven (hotmail: alleen koppen via de Mac)">Helemaal weg kan hier niet: gebruik Ruis</small>{% endif %}
         </div></td>
       </tr>
       {% endfor %}
@@ -313,11 +313,11 @@
           {% if x['regel'] %}
             <span class="chip {{ 'goed' if x['regel'] in ('opruimen', 'uitschrijven') else ('kritiek' if x['regel'] == 'belangrijk' else '') }}">{{ acties.get(x['regel'], x['regel']) }}</span>
           {% else %}
-            <form method="post" action="{{ url_for('mail_regel') }}" onsubmit='return confirm({{ ("Helemaal weg: alle mail van " ~ x["van"] ~ " in " ~ x["postvak"] ~ " naar Opgeruimd, ook wat later komt, en uitschrijven via de officiele knop als die er is. Er wordt niets verwijderd; terugdraaien kan bij Jouw regels.")|tojson }})'>
+            {% if x['kan_opruimen'] %}
+            <form method="post" action="{{ url_for('mail_regel') }}" onsubmit='return confirm({{ ("Helemaal weg: alle mail van " ~ x["van"] ~ " in " ~ x["postvak"] ~ " naar Opgeruimd, ook wat later komt (behalve een aanmaning, ingebrekestelling of deurwaarder), en uitschrijven via de officiele knop als die er is. Er wordt niets verwijderd; terugdraaien kan bij Jouw regels, maar een uitschrijving die al gebeurde, blijft.")|tojson }})'>
               <input type="hidden" name="postvak" value="{{ x['postvak'] }}"><input type="hidden" name="wie" value="{{ x['van'] }}"><input type="hidden" name="actie" value="uitschrijven">
               <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
               <button class="knop-weg knop-klein" title="Uitschrijven en alles van deze afzender opruimen, ook later">Helemaal weg</button></form>
-            {% if x['kan_opruimen'] %}
             <form method="post" action="{{ url_for('mail_regel') }}" onsubmit='return confirm({{ ("Alle mail van " ~ x["van"] ~ " uit de inbox van " ~ x["postvak"] ~ " naar Opgeruimd, ook wat later komt? Er wordt niets verwijderd.")|tojson }})'>
               <input type="hidden" name="postvak" value="{{ x['postvak'] }}"><input type="hidden" name="wie" value="{{ x['van'] }}"><input type="hidden" name="actie" value="opruimen">
               <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">

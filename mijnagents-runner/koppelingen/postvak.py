@@ -293,7 +293,10 @@ def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel=""):
         return "verdacht", f"'{b.get('van_naam')}' vanaf een gratis adres ({dom})"
     if regel == "belangrijk":
         return "hoog", "Mehdi zette deze afzender op belangrijk"
-    if regel == "uitschrijven":
+    # Helemaal weg (uitschrijven) laat een aanmaning, ingebrekestelling of deurwaarder (DRINGEND) nooit verdwijnen
+    # (Codex-toets e70f5a4, 1); die knop kunnen ook Angela en Shaniel gebruiken. Ruis en Opruimen gaan wel voor alles,
+    # zoals Mehdi op 26-09-2026 koos (test_de_beslissing_van_mehdi_gaat_voor_de_regels).
+    if regel == "uitschrijven" and not DRINGEND.search(f"{ond} {b.get('van_naam') or ''}"):
         return "rommel", "op het maildashboard op Helemaal weg gezet"
     if regel in ("ruis", "opruimen"):
         return "rommel", "Mehdi zette deze afzender op ruis"
@@ -724,7 +727,7 @@ def past(van, wie):
     return van == wie
 
 
-def opruimen(mb, wie):
+def opruimen(mb, wie, spaar_dringend=False):
     """Verplaatst alle post van `wie` (adres of @domein) uit de INBOX naar de map Opgeruimd, op beslissing van
     Mehdi. Alleen als de postbus dit postvak laat schrijven (mailboxen.yaml, 'schrijven'). Niets wordt verwijderd:
     de map staat gewoon in de webmail. Geeft de Message-ID's (of uid's) van wat verplaatst werd."""
@@ -744,7 +747,9 @@ def opruimen(mb, wie):
         weg = []
         for uid, (_prefix, ruw) in imapbron._fetch_koppen(M, uids).items():
             kop = email.message_from_bytes(ruw)
-            if past(parseaddr(imapbron._kop(kop.get("From")))[1], wie):
+            van_naam, van_adres = parseaddr(imapbron._kop(kop.get("From")))
+            # Bij Helemaal weg (spaar_dringend) blijft dringende mail (DRINGEND) in de inbox.
+            if past(van_adres, wie) and not (spaar_dringend and DRINGEND.search(f"{imapbron._kop(kop.get('Subject'))} {van_naam}")):
                 weg.append((uid, imapbron._kop(kop.get("Message-ID")) or str(uid)))
         if weg:
             ok, gegevens = M.uid("MOVE", ",".join(str(u) for u, _ in weg), f'"{doel}"')
@@ -940,7 +945,7 @@ def werk(naam, ag, r):
             # Helemaal weg (uitschrijven, 20-10-2026) ruimt op zoals Opruimen; het uitschrijven zelf doet uitschrijven.py
             if actie in ("opruimen", "uitschrijven") and pv in (adres.lower(), "*") and schrijven:
                 try:
-                    opgeruimd += [f"{adres}:{mid}" for mid in opruimen(mb, wie)]
+                    opgeruimd += [f"{adres}:{mid}" for mid in opruimen(mb, wie, spaar_dringend=actie == "uitschrijven")]
                 except Exception as e:  # noqa: BLE001
                     ag.log("opruimen", "fout", f"{adres} {wie}: {type(e).__name__}: {str(e)[:120]}")
     tel["opgeruimd"] = len(opgeruimd)

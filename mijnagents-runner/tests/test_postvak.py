@@ -408,8 +408,13 @@ def test_helemaal_weg_gaat_voor_de_automatische_voorwaarden_maar_niet_voor_de_kn
     assert U.beoordeel(_nieuwsbrief(van="x@h-architects.be"), "rommel", "uitschrijven", eigen, bekend, veilig, True) == \
         (None, "eigen domein")
     assert postvak.trieer(kop("news@brand.be", "Nieuwsbrief"), EIGEN, frozenset(), "uitschrijven")[0] == "rommel"
+    # Codex-toets e70f5a4, 1: Helemaal weg laat nooit dringende mail verdwijnen (Ruis en Opruimen gaan voor alles, 26-09)
+    assert postvak.trieer(kop("info-kbc@mail-kbc.be", "Laatste aanmaning: achterstal H-INVEST BV"), EIGEN, frozenset(),
+                          "uitschrijven")[0] != "rommel"
     bron = open(os.path.join(HIER, "koppelingen", "postvak.py"), encoding="utf-8").read()
     assert 'actie in ("opruimen", "uitschrijven")' in bron, "Helemaal weg ruimt op zoals Opruimen"
+    assert 'spaar_dringend=actie == "uitschrijven"' in bron and "spaar_dringend and DRINGEND.search(" in bron, \
+        "Helemaal weg laat dringende mail in de inbox"
     ronde = open(os.path.join(HIER, "koppelingen", "uitschrijven.py"), encoding="utf-8").read()
     assert 'key=lambda x: (expliciet(x[0], x[2])' in ronde, "Helemaal weg gaat voor in de beurt"
 

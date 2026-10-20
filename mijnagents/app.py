@@ -1241,7 +1241,7 @@ def mail_pagina():
     return render_template("mail.html", app_naam=APP_NAAM, wachten=wachten, open_alle=open_alle, open_per=open_per,
                            afgesloten=afgesloten, loopt=loopt, vast_wd=MAIL_VAST, reclame=reclame, uitgeschreven=uitgeschreven, labels=labels, status=status,
                            noden=noden, kpi=kpi, periode=periode, periodes=MAIL_PERIODES, postvak=postvak, focus=MAIL_FOCUS,
-                           geschiedenis=_mail_geschiedenis(conn, [p["uniek"] for p in (*open_alle, *loopt, *afgesloten)]),
+                           geschiedenis=_mail_geschiedenis(conn, [*open_alle, *loopt, *afgesloten]),
                            alleen_mail=not mag_beslissen(),
                            postvakken=postvakken, wacht_van=wacht_van, per_postvak=per_postvak, soorten=MAIL_SOORTEN,
                            ruis=ruis, regels=regels, acties=MAIL_ACTIES, gratis=MAIL_GEEN_DOMEIN, grafiek=_grafiek(grafiek_per_dag, grafiek_dagen),
@@ -1275,11 +1275,15 @@ def mail_besluit():
         if actie == "ruis":
             _mail_regel_zetten(conn, r["postvak"], r["van"], "ruis")
     elif actie == "weg":
+        _mail_regel_zetten(conn, r["postvak"], r["van"], "uitschrijven")
         conn.execute("UPDATE mailbericht SET besluit='ruis', besluit_door=?, besluit_ts=? WHERE uniek=?",
                      (gebruiker(), nu(), r["uniek"]))
-        _mail_regel_zetten(conn, r["postvak"], r["van"], "uitschrijven")
     elif actie == "terug":
         conn.execute("UPDATE mailbericht SET besluit='', besluit_door='', besluit_ts='' WHERE uniek=?", (r["uniek"],))
+        # Terugzetten maakt ook Helemaal weg ongedaan: de afzender wordt niet langer opgeruimd (Codex-toets e70f5a4, 5).
+        # Een uitschrijving die al gebeurde, blijft gebeurd.
+        conn.execute("UPDATE mailregel SET actief=0, door=?, ts=? WHERE postvak=? AND wie=? AND actie='uitschrijven' AND actief=1",
+                     (gebruiker(), nu(), (r["postvak"] or "").lower(), (r["van"] or "").lower()))
     elif actie == "houden":
         _mail_regel_zetten(conn, r["postvak"], r["van"], "houden")
         if r["auto_opruimen"] == "verplaatst":
@@ -1299,23 +1303,52 @@ def _mail_besluit_loggen(conn, uniek, postvak, van, actie):
                  ((uniek or "")[:250], (postvak or "")[:120], (van or "")[:200], (actie or "")[:20], gebruiker()[:60], nu()))
 
 
-def _mail_geschiedenis(conn, uniek_lijst):
-    """Per bericht de klikken uit mailbesluit, oudste eerst: [(wanneer, actie, door)]."""
+def _mail_geschiedenis(conn, punten):
+    """Per bericht wat er gebeurde, op tijd: binnengekomen, beantwoord of doorgestuurd, elke klik op het bericht en elke
+    klik op zijn afzender (Jouw regels), met wie (Codex-toets e70f5a4, 6). {uniek: [(wanneer, tekst)]}."""
+    def tijd(ts):
+        try:
+            t = datetime.fromisoformat(ts or "")
+        except ValueError:
+            return None
+        return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+    kliks, regels = {}, {}
+    uniek = [p["uniek"] for p in punten if p["uniek"]]
+    paren = {((p["postvak"] or "").lower(), (p["van"] or "").lower()) for p in punten}
+    for i in range(0, len(uniek), 400):
+        deel = uniek[i:i + 400]
+        for r in conn.execute(f"SELECT uniek, actie, door, ts FROM mailbesluit WHERE uniek IN ({','.join('?' * len(deel))})",
+                              deel).fetchall():
+            kliks.setdefault(r["uniek"], []).append((r["ts"], f"{MAIL_KLIK.get(r['actie'], r['actie'])} door {r['door']}"))
+    for r in conn.execute("SELECT postvak, van, actie, door, ts FROM mailbesluit WHERE uniek=''").fetchall():
+        sleutel = ((r["postvak"] or "").lower(), (r["van"] or "").lower())
+        if sleutel in paren:
+            actie = (r["actie"] or "").split(":", 1)[-1]
+            tekst = "regel weggehaald" if actie == "weg" else f"afzender op {MAIL_ACTIES.get(actie, actie)}"
+            regels.setdefault(sleutel, []).append((r["ts"], f"{tekst} door {r['door']}"))
     uit = {}
-    lijst = [u for u in uniek_lijst if u]
-    for i in range(0, len(lijst), 400):
-        deel = lijst[i:i + 400]
-        for r in conn.execute(f"SELECT uniek, actie, door, ts FROM mailbesluit WHERE uniek IN ({','.join('?' * len(deel))}) "
-                              "ORDER BY id", deel).fetchall():
-            uit.setdefault(r["uniek"], []).append((_brussel(r["ts"]), MAIL_KLIK.get(r["actie"], r["actie"]), r["door"]))
+    for p in punten:
+        rijen = [(p["datum_iso"], "binnengekomen" + (f" in {p['map']}" if p["map"] else ""))]
+        if p["antwoord_door"] and p["antwoord_ts"]:
+            woord = {"doorgezet": "doorgestuurd", "onzeker": "mogelijk beantwoord"}.get(p["opvolging"], "beantwoord")
+            rijen.append((p["antwoord_ts"], f"{woord} door {p['antwoord_door']}"))
+        rijen += kliks.get(p["uniek"], []) + regels.get(((p["postvak"] or "").lower(), (p["van"] or "").lower()), [])
+        rijen = [(tijd(ts), tekst) for ts, tekst in rijen if tijd(ts)]
+        uit[p["uniek"]] = [(_brussel(t.isoformat()), tekst) for t, tekst in sorted(rijen, key=lambda x: x[0])]
     return uit
 
 
 def _mail_regel_zetten(conn, postvak, wie, actie):
-    _mail_tabellen(conn)
+    """Zonder _mail_tabellen: dat commit (executescript) en de aanroeper doet besluit, regel en logboek samen (Codex-toets
+    e70f5a4, 4). Helemaal weg (uitschrijven) alleen voor een exact adres in een postvak dat de wacht kan schrijven,
+    nooit voor @domein of * (Codex-toets e70f5a4, 1 en 3)."""
     postvak, wie = (postvak or "*").strip().lower()[:120], (wie or "").strip().lower()[:200]
     if not wie or ("@" not in wie):
         abort(400)
+    if actie == "uitschrijven":
+        pv = conn.execute("SELECT schrijven FROM mailpostvak WHERE postvak=?", (postvak,)).fetchone()
+        if wie.startswith("@") or postvak == "*" or not (pv and pv["schrijven"]):
+            abort(400)
     if wie.startswith("@") and wie[1:] in MAIL_GEEN_DOMEIN and actie != "weg":
         abort(400)
     if actie == "weg":
@@ -1334,6 +1367,7 @@ def mail_regel():
     if not mag_mail():
         abort(403)
     conn = db()
+    _mail_tabellen(conn)
     _mail_regel_zetten(conn, request.form.get("postvak"), request.form.get("wie"), request.form.get("actie", ""))
     _mail_besluit_loggen(conn, "", request.form.get("postvak"), request.form.get("wie"), "regel:" + request.form.get("actie", ""))
     conn.commit()

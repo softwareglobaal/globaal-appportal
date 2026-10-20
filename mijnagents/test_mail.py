@@ -420,6 +420,29 @@ check("de geschiedenis per bericht toont elke klik met wie (Teruggezet en Helema
 check("Op te volgen heeft de knop Helemaal weg", ">Helemaal weg</button>" in _html.split('id="opvolgen"')[1].split("</section>")[0])
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "terug"})
 c.post("/mail/regel", headers=BEHEER, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "weg"})
+# Codex-toets e70f5a4: alleen een exact adres in een postvak dat de wacht kan schrijven (1, 3); besluit en regel samen of
+# niet (4); Terugzetten haalt ook de regel weg (5); de geschiedenis toont klikken op de afzender, op tijd (6)
+for data in ({"postvak": "mch@h-architects.be", "wie": "@bouwheer.be"}, {"postvak": "*", "wie": "klant@bouwheer.be"},
+             {"postvak": "melodiebvba@gmail.com", "wie": "news@syndicus.be"}):
+    check(f"Helemaal weg weigert {data}", c.post("/mail/regel", headers=BEHEER, data=dict(data, actie="uitschrijven")).status_code == 400)
+_voor = rij("melodiebvba@gmail.com:<m@x>")["besluit"]
+check("Helemaal weg in een postvak zonder schrijven: geweigerd, en het besluit blijft wat het was",
+      c.post("/mail/besluit", headers=BEHEER, data={"uniek": "melodiebvba@gmail.com:<m@x>", "actie": "weg"}).status_code == 400
+      and rij("melodiebvba@gmail.com:<m@x>")["besluit"] == _voor)
+check("geen knop Helemaal weg bij een postvak zonder schrijven",
+      "Helemaal weg kan hier niet" in c.get("/mail?postvak=melodiebvba@gmail.com", headers=BEHEER).get_data(as_text=True))
+c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "weg"})
+c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "terug"})
+check("Terugzetten na Helemaal weg haalt ook de regel weg",
+      ("mch@h-architects.be", "klant@bouwheer.be", "uitschrijven") not in
+      [(x["postvak"], x["wie"], x["actie"]) for x in c.get("/api/mailregels", headers=K).get_json()["regels"]])
+c.post("/mail/regel", headers=MAILGROEP, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "uitschrijven"})
+_g = c.get("/mail?periode=30", headers=BEHEER).get_data(as_text=True)
+check("een klik op de afzender staat in de geschiedenis van zijn berichten", "afzender op Helemaal weg (uitschrijven en opruimen) door angela" in _g)
+_gesch = _g.split("Gewone vraag van een klant")[1].split("</details>")[0]
+check("de geschiedenis staat op tijd: binnengekomen eerst", _gesch.find("binnengekomen") < _gesch.find("door angela"), _gesch[:400])
+c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "terug"})
+c.post("/mail/regel", headers=BEHEER, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "weg"})
 check("Helemaal weg is terug te draaien bij Jouw regels",
       ("mch@h-architects.be", "klant@bouwheer.be", "uitschrijven") not in
       [(x["postvak"], x["wie"], x["actie"]) for x in c.get("/api/mailregels", headers=K).get_json()["regels"]])
