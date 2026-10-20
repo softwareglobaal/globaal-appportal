@@ -18,6 +18,7 @@ versturen, nooit een bestand opladen. Op het agentbord alleen werkstatus.
 Draait op de host via cron. Staat in mijnagents-data/contracten-agent.json.
 """
 import hashlib
+import html
 import json
 import os
 import re
@@ -708,7 +709,8 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
 
 
 # -------------------------------------------------------------- melding ---
-def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None, tijdlijn=None, gaten=None):
+def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None, tijdlijn=None, gaten=None,
+                  proefpunten=None):
     m = plan.get("melding") or {}
     def blok(kop, items):
         items = [str(x) for x in (items or []) if str(x).strip()]
@@ -728,8 +730,12 @@ def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None,
     if nummer_voorstel:
         ontbreekt.append(f"Projectnummer: voorstel {nummer_voorstel} staat op het agentbord ter goedkeuring")
     uit += blok("4. Ontbreekt, en wie het levert", ontbreekt)
-    proeftekst = f"Proef gemaakt: {proef}" if proef else "Nog geen proef: het dossier is niet volledig (zie 4)."
-    uit += f"<b>5. Proef en volgende klik</b><br>- {proeftekst}<br>- {m.get('volgende_stap', '')}<br>"
+    proeftekst = (f"Proef gemaakt: {proef}" + (f", met {len(proefpunten)} punt(en) om na te kijken (geel bovenaan "
+                  "in de proef)" if proefpunten else ", zonder aandachtspunten")) if proef else "De proef lukte niet (zie fouten)."
+    uit += f"<b>5. Proef en volgende klik</b><br>- {proeftekst}<br>"
+    for punt in (proefpunten or [])[:8]:
+        uit += f"&nbsp;&nbsp;· {html.escape(str(punt))[:240]}<br>"
+    uit += f"- {m.get('volgende_stap', '')}<br>"
     if proef and not ontbreekt and (m.get("projectmap_voorstel") or "").strip():
         uit += f"- Voorstel projectmapnaam bij ondertekening (A13): {m['projectmap_voorstel'].strip()}<br>"
     uit += "<br><i>Nakijken en ondertekenen op contracten.globaal.be (In voorbereiding).</i>"
@@ -770,7 +776,7 @@ def verwerk(deal, werkinstructie, staat):
 
     # Werkwijze stap 6 (D37): eerst de tijdlijn. Wat er wanneer gebeurde, en of het
     # bewijs in de salesmap staat. Elk gat gaat als verzoek naar de agent die ervoor
-    # staat; zolang er gaten zijn komt er geen proef (het dashboard weigert ze ook).
+    # staat; zolang er gaten zijn komt er geen definitief contract. De proef komt er wel, met de gaten erin (D66).
     tijdlijn, tijdlijn_gaten = {}, []
     if not DROOG:
         try:
@@ -945,19 +951,16 @@ def verwerk(deal, werkinstructie, staat):
         except mcp.ToolFout as e:
             fouten.append(f"keuze_maken: {str(e)[:200]}")
             log(ond, "fout", f"keuze_maken geweigerd: {str(e)[:200]}")
-    proef = ""
+    # D66 (Mehdi, 20-10-2026): de proef komt er altijd. Een tijdlijngat blokkeert alleen het definitieve contract;
+    # het staat als aandachtspunt in de proef, en de verzoeken staan op het bord.
+    proef, proefpunten = "", []
     if tijdlijn_gaten and str(velden.get("tijdlijn_aanvaard", "")).lower() != "ja":
-        fouten.append(f"proef: tijdlijn heeft {len(tijdlijn_gaten)} gat(en) zonder bewijs (D37); verzoeken staan op het bord")
-        log(ond, "proef", f"geen proef: tijdlijn heeft {len(tijdlijn_gaten)} gat(en) zonder bewijs (D37)")
-        p = None
-    else:
-        p = True
+        log(ond, "proef", f"tijdlijn heeft {len(tijdlijn_gaten)} gat(en) zonder bewijs (D37): aandachtspunt in de proef")
     try:
-        if p is None:
-            raise mcp.ToolFout("tijdlijn niet volledig (D37)")
         p = mcp_call("proef_maken", deal_id=deal_id)
         proef = p.get("docx", "") if isinstance(p, dict) else ""
-        log(ond, "proef", f"proef gemaakt: {proef}")
+        proefpunten = list((p.get("aandachtspunten") or []) if isinstance(p, dict) else [])
+        log(ond, "proef", f"proef gemaakt: {proef} ({len(proefpunten)} aandachtspunt(en))")
     except mcp.ToolFout as e:
         fouten.append(f"proef: {str(e)[:200]}")
         log(ond, "proef", f"nog geen proef: {str(e)[:200]}")
@@ -988,7 +991,7 @@ def verwerk(deal, werkinstructie, staat):
             except Exception:  # noqa: BLE001
                 pass
     tekst = melding_tekst(plan, proef, nummer_voorstel, geschreven, [f for f in fouten if not f.startswith("proef")],
-                          tijdlijn=tijdlijn, gaten=tijdlijn_gaten)
+                          tijdlijn=tijdlijn, gaten=tijdlijn_gaten, proefpunten=proefpunten)
     tekst += f"<br><i>Bronnen gelezen: {bronnen_mod.samenvatting(bronnen)}</i>"
     uitkomst = notitie_bijwerken(deal_id, tekst)
     log(ond, "melding", f"notitie op de Pipedrive-deal {uitkomst}", re.sub(r"<[^>]+>", "", tekst.replace("<br>", "\n")))

@@ -168,5 +168,12 @@ check("niet als het veld al gevuld is", not hh.voorstellen_voor_leeg(POST_PV, TE
 check("de runner stuurt het voorstel en meldt het niet als geschreven",
       "voorstellen_voor_leeg" in inspect.getsource(ca) and "voorstel_klaargezet" in inspect.getsource(ca))
 
+print("\n6. de proef komt er altijd, ook met tijdlijngaten (D66, Mehdi 20-10-2026)")
+_bron = inspect.getsource(ca)
+check("de runner houdt de proef niet meer tegen bij een tijdlijngat",
+      'raise mcp.ToolFout("tijdlijn niet volledig (D37)")' not in _bron and 'mcp_call("proef_maken", deal_id=deal_id)' in _bron)
+_m = ca.melding_tekst({"melding": {}}, "PROEF-5610.docx", None, proefpunten=["Tijdlijn niet volledig <b>"])
+check("de melding noemt de aandachtspunten, veilig als tekst", "1 punt(en) om na te kijken" in _m and "&lt;b&gt;" in _m, _m[-300:])
+
 print(f"\n{'=' * 50}\n{ok} geslaagd, {fout} gefaald\n{'=' * 50}")
 sys.exit(1 if fout else 0)
