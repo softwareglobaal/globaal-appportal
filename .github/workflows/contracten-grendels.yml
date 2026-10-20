@@ -1,6 +1,8 @@
 # Grendels op wat de Contracten-agent in een dossier mag schrijven (D53, 13-10-2026): een aanspreektitel alleen
 # uit een expliciete bron, nooit over een beslissing van Mehdi heen (ook niet over een bewust leeg veld), en
 # runner en goudstandaard toetsen elke post met dezelfde functie. Aanleiding: dossier 2618, deal 14566.
+# D63 (20-10-2026): de soort ligt vast vóór het nummer; een nummer uit de reeks van een verworpen soort gaat nooit
+# naar het bord. Aanleiding: deal 14582 (5610 Ingrid Schmitz), voorgesteld als 2620.
 name: contracten-grendels
 
 on:
@@ -8,11 +10,13 @@ on:
     paths: ["mijnagents-runner/contracten_agent.py", "mijnagents-runner/goudstandaard.py",
             "mijnagents-runner/koppelingen/herhaalbaar.py", "mijnagents-runner/werkwijze/contracten-agent.md",
             "mijnagents-runner/tests/test_titels_en_beslissingen.py", "mijnagents-runner/tests/test_herhaalbaar.py",
+            "mijnagents-runner/koppelingen/soortbepaling.py", "mijnagents-runner/tests/test_soortbepaling.py",
             ".github/workflows/contracten-grendels.yml"]
   pull_request:
     paths: ["mijnagents-runner/contracten_agent.py", "mijnagents-runner/goudstandaard.py",
             "mijnagents-runner/koppelingen/herhaalbaar.py",
-            "mijnagents-runner/tests/test_titels_en_beslissingen.py", "mijnagents-runner/tests/test_herhaalbaar.py"]
+            "mijnagents-runner/tests/test_titels_en_beslissingen.py", "mijnagents-runner/tests/test_herhaalbaar.py",
+            "mijnagents-runner/koppelingen/soortbepaling.py", "mijnagents-runner/tests/test_soortbepaling.py"]
 
 jobs:
   grendels:
@@ -24,3 +28,4 @@ jobs:
           python-version: "3.12"
       - run: python3 mijnagents-runner/tests/test_herhaalbaar.py
       - run: python3 mijnagents-runner/tests/test_titels_en_beslissingen.py
+      - run: python3 mijnagents-runner/tests/test_soortbepaling.py

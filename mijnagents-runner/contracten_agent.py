@@ -9,6 +9,8 @@ De stappen 1 tot 12 in de code volgen de nummering van de werkwijze v2:
 deals in fase Gegevens ontvangen -> herronde-regel -> projectnummer (vier bronnen, volledig; anders geen)
 -> voorbereiding_starten -> lezen (voorbereiding, veldenschema, dossiercontrole)
 -> bronnen (salesmap, klantmails; projectmap alleen bij een lopend project)
+-> de soort vóór het nummer (D63: een bestaand nummer legt de reeks vast; stelt het plan met citaat een andere
+   soort voor, dan eerst die soort, dan het nummer uit haar reeks, dan opnieuw plannen met haar master)
 -> plan (gegevens en keuzes strikt gescheiden) -> invullen met bron -> proef
 -> melding op de deal (blok 0 uit de echte schrijfacties) -> verslag op het bord
 -> bij een fout één keer opnieuw, dan melden en doorgaan.
@@ -32,6 +34,7 @@ import pipedrive  # noqa: E402
 import nummerlezer  # noqa: E402
 import bronnen as bronnen_mod  # noqa: E402
 import herhaalbaar as hh  # noqa: E402
+import soortbepaling  # noqa: E402
 
 NAAM = "contracten-agent"
 FIRMA = "harchitects"
@@ -515,6 +518,7 @@ SCHEMA_UITLEG = """Antwoord met UITSLUITEND een JSON-object met deze sleutels:
                 "citaat": "de zin uit die bron waar dit letterlijk in staat, exact overgeschreven (12 tot 300 tekens)"} ],
  "keuzes": {"veld": "waarde", ...},
  "keuzes_bron": "waarop de keuzes steunen, bv. 'Fathom-transcript 06-07-2026'",
+ "soort_bewijs": {"bron": "alleen bij een andere soort: bron met datum", "citaat": "letterlijk uit die bron"},
  "nummer_voorstel": "het aangereikte volgend_vrij_nummer, of null",
  "melding": {
    "vastligt": ["... (met bron)"],
@@ -552,7 +556,15 @@ Regels die je nooit breekt:
   per bronzin, met alleen de velden die die zin bewijst.
 - Bedragen als '50.000,00'; percentages als getal ('14').
 - project_beschrijving volgens de vaste opbouw uit de Werkinstructie (per ruimte, chronologisch, wat de architect doet en wat de klant zelf doet), alleen uit de gesprekken en notities die je kreeg. Zonder voorontwerp zijn het wensen en randvoorwaarden van de klant, geen ontwerp: de lijst heet 'Wensen en randvoorwaarden van de Opdrachtgever' (D54). Extra uitsluitingen alleen als 'Buiten het Bouwproject vallen ook ...', nooit een tweede 'Het project omvat niet' naast de lijst van de master; werken die de klant zelf doet zijn een mogelijkheid ('in onderling overleg'), geen uitsluiting (artikel 7.1).
-- Geef 'nummer_voorstel' alleen als de dealtitel géén projectnummer heeft (D9: JJNN, regularisatie (JJ+30)NN); gebruik dan exact het aangereikte volgend_vrij_nummer. Is dat leeg, dan null: verzin nooit een nummer.
+- De soort eerst (D63). 'soort_van_dit_dossier' is wat nu in het dossier staat; bij een nieuw dossier is dat de standaard
+  architectuur van het klaarzetten, geen beslissing. Bepaal vóór al het andere uit de bronnen welk contracttype bij de
+  opdracht past, volgens de WERKWIJZE en de WERKINSTRUCTIE. 'soortsignalen' zijn aanwijzingen uit de bronnen, geen
+  beslissing: een PV of het woord regularisatie staat ook in architectuurdossiers. Past een ander type en staat 'soort'
+  niet bij 'beschermde_velden', zet dan keuzes.soort op dat type, met 'soort_bewijs' (bron met datum en een letterlijk
+  citaat dat de opdracht zelf beschrijft), nummer_voorstel null en 'gegevens' leeg: de code zet eerst de soort, berekent
+  het nummer uit de reeks van die soort en vraagt je daarna opnieuw, met de velden van die master. Twijfel je, laat de
+  soort staan en zet de twijfel als eerste punt onder 'nakijken'.
+- Geef 'nummer_voorstel' alleen als de dealtitel géén projectnummer heeft (D9: JJNN, regularisatie (JJ+30)NN); gebruik dan exact het aangereikte volgend_vrij_nummer, dat bij soort_van_dit_dossier hoort. Is dat leeg, dan null: verzin nooit een nummer.
 - Is er niets te doen, geef lege lijsten/objecten en zeg dat in 'volgende_stap'.
 """
 
@@ -618,7 +630,8 @@ def kennis_melden(tekst, bron):
 WERKWIJZE = ""
 
 
-def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, vrij_nummer, bronnen=None):
+def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, vrij_nummer, bronnen=None,
+                   soortsignalen=None):
     veldenschema = veldenschema_voor((voorbereiding or {}).get("soort") or "architectuur")
     from anthropic import Anthropic
     client = Anthropic()
@@ -635,6 +648,9 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
         "deal": {"id": deal.get("id"), "titel": deal.get("title"), "waarde": deal.get("value"),
                  "persoon": (deal.get("person_id") or {}).get("name") if isinstance(deal.get("person_id"), dict) else deal.get("person_name"),
                  "organisatie": (deal.get("org_id") or {}).get("name") if isinstance(deal.get("org_id"), dict) else deal.get("org_name")},
+        # D63: het nummer hoort bij de reeks van deze soort; eerst de soort, dan het nummer.
+        "soort_van_dit_dossier": (voorbereiding or {}).get("soort") or "architectuur",
+        "soortsignalen": soortsignalen or [],
         "volgend_vrij_nummer": vrij_nummer,
         "voorbereiding": voorbereiding,
         # D53: ook de bewust lege velden, die niet in herkomst.gevuld staan.
@@ -663,6 +679,10 @@ def plan_met_model(werkinstructie, deal, voorbereiding, controle, notitielijst, 
                     "required": ["velden", "bron", "citaat"]}},
                 "keuzes": {"type": "object"},
                 "keuzes_bron": {"type": "string"},
+                "soort_bewijs": {"type": "object", "properties": {
+                    "bron": {"type": "string"},
+                    "citaat": {"type": "string", "description": "letterlijk uit de bron, 12 tot 300 tekens"}},
+                    "description": "alleen als keuzes.soort afwijkt van soort_van_dit_dossier"},
                 "nummer_voorstel": {"type": ["string", "null"]},
                 "melding": {"type": "object", "properties": {
                     "vastligt": {"type": "array", "items": {"type": "string"}},
@@ -737,6 +757,35 @@ def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None,
 
 
 # ---------------------------------------------------------------- werk ---
+def soort_van_nummer(nummer):
+    """De soort van de reeks van een bestaand projectnummer ('regularisatie' of 'architectuur'), of None (D63)."""
+    if not nummer:
+        return None
+    try:
+        return reeks_van_nummer(nummer)[0]
+    except NummerFout:
+        return None
+
+
+def soort_voorstellen(deal_id, nieuw, bron, voorb, ond):
+    """D63: de soort als voorstel met bron in het dossier zetten, vóór het nummer berekend wordt.
+    Geeft (voorbereiding, gelukt, regel voor blok 0). Droog: niets schrijven, wel verder rekenen met de
+    nieuwe soort, zodat de droge ronde het nummer uit de juiste reeks toont."""
+    if DROOG:
+        log(ond, "besluit", f"(droog) zou de soort {nieuw} voorstellen (bron: {bron[:200]})")
+        return dict(voorb or {}, soort=nieuw), True, ""
+    try:
+        antwoord = mcp_call("keuze_maken", deal_id=deal_id, keuzes={"soort": nieuw}, bron=bron)
+    except mcp.ToolFout as e:
+        log(ond, "fout", f"soort {nieuw} niet voorgesteld: {str(e)[:200]}")
+        return voorb, False, ""
+    if "soort" in ((antwoord or {}).get("niet_overschreven") or {}):
+        log(ond, "geweigerd", f"soort {nieuw}: het dashboard overschrijft de soort van Mehdi niet (D63)")
+        return voorb, False, ""
+    log(ond, "schrijf", f"keuze_maken soort = {nieuw} (bron: {bron[:160]})")
+    return mcp_call("voorbereiding", deal_id=deal_id), True, f"keuze soort = {nieuw} (voorstel, bron: {bron[:90]})"
+
+
 def verwerk(deal, werkinstructie, staat):
     # Ook bij een bestaande dossiercode eerst het account vaststellen, voor de eerste MCP-schrijfactie.
     pipedrive.controleer_bedrijf(FIRMA, H_A_BEDRIJF_ID)
@@ -767,6 +816,21 @@ def verwerk(deal, werkinstructie, staat):
     rood = [f"{c['nummer']} {c['titel']}: {c['bevinding'][:90]}" for c in (controle or {}).get("controles", []) if c.get("status") == "fout"]
     log(ond, "bevinding", f"dossiercontrole: {tel.get('ok', 0)} ok, {tel.get('let_op', 0)} let op, {tel.get('fout', 0)} fout",
         "\n".join(rood))
+
+    # D63: de soort ligt vast vóór het nummer. Een bestaand projectnummer legt de reeks vast, en dus de soort
+    # (5610 is regularisatie). Een soort die Mehdi koos, raak ik niet aan.
+    vooraf_geschreven, vooraf_fouten = [], []
+    beschermd_soort = "soort" in hh.beschermde_velden(voorb)
+    nummer_soort = soort_van_nummer(nummer)
+    voorstel, conflict = soortbepaling.soort_bij_nummer(nummer_soort, (voorb or {}).get("soort") or "architectuur",
+                                                        beschermd_soort)
+    if conflict:
+        log(ond, "fout", f"soort: {conflict}")
+        vooraf_fouten.append(f"soort: {conflict}")
+    if voorstel:
+        voorb, gelukt, regel = soort_voorstellen(deal_id, voorstel, f"projectnummer {nummer} in de dealtitel of de "
+                                                 f"voorbereiding: de reeks {nummer[:2]}xx is {voorstel} (D9, D63)", voorb, ond)
+        vooraf_geschreven += [regel] if regel else []
 
     # Werkwijze stap 6 (D37): eerst de tijdlijn. Wat er wanneer gebeurde, en of het
     # bewijs in de salesmap staat. Elk gat gaat als verzoek naar de agent die ervoor
@@ -812,55 +876,98 @@ def verwerk(deal, werkinstructie, staat):
     log(ond, "bron", "gelezen: " + bronnen_mod.samenvatting(bronnen),
         "teksten: " + ", ".join(bestanden) + "\nmails: " + ", ".join(f"{m['datum'][:16]} {m['onderwerp']}" for m in bronnen.get("mails", [])))
 
-    vrij, nummer_fout = "", ""
-    if not nummer:
-        try:
-            vrij = volgend_vrij_nummer(soort, deal_id=deal_id)
-        except NummerFout as e:
-            nummer_fout = str(e)
-            log(ond, "fout", f"geen vrij projectnummer voorgesteld: {nummer_fout[:200]}")
     notitielijst = notities(deal_id)
-    schema = veldenschema_voor(soort)
-    # Stap 1 van het rapport: één hash over alle invoer. Zelfde hash = zelfde plan,
-    # zonder het model opnieuw te vragen. Zo is "zelfde invoer, zelfde uitvoer" een
-    # constructie en geen hoop.
+    # D63: wat in de bronnen op een regularisatie wijst, met citaat. Aanwijzingen voor het model, geen beslissing:
+    # een PV of het woord regularisatie staat ook in architectuurdossiers (2614, 2617, 2618).
+    sigs = soortbepaling.signalen(deal, notitielijst, bronnen)
+    log(ond, "bevinding", f"soort {soort}: {soortbepaling.samenvatting(sigs)}",
+        "\n".join(f"{x['bron']}: «{x['citaat'][:160]}»" for x in sigs))
     record = hh.RunRecord(NAAM, deal_id)
-    hash_, per_deel = hh.invoerhash({
-        "dossier": {"velden": {k: v for k, v in velden.items() if k != "datum_vandaag"},
-                    "keuzes": {k.get("veld"): k.get("gekozen") for k in ((voorb or {}).get("keuzes") or []) if isinstance(k, dict)},
-                    "soort": soort, "beschermd": hh.beschermde_velden(voorb)},
-        "notities": notitielijst, "bronnen": _bronnen_compact(bronnen),
-        "werkinstructie": werkinstructie, "werkwijze": WERKWIJZE, "veldenschema": schema,
-        "model": MODEL, "vrij_nummer": vrij, "promptversie": SCHEMA_UITLEG})
-    record.zet(invoerhash=hash_, hashes=per_deel, dossier_stempel=vingerafdruk(voorb), model_gevraagd=MODEL,
-               werkinstructie_hash=per_deel.get("werkinstructie"), werkwijze_hash=per_deel.get("werkwijze"),
-               schema_hash=per_deel.get("veldenschema"))
-    cache = None if VERS else hh.plan_uit_cache(NAAM, deal_id, hash_)
-    if cache:
-        # Een hergebruikte ronde kost niets: tokens en kost op nul, met verwijzing naar de bronronde.
-        meta0 = cache.get("meta") or {}
-        plan, tokens, meta = cache["plan"], 0, {"model_id": meta0.get("model_id"), "stop_reason": "hergebruikt",
-                                                "tokens_in": 0, "tokens_uit": 0, "bron_run_id": meta0.get("run_id"),
-                                                "run_id": meta0.get("run_id")}
-        log(ond, "besluit", f"plan hergebruikt: zelfde invoer als run {meta.get('run_id', '?')} (hash {hash_}); het model is niet gevraagd")
-    else:
-        plan, tokens, meta = plan_met_model(werkinstructie, deal, voorb, controle, notitielijst, vrij, bronnen)
-        meta["run_id"] = record.record["run_id"]
-        if not DROOG:
-            hh.plan_in_cache(NAAM, deal_id, hash_, plan, meta)
-    record.zet(model_id=meta.get("model_id"), stop_reason=meta.get("stop_reason"), tokens_in=meta.get("tokens_in", 0),
-               tokens_uit=meta.get("tokens_uit", 0), kost_eur=hh.kost_eur(meta.get("model_id") or "", meta.get("tokens_in", 0), meta.get("tokens_uit", 0)),
-               plan_hergebruikt=bool(cache), bron_run_id=meta.get("bron_run_id"), plan=plan)
-    log(ond, "besluit", f"plan: {len(plan.get('gegevens') or [])} gegevensposten, {len(plan.get('keuzes') or {})} keuzes"
-                        f"{', nummer-voorstel ' + str(plan.get('nummer_voorstel')) if plan.get('nummer_voorstel') and not nummer else ''}"
-                        f" ({tokens} tokens, model {meta.get('model_id', '?')})", plan)
+
+    def nummer_en_plan(soort, voorb):
+        """Het vrije nummer uit de reeks van DEZE soort, dan het plan met de master van deze soort."""
+        vrij, nummer_fout = "", ""
+        if not nummer:
+            try:
+                vrij = volgend_vrij_nummer(soort, deal_id=deal_id)
+            except NummerFout as e:
+                nummer_fout = str(e)
+                log(ond, "fout", f"geen vrij projectnummer voorgesteld: {nummer_fout[:200]}")
+        schema = veldenschema_voor(soort)
+        velden = (voorb or {}).get("velden") or {}
+        # Stap 1 van het rapport: één hash over alle invoer. Zelfde hash = zelfde plan,
+        # zonder het model opnieuw te vragen. Zo is "zelfde invoer, zelfde uitvoer" een
+        # constructie en geen hoop.
+        hash_, per_deel = hh.invoerhash({
+            "dossier": {"velden": {k: v for k, v in velden.items() if k != "datum_vandaag"},
+                        "keuzes": {k.get("veld"): k.get("gekozen") for k in ((voorb or {}).get("keuzes") or []) if isinstance(k, dict)},
+                        "soort": soort, "beschermd": hh.beschermde_velden(voorb)},
+            "notities": notitielijst, "bronnen": _bronnen_compact(bronnen),
+            "werkinstructie": werkinstructie, "werkwijze": WERKWIJZE, "veldenschema": schema,
+            "model": MODEL, "vrij_nummer": vrij, "promptversie": SCHEMA_UITLEG})
+        record.zet(invoerhash=hash_, hashes=per_deel, dossier_stempel=vingerafdruk(voorb), model_gevraagd=MODEL,
+                   werkinstructie_hash=per_deel.get("werkinstructie"), werkwijze_hash=per_deel.get("werkwijze"),
+                   schema_hash=per_deel.get("veldenschema"))
+        cache = None if VERS else hh.plan_uit_cache(NAAM, deal_id, hash_)
+        if cache:
+            # Een hergebruikte ronde kost niets: tokens en kost op nul, met verwijzing naar de bronronde.
+            meta0 = cache.get("meta") or {}
+            plan, tokens, meta = cache["plan"], 0, {"model_id": meta0.get("model_id"), "stop_reason": "hergebruikt",
+                                                    "tokens_in": 0, "tokens_uit": 0, "bron_run_id": meta0.get("run_id"),
+                                                    "run_id": meta0.get("run_id")}
+            log(ond, "besluit", f"plan hergebruikt: zelfde invoer als run {meta.get('run_id', '?')} (hash {hash_}); het model is niet gevraagd")
+        else:
+            plan, tokens, meta = plan_met_model(werkinstructie, deal, voorb, controle, notitielijst, vrij, bronnen,
+                                                soortsignalen=sigs)
+            meta["run_id"] = record.record["run_id"]
+            if not DROOG:
+                hh.plan_in_cache(NAAM, deal_id, hash_, plan, meta)
+        record.zet(model_id=meta.get("model_id"), stop_reason=meta.get("stop_reason"), tokens_in=meta.get("tokens_in", 0),
+                   tokens_uit=meta.get("tokens_uit", 0), kost_eur=hh.kost_eur(meta.get("model_id") or "", meta.get("tokens_in", 0), meta.get("tokens_uit", 0)),
+                   plan_hergebruikt=bool(cache), bron_run_id=meta.get("bron_run_id"), plan=plan)
+        log(ond, "besluit", f"plan ({soort}): {len(plan.get('gegevens') or [])} gegevensposten, {len(plan.get('keuzes') or {})} keuzes"
+                            f"{', nummer-voorstel ' + str(plan.get('nummer_voorstel')) if plan.get('nummer_voorstel') and not nummer else ''}"
+                            f" ({tokens} tokens, model {meta.get('model_id', '?')})", plan)
+        return vrij, nummer_fout, schema, hash_, plan, tokens
+
+    vrij, nummer_fout, schema, hash_, plan, tokens = nummer_en_plan(soort, voorb)
+    # D63: stelt het model met bewijs een andere soort voor, dan eerst die soort, dan het nummer uit haar reeks,
+    # dan het plan met de velden van haar master. Eén keer per ronde; een tweede wissel volgt niet.
+    nieuw = str((plan.get("keuzes") or {}).get("soort") or "").strip()
+    if nieuw and nieuw != soort:
+        mag, reden = soortbepaling.wissel_toegelaten(nieuw, soort, beschermd_soort, nummer_soort)
+        bron_soort = ""
+        if mag:
+            bron_soort, citaatfout = soortbepaling.toets_bewijs(plan.get("soort_bewijs"), deal, notitielijst, bronnen)
+            if citaatfout:
+                mag, reden = False, f"zonder bewijs ({citaatfout}); geen nummer tot de soort vastligt"
+                plan["nummer_voorstel"] = None
+        (plan.get("keuzes") or {}).pop("soort", None)
+        if not mag:
+            log(ond, "geweigerd", f"soortwissel {soort} -> {nieuw}: {reden}")
+            vooraf_fouten.append(f"soort {nieuw} niet voorgesteld: {reden}")
+        else:
+            voorb_nieuw, gelukt, regel = soort_voorstellen(deal_id, nieuw, bron_soort, voorb, ond)
+            if gelukt:
+                vooraf_geschreven += [regel] if regel else []
+                record.zet(soortwissel={"van": soort, "naar": nieuw, "bron": bron_soort[:300], "eerste_plan": plan,
+                                        "eerste_tokens": tokens})
+                eerste_tokens = tokens
+                soort, voorb = nieuw, voorb_nieuw
+                if (soort in ("addendum", "regularisatie")) != lopend and (nummer or ""):
+                    lopend = not lopend
+                    bronnen.update(bronnen_mod.verzamel(salesmap_pad, nummer if lopend else "", klant_email))
+                vrij, nummer_fout, schema, hash_, plan, tokens = nummer_en_plan(soort, voorb)
+                tokens += eerste_tokens
+                (plan.get("keuzes") or {}).pop("soort", None)
+    velden = (voorb or {}).get("velden") or {}
     if DROOG:
         log_verstuur()
         record.sluit("droog")
-        return {"droog": True, "plan": plan}
+        return {"droog": True, "plan": plan, "soort": soort, "vrij_nummer": vrij}
 
     # toepassen, deterministisch: eerst validatie in code (rapport stap 4), dan schrijven
-    fouten, geschreven, geweigerd_lijst = [], [], []
+    fouten, geschreven, geweigerd_lijst = list(vooraf_fouten), list(vooraf_geschreven), []
     if nummer_fout:
         fouten.append(f"projectnummer: {nummer_fout[:200]}")
     toegelaten = set(((schema.get("master") or {}).get(soort) or {}).get("velden") or []) or None

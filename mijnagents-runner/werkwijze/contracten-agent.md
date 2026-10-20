@@ -1,6 +1,6 @@
 # Werkwijze van De Contractmaker
 
-Versie 8 (13-10-2026; een aanspreektitel alleen uit een expliciete bron, en wat Mehdi besliste blijft staan, ook leeg: D53). Versie 7 (12-10-2026; eigen gebruik van een nummer en reeds voldaan). Versie 6 (12-10-2026) bracht de nummerreservering per voorstel (WP2b); versie 5 was van 06-10-2026 (volledige bronnen, vaste dossieridentiteit en veilige koppelingen), versie 4 van 05-10-2026. Dit is het volledige proces dat ik volg, in de volgorde
+Versie 9 (20-10-2026; eerst de soort, dan het nummer uit haar reeks: D63). Versie 8 (13-10-2026; een aanspreektitel alleen uit een expliciete bron, en wat Mehdi besliste blijft staan, ook leeg: D53). Versie 7 (12-10-2026; eigen gebruik van een nummer en reeds voldaan). Versie 6 (12-10-2026) bracht de nummerreservering per voorstel (WP2b); versie 5 was van 06-10-2026 (volledige bronnen, vaste dossieridentiteit en veilige koppelingen), versie 4 van 05-10-2026. Dit is het volledige proces dat ik volg, in de volgorde
 waarin ik het doe. Mehdi bewerkt deze tekst op het agentbord; ik lees hem aan
 het begin van elke ronde. De regels over het contract zelf (welke velden, welke
 keuzewaarden, waar elk gegeven vandaan komt, de nummering, de mapnamen) staan
@@ -49,7 +49,29 @@ transcript telt, nooit de samenvatting van de recorder (D7).
 2. **Beslissen of ik hem nu doe.** Hoogstens één keer per 24 uur per deal,
    tenzij het dossier in voorbereiding intussen veranderde (bijvoorbeeld
    omdat Mehdi een keuze maakte of een bijlage toevoegde). Dan meteen opnieuw.
-3. **Het projectnummer nakijken (D9).** Het nummer staat vóór de klantnaam in
+3. **Eerst de soort, dan het projectnummer (D63, D9).** Het nummer volgt de
+   reeks van de soort, dus de soort ligt eerst vast. Een nieuw dossier staat op
+   de standaard architectuur van het klaarzetten; dat is geen beslissing. Staat
+   er al een nummer, dan legt de reeks de soort vast: 56xx is regularisatie, en
+   een andere soort meld ik als conflict zonder iets te veranderen. Zonder nummer
+   stel ik de soort voor uit de bronnen, met `keuze_maken` en een bron met een
+   letterlijk citaat dat de opdracht zelf beschrijft: **regularisatie** als de
+   opdracht het vergunnen van een bestaande, niet-vergunde toestand is (een
+   aanvraag via regulariseren.be, een PV of vaststelling van een
+   bouwovertreding, een forfait voor de regularisatie in het gesprek);
+   **architectuur** als er nieuwe werken ontworpen en opgevolgd worden, ook als
+   daarbij een stuk bestaande toestand geregulariseerd wordt (2614, 2617,
+   2618); **voorstudie** of **addendum** volgens de Werkinstructie. Eén signaal
+   beslist nooit alleen: een PV of het woord regularisatie staat ook in
+   architectuurdossiers. Twijfel ik, dan laat ik de soort staan en zet ik de
+   twijfel als eerste punt onder "nakijken". Een soort die Mehdi koos (op het
+   dashboard, of als beslissing in een Claude-sessie) raak ik niet aan; het
+   dashboard weigert het ook. Pas als de soort vastligt, bereken ik het nummer,
+   uit de reeks van die soort. Verandert de soort in deze ronde, dan plan ik
+   opnieuw met de velden van de master van die soort; een nummer uit de reeks
+   van de oude soort gaat nooit naar het bord.
+
+   Het projectnummer nakijken (D9). Het nummer staat vóór de klantnaam in
    de dealtitel: JJNN voor architectuur, voorstudie en addendum (2026: 26xx,
    2027: 27xx); (JJ+30)NN voor regularisatie (2026: 56xx, 2027: 57xx, 2030:
    60xx). Ik lees het met de gedeelde nummerlezer (`koppelingen/nummerlezer.py`),
@@ -137,7 +159,8 @@ transcript telt, nooit de samenvatting van de recorder (D7).
      "hij" of "zij", nooit uit een aanhef ("Geachte mevrouw ..." is hoe wij
      iemand aanspreken). Zonder zo'n bron blijft de titel leeg; dat is geldig
      (D51). De code weigert elke andere titel (`herhaalbaar.toets_post`, D53).
-   - **Keuzes** (via `keuze_maken`, met `bron`): `soort`,
+   - **Keuzes** (via `keuze_maken`, met `bron`): `soort` (al in stap 3, vóór
+     het nummer),
      `architectuur_scope` (`wind_waterdicht`, `wind_waterdicht_technieken`,
      `volledige_afwerking`), `ereloon_scenario` (`percentage`, `vast_bedrag`,
      `vast_bedrag_en_percentage`), `budget_scenario` (`vast_bedrag`,
@@ -506,6 +529,8 @@ er iets fout, lees dan eerst de fiche van die bron: daar staat de redenering.
 
 ## Wat Mehdi beslist
 
+- De soort van het contract: ik stel ze voor uit de bronnen, vóór het nummer
+  (stap 3); hij bevestigt of past aan met Keuzes, en vanaf dan is ze van hem.
 - Mijn keuzes: scope, ereloonberekening, budgetvorm, uitvoeringswijze,
   relatievorm, minimum, voorontwerp. Hij bevestigt of past aan met Keuzes op
   het dashboard; vanaf dan staan ze als "ingevuld in het dashboard" en zijn ze
@@ -543,6 +568,7 @@ hier onderaan bij.
 
 | 06-10 | 1, 3 en 4 (bronnen en identiteit) | Een startfase kon na 100 deals stoppen; dashboardlijsten konden worden afgekapt; een foutieve Dropbox-pagina werd soms leeg gelezen; een nummer in de voorbereiding ging verloren als de titel geen nummer meer had. | Een gedeeltelijke lezing werd voor volledig gehouden; de accountgrendel stond te laat in het proces. | Alle pagina's en opgegeven totalen verplicht, Dropbox-fouten blokkeren, account vóór de eerste dashboardbewerking, voorbereiding behoudt het nummer en een conflict stopt de ronde. Grendels: tests/test_nummerroutes.py, test_nummeruitgifte.py en test_nummerlezer.py. |
 | 13-10 | 8 en 9 (plan en invullen) | Bij 2618 (deal 14566) zette ik om 14:32 `vertegenwoordiger_titel = de heer`, met als bron de aanvraagmail ("De zaakvoerder ... Hij kan aanwezig zijn") en de naam Serhii Kovalenko in het proces-verbaal, terwijl Mehdi in een Claude-sessie had gekozen voor geen titel. `opdrachtgever_1_titel` en `contactpersoon_titel` haalde ik uit zijn aanhef "Geachte mevrouw Andrzejczyk". | Een titel uit een voornaam of "hij" is een gok; een aanhef is hoe wij iemand aanspreken. Mijn citaat stond letterlijk in de mail, dus de citaatcontrole liet het door zonder te toetsen of het de titel bewees. En een beslissing van Mehdi uit een Claude-sessie stond als "afgeleid", een leeg veld zag ik niet eens. | D53. Eén toets per post, voor runner en goudstandaard (`herhaalbaar.toets_post`): een titel alleen met de titel bij de naam of een geslacht in een document, geen aanhef; wat `beschermd` is schrijf ik niet; een post die zelf een beslissing van Mehdi claimt, wordt geweigerd. Het dashboard weigert hetzelfde en toont `beschermd`. Grendel: tests/test_titels_en_beslissingen.py, CI contracten-grendels. |
+| 16-10 | 3 (soort en nummer) | Bij 5610 Ingrid Schmitz (deal 14582) liet ik het dossier op de standaard architectuur staan en stelde ik 2620 voor, terwijl de aanvraag via regulariseren.be kwam, er een PV in de salesmap stond en het Fathom-gesprek een regularisatie tegen een forfait van 3.500 euro afsprak. Ik meldde alleen "nakijken of dit geen regularisatie is". Een Claude-sessie zette de soort met de hand op regularisatie en het nummer op 5610. | Het nummer werd berekend uit de soort van het dossier vóór ik de bronnen woog, ik moest exact dat nummer gebruiken, en deze werkwijze zei nergens dat de soort eerst komt; ik dacht dat ik er niet over mocht beslissen. | D63. Stap 3 begint met de soort: een bestaand nummer legt ze vast, anders stel ik ze voor met citaat en pas dan komt het nummer uit haar reeks; bij een wissel plan ik opnieuw met de juiste master, en een nummer uit de reeks van een verworpen soort gaat nooit naar het bord. Op het dashboard heeft de soort nu een herkomst, en wat Mehdi koos is beschermd. Grendels: tests/test_soortbepaling.py (CI contracten-grendels) en Tests/test_mcp_schrijven.py sectie 15 in contract-systeem. |
 
 Nog open (kan ik zelf niet oplossen):
 

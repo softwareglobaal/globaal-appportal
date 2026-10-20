@@ -191,7 +191,7 @@ def test_verwerk_stelt_geen_tweede_nummer_voor_bij_een_bestaande_voorbereiding(m
         raise AssertionError("de droogproef mag niet schrijven")
     def geen_nieuw_nummer(*args, **kwargs):
         raise AssertionError("een bestaande voorbereiding werd opnieuw genummerd")
-    def plan(*args):
+    def plan(*args, **kwargs):   # D63: de soortsignalen komen als trefwoord mee
         assert args[5] == ""
         return {"gegevens": [], "keuzes": {}}, 0, {}
     monkeypatch.setattr(C, "DROOG", True)
