@@ -1,6 +1,6 @@
 # Werkwijze van De Mailwacht info@ H-Invest
 
-Versie 1.7 (20-10-2026: ook de knop van een verzendbedrijf, als de afzender zelf ondertekende). Versie 1.6 (20-10-2026: resultaattoets van het uitschrijven, strenger bij banken, verzekeraars, overheid en klanten). Versie 1.5 (20-10-2026: uitschrijven via de officiele knop, beslissing van Mehdi). Versie 1.4 (19-10-2026, driehoeksoverleg 3-0: een bron voor wat openstaat, beantwoord via de draad, gewone mail na een werkdag, collega's tellen mee, reclame naar Opgeruimd; 1.3 26-09-2026; 1.2 dezelfde nacht). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
+Versie 1.8 (20-10-2026: opgevolgd tot opgelost, een antwoord zet een punt op Loopt). Versie 1.7 (20-10-2026: ook de knop van een verzendbedrijf, als de afzender zelf ondertekende). Versie 1.6 (20-10-2026: resultaattoets van het uitschrijven, strenger bij banken, verzekeraars, overheid en klanten). Versie 1.5 (20-10-2026: uitschrijven via de officiele knop, beslissing van Mehdi). Versie 1.4 (19-10-2026, driehoeksoverleg 3-0: een bron voor wat openstaat, beantwoord via de draad, gewone mail na een werkdag, collega's tellen mee, reclame naar Opgeruimd; 1.3 26-09-2026; 1.2 dezelfde nacht). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
 zodat elke agent apart kan toezien en de belangrijke e-mails kan opvolgen, zodat het niet allemaal bij mij komt en
 ik niet alles moet onthouden. Geen spam, geen rommelinformatie." En op 26-09-2026: "ik wil een overzicht hebben
 zodat we het aantal mails onder controle krijgen, en ik wil de mails opschonen, er is te veel rommel en ruis."
@@ -21,7 +21,7 @@ Elk bericht krijgt een soort:
 - koud: een mens die we niet kennen en die niets aanvraagt (koude verkoop). Ik tel het.
 - melding: een automatisch bericht zonder gevolg (pakje, bestelling, afwezigheid, mailinglijst). Ik tel het.
 - actie: een automatisch bericht met gevolg (betaling mislukt, account gepauzeerd, e-Box, achterstal). Het staat
-  zeven dagen op de lijst van De Mailregisseur; beantwoorden kan niet, regelen wel.
+  op de lijst tot iemand het als opgelost aanduidt; beantwoorden kan niet, regelen wel.
 - gewoon: een bekend contact (we mailden hem het laatste half jaar), een lopend gesprek of een aanvraag.
   Zonder antwoord na een werkdag gaat het op de lijst.
 - hoog: een mens met een rol (bank, overheid, verzekeraar, boekhouder, notaris, advocaat), een woord met gevolg
@@ -38,6 +38,8 @@ verlopen (een actie ouder dan zeven dagen) of geen. Wat Mehdi op het maildashboa
 doorgezet, ruis), staat ernaast en overschrijf ik nooit. Het bord telt wat openstaat; dat getal zet ik in mijn
 werkverslag, en het is hetzelfde als op het maildashboard en bij De Mailregisseur. Ik zet niets meer klaar voor De
 Mailregisseur: hij leest de lijst van het bord.
+
+Opgevolgd tot opgelost (Mehdi, 20-10-2026: "er moet een systeem zijn dat ik weet dat een mail opgevolgd wordt tot het volledig gedaan/opgelost is"; gekozen: pas weg na Opgelost). Mijn opvolging sluit niets meer af: beantwoord of doorgezet zet een opvolgpunt op het bord op Loopt, met wie en sinds wanneer, en een actie ouder dan zeven dagen (verlopen) blijft op te volgen. Weg is een punt pas na een klik op Opgelost of Ruis op het maildashboard; een punt dat vijf werkdagen niet beweegt, staat bovenaan Loopt en in de update van 08:00 en 17:00.
 
 Beantwoord betekent: een verzonden bericht antwoordt rechtstreeks op dit bericht (In-Reply-To), vanuit dit postvak of
 vanuit een ander postvak waarvan ik de verzonden post lees. Dan staat erbij wie antwoordde en wanneer; is het

@@ -127,10 +127,10 @@ check("de grafiek staat erop", "<svg" in html and "Mails per dag" in html)
 
 # --- een bron: vier tellingen, een getal
 tegel, kolom, api = tellingen(html)
-check("open is: hoog, gewoon en onzeker zonder besluit (4); niet beantwoord, nog geen werkdag of verlopen",
-      api == 4, api)
+check("open is: hoog, gewoon, onzeker en een verlopen automatisch bericht zonder besluit (5); niet beantwoord of nog geen werkdag",
+      api == 5, api)
 check("de wacht, De Mailregisseur, de tegel en de kolom Open geven hetzelfde getal",
-      (antw_mch["open"] + antw_melo["open"], tegel, kolom, api) == (4, 4, 4, 4), (antw_mch, antw_melo, tegel, kolom, api))
+      (antw_mch["open"] + antw_melo["open"], tegel, kolom, api) == (5, 5, 5, 5), (antw_mch, antw_melo, tegel, kolom, api))
 opv = html.split('id="opvolgen"')[1].split("</section>")[0]
 for kop in ("Ontvangen", "Afzender", "Postvak", "Onderwerp", "Status", "Wacht", "Volgende stap"):
     check(f"de lijst Op te volgen toont per bericht: {kop}", f"<th>{kop}</th>" in opv or f">{kop}</th>" in opv)
@@ -139,9 +139,16 @@ check("belangrijk staat boven gewone mail, ook als die langer wacht",
 check("mogelijk beantwoord staat erbij, met wie", "mogelijk beantwoord (mch@h-architects.be" in opv)
 check("een gewoon bericht van vandaag staat er nog niet", "Vraag van vandaag" not in opv)
 check("de wachttijd staat in werkdagen", "werkdagen</span>" in opv or "werkdag</span>" in opv)
+# --- opgevolgd tot opgelost (Mehdi, 20-10-2026: "dat ik weet dat een mail opgevolgd wordt tot het volledig gedaan/opgelost
+# is"; gekozen: pas weg na Opgelost). Een antwoord sluit niets: het punt loopt, met wie en sinds wanneer.
 dicht = html.split('id="afgesloten"')[1].split("</section>")[0]
-check("beantwoord staat bij afgesloten, door wie", "beantwoord door info@h-invest.be op" in dicht)
-check("verlopen staat bij afgesloten, niet stil weg", "Betaling mislukt" in dicht and "verlopen" in dicht)
+loopt = html.split('id="loopt"')[1].split("</section>")[0]
+check("beantwoord staat bij Loopt, door wie, niet bij afgesloten",
+      "Akte verkoop" in loopt and "info@h-invest.be" in loopt and "Akte verkoop" not in dicht, loopt[:400])
+check("een verlopen automatisch bericht blijft open, niet stil weg", "Betaling mislukt" in opv and "Betaling mislukt" not in dicht)
+check("Loopt heeft de knoppen Opgelost en Toch open", ">Opgelost</button>" in loopt and ">Toch open</button>" in loopt)
+check("de tegel Loopt telt de lijst Loopt", int(html.split('id="tegel-loopt"')[1].split('class="groot">')[1].split("<")[0])
+      == loopt.count("<tr class=") , loopt.count("<tr class="))
 check("de kolom heet mailinglijst; een oude wacht met 'lijst' werkt nog",
       rij("mch@h-architects.be:<nl@x>")["mailinglijst"] == 1 and "lijst" not in rij("mch@h-architects.be:<nl@x>"))
 check("wat al in de tabel stond, houdt zijn mailinglijst", rij("mch@h-architects.be:<nieuwsbrief>")["mailinglijst"] == 1)
@@ -156,22 +163,30 @@ check("afgehandeld blijft afgehandeld als de wacht het bericht opnieuw als open 
 check("wie afhandelde, staat erbij", st["besluit_door"] == "mehdi")
 html = c.get("/mail", headers=BEHEER).get_data(as_text=True)
 tegel, kolom, api = tellingen(html)
-check("na een besluit zakken alle tellingen samen", (antw["open"] + antw_melo["open"], tegel, kolom, api) == (3, 3, 3, 3),
+check("na een besluit zakken alle tellingen samen", (antw["open"] + antw_melo["open"], tegel, kolom, api) == (4, 4, 4, 4),
       (antw, tegel, kolom, api))
-check("afgehandeld staat bij afgesloten met wie", "afgehandeld door mehdi op" in html.split('id="afgesloten"')[1].split("</section>")[0])
+check("Opgelost staat bij afgesloten met wie", "opgelost (aangeduid door mehdi op" in html.split('id="afgesloten"')[1].split("</section>")[0])
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<a@kbc>", "actie": "terug"})
-check("terugzetten maakt het weer open", c.get("/api/mail/open", headers=K).get_json()["aantal"] == 4)
+check("terugzetten maakt het weer open", c.get("/api/mail/open", headers=K).get_json()["aantal"] == 5)
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<antw@x>", "actie": "open"})
-check("Toch open zet een door de wacht afgesloten bericht weer op de lijst, ook als de wacht het beantwoord blijft noemen",
-      c.get("/api/mail/open", headers=K).get_json()["aantal"] == 5
-      and "weer opengezet door mehdi" in c.get("/mail", headers=BEHEER).get_data(as_text=True))
+check("Toch open zet een punt dat loopt weer op de lijst, ook als de wacht het beantwoord blijft noemen",
+      c.get("/api/mail/open", headers=K).get_json()["aantal"] == 6
+      and "weer opengezet door mehdi" in c.get("/mail", headers=BEHEER).get_data(as_text=True)
+      and "Akte verkoop" not in c.get("/mail", headers=BEHEER).get_data(as_text=True).split('id="loopt"')[1].split("</section>")[0])
+c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<antw@x>", "actie": "afgehandeld"})
+_html = c.get("/mail", headers=BEHEER).get_data(as_text=True)
+check("pas na Opgelost is een beantwoord punt weg uit Loopt en staat het bij afgesloten",
+      "Akte verkoop" not in _html.split('id="loopt"')[1].split("</section>")[0]
+      and "Akte verkoop" in _html.split('id="afgesloten"')[1].split("</section>")[0])
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<antw@x>", "actie": "terug"})
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "ruis"})
 check("Ruis op een open punt sluit het en zet de afzender op ruis in dat postvak",
       [(x["postvak"], x["wie"], x["actie"]) for x in c.get("/api/mailregels", headers=K).get_json()["regels"]]
       == [("mch@h-architects.be", "klant@bouwheer.be", "ruis")] and rij("mch@h-architects.be:<klant@x>")["besluit"] == "ruis")
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<twijfel@x>", "actie": "doorgezet"})
-check("Doorgezet sluit het punt", rij("mch@h-architects.be:<twijfel@x>")["besluit"] == "doorgezet")
+_loopt = c.get("/mail", headers=BEHEER).get_data(as_text=True).split('id="loopt"')[1].split("</section>")[0]
+check("Doorgezet haalt het van Op te volgen en zet het op Loopt, met wie", rij("mch@h-architects.be:<twijfel@x>")["besluit"] == "doorgezet"
+      and "Planning werf" in _loopt and "mehdi (doorgezet)" in _loopt, _loopt[:300])
 c.post("/mail/regel", headers=BEHEER, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "weg"})
 
 # --- een onvolledige ronde zegt een gevonden antwoord niet af
@@ -339,14 +354,22 @@ check("de stand telt open per postvak zoals /api/mail/open",
       sum(x["open"] for x in stand["postvakken"].values()) == alle_api and stand["postvakken"]["info@h-invest.be"]["open"] == 1,
       {k: v["open"] for k, v in stand["postvakken"].items()})
 with A.app.app_context():
-    _verwacht = sum(1 for (d,) in A.db().execute("SELECT datum FROM mailbericht WHERE postvak='mch@h-architects.be'").fetchall()
-                    if datetime.fromisoformat(d) >= VANDAAG - timedelta(days=3))
-check("binnen telt alleen wat na sinds kwam (mch@: zonder die van 6, 9 en 40 dagen)",
-      stand["postvakken"]["mch@h-architects.be"]["binnen"] == _verwacht and 0 < _verwacht < 20,
-      (stand["postvakken"]["mch@h-architects.be"], _verwacht))
+    _rijen = A.db().execute("SELECT uniek, datum, gezien FROM mailbericht WHERE postvak='mch@h-architects.be'").fetchall()
+_grens = VANDAAG - timedelta(days=3)
+_verwacht = sum(1 for r in _rijen if datetime.fromisoformat(r["gezien"] or r["datum"]) >= _grens)
+check("binnen telt wanneer het bord een bericht voor het eerst zag (zonder dat: de maildatum), niet de maildatum",
+      stand["postvakken"]["mch@h-architects.be"]["binnen"] == _verwacht and 0 < _verwacht < len(_rijen),
+      (stand["postvakken"]["mch@h-architects.be"], _verwacht, len(_rijen)))
+check("een mail met een oude datum die het bord nu pas ziet, telt mee (hotmail als de Mac sliep)",
+      rij("mch@h-architects.be:oud")["gezien"] >= _grens.astimezone(timezone.utc).isoformat()[:10]
+      and not rij("mch@h-architects.be:<nieuwsbrief>")["gezien"])
 check("een postvak zonder mail staat er toch, met nul (hotmail)", stand["postvakken"]["mehdichegini@hotmail.com"]["binnen"] == 0)
 check("uitgeschreven telt alleen wat aanvaard werd", stand["postvakken"]["melodiebvba@gmail.com"]["uitgeschreven"] == 1
       and stand["postvakken"]["mch@h-architects.be"]["uitgeschreven"] == 0, stand["postvakken"]["melodiebvba@gmail.com"])
+_alle = c.get("/mail?postvak=alle", headers=BEHEER).get_data(as_text=True)
+check("de stand telt Loopt zoals de tegel Loopt op Alle postvakken",
+      sum(x["loopt"] for x in stand["postvakken"].values())
+      == int(_alle.split('id="tegel-loopt"')[1].split('class="groot">')[1].split("<")[0]) > 0)
 check("de stand geeft per wacht de laatste ronde en de open noden", "mail-mch" in stand["wachten"]
       and "noden" in stand["wachten"]["mail-mch"])
 

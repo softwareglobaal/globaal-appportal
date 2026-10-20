@@ -657,7 +657,13 @@ def test_de_mailregisseur_leest_dezelfde_lijst():
     assert M.moment(datetime.fromisoformat("2026-10-19T22:00:00+02:00"), {}) == "", "een ronde om 22:00 is geen moment"
     assert M.moment(datetime.fromisoformat("2026-10-19T08:05:00+02:00"), {}) == "08:00"
     assert M.moment(datetime.fromisoformat("2026-10-18T08:05:00+02:00"), {}) == "08:00", "zondag: de update van 08:00"
-    assert M.moment(datetime.fromisoformat("2026-10-18T12:35:00+02:00"), {}) == "", "zondag geen 12:30"
+    assert M.moment(datetime.fromisoformat("2026-10-18T12:35:00+02:00"), {"2026-10-18": {"08:00": "x"}}) == "", "zondag geen 12:30"
+    # een gemiste update haal ik in, tot de volgende update of 21:00, en een late ronde belt nooit (Codex-toets 20-10-2026, 1)
+    assert M.moment(datetime.fromisoformat("2026-10-19T10:00:00+02:00"), {}) == "08:00"
+    assert M.moment(datetime.fromisoformat("2026-10-19T13:00:00+02:00"), {"2026-10-19": {"12:30": "x"}}) == "08:00"
+    assert M.moment(datetime.fromisoformat("2026-10-19T20:30:00+02:00"), {"2026-10-19": {"08:00": "x"}}) == "17:00"
+    assert M.moment(datetime.fromisoformat("2026-10-19T21:30:00+02:00"), {}) == ""
+    assert not M.mag_bellen(datetime.fromisoformat("2026-10-19T10:00:00+02:00"), {}), "een ingehaalde update belt niet"
     assert not M.mag_bellen(datetime.fromisoformat("2026-10-18T08:05:00+02:00"), {}), "in het weekend belt de regisseur niet"
     assert M.mag_bellen(datetime.fromisoformat("2026-10-19T08:05:00+02:00"), {})
     assert not M.mag_bellen(datetime.fromisoformat("2026-10-19T08:05:00+02:00"), {}, forceer=True), "--nu belt nooit"
@@ -681,7 +687,7 @@ def test_de_update_twee_keer_per_dag():
     nu = datetime.fromisoformat("2026-10-20T17:05:00+02:00")
     focus = ["mch@h-architects.be", "mehdichegini@hotmail.com", "melodiebvba@gmail.com"]
     tel = lambda w, n, o: {"wacht": w, "binnen": n, "belangrijk": 1, "ruis": 2, "gesorteerd": 1, "uitgeschreven": 0,  # noqa: E731
-                           "open": o, "open_belangrijk": 0, "lang": 0}
+                           "open": o, "open_belangrijk": 0, "lang": 0, "loopt": 1, "vast": 1 if w == "mail-mch" else 0}
     stand = {"focus": focus, "postvakken": {"mch@h-architects.be": tel("mail-mch", 10, 4),
                                             "mehdichegini@hotmail.com": tel("mail-prive", 3, 2),
                                             "melodiebvba@gmail.com": tel("mail-melo", 2, 1),
@@ -693,12 +699,20 @@ def test_de_update_twee_keer_per_dag():
     storing = M.storingen(stand, nu)
     assert set(storing) == {"mehdichegini@hotmail.com", "melodiebvba@gmail.com"}, storing
     titel = M.titel_update("17:00", stand, storing)
-    assert titel.startswith("Mail 17:00: 15 nieuw, 3 belangrijk; op te volgen mch@ 4, hotmail 2, Melodie 1; storing hotmail, Melodie")
+    assert titel.startswith("Mail 17:00: open mch@ 4, hotmail 2, Melodie 1; loopt 3 (1 vast); storing hotmail, Melodie"), titel
+    lang = M.titel_update("17:00", dict(stand, postvakken={a: dict(x, open=123, loopt=99) for a, x in stand["postvakken"].items()}),
+                          {a: ["x"] for a in focus})
+    assert len(lang) <= 110 and "; storing mch@, hotmail, Melodie" in lang, "grote getallen: de storing valt nooit weg"
     assert len(titel) <= 110 and "stil" not in titel.lower()
-    inhoud = M.inhoud_update("17:00", stand, storing, [], M.vorige_update(nu, "17:00"))
+    inhoud = M.inhoud_update("17:00", stand, storing, M.vorige_update(nu, "17:00"))
     assert "info@ H-Invest 7 op te volgen" in inhoud and "niet vers" in inhoud and "stil" not in inhoud.lower()
+    assert "1 lopen nog tot iemand Opgelost klikt" in inhoud, "opgevolgd tot opgelost (20-10-2026)"
     bron = open(os.path.join(HIER, "mail_regisseur.py"), encoding="utf-8").read()
     assert '"uniek": f"mailupdate:{vandaag}:{m}"' in bron and "if m in UPDATES:" in bron
+    assert 'staat["_laatste_update"] = nu.isoformat()' in bron, "de volgende update telt vanaf de vorige geslaagde"
+    assert "onderwerp" not in bron[bron.index("def inhoud_update"):bron.index("def oude_oproepen")], "geen losse mails in de update"
+    stand["wachten"]["mail-mch"]["actief"] = 0
+    assert "de wacht staat uit" in M.storingen(stand, nu)["mch@h-architects.be"]
 
 
 def test_wat_op_25_september_ten_onrechte_doorkwam():
