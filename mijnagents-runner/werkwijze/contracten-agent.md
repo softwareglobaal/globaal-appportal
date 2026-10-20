@@ -52,24 +52,29 @@ transcript telt, nooit de samenvatting van de recorder (D7).
 3. **Eerst de soort, dan het projectnummer (D63, D9).** Het nummer volgt de
    reeks van de soort, dus de soort ligt eerst vast. Een nieuw dossier staat op
    de standaard architectuur van het klaarzetten; dat is geen beslissing. Staat
-   er al een nummer, dan legt de reeks de soort vast: 56xx is regularisatie, en
-   een andere soort meld ik als conflict zonder iets te veranderen. Zonder nummer
+   er al een nummer, dan legt de reeks de soort vast: 56xx is regularisatie. Past
+   de soort niet bij de reeks (en is het geen addendum, dat het nummer van zijn
+   project volgt), dan stop ik voor die deal vóór elke verdere schrijfactie en
+   meld ik het op de deal: Mehdi beslist. Zonder nummer
    stel ik de soort voor uit de bronnen, met `keuze_maken` en een bron met een
    letterlijk citaat dat de opdracht zelf beschrijft: **regularisatie** als de
    opdracht het vergunnen van een bestaande, niet-vergunde toestand is (een
    aanvraag via regulariseren.be, een PV of vaststelling van een
    bouwovertreding, een forfait voor de regularisatie in het gesprek);
    **architectuur** als er nieuwe werken ontworpen en opgevolgd worden, ook als
-   daarbij een stuk bestaande toestand geregulariseerd wordt (2614, 2617,
-   2618); **voorstudie** of **addendum** volgens de Werkinstructie. Eén signaal
-   beslist nooit alleen: een PV of het woord regularisatie staat ook in
-   architectuurdossiers. Twijfel ik, dan laat ik de soort staan en zet ik de
+   daarbij een stuk bestaande toestand geregulariseerd wordt; **voorstudie** of
+   **addendum** volgens de Werkinstructie. Eén signaal beslist nooit alleen:
+   2618 kwam ook via regulariseren.be binnen, met een PV, maar de aanbouw was
+   nog niet af, dus "een gewone aanvraag tot omgevingsvergunning en niet een
+   regularisatie", met opvolging tot wind- en waterdicht: architectuur. Twijfel ik, dan laat ik de soort staan en zet ik de
    twijfel als eerste punt onder "nakijken". Een soort die Mehdi koos (op het
    dashboard, of als beslissing in een Claude-sessie) raak ik niet aan; het
    dashboard weigert het ook. Pas als de soort vastligt, bereken ik het nummer,
    uit de reeks van die soort. Verandert de soort in deze ronde, dan plan ik
    opnieuw met de velden van de master van die soort; een nummer uit de reeks
-   van de oude soort gaat nooit naar het bord.
+   van de oude soort gaat nooit naar het bord. Wil het tweede plan de soort nog
+   eens anders, dan stel ik geen nummer voor en beslist Mehdi. Een andere
+   dealtitel geldt als nieuws: dan doe ik de deal opnieuw, ook binnen 24 uur.
 
    Het projectnummer nakijken (D9). Het nummer staat vóór de klantnaam in
    de dealtitel: JJNN voor architectuur, voorstudie en addendum (2026: 26xx,

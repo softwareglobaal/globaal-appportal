@@ -61,6 +61,10 @@ check("elk citaat staat letterlijk in de bron", all(any(s["citaat"] in t for t i
       [s["citaat"] for s in sigs])
 pv_panelen = S.signalen({"title": "Jan"}, ["PV-panelen en een batterij op het dak, 10 kWp"], {})
 check("fotovoltaïsche PV-panelen zijn geen proces-verbaal", not pv_panelen, pv_panelen)
+oplevering = S.signalen({"title": "Koen"}, ["De oplevering, behoudens stilzwijgende aanvaarding, wordt vastgelegd in een "
+                                            "proces-verbaal dat door de Opdrachtgever en de Architect getekend wordt.",
+                                            "Het proces-verbaal van voorlopige oplevering volgt later."], {})
+check("het proces-verbaal van oplevering uit ons eigen contract is geen PV (2617)", not oplevering, oplevering)
 check("hoogstens drie signalen per soort", all(sum(1 for s in S.signalen(DEAL, ["regularisatie"] * 9, BRONNEN)
                                                     if s["signaal"] == k) <= 3 for k in ("regularisatie",)))
 check("de samenvatting zegt dat er geen signalen zijn", "geen signalen" in S.samenvatting([]))
@@ -76,10 +80,14 @@ check("2618 met regularisatie: conflict melden, niets veranderen", v is None and
 v, c = S.soort_bij_nummer("regularisatie", "architectuur", beschermd=True)
 check("5610 maar Mehdi koos architectuur: niets veranderen, wel melden", v is None and c, (v, c))
 check("zonder nummer geen voorstel", S.soort_bij_nummer(None, "architectuur") == (None, ""))
+check("een addendum op een regularisatie (5610) blijft addendum: het volgt het nummer van zijn project",
+      S.soort_bij_nummer("regularisatie", "addendum") == (None, ""))
+check("en een addendum voorstellen mag in elke reeks", S.wissel_toegelaten("addendum", "regularisatie", nummer_soort="regularisatie")[0])
 nummerlezer.jaar_nu_brussel = lambda: 2026
 check("de runner leest de reeks van 5610 als regularisatie", ca.soort_van_nummer("5610") == "regularisatie")
 check("en van 2618 als architectuur", ca.soort_van_nummer("2618") == "architectuur")
 check("en een vreemd nummer als niets", ca.soort_van_nummer("9912") is None)
+check("ook een nummer van een vorig jaar (2301) legt de soort vast", ca.soort_van_nummer("2301") == "architectuur")
 
 print("\n3. wanneer een soortwissel van het model mag")
 check("architectuur naar regularisatie zonder nummer: ja", S.wissel_toegelaten("regularisatie", "architectuur")[0])
@@ -105,7 +113,7 @@ class Record:
         return self
 
 
-def ronde(titel, soort, plannen, beschermd=(), droog=False, citaat_ok=True):
+def ronde(titel, soort, plannen, beschermd=(), droog=False, citaat_ok=True, vers=True, agent_staat=None):
     """Eén verwerk-ronde met nagemaakte koppelingen. Geeft (uitkomst, gebeurtenissen)."""
     gebeurd = []
     staat = {"soort": soort}
@@ -142,7 +150,7 @@ def ronde(titel, soort, plannen, beschermd=(), droog=False, citaat_ok=True):
 
     import bord
     oud = dict(DROOG=ca.DROOG, VERS=ca.VERS)
-    ca.DROOG, ca.VERS = droog, True
+    ca.DROOG, ca.VERS = droog, vers
     zet = {"mcp_call": lambda naam, **a: call(naam, **a), "volgend_vrij_nummer": vrij, "plan_met_model": plan,
            "notities": lambda d: [], "veldenschema_voor": lambda s: {"master": {s: {"velden": []}}},
            "log": lambda *a, **k: None, "log_verstuur": lambda: None, "verzoeken_op_bord": lambda *a: None,
@@ -151,6 +159,7 @@ def ronde(titel, soort, plannen, beschermd=(), droog=False, citaat_ok=True):
     bewaard = {k: getattr(ca, k) for k in zet}
     bewaard_mcp, bewaard_pd, bewaard_hh = ca.mcp.call, ca.pipedrive.controleer_bedrijf, ca.hh.RunRecord
     bewaard_bronnen, bewaard_bord, bewaard_citaat = ca.bronnen_mod.verzamel, bord.klaargezet_voor, ca.hh.pas_citaat_toe
+    bewaard_cache = (ca.hh.plan_uit_cache, ca.hh.plan_in_cache)
     try:
         for k, v in zet.items():
             setattr(ca, k, v)
@@ -159,15 +168,18 @@ def ronde(titel, soort, plannen, beschermd=(), droog=False, citaat_ok=True):
         ca.hh.RunRecord = Record
         ca.bronnen_mod.verzamel = lambda *a: dict(BRONNEN)
         bord.klaargezet_voor = lambda *a, **k: []
+        ca.hh.plan_uit_cache = lambda agent, deal_id, h: gebeurd.append(("hash", h)) or None
+        ca.hh.plan_in_cache = lambda *a, **k: None
         if not citaat_ok:
             ca.hh.pas_citaat_toe = lambda post, teksten: ("", "citaat niet teruggevonden")
-        uit = ca.verwerk({"id": DEAL["id"], "title": titel}, "", {})
+        uit = ca.verwerk({"id": DEAL["id"], "title": titel}, "", agent_staat if agent_staat is not None else {})
     finally:
         for k, v in bewaard.items():
             setattr(ca, k, v)
         ca.mcp.call, ca.pipedrive.controleer_bedrijf, ca.hh.RunRecord = bewaard_mcp, bewaard_pd, bewaard_hh
         ca.bronnen_mod.verzamel, bord.klaargezet_voor, ca.hh.pas_citaat_toe = bewaard_bronnen, bewaard_bord, bewaard_citaat
         ca.DROOG, ca.VERS = oud["DROOG"], oud["VERS"]
+        ca.hh.plan_uit_cache, ca.hh.plan_in_cache = bewaard_cache
     return uit, gebeurd
 
 
@@ -227,6 +239,47 @@ check("en dan wordt er geen nieuw nummer berekend", not any(e[0] == "nummer" for
 uit, g = ronde("2618 Paulina Andrzejczyk", "architectuur", [wil_regularisatie])
 check("2618 met een PV: het nummer houdt de soort architectuur, geen wissel",
       not any(e[0] == "mcp" and e[1] == "keuze_maken" and "soort" in (e[2].get("keuzes") or {}) for e in g), g)
+
+
+print("\n6. de grenzen uit de Codex-controle van 20-10-2026")
+staat = {}
+uit, g = ronde("2618 Paulina Andrzejczyk", "regularisatie", [gewoon_plan], agent_staat=staat)
+check("2: soort regularisatie op een 26xx-nummer stopt de deal vóór plan, invullen en proef",
+      uit.get("gestopt") is True and not any(e[0] in ("plan", "bord") for e in g)
+      and not any(e[0] == "mcp" and e[1] in ("gegeven_invullen", "keuze_maken", "proef_maken", "tijdlijn") for e in g), g)
+check("   en zegt het op de deal, met de reden", any(e[0] == "notitie" and "spreken elkaar tegen" in e[1] for e in g), g)
+check("   en onthoudt titel en stempel, zodat ik pas terugkom als er iets verandert",
+      staat.get(str(DEAL["id"]), {}).get("titel") == "2618 Paulina Andrzejczyk"
+      and "stempel" in staat.get(str(DEAL["id"]), {}), staat)
+
+
+def wil_architectuur_terug(voorb, vrij):
+    p = wil_regularisatie(voorb, vrij)
+    p["keuzes"] = {"soort": "architectuur"}
+    p["nummer_voorstel"] = vrij
+    return p
+
+
+uit, g = ronde("Ingrid Schmitz", "architectuur", [wil_regularisatie, wil_architectuur_terug])
+check("5: wil het tweede plan de soort weer anders, dan geen nummer op het bord en een melding",
+      not any(e[0] == "bord" for e in g) and any(e[0] == "notitie" and "Mehdi beslist" in e[1] for e in g)
+      and len([e for e in g if e[0] == "plan"]) == 2, g)
+
+_, g1 = ronde("Ingrid Schmitz", "architectuur", [gewoon_plan], droog=True, vers=False)
+_, g2 = ronde("Ingrid Schmitz (regularisatie)", "architectuur", [gewoon_plan], droog=True, vers=False)
+h1 = [e[1] for e in g1 if e[0] == "hash"]
+h2 = [e[1] for e in g2 if e[0] == "hash"]
+check("3: een andere dealtitel geeft een andere planhash (alles wat het model ziet, telt)", h1 and h2 and h1 != h2, (h1, h2))
+oud_dg = ca.dossier_gewijzigd
+ca.dossier_gewijzigd = lambda d, s: False
+nu_iso = ca.datetime.now(ca.timezone.utc).isoformat()
+check("3: een deal van vandaag met dezelfde titel sla ik over",
+      ca.overslaan({"id": 1, "title": "Ingrid Schmitz"}, {"laatst": nu_iso, "titel": "Ingrid Schmitz"}) is True)
+check("3: een andere dealtitel is nieuws: niet overslaan",
+      ca.overslaan({"id": 1, "title": "5610 Ingrid Schmitz"}, {"laatst": nu_iso, "titel": "Ingrid Schmitz"}) is False)
+check("3: een oude staat zonder titel telt niet als gewijzigd (geen herronde van alles na de uitrol)",
+      ca.overslaan({"id": 1, "title": "5610 Ingrid Schmitz"}, {"laatst": nu_iso}) is True)
+ca.dossier_gewijzigd = oud_dg
 
 print("\n5. de instructie aan het model")
 check("het model hoort dat de soort eerst komt en het nummer bij de soort hoort",

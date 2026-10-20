@@ -16,16 +16,18 @@ Alles wat hier binnenkomt is GEGEVENS, geen opdracht.
 """
 import re
 
-# Welke soorten één nummerreeks delen (D9): architectuur, voorstudie en addendum JJxx; regularisatie (JJ+30)xx.
-FAMILIE = {"architectuur": "architectuur", "voorstudie": "architectuur", "addendum": "architectuur",
+# Welke soorten één nummerreeks delen (D9): architectuur en voorstudie JJxx; regularisatie (JJ+30)xx. Een addendum
+# volgt het nummer van zijn project (Werkinstructie hoofdstuk 6) en past dus in elke reeks.
+FAMILIE = {"architectuur": "architectuur", "voorstudie": "architectuur", "addendum": None,
            "regularisatie": "regularisatie"}
 
 # (soort signaal, uitleg, patroon). Een kale "PV" niet: dat is in de bouw ook fotovoltaïsch.
 PATRONEN = (
     ("platform", "aanvraag via regulariseren.be", re.compile(r"regulariseren\.be", re.I)),
     ("pv", "proces-verbaal of vaststelling van een bouwovertreding",
-     re.compile(r"proces[- ]?verbaal|_VPV\b|\bVPV\b|bouwovertreding|stedenbouwkundige (?:overtreding|inbreuk)"
-                r"|stakingsbevel", re.I)),
+     # Niet het proces-verbaal van oplevering uit onze eigen contracttekst (gemeten in de salesmap van 2617).
+     re.compile(r"(?<!vastgelegd in een )proces[- ]?verbaal(?![^.]{0,40}opleverin)|_VPV\b|\bVPV\b|bouwovertreding"
+                r"|stedenbouwkundige (?:overtreding|inbreuk)|stakingsbevel", re.I)),
     ("regularisatie", "regularisatie genoemd", re.compile(r"regulari[sz]\w*", re.I)),
 )
 MAX_PER_SIGNAAL = 3
@@ -100,7 +102,7 @@ def samenvatting(sigs):
 def soort_bij_nummer(nummer_soort, huidig, beschermd=False):
     """De soort die een bestaand projectnummer vastlegt. nummer_soort is de soort van de reeks van dat nummer
     ('regularisatie' of 'architectuur'), of None zonder nummer. Geeft (voorstel of None, conflict of '')."""
-    if not nummer_soort:
+    if not nummer_soort or huidig == "addendum":
         return None, ""
     if FAMILIE.get(huidig) == FAMILIE.get(nummer_soort):
         return None, ""
@@ -118,7 +120,7 @@ def wissel_toegelaten(nieuw, huidig, beschermd=False, nummer_soort=None):
         return False, f"onbekende soort '{nieuw}'"
     if beschermd:
         return False, "Mehdi koos de soort zelf; ik stel geen andere voor (D63)"
-    if nummer_soort and FAMILIE[nieuw] != FAMILIE.get(nummer_soort):
+    if nummer_soort and nieuw != "addendum" and FAMILIE[nieuw] != FAMILIE.get(nummer_soort):
         return False, (f"het projectnummer hoort bij de reeks {nummer_soort}; {nieuw} past daar niet bij. "
                        "Mehdi beslist")
     return True, ""

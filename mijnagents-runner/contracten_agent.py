@@ -759,12 +759,10 @@ def melding_tekst(plan, proef, nummer_voorstel, geschreven=None, geweigerd=None,
 # ---------------------------------------------------------------- werk ---
 def soort_van_nummer(nummer):
     """De soort van de reeks van een bestaand projectnummer ('regularisatie' of 'architectuur'), of None (D63)."""
-    if not nummer:
-        return None
-    try:
-        return reeks_van_nummer(nummer)[0]
-    except NummerFout:
-        return None
+    # Elk jaar volgens de gedeelde nummerlezer, niet alleen dit jaar: ook 23xx is architectuur. Twee lezingen
+    # met een andere soort: geen soort uit het nummer.
+    soorten = {soort for _, soort in nummerlezer.ha_lezingen(str(nummer or "").strip())}
+    return soorten.pop() if len(soorten) == 1 else None
 
 
 def soort_voorstellen(deal_id, nieuw, bron, voorb, ond):
@@ -825,8 +823,18 @@ def verwerk(deal, werkinstructie, staat):
     voorstel, conflict = soortbepaling.soort_bij_nummer(nummer_soort, (voorb or {}).get("soort") or "architectuur",
                                                         beschermd_soort)
     if conflict:
-        log(ond, "fout", f"soort: {conflict}")
-        vooraf_fouten.append(f"soort: {conflict}")
+        # Codex-controle 2 (20-10-2026): niet verder schrijven in een soort die niet bij het nummer past; Mehdi
+        # beslist. Stempel en titel bewaren, zodat ik pas terugkom als hij iets veranderde (of na 24 uur).
+        log(ond, "fout", f"soort: {conflict}; ronde voor deze deal gestopt")
+        if not DROOG:
+            notitie_bijwerken(deal_id, "<b>Contracten-agent</b> — " + datetime.now().strftime("%d-%m-%Y %H:%M")
+                              + "<br><br><b>Gestopt: soort en projectnummer spreken elkaar tegen (D63)</b><br>- "
+                              + conflict + "<br>- Kies de juiste soort met Keuzes op contracten.globaal.be, of laat "
+                              "het nummer aanpassen; daarna ga ik verder.")
+            staat[str(deal_id)] = {"laatst": datetime.now(timezone.utc).isoformat(), "proef": "", "fouten": 1,
+                                   "stempel": vingerafdruk(voorb), "titel": titel, "conflict": conflict[:200]}
+        log_verstuur()
+        return {"proef": "", "fouten": [f"soort: {conflict}"], "gestopt": True}
     if voorstel:
         voorb, gelukt, regel = soort_voorstellen(deal_id, voorstel, f"projectnummer {nummer} in de dealtitel of de "
                                                  f"voorbereiding: de reeks {nummer[:2]}xx is {voorstel} (D9, D63)", voorb, ond)
@@ -904,7 +912,11 @@ def verwerk(deal, werkinstructie, staat):
                         "soort": soort, "beschermd": hh.beschermde_velden(voorb)},
             "notities": notitielijst, "bronnen": _bronnen_compact(bronnen),
             "werkinstructie": werkinstructie, "werkwijze": WERKWIJZE, "veldenschema": schema,
-            "model": MODEL, "vrij_nummer": vrij, "promptversie": SCHEMA_UITLEG})
+            "model": MODEL, "vrij_nummer": vrij, "promptversie": SCHEMA_UITLEG,
+            # Codex-controle 3: alles wat het model ziet, ook de deal zelf en de soortsignalen.
+            "deal": {"titel": titel, "organisatie": (deal.get("org_id") or {}).get("name")
+                     if isinstance(deal.get("org_id"), dict) else deal.get("org_name")},
+            "soortsignalen": sigs})
         record.zet(invoerhash=hash_, hashes=per_deel, dossier_stempel=vingerafdruk(voorb), model_gevraagd=MODEL,
                    werkinstructie_hash=per_deel.get("werkinstructie"), werkwijze_hash=per_deel.get("werkwijze"),
                    schema_hash=per_deel.get("veldenschema"))
@@ -959,7 +971,12 @@ def verwerk(deal, werkinstructie, staat):
                     bronnen.update(bronnen_mod.verzamel(salesmap_pad, nummer if lopend else "", klant_email))
                 vrij, nummer_fout, schema, hash_, plan, tokens = nummer_en_plan(soort, voorb)
                 tokens += eerste_tokens
-                (plan.get("keuzes") or {}).pop("soort", None)
+                tweede = str((plan.get("keuzes") or {}).pop("soort", "") or "").strip()
+                if tweede and tweede != soort:
+                    # Codex-controle 5: het tweede plan spreekt de wissel tegen. Geen nummer; Mehdi beslist.
+                    plan["nummer_voorstel"] = None
+                    log(ond, "geweigerd", f"tweede soortwissel {soort} -> {tweede}: tegenspraak, geen nummer")
+                    vooraf_fouten.append(f"soort: het plan wil na {soort} opnieuw {tweede}; geen nummer, Mehdi beslist")
     velden = (voorb or {}).get("velden") or {}
     if DROOG:
         log_verstuur()
@@ -1095,7 +1112,7 @@ def verwerk(deal, werkinstructie, staat):
         stempel = vingerafdruk(mcp.call("voorbereiding", deal_id=deal_id))
     except Exception:  # noqa: BLE001
         stempel = ""
-    staat[str(deal_id)] = {"laatst": datetime.now(timezone.utc).isoformat(), "proef": proef,
+    staat[str(deal_id)] = {"laatst": datetime.now(timezone.utc).isoformat(), "proef": proef, "titel": titel,
                            "fouten": len(fouten), "tokens": tokens, "nummer_voorstel": nummer_voorstel,
                            "stempel": stempel, "run_id": record.record["run_id"], "invoerhash": hash_}
     record.zet(geschreven=geschreven, geweigerd=geweigerd_lijst, fouten=fouten, proef=proef,
@@ -1113,6 +1130,17 @@ def vingerafdruk(voorb):
     keuzes = {k.get("veld"): k.get("gekozen") for k in (voorb.get("keuzes") or []) if isinstance(k, dict)}
     return hashlib.sha256(json.dumps([velden, keuzes, voorb.get("soort")], sort_keys=True,
                                      ensure_ascii=False).encode()).hexdigest()[:16]
+
+
+def overslaan(deal, s):
+    """Werkwijze stap 2: een deal die ik de laatste 24 uur deed, sla ik over, tenzij het dossier of de dealtitel
+    intussen veranderde (Codex-controle 3, 20-10-2026: een nummer of 'regularisatie' in de titel is ook nieuws).
+    Een oude staat zonder titel telt niet als gewijzigd: anders deed de eerste ronde na de uitrol alles opnieuw."""
+    if not s or ALLEEN or uren_sinds(s.get("laatst", "")) >= HERRONDE_UREN:
+        return False
+    if s.get("titel") is not None and s.get("titel") != deal.get("title", ""):
+        return False
+    return not dossier_gewijzigd(int(deal["id"]), s)
 
 
 def dossier_gewijzigd(deal_id, s):
@@ -1162,8 +1190,7 @@ def _main_binnen_slot():
         gedaan, overgeslagen, proeven = 0, 0, 0
         for deal in deals:
             s = staat.get(str(deal["id"]))
-            if (s and uren_sinds(s.get("laatst", "")) < HERRONDE_UREN and not ALLEEN
-                    and not dossier_gewijzigd(int(deal["id"]), s)):
+            if overslaan(deal, s):
                 overgeslagen += 1
                 continue
             uit = verwerk(deal, werkinstructie, staat)
