@@ -475,6 +475,20 @@ def zonder_beschermd(velden: dict, dossier_velden: dict | None, beschermd: dict 
     return goed, geweigerd
 
 
+def voorstellen_voor_leeg(post: dict, teksten, toegelaten: set | None, dossier_velden: dict | None,
+                         beschermd: dict | None) -> dict:
+    """D64 (contract-systeem, 5610): wat alle toetsen van toets_post doorstaat en alleen wegvalt omdat het LEGE veld
+    in het dashboard leeggemaakt is, gaat toch naar gegeven_invullen. Het dashboard
+    overschrijft niets en zet het als voorstel klaar; Mehdi neemt het over met één klik. Een gevuld beschermd veld
+    (wat de klant bevestigde, wat Mehdi koos) krijgt geen voorstel. Geeft {veld: waarde}."""
+    _, zonder_slot, _ = toets_post(post, teksten, toegelaten, dossier_velden, None)
+    nu = dossier_velden or {}
+    # Een beslissing van Mehdi (ook 'bewust leeg', bv. geen aanspreektitel bij 2618) wint: geen voorstel.
+    return {veld: waarde for veld, waarde in zonder_slot.items()
+            if "bewust leeggemaakt in het dashboard" in str((beschermd or {}).get(veld, ""))
+            and not str(nu.get(veld, "")).strip()}
+
+
 def toets_post(post: dict, teksten, toegelaten: set | None = None, dossier_velden: dict | None = None,
                beschermd: dict | None = None):
     """Eén gegevenspost door alle grendels, voor runner en goudstandaard dezelfde: het citaat staat letterlijk in

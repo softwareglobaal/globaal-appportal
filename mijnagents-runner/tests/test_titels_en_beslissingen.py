@@ -149,5 +149,24 @@ check("het model krijgt de beschermde velden, ook de lege", "beschermde_velden" 
 check("de prompt verbiedt een titel uit een voornaam, 'hij/zij' of een aanhef",
       all(s in ca.SCHEMA_UITLEG for s in ("aanspreektitel", "voornaam", "aanhef", "beslissing Mehdi")))
 
+print("\n5. een voorstel voor een leeg veld uit het dashboard gaat mee als voorstel (D64, 5610)")
+PV = "In het appartement op de zolderverdieping werd aan de voorzijde in het zadeldak een inpandig dakterras gecreëerd"
+TEKSTEN_PV = [("salesmap: 11002_2024_18344_VPV_anoniem.pdf", PV)]
+POST_PV = {"velden": {"regularisatiewerken_bullets": "Inpandig dakterras in het zadeldak aan de voorzijde"},
+           "bron": "proces-verbaal 11002_2024_18344_VPV", "citaat": PV}
+LEEG_DASHBOARD = {"regularisatiewerken_bullets": "bewust leeggemaakt in het dashboard"}
+_, goed, weg = hh.toets_post(POST_PV, TEKSTEN_PV, None, {"regularisatiewerken_bullets": ""}, LEEG_DASHBOARD)
+check("toets_post zelf schrijft het beschermde veld niet (D53 blijft)", not goed, (goed, weg))
+check("maar het gaat mee als voorstel", hh.voorstellen_voor_leeg(POST_PV, TEKSTEN_PV, None,
+      {"regularisatiewerken_bullets": ""}, LEEG_DASHBOARD) == POST_PV["velden"])
+check("niet als het citaat niet in de bron staat", not hh.voorstellen_voor_leeg(
+      {**POST_PV, "citaat": "verzonnen zin"}, TEKSTEN_PV, None, {"regularisatiewerken_bullets": ""}, LEEG_DASHBOARD))
+check("niet bij een beslissing van Mehdi (bewust leeg, zoals de titel bij 2618)",
+      not hh.voorstellen_voor_leeg(POST_ID, TEKSTEN, None, DOSSIER, BESCHERMD))
+check("niet als het veld al gevuld is", not hh.voorstellen_voor_leeg(POST_PV, TEKSTEN_PV, None,
+      {"regularisatiewerken_bullets": "Terras"}, {"regularisatiewerken_bullets": "ingevuld in het dashboard"}))
+check("de runner stuurt het voorstel en meldt het niet als geschreven",
+      "voorstellen_voor_leeg" in inspect.getsource(ca) and "voorstel_klaargezet" in inspect.getsource(ca))
+
 print(f"\n{'=' * 50}\n{ok} geslaagd, {fout} gefaald\n{'=' * 50}")
 sys.exit(1 if fout else 0)

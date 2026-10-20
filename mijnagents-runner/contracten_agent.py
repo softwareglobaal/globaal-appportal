@@ -878,6 +878,11 @@ def verwerk(deal, werkinstructie, staat):
         # Rapport deel 5 en D53: het citaat staat letterlijk in de bron, de post claimt geen beslissing van
         # Mehdi, een aanspreektitel heeft zijn bewijs in het citaat, en niets wat beschermd is.
         bron, velden_post, geweigerd = hh.toets_post(post, teksten, toegelaten, velden, beschermd)
+        # D64: een onderbouwd voorstel voor een leeg, beschermd veld gaat mee; het dashboard zet het klaar als
+        # voorstel (voorstel_klaargezet) en overschrijft niets. Zo verdwijnt het niet meer in dit verslag.
+        voorstel = hh.voorstellen_voor_leeg(post, teksten, toegelaten, velden, beschermd)
+        velden_post.update(voorstel)
+        geweigerd = [g for g in geweigerd if g[0] not in voorstel]
         for veld, waarde, reden in geweigerd:
             weiger(veld, waarde, reden, bron)
         if not velden_post:
@@ -890,7 +895,15 @@ def verwerk(deal, werkinstructie, staat):
             continue
         # Wat het dashboard niet overschreef, is niet geschreven (blok 0 van de melding moet kloppen).
         niet = (antwoord.get("niet_overschreven") or {}) if isinstance(antwoord, dict) else {}
+        klaar = set((antwoord.get("voorstel_klaargezet") or []) if isinstance(antwoord, dict) else [])
         for veld, info in niet.items():
+            if veld in klaar:
+                # D64: niet 'klaar' en niet geschreven: het voorstel wacht op Mehdi op het dashboard
+                geweigerd_lijst.append({"veld": veld, "waarde": str(velden_post.get(veld, ""))[:80],
+                                        "reden": "voorstel klaargezet op het dashboard (Herkomst); Mehdi neemt het "
+                                                 "over met één klik", "bron": bron[:80]})
+                log(ond, "voorstel", f"{veld} klaargezet als voorstel voor Mehdi (bron: {bron[:80]})")
+                continue
             weiger(veld, velden_post.get(veld, ""), f"dashboard: niet overschreven ({(info or {}).get('zekerheid', '')})", bron)
         velden_post = {k: v for k, v in velden_post.items() if k not in niet}
         if velden_post:
