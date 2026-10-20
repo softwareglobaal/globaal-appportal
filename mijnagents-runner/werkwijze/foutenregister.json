@@ -3879,10 +3879,10 @@
    "gevonden_door": "Mehdi, driehoeksoverleg 13",
    "fout": "Een onleesbaar postvak bereikte Mehdi niet tijdig.",
    "gevolg": "Een zorgmail kon ontbreken zonder snelle melding met herstelstap.",
-   "waarom_niet_gezien": "De eerdere zelfcontrole wachtte 26 uur en kende geen herstelcommando.",
+   "waarom_niet_gezien": "De eerdere zelfcontrole wachtte 26 uur en kende geen herstelcommando; een zorgafspraak die alleen in het onleesbare postvak staat, telt niet mee voor 'binnen 24 uur'.",
    "oorzaak": "Er was geen duurzaam foutreeksgeheugen met meldingsdrempel.",
    "soort_oorzaak": "code",
-   "oplossing": "Meld na twee mislukte rondes over twee uur, of direct bij een afhankelijke afspraak binnen 24 uur; herhaal hooguit na 24 uur en wis bij succes.",
+   "oplossing": "Meld na twee mislukte rondes vanaf 115 minuten, of direct bij een afhankelijke afspraak binnen 24 uur; herhaal hooguit na 24 uur en wis bij succes.",
    "grendel": {"soort": "test", "waar": "tests/test_zorg_plaats.py", "tekst": "test_mailbron_blijvend_herkoppelen"},
    "controle": [],
    "status": "opgelost"

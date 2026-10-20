@@ -678,7 +678,7 @@ def mailbron_nood(mailbox, afhankelijk=False, nu=None):
             return None
         eerste = datetime.fromisoformat(st["eerste_fout"])
         laatst = datetime.fromisoformat(st["laatste_nood"]) if st["laatste_nood"] else None
-        oud_genoeg = st["fout_rondes"] >= 2 and nu - eerste >= timedelta(hours=2)
+        oud_genoeg = st["fout_rondes"] >= 2 and nu - eerste >= timedelta(minutes=115)
         if not (afhankelijk or oud_genoeg or laatst):
             return None
         if not laatst or nu - laatst >= timedelta(hours=24):

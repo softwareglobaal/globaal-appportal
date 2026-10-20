@@ -1,6 +1,7 @@
 """Z1-Z4: fictieve zorgprofielen, een vaste klok en een nagebootste agenda zonder netwerk."""
 import copy
 import inspect
+import io
 import os
 import sys
 import tempfile
@@ -8,6 +9,7 @@ import unittest
 from contextlib import ExitStack
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from unittest.mock import patch
 
 HIER = Path(__file__).resolve().parent.parent
@@ -129,14 +131,16 @@ class ZorgPlaats(unittest.TestCase):
             opties["niet_op_kaart"] = niet_op_kaart
         return W.vragen_in_agenda(self.items, **opties)
 
-    def rit(self, kaart_adressen=(), niet_op_kaart=None):
+    def rit(self, kaart_adressen=(), niet_op_kaart=None, coord_override=None):
         p = self.stack.enter_context
         p(patch.object(W, "_cache_laden", lambda: {}))
         p(patch.object(W, "_cache_bewaren", lambda _cache: None))
         p(patch.object(W, "lara_vakantiedagen", lambda: set()))
         p(patch.object(W, "geen_auto_dagen", lambda: set()))
         vindbaar = {ADRES_A, *kaart_adressen}
-        p(patch.object(W, "coord", lambda adres, _cache: (0, 0) if adres == W.THUIS else (1, 1) if adres in vindbaar else None))
+        coord_proef = coord_override or (lambda adres, _cache: (0, 0) if adres == W.THUIS else
+                                        (1, 1) if adres in vindbaar else None)
+        p(patch.object(W, "coord", coord_proef))
         p(patch.object(W, "ritlabel", lambda adres, _ander="": "thuis" if adres == W.THUIS else "Teststad"))
         p(patch.object(W, "rijtijd_min", lambda _a, _b, _t: (20, "proef")))
         p(patch.object(W, "kleur_gewenst", lambda *_a: "11"))
@@ -186,6 +190,66 @@ class ZorgPlaats(unittest.TestCase):
         self.assertIn("vind ik niet op de kaart", nood[0]["tekst"])
         self.assertEqual(W.adres_vraag_noden(self.items, nu=NU, niet_op_kaart=niet_op_kaart), nood)
 
+    def test_onvindbare_agendaplaats_gebruikt_projectmap_zonder_overschrijven(self):
+        a = self.voeg(item("project-terugval", kalender=W.WERKAGENDA,
+                           titel="!! Mehdi: [HA-KB] 2616 - Projectproef", locatie="Onvindbare Plek"))
+        project = {"2616": {"adres": ADRES_A, "gemeente": "Teststad"}}
+        with patch.object(W.projectadressen, "index", lambda: project):
+            niet_op_kaart = set()
+            rit = self.rit(niet_op_kaart=niet_op_kaart)
+            self.assertGreaterEqual(rit[0], 1)
+            self.assertFalse(niet_op_kaart)
+            self.assertEqual(self.vraag(niet_op_kaart), (0, 0))
+        self.assertEqual(a["locatie"], "Onvindbare Plek")
+        self.assertEqual(a["_bron_adres"], "projectmap (plaats in de agenda niet op de kaart)")
+        self.assertTrue(any("projectmap (plaats in de agenda niet op de kaart)" in regel for regel in rit[4]))
+        self.assertTrue(any("adres uit projectmap (plaats in de agenda niet op de kaart)" in
+                            body.get("description", "") for body in self.writer.ritten))
+        self.assertFalse(any("location" in body for _, body in self.writer.patches))
+
+    def test_onvindbare_agendaplaats_probeert_plek_en_vaste_plek(self):
+        gevallen = (("locatiesysteem (Proefhal)", (ADRES_A, "Proefhal"), (None, None)),
+                    ("vaste plek (proefhal)", (None, None), ("proefhal", {"adres": ADRES_A})))
+        for bron, plek, vast in gevallen:
+            with self.subTest(bron=bron):
+                a = self.voeg(item(bron, titel="!! [PR] Buitenproef proefhal", locatie="Onvindbare Plek"))
+                with patch.object(W, "plek_zoeken", return_value=plek), patch.object(W, "vaste_plek", return_value=vast):
+                    niet_op_kaart = set()
+                    rit = self.rit(niet_op_kaart=niet_op_kaart)
+                    self.assertGreaterEqual(rit[0], 1)
+                    self.assertFalse(niet_op_kaart)
+                self.assertEqual(a["locatie"], "Onvindbare Plek")
+                self.assertEqual(a["_bron_adres"], bron + " (plaats in de agenda niet op de kaart)")
+                self.items.clear()
+                self.writer.events.clear()
+                self.writer.ritten.clear()
+
+    def test_kaartstoring_is_geen_leeg_resultaat_en_geen_vr(self):
+        params = {"q": "Onvindbare Plek", "format": "jsonv2", "limit": 1}
+        fouten = (URLError("proefstoring"), TimeoutError("proeftijd"),
+                  HTTPError("https://voorbeeld.test", 503, "proefstoring", {}, None))
+        for fout in fouten:
+            with self.subTest(fout=type(fout).__name__):
+                with patch("time.sleep"), patch("urllib.request.urlopen", side_effect=fout):
+                    storing = W._nominatim(params)
+                self.assertIsNotNone(storing)
+                self.assertFalse(storing)
+        with patch("time.sleep"), patch("urllib.request.urlopen", return_value=io.BytesIO(b"[]")):
+            self.assertIsNone(W._nominatim(params))
+        with patch.object(W, "_nominatim", return_value=storing):
+            cache = {}
+            self.assertIs(W.coord("Onvindbare Plek", cache), storing)
+            self.assertFalse(cache)
+        with patch.object(W, "_nominatim", return_value=[1, 1]):
+            self.assertEqual(W.coord("Onvindbare Plek", cache), [1, 1])
+        a = self.voeg(item("kaartstoring", titel="!! [PR] Buitenproef", locatie="Onvindbare Plek"))
+        niet_op_kaart = set()
+        self.rit(niet_op_kaart=niet_op_kaart,
+                 coord_override=lambda adres, _cache: (0, 0) if adres == W.THUIS else storing)
+        self.assertFalse(niet_op_kaart)
+        self.assertEqual(self.vraag(niet_op_kaart), (0, 0))
+        self.assertEqual(a["locatie"], "Onvindbare Plek")
+
     def test_kaartfout_gaat_in_dezelfde_ronde_naar_vraag_en_nood(self):
         bron = inspect.getsource(W.main)
         rit = "reistijd_zetten(rit_items, dag_grens, niet_op_kaart=niet_op_kaart)"
@@ -231,6 +295,34 @@ class ZorgPlaats(unittest.TestCase):
         a = self.voeg(item(titel="!! [PR] Kine bij Praktijk Beta"))
         self.zorg()
         self.assertEqual(a["locatie"], ADRES_B)
+
+    def test_zorg_onbekende_praktijk_blokkeert_uniek_profiel_en_vraagt(self):
+        self.profiles[0]["aan_huis"] = False
+        gevallen = (("!! [PR] Kine bij Praktijk Beta", "Fictieve afspraak."),
+                    ("!! [PR] Kine praktijk Beta", "Fictieve afspraak."),
+                    ("!! [PR] Kinesist Beta", "Fictieve afspraak."),
+                    ("!! [PR] Kine controle", "Afspraak bij Praktijk Beta."),
+                    ("!! [PR] Kine Modelweg 8", "Fictieve afspraak."))
+        for n, (titel, omschrijving) in enumerate(gevallen):
+            a = self.voeg(item(f"andere-praktijk-{n}", titel=titel, omschrijving=omschrijving))
+            self.assertFalse(W._zorg_profiel_nooit_aan_huis(a, self.profiles, NU))
+        self.zorg()
+        self.assertTrue(all(not a["locatie"] for a in self.items))
+        self.assertEqual(self.vraag(), (len(gevallen), 0))
+        self.assertTrue(all(a["titel"].startswith("VR ") for a in self.items))
+
+    def test_zorg_onbekende_praktijk_negeert_huisbezoekwoord_niet(self):
+        self.profiles[0]["aan_huis"] = False
+        a = self.voeg(item(titel="!! [PR] Kine huisbezoek bij Praktijk Beta"))
+        self.assertTrue(W._zorg_huisbezoek(a, self.profiles, NU))
+        self.zorg()
+        self.assertEqual(a["locatie"], "")
+        self.assertEqual(self.vraag(), (0, 0))
+
+    def test_zorg_genoemde_profielstraat_is_geen_andere_praktijk(self):
+        a = self.voeg(item(titel="!! [PR] Kine Oefenlaan 7"))
+        self.zorg()
+        self.assertEqual(a["locatie"], ADRES_A)
 
     def test_zorg_huisbezoek_geen_praktijkadres(self):
         a = self.voeg(item(titel="!! [PR] Kine huisbezoek", locatie="aan huis"))
@@ -452,6 +544,15 @@ class ZorgPlaats(unittest.TestCase):
                 self.assertEqual(MA.mailbron_nood(mb, nu=t + timedelta(hours=3)), nood)
                 self.assertNotEqual(MA.mailbron_nood(mb, nu=t + timedelta(hours=24)), nood)
 
+    def test_mailbron_marge_114_en_115_minuten(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as d:
+            with patch.object(MA, "DB", str(Path(d) / "mail.db")):
+                mb = "postvak@voorbeeld.test"
+                MA.leesstand_zet(mb, False, "onleesbaar", nu=NU, dekking="mislukt")
+                MA.leesstand_zet(mb, False, "onleesbaar", nu=NU + timedelta(minutes=114), dekking="mislukt")
+                self.assertIsNone(MA.mailbron_nood(mb, nu=NU + timedelta(minutes=114)))
+                self.assertEqual(MA.mailbron_nood(mb, nu=NU + timedelta(minutes=115))["wie"], "mehdi")
+
     def test_mailbron_succes_wist_foutreeks(self):
         with tempfile.TemporaryDirectory(dir=TMP) as d:
             with patch.object(MA, "DB", str(Path(d) / "mail.db")):
@@ -475,6 +576,32 @@ class ZorgPlaats(unittest.TestCase):
         self.assertFalse(W._mailbron_zorg_afhankelijk(mb, self.items, nu=NU))
         a["start"], a["kalender"] = "2026-10-21T08:00:00+02:00", LARA
         self.assertFalse(W._mailbron_zorg_afhankelijk(mb, self.items, nu=NU))
+
+
+
+class KaartstoringNietWegschrijven(unittest.TestCase):
+    """Een storing van de kaartdienst is vals maar geen JSON-waarde: niemand mag coord() rauw in een structuur zetten."""
+
+    def test_geen_rauwe_coord_uitkomst_in_een_structuur(self):
+        import re as _re
+        hier = Path(__file__).resolve().parents[1]
+        fout = []
+        for bestand in hier.rglob("*.py"):
+            if "tests" in bestand.parts or ".tmp" in bestand.parts:
+                continue
+            for nr, regel in enumerate(bestand.read_text(encoding="utf-8").splitlines(), 1):
+                # W.coord overal; een kale coord() alleen in de agent zelf (mac/icloud_wacht heeft een eigen coord)
+                patroon = r"\[[^\]]+\]\s*=\s*(?:W\.)" + ("?" if bestand.name == "agenda_wacht.py" else "") + r"coord\("
+                if _re.search(patroon, regel) and not _re.search(r"coord\([^)]*\)\s*or\s+None", regel):
+                    fout.append(f"{bestand.name}:{nr}")
+        self.assertEqual(fout, [])
+
+    def test_storing_wordt_null_in_json(self):
+        import json as _json
+        with patch.object(W, "_nominatim", lambda params: W.KAARTDIENST_STORING):
+            c = W.coord("Proefstraat 1, 3000 Leuven", {})
+        self.assertIs(c, W.KAARTDIENST_STORING)
+        self.assertEqual(_json.dumps({"coordinaten": c or None}), '{"coordinaten": null}')
 
 
 if __name__ == "__main__":

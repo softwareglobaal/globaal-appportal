@@ -85,7 +85,8 @@ def main():
         elif nr in projecten and not p["gemeente"]:
             p["gemeente"] = projecten[nr]["gemeente"]
         if p["adres"]:
-            p["coordinaten"] = W.coord(p["adres"], cache)
+            # een storing van de kaartdienst is geen coördinaat en geen JSON-waarde: dan null, zoals bij niet gevonden
+            p["coordinaten"] = W.coord(p["adres"], cache) or None
     W._cache_bewaren(cache)
 
     grens = (datetime.now() - timedelta(days=VERVAL_MAANDEN * 31)).date().isoformat()

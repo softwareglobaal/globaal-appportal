@@ -2047,6 +2047,14 @@ def _cache_bewaren(c):
     json.dump(c, open(ADRES_CACHE, "w"), ensure_ascii=False)
 
 
+class _KaartdienstStoring:
+    def __bool__(self):
+        return False
+
+
+KAARTDIENST_STORING = _KaartdienstStoring()
+
+
 def _nominatim(params):
     import time
     import urllib.parse
@@ -2058,7 +2066,8 @@ def _nominatim(params):
             url, headers={"User-Agent": "MehdiAgents-agendawacht/1.0 (mch@h-architects.be)"}), timeout=20))
         return [float(d[0]["lat"]), float(d[0]["lon"])] if d else None
     except Exception:  # noqa: BLE001
-        return None
+        # Netwerk-, HTTP-, time-out- en antwoordfouten zijn geen geldig leeg zoekresultaat.
+        return KAARTDIENST_STORING
 
 
 def coord(adres, cache):
@@ -2098,15 +2107,19 @@ def coord(adres, cache):
                              "format": "jsonv2", "limit": 1})
             pogingen.append({"q": f"{kort}, {post} {gemeente}", "format": "jsonv2", "limit": 1,
                              "countrycodes": "be,nl"})
+    storing = False
     for i, params in enumerate(pogingen):
         uit = _nominatim(params)
+        if uit is KAARTDIENST_STORING:
+            storing = True
+            continue
         if uit:
             if i:
                 print(f"adres gevonden via poging {i + 1}: {adres}", file=sys.stderr)
             cache[sleutel] = uit
             return uit
     cache.pop(sleutel, None)   # niet blijvend onthouden dat het mislukte
-    return None
+    return KAARTDIENST_STORING if storing else None
 
 
 # Filefactor op de vrije rijtijd, per vertrekuur op een werkdag (Vlaanderen: ochtend- en
@@ -2649,16 +2662,63 @@ def _zorg_profiel_kandidaten(a, profielen, nu):
     return kandidaten
 
 
+def _zorg_genoemde_praktijk(a, kandidaten):
+    """(profiel, expliciet): een genoemde praktijk of straat moet bij precies een kandidaat horen."""
+    import mail_afspraken as MA  # noqa: PLC0415
+    velden = (a.get("titel") or "", a.get("omschrijving") or "")
+
+    def bij_naam(tekst):
+        plat = MA._plat_tekst(tekst)
+        return [p for p in kandidaten if any(
+            re.search(r"(?<!\w)" + re.escape(MA._plat_tekst(naam)) + r"(?!\w)", plat)
+            for naam in (p.get("naam"), *(p.get("praktijknamen") or []))
+            if naam and len(MA._plat_tekst(naam)) >= 5)]
+
+    verwijzingen = []
+    for tekst in velden:
+        # Alleen een benoemde praktijk; een generieke zin als 'bij de tandarts' is geen naam.
+        for m in re.finditer(r"(?i:\b(?:bij|praktijk|kinesist)\s+)[A-ZÀ-Ý][^\n,;.!?]{0,70}", tekst):
+            gevonden = bij_naam(m.group())
+            if len(gevonden) != 1:
+                return None, True
+            verwijzingen.append(gevonden[0]["id"])
+        # Een uitgeschreven straat met huisnummer is eveneens een expliciete plaats.
+        for m in re.finditer(r"\b(?:[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]*\s+){0,3}"
+                             r"[A-Za-zÀ-ÿ]+(?:straat|laan|weg|dreef|plein|lei|kaai|baan|hof|steeg|markt|rue|avenue)"
+                             r"\s+\d{1,4}[A-Za-z]?\b", tekst, re.I):
+            genoemd = _plat_adres(m.group())
+            gevonden = [p for p in kandidaten if re.search(
+                r"(?<!\w)" + re.escape(_plat_adres((p.get("adres") or "").split(",", 1)[0])) + r"(?!\w)", genoemd)]
+            if len(gevonden) != 1:
+                return None, True
+            verwijzingen.append(gevonden[0]["id"])
+
+    # Ook een volledige profielnaam zonder voorzetsel is een ondubbelzinnige aanwijzing.
+    alle_namen = bij_naam(" ".join(velden))
+    verwijzingen.extend(p["id"] for p in alle_namen)
+    if not verwijzingen:
+        return None, False
+    if len(set(verwijzingen)) != 1:
+        return None, True
+    return next((p for p in kandidaten if p["id"] == verwijzingen[0]), None), True
+
+
 def _zorg_bronprofiel(a, kandidaten):
     """Kies een profiel uit een zorgmailmerk, een eigen plaatsmerk of de enige geverifieerde kandidaat."""
+    expliciet, genoemd = _zorg_genoemde_praktijk(a, kandidaten)
+    if genoemd and expliciet is None:
+        return None
     merk = a.get("_merk") or {}
     zorgmerk = merk.get(ZORGMERK) or ""
     if zorgmerk:
         pid = zorgmerk.split("|", 2)[1] if zorgmerk.startswith("zorg|") and zorgmerk.count("|") >= 2 else ""
-        return next((p for p in kandidaten if p["id"] == pid), None)
+        return next((p for p in kandidaten if p["id"] == pid and (not genoemd or p["id"] == expliciet["id"])), None)
     plaatsmerk = merk.get(ZORGPLAATSMERK) or ""
     if plaatsmerk:
-        return next((p for p in kandidaten if _zorg_profielmerk(p) == plaatsmerk), None)
+        return next((p for p in kandidaten if _zorg_profielmerk(p) == plaatsmerk
+                     and (not genoemd or p["id"] == expliciet["id"])), None)
+    if genoemd:
+        return expliciet
     return kandidaten[0] if len(kandidaten) == 1 else None
 
 
@@ -2669,13 +2729,16 @@ def _zorg_profiel_nooit_aan_huis(a, profielen=None, nu=None):
     if profielen is None:
         import mail_afspraken as MA  # noqa: PLC0415
         profielen = MA.zorgprofielen()
-    p = _zorg_bronprofiel(a, _zorg_profiel_kandidaten(a, profielen, nu or nu_lokaal()))
-    return p is not None and p.get("aan_huis") is False
+    kandidaten = _zorg_profiel_kandidaten(a, profielen, nu or nu_lokaal())
+    p = _zorg_bronprofiel(a, kandidaten)
+    merk = a.get("_merk") or {}
+    # Een vrije naam bewijst bij meerdere kandidaten nog niet dat deze afspraak nooit aan huis is.
+    bewezen = len(kandidaten) == 1 or merk.get(ZORGMERK) or merk.get(ZORGPLAATSMERK)
+    return p is not None and bool(bewezen) and p.get("aan_huis") is False
 
 
 def _zorg_profiel_kiezen(a, profielen, nu):
     """Een gecontroleerd profiel en een eigen patiënt; vrije omschrijving bewijst nooit de herkomst van de plaats."""
-    import mail_afspraken as MA  # noqa: PLC0415
     if not (a.get("kalender") == PRIVE_AGENDA and a.get("id") and is_zorg_titel(a.get("titel"))
             and _toekomst(a.get("start"), nu) and not a.get("hele_dag")
             and not a.get("deelnemers") and not a.get("_agendagasten")
@@ -2689,12 +2752,7 @@ def _zorg_profiel_kiezen(a, profielen, nu):
     bronprofiel = _zorg_bronprofiel(a, kandidaten)
     if bronprofiel:
         return bronprofiel
-    if (a.get("_merk") or {}).get(ZORGMERK) or (a.get("_merk") or {}).get(ZORGPLAATSMERK):
-        return None
-    tekst = MA._plat_tekst(" ".join(str(a.get(k) or "") for k in ("titel", "omschrijving")))
-    treffers = [p for p in kandidaten if any(re.search(r"(?<!\w)" + re.escape(MA._plat_tekst(naam)) + r"(?!\w)", tekst)
-                for naam in [p.get("naam"), *(p.get("praktijknamen") or [])] if naam and len(MA._plat_tekst(naam)) >= 5)]
-    return treffers[0] if len(treffers) == 1 else None
+    return None
 
 
 def zorg_profielplaatsen_zetten(items, tok, nu=None, profielen=None):
@@ -3466,6 +3524,25 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     gemaakt, al, geen_adres, fout, regels = 0, 0, 0, 0, []
     reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"]]
     projecten = projectadressen.index()
+
+    def alternatieve_adressen(a, info):
+        """Bekende bronnen in vaste volgorde, zonder de handmatig ingevulde plaats te wijzigen."""
+        project = projecten.get(info["nummer"]) if info["nummer"] else None
+        if project and _bruikbare_locatie(project.get("adres")):
+            yield project["adres"], "projectmap"
+        try:
+            gevonden, naam = plek_zoeken((a.get("titel") or "") + " " + (a.get("omschrijving") or ""))
+            if gevonden and _bruikbare_locatie(gevonden):
+                yield gevonden, f"locatiesysteem ({naam})"
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            woord, vp = vaste_plek(a.get("titel") or "")
+            if vp and _bruikbare_locatie(vp.get("adres")):
+                yield vp["adres"], f"vaste plek ({woord})"
+        except Exception:  # noqa: BLE001
+            pass
+
     buiten = []
     begonnen = set()      # buitenafspraken van vandaag die al begonnen zijn: vertrekpunt, geen eigen ritten meer (FR-97)
     vrij = lara_vakantiedagen()
@@ -3554,7 +3631,23 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
                 regels.append(f"{a['start'][:16]} {a['titel'][:45]}: projectadres in de afspraak gezet ({adres[:40]})")
             except Exception as e:  # noqa: BLE001
                 regels.append(f"{a['start'][:16]} {a['titel'][:45]}: projectadres niet gezet ({type(e).__name__})")
-        buiten.append((start, einde, a, info, adres, fysiek))
+        doel = coord(adres, cache) if fysiek else None
+        kaartstoring = doel is KAARTDIENST_STORING or thuis is KAARTDIENST_STORING
+        if doel is None and bron_adres == "agenda" and (a.get("locatie") or "").strip():
+            for alternatief, bron in alternatieve_adressen(a, info):
+                if alternatief == adres:
+                    continue
+                gevonden = coord(alternatief, cache)
+                if gevonden is KAARTDIENST_STORING:
+                    kaartstoring = True
+                elif gevonden:
+                    adres, doel = alternatief, gevonden
+                    bron_adres = f"{bron} (plaats in de agenda niet op de kaart)"
+                    a["_bron_adres"] = bron_adres
+                    regels.append(f"{a['start'][:16]} {a['titel'][:45]}: agenda-plaats niet op de kaart; "
+                                  f"rit via {bron}")
+                    break
+        buiten.append((start, einde, a, info, adres, fysiek, doel, kaartstoring))
     buiten.sort(key=lambda x: x[0])
     # Mandaat van Mehdi, 20-09-2026: "als er twee afspraken buiten zijn en het is ver,
     # dan kom ik niet naar huis om dan te gaan". Dus: de rit terug naar huis maak ik
@@ -3675,8 +3768,8 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
             if bureau:
                 # ook met 90 minuten of meer: past de rit naar huis en terug niet met tijd thuis, dan rechtstreeks (FR-75)
                 try:
-                    c1 = coord(rij[i][4], cache) if rij[i][5] and rij[i][4] else None
-                    c2 = coord(rij[i + 1][4], cache) if rij[i + 1][5] and rij[i + 1][4] else None
+                    c1 = rij[i][6] if rij[i][5] else None
+                    c2 = rij[i + 1][6] if rij[i + 1][5] else None
                     heen = vrije_rijtijd_min(c1, thuis) * filefactor(e_) + BUFFER_MIN if c1 and thuis else None
                     terug = vrije_rijtijd_min(thuis, c2) * filefactor(s_volgend) + BUFFER_MIN if c2 and thuis else None
                 except Exception:  # noqa: BLE001
@@ -3700,10 +3793,11 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
                               f"'{bureau['titel'][:30]}' achter het bureau, om {a_volgend['start'][11:16]} weer buiten. "
                               f"Ik reken dat je tussendoor naar huis gaat. Klopt dat, of doe je het vanuit de auto?")
 
-    for start, einde, a, info, adres, fysiek in buiten:
+    for start, einde, a, info, adres, fysiek, doel, kaartstoring in buiten:
         dag = a["start"][:10]
         sleutel = (a["kalender"], a.get("id"), a["start"])
         vorige = vorige_per_dag.get(dag)
+        bron_adres = a.get("_bron_adres") or "agenda"
         def zonder_plek():
             # Zonder adres weet ik niet waar hij is; de volgende rit vertrekt dan van de laatste plek die ik ken, niet van
             # thuis. Gezien 30-09-2026: 'KBC ophalen' zonder adres tussen MediaMarkt Woluwe en MegaMobile Mechelen liet de
@@ -3719,11 +3813,13 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
                 regels.append(f"{a['start'][:16]} {a['titel'][:50]}: geen adres, geen reistijd")
             zonder_plek()
             continue
-        doel = coord(adres, cache)
         if not (doel and thuis):
             geen_adres += 1
-            regels.append(f"{a['start'][:16]} {a['titel'][:50]}: adres niet gevonden ({adres[:40]})")
-            if not doel and start > nu and niet_op_kaart is not None:
+            if kaartstoring:
+                regels.append(f"{a['start'][:16]} {a['titel'][:50]}: kaartdienst niet beschikbaar; volgende ronde opnieuw")
+            else:
+                regels.append(f"{a['start'][:16]} {a['titel'][:50]}: adres niet gevonden ({adres[:40]})")
+            if doel is None and not kaartstoring and start > nu and niet_op_kaart is not None:
                 niet_op_kaart.add((a.get("kalender"), a.get("id"), a.get("start")))
             zonder_plek()
             continue

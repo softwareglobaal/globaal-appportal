@@ -5,10 +5,11 @@ geverifieerd profiel het praktijkadres, ook zonder bronmail en ook na de verhuiz
 legt de herkomst vast; een latere mail mag die plaats vervangen, maar een handmatige plaats blijft staan en een
 afwijking wordt een open punt. Bij twijfel vraagt de agenda om een adres; een echt huisbezoek gebruikt nooit het
 praktijkadres en krijgt geen rit. Een buitenafspraak zonder bruikbaar adres krijgt VR op werk, privé of Lara, en
-anders een stabiele nood. Een onleesbaar postvak wordt na twee mislukte rondes over twee uur, of bij een afhankelijke
+anders een stabiele nood. Een onleesbaar postvak wordt na twee mislukte rondes vanaf 115 minuten, of bij een afhankelijke
 zorgafspraak binnen 24 uur direct, een nood voor Mehdi met de herstelstap; hooguit een herhaling na 24 uur.
 Een benoemde fysieke plek zonder huisnummer telt mee voor reistijd; als de kaart de plek niet vindt, volgt een VR-vraag of stabiele nood tot het adres is verbeterd.
 Bij een geverifieerd zorgprofiel met `aan_huis: false` zijn huisbezoekwoorden in titel, omschrijving of mailplaats geen bewijs van een thuisafspraak: bij een eigen afspraak zonder gasten of reeks vul ik het profieladres in en plan ik de rit; zonder die sleutel blijft de oude huisbezoekregel gelden.
+Een genoemde onbekende praktijk blokkeert de profielplaats; bij een onvindbare agenda-plaats probeer ik de projectmap en bekende plekken zonder die plaats te wijzigen, terwijl een kaartstoring tot de volgende ronde wacht en een zorgafspraak die alleen in een onleesbaar postvak staat niet meetelt voor de 24-uursmelding.
 
 Aanvulling v8.20 (19-10-2026): barsten en scheuren ter plaatse krijgen altijd twee uur. Een eigen werkafspraak
 zonder gasten of reeks wordt verlengd als het verlengde stuk vrij is; anders komt een VR-vraag of een bevinding in
