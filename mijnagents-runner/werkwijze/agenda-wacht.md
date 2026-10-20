@@ -3,11 +3,12 @@
 Aanvulling v8.21 (20-10-2026): een komende eigen zorgafspraak zonder plaats krijgt bij één ondubbelzinnig
 geverifieerd profiel het praktijkadres, ook zonder bronmail en ook na de verhuizing naar privé. Een verborgen merk
 legt de herkomst vast; een latere mail mag die plaats vervangen, maar een handmatige plaats blijft staan en een
-afwijking wordt een open punt. Bij twijfel vraagt de agenda om een adres; een huisbezoek gebruikt nooit het
+afwijking wordt een open punt. Bij twijfel vraagt de agenda om een adres; een echt huisbezoek gebruikt nooit het
 praktijkadres en krijgt geen rit. Een buitenafspraak zonder bruikbaar adres krijgt VR op werk, privé of Lara, en
 anders een stabiele nood. Een onleesbaar postvak wordt na twee mislukte rondes over twee uur, of bij een afhankelijke
 zorgafspraak binnen 24 uur direct, een nood voor Mehdi met de herstelstap; hooguit een herhaling na 24 uur.
 Een benoemde fysieke plek zonder huisnummer telt mee voor reistijd; als de kaart de plek niet vindt, volgt een VR-vraag of stabiele nood tot het adres is verbeterd.
+Bij een geverifieerd zorgprofiel met `aan_huis: false` zijn huisbezoekwoorden in titel, omschrijving of mailplaats geen bewijs van een thuisafspraak: bij een eigen afspraak zonder gasten of reeks vul ik het profieladres in en plan ik de rit; zonder die sleutel blijft de oude huisbezoekregel gelden.
 
 Aanvulling v8.20 (19-10-2026): barsten en scheuren ter plaatse krijgen altijd twee uur. Een eigen werkafspraak
 zonder gasten of reeks wordt verlengd als het verlengde stuk vrij is; anders komt een VR-vraag of een bevinding in
@@ -582,7 +583,7 @@ Een eigen zorgafspraak zonder plaats mag ook zonder mail het adres van precies �
 zorgsoort krijgen, of van de ene praktijk die ondubbelzinnig in titel of omschrijving staat. Dat geldt alleen voor
 Mehdi als patiënt en organisator, zonder gasten of reeks. Het private merk `agendawacht_zorgplaats` bevat profiel-id
 en adres-hash; de omschrijving krijgt één bronzin zonder naam of behandelaar. Een latere mail mag alleen een
-overeenkomende gemerkte plaats vervangen. Bij twijfel komt VR, bij huisbezoek geen praktijkadres of rit. Na het
+overeenkomende gemerkte plaats vervangen. Bij twijfel komt VR, bij een echt huisbezoek geen praktijkadres of rit. Na het
 teruglezen maakt de gewone reistijdroute in dezelfde ronde de ritten.
 
 Na de Codex-controle (ronde 1, A01 tot A08, FR-134 tot FR-138): ik verwerk de mails oudste eerst en een bericht maar

@@ -2610,9 +2610,10 @@ ZORGPLAATSMERK = "agendawacht_zorgplaats"
 ZORGPLAATSZIN = "Adres uit het geverifieerde zorgprofiel (Agendawacht, {dag})"
 
 
-def _zorg_huisbezoek(a):
-    return bool(re.search(r"\b(huisbezoek|aan[-\s]+huis|thuis)\b",
-                          " ".join(str(a.get(k) or "") for k in ("titel", "omschrijving", "locatie")), re.I))
+def _zorg_huisbezoek(a, profielen=None, nu=None):
+    woorden = bool(re.search(r"\b(huisbezoek|aan[-\s]+huis|thuis)\b",
+                            " ".join(str(a.get(k) or "") for k in ("titel", "omschrijving", "locatie")), re.I))
+    return woorden and not _zorg_profiel_nooit_aan_huis(a, profielen, nu)
 
 
 def _zorg_profielmerk(p):
@@ -2626,6 +2627,52 @@ def _zorgplaats_merk_klopt(a):
     return bool(merk and adres and merk.rpartition(":")[2] == hashlib.sha256(adres.encode()).hexdigest()[:16])
 
 
+def _zorg_profiel_kandidaten(a, profielen, nu):
+    """Alleen geverifieerde profielen van de zorgsoort en de genoemde patiënt."""
+    import mail_afspraken as MA  # noqa: PLC0415
+    t = a.get("titel") or ""
+    soort = "kine" if re.search(r"\bkine\b|kinesi|kinésit", t, re.I) else "tandarts" if re.search(r"tandarts|mondhygi|dentist", t, re.I) else ""
+
+    def geverifieerd(p):
+        try:
+            return datetime.fromisoformat(str(p.get("geverifieerd") or "")).date() <= nu.date()
+        except ValueError:
+            return False
+
+    kandidaten = [p for p in profielen if p.get("soort") == soort and p.get("id") and geverifieerd(p)
+                  and p.get("bewijs") and MA.zorg_locatie_is_adres(p.get("adres")) and p.get("patienten")]
+    expliciet = re.search(r"\b(?:pati[eë]nt|patient)\s*:\s*([^\n,;.]+)",
+                         " ".join(str(a.get(k) or "") for k in ("titel", "omschrijving")), re.I)
+    if expliciet:
+        naam = MA._plat_tekst(expliciet.group(1))
+        kandidaten = [p for p in kandidaten if naam in {MA._plat_tekst(n) for n in p.get("patienten") or []}]
+    return kandidaten
+
+
+def _zorg_bronprofiel(a, kandidaten):
+    """Kies een profiel uit een zorgmailmerk, een eigen plaatsmerk of de enige geverifieerde kandidaat."""
+    merk = a.get("_merk") or {}
+    zorgmerk = merk.get(ZORGMERK) or ""
+    if zorgmerk:
+        pid = zorgmerk.split("|", 2)[1] if zorgmerk.startswith("zorg|") and zorgmerk.count("|") >= 2 else ""
+        return next((p for p in kandidaten if p["id"] == pid), None)
+    plaatsmerk = merk.get(ZORGPLAATSMERK) or ""
+    if plaatsmerk:
+        return next((p for p in kandidaten if _zorg_profielmerk(p) == plaatsmerk), None)
+    return kandidaten[0] if len(kandidaten) == 1 else None
+
+
+def _zorg_profiel_nooit_aan_huis(a, profielen=None, nu=None):
+    """Vrije tekst bewijst nooit welke praktijk de afspraak heeft."""
+    if not is_zorg_titel(a.get("titel")):
+        return False
+    if profielen is None:
+        import mail_afspraken as MA  # noqa: PLC0415
+        profielen = MA.zorgprofielen()
+    p = _zorg_bronprofiel(a, _zorg_profiel_kandidaten(a, profielen, nu or nu_lokaal()))
+    return p is not None and p.get("aan_huis") is False
+
+
 def _zorg_profiel_kiezen(a, profielen, nu):
     """Een gecontroleerd profiel en een eigen patiënt; vrije omschrijving bewijst nooit de herkomst van de plaats."""
     import mail_afspraken as MA  # noqa: PLC0415
@@ -2634,26 +2681,17 @@ def _zorg_profiel_kiezen(a, profielen, nu):
             and not a.get("deelnemers") and not a.get("_agendagasten")
             and not a.get("_terugkerend") and not a.get("_reeks")
             and a.get("_organisator_zelf") is True
-            and (a.get("maker") or "").strip().lower() in _eigen_accounts()
-            and not _zorg_huisbezoek(a)):
+            and (a.get("maker") or "").strip().lower() in _eigen_accounts()):
         return None
-    t = a.get("titel") or ""
-    soort = "kine" if re.search(r"\bkine\b|kinesi|kinésit", t, re.I) else "tandarts" if re.search(r"tandarts|mondhygi|dentist", t, re.I) else ""
-    def geverifieerd(p):
-        try:
-            return datetime.fromisoformat(str(p.get("geverifieerd") or "")).date() <= nu.date()
-        except ValueError:
-            return False
-    kandidaten = [p for p in profielen if p.get("soort") == soort and p.get("id") and geverifieerd(p)
-                  and p.get("bewijs") and MA.zorg_locatie_is_adres(p.get("adres")) and p.get("patienten")]
+    kandidaten = _zorg_profiel_kandidaten(a, profielen, nu)
+    if _zorg_huisbezoek(a, profielen, nu):
+        return None
+    bronprofiel = _zorg_bronprofiel(a, kandidaten)
+    if bronprofiel:
+        return bronprofiel
+    if (a.get("_merk") or {}).get(ZORGMERK) or (a.get("_merk") or {}).get(ZORGPLAATSMERK):
+        return None
     tekst = MA._plat_tekst(" ".join(str(a.get(k) or "") for k in ("titel", "omschrijving")))
-    expliciet = re.search(r"\b(?:pati[eë]nt|patient)\s*:\s*([^\n,;.]+)",
-                         " ".join(str(a.get(k) or "") for k in ("titel", "omschrijving")), re.I)
-    if expliciet:
-        naam = MA._plat_tekst(expliciet.group(1))
-        kandidaten = [p for p in kandidaten if naam in {MA._plat_tekst(n) for n in p.get("patienten") or []}]
-    if len(kandidaten) == 1:
-        return kandidaten[0]
     treffers = [p for p in kandidaten if any(re.search(r"(?<!\w)" + re.escape(MA._plat_tekst(naam)) + r"(?!\w)", tekst)
                 for naam in [p.get("naam"), *(p.get("praktijknamen") or [])] if naam and len(MA._plat_tekst(naam)) >= 5)]
     return treffers[0] if len(treffers) == 1 else None
@@ -2668,11 +2706,12 @@ def zorg_profielplaatsen_zetten(items, tok, nu=None, profielen=None):
     for a in items:
         if not _toekomst(a.get("start"), nu) or a.get("kalender") != PRIVE_AGENDA or not is_zorg_titel(a.get("titel")):
             continue
-        if _zorg_huisbezoek(a) or (a.get("locatie") or "").strip():
-            continue
         p = _zorg_profiel_kiezen(a, profielen, nu)
         if not p:
             continue                         # de adresvraag loopt via vragen_in_agenda; nooit een profiel raden
+        locatie = (a.get("locatie") or "").strip()
+        if locatie and not (_huisbezoek_locatie(locatie) and _zorg_profiel_nooit_aan_huis(a, profielen, nu)):
+            continue                         # een handmatige fysieke plaats blijft staan
         merk = _zorg_profielmerk(p)
         try:
             oms = a.get("omschrijving") or ""
@@ -2750,10 +2789,12 @@ def _zorg_body(a, z, profiel):
             "extendedProperties": {"private": {ZORGMERK: a["sleutel"]}}}
 
 
-def _zorg_teruglezen(kal, eid, body, tok):
+def _zorg_teruglezen(kal, eid, body, tok, gelezen=None):
     """Leest het blok terug: pas als begin, einde, Bezet, plaats, 'geen gasten', titel, herinnering en ons merk kloppen,
     heet het gezet (Codex A07, ronde 3: titel, herinnering en merk werden niet teruggelezen)."""
     e = _lees_event(kal, eid, tok)
+    if gelezen is not None:
+        gelezen["event"] = e
     if not e:
         return "niet terug te lezen"
     fout = []
@@ -2856,7 +2897,8 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 st["fout"] += 1
                 st["prive"].append(f"{wat}: niet gezet ({type(ex).__name__})")
                 continue
-            probleem = _zorg_teruglezen(PRIVE_AGENDA, e.get("id"), body, tok)
+            gelezen = {}
+            probleem = _zorg_teruglezen(PRIVE_AGENDA, e.get("id"), body, tok, gelezen)
             a["google"] = f"{PRIVE_AGENDA}|{e.get('id')}"
             if probleem:
                 a["status"], a["detail"] = "afwijkend", f"teruglezen: {probleem}"
@@ -2866,6 +2908,22 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 a["status"] = "gezet"
                 st["gezet"] += 1
                 st["prive"].append(f"{wat}: blok gezet in de privé-agenda ({e.get('id')}), teruggelezen")
+                if bijwerken_items and z.get("mehdi") is True and (PRIVE_AGENDA, e.get("id")) not in per_id:
+                    # De hoofdronde gebruikte al een agenda-momentopname. Geef het teruggelezen nieuwe blok
+                    # direct aan Z1 en de ritten door; anders mist een mail zonder bruikbare plaats deze ronde.
+                    terug = gelezen["event"]
+                    nieuw = {"kalender": PRIVE_AGENDA, "id": e["id"], "titel": terug.get("summary") or body["summary"],
+                             "start": (terug.get("start") or {}).get("dateTime") or a["start"],
+                             "einde": (terug.get("end") or {}).get("dateTime") or a["einde"],
+                             "hele_dag": False, "locatie": terug.get("location") or "",
+                             "omschrijving": (terug.get("description") or body["description"])[:2000],
+                             "maker": (terug.get("creator") or {}).get("email") or PRIVE_AGENDA,
+                             "_organisator_zelf": (terug.get("organizer") or {}).get("self", True) is True,
+                             "deelnemers": [], "_agendagasten": [],
+                             "_terugkerend": bool(terug.get("recurringEventId")), "_reeks": terug.get("recurringEventId") or "",
+                             "_merk": (terug.get("extendedProperties") or {}).get("private") or {}}
+                    items.append(nieuw)
+                    per_id[(PRIVE_AGENDA, e["id"])] = nieuw
         elif a["status"] == "gekoppeld":
             st["gekoppeld"] += 1
             kal, _, eid = (a.get("google") or "").partition("|")
@@ -3420,8 +3478,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         if a.get("hele_dag") or a.get("kalender", "").startswith("en.be#"):
             continue
         adres = a.get("locatie") or ""
-        if (is_thuis_adres(adres) or _huisbezoek_locatie(adres)
-                or is_zorg_titel(a.get("titel")) and _zorg_huisbezoek(a)):
+        if is_thuis_adres(adres) or _afspraak_is_huisbezoek(a, nu=nu):
             # Ook bij een onleesbare grendel of een dag zonder auto is thuis geen buitenrit.
             continue
         if zonder_auto is None or (vrij is None and a.get("kalender") in AGENDA_VASTE_KLEUR
@@ -4334,6 +4391,12 @@ def _huisbezoek_locatie(locatie):
     return bool(re.search(r"\b(huisbezoek|aan[-\s]+huis|thuis)\b", locatie or "", re.I))
 
 
+def _afspraak_is_huisbezoek(a, nu=None):
+    if is_zorg_titel(a.get("titel")):
+        return _zorg_huisbezoek(a, nu=nu)
+    return _huisbezoek_locatie(a.get("locatie"))
+
+
 def _bruikbare_locatie(locatie):
     """Een ingevulde agenda-plaats mag door coord() als naam of adres worden gezocht."""
     tekst = (locatie or "").strip()
@@ -4713,8 +4776,7 @@ def _adresvragen(items, nu=None, uren=24 * RIT_VOORUIT_ALLES, projecten=None, ni
     projecten = projectadressen.index() if projecten is None else projecten
     uit = []
     for a in items:
-        if (a.get("hele_dag") or _huisbezoek_locatie(a.get("locatie"))
-                or is_zorg_titel(a.get("titel")) and _zorg_huisbezoek(a)):
+        if a.get("hele_dag") or _afspraak_is_huisbezoek(a, nu=nu):
             continue
         try:
             start = datetime.fromisoformat(a.get("start") or "")

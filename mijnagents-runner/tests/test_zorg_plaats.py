@@ -240,6 +240,108 @@ class ZorgPlaats(unittest.TestCase):
         self.assertEqual(self.rit()[0], 0)
         self.assertFalse(MA.zorg_locatie_is_adres("Huisbezoek bij patiënt thuis"))
 
+    def test_zorg_nooit_aan_huis_standaardzin_krijgt_profieladres_en_rit(self):
+        self.profiles[0]["aan_huis"] = False
+        zin = "Indien u een huisbezoek hebt aangevraagd, komen we aan huis."
+        a = self.voeg(item(omschrijving="Fictieve afspraak. " + zin))
+        self.zorg()
+        self.assertEqual(a["locatie"], ADRES_A)
+        self.assertGreaterEqual(self.rit()[0], 1)
+        self.assertEqual(self.vraag(), (0, 0))
+        self.assertFalse(W._adresvragen(self.items, nu=NU, projecten={}))
+
+    def test_zorg_nooit_aan_huis_tandarts_titel_krijgt_profieladres(self):
+        self.profiles[0]["soort"] = "tandarts"
+        self.profiles[0]["aan_huis"] = False
+        a = self.voeg(item(titel="!! [PR] Tandarts thuis"))
+        self.zorg()
+        self.assertEqual(a["locatie"], ADRES_A)
+        self.assertGreaterEqual(self.rit()[0], 1)
+        self.assertEqual(self.vraag(), (0, 0))
+
+    def test_zorg_huisbezoekzin_bij_onbekend_aan_huis_blijft_onbekend(self):
+        a = self.voeg(item(omschrijving="Indien u een huisbezoek hebt aangevraagd, komen we aan huis."))
+        self.zorg()
+        self.assertEqual(a["locatie"], "")
+        self.assertEqual(self.rit()[0], 0)
+        self.assertEqual(self.vraag(), (0, 0))
+
+    def test_zorg_mailplaats_huisbezoekzin_met_nooit_aan_huis_krijgt_rit(self):
+        self.profiles[0]["aan_huis"] = False
+        self.profiles.append(profiel("proef-b", "Praktijk Beta", ADRES_B))
+        zin = "Indien u een huisbezoek hebt aangevraagd, komen we aan huis"
+        mail = {"onderwerp": "Bevestiging afspraak kine op 21/10/2026 om 12:00",
+                "tekst": "Beste Mo Voorbeeld. Uw afspraak is bevestigd. Waar: " + zin + " Toevoegen aan agenda",
+                "ics": [], "linktijden": []}
+        self.assertEqual(MA.zorg_herken(mail, self.profiles[0])["locatie"], "")
+        self.assertFalse(MA.zorg_locatie_is_adres(zin))
+        a = self.voeg(item(locatie=zin, _merk={W.ZORGMERK: "zorg|proef-a|2026-10-21T12:00:00+02:00"}))
+        self.zorg()
+        self.assertEqual(a["locatie"], ADRES_A)
+        self.assertGreaterEqual(self.rit()[0], 1)
+        self.assertEqual(self.vraag(), (0, 0))
+
+    def test_zorg_nieuwe_mail_met_huisbezoekzin_krijgt_dezelfde_ronde_rit(self):
+        self.profiles[0]["aan_huis"] = False
+        onderwerp = "Bevestiging afspraak kine op 21/10/2026 om 12:00"
+        mail = {"onderwerp": onderwerp,
+                "tekst": "Beste Mo Voorbeeld. Uw afspraak is bevestigd. Waar: Indien u een huisbezoek hebt "
+                         "aangevraagd, komen we aan huis Toevoegen aan agenda",
+                "ics": [], "linktijden": []}
+        z = MA.zorg_herken(mail, self.profiles[0])
+        self.assertTrue(z["mehdi"])
+        self.assertEqual(z["locatie"], "")
+        regel = {"soort": "zorg", "sleutel": "zorg|proef-a|2026-10-21T12:00:00+02:00",
+                 "status": "ontbreekt", "start": "2026-10-21T12:00:00+02:00",
+                 "einde": "2026-10-21T12:30:00+02:00", "titel": "Kine controle",
+                 "locatie": z["locatie"], "zorg": z, "bron_mailbox": "postvak@voorbeeld.test",
+                 "bron_onderwerp": onderwerp, "bron_ontvangen": "2026-10-20T08:00:00+02:00",
+                 "bron_message_id": "<proef@voorbeeld.test>"}
+
+        def zet_nieuw(kal, body, _tok, **_opties):
+            e = {**copy.deepcopy(body), "id": "uit-mail", "organizer": {"self": True},
+                 "creator": {"email": W.WERKAGENDA}}
+            self.writer.events[(kal, e["id"])] = copy.deepcopy(e)
+            return e
+
+        with patch.object(W, "_insert", zet_nieuw):
+            resultaat = W.zorg_afspraken_zetten([regel], self.items, "proef", nu=NU, bijwerken_items=True)
+        self.assertEqual(resultaat["gezet"], 1)
+        self.assertEqual(resultaat["profielplaats"], 1)
+        self.assertEqual(len(self.items), 1)
+        self.assertEqual(self.items[0]["locatie"], ADRES_A)
+        self.assertGreaterEqual(self.rit()[0], 1)
+        self.assertEqual(self.vraag(), (0, 0))
+
+    def test_zorg_profielplaatsmerk_gaat_voor_huisbezoekwoord(self):
+        self.profiles[0]["aan_huis"] = False
+        self.profiles.append(profiel("proef-b", "Praktijk Beta", ADRES_B))
+        merk = W._zorg_profielmerk(self.profiles[0])
+        a = self.voeg(item(omschrijving="Huisbezoek indien aangevraagd.",
+                           _merk={W.ZORGPLAATSMERK: merk}))
+        self.zorg()
+        self.assertEqual(a["locatie"], ADRES_A)
+        self.assertGreaterEqual(self.rit()[0], 1)
+        self.assertEqual(self.vraag(), (0, 0))
+
+    def test_zorg_praktijknaam_alleen_bewijst_nooit_aan_huis_niet(self):
+        self.profiles[0]["aan_huis"] = False
+        self.profiles.append(profiel("proef-b", "Praktijk Beta", ADRES_B))
+        a = self.voeg(item(titel="!! [PR] Kine bij Praktijk Alpha huisbezoek"))
+        self.zorg()
+        self.assertEqual(a["locatie"], "")
+        self.assertEqual(self.rit()[0], 0)
+        self.assertEqual(self.vraag(), (0, 0))
+
+    def test_zorg_nooit_aan_huis_houdt_gast_en_reeks_buiten_z1(self):
+        self.profiles[0]["aan_huis"] = False
+        zin = "Indien u een huisbezoek hebt aangevraagd, komen we aan huis."
+        gast = self.voeg(item("nooit-gast", omschrijving=zin, deelnemers=["gast@voorbeeld.test"]))
+        reeks = self.voeg(item("nooit-reeks", omschrijving=zin, _terugkerend=True))
+        self.zorg()
+        self.assertEqual((gast["locatie"], reeks["locatie"]), ("", ""))
+        self.assertEqual(len(W.adres_vraag_noden(self.items, nu=NU)), 2)
+
     def test_zorg_handmatige_plaats_blijft(self):
         a = self.voeg(item(locatie=ADRES_B))
         self.zorg()
