@@ -11,7 +11,7 @@ Aanleiding: de Pipedrive-storing van 18-10-2026 (opdracht Shaniel 19-10-2026).
 |---|---|---|---|
 | VM `~/backups/pipedrive/` | alle gegevens, zonder bijlagen | 01:30 UTC | elke run 30 dagen, daarna de eerste van elke maand 12 maanden |
 | S3 `globaal-db-backups-2026/pipedrive/<firma>/` | dezelfde gegevens, GPG-versleuteld | direct na de VM-run | 30 dagen (lifecycle van de bucket) |
-| Linux-pc kantoor `~/backups/pipedrive/` | alle bijlagen (ca. 85 GB) plus de bestandenlijst | 02:00 UTC | bijlagen blijven staan en groeien aan |
+| Linux-pc kantoor `~/backups/pipedrive/` | alle bijlagen (ca. 85 GB) plus de bestandenlijst | 02:00 UTC, UNABO en TKN nog eens om 08:30 UTC | bijlagen blijven staan en groeien aan |
 
 De bijlagen passen niet op de VM (71 GB vrij), daarom staan ze op de Linux-pc
 (914 GB schijf). De pc haalt bewust alleen de bijlagen op (`--alleen-bijlagen`):
@@ -44,6 +44,13 @@ Bewust niet, en dat staat ook in elk manifest onder `niet_meegenomen`:
   onderwerp, deelnemers en fragment zitten er wel in);
 - volgers en notitie-reacties (een gebruiker per administratie).
 
+Een download telt als compleet als het aantal ontvangen bytes gelijk is aan wat
+de server meestuurt (Content-Length). De `file_size` van Pipedrive klopt bij
+oude bestanden soms niet; zo'n bestand komt wel binnen en telt mee onder
+`grootte_afwijkend`. Sommige oude bestanden kan Pipedrive zelf niet meer leveren
+(HTTP 403 van hun opslag): die staan onder `mislukt` en worden elke nacht
+opnieuw geprobeerd.
+
 Projecten en taken geven bij de meeste firma's HTTP 402 (geen add-on); dat
 staat per run onder `niet_beschikbaar`. Bijlagen staan in het manifest in vier
 groepen: binnen, `uitgesteld` (budget, volgende nacht), `mislukt` (met reden,
@@ -64,8 +71,13 @@ Pipedrive gewist voordat de backup het had).
 
 ## API-budget
 
-Pipedrive geeft per firma een dagbudget aan API-tokens (60.000 tot 240.000,
-reset rond middernacht) dat we delen met het sales-dashboard, de Pipedrive-MCP,
+Pipedrive geeft per firma een dagbudget aan API-tokens (60.000 tot 240.000) dat
+niet voor elke firma op hetzelfde uur terugkomt: H-Architects, HarmonieBOUW en
+Energie Efficiënt voor 01:30 UTC, UNABO en TKN-Tekenwerk pas tussen 02:10 en
+09:45 UTC (gemeten 20-10-2026, waarschijnlijk 04:00 UTC: middernacht in de VS).
+Daarom halen UNABO en TKN hun bijlagen ook om 08:30 UTC op; om 02:00 kregen ze
+alleen de restjes van de vorige dag (UNABO 225 bijlagen die nacht). Het budget
+wordt gedeeld met het sales-dashboard, de Pipedrive-MCP,
 de won-deals-poller en de leadmeldingen (samen bij H-Architects ongeveer 35.000
 per dag). Gemeten 19-10-2026: een lijstpagina kost 20 tokens, een bijlage 20.
 De VM-run kost per nacht 2.800 (Energie Efficiënt) tot 33.000 tokens
@@ -119,6 +131,7 @@ scp pipedrive-backup/backup.py unbuntu@192.168.1.56:pipedrive-backup/backup.py
 python3 -m venv ~/pipedrive-backup/.venv && ~/pipedrive-backup/.venv/bin/pip install openpyxl
 crontab -e
 0 2 * * * /usr/bin/flock -n /tmp/pipedrive-backup.lock $HOME/pipedrive-backup/.venv/bin/python $HOME/pipedrive-backup/backup.py --alleen-bijlagen --zonder-offsite --env $HOME/pipedrive-backup/pipedrive.env --doel $HOME/backups/pipedrive >> $HOME/backups/pipedrive/backup.log 2>&1
+30 8 * * * /usr/bin/flock -n /tmp/pipedrive-backup.lock $HOME/pipedrive-backup/.venv/bin/python $HOME/pipedrive-backup/backup.py --alleen-bijlagen --zonder-offsite --firma unabo --firma tknburo --env $HOME/pipedrive-backup/pipedrive.env --doel $HOME/backups/pipedrive >> $HOME/backups/pipedrive/backup.log 2>&1
 ```
 `~/pipedrive-backup/pipedrive.env` (600) bevat de vijf `PIPEDRIVE_TOKEN_*`
 (kopie van de VM, rechtstreeks overgezet, nooit via chat) en de push-URL.

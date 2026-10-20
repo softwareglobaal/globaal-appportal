@@ -270,6 +270,7 @@ class Pipedrive:
     def download(self, pad, doel, verwacht=None):
         tmp = doel + ".deel"
         antwoord = self._open(API + pad, accept="*/*")
+        lengte = antwoord.headers.get("Content-Length")
         h = hashlib.sha256()
         grootte = 0
         with antwoord, open(tmp, "wb") as f:
@@ -287,9 +288,16 @@ class Pipedrive:
             ververs = self.downloads % 100 == 0
         if ververs:
             self.get("/v1/users/me")  # echte budgetstand, de schatting kan afwijken
-        if verwacht and grootte != verwacht:
+        # Volledigheid toetsen aan wat de server meestuurde (Content-Length). De
+        # file_size in Pipedrive klopt bij oude bestanden soms niet (gemeten 20-10:
+        # 19 bij H-Architects), dus die geldt alleen als er geen lengte meekomt.
+        if lengte is not None and lengte.isdigit():
+            if grootte != int(lengte):
+                os.remove(tmp)
+                raise ApiFout("onvolledig", pad, f"{grootte} van {lengte} bytes ontvangen")
+        elif verwacht and grootte < verwacht:
             os.remove(tmp)
-            raise ApiFout("grootte", pad, f"{grootte} bytes ontvangen, {verwacht} verwacht")
+            raise ApiFout("onvolledig", pad, f"{grootte} bytes ontvangen, Pipedrive meldt {verwacht}")
         os.replace(tmp, doel)
         return grootte, h.hexdigest()
 
@@ -479,8 +487,10 @@ def haal_bijlagen(pd, firma, bestanden, basis, m, werkers):
     # de link staat in bestanden.json. verwijderd = in Pipedrive gewist voor we het
     # hadden. Beide zijn geen fout van de backup en staan met naam in het manifest.
     # mislukt = echte downloadfout, die geeft een waarschuwing.
+    # grootte_afwijkend = volledig binnen (Content-Length klopt), maar Pipedrive
+    # meldt een andere file_size; telt mee als binnen, geen waarschuwing.
     stand = {"totaal": len(bestanden), "nieuw": 0, "al_aanwezig": 0, "uitgesteld": 0,
-             "bytes_nieuw": 0, "extern": [], "verwijderd": [], "mislukt": []}
+             "bytes_nieuw": 0, "grootte_afwijkend": 0, "extern": [], "verwijderd": [], "mislukt": []}
     taken = []
     for f in bestanden:
         fid = f.get("id")
@@ -488,7 +498,10 @@ def haal_bijlagen(pd, firma, bestanden, basis, m, werkers):
         verwacht = f.get("file_size") or None
         map_ = os.path.join(doelmap, str(fid))
         doel = os.path.join(map_, veilige_naam(naam))
-        if os.path.exists(doel) and (not verwacht or os.path.getsize(doel) == verwacht):
+        # Een bestand krijgt pas zijn naam na een volledige download (daarvoor
+        # heet het .deel), dus bestaan = compleet. Bijlagen in Pipedrive
+        # veranderen niet: een nieuwe versie krijgt een nieuw id.
+        if os.path.exists(doel):
             stand["al_aanwezig"] += 1
             continue
         locatie = f.get("remote_location") or "s3"
@@ -519,6 +532,8 @@ def haal_bijlagen(pd, firma, bestanden, basis, m, werkers):
             if uitkomst == "nieuw":
                 stand["nieuw"] += 1
                 stand["bytes_nieuw"] += extra
+                if taak[2] and extra != taak[2]:
+                    stand["grootte_afwijkend"] += 1
                 if stand["nieuw"] % 500 == 0:
                     log(f"  {firma:16} {'bijlagen':20} {stand['nieuw']}/{len(taken)} binnen "
                         f"({stand['bytes_nieuw'] / 1e9:.2f} GB), budget {pd.rest}/{pd.limiet}")
