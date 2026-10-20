@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='glas.css') }}">
 <style>
   /* platform: het maildashboard (alleen wat glas.css niet heeft) */
-  .blad{position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:18px 18px 60px;display:flex;flex-direction:column;gap:var(--gap)}
+  .blad{position:relative;z-index:1;max-width:1760px;margin:0 auto;padding:18px 18px 60px;display:flex;flex-direction:column;gap:var(--gap)}
   .seg a{padding:7px 14px;border-radius:var(--pil);font-size:13px;color:var(--inkt-zacht);font-weight:500;text-decoration:none;white-space:nowrap}
   .seg a.actief{background:#fff;color:var(--inkt);box-shadow:0 2px 8px rgba(0,0,0,.08)}
   .seg{flex-wrap:wrap}
@@ -48,6 +48,11 @@
   .opvolglijst tr.onzeker td{background:rgba(255,214,140,.12)}
   .opvolglijst .knoppen{flex-direction:column;align-items:stretch;gap:4px}
   .opvolglijst .knoppen button{width:100%}
+  .opvolglijst td small{overflow-wrap:anywhere}
+  details.gesch{margin-top:6px;font-size:12px;color:var(--inkt-zacht)}
+  details.gesch summary{cursor:pointer;color:var(--inkt-vaag);font-size:11.5px}
+  details.gesch ul{margin:4px 0 0;padding-left:16px}
+  .knop-weg{background:var(--kritiek);color:#fff;border:0}
   @media (max-width:1100px){
     table.opvolglijst{table-layout:auto}
     table.stapel colgroup{display:none}
@@ -68,13 +73,20 @@
 </style>
 </head>
 <body>
+{% macro kort(a) %}{{ a.split('@')[0] }}@{{ a.split('@')[1].split('.')[0] if '@' in a else '' }}{% endmacro %}
+{% macro gesch(p) %}<details class="gesch"><summary>Geschiedenis</summary><ul>
+  <li>{{ p['datum'] }}: binnengekomen{% if p['map'] %} in {{ p['map'] }}{% endif %}</li>
+  {% if p['antwoord_door'] %}<li>{{ p['antwoord_wanneer'] }}: {{ 'doorgestuurd' if p['opvolging'] == 'doorgezet' else ('mogelijk beantwoord' if p['opvolging'] == 'onzeker' else 'beantwoord') }} door {{ p['antwoord_door'] }}</li>{% endif %}
+  {% for w, a, d in geschiedenis.get(p['uniek'], []) %}<li>{{ w }}: {{ a }} door {{ d }}</li>{% endfor %}
+  <li>nu: {{ p['status'] }}</li>
+</ul></details>{% endmacro %}
 <div class="scene"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
 <div class="blad">
 
   <div class="topbar">
     <h1>Mail <em>onder controle</em></h1>
-    <a class="knop-licht knop-klein" href="{{ url_for('bord') }}">Bord</a>
-    <a class="knop-licht knop-klein" href="{{ url_for('kantoor') }}">Kantoor</a>
+    {% if not alleen_mail %}<a class="knop-licht knop-klein" href="{{ url_for('bord') }}">Bord</a>
+    <a class="knop-licht knop-klein" href="{{ url_for('kantoor') }}">Kantoor</a>{% endif %}
   </div>
 
   <div class="werkbalk">
@@ -142,16 +154,16 @@
     <div class="kop"><h2>Op te volgen</h2><small>belangrijk bovenaan, dan wat het langst wacht; een antwoord of doorsturen zet het op Loopt, weg is het pas na Opgelost</small></div>
     {% if open_alle %}
     <div class="tabelwrap"><table class="tabel stapel opvolglijst">
-      <colgroup><col style="width:112px"><col style="width:15%"><col style="width:13%"><col><col style="width:14%">
-        <col style="width:96px"><col style="width:15%"><col style="width:124px"></colgroup>
+      <colgroup><col style="width:112px"><col style="width:17%"><col style="width:8%"><col><col style="width:14%">
+        <col style="width:96px"><col style="width:15%"><col style="width:136px"></colgroup>
       <thead><tr><th>Ontvangen</th><th>Afzender</th><th>Postvak</th><th>Onderwerp</th><th>Status</th><th class="num">Wacht</th><th>Volgende stap</th><th></th></tr></thead>
       <tbody>
       {% for p in open_alle %}{% set i = loop.index %}
       <tr id="o{{ i }}" class="{{ 'onzeker' if p['opvolging'] == 'onzeker' }}">
         <td class="nw">{{ p['datum'] }}<small><span class="chip {{ 'kritiek' if p['soort'] == 'hoog' else ('let' if p['soort'] == 'actie' else 'accent') }}">{{ p['soort_label'] }}</span></small></td>
         <td>{{ p['van_naam'] or p['van'] }}<small>{{ p['van'] }}</small></td>
-        <td class="nw">{{ p['postvak'] }}</td>
-        <td><b style="font-weight:600">{{ p['onderwerp'] }}</b><small>{{ p['waarom'] }}</small></td>
+        <td class="nw" title="{{ p['postvak'] }}">{{ kort(p['postvak']) }}</td>
+        <td><b style="font-weight:600">{{ p['onderwerp'] }}</b><small>{{ p['waarom'] }}</small>{{ gesch(p) }}</td>
         <td class="status">{% if p['opvolging'] == 'onzeker' %}<span class="chip let">{{ p['status'] }}</span>{% else %}{{ p['status'] }}{% endif %}</td>
         <td class="num nw"><span class="chip {{ 'kritiek' if p['werkdagen'] >= 5 else '' }}">{{ p['werkdagen'] }} werkdag{{ '' if p['werkdagen'] == 1 else 'en' }}</span></td>
         <td class="volgende">{{ p['stap'] }}</td>
@@ -162,6 +174,10 @@
             <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
             <button class="{{ stijl }} knop-klein">{{ naam }}</button></form>
           {% endfor %}
+          <form method="post" action="{{ url_for('mail_besluit') }}" onsubmit='return confirm({{ ("Helemaal weg: alle mail van " ~ p["van"] ~ " in " ~ p["postvak"] ~ " naar Opgeruimd, ook wat later komt, en uitschrijven via de officiele knop als die er is. Er wordt niets verwijderd; terugdraaien kan bij Jouw regels.")|tojson }})'>
+            <input type="hidden" name="uniek" value="{{ p['uniek'] }}"><input type="hidden" name="actie" value="weg">
+            <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
+            <button class="knop-weg knop-klein" title="Uitschrijven en alles van deze afzender opruimen, ook later">Helemaal weg</button></form>
         </div></td>
       </tr>
       {% endfor %}
@@ -180,8 +196,8 @@
       <tr class="{{ 'vast' if p['vast'] }}">
         <td class="nw">{{ p['datum'] }}<small><span class="chip {{ 'kritiek' if p['soort'] == 'hoog' else ('let' if p['soort'] == 'actie' else 'accent') }}">{{ p['soort_label'] }}</span></small></td>
         <td>{{ p['van_naam'] or p['van'] }}<small>{{ p['van'] }}</small></td>
-        <td class="nw">{{ p['postvak'] }}</td>
-        <td><b style="font-weight:600">{{ p['onderwerp'] }}</b><small>{{ p['status'] }}</small></td>
+        <td class="nw" title="{{ p['postvak'] }}">{{ kort(p['postvak']) }}</td>
+        <td><b style="font-weight:600">{{ p['onderwerp'] }}</b><small>{{ p['status'] }}</small>{{ gesch(p) }}</td>
         <td>{{ p['wie'] }}</td>
         <td class="num nw">{{ p['beweging'] }}<small><span class="chip {{ 'kritiek' if p['vast'] else '' }}">{{ p['beweging_wd'] }} werkdag{{ '' if p['beweging_wd'] == 1 else 'en' }}</span></small></td>
         <td><div class="knoppen">
@@ -209,8 +225,8 @@
       <tr>
         <td class="nw">{{ p['datum'] }}<small>{{ p['soort_label'] }}</small></td>
         <td>{{ p['van_naam'] or p['van'] }}<small>{{ p['van'] }}</small></td>
-        <td class="nw">{{ p['postvak'] }}</td>
-        <td>{{ p['onderwerp'] }}</td>
+        <td class="nw" title="{{ p['postvak'] }}">{{ kort(p['postvak']) }}</td>
+        <td>{{ p['onderwerp'] }}{{ gesch(p) }}</td>
         <td class="status">{{ p['status'] }}</td>
         <td><form method="post" action="{{ url_for('mail_besluit') }}">
           <input type="hidden" name="uniek" value="{{ p['uniek'] }}"><input type="hidden" name="actie" value="{{ 'terug' if p['besluit'] else 'open' }}">
@@ -295,8 +311,12 @@
         <td class="nw">{{ x['laatst'] }}</td>
         <td><div class="knoppen">
           {% if x['regel'] %}
-            <span class="chip {{ 'goed' if x['regel'] == 'opruimen' else ('kritiek' if x['regel'] == 'belangrijk' else '') }}">{{ acties.get(x['regel'], x['regel']) }}</span>
+            <span class="chip {{ 'goed' if x['regel'] in ('opruimen', 'uitschrijven') else ('kritiek' if x['regel'] == 'belangrijk' else '') }}">{{ acties.get(x['regel'], x['regel']) }}</span>
           {% else %}
+            <form method="post" action="{{ url_for('mail_regel') }}" onsubmit='return confirm({{ ("Helemaal weg: alle mail van " ~ x["van"] ~ " in " ~ x["postvak"] ~ " naar Opgeruimd, ook wat later komt, en uitschrijven via de officiele knop als die er is. Er wordt niets verwijderd; terugdraaien kan bij Jouw regels.")|tojson }})'>
+              <input type="hidden" name="postvak" value="{{ x['postvak'] }}"><input type="hidden" name="wie" value="{{ x['van'] }}"><input type="hidden" name="actie" value="uitschrijven">
+              <input type="hidden" name="periode" value="{{ periode }}"><input type="hidden" name="filter" value="{{ postvak }}">
+              <button class="knop-weg knop-klein" title="Uitschrijven en alles van deze afzender opruimen, ook later">Helemaal weg</button></form>
             {% if x['kan_opruimen'] %}
             <form method="post" action="{{ url_for('mail_regel') }}" onsubmit='return confirm({{ ("Alle mail van " ~ x["van"] ~ " uit de inbox van " ~ x["postvak"] ~ " naar Opgeruimd, ook wat later komt? Er wordt niets verwijderd.")|tojson }})'>
               <input type="hidden" name="postvak" value="{{ x['postvak'] }}"><input type="hidden" name="wie" value="{{ x['van'] }}"><input type="hidden" name="actie" value="opruimen">

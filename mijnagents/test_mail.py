@@ -392,6 +392,38 @@ c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<oud
 check("de stand geeft per wacht de laatste ronde en de open noden", "mail-mch" in stand["wachten"]
       and "noden" in stand["wachten"]["mail-mch"])
 
+# --- delen met Angela en Shaniel (Mehdi, 20-10-2026; gekozen: kijken en mee afhandelen): de groep mail opent /mail en
+# klikt mee, met de eigen naam erbij; de rest van het bord blijft dicht
+MAILGROEP = {"X-authentik-groups": "mail", "X-authentik-username": "angela"}
+check("de groep mail ziet het maildashboard", c.get("/mail", headers=MAILGROEP).status_code == 200)
+r = c.get("/", headers=MAILGROEP)
+check("de groep mail ziet de rest van het bord niet: naar /mail", r.status_code == 302 and r.headers["Location"].endswith("/mail"),
+      (r.status_code, r.headers.get("Location")))
+check("ook geen andere pagina of API zonder token", c.get("/kantoor", headers=MAILGROEP).status_code == 302
+      and c.get("/api/mail/open", headers=MAILGROEP).status_code == 302)
+check("de groep mail ziet geen knoppen naar het bord", 'href="/kantoor"' not in c.get("/mail", headers=MAILGROEP).get_data(as_text=True))
+check("wie in agents zit en niet in mail, ziet /mail nog steeds niet", c.get("/mail", headers=ANDER).status_code == 403)
+check("de agents en De Mailregisseur lezen nog met token", c.get("/api/mail/open", headers=K).status_code == 200)
+
+# --- Helemaal weg (Mehdi, 20-10-2026: "een knop die meer is dan ruis ... helemaal uitschrijven, zodat het effectief gedaan
+# is"): het punt is ruis, de afzender staat op uitschrijven (de wacht ruimt op en schrijft uit), en wie klikte staat erbij
+c.post("/mail/besluit", headers=MAILGROEP, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "terug"})
+c.post("/mail/besluit", headers=MAILGROEP, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "weg"})
+_r = rij("mch@h-architects.be:<klant@x>")
+_regels = [(x["postvak"], x["wie"], x["actie"]) for x in c.get("/api/mailregels", headers=K).get_json()["regels"]]
+check("Helemaal weg: het punt is ruis, door wie klikte", (_r["besluit"], _r["besluit_door"]) == ("ruis", "angela"), _r)
+check("Helemaal weg: de afzender staat op uitschrijven in dat postvak",
+      ("mch@h-architects.be", "klant@bouwheer.be", "uitschrijven") in _regels, _regels)
+_html = c.get("/mail?periode=30", headers=BEHEER).get_data(as_text=True)
+check("de geschiedenis per bericht toont elke klik met wie (Teruggezet en Helemaal weg door angela)",
+      "Teruggezet door angela" in _html and "Helemaal weg door angela" in _html)
+check("Op te volgen heeft de knop Helemaal weg", ">Helemaal weg</button>" in _html.split('id="opvolgen"')[1].split("</section>")[0])
+c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "terug"})
+c.post("/mail/regel", headers=BEHEER, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "weg"})
+check("Helemaal weg is terug te draaien bij Jouw regels",
+      ("mch@h-architects.be", "klant@bouwheer.be", "uitschrijven") not in
+      [(x["postvak"], x["wie"], x["actie"]) for x in c.get("/api/mailregels", headers=K).get_json()["regels"]])
+
 check("het bord heeft een knop Mail voor beheer", "/mail" in c.get("/", headers=BEHEER).get_data(as_text=True))
 check("het bord toont die knop niet aan anderen", 'href="/mail"' not in c.get("/", headers=ANDER).get_data(as_text=True))
 check("werkdagen tellen het weekend niet (vrijdag tot maandag is een werkdag)",

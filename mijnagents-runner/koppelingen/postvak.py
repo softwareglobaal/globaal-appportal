@@ -270,8 +270,8 @@ def automatisch(b):
 
 
 def regel_voor(regels, postvak_adres, van):
-    """De beslissing van Mehdi over deze afzender (op het maildashboard): 'belangrijk', 'ruis' of 'opruimen',
-    of ''. Een regel op het adres gaat voor een regel op het domein (@domein); een regel voor dit postvak
+    """De beslissing van Mehdi over deze afzender (op het maildashboard): 'belangrijk', 'ruis', 'opruimen',
+    'houden' of 'uitschrijven' (Helemaal weg), of ''. Een regel op het adres gaat voor een regel op het domein (@domein); een regel voor dit postvak
     gaat voor een regel voor alle postvakken (*)."""
     van = (van or "").lower()
     for pv in ((postvak_adres or "").lower(), "*"):
@@ -293,6 +293,8 @@ def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel=""):
         return "verdacht", f"'{b.get('van_naam')}' vanaf een gratis adres ({dom})"
     if regel == "belangrijk":
         return "hoog", "Mehdi zette deze afzender op belangrijk"
+    if regel == "uitschrijven":
+        return "rommel", "op het maildashboard op Helemaal weg gezet"
     if regel in ("ruis", "opruimen"):
         return "rommel", "Mehdi zette deze afzender op ruis"
     if automatisch_antwoord(ond):
@@ -935,7 +937,8 @@ def werk(naam, ag, r):
         schrijven = bool(mb and mb.get("schrijven") and not mb.get("bron"))
         postvakken.append({"postvak": adres, "wacht": naam, "schrijven": 1 if schrijven else 0})
         for (pv, wie), actie in regels.items():
-            if actie == "opruimen" and pv in (adres.lower(), "*") and schrijven:
+            # Helemaal weg (uitschrijven, 20-10-2026) ruimt op zoals Opruimen; het uitschrijven zelf doet uitschrijven.py
+            if actie in ("opruimen", "uitschrijven") and pv in (adres.lower(), "*") and schrijven:
                 try:
                     opgeruimd += [f"{adres}:{mid}" for mid in opruimen(mb, wie)]
                 except Exception as e:  # noqa: BLE001

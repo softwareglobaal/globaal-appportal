@@ -342,27 +342,33 @@ def beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerende=False):
     van = (b.get("van") or "").lower()
     dom = postvak._domein(van)
     onderwerp = b.get("onderwerp") or ""
-    if soort not in ("rommel", "koud"):
-        return None, f"soort {soort}"
-    if not terugkerende:
-        return None, f"{soort} en geen terugkerende verzender"  # ook rommel: een klant mailt een eerste keer (K2)
-    if regel in ("belangrijk", "houden"):
-        return None, f"regel {regel} van Mehdi"
-    if ANTWOORD_OF_DOORGESTUURD.match(onderwerp) or any(w in onderwerp.lower() for w in postvak.AANVRAAG):
-        return None, "antwoord, doorgestuurd of aanvraag"
-    knophost = (urllib.parse.urlsplit(knop(b.get("list_unsubscribe"), b.get("list_unsubscribe_post")) or "").hostname or "")
-    reden = rol_of_dringend(van, b.get("van_naam") or "", onderwerp, knophost)
-    if reden:
-        return None, reden
+    # Helemaal weg (regel 'uitschrijven', 20-10-2026): iemand koos op het maildashboard zelf voor deze afzender. Die keuze
+    # gaat voor soort, terugkeer, rol en klantenlijst; eigen domein, gratis maildienst en alle controles op de knop zelf
+    # (precies een kop, one-click, ondertekend door de afzender, knop bij de afzender of een verzendbedrijf) blijven.
+    expliciet = regel == "uitschrijven"
+    if not expliciet:
+        if soort not in ("rommel", "koud"):
+            return None, f"soort {soort}"
+        if not terugkerende:
+            return None, f"{soort} en geen terugkerende verzender"  # ook rommel: een klant mailt een eerste keer (K2)
+        if regel in ("belangrijk", "houden"):
+            return None, f"regel {regel} van Mehdi"
+        if ANTWOORD_OF_DOORGESTUURD.match(onderwerp) or any(w in onderwerp.lower() for w in postvak.AANVRAAG):
+            return None, "antwoord, doorgestuurd of aanvraag"
+        knophost = (urllib.parse.urlsplit(knop(b.get("list_unsubscribe"), b.get("list_unsubscribe_post")) or "").hostname or "")
+        reden = rol_of_dringend(van, b.get("van_naam") or "", onderwerp, knophost)
+        if reden:
+            return None, reden
     if not dom or postvak.zelfde_domein(dom, eigen, True):
         return None, "eigen domein"
     if postvak.zelfde_domein(dom, postvak.GRATIS_DIENSTEN):
         return None, "gratis maildienst"
-    gemaild = {postvak._domein(a) for a in bekend if postvak._domein(a)}
-    if van in bekend or postvak.zelfde_domein(dom, gemaild, True):
-        return None, "klant: we mailden dit adres of domein"
-    if postvak.zelfde_domein(dom, veilig, True):
-        return None, "klant: ooit belangrijk, gewoon, met gevolg of beantwoord"
+    if not expliciet:
+        gemaild = {postvak._domein(a) for a in bekend if postvak._domein(a)}
+        if van in bekend or postvak.zelfde_domein(dom, gemaild, True):
+            return None, "klant: we mailden dit adres of domein"
+        if postvak.zelfde_domein(dom, veilig, True):
+            return None, "klant: ooit belangrijk, gewoon, met gevolg of beantwoord"
     if tuple(b.get("uitschrijfkoppen") or ()) != (1, 1):  # zonder telling: weigeren (derde toets K3)
         # DKIM dekt alleen de onderste van twee gelijke koppen; een tussenpersoon kan er een boven zetten (RFC 8058: een)
         return None, "niet precies een uitschrijfkop"
@@ -627,7 +633,9 @@ def ronde(naam, cfg, ag, r, nu, bekend, veilig, regels, klaar_voor, bord, lezen=
             ag.log("uitschrijven", "bron", f"{type(e).__name__}: {str(e)[:160]}")
             kand = {}
     gedaan = []
-    volgorde = sorted(kand.values(), key=lambda x: x[0]["datum"] or nu, reverse=True)
+    # Wat iemand op Helemaal weg zette, gaat voor (20-10-2026); daarna het nieuwste.
+    expliciet = lambda b, adres: postvak.regel_voor(regels, adres, b["van"]) == "uitschrijven"  # noqa: E731
+    volgorde = sorted(kand.values(), key=lambda x: (expliciet(x[0], x[2]), x[0]["datum"] or nu), reverse=True)
     for b, url, adres in volgorde[:inst["per_ronde"]]:
         host, ip, reden = adres_ok(url, opzoeken)
         start = datetime.now(postvak.BRUSSEL).isoformat()
@@ -635,12 +643,14 @@ def ronde(naam, cfg, ag, r, nu, bekend, veilig, regels, klaar_voor, bord, lezen=
                  "van": b["van"], "onderwerp": (b["onderwerp"] or "")[:200], "map": b["map"],
                  "message_id": (b["message_id"] or "")[:250], "datum": b["datum"].isoformat() if b["datum"] else "",
                  "knop_domein": hoofddomein(host)}
+        if expliciet(b, adres):
+            regel["reden"] = "op het maildashboard op Helemaal weg gezet"
         if not ip:
             regel.update(uitslag="overgeslagen", code=0, reden=reden)
         else:
             schrijf_log(dict(regel, uitslag="bezig", code=0, reden=""), logpad)
             uitslag, code = posten(url, ip)
-            regel.update(uitslag=uitslag, code=code, reden="")
+            regel.update(uitslag=uitslag, code=code, reden=regel.get("reden", ""))
             regel["ts"] = datetime.now(postvak.BRUSSEL).isoformat()
         schrijf_log(regel, logpad)
         gedaan.append(regel)

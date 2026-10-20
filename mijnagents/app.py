@@ -272,6 +272,27 @@ def mag_beslissen():
     return bool(groepen() & BESLIS_GROEPEN)
 
 
+# De groep mail (Mehdi, 20-10-2026: "kunnen we dit ook delen met Angela en Shaniel"; gekozen: kijken en mee afhandelen):
+# wie erin zit, opent /mail en klikt er mee (Opgelost, Doorgezet, Ruis, Helemaal weg; zijn naam komt erbij), maar ziet
+# de rest van het bord niet. Lid maken gebeurt in Authentik (scripts/mail-groep-vullen.py), niet hier.
+MAIL_GROEP = "mail"
+
+
+def mag_mail():
+    return bool(groepen() & (BESLIS_GROEPEN | {MAIL_GROEP}))
+
+
+@app.before_request
+def alleen_mail():
+    """Wie alleen via de groep mail binnenkomt, ziet alleen de pagina Mail; de rest van het bord blijft dicht."""
+    g = groepen()
+    if MAIL_GROEP in g and not g & (BESLIS_GROEPEN | {"agents"}):
+        pad = request.path
+        if not (pad == "/mail" or pad.startswith("/mail/") or pad.startswith("/static/")):
+            return redirect(url_for("mail_pagina"))
+    return None
+
+
 def leeftijd_min(ts):
     try:
         t = datetime.fromisoformat(ts)
@@ -566,7 +587,7 @@ def gesprekken_pagina():
 #     van de wacht (open, onzeker, beantwoord, doorgezet, wacht, verlopen, geen) en, apart, het besluit van Mehdi
 #     (afgehandeld, doorgezet, ruis), dat een wacht nooit overschrijft. Wat openstaat, telt alleen _mail_open: /mail,
 #     De Mailregisseur en zijn 08:00-bericht (/api/mail/open) en het werkverslag van elke wacht (antwoord op /api/mail).
-#     Alleen beheer: afzenders en onderwerpen zijn inhoud.
+#     Alleen beheer en de groep mail (MAIL_GROEP, sinds 20-10-2026): afzenders en onderwerpen zijn inhoud.
 MAIL_SOORT = {"hoog": (0, "Belangrijk"), "actie": (1, "Automatisch, met gevolg"), "midden": (2, "Gewone mail")}
 # Volgorde, naam en kleur per soort in de cijfers; de ruis staat achteraan, in grijzen.
 MAIL_SOORTEN = [("hoog", "Belangrijk", "var(--kritiek)"), ("actie", "Met gevolg", "var(--let)"),
@@ -575,7 +596,7 @@ MAIL_SOORTEN = [("hoog", "Belangrijk", "var(--kritiek)"), ("actie", "Met gevolg"
                 ("verdacht", "Verdacht", "#6b2a2a")]
 MAIL_RUIS = ("melding", "koud", "rommel", "verdacht")
 MAIL_ACTIES = {"belangrijk": "Belangrijk", "ruis": "Ruis (tellen, niet tonen)", "opruimen": "Opruimen",
-               "houden": "Nooit automatisch opruimen"}
+               "houden": "Nooit automatisch opruimen", "uitschrijven": "Helemaal weg (uitschrijven en opruimen)"}
 # Opgevolgd tot opgelost (Mehdi, 20-10-2026: "er moet een systeem zijn dat ik weet dat een mail opgevolgd wordt tot het
 # volledig gedaan/opgelost is"; gekozen: "pas weg na Opgelost"). Niets verdwijnt nog vanzelf: een antwoord of doorsturen
 # zet een opvolgpunt op Loopt (MAIL_LOOPT), een automatisch bericht met gevolg dat ouder is dan 7 dagen (verlopen) blijft
@@ -586,6 +607,8 @@ MAIL_LOOPT = ("beantwoord", "doorgezet")     # er is gereageerd, maar niemand ze
 MAIL_OPVOLG = ("hoog", "midden", "actie")    # de soorten die opgevolgd worden
 MAIL_VAST = 5                                # werkdagen zonder beweging: een punt dat loopt, is vastgelopen
 MAIL_BESLUITEN = ("afgehandeld", "doorgezet", "ruis", "open")   # open: Toch open, ook als de wacht het afsloot
+MAIL_KLIK = {"afgehandeld": "Opgelost", "doorgezet": "Doorgezet", "ruis": "Ruis", "open": "Toch open", "terug": "Teruggezet",
+             "houden": "Niet opruimen", "weg": "Helemaal weg"}
 MAIL_PERIODES = {"vandaag": ("Vandaag", 0), "7": ("7 dagen", 6), "30": ("30 dagen", 29)}
 # De focus (Mehdi, 20-10-2026: "we focusen nu op mch, mehdichegini@hotmail.com, melodie"): /mail toont standaard deze
 # drie postvakken; ?postvak=alle toont alles. De Mailregisseur leest dezelfde lijst via /api/mail/stand (test_mail.py).
@@ -642,6 +665,10 @@ def _mail_tabellen(conn):
             knop_domein TEXT DEFAULT '', uitslag TEXT, code INTEGER DEFAULT 0, reden TEXT DEFAULT '',
             gebeurtenis TEXT);
         CREATE INDEX IF NOT EXISTS mailuitschrijving_ts ON mailuitschrijving(ts);
+        CREATE TABLE IF NOT EXISTS mailbesluit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, uniek TEXT DEFAULT '', postvak TEXT DEFAULT '', van TEXT DEFAULT '',
+            actie TEXT, door TEXT DEFAULT '', ts TEXT);
+        CREATE INDEX IF NOT EXISTS mailbesluit_uniek ON mailbesluit(uniek);
         CREATE UNIQUE INDEX IF NOT EXISTS mailuitschrijving_id ON mailuitschrijving(gebeurtenis);
     """)
     kol = {r[1] for r in conn.execute("PRAGMA table_info(mailbericht)").fetchall()}
@@ -1023,6 +1050,7 @@ def _mailpunt(r):
             "werkdagen": wd if wd is not None else 0, "waarom": r["waarom"] or "", "stap": r["stap"] or "",
             "opvolging": r["opvolging"] or "", "besluit": r["besluit"] or "", "status": _mail_status(r),
             "antwoord_door": r["antwoord_door"] or "", "antwoord_ts": r["antwoord_ts"] or "",
+            "antwoord_wanneer": _brussel(r["antwoord_ts"]) if r["antwoord_ts"] else "",
             "dringend": bool(r["dringend"]), "klaarzet_id": r["klaarzet_id"], "auto_opruimen": r["auto_opruimen"] or "",
             "map": r["map"] or "", "terug": r["terug"], "message_id": r["message_id"] or ""}
 
@@ -1133,7 +1161,7 @@ def _grafiek(per_dag, dagen):
 
 @app.route("/mail")
 def mail_pagina():
-    if not mag_beslissen():
+    if not mag_mail():
         abort(403)
     conn = db()
     _mail_tabellen(conn)
@@ -1213,6 +1241,8 @@ def mail_pagina():
     return render_template("mail.html", app_naam=APP_NAAM, wachten=wachten, open_alle=open_alle, open_per=open_per,
                            afgesloten=afgesloten, loopt=loopt, vast_wd=MAIL_VAST, reclame=reclame, uitgeschreven=uitgeschreven, labels=labels, status=status,
                            noden=noden, kpi=kpi, periode=periode, periodes=MAIL_PERIODES, postvak=postvak, focus=MAIL_FOCUS,
+                           geschiedenis=_mail_geschiedenis(conn, [p["uniek"] for p in (*open_alle, *loopt, *afgesloten)]),
+                           alleen_mail=not mag_beslissen(),
                            postvakken=postvakken, wacht_van=wacht_van, per_postvak=per_postvak, soorten=MAIL_SOORTEN,
                            ruis=ruis, regels=regels, acties=MAIL_ACTIES, gratis=MAIL_GEEN_DOMEIN, grafiek=_grafiek(grafiek_per_dag, grafiek_dagen),
                            nu=datetime.now(BRUSSEL).strftime("%d-%m-%Y %H:%M"))
@@ -1227,8 +1257,11 @@ def _terug_naar_mail(anker=""):
 def mail_besluit():
     """Mehdi beslist over een bericht. Afgehandeld: hij regelde het (of het hoeft niet). Doorgezet: iemand anders volgt
     het op. Ruis: afgehandeld, en deze afzender voortaan als ruis tellen in dit postvak. Terug: het besluit ongedaan maken.
-    Niet opruimen: de wacht zet deze afzender nooit automatisch in Opgeruimd, en wat hij al verplaatste, zet hij terug."""
-    if not mag_beslissen():
+    Niet opruimen: de wacht zet deze afzender nooit automatisch in Opgeruimd, en wat hij al verplaatste, zet hij terug.
+    Helemaal weg (weg): ruis voor dit bericht, en deze afzender in dit postvak op uitschrijven: de wacht ruimt al zijn
+    mail op, ook wat later komt, en schrijft uit via de officiele knop als die er is (Mehdi, 20-10-2026: "een knop die
+    meer is dan ruis ... helemaal uitschrijven, zodat het effectief gedaan is"). Elke klik komt in mailbesluit."""
+    if not mag_mail():
         abort(403)
     conn = db()
     _mail_tabellen(conn)
@@ -1241,6 +1274,10 @@ def mail_besluit():
                      (actie, gebruiker(), nu(), r["uniek"]))
         if actie == "ruis":
             _mail_regel_zetten(conn, r["postvak"], r["van"], "ruis")
+    elif actie == "weg":
+        conn.execute("UPDATE mailbericht SET besluit='ruis', besluit_door=?, besluit_ts=? WHERE uniek=?",
+                     (gebruiker(), nu(), r["uniek"]))
+        _mail_regel_zetten(conn, r["postvak"], r["van"], "uitschrijven")
     elif actie == "terug":
         conn.execute("UPDATE mailbericht SET besluit='', besluit_door='', besluit_ts='' WHERE uniek=?", (r["uniek"],))
     elif actie == "houden":
@@ -1251,8 +1288,27 @@ def mail_besluit():
             conn.execute("UPDATE mailbericht SET auto_opruimen='' WHERE uniek=?", (r["uniek"],))
     else:
         abort(400)
+    _mail_besluit_loggen(conn, r["uniek"], r["postvak"], r["van"], actie)
     conn.commit()
     return _terug_naar_mail("#opvolgen" if actie != "houden" else "#reclame")
+
+
+def _mail_besluit_loggen(conn, uniek, postvak, van, actie):
+    """Elke klik op /mail, met wie en wanneer: de geschiedenis per bericht (20-10-2026; nu ook Angela en Shaniel)."""
+    conn.execute("INSERT INTO mailbesluit(uniek, postvak, van, actie, door, ts) VALUES(?,?,?,?,?,?)",
+                 ((uniek or "")[:250], (postvak or "")[:120], (van or "")[:200], (actie or "")[:20], gebruiker()[:60], nu()))
+
+
+def _mail_geschiedenis(conn, uniek_lijst):
+    """Per bericht de klikken uit mailbesluit, oudste eerst: [(wanneer, actie, door)]."""
+    uit = {}
+    lijst = [u for u in uniek_lijst if u]
+    for i in range(0, len(lijst), 400):
+        deel = lijst[i:i + 400]
+        for r in conn.execute(f"SELECT uniek, actie, door, ts FROM mailbesluit WHERE uniek IN ({','.join('?' * len(deel))}) "
+                              "ORDER BY id", deel).fetchall():
+            uit.setdefault(r["uniek"], []).append((_brussel(r["ts"]), MAIL_KLIK.get(r["actie"], r["actie"]), r["door"]))
+    return uit
 
 
 def _mail_regel_zetten(conn, postvak, wie, actie):
@@ -1275,10 +1331,11 @@ def _mail_regel_zetten(conn, postvak, wie, actie):
 @app.route("/mail/regel", methods=["POST"])
 def mail_regel():
     """Mehdi beslist over een afzender (adres of @domein) in een postvak: belangrijk, ruis, opruimen, houden, of weg."""
-    if not mag_beslissen():
+    if not mag_mail():
         abort(403)
     conn = db()
     _mail_regel_zetten(conn, request.form.get("postvak"), request.form.get("wie"), request.form.get("actie", ""))
+    _mail_besluit_loggen(conn, "", request.form.get("postvak"), request.form.get("wie"), "regel:" + request.form.get("actie", ""))
     conn.commit()
     return _terug_naar_mail("#opschonen")
 

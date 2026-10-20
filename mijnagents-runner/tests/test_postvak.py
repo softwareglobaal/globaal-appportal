@@ -391,6 +391,29 @@ def test_uitschrijven_alleen_een_ondertekende_knop_van_de_afzender():
     assert U.hoofddomein("mail.bedrijf.com.pl") == "bedrijf.com.pl" and U.hoofddomein("x.firma.co.th") == "firma.co.th", "K5"
 
 
+def test_helemaal_weg_gaat_voor_de_automatische_voorwaarden_maar_niet_voor_de_knop():
+    """Mehdi, 20-10-2026: "een knop die meer is dan ruis ... helemaal uitschrijven, zodat het effectief gedaan is". Een
+    afzender op Helemaal weg (regel 'uitschrijven'): geen eis van soort, terugkeer, rol of klantenlijst, want iemand koos
+    zelf; wel eigen domein, gratis maildienst en elke controle op de knop. De wacht ruimt hem op zoals Opruimen."""
+    import uitschrijven as U
+    eigen, bekend, veilig = ("h-architects.be",), frozenset({"news@brand.be"}), frozenset({"brand.be"})
+    b = _nieuwsbrief(onderwerp="Re: uw vraag")
+    assert U.beoordeel(b, "hoog", "", eigen, bekend, veilig, False)[0] is None, "automatisch nooit (klant, eerste keer)"
+    assert U.beoordeel(b, "hoog", "uitschrijven", eigen, bekend, veilig, False)[0] == "https://unsub.brand.be/u?t=GEHEIM"
+    assert U.beoordeel(dict(b, uitschrijfkoppen=(2, 1)), "rommel", "uitschrijven", eigen, bekend, veilig, True)[0] is None
+    assert U.beoordeel(_nieuwsbrief(van="news@ander.be"), "rommel", "uitschrijven", eigen, bekend, veilig, True)[0] is None, \
+        "ook op vraag nooit een knop die de afzender niet zelf ondertekende"
+    assert U.beoordeel(_nieuwsbrief(knop="https://unsub.ander-bedrijf.be/u"), "rommel", "uitschrijven", eigen, bekend, veilig,
+                       True)[0] is None
+    assert U.beoordeel(_nieuwsbrief(van="x@h-architects.be"), "rommel", "uitschrijven", eigen, bekend, veilig, True) == \
+        (None, "eigen domein")
+    assert postvak.trieer(kop("news@brand.be", "Nieuwsbrief"), EIGEN, frozenset(), "uitschrijven")[0] == "rommel"
+    bron = open(os.path.join(HIER, "koppelingen", "postvak.py"), encoding="utf-8").read()
+    assert 'actie in ("opruimen", "uitschrijven")' in bron, "Helemaal weg ruimt op zoals Opruimen"
+    ronde = open(os.path.join(HIER, "koppelingen", "uitschrijven.py"), encoding="utf-8").read()
+    assert 'key=lambda x: (expliciet(x[0], x[2])' in ronde, "Helemaal weg gaat voor in de beurt"
+
+
 def test_uitschrijven_nooit_bij_bank_overheid_verzekeraar_notaris_of_klant():
     import uitschrijven as U
     eigen = ("h-architects.be",)
