@@ -14,16 +14,19 @@ het dossier hebben (titel, openingszin, overlappende afspraak of kop); met een t
 opnametijdstip.
 
 Het schrijfpad komt uit de taak zelf (de gevalideerde bezoekrij), nooit uit een transcriptkop: een
-pad in een transcript is een aanwijzing, geen autorisatie. Het pad wordt gecontroleerd op firma
-(basismap van de verslagsoort), dossier, bezoekdatum en taak-id. Een bestaand transcript.txt telt
-pas als geleverd als het dezelfde opname is (plaud_id in de kop); een ander wordt nooit overschreven.
+pad in een transcript is een aanwijzing, geen autorisatie. Bij de klassieke bezoekmap controleren
+we firma, dossier, bezoekdatum en taak-id. Bij een TKN-dossiermap controleren we daarnaast het
+mapnummer, de Plaud-submap en de vaste transcriptnaam. Een bestaande kopie telt pas als geleverd
+als de Plaud-id in de kop overeenkomt. Een ander bestand wordt nooit overschreven.
 """
 import hashlib
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from context import BRUSSEL
+import dossier as ds
+import verslagsoorten as vs
 
 VOOR = timedelta(minutes=30)
 NA = timedelta(minutes=60)
@@ -37,7 +40,7 @@ def inhoud_van(taak):
             i = json.loads(i) if i.startswith("{") else {}
         except ValueError:
             i = {}
-    return i
+    return i if isinstance(i, dict) else {}
 
 
 def verslagsoort(taak):
@@ -56,8 +59,13 @@ def bewijs_van(taak, soorten):
     if not re.fullmatch(r"\d{4,6}", nummer):
         return None
     soort = verslagsoort(taak)
-    afdeling = "h-architects" if soort == "werfverslag" else (soorten.get(soort) or {}).get("afdeling", "")
-    firma = AFDELING_FIRMA.get(afdeling)
+    s = soorten.get(soort) or {}
+    if s.get("submappen") and len(nummer) == 4 and nummer in re.findall(
+            r",\s*(\d{4})\b", str(i.get("adres") or "")):
+        return None
+    afdeling = "h-architects" if soort == "werfverslag" else s.get("afdeling", "")
+    agenda_firma = i.get("firma") if s.get("submappen") and i.get("plaud_doelmap") else None
+    firma = agenda_firma if isinstance(agenda_firma, str) and agenda_firma in ds.FIRMA_AFDELING else AFDELING_FIRMA.get(afdeling)
     return (firma, nummer) if firma else None
 
 
@@ -77,7 +85,10 @@ def _tijd(datum, tijd):
 def valideer_bezoekmap(taak, soorten):
     """(ok, reden). soorten = verslagsoorten.SOORTEN."""
     i = inhoud_van(taak)
-    pad = (i.get("bezoekmap") or "").rstrip("/")
+    bezoekmap = i.get("bezoekmap") or ""
+    if not isinstance(bezoekmap, str):
+        return False, "bezoekmap is geen geldig Dropbox-pad"
+    pad = bezoekmap.rstrip("/")
     datum = i.get("datum") or ""
     dossier = str(i.get("dossier") or "")
     if not taak.get("id"):
@@ -85,6 +96,31 @@ def valideer_bezoekmap(taak, soorten):
     if not pad.startswith("/") or ".." in pad.split("/") or "\x00" in pad:
         return False, "bezoekmap is geen geldig Dropbox-pad"
     soort = verslagsoort(taak)
+    s = soorten.get(soort) or {}
+    if s.get("submappen"):
+        if taak.get("van") != "commandocentrum":
+            return False, "TKN-doel vraagt een taak van het Commandocentrum"
+        mapnummer = str(i.get("mapnummer") or "")
+        if not re.fullmatch(r"\d{4,6}", mapnummer) or not re.fullmatch(r"\d{4,6}", dossier):
+            return False, "TKN-doel vraagt een geldig mapnummer en dossiernummer"
+        if len(dossier) == 4 and dossier in re.findall(r",\s*(\d{4})\b", str(i.get("adres") or "")):
+            return False, "TKN-dossiernummer is de postcode van het bezoekadres"
+        basissen = s.get("basismappen") or []
+        if pad != bezoekmap or not any(vs.tkn_pad(pad, basis) == mapnummer for basis in basissen):
+            return False, "bezoekmap is geen TKN-dossiermap met dit mapnummer"
+        doelmap = i.get("plaud_doelmap") or ""
+        if not isinstance(doelmap, str) or not doelmap.startswith(pad + "/") or "/" in doelmap[len(pad) + 1:]:
+            return False, "Plaud-doelmap ligt niet rechtstreeks onder de TKN-dossiermap"
+        if vs.submap_sleutel(doelmap[len(pad) + 1:]) != "plaud":
+            return False, "Plaud-doelmap is geen bekende Plaud-submap"
+        try:
+            if date.fromisoformat(datum).isoformat() != datum:
+                raise ValueError
+        except (TypeError, ValueError):
+            return False, "bezoekdatum is geen ISO-datum"
+        if i.get("transcriptnaam") != s["transcriptnaam"].format(datum=datum):
+            return False, "transcriptnaam hoort niet bij de bezoekdatum"
+        return True, ""
     if soort == "werfverslag":
         basissen = [HA_WORK]
     elif soort in soorten:
@@ -158,14 +194,14 @@ def transcript_hash(tekst):
 
 def _kop(begin):
     uit = {}
-    for regel in begin.splitlines()[:4]:
+    for regel in begin.splitlines()[:10]:
         if ":" in regel:
             k, _, v = regel.partition(":")
-            uit[k.strip()] = v.strip()
+            uit[re.sub(r"[- ]", "_", k.strip().lower())] = v.strip()
     return uit
 
 
-def lever(bezoekmap, plaud_id, tekst, dropbox, naam="transcript.txt"):
+def lever(bezoekmap, plaud_id, tekst, dropbox, naam="transcript.txt", scan_alle=False):
     """Zet het transcript in de map en bevestig id én transcriptversie (nacontrole v1.1, P2-9).
 
     Bovenaan het bestand: `plaud_id:` en `transcript_hash:`. Uitkomst:
@@ -174,23 +210,32 @@ def lever(bezoekmap, plaud_id, tekst, dropbox, naam="transcript.txt"):
         nieuwe_versie  dit id stond er met een andere versie; die blijft onaangeroerd en de nieuwe versie
                        komt ernaast als `<naam> versie <hash>.txt` (geen overschrijving zonder toestemming)
         conflict       er staat een transcript van een andere opname: niets geschreven
-    In een bezoekmap telt elk transcript*.txt; in een dossiermap alleen bestanden met dezelfde naamstam."""
+    In een gewone bezoekmap telt elk transcript*.txt; in een dossiermap alleen bestanden met dezelfde
+    naamstam. Bij scan_alle telt elk .txt-bestand in de Plaud-submap, ook een handmatig opgeslagen
+    transcript met een andere naam of kopindeling. Bestanden zonder deze Plaud-id blijven staan."""
     h = transcript_hash(tekst)
     kop = f"plaud_id: {plaud_id}\ntranscript_hash: {h}\n"
     stam = "transcript" if naam == "transcript.txt" else naam[:-4]
     oudere = False
-    for e in dropbox.lijst(bezoekmap, recursief=False) or []:
+    items = dropbox.lijst(bezoekmap, recursief=False)
+    if scan_alle and items is None:
+        return {"uitkomst": "conflict", "reden": "doelmap bestaat niet"}
+    koplengte = 2000 if scan_alle else 600
+    for e in items or []:
         bestaand = e.get("name") or ""
-        if e.get(".tag") == "file" and bestaand.lower().startswith(stam.lower()) and bestaand.lower().endswith(".txt"):
-            k = _kop(dropbox.download(e["path_display"], 600).decode("utf-8", "replace"))
+        if (e.get(".tag") == "file" and bestaand.lower().endswith(".txt")
+                and (scan_alle or bestaand.lower().startswith(stam.lower()))):
+            k = _kop(dropbox.download_kop(e["path_display"], koplengte).decode("utf-8", "replace"))
             if k.get("plaud_id") != plaud_id:
+                if scan_alle:
+                    continue
                 return {"uitkomst": "conflict", "pad": e["path_display"], "reden": "er staat al een transcript van een andere opname"}
-            if k.get("transcript_hash") == h:
+            if k.get("transcript_hash") == h or (scan_alle and not k.get("transcript_hash")):
                 return {"uitkomst": "al_geleverd", "pad": e["path_display"], "transcript_hash": h}
             oudere = True
     doelnaam = f"{stam} versie {h[:6]}.txt" if oudere else naam
     pad = dropbox.upload(f"{bezoekmap}/{doelnaam}", (kop + "\n" + tekst).encode("utf-8"))
-    controle = _kop(dropbox.download(pad, 600).decode("utf-8", "replace"))
+    controle = _kop(dropbox.download_kop(pad, koplengte).decode("utf-8", "replace"))
     if controle.get("plaud_id") != plaud_id or controle.get("transcript_hash") != h:
         raise RuntimeError("levering niet bevestigd: het bestand in de map is niet deze opname of niet deze versie")
     return {"uitkomst": "nieuwe_versie" if oudere else "geleverd", "pad": pad, "transcript_hash": h}

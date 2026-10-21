@@ -19,6 +19,7 @@ import tempfile
 import time
 import types
 import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -37,14 +38,19 @@ import bouw_map  # noqa: E402
 import lijst  # noqa: E402
 import manifest  # noqa: E402
 import plaud_wacht as P  # noqa: E402
+ECHTE_DOWNLOAD_KOP = P.bronnen.download_kop
 
 lijst.OUDE_REPO_LIJST = Path("/nonexistent/plaud_lijst.json")
 
 ID1, ID2, ID3 = "of_" + "1" * 32, "of_" + "2" * 32, "of_" + "3" * 32
 HA = "/Work All/01. H-A WORK/0 H-A Standaard projects/5. STAN Execution"
-BEZOEK = f"{HA}/2531 Spleesters/_00. Communication/2026-10-08 bezoek klant - werfbezoek"
+BEZOEK = f"{HA}/2531 Fictiva/_00. Communication/2026-10-08 bezoek klant - werfbezoek"
 VC = "/Work All/02. UNABO/01. U-WORK/03. U-SAFETY"
-OPENING = [{"start_time": 0, "speaker": "Speaker 1", "content": "Werfbezoek 2531 Spleesters met de aannemer."},
+TKN_BASIS = "/Work/TKN BURO WORK/1 Projects"
+TKN_MAP = f"{TKN_BASIS}/2026/47035_Proeflaan 23, 9998 Proefgem"
+TKN_PLAUD = f"{TKN_MAP}/2. Plaud"
+TKN_NAAM = "2026-10-08 Plaud transcript.txt"
+OPENING = [{"start_time": 0, "speaker": "Speaker 1", "content": "Werfbezoek 2531 Fictiva met de aannemer."},
            {"start_time": 6000, "speaker": "Speaker 2", "content": "We lopen de ruwbouw na."}]
 ZONDER_NUMMER = [{"start_time": 0, "speaker": "Speaker 1", "content": "Goedemorgen, we beginnen."},
                  {"start_time": 6000, "speaker": "Speaker 2", "content": "We lopen de werf na."}]
@@ -57,6 +63,7 @@ class Wereld:
         self.invoer = Path(tempfile.mkdtemp(prefix="plaud-invoer-"))
         self.staat = Path(tempfile.mkdtemp(prefix="plaud-staat-"))
         self.bestanden = {}            # Dropbox: pad -> bytes
+        self.ontbrekende_mappen = set()
         self.taken = []                # open zoektaken voor plaud-wacht
         self.agenda = []               # klaarzet-items soort afspraak
         self.rijen, self.klaar, self.opgepakt, self.uploads, self.logs = [], [], [], [], []
@@ -72,6 +79,7 @@ class Wereld:
         P.ag.log = lambda onderwerp, stap, tekst, detail="": self.logs.append((stap, tekst))
         P.bronnen.lijst = self.lijst
         P.bronnen.download = self.download
+        P.bronnen.download_kop = self.download_kop
         P.bronnen.upload = self.upload
         P.bronnen.zoek_salesmap = lambda naam="", nummer="": f"/Sales/{nummer} klant" if nummer else None
         P.LC.verblijf_op = lambda moment, ook_kandidaten=False: None
@@ -116,6 +124,8 @@ class Wereld:
         self.taken = [t for t in self.taken if t["id"] != kid]
 
     def lijst(self, pad, recursief=False):
+        if pad in self.ontbrekende_mappen:
+            return None
         uit = []
         for p in self.bestanden:
             if os.path.dirname(p) == pad.rstrip("/"):
@@ -124,7 +134,14 @@ class Wereld:
 
     def download(self, pad, maximum=25_000_000):
         """Dropbox is hoofdletterongevoelig: path_lower vindt het bestand."""
-        return next(v for k, v in self.bestanden.items() if k.lower() == pad.lower())[:maximum]
+        data = next(v for k, v in self.bestanden.items() if k.lower() == pad.lower())
+        if len(data) > maximum:
+            raise RuntimeError("downloadgrens overschreden")
+        return data
+
+    def download_kop(self, pad, n):
+        """Een Range-download geeft alleen de gevraagde kop terug."""
+        return next(v for k, v in self.bestanden.items() if k.lower() == pad.lower())[:n]
 
     def upload(self, pad, data):
         self._faal("upload:" + ("bezoek" if "/Work All/" in pad else "dossier"))
@@ -136,7 +153,7 @@ class Wereld:
         pid = g["recording_id"]
         self.herkend.append((pid, context, len(tekst)))
         h = self.herkenning.get(pid, {"personen": ["aannemer"], "hoofdpersoon": "aannemer", "bedrijf": "", "afdeling": "h-architects",
-                                      "thema": "werfbezoek ruwbouw", "project": "2531 Spleesters", "prive": False,
+                                      "thema": "werfbezoek ruwbouw", "project": "2531 Fictiva", "prive": False,
                                       "zekerheid": "hoog", "waarom": "openingszin"})
         if isinstance(h, Exception):
             raise h
@@ -185,6 +202,15 @@ def cctaak(kid, van, tot, bezoekmap, dossier="2531", datum="2026-10-08", soort="
                                   "van_tijd": van, "tot_tijd": tot, "verslagsoort": soort})}
 
 
+def tkn_taak(kid=701, **wijzigingen):
+    taak = cctaak(kid, "09:00", "10:00", TKN_MAP, dossier="3999", soort="barsten-scheuren")
+    inhoud = json.loads(taak["inhoud"])
+    inhoud.update(mapnummer="47035", plaud_doelmap=TKN_PLAUD, transcriptnaam=TKN_NAAM, firma="UNAB")
+    inhoud.update(wijzigingen)
+    taak["inhoud"] = json.dumps(inhoud)
+    return taak
+
+
 def in_bezoekmap(w):
     return [p for p in w.uploads if p.startswith("/Work All/")]
 
@@ -192,8 +218,8 @@ def in_bezoekmap(w):
 # ------------------------------------------------------------------ proeven ---
 def test_van_bron_tot_tabel_klaarzet_en_bezoekmap_en_een_tweede_ronde_zonder_dubbel():
     w = Wereld()
-    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}]
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")      # 11:05 in Brussel
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")      # 11:05 in Brussel
     w.push()
     w.taken = [werftaak(101)]
     code, tel, noden = w.ronde()
@@ -216,8 +242,8 @@ def test_van_bron_tot_tabel_klaarzet_en_bezoekmap_en_een_tweede_ronde_zonder_dub
 
 def test_geforceerde_fouten_en_een_geslaagde_hervatting():
     w = Wereld()
-    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}]
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.push()
     w.taken = [werftaak(101)]
     w.fout = {"tabel": 1, "klaarzet": 1, "upload:dossier": 1, "upload:bezoek": 1}
@@ -234,7 +260,7 @@ def test_geforceerde_fouten_en_een_geslaagde_hervatting():
 
 def test_later_toegevoegde_bezoekmap_wordt_alsnog_geleverd():
     w = Wereld()
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.push()
     w.ronde()
     assert not in_bezoekmap(w)
@@ -246,7 +272,7 @@ def test_later_toegevoegde_bezoekmap_wordt_alsnog_geleverd():
 
 def test_een_fout_bij_de_tweede_opname_blokkeert_de_eerste_niet():
     w = Wereld()
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.opname(ID2, "10-08 Telefoon", "2026-10-08T13:00:00")
     w.push()
     w.herkenning[ID2] = RuntimeError("model weigert")
@@ -257,7 +283,7 @@ def test_een_fout_bij_de_tweede_opname_blokkeert_de_eerste_niet():
 
 def test_titel_en_kop_in_conflict_geven_geen_kopie_en_gaan_naar_mehdi():
     w = Wereld()
-    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}]
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
     w.bestanden["/inbox/2026-10-09 1400 Plaud transcript.md"] = (
         f"plaud_id: {ID3}\nstart: 2026-10-09 14:00\nduur_minuten: 30\nnaam_in_plaud: Werfbezoek 2531\ndossier: 2612\n"
         f"bezoekmap: {BEZOEK}\n\n[00:00:00] Speaker 1: we bespreken de ruwbouw\n").encode()
@@ -271,8 +297,8 @@ def test_titel_en_kop_in_conflict_geven_geen_kopie_en_gaan_naar_mehdi():
 
 def test_onbekende_afdeling_of_lage_zekerheid_blijft_bij_mehdi():
     w = Wereld()
-    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}]
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.push()
     w.herkenning[ID1] = {"personen": [], "hoofdpersoon": "", "bedrijf": "", "afdeling": "onbekend", "thema": "", "project": "",
                          "prive": False, "zekerheid": "laag", "waarom": ""}
@@ -284,8 +310,8 @@ def test_onbekende_afdeling_of_lage_zekerheid_blijft_bij_mehdi():
 
 def test_tegenstrijdige_privevelden_leveren_niets():
     w = Wereld()
-    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}]
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.push()
     w.taken = [werftaak(602)]
     w.herkenning[ID1] = {"personen": ["Angela"], "hoofdpersoon": "Angela", "bedrijf": "", "afdeling": "prive", "thema": "weekend",
@@ -296,8 +322,8 @@ def test_tegenstrijdige_privevelden_leveren_niets():
 
 def test_pipedrive_herstel_geeft_herbeoordeling_zonder_nieuwe_modelvraag():
     w = Wereld()
-    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}]
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00", uitingen=ZONDER_NUMMER)
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00", uitingen=ZONDER_NUMMER)
     w.push()
     w.pipedrive_fout = True
     w.ronde()
@@ -310,7 +336,7 @@ def test_pipedrive_herstel_geeft_herbeoordeling_zonder_nieuwe_modelvraag():
 
 def test_gewijzigde_titel_bij_gelijk_transcript_herkent_opnieuw():
     w = Wereld()
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.push()
     w.ronde()
     w.opname(ID1, "10-08 PRIVE Angela en Mehdi weekend", "2026-10-08T09:05:00")
@@ -324,13 +350,13 @@ def test_gewijzigde_titel_bij_gelijk_transcript_herkent_opnieuw():
 
 def test_gewijzigd_transcript_wordt_als_nieuwe_versie_geleverd():
     w = Wereld()
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.push()
     w.taken = [werftaak(603)]
     w.ronde()
     oud = w.bestanden[f"{BEZOEK}/transcript.txt"]
     nieuw = OPENING + [{"start_time": 9000, "speaker": "Speaker 1", "content": "Aanvulling na hertranscriptie."}]
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00", uitingen=nieuw)
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00", uitingen=nieuw)
     w.push()
     w.taken = [werftaak(603)]
     w.ronde()
@@ -399,7 +425,7 @@ def test_verzoek_van_de_contractmaker_vraagt_een_overlappende_afspraak():
 
 def test_id_conflict_in_het_manifest_publiceert_niets():
     w = Wereld()
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     eerste = next(w.archief.glob("*/gesprek.json")).parent
     tweede = w.archief / "2026-10-08 1105 tweede exemplaar"
     shutil.copytree(eerste, tweede)
@@ -414,7 +440,7 @@ def test_id_conflict_in_het_manifest_publiceert_niets():
 def test_een_bouwjaar_in_de_titel_is_geen_dossier():
     """Live gezien op 12-10-2026: "Renovatieplan vrijstaande woning 1933" werd HARC:1933 en ging naar h-architects."""
     w = Wereld()
-    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}]
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
     w.opname(ID1, "10-01 Vergadering Renovatieplan vrijstaande woning 1933 - dakvernieuwing", "2026-10-01T07:31:00", uitingen=ZONDER_NUMMER)
     w.push()
     w.herkenning[ID1] = {"personen": [], "hoofdpersoon": "eigenaar", "bedrijf": "", "afdeling": "h-architects", "thema": "renovatie",
@@ -457,7 +483,7 @@ def test_context_alleen_overlappende_agenda_ook_na_teken_6000():
     w = Wereld()
     lang = [{"start_time": 0, "speaker": "Speaker 1", "content": "Goedemorgen."}] + \
            [{"start_time": 70000 + i * 1000, "speaker": "Speaker 2", "content": "ruwbouw " * 40} for i in range(60)]
-    w.deals = [{"id": 777, "titel": "2531 Spleesters", "nummer": "2531"}, {"id": 778, "titel": "2612 Ander", "nummer": "2612"}]
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}, {"id": 778, "titel": "2612 Ander", "nummer": "2612"}]
     w.opname(ID1, "10-08 opname", "2026-10-08T09:05:00", uitingen=lang)
     w.push()
     w.agenda = [{"soort": "afspraak", "titel": "vroeger", "inhoud": json.dumps({"titel": "HA 2612 vroeger", "start": "2026-10-08T08:00:00+02:00",
@@ -474,14 +500,14 @@ def test_context_alleen_overlappende_agenda_ook_na_teken_6000():
 
 def test_ongeldige_bezoekmappen_krijgen_niets():
     w = Wereld()
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.push()
     zonder_id = werftaak(0)
     zonder_id.pop("id")
     w.taken = [werftaak(201, bezoekmap="/Privé/Mehdi/2026-10-08"),                                      # willekeurig pad
-               werftaak(202, bezoekmap=f"{HA}/2531 Spleesters/../../../Privé/2026-10-08"),               # ..
+               werftaak(202, bezoekmap=f"{HA}/2531 Fictiva/../../../Privé/2026-10-08"),               # ..
                werftaak(203, bezoekmap=BEZOEK.replace("2026-10-08 bezoek", "2026-10-01 bezoek")),        # andere dag
-               werftaak(204, bezoekmap=BEZOEK.replace("2531 Spleesters", "2612 Andere")),                # ander dossier
+               werftaak(204, bezoekmap=BEZOEK.replace("2531 Fictiva", "2612 Andere")),                # ander dossier
                cctaak(205, "11:00", "12:00", BEZOEK),                                                     # firma van VC, pad van H-A
                zonder_id]
     code, _, noden = w.ronde()
@@ -492,7 +518,7 @@ def test_ongeldige_bezoekmappen_krijgen_niets():
 
 def test_dezelfde_dag_is_geen_bevestiging_het_tijdstip_wel():
     w = Wereld()
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T07:00:00")     # 09:00 in Brussel
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T07:00:00")     # 09:00 in Brussel
     w.opname(ID2, "10-08 VC bezoek", "2026-10-08T12:00:00")                         # 14:00 in Brussel
     w.push()
     w.taken = [werftaak(301)]
@@ -500,7 +526,7 @@ def test_dezelfde_dag_is_geen_bevestiging_het_tijdstip_wel():
     assert not in_bezoekmap(w) and not w.opgepakt and any("meer passende opnames" in n for n in noden), (w.uploads, noden)
     vc = f"{VC}/2531 Proefwerf/2026-10-08 bezoek werf - veiligheidscoördinatie"
     w2 = Wereld()
-    w2.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T07:00:00")
+    w2.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T07:00:00")
     w2.opname(ID2, "10-08 VC bezoek", "2026-10-08T12:00:00", uitingen=ZONDER_NUMMER)
     w2.push()
     w2.taken = [cctaak(302, "14:00", "15:00", vc)]
@@ -516,7 +542,7 @@ def test_een_enkele_opname_op_de_bezoekdag_zonder_bewijs_wordt_niet_geleverd():
     w = Wereld()
     w.opname(ID1, "10-08 Vergadering dakterras", "2026-10-08T08:06:00", uitingen=ZONDER_NUMMER)
     w.push()
-    w.taken = [werftaak(410, dossier="2324", bezoekmap=f"{HA}/2324 Herenthout/_00. Communication/2026-10-08 bezoek klant - werfbezoek")]
+    w.taken = [werftaak(410, dossier="2324", bezoekmap=f"{HA}/2324 Proefdorp/_00. Communication/2026-10-08 bezoek klant - werfbezoek")]
     w.ronde()
     assert not in_bezoekmap(w) and not w.opgepakt, w.uploads
     assert any("dezelfde dag alleen is geen bevestiging" in l[1] for l in w.logs), w.logs
@@ -524,7 +550,7 @@ def test_een_enkele_opname_op_de_bezoekdag_zonder_bewijs_wordt_niet_geleverd():
 
 def test_een_ander_transcript_in_de_bezoekmap_wordt_niet_overschreven():
     w = Wereld()
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.push()
     w.bestanden[f"{BEZOEK}/transcript.txt"] = b"plaud_id: of_ffffffffffffffffffffffffffffffff\n\nander gesprek"
     w.taken = [werftaak(401)]
@@ -535,7 +561,7 @@ def test_een_ander_transcript_in_de_bezoekmap_wordt_niet_overschreven():
 
 def test_wachtend_transcript_laat_de_taak_open():
     w = Wereld()
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00", transcript=False)
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00", transcript=False)
     w.push()
     w.taken = [werftaak(501)]
     code, tel, _ = w.ronde()
@@ -556,7 +582,7 @@ def test_oude_inboxbestanden_zijn_geen_gezonde_aanvoer():
 
 def test_verouderde_invoer_en_aanmeldfout_worden_gemeld():
     w = Wereld()
-    w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     (w.archief / "00 status.json").write_text(json.dumps({"uitkomst": "authfout"}))
     w.push(gemaakt=(datetime.now(timezone.utc) - timedelta(hours=5)).isoformat(timespec="seconds"))
     code, _, noden = w.ronde()
@@ -595,6 +621,169 @@ def test_bron_houdt_de_grenzen():
     assert "tekst[:6000] + " not in bron
     assert '"werfbezoek" if' not in bron
     assert "kop.get(\"bezoekmap\")" not in bron, "een pad in een transcriptkop is geen schrijfrecht"
+
+
+def test_dropbox_koplezer_leest_alleen_range_bij_200_en_206():
+    data = b"Plaud-ID: of_" + b"a" * 54000
+    gezien = []
+    oude_koppen, oude_urlopen = P.bronnen._koppen, urllib.request.urlopen
+    try:
+        P.bronnen._koppen = lambda extra=None: extra or {}
+        for status in (200, 206):
+            class Antwoord:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return False
+
+                def read(self, n):
+                    gezien.append((status, n))
+                    return data[:n]
+
+            def urlopen(req, timeout):
+                koppen = dict((k.lower(), v) for k, v in req.header_items())
+                assert req.get_method() == "POST" and timeout == 120
+                assert koppen["range"] == "bytes=0-599", koppen
+                return Antwoord()
+
+            urllib.request.urlopen = urlopen
+            assert ECHTE_DOWNLOAD_KOP("/een groot transcript.txt", 600) == data[:600]
+        assert gezien == [(200, 600), (206, 600)]
+    finally:
+        P.bronnen._koppen, urllib.request.urlopen = oude_koppen, oude_urlopen
+
+
+def test_groot_bestaand_transcript_wordt_met_koplezing_bevestigd():
+    w = Wereld()
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    uitingen = [{"start_time": 0, "speaker": "Speaker 1", "content": "Werfbezoek 2531 Fictiva. " + "x" * 54000}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00", uitingen=uitingen)
+    w.push()
+    tekst = P.tekst_van(uitingen)
+    w.bestanden[f"{BEZOEK}/transcript.txt"] = (
+        f"plaud_id: {ID1}\ntranscript_hash: {P.zoektaak.transcript_hash(tekst)}\n\n{tekst}").encode()
+    assert len(w.bestanden[f"{BEZOEK}/transcript.txt"]) > 54000
+    w.taken = [werftaak(705)]
+    code, _, _ = w.ronde()
+    assert code == P.OK and w.opgepakt == [705] and not in_bezoekmap(w), (code, w.opgepakt, w.uploads)
+
+
+def test_tkn_zoektaak_valideert_apart_mapnummer_en_plaud_doel():
+    taak = tkn_taak()
+    assert P.zoektaak.valideer_bezoekmap(taak, P.verslagsoorten.SOORTEN) == (True, "")
+    assert json.loads(taak["inhoud"])["dossier"] == "3999"
+    assert json.loads(taak["inhoud"])["mapnummer"] == "47035"
+    assert P.zoektaak.bewijs_van(taak, P.verslagsoorten.SOORTEN) == ("UNAB", "3999")
+    assert P.zoektaak.bewijs_van(tkn_taak(firma="ONBEKEND"), P.verslagsoorten.SOORTEN) == ("UNAB", "3999")
+    assert P.zoektaak.bewijs_van(tkn_taak(firma="TKNB"), P.verslagsoorten.SOORTEN) == ("TKNB", "3999")
+    oud_formaat = tkn_taak()
+    oude_inhoud = json.loads(oud_formaat["inhoud"])
+    del oude_inhoud["firma"]
+    oud_formaat["inhoud"] = json.dumps(oude_inhoud)
+    assert P.zoektaak.bewijs_van(oud_formaat, P.verslagsoorten.SOORTEN) == ("UNAB", "3999")
+    assert P.zoektaak.bewijs_van(werftaak(702), P.verslagsoorten.SOORTEN) == ("HARC", "2531")
+    assert P.zoektaak.bewijs_van(cctaak(703, "09:00", "10:00", f"{VC}/2531 Proefwerf/2026-10-08 bezoek",
+                                           soort="veiligheidscoordinatie"), P.verslagsoorten.SOORTEN) == ("UNAB", "2531")
+    varianten = [
+        {"mapnummer": "3999"}, {"mapnummer": "abc"}, {"dossier": "abc"},
+        {"bezoekmap": TKN_PLAUD}, {"bezoekmap": TKN_MAP.replace("/2026/", "/2025/")},
+        {"plaud_doelmap": f"{TKN_MAP}/3.Documents"},
+        {"plaud_doelmap": f"{TKN_PLAUD}/extra"},
+        {"plaud_doelmap": "/andere firma/2. Plaud"},
+        {"datum": "2026-13-08"}, {"transcriptnaam": "transcript.txt"},
+    ]
+    for wijziging in varianten:
+        fout = tkn_taak(**wijziging)
+        assert not P.zoektaak.valideer_bezoekmap(fout, P.verslagsoorten.SOORTEN)[0], wijziging
+    fout = tkn_taak()
+    fout["van"] = "werfverslag-voorbereider"
+    assert not P.zoektaak.valideer_bezoekmap(fout, P.verslagsoorten.SOORTEN)[0]
+    fout = tkn_taak()
+    del fout["id"]
+    assert not P.zoektaak.valideer_bezoekmap(fout, P.verslagsoorten.SOORTEN)[0]
+
+
+def test_tkn_plaudwordt_uit_zoektaak_in_submap_geleverd():
+    w = Wereld()
+    w.opname(ID1, "Opname barsten en scheuren", "2026-10-08T07:10:00", uitingen=ZONDER_NUMMER)
+    w.push()
+    w.taken = [tkn_taak()]
+    w.agenda = [{"soort": "afspraak", "titel": "barstenbezoek", "inhoud": json.dumps({
+        "titel": "[UNAB-KB] BS 3999 Proeflaan 23", "start": "2026-10-08T09:00:00+02:00",
+        "einde": "2026-10-08T10:00:00+02:00", "firma": "UNAB", "nummer": "3999"})}]
+    w.herkenning[ID1] = {"personen": ["bouwheer"], "hoofdpersoon": "bouwheer", "bedrijf": "UNABO",
+                        "afdeling": "unabo", "thema": "barsten en scheuren", "project": "", "prive": False,
+                        "zekerheid": "middel", "waarom": "bezoekopdracht"}
+    code, _, _ = w.ronde()
+    doel = f"{TKN_PLAUD}/{TKN_NAAM}"
+    assert code == P.OK and w.uploads == [doel] and w.opgepakt == [701], (code, w.uploads, w.opgepakt, w.logs)
+    assert w.klaar[0]["voor"] == "unabo" and w.klaar[0]["inhoud"]["projectnummer"] == "3999", w.klaar[0]
+    assert not w.klaar[0]["inhoud"]["conflict"], w.klaar[0]
+    assert w.bestanden[doel].startswith(f"plaud_id: {ID1}".encode())
+
+
+def test_tkn_postcode_als_agendanummer_geeft_geen_tegenstrijdig_bewijs():
+    w = Wereld()
+    w.opname(ID1, "Opname barsten en scheuren", "2026-10-08T07:10:00", uitingen=ZONDER_NUMMER)
+    w.push()
+    w.taken = [tkn_taak(dossier="47035", adres="Proeflaan 23, 9998 Proefgem")]
+    w.agenda = [{"soort": "afspraak", "titel": "barstenbezoek", "inhoud": json.dumps({
+        "titel": "BS Proeflaan 23", "start": "2026-10-08T09:00:00+02:00",
+        "einde": "2026-10-08T10:00:00+02:00", "firma": "UNAB", "nummer": "9998",
+        "locatie": "Proeflaan 23, 9998 Proefgem"})}]
+    w.herkenning[ID1] = {"personen": ["bouwheer"], "hoofdpersoon": "bouwheer", "bedrijf": "UNABO",
+                        "afdeling": "unabo", "thema": "barsten en scheuren", "project": "", "prive": False,
+                        "zekerheid": "middel", "waarom": "bezoekopdracht"}
+    code, _, _ = w.ronde()
+    assert code == P.OK and w.uploads == [f"{TKN_PLAUD}/{TKN_NAAM}"] and w.opgepakt == [701], (code, w.uploads, w.opgepakt)
+    besluit = w.klaar[0]["inhoud"]
+    assert besluit["projectnummer"] == "47035" and not besluit["conflict"], besluit
+    assert P.context_op("2026-10-08T07:10:00Z", 40, w.agenda)[0][0]["nummer"] == ""
+    oude_taak = tkn_taak(dossier="9998", adres="Proeflaan 23, 9998 Proefgem")
+    assert P.zoektaak.bewijs_van(oude_taak, P.verslagsoorten.SOORTEN) is None
+    assert not P.zoektaak.valideer_bezoekmap(oude_taak, P.verslagsoorten.SOORTEN)[0]
+
+
+def test_tkn_plaud_payload_en_handmatig_bestaand_transcript():
+    taak = tkn_taak()
+    opname = {"plaud_id": ID1, "start_brussel": "2026-10-08T09:05:00+02:00", "duur_minuten": 40}
+    besluit = {"dossier": "3999", "zekerheid": "hoog", "projectnummer": "3999", "voor": "unabo",
+               "firma": "UNAB", "conflict": False, "redenen": [], "kopie_toegestaan": True}
+    opdracht = next(o for o in P.opdrachten_voor(opname, "de tekst", besluit, {"prive": False}, None,
+                                                  [taak], "barsten-scheuren") if o["soort"] == "bezoekmap")
+    payload = opdracht["payload"]
+    assert payload == {"plaud_id": ID1, "taak_id": 701, "bezoekmap": TKN_PLAUD,
+                       "naam": TKN_NAAM, "scan_alle": True, "tekst": "de tekst"}, payload
+    w = Wereld()
+    handmatig = f"Transcript van het plaatsbezoek\n---\nPlaud-ID: {ID1}\n".encode() + b"x" * 54000
+    w.bestanden[f"{TKN_PLAUD}/handmatig verslag.txt"] = handmatig
+    resultaat = P._bezoekmap(payload)
+    assert resultaat["uitkomst"] == "al_geleverd" and not w.uploads and w.opgepakt == [701]
+
+    w2 = Wereld()
+    w2.bestanden[f"{TKN_PLAUD}/andere opname.txt"] = f"Plaud-ID: {ID2}\n".encode() + b"x" * 54000
+    resultaat = P._bezoekmap(payload)
+    assert resultaat["uitkomst"] == "geleverd" and w2.uploads == [f"{TKN_PLAUD}/{TKN_NAAM}"] and w2.opgepakt == [701]
+    assert w2.bestanden[f"{TKN_PLAUD}/andere opname.txt"].startswith(f"Plaud-ID: {ID2}".encode())
+
+    w3 = Wereld()
+    w3.ontbrekende_mappen.add(TKN_PLAUD)
+    try:
+        P._bezoekmap(payload)
+        raise AssertionError("een ontbrekende Plaud-map mag niet worden aangemaakt of afgevinkt")
+    except RuntimeError as ex:
+        assert "doelmap bestaat niet" in str(ex)
+    assert not w3.uploads and not w3.opgepakt
+
+
+def test_tkn_nieuwe_transcriptversie_komt_naast_de_oude():
+    w = Wereld()
+    w.bestanden[f"{TKN_PLAUD}/{TKN_NAAM}"] = f"Plaud-ID: {ID1}\nTranscript-Hash: oudehash\n\noud".encode()
+    resultaat = P.zoektaak.lever(TKN_PLAUD, ID1, "nieuwe tekst", P.bronnen, naam=TKN_NAAM, scan_alle=True)
+    naam = f"{TKN_NAAM[:-4]} versie {P.zoektaak.transcript_hash('nieuwe tekst')[:6]}.txt"
+    assert resultaat["uitkomst"] == "nieuwe_versie" and w.uploads == [f"{TKN_PLAUD}/{naam}"]
+    assert w.bestanden[f"{TKN_PLAUD}/{TKN_NAAM}"].endswith(b"oud")
 
 
 if __name__ == "__main__":
