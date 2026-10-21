@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Geen foto-I/O/export/netwerk: geweigerde bron blijft als fout zichtbaar."""
 import importlib.util
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
@@ -34,10 +34,14 @@ class ICloudStatus(unittest.TestCase):
             spec.loader.exec_module(self.module)
         self.module.TOKEN = "alleen-fictief-testtoken"
         self.export_orig = self.module.exporteer_naar
+        self.export_jpg_orig = self.module.exporteer_jpg_naar
+        self.hartslag_orig = self.module.hartslag
+        self.module.DROPBOX_LOKAAL = str(Path(self.home.name) / "Dropbox")
         self.statussen, self.afgevinkt = [], []
         self.module.hartslag = lambda status, **kw: self.statussen.append((status, kw))
         self.module.taak_opgepakt = lambda kid: self.afgevinkt.append(kid)
         self.module.exporteer_naar = lambda *a: self.fail("geweigerde bron mag niet worden geëxporteerd")
+        self.module.exporteer_jpg_naar = lambda *a: self.fail("geweigerde bron mag niet worden geëxporteerd")
         self.module.exporteer = lambda *a: self.fail("geweigerde bron mag niet worden geëxporteerd")
         self.module.bord = lambda *a: self.fail("deze fout mag geen inhoud publiceren")
 
@@ -75,7 +79,19 @@ class ICloudStatus(unittest.TestCase):
         self.assertEqual(self.statussen, [])
         self.assertEqual(self.afgevinkt, [])
 
-    def fake_run(self, fotos, inhoud=None, geleverd=None):
+    def inhoud_tkn(self, **changes):
+        project = "/Work/TKN BURO WORK/1 Projects/2026/47035_Barsten & Scheuren_Proeflaan 23, 9998 Proefgem"
+        fotomap = Path(self.module.DROPBOX_LOKAAL) / project.lstrip("/") / "1. Foto's"
+        fotomap.mkdir(parents=True, exist_ok=True)
+        data = {"dossier": "3999", "mapnummer": "47035", "project_ref": "tkn:47035",
+                "bezoek_ref": "verslagopdracht:12", "datum": "2026-10-14",
+                "van_tijd": "2026-10-14T11:00:00+02:00", "tot_tijd": "2026-10-14T12:00:00+02:00",
+                "adres": "Proeflaan 23, 9998 Proefgem", "projectmap": project,
+                "doelmap": project + "/1. Foto's/2026-10-14 iPhone", "lat": 50.0, "lon": 4.0}
+        data.update(changes)
+        return data
+
+    def fake_run(self, fotos, inhoud=None, geleverd=None, echt_jpg=False):
         m = self.module
         logs, exports = [], []
         m.taken_lezen = lambda: [{"id": 12, "inhoud": json.dumps(inhoud or self.inhoud())}]
@@ -86,8 +102,13 @@ class ICloudStatus(unittest.TestCase):
         def export(selected, doel):
             exports.append([f["uuid"] for f in selected])
             Path(doel).mkdir(parents=True, exist_ok=True)
-            return len(selected) if geleverd is None else geleverd
+            n = len(selected) if geleverd is None else geleverd
+            for f in selected[:n]:
+                f["geexporteerd"] = True
+                f["export"] = f["uuid"] + ".jpg"
+            return n
         m.exporteer_naar = export
+        m.exporteer_jpg_naar = self.export_jpg_orig if echt_jpg else export
         m.jpeg_kopieen = lambda doel: 0
         with patch.object(sys, "argv", ["icloud_wacht.py", "--taken"]):
             code = m.main()
@@ -205,6 +226,191 @@ class ICloudStatus(unittest.TestCase):
         self.assertEqual(len(requests), 85)
         self.assertTrue(all(f["geexporteerd"] for f in fotos))
 
+    def test_fotos_van_leest_originele_naam_en_valt_terug_bij_oud_sqlite_schema(self):
+        m = self.module
+        m.DB = str(Path(self.home.name) / "Photos.sqlite")
+        t = datetime.fromisoformat("2026-10-14T11:30:00+02:00").timestamp() - m.APPLE_EPOCH
+        con = sqlite3.connect(m.DB)
+        con.execute("CREATE TABLE ZASSET (Z_PK INTEGER, ZUUID TEXT, ZFILENAME TEXT, ZDATECREATED REAL, ZLATITUDE REAL, ZLONGITUDE REAL, ZKIND INTEGER, ZTRASHEDSTATE INTEGER)")
+        con.execute("CREATE TABLE ZADDITIONALASSETATTRIBUTES (ZASSET INTEGER, ZORIGINALFILENAME TEXT)")
+        con.execute("INSERT INTO ZASSET VALUES (1, 'uuid', 'UUID.HEIC', ?, 50, 4, 0, 0)", (t,))
+        con.execute("INSERT INTO ZADDITIONALASSETATTRIBUTES VALUES (1, 'IMG_0001.HEIC')")
+        con.commit()
+        self.assertEqual(m.fotos_van("2026-10-14")[0]["origineel"], "IMG_0001.HEIC")
+        con.execute("DROP TABLE ZADDITIONALASSETATTRIBUTES")
+        con.commit()
+        con.close()
+        self.assertIsNone(m.fotos_van("2026-10-14")[0]["origineel"])
+
+    def test_tkn_tijd_aliasen_en_alleen_fotos_naar_bestaande_fotomap(self):
+        data = self.inhoud_tkn()
+        fotos = [self.foto("goed"), self.foto("film")]
+        fotos[1]["video"] = True
+        code, exports, _ = self.fake_run(fotos, inhoud=data)
+        self.assertEqual(code, 0)
+        self.assertEqual(exports, [["goed"]])
+        self.assertEqual(self.afgevinkt, [12])
+        doel = Path(self.module.taakdoel(data))
+        self.assertEqual(doel.name, "2026-10-14 iPhone")
+        tekst = (doel / "00 fotos.md").read_text()
+        self.assertIn("verslagopdracht:12", tekst)
+        self.assertIn("van de Agendawacht", tekst)
+
+    def test_tkn_onbeslist_blokkeert_geldige_foto_niet(self):
+        data = self.inhoud_tkn()
+        fotos = [self.foto("goed"), self.foto("zonder_gps", lat=None), self.foto("zonder_tijd", tijd="")]
+        code, exports, logs = self.fake_run(fotos, inhoud=data)
+        self.assertEqual((code, exports), (0, [["goed"]]))
+        self.assertEqual(self.afgevinkt, [12])
+        self.assertIn("2 foto's niet toewijsbaar", (Path(self.module.taakdoel(data)) / "00 fotos.md").read_text())
+        self.assertTrue(any("2 onbeslist" in r.get("tekst", "") for _, payload in logs if "regels" in payload for r in payload["regels"]))
+
+    def test_tkn_identiteit_en_fotomap_worden_gecontroleerd_voor_fotolezing(self):
+        basis = self.inhoud_tkn()
+        fouten = [
+            (dict(mapnummer=None), "projectidentiteit_ontbreekt"),
+            (dict(mapnummer="260010"), "projectidentiteit_ontbreekt"),
+            (dict(bezoek_ref="verslagopdracht:x"), "bronregistratie_ontbreekt"),
+            (dict(projectmap="/Work/TKN BURO WORK/1 Projects/2026/47035_Barsten & Scheuren_Proeflaan 23, 9998 Proefgem/../ander"), "bezoekmap_buiten_project"),
+            (dict(projectmap="/Work/TKN BURO WORK/1 Projects/2026/999999_Ander"), "bezoekmap_buiten_project"),
+            (dict(projectmap="/private/47035_Barsten & Scheuren_Proeflaan 23, 9998 Proefgem"), "bezoekmap_buiten_project"),
+            (dict(doelmap=basis["projectmap"] + "/2. plaud/2026-10-14 iPhone"), "bezoekmap_buiten_project"),
+        ]
+        for changes, fout in fouten:
+            with self.subTest(changes=changes):
+                self.statussen.clear()
+                self.afgevinkt.clear()
+                code, exports, _ = self.fake_run([self.foto("goed")], inhoud={**basis, **changes})
+                self.assertEqual((code, exports, self.afgevinkt, self.lezingen), (1, [], [], []))
+                self.assertIn(fout, self.statussen[-1][1]["detail"])
+        ontbreekt = {**basis, "projectmap": "/Work/TKN BURO WORK/1 Projects/2026/47035_Onbestaand"}
+        code, exports, _ = self.fake_run([self.foto("goed")], inhoud=ontbreekt)
+        self.assertEqual((code, exports), (1, []))
+        self.assertIn("fotomap_ontbreekt", self.statussen[-1][1]["detail"])
+        self.assertFalse(Path(self.module.DROPBOX_LOKAAL, "Work/TKN BURO WORK/1 Projects/2026/47035_Onbestaand").exists())
+
+    def test_tkn_fotomap_symlink_buiten_project_wordt_geweigerd(self):
+        data = self.inhoud_tkn()
+        project = Path(self.module.DROPBOX_LOKAAL) / data["projectmap"].lstrip("/")
+        (project / "1. Foto's").rmdir()
+        buiten = Path(self.home.name) / "buiten-project"
+        buiten.mkdir()
+        (project / "1. Foto's").symlink_to(buiten, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "bezoekmap_buiten_project"):
+            self.module.taakdoel(data)
+
+    def test_tkn_onvolledig_twee_keer_geen_manifest_en_volledig_een_manifest(self):
+        data = self.inhoud_tkn()
+        fotos = [self.foto("eerste"), self.foto("tweede")]
+        doel = Path(self.module.taakdoel(data))
+        for _ in range(2):
+            code, _, _ = self.fake_run(fotos, inhoud=data, geleverd=1)
+            self.assertEqual(code, 1)
+            self.assertFalse((doel / "00 fotos.md").exists())
+        code, _, _ = self.fake_run(fotos, inhoud=data)
+        self.assertEqual(code, 0)
+        origineel = (doel / "00 fotos.md").read_text()
+        code, _, _ = self.fake_run(fotos, inhoud=data)
+        self.assertEqual(code, 0)
+        self.assertEqual((doel / "00 fotos.md").read_text(), origineel)
+        self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 1)
+
+    def test_tkn_schermafbeelding_telt_niet_als_bezoekfoto(self):
+        data = self.inhoud_tkn()
+        fotos = [dict(self.foto("scherm"), origineel="Screenshot 2026-10-14.png"),
+                 dict(self.foto("goed"), origineel="IMG_0001.HEIC")]
+        code, exports, _ = self.fake_run(fotos, inhoud=data)
+        self.assertEqual(code, 0)
+        self.assertEqual(exports, [["goed"]])
+
+    def test_tkn_jpg_bestaand_bestand_blijft_en_heic_wordt_omgezet(self):
+        m = self.module
+        m.exporteer_jpg_naar = self.export_jpg_orig
+        m.LIB = str(Path(self.home.name) / "originelen")
+        doel = Path(self.home.name) / "doel"
+        doel.mkdir()
+        bestaand = doel / "IMG_0001.jpg"
+        bestaand.write_bytes(b"oude, fictieve inhoud")
+        mtime = bestaand.stat().st_mtime_ns
+        fotos = [dict(self.foto("a"), origineel="IMG_0001.HEIC", bestand="a.HEIC"),
+                 dict(self.foto("b"), origineel="IMG_0002.HEIC", bestand="b.HEIC")]
+        bron = Path(m.LIB) / "b" / "b.HEIC"
+        bron.parent.mkdir(parents=True)
+        bron.write_bytes(b"fictieve HEIC")
+        def sips_stub(command, **kw):
+            self.assertEqual(command[:6], ["sips", "-s", "format", "jpeg", "-s", "formatOptions"])
+            Path(command[-1]).write_bytes(b"fictieve JPEG")
+            return SimpleNamespace(returncode=0, stderr="")
+        with patch("subprocess.run", sips_stub):
+            self.assertEqual(m.exporteer_jpg_naar(fotos, str(doel)), 2)
+        self.assertEqual(bestaand.read_bytes(), b"oude, fictieve inhoud")
+        self.assertEqual(bestaand.stat().st_mtime_ns, mtime)
+        self.assertEqual((doel / "IMG_0002.jpg").read_bytes(), b"fictieve JPEG")
+        self.assertFalse(list(doel.glob("*.HEIC")))
+
+    def test_tkn_live_photo_negeert_grotere_mov(self):
+        m = self.module
+        m.exporteer_jpg_naar = self.export_jpg_orig
+        m.LIB = str(Path(self.home.name) / "geen-originelen")
+        doel = Path(self.home.name) / "doel"
+        foto = dict(self.foto("beeld"), origineel="IMG_0003.JPG", bestand="beeld.JPG")
+        def photos_stub(command, **kw):
+            tmp = re.search(r'to POSIX file "([^"]+)"', command[-1]).group(1)
+            (Path(tmp) / "IMG_0003.MOV").write_bytes(b"video" * 1000)
+            (Path(tmp) / "IMG_0003.JPG").write_bytes(b"fictieve foto")
+            return SimpleNamespace(returncode=0, stderr="")
+        with patch("subprocess.run", photos_stub):
+            self.assertEqual(m.exporteer_jpg_naar([foto], str(doel)), 1)
+        self.assertEqual((doel / "IMG_0003.jpg").read_bytes(), b"fictieve foto")
+        self.assertEqual(len(list(doel.iterdir())), 1)
+
+    def test_tkn_twee_originelen_met_dezelfde_naam_worden_niet_stil_afgevinkt(self):
+        m = self.module
+        m.exporteer_jpg_naar = self.export_jpg_orig
+        m.LIB = str(Path(self.home.name) / "originelen")
+        for uid in ("a", "b"):
+            bron = Path(m.LIB) / uid / (uid + ".JPG")
+            bron.parent.mkdir(parents=True)
+            bron.write_bytes(uid.encode())
+        fotos = [dict(self.foto(uid), origineel="IMG_0010.JPG", bestand=uid + ".JPG") for uid in ("a", "b")]
+        doel = Path(self.home.name) / "doel"
+        self.assertEqual(m.exporteer_jpg_naar(fotos, str(doel)), 1)
+        self.assertEqual((doel / "IMG_0010.jpg").read_bytes(), b"a")
+        self.assertEqual(fotos[1]["export_fout"], "bestandsnaam_dubbel")
+
+    def test_tkn_sips_fout_houdt_taak_open_en_schrijft_geen_manifest(self):
+        m = self.module
+        m.LIB = str(Path(self.home.name) / "originelen")
+        bron = Path(m.LIB) / "h" / "heic.HEIC"
+        bron.parent.mkdir(parents=True)
+        bron.write_bytes(b"fictieve HEIC")
+        data = self.inhoud_tkn()
+        foto = dict(self.foto("heic"), origineel="IMG_0004.HEIC", bestand="heic.HEIC")
+        with patch("subprocess.run", return_value=SimpleNamespace(returncode=1, stderr="mislukt")):
+            code, exports, _ = self.fake_run([foto], inhoud=data, echt_jpg=True)
+        doel = Path(self.module.taakdoel(data))
+        self.assertEqual(code, 1)
+        self.assertEqual(exports, [])
+        self.assertEqual(self.afgevinkt, [])
+        self.assertIn("omzetting_mislukt", self.statussen[-1][1]["detail"])
+        self.assertFalse((doel / "00 fotos.md").exists())
+        self.assertFalse((doel / "IMG_0004.jpg").exists())
+
+    def test_hartslag_vermeldt_versie_of_onbekend(self):
+        m = self.module
+        m.hartslag = self.hartslag_orig
+        meldingen = []
+        m.bord = lambda path, data: meldingen.append(data)
+        m.__file__ = str(Path(self.home.name) / "icloud_wacht.py")
+        m.hartslag("klaar", detail="proef")
+        self.assertIn("VERSIE onbekend", meldingen[-1]["detail"])
+        Path(self.home.name, "VERSIE").write_text("abc123\n")
+        m.hartslag("klaar", detail="proef")
+        self.assertIn("VERSIE abc123", meldingen[-1]["detail"])
+
 
 if __name__ == "__main__":
-    unittest.main()
+    uitslag = unittest.main(exit=False).result
+    if not uitslag.wasSuccessful():
+        raise SystemExit(1)
+    print("alles geslaagd")

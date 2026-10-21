@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key><string>be.globaal.icloudwacht</string>
+    <key>CFBundleName</key><string>iCloudWacht</string>
+    <key>CFBundleExecutable</key><string>icloudwacht</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>LSUIElement</key><true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>iCloudWacht exporteert plaatsbezoekfoto's uit Foto's naar de projectmap.</string>
+</dict>
+</plist>
