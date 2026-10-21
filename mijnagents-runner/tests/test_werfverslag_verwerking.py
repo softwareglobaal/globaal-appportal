@@ -250,8 +250,34 @@ def test_directe_proef_bewaart_gegevens_en_bijlagen_op_bezoekpagina(runtime, mon
     p.bronnen.upload = lambda pad, data: pad
     p.proef(Agent(), "9999", 1)
     opgeslagen = [w[1]["rijen"][0] for w in runtime.writes if w[1]["rijen"][0].get("proef_pad")]
-    assert opgeslagen and opgeslagen[0]["gegevens"]["gegevens"][0]["waarde"] == "Proef BV"
+    assert opgeslagen and opgeslagen[0]["gegevens"]["gegevens"] == []  # eigen-modus vraagt geen klantgegevens
     assert opgeslagen[0]["bijlagen"][0]["naam"] == "transcript.txt"
+
+
+def test_afgekapt_proefantwoord_krijgt_een_kleinere_geregistreerde_herhaling(runtime, monkeypatch):
+    p = runtime.p
+    p.lees_bezoekmap = lambda *args, **kwargs: ([{"naam": "transcript.txt", "pad": "/proef/bezoek/transcript.txt",
+                                                 "tekst": "plaud_id: of_ffffffffffffffffffffffffffffffff\nEigen vaststelling."}], [], [])
+    pogingen = []
+
+    def vraag(*args, **kwargs):
+        pogingen.append(kwargs["max_tokens"])
+        if len(pogingen) == 1:
+            antwoord = SimpleNamespace(stop_reason="max_tokens", usage=SimpleNamespace(input_tokens=50, output_tokens=8000))
+            raise p.ModelAntwoordFout("afgekapt", antwoord)
+        return {"status_nl": "Ter plaatse", "status_en": "", "aanwezigen": [], "categorieen": [],
+                "raming": [], "acties": [], "volgend": "", "akkoord": []}, SimpleNamespace(input_tokens=25, output_tokens=100)
+
+    p.vraag_verslag = vraag
+    monkeypatch.setattr(p.sjab, "naar_markdown", lambda *args: "# Concept")
+    monkeypatch.setattr(p.sjab, "naar_docx", lambda *args: b"word")
+    monkeypatch.setattr(p.sjab, "telling_open", lambda *args: {})
+    p.bronnen.upload = lambda pad, data: pad
+    p.proef(Agent(), "9999", 1)
+    assert pogingen == [8000, 4000]
+    assert runtime.calls == ["bron-feiten", "proef"]
+    info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert info["tokens"]["proef_pogingen"] == [{"in": 50, "uit": 8000}, {"in": 25, "uit": 100}]
 
 
 def test_werfappfout_laat_de_proef_staan_en_noemt_de_reden(runtime, monkeypatch):

@@ -204,6 +204,9 @@
 {% endif %}
 <div class="melding"><strong>Word-concept:</strong> <code>{{ b.proef_pad }}</code><br>
   <span class="stil">Gemaakt op {{ b.proef_ts }}{% if b.proef_info %} · {{ b.proef_info.verslagtype }} · {{ b.proef_info.punten }} punten · {{ b.proef_info.fotos }} foto's · {{ b.proef_info.docx_kb }} kB{% if b.proef_info.open %} · nog {{ b.proef_info.open.in_te_vullen }} in te vullen, {{ b.proef_info.open.na_te_kijken }} na te kijken, {{ b.proef_info.open.raming_open }} ramingen{% endif %}{% endif %}. Dezelfde tekst staat ernaast als .md. Jij legt er je laag overheen en verstuurt; de agents versturen nooit.</span></div>
+{% if (b.proef_info or {}).get('fotos_niet_geplaatst') %}<div class="melding"><strong>Foto's niet geplaatst ({{ b.proef_info.fotos_niet_geplaatst|length }}):</strong><ul>{% for f in b.proef_info.fotos_niet_geplaatst %}<li>{{ f.naam }}: {{ f.reden }}</li>{% endfor %}</ul></div>{% endif %}
+{% if (b.proef_info or {}).get('zonder_bron') %}<div class="melding"><strong>Punten zonder bron ({{ b.proef_info.zonder_bron|length }}):</strong> {{ b.proef_info.zonder_bron|join(', ') }}</div>{% endif %}
+{% if (b.proef_info or {}).get('naslagmeldingen') %}<div class="melding"><strong>Naslag na te kijken:</strong><ul>{% for m in b.proef_info.naslagmeldingen %}<li>{{ m }}</li>{% endfor %}</ul></div>{% endif %}
 <div class="verslag">{{ verslag_html|safe }}</div>
 {% else %}
 <p class="stil">Nog geen concept. Klik <em>Maak concept</em> (pas eventueel eerst je keuzes aan): Werfverslag schrijver zet het verslag als concept in de werfapp, waar je naleest en zelf verstuurt, en de Word-versie in de bezoekmap.</p>

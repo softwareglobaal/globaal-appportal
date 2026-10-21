@@ -4,7 +4,7 @@
 
 Ik maak op Mehdi's uitdrukkelijke knop of een commandline-opdracht met zijn vastgelegde reden een voorbereiding of proef uit de bronnen in de bezoekmap. Ik mag het concept in de werfapp klaarzetten, maar geen verzending, handtekening, stille betaalde start of onbewezen aanwezigheid veroorzaken.
 
-Versie 4 (17-10-2026: directe proef, commandline-mandaat en één werfapp-identiteit; v3 16-10-2026). Ik schrijf werfverslagen. Ik werk alleen op een opdracht van Mehdi via de bezoekpagina (Proef maken of Voorbereiden), of via `--op-vraag-van-mehdi "reden"`; de voorbereider geeft sinds 14-09-2026 niets meer automatisch door (tokens zijn Mehdi's knop).
+Versie 5 (21-10-2026: bronpoort, foto- en naslagcontrole, tokenmeting; v4 17-10-2026). Ik schrijf werfverslagen. Ik werk alleen op een opdracht van Mehdi via de bezoekpagina (Proef maken of Voorbereiden), of via `--op-vraag-van-mehdi "reden"`; de voorbereider geeft sinds 14-09-2026 niets meer automatisch door (tokens zijn Mehdi's knop).
 Ik verstuur nooit, ik overschrijf nooit, en ik verzin niets (regel E8).
 
 ## Bron van waarheid en norm
@@ -71,9 +71,38 @@ verandert het sjabloon, dan verandert eerst dit hoofdstuk, dan de code.
   `<dossier>-<bezoeknummer>`, de punten `3.1, 3.2` voor werfbezoek 3. Het volgnummer van de rij (het getal
   in de knop en in `/werfverslag/<dossier>/<rij>`) telt alle bezoeken door en komt nooit in het verslag.
 
+## Bronpoort en foto's (21-10-2026)
+
+In eigen-modus vraag ik geen klantvelden zoals bouwheer, facturen, gemelde gebreken of juridische
+stand. `transcript.txt` telt alleen met een Plaud-id of de skill-kop in de eerste regels; anders
+staat er `herkomst onbekend`. Elk niet-vast punt krijgt een bestandsnaam uit de bezoekmap, bij
+transcript met tijdstip. Zonder toetsbare bron markeer ik het punt `(bron ontbreekt, na te kijken)`
+en tel ik het op de bezoekpagina. De vaste kantoorpunten 1.1 tot 1.11 dragen `Herkomst: vast punt
+kantoor`; zij zijn geen bezoekvaststellingen. Een jpg-kopie vervangt HEIC ook in `fotos icloud
+mehdi`. Download-, formaat-, limiet- en Word-plaatsingsfouten blijven per bestandsnaam en reden
+in de proef, het werkverslag en op de bezoekpagina staan.
+
 ## Naslag (Buildwise)
 
-Bij Voorbereiden en Proef maken zoek ik op de vaststellingen per bouwonderdeel in het lokale Buildwise-register. Ik neem alleen korte fragmenten met paginanummer mee in het proefverzoek; de limiet is 9000 tekens. Een passend verslagpunt mag één korte regel `Naslag: TV-nummer, uitgever, jaar, pagina: parafrase` krijgen. Ik kopieer geen alinea's en stuur geen pdf door. Bij een TV van voor 2010 meld ik dat een opvolger na te kijken is. Mehdi zet dit per bezoek uit met een afzonderlijke regel `Naslag: nee` bij Keuzes > Opmerking; `keuzes.naslag = "nee"` werkt ook. Standaard is `ja`. De bediening en bronopbouw staan in `docs/Werfverslagen - naslag Buildwise v1.0.md`.
+Bij Voorbereiden en Proef maken zoek ik alleen bij een vaststelling met bron in het lokale register.
+Ik neem korte fragmenten met paginanummer mee; normaal maximaal 9000 tekens. Naslag gaat apart
+van de fotolijst naar het model. Elk verslagpunt mag maximaal 240 tekens naslag krijgen, beginnend
+met een geldige registersleutel. Na de modelaanroep vervang ik een zin die meer dan twaalf woorden
+letterlijk uit een meegegeven fragment overneemt door `(zie naslag)`. Buildwise- en NBN-fragmenten
+dragen `citeren, niet kopiëren`; een pdf-naam komt niet in het verslag. Bij registerstatus
+`verouderd` komt `(opvolger na te kijken)` erbij. Meldingen staan op de bezoekpagina. Mehdi zet
+naslag uit met `Naslag: nee` bij Keuzes > Opmerking; `keuzes.naslag = "nee"` werkt ook. Standaard
+is `ja`.
+
+## Tokens (21-10-2026)
+
+De proef stuurt alleen verslagfeiten, één fotolijst en een afzonderlijk naslagblok. De echte
+input- en outputtokens van de voorbereiding en elke proefpoging staan in `proef_info.tokens`.
+Een antwoord dat door `max_tokens` stopt, krijgt één geregistreerde herhaling met hoogstens
+de helft van de onderdelen en maximaal 4000 uitvoertokens. Het optionele harde bezoekbudget
+staat standaard **uit**. Zet `WERF_TOKENBUDGET=ja` in de omgevingsinstelling van de runner
+om vóór betaalde stappen de grens 25.000 invoertokens, 8.000 uitvoertokens, 3 naslagbronnen
+en 3.000 naslagtekens te bewaken.
 
 ## Wat ik nooit doe
 

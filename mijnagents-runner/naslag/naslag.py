@@ -148,6 +148,10 @@ def naslag_voor_punten(onderdelen, max_bronnen=6, max_tekens=9000):
             if bron["sleutel"] in gekozen or len(gekozen) >= max_bronnen or aantal >= 2:
                 continue
             kop = f"\n\n{omschrijving}\n{bron['sleutel']}: {bron['titel']} ({bron['uitgever']} {bron['jaar'] or 'jaar onbekend'}; {bron['status']})"
+            if str(bron.get("licentie", "")).lower() in ("buildwise", "nbn"):
+                kop += "\nciteren, niet kopiëren"
+            if bron.get("status") == "verouderd":
+                kop += "\n(opvolger na te kijken)"
             ruimte = max_tekens - len(uit) - len(kop)
             if ruimte <= 0:
                 return uit[:max_tekens]

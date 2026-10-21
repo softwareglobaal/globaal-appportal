@@ -53,7 +53,7 @@ import werfapp  # noqa: E402
 import werfnamen  # noqa: E402
 import sjabloon_werfverslag as sjab  # noqa: E402
 import sjabloon_oplevering as pv  # noqa: E402
-from naslag.naslag import naslag_voor_punten  # noqa: E402
+from naslag.naslag import naslag_voor_punten, register as naslag_register  # noqa: E402
 
 OPDRACHT = contextvars.ContextVar("werfverslag_opdracht", default=None)
 
@@ -136,7 +136,7 @@ eigen_tekst = werfnamen.eigen_tekst
 # Niet: "4. foto's" (projectstructuur), foto's in de wortel (herkomst onbekend), "foto niet gebruiken", of een "fotos"-map
 # dieper in een submap van derden (CX4-3, CX4-8).
 OPNAME_EXT = (".mp3", ".m4a", ".wav", ".mp4", ".mov")   # zoals de voorbereider (werfverslag_voorbereider.OPNAME_EXT)
-EIGEN_FOTOMAP = re.compile(r"^fotos(\s.*\bmehdi\b.*)?$", re.I)
+EIGEN_FOTOMAP = re.compile(r"^fotos(?:[\s_-].*?mehdi(?:[\s_-]|$).*)?$", re.I)
 
 
 def eigen_bestand(bezoekmap, pad, naam):
@@ -182,7 +182,12 @@ def lees_bezoekmap(bezoekmap, alleen_eigen=False):
     (bouwheer, aannemer) blijven buiten beschouwing, ook als ze in de map staan."""
     items = bronnen.lijst(bezoekmap) or []
     teksten, fotos, opnames = [], [], []
-    namen = {(e.get("name") or "").lower() for e in items}
+    jpg_eigen = set()
+    for e in items:
+        ouder = os.path.dirname((e.get("path_display") or "").lower())
+        naam = (e.get("name") or "").lower()
+        if EIGEN_FOTOMAP.match(os.path.basename(ouder).strip()) and naam.endswith((".jpg", ".jpeg")):
+            jpg_eigen.add(naam)
     for e in sorted(items, key=lambda x: x.get("path_display", "")):
         if e.get(".tag") != "file":
             continue
@@ -190,10 +195,10 @@ def lees_bezoekmap(bezoekmap, alleen_eigen=False):
         laag = naam.lower()
         if laag.startswith(".") or "(concept)" in laag:
             continue
-        in_fotos = "/fotos/" in pad.lower()
+        in_fotos = bool(EIGEN_FOTOMAP.match(os.path.basename(os.path.dirname(pad)).strip()))
         if alleen_eigen and not eigen_bestand(bezoekmap, pad, naam):
             continue
-        if in_fotos and laag.endswith(".heic") and (laag[:-5] + ".jpg") in namen:
+        if in_fotos and laag.endswith(".heic") and any((laag[:-5] + ext) in jpg_eigen for ext in (".jpg", ".jpeg")):
             continue  # de jpeg-kopie telt, niet het HEIC-origineel
         try:
             if laag.endswith((".jpg", ".jpeg", ".heic", ".png")):
@@ -214,6 +219,9 @@ def lees_bezoekmap(bezoekmap, alleen_eigen=False):
                     tekst = pdf_tekst(data)
                 else:
                     tekst = data.decode("utf8", "strict")
+                if laag == "transcript.txt" and not werfnamen.vertrouwde_transcriptkop(tekst):
+                    teksten.append({"naam": naam, "pad": pad, "tekst": "", "leesfout": "herkomst onbekend"})
+                    continue
                 teksten.append({"naam": naam, "pad": pad, "file_id": e.get("id", ""), "bytes": len(data), "tekst": tekst, "sha256": extractie.sha256(data),
                                 "rev": e.get("rev", ""), "pptx": laag.endswith(".pptx")})
             elif laag.endswith((".doc", ".xls", ".xlsx", ".odt", ".rtf")):
@@ -280,6 +288,7 @@ GEGEVENS_SCHEMA = {
 VELDEN = ["bouwheer", "adres werf", "aannemer", "datum werfbezoek", "aanwezigen", "opdrachtgever van het verslag",
           "doel van het verslag", "contract H-Architects (opdracht)", "gebreken gemeld door de bouwheer",
           "schade en meerkosten gemeld door de bouwheer", "openstaande facturen", "juridische stand"]
+VELDEN_EIGEN = ["adres werf", "datum werfbezoek", "aanwezigen", "doel van het verslag"]
 
 SYSTEEM_VOORBEREID = """Je bent de voorbereider van werfverslagen van H-Architects (België). Je leest de bronnen van één
 werfbezoek en haalt er de gegevens uit. Regel E8 van het kantoor: je verzint niets. Wat niet in de bronnen staat,
@@ -312,9 +321,10 @@ VERSLAG_SCHEMA = {
                     "tekst_nl": {"type": "string"},
                     "tekst_en": {"type": "string", "description": "leeg als geen Engels gevraagd"},
                     "verantwoordelijke": {"type": "string"},
+                    "bron": {"type": "string", "description": "exacte bestandsnaam uit de bezoekmap; bij transcript ook tijdstip"},
                     "naslag": {"type": "string", "description": "optionele korte bronverwijzing met TV-nummer, uitgever, jaar en pagina"},
                     "fotos": {"type": "array", "items": {"type": "string"}, "description": "bijschriften: 'dia 14' voor een pptx-dia, of een bestandsnaam uit de bezoekmap"},
-                }, "required": ["titel", "datum", "vlag", "tekst_nl", "tekst_en", "verantwoordelijke", "fotos"]}},
+                }, "required": ["titel", "datum", "vlag", "tekst_nl", "tekst_en", "verantwoordelijke", "bron", "fotos"]}},
             }, "required": ["naam", "punten"]}},
             "raming": {"type": "array", "description": "alleen bij een vaststellingsverslag; bedragen alleen uit de bronnen", "items": {"type": "object", "properties": {
                 "onderdeel": {"type": "string"}, "herstelling": {"type": "string"}, "raming": {"type": "string"}},
@@ -339,6 +349,8 @@ Regels:
   ze in de bronnen staan; anders "(raming door de architect in te vullen)".
 - Elke waarneming is één concreet punt met een korte titel, de datum waarop het werd vastgesteld en, waar de bron dat
   toelaat, de foto's ("dia 14" voor een dia uit een pptx, of de bestandsnaam van een foto in de bezoekmap).
+- Elk niet-vast punt krijgt bron: een bestandsnaam uit de bezoekmap of een foto-bestandsnaam. Bij transcript.txt
+  vermeld je ook het tijdstip in de opname. Vaste kantoorpunten krijgen als herkomst 'vast punt kantoor'.
 - Geen juridische conclusies (wie aansprakelijk is): beschrijf vaststellingen; verwijs voor de rest naar de raadsman.
 - Bij een vaststellingsverslag (schade, geschil) komt er een tabel raming van de herstelkosten per onderdeel.
 - Bij een werfverslag voor lopende werken komen de doorlopende punten (omgevingsloket, werfbezoeken, orde en netheid,
@@ -390,17 +402,21 @@ def _tool(resp, schema=None):
     return uit
 
 
-def vraag_gegevens(kop, bundel, max_tokens=3000):
-    resp = _client().messages.create(model=MODEL, max_tokens=max_tokens, system=SYSTEEM_VOORBEREID,
+def vraag_gegevens(kop, bundel, max_tokens=3000, eigen=False):
+    systeem = SYSTEEM_VOORBEREID
+    if eigen:
+        systeem = systeem.split("Vul minstens deze velden in:")[0] + "Vul uitsluitend deze velden in: " + ", ".join(VELDEN_EIGEN)
+        systeem += "\nVraag geen klantgegevens, facturen, juridische stand of gebreken gemeld door de bouwheer."
+    resp = _client().messages.create(model=MODEL, max_tokens=max_tokens, system=systeem,
                                      messages=[{"role": "user", "content": kop + "\n\n" + bundel}],
                                      tools=[GEGEVENS_SCHEMA], tool_choice={"type": "tool", "name": "gegevens"})
     return _tool(resp, GEGEVENS_SCHEMA), _provider_usage(resp)
 
 
-def vraag_verslag(kop, gegevens, keuzes, bundel="", max_tokens=8000):
+def vraag_verslag(kop, gegevens, keuzes, bundel="", max_tokens=8000, naslag=""):
     user = (kop + "\n\n## KEUZES VAN MEHDI\n" + json.dumps(keuzes, ensure_ascii=False, indent=1)
             + "\n\n## GEGEVENS (uit de voorbereiding, met bron en zekerheid)\n" + json.dumps(gegevens, ensure_ascii=False, indent=1)
-            + "\n\n## BRONNEN\n" + bundel)
+            + "\n\n## EIGEN FOTO'S\n" + bundel + "\n\n## NASLAG (alleen toelichting)\n" + naslag)
     resp = _client().messages.create(model=MODEL, max_tokens=max_tokens, system=SYSTEEM_PROEF,
                                      messages=[{"role": "user", "content": user}],
                                      tools=[VERSLAG_SCHEMA], tool_choice={"type": "tool", "name": "werfverslag"})
@@ -414,6 +430,15 @@ def _zonder_verwerking(value):
     if isinstance(value, list):
         return [_zonder_verwerking(v) for v in value]
     return value
+
+
+def _budget_aan():
+    return os.environ.get("WERF_TOKENBUDGET", "").strip().lower() in ("1", "ja", "true", "aan")
+
+
+def _tokens(usage):
+    return {"in": sum(getattr(usage, k, 0) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")),
+            "uit": getattr(usage, "output_tokens", 0) or 0}
 
 
 def _claim_invoer(rij, soort):
@@ -489,9 +514,11 @@ def _voorbereid_bronnen(ag, dossier, volgnr, rij, teksten, fotos, opnames):
                    "Verwijs bij iedere vaststelling en actie naar bestandsnaam en pagina/alinea of segment. "
                    "Beweer geen inhoudelijke beeldanalyse: fotopixels worden niet aan je gegeven.")
             inp = {"kop": kop, "segment": segment}
+            if _budget_aan() and (tokens_in + len(json.dumps(inp, ensure_ascii=False).encode("utf8")) + 6000 > 25000 or tokens_uit + 3000 > 8000):
+                raise extractie.BronLeesFout("WERF_TOKENBUDGET: grens 25.000 in / 8.000 uit vóór volgende bron bereikt")
             uit, usage = register.verwerk(rij, dossier, volgnr, "bron-feiten", inp, MODEL, "bron-feiten-1", "gegevens-1", "nl",
                                           beleid, bronmanifest,
-                                          lambda kop=kop, segment=segment: vraag_gegevens(kop, segment["tekst"], max_tokens=3000), 3000)
+                                          lambda kop=kop, segment=segment: vraag_gegevens(kop, segment["tekst"], max_tokens=3000, eigen=beleid == "eigen"), 3000)
             extractie.valideer(uit, GEGEVENS_SCHEMA["input_schema"])
             # Een modelbronverwijzing aanvullen met exacte segmentherkomst, nooit verliezen bij de merge.
             for g in uit["gegevens"]:
@@ -499,6 +526,10 @@ def _voorbereid_bronnen(ag, dossier, volgnr, rij, teksten, fotos, opnames):
                     g["bron"] = f"{bron['naam']} [segment {segment['segment']}, tekens {segment['van']}:{segment['tot']}]: {g['bron']}"
             for a in uit["acties"]:
                 a["bron"] = f"{bron['naam']} [segment {segment['segment']}, tekens {segment['van']}:{segment['tot']}]"
+            for onderdeel in uit["onderdelen"]:
+                onderdeel["bron"] = f"{bron['naam']} [segment {segment['segment']}, tekens {segment['van']}:{segment['tot']}]"
+            if beleid == "eigen":
+                uit["gegevens"] = [g for g in uit["gegevens"] if g.get("veld", "").strip().lower() in VELDEN_EIGEN]
             resultaten.append(uit)
             gelezen = getattr(usage, "cache_read_input_tokens", 0) or 0
             geschreven = getattr(usage, "cache_creation_input_tokens", 0) or 0
@@ -534,7 +565,84 @@ def _naslagblok(rij, gegevens):
     opmerking_nee = re.search(r"(?im)^\s*naslag\s*:\s*nee\s*$", str(keuzes.get("opmerking") or ""))
     if str(keuzes.get("naslag") or "ja").strip().lower() == "nee" or (not keuzes.get("naslag") and opmerking_nee):
         return ""
-    return naslag_voor_punten(gegevens.get("onderdelen") or [])
+    onderdelen = [o for o in (gegevens.get("onderdelen") or []) if isinstance(o, dict) and
+                  any(v.strip() for v in o.get("vaststellingen", []) if isinstance(v, str)) and
+                  o.get("bron") and o["bron"] != "niet gevonden"]
+    begrensd = _budget_aan()
+    return naslag_voor_punten(onderdelen, max_bronnen=3, max_tekens=3000) if begrensd else naslag_voor_punten(onderdelen)
+
+
+def _bronpoort(verslag, teksten, fotos):
+    """Alle modelpunten krijgen een toetsbare eigen bestandsnaam; kantoorpunten zijn geen vaststelling."""
+    toegelaten = {x["naam"].lower(): x["naam"] for x in teksten if x.get("tekst") and not x.get("leesfout")}
+    toegelaten.update({x["naam"].lower(): x["naam"] for x in fotos})
+    zonder = []
+    for cat in verslag.get("categorieen", []):
+        for punt in cat.get("punten", []):
+            if punt.get("doorlopend"):
+                punt["bron"] = "vast punt kantoor"
+                continue
+            bron = str(punt.get("bron") or "").strip()
+            fotos_van_punt = [f for f in punt.get("fotos", []) if str(f).lower() in toegelaten]
+            if not bron and fotos_van_punt:
+                bron = fotos_van_punt[0]
+            match = next((naam for laag, naam in toegelaten.items() if laag in bron.lower()), None)
+            if not match or (match.lower().startswith("transcript") and not re.search(r"\b(?:\d{1,2}:\d{2}|\d+m\d+s)\b", bron)):
+                punt["tekst_nl"] = punt.get("tekst_nl", "").rstrip() + " (bron ontbreekt, na te kijken)"
+                punt["bron"] = ""
+                zonder.append(punt.get("titel") or "punt zonder titel")
+                punt.pop("naslag", None)
+            else:
+                punt["bron"] = bron
+    return zonder
+
+
+def _naslagcontrole(verslag, naslagblok):
+    """Beperk verwijzingen en vervang letterlijk gekopieerde zinnen uit de meegegeven fragmenten."""
+    meldingen = []
+    regels = {r["sleutel"].upper(): r for r in naslag_register()} if naslagblok else {}
+    fragmenten = re.findall(r"(?m)^\[p\. \d+\]\s*(.*)$", naslagblok)
+    tokens = [re.findall(r"\w+", f.lower()) for f in fragmenten]
+    reeksen = {tuple(t[i:i + 13]) for t in tokens for i in range(max(0, len(t) - 12))}
+    for cat in verslag.get("categorieen", []):
+        for punt in cat.get("punten", []):
+            naam = punt.get("titel") or "punt"
+            naslag = str(punt.get("naslag") or "").strip()
+            if naslag:
+                sleutel = re.match(r"^([A-Za-z][A-Za-z0-9.\-]*)\b", naslag)
+                record = regels.get(sleutel.group(1).upper()) if sleutel else None
+                if punt.get("doorlopend") or not punt.get("bron") or not record or sleutel.group(1).upper() not in naslagblok.upper():
+                    punt["naslag"] = ""
+                    meldingen.append(f"{naam}: naslag zonder geldige eigen vaststelling of registersleutel verwijderd")
+                else:
+                    naslag = re.sub(r"\S+\.pdf\b", "", naslag, flags=re.I)
+                    suffix = " (opvolger na te kijken)" if record.get("status") == "verouderd" and "opvolger na te kijken" not in naslag else ""
+                    if len(naslag) + len(suffix) > 240:
+                        naslag = naslag[:240 - len(suffix)].rstrip()
+                        meldingen.append(f"{naam}: naslag ingekort tot 240 tekens")
+                    punt["naslag"] = naslag + suffix
+            zinnen = re.split(r"(?<=[.!?])\s+", punt.get("tekst_nl") or "")
+            aangepast = []
+            for zin in zinnen:
+                woorden = re.findall(r"\w+", zin.lower())
+                if any(tuple(woorden[i:i + 13]) in reeksen for i in range(max(0, len(woorden) - 12))):
+                    aangepast.append("(zie naslag)")
+                    meldingen.append(f"{naam}: letterlijke naslagtekst vervangen")
+                else:
+                    aangepast.append(zin)
+            punt["tekst_nl"] = " ".join(aangepast)
+    pdf_namen = [r.get("bestand") for r in regels.values() if r.get("bestand")]
+    def zonder_pdfnamen(waarde):
+        if isinstance(waarde, dict):
+            return {k: (v if k in ("bron", "fotos") else zonder_pdfnamen(v)) for k, v in waarde.items()}
+        if isinstance(waarde, list):
+            return [zonder_pdfnamen(v) for v in waarde]
+        if isinstance(waarde, str):
+            for bestand in pdf_namen:
+                waarde = re.sub(re.escape(bestand), "(zie naslag)", waarde, flags=re.I)
+        return waarde
+    verslag.update(zonder_pdfnamen(verslag))
+    return meldingen
 
 
 def voorbereid(ag, dossier, volgnr):
@@ -560,17 +668,19 @@ def _fotos_verzamelen(teksten, fotos, verslag):
     gevraagd = []
     for cat in verslag.get("categorieen", []):
         for p in cat.get("punten", []):
-            gevraagd += p.get("fotos", [])
-    gevraagd = list(dict.fromkeys(gevraagd))[:MAX_FOTOS]
-    uit = {}
+            gevraagd += [re.sub(r"^dia\s*(\d+)$", r"dia \1", str(b).strip(), flags=re.I) for b in p.get("fotos", [])]
+    alle_gevraagd = list(dict.fromkeys(gevraagd))
+    gevraagd = alle_gevraagd[:MAX_FOTOS]
+    uit, fouten = {}, [{"naam": b, "reden": f"boven fotolimiet ({MAX_FOTOS})"} for b in alle_gevraagd[MAX_FOTOS:]]
     dias = sorted({int(m.group(1)) for b in gevraagd for m in [re.match(r"dia\s*(\d+)", b, re.I)] if m})
+    dia_fouten = {}
     if dias:
         for t in teksten:
             if t.get("pptx"):
                 try:
                     uit.update(pptx_fotos(bronnen.download(t["pad"]), dias))
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as ex:  # noqa: BLE001
+                    dia_fouten.update({f"dia {n}": f"dia-download uit {t['naam']}: {type(ex).__name__}" for n in dias})
     per_naam = {f["naam"]: f for f in fotos}
     per_naam.update({os.path.basename(f["pad"]): f for f in fotos})
     for b in gevraagd:
@@ -578,12 +688,19 @@ def _fotos_verzamelen(teksten, fotos, verslag):
         if f and f["naam"].lower().endswith((".jpg", ".jpeg", ".png")) and f["grootte"] <= MAX_FOTO_BYTES:
             try:
                 uit[b] = bronnen.download(f["pad"])
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as ex:  # noqa: BLE001
+                fouten.append({"naam": b, "reden": f"download: {type(ex).__name__}"})
+        elif b not in uit:
+            reden = (dia_fouten.get(b) or ("niet in bezoekmap" if not f else
+                     "HEIC niet plaatsbaar; jpg-kopie ontbreekt" if f["naam"].lower().endswith(".heic") else
+                     f"foto groter dan {MAX_FOTO_BYTES // 1_000_000} MB" if f["grootte"] > MAX_FOTO_BYTES else
+                     "formaat niet plaatsbaar"))
+            fouten.append({"naam": b, "reden": reden})
     # bijschriften normaliseren: 'Dia 14' -> 'dia 14'
     for cat in verslag.get("categorieen", []):
         for p in cat.get("punten", []):
             p["fotos"] = [re.sub(r"^dia\s*(\d+)$", r"dia \1", b.strip(), flags=re.I) for b in p.get("fotos", [])]
+    verslag["fotos_niet_geplaatst"] = fouten
     return uit
 
 
@@ -652,20 +769,48 @@ def proef(ag, dossier, volgnr):
     kop = (f"Dossier {dossier}, {rij.get('adres','')}. {soort_bezoek.capitalize()} {nr_label} op {rij['datum']}; verslagnummer {dossier}-{nr_label}"
            + (" (plaatsbezoek vóór de werfstart: geen werfverslagnummer, titel 'Verslag plaatsbezoek')" if soort_bezoek == "plaatsbezoek" else "") + ". "
            f"Verslagtype: {verslagtype}. Taal: {'Nederlands en Engels' if taal == 'nl+en' else 'alleen Nederlands (tekst_en en status_en leeg laten)'}. "
-           f"Datum van opmaak: {vandaag}. Foto's in de map: {', '.join(f['naam'] for f in fotos) or 'geen'}; opnames: {', '.join(opnames) or 'geen'}.")
+           f"Datum van opmaak: {vandaag}. Opnames: {', '.join(opnames) or 'geen'}.")
     if eigen:
         kop += EIGEN_REGEL
     ag.log(f"{dossier}-{volgnr}", "besluit", f"proef van {soort_bezoek} {nr_label} (rij {volgnr}) als {verslagtype}, taal {taal}, "
            f"keuzes: {', '.join(k for k in keuzes if keuzes[k]) or 'geen'}")
-    feiten = {k: v for k, v in gegevens.items() if k not in ("_verwerking", "naslag")}
+    feiten = {k: gegevens[k] for k in ("gegevens", "situatie", "onderdelen", "acties", "ontbreekt", "verslagtype_voorstel") if k in gegevens}
     hoofdkeuzes = {k: v for k, v in keuzes.items() if k not in ("door", "ts")}
-    proef_bundel = fotolijst(fotos) + ("\n\n" + gegevens["naslag"] if gegevens["naslag"] else "")
-    inp = {"kop": kop, "gegevens": feiten, "keuzes": hoofdkeuzes, "fotolijst": proef_bundel}
+    proef_bundel = fotolijst(fotos)
+    naslagblok = gegevens["naslag"]
+    inp = {"kop": kop, "gegevens": feiten, "keuzes": hoofdkeuzes, "fotolijst": proef_bundel, "naslag": naslagblok}
     if OPDRACHT.get():
         _rij(dossier, volgnr)
-    uit, usage = register.verwerk(rij, dossier, volgnr, "proef", inp, MODEL, "werfproef-feiten-1", "werfverslag-1", taal,
-                                  bronkeuze(rij), extractie.manifest(teksten, fotos, opnames),
-                                  lambda: vraag_verslag(kop, feiten, hoofdkeuzes, proef_bundel, max_tokens=8000), 8000)
+    voorbereide_tokens = (gegevens.get("_verwerking") or {})
+    uitvoer_ruimte = 8000 - (voorbereide_tokens.get("tokens_uit") or 0) if _budget_aan() else 8000
+    eerste_plafond = min(4000, uitvoer_ruimte) if _budget_aan() else 8000
+    if eerste_plafond <= 0 or (_budget_aan() and (voorbereide_tokens.get("tokens_in") or 0) + len(json.dumps(inp, ensure_ascii=False).encode("utf8")) + 6000 > 25000):
+        raise extractie.BronLeesFout("WERF_TOKENBUDGET: bezoekbudget vóór proef bereikt")
+    manifest = extractie.manifest(teksten, fotos, opnames)
+    pogingen = []
+    try:
+        uit, usage = register.verwerk(rij, dossier, volgnr, "proef", inp, MODEL, "werfproef-feiten-2", "werfverslag-2", taal,
+                                      bronkeuze(rij), manifest,
+                                      lambda: vraag_verslag(kop, feiten, hoofdkeuzes, proef_bundel, max_tokens=eerste_plafond, naslag=naslagblok), eerste_plafond)
+    except ModelAntwoordFout as fout:
+        if fout.stop_reason != "max_tokens":
+            raise
+        pogingen.append(_tokens(fout.usage))
+        over = 8000 - (voorbereide_tokens.get("tokens_uit") or 0) - pogingen[0]["uit"] if _budget_aan() else 4000
+        if over <= 0:
+            raise extractie.BronLeesFout("WERF_TOKENBUDGET: afgekapt antwoord, geen uitvoerruimte voor herhaling") from fout
+        kleiner = dict(feiten)
+        punten = feiten.get("onderdelen") or []
+        kleiner["onderdelen"] = punten[:max(1, len(punten) // 2)]
+        inp_retry = dict(inp, gegevens=kleiner, herhaling="afgekapt antwoord; eerste helft van de onderdelen")
+        plafond = min(4000, over)
+        if _budget_aan() and (voorbereide_tokens.get("tokens_in") or 0) + pogingen[0]["in"] + len(json.dumps(inp_retry, ensure_ascii=False).encode("utf8")) + 6000 > 25000:
+            raise extractie.BronLeesFout("WERF_TOKENBUDGET: geen invoerruimte voor herhaling") from fout
+        ag.log(f"{dossier}-{volgnr}", "besluit", "modelantwoord afgekapt; één herhaling met minder onderdelen")
+        uit, usage = register.verwerk(rij, dossier, volgnr, "proef", inp_retry, MODEL, "werfproef-feiten-2-herhaling", "werfverslag-2", taal,
+                                      bronkeuze(rij), manifest,
+                                      lambda: vraag_verslag(kop, kleiner, hoofdkeuzes, proef_bundel, max_tokens=plafond, naslag=naslagblok), plafond)
+    pogingen.append(_tokens(usage))
     extractie.valideer(uit, VERSLAG_SCHEMA["input_schema"])
     if keuzes.get("aanwezigen"):
         uit["aanwezigen"] = keuzes["aanwezigen"]
@@ -676,23 +821,29 @@ def proef(ag, dossier, volgnr):
                "aanwezigen": uit.get("aanwezigen", []), "raming": uit.get("raming", []) if verslagtype == "vaststellingsverslag" else [],
                "acties": uit.get("acties", []), "volgend": uit.get("volgend", ""), "akkoord": uit.get("akkoord", [])}
     verslag["categorieen"] = _nummer_punten(uit, nr_label, doorlopend=(verslagtype == "werfverslag" and keuzes.get("doorlopend", "ja") != "nee"))
+    zonder_bron = _bronpoort(verslag, teksten, fotos)
+    naslagmeldingen = _naslagcontrole(verslag, naslagblok)
     if taal != "nl+en":
         for cat in verslag["categorieen"]:
             for p in cat["punten"]:
                 p["tekst_en"] = ""
     beelden = _fotos_verzamelen(teksten, fotos, verslag)
-    md = sjab.naar_markdown(verslag)
     docx = sjab.naar_docx(verslag, beelden)
+    md = sjab.naar_markdown(verslag)
     naam = f"{dossier}-{verslag['bezoek']} {'verslag plaatsbezoek' if verslag['soort_bezoek'] == 'plaatsbezoek' else 'werfverslag'} (concept)"
     pad_md = bronnen.upload(f"{rij['bezoekmap']}/{naam}.md", md.encode("utf8"))
     pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
     telling = sjab.telling_open(md)
     n_punten = sum(len(c["punten"]) for c in verslag["categorieen"])
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"proef gezet: {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {n_punten} punten, "
-           f"{len(beelden)} foto's) en {os.path.basename(pad_md)} in de bezoekmap; open: {telling} ({usage.input_tokens}+{usage.output_tokens} tokens)")
+           f"{len(beelden)} foto's) en {os.path.basename(pad_md)} in de bezoekmap; open: {telling}; "
+           f"{len(verslag['fotos_niet_geplaatst'])} foto's niet geplaatst, {len(zonder_bron)} punten zonder bron, "
+           f"{len(naslagmeldingen)} naslagmeldingen; tokens: {pogingen}")
     info = {"verslagtype": verslagtype, "taal": taal, "punten": n_punten, "fotos": len(beelden), "open": telling, "docx_kb": len(docx) // 1024,
             "bronnen": [t["naam"] for t in teksten][:50],   # welke teksten de proef voedden, zichtbaar op de bezoekpagina (CX5-4)
             "dekking": gegevens["dekking"], "beeldanalyse": "niet uitgevoerd", "hergebruikt": bool(getattr(usage, "hergebruikt", False)),
+            "fotos_niet_geplaatst": verslag["fotos_niet_geplaatst"], "zonder_bron": zonder_bron,
+            "naslagmeldingen": naslagmeldingen, "tokens": {"voorbereiding": {"in": voorbereide_tokens.get("tokens_in", 0), "uit": voorbereide_tokens.get("tokens_uit", 0)}, "proef_pogingen": pogingen},
             "_verwerking": getattr(usage, "verwerking", {})}
     # Eerst de betaalde proef op de bordrij bewaren, dan pas de brug: wat de brug ook doet, de proef en haar markdown
     # (de invoer voor --naar-werfapp) zijn er (CX4-4).
