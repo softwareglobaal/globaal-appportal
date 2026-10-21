@@ -1507,6 +1507,16 @@ def test_t103_opname_van_een_ander_account_zonder_mehdi():
             assert R.transcript_lees(f"fathom:5{i}", "werf").get("treffers") == 1, email
 
 
+def test_eigen3_een_lijst_voor_het_eigen_fathom_account():
+    """EIGEN-3 (22-10-2026): De Regisseur en De Zoomwacht herkennen Mehdi's eigen Fathom-account aan dezelfde lijst,
+    MEHDI_FATHOM_ADRESSEN in koppelingen/fathom.py, op een exact adres in kleine letters. Tot nu had De Regisseur een
+    eigen kopie van die lijst, die stil van die van De Zoomwacht kon afwijken."""
+    import fathom as F  # noqa: PLC0415
+    assert R.MEHDI_FATHOM_ADRESSEN is F.MEHDI_FATHOM_ADRESSEN, "een lijst, geen kopie"
+    assert R._eigen_account({"recorded_by": {"email": "collega@h-architects.be"}}) is False
+    assert R._eigen_account({"recorded_by": {"email": " Zoomafspraken@Gmail.com "}}) is True
+
+
 if __name__ == "__main__":
     import traceback
     goed = fout = 0

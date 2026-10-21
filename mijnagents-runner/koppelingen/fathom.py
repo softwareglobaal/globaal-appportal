@@ -1,5 +1,6 @@
 """Fathom (opnames van online gesprekken), alleen lezen, vanaf de host.
-Sleutel(s) bij naam uit ~/appportal/.env: FATHOM_API_KEYS (komma-gescheiden).
+Sleutel(s) bij naam uit ~/appportal/.env: FATHOM_API_KEYS (komma-gescheiden). Mehdi's eigen account: de adressen in
+FATHOM_MEHDI_ADRESSEN (komma-gescheiden, geen sleutel), in de code MEHDI_FATHOM_ADRESSEN.
 Zelfde API als het contract-dashboard (webapp/fathom_api.py)."""
 import json
 import os
@@ -25,6 +26,13 @@ def _env(pad):
 
 
 _env("~/appportal/.env")
+
+# Mehdi's eigen Fathom-account (EIGEN-3, M2): alleen deze exacte adressen, in kleine letters, nooit een deel van een adres.
+# Gemeten op de VM (21-10-2026): elke eigen opname heeft zoomafspraken@gmail.com, de andere 177 shaniel@hdssr.com. Een
+# deelstuk als 'h-architects' of 'mch@' paste ook op het adres van een collega. De Zoomwacht en De Regisseur lezen deze
+# ene lijst; zonder waarde in FATHOM_MEHDI_ADRESSEN geldt de standaard.
+MEHDI_FATHOM_ADRESSEN = frozenset(a.strip().lower() for a in (os.environ.get("FATHOM_MEHDI_ADRESSEN") or
+                                                               "zoomafspraken@gmail.com,mch@h-architects.be").split(",") if a.strip())
 
 
 def sleutels():

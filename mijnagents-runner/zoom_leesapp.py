@@ -17,9 +17,17 @@ dat). De Account ID vergelijkt het stil met ZOOM_ACCOUNT_ID van de stack; alleen
 ZOOM_LEES_ACCOUNT_ID erbij. Het bestand wordt atomisch vervangen (tijdelijk bestand ernaast, rechten 600,
 os.replace); de andere regels blijven zoals ze waren. Er wordt nooit een waarde afgedrukt.
 
+Een verboden recht (13.6, rechten-zoomwacht-lezen.md, Nooit aanvinken: elk recht met write, update of delete, de
+sleutels om als gebruiker te starten, de bediening van een ruimte, chatberichten, AI-samenvattingen en archieven): dan
+weigert het te werken. Met --zet schrijft het niets ("niets geschreven: verboden recht <naam>"), zonder --zet toetst het
+niets verder ("geweigerd: ... <naam>"); de exitcode is niet nul. Het Zoom-transcript
+(cloud_recording:read:meeting_transcript:admin) staat ook onder Nooit, maar het vangnet kan het nodig hebben: alleen een
+melding, Mehdi beslist.
+
 Toetsen, met alleen namen, ja of nee en HTTP-codes op het scherm:
-- of de app een token krijgt, en per nodig recht 'aanwezig' of 'ontbreekt'; geen token met sleutels die er al staan:
-  de laatste regel zegt "opnieuw met --zet --vervang";
+- of de app een token krijgt, en per recht 'aanwezig' of 'ontbreekt': KERN (nodig voor de telling en het vangnet; een
+  ontbrekend recht maakt de exitcode niet nul) en ADVIES (voor de latere accountscan; telt niet mee). Geen token met
+  sleutels die er al staan: de laatste regel zegt "opnieuw met --zet --vervang";
 - de host van het meest voorkomende nummer in de opnames van Mehdi's eigen Fathom-account (via /meetings/<nummer>),
   naast de eigenaar van de app van de stack (/users/me, gemeten: Mehdi). Alleen als die twee dezelfde zijn, is de
   gebruiker zeker, en alleen dan en alleen met --zet schrijft het ZOOM_MEHDI_USER zelf als die nog niet staat (J17).
@@ -27,8 +35,10 @@ Toetsen, met alleen namen, ja of nee en HTTP-codes op het scherm:
   meer eigen opnames in zijn ruimte nooit af, want ze vergeleek die gebruiker met zijn eigen nummer;
 - of de vaste vergaderruimte van die gebruiker hetzelfde nummer heeft (ja of nee);
 - een proefdownload in het geheugen van de jongste TRANSCRIPT-opname (ja of nee, met de HTTP-code, nooit de url):
-  of een Server-to-Server-token een Zoom-transcript mag downloaden, is niet bewezen, dus meten we het hier.
-Exitcode 0 alleen als alles in orde is. De laatste regel is "klaar" of wat ontbreekt.
+  of een Server-to-Server-token een Zoom-transcript mag downloaden, is niet bewezen, dus meten we het hier. Mislukt ze
+  op een recht, dan noemt een melding het recht dat het vangnet mogelijk vraagt.
+Exitcode 0 alleen als de kern volledig is en de andere toetsen slagen; een advies telt niet mee. De laatste regel is
+"klaar", wat ontbreekt, of de weigering.
 """
 import argparse
 import getpass
@@ -44,12 +54,34 @@ sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import zoom as Z  # noqa: E402
 
 ENV = os.path.expanduser("~/appportal/.env")
-# De rechten die De Zoomwacht nodig heeft (ontwerp, 8.1). Geen enkel recht met write.
-NODIG = ("report:read:user:admin", "meeting:read:list_past_instances:admin", "meeting:read:past_meeting:admin",
-         "meeting:read:list_past_participants:admin", "meeting:read:meeting:admin", "meeting:read:list_meetings:admin",
-         "cloud_recording:read:list_user_recordings:admin", "user:read:user:admin",
-         "team_chat:read:list_user_sessions:admin", "team_chat:read:list_user_messages:admin")
-FACULTATIEF = ("cloud_recording:read:recording:admin",)   # "als Zoom hem toont"
+# De rechten van de app, uit de definitieve lijst (rechten-zoomwacht-lezen.md v1, ontwerp 13.6), alle alleen lezend.
+# KERN is nodig voor de telling en het vangnet en bepaalt de exitcode. Het recht op chatberichten staat er bewust niet in:
+# het tellen ervan blijft op de app van de stack (EIGEN-1).
+KERN = ("user:read:user:admin", "meeting:read:meeting:admin", "meeting:read:list_meetings:admin",
+        "meeting:read:past_meeting:admin", "meeting:read:list_past_participants:admin", "meeting:read:list_past_instances:admin",
+        "report:read:user:admin", "cloud_recording:read:list_user_recordings:admin",
+        "cloud_recording:read:list_recording_files:admin", "team_chat:read:list_user_sessions:admin")
+# ADVIES is de rest van de lijst, voor de latere accountscan (fase 4b): per recht aanwezig of ontbreekt, zonder gevolg
+# voor de exitcode. Een paar toont Zoom soms niet; dan ontbreken ze gewoon.
+ADVIES = ("user:read:list_users:admin", "user:read:summary:admin", "user:read:settings:admin",
+          "account:read:settings:admin", "account:read:lock_settings:admin",
+          "meeting:read:list_templates:admin", "meeting:read:list_summaries:admin",
+          "cloud_recording:read:list_account_recordings:admin", "cloud_recording:read:recording_settings:admin",
+          "report:read:list_users:admin", "report:read:daily_usage:admin", "report:read:cloud_recording:admin",
+          "report:read:user_activities:admin", "report:read:operation_logs:admin", "report:read:billing:admin",
+          "report:read:list_history_meetings:admin",
+          "dashboard:read:list_meetings:admin", "dashboard:read:client_versions:admin", "dashboard:read:chat:admin",
+          "dashboard:read:ai_adoption:admin", "dashboard:read:ai_usage_trend:admin", "dashboard:read:ai_kpi:admin",
+          "group:read:list_groups:admin", "group:read:list_members:admin", "group:read:settings:admin",
+          "group:read:lock_settings:admin", "role:read:list_roles:admin", "role:read:list_members:admin", "role:read:role:admin",
+          "team_chat:read:list_user_channels:admin", "team_chat:read:list_channels:admin", "team_chat:read:list_members:admin",
+          "team_chat:read:retention:admin",
+          "marketplace:read:list_apps:admin", "marketplace:read:app:admin", "marketplace:read:list_user_app_requests:admin",
+          "billing:read:plan_information:admin", "billing:read:plan_usage:admin", "billing:read:list_invoices:admin",
+          "zoom_rooms:read:list_rooms:admin", "webinar:read:list_webinars:admin", "h323_device:read:list_devices:admin",
+          "contact_group:read:list_groups:admin", "tsp:read:tsp:admin", "tracking_field:read:list_tracking_fields:admin",
+          "information_barrier:read:list_policies:admin")
+MARKETPLACE = "haal het weg in de Zoom Marketplace, dan opnieuw"
 FATHOM_DAGEN = 60
 VERVANG = "opnieuw met --zet --vervang"
 ANDERE_WAARDE = f"staat al, met een andere waarde ({VERVANG})"
@@ -113,11 +145,17 @@ def zetten(vervang=False):
     er geen token kwam: dan staat er niets nieuws in .env, en is de laatste regel 'niets geschreven: ...'."""
     w = vragen()
     try:
-        Z.token_halen(w["client"], w["geheim"], w["account"])
+        d = Z.token_halen(w["client"], w["geheim"], w["account"])
         print("token met de nieuwe sleutels: ja")
     except Z.ZoomFout as e:
         print(f"token met de nieuwe sleutels: nee ({e})")
         print("niets geschreven: geen token met deze sleutels")
+        return False
+    fout = Z.verboden((d.get("scope") or "").split())
+    if fout:
+        # 13.6: een app met een recht uit 'Nooit aanvinken' krijgt geen plaats in .env
+        print(f"geweigerd: de app heeft een recht dat ze nooit mag hebben ({MARKETPLACE})")
+        print("niets geschreven: verboden recht " + ", ".join(fout))
         return False
     nieuw = {"ZOOM_LEES_CLIENT_ID": w["client"], "ZOOM_LEES_CLIENT_SECRET": w["geheim"]}
     if w["account"] != Z._sleutel("ZOOM_ACCOUNT_ID"):
@@ -198,16 +236,29 @@ def toetsen(zet=False, vervang=False):
         return 1
     try:
         rechten = Z.rechten("lees")
-        print("token: ja")
+        fout = Z.verboden(rechten)
+    except Z.VerbodenRecht as e:
+        rechten, fout = set(), e.rechten
     except Z.ZoomFout as e:
         print(f"token: nee ({e})")
         print(f"ontbreekt: token, de sleutels van de leesapp geven er geen: {VERVANG}")
         return 1
-    for naam in NODIG + FACULTATIEF:
+    if fout:
+        # 13.6: met een recht uit 'Nooit aanvinken' werk ik niet verder; De Zoomwacht leest dan met de app van de stack
+        print("token: ja, maar geweigerd")
+        print(f"geweigerd: de leesapp heeft een recht dat ze nooit mag hebben: {', '.join(fout)} ({MARKETPLACE})")
+        return 1
+    print("token: ja")
+    for naam in KERN:
         aanwezig = naam in rechten
-        print(f"recht {naam}: {'aanwezig' if aanwezig else 'ontbreekt'}" + (" (facultatief)" if naam in FACULTATIEF else ""))
-        if not aanwezig and naam in NODIG:
+        print(f"recht {naam}: {'aanwezig' if aanwezig else 'ontbreekt'}")
+        if not aanwezig:
             ontbreekt.append(naam)
+    for naam in ADVIES:
+        print(f"recht {naam}: {'aanwezig' if naam in rechten else 'ontbreekt'} (advies)")
+    for naam in sorted(Z.MELDEN_RECHTEN & set(rechten)):
+        print(f"melding: recht {naam} is aanwezig; het geeft de tekst van opnames en staat onder Nooit aanvinken, alleen het "
+              "vangnet mag het gebruiken: Mehdi beslist")
     nummer = eigen_nummer()
     if not nummer:
         print("nummer van de vaste vergaderruimte uit Fathom: onbekend (geen eigen opnames in het archief)")
@@ -239,6 +290,9 @@ def toetsen(zet=False, vervang=False):
             print(f"proefdownload van een Zoom-transcript: {'ja' if gelukt else 'nee'} ({uitleg})")
             if not gelukt:
                 ontbreekt.append("downloadrecht voor opnames")
+                if uitleg.startswith("geen downloadrecht") and not Z.MELDEN_RECHTEN & set(rechten):
+                    print(f"melding: de download voor het vangnet vraagt mogelijk {', '.join(sorted(Z.MELDEN_RECHTEN))}; dat "
+                          "recht staat onder Nooit aanvinken: Mehdi beslist")
         else:
             ontbreekt.append("gebruiker")
     print("klaar" if not ontbreekt else "ontbreekt: " + ", ".join(ontbreekt))

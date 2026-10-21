@@ -18,6 +18,10 @@ stille 0. Een url komt nooit in een fouttekst; download- en afspeellinks bewaart
 Grendels (13.2): lees() leest alleen onder het vaste gebruikers-id van Mehdi, /past_meetings/ en zijn eigen
 meetingnummers (L5); download() alleen bestanden uit zijn eigen opnamelijst, en volgt een omleiding zelf, alleen naar
 een host op zoom.us en zonder Authorization-kop na de eerste sprong (L1).
+Grendels (13.6): een token van het profiel lees met een recht uit 'Nooit aanvinken' (rechten-zoomwacht-lezen.md) wordt
+geweigerd, niet bewaard en nooit gebruikt (VerbodenRecht); lees() leest dan met de app van de stack en
+leesapp_verboden() noemt het recht. Chatberichten (/chat/users/<id>/messages) nooit met de leesapp: die krijgt dat recht
+bewust niet, het tellen van chatberichten blijft op de app van de stack (EIGEN-1).
 """
 import base64
 import json
@@ -38,8 +42,19 @@ _VAST = {"id": "", "nummers": set()}
 # Downloadlinks per bestandsid, alleen uit de eigen opnamelijst en alleen in het geheugen (Z4, L5).
 _DOWNLOADS = {}
 _MAX_SPRONGEN = 5
-# ZOO-10: waarom de leesapp deze ronde geen token gaf (leeg: wel een token, of niet gevraagd). Een nieuwe ronde wist het.
-_LEESAPP = {"fout": ""}
+# ZOO-10: waarom de leesapp deze ronde geen token gaf (leeg: wel een token, of niet gevraagd), en welke verboden rechten
+# haar token had (13.6). Een nieuwe ronde wist het.
+_LEESAPP = {"fout": "", "verboden": []}
+# 13.6 (rechten-zoomwacht-lezen.md, Nooit aanvinken): rechten die de leesapp nooit mag hebben. Elk recht dat schrijft,
+# verandert of wist; een sleutel om als gebruiker een meeting te starten; de bediening van een ruimte; de inhoud van
+# chatberichten, AI-samenvattingen en archieven. De app van de stack valt hier niet onder: die is gedeeld en kan meer.
+VERBODEN_SOORTEN = frozenset({"write", "update", "delete"})
+VERBODEN_RECHTEN = frozenset({"user:read:token:admin", "user:read:zak:admin", "zoom_rooms:read:virtual_controller:admin",
+                              "meeting:read:local_archiving_token:admin", "team_chat:read:list_user_messages:admin",
+                              "meeting:read:summary:admin", "aic:read:conversation_archives:admin"})
+# Ook onder Nooit aanvinken, maar het vangnet kan het nodig hebben voor de Zoom-tekst: geen weigering, alleen een
+# melding van zoom_leesapp.py, en Mehdi beslist.
+MELDEN_RECHTEN = frozenset({"cloud_recording:read:meeting_transcript:admin"})
 
 
 class ZoomFout(RuntimeError):
@@ -57,6 +72,20 @@ class GeenRecht(ZoomFout):
 
 class Geweigerd(ZoomFout):
     """De grendel weigerde de vraag voor er iets naar Zoom ging (L1, L5)."""
+
+
+class VerbodenRecht(Geweigerd):
+    """Het token van de leesapp heeft een recht dat ze nooit mag hebben (13.6). `rechten` zijn de namen, nooit een waarde."""
+
+    def __init__(self, rechten):
+        self.rechten = list(rechten)
+        super().__init__("verboden recht: " + ", ".join(self.rechten))
+
+
+def verboden(rechten):
+    """De rechten uit deze lijst die de leesapp nooit mag hebben, gesorteerd (13.6): elk recht met write, update of
+    delete als deel van de naam, en de vaste lijst VERBODEN_RECHTEN."""
+    return sorted(r for r in rechten if r.lower() in VERBODEN_RECHTEN or VERBODEN_SOORTEN & set(r.lower().split(":")))
 
 
 def _sleutel(naam, bestanden=None):
@@ -99,13 +128,20 @@ def leesapp_fout():
     return _LEESAPP["fout"]
 
 
+def leesapp_verboden():
+    """De verboden rechten waarom het token van de leesapp deze ronde geweigerd werd (13.6), of een lege lijst."""
+    return list(_LEESAPP["verboden"])
+
+
 def _token_voor(profiel):
     """Het token voor een vraag. lees zonder sleutels leest met de app van de stack; geven de sleutels van de leesapp
-    geen token, dan ook, en leesapp_fout() zegt waarom. Een keer per ronde: daarna vraagt lees() geen token meer met
-    sleutels die net faalden."""
+    geen token, of een token met een verboden recht, dan ook, en leesapp_fout() zegt waarom. Een keer per ronde: daarna
+    vraagt lees() geen token meer met sleutels die net faalden."""
     if profiel == "lees" and leesapp() and not _LEESAPP["fout"]:
         try:
             return _toegang("lees")
+        except VerbodenRecht as e:
+            _LEESAPP["fout"], _LEESAPP["verboden"] = "verboden recht", list(e.rechten)
         except ZoomFout as e:
             _LEESAPP["fout"] = str(e)[:80] or "geen token"
     return _toegang("stack")
@@ -142,13 +178,18 @@ def _toegang(profiel="stack"):
             raise ZoomFout("Zoom-sleutels van de stack ontbreken")
         cid, geheim, account = _sleutel("ZOOM_CLIENT_ID"), _sleutel("ZOOM_CLIENT_SECRET"), _sleutel("ZOOM_ACCOUNT_ID")
     d = token_halen(cid, geheim, account)
+    namen = set((d.get("scope") or "").split())
+    if profiel == "lees" and verboden(namen):
+        # 13.6: de leesapp mag niets schrijven en geen inhoud lezen. Het token wordt niet bewaard en nooit gebruikt.
+        raise VerbodenRecht(verboden(namen))
     _tokens[profiel] = {"waarde": d["access_token"], "tot": time.time() + int(d.get("expires_in", 3600)) - 120,
-                        "rechten": set((d.get("scope") or "").split())}
+                        "rechten": namen}
     return _tokens[profiel]["waarde"]
 
 
 def rechten(profiel="lees"):
-    """De rechten van de app, uit het veld scope van het tokenantwoord (alleen namen)."""
+    """De rechten van de app, uit het veld scope van het tokenantwoord (alleen namen). Heeft de leesapp een verboden
+    recht, dan VerbodenRecht met de namen (13.6)."""
     _toegang(profiel)
     return set(_tokens[profiel]["rechten"])
 
@@ -205,7 +246,7 @@ def vastzetten(gebruiker_id, nummers=()):
     _VAST["nummers"] = {str(n) for n in nummers if n}
     if not gebruiker_id:
         _DOWNLOADS.clear()
-        _LEESAPP["fout"] = ""
+        _LEESAPP["fout"], _LEESAPP["verboden"] = "", []
 
 
 def nummer_erbij(nummer):
@@ -236,9 +277,12 @@ def toegestaan(pad):
 # ---------------------------------------------------------------- lezen ---
 def lees(pad, params=None, profiel="lees"):
     """Een GET op de Zoom-API. 200 geeft het antwoord, 404 None. Een ontbrekend recht geeft GeenRecht(scope), elke
-    andere fout ZoomFout, zonder url. Een pad buiten het vaste gebruikers-id geeft Geweigerd, zonder vraag aan Zoom."""
+    andere fout ZoomFout, zonder url. Een pad buiten het vaste gebruikers-id geeft Geweigerd, zonder vraag aan Zoom; zo
+    ook chatberichten met de leesapp (EIGEN-1)."""
     if not toegestaan(pad):
         raise Geweigerd("pad buiten de vaste gebruiker van Mehdi geweigerd")
+    if profiel != "stack" and re.fullmatch(r"/chat/users/[^/]+/messages", pad.split("?", 1)[0]):
+        raise Geweigerd("chatberichten alleen met de app van de stack")
     url = API + pad + ("?" + urllib.parse.urlencode(params) if params else "")
     code, _, inhoud = _vraag(url, {"Authorization": "Bearer " + _token_voor(profiel)})
     if code == 200:

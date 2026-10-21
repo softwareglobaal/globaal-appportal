@@ -4,7 +4,8 @@ Gemeten op 21-10-2026: De Zoomwacht zag de vaste vergaderruimte niet (1 van de 1
 bevroor bij het oppakken, de gesprekkentabel telde elk gesprek met Fathom twee keer, en geen enkele test raakte
 zoom_wacht.py. Deze test legt vast wat het ontwerp belooft, met de T-nummers van hoofdstuk 6 en 13.5: T05 tot T30,
 T95, T96, T101, T102, T104, T106 en de K5-regressie bij T23. Daarna de bevindingen van de tegenlezing (ZOO-01 tot
-ZOO-10, 21-10-2026): elk eerst als falende test op de code van toen, dan hersteld in de bron.
+ZOO-10, 21-10-2026) en van de bouwcontrole (RZ2-05, met EIGEN-1 tot EIGEN-3 uit 13.6, 22-10-2026): elk eerst als
+falende test op de code van toen, dan hersteld in de bron.
 
 Geen netwerk en geen sleutels. Nagebootst: de Zoom-API op het laagste niveau (zoom._vraag en het token), de Fathom-API,
 een tijdelijk Fathom-archief en een tijdelijke zoom-data, en de klok (zoom_wacht.nu). Het bord is het echte bord
@@ -281,6 +282,8 @@ class Bord:
 
 
 ECHTE_DB_LEES = bord.db_lees
+# De echte tokenweg van zoom.py, voor de toetsen met twee apps (EIGEN-1, EIGEN-2): Wereld vervangt _toegang.
+ECHTE_TOEGANG, ECHTE_RECHTEN = Z._toegang, Z.rechten
 
 
 class Wereld:
@@ -1396,7 +1399,7 @@ def test_t106_leesapp_schrijft_atomisch_met_600_en_toont_geen_waarde():
         assert stat.S_IMODE(os.stat(env).st_mode) == 0o600
         # toetsen: alleen namen, ja of nee; J17 schrijft ZOOM_MEHDI_USER zelf, met --zet en alleen als de host de
         # eigenaar van de app van de stack is (ZOO-08)
-        Z.rechten = lambda profiel="lees": set(ZL.NODIG) - {"report:read:user:admin"}
+        Z.rechten = lambda profiel="lees": set(ZL.KERN) - {"report:read:user:admin"}
         ZL.eigen_nummer = lambda: PMI
         Z.lees = lambda pad, params=None, profiel="lees": {f"/meetings/{PMI}": {"host_id": "host-xyz-77"},
                                                             "/users/me": {"id": "host-xyz-77"},
@@ -1408,7 +1411,7 @@ def test_t106_leesapp_schrijft_atomisch_met_600_en_toont_geen_waarde():
         laatste = uit.getvalue().strip().splitlines()[-1]
         assert code == 1 and laatste == "ontbreekt: report:read:user:admin", (code, laatste)
         assert "ZOOM_MEHDI_USER=host-xyz-77" in open(env, encoding="utf-8").read()
-        Z.rechten = lambda profiel="lees": set(ZL.NODIG)
+        Z.rechten = lambda profiel="lees": set(ZL.KERN)
         uit2 = io.StringIO()
         with redirect_stdout(uit2):
             assert ZL.toetsen() == 0
@@ -1827,7 +1830,7 @@ def _zoo08_zoom(host, eigenaar):
             return {"id": pad.split("/")[2], "pmi": int(PMI)}
         raise AssertionError("onverwachte vraag " + pad)
     Z.lees = lees
-    Z.rechten = lambda profiel="lees": set(__import__("zoom_leesapp").NODIG)
+    Z.rechten = lambda profiel="lees": set(__import__("zoom_leesapp").KERN)
     Z.opnames = lambda van, tot, profiel="lees": [{"bestanden": [{"id": "f1", "soort": "TRANSCRIPT", "status": "completed", "start": "x"}]}]
     Z.download = lambda bid, profiel="lees", max_bytes=0: b"WEBVTT"
 
@@ -1883,6 +1886,379 @@ def test_zoo08_users_me_mag_voor_de_vaste_gebruiker_gezet_is():
     finally:
         os.environ.pop("ZOOM_MEHDI_USER", None)
         Z.vastzetten(None)
+
+
+# ------------------------------------------------------------- bouwcontrole RZ2 en de eigen punten (13.6) ---
+NACHT = "2026-10-25"
+EERSTE_UUR, TWEEDE_UUR = datetime(2026, 10, 25, 0, 30, tzinfo=UTC), datetime(2026, 10, 25, 1, 30, tzinfo=UTC)
+# De definitieve lijst van rechten-zoomwacht-lezen.md v1 (22-10-2026): KERN voor de telling en het vangnet, de rest advies.
+KERN_PROEF = frozenset({"user:read:user:admin", "meeting:read:meeting:admin", "meeting:read:list_meetings:admin",
+                        "meeting:read:past_meeting:admin", "meeting:read:list_past_participants:admin",
+                        "meeting:read:list_past_instances:admin", "report:read:user:admin",
+                        "cloud_recording:read:list_user_recordings:admin", "cloud_recording:read:list_recording_files:admin",
+                        "team_chat:read:list_user_sessions:admin"})
+AANVINKEN_PROEF = KERN_PROEF | frozenset({
+    "user:read:list_users:admin", "user:read:summary:admin", "user:read:settings:admin", "account:read:settings:admin",
+    "account:read:lock_settings:admin", "meeting:read:list_templates:admin", "meeting:read:list_summaries:admin",
+    "cloud_recording:read:list_account_recordings:admin", "cloud_recording:read:recording_settings:admin",
+    "report:read:list_users:admin", "report:read:daily_usage:admin", "report:read:cloud_recording:admin",
+    "report:read:user_activities:admin", "report:read:operation_logs:admin", "report:read:billing:admin",
+    "report:read:list_history_meetings:admin", "dashboard:read:list_meetings:admin", "dashboard:read:client_versions:admin",
+    "dashboard:read:chat:admin", "dashboard:read:ai_adoption:admin", "dashboard:read:ai_usage_trend:admin",
+    "dashboard:read:ai_kpi:admin", "group:read:list_groups:admin", "group:read:list_members:admin", "group:read:settings:admin",
+    "group:read:lock_settings:admin", "role:read:list_roles:admin", "role:read:list_members:admin", "role:read:role:admin",
+    "team_chat:read:list_user_channels:admin", "team_chat:read:list_channels:admin", "team_chat:read:list_members:admin",
+    "team_chat:read:retention:admin", "marketplace:read:list_apps:admin", "marketplace:read:app:admin",
+    "marketplace:read:list_user_app_requests:admin", "billing:read:plan_information:admin", "billing:read:plan_usage:admin",
+    "billing:read:list_invoices:admin", "zoom_rooms:read:list_rooms:admin", "webinar:read:list_webinars:admin",
+    "h323_device:read:list_devices:admin", "contact_group:read:list_groups:admin", "tsp:read:tsp:admin",
+    "tracking_field:read:list_tracking_fields:admin", "information_barrier:read:list_policies:admin"})
+VERBODEN_PROEF = ("meeting:write:meeting:admin", "meeting:update:meeting:admin", "cloud_recording:delete:recording_file:admin",
+                  "recording:write", "user:read:token:admin", "user:read:zak:admin", "zoom_rooms:read:virtual_controller:admin",
+                  "meeting:read:local_archiving_token:admin", "team_chat:read:list_user_messages:admin",
+                  "meeting:read:summary:admin", "aic:read:conversation_archives:admin")
+TRANSCRIPT_RECHT = "cloud_recording:read:meeting_transcript:admin"
+OUD_RECHT = "cloud_recording:read:" + "recording:admin"     # bestaat niet bij Zoom; zo staat de naam niet letterlijk hier
+
+
+def twee_apps(lees_rechten):
+    """Echte tokens per app: zoom._toegang draait echt, alleen het tokenantwoord is nagebootst. De leesapp krijgt
+    'tok-lees' met deze rechten, de stack 'tok-stack' met schrijfrechten (de gedeelde app kan meer). Geeft het herstel."""
+    oud = Z.token_halen
+    Z._toegang = ECHTE_TOEGANG
+    Z.token_halen = lambda cid, geheim, account: ({"access_token": "tok-lees", "scope": lees_rechten} if cid == "lees-proef" else
+                                                  {"access_token": "tok-stack", "scope": "meeting:write:meeting:admin"})
+    Z._tokens.clear()
+
+    def herstel():
+        Z.token_halen = oud
+        Z._tokens.clear()
+    return herstel
+
+
+def test_rz2_05_een_brusselse_tijd_die_twee_keer_bestaat():
+    """RZ2-05: op 25-10-2026 gaat de klok terug en bestaat 02:30 Brussel twee keer, om 00:30 en om 01:30 UTC. Een
+    onleesbare gesprek.json (de mapnaam is Brusselse tijd) is een kandidaat voor een sessie in elk van die uren: tot nu
+    las kandidaat() alleen het eerste uur, en dan heette een sessie in het tweede uur 'zonder Fathom'. Een tijd zonder
+    UTC-bron geeft twee kandidaten, het eerste uur eerst; een gewone tijd een."""
+    klok = datetime(2026, 10, 27, 7, 20, tzinfo=UTC)
+    x = {"dag": NACHT, "tijd": "0235", "map": "m"}
+    for start, verwacht in ((EERSTE_UUR, True), (TWEEDE_UUR, True), (datetime(2026, 10, 25, 5, 0, tzinfo=UTC), False)):
+        assert ZW.kandidaat({"start": start, "einde": start + timedelta(minutes=20)}, x, klok) is verwacht, start
+    assert ZW.utc_tijden(NACHT, "02:30") == [EERSTE_UUR, TWEEDE_UUR]
+    assert ZW.utc_tijden("2026-10-20", "10:00") == [bxl("2026-10-20 10:00")]
+    assert len(ZW.utc_tijden("2027-03-28", "02:30")) == 2, "een tijd die niet bestaat (de klok gaat vooruit) is ook dubbelzinnig"
+
+
+@bord_nodig
+def test_rz2_05_koppel_sinds_rond_het_terugzetten_van_de_klok():
+    """RZ2-05: een oude rij kent alleen de Brusselse datum en tijd, en --koppel-sinds las 02:30 op 25-10 altijd als het
+    eerste uur. Een rij uit het tweede uur koppelde dan niet en verloor haar link, of nam de opname van het eerste uur.
+    Nu beslist de UTC-tijd van Fathom (recording_start_time): raakt maar een van de twee uren een opname met hetzelfde
+    nummer, dan is dat het uur (een rij in het eerste en een in het tweede uur, elk met een eigen nummer). Kan Fathom het
+    niet zeggen (twee rijen met het nummer van de vaste ruimte, een opname in elk uur), dan blijft de rij ongekoppeld,
+    houdt ze haar link en staat er een regel in het werkverslag."""
+    w = Wereld()
+    assert ZW.brussel(EERSTE_UUR).strftime("%H:%M") == ZW.brussel(TWEEDE_UUR).strftime("%H:%M") == "02:30"
+    for uniek, link in (("nacht-1", "https://us06web.zoom.us/j/8300000011"), ("nacht-2", "https://us06web.zoom.us/j/8300000012"),
+                        ("pmr-1", f"https://us06web.zoom.us/j/{PMI}"), ("pmr-2", f"https://us06web.zoom.us/j/{PMI}?pwd=geheim")):
+        w.bord.call("/api/gesprekken", {"rijen": [{"uniek": f"zoom:meeting:{uniek}", "datum": NACHT, "start": "02:30", "minuten": 20,
+                                                   "personen": "Klant A, Mehdi", "afdeling": "unabo", "thema": "Overleg", "prive": False,
+                                                   "zekerheid": "middel", "waarom": "oud", "link": link, "opgenomen_door": "Mehdi",
+                                                   "bron": "zoom"}]})
+    for rid, nummer, t in (("801", "8300000011", EERSTE_UUR), ("802", "8300000012", TWEEDE_UUR), ("803", PMI, EERSTE_UUR),
+                           ("804", PMI, TWEEDE_UUR)):
+        w.fathom_opname(rid, None, nummer=nummer, start=t + timedelta(seconds=40), einde=t + timedelta(minutes=20))
+    w.zoom.meetings[PMI] = {"id": int(PMI), "type": 8}
+    assert w.ronde(datetime(2026, 10, 27, 7, 20, tzinfo=UTC), "--koppel-sinds", "2026-10-24") is None
+    assert koppelvelden(w, "zoom:meeting:nacht-1") == {"sessie": "zoom:meeting:nacht-1", "dubbel_van": "fathom:801"}
+    assert koppelvelden(w, "zoom:meeting:nacht-2") == {"sessie": "zoom:meeting:nacht-2", "dubbel_van": "fathom:802"}, \
+        ("de rij uit het tweede uur", koppelvelden(w, "zoom:meeting:nacht-2"))
+    assert w.bord.rij("fathom:801")["sessie"] == "zoom:meeting:nacht-1" and w.bord.rij("fathom:802")["sessie"] == "zoom:meeting:nacht-2"
+    assert w.bord.rij("zoom:meeting:nacht-1")["link"] == "" and w.bord.rij("zoom:meeting:nacht-2")["link"] == ""
+    for uniek in ("pmr-1", "pmr-2"):
+        rij = w.bord.rij(f"zoom:meeting:{uniek}")
+        assert rij["dubbel_van"] == "" and rij["link"].startswith("https://us06web.zoom.us/j/"), ("ongekoppeld, met link", rij)
+    assert w.bord.rij("fathom:803")["sessie"] == "" and w.bord.rij("fathom:804")["sessie"] == ""
+    regel = f"{NACHT} 02:30: niet gekoppeld, die tijd bestaat twee keer in Brussel en Fathom zegt niet welk uur; de rij houdt haar link"
+    assert [t for o, t in besluiten(w) if o == "koppel-sinds"] == [regel, regel], besluiten(w)
+    assert "Koppeling met Fathom niet bevestigd" not in w.bord.noden(), w.bord.noden()
+    assert "Een oude Zoom-link met toegangscode hoort bij een terugkerende meeting: de code geldt tot ze in Zoom verandert" \
+        in w.bord.noden(), "L4 telt ook een rij die haar link houdt"
+
+
+def _oude_rijen(w, rijen):
+    for uniek, start, minuten in rijen:
+        w.bord.call("/api/gesprekken", {"rijen": [{"uniek": f"zoom:meeting:{uniek}", "datum": NACHT, "start": start, "minuten": minuten,
+                                                   "personen": "Klant A, Mehdi", "afdeling": "unabo", "thema": "Overleg", "prive": False,
+                                                   "zekerheid": "middel", "waarom": "oud", "link": f"https://us06web.zoom.us/j/{PMI}",
+                                                   "opgenomen_door": "Mehdi", "bron": "zoom"}]})
+
+
+@bord_nodig
+def test_rz2_05_fathom_beslist_alleen_als_de_keuze_uitsluitend_is():
+    """Tegenproef RZ2-05 (22-10-2026): 'raakt maar een van de twee uren een opname met dit nummer' bewijst niets als rijen
+    hetzelfde nummer delen (83% van de meetings zit in de vaste ruimte). (A) Twee rijen in de vaste ruimte om 02:30 en een
+    opname in het tweede uur: Fathom weet niet welke rij het is. (B) 02:10 (60 min) en 02:40 (20 min) in dezelfde ruimte en
+    een opname om 01:40 UTC: in het tweede uur overlappen de twee rijen, wat in een ruimte niet kan. Toen kreeg een rij
+    willekeurig de opname en verloor de andere haar link zonder koppeling. Nu blijven alle betrokken rijen ongekoppeld,
+    met hun link en een regel in het werkverslag. (C) Geeft Zoom de UTC-start van de sessie (/past_meetings/<uuid>), dan
+    beslist die: de rij koppelt juist, en een rij die met haar zou overlappen, blijft ongekoppeld."""
+    klok = datetime(2026, 10, 27, 7, 20, tzinfo=UTC)
+    regel = lambda uur: f"{NACHT} {uur}: niet gekoppeld, die tijd bestaat twee keer in Brussel en Fathom zegt niet welk uur; de rij houdt haar link"  # noqa: E731
+    # (A)
+    w = Wereld()
+    _oude_rijen(w, (("pmr-a", "02:30", 20), ("pmr-b", "02:30", 20)))
+    w.fathom_opname("804", None, nummer=PMI, start=TWEEDE_UUR + timedelta(seconds=40), einde=TWEEDE_UUR + timedelta(minutes=20))
+    assert w.ronde(klok, "--koppel-sinds", "2026-10-24") is None
+    for uniek in ("pmr-a", "pmr-b"):
+        rij = w.bord.rij(f"zoom:meeting:{uniek}")
+        assert rij["dubbel_van"] == "" and rij["link"] == f"https://us06web.zoom.us/j/{PMI}", ("A: ongekoppeld, met link", rij)
+    assert w.bord.rij("fathom:804")["sessie"] == "", w.bord.rij("fathom:804")
+    assert [t for o, t in besluiten(w) if o == "koppel-sinds"] == [regel("02:30")] * 2, besluiten(w)
+    # (B)
+    w = Wereld()
+    _oude_rijen(w, (("pmr-x", "02:10", 60), ("pmr-y", "02:40", 20)))
+    w.fathom_opname("805", None, nummer=PMI, start=datetime(2026, 10, 25, 1, 40, tzinfo=UTC), einde=datetime(2026, 10, 25, 2, 0, tzinfo=UTC))
+    assert w.ronde(klok, "--koppel-sinds", "2026-10-24") is None
+    for uniek in ("pmr-x", "pmr-y"):
+        rij = w.bord.rij(f"zoom:meeting:{uniek}")
+        assert rij["dubbel_van"] == "" and rij["link"], ("B: ongekoppeld, met link", rij)
+    assert w.bord.rij("fathom:805")["sessie"] == "", w.bord.rij("fathom:805")
+    assert sorted(t for o, t in besluiten(w) if o == "koppel-sinds") == [regel("02:10"), regel("02:40")], besluiten(w)
+    # (C) zoals A, maar Zoom kent de start van pmr-b: het tweede uur. Die sessie staat in geen lijst, alleen achter
+    # /past_meetings/<uuid>, zodat de gewone ronde haar niet als nieuwe sessie telt.
+    w = Wereld()
+    _oude_rijen(w, (("pmr-a", "02:30", 20), ("pmr-b", "02:30", 20)))
+    w.zoom.sessie("pmr-b", TWEEDE_UUR, 20, nummer="8300000099", rapport=(), instantie=False, gepland=False)
+    w.fathom_opname("804", None, nummer=PMI, start=TWEEDE_UUR + timedelta(seconds=40), einde=TWEEDE_UUR + timedelta(minutes=20))
+    assert w.ronde(klok, "--koppel-sinds", "2026-10-24") is None
+    assert koppelvelden(w, "zoom:meeting:pmr-b") == {"sessie": "zoom:meeting:pmr-b", "dubbel_van": "fathom:804"}, koppelvelden(w, "zoom:meeting:pmr-b")
+    assert w.bord.rij("zoom:meeting:pmr-b")["link"] == "" and w.bord.rij("fathom:804")["sessie"] == "zoom:meeting:pmr-b"
+    a = w.bord.rij("zoom:meeting:pmr-a")
+    assert a["dubbel_van"] == "" and a["link"], ("C: de andere rij blijft ongekoppeld, met link", a)
+    assert [t for o, t in besluiten(w) if o == "koppel-sinds"] == [regel("02:30")], besluiten(w)
+
+
+@bord_nodig
+def test_eigen1_chat_altijd_met_de_app_van_de_stack():
+    """EIGEN-1 (13.6): de leesapp krijgt team_chat:read:list_user_messages:admin bewust niet. Het tellen van chatberichten
+    (/chat/users/<id>/sessions en /messages) gaat daarom altijd met de app van de stack, die dat recht al heeft. Tot nu
+    ging het met de leesapp; met de definitieve rechten was de chat dan 'geen recht' en haar telling onbekend. zoom.py
+    weigert /messages met de leesapp, zonder iets aan Zoom te vragen."""
+    w = Wereld()
+    herstel = twee_apps(" ".join(sorted(KERN_PROEF)))
+    chat = []
+
+    def vraag(url, koppen, max_bytes=2_000_000, echt=w.zoom.vraag):
+        pad = urllib.parse.unquote(urllib.parse.urlsplit(url).path)
+        if "/chat/" in pad:
+            chat.append((pad.rsplit("/", 1)[1], koppen.get("Authorization")))
+            if koppen.get("Authorization") == "Bearer tok-lees" and pad.endswith("/messages"):
+                return NepZoom._weiger("team_chat:read:list_user_messages:admin")
+        return echt(url, koppen, max_bytes)
+    Z._vraag = vraag
+    try:
+        w.zoom.chat = [({"type": "1:1", "peer_contact_email": "sara@globaal.be", "name": "Sara Team"},
+                        [{"date_time": "2026-10-20T08:00:00Z", "sender": "info@h-invest.test"},
+                         {"date_time": "2026-10-20T08:05:00Z", "sender": "sara@globaal.be"}])]
+        w.fathom_opname("730", w.zoom.sessie("c1", bxl("2026-10-20 09:00"), 20))
+        assert w.ronde(NU) is None
+        assert sorted({d for d, _ in chat}) == ["messages", "sessions"] and {k for _, k in chat} == {"Bearer tok-stack"}, chat
+        rij = w.bord.rij("zoom:chat:sara@globaal.be:2026-10-20")
+        assert rij and rij["thema"].startswith("Zoom-chat: 2 bericht(en), 1 van Mehdi"), rij
+        assert w.dagregel("2026-10-20")[1]["chat"] == {"berichten": 2, "gesprekken": 1, "prive": 0}, w.dagregel("2026-10-20")[1]
+        assert not [t for t in w.bord.noden() if t.startswith("Zoom-chat niet gelezen")], w.bord.noden()
+        assert any(k.get("Authorization") == "Bearer tok-lees" for _, k in w.zoom.gevraagd), "de rest leest met de leesapp"
+        # de grendel in zoom.py: chatberichten nooit met de leesapp
+        Z.vastzetten("mehdi-id")
+        n = len(w.zoom.gevraagd)
+        for profiel in ("lees", None):
+            try:
+                Z.lees("/chat/users/mehdi-id/messages", {"to_contact": "sara@globaal.be"}, **({"profiel": profiel} if profiel else {}))
+                raise AssertionError(f"/messages met de leesapp ({profiel}) werd niet geweigerd")
+            except Z.Geweigerd:
+                pass
+        assert len(w.zoom.gevraagd) == n, "een geweigerde vraag ging toch naar Zoom"
+    finally:
+        herstel()
+        Z.vastzetten(None)
+
+
+def test_eigen2_zoom_weigert_een_leestoken_met_een_verboden_recht():
+    """EIGEN-2 (13.6) in zoom.py: een token van het profiel lees met een recht uit 'Nooit aanvinken' wordt geweigerd. Het
+    wordt niet bewaard en gaat nooit naar Zoom; lees() leest dan met de app van de stack, en leesapp_verboden() noemt
+    het recht. Het Zoom-transcript is geen weigering (het vangnet kan het nodig hebben), en de app van de stack valt er
+    niet onder."""
+    ZL, env, herstel = _leesapp_proef(["ZOOM_ACCOUNT_ID=stack-account-1234", "ZOOM_CLIENT_ID=stack-client", "ZOOM_CLIENT_SECRET=stack-geheim",
+                                       "ZOOM_LEES_CLIENT_ID=lees-client-445566", "ZOOM_LEES_CLIENT_SECRET=lees-geheim-112233"])
+    try:
+        Z._toegang = ECHTE_TOEGANG
+        for recht in VERBODEN_PROEF:
+            Z._tokens.clear()
+            Z.vastzetten(None)
+            Z.token_halen = lambda cid, geheim, account, r=recht: ({"access_token": "tok-lees", "scope": f"user:read:user:admin {r}"}
+                                                                   if cid.startswith("lees") else
+                                                                   {"access_token": "tok-stack", "scope": "meeting:write:meeting:admin"})
+            try:
+                Z._toegang("lees")
+                raise AssertionError(f"een leestoken met {recht} werd aanvaard")
+            except Z.VerbodenRecht as e:
+                assert e.rechten == [recht] and recht in str(e) and "tok-" not in str(e), (recht, str(e))
+            assert "lees" not in Z._tokens, "het geweigerde token wordt niet bewaard"
+            gevraagd = []
+            Z._vraag = lambda url, koppen, max_bytes=0, g=gevraagd: (g.append(koppen.get("Authorization")), (200, "", b'{"id": "mehdi-id"}'))[1]
+            assert Z.lees("/users/me")["id"] == "mehdi-id"
+            assert gevraagd == ["Bearer tok-stack"] and Z.leesapp_verboden() == [recht], (recht, gevraagd, Z.leesapp_verboden())
+        Z._tokens.clear()
+        Z.vastzetten(None)
+        assert Z.leesapp_verboden() == [], "een nieuwe ronde begint zonder weigering"
+        Z.token_halen = lambda cid, geheim, account: {"access_token": "tok-" + cid[:4], "scope": f"user:read:user:admin {TRANSCRIPT_RECHT}"}
+        assert Z._toegang("lees") == "tok-lees", "het Zoom-transcript geeft alleen een melding, geen weigering"
+        Z.token_halen = lambda cid, geheim, account: {"access_token": "tok-stack", "scope": "meeting:write:meeting:admin"}
+        assert Z._toegang("stack") == "tok-stack", "de gedeelde app van de stack valt niet onder de lijst"
+    finally:
+        herstel()
+        Z.vastzetten(None)
+
+
+@bord_nodig
+def test_eigen2_zoomwacht_met_een_geweigerde_leesapp():
+    """EIGEN-2 in de ronde: een leesapp met een verboden recht wordt geweigerd. De ronde leest met de app van de stack,
+    het token van de leesapp gaat nooit naar Zoom, en Mehdi krijgt een nood die zegt wat er mis is; de naam van het recht
+    staat in het werkverslag."""
+    w = Wereld()
+    herstel = twee_apps(" ".join(sorted(KERN_PROEF)) + " meeting:write:meeting:admin")
+    try:
+        w.fathom_opname("740", w.zoom.sessie("v1", bxl("2026-10-20 09:00"), 20))
+        assert w.ronde(NU) is None
+    finally:
+        herstel()
+    assert {k.get("Authorization") for _, k in w.zoom.gevraagd if k} == {"Bearer tok-stack"}, {k.get("Authorization") for _, k in w.zoom.gevraagd}
+    assert w.bord.noden().get("Zoom-leesapp geweigerd: ze heeft een recht dat ze nooit mag hebben; telling en vangnet zijn "
+                              "onvolledig") == "mehdi", w.bord.noden()
+    assert "Zoom-leesapp geeft geen token: telling en vangnet zijn onvolledig" not in w.bord.noden()
+    assert "meeting:write:meeting:admin" in json.dumps(w.bord.posts("/api/logboek")), "het werkverslag noemt het recht"
+    Z.vastzetten(None)
+
+
+def test_eigen2_leesapp_kern_advies_en_verboden_rechten():
+    """EIGEN-2 (13.6, rechten-zoomwacht-lezen.md v1): zoom_leesapp.py toetst de rechten tegen de definitieve lijst. KERN is
+    nodig voor de telling en het vangnet en bepaalt de exitcode; ADVIES (de rest, voor de latere accountscan) meldt hij per
+    recht als aanwezig of ontbreekt. Heeft het token een recht uit 'Nooit aanvinken', dan weigert hij te werken: exit
+    niet-nul met de naam, niets geschreven en niets verder getoetst. Het Zoom-transcript geeft alleen een melding. Het
+    recht dat bij Zoom niet bestaat, is overal weg. Tot nu stond team_chat:read:list_user_messages:admin bij de nodige
+    rechten en toetste niets een verboden recht."""
+    import zoom_leesapp as ZL  # noqa: PLC0415
+    assert set(ZL.KERN) == KERN_PROEF and len(ZL.KERN) == len(KERN_PROEF), ZL.KERN
+    assert set(ZL.KERN) | set(ZL.ADVIES) == AANVINKEN_PROEF and not set(ZL.KERN) & set(ZL.ADVIES), set(ZL.ADVIES) ^ (AANVINKEN_PROEF - KERN_PROEF)
+    assert len(ZL.ADVIES) == len(set(ZL.ADVIES)) == len(AANVINKEN_PROEF) - len(KERN_PROEF)
+    assert not Z.verboden(AANVINKEN_PROEF), Z.verboden(AANVINKEN_PROEF)
+    assert [r for r in VERBODEN_PROEF if Z.verboden({r}) != [r]] == [], "elk verboden recht wordt herkend"
+    assert not Z.verboden({TRANSCRIPT_RECHT}) and TRANSCRIPT_RECHT in Z.MELDEN_RECHTEN
+    for pad in ("zoom_leesapp.py", "zoom_wacht.py", os.path.join("koppelingen", "zoom.py")):
+        assert OUD_RECHT not in open(os.path.join(RUNNER, pad), encoding="utf-8").read(), pad
+    ZL, env, herstel = _leesapp_proef(["ZOOM_ACCOUNT_ID=stack-account-1234", "ZOOM_LEES_CLIENT_ID=lees-client-445566",
+                                       "ZOOM_LEES_CLIENT_SECRET=lees-geheim-112233", "ZOOM_MEHDI_USER=mehdi-id"])
+    try:
+        ZL.eigen_nummer = lambda: PMI
+        _zoo08_zoom("mehdi-id", "mehdi-id")
+        gelezen, lees = [], Z.lees
+        Z.lees = lambda pad, params=None, profiel="lees": (gelezen.append(pad), lees(pad, params, profiel))[1]
+        voor = open(env, encoding="utf-8").read()
+
+        def toets(rechten, *argv):
+            Z.rechten = lambda profiel="lees": set(rechten)
+            gelezen.clear()
+            uit = io.StringIO()
+            with redirect_stdout(uit):
+                code = ZL.main(list(argv))
+            return code, uit.getvalue().strip().splitlines()
+        # 1. alleen de kern: klaar, en elk advies apart als ontbreekt
+        code, regels = toets(KERN_PROEF)
+        assert code == 0 and regels[-1] == "klaar", regels[-3:]
+        assert all(f"recht {r}: aanwezig" in regels for r in KERN_PROEF)
+        assert all(f"recht {r}: ontbreekt (advies)" in regels for r in AANVINKEN_PROEF - KERN_PROEF), regels
+        code, regels = toets(AANVINKEN_PROEF)
+        assert code == 0 and all(f"recht {r}: aanwezig (advies)" in regels for r in AANVINKEN_PROEF - KERN_PROEF)
+        # 2. een recht van de kern ontbreekt
+        code, regels = toets(KERN_PROEF - {"report:read:user:admin"})
+        assert code == 1 and regels[-1] == "ontbreekt: report:read:user:admin", regels[-1]
+        # 3. een verboden recht: geweigerd, met de naam, en niets verder gevraagd of geschreven
+        for recht in VERBODEN_PROEF:
+            code, regels = toets(KERN_PROEF | {recht})
+            assert code != 0 and regels[-1].startswith("geweigerd: ") and recht in regels[-1], (recht, regels[-1])
+            assert not gelezen, (recht, gelezen)
+        # 4. het Zoom-transcript: een melding, geen weigering
+        code, regels = toets(KERN_PROEF | {TRANSCRIPT_RECHT})
+        assert code == 0 and [r for r in regels if r.startswith("melding: ") and TRANSCRIPT_RECHT in r], regels
+        # 5. de echte weg: zoom.py weigert het token, de toets noemt het recht
+        Z.rechten, Z._toegang = ECHTE_RECHTEN, ECHTE_TOEGANG
+        Z._tokens.clear()
+        Z.token_halen = lambda cid, geheim, account: {"access_token": "x", "scope": " ".join(sorted(KERN_PROEF)) + " user:read:zak:admin"}
+        uit = io.StringIO()
+        with redirect_stdout(uit):
+            code = ZL.main([])
+        laatste = uit.getvalue().strip().splitlines()[-1]
+        assert code != 0 and laatste.startswith("geweigerd: ") and "user:read:zak:admin" in laatste, laatste
+        # 6. --zet met nieuwe sleutels die zo'n token geven: niets geschreven
+        ZL.getpass.getpass = lambda vraag: {"Account ID: ": "stack-account-1234", "Client ID: ": "lees-client-445566",
+                                            "Client Secret: ": "nieuw-geheim-998877"}[vraag]
+        uit = io.StringIO()
+        with redirect_stdout(uit):
+            code = ZL.main(["--zet", "--vervang"])
+        laatste = uit.getvalue().strip().splitlines()[-1]
+        assert code != 0 and laatste.startswith("niets geschreven: ") and "user:read:zak:admin" in laatste, laatste
+        assert open(env, encoding="utf-8").read() == voor, "met een verboden recht werd toch iets geschreven"
+        assert "nieuw-geheim" not in uit.getvalue() and "lees-geheim" not in uit.getvalue()
+    finally:
+        herstel()
+        Z.vastzetten(None)
+
+
+def test_eigen3_eigen_account_alleen_op_een_exact_adres():
+    """EIGEN-3: 'eigen account' op een exact adres, nooit op een deel. Een plek: MEHDI_FATHOM_ADRESSEN in
+    koppelingen/fathom.py, uit FATHOM_MEHDI_ADRESSEN met als standaard zoomafspraken@gmail.com en mch@h-architects.be
+    (gemeten op de VM: elke eigen opname heeft zoomafspraken@gmail.com, de andere 177 shaniel@hdssr.com). Tot nu
+    herkende De Zoomwacht het eigen account aan deelstukken van De Fathomwacht ('h-architects', 'mch@'): de opname van
+    een collega met een adres van h-architects telde als die van Mehdi, kreeg voorrang bij het koppelen en telde zonder
+    hem in de sessie. Tegenproef van 22-10-2026: ook De Fathomwacht (sleutel_nood) zocht nog op die deelstukken, met een
+    eigen lijst en een eigen naam in .env; een opname van een collega dempte zo de nood over Mehdi's eigen Fathom-sleutel.
+    Nu leest ook zij de ene lijst."""
+    import fathom as F  # noqa: PLC0415
+    assert F.MEHDI_FATHOM_ADRESSEN == frozenset({"zoomafspraken@gmail.com", "mch@h-architects.be"}), F.MEHDI_FATHOM_ADRESSEN
+    g = {"recording_id": 1, "recording_start_time": "2026-10-20T08:00:00Z", "recording_end_time": "2026-10-20T08:30:00Z",
+         "meeting_url": f"https://us06web.zoom.us/j/{PMI}"}
+    for email, eigen in (("bram@h-architects.be", False), ("xmch@elders.example", False), ("mch@ander-domein.example", False),
+                         ("mch@h-architects.be.example", False), ("jan@h-architects-partner.example", False), ("", False),
+                         ("shaniel@hdssr.com", False), (" MCH@H-Architects.be ", True), ("zoomafspraken@gmail.com", True),
+                         ("Zoomafspraken@Gmail.com", True)):
+        assert ZW.opname_uit(dict(g, recorded_by={"email": email}))["eigen"] is eigen, email
+    zw = open(os.path.join(RUNNER, "zoom_wacht.py"), encoding="utf-8").read()
+    assert "MEHDI_FATHOM_EIGENAARS" not in zw and "fathom.MEHDI_FATHOM_ADRESSEN" in zw, "De Zoomwacht leest de ene lijst"
+    fw = open(os.path.join(RUNNER, "fathom_wacht.py"), encoding="utf-8").read()
+    assert "MEHDI_FATHOM_EIGENAARS" not in fw and "FATHOM_MEHDI_EIGENAARS" not in fw and "fathom.MEHDI_FATHOM_ADRESSEN" in fw, \
+        "De Fathomwacht leest dezelfde lijst, zonder eigen naam in .env"
+    # De Fathomwacht: alleen een opname van een exact eigen adres bewijst de sleutel (volle venster: anders de nood)
+    oud_dagen, ZW.fw.DAGEN = ZW.fw.DAGEN, ZW.fw.STANDAARD_DAGEN
+    try:
+        for email, nood in (("bram@h-architects.be", True), ("xmch@elders.example", True), ("shaniel@hdssr.com", True),
+                            (" Zoomafspraken@Gmail.com ", False), ("mch@h-architects.be", False)):
+            uit = ZW.fw.sleutel_nood([{"recorded_by": {"email": email}}])
+            assert uit == ([{"tekst": ZW.fw.SLEUTEL_NOOD, "wie": "mehdi"}] if nood else []), (email, uit)
+    finally:
+        ZW.fw.DAGEN = oud_dagen
+    # de omgeving bepaalt de lijst; zonder waarde geldt de standaard
+    try:
+        for waarde, verwacht in ((" Ander@Voorbeeld.test , x@y.test,", {"ander@voorbeeld.test", "x@y.test"}),
+                                 ("", {"zoomafspraken@gmail.com", "mch@h-architects.be"})):
+            os.environ["FATHOM_MEHDI_ADRESSEN"] = waarde
+            spec = importlib.util.spec_from_file_location("fathom_proef", os.path.join(RUNNER, "koppelingen", "fathom.py"))
+            M = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(M)
+            assert M.MEHDI_FATHOM_ADRESSEN == frozenset(verwacht), (waarde, M.MEHDI_FATHOM_ADRESSEN)
+    finally:
+        os.environ.pop("FATHOM_MEHDI_ADRESSEN", None)
 
 
 if __name__ == "__main__":

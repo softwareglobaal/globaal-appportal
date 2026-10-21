@@ -43,6 +43,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord as bordklant  # noqa: E402  de gedeelde bord-klant; bord() hieronder is mijn eigen oproep (tests vervangen R.bord)
 import contracten_mcp as mcp  # noqa: E402
+import fathom  # noqa: E402  alleen MEHDI_FATHOM_ADRESSEN: Mehdi's eigen Fathom-account, een lijst (EIGEN-3)
 import ochtend as O  # noqa: E402
 import pipedrive  # noqa: E402
 import taken  # noqa: E402
@@ -115,11 +116,10 @@ INHOUD_SOORTEN = ("verslag", "dagbundel", "dagplan", "signaal", "verzoek", "ocht
 NOOIT_INHOUD = ("transcript", "locatie", "gezondheid", "coaching")
 # privé of prive, met of zonder accent, in elke hoofdletter: De Fathomwacht schrijft de afdeling 'prive' zonder accent
 PRIVE = re.compile(r"priv[eé]", re.I)
-# Mehdi's eigen Fathom-account (M2): alleen deze exacte adressen geven tekst vrij. De Fathomwacht en De Zoomwacht
-# herkennen zijn sleutel aan deelstukken (MEHDI_FATHOM_EIGENAARS: 'h-architects', 'mch@'); die passen ook op het adres van
-# een collega of van een ander domein, en zijn dus geen grond om gesprekstekst te geven (REG-02). Zijn account neemt op
-# als zoomafspraken@gmail.com (fathom_wacht.py:399).
-MEHDI_FATHOM_ADRESSEN = frozenset({"mch@h-architects.be", "zoomafspraken@gmail.com"})
+# Mehdi's eigen Fathom-account (M2): alleen deze exacte adressen geven tekst vrij, nooit een deelstuk van een adres: dat
+# past ook op het adres van een collega of van een ander domein (REG-02). Een lijst voor De Regisseur en De Zoomwacht, in
+# koppelingen/fathom.py (EIGEN-3); zijn account neemt op als zoomafspraken@gmail.com.
+MEHDI_FATHOM_ADRESSEN = fathom.MEHDI_FATHOM_ADRESSEN
 
 NOOD_GRENZEN = "Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist"
 NOOD_OCHTEND_WEG = "Ochtendbericht niet teruggevonden op het bord"

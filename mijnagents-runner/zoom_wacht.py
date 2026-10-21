@@ -28,8 +28,10 @@ Ontwerp regie-zoom v1.2 (Z3 tot Z9, met 13.2 en 13.5). In de gesprekkenketen na 
 
 De koppeling met Zoom is koppelingen/zoom.py (een koppeling, Z1). De alleen-lezende app "Zoomwacht lezen" zet Mehdi
 met zoom_leesapp.py --zet; zonder die app, of als haar sleutels geen token geven (ZOO-10), lees ik met de app van de
-stack en is de telling een ondergrens ("minstens N"), met een nood voor Mehdi. Onbekend is nooit 0 (L29, L38). Elke
-ronde gaat door de gedeelde ronde (N12).
+stack en is de telling een ondergrens ("minstens N"), met een nood voor Mehdi; zo ook als het token van de leesapp een
+recht heeft dat ze nooit mag hebben (13.6: zoom.py weigert het). De chat lees ik altijd met de app van de stack: de
+leesapp krijgt het recht op chatberichten bewust niet (EIGEN-1). Onbekend is nooit 0 (L29, L38). Elke ronde gaat door
+de gedeelde ronde (N12).
 
     zoom_wacht.py                              een ronde
     zoom_wacht.py --droog                      alleen lezen; een rapport per dag zonder namen of onderwerpen
@@ -56,8 +58,8 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
-import fathom  # noqa: E402  (de API zonder transcript: "het archief volgt" is iets anders dan "Fathom heeft het niet")
-import fathom_wacht as fw  # noqa: E402  (personen_uit_werkwijze, belgisch, AFDELINGEN, MEHDI_FATHOM_EIGENAARS, ARCHIEF)
+import fathom  # noqa: E402  (de API zonder transcript, en MEHDI_FATHOM_ADRESSEN: Mehdi's eigen account, EIGEN-3)
+import fathom_wacht as fw  # noqa: E402  (personen_uit_werkwijze, belgisch, AFDELINGEN, ARCHIEF)
 import zoom as Z  # noqa: E402
 
 NAAM = "zoom-wacht"
@@ -122,6 +124,14 @@ def dag_grenzen(dag):
     begin = datetime.combine(d, time(0), tzinfo=BE)
     einde = datetime.combine(d + timedelta(days=1), time(0), tzinfo=BE)
     return begin.astimezone(timezone.utc), einde.astimezone(timezone.utc)
+
+
+def utc_tijden(dag, uur):
+    """Een Brusselse datum en tijd zonder UTC-bron ('2026-10-25', '02:30') als UTC: een tijd, of twee als de Brusselse tijd
+    dubbelzinnig is (RZ2-05). Op 25-10-2026 gaat de klok terug en bestaat 02:30 twee keer, om 00:30 en 01:30 UTC; een
+    tijd die niet bestaat (28-03-2027, 02:30) geeft er ook twee. Gesorteerd, het eerste uur eerst."""
+    lokaal = datetime.strptime(f"{dag} {uur}", "%Y-%m-%d %H:%M")
+    return sorted({lokaal.replace(tzinfo=BE, fold=f).astimezone(timezone.utc) for f in (0, 1)})
 
 
 def overlap(a_start, a_einde, b_start, b_einde):
@@ -264,8 +274,8 @@ def toestand_van(fout):
     return f"fout: {type(fout).__name__}"
 
 
-def _lijst(pad, params, sleutel):
-    lijst = Z.lees_alles(pad, params, sleutel)
+def _lijst(pad, params, sleutel, profiel="lees"):
+    lijst = Z.lees_alles(pad, params, sleutel, profiel)
     if lijst is None:
         raise Z.ZoomFout("lijst niet gevonden")
     return lijst
@@ -451,8 +461,10 @@ def zoom_lezen(van, tot, staat, klok):
 def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
     """Eén rij per chatgesprek per dag: aantallen en tijden, nooit de inhoud. Een 1:1 is werk als de ander bekend is op
     e-mailadres of teamdomein (H2), anders privé, bij twijfel privé; zonder personentabel is elke 1:1 privé (T26). De
-    naam van een privé-1:1 gaat naar het masker van het bord."""
-    sessies = _lijst(f"/chat/users/{ik['id']}/sessions", {"from": van_dag, "to": tot_dag, "page_size": 50}, "sessions")
+    naam van een privé-1:1 gaat naar het masker van het bord.
+    Altijd met de app van de stack, nooit met de leesapp (EIGEN-1, 13.6): de leesapp krijgt het recht op chatberichten
+    bewust niet, en zoom.py weigert /messages met de leesapp."""
+    sessies = _lijst(f"/chat/users/{ik['id']}/sessions", {"from": van_dag, "to": tot_dag, "page_size": 50}, "sessions", "stack")
     rijen, dagtel = [], defaultdict(lambda: {"berichten": 0, "gesprekken": 0, "prive": 0})
     for s in sessies:
         p = {"from": van_dag, "to": tot_dag, "page_size": 50}
@@ -463,7 +475,7 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
             p["to_channel"] = s.get("channel_id", "")
         if not (p.get("to_contact") or p.get("to_channel")):
             continue
-        berichten = _lijst(f"/chat/users/{ik['id']}/messages", p, "messages")
+        berichten = _lijst(f"/chat/users/{ik['id']}/messages", p, "messages", "stack")
         if not berichten:
             continue
         naam = s.get("name") or ("gesprek" if een_op_een else "kanaal")
@@ -511,17 +523,19 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
 # ---------------------------------------------------------------- fathom ---
 def opname_uit(g, map_=""):
     """Een opname van Fathom: recording_id, het meetingnummer uit meeting_url (geen Zoom-link: geen nummer), begin en
-    einde, of ze van Mehdi's eigen account is, en de privévlag van De Fathomwacht (onbekend telt als privé)."""
+    einde, of ze van Mehdi's eigen account is (exact adres uit fathom.MEHDI_FATHOM_ADRESSEN), en de privévlag van De
+    Fathomwacht (onbekend telt als privé)."""
     rid = str(g.get("recording_id") or "")
     start, einde = tijd(g.get("recording_start_time")), tijd(g.get("recording_end_time"))
     if not rid or not start or not einde:
         return None
     m = NUMMER.search(str(g.get("meeting_url") or ""))
     door = g.get("recorded_by") if isinstance(g.get("recorded_by"), dict) else {}
-    email = (door.get("email") or "").lower()
+    email = (door.get("email") or "").strip().lower()
     herk = g.get("herkenning") if isinstance(g.get("herkenning"), dict) else {}
+    # EIGEN-3: alleen op een exact adres. Een deelstuk ('h-architects', 'mch@') maakte de opname van een collega eigen.
     return {"rid": rid, "uniek": f"fathom:{rid}", "nummer": m.group(1) if m else "", "start": start, "einde": einde,
-            "eigen": bool(email) and any(k in email for k in fw.MEHDI_FATHOM_EIGENAARS),
+            "eigen": email in fathom.MEHDI_FATHOM_ADRESSEN,
             "prive": herk.get("prive") is not False, "thema": str(herk.get("thema") or "")[:80],
             "map": map_, "archief": bool(map_)}
 
@@ -874,13 +888,14 @@ def vangnet_schrijven(s, bestand, ik, klok):
 
 def kandidaat(s, x, klok):
     """Kan een onleesbare gesprek.json bij deze sessie horen? De mapnaam geeft de Brusselse start van de opname, op de
-    minuut; Fathom start na het begin van de sessie en voor haar einde."""
+    minuut; Fathom start na het begin van de sessie en voor haar einde. Bestaat die Brusselse tijd twee keer (de klok
+    gaat terug), dan is het een kandidaat als een van beide uren past: bij twijfel onbekend (RZ2-05)."""
     if x["dag"] != dag_van(s["start"]):
         return False
     if not x["tijd"]:
         return True
-    t = datetime.strptime(x["dag"] + x["tijd"], "%Y-%m-%d%H%M").replace(tzinfo=BE).astimezone(timezone.utc)
-    return s["start"] - timedelta(minutes=1) <= t <= (s["einde"] or klok)
+    return any(s["start"] - timedelta(minutes=1) <= t <= (s["einde"] or klok)
+               for t in utc_tijden(x["dag"], f"{x['tijd'][:2]}:{x['tijd'][2:]}"))
 
 
 def fathom_stand(s, w, k, bevestigd, klok):
@@ -1315,6 +1330,10 @@ def werk(r, a, klok):
     k = w["koppeling"]
     if not Z.leesapp():
         r.nood("Zoom-leesapp ontbreekt: telling en vangnet zijn onvolledig", "mehdi")
+    elif Z.leesapp_verboden():
+        # EIGEN-2: het token van de leesapp heeft een recht uit 'Nooit aanvinken'; zoom.py weigerde het en deze ronde las
+        # ik met de app van de stack. De naam van het recht staat in het werkverslag (de bronregel).
+        r.nood("Zoom-leesapp geweigerd: ze heeft een recht dat ze nooit mag hebben; telling en vangnet zijn onvolledig", "mehdi")
     elif Z.leesapp_fout():
         # ZOO-10: de sleutels staan er maar geven geen token; deze ronde las ik met de app van de stack
         r.nood("Zoom-leesapp geeft geen token: telling en vangnet zijn onvolledig", "mehdi")
@@ -1322,7 +1341,8 @@ def werk(r, a, klok):
         if w["bronnen"][b].startswith("geen recht: "):
             r.nood(f"Zoom-telling onvolledig: de leesapp mist het recht {w['bronnen'][b][len('geen recht: '):]}", "mehdi")
     if w["bronnen"]["chat"].startswith("geen recht: "):
-        r.nood(f"Zoom-chat niet gelezen: de leesapp mist het recht {w['bronnen']['chat'][len('geen recht: '):]}", "mehdi")
+        # EIGEN-1: de chat leest altijd met de app van de stack
+        r.nood(f"Zoom-chat niet gelezen: de app van de stack mist het recht {w['bronnen']['chat'][len('geen recht: '):]}", "mehdi")
     if not w["identiteit_ok"]:
         r.nood("De Zoom-gebruiker van de leesapp is niet de eigenaar van de vaste vergaderruimte", "mehdi")
 
@@ -1407,9 +1427,12 @@ def _tel(uit):
 
 
 def leesapp_stand():
-    """Voor het werkverslag en --droog: 'ja', 'nee' of 'ja, maar geen token (gelezen met de app van de stack)'."""
+    """Voor het werkverslag en --droog: 'ja', 'nee', 'ja, maar geen token (gelezen met de app van de stack)' of, met een
+    verboden recht (EIGEN-2), 'ja, maar geweigerd om een verboden recht: <namen> (gelezen met de app van de stack)'."""
     if not Z.leesapp():
         return "nee"
+    if Z.leesapp_verboden():
+        return f"ja, maar geweigerd om een verboden recht: {', '.join(Z.leesapp_verboden())} (gelezen met de app van de stack)"
     return "ja, maar geen token (gelezen met de app van de stack)" if Z.leesapp_fout() else "ja"
 
 
@@ -1418,7 +1441,10 @@ def koppel_sinds(r, datum, klok, ik, schrijven, droog=False):
     """Z9, J12, L4: de oude zoom:meeting-rijen sinds DATUM met een joinlink aan Fathom koppelen en daarna die link
     leegmaken: eerst koppelen en teruglezen, dan dezelfde volledige rij opnieuw met alleen link leeg. Er wordt niets
     verwijderd; een rij zonder Fathom-tegenhanger blijft tellen. Een rij waarvan het archief rond die tijd onleesbaar
-    is, of waarvan de koppeling niet terugkomt, houdt haar link (het nummer is nog nodig)."""
+    is, of waarvan de koppeling niet terugkomt, houdt haar link (het nummer is nog nodig). RZ2-05: de rij kent alleen
+    de Brusselse tijd; bestaat die twee keer (25-10-2026, 02:00 tot 03:00), dan beslist eerst de UTC-start van de sessie
+    bij Zoom, dan de UTC-tijd van Fathom, maar die alleen als de keuze uitsluitend is (tegenproef 22-10-2026); kan geen
+    van beide het, dan blijft de rij ongekoppeld met haar link en een regel in het werkverslag."""
     try:
         oud = bord.db_lees("SELECT * FROM gesprek_log WHERE uniek LIKE 'zoom:meeting:%' AND datum >= ? AND link <> '' ORDER BY datum, start", (datum,))
     except bord.BordOnbekend as e:
@@ -1431,16 +1457,62 @@ def koppel_sinds(r, datum, klok, ik, schrijven, droog=False):
         if r is not None:
             r.nood("Fathom-archief niet leesbaar voor de oude koppeling", "claude-code")
         return
-    sessies = []
+    sessies, dubbelzinnig = [], []
     for rij in oud:
         m = NUMMER.search(rij.get("link") or "")
+        nummer = m.group(1) if m else ""
         try:
-            start = datetime.strptime(f"{rij['datum']} {rij['start']}", "%Y-%m-%d %H:%M").replace(tzinfo=BE).astimezone(timezone.utc)
+            tijden = utc_tijden(rij["datum"], rij["start"])
+            duur = timedelta(minutes=max(1, int(rij.get("minuten") or 0)))
         except (TypeError, ValueError):
             continue
-        sessies.append({"uuid": rij["uniek"][len("zoom:meeting:"):], "nummer": m.group(1) if m else "", "start": start,
-                        "einde": start + timedelta(minutes=max(1, int(rij.get("minuten") or 0))), "duur": rij.get("minuten"),
-                        "deelnemers": None, "host_id": ik["id"] if ik else "", "deelname": False, "rij": rij})
+        s = {"uuid": rij["uniek"][len("zoom:meeting:"):], "nummer": nummer, "start": tijden[0], "einde": tijden[0] + duur,
+             "duur": rij.get("minuten"), "deelnemers": None, "host_id": ik["id"] if ik else "", "deelname": False, "rij": rij}
+        if len(tijden) > 1:
+            # RZ2-05: de rij kent alleen de Brusselse tijd, en die bestaat twee keer. Eerst de UTC-bron van Zoom: de start
+            # van deze sessie (/past_meetings/<uuid>), op de minuut gelijk aan een van de twee uren.
+            try:
+                d = Z.lees(f"/past_meetings/{Z.uuid_pad(s['uuid'])}")
+            except Exception:  # noqa: BLE001  geen antwoord: dan Fathom
+                d = None
+            bij_zoom = tijd((d or {}).get("start_time"))
+            bij_zoom = bij_zoom.replace(second=0, microsecond=0) if bij_zoom else None
+            if bij_zoom in tijden:
+                s["start"], s["einde"] = bij_zoom, bij_zoom + duur
+                sessies.append(s)
+                continue
+            # Dan de UTC-tijd van Fathom (recording_start_time): raakt maar een van de twee uren een opname met dit nummer
+            # of een onleesbaar archief, dan is dat het uur, als die keuze uitsluitend is (hieronder). Raakt geen van
+            # beide iets, dan maakt het uur niets uit. Raken ze allebei, dan koppel ik niet: de rij houdt haar link en
+            # krijgt een regel in het werkverslag.
+            raak = [t for t in tijden
+                    if any(nummer and o["nummer"] == nummer and overlap(t, t + duur, o["start"], o["einde"]) > 0 for o in opnames)
+                    or any(kandidaat({"start": t, "einde": t + duur}, x, klok) for x in onleesbaar)]
+            if len(raak) > 1:
+                dubbelzinnig.append(s)
+                continue
+            if raak:
+                s["start"], s["einde"] = raak[0], raak[0] + duur
+                s["via_fathom"] = {o["uniek"] for o in opnames
+                                   if nummer and o["nummer"] == nummer and overlap(s["start"], s["einde"], o["start"], o["einde"]) > 0}
+            else:
+                s["uur_onbepaald"] = True
+        sessies.append(s)
+    # Tegenproef RZ2-05 (22-10-2026): wat Fathom aanwijst, bewijst alleen iets als het uitsluitend is. 83% van de meetings
+    # zit in de vaste ruimte, dus rijen delen vaak een nummer. Een opname die voor twee rijen het uur kiest, of een uur dat
+    # in dezelfde ruimte overlapt met een andere rij (twee meetings tegelijk in een ruimte kan niet), maakt de keuze
+    # willekeurig: alle betrokken rijen blijven dan ongekoppeld, met hun link. Een rij waarvan het uur niets uitmaakt, telt
+    # hier niet mee: geen van haar twee uren raakt een opname.
+    gekozen = [s for s in sessies if "via_fathom" in s]
+    twijfel = set()
+    for i, s in enumerate(gekozen):
+        if any(s["via_fathom"] & t["via_fathom"] for t in gekozen[i + 1:]):
+            twijfel |= {id(s)} | {id(t) for t in gekozen[i + 1:] if s["via_fathom"] & t["via_fathom"]}
+        if s["nummer"] and any(t is not s and t["nummer"] == s["nummer"] and not t.get("uur_onbepaald")
+               and overlap(s["start"], s["einde"], t["start"], t["einde"]) > 0 for t in sessies):
+            twijfel.add(id(s))
+    dubbelzinnig += [s for s in sessies if id(s) in twijfel]
+    sessies = [s for s in sessies if id(s) not in twijfel]
     k = koppel(sessies, opnames, ik, klok)
     wens = {}
     for uuid, o in k["leidend"].items():
@@ -1448,13 +1520,18 @@ def koppel_sinds(r, datum, klok, ik, schrijven, droog=False):
         wens[f"zoom:meeting:{uuid}"] = {"sessie": f"zoom:meeting:{uuid}", "dubbel_van": o["uniek"]}
     for rid, (uuid, leider) in k["dubbel"].items():
         wens[f"fathom:{rid}"] = {"sessie": f"zoom:meeting:{uuid}", "dubbel_van": f"fathom:{leider}"}
-    met_code = [s for s in sessies if "pwd=" in (s["rij"].get("link") or "")]
+    met_code = [s for s in sessies + dubbelzinnig if "pwd=" in (s["rij"].get("link") or "")]
     if droog:
         print(f"(droog) koppel-sinds {datum}: {len(oud)} oude rijen met een link, {len(k['leidend'])} met een Fathom-opname, "
-              f"{len(met_code)} met een toegangscode; niets geschreven")
+              f"{len(met_code)} met een toegangscode"
+              + (f", {len(dubbelzinnig)} niet te koppelen (die Brusselse tijd bestaat twee keer)" if dubbelzinnig else "")
+              + "; niets geschreven")
         return
     if not schrijven:
         return
+    for s in dubbelzinnig:
+        ag.log("koppel-sinds", "besluit", f"{s['rij']['datum']} {s['rij']['start']}: niet gekoppeld, die tijd bestaat twee keer in "
+               "Brussel en Fathom zegt niet welk uur; de rij houdt haar link")
     bevestigd, _, _ = koppel_schrijven(wens)
     try:
         na = rijen_lezen([f"zoom:meeting:{s['uuid']}" for s in sessies], "*")
@@ -1494,7 +1571,9 @@ def koppel_sinds(r, datum, klok, ik, schrijven, droog=False):
     if r is not None and onbekend_l4:
         r.nood("Niet nagekeken of een oude Zoom-link met toegangscode bij een terugkerende meeting hoort", "claude-code")
     ag.log("koppel-sinds", "schrijf", f"sinds {datum}: {len(oud)} oude rijen met een link, {len(k['leidend'])} gekoppeld aan Fathom, "
-           f"{len(gewist)} links leeggemaakt, {gehouden} gehouden; {len(met_code)} met toegangscode, {terugkerend} terugkerend")
+           f"{len(gewist)} links leeggemaakt, {gehouden} gehouden"
+           + (f", {len(dubbelzinnig)} niet gekoppeld (die Brusselse tijd bestaat twee keer)" if dubbelzinnig else "")
+           + f"; {len(met_code)} met toegangscode, {terugkerend} terugkerend")
 
 
 def rapport_nummers(ik, van_dag, tot_dag):

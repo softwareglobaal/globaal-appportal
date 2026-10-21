@@ -44,9 +44,9 @@ ARCHIEF = os.path.expanduser(os.environ.get("FATHOM_ARCHIEF_PAD", "~/appportal/m
 VERBODEN_TEKEN = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
 MODEL = os.environ.get("FATHOM_WACHT_MODEL", "claude-sonnet-5")
 AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "tkn", "elevait", "regie", "prive")
-# Kenmerken in het e-mailadres van de opnemer waaraan we Mehdi's eigen Fathom-sleutel herkennen
-MEHDI_FATHOM_EIGENAARS = tuple(k.strip() for k in os.environ.get(
-    "FATHOM_MEHDI_EIGENAARS", "h-architects,mch@,zoomafspraken@gmail.com").split(",") if k.strip())
+# Mehdi's eigen Fathom-sleutel herken ik aan een opname van zijn account: een exact adres uit fathom.MEHDI_FATHOM_ADRESSEN,
+# dezelfde lijst als De Zoomwacht en De Regisseur (EIGEN-3, tegenproef 22-10-2026). Tot dan zocht ik op deelstukken
+# ('h-architects', 'mch@'), en dan dempte een opname van een collega de nood hieronder.
 SLEUTEL_NOOD = "Mehdi's eigen Fathom-sleutel ontbreekt op de VM (FATHOM_API_KEYS is nu van Shaniel); ik zie zijn gesprekken niet"
 
 
@@ -333,9 +333,10 @@ def sleutel_nood(gesprekken):
     de nood. Geen opname in een kort venster, zoals de echte ronde die De Regisseur start (J1), bewijst niets: dan blijft
     de vorige stand, open als ze open stond en dicht als ze dicht was. Weet het bord die stand niet, dan None: onbekend is
     niet leeg."""
-    eigenaars = {(g.get("recorded_by") or {}).get("email") or "" for g in gesprekken}
-    # Mehdi's Fathom-account neemt op als zoomafspraken@gmail.com (sleutel MEHDI_FATHOM_API_KEY, ook in ~/elevait/.env)
-    if any(any(kenmerk in e for kenmerk in MEHDI_FATHOM_EIGENAARS) for e in eigenaars):
+    eigenaars = {((g.get("recorded_by") or {}).get("email") or "").strip().lower() for g in gesprekken}
+    # Mehdi's Fathom-account neemt op als zoomafspraken@gmail.com (sleutel MEHDI_FATHOM_API_KEY, ook in ~/elevait/.env);
+    # alleen een exact adres telt, nooit een deel ervan (EIGEN-3)
+    if eigenaars & fathom.MEHDI_FATHOM_ADRESSEN:
         return []
     if DAGEN >= STANDAARD_DAGEN:
         return [{"tekst": SLEUTEL_NOOD, "wie": "mehdi"}]
