@@ -151,6 +151,17 @@ def download(pad, maximum=25_000_000):
         return data
 
 
+def download_kop(pad, n):
+    """Lees hoogstens de eerste n bytes, ook als Dropbox het hele bestand terugstuurt."""
+    if n < 1:
+        raise ValueError("de koplengte moet positief zijn")
+    req = urllib.request.Request(f"{INHOUD}/2/files/download", method="POST",
+                                 headers=_koppen({"Dropbox-API-Arg": json.dumps({"path": pad}),
+                                                 "Range": f"bytes=0-{n - 1}"}))
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return r.read(n)
+
+
 def upload(pad, data):
     """Nieuw bestand in Dropbox, nooit overschrijven (mode add: bij een bestaand pad
     krijgt het een nummer). Geeft het definitieve pad terug."""
