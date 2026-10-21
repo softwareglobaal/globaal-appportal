@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ datum }} — {{ app_naam }}</title>
+<title>{{ datum }} · {{ app_naam }}</title>
 <style>
   :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;--stil:#f59e0b}
   *{box-sizing:border-box}
@@ -22,6 +22,7 @@
   table.t{border-collapse:collapse;width:100%;font-size:13px}
   table.t td,table.t th{padding:5px 8px;border-top:1px solid var(--rand);text-align:left;vertical-align:top}
   table.t th{color:var(--zacht);font-weight:600}
+  table.t tr.dubbel td{color:var(--zacht)}
   .leeg{color:var(--zacht);font-style:italic}
   details summary{cursor:pointer;color:var(--accent)}
   .tag{font-size:11px;color:var(--zacht)}
@@ -60,8 +61,13 @@
 
   <div class="blok">
     <h2>Gesprekken (Fathom, Plaud, mail, telefoon)</h2>
-    {% if gesprekken %}<div class="wrap"><table class="t"><tr><th>Bron</th><th>Start</th><th>Min</th><th>Personen</th><th>Afdeling</th><th>Thema</th><th>Project</th><th>Zeker</th></tr>
-      {% for g in gesprekken %}<tr><td>{{ g['bron'] }}</td><td>{{ g['start'] }}</td><td>{{ g['minuten'] or '' }}</td><td>{{ g['personen'] }}</td><td>{{ g['afdeling'] }}{% if g['prive'] %} · privé{% endif %}</td><td>{{ g['thema'] }}</td><td>{{ g['project'] }}</td><td>{{ g['zekerheid'] }}</td></tr>{% endfor %}
+    {# J10, Z12 (ontwerp regie-zoom v1.2): een rij met dubbel_van telt niet mee, zoals op de pagina Gesprekken: grijs,
+       met waarvan, of "telt niet" voor een rij buiten Mehdi's ruimte. De tellende rijen staan eerst. #}
+    {% if gesprekken %}{% set dubbel = gesprekken|length - gesprekken_tellend %}
+    <p class="tag">{{ gesprekken_tellend }} {{ 'gesprek telt' if gesprekken_tellend == 1 else 'gesprekken tellen' }}{% if dubbel %}, {{ dubbel }} dubbel of buiten; een grijze rij telt niet mee{% endif %}.</p>
+    <div class="wrap"><table class="t"><tr><th>Bron</th><th>Start</th><th>Min</th><th>Personen</th><th>Afdeling</th><th>Thema</th><th>Project</th><th>Zeker</th></tr>
+      {% for g in gesprekken %}<tr{% if g['dubbel_van'] %} class="dubbel"{% endif %}><td>{{ g['bron'] }}
+        {%- if g['dubbel_van'] %}<div class="tag">{% if g['dubbel_van'].startswith('buiten:') %}telt niet: {{ g['dubbel_van'][7:] | replace('-', ' ') }}{% else %}dubbel van {{ g['dubbel_van'] }}{% endif %}</div>{% endif %}</td><td>{{ g['start'] }}</td><td>{{ g['minuten'] or '' }}</td><td>{{ g['personen'] }}</td><td>{{ g['afdeling'] }}{% if g['prive'] %} · privé{% endif %}</td><td>{{ g['thema'] }}</td><td>{{ g['project'] }}</td><td>{{ g['zekerheid'] }}</td></tr>{% endfor %}
     </table></div>{% else %}<p class="leeg">Geen gesprekken in de tabel voor deze dag.</p>{% endif %}
   </div>
 

@@ -6,6 +6,7 @@ import http.client
 import json
 import os
 import re
+import sqlite3
 import sys
 import unicodedata
 import urllib.error
@@ -239,26 +240,32 @@ class Agent:
             raise WerkwijzeOnbekend("onleesbaar antwoord van het bord", "geen werkwijze in het antwoord")
         return tekst
 
-    def werkwijze(self, taak="werkwijze lezen"):
+    def werkwijze(self, taak="werkwijze lezen", noden=()):
         """Mijn regelboek van het bord, nooit een lege tekst. Is het onbekend of leeg, dan stopt mijn werk hier:
         een nood met eigenaar, hartslag "fout" zodat N11 en de Normwacht het zien, en RondeGestopt (NA09).
         Zo ook voor de runners die hun werkwijze nog buiten de ronde lezen (agenda-wacht, archivaris,
-        fathom-wacht, levenscoach): die werkten tot 16-10-2026 bij een leesfout gewoon door (Codex NA11)."""
+        fathom-wacht, levenscoach): die werkten tot 16-10-2026 bij een leesfout gewoon door (Codex NA11).
+        noden: wat de ronde voor het lezen al wist (begin_noden, X4); dat gaat mee als het werk hier stopt."""
         try:
             tekst = self.werkwijze_lezen()
         except WerkwijzeOnbekend as e:
-            self.zonder_regelboek(f"Werkwijze niet gelezen: {e.soort}", "claude-code", taak, e.reden, e)
+            self.zonder_regelboek(f"Werkwijze niet gelezen: {e.soort}", "claude-code", taak, e.reden, e, noden=noden)
         if not tekst.strip():
-            self.zonder_regelboek("Werkwijze leeg op het bord", "mehdi", taak)
+            self.zonder_regelboek("Werkwijze leeg op het bord", "mehdi", taak, noden=noden)
         return tekst
 
     def zonder_regelboek(self, tekst, wie, taak, reden="", oorzaak=None, noden=()):
         """Stoppen voor het werk begint. De noodtekst blijft gelijk van ronde tot ronde (N10); de reden, zoals
-        de HTTP-code, staat in het detail. Er gaat geen kennis mee, want er is niets gelezen."""
+        de HTTP-code, staat in het detail. Er gaat geen kennis mee, want er is niets gelezen.
+        noden gaan mee op de lijst (X4). Is die lijst onbekend, dan stuurt de ronde er geen (het bord zou anders
+        alles sluiten), en staan hun teksten in het detail, zodat ze niet stil verdwijnen."""
         nieuw = [n for n in noden if n["tekst"] != tekst] + [{"tekst": tekst, "wie": wie}]
         self.log_verstuur()
-        self.hartslag("fout", taak=taak, detail=f"{tekst}{f' ({reden})' if reden else ''}; ronde gestopt voor het werk",
-                      nood=self.noden_bij_breuk(nieuw))
+        lijst = self.noden_bij_breuk(nieuw)
+        detail = f"{tekst}{f' ({reden})' if reden else ''}; ronde gestopt voor het werk"
+        if lijst is None and len(nieuw) > 1:
+            detail += "; ook: " + "; ".join(n["tekst"] for n in nieuw[:-1])
+        self.hartslag("fout", taak=taak, detail=detail, nood=lijst)
         raise RondeGestopt(tekst) from oorzaak
 
     def noden_bij_breuk(self, nieuw):
@@ -301,7 +308,7 @@ class Agent:
             it.setdefault("van", self.naam)
         return call("/api/klaarzet", {"items": self.maskeer(items)}) if items else {"nieuw": 0, "bestaand": 0}
 
-    def ronde(self, taak="ronde", bronnen=None):
+    def ronde(self, taak="ronde", bronnen=None, begin_noden=None):
         """De standaarddoorgang van een ronde. Zie AGENTNORM.md.
 
         Wie hiermee werkt haalt vanzelf N4 (melden welk regelboek je las), N11
@@ -316,16 +323,20 @@ class Agent:
 
         bronnen: extra regelboeken als {naam: inhoud}, bovenop de werkwijze.
 
+        begin_noden: noden die de agent al heeft voor de ronde begint, elk {"tekst": ..., "wie": ...}, zoals
+        De Bode met het bellen en het alarm, die voor de ronde lopen (X4, ontwerp regie-zoom v1.2). Ze staan
+        in de ronde alsof ze met r.nood() gemeld zijn, en gaan ook mee als de ronde stopt.
+
         Is de werkwijze op het bord onbekend of leeg, dan stopt de ronde voor het werk begint:
         een nood, hartslag "fout" en RondeGestopt (NA09). Zonder regelboek werkt geen agent.
         """
-        return Ronde(self, taak, bronnen or {})
+        return Ronde(self, taak, bronnen or {}, begin_noden or ())
 
 
 class Ronde:
     """Eén ronde van een agent, van hartslag tot hartslag."""
 
-    def __init__(self, agent, taak, bronnen):
+    def __init__(self, agent, taak, bronnen, begin_noden=()):
         self.agent = agent
         self.taak = taak
         self.detail = ""
@@ -334,6 +345,9 @@ class Ronde:
         self._noden = []
         for naam, inhoud in dict(bronnen).items():
             self.bron(naam, inhoud)
+        for n in begin_noden:
+            # door r.nood(), zodat ook hier geen teller in de tekst staat en een dubbel er maar een keer in komt (N10)
+            self.nood(n["tekst"], n.get("wie") or "mehdi")
 
     def bron(self, naam, inhoud):
         """Een regelboek dat ik deze ronde gelezen heb. Gaat mee als kennis."""
@@ -372,9 +386,10 @@ class Ronde:
             self._begin()
         except RondeGestopt:
             raise
-        except Exception as e:
+        except BaseException as e:
             # Codex NA15: een fout in de startfase liet de agent op "actief" staan, want __exit__ draait dan
-            # niet. Ook hier geldt N11: nooit blijven hangen op actief.
+            # niet. Ook hier geldt N11: nooit blijven hangen op actief. BaseException: ook SIGTERM (als
+            # SystemExit, keten.py en de timeout van De Regisseur) en Ctrl-C (ontwerp regie-zoom v1.2, J1).
             self.agent.log_verstuur()
             self.agent.hartslag("fout", taak=self.taak, detail=f"{type(e).__name__}: {str(e)[:180]}",
                                 nood=self.agent.noden_bij_breuk(self._noden))
@@ -384,8 +399,8 @@ class Ronde:
     def _begin(self):
         # NA09 (Codex, 16-10-2026): tot dan gaf een leesfout een lege werkwijze en werkte de agent gewoon
         # door zonder regelboek, zonder dat iemand het zag. Onbekend is niet leeg, en leeg is geen regelboek:
-        # werkwijze() stopt de ronde dan zelf, voor het werk begint.
-        self.werkwijze = self.agent.werkwijze(taak=self.taak)
+        # werkwijze() stopt de ronde dan zelf, voor het werk begint; de begin_noden gaan dan mee (X4).
+        self.werkwijze = self.agent.werkwijze(taak=self.taak, noden=self._noden)
         self._bronnen.setdefault("werkwijze op het bord", self.werkwijze)
         # Norm N13: wat een agent leert, leest elke agent. De gedeelde lessen gaan elke
         # ronde mee als bron, zodat ze in de kennis staan en een taalmodel ze in zijn
@@ -467,3 +482,40 @@ def klaargezet_voor(voor, sleutel=None, afdeling=None, status="klaar", n=100):
 
 def opgepakt(kid, door):
     return call(f"/api/klaarzet/{kid}/opgepakt", {"door": door})
+
+
+# --- G1 (ontwerp regie-zoom v1.2): één alleen-lezende leesweg naar de databank van het bord, voor De Regisseur,
+#     De Bode en De Zoomwacht. Schrijven gaat altijd via de API; teruglezen langs een andere weg dan het schrijven
+#     is het sterkere bewijs (L32). Zelfde variabele en standaard als regisseur.py.
+BORD_DB = os.environ.get("BORD_DB", os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db"))
+_ALLEEN_LEZEN = re.compile(r"^\s*(select|with)\b", re.I)
+
+
+class BordOnbekend(RuntimeError):
+    """De databank van het bord gaf geen antwoord. Onbekend is niet leeg (L29): wie dit krijgt, zegt "onbekend",
+    nooit "niets gevonden". `reden` is kort en zonder getal dat elke ronde verandert."""
+
+    def __init__(self, reden):
+        self.reden = reden
+        super().__init__(reden)
+
+
+def db_lees(sql, args=()):
+    """Een vraag aan de databank van het bord, alleen lezend: de URI met mode=ro, timeout 10 en PRAGMA query_only,
+    zodat ook een vergissing niets kan schrijven (G2). Alleen tekst die met SELECT of WITH begint. Geeft een lijst
+    van dicts. Een weigering, een ontbrekend bestand of een sqlite-fout geeft BordOnbekend, nooit een lege lijst."""
+    if not isinstance(sql, str) or not _ALLEEN_LEZEN.match(sql):
+        raise BordOnbekend("geweigerd: db_lees leest alleen (SELECT of WITH)")
+    if not os.path.isfile(BORD_DB):
+        raise BordOnbekend("databank van het bord ontbreekt")
+    con = None
+    try:
+        con = sqlite3.connect(f"file:{urllib.parse.quote(BORD_DB)}?mode=ro", uri=True, timeout=10)
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA query_only = 1")
+        return [dict(r) for r in con.execute(sql, args).fetchall()]
+    except sqlite3.Error as e:
+        raise BordOnbekend(f"databank van het bord niet leesbaar ({type(e).__name__}: {str(e)[:120]})") from e
+    finally:
+        if con is not None:
+            con.close()
