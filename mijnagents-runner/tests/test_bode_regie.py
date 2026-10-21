@@ -7,7 +7,10 @@
 - T70 tot T75 (B5, M6, L8): het ochtendbericht met de regel Gebundeld binnen 900 tekens, een verkeerd item, de terugval
   om 11:00 aan beide kanten van 25-10, de bundelstand tegenover 'uit', alarm meteen, de avondbundel.
 - T76 (FR-154, X4): een onleesbare werkwijze houdt het bellen niet tegen; de berichten wachten.
-- T77: BUNDELEN en de werkwijze zeggen hetzelfde; werkwijze 2.7 in de strikte vorm.
+- T77: het zaad draagt de vaste regel BUNDELEN en de code leest de stand uit de werkwijze (RZ3-02); werkwijze 2.8 in de
+  strikte vorm.
+- RZ3-02 (Codex RZ3-herstelcontrole): de stand van BUNDELEN volgt uit de werkwijze op het bord. Werkwijze 2.5 zonder de
+  regel geeft 'uit' en houdt niets vast; met de regel 'ochtend-avond'; terug naar 'uit' gaat langs de slotbundel.
 - T99 (X4): de noden van het bellen en het alarm gaan als begin_noden mee, ook als de ronde stopt.
 - T100 (H1, L2): geen vraag- of antwoordtekst in het werkverslag of de export; een antwoord nooit via Zoom-chat.
 - REG-03 (R6): een lang antwoord gaat ingekort tot 800 tekens naar WhatsApp, met de verwijzing naar het bord en de regel
@@ -57,6 +60,16 @@ UTC = timezone.utc
 ECHT = {n: getattr(B.bellen, n) for n in ("afspraken_bellen", "alarm_bellen", "afspraak_bellen_beschikbaar",
                                           "belafspraak_actueel", "bel_afspraak")}
 WERKWIJZE = open(os.path.join(RUNNER, "werkwijze", "bode.md"), encoding="utf-8").read()
+# RZ3-02 (besluit van de regie, 22-10-2026): de stand van BUNDELEN volgt uit de werkwijze op het bord. De vaste regel in
+# het zaad zet de bundelstand aan; zonder die regel is de stand 'uit'. Een ronde met stand 'uit' krijgt dus het zaad
+# zonder de regel, en een omschakeling is een andere werkwijze op het bord, zoals wanneer Mehdi een versie terugzet.
+REGEL = "BUNDELEN: ochtend-avond"
+WERKWIJZE_UIT = WERKWIJZE.replace("\n" + REGEL + "\n", "\n", 1)
+# Zoals werkwijze 2.5 van 15-10-2026 (alleen de vorm): van voor het bundelen, zonder sectie over de stand van BUNDELEN.
+WERKWIJZE_25 = ("# Werkwijze van De Bode (Regie)\n\nVersie 2.5 (15-10-2026, proefkopie van de vorm).\n\n"
+                "## Wat ik doe, in deze volgorde\n\n1. Elke minuut lees ik het bord en stuur ik wat voor Mehdi klaarstaat.\n\n"
+                "## Wat ik nooit doe\n\n- Iets versturen naar iemand anders dan Mehdi.\n- Vaker sturen dan de regels hierboven.\n\n"
+                "## Wat Mehdi beslist\n\n- Welk kanaal.\n- Wat een alarm is dat 's nachts mag doorkomen.\n")
 
 # De 40 actieve agents van het bord, gemeten op 21-10-2026 (naam en label; geen persoonsgegevens).
 LABELS = {
@@ -121,7 +134,8 @@ class Wereld:
         self.moment = moment
         self.items = []
         self.noden = []                       # /api/nood; None: het bord weet het niet
-        self.werkwijze = werkwijze
+        # RZ3-02: de stand komt uit de werkwijze op het bord; 'uit' is het zaad zonder de vaste regel
+        self.werkwijze = WERKWIJZE_UIT if stand == "uit" and werkwijze is WERKWIJZE else werkwijze
         self.gesprekken = {}
         self.gestuurd, self.hartslagen, self.wa, self.zoom, self.alarmen = [], [], [], [], []
         self.wa_fout = None                   # f(tekst, kop, voorrang) -> uitzondering of None
@@ -139,7 +153,6 @@ class Wereld:
         bord.BORD_DB = self.db
         B.bord.call = self.call
         B.nu = lambda: self.moment
-        B.BUNDELEN = stand
         B.whatsapp.stuur = self.wa_stuur
         B.whatsapp.binnen = lambda sinds=0: [m for m in self.wa_binnen if m["id"] > sinds]
         B.whatsapp.instellingen = lambda: {"sjabloon": "agent_melding"}
@@ -724,30 +737,41 @@ def test_t76_onleesbare_werkwijze_belt_toch_en_berichten_wachten():
 
 # ------------------------------------------------------------------------------------------------- T77 ---
 def test_t77_bundelen_en_werkwijze_zeggen_hetzelfde():
-    # de waarde zoals ze in de code staat, niet die van een vorige toets (Wereld zet B.BUNDELEN)
+    """T77, sinds RZ3-02 (22-10-2026): de stand staat niet meer vast in de code. Het zaad draagt de vaste regel op een
+    eigen regel in de sectie over de stand van BUNDELEN, en de code leest de stand uit de werkwijze die de ronde las.
+    Tot dan toetste T77 dat een vaste waarde BUNDELEN in bode.py en de zin in de werkwijze gelijk waren; een push van de
+    code bundelde dan al voor Mehdi de werkwijze met een klik op het bord zette."""
     bron = open(os.path.join(RUNNER, "bode.py"), encoding="utf-8").read()
-    bundelen = re.search(r'^BUNDELEN = "([a-z-]+)"', bron, re.M).group(1)
     standen = re.search(r"^BUNDEL_STANDEN = (\(.*\))$", bron, re.M).group(1)
-    assert bundelen in ("uit", "ochtend", "ochtend-avond") and f'"{bundelen}"' in standen, (bundelen, standen)
-    assert bundelen == "ochtend-avond", "keuze 1 van Mehdi, 21-10-2026: optie A"
-    assert '"ochtend"' not in standen, "optie C is niet gebouwd (13.4)"
-    m = re.search(r"De stand van BUNDELEN is ([a-z-]+)", WERKWIJZE)
-    assert m and m.group(1) == bundelen, "werkwijze en code horen samen om te gaan"
+    assert standen == '("uit", "ochtend-avond")', "keuze 1 van Mehdi, 21-10-2026: optie A; optie C is niet gebouwd (13.4)"
+    # geen vaste stand in de code: de regel staat in de werkwijze, de code kent alleen haar vorm
+    assert not re.search(r"^BUNDELEN\s*=", bron, re.M) and not hasattr(B, "BUNDELEN"), "de stand staat niet vast in de code"
+    assert re.search(rf'^BUNDELEN_REGEL = "{REGEL}"$', bron, re.M), "de vorm van de regel staat een keer in de code"
+    # het zaad draagt de regel, op een eigen regel, in de sectie over de stand van BUNDELEN
+    assert WERKWIJZE.count("\n## De stand van BUNDELEN\n") == 1, "de sectie staat er precies een keer"
+    sectie = WERKWIJZE.split("\n## De stand van BUNDELEN\n", 1)[1].split("\n#", 1)[0]
+    assert sectie.splitlines().count(REGEL) == 1 and WERKWIJZE.splitlines().count(REGEL) == 1, sectie
+    assert B.stand_bundelen(WERKWIJZE) == "ochtend-avond" and B.stand_bundelen(WERKWIJZE_UIT) == "uit"
+    # de code leest de stand uit de werkwijze van de ronde, en droog uit de werkwijze op het bord
+    ronde = bron.split("\ndef ronde(", 1)[1].split("\ndef ", 1)[0]
+    assert "stand = stand_bundelen(r.werkwijze)" in ronde and "stand_bundelen(ag.werkwijze_lezen" not in ronde, ronde[-600:]
+    assert re.search(r"stand = stand_bundelen\(veilig\(nood, \"Werkwijze lezen\", ag\.werkwijze_lezen, None\)\)", ronde), \
+        "droog leest de werkwijze zelf; onleesbaar is 'uit'"
+    assert "Bij een omschakeling verdwijnt niets" in sectie and "slotbundel_sturen" in bron, \
+        "BOD-1, BOD-2: code en werkwijze zeggen dat bij een omschakeling niets verdwijnt"
     regisseur = open(os.path.join(RUNNER, "mail_regisseur.py"), encoding="utf-8").read()
-    assert f"BUNDELEN op '{bundelen}'" in regisseur.split('"""')[1], "de docstring van mail_regisseur.py volgt mee"
-    # G2: hoofdstuk 6 van AGENTNORM.md zegt welke stand geldt; die volgt de code in dezelfde commit
+    assert "BUNDELEN op 'ochtend-avond'" in regisseur.split('"""')[1], "de docstring van mail_regisseur.py volgt mee"
+    # G2 en L7: hoofdstuk 6 van AGENTNORM.md noemt de bundelstand en de slotbundel
     norm = open(os.path.join(RUNNER, "AGENTNORM.md"), encoding="utf-8").read()
     hoofdstuk6 = norm.split("## 6.", 1)[1].split("\n## ", 1)[0]
-    assert f'`BUNDELEN = "{bundelen}"`' in hoofdstuk6, "AGENTNORM hoofdstuk 6 hoort dezelfde stand van BUNDELEN te noemen"
+    assert "ochtend-avond" in hoofdstuk6 and "slotbundel" in hoofdstuk6, "AGENTNORM hoofdstuk 6 noemt de bundelstand"
     assert "in het ochtendbericht, als punt of onder Verder" in hoofdstuk6, "L7: zo bereikt een nood voor Mehdi hem"
-    assert "slotbundel" in hoofdstuk6 and "Bij een omschakeling verdwijnt niets" in WERKWIJZE and "slotbundel_sturen" in bron, \
-        "BOD-1, BOD-2: code, werkwijze en AGENTNORM zeggen dat bij een omschakeling niets verdwijnt"
     assert "HERINNERING_UREN" not in bron and not hasattr(B, "HERINNERING_UREN"), "geen herinnering om de zes uur (I7)"
 
 
-def test_t77_werkwijze_27_in_de_strikte_vorm():
+def test_t77_werkwijze_28_in_de_strikte_vorm():
     regels = WERKWIJZE.splitlines()
-    assert regels[2].startswith("Versie 2.7"), regels[2][:40]
+    assert regels[2].startswith("Versie 2.8"), regels[2][:40]
     nooit, beslist = bord.grenzen(WERKWIJZE)
     assert len(nooit) >= 3 and len(beslist) >= 3, (nooit, beslist)
     assert any(p.startswith("Keuze 1") and "21-10-2026" in p and "ochtend-avond" in p for p in beslist), beslist
@@ -809,7 +833,7 @@ def test_t99_open_noden_onbekend_dan_in_het_detail():
 
 def test_t99_de_bron_geeft_de_noden_door():
     bron = open(os.path.join(RUNNER, "bode.py"), encoding="utf-8").read()
-    assert 'ag.ronde("berichten van en naar Mehdi", bronnen={"BUNDELEN": stand}, begin_noden=nood)' in bron
+    assert 'ag.ronde("berichten van en naar Mehdi", begin_noden=nood)' in bron
     assert bron.index("bellen.afspraken_bellen(") < bron.index("ag.ronde(") and bron.index("bellen.alarm_bellen(") < bron.index("ag.ronde(")
 
 
@@ -950,7 +974,7 @@ def test_bod2_terug_naar_uit_stuurt_eerst_de_slotbundel():
     w = t73_wereld("ochtend-avond")
     staat = w.ronde()
     assert not w.wa and staat["laatste_id"] == 200, (w.wa, staat)
-    B.BUNDELEN = "uit"
+    w.werkwijze = WERKWIJZE_UIT                 # RZ3-02: de werkwijze op het bord zonder de regel
     w.zet(201, "signaal", "Proefsignaal na de omschakeling", ts="2026-10-22T11:30:00+00:00")
     w.wa_fout = lambda tekst, kop, voorrang: RuntimeError("Meta nagebootst 500") if voorrang else None
     staat = w.ronde(utc(2026, 10, 22, 12, 0))   # 14:00 Brussel: de slotbundel mislukt, het losse bericht niet
@@ -968,7 +992,7 @@ def test_bod2_terug_naar_uit_stuurt_eerst_de_slotbundel():
     # in de stille uren wacht de slotbundel tot 07:00
     w = t73_wereld("ochtend-avond")
     w.ronde()
-    B.BUNDELEN = "uit"
+    w.werkwijze = WERKWIJZE_UIT
     staat = w.ronde(utc(2026, 10, 22, 21, 0))   # 23:00 Brussel
     assert not w.wa and staat["bundel_vanaf"], (w.wa, staat)
     w.ronde(utc(2026, 10, 23, 5, 1))            # 07:01 Brussel
@@ -1172,7 +1196,7 @@ def test_rz2_04_slotbundel_onderbroken_na_aanvaarding_niet_opnieuw():
     gaat weg. 'verzonden' in het spoor zonder stand: ook weg, zonder nood."""
     w = t73_wereld("ochtend-avond")
     w.ronde()
-    B.BUNDELEN = "uit"
+    w.werkwijze = WERKWIJZE_UIT
     gestopte_ronde(w, utc(2026, 10, 22, 12, 1), lambda kop: kop.startswith("Bundel"))
     assert [m["kop"] for m in w.wa] == ["Bundel do 22-10"] and w.staat()["bundel_vanaf"], (w.wa, w.staat())
     staat = w.ronde(utc(2026, 10, 22, 12, 2))
@@ -1185,7 +1209,7 @@ def test_rz2_04_slotbundel_onderbroken_na_aanvaarding_niet_opnieuw():
     # verzonden in het spoor, de stand verloren: niets opnieuw en niets onzeker
     w = t73_wereld("ochtend-avond")
     w.ronde()
-    B.BUNDELEN = "uit"
+    w.werkwijze = WERKWIJZE_UIT
     B.bellen.spoor_schrijven(B.verzendspoor(), "slotbundel:2026-10-22:200", "2026-10-22T12:01:00+00:00")
     staat = w.ronde(utc(2026, 10, 22, 12, 2))
     assert not w.wa and not onzeker(w, "Slotbundel") and "bundel_vanaf" not in staat, (w.wa, w.noodteksten(), staat)
@@ -1281,6 +1305,111 @@ def test_rz2_04_het_spoor_groeit_niet():
     w.ronde()
     assert [json.loads(r)["sleutel"] for r in open(B.verzendspoor())] == ["avondbundel:2026-10-21"], \
         open(B.verzendspoor()).read()
+
+
+# --------------------------------------------------------------------------------------------- RZ3-02 ---
+# Codex RZ3-herstelcontrole (22-10-2026): BUNDELEN stond standaard op 'ochtend-avond' in de code. Een volledige push naar
+# main kon berichten dus uitstellen voor Mehdi zijn nieuwe werkwijze goedkeurde. Besluit van de regie: de stand volgt
+# uit de werkwijze op het bord, met een vaste regel; al het andere is 'uit', daar wordt niets vastgehouden.
+def test_rz3_02_de_stand_komt_uit_de_werkwijze():
+    assert B.stand_bundelen(WERKWIJZE) == "ochtend-avond"
+    assert B.stand_bundelen(WERKWIJZE.replace("\n", "\r\n")) == "ochtend-avond", "regeleinden van Windows"
+    kop = "## De stand van BUNDELEN"
+    for naam, tekst in (("werkwijze 2.5", WERKWIJZE_25), ("zonder de regel", WERKWIJZE_UIT), ("leeg", ""),
+                        ("onleesbaar", None), ("een andere stand", WERKWIJZE.replace(REGEL, "BUNDELEN: uit")),
+                        ("optie C", WERKWIJZE.replace(REGEL, "BUNDELEN: ochtend")),
+                        ("met een toevoeging", WERKWIJZE.replace(REGEL, REGEL + " vanaf maandag")),
+                        ("als lijstpunt", WERKWIJZE.replace(REGEL, "- " + REGEL)),
+                        ("ingesprongen", WERKWIJZE.replace(REGEL, "    " + REGEL)),
+                        ("met een gelijkteken", WERKWIJZE.replace(REGEL, 'BUNDELEN = "ochtend-avond"')),
+                        ("buiten de sectie", WERKWIJZE_UIT.rstrip("\n") + "\n\n" + REGEL + "\n"),
+                        ("twee keer", WERKWIJZE.replace(REGEL, REGEL + "\n\n" + REGEL)),
+                        ("tegenstrijdig", WERKWIJZE.replace(REGEL, REGEL + "\n\nBUNDELEN: uit")),
+                        ("de kop twee keer", WERKWIJZE.rstrip("\n") + f"\n\n{kop}\n\n{REGEL}\n"),
+                        ("de kop met opmaak", WERKWIJZE.replace(kop, kop.replace("BUNDELEN", "**BUNDELEN**"))),
+                        ("in een HTML-commentaar", WERKWIJZE_UIT + f"\n<!--\n{REGEL}\n-->\n"),
+                        ("in de sectie verborgen", WERKWIJZE.replace(REGEL, f"<!--\n{REGEL}\n-->")),
+                        ("in een codeblok", WERKWIJZE.replace(REGEL, f"```\n{REGEL}\n```"))):
+        assert B.stand_bundelen(tekst) == "uit", naam
+    # Tegenproef van 22-10-2026: een tweede stand in een andere schrijfwijze telde niet mee, want alleen de letterlijke
+    # tekst "BUNDELEN:" telde. Mehdi las dan twee standen terwijl de code bundelde: de onveilige kant. Nu telt elke regel
+    # die BUNDELEN noemt, zoals hij ze op het bord leest: zonder entiteiten, onzichtbare tekens, hoofdletters of leestekens.
+    tweede = {"in kleine letters": "Bundelen: uit", "met een spatie": "BUNDELEN : uit", "zonder dubbelepunt": "BUNDELEN uit",
+              "met een HTML-entiteit": "&#66;UNDELEN: uit", "met een nulbreedteteken": "BUN​DELEN: uit",
+              "met een volle-breedte dubbelepunt": "BUNDELEN：uit", "met spaties tussen de letters": "B U N D E L E N: uit",
+              "in volle-breedte letters": "ＢＵＮＤＥＬＥＮ: uit",
+              "als zin": "De stand van BUNDELEN is uit."}
+    for naam, regel in tweede.items():
+        assert B.stand_bundelen(WERKWIJZE.replace(REGEL, REGEL + "\n\n" + regel)) == "uit", f"tweede regel {naam}"
+    voor_de_kop = "\n" + kop + "\n"
+    for naam, tekst in (("een tweede kop in kleine letters", WERKWIJZE.rstrip("\n") + "\n\n## De stand van bundelen\n\nDe stand is uit.\n"),
+                        ("een stand in een andere sectie, als lijstpunt",
+                         WERKWIJZE.replace("\n## Wat ik nooit doe\n", "\n1. Bundelen: uit\n\n## Wat ik nooit doe\n", 1)),
+                        ("een stand voor de kop", WERKWIJZE.replace(voor_de_kop, "\n> **BUNDELEN**: uit\n" + voor_de_kop, 1)),
+                        ("een codeblok dat voor de kop opengaat", WERKWIJZE.replace(voor_de_kop, "\n```" + voor_de_kop, 1))):
+        assert tekst != WERKWIJZE and B.stand_bundelen(tekst) == "uit", naam
+    # wat Mehdi gewoon leest, blijft gewoon: een regel met tab of spaties achteraan, en de kop met spaties achteraan
+    for naam, tekst in (("tab achteraan", WERKWIJZE.replace(REGEL, REGEL + "\t")),
+                        ("kop met spaties achteraan", WERKWIJZE.replace(voor_de_kop, "\n" + kop + "  \n", 1))):
+        assert B.stand_bundelen(tekst) == "ochtend-avond", naam
+
+
+def rz3_02_wereld(werkwijze):
+    w = Wereld(utc(2026, 10, 22, 10, 0), werkwijze=werkwijze,
+               staat={"laatste_id": 199, "voorstel_hoogste": 11, "avond": {},
+                      "ochtend": {"2026-10-22": {"verzonden": "2026-10-22T09:40:00+02:00", "klaarzet_id": 150, "opgepakt": True}}},
+               voorstellen=[(i, "ontwikkelaar") for i in range(1, 12)])
+    w.zet(200, "signaal", "Proefonderwerp Omega voor Proefpersoon Zeta", ts="2026-10-22T10:00:00+00:00")
+    return w
+
+
+def test_rz3_02_werkwijze_25_houdt_niets_vast_met_de_regel_wel():
+    """Werkwijze 2.5 op het bord (van voor het bundelen) en de code van nu: het signaal gaat meteen los en De Bode houdt
+    niets vast. Met de regel in de werkwijze wacht het op het vaste moment. Zo bundelt De Bode pas als Mehdi de nieuwe
+    werkwijze met een klik op het bord zette, ook als de code al live staat. De gelezen stand gaat mee als bron (N4)."""
+    w = rz3_02_wereld(WERKWIJZE_25)
+    staat = w.ronde()
+    assert [m["kop"] for m in w.wa] == ["je agents"] and "Proefonderwerp Omega" in w.wa[0]["tekst"], w.wa
+    assert staat["laatste_id"] == 200 and "bundel_vanaf" not in staat, staat
+    kennis = [p for pad, p in w.gestuurd if pad.endswith("/kennis")]
+    assert kennis and "BUNDELEN" in kennis[-1]["bron"], kennis
+    w.ronde(utc(2026, 10, 22, 15, 31))           # 17:31: geen avondbundel in 'uit'
+    assert len(w.wa) == 1, w.wa[1:]
+    # met de regel: hetzelfde signaal wacht en komt in de avondbundel
+    w = rz3_02_wereld(WERKWIJZE)
+    staat = w.ronde()
+    assert not w.wa and staat["laatste_id"] == 200 and staat["bundel_vanaf"], (w.wa, staat)
+    w.ronde(utc(2026, 10, 22, 15, 31))
+    assert [m["kop"] for m in w.wa] == ["Avondbundel do 22-10"] and "Proefonderwerp Omega" in w.wa[0]["tekst"], w.wa
+
+
+def test_rz3_02_terug_naar_uit_via_de_werkwijze_stuurt_de_slotbundel():
+    """Mehdi zet op het bord een werkwijze zonder de regel terug (hier 2.5). Wat de bundelstand al vasthield, gaat eerst
+    als slotbundel (BOD-2, de bestaande slotbundel_sturen); wat daarna binnenkomt, gaat los. Er verdwijnt niets."""
+    w = rz3_02_wereld(WERKWIJZE)
+    staat = w.ronde()
+    assert not w.wa and staat["bundel_vanaf"], (w.wa, staat)
+    w.werkwijze = WERKWIJZE_25
+    w.zet(201, "signaal", "Proefsignaal na het terugzetten", ts="2026-10-22T11:30:00+00:00")
+    staat = w.ronde(utc(2026, 10, 22, 12, 0))
+    assert [m["kop"] for m in w.wa] == ["Bundel do 22-10", "je agents"], w.wa
+    assert "Proefonderwerp Omega" in w.wa[0]["tekst"] and "na het terugzetten" not in w.wa[0]["tekst"], w.wa[0]
+    assert "na het terugzetten" in w.wa[1]["tekst"] and "Proefonderwerp Omega" not in w.wa[1]["tekst"], w.wa[1]
+    assert "bundel_vanaf" not in staat and "bundel_tot" not in staat and staat["laatste_id"] == 201, staat
+    w.ronde(utc(2026, 10, 22, 12, 1))
+    assert len(w.wa) == 2, f"de slotbundel gaat een keer: {w.wa[2:]}"
+
+
+def test_rz3_02_droog_leest_de_stand_uit_de_werkwijze():
+    """Droog leest de werkwijze zelf, alleen lezend, en zegt welke stand ze geeft; onleesbaar is 'uit', met een nood in
+    de uitvoer. Droog schrijft nooit iets."""
+    for werkwijze, stand in ((WERKWIJZE, "ochtend-avond"), (WERKWIJZE_25, "uit"), (http(500), "uit")):
+        w = rz3_02_wereld(werkwijze)
+        with redirect_stdout(io.StringIO()) as uit, redirect_stderr(io.StringIO()):
+            B.main(droog=True)
+        assert f"(droog) stand {stand};" in uit.getvalue(), (stand, uit.getvalue()[-400:])
+        assert not w.wa and not w.hartslagen, (w.wa, w.hartslagen)
+    assert "Werkwijze lezen mislukt" in uit.getvalue(), uit.getvalue()[-400:]
 
 
 # ------------------------------------------------------------------------------------------------ droog ---

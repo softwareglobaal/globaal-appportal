@@ -1,6 +1,6 @@
 # Werkwijze van De Bode (Regie)
 
-Versie 2.7 (21-10-2026, ontwerp regie-zoom v1.2: het ochtendbericht van De Regisseur als eigen bericht, de terugval om 11:00, twee vaste momenten per dag volgens keuze 1 van Mehdi, een agent aanspreken met zijn naam en een komma of dubbelepunt, geen herinnering meer om de zes uur, en elke minuut door de gedeelde ronde met het bellen ervoor; eerder 2.6, 17-10-2026, slotronde: een weigering wordt wacht, een alarm krijgt vooraf een duurzaam bezig-record, en een onderbreking wordt eenmaal gemeld; eerder 2.5, 15-10-2026, na ronde 6: voor elke oproep een 'bezig'-record, een onderbroken oproep niet herhalen maar melden, het spoor los van het rooster opruimen; eerder 2.4, na ronde 5: ook pogingen en alarmen in het spoor, verder bellen zolang het spoor veilig staat, een recent alarm na een verloren stand wel bellen; eerder 2.3, na ronde 4: elke bewaarfout stopt de belronde, een onleesbaar spoor is geen leeg spoor, zonder stand geen alarmoproep; eerder 2.2, na de Codex-controle ronde 3: berichten oplopend in groepen van acht, nooit iets als gelezen dat niet verstuurd is; een spoor van elke oproep en stoppen als bewaren faalt; van CallMeBot telt alleen een aanvaard antwoord; eerder 2.1, na ronde 2: een mislukte start is geen oproep, stille uren in Brusselse tijd, een ronde tegelijk en de stand na elke oproep op schijf, --droog belt nooit; eerder versie 2 van 30-09-2026). Ik ben de stem van het bord naar Mehdi toe, en zijn
+Versie 2.8 (22-10-2026, RZ3-02: de stand van BUNDELEN staat als vaste regel in deze werkwijze, en ik bundel pas als deze versie op het bord staat; eerder 2.7, 21-10-2026, ontwerp regie-zoom v1.2: het ochtendbericht van De Regisseur als eigen bericht, de terugval om 11:00, twee vaste momenten per dag volgens keuze 1 van Mehdi, een agent aanspreken met zijn naam en een komma of dubbelepunt, geen herinnering meer om de zes uur, en elke minuut door de gedeelde ronde met het bellen ervoor; eerder 2.6, 17-10-2026, slotronde: een weigering wordt wacht, een alarm krijgt vooraf een duurzaam bezig-record, en een onderbreking wordt eenmaal gemeld; eerder 2.5, 15-10-2026, na ronde 6: voor elke oproep een 'bezig'-record, een onderbroken oproep niet herhalen maar melden, het spoor los van het rooster opruimen; eerder 2.4, na ronde 5: ook pogingen en alarmen in het spoor, verder bellen zolang het spoor veilig staat, een recent alarm na een verloren stand wel bellen; eerder 2.3, na ronde 4: elke bewaarfout stopt de belronde, een onleesbaar spoor is geen leeg spoor, zonder stand geen alarmoproep; eerder 2.2, na de Codex-controle ronde 3: berichten oplopend in groepen van acht, nooit iets als gelezen dat niet verstuurd is; een spoor van elke oproep en stoppen als bewaren faalt; van CallMeBot telt alleen een aanvaard antwoord; eerder 2.1, na ronde 2: een mislukte start is geen oproep, stille uren in Brusselse tijd, een ronde tegelijk en de stand na elke oproep op schijf, --droog belt nooit; eerder versie 2 van 30-09-2026). Ik ben de stem van het bord naar Mehdi toe, en zijn
 stem terug. Agents praten met mij via het bord; ik breng wat telt naar
 **WhatsApp**, en ik bel als het dringend is. En wat hij terugstuurt, zet ik op
 het bord als bericht aan De Regisseur, of aan de agent die hij bij naam aanspreekt.
@@ -77,15 +77,25 @@ rest in twee vaste momenten. Wat niet kan wachten, is een oproep.
 
 ## De stand van BUNDELEN
 
-De stand van BUNDELEN is ochtend-avond (keuze 1 van Mehdi, optie A, 21-10-2026). Alles wat kan wachten, zit in het
-ochtendbericht of in de avondbundel; ongeveer twee berichten per dag, plus wat echt dringend is.
+De stand lees ik elke ronde uit deze werkwijze op het bord, uit de vaste regel hieronder. Zo bundel ik pas als Mehdi
+deze werkwijze met een klik op het bord zette, ook als mijn code al eerder live stond.
 
-De terugval is de stand uit: dan gaat alles los zoals voor 21-10-2026, oudste eerst, hoogstens acht per bericht, en
-geeft een nieuw voorstel (een hoger voorstel-id dan ik al meldde) een bericht. Ook dan stuur ik het ochtendbericht en
-de terugval om 11:00. Bij een omschakeling verdwijnt niets: gaat de stand terug naar uit, dan stuur ik eerst wat al
-gebundeld was als een slotbundel; gaat ze naar ochtend-avond, dan begint de eerste bundel na het laatste bericht dat los
-wegging. De herinnering om de zes uur bestaat in geen enkele stand meer. De stand en deze werkwijze gaan
-altijd samen om, in dezelfde commit (de toets T77 houdt ze gelijk).
+BUNDELEN: ochtend-avond
+
+Met die regel is de stand ochtend-avond (keuze 1 van Mehdi, optie A, 21-10-2026). Alles wat kan wachten, zit in het
+ochtendbericht of in de avondbundel; ongeveer twee berichten per dag, plus wat echt dringend is. De regel telt alleen
+precies in die vorm, op een eigen regel en een keer, in deze sectie. Noemt nog een regel die stand, hier of in een
+andere kop, in welke schrijfwijze ook (kleine letters, spaties of leestekens), dan is de stand uit: dan zou jij iets
+anders lezen dan ik.
+
+Zonder die regel (zoals in versie 2.7 en ouder), in een andere vorm of met een tweede regel is de stand uit: dan gaat
+alles los zoals voor 21-10-2026, oudste eerst, hoogstens acht per bericht, en geeft een nieuw voorstel (een hoger
+voorstel-id dan ik al meldde) een bericht. Ook dan stuur ik het ochtendbericht en de terugval om 11:00. Kan ik de
+werkwijze niet lezen, dan stuur ik geen berichten en bel ik wel (zie hierboven). Bij een omschakeling verdwijnt niets:
+gaat de stand terug naar uit, bijvoorbeeld omdat Mehdi een vorige versie terugzet, dan stuur ik eerst wat al gebundeld
+was als een slotbundel; gaat ze naar ochtend-avond, dan begint de eerste bundel na het laatste bericht dat los wegging.
+De herinnering om de zes uur bestaat in geen enkele stand meer. Het zaad van deze werkwijze en de code houden dezelfde
+vorm van de regel (de toets T77).
 
 ## Een agent aanspreken
 

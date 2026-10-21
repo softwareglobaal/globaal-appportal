@@ -21,8 +21,9 @@ Een verboden recht (13.6, rechten-zoomwacht-lezen.md, Nooit aanvinken: elk recht
 sleutels om als gebruiker te starten, de bediening van een ruimte, chatberichten, AI-samenvattingen en archieven): dan
 weigert het te werken. Met --zet schrijft het niets ("niets geschreven: verboden recht <naam>"), zonder --zet toetst het
 niets verder ("geweigerd: ... <naam>"); de exitcode is niet nul. Het Zoom-transcript
-(cloud_recording:read:meeting_transcript:admin) staat ook onder Nooit, maar het vangnet kan het nodig hebben: alleen een
-melding, Mehdi beslist.
+(cloud_recording:read:meeting_transcript:admin) staat ook onder Nooit; het vangnet kan het nodig hebben, maar sinds RZ3-04
+(22-10-2026) wordt het geweigerd zoals de andere, tot Mehdi over dat recht beslist. De weigering zegt dat er dan bij
+("dat recht blijft geweigerd tot Mehdi erover beslist"). Tot dan gaf het alleen een melding en werkte de app ermee.
 
 Toetsen, met alleen namen, ja of nee en HTTP-codes op het scherm:
 - of de app een token krijgt, en per recht 'aanwezig' of 'ontbreekt': KERN (nodig voor de telling en het vangnet; een
@@ -35,8 +36,13 @@ Toetsen, met alleen namen, ja of nee en HTTP-codes op het scherm:
   meer eigen opnames in zijn ruimte nooit af, want ze vergeleek die gebruiker met zijn eigen nummer;
 - of de vaste vergaderruimte van die gebruiker hetzelfde nummer heeft (ja of nee);
 - een proefdownload in het geheugen van de jongste TRANSCRIPT-opname (ja of nee, met de HTTP-code, nooit de url):
-  of een Server-to-Server-token een Zoom-transcript mag downloaden, is niet bewezen, dus meten we het hier. Mislukt ze
-  op een recht, dan noemt een melding het recht dat het vangnet mogelijk vraagt.
+  of een Server-to-Server-token een Zoom-transcript mag downloaden, is niet bewezen, dus meten we het hier. Weigert Zoom
+  de download (401, 403, of 400 met code 4711), dan meet ik welk recht Zoom noemt. Is het het transcriptrecht, dan zegt
+  de regel "download van het transcript vraagt een recht dat Mehdi nog niet toestond", noemt een melding dat recht, en
+  ontbreekt het (Mehdi beslist). Is het een ander recht, dan "download vraagt recht <naam>" en ontbreekt dat recht,
+  zonder Mehdi. Noemt Zoom geen recht (bv. 401 met Zoom-code 124, een ongeldig token), dan "download geweigerd, HTTP
+  <code>; Zoom noemde geen recht" (tegenproef op RZ3-04, 22-10-2026: tot dan heette elke weigering het transcriptrecht).
+  De Zoomwacht zet bij een geweigerde download een nood voor Mehdi en telt het gesprek zonder tekst.
 Exitcode 0 alleen als de kern volledig is en de andere toetsen slagen; een advies telt niet mee. De laatste regel is
 "klaar", wat ontbreekt, of de weigering.
 """
@@ -82,6 +88,8 @@ ADVIES = ("user:read:list_users:admin", "user:read:summary:admin", "user:read:se
           "contact_group:read:list_groups:admin", "tsp:read:tsp:admin", "tracking_field:read:list_tracking_fields:admin",
           "information_barrier:read:list_policies:admin")
 MARKETPLACE = "haal het weg in de Zoom Marketplace, dan opnieuw"
+# RZ3-04: wat de proefdownload zegt als Zoom de download van het transcript op een recht weigert
+TRANSCRIPT_NIET_TOEGESTAAN = "download van het transcript vraagt een recht dat Mehdi nog niet toestond"
 FATHOM_DAGEN = 60
 VERVANG = "opnieuw met --zet --vervang"
 ANDERE_WAARDE = f"staat al, met een andere waarde ({VERVANG})"
@@ -129,6 +137,17 @@ def env_zetten(waarden, vervang=False, pad=None):
     return uit
 
 
+def wacht_op_mehdi(fout):
+    """RZ3-04: de toevoeging bij een weigering voor een recht dat het vangnet misschien nodig heeft (TOT_MEHDI_BESLIST,
+    het Zoom-transcript): het blijft geweigerd tot Mehdi erover beslist. Leeg als geen enkel geweigerd recht daarop
+    wacht; zo zegt een weigering voor een recht dat nooit mag, niet dat Mehdi er nog over beslist."""
+    wacht = [r for r in fout if r.lower() in Z.TOT_MEHDI_BESLIST]
+    if not wacht:
+        return ""
+    wie = "dat recht" if len(wacht) == len(fout) == 1 else ", ".join(wacht)
+    return f"; {wie} blijft geweigerd tot Mehdi erover beslist"
+
+
 def vragen():
     """De drie waarden uit App Credentials, zonder echo. Een lege waarde of een met een spatie stopt het zetten."""
     waarden = {}
@@ -155,7 +174,7 @@ def zetten(vervang=False):
     if fout:
         # 13.6: een app met een recht uit 'Nooit aanvinken' krijgt geen plaats in .env
         print(f"geweigerd: de app heeft een recht dat ze nooit mag hebben ({MARKETPLACE})")
-        print("niets geschreven: verboden recht " + ", ".join(fout))
+        print("niets geschreven: verboden recht " + ", ".join(fout) + wacht_op_mehdi(fout))
         return False
     nieuw = {"ZOOM_LEES_CLIENT_ID": w["client"], "ZOOM_LEES_CLIENT_SECRET": w["geheim"]}
     if w["account"] != Z._sleutel("ZOOM_ACCOUNT_ID"):
@@ -180,25 +199,37 @@ def eigen_nummer():
 
 
 def proefdownload():
-    """De jongste TRANSCRIPT-opname van de laatste 30 dagen, in het geheugen: (gelukt, uitleg). Nooit de url."""
+    """De jongste TRANSCRIPT-opname van de laatste 30 dagen, in het geheugen: (gelukt, uitleg, recht). Nooit de url.
+    recht is het recht dat Zoom noemt als het de lijst of de download weigert, anders leeg. Tegenproef op RZ3-04
+    (22-10-2026): tot dan heette elke geweigerde download 'een recht dat Mehdi nog niet toestond', ook een ander recht
+    of een ongeldig token. Nu meet ik het (rechten-zoomwacht-lezen.md: 'dan meldt zoom_leesapp.py welk'):
+    - Zoom noemt het transcriptrecht (TOT_MEHDI_BESLIST): TRANSCRIPT_NIET_TOEGESTAAN, en Mehdi beslist;
+    - Zoom noemt een ander recht: 'download vraagt recht <naam>', zonder Mehdi;
+    - Zoom noemt geen recht (401, 403, Zoom-code 124): 'download geweigerd, HTTP <code>; Zoom noemde geen recht'."""
     tot = date.today() + timedelta(days=1)
     try:
         lijst = Z.opnames((tot - timedelta(days=30)).isoformat(), tot.isoformat(), "lees")
     except Z.GeenRecht as e:
-        return False, f"geen recht: {e.scope}"
+        return False, f"geen recht: {e.scope}", e.scope
     except Z.ZoomFout as e:
-        return False, str(e)
+        return False, str(e), ""
     bestanden = sorted((b["start"], b["id"]) for m in lijst for b in m["bestanden"]
                        if b["soort"] == "TRANSCRIPT" and b["status"] == "completed" and b["id"])
     if not bestanden:
-        return False, "geen TRANSCRIPT-opname in de laatste 30 dagen"
+        return False, "geen TRANSCRIPT-opname in de laatste 30 dagen", ""
     try:
         Z.download(bestanden[-1][1], "lees", max_bytes=2_000_000)
-    except Z.GeenRecht:
-        return False, "geen downloadrecht (HTTP 401 of 403)"
+    except Z.GeenRecht as e:
+        if e.scope.lower() in Z.TOT_MEHDI_BESLIST:
+            # RZ3-04: het recht voor het transcript staat onder Nooit aanvinken en blijft geweigerd tot Mehdi beslist
+            return False, TRANSCRIPT_NIET_TOEGESTAAN, e.scope
+        if e.scope != "download":
+            return False, f"download vraagt recht {e.scope}", e.scope
+        zoomcode = f", Zoom-code {e.zoomcode}" if e.zoomcode is not None else ""
+        return False, f"download geweigerd, HTTP {e.http}{zoomcode}; Zoom noemde geen recht", ""
     except Z.ZoomFout as e:
-        return False, str(e)
-    return True, "HTTP 200"
+        return False, str(e), ""
+    return True, "HTTP 200", ""
 
 
 def gebruiker_zetten(host, zet, vervang):
@@ -246,7 +277,8 @@ def toetsen(zet=False, vervang=False):
     if fout:
         # 13.6: met een recht uit 'Nooit aanvinken' werk ik niet verder; De Zoomwacht leest dan met de app van de stack
         print("token: ja, maar geweigerd")
-        print(f"geweigerd: de leesapp heeft een recht dat ze nooit mag hebben: {', '.join(fout)} ({MARKETPLACE})")
+        print(f"geweigerd: de leesapp heeft een recht dat ze nooit mag hebben: {', '.join(fout)} ({MARKETPLACE})"
+              + wacht_op_mehdi(fout))
         return 1
     print("token: ja")
     for naam in KERN:
@@ -256,9 +288,6 @@ def toetsen(zet=False, vervang=False):
             ontbreekt.append(naam)
     for naam in ADVIES:
         print(f"recht {naam}: {'aanwezig' if naam in rechten else 'ontbreekt'} (advies)")
-    for naam in sorted(Z.MELDEN_RECHTEN & set(rechten)):
-        print(f"melding: recht {naam} is aanwezig; het geeft de tekst van opnames en staat onder Nooit aanvinken, alleen het "
-              "vangnet mag het gebruiken: Mehdi beslist")
     nummer = eigen_nummer()
     if not nummer:
         print("nummer van de vaste vergaderruimte uit Fathom: onbekend (geen eigen opnames in het archief)")
@@ -286,13 +315,18 @@ def toetsen(zet=False, vervang=False):
             ontbreekt.append("eigenaar van de vaste vergaderruimte")
         if ik.get("id"):
             Z.vastzetten(ik["id"], [nummer])
-            gelukt, uitleg = proefdownload()
+            gelukt, uitleg, recht = proefdownload()
             print(f"proefdownload van een Zoom-transcript: {'ja' if gelukt else 'nee'} ({uitleg})")
-            if not gelukt:
-                ontbreekt.append("downloadrecht voor opnames")
-                if uitleg.startswith("geen downloadrecht") and not Z.MELDEN_RECHTEN & set(rechten):
-                    print(f"melding: de download voor het vangnet vraagt mogelijk {', '.join(sorted(Z.MELDEN_RECHTEN))}; dat "
-                          "recht staat onder Nooit aanvinken: Mehdi beslist")
+            if recht.lower() in Z.TOT_MEHDI_BESLIST:
+                # RZ3-04: geen fout van de app maar een keuze van Mehdi; tot dan telt De Zoomwacht zulke gesprekken zonder
+                # tekst, met een nood voor hem. Alleen als Zoom dat recht zelf noemt (tegenproef van 22-10-2026).
+                print(f"melding: het vangnet vraagt {recht}; dat recht staat onder Nooit aanvinken en blijft geweigerd tot "
+                      "Mehdi erover beslist")
+                ontbreekt.append("recht voor de download van het transcript (Mehdi beslist)")
+            elif recht:
+                ontbreekt.append(recht)          # een recht dat Zoom noemt en dat wel mag: aanvinken in de Marketplace
+            elif not gelukt:
+                ontbreekt.append("proefdownload van een Zoom-transcript")
         else:
             ontbreekt.append("gebruiker")
     print("klaar" if not ontbreekt else "ontbreekt: " + ", ".join(ontbreekt))

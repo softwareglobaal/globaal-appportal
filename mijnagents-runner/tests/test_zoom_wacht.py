@@ -4,8 +4,9 @@ Gemeten op 21-10-2026: De Zoomwacht zag de vaste vergaderruimte niet (1 van de 1
 bevroor bij het oppakken, de gesprekkentabel telde elk gesprek met Fathom twee keer, en geen enkele test raakte
 zoom_wacht.py. Deze test legt vast wat het ontwerp belooft, met de T-nummers van hoofdstuk 6 en 13.5: T05 tot T30,
 T95, T96, T101, T102, T104, T106 en de K5-regressie bij T23. Daarna de bevindingen van de tegenlezing (ZOO-01 tot
-ZOO-10, 21-10-2026) en van de bouwcontrole (RZ2-05, met EIGEN-1 tot EIGEN-3 uit 13.6, 22-10-2026): elk eerst als
-falende test op de code van toen, dan hersteld in de bron.
+ZOO-10, 21-10-2026), van de bouwcontrole (RZ2-05, met EIGEN-1 tot EIGEN-3 uit 13.6, 22-10-2026) en van de
+herstelcontrole (RZ3-04, 22-10-2026: het Zoom-transcript geweigerd tot Mehdi beslist): elk eerst als falende test op de
+code van toen, dan hersteld in de bron.
 
 Geen netwerk en geen sleutels. Nagebootst: de Zoom-API op het laagste niveau (zoom._vraag en het token), de Fathom-API,
 een tijdelijk Fathom-archief en een tijdelijke zoom-data, en de klok (zoom_wacht.nu). Het bord is het echte bord
@@ -294,6 +295,7 @@ class Bord:
 ECHTE_DB_LEES = bord.db_lees
 # De echte tokenweg van zoom.py, voor de toetsen met twee apps (EIGEN-1, EIGEN-2): Wereld vervangt _toegang.
 ECHTE_TOEGANG, ECHTE_RECHTEN = Z._toegang, Z.rechten
+ECHTE_DOWNLOAD = Z.download          # RZ3-04: de proefdownload langs de echte download() met haar grendels
 
 
 class Wereld:
@@ -1166,9 +1168,13 @@ def test_t30_planning():
     assert len(keten) == 1 and keten[0].startswith("0 7,13 * * * /usr/bin/flock -w 1800 /tmp/gesprekken.lock "), keten
     assert not any("fathom_wacht.py" in r or "zoom_wacht.py" in r for r in actief), "de losse regels zijn weg"
     bundel = [r for r in actief if "dagbundelaar.py" in r]
-    # RZ2-03: De Dagbundelaar draait binnen het slot (niet meer na /bin/true), en een time-out staat in zijn logboek
+    # RZ2-03: De Dagbundelaar draait binnen het slot (niet meer na /bin/true), en een time-out staat in zijn logboek. Hoe
+    # lang hij wacht, rekent tests/test_keten.py na tegen de langste keten (RZ3-03); hier telt dat de regel uit
+    # gesprekken.cron ongewijzigd in het blok komt, met de wachttijd die daar staat.
+    wacht = re.findall(r"^5 7 \* \* 1-5 /usr/bin/flock -w (\d+) -E 75 /tmp/gesprekken\.lock ", "\n".join(cron), re.M)
+    assert len(wacht) == 1, "De Dagbundelaar wacht in gesprekken.cron een keer op het slot"
     assert len(bundel) == 1 and bundel[0].startswith(
-        f"5 7 * * 1-5 /usr/bin/flock -w 3600 -E 75 /tmp/gesprekken.lock {py} {rn}/dagbundelaar.py "), bundel
+        f"5 7 * * 1-5 /usr/bin/flock -w {wacht[0]} -E 75 /tmp/gesprekken.lock {py} {rn}/dagbundelaar.py "), bundel
     assert "/bin/true" not in bundel[0] and "; if [ $? -eq 75 ]; then " in bundel[0], bundel
     assert f"* * * * * {py} {rn}/bode.py >> {lg}/bode.log 2>&1" in doel and "MAILTO=''" in doel and huidig[4] in doel
     begin, einde = doel.index(M.BEGIN), doel.index(M.EINDE)
@@ -1923,11 +1929,13 @@ AANVINKEN_PROEF = KERN_PROEF | frozenset({
     "billing:read:list_invoices:admin", "zoom_rooms:read:list_rooms:admin", "webinar:read:list_webinars:admin",
     "h323_device:read:list_devices:admin", "contact_group:read:list_groups:admin", "tsp:read:tsp:admin",
     "tracking_field:read:list_tracking_fields:admin", "information_barrier:read:list_policies:admin"})
+# RZ3-04 (22-10-2026): ook het Zoom-transcript staat onder Nooit aanvinken en wordt geweigerd zoals de andere, tot Mehdi
+# over dat recht beslist. Tot dan gaf het alleen een melding en werkte de leesapp ermee verder.
+TRANSCRIPT_RECHT = "cloud_recording:read:meeting_transcript:admin"
 VERBODEN_PROEF = ("meeting:write:meeting:admin", "meeting:update:meeting:admin", "cloud_recording:delete:recording_file:admin",
                   "recording:write", "user:read:token:admin", "user:read:zak:admin", "zoom_rooms:read:virtual_controller:admin",
                   "meeting:read:local_archiving_token:admin", "team_chat:read:list_user_messages:admin",
-                  "meeting:read:summary:admin", "aic:read:conversation_archives:admin")
-TRANSCRIPT_RECHT = "cloud_recording:read:meeting_transcript:admin"
+                  "meeting:read:summary:admin", "aic:read:conversation_archives:admin", TRANSCRIPT_RECHT)
 OUD_RECHT = "cloud_recording:read:" + "recording:admin"     # bestaat niet bij Zoom; zo staat de naam niet letterlijk hier
 
 
@@ -2098,8 +2106,8 @@ def test_eigen1_chat_altijd_met_de_app_van_de_stack():
 def test_eigen2_zoom_weigert_een_leestoken_met_een_verboden_recht():
     """EIGEN-2 (13.6) in zoom.py: een token van het profiel lees met een recht uit 'Nooit aanvinken' wordt geweigerd. Het
     wordt niet bewaard en gaat nooit naar Zoom; lees() leest dan met de app van de stack, en leesapp_verboden() noemt
-    het recht. Het Zoom-transcript is geen weigering (het vangnet kan het nodig hebben), en de app van de stack valt er
-    niet onder."""
+    het recht. Sinds RZ3-04 hoort het Zoom-transcript daarbij (VERBODEN_PROEF), tot Mehdi over dat recht beslist; tot
+    dan werd een token met dat recht aanvaard. De app van de stack valt er niet onder."""
     ZL, env, herstel = _leesapp_proef(["ZOOM_ACCOUNT_ID=stack-account-1234", "ZOOM_CLIENT_ID=stack-client", "ZOOM_CLIENT_SECRET=stack-geheim",
                                        "ZOOM_LEES_CLIENT_ID=lees-client-445566", "ZOOM_LEES_CLIENT_SECRET=lees-geheim-112233"])
     try:
@@ -2123,8 +2131,7 @@ def test_eigen2_zoom_weigert_een_leestoken_met_een_verboden_recht():
         Z._tokens.clear()
         Z.vastzetten(None)
         assert Z.leesapp_verboden() == [], "een nieuwe ronde begint zonder weigering"
-        Z.token_halen = lambda cid, geheim, account: {"access_token": "tok-" + cid[:4], "scope": f"user:read:user:admin {TRANSCRIPT_RECHT}"}
-        assert Z._toegang("lees") == "tok-lees", "het Zoom-transcript geeft alleen een melding, geen weigering"
+        assert TRANSCRIPT_RECHT in Z.TOT_MEHDI_BESLIST and not hasattr(Z, "MELDEN_RECHTEN"), "RZ3-04: geen recht met alleen een melding"
         Z.token_halen = lambda cid, geheim, account: {"access_token": "tok-stack", "scope": "meeting:write:meeting:admin"}
         assert Z._toegang("stack") == "tok-stack", "de gedeelde app van de stack valt niet onder de lijst"
     finally:
@@ -2156,16 +2163,17 @@ def test_eigen2_leesapp_kern_advies_en_verboden_rechten():
     """EIGEN-2 (13.6, rechten-zoomwacht-lezen.md v1): zoom_leesapp.py toetst de rechten tegen de definitieve lijst. KERN is
     nodig voor de telling en het vangnet en bepaalt de exitcode; ADVIES (de rest, voor de latere accountscan) meldt hij per
     recht als aanwezig of ontbreekt. Heeft het token een recht uit 'Nooit aanvinken', dan weigert hij te werken: exit
-    niet-nul met de naam, niets geschreven en niets verder getoetst. Het Zoom-transcript geeft alleen een melding. Het
-    recht dat bij Zoom niet bestaat, is overal weg. Tot nu stond team_chat:read:list_user_messages:admin bij de nodige
-    rechten en toetste niets een verboden recht."""
+    niet-nul met de naam, niets geschreven en niets verder getoetst. Het Zoom-transcript ook (RZ3-04), en dan zegt de
+    melding dat het geweigerd blijft tot Mehdi beslist. Het recht dat bij Zoom niet bestaat, is overal weg. Tot nu stond
+    team_chat:read:list_user_messages:admin bij de nodige rechten en toetste niets een verboden recht."""
     import zoom_leesapp as ZL  # noqa: PLC0415
     assert set(ZL.KERN) == KERN_PROEF and len(ZL.KERN) == len(KERN_PROEF), ZL.KERN
     assert set(ZL.KERN) | set(ZL.ADVIES) == AANVINKEN_PROEF and not set(ZL.KERN) & set(ZL.ADVIES), set(ZL.ADVIES) ^ (AANVINKEN_PROEF - KERN_PROEF)
     assert len(ZL.ADVIES) == len(set(ZL.ADVIES)) == len(AANVINKEN_PROEF) - len(KERN_PROEF)
     assert not Z.verboden(AANVINKEN_PROEF), Z.verboden(AANVINKEN_PROEF)
     assert [r for r in VERBODEN_PROEF if Z.verboden({r}) != [r]] == [], "elk verboden recht wordt herkend"
-    assert not Z.verboden({TRANSCRIPT_RECHT}) and TRANSCRIPT_RECHT in Z.MELDEN_RECHTEN
+    assert Z.verboden({TRANSCRIPT_RECHT}) == [TRANSCRIPT_RECHT] and TRANSCRIPT_RECHT in Z.TOT_MEHDI_BESLIST
+    assert Z.TOT_MEHDI_BESLIST <= Z.VERBODEN_RECHTEN, "wat op Mehdi wacht, wordt geweigerd zoals de rest"
     for pad in ("zoom_leesapp.py", "zoom_wacht.py", os.path.join("koppelingen", "zoom.py")):
         assert OUD_RECHT not in open(os.path.join(RUNNER, pad), encoding="utf-8").read(), pad
     ZL, env, herstel = _leesapp_proef(["ZOOM_ACCOUNT_ID=stack-account-1234", "ZOOM_LEES_CLIENT_ID=lees-client-445566",
@@ -2199,9 +2207,13 @@ def test_eigen2_leesapp_kern_advies_en_verboden_rechten():
             code, regels = toets(KERN_PROEF | {recht})
             assert code != 0 and regels[-1].startswith("geweigerd: ") and recht in regels[-1], (recht, regels[-1])
             assert not gelezen, (recht, gelezen)
-        # 4. het Zoom-transcript: een melding, geen weigering
+        # 4. het Zoom-transcript (RZ3-04): geweigerd zoals de andere, en de melding zegt dat het wacht op Mehdi
         code, regels = toets(KERN_PROEF | {TRANSCRIPT_RECHT})
-        assert code == 0 and [r for r in regels if r.startswith("melding: ") and TRANSCRIPT_RECHT in r], regels
+        assert code != 0 and regels[-1].startswith("geweigerd: ") and TRANSCRIPT_RECHT in regels[-1], regels[-1]
+        assert regels[-1].endswith("; dat recht blijft geweigerd tot Mehdi erover beslist"), regels[-1]
+        assert not gelezen, gelezen
+        code, regels = toets(KERN_PROEF | {"user:read:zak:admin"})
+        assert "Mehdi" not in regels[-1], "een recht dat nooit mag, wacht niet op Mehdi"
         # 5. de echte weg: zoom.py weigert het token, de toets noemt het recht
         Z.rechten, Z._toegang = ECHTE_RECHTEN, ECHTE_TOEGANG
         Z._tokens.clear()
@@ -2221,9 +2233,112 @@ def test_eigen2_leesapp_kern_advies_en_verboden_rechten():
         assert code != 0 and laatste.startswith("niets geschreven: ") and "user:read:zak:admin" in laatste, laatste
         assert open(env, encoding="utf-8").read() == voor, "met een verboden recht werd toch iets geschreven"
         assert "nieuw-geheim" not in uit.getvalue() and "lees-geheim" not in uit.getvalue()
+        # 7. --zet met een token met het Zoom-transcript (RZ3-04): niets geschreven, en de melding noemt Mehdi
+        Z._tokens.clear()
+        Z.token_halen = lambda cid, geheim, account: {"access_token": "x", "scope": " ".join(sorted(KERN_PROEF | {TRANSCRIPT_RECHT}))}
+        uit = io.StringIO()
+        with redirect_stdout(uit):
+            code = ZL.main(["--zet", "--vervang"])
+        laatste = uit.getvalue().strip().splitlines()[-1]
+        assert code != 0 and laatste == f"niets geschreven: verboden recht {TRANSCRIPT_RECHT}; dat recht blijft geweigerd tot " \
+            "Mehdi erover beslist", laatste
+        assert open(env, encoding="utf-8").read() == voor, "met het Zoom-transcript werd toch iets geschreven"
     finally:
         herstel()
         Z.vastzetten(None)
+
+
+def test_rz3_04_proefdownload_zonder_het_transcriptrecht():
+    """RZ3-04 in zoom_leesapp.py: het Zoom-transcript wordt geweigerd tot Mehdi beslist. Weigert Zoom de download van het
+    transcript op dat recht (400 met code 4711, of 401 of 403 met dat recht in de melding), dan zegt de proefdownload dat
+    in die woorden, noemt een melding het recht, en is de exitcode niet nul. Langs de echte download() van zoom.py, met de
+    grendels L1 en L5; alleen het antwoord van Zoom is nagebootst. Nooit een url op het scherm.
+    Tegenproef van 22-10-2026: de proefdownload mat niet welk recht ontbrak. download() gooide de naam uit de melding van
+    Zoom weg, en elke weigering heette 'een recht dat Mehdi nog niet toestond': ook een ander recht dat wel aangevinkt mag
+    worden, en een ongeldig token (401, Zoom-code 124). Zo stuurde de melding Mehdi op een gok naar een recht onder Nooit
+    aanvinken. Nu noemt ze het recht dat Zoom noemt, en Mehdi alleen voor het transcriptrecht."""
+    ZL, env, herstel = _leesapp_proef(["ZOOM_ACCOUNT_ID=stack-account-1234", "ZOOM_LEES_CLIENT_ID=lees-client-445566",
+                                       "ZOOM_LEES_CLIENT_SECRET=lees-geheim-112233", "ZOOM_MEHDI_USER=mehdi-id"])
+    url = "https://proef.zoom.us/rec/download/f1"
+    ander = "cloud_recording:read:list_recording_files:admin"
+
+    def weiger(http, scope):
+        return http, "", json.dumps({"code": 4711, "message": f"Invalid access token, does not contain scopes:[{scope}]."}).encode()
+    try:
+        ZL.eigen_nummer = lambda: PMI
+        _zoo08_zoom("mehdi-id", "mehdi-id")
+        Z.download, Z._toegang = ECHTE_DOWNLOAD, ECHTE_TOEGANG
+        Z.token_halen = lambda cid, geheim, account: {"access_token": "x", "scope": " ".join(sorted(KERN_PROEF))}
+        Z.opnames = lambda van, tot, profiel="lees": (Z._DOWNLOADS.__setitem__("f1", url),
+                                                       [{"bestanden": [{"id": "f1", "soort": "TRANSCRIPT", "status": "completed",
+                                                                        "start": "x"}]}])[1]
+        for naam, antwoord, soort in (("4711 met het transcriptrecht", weiger(400, TRANSCRIPT_RECHT), "mehdi"),
+                                      ("403 met het transcriptrecht", weiger(403, TRANSCRIPT_RECHT), "mehdi"),
+                                      ("4711 met een ander recht", weiger(400, ander), "ander"),
+                                      ("401 met Zoom-code 124", (401, "", b'{"code": 124, "message": "Invalid access token."}'), "geen"),
+                                      ("403 zonder tekst", (403, "", b""), "geen")):
+            gevraagd = []
+            Z._vraag = lambda u, koppen, max_bytes=0, a=antwoord, g=gevraagd: (g.append(u), a)[1]
+            uit = io.StringIO()
+            with redirect_stdout(uit):
+                code = ZL.main([])
+            regels = uit.getvalue().strip().splitlines()
+            assert gevraagd == [url] and code == 1, (naam, gevraagd, code)
+            if soort == "mehdi":
+                assert "proefdownload van een Zoom-transcript: nee (download van het transcript vraagt een recht dat Mehdi nog " \
+                       "niet toestond)" in regels, (naam, regels)
+                assert f"melding: het vangnet vraagt {TRANSCRIPT_RECHT}; dat recht staat onder Nooit aanvinken en blijft " \
+                       "geweigerd tot Mehdi erover beslist" in regels, (naam, regels)
+                assert regels[-1] == "ontbreekt: recht voor de download van het transcript (Mehdi beslist)", (naam, regels[-1])
+            elif soort == "ander":
+                assert f"proefdownload van een Zoom-transcript: nee (download vraagt recht {ander})" in regels, (naam, regels)
+                assert regels[-1] == f"ontbreekt: {ander}" and "Mehdi" not in uit.getvalue(), (naam, uit.getvalue())
+            else:
+                assert f"proefdownload van een Zoom-transcript: nee (download geweigerd, HTTP {antwoord[0]}" \
+                       f"{', Zoom-code 124' if antwoord[0] == 401 else ''}; Zoom noemde geen recht)" in regels, (naam, regels)
+                assert regels[-1] == "ontbreekt: proefdownload van een Zoom-transcript", (naam, regels[-1])
+                assert "Mehdi" not in uit.getvalue() and TRANSCRIPT_RECHT not in uit.getvalue(), (naam, uit.getvalue())
+            assert "proef.zoom.us" not in uit.getvalue() and "/rec/" not in uit.getvalue(), "geen url op het scherm"
+        # een andere fout bij de download is geen recht dat op Mehdi wacht
+        Z._vraag = lambda u, koppen, max_bytes=0: (500, "", b"")
+        uit = io.StringIO()
+        with redirect_stdout(uit):
+            assert ZL.main([]) == 1
+        assert "proefdownload van een Zoom-transcript: nee (download: HTTP 500)" in uit.getvalue(), uit.getvalue()
+        assert "Mehdi" not in uit.getvalue(), uit.getvalue()
+        # met de download in orde: klaar
+        Z._vraag = lambda u, koppen, max_bytes=0: (200, "", b"WEBVTT")
+        uit = io.StringIO()
+        with redirect_stdout(uit):
+            assert ZL.main([]) == 0, uit.getvalue()
+        assert "proefdownload van een Zoom-transcript: ja (HTTP 200)" in uit.getvalue(), uit.getvalue()
+    finally:
+        herstel()
+        Z.vastzetten(None)
+
+
+@bord_nodig
+def test_rz3_04_zoomwacht_zonder_downloadrecht_zet_een_nood_en_crasht_niet():
+    """RZ3-04 in de ronde: het vangnet moet de Zoom-tekst ophalen, en Zoom weigert de download (403, het recht voor het
+    transcript is niet toegestaan). De ronde crasht niet: geen map, geen tekst, de sessie telt mee met toestand onbekend,
+    en Mehdi krijgt een nood. De volgende ronde probeert opnieuw, zonder een tweede nood."""
+    w = Wereld()
+    s = een_sessie(w)
+    echt, geweigerd = Z._vraag, []
+    Z._vraag = lambda u, koppen, max_bytes=2_000_000: ((geweigerd.append(u), (403, "", b'{"code": 124, "message": "proef"}'))[1]
+                                                       if "/rec/download/" in u else echt(u, koppen, max_bytes))
+    try:
+        fout = w.ronde(s["einde"] + timedelta(minutes=31))
+        assert fout is None, fout
+        assert len(geweigerd) == 1 and not w.vangnetmappen(), (geweigerd, w.vangnetmappen())
+        assert w.bord.noden().get("Zoom-tekst niet op te halen: de leesapp mist het downloadrecht voor opnames") == "mehdi", \
+            w.bord.noden()
+        assert w.bord.status()["status"] in ("klaar", "waakt"), w.bord.status()
+        assert w.bord.rij("zoom:meeting:z24") and not w.bord.item("zoom-tekst:z24"), "de sessie telt, zonder tekst"
+        fout = w.ronde(s["einde"] + timedelta(minutes=45))
+        assert fout is None and len([t for t in w.bord.noden() if t.startswith("Zoom-tekst niet op te halen")]) == 1, w.bord.noden()
+    finally:
+        Z._vraag = echt
 
 
 def test_eigen3_eigen_account_alleen_op_een_exact_adres():

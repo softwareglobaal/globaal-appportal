@@ -241,8 +241,10 @@ check("A13 alarm: na drie mislukte starts opgegeven, met een logregel, ook als h
       f"{len(alarm_oproepen)} {st} {logs}")
 
 # ------------------------------------------------------------------ A23 Brusselse tijd ---
-ECHT_BUNDELEN = B.BUNDELEN
-B.BUNDELEN = "uit"          # B9: de losse berichten van voor 21-10-2026; de bundelstand heeft test_bode_regie.py
+# B9: de losse berichten van voor 21-10-2026; de bundelstand heeft test_bode_regie.py. Sinds RZ3-02 (22-10-2026) volgt
+# de stand uit de werkwijze op het bord: de proefwerkwijze heeft de regel BUNDELEN niet, dus deze proef loopt in 'uit'.
+_u, _f = probeer(lambda: B.stand_bundelen(PROEFWERKWIJZE))
+check("B9 RZ3-02 de proefwerkwijze zonder de regel BUNDELEN geeft de stand 'uit'", _f is None and _u == "uit", f"{_u} {_f}")
 UTC = timezone.utc
 for _t, _verwacht, _uitleg in ((datetime(2026, 7, 15, 20, 30, tzinfo=UTC), True, "juli 20:30 UTC is 22:30 in Brussel"),
                                (datetime(2026, 7, 15, 5, 30, tzinfo=UTC), False, "juli 05:30 UTC is 07:30 in Brussel"),
@@ -279,7 +281,6 @@ _u, _f = probeer(B.main)
 check("A23 om 20:30 UTC in juli (22:30 Brussel) stuurt De Bode niets zonder alarm", _f is None and not verstuurd,
       f"{_f} {verstuurd[:1]}")
 B.datetime = ECHTE_TIJD
-B.BUNDELEN = ECHT_BUNDELEN
 BORD["items"] = []
 
 # ------------------------------------------------------------------ A26 slot en stand ---
@@ -401,7 +402,7 @@ BORD["items"] = []
 # ------------------------------------------------------------------ ronde 3: A31 groepen ---
 # De stille uren hangen af van de klok; hier altijd overdag, anders faalt de test 's nachts.
 ECHT_STIL, ECHT_STUUR, ECHT_NIET_TG = B.is_stil, B.stuur, B.NIET_OP_TELEGRAM
-B.BUNDELEN = "uit"          # B9: de groepen van A31 gelden voor de losse berichten (stand 'uit')
+# B9: de groepen van A31 gelden voor de losse berichten (stand 'uit', de proefwerkwijze heeft de regel BUNDELEN niet)
 B.is_stil = lambda t=None: False
 B.NIET_OP_TELEGRAM = ("agenda-wacht",)
 B.tg = lambda methode, **p: {"result": []}
@@ -500,7 +501,6 @@ check("A31 een volle pagina waarvan zelfs het oudste item nieuw is: een nood (er
       str(hartslagen[-1:])[:300])
 BORD["items"] = []
 B.is_stil, B.NIET_OP_TELEGRAM = ECHT_STIL, ECHT_NIET_TG
-B.BUNDELEN = ECHT_BUNDELEN
 
 # ------------------------------------------------------------------ ronde 3: A26 belspoor ---
 SPOOR = B.belspoor() if hasattr(B, "belspoor") else str(TMP / "bode-gebeld.jsonl")

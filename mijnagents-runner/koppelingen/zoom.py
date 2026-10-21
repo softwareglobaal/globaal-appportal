@@ -22,6 +22,11 @@ Grendels (13.6): een token van het profiel lees met een recht uit 'Nooit aanvink
 geweigerd, niet bewaard en nooit gebruikt (VerbodenRecht); lees() leest dan met de app van de stack en
 leesapp_verboden() noemt het recht. Chatberichten (/chat/users/<id>/messages) nooit met de leesapp: die krijgt dat recht
 bewust niet, het tellen van chatberichten blijft op de app van de stack (EIGEN-1).
+Het Zoom-transcript (cloud_recording:read:meeting_transcript:admin) staat ook onder Nooit aanvinken en wordt sinds RZ3-04
+(22-10-2026) geweigerd zoals de andere, tot Mehdi over dat recht beslist (TOT_MEHDI_BESLIST); tot dan gaf het alleen een
+melding en las de leesapp ermee. Weigert Zoom een download, dan is dat GeenRecht bij download(), met het recht dat Zoom
+noemt (of 'download' als het er geen noemt): zoom_leesapp.py meldt het bij de proefdownload, en noemt Mehdi alleen als
+het het transcriptrecht is; De Zoomwacht zet een nood voor Mehdi.
 """
 import base64
 import json
@@ -49,12 +54,13 @@ _LEESAPP = {"fout": "", "verboden": []}
 # verandert of wist; een sleutel om als gebruiker een meeting te starten; de bediening van een ruimte; de inhoud van
 # chatberichten, AI-samenvattingen en archieven. De app van de stack valt hier niet onder: die is gedeeld en kan meer.
 VERBODEN_SOORTEN = frozenset({"write", "update", "delete"})
+# Ook onder Nooit aanvinken, maar het vangnet kan het nodig hebben voor de Zoom-tekst. RZ3-04 (Codex RZ3-herstelcontrole,
+# besluit van de regie 22-10-2026): geweigerd zoals de andere, tot Mehdi over dat recht beslist; de meldingen van
+# zoom_leesapp.py zeggen dat. Tot dan aanvaardde de code het met alleen een melding (MELDEN_RECHTEN).
+TOT_MEHDI_BESLIST = frozenset({"cloud_recording:read:meeting_transcript:admin"})
 VERBODEN_RECHTEN = frozenset({"user:read:token:admin", "user:read:zak:admin", "zoom_rooms:read:virtual_controller:admin",
                               "meeting:read:local_archiving_token:admin", "team_chat:read:list_user_messages:admin",
-                              "meeting:read:summary:admin", "aic:read:conversation_archives:admin"})
-# Ook onder Nooit aanvinken, maar het vangnet kan het nodig hebben voor de Zoom-tekst: geen weigering, alleen een
-# melding van zoom_leesapp.py, en Mehdi beslist.
-MELDEN_RECHTEN = frozenset({"cloud_recording:read:meeting_transcript:admin"})
+                              "meeting:read:summary:admin", "aic:read:conversation_archives:admin"}) | TOT_MEHDI_BESLIST
 
 
 class ZoomFout(RuntimeError):
@@ -63,10 +69,13 @@ class ZoomFout(RuntimeError):
 
 class GeenRecht(ZoomFout):
     """De app mist een recht (Zoom 400 met code 4711, of 'does not contain scopes'). `scope` is de naam van het recht,
-    of 'download' als een opname niet gedownload mag worden."""
+    of 'download' als een opname niet gedownload mag worden en Zoom geen recht noemde. `http` en `zoomcode` zijn de
+    HTTP-code en de code van Zoom, als ze er zijn (RZ3-04: zoom_leesapp.py meldt zo welk recht ontbreekt, of dat Zoom
+    er geen noemde)."""
 
-    def __init__(self, scope):
+    def __init__(self, scope, http=None, zoomcode=None):
         self.scope = scope or "onbekend recht"
+        self.http, self.zoomcode = http, zoomcode
         super().__init__(f"geen recht: {self.scope}")
 
 
@@ -348,8 +357,9 @@ def opnames(van_dag, tot_dag, profiel="lees"):
 
 def download(bestandsid, profiel="lees", max_bytes=5_000_000):
     """Een opnamebestand in het geheugen, alleen als het in de eigen opnamelijst stond (L5). Een omleiding volgen we
-    zelf: alleen naar https op zoom.us, en na de eerste sprong zonder Authorization-kop (L1). 401 of 403 is
-    GeenRecht('download')."""
+    zelf: alleen naar https op zoom.us, en na de eerste sprong zonder Authorization-kop (L1). 401, 403, of 400 met code
+    4711 is GeenRecht: met het recht dat Zoom in zijn melding noemt, anders 'download', en met de HTTP-code en de code
+    van Zoom. Tot 22-10-2026 gooide ik de naam van het recht weg (tegenproef op RZ3-04)."""
     url = _DOWNLOADS.get(str(bestandsid))
     if not url:
         raise Geweigerd("download: bestand staat niet in de eigen opnamelijst")
@@ -365,7 +375,11 @@ def download(bestandsid, profiel="lees", max_bytes=5_000_000):
             continue
         tekst = (inhoud or b"")[:4096].decode("utf-8", "replace") if code != 200 else ""
         if code in (401, 403) or (code == 400 and ("4711" in tekst or "does not contain scope" in tekst)):
-            raise GeenRecht("download")
+            try:
+                zoomcode = json.loads(tekst).get("code")
+            except (ValueError, AttributeError):
+                zoomcode = None
+            raise GeenRecht(_scope_uit(tekst) or "download", http=code, zoomcode=zoomcode if isinstance(zoomcode, int) else None)
         if code != 200:
             raise ZoomFout(f"download: HTTP {code}")
         if len(inhoud) > max_bytes:

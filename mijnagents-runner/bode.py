@@ -4,6 +4,10 @@
 Naar Mehdi: wat de agents voor hem klaarzetten, via WhatsApp (sinds 30-09-2026, koppelingen/whatsapp.py: de Cloud API
 van Meta, van het agentennummer UNABO Assistant). Mag WhatsApp niet (venster van 24 uur dicht en nog geen sjabloon) of
 lukt het niet, dan Telegram, dan Zoom-chat; een antwoord op een vraag van Mehdi gaat nooit via Zoom-chat (L2).
+De stand van BUNDELEN lees ik elke ronde uit mijn werkwijze op het bord (RZ3-02, 22-10-2026): alleen met de vaste regel
+"BUNDELEN: ochtend-avond" in de sectie over de stand van BUNDELEN bundel ik; zonder die regel, of met een werkwijze die
+ik niet kan lezen, is de stand 'uit' en houd ik niets vast. Zo bundel ik pas als Mehdi die werkwijze met een klik op het
+bord zette, ook als deze code al live staat.
 Sinds 21-10-2026 (ontwerp regie-zoom v1.2, keuze 1 van Mehdi: optie A) bundel ik, met BUNDELEN op 'ochtend-avond':
   - het ochtendbericht van De Regisseur (soort ochtendbericht, uniek ochtendbericht:JJJJ-MM-DD) gaat als eigen bericht,
     met zijn nummers en een regel "Gebundeld: ..." voor wat sinds de vorige bundel binnenkwam (ochtend_sturen). Staat
@@ -29,6 +33,7 @@ import base64
 import difflib
 import fcntl
 import hashlib
+import html
 import json
 import os
 import re
@@ -61,10 +66,16 @@ SOORTEN = ("signaal", "coaching", "verslag", "dagplan", "dagbundel", "ochtendber
 # 'ochtend-avond': het ochtendbericht en rond 17:00 de avondbundel; wat kan wachten zit in een van die twee, alleen
 # oproepen, alarmen en het bellen voor afspraken komen meteen. 'uit' is de terugval: alles los, zoals voor die dag.
 # Bij elke omschakeling verdwijnt niets: naar de bundelstand begint de bundel na het laatste losse bericht (bundel_begin),
-# terug naar 'uit' gaat eerst een slotbundel (slotbundel_sturen). Terugdraaien is deze ene regel, in dezelfde commit als werkwijze/bode.md, AGENTNORM hoofdstuk 6 en de docstring van
-# mail_regisseur.py (tests/test_bode_regie.py, T77, houdt code en werkwijze gelijk). Optie C ('ochtend', een bericht per
-# dag) is niet gebouwd; een onbekende stand werkt als 'uit', want daar verdwijnt niets.
-BUNDELEN = "ochtend-avond"
+# terug naar 'uit' gaat eerst een slotbundel (slotbundel_sturen). Optie C ('ochtend', een bericht per dag) is niet
+# gebouwd.
+# RZ3-02 (Codex RZ3-herstelcontrole, besluit van de regie 22-10-2026): de stand staat niet meer vast in de code. Tot dan
+# stond hier BUNDELEN = "ochtend-avond", en een volledige push naar main hield berichten vast voor Mehdi zijn nieuwe
+# werkwijze goedkeurde. Nu leest stand_bundelen de stand uit de werkwijze op het bord: de regel BUNDELEN_REGEL, op een
+# eigen regel in de sectie BUNDELEN_KOP, zet de bundelstand aan; al het andere is 'uit', want daar verdwijnt niets.
+# Omschakelen of terugdraaien is dus een werkwijze op het bord, met een klik van Mehdi (het bord bewaart de vorige
+# versie). tests/test_bode_regie.py (T77) houdt het zaad werkwijze/bode.md en deze vorm gelijk.
+BUNDELEN_KOP = "## De stand van BUNDELEN"
+BUNDELEN_REGEL = "BUNDELEN: ochtend-avond"
 BUNDEL_STANDEN = ("uit", "ochtend-avond")
 TERUGVAL = (11, 0)            # Brussel: geen ochtendbericht van De Regisseur, dan een terugval met de aantallen (I7, I9)
 AVOND_TRIGGER = "mailupdate:{datum}:17:00"   # de update van 17:00 van De Mailregisseur (mail_regisseur.py, UPDATES)
@@ -114,9 +125,51 @@ def nu():
     return datetime.now(BRUSSEL)
 
 
-def stand_bundelen():
-    """De stand van BUNDELEN; een onbekende stand werkt als 'uit' (daar verdwijnt niets)."""
-    return BUNDELEN if BUNDELEN in BUNDEL_STANDEN else "uit"
+def _zoals_gelezen(regel):
+    """Een regel zoals Mehdi ze op het bord leest, om te zien of ze BUNDELEN noemt: HTML-entiteiten uitgeschreven,
+    onzichtbare tekens (Unicode-categorie Cf, zoals een nulbreedteteken) weg, NFKC (een volle-breedte dubbelepunt wordt
+    een gewone), casefold, en daarna alleen letters en cijfers ('B U N D E L E N' wordt 'bundelen')."""
+    r = "".join(t for t in html.unescape(regel) if unicodedata.category(t) != "Cf")
+    return re.sub(r"[\W_]+", "", unicodedata.normalize("NFKC", r).casefold())
+
+
+def stand_bundelen(werkwijze):
+    """De stand van BUNDELEN uit de werkwijze op het bord (RZ3-02). 'ochtend-avond' alleen als de kop BUNDELEN_KOP er
+    precies een keer staat en daaronder, tot de volgende kop, precies een regel BUNDELEN noemt, en die regel exact
+    BUNDELEN_REGEL is (op een eigen regel, zonder inspringen of toevoeging). Al het andere geeft 'uit': geen werkwijze
+    (onleesbaar), geen regel (zoals werkwijze 2.7 en ouder), een andere of een tweede stand, een codeblok in of voor de
+    sectie, en ruwe HTML ergens in de werkwijze, want die zet het bord onbewerkt op de pagina, en dan leest Mehdi niet
+    wat ik lees (zoals bord.grenzen). Een twijfelgeval is 'uit': daar wordt niets vastgehouden.
+    Tegenproef van 22-10-2026: tot dan telde alleen de letterlijke tekst "BUNDELEN:" als stand, en een tweede regel als
+    'Bundelen: uit', 'BUNDELEN : uit' of '&#66;UNDELEN: uit' gaf toch 'ochtend-avond': Mehdi las twee standen terwijl ik
+    bundelde. Nu telt elke regel die BUNDELEN noemt zoals hij ze leest (_zoals_gelezen): in de sectie elke regel, in een
+    andere kop elke vermelding, en elders een regel die met BUNDELEN begint (een stand als lijstpunt of citaat)."""
+    if not isinstance(werkwijze, str):
+        return "uit"
+    tekst = werkwijze.replace("\r\n", "\n").replace("\r", "\n")
+    if bord.HTML.search(tekst):
+        return "uit"
+    regels = tekst.split("\n")
+    koppen = [i for i, regel in enumerate(regels) if regel.rstrip() == BUNDELEN_KOP]
+    if len(koppen) != 1:
+        return "uit"
+    blok = re.compile(r"^\s*(`{3,}|~{3,})")
+    if sum(1 for regel in regels[:koppen[0]] if blok.match(regel)) % 2:
+        return "uit"                    # een codeblok dat voor de kop opengaat: dan is de kop geen kop
+    einde = next((j for j in range(koppen[0] + 1, len(regels)) if regels[j].lstrip().startswith("#")), len(regels))
+    sectie = regels[koppen[0] + 1:einde]
+    if any(blok.match(regel) for regel in sectie):
+        return "uit"
+    schakel = [regel.rstrip() for regel in sectie if "bundelen" in _zoals_gelezen(regel)]
+    if schakel != [BUNDELEN_REGEL]:
+        return "uit"
+    for j, regel in enumerate(regels):
+        if koppen[0] <= j < einde:
+            continue
+        gelezen = _zoals_gelezen(regel)
+        if (regel.lstrip().startswith("#") and "bundelen" in gelezen) or re.sub(r"^\d+", "", gelezen).startswith("bundelen"):
+            return "uit"                # een tweede kop over BUNDELEN, of een stand buiten de sectie
+    return "ochtend-avond"
 
 
 # ---------------------------------------------------------------- kanalen ---
@@ -526,7 +579,7 @@ def melding_groep(items, eerste=False, staat=None, stand=None):
     rest bewust als gelezen; anders kwam heel de geschiedenis van het bord in tientallen berichten terug. Een
     ochtendbericht van vandaag vindt ochtend_sturen dan toch, want dat zoekt het op zijn uniek."""
     staat = staat or {}
-    stand = stand or stand_bundelen()
+    stand = stand or "uit"          # zonder stand de terugval: daar wordt niets vastgehouden (RZ3-02)
     gemeld = set(staat.get("alarm_gemeld") or [])
     voor_mehdi = [it for it in items if not apart(it, stand) and it["id"] not in gemeld]
     if eerste:
@@ -1190,11 +1243,12 @@ def ronde(droog=False):
     Volgorde (B5, ontwerp regie-zoom v1.2): 1. afspraken bellen en 2. de items lezen en alarm bellen, allebei buiten de
     ronde en ongewijzigd, zodat een onleesbare werkwijze geen oproep tegenhoudt (FR-154); 3. bij --droog alles tonen;
     4. de rest door de gedeelde ronde (N12), met de noden van 1 en 2 als begin_noden (X4). Stopt de ronde omdat het
-    regelboek ontbreekt (RondeGestopt), dan wachten de berichten en gaat de stand van het bellen toch op schijf."""
+    regelboek ontbreekt (RondeGestopt), dan wachten de berichten en gaat de stand van het bellen toch op schijf.
+    De stand van BUNDELEN komt uit de werkwijze die de ronde las (RZ3-02); droog leest de werkwijze zelf, en een
+    onleesbare werkwijze is daar 'uit'."""
     staat = lees_staat()
     nood = []
     moment = nu()
-    stand = stand_bundelen()
     # Eerst bellen: dat hangt alleen af van het belrooster op schijf. Een storing bij Telegram of het bord liet main
     # vroeger crashen voor afspraken_bellen liep, en dan belde ik voor geen enkele afspraak. Na elke oproep staat de
     # stand meteen op schijf (bewaar), niet pas aan het eind na de time-outs (Codex A26, 15-10-2026).
@@ -1258,6 +1312,8 @@ def ronde(droog=False):
     nood += bellen.nood() + bellen.nood_afspraken()
 
     if droog:
+        # RZ3-02: zonder ronde lees ik de werkwijze zelf, alleen lezend; onleesbaar is 'uit', met een nood in de uitvoer
+        stand = stand_bundelen(veilig(nood, "Werkwijze lezen", ag.werkwijze_lezen, None))
         namen = agentnamen()
         voorstellen = open_voorstellen(nood)
         vast = veilig(nood, "Vaste momenten", lambda: vaste_momenten(staat, nood, moment, namen, stand, bord_items,
@@ -1272,7 +1328,11 @@ def ronde(droog=False):
               + (f"; nood: {[n['tekst'] for n in nood]}" if nood else ""))
         return
     try:
-        with ag.ronde("berichten van en naar Mehdi", bronnen={"BUNDELEN": stand}, begin_noden=nood) as r:
+        with ag.ronde("berichten van en naar Mehdi", begin_noden=nood) as r:
+            # RZ3-02: de stand uit de werkwijze die deze ronde las; ze gaat mee als bron (N4), zodat achteraf te zien is
+            # met welke stand ik werkte
+            stand = stand_bundelen(r.werkwijze)
+            r.bron("BUNDELEN", stand)
             werk = []
             try:
                 r.detail = berichten(staat, werk, moment, stand, items, eerste, alarm, bord_items, bel_detail, gelezen)
