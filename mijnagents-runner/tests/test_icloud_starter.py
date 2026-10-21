@@ -93,8 +93,10 @@ class StarterGedrag(unittest.TestCase):
         self.assertEqual(data['argv'], [str(SCRIPT)])
         self.assertEqual(data['file'], str(SCRIPT))
         self.assertEqual(data['python'], str(PYTHON))
-        self.assertEqual(data['env'], {'HOME': str(Path.home()),
-                                       'PATH': '/usr/bin:/bin', 'LANG': 'en_US.UTF-8'})
+        # __CF_USER_TEXT_ENCODING zet CoreFoundation zelf in het Python-proces; de starter geeft het niet door.
+        env = {k: v for k, v in data['env'].items() if k != '__CF_USER_TEXT_ENCODING'}
+        self.assertEqual(env, {'HOME': str(Path.home()),
+                               'PATH': '/usr/bin:/bin', 'LANG': 'en_US.UTF-8'})
         self.assertFalse(list(ROOT.glob('__pycache__')))
         result = self.run_starter('--taken')
         self.assertEqual(result.returncode, 23, result.stderr)
@@ -144,10 +146,21 @@ class StarterGedrag(unittest.TestCase):
                                         capture_output=True, text=True)
             self.assertEqual(onbeschermd.returncode, 64)
             self.assertIn('DYLD_PROEF_GELADEN', onbeschermd.stderr)
+            # Beide beschermingen moeten in het programma zitten: geharde runtime en een __RESTRICT-segment.
+            segmenten = subprocess.run(['/usr/bin/otool', '-l', str(self.bin)], capture_output=True, text=True, check=True)
+            self.assertRegex(segmenten.stdout, r'segname __RESTRICT\b')
+            handtekening = subprocess.run(['/usr/bin/codesign', '-d', '--verbose=4', str(self.bin)],
+                                          capture_output=True, text=True)
+            self.assertRegex(handtekening.stderr, r'flags=0x[0-9a-f]+\([^)]*runtime')
             result = self.run_starter('--fout', extra_env={'DYLD_INSERT_LIBRARIES': str(lib)})
             self.assertEqual(result.returncode, 64, result.stderr)
             self.assertIn('Gebruik:', result.stderr)
-            self.assertNotIn('DYLD_PROEF_GELADEN', result.stderr)
+            # Gedrag alleen afdwingbaar met SIP aan (zoals op de Mac van Mehdi); sommige runners draaien zonder.
+            sip = subprocess.run(['/usr/bin/csrutil', 'status'], capture_output=True, text=True).stdout
+            if 'enabled' in sip:
+                self.assertNotIn('DYLD_PROEF_GELADEN', result.stderr)
+            else:
+                print(f'SIP staat uit op deze runner; injectie geladen: {"DYLD_PROEF_GELADEN" in result.stderr}')
 
     def test_symlink_en_schrijfrechten_worden_geweigerd(self):
         sudo('/bin/chmod', '664', SCRIPT)

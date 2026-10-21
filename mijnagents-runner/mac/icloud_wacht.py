@@ -381,9 +381,11 @@ def exporteer_jpg_naar(fotos, doel):
                 f["export_fout"] = "doelbestand_ongeldig"
             continue
 
-        ext = os.path.splitext(str(f.get("bestand") or ""))[1].lower()
+        ext_echt = os.path.splitext(str(f.get("bestand") or ""))[1]
+        ext = ext_echt.lower()
         uid = str(f.get("uuid") or "")
-        bron = os.path.join(LIB, uid[:1], uid + ext) if uid and ext in beeld_ext else ""
+        # De echte extensie uit Photos: op een hoofdlettergevoelig bestandssysteem vindt '.heic' geen '.HEIC'.
+        bron = os.path.join(LIB, uid[:1], uid + ext_echt) if uid and ext in beeld_ext else ""
         with tempfile.TemporaryDirectory(prefix="icloud-jpg-") as tmp:
             if not bron or not os.path.isfile(bron) or os.path.getsize(bron) == 0:
                 if not uid or '"' in uid or "\\" in uid:

@@ -98,7 +98,7 @@ jobs:
           plutil -lint mijnagents-runner/mac/starter/Info.plist
           plutil -lint mijnagents-runner/mac/starter/Entitlements.plist
           mkdir -p "$RUNNER_TEMP/iCloudWacht.app/Contents/MacOS"
-          cc -O2 -Wall -Werror -o "$RUNNER_TEMP/iCloudWacht.app/Contents/MacOS/icloudwacht" mijnagents-runner/mac/starter/icloudwacht.c
+          cc -O2 -Wall -Werror -Wl,-sectcreate,__RESTRICT,__restrict,/dev/null -o "$RUNNER_TEMP/iCloudWacht.app/Contents/MacOS/icloudwacht" mijnagents-runner/mac/starter/icloudwacht.c
           cp mijnagents-runner/mac/starter/Info.plist "$RUNNER_TEMP/iCloudWacht.app/Contents/Info.plist"
           codesign -s - --force --options runtime --entitlements mijnagents-runner/mac/starter/Entitlements.plist --identifier be.globaal.icloudwacht "$RUNNER_TEMP/iCloudWacht.app"
           codesign --verify --strict "$RUNNER_TEMP/iCloudWacht.app"

@@ -199,7 +199,10 @@ try:
     rechten = plistlib.loads(entitlements.stdout)
 except (ValueError, TypeError):
     rechten = None
-goed = (verify.returncode == display.returncode == entitlements.returncode == 0
+segmenten = subprocess.run(['/usr/bin/otool', '-l', app + '/Contents/MacOS/icloudwacht'], capture_output=True)
+beperkt = re.search(rb'segname __RESTRICT\b', segmenten.stdout) is not None
+goed = (verify.returncode == display.returncode == entitlements.returncode == segmenten.returncode == 0
+        and beperkt
         and flags is not None and b'runtime' in flags.group(1).split(b',')
         and identiteit is not None and identiteit.group(1) == b'be.globaal.icloudwacht'
         and rechten == {'com.apple.security.automation.apple-events': True})
@@ -318,7 +321,8 @@ if [[ ! -d "$APP" || "$modus" == --herbouw-starter ]]; then
     bouw_app=1
     nieuw="$werk/iCloudWacht.app"
     /bin/mkdir -p "$nieuw/Contents/MacOS" "$nieuw/Contents/Resources"
-    /usr/bin/cc -O2 -Wall -Werror "$werk/icloudwacht.c" -o "$nieuw/Contents/MacOS/icloudwacht"
+    # __RESTRICT: dyld negeert DYLD_*-variabelen, ook waar de geharde runtime dat niet afdwingt.
+    /usr/bin/cc -O2 -Wall -Werror -Wl,-sectcreate,__RESTRICT,__restrict,/dev/null "$werk/icloudwacht.c" -o "$nieuw/Contents/MacOS/icloudwacht"
     [[ "$(git -C "$REPO" hash-object "$werk/icloudwacht.c")" == "$starter_blob" ]] ||
         { print -u2 -- 'Starterbron veranderde tijdens de bouw'; exit 1; }
     /usr/bin/install -m 644 "$werk/Info.plist" "$nieuw/Contents/Info.plist"
