@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Geen foto-I/O/export/netwerk: geweigerde bron blijft als fout zichtbaar."""
 import importlib.util
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -91,10 +92,10 @@ class ICloudStatus(unittest.TestCase):
         data.update(changes)
         return data
 
-    def fake_run(self, fotos, inhoud=None, geleverd=None, echt_jpg=False):
+    def fake_run(self, fotos, inhoud=None, geleverd=None, echt_jpg=False, nu=None, taak_id=12):
         m = self.module
         logs, exports = [], []
-        m.taken_lezen = lambda: [{"id": 12, "inhoud": json.dumps(inhoud or self.inhoud())}]
+        m.taken_lezen = lambda: [{"id": taak_id, "inhoud": json.dumps(inhoud or self.inhoud())}]
         m.coord = lambda address: (50.0, 4.0)
         self.lezingen = []
         m.fotos_van = lambda day: self.lezingen.append(day) or fotos
@@ -110,7 +111,12 @@ class ICloudStatus(unittest.TestCase):
         m.exporteer_naar = export
         m.exporteer_jpg_naar = self.export_jpg_orig if echt_jpg else export
         m.jpeg_kopieen = lambda doel: 0
-        with patch.object(sys, "argv", ["icloud_wacht.py", "--taken"]):
+        class Klok(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime.fromisoformat(nu).astimezone(tz)
+        klok = patch.object(m, "datetime", Klok) if nu else nullcontext()
+        with patch.object(sys, "argv", ["icloud_wacht.py", "--taken"]), klok:
             code = m.main()
         return code, exports, logs
 
@@ -265,6 +271,44 @@ class ICloudStatus(unittest.TestCase):
         self.assertIn("2 foto's niet toewijsbaar", (Path(self.module.taakdoel(data)) / "00 fotos.md").read_text())
         self.assertTrue(any("2 onbeslist" in r.get("tekst", "") for _, payload in logs if "regels" in payload for r in payload["regels"]))
 
+    def test_tkn_twee_gelijke_selecties_minstens_45_minuten_uiteen(self):
+        data = self.inhoud_tkn()
+        fotos = [self.foto("eerste")]
+        for nu in ("2026-10-14T11:00:00+00:00", "2026-10-14T11:44:59+00:00"):
+            code, exports, _ = self.fake_run(fotos, inhoud=data, nu=nu)
+            self.assertEqual((code, exports[-1], self.afgevinkt), (1, ["eerste"], []))
+        self.assertFalse((Path(self.module.taakdoel(data)) / "00 fotos.md").exists())
+        code, _, _ = self.fake_run(fotos, inhoud=data, nu="2026-10-14T11:45:00+00:00")
+        self.assertEqual((code, self.afgevinkt), (0, [12]))
+        staat = json.loads((Path(self.module.SELECTIE_STAAT) / "12.json").read_text())
+        self.assertEqual(staat["eerste_meting"], "2026-10-14T11:00:00+00:00")
+        self.assertEqual(set(staat), {"selectiehash", "eerste_meting"})
+
+    def test_tkn_groeiende_selectie_reset_rust_en_levert_nieuwe_foto(self):
+        data = self.inhoud_tkn()
+        eerste = self.foto("eerste")
+        tweede = self.foto("tweede")
+        self.fake_run([eerste], inhoud=data, nu="2026-10-14T11:00:00+00:00")
+        code, exports, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T11:46:00+00:00")
+        self.assertEqual((code, exports, self.afgevinkt), (1, [["eerste", "tweede"]], []))
+        self.assertFalse((Path(self.module.taakdoel(data)) / "00 fotos.md").exists())
+        code, _, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T12:31:00+00:00")
+        self.assertEqual((code, self.afgevinkt), (0, [12]))
+
+    def test_tkn_zesuursgrens_en_groei_op_de_grens(self):
+        data = self.inhoud_tkn()
+        eerste = self.foto("eerste")
+        tweede = self.foto("tweede")
+        self.fake_run([eerste], inhoud=data, nu="2026-10-14T15:59:59+00:00")
+        self.assertEqual(self.afgevinkt, [])
+        code, _, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T16:00:00+00:00")
+        self.assertEqual((code, self.afgevinkt), (1, []))
+        code, _, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T16:30:00+00:00")
+        self.assertEqual((code, self.afgevinkt), (0, [12]))
+        nieuw = self.inhoud_tkn(bezoek_ref="verslagopdracht:13")
+        code, _, _ = self.fake_run([eerste], inhoud=nieuw, nu="2026-10-14T16:00:00+00:00", taak_id=13)
+        self.assertEqual((code, self.afgevinkt), (0, [12, 13]))
+
     def test_tkn_identiteit_en_fotomap_worden_gecontroleerd_voor_fotolezing(self):
         basis = self.inhoud_tkn()
         fouten = [
@@ -275,6 +319,7 @@ class ICloudStatus(unittest.TestCase):
             (dict(projectmap="/Work/TKN BURO WORK/1 Projects/2026/999999_Ander"), "bezoekmap_buiten_project"),
             (dict(projectmap="/private/47035_Barsten & Scheuren_Proeflaan 23, 9998 Proefgem"), "bezoekmap_buiten_project"),
             (dict(doelmap=basis["projectmap"] + "/2. plaud/2026-10-14 iPhone"), "bezoekmap_buiten_project"),
+            (dict(tot_tijd=None), "bezoekvenster_ontbreekt"),
         ]
         for changes, fout in fouten:
             with self.subTest(changes=changes):

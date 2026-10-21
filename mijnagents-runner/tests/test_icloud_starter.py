@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -14,7 +15,10 @@ ROOT = Path('/Library/Application Support/iCloudWacht')
 SCRIPT = ROOT / 'icloud_wacht.py'
 PYTHON = Path('/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9')
 PROBE = ("import json,os,sys\n"
-         "print(json.dumps({'argv': sys.argv, 'env': dict(os.environ), 'file': __file__, 'python': sys.executable}))\n"
+         "print(json.dumps({'argv': sys.argv, 'env': dict(os.environ), 'file': __file__, "
+         "'python': sys.executable, 'isolated': sys.flags.isolated, "
+         "'no_user_site': sys.flags.no_user_site, "
+         "'dont_write_bytecode': sys.flags.dont_write_bytecode, 'path': sys.path}))\n"
          "raise SystemExit(23 if len(sys.argv) == 2 else 0)\n")
 
 
@@ -26,6 +30,13 @@ def sudo(*args):
 # Deze proef werkt met sudo in een systeemmap: alleen op de wegwerp-runner van GitHub, nooit op een
 # echte Mac. De workflow zet beide variabelen; ontbreekt er een, dan slaat de proef over.
 OP_CI_RUNNER = os.environ.get('GITHUB_ACTIONS') == 'true' and bool(os.environ.get('ICLOUD_STARTER_BIN'))
+
+
+class CIConfiguratie(unittest.TestCase):
+    def test_runner_geeft_de_starterbinary_door(self):
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            self.assertTrue(os.environ.get('ICLOUD_STARTER_BIN'),
+                            'CI moet de gebouwde productiestarter testen')
 
 
 @unittest.skipUnless(OP_CI_RUNNER, 'alleen op de macOS-runner van GitHub Actions (sudo in een systeemmap)')
@@ -93,6 +104,15 @@ class StarterGedrag(unittest.TestCase):
         self.assertEqual(data['argv'], [str(SCRIPT)])
         self.assertEqual(data['file'], str(SCRIPT))
         self.assertEqual(data['python'], str(PYTHON))
+        self.assertEqual(data['isolated'], 1)
+        self.assertEqual(data['no_user_site'], 1)
+        self.assertEqual(data['dont_write_bytecode'], 1)
+        self.assertNotIn('', data['path'])
+        self.assertNotIn(str(Path.cwd()), data['path'])
+        user_site = subprocess.check_output(
+            [str(PYTHON), '-I', '-B', '-c', 'import site; print(site.getusersitepackages())'],
+            text=True).strip()
+        self.assertNotIn(user_site, data['path'])
         # __CF_USER_TEXT_ENCODING zet CoreFoundation zelf in het Python-proces; de starter geeft het niet door.
         env = {k: v for k, v in data['env'].items() if k != '__CF_USER_TEXT_ENCODING'}
         self.assertEqual(env, {'HOME': str(Path.home()),
@@ -180,6 +200,35 @@ class StarterGedrag(unittest.TestCase):
             self.assert_veilig_geweigerd(self.run_starter())
         finally:
             sudo('/bin/chmod', '755', ROOT)
+
+    def test_geisoleerd_python_negeert_user_site_pth(self):
+        user_site = Path(subprocess.check_output(
+            [str(PYTHON), '-I', '-B', '-c', 'import site; print(site.getusersitepackages())'],
+            text=True).strip())
+        user_site.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='icloud-pth-', dir='/private/tmp') as work:
+            marker = Path(work) / 'pth-uitgevoerd'
+            pth = user_site / 'icloudwacht_ci_proef.pth'
+            if pth.exists():
+                self.fail(f'Tijdelijke CI-proefnaam is al bezet: {pth}')
+            pth.write_text(f'import pathlib; pathlib.Path({str(marker)!r}).write_text("uitgevoerd")\n',
+                           encoding='utf-8')
+            try:
+                result = self.run_starter()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(marker.exists(), 'Python voerde een user-site .pth uit')
+            finally:
+                pth.unlink()
+
+    def test_bovenliggende_mappen_moeten_veilig_zijn(self):
+        for path in (Path('/Library/Application Support'), PYTHON.parent):
+            with self.subTest(path=str(path)):
+                originele_modus = stat.S_IMODE(path.lstat().st_mode)
+                sudo('/bin/chmod', f'{originele_modus | stat.S_IWGRP:o}', path)
+                try:
+                    self.assert_veilig_geweigerd(self.run_starter())
+                finally:
+                    sudo('/bin/chmod', f'{originele_modus:o}', path)
 
     def test_script_moet_root_eigen_zijn(self):
         sudo('/usr/sbin/chown', str(os.getuid()), SCRIPT)

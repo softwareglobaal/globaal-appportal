@@ -1,16 +1,19 @@
 #!/bin/zsh
 # Op Mehdi's Mac: haal de laatste groen geteste main-versie op, werk de iCloudWacht-app
 # en twee LaunchAgents bij en controleer de uitkomst. Bestaande versies blijven als
-# backup beschikbaar. Alleen bij een gewijzigde starter is --herbouw-starter nodig.
-# sudo installeert /Library/Application Support/iCloudWacht als root:wheel-map;
-# het Python-script en VERSIE daarin worden eveneens eigendom van root:wheel.
+# backup beschikbaar. Gebruik --herbouw-starter als de starterbron verandert
+# of de geïnstalleerde app de controle niet doorstaat.
+# sudo installeert het Python-script, VERSIE en de app in
+# /Library/Application Support/iCloudWacht als root:wheel. Geef Full Disk Access
+# pas aan die app, nadat --controleer 'gelijk' meldt.
 set -euo pipefail
 
 REPO=${REPO:-$HOME/dev/globaal-appportal}
-APP=${APP:-$HOME/Applications/iCloudWacht.app}
 DATA=${DATA:-$HOME/Library/Application Support/iCloudWacht}
 GH=${GH:-/opt/homebrew/bin/gh}
 ROOT_DATA='/Library/Application Support/iCloudWacht'
+APP="$ROOT_DATA/iCloudWacht.app"
+oude_app="$HOME/Applications/iCloudWacht.app"
 PYTHON_VAST='/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9'
 PY=mijnagents-runner/mac/icloud_wacht.py
 C=mijnagents-runner/mac/starter/icloudwacht.c
@@ -23,16 +26,19 @@ if (( $# > 1 )) || { (( $# == 1 )) && [[ "$1" != --controleer && "$1" != --herbo
 fi
 modus=${1:-uitrol}
 [[ -d "$REPO/.git" ]] || { print -u2 -- "Repo ontbreekt: $REPO"; exit 1; }
-[[ -x "$GH" ]] || { print -u2 -- "gh ontbreekt: $GH"; exit 1; }
 [[ "$APP" == *.app && ! -L "$APP" ]] || { print -u2 -- "APP moet een echte .app-map zijn"; exit 1; }
 
 werk=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/icloud-uitrol.XXXXXXXX")
 app_backup=''
 app_backed=0
 app_new=0
+app_stage=''
+oude_app_backup=''
+oude_app_backed=0
 root_changed=0
 root_old_script=0
 root_old_versie=0
+manifest_changed=0
 plist_changed=()
 typeset -A was_loaded
 stempel=$(/bin/date '+%Y%m%dT%H%M%S').$$
@@ -50,12 +56,30 @@ bootstrap_met_herhaling() {
 terugzetten() {
     local label plist backup
     print -u2 -- 'Uitrol mislukt; vorige toestand wordt teruggezet.'
+    if [[ -n "$app_stage" && -d "$app_stage" ]]; then
+        /usr/bin/sudo /bin/mv "$app_stage" "$root_backup/iCloudWacht.onvolledig.app" ||
+            print -u2 -- 'Onvolledige app kon niet apart worden gezet'
+    fi
     if (( app_new )) && [[ -d "$APP" ]]; then
-        /bin/mv "$APP" "$DATA/app-bak/iCloudWacht.mislukt.$stempel.app" ||
+        /usr/bin/sudo /bin/mv "$APP" "$root_backup/iCloudWacht.mislukt.app" ||
             print -u2 -- 'Nieuwe app kon niet apart worden gezet'
     fi
-    if (( app_backed )); then
-        /bin/mv "$app_backup" "$APP" || print -u2 -- 'Vorige app kon niet worden teruggezet'
+    if (( app_backed )) && [[ -d "$app_backup" ]]; then
+        /usr/bin/sudo /bin/mv "$app_backup" "$APP" ||
+            print -u2 -- 'Vorige app kon niet worden teruggezet'
+    fi
+    if (( oude_app_backed )) && [[ -d "$oude_app_backup" ]]; then
+        /bin/mv "$oude_app_backup" "$oude_app" ||
+            print -u2 -- 'Vorige app in Applications kon niet worden teruggezet'
+    fi
+    if (( manifest_changed )); then
+        if [[ -f "$root_backup/STARTER_HASHES.oud" ]]; then
+            /usr/bin/sudo /usr/bin/install -o root -g wheel -m 644 \
+                "$root_backup/STARTER_HASHES.oud" "$ROOT_DATA/STARTER_HASHES" ||
+                print -u2 -- 'Vorige starterhashes konden niet worden teruggezet'
+        else
+            /usr/bin/sudo /bin/rm -f "$ROOT_DATA/STARTER_HASHES" || true
+        fi
     fi
     if (( root_changed )); then
         /usr/bin/sudo /bin/rm -f "$ROOT_DATA/icloud_wacht.py.nieuw.$stempel" \
@@ -89,23 +113,39 @@ terugzetten() {
 opruimen() {
     local code=$?
     trap - EXIT
-    if (( code != 0 && (root_changed || app_backed || app_new || ${#plist_changed[@]} > 0) )); then
+    trap '' HUP INT TERM
+    if (( code != 0 && (root_changed || app_backed || app_new || oude_app_backed || manifest_changed || ${#plist_changed[@]} > 0) )) ||
+       [[ -n "$app_stage" && -d "$app_stage" ]]; then
         terugzetten
     fi
     /bin/rm -rf -- "$werk"
     exit "$code"
 }
 trap opruimen EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-git -C "$REPO" fetch -q origin main
-# De eerste ouder is de gepubliceerde main-lijn, inclusief de merge-commit.
-sha=$(git -C "$REPO" log -1 --first-parent --format=%H origin/main -- "$PY" mijnagents-runner/mac/starter)
-[[ -n "$sha" ]] || { print -u2 -- 'Geen gepubliceerde iCloud-versie'; exit 1; }
-geslaagd=$(cd "$REPO" && "$GH" run list -R softwareglobaal/globaal-appportal \
-    --workflow verslag-grendels.yml --commit "$sha" --branch main --event push \
-    --json status,conclusion --limit 1 \
-    --jq '.[0] | select(.status == "completed" and .conclusion == "success") | .conclusion')
-[[ "$geslaagd" == success ]] || { print -u2 -- "Nieuwste push-CI op main ontbreekt of is niet groen voor $sha"; exit 1; }
+if [[ "$modus" == --controleer ]]; then
+    [[ -f "$ROOT_DATA/VERSIE" && ! -L "$ROOT_DATA/VERSIE" ]] ||
+        { print -u2 -- 'Geïnstalleerde versie ontbreekt'; exit 1; }
+    sha=$(<"$ROOT_DATA/VERSIE")
+    [[ "$sha" =~ '^[[:xdigit:]]{40}$' ]] ||
+        { print -u2 -- 'Ongeldige geïnstalleerde versie'; exit 1; }
+    git -C "$REPO" cat-file -e "$sha^{commit}" ||
+        { print -u2 -- 'Geïnstalleerde commit ontbreekt lokaal'; exit 1; }
+else
+    [[ -x "$GH" ]] || { print -u2 -- "gh ontbreekt: $GH"; exit 1; }
+    git -C "$REPO" fetch -q origin main
+    # De eerste ouder is de gepubliceerde main-lijn, inclusief de merge-commit.
+    sha=$(git -C "$REPO" log -1 --first-parent --format=%H origin/main -- "$PY" mijnagents-runner/mac/starter)
+    [[ -n "$sha" ]] || { print -u2 -- 'Geen gepubliceerde iCloud-versie'; exit 1; }
+    geslaagd=$(cd "$REPO" && "$GH" run list -R softwareglobaal/globaal-appportal \
+        --workflow verslag-grendels.yml --commit "$sha" --branch main --event push \
+        --json status,conclusion --limit 1 \
+        --jq '.[0] | select(.status == "completed" and .conclusion == "success") | .conclusion')
+    [[ "$geslaagd" == success ]] || { print -u2 -- "Nieuwste push-CI op main ontbreekt of is niet groen voor $sha"; exit 1; }
+fi
 
 git -C "$REPO" show "$sha:$PY" > "$werk/icloud_wacht.py"
 git -C "$REPO" show "$sha:$C" > "$werk/icloudwacht.c"
@@ -120,7 +160,7 @@ entitlements_blob=$(git -C "$REPO" rev-parse "$sha:$ENTITLEMENTS")
    "$(git -C "$REPO" hash-object "$werk/Info.plist")" == "$info_blob" &&
    "$(git -C "$REPO" hash-object "$werk/Entitlements.plist")" == "$entitlements_blob" ]] ||
     { print -u2 -- 'Opgehaalde bron wijkt af van de gepubliceerde commit'; exit 1; }
-/usr/bin/python3 - "$werk/icloud_wacht.py" <<'PYCONTROLE'
+"$PYTHON_VAST" -I -B - "$werk/icloud_wacht.py" <<'PYCONTROLE'
 import ast
 import pathlib
 import sys
@@ -129,14 +169,16 @@ PYCONTROLE
 /usr/bin/plutil -lint "$werk/Info.plist" >/dev/null
 /usr/bin/plutil -lint "$werk/Entitlements.plist" >/dev/null
 print -r -- "$sha" > "$werk/VERSIE"
-starter_hash=$(/usr/bin/shasum -a 256 "$werk/icloudwacht.c" | /usr/bin/awk '{print $1}')
+starter_hash=$(git -C "$REPO" show "$sha:$C" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')
 starter="$APP/Contents/MacOS/icloudwacht"
 hashpad="$APP/Contents/Resources/starter.sha256"
+manifestpad="$ROOT_DATA/STARTER_HASHES"
+verse_starter="$werk/iCloudWacht.app/Contents/MacOS/icloudwacht"
 launchagents="$HOME/Library/LaunchAgents"
 uid=$(/usr/bin/id -u)
 
 veilig_rootpad() {
-    /usr/bin/python3 - "$ROOT_DATA" <<'PYPAD'
+    "$PYTHON_VAST" -I -B - "$ROOT_DATA" <<'PYPAD'
 import os
 import stat
 import sys
@@ -154,8 +196,57 @@ for path, is_dir in [('/', True), ('/Library', True),
 PYPAD
 }
 
+veilig_apppad() {
+    "$PYTHON_VAST" -I -B - "${1:-$APP}" <<'PYPAD'
+import os
+import stat
+import sys
+
+app = sys.argv[1]
+try:
+    root = os.lstat(app)
+except OSError:
+    raise SystemExit(1)
+if not stat.S_ISDIR(root.st_mode):
+    raise SystemExit(1)
+for directory, dirs, files in os.walk(app, followlinks=False):
+    for path in [directory] + [os.path.join(directory, name) for name in dirs + files]:
+        st = os.lstat(path)
+        if st.st_uid != 0 or st.st_gid != 0 or st.st_mode & 0o022 or not (
+                stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)):
+            raise SystemExit(1)
+PYPAD
+}
+
+app_bron_en_binary_juist() {
+    [[ -f "$hashpad" && ! -L "$hashpad" && "$(<"$hashpad")" == "$starter_hash" ]] || return 1
+    "$PYTHON_VAST" -I -B - "$manifestpad" "$starter" "$starter_hash" <<'PYHASH' || return 1
+import hashlib
+import json
+import os
+import stat
+import sys
+
+manifest, binary, bron = sys.argv[1:]
+try:
+    st = os.lstat(manifest)
+    if st.st_uid != 0 or st.st_gid != 0 or st.st_mode & 0o022 or not stat.S_ISREG(st.st_mode):
+        raise ValueError('onveilig manifest')
+    with open(manifest, encoding='utf-8') as f:
+        hashes = json.load(f)
+    with open(binary, 'rb') as f:
+        werkelijk = hashlib.sha256(f.read()).hexdigest()
+except (OSError, ValueError, TypeError):
+    raise SystemExit(1)
+raise SystemExit(0 if hashes == {'bron': bron, 'binary': werkelijk} else 1)
+PYHASH
+    if [[ "$modus" == --controleer ]]; then
+        [[ -f "$verse_starter" ]] && /usr/bin/cmp -s "$verse_starter" "$starter"
+    fi
+}
+
 veilig_pythonpad() {
-    /usr/bin/python3 - "$PYTHON_VAST" <<'PYPAD'
+    "$PYTHON_VAST" -I -B - "$PYTHON_VAST" <<'PYPAD'
 import os
 import stat
 import sys
@@ -181,7 +272,7 @@ PYPAD
 }
 
 handtekening_veilig() {
-    "$PYTHON_VAST" - "$1" <<'PYCODE'
+    "$PYTHON_VAST" -I -B - "$1" <<'PYCODE'
 import plistlib
 import re
 import subprocess
@@ -211,7 +302,7 @@ PYCODE
 }
 
 plist_juist() {
-    /usr/bin/python3 - "$1" "$starter" "$2" <<'PYPLIST'
+    "$PYTHON_VAST" -I -B - "$1" "$starter" "$2" <<'PYPLIST'
 import plistlib
 import sys
 try:
@@ -225,7 +316,7 @@ PYPLIST
 }
 
 plist_starter_als_eerste_arg() {
-    /usr/bin/python3 - "$1" "$starter" <<'PYPLIST'
+    "$PYTHON_VAST" -I -B - "$1" "$starter" <<'PYPLIST'
 import plistlib
 import sys
 with open(sys.argv[1], 'rb') as f:
@@ -233,6 +324,25 @@ with open(sys.argv[1], 'rb') as f:
 raise SystemExit(0 if isinstance(args, list) and args and args[0] == sys.argv[2] else 1)
 PYPLIST
 }
+
+bouw_verse_app() {
+    local nieuw="$werk/iCloudWacht.app"
+    /bin/mkdir -p "$nieuw/Contents/MacOS" "$nieuw/Contents/Resources"
+    # __RESTRICT: dyld negeert DYLD_*-variabelen, ook waar de geharde runtime dat niet afdwingt.
+    /usr/bin/cc -O2 -Wall -Werror -Wl,-sectcreate,__RESTRICT,__restrict,/dev/null \
+        "$werk/icloudwacht.c" -o "$verse_starter"
+    [[ "$(git -C "$REPO" hash-object "$werk/icloudwacht.c")" == "$starter_blob" ]] ||
+        { print -u2 -- 'Starterbron veranderde tijdens de bouw'; return 1; }
+    /usr/bin/install -m 644 "$werk/Info.plist" "$nieuw/Contents/Info.plist"
+    print -r -- "$starter_hash" > "$nieuw/Contents/Resources/starter.sha256"
+    /usr/bin/codesign -s - --force --options runtime \
+        --entitlements "$werk/Entitlements.plist" --identifier be.globaal.icloudwacht "$nieuw"
+    handtekening_veilig "$nieuw" || { print -u2 -- 'Geharde app-handtekening ongeldig'; return 1; }
+}
+
+if [[ "$modus" == --controleer ]]; then
+    bouw_verse_app
+fi
 
 controleer() {
     local rapport="$werk/verschillen.txt" label plist
@@ -247,11 +357,13 @@ controleer() {
         done
     fi
     veilig_pythonpad || print -r -- 'Vaste root-eigen Python 3.9 ontbreekt of heeft onveilige rechten' >> "$rapport"
-    if [[ ! -x "$starter" ]] || ! handtekening_veilig "$APP"; then
+    if ! veilig_apppad; then
+        print -r -- 'App ontbreekt of is niet geheel root:wheel zonder schrijfrechten voor anderen' >> "$rapport"
+    elif [[ ! -x "$starter" ]] || ! handtekening_veilig "$APP"; then
         print -r -- 'Starter ontbreekt of handtekening mist geharde runtime of veilige rechten' >> "$rapport"
     fi
-    if [[ ! -f "$hashpad" || "$(<"$hashpad")" != "$starter_hash" ]]; then
-        print -r -- 'Starterbron verschilt van de app' >> "$rapport"
+    if ! app_bron_en_binary_juist; then
+        print -r -- 'Starterbron of binary verschilt van de vers gebouwde starter' >> "$rapport"
     fi
     if [[ ! -f "$APP/Contents/Info.plist" ]] ||
        ! /usr/bin/cmp -s "$werk/Info.plist" "$APP/Contents/Info.plist"; then
@@ -285,7 +397,7 @@ for label in be.globaal.mijnagents.icloud be.globaal.mijnagents.icloud-taken; do
         exit 1
     fi
 done
-if ! /usr/bin/python3 - "$ROOT_DATA" <<'PYPAD'
+if ! "$PYTHON_VAST" -I -B - "$ROOT_DATA" <<'PYPAD'
 import os, stat, sys
 for path in ('/', '/Library', '/Library/Application Support'):
     st = os.lstat(path)
@@ -307,11 +419,15 @@ then
     print -u2 -- "Onveilige root-map: $ROOT_DATA"
     exit 1
 fi
+if [[ -e "$APP" || -L "$APP" ]] && [[ ! -d "$APP" || -L "$APP" ]]; then
+    print -u2 -- "Onveilig app-pad: $APP"
+    exit 1
+fi
 if [[ -d "$APP" && "$modus" != --herbouw-starter ]]; then
-    if [[ ! -f "$hashpad" || "$(<"$hashpad")" != "$starter_hash" ]] ||
+    if ! veilig_apppad || ! app_bron_en_binary_juist ||
        ! handtekening_veilig "$APP" ||
        ! /usr/bin/cmp -s "$werk/Info.plist" "$APP/Contents/Info.plist"; then
-        print -u2 -- 'Starter gewijzigd; controleer de app-rechten en gebruik --herbouw-starter'
+        print -u2 -- 'Starter gewijzigd of ongeldig; controleer de app-rechten en gebruik --herbouw-starter'
         exit 1
     fi
 fi
@@ -319,21 +435,10 @@ fi
 bouw_app=0
 if [[ ! -d "$APP" || "$modus" == --herbouw-starter ]]; then
     bouw_app=1
-    nieuw="$werk/iCloudWacht.app"
-    /bin/mkdir -p "$nieuw/Contents/MacOS" "$nieuw/Contents/Resources"
-    # __RESTRICT: dyld negeert DYLD_*-variabelen, ook waar de geharde runtime dat niet afdwingt.
-    /usr/bin/cc -O2 -Wall -Werror -Wl,-sectcreate,__RESTRICT,__restrict,/dev/null "$werk/icloudwacht.c" -o "$nieuw/Contents/MacOS/icloudwacht"
-    [[ "$(git -C "$REPO" hash-object "$werk/icloudwacht.c")" == "$starter_blob" ]] ||
-        { print -u2 -- 'Starterbron veranderde tijdens de bouw'; exit 1; }
-    /usr/bin/install -m 644 "$werk/Info.plist" "$nieuw/Contents/Info.plist"
-    print -r -- "$starter_hash" > "$nieuw/Contents/Resources/starter.sha256"
-    /usr/bin/codesign -s - --force --options runtime \
-        --entitlements "$werk/Entitlements.plist" --identifier be.globaal.icloudwacht "$nieuw"
-    handtekening_veilig "$nieuw" || { print -u2 -- 'Geharde app-handtekening ongeldig'; exit 1; }
 fi
 
 /usr/bin/sudo -v
-/bin/mkdir -p "$DATA" "$DATA/app-bak" "$DATA/plist-bak" "${APP:h}"
+/bin/mkdir -p "$DATA" "$DATA/app-bak" "$DATA/plist-bak"
 /bin/chmod 700 "$DATA"
 /usr/bin/sudo /usr/bin/install -d -o root -g wheel -m 755 "$ROOT_DATA"
 /usr/bin/sudo /usr/bin/install -d -o root -g wheel -m 700 "$ROOT_DATA/backups"
@@ -362,15 +467,78 @@ fi
 veilig_rootpad || { print -u2 -- 'Root-script heeft na installatie onveilige rechten'; exit 1; }
 
 if (( bouw_app )); then
+    # Bron en bouw blijven onder een private root-map. Een ander proces van de
+    # Mac-gebruiker kan zo noch de compilerinvoer noch de referentiebinary wisselen.
+    /usr/bin/sudo /usr/bin/install -d -o root -g wheel -m 700 "$root_backup"
+    root_bouw="$root_backup/bouw"
+    app_stage="$root_bouw/iCloudWacht.app"
+    /usr/bin/sudo /usr/bin/install -d -o root -g wheel -m 700 "$root_bouw"
+    /usr/bin/sudo /usr/bin/install -d -o root -g wheel -m 755 \
+        "$app_stage" "$app_stage/Contents" "$app_stage/Contents/MacOS" "$app_stage/Contents/Resources"
+    /usr/bin/sudo /usr/bin/install -o root -g wheel -m 644 "$werk/icloudwacht.c" "$root_bouw/icloudwacht.c"
+    /usr/bin/sudo /usr/bin/install -o root -g wheel -m 644 "$werk/Info.plist" "$app_stage/Contents/Info.plist"
+    /usr/bin/sudo /usr/bin/install -o root -g wheel -m 644 "$werk/Entitlements.plist" "$root_bouw/Entitlements.plist"
+    [[ "$(/usr/bin/sudo /usr/bin/git hash-object "$root_bouw/icloudwacht.c")" == "$starter_blob" &&
+       "$(/usr/bin/sudo /usr/bin/git hash-object "$app_stage/Contents/Info.plist")" == "$info_blob" &&
+       "$(/usr/bin/sudo /usr/bin/git hash-object "$root_bouw/Entitlements.plist")" == "$entitlements_blob" ]] ||
+        { print -u2 -- 'Private root-bron wijkt af van de gepubliceerde commit'; exit 1; }
+    /usr/bin/sudo /usr/bin/env -i PATH=/usr/bin:/bin LANG=en_US.UTF-8 \
+        /usr/bin/cc -O2 -Wall -Werror -Wl,-sectcreate,__RESTRICT,__restrict,/dev/null \
+        "$root_bouw/icloudwacht.c" -o "$app_stage/Contents/MacOS/icloudwacht"
+    /usr/bin/sudo "$PYTHON_VAST" -I -B - "$root_bouw/icloudwacht.c" \
+        "$app_stage/Contents/Resources/starter.sha256" <<'PYBRON'
+import hashlib
+import pathlib
+import sys
+bron = hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest()
+pathlib.Path(sys.argv[2]).write_text(bron + '\n', encoding='ascii')
+PYBRON
+    /usr/bin/sudo /usr/bin/env -i PATH=/usr/bin:/bin LANG=en_US.UTF-8 \
+        /usr/bin/codesign -s - --force --options runtime \
+        --entitlements "$root_bouw/Entitlements.plist" --identifier be.globaal.icloudwacht "$app_stage"
+    /usr/bin/sudo /usr/sbin/chown -R root:wheel "$app_stage"
+    /usr/bin/sudo /bin/chmod -RN "$app_stage"
+    /usr/bin/sudo /bin/chmod -R go-w "$app_stage"
+    /usr/bin/sudo /usr/bin/codesign --verify --strict "$app_stage" ||
+        { print -u2 -- 'Private root-app heeft geen geldige handtekening'; exit 1; }
+    /usr/bin/sudo "$PYTHON_VAST" -I -B - "$root_bouw/icloudwacht.c" \
+        "$app_stage/Contents/MacOS/icloudwacht" "$root_bouw/STARTER_HASHES" <<'PYHASH'
+import hashlib
+import json
+import pathlib
+import sys
+bron, binary, doel = map(pathlib.Path, sys.argv[1:])
+doel.write_text(json.dumps({'bron': hashlib.sha256(bron.read_bytes()).hexdigest(),
+                            'binary': hashlib.sha256(binary.read_bytes()).hexdigest()},
+                           sort_keys=True) + '\n', encoding='ascii')
+PYHASH
     if [[ -d "$APP" ]]; then
         # Eerst een zelfstandige kopie; de verplaatste originele app is de terugzetversie.
-        /bin/cp -Rp "$APP" "$DATA/app-bak/iCloudWacht.kopie.$stempel.app"
-        app_backup="$DATA/app-bak/iCloudWacht.$stempel.app"
-        /bin/mv "$APP" "$app_backup"
+        /usr/bin/sudo /usr/bin/ditto "$APP" "$root_backup/iCloudWacht.kopie.app"
+        app_backup="$root_backup/iCloudWacht.oud.app"
         app_backed=1
+        /usr/bin/sudo /bin/mv "$APP" "$app_backup"
     fi
-    /bin/mv "$nieuw" "$APP"
     app_new=1
+    /usr/bin/sudo /bin/mv "$app_stage" "$APP"
+    app_stage=''
+    if [[ -f "$manifestpad" ]]; then
+        /usr/bin/sudo /bin/cp -p "$manifestpad" "$root_backup/STARTER_HASHES.oud"
+    fi
+    manifest_changed=1
+    /usr/bin/sudo /usr/bin/install -o root -g wheel -m 644 "$root_bouw/STARTER_HASHES" "$manifestpad"
+fi
+veilig_apppad && app_bron_en_binary_juist && handtekening_veilig "$APP" ||
+    { print -u2 -- 'Geïnstalleerde root-app wijkt af of heeft onveilige rechten'; exit 1; }
+
+# De vorige app blijft als kopie bewaard; de oude FDA-route wordt uit Applications gehaald.
+if [[ -e "$oude_app" || -L "$oude_app" ]]; then
+    [[ -d "$oude_app" && ! -L "$oude_app" ]] ||
+        { print -u2 -- "Onveilig oud app-pad: $oude_app"; exit 1; }
+    /bin/cp -Rp "$oude_app" "$DATA/app-bak/iCloudWacht.kopie.$stempel.app"
+    oude_app_backup="$DATA/app-bak/iCloudWacht.oud.$stempel.app"
+    oude_app_backed=1
+    /bin/mv "$oude_app" "$oude_app_backup"
 fi
 
 for label in be.globaal.mijnagents.icloud be.globaal.mijnagents.icloud-taken; do
@@ -388,7 +556,7 @@ for label in be.globaal.mijnagents.icloud be.globaal.mijnagents.icloud-taken; do
         was_loaded[$label]=0
     fi
     plist_changed+=("$label")
-    args=$(/usr/bin/python3 - "$starter" "$label" <<'PYARGS'
+    args=$("$PYTHON_VAST" -I -B - "$starter" "$label" <<'PYARGS'
 import json, sys
 print(json.dumps([sys.argv[1]] + (['--taken'] if sys.argv[2].endswith('-taken') else [])))
 PYARGS

@@ -59,9 +59,11 @@ def afspraken_op(items, start_utc, duur_minuten):
             continue
         if a < e + MARGE and b > s - MARGE:
             nummer = str(inhoud.get("nummer") or "")
-            # Een viercijferig getal uit het adres is geen gecontroleerd projectbewijs.
+            # Bij TKN kan een postcode ten onrechte als agendanummer zijn ingevuld.
+            # H-A gebruikt ook viercijferige projectnummers die met de postcode
+            # van de werf kunnen samenvallen; het agenda-item blijft dan bewijs.
             postcodes = re.findall(r",\s*(\d{4})\b", str(inhoud.get("locatie") or ""))
-            if len(nummer) == 4 and nummer in postcodes:
+            if inhoud.get("firma") != "HARC" and len(nummer) == 4 and nummer in postcodes:
                 nummer = ""
             uit.append({"titel": inhoud.get("titel") or it.get("titel", ""), "start": inhoud.get("start"), "einde": inhoud.get("einde"),
                         "firma": inhoud.get("firma") or "", "nummer": nummer, "agenda": inhoud.get("agenda") or ""})

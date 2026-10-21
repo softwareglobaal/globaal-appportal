@@ -49,6 +49,7 @@ TERUG_DAGEN = int(os.environ.get("CC_TERUG_DAGEN", "21"))
 VOORUIT_DAGEN = int(os.environ.get("CC_VOORUIT_DAGEN", "21"))
 NA_BEZOEK_MIN = int(os.environ.get("CC_NA_BEZOEK_MIN", "60"))     # taken voor de wachten pas een uur na het einde
 STRAAL_M = 300
+WACHTRONDE_MIN = {"icloud-wacht": 30, "plaud-wacht": 60}
 
 ag = bord.Agent(NAAM)
 
@@ -179,8 +180,8 @@ def taak_bron_gewijzigd(oud_item, nieuwe_inhoud):
                     and oude_inhoud["firma"] != nieuwe_inhoud["firma"]))
 
 
-def taak_voor_nieuwe_ronde(taak, oude_taak, bord_item, bron_aanwezig):
-    """Hergebruik een open taak; een eerder gesloten taak krijgt zo nodig een nieuw volgnummer."""
+def taak_voor_nieuwe_ronde(taak, oude_taak, bord_item, bron_aanwezig, gemeten_ts=""):
+    """Hergebruik open taken; heropen alleen na een nieuwe bronmeting na de afvinkronde."""
     if not oude_taak:
         return taak
     basis = taak["uniek"]
@@ -190,6 +191,11 @@ def taak_voor_nieuwe_ronde(taak, oude_taak, bord_item, bron_aanwezig):
         return taak
     if (bron_aanwezig and bord_item.get("status") == "opgepakt" and bord_item.get("opgepakt_door") == taak["voor"]
             and not taak_bron_gewijzigd(bord_item, taak["inhoud"])):
+        return None
+    afgevinkt = _tijd(bord_item.get("opgepakt_ts"))
+    gemeten = _tijd(gemeten_ts)
+    wachtduur = timedelta(minutes=WACHTRONDE_MIN[taak["voor"]])
+    if bron_aanwezig or not afgevinkt or not gemeten or gemeten < afgevinkt + wachtduur:
         return None
     match = re.fullmatch(re.escape(basis) + r":([2-9][0-9]*)", oud_uniek)
     nummer = int(match.group(1)) + 1 if match else 2
@@ -344,7 +350,7 @@ def main():
                             "inhoud": inhoud_foto, "verwijzing": inhoud_foto["doelmap"],
                             "uniek": f"cc:{uniek}:icloud-wacht"}
                     taak = taak_voor_nieuwe_ronde(taak, oude_taken.get("icloud-wacht"), bord_taken.get("icloud-wacht"),
-                                                  (pk.get("fotos_iphone") or 0) > 0)
+                                                  (pk.get("fotos_iphone") or 0) > 0, pk.get("gemeten_ts"))
                     if taak:
                         nieuwe.append(taak)
                 if plaud_nodig:
@@ -353,7 +359,7 @@ def main():
                             "inhoud": inhoud_plaud, "verwijzing": inhoud_plaud["plaud_doelmap"],
                             "uniek": f"cc:{uniek}:plaud-wacht"}
                     taak = taak_voor_nieuwe_ronde(taak, oude_taken.get("plaud-wacht"), bord_taken.get("plaud-wacht"),
-                                                  (pk.get("transcripten") or 0) > 0)
+                                                  (pk.get("transcripten") or 0) > 0, pk.get("gemeten_ts"))
                     if taak:
                         nieuwe.append(taak)
                 if nieuwe:

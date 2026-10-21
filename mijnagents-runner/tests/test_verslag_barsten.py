@@ -241,13 +241,61 @@ class DossierkeuzeEnInventaris(unittest.TestCase):
         verkeerd = "47036_Barsten & Scheuren_Proeflaan 23, 8888 Anderhem"
         gekozen, hoe, nood = V.kies_dossiermap(rij(adres=adres, dossier="9998"),
                                                 [(verkeerd, f"{BASIS}/2026/{verkeerd}"), (MAPNAAM, MAP)], SOORT)
-        self.assertEqual((gekozen, nood), (MAP, None))
+        self.assertIsNone(gekozen)
+        self.assertIn(MAPNAAM, nood)
+        self.assertIn("busnummer", nood)
         self.assertIn("nummer is de postcode", hoe)
         gekozen, _, nood = V.kies_dossiermap(rij(adres=adres, dossier=""),
                                               [(verkeerd, f"{BASIS}/2026/{verkeerd}")], SOORT)
         self.assertIsNone(gekozen)
         self.assertIn(verkeerd, nood)
         self.assertIn("postcode 9998", nood)
+
+    def test_busnummer_verschilt_of_wordt_op_beide_adressen_herkend(self):
+        naam = "47036_Barsten & Scheuren_Proeflaan 23 bus 2, 9998 Proefgem"
+        pad = f"{BASIS}/2026/{naam}"
+        for adres in ("Proeflaan 23 bte 2, 9998 Proefgem",
+                      "Proeflaan 23 bt 2, 9998 Proefgem",
+                      "Proeflaan 23/2, 9998 Proefgem",
+                      "Proeflaan 23, bus 2, 9998 Proefgem"):
+            with self.subTest(adres=adres):
+                self.assertEqual(V.kies_dossiermap(rij(dossier="", adres=adres), [(naam, pad)], SOORT)[0], pad)
+        for dossier in ("", "47036"):
+            gekozen, _, nood = V.kies_dossiermap(rij(dossier=dossier, adres="Proeflaan 23 bus 1, 9998 Proefgem"),
+                                                  [(naam, pad)], SOORT)
+            self.assertIsNone(gekozen)
+            self.assertIn("busnummer", nood)
+            self.assertIn(naam, nood)
+
+    def test_bus_aan_een_kant_vraagt_nummerbevestiging(self):
+        met_bus = "47036_Barsten & Scheuren_Proeflaan 23 bus 2, 9998 Proefgem"
+        zonder_bus = "47037_Barsten & Scheuren_Proeflaan 23, 9998 Proefgem"
+        for naam, adres in ((met_bus, ADRES), (zonder_bus, "Proeflaan 23 bus 2, 9998 Proefgem")):
+            pad = f"{BASIS}/2026/{naam}"
+            with self.subTest(naam=naam):
+                gekozen, _, nood = V.kies_dossiermap(rij(dossier="", adres=adres), [(naam, pad)], SOORT)
+                self.assertIsNone(gekozen)
+                self.assertIn(naam, nood)
+                self.assertIn("busnummer", nood)
+                self.assertEqual(V.kies_dossiermap(rij(dossier=naam[:5], adres=adres), [(naam, pad)], SOORT)[0], pad)
+
+    def test_onbekend_vijf_of_zescijferig_agendanummer_blokkeert_adreskeuze(self):
+        for nummer in ("47300", "473001"):
+            with self.subTest(nummer=nummer):
+                gekozen, _, nood = V.kies_dossiermap(rij(dossier=nummer), [(MAPNAAM, MAP)], SOORT)
+                self.assertIsNone(gekozen)
+                self.assertIn(nummer, nood)
+                self.assertIn(MAPNAAM, nood)
+        self.assertEqual(V.kies_dossiermap(rij(dossier="3846"), [(MAPNAAM, MAP)], SOORT)[0], MAP)
+
+    def test_gemeente_zonder_postcode_moet_overeenkomen(self):
+        gekozen, _, nood = V.kies_dossiermap(rij(dossier="", adres="Proeflaan 23, Anderhem"),
+                                              [(MAPNAAM, MAP)], SOORT)
+        self.assertIsNone(gekozen)
+        self.assertIn("gemeente anderhem", nood)
+        self.assertIn(MAPNAAM, nood)
+        self.assertEqual(V.kies_dossiermap(rij(dossier="", adres="Proeflaan 23, Proefgem"),
+                                           [(MAPNAAM, MAP)], SOORT)[0], MAP)
 
     def test_vijfcijferig_nummer_overrulet_tegenstrijdig_straatadres_niet(self):
         verkeerde_straat = "47035_Barsten & Scheuren_Andereweg 9, 9998 Proefgem"
@@ -323,6 +371,15 @@ class DossierkeuzeEnInventaris(unittest.TestCase):
         self.assertEqual([e["name"] for e in inv["proef"]], [f"{DATUM} rapport (concept).docx"])
         self.assertIn("oud.jpg", [e["name"] for e in inv["overig"]])
         self.assertEqual(inv["laatst_gewijzigd"], "2026-10-21T09:30:00Z")
+
+    def test_plaud_samenvatting_met_dezelfde_id_is_geen_transcript(self):
+        db = Dropbox()
+        db.bestand(f"{PLAUD}/{DATUM} Plaud samenvatting.txt", b"Plaud-id: of_proef\nSamenvatting")
+        inv = V.deel_in(db.lijst(MAP, recursief=True), MAP, DATUM, SOORT, CONTRACT)
+        self.assertEqual(inv["transcripten"], [])
+        db.bestand(f"{PLAUD}/{DATUM} Plaud transcript.txt", b"Plaud-id: of_proef\nTranscript")
+        inv = V.deel_in(db.lijst(MAP, recursief=True), MAP, DATUM, SOORT, CONTRACT)
+        self.assertEqual([e["name"] for e in inv["transcripten"]], [f"{DATUM} Plaud transcript.txt"])
 
 
 def jpg(opnametijd=None):
@@ -645,6 +702,60 @@ class Rondes(unittest.TestCase):
         self.assertTrue(any("zonder iPhone-foto's" in n["tekst"] for n in
                             (self.log.hartslagen[-1][1].get("nood") or [])))
 
+    def test_waarschuwing_zonder_iphone_blijft_tot_volledige_nieuwe_versie(self):
+        foto = f"{FOTOS}/{DATUM} iPhone/IMG_001.jpg"
+        for opslag in (self.db.bestanden, self.db.gewijzigd, self.db.revisies):
+            opslag.pop(foto)
+        self.db.bestand(f"{FOTOS}/{DATUM} drone/DRONE_001.jpg", b"synthetische dronefoto")
+        self.board.taken["cc:bs77:plaud-wacht"]["status"] = "opgepakt"
+        for uur, minuut in ((10, 0), (15, 3), (15, 13), (15, 23)):
+            Klok.huidig = datetime(2026, 10, 21, uur, minuut, tzinfo=timezone.utc)
+            self.agent.ronde()
+            if uur == 15:
+                overdracht = self.board.rijen["afspraak:bs77"]["pakket"]["overdracht"]
+                self.assertIn("zonder iPhone-foto's", overdracht["waarschuwing"])
+                self.assertTrue(any(overdracht["waarschuwing"] == n["tekst"] for n in
+                                    (self.log.hartslagen[-1][1].get("nood") or [])))
+        self.assertEqual(len(self.pakketten), 1)
+        self.db.mappen.remove(PLAUD)
+        Klok.huidig = datetime(2026, 10, 21, 15, 33, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertTrue(any("zonder iPhone-foto's" in n["tekst"] for n in
+                            (self.log.hartslagen[-1][1].get("nood") or [])))
+        self.db.map(PLAUD)
+        self.db.bestand(foto, b"nieuwe iPhone-foto", gewijzigd="2026-10-21T15:24:00Z", rev="r2")
+        Klok.huidig = datetime(2026, 10, 21, 16, 30, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertEqual(len(self.pakketten), 1)
+        self.assertTrue(any("zonder iPhone-foto's" in n["tekst"] for n in
+                            (self.log.hartslagen[-1][1].get("nood") or [])))
+        Klok.huidig = datetime(2026, 10, 21, 17, 35, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertEqual(len(self.pakketten), 2)
+        self.assertNotIn("waarschuwing", self.board.rijen["afspraak:bs77"]["pakket"]["overdracht"])
+        self.assertFalse(any("zonder iPhone-foto's" in n["tekst"] for n in
+                             (self.log.hartslagen[-1][1].get("nood") or [])))
+
+    def test_bestaand_pakket_zonder_iphone_krijgt_ook_blijvende_waarschuwing(self):
+        foto = f"{FOTOS}/{DATUM} iPhone/IMG_001.jpg"
+        for opslag in (self.db.bestanden, self.db.gewijzigd, self.db.revisies):
+            opslag.pop(foto)
+        self.db.bestand(f"{FOTOS}/{DATUM} drone/DRONE_001.jpg", b"synthetische dronefoto")
+        self.board.taken["cc:bs77:plaud-wacht"]["status"] = "opgepakt"
+
+        def al_klaar(plan, inbox, download, download_kop, nu):
+            return {"uitkomst": "al klaargezet", "naam": plan["naam"], "pad": "/nep-inbox/" + plan["naam"],
+                    "invoerhash": plan["invoerhash"], "bijlagenhash": plan["bijlagenhash"], "ts": nu.isoformat()}
+
+        with patch.object(V, "schrijf_pakket", al_klaar):
+            for uur, minuut in ((10, 0), (15, 3), (15, 13)):
+                Klok.huidig = datetime(2026, 10, 21, uur, minuut, tzinfo=timezone.utc)
+                self.agent.ronde()
+        waarschuwing = self.board.rijen["afspraak:bs77"]["pakket"]["overdracht"]["waarschuwing"]
+        self.assertIn("zonder iPhone-foto's", waarschuwing)
+        self.assertTrue(any(n["tekst"] == waarschuwing for n in
+                            (self.log.hartslagen[-1][1].get("nood") or [])))
+
     def test_een_iphonefoto_zonder_afgeronde_fototaak_levert_niet_vroeg_over(self):
         self.board.rijen["afspraak:bs77"]["taken"] = [
             {"voor": "plaud-wacht", "uniek": "cc:bs77:plaud-wacht"}]
@@ -680,6 +791,13 @@ class Rondes(unittest.TestCase):
         self.agent.ronde()
         self.assertEqual(len(self.pakketten), 1)
         self.assertTrue(any("iCloud-wachttaak nog open" in n["tekst"] for n in
+                            (self.log.hartslagen[-1][1].get("nood") or [])))
+        Klok.huidig = datetime(2026, 10, 21, 15, 13, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertEqual(len(self.pakketten), 1)
+        waarschuwing = self.board.rijen["afspraak:bs77"]["pakket"]["overdracht"]["waarschuwing"]
+        self.assertIn("iCloud-wachttaak nog open", waarschuwing)
+        self.assertTrue(any(n["tekst"] == waarschuwing for n in
                             (self.log.hartslagen[-1][1].get("nood") or [])))
 
     def test_agentkeuze_blijft_na_overdracht_of_late_stand_vast(self):

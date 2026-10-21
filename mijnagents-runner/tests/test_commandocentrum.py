@@ -90,6 +90,17 @@ class Taakinhoud(unittest.TestCase):
         self.assertEqual(json.dumps(foto, ensure_ascii=False), json.dumps(verwacht, ensure_ascii=False))
         self.assertEqual(json.dumps(plaud, ensure_ascii=False), json.dumps(verwacht, ensure_ascii=False))
 
+    def test_gesloten_taak_wacht_op_nieuwe_bronmeting(self):
+        taak = {"voor": "icloud-wacht", "uniek": "cc:afspraak:bs1:icloud-wacht", "inhoud": {}}
+        oud = {"uniek": taak["uniek"]}
+        bord_item = {"status": "opgepakt", "opgepakt_door": "icloud-wacht",
+                     "opgepakt_ts": "2026-10-21T13:16:00+02:00", "inhoud": {}}
+        self.assertIsNone(CC.taak_voor_nieuwe_ronde(taak.copy(), oud, bord_item, False, "2026-10-21T13:17:00+02:00"))
+        self.assertIsNone(CC.taak_voor_nieuwe_ronde(taak.copy(), oud, bord_item, False, ""))
+        self.assertIsNone(CC.taak_voor_nieuwe_ronde(taak.copy(), oud, bord_item, True, "2026-10-21T14:00:00+02:00"))
+        nieuw = CC.taak_voor_nieuwe_ronde(taak.copy(), oud, bord_item, False, "2026-10-21T13:46:00+02:00")
+        self.assertEqual(nieuw["uniek"], taak["uniek"] + ":2")
+
 
 class NepAgent:
     def __init__(self):
@@ -156,9 +167,10 @@ class Hoofdronde(unittest.TestCase):
             @classmethod
             def now(cls, tz=None):
                 return datetime.fromisoformat(tijd).astimezone(tz)
+        begin = len(self.agent.gestuurd)
         with patch.object(CC, "datetime", Klok):
             CC.main()
-        items = self.agent.gestuurd[-1] if self.agent.gestuurd else []
+        items = [item for groep in self.agent.gestuurd[begin:] for item in groep]
         for t in items:
             if t["soort"] == "taak":
                 oud = self.open_taken.setdefault(t["uniek"], {"id": 100 + len(self.open_taken), "uniek": t["uniek"],
@@ -229,10 +241,11 @@ class Hoofdronde(unittest.TestCase):
     def test_eerder_gesloten_taak_krijgt_pas_bij_herstart_een_nieuwe_sleutel(self):
         self.ronde("2026-10-21T13:16:00+02:00")
         oud = self.open_taken["cc:afspraak:bs1:icloud-wacht"]
-        oud.update(status="opgepakt", opgepakt_door="commandocentrum")
+        oud.update(status="opgepakt", opgepakt_door="commandocentrum", opgepakt_ts="2026-10-21T13:16:00+02:00")
         self.r["einde"] = "2026-10-21T12:00:00+02:00"
         self.ronde("2026-10-21T13:20:00+02:00")
         self.assertNotIn("cc:afspraak:bs1:icloud-wacht:2", self.open_taken)
+        self.o["pakket"]["gemeten_ts"] = "2026-10-21T15:16:00+02:00"
         weer = self.ronde("2026-10-21T15:16:00+02:00")
         nieuw = next(t for t in weer if t["voor"] == "icloud-wacht")
         self.assertEqual(nieuw["uniek"], "cc:afspraak:bs1:icloud-wacht:2")
@@ -247,11 +260,22 @@ class Hoofdronde(unittest.TestCase):
     def test_verdwenen_bron_na_afgehandelde_taak_vraagt_opnieuw_aan(self):
         self.ronde("2026-10-21T13:16:00+02:00")
         for wacht in ("icloud-wacht", "plaud-wacht"):
-            self.open_taken[f"cc:afspraak:bs1:{wacht}"].update(status="opgepakt", opgepakt_door=wacht)
-        self.o["pakket"] = {"fotos_iphone": 0, "transcripten": 0}
-        opnieuw = self.ronde("2026-10-21T13:17:00+02:00")
+            self.open_taken[f"cc:afspraak:bs1:{wacht}"].update(
+                status="opgepakt", opgepakt_door=wacht, opgepakt_ts="2026-10-21T13:16:00+02:00")
+        self.o["pakket"] = {"fotos_iphone": 0, "transcripten": 0, "gemeten_ts": "2026-10-21T13:17:00+02:00"}
+        self.assertEqual([t for t in self.ronde("2026-10-21T13:17:00+02:00") if t["soort"] == "taak"], [])
+        self.o["pakket"]["gemeten_ts"] = "2026-10-21T13:45:59+02:00"
+        self.assertEqual([t for t in self.ronde("2026-10-21T13:45:59+02:00") if t["soort"] == "taak"], [])
+        self.o["pakket"]["gemeten_ts"] = "2026-10-21T13:46:00+02:00"
+        opnieuw = self.ronde("2026-10-21T13:46:00+02:00")
         self.assertEqual({t["uniek"] for t in opnieuw if t["soort"] == "taak"},
-                         {"cc:afspraak:bs1:icloud-wacht:2", "cc:afspraak:bs1:plaud-wacht:2"})
+                         {"cc:afspraak:bs1:icloud-wacht:2"})
+        self.o["pakket"]["gemeten_ts"] = "2026-10-21T14:15:59+02:00"
+        self.assertNotIn("cc:afspraak:bs1:plaud-wacht:2",
+                         {t["uniek"] for t in self.ronde("2026-10-21T14:15:59+02:00") if t["soort"] == "taak"})
+        self.o["pakket"]["gemeten_ts"] = "2026-10-21T14:16:00+02:00"
+        opnieuw = self.ronde("2026-10-21T14:16:00+02:00")
+        self.assertIn("cc:afspraak:bs1:plaud-wacht:2", {t["uniek"] for t in opnieuw if t["soort"] == "taak"})
 
     def test_toekomstig_bezoek_zonder_map_geeft_nog_geen_nood(self):
         self.r.update(datum="2026-11-05", start="2026-11-05T08:00:00+01:00",
@@ -262,6 +286,33 @@ class Hoofdronde(unittest.TestCase):
         self.o["taken"] = [{"voor": "icloud-wacht", "uniek": "cc:afspraak:bs1:icloud-wacht"}]
         self.ronde("2026-10-21T10:15:00+02:00")
         self.assertTrue(self.agent.hartslagen[-1][1]["nood"])
+
+
+class DagbundelaarTaken(unittest.TestCase):
+    def test_open_cc_taak_blijft_open_na_ochtendbundel(self):
+        spec = importlib.util.spec_from_file_location("dagbundelaar_uit_test", RUNNER / "dagbundelaar.py")
+        dag = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(dag)
+        dag.DAG = "2026-10-21"
+        agent = NepAgent()
+        inhoud = json.dumps({"datum": dag.DAG})
+        items = [
+            {"id": 1, "uniek": "cc:afspraak:bs1:icloud-wacht", "van": "andere-maker", "voor": "icloud-wacht",
+             "soort": "taak", "status": "klaar", "sleutel": "47035", "titel": "Fototaak", "inhoud": inhoud},
+            {"id": 2, "uniek": "zelfstandige-taak", "van": "commandocentrum", "voor": "andere-agent",
+             "soort": "taak", "status": "klaar", "sleutel": "47035", "titel": "Gewone taak", "inhoud": inhoud},
+            {"id": 3, "uniek": "afspraak:test", "van": "agenda-wacht", "voor": "tkn", "soort": "afspraak",
+             "status": "klaar", "sleutel": "47035", "titel": "Fictief bezoek", "inhoud": inhoud},
+        ]
+        afgevinkt = []
+        with patch.object(dag, "ag", agent), patch.object(dag.bord, "call", return_value={"items": items}), \
+                patch.object(dag.bord, "opgepakt", lambda kid, door: afgevinkt.append((kid, door))), \
+                patch.object(dag.LC, "dag_heeft_dagboek", return_value=False):
+            dag.main()
+        self.assertEqual(afgevinkt, [(2, dag.NAAM), (3, dag.NAAM)])
+        inhoud_bundel = "\n".join(it["inhoud"] for groep in agent.gestuurd for it in groep)
+        self.assertNotIn("Fototaak", inhoud_bundel)
+        self.assertIn("Gewone taak", inhoud_bundel)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,9 @@
 # Commandocentrum en verslagagents (v1.0, 16-09-2026)
 
+Correctie 22-10-2026: de actuele iCloud-stap voor Mehdi staat in
+`werkwijze/icloud-wacht.md` versie 3. De overige ketenbeschrijving hieronder is
+de historische stand van v1.0.
+
 Voor Mehdi, en voor elke volgende sessie of andere AI die hieraan verder bouwt. Code in repo
 `softwareglobaal/globaal-appportal` (VM: `~/appportal`), bord `mijnagents.globaal.be`.
 
@@ -55,8 +59,10 @@ data: als het bezoek voorbij is, ligt alles al in de bezoekmap en maakt hij alle
 
 ## Handelingen voor Mehdi
 
-- iCloud-wacht op de Mac: `/usr/bin/python3` Full Disk Access en Automation (Photos) geven (open sinds 14-09),
-  anders komen er geen foto's in de bezoekmappen.
+- iCloud-wacht op de Mac: eerst `mac/uitrol_icloud_wacht.sh --controleer` laten slagen;
+  daarna Full Disk Access en Photos Automation geven aan
+  `/Library/Application Support/iCloudWacht/iCloudWacht.app`. Eventuele rechten
+  voor de oude app in `~/Applications` intrekken.
 - Claude.ai Plaud-routine bijwerken volgens `werkwijze/plaud-routine.md` (open sinds 14-09).
 - Per nieuw bezoek zonder dossiermap: het pad zetten op de pagina Commandocentrum.
 

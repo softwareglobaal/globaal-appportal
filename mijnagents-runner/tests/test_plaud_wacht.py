@@ -11,6 +11,7 @@ locatie, Pipedrive en het taalmodel zijn nagebootst; geen netwerk.
 Draaien: python3 mijnagents-runner/tests/test_plaud_wacht.py
 """
 import gzip
+import io
 import json
 import os
 import shutil
@@ -20,6 +21,7 @@ import time
 import types
 import urllib.parse
 import urllib.request
+import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -745,6 +747,26 @@ def test_tkn_postcode_als_agendanummer_geeft_geen_tegenstrijdig_bewijs():
     assert not P.zoektaak.valideer_bezoekmap(oude_taak, P.verslagsoorten.SOORTEN)[0]
 
 
+def test_ha_projectnummer_gelijk_werfpostcode_blijft_agendabewijs():
+    w = Wereld()
+    bezoek = BEZOEK.replace("2531", "2640")
+    w.deals = [{"id": 840, "titel": "2640 Proefwerf", "nummer": "2640"}]
+    w.opname(ID1, "Plaatsbezoek Proefwerf", "2026-10-08T09:05:00", uitingen=ZONDER_NUMMER)
+    w.push()
+    w.taken = [werftaak(801, dossier="2640", bezoekmap=bezoek)]
+    w.agenda = [{"soort": "afspraak", "titel": "Werfbezoek", "inhoud": json.dumps({
+        "titel": "[HA-KB] WB 2640 Proefwerf", "start": "2026-10-08T11:00:00+02:00",
+        "einde": "2026-10-08T12:00:00+02:00", "firma": "HARC", "nummer": "2640",
+        "locatie": "Proefstraat 1, 2640 Proefgem"})}]
+    w.herkenning[ID1] = {"personen": ["aannemer"], "hoofdpersoon": "aannemer", "bedrijf": "",
+                         "afdeling": "h-architects", "thema": "werfbezoek", "project": "",
+                         "prive": False, "zekerheid": "hoog", "waarom": "afspraak"}
+    assert P.context_op("2026-10-08T09:05:00Z", 40, w.agenda)[0][0]["nummer"] == "2640"
+    code, _, _ = w.ronde()
+    assert code == P.OK and w.opgepakt == [801] and f"{bezoek}/transcript.txt" in w.uploads, (code, w.opgepakt, w.uploads, w.logs)
+    assert w.klaar[0]["inhoud"]["projectnummer"] == "2640" and w.klaar[0]["voor"] == "h-architects"
+
+
 def test_tkn_plaud_payload_en_handmatig_bestaand_transcript():
     taak = tkn_taak()
     opname = {"plaud_id": ID1, "start_brussel": "2026-10-08T09:05:00+02:00", "duur_minuten": 40}
@@ -759,13 +781,24 @@ def test_tkn_plaud_payload_en_handmatig_bestaand_transcript():
     handmatig = f"Transcript van het plaatsbezoek\n---\nPlaud-ID: {ID1}\n".encode() + b"x" * 54000
     w.bestanden[f"{TKN_PLAUD}/handmatig verslag.txt"] = handmatig
     resultaat = P._bezoekmap(payload)
-    assert resultaat["uitkomst"] == "al_geleverd" and not w.uploads and w.opgepakt == [701]
+    assert resultaat["uitkomst"] == "geleverd" and w.uploads == [f"{TKN_PLAUD}/{TKN_NAAM}"] and w.opgepakt == [701]
+    assert w.bestanden[f"{TKN_PLAUD}/handmatig verslag.txt"] == handmatig
 
     w2 = Wereld()
     w2.bestanden[f"{TKN_PLAUD}/andere opname.txt"] = f"Plaud-ID: {ID2}\n".encode() + b"x" * 54000
     resultaat = P._bezoekmap(payload)
     assert resultaat["uitkomst"] == "geleverd" and w2.uploads == [f"{TKN_PLAUD}/{TKN_NAAM}"] and w2.opgepakt == [701]
     assert w2.bestanden[f"{TKN_PLAUD}/andere opname.txt"].startswith(f"Plaud-ID: {ID2}".encode())
+
+    w_bezet = Wereld()
+    bestaand = f"Plaud-ID: {ID2}\nDit is een andere opname".encode()
+    w_bezet.bestanden[f"{TKN_PLAUD}/{TKN_NAAM}"] = bestaand
+    try:
+        P._bezoekmap(payload)
+        raise AssertionError("de vaste transcriptnaam van een andere opname mag niet worden overschreven")
+    except RuntimeError as ex:
+        assert "al in gebruik" in str(ex)
+    assert w_bezet.bestanden[f"{TKN_PLAUD}/{TKN_NAAM}"] == bestaand and not w_bezet.uploads and not w_bezet.opgepakt
 
     w3 = Wereld()
     w3.ontbrekende_mappen.add(TKN_PLAUD)
@@ -775,6 +808,44 @@ def test_tkn_plaud_payload_en_handmatig_bestaand_transcript():
     except RuntimeError as ex:
         assert "doelmap bestaat niet" in str(ex)
     assert not w3.uploads and not w3.opgepakt
+
+
+def test_scan_alle_gebruikt_dezelfde_transcriptnaamregel_als_de_verslagagent():
+    p, naam = TKN_PLAUD, TKN_NAAM
+    voorbeelden = (
+        ("2026-10-08 Plaud samenvatting.txt", False),
+        ("2026-10-08 Plaud summary.txt", False),
+        ("2026-10-08 Plaud (concept).txt", False),
+        ("handmatig transcript.txt", False),
+        ("2026-10-07 Plaud transcript.txt", False),
+        ("2026-10-080 Plaud transcript.txt", False),
+        ("2026-10-08 Plaud transcript.pdf", False),
+        ("2026-10-08 Plaud transcript.TXT", True),
+        ("20261008 Plaud transcript.docx", True),
+    )
+    for bestandsnaam, telt in voorbeelden:
+        assert P.zoektaak.is_bezoektranscript(bestandsnaam, "2026-10-08") is telt, bestandsnaam
+    for bestandsnaam, _ in voorbeelden[:7]:
+        w = Wereld()
+        oud = f"Plaud-ID: {ID1}\nHandmatige tekst".encode()
+        w.bestanden[f"{p}/{bestandsnaam}"] = oud
+        resultaat = P.zoektaak.lever(p, ID1, "nieuw transcript", P.bronnen, naam=naam, scan_alle=True)
+        assert resultaat["uitkomst"] == "geleverd" and w.uploads == [f"{p}/{naam}"], (bestandsnaam, resultaat)
+        assert w.bestanden[f"{p}/{bestandsnaam}"] == oud
+    w = Wereld()
+    w.bestanden[f"{p}/2026-10-08 handmatig transcript.TXT"] = f"Plaud-ID: {ID1}\nHandmatige tekst".encode()
+    resultaat = P.zoektaak.lever(p, ID1, "nieuw transcript", P.bronnen, naam=naam, scan_alle=True)
+    assert resultaat["uitkomst"] == "al_geleverd" and not w.uploads
+
+    docx = io.BytesIO()
+    xml = (f'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+           f'<w:body><w:p><w:r><w:t>Plaud-ID: {ID1}</w:t></w:r></w:p></w:body></w:document>')
+    with zipfile.ZipFile(docx, "w") as pakket:
+        pakket.writestr("word/document.xml", xml)
+    w = Wereld()
+    w.bestanden[f"{p}/2026-10-08 handmatig transcript.docx"] = docx.getvalue()
+    resultaat = P.zoektaak.lever(p, ID1, "nieuw transcript", P.bronnen, naam=naam, scan_alle=True)
+    assert resultaat["uitkomst"] == "al_geleverd" and not w.uploads
 
 
 def test_tkn_nieuwe_transcriptversie_komt_naast_de_oude():

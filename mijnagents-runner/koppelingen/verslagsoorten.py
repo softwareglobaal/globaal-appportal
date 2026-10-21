@@ -121,9 +121,24 @@ def plat(t):
 
 
 def straat_nummer(adres):
-    straat = re.sub(r"(?i)\bbus\s+[^\s,]+", "", str(adres or "").split(",", 1)[0])
+    straat = str(adres or "").split(",", 1)[0]
+    straat = re.sub(r"(?i)\s*(?:bus|bte|bt)\s*\d+[a-z]?\s*$", "", straat)
+    straat = re.sub(r"(?i)\s*/\s*\d+[a-z]?\s*$", "", straat)
     straat = plat(straat)
     return straat if re.fullmatch(r"[a-z][a-z0-9 ]* \d{1,4}(?: ?[a-z])?", straat) else ""
+
+
+def busnummer(adres):
+    tekst = str(adres or "")
+    voor_komma = tekst.split(",", 1)[0]
+    match = re.search(r"(?i)\b\d{1,4}[a-z]?\s*/\s*(\d+[a-z]?)\b", voor_komma)
+    if not match:
+        match = re.search(r"(?i)\b(?:bus|bte|bt)\s*(\d+[a-z]?)\b", tekst)
+    if not match:
+        return ""
+    waarde = match.group(1).lower()
+    cijfers = re.match(r"\d+", waarde).group()
+    return str(int(cijfers)) + waarde[len(cijfers):]
 
 
 def mapnummer(naam):

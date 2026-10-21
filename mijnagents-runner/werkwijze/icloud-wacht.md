@@ -1,6 +1,7 @@
 # Werkwijze van De iCloud-wacht (Privé)
 
-Versie 2 (21-10-2026: vaste Mac-starter en root-eigen bron; v1 09-09-2026).
+Versie 3 (22-10-2026: root-eigen app en wachtrondes voor TKN; v2 21-10-2026,
+v1 09-09-2026).
 Ik ben de bronnen-agent voor Mehdi's foto's. Ik draai op
 zijn Mac (de fotobibliotheek staat alleen daar; de VM ziet haar niet) en meld
 aan het bord. Elke avond zet ik de foto's van de dag klaar: tijd, plaats,
@@ -67,15 +68,22 @@ regel exporteerde, zijn weer weggehaald; de metadata bleef.
 
 ## Wat ik nodig heb (Mac-rechten, één keer)
 
-Na uitrol starten mijn twee LaunchAgents `~/Applications/iCloudWacht.app`. Geef in
-System Settings > Privacy & Security > Full Disk Access alleen **iCloudWacht.app**
-toegang. Sta voor deze app ook Photos Automation toe wanneer macOS daarom vraagt.
-Het Python-script en de versie staan root-eigen onder
-`/Library/Application Support/iCloudWacht/`; het uitrolscript
-`mac/uitrol_icloud_wacht.sh` plaatst ze met sudo na een groene CI-run op main.
+Na uitrol starten mijn twee LaunchAgents
+`/Library/Application Support/iCloudWacht/iCloudWacht.app`. Draai eerst
+`mac/uitrol_icloud_wacht.sh --controleer`; pas als dat `gelijk` meldt, geef je in
+System Settings > Privacy & Security > Full Disk Access toegang aan
+**/Library/Application Support/iCloudWacht/iCloudWacht.app**. Trek eventuele
+toegang voor de oude app in `~/Applications` in. Sta voor de nieuwe app ook
+Photos Automation toe wanneer macOS daarom vraagt. Het Python-script, de versie
+en de app staan root-eigen onder `/Library/Application Support/iCloudWacht/`;
+het uitrolscript plaatst ze met sudo na een groene CI-run op main en bewaart eerst
+een kopie van een bestaande app. De LaunchAgents wijzen daarna naar de nieuwe app.
 De app is met macOS Hardened Runtime ondertekend; alleen Apple Events voor
-Photos is als recht toegevoegd. De uitrol controleert die handtekening.
-`--controleer` leest de installatie na zonder sudo. Bij `--herbouw-starter` kan
+Photos is als recht toegevoegd. De uitrol controleert de handtekening, de
+root-eigendom en de binary tegen een verse bouw uit de geïnstalleerde commit.
+De bron en binary krijgen daarnaast een root-eigen hashbestand naast de app;
+de uitrol bouwt uit een private root-map.
+`--controleer` leest de installatie na zonder sudo of netwerk. Bij `--herbouw-starter` kan
 macOS opnieuw om Full Disk Access vragen. De oude les van 11-09-2026 was dat
 avondrondes zonder die toestemming met "authorization denied" stilvielen.
 
@@ -87,5 +95,8 @@ dossier, datum, adres, bezoekmap. Ik geocodeer het adres (varianten; mislukking 
 de foto's van die dag binnen 300 m (600 m als het huisnummer niet gevonden is), exporteer de originelen
 per foto uit Photos naar `<bezoekmap>/fotos/` in Dropbox en schrijf `00 fotos.md` met tijd, plaats en
 afstand. Foto's buiten de straal blijven in Photos. Ik vink de taak af en meld het in mijn werkverslag.
-Nood: controleer Full Disk Access en Photos Automation voor iCloudWacht.app;
+Voor TKN-taken blijft de taak open tot de fotoselectie in twee wachtrondes die minstens
+45 minuten uiteenliggen gelijk is, of tot zes uur na het bezoek. Nieuwe iCloud-foto's
+worden in de volgende ronde alsnog geleverd. H-A-taken volgen hun bestaande regeling.
+Nood: controleer Full Disk Access en Photos Automation voor de root-eigen iCloudWacht.app;
 geef deze rechten niet aan de algemene Python-interpreter.

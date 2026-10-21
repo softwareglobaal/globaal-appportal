@@ -12,11 +12,13 @@ Gebruik: icloud_wacht.py [--dag JJJJ-MM-DD] | icloud_wacht.py --taken
   --taken: de foto-taken van de Werfverslag voorbereider uitvoeren (klaarzet soort taak, voor icloud-wacht):
   foto's van de bezoekdag binnen de straal van het werfadres exporteren naar <bezoekmap>/fotos/ in Dropbox.
 """
+import hashlib
 import json
 import os
 import re
 import sqlite3
 import sys
+import tempfile
 import uuid
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -36,6 +38,10 @@ LIB = os.path.expanduser("~/Pictures/Photos Library.photoslibrary/originals")
 ADRESSEN = os.path.expanduser("~/.config/mijnagents/adressen.json")
 STRAAL_M = int(os.environ.get("FOTO_STRAAL_M", "300"))
 VOOR_MIN, NA_MIN = 30, 90  # venster rond de afspraak waarin foto's bij het bezoek horen
+SELECTIE_RUST_MIN = 45
+# Hetzelfde vangnet als verslag_basis.ZONDER_TAKEN_UUR; de geïsoleerde Mac-starter kan de VM-module niet importeren.
+ZONDER_TAKEN_UUR = 6
+SELECTIE_STAAT = os.path.expanduser("~/.config/mijnagents/icloud_selecties")
 DAG = None
 for i, a in enumerate(sys.argv):
     if a == "--dag" and i + 1 < len(sys.argv):
@@ -592,6 +598,44 @@ def selecteer(fotos, start, einde, c, straal):
     return binnen, onbeslist
 
 
+def selectie_stabiel(it, d, fotos, nu):
+    """Bewaar alleen een hash en het begin van de huidige, ongewijzigde selectie op de Mac.
+
+    Een nieuwe foto reset de klok, ook wanneer de zesuursgrens al is verstreken.
+    Een eerste meting na die grens mag wel meteen sluiten.
+    """
+    sleutel = it.get("id")
+    if type(sleutel) is not int or sleutel <= 0:
+        raise ValueError("taakidentiteit_ongeldig")
+    inhoud = json.dumps({"taak": d, "fotos": sorted((str(f.get("uuid")), str(f.get("vastgelegd_utc"))) for f in fotos)},
+                        ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    selectiehash = hashlib.sha256(inhoud.encode("utf-8")).hexdigest()
+    pad = Path(SELECTIE_STAAT) / f"{sleutel}.json"
+    eerder_gemeten = pad.exists()
+    try:
+        oud = json.loads(pad.read_text(encoding="utf-8"))
+        eerste = _tijd_met_zone(oud.get("eerste_meting"))
+    except (OSError, ValueError, AttributeError, TypeError):
+        oud, eerste = {}, None
+    einde_bezoek = _tijd_met_zone(d.get("tot_tijd"))
+    na_vangnet = nu >= einde_bezoek + timedelta(hours=ZONDER_TAKEN_UUR)
+    if oud.get("selectiehash") == selectiehash and eerste and eerste <= nu:
+        return nu - eerste >= timedelta(minutes=SELECTIE_RUST_MIN) or na_vangnet
+    pad.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    tijdelijk_pad = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=pad.parent, prefix=".selectie-",
+                                         suffix=".json", delete=False) as tijdelijk:
+            tijdelijk_pad = tijdelijk.name
+            os.chmod(tijdelijk_pad, 0o600)
+            json.dump({"selectiehash": selectiehash, "eerste_meting": nu.isoformat()}, tijdelijk)
+        os.replace(tijdelijk_pad, pad)
+    finally:
+        if tijdelijk_pad and os.path.exists(tijdelijk_pad):
+            os.unlink(tijdelijk_pad)
+    return not eerder_gemeten and na_vangnet
+
+
 def taken():
     """Geen afvinkactie zonder volledige levering voor het bevestigde bezoek."""
     lijst = taken_lezen()
@@ -621,6 +665,8 @@ def taken():
                 raise ValueError("fotostraal_ongeldig")
             if not isinstance(d.get("adres"), str) or not d["adres"].strip():
                 raise ValueError("werfadres_ontbreekt")
+            if tkn:
+                _tijd_met_zone(d.get("tot_tijd"))
         except ValueError as exc:
             codes = {"bezoekvenster_ontbreekt", "bezoekvenster_ongeldig", "bezoekvenster_tijdzone_ontbreekt", "bezoekvenster_andere_dag",
                      "projectidentiteit_ontbreekt", "bronregistratie_ontbreekt", "bezoekmap_ontbreekt", "bezoekmap_buiten_project",
@@ -650,6 +696,7 @@ def taken():
         if type(n) is not int or not 0 <= n <= len(binnen):
             blokkeer(it, "exportresultaat_ongeldig")
             continue
+        stabiel = selectie_stabiel(it, d, binnen, datetime.now(timezone.utc)) if tkn and volledig else True
         md = ["# Fotoaanvoer " + ("volledig" if volledig else "onvolledig"), "",
               f"Bezoek {d.get('bezoek_id') or d.get('bezoek_ref')}; {n} van {len(binnen)} geselecteerde foto's geleverd; {onbeslist} foto's niet toewijsbaar.",
               f"Venster: {d.get('start') or d.get('van_tijd')} tot {d.get('einde') or d.get('tot_tijd')}; vaste straal {straal} m. Geen automatische verruiming.",
@@ -663,7 +710,7 @@ def taken():
                 manifest = os.path.join(doel, f"00 fotos {stempel}.md")
             with open(manifest, "x", encoding="utf-8") as f:
                 f.write("\n".join(md) + "\n")
-        elif volledig:
+        elif volledig and stabiel:
             manifest = os.path.join(doel, "00 fotos.md")
             if not os.path.exists(manifest):
                 with open(manifest, "x", encoding="utf-8") as f:
@@ -673,6 +720,9 @@ def taken():
         if not volledig:
             blokkeer(it, ("omzetting_mislukt" if tkn and any(f.get("export_fout") == "omzetting_mislukt" for f in binnen)
                           else "fotoselectie_onbeslist" if onbeslist and not tkn else "fotolevering_gedeeltelijk"))
+            continue
+        if tkn and not stabiel:
+            blokkeer(it, "fotoselectie_wacht_op_stabiliteit")
             continue
         if not tkn:
             jpeg_kopieen(doel)

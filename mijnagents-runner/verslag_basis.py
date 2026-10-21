@@ -26,8 +26,10 @@ from urllib.parse import urlencode
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+sys.path.insert(0, os.path.join(HIER, "plaud"))
 import bord  # noqa: E402
 import bronnen  # noqa: E402
+import zoektaak as pz  # noqa: E402
 import verslagsoorten as vs  # noqa: E402
 import werfverslag_proef as wp  # noqa: E402  (leest bezoekmappen, bundelt bronnen, Claude-client, sleutel uit ~/agents/.env)
 
@@ -210,20 +212,42 @@ def kies_dossiermap(rij, mappen, s):
     if not re.fullmatch(r"\d{4,6}", nummer):
         nummer = ""
     sn = vs.straat_nummer(rij.get("adres"))
+    bord_bus = vs.busnummer(rij.get("adres"))
     def postcode(adres):
         staart = str(adres or "").partition(",")[2]
         gevonden = re.findall(r"\b\d{4}\b", staart)
         return gevonden[-1] if gevonden else ""
+    def gemeente(adres):
+        for deel in str(adres or "").split(",")[1:]:
+            deel = re.sub(r"(?i)\b(?:bus|bte|bt)\s*\d+[a-z]?\b", "", deel)
+            deel = re.sub(r"(?i)\b(?:b[e]?-)?\d{4}\b", "", deel)
+            naam = vs.plat(deel)
+            if naam:
+                return naam
+        return ""
     bord_postcode = postcode(rij.get("adres"))
+    bord_gemeente = gemeente(rij.get("adres")) if not bord_postcode else ""
     if len(nummer) == 4 and nummer == bord_postcode:
         nummer, hoe_postcode = "", "nummer is de postcode"
     def straat_in(naam):
         return bool(sn and vs.straat_nummer(str(naam).rsplit("_", 1)[-1]) == sn)
-    def adres_in(naam):
+    def plaats_in(naam):
         adresdeel = str(naam).rsplit("_", 1)[-1]
-        return bool(straat_in(naam) and (not bord_postcode or postcode(adresdeel) == bord_postcode))
+        return bool(straat_in(naam) and
+                    (not bord_postcode or postcode(adresdeel) == bord_postcode) and
+                    (not bord_gemeente or gemeente(adresdeel) == bord_gemeente))
+    def adres_in(naam):
+        if not plaats_in(naam):
+            return False
+        map_bus = vs.busnummer(str(naam).rsplit("_", 1)[-1])
+        if bord_bus and map_bus:
+            return bord_bus == map_bus
+        if bord_bus or map_bus:
+            return bool(nummer and vs.mapnummer(naam) == nummer)
+        return True
     op_nummer = [(n, p) for n, p in barsten if nummer and vs.mapnummer(n) == nummer]
     op_straat = [(n, p) for n, p in barsten if straat_in(n)]
+    op_plaats = [(n, p) for n, p in barsten if plaats_in(n)]
     op_adres = [(n, p) for n, p in barsten if adres_in(n)]
     if len(op_nummer) > 1:
         return None, hoe_postcode, f"meerdere barstenmappen met nummer {nummer}: {', '.join(n for n, _ in op_nummer)}"
@@ -237,6 +261,9 @@ def kies_dossiermap(rij, mappen, s):
         return None, hoe_postcode, (f"agendanummer {nummer} wijst naar {a[0]}, het adres naar {b[0]}; "
                                       "zet de juiste map op de pagina Commandocentrum")
     if b:
+        if len(nummer) in (5, 6) and not a:
+            return None, hoe_postcode, (f"agendanummer {nummer} staat niet vooraan een barstenmap, maar het adres "
+                                          f"raakt {b[0]}; zet de juiste map op de pagina Commandocentrum")
         hoe = "straat en huisnummer"
         if a:
             hoe += "; nummer bevestigt"
@@ -245,8 +272,14 @@ def kies_dossiermap(rij, mappen, s):
         if hoe_postcode:
             hoe += "; " + hoe_postcode
         return b[1], hoe, None
+    if op_plaats:
+        return None, hoe_postcode, (f"busnummer van {rij.get('adres')} past niet bij barstenmap(pen) "
+                                      f"{', '.join(n for n, _ in op_plaats)}; zet de juiste map op de pagina Commandocentrum")
     if bord_postcode and op_straat:
         return None, hoe_postcode, (f"postcode {bord_postcode} past niet bij barstenmap(pen) "
+                                      f"{', '.join(n for n, _ in op_straat)}; zet de juiste map op de pagina Commandocentrum")
+    if bord_gemeente and op_straat:
+        return None, hoe_postcode, (f"gemeente {bord_gemeente} past niet bij barstenmap(pen) "
                                       f"{', '.join(n for n, _ in op_straat)}; zet de juiste map op de pagina Commandocentrum")
     if a:
         return None, hoe_postcode, (f"agendanummer {nummer} wijst naar {a[0]}, maar het adres bevestigt dat niet; "
@@ -299,9 +332,7 @@ def deel_in(entries, dossiermap, datum, s, contract):
                     uit["fotos_iphone"].append(e)
             else:
                 rol = "overig"
-        elif sleutel == "plaud" and len(delen) == 2 and ext in (".txt", ".docx") and \
-                (datum.lower() in naam or datum.replace("-", "") in naam) and \
-                not any(x in naam for x in ("samenvatting", "summary", "(concept)")):
+        elif sleutel == "plaud" and len(delen) == 2 and pz.is_bezoektranscript(naam, datum):
             rol = "transcripten"
         elif sleutel == "mail" and ext in contract["bijlage_ext"]:
             rol = "mails"
@@ -1019,6 +1050,10 @@ class VerslagAgent:
         basis = self.s["basismappen"][0]
         pad = rij.get("dossiermap") or ""
         oud = rij.get("pakket") or {}
+        oude_waarschuwing = (oud.get("overdracht") or {}).get("waarschuwing")
+        waarschuwing_nood = {"tekst": oude_waarschuwing, "wie": "mehdi"} if oude_waarschuwing else None
+        if waarschuwing_nood:
+            self._noden.insert(0, waarschuwing_nood)
         keuze = oud.get("dossierkeuze") or {}
         agentkeuze = keuze.get("door") == "agent" and keuze.get("pad") == pad
         if not pad or (agentkeuze and not dossierkeuze_vast(rij)):
@@ -1095,10 +1130,12 @@ class VerslagAgent:
                         if uitslag["uitkomst"] == "klaargezet":
                             self.ag.log(onderwerp, "schrijf", f"pakket klaargezet voor het dashboard: {uitslag['pad']} "
                                         f"({uitslag['fotos']} foto's, {uitslag['bijlagen']} bijlagen); laden en verwerken doet een mens in barstenscheurenv2")
+                        if uitslag["uitkomst"] in ("klaargezet", "al klaargezet"):
                             if not inv["fotos_iphone"]:
-                                self._nood(f"{mapnr}: pakket klaargezet zonder iPhone-foto's; controleer de fotolevering")
+                                uitslag["waarschuwing"] = f"{mapnr}: pakket klaargezet zonder iPhone-foto's; controleer de fotolevering"
                             elif reden.startswith("bezoek meer dan 6 uur voorbij;"):
-                                self._nood(f"{mapnr}: pakket klaargezet na zes uur terwijl {reden.split('; ', 1)[1]}; controleer of alle bronnen volledig zijn")
+                                uitslag["waarschuwing"] = (f"{mapnr}: pakket klaargezet na zes uur terwijl "
+                                                         f"{reden.split('; ', 1)[1]}; controleer of alle bronnen volledig zijn")
                         if plan["overgeslagen"]:
                             self._nood("overgeslagen uit pakket: " + ", ".join(os.path.basename(x["dropbox"] or "") for x in plan["overgeslagen"]))
         except Exception as e:  # noqa: BLE001
@@ -1110,6 +1147,14 @@ class VerslagAgent:
         vergelijk = lambda d: {k: v for k, v in d.items() if k != "gemeten_ts"}
         if vergelijk(pk) != vergelijk(oud):
             self._bewaar_pakket(rij, pk)
+        waarschuwing = (pk.get("overdracht") or {}).get("waarschuwing")
+        if waarschuwing_nood:
+            if waarschuwing:
+                waarschuwing_nood["tekst"] = waarschuwing
+            else:
+                self._noden.remove(waarschuwing_nood)
+        elif waarschuwing:
+            self._noden.insert(0, {"tekst": waarschuwing, "wie": "mehdi"})
 
     # ------------------------------------------------------------- ronde ---
     def ronde(self):

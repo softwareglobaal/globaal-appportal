@@ -20,9 +20,12 @@ mapnummer, de Plaud-submap en de vaste transcriptnaam. Een bestaande kopie telt 
 als de Plaud-id in de kop overeenkomt. Een ander bestand wordt nooit overschreven.
 """
 import hashlib
+import io
 import json
 import re
+import zipfile
 from datetime import date, datetime, timedelta
+from xml.etree import ElementTree
 
 from context import BRUSSEL
 import dossier as ds
@@ -31,6 +34,22 @@ import verslagsoorten as vs
 VOOR = timedelta(minutes=30)
 NA = timedelta(minutes=60)
 HA_WORK = "/Work All/01. H-A WORK/"
+
+
+def is_bezoektranscript(naam, datum):
+    """De gedeelde naamregel voor een geleverd Plaud-transcript in een bezoekmap.
+
+    Zowel De Plaudwacht als de verslagagent moeten hetzelfde bestand tellen. De
+    naam draagt de bezoekdatum; een samenvatting of concept is geen transcript.
+    """
+    if not isinstance(naam, str) or not isinstance(datum, str) or not datum:
+        return False
+    laag = naam.casefold()
+    heeft_datum = any(re.search(rf"(?<!\d){re.escape(vorm)}(?!\d)", laag)
+                      for vorm in (datum.casefold(), datum.replace("-", "").casefold()))
+    return (laag.endswith((".txt", ".docx"))
+            and heeft_datum
+            and not any(x in laag for x in ("samenvatting", "summary", "(concept)")))
 
 
 def inhoud_van(taak):
@@ -201,6 +220,28 @@ def _kop(begin):
     return uit
 
 
+def _docx_kop(data):
+    """Lees alleen kopparagrafen van een handmatig DOCX-transcript voor de Plaud-id."""
+    with zipfile.ZipFile(io.BytesIO(data)) as docx:
+        info = docx.getinfo("word/document.xml")
+        if info.file_size > 2_000_000:
+            return {}
+        wortel = ElementTree.fromstring(docx.read(info))
+    w = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    regels = ["".join(knoop.text or "" for knoop in p.iter(w + "t"))
+              for p in wortel.iter(w + "p")]
+    return _kop("\n".join(regels[:10]))
+
+
+def _bestaande_kop(dropbox, pad, naam, koplengte):
+    if naam.casefold().endswith(".docx"):
+        try:
+            return _docx_kop(dropbox.download(pad))
+        except (KeyError, ValueError, zipfile.BadZipFile, ElementTree.ParseError):
+            return {}
+    return _kop(dropbox.download_kop(pad, koplengte).decode("utf-8", "replace"))
+
+
 def lever(bezoekmap, plaud_id, tekst, dropbox, naam="transcript.txt", scan_alle=False):
     """Zet het transcript in de map en bevestig id én transcriptversie (nacontrole v1.1, P2-9).
 
@@ -211,11 +252,20 @@ def lever(bezoekmap, plaud_id, tekst, dropbox, naam="transcript.txt", scan_alle=
                        komt ernaast als `<naam> versie <hash>.txt` (geen overschrijving zonder toestemming)
         conflict       er staat een transcript van een andere opname: niets geschreven
     In een gewone bezoekmap telt elk transcript*.txt; in een dossiermap alleen bestanden met dezelfde
-    naamstam. Bij scan_alle telt elk .txt-bestand in de Plaud-submap, ook een handmatig opgeslagen
-    transcript met een andere naam of kopindeling. Bestanden zonder deze Plaud-id blijven staan."""
+    naamstam. Bij scan_alle telt een handmatig bestand alleen wanneer het ook voor de verslagagent
+    een transcript van deze bezoekdatum is. Bestanden zonder deze Plaud-id blijven staan."""
     h = transcript_hash(tekst)
     kop = f"plaud_id: {plaud_id}\ntranscript_hash: {h}\n"
     stam = "transcript" if naam == "transcript.txt" else naam[:-4]
+    scan_datum = None
+    if scan_alle:
+        match = re.search(r"(?<!\d)(\d{4}-\d{2}-\d{2})(?!\d)", naam)
+        if not match:
+            return {"uitkomst": "conflict", "reden": "transcriptnaam mist de bezoekdatum"}
+        try:
+            scan_datum = date.fromisoformat(match.group(1)).isoformat()
+        except ValueError:
+            return {"uitkomst": "conflict", "reden": "transcriptnaam heeft geen geldige bezoekdatum"}
     oudere = False
     items = dropbox.lijst(bezoekmap, recursief=False)
     if scan_alle and items is None:
@@ -223,17 +273,26 @@ def lever(bezoekmap, plaud_id, tekst, dropbox, naam="transcript.txt", scan_alle=
     koplengte = 2000 if scan_alle else 600
     for e in items or []:
         bestaand = e.get("name") or ""
-        if (e.get(".tag") == "file" and bestaand.lower().endswith(".txt")
-                and (scan_alle or bestaand.lower().startswith(stam.lower()))):
-            k = _kop(dropbox.download_kop(e["path_display"], koplengte).decode("utf-8", "replace"))
+        kandidaat = (is_bezoektranscript(bestaand, scan_datum) if scan_alle
+                     else bestaand.casefold().endswith(".txt") and bestaand.casefold().startswith(stam.casefold()))
+        if e.get(".tag") == "file" and kandidaat:
+            k = _bestaande_kop(dropbox, e["path_display"], bestaand, koplengte)
             if k.get("plaud_id") != plaud_id:
                 if scan_alle:
+                    if bestaand.casefold() == naam.casefold():
+                        return {"uitkomst": "conflict", "pad": e["path_display"],
+                                "reden": "de transcriptnaam is al in gebruik door een andere opname"}
                     continue
                 return {"uitkomst": "conflict", "pad": e["path_display"], "reden": "er staat al een transcript van een andere opname"}
             if k.get("transcript_hash") == h or (scan_alle and not k.get("transcript_hash")):
                 return {"uitkomst": "al_geleverd", "pad": e["path_display"], "transcript_hash": h}
             oudere = True
     doelnaam = f"{stam} versie {h[:6]}.txt" if oudere else naam
+    bezet = next((e for e in items or [] if e.get(".tag") == "file"
+                 and (e.get("name") or "").casefold() == doelnaam.casefold()), None)
+    if bezet:
+        return {"uitkomst": "conflict", "pad": bezet["path_display"],
+                "reden": "de transcriptnaam is al in gebruik door een andere opname"}
     pad = dropbox.upload(f"{bezoekmap}/{doelnaam}", (kop + "\n" + tekst).encode("utf-8"))
     controle = _kop(dropbox.download_kop(pad, koplengte).decode("utf-8", "replace"))
     if controle.get("plaud_id") != plaud_id or controle.get("transcript_hash") != h:
