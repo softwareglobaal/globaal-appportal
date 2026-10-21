@@ -1,6 +1,6 @@
 #!/bin/sh
-# Auto-deploy Agents-tegel (cron, elke 2 min). De monorepo wordt door de andere
-# deploy-scripts al op origin/main gehouden; dit script herbouwt de container
+# Auto-deploy Agents-tegel (cron, elke 2 min). De monorepo komt via handmatige
+# merges op main; dit script herbouwt de container
 # alleen als de map agents/ echt veranderde (vergelijkt de tree-hash), zodat
 # er niet elke 2 minuten onnodig gebouwd wordt.
 set -eu

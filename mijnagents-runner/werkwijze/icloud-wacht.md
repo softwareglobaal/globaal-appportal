@@ -1,6 +1,7 @@
 # Werkwijze van De iCloud-wacht (Privé)
 
-Versie 1 (09-09-2026). Ik ben de bronnen-agent voor Mehdi's foto's. Ik draai op
+Versie 2 (21-10-2026: vaste Mac-starter en root-eigen bron; v1 09-09-2026).
+Ik ben de bronnen-agent voor Mehdi's foto's. Ik draai op
 zijn Mac (de fotobibliotheek staat alleen daar; de VM ziet haar niet) en meld
 aan het bord. Elke avond zet ik de foto's van de dag klaar: tijd, plaats,
 bestand en uuid, gegroepeerd per plek. Ik verplaats geen foto: de Dagbundelaar
@@ -66,11 +67,17 @@ regel exporteerde, zijn weer weggehaald; de metadata bleef.
 
 ## Wat ik nodig heb (Mac-rechten, één keer)
 
-Onder launchd draai ik als `/usr/bin/python3`; die heeft van macOS geen toegang tot de
-fotobibliotheek zolang Mehdi dat niet toestaat: System Settings > Privacy & Security >
-Full Disk Access > python3 aan. Voor de iCloud-export vraagt macOS één keer om Photos te
-mogen sturen (Automation): Allow. Les van 11-09-2026: mijn avondrondes vielen stil met
-"authorization denied" tot dat geregeld is; op 12-09 draaide Claude Code mij handmatig.
+Na uitrol starten mijn twee LaunchAgents `~/Applications/iCloudWacht.app`. Geef in
+System Settings > Privacy & Security > Full Disk Access alleen **iCloudWacht.app**
+toegang. Sta voor deze app ook Photos Automation toe wanneer macOS daarom vraagt.
+Het Python-script en de versie staan root-eigen onder
+`/Library/Application Support/iCloudWacht/`; het uitrolscript
+`mac/uitrol_icloud_wacht.sh` plaatst ze met sudo na een groene CI-run op main.
+De app is met macOS Hardened Runtime ondertekend; alleen Apple Events voor
+Photos is als recht toegevoegd. De uitrol controleert die handtekening.
+`--controleer` leest de installatie na zonder sudo. Bij `--herbouw-starter` kan
+macOS opnieuw om Full Disk Access vragen. De oude les van 11-09-2026 was dat
+avondrondes zonder die toestemming met "authorization denied" stilvielen.
 
 ## Foto-taken van de Werfverslag voorbereider (14-09-2026)
 
@@ -80,6 +87,5 @@ dossier, datum, adres, bezoekmap. Ik geocodeer het adres (varianten; mislukking 
 de foto's van die dag binnen 300 m (600 m als het huisnummer niet gevonden is), exporteer de originelen
 per foto uit Photos naar `<bezoekmap>/fotos/` in Dropbox en schrijf `00 fotos.md` met tijd, plaats en
 afstand. Foto's buiten de straal blijven in Photos. Ik vink de taak af en meld het in mijn werkverslag.
-Nood: /usr/bin/python3 heeft Full Disk Access en Automation (Photos) nodig, anders draai ik alleen
-vanuit Claude Code.
-
+Nood: controleer Full Disk Access en Photos Automation voor iCloudWacht.app;
+geef deze rechten niet aan de algemene Python-interpreter.
