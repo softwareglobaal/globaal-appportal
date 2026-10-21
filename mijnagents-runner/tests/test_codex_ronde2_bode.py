@@ -69,11 +69,17 @@ B.whatsapp.binnen = onbereikbaar("whatsapp")
 B.whatsapp.instellingen = onbereikbaar("whatsapp")
 B.whatsapp.stuur = onbereikbaar("whatsapp")
 verstuurd, logs, hartslagen = [], [], []
-B.stuur = lambda tekst, nood: verstuurd.append(tekst) or "proef"
+B.stuur = lambda tekst, nood, **k: verstuurd.append(tekst) or "proef"
 B.ag.log = lambda onderwerp, stap, tekst, detail="": logs.append(tekst)
 B.ag.log_verstuur = lambda: None
 B.ag.hartslag = lambda *a, **k: hartslagen.append(k)
 BORD = {"fout": False, "items": [], "gesprek_fout": False}
+# B9 en T81 (ontwerp regie-zoom v1.2): De Bode gaat sinds 21-10-2026 door de gedeelde ronde en leest dus zijn werkwijze van
+# het bord; hier een proefwerkwijze. De vaste momenten (ochtendbericht, terugval om 11:00, avondbundel) en de bundelstand
+# toetst tests/test_bode_regie.py; hier staan ze uit, zodat deze proef niet afhangt van het uur waarop ze draait.
+PROEFWERKWIJZE = "# Werkwijze van De Bode (proef)\n\n## Wat ik nooit doe\n\n- Iets versturen naar iemand anders dan Mehdi.\n"
+B.vaste_momenten = lambda *a, **k: ""
+B.bord.BORD_DB = str(Path(tempfile.mkdtemp()) / "geen-bord.db")     # nooit de echte databank van het bord
 
 
 def nep_bord(pad, payload=None, method=None):
@@ -81,6 +87,8 @@ def nep_bord(pad, payload=None, method=None):
         raise OSError("bord nagebootst onbereikbaar")
     if pad.startswith("/api/klaarzet"):
         return {"items": list(BORD["items"])}
+    if pad == "/api/agent/bode/werkwijze":
+        return {"werkwijze": PROEFWERKWIJZE}
     return {"agents": []} if pad.startswith("/api/overzicht") else {}
 
 
@@ -233,6 +241,8 @@ check("A13 alarm: na drie mislukte starts opgegeven, met een logregel, ook als h
       f"{len(alarm_oproepen)} {st} {logs}")
 
 # ------------------------------------------------------------------ A23 Brusselse tijd ---
+ECHT_BUNDELEN = B.BUNDELEN
+B.BUNDELEN = "uit"          # B9: de losse berichten van voor 21-10-2026; de bundelstand heeft test_bode_regie.py
 UTC = timezone.utc
 for _t, _verwacht, _uitleg in ((datetime(2026, 7, 15, 20, 30, tzinfo=UTC), True, "juli 20:30 UTC is 22:30 in Brussel"),
                                (datetime(2026, 7, 15, 5, 30, tzinfo=UTC), False, "juli 05:30 UTC is 07:30 in Brussel"),
@@ -269,6 +279,7 @@ _u, _f = probeer(B.main)
 check("A23 om 20:30 UTC in juli (22:30 Brussel) stuurt De Bode niets zonder alarm", _f is None and not verstuurd,
       f"{_f} {verstuurd[:1]}")
 B.datetime = ECHTE_TIJD
+B.BUNDELEN = ECHT_BUNDELEN
 BORD["items"] = []
 
 # ------------------------------------------------------------------ A26 slot en stand ---
@@ -336,8 +347,13 @@ for _wat, _bord_fout, _tg in (("Telegram", False, onbereikbaar("telegram")),
     check(f"A26 als {_wat} een fout gooit, wordt er toch gebeld en staat het op schijf",
           _f is None and len(oproepen) == 1 and f"proef-storing-{_wat}" in ((stand() or {}).get("gebeld") or {}),
           f"{_f} {len(oproepen)} {stand()}")
+    # Sinds De Bode door de gedeelde ronde gaat (21-10-2026): is het hele bord weg, dan is ook de werkwijze onbekend en
+    # stopt de ronde (NA09). De nood gaat dan mee als begin_noden (X4); weet het bord niet welke noden open staan, dan
+    # staat ze in het detail van de fouthartslag in plaats van in een lijst die alles zou sluiten.
+    _laatste = hartslagen[-1] if hartslagen else {}
     check(f"A26 een storing bij {_wat} wordt een nood op het bord, geen crash",
-          bool(hartslagen) and any("mislukt" in n["tekst"] for n in (hartslagen[-1].get("nood") or [])),
+          bool(hartslagen) and (any("mislukt" in n["tekst"] for n in (_laatste.get("nood") or []))
+                                or (_laatste.get("nood") is None and "mislukt" in (_laatste.get("detail") or ""))),
           str(hartslagen[-1:]))
 BORD["fout"] = False
 
@@ -385,6 +401,7 @@ BORD["items"] = []
 # ------------------------------------------------------------------ ronde 3: A31 groepen ---
 # De stille uren hangen af van de klok; hier altijd overdag, anders faalt de test 's nachts.
 ECHT_STIL, ECHT_STUUR, ECHT_NIET_TG = B.is_stil, B.stuur, B.NIET_OP_TELEGRAM
+B.BUNDELEN = "uit"          # B9: de groepen van A31 gelden voor de losse berichten (stand 'uit')
 B.is_stil = lambda t=None: False
 B.NIET_OP_TELEGRAM = ("agenda-wacht",)
 B.tg = lambda methode, **p: {"result": []}
@@ -483,6 +500,7 @@ check("A31 een volle pagina waarvan zelfs het oudste item nieuw is: een nood (er
       str(hartslagen[-1:])[:300])
 BORD["items"] = []
 B.is_stil, B.NIET_OP_TELEGRAM = ECHT_STIL, ECHT_NIET_TG
+B.BUNDELEN = ECHT_BUNDELEN
 
 # ------------------------------------------------------------------ ronde 3: A26 belspoor ---
 SPOOR = B.belspoor() if hasattr(B, "belspoor") else str(TMP / "bode-gebeld.jsonl")

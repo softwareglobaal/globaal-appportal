@@ -27,6 +27,10 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_agenda_signaal.py
       - run: python3 mijnagents-runner/tests/test_annulering_en_thuis.py
       - run: python3 mijnagents-runner/tests/test_agenda_beweging.py
+      # J6 (ontwerp regie-zoom v1.2): test_taken.py toetst taak_plannen op het echte bordschema uit init_db van
+      # mijnagents/app.py (agent.draait_op komt pas via ALTER), en daarvoor is Flask nodig. Zonder Flask bouwt hij het
+      # schema met de hand, en dan ziet hij een hernoemde kolom niet.
+      - run: pip install -r mijnagents/requirements.txt
       - run: python3 mijnagents-runner/tests/test_taken.py
       - run: python3 mijnagents-runner/tests/test_mail_afspraken.py
       - run: python3 mijnagents-runner/tests/test_zorg_afspraken.py
