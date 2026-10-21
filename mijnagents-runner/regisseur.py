@@ -509,13 +509,51 @@ def ronde_starten(inp):
 
 
 # ------------------------------------------------------- de leestools (R4) ---
-def _zonder_prive_regels(tekst):
-    return "\n".join("(privé)" if PRIVE.search(r) else r for r in (tekst or "").splitlines())
+def _zonder_prive_regels(tekst, kenmerken=()):
+    """Een regel die privé noemt, of (RZ3-01) de titel of de verwijzing van een privé-item draagt, wordt '(privé)'."""
+    return "\n".join("(privé)" if PRIVE.search(r) or any(k in r for k in kenmerken) else r for r in (tekst or "").splitlines())
+
+
+def _prive_kenmerken():
+    """RZ3-01, zoals bord_export.prive_kenmerken: de titels en verwijzingen (minstens twaalf tekens) van de privé-items op
+    het bord. Een bundel of Dagverslag van voor 22-10-2026 noemt een item met afdeling prive en prive=false bij zijn
+    titel, zonder PRIVÉ; zo'n regel kwam voluit in de inhoud die ik aan het model geef. BordOnbekend gaat door."""
+    rijen = bordklant.db_lees("SELECT titel, inhoud, verwijzing FROM klaarzet WHERE soort <> 'dagbundel'")
+    return frozenset(k.strip() for r in rijen if _item_prive(r["titel"], r["inhoud"])
+                     for k in (r["titel"], r["verwijzing"]) if k and len(k.strip()) >= 12)
+
+
+def _afdeling_prive(afdeling):
+    """RZ3-01 (tegenproef op de herstelcontrole, 22-10-2026): afdeling prive, in elke schrijfwijze, is privé, ook bij
+    prive=false, zoals de dossierbeslissing (plaud/dossier.py) en De Fathomwacht (fathom_wacht.is_prive) het zeggen. Rijen
+    in de gesprekkentabel van voor 22-10-2026 staan zo nog op prive 0, en Plaud stuurt ze nooit opnieuw."""
+    return str(afdeling or "").strip().casefold() in ("prive", "privé")
+
+
+def _rij_prive(r):
+    """Een rij van de gesprekkentabel is privé als de kolom prive het zegt of de afdeling prive is (RZ3-01)."""
+    return bool(r["prive"]) or _afdeling_prive(r["afdeling"])
+
+
+def _item_prive(titel, inhoud):
+    """Een klaargezet item is privé als zijn titel privé noemt, of zijn inhoud prive of afdeling prive draagt (RZ3-01),
+    zoals bord_export.is_prive: een item van De Fathomwacht of De Plaudwacht van voor 22-10-2026 met afdeling prive en
+    prive=false droeg naam en onderwerp in de titel, zonder PRIVÉ."""
+    if PRIVE.search(titel or ""):
+        return True
+    s = (inhoud or "").strip()
+    try:
+        d = json.loads(s) if s.startswith("{") else {}
+    except ValueError:
+        d = {}
+    return isinstance(d, dict) and (bool(d.get("prive")) or _afdeling_prive(d.get("afdeling")))
 
 
 def klaargezet_lees(naam, richting="beide", soort=None, status="klaar", n=20):
     """Wat een agent klaarzette of wat voor hem klaarstaat (R4, M3). Van een privé-agent (agent.prive = 1) en van een item
-    met 'privé' in de titel alleen de titel '(privé)', nooit inhoud. Inhoud tot 3000 tekens alleen voor INHOUD_SOORTEN."""
+    met 'privé' in de titel, of met prive of afdeling prive in de inhoud (RZ3-01, _item_prive), alleen de titel
+    '(privé)', nooit inhoud. Inhoud tot 3000 tekens alleen voor INHOUD_SOORTEN, zonder de regels die privé noemen of de
+    titel of verwijzing van een privé-item dragen (RZ3-01, _prive_kenmerken)."""
     nu = nu_utc()
     naam = str(naam or "")
     n = max(1, min(int(n or 20), 100))
@@ -534,17 +572,18 @@ def klaargezet_lees(naam, richting="beide", soort=None, status="klaar", n=20):
             "COALESCE(av.prive, 0) AS van_prive, COALESCE(ao.prive, 0) AS voor_prive FROM klaarzet k "
             "LEFT JOIN agent av ON av.naam = k.van LEFT JOIN agent ao ON ao.naam = k.voor "
             f"WHERE {waar} ORDER BY k.id DESC LIMIT ?", (*args, n))
+        kenmerken = _prive_kenmerken() if any(r["soort"] in INHOUD_SOORTEN for r in rijen) else frozenset()
     except bordklant.BordOnbekend as e:
         return {"onbekend": e.reden, "_bron": f"klaargezette items van en voor {naam} (onbekend)"}
     items = []
     for r in rijen:
-        prive = bool(r["van_prive"] or r["voor_prive"]) or bool(PRIVE.search(r["titel"] or ""))
+        prive = bool(r["van_prive"] or r["voor_prive"]) or _item_prive(r["titel"], r["inhoud"])
         it = {k: r[k] for k in ("id", "van", "voor", "soort", "sleutel", "titel", "status", "opgepakt_door")}
         it["ts"] = O.kort(r["ts"])
         if prive:
             it["titel"] = "(privé)"
         elif r["soort"] in INHOUD_SOORTEN and r["soort"] not in NOOIT_INHOUD:
-            it["inhoud"] = _zonder_prive_regels(r["inhoud"])[:3000]
+            it["inhoud"] = _zonder_prive_regels(r["inhoud"], kenmerken)[:3000]
         items.append(it)
     return {"items": items, "aantal": len(items), "_bron": f"klaargezette items van en voor {naam} ({O.kort(nu)})"}
 
@@ -645,13 +684,15 @@ def _dagregels(dagen):
 def _prive_sessies(sessies):
     """De sessies waarvan een rij privé is, dubbels inbegrepen (M1, BAS-02), zoals in transcript_lees: de Zoom-rij van
     een gekoppelde sessie is een dubbel en telt niet, maar haar privévlag (de Zoom-regel, H2) geldt voor de hele sessie.
-    Een rij met buiten:... hoort niet bij Mehdi's gesprek en telt niet mee. BordOnbekend gaat door."""
+    Een rij met buiten:... hoort niet bij Mehdi's gesprek en telt niet mee. Privé is prive of afdeling prive (RZ3-01,
+    _rij_prive). BordOnbekend gaat door."""
     uit, sessies = set(), sorted(sessies)
     for i in range(0, len(sessies), 400):
         deel = sessies[i:i + 400]
         uit |= {r["sessie"] for r in bordklant.db_lees(
-            f"SELECT DISTINCT sessie FROM gesprek_log WHERE sessie IN ({','.join('?' * len(deel))}) AND prive <> 0 "
-            "AND COALESCE(dubbel_van, '') NOT LIKE 'buiten:%'", tuple(deel))}
+            f"SELECT DISTINCT sessie, prive, COALESCE(afdeling, '') AS afdeling FROM gesprek_log "
+            f"WHERE sessie IN ({','.join('?' * len(deel))}) AND COALESCE(dubbel_van, '') NOT LIKE 'buiten:%'", tuple(deel))
+                if _rij_prive(r)}
     return uit
 
 
@@ -663,7 +704,7 @@ def gesprekken_lees(van=None, tot=None, bron=None, persoon=None, soort=None):
     - Een privérij geeft alleen datum, start, minuten, bron en prive: niet met wie (M3). Privé is de OF over alle rijen
       van dezelfde sessie, dubbels inbegrepen (M1, BAS-02): een Fathom-rij die zelf niet privé is, met een Zoom-dubbel die
       het wel is, geeft ook alleen dat. Met persoon wordt alleen in de niet-privérijen gezocht; de privérijen van die
-      periode staan als aantal.
+      periode staan als aantal. Privé is de kolom prive of afdeling prive (RZ3-01, _rij_prive).
     - laatste_lezing per bron is de hartslag van de agent in de tabel status (L9), niet het laatste schrijven.
     - De Zoom-telling per dag komt uit de dagregel van De Zoomwacht: 'minstens N' of 'onbekend' (M5)."""
     nu = nu_utc()
@@ -677,7 +718,8 @@ def gesprekken_lees(van=None, tot=None, bron=None, persoon=None, soort=None):
     dagen = [(d_van + timedelta(days=i)).isoformat() for i in range((d_tot - d_van).days + 1)]
     try:
         rijen = bordklant.db_lees("SELECT uniek, datum, start, minuten, personen, thema, bron, prive, archief, "
-                                  "COALESCE(sessie, '') AS sessie, COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log "
+                                  "COALESCE(afdeling, '') AS afdeling, COALESCE(sessie, '') AS sessie, "
+                                  "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log "
                                   "WHERE datum BETWEEN ? AND ? ORDER BY datum, start", (d_van.isoformat(), d_tot.isoformat()))
         prive_sessies = _prive_sessies({r["sessie"] for r in rijen if r["sessie"] and not r["dubbel_van"]})
         lezing = {r["naam"]: r for r in bordklant.db_lees(
@@ -705,7 +747,7 @@ def gesprekken_lees(van=None, tot=None, bron=None, persoon=None, soort=None):
     if soort != "chat":
         gesprekken, prive_buiten_zoek = [], 0
         for r in tellend:
-            if r["prive"] or r["sessie"] in prive_sessies:
+            if _rij_prive(r) or r["sessie"] in prive_sessies:
                 if persoon:
                     prive_buiten_zoek += 1
                     continue
@@ -721,7 +763,7 @@ def gesprekken_lees(van=None, tot=None, bron=None, persoon=None, soort=None):
         if persoon:
             uit["prive_in_deze_periode"] = prive_buiten_zoek
     if soort != "gesprek":
-        uit["chats"] = {"aantal": len(chats), "prive": sum(1 for r in chats if r["prive"])}
+        uit["chats"] = {"aantal": len(chats), "prive": sum(1 for r in chats if _rij_prive(r))}
     return uit
 
 
@@ -821,16 +863,18 @@ def transcript_lees(uniek, zoek=None, max_tekens=None):
     """De tekst van een gesprek (R5), alleen als het zeker mag.
     - Plaats: het archief ligt onder DATA/fathom-data of DATA/zoom-data (realpath, ook tegen symlinks); anders geweigerd
       zonder een bestand te openen.
-    - Privé als een rij of archief van dezelfde sessie privé is (M1): gesprek_log.prive, herkenning.prive, het
-      archivarislabel Prive, prive in zoom.json, of een metabestand dat niet te lezen is. Dan alleen datum, start en minuten.
+    - Privé als een rij of archief van dezelfde sessie privé is (M1): gesprek_log.prive of gesprek_log.afdeling prive,
+      herkenning.prive of herkenning.afdeling prive (RZ3-01), het archivarislabel Prive, prive in zoom.json, of een
+      metabestand dat niet te lezen is. Dan alleen datum, start en minuten.
     - Het Zoom-vangnet geeft nooit tekst (X1): alleen datum, start, minuten en het aantal deelnemers.
     - Tekst alleen van Mehdi's eigen Fathom-opnames of van opnames gekoppeld aan een Zoom-sessie waarin hij zat (M2).
     - Plaud: alleen metadata. Alleen transcript.json of transcript.vtt, nooit transcript.md.
     - Met zoek: de treffers met twee uitingen ervoor en erna, over alle bruikbare opnames van de sessie (J19)."""
     max_tekens = max(500, min(int(max_tekens or 20000), 40000))
     try:
-        rijen = bordklant.db_lees("SELECT uniek, datum, start, minuten, prive, archief, sessie, bron, opgenomen_door, "
-                                  "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE uniek=?", (str(uniek or ""),))
+        rijen = bordklant.db_lees("SELECT uniek, datum, start, minuten, prive, COALESCE(afdeling, '') AS afdeling, archief, "
+                                  "sessie, bron, opgenomen_door, COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log "
+                                  "WHERE uniek=?", (str(uniek or ""),))
     except bordklant.BordOnbekend as e:
         return {"onbekend": e.reden, "_bron": f"transcript {uniek} (onbekend)"}
     if not rijen:
@@ -848,9 +892,9 @@ def transcript_lees(uniek, zoek=None, max_tekens=None):
     leden = [rij]
     if rij["sessie"]:
         try:
-            leden = bordklant.db_lees("SELECT uniek, datum, start, minuten, prive, archief, sessie, bron, opgenomen_door, "
-                                      "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE uniek=? OR sessie=?",
-                                      (uniek, rij["sessie"]))
+            leden = bordklant.db_lees("SELECT uniek, datum, start, minuten, prive, COALESCE(afdeling, '') AS afdeling, archief, "
+                                      "sessie, bron, opgenomen_door, COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log "
+                                      "WHERE uniek=? OR sessie=?", (uniek, rij["sessie"]))
         except bordklant.BordOnbekend as e:
             return dict(meta, prive=True, uitleg=f"de rest van de sessie is onbekend ({e.reden}); alleen metadata")
     met_mehdi = {lid["sessie"] for lid in leden if lid["sessie"] and lid["uniek"] == lid["sessie"]
@@ -859,7 +903,7 @@ def transcript_lees(uniek, zoek=None, max_tekens=None):
     for lid in leden:
         if lid["dubbel_van"].startswith("buiten:"):
             continue
-        prive = prive or bool(lid["prive"])
+        prive = prive or _rij_prive(lid)
         plaats = _plaats(lid["archief"])
         if lid["archief"] and plaats is None:
             prive = True                 # buiten de toegestane mappen: niet te lezen, dus privé
@@ -877,8 +921,10 @@ def transcript_lees(uniek, zoek=None, max_tekens=None):
         if not isinstance(gj, dict):
             prive = True
             continue
-        if (gj.get("herkenning") or {}).get("prive") or str((gj.get("archivaris") or {}).get("label") or "").lower() in ("prive", "privé"):
-            prive = True
+        herk = gj.get("herkenning") if isinstance(gj.get("herkenning"), dict) else {}
+        if herk.get("prive") or _afdeling_prive(herk.get("afdeling")) \
+                or str((gj.get("archivaris") or {}).get("label") or "").lower() in ("prive", "privé"):
+            prive = True                 # RZ3-01: ook afdeling prive in de herkenning, bij prive=false
         if _eigen_account(gj) or lid["sessie"] in met_mehdi:
             bruikbaar.append((lid, pad, O.tijdstip(gj.get("recording_start_time"))))
     if _plaats(rij["archief"]) and _plaats(rij["archief"])[0] == "zoom-data":
@@ -1398,13 +1444,13 @@ def ochtend_bronnen(nu):
 
     def gesprekken():
         per = {}
-        for r in bordklant.db_lees("SELECT uniek, bron, prive, archief FROM gesprek_log WHERE datum=? AND COALESCE(dubbel_van, '')=''",
-                                   (gisteren,)):
+        for r in bordklant.db_lees("SELECT uniek, bron, prive, COALESCE(afdeling, '') AS afdeling, archief FROM gesprek_log "
+                                   "WHERE datum=? AND COALESCE(dubbel_van, '')=''", (gisteren,)):
             if r["bron"] in ("zoom", "mail") or str(r["uniek"]).startswith("zoom:"):
                 continue                 # Zoom komt uit de dagregel (M5); mail is geen gesprek
             t = per.setdefault(r["bron"] or "onbekend", {"tellend": 0, "prive": 0, "zonder_transcript": 0})
             t["tellend"] += 1
-            t["prive"] += 1 if r["prive"] else 0
+            t["prive"] += 1 if _rij_prive(r) else 0      # RZ3-01: ook afdeling prive
             t["zonder_transcript"] += 0 if r["archief"] else 1
         return per
 

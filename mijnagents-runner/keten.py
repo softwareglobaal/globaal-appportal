@@ -17,6 +17,11 @@ het ochtendbericht pas als keten.json een start na het geplande startmoment van 
 
 Een stap die te lang loopt, krijgt eerst SIGTERM (De Fathomwacht en De Zoomwacht sluiten dan zelf hun hartslag af, J1),
 na dertig seconden SIGKILL; zijn exit is dan 124, zoals bij /usr/bin/timeout.
+
+De keten duurt zo hoogstens de som van de time-outs plus de nadruk per stap: 2700 + 1200 + 2 x 30 = 3960 seconden.
+De Dagbundelaar wacht op hetzelfde slot (planning/gesprekken.cron) en moet dus langer wachten dan dat, met marge: 5400
+seconden (RZ3-03; tot 22-10-2026 3600, korter dan de langste keten). Wie hier een time-out verhoogt, verhoogt ook die
+wachttijd; tests/test_keten.py leest beide uit de bestanden en eist minstens tien minuten marge.
 """
 import json
 import os

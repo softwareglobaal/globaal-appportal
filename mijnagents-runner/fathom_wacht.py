@@ -209,6 +209,17 @@ def prive_verwijzing(map_, start, gid):
     return os.path.join(os.path.dirname(map_), f"{start[:10]} {start[11:16].replace(':', '')} (privé) [{gid}]")
 
 
+def is_prive(herk, besl=None):
+    """RZ3-01 (besluit van de regie, 22-10-2026: de veilige kant). Een gesprek is privé als de herkenning prive zegt OF de
+    dossierbeslissing (plaud/dossier.py) het privé noemt: afdeling prive, ook met prive=false. Tot dan las ik voor de
+    gesprekkentabel, het klaarzet-item (titel, inhoud, verwijzing) en het werkverslag alleen herkenning['prive'], terwijl
+    de dossierbeslissing hetzelfde gesprek al privé noemde; zo kwamen naam en onderwerp alsnog in een bundel en in de
+    export. Dezelfde regel staat in plaud_wacht.py; De Dagbundelaar en bord_export lezen inhoud.afdeling ook zo."""
+    herk = herk or {}
+    afdeling = str(herk.get("afdeling") or "").strip().lower()
+    return bool(herk.get("prive")) or afdeling in ("prive", "privé") or bool((besl or {}).get("prive"))
+
+
 def bewaar(g, tekst, herkenning):
     map_ = os.path.join(ARCHIEF, archiefmap(g))
     gj = os.path.join(map_, "gesprek.json")
@@ -383,8 +394,6 @@ def main():
                 duur = int((datetime.fromisoformat(g["recording_end_time"].replace("Z", "+00:00")) - datetime.fromisoformat(g["recording_start_time"].replace("Z", "+00:00"))).total_seconds() / 60)
             except Exception:  # noqa: BLE001
                 pass
-            prive = bool(herk.get("prive"))
-            prive_n += 1 if prive else 0
             # dossier op bewijs: titel, of de e-mail van een deelnemer bij een deal met projectnummer;
             # het project dat het model noemt is een kandidaat, geen bewijs
             bewijzen = dossier.uit_tekst("titel", g.get("title") or g.get("meeting_title") or "")
@@ -393,6 +402,9 @@ def main():
             # H1-2, driehoeksoverleg C2, 17-10-2026: dezelfde firmacomposiet als in koppel_deal.
             besl = dossier.beslis(bewijzen, herk, dossier.uit_tekst("model", herk.get("project") or ""),
                                   bekend={("HARC", str(d["nummer"])) for d in deals if d.get("nummer")})
+            # RZ3-01: privé volgens de herkenning OF de dossierbeslissing, voor de tabel, het item en het werkverslag
+            prive = is_prive(herk, besl)
+            prive_n += 1 if prive else 0
             if deal and deal.get("nummer") != besl["projectnummer"]:
                 deal = None                 # een deal die niet bij het beslist dossier hoort, krijgt geen kopie
             rij = {"uniek": f"fathom:{gid}", "datum": start[:10], "start": start[11:16], "minuten": duur,

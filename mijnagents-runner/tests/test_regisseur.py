@@ -311,7 +311,7 @@ CRON = ("# begin gesprekken (beheerd door planning/gesprekken_cron_zetten.py)\n"
         "# 07:00 UTC is 09:00 Brussel tot en met 24-10-2026, vanaf 25-10 08:00\n"
         "0 7,13 * * * /usr/bin/flock -w 1800 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python "
         "/home/ubuntu/appportal/mijnagents-runner/keten.py >> /home/ubuntu/agents/keten.log 2>&1\n"
-        "5 7 * * 1-5 /usr/bin/flock -w 3600 -E 75 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python "
+        "5 7 * * 1-5 /usr/bin/flock -w 5400 -E 75 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python "
         "/home/ubuntu/appportal/mijnagents-runner/dagbundelaar.py >> /home/ubuntu/agents/dagbundelaar.log 2>&1\n"
         "# einde gesprekken\n")
 
@@ -363,19 +363,20 @@ class Wereld:
                             (van, voor, soort, sleutel, titel, inhoud if isinstance(inhoud, str) else json.dumps(inhoud), uniek, status, ts))
 
     def gesprek(self, uniek, datum, start, minuten=30, bron="fathom", prive=0, archief="", sessie="", dubbel_van="", personen="",
-                thema="", opgenomen_door=""):
+                thema="", opgenomen_door="", afdeling=""):
         self.schrijf("INSERT INTO gesprek_log(uniek, datum, start, minuten, personen, thema, prive, archief, bron, ts, sessie, dubbel_van, "
-                     "opgenomen_door) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                     "opgenomen_door, afdeling) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                      (uniek, datum, start, minuten, personen, thema, prive, archief, bron, "2026-10-21T12:00:00+00:00", sessie,
-                      dubbel_van, opgenomen_door))
+                      dubbel_van, opgenomen_door, afdeling))
 
     def vraag(self, aan, tekst, van="mehdi", status="open"):
         return self.schrijf("INSERT INTO gesprek(aan, van, tekst, status, ts) VALUES(?,?,?,?,?)", (aan, van, tekst, status, self.nu.isoformat()))
 
 
 def fathom_map(data, naam, start="2026-10-21T08:00:00Z", email=WERK_ADRES, prive=False, label="", transcript=None,
-               gesprek_json=True):
-    """Een map in fathom-data zoals De Fathomwacht ze schrijft, met transcript.json in de vorm van Fathom."""
+               gesprek_json=True, afdeling=None):
+    """Een map in fathom-data zoals De Fathomwacht ze schrijft, met transcript.json in de vorm van Fathom. afdeling: ook
+    herkenning.afdeling in gesprek.json (RZ3-01)."""
     m = os.path.join(data, "fathom-data", naam)
     os.makedirs(m, exist_ok=True)
     with open(os.path.join(m, "transcript.json"), "w", encoding="utf-8") as f:
@@ -393,6 +394,8 @@ def fathom_map(data, naam, start="2026-10-21T08:00:00Z", email=WERK_ADRES, prive
     if gesprek_json is True:
         g = {"recording_id": 1, "recording_start_time": start, "recorded_by": {"name": "Mehdi", "email": email},
              "share_url": "https://fathom.video/share/GEHEIM", "herkenning": {"prive": prive}}
+        if afdeling is not None:
+            g["herkenning"]["afdeling"] = afdeling
         if label:
             g["archivaris"] = {"label": label}
         with open(os.path.join(m, "gesprek.json"), "w", encoding="utf-8") as f:
@@ -609,6 +612,63 @@ def test_t40_bas02_privé_geldt_voor_de_hele_sessie():
         with vervang((B, "db_lees", sessies_weg)):
             weg = R.gesprekken_lees("2026-10-21", "2026-10-21")
         assert "onbekend" in weg and "gesprekken" not in weg, "privé van de sessie onbekend: onbekend, nooit zonder privé"
+
+
+def test_rz3_01_afdeling_prive_is_prive_bij_de_regisseur():
+    """RZ3-01 (tegenproef op de herstelcontrole, 22-10-2026): de dossierbeslissing noemt een gesprek met afdeling prive
+    privé, ook bij prive=false. De Fathomwacht en De Plaudwacht schrijven sindsdien prive 1, maar bestaande rijen in de
+    gesprekkentabel blijven op prive 0 staan (Plaud stuurt ze nooit opnieuw, Fathom alleen 14 dagen). De Regisseur las
+    alleen de kolom prive, en gaf zo personen en thema aan zijn model (M3). Nu is afdeling prive (in elke schrijfwijze)
+    ook privé: in de tool gesprekken, voor de hele sessie (M1), in transcript_lees (rij en gesprek.json), in de telling
+    van het ochtendbericht en voor de titel van een klaargezet item met inhoud.afdeling prive."""
+    with Wereld("rz3-01", datetime(2026, 10, 22, 7, 30, tzinfo=UTC)) as w:
+        w.gesprek("fathom:71", "2026-10-21", "10:00", afdeling="prive", personen="Proefpersoon Zeta",
+                  thema="Proefonderwerp Omega", archief=fathom_map(w.data, "a", afdeling="prive"))
+        w.gesprek("fathom:72", "2026-10-21", "11:00", afdeling=" Privé ", personen="Proefpersoon Zeta",
+                  thema="Proefonderwerp Omega", sessie="zoom:meeting:q")
+        w.gesprek("zoom:meeting:q", "2026-10-21", "11:00", bron="zoom", sessie="zoom:meeting:q", dubbel_van="fathom:72")
+        w.gesprek("fathom:73", "2026-10-21", "12:00", afdeling="h-architects", personen="Jan Werf", thema="werf")
+        uit = R.gesprekken_lees("2026-10-21", "2026-10-21")
+        assert uit["gesprekken"] == [
+            {"datum": "2026-10-21", "start": "10:00", "minuten": 30, "bron": "fathom", "prive": True},
+            {"datum": "2026-10-21", "start": "11:00", "minuten": 30, "bron": "fathom", "prive": True},
+            {"uniek": "fathom:73", "datum": "2026-10-21", "start": "12:00", "minuten": 30, "personen": "Jan Werf", "thema": "werf",
+             "bron": "fathom", "prive": False, "tekst": False}], uit["gesprekken"]
+        tekst = json.dumps(uit, ensure_ascii=False)
+        assert "Zeta" not in tekst and "Omega" not in tekst, tekst
+        zeta = R.gesprekken_lees("2026-10-21", "2026-10-21", persoon="zeta")
+        assert zeta["gesprekken"] == [] and zeta["prive_in_deze_periode"] == 2, zeta
+        # de sessie: de Zoom-rij is niet privé, de Fathom-rij van dezelfde sessie wel (afdeling): de hele sessie is privé
+        assert "zoom:meeting:q" in R._prive_sessies({"zoom:meeting:q"})
+        # transcript_lees: op de rij, op gesprek.json, en op elk van beide alleen
+        w.gesprek("fathom:74", "2026-10-21", "13:00", opgenomen_door="Mehdi", archief=fathom_map(w.data, "b", afdeling="Prive"))
+        w.gesprek("fathom:77", "2026-10-21", "13:30", opgenomen_door="Mehdi", afdeling="PRIVE", archief=fathom_map(w.data, "c"))
+        w.gesprek("fathom:78", "2026-10-21", "14:00", opgenomen_door="Mehdi", afdeling="h-architects", archief=fathom_map(w.data, "d"))
+        for uniek, kenmerk in (("fathom:71", "rij en gesprek.json"), ("fathom:74", "alleen gesprek.json"), ("fathom:77", "alleen de rij")):
+            uit = R.transcript_lees(uniek, "werf")
+            assert uit.get("prive") is True and "uitingen" not in uit, (kenmerk, uit)
+        assert R.transcript_lees("fathom:78", "werf").get("treffers") == 1, "een zakelijk gesprek blijft leesbaar"
+        # de Zoom-chats: alleen een aantal, en een chat met afdeling prive telt als privé
+        w.gesprek("zoom:chat:9", "2026-10-21", "08:00", bron="zoom", afdeling="prive")
+        assert R.gesprekken_lees("2026-10-21", "2026-10-21")["chats"] == {"aantal": 1, "prive": 1}
+        # een klaargezet item met inhoud.afdeling prive en prive false: titel '(privé)'
+        w.item("fathom-wacht", "dagbundelaar", "verslag", "2026-10-21 10:00 Fathom: Proefpersoon Zeta, Proefonderwerp Omega",
+               {"prive": False, "afdeling": "prive", "thema": "Proefonderwerp Omega"})
+        items = R.klaargezet_lees("fathom-wacht")["items"]
+        assert [it["titel"] for it in items] == ["(privé)"] and "inhoud" not in items[0], items
+        # een bundel van voor de herstelling noemt dat item bij zijn titel, zonder PRIVÉ: die regel wordt '(privé)', zoals
+        # in de export (bord_export.prive_kenmerken); een gewone regel blijft staan
+        w.item("dagbundelaar", "mehdi", "dagbundel", "Bundel 2026-10-21",
+               "Bundel 2026-10-21\n- verslag: 2026-10-21 10:00 Fathom: Proefpersoon Zeta, Proefonderwerp Omega\n- verslag: werf")
+        bundel = R.klaargezet_lees("dagbundelaar", soort="dagbundel")["items"]
+        assert bundel[0]["inhoud"] == "Bundel 2026-10-21\n(privé)\n- verslag: werf", bundel
+    with Wereld("rz3-01-ochtend", GOUD_NU) as w:
+        w.keten("2026-10-22T07:00:05+00:00")
+        w.status("dagbundelaar", "klaar", "2026-10-22T07:20:00+00:00")
+        w.item("dagbundelaar", "mehdi", "dagbundel", "Dagverslag 2026-10-21", "Dagverslag.", uniek="dagverslag:2026-10-21")
+        w.gesprek("fathom:75", "2026-10-21", "14:00", afdeling="prive", personen="Proefpersoon Zeta", thema="Proefonderwerp Omega")
+        w.gesprek("fathom:76", "2026-10-21", "15:00", personen="Jan Proef", thema="werf")
+        assert R.ochtend_bronnen(GOUD_NU)["gesprekken"]["fathom"] == {"tellend": 2, "prive": 1, "zonder_transcript": 2}
 
 
 # ------------------------------------------------------------------------------------------------- T41 ---

@@ -3,8 +3,9 @@
 zegt per bundel bij welk dossier het hoort, en geeft het door.
 
 Elke werkdag om 07:05 UTC (voor gisteren), na de gesprekkenketen: de cron start me binnen
-/tmp/gesprekken.lock (planning/gesprekken.cron); krijg ik het slot niet binnen 60 minuten, dan
-start ik niet en staat dat in dagbundelaar.log (RZ2-03). Op verzoek (--dag JJJJ-MM-DD):
+/tmp/gesprekken.lock (planning/gesprekken.cron); krijg ik het slot niet binnen 90 minuten, dan
+start ik niet en staat dat in dagbundelaar.log (RZ2-03). 90 minuten is langer dan de keten kan duren (RZ3-03, tot
+22-10-2026 was het 60; tests/test_keten.py rekent het na). Op verzoek (--dag JJJJ-MM-DD):
   1. alles wat klaargezet is met gisteren als dag: afspraken, transcripten, opnames,
      later ook locatie en foto's;
   2. per dossier (deal) één bundel: wat er gebeurde, welke bronnen erbij horen,
@@ -23,8 +24,9 @@ De Zoom-dagregel en het lek naar de afdeling (ontwerp regie-zoom v1.2, Z14 en J1
   - een sleutel is alleen een dossier als hij niet leeg is en geen datum (JJJJ-MM-DD);
     een item voor mehdi gaat in een bundel voor mehdi (uniek bundel:<dag>:<sleutel>:mehdi),
     zodat een bundel voor h-architects nooit een item voor Mehdi of zonder dossier bevat.
-Van een privé-item (inhoud.prive, of PRIVÉ in de titel) zet ik alleen "privégesprek, N min" in de
-bundel, het Dagverslag en mijn werkverslag (RZ2-01).
+Van een privé-item (inhoud.prive, PRIVÉ in de titel, of inhoud.afdeling prive: RZ3-01) zet ik alleen
+"privégesprek, N min" in de bundel, het Dagverslag en mijn werkverslag (RZ2-01), zonder verwijzing, en nooit in een
+bundel voor een afdeling.
 """
 import json
 import os
@@ -60,7 +62,11 @@ def main():
                 return False
 
         def prive(it):
-            return bool((it.get("_d") or {}).get("prive")) or "PRIVÉ" in (it.get("titel") or "")
+            # RZ3-01: ook afdeling prive is privé, zoals de dossierbeslissing (plaud/dossier.py) het zegt, ook bij
+            # prive=false; zo'n item van voor 22-10-2026 droeg naam en onderwerp in titel en verwijzing, zonder PRIVÉ
+            d = it.get("_d") or {}
+            return (bool(d.get("prive")) or "PRIVÉ" in (it.get("titel") or "")
+                    or str(d.get("afdeling") or "").strip().lower() in ("prive", "privé"))
 
         def naam_van(it):
             """RZ2-01: van een privé-item alleen 'privégesprek, N min', in de bundel, het Dagverslag en het werkverslag; met
@@ -112,7 +118,8 @@ def main():
         for it in van_dag:
             sleutel = (it.get("sleutel") or "").strip()
             dossier = sleutel if sleutel and not is_datum(sleutel) else "(zonder dossier)"
-            per_deal[(dossier, dossier != "(zonder dossier)" and it.get("voor") == "mehdi")].append(it)
+            # RZ3-01: een privé-item gaat nooit in een bundel voor een afdeling, ook niet als het voor een afdeling klaarstond
+            per_deal[(dossier, dossier != "(zonder dossier)" and (it.get("voor") == "mehdi" or prive(it)))].append(it)
         bundels, vragen = [], []
         for (sleutel, voor_mehdi), lijst in per_deal.items():
             soorten = defaultdict(int)

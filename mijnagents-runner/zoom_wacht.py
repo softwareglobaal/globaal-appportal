@@ -524,7 +524,9 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
 def opname_uit(g, map_=""):
     """Een opname van Fathom: recording_id, het meetingnummer uit meeting_url (geen Zoom-link: geen nummer), begin en
     einde, of ze van Mehdi's eigen account is (exact adres uit fathom.MEHDI_FATHOM_ADRESSEN), en de privévlag van De
-    Fathomwacht (onbekend telt als privé)."""
+    Fathomwacht (onbekend telt als privé). RZ3-01: ook afdeling prive in de herkenning is privé, met de regel van De
+    Fathomwacht (fw.is_prive), ook bij prive=false; tot 22-10-2026 las ik alleen herkenning.prive, en dan kwamen naam en
+    onderwerp van zo'n gesprek in de dagregel (inhoud.werk) en in de export."""
     rid = str(g.get("recording_id") or "")
     start, einde = tijd(g.get("recording_start_time")), tijd(g.get("recording_end_time"))
     if not rid or not start or not einde:
@@ -536,7 +538,7 @@ def opname_uit(g, map_=""):
     # EIGEN-3: alleen op een exact adres. Een deelstuk ('h-architects', 'mch@') maakte de opname van een collega eigen.
     return {"rid": rid, "uniek": f"fathom:{rid}", "nummer": m.group(1) if m else "", "start": start, "einde": einde,
             "eigen": email in fathom.MEHDI_FATHOM_ADRESSEN,
-            "prive": herk.get("prive") is not False, "thema": str(herk.get("thema") or "")[:80],
+            "prive": herk.get("prive") is not False or fw.is_prive(herk), "thema": str(herk.get("thema") or "")[:80],
             "map": map_, "archief": bool(map_)}
 
 

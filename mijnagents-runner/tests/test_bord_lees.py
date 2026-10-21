@@ -816,6 +816,97 @@ def test_rz2_01_oude_bundels_en_werkverslagregels_lekken_niet_in_de_export():
     assert "Jan Klant | regie | Dakkapel nakijken" in fathom and "2 gesprekken sinds" in fathom, fathom
 
 
+# ------------------------------------------------------------------------------------------------- RZ3-01 ---
+def test_rz3_01_afdeling_prive_is_prive_over_de_hele_route():
+    """RZ3-01 (herstelcontrole van Codex, besluit van de regie 22-10-2026: de veilige kant). De dossierbeslissing
+    (plaud/dossier.py:113) noemt een gesprek met afdeling prive privé, ook als de herkenning prive=false zegt. De
+    Fathomwacht gebruikte voor klaarzet, titel, verwijzing en werkverslag alleen het veld prive, zodat naam en onderwerp
+    in de bundel, het Dagverslag en de export kwamen. Nu is zo'n gesprek privé aan de bron, ook in de gesprekkentabel.
+    De Dagbundelaar en de export behandelen een item met inhoud.afdeling prive ook als privé: zo lekt ook niet wat van
+    voor de herstelling nog op het bord en in het venster van de export staat (een item van De Fathomwacht en van De
+    Plaudwacht, een bundel en een Dagverslag die zo'n item bij zijn titel noemen, een bevinding in de oude vorm met
+    ' · prive · '). Een werkgesprek blijft zoals het was."""
+    prive = gesprek(7301, "2026-10-20T18:00:00Z", "2026-10-20T18:40:00Z", titel="Avond met Proefpersoon Zeta")
+    werk = gesprek(7302, "2026-10-20T08:00:00Z", "2026-10-20T08:30:00Z", titel="Werfoverleg")
+    gezet, scherm, _ = fathom_ronde(BordNabootsing(werkwijze=WW_FATHOM), [
+        (prive, herkenning(["Proefpersoon Zeta", "Mehdi"], "Proefonderwerp Omega bespreken", prive=False, afdeling="prive",
+                           waarom="Proefpersoon Zeta en Mehdi over het Proefonderwerp Omega")),
+        (werk, herkenning(["Jan Klant"], "Dakkapel nakijken"))])
+    archief = os.path.dirname(gezet["/api/gesprekken"][0]["rijen"][0]["archief"])
+    rijen = {r["uniek"]: r["prive"] for r in gezet["/api/gesprekken"][0]["rijen"]}
+    assert rijen == {"fathom:7301": True, "fathom:7302": False}, rijen
+
+    # de bron: het item zoals elk privé-item, het werkverslag zonder naam of onderwerp
+    items = {it["uniek"]: it for it in gezet["/api/klaarzet"][0]["items"]}
+    p = items["fathom:7301"]
+    verwijzing = os.path.join(archief, "2026-10-20 2000 (privé) [7301]")
+    assert p["titel"] == "2026-10-20T20:00 Fathom: privégesprek, 40 min · PRIVÉ", p["titel"]
+    assert p["inhoud"] == {"datum": "2026-10-20", "start": "20:00", "minuten": 40, "prive": True, "archief": verwijzing}, p["inhoud"]
+    assert p["verwijzing"] == verwijzing and p["voor"] == "mehdi", p
+    assert items["fathom:7302"]["titel"] == "2026-10-20T10:00 Fathom: Jan Klant · Dakkapel nakijken", items["fathom:7302"]
+    regels = [r for lijst in gezet.get("/api/logboek", []) for r in lijst["regels"]]
+    assert any(r["stap"] == "bevinding" and r["tekst"].startswith("privégesprek · 40 min") and not r["detail"] for r in regels), regels
+    bron = [r for r in regels if r["stap"] == "bron"]
+    assert len(bron) == 1 and bron[0]["detail"].count("(privé)") == 1 and "Jan Klant" in bron[0]["detail"], bron
+
+    # van voor de herstelling, nog op het bord: afdeling prive, prive=false, naam en onderwerp in titel, inhoud en verwijzing
+    oud_titel = "2026-10-20T21:00 Fathom: Proefpersoon Zeta · Proefonderwerp Omega regelen"
+    oud_kaart = "/home/ubuntu/appportal/mijnagents-data/fathom-data/2026-10-20 2100 Avond met Proefpersoon Zeta"
+    oud_fathom = {"id": 1, "van": "fathom-wacht", "voor": "mehdi", "soort": "transcript", "sleutel": "", "status": "klaar",
+                  "titel": oud_titel, "uniek": "fathom:7300", "verwijzing": oud_kaart,
+                  "inhoud": json.dumps({"uniek": "fathom:7300", "datum": DAG_RZ2, "start": "21:00", "minuten": 25,
+                                        "personen": "Proefpersoon Zeta, Mehdi", "afdeling": "prive", "thema": "Proefonderwerp Omega regelen",
+                                        "prive": False, "waarom": "Proefpersoon Zeta over het Proefonderwerp Omega"}, ensure_ascii=False)}
+    oud_plaud = {"id": 2, "van": "plaud-wacht", "voor": "mehdi", "soort": "transcript", "sleutel": "", "status": "klaar",
+                 "titel": "2026-10-20 22:00 Plaud: Proefpersoon Zeta · Proefonderwerp Omega", "uniek": "plaud:of_rz3",
+                 "verwijzing": "Data uit Mehdi/Plaud/2026-10-20 2200 Proefpersoon Zeta/transcript.md",
+                 "inhoud": json.dumps({"plaud_id": "of_rz3", "datum": DAG_RZ2, "start": "22:00", "afdeling": "Prive", "prive": False,
+                                       "personen": ["Proefpersoon Zeta"], "thema": "Proefonderwerp Omega"}, ensure_ascii=False)}
+    bak = [oud_fathom, oud_plaud] + [dict(it, id=i, status="klaar", inhoud=json.dumps(it["inhoud"], ensure_ascii=False))
+                                     for i, it in enumerate(gezet["/api/klaarzet"][0]["items"], start=3)]
+    bundel, bundel_scherm = dagbundel_ronde(bak, DAG_RZ2)
+    bundels = {b["uniek"]: b for b in bundel["/api/klaarzet"][0]["items"]}
+    verslag = bundels[f"dagverslag:{DAG_RZ2}"]["inhoud"]
+    for regel in ("- transcript: privégesprek, 40 min", "- transcript: privégesprek, 25 min", "- transcript: privégesprek, duur onbekend"):
+        assert regel in verslag, (regel, verslag)
+    assert "Jan Klant" in verslag, "een werkgesprek staat er zoals voordien in"
+    bundellog = bundel["/api/logboek"][0]["regels"]
+
+    # een bundel, een Dagverslag en werkverslagregels van voor de herstelling (19-10), nog in het venster van de export
+    oud_bundel = (f"Dossier (zonder dossier) op 2026-10-19: 2 transcript\n- transcript: {oud_titel} ({oud_kaart})\n"
+                  "- transcript: 2026-10-19T10:00 Fathom: Jan Klant · Dakkapel nakijken\nOntbreekt: bronnen zonder dossier: Mehdi wijst ze toe")
+    oud_verslag = (f"Dagverslag 2026-10-19: 2 bronnen in 1 bundel(s).\nZoom: dagregel ontbreekt (Zoomwacht niet klaar)\n"
+                   f"Toe te wijzen: {oud_titel}; 2026-10-19T10:00 Fathom: Jan Klant · Dakkapel nakijken\n\n{oud_bundel}")
+    oude_bundels = [{"van": "dagbundelaar", "voor": "mehdi", "soort": "dagbundel", "sleutel": "2026-10-19", "uniek": "bundel:2026-10-19:(zonder dossier)",
+                     "titel": "Bundel 2026-10-19 · (zonder dossier)", "inhoud": oud_bundel},
+                    {"van": "dagbundelaar", "voor": "mehdi", "soort": "dagbundel", "sleutel": "2026-10-19", "uniek": "dagverslag:2026-10-19",
+                     "titel": "Dagverslag 2026-10-19", "inhoud": oud_verslag}]
+    oude_regels = [{"naam": "dagbundelaar", "onderwerp": "dag 2026-10-19", "stap": "bevinding",
+                    "tekst": "2 klaargezette bronnen, 1 bundel(s), 2 toe te wijzen; Zoom-dagregel ontbreekt, 0 nagekomen of herzien",
+                    "detail": oud_verslag},
+                   {"naam": "fathom-wacht", "onderwerp": "gesprek 2026-10-19T21:00", "stap": "bevinding",
+                    "tekst": "Proefpersoon Zeta · prive · Proefonderwerp Omega regelen · zekerheid hoog",
+                    "detail": "Proefpersoon Zeta over het Proefonderwerp Omega"}]
+
+    gelezen = export(export_db("rz3-01"), [oud_fathom, oud_plaud] + [dict(it, van="fathom-wacht") for it in items.values()]
+                     + [dict(b, van="dagbundelaar") for b in bundels.values()] + oude_bundels,
+                     regels + bundellog + oude_regels)
+    deel = lambda *paden: "".join(t for pad, t in gelezen.items() if pad.startswith(os.path.join("export", *paden)))  # noqa: E731
+    assert deel("Fathom", "klaargezet").count("): (privé)") == 2 and "Jan Klant · Dakkapel nakijken" in deel("Fathom", "klaargezet")
+    assert deel("Plaud", "klaargezet").count("): (privé)") == 1, deel("Plaud", "klaargezet")
+    assert "(privé)" in deel("Dagbundelaar", "klaargezet") and "Jan Klant · Dakkapel nakijken" in deel("Dagbundelaar", "klaargezet")
+    assert "(privé)" in deel("Dagbundelaar", "werkverslag") and "2 klaargezette bronnen" in deel("Dagbundelaar", "werkverslag")
+    assert "Jan Klant · regie · Dakkapel nakijken" in deel("Fathom", "werkverslag"), "een werkgesprek blijft in het werkverslag"
+
+    nagaan = {f"fathom {pad}": json.dumps(lijst, ensure_ascii=False) for pad, lijst in gezet.items() if pad != "/api/gesprekken"}
+    nagaan.update({f"dagbundelaar {pad}": json.dumps(lijst, ensure_ascii=False) for pad, lijst in bundel.items()})
+    nagaan.update({"fathom scherm": scherm, "dagbundelaar scherm": bundel_scherm})
+    nagaan.update({f"export {pad}": t for pad, t in gelezen.items()})
+    for waar, tekst in nagaan.items():
+        for geheim in GEHEIM:
+            assert geheim not in tekst, f"{geheim!r} staat in {waar}: {tekst[:2000]}"
+
+
 if __name__ == "__main__":
     import traceback
     goed = fout = 0

@@ -14,8 +14,11 @@ werkdagen 'gisteren' bundelt. Deze test legt vast:
 - RZ2-01 (bouwcontrole RZ2): van een privé-item staat alleen "privégesprek, N min" in de bundel, het Dagverslag en het
   werkverslag, ook voor een item van voor 21-10-2026 met naam en onderwerp in de titel (de hele keten met De
   Fathomwacht en de export: test_bord_lees.py);
-- RZ2-03: De Dagbundelaar draait binnen het slot van de gesprekkenketen; krijgt hij het slot niet binnen 60 minuten,
-  dan start hij niet en staat dat in zijn logboek. Het zetscript zet die regel, ook over het oude blok heen.
+- RZ2-03: De Dagbundelaar draait binnen het slot van de gesprekkenketen; krijgt hij het slot niet binnen 90 minuten
+  (RZ3-03, tot 22-10-2026 60), dan start hij niet en staat dat in zijn logboek. Het zetscript zet die regel, ook over
+  het oude blok heen;
+- RZ3-01: een item met inhoud.afdeling prive is privé, ook bij prive=false;
+- RZ3-02: het zetscript aanvaardt alleen precies de drie oude regels of het beheerde blok; elke andere vorm weigert het.
 
 Geen netwerk: het bord is nagebootst (bord.call, bord.opgepakt) en de agent vangt zijn klaarzet en hartslag op. De
 cronregel draait met /bin/sh, met een nagebootste flock en python.
@@ -184,6 +187,31 @@ def test_rz2_01_oud_prive_item_zonder_dossier():
     assert sorted(nb.opgepakt) == [3, 31, 32], "ook een privé-item is verwerkt"
 
 
+def test_rz3_01_afdeling_prive_is_prive():
+    """RZ3-01 (besluit van de regie, 22-10-2026: de veilige kant): de dossierbeslissing noemt een gesprek met afdeling
+    prive privé, ook bij prive=false. Een item van voor de herstelling met die inhoud droeg naam en onderwerp in titel en
+    verwijzing, zonder PRIVÉ en zonder prive=true, en kwam zo voluit in de bundel en het Dagverslag. Nu is het voor De
+    Dagbundelaar privé (ook met een hoofdletter): 'privégesprek, N min', geen verwijzing, en nooit in een bundel voor een
+    afdeling, ook niet als het item voor een afdeling klaarstond. De hele route met De Fathomwacht en de export:
+    test_bord_lees.py; met De Plaudwacht: test_plaud_wacht.py."""
+    fathom = item(41, "fathom-wacht", "mehdi", "transcript", "2026-10-20T21:00 Fathom: Proefpersoon Zeta · Proefonderwerp Omega",
+                  sleutel="2531", uniek="fathom:41",
+                  inhoud={"datum": DAG, "start": "21:00", "minuten": 25, "afdeling": "prive", "prive": False, "personen": "Proefpersoon Zeta"})
+    fathom["verwijzing"] = "/home/ubuntu/appportal/mijnagents-data/fathom-data/2026-10-20 2100 Avond met Proefpersoon Zeta"
+    plaud = item(42, "plaud-wacht", "h-architects", "transcript", "2026-10-20 22:00 Plaud: Proefpersoon Zeta · Proefonderwerp Omega",
+                 sleutel="2531", uniek="plaud:42", inhoud={"datum": DAG, "start": "22:00", "afdeling": "Prive", "prive": False})
+    nb = bundelen(DAG, NepBord([fathom, plaud, WERK]))
+    per_uniek = {b["uniek"]: b for b in nb.bundels}
+    assert [b["uniek"] for b in nb.bundels if b["voor"] == "h-architects"] == [f"bundel:{DAG}:2531"], [b["uniek"] for b in nb.bundels]
+    afdeling = per_uniek[f"bundel:{DAG}:2531"]["inhoud"]
+    assert WERK["titel"] in afdeling and "privégesprek" not in afdeling and "Proefpersoon" not in afdeling, afdeling
+    voor_mehdi = per_uniek[f"bundel:{DAG}:2531:mehdi"]["inhoud"]
+    assert "- transcript: privégesprek, 25 min" in voor_mehdi and "- transcript: privégesprek, duur onbekend" in voor_mehdi, voor_mehdi
+    for tekst in [json.dumps(b, ensure_ascii=False) for b in nb.bundels] + [json.dumps(a, ensure_ascii=False) for a in nb.logs]:
+        assert "Zeta" not in tekst and "Omega" not in tekst and "Avond met" not in tekst, tekst
+    assert sorted(nb.opgepakt) == [3, 41, 42], nb.opgepakt
+
+
 # ------------------------------------------------------------------------------------------------- RZ2-03 ---
 PLANNING = os.path.join(RUNNER, "planning")
 VM = {"flock": "/usr/bin/flock", "python": "/home/ubuntu/agents/.venv/bin/python", "slot": "/tmp/gesprekken.lock",
@@ -244,9 +272,11 @@ def cron_draaien(proef, exit_python=0):
 def test_rz2_03_dagbundelaar_draait_binnen_het_slot():
     """RZ2-03 (bouwcontrole RZ2, 21-10-2026): de regel was 'flock -w 3600 /tmp/gesprekken.lock /bin/true; python
     dagbundelaar.py'. Het slot ging na /bin/true weer open, en na een wachttime-out startte De Dagbundelaar toch, terwijl
-    de keten nog liep. Nu draait hij binnen het slot; bij een time-out start hij niet en staat dat in dagbundelaar.log."""
+    de keten nog liep. Nu draait hij binnen het slot; bij een time-out start hij niet en staat dat in dagbundelaar.log.
+    RZ3-03: hij wacht 5400 seconden, langer dan de keten kan duren (test_keten.py rekent het na)."""
     regel = cronregel("dagbundelaar.py")
-    assert regel.startswith("5 7 * * 1-5 /usr/bin/flock -w 3600 ") and "/bin/true" not in regel, regel
+    assert regel.startswith("5 7 * * 1-5 /usr/bin/flock -w 5400 ") and "/bin/true" not in regel, regel
+    assert "na 5400 s niet vrij" in regel, "de melding in het logboek noemt dezelfde wachttijd"
     spoor, log = cron_draaien("vrij")
     assert spoor == ["slot genomen: vrij", "python /runner/dagbundelaar.py", "slot vrij"], spoor
     assert "niet gestart" not in log, log
@@ -283,6 +313,136 @@ def test_rz2_03_zetscript_zet_de_nieuwe_regel():
         assert bundel == [cronregel("dagbundelaar.py")], bundel
         assert not any("/bin/true" in r for r in doel) and doel.count(M.BEGIN) == 1, doel
         assert "MAILTO=''" in doel and M.samenvoegen(doel, cron) == (doel, 0), "twee keer samenvoegen geeft hetzelfde"
+
+
+def _zetscript():
+    spec = importlib.util.spec_from_file_location("gesprekken_cron_zetten", os.path.join(PLANNING, "gesprekken_cron_zetten.py"))
+    M = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(M)
+    return M
+
+
+def test_rz3_02_zetscript_weigert_elke_andere_vorm():
+    """RZ3-02 (herstelcontrole van Codex, 22-10-2026): het zetscript eiste niet dat het precies de drie oude regels
+    vervangt. Twee van de drie, een dubbele, of het blok met daarnaast nog een oude regel werden stil aanvaard, en dan
+    liep er na --zet nog een losse ronde naast de keten, of ontbrak er een. Nu aanvaardt het alleen precies de drie
+    verwachte oude regels (De Fathomwacht om 7 en 13, De Zoomwacht om 7:15 en 13:15, De Dagbundelaar om 7:00 op werkdagen),
+    of al het beheerde blok zonder oude regels. Elke andere vorm weigert het, met de gevonden regels van de
+    gesprekkenrunners in de melding; andere regels (die geheimen kunnen dragen) noemt het nooit."""
+    M = _zetscript()
+    cron = open(os.path.join(PLANNING, "gesprekken.cron"), encoding="utf-8").read().splitlines()
+    py, rn, lg = VM["python"], VM["runner"].rstrip("/"), VM["logmap"].rstrip("/")
+    bode = f"* * * * * GEHEIM_PROEF=x {py} {rn}/bode.py >> {lg}/bode.log 2>&1"
+    los = [f"0 7 * * 1-5 {py} {rn}/dagbundelaar.py >> {lg}/dagbundelaar.log 2>&1",
+           f"0 7,13 * * * {py} {rn}/fathom_wacht.py >> {lg}/fathom_wacht.log 2>&1",
+           f"15 7,13 * * * {py} {rn}/zoom_wacht.py >> {lg}/zoom_wacht.log 2>&1"]
+    # tegenproef van 22-10-2026: een runnerregel met een toewijzing (een sleutel in de omgeving) kwam voluit in de melding
+    met_sleutel = f"0 7,13 * * * GEHEIM_PROEF=x FATHOM_TOKEN='a b' {py} {rn}/fathom_wacht.py >> {lg}/fathom_wacht.log 2>&1"
+    doel, oud = M.samenvoegen(["MAILTO=''", bode] + los, cron)
+    assert oud == 3 and M.samenvoegen(doel, cron) == (doel, 0), "precies de drie oude regels, daarna het blok"
+    blok = doel[doel.index(M.BEGIN):doel.index(M.EINDE) + 1]
+    gevallen = {
+        "twee van de drie": ["MAILTO=''", bode] + los[1:],
+        "een van de drie": ["MAILTO=''", bode, los[1]],
+        "een dubbele": ["MAILTO=''", bode] + los + [los[2]],
+        "geen enkele en geen blok": ["MAILTO=''", bode],
+        "het blok en nog een oude regel": doel + [los[1]],
+        "twee blokken": doel + [""] + blok,
+        "een andere tijd": ["MAILTO=''", bode, los[0], los[1], los[2].replace("15 7,13", "20 7,13")],
+        "met timeout": ["MAILTO=''", bode, los[0], f"0 7,13 * * * /usr/bin/timeout 2700 {py} {rn}/fathom_wacht.py", los[2]],
+        "met een sleutel in de regel": ["MAILTO=''", bode, los[0], met_sleutel, los[2]],
+    }
+    for naam, huidig in gevallen.items():
+        try:
+            M.samenvoegen(huidig, cron)
+        except ValueError as e:
+            melding = str(e)
+        else:
+            raise AssertionError(f"{naam}: aanvaard")
+        eigen = [r.strip() for r in huidig if r.strip() and not r.lstrip().startswith("#")
+                 and any(f"mijnagents-runner/{x}" in r for x in M.RUNNERS)]
+        for r in eigen:
+            r = r.replace("GEHEIM_PROEF=x FATHOM_TOKEN='a b'", "<waarde> <waarde>")
+            assert r in melding, (naam, r, melding)
+        assert "GEHEIM_PROEF" not in melding and "bode.py" not in melding and "MAILTO" not in melding, (naam, melding)
+        assert "FATHOM_TOKEN" not in melding and "a b'" not in melding, (naam, melding)
+        if not eigen:
+            assert "Gevonden regels: geen" in melding, (naam, melding)
+
+
+# Een nagebootste crontab: -l leest het bestand CRON_PROEF ("no crontab" als het er niet is), - schrijft het.
+NEP_CRONTAB = """#!/bin/sh
+if [ "$1" = "-l" ]; then
+  if [ -f "$CRON_PROEF" ]; then cat "$CRON_PROEF"; else echo "no crontab for proef" >&2; exit 1; fi
+else
+  cat > "$CRON_PROEF"
+fi
+"""
+
+
+def test_rz3_02_zetten_alleen_als_het_bord_herbouwd_is():
+    """RZ3-02, derde deel (tegenproef op de herstelcontrole, 22-10-2026): mislukt de build van het bord in deploy.sh, dan
+    blijft de oude bordcontainer draaien terwijl de runnercode al nieuw is, en .built houdt de vorige boom. Het zetscript
+    zette de nieuwe planning toch. Nu zet --zet alleen als ~/appportal/mijnagents-data/.built gelijk is aan
+    HEAD:mijnagents (zoals deploy.sh het schrijft); anders 'geweigerd: bord nog niet herbouwd', exit 2, en de crontab
+    blijft zoals ze was. Zonder --zet toont het de waarschuwing en zet het niets. Een echte git-boom in een tijdelijke map,
+    een nagebootste crontab; geen netwerk."""
+    M = _zetscript()
+    map_ = tempfile.mkdtemp(prefix="built-")
+    repo = os.path.join(map_, "appportal")
+    os.makedirs(os.path.join(repo, "mijnagents"))
+    with open(os.path.join(repo, "mijnagents", "app.py"), "w", encoding="utf-8") as f:
+        f.write("# proef\n")
+    git = ["git", "-C", repo, "-c", "user.name=Proefpersoon Zeta", "-c", "user.email=zeta@proef.test",
+           "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"]
+    subprocess.run(["git", "init", "-q", repo], check=True, capture_output=True)
+    subprocess.run(git + ["add", "-A"], check=True, capture_output=True)
+    subprocess.run(git + ["commit", "-qm", "proef"], check=True, capture_output=True)
+    boom = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD:mijnagents"], check=True, capture_output=True, text=True).stdout.strip()
+    built = os.path.join(repo, "mijnagents-data", ".built")
+    os.makedirs(os.path.dirname(built))
+    bin_ = os.path.join(map_, "bin")
+    os.makedirs(bin_)
+    with open(os.path.join(bin_, "crontab"), "w", encoding="utf-8") as f:
+        f.write(NEP_CRONTAB)
+    os.chmod(os.path.join(bin_, "crontab"), 0o755)
+    py, rn, lg = VM["python"], VM["runner"].rstrip("/"), VM["logmap"].rstrip("/")
+    los = [f"0 7 * * 1-5 {py} {rn}/dagbundelaar.py >> {lg}/dagbundelaar.log 2>&1",
+           f"0 7,13 * * * {py} {rn}/fathom_wacht.py >> {lg}/fathom_wacht.log 2>&1",
+           f"15 7,13 * * * {py} {rn}/zoom_wacht.py >> {lg}/zoom_wacht.log 2>&1"]
+    cron = os.path.join(map_, "crontab.txt")
+    oud_env = {k: os.environ.get(k) for k in ("PATH", "CRON_PROEF")}
+    os.environ["PATH"], os.environ["CRON_PROEF"] = bin_ + os.pathsep + os.environ.get("PATH", ""), cron
+    M.REPO, M.BUILT = repo, built
+    try:
+        for naam, gebouwd, argv, code in (("afwijkend, --zet", "ander\n", ["--zet"], 2), ("ontbreekt, --zet", None, ["--zet"], 2),
+                                          ("afwijkend, tonen", "ander\n", [], 0), ("gelijk, --zet", boom + "\n", ["--zet"], 0)):
+            with open(cron, "w", encoding="utf-8") as f:
+                f.write("MAILTO=''\n" + "\n".join(los) + "\n")
+            if gebouwd is None:
+                if os.path.exists(built):
+                    os.remove(built)
+            else:
+                with open(built, "w", encoding="utf-8") as f:
+                    f.write(gebouwd)
+            with redirect_stdout(io.StringIO()) as uit, redirect_stderr(io.StringIO()) as fout:
+                assert M.main(argv) == code, (naam, uit.getvalue(), fout.getvalue())
+            na = open(cron, encoding="utf-8").read()
+            if naam == "gelijk, --zet":
+                assert M.BEGIN in na and "fathom_wacht.py >>" not in na and "gezet en nagelezen" in uit.getvalue(), (naam, na)
+                assert "niet herbouwd" not in fout.getvalue(), fout.getvalue()
+            else:
+                assert M.BEGIN not in na and na.count("fathom_wacht.py") == 1, (naam, na)
+                assert "bord nog niet herbouwd" in fout.getvalue(), (naam, fout.getvalue())
+                if code == 2:
+                    assert "geweigerd: bord nog niet herbouwd" in fout.getvalue(), (naam, fout.getvalue())
+            assert boom not in uit.getvalue() + fout.getvalue(), "geen boom-hash op het scherm"
+    finally:
+        for k, v in oud_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def test_bron_houdt_de_bestaande_grendels():

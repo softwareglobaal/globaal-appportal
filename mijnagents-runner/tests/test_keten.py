@@ -10,7 +10,8 @@ geslaagde ochtendketen tellen. keten.json is het bewijs. Deze test legt vast:
 - atomisch schrijven: elke versie komt via een tijdelijk bestand en os.replace; tijdens een stap staat er een volledige
   versie met einde null en geslaagd false; er blijft geen tijdelijk bestand achter;
 - stopt iemand de keten zelf (SIGTERM), dan stopt de lopende stap mee en zegt keten.json: niet geslaagd;
-- RZ2-02: de echte fathom_wacht.py zonder Fathom-sleutel, of met een sleutel die faalt, maakt de keten niet geslaagd.
+- RZ2-02: de echte fathom_wacht.py zonder Fathom-sleutel, of met een sleutel die faalt, maakt de keten niet geslaagd;
+- RZ3-03: De Dagbundelaar wacht langer op het slot dan de langste keten plus tien minuten.
 
 Geen netwerk: de stappen zijn kleine nepscripts in een tijdelijke map. Voor RZ2-02 start het nepscript de echte
 fathom_wacht.py, met een bord dat alleen afdrukt en zonder echte .env-bestanden.
@@ -243,6 +244,27 @@ def test_rz2_02_fathom_niet_gelezen_is_geen_geslaagde_keten():
         assert k["stappen"]["fathom-wacht"]["exit"] != 0, (gedrag, k, log[-2000:])
         assert k["stappen"]["zoom-wacht"]["exit"] == 0, "Zoom werkte"
         assert code == 1 and k["geslaagd"] is False, (gedrag, k)
+
+
+def test_rz3_03_dagbundelaar_wacht_langer_dan_de_keten_duurt():
+    """RZ3-03 (herstelcontrole van Codex, 22-10-2026): de keten kan tot 3960 seconden duren (per stap zijn time-out plus
+    de nadruk van dertig seconden tussen SIGTERM en SIGKILL), maar De Dagbundelaar wachtte maar 3600 seconden op het slot.
+    In dat randgeval startte hij niet en ontbrak het dagverslag zonder inhaalronde. Nu wacht hij langer dan de langste
+    keten plus tien minuten. Beide getallen komen uit de bestanden zelf: de time-outs en de nadruk uit keten.py, de
+    wachttijd uit de regel van De Dagbundelaar in planning/gesprekken.cron (ook in zijn melding bij een time-out)."""
+    import re  # noqa: PLC0415
+    regels = [r for r in open(os.path.join(RUNNER, "planning", "gesprekken.cron"), encoding="utf-8").read().splitlines()
+              if r.strip() and not r.startswith("#") and "dagbundelaar.py" in r]
+    assert len(regels) == 1, regels
+    wachten = re.findall(r"flock -w (\d+) ", regels[0])
+    assert len(wachten) == 1, regels[0]
+    wacht = int(wachten[0])
+    langste_keten = sum(tijdslimiet for _, _, tijdslimiet, _ in K.STAPPEN) + len(K.STAPPEN) * K.NADRUK
+    assert wacht > langste_keten + 600, f"De Dagbundelaar wacht {wacht} s, de keten kan {langste_keten} s duren (plus 600 s marge)"
+    assert f"na {wacht} s niet vrij" in regels[0], "de melding bij een time-out noemt dezelfde wachttijd"
+    keten = [r for r in open(os.path.join(RUNNER, "planning", "gesprekken.cron"), encoding="utf-8").read().splitlines()
+             if r.strip() and not r.startswith("#") and "keten.py" in r]
+    assert len(keten) == 1 and "/tmp/gesprekken.lock" in keten[0] and "/tmp/gesprekken.lock" in regels[0], "hetzelfde slot"
 
 
 def test_bron():

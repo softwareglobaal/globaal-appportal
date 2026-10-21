@@ -337,9 +337,10 @@ class Wereld:
         return [dict(g) for g in self.api]
 
     def fathom_opname(self, rid, s=None, nummer=None, start=None, einde=None, eigen=True, prive=False, archief=True, api=True,
-                      rij=True, kapot=False, url=None):
+                      rij=True, kapot=False, url=None, herkenning=None):
         """Een opname van Fathom: in het archief (gesprek.json als laatste), in de API, en als rij in de gesprekkentabel
-        zoals De Fathomwacht ze schrijft. url: een andere meeting_url dan de Zoom-link met het nummer (BAS-03)."""
+        zoals De Fathomwacht ze schrijft. url: een andere meeting_url dan de Zoom-link met het nummer (BAS-03).
+        herkenning: de herkenning in gesprek.json, als ze anders is dan {prive, thema} (RZ3-01)."""
         start = start or (s["start"] + timedelta(seconds=40))
         einde = einde or (s["einde"] if s else start + timedelta(minutes=20))
         nummer = nummer or (s["nummer"] if s else PMI)
@@ -352,7 +353,8 @@ class Wereld:
             map_ = os.path.join(self.fathom, f"{start.astimezone(ZW.BE):%Y-%m-%d %H%M} Gesprek {rid}")
             os.makedirs(map_)
             with open(os.path.join(map_, "gesprek.json"), "w", encoding="utf-8") as f:
-                f.write('{"recording_id": ' if kapot else json.dumps(dict(g, herkenning={"prive": prive, "thema": "proefthema"})))
+                f.write('{"recording_id": ' if kapot else
+                        json.dumps(dict(g, herkenning=herkenning if herkenning is not None else {"prive": prive, "thema": "proefthema"})))
         if api:
             self.api.append(g)
         if rij:
@@ -744,6 +746,27 @@ def test_t24b_onderwerp_van_een_prive_meeting_niet_in_de_verwijzing():
     it = w.bord.item("zoom-tekst:z24")
     assert "Vermeulen" not in it["verwijzing"] and "(privé)" in it["verwijzing"], it["verwijzing"]
     assert it["verwijzing"].endswith(f"[{ZW.achtervoegsel('z24')}]")
+
+
+@bord_nodig
+def test_rz3_01_fathom_met_afdeling_prive_is_prive_in_de_dagregel():
+    """RZ3-01 (tegenproef op de herstelcontrole, 22-10-2026): De Fathomwacht bewaart in gesprek.json de ruwe herkenning,
+    en die kan prive=false zeggen met afdeling prive. De dossierbeslissing noemt zo'n gesprek privé, maar opname_uit las
+    alleen herkenning.prive: de Zoom-rij van die sessie bleef op prive 0, en de dagregel zette naam en onderwerp in
+    inhoud.werk, en daarmee in de export naar Data uit Mehdi. Ook voor elk bestaand archief. Nu telt afdeling prive (in
+    elke schrijfwijze) als privé, met dezelfde regel als De Fathomwacht (fathom_wacht.is_prive)."""
+    for afdeling in ("prive", " Privé "):
+        w = Wereld()
+        s = een_sessie(w)
+        w.fathom_opname("700", s, herkenning={"prive": False, "afdeling": afdeling, "thema": "Proefonderwerp Omega regelen"})
+        assert w.ronde(NU) is None
+        assert w.bord.rij("zoom:meeting:z24")["prive"] == 1, (afdeling, w.bord.rij("zoom:meeting:z24"))
+        _, inhoud = w.dagregel("2026-10-20")
+        assert inhoud["werk"] == [] and inhoud["gesprekken"] == 1, (afdeling, inhoud)
+        assert "Omega" not in w.alle_tekst() and "Ypsilon" not in json.dumps(inhoud, ensure_ascii=False), afdeling
+    assert ZW.opname_uit({"recording_id": 1, "recording_start_time": "2026-10-20T08:00:00Z",
+                          "recording_end_time": "2026-10-20T08:30:00Z",
+                          "herkenning": {"prive": False, "afdeling": "h-architects"}})["prive"] is False, "zakelijk blijft zakelijk"
 
 
 @bord_nodig
