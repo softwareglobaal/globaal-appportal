@@ -1,0 +1,24 @@
+**Niet klaar.** BU-10 en BU-12 zijn voor hun gemelde foutgeval hersteld. In BU-11 en BU-13 blijven vier punten van ernst middel open. Volgens werkafspraken v1.3 houden die de merge en de bewaakte uitrol tegen.
+
+1. **BU-14 — middel — [mijnagents/deploy.sh:102](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/deploy.sh:102), [mijnagents/deploy.sh:224](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/deploy.sh:224).** Tijdens afkoeling kan `bewaak` een extern gestarte image met het HEAD-label direct in `.built` zetten, zelfs als de daaropvolgende gezondheidsproef faalt. Daarna is `NIEUW=OUD` en verlaten ook latere rondes het uitrolpad. **Fix:** laat een afwijkend label `.built` niet als geslaagde uitrol markeren; eis eerst de volledige gezondheidscontrole en behandel een lopende afkoeling afzonderlijk. Test een ongezonde HEAD-image tijdens afkoeling.
+
+2. **BU-15 — middel — [mijnagents/deploy.sh:103](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/deploy.sh:103), [mijnagents/deploy.sh:226](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/deploy.sh:226).** Zet een beheerder bewust een oudere, ongelabelde image terug terwijl `.built=HEAD` en er geen `.mislukt` is, dan wordt `.built=onbekend` en rolt dezelfde cronronde HEAD opnieuw uit. Een functionele fout die `/gezondheid` niet ziet, keert zo terug. **Fix:** leg voor handmatige terugrol een pauzestand vast onder hetzelfde slot; hervat automatische uitrol pas na expliciete vrijgave. Test deze toestand.
+
+3. **BU-16 — middel — [mijnagents/deploy.sh:102](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/deploy.sh:102).** `bewaak` vergelijkt geen image-ID. Twee builds van dezelfde tree kunnen door de niet vastgepinde [basisimage](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/Dockerfile:1) en [afhankelijkheden](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/requirements.txt:1) verschillende inhoud en ID’s hebben, maar hetzelfde revisielabel. Wisselt de draaiende image naar het andere ID, dan blijft dat onopgemerkt. **Fix:** bewaar het na uitrol gecontroleerde ID samen met de revisie en vergelijk beide; test twee ID’s met hetzelfde label.
+
+4. **BU-17 — middel — [mijnagents/deploy.sh:322](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/deploy.sh:322), [mijnagents/deploy.sh:127](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/deploy.sh:127).** Mislukt de kopie terwijl het oude bord tijdens de bouw ongezond werd, dan kan `herstel` dat nog draaiende bord met `compose up --force-recreate` herstarten; `.herstel` blijft staan als herstel faalt. Zonder gezonde vorige image of `:vorige` blijft juist de nooit gestarte nieuwe image als `:latest` staan. **Fix:** bouw onder een kandidaattag en maak `:latest` pas na een geslaagde kopie actief. Raak bij een kopiefout de container niet aan; test beide foutpaden.
+
+5. **BU-18 — laag — [mijnagents/deploy.sh:314](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/deploy.sh:314), [mijnagents/deploy.sh:322](/Users/mehdichegini/dev/_bord-uitrol/mijnagents/deploy.sh:322).** Bij blijvend ruimtegebrek bouwt iedere cronronde opnieuw voordat de kopie dezelfde fout vaststelt. Er is geen strakke lus *binnen* één ronde, wel herhaald onnodig bouwwerk. **Fix:** controleer kopievoorwaarden vóór de bouw en geef kopiefouten een eigen wachttijd of hergebruik de gecontroleerde kandidaatimage; test twee opeenvolgende rondes.
+
+| Herstel | Oordeel |
+|---|---|
+| BU-10 | **Volstaat** voor de achtergebleven `.herstel`: `:latest` en een foutieve `.built` worden teruggezet. `onbekend` voor een ongelabelde oude image is juist; BU-15 betreft de daaropvolgende automatische actie. |
+| BU-11 | **Deels.** Een verschillend label wordt gezien, maar BU-14 tot BU-16 doorbreken de bedoelde bewaking. |
+| BU-12 | **Volstaat** voor een ontbrekende of lege databank: de kopie en `/gezondheid` eisen minstens één actieve agent. Dat bewijst niet dat alle verwachte agents aanwezig zijn; vergelijk hun aantal bij de eerste live controle ook met de kopie. |
+| BU-13 | **Deels.** De kopie staat nu na de bouw en vóór de start; het foutpad heeft BU-17 en BU-18. |
+
+**BU-9:** akkoord als afzonderlijke lage taak voor Mehdi. De bordmelding houdt op zichzelf de uitrol niet tegen.
+
+1. **Gedaan:** werkafspraken v1.3, beide ronde-2-rapporten, `git log`, `git status`, de diff en betrokken code en tests gelezen. HEAD is `88b0f5cef84e13b093d4d243e3f27ea5ef9a7ed2`. Geen bestanden gewijzigd, geen commit, SSH of netwerk naar `*.globaal.be`.
+2. **Nagekeken:** `git diff --check`, `dash -n` en Python-AST-controle slaagden. Ik telde 41 deploytests en zes CI-tests. De gemelde groene testuitvoering kon ik in de alleen-lezen-sandbox niet zelfstandig herhalen; de tests maken tijdelijke bestanden.
+3. **Open:** Claude kan BU-14 tot BU-17 herstellen en met gerichte regressietests nameten. Daarna is een nieuwe controle nodig vóór merge en bewaakte uitrol; BU-18 kan als lage vervolggreep mee.
