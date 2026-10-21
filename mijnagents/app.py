@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mijnagents — Mehdi's eigen agent-besturingscentrum (mijnagents.globaal.be).
+"""mijnagents: Mehdi's eigen agent-besturingscentrum (mijnagents.globaal.be).
 
 Bewust zelfstandig, naar het patroon van agents/ en siyanagents/: een eigen
 SQLite in het datavolume, forward-auth ervoor (nginx), en het gedeelde
@@ -172,7 +172,9 @@ def init_db():
             thema     TEXT DEFAULT '', project TEXT DEFAULT '', prive INTEGER DEFAULT 0,
             zekerheid TEXT DEFAULT '', waarom TEXT DEFAULT '', archief TEXT DEFAULT '',
             link      TEXT DEFAULT '', opgenomen_door TEXT DEFAULT '', bron TEXT DEFAULT 'fathom',
-            ts        TEXT NOT NULL
+            ts        TEXT NOT NULL,
+            sessie    TEXT DEFAULT '',    -- bij welk gesprek de rij hoort, bv. zoom:meeting:<uuid> (Z10)
+            dubbel_van TEXT DEFAULT ''    -- leeg: de rij telt; anders de uniek van de rij die telt, of buiten:<reden>
         );
         CREATE TABLE IF NOT EXISTS afdeling (
             naam         TEXT PRIMARY KEY,   -- sleutel, gelijk aan agent.type
@@ -237,7 +239,29 @@ def init_db():
         if kolom not in bestaand:
             conn.execute(f"ALTER TABLE agent ADD COLUMN {kolom} {definitie}")
     conn.commit()
+    _gesprek_log_kolommen(conn)
     conn.close()
+
+
+def _gesprek_log_kolommen(conn):
+    """Z10 (ontwerp regie-zoom v1.2): de koppelkolommen van de gesprekkentabel. Zonder koppeling telde de tabel elk
+    gesprek dat Zoom en Fathom allebei hebben twee keer. Twee gunicorn-werkers kunnen de oude tabel tegelijk zien:
+    onder een slot, en daarna de kolommen opnieuw lezen (J5, zoals _mail_tabellen). Verwacht geen open transactie."""
+    nieuw = (("sessie", "TEXT DEFAULT ''"), ("dubbel_van", "TEXT DEFAULT ''"))
+    kol = {r[1] for r in conn.execute("PRAGMA table_info(gesprek_log)").fetchall()}
+    if any(k not in kol for k, _ in nieuw):
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            kol = {r[1] for r in conn.execute("PRAGMA table_info(gesprek_log)").fetchall()}
+            for k, soort in nieuw:
+                if k not in kol:
+                    conn.execute(f"ALTER TABLE gesprek_log ADD COLUMN {k} {soort}")
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    conn.execute("CREATE INDEX IF NOT EXISTS gesprek_log_sessie ON gesprek_log(sessie)")
+    conn.commit()
 
 
 def md(tekst):
@@ -439,6 +463,14 @@ def bord():
 
 
 # --- klaargezet: bron-agents (Privé) zetten iets klaar; afdelingsagents pakken het op.
+# M6 (ontwerp regie-zoom v1.2): een uniek hoort bij de agent die het item aanmaakte. Een andere afzender overschrijft
+# het niet, zodat bijvoorbeeld het ochtendbericht van De Regisseur niet stil door een andere agent vervangen wordt.
+# Uitzondering, gemeten op 21-10-2026: de Mac-mailwacht (mijnagents-runner/mac/mail_wacht.py) draait per postvak met een
+# eigen naam en zet een mail van hoog belang klaar als mailsignaal:<Message-ID>. Komt dezelfde mail in twee postvakken
+# binnen, dan schrijven twee wachten legitiem op dezelfde uniek; die blijven werken zoals voordien.
+KLAARZET_GEDEELD = ("mailsignaal:",)
+
+
 @app.route("/api/klaarzet", methods=["POST"])
 def api_klaarzet():
     if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
@@ -447,6 +479,7 @@ def api_klaarzet():
     items = p.get("items") if isinstance(p.get("items"), list) else [p]
     conn = db()
     nieuw, bestaand, bijgewerkt, herzien, zakelijk_herzien = 0, 0, 0, 0, 0
+    andere_afzender = []
     for it in items:
         if not (it.get("van") and it.get("voor") and it.get("soort") and it.get("titel")):
             continue
@@ -454,8 +487,11 @@ def api_klaarzet():
         inhoud = it.get("inhoud")
         if not isinstance(inhoud, str):
             inhoud = json.dumps(inhoud, ensure_ascii=False)
-        oud = conn.execute("SELECT id, voor, titel, inhoud, verwijzing, status, sleutel, opgepakt_door, opgepakt_ts FROM klaarzet WHERE uniek=?",
+        oud = conn.execute("SELECT id, van, voor, titel, inhoud, verwijzing, status, sleutel, opgepakt_door, opgepakt_ts FROM klaarzet WHERE uniek=?",
                            (uniek,)).fetchone() if uniek else None
+        if oud and oud["van"] != it["van"] and not uniek.startswith(KLAARZET_GEDEELD):
+            andere_afzender.append({"uniek": uniek, "van": it["van"], "bestaande_van": oud["van"]})
+            continue
         anders = oud is not None and (oud["voor"], oud["titel"], oud["inhoud"], oud["verwijzing"] or "") != \
             (it["voor"], it["titel"][:300], inhoud[:60000], (it.get("verwijzing") or "")[:500])
         if oud and anders and oud["status"] != "klaar" and it.get("revisie"):
@@ -491,6 +527,15 @@ def api_klaarzet():
              inhoud[:60000], (it.get("verwijzing") or "")[:500], uniek, nu()))
         nieuw += 1
     conn.commit()
+    if andere_afzender:
+        # M6: het geweigerde item is niet geschreven, de andere items van de oproep wel; een oude rij van een agent
+        # die ooit anders heette, houdt zo niet al zijn werk tegen. De afzender krijgt een fout die hij niet kan missen
+        # (409 breekt zijn ronde, zodat N11 en De Normwacht het zien), met wat er wel en niet geschreven is.
+        eerste = andere_afzender[0]
+        return jsonify(ok=False, nieuw=nieuw, bestaand=bestaand, bijgewerkt=bijgewerkt, herzien=herzien,
+                       zakelijk_herzien=zakelijk_herzien, geweigerd=andere_afzender,
+                       fout=f"uniek {eerste['uniek']} hoort bij {eerste['bestaande_van']}, niet bij {eerste['van']}; "
+                            "een andere afzender overschrijft een klaargezet item niet (dat item is niet geschreven)"), 409
     return jsonify(ok=True, nieuw=nieuw, bestaand=bestaand, bijgewerkt=bijgewerkt, herzien=herzien, zakelijk_herzien=zakelijk_herzien)
 
 
@@ -551,10 +596,12 @@ def api_gesprekken_zetten():
         abort(403)
     p = request.get_json(silent=True) or {}
     conn = db()
-    n = 0
+    n, zonder_bron = 0, 0
     for r in p.get("rijen") or []:
         if not r.get("uniek"):
             continue
+        # De standaard fathom blijft voor oude afzenders, maar wordt geteld: een vergeten bron is zo zichtbaar (Z11, Z13).
+        zonder_bron += 0 if r.get("bron") else 1
         conn.execute(
             "INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,bedrijf,afdeling,thema,project,prive,zekerheid,waarom,archief,link,opgenomen_door,bron,ts) "
             "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(uniek) DO UPDATE SET datum=excluded.datum, start=excluded.start, minuten=excluded.minuten, "
@@ -563,9 +610,64 @@ def api_gesprekken_zetten():
             (r["uniek"], r.get("datum", ""), r.get("start", ""), int(r.get("minuten") or 0), r.get("personen", ""), r.get("bedrijf", ""),
              r.get("afdeling", ""), r.get("thema", ""), r.get("project", ""), 1 if r.get("prive") else 0, r.get("zekerheid", ""),
              r.get("waarom", ""), r.get("archief", ""), r.get("link", ""), r.get("opgenomen_door", ""), r.get("bron", "fathom"), nu()))
+        # Z11: sessie en dubbel_van alleen als ze meekomen. Zonder die sleutels blijven ze staan, zodat de upsert van
+        # De Fathomwacht een koppeling van De Zoomwacht nooit wist.
+        koppel = {k: str(r.get(k) or "")[:200] for k in ("sessie", "dubbel_van") if k in r}
+        if koppel:
+            conn.execute(f"UPDATE gesprek_log SET {', '.join(k + '=?' for k in koppel)} WHERE uniek=?", (*koppel.values(), r["uniek"]))
         n += 1
     conn.commit()
-    return jsonify(ok=True, rijen=n)
+    return jsonify(ok=True, rijen=n, zonder_bron=zonder_bron)
+
+
+# Een dubbel_van die met buiten: begint, is een merkteken en geen verwijzing naar een rij: de rij telt niet voor Mehdi,
+# bijvoorbeeld een Fathom-opname van een ander account uit een andere ruimte (buiten:andere-ruimte, J10).
+GESPREK_BUITEN = "buiten:"
+
+
+@app.route("/api/gesprekken/koppel", methods=["POST"])
+def api_gesprekken_koppel():
+    """Z11: koppelingen op bestaande rijen zetten, zonder hun andere velden te raken. Invoer {koppelingen: [{uniek,
+    sessie, dubbel_van}]}; elk veld dat meekomt wordt gezet, een veld dat ontbreekt blijft staan. Maakt nooit een rij
+    aan. Weigert een dubbel_van gelijk aan de eigen uniek, een doel dat niet bestaat en een doel dat zelf dubbel_van
+    heeft (dan telt niets meer). Eerst de koppelingen zonder doel (ook het wissen van dubbel_van), dan die met een
+    doel, zodat een nieuwe leidende rij in dezelfde oproep eerst vrijkomt. Antwoord {gezet: [uniek], onbekend: [uniek],
+    geweigerd: [{uniek, reden}]}. Teruglezen doet de agent zelf, langs bord.db_lees (L32)."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    p = request.get_json(silent=True) or {}
+    lijst = p.get("koppelingen")
+    if not isinstance(lijst, list):
+        return jsonify(fout="koppelingen (een lijst) vereist"), 400
+    conn = db()
+    gezet, onbekend, geweigerd = [], [], []
+    goed = [k for k in lijst if isinstance(k, dict) and k.get("uniek")]
+    geweigerd += [{"uniek": "", "reden": "koppeling zonder uniek"} for k in lijst if not (isinstance(k, dict) and k.get("uniek"))]
+    for k in sorted(goed, key=lambda k: bool(k.get("dubbel_van"))):
+        uniek = str(k["uniek"])[:200]
+        if not conn.execute("SELECT 1 FROM gesprek_log WHERE uniek=?", (uniek,)).fetchone():
+            onbekend.append(uniek)
+            continue
+        velden = {v: str(k.get(v) or "")[:200] for v in ("sessie", "dubbel_van") if v in k}
+        if not velden:
+            geweigerd.append({"uniek": uniek, "reden": "geen sessie of dubbel_van"})
+            continue
+        doel = velden.get("dubbel_van")
+        if doel == uniek:
+            geweigerd.append({"uniek": uniek, "reden": "dubbel_van verwijst naar de rij zelf"})
+            continue
+        if doel and not doel.startswith(GESPREK_BUITEN):
+            rij = conn.execute("SELECT dubbel_van FROM gesprek_log WHERE uniek=?", (doel,)).fetchone()
+            if not rij:
+                geweigerd.append({"uniek": uniek, "reden": f"doel {doel} bestaat niet"})
+                continue
+            if rij["dubbel_van"]:
+                geweigerd.append({"uniek": uniek, "reden": f"doel {doel} is zelf een dubbel"})
+                continue
+        conn.execute(f"UPDATE gesprek_log SET {', '.join(v + '=?' for v in velden)} WHERE uniek=?", (*velden.values(), uniek))
+        gezet.append(uniek)
+    conn.commit()
+    return jsonify(ok=True, gezet=gezet, onbekend=onbekend, geweigerd=geweigerd)
 
 
 @app.route("/gesprekken")
@@ -1428,7 +1530,8 @@ def dagen_pagina():
             r["bundels"] += 1
         elif s == "signaal":
             r["signalen"] += 1
-    for g in conn.execute("SELECT datum, minuten, personen, prive FROM gesprek_log").fetchall():
+    # Telregel (Z10): een rij met dubbel_van telt niet, anders telt een gesprek in Zoom en Fathom twee keer.
+    for g in conn.execute("SELECT datum, minuten, personen, prive FROM gesprek_log WHERE COALESCE(dubbel_van, '')=''").fetchall():
         r = dagen.setdefault(g["datum"], {"dag": g["datum"], "afspraken": 0, "gesprekken": 0, "gesprek_min": 0, "personen": set(), "bezoeken": 0,
                                           "km": 0.0, "onderweg_min": 0, "fotos": 0, "slaap": "", "hartslag": "", "spiegel": "", "bundels": 0,
                                           "signalen": 0, "transcripten": 0})
@@ -1524,13 +1627,17 @@ def dag_pagina(datum):
     eerste = (_locatie("/api/beleid", {}) or {}).get("eerste_dag") or "9999-12-31"
     if datum < eerste:
         items = [i for i in items if i["soort"] != "locatie"]
-    gesprekken = conn.execute("SELECT * FROM gesprek_log WHERE datum=? ORDER BY start", (datum,)).fetchall()
+    # J10, Z12 (ontwerp regie-zoom v1.2): een rij telt alleen als dubbel_van leeg is, zoals op de pagina Gesprekken en
+    # in de dagenpagina. De tellende rijen eerst; de dubbels en de rijen buiten Mehdi's ruimte grijs eronder.
+    gesprekken = conn.execute("SELECT * FROM gesprek_log WHERE datum=? ORDER BY COALESCE(dubbel_van, '')<>'', start",
+                              (datum,)).fetchall()
     return render_template(
         "dag.html", app_naam=APP_NAAM, datum=datum, mdf=md,
         overzichten=van_soort("dagbundel"), spiegels=van_soort("coaching"), locaties=van_soort("locatie"),
         dagplannen=van_soort("dagplan"), afspraken=van_soort("afspraak"), fotos=van_soort("foto"),
         gezondheid=van_soort("gezondheid"), mails=van_soort("mail"), signalen=van_soort("signaal"),
         transcripten=van_soort("transcript", "werfbezoek"), gesprekken=gesprekken,
+        gesprekken_tellend=sum(1 for g in gesprekken if not g["dubbel_van"]),
     )
 
 

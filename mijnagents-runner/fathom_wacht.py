@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""De Fathomwacht (Privé) — haalt alles uit Fathom naar onze eigen plek, herkent
+"""De Fathomwacht (Privé): haalt alles uit Fathom naar onze eigen plek, herkent
 wie erbij was en waarover het ging, houdt een dagelijks logboek en een
 gesprekkentabel bij, en zet klaar voor de afdelingen. Werkwijze v2 (10-09-2026):
 het volledige proces staat op het bord (werkwijze/fathom-wacht.md is het zaad).
@@ -15,6 +15,7 @@ fathom_haal_alles.py; dit script houdt het bij.
 import json
 import os
 import re
+import signal
 import sys
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -35,14 +36,18 @@ import dossier  # noqa: E402  dossierbeslissing op bewijs, gedeeld met De Plaudw
 
 NAAM = "fathom-wacht"
 ag = bord.Agent(NAAM)
-DAGEN = int(os.environ.get("FATHOM_WACHT_DAGEN", "14"))
+# Het gewone venster van de keten. Een echte ronde van De Regisseur leest alleen de laatste dag (FATHOM_WACHT_DAGEN=1, J1);
+# wat een volledig venster veronderstelt (de nood over de eigen sleutel), doet zo'n korte ronde niet (BAS-04).
+STANDAARD_DAGEN = 14
+DAGEN = int(os.environ.get("FATHOM_WACHT_DAGEN", str(STANDAARD_DAGEN)))
 ARCHIEF = os.path.expanduser(os.environ.get("FATHOM_ARCHIEF_PAD", "~/appportal/mijnagents-data/fathom-data"))
 VERBODEN_TEKEN = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
 MODEL = os.environ.get("FATHOM_WACHT_MODEL", "claude-sonnet-5")
 AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "tkn", "elevait", "regie", "prive")
-# Kenmerken in het e-mailadres van de opnemer waaraan we Mehdi's eigen Fathom-sleutel herkennen
-MEHDI_FATHOM_EIGENAARS = tuple(k.strip() for k in os.environ.get(
-    "FATHOM_MEHDI_EIGENAARS", "h-architects,mch@,zoomafspraken@gmail.com").split(",") if k.strip())
+# Mehdi's eigen Fathom-sleutel herken ik aan een opname van zijn account: een exact adres uit fathom.MEHDI_FATHOM_ADRESSEN,
+# dezelfde lijst als De Zoomwacht en De Regisseur (EIGEN-3, tegenproef 22-10-2026). Tot dan zocht ik op deelstukken
+# ('h-architects', 'mch@'), en dan dempte een opname van een collega de nood hieronder.
+SLEUTEL_NOOD = "Mehdi's eigen Fathom-sleutel ontbreekt op de VM (FATHOM_API_KEYS is nu van Shaniel); ik zie zijn gesprekken niet"
 
 
 def laad_env(pad):
@@ -165,7 +170,7 @@ def archiefmap(g, uniek=False):
     archief ophaalde; wie er een verandert, verandert ze allebei.
     """
     start = belgisch(g.get("recording_start_time") or g.get("created_at") or "").replace("T", " ").replace(":", "")
-    titel = VERBODEN_TEKEN.sub(" ", g.get("title") or g.get("meeting_title") or "").replace("–", "-")
+    titel = VERBODEN_TEKEN.sub(" ", g.get("title") or g.get("meeting_title") or "").replace("\N{EN DASH}", "-")
     titel = re.sub(r"\s+", " ", titel).strip(" .-") or "zonder titel"
     staart = f" [{g.get('recording_id')}]" if uniek else ""
     naam = f"{start} {titel}"
@@ -195,6 +200,13 @@ def bestaande_map(g):
 
 def veilige_naam(t):
     return re.sub(r"[^\w\- .,()]+", "", t or "").strip()[:70] or "gesprek"
+
+
+def prive_verwijzing(map_, start, gid):
+    """De verwijzing van een privé-item (RZ2-01): de archiefmap op de VM met '(privé)' in plaats van de titel in Fathom,
+    die een naam of een onderwerp kan dragen, en het recording_id, waarop de map te vinden is (gesprek.json, zoals
+    bestaande_map zoekt). Zoals verwijzing_van in zoom_wacht.py; de map zelf houdt haar naam."""
+    return os.path.join(os.path.dirname(map_), f"{start[:10]} {start[11:16].replace(':', '')} (privé) [{gid}]")
 
 
 def bewaar(g, tekst, herkenning):
@@ -293,15 +305,62 @@ def herken(g, tekst, personen, deal, hoe, context=None, bron="fathom"):
 
 
 # ----------------------------------------------------------------- main ---
+def stop_bij_sigterm(signum, frame):
+    """J1, K3 (ontwerp regie-zoom v1.2): timeout stopt een te lange ronde met SIGTERM (de cron na 2700 s, De Regisseur
+    na 540 s). Zonder handler stierf het proces meteen en bleef de hartslag op actief staan (N11). Nu gaat het als
+    SystemExit door main(), en sluit de finally daar de hartslag af."""
+    raise SystemExit(128 + signum)
+
+
+def nu_utc():
+    return datetime.now(timezone.utc)
+
+
+def eerste_volle_dag(begin):
+    """De eerste Belgische dag die volledig in het venster valt, als 'JJJJ-MM-DD' (BAS-04). De dag waarin het venster
+    begint, ziet de ronde maar voor een deel: haar logboek herschrijven zou het inkorten, ook in Dropbox, want spiegel_map
+    stuurt elk gewijzigd bestand door. Dat gold voor de korte ronde van De Regisseur (J1) en voor de oudste dag van het
+    gewone venster. Fathom geeft wat na het begin aangemaakt is (created_after); een opname bestaat niet voor ze begint."""
+    b = begin.astimezone(BE)
+    dag = b.date() if (b.hour, b.minute, b.second, b.microsecond) == (0, 0, 0, 0) else b.date() + timedelta(days=1)
+    return dag.isoformat()
+
+
+def sleutel_nood(gesprekken):
+    """De nood over Mehdi's eigen Fathom-sleutel als lijst, of None als deze ronde de vorige stand niet kent (BAS-04).
+
+    Een opname van zijn account bewijst de sleutel: geen nood. Geen opname in het volle venster (STANDAARD_DAGEN of meer):
+    de nood. Geen opname in een kort venster, zoals de echte ronde die De Regisseur start (J1), bewijst niets: dan blijft
+    de vorige stand, open als ze open stond en dicht als ze dicht was. Weet het bord die stand niet, dan None: onbekend is
+    niet leeg."""
+    eigenaars = {((g.get("recorded_by") or {}).get("email") or "").strip().lower() for g in gesprekken}
+    # Mehdi's Fathom-account neemt op als zoomafspraken@gmail.com (sleutel MEHDI_FATHOM_API_KEY, ook in ~/elevait/.env);
+    # alleen een exact adres telt, nooit een deel ervan (EIGEN-3)
+    if eigenaars & fathom.MEHDI_FATHOM_ADRESSEN:
+        return []
+    if DAGEN >= STANDAARD_DAGEN:
+        return [{"tekst": SLEUTEL_NOOD, "wie": "mehdi"}]
+    vorig = ag.open_noden()
+    if vorig is None:
+        return None
+    return [n for n in vorig if n["tekst"] == SLEUTEL_NOOD]
+
+
 def main():
     ag.hartslag("actief", taak="Fathom ophalen")
+    afgesloten = False
     try:
         if not fathom.beschikbaar():
             ag.hartslag("fout", taak="geen Fathom-sleutel", detail="FATHOM_API_KEYS ontbreekt")
-            return
+            afgesloten = True
+            # RZ2-02: een ronde die Fathom niet kon lezen, eindigt niet op 0. Met exit 0 schreef keten.py 'geslaagd' en kon
+            # het ochtendbericht voor 10:30 vertrekken zonder Fathom-lezing. Een sleutel die faalt, gooit hieronder een
+            # fout op en eindigt zo ook niet op 0.
+            return 1
         werkwijze = ag.werkwijze()
         personen = personen_uit_werkwijze(werkwijze)
-        sinds = (datetime.now(timezone.utc) - timedelta(days=DAGEN)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        begin = nu_utc() - timedelta(days=DAGEN)
+        sinds = begin.strftime("%Y-%m-%dT%H:%M:%SZ")
         gesprekken = fathom.gesprekken(sinds, met_transcript=True)
         deals = deals_index()
         klaar, rijen, nieuw_archief, prive_n, logdag = [], [], 0, 0, {}
@@ -340,7 +399,8 @@ def main():
                    "personen": ", ".join(herk.get("personen") or []), "bedrijf": herk.get("bedrijf", ""), "afdeling": herk.get("afdeling", ""),
                    "thema": herk.get("thema", ""), "project": herk.get("project", "") or (deal["titel"] if deal else ""),
                    "prive": prive, "zekerheid": herk.get("zekerheid", ""), "waarom": herk.get("waarom", ""), "archief": map_,
-                   "link": g.get("url", ""), "opgenomen_door": (g.get("recorded_by") or {}).get("name", "")}
+                   "link": g.get("url", ""), "opgenomen_door": (g.get("recorded_by") or {}).get("name", ""),
+                   "bron": "fathom"}   # Z13: expliciet, niet de stille standaard van het bord
             rijen.append(rij)
             logdag.setdefault(start[:10], []).append(rij)
             # kopie naar de salesmap bij een H-A-dossier (nooit overschrijven), niet als privé
@@ -355,19 +415,38 @@ def main():
                     else:
                         pad = f"{salesmap}/0 Fathom/{naam}"
             voor = besl["voor"]
-            klaar.append({"voor": voor, "soort": "transcript", "sleutel": (besl["projectnummer"] or "") if besl["zekerheid"] != "laag" else "",
-                          "titel": f"{start} Fathom: {herk.get('hoofdpersoon') or g.get('title')} · {herk.get('thema', '')[:60]}" + (" · PRIVÉ" if prive else ""),
-                          "uniek": f"fathom:{gid}", "verwijzing": pad or map_,
-                          "inhoud": {**{k: v for k, v in rij.items() if k != "waarom"}, "waarom": herk.get("waarom", ""), "transcript_pad": pad or os.path.join(map_, "transcript.md"),
-                                     "dossier": besl["dossier"], "firma": besl["firma"], "projectnummer": besl["projectnummer"],
-                                     "deal_id": deal["id"] if deal else None, "zekerheid_dossier": besl["zekerheid"],
-                                     "conflict": besl["conflict"], "redenen": besl["redenen"]}})
-            ag.log(f"gesprek {start}", "bevinding",
-                   f"{herk.get('hoofdpersoon') or g.get('title')} · {herk.get('afdeling')} · {herk.get('thema', '')[:60]}" + (" · privé" if prive else "") + f" · zekerheid {herk.get('zekerheid')}",
-                   herk.get("waarom", ""))
-        # logboek per dag in het archief
+            dossiersleutel = (besl["projectnummer"] or "") if besl["zekerheid"] != "laag" else ""
+            if prive:
+                # RZ2-01 (M3): een privé-item draagt geen persoon, onderwerp of toelichting, ook niet in de verwijzing (de
+                # archiefmap heet naar de titel in Fathom). Het gaat naar De Dagbundelaar, De Levenscoach en de export van
+                # het bord; met wie en waarover staan in het archief op de VM.
+                verwijzing = prive_verwijzing(map_, start, gid)
+                klaar.append({"voor": voor, "soort": "transcript", "sleutel": dossiersleutel,
+                              "titel": f"{start} Fathom: privégesprek, {duur} min · PRIVÉ", "uniek": f"fathom:{gid}", "verwijzing": verwijzing,
+                              "inhoud": {"datum": start[:10], "start": start[11:16], "minuten": duur, "prive": True, "archief": verwijzing}})
+            else:
+                klaar.append({"voor": voor, "soort": "transcript", "sleutel": dossiersleutel,
+                              "titel": f"{start} Fathom: {herk.get('hoofdpersoon') or g.get('title')} · {herk.get('thema', '')[:60]}",
+                              "uniek": f"fathom:{gid}", "verwijzing": pad or map_,
+                              "inhoud": {**{k: v for k, v in rij.items() if k not in ("waarom", "bron")}, "waarom": herk.get("waarom", ""), "transcript_pad": pad or os.path.join(map_, "transcript.md"),
+                                         "dossier": besl["dossier"], "firma": besl["firma"], "projectnummer": besl["projectnummer"],
+                                         "deal_id": deal["id"] if deal else None, "zekerheid_dossier": besl["zekerheid"],
+                                         "conflict": besl["conflict"], "redenen": besl["redenen"]}})
+            if prive:
+                # BAS-01, M3 (ontwerp 13.2): met wie en waarover vallen weg bij een privégesprek, ook in het werkverslag.
+                # Dat gaat naar een taalmodel (het dossier en agent_verslag van De Regisseur, De Ontwikkelaar), en het
+                # masker van het bord kent deze namen niet. Wanneer en hoe lang blijft; de rest staat in het archief.
+                ag.log(f"gesprek {start}", "bevinding", f"privégesprek · {duur} min · zekerheid {herk.get('zekerheid')}")
+            else:
+                ag.log(f"gesprek {start}", "bevinding",
+                       f"{herk.get('hoofdpersoon') or g.get('title')} · {herk.get('afdeling')} · {herk.get('thema', '')[:60]} · zekerheid {herk.get('zekerheid')}",
+                       herk.get("waarom", ""))
+        # logboek per dag in het archief, alleen voor een dag die deze ronde volledig zag (BAS-04)
+        volle = eerste_volle_dag(begin)
+        geschreven = sorted(dag for dag in logdag if dag >= volle)
         os.makedirs(os.path.join(ARCHIEF, "logboek"), exist_ok=True)
-        for dag, lijst in logdag.items():
+        for dag in geschreven:
+            lijst = logdag[dag]
             regels = [f"# Fathom-logboek {dag}", "", f"{len(lijst)} gesprek(ken), {sum(r['minuten'] for r in lijst)} minuten", "",
                       "| start | min | personen | bedrijf | afdeling | thema | project | privé |", "|---|---|---|---|---|---|---|---|"]
             regels += [f"| {r['start']} | {r['minuten']} | {r['personen']} | {r['bedrijf']} | {r['afdeling']} | {r['thema'][:50]} | {r['project'][:40]} | {'ja' if r['prive'] else ''} |" for r in sorted(lijst, key=lambda x: x["start"])]
@@ -379,24 +458,34 @@ def main():
                    + (f"; fout: {sp['fout']}" if sp["fout"] else ""))
         bord.call("/api/gesprekken", {"rijen": rijen})
         uit = ag.klaarzet(klaar)
+        # BAS-01: van een privérij alleen datum en start, zoals in de bevinding
         ag.log("Fathom", "bron", f"{len(gesprekken)} gesprekken sinds {sinds[:10]} van {len(fathom.sleutels())} sleutel(s); {nieuw_archief} nieuw in het archief; {prive_n} privé; {len(personen)} personen in de tabel",
-               "\n".join(f"{r['datum']} {r['start']} {r['personen'][:40]} | {r['afdeling']} | {r['thema'][:50]}" for r in rijen))
-        ag.log("Fathom", "schrijf", f"gesprekkentabel bijgewerkt ({len(rijen)} rijen); klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend; logboek voor {len(logdag)} dag(en)")
+               "\n".join(f"{r['datum']} {r['start']} (privé)" if r["prive"] else f"{r['datum']} {r['start']} {r['personen'][:40]} | {r['afdeling']} | {r['thema'][:50]}" for r in rijen))
+        ag.log("Fathom", "schrijf", f"gesprekkentabel bijgewerkt ({len(rijen)} rijen); klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend; logboek voor {len(geschreven)} dag(en)")
         ag.log_verstuur()
-        nood = []
-        eigenaars = {(g.get("recorded_by") or {}).get("email", "") for g in gesprekken}
-        # Mehdi's Fathom-account neemt op als zoomafspraken@gmail.com (sleutel MEHDI_FATHOM_API_KEY, ook in ~/elevait/.env)
-        if not any(any(kenmerk in e for kenmerk in MEHDI_FATHOM_EIGENAARS) for e in eigenaars):
-            nood.append({"tekst": "Mehdi's eigen Fathom-sleutel ontbreekt op de VM (FATHOM_API_KEYS is nu van Shaniel); ik zie zijn gesprekken niet", "wie": "mehdi"})
-        nood += dropbox_prive.nood(wat="het Fathom-archief")
+        sleutel = sleutel_nood(gesprekken)
+        nood = list(dropbox_prive.nood(wat="het Fathom-archief"))
         if any(len(p["mails"]) == 0 and "aan te vullen" in p.get("mails", []) for p in personen) or len([p for p in personen if p["mails"]]) < 6:
             nood.append({"tekst": "De tabel Betrokken personen mist e-mailadressen van collega's (dashboard van Mehdi)", "wie": "mehdi"})
-        ag.hartslag("waakt", taak="wacht op nieuwe gesprekken", detail=f"laatste ronde: {len(gesprekken)} gesprekken, {nieuw_archief} nieuw, {prive_n} privé", nood=nood)
+        detail = f"laatste ronde: {len(gesprekken)} gesprekken, {nieuw_archief} nieuw, {prive_n} privé"
+        if sleutel is None:
+            # BAS-04: de vorige stand is onbekend. Zonder lijst sluit en opent het bord niets (zoals bord.noden_bij_breuk);
+            # wat deze ronde vond, staat in het detail tot de volgende ronde van de keten.
+            detail += "; noden niet bijgewerkt, open noden onbekend" + "".join(f"; {n['tekst']}" for n in nood)
+        ag.hartslag("waakt", taak="wacht op nieuwe gesprekken", detail=detail, nood=None if sleutel is None else sleutel + nood)
+        afgesloten = True
+        return 0
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
         ag.log_verstuur()
         ag.hartslag("fout", taak="ronde mislukt", detail=f"{type(e).__name__}: {str(e)[:120]}")
+        afgesloten = True
         raise
+    finally:
+        if not afgesloten:
+            # SIGTERM (time-out), Ctrl-C of iets anders dat geen Exception is: nooit blijven hangen op actief (N11).
+            # Zonder noodlijst, zodat wat al open stond open blijft: deze ronde kon het niet meer nakijken.
+            ag.hartslag("fout", taak="ronde afgebroken", detail="ronde afgebroken voor het einde (time-out of stopsignaal)")
 
 
 def hoofd_van(herk):
@@ -404,4 +493,5 @@ def hoofd_van(herk):
 
 
 if __name__ == "__main__":
-    main()
+    signal.signal(signal.SIGTERM, stop_bij_sigterm)
+    sys.exit(main())

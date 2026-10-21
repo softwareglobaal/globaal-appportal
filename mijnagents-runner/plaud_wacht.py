@@ -321,6 +321,16 @@ def opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort):
                         "afdeling": herk.get("afdeling", ""), "thema": herk.get("thema", ""), "personen": herk.get("personen") or [],
                         "toestel": o.get("toestel", "onbekend"), "account": o.get("account", "onbekend"),
                         "opgenomen_door": o.get("opgenomen_door") or "onbekend", "transcript_pad": pad_mac}}
+    if prive:
+        # RZ2-01 (M3), zoals De Fathomwacht: een privé-item draagt geen persoon, onderwerp of afdeling, ook niet in de
+        # verwijzing (de archiefmap heet naar de naam in Plaud). Het gaat naar De Dagbundelaar, De Levenscoach en de
+        # export van het bord; met wie en waarover staan in het archief en in de gesprekkentabel (alleen beheer).
+        verwijzing = f"{ARCHIEF_OP_MAC}/{start[:10]} {start[11:16].replace(':', '')} (privé) [{pid}]"
+        duur = f"{rij['minuten']} min" if rij["minuten"] > 0 else "duur onbekend"
+        klaar.update(titel=f"{start[:16].replace('T', ' ')} Plaud: privégesprek, {duur} · PRIVÉ" + (" · NAKIJKEN" if b["conflict"] else ""),
+                     verwijzing=verwijzing,
+                     inhoud={"plaud_id": pid, "datum": start[:10], "start": start[11:16], "minuten": rij["minuten"], "prive": True,
+                             "archief": verwijzing})
     uit = [{"sleutel": "tabel", "soort": "tabel", "payload": rij}, {"sleutel": "klaarzet", "soort": "klaarzet", "payload": klaar}]
     if b["kopie_toegestaan"] and deal and tekst:
         wie = re.sub(r"[^A-Za-z0-9À-ÿ ,.-]+", " ", herk.get("hoofdpersoon") or "gesprek").strip()[:60]
@@ -395,9 +405,17 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
         staat.trek_in(st, "nieuwe beslissing staat geen zakelijke kopie toe: " + ("; ".join(b["redenen"]) or "zie beslissing"))
     st_obj.bewaar(pid, st)                     # eerst vastleggen, dan pas extern schrijven
     gedaan, fouten = staat.voer_uit(st, lambda s: st_obj.bewaar(pid, s), UITVOERDERS)
+    if b["prive"]:
+        # BAS-01 en RZ2-01: van een privé-opname alleen wanneer en hoe lang, zoals De Fathomwacht; het werkverslag leest
+        # een taalmodel mee en gaat naar de export. Met wie, het dossier en de redenen staan in de staat van deze opname.
+        minuten = int(float(o.get("duur_minuten") or 0))
+        ag.log(f"opname {o['start_brussel'][:16]}", "bevinding",
+               f"privégesprek · {f'{minuten} min' if minuten > 0 else 'duur onbekend'} · voor {b['voor']}"
+               + f" · {gedaan} publicatie(s), {fouten} fout")
+        return {"uitkomst": "gedaan", "fouten": fouten}
     ag.log(f"opname {o['start_brussel'][:16]}", "bevinding",
            f"{herk.get('hoofdpersoon') or o.get('naam_in_plaud')} · dossier {b['dossier'] or 'geen'} ({b['zekerheid']})"
-           + (" · conflict" if b["conflict"] else "") + (" · privé" if b["prive"] else "") + f" · voor {b['voor']}"
+           + (" · conflict" if b["conflict"] else "") + f" · voor {b['voor']}"
            + f" · {gedaan} publicatie(s), {fouten} fout", "; ".join(b["redenen"]))
     return {"uitkomst": "gedaan", "fouten": fouten}
 
