@@ -67,6 +67,10 @@ rest in twee vaste momenten. Wat niet kan wachten, is een oproep.
    alsnog, met nummers en zonder bundelregel.
 5. Rond 17:00 stuur ik de avondbundel: de mailupdate van 17:00 bovenaan, dan wat sinds de ochtend binnenkwam en de
    nieuwe voorstellen. Komt die update niet, dan stuur ik de bundel vanaf 17:30 als er iets in zit.
+   Voor elk vast moment (het ochtendbericht, de terugval, de avondbundel en de slotbundel) schrijf ik eerst een
+   'bezig'-record in mijn verzendspoor (bode-verzonden.jsonl), en na de aanvaarding 'verzonden'. Stopte een ronde
+   daartussen, dan stuur ik dat moment niet opnieuw maar meld ik een onzekere aflevering; zonder schrijfbaar of leesbaar
+   spoor stuur ik het niet (FR-193, zoals het belspoor van FR-179).
 6. Meteen gaan alleen een oproep en een alarm, ook 's nachts, en het bellen voor afspraken.
 7. Stilte-uren: tussen 22:00 en 07:00 Brusselse tijd stuur ik niets, behalve een alarm. De server draait op UTC; ik reken
    zelf in Europe/Brussels (FR-152).

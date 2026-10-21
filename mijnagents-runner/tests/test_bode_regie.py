@@ -15,6 +15,9 @@
 - BOD-1 tot BOD-5 (tegenlezing fase 3): de overgang naar de bundelstand en terug naar 'uit' verliest niets, een verkeerd
   of wachtend ochtendbericht houdt geen oproep tegen, een bundel noemt een item een keer, en een voorstel dat na het
   opstellen van het ochtendbericht bijkwam, blijft nieuw.
+- RZ2-04 (Codex RZ2-bouwcontrole, patroon FR-179): stopt het proces na de aanvaarding van een ochtendbericht, terugval of
+  avondbundel en voor de stand op schijf staat, dan gaat het niet nog eens weg; het verzendspoor zegt 'bezig', en dat
+  wordt een nood voor claude-code. Een mislukte verzending blijft herkansbaar, zonder schrijfbaar spoor geen verzending.
 
 Geen netwerk en geen sleutels: het bord, WhatsApp, Telegram, Zoom-chat, het bellen (BELLEN_UIT=1) en de klok zijn
 nagebootst, de stand staat in een tijdelijke map, en de databank van het bord komt uit init_db van mijnagents/app.py als
@@ -127,7 +130,7 @@ class Wereld:
         self.db = os.path.join(MAP, f"bord-{Wereld.teller}.db")
         shutil.copy(SJABLOON_DB, self.db)
         self.zet_voorstellen(voorstellen)
-        for pad in (B.STAAT, B.STAAT + ".lock", B.belspoor()):
+        for pad in (B.STAAT, B.STAAT + ".lock", B.belspoor(), B.verzendspoor()):
             if os.path.exists(pad):
                 os.remove(pad)
         if staat is not None:
@@ -1077,6 +1080,209 @@ def test_bod5_voorstel_van_na_het_opstellen_blijft_nieuw():
     assert w.ronde()["voorstel_hoogste"] == 899 and len(w.wa) == 1, (w.staat(), w.wa)
 
 
+# --------------------------------------------------------------------------------------------- RZ2-04 ---
+# Codex RZ2-bouwcontrole (21-10-2026): stopt het proces nadat WhatsApp een vast moment aanvaardde maar voor de stand op
+# schijf staat, dan stuurde de volgende ronde hetzelfde bericht opnieuw. Nu het patroon van FR-179: voor het versturen
+# een 'bezig'-record in het verzendspoor, na aanvaarding 'verzonden'.
+class Gestopt(BaseException):
+    """Het proces stopt (kill, stroom weg): wat hierna komt, loopt niet meer."""
+
+
+def gestopte_ronde(w, moment, stop):
+    """Een ronde die stopt zodra WhatsApp het bericht aanvaardde waarvan stop(kop) waar is: het bericht is weg, maar de
+    stand komt niet meer op schijf (bewaar doet niets, zoals na een kill)."""
+    echt_stuur, echt_bewaar = B.whatsapp.stuur, B.bewaar
+
+    def stuur(tekst, kop="je agents", voorrang=False):
+        uit = echt_stuur(tekst, kop, voorrang)
+        if stop(kop):
+            raise Gestopt()
+        return uit
+
+    B.whatsapp.stuur, B.bewaar = stuur, lambda staat: None
+    try:
+        w.ronde(moment)
+        raise AssertionError("de ronde had moeten stoppen na de aanvaarding")
+    except Gestopt:
+        pass
+    finally:
+        B.whatsapp.stuur, B.bewaar = echt_stuur, echt_bewaar
+
+
+def onzeker(w, wat):
+    return [n for n in (w.laatste().get("nood") or []) if n["tekst"] == f"{wat} van 2026-10-22: aflevering onzeker, nakijken"]
+
+
+def test_rz2_04_ochtendbericht_onderbroken_na_aanvaarding_niet_opnieuw():
+    """Het ochtendbericht is door WhatsApp aanvaard, dan stopt het proces voor het item opgepakt en de stand bewaard is.
+    De volgende ronde stuurt het niet opnieuw, zet een nood voor claude-code, telt het item als afgehandeld (opgepakt,
+    laatste_id erover) en stuurt om 11:00 geen terugval, want er ging misschien wel een ochtendbericht weg."""
+    w = t70_wereld()
+    gestopte_ronde(w, utc(2026, 10, 22, 7, 35), lambda kop: kop.startswith("Ochtendbericht"))
+    assert len(w.wa) == 1 and w.item(103)["status"] == "klaar", (w.wa, w.item(103))
+    assert not (w.staat().get("ochtend") or {}).get("2026-10-22"), "de stand kwam niet op schijf"
+    staat = w.ronde(utc(2026, 10, 22, 7, 36))
+    assert len(w.wa) == 1, f"hetzelfde ochtendbericht opnieuw verstuurd: {w.wa[1:]}"
+    nood = onzeker(w, "Ochtendbericht")
+    assert nood and nood[0]["wie"] == "claude-code", w.noodteksten()
+    assert w.item(103)["status"] == "opgepakt" and "onzeker" in w.item(103)["opgepakt_door"], w.item(103)
+    assert staat["laatste_id"] == 103 and staat["ochtend"]["2026-10-22"]["onzeker"], staat
+    w.ronde(utc(2026, 10, 22, 9, 1))             # 11:01 Brussel
+    assert len(w.wa) == 1, f"geen terugval na een onzeker ochtendbericht: {w.wa[1:]}"
+    assert onzeker(w, "Ochtendbericht") and "Geen ochtendbericht van De Regisseur om 11:00" not in w.noodteksten(), \
+        w.noodteksten()
+
+
+def test_rz2_04_terugval_onderbroken_na_aanvaarding_niet_opnieuw():
+    w = Wereld(utc(2026, 10, 22, 9, 1), staat={"laatste_id": 1, "voorstel_hoogste": 0, "ochtend": {}, "avond": {},
+                                                "bundel_vanaf": "2026-10-22T07:00:00+00:00"})
+    gestopte_ronde(w, utc(2026, 10, 22, 9, 1), lambda kop: kop.endswith("geen ochtendbericht"))
+    assert len(w.wa) == 1 and not (w.staat().get("ochtend") or {}).get("2026-10-22"), (w.wa, w.staat())
+    staat = w.ronde(utc(2026, 10, 22, 9, 2))
+    assert len(w.wa) == 1, f"dezelfde terugval opnieuw verstuurd: {w.wa[1:]}"
+    nood = onzeker(w, "Terugval")
+    assert nood and nood[0]["wie"] == "claude-code", w.noodteksten()
+    assert staat["ochtend"]["2026-10-22"]["terugval_onzeker"], staat
+    w.ronde(utc(2026, 10, 22, 12, 0))
+    assert len(w.wa) == 1 and onzeker(w, "Terugval"), (w.wa, w.noodteksten())
+
+
+def test_rz2_04_avondbundel_onderbroken_na_aanvaarding_niet_opnieuw():
+    w = t75_wereld(utc(2026, 10, 22, 15, 2))
+    w.zet(400, "signaal", "Proefsignaal van de middag", ts="2026-10-22T10:00:00+00:00")
+    w.zet(401, "signaal", "Mail 17:00: open mch@ 3; wachten werken", van="mail-regisseur",
+          uniek="mailupdate:2026-10-22:17:00", ts="2026-10-22T15:01:00+00:00")
+    gestopte_ronde(w, utc(2026, 10, 22, 15, 2), lambda kop: kop.startswith("Avondbundel"))
+    assert len(w.wa) == 1 and not w.staat()["avond"], (w.wa, w.staat())
+    staat = w.ronde(utc(2026, 10, 22, 15, 3))
+    assert len(w.wa) == 1, f"dezelfde avondbundel opnieuw verstuurd: {w.wa[1:]}"
+    nood = onzeker(w, "Avondbundel")
+    assert nood and nood[0]["wie"] == "claude-code", w.noodteksten()
+    assert staat["avond"]["2026-10-22"]["onzeker"], staat
+    assert staat["bundel_vanaf"] == "2026-10-22T07:40:00+00:00", "onzeker: de bundel schuift niet op, er verdwijnt niets"
+    w.ronde(utc(2026, 10, 22, 15, 40))           # 17:40: zonder spoor ging hij hier zeker opnieuw
+    assert len(w.wa) == 1 and onzeker(w, "Avondbundel"), (w.wa, w.noodteksten())
+
+
+def test_rz2_04_slotbundel_onderbroken_na_aanvaarding_niet_opnieuw():
+    """Tegenproef van 22-10-2026: de slotbundel (terug naar 'uit', BOD-2) is het vierde vaste moment en had hetzelfde
+    venster. Aanvaard door WhatsApp, dan een stop voor de stand op schijf stond, en de volgende ronde stuurde hem opnieuw.
+    Nu door hetzelfde verzendspoor, met de grens bundel_tot in de sleutel (een tweede omschakeling op dezelfde dag krijgt
+    een eigen sleutel). 'bezig' wordt onzeker en een nood; in 'uit' draagt geen latere bundel bundel_vanaf nog, dus die
+    gaat weg. 'verzonden' in het spoor zonder stand: ook weg, zonder nood."""
+    w = t73_wereld("ochtend-avond")
+    w.ronde()
+    B.BUNDELEN = "uit"
+    gestopte_ronde(w, utc(2026, 10, 22, 12, 1), lambda kop: kop.startswith("Bundel"))
+    assert [m["kop"] for m in w.wa] == ["Bundel do 22-10"] and w.staat()["bundel_vanaf"], (w.wa, w.staat())
+    staat = w.ronde(utc(2026, 10, 22, 12, 2))
+    assert [m["kop"] for m in w.wa] == ["Bundel do 22-10"], f"dezelfde slotbundel opnieuw verstuurd: {w.wa[1:]}"
+    nood = onzeker(w, "Slotbundel")
+    assert nood and nood[0]["wie"] == "claude-code", w.noodteksten()
+    assert "bundel_vanaf" not in staat and "bundel_tot" not in staat, staat
+    w.ronde(utc(2026, 10, 22, 16, 0))
+    assert len(w.wa) == 1 and onzeker(w, "Slotbundel"), (w.wa, w.noodteksten())
+    # verzonden in het spoor, de stand verloren: niets opnieuw en niets onzeker
+    w = t73_wereld("ochtend-avond")
+    w.ronde()
+    B.BUNDELEN = "uit"
+    B.bellen.spoor_schrijven(B.verzendspoor(), "slotbundel:2026-10-22:200", "2026-10-22T12:01:00+00:00")
+    staat = w.ronde(utc(2026, 10, 22, 12, 2))
+    assert not w.wa and not onzeker(w, "Slotbundel") and "bundel_vanaf" not in staat, (w.wa, w.noodteksten(), staat)
+
+
+def test_rz2_04_verzonden_in_het_spoor_ook_als_de_stand_verloren_is():
+    """Het ochtendbericht is weg en 'verzonden' staat in het spoor; het proces stopt bij het oppakken op het bord, voor
+    de stand bewaard is. De volgende ronde stuurt niets en meldt niets onzekers: het spoor zegt dat het aankwam."""
+    w = t70_wereld()
+    echt_call, echt_bewaar = w.call, B.bewaar
+
+    def call(pad, payload=None, method=None):
+        if pad.endswith("/opgepakt"):
+            raise Gestopt()
+        return echt_call(pad, payload, method)
+
+    B.bord.call, B.bewaar = call, lambda staat: None
+    try:
+        w.ronde()
+    except Gestopt:
+        pass
+    finally:
+        B.bord.call, B.bewaar = echt_call, echt_bewaar
+    assert len(w.wa) == 1 and w.item(103)["status"] == "klaar" and not w.staat()["ochtend"], (w.wa, w.staat())
+    staat = w.ronde(utc(2026, 10, 22, 7, 36))
+    assert len(w.wa) == 1 and not onzeker(w, "Ochtendbericht"), (w.wa, w.noodteksten())
+    assert w.item(103)["status"] == "opgepakt" and w.item(103)["opgepakt_door"] == "bode", w.item(103)
+    assert staat["laatste_id"] == 103 and staat["ochtend"]["2026-10-22"]["verzonden"], staat
+
+
+def test_rz2_04_mislukt_versturen_is_niet_onzeker():
+    """Weigeren alle kanalen een vast moment, dan staat 'mislukt' na het 'bezig'-record: de volgende ronde probeert
+    opnieuw, zonder nood over een onzekere aflevering (T69 toetst hetzelfde voor het ochtendbericht)."""
+    for moment, later, wat in ((utc(2026, 10, 22, 9, 1), utc(2026, 10, 22, 9, 2), "Terugval"),
+                               (utc(2026, 10, 22, 15, 31), utc(2026, 10, 22, 15, 32), "Avondbundel")):
+        w = t75_wereld(moment) if wat == "Avondbundel" else \
+            Wereld(moment, staat={"laatste_id": 1, "voorstel_hoogste": 0, "ochtend": {}, "avond": {},
+                                  "bundel_vanaf": "2026-10-22T07:00:00+00:00"})
+        w.zet(400, "signaal", "Proefsignaal van de middag", ts="2026-10-22T08:00:00+00:00")
+        w.wa_fout = lambda tekst, kop, voorrang: RuntimeError("Meta nagebootst 500")
+        w.ronde()
+        assert not w.wa and not onzeker(w, wat), (wat, w.noodteksten())
+        w.wa_fout = None
+        w.ronde(later)
+        assert len(w.wa) == 1 and w.wa[0]["voorrang"] and not onzeker(w, wat), (wat, w.wa, w.noodteksten())
+
+
+def test_rz2_04_zonder_schrijfbaar_spoor_geen_vast_moment():
+    """Is het 'bezig'-record niet te schrijven, dan gaat het ochtendbericht niet weg (FR-179: zonder spoor niet bellen),
+    met een nood; laatste_id blijft ervoor. Lukt het spoor weer, dan gaat het alsnog."""
+    w = t70_wereld()
+    echt = B.bellen.spoor_schrijven
+
+    def kapot(pad, *a, **k):
+        raise OSError("schijf nagebootst vol")
+
+    B.bellen.spoor_schrijven = kapot
+    try:
+        staat = w.ronde()
+    finally:
+        B.bellen.spoor_schrijven = echt
+    assert not w.wa and w.item(103)["status"] == "klaar" and staat["laatste_id"] == 102, (w.wa, staat)
+    assert any("verzendspoor niet te schrijven" in t for t in w.noodteksten()), w.noodteksten()
+    w.ronde(utc(2026, 10, 22, 7, 36))
+    assert len(w.wa) == 1 and w.item(103)["status"] == "opgepakt", w.wa
+
+
+def test_rz2_04_onleesbaar_spoor_is_geen_leeg_spoor():
+    """Een verzendspoor dat er is maar niet te lezen valt (hier een map), kan een verzending bevatten (A33): geen
+    ochtendbericht, geen terugval, geen avondbundel, wel een nood per vast moment."""
+    echt = B.verzendspoor
+    for moment, wat in ((utc(2026, 10, 22, 7, 35), "Ochtendbericht"), (utc(2026, 10, 22, 9, 1), "Terugval"),
+                        (utc(2026, 10, 22, 15, 31), "Avondbundel")):
+        w = t70_wereld() if wat == "Ochtendbericht" else t75_wereld(moment) if wat == "Avondbundel" else \
+            Wereld(moment, staat={"laatste_id": 1, "voorstel_hoogste": 0, "ochtend": {}, "avond": {},
+                                  "bundel_vanaf": "2026-10-22T07:00:00+00:00"})
+        w.zet(400, "signaal", "Proefsignaal van de middag", ts="2026-10-22T08:00:00+00:00")
+        B.verzendspoor = lambda: MAP
+        try:
+            w.ronde(moment)
+        finally:
+            B.verzendspoor = echt
+        assert not w.wa, (wat, w.wa)
+        assert f"{wat} van 2026-10-22 niet verstuurd: verzendspoor onleesbaar (IsADirectoryError); kijk de schijf van " \
+               "mijnagents-data na" in w.noodteksten(), (wat, w.noodteksten())
+
+
+def test_rz2_04_het_spoor_groeit_niet():
+    """Het verzendspoor houdt alleen de laatste dagen (OCHTEND_DAGEN plus een), zoals de stand; ouder gaat weg."""
+    w = t75_wereld(utc(2026, 10, 22, 10, 0))
+    B.bellen.spoor_schrijven(B.verzendspoor(), "avondbundel:2026-10-15", "2026-10-15T15:02:00+00:00")
+    B.bellen.spoor_schrijven(B.verzendspoor(), "avondbundel:2026-10-21", "2026-10-21T15:02:00+00:00")
+    w.ronde()
+    assert [json.loads(r)["sleutel"] for r in open(B.verzendspoor())] == ["avondbundel:2026-10-21"], \
+        open(B.verzendspoor()).read()
+
+
 # ------------------------------------------------------------------------------------------------ droog ---
 def test_droog_stuurt_niets_en_schrijft_niets():
     w = t70_wereld()
@@ -1085,6 +1291,7 @@ def test_droog_stuurt_niets_en_schrijft_niets():
         B.main(droog=True)
     assert not w.wa and not w.hartslagen and open(B.STAAT, "rb").read() == voor, (w.wa, w.hartslagen)
     assert w.item(103)["status"] == "klaar" and "zou het ochtendbericht 103 sturen" in uit.getvalue(), uit.getvalue()[-400:]
+    assert not os.path.exists(B.verzendspoor()), "droog schrijft ook geen verzendspoor (RZ2-04)"
 
 
 if __name__ == "__main__":

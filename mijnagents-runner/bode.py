@@ -11,6 +11,8 @@ Sinds 21-10-2026 (ontwerp regie-zoom v1.2, keuze 1 van Mehdi: optie A) bundel ik
   - rond 17:00 Brussel volgt de avondbundel met de mailupdate van 17:00 en wat sinds de ochtend binnenkwam
     (avond_sturen);
   - alleen een oproep, een alarm en het bellen voor afspraken komen meteen.
+Elk van die vaste momenten krijgt voor het versturen een 'bezig'-record in het verzendspoor (bode-verzonden.jsonl,
+RZ2-04): wat een onderbroken ronde misschien al verstuurde, gaat nooit een tweede keer weg maar wordt een nood.
 Met BUNDELEN op 'uit' gaat alles los, zoals voor 21-10-2026; wat de bundelstand bij het terugzetten nog vasthield, gaat
 eerst als slotbundel (slotbundel_sturen). De herinnering om de zes uur bestaat niet meer: in 'uit' geeft alleen een nieuw
 voorstel (een hoger voorstel-id dan ik al meldde) een bericht (L8).
@@ -494,7 +496,8 @@ def apart(it, stand="uit"):
 
 def ochtend_afgehandeld(it, staat):
     """Telt dit ochtendbericht als afgehandeld voor laatste_id (J4)? Als het niet meer op klaar staat, als ik het
-    verstuurde (staat['ochtend'][datum] heeft verzonden), of als ik het als verlopen opzij zette."""
+    verstuurde (staat['ochtend'][datum] heeft verzonden, ook met onzeker erbij: RZ2-04), of als ik het als verlopen
+    opzij zette."""
     if it.get("status", "klaar") != "klaar":
         return True
     for datum, dag in (staat.get("ochtend") or {}).items():
@@ -603,6 +606,60 @@ def na(moment, uur_minuut):
 
 def meervoud(n, een, meer):
     return f"{n} {een if n == 1 else meer}"
+
+
+# Het verzendspoor (Codex RZ2-04, 21-10-2026). Stopte het proces nadat WhatsApp een vast moment aanvaardde, maar voor de
+# stand op schijf stond, dan stuurde de volgende ronde hetzelfde bericht opnieuw: 'verzonden' stond alleen in bode.json.
+# Nu het patroon van het belspoor (FR-179), met dezelfde schrijfwijze (bellen.spoor_schrijven: een regel achteraan, met
+# flush en fsync): voor het versturen een 'bezig'-record, na aanvaarding 'verzonden', en weigeren alle kanalen 'mislukt'
+# (een poging). Een apart bestand, want afspraken_bellen meldt elk 'bezig' in het belspoor als onderbroken oproep.
+ONZEKER = "{wat}: aflevering onzeker, nakijken"
+
+
+def verzendspoor():
+    """Het verzendspoor naast de stand (bode-verzonden.jsonl): een regel per stap van het ochtendbericht, de terugval
+    van 11:00, de avondbundel en de slotbundel, met als sleutel ochtendbericht:, terugval:, avondbundel: of slotbundel:
+    en de Brusselse datum (bij de slotbundel ook bundel_tot)."""
+    return os.path.splitext(STAAT)[0] + "-verzonden.jsonl"
+
+
+def verzending(sleutel):
+    """Wat het verzendspoor zegt over een vast moment: ('verzonden', tijd); ('bezig', tijd) als het laatste record 'bezig'
+    is, want dan kan het bericht aanvaard zijn zonder dat de uitkomst op schijf kwam; of (None, None): nog niet, of de
+    laatste poging mislukte. Gooit OSError bij een spoor dat er is maar niet te lezen valt: dat is geen leeg spoor (A33)."""
+    pad = verzendspoor()
+    gedaan = bellen.spoor_lezen(pad)
+    if sleutel in gedaan:
+        return "verzonden", gedaan[sleutel]
+    bezig = bellen.spoor_bezig(pad)
+    return ("bezig", bezig[sleutel]) if sleutel in bezig else (None, None)
+
+
+def spoor_onleesbaar(nood, wat, e):
+    """Een spoor dat er is maar niet te lezen valt, kan een verzending bevatten: niet versturen, wel melden (A33)."""
+    nood.append({"tekst": f"{wat} niet verstuurd: verzendspoor onleesbaar ({type(e).__name__}); kijk de schijf van "
+                          "mijnagents-data na", "wie": "claude-code"})
+
+
+def vast_sturen(sleutel, wat, tekst, nood, kop, moment):
+    """Een vast moment versturen, met voorrang, tussen twee records in het verzendspoor. Eerst 'bezig'; lukt dat niet,
+    dan stuur ik niet (FR-179: zonder schrijfbaar spoor geen oproep) en probeert de volgende ronde opnieuw. Na aanvaarding
+    'verzonden'; weigeren alle kanalen, dan 'mislukt', zodat de volgende ronde wel opnieuw stuurt. Lukt dat tweede record
+    niet, dan blijft 'bezig' staan en stuurt geen ronde het opnieuw: een onzekere aflevering is beter dan een tweede
+    bericht. Geeft het kanaal, of '' als er niets verstuurd is."""
+    try:
+        bellen.spoor_schrijven(verzendspoor(), sleutel, moment.isoformat(), bezig=True)
+    except OSError as e:
+        nood.append({"tekst": f"{wat} niet verstuurd: verzendspoor niet te schrijven ({type(e).__name__}); kijk de schijf "
+                              "van mijnagents-data na", "wie": "claude-code"})
+        return ""
+    kanaal = stuur(tekst, nood, kop=kop, voorrang=True)
+    try:
+        bellen.spoor_schrijven(verzendspoor(), sleutel, moment.isoformat(), poging=None if kanaal else 1)
+    except OSError as e:
+        nood.append({"tekst": f"{wat} {'verstuurd' if kanaal else 'niet verstuurd'}, maar niet in het verzendspoor "
+                              f"({type(e).__name__}); kijk de schijf van mijnagents-data na", "wie": "claude-code"})
+    return kanaal
 
 
 def open_voorstellen(nood):
@@ -808,6 +865,9 @@ def ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, d
     dan verschuift er niets en probeert de volgende ronde opnieuw.
     Een verkeerd item zet ik elke ronde opzij, ook nadat het ochtendbericht van vandaag weg is (BOD-3): tot 21-10-2026
     bleef het dan tot middernacht op klaar, en wachtte elk bericht erachter, ook dat van een oproep.
+    Het verzendspoor (RZ2-04) houdt vast wat de stand niet meer haalde: 'verzonden' zonder stand neem ik over; 'bezig'
+    zonder 'verzonden' (het proces stopte na het versturen) stuur ik nooit opnieuw, het item telt als afgehandeld met
+    onzeker erbij, en vaste_momenten zet de nood voor claude-code. Geen terugval dan: er ging misschien wel een weg.
     Geeft (uitkomst, detail): verstuurd, eerder, mislukt, wacht, droog of geen."""
     datum = dag_van(moment)
     dag = staat.setdefault("ochtend", {}).setdefault(datum, {})
@@ -823,6 +883,25 @@ def ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, d
     it = ochtend_item(datum)
     if it is None or ochtend_fout(it, datum):
         return "geen", ""
+    sleutel, wat = f"ochtendbericht:{datum}", f"Ochtendbericht van {datum}"
+    try:
+        spoor, tijd = verzending(sleutel)
+    except OSError as e:
+        spoor_onleesbaar(nood, wat, e)
+        return "mislukt", "ochtendbericht niet verstuurd: verzendspoor onleesbaar"
+    if spoor:
+        if droog:
+            print(f"  (droog) ochtendbericht {it['id']}: {spoor} volgens het verzendspoor; zou het niet opnieuw sturen")
+            return "droog", ""
+        dag.update({"klaarzet_id": it["id"], "verzonden": tijd, **({"onzeker": True} if spoor == "bezig" else {})})
+        if spoor == "bezig":
+            ag.log(f"ochtendbericht {datum}", "besluit", f"item {it['id']}: aflevering onzeker, een vorige ronde stopte na "
+                                                        "het versturen; niet opnieuw verstuurd")
+        if it.get("status") == "klaar":
+            ochtend_oppakken(dag, nood)
+        else:
+            dag["opgepakt"] = True
+        return "eerder", "ochtendbericht aflevering onzeker" if spoor == "bezig" else ""
     if it.get("status") != "klaar":
         # opgepakt zonder dat mijn stand het weet (een verloren bode.json): niet opnieuw, en geen terugval
         return "eerder", ""
@@ -839,7 +918,7 @@ def ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, d
     if droog:
         print(f"  (droog) zou het ochtendbericht {it['id']} sturen, kop {kop!r}:\n{volledige_tekst}")
         return "droog", ""
-    kanaal = stuur(volledige_tekst, nood, kop=kop, voorrang=True)
+    kanaal = vast_sturen(sleutel, wat, volledige_tekst, nood, kop, moment)
     if not kanaal:
         return "mislukt", "ochtendbericht niet verstuurd"
     punten = [p for p in (inhoud.get("punten") if isinstance(inhoud.get("punten"), list) else []) if isinstance(p, dict)]
@@ -859,9 +938,9 @@ def ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, d
 
 def ochtend_oppakken(dag, nood):
     """Het verstuurde ochtendbericht op opgepakt zetten. Lukt dat niet, dan een nood, en de volgende ronde probeert
-    alleen dat opnieuw: verstuurd is verstuurd (M6)."""
+    alleen dat opnieuw: verstuurd is verstuurd (M6). Een onzekere aflevering (RZ2-04) zegt dat op het bord."""
     try:
-        bord.opgepakt(dag["klaarzet_id"], NAAM)
+        bord.opgepakt(dag["klaarzet_id"], f"{NAAM}: aflevering onzeker" if dag.get("onzeker") else NAAM)
         dag["opgepakt"] = True
     except Exception as e:  # noqa: BLE001
         nood.append({"tekst": f"Ochtendbericht verstuurd maar niet opgepakt op het bord: {type(e).__name__}",
@@ -870,11 +949,25 @@ def ochtend_oppakken(dag, nood):
 
 def terugval_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, droog=False, gelezen=None):
     """Geen ochtendbericht om 11:00 Brussel (B5, I7): een bericht zonder nummers met de aantallen, en in de bundelstand
-    de regel Gebundeld. Een keer per dag; de nood staat apart (vaste_momenten). Onbekend is nooit 0 (L29)."""
+    de regel Gebundeld. Een keer per dag; de nood staat apart (vaste_momenten). Onbekend is nooit 0 (L29).
+    Het verzendspoor zoals bij ochtend_sturen (RZ2-04): wat er 'bezig' of 'verzonden' staat, stuur ik nooit opnieuw;
+    'bezig' wordt terugval_onzeker en een nood."""
     datum = dag_van(moment)
     dag = staat.setdefault("ochtend", {}).setdefault(datum, {})
     if dag.get("terugval") or is_stil(moment):
         return ""
+    sleutel, wat = f"terugval:{datum}", f"Terugval van {datum}"
+    try:
+        spoor, tijd = verzending(sleutel)
+    except OSError as e:
+        spoor_onleesbaar(nood, wat, e)
+        return "terugval niet verstuurd"
+    if spoor:
+        dag.update({"terugval": tijd, **({"terugval_onzeker": True} if spoor == "bezig" else {})})
+        if spoor == "bezig" and not droog:
+            ag.log(f"ochtendbericht {datum}", "besluit", "terugval: aflevering onzeker, een vorige ronde stopte na het "
+                                                        "versturen; niet opnieuw verstuurd")
+        return "terugval aflevering onzeker" if spoor == "bezig" else ""
     nieuw = nieuwe_voorstellen(staat, voorstellen)
     v = ("voorstellen onbekend" if voorstellen is None else meervoud(len(voorstellen), "voorstel", "voorstellen")
          + (f" ({len(nieuw)} nieuw)" if nieuw else ""))
@@ -892,7 +985,7 @@ def terugval_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, 
     if droog:
         print(f"  (droog) zou de terugval sturen, kop {kop!r}:\n{tekst}")
         return ""
-    kanaal = stuur(tekst, nood, kop=kop, voorrang=True)
+    kanaal = vast_sturen(sleutel, wat, tekst, nood, kop, moment)
     if not kanaal:
         return "terugval niet verstuurd"
     dag.update({"terugval": moment.isoformat(), "terugval_kanaal": kanaal})
@@ -925,11 +1018,26 @@ def avond_regels(update, bundel, nieuw, namen, volledig):
 def avond_sturen(staat, nood, moment, namen, bord_items, voorstellen, droog=False, gelezen=None):
     """De avondbundel (alleen in 'ochtend-avond', B5): bij de mailupdate van 17:00 (AVOND_TRIGGER), of vanaf 17:30
     Brussel als er iets gebundeld is. Een keer per dag, niet in de stille uren, met voorrang; daarna begint de bundel
-    opnieuw. Is het bord niet gelezen, dan niets: ik stuur geen bundel alsof er niets is."""
+    opnieuw. Is het bord niet gelezen, dan niets: ik stuur geen bundel alsof er niets is.
+    Het verzendspoor zoals bij ochtend_sturen (RZ2-04): wat er 'bezig' of 'verzonden' staat, stuur ik nooit opnieuw;
+    'bezig' wordt onzeker en een nood. bundel_vanaf schuift dan niet op: wat in een onzekere bundel stond, komt liever nog
+    eens in het ochtendbericht dan nooit."""
     datum = dag_van(moment)
     dag = staat.setdefault("avond", {}).setdefault(datum, {})
     if dag.get("verzonden") or not na(moment, AVOND_VANAF) or is_stil(moment):
         return ""
+    sleutel, wat = f"avondbundel:{datum}", f"Avondbundel van {datum}"
+    try:
+        spoor, tijd = verzending(sleutel)
+    except OSError as e:
+        spoor_onleesbaar(nood, wat, e)
+        return "avondbundel niet verstuurd"
+    if spoor:
+        dag.update({"verzonden": tijd, **({"onzeker": True} if spoor == "bezig" else {})})
+        if spoor == "bezig" and not droog:
+            ag.log(f"avondbundel {datum}", "besluit", "aflevering onzeker, een vorige ronde stopte na het versturen; "
+                                                     "niet opnieuw verstuurd")
+        return "avondbundel aflevering onzeker" if spoor == "bezig" else ""
     bundel, volledig = bundelwerk(bord_items, staat)
     if bundel is None:
         return ""
@@ -943,7 +1051,7 @@ def avond_sturen(staat, nood, moment, namen, bord_items, voorstellen, droog=Fals
     if droog:
         print(f"  (droog) zou de avondbundel sturen, kop {kop!r}:\n{tekst}")
         return ""
-    kanaal = stuur(tekst, nood, kop=kop, voorrang=True)
+    kanaal = vast_sturen(sleutel, wat, tekst, nood, kop, moment)
     if not kanaal:
         return "avondbundel niet verstuurd"
     dag.update({"verzonden": moment.isoformat(), "kanaal": kanaal, "items": len(bundel), "met_update": bool(update)})
@@ -959,7 +1067,11 @@ def slotbundel_sturen(staat, nood, moment, namen, bord_items, droog=False):
     laatste_id en gaat in 'uit' niet meer los. Dat stuur ik eerst als slotbundel, met voorrang en niet in de stille uren;
     pas na een geslaagde verzending laat ik bundel_vanaf los. Mislukt het, of is het bord niet gelezen, dan blijft alles
     staan en probeert de volgende ronde opnieuw. De grens is laatste_id bij de omschakeling (bundel_tot): wat daarna
-    binnenkomt, gaat los en hoort niet ook in de slotbundel. Tot 21-10-2026 gooide 'uit' bundel_vanaf meteen weg."""
+    binnenkomt, gaat los en hoort niet ook in de slotbundel. Tot 21-10-2026 gooide 'uit' bundel_vanaf meteen weg.
+    Het verzendspoor zoals bij de andere vaste momenten (RZ2-04, tegenproef 22-10-2026), met bundel_tot in de sleutel:
+    een tweede omschakeling op dezelfde dag is een andere slotbundel. 'verzonden' of 'bezig' stuur ik nooit opnieuw;
+    'bezig' wordt onzeker en een nood. In beide gevallen laat ik bundel_vanaf los, want in 'uit' draagt geen latere bundel
+    het nog."""
     if "bundel_vanaf" not in staat:
         staat.pop("bundel_tot", None)
         return ""
@@ -972,16 +1084,31 @@ def slotbundel_sturen(staat, nood, moment, namen, bord_items, droog=False):
         staat.pop("bundel_vanaf", None)
         staat.pop("bundel_tot", None)
         return ""
+    datum = dag_van(moment)
+    sleutel, wat = f"slotbundel:{datum}:{tot}", f"Slotbundel van {datum}"
+    try:
+        spoor, _ = verzending(sleutel)
+    except OSError as e:
+        spoor_onleesbaar(nood, wat, e)
+        return "slotbundel niet verstuurd"
+    if spoor:
+        staat.pop("bundel_vanaf", None)
+        staat.pop("bundel_tot", None)
+        if spoor == "bezig":
+            staat["ochtend"].setdefault(datum, {})["slotbundel_onzeker"] = True
+            if not droog:
+                ag.log(f"bundel {datum}", "besluit", "slotbundel: aflevering onzeker, een vorige ronde stopte na het "
+                                                     "versturen; niet opnieuw verstuurd, terug naar de stand uit")
+        return "slotbundel aflevering onzeker" if spoor == "bezig" else ""
     if is_stil(moment):
         return ""
-    datum = dag_van(moment)
     b = moment.astimezone(BRUSSEL)
     kop = f"Bundel {WEEKDAG[b.weekday()]} {b:%d-%m}"
     tekst = "\n\n".join(avond_regels([], slot, [], namen, volledig))
     if droog:
         print(f"  (droog) zou de slotbundel sturen, kop {kop!r}:\n{tekst}")
         return ""
-    kanaal = stuur(tekst, nood, kop=kop, voorrang=True)
+    kanaal = vast_sturen(sleutel, wat, tekst, nood, kop, moment)
     if not kanaal:
         return "slotbundel niet verstuurd"
     staat.pop("bundel_vanaf", None)
@@ -1005,6 +1132,9 @@ def vaste_momenten(staat, nood, moment, namen, stand, bord_items, voorstellen, d
             staat[sleutel] = {}
         for d in [d for d in staat[sleutel] if d < grens]:
             staat[sleutel].pop(d)
+    if not droog:
+        # het verzendspoor even lang als de stand, opgeruimd zoals het belspoor (FR-179: een spoor dat niet blijft groeien)
+        bellen._spoor_opruimen(verzendspoor(), (moment - timedelta(days=OCHTEND_DAGEN + 1)).isoformat())
     uit = []
     if stand == "uit":
         uit.append(slotbundel_sturen(staat, nood, moment, namen, bord_items, droog))
@@ -1024,6 +1154,12 @@ def vaste_momenten(staat, nood, moment, namen, stand, bord_items, voorstellen, d
                      "wie": "claude-code"})
     if stand == "ochtend-avond":
         uit.append(avond_sturen(staat, nood, moment, namen, bord_items, voorstellen, droog, gelezen=gelezen))
+    # RZ2-04: een onzekere aflevering blijft de hele dag een nood (N10), zoals een verlopen ochtendbericht
+    ochtend, avond = staat["ochtend"].get(datum) or {}, staat["avond"].get(datum) or {}
+    for wat, onzeker in (("Ochtendbericht", ochtend.get("onzeker")), ("Terugval", ochtend.get("terugval_onzeker")),
+                         ("Avondbundel", avond.get("onzeker")), ("Slotbundel", ochtend.get("slotbundel_onzeker"))):
+        if onzeker:
+            nood.append({"tekst": ONZEKER.format(wat=f"{wat} van {datum}"), "wie": "claude-code"})
     return "; ".join(x for x in uit if x)
 
 
