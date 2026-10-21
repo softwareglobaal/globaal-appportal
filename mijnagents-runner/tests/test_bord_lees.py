@@ -11,6 +11,10 @@
   naar een taalmodel (het dossier en agent_verslag van De Regisseur, De Ontwikkelaar).
 - BAS-04 (J1): een kort venster (FATHOM_WACHT_DAGEN=1, een echte ronde van De Regisseur) opent geen nood over Mehdi's
   eigen sleutel en herschrijft geen dagelijks logboek van een dag die het maar voor een deel ziet.
+- RZ2-01 (bouwcontrole RZ2): een privé-item van De Fathomwacht draagt in titel, inhoud en verwijzing geen persoon,
+  onderwerp of toelichting. Samen getoetst met De Dagbundelaar en bord_export: een herkenbare naam en een herkenbaar
+  onderwerp staan nergens in de bundel, het Dagverslag, de werkverslagen of de export.
+- RZ2-02: zonder Fathom-sleutel geeft main() 1, zodat het script niet met exit 0 eindigt (zie ook test_keten.py).
 
 Geen netwerk: het bord is nagebootst met BordNabootsing uit test_agentnorm.py, de databank is tijdelijk en komt uit
 init_db van mijnagents/app.py als Flask er is (in de CI altijd).
@@ -19,6 +23,7 @@ Draaien: python3 mijnagents-runner/tests/test_bord_lees.py
 import io
 import json
 import os
+import re
 import signal
 import sqlite3
 import subprocess
@@ -320,16 +325,19 @@ def test_k3_fathom_wacht_afgebroken_blijft_niet_op_actief():
 
 
 def test_k3_fathom_wacht_gewone_uitgangen_onveranderd():
-    """Een gewone fout en een ontbrekende sleutel melden zoals voordien, zonder extra hartslag erachter."""
+    """Een gewone fout en een ontbrekende sleutel melden zoals voordien, zonder extra hartslag erachter. RZ2-02: zonder
+    sleutel geeft main() wel 1, zodat het script niet met exit 0 eindigt."""
     fw = _fathom_wacht()
     nb = BordNabootsing()
     echt = (bord.call, fw.fathom.beschikbaar)
     bord.call, fw.fathom.beschikbaar = nb.call, (lambda: False)
     try:
-        fw.main()
+        code = fw.main()
     finally:
         bord.call, fw.fathom.beschikbaar = echt
     assert [s["status"] for s in nb.statussen()] == ["actief", "fout"] and nb.statussen()[-1]["taak"] == "geen Fathom-sleutel"
+    assert "nood" not in nb.statussen()[-1], "de hartslag blijft zoals voordien, zonder noodlijst"
+    assert code == 1, f"RZ2-02: een ronde die Fathom niet kon lezen, eindigt niet op 0: {code!r}"
 
     nb = BordNabootsing(werkwijze=_http(500), open_noden=[])
     bord.call, fw.fathom.beschikbaar = nb.call, (lambda: True)
@@ -464,7 +472,7 @@ def fathom_ronde(nb, gesprekken, archief=None, nu=None, dagen=None):
     nummerlezer._standaard["codes"], nummerlezer._standaard["ts"] = nummerlezer._bouw_codes([]), time.time()   # geen register
     archief = archief or tempfile.mkdtemp(prefix="fathom-data-")
     for g, herk in gesprekken:
-        map_ = os.path.join(archief, f"gesprek {g['recording_id']}")
+        map_ = os.path.join(archief, fw.archiefmap(g))     # de echte mapnaam: datum, uur en de titel in Fathom
         os.makedirs(map_, exist_ok=True)
         with open(os.path.join(map_, "gesprek.json"), "w", encoding="utf-8") as f:
             json.dump(dict(g, herkenning=herk), f)
@@ -596,6 +604,212 @@ def test_bas04_kort_venster_opent_geen_nood_over_de_eigen_sleutel():
     assert not any("eigen Fathom-sleutel" in n["tekst"] for n in h["nood"]), f"een eigen opname bewijst de sleutel: {h}"
     h = laatste([], van_shaniel, 14)
     assert {"tekst": SLEUTEL_NOOD, "wie": "mehdi"} in h["nood"], f"het volle venster meldt zoals voordien, dezelfde tekst (N10): {h}"
+
+
+# ------------------------------------------------------------------------------------------------- RZ2-01 ---
+GEHEIM = ("Proefnaam", "Proefscheiding")          # een herkenbare naam en een herkenbaar onderwerp
+DAG_RZ2 = "2026-10-20"
+
+
+def _dagbundelaar():
+    _argv, sys.argv = sys.argv, [sys.argv[0]]      # dagbundelaar.py leest --dag bij het importeren
+    try:
+        import dagbundelaar  # noqa: PLC0415
+    finally:
+        sys.argv = _argv
+    return dagbundelaar
+
+
+def dagbundel_ronde(items, dag):
+    """Een ronde van De Dagbundelaar op deze items, zoals het bord ze teruggeeft (inhoud als json-tekst), zonder netwerk.
+    Geeft (wat naar het bord ging, per pad een lijst; de schermregels)."""
+    D = _dagbundelaar()
+    gezet = {}
+
+    def call(pad, payload=None, method=None):
+        if pad.startswith("/api/klaarzet?"):
+            return {"items": [dict(it) for it in items if "soort=zoom" not in pad or it["soort"] == "zoom"]}
+        gezet.setdefault(pad, []).append(payload)
+        return {"nieuw": len((payload or {}).get("items") or [])}
+
+    oud = (bord.call, bord.opgepakt, D.DAG)
+    bord.call, bord.opgepakt, D.DAG = call, (lambda kid, door: None), dag
+    try:
+        with redirect_stdout(io.StringIO()) as scherm:
+            D.main()
+    finally:
+        bord.call, bord.opgepakt, D.DAG = oud
+    return gezet, scherm.getvalue()
+
+
+def export_db(naam):
+    """Een tijdelijke databank met het volle schema van het bord (init_db van mijnagents/app.py), voor bord_export."""
+    pad = os.path.join(MAP, naam + ".db")
+    try:
+        os.environ.setdefault("AGENTS_DB", os.path.join(MAP, "app-start.db"))
+        sys.path.insert(0, os.path.join(REPO, "mijnagents"))
+        import app  # noqa: PLC0415
+        app.DB_PAD = pad
+        with redirect_stdout(io.StringIO()):
+            app.init_db()
+    except ImportError:
+        # Lokaal zonder Flask: het schema uit de tekst van init_db, zoals test_bode_regie.py. In de CI is Flask er altijd.
+        assert not os.environ.get("CI"), "Flask ontbreekt in de CI: deze toets hoort de databank uit init_db te bouwen"
+        bron = open(os.path.join(REPO, "mijnagents", "app.py"), encoding="utf-8").read()
+        sql = re.search(r'def init_db\(\):.*?executescript\(\s*"""(.*?)"""', bron, re.S).group(1)
+        c = sqlite3.connect(pad)
+        c.executescript(sql)
+        c.execute("ALTER TABLE agent ADD COLUMN werkwijze TEXT DEFAULT ''")
+        c.commit()
+        c.close()
+    return pad
+
+
+def export(pad, klaarzet, logboek):
+    """bord_export.main() op een databank met deze klaarzet-items en werkverslagregels. Geeft {pad: tekst} van de export."""
+    import bord_export as E  # noqa: PLC0415
+    nu_ = datetime.now(timezone.utc).isoformat()
+    c = sqlite3.connect(pad)
+    c.executemany("INSERT INTO klaarzet(van, voor, soort, sleutel, titel, inhoud, verwijzing, uniek, status, ts) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                  [(it["van"], it["voor"], it["soort"], it.get("sleutel") or "", it["titel"],
+                    it["inhoud"] if isinstance(it.get("inhoud"), str) else json.dumps(it.get("inhoud"), ensure_ascii=False),
+                    it.get("verwijzing") or "", it.get("uniek") or "", it.get("status") or "klaar", nu_) for it in klaarzet])
+    c.executemany("INSERT INTO logboek(naam, onderwerp, stap, tekst, detail, ts) VALUES(?,?,?,?,?,?)",
+                  [(r["naam"], r["onderwerp"], r["stap"], r["tekst"], r["detail"], nu_) for r in logboek])
+    c.commit()
+    c.close()
+    data = tempfile.mkdtemp(prefix="export-")
+    oud = (E.DB, E.DATA, E.UIT)
+    E.DB, E.DATA, E.UIT = pad, data, os.path.join(data, "export")
+    try:
+        with redirect_stdout(io.StringIO()):
+            E.main()
+    finally:
+        E.DB, E.DATA, E.UIT = oud
+    gelezen = {}
+    for wortel, _, bestanden in os.walk(os.path.join(data, "export")):
+        for b in bestanden:
+            gelezen[os.path.relpath(os.path.join(wortel, b), data)] = open(os.path.join(wortel, b), encoding="utf-8").read()
+    return gelezen
+
+
+def test_rz2_01_prive_nergens_in_bundel_werkverslag_of_export():
+    """RZ2-01 (bouwcontrole RZ2, 21-10-2026), aan de bron. Een privé-opname droeg persoon, onderwerp en toelichting in het
+    klaarzet-item van De Fathomwacht (titel, inhoud, en de verwijzing: de archiefmap heet naar de titel in Fathom). De
+    Dagbundelaar nam de titel over in het Dagverslag en zijn werkverslag, en bord_export schreef de iteminhoud uit. Nu:
+    een privé-item draagt alleen datum, start, minuten, privé en een verwijzing naar het archief op de VM; De Dagbundelaar
+    zet er 'privégesprek, N min' van in; de export schrijft geen inhoud van een privé-item. Ook een item van voor de
+    herstelling (titel met naam en onderwerp, nog op het bord) lekt niet meer. Een werkgesprek blijft zoals het was: De
+    Contractmaker en de werfverslagagents lezen Fathom-items."""
+    prive = gesprek(7101, "2026-10-20T18:00:00Z", "2026-10-20T18:40:00Z", titel="Avond met Lara Proefnaam")
+    werk = gesprek(7102, "2026-10-20T08:00:00Z", "2026-10-20T08:30:00Z", titel="Werfoverleg")
+    gezet, scherm, _ = fathom_ronde(BordNabootsing(werkwijze=WW_FATHOM), [
+        (prive, herkenning(["Lara Proefnaam", "Mehdi"], "Proefscheiding bespreken", prive=True, afdeling="prive",
+                           waarom="Lara Proefnaam en Mehdi over de Proefscheiding")),
+        (werk, herkenning(["Jan Klant"], "Dakkapel nakijken"))])
+    archief = os.path.dirname(gezet["/api/gesprekken"][0]["rijen"][0]["archief"])
+    assert "Proefnaam" in json.dumps(gezet["/api/gesprekken"], ensure_ascii=False), \
+        "de gesprekkentabel (alleen beheer) houdt wie en waarover: de proef draagt de naam echt"
+    items = {it["uniek"]: it for it in gezet["/api/klaarzet"][0]["items"]}
+
+    # het privé-item zelf: alleen datum, start, minuten, privé en de verwijzing naar het archief op de VM
+    p = items["fathom:7101"]
+    verwijzing = os.path.join(archief, "2026-10-20 2000 (privé) [7101]")
+    assert p["titel"] == "2026-10-20T20:00 Fathom: privégesprek, 40 min · PRIVÉ", p["titel"]
+    assert p["inhoud"] == {"datum": "2026-10-20", "start": "20:00", "minuten": 40, "prive": True, "archief": verwijzing}, p["inhoud"]
+    assert p["verwijzing"] == verwijzing and p["voor"] == "mehdi" and p["soort"] == "transcript", p
+    assert os.path.isdir(os.path.join(archief, "2026-10-20 2000 Avond met Lara Proefnaam")), "de map op de VM houdt haar naam"
+
+    # een werkgesprek blijft zoals het was
+    w = items["fathom:7102"]
+    assert w["titel"] == "2026-10-20T10:00 Fathom: Jan Klant · Dakkapel nakijken", w["titel"]
+    assert w["verwijzing"] == os.path.join(archief, "2026-10-20 1000 Werfoverleg"), w["verwijzing"]
+    assert set(w["inhoud"]) == {"uniek", "datum", "start", "minuten", "personen", "bedrijf", "afdeling", "thema", "project", "prive",
+                                "zekerheid", "archief", "link", "opgenomen_door", "waarom", "transcript_pad", "dossier", "firma",
+                                "projectnummer", "deal_id", "zekerheid_dossier", "conflict", "redenen"}, sorted(w["inhoud"])
+    assert w["inhoud"]["personen"] == "Jan Klant" and w["inhoud"]["thema"] == "Dakkapel nakijken" and w["inhoud"]["prive"] is False
+
+    # De Dagbundelaar, met daarnaast een privé-item van voor de herstelling dat nog op het bord staat
+    oud_prive = {"id": 1, "van": "fathom-wacht", "voor": "mehdi", "soort": "transcript", "sleutel": "", "status": "klaar",
+                 "titel": "2026-10-20T21:00 Fathom: Lara Proefnaam · Proefscheiding regelen · PRIVÉ", "uniek": "fathom:7000",
+                 "verwijzing": "/home/ubuntu/appportal/mijnagents-data/fathom-data/2026-10-20 2100 Avond met Lara Proefnaam",
+                 "inhoud": json.dumps({"uniek": "fathom:7000", "datum": DAG_RZ2, "start": "21:00", "minuten": 25,
+                                       "personen": "Lara Proefnaam, Mehdi", "thema": "Proefscheiding regelen", "prive": True,
+                                       "waarom": "Lara Proefnaam over de Proefscheiding"}, ensure_ascii=False)}
+    bak = [oud_prive] + [dict(it, id=i, status="klaar", inhoud=json.dumps(it["inhoud"], ensure_ascii=False))
+                         for i, it in enumerate(gezet["/api/klaarzet"][0]["items"], start=2)]
+    bundel, bundel_scherm = dagbundel_ronde(bak, DAG_RZ2)
+    bundels = {b["uniek"]: b for b in bundel["/api/klaarzet"][0]["items"]}
+    verslag = bundels[f"dagverslag:{DAG_RZ2}"]["inhoud"]
+    assert "- transcript: privégesprek, 40 min" in verslag and "- transcript: privégesprek, 25 min" in verslag, verslag
+    assert "Jan Klant" in verslag, "een werkgesprek staat er zoals voordien in"
+    regels = bundel["/api/logboek"][0]["regels"]
+    assert any("privégesprek, 25 min" in r["detail"] for r in regels), "het werkverslag zegt alleen privégesprek, N min"
+
+    # de export van het bord: klaargezet, werkverslagen en de dagverslagen voluit
+    gelezen = export(export_db("rz2-01"), [dict(it, van="fathom-wacht") for it in [oud_prive] + list(items.values())]
+                     + [dict(b, van="dagbundelaar") for b in bundels.values()],
+                     gezet["/api/logboek"][0]["regels"] + regels)
+    fathom_export = "".join(t for pad, t in gelezen.items() if pad.startswith(os.path.join("export", "Fathom", "klaargezet")))
+    assert fathom_export.count("): (privé)") == 2 and "Jan Klant" in fathom_export and "Dakkapel nakijken" in fathom_export, fathom_export
+    assert any("privégesprek, 40 min" in t for pad, t in gelezen.items() if "dagverslagen" in pad), list(gelezen)
+
+    # nergens de naam of het onderwerp: niet in wat naar het bord ging (behalve de gesprekkentabel), niet op het scherm
+    # (de cron-logboeken), niet in de bundels, het Dagverslag of de werkverslagen, en niet in de export
+    nagaan = {f"fathom {pad}": json.dumps(p, ensure_ascii=False) for pad, lijst in gezet.items() if pad != "/api/gesprekken" for p in lijst}
+    nagaan.update({f"dagbundelaar {pad}": json.dumps(p, ensure_ascii=False) for pad, lijst in bundel.items() for p in lijst})
+    nagaan.update({"fathom scherm": scherm, "dagbundelaar scherm": bundel_scherm})
+    nagaan.update({f"export {pad}": t for pad, t in gelezen.items()})
+    for waar, tekst in nagaan.items():
+        for geheim in GEHEIM:
+            assert geheim not in tekst, f"{geheim!r} staat in {waar}: {tekst[:2000]}"
+
+
+def test_rz2_01_oude_bundels_en_werkverslagregels_lekken_niet_in_de_export():
+    """RZ2-01, tegenproef van 22-10-2026. Wat van voor de herstelling nog in het venster van de export staat (14 dagen),
+    droeg de naam en het onderwerp van een privégesprek op drie plaatsen buiten de dagverslagen/: een bundel en het
+    Dagverslag als klaarzet-item (export/Dagbundelaar/klaargezet/), de werkverslagregel van De Dagbundelaar met 'Toe te
+    wijzen' in het detail, en de bevinding van De Plaudwacht met de hoofdpersoon (export/<Agent>/werkverslag/). Alleen
+    dagverslagen/ ging door zonder_prive_regels. Nu wordt elke regel met PRIVÉ '(privé)' in klaargezet/ en in het
+    werkverslag, en ook een bevinding in de oude vorm van De Plaudwacht en De Fathomwacht (met ' · privé'), waarvan dan
+    ook het detail (de reden) wegvalt, en een oude bronregel van De Fathomwacht met afdeling prive. Wat geen privé
+    draagt, blijft staan."""
+    oud = "2026-10-20T21:00 Fathom: Lara Proefnaam · Proefscheiding regelen · PRIVÉ"
+    kaart = "/home/ubuntu/appportal/mijnagents-data/fathom-data/2026-10-20 2100 Avond met Lara Proefnaam"
+    bundel = (f"Dossier (zonder dossier) op {DAG_RZ2}: 2 transcript\n- transcript: {oud} ({kaart})\n"
+              f"- transcript: 2026-10-20T10:00 Fathom: Jan Klant · Dakkapel nakijken\nOntbreekt: bronnen zonder dossier: Mehdi wijst ze toe")
+    verslag = (f"Dagverslag {DAG_RZ2}: 2 bronnen in 1 bundel(s).\nZoom: dagregel ontbreekt (Zoomwacht niet klaar)\n"
+               f"Toe te wijzen: {oud}; 2026-10-20T10:00 Fathom: Jan Klant · Dakkapel nakijken\n\n{bundel}")
+    klaarzet = [{"van": "dagbundelaar", "voor": "mehdi", "soort": "dagbundel", "sleutel": DAG_RZ2, "titel": f"Bundel {DAG_RZ2} · (zonder dossier)",
+                 "uniek": f"bundel:{DAG_RZ2}:(zonder dossier)", "inhoud": bundel},
+                {"van": "dagbundelaar", "voor": "mehdi", "soort": "dagbundel", "sleutel": DAG_RZ2, "titel": f"Dagverslag {DAG_RZ2}",
+                 "uniek": f"dagverslag:{DAG_RZ2}", "inhoud": verslag}]
+    logboek = [{"naam": "dagbundelaar", "onderwerp": f"dag {DAG_RZ2}", "stap": "bevinding",
+                "tekst": "2 klaargezette bronnen, 1 bundel(s), 2 toe te wijzen; Zoom-dagregel ontbreekt, 0 nagekomen of herzien", "detail": verslag},
+               {"naam": "plaud-wacht", "onderwerp": "opname 2026-10-20T22:00", "stap": "bevinding",
+                "tekst": "Lara Proefnaam · dossier geen (laag) · privé · voor mehdi · 2 publicatie(s), 0 fout", "detail": "afdeling onbekend; privé"},
+               {"naam": "plaud-wacht", "onderwerp": "opname 2026-10-20T09:00", "stap": "bevinding",
+                "tekst": "Jan Klant · dossier HARC:2531 (hoog) · voor h-architects · 3 publicatie(s), 0 fout", "detail": ""},
+               # De Fathomwacht van voor BAS-01 (21-10-2026): de bevinding met ' · privé' en de reden in het detail, en de
+               # bronregel met per gesprek personen | afdeling | thema
+               {"naam": "fathom-wacht", "onderwerp": "gesprek 2026-10-20T20:00", "stap": "bevinding",
+                "tekst": "Lara Proefnaam · prive · Proefscheiding bespreken · privé · zekerheid hoog",
+                "detail": "Lara Proefnaam en Mehdi over de Proefscheiding"},
+               {"naam": "fathom-wacht", "onderwerp": "Fathom", "stap": "bron", "tekst": "2 gesprekken sinds 2026-10-06; 1 privé",
+                "detail": "2026-10-20 20:00 Lara Proefnaam, Mehdi | prive | Proefscheiding bespreken\n"
+                          "2026-10-20 10:00 Jan Klant | regie | Dakkapel nakijken"}]
+    gelezen = export(export_db("rz2-01-oud"), klaarzet, logboek)
+    for pad, tekst in gelezen.items():
+        for geheim in GEHEIM:
+            assert geheim not in tekst, f"{geheim!r} staat in export {pad}: {tekst[:2000]}"
+    bundelaar = "".join(t for pad, t in gelezen.items() if pad.startswith(os.path.join("export", "Dagbundelaar", "klaargezet")))
+    assert "(privé)" in bundelaar and "Jan Klant · Dakkapel nakijken" in bundelaar, bundelaar
+    werk = "".join(t for pad, t in gelezen.items() if pad.startswith(os.path.join("export", "Dagbundelaar", "werkverslag")))
+    assert "(privé)" in werk and "2 klaargezette bronnen" in werk, werk
+    plaud = "".join(t for pad, t in gelezen.items() if pad.startswith(os.path.join("export", "Plaud", "werkverslag")))
+    assert "Jan Klant · dossier HARC:2531 (hoog)" in plaud and "(privé)" in plaud, plaud
+    fathom = "".join(t for pad, t in gelezen.items() if pad.startswith(os.path.join("export", "Fathom", "werkverslag")))
+    assert "Jan Klant | regie | Dakkapel nakijken" in fathom and "2 gesprekken sinds" in fathom, fathom
 
 
 if __name__ == "__main__":

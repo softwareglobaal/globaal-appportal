@@ -202,6 +202,13 @@ def veilige_naam(t):
     return re.sub(r"[^\w\- .,()]+", "", t or "").strip()[:70] or "gesprek"
 
 
+def prive_verwijzing(map_, start, gid):
+    """De verwijzing van een privé-item (RZ2-01): de archiefmap op de VM met '(privé)' in plaats van de titel in Fathom,
+    die een naam of een onderwerp kan dragen, en het recording_id, waarop de map te vinden is (gesprek.json, zoals
+    bestaande_map zoekt). Zoals verwijzing_van in zoom_wacht.py; de map zelf houdt haar naam."""
+    return os.path.join(os.path.dirname(map_), f"{start[:10]} {start[11:16].replace(':', '')} (privé) [{gid}]")
+
+
 def bewaar(g, tekst, herkenning):
     map_ = os.path.join(ARCHIEF, archiefmap(g))
     gj = os.path.join(map_, "gesprek.json")
@@ -345,7 +352,10 @@ def main():
         if not fathom.beschikbaar():
             ag.hartslag("fout", taak="geen Fathom-sleutel", detail="FATHOM_API_KEYS ontbreekt")
             afgesloten = True
-            return
+            # RZ2-02: een ronde die Fathom niet kon lezen, eindigt niet op 0. Met exit 0 schreef keten.py 'geslaagd' en kon
+            # het ochtendbericht voor 10:30 vertrekken zonder Fathom-lezing. Een sleutel die faalt, gooit hieronder een
+            # fout op en eindigt zo ook niet op 0.
+            return 1
         werkwijze = ag.werkwijze()
         personen = personen_uit_werkwijze(werkwijze)
         begin = nu_utc() - timedelta(days=DAGEN)
@@ -404,13 +414,23 @@ def main():
                     else:
                         pad = f"{salesmap}/0 Fathom/{naam}"
             voor = besl["voor"]
-            klaar.append({"voor": voor, "soort": "transcript", "sleutel": (besl["projectnummer"] or "") if besl["zekerheid"] != "laag" else "",
-                          "titel": f"{start} Fathom: {herk.get('hoofdpersoon') or g.get('title')} · {herk.get('thema', '')[:60]}" + (" · PRIVÉ" if prive else ""),
-                          "uniek": f"fathom:{gid}", "verwijzing": pad or map_,
-                          "inhoud": {**{k: v for k, v in rij.items() if k not in ("waarom", "bron")}, "waarom": herk.get("waarom", ""), "transcript_pad": pad or os.path.join(map_, "transcript.md"),
-                                     "dossier": besl["dossier"], "firma": besl["firma"], "projectnummer": besl["projectnummer"],
-                                     "deal_id": deal["id"] if deal else None, "zekerheid_dossier": besl["zekerheid"],
-                                     "conflict": besl["conflict"], "redenen": besl["redenen"]}})
+            dossiersleutel = (besl["projectnummer"] or "") if besl["zekerheid"] != "laag" else ""
+            if prive:
+                # RZ2-01 (M3): een privé-item draagt geen persoon, onderwerp of toelichting, ook niet in de verwijzing (de
+                # archiefmap heet naar de titel in Fathom). Het gaat naar De Dagbundelaar, De Levenscoach en de export van
+                # het bord; met wie en waarover staan in het archief op de VM.
+                verwijzing = prive_verwijzing(map_, start, gid)
+                klaar.append({"voor": voor, "soort": "transcript", "sleutel": dossiersleutel,
+                              "titel": f"{start} Fathom: privégesprek, {duur} min · PRIVÉ", "uniek": f"fathom:{gid}", "verwijzing": verwijzing,
+                              "inhoud": {"datum": start[:10], "start": start[11:16], "minuten": duur, "prive": True, "archief": verwijzing}})
+            else:
+                klaar.append({"voor": voor, "soort": "transcript", "sleutel": dossiersleutel,
+                              "titel": f"{start} Fathom: {herk.get('hoofdpersoon') or g.get('title')} · {herk.get('thema', '')[:60]}",
+                              "uniek": f"fathom:{gid}", "verwijzing": pad or map_,
+                              "inhoud": {**{k: v for k, v in rij.items() if k not in ("waarom", "bron")}, "waarom": herk.get("waarom", ""), "transcript_pad": pad or os.path.join(map_, "transcript.md"),
+                                         "dossier": besl["dossier"], "firma": besl["firma"], "projectnummer": besl["projectnummer"],
+                                         "deal_id": deal["id"] if deal else None, "zekerheid_dossier": besl["zekerheid"],
+                                         "conflict": besl["conflict"], "redenen": besl["redenen"]}})
             if prive:
                 # BAS-01, M3 (ontwerp 13.2): met wie en waarover vallen weg bij een privégesprek, ook in het werkverslag.
                 # Dat gaat naar een taalmodel (het dossier en agent_verslag van De Regisseur, De Ontwikkelaar), en het
@@ -453,6 +473,7 @@ def main():
             detail += "; noden niet bijgewerkt, open noden onbekend" + "".join(f"; {n['tekst']}" for n in nood)
         ag.hartslag("waakt", taak="wacht op nieuwe gesprekken", detail=detail, nood=None if sleutel is None else sleutel + nood)
         afgesloten = True
+        return 0
     except Exception as e:  # noqa: BLE001
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
         ag.log_verstuur()
@@ -472,4 +493,4 @@ def hoofd_van(herk):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, stop_bij_sigterm)
-    main()
+    sys.exit(main())

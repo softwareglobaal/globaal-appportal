@@ -65,7 +65,9 @@ BORD_URL = "mijnagents.globaal.be"
 #     droog: de runner kent --droog. Gemeten 21-10-2026 in de code ("--droog" in sys.argv): contracten_agent.py,
 #     locatie_wacht.py, bode.py, zoom_wacht.py en mail_regisseur.py; de andere niet, en daar zou een droge ronde echt
 #     draaien (J2), dus die weiger ik. stuurt: de runner bereikt Mehdi zelf (bode stuurt WhatsApp en belt; mail-regisseur
-#     zet oproepen klaar): die draaien alleen droog. slot: hetzelfde flock-slot als de cron (I10, J16).
+#     zet oproepen klaar): die draaien alleen droog. slot: hetzelfde flock-slot als de cron (I10, J16); De Dagbundelaar
+#     draait in de cron binnen het gesprekkenslot (RZ2-03), dus met de hand ook, anders kon een ronde tijdens de keten
+#     lopen en na het einde een hartslag geven die het ochtendbericht vrijgaf.
 #     dag, deal: de runner leest --dag of --deal (gemeten 21-10-2026). Een andere runner krijgt ze niet: zoom_wacht.py
 #     weigert een onbekend argument (argparse, exit 2), en wie --dag negeert, draaide een gewone ronde buiten de
 #     kwartierregel (J15).
@@ -78,7 +80,7 @@ RONDE_TOEGELATEN = {
     "fathom-wacht": {"droog": False, "stuurt": False, "slot": GESPREKKEN_SLOT, "dag": False, "deal": False},
     "zoom-wacht": {"droog": True, "stuurt": False, "slot": GESPREKKEN_SLOT, "dag": False, "deal": False},
     "plaud-wacht": {"droog": False, "stuurt": False, "slot": PLAUD_SLOT, "dag": False, "deal": False},
-    "dagbundelaar": {"droog": False, "stuurt": False, "slot": None, "dag": True, "deal": False},
+    "dagbundelaar": {"droog": False, "stuurt": False, "slot": GESPREKKEN_SLOT, "dag": True, "deal": False},
     "locatie-wacht": {"droog": True, "stuurt": False, "slot": None, "dag": True, "deal": False},
     "ontwikkelaar": {"droog": False, "stuurt": False, "slot": None, "dag": False, "deal": False},
     "levenscoach": {"droog": False, "stuurt": False, "slot": None, "dag": True, "deal": False},
@@ -90,7 +92,7 @@ RONDE_TOEGELATEN = {
 # icloud-wacht, tekenaar en gezondheid-wacht draaien op de Mac (launchd), niet hier.
 NOOIT_RONDE = {"regisseur", "mijnagents-uitvoerder"}
 # Wat achter een slot draait, en hoe lang het hoogstens duurt (de time-outs van de cronregels): voor "probeer na".
-SLOTEN = {GESPREKKEN_SLOT: {"wat": "de gesprekkenketen", "agents": ("fathom-wacht", "zoom-wacht"), "duur_min": 65},
+SLOTEN = {GESPREKKEN_SLOT: {"wat": "de gesprekkenketen", "agents": ("fathom-wacht", "zoom-wacht", "dagbundelaar"), "duur_min": 65},
           PLAUD_SLOT: {"wat": "De Plaudwacht", "agents": ("plaud-wacht",), "duur_min": 50}}
 PYTHON = os.path.expanduser("~/agents/.venv/bin/python")
 FLOCK, TIMEOUT = "/usr/bin/flock", "/usr/bin/timeout"

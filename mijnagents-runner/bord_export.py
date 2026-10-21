@@ -13,6 +13,9 @@ De Mac-synctaak kopieert export/ naar Data uit Mehdi. Cron: elk half uur.
 Geen gespreksinhoud buiten de VM (H1, ontwerp regie-zoom v1.2): van een gesprek met een agent gaan alleen id, aan,
 status, tijd en lengtes mee, nooit de vraag of het antwoord; in het werkverslag van De Bode en De Regisseur staat bij
 een bericht alleen hoe lang vraag en antwoord waren.
+Van een privé-item in klaargezet/ alleen tijd, soort, voor wie en status, nooit titel, verwijzing of inhoud; in een
+Dagverslag, in de inhoud van elk ander klaarzet-item en in het werkverslag wordt een regel met PRIVÉ, of een bevinding van
+De Plaudwacht in de oude vorm met ' · privé', "(privé)" (RZ2-01, voor wat van voor 22-10-2026 nog in het venster staat).
 """
 import json
 import os
@@ -98,6 +101,37 @@ def inhoud_tekst(inhoud):
     return "\n".join("  " + r for r in s.splitlines()[:80])
 
 
+def is_prive(titel, inhoud):
+    """RZ2-01: een klaarzet-item is privé als zijn inhoud prive draagt of zijn titel PRIVÉ, zoals De Fathomwacht, De
+    Plaudwacht en De Zoomwacht het zetten. Tot 21-10-2026 schreef de export van zo'n item de titel (met wie en waarover)
+    en de hele inhoud uit, en die gaat naar Data uit Mehdi."""
+    if "PRIVÉ" in (titel or ""):
+        return True
+    s = (inhoud or "").strip()
+    try:
+        d = json.loads(s) if s.startswith("{") else {}
+    except ValueError:
+        d = {}
+    return isinstance(d, dict) and bool(d.get("prive"))
+
+
+def prive_regel(r):
+    """Een regel die een privé-item bij naam noemt (RZ2-01): de titel met PRIVÉ (De Fathomwacht, De Plaudwacht, De
+    Zoomwacht); een bevinding in de oude vorm met ' · privé', van De Plaudwacht tot 22-10-2026 ('<hoofdpersoon> · dossier
+    ... · privé · voor mehdi') en van De Fathomwacht tot 21-10-2026 ('<hoofdpersoon> · <afdeling> · <thema> · privé');
+    of een oude bronregel van De Fathomwacht met afdeling prive ('<personen> | prive | <thema>'). Sindsdien schrijven ze
+    van een privégesprek alleen wanneer en hoe lang."""
+    return "PRIVÉ" in r or " · privé" in r or " | prive | " in r
+
+
+def zonder_prive_regels(tekst):
+    """Een Dagverslag, een bundel of een werkverslagregel van voor 21-10-2026 noemt een privé-item met zijn titel: die regel
+    wordt '(privé)' (RZ2-01). Sinds dan zet De Dagbundelaar er zelf 'privégesprek, N min' van. Tot 22-10-2026 ging alleen
+    dagverslagen/ hierdoor; een oude bundel in klaargezet/ en het detail van De Dagbundelaar in werkverslag/ (met 'Toe te
+    wijzen') droegen nog de naam en het onderwerp."""
+    return "\n".join("(privé)" if prive_regel(r) else r for r in (tekst or "").split("\n"))
+
+
 def main():
     c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
     c.row_factory = sqlite3.Row
@@ -116,7 +150,12 @@ def main():
         d = be(r["ts"])
         if d:
             tekst, detail = zonder_gesprekstekst(r["onderwerp"], r["tekst"], r["detail"] or "")
-            per[r["naam"]][d.strftime("%Y-%m-%d")].append((d.strftime("%H:%M"), r["stap"], r["onderwerp"], tekst, detail))
+            # RZ2-01: een regel die een privé-item bij naam noemt, ook in een oude regel die nog in het venster staat. Noemt
+            # de tekst een privégesprek in de oude vorm, dan valt ook het detail weg: daar stond de reden (met wie en waarom).
+            if any(prive_regel(t) for t in (tekst or "").split("\n")):
+                detail = "(privé, niet in de export)" if detail.strip() else detail
+            ond, tekst, detail = (zonder_prive_regels(t) for t in (r["onderwerp"] or "", tekst or "", detail))
+            per[r["naam"]][d.strftime("%Y-%m-%d")].append((d.strftime("%H:%M"), r["stap"], ond, tekst, detail))
     for naam, dagen in per.items():
         m = MAP.get(naam) or veilig(re.sub(r"^De ", "", (agents.get(naam) or {}).get("label") or naam))
         for dag, regels in dagen.items():
@@ -140,10 +179,14 @@ def main():
         for dag, items in dagen.items():
             uit = [f"# Klaargezet door {m} op {dag}", "", f"{len(items)} items.", ""]
             for it in items:
+                if is_prive(it["titel"], it["inhoud"]):
+                    uit += [f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): (privé)", ""]
+                    continue
                 uit.append(f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): {it['titel']}")
                 if it.get("verwijzing"):
                     uit.append(f"  - verwijzing: {it['verwijzing']}")
-                uit.append(inhoud_tekst(it["inhoud"]))
+                # RZ2-01: een bundel of Dagverslag van voor 21-10-2026 noemt een privé-item met zijn titel
+                uit.append(zonder_prive_regels(inhoud_tekst(it["inhoud"])))
                 uit.append("")
             geschreven += schrijf(os.path.join(UIT, m, "klaargezet", f"{dag}.md"), "\n".join(uit))
     # noden en voorstellen per agent
@@ -184,7 +227,8 @@ def main():
     for soort, m, sub in (("coaching", "Levenscoach", "coaching"), ("dagbundel", "Dagbundelaar", "dagverslagen"), ("dagplan", "Agendawacht", "dagplan")):
         for r in c.execute("select titel, inhoud, sleutel, ts from klaarzet where soort=? and ts >= ? order by ts", (soort, sinds)):
             d = be(r["ts"])
-            geschreven += schrijf(os.path.join(UIT, m, sub, f"{d.strftime('%Y-%m-%d %H%M')} {veilig(r['titel'])}.md"), (r["inhoud"] or "") + "\n")
+            tekst = zonder_prive_regels(r["inhoud"]) if soort == "dagbundel" else (r["inhoud"] or "")
+            geschreven += schrijf(os.path.join(UIT, m, sub, f"{d.strftime('%Y-%m-%d %H%M')} {veilig(r['titel'])}.md"), tekst + "\n")
     # Agendawacht: belrooster en adressen (kopie); Bord-map bestaat al voor weekoverzichten
     for bron, doel in (("belrooster.json", os.path.join("Agendawacht", "belrooster.json")), ("agenda-adressen.json", os.path.join("Agendawacht", "adressen.json"))):
         p = os.path.join(DATA, bron)

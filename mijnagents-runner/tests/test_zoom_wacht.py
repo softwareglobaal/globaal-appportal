@@ -1153,7 +1153,10 @@ def test_t30_planning():
     assert len(keten) == 1 and keten[0].startswith("0 7,13 * * * /usr/bin/flock -w 1800 /tmp/gesprekken.lock "), keten
     assert not any("fathom_wacht.py" in r or "zoom_wacht.py" in r for r in actief), "de losse regels zijn weg"
     bundel = [r for r in actief if "dagbundelaar.py" in r]
-    assert len(bundel) == 1 and bundel[0].startswith("5 7 * * 1-5 /usr/bin/flock -w 3600 /tmp/gesprekken.lock /bin/true; "), bundel
+    # RZ2-03: De Dagbundelaar draait binnen het slot (niet meer na /bin/true), en een time-out staat in zijn logboek
+    assert len(bundel) == 1 and bundel[0].startswith(
+        f"5 7 * * 1-5 /usr/bin/flock -w 3600 -E 75 /tmp/gesprekken.lock {py} {rn}/dagbundelaar.py "), bundel
+    assert "/bin/true" not in bundel[0] and "; if [ $? -eq 75 ]; then " in bundel[0], bundel
     assert f"* * * * * {py} {rn}/bode.py >> {lg}/bode.log 2>&1" in doel and "MAILTO=''" in doel and huidig[4] in doel
     begin, einde = doel.index(M.BEGIN), doel.index(M.EINDE)
     assert doel[begin] == "# begin gesprekken (beheerd door planning/gesprekken_cron_zetten.py)" and doel[einde] == "# einde gesprekken"

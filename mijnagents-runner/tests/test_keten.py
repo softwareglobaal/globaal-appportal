@@ -9,9 +9,11 @@ geslaagde ochtendketen tellen. keten.json is het bewijs. Deze test legt vast:
 - een time-out: de stap krijgt SIGTERM (zodat De Fathomwacht zijn hartslag afsluit), daarna geldt exit 124;
 - atomisch schrijven: elke versie komt via een tijdelijk bestand en os.replace; tijdens een stap staat er een volledige
   versie met einde null en geslaagd false; er blijft geen tijdelijk bestand achter;
-- stopt iemand de keten zelf (SIGTERM), dan stopt de lopende stap mee en zegt keten.json: niet geslaagd.
+- stopt iemand de keten zelf (SIGTERM), dan stopt de lopende stap mee en zegt keten.json: niet geslaagd;
+- RZ2-02: de echte fathom_wacht.py zonder Fathom-sleutel, of met een sleutel die faalt, maakt de keten niet geslaagd.
 
-Geen netwerk en geen echte runners: de stappen zijn kleine nepscripts in een tijdelijke map.
+Geen netwerk: de stappen zijn kleine nepscripts in een tijdelijke map. Voor RZ2-02 start het nepscript de echte
+fathom_wacht.py, met een bord dat alleen afdrukt en zonder echte .env-bestanden.
 Draaien: python3 mijnagents-runner/tests/test_keten.py
 """
 import io
@@ -197,6 +199,50 @@ def test_contract_met_de_regisseur():
     p2.draai()
     tussen = O.lees_keten(p2.zag)
     assert O.keten_geslaagd(tussen, O.tijdstip(tussen["start"]) - timedelta(seconds=1)) == (False, "gesprekkenketen loopt nog"), tussen
+
+
+# De echte fathom_wacht.py als stap van de keten: een bord dat alleen afdrukt (in het logboek van de stap), geen echte
+# .env-bestanden, geen sleutel; met sleutel_faalt een sleutel die Fathom weigert (401).
+ECHTE_FATHOMWACHT = r"""
+import json, os, runpy, sys, tempfile
+sys.dont_write_bytecode = True
+os.environ["HOME"] = tempfile.mkdtemp(prefix="thuis-")
+os.environ.pop("FATHOM_API_KEYS", None)
+RUNNER = os.environ["KETEN_ECHTE_RUNNER"]
+sys.path.insert(0, os.path.join(RUNNER, "koppelingen"))
+import bord, fathom
+bord.call = lambda pad, payload=None, method=None: print("BORD " + json.dumps([pad, payload]), flush=True) or {}
+if json.load(open(os.environ["KETEN_PROEF"])).get("fathom_wacht.py", {}).get("sleutel_faalt"):
+    import urllib.error
+    os.environ["FATHOM_API_KEYS"] = "proefsleutel"
+
+    def geweigerd(sinds, met_transcript=False):
+        raise urllib.error.HTTPError("https://api.fathom.ai/external/v1/meetings", 401, "Unauthorized", None, None)
+
+    fathom.gesprekken = geweigerd
+    bord.Agent.werkwijze = lambda self, *a, **k: "# Fathomwacht\n\nGeen personentabel."
+runpy.run_path(os.path.join(RUNNER, "fathom_wacht.py"), run_name="__main__")
+"""
+
+
+def test_rz2_02_fathom_niet_gelezen_is_geen_geslaagde_keten():
+    """RZ2-02 (bouwcontrole RZ2, 21-10-2026): zonder Fathom-sleutel eindigde fathom_wacht.py met exit 0. Werkte Zoom, dan
+    schreef keten.py 'geslaagd' en kon het ochtendbericht voor 10:30 vertrekken zonder Fathom-lezing. Nu eindigt een ronde
+    die Fathom niet kon lezen niet op 0, en is de keten niet geslaagd; de hartslag (fout, zonder noodlijst) blijft zoals
+    voordien. Een sleutel die faalt, gaf al een fout (exit 1); dat blijft zo."""
+    for gedrag, taak in (({}, "geen Fathom-sleutel"), ({"sleutel_faalt": True}, "ronde mislukt")):
+        p = Proef({"fathom_wacht.py": gedrag})
+        with open(os.path.join(p.runners, "fathom_wacht.py"), "w", encoding="utf-8") as f:
+            f.write(ECHTE_FATHOMWACHT)
+        os.environ["KETEN_ECHTE_RUNNER"] = RUNNER
+        code, k = p.draai()
+        log = open(os.path.join(p.logmap, "fathom_wacht.log"), encoding="utf-8").read()
+        statussen = [json.loads(r[5:])[1] for r in log.splitlines() if r.startswith("BORD ") and json.loads(r[5:])[0] == "/agent-status"]
+        assert statussen and statussen[-1]["status"] == "fout" and statussen[-1]["taak"] == taak, (gedrag, statussen, log[-2000:])
+        assert "nood" not in statussen[-1], f"de hartslag blijft zoals voordien, zonder noodlijst: {statussen[-1]}"
+        assert k["stappen"]["fathom-wacht"]["exit"] != 0, (gedrag, k, log[-2000:])
+        assert k["stappen"]["zoom-wacht"]["exit"] == 0, "Zoom werkte"
+        assert code == 1 and k["geslaagd"] is False, (gedrag, k)
 
 
 def test_bron():

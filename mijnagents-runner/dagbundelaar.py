@@ -2,8 +2,9 @@
 """De Dagbundelaar (Privé): legt per dag samen wat de bronnen-agents klaarzetten,
 zegt per bundel bij welk dossier het hoort, en geeft het door.
 
-Elke werkdag om 07:05 UTC (voor gisteren), na de gesprekkenketen: de cron wacht op
-/tmp/gesprekken.lock (planning/gesprekken.cron), en op verzoek (--dag JJJJ-MM-DD):
+Elke werkdag om 07:05 UTC (voor gisteren), na de gesprekkenketen: de cron start me binnen
+/tmp/gesprekken.lock (planning/gesprekken.cron); krijg ik het slot niet binnen 60 minuten, dan
+start ik niet en staat dat in dagbundelaar.log (RZ2-03). Op verzoek (--dag JJJJ-MM-DD):
   1. alles wat klaargezet is met gisteren als dag: afspraken, transcripten, opnames,
      later ook locatie en foto's;
   2. per dossier (deal) één bundel: wat er gebeurde, welke bronnen erbij horen,
@@ -22,6 +23,8 @@ De Zoom-dagregel en het lek naar de afdeling (ontwerp regie-zoom v1.2, Z14 en J1
   - een sleutel is alleen een dossier als hij niet leeg is en geen datum (JJJJ-MM-DD);
     een item voor mehdi gaat in een bundel voor mehdi (uniek bundel:<dag>:<sleutel>:mehdi),
     zodat een bundel voor h-architects nooit een item voor Mehdi of zonder dossier bevat.
+Van een privé-item (inhoud.prive, of PRIVÉ in de titel) zet ik alleen "privégesprek, N min" in de
+bundel, het Dagverslag en mijn werkverslag (RZ2-01).
 """
 import json
 import os
@@ -55,6 +58,18 @@ def main():
                 return len(s) == 10 and bool(date.fromisoformat(s))
             except ValueError:
                 return False
+
+        def prive(it):
+            return bool((it.get("_d") or {}).get("prive")) or "PRIVÉ" in (it.get("titel") or "")
+
+        def naam_van(it):
+            """RZ2-01: van een privé-item alleen 'privégesprek, N min', in de bundel, het Dagverslag en het werkverslag; met
+            wie en waarover staan in het archief op de VM. Ook voor een item van voor 21-10-2026, dat de persoon en het
+            onderwerp nog in de titel en de verwijzing droeg. Zonder minuten: duur onbekend, nooit 0."""
+            if not prive(it):
+                return it["titel"]
+            n = (it.get("_d") or {}).get("minuten")
+            return "privégesprek, " + (f"{n} min" if isinstance(n, int) and not isinstance(n, bool) else "duur onbekend")
 
         items = bord.call(f"/api/klaarzet?status=alle&n=500").get("items", [])
         # Z14: de Zoom-dagregels per soort lezen; n=500 over de hele bak dekt minder dan een week
@@ -110,8 +125,9 @@ def main():
                 ontbreekt.append("afspraak zonder opname of transcript")
             if sleutel == "(zonder dossier)":
                 ontbreekt.append("bronnen zonder dossier: Mehdi wijst ze toe")
-                vragen += [it["titel"] for it in lijst]
-            regels = [f"- {it['soort']}: {it['titel']}" + (f" ({it['verwijzing']})" if it.get("verwijzing") else "") for it in lijst]
+                vragen += [naam_van(it) for it in lijst]
+            regels = [f"- {it['soort']}: {naam_van(it)}" + (f" ({it['verwijzing']})" if it.get("verwijzing") and not prive(it) else "")
+                      for it in lijst]
             tekst = f"Dossier {sleutel} op {DAG}: " + ", ".join(f"{n} {s}" for s, n in soorten.items()) + "\n" + "\n".join(regels) + \
                     ("\nOntbreekt: " + "; ".join(ontbreekt) if ontbreekt else "")
             if sleutel == "(zonder dossier)":

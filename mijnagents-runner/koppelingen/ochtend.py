@@ -142,9 +142,13 @@ def aan_de_beurt(nu, statussen=None, keten=None, cron_tekst=None, bestaat=False)
     - bestaat: of ochtendbericht:<datum> al op het bord staat; None is onbekend en dan niet (een tweede maken kan niet
       ongedaan, wachten wel).
     - Vanaf 21:00 Brussel niet meer, met een nood.
-    - Aan de beurt als keten.json van vandaag geslaagd is (X3) en, op werkdagen, de dagbundelaar na het startmoment een
-      afgeronde hartslag heeft (statussen: {naam: {status, ts}} uit de tabel status, None als onbekend). In het
-      weekend draait de dagbundelaar niet (J19).
+    - Aan de beurt als keten.json van vandaag geslaagd is (X3) en, op werkdagen, de dagbundelaar na het einde van die
+      geslaagde keten een afgeronde hartslag heeft (statussen: {naam: {status, ts}} uit de tabel status, None als
+      onbekend). Tot 21-10-2026 volstond een hartslag na het startmoment, ook een van een ronde die liep terwijl de keten
+      nog bezig was (RZ2-03). Slaagde de keten niet, dan staat zij onder wat ontbreekt, en De Dagbundelaar ook als die
+      niet na het einde van die keten klaar was (tegenproef RZ2-03, 22-10-2026). De grens is het einde van de keten van
+      vandaag; loopt ze nog, dan telt geen ronde; zonder keten van vandaag het geplande startmoment, nooit het einde van
+      een keten van gisteren. In het weekend draait de dagbundelaar niet (J19).
     - Om 10:30 Brussel komt het toch, met wat ontbreekt onder Onbekend.
     ontbreekt: wat er nu nog niet klaar is (ook voor --nu in regisseur.py, dat het moment negeert)."""
     lokaal = brussel(nu)
@@ -164,10 +168,13 @@ def aan_de_beurt(nu, statussen=None, keten=None, cron_tekst=None, bestaat=False)
     klaar, reden = keten_geslaagd(keten, start_utc)
     ontbreekt = [] if klaar else [reden]
     if datum.weekday() < 5:
+        begin = (tijdstip(keten.get("start")) or tijdstip(keten.get("keten_id"))) if isinstance(keten, dict) else None
+        van_vandaag = start_utc is not None and begin is not None and begin >= start_utc
+        grens = tijdstip(keten.get("einde")) if van_vandaag else start_utc
         if statussen is None:
             ontbreekt.append("hartslag van De Dagbundelaar onbekend")
-        elif not _klaar_na(statussen.get("dagbundelaar"), start_utc):
-            ontbreekt.append("De Dagbundelaar had vandaag nog geen afgeronde ronde")
+        elif not _klaar_na(statussen.get("dagbundelaar"), grens):
+            ontbreekt.append("De Dagbundelaar had na de gesprekkenketen nog geen afgeronde ronde")
     uit["ontbreekt"] = ontbreekt
     if not ontbreekt:
         uit["beurt"], uit["reden"] = True, "gesprekkenketen klaar"

@@ -322,6 +322,41 @@ def test_gewijzigde_titel_bij_gelijk_transcript_herkent_opnieuw():
     assert w.klaar[-1]["voor"] == "mehdi" and w.klaar[-1]["inhoud"]["prive"], w.klaar[-1]
 
 
+def test_rz2_01_prive_opname_draagt_geen_naam_of_onderwerp():
+    """RZ2-01 bij De Plaudwacht (tegenproef van 22-10-2026: herstellen in alle varianten, zoals bij De Fathomwacht). Een
+    privé-opname droeg de hoofdpersoon en het thema in de titel van het klaarzet-item, personen, thema en afdeling in de
+    inhoud, en de archiefmap (die naar de naam in Plaud heet) in de verwijzing; de bevinding in het werkverslag noemde de
+    hoofdpersoon. Dat item gaat naar De Dagbundelaar, De Levenscoach en de export. Nu: alleen het Plaud-id, datum, start,
+    minuten, privé en een verwijzing naar het archief op de Mac met '(privé)' en het id. De gesprekkentabel (alleen beheer)
+    houdt wie en waarover; een werkopname blijft zoals ze was."""
+    w = Wereld()
+    logs = []
+    P.ag.log = lambda onderwerp, stap, tekst, detail="": logs.append((onderwerp, stap, tekst, detail))
+    w.opname(ID1, "10-08 Lara Proefnaam Proefscheiding", "2026-10-08T18:05:00")      # 20:05 in Brussel
+    w.opname(ID2, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")
+    w.push()
+    w.herkenning[ID1] = {"personen": ["Lara Proefnaam", "Mehdi"], "hoofdpersoon": "Lara Proefnaam", "bedrijf": "", "afdeling": "prive",
+                         "thema": "Proefscheiding regelen", "project": "", "prive": True, "zekerheid": "hoog",
+                         "waarom": "Lara Proefnaam over de Proefscheiding"}
+    code, tel, _ = w.ronde()
+    assert tel["gedaan"] == 2, tel
+    assert "Proefnaam" in json.dumps(w.rijen, ensure_ascii=False), "de gesprekkentabel (alleen beheer) houdt wie en waarover"
+    items = {k["uniek"]: k for k in w.klaar}
+    p = items[f"plaud:{ID1}"]
+    verwijzing = f"{P.ARCHIEF_OP_MAC}/2026-10-08 2005 (privé) [{ID1}]"
+    assert p["titel"] == "2026-10-08 20:05 Plaud: privégesprek, 40 min · PRIVÉ", p["titel"]
+    assert p["inhoud"] == {"plaud_id": ID1, "datum": "2026-10-08", "start": "20:05", "minuten": 40, "prive": True,
+                           "archief": verwijzing}, p["inhoud"]
+    assert p["verwijzing"] == verwijzing and p["voor"] == "mehdi" and p["soort"] == "transcript", p
+    werk = items[f"plaud:{ID2}"]
+    assert werk["titel"] == "2026-10-08 11:05 Plaud: aannemer · werfbezoek ruwbouw", werk["titel"]
+    assert werk["inhoud"]["personen"] == ["aannemer"] and werk["inhoud"]["thema"] == "werfbezoek ruwbouw", werk["inhoud"]
+    assert any(t.startswith("privégesprek · 40 min") for _, s, t, _ in logs if s == "bevinding"), logs
+    for waar, tekst in (("klaarzet", json.dumps(w.klaar, ensure_ascii=False)), ("werkverslag", json.dumps(logs, ensure_ascii=False))):
+        for geheim in ("Proefnaam", "Proefscheiding"):
+            assert geheim not in tekst, f"{geheim!r} staat in {waar}: {tekst[:1500]}"
+
+
 def test_gewijzigd_transcript_wordt_als_nieuwe_versie_geleverd():
     w = Wereld()
     w.opname(ID1, "10-08 Werfbezoek 2531 Spleesters", "2026-10-08T09:05:00")

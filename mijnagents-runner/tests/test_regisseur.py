@@ -307,7 +307,7 @@ CRON = ("# begin gesprekken (beheerd door planning/gesprekken_cron_zetten.py)\n"
         "# 07:00 UTC is 09:00 Brussel tot en met 24-10-2026, vanaf 25-10 08:00\n"
         "0 7,13 * * * /usr/bin/flock -w 1800 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python "
         "/home/ubuntu/appportal/mijnagents-runner/keten.py >> /home/ubuntu/agents/keten.log 2>&1\n"
-        "5 7 * * 1-5 /usr/bin/flock -w 3600 /tmp/gesprekken.lock /bin/true; /home/ubuntu/agents/.venv/bin/python "
+        "5 7 * * 1-5 /usr/bin/flock -w 3600 -E 75 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python "
         "/home/ubuntu/appportal/mijnagents-runner/dagbundelaar.py >> /home/ubuntu/agents/dagbundelaar.log 2>&1\n"
         "# einde gesprekken\n")
 
@@ -745,8 +745,13 @@ def test_t45_droge_stand_gemeten_in_de_code():
         assert kent == recht["droog"], f"{naam}: droog {recht['droog']} in de lijst, maar de code {'kent' if kent else 'kent geen'} --droog"
         assert not recht["stuurt"] or recht["droog"], f"{naam} stuurt en moet dus een droge stand hebben"
     assert {n for n, r in R.RONDE_TOEGELATEN.items() if r["stuurt"]} == {"bode", "mail-regisseur"}
+    # RZ2-03 (tegenproef 22-10-2026): De Dagbundelaar draait in de cron binnen het gesprekkenslot, dus een ronde met de hand
+    # ook; anders kon ze tijdens de keten lopen en na het einde een hartslag geven die het ochtendbericht vrijgaf
     assert {n: r["slot"] for n, r in R.RONDE_TOEGELATEN.items() if r["slot"]} == {
-        "fathom-wacht": "/tmp/gesprekken.lock", "zoom-wacht": "/tmp/gesprekken.lock", "plaud-wacht": "/tmp/plaud-wacht.lock"}
+        "fathom-wacht": "/tmp/gesprekken.lock", "zoom-wacht": "/tmp/gesprekken.lock", "dagbundelaar": "/tmp/gesprekken.lock",
+        "plaud-wacht": "/tmp/plaud-wacht.lock"}
+    for slot, s in R.SLOTEN.items():
+        assert set(s["agents"]) == {n for n, r in R.RONDE_TOEGELATEN.items() if r["slot"] == slot}, (slot, s)
     vroeger = {"contracten-agent", "agenda-wacht", "fathom-wacht", "plaud-wacht", "dagbundelaar", "locatie-wacht", "ontwikkelaar",
                "levenscoach", "bode", "benamingen-wacht", "mappen-wacht"}
     assert set(R.RONDE_TOEGELATEN) == vroeger | {"zoom-wacht", "mail-regisseur"}, "K2: de vroegere lijst plus zoom-wacht (en mail-regisseur alleen droog)"
@@ -813,6 +818,8 @@ def test_t46_agent_ronde_slot_droog_en_kwartier():
             w.status("dagbundelaar", "klaar", (nu - timedelta(minutes=5)).isoformat())
             assert R.ronde_starten({"naam": "dagbundelaar", "dag": "2026-10-20"})["exit"] == 0, "J15: --dag valt buiten de kwartierregel"
             assert proces.aanroepen[-1][0][-2:] == ["--dag", "2026-10-20"], proces.aanroepen[-1][0]
+            assert proces.aanroepen[-1][0][:5] == [R.FLOCK, "-n", "-E", "75", R.GESPREKKEN_SLOT], \
+                f"RZ2-03: ook met de hand binnen het gesprekkenslot: {proces.aanroepen[-1][0]}"
             uit = R.voer_tool_uit("taak_plannen", {"agent": "zoom-wacht", "dag": "2026-10-23", "wanneer": "2026-10-23T08:00:00+00:00"})
             assert uit["ok"] is False and "kent geen --dag" in uit["fout"], uit
 
@@ -1051,8 +1058,50 @@ def test_t51_een_nummer_is_geen_besluit():
 
 
 # ------------------------------------------------------------------------------------------------- T52 ---
+DAGBUNDELAAR_NA_KETEN = "De Dagbundelaar had na de gesprekkenketen nog geen afgeronde ronde"
+
+
 def _stand(nu, keten=None, statussen=None, bestaat=False, cron=CRON):
     return O.aan_de_beurt(nu, statussen if statussen is not None else {}, keten, cron, bestaat)
+
+
+def test_rz2_03_dagbundelaar_telt_pas_na_het_einde_van_de_keten():
+    """RZ2-03 (bouwcontrole RZ2, 21-10-2026): een afgeronde hartslag van De Dagbundelaar na het startmoment volstond. Een
+    ronde die liep terwijl de keten nog bezig was (na een wachttime-out, of met de hand), gaf zo een onvolledig Dagverslag
+    vrij. Nu telt alleen een hartslag na het einde van de geslaagde keten uit keten.json."""
+    keten = {"start": "2026-10-22T07:00:05+00:00", "einde": "2026-10-22T07:50:00+00:00", "geslaagd": True}
+    db = lambda ts: {"dagbundelaar": {"status": "klaar", "ts": ts}}  # noqa: E731
+    nu = datetime(2026, 10, 22, 7, 55, tzinfo=UTC)
+    tijdens = _stand(nu, keten, db("2026-10-22T07:30:00+00:00"))
+    assert not tijdens["beurt"] and tijdens["ontbreekt"] == [DAGBUNDELAAR_NA_KETEN], tijdens
+    assert _stand(nu, keten, db("2026-10-22T07:50:00+00:00"))["beurt"], "op het einde zelf telt"
+    na = _stand(nu, keten, db("2026-10-22T07:50:30+00:00"))
+    assert na["beurt"] and not na["onbekend"], na
+    laat = _stand(datetime(2026, 10, 22, 8, 31, tzinfo=UTC), keten, db("2026-10-22T07:30:00+00:00"))
+    assert laat["beurt"] and laat["onbekend"] == [DAGBUNDELAAR_NA_KETEN], "om 10:30 toch, met De Dagbundelaar onder Onbekend"
+    # een keten die niet slaagde, maakt ook een latere Dagbundelaar niet klaar: de keten staat onder Onbekend
+    mislukt = _stand(datetime(2026, 10, 22, 8, 31, tzinfo=UTC), dict(keten, geslaagd=False), db("2026-10-22T07:51:00+00:00"))
+    assert mislukt["beurt"] and mislukt["onbekend"] == ["gesprekkenketen niet geslaagd"], mislukt
+    assert not _stand(nu, dict(keten, geslaagd=False), db("2026-10-22T07:51:00+00:00"))["beurt"]
+    # Tegenproef van 22-10-2026: na een mislukte keten zweeg het ochtendbericht over De Dagbundelaar, ook als die niet
+    # draaide of alleen tijdens de keten (door RZ2-02 is elke dag zonder Fathom-sleutel zo'n dag). De grens is het einde
+    # van de keten van vandaag, ook een mislukte; loopt ze nog, dan telt geen ronde; zonder keten van vandaag het
+    # geplande startmoment, nooit het einde van een keten van gisteren.
+    om_1030 = datetime(2026, 10, 22, 8, 31, tzinfo=UTC)
+    leeg = _stand(om_1030, dict(keten, geslaagd=False), {})
+    assert leeg["onbekend"] == ["gesprekkenketen niet geslaagd", DAGBUNDELAAR_NA_KETEN], leeg
+    tijdens_mislukt = _stand(om_1030, dict(keten, geslaagd=False), db("2026-10-22T07:30:00+00:00"))
+    assert tijdens_mislukt["onbekend"] == ["gesprekkenketen niet geslaagd", DAGBUNDELAAR_NA_KETEN], tijdens_mislukt
+    loopt = _stand(om_1030, {"start": keten["start"]}, db("2026-10-22T07:30:00+00:00"))
+    assert loopt["onbekend"] == ["gesprekkenketen loopt nog", DAGBUNDELAAR_NA_KETEN], loopt
+    gisteren = dict(keten, start="2026-10-21T07:00:05+00:00", einde="2026-10-21T07:50:00+00:00")
+    oud = _stand(om_1030, gisteren, db("2026-10-21T08:00:00+00:00"))
+    assert oud["onbekend"] == ["gesprekkenketen van vandaag nog niet klaar", DAGBUNDELAAR_NA_KETEN], oud
+    zonder = _stand(om_1030, None, db("2026-10-22T07:06:00+00:00"))
+    assert zonder["onbekend"] == ["gesprekkenketen niet geslaagd (geen keten.json)"], zonder
+    # in het weekend draait De Dagbundelaar niet (J19): alleen de keten telt
+    assert _stand(datetime(2026, 10, 24, 7, 55, tzinfo=UTC), dict(keten, start="2026-10-24T07:00:05+00:00",
+                                                                  einde="2026-10-24T07:50:00+00:00"))["beurt"]
 
 
 def test_t52_moment_van_het_ochtendbericht():
@@ -1067,7 +1116,7 @@ def test_t52_moment_van_het_ochtendbericht():
     assert not ma["beurt"], ma
     for nu in (datetime(2026, 10, 22, 8, 31, tzinfo=UTC), datetime(2026, 10, 26, 9, 31, tzinfo=UTC)):
         laat = _stand(nu, k(nu.date().isoformat() + "T07:00:10+00:00"))
-        assert laat["beurt"] and laat["onbekend"] == ["De Dagbundelaar had vandaag nog geen afgeronde ronde"], (nu, laat)
+        assert laat["beurt"] and laat["onbekend"] == [DAGBUNDELAAR_NA_KETEN], (nu, laat)
     vroeg = _stand(datetime(2026, 10, 22, 8, 29, tzinfo=UTC), k("2026-10-22T07:00:10+00:00"))
     assert not vroeg["beurt"], "10:29 Brussel zonder dagbundelaar: nog niet"
     avond = _stand(datetime(2026, 10, 25, 22, 30, tzinfo=UTC))

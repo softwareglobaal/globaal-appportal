@@ -3,7 +3,9 @@
 geslaagd is (ontwerp regie-zoom v1.2, 13.5 X3).
 
 De cron start dit script om 07:00 en 13:00 UTC onder /tmp/gesprekken.lock (planning/gesprekken.cron). De Dagbundelaar
-wacht op hetzelfde slot. Een stap die faalt, houdt de volgende niet tegen, zoals bij de losse cronregels van voordien.
+draait daarna binnen hetzelfde slot (RZ2-03). Een stap die faalt, houdt de volgende niet tegen, zoals bij de losse
+cronregels van voordien. Een Fathomwacht die Fathom niet kon lezen (geen sleutel, of een sleutel die faalt), eindigt niet
+op 0 (RZ2-02), dus is de keten dan niet geslaagd.
 De uitvoer van elke stap gaat naar zijn eigen logboek in ~/agents.
 
 Het schrijft mijnagents-data/keten.json, altijd atomisch (tijdelijk bestand ernaast, dan os.replace):

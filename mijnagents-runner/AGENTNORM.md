@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.11, 21-10-2026 (BAS-01: het werkverslag draagt geen privé, van een privégesprek staat er alleen wanneer en hoe lang, en De Regisseur filtert wat hij leest; bij een omschakeling van BUNDELEN verdwijnt niets; v1.10 dezelfde dag, ontwerp regie-zoom v1.2, G2 en L7: De Regisseur en De Zoomwacht lezen hun regels niet meer als leeg bij onbekend; een signaal voor Mehdi komt op een vast moment, het ochtendbericht of de avondbundel; een nood voor Mehdi bereikt hem in het ochtendbericht; een agent aanspreken met "Naam, vraag"; de ronde neemt noden van voor de ronde mee en sluit ook bij een stopsignaal af; db_lees is de enige leesweg naar de databank van het bord; v1.9 16-10-2026 NA08 en NA09 in de code: zonder regelboek geen ronde, en de generator controleert eerst en geeft de cron pas na een gecontroleerde eerste ronde; v1.8 16-10-2026 hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.12, 22-10-2026 (RZ2-01: een privégesprek draagt ook in het klaarzet-item, de bundel van De Dagbundelaar en de export van het bord geen naam of onderwerp, bij De Fathomwacht en De Plaudwacht; v1.11 21-10-2026 BAS-01: het werkverslag draagt geen privé, van een privégesprek staat er alleen wanneer en hoe lang, en De Regisseur filtert wat hij leest; bij een omschakeling van BUNDELEN verdwijnt niets; v1.10 dezelfde dag, ontwerp regie-zoom v1.2, G2 en L7: De Regisseur en De Zoomwacht lezen hun regels niet meer als leeg bij onbekend; een signaal voor Mehdi komt op een vast moment, het ochtendbericht of de avondbundel; een nood voor Mehdi bereikt hem in het ochtendbericht; een agent aanspreken met "Naam, vraag"; de ronde neemt noden van voor de ronde mee en sluit ook bij een stopsignaal af; db_lees is de enige leesweg naar de databank van het bord; v1.9 16-10-2026 NA08 en NA09 in de code: zonder regelboek geen ronde, en de generator controleert eerst en geeft de cron pas na een gecontroleerde eerste ronde; v1.8 16-10-2026 hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -189,10 +189,14 @@ Ontwikkelaar. Van een privégesprek of een privébron staat er alleen wanneer, h
 woord privé; met wie, waarover en waarom blijven in het archief (M3, ontwerp regie-zoom 13.2).
 Het masker van het bord (`ag.prive()`) vangt alleen wat een agent aanmeldt; wat hij niet
 aanmeldt, gaat er onbewerkt door. De Fathomwacht doet dit sinds 21-10-2026, in de bevinding,
-de bronregel en de schermregel (`tests/test_bord_lees.py`). Open, gemeten op dezelfde dag:
-De Plaudwacht (`plaud_wacht.py`, de bevinding met hoofdpersoon en redenen) en De Archivaris
-(`archivaris.py`, de bevinding met personen en reden) schrijven het nog; het twijfelsignaal
-van De Archivaris, een klaargezet signaal, noemt ook personen. De Regisseur filtert wat hij
+de bronregel en de schermregel (`tests/test_bord_lees.py`). Hetzelfde geldt voor het klaarzet-item
+van een privégesprek (RZ2-01, 22-10-2026): alleen datum, start, minuten, privé en een verwijzing
+naar het archief met "(privé)" en het id, bij De Fathomwacht en De Plaudwacht (`tests/test_bord_lees.py`,
+`tests/test_plaud_wacht.py`); De Plaudwacht schrijft sinds dan ook in haar bevinding alleen
+"privégesprek" en de duur. De Dagbundelaar zet er "privégesprek, N min" van, ook voor een oud item,
+en de export van het bord (`bord_export.py`) maakt van elke regel met PRIVÉ "(privé)". Open, gemeten
+op 21-10-2026: De Archivaris (`archivaris.py`, de bevinding met personen en reden) schrijft het nog;
+het twijfelsignaal van De Archivaris, een klaargezet signaal, noemt ook personen. De Regisseur filtert wat hij
 leest wel zelf (`werkverslag_lees` in `regisseur.py`, voor het dossier en de tool `agent_verslag`):
 nooit het detail, een regel die privé noemt wordt "(privé)", en van een privé-agent of een agent
 waarvan dat onbekend is alleen tijd, stap en onderwerp. Dat beschermt alleen die lezer; het
