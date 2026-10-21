@@ -80,11 +80,21 @@ def dossiers_schrijven(d):
     json.dump(d, open(DOSSIERS_PAD, "w"), ensure_ascii=False, indent=1)
 
 
-def nummer_bezoeken(bezoeken, werfstart):
-    """Zet volgnr (uniek, oplopend), nr_label (PB1.. of 1..) en soort_bezoek."""
-    pb, wb = 0, 0
+def bevindingenmappen(bord_rijen):
+    """Bezoekmappen waarvoor Mehdi op het bord 'verslag van bevindingen' koos (2309, 21-10-2026): geen werfbezoek."""
+    return {(r.get("bezoekmap") or "").casefold() for r in bord_rijen
+            if isinstance(r.get("keuzes"), dict) and r["keuzes"].get("verslagtype") == "verslag_bevindingen" and r.get("bezoekmap")}
+
+
+def nummer_bezoeken(bezoeken, werfstart, bevindingen=()):
+    """Zet volgnr (uniek, oplopend), nr_label (VB1.., PB1.. of 1..) en soort_bezoek. Een verslag van bevindingen telt
+    niet mee in de werfverslagnummers."""
+    pb, wb, vb = 0, 0, 0
     for b in sorted(bezoeken, key=lambda m: (m["datum"], m["map"])):
-        if werfstart and b["datum"] < werfstart:
+        if b["map"].casefold() in bevindingen:
+            vb += 1
+            b["soort_bezoek"], b["nr_label"], b["werfnr"] = "bevindingen", f"VB{vb}", 0
+        elif werfstart and b["datum"] < werfstart:
             pb += 1
             b["soort_bezoek"], b["nr_label"], b["werfnr"] = "plaatsbezoek", f"PB{pb}", 0
         else:
@@ -865,6 +875,8 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
     app_bezoeken = werfapp_bezoeken(nummer)
     if bezoek.get("soort_bezoek") == "plaatsbezoek":
         post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek['nr_label']}: plaatsbezoek vóór de werfstart, geen werfverslagnummer (A7/A8)")
+    elif bezoek.get("soort_bezoek") == "bevindingen":
+        post("W8", "verslagnummer", "ok", f"{nummer}-{bezoek['nr_label']}: verslag van bevindingen, geen werfverslag en geen werfverslagnummer")
     elif app_bezoeken is None:
         post("W8", "verslagnummer", "onbekend", "werfapp kent dit project niet of is niet bereikbaar; nummer niet geijkt")
     else:
@@ -960,15 +972,17 @@ def verwerk(nummer, droog=False):
         alle_rijen = bord.call(f"/api/werfbezoek?dossier={nummer}").get("rijen", [])
     except Exception:  # noqa: BLE001
         alle_rijen = []
+    bevindingen = bevindingenmappen(alle_rijen)
     if not droog and bezoeken:
         try:
-            bezoeken = vooraf_koppelen(bezoeken, str(nummer), projectmap, werfstart, alle_rijen)
+            bezoeken = vooraf_koppelen(bezoeken, str(nummer), projectmap, werfstart, alle_rijen,
+                                       **({"bevindingen": bevindingen} if bevindingen else {}))
         except werfregister.RegisterFout as ex:
             ag.log(str(nummer), "fout", f"werfapp-identiteit vóór nummering niet bevestigd: {ex}")
             for b in bezoeken:
                 if not b.get("registratie"):
                     b["registratie_blokkade"] = True
-    bezoeken = nummer_bezoeken(bezoeken, werfstart)
+    bezoeken = nummer_bezoeken(bezoeken, werfstart, bevindingen)
     ag.log(str(nummer), "bevinding", f"{len(bezoeken)} bezoek(en) in de mappen: " + ", ".join(f"{b['nr_label']} {b['datum']}" for b in bezoeken)
            + (f"; werfstart {werfstart}" if werfstart else "; geen werfstart bekend"))
     bord_rijen = {r.get("bezoekmap"): r for r in alle_rijen}
