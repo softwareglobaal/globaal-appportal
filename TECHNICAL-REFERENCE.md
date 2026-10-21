@@ -2736,6 +2736,10 @@ rol `whatsapp_writer`, Authentik-app `whatsapp` (groepen `whatsapp`, `whatsapp-b
   (`mijnagents-data/wa_sjablonen.json`) en stopt bij `WA_SJABLOON_MAX_PER_DAG` (standaard 10); daarna
   Telegram tot de volgende dag. Vrije tekst binnen het venster is gratis en telt niet mee. Is de
   teller niet schrijfbaar, dan gaat er geen sjabloon weg. De Bode stuurt alleen naar Mehdi.
+  Sinds 21-10-2026 (ontwerp regie-zoom v1.2, B7) is de sjabloondag de Brusselse dag (de VM draait op
+  UTC; met de UTC-dag begon de teller in de zomer om 02:00 Brussel), en blijven van het plafond
+  `WA_SJABLOON_RESERVE` (standaard 2) berichten vrij voor de vaste momenten van De Bode, die met
+  voorrang sturen (zie 14.16).
 
 ### 14.12 Namen en mappen: gekoppeld permanent toezicht (05-10-2026)
 
@@ -2878,3 +2882,67 @@ voor deze interne APIvelden.
   open. Buildwise/NBN-verwerkingsrechten en een expliciet gekozen echte
   proefverwerking staan nog open. Het technische bronnenregister bevat
   metadata en geeft geen toestemming om beschermde publicaties te verwerken.
+
+### 14.16 Regie en Zoom: gesprekkenketen, De Zoomwacht, De Regisseur en De Bode (22-10-2026)
+
+Ontwerp regie-zoom v1.2 (`~/dev/samenwerking-codex/regie-zoom/ontwerp-v1.md`, hoofdstuk 13 gaat voor), met de
+bouwcontrole RZ2 van Codex verwerkt. Geen Postgres-migratie: alles staat in het bord (`mijnagents.db`) en in
+`mijnagents-data/` op de VM. Sleutels staan alleen in `~/appportal/.env` of `mijnagents-data/.env`; hier alleen namen.
+
+- **Gesprekkenketen** (`mijnagents-runner/keten.py`): De Fathomwacht en daarna De Zoomwacht, elk met een eigen
+  time-out (2700 en 1200 s; eerst SIGTERM, na 30 s SIGKILL, exit 124). Schrijft atomisch `mijnagents-data/keten.json`:
+  `keten_id`, `start`, `einde`, per stap `exit` en `einde`, en `geslaagd` (alleen als beide stappen met exit 0
+  eindigden). Alleen keten.py schrijft dat bestand, een ronde die De Regisseur start niet. Kon De Fathomwacht Fathom niet
+  lezen (geen of een foute sleutel), dan eindigt ze niet op 0 en is de keten niet geslaagd (RZ2-02).
+- **Planning** (`mijnagents-runner/planning/gesprekken.cron`): keten.py om 07:00 en 13:00 UTC onder
+  `/usr/bin/flock -w 1800 /tmp/gesprekken.lock`; De Dagbundelaar op werkdagen om 07:05 UTC binnen hetzelfde slot
+  (`flock -w 3600 -E 75`): krijgt hij het niet, dan start hij niet en staat dat in `dagbundelaar.log` (RZ2-03). Een
+  ronde met de hand van fathom-wacht, zoom-wacht of dagbundelaar via De Regisseur gaat door hetzelfde slot
+  (`flock -n -E 75`; exit 75 is "de keten loopt", geen mislukte ronde). Zetten op de VM:
+  `python3 mijnagents-runner/planning/gesprekken_cron_zetten.py` (toont het blok), daarna met `--zet`. Het zetscript
+  vervangt alleen het beheerde blok tussen de merktekens en de drie oude losse regels, weigert bij een andere regel
+  met dezelfde runners en leest terug. `flock -E` vraagt util-linux 2.25 of nieuwer.
+- **De Zoomwacht** (`zoom_wacht.py`, in de keten na De Fathomwacht): telt elk Zoom-gesprek, koppelt het aan Fathom en
+  zet per Brusselse dag een dagregel `zoom:dag:<dag>` klaar. Mist Fathom een gesprek, dan bewaart ze de Zoom-tekst als
+  vangnet in `mijnagents-data/zoom-data/<map>/` (transcript.vtt en transcript.json in de vorm van Fathom); elke
+  vangnettekst is privé (13.5 X1). `--koppel-sinds JJJJ-MM-DD` koppelt oude rijen met een joinlink aan Fathom en maakt
+  de link daarna leeg. Een rij uit het dubbele uur van 25-10-2026 (02:00 tot 03:00 Brussel) koppelt alleen op de
+  UTC-start bij Zoom of op een opname die alleen bij haar kan horen; anders houdt ze haar link (RZ2-05).
+- **Zoom-profielen** (`koppelingen/zoom.py`): `stack` is de Server-to-Server-app van de stack (`ZOOM_ACCOUNT_ID`,
+  `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`), `lees` de alleen-lezende app "Zoomwacht lezen" (`ZOOM_LEES_CLIENT_ID`,
+  `ZOOM_LEES_CLIENT_SECRET`, zo nodig `ZOOM_LEES_ACCOUNT_ID`). Zonder leesapp leest het profiel `lees` met de stack.
+  Alleen GET, alleen onder de vaste gebruiker (`ZOOM_MEHDI_USER`), `/past_meetings/` en zijn eigen nummers. Een
+  leestoken met een verboden recht (write, update, delete en de lijst "Nooit aanvinken" in
+  `rechten-zoomwacht-lezen.md`) wordt geweigerd en nooit gebruikt. Chatberichten alleen met de stack.
+- **`zoom_leesapp.py`**: zet en toetst de leesapp. Mehdi plakt de drie waarden met `--zet`; het script schrijft de
+  sleutels `ZOOM_LEES_*` atomisch met rechten 600 en drukt nooit een waarde af. Exit 0 alleen als de kern (tien
+  rechten) er is en de toetsen slagen; de advieslijst telt niet mee. `ZOOM_MEHDI_USER` schrijft het alleen als de
+  gebruiker zeker is.
+- **Gesprekkentabel** (`gesprek_log`): kolommen `sessie` (de Zoom-sessie van de rij) en `dubbel_van` (de rij die telt;
+  `buiten:<reden>` als merkteken voor een rij die niet voor Mehdi telt, bv. `buiten:andere-ruimte`), toegevoegd in
+  `init_db` onder `BEGIN IMMEDIATE`. Route `POST /api/gesprekken/koppel` (`X-Agents-Token`), invoer
+  `{koppelingen: [{uniek, sessie, dubbel_van}]}`: zet alleen die velden op bestaande rijen, maakt nooit een rij aan, en
+  weigert een verwijzing naar de rij zelf, naar een rij die niet bestaat of naar een rij die zelf een dubbel is.
+  Antwoord `{gezet, onbekend, geweigerd}`; teruglezen doet de agent langs `bord.db_lees`.
+- **Klaarzet en afzender** (M6): bestaat een `uniek` al met een andere afzender, dan schrijft `POST /api/klaarzet` dat
+  item niet en antwoordt 409, met wat wel geschreven is. Uitzondering: `mailsignaal:` (dezelfde mail in twee
+  postvakken, `KLAARZET_GEDEELD` in `mijnagents/app.py`).
+- **`bord.db_lees(sql, args)`** (`koppelingen/bord.py`): de enige leesweg van de runners naar `mijnagents.db` (pad uit
+  `BORD_DB`): URI met mode=ro, timeout 10 en `PRAGMA query_only = 1`, alleen een vraag die met SELECT of WITH begint.
+  Een fout geeft `bord.BordOnbekend`, nooit een lege lijst. Schrijven gaat altijd via de API van het bord.
+- **Ochtendbericht en avondbundel** (`bode.py`, `BUNDELEN = "ochtend-avond"`, keuze 1 van Mehdi): De Regisseur zet het
+  ochtendbericht klaar (`ochtendbericht:<datum>`, hoogstens vijf beslissingen) zodra keten.json van vandaag geslaagd
+  is en, op werkdagen, De Dagbundelaar na het einde van die keten klaar was; anders om 10:30 Brussel, met wat
+  ontbreekt onder Onbekend. De Bode stuurt het als eigen bericht; staat er om 11:00 geen, dan een terugval met de
+  aantallen. Rond 17:00 (bij de mailupdate van 17:00, anders vanaf 17:30) volgt de avondbundel. In de stand `uit` gaat
+  alles los, eerst met een slotbundel van wat al gebundeld was. Elk vast moment loopt door het verzendspoor
+  `mijnagents-data/bode-verzonden.jsonl` (bezig, verzonden of mislukt; FR-193): wat er bezig of verzonden staat, gaat
+  nooit een tweede keer, en "bezig" wordt een nood "aflevering onzeker".
+- **Privé** (RZ2-01): het klaarzet-item van een privégesprek van De Fathomwacht of De Plaudwacht draagt alleen datum,
+  start, minuten, privé en een verwijzing met "(privé)"; De Dagbundelaar zet er "privégesprek, N min" van, en
+  `bord_export.py` maakt van elke regel met PRIVÉ "(privé)" in klaargezet/, werkverslag/ en dagverslagen/.
+- **Grendels**: workflow `regie-grendels.yml`, job bord (`mijnagents/test_gesprekken_api.py`) en job runners
+  (`test_bord_lees.py`, `test_zoom_wacht.py`, `test_dagbundelaar.py`, `test_keten.py`, `test_regisseur.py` en
+  `test_bode_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is `test_geen_echte_namen.py`:
+  die faalt als een van de genoemde testbestanden een woord bevat waarvan de sha256 op een vaste lijst staat (echte
+  namen, privéonderwerpen en adressen, alleen als hash bewaard; de repo is publiek). Testgegevens zijn altijd verzonnen.

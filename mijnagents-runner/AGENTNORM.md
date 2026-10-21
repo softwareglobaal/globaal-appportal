@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.9, 16-10-2026 (NA08 en NA09 in de code: zonder regelboek geen ronde, en de generator controleert eerst en geeft de cron pas na een gecontroleerde eerste ronde; v1.8 16-10-2026 hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.12, 22-10-2026 (RZ2-01: een privégesprek draagt ook in het klaarzet-item, de bundel van De Dagbundelaar en de export van het bord geen naam of onderwerp, bij De Fathomwacht en De Plaudwacht; v1.11 21-10-2026 BAS-01: het werkverslag draagt geen privé, van een privégesprek staat er alleen wanneer en hoe lang, en De Regisseur filtert wat hij leest; bij een omschakeling van BUNDELEN verdwijnt niets; v1.10 dezelfde dag, ontwerp regie-zoom v1.2, G2 en L7: De Regisseur en De Zoomwacht lezen hun regels niet meer als leeg bij onbekend; een signaal voor Mehdi komt op een vast moment, het ochtendbericht of de avondbundel; een nood voor Mehdi bereikt hem in het ochtendbericht; een agent aanspreken met "Naam, vraag"; de ronde neemt noden van voor de ronde mee en sluit ook bij een stopsignaal af; db_lees is de enige leesweg naar de databank van het bord; v1.9 16-10-2026 NA08 en NA09 in de code: zonder regelboek geen ronde, en de generator controleert eerst en geeft de cron pas na een gecontroleerde eerste ronde; v1.8 16-10-2026 hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -131,7 +131,7 @@ Wat de ronde zelf doet:
 | is de werkwijze onbekend (bord onbereikbaar, geen toegang, niet op het bord, onleesbaar) of leeg, dan stopt de ronde voor het werk begint: een nood, hartslag "fout" en `RondeGestopt` | |
 | de gedeelde lessen lezen (`r.lessen`, N13) en de collega's van het bord (`r.collegas`, N14) | |
 | | het werkverslag versturen |
-| | breekt de ronde, dan hartslag "fout" met de foutmelding, nooit blijven hangen op "actief" (N11); noden die al open stonden blijven open |
+| | breekt de ronde, dan hartslag "fout" met de foutmelding, nooit blijven hangen op "actief" (N11); noden die al open stonden blijven open. Dat geldt ook voor een stopsignaal (SIGTERM van een time-out, Ctrl-C), ook terwijl de ronde nog begint |
 
 **Zonder regelboek geen ronde** (Codex NA09, 16-10-2026). Tot dan gaf een leesfout
 een lege werkwijze en werkte de agent gewoon door, zonder dat iemand het zag.
@@ -144,11 +144,15 @@ geldt in `ag.werkwijze()`, waarmee vier oudere runners (agenda-wacht, archivaris
 fathom-wacht, levenscoach) hun werkwijze nog buiten de ronde lezen: ook hun werk
 stopt (Codex NA11). Ze horen alsnog door de ronde te gaan.
 
-Open, gemeten op 16-10-2026: zes plekken lezen een werkwijze nog met eigen code en
-maken van onbekend een lege tekst: `contracten_agent.py` (`werkwijze_van_bord`),
-`regisseur.py`, `plaud_wacht.py` en `zoom_wacht.py` (de personentabel van
-fathom-wacht), `mac/mail_wacht.py` en `zelfcontrole.py`. Die horen
-`ag.werkwijze()` of `werkwijze_lezen()` te gebruiken. En weet de ronde de open
+Open, gemeten op 16-10-2026 en opnieuw op 21-10-2026: vier plekken lezen een werkwijze
+nog met eigen code en maken van onbekend een lege tekst: `contracten_agent.py`
+(`werkwijze_van_bord`), `plaud_wacht.py` (de personentabel van fathom-wacht),
+`mac/mail_wacht.py` en `zelfcontrole.py`. Die horen `ag.werkwijze()` of
+`werkwijze_lezen()` te gebruiken. Sinds 21-10-2026 (ontwerp regie-zoom v1.2) niet meer
+`regisseur.py`, die zijn eigen werkwijze als `r.werkwijze` uit de ronde leest en een
+onleesbare werkwijze van een andere agent als onbekend meldt, en niet meer
+`zoom_wacht.py`, die de personentabel van fathom-wacht met `werkwijze_lezen()` leest:
+is die onbekend, dan volgt een nood en is elke sessie met een onbekende privé. En weet de ronde de open
 noden niet, dan stuurt ze geen lijst; de nieuwe nood staat dan alleen in het
 detail van de fouthartslag. Een nood toevoegen zonder de lijst te vervangen,
 vraagt een route op het bord (Codex NA16).
@@ -168,6 +172,36 @@ die grenzen in de vaste vorm (hoofdstuk 8) doet het geen werk en meldt het een n
 `r.nood()` haalt een aantal vooraan uit de tekst weg en weigert dubbels, zodat
 dezelfde nood morgen dezelfde nood is (N10). Het aantal zet je in `r.detail`.
 
+Noden die een agent al heeft voor zijn ronde begint, zoals De Bode met het bellen en
+het alarm, geeft hij mee als `ag.ronde(taak, begin_noden=[{"tekst": ..., "wie": ...}])`
+(sinds 21-10-2026, ontwerp regie-zoom X4). Ze staan in de ronde alsof ze met `r.nood()`
+gemeld zijn, en gaan ook mee als de ronde stopt omdat het regelboek ontbreekt.
+
+Wie rechtstreeks uit de databank van het bord leest, doet dat langs een weg: `bord.db_lees(sql, args)`,
+alleen lezend (mode=ro en query_only), alleen een vraag die met SELECT of WITH begint.
+Een fout geeft `bord.BordOnbekend` met een reden, nooit een lege lijst: wie dat
+opvangt, zegt onbekend. Schrijven gaat altijd via de API van het bord, en teruglezen
+met `db_lees` is het bewijs dat iets echt staat.
+
+**Het werkverslag draagt geen privé** (BAS-01, 21-10-2026). Wat een agent met `ag.log` schrijft,
+leest een taalmodel mee: het dossier en de tool `agent_verslag` van De Regisseur, en De
+Ontwikkelaar. Van een privégesprek of een privébron staat er alleen wanneer, hoe lang en het
+woord privé; met wie, waarover en waarom blijven in het archief (M3, ontwerp regie-zoom 13.2).
+Het masker van het bord (`ag.prive()`) vangt alleen wat een agent aanmeldt; wat hij niet
+aanmeldt, gaat er onbewerkt door. De Fathomwacht doet dit sinds 21-10-2026, in de bevinding,
+de bronregel en de schermregel (`tests/test_bord_lees.py`). Hetzelfde geldt voor het klaarzet-item
+van een privégesprek (RZ2-01, 22-10-2026): alleen datum, start, minuten, privé en een verwijzing
+naar het archief met "(privé)" en het id, bij De Fathomwacht en De Plaudwacht (`tests/test_bord_lees.py`,
+`tests/test_plaud_wacht.py`); De Plaudwacht schrijft sinds dan ook in haar bevinding alleen
+"privégesprek" en de duur. De Dagbundelaar zet er "privégesprek, N min" van, ook voor een oud item,
+en de export van het bord (`bord_export.py`) maakt van elke regel met PRIVÉ "(privé)". Open, gemeten
+op 21-10-2026: De Archivaris (`archivaris.py`, de bevinding met personen en reden) schrijft het nog;
+het twijfelsignaal van De Archivaris, een klaargezet signaal, noemt ook personen. De Regisseur filtert wat hij
+leest wel zelf (`werkverslag_lees` in `regisseur.py`, voor het dossier en de tool `agent_verslag`):
+nooit het detail, een regel die privé noemt wordt "(privé)", en van een privé-agent of een agent
+waarvan dat onbekend is alleen tijd, stap en onderwerp. Dat beschermt alleen die lezer; het
+werkverslag zelf gaat ook naar de export en naar De Ontwikkelaar.
+
 `tests/test_agentnorm.py` faalt zodra iemand deze doorgang weghaalt of uitholt,
 en ook als het sjabloon hem niet meer gebruikt. Acht toetsen, allemaal groen op
 20-09-2026.
@@ -180,16 +214,41 @@ dat uit staat is geen melding. Drie kanalen, van zacht naar hard:
 | kanaal | hoe | waarvoor |
 |---|---|---|
 | het bord | `hartslag(..., nood=[...])` | alles wat kan wachten tot hij kijkt |
-| Telegram | een klaarzet-item met `soort: signaal` en `voor: mehdi`; De Bode bundelt en stuurt | wat hij vandaag moet weten |
+| WhatsApp, met Telegram als vangnet | een klaarzet-item met `soort: signaal` en `voor: mehdi`; De Bode bundelt het in het eerstvolgende vaste moment: het ochtendbericht of de avondbundel (rond 17:00 Brussel, met de mailupdate van 17:00) | wat hij vandaag moet weten; wat niet kan wachten, is een oproep |
 | bellen (Twilio) | `koppelingen/bellen.py`, De Bode belt | alleen wat op een tijdstip moet gebeuren, zoals het belrooster van de Agendawacht |
 
-**Een nood alleen op het bord bereikt hem niet.** De Bode stuurt klaarzet-items
-en voorstellen door, geen noden. Wie wil dat Mehdi iets ziet, zet een signaal.
+Dat is keuze 1 van Mehdi (21-10-2026): `BUNDELEN = "ochtend-avond"` in `bode.py`. Alleen
+oproepen, alarmen en het bellen voor afspraken gaan meteen. Het ochtendbericht maakt
+De Regisseur (hoogstens vijf beslissingen, met een link naar het bord); De Bode stuurt
+het als eigen bericht. Komt het er om 11:00 Brussel niet, dan stuurt De Bode een
+terugval met de aantallen. Staat `BUNDELEN` op `"uit"` (de terugval van de schakelaar),
+dan gaat elk signaal los, zoals voor 21-10-2026; dan hoort deze tabel in dezelfde commit
+mee te veranderen. Bij een omschakeling verdwijnt niets: terug naar `"uit"` stuurt De Bode
+eerst wat al gebundeld was als een slotbundel (in de stille uren om 07:00), en naar
+`"ochtend-avond"` begint de eerste bundel na het laatste bericht dat los wegging.
+
+**Een nood voor Mehdi bereikt hem in het ochtendbericht, als punt of onder Verder.**
+De Regisseur neemt elke ochtend de open noden met `wie: mehdi` mee: als punt (samen,
+oudste eerst, met hoeveel nieuw) als er plaats is binnen de vijf beslissingen, en
+altijd als aantal onder Verder; kon hij de noden niet lezen, dan staan ze onder
+Onbekend, nooit als 0. Dat is een keer per dag. De Bode stuurt zelf geen noden
+door: wat Mehdi vandaag nog moet weten, zet je als signaal, en wat niet kan wachten,
+als oproep.
+
+**Mehdi spreekt een agent aan met "Naam, vraag"**, via WhatsApp of Telegram: de naam of
+het label van de agent, dan een komma, een dubbelepunt of een los koppelteken, dan de
+vraag ("Zoomwacht, wat is er vanochtend afgesproken?"). De Bode herkent de naam met een
+vaste regel: accenten, hoofdletters en "De" of "Het" vooraan tellen niet, dus
+"Zoomwacht", "De Zoomwacht" en "zoom-wacht" zijn dezelfde; een kleine verschrijving van
+minstens vijf tekens telt alleen als ze op precies een agent past. De Regisseur antwoordt
+dan in de rol van die agent, met diens dossier en een regel "Gelezen:" met bron en tijd.
+Past de naam op meer dan een agent, of op geen, dan kijkt De Regisseur ernaar, en zegt de
+bevestiging dat.
 
 **Het woord "stil" in een signaaltitel belt hem op.** De Bode leest een signaal
 met "stil" erin als alarm en start een gesproken oproep via Twilio, herhaald tot
-er wordt opgenomen, ook in de stille uren (`alarm = [... if "stil" in titel]` in
-`bode.py`). Gemeten op 20-09-2026: de eerste ronde van de Normwacht meldde "39
+er wordt opgenomen, ook in de stille uren (`is_alarm()` in `bode.py`: een oproep, of
+een signaal met "stil" in de titel). Gemeten op 20-09-2026: de eerste ronde van de Normwacht meldde "39
 uur stil" en belde Mehdi daarop op. Een agent die niet draait is geen alarm; dat
 heet nu "geen hartslag". Bellen blijft voor wat op een tijdstip moet gebeuren.
 

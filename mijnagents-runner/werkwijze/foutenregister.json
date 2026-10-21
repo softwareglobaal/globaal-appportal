@@ -1,7 +1,7 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.41",
- "datum": "20-10-2026",
+ "versie": "3.42",
+ "datum": "22-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
   "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
@@ -3884,6 +3884,20 @@
    "soort_oorzaak": "code",
    "oplossing": "Meld na twee mislukte rondes vanaf 115 minuten, of direct bij een afhankelijke afspraak binnen 24 uur; herhaal hooguit na 24 uur en wis bij succes.",
    "grendel": {"soort": "test", "waar": "tests/test_zorg_plaats.py", "tekst": "test_mailbron_blijvend_herkoppelen"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-193",
+   "datum": "22-10-2026",
+   "gevonden_door": "Codex-bouwcontrole RZ2 (RZ2-04) en de tegenproef van Claude, nagemeten door Claude",
+   "fout": "Stopte De Bode nadat WhatsApp een vast moment aanvaardde (het ochtendbericht, de terugval van 11:00, de avondbundel of de slotbundel), maar voor de stand op schijf stond, dan stuurde de volgende ronde hetzelfde bericht opnieuw.",
+   "gevolg": "Mehdi kreeg hetzelfde ochtendbericht of dezelfde bundel twee keer.",
+   "waarom_niet_gezien": "Het belspoor van FR-179 dekte alleen oproepen; de vaste momenten zijn nieuw in versie 2.7 van de werkwijze, en de slotbundel kwam er na de eerste herstelling bij.",
+   "oorzaak": "'verzonden' stond alleen in bode.json, en die komt pas aan het einde van de ronde op schijf.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een eigen verzendspoor (bode-verzonden.jsonl): voor het versturen een 'bezig'-record, na aanvaarding 'verzonden', weigeren alle kanalen 'mislukt'. Een moment met 'bezig' of 'verzonden' gaat nooit opnieuw; 'bezig' wordt een nood 'aflevering onzeker'. Zonder schrijfbaar of leesbaar spoor geen vast moment. Het spoor wordt opgeruimd zoals de stand.",
+   "grendel": {"soort": "test", "waar": "tests/test_bode_regie.py", "tekst": "hetzelfde ochtendbericht opnieuw verstuurd"},
    "controle": [],
    "status": "opgelost"
   }
