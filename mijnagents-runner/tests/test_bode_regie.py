@@ -759,13 +759,19 @@ def test_t77_bundelen_en_werkwijze_zeggen_hetzelfde():
         "droog leest de werkwijze zelf; onleesbaar is 'uit'"
     assert "Bij een omschakeling verdwijnt niets" in sectie and "slotbundel_sturen" in bron, \
         "BOD-1, BOD-2: code en werkwijze zeggen dat bij een omschakeling niets verdwijnt"
-    regisseur = open(os.path.join(RUNNER, "mail_regisseur.py"), encoding="utf-8").read()
-    assert "BUNDELEN op 'ochtend-avond'" in regisseur.split('"""')[1], "de docstring van mail_regisseur.py volgt mee"
-    # G2 en L7: hoofdstuk 6 van AGENTNORM.md noemt de bundelstand en de slotbundel
+    # Tegenproef van 22-10-2026: de documentatie noemde nog een vaste waarde in bode.py, en T77 hield dat zelfs vast. Nu
+    # moeten de norm, de docstring van mail_regisseur.py en TECHNICAL-REFERENCE.md de regel in de werkwijze noemen.
+    regisseur = open(os.path.join(RUNNER, "mail_regisseur.py"), encoding="utf-8").read().split('"""')[1]
+    regisseur = " ".join(regisseur.split())
+    assert f"`{B.BUNDELEN_REGEL}`" in regisseur and "in bode.py" not in regisseur, "de docstring van mail_regisseur.py volgt mee"
+    # G2 en L7: hoofdstuk 6 van AGENTNORM.md noemt de regel in de werkwijze, de terugval en de slotbundel
     norm = open(os.path.join(RUNNER, "AGENTNORM.md"), encoding="utf-8").read()
     hoofdstuk6 = norm.split("## 6.", 1)[1].split("\n## ", 1)[0]
-    assert "ochtend-avond" in hoofdstuk6 and "slotbundel" in hoofdstuk6, "AGENTNORM hoofdstuk 6 noemt de bundelstand"
+    assert f"`{B.BUNDELEN_REGEL}`" in hoofdstuk6 and "`BUNDELEN = " not in hoofdstuk6, "AGENTNORM hoofdstuk 6 noemt de regel"
+    assert "werkwijze van De Bode" in " ".join(hoofdstuk6.split()) and "slotbundel" in hoofdstuk6, hoofdstuk6[:400]
     assert "in het ochtendbericht, als punt of onder Verder" in hoofdstuk6, "L7: zo bereikt een nood voor Mehdi hem"
+    referentie = open(os.path.join(os.path.dirname(RUNNER), "TECHNICAL-REFERENCE.md"), encoding="utf-8").read()
+    assert 'BUNDELEN = "' not in referentie and f"`{B.BUNDELEN_REGEL}`" in referentie, "TECHNICAL-REFERENCE.md volgt mee"
     assert "HERINNERING_UREN" not in bron and not hasattr(B, "HERINNERING_UREN"), "geen herinnering om de zes uur (I7)"
 
 

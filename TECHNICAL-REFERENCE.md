@@ -2886,7 +2886,7 @@ voor deze interne APIvelden.
 ### 14.16 Regie en Zoom: gesprekkenketen, De Zoomwacht, De Regisseur en De Bode (22-10-2026)
 
 Ontwerp regie-zoom v1.2 (`~/dev/samenwerking-codex/regie-zoom/ontwerp-v1.md`, hoofdstuk 13 gaat voor), met de
-bouwcontrole RZ2 van Codex verwerkt. Geen Postgres-migratie: alles staat in het bord (`mijnagents.db`) en in
+bouwcontrole RZ2 en de herstelcontrole RZ3 van Codex (met tegenproef) verwerkt. Geen Postgres-migratie: alles staat in het bord (`mijnagents.db`) en in
 `mijnagents-data/` op de VM. Sleutels staan alleen in `~/appportal/.env` of `mijnagents-data/.env`; hier alleen namen.
 
 - **Gesprekkenketen** (`mijnagents-runner/keten.py`): De Fathomwacht en daarna De Zoomwacht, elk met een eigen
@@ -2896,12 +2896,19 @@ bouwcontrole RZ2 van Codex verwerkt. Geen Postgres-migratie: alles staat in het 
   lezen (geen of een foute sleutel), dan eindigt ze niet op 0 en is de keten niet geslaagd (RZ2-02).
 - **Planning** (`mijnagents-runner/planning/gesprekken.cron`): keten.py om 07:00 en 13:00 UTC onder
   `/usr/bin/flock -w 1800 /tmp/gesprekken.lock`; De Dagbundelaar op werkdagen om 07:05 UTC binnen hetzelfde slot
-  (`flock -w 3600 -E 75`): krijgt hij het niet, dan start hij niet en staat dat in `dagbundelaar.log` (RZ2-03). Een
-  ronde met de hand van fathom-wacht, zoom-wacht of dagbundelaar via De Regisseur gaat door hetzelfde slot
-  (`flock -n -E 75`; exit 75 is "de keten loopt", geen mislukte ronde). Zetten op de VM:
+  (`flock -w 5400 -E 75`): krijgt hij het niet, dan start hij niet en staat dat in `dagbundelaar.log` (RZ2-03). 5400 s
+  is langer dan de keten kan duren: 2700 + 1200 s time-out plus 2 x 30 s nadruk is 3960 s, plus 600 s marge (RZ3-03;
+  tot 22-10-2026 3600 s; `tests/test_keten.py` rekent het na; wie een time-out in `keten.py` verhoogt, verhoogt ook
+  deze wachttijd). Een ronde met de hand van fathom-wacht, zoom-wacht of dagbundelaar via De Regisseur gaat door
+  hetzelfde slot (`flock -n -E 75`; exit 75 is "de keten loopt", geen mislukte ronde). Zetten op de VM:
   `python3 mijnagents-runner/planning/gesprekken_cron_zetten.py` (toont het blok), daarna met `--zet`. Het zetscript
-  vervangt alleen het beheerde blok tussen de merktekens en de drie oude losse regels, weigert bij een andere regel
-  met dezelfde runners en leest terug. `flock -E` vraagt util-linux 2.25 of nieuwer.
+  aanvaardt maar twee vormen (RZ3-02): precies de drie oude losse regels, elk een keer en zonder blok, of precies een
+  beheerd blok zonder oude regel. Elke andere vorm (twee of een van de drie, een dubbele, een blok met een oude regel,
+  twee blokken, een andere tijd) weigert het met exit 2, zonder iets te zetten; de melding noemt alleen de regels van de
+  gesprekkenrunners, met elke toewijzing (`NAAM=waarde`) als `<waarde>`. `--zet` zet bovendien alleen als
+  `mijnagents-data/.built` gelijk is aan `git rev-parse HEAD:mijnagents` (wat `mijnagents/deploy.sh` na een geslaagde
+  build schrijft); anders "geweigerd: bord nog niet herbouwd", exit 2. Het leest terug na het zetten. `flock -E` vraagt
+  util-linux 2.25 of nieuwer.
 - **De Zoomwacht** (`zoom_wacht.py`, in de keten na De Fathomwacht): telt elk Zoom-gesprek, koppelt het aan Fathom en
   zet per Brusselse dag een dagregel `zoom:dag:<dag>` klaar. Mist Fathom een gesprek, dan bewaart ze de Zoom-tekst als
   vangnet in `mijnagents-data/zoom-data/<map>/` (transcript.vtt en transcript.json in de vorm van Fathom); elke
@@ -2913,11 +2920,18 @@ bouwcontrole RZ2 van Codex verwerkt. Geen Postgres-migratie: alles staat in het 
   `ZOOM_LEES_CLIENT_SECRET`, zo nodig `ZOOM_LEES_ACCOUNT_ID`). Zonder leesapp leest het profiel `lees` met de stack.
   Alleen GET, alleen onder de vaste gebruiker (`ZOOM_MEHDI_USER`), `/past_meetings/` en zijn eigen nummers. Een
   leestoken met een verboden recht (write, update, delete en de lijst "Nooit aanvinken" in
-  `rechten-zoomwacht-lezen.md`) wordt geweigerd en nooit gebruikt. Chatberichten alleen met de stack.
+  `rechten-zoomwacht-lezen.md`) wordt geweigerd en nooit gebruikt. Daar hoort sinds RZ3-04 (22-10-2026) ook het
+  Zoom-transcript bij (`cloud_recording:read:meeting_transcript:admin`, `TOT_MEHDI_BESLIST`): geweigerd tot Mehdi over
+  dat recht beslist; tot dan gaf het alleen een melding. Chatberichten alleen met de stack. Weigert Zoom een download
+  (401, 403, of 400 met code 4711), dan is dat `GeenRecht` met het recht dat Zoom noemt (anders `download`), plus de
+  HTTP-code en de code van Zoom.
 - **`zoom_leesapp.py`**: zet en toetst de leesapp. Mehdi plakt de drie waarden met `--zet`; het script schrijft de
   sleutels `ZOOM_LEES_*` atomisch met rechten 600 en drukt nooit een waarde af. Exit 0 alleen als de kern (tien
   rechten) er is en de toetsen slagen; de advieslijst telt niet mee. `ZOOM_MEHDI_USER` schrijft het alleen als de
-  gebruiker zeker is.
+  gebruiker zeker is. Een app met het transcriptrecht weigert het ("dat recht blijft geweigerd tot Mehdi erover
+  beslist"). De proefdownload meet welk recht Zoom noemt: het transcriptrecht geeft "download van het transcript vraagt
+  een recht dat Mehdi nog niet toestond" (Mehdi beslist), een ander recht "download vraagt recht <naam>" (ontbreekt dat
+  recht, zonder Mehdi), geen recht "download geweigerd, HTTP <code>; Zoom noemde geen recht" (tegenproef op RZ3-04).
 - **Gesprekkentabel** (`gesprek_log`): kolommen `sessie` (de Zoom-sessie van de rij) en `dubbel_van` (de rij die telt;
   `buiten:<reden>` als merkteken voor een rij die niet voor Mehdi telt, bv. `buiten:andere-ruimte`), toegevoegd in
   `init_db` onder `BEGIN IMMEDIATE`. Route `POST /api/gesprekken/koppel` (`X-Agents-Token`), invoer
@@ -2930,7 +2944,11 @@ bouwcontrole RZ2 van Codex verwerkt. Geen Postgres-migratie: alles staat in het 
 - **`bord.db_lees(sql, args)`** (`koppelingen/bord.py`): de enige leesweg van de runners naar `mijnagents.db` (pad uit
   `BORD_DB`): URI met mode=ro, timeout 10 en `PRAGMA query_only = 1`, alleen een vraag die met SELECT of WITH begint.
   Een fout geeft `bord.BordOnbekend`, nooit een lege lijst. Schrijven gaat altijd via de API van het bord.
-- **Ochtendbericht en avondbundel** (`bode.py`, `BUNDELEN = "ochtend-avond"`, keuze 1 van Mehdi): De Regisseur zet het
+- **Ochtendbericht en avondbundel** (`bode.py`, stand ochtend-avond, keuze 1 van Mehdi): de stand staat niet in de
+  code maar als vaste regel `BUNDELEN: ochtend-avond` in de werkwijze van De Bode op het bord, onder de kop "De stand
+  van BUNDELEN" (RZ3-02, werkwijze 2.8, `stand_bundelen`). Zonder die regel, in een andere vorm, of met een tweede
+  vermelding van de stand in welke schrijfwijze ook (kleine letters, spaties, entiteiten, onzichtbare tekens) is de
+  stand `uit`; omschakelen is een werkwijze met een klik van Mehdi, geen commit. De Regisseur zet het
   ochtendbericht klaar (`ochtendbericht:<datum>`, hoogstens vijf beslissingen) zodra keten.json van vandaag geslaagd
   is en, op werkdagen, De Dagbundelaar na het einde van die keten klaar was; anders om 10:30 Brussel, met wat
   ontbreekt onder Onbekend. De Bode stuurt het als eigen bericht; staat er om 11:00 geen, dan een terugval met de
@@ -2940,7 +2958,15 @@ bouwcontrole RZ2 van Codex verwerkt. Geen Postgres-migratie: alles staat in het 
   nooit een tweede keer, en "bezig" wordt een nood "aflevering onzeker".
 - **Privé** (RZ2-01): het klaarzet-item van een privégesprek van De Fathomwacht of De Plaudwacht draagt alleen datum,
   start, minuten, privé en een verwijzing met "(privé)"; De Dagbundelaar zet er "privégesprek, N min" van, en
-  `bord_export.py` maakt van elke regel met PRIVÉ "(privé)" in klaargezet/, werkverslag/ en dagverslagen/.
+  `bord_export.py` maakt van elke regel met PRIVÉ "(privé)" in klaargezet/, werkverslag/ en dagverslagen/. Privé is
+  de herkenning prive OF afdeling prive, in elke schrijfwijze, OF de dossierbeslissing (RZ3-01, 22-10-2026; tot dan
+  alleen herkenning.prive): `is_prive` in `fathom_wacht.py` en `plaud_wacht.py`, `opname_uit` in `zoom_wacht.py`,
+  `prive` in `dagbundelaar.py` (ook nooit in een bundel voor een afdeling), `_rij_prive`, `_item_prive` en
+  `_prive_kenmerken` in `regisseur.py` (gesprekkentabel ook op de kolom `afdeling`, transcript, klaargezette items en
+  oude bundelregels met de titel van een privé-item, ochtendtelling), en
+  `is_prive` in `bord_export.py` (inhoud.afdeling). De export maakt ook "(privé)" van een regel met de titel of de
+  verwijzing van een privé-item (`prive_kenmerken`, minstens twaalf tekens) en van de oude Fathom-bevinding
+  " · prive · ". Exportbestanden buiten het venster van veertien dagen worden niet herschreven of gewist.
 - **Grendels**: workflow `regie-grendels.yml`, job bord (`mijnagents/test_gesprekken_api.py`) en job runners
   (`test_bord_lees.py`, `test_zoom_wacht.py`, `test_dagbundelaar.py`, `test_keten.py`, `test_regisseur.py` en
   `test_bode_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is `test_geen_echte_namen.py`:

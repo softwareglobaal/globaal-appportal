@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.12, 22-10-2026 (RZ2-01: een privégesprek draagt ook in het klaarzet-item, de bundel van De Dagbundelaar en de export van het bord geen naam of onderwerp, bij De Fathomwacht en De Plaudwacht; v1.11 21-10-2026 BAS-01: het werkverslag draagt geen privé, van een privégesprek staat er alleen wanneer en hoe lang, en De Regisseur filtert wat hij leest; bij een omschakeling van BUNDELEN verdwijnt niets; v1.10 dezelfde dag, ontwerp regie-zoom v1.2, G2 en L7: De Regisseur en De Zoomwacht lezen hun regels niet meer als leeg bij onbekend; een signaal voor Mehdi komt op een vast moment, het ochtendbericht of de avondbundel; een nood voor Mehdi bereikt hem in het ochtendbericht; een agent aanspreken met "Naam, vraag"; de ronde neemt noden van voor de ronde mee en sluit ook bij een stopsignaal af; db_lees is de enige leesweg naar de databank van het bord; v1.9 16-10-2026 NA08 en NA09 in de code: zonder regelboek geen ronde, en de generator controleert eerst en geeft de cron pas na een gecontroleerde eerste ronde; v1.8 16-10-2026 hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.13, 22-10-2026 (RZ3-01 en RZ3-02: privé is ook een gesprek met afdeling prive, bij elke agent en lezer, en de stand van BUNDELEN staat als vaste regel in de werkwijze van De Bode, niet meer in de code; v1.12 dezelfde dag, RZ2-01: een privégesprek draagt ook in het klaarzet-item, de bundel van De Dagbundelaar en de export van het bord geen naam of onderwerp, bij De Fathomwacht en De Plaudwacht; v1.11 21-10-2026 BAS-01: het werkverslag draagt geen privé, van een privégesprek staat er alleen wanneer en hoe lang, en De Regisseur filtert wat hij leest; bij een omschakeling van BUNDELEN verdwijnt niets; v1.10 dezelfde dag, ontwerp regie-zoom v1.2, G2 en L7: De Regisseur en De Zoomwacht lezen hun regels niet meer als leeg bij onbekend; een signaal voor Mehdi komt op een vast moment, het ochtendbericht of de avondbundel; een nood voor Mehdi bereikt hem in het ochtendbericht; een agent aanspreken met "Naam, vraag"; de ronde neemt noden van voor de ronde mee en sluit ook bij een stopsignaal af; db_lees is de enige leesweg naar de databank van het bord; v1.9 16-10-2026 NA08 en NA09 in de code: zonder regelboek geen ronde, en de generator controleert eerst en geeft de cron pas na een gecontroleerde eerste ronde; v1.8 16-10-2026 hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -194,7 +194,16 @@ van een privégesprek (RZ2-01, 22-10-2026): alleen datum, start, minuten, privé
 naar het archief met "(privé)" en het id, bij De Fathomwacht en De Plaudwacht (`tests/test_bord_lees.py`,
 `tests/test_plaud_wacht.py`); De Plaudwacht schrijft sinds dan ook in haar bevinding alleen
 "privégesprek" en de duur. De Dagbundelaar zet er "privégesprek, N min" van, ook voor een oud item,
-en de export van het bord (`bord_export.py`) maakt van elke regel met PRIVÉ "(privé)". Open, gemeten
+en de export van het bord (`bord_export.py`) maakt van elke regel met PRIVÉ "(privé)".
+**Privé is ook afdeling prive** (RZ3-01, 22-10-2026). De dossierbeslissing (`plaud/dossier.py`) noemt
+een gesprek met afdeling prive privé, ook als de herkenning prive=false zegt; elke lezer volgt dat,
+in elke schrijfwijze: De Fathomwacht en De Plaudwacht (`is_prive`, voor de gesprekkentabel, het
+klaarzet-item en het werkverslag), De Zoomwacht (een Fathom-opname met die afdeling maakt de
+sessie privé, en dan staat ze niet in de dagregel), De Dagbundelaar (ook nooit in een bundel voor
+een afdeling), De Regisseur (gesprekkentabel, transcript, klaargezette items en de telling van het
+ochtendbericht) en de export. De Regisseur en de export maken ook van een regel met de titel of de
+verwijzing van een privé-item "(privé)", en de export ook van de oude Fathom-bevinding met " · prive · ". Oude exportbestanden buiten het venster
+van veertien dagen wist de export niet; dat is een afzonderlijke opruiming met een ja van Mehdi. Open, gemeten
 op 21-10-2026: De Archivaris (`archivaris.py`, de bevinding met personen en reden) schrijft het nog;
 het twijfelsignaal van De Archivaris, een klaargezet signaal, noemt ook personen. De Regisseur filtert wat hij
 leest wel zelf (`werkverslag_lees` in `regisseur.py`, voor het dossier en de tool `agent_verslag`):
@@ -217,15 +226,19 @@ dat uit staat is geen melding. Drie kanalen, van zacht naar hard:
 | WhatsApp, met Telegram als vangnet | een klaarzet-item met `soort: signaal` en `voor: mehdi`; De Bode bundelt het in het eerstvolgende vaste moment: het ochtendbericht of de avondbundel (rond 17:00 Brussel, met de mailupdate van 17:00) | wat hij vandaag moet weten; wat niet kan wachten, is een oproep |
 | bellen (Twilio) | `koppelingen/bellen.py`, De Bode belt | alleen wat op een tijdstip moet gebeuren, zoals het belrooster van de Agendawacht |
 
-Dat is keuze 1 van Mehdi (21-10-2026): `BUNDELEN = "ochtend-avond"` in `bode.py`. Alleen
-oproepen, alarmen en het bellen voor afspraken gaan meteen. Het ochtendbericht maakt
-De Regisseur (hoogstens vijf beslissingen, met een link naar het bord); De Bode stuurt
-het als eigen bericht. Komt het er om 11:00 Brussel niet, dan stuurt De Bode een
-terugval met de aantallen. Staat `BUNDELEN` op `"uit"` (de terugval van de schakelaar),
-dan gaat elk signaal los, zoals voor 21-10-2026; dan hoort deze tabel in dezelfde commit
-mee te veranderen. Bij een omschakeling verdwijnt niets: terug naar `"uit"` stuurt De Bode
-eerst wat al gebundeld was als een slotbundel (in de stille uren om 07:00), en naar
-`"ochtend-avond"` begint de eerste bundel na het laatste bericht dat los wegging.
+Dat is keuze 1 van Mehdi (21-10-2026): de stand ochtend-avond. Die staat niet in de code,
+maar als vaste regel `BUNDELEN: ochtend-avond` in de werkwijze van De Bode op het bord
+(RZ3-02, 22-10-2026, werkwijze 2.8): De Bode bundelt pas als Mehdi die werkwijze met een
+klik zette, ook als de code al eerder live stond. Alleen oproepen, alarmen en het bellen
+voor afspraken gaan meteen. Het ochtendbericht maakt De Regisseur (hoogstens vijf
+beslissingen, met een link naar het bord); De Bode stuurt het als eigen bericht. Komt het
+er om 11:00 Brussel niet, dan stuurt De Bode een terugval met de aantallen. Zonder die
+regel, in een andere vorm, of met een tweede vermelding van de stand (in welke
+schrijfwijze ook) is de stand `uit`, de terugval: dan gaat elk signaal los, zoals voor
+21-10-2026. Omschakelen of terugdraaien is dus een werkwijze op het bord, geen commit; dan
+hoort deze tabel mee te veranderen. Bij een omschakeling verdwijnt niets: terug naar `uit`
+stuurt De Bode eerst wat al gebundeld was als een slotbundel (in de stille uren om 07:00),
+en naar `ochtend-avond` begint de eerste bundel na het laatste bericht dat los wegging.
 
 **Een nood voor Mehdi bereikt hem in het ochtendbericht, als punt of onder Verder.**
 De Regisseur neemt elke ochtend de open noden met `wie: mehdi` mee: als punt (samen,
