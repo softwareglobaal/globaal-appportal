@@ -10,6 +10,9 @@ Leest de bord-database alleen en schrijft markdown en json naar mijnagents-data/
   - <extra>                               per agent: Agendawacht belrooster.json, Ontwikkelaar verslagen/, Regisseur gesprekken.md
 Werkwijzen van alle agents samen in export/_Werkwijzen/. Nooit wissen; alleen (over)schrijven.
 De Mac-synctaak kopieert export/ naar Data uit Mehdi. Cron: elk half uur.
+Geen gespreksinhoud buiten de VM (H1, ontwerp regie-zoom v1.2): van een gesprek met een agent gaan alleen id, aan,
+status, tijd en lengtes mee, nooit de vraag of het antwoord; in het werkverslag van De Bode en De Regisseur staat bij
+een bericht alleen hoe lang vraag en antwoord waren.
 """
 import json
 import os
@@ -36,6 +39,26 @@ MAP = {"agenda-wacht": "Agendawacht", "archivaris": "Archivaris", "bode": "Bode"
 
 def veilig(s):
     return re.sub(r"[^\w\- .,()]+", "", s or "").strip()[:60] or "agent"
+
+
+# H1: een werkverslagregel over een bericht van Mehdi (onderwerp "bericht <id> ...", zo schrijven De Bode en De
+# Regisseur het) draagt de vraag in de tekst en het antwoord in het detail. Tot 21-10-2026 schreven ze die voluit; de
+# export houdt alleen de lengte, ook voor die oude regels.
+GESPREK_ONDERWERP = re.compile(r"^bericht \d+")
+VRAAG_IN_TEKST = re.compile(r"^((?:uit (?:WhatsApp|Telegram) aan|vraag van) [^:\n]*?):\s*(.*)$", re.S)
+
+
+def zonder_gesprekstekst(onderwerp, tekst, detail):
+    """(tekst, detail) van een werkverslagregel zoals ze naar de export gaan (H1): bij een bericht van Mehdi de lengte
+    van vraag en antwoord in plaats van de tekst. Andere regels blijven zoals ze zijn."""
+    if not GESPREK_ONDERWERP.match(onderwerp or ""):
+        return tekst, detail
+    m = VRAAG_IN_TEKST.match(tekst or "")
+    if m:
+        tekst = f"{m.group(1)}, {len(m.group(2))} tekens (vraag niet in de export)"
+    if (detail or "").strip():
+        detail = f"({len(detail)} tekens, niet in de export)"
+    return tekst, detail
 
 
 def be(ts):
@@ -92,7 +115,8 @@ def main():
     for r in c.execute("select naam, onderwerp, stap, tekst, detail, ts from logboek where ts >= ? order by ts", (sinds,)):
         d = be(r["ts"])
         if d:
-            per[r["naam"]][d.strftime("%Y-%m-%d")].append((d.strftime("%H:%M"), r["stap"], r["onderwerp"], r["tekst"], r["detail"] or ""))
+            tekst, detail = zonder_gesprekstekst(r["onderwerp"], r["tekst"], r["detail"] or "")
+            per[r["naam"]][d.strftime("%Y-%m-%d")].append((d.strftime("%H:%M"), r["stap"], r["onderwerp"], tekst, detail))
     for naam, dagen in per.items():
         m = MAP.get(naam) or veilig(re.sub(r"^De ", "", (agents.get(naam) or {}).get("label") or naam))
         for dag, regels in dagen.items():
@@ -143,11 +167,14 @@ def main():
             d = be(r["ts"])
             uit.append(f"| {d.strftime('%d-%m %H:%M') if d else ''} | {r['status']} | {r['actie'][:80]} | {(r['doel'] or '')[:60]} | {(r['reden'] or '')[:80]} | {r['runbook'] or ''} | {r['besluit_door'] or ''} |")
         geschreven += schrijf(os.path.join(UIT, m, "voorstellen.md"), "\n".join(uit) + "\n")
-    # Regisseur: gesprekken met Mehdi
-    uit = ["# Gesprekken via het bord en Telegram", "", "| wanneer | van | aan | vraag | antwoord | status |", "|---|---|---|---|---|---|"]
-    for r in c.execute("select aan, van, tekst, antwoord, status, ts from gesprek order by ts desc limit 300"):
-        d = be(r["ts"])
-        uit.append(f"| {d.strftime('%d-%m %H:%M') if d else ''} | {r['van']} | {r['aan']} | {(r['tekst'] or '')[:120].replace(chr(10), ' ')} | {(r['antwoord'] or '')[:160].replace(chr(10), ' ')} | {r['status']} |")
+    # Regisseur: gesprekken met Mehdi, zonder vraag- of antwoordtekst (H1): die blijven op het bord, op de VM
+    uit = ["# Gesprekken via het bord, WhatsApp en Telegram", "",
+           "Alleen id, aan, status, tijd en lengtes; de vraag en het antwoord blijven op het bord (H1, 21-10-2026).", "",
+           "| id | gevraagd | aan | status | beantwoord | vraag | antwoord |", "|---|---|---|---|---|---|---|"]
+    for r in c.execute("select id, aan, tekst, antwoord, status, ts, beantwoord_ts from gesprek order by ts desc limit 300"):
+        d, b = be(r["ts"]), be(r["beantwoord_ts"] or "")
+        uit.append(f"| {r['id']} | {d.strftime('%d-%m %H:%M') if d else ''} | {r['aan']} | {r['status']} | "
+                   f"{b.strftime('%d-%m %H:%M') if b else ''} | {len(r['tekst'] or '')} tekens | {len(r['antwoord'] or '')} tekens |")
     geschreven += schrijf(os.path.join(UIT, "Regisseur", "gesprekken.md"), "\n".join(uit) + "\n")
     # Ontwikkelaar: verslagen voluit
     for r in c.execute("select titel, inhoud, ts from klaarzet where soort='verslag' order by ts"):
