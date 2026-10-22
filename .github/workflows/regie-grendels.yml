@@ -1,0 +1,50 @@
+# Grendels op De Zoomwacht, De Regisseur en De Bode (ontwerp regie-zoom v1.2, I12 en G3): een workflow voor de bouw,
+# met een job voor het bord (Python 3.11, zoals de Dockerfile) en een job voor de runners (Python 3.12, zoals de venv
+# op de VM). Beide jobs installeren mijnagents/requirements.txt (J6). Een testbestand komt er pas bij in de fase waarin
+# het ontstaat; bestaande tests blijven in hun eigen workflow (agenda-grendels: test_taken.py en
+# test_codex_ronde2_bode.py; contactwacht-grendels: test_whatsapp.py; locatie- en mail-grendels: dagbundelaar.py).
+name: regie-grendels
+
+on:
+  push:
+    paths: ["mijnagents-runner/**", "mijnagents/**", ".github/workflows/regie-grendels.yml"]
+  pull_request:
+    paths: ["mijnagents-runner/**", "mijnagents/**", ".github/workflows/regie-grendels.yml"]
+
+jobs:
+  # Het bord: de gesprekkentabel (Z10, Z11), de koppelroute en de afzendergrendel op klaarzet (M6, T105).
+  bord:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r mijnagents/requirements.txt
+      - run: cd mijnagents && python3 test_gesprekken_api.py
+
+  # De runners: de gedeelde leesweg bord.db_lees (G1, G2, T36), de begin_noden van de ronde (X4, T99) en De Fathomwacht
+  # (J1, K3, Z13; BAS-01 geen privé in het werkverslag, BAS-04 het korte venster); De Zoomwacht op
+  # het echte bord (T05 tot T30, T95, T96, T101, T102, T104, T106), De Dagbundelaar (T31 tot T33), de gesprekkenketen
+  # (X3), De Regisseur (T34 tot T60, T97, T98, T100, T103) en De Bode (T61 tot T77, T99, H1). Zonder Flask falen
+  # test_zoom_wacht, test_regisseur en test_bode_regie hier met opzet: ze horen het schema uit init_db te gebruiken.
+  # Sinds RZ4-07 (22-10-2026) ook de uitrol: werkwijze_naar_bord.py zet de drie regie-werkwijzen alleen als voorstel,
+  # en mijnagents/deploy.sh markeert het bord pas als gebouwd na de routetoets (test_uitrol_regie.py, onder /bin/sh).
+  # Eerst de privacygrendel (22-10-2026): geen echte namen, gevoelige onderwerpen of echte adressen in de testbestanden
+  # van deze branch; de test kent alleen hun sha256, de repo is publiek.
+  runners:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 mijnagents-runner/tests/test_geen_echte_namen.py
+      - run: pip install -r mijnagents/requirements.txt
+      - run: python3 mijnagents-runner/tests/test_bord_lees.py
+      - run: python3 mijnagents-runner/tests/test_zoom_wacht.py
+      - run: python3 mijnagents-runner/tests/test_dagbundelaar.py
+      - run: python3 mijnagents-runner/tests/test_keten.py
+      - run: python3 mijnagents-runner/tests/test_regisseur.py
+      - run: python3 mijnagents-runner/tests/test_bode_regie.py
+      - run: python3 mijnagents-runner/tests/test_uitrol_regie.py

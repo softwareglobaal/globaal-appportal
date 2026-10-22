@@ -14,7 +14,9 @@ import gzip
 import io
 import json
 import os
+import re
 import shutil
+import sqlite3
 import sys
 import tempfile
 import time
@@ -22,6 +24,7 @@ import types
 import urllib.parse
 import urllib.request
 import zipfile
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -310,16 +313,110 @@ def test_onbekende_afdeling_of_lage_zekerheid_blijft_bij_mehdi():
     assert any("niet geleverd" in l[1] for l in w.logs), "een afgewezen levering laat de taak open met reden"
 
 
+def dagbundelaar_op(items, dag):
+    """Een ronde van De Dagbundelaar op deze klaarzet-items, zoals het bord ze teruggeeft (inhoud als json-tekst), zonder
+    netwerk. Geeft (bundels, werkverslagregels)."""
+    _argv, sys.argv = sys.argv, [sys.argv[0]]          # dagbundelaar.py leest --dag bij het importeren
+    try:
+        import dagbundelaar as D  # noqa: PLC0415
+    finally:
+        sys.argv = _argv
+    gezet = {}
+
+    def call(pad, payload=None, method=None):
+        if pad.startswith("/api/klaarzet?"):
+            return {"items": [dict(it) for it in items if "soort=zoom" not in pad or it["soort"] == "zoom"]}
+        gezet.setdefault(pad, []).append(payload)
+        return {"nieuw": len((payload or {}).get("items") or [])}
+
+    oud = (D.bord.call, D.bord.opgepakt, D.DAG)
+    D.bord.call, D.bord.opgepakt, D.DAG = call, (lambda kid, door: None), dag
+    try:
+        with redirect_stdout(io.StringIO()):
+            D.main()
+    finally:
+        D.bord.call, D.bord.opgepakt, D.DAG = oud
+    return gezet["/api/klaarzet"][0]["items"], [r for p in gezet.get("/api/logboek", []) for r in p["regels"]]
+
+
+def export_van(klaarzet, logboek):
+    """bord_export.main() op een tijdelijke databank met deze klaarzet-items en werkverslagregels. Het schema komt uit
+    init_db van mijnagents/app.py, als tekst gelezen: plaud-grendels draait deze test voor Flask er is. Geeft {pad: tekst}
+    van de export."""
+    import bord_export as E  # noqa: PLC0415
+    map_ = tempfile.mkdtemp(prefix="plaud-export-")
+    pad = os.path.join(map_, "bord.db")
+    bron = open(os.path.join(os.path.dirname(HIER), "mijnagents", "app.py"), encoding="utf-8").read()
+    c = sqlite3.connect(pad)
+    c.executescript(re.search(r'def init_db\(\):.*?executescript\(\s*"""(.*?)"""', bron, re.S).group(1))
+    c.execute("ALTER TABLE agent ADD COLUMN werkwijze TEXT DEFAULT ''")
+    nu_ = datetime.now(timezone.utc).isoformat()
+    c.executemany("INSERT INTO klaarzet(van, voor, soort, sleutel, titel, inhoud, verwijzing, uniek, status, ts) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                  [(it["van"], it["voor"], it["soort"], it.get("sleutel") or "", it["titel"],
+                    it["inhoud"] if isinstance(it.get("inhoud"), str) else json.dumps(it.get("inhoud"), ensure_ascii=False),
+                    it.get("verwijzing") or "", it.get("uniek") or "", it.get("status") or "klaar", nu_) for it in klaarzet])
+    c.executemany("INSERT INTO logboek(naam, onderwerp, stap, tekst, detail, ts) VALUES(?,?,?,?,?,?)",
+                  [(r["naam"], r["onderwerp"], r["stap"], r["tekst"], r["detail"], nu_) for r in logboek])
+    c.commit()
+    c.close()
+    oud = (E.DB, E.DATA, E.UIT)
+    E.DB, E.DATA, E.UIT = pad, map_, os.path.join(map_, "export")
+    try:
+        with redirect_stdout(io.StringIO()):
+            E.main()
+    finally:
+        E.DB, E.DATA, E.UIT = oud
+    gelezen = {}
+    for wortel, _, bestanden in os.walk(os.path.join(map_, "export")):
+        for b in bestanden:
+            gelezen[os.path.relpath(os.path.join(wortel, b), map_)] = open(os.path.join(wortel, b), encoding="utf-8").read()
+    return gelezen
+
+
 def test_tegenstrijdige_privevelden_leveren_niets():
+    """Afdeling prive met prive=false: de dossierbeslissing (plaud/dossier.py) noemt dat privé en levert niets zakelijk.
+    RZ3-01 (herstelcontrole van 22-10-2026, besluit van de regie: de veilige kant): tot dan zette De Plaudwacht zo'n
+    opname klaar met de hoofdpersoon en het thema in de titel, personen en thema in de inhoud en de archiefmap in de
+    verwijzing, omdat ze daarvoor alleen herkenning['prive'] las. Die titel kwam in de bundel, het Dagverslag en de export.
+    Nu is de opname privé als de herkenning OF de dossierbeslissing het zegt, en toetst deze test de hele route: de
+    klaarzet-tekst, het werkverslag, De Dagbundelaar en de export."""
     w = Wereld()
+    logs = []
+    P.ag.log = lambda onderwerp, stap, tekst, detail="": logs.append({"naam": "plaud-wacht", "onderwerp": onderwerp, "stap": stap,
+                                                                        "tekst": tekst, "detail": detail})
     w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
     w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.push()
     w.taken = [werftaak(602)]
-    w.herkenning[ID1] = {"personen": ["Angela"], "hoofdpersoon": "Angela", "bedrijf": "", "afdeling": "prive", "thema": "weekend",
-                         "project": "", "prive": False, "zekerheid": "hoog", "waarom": ""}
+    w.herkenning[ID1] = {"personen": ["Proefpersoon Zeta", "Mehdi"], "hoofdpersoon": "Proefpersoon Zeta", "bedrijf": "",
+                         "afdeling": "prive", "thema": "Proefonderwerp Omega regelen", "project": "", "prive": False,
+                         "zekerheid": "hoog", "waarom": "Proefpersoon Zeta over het Proefonderwerp Omega"}
     w.ronde()
-    assert w.klaar[0]["voor"] == "mehdi" and not w.uploads and not w.opgepakt, (w.klaar[0], w.uploads)
+    k = w.klaar[0]
+    assert k["voor"] == "mehdi" and not w.uploads and not w.opgepakt, (k, w.uploads)
+    # de klaarzet-tekst: zoals elk privé-item, alleen id, datum, start, minuten, privé en de verwijzing met '(privé)'
+    verwijzing = f"{P.ARCHIEF_OP_MAC}/2026-10-08 1105 (privé) [{ID1}]"
+    assert k["titel"].startswith("2026-10-08 11:05 Plaud: privégesprek, 40 min · PRIVÉ"), k["titel"]
+    assert k["inhoud"] == {"plaud_id": ID1, "datum": "2026-10-08", "start": "11:05", "minuten": 40, "prive": True,
+                           "archief": verwijzing}, k["inhoud"]
+    assert k["verwijzing"] == verwijzing, k["verwijzing"]
+    assert w.rijen[0]["prive"] is True, "ook de gesprekkentabel draagt de veilige privévlag"
+    assert any(r["stap"] == "bevinding" and r["tekst"].startswith("privégesprek · 40 min") for r in logs), logs
+    # De Dagbundelaar en de export, op wat het bord van dit item teruggeeft
+    bak = [dict(k, id=1, van="plaud-wacht", status="klaar", inhoud=json.dumps(k["inhoud"], ensure_ascii=False))]
+    bundels, bundellog = dagbundelaar_op(bak, "2026-10-08")
+    verslag = next(b for b in bundels if b["uniek"] == "dagverslag:2026-10-08")["inhoud"]
+    assert "- transcript: privégesprek, 40 min" in verslag, verslag
+    assert not any(b["voor"] == "h-architects" for b in bundels), "een privé-opname komt in geen bundel voor een afdeling"
+    gelezen = export_van(bak + [dict(b, van="dagbundelaar") for b in bundels], logs + bundellog)
+    plaud = "".join(t for pad, t in gelezen.items() if pad.startswith(os.path.join("export", "Plaud", "klaargezet")))
+    assert plaud.count("): (privé)") == 1, plaud
+    nagaan = {"klaarzet": json.dumps(w.klaar, ensure_ascii=False), "werkverslag": json.dumps(logs, ensure_ascii=False),
+              "bundels": json.dumps(bundels + bundellog, ensure_ascii=False)}
+    nagaan.update({f"export {pad}": t for pad, t in gelezen.items()})
+    for waar, tekst in nagaan.items():
+        for geheim in ("Zeta", "Omega"):
+            assert geheim not in tekst, f"{geheim!r} staat in {waar}: {tekst[:1500]}"
 
 
 def test_pipedrive_herstel_geeft_herbeoordeling_zonder_nieuwe_modelvraag():
@@ -341,13 +438,48 @@ def test_gewijzigde_titel_bij_gelijk_transcript_herkent_opnieuw():
     w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
     w.push()
     w.ronde()
-    w.opname(ID1, "10-08 PRIVE Angela en Mehdi weekend", "2026-10-08T09:05:00")
+    w.opname(ID1, "10-08 PRIVE Proefpersoon Ypsilon en Mehdi weekend", "2026-10-08T09:05:00")
     w.push()
-    w.herkenning[ID1] = {"personen": ["Angela"], "hoofdpersoon": "Angela", "bedrijf": "", "afdeling": "prive", "thema": "weekend",
-                         "project": "", "prive": True, "zekerheid": "hoog", "waarom": ""}
+    w.herkenning[ID1] = {"personen": ["Proefpersoon Ypsilon"], "hoofdpersoon": "Proefpersoon Ypsilon", "bedrijf": "", "afdeling": "prive",
+                         "thema": "weekend", "project": "", "prive": True, "zekerheid": "hoog", "waarom": ""}
     w.ronde()
     assert len(w.herkend) == 2, "een andere titel is andere modelinput"
     assert w.klaar[-1]["voor"] == "mehdi" and w.klaar[-1]["inhoud"]["prive"], w.klaar[-1]
+
+
+def test_rz2_01_prive_opname_draagt_geen_naam_of_onderwerp():
+    """RZ2-01 bij De Plaudwacht (tegenproef van 22-10-2026: herstellen in alle varianten, zoals bij De Fathomwacht). Een
+    privé-opname droeg de hoofdpersoon en het thema in de titel van het klaarzet-item, personen, thema en afdeling in de
+    inhoud, en de archiefmap (die naar de naam in Plaud heet) in de verwijzing; de bevinding in het werkverslag noemde de
+    hoofdpersoon. Dat item gaat naar De Dagbundelaar, De Levenscoach en de export. Nu: alleen het Plaud-id, datum, start,
+    minuten, privé en een verwijzing naar het archief op de Mac met '(privé)' en het id. De gesprekkentabel (alleen beheer)
+    houdt wie en waarover; een werkopname blijft zoals ze was."""
+    w = Wereld()
+    logs = []
+    P.ag.log = lambda onderwerp, stap, tekst, detail="": logs.append((onderwerp, stap, tekst, detail))
+    w.opname(ID1, "10-08 Proefpersoon Zeta Proefonderwerp Omega", "2026-10-08T18:05:00")      # 20:05 in Brussel
+    w.opname(ID2, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.herkenning[ID1] = {"personen": ["Proefpersoon Zeta", "Mehdi"], "hoofdpersoon": "Proefpersoon Zeta", "bedrijf": "", "afdeling": "prive",
+                         "thema": "Proefonderwerp Omega regelen", "project": "", "prive": True, "zekerheid": "hoog",
+                         "waarom": "Proefpersoon Zeta over het Proefonderwerp Omega"}
+    code, tel, _ = w.ronde()
+    assert tel["gedaan"] == 2, tel
+    assert "Zeta" in json.dumps(w.rijen, ensure_ascii=False), "de gesprekkentabel (alleen beheer) houdt wie en waarover"
+    items = {k["uniek"]: k for k in w.klaar}
+    p = items[f"plaud:{ID1}"]
+    verwijzing = f"{P.ARCHIEF_OP_MAC}/2026-10-08 2005 (privé) [{ID1}]"
+    assert p["titel"] == "2026-10-08 20:05 Plaud: privégesprek, 40 min · PRIVÉ", p["titel"]
+    assert p["inhoud"] == {"plaud_id": ID1, "datum": "2026-10-08", "start": "20:05", "minuten": 40, "prive": True,
+                           "archief": verwijzing}, p["inhoud"]
+    assert p["verwijzing"] == verwijzing and p["voor"] == "mehdi" and p["soort"] == "transcript", p
+    werk = items[f"plaud:{ID2}"]
+    assert werk["titel"] == "2026-10-08 11:05 Plaud: aannemer · werfbezoek ruwbouw", werk["titel"]
+    assert werk["inhoud"]["personen"] == ["aannemer"] and werk["inhoud"]["thema"] == "werfbezoek ruwbouw", werk["inhoud"]
+    assert any(t.startswith("privégesprek · 40 min") for _, s, t, _ in logs if s == "bevinding"), logs
+    for waar, tekst in (("klaarzet", json.dumps(w.klaar, ensure_ascii=False)), ("werkverslag", json.dumps(logs, ensure_ascii=False))):
+        for geheim in ("Zeta", "Omega"):
+            assert geheim not in tekst, f"{geheim!r} staat in {waar}: {tekst[:1500]}"
 
 
 def test_gewijzigd_transcript_wordt_als_nieuwe_versie_geleverd():
