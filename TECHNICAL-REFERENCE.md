@@ -3049,9 +3049,26 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   rol `regie` (transactie per bestand, databaseslot, checksum).
 - **Toegang**: forward-auth op de hele host; de app toetst zelf nog eens `REGIE_GROUPS`. Eén uitzondering:
   `location = /api/mac` voor de Mac-brug, die geen browsersessie heeft: alleen POST, hoogstens 256k, 30 verzoeken per
-  minuut per adres (burst 10) en alle `X-authentik-*`-headers geleegd. De app eist daar `X-Regie-Token`
+  minuut per adres (burst 10) en de vijf identiteitsheaders (`X-authentik-username`, `-groups`, `-email`, `-name`,
+  `-uid`) geleegd. Andere `X-authentik-*`-headers van de client geeft nginx door, zoals op elke route met
+  forward-auth; de app leest daarom alleen `username` en `groups`. De app eist op `/api/mac` `X-Regie-Token`
   (hmac-vergelijking met `REGIE_MAC_TOKEN`). `/healthz` blijft achter de forward-auth; de healthcheck toetst binnen
   de container.
+- **Koppen**: `X-Robots-Tag` en `nosniff` op serverniveau in `84-regie` bereiken alleen `/api/mac`; de `location /`
+  uit `forward-auth.conf` heeft eigen `add_header`-regels en erft in nginx 1.27 niets. Voor de pagina's moet de app
+  ze zelf zetten (`_na_verzoek` in `app/__init__.py` van globaal-regie): `X-Robots-Tag` doet ze al, `nosniff` is
+  daar nog een open punt.
+- **Bekende zwakte, besluit open**: zoals prive en mijnagents vertrouwt `app-regie` de `X-authentik-*`-headers
+  zonder proxygeheim. Een andere container in `appnet` kan `http://app-regie:3042` dus rechtstreeks aanspreken,
+  buiten nginx en Authentik om. Dichtzetten kan naar het patroon van `42-btw` (een `REGIE_PROXY_GEHEIM` per host in
+  een `map`, `proxy_set_header` in de forward-auth-locatie, hmac-toets in `app/auth.py`); dat raakt ook de app en
+  `forward-auth.conf` en is nog niet beslist.
+- **Grendels**: `scripts/test_regie_infra.py` in `.github/workflows/regiebord-grendels.yml` zet vast dat
+  `/api/mac` de enige eigen locatie is (alleen POST, 256k, de vijf identiteitsheaders geleegd, geen `auth_request`),
+  dat `app-regie` geen hostpoort, volume of ander netwerk dan `appnet` heeft en de sleutels alleen als naam,
+  dat de tegel alleen `regie-mehdi` opent en geen poort heeft, dat 197 geen wachtwoord bevat, en dat `/regie/` en
+  `/regie-mac-token` in de gevolgde `.gitignore` staan. `.git/info/exclude` op de VM (gezet door de eerste uitrol)
+  is alleen een tweede laag: die zit niet in versiebeheer en verdwijnt bij een nieuwe kloon.
 - **Bronnen, alleen lezen**: `MIJNAGENTS_URL` (`/api/klaarzet` met `soort=ochtendbericht` en `status=alle`,
   `/api/nood`, `/api/overzicht`) en `HA_PROJECTEN_URL` (`/api/projecten`), over het interne netwerk met
   `X-Agents-Token` uit `REGIE_AGENTS_TOKEN`. Dat token kan ook schrijven; het bord doet daarom uitsluitend GET,
@@ -3062,8 +3079,11 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   uitkomst, datum). De app weigert of knipt verboden velden weg, ook als de Mac ze toch stuurt.
 - **Sleutels** (hier alleen namen, waarden in `~/appportal/.env`): `REGIE_DB_URL`, `REGIE_SECRET_KEY`,
   `REGIE_AGENTS_TOKEN` (dezelfde waarde als `AGENTS_TOKEN` in `mijnagents-data/.env`) en `REGIE_MAC_TOKEN`;
-  optioneel `REGIE_GROUPS` (standaard de groep van de tegel). Op de Mac staat het brugtoken in
-  `~/.config/regiebord/token` (600).
+  optioneel `REGIE_GROUPS` (standaard de groep van de tegel). Op de VM staat het brugtoken ook in
+  `~/appportal/regie-mac-token` (600, genegeerd door `.gitignore`), op de Mac in `~/.config/regiebord/token` (600).
+  `REGIE_DB_URL` staat in de overlay als `${REGIE_DB_URL:-}`, zoals bij prive; een `:?` zou bij een ontbrekende
+  waarde elk `docker compose`-commando van de stack stilleggen. Open punt in globaal-regie: `/healthz` antwoordt nu
+  nog `ok` als `REGIE_DB_URL` leeg is, terwijl het bord dan 500 geeft; de app hoort dan 503 te geven.
 - **Uitrol**: `COMPOSE_FILE` in `~/appportal/.env` krijgt `:docker-compose.regie.yml`. De eerste uitrol doet één
   script uit de eigen repo (`deploy/eerste-uitrol.sh`: migratie 197, rolwachtwoord, env-namen, build, `/healthz`,
   `nginx -t`, registratie in Authentik, groepslid, cron), zonder een geheim te tonen. Daarna rolt

@@ -12,7 +12,9 @@ server {
     server_name regie.${BASE_DOMAIN};
     include /etc/nginx/snippets/ssl.conf;
 
-    # Persoonlijk werkoverzicht: niet indexeren.
+    # Persoonlijk werkoverzicht: niet indexeren. Deze twee koppen bereiken alleen /api/mac: de location / uit
+    # forward-auth.conf heeft eigen add_header-regels en erft in nginx 1.27 niets van dit niveau. Voor de
+    # pagina's moet de app ze zelf zetten (_na_verzoek in app/__init__.py van globaal-regie).
     add_header X-Robots-Tag "noindex, nofollow" always;
     add_header X-Content-Type-Options "nosniff" always;
 

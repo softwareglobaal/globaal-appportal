@@ -1,0 +1,42 @@
+# Grendels op het regiebord (regie.globaal.be, TECHNICAL-REFERENCE 14.17): de enige ingang buiten Authentik
+# (POST /api/mac met geleegde identiteitsheaders en 256k), geen hostpoort voor app-regie, alleen de groep regie-mehdi,
+# de rol zonder wachtwoord in 197, en de checkout ./regie plus het Mac-token in de gevolgde .gitignore.
+# Los van regie-grendels.yml: dat bewaakt De Regisseur en De Bode in mijnagents.
+name: regiebord-grendels
+
+on:
+  push:
+    paths:
+      - ".gitignore"
+      - "apps.yaml"
+      - "docker-compose.regie.yml"
+      - "nginx/templates/*-regie.conf.template"
+      - "nginx/snippets/forward-auth.conf"
+      - "db/migrations/197-regie.sql"
+      - "scripts/appcatalogus.py"
+      - "scripts/apps-ontbrekend.py"
+      - "scripts/test_regie_infra.py"
+      - ".github/workflows/regiebord-grendels.yml"
+  pull_request:
+    paths:
+      - ".gitignore"
+      - "apps.yaml"
+      - "docker-compose.regie.yml"
+      - "nginx/templates/*-regie.conf.template"
+      - "nginx/snippets/forward-auth.conf"
+      - "db/migrations/197-regie.sql"
+      - "scripts/appcatalogus.py"
+      - "scripts/apps-ontbrekend.py"
+      - "scripts/test_regie_infra.py"
+      - ".github/workflows/regiebord-grendels.yml"
+
+jobs:
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install PyYAML==6.0.2
+      - run: python3 scripts/test_regie_infra.py

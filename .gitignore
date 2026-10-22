@@ -65,6 +65,12 @@ awscliv2.zip
 /bedrijfsvoering/
 /bedrijfsvoering-config/
 
+# Eigen repo (softwareglobaal/globaal-regie), uitgecheckt op de VM.
+/regie/
+# Token van de Mac-brug van het regiebord (600, gezet door regie/deploy/eerste-uitrol.sh).
+# Nooit in git; grendel in scripts/test_regie_infra.py.
+/regie-mac-token
+
 # Gedeelde 3D-scans (web-scan.globaal.be/<token>/): foto's van klantpanden,
 # alleen op de VM, nooit in git. Bron: eigen-matterport/tools/deelversie.py.
 /websites/scan/
