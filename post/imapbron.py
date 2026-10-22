@@ -51,6 +51,10 @@ _pool = {}   # sleutel -> (verbinding, laatst_gebruikt)
 
 
 # ---- verbindingen ----------------------------------------------------
+# wachttijden (seconden) tussen nieuwe pogingen bij Microsofts 'not connected'
+HERKANS_NIET_VERBONDEN = (2, 5, 10)
+
+
 class _Sessie:
     """Een IMAP-verbinding die zichzelf na gebruik terugzet in de pool.
 
@@ -87,28 +91,41 @@ class _Sessie:
         # verlopen koppeling een duidelijke melding geeft en geen halve sessie.
         token = (oauth_ms.toegangstoken(m) if m.get("auth") == "microsoft"
                  else None)
-        try:
-            M = imaplib.IMAP4_SSL(m["imap_host"], m["imap_poort"],
-                                  timeout=TIMEOUT)
-        except Exception as e:
-            raise ValueError(f"Geen verbinding met {m['imap_host']}:"
-                             f"{m['imap_poort']} ({type(e).__name__}: {e})")
-        try:
-            if token:
-                M.authenticate("XOAUTH2",
-                               lambda _: oauth_ms.xoauth2(m["gebruiker"], token))
-            else:
-                M.login(m["gebruiker"], m["wachtwoord"])
-        except imaplib.IMAP4.error as e:
+        # Microsoft antwoordt soms 'User is authenticated but not connected': het token klopt, maar de mailbox is
+        # even niet bereikbaar. Gemeten 15-10 en 20/22-10-2026: een nieuwe poging enkele seconden later lukt. Daarom
+        # hier opnieuw proberen, voor elke gebruiker van de postbus (ook de mailkoppeling), en niet "koppel opnieuw"
+        # zeggen: het token is niet het probleem.
+        for poging, wacht in enumerate(HERKANS_NIET_VERBONDEN + (None,)):
             try:
-                M.logout()
-            except Exception:
-                pass
-            hint = ("Koppel opnieuw met oauth_koppel.py." if token else
-                    "Controleer gebruiker en wachtwoord in mailboxen.yaml.")
-            raise ValueError(f"Inloggen op {m['adres']} lukt niet: {e}. {hint}")
-        self.M = M
-        return M
+                M = imaplib.IMAP4_SSL(m["imap_host"], m["imap_poort"],
+                                      timeout=TIMEOUT)
+            except Exception as e:
+                raise ValueError(f"Geen verbinding met {m['imap_host']}:"
+                                 f"{m['imap_poort']} ({type(e).__name__}: {e})")
+            try:
+                if token:
+                    M.authenticate("XOAUTH2",
+                                   lambda _: oauth_ms.xoauth2(m["gebruiker"], token))
+                else:
+                    M.login(m["gebruiker"], m["wachtwoord"])
+            except imaplib.IMAP4.error as e:
+                try:
+                    M.logout()
+                except Exception:
+                    pass
+                niet_verbonden = token and "not connected" in str(e).lower()
+                if niet_verbonden and wacht is not None:
+                    time.sleep(wacht)
+                    continue
+                if niet_verbonden:
+                    hint = ("Microsoft bereikt de mailbox tijdelijk niet; het token is in orde. Probeer het over "
+                            "enkele minuten opnieuw.")
+                else:
+                    hint = ("Koppel opnieuw met oauth_koppel.py." if token else
+                            "Controleer gebruiker en wachtwoord in mailboxen.yaml.")
+                raise ValueError(f"Inloggen op {m['adres']} lukt niet: {e}. {hint}")
+            self.M = M
+            return M
 
     def __exit__(self, soort, waarde, sporen):
         if self.M is None:

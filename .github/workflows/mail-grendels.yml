@@ -28,3 +28,4 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_postvak.py
       - run: python3 mijnagents-runner/mailregels/test_sorteren.py
       - run: cd mijnagents && python3 test_mail.py
+      - run: cd post && python3 test_imapbron_herkans.py
