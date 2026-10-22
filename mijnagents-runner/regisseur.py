@@ -17,12 +17,13 @@ gesprekkentabel en transcripten; de databank van het bord alleen lezend via bord
 alleen droog) en een voorstel op het bord zetten voor alles wat iets verandert. Hij voert zelf niets muterends uit; dat
 doet de uitvoerder na Mehdi's goedkeuring. Staan zijn grenzen niet in de vaste vorm op het bord (de werkwijze van versie
 1, tot Mehdi's klik), dan leest hij alleen: geen rondes, voorstellen of taken, geen ochtendbericht, wel een nood
-(13.5 vraag 6).
+(13.5 vraag 6). Die controle komt voor de geplande taken (RZ4-05, besluit X3 van de ontwerpronde RZ5).
 
 Privé: alleen hoeveel en wanneer, ook als Mehdi het zelf vraagt; wat niet zeker niet-privé is, telt als privé.
 Gespreksinhoud staat nooit in het werkverslag of in gesprek.detail (H1).
 
-    regisseur.py              elke minuut (cron): taken, open berichten, en het ochtendbericht als het aan de beurt is
+    regisseur.py              elke minuut (cron): eerst mijn grenzen op het bord, dan de taken (zonder grenzen geen taak,
+                              RZ4-05), de open berichten, en het ochtendbericht als het aan de beurt is
     regisseur.py --ochtend    alleen het ochtendbericht; met --nu zonder op het moment te wachten (uniek blijft gelden)
     regisseur.py --droog      tonen wat ik zou doen: niets schrijven, geen taalmodel
 """
@@ -1599,11 +1600,48 @@ def slot_nemen(pad):
     return f
 
 
-def regie(r, open_, bezig, stand, leesfout=""):
+def taken_tegenhouden():
+    """De controle voor de taakloper (RZ4-05, besluit X3 van de ontwerpronde RZ5, 22-10-2026). None als mijn werkwijze op
+    het bord de grenzen in de vaste vorm heeft (bord.grenzen): dan mogen de geplande taken lopen. Anders een dict:
+      reden     waarom er geen taak loopt;
+      nood      de nood die een ronde daarover meldt (dezelfde tekst als regie of de ronde zelf);
+      wachtend  hoeveel taken aan de beurt waren, of None als dat onbekend is.
+    De taakloper start rondes van andere agents (agent_ronde). Tot 22-10-2026 liep hij in main voor elke controle: een
+    geplande taak draaide ook als de werkwijze de grenzen miste en de ronde daarna alleen las (Codex RZ4-05; het ontwerp
+    schreef die volgorde zelf voor in R7). Onbekend is niet leeg (NA09): een werkwijze die ik niet kan lezen, of een lege,
+    geeft ook geen taken."""
+    try:
+        tekst = ag.werkwijze_lezen()
+    except bordklant.WerkwijzeOnbekend as e:
+        reden, nood = f"werkwijze niet gelezen ({e.soort})", f"Werkwijze niet gelezen: {e.soort}"
+    else:
+        nooit, beslist = bordklant.grenzen(tekst)
+        if nooit and beslist:
+            return None
+        reden, nood = (("werkwijze leeg op het bord", "Werkwijze leeg op het bord") if not tekst.strip() else
+                       ("geen grenzen op het bord", NOOD_GRENZEN))
+    try:
+        wachtend = len(taken.te_doen(nu_utc()))
+    except Exception:  # noqa: BLE001  sqlite of schijf: onbekend, nooit 0
+        wachtend = None
+    return {"reden": reden, "nood": nood, "wachtend": wachtend}
+
+
+def taken_tekst(tegen):
+    """Een regel voor het detail van de hartslag als er taken wachten op mijn grenzen (RZ4-05), anders ''."""
+    if not tegen or tegen["wachtend"] == 0:
+        return ""
+    n = tegen["wachtend"]
+    wat = ("geplande taken onbekend" if n is None else "1 geplande taak wacht" if n == 1 else f"{n} geplande taken wachten")
+    return f"{wat}: {tegen['reden']}"
+
+
+def regie(r, open_, bezig, stand, leesfout="", taken_wacht=None):
     """Het werk binnen de ronde (R7). Noden worden elke werkronde opnieuw afgeleid.
     Zonder grenzen in de vaste vorm (zoals de werkwijze van versie 1 tot Mehdi's klik) lees ik alleen (13.5 vraag 6 gaat
-    voor op R7, REG-07): een nood voor Mehdi, geen ochtendbericht, en de open berichten beantwoord zonder agent_ronde,
-    voorstel en taak_plannen. leesfout: de open berichten waren niet te lezen (REG-05); dat is onbekend, nooit 'geen'."""
+    voor op R7, REG-07): een nood voor Mehdi, geen taken (main liet ze al liggen, RZ4-05), geen ochtendbericht, en de open
+    berichten beantwoord zonder agent_ronde, voorstel en taak_plannen. leesfout: de open berichten waren niet te lezen
+    (REG-05); dat is onbekend, nooit 'geen'. taken_wacht: wat taken_tegenhouden zei, voor het detail."""
     if stand and stand.get("cron"):
         r.bron("planning/gesprekken.cron", stand["cron"])
     for b in bezig:
@@ -1615,12 +1653,14 @@ def regie(r, open_, bezig, stand, leesfout=""):
     if leesfout:
         r.nood(NOOD_OPEN_ONBEKEND, "claude-code")
         r.detail = leesfout
+    if taken_tekst(taken_wacht):
+        r.detail = ((r.detail + "; ") if r.detail else "") + taken_tekst(taken_wacht)
     if not (nooit and beslist):
         r.nood(NOOD_GRENZEN, "mehdi")
         uitkomst = [beantwoord(g, r.werkwijze, ([], [])) for g in open_]
         r.detail = ((r.detail + "; ") if r.detail else "") + (
-            f"geen grenzen op het bord: alleen gelezen, geen ochtendbericht; {uitkomst.count('beantwoord')} van {len(open_)} "
-            "bericht(en) beantwoord")
+            f"geen grenzen op het bord: alleen gelezen, geen taken, geen ochtendbericht; {uitkomst.count('beantwoord')} van "
+            f"{len(open_)} bericht(en) beantwoord")
         return
     if stand and stand.get("beurt"):
         try:
@@ -1667,13 +1707,20 @@ def main(argv=None):
     if not TOKEN:
         meld("FOUT: geen AGENTS_TOKEN", fout=True)
         return 1
+    tegen = None
     if not alleen_ochtend:
-        # eerst de taken waarvan het moment gekomen is (toezeggingen voor later, A9)
-        for tid, st in taken_uitvoeren():
-            meld(f"taak {tid}: {st}")
+        # RZ4-05 (besluit X3 van de ontwerpronde RZ5, 22-10-2026): eerst mijn grenzen van het bord, dan pas de taken
+        # waarvan het moment gekomen is (toezeggingen voor later, A9). Zonder grenzen in de vaste vorm geen enkele taak;
+        # een ronde meldt dan de nood (_werk). De klok van de ronde, zodat de taken dezelfde tijd zien als de rest.
+        tegen = taken_tegenhouden()
+        if tegen is None:
+            for tid, st in taken_uitvoeren(nu_utc()):
+                meld(f"taak {tid}: {st}")
+        else:
+            meld(f"geen taken uitgevoerd: {tegen['reden']}")
     sloten = []
     try:
-        return _werk(alleen_ochtend, forceer, sloten)
+        return _werk(alleen_ochtend, forceer, sloten, tegen)
     finally:
         # de sloten altijd vrijgeven, ook na een fout (13.5 G3), niet pas als het proces stopt
         for f in sloten:
@@ -1681,7 +1728,8 @@ def main(argv=None):
                 f.close()
 
 
-def _werk(alleen_ochtend, forceer, sloten):
+def _werk(alleen_ochtend, forceer, sloten, tegen=None):
+    """tegen: wat taken_tegenhouden zei (RZ4-05), of None als de taken mochten lopen."""
     gslot = None if alleen_ochtend else slot_nemen(GESPREK_SLOT)
     sloten.append(gslot)
     open_, bezig, leesfout = [], [], ""
@@ -1701,17 +1749,22 @@ def _werk(alleen_ochtend, forceer, sloten):
     if stand and stand["beurt"] and not forceer and ochtend_te_vroeg(nu_utc()):
         stand["beurt"], stand["reden"] = False, "vorige poging mislukte; opnieuw na een kwartier"
     ochtend_werk = bool(stand and (stand["beurt"] or stand["nood_nieuw"]))
-    if not (open_ or bezig or ochtend_werk):
+    # RZ4-05: wachten er taken op mijn grenzen, dan meldt een ronde de nood, alleen lezend en zonder taalmodel. Staat die
+    # nood al open, dan niet elke minuut opnieuw: de losse hartslag zegt dan dat er taken wachten. Onbekend: wel een ronde.
+    noden = open_noden_van_mij() if gslot and taken_tekst(tegen) else set()
+    taken_nood = bool(gslot and taken_tekst(tegen) and (noden is None or tegen["nood"] not in noden))
+    if not (open_ or bezig or ochtend_werk or taken_nood):
         if gslot:
             # de losse hartslag van elke minuut; kon ik de berichten niet lezen, dan fout met de reden, zodat het bord en
             # de Normwacht het zien (N11), en geen 'geen open berichten'
-            hartslag("fout" if leesfout else "waakt", taak="luistert", detail=leesfout or "geen open berichten")
+            detail = "; ".join(x for x in (leesfout or "geen open berichten", taken_tekst(tegen)) if x)
+            hartslag("fout" if leesfout else "waakt", taak="luistert", detail=detail)
         if alleen_ochtend:
             meld(f"ochtendbericht: {stand['reden'] if stand else 'een andere ronde maakt het'}")
         return 1 if leesfout else 0
     try:
         with ag.ronde("regie") as r:
-            regie(r, open_, bezig, stand, leesfout)
+            regie(r, open_, bezig, stand, leesfout, tegen)
     except bordklant.RondeGestopt as e:
         meld(f"ronde gestopt: {e}", fout=True)
         return 1

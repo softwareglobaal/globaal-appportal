@@ -7,8 +7,8 @@
 - T70 tot T75 (B5, M6, L8): het ochtendbericht met de regel Gebundeld binnen 900 tekens, een verkeerd item, de terugval
   om 11:00 aan beide kanten van 25-10, de bundelstand tegenover 'uit', alarm meteen, de avondbundel.
 - T76 (FR-154, X4): een onleesbare werkwijze houdt het bellen niet tegen; de berichten wachten.
-- T77: het zaad draagt de vaste regel BUNDELEN en de code leest de stand uit de werkwijze (RZ3-02); werkwijze 2.8 in de
-  strikte vorm.
+- T77: het zaad draagt de vaste regel BUNDELEN en de code leest de stand uit de werkwijze (RZ3-02); werkwijze 2.9 in de
+  strikte vorm, met de regels van RZ4-03.
 - RZ3-02 (Codex RZ3-herstelcontrole): de stand van BUNDELEN volgt uit de werkwijze op het bord. Werkwijze 2.5 zonder de
   regel geeft 'uit' en houdt niets vast; met de regel 'ochtend-avond'; terug naar 'uit' gaat langs de slotbundel.
 - T99 (X4): de noden van het bellen en het alarm gaan als begin_noden mee, ook als de ronde stopt.
@@ -21,6 +21,11 @@
 - RZ2-04 (Codex RZ2-bouwcontrole, patroon FR-179): stopt het proces na de aanvaarding van een ochtendbericht, terugval of
   avondbundel en voor de stand op schijf staat, dan gaat het niet nog eens weg; het verzendspoor zegt 'bezig', en dat
   wordt een nood voor claude-code. Een mislukte verzending blijft herkansbaar, zonder schrijfbaar spoor geen verzending.
+- RZ4-03 (Codex RZ4-herstelcontrole): laatste_id schuift pas op als elk item erboven meegenomen is, verstuurd of in een
+  bundel. Bij de omschakeling begint de bundel voor het oudste item dat nog niet weg is, ook als dat ouder is dan 24 uur;
+  wat in geen bundel valt, gaat los; een item onder een volle pagina wordt opgehaald (tot_id), of de stand blijft staan.
+  Tegenproef op RZ4-03: ook de lopende bundel wordt onder de pagina aangevuld; lukt dat niet, dan zegt het vaste moment
+  "onbekend of meer" en schuift bundel_vanaf niet op.
 
 Geen netwerk en geen sleutels: het bord, WhatsApp, Telegram, Zoom-chat, het bellen (BELLEN_UIT=1) en de klok zijn
 nagebootst, de stand staat in een tijdelijke map, en de databank van het bord komt uit init_db van mijnagents/app.py als
@@ -141,6 +146,7 @@ class Wereld:
         self.wa_fout = None                   # f(tekst, kop, voorrang) -> uitzondering of None
         self.wa_binnen = []
         self.oppakken_faalt = 0
+        self.tot_id_negeren, self.tot_id_fout = False, False
         self.db = os.path.join(MAP, f"bord-{Wereld.teller}.db")
         shutil.copy(SJABLOON_DB, self.db)
         self.zet_voorstellen(voorstellen)
@@ -214,9 +220,13 @@ class Wereld:
             it["status"], it["opgepakt_door"] = "opgepakt", payload.get("door", "")
             return {"ok": True}
         if p == "/api/klaarzet" and payload is None:
+            if self.tot_id_fout and q.get("tot_id"):
+                raise OSError("terugbladeren nagebootst onbereikbaar")
+            # tot_id zoals mijnagents/app.py (terugbladeren, sinds 18-10-2026); tot_id_negeren: een bord van daarvoor
+            tot = int(q["tot_id"]) if (q.get("tot_id") or "").isdigit() and not self.tot_id_negeren else None
             rijen = [it for it in self.items
                      if (not q.get("voor") or it["voor"] == q["voor"]) and (not q.get("uniek") or it["uniek"] == q["uniek"])
-                     and (not q.get("soort") or it["soort"] == q["soort"])
+                     and (not q.get("soort") or it["soort"] == q["soort"]) and (tot is None or it["id"] < tot)
                      and (q.get("status", "klaar") == "alle" or it["status"] == q.get("status", "klaar"))]
             rijen.sort(key=lambda it: -it["id"])
             return {"items": [dict(it) for it in rijen[:min(int(q.get("n", 100)), 500)]]}
@@ -775,9 +785,12 @@ def test_t77_bundelen_en_werkwijze_zeggen_hetzelfde():
     assert "HERINNERING_UREN" not in bron and not hasattr(B, "HERINNERING_UREN"), "geen herinnering om de zes uur (I7)"
 
 
-def test_t77_werkwijze_28_in_de_strikte_vorm():
+def test_t77_werkwijze_29_in_de_strikte_vorm():
     regels = WERKWIJZE.splitlines()
-    assert regels[2].startswith("Versie 2.8"), regels[2][:40]
+    assert regels[2].startswith("Versie 2.9"), regels[2][:40]
+    # RZ4-03 (22-10-2026): het zaad zegt wat de code doet met de leesstand en de lopende bundel
+    tekst = " ".join(WERKWIJZE.split())
+    assert "nooit na een bericht dat nog niet weg is" in tekst and '"onbekend of meer"' in tekst, "RZ4-03 in de werkwijze"
     nooit, beslist = bord.grenzen(WERKWIJZE)
     assert len(nooit) >= 3 and len(beslist) >= 3, (nooit, beslist)
     assert any(p.startswith("Keuze 1") and "21-10-2026" in p and "ochtend-avond" in p for p in beslist), beslist
@@ -1416,6 +1429,162 @@ def test_rz3_02_droog_leest_de_stand_uit_de_werkwijze():
         assert f"(droog) stand {stand};" in uit.getvalue(), (stand, uit.getvalue()[-400:])
         assert not w.wa and not w.hartslagen, (w.wa, w.hartslagen)
     assert "Werkwijze lezen mislukt" in uit.getvalue(), uit.getvalue()[-400:]
+
+
+# --------------------------------------------------------------------------------------------- RZ4-03 ---
+# Codex RZ4-herstelcontrole (22-10-2026): de leesstand (laatste_id) schuift pas op als elk item erboven meegenomen is,
+# verstuurd of in een bundel. Elke toets hieronder faalde eerst op de code van 6dfbafa.
+def test_rz4_03_omschakeling_met_een_onverstuurd_item_ouder_dan_24_uur():
+    """Signaal 101 van eergisteravond ging nooit weg (zijn bericht mislukte, of het kwam na een verloren stand) en het
+    laatst afgehandelde item 100 staat niet meer op de pagina van het bord. Bij de omschakeling naar 'ochtend-avond' zette
+    bundel_begin de grens toen 24 uur terug, voorbij 101; melding_groep telde 101 als bundelwerk en laatste_id schoof
+    erover: het bereikte Mehdi nooit. Nu begint de bundel voor het oudste item dat nog niet weg is."""
+    w = Wereld(utc(2026, 10, 22, 4, 0), staat={"laatste_id": 100, "voorstel_hoogste": 0, "wacht": []})
+    w.zet(101, "signaal", "Proefonderwerp Omega van eergisteravond", ts="2026-10-20T21:00:00+00:00")
+    staat = w.ronde()                            # 06:00 Brussel, de eerste ronde in de bundelstand
+    assert not w.wa, w.wa
+    assert datetime.fromisoformat(staat["bundel_vanaf"]) < utc(2026, 10, 20, 21, 0), staat
+    w.zet(102, "ochtendbericht", "Ochtendbericht do 22-10, 2 beslissingen", van="regisseur",
+          uniek="ochtendbericht:2026-10-22", inhoud=ochtend_inhoud(ochtend_tekst()), ts="2026-10-22T07:30:00+00:00")
+    staat = w.ronde(utc(2026, 10, 22, 7, 35))
+    assert len(w.wa) == 1 and w.wa[0]["tekst"] == ochtend_tekst() + "\nGebundeld: signaal van De Normwacht; alles op het bord", w.wa
+    assert staat["laatste_id"] == 102, staat
+    w.ronde(utc(2026, 10, 22, 15, 31))
+    assert len(w.wa) == 1, f"een keer, niet nog eens in de avondbundel: {w.wa[1:]}"
+
+
+def test_rz4_03_melding_groep_schuift_niet_over_een_item_dat_in_geen_bundel_zit():
+    """Een item boven laatste_id dat niet in de lopende bundel valt (ts voor bundel_vanaf, of geen leesbare ts) en ook in
+    geen verstuurde bundel stond, telt in de bundelstand niet als afgehandeld: het gaat los, zoals in 'uit'. Wat in een
+    verstuurde bundel stond (staat['gebundeld']) of in de lopende bundel valt, telt wel."""
+    oud = {"id": 101, "soort": "signaal", "titel": "a", "van": "normwacht", "ts": "2026-10-20T21:00:00+00:00"}
+    staat = {"laatste_id": 100, "bundel_vanaf": "2026-10-21T04:00:00+00:00"}
+    groep, tot, rest = B.melding_groep([oud], False, staat, "ochtend-avond")
+    assert [it["id"] for it in groep] == [101] and tot == 101 and rest == 0, (groep, tot, rest)
+    groep, tot, _ = B.melding_groep([dict(oud, ts="")], False, staat, "ochtend-avond")
+    assert [it["id"] for it in groep] == [101], "zonder leesbare ts komt het in geen bundel"
+    groep, tot, _ = B.melding_groep([oud], False, staat | {"gebundeld": [101]}, "ochtend-avond")
+    assert groep == [] and tot == 101, (groep, tot)
+    groep, tot, _ = B.melding_groep([dict(oud, ts="2026-10-21T05:00:00+00:00")], False, staat, "ochtend-avond")
+    assert groep == [] and tot == 101, "in de lopende bundel: afgehandeld tot het vaste moment"
+    groep, tot, _ = B.melding_groep([oud], True, {"laatste_id": 0, "bundel_vanaf": staat["bundel_vanaf"]}, "ochtend-avond")
+    assert groep == [] and tot == 101, "zonder stand blijft de eerste ronde zoals ze was (A31)"
+
+
+def test_rz4_03_wat_in_een_verstuurde_bundel_stond_gaat_niet_nog_eens_los():
+    """Het ochtendbericht van 06:30 wacht in de stille uren, dus blijft laatste_id ervoor staan; signaal 501 erachter komt
+    om 07:01 in de regel Gebundeld en bundel_vanaf schuift erover. De Bode onthoudt 501 in staat['gebundeld'] tot
+    laatste_id erover schuift, zodat het niet ook nog los gaat."""
+    w = Wereld(utc(2026, 10, 22, 4, 30), staat={"laatste_id": 499, "voorstel_hoogste": 0, "avond": {}, "ochtend": {},
+                                                 "bundel_vanaf": "2026-10-21T15:00:00+00:00"})
+    w.zet(500, "ochtendbericht", "Ochtendbericht do 22-10, 2 beslissingen", van="regisseur",
+          uniek="ochtendbericht:2026-10-22", inhoud=ochtend_inhoud(ochtend_tekst()), ts="2026-10-22T04:28:00+00:00")
+    w.zet(501, "signaal", "Proefsignaal achter het ochtendbericht", ts="2026-10-22T04:29:00+00:00")
+    staat = w.ronde()                            # 06:30 Brussel: het ochtendbericht wacht
+    assert not w.wa and staat["laatste_id"] == 499, (w.wa, staat)
+    staat = w.ronde(utc(2026, 10, 22, 5, 1))     # 07:01 Brussel
+    assert len(w.wa) == 1 and w.wa[0]["tekst"].endswith("\nGebundeld: signaal van De Normwacht; alles op het bord"), w.wa
+    assert staat["laatste_id"] == 501 and "gebundeld" not in staat, staat
+    w.ronde(utc(2026, 10, 22, 5, 2))
+    assert len(w.wa) == 1, f"niet nog eens los: {w.wa[1:]}"
+
+
+def rz4_03_volle_pagina():
+    """Een volle pagina (KLAARZET_N agendazaken, die niet naar Mehdi gaan) boven signaal 100, dat nog niet weg is."""
+    w = Wereld(utc(2026, 10, 22, 10, 0), stand="uit", staat={"laatste_id": 99, "voorstel_hoogste": 0, "avond": {},
+                                                              "ochtend": {"2026-10-22": {"verzonden": "x", "opgepakt": True}}})
+    w.zet(100, "signaal", "Proefsignaal onder de pagina", ts="2026-10-22T09:00:00+00:00")
+    for i in range(B.KLAARZET_N):
+        w.zet(1000 + i, "signaal", f"Proefafspraak {i}", van="agenda-wacht", ts="2026-10-22T09:30:00+00:00")
+    return w
+
+
+def test_rz4_03_een_item_onder_de_volle_pagina_wordt_alsnog_opgehaald():
+    """Het bord geeft de nieuwste KLAARZET_N items. Ligt zelfs het oudste daarvan boven laatste_id, dan blader ik terug
+    met tot_id tot laatste_id. Tot 22-10-2026 schoof laatste_id over wat eronder viel (alleen een nood)."""
+    w = rz4_03_volle_pagina()
+    staat = w.ronde()
+    assert len(w.wa) == 1 and "Proefsignaal onder de pagina" in w.wa[0]["tekst"], w.wa
+    assert staat["laatste_id"] == 1000 + B.KLAARZET_N - 1, staat
+    assert any("tot_id=1000" in pad for pad, _ in w.gestuurd), "teruggebladerd vanaf het oudste item op de pagina"
+    assert not any("klaarzet-items" in t for t in w.noodteksten()), w.noodteksten()
+
+
+def test_rz4_03_kan_ik_niet_terugbladeren_dan_blijft_de_leesstand_staan():
+    """Geeft het bord de items onder de pagina niet (een fout, of een bord van voor tot_id), dan schuift laatste_id niet
+    op en gaat er geen gewoon bericht weg dat de volgende ronde opnieuw zou komen; een oproep op de pagina gaat wel, een
+    keer (alarm_gemeld). Lukt het daarna, dan komt het signaal eronder alsnog."""
+    for kapot in ("tot_id_negeren", "tot_id_fout"):
+        w = rz4_03_volle_pagina()
+        w.zet(1000 + B.KLAARZET_N, "oproep", "Dringende mail van een proefafzender", van="mail-regisseur")
+        setattr(w, kapot, True)
+        staat = w.ronde()
+        assert w.alarmen == [[1000 + B.KLAARZET_N]] and len(w.wa) == 1 and "Dringende mail" in w.wa[0]["tekst"], (kapot, w.wa)
+        assert staat["laatste_id"] == 99 and staat["alarm_gemeld"] == [1000 + B.KLAARZET_N], (kapot, staat)
+        assert any("klaarzet-items" in t for t in w.noodteksten()), (kapot, w.noodteksten())
+        setattr(w, kapot, False)
+        staat = w.ronde(utc(2026, 10, 22, 10, 1))
+        assert len(w.wa) == 2 and "Proefsignaal onder de pagina" in w.wa[1]["tekst"], (kapot, w.wa)
+        assert "Dringende mail" not in w.wa[1]["tekst"], (kapot, w.wa[1])
+        assert staat["laatste_id"] == 1000 + B.KLAARZET_N and "alarm_gemeld" not in staat, (kapot, staat)
+
+
+def rz4_03_lopende_bundel():
+    """Signaal 100 valt in de lopende bundel (ts na bundel_vanaf), dus schuift laatste_id erover zonder bericht. Daarna
+    zet De Agendawacht 250 items voor Mehdi klaar (die gaan niet naar hem), zodat 100 onder de pagina van het bord valt."""
+    w = Wereld(utc(2026, 10, 22, 8, 0), staat={"laatste_id": 99, "voorstel_hoogste": 0, "avond": {},
+                                                "ochtend": {"2026-10-22": {"verzonden": "x", "opgepakt": True}},
+                                                "bundel_vanaf": "2026-10-22T05:00:00+00:00"})
+    w.zet(100, "signaal", "Proefsignaal Zeta in de lopende bundel", ts="2026-10-22T07:59:00+00:00")
+    staat = w.ronde()
+    assert not w.wa and staat["laatste_id"] == 100, (w.wa, staat)
+    for i in range(250):
+        w.zet(1000 + i, "signaal", f"Proefafspraak {i}", van="agenda-wacht", ts="2026-10-22T12:00:00+00:00")
+    staat = w.ronde(utc(2026, 10, 22, 12, 0))
+    assert not w.wa and staat["laatste_id"] == 1249, (w.wa, staat)
+    return w
+
+
+def test_rz4_03_de_lopende_bundel_wordt_onder_de_pagina_aangevuld():
+    """Tegenproef op RZ4-03 (22-10-2026): in_bundel telt een item met een ts na bundel_vanaf als 'in een bundel', en
+    laatste_id schuift erover. Maar de bundel zelf kwam alleen uit de eerste pagina van het bord. Viel het item daar
+    onder, dan ging om 17:31 geen avondbundel, had het ochtendbericht geen regel Gebundeld, en schoof bundel_vanaf er
+    toch over: het signaal bereikte Mehdi nooit, stil. Nu bladert De Bode terug met tot_id tot de lopende bundel
+    helemaal gelezen is, en noemt de avondbundel het signaal, een keer."""
+    w = rz4_03_lopende_bundel()
+    staat = w.ronde(utc(2026, 10, 22, 15, 31))   # 17:31 Brussel
+    assert len(w.wa) == 1 and w.wa[0]["kop"] == "Avondbundel do 22-10", w.wa
+    assert "Proefsignaal Zeta in de lopende bundel (van De Normwacht)" in w.wa[0]["tekst"], w.wa[0]["tekst"]
+    assert "er kan meer zijn" not in w.wa[0]["tekst"], w.wa[0]["tekst"]
+    assert datetime.fromisoformat(staat["bundel_vanaf"]) == utc(2026, 10, 22, 15, 31), staat
+    assert any("tot_id=1050" in pad for pad, _ in w.gestuurd), "teruggebladerd onder de pagina"
+    assert not any("lopende bundel" in t for t in w.noodteksten()), w.noodteksten()
+    w.zet(2000, "ochtendbericht", "Ochtendbericht vr 23-10, 2 beslissingen", van="regisseur",
+          uniek="ochtendbericht:2026-10-23", inhoud=ochtend_inhoud(ochtend_tekst()), ts="2026-10-23T05:30:00+00:00")
+    w.ronde(utc(2026, 10, 23, 5, 35))
+    assert len(w.wa) == 2 and w.wa[1]["tekst"] == ochtend_tekst(), f"niet nog eens in het ochtendbericht: {w.wa[1:]}"
+
+
+def test_rz4_03_kan_ik_de_lopende_bundel_niet_aanvullen_dan_schuift_ze_niet_op():
+    """Kan De Bode de lopende bundel niet helemaal lezen (het terugbladeren faalt), dan zegt een vast moment dat er meer
+    kan zijn, en schuift bundel_vanaf niet over wat hij niet las; met een nood. Lukt het later, dan komt het signaal
+    alsnog mee."""
+    w = rz4_03_lopende_bundel()
+    w.tot_id_fout = True
+    staat = w.ronde(utc(2026, 10, 22, 15, 31))
+    assert len(w.wa) == 1 and w.wa[0]["kop"] == "Avondbundel do 22-10" and "er kan meer zijn" in w.wa[0]["tekst"], w.wa
+    assert staat["bundel_vanaf"] == "2026-10-22T05:00:00+00:00", staat
+    assert any("lopende bundel" in t for t in w.noodteksten()), w.noodteksten()
+    w.zet(2000, "ochtendbericht", "Ochtendbericht vr 23-10, 2 beslissingen", van="regisseur",
+          uniek="ochtendbericht:2026-10-23", inhoud=ochtend_inhoud(ochtend_tekst()), ts="2026-10-23T05:30:00+00:00")
+    staat = w.ronde(utc(2026, 10, 23, 5, 35))
+    assert len(w.wa) == 2 and w.wa[1]["tekst"] == ochtend_tekst() + "\nGebundeld: onbekend of meer; alles op het bord", w.wa[1:]
+    assert staat["bundel_vanaf"] == "2026-10-22T05:00:00+00:00", staat
+    w.tot_id_fout = False
+    staat = w.ronde(utc(2026, 10, 23, 15, 31))
+    assert len(w.wa) == 3 and "Proefsignaal Zeta in de lopende bundel" in w.wa[2]["tekst"], w.wa[2:]
+    assert datetime.fromisoformat(staat["bundel_vanaf"]) == utc(2026, 10, 23, 15, 31), staat
+    assert not any("lopende bundel" in t for t in w.noodteksten()), w.noodteksten()
 
 
 # ------------------------------------------------------------------------------------------------ droog ---

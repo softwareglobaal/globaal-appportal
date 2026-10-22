@@ -967,7 +967,9 @@ def test_t47_slot_rond_het_beantwoorden():
                 R.main([])
         finally:
             slot.close()
-        assert not w.nb.gestuurd, f"slot bezet: geen bordoproep, ook geen hartslag: {w.nb.gestuurd}"
+        # RZ4-05: alleen het lezen van mijn werkwijze, dat voor de taakloper komt; geen andere bordoproep, geen hartslag
+        assert w.nb.gestuurd == [("/api/agent/regisseur/werkwijze", None)], \
+            f"slot bezet: geen bordoproep, ook geen hartslag: {w.nb.gestuurd}"
     with Wereld("t47-bezig", nu) as w, vervang((R, "_client", lambda: NepModel("Antwoord."))):
         w.item("regisseur", "mehdi", "ochtendbericht", "Ochtendbericht", {"punten": []}, uniek="ochtendbericht:2026-10-22")
         gid = w.vraag("zoom-wacht", "Hoe staat het?", status="bezig")
@@ -1052,10 +1054,57 @@ def test_t48_mislukt_ochtendbericht_niet_elke_minuut_een_ronde():
             voor = len(w.nb.gestuurd)
             with redirect_stdout(io.StringIO()):
                 R.main([])
-            if ("/api/agent/regisseur/werkwijze", None) in w.nb.gestuurd[voor:]:
+            # alleen een ronde meldt kennis (N4); de werkwijze lees ik sinds RZ4-05 elke minuut, voor de taakloper
+            if any(pad == "/api/agent/regisseur/kennis" for pad, _ in w.nb.gestuurd[voor:]):
                 rondes.append(minuut)
         assert rondes == [0, 16], rondes
         assert not w.rij("SELECT id FROM klaarzet WHERE uniek='ochtendbericht:2026-10-22'"), "zonder grenzen geen ochtendbericht"
+
+
+# ------------------------------------------------------------------------------------------------ RZ4-05 ---
+def test_rz4_05_geen_geplande_taak_zonder_grenzen():
+    """RZ4-05 (Codex RZ4-herstelcontrole; besluit X3 van de ontwerpronde RZ5, 22-10-2026): de controle van mijn grenzen
+    op het bord komt voor de taakloper. Zolang mijn werkwijze ze niet in de vaste vorm heeft (versie 1, tot Mehdi's klik)
+    of onbekend is, voert main geen geplande taak uit: geen agent-ronde, geen poging, de taak blijft gepland. Een ronde
+    meldt de nood voor Mehdi, zonder taalmodel, en de minuut erna blijft het bij de losse hartslag, die zegt dat er een
+    taak wacht. Staan de grenzen er, dan loopt dezelfde taak wel. Tot 22-10-2026 liep taken_uitvoeren in main voor elke
+    controle, zodat de beloofde alleen-lezenstand niet gold voor geplande taken."""
+    nu = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
+    oud = "# Werkwijze\n\nVersie 1.\n\n## Wat ik nooit doe\n\n- Zelf iets veranderen: geen veld,\n  geen keuze.\n"
+    with Wereld("rz4-05", nu, werkwijzen={"regisseur": oud}) as w, \
+            vervang((T, "DB", os.path.join(MAP, "taken-rz4-05.db")), (R, "taken_uitvoeren", ECHTE_TAKEN),
+                    (R, "_client", geen_model), (R, "afspraak_nu", lambda k, a: ("er", ""))):
+        w.item("regisseur", "mehdi", "ochtendbericht", "Ochtendbericht", {"punten": []}, uniek="ochtendbericht:2026-10-22")
+        w.status("agenda-wacht", "klaar", (nu - timedelta(hours=1)).isoformat())
+        # een dag te laat: aan de beurt op de klok van de proef en op de echte klok (main gaf tot 22-10-2026 geen klok mee)
+        t = T.plannen("agent_ronde", "agenda-wacht", {"naam": "agenda-wacht", "dag": "2026-10-23"}, nu - timedelta(days=1))
+        proces = NepProces(0)
+        with vervang((R.subprocess, "run", proces)):
+            for minuut in (0, 1):
+                w.nu = nu + timedelta(minutes=minuut)
+                with redirect_stdout(io.StringIO()):
+                    R.main([])
+            n = T.haal(t["id"])
+            # alleen de opdrachtregels in de melding, nooit de omgeving van het proces
+            assert not proces.aanroepen and n["status"] == "gepland" and n["pogingen"] == 0, ([c for c, _ in proces.aanroepen], n)
+            assert {"tekst": R.NOOD_GRENZEN, "wie": "mehdi"} in w.rij("SELECT tekst, wie FROM nood WHERE naam='regisseur' AND open=1")
+            rondes = [pad for pad, _ in w.nb.gestuurd if pad == "/api/agent/regisseur/kennis"]
+            assert len(rondes) == 1, f"een ronde voor de nood, niet elke minuut: {len(rondes)}"
+            st = w.rij("SELECT status, detail FROM status WHERE naam='regisseur'")[0]
+            assert st["status"] == "waakt" and "1 geplande taak wacht: geen grenzen op het bord" in st["detail"], st
+            # een werkwijze die ik niet kan lezen, is geen werkwijze met grenzen: ook dan geen taak
+            w.nb.werkwijzen["regisseur"] = onbekend_fout(500)
+            w.nu = nu + timedelta(minutes=2)
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                R.main([])
+            assert not proces.aanroepen and T.haal(t["id"])["status"] == "gepland", [c for c, _ in proces.aanroepen]
+            # met de grenzen van het zaad (versie 2) loopt dezelfde taak wel
+            w.nb.werkwijzen["regisseur"] = ZAAD
+            w.nu = nu + timedelta(minutes=3)
+            with redirect_stdout(io.StringIO()):
+                R.main([])
+            n = T.haal(t["id"])
+            assert len(proces.aanroepen) == 1 and n["status"] == "geverifieerd", ([c for c, _ in proces.aanroepen], n)
 
 
 def test_rz4_04_probeer_na_dekt_de_langste_keten():

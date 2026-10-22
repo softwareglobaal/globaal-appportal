@@ -65,9 +65,12 @@ SOORTEN = ("signaal", "coaching", "verslag", "dagplan", "dagbundel", "ochtendber
 # Keuze 1 van Mehdi (21-10-2026, in de chat met Claude; ontwerp regie-zoom v1.2, 13.4): optie A, twee vaste momenten.
 # 'ochtend-avond': het ochtendbericht en rond 17:00 de avondbundel; wat kan wachten zit in een van die twee, alleen
 # oproepen, alarmen en het bellen voor afspraken komen meteen. 'uit' is de terugval: alles los, zoals voor die dag.
-# Bij elke omschakeling verdwijnt niets: naar de bundelstand begint de bundel na het laatste losse bericht (bundel_begin),
-# terug naar 'uit' gaat eerst een slotbundel (slotbundel_sturen). Optie C ('ochtend', een bericht per dag) is niet
-# gebouwd.
+# Bij elke omschakeling verdwijnt niets: naar de bundelstand begint de bundel na het laatste losse bericht, en nooit na een
+# item dat nog niet weg is (bundel_begin, RZ4-03); terug naar 'uit' gaat eerst een slotbundel (slotbundel_sturen). De
+# leesstand laatste_id schuift pas over een item als het verstuurd is of in een bundel zit (melding_groep). De lopende
+# bundel lees ik helemaal, ook onder de pagina van het bord (aanvullen); lukt dat niet, dan zegt een vast moment
+# "onbekend of meer" en schuift bundel_vanaf niet op (tegenproef op RZ4-03). Optie C ('ochtend', een bericht per dag)
+# is niet gebouwd.
 # RZ3-02 (Codex RZ3-herstelcontrole, besluit van de regie 22-10-2026): de stand staat niet meer vast in de code. Tot dan
 # stond hier BUNDELEN = "ochtend-avond", en een volledige push naar main hield berichten vast voor Mehdi zijn nieuwe
 # werkwijze goedkeurde. Nu leest stand_bundelen de stand uit de werkwijze op het bord: de regel BUNDELEN_REGEL, op een
@@ -89,6 +92,18 @@ WEEKDAG = ("ma", "di", "wo", "do", "vr", "za", "zo")
 PER_BERICHT = 8
 # Zoveel klaarzet-items vraag ik per ronde op; het bord levert de nieuwste eerst (mijnagents/app.py, /api/klaarzet).
 KLAARZET_N = 200
+# Ligt zelfs het oudste item van die pagina boven laatste_id, dan blader ik terug met tot_id (het bord geeft de items met
+# een kleiner id, sinds 18-10-2026), in pagina's van AANVUL_N (het maximum van het bord), hoogstens AANVUL_PAGINAS keer
+# (RZ4-03). Kom ik zo niet tot laatste_id, dan blijft de leesstand staan (aanvullen).
+AANVUL_N = 500
+AANVUL_PAGINAS = 4
+# Zonder aantal (N10): zolang ik niet tot laatste_id kan terugbladeren, staat deze nood open.
+NOOD_ONDER_PAGINA = ("De Bode haalde de klaarzet-items onder de eerste pagina van het bord niet allemaal op; de leesstand "
+                     "blijft staan tot dat lukt, kijk het bord na")
+# Tegenproef op RZ4-03 (22-10-2026): ook de lopende bundel (alles na bundel_vanaf) lees ik helemaal, met tot_id. Lukt dat
+# niet, dan staat deze nood open, zegt een vast moment dat er meer kan zijn en schuift bundel_vanaf niet op.
+NOOD_BUNDEL_ONDER_PAGINA = ("De Bode haalde de items van de lopende bundel onder de pagina van het bord niet allemaal op; "
+                            "de bundel zegt 'onbekend of meer' en schuift niet op tot dat lukt, kijk het bord na")
 # Mehdi, 25-09-2026: "stuur mij geen domme berichten over mijn agenda op mijn Telegram; heel mijn ding is
 # visueel gemaakt". Wat deze agents klaarzetten blijft op het bord en in de agenda zelf, maar gaat niet naar
 # Telegram. Een oproep (belrooster, vastzitten) blijft wel gewoon werken.
@@ -501,8 +516,9 @@ def lees_staat():
     """De stand uit bode.json. Oude sleutels (laatste_herinnering, laatste_voorstellen van voor 21-10-2026) storen niet.
     Nieuw (B6): ochtend en avond per Brusselse datum, hoogstens OCHTEND_DAGEN bewaard, en bundel_vanaf. Is de stand er
     niet of niet te lezen, dan begint de bundel 24 uur terug (B5): wat in die tijd binnenkwam, komt zo nog mee.
-    Alleen zolang het nodig is: bundel_tot (terug naar 'uit', tot de slotbundel weg is, BOD-2) en alarm_gemeld (alarmen
-    die al een bericht kregen terwijl laatste_id voor een ochtendbericht bleef staan, BOD-3)."""
+    Alleen zolang het nodig is: bundel_tot (terug naar 'uit', tot de slotbundel weg is, BOD-2), alarm_gemeld (alarmen
+    die al een bericht kregen terwijl laatste_id voor een ochtendbericht bleef staan, BOD-3) en gebundeld (items boven
+    laatste_id die een verstuurde bundel al droeg, RZ4-03)."""
     try:
         return json.load(open(STAAT))
     except (OSError, ValueError):
@@ -517,19 +533,71 @@ def belspoor():
     return os.path.splitext(STAAT)[0] + "-gebeld.jsonl"
 
 
+def aanvullen(bord_items, staat, nood):
+    """De items tussen laatste_id en de gelezen pagina (RZ4-03), en die van de lopende bundel (tegenproef op RZ4-03).
+    Een volle pagina waarvan zelfs het oudste item nog boven laatste_id ligt, kan nieuwe items missen die eronder vallen.
+    Die haal ik alsnog op: terugbladeren met tot_id tot een pagina laatste_id raakt of minder dan AANVUL_N items geeft.
+    Hetzelfde voor de lopende bundel: valt zelfs het oudste item nog na bundel_vanaf, dan blader ik terug tot een item
+    met een ts op of voor bundel_vanaf. Geeft (items, compleet, bundel_compleet): de pagina met wat eronder lag, of alles
+    boven laatste_id gelezen is, en of de lopende bundel helemaal gelezen is.
+    Niet compleet (het bord gaf een fout, negeerde tot_id, of er waren meer dan AANVUL_PAGINAS pagina's): een nood, en
+    melding_groep houdt de leesstand tegen, zodat geen item voorbij iets schuift wat ik niet las. Tot 22-10-2026 kende ik
+    tot_id niet: een nood, en laatste_id schoof over de items eronder heen, die nooit een bericht kregen en in geen bundel
+    stonden. De bundel niet compleet: een nood, een vast moment zegt dat er meer kan zijn, en bundel_vanaf schuift niet
+    op (bundelwerk, bundelregel). Tot de tegenproef op RZ4-03 kwam de bundel alleen uit de eerste pagina: een item in de
+    lopende bundel waar laatste_id al over schoof, verdween dan stil als er genoeg andere items op volgden.
+    Zonder stand (eerste ronde) blader ik niet terug voor de leesstand: dan telt de geschiedenis bewust als gelezen (A31,
+    A36)."""
+    laatste = staat.get("laatste_id") or 0
+    vanaf = bundel_vanaf_van(staat)
+    if not bord_items or len(bord_items) < KLAARZET_N:
+        return bord_items, True, True
+
+    def leesstand_gelezen(alles):
+        return not laatste or min(it["id"] for it in alles) <= laatste
+
+    def bundel_gelezen(alles):
+        oudste = min((t for t in (ts_van(it) for it in alles) if t is not None), default=None)
+        return vanaf is None or oudste is None or oudste <= vanaf
+
+    lees_nodig, bundel_nodig = not leesstand_gelezen(bord_items), not bundel_gelezen(bord_items)
+    if not lees_nodig and not bundel_nodig:
+        return bord_items, True, True
+    alles, bodem = list(bord_items), False
+    for _ in range(AANVUL_PAGINAS):
+        laagste = min(it["id"] for it in alles)
+        q = urllib.parse.urlencode({"voor": "mehdi", "status": "alle", "n": AANVUL_N, "tot_id": laagste})
+        try:
+            pagina = bord.call(f"/api/klaarzet?{q}").get("items", [])
+        except Exception:  # noqa: BLE001  onbekend is niet leeg: de stand blijft staan
+            break
+        if any(it["id"] >= laagste for it in pagina):
+            break                    # een bord dat tot_id niet kent, geeft dezelfde pagina: wat eronder valt, weet ik niet
+        alles += pagina
+        if len(pagina) < AANVUL_N:
+            bodem = True             # het bord heeft niets meer onder deze pagina
+            break
+        if leesstand_gelezen(alles) and bundel_gelezen(alles):
+            break
+    compleet = not lees_nodig or bodem or leesstand_gelezen(alles)
+    bundel_compleet = not bundel_nodig or bodem or bundel_gelezen(alles)
+    if not compleet:
+        nood.append({"tekst": NOOD_ONDER_PAGINA, "wie": "claude-code"})
+    if not bundel_compleet:
+        nood.append({"tekst": NOOD_BUNDEL_ONDER_PAGINA, "wie": "claude-code"})
+    return alles, compleet, bundel_compleet
+
+
 def nieuwe_items(bord_items, staat, nood):
     """De nieuwe klaarzet-items (id boven laatste_id, soort in SOORTEN), OPLOPEND op id. Het bord levert ze dalend
     (ORDER BY id DESC); vroeger nam ik daarvan items[-8:], de oudste acht, maar bewaarde ik het hoogste id als gelezen:
-    het negende en verdere kregen nooit een bericht (Codex A31, 15-10-2026). Een volle pagina waarvan zelfs het oudste
-    item nog nieuw is, kan nieuwe items missen die eronder vallen (het bord kent geen 'vanaf id'): dat wordt een nood."""
+    het negende en verdere kregen nooit een bericht (Codex A31, 15-10-2026). Wat onder een volle pagina valt, haalt
+    aanvullen op (RZ4-03)."""
     laatste = staat.get("laatste_id", 0)
     if not laatste and len(bord_items) >= KLAARZET_N:
         # zonder stand en een volle pagina: een recent alarm kan onder de pagina vallen (Codex A36, ronde 6)
         nood.append({"tekst": f"De Bode had geen leesbare stand en het bord gaf een volle pagina ({KLAARZET_N}): een oproep of "
                               "dringend signaal kan erbuiten vallen; kijk het bord na", "wie": "claude-code"})
-    if laatste and len(bord_items) >= KLAARZET_N and min(it["id"] for it in bord_items) > laatste:
-        nood.append({"tekst": f"Meer dan {KLAARZET_N} nieuwe klaarzet-items voor Mehdi sinds de vorige ronde: de oudste "
-                              "haalt De Bode niet op en ze krijgen geen bericht; kijk het bord na", "wie": "claude-code"})
     return sorted((it for it in bord_items if it["id"] > laatste and it["soort"] in SOORTEN), key=lambda it: it["id"])
 
 
@@ -539,12 +607,34 @@ def is_alarm(it):
     return it["soort"] == "oproep" or (it["soort"] == "signaal" and "stil" in (it.get("titel") or "").lower())
 
 
-def apart(it, stand="uit"):
+def apart(it, stand="uit", staat=None):
     """Hoort dit item niet in het gewone bericht van deze ronde (B4)? Een agendazaak (NIET_OP_TELEGRAM, gaat niet naar
     Mehdi), elk ochtendbericht (dat verstuurt alleen ochtend_sturen, J4), en in de bundelstand alles wat geen alarm is:
-    dat is bundelwerk en komt op een vast moment mee, op tijdvenster."""
-    return (it.get("van") in NIET_OP_TELEGRAM or it.get("soort") == "ochtendbericht"
-            or (stand != "uit" and not is_alarm(it)))
+    dat is bundelwerk en komt op een vast moment mee, op tijdvenster.
+    Met staat (RZ4-03) telt bundelwerk alleen als apart als het ook in een bundel zit (in_bundel): wat in geen bundel
+    valt, gaat los, zoals in 'uit'. Zonder staat (de eerste ronde, A31) zoals voordien."""
+    if it.get("van") in NIET_OP_TELEGRAM or it.get("soort") == "ochtendbericht":
+        return True
+    return stand != "uit" and not is_alarm(it) and (staat is None or in_bundel(it, staat))
+
+
+def bundel_vanaf_van(staat):
+    """staat['bundel_vanaf'] als tijdstip met zone, of None als het er niet is of niet te lezen valt."""
+    try:
+        vanaf = datetime.fromisoformat(staat.get("bundel_vanaf") or "")
+    except (TypeError, ValueError):
+        return None
+    return vanaf if vanaf.tzinfo else vanaf.replace(tzinfo=timezone.utc)
+
+
+def in_bundel(it, staat):
+    """Zit dit item in een bundel (RZ4-03)? In een verstuurde (staat['gebundeld'], tot laatste_id erover schuift), of in de
+    lopende: een leesbare ts na bundel_vanaf, zodat het eerstvolgende vaste moment het meeneemt. Een item zonder leesbare
+    ts komt in geen bundel (bundelwerk), en zonder bundel_vanaf is er geen lopende bundel."""
+    if it.get("id") in (staat.get("gebundeld") or []):
+        return True
+    vanaf, t = bundel_vanaf_van(staat), ts_van(it)
+    return vanaf is not None and t is not None and t > vanaf
 
 
 def ochtend_afgehandeld(it, staat):
@@ -563,32 +653,40 @@ def ochtend_afgehandeld(it, staat):
     return False
 
 
-def melding_groep(items, eerste=False, staat=None, stand=None):
+def melding_groep(items, eerste=False, staat=None, stand=None, compleet=True):
     """Welke nieuwe items in dit bericht gaan, en tot welk id ze na een geslaagde verzending als gelezen tellen.
     items: oplopend (nieuwe_items). Geeft (groep, tot, rest):
-      groep  hoogstens PER_BERICHT items voor Mehdi, de oudste eerst; in de bundelstand alleen alarmen;
+      groep  hoogstens PER_BERICHT items voor Mehdi, de oudste eerst; in de bundelstand alleen alarmen, en wat in geen
+             bundel zit (RZ4-03);
       tot    het id tot waar alles verstuurd of bewust afgehandeld is: de groep, plus wat apart is (agendazaken,
-             bundelwerk, een verstuurd ochtendbericht) ertussen en erna, tot het eerste item dat niet meer in de groep
-             past. Nooit voorbij een item dat niet verstuurd is: dat komt de volgende ronde (Codex A31). Ook niet voorbij
-             een ochtendbericht dat nog niet weg is (J4); dat stuurt ochtend_sturen, nooit deze groep. Een alarm erachter
-             gaat wel mee in de groep (BOD-3: een oproep komt meteen, ook als het ochtendbericht in de stille uren
-             wacht); berichten() onthoudt het in staat['alarm_gemeld'] tot laatste_id erover schuift, en wat daar staat,
-             telt hier als afgehandeld. Een gewoon item erachter wacht;
+             bundelwerk dat in een bundel zit, een verstuurd ochtendbericht) ertussen en erna, tot het eerste item dat
+             niet meer in de groep past. Nooit voorbij een item dat niet verstuurd is: dat komt de volgende ronde (Codex
+             A31). Ook niet voorbij een ochtendbericht dat nog niet weg is (J4); dat stuurt ochtend_sturen, nooit deze
+             groep. Een alarm erachter gaat wel mee in de groep (BOD-3: een oproep komt meteen, ook als het ochtendbericht
+             in de stille uren wacht); berichten() onthoudt het in staat['alarm_gemeld'] tot laatste_id erover schuift,
+             en wat daar staat, telt hier als afgehandeld, net als wat een verstuurde bundel droeg (staat['gebundeld']).
+             Een gewoon item erachter wacht;
       rest   hoeveel items voor Mehdi na deze groep nog wachten.
+    Zo schuift laatste_id pas op als elk item erboven meegenomen is, verstuurd of in een bundel (RZ4-03). Tot 22-10-2026
+    telde in de bundelstand elk bundelwerk als afgehandeld, ook een item dat voor bundel_vanaf lag en dus in geen enkele
+    bundel kwam.
+    compleet: onwaar als aanvullen niet alles boven laatste_id kon lezen. Dan wacht alles behalve een alarm, en blijft tot
+    op 0: de leesstand schuift niet over wat ik niet las, en wat nu verstuurd zou worden, kwam de volgende ronde niet terug.
     eerste: er is nog geen laatste_id (eerste ronde, of een onleesbare bode.json). Dan de nieuwste PER_BERICHT en de
     rest bewust als gelezen; anders kwam heel de geschiedenis van het bord in tientallen berichten terug. Een
     ochtendbericht van vandaag vindt ochtend_sturen dan toch, want dat zoekt het op zijn uniek."""
     staat = staat or {}
     stand = stand or "uit"          # zonder stand de terugval: daar wordt niets vastgehouden (RZ3-02)
-    gemeld = set(staat.get("alarm_gemeld") or [])
-    voor_mehdi = [it for it in items if not apart(it, stand) and it["id"] not in gemeld]
+    gemeld = set(staat.get("alarm_gemeld") or []) | set(staat.get("gebundeld") or [])
+    bundel = None if eerste else staat
+    voor_mehdi = [it for it in items if not apart(it, stand, bundel) and it["id"] not in gemeld]
     if eerste:
         return voor_mehdi[-PER_BERICHT:], (items[-1]["id"] if items else 0), max(0, len(voor_mehdi) - PER_BERICHT)
-    groep, tot, wacht = [], 0, False
+    groep, tot, wacht = [], 0, not compleet
     for it in items:
         if it["id"] in gemeld:
-            pass                     # al verstuurd achter een ochtendbericht dat toen nog niet weg was
-        elif apart(it, stand):
+            pass                     # al verstuurd: een alarm achter een ochtendbericht, of in een verstuurde bundel
+        elif apart(it, stand, bundel):
             if it.get("soort") == "ochtendbericht" and not ochtend_afgehandeld(it, staat):
                 wacht = True         # tot blijft ervoor staan
         elif not wacht or is_alarm(it):
@@ -779,22 +877,22 @@ def is_bundelwerk(it):
             and it.get("van") not in NIET_OP_TELEGRAM)
 
 
-def bundelwerk(bord_items, staat):
+def bundelwerk(bord_items, staat, compleet=None):
     """(items, volledig): het bundelwerk sinds staat['bundel_vanaf'], oudste eerst. (None, False) als het bord niet
-    gelezen is: onbekend is niet leeg. volledig is onwaar als de pagina van het bord vol was en zelfs het oudste item nog
-    in het venster valt; dan kan er meer zijn, en zegt de bundel dat."""
+    gelezen is: onbekend is niet leeg. volledig is onwaar als ik de lopende bundel niet helemaal las; dan kan er meer
+    zijn, zegt de bundel dat, en schuift bundel_vanaf niet op (tegenproef op RZ4-03). compleet: wat aanvullen daarover
+    zei; zonder (een aanroep buiten de ronde) de oude schatting: de pagina was vol en zelfs het oudste item valt nog in het
+    venster."""
     if bord_items is None:
         return None, False
-    try:
-        vanaf = datetime.fromisoformat(staat.get("bundel_vanaf") or "")
-    except ValueError:
+    vanaf = bundel_vanaf_van(staat)
+    if vanaf is None:
         return [], True
-    if vanaf.tzinfo is None:
-        vanaf = vanaf.replace(tzinfo=timezone.utc)
     binnen = [it for it in bord_items if is_bundelwerk(it) and ts_van(it) is not None and ts_van(it) > vanaf]
-    oudste = min((t for t in (ts_van(it) for it in bord_items) if t is not None), default=None)
-    volledig = not (len(bord_items) >= KLAARZET_N and oudste is not None and oudste > vanaf)
-    return sorted(binnen, key=lambda it: it["id"]), volledig
+    if compleet is None:
+        oudste = min((t for t in (ts_van(it) for it in bord_items) if t is not None), default=None)
+        compleet = not (len(bord_items) >= KLAARZET_N and oudste is not None and oudste > vanaf)
+    return sorted(binnen, key=lambda it: it["id"]), compleet
 
 
 def bundel_begin(staat, bord_items, moment):
@@ -802,11 +900,30 @@ def bundel_begin(staat, bord_items, moment):
     (id tot en met laatste_id), want wat daarna kwam, ging nog niet weg. Staat er zo geen item op de pagina, dan 24 uur
     terug, zoals lees_staat. Tot 21-10-2026 begon de bundel bij de eerste ronde in de bundelstand: wat in de stille uren
     was blijven liggen, of tussen de laatste losse ronde en de uitrol binnenkwam, telde meteen als afgehandeld en kwam in
-    geen enkele bundel."""
+    geen enkele bundel.
+    En nooit na een item dat nog niet weg is (RZ4-03): ligt er bundelwerk boven laatste_id, dan begint de bundel vlak voor
+    het oudste daarvan, ook als dat ouder is dan 24 uur. Tot 22-10-2026 viel zo'n item, als het laatst afgehandelde item
+    niet meer op de pagina stond, voor de grens van 24 uur, en schoof laatste_id erover: het bereikte Mehdi nooit. Een
+    item dat al los wegging en toch na die grens ligt, komt dan nog eens in de bundel: dubbel is beter dan verloren."""
     laatste = staat.get("laatste_id") or 0
     tijden = [t for t in (ts_van(it) for it in bord_items if it["id"] <= laatste) if t is not None]
     begin = max(tijden) if tijden else moment - timedelta(hours=24)
+    open_ = [t for t in (ts_van(it) for it in bord_items if it["id"] > laatste and is_bundelwerk(it)) if t is not None]
+    if open_:
+        begin = min(begin, min(open_) - timedelta(microseconds=1))
     return begin.astimezone(timezone.utc).isoformat()
+
+
+def bundel_verstuurd(staat, bundel, vanaf):
+    """Een vast moment droeg de bundel: de volgende begint bij vanaf (het lezen van het bord, BOD-4). Wat erin stond met
+    een id boven laatste_id, onthoud ik in staat['gebundeld'] tot laatste_id erover schuift (RZ4-03): het ligt nu voor
+    bundel_vanaf, en melding_groep telt het anders als een item dat in geen bundel zit, en stuurt het nog eens los. Dat
+    gebeurt als laatste_id voor een ochtendbericht bleef staan dat in de stille uren wachtte."""
+    staat["bundel_vanaf"] = vanaf.astimezone(timezone.utc).isoformat()
+    laatste = staat.get("laatste_id") or 0
+    erbij = {it["id"] for it in (bundel or []) if it["id"] > laatste}
+    if erbij:
+        staat["gebundeld"] = sorted(set(staat.get("gebundeld") or []) | erbij)
 
 
 def kort_item(it, namen):
@@ -825,9 +942,12 @@ def bundelregel(tekst, bundel, volledig, namen):
     """De regel "Gebundeld: ..." onder een vast bericht (B5): wat sinds de vorige bundel binnenkwam, zo kort dat de hele
     tekst als sjabloonparameter binnen whatsapp.MAX_PARAM (900) blijft. De Regisseur houdt zijn deel op 720 (I1); ik
     voeg alleen deze regel toe. Eerst met namen, anders alleen de aantallen; leeg als er niets gebundeld is of zelfs de
-    aantallen niet passen. Een onleesbaar bord is "onbekend", nooit "niets"."""
+    aantallen niet passen. Een onleesbaar bord is "onbekend", nooit "niets"; een bundel die ik niet helemaal las en
+    waarin ik niets vond, is "onbekend of meer" (tegenproef op RZ4-03), nooit een lege regel."""
     if bundel is None:
         kandidaten = ["Gebundeld: onbekend, het bord was niet te lezen; alles op het bord"]
+    elif not bundel and not volledig:
+        kandidaten = ["Gebundeld: onbekend of meer; alles op het bord"]
     elif not bundel:
         return ""
     else:
@@ -909,7 +1029,8 @@ def ochtend_item(datum):
     return items[0] if items else None
 
 
-def ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, droog=False, gelezen=None):
+def ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, droog=False, gelezen=None,
+                   bundel_compleet=True):
     """Het ochtendbericht van De Regisseur naar Mehdi, als eigen bericht (B5, J4, M6). Alleen hier gaat het weg: van De
     Regisseur, met de datum van vandaag, op klaar. De tekst is inhoud.tekst; in de bundelstand komt de regel
     "Gebundeld: ..." erbij, behalve na een terugval (die droeg de bundel al). Met de titel als kop en met voorrang.
@@ -921,6 +1042,8 @@ def ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, d
     Het verzendspoor (RZ2-04) houdt vast wat de stand niet meer haalde: 'verzonden' zonder stand neem ik over; 'bezig'
     zonder 'verzonden' (het proces stopte na het versturen) stuur ik nooit opnieuw, het item telt als afgehandeld met
     onzeker erbij, en vaste_momenten zet de nood voor claude-code. Geen terugval dan: er ging misschien wel een weg.
+    Las ik de lopende bundel niet helemaal (bundel_compleet onwaar), dan zegt de regel dat en schuift bundel_vanaf niet op
+    (tegenproef op RZ4-03): wat ik niet las, komt in een volgend vast moment.
     Geeft (uitkomst, detail): verstuurd, eerder, mislukt, wacht, droog of geen."""
     datum = dag_van(moment)
     dag = staat.setdefault("ochtend", {}).setdefault(datum, {})
@@ -963,7 +1086,8 @@ def ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, d
     inhoud = ochtend_inhoud(it)
     tekst = str(inhoud["tekst"]).strip()
     kop = (it.get("titel") or "Ochtendbericht").strip()[:60]
-    bundel, volledig = (None, False) if stand == "uit" or dag.get("terugval") else bundelwerk(bord_items, staat)
+    bundel, volledig = ((None, False) if stand == "uit" or dag.get("terugval")
+                        else bundelwerk(bord_items, staat, bundel_compleet))
     regel = "" if stand == "uit" or dag.get("terugval") else bundelregel(tekst, bundel, volledig, namen)
     volledige_tekst = tekst + (f"\n{regel}" if regel else "")
     if sjabloonlengte(volledige_tekst) > whatsapp.MAX_PARAM:
@@ -979,8 +1103,8 @@ def ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, d
                 "punten": [{"nr": p.get("nr"), "soort": p.get("soort"), "ref": p.get("ref"),
                             "vingerafdruk": p.get("vingerafdruk")} for p in punten],
                 "sha": hashlib.sha256(volledige_tekst.encode()).hexdigest()[:12]})
-    if stand != "uit" and not dag.get("terugval") and bundel is not None and (regel or not bundel):
-        staat["bundel_vanaf"] = (gelezen or moment).astimezone(timezone.utc).isoformat()
+    if stand != "uit" and not dag.get("terugval") and bundel is not None and volledig and (regel or not bundel):
+        bundel_verstuurd(staat, bundel, gelezen or moment)
     ochtend_voorstellen_gemeld(staat, inhoud)
     ag.log(f"ochtendbericht {datum}", "melding", f"ochtendbericht {datum} via {kanaal} (item {it['id']}, "
                                                  f"{meervoud(len(punten), 'punt', 'punten')})",
@@ -1000,11 +1124,13 @@ def ochtend_oppakken(dag, nood):
                      "wie": "claude-code"})
 
 
-def terugval_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, droog=False, gelezen=None):
+def terugval_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, droog=False, gelezen=None,
+                    bundel_compleet=True):
     """Geen ochtendbericht om 11:00 Brussel (B5, I7): een bericht zonder nummers met de aantallen, en in de bundelstand
     de regel Gebundeld. Een keer per dag; de nood staat apart (vaste_momenten). Onbekend is nooit 0 (L29).
     Het verzendspoor zoals bij ochtend_sturen (RZ2-04): wat er 'bezig' of 'verzonden' staat, stuur ik nooit opnieuw;
-    'bezig' wordt terugval_onzeker en een nood."""
+    'bezig' wordt terugval_onzeker en een nood. Een bundel die ik niet helemaal las, schuift niet op (tegenproef op
+    RZ4-03)."""
     datum = dag_van(moment)
     dag = staat.setdefault("ochtend", {}).setdefault(datum, {})
     if dag.get("terugval") or is_stil(moment):
@@ -1028,11 +1154,11 @@ def terugval_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, 
     tekst = (f"De Regisseur zette vandaag geen ochtendbericht klaar; {v} en "
              f"{'noden onbekend' if n is None else meervoud(n, 'nood', 'noden') + ' voor jou'} open, alles op het bord.")
     if stand != "uit":
-        bundel, volledig = bundelwerk(bord_items, staat)
+        bundel, volledig = bundelwerk(bord_items, staat, bundel_compleet)
         regel = bundelregel(tekst, bundel, volledig, namen)
         tekst += f"\n{regel}" if regel else ""
     else:
-        bundel, regel = None, ""
+        bundel, volledig, regel = None, False, ""
     b = moment.astimezone(BRUSSEL)
     kop = f"Ochtend {WEEKDAG[b.weekday()]} {b:%d-%m}: geen ochtendbericht"
     if droog:
@@ -1042,8 +1168,8 @@ def terugval_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, 
     if not kanaal:
         return "terugval niet verstuurd"
     dag.update({"terugval": moment.isoformat(), "terugval_kanaal": kanaal})
-    if stand != "uit" and bundel is not None and (regel or not bundel):
-        staat["bundel_vanaf"] = (gelezen or moment).astimezone(timezone.utc).isoformat()
+    if stand != "uit" and bundel is not None and volledig and (regel or not bundel):
+        bundel_verstuurd(staat, bundel, gelezen or moment)
     voorstellen_gemeld(staat, voorstellen)
     ag.log(f"ochtendbericht {datum}", "melding", f"terugval {datum} via {kanaal}: geen ochtendbericht van De Regisseur", tekst)
     return f"terugval via {kanaal}"
@@ -1068,13 +1194,16 @@ def avond_regels(update, bundel, nieuw, namen, volledig):
     return regels + staart + [f"Bord: {BORD_URL}"]
 
 
-def avond_sturen(staat, nood, moment, namen, bord_items, voorstellen, droog=False, gelezen=None):
+def avond_sturen(staat, nood, moment, namen, bord_items, voorstellen, droog=False, gelezen=None, bundel_compleet=True):
     """De avondbundel (alleen in 'ochtend-avond', B5): bij de mailupdate van 17:00 (AVOND_TRIGGER), of vanaf 17:30
     Brussel als er iets gebundeld is. Een keer per dag, niet in de stille uren, met voorrang; daarna begint de bundel
     opnieuw. Is het bord niet gelezen, dan niets: ik stuur geen bundel alsof er niets is.
     Het verzendspoor zoals bij ochtend_sturen (RZ2-04): wat er 'bezig' of 'verzonden' staat, stuur ik nooit opnieuw;
     'bezig' wordt onzeker en een nood. bundel_vanaf schuift dan niet op: wat in een onzekere bundel stond, komt liever nog
-    eens in het ochtendbericht dan nooit."""
+    eens in het ochtendbericht dan nooit.
+    Las ik de lopende bundel niet helemaal (tegenproef op RZ4-03), dan telt dat als 'er is iets': de avondbundel zegt dat
+    er meer kan zijn, en bundel_vanaf schuift niet op. Tot dan ging er bij een lege eerste pagina geen avondbundel, en
+    schoof het volgende vaste moment over wat ik niet las."""
     datum = dag_van(moment)
     dag = staat.setdefault("avond", {}).setdefault(datum, {})
     if dag.get("verzonden") or not na(moment, AVOND_VANAF) or is_stil(moment):
@@ -1091,12 +1220,12 @@ def avond_sturen(staat, nood, moment, namen, bord_items, voorstellen, droog=Fals
             ag.log(f"avondbundel {datum}", "besluit", "aflevering onzeker, een vorige ronde stopte na het versturen; "
                                                      "niet opnieuw verstuurd")
         return "avondbundel aflevering onzeker" if spoor == "bezig" else ""
-    bundel, volledig = bundelwerk(bord_items, staat)
+    bundel, volledig = bundelwerk(bord_items, staat, bundel_compleet)
     if bundel is None:
         return ""
     update = [it for it in bundel if it.get("uniek") == AVOND_TRIGGER.format(datum=datum)]
     nieuw = nieuwe_voorstellen(staat, voorstellen)
-    if not update and not (na(moment, AVOND_UITERLIJK) and (bundel or nieuw)):
+    if not update and not (na(moment, AVOND_UITERLIJK) and (bundel or nieuw or not volledig)):
         return ""
     b = moment.astimezone(BRUSSEL)
     kop = f"Avondbundel {WEEKDAG[b.weekday()]} {b:%d-%m}"
@@ -1108,14 +1237,15 @@ def avond_sturen(staat, nood, moment, namen, bord_items, voorstellen, droog=Fals
     if not kanaal:
         return "avondbundel niet verstuurd"
     dag.update({"verzonden": moment.isoformat(), "kanaal": kanaal, "items": len(bundel), "met_update": bool(update)})
-    staat["bundel_vanaf"] = (gelezen or moment).astimezone(timezone.utc).isoformat()
+    if volledig:
+        bundel_verstuurd(staat, bundel, gelezen or moment)
     voorstellen_gemeld(staat, voorstellen)
     ag.log(f"avondbundel {datum}", "melding", f"avondbundel {datum} via {kanaal}: {meervoud(len(bundel), 'item', 'items')}"
                                               f"{', met de mailupdate van 17:00' if update else ''}", tekst)
     return f"avondbundel via {kanaal}"
 
 
-def slotbundel_sturen(staat, nood, moment, namen, bord_items, droog=False):
+def slotbundel_sturen(staat, nood, moment, namen, bord_items, droog=False, bundel_compleet=True):
     """Terug naar 'uit' (BOD-2). Wat de bundelstand sinds het laatste vaste moment als afgehandeld telde, staat al voorbij
     laatste_id en gaat in 'uit' niet meer los. Dat stuur ik eerst als slotbundel, met voorrang en niet in de stille uren;
     pas na een geslaagde verzending laat ik bundel_vanaf los. Mislukt het, of is het bord niet gelezen, dan blijft alles
@@ -1124,13 +1254,15 @@ def slotbundel_sturen(staat, nood, moment, namen, bord_items, droog=False):
     Het verzendspoor zoals bij de andere vaste momenten (RZ2-04, tegenproef 22-10-2026), met bundel_tot in de sleutel:
     een tweede omschakeling op dezelfde dag is een andere slotbundel. 'verzonden' of 'bezig' stuur ik nooit opnieuw;
     'bezig' wordt onzeker en een nood. In beide gevallen laat ik bundel_vanaf los, want in 'uit' draagt geen latere bundel
-    het nog."""
+    het nog. Las ik de lopende bundel niet helemaal (tegenproef op RZ4-03), dan wacht de slotbundel tot dat lukt: anders
+    liet ik bundel_vanaf los over items die ik niet las. Alleen met bundel_tot 0 (er ging nooit iets in een bundel) maakt
+    dat niet uit."""
     if "bundel_vanaf" not in staat:
         staat.pop("bundel_tot", None)
         return ""
     tot = staat.setdefault("bundel_tot", staat.get("laatste_id") or 0)
-    bundel, volledig = bundelwerk(bord_items, staat)
-    if bundel is None:
+    bundel, volledig = bundelwerk(bord_items, staat, bundel_compleet)
+    if bundel is None or (not volledig and tot):
         return ""
     slot = [it for it in bundel if it["id"] <= tot]
     if not slot:
@@ -1171,12 +1303,14 @@ def slotbundel_sturen(staat, nood, moment, namen, bord_items, droog=False):
     return f"slotbundel via {kanaal}"
 
 
-def vaste_momenten(staat, nood, moment, namen, stand, bord_items, voorstellen, droog=False, gelezen=None):
+def vaste_momenten(staat, nood, moment, namen, stand, bord_items, voorstellen, droog=False, gelezen=None,
+                   bundel_compleet=True):
     """De vaste momenten naar Mehdi (ontwerp regie-zoom v1.2, B5): het ochtendbericht, de terugval om 11:00 en, in de
     stand 'ochtend-avond', de avondbundel; in de stand 'uit' eerst nog de slotbundel als de bundelstand iets achterliet.
     Elke ronde opnieuw afgeleid; de noden ook (N10: zonder aantal, en ze blijven de hele dag staan zolang het zo is).
-    gelezen: wanneer het bord gelezen is; daar begint na een vast moment de volgende bundel (BOD-4). Geeft een korte
-    tekst voor het detail van de hartslag."""
+    gelezen: wanneer het bord gelezen is; daar begint na een vast moment de volgende bundel (BOD-4). bundel_compleet: of
+    aanvullen de lopende bundel helemaal las (tegenproef op RZ4-03). Geeft een korte tekst voor het detail van de
+    hartslag."""
     gelezen = gelezen or moment
     datum = dag_van(moment)
     grens = (moment.astimezone(BRUSSEL).date() - timedelta(days=OCHTEND_DAGEN)).isoformat()
@@ -1190,23 +1324,26 @@ def vaste_momenten(staat, nood, moment, namen, stand, bord_items, voorstellen, d
         bellen._spoor_opruimen(verzendspoor(), (moment - timedelta(days=OCHTEND_DAGEN + 1)).isoformat())
     uit = []
     if stand == "uit":
-        uit.append(slotbundel_sturen(staat, nood, moment, namen, bord_items, droog))
+        uit.append(slotbundel_sturen(staat, nood, moment, namen, bord_items, droog, bundel_compleet))
     else:
         staat.pop("bundel_tot", None)
         if "bundel_vanaf" not in staat and bord_items is not None:
             # de overgang naar de bundelstand (BOD-1): wat al los afgehandeld is, komt niet nog eens in een bundel, en wat
             # nog niet wegging, komt er wel in. Is het bord niet gelezen, dan de volgende ronde.
             staat["bundel_vanaf"] = bundel_begin(staat, bord_items, moment)
-    uitkomst, detail = ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, droog, gelezen=gelezen)
+    uitkomst, detail = ochtend_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, droog, gelezen=gelezen,
+                                      bundel_compleet=bundel_compleet)
     uit.append(detail)
     if uitkomst == "geen" and na(moment, TERUGVAL):
         nood.append({"tekst": "Geen ochtendbericht van De Regisseur om 11:00", "wie": "claude-code"})
-        uit.append(terugval_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, droog, gelezen=gelezen))
+        uit.append(terugval_sturen(staat, nood, moment, namen, stand, bord_items, voorstellen, droog, gelezen=gelezen,
+                                   bundel_compleet=bundel_compleet))
     if (staat["ochtend"].get(datum) or {}).get("verlopen"):
         nood.append({"tekst": "Ochtendbericht niet verstuurd: een item van een andere afzender of een andere dag",
                      "wie": "claude-code"})
     if stand == "ochtend-avond":
-        uit.append(avond_sturen(staat, nood, moment, namen, bord_items, voorstellen, droog, gelezen=gelezen))
+        uit.append(avond_sturen(staat, nood, moment, namen, bord_items, voorstellen, droog, gelezen=gelezen,
+                                bundel_compleet=bundel_compleet))
     # RZ2-04: een onzekere aflevering blijft de hele dag een nood (N10), zoals een verlopen ochtendbericht
     ochtend, avond = staat["ochtend"].get(datum) or {}, staat["avond"].get(datum) or {}
     for wat, onzeker in (("Ochtendbericht", ochtend.get("onzeker")), ("Terugval", ochtend.get("terugval_onzeker")),
@@ -1268,6 +1405,9 @@ def ronde(droog=False):
     # None als het bord niet te lezen was: dan is de bundel onbekend, niet leeg
     bord_items = veilig(nood, "Het bord lezen", lambda: bord.call(
         f"/api/klaarzet?voor=mehdi&status=alle&n={KLAARZET_N}").get("items", []), None)
+    # RZ4-03: wat onder een volle pagina valt, alsnog ophalen, ook voor de lopende bundel; lukt dat niet, dan blijft de
+    # leesstand staan, of schuift de bundel niet op
+    bord_items, compleet, bundel_compleet = aanvullen(bord_items, staat, nood)
     items = nieuwe_items(bord_items or [], staat, nood)
     eerste = not staat.get("laatste_id")
     alarm = [it for it in items if is_alarm(it)]
@@ -1317,8 +1457,9 @@ def ronde(droog=False):
         namen = agentnamen()
         voorstellen = open_voorstellen(nood)
         vast = veilig(nood, "Vaste momenten", lambda: vaste_momenten(staat, nood, moment, namen, stand, bord_items,
-                                                                       voorstellen, droog=True, gelezen=gelezen), "")
-        groep, _, rest = melding_groep(items, eerste, staat, stand)
+                                                                       voorstellen, droog=True, gelezen=gelezen,
+                                                                       bundel_compleet=bundel_compleet), "")
+        groep, _, rest = melding_groep(items, eerste, staat, stand, compleet)
         nieuw = nieuwe_voorstellen(staat, voorstellen) if stand == "uit" else []
         if (groep or nieuw) and (not stil or alarm):
             print("  (droog) zou sturen:\n" + "\n".join(
@@ -1335,7 +1476,8 @@ def ronde(droog=False):
             r.bron("BUNDELEN", stand)
             werk = []
             try:
-                r.detail = berichten(staat, werk, moment, stand, items, eerste, alarm, bord_items, bel_detail, gelezen)
+                r.detail = berichten(staat, werk, moment, stand, items, eerste, alarm, bord_items, bel_detail, gelezen,
+                                     compleet, bundel_compleet)
             finally:
                 # Een stand die niet op schijf kan, mag de hartslag niet tegenhouden: anders bereikt de nood van
                 # afspraken_bellen (belronde gestopt, A26 ronde 3) het bord nooit. Het belspoor houdt een gevoerde
@@ -1349,9 +1491,11 @@ def ronde(droog=False):
         veilig([], "Stand wegschrijven", lambda: bewaar(staat), None)
 
 
-def berichten(staat, nood, moment, stand, items, eerste, alarm, bord_items, bel_detail="", gelezen=None):
+def berichten(staat, nood, moment, stand, items, eerste, alarm, bord_items, bel_detail="", gelezen=None, compleet=True,
+              bundel_compleet=True):
     """Het werk binnen de ronde (B5): berichten van Mehdi op het bord zetten, antwoorden terugbrengen, de vaste momenten
-    en wat nu naar Mehdi moet. gelezen: wanneer het bord gelezen is (BOD-4). Geeft het detail voor de hartslag."""
+    en wat nu naar Mehdi moet. gelezen: wanneer het bord gelezen is (BOD-4). compleet: of aanvullen alles boven
+    laatste_id las (RZ4-03); bundel_compleet: of het de lopende bundel helemaal las. Geeft het detail voor de hartslag."""
     stil = is_stil(moment)
     namen = agentnamen()
     binnen = (veilig(nood, "WhatsApp lezen", lambda: lees_whatsapp(staat, namen, nood))
@@ -1360,9 +1504,10 @@ def berichten(staat, nood, moment, stand, items, eerste, alarm, bord_items, bel_
     voorstellen = open_voorstellen(nood)
     nieuwe_voorstellen(staat, voorstellen)      # zonder stand: het hoogste id leren, zonder bericht
     vast = veilig(nood, "Vaste momenten", lambda: vaste_momenten(staat, nood, moment, namen, stand, bord_items,
-                                                                   voorstellen, gelezen=gelezen), "")
+                                                                   voorstellen, gelezen=gelezen,
+                                                                   bundel_compleet=bundel_compleet), "")
     gemeld = set(staat.get("alarm_gemeld") or [])
-    groep, tot, rest = melding_groep(items, eerste, staat, stand)
+    groep, tot, rest = melding_groep(items, eerste, staat, stand, compleet)
     # een alarm dat al een bericht kreeg (BOD-3), trekt in de stille uren geen ander bericht meer mee
     alarm = [it for it in alarm if it["id"] not in gemeld]
     # De herinnering om de zes uur bestaat niet meer (I7). In de stand 'uit' geeft een nieuw voorstel een bericht (L8);
@@ -1393,12 +1538,17 @@ def berichten(staat, nood, moment, stand, items, eerste, alarm, bord_items, bel_
                 voorstellen_gemeld(staat, voorstellen)
             ag.log("bericht", "melding", f"{len(groep)} van {len(items)} items{', nieuwe voorstellen' if nieuw else ''} "
                                          f"via {kanaal}", "\n".join(regels))
-    # wat laatste_id intussen dekt, hoef ik niet meer apart te onthouden
+    # wat laatste_id intussen dekt, hoef ik niet meer apart te onthouden: een gemeld alarm en wat een bundel droeg (RZ4-03)
     gemeld = sorted(i for i in gemeld if i > staat.get("laatste_id", 0))
     if gemeld:
         staat["alarm_gemeld"] = gemeld
     else:
         staat.pop("alarm_gemeld", None)
+    gebundeld = sorted(i for i in (staat.get("gebundeld") or []) if i > staat.get("laatste_id", 0))
+    if gebundeld:
+        staat["gebundeld"] = gebundeld
+    else:
+        staat.pop("gebundeld", None)
     if not TG_TOKEN:
         nood.append({"tekst": "Telegram niet ingesteld: bot bij BotFather, TELEGRAM_BOT_TOKEN en TELEGRAM_CHAT_ID in mijnagents-data/.env", "wie": "mehdi"})
     try:
