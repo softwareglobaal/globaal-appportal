@@ -3117,9 +3117,14 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   `nginx -t`, registratie in Authentik, groepslid, cron), zonder een geheim te tonen. Vóór er iets binnenkomt, kijkt
   het beide checkouts na (`~/appportal` en `~/appportal/regie`): elke niet vastgelegde wijziging, gevolgd of niet,
   stopt het; alleen de twee bestanden die op de VM bewust lokaal gewijzigd zijn (`docker-compose.override.yml` en
-  `nginx/templates/49-elevaitnv.conf.template`) en de checkouts van andere repo's op het hoogste niveau worden genoemd
-  en ongemoeid gelaten. Het stopt ook als een checkout niet op `main` staat, niet kan vooruitspoelen, of als main een
-  van die twee lokale bestanden wijzigt. Daarna rolt `regie/deploy-stack.sh` (cron elke 2 minuten, logboek
-  `~/deploy-regie.log`) elke nieuwe commit op main van globaal-regie uit: een push naar main daar is productie, zoals
-  bij prive. Het haalt alleen `main` binnen, alleen met `--ff-only` en alleen uit een schone checkout, bouwt alleen
-  als HEAD veranderde, doet een starttoets en `/healthz`, en valt bij falen terug op `appportal-regie:vorige`.
+  `nginx/templates/49-elevaitnv.conf.template`), drie paden van andere apps die deze repo niet volgt en niet negeert
+  (`mijnagents-runner/werfverslag_dashboard.py`, de kopie van `globaal-werfverslag/deploy.sh`; de bind mounts
+  `werfverslag-data/` en `locatie-data/`, waarvan de SQLite-WAL-bestanden niet onder `*.db` vallen) en de checkouts van
+  andere repo's op het hoogste niveau worden genoemd en ongemoeid gelaten, de eerste twee groepen alleen bij exact die
+  naam. Het stopt ook als een checkout niet op `main` staat, niet kan vooruitspoelen, of als main een van die twee
+  lokale bestanden wijzigt of iets op een van die drie paden zet. Een regel hier in `.gitignore` zou de eerste uitrol
+  niet helpen: die kijkt na met de `.gitignore` die op de VM staat, vóór de merge. Daarna rolt
+  `regie/deploy-stack.sh` (cron elke 2 minuten, logboek `~/deploy-regie.log`) elke nieuwe commit op main van
+  globaal-regie uit: een push naar main daar is productie, zoals bij prive. Het haalt alleen `main` binnen, alleen met
+  `--ff-only` en alleen uit een schone checkout, bouwt alleen als HEAD veranderde, doet een starttoets en `/healthz`,
+  en valt bij falen terug op `appportal-regie:vorige`.
