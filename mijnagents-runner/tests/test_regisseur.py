@@ -894,7 +894,8 @@ def test_t46_exit_75_keten_loopt_en_exit_124_onbekend():
         w.keten("2026-10-22T07:00:00+00:00", geslaagd=False, einde="")
         with vervang((R.subprocess, "run", NepProces(75))):
             uit = R.ronde_starten({"naam": "fathom-wacht"})
-        assert uit["exit"] == 75 and uit["uitkomst"] == "de gesprekkenketen loopt (gestart 09:00 Brussel); probeer na 10:05 opnieuw", uit
+        # 85 minuten na de start: de langste keten met De Dagbundelaar (tegenproef op RZ4-04; tot dan 65, dus 10:05)
+        assert uit["exit"] == 75 and uit["uitkomst"] == "de gesprekkenketen loopt (gestart 09:00 Brussel); probeer na 10:25 opnieuw", uit
         # REG-06 (J15): het slot is bezet, de ronde startte niet; dat is een weigering die wacht, geen mislukte ronde
         assert uit["ok"] is False and uit["wacht"] is True and uit["geweigerd"] == uit["uitkomst"], uit
         w.status("fathom-wacht", "fout", (nu - timedelta(minutes=1)).isoformat())
@@ -1055,6 +1056,17 @@ def test_t48_mislukt_ochtendbericht_niet_elke_minuut_een_ronde():
                 rondes.append(minuut)
         assert rondes == [0, 16], rondes
         assert not w.rij("SELECT id FROM klaarzet WHERE uniek='ochtendbericht:2026-10-22'"), "zonder grenzen geen ochtendbericht"
+
+
+def test_rz4_04_probeer_na_dekt_de_langste_keten():
+    """Tegenproef op RZ4-04 (22-10-2026): met De Dagbundelaar als laatste stap houdt de ochtendketen het slot hoogstens
+    4890 s (de drie time-outs van keten.py plus de nadruk per stap, tests/test_keten.py). De Regisseur zei 'probeer na'
+    met 65 minuten: te vroeg, dan botste de tweede vraag weer op het slot. De duur in SLOTEN dekt de langste keten."""
+    import keten as K  # noqa: PLC0415
+    langste = sum(s[2] for s in K.STAPPEN + (K.DAGBUNDELAAR,)) + (len(K.STAPPEN) + 1) * K.NADRUK
+    slot = R.SLOTEN[R.GESPREKKEN_SLOT]
+    assert set(slot["agents"]) == {"fathom-wacht", "zoom-wacht", "dagbundelaar"}, slot
+    assert slot["duur_min"] * 60 >= langste, (slot["duur_min"], langste)
 
 
 # ------------------------------------------------------------------------------------------------- T49 ---

@@ -2,10 +2,12 @@
 """De Dagbundelaar (Privé): legt per dag samen wat de bronnen-agents klaarzetten,
 zegt per bundel bij welk dossier het hoort, en geeft het door.
 
-Elke werkdag om 07:05 UTC (voor gisteren), na de gesprekkenketen: de cron start me binnen
-/tmp/gesprekken.lock (planning/gesprekken.cron); krijg ik het slot niet binnen 90 minuten, dan
-start ik niet en staat dat in dagbundelaar.log (RZ2-03). 90 minuten is langer dan de keten kan duren (RZ3-03, tot
-22-10-2026 was het 60; tests/test_keten.py rekent het na). Op verzoek (--dag JJJJ-MM-DD):
+Elke werkdag (maandag tot vrijdag in Brussel), voor gisteren, als laatste stap van de ochtendketen: keten.py start me
+om 07:00 UTC binnen /tmp/gesprekken.lock (planning/gesprekken.cron), na De Fathomwacht en De Zoomwacht, ook als een van
+die faalde, met een time-out van 900 s; mijn uitvoer gaat naar dagbundelaar.log en mijn exit staat in keten.json
+(RZ4-04). Tot 22-10-2026 had ik een eigen cronregel, vijf minuten na de keten, die op hetzelfde slot wachtte; een
+handmatige ronde van een gesprekkenwacht kon me zo vóór de keten laten lopen, of me laten afhaken. Op verzoek
+(--dag JJJJ-MM-DD), ook via De Regisseur, onder hetzelfde slot:
   1. alles wat klaargezet is met gisteren als dag: afspraken, transcripten, opnames,
      later ook locatie en foto's;
   2. per dossier (deal) één bundel: wat er gebeurde, welke bronnen erbij horen,

@@ -14,11 +14,13 @@ werkdagen 'gisteren' bundelt. Deze test legt vast:
 - RZ2-01 (bouwcontrole RZ2): van een privé-item staat alleen "privégesprek, N min" in de bundel, het Dagverslag en het
   werkverslag, ook voor een item van voor 21-10-2026 met naam en onderwerp in de titel (de hele keten met De
   Fathomwacht en de export: test_bord_lees.py);
-- RZ2-03: De Dagbundelaar draait binnen het slot van de gesprekkenketen; krijgt hij het slot niet binnen 90 minuten
-  (RZ3-03, tot 22-10-2026 60), dan start hij niet en staat dat in zijn logboek. Het zetscript zet die regel, ook over
-  het oude blok heen;
+- RZ2-03 en RZ4-04: De Dagbundelaar draait binnen het slot van de gesprekkenketen, sinds RZ4-04 als laatste stap van
+  keten.py (test_keten.py), zonder eigen cronregel. Het zetscript zet het nieuwe blok, ook over het vorige blok met de
+  losse regel van De Dagbundelaar heen;
 - RZ3-01: een item met inhoud.afdeling prive is privé, ook bij prive=false;
-- RZ3-02: het zetscript aanvaardt alleen precies de drie oude regels of het beheerde blok; elke andere vorm weigert het.
+- RZ3-02: het zetscript aanvaardt alleen precies de drie oude regels of het beheerde blok; elke andere vorm weigert het;
+- RZ4-06: het beheerde blok vervangt het alleen als zijn inhoud precies een bekende vorm is (het huidige blok of het
+  vorige uit deze branch); een onbekende regel in het blok weigert het, zonder die opdracht te tonen.
 
 Geen netwerk: het bord is nagebootst (bord.call, bord.opgepakt) en de agent vangt zijn klaarzet en hartslag op. De
 cronregel draait met /bin/sh, met een nagebootste flock en python.
@@ -249,15 +251,15 @@ def cronregel(script):
     return gevonden[0]
 
 
-def cron_draaien(proef, exit_python=0):
-    """De echte regel van De Dagbundelaar uit planning/gesprekken.cron, zoals cron ze draait (/bin/sh -c, zonder de vijf
+def cron_draaien(proef, script="keten.py", exit_python=0):
+    """De echte regel van dit script uit planning/gesprekken.cron, zoals cron ze draait (/bin/sh -c, zonder de vijf
     tijdvelden), met de paden van de VM vervangen door een tijdelijke map. Geeft (spoor, logboek)."""
     map_ = tempfile.mkdtemp(prefix="cron-")
     for naam, tekst in (("flock", NEP_FLOCK), ("python", NEP_PYTHON)):
         with open(os.path.join(map_, naam), "w", encoding="utf-8") as f:
             f.write(tekst)
         os.chmod(os.path.join(map_, naam), 0o755)
-    regel = cronregel("dagbundelaar.py").split(None, 5)[5]
+    regel = cronregel(script).split(None, 5)[5]
     for sleutel, pad in (("flock", os.path.join(map_, "flock")), ("python", os.path.join(map_, "python")),
                          ("slot", os.path.join(map_, "gesprekken.lock")), ("logmap", map_ + os.sep), ("runner", "/runner/")):
         assert VM[sleutel] in regel, (sleutel, regel)
@@ -266,53 +268,114 @@ def cron_draaien(proef, exit_python=0):
     subprocess.run(["/bin/sh", "-c", regel], check=False, timeout=30,
                    env=dict(os.environ, FLOCK_PROEF=proef, CRON_SPOOR=spoor, NEP_EXIT=str(exit_python)))
     lees = lambda p: open(p, encoding="utf-8").read() if os.path.exists(p) else ""  # noqa: E731
-    return lees(spoor).splitlines(), lees(os.path.join(map_, "dagbundelaar.log"))
+    return lees(spoor).splitlines(), lees(os.path.join(map_, script.replace(".py", ".log")))
 
 
-def test_rz2_03_dagbundelaar_draait_binnen_het_slot():
-    """RZ2-03 (bouwcontrole RZ2, 21-10-2026): de regel was 'flock -w 3600 /tmp/gesprekken.lock /bin/true; python
-    dagbundelaar.py'. Het slot ging na /bin/true weer open, en na een wachttime-out startte De Dagbundelaar toch, terwijl
-    de keten nog liep. Nu draait hij binnen het slot; bij een time-out start hij niet en staat dat in dagbundelaar.log.
-    RZ3-03: hij wacht 5400 seconden, langer dan de keten kan duren (test_keten.py rekent het na)."""
-    regel = cronregel("dagbundelaar.py")
-    assert regel.startswith("5 7 * * 1-5 /usr/bin/flock -w 5400 ") and "/bin/true" not in regel, regel
-    assert "na 5400 s niet vrij" in regel, "de melding in het logboek noemt dezelfde wachttijd"
+def test_rz4_04_dagbundelaar_zonder_eigen_cronregel_binnen_het_slot_van_de_keten():
+    """RZ2-03 (bouwcontrole RZ2, 21-10-2026): De Dagbundelaar startte na een wachttime-out toch, terwijl de keten nog
+    liep. RZ3-03 gaf hem een eigen regel die 5400 s op het slot wachtte. RZ4-04 (herstelcontrole van Codex, besluit van
+    de regie 22-10-2026): een handmatige ronde kan het slot 1800 s vasthouden, en dan kon hij te vroeg of te laat lopen.
+    Nu heeft hij geen eigen regel meer: hij is de laatste stap van keten.py (test_keten.py), en die regel draait binnen
+    het slot; krijgt de keten het slot niet, dan start ze niet."""
+    regels = [r for r in open(os.path.join(PLANNING, "gesprekken.cron"), encoding="utf-8").read().splitlines()
+              if r.strip() and not r.startswith("#")]
+    assert not [r for r in regels if "dagbundelaar" in r], "geen eigen cronregel meer voor De Dagbundelaar"
+    regel = cronregel("keten.py")
+    assert regel.startswith("0 7,13 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock ") and "/bin/true" not in regel, regel
     spoor, log = cron_draaien("vrij")
-    assert spoor == ["slot genomen: vrij", "python /runner/dagbundelaar.py", "slot vrij"], spoor
+    assert spoor == ["slot genomen: vrij", "python /runner/keten.py", "slot vrij"], spoor
     assert "niet gestart" not in log, log
     spoor, log = cron_draaien("bezet")
-    assert spoor == ["slot genomen: bezet"], f"na een time-out start De Dagbundelaar niet: {spoor}"
-    assert "De Dagbundelaar niet gestart" in log and "/gesprekken.lock" in log, log
+    assert spoor == ["slot genomen: bezet"], f"zonder slot start de keten niet: {spoor}"
+    # tegenproef op RZ4-04 (22-10-2026): zonder -E schreef een keten die het slot niet kreeg niets in keten.log
+    assert "gesprekken.lock na 1800 s niet vrij: keten niet gestart" in log, log
     spoor, log = cron_draaien("vrij", exit_python=1)
-    assert spoor == ["slot genomen: vrij", "python /runner/dagbundelaar.py", "slot vrij"] and "niet gestart" not in log, \
-        "een fout van De Dagbundelaar zelf is geen time-out"
+    assert "niet gestart" not in log, "een keten die liep en faalde, is geen keten die niet startte"
     assert "%" not in regel, "cron leest een % als einde van de opdracht"
     assert "\N{EM DASH}" not in regel and "\N{EN DASH}" not in regel
 
 
-def test_rz2_03_zetscript_zet_de_nieuwe_regel():
-    """Het zetscript (samenvoegen) zet de nieuwe regel, ook over het beheerde blok van voor RZ2-03 heen, en twee keer
-    samenvoegen geeft hetzelfde."""
-    spec = importlib.util.spec_from_file_location("gesprekken_cron_zetten", os.path.join(PLANNING, "gesprekken_cron_zetten.py"))
-    M = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(M)
+# Het vorige beheerde blok uit deze branch (be314cc, 22-10-2026), letterlijk: met de losse regel van De Dagbundelaar.
+PY, RN, LG = VM["python"], VM["runner"].rstrip("/"), VM["logmap"].rstrip("/")
+TIJDEN = "# 07:00 UTC is 09:00 Brussel tot en met 24-10-2026, vanaf 25-10 08:00; 13:00 UTC is 15:00, vanaf 25-10 14:00."
+# De ketenregel van nu (tegenproef op RZ4-04: met -E 75 en een regel in keten.log) en die van het vorige blok.
+KETEN = (f"0 7,13 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock {PY} {RN}/keten.py >> {LG}/keten.log 2>&1;"
+         f' if [ $? -eq 75 ]; then echo "$(date -u -Iseconds) slot /tmp/gesprekken.lock na 1800 s niet vrij: keten niet'
+         f' gestart" >> {LG}/keten.log; fi')
+KETEN_VORIG = f"0 7,13 * * * /usr/bin/flock -w 1800 /tmp/gesprekken.lock {PY} {RN}/keten.py >> {LG}/keten.log 2>&1"
+VORIG_BUNDEL =(f"5 7 * * 1-5 /usr/bin/flock -w 5400 -E 75 /tmp/gesprekken.lock {PY} {RN}/dagbundelaar.py >> {LG}/dagbundelaar.log 2>&1;"
+                f' if [ $? -eq 75 ]; then echo "$(date -u -Iseconds) slot /tmp/gesprekken.lock na 5400 s niet vrij: De Dagbundelaar'
+                f' niet gestart" >> {LG}/dagbundelaar.log; fi')
+LOS = [f"0 7 * * 1-5 {PY} {RN}/dagbundelaar.py >> {LG}/dagbundelaar.log 2>&1",
+       f"0 7,13 * * * {PY} {RN}/fathom_wacht.py >> {LG}/fathom_wacht.log 2>&1",
+       f"15 7,13 * * * {PY} {RN}/zoom_wacht.py >> {LG}/zoom_wacht.log 2>&1"]
+
+
+def test_rz4_04_zetscript_vervangt_het_vorige_blok_en_de_losse_regels():
+    """Het zetscript (samenvoegen) zet het nieuwe blok, met alleen de regel van de keten: over het vorige blok uit deze
+    branch heen (met de losse regel van De Dagbundelaar, ook met spaties achteraan) en over de drie oude losse regels.
+    Twee keer samenvoegen geeft hetzelfde; elke andere regel blijft staan."""
+    M = _zetscript()
     cron = open(os.path.join(PLANNING, "gesprekken.cron"), encoding="utf-8").read().splitlines()
-    py, rn, lg = VM["python"], VM["runner"].rstrip("/"), VM["logmap"].rstrip("/")
-    oud_blok = [M.BEGIN, "# 07:00 UTC is 09:00 Brussel tot en met 24-10-2026, vanaf 25-10 08:00; 13:00 UTC is 15:00, vanaf 25-10 14:00",
-                f"0 7,13 * * * /usr/bin/flock -w 1800 /tmp/gesprekken.lock {py} {rn}/keten.py >> {lg}/keten.log 2>&1",
-                f"5 7 * * 1-5 /usr/bin/flock -w 3600 /tmp/gesprekken.lock /bin/true; {py} {rn}/dagbundelaar.py >> {lg}/dagbundelaar.log 2>&1",
-                M.EINDE]
-    los = [f"0 7 * * 1-5 {py} {rn}/dagbundelaar.py >> {lg}/dagbundelaar.log 2>&1",
-           f"0 7,13 * * * {py} {rn}/fathom_wacht.py >> {lg}/fathom_wacht.log 2>&1",
-           f"15 7,13 * * * {py} {rn}/zoom_wacht.py >> {lg}/zoom_wacht.log 2>&1"]
-    for huidig, oude_regels in ((["MAILTO=''", f"* * * * * {py} {rn}/bode.py >> {lg}/bode.log 2>&1", ""] + oud_blok, 0),
-                                (["MAILTO=''"] + los, 3)):
+    bode = f"* * * * * {PY} {RN}/bode.py >> {LG}/bode.log 2>&1"
+    vorig = [M.BEGIN, TIJDEN, KETEN_VORIG, VORIG_BUNDEL, M.EINDE]
+    for huidig, oude_regels in ((["MAILTO=''", bode, ""] + vorig, 0),
+                                (["MAILTO=''", bode, ""] + [r + "  " if r.startswith(("#", "0", "5")) and r not in (M.BEGIN, M.EINDE) else r
+                                                            for r in vorig], 0),
+                                (["MAILTO=''", bode] + LOS, 3)):
         doel, oud = M.samenvoegen(huidig, cron)
         assert oud == oude_regels, (oud, huidig)
-        bundel = [r for r in doel if "dagbundelaar.py" in r and not r.startswith("#")]
-        assert bundel == [cronregel("dagbundelaar.py")], bundel
-        assert not any("/bin/true" in r for r in doel) and doel.count(M.BEGIN) == 1, doel
-        assert "MAILTO=''" in doel and M.samenvoegen(doel, cron) == (doel, 0), "twee keer samenvoegen geeft hetzelfde"
+        assert doel[doel.index(M.BEGIN):] == [M.BEGIN, TIJDEN, KETEN, M.EINDE], doel
+        assert not any("dagbundelaar" in r for r in doel), doel
+        assert "MAILTO=''" in doel and bode in doel and M.samenvoegen(doel, cron) == (doel, 0), "twee keer samenvoegen geeft hetzelfde"
+
+
+def _weigering(M, huidig, cron):
+    try:
+        M.samenvoegen(huidig, cron)
+    except ValueError as e:
+        return str(e)
+    raise AssertionError(f"aanvaard: {huidig}")
+
+
+def test_rz4_06_zetscript_weigert_een_blok_met_onbekende_inhoud():
+    """RZ4-06 (herstelcontrole van Codex, 22-10-2026): binnen een bestaand beheerd blok verving het zetscript alles, ook
+    een opdracht die er niet van ons is; die verdween dan stil uit de crontab. Nu vervangt het een blok alleen als zijn
+    inhoud precies een bekende vorm is: het huidige blok of het vorige uit deze branch. Anders weigert het, met de
+    gevonden regels: een regel van een gesprekkenrunner zoals voordien (een toewijzing wordt '<waarde>'), de tijden van
+    het blok voluit, en van een onbekende opdracht alleen haar tijdvelden, want de opdracht zelf kan een geheim
+    bevatten. Ook het blok van voor RZ2-03 (met /bin/true) en dat van de eerste bouw (3600 s) zijn geen bekende vorm:
+    deze branch stond nooit op de VM."""
+    M = _zetscript()
+    cron = open(os.path.join(PLANNING, "gesprekken.cron"), encoding="utf-8").read().splitlines()
+    nieuw = M.samenvoegen(["MAILTO=''"] + LOS, cron)[0]
+    blok = nieuw[nieuw.index(M.BEGIN):]
+    vreemd = f"30 6 * * * GEHEIM_PROEF=x {PY} /home/ubuntu/eigen/opruimen.sh --sleutel proefgeheim"
+    gevallen = {
+        "een vreemde opdracht in het huidige blok": blok[:3] + [vreemd] + blok[3:],
+        "een vreemde opdracht in het vorige blok": [M.BEGIN, TIJDEN, KETEN_VORIG, VORIG_BUNDEL, vreemd, M.EINDE],
+        "het vorige blok zonder de regel van De Dagbundelaar": [M.BEGIN, TIJDEN, KETEN_VORIG, M.EINDE],
+        "een andere wachttijd van de keten": [M.BEGIN, TIJDEN, KETEN.replace("-w 1800", "-w 900"), M.EINDE],
+        "zonder de regel met de tijden": [M.BEGIN, KETEN, M.EINDE],
+        "een leeg blok": [M.BEGIN, M.EINDE],
+        "een lege regel in het blok": [M.BEGIN, TIJDEN, "", KETEN, M.EINDE],
+        "ander commentaar in het blok": [M.BEGIN, TIJDEN, "# MAILTO=proefgeheim", KETEN, M.EINDE],
+        "het blok van voor RZ2-03": [M.BEGIN, TIJDEN, KETEN_VORIG, f"5 7 * * 1-5 /usr/bin/flock -w 3600 /tmp/gesprekken.lock /bin/true; "
+                                                               f"{PY} {RN}/dagbundelaar.py >> {LG}/dagbundelaar.log 2>&1", M.EINDE],
+        "het blok van de eerste bouw": [M.BEGIN, TIJDEN, KETEN_VORIG, VORIG_BUNDEL.replace("5400", "3600"), M.EINDE],
+    }
+    for naam, inhoud in gevallen.items():
+        melding = _weigering(M, ["MAILTO=''", ""] + inhoud, cron)
+        assert "onbekende inhoud in het beheerde blok" in melding, (naam, melding)
+        for geheim in ("GEHEIM_PROEF", "proefgeheim", "opruimen.sh", "MAILTO=", "/home/ubuntu/eigen"):
+            assert geheim not in melding, (naam, geheim, melding)
+        for r in inhoud[1:-1]:
+            if any(f"mijnagents-runner/{x}" in r for x in M.RUNNERS):
+                assert r.strip() in melding, (naam, r, melding)
+        if vreemd in inhoud:
+            assert "30 6 * * * <onbekende opdracht, niet getoond>" in melding, (naam, melding)
+    melding = _weigering(M, ["MAILTO=''", ""] + gevallen["ander commentaar in het blok"], cron)
+    assert TIJDEN in melding and "# (ander commentaar, niet getoond)" in melding, melding
 
 
 def _zetscript():
@@ -450,7 +513,9 @@ def test_bron_houdt_de_bestaande_grendels():
     bron = open(os.path.join(RUNNER, "dagbundelaar.py"), encoding="utf-8").read()
     assert '"mail-regisseur" in (it.get("van"), it.get("voor"))' in bron
     assert "LC.dag_heeft_dagboek(DAG, items)" in bron and 'or it.get("soort") == "locatie"' not in bron
-    assert "07:05 UTC" in bron and "gesprekken.lock" in bron, "Z14 punt 6: de docstring zegt wanneer hij draait"
+    assert "laatste stap van de ochtendketen" in bron and "keten.py" in bron and "gesprekken.lock" in bron, \
+        "Z14 punt 6 en RZ4-04: de docstring zegt wanneer hij draait"
+    assert "07:05" not in bron and "90 minuten" not in bron, "de eigen cronregel van voor RZ4-04 bestaat niet meer"
     assert "\N{EM DASH}" not in bron and "\N{EN DASH}" not in bron
 
 

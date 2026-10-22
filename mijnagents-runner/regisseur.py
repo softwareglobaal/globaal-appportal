@@ -92,8 +92,9 @@ RONDE_TOEGELATEN = {
 }
 # icloud-wacht, tekenaar en gezondheid-wacht draaien op de Mac (launchd), niet hier.
 NOOIT_RONDE = {"regisseur", "mijnagents-uitvoerder"}
-# Wat achter een slot draait, en hoe lang het hoogstens duurt (de time-outs van de cronregels): voor "probeer na".
-SLOTEN = {GESPREKKEN_SLOT: {"wat": "de gesprekkenketen", "agents": ("fathom-wacht", "zoom-wacht", "dagbundelaar"), "duur_min": 65},
+# Wat achter een slot draait, en hoe lang het hoogstens duurt (de time-outs van de cronregels): voor "probeer na". De
+# gesprekkenketen met De Dagbundelaar als laatste stap: hoogstens 4890 s (keten.py, RZ4-04), dus 85 minuten met marge.
+SLOTEN = {GESPREKKEN_SLOT: {"wat": "de gesprekkenketen", "agents": ("fathom-wacht", "zoom-wacht", "dagbundelaar"), "duur_min": 85},
           PLAUD_SLOT: {"wat": "De Plaudwacht", "agents": ("plaud-wacht",), "duur_min": 50}}
 PYTHON = os.path.expanduser("~/agents/.venv/bin/python")
 FLOCK, TIMEOUT = "/usr/bin/flock", "/usr/bin/timeout"

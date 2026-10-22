@@ -142,13 +142,16 @@ def aan_de_beurt(nu, statussen=None, keten=None, cron_tekst=None, bestaat=False)
     - bestaat: of ochtendbericht:<datum> al op het bord staat; None is onbekend en dan niet (een tweede maken kan niet
       ongedaan, wachten wel).
     - Vanaf 21:00 Brussel niet meer, met een nood.
-    - Aan de beurt als keten.json van vandaag geslaagd is (X3) en, op werkdagen, de dagbundelaar na het einde van die
-      geslaagde keten een afgeronde hartslag heeft (statussen: {naam: {status, ts}} uit de tabel status, None als
-      onbekend). Tot 21-10-2026 volstond een hartslag na het startmoment, ook een van een ronde die liep terwijl de keten
-      nog bezig was (RZ2-03). Slaagde de keten niet, dan staat zij onder wat ontbreekt, en De Dagbundelaar ook als die
-      niet na het einde van die keten klaar was (tegenproef RZ2-03, 22-10-2026). De grens is het einde van de keten van
-      vandaag; loopt ze nog, dan telt geen ronde; zonder keten van vandaag het geplande startmoment, nooit het einde van
-      een keten van gisteren. In het weekend draait de dagbundelaar niet (J19).
+    - Aan de beurt als keten.json van vandaag geslaagd is (X3) en, op werkdagen, De Dagbundelaar klaar is. Sinds RZ4-04
+      is hij de laatste stap van de ochtendketen zelf: staat in keten.json van vandaag de stap dagbundelaar met exit 0,
+      dan is hij klaar, met of zonder hartslag (die valt dan altijd vóór het einde van de keten). Een andere exit staat
+      onder wat ontbreekt. Zonder die stap (een keten die hem niet draaide), of na een stap die faalde, telt zoals
+      voordien een afgeronde hartslag na het einde van de keten (statussen: {naam: {status, ts}} uit de tabel status,
+      None als onbekend), van een ronde die De Regisseur daarna startte. Tot 21-10-2026 volstond een hartslag na het
+      startmoment, ook een van een ronde die liep terwijl de keten nog bezig was (RZ2-03). Slaagde de keten niet, dan
+      staat zij onder wat ontbreekt, en De Dagbundelaar ook als die niet klaar was (tegenproef RZ2-03, 22-10-2026). De
+      grens is het einde van de keten van vandaag; loopt ze nog, dan telt geen ronde; zonder keten van vandaag het
+      geplande startmoment, nooit het einde van een keten van gisteren. In het weekend draait de dagbundelaar niet (J19).
     - Om 10:30 Brussel komt het toch, met wat ontbreekt onder Onbekend.
     ontbreekt: wat er nu nog niet klaar is (ook voor --nu in regisseur.py, dat het moment negeert)."""
     lokaal = brussel(nu)
@@ -171,9 +174,19 @@ def aan_de_beurt(nu, statussen=None, keten=None, cron_tekst=None, bestaat=False)
         begin = (tijdstip(keten.get("start")) or tijdstip(keten.get("keten_id"))) if isinstance(keten, dict) else None
         van_vandaag = start_utc is not None and begin is not None and begin >= start_utc
         grens = tijdstip(keten.get("einde")) if van_vandaag else start_utc
-        if statussen is None:
+        # RZ4-04: de stap dagbundelaar in de keten van vandaag
+        stappen = keten.get("stappen") if van_vandaag else None
+        stap = stappen.get("dagbundelaar") if isinstance(stappen, dict) else None
+        code = stap.get("exit") if isinstance(stap, dict) else None
+        if _getal(code) and code == 0:
+            pass
+        elif statussen is not None and _klaar_na(statussen.get("dagbundelaar"), grens):
+            pass                                       # een ronde na het einde van de keten, door De Regisseur gestart
+        elif _getal(code):
+            ontbreekt.append(f"De Dagbundelaar eindigde in de gesprekkenketen met exit {code}")
+        elif statussen is None:
             ontbreekt.append("hartslag van De Dagbundelaar onbekend")
-        elif not _klaar_na(statussen.get("dagbundelaar"), grens):
+        else:
             ontbreekt.append("De Dagbundelaar had na de gesprekkenketen nog geen afgeronde ronde")
     uit["ontbreekt"] = ontbreekt
     if not ontbreekt:

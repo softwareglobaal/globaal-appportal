@@ -1,6 +1,9 @@
 """Runbook 'werkwijze-bijwerken': zet een nieuwe werkwijze op het bord van een agent,
 na goedkeuring door Mehdi. De vorige versie blijft bewaard (werkwijze_versie).
-Parameters: {"agent": "contracten-agent", "werkwijze": "<volledige nieuwe tekst>"}"""
+Parameters: {"agent": "contracten-agent", "werkwijze": "<volledige nieuwe tekst>", "mandaat": "<kaarttekst>"}
+Het mandaat is optioneel (RZ4-07, uitrol van regie-zoom release 1, 22-10-2026): werkwijze_naar_bord.py --voorstel
+geeft de eerste alinea onder ## Mandaat mee, zoals --zet die zet; anders bleef de kaarttekst oud. Zonder mandaat blijft
+de kaart zoals ze was."""
 import json
 import os
 import sys
@@ -39,8 +42,12 @@ def voer_uit(p):
                           toestemming="voorstel goedgekeurd door Mehdi", bron="runbook werkwijze-bijwerken")
         return (f"niet rechtstreeks op het bord: de regels van {agent} staan in code en JSON. Regelwijziging taak {t['id']} "
                 f"staat klaar voor de ontwikkelaar", pad)
+    inhoud = {"werkwijze": tekst, "overschrijf": True}
+    mandaat = p.get("mandaat")
+    if isinstance(mandaat, str) and mandaat.strip():
+        inhoud["mandaat"] = mandaat.strip()
     req = urllib.request.Request(f"{PLATFORM}/api/agent/{agent}/werkwijze",
-                                 data=json.dumps({"werkwijze": tekst, "overschrijf": True}).encode(),
+                                 data=json.dumps(inhoud).encode(),
                                  headers={"Content-Type": "application/json", "X-Agents-Token": _token()},
                                  method="POST")
     uit = json.loads(urllib.request.urlopen(req, timeout=20).read().decode())

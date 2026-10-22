@@ -1188,17 +1188,11 @@ def test_t30_planning():
     assert oud == 3, oud
     actief = [r for r in doel if r.strip() and not r.startswith("#") and not r.startswith("MAILTO")]
     keten = [r for r in actief if "keten.py" in r]
-    assert len(keten) == 1 and keten[0].startswith("0 7,13 * * * /usr/bin/flock -w 1800 /tmp/gesprekken.lock "), keten
+    assert len(keten) == 1 and keten[0].startswith("0 7,13 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock "), keten
+    assert "; if [ $? -eq 75 ]; then " in keten[0], "een keten die het slot niet kreeg, staat in keten.log (RZ4-04)"
     assert not any("fathom_wacht.py" in r or "zoom_wacht.py" in r for r in actief), "de losse regels zijn weg"
-    bundel = [r for r in actief if "dagbundelaar.py" in r]
-    # RZ2-03: De Dagbundelaar draait binnen het slot (niet meer na /bin/true), en een time-out staat in zijn logboek. Hoe
-    # lang hij wacht, rekent tests/test_keten.py na tegen de langste keten (RZ3-03); hier telt dat de regel uit
-    # gesprekken.cron ongewijzigd in het blok komt, met de wachttijd die daar staat.
-    wacht = re.findall(r"^5 7 \* \* 1-5 /usr/bin/flock -w (\d+) -E 75 /tmp/gesprekken\.lock ", "\n".join(cron), re.M)
-    assert len(wacht) == 1, "De Dagbundelaar wacht in gesprekken.cron een keer op het slot"
-    assert len(bundel) == 1 and bundel[0].startswith(
-        f"5 7 * * 1-5 /usr/bin/flock -w {wacht[0]} -E 75 /tmp/gesprekken.lock {py} {rn}/dagbundelaar.py "), bundel
-    assert "/bin/true" not in bundel[0] and "; if [ $? -eq 75 ]; then " in bundel[0], bundel
+    # RZ4-04: De Dagbundelaar heeft geen eigen regel meer; hij is de laatste stap van keten.py (tests/test_keten.py)
+    assert not [r for r in actief if "dagbundelaar" in r], actief
     assert f"* * * * * {py} {rn}/bode.py >> {lg}/bode.log 2>&1" in doel and "MAILTO=''" in doel and huidig[4] in doel
     begin, einde = doel.index(M.BEGIN), doel.index(M.EINDE)
     assert doel[begin] == "# begin gesprekken (beheerd door planning/gesprekken_cron_zetten.py)" and doel[einde] == "# einde gesprekken"

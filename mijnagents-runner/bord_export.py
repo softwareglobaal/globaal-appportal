@@ -17,8 +17,12 @@ Van een privé-item in klaargezet/ alleen tijd, soort, voor wie en status, nooit
 Dagverslag, in de inhoud van elk ander klaarzet-item en in het werkverslag wordt een regel met PRIVÉ, of een bevinding van
 De Plaudwacht in de oude vorm met ' · privé', "(privé)" (RZ2-01, voor wat van voor 22-10-2026 nog in het venster staat).
 Privé is ook een item met afdeling prive in de inhoud, en een regel met de titel of de verwijzing van zo'n item (RZ3-01).
+De markering telt in elke schrijfwijze (RZ4-01): prive, privé, Prive, PRIVE of PRIVÉ, als woord in hoofdletters of als
+eigen veld tussen ' · ' of ' | '. Van een oude Zoom-dagregel (van voor 21-10-2026) gaan de aantallen mee, en van haar
+lijst werk (met wie en waarover) alleen hoeveel (RZ4-01).
 Wat buiten het venster valt, schrijft de export niet opnieuw en wist ze ook niet: een bestand van voor RZ2-01 en RZ3-01
-blijft zoals het was, hier en in Data uit Mehdi, tot een afzonderlijk goedgekeurde opruiming.
+blijft zoals het was, hier en in Data uit Mehdi, tot een afzonderlijk goedgekeurde opruiming (het privacyproject, net
+als De Levenscoach en De Ontwikkelaar, die oude items nog voluit aan hun taalmodel geven).
 """
 import json
 import os
@@ -104,14 +108,28 @@ def inhoud_tekst(inhoud):
     return "\n".join("  " + r for r in s.splitlines()[:80])
 
 
+# RZ4-01 (herstelcontrole van Codex, 22-10-2026): de privémarkering in elke schrijfwijze. Als woord in hoofdletters waar
+# ook (de titel '... · PRIVÉ' of '... · PRIVE'), of als eigen veld tussen ' · ' of ' | ' in elke schrijfwijze ('Prive',
+# 'Privé', 'prive'), ook gevolgd door een verwijzing tussen haakjes of een volgende titel na een puntkomma of komma.
+# Niet: de veilige vorm 'privégesprek, N min', een telling '(1 privé)' of een naam als 'Mailwacht prive'. Tot dan
+# herkende het masker alleen 'PRIVÉ' en de kleine letters, en ging een titel met ' · Prive' voluit naar Data uit Mehdi.
+PRIVE_WOORD = re.compile(r"\bPRIV[EÉ]\b")
+PRIVE_VELD = re.compile(r"(?:^|[·|])\s*priv[eé]\s*(?=[·|(;,]|$)", re.I)
+
+
+def prive_markering(tekst):
+    return bool(PRIVE_WOORD.search(tekst or "") or PRIVE_VELD.search(tekst or ""))
+
+
 def is_prive(titel, inhoud):
     """RZ2-01: een klaarzet-item is privé als zijn inhoud prive draagt of zijn titel PRIVÉ, zoals De Fathomwacht, De
     Plaudwacht en De Zoomwacht het zetten. Tot 21-10-2026 schreef de export van zo'n item de titel (met wie en waarover)
     en de hele inhoud uit, en die gaat naar Data uit Mehdi.
     RZ3-01 (besluit van de regie, 22-10-2026: de veilige kant): ook een inhoud met afdeling prive is privé, zoals de
     dossierbeslissing (plaud/dossier.py) het zegt, ook bij prive=false. Tot 22-10-2026 zetten De Fathomwacht en De
-    Plaudwacht zo'n gesprek klaar met naam en onderwerp in titel en inhoud, zonder PRIVÉ."""
-    if "PRIVÉ" in (titel or ""):
+    Plaudwacht zo'n gesprek klaar met naam en onderwerp in titel en inhoud, zonder PRIVÉ.
+    RZ4-01: de markering in de titel in elke schrijfwijze (prive_markering)."""
+    if "PRIVÉ" in (titel or "") or prive_markering(titel):
         return True
     s = (inhoud or "").strip()
     try:
@@ -128,8 +146,37 @@ def prive_regel(r):
     of een oude bronregel van De Fathomwacht met afdeling prive ('<personen> | prive | <thema>'). Sindsdien schrijven ze
     van een privégesprek alleen wanneer en hoe lang.
     RZ3-01: ook de bevinding van De Fathomwacht tot 22-10-2026 voor een gesprek met afdeling prive en prive=false
-    ('<hoofdpersoon> · prive · <thema> · zekerheid ...'): die was nog niet privé."""
-    return "PRIVÉ" in r or " · privé" in r or " | prive | " in r or " · prive · " in r
+    ('<hoofdpersoon> · prive · <thema> · zekerheid ...'): die was nog niet privé.
+    RZ4-01: de markering in elke schrijfwijze, ook 'Prive' en 'PRIVE' (prive_markering)."""
+    return "PRIVÉ" in r or " · privé" in r or " | prive | " in r or " · prive · " in r or prive_markering(r)
+
+
+def oude_zoomregel(soort, inhoud):
+    """RZ4-01: is dit een dagregel van De Zoomwacht in de oude vorm (van voor 21-10-2026: met meetings, zonder telling,
+    zoals zoom_wacht.oude_telling ze herkent) met een lijst werk? Die lijst noemt met wie en waarover elk gesprek ging
+    dat de oude regel geen privé vond, en die regel was zwakker dan nu: een meeting was werk tenzij elke andere
+    deelnemer een privénaam had. Geeft de inhoud als dict, of None."""
+    if soort != "zoom":
+        return None
+    s = (inhoud or "").strip()
+    try:
+        d = json.loads(s) if s.startswith("{") else None
+    except ValueError:
+        return None
+    if not isinstance(d, dict) or "telling" in d or "meetings" not in d or not d.get("werk"):
+        return None
+    return d
+
+
+def zonder_zoomnamen(soort, inhoud):
+    """De inhoud van een klaarzet-item zoals ze naar de export gaat: van een oude Zoom-dagregel (oude_zoomregel) de
+    aantallen, en van werk alleen hoeveel. Elke andere inhoud blijft zoals ze is."""
+    d = oude_zoomregel(soort, inhoud)
+    if d is None:
+        return inhoud
+    werk = d["werk"]
+    aantal = len(werk) if isinstance(werk, list) else 1
+    return json.dumps(dict(d, werk=f"{aantal} stuks (namen en onderwerpen niet in de export)"), ensure_ascii=False)
 
 
 def prive_kenmerken(c):
@@ -208,8 +255,9 @@ def main():
                 uit.append(f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): {it['titel']}")
                 if it.get("verwijzing"):
                     uit.append(f"  - verwijzing: {it['verwijzing']}")
-                # RZ2-01: een bundel of Dagverslag van voor 21-10-2026 noemt een privé-item met zijn titel
-                uit.append(zonder_prive_regels(inhoud_tekst(it["inhoud"]), kenmerken))
+                # RZ2-01: een bundel of Dagverslag van voor 21-10-2026 noemt een privé-item met zijn titel; RZ4-01: een
+                # oude Zoom-dagregel noemt in werk met wie en waarover
+                uit.append(zonder_prive_regels(inhoud_tekst(zonder_zoomnamen(it["soort"], it["inhoud"])), kenmerken))
                 uit.append("")
             geschreven += schrijf(os.path.join(UIT, m, "klaargezet", f"{dag}.md"), "\n".join(uit))
     # noden en voorstellen per agent

@@ -15,6 +15,9 @@
   onderwerp of toelichting. Samen getoetst met De Dagbundelaar en bord_export: een herkenbare naam en een herkenbaar
   onderwerp staan nergens in de bundel, het Dagverslag, de werkverslagen of de export.
 - RZ2-02: zonder Fathom-sleutel geeft main() 1, zodat het script niet met exit 0 eindigt (zie ook test_keten.py).
+- RZ4-01 (deel release 1) en K4: het exportmasker herkent de privémarkering in elke schrijfwijze en toont van een oude
+  Zoom-dagregel geen namen; een nieuw privé-Zoomgesprek zet via De Levenscoach (bronnen_van) en de export geen naam of
+  onderwerp in Data uit Mehdi.
 
 Geen netwerk: het bord is nagebootst met BordNabootsing uit test_agentnorm.py, de databank is tijdelijk en komt uit
 init_db van mijnagents/app.py als Flask er is (in de CI altijd).
@@ -32,7 +35,7 @@ import tempfile
 import time
 import urllib.error
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 RUNNER = os.path.dirname(HIER)
@@ -905,6 +908,145 @@ def test_rz3_01_afdeling_prive_is_prive_over_de_hele_route():
     for waar, tekst in nagaan.items():
         for geheim in GEHEIM:
             assert geheim not in tekst, f"{geheim!r} staat in {waar}: {tekst[:2000]}"
+
+
+# ------------------------------------------------------------------------------------------------- RZ4-01 ---
+# Regels die een privé-item noemen, in elke schrijfwijze van de markering, en regels die moeten blijven staan.
+PRIVE_REGELS = [
+    "2026-10-20 22:00 Plaud: Proefpersoon Zeta · Proefonderwerp Omega · Prive",
+    "2026-10-20 22:00 Plaud: Proefpersoon Zeta · Proefonderwerp Omega · PRIVE",
+    "- transcript: 2026-10-20 22:00 Plaud: Proefpersoon Zeta · Proefonderwerp Omega · prive (Data uit Mehdi/Plaud/proef.md)",
+    "Toe te wijzen: 2026-10-20 22:00 Plaud: Proefpersoon Zeta · Privé; 2026-10-20T10:00 Fathom: Jan Klant · Dakkapel nakijken",
+    "Proefpersoon Zeta · Prive · Proefonderwerp Omega · zekerheid hoog",
+    "Proefpersoon Zeta · dossier geen (laag) · PRIVE · voor mehdi",
+    "Proefpersoon Zeta · dossier geen (laag) · Privé · voor mehdi",
+    "2026-10-20 20:00 Proefpersoon Zeta, Mehdi | Prive | Proefonderwerp Omega",
+    "2026-10-20 20:00 Proefpersoon Zeta, Mehdi | PRIVÉ | Proefonderwerp Omega",
+]
+GEWONE_REGELS = [
+    "- transcript: privégesprek, 25 min",
+    "Toe te wijzen: privégesprek, 25 min; privégesprek, duur onbekend",
+    "privégesprek · 40 min · voor mehdi",
+    "Zoom 20-10: 1 gesprekken (0 met Fathom, 1 alleen in Zoom), 40 min; 0 chatgesprekken",
+    "Zoom 2026-10-19: 6 berichten in 2 gesprek(ken) (1 privé), 2 meeting(s), 75 min",
+    "Mailwacht prive: 3 mails gelezen",
+    "2026-10-20T10:00 Fathom: Jan Klant · Dakkapel nakijken",
+    "2026-10-20 10:00 Jan Klant | regie | Dakkapel nakijken",
+]
+
+
+def test_rz4_01_prive_in_elke_schrijfwijze():
+    """RZ4-01, deel release 1 (herstelcontrole van Codex, 22-10-2026): het exportmasker herkende alleen 'PRIVÉ' in
+    hoofdletters en ' · privé', ' | prive | ' en ' · prive · ' in kleine letters. Een titel of regel met 'Prive', 'PRIVE'
+    of 'Privé' als veld (De Plaudwacht schreef de afdeling met een hoofdletter) ging voluit naar Data uit Mehdi. Nu
+    herkent het de markering in elke schrijfwijze, als woord in hoofdletters of als eigen veld tussen ' · ' of ' | ', ook
+    voor een verwijzing tussen haakjes of een volgende titel na een puntkomma. De veilige vorm 'privégesprek, N min', een
+    telling '(1 privé)' en een agentnaam blijven staan."""
+    import bord_export as E  # noqa: PLC0415
+    uit = E.zonder_prive_regels("\n".join(PRIVE_REGELS + GEWONE_REGELS)).split("\n")
+    assert uit == ["(privé)"] * len(PRIVE_REGELS) + GEWONE_REGELS, list(zip(PRIVE_REGELS + GEWONE_REGELS, uit))
+    for titel in PRIVE_REGELS[:2]:
+        assert E.is_prive(titel, json.dumps({"datum": DAG_RZ2, "prive": False})), titel
+    for titel in GEWONE_REGELS[3:5]:
+        assert not E.is_prive(titel, json.dumps({"datum": DAG_RZ2, "telling": "volledig"})), titel
+    assert E.is_prive("titel", json.dumps({"afdeling": "PRIVÉ"})) and E.is_prive("titel", json.dumps({"afdeling": "Prive"}))
+
+
+def _zoom_prive():
+    """Een nieuw privé-Zoomgesprek zoals De Zoomwacht het nu klaarzet, met haar eigen functies: het zoom-tekst-item voor
+    De Regisseur (tekst_item) en de dagregel voor Mehdi (dag_inhoud en dag_titel). Het gesprek heeft een herkenbare naam
+    en een herkenbaar onderwerp; het archief op de VM houdt het onderwerp in zijn naam."""
+    import zoom_wacht as ZW  # noqa: PLC0415
+    start = datetime(2026, 10, 20, 18, 0, tzinfo=timezone.utc)
+    ik = {"id": "u-mehdi", "email": EIGEN_ADRES, "pmi": "900000001"}
+    s = {"uuid": "proefsessie-zeta==", "start": start, "einde": start + timedelta(minutes=40),
+         "deelnemers": [{"naam": "Proefpersoon Zeta", "email": "zeta@proef.test"}, {"naam": "Mehdi", "id": "u-mehdi"}],
+         "onderwerp": "Proefonderwerp Omega", "nummer": "900000002", "host_id": "u-mehdi"}
+    archief = os.path.join(MAP, "zoom-data", "2026-10-20 2000 Zoom Proefonderwerp Omega [ab12cd34]")
+    x = {"s": s, "toestand": "vangnet: tekst bewaard", "prive": True, "archief": archief, "gesprek": True, "reden": "",
+         "leider": None}
+    tekst = dict(ZW.tekst_item(x, ik), van="zoom-wacht")
+    w = {"koppeling": {"gezien": []}, "onleesbaar": [], "chat_dag": {}, "ik": ik,
+         "bronnen": {b: "ok" for b in ZW.ZOOM_BRONNEN + ("fathom-archief", "fathom-api", "chat")}}
+    inhoud = ZW.dag_inhoud("2026-10-20", w, [x], "volledig", [])
+    dag = {"van": "zoom-wacht", "voor": "mehdi", "soort": "zoom", "sleutel": "", "titel": ZW.dag_titel(inhoud),
+           "uniek": "zoom:dag:2026-10-20", "inhoud": inhoud}
+    return tekst, dag
+
+
+# Een dagregel van De Zoomwacht van voor 21-10-2026 (de oude vorm: met meetings, zonder telling). Haar lijst werk noemde
+# mensen en onderwerp van elk gesprek dat de oude regel geen privé vond: een meeting was werk tenzij elke andere deelnemer
+# een privénaam had.
+OUDE_ZOOMREGEL = {"van": "zoom-wacht", "voor": "mehdi", "soort": "zoom", "sleutel": "2026-10-19", "uniek": "zoom:dag:2026-10-19",
+                  "titel": "Zoom 2026-10-19: 6 berichten in 2 gesprek(ken) (1 privé), 2 meeting(s), 75 min",
+                  "inhoud": {"datum": "2026-10-19", "berichten": 6, "gesprekken": 2, "prive_gesprekken": 1, "meetings": 2,
+                             "meeting_minuten": 75, "werk": ["Proefpersoon Zeta, Mehdi (Proefonderwerp Omega)",
+                                                             "Jan Klant (Dakkapel nakijken)"]}}
+
+
+def test_rz4_01_k4_zoom_prive_door_bronnen_van_en_de_export():
+    """K4 (ontwerpronde RZ5, voorwaarde voor release 1): een nieuw privé-Zoomgesprek zet via De Levenscoach (bronnen_van,
+    wat naar het taalmodel gaat) en via de export (zonder_prive_regels, is_prive) geen naam of onderwerp in Data uit
+    Mehdi. RZ4-01: ook een oude Zoom-dagregel niet, en geen item of regel met 'Prive' in een andere schrijfwijze. Van een
+    oude dagregel toont de export de aantallen, en van werk alleen hoeveel. Een werkgesprek in een nieuwe dagregel en
+    een gewone regel blijven staan. Oude items van andere agents langs De Levenscoach horen bij het privacyproject."""
+    tekst, dag = _zoom_prive()
+    for veld in ("titel", "verwijzing", "inhoud"):
+        for geheim in GEHEIM:
+            assert geheim not in json.dumps(tekst[veld], ensure_ascii=False), (veld, tekst)
+            assert geheim not in json.dumps(dag.get(veld) or "", ensure_ascii=False), (veld, dag)
+    assert tekst["titel"].endswith(" · PRIVÉ") and tekst["voor"] == "regisseur" and dag["voor"] == "mehdi", (tekst, dag)
+
+    # De Levenscoach: bronnen_van leest alles wat voor Mehdi klaarstaat (het bord filtert op voor=mehdi)
+    bak = [dict(it, id=i, status="klaar", inhoud=json.dumps(it["inhoud"], ensure_ascii=False)) for i, it in enumerate((tekst, dag), start=1)]
+    thuis, os.environ["HOME"] = os.environ.get("HOME"), tempfile.mkdtemp(prefix="thuis-")   # geen echte ~/agents/.env
+    try:
+        import levenscoach as L  # noqa: PLC0415
+    finally:
+        os.environ["HOME"] = thuis
+    gevraagd, echt = [], bord.call
+    bord.call = lambda pad, *a, **k: gevraagd.append(pad) or {"items": [it for it in bak if "voor=mehdi" not in pad or it["voor"] == "mehdi"]}
+    try:
+        bronnen = L.bronnen_van(["2026-10-20"])
+    finally:
+        bord.call = echt
+    assert gevraagd and all("voor=mehdi" in p for p in gevraagd), gevraagd
+    assert [it["soort"] for it in bronnen["2026-10-20"]] == ["zoom"], bronnen
+    for geheim in GEHEIM:
+        assert geheim not in json.dumps(bronnen, ensure_ascii=False), (geheim, bronnen)
+
+    # zonder_prive_regels: een bundel of Dagverslag die het zoom-tekst-item bij titel en verwijzing noemt
+    import bord_export as E  # noqa: PLC0415
+    regels = [f"- zoom-tekst: {tekst['titel']} ({tekst['verwijzing']})", f"Zoom: {dag['titel']}", f"Zoom: {OUDE_ZOOMREGEL['titel']}"]
+    assert E.zonder_prive_regels("\n".join(regels)).split("\n") == ["(privé)", regels[1], regels[2]]
+
+    # de export: de Zoom-items, een oude dagregel, een item met ' · Prive' en een Dagverslag en werkverslag die ze noemen
+    plaud = {"van": "plaud-wacht", "voor": "mehdi", "soort": "transcript", "sleutel": "", "uniek": "plaud:rz4",
+             "titel": PRIVE_REGELS[0], "verwijzing": "Data uit Mehdi/Plaud/2026-10-20 2200 Proefpersoon Zeta/transcript.md",
+             "inhoud": {"datum": DAG_RZ2, "start": "22:00", "prive": False, "personen": ["Proefpersoon Zeta"], "thema": "Proefonderwerp Omega"}}
+    verslag = "\n".join([f"Dagverslag {DAG_RZ2}: 3 bronnen in 1 bundel(s).", f"Zoom: {dag['titel']}", PRIVE_REGELS[3],
+                         "", f"Dossier (zonder dossier) op {DAG_RZ2}: 1 transcript", PRIVE_REGELS[2], GEWONE_REGELS[6]])
+    klaarzet = [tekst, dag, OUDE_ZOOMREGEL, plaud,
+                {"van": "dagbundelaar", "voor": "mehdi", "soort": "dagbundel", "sleutel": DAG_RZ2, "titel": f"Dagverslag {DAG_RZ2}",
+                 "uniek": f"dagverslag:{DAG_RZ2}", "inhoud": verslag}]
+    logboek = [{"naam": "plaud-wacht", "onderwerp": "opname 2026-10-20T22:00", "stap": "bevinding", "tekst": PRIVE_REGELS[4],
+                "detail": "afdeling Prive; Proefpersoon Zeta over het Proefonderwerp Omega"},
+               {"naam": "fathom-wacht", "onderwerp": "Fathom", "stap": "bron", "tekst": "2 gesprekken sinds 2026-10-06",
+                "detail": PRIVE_REGELS[7] + "\n" + GEWONE_REGELS[7]},
+               {"naam": "dagbundelaar", "onderwerp": f"dag {DAG_RZ2}", "stap": "bevinding", "tekst": "3 klaargezette bronnen",
+                "detail": verslag}]
+    gelezen = export(export_db("rz4-01"), klaarzet, logboek)
+    for pad, inhoud in gelezen.items():
+        for geheim in GEHEIM:
+            assert geheim not in inhoud, f"{geheim!r} staat in export {pad}: {inhoud[:2000]}"
+    deel = lambda *paden: "".join(t for pad, t in gelezen.items() if pad.startswith(os.path.join("export", *paden)))  # noqa: E731
+    zoom = deel("Zoomwacht", "klaargezet")
+    assert zoom.count("): (privé)") == 1 and dag["titel"] in zoom, zoom
+    assert OUDE_ZOOMREGEL["titel"] in zoom and "werk: 2 stuks (namen en onderwerpen niet in de export)" in zoom, zoom
+    assert "meetings: 2" in zoom and "Jan Klant" not in zoom, "van een oude dagregel de aantallen, van werk alleen hoeveel"
+    assert deel("Plaud", "klaargezet").count("): (privé)") == 1, deel("Plaud", "klaargezet")
+    assert "Jan Klant | regie | Dakkapel nakijken" in deel("Fathom", "werkverslag"), "een gewone regel blijft"
+    assert "Jan Klant · Dakkapel nakijken" in deel("Dagbundelaar", "dagverslagen"), deel("Dagbundelaar", "dagverslagen")
 
 
 if __name__ == "__main__":

@@ -11,13 +11,17 @@ geslaagde ochtendketen tellen. keten.json is het bewijs. Deze test legt vast:
   versie met einde null en geslaagd false; er blijft geen tijdelijk bestand achter;
 - stopt iemand de keten zelf (SIGTERM), dan stopt de lopende stap mee en zegt keten.json: niet geslaagd;
 - RZ2-02: de echte fathom_wacht.py zonder Fathom-sleutel, of met een sleutel die faalt, maakt de keten niet geslaagd;
-- RZ3-03: De Dagbundelaar wacht langer op het slot dan de langste keten plus tien minuten.
+- RZ4-04: De Dagbundelaar is de laatste stap van de ochtendketen zelf (eerste geplande uur, werkdagen in Brusselse
+  tijd), na De Fathomwacht en De Zoomwacht, ook als een van die faalde, met een eigen time-out; zijn stap staat in
+  keten.json, geslaagd blijft bij Fathom en Zoom, en De Regisseur (ochtend.py) leest die stap. Er is geen eigen
+  cronregel meer die op het slot wacht.
 
-Geen netwerk: de stappen zijn kleine nepscripts in een tijdelijke map. Voor RZ2-02 start het nepscript de echte
-fathom_wacht.py, met een bord dat alleen afdrukt en zonder echte .env-bestanden.
+Geen netwerk: de stappen zijn kleine nepscripts in een tijdelijke map, met een vaste klok. Voor RZ2-02 start het
+nepscript de echte fathom_wacht.py, met een bord dat alleen afdrukt en zonder echte .env-bestanden.
 Draaien: python3 mijnagents-runner/tests/test_keten.py
 """
 import io
+import itertools
 import json
 import os
 import signal
@@ -26,6 +30,7 @@ import sys
 import tempfile
 import time
 from contextlib import redirect_stdout
+from datetime import datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 RUNNER = os.path.dirname(HIER)
@@ -53,12 +58,25 @@ sys.exit(gedrag.get("exit", 0))
 """
 
 
+UTC = timezone.utc
+# Een vaste klok: elke keten start op een gekozen moment, elke volgende vraag naar de tijd is een seconde later. Zonder
+# start een donderdag om 13:00 UTC, de middagketen: zo hangt een proef niet af van het uur waarop ze draait.
+MIDDAG = datetime(2026, 10, 22, 13, 0, 5, tzinfo=UTC)
+OCHTEND = datetime(2026, 10, 22, 7, 0, 5, tzinfo=UTC)        # donderdag, de ochtendketen
+CRON_ECHT = os.path.join(RUNNER, "planning", "gesprekken.cron")
+
+
+def klok(start):
+    teller = itertools.count()
+    return lambda: start + timedelta(seconds=next(teller))
+
+
 class Proef:
     def __init__(self, gedrag):
         self.map = tempfile.mkdtemp(prefix="keten-")
         self.runners = os.path.join(self.map, "runners")
         os.makedirs(self.runners)
-        for runner in ("fathom_wacht.py", "zoom_wacht.py"):
+        for runner in ("fathom_wacht.py", "zoom_wacht.py", "dagbundelaar.py"):
             with open(os.path.join(self.runners, runner), "w", encoding="utf-8") as f:
                 f.write(NEP)
         self.proef = os.path.join(self.map, "gedrag.json")
@@ -70,8 +88,9 @@ class Proef:
             json.dump(gedrag, f)
         os.environ.update(KETEN_PROEF=self.proef, KETEN_SPOOR=self.spoor, KETEN_ZAG=self.zag)
 
-    def draai(self, stappen=None, nadruk=5):
-        oud = (K.HIER, K.KETEN, K.LOGMAP, K.PYTHON, K.STAPPEN, K.NADRUK, os.replace)
+    def draai(self, stappen=None, nadruk=5, start=MIDDAG, cron=CRON_ECHT, dagbundelaar=None):
+        oud = (K.HIER, K.KETEN, K.LOGMAP, K.PYTHON, K.STAPPEN, K.NADRUK, os.replace, K.nu,
+               getattr(K, "CRON", None), getattr(K, "DAGBUNDELAAR", None))
         self.vervangen = []
 
         def vervang(a, b):
@@ -79,14 +98,17 @@ class Proef:
             oud[6](a, b)
             json.load(open(b, encoding="utf-8"))   # na elke vervanging een hele versie
         K.HIER, K.KETEN, K.LOGMAP, K.PYTHON, K.NADRUK = self.runners, self.keten, self.logmap, sys.executable, nadruk
+        K.nu, K.CRON = klok(start), cron
         if stappen:
             K.STAPPEN = stappen
+        if dagbundelaar:
+            K.DAGBUNDELAAR = dagbundelaar
         os.replace = vervang
         try:
-            with redirect_stdout(io.StringIO()):
+            with redirect_stdout(io.StringIO()) as self.scherm:
                 code = K.main()
         finally:
-            K.HIER, K.KETEN, K.LOGMAP, K.PYTHON, K.STAPPEN, K.NADRUK, os.replace = oud
+            K.HIER, K.KETEN, K.LOGMAP, K.PYTHON, K.STAPPEN, K.NADRUK, os.replace, K.nu, K.CRON, K.DAGBUNDELAAR = oud
         return code, json.load(open(self.keten, encoding="utf-8"))
 
     def spoorregels(self):
@@ -246,25 +268,183 @@ def test_rz2_02_fathom_niet_gelezen_is_geen_geslaagde_keten():
         assert code == 1 and k["geslaagd"] is False, (gedrag, k)
 
 
-def test_rz3_03_dagbundelaar_wacht_langer_dan_de_keten_duurt():
-    """RZ3-03 (herstelcontrole van Codex, 22-10-2026): de keten kan tot 3960 seconden duren (per stap zijn time-out plus
-    de nadruk van dertig seconden tussen SIGTERM en SIGKILL), maar De Dagbundelaar wachtte maar 3600 seconden op het slot.
-    In dat randgeval startte hij niet en ontbrak het dagverslag zonder inhaalronde. Nu wacht hij langer dan de langste
-    keten plus tien minuten. Beide getallen komen uit de bestanden zelf: de time-outs en de nadruk uit keten.py, de
-    wachttijd uit de regel van De Dagbundelaar in planning/gesprekken.cron (ook in zijn melding bij een time-out)."""
+def test_rz4_04_dagbundelaar_als_laatste_stap_van_de_ochtendketen():
+    """RZ4-04 (herstelcontrole van Codex, besluit van de regie 22-10-2026): De Dagbundelaar had een eigen cronregel die
+    op het slot van de keten wachtte. Een handmatige ronde kan dat slot 1800 s vasthouden; dan wachtte ook de keten, en
+    kon De Dagbundelaar het slot vóór de keten krijgen (een dagverslag zonder de gesprekken van die ochtend) of na zijn
+    wachttijd afhaken. Nu is hij de laatste stap van keten.py zelf, in de ochtendketen op een werkdag: na De Fathomwacht en
+    De Zoomwacht, met zijn eigen logboek, en zijn stap staat in keten.json met exit en einde."""
+    p = Proef({})
+    code, k = p.draai(start=OCHTEND)
+    assert code == 0 and k["geslaagd"] is True, k
+    assert list(k["stappen"]) == ["fathom-wacht", "zoom-wacht", "dagbundelaar"], k
+    assert p.spoorregels() == ["fathom_wacht.py start", "zoom_wacht.py start", "dagbundelaar.py start"], p.spoorregels()
+    stap = k["stappen"]["dagbundelaar"]
+    assert set(stap) == {"exit", "einde"} and stap["exit"] == 0, stap
+    assert k["stappen"]["zoom-wacht"]["einde"] <= stap["einde"] <= k["einde"], "na Zoom, en de keten eindigt pas na hem"
+    assert "uitvoer van dagbundelaar.py" in open(os.path.join(p.logmap, "dagbundelaar.log"), encoding="utf-8").read()
+
+
+def test_rz4_04_dagbundelaar_ook_na_een_falende_stap():
+    """Een eerdere stap die faalt of te lang loopt, houdt De Dagbundelaar niet tegen: hij meldt zelf wat ontbreekt
+    (Zoom-dagregel ontbreekt). Faalt hij zelf, dan blijft 'geslaagd' bij De Fathomwacht en De Zoomwacht: het
+    ochtendbericht leest zijn stap apart (ochtend.py)."""
+    for gedrag in ({"fathom_wacht.py": {"exit": 1}}, {"zoom_wacht.py": {"exit": 2}}):
+        p = Proef(gedrag)
+        code, k = p.draai(start=OCHTEND)
+        assert code == 1 and k["geslaagd"] is False, (gedrag, k)
+        assert p.spoorregels()[-1] == "dagbundelaar.py start" and k["stappen"]["dagbundelaar"]["exit"] == 0, (gedrag, k)
+    p = Proef({"zoom_wacht.py": {"slaap": 60}})
+    code, k = p.draai(start=OCHTEND, stappen=(("fathom-wacht", "fathom_wacht.py", 30, "fathom_wacht.log"),
+                                              ("zoom-wacht", "zoom_wacht.py", 1, "zoom_wacht.log")))
+    assert k["stappen"]["zoom-wacht"]["exit"] == K.TIJDSLIMIET and k["stappen"]["dagbundelaar"]["exit"] == 0, k
+    p = Proef({"dagbundelaar.py": {"exit": 1}})
+    code, k = p.draai(start=OCHTEND)
+    assert code == 0 and k["geslaagd"] is True and k["stappen"]["dagbundelaar"]["exit"] == 1, k
+
+
+def test_rz4_04_dagbundelaar_alleen_in_de_ochtendketen_op_werkdagen():
+    """Alleen de keten van het eerste geplande uur (07:00 UTC uit planning/gesprekken.cron) draait De Dagbundelaar, ook
+    als ze tot 1800 s op het slot wachtte, en alleen van maandag tot vrijdag in Brusselse tijd. De middagketen, het
+    weekend, een keten met de hand buiten dat uur, of een planning die niet te lezen is: geen Dagbundelaar."""
+    gevallen = {
+        OCHTEND: True,
+        datetime(2026, 10, 22, 7, 30, 0, tzinfo=UTC): True,     # 1800 s gewacht op een handmatige ronde
+        datetime(2026, 10, 23, 7, 0, 5, tzinfo=UTC): True,      # vrijdag
+        datetime(2026, 10, 26, 7, 0, 5, tzinfo=UTC): True,      # maandag, de eerste dag van de wintertijd
+        MIDDAG: False,
+        datetime(2026, 10, 24, 7, 0, 5, tzinfo=UTC): False,     # zaterdag
+        datetime(2026, 10, 25, 7, 0, 5, tzinfo=UTC): False,     # zondag
+        datetime(2026, 10, 22, 6, 59, 0, tzinfo=UTC): False,    # met de hand, voor het geplande uur
+        datetime(2026, 10, 22, 8, 0, 5, tzinfo=UTC): False,     # met de hand, na het eerste geplande uur
+    }
+    for start, verwacht in gevallen.items():
+        p = Proef({})
+        code, k = p.draai(start=start)
+        assert code == 0 and ("dagbundelaar" in k["stappen"]) is verwacht, (start, k)
+        assert ("dagbundelaar.py start" in p.spoorregels()) is verwacht, (start, p.spoorregels())
+    p = Proef({})
+    code, k = p.draai(start=OCHTEND, cron=os.path.join(p.map, "bestaat-niet.cron"))
+    assert code == 0 and k["geslaagd"] is True and "dagbundelaar" not in k["stappen"], k
+    assert "dagbundelaar: niet in deze keten" in p.scherm.getvalue(), "de keten zegt in keten.log waarom niet"
+
+
+WOENSDAG_MIDDAG = datetime(2026, 10, 21, 13, 0, 5, tzinfo=UTC)
+
+
+def test_rz4_04_inhalen_als_de_ochtendketen_hem_niet_draaide():
+    """Tegenproef op RZ4-04 (22-10-2026): krijgt de ochtendketen het slot niet binnen 1800 s (een handmatige ronde die
+    langer loopt), dan start keten.py die ochtend niet, en de keten van 13:00 sloeg De Dagbundelaar over ('niet de
+    ochtendketen'): die dag draaide hij nergens. Nu haalt een latere keten op dezelfde Brusselse werkdag hem in als de
+    vorige keten (keten.json zoals het voor deze start stond) niet van vandaag is, of geen stap dagbundelaar met exit 0
+    heeft. Zonder leesbare vorige keten niet: dan is onbekend of hij al liep. Een tweede ronde op dezelfde dag is veilig:
+    De Dagbundelaar zet zijn bundels klaar op een vaste uniek."""
+    # 1. de ochtendketen van donderdag startte niet: de vorige keten is die van woensdag 13:00
+    p = Proef({})
+    code, k = p.draai(start=WOENSDAG_MIDDAG)
+    assert code == 0 and "dagbundelaar" not in k["stappen"], k
+    code, k = p.draai(start=MIDDAG)
+    assert code == 0 and list(k["stappen"]) == ["fathom-wacht", "zoom-wacht", "dagbundelaar"], k
+    assert k["stappen"]["dagbundelaar"]["exit"] == 0 and p.spoorregels()[-1] == "dagbundelaar.py start", p.spoorregels()
+    assert "dagbundelaar: inhaalronde" in p.scherm.getvalue(), p.scherm.getvalue()
+    # 2. de ochtendketen draaide hem met exit 0: de middagketen niet
+    p = Proef({})
+    p.draai(start=OCHTEND)
+    code, k = p.draai(start=MIDDAG)
+    assert "dagbundelaar" not in k["stappen"] and p.spoorregels().count("dagbundelaar.py start") == 1, (k, p.spoorregels())
+    assert "dagbundelaar: niet in deze keten (liep vandaag al in een keten)" in p.scherm.getvalue(), p.scherm.getvalue()
+    # 3. hij faalde in de ochtendketen: de middagketen draait hem opnieuw
+    p = Proef({"dagbundelaar.py": {"exit": 1}})
+    code, k = p.draai(start=OCHTEND)
+    assert k["stappen"]["dagbundelaar"]["exit"] == 1, k
+    with open(p.proef, "w", encoding="utf-8") as f:
+        json.dump({}, f)
+    code, k = p.draai(start=MIDDAG)
+    assert k["stappen"]["dagbundelaar"]["exit"] == 0 and p.spoorregels().count("dagbundelaar.py start") == 2, k
+    # 4. de ochtendketen stopte halverwege (zonder stap dagbundelaar): inhalen
+    p = Proef({})
+    p.draai(start=WOENSDAG_MIDDAG)
+    with open(p.keten, encoding="utf-8") as f:
+        half = json.load(f)
+    half.update(keten_id="2026-10-22T07:00:05+00:00", start="2026-10-22T07:00:05+00:00", einde=None, geslaagd=False,
+                stappen={"fathom-wacht": {"exit": 124, "einde": "2026-10-22T07:45:05+00:00"}})
+    with open(p.keten, "w", encoding="utf-8") as f:
+        json.dump(half, f)
+    code, k = p.draai(start=MIDDAG)
+    assert k["stappen"]["dagbundelaar"]["exit"] == 0, k
+    # 5. geen of een onleesbare vorige keten.json: niet, want onbekend
+    for inhoud in (None, "{half"):
+        p = Proef({})
+        if inhoud is not None:
+            os.makedirs(os.path.dirname(p.keten))
+            with open(p.keten, "w", encoding="utf-8") as f:
+                f.write(inhoud)
+        code, k = p.draai(start=MIDDAG)
+        assert "dagbundelaar" not in k["stappen"], (inhoud, k)
+        assert "geen leesbare vorige keten" in p.scherm.getvalue(), p.scherm.getvalue()
+    # 6. niet in het weekend, en niet voor het eerste geplande uur
+    for vorige, start in ((datetime(2026, 10, 23, 13, 0, 5, tzinfo=UTC), datetime(2026, 10, 24, 13, 0, 5, tzinfo=UTC)),
+                          (WOENSDAG_MIDDAG, datetime(2026, 10, 22, 6, 59, 0, tzinfo=UTC))):
+        p = Proef({})
+        p.draai(start=vorige)
+        code, k = p.draai(start=start)
+        assert "dagbundelaar" not in k["stappen"] and "dagbundelaar.py start" not in p.spoorregels(), (start, k)
+
+
+def test_rz4_04_dagbundelaar_met_eigen_time_out():
+    p = Proef({"dagbundelaar.py": {"slaap": 60}})
+    begin = time.monotonic()
+    code, k = p.draai(start=OCHTEND, dagbundelaar=("dagbundelaar", "dagbundelaar.py", 1, "dagbundelaar.log"))
+    assert time.monotonic() - begin < 20, "de time-out hield De Dagbundelaar niet tegen"
+    assert k["stappen"]["dagbundelaar"]["exit"] == K.TIJDSLIMIET and k["geslaagd"] is True and code == 0, k
+    assert "dagbundelaar.py sigterm" in p.spoorregels(), "eerst SIGTERM, zodat hij zijn hartslag kan afsluiten"
+    assert K.DAGBUNDELAAR[:3] == ("dagbundelaar", "dagbundelaar.py", 900) and K.DAGBUNDELAAR[3] == "dagbundelaar.log"
+
+
+def test_rz4_04_contract_met_de_regisseur():
+    """keten.json met de stap dagbundelaar, gelezen met de code van De Regisseur (koppelingen/ochtend.py). Tot RZ4-04
+    eiste ochtend.py een afgeronde hartslag van De Dagbundelaar na het einde van de keten. Nu De Dagbundelaar in de keten
+    loopt, valt zijn hartslag altijd vóór dat einde: het ochtendbericht kwam dan pas om 10:30, met De Dagbundelaar onder
+    Onbekend. Nu leest ochtend.py zijn stap: exit 0 is een afgeronde ronde, ook zonder hartslag; een andere exit staat
+    onder wat ontbreekt."""
+    sys.path.insert(0, os.path.join(RUNNER, "koppelingen"))
+    import ochtend as O  # noqa: PLC0415
+    cron = O.lees_cron()
+    p = Proef({})
+    p.draai(start=OCHTEND)
+    k = O.lees_keten(p.keten)
+    nu = O.tijdstip(k["einde"]) + timedelta(minutes=1)
+    tijdens = {"dagbundelaar": {"status": "klaar", "ts": O.tijdstip(k["stappen"]["dagbundelaar"]["einde"]) - timedelta(seconds=1)}}
+    for statussen in (tijdens, {}, None):
+        stand = O.aan_de_beurt(nu, statussen, k, cron, False)
+        assert stand["beurt"] and stand["ontbreekt"] == [] and stand["onbekend"] == [], (statussen, stand)
+    p = Proef({"dagbundelaar.py": {"exit": 1}})
+    p.draai(start=OCHTEND)
+    k = O.lees_keten(p.keten)
+    stand = O.aan_de_beurt(O.tijdstip(k["einde"]) + timedelta(minutes=1), tijdens, k, cron, False)
+    assert not stand["beurt"] and stand["ontbreekt"] == ["De Dagbundelaar eindigde in de gesprekkenketen met exit 1"], stand
+    laat = O.aan_de_beurt(datetime(2026, 10, 22, 8, 31, tzinfo=UTC), tijdens, k, cron, False)
+    assert laat["beurt"] and laat["onbekend"] == ["De Dagbundelaar eindigde in de gesprekkenketen met exit 1"], laat
+    # een ronde met de hand na die keten (De Regisseur, onder het slot) telt wel, zoals voordien
+    later = {"dagbundelaar": {"status": "klaar", "ts": O.tijdstip(k["einde"]) + timedelta(minutes=5)}}
+    assert O.aan_de_beurt(O.tijdstip(k["einde"]) + timedelta(minutes=6), later, k, cron, False)["beurt"]
+
+
+def test_rz4_04_planning_zonder_eigen_regel_voor_de_dagbundelaar():
+    """De planning heeft een regel voor de keten en geen voor De Dagbundelaar. Wacht de keten op een handmatige ronde, dan
+    start ze uiterlijk na de wachttijd van haar flock; die blijft binnen het eerste geplande uur, zodat de ochtendketen
+    De Dagbundelaar dan nog draait. De langste keten: de drie time-outs plus de nadruk per stap."""
     import re  # noqa: PLC0415
-    regels = [r for r in open(os.path.join(RUNNER, "planning", "gesprekken.cron"), encoding="utf-8").read().splitlines()
-              if r.strip() and not r.startswith("#") and "dagbundelaar.py" in r]
-    assert len(regels) == 1, regels
-    wachten = re.findall(r"flock -w (\d+) ", regels[0])
-    assert len(wachten) == 1, regels[0]
-    wacht = int(wachten[0])
-    langste_keten = sum(tijdslimiet for _, _, tijdslimiet, _ in K.STAPPEN) + len(K.STAPPEN) * K.NADRUK
-    assert wacht > langste_keten + 600, f"De Dagbundelaar wacht {wacht} s, de keten kan {langste_keten} s duren (plus 600 s marge)"
-    assert f"na {wacht} s niet vrij" in regels[0], "de melding bij een time-out noemt dezelfde wachttijd"
-    keten = [r for r in open(os.path.join(RUNNER, "planning", "gesprekken.cron"), encoding="utf-8").read().splitlines()
-             if r.strip() and not r.startswith("#") and "keten.py" in r]
-    assert len(keten) == 1 and "/tmp/gesprekken.lock" in keten[0] and "/tmp/gesprekken.lock" in regels[0], "hetzelfde slot"
+    regels = [r for r in open(CRON_ECHT, encoding="utf-8").read().splitlines() if r.strip() and not r.startswith("#")]
+    assert not [r for r in regels if "dagbundelaar" in r], regels
+    keten = [r for r in regels if "keten.py" in r]
+    assert len(keten) == 1 and keten[0].startswith("0 7,13 * * * /usr/bin/flock -w ") and "/tmp/gesprekken.lock" in keten[0], keten
+    # tegenproef op RZ4-04: een keten die het slot niet kreeg, staat in keten.log (flock -E 75 en een regel)
+    assert " -E 75 /tmp/gesprekken.lock " in keten[0] and "; if [ $? -eq 75 ]; then " in keten[0], keten
+    wacht = int(re.findall(r"flock -w (\d+) ", keten[0])[0])
+    assert wacht < K.OCHTENDVENSTER.total_seconds() == 3600, (wacht, K.OCHTENDVENSTER)
+    langste = sum(s[2] for s in K.STAPPEN + (K.DAGBUNDELAAR,)) + (len(K.STAPPEN) + 1) * K.NADRUK
+    assert langste == 4890, langste
 
 
 def test_bron():

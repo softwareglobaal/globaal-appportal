@@ -1,11 +1,11 @@
 # De gesprekkenketen op de VM (ontwerp regie-zoom v1.2, Z16 en 13.5 X3). keten.py draait De Fathomwacht en daarna De
 # Zoomwacht, elk met een eigen time-out (2700 en 1200 seconden), en schrijft mijnagents-data/keten.json.
 # flock: de keten en een handmatige ronde lopen nooit tegelijk; een handmatige ronde van fathom_wacht.py of zoom_wacht.py
-# loopt daarom altijd via /usr/bin/flock -w 1800 /tmp/gesprekken.lock. De Dagbundelaar draait binnen hetzelfde slot en
-# wacht er hoogstens 90 minuten op (RZ2-03; RZ3-03: langer dan de keten kan duren, 2 x 30 s nadruk inbegrepen 3960 s,
-# plus marge; tests/test_keten.py rekent het na). Krijgt hij het niet, dan eindigt flock met 75 (-E) en start hij niet;
-# dat staat dan in dagbundelaar.log. Geen % in een cronregel: cron leest dat als einde van de opdracht.
+# loopt daarom altijd via /usr/bin/flock -w 1800 /tmp/gesprekken.lock. De Dagbundelaar heeft geen eigen regel meer
+# (RZ4-04): hij is de laatste stap van de ochtendketen zelf (07:00 UTC, maandag tot vrijdag in Brussel), na Fathom en
+# Zoom, binnen hetzelfde slot; startte die keten niet of faalde hij erin, dan haalt een latere keten van dezelfde dag
+# hem in (keten.py en tests/test_keten.py). Krijgt de keten het slot niet binnen 1800 s, dan eindigt flock met 75 (-E)
+# en staat dat in keten.log. Geen % in een cronregel: cron leest dat als einde van de opdracht.
 # 07:00 UTC is 09:00 Brussel tot en met 24-10-2026, vanaf 25-10 08:00; 13:00 UTC is 15:00, vanaf 25-10 14:00.
 # Op de VM zetten: python3 mijnagents-runner/planning/gesprekken_cron_zetten.py (tonen), daarna met --zet
-0 7,13 * * * /usr/bin/flock -w 1800 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/keten.py >> /home/ubuntu/agents/keten.log 2>&1
-5 7 * * 1-5 /usr/bin/flock -w 5400 -E 75 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/dagbundelaar.py >> /home/ubuntu/agents/dagbundelaar.log 2>&1; if [ $? -eq 75 ]; then echo "$(date -u -Iseconds) slot /tmp/gesprekken.lock na 5400 s niet vrij: De Dagbundelaar niet gestart" >> /home/ubuntu/agents/dagbundelaar.log; fi
+0 7,13 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/keten.py >> /home/ubuntu/agents/keten.log 2>&1; if [ $? -eq 75 ]; then echo "$(date -u -Iseconds) slot /tmp/gesprekken.lock na 1800 s niet vrij: keten niet gestart" >> /home/ubuntu/agents/keten.log; fi
