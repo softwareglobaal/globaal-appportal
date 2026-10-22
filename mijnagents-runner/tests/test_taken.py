@@ -21,9 +21,11 @@ os.environ["BELLEN_UIT"] = "1"
 HIER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HIER))
 sys.path.insert(0, str(HIER / "koppelingen"))
+sys.path.insert(0, str(HIER / "tests"))
 import taken as T                     # noqa: E402
 import regisseur as R                 # noqa: E402
 import runbooks.werkwijze_bijwerken as WB   # noqa: E402
+from test_regisseur import SCHEMA_BRON, bord_db_bouwen   # noqa: E402  dezelfde bordtabellen als test_regisseur.py (R10)
 
 ok = fout = 0
 
@@ -68,7 +70,7 @@ R.voer_tool_uit_orig = R.voer_tool_uit
 
 
 def _nep_tool(naam, inp):
-    if naam == "agent_ronde":
+    if naam == "agent_ronde" and not _echte_ronde[0]:
         _rondes.append(dict(inp))
         return {"exit": _exit[0], "uitvoer": "klaar"}
     return R.voer_tool_uit_orig(naam, inp)
@@ -77,6 +79,7 @@ def _nep_tool(naam, inp):
 R.voer_tool_uit = _nep_tool
 R.TAKEN_SLOT = os.path.join(TMP, "taken.slot")
 _exit = [0]
+_echte_ronde = [False]          # True: agent_ronde gaat naar de echte ronde_starten (met een nagebootst subprocess)
 R.afspraak_nu = lambda kal, aid: ("er", "2026-10-12")          # Mehdi verplaatste de afspraak van 10-10 naar 12-10
 _g = R.taken_uitvoeren(nu + timedelta(hours=2))
 _t = T.haal(t1["id"])
@@ -94,10 +97,11 @@ check("een taak aan een geschrapte afspraak vervalt, zonder uitvoering", T.haal(
       and not any(r.get("dag") == "2026-10-20" for r in _rondes))
 
 t3 = T.plannen("agent_ronde", "agenda-wacht", {"naam": "agenda-wacht", "dag": "2026-10-21"}, nu)
-_exit[0] = 75
+# een ronde die echt draaide en mislukte; een bezet slot (exit 75) is een weigering die wacht, zie onder (REG-06)
+_exit[0] = 1
 R.taken_uitvoeren(nu + timedelta(minutes=1))
 _t3 = T.haal(t3["id"])
-check("een mislukte uitvoering (exit 75, slot bezet) is een nieuwe poging later, geen succes",
+check("een mislukte uitvoering (exit 1) is een nieuwe poging later, geen succes",
       _t3["status"] == "gepland" and _t3["pogingen"] == 1 and _t3["volgende"] > T._iso(nu), str(_t3))
 _moment = nu
 for _ in range(T.MAX_POGINGEN + 2):
@@ -107,6 +111,12 @@ _t3 = T.haal(t3["id"])
 check(f"na {T.MAX_POGINGEN} pogingen heet de taak mislukt en wordt ze niet meer geprobeerd",
       _t3["status"] == "mislukt" and _t3["pogingen"] == T.MAX_POGINGEN, str(_t3))
 
+# R10 (ontwerp regie-zoom v1.2): taak_plannen kijkt de runner na op het bord (runner_voor), dus eerst de bordtabellen uit
+# init_db, met agenda-wacht actief op de VM. agenda-grendels.yml installeert Flask (J6), dus in de CI altijd het echte
+# schema; lokaal zonder Flask dezelfde tabellen met de hand.
+bord_db_bouwen(os.environ["BORD_DB"], [("agenda-wacht", "De Agendawacht", "VM", 0), ("plaud-wacht", "De Plaudwacht", "VM", 0)])
+check(f"R10: het bordschema komt in de CI uit init_db (nu: {SCHEMA_BRON['bron']})",
+      SCHEMA_BRON["bron"] == "init_db" or not os.environ.get("CI"))
 _antw = R.voer_tool_uit_orig("taak_plannen", {"agent": "agenda-wacht", "wanneer": "2026-10-09T08:00", "reden": "titel nakijken",
                                               "dag": "2026-10-17"})
 check("de tool taak_plannen geeft het taak-ID terug zoals het opgeslagen is",
@@ -114,9 +124,26 @@ check("de tool taak_plannen geeft het taak-ID terug zoals het opgeslagen is",
 check("een taak voor een agent zonder runner wordt niet opgeslagen",
       R.voer_tool_uit_orig("taak_plannen", {"agent": "bestaat-niet", "wanneer": "2026-10-09T08:00", "reden": "x"}).get("ok") is False)
 
+# REG-06 (J15, T46): het slot van De Plaudwacht is bezet, flock geeft exit 75 en de ronde startte niet. Dat is een
+# weigering: de taak wacht zonder poging, ook na meer dan MAX_POGINGEN keer. Hier met de echte agent_ronde.
+t4 = T.plannen("agent_ronde", "plaud-wacht", {"naam": "plaud-wacht"}, nu)
+_echte_ronde[0] = True
+_run_orig = R.subprocess.run
+R.subprocess.run = lambda cmd, **k: R.subprocess.CompletedProcess(cmd, 75, "", "")
+try:
+    for _i in range(T.MAX_POGINGEN + 2):
+        _g4 = R.taken_uitvoeren(nu + timedelta(minutes=1 + 15 * _i))
+finally:
+    R.subprocess.run = _run_orig
+    _echte_ronde[0] = False
+_t4 = T.haal(t4["id"])
+check("een bezet slot (exit 75) kost geen poging: de taak wacht en blijft gepland",
+      _g4 == [(t4["id"], "wacht")] and _t4["status"] == "gepland" and _t4["pogingen"] == 0 and "Plaudwacht loopt" in _t4["bewijs"],
+      str((_g4, _t4)))
+
 # --- A10: een voorstel heet pas gezet met een voorstel-ID uit het bord --------------------------------------------
 b = sqlite3.connect(os.environ["BORD_DB"])
-b.execute("CREATE TABLE voorstel (id INTEGER PRIMARY KEY, naam TEXT, actie TEXT, doel TEXT, reden TEXT, parameters TEXT, "
+b.execute("CREATE TABLE IF NOT EXISTS voorstel (id INTEGER PRIMARY KEY, naam TEXT, actie TEXT, doel TEXT, reden TEXT, parameters TEXT, "
           "runbook TEXT, status TEXT DEFAULT 'open', besluit_door TEXT, besluit_ts TEXT, bewijs TEXT, ts TEXT)")
 b.commit()
 _bord_orig = R.bord
