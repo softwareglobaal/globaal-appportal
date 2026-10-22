@@ -61,7 +61,7 @@ STIL = (22, 7)
 # "oproep": een agent vraagt uitdrukkelijk om Mehdi te bellen (sinds 26-09-2026 De Mailregisseur bij dringende mail).
 # Dat vervangt voor nieuwe agents het woord "stil" in een signaaltitel, dat vroeger per ongeluk belde.
 # "ochtendbericht": het bericht van De Regisseur met hoogstens vijf beslissingen; alleen ochtend_sturen verstuurt het (J4).
-SOORTEN = ("signaal", "coaching", "verslag", "dagplan", "dagbundel", "ochtendbericht", "oproep")
+SOORTEN = ("signaal", "coaching", "verslag", "dagplan", "dagbundel", "ochtendbericht", "zoom-account", "oproep")
 # Keuze 1 van Mehdi (21-10-2026, in de chat met Claude; ontwerp regie-zoom v1.2, 13.4): optie A, twee vaste momenten.
 # 'ochtend-avond': het ochtendbericht en rond 17:00 de avondbundel; wat kan wachten zit in een van die twee, alleen
 # oproepen, alarmen en het bellen voor afspraken komen meteen. 'uit' is de terugval: alles los, zoals voor die dag.
@@ -933,6 +933,8 @@ def kort_item(it, namen):
         return f"mailupdate {m.group(1)}"
     if it.get("soort") == "dagbundel":
         return "dagverslag"
+    if it.get("soort") == "zoom-account":
+        return "Zoom-account van De Zoomwacht"
     if it.get("soort") in ("dagplan", "coaching"):
         return it["soort"]
     return f"{it.get('soort')} van {namen.get(it.get('van'), it.get('van'))}"

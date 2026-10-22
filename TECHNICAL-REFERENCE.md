@@ -2949,6 +2949,23 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   krijgt eenmalig een herziening zodra de gesprekkentabel leesbaar is en de dag binnen `TERUGBLIK` valt (X3, RZ15).
   Oude dagregels in de vorm van vóór 22-10 buiten het venster blijven als geschiedenis staan zonder migratie; De
   Regisseur telt uit `gesprek_log` en De Dagbundelaar kopieert alleen de dagtitel.
+- **Zoom-accountscan, fase 4b** (`koppelingen/zoom_account.py`, werkwijze 2.3): alleen de exacte bordregel
+  `ACCOUNTSCAN: aan` laat de scan binnen de bestaande Zoom-ronde lopen, na een bewezen identiteit. De aparte
+  `zoom.lees_account()` gebruikt alleen de leesapp en een vaste GET-padenlijst; `lees()` en de L5-grendel blijven zoals
+  ze zijn. Een volledige scan lukt hoogstens eenmaal per Brusselse ISO-week; een fout of gedeeltelijke scan wordt in
+  de volgende ketenronde opnieuw geprobeerd. Elke ronde vergelijkt vaste veilige accountvelden, het opnameblok,
+  apps en gevoelige beheerhandelingen. De opslag komt uit `plans/usage.plan_recording`, licenties uit de
+  `*_users_count`-velden van `/users/summary`; klassieke appscopes met twee delen blijven leesbaar. Ruwe Zoom-JSON,
+  tekstvelden en appnamen gaan niet naar het bord of de staat. Onbekende bronnen blijven `None` tot de uitvoer ze
+  uitdrukkelijk als onbekend toont. Adviezen ZA-01 tot ZA-15 gaan als handmatig uit te voeren voorstellen zonder runbook,
+  met maximaal drie nieuwe per week en een uitzondering voor hoge ernst. Alleen deze Zoom-adviezen blijven bij een leeg
+  runbook goedgekeurd staan; de andere agents behouden de oude foutmelding. Bevestigde klikpaden zijn direct, waarschijnlijke
+  paden dragen `te bevestigen`. ZA-08 vraagt een Supportticket, ZA-04 noemt de beperking tot werk-e-mailaanmelding,
+  ZA-05 noemt zonder pakketbewijs geen onbeschermde vergadering en ZA-12 leest de inactiviteitsvelden.
+  De Bode bundelt `zoom-account` op de vaste ochtend- en
+  avondmomenten; De Licentiewacht krijgt alleen een gebruiksmelding. `bord_export.py` beperkt de export tot delen en
+  adviescodes. Tests staan in `test_zoom_account.py`, `test_zoom_wacht.py`, `test_bode_regie.py` en
+  `test_uitvoerder_signaal.py`.
 - **Zoom-profielen** (`koppelingen/zoom.py`): `stack` is de Server-to-Server-app van de stack (`ZOOM_ACCOUNT_ID`,
   `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`), `lees` de alleen-lezende app "Zoomwacht lezen" (`ZOOM_LEES_CLIENT_ID`,
   `ZOOM_LEES_CLIENT_SECRET`, zo nodig `ZOOM_LEES_ACCOUNT_ID`). Zonder leesapp leest het profiel `lees` met de stack.

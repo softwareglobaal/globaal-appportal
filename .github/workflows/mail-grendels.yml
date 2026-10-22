@@ -6,12 +6,12 @@ name: mail-grendels
 
 on:
   push:
-    paths: ["mijnagents-runner/koppelingen/postvak.py", "mijnagents-runner/mail_*.py", "mijnagents-runner/dagbundelaar.py",
+    paths: ["mijnagents-runner/koppelingen/postvak.py", "mijnagents-runner/mail_*.py", "mijnagents-runner/dagbundelaar.py", "mijnagents-runner/bode.py",
             "mijnagents-runner/mailregels/**", "mijnagents-runner/werkwijze/mailwachten.json", "mijnagents-runner/tests/test_postvak.py",
             "mijnagents/app.py", "mijnagents/templates/mail.html", "mijnagents/test_mail.py", "mijnagents/eenmalig_mail_een_bron.py",
             "post/imapbron.py", ".github/workflows/mail-grendels.yml"]
   pull_request:
-    paths: ["mijnagents-runner/koppelingen/postvak.py", "mijnagents-runner/mail_*.py", "mijnagents-runner/dagbundelaar.py",
+    paths: ["mijnagents-runner/koppelingen/postvak.py", "mijnagents-runner/mail_*.py", "mijnagents-runner/dagbundelaar.py", "mijnagents-runner/bode.py",
             "mijnagents-runner/mailregels/**", "mijnagents-runner/werkwijze/mailwachten.json", "mijnagents-runner/tests/test_postvak.py",
             "mijnagents/app.py", "mijnagents/templates/mail.html", "mijnagents/test_mail.py", "mijnagents/eenmalig_mail_een_bron.py",
             "post/imapbron.py", ".github/workflows/mail-grendels.yml"]

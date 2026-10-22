@@ -33,6 +33,7 @@ import urllib.error
 import urllib.parse
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 RUNNER = os.path.dirname(HIER)
@@ -75,6 +76,8 @@ ZAAD = open(os.path.join(RUNNER, "werkwijze", "zoom-wacht.md"), encoding="utf-8"
 # proefadres en geen echt adres op een echt teamdomein. test_t25_bron_en_zaad toetst het zaad zelf.
 TEAMDOMEIN = "kantoor.test"
 WERKWIJZE = re.sub(r"^(Teamdomeinen[^:\n]*:\s*)", rf"\g<1>{TEAMDOMEIN}, ", ZAAD, count=1, flags=re.M)
+assert "ACCOUNTSCAN: aan" in WERKWIJZE
+WERKWIJZE = WERKWIJZE.replace("ACCOUNTSCAN: aan", "")  # bestaande gesprekkenproeven blijven zonder accountvragen
 assert WERKWIJZE != ZAAD, "het zaad heeft geen regel Teamdomeinen meer"
 FATHOM_WW = f"""# Werkwijze van De Fathomwacht
 
@@ -1059,6 +1062,116 @@ def test_k5_klaarzet_geeft_revisie_door():
 
 
 # ------------------------------------------------------------------------------------- ronde en werkwijze ---
+@bord_nodig
+def test_a00_a11_accountscan_verandert_gesprekken_niet_en_fout_breekt_niets():
+    met_scan = WERKWIJZE.replace("## Accountscan\n\n\n", "## Accountscan\n\nACCOUNTSCAN: aan\n")
+    assert ZW.ZA.scan_aan(met_scan)
+    echt_week, echt_wijziging = ZW.ZA.lees_week, ZW.ZA.lees_wijziging
+    gezien = []
+    try:
+        ZW.ZA.lees_week = lambda ik, pmi, klok: gezien.append(ik) or ({}, [], False, 0)
+        ZW.ZA.lees_wijziging = lambda *args: ({}, [], 0)
+        w = Wereld(werkwijze=met_scan)
+        dag_twintig(w, n_pmr=1, met_gepland=False, zonder_fathom=())
+        assert w.ronde(NU) is None
+        item, inhoud = w.dagregel("2026-10-20")
+        assert gezien == [IK["id"]] and item and inhoud["gesprekken"] == 1
+        rijen = w.bord.sql("SELECT uniek, sessie, dubbel_van FROM gesprek_log ORDER BY uniek")
+        met_staat = json.load(open(ZW.STAAT, encoding="utf-8"))
+        zonder = Wereld(werkwijze=WERKWIJZE)
+        dag_twintig(zonder, n_pmr=1, met_gepland=False, zonder_fathom=())
+        assert zonder.ronde(NU) is None
+        assert zonder.dagregel("2026-10-20")[1] == inhoud
+        assert zonder.bord.sql("SELECT uniek, sessie, dubbel_van FROM gesprek_log ORDER BY uniek") == rijen
+        zonder_staat = json.load(open(ZW.STAAT, encoding="utf-8"))
+        assert {k: v for k, v in met_staat.items() if k != "account"} == zonder_staat
+        assert "accountscan" not in (zonder.bord.status() or {}).get("detail", "").lower()
+        assert {k: v for k, v in w.bord.noden().items() if "account" not in k.lower()} == zonder.bord.noden()
+        ZW.ZA.lees_week = lambda *args: (_ for _ in ()).throw(RuntimeError("verzonnen fout"))
+        w2 = Wereld(werkwijze=met_scan)
+        dag_twintig(w2, n_pmr=1, met_gepland=False, zonder_fathom=())
+        assert w2.ronde(NU) is None
+        _, inhoud2 = w2.dagregel("2026-10-20")
+        assert inhoud2["gesprekken"] == inhoud["gesprekken"]
+        assert "Zoom-accountscan van deze week nog niet gelukt" in w2.bord.noden()
+        assert "verzonnen fout" not in w2.alle_tekst(), "de fouttekst mag geen privégegevens meenemen"
+    finally:
+        ZW.ZA.lees_week, ZW.ZA.lees_wijziging = echt_week, echt_wijziging
+
+
+@bord_nodig
+def test_za2_droog_account_en_ontbrekende_schrijfgrens_bellen_geen_accountscan():
+    met_scan = WERKWIJZE.replace("## Accountscan\n\n\n", "## Accountscan\n\nACCOUNTSCAN: aan\n")
+    echt_droog, echt_ronde = ZW.ZA.droog, ZW.ZA.ronde
+    gezien = []
+    try:
+        ZW.ZA.droog = lambda *args: gezien.append("droog")
+        zonder = Wereld(werkwijze=WERKWIJZE)
+        dag_twintig(zonder, n_pmr=1, met_gepland=False, zonder_fathom=())
+        staat_voor = open(ZW.STAAT, "rb").read()
+        assert zonder.ronde(NU, "--droog", "--account") is None
+        assert gezien == [] and open(ZW.STAAT, "rb").read() == staat_voor
+        assert not [p for p, payload in zonder.bord.oproepen if p.startswith("/api/") and payload is not None]
+        met = Wereld(werkwijze=met_scan)
+        dag_twintig(met, n_pmr=1, met_gepland=False, zonder_fathom=())
+        staat_voor = open(ZW.STAAT, "rb").read()
+        assert met.ronde(NU, "--droog", "--account") is None
+        assert gezien == ["droog"] and open(ZW.STAAT, "rb").read() == staat_voor
+        assert not [p for p, payload in met.bord.oproepen if p.startswith("/api/") and payload is not None]
+        ZW.ZA.ronde = lambda *args, **kwargs: gezien.append("ronde") or ""
+        # De accountregel alleen is geen toestemming om te schrijven; beide vaste werkwijzegrenzen ontbreken.
+        zonder_grenzen = Wereld(werkwijze="# Proef\n\n## Accountscan\n\nACCOUNTSCAN: aan\n")
+        dag_twintig(zonder_grenzen, n_pmr=1, met_gepland=False, zonder_fathom=())
+        assert zonder_grenzen.ronde(NU) is None
+        assert gezien == ["droog"], "zonder schrijfgrenzen mag ZA.ronde niet worden aangeroepen"
+    finally:
+        ZW.ZA.droog, ZW.ZA.ronde = echt_droog, echt_ronde
+
+
+def test_za6_werk_herhaalt_scannoden_bij_identiteitsstop_en_ontbrekende_grenzen():
+    met_scan = WERKWIJZE.replace("## Accountscan\n\n\n", "## Accountscan\n\nACCOUNTSCAN: aan\n")
+    zonder_grenzen = "# Proef\n\n## Accountscan\n\nACCOUNTSCAN: aan\n"
+    staat = {"account": {"scannoden": {"opslag_vol": True, "pakket_veranderd": True}}}
+    bronnen = {b: "ok" for b in ZW.ZOOM_BRONNEN}
+    bronnen.update({"chat": "ok", "fathom-api": "ok"})
+    onbekend = {"bronnen": bronnen, "koppeling": {}, "ik": None,
+                "identiteit": "onbekend", "identiteit_ok": False}
+    bewezen = {**onbekend, "ik": {"id": "proef-id", "pmi": PMI}, "identiteit": "eigen",
+               "identiteit_ok": True, "koppeling": {"gezien": []}, "sessies": {}, "fathom": [],
+               "onleesbaar": [], "chat": [], "eerste": "2026-10-20", "vandaag": "2026-10-26",
+               "timeout_gebruikt": False}
+    class Agent:
+        def log(self, *_):
+            pass
+    class R:
+        agent = Agent()
+        def __init__(self, werkwijze):
+            self.werkwijze = werkwijze
+            self.noden = []
+        def bron(self, *_):
+            pass
+        def nood(self, tekst, wie="mehdi"):
+            self.noden.append(tekst)
+    a = type("A", (), {"koppel_sinds": None})()
+    gevallen = ((met_scan, onbekend, True), (zonder_grenzen, bewezen, True),
+                (WERKWIJZE, onbekend, False),
+                (zonder_grenzen.replace("ACCOUNTSCAN: aan", "ACCOUNTSCAN: uit"), bewezen, False))
+    with patch.object(ZW, "staat_lezen", return_value=staat), patch.object(ZW, "personentabel", return_value={}), \
+         patch.object(ZW, "teamdomeinen", return_value=set()), \
+         patch.object(ZW.Z, "leesapp", return_value=True), patch.object(ZW.Z, "leesapp_fout", return_value=""), \
+         patch.object(ZW.Z, "leesapp_verboden", return_value=[]), \
+         patch.object(ZW, "telling", return_value=("gedeeltelijk", [])), \
+         patch.object(ZW, "koppel_wensen", return_value={}), patch.object(ZW, "beoordelen", return_value=[]), \
+         patch.object(ZW, "chat_verslag", return_value=""), patch.object(ZW, "leesapp_stand", return_value="proef"), \
+         patch.object(ZW.ZA, "ronde", side_effect=AssertionError("accountscan mocht niet lopen")):
+        for werkwijze, antwoord, verwacht in gevallen:
+            r = R(werkwijze)
+            with patch.object(ZW, "lezen", return_value=antwoord):
+                ZW.werk(r, a, NU)
+            assert (ZW.ZA.NOOD_OPSLAG_VOL in r.noden) is verwacht
+            assert (ZW.ZA.NOOD_PAKKET in r.noden) is verwacht
+
+
 def test_t25_bron_en_zaad():
     bron = open(os.path.join(RUNNER, "zoom_wacht.py"), encoding="utf-8").read()
     assert "ag.ronde(" in bron and "ag.hartslag(" not in bron, "N12: de ronde doet de hartslag"
@@ -1068,7 +1181,7 @@ def test_t25_bron_en_zaad():
     assert any("ander Fathom-account" in p for p in beslist), "13.1: de opnames van een ander account staan bij Wat Mehdi beslist"
     assert "\N{EM DASH}" not in ZAAD and "\N{EN DASH}" not in ZAAD and not bord.HTML.search(ZAAD), "N9 en NA44"
     assert "```" not in ZAAD and "~~~" not in ZAAD and len(ZAAD) >= 500
-    assert ZAAD.splitlines()[2].startswith("Versie 2.2 ("), ZAAD.splitlines()[2]
+    assert ZAAD.splitlines()[2].startswith("Versie 2.3 ("), ZAAD.splitlines()[2]
     # RZ4-02 en RZ4-04 (22-10-2026): het zaad zegt wat de code doet bij een vreemde Zoom-gebruiker, wanneer de leesapp
     # sleutels bewaart, en dat De Dagbundelaar de laatste stap van de ochtendketen is (geen eigen wachttijd meer)
     zaad = " ".join(ZAAD.split())

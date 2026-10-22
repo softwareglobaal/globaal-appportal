@@ -951,6 +951,39 @@ def test_t100_export_zonder_gesprekstekst():
     assert f"({len(ANTWOORD)} tekens, niet in de export)" in bode and "Mehdi Agents, 10:00" in bode, bode
 
 
+def test_a54_zoom_account_export_bevat_alleen_delen_en_codes():
+    pad = os.path.join(MAP, "export-account.db")
+    shutil.copy(SJABLOON_DB, pad)
+    ts = datetime.now(UTC).isoformat()
+    c = sqlite3.connect(pad)
+    c.execute("INSERT INTO agent(naam, label, werkwijze, actief, aangemaakt) VALUES(?,?,?,1,?)",
+              ("zoom-wacht", "De Zoomwacht", "# proef", ts))
+    inhoud = {"delen": {"beveiliging": "ok", "apps": "onbekend: gevoeligeredenproef"}, "adviezen": [{"code": "ZA-04"}],
+              "beveiliging": {"tweestaps": "uitgevoeligeproef"}}
+    c.execute("INSERT INTO klaarzet(van,voor,soort,sleutel,titel,inhoud,uniek,status,ts) VALUES(?,?,?,?,?,?,?,?,?)",
+              ("zoom-wacht", "mehdi", "zoom-account", "", "Zoom-account proef", json.dumps(inhoud),
+               "zoom-account:2026-W44", "klaar", ts))
+    c.execute("INSERT INTO voorstel(naam,actie,doel,reden,parameters,runbook,ts) VALUES(?,?,?,?,?,?,?)",
+              ("zoom-wacht", "Zoom: tweestapsverificatie aanzetten", "gevoeligdoelproef", "gevoeligredenproef",
+               json.dumps({"zoom_advies": "ZA-04"}), "", ts))
+    c.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,detail,ts) VALUES(?,?,?,?,?,?)",
+              ("zoom-wacht", "Zoom-account", "bron", "gevoeligtekstproef", "gevoeligdetailproef", ts))
+    c.commit()
+    c.close()
+    E.DB, E.DATA, E.UIT = pad, MAP, os.path.join(MAP, "export-account")
+    with redirect_stdout(io.StringIO()):
+        E.main()
+    gelezen = []
+    for wortel, _, bestanden in os.walk(E.UIT):
+        for b in bestanden:
+            if os.sep + "Zoomwacht" + os.sep in os.path.join(wortel, b):
+                gelezen.append(open(os.path.join(wortel, b), encoding="utf-8").read())
+    samen = "\n".join(gelezen)
+    assert "ZA-04" in samen and "beveiliging: ok" in samen and "apps: onbekend" in samen
+    assert all(x not in samen for x in ("uitgevoeligeproef", "gevoeligdoelproef", "gevoeligredenproef",
+                                        "gevoeligeredenproef", "gevoeligtekstproef", "gevoeligdetailproef")), samen
+
+
 # ----------------------------------------------------------------------------------- BOD-1 tot BOD-5 ---
 # Bevestigde bevindingen van de tegenlezing van fase 3 (21-10-2026), elk eerst als falende toets op de code van toen.
 def test_bod1_overgang_naar_de_bundelstand_verliest_niets():
@@ -1588,6 +1621,16 @@ def test_rz4_03_kan_ik_de_lopende_bundel_niet_aanvullen_dan_schuift_ze_niet_op()
 
 
 # ------------------------------------------------------------------------------------------------ droog ---
+def test_a47_zoom_account_alleen_op_vaste_momenten():
+    it = {"id": 481, "van": "zoom-wacht", "soort": "zoom-account", "titel": "Zoom-account week 44",
+          "voor": "mehdi", "uniek": "zoom-account:2026-W44", "status": "klaar"}
+    assert B.nieuwe_items([it], {"laatste_id": 480}, []) == [it]
+    assert B.kort_item(it, LABELS) == "Zoom-account van De Zoomwacht"
+    assert B.stand_bundelen(WERKWIJZE) == "ochtend-avond"
+    assert B.is_bundelwerk(it) and not B.is_alarm(it)
+    assert B.apart(it, "ochtend-avond") and not B.apart(it, "uit")
+
+
 def test_droog_stuurt_niets_en_schrijft_niets():
     w = t70_wereld()
     voor = open(B.STAAT, "rb").read()

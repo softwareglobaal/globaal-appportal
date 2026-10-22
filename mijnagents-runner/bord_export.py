@@ -220,6 +220,8 @@ def main():
         d = be(r["ts"])
         if d:
             tekst, detail = zonder_gesprekstekst(r["onderwerp"], r["tekst"], r["detail"] or "")
+            if r["onderwerp"] == "Zoom-account":
+                tekst, detail = "Accountscan uitgevoerd; details staan op het bord.", ""
             # RZ2-01: een regel die een privé-item bij naam noemt, ook in een oude regel die nog in het venster staat. Noemt
             # de tekst een privégesprek in de oude vorm, dan valt ook het detail weg: daar stond de reden (met wie en waarom).
             if any(prive_regel(t) for t in (tekst or "").split("\n")):
@@ -249,6 +251,21 @@ def main():
         for dag, items in dagen.items():
             uit = [f"# Klaargezet door {m} op {dag}", "", f"{len(items)} items.", ""]
             for it in items:
+                if it["soort"] == "zoom-account":
+                    try:
+                        inhoud = json.loads(it["inhoud"] or "{}")
+                        delen = inhoud.get("delen") or {}
+                        codes = [a.get("code") for a in inhoud.get("adviezen", []) if isinstance(a, dict)]
+                        codes = [x for x in codes if isinstance(x, str) and re.fullmatch(r"ZA-\d{2}", x)]
+                        deeltekst = ", ".join(f"{k}: {'onbekend' if v.startswith('onbekend') else 'ok'}"
+                                               for k, v in delen.items()
+                                               if k in ("beveiliging", "opnames", "ai", "licenties", "apps", "gebruik")
+                                               and isinstance(v, str) and (v == "ok" or v.startswith("onbekend:")))
+                    except (ValueError, TypeError, AttributeError):
+                        deeltekst, codes = "", []
+                    uit += [f"## {be(it['ts']).strftime('%H:%M')} Zoom-account voor {it['voor']} ({it['status']})",
+                            "", f"Delen: {deeltekst or 'zie bord'}", f"Adviescodes: {', '.join(codes) or 'zie bord'}", ""]
+                    continue
                 if is_prive(it["titel"], it["inhoud"]):
                     uit += [f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): (privé)", ""]
                     continue
@@ -272,13 +289,21 @@ def main():
             uit.append(f"| {'ja' if r['open'] else 'opgelost'} | {d.strftime('%d-%m %H:%M') if d else ''} | {r['wie']} | {r['tekst'][:200]} |")
         geschreven += schrijf(os.path.join(UIT, m, "noden.md"), "\n".join(uit) + "\n")
     vs = defaultdict(list)
-    for r in c.execute("select naam, actie, doel, reden, runbook, status, besluit_door, ts from voorstel order by ts desc limit 500"):
+    for r in c.execute("select naam, actie, doel, reden, parameters, runbook, status, besluit_door, ts from voorstel order by ts desc limit 500"):
         vs[r["naam"]].append(r)
     for naam, lijst in vs.items():
         m = MAP.get(naam) or veilig(re.sub(r"^De ", "", (agents.get(naam) or {}).get("label") or naam))
         uit = [f"# Voorstellen van {m}", "", "| wanneer | status | actie | doel | reden | runbook | besluit door |", "|---|---|---|---|---|---|---|"]
         for r in lijst:
             d = be(r["ts"])
+            if naam == "zoom-wacht" and (r["actie"] or "").startswith("Zoom: ") and not r["runbook"]:
+                try:
+                    code = json.loads(r["parameters"] or "{}").get("zoom_advies")
+                except (ValueError, TypeError):
+                    code = None
+                if isinstance(code, str) and re.fullmatch(r"ZA-\d{2}", code):
+                    uit.append(f"| {d.strftime('%d-%m %H:%M') if d else ''} | {r['status']} | {code} | op het bord | op het bord |  |  |")
+                    continue
             uit.append(f"| {d.strftime('%d-%m %H:%M') if d else ''} | {r['status']} | {r['actie'][:80]} | {(r['doel'] or '')[:60]} | {(r['reden'] or '')[:80]} | {r['runbook'] or ''} | {r['besluit_door'] or ''} |")
         geschreven += schrijf(os.path.join(UIT, m, "voorstellen.md"), "\n".join(uit) + "\n")
     # Regisseur: gesprekken met Mehdi, zonder vraag- of antwoordtekst (H1): die blijven op het bord, op de VM

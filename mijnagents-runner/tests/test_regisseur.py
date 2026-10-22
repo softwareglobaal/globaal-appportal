@@ -52,6 +52,7 @@ for _pad in (HIER, RUNNER, os.path.join(RUNNER, "koppelingen")):
 import bord as B  # noqa: E402
 import controle_agenten as C  # noqa: E402
 import ochtend as O  # noqa: E402
+import zoom_account as ZA  # noqa: E402
 import regisseur as R  # noqa: E402
 import taken as T  # noqa: E402
 import whatsapp  # noqa: E402
@@ -1654,6 +1655,22 @@ def test_eigen3_een_lijst_voor_het_eigen_fathom_account():
     assert R.MEHDI_FATHOM_ADRESSEN == frozenset({EIGEN_ADRES, WERK_ADRES}), "de proef zet de lijst via FATHOM_MEHDI_ADRESSEN"
     assert R._eigen_account({"recorded_by": {"email": "collega@kantoor.test"}}) is False
     assert R._eigen_account({"recorded_by": {"email": " Eigen@Mehdi.TEST "}}) is True
+
+
+def test_a51_hoogste_zoom_adviezen_zijn_de_twee_aparte_punten():
+    adv = [{"code": code, "ernst": ernst, "toestand": "open", "stand": {"proef": True}}
+           for code, ernst in (("ZA-01", "hoog"), ("ZA-04", "hoog"), ("ZA-02", "middel"))]
+    gekozen, _ = ZA.te_versturen(adv, [], datetime(2026, 10, 26, 7, tzinfo=UTC))
+    voorstellen = [{"id": 201 + i, "naam": "zoom-wacht", "label": "De Zoomwacht", "actie": ZA.ACTIES[a["code"]],
+                   "ts": "2026-10-26T07:00:00+00:00", "parameters": "{}"}
+                  for i, a in enumerate(gekozen)]
+    b = {"nu": datetime(2026, 10, 26, 8, tzinfo=UTC), "vorig": {"hoogste_voorstel": 200},
+         "voorstellen": voorstellen, "mail": None, "dagverslag": None, "noden": []}
+    punten = O.kandidaten(b)
+    apart = [p for p in punten if p["soort"] == "voorstel"]
+    assert [p["ref"] for p in apart] == ["voorstel:202", "voorstel:203"], apart
+    assert all(any(ZA.ACTIES[code] in p["wat"] for code in ("ZA-01", "ZA-04")) for p in apart), apart
+    assert all(ZA.ACTIES["ZA-02"] not in p["wat"] for p in apart), apart
 
 
 if __name__ == "__main__":

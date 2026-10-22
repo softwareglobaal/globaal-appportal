@@ -25,6 +25,7 @@ Grendels (13.6): een token van het profiel lees met een recht uit 'Nooit aanvink
 geweigerd, niet bewaard en nooit gebruikt (VerbodenRecht); lees() leest dan met de app van de stack en
 leesapp_verboden() noemt het recht. Chatberichten (/chat/users/<id>/messages) nooit met de leesapp: die krijgt dat recht
 bewust niet, het tellen van chatberichten blijft op de app van de stack (EIGEN-1).
+Grendel 4b: accountvragen gaan alleen als GET via lees_account(), de vaste lijst ACCOUNT_PADEN en de leesapp.
 Het Zoom-transcript (cloud_recording:read:meeting_transcript:admin) staat ook onder Nooit aanvinken en wordt sinds RZ3-04
 (22-10-2026) geweigerd zoals de andere, tot Mehdi over dat recht beslist (TOT_MEHDI_BESLIST); tot dan gaf het alleen een
 melding en las de leesapp ermee. Weigert Zoom een download, dan is dat GeenRecht bij download(), met het recht dat Zoom
@@ -82,6 +83,18 @@ class GeenRecht(ZoomFout):
         self.scope = scope or "onbekend recht"
         self.http, self.zoomcode = http, zoomcode
         super().__init__(f"geen recht: {self.scope}")
+
+
+class AccountFout(ZoomFout):
+    """Een accountantwoord zonder vrije fouttekst van Zoom."""
+
+    def __init__(self, http=None, zoomcode=None, reden=""):
+        self.http, self.zoomcode = http, zoomcode
+        self.reden = reden if reden in ("niet gevonden", "onleesbaar", "afgekapt", "limiet van Zoom") else ""
+        tekst = f"HTTP {http}" if isinstance(http, int) else (self.reden or "account niet leesbaar")
+        if isinstance(zoomcode, int):
+            tekst += f" (Zoom-code {zoomcode})"
+        super().__init__(tekst)
 
 
 class Geweigerd(ZoomFout):
@@ -354,6 +367,127 @@ def lees_alles(pad, params, sleutel, profiel="lees"):
         if not d.get("next_page_token"):
             return uit
         p["next_page_token"] = d["next_page_token"]
+
+
+# Fase 4b: accountvragen lopen uitsluitend langs deze tweede, nauwe grendel.
+# De bestaande L5-grendel in toegestaan() en lees() blijft ongewijzigd.
+ACCOUNT_PADEN = (
+    r"/users", r"/users/summary", r"/users/[^/]+/settings",
+    r"/accounts/me/settings", r"/accounts/me/lock_settings", r"/meetings/\d+",
+    r"/roles", r"/groups", r"/report/daily", r"/report/users",
+    r"/report/cloud_recording", r"/report/activities", r"/report/operationlogs",
+    r"/accounts/me/recordings", r"/meetings/meeting_summaries",
+    r"/accounts/me/plans", r"/accounts/me/plans/usage", r"/accounts/me/billing/invoices",
+    r"/marketplace/apps", r"/marketplace/apps/[A-Za-z0-9_-]{6,64}",
+)
+PAUZE = 0.5
+_ACCOUNT_PARAMS = {
+    "/users": {"status", "page_size", "next_page_token"},
+    "/accounts/me/settings": {"option"},
+    "/groups": {"page_size", "next_page_token"},
+    "/report/daily": {"year", "month"},
+    "/report/users": {"type", "from", "to", "page_size", "next_page_token"},
+    "/report/cloud_recording": {"from", "to", "page_size", "next_page_token"},
+    "/report/activities": {"from", "to", "page_size", "next_page_token"},
+    "/report/operationlogs": {"from", "to", "page_size", "next_page_token"},
+    "/accounts/me/recordings": {"from", "to", "page_size", "next_page_token"},
+    "/meetings/meeting_summaries": {"from", "to", "page_size", "next_page_token"},
+    "/marketplace/apps": {"type", "page_size", "next_page_token"},
+}
+_ACCOUNT_OPTIONS = {"security", "meeting_security", "recording_authentication", "meeting_authentication"}
+_ACCOUNT_APP_TYPES = {"account_added", "account_created", "active_requests", "restricted_apps", "approved_apps"}
+
+
+def account_toegestaan(pad, params=None, methode="GET"):
+    """Controleer pad en query voor token of netwerk ooit worden geraadpleegd."""
+    if methode != "GET" or not isinstance(pad, str) or not _VAST["id"]:
+        return False
+    if "?" in pad or "#" in pad or "%" in pad or ".." in pad or "//" in pad:
+        return False
+    if not any(re.fullmatch(patroon, pad) for patroon in ACCOUNT_PADEN):
+        return False
+    if pad.startswith("/users/") and pad.endswith("/settings") and pad != f"/users/{_VAST['id']}/settings":
+        return False
+    if re.fullmatch(r"/meetings/\d+", pad) and pad.split("/")[-1] not in _VAST["nummers"]:
+        return False
+    if params is not None and not isinstance(params, dict):
+        return False
+    toegestaan_params = _ACCOUNT_PARAMS.get(pad, set())
+    if set(params or {}) - toegestaan_params:
+        return False
+    for k, v in (params or {}).items():
+        v = str(v)
+        if k == "option" and v not in _ACCOUNT_OPTIONS:
+            return False
+        if k == "status" and v not in {"active", "inactive", "pending"}:
+            return False
+        if k == "type" and v not in (_ACCOUNT_APP_TYPES if pad == "/marketplace/apps" else {"active", "inactive"}):
+            return False
+        if k in {"from", "to"} and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+            return False
+        if k in {"year", "month", "page_size"} and (not v.isascii() or not v.isdecimal() or
+                not 1 <= int(v) <= (300 if k == "page_size" else 12 if k == "month" else 2100)):
+            return False
+        if k == "next_page_token" and not re.fullmatch(r"[A-Za-z0-9_+/=-]{1,512}", v):
+            return False
+    return True
+
+
+def lees_account(pad, params=None, methode="GET"):
+    """Eén GET met uitsluitend de leesapp; 404 en elke fout blijven onbekend."""
+    if not account_toegestaan(pad, params, methode):
+        raise Geweigerd("accountpad of methode geweigerd")
+    if not leesapp() or leesapp_fout() or leesapp_verboden():
+        raise Geweigerd("leesapp niet beschikbaar")
+    try:
+        token = _toegang("lees")
+    except ZoomFout:
+        raise AccountFout(reden="onleesbaar") from None
+    url = API + pad + ("?" + urllib.parse.urlencode(params) if params else "")
+    try:
+        code, _, inhoud = _vraag(url, {"Authorization": "Bearer " + token})
+    except ZoomFout:
+        raise AccountFout(reden="onleesbaar") from None
+    if code == 200:
+        try:
+            antwoord = json.loads((inhoud or b"").decode("utf-8"))
+            if not isinstance(antwoord, dict):
+                raise ValueError("geen object")
+            return antwoord
+        except (ValueError, UnicodeError):
+            raise AccountFout(reden="onleesbaar") from None
+    if code == 429:
+        raise AccountFout(429, reden="limiet van Zoom")
+    try:
+        d = json.loads((inhoud or b"").decode("utf-8"))
+        zoomcode = d.get("code") if isinstance(d, dict) else None
+        bericht = d.get("message", "") if isinstance(d, dict) else ""
+    except (ValueError, UnicodeError):
+        zoomcode, bericht = None, ""
+    if code in (400, 401, 403) and (zoomcode == 4711 or "does not contain scope" in str(bericht)):
+        scope = _scope_uit(str(bericht))
+        if not re.fullmatch(r"[a-z_]+:(?:read|list):[a-z_]+(?::admin)?", scope):
+            scope = "onbekend recht"
+        raise GeenRecht(scope, code, zoomcode)
+    raise AccountFout(code, zoomcode if isinstance(zoomcode, int) else None)
+
+
+def lees_account_alles(pad, params, sleutel, max_paginas=10):
+    """Een ontbrekende lijst of afgekapt resultaat is onbekend, nooit een lege lijst."""
+    if not isinstance(max_paginas, int) or max_paginas < 1:
+        raise Geweigerd("paginagrens geweigerd")
+    uit, p = [], dict(params or {})
+    for _ in range(max_paginas):
+        d = lees_account(pad, p)
+        if sleutel not in d or not isinstance(d[sleutel], list):
+            raise AccountFout(reden="onleesbaar")
+        uit.extend(d[sleutel])
+        token = d.get("next_page_token")
+        if not token:
+            return uit
+        p["next_page_token"] = token
+        time.sleep(PAUZE)
+    raise AccountFout(reden="afgekapt")
 
 
 def uuid_pad(uuid):

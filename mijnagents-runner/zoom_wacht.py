@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """De Zoomwacht (Privé · Communicatie): telt elk Zoom-gesprek van Mehdi, koppelt het aan Fathom en bewaart de
-Zoom-tekst als Fathom een gesprek mist. Werkwijze op het bord (werkwijze/zoom-wacht.md is het zaad, versie 2).
+Zoom-tekst als Fathom een gesprek mist. Werkwijze op het bord (werkwijze/zoom-wacht.md is het zaad, versie 2.3).
 
 Ontwerp regie-zoom v1.2 (Z3 tot Z9, met 13.2 en 13.5). In de gesprekkenketen na De Fathomwacht (keten.py, 07:00 en
 13:00 UTC onder /tmp/gesprekken.lock; 09:00 en 15:00 Brussel tot en met 24-10-2026, daarna 08:00 en 14:00):
@@ -26,6 +26,8 @@ Ontwerp regie-zoom v1.2 (Z3 tot Z9, met 13.2 en 13.5). In de gesprekkenketen na 
    oppakken (ook het aantal bewezen chatgesprekken, RZ13), dan met revisie, tot zes dagen terug; nooit naar
    onbekend en, als een bron faalde, nooit naar een lagere telling (ZOO-01, ZOO-05). Zag alleen Fathom een gesprek, dan
    is die dag een ondergrens (ZOO-09). Het chatcijfer komt uit de gesprekkentabel na het schrijven (RZ10, chat_tellen).
+6. Fase 4b: alleen met ACCOUNTSCAN: aan op het bord een wekelijkse accountscan en een wijzigingscontrole per ronde.
+   Alle accountvragen zijn GET via de eigen leesapp; adviezen worden voorstellen zonder uitvoerbaar runbook.
 
 De koppeling met Zoom is koppelingen/zoom.py (een koppeling, Z1). De alleen-lezende app "Zoomwacht lezen" zet Mehdi
 met zoom_leesapp.py --zet; zonder die app, of als haar sleutels geen token geven (ZOO-10), lees ik met de app van de
@@ -67,6 +69,7 @@ import bord  # noqa: E402
 import fathom  # noqa: E402  (de API zonder transcript, en MEHDI_FATHOM_ADRESSEN: Mehdi's eigen account, EIGEN-3)
 import fathom_wacht as fw  # noqa: E402  (personen_uit_werkwijze, belgisch, AFDELINGEN, ARCHIEF)
 import zoom as Z  # noqa: E402
+import zoom_account as ZA  # noqa: E402  (accountscan, alleen via het leestoken)
 
 NAAM = "zoom-wacht"
 ag = bord.Agent(NAAM)
@@ -1494,6 +1497,8 @@ def werk(r, a, klok):
     w.update(personen=personen, domeinen=domeinen)
     r.bron("zoom-bronnen", w["bronnen"])
     k = w["koppeling"]
+    if not schrijven or not w["identiteit_ok"] or w["identiteit"] == "anders":
+        ZA.herhaal_bewaarde_scannoden(r, staat)
     if not Z.leesapp():
         r.nood("Zoom-leesapp ontbreekt: telling en vangnet zijn onvolledig", "mehdi")
     elif Z.leesapp_verboden():
@@ -1597,6 +1602,15 @@ def werk(r, a, klok):
            json.dumps(w["bronnen"], ensure_ascii=False))
     ag.log("Zoom", "bevinding", f"{gekoppeld} met Fathom, {vangnet} in het vangnet, {wachten} wachten of onbekend, "
            f"{len(k['gezien'])} alleen via Fathom gezien, {alleen} alleen Mehdi; telling {tel}")
+    account_detail = ""
+    if schrijven:
+        try:
+            account_detail = ZA.ronde(r, w, staat, klok, vangnet, forceer=getattr(a, "account", False))
+        except Exception as e:  # noqa: BLE001 - de gesprekkenronde blijft werken
+            r.nood("Zoom-accountscan van deze week nog niet gelukt", "claude-code")
+            ZA.herhaal_bewaarde_scannoden(r, staat)
+            account_detail = "accountscan mislukt"
+            ag.log("Zoom-account", "fout", f"accountscan mislukt ({type(e).__name__})")
     if schrijven:
         ag.log("Zoom", "schrijf", f"gesprekkentabel: {n_rijen} sessierijen en {len(w['chat'])} chatrijen (bron zoom), "
                f"{n_alleen} bestaande rij(en) met alleen Mehdi gemarkeerd; "
@@ -1606,7 +1620,7 @@ def werk(r, a, klok):
         staat["laatste"] = klok.isoformat()
         staat_schrijven(staat)
     r.detail = (f"{len(info)} sessies, {gekoppeld} met Fathom, {vangnet} vangnet, {wachten} wachten; telling {tel}"
-                + ("" if schrijven else "; alleen gelezen"))
+                + ("" if schrijven else "; alleen gelezen") + (f"; {account_detail}" if account_detail else ""))
     if tel == "onbekend":
         # J13: geen enkele bron leesbaar. De ronde breekt, zodat de hartslag fout is en de open noden openblijven (N11).
         r.nood("Zoom niet leesbaar: geen enkele bron gaf antwoord", "claude-code")
@@ -1884,6 +1898,8 @@ def droog(a, klok):
     if a.koppel_sinds:
         koppel_sinds(None, a.koppel_sinds, klok, w["ik"], False, droog=True)
         buiten_herzien(None, a.koppel_sinds, w["eerste"], w["ik"], False, droog=True)
+    if getattr(a, "account", False) and ZA.scan_aan(eigen):
+        ZA.droog(w, klok)
     return 0
 
 
@@ -1891,6 +1907,7 @@ def droog(a, klok):
 def argumenten(argv):
     p = argparse.ArgumentParser(description="De Zoomwacht: telt elk Zoom-gesprek en koppelt het aan Fathom.")
     p.add_argument("--droog", action="store_true", help="alleen lezen; een rapport per dag zonder namen of onderwerpen")
+    p.add_argument("--account", action="store_true", help="de accountscan in deze ronde volledig proberen")
     p.add_argument("--inhaal", type=int, default=VENSTER_DAGEN, help="het venster in dagen (standaard 7)")
     p.add_argument("--koppel-sinds", dest="koppel_sinds",
                    help="oude zoom:meeting-rijen sinds JJJJ-MM-DD koppelen en hun link leegmaken, en andere ruimtes opnieuw beoordelen")

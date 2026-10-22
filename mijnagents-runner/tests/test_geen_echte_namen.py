@@ -21,8 +21,7 @@ import sys
 HIER = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HIER))
 
-# De testbestanden die de branch regie-zoom toevoegde of wijzigde (git diff --name-only origin/main..regie-zoom), en
-# deze grendel zelf.
+# Testbestanden uit regie-zoom en zoom-accountscan, plus deze grendel zelf.
 BESTANDEN = (
     "mijnagents-runner/tests/test_bode_regie.py",
     "mijnagents-runner/tests/test_bord_lees.py",
@@ -34,8 +33,11 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_regisseur.py",
     "mijnagents-runner/tests/test_taken.py",
     "mijnagents-runner/tests/test_uitrol_regie.py",
+    "mijnagents-runner/tests/test_uitvoerder_signaal.py",
     "mijnagents-runner/tests/test_whatsapp.py",
+    "mijnagents-runner/tests/test_zoom_account.py",
     "mijnagents-runner/tests/test_zoom_wacht.py",
+    "mijnagents-runner/tests/fixtures/zoom_leesapp_scopes.txt",
     "mijnagents/test_gesprekken_api.py",
 )
 
@@ -96,6 +98,15 @@ def test_de_lijsten_zijn_volledig():
     assert len(set(BESTANDEN)) == len(BESTANDEN), "een bestand staat twee keer in BESTANDEN"
     ontbreekt = [p for p in BESTANDEN if not os.path.isfile(os.path.join(REPO, p))]
     assert not ontbreekt, f"deze testbestanden bestaan niet meer (hernoemd? pas BESTANDEN aan): {ontbreekt}"
+    fixtures = os.path.join(REPO, "mijnagents-runner", "tests", "fixtures")
+    fixture_paden = {os.path.relpath(os.path.join(mapnaam, naam), REPO)
+                    for mapnaam, _, namen in os.walk(fixtures) for naam in namen
+                    if not naam.startswith(".") and not naam.endswith((".pyc", ".pyo"))}
+    assert fixture_paden <= set(BESTANDEN), "een fixture staat buiten de namengrendel"
+    workflow = os.path.join(REPO, ".github", "workflows", "regie-grendels.yml")
+    with open(workflow, encoding="utf-8") as f:
+        ci_tests = set(re.findall(r"- run: python3 (mijnagents-runner/tests/test_[^\s]+\.py)", f.read()))
+    assert ci_tests <= set(BESTANDEN), "een CI-testbestand staat buiten de namengrendel"
 
 
 def test_de_grendel_vangt_een_woord_in_elke_vorm():

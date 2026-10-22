@@ -43,6 +43,8 @@ jobs:
       - run: pip install -r mijnagents/requirements.txt
       - run: python3 mijnagents-runner/tests/test_bord_lees.py
       - run: python3 mijnagents-runner/tests/test_zoom_wacht.py
+      - run: python3 mijnagents-runner/tests/test_zoom_account.py
+      - run: python3 mijnagents-runner/tests/test_uitvoerder_signaal.py
       - run: python3 mijnagents-runner/tests/test_dagbundelaar.py
       - run: python3 mijnagents-runner/tests/test_keten.py
       - run: python3 mijnagents-runner/tests/test_regisseur.py

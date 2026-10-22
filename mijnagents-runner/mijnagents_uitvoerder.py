@@ -9,10 +9,12 @@ De poort:
 
 Alleen runbooks uit de allowlist in runbooks/__init__.py worden uitgevoerd.
 Een onbekend runbook of een voorstel zonder parameters wordt nooit uitgevoerd.
+Een goedgekeurd Zoom-advies zonder runbook blijft staan voor Mehdi's handmatige uitvoering.
 Draait op de host via cron (elke minuut), praat met de app over localhost.
 """
 import json
 import os
+import re
 import sys
 import urllib.request
 
@@ -58,6 +60,14 @@ def main():
     wacht = api("/api/uitvoer-wacht").get("wacht") or []
     for a in wacht:
         vid, rb = a.get("id"), (a.get("runbook") or "").strip()
+        if not rb and a.get("naam") == "zoom-wacht":
+            try:
+                advies = json.loads(a.get("parameters") or "")
+            except (ValueError, TypeError):
+                advies = None
+            if isinstance(advies, dict) and isinstance(advies.get("zoom_advies"), str) and \
+                    re.fullmatch(r"ZA-\d{2}", advies["zoom_advies"]):
+                continue  # alleen een herkenbaar Zoom-advies voert Mehdi zelf uit
         try:
             p = json.loads(a.get("parameters") or "")
         except (ValueError, TypeError):
