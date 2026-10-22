@@ -20,9 +20,10 @@ services:
       REGIE_DB_URL: ${REGIE_DB_URL:-}
       REGIE_GROUPS: ${REGIE_GROUPS:-regie-mehdi}
       REGIE_SECRET_KEY: ${REGIE_SECRET_KEY:-}
-      # Proxygeheim (X-Regie-Proxy-Geheim): nginx zet het alleen na de
-      # forward-auth (84-regie.conf.template). Dezelfde naam staat bij nginx in
-      # docker-compose.yml; leeg = de app laat niemand binnen.
+      # Proxygeheim (X-Regie-Proxy-Geheim): nginx zet het na de forward-auth en
+      # op /api/mac (84-regie.conf.template); de app eist het op elke route
+      # behalve /healthz. Dezelfde naam staat bij nginx in docker-compose.yml;
+      # leeg = de app laat niemand binnen. Aangemaakt door de eerste uitrol.
       REGIE_PROXY_GEHEIM: ${REGIE_PROXY_GEHEIM:-}
       # Token voor mijnagents (X-Agents-Token), dezelfde waarde als AGENTS_TOKEN
       # in mijnagents-data/.env. Het token kan ook schrijven, daarom doet het

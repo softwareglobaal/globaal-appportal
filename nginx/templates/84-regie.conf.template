@@ -3,10 +3,11 @@
 # Eigen repo softwareglobaal/globaal-regie, uitgecheckt in ./regie (docker-compose.regie.yml, migratie 197-regie.sql).
 # Het bord leest zijn bronnen alleen en stuurt zelf niets uit.
 
-# Geheim dat de app eist naast de X-authentik-*-koppen (REGIE_PROXY_GEHEIM, patroon van 42-btw), zodat een andere
+# Geheim dat de app op elke route behalve /healthz eist (REGIE_PROXY_GEHEIM, patroon van 42-btw), zodat een andere
 # container in het appnet of een proces op de host zich niet als lid van regie-mehdi kan voordoen door app-regie
-# rechtstreeks aan te spreken. Alleen naar regie.<domain> en alleen na de forward-auth: forward-auth.conf zet de kop,
-# /api/mac leegt hem. Leeg = niet verstuurd, en dan laat de app niemand binnen.
+# rechtstreeks aan te spreken. Alleen naar regie.<domain>: forward-auth.conf zet de kop na de forward-auth, en
+# /api/mac zet hem zelf (daar toetst de app daarnaast het Mac-token). Leeg = niet verstuurd, en dan laat de app niemand
+# binnen.
 map $host $regie_proxy_geheim {
     default "";
     "regie.${BASE_DOMAIN}" "${REGIE_PROXY_GEHEIM}";
@@ -35,8 +36,9 @@ server {
     # De momentopname van de Mac-brug: de brug heeft geen browsersessie, dus
     # deze ene POST passeert de forward-auth en de app controleert zelf het
     # token (X-Regie-Token tegen REGIE_MAC_TOKEN). Alleen POST, een kleine
-    # body, en de identiteitsheaders en het proxygeheim worden hard geleegd,
-    # zodat niemand zich via deze weg als lid van de groep voordoet.
+    # body, en de identiteitsheaders worden hard geleegd, zodat niemand zich
+    # via deze weg als lid van de groep voordoet. Het proxygeheim zet nginx
+    # wel: de app eist het ook hier, zodat /api/mac buiten nginx om dicht is.
     location = /api/mac {
         limit_except POST { deny all; }
         limit_req zone=regie_mac_zone burst=10 nodelay;
@@ -49,7 +51,7 @@ server {
         proxy_set_header X-authentik-email "";
         proxy_set_header X-authentik-name "";
         proxy_set_header X-authentik-uid "";
-        proxy_set_header X-Regie-Proxy-Geheim "";
+        proxy_set_header X-Regie-Proxy-Geheim $regie_proxy_geheim;
         proxy_pass $app_upstream;
     }
 

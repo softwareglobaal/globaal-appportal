@@ -3028,9 +3028,10 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   release 1: `~/dev/samenwerking-codex/regie-zoom/uitrolstappen-release1.md`.
 - **Grendels**: workflow `regie-grendels.yml`, job bord (`mijnagents/test_gesprekken_api.py`) en job runners
   (`test_bord_lees.py`, `test_zoom_wacht.py`, `test_dagbundelaar.py`, `test_keten.py`, `test_regisseur.py`,
-  `test_bode_regie.py` en `test_uitrol_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is `test_geen_echte_namen.py`:
-  die faalt als een van de genoemde testbestanden een woord bevat waarvan de sha256 op een vaste lijst staat (echte
-  namen, privéonderwerpen en adressen, alleen als hash bewaard; de repo is publiek). Testgegevens zijn altijd verzonnen.
+  `test_bode_regie.py` en `test_uitrol_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is
+  `test_geen_echte_namen.py`: die faalt als een van de genoemde testbestanden een woord bevat waarvan de sha256 op een
+  vaste lijst staat (echte namen, privéonderwerpen en adressen, alleen als hash bewaard; de repo is publiek).
+  Testgegevens zijn altijd verzonnen.
 
 ### 14.17 Regiebord: `regie.globaal.be` *(in opbouw, 22-10-2026)*
 
@@ -3050,50 +3051,52 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
 - **Toegang**: forward-auth op de hele host; de app toetst zelf nog eens `REGIE_GROUPS`. Eén uitzondering:
   `location = /api/mac` voor de Mac-brug, die geen browsersessie heeft: alleen POST, hoogstens 256k, 30 verzoeken per
   minuut per adres (burst 10), de vijf identiteitsheaders (`X-authentik-username`, `-groups`, `-email`, `-name`,
-  `-uid`) en het proxygeheim `X-Regie-Proxy-Geheim` geleegd. Andere `X-authentik-*`-headers van de client geeft nginx door, zoals op elke route met
-  forward-auth; de app leest daarom alleen `username` en `groups`. De app eist op `/api/mac` `X-Regie-Token`
-  (hmac-vergelijking met `REGIE_MAC_TOKEN`). `/healthz` blijft achter de forward-auth; de healthcheck toetst binnen
-  de container.
+  `-uid`) geleegd en het proxygeheim `X-Regie-Proxy-Geheim` gezet. Andere `X-authentik-*`-headers van de client geeft
+  nginx door, zoals op elke route met forward-auth; de app leest daarom alleen `username` en `groups`. De app eist op
+  `/api/mac` het proxygeheim en `X-Regie-Token` (hmac-vergelijking met `REGIE_MAC_TOKEN`). `/healthz` blijft achter de
+  forward-auth; de healthcheck toetst binnen de container, en het is de enige route die de app zonder proxygeheim
+  beantwoordt.
 - **Koppen**: `X-Robots-Tag` en `nosniff` op serverniveau in `84-regie` bereiken alleen `/api/mac`; de `location /`
   uit `forward-auth.conf` heeft eigen `add_header`-regels en erft in nginx 1.27 niets. Voor de pagina's moet de app
-  ze zelf zetten (`_na_verzoek` in `app/__init__.py` van globaal-regie): `X-Robots-Tag` doet ze al, `nosniff` is
-  daar nog een open punt.
+  ze zelf zetten (`_na_verzoek` in `app/__init__.py` van globaal-regie), en dat doet ze voor beide.
 - **Proxygeheim** (besluit bij de review van 22-10-2026, patroon van `42-btw`): zonder geheim vertrouwt de app de
   `X-authentik-*`-headers van wie haar ook bereikt. Elke container in `appnet` en elk proces op de host kan
-  `http://app-regie:3042` rechtstreeks aanspreken, buiten nginx en Authentik om; nagespeeld op globaal-regie
-  `2dc826f`: zonder headers 403, met vervalste `X-authentik-username` en `X-authentik-groups: regie-mehdi` voorbij
-  de groepscontrole. Daarom zet nginx `X-Regie-Proxy-Geheim`: `map $host $regie_proxy_geheim` in `84-regie` (alleen
-  voor `regie.<domain>`, standaard leeg), de kop in `location /` van `forward-auth.conf` (dus alleen na een
-  geslaagde forward-auth; voor elke andere host leeg en dus niet verstuurd) en geleegd op `/api/mac`. De naam
-  `REGIE_PROXY_GEHEIM` staat bij nginx in `docker-compose.yml` (niet in de overlay: de template staat er altijd, en
-  envsubst vult alleen gedefinieerde namen in) en bij `app-regie` in de overlay. **Nog te doen in globaal-regie**,
-  pas dan is de zwakte dicht: `app/auth.py` vergelijkt de kop met `REGIE_PROXY_GEHEIM` (`hmac.compare_digest`) en
-  weigert als een van beide leeg is, met dezelfde testmodus-grendel als de groepscontrole (`/healthz` en
-  `POST /api/mac` blijven daarbuiten, `/api/mac` heeft zijn eigen token); `deploy/regie_env.py` maakt
-  `REGIE_PROXY_GEHEIM` willekeurig aan in `~/appportal/.env`. **Uitrol van deze wijziging**: nginx opnieuw maken
-  (`docker compose up -d nginx`, zoals `deploy.sh`, `apps-bijwerken.sh` en de eerste uitrol doen), niet alleen
-  herstarten: een `restart` houdt de oude omgeving, envsubst laat `${REGIE_PROXY_GEHEIM}` dan staan en nginx start
-  niet.
-- **Grendels**: `scripts/test_regie_infra.py` in `.github/workflows/regiebord-grendels.yml` werkt met lijsten in
-  plaats van verboden: wat erbij komt, valt op en moet in dezelfde review in de test. Vast staan de vhost opdracht
-  per opdracht (`/api/mac` als enige eigen locatie: alleen POST, 256k, burst 10, de vijf identiteitsheaders en het
-  proxygeheim elk één keer en leeg, geen `auth_request`; alleen de includes `ssl.conf` en `forward-auth.conf`), het
-  proxygeheim alleen in `location /` van `forward-auth.conf`, elke `${NAAM}` van de template in de omgeving van
+  `http://app-regie:3042` rechtstreeks aanspreken, buiten nginx en Authentik om; nagespeeld op globaal-regie `2dc826f`:
+  zonder headers 403, met vervalste `X-authentik-username` en `X-authentik-groups: regie-mehdi` voorbij de
+  groepscontrole. Daarom zet nginx `X-Regie-Proxy-Geheim`: `map $host $regie_proxy_geheim` in `84-regie` (alleen voor
+  `regie.<domain>`, standaard leeg), de kop in `location /` van `forward-auth.conf` (dus alleen na een geslaagde
+  forward-auth; voor elke andere host leeg en dus niet verstuurd) en op `/api/mac` (review X1: ook die ingang is buiten
+  nginx om dicht; de app toetst er daarnaast het Mac-token, en een geheim dat alleen naar de app gaat, maakt die ingang
+  niet ruimer). De naam `REGIE_PROXY_GEHEIM` staat bij nginx in `docker-compose.yml` (niet in de overlay: de template
+  staat er altijd, en envsubst vult alleen gedefinieerde namen in) en bij `app-regie` in de overlay. **In
+  globaal-regie** (reviewronde 4, 22-10-2026, `baa77d3`): `app/auth.py` vergelijkt de kop op elke route behalve
+  `/healthz` met `REGIE_PROXY_GEHEIM` (`hmac.compare_digest`) en weigert als een van beide leeg is; alleen de proeven en
+  de lokale debugserver komen zonder ingesteld geheim binnen, gunicorn nooit. `deploy/regie_env.py` maakt het geheim
+  willekeurig aan in `~/appportal/.env` (64 hextekens, nooit getoond, idempotent), en de eerste uitrol kijkt in
+  `app-regie` en in een proefcontainer van nginx na dat het er is (alleen de lengte) en dat vervalste
+  `X-authentik-*`-koppen zonder geheim een 403 krijgen. **Uitrol van deze wijziging**: nginx opnieuw maken (`docker
+  compose up -d nginx`, zoals `deploy.sh`, `apps-bijwerken.sh` en de eerste uitrol doen), niet alleen herstarten: een
+  `restart` houdt de oude omgeving, envsubst laat `${REGIE_PROXY_GEHEIM}` dan staan en nginx start niet.
+- **Grendels**: `scripts/test_regie_infra.py` in `.github/workflows/regiebord-grendels.yml` werkt met lijsten in plaats
+  van verboden: wat erbij komt, valt op en moet in dezelfde review in de test. Vast staan de vhost opdracht per opdracht
+  (`/api/mac` als enige eigen locatie: alleen POST, 256k, burst 10, de vijf identiteitsheaders elk één keer en leeg, het
+  proxygeheim één keer en gezet, geen `auth_request`; alleen de includes `ssl.conf` en `forward-auth.conf`), het
+  proxygeheim verder alleen in `location /` van `forward-auth.conf`, elke `${NAAM}` van de template in de omgeving van
   nginx, de sleutels van `app-regie` (`build`, `image`, `restart`, `environment`, `healthcheck`, `networks`; dus geen
   hostpoort, volume, `env_file`, `secrets`, `pid` of `user`) en zijn volledige omgeving (geheimen alleen als
-  `${NAAM:-}`), de tegel alleen voor `regie-mehdi` en zonder poort, de SQL van 197 woord voor woord, en dat
-  `/regie/` en `/regie-mac-token` echt genegeerd worden via de gevolgde `.gitignore` (ook een `!`-regel valt op).
-  De workflow zelf mag geen `continue-on-error` of `if` hebben. 56 mutaties getoetst, alle gevangen.
-  `.git/info/exclude` op de VM (gezet door de eerste uitrol) is alleen een tweede laag: die zit niet in versiebeheer
-  en verdwijnt bij een nieuwe kloon.
+  `${NAAM:-}`), de tegel alleen voor `regie-mehdi` en zonder poort, de SQL van 197 woord voor woord, en dat `/regie/` en
+  `/regie-mac-token` echt genegeerd worden via de gevolgde `.gitignore` (ook een `!`-regel valt op). De workflow zelf
+  mag geen `continue-on-error` of `if` hebben. 56 mutaties getoetst, alle gevangen; bij reviewronde 4 ook een leeg proxygeheim op `/api/mac` (drie tests rood). `.git/info/exclude` op de VM (gezet
+  door de eerste uitrol) is alleen een tweede laag: die zit niet in versiebeheer en verdwijnt bij een nieuwe kloon.
 - **Bronnen, alleen lezen**: `MIJNAGENTS_URL` (`/api/klaarzet` met `soort=ochtendbericht` en `status=alle`,
   `/api/nood`, `/api/overzicht`) met `X-Agents-Token` uit `REGIE_AGENTS_TOKEN`, en `HA_PROJECTEN_URL`
   (`/api/projecten`) met `X-Agents-Token` uit `REGIE_HA_PROJECTEN_TOKEN`, beide over het interne netwerk. De twee
   tokens staan los van elkaar: ha-projecten toetst tegen zijn eigen `AGENTS_TOKEN` in `~/ha-projecten/.env`, en die
   waarde staat in `~/appportal/.env` al als `HA_PROJECTEN_TOKEN` (voor `app-locatie`); de overlay geeft die naam door,
-  zodat een rotatie bij ha-projecten maar op één plaats landt. **Nog te doen in globaal-regie**: `app/bord.py`
-  gebruikt nu voor beide bronnen `REGIE_AGENTS_TOKEN` en hoort voor ha-projecten `REGIE_HA_PROJECTEN_TOKEN` te
-  lezen; zolang de twee waarden op de VM verschillen, staat ha-projecten op "onbekend". De tokens kunnen ook
+  zodat een rotatie bij ha-projecten maar op één plaats landt. **In globaal-regie** (reviewronde 4): `app/bord.py`
+  leest per bron haar eigen naam (`REGIE_AGENTS_TOKEN` voor mijnagents, `REGIE_HA_PROJECTEN_TOKEN` voor
+  ha-projecten), met een proef op twee verschillende tokens; de eerste uitrol stopt zonder iets te wijzigen als
+  `HA_PROJECTEN_TOKEN` in `.env` ontbreekt. De tokens kunnen ook
   schrijven; het bord doet daarom uitsluitend GET, vastgezet met een test in de eigen repo. Een bron die niet
   antwoordt, wordt "onbekend", nooit 0 of leeg. Het bord schrijft alleen in zijn eigen schema.
 - **Mac-brug**: een launchd-agent op de Mac post elke minuut alleen een vaste lijst metadatavelden per chat (geen
@@ -3111,6 +3114,12 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   de testfabriek `create_app()` zonder databank antwoordt op `/healthz` met `ok`.
 - **Uitrol**: `COMPOSE_FILE` in `~/appportal/.env` krijgt `:docker-compose.regie.yml`. De eerste uitrol doet één
   script uit de eigen repo (`deploy/eerste-uitrol.sh`: migratie 197, rolwachtwoord, env-namen, build, `/healthz`,
-  `nginx -t`, registratie in Authentik, groepslid, cron), zonder een geheim te tonen. Daarna rolt
-  `regie/deploy-stack.sh` (cron elke 2 minuten, logboek `~/deploy-regie.log`) elke nieuwe commit op main uit, met
-  starttoets en `/healthz`, en valt bij falen terug op `appportal-regie:vorige`.
+  `nginx -t`, registratie in Authentik, groepslid, cron), zonder een geheim te tonen. Vóór er iets binnenkomt, kijkt
+  het beide checkouts na (`~/appportal` en `~/appportal/regie`): elke niet vastgelegde wijziging, gevolgd of niet,
+  stopt het; alleen de twee bestanden die op de VM bewust lokaal gewijzigd zijn (`docker-compose.override.yml` en
+  `nginx/templates/49-elevaitnv.conf.template`) en de checkouts van andere repo's op het hoogste niveau worden genoemd
+  en ongemoeid gelaten. Het stopt ook als een checkout niet op `main` staat, niet kan vooruitspoelen, of als main een
+  van die twee lokale bestanden wijzigt. Daarna rolt `regie/deploy-stack.sh` (cron elke 2 minuten, logboek
+  `~/deploy-regie.log`) elke nieuwe commit op main van globaal-regie uit: een push naar main daar is productie, zoals
+  bij prive. Het haalt alleen `main` binnen, alleen met `--ff-only` en alleen uit een schone checkout, bouwt alleen
+  als HEAD veranderde, doet een starttoets en `/healthz`, en valt bij falen terug op `appportal-regie:vorige`.

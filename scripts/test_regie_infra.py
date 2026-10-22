@@ -3,9 +3,9 @@
 
 De app vertrouwt de X-authentik-*-headers die nginx meegeeft. Daarom zet deze test vast wat bij de reviews van
 22-10-2026 is afgesproken, zodat een latere wijziging het niet ongemerkt breekt:
-- POST /api/mac is de enige ingang buiten Authentik: alleen POST, hoogstens 256k, identiteitsheaders en
-  proxygeheim geleegd;
-- het proxygeheim (X-Regie-Proxy-Geheim) gaat alleen naar regie.<domain> en alleen na de forward-auth;
+- POST /api/mac is de enige ingang buiten Authentik: alleen POST, hoogstens 256k, identiteitsheaders geleegd;
+- het proxygeheim (X-Regie-Proxy-Geheim) gaat alleen naar regie.<domain>: na de forward-auth en op /api/mac, dat de app
+  daarnaast met het Mac-token toetst (review van 22-10-2026, X1);
 - app-regie heeft precies de afgesproken sleutels en omgeving (geen hostpoort, volume, env_file, ...), alleen appnet;
 - de vhost bevat precies de afgesproken opdrachten, migratie 197 precies de afgesproken SQL;
 - de tegel opent alleen voor de groep regie-mehdi en heeft geen poort;
@@ -79,7 +79,7 @@ VHOST = [
     "proxy_set_header X-Forwarded-Proto https;",
     "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
     *[f'proxy_set_header X-authentik-{identiteit} "";' for identiteit in IDENTITEIT],
-    'proxy_set_header X-Regie-Proxy-Geheim "";',
+    "proxy_set_header X-Regie-Proxy-Geheim $regie_proxy_geheim;",
     "proxy_pass $app_upstream;",
     "}",
     "include /etc/nginx/snippets/forward-auth.conf;",
@@ -203,7 +203,9 @@ class RegieInfra(unittest.TestCase):
             # Precies één keer en leeg; HTTP-koppen zijn hoofdletterongevoelig, dus ook x-authentik-... telt mee.
             koppen = re.findall(rf"proxy_set_header\s+X-authentik-{identiteit}\s+([^;]*);", mac, re.I)
             self.assertEqual(koppen, ['""'], identiteit)
-        self.assertEqual(re.findall(r"proxy_set_header\s+X-Regie-Proxy-Geheim\s+([^;]*);", mac, re.I), ['""'])
+        # Het proxygeheim wel, precies één keer: de app eist het ook op /api/mac (naast het Mac-token).
+        self.assertEqual(re.findall(r"proxy_set_header\s+X-Regie-Proxy-Geheim\s+([^;]*);", mac, re.I),
+                         ["$regie_proxy_geheim"])
         self.assertIn("proxy_pass $app_upstream;", mac)
         self.assertNotIn("auth_request", mac)
         # Een grotere body op serverniveau zou ook voor de rest van het bord gelden.
@@ -220,11 +222,13 @@ class RegieInfra(unittest.TestCase):
             self.assertEqual(koppen, [f"$authentik_{identiteit}"], identiteit)
         self.assertIn("proxy_pass $app_upstream;", rest)
 
-    def test_proxygeheim_alleen_naar_regie_en_alleen_na_forward_auth(self):
+    def test_proxygeheim_alleen_naar_regie_na_forward_auth_en_op_api_mac(self):
         kaart = opdrachten(blok(self.template, "map $host $regie_proxy_geheim {"))
         self.assertEqual(kaart, ['default "";', '"regie.${BASE_DOMAIN}" "${REGIE_PROXY_GEHEIM}";'])
-        # In de template alleen in de map; de kop zelf zet forward-auth.conf, in location / en nergens anders.
-        self.assertEqual(self.template.count("$regie_proxy_geheim"), 1)
+        # In de template in de map en in /api/mac; voor de rest zet forward-auth.conf de kop, in location / en
+        # nergens anders.
+        self.assertEqual(self.template.count("$regie_proxy_geheim"), 2)
+        self.assertIn("$regie_proxy_geheim", blok(self.template, "location = /api/mac {"))
         rest = blok(self.snippet, "location / {")
         self.assertIn("proxy_set_header X-Regie-Proxy-Geheim $regie_proxy_geheim;", rest)
         self.assertEqual(len(re.findall(r"X-Regie-Proxy-Geheim", self.snippet, re.I)), 1)
