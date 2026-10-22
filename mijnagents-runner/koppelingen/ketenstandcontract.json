@@ -1,0 +1,32 @@
+{
+  "schema": "bs-ketenstand",
+  "versie": 1,
+  "bestand": ".ketenstand.json",
+  "max_bytes": 262144,
+  "max_dossiers": 100,
+  "max_tekst": 200,
+  "max_kort": 40,
+  "max_uitleg": 160,
+  "max_documenten_per_soort": 20,
+  "kop_sleutels": ["schema", "versie", "geschreven", "agent", "wachten", "dossiers", "weggelaten", "documenten"],
+  "agent_sleutels": ["naam", "commit", "ronde_min"],
+  "wachten": ["commandocentrum", "icloud-wacht", "plaud-wacht", "barsten-scheuren-verslag"],
+  "wacht_sleutels": ["stand", "ts"],
+  "wacht_standen": ["werkt", "storing", "onbekend"],
+  "dossier_sleutels": ["id", "datum", "start", "einde", "mapnummer", "agendanummer", "adres", "stand", "pakketnaam", "melding", "schakels"],
+  "schakels": ["agenda", "map", "foto", "plaud", "mail", "pakket"],
+  "schakel_sleutels": ["stand", "aantal", "uitleg"],
+  "standen": ["ok", "bezig", "ontbreekt", "nog_niet", "geen"],
+  "documenten_sleutels": ["gemeten", "map_gevonden", "fout", "los", "andere", "soorten"],
+  "soort_sleutels": ["aantal", "laatst", "documenten"],
+  "document_sleutels": ["naam", "versie", "gewijzigd", "vervangen"],
+  "namen_tonen": ["sjabloon", "vaste_teksten", "checklist", "handboek"],
+  "documentenmap": "/Work/TKN BURO WORK/2 Knowledge base/0 Systeem barsten en scheuren",
+  "soorten": {
+    "voorbeeldverslagen": "1 Voorbeeldverslagen (goedgekeurd)",
+    "sjabloon": "2 Sjabloon en huisstijl",
+    "vaste_teksten": "3 Vaste teksten en voorbehoud",
+    "checklist": "4 Oorzakenchecklist",
+    "handboek": "5 Handboek"
+  }
+}

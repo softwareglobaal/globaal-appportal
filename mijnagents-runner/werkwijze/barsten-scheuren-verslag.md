@@ -1,6 +1,6 @@
 # Werkwijze van Barsten en scheuren verslag (UNABO / TKN-Buro)
 
-## Versie 3 (22-10-2026; versie 2 van 21-10-2026)
+## Versie 3.1 (22-10-2026; versie 3 van 22-10-2026)
 
 De TKN-projectmap is voor deze dienst tegelijk **dossiermap en bezoekmap**:
 `/Work/TKN BURO WORK/1 Projects/<jaar>/<mapnummer>_...`. Ik maak geen nieuwe bezoekmap.
@@ -54,6 +54,12 @@ levert geen dubbele versie op. Bij nieuwe invoer komt
 een nieuwe map, maximaal vijf versies; bij de grens vraag ik om een beslissing. Bestaande
 bronbestanden en afgeronde pakketten verplaats, hernoem, verwijder of overschrijf ik nooit.
 Een mens laadt en verwerkt het pakket in **barstenscheurenv2**; ik start die verwerking niet.
+
+### Stand voor het dashboard
+
+Elke ronde schrijf ik `.ketenstand.json` in de inbox, met per bezoek de stand van agenda,
+map, foto, opname, mail en pakket. Een wacht in storing of een taak die na 6 uur niets
+leverde, meld ik als `ontbreekt`. De documentenmap lees ik alleen; ik schrijf niets in Dropbox.
 
 Een proef met Claude kost tokens en start alleen na de knop **Proef maken** op het
 Commandocentrum. Die proef is geen automatische overdracht of verzending. De iCloud-wacht
