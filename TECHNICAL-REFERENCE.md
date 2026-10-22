@@ -2930,6 +2930,17 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   ronde niets: geen rij, geen koppeling, geen vangnet of download, geen klaarzet, geen staat en geen `--koppel-sinds`;
   alleen de nood "De Zoom-gebruiker van de leesapp is niet de eigenaar van de vaste vergaderruimte" voor Mehdi en de
   hartslag "waakt" met "niets geschreven: ..." (RZ4-02; tot dan schreef ze na de nood gewoon door).
+  De chattelling heeft een bron, `gesprek_log` (RZ9-01 tot RZ10-03, 22-10-2026): elke ronde schrijft (upsert) een rij
+  `zoom:chat:<sleutel>:<dag>` per gesprek per dag voor wat ze kon lezen en verwijdert of leegt er nooit een; het
+  chatcijfer van de dagregel (berichten, gesprekken, privé) komt daarna uit die rijen voor de Brusselse dag
+  (`chat_tellen`, langs `bord.db_lees`, met de regels van De Regisseur: geen `buiten:`, privé is `prive` of afdeling
+  prive), dus het daalt niet door een slechtere ronde en zegt hetzelfde als `gesprekken_lees(soort='chat')`. De stand
+  (`chat.telling`): volledig als de ronde de sessielijst en elk gesprek erin las; anders een ondergrens (titel "minstens N
+  chatgesprekken", reden in `chat.onvolledig` en in het werkverslag, zonder namen: "N chatgesprek(ken) niet leesbaar" bij
+  een 404, "N chatgesprek(ken) zonder bestemming", of "chat niet gelezen (...)" als de sessielijst faalde); onbekend
+  alleen als `gesprek_log` niet te lezen was. Het aantal chatgesprekken en de chatstand horen bij de kern die een
+  opgepakte dagregel laat herzien (`kern_anders`); een onbekende chat herziet niets en laat het chatdeel staan dat de
+  regel al had, ook bij een herziening om de meetings.
 - **Zoom-profielen** (`koppelingen/zoom.py`): `stack` is de Server-to-Server-app van de stack (`ZOOM_ACCOUNT_ID`,
   `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`), `lees` de alleen-lezende app "Zoomwacht lezen" (`ZOOM_LEES_CLIENT_ID`,
   `ZOOM_LEES_CLIENT_SECRET`, zo nodig `ZOOM_LEES_ACCOUNT_ID`). Zonder leesapp leest het profiel `lees` met de stack.

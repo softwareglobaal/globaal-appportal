@@ -2364,7 +2364,8 @@ def test_eigen1_chat_altijd_met_de_app_van_de_stack():
         assert sorted({d for d, _ in chat}) == ["messages", "sessions"] and {k for _, k in chat} == {"Bearer tok-stack"}, chat
         rij = w.bord.rij(f"zoom:chat:{TEAM_ADRES}:2026-10-20")
         assert rij and rij["thema"].startswith("Zoom-chat: 2 bericht(en), 1 van Mehdi"), rij
-        assert w.dagregel("2026-10-20")[1]["chat"] == {"berichten": 2, "gesprekken": 1, "prive": 0}, w.dagregel("2026-10-20")[1]
+        assert w.dagregel("2026-10-20")[1]["chat"] == {"berichten": 2, "gesprekken": 1, "prive": 0, "telling": "volledig"}, \
+            w.dagregel("2026-10-20")[1]
         assert not [t for t in w.bord.noden() if t.startswith("Zoom-chat niet gelezen")], w.bord.noden()
         assert any(k.get("Authorization") == "Bearer tok-lees" for _, k in w.zoom.gevraagd), "de rest leest met de leesapp"
         # de grendel in zoom.py: chatberichten nooit met de leesapp
@@ -2387,7 +2388,8 @@ def test_chat_venster_met_datum_en_tijd():
     """Live gemeten 22-10-2026: met from en to als datum zonder tijd negeert Zoom het venster en geeft /messages alleen
     de laatste dag. De dagregels van 19 en 20-10 zeiden zo '0 chatgesprekken', terwijl Zoom met datum en tijd er 30 en 36
     berichten gaf. Nu vraagt De Zoomwacht het venster in UTC met tijd, en telt elke dag van het venster. Een gesprek dat
-    Zoom niet meer kent (404) maakt de chat niet onbekend: de rest telt, het aantal staat in het werkverslag."""
+    Zoom niet geeft (404) maakt de chat niet onbekend: de rest telt, als ondergrens, en het aantal staat in het
+    werkverslag (RZ9-01, RZ10)."""
     w = Wereld()
     w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
                     [{"date_time": "2026-10-18T09:00:00Z", "sender": "info@h-invest.test"},
@@ -2397,7 +2399,7 @@ def test_chat_venster_met_datum_en_tijd():
                    ({"type": "group", "channel_id": "kanaal-weg", "name": "Oud proefkanaal", "weg": True}, [])]
     assert w.ronde(NU) is None
     bron = w.bord.sql("SELECT tekst FROM logboek WHERE naam='zoom-wacht' AND stap='bron' ORDER BY id DESC LIMIT 1")[0]["tekst"]
-    assert "chat: 1 gesprek(ken) kent Zoom niet meer" in bron, bron
+    assert "chat ondergrens: 1 chatgesprek(ken) niet leesbaar" in bron, bron
     for dag, n in (("2026-10-18", 1), ("2026-10-19", 2), ("2026-10-20", 1)):
         rij = w.bord.rij(f"zoom:chat:{TEAM_ADRES}:{dag}")
         assert rij and rij["thema"].startswith(f"Zoom-chat: {n} bericht(en)"), (dag, rij)
@@ -2405,6 +2407,280 @@ def test_chat_venster_met_datum_en_tijd():
     gevraagd = [dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(u).query)) for u, _ in w.zoom.gevraagd
                 if urllib.parse.urlsplit(u).path.endswith("/messages")]
     assert gevraagd and all(re.fullmatch(ZOOM_DT, q.get("from", "")) and re.fullmatch(ZOOM_DT, q.get("to", "")) for q in gevraagd), gevraagd
+
+
+def _bronregel(w):
+    """De laatste bronregel van De Zoomwacht in het werkverslag."""
+    return w.bord.sql("SELECT tekst FROM logboek WHERE naam='zoom-wacht' AND stap='bron' ORDER BY id DESC LIMIT 1")[0]["tekst"]
+
+
+def _dag_gestuurd(w, dag):
+    """De dagregel van een dag zoals de laatste ronde ze naar het bord stuurde."""
+    return [i for p in w.bord.posts("/api/klaarzet") for i in p["items"] if i["uniek"] == f"zoom:dag:{dag}"]
+
+
+def chattabel_onleesbaar(w):
+    """De gesprekkentabel is voor de chat niet te lezen: elke lezing langs bord.db_lees die chatrijen vraagt (in de vraag
+    of in haar waarden), geeft BordOnbekend; de rest van het bord leest gewoon. Tot de volgende Wereld."""
+    echt = w.bord.db_lees
+
+    def lees(sql, args=()):
+        if "zoom:chat:" in sql or any("zoom:chat:" in str(a) for a in args):
+            raise bord.BordOnbekend("proef: gesprekkentabel niet leesbaar")
+        return echt(sql, args)
+    bord.db_lees = lees
+
+
+@bord_nodig
+def test_rz9_01_een_chatgesprek_met_404_maakt_de_chat_een_ondergrens():
+    """RZ9-01 (Codex, 22-10-2026): een 404 op de berichten van een chatgesprek werd overgeslagen en de chat bleef ok,
+    zodat een leesfout als 0 kon verschijnen. Nu heeft de chattelling een eigen stand. Een of meer gesprekken met een 404
+    tussen leesbare gesprekken geeft een ondergrens ('minstens N chatgesprekken'), voor elke dag van het venster, want
+    zo'n gesprek kan op elke dag berichten hebben. De reden staat in de dagregel en in het werkverslag, zonder namen."""
+    w = Wereld()
+    w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
+                    [{"date_time": "2026-10-20T08:00:00Z", "sender": "info@h-invest.test"},
+                     {"date_time": "2026-10-20T08:05:00Z", "sender": TEAM_ADRES}]),
+                   ({"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta", "weg": True}, []),
+                   ({"type": "group", "channel_id": "kanaal-omega", "name": "H-Architects proefkanaal"},
+                    [{"date_time": "2026-10-20T12:00:00Z", "sender": TEAM_ADRES}])]
+    assert w.ronde(NU) is None
+    reden = "1 chatgesprek(ken) niet leesbaar"
+    it, inhoud = w.dagregel("2026-10-20")
+    assert inhoud["chat"] == {"berichten": 3, "gesprekken": 2, "prive": 0, "telling": "ondergrens", "onvolledig": [reden]}, inhoud["chat"]
+    assert it["titel"].endswith("; minstens 2 chatgesprekken"), it["titel"]
+    assert inhoud["bronnen"]["chat"] == "ok", "de chatbron gaf antwoord; de telling is de ondergrens"
+    stil, stil_inhoud = w.dagregel("2026-10-18")
+    assert stil_inhoud["chat"]["telling"] == "ondergrens" and stil["titel"].endswith("; minstens 0 chatgesprekken"), stil["titel"]
+    assert f"chat ondergrens: {reden}" in _bronregel(w), _bronregel(w)
+    verslag = json.dumps(w.bord.sql("SELECT onderwerp, tekst, detail FROM logboek WHERE naam='zoom-wacht'"), ensure_ascii=False)
+    assert "Proefkanaal Zeta" not in verslag and "kanaal-zeta" not in verslag, "het werkverslag noemt het gesprek niet"
+
+
+@bord_nodig
+def test_rz9_01_elk_chatgesprek_404_is_een_ondergrens_nooit_volledig_0():
+    """RZ9-01: geeft elk berichtenverzoek een 404, dan zei de dagregel '0 chatgesprekken' alsof dat zeker was. Sinds RZ10
+    komt het cijfer uit de gesprekkentabel en is de chat een ondergrens met de reden: zonder eerdere rijen 'minstens 0'
+    (test_rz10_03 toetst het met rijen). Onbekend is ze alleen als de gesprekkentabel niet te lezen is."""
+    w = Wereld()
+    w.zoom.chat = [({"type": "1:1", "peer_contact_email": "zeta@elders.test", "name": "Proefpersoon Zeta", "weg": True}, []),
+                   ({"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta", "weg": True}, [])]
+    assert w.ronde(NU) is None
+    reden = "2 chatgesprek(ken) niet leesbaar"
+    for dag in ("2026-10-18", "2026-10-20"):
+        it, inhoud = w.dagregel(dag)
+        assert inhoud["chat"] == {"berichten": 0, "gesprekken": 0, "prive": 0, "telling": "ondergrens", "onvolledig": [reden]}, \
+            (dag, inhoud["chat"])
+        assert it["titel"].endswith("; minstens 0 chatgesprekken") and inhoud["bronnen"]["chat"] == "ok", (dag, it["titel"])
+    assert f"chat ondergrens: {reden}" in _bronregel(w), _bronregel(w)
+
+
+@bord_nodig
+def test_rz9_02_een_chatcorrectie_na_het_oppakken_gaat_met_revisie():
+    """RZ9-02 (Codex, 22-10-2026): de chat hoorde niet bij de kern van de dagregel. Kreeg Mehdi '0 chatgesprekken' (zoals
+    op 19 en 20-10 door het chatvenster zonder tijd) en telde een latere ronde er 2, dan bleef de opgepakte regel op 0.
+    Nu horen het aantal chatgesprekken en de chatstand bij de kern: een stijging of een andere stand herziet de regel.
+    Sinds RZ10 komt het cijfer uit de gesprekkentabel en daalt het niet; een onbekende chat (de gesprekkentabel niet
+    gelezen) herziet niets en laat het chatdeel staan dat Mehdi kreeg."""
+    w = Wereld()
+    assert w.ronde(NU) is None
+    it, inhoud = w.dagregel("2026-10-20")
+    assert inhoud["chat"]["gesprekken"] == 0 and it["titel"].endswith("; 0 chatgesprekken"), it["titel"]
+    w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
+    kanaal = {"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta"}
+    w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
+                    [{"date_time": "2026-10-20T08:00:00Z", "sender": TEAM_ADRES}]),
+                   (kanaal, [{"date_time": "2026-10-20T09:00:00Z", "sender": "info@h-invest.test"}])]
+    # 1. 0 werd 2: herzien
+    assert w.ronde(NU + timedelta(minutes=10)) is None
+    gestuurd = _dag_gestuurd(w, "2026-10-20")
+    assert gestuurd and gestuurd[0].get("revisie") is True, gestuurd
+    na = w.bord.item("zoom:dag:2026-10-20")
+    assert na["status"] == "klaar" and json.loads(na["inhoud"])["chat"]["gesprekken"] == 2 and na["titel"].endswith("; 2 chatgesprekken"), na
+    assert len(w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-20'")) == 1
+    # 2. hetzelfde aantal, nu als ondergrens (het kanaal geeft een 404, zijn rij telt mee): alleen een andere stand
+    # stuurt geen herziening (besluit van de regie, 22-10-2026: anders kan een wisselende 404 Mehdi telkens storen)
+    w.bord.call(f"/api/klaarzet/{na['id']}/opgepakt", {"door": "dagbundelaar"})
+    kanaal["weg"] = True
+    assert w.ronde(NU + timedelta(minutes=20)) is None
+    gestuurd = _dag_gestuurd(w, "2026-10-20")
+    assert gestuurd and gestuurd[0]["inhoud"]["chat"]["telling"] == "ondergrens" and not gestuurd[0].get("revisie"), gestuurd
+    na = w.bord.item("zoom:dag:2026-10-20")
+    assert na["status"] == "opgepakt" and na["titel"].endswith("; 2 chatgesprekken"), na
+    assert len(w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-20'")) == 1
+    # 3. de chat is onbekend (de gesprekkentabel niet gelezen): geen herziening, de regel blijft zoals Mehdi ze kreeg
+    chattabel_onleesbaar(w)
+    assert w.ronde(NU + timedelta(minutes=30)) is None
+    gestuurd = _dag_gestuurd(w, "2026-10-20")
+    assert gestuurd and gestuurd[0]["inhoud"]["chat"] == json.loads(na["inhoud"])["chat"] and not gestuurd[0].get("revisie"), gestuurd
+    blijft = w.bord.item("zoom:dag:2026-10-20")
+    assert blijft["status"] == "opgepakt" and blijft["titel"].endswith("; 2 chatgesprekken"), blijft
+    assert len(w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-20'")) == 1
+    assert "chat onbekend: 1 chatgesprek(ken) niet leesbaar, gesprekkentabel niet gelezen" in _bronregel(w), _bronregel(w)
+
+
+@bord_nodig
+def test_rz9_03_eerder_opgeslagen_chatrijen_van_een_404_tellen_mee():
+    """RZ9-03 (Codex, 22-10-2026): de chatrijen van een gesprek dat nu een 404 geeft, blijven in de gesprekkentabel
+    staan (de upsert verwijdert niets) en telden bij De Regisseur mee, maar niet in de dagregel. Sinds RZ10 komt het
+    chatcijfer van de dagregel uit diezelfde tabel: zo'n gesprek telt met zijn rijen en hun aantal berichten mee, want
+    een eerder bewezen gesprek is niet verdwenen omdat Zoom het nu niet geeft. Dagregel en De Regisseur zeggen zo
+    hetzelfde, en er wordt niets verwijderd of herschreven."""
+    R, _ = _regisseur()
+    w = Wereld()
+    kanaal = {"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta"}
+    w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
+                    [{"date_time": "2026-10-20T08:00:00Z", "sender": TEAM_ADRES}]),
+                   (kanaal, [{"date_time": "2026-10-19T09:00:00Z", "sender": "info@h-invest.test"},
+                             {"date_time": "2026-10-20T09:00:00Z", "sender": "info@h-invest.test"},
+                             {"date_time": "2026-10-20T09:30:00Z", "sender": TEAM_ADRES}])]
+    assert w.ronde(NU) is None
+    voor = {u: w.bord.rij(u) for u in ("zoom:chat:kanaal-zeta:2026-10-19", "zoom:chat:kanaal-zeta:2026-10-20")}
+    assert all(voor.values()), voor
+    kanaal["weg"] = True
+    assert w.ronde(NU + timedelta(minutes=10)) is None
+    for dag, gesprekken, berichten in (("2026-10-19", 1, 1), ("2026-10-20", 2, 3)):
+        chat = w.dagregel(dag)[1]["chat"]
+        assert (chat["gesprekken"], chat["berichten"]) == (gesprekken, berichten), (dag, chat)
+        assert chat.get("telling") == "ondergrens", (dag, chat)
+        uit = R.gesprekken_lees(dag, dag, soort="chat")
+        assert uit["chats"] == {"aantal": chat["gesprekken"], "prive": chat["prive"]}, (dag, uit, chat)
+    assert {u: w.bord.rij(u) for u in voor} == voor, "niets verwijderd of herschreven"
+    assert not [r for p in w.bord.posts("/api/gesprekken") for r in p["rijen"] if r["uniek"].startswith("zoom:chat:kanaal-zeta")]
+    assert "chat ondergrens: 1 chatgesprek(ken) niet leesbaar" in _bronregel(w), _bronregel(w)
+
+
+@bord_nodig
+def test_rz10_01_een_sessie_zonder_bestemming_is_een_ondergrens():
+    """RZ10-01 (Codex, 22-10-2026): een chatsessie zonder adres of kanaal werd stil overgeslagen, en de chat heette daarna
+    volledig: '0 chatgesprekken' terwijl er gesprekken waren die ik niet kon lezen. Nu telt zo'n sessie als niet gelezen:
+    de chat is een ondergrens, met de reden en het aantal, zonder namen."""
+    w = Wereld()
+    w.zoom.chat = [({"type": "1:1", "name": "Proefpersoon Zeta"}, [{"date_time": "2026-10-20T08:00:00Z", "sender": "info@h-invest.test"}]),
+                   ({"type": "group", "name": "Proefkanaal Zeta"}, [])]
+    assert w.ronde(NU) is None
+    reden = "2 chatgesprek(ken) zonder bestemming"
+    for dag in ("2026-10-18", "2026-10-20"):
+        it, inhoud = w.dagregel(dag)
+        assert inhoud["chat"] == {"berichten": 0, "gesprekken": 0, "prive": 0, "telling": "ondergrens", "onvolledig": [reden]}, \
+            (dag, inhoud["chat"])
+        assert it["titel"].endswith("; minstens 0 chatgesprekken"), it["titel"]
+    assert f"chat ondergrens: {reden}" in _bronregel(w), _bronregel(w)
+    verslag = json.dumps(w.bord.sql("SELECT onderwerp, tekst, detail FROM logboek WHERE naam='zoom-wacht'"), ensure_ascii=False)
+    assert "Proefpersoon Zeta" not in verslag and "Proefkanaal Zeta" not in verslag, "het werkverslag noemt het gesprek niet"
+
+
+@bord_nodig
+def test_rz10_01_een_gesprek_dat_uit_de_sessielijst_verdwijnt_telt_mee():
+    """RZ10-01: een gesprek met rijen van een eerdere ronde dat nu helemaal uit de sessielijst ontbreekt, telde niet meer
+    mee: de dagregel zei 0 en een opgepakte regel werd van 1 naar 0 herzien. Nu komt het chatcijfer uit de
+    gesprekkentabel, waar de rijen van eerdere rondes blijven staan: het gesprek telt mee en het cijfer daalt niet."""
+    w = Wereld()
+    w.zoom.chat = [({"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta"},
+                    [{"date_time": "2026-10-20T09:00:00Z", "sender": "info@h-invest.test"},
+                     {"date_time": "2026-10-20T09:10:00Z", "sender": TEAM_ADRES}])]
+    assert w.ronde(NU) is None
+    it, inhoud = w.dagregel("2026-10-20")
+    assert inhoud["chat"] == {"berichten": 2, "gesprekken": 1, "prive": 0, "telling": "volledig"}, inhoud["chat"]
+    w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
+    w.zoom.chat = []
+    assert w.ronde(NU + timedelta(minutes=10)) is None
+    gestuurd = _dag_gestuurd(w, "2026-10-20")
+    assert gestuurd and gestuurd[0]["inhoud"]["chat"] == inhoud["chat"] and not gestuurd[0].get("revisie"), gestuurd
+    blijft = w.bord.item("zoom:dag:2026-10-20")
+    assert blijft["status"] == "opgepakt" and blijft["titel"].endswith("; 1 chatgesprekken"), blijft
+    assert not w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-20'")
+
+
+@bord_nodig
+def test_rz10_03_elk_chatgesprek_404_telt_de_rijen_uit_de_tabel():
+    """RZ10-03 (Codex, 22-10-2026): gaf elk chatgesprek een 404, dan brak de chat af voor de opgeslagen rijen teruggelezen
+    waren, en was ze onbekend. Nu telt de gesprekkentabel: een ondergrens met het aantal uit de tabel, hetzelfde als De
+    Regisseur. Zo ook als de sessielijst zelf niet te lezen is: de rijen van eerdere rondes tellen, nooit 0 als volledig."""
+    R, _ = _regisseur()
+    w = Wereld()
+    w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
+                    [{"date_time": "2026-10-19T08:00:00Z", "sender": TEAM_ADRES}]),
+                   ({"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta"},
+                    [{"date_time": "2026-10-19T09:00:00Z", "sender": "info@h-invest.test"},
+                     {"date_time": "2026-10-20T09:00:00Z", "sender": "info@h-invest.test"}])]
+    assert w.ronde(NU) is None
+    for s, _ in w.zoom.chat:
+        s["weg"] = True
+    assert w.ronde(NU + timedelta(minutes=10)) is None
+    for dag, gesprekken, berichten in (("2026-10-19", 2, 2), ("2026-10-20", 1, 1)):
+        it, inhoud = w.dagregel(dag)
+        assert inhoud["chat"] == {"berichten": berichten, "gesprekken": gesprekken, "prive": 0, "telling": "ondergrens",
+                                  "onvolledig": ["2 chatgesprek(ken) niet leesbaar"]}, (dag, inhoud["chat"])
+        assert it["titel"].endswith(f"; minstens {gesprekken} chatgesprekken"), it["titel"]
+        assert R.gesprekken_lees(dag, dag, soort="chat")["chats"]["aantal"] == gesprekken, dag
+    # de sessielijst zelf niet te lezen: dezelfde ondergrens uit de tabel, met de reden
+    w.zoom.fout = {f"/chat/users/{IK['id']}/sessions"}
+    assert w.ronde(NU + timedelta(minutes=20)) is None
+    it, inhoud = w.dagregel("2026-10-19")
+    assert inhoud["chat"] == {"berichten": 2, "gesprekken": 2, "prive": 0, "telling": "ondergrens",
+                              "onvolledig": ["chat niet gelezen (fout: HTTP 500)"]}, inhoud["chat"]
+    assert it["titel"].endswith("; minstens 2 chatgesprekken"), it["titel"]
+
+
+@bord_nodig
+def test_rz10_02_een_revisie_om_de_meetings_houdt_het_chatdeel_als_de_chat_onbekend_is():
+    """RZ10-02 (Codex, 22-10-2026): veranderde de meetingkern van een opgepakte dagregel, dan ging de revisie weg voor de
+    chatbescherming, met een eerdere bekende chat van 2 als onbekend of als lagere ondergrens. Nu laat een onbekende chat
+    (de gesprekkentabel niet te lezen) het chatdeel staan dat de regel al had, ook in een revisie om de meetings."""
+    w = Wereld()
+    w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
+                    [{"date_time": "2026-10-20T08:00:00Z", "sender": TEAM_ADRES}]),
+                   ({"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta"},
+                    [{"date_time": "2026-10-20T09:00:00Z", "sender": "info@h-invest.test"}])]
+    assert w.ronde(NU) is None
+    it, inhoud = w.dagregel("2026-10-20")
+    assert inhoud["chat"]["gesprekken"] == 2 and inhoud["gesprekken"] == 0 and it["titel"].endswith("; 2 chatgesprekken"), it["titel"]
+    w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
+    # een meeting erbij op die dag; Zoom geeft geen enkel chatgesprek (404) en de gesprekkentabel is voor de chat onleesbaar
+    w.zoom.sessie("m2", bxl("2026-10-20 15:00"), 20)
+    for s, _ in w.zoom.chat:
+        s["weg"] = True
+    chattabel_onleesbaar(w)
+    assert w.ronde(NU + timedelta(minutes=10)) is None
+    gestuurd = _dag_gestuurd(w, "2026-10-20")
+    assert gestuurd and gestuurd[0].get("revisie") is True and gestuurd[0]["inhoud"]["gesprekken"] == 1, gestuurd
+    assert gestuurd[0]["inhoud"]["chat"] == inhoud["chat"], gestuurd[0]["inhoud"]["chat"]
+    na = w.bord.item("zoom:dag:2026-10-20")
+    assert na["titel"].endswith("; 2 chatgesprekken") and json.loads(na["inhoud"])["chat"] == inhoud["chat"], na
+
+
+@bord_nodig
+def test_rz10_dagregel_en_de_regisseur_tellen_dezelfde_chatgesprekken():
+    """RZ10, een bron: het chatcijfer van de dagregel komt uit de gesprekkentabel, met de regels van De Regisseur
+    (gesprekken_lees met soort chat). Per dag van het venster zeggen ze hetzelfde aantal gesprekken en privé, ook voor
+    een gesprek dat uit de sessielijst verdween, een oude chatrij zonder bron (dus fathom) met afdeling prive (RZ3-01)
+    en een chatrij met dubbel_van buiten:..., die nergens telt."""
+    R, _ = _regisseur()
+    w = Wereld()
+    ypsilon = ({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
+               [{"date_time": "2026-10-18T08:00:00Z", "sender": TEAM_ADRES},
+                {"date_time": "2026-10-20T08:00:00Z", "sender": "info@h-invest.test"}])
+    w.zoom.chat = [ypsilon, ({"type": "1:1", "peer_contact_email": "zeta@elders.test", "name": "Proefpersoon Zeta"},
+                             [{"date_time": "2026-10-19T19:00:00Z", "sender": "zeta@elders.test"}])]
+    assert w.ronde(NU) is None
+    w.bord.call("/api/gesprekken", {"rijen": [
+        {"uniek": "zoom:chat:oud-kanaal:2026-10-17", "datum": "2026-10-17", "thema": "Zoom-chat: 3 bericht(en), 1 van Mehdi",
+         "afdeling": "prive"},
+        {"uniek": "zoom:chat:kanaal-buiten:2026-10-19", "datum": "2026-10-19", "thema": "Zoom-chat: 1 bericht(en), 0 van Mehdi",
+         "bron": "zoom"}]})
+    w.bord.call("/api/gesprekken/koppel", {"koppelingen": [{"uniek": "zoom:chat:kanaal-buiten:2026-10-19", "dubbel_van": "buiten:alleen-mehdi"}]})
+    # Zeta verdwijnt uit de sessielijst, een kanaal komt erbij
+    w.zoom.chat = [ypsilon, ({"type": "group", "channel_id": "kanaal-omega", "name": "H-Architects proefkanaal"},
+                             [{"date_time": "2026-10-20T12:00:00Z", "sender": TEAM_ADRES}])]
+    assert w.ronde(NU + timedelta(minutes=10)) is None
+    verwacht = {"2026-10-17": (1, 1), "2026-10-18": (1, 0), "2026-10-19": (1, 1), "2026-10-20": (2, 0)}
+    for i in range(7):
+        dag = (datetime(2026, 10, 14) + timedelta(days=i)).date().isoformat()
+        chat = w.dagregel(dag)[1]["chat"]
+        uit = R.gesprekken_lees(dag, dag, soort="chat")["chats"]
+        assert uit == {"aantal": chat["gesprekken"], "prive": chat["prive"]}, (dag, uit, chat)
+        assert (chat["gesprekken"], chat["prive"], chat["telling"]) == (*verwacht.get(dag, (0, 0)), "volledig"), (dag, chat)
 
 
 def test_eigen2_zoom_weigert_een_leestoken_met_een_verboden_recht():
