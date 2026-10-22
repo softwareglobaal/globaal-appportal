@@ -1,5 +1,12 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.24 (22-10-2026): een gemaskeerde patiëntnaam telt alleen als eigen wanneer minstens twee naamdelen
+gemaskeerd zijn, elk zichtbaar deel minstens drie letters vóór het sterretje toont, en alle delen in volgorde bij
+precies één profielpatiënt passen. Bij twijfel volgt een vraag. De vertrekmelding op een afspraak krijgt een eigen
+privémerk met het aantal minuten. Verandert de vertrektijd, dan vervangt de agent alleen de aldus herkenbare eigen
+popup; handmatige herinneringen blijven staan. Bij vijf bestaande herinneringen komt er geen zesde bij, en een
+melding van nul minuten wordt niet gezet. Grendels: `test_planregels.py` (X2 en X4 van controle 17c).
+
 Aanvulling v8.23 (22-10-2026): een rit eindigt nooit na het begin van de afspraak waarvoor ik rijd. Is de volgende
 afspraak vast (zorg, klant, Lara, met gasten of van iemand anders) en de vorige een eigen verschuifbare afspraak,
 dan plan ik het vertrek op tijd en zet ik op de vorige afspraak een VR-vraag ("vertrek om HH:MM bij <vorige> voor

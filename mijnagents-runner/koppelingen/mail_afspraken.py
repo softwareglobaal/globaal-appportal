@@ -406,18 +406,26 @@ def _eigen_patient(patient, profiel):
     if plat and plat in eigen:
         return True
     ruw_delen = [d for d in re.split(r"\s+", (patient or "").strip()) if d]
-    delen = [(re.sub(r"[^a-z]", "", _naam_plat(d)), "*" in d) for d in ruw_delen]
-    delen = [(d, masker) for d, masker in delen if d]
-    if len(delen) < 2 or any(len(d) < 2 for d, _ in delen):
+    delen = []
+    for ruw in ruw_delen:
+        plat_deel = _naam_plat(ruw)
+        voor_ster, ster, na_ster = plat_deel.partition("*")
+        zichtbaar = re.sub(r"[^a-z]", "", voor_ster if ster else plat_deel)
+        # Een rest na het masker is niet controleerbaar als naamdeel. Bij twijfel geen eigen patiënt.
+        if len(zichtbaar) < 3 or (ster and re.search(r"[a-z]", na_ster)):
+            return False
+        delen.append((zichtbaar, bool(ster)))
+    if len(delen) < 2 or sum(masker for _, masker in delen) < 2:
         return False
+    passend = 0
     for naam in eigen:
         woorden = naam.split()
         if len(woorden) < len(delen):
             continue
         it = iter(woorden)
         if all(any(vol.startswith(stuk) if masker else vol == stuk for vol in it) for stuk, masker in delen):
-            return True
-    return False
+            passend += 1
+    return passend == 1
 
 
 def _link_einde(links, start):

@@ -793,26 +793,52 @@ def _reeks_als_afspraak(a, reeks):
             "omschrijving": omschrijving}
 
 
-def _herinneringen_behouden(a, gevraagd, eigen_rit=False):
-    """Een herinnering die Mehdi of Claude zette, haalt de agent nooit weg of vervangt hij nooit; popup 0 komt er nooit in."""
+def _eigen_vertrekmelding_index(a, overrides):
+    """Alleen een passende private marker bewijst welke override van de agent is."""
+    try:
+        minuten = int((a.get("_merk") or {}).get(VERTREKMELDINGMERK))
+    except (TypeError, ValueError):
+        return None
+    return next((i for i, ov in enumerate(overrides)
+                 if minuten > 0 and ov == {"method": "popup", "minutes": minuten}), None)
+
+
+def _herinneringen_behouden(a, gevraagd, eigen_rit=False, beheerde_vertrekmelding=False):
+    """Bewaar bestaande overrides; alleen de herkenbaar eigen vertrekmelding mag worden vervangen."""
     if not isinstance(gevraagd, dict):
         return gevraagd
     nieuw = [dict(ov) for ov in (gevraagd.get("overrides") or [])
              if isinstance(ov, dict) and int(ov.get("minutes") or 0) > 0]
     schoon = {"useDefault": bool(gevraagd.get("useDefault", False)), "overrides": nieuw}
+    if beheerde_vertrekmelding:
+        if len(nieuw) > 5:
+            raise ValueError("meer dan vijf vertrekmeldingen")
+        return schoon
     if eigen_rit or is_eigen_rit(a) or lees_titel(a.get("titel") or "")["reistijd"]:
+        schoon["overrides"] = nieuw[:5]
         return schoon
     bestaand = [dict(ov) for ov in ((a.get("_reminders") or {}).get("overrides") or [])
                 if isinstance(ov, dict) and int(ov.get("minutes") or 0) > 0]
+    eigen_index = _eigen_vertrekmelding_index(a, bestaand)
+    extra = [ov for ov in nieuw if ov not in bestaand]
+    if eigen_index is not None and (not nieuw or len(bestaand) + len(extra) > 5):
+        bestaand.pop(eigen_index)
+    if len(bestaand) > 5:
+        raise ValueError("meer dan vijf bestaande herinneringen")
     if not bestaand:
+        schoon["overrides"] = nieuw[:5]
         return schoon
     # De herkomst van een bestaande override is niet te bewijzen. Bewaar hem ook als een andere
-    # stap stilte of een nieuwe vertrekmelding vraagt; voeg alleen een nieuwe positieve melding toe.
-    samen = bestaand + [ov for ov in nieuw if ov not in bestaand]
+    # stap stilte vraagt; voeg nieuwe meldingen alleen toe als Google nog plaats heeft.
+    samen = list(bestaand)
+    for ov in nieuw:
+        if ov not in samen and len(samen) < 5:
+            samen.append(ov)
     return {"useDefault": False, "overrides": samen}
 
 
-def _patch(a, body, tok, toch=False, eigen_rit=False, eigen_zorgverhuis=False, uit_onderzoek=False):
+def _patch(a, body, tok, toch=False, eigen_rit=False, eigen_zorgverhuis=False, uit_onderzoek=False,
+           beheerde_vertrekmelding=False):
     import urllib.parse
     import urllib.request
     if is_zorgschaduw(a):
@@ -820,9 +846,20 @@ def _patch(a, body, tok, toch=False, eigen_rit=False, eigen_zorgverhuis=False, u
     if not mag_schrijven(a["kalender"]):
         raise GeenSchrijfrecht(a["kalender"])
     nieuwe_herinneringen = None
+    eigen_merk_wissen = False
     if "reminders" in body and isinstance(body["reminders"], dict):
-        body = {**body, "reminders": _herinneringen_behouden(a, body["reminders"], eigen_rit=eigen_rit)}
+        body = {**body, "reminders": _herinneringen_behouden(
+            a, body["reminders"], eigen_rit=eigen_rit, beheerde_vertrekmelding=beheerde_vertrekmelding)}
         nieuwe_herinneringen = dict(body["reminders"])
+        if not beheerde_vertrekmelding:
+            oude = (a.get("_reminders") or {}).get("overrides") or []
+            index = _eigen_vertrekmelding_index(a, oude)
+            if index is not None:
+                eigen = oude[index]
+                nieuw_aantal = nieuwe_herinneringen["overrides"].count(eigen)
+                eigen_merk_wissen = nieuw_aantal < oude.count(eigen)
+                if eigen_merk_wissen:
+                    body.setdefault("extendedProperties", {}).setdefault("private", {})[VERTREKMELDINGMERK] = None
     # Gewone wijzigingen blijven stil (sendUpdates=none); alleen _uitnodiging_patch is de toegestane uitnodigingsroute.
     # Google doet dit standaard ook niet, maar hier staat het expliciet, met een test erop.
     url = (f"{agenda.API}/calendars/{urllib.parse.quote(a['kalender'], safe='')}/events/"
@@ -855,6 +892,40 @@ def _patch(a, body, tok, toch=False, eigen_rit=False, eigen_zorgverhuis=False, u
     urllib.request.urlopen(req, timeout=30)
     if nieuwe_herinneringen is not None:
         a["_reminders"] = nieuwe_herinneringen
+    if eigen_merk_wissen:
+        a.setdefault("_merk", {}).pop(VERTREKMELDINGMERK, None)
+
+
+def _vertrekmelding_zetten(a, minuten, tok):
+    """Vervang hoogstens de eigen popup; een gelijke handmatige popup blijft van de eigenaar."""
+    if minuten <= 0:
+        return False
+    bestaand = [dict(ov) for ov in ((a.get("_reminders") or {}).get("overrides") or [])
+                if isinstance(ov, dict) and int(ov.get("minutes") or 0) > 0]
+    merk = (a.get("_merk") or {}).get(VERTREKMELDINGMERK)
+    eigen_index = _eigen_vertrekmelding_index(a, bestaand)
+    if eigen_index is not None and bestaand[eigen_index]["minutes"] == minuten and len(bestaand) <= 5:
+        return True
+    over = list(bestaand)
+    if eigen_index is not None:
+        over.pop(eigen_index)
+    if len(over) > 5:
+        raise ValueError("meer dan vijf bestaande herinneringen")
+    nieuw = {"method": "popup", "minutes": minuten}
+    toegevoegd = nieuw not in over and len(over) < 5
+    if toegevoegd:
+        over.append(nieuw)
+    nieuw_merk = str(minuten) if toegevoegd else None
+    if over == bestaand and (merk or None) == nieuw_merk:
+        return nieuw in over
+    _patch(a, {"reminders": {"useDefault": False, "overrides": over},
+               "extendedProperties": {"private": {VERTREKMELDINGMERK: nieuw_merk}}},
+           tok, beheerde_vertrekmelding=True)
+    if toegevoegd:
+        a.setdefault("_merk", {})[VERTREKMELDINGMERK] = nieuw_merk
+    else:
+        a.setdefault("_merk", {}).pop(VERTREKMELDINGMERK, None)
+    return toegevoegd or nieuw in over
 
 
 def herinneringen_zetten(items, alleen_dag=None):
@@ -2464,6 +2535,7 @@ def _verplaats(x, doel, tok):
 
 RITMERK = "agendawacht_rit"
 VERTREKMERK = "agendawacht_vertrek"
+VERTREKMELDINGMERK = "agendawacht_vertrekmelding"
 KETENMERK = "agendawacht_keten_vanaf"
 RIT_MERKEN_PER_RONDE = 60      # oude ritten krijgen hun merk geleidelijk, zodat de eerste ronde niet uitloopt
 
@@ -4388,11 +4460,11 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
                 gemaakt += 1
             elif is_laatste:
                 al += 1
-            if vertrek_min + 5 > 0:
-                _patch(a, {"reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": vertrek_min + 5}]}}, tok)
+            melding = _vertrekmelding_zetten(a, vertrek_min + 5, tok)
             regels.append(f"{a['start'][:16]} {_toon(a, 44)}: {van_plaats} → {plaats} {heen} min (file x{fh})"
                           + (f", terug naar huis {terug} min (file x{ft})" if is_laatste else ", daarna door naar de volgende")
-                          + f", adres uit {bron_adres}, melding {vertrek_min + 5} min vooraf")
+                          + f", adres uit {bron_adres}"
+                          + (f", melding {vertrek_min + 5} min vooraf" if melding else ", geen extra vertrekmelding"))
         except Exception as e:  # noqa: BLE001
             fout += 1
             regels.append(f"{a['start'][:16]} {_toon(a, 50)}: reistijd niet gezet ({type(e).__name__})")

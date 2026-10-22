@@ -441,8 +441,122 @@ class Planregels(unittest.TestCase):
         self.assertEqual(gepatcht[0]["reminders"]["overrides"], bestaand + [vertrek],
                          msg="test_patch_laat_bestaande_herinneringen_staan")
         self.assertEqual(gepatcht[1]["reminders"]["overrides"], bestaand + [vertrek])
-        self.assertEqual(gepatcht[2]["reminders"]["overrides"], bestaand + [vertrek])
+        # STIL verwijdert nu de gemerkte eigen vertrekmelding, maar niet de twee handmatige meldingen.
+        self.assertEqual(gepatcht[2]["reminders"]["overrides"], bestaand)
+        self.assertNotIn("agendawacht_vertrekmelding", zorg["_merk"])
         self.assertEqual(gepatcht[3]["reminders"]["overrides"], [])
+
+    def test_vertrekmelding_vervangt_eigen_override_in_drie_rondes(self):
+        eigen = [{"method": "popup", "minutes": 1440}, {"method": "popup", "minutes": 30}]
+        zorg = afspraak("zorg", "!! [PRIVE] Huisarts Dr. Proef", "11:20", "11:40",
+                        kalender=W.PRIVE_AGENDA, locatie=PLAATSEN[0],
+                        _reminders={"useDefault": False, "overrides": copy.deepcopy(eigen)})
+        items = [zorg]
+        echte_patch = W._patch
+        schrijver = self.p2(items)
+
+        def patch_via_google(a, body, tok, **kwargs):
+            with patch("urllib.request.urlopen", lambda req, timeout=30:
+                       schrijver.patch(a, json.loads(req.data.decode()), tok, **kwargs)):
+                return echte_patch(a, body, tok, **kwargs)
+
+        with patch.object(W, "_patch", patch_via_google):
+            for rij_min in (20, 27, 35):
+                with patch.object(W, "rijtijd_min", lambda *_args: (rij_min, "proef")):
+                    self.assertEqual(W.reistijd_zetten(items, nu=NU.replace(hour=7))[3], 0)
+                minuten = rij_min + 5
+                self.assertEqual(zorg["_reminders"]["overrides"],
+                                 eigen + [{"method": "popup", "minutes": minuten}])
+                self.assertEqual(zorg["_merk"].get("agendawacht_vertrekmelding"), str(minuten))
+        self.assertTrue(all(len(body["reminders"]["overrides"]) <= 5
+                            for eid, body in schrijver.patches if eid == zorg["id"] and "reminders" in body))
+
+    def test_vertrekmelding_laat_vijf_handmatige_overrides_staan(self):
+        eigen = [{"method": "popup", "minutes": n} for n in (1440, 120, 60, 30, 10)]
+        zorg = afspraak("zorg", "!! [PRIVE] Huisarts Dr. Proef", "11:20", "11:40",
+                        kalender=W.PRIVE_AGENDA, locatie=PLAATSEN[0],
+                        _reminders={"useDefault": False, "overrides": copy.deepcopy(eigen)})
+        items = [zorg]
+        echte_patch = W._patch
+        schrijver = self.p2(items)
+
+        def patch_via_google(a, body, tok, **kwargs):
+            with patch("urllib.request.urlopen", lambda req, timeout=30:
+                       schrijver.patch(a, json.loads(req.data.decode()), tok, **kwargs)):
+                return echte_patch(a, body, tok, **kwargs)
+
+        with patch.object(W, "_patch", patch_via_google):
+            self.assertEqual(self.rit_zetten(items)[3], 0)
+        self.assertEqual(zorg["_reminders"]["overrides"], eigen)
+        self.assertNotIn("agendawacht_vertrekmelding", zorg["_merk"])
+        self.assertTrue(all(len(body["reminders"]["overrides"]) <= 5
+                            for eid, body in schrijver.patches if eid == zorg["id"] and "reminders" in body))
+
+    def test_vertrekmelding_neemt_gelijke_handmatige_popup_niet_over(self):
+        handmatig = {"method": "popup", "minutes": 25}
+        zorg = afspraak("zorg", "!! [PRIVE] Huisarts Dr. Proef", "11:20", "11:40",
+                        kalender=W.PRIVE_AGENDA, locatie=PLAATSEN[0],
+                        _reminders={"useDefault": False, "overrides": [handmatig]})
+        items = [zorg]
+        echte_patch = W._patch
+        schrijver = self.p2(items)
+
+        def patch_via_google(a, body, tok, **kwargs):
+            with patch("urllib.request.urlopen", lambda req, timeout=30:
+                       schrijver.patch(a, json.loads(req.data.decode()), tok, **kwargs)):
+                return echte_patch(a, body, tok, **kwargs)
+
+        with patch.object(W, "_patch", patch_via_google):
+            with patch.object(W, "rijtijd_min", lambda *_args: (20, "proef")):
+                self.assertEqual(W.reistijd_zetten(items, nu=NU.replace(hour=7))[3], 0)
+            self.assertEqual(zorg["_reminders"]["overrides"], [handmatig])
+            self.assertNotIn("agendawacht_vertrekmelding", zorg["_merk"])
+            with patch.object(W, "rijtijd_min", lambda *_args: (30, "proef")):
+                self.assertEqual(W.reistijd_zetten(items, nu=NU.replace(hour=7))[3], 0)
+        self.assertEqual(zorg["_reminders"]["overrides"], [handmatig, {"method": "popup", "minutes": 35}])
+        self.assertEqual(zorg["_merk"].get("agendawacht_vertrekmelding"), "35")
+
+    def test_bij_vijf_meldingen_maakt_eigen_override_eerst_plaats(self):
+        handmatig = [{"method": "popup", "minutes": n} for n in (1440, 120, 60, 30)]
+        vertrek = {"method": "popup", "minutes": 25}
+        a = afspraak(_merk={"agendawacht_vertrekmelding": "25"},
+                    _reminders={"useDefault": False, "overrides": handmatig + [vertrek]})
+        verzonden = []
+        with patch.object(W, "mag_schrijven", lambda _kal: True), \
+                patch("urllib.request.urlopen", lambda req, timeout=30:
+                      verzonden.append(json.loads(req.data.decode())) or None):
+            W._patch(a, {"reminders": {"useDefault": False,
+                                       "overrides": [{"method": "popup", "minutes": 40}]}}, "tok")
+        verwacht = handmatig + [{"method": "popup", "minutes": 40}]
+        self.assertEqual(a["_reminders"]["overrides"], verwacht)
+        self.assertEqual(verzonden[0]["reminders"]["overrides"], verwacht)
+        self.assertNotIn("agendawacht_vertrekmelding", a["_merk"])
+
+    def test_stil_wist_alleen_gemerkte_vertrekmelding(self):
+        handmatig = {"method": "popup", "minutes": 1440}
+        vertrek = {"method": "popup", "minutes": 25}
+        a = afspraak(_merk={"agendawacht_vertrekmelding": "25", "ander_merk": "blijft"},
+                    _reminders={"useDefault": False, "overrides": [handmatig, vertrek]})
+        verzonden = []
+        with patch.object(W, "mag_schrijven", lambda _kal: True), \
+                patch("urllib.request.urlopen", lambda req, timeout=30:
+                      verzonden.append(json.loads(req.data.decode())) or None):
+            W._patch(a, {"reminders": {"useDefault": False, "overrides": []}}, "tok")
+        self.assertEqual(a["_reminders"]["overrides"], [handmatig])
+        self.assertEqual(a["_merk"], {"ander_merk": "blijft"})
+        self.assertEqual(verzonden[0]["extendedProperties"]["private"]["agendawacht_vertrekmelding"], None)
+
+    def test_gemaskeerde_patient_vraagt_drie_letters_en_een_persoon(self):
+        import mail_afspraken as MA  # noqa: PLC0415
+        profiel = {"patienten": ["Jan Pieter Jansens"]}
+        self.assertFalse(MA._eigen_patient("Ja*** Ja***", profiel))
+        self.assertFalse(MA._eigen_patient("Ja*** Pie*** Jan***", profiel))
+        self.assertTrue(MA._eigen_patient("Jan*** Jan***", profiel))
+        self.assertTrue(MA._eigen_patient("Jan*** Pie*** Jan***", profiel))
+        self.assertFalse(MA._eigen_patient("Jan*** Pav*** Jan***", profiel))
+        self.assertFalse(MA._eigen_patient("Jan*** Pieter Jansens", profiel))
+        ambigu = {"patienten": ["Jan Pieter Jansens", "Jan Paul Janssens"]}
+        self.assertFalse(MA._eigen_patient("Jan*** Jan***", ambigu))
 
     def test_gemaskeerde_patient_drie_velden_telt_als_mehdi(self):
         import mail_afspraken as MA  # noqa: PLC0415
