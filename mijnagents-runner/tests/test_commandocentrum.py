@@ -289,6 +289,110 @@ class Hoofdronde(unittest.TestCase):
         opnieuw = self.ronde("2026-10-21T14:16:00+02:00")
         self.assertIn("cc:afspraak:bs1:plaud-wacht:2", {t["uniek"] for t in opnieuw if t["soort"] == "taak"})
 
+    def test_ontbrekende_bron_heropent_hoogstens_eens_per_dag_en_drie_keer(self):
+        self.o["pakket"]["fotos_iphone"] = 1
+        self.ronde("2026-10-21T13:16:00+02:00")
+        basis = "cc:afspraak:bs1:plaud-wacht"
+        self.open_taken[basis].update(status="opgepakt", opgepakt_door="plaud-wacht",
+                                     opgepakt_ts="2026-10-21T13:16:00+02:00")
+
+        for dag, verwacht in (("2026-10-21", ":2"), ("2026-10-22", ":3"),
+                              ("2026-10-23", ":4")):
+            tijd = f"{dag}T16:00:00+02:00"
+            self.o["pakket"]["gemeten_ts"] = tijd
+            nieuwe = [t for t in self.ronde(tijd) if t["soort"] == "taak" and t["voor"] == "plaud-wacht"]
+            self.assertEqual([t["uniek"] for t in nieuwe], [basis + verwacht])
+            sleutel = basis + verwacht
+            self.assertEqual(self.o["taken"][-1]["heropend_ts"], tijd)
+            self.open_taken[sleutel].update(status="opgepakt", opgepakt_door="plaud-wacht", opgepakt_ts=tijd)
+            later = f"{dag}T18:00:00+02:00"
+            self.o["pakket"]["gemeten_ts"] = later
+            self.assertFalse([t for t in self.ronde(later) if t["soort"] == "taak" and t["voor"] == "plaud-wacht"])
+
+        tijd = "2026-10-24T16:00:00+02:00"
+        self.o["pakket"]["gemeten_ts"] = tijd
+        self.assertFalse([t for t in self.ronde(tijd) if t["soort"] == "taak" and t["voor"] == "plaud-wacht"])
+        self.assertNotIn(basis + ":5", self.open_taken)
+        noden = [n["tekst"] for n in self.agent.hartslagen[-1][1]["nood"] if "blijft ontbreken" in n["tekst"]]
+        self.assertEqual(noden, ["47035: Plaud-opname blijft ontbreken na 3 pogingen; kijk het na"])
+
+        self.o["pakket"].update(transcripten=1, gemeten_ts="2026-10-24T18:00:00+02:00")
+        self.assertFalse([t for t in self.ronde("2026-10-24T18:00:00+02:00")
+                          if t["soort"] == "taak" and t["voor"] == "plaud-wacht"])
+        self.assertFalse([n for n in self.agent.hartslagen[-1][1]["nood"] if "blijft ontbreken" in n["tekst"]])
+
+    def test_brusselse_dag_en_oude_heropening_zonder_tijdveld(self):
+        basis = "cc:afspraak:bs1:plaud-wacht"
+        taak = {"voor": "plaud-wacht", "uniek": basis, "inhoud": {}}
+        bord_item = {"status": "opgepakt", "opgepakt_door": "plaud-wacht", "inhoud": {},
+                     "opgepakt_ts": "2026-10-25T01:00:00+02:00"}
+        oud = {"uniek": basis + ":2", "heropend_ts": "2026-10-25T00:30:00+02:00"}
+        vandaag = CC.taak_voor_nieuwe_ronde(taak.copy(), oud, bord_item, False,
+                                             "2026-10-25T04:00:00+01:00",
+                                             nu=datetime.fromisoformat("2026-10-25T04:00:00+01:00"))
+        self.assertIsNone(vandaag)
+        morgen = CC.taak_voor_nieuwe_ronde(taak.copy(), oud, bord_item, False,
+                                            "2026-10-26T07:00:00+01:00",
+                                            nu=datetime.fromisoformat("2026-10-26T07:00:00+01:00"))
+        self.assertEqual(morgen["uniek"], basis + ":3")
+        legacy = {"uniek": basis + ":2"}
+        bord_item["ts"] = "2026-10-25T00:30:00+02:00"
+        self.assertIsNone(CC.taak_voor_nieuwe_ronde(taak.copy(), legacy, bord_item, False,
+                                                     "2026-10-25T04:00:00+01:00",
+                                                     nu=datetime.fromisoformat("2026-10-25T04:00:00+01:00")))
+        self.assertEqual(CC._taakbesluit(taak.copy(), {"uniek": basis + ":10"}, bord_item, False,
+                                          "2026-10-26T07:00:00+01:00",
+                                          nu=datetime.fromisoformat("2026-10-26T07:00:00+01:00"))[1], "limiet")
+        zonder_tijd = {k: v for k, v in bord_item.items() if k not in ("ts", "opgepakt_ts")}
+        self.assertEqual(CC._taakbesluit(taak.copy(), legacy, zonder_tijd, False,
+                                          "2026-10-26T07:00:00+01:00",
+                                          nu=datetime.fromisoformat("2026-10-26T07:00:00+01:00"))[1], "tijdstip")
+
+    def test_uitgestelde_heropening_maakt_pakket_niet_klaar(self):
+        self.ronde("2026-10-21T13:16:00+02:00")
+        for wacht in ("icloud-wacht", "plaud-wacht"):
+            self.open_taken[f"cc:afspraak:bs1:{wacht}"].update(
+                status="opgepakt", opgepakt_door=wacht, opgepakt_ts="2026-10-21T13:16:00+02:00")
+        self.o["pakket"].update(fotos_iphone=1, transcripten=1)
+        self.r["adres"] = "Nieuwe Proefstraat 2"
+        heropend = self.ronde("2026-10-21T14:16:00+02:00")
+        self.assertEqual({t["uniek"] for t in heropend if t["soort"] == "taak"},
+                         {f"cc:afspraak:bs1:{wacht}:2" for wacht in ("icloud-wacht", "plaud-wacht")})
+        for wacht in ("icloud-wacht", "plaud-wacht"):
+            self.open_taken[f"cc:afspraak:bs1:{wacht}:2"].update(
+                status="opgepakt", opgepakt_door=wacht, opgepakt_ts="2026-10-21T14:16:00+02:00")
+        self.r["adres"] = "Tweede Proefstraat 4"
+        uitgesteld = self.ronde("2026-10-21T14:17:00+02:00")
+        self.assertFalse([t for t in uitgesteld if t["soort"] == "taak"])
+        self.assertFalse([t for t in uitgesteld if t["soort"] == "impuls" and t["voor"] == SOORT["agent"]])
+        self.assertFalse(self.o["impuls_verslag_ts"])
+
+    def test_plaud_uitgesteld_terwijl_iphone_actueel_is_geeft_geen_verslagimpuls(self):
+        self.ronde("2026-10-21T13:16:00+02:00")
+        plaud = "cc:afspraak:bs1:plaud-wacht"
+        foto = "cc:afspraak:bs1:icloud-wacht"
+        self.open_taken[plaud].update(status="opgepakt", opgepakt_door="plaud-wacht",
+                                      opgepakt_ts="2026-10-21T13:16:00+02:00")
+        self.o["pakket"].update(fotos_iphone=1, transcripten=1)
+        self.r["adres"] = "Nieuwe Proefstraat 2"
+        eerste = self.ronde("2026-10-21T14:16:00+02:00")
+        self.assertEqual([t["uniek"] for t in eerste if t["voor"] == "plaud-wacht"], [plaud + ":2"])
+        self.assertEqual([t["uniek"] for t in eerste if t["voor"] == "icloud-wacht"], [foto])
+        self.open_taken[foto].update(status="opgepakt", opgepakt_door="icloud-wacht",
+                                     opgepakt_ts="2026-10-21T14:16:00+02:00")
+        self.open_taken[plaud + ":2"].update(status="opgepakt", opgepakt_door="plaud-wacht",
+                                              opgepakt_ts="2026-10-21T14:16:00+02:00")
+        self.r["adres"] = "Tweede Proefstraat 4"
+        tweede = self.ronde("2026-10-21T14:17:00+02:00")
+        self.assertEqual([t["uniek"] for t in tweede if t["voor"] == "icloud-wacht"], [foto + ":2"])
+        self.assertFalse([t for t in tweede if t["voor"] == "plaud-wacht"])
+        self.open_taken[foto + ":2"].update(status="opgepakt", opgepakt_door="icloud-wacht",
+                                             opgepakt_ts="2026-10-21T14:17:00+02:00")
+        derde = self.ronde("2026-10-21T14:18:00+02:00")
+        self.assertFalse([t for t in derde if t["soort"] == "taak"])
+        self.assertFalse([t for t in derde if t["soort"] == "impuls" and t["voor"] == SOORT["agent"]])
+        self.assertFalse(self.o["impuls_verslag_ts"])
+
     def test_toekomstig_bezoek_zonder_map_geeft_nog_geen_nood(self):
         self.r.update(datum="2026-11-05", start="2026-11-05T08:00:00+01:00",
                       einde="2026-11-05T10:00:00+01:00")

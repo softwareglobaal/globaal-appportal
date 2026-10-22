@@ -775,6 +775,44 @@ class Rondes(unittest.TestCase):
             self.assertNotIn("waarschuwing", r["pakket"]["overdracht"])
         self.assertEqual(len(self.pakketten), 1)
 
+    def test_legacy_overdracht_bordtimeout_bewaart_bestaande_waarschuwing(self):
+        r = self.board.rijen["afspraak:bs77"]
+        self.board.taken["cc:bs77:plaud-wacht"]["ts"] = "2026-10-21T09:00:00Z"
+        Klok.huidig = datetime(2026, 10, 21, 10, 0, tzinfo=timezone.utc)
+        self.agent.ronde()
+        Klok.huidig = datetime(2026, 10, 21, 15, 3, tzinfo=timezone.utc)
+        self.agent.ronde()
+        overdracht = r["pakket"]["overdracht"]
+        waarschuwing = overdracht["waarschuwing"]
+        for veld in ("open_wachttaak_bij_overdracht", "open_wachttaak_reden_bij_overdracht",
+                     "open_wachttaken_bij_overdracht"):
+            overdracht.pop(veld)
+        Klok.huidig = datetime(2026, 10, 21, 15, 13, tzinfo=timezone.utc)
+        with patch.object(self.agent, "_lees_taakstatus", side_effect=TimeoutError("bord time-out")):
+            self.agent.ronde()
+        self.assertEqual(r["pakket"]["overdracht"]["waarschuwing"], waarschuwing)
+        self.assertEqual([n["tekst"] for n in self.log.hartslagen[-1][1].get("nood", [])
+                          if "pakket klaargezet" in n["tekst"]], [waarschuwing])
+        self.assertFalse([tekst for _, _, tekst in self.log.regels if "pakketwaarschuwing gewist" in tekst])
+
+        self.board.taken["cc:bs77:plaud-wacht"].update(status="opgepakt", opgepakt_door="plaud-wacht")
+        Klok.huidig = datetime(2026, 10, 21, 15, 23, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertNotIn("waarschuwing", r["pakket"]["overdracht"])
+        self.assertEqual(len([tekst for _, _, tekst in self.log.regels
+                              if "pakketwaarschuwing gewist" in tekst]), 1)
+
+    def test_eerste_overdracht_bordtimeout_meldt_onleesbare_taakstatus(self):
+        r = self.board.rijen["afspraak:bs77"]
+        Klok.huidig = datetime(2026, 10, 21, 10, 0, tzinfo=timezone.utc)
+        self.agent.ronde()
+        Klok.huidig = datetime(2026, 10, 21, 15, 3, tzinfo=timezone.utc)
+        with patch.object(self.agent, "_lees_taakstatus", side_effect=TimeoutError("bord time-out")):
+            self.agent.ronde()
+        overdracht = r["pakket"]["overdracht"]
+        self.assertTrue(overdracht["open_wachttaak_bij_overdracht"])
+        self.assertIn("taakstatus niet leesbaar", overdracht["waarschuwing"])
+
     def test_late_fototaak_met_nieuwe_foto_geeft_nieuwe_versie(self):
         r = self.board.rijen["afspraak:bs77"]
         r["taken"] = []

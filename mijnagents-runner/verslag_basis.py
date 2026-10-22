@@ -466,7 +466,11 @@ def taken_dicht(rij, nu, lees):
     return True, "wachttaken volledig afgehandeld"
 
 
-def _open_wachttaken(rij, lees, *, overdracht_ts=None, toegestane_taken=None):
+class TaakstatusLeesfout(RuntimeError):
+    """De huidige status van een wachttaak is onbekend door een bordleesfout."""
+
+
+def _open_wachttaken(rij, lees, *, overdracht_ts=None, toegestane_taken=None, leesfout_doorgeven=False):
     """Geef de open taken met sleutel en reden, eventueel begrensd tot de overdracht."""
     taken = rij.get("taken") or []
     volgorde = list(dict.fromkeys(taak.get("voor") for taak in taken
@@ -486,7 +490,9 @@ def _open_wachttaken(rij, lees, *, overdracht_ts=None, toegestane_taken=None):
             antwoord = lees(uniek)
             items = antwoord.get("items", []) if isinstance(antwoord, dict) else antwoord
             item = next((it for it in items or [] if it.get("uniek") == uniek), None)
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            if leesfout_doorgeven:
+                raise TaakstatusLeesfout(uniek) from e
             if overdracht_ts is None:
                 per_wacht[wacht] = (uniek, "taakstatus niet leesbaar")
             continue
@@ -508,7 +514,7 @@ def _open_wachttaken(rij, lees, *, overdracht_ts=None, toegestane_taken=None):
 def open_wachttaak(rij, lees, *, overdracht_ts=None, toegestane_taken=None):
     """Geef alleen een reden voor een wachttaak die bij deze overdracht meetelt."""
     open_taken = _open_wachttaken(rij, lees, overdracht_ts=overdracht_ts,
-                                 toegestane_taken=toegestane_taken)
+                                 toegestane_taken=toegestane_taken, leesfout_doorgeven=overdracht_ts is not None)
     return open_taken[0][1] if open_taken else None
 
 
@@ -1209,24 +1215,28 @@ class VerslagAgent:
             if bij_overdracht is None:
                 bij_overdracht = (0 if "zonder iPhone-foto's" in (overdracht.get("waarschuwing") or "")
                                   else len(inv["fotos_iphone"]))
-            if "open_wachttaak_bij_overdracht" in overdracht:
-                open_reden = (open_wachttaak(rij, self._lees_taakstatus,
-                                             toegestane_taken=set(overdracht.get("open_wachttaken_bij_overdracht") or []))
-                              if overdracht["open_wachttaak_bij_overdracht"] else None)
+            try:
+                if "open_wachttaak_bij_overdracht" in overdracht:
+                    open_reden = (open_wachttaak(rij, self._lees_taakstatus,
+                                                 toegestane_taken=set(overdracht.get("open_wachttaken_bij_overdracht") or []))
+                                  if overdracht["open_wachttaak_bij_overdracht"] else None)
+                else:
+                    grens = _tijd(overdracht.get("ts"))
+                    open_reden = open_wachttaak(rij, self._lees_taakstatus, overdracht_ts=grens) if grens else None
+            except TaakstatusLeesfout:
+                pass  # Onbekend: bewaar de waarschuwing tot een volgende leesbare ronde.
             else:
-                grens = _tijd(overdracht.get("ts"))
-                open_reden = open_wachttaak(rij, self._lees_taakstatus, overdracht_ts=grens) if grens else None
-            if not bij_overdracht:
-                waarschuwing = f"{mapnr}: pakket klaargezet zonder iPhone-foto's; controleer de fotolevering"
-            elif open_reden:
-                waarschuwing = (f"{mapnr}: pakket klaargezet na zes uur terwijl {open_reden}; "
-                               "controleer of alle bronnen volledig zijn")
-            else:
-                waarschuwing = None
-            if waarschuwing:
-                overdracht["waarschuwing"] = waarschuwing
-            elif overdracht.pop("waarschuwing", None):
-                self.ag.log(onderwerp, "bevinding", "pakketwaarschuwing gewist: bronnen volledig en geen open wachttaken")
+                if not bij_overdracht:
+                    waarschuwing = f"{mapnr}: pakket klaargezet zonder iPhone-foto's; controleer de fotolevering"
+                elif open_reden:
+                    waarschuwing = (f"{mapnr}: pakket klaargezet na zes uur terwijl {open_reden}; "
+                                   "controleer of alle bronnen volledig zijn")
+                else:
+                    waarschuwing = None
+                if waarschuwing:
+                    overdracht["waarschuwing"] = waarschuwing
+                elif overdracht.pop("waarschuwing", None):
+                    self.ag.log(onderwerp, "bevinding", "pakketwaarschuwing gewist: bronnen volledig en geen open wachttaken")
             pk["overdracht"] = overdracht
         vergelijk = lambda d: {k: v for k, v in d.items() if k != "gemeten_ts"}
         laatste_meting = _tijd(oud.get("gemeten_ts"))
