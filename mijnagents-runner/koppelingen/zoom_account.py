@@ -870,8 +870,8 @@ def voorstel_van(a, week):
             "parameters": params, "runbook": ""}
 
 
-def basis_van(d, vorige_basis=None):
-    """Bewaar vaste velden en de laatst bewezen rechten per geanonimiseerde app."""
+def basis_van(d, vorige_basis=None, week=None):
+    """Bewaar de laatst bewezen apprechten en hun meetweek voor de vergelijking."""
     a = _bekend(d, "account") or {}
     s = _bekend(d, "security") or {}
     u = _bekend(d, "user") or {}
@@ -882,16 +882,23 @@ def basis_van(d, vorige_basis=None):
                                "recording.auto_delete_cmr") if k in a}
     if s.get("tweestaps"):
         inst["security.sign_in_with_two_factor_auth"] = s["tweestaps"]
-    app_basis = {x["code"]: {"naam": x["naam"], "gepubliceerd": x["gepubliceerd"],
-                             "rechten": x["rechten"], "schrijf": x["schrijf"]}
-                 for x in ap.get("overzicht", [])}
     vorige_apps = vorige_basis.get("apps") if isinstance(vorige_basis, dict) else None
-    if isinstance(vorige_apps, dict):
-        for code, app in app_basis.items():
-            oud = vorige_apps.get(code)
-            if app["rechten"] is None and isinstance(oud, dict) and \
-                    type(oud.get("rechten")) is int and type(oud.get("schrijf")) is int:
-                app["rechten"], app["schrijf"] = oud["rechten"], oud["schrijf"]
+    app_basis = {}
+    for x in ap.get("overzicht", []):
+        oud = vorige_apps.get(x["code"]) if isinstance(vorige_apps, dict) else None
+        app = {"naam": x["naam"], "gepubliceerd": x["gepubliceerd"]}
+        if _tel(x["rechten"]) is not None and _tel(x["schrijf"]) is not None:
+            app.update(rechten=x["rechten"], schrijf=x["schrijf"], gemeten_week=week)
+        elif isinstance(oud, dict) and _tel(oud.get("rechten")) is not None and \
+                _tel(oud.get("schrijf")) is not None:
+            # Oudere staat had geen meetweek. Bewaar de telling, maar verzin geen datum.
+            bewijsweek = oud.get("gemeten_week")
+            app.update(rechten=oud["rechten"], schrijf=oud["schrijf"],
+                       gemeten_week=bewijsweek if isinstance(bewijsweek, str) and
+                       re.fullmatch(r"\d{4}-W\d{2}", bewijsweek) else None)
+        else:
+            app.update(rechten=None, schrijf=None, gemeten_week=None)
+        app_basis[x["code"]] = app
     return {"instellingen": inst,
             "opname": {k: u[k] for k in ("recording.auto_recording", "recording.recording_audio_transcript") if k in u},
             "vergrendelingen": locks.get("velden") or {},
@@ -899,22 +906,65 @@ def basis_van(d, vorige_basis=None):
             "apps": app_basis}
 
 
-def apprechten_veranderd(vorige_basis, huidige_apps):
-    """Rechten zijn pas met appdetails in de weekscan vergelijkbaar."""
+def actuele_appmeting(d, week):
+    """De lezing van deze ronde, ook als een wijzigingsmelding de basis vasthoudt."""
+    ap = _bekend(d, "apps")
+    overzicht = ap.get("overzicht") if ap else None
+    if not isinstance(overzicht, list):
+        return {"week": week, "stand": "onbekend: appslijst ontbreekt",
+                "onbekende_rechten": None, "apps": {}}
+    onbekend = _tel(ap.get("onbekende_rechten"))
+    if onbekend is None:
+        onbekend = sum(x.get("rechten") is None or x.get("schrijf") is None for x in overzicht)
+    return {"week": week, "stand": "ok", "onbekende_rechten": onbekend,
+            "apps": {x["code"]: {"rechten": x["rechten"], "schrijf": x["schrijf"]}
+                     for x in overzicht}}
+
+
+def laatst_bewezen_apprechten(vorige, actueel):
+    """Werk echt gemeten rechten bij, onafhankelijk van de meldingsbasis."""
+    vorige = vorige if isinstance(vorige, dict) else {}
+    if actueel["stand"] != "ok":
+        return copy.deepcopy(vorige)
+    bewijs = {}
+    for code, meting in actueel["apps"].items():
+        if _tel(meting["rechten"]) is not None and _tel(meting["schrijf"]) is not None:
+            bewijs[code] = {"rechten": meting["rechten"], "schrijf": meting["schrijf"],
+                            "gemeten_week": actueel["week"]}
+        elif code in vorige:
+            bewijs[code] = copy.deepcopy(vorige[code])
+    return bewijs
+
+
+def apprechten_veranderd(vorige_basis, huidige_apps, laatste_bewijs=None):
+    """Vergelijk alleen gemeten aantallen; meld ook niet vergelijkbare apps."""
     vorig = (vorige_basis or {}).get("apps")
-    if not isinstance(vorig, dict) or not isinstance(huidige_apps, dict):
-        return {"stand": "onbekend: vorige of huidige appmeting ontbreekt"}
-    nu = {x["code"]: x for x in huidige_apps.get("overzicht", [])}
+    bewijs = laatste_bewijs if isinstance(laatste_bewijs, dict) else {}
+    huidige_lijst = huidige_apps.get("overzicht") if isinstance(huidige_apps, dict) and \
+        not str(huidige_apps.get("stand", "")).startswith("onbekend") else None
+    if not isinstance(huidige_lijst, list):
+        return {"stand": "onbekend: huidige appmeting ontbreekt", "overzicht": [],
+                "onbekende_vergelijkingen": None}
+    if not isinstance(vorig, dict) and not bewijs:
+        return {"stand": "onbekend: vorige of huidige appmeting ontbreekt", "overzicht": [],
+                "onbekende_vergelijkingen": len(huidige_lijst)}
+    nu = {x["code"]: x for x in huidige_lijst}
+    vorig = dict(vorig) if isinstance(vorig, dict) else {}
+    vorig.update({code: bewijs[code] for code in bewijs.keys() - vorig.keys()})
     veranderd = []
+    # Nieuwe en verdwenen apps hebben geen meting aan beide kanten van de vergelijking.
+    onbekend = len(vorig.keys() ^ nu.keys())
     for code in sorted(vorig.keys() & nu.keys()):
         oud, nieuw = vorig[code], nu[code]
-        if any(oud.get(k) is None or nieuw.get(k) is None for k in ("rechten", "schrijf")):
+        if any(_tel(oud.get(k)) is None or _tel(nieuw.get(k)) is None for k in ("rechten", "schrijf")):
+            onbekend += 1
             continue
         if any(oud.get(k) != nieuw.get(k) for k in ("rechten", "schrijf")):
             veranderd.append({"naam": nieuw["naam"], "rechten_van": oud.get("rechten"),
                               "rechten_naar": nieuw["rechten"], "schrijf_van": oud.get("schrijf"),
                               "schrijf_naar": nieuw["schrijf"]})
-    return {"stand": "ok", "overzicht": veranderd}
+    return {"stand": "onbekend: niet alle apprechten zijn vergelijkbaar" if onbekend else "ok",
+            "overzicht": veranderd, "onbekende_vergelijkingen": onbekend}
 
 
 def verschil(oud, nieuw):
@@ -953,7 +1003,7 @@ UITVOER_SLEUTELS = frozenset((
     "pakket periode hosts sinds volgende_factuur licensed basic room pending in_gebruik actief inactief "
     "hosts_30d facturen kenmerken gebruiker dienst oordeel aanvragen geblokkeerd goedgekeurd "
     "wijziging tot instellingen apps_nieuw apps_weg beheerhandelingen veld van naar "
-    "rechten_veranderd rechten_van rechten_naar schrijf_van schrijf_naar onderwerp stap"
+    "rechten_veranderd onbekende_vergelijkingen rechten_van rechten_naar schrijf_van schrijf_naar onderwerp stap"
 ).split())
 _VERBODEN_SLEUTELS = re.compile(r"(?:email|ip_address|operator|operation_detail|topic|host_email|user_name|first_name|last_name|phone|pmi|password|passcode|pwd|token|secret|download_url|play_url|share_url|meeting_id)", re.I)
 _PATRONEN = (re.compile(r"@"), re.compile(r"\d{9,}"), re.compile(r"(?:\d{1,3}\.){3}\d{1,3}"),
@@ -1008,6 +1058,12 @@ def weekoverzicht(d, adv, wachtrij, week, klok, volledig):
     security_d = _bekend(d, "security")
     act_d = _bekend(d, "activiteiten")
     daily_d = _bekend(d, "daggebruik")
+    app_rechten = d.get("app_rechten") if isinstance(d.get("app_rechten"), dict) else None
+    wijzigingen = app_rechten.get("overzicht") if app_rechten else None
+    onbekende_vergelijkingen = app_rechten.get("onbekende_vergelijkingen") if app_rechten else None
+    rechten_veranderd = wijzigingen if isinstance(wijzigingen, list) and \
+        (wijzigingen or app_rechten.get("stand") == "ok" and onbekende_vergelijkingen == 0) else \
+        "onbekend: appvergelijking ontbreekt"
     content = {"soort": "weekoverzicht", "week": week, "gemeten": klok.isoformat(),
                "scan": "volledig" if volledig else "gedeeltelijk", "delen": delen,
                "beveiliging": {"tweestaps": _waarde(security_d, "tweestaps"),
@@ -1045,7 +1101,9 @@ def weekoverzicht(d, adv, wachtrij, week, klok, volledig):
                         "goedgekeurd": _waarde(_bekend(d, "goedgekeurd"), "aantal", "niet beschikbaar"),
                         "met_schrijfrechten": [{"naam": x["naam"], "rechten": x["rechten"], "schrijf": x["schrijf"]}
                                                 for x in (apps_d.get("met_schrijfrechten", []) if apps_d else [])[:6]],
-                        "rechten_veranderd": _waarde(_bekend(d, "app_rechten"), "overzicht", "eerste scan of appdetail ontbreekt")},
+                        "rechten_veranderd": rechten_veranderd,
+                        "onbekende_vergelijkingen": _waarde(app_rechten, "onbekende_vergelijkingen",
+                                                          "eerste scan of appdetail ontbreekt")},
                "gebruik": {"actief": _waarde(_bekend(d, "rapport_actief"), "aantal"),
                            "inactief": _waarde(_bekend(d, "rapport_inactief"), "aantal"),
                            "maand_tot_nu": {"meetings": _waarde(daily_d, "meetings"),
@@ -1182,9 +1240,17 @@ def ronde(r, w, staat, klok, gesprekken=0, forceer=False):
     d = {}
     fouten = []
     vragen = 0
-    if forceer or aan_de_beurt(oud, klok):
+    weekscan = forceer or aan_de_beurt(oud, klok)
+    overzicht_ok = False
+    if weekscan:
         d, fouten, volledig, vragen = lees_week(w["ik"]["id"], str(w["ik"]["pmi"]), klok)
-        d["app_rechten"] = apprechten_veranderd(oud.get("basis"), _bekend(d, "apps"))
+        weekbasis = oud.get("rechten_weekbasis")
+        if not isinstance(weekbasis, dict) or weekbasis.get("week") != week:
+            vorige_basis = oud.get("basis") if isinstance(oud.get("basis"), dict) else {}
+            weekbasis = {"week": week, "apps": copy.deepcopy(vorige_basis.get("apps"))}
+        nieuw["rechten_weekbasis"] = weekbasis
+        d["app_rechten"] = apprechten_veranderd(weekbasis, _bekend(d, "apps"),
+                                               oud.get("laatst_bewezen_apprechten"))
         adv = adviezen(d, gesprekken, nieuw)
         try:
             voorstellen = voorstellen_lezen()
@@ -1268,8 +1334,22 @@ def ronde(r, w, staat, klok, gesprekken=0, forceer=False):
                 r.nood("Zoom-wijzigingscontrole twee rondes na elkaar niet gelezen", "claude-code")
         else:
             nieuw["wijziging_fouten"] = 0
-    basis = basis_van(d, oud.get("basis"))
-    if all(_bekend(d, k) is not None for k in ("account", "security", "user", "locks", "apps", "logboek")):
+    nieuw["actuele_appmeting"] = actuele_appmeting(d, week)
+    vorig_bewijs = oud.get("laatst_bewezen_apprechten")
+    if not isinstance(vorig_bewijs, dict):
+        vorige_apps = (oud.get("basis") or {}).get("apps") or {}
+        vorig_bewijs = {code: {"rechten": app["rechten"], "schrijf": app["schrijf"],
+                               "gemeten_week": app.get("gemeten_week")}
+                        for code, app in vorige_apps.items() if isinstance(app, dict) and
+                        _tel(app.get("rechten")) is not None and _tel(app.get("schrijf")) is not None}
+    nieuw["laatst_bewezen_apprechten"] = laatst_bewezen_apprechten(
+        vorig_bewijs, nieuw["actuele_appmeting"])
+    basis = basis_van(d, oud.get("basis"), week)
+    if weekscan and volledig and nieuw["rechten_weekbasis"].get("apps") is None:
+        # De eerste geslaagde scan legt de referentie voor latere scans in dezelfde week vast.
+        nieuw["rechten_weekbasis"]["apps"] = copy.deepcopy(basis["apps"])
+    if (not weekscan or volledig) and all(_bekend(d, k) is not None for k in
+                                              ("account", "security", "user", "locks", "apps", "logboek")):
         vorige = oud.get("basis")
         if not vorige:
             nieuw["basis"] = basis
@@ -1325,19 +1405,11 @@ def lees_wijziging(ik, klok, oude_basis):
                 raise Z.AccountFout(reden="onleesbaar")
             code = _ident(appid)
             if code in vorig:
-                details[appid] = {"app_scopes": []}
+                # Bestaande apps krijgen hier geen detailvraag: de huidige rechten zijn onbekend.
+                details[appid] = {}
             else:
                 details[appid] = l.vraag(f"/marketplace/apps/{appid}")
-        antwoord = apps(rows, details)
-        for x in antwoord.get("overzicht", []):
-            if x["code"] in vorig:
-                x["rechten"] = vorig[x["code"]]["rechten"]
-                x["schrijf"] = vorig[x["code"]]["schrijf"]
-        if antwoord.get("stand") == "ok":
-            antwoord["onbekende_rechten"] = sum(x["rechten"] is None for x in antwoord["overzicht"])
-            antwoord["met_schrijfrechten"] = [x for x in antwoord["overzicht"]
-                                              if x["schrijf"] is not None and x["schrijf"] >= 5]
-        return antwoord
+        return apps(rows, details)
     _deel(l, d, "apps", app_lijst, "apps", fouten)
     return d, fouten, l.vragen
 

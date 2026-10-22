@@ -840,6 +840,9 @@ def test_za2_maximaal_een_wijzigingsmelding_per_brusselse_dag():
     eerste["account"]["in_meeting.waiting_room"] = False
     tweede = proefstand()
     tweede["account"].update({"in_meeting.waiting_room": False, "recording.auto_delete_cmr": True})
+    tweede["apps"]["overzicht"][0].update(rechten=None, schrijf=None)
+    tweede["apps"]["met_schrijfrechten"] = []
+    tweede["apps"]["onbekende_rechten"] = 1
     items = []
     class Agent:
         def __init__(self, naam):
@@ -868,6 +871,10 @@ def test_za2_maximaal_een_wijzigingsmelding_per_brusselse_dag():
                  staat, KLOK.replace(hour=13))
     assert len([x for x in items if x["inhoud"]["soort"] == "wijziging"]) == 1
     assert staat["account"]["basis"] == bewaarde_basis
+    code = tweede["apps"]["overzicht"][0]["code"]
+    assert staat["account"]["actuele_appmeting"]["apps"][code] == {"rechten": None, "schrijf": None}
+    assert staat["account"]["actuele_appmeting"]["onbekende_rechten"] == 1
+    assert staat["account"]["laatst_bewezen_apprechten"][code]["rechten"] == 10
 
 
 def test_za4_publieke_scopes_in_gemeten_week():
@@ -1325,6 +1332,163 @@ def test_bouw_za9_laatst_bekende_rechten_blijven_vergelijkbaar_na_onbekende_week
     gewijzigd = ZA.apprechten_veranderd(tussen, d["apps"])["overzicht"]
     assert gewijzigd == [{"naam": "externe app", "rechten_van": 2, "rechten_naar": 3,
                           "schrijf_van": 1, "schrijf_naar": 2}]
+
+
+def test_bouw_za11_onbekende_vergelijkingen_blijven_zichtbaar_naast_gemeten_wijzigingen():
+    d = proefstand()
+    code_bekend = "aaaaaaaaaaaaaaaa"
+    code_onbekend = "bbbbbbbbbbbbbbbb"
+    d["apps"]["overzicht"] = [
+        {"code": code_bekend, "naam": "externe app", "gepubliceerd": True,
+         "rechten": 3, "schrijf": 1},
+        {"code": code_onbekend, "naam": "externe app", "gepubliceerd": True,
+         "rechten": None, "schrijf": None},
+    ]
+    vorige = {"apps": {
+        code_bekend: {"naam": "externe app", "gepubliceerd": True, "rechten": 2, "schrijf": 1},
+        code_onbekend: {"naam": "externe app", "gepubliceerd": True, "rechten": 4, "schrijf": 0},
+    }}
+    d["app_rechten"] = ZA.apprechten_veranderd(vorige, d["apps"])
+    assert d["app_rechten"]["stand"].startswith("onbekend")
+    assert d["app_rechten"]["onbekende_vergelijkingen"] == 1
+    assert d["app_rechten"]["overzicht"] == [
+        {"naam": "externe app", "rechten_van": 2, "rechten_naar": 3,
+         "schrijf_van": 1, "schrijf_naar": 1}]
+    w = ZA.weekoverzicht(d, [], [], ZA.week_van(KLOK), KLOK, True)["inhoud"]["apps"]
+    assert w["rechten_veranderd"] == d["app_rechten"]["overzicht"]
+    assert w["onbekende_vergelijkingen"] == 1
+    d["apps"]["overzicht"][0]["rechten"] = 2
+    d["app_rechten"] = ZA.apprechten_veranderd(vorige, d["apps"])
+    w = ZA.weekoverzicht(d, [], [], ZA.week_van(KLOK), KLOK, True)["inhoud"]["apps"]
+    assert w["onbekende_vergelijkingen"] == 1
+    assert isinstance(w["rechten_veranderd"], str) and w["rechten_veranderd"].startswith("onbekend")
+    assert ZA.apprechten_veranderd(None, d["apps"])["onbekende_vergelijkingen"] == 2
+    assert ZA.apprechten_veranderd(vorige, None)["onbekende_vergelijkingen"] is None
+    assert ZA.apprechten_veranderd({"apps": {}}, d["apps"])["onbekende_vergelijkingen"] == 2
+    assert ZA.apprechten_veranderd(vorige, {"overzicht": []})["onbekende_vergelijkingen"] == 2
+    d["apps"]["overzicht"][1].update(rechten=4, schrijf=0)
+    d["app_rechten"] = ZA.apprechten_veranderd(vorige, d["apps"])
+    assert d["app_rechten"] == {"stand": "ok", "overzicht": [], "onbekende_vergelijkingen": 0}
+    w = ZA.weekoverzicht(d, [], [], ZA.week_van(KLOK), KLOK, True)["inhoud"]["apps"]
+    assert w["rechten_veranderd"] == [] and w["onbekende_vergelijkingen"] == 0
+    d["apps"]["overzicht"][0]["rechten"] = 3
+    bewijs = {code_bekend: {"rechten": 2, "schrijf": 1, "gemeten_week": ZA.week_van(KLOK)}}
+    fallback = ZA.apprechten_veranderd({"apps": {}}, d["apps"], bewijs)
+    assert fallback["onbekende_vergelijkingen"] == 1
+    assert fallback["overzicht"] == [{"naam": "externe app", "rechten_van": 2, "rechten_naar": 3,
+                                     "schrijf_van": 1, "schrijf_naar": 1}]
+
+
+def test_bouw_za11_korte_scan_houdt_actuele_rechten_onbekend_en_bewaart_meetweek():
+    d, fouten, volledig, _, _, wijzig = _za9_proefweek(wijziging=True)
+    assert volledig and not [f for f in fouten if f[1] == "apps"]
+    actuele_apps = wijzig[0]["apps"]
+    assert actuele_apps["aantal"] == 1 and actuele_apps["onbekende_rechten"] == 1
+    assert actuele_apps["overzicht"][0]["rechten"] is None
+    assert actuele_apps["overzicht"][0]["schrijf"] is None
+    assert next(a for a in ZA.adviezen({"apps": actuele_apps}) if a["code"] == "ZA-10")["toestand"] == "onbekend"
+    eerste_week = ZA.week_van(KLOK)
+    eerste = ZA.basis_van(d, week=eerste_week)
+    volgende_week = ZA.week_van(KLOK + timedelta(days=7))
+    tussen = ZA.basis_van(wijzig[0], eerste, week=volgende_week)
+    code = actuele_apps["overzicht"][0]["code"]
+    assert tussen["apps"][code]["rechten"] == 1
+    assert tussen["apps"][code]["schrijf"] == 0
+    assert tussen["apps"][code]["gemeten_week"] == eerste_week
+    actueel = ZA.actuele_appmeting(wijzig[0], volgende_week)
+    assert actueel["week"] == volgende_week and actueel["onbekende_rechten"] == 1
+    assert actueel["apps"][code] == {"rechten": None, "schrijf": None}
+    bewijs = ZA.laatst_bewezen_apprechten(
+        {code: {"rechten": 1, "schrijf": 0, "gemeten_week": eerste_week}}, actueel)
+    assert bewijs[code] == {"rechten": 1, "schrijf": 0, "gemeten_week": eerste_week}
+
+
+def test_bouw_za11_mislukte_weekronde_schuift_rechtenbasis_niet_door():
+    vorig = proefstand()
+    huidig = proefstand()
+    huidig["apps"]["overzicht"][0]["rechten"] = 11
+    oude_week = ZA.week_van(KLOK - timedelta(days=7))
+    class Agent:
+        def __init__(self, naam):
+            pass
+        def log(self, *_):
+            pass
+    class R:
+        werkwijze = "## Accountscan\nACCOUNTSCAN: aan\n"
+        agent = Agent("zoom-wacht")
+        def nood(self, *_):
+            pass
+        def bron(self, *_):
+            pass
+    for foute_stap in ("weekoverzicht", "gebruik"):
+        staat = {"account": {"basis": ZA.basis_van(vorig, week=oude_week)}}
+        vorige_basis = json.loads(json.dumps(staat["account"]["basis"]))
+        geplaatst = []
+        def schrijf(_agent, item):
+            soort = item["inhoud"].get("soort", item["soort"])
+            if soort == "weekoverzicht":
+                geplaatst.append(item)
+            return not (len(geplaatst) == 1 and soort == foute_stap)
+        with patch.object(Z, "leesapp", return_value=True), patch.object(Z, "leesapp_fout", return_value=""), \
+             patch.object(Z, "leesapp_verboden", return_value=[]), \
+             patch.object(ZA, "lees_week", return_value=(huidig, [], True, 24)), \
+             patch.object(ZA, "adviezen", return_value=[]), \
+             patch.object(ZA, "voorstellen_lezen", return_value=[]), \
+             patch.object(ZA, "_schrijf_item", side_effect=schrijf), \
+             patch.object(ZA.bord, "Agent", Agent):
+            w = {"identiteit_ok": True, "ik": {"id": "vaste-id", "pmi": "9100000001"}}
+            ZA.ronde(R(), w, staat, KLOK)
+            assert staat["account"]["basis"] == vorige_basis, foute_stap
+            code = huidig["apps"]["overzicht"][0]["code"]
+            assert staat["account"]["laatst_bewezen_apprechten"][code] == {
+                "rechten": 11, "schrijf": 6, "gemeten_week": ZA.week_van(KLOK)}
+            ZA.ronde(R(), w, staat, KLOK)
+            ZA.ronde(R(), w, staat, KLOK, forceer=True)
+        assert len(geplaatst) == 3
+        assert len({x["uniek"] for x in geplaatst}) == 1
+        assert all(x["inhoud"]["apps"]["rechten_veranderd"][0]["rechten_van"] == 10
+                   for x in geplaatst)
+        assert staat["account"]["rechten_weekbasis"]["apps"][code]["rechten"] == 10
+        assert staat["account"]["basis"]["apps"][code]["rechten"] == 11
+        assert staat["account"]["basis"]["apps"][code]["gemeten_week"] == ZA.week_van(KLOK)
+
+
+def test_bouw_za11_eerste_scan_wordt_weekbasis_voor_hermeting():
+    huidig = proefstand()
+    staat, overzichten = {}, []
+    class Agent:
+        def __init__(self, naam):
+            pass
+        def log(self, *_):
+            pass
+    class R:
+        werkwijze = "## Accountscan\nACCOUNTSCAN: aan\n"
+        agent = Agent("zoom-wacht")
+        def nood(self, *_):
+            pass
+        def bron(self, *_):
+            pass
+    def schrijf(_agent, item):
+        if item["inhoud"].get("soort") == "weekoverzicht":
+            overzichten.append(item)
+        return True
+    with patch.object(Z, "leesapp", return_value=True), patch.object(Z, "leesapp_fout", return_value=""), \
+         patch.object(Z, "leesapp_verboden", return_value=[]), \
+         patch.object(ZA, "lees_week", return_value=(huidig, [], True, 24)), \
+         patch.object(ZA, "adviezen", return_value=[]), \
+         patch.object(ZA, "voorstellen_lezen", return_value=[]), \
+         patch.object(ZA, "_schrijf_item", side_effect=schrijf), \
+         patch.object(ZA.bord, "Agent", Agent):
+        w = {"identiteit_ok": True, "ik": {"id": "vaste-id", "pmi": "9100000001"}}
+        ZA.ronde(R(), w, staat, KLOK)
+        code = huidig["apps"]["overzicht"][0]["code"]
+        assert staat["account"]["rechten_weekbasis"]["apps"][code]["rechten"] == 10
+        huidig["apps"]["overzicht"][0]["rechten"] = 11
+        ZA.ronde(R(), w, staat, KLOK, forceer=True)
+    assert overzichten[0]["inhoud"]["apps"]["rechten_veranderd"].startswith("onbekend")
+    assert overzichten[1]["inhoud"]["apps"]["rechten_veranderd"] == [
+        {"naam": "externe app", "rechten_van": 10, "rechten_naar": 11,
+         "schrijf_van": 6, "schrijf_naar": 6}]
 
 
 def test_bouw_za9_marketplace_pagineert_met_honderd_in_beide_scans():
