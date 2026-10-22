@@ -17,7 +17,7 @@ import config      # noqa: E402
 import imapbron    # noqa: E402
 
 opdracht = json.loads(os.environ.get("LEES", "{}"))
-# Beheerde zorgafzenders (kine, tandarts): apart gezocht, ook zonder afspraakwoord in het onderwerp, ook met een
+# Beheerde zorgafzenders (ook gedeelde platforms voor huisarts): apart gezocht, ook zonder afspraakwoord in het onderwerp, ook met een
 # List-Unsubscribe en verder terug dan de gewone twee weken ('Opdracht kine en tandarts' v1.0, 14-10-2026)
 ZORG_AFZENDERS = [a.lower() for a in opdracht.get("zorg_afzenders") or []]
 

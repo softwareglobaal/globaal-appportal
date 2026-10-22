@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.43",
+ "versie": "3.44",
  "datum": "22-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -4024,6 +4024,62 @@
    "soort_oorzaak": "code",
    "oplossing": "deploy.sh schrijft .built pas na een routetoets op 127.0.0.1:3022 (/gezondheid met ok true en de bordpagina), anders een logregel en exit 1. werkwijze_naar_bord.py weigert --zet voor de drie regie-agents en zet hun zaad met --voorstel als voorstel met het runbook werkwijze-bijwerken; het runbook zet het mandaat van de kaart mee als het voorstel het draagt.",
    "grendel": {"soort": "test", "waar": "tests/test_uitrol_regie.py", "tekst": "NIET als gebouwd gemarkeerd"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-202",
+   "datum": "22-10-2026",
+   "gevonden_door": "Mehdi, driehoeksoverleg 15",
+   "fout": "Een dubbel zorgitem op de werkagenda kon de mailkoppeling en de ritten winnen van een gemerkt privé-item.",
+   "gevolg": "Mehdi zag twee afspraken en dubbele ritten zonder een duidelijke vraag over het dubbel.",
+   "waarom_niet_gezien": "De koppeling kende geen voorrang voor de privébron en de ritplanner kende geen schaduwitem.",
+   "oorzaak": "Een eerste kalenderkandidaat kon de bron worden; dubbele items werden niet als cluster herkend.",
+   "soort_oorzaak": "code",
+   "oplossing": "Koppel aan het gemerkte privé-item, markeer het werkitem alleen in geheugen als schaduw en meld één stabiele verwijdervraag aan Mehdi.",
+   "grendel": {"soort": "test", "waar": "tests/test_agenda_dubbel_huisarts.py", "tekst": "test_zorg_dubbel_prive_is_bron_en_werk_is_schaduw"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-203",
+   "datum": "22-10-2026",
+   "gevonden_door": "Mehdi, driehoeksoverleg 15",
+   "fout": "Een boeking van een gedeeld zorgplatform werd niet veilig als huisartsafspraak herkend.",
+   "gevolg": "Een afspraak voor dezelfde dag kon ontbreken uit de privé-agenda en zonder nood blijven.",
+   "waarom_niet_gezien": "De vorige profielen kenden alleen een eigen afzender en een expliciete eindtijd.",
+   "oorzaak": "Er was geen combinatiebewijs uit platformafzender en profielplaats of praktijknaam, en geen profielduur.",
+   "soort_oorzaak": "code",
+   "oplossing": "Gebruik een geverifieerd privéprofiel voor huisarts, herken gedeelde boekingen alleen met Locatie of Bij, gebruik de profielduur en meld boekingen vandaag of binnen zes uur.",
+   "grendel": {"soort": "test", "waar": "tests/test_agenda_dubbel_huisarts.py", "tekst": "test_gedeeld_platform_vereist_locatie_en_behandelaar"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-204",
+   "datum": "22-10-2026",
+   "gevonden_door": "Mehdi, driehoeksoverleg 15",
+   "fout": "Een parkeerhint of landtoevoeging maakte van dezelfde zorgplaats een afwijking.",
+   "gevolg": "Mehdi kreeg een vals open punt terwijl straat, huisnummer en postcode gelijk waren.",
+   "waarom_niet_gezien": "De bestaande vergelijking gebruikte de ruwe plaats als tekst.",
+   "oorzaak": "Er ontbrak een gedeelde normalisering voor mail en agenda.",
+   "soort_oorzaak": "code",
+   "oplossing": "Normaliseer haakjes, parkeerhint, land, hoofdletters, komma's en spaties; behoud straat, nummer en postcode als onderscheid.",
+   "grendel": {"soort": "test", "waar": "tests/test_agenda_dubbel_huisarts.py", "tekst": "test_parkeerhint_is_gelijk_maar_ander_huisnummer_niet"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-205",
+   "datum": "22-10-2026",
+   "gevonden_door": "Mehdi, driehoeksoverleg 15",
+   "fout": "Een handmatig ritblok op een andere gelezen agenda hield een extra agentrit niet tegen.",
+   "gevolg": "Mehdi zag dubbele ritten, terwijl het werkitem als schaduw kon worden bijgewerkt of verhuisd.",
+   "waarom_niet_gezien": "De ritkoppeling vroeg om dezelfde agenda of eigen ritomschrijving en de zorgroute herkende geen schaduw.",
+   "oorzaak": "Grensuur en menselijke rittitel telden niet over agenda's heen.",
+   "soort_oorzaak": "code",
+   "oplossing": "Tel een menselijke rit op het grensuur mee, schrijf geen tweede rit en blokkeer elke patch of verhuisactie voor een schaduwitem.",
+   "grendel": {"soort": "test", "waar": "tests/test_agenda_dubbel_huisarts.py", "tekst": "test_handmatige_rit_onderdrukt_agentrit_over_zorgcluster"},
    "controle": [],
    "status": "opgelost"
   }

@@ -18,7 +18,7 @@ Een smalle uitzondering ('Opdracht voor Claude - kine en tandarts in de privéag
 afspraak voor Mehdi bij een beheerde persoonlijke zorgpraktijk (tabel zorgpraktijk in dit privéregister, nooit in git)
 krijgt een echt blok in de privé-agenda. Hier gebeurt de herkenning: welke praktijk, welke gebeurtenis (bevestiging,
 herinnering, aanvraag, verplaatsing, annulering), patiënt, behandelaar, begin, einde en plaats, met een duurzame
-identiteit per afspraak. Een tijd of duur wordt nooit verzonnen: wat ontbreekt, blijft een open punt.
+identiteit per afspraak. Alleen een beheerd profiel mag een standaardduur voor een platformboeking geven.
 """
 import email.utils
 import hashlib
@@ -247,10 +247,12 @@ def _adres(van):
 # ------------------------------------------------------------------------- zorgpraktijken (persoonlijk, privé) ---
 def zorgprofiel_zet(profiel, nu=None):
     """Legt een beheerd profiel vast in het privéregister: id, naam, soort, afzenders (exacte adressen), praktijknamen,
-    adres, telefoon, website, patiënten (Mehdi's namen), behandelaars {naam: rol}, bewijs en verificatiedatum."""
+    platform_afzenders, locaties, duur_minuten, adres, telefoon, website, patiënten, behandelaars {naam: rol},
+    bewijs en verificatiedatum."""
     nu = (nu or _nu()).isoformat(timespec="seconds")
     p = dict(profiel)
     p["afzenders"] = sorted({a.strip().lower() for a in p.get("afzenders") or [] if a.strip()})
+    p["platform_afzenders"] = sorted({a.strip().lower() for a in p.get("platform_afzenders") or [] if a.strip()})
     with _db() as c:
         c.execute("INSERT OR REPLACE INTO zorgpraktijk(id, profiel, bijgewerkt) VALUES(?,?,?)",
                   (p["id"], json.dumps(p, ensure_ascii=False), nu))
@@ -281,6 +283,41 @@ def _zorgprofiel(afzender, profielen):
     een heel andere praktijk zijn dan info@praktijkleuven.be)."""
     a = (afzender or "").lower()
     return next((p for p in profielen or [] if a and a in (p.get("afzenders") or [])), None)
+
+
+ZORG_WERKVERSLAG = []  # generieke regels, zonder afzender, patiënt, praktijk of plaats
+
+
+def _mailveld(tekst, naam):
+    m = re.search(r"(?im)^\s*" + re.escape(naam) + r"\s*:\s*([^\r\n]*)", tekst or "")
+    return m.group(1).strip() if m else ""
+
+
+def zorg_plaats_normaal(plaats):
+    """Vergelijk de fysieke plaats, zonder parkeeruitleg, land, hoofdletters of leestekens."""
+    p = re.sub(r"\([^)]*\)", " ", plaats or "")
+    p = re.sub(r"(?:[,;\n]|\s+-\s+)\s*(?:parkeren|parking|parkeerhint)\b.*$", "", p, flags=re.I | re.S)
+    p = re.sub(r"\b(?:belgie|belgium|belgique)\b", " ", _plat_tekst(p))
+    return " ".join(re.findall(r"[a-z0-9]+", p))
+
+
+def zorg_plaats_gelijk(a, b):
+    pa, pb = zorg_plaats_normaal(a), zorg_plaats_normaal(b)
+    return bool(pa and pb and pa == pb)
+
+
+def _platform_profiel(k, profielen):
+    afzender = _adres(k.get("van"))
+    gedeeld = [p for p in profielen or [] if afzender and afzender in (p.get("platform_afzenders") or [])]
+    if not gedeeld:
+        return None, False
+    locatie = _mailveld(k.get("tekst"), "Locatie")
+    bij = _naam_plat(_mailveld(k.get("tekst"), "Bij"))
+    passend = [p for p in gedeeld if
+               (locatie and any(zorg_plaats_gelijk(locatie, loc) for loc in
+                                (p.get("locaties") or ([p.get("adres")] if p.get("adres") else []))))
+               or (bij and bij in {_naam_plat(n) for n in (p.get("praktijknamen") or [])})]
+    return (passend[0] if len(passend) == 1 else None), True
 
 
 def _naam_plat(t):
@@ -343,6 +380,40 @@ def _zorg_tijden(tekst):
     return sorted(set(uit))
 
 
+def _platform_tijd(tekst):
+    datum = _mailveld(tekst, "Datum") or _mailveld(tekst, "Afspraakdatum") or tekst
+    tijd = _mailveld(tekst, "Tijdstip")
+    m_tijd = re.fullmatch(r"(\d{1,2}):(\d{2})", tijd)
+    m_datum = re.search(r"\b(\d{1,2})[/.](\d{1,2})[/.](\d{4})\b", datum)
+    m_woorden = re.search(r"\b(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\b", datum)
+    if not m_tijd or not (m_datum or m_woorden):
+        return ""
+    try:
+        if m_datum:
+            d, mn, j = map(int, m_datum.groups())
+        else:
+            d, j = int(m_woorden.group(1)), int(m_woorden.group(3))
+            maand = m_woorden.group(2).lower()
+            mn = MAANDEN.get(maand, MAANDEN.get(maand[:3], 0))
+        return datetime(j, mn, d, int(m_tijd.group(1)), int(m_tijd.group(2)), tzinfo=BRUSSEL).isoformat()
+    except ValueError:
+        return ""
+
+
+def _eigen_patient(patient, profiel):
+    eigen = {_naam_plat(n) for n in profiel.get("patienten") or []}
+    plat = _naam_plat(patient)
+    if plat in eigen:
+        return True
+    if "*" not in (patient or ""):
+        return False
+    delen = [re.sub(r"[^a-z]", "", _naam_plat(d)) for d in patient.split()]
+    if len(delen) < 2 or any(len(d) < 2 for d in delen):
+        return False
+    return any(len(naam.split()) == len(delen) and all(vol.startswith(stuk) for vol, stuk in zip(naam.split(), delen))
+               for naam in eigen)
+
+
 def _link_einde(links, start):
     """Het einde uit een meegeleverde agenda-link (dates=BEGIN/EINDE) waarvan het begin het bevestigde uur is."""
     for ln in links or []:
@@ -377,9 +448,10 @@ def zorg_locatie_is_adres(loc):
 def zorg_herken(k, profiel):
     """Lees een mail van een beheerde zorgpraktijk. Geeft None voor een bericht zonder afspraak (een nieuwsbrief),
     anders een dict met gebeurtenis, patient, mehdi, behandelaar, start, einde, locatie, oude_start, ics_uid,
-    recurrence_id en problemen. Niets wordt geraden: een eindtijd komt uit de ICS of de meegeleverde agenda-link."""
+    recurrence_id en problemen. Een eindtijd komt uit ICS, de meegeleverde agenda-link of de beheerde profielduur."""
     onderwerp = re.sub(r"\s+", " ", k.get("onderwerp") or "")
-    tekst = re.sub(r"\s+", " ", _zonder_citaat(k.get("tekst") or ""))
+    ruw = _zonder_citaat(k.get("tekst") or "")
+    tekst = re.sub(r"\s+", " ", ruw)
     alles = f"{onderwerp}\n{tekst}"
     ev = None
     for ics in k.get("ics") or []:
@@ -388,6 +460,9 @@ def zorg_herken(k, profiel):
         except Exception:  # noqa: BLE001
             continue
     tijden = _zorg_tijden(alles)
+    platform_start = _platform_tijd(ruw)
+    if platform_start and not tijden:
+        tijden = [(0, platform_start)]
     gebeurtenis = next((g for g, p in _GEBEURTENIS if p.search(alles)), "onbekend")
     if not ev and not (tijden and _AFSPRAAKWOORD_ZORG.search(alles)):
         # een annulering of verplaatsing zonder leesbare tijd verdwijnt niet: ze wordt een open punt (Codex A03)
@@ -403,21 +478,38 @@ def zorg_herken(k, profiel):
         voor = [t for pos, t in tijden if pos < m.start()]
         na = [t for pos, t in tijden if pos > m.start()]
         start, oude_start = (na[0] if na else ""), (voor[-1] if voor else "")
+        if platform_start:
+            start = platform_start
+            oud = [t for _, t in tijden if t != start]
+            oude_start = oud[-1] if oud else oude_start
     elif ev and ev.get("start"):
         start = ev["start"]
     elif tijden:
         start = tijden[0][1]
+    if platform_start and gebeurtenis != "verplaatsing":
+        start = platform_start
     einde = (ev or {}).get("einde", "") if ev and ev.get("start") == start else ""
     einde = einde or _link_einde(k.get("linktijden"), start)
+    duur_geschat = False
+    if not einde and start and profiel.get("duur_minuten"):
+        try:
+            duur = int(profiel["duur_minuten"])
+            if 5 <= duur <= 240:
+                einde = (datetime.fromisoformat(start) + timedelta(minutes=duur)).isoformat()
+                duur_geschat = True
+        except (TypeError, ValueError):
+            pass
     plaats = (ev or {}).get("locatie", "") if ev else ""
     if not plaats:
         m = re.search(r"\bWaar:\s*(.+?)\s+(?:Toevoegen|Indien|Google Agenda|$)", tekst)
         plaats = m.group(1) if m else ""
+    plaats = _mailveld(ruw, "Locatie") or plaats
     if not zorg_locatie_is_adres(plaats):
         plaats = ""
+    patient_veld = _mailveld(ruw, "Patiënt") or _mailveld(ruw, "Patient")
     m = re.search(r"Pati[eë]nt:\s*(.+?)\s+(?:Uw therapeut|Wanneer|Waar|$)", tekst)
-    if m:
-        patient = m.group(1).strip()
+    if patient_veld or m:
+        patient = patient_veld or m.group(1).strip()
     else:
         m = re.search(r"\b(?:Beste|Dear|Geachte)\s+((?:(?:Dhr|Mevr|Mr|Mrs|Ms|Mw)\.?\s+)?(?:[A-Z][\w'-]+\s?){1,5})", tekst)
         delen = (m.group(1).split() if m else [])
@@ -426,8 +518,7 @@ def zorg_herken(k, profiel):
         while delen and _AANSPREKING.match(delen[0]):
             delen.pop(0)
         patient = " ".join(d.strip(",.") for d in delen)
-    eigen = {_naam_plat(n) for n in profiel.get("patienten") or []}
-    behandelaar = next((n for n in (profiel.get("behandelaars") or {}) if _naam_plat(n) in _naam_plat(alles)), "")
+    behandelaar = _mailveld(ruw, "Bij") or next((n for n in (profiel.get("behandelaars") or {}) if _naam_plat(n) in _naam_plat(alles)), "")
     if not behandelaar:
         m = (re.search(r"(?:therapeut|therapist)\s*:\s*([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+){1,3})", tekst)
              or re.search(r"\b(?:bij|with)\s+((?:[A-Z][a-z][\w'-]*\s?){2,4})\s*[.:]", alles))
@@ -438,8 +529,9 @@ def zorg_herken(k, profiel):
     if not patient:
         problemen.append("patiënt niet te lezen")
     return {"praktijk": profiel["id"], "gebeurtenis": gebeurtenis, "patient": patient,
-            "mehdi": bool(patient) and _naam_plat(patient) in eigen, "behandelaar": behandelaar, "start": start,
+            "mehdi": bool(patient) and _eigen_patient(patient, profiel), "behandelaar": behandelaar, "start": start,
             "einde": einde, "locatie": _plaats_netjes(plaats), "oude_start": oude_start,
+            "duur_geschat": duur_geschat,
             "ics_uid": (ev or {}).get("uid", ""), "recurrence_id": (ev or {}).get("recurrence_id", ""), "problemen": problemen}
 
 
@@ -447,12 +539,19 @@ def zorg_rol(z, profiel):
     """Wat op het blok staat: de rol van de behandelaar uit het profiel (Kine, Tandarts, Mondhygiëne), anders de soort
     van de praktijk. De naam uit de bevestiging is leidend."""
     rollen = profiel.get("behandelaars") or {}
-    return rollen.get(z.get("behandelaar") or "") or {"kine": "Kine", "tandarts": "Tandarts"}.get(profiel.get("soort"), "Zorg")
+    return rollen.get(z.get("behandelaar") or "") or {"kine": "Kine", "tandarts": "Tandarts",
+                                                        "huisarts": "Huisarts"}.get(profiel.get("soort"), "Zorg")
 
 
 def uit_kandidaat(k, profielen=None):
     """De afspraken (dicts met sleutel) in een kandidaat-mail van post_lezer."""
-    profiel = _zorgprofiel(_adres(k.get("van")), zorgprofielen() if profielen is None else profielen)
+    profielen = zorgprofielen() if profielen is None else profielen
+    profiel, gedeeld = _platform_profiel(k, profielen)
+    if gedeeld and not profiel:
+        ZORG_WERKVERSLAG.append("Gedeeld zorgplatform zonder passende Locatie of Bij: geen afspraak gemaakt")
+        return []
+    if not gedeeld:
+        profiel = _zorgprofiel(_adres(k.get("van")), profielen)
     if profiel:
         return _zorg_uit_kandidaat(k, profiel)
     ontvangen = _ontvangen(k.get("datum"))
@@ -752,7 +851,7 @@ def _instantie(kand, a):
 
 
 ZORGMERK = "agendawacht_zorg"
-_ZORGWOORD = re.compile(r"\bkine\b|kinesi|kinésit|tandarts|mondhygi|dentist", re.I)
+_ZORGWOORD = re.compile(r"\bkine\b|kinesi|kinésit|tandarts|mondhygi|dentist|huisarts", re.I)
 
 
 def _uid_conflict(x, a):
@@ -814,6 +913,15 @@ def _zorg_status(a, items, nu, vorig_google=""):
     zwak = [x for x in kand if _zorgachtig(x, a, z, profiel) == 1]
     kand = [x for x in kand if x not in zwak and x not in conflict]
     merk = [x for x in items if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"] and not _uid_conflict(x, a)]
+    prive_bron = [x for x in items if x.get("kalender") == "mehdipriveagena@gmail.com" and start
+                  and not x.get("hele_dag") and _iso(x.get("start") or "")
+                  and abs((_iso(x["start"]) - start).total_seconds()) <= 900
+                  and ((x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]
+                       or (x.get("_merk") or {}).get("agendawacht_zorgplaats", "").split(":", 1)[0] == z.get("praktijk")
+                       or "Van de werkagenda naar privé verhuisd door de Agendawacht" in (x.get("omschrijving") or ""))
+                  and _zorgachtig(x, a, z, profiel) == 2]
+    prive_bron.sort(key=lambda x: (0 if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"] else 1,
+                                    abs((_iso(x["start"]) - start).total_seconds())))
     # een oude verwijzing die intussen naar een item van een andere afspraak wijst, telt niet (Codex A02, ronde 5)
     vorig = [x for x in items if vorig_google and f"{x.get('kalender')}|{x.get('id')}" == vorig_google and not _ander_zorgitem(x, a)]
     recent = (a.get("bron_ontvangen") or "")[:10] >= (nu - timedelta(days=14)).astimezone(BRUSSEL).date().isoformat()
@@ -822,7 +930,7 @@ def _zorg_status(a, items, nu, vorig_google=""):
         return {"status": "zorg_open" if recent else "zorg_historisch", "google": "",
                 "detail": "annulering zonder datum of uur: welke afspraak?"}
     if a["geannuleerd"]:
-        m = (kand or merk or vorig or [None])[0]
+        m = (prive_bron or kand or merk or vorig or [None])[0]
         return {"status": "geannuleerd_staat_er" if m else "geannuleerd", "google": f"{m['kalender']}|{m['id']}" if m else "",
                 "detail": "in mail geannuleerd" if m else ""}
     if not start:
@@ -830,8 +938,9 @@ def _zorg_status(a, items, nu, vorig_google=""):
     if start < nu - timedelta(hours=1):
         # voorbij is historisch, ook als de patiënt niet te lezen was: nooit een open punt of een blok achteraf. De agent
         # leest de agenda veertien dagen terug: wat ouder is, is niet vergeleken (geen bewering 'niet gevonden').
-        if kand:
-            return {"status": "gekoppeld", "google": f"{kand[0]['kalender']}|{kand[0]['id']}", "detail": "historisch, in de agenda"}
+        if prive_bron or kand:
+            m = (prive_bron or kand)[0]
+            return {"status": "gekoppeld", "google": f"{m['kalender']}|{m['id']}", "detail": "historisch, in de agenda"}
         oud_venster = start < nu - timedelta(days=14)
         return {"status": "voorbij", "google": "",
                 "detail": "historisch, ouder dan het leesvenster (niet vergeleken)" if oud_venster else "historisch: niet in de agenda gevonden"}
@@ -842,18 +951,18 @@ def _zorg_status(a, items, nu, vorig_google=""):
         # een zorgitem van een andere afspraak of uitnodiging op dit uur: ook als er een oud eigen item is, nooit verzetten
         # naar dat bezette uur of stil koppelen, maar een vraag (Codex A35, ronde 6)
         return {"status": "zorg_open", "google": "", "detail": "op dat uur staat een zorgafspraak van een andere afspraak of uitnodiging: welke is het?"}
-    if len(kand) > 1 and not eigen:
+    if len(kand) > 1 and not (eigen or prive_bron):
         # twee kandidaten op hetzelfde uur: niet raden welke het is (Codex A02)
         return {"status": "zorg_open", "google": "", "detail": f"{len(kand)} afspraken op dat uur, niet eenduidig te koppelen"}
     if not kand and conflict and not (merk or vorig):
         return {"status": "zorg_open", "google": "", "detail": "op dat uur staat een zorgafspraak van een andere afspraak of uitnodiging: welke is het?"}
-    if not kand and zwak and not (merk or vorig):
+    if not kand and zwak and not (prive_bron or merk or vorig):
         # alleen een algemeen zorgwoord op dat uur: misschien deze afspraak, misschien die van iemand anders. Geen tweede
         # blok en geen stille koppeling, maar een vraag (Codex A02, ronde 3)
         return {"status": "zorg_open", "google": "",
                 "detail": f"{len(zwak)} afspraken op dat uur, niet eenduidig te koppelen" if len(zwak) > 1 else
                 "op dat uur staat al een zorgafspraak zonder de naam van de praktijk: is dat deze?"}
-    kand = eigen or kand
+    kand = prive_bron or eigen or kand
     if kand:
         m = kand[0]
         return {"status": "gekoppeld", "google": f"{m['kalender']}|{m['id']}", "detail": ""}
@@ -966,10 +1075,12 @@ def ronde(items, sinds, nu=None, mailboxen=MAILBOXEN, agenda_onvolledig=()):
     als alle mappen en berichten gelezen, verwerkt en bewaard zijn; een fout in een map, een bericht dat niet te halen
     of te ontleden is, of een afgekapte map maakt de dekking gedeeltelijk (V7). Een fout bericht houdt de andere niet
     tegen: elk krijgt zijn bron-ID in de fouten en komt de volgende ronde opnieuw. Geeft (afspraken, fouten)."""
+    ZORG_WERKVERSLAG.clear()
     profielen = zorgprofielen()
     zorg = None
     if profielen:
-        zorg = {"zorg_afzenders": sorted({x for p in profielen for x in p.get("afzenders") or []}),
+        zorg = {"zorg_afzenders": sorted({x for p in profielen for x in
+                                           (p.get("afzenders") or []) + (p.get("platform_afzenders") or [])}),
                 "zorg_sinds": ((nu or _nu()).astimezone(BRUSSEL).date() - timedelta(days=ZORG_DAGEN_TERUG)).isoformat()}
     kandidaten, fouten = lees(sinds, mailboxen, zorg=zorg) if zorg else lees(sinds, mailboxen)
     if ZORG_FOUT:
@@ -1016,7 +1127,9 @@ def prive_teksten():
     uit = {v.strip() for r in rijen for v in r if v and v.strip()}
     for p in zorgprofielen():
         uit |= {str(v).strip() for v in [p.get("naam"), p.get("adres"), p.get("telefoon"), *(p.get("praktijknamen") or []),
-                                         *(p.get("behandelaars") or {}), *(p.get("afzenders") or [])] if v and str(v).strip()}
+                                         *(p.get("locaties") or []), *(p.get("behandelaars") or {}),
+                                         *(p.get("afzenders") or []), *(p.get("platform_afzenders") or [])]
+                if v and str(v).strip()}
     return uit
 
 

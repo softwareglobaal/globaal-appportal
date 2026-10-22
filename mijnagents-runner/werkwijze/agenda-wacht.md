@@ -1,5 +1,12 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.22 (22-10-2026): bij een dubbele zorgafspraak is het gemerkte of door mij verhuisde privé-item de bron;
+het werkitem van een collega blijft onaangeraakt als schaduw en krijgt geen rit. Mehdi krijgt één vaste verwijdervraag,
+maar alleen hij beslist. Een gedeeld huisartsplatform telt pas met een passende profielplaats of praktijknaam;
+de profielduur vult een ontbrekend einde in en een boeking vandaag of binnen zes uur wordt direct een nood.
+Plaatsen vergelijk ik zonder parkeeruitleg, land en schrijfverschillen, met behoud van straat, nummer en postcode.
+Een handmatig ritblok op het grensuur telt op elke gelezen agenda. Grendels: FR-202 t/m FR-205.
+
 Aanvulling v8.21 (20-10-2026): een komende eigen zorgafspraak zonder plaats krijgt bij één ondubbelzinnig
 geverifieerd profiel het praktijkadres, ook zonder bronmail en ook na de verhuizing naar privé. Een verborgen merk
 legt de herkomst vast; een latere mail mag die plaats vervangen, maar een handmatige plaats blijft staan en een
@@ -574,11 +581,21 @@ archiefmappen, ook als het onderwerp alleen de praktijknaam of 'Herinnering' dra
 heeft een duurzame sleutel met alle bronbericht-ID's en het Google-ID: herinnering, dezelfde mail via MCH en Hotmail en
 een volgende ronde geven geen tweede item; een verplaatsing zet hetzelfde item op het nieuwe uur en bewaart de oude
 tijd. Staat de afspraak al in een agenda, dan koppel ik; staat ze op de werkagenda, dan verhuist ze naar privé met
-behoud van haar Google-ID, zonder VR en zonder vraag naar firma en klant. Geen eindtijd, een andere patiënt (een
+behoud van haar Google-ID, zonder VR en zonder vraag naar firma en klant. Geen eindtijd zonder beheerde profielduur, een andere patiënt (een
 gezinslid nooit vanzelf), geen leesbare tijd of een onzekere wijziging: een VR-melding in de privé-agenda, geen blok en
 geen verzonnen duur. Voorbij is historisch gemist, ik boek niets terug in het verleden. Medisch is altijd privé, ook
 als de mail via MCH kwam: naar het bord gaan alleen tellingen. `agenda_wacht.py --zorg` doet hetzelfde met de details
 in een privélog op de server.
+
+Bij gedeelde boekingsplatformen bewaart alleen het privéprofiel de platformafzender, toegestane locaties,
+praktijknamen en een eventuele standaardduur. De afzender alleen bewijst geen afspraak: `Locatie:` moet met het
+profiel overeenkomen, of `Bij:` moet een profielnaam zijn; anders komt alleen een naamloze regel in het werkverslag.
+Ik lees de datum, `Tijdstip:`, `Bij:` en `Locatie:` uit de mail zonder de downloadlink te openen; een gemaskeerde
+patiëntnaam telt alleen als de zichtbare beginletters bij een profielpatiënt passen. Een profielduur is als geschat
+gemerkt. Annulering en wijziging volgen dezelfde sleutel. Een gemerkt privé-item wint van een dubbel werkitem binnen
+vijftien minuten als soort en profiel of plaats gelijk zijn. Het werkitem wordt niet gepatcht of verhuisd en krijgt
+geen rit; de nood aan Mehdi noemt alleen dag en uur. Menselijke ritten die op het grensuur aansluiten blijven staan
+en blokkeren een tweede agentrit, ook als ze op een andere gelezen agenda staan.
 
 Een eigen zorgafspraak zonder plaats mag ook zonder mail het adres van precies één geverifieerd profiel van die
 zorgsoort krijgen, of van de ene praktijk die ondubbelzinnig in titel of omschrijving staat. Dat geldt alleen voor
