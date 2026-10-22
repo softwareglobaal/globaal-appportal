@@ -331,19 +331,15 @@ def opnames(rows, klok):
 
 
 def _rechten_detail(d):
-    if not isinstance(d, dict) or not any(isinstance(d.get(k), list) for k in ("app_scopes", "scopes")):
+    if not isinstance(d, dict) or not isinstance(d.get("app_scopes"), list):
         raise Z.AccountFout(reden="onleesbaar")
     gevonden = set()
-    for veld in ("app_scopes", "scopes"):
-        bron = d.get(veld)
-        if not isinstance(bron, list):
-            continue
-        for rij in bron:
-            kandidaten = (rij.get("scope"), rij.get("scope_name")) if isinstance(rij, dict) else (rij,)
-            code = next((x for x in kandidaten if isinstance(x, str) and SCOPE_PATROON.fullmatch(x)), None)
-            if code is None:
-                raise Z.AccountFout(reden="onleesbaar")
-            gevonden.add(code)
+    for rij in d["app_scopes"]:
+        # Gemeten op 22-10: app_scopes is een lijst rechtennamen als tekst; een dict met scope_name kan ook.
+        code = rij.get("scope_name") if isinstance(rij, dict) else rij
+        if not isinstance(code, str) or not SCOPE_PATROON.fullmatch(code):
+            raise Z.AccountFout(reden="onleesbaar")
+        gevonden.add(code)
     return len(gevonden), sum(bool(re.search(r":(?:write|update|delete)(?::|$)", s)) for s in gevonden)
 
 
@@ -355,13 +351,18 @@ def apps(rows, details):
         appid = str(row["app_id"])
         if appid not in details or details[appid] is None:
             return {"stand": "onbekend: appdetail ontbreekt"}
-        n, schrijf = _rechten_detail(details[appid])
+        try:
+            n, schrijf = _rechten_detail(details[appid])
+        except Z.AccountFout:
+            n, schrijf = None, None
         gepubliceerd = row.get("app_status") == "PUBLISHED"
         uit.append({"code": _ident(appid), "naam": _naam(row.get("app_name")) if gepubliceerd else "eigen app",
                     "gepubliceerd": gepubliceerd, "rechten": n, "schrijf": schrijf})
     return {"stand": "ok", "aantal": len(uit), "eigen": sum(not x["gepubliceerd"] for x in uit),
+            "onbekende_rechten": sum(x["rechten"] is None for x in uit),
             "overzicht": sorted(uit, key=lambda x: x["code"]),
-            "met_schrijfrechten": sorted((x for x in uit if x["schrijf"] >= 5), key=lambda x: x["code"])}
+            "met_schrijfrechten": sorted((x for x in uit if x["schrijf"] is not None and x["schrijf"] >= 5),
+                                         key=lambda x: x["code"])}
 
 
 def pakket(d):
@@ -533,12 +534,17 @@ def lees_week(ik, pmi, klok, budget=BUDGET):
     _deel(l, d, "daggebruik", lambda: daggebruik(l.vraag("/report/daily", {"year": klok.year, "month": klok.month})), "gebruik", fouten)
     _deel(l, d, "facturen", lambda: facturen(_lijst_een(l, "/accounts/me/billing/invoices", {}, "invoices")), "licenties", fouten)
     _deel(l, d, "apps", lambda: _lees_apps(l), "apps", fouten)
+    def hulptelling(soort):
+        try:
+            return {"aantal": len(_lijst_een(l, "/marketplace/apps", {"type": soort, "page_size": 100}, "apps"))}
+        except Exception:  # noqa: BLE001 - deze lijsten zijn informatief, ook bij een API-fout
+            return {"stand": "onbekend: niet beschikbaar"}
     for soort, naam in (("account_created", "gemaakt"), ("active_requests", "aanvragen"),
                         ("restricted_apps", "geblokkeerd"), ("approved_apps", "goedgekeurd")):
-        _deel(l, d, naam, lambda soort=soort: {"aantal": len(_lijst_een(l, "/marketplace/apps", {"type": soort,
-                                                                                        "page_size": 300}, "apps"))}, "apps", fouten)
+        _deel(l, d, naam, lambda soort=soort: hulptelling(soort), "apps", fouten)
     # Optionele, op dit pakket niet beschikbare delen bepalen niet of een week gelukt is.
-    verplicht_fout = [x for x in fouten if x[1] not in {"facturen", "opslagtrend"}]
+    verplicht_fout = [x for x in fouten if x[1] not in {"facturen", "opslagtrend", "gemaakt", "aanvragen",
+                                                     "geblokkeerd", "goedgekeurd"}]
     return d, fouten, not verplicht_fout, l.vragen
 
 
@@ -592,7 +598,7 @@ def facturen(rows):
 
 
 def _lees_apps(l):
-    rows = _lijst_een(l, "/marketplace/apps", {"type": "account_added", "page_size": 300}, "apps")
+    rows = _lijst_een(l, "/marketplace/apps", {"type": "account_added", "page_size": 100}, "apps")
     details = {}
     for row in rows:
         appid = row.get("app_id") if isinstance(row, dict) else None
@@ -730,11 +736,28 @@ def adviezen(d, gesprekken=0, staat_acc=None):
 
     zwaar = (app.get("met_schrijfrechten") if app else None)
     aantal_zwaar = len(zwaar) if zwaar is not None else None
+    onbekende_rechten = app.get("onbekende_rechten") if app else None
+    if onbekende_rechten is None and app and isinstance(app.get("overzicht"), list) and \
+            app.get("aantal") == len(app["overzicht"]) and all(isinstance(x, dict) for x in app["overzicht"]):
+        onbekende_rechten = sum(x.get("rechten") is None or x.get("schrijf") is None
+                                 for x in app["overzicht"])
     vaste_banden = sorted((x["code"], 50 if x["schrijf"] >= 50 else 10 if x["schrijf"] >= 10 else 5)
                           for x in (zwaar or []))
-    voeg("ZA-10", "middel", bool(zwaar) if zwaar is not None else None,
+    if zwaar:
+        open10 = True
+    elif zwaar is None or onbekende_rechten is None or onbekende_rechten:
+        open10 = None
+    else:
+        open10 = False
+    zwaar_tekst = "app heeft" if aantal_zwaar == 1 else "apps hebben"
+    reden10 = f"{aantal_zwaar} {zwaar_tekst} vijf of meer schrijfrechten."
+    if onbekende_rechten:
+        onbekend_tekst = "app" if onbekende_rechten == 1 else "apps"
+        reden10 = (f"Minstens {aantal_zwaar} {zwaar_tekst} vijf of meer schrijfrechten; "
+                   f"bij {onbekende_rechten} {onbekend_tekst} zijn de rechten onbekend.")
+    voeg("ZA-10", "middel", open10,
          {"apps": [code for code, _ in vaste_banden], "banden": [band for _, band in vaste_banden]},
-         f"{aantal_zwaar} apps hebben vijf of meer schrijfrechten.",
+         reden10,
          "Kijk op de accountbrede apppagina na of deze rechten nog nodig zijn.")
     leeg_r = role.get("eigen_leeg") if role else None
     leeg_g = group.get("leeg") if group else None
@@ -847,8 +870,8 @@ def voorstel_van(a, week):
             "parameters": params, "runbook": ""}
 
 
-def basis_van(d):
-    """Alleen de vaste beveiligingsvelden en geanonimiseerde appcodes gaan in de staat."""
+def basis_van(d, vorige_basis=None):
+    """Bewaar vaste velden en de laatst bewezen rechten per geanonimiseerde app."""
     a = _bekend(d, "account") or {}
     s = _bekend(d, "security") or {}
     u = _bekend(d, "user") or {}
@@ -859,12 +882,21 @@ def basis_van(d):
                                "recording.auto_delete_cmr") if k in a}
     if s.get("tweestaps"):
         inst["security.sign_in_with_two_factor_auth"] = s["tweestaps"]
+    app_basis = {x["code"]: {"naam": x["naam"], "gepubliceerd": x["gepubliceerd"],
+                             "rechten": x["rechten"], "schrijf": x["schrijf"]}
+                 for x in ap.get("overzicht", [])}
+    vorige_apps = vorige_basis.get("apps") if isinstance(vorige_basis, dict) else None
+    if isinstance(vorige_apps, dict):
+        for code, app in app_basis.items():
+            oud = vorige_apps.get(code)
+            if app["rechten"] is None and isinstance(oud, dict) and \
+                    type(oud.get("rechten")) is int and type(oud.get("schrijf")) is int:
+                app["rechten"], app["schrijf"] = oud["rechten"], oud["schrijf"]
     return {"instellingen": inst,
             "opname": {k: u[k] for k in ("recording.auto_recording", "recording.recording_audio_transcript") if k in u},
             "vergrendelingen": locks.get("velden") or {},
             "beheerlogboek": log.get("gevoelig") or {},
-            "apps": {x["code"]: {"naam": x["naam"], "gepubliceerd": x["gepubliceerd"], "rechten": x["rechten"],
-                                   "schrijf": x["schrijf"]} for x in ap.get("overzicht", [])}}
+            "apps": app_basis}
 
 
 def apprechten_veranderd(vorige_basis, huidige_apps):
@@ -876,6 +908,8 @@ def apprechten_veranderd(vorige_basis, huidige_apps):
     veranderd = []
     for code in sorted(vorig.keys() & nu.keys()):
         oud, nieuw = vorig[code], nu[code]
+        if any(oud.get(k) is None or nieuw.get(k) is None for k in ("rechten", "schrijf")):
+            continue
         if any(oud.get(k) != nieuw.get(k) for k in ("rechten", "schrijf")):
             veranderd.append({"naam": nieuw["naam"], "rechten_van": oud.get("rechten"),
                               "rechten_naar": nieuw["rechten"], "schrijf_van": oud.get("schrijf"),
@@ -915,7 +949,7 @@ UITVOER_SLEUTELS = frozenset((
     "instellingen auto_opname_gebruiker cloud_opname transcript_aan opslaglocatie samenvattingen_30d "
     "bewaartermijn_aan gemaakte_apps aanvragen geblokkeerd goedgekeurd maand_tot_nu meetings deelnemers minuten "
     "nieuw goed onbekend ernst toestand opslag pct gebruikt_gb gratis_gb betaald_gb groei_gb_per_dag "
-    "vol_rond aantal eigen met_schrijfrechten rechten schrijf gepubliceerd Owner Admin Member "
+    "vol_rond aantal eigen onbekende_rechten met_schrijfrechten rechten schrijf gepubliceerd Owner Admin Member "
     "pakket periode hosts sinds volgende_factuur licensed basic room pending in_gebruik actief inactief "
     "hosts_30d facturen kenmerken gebruiker dienst oordeel aanvragen geblokkeerd goedgekeurd "
     "wijziging tot instellingen apps_nieuw apps_weg beheerhandelingen veld van naar "
@@ -953,8 +987,7 @@ def weekoverzicht(d, adv, wachtrij, week, klok, volledig):
                 "activiteiten": "beveiliging", "logboek": "beveiliging", "account": "beveiliging",
                 "user": "opnames", "opslag": "opnames", "opslagtrend": "opnames", "opnames": "opnames", "samenvattingen": "ai",
                 "pakket": "licenties", "samenvatting": "licenties", "gebruikers": "licenties",
-                "facturen": "licenties", "apps": "apps", "gemaakt": "apps", "aanvragen": "apps",
-                "geblokkeerd": "apps", "goedgekeurd": "apps", "daggebruik": "gebruik",
+                "facturen": "licenties", "apps": "apps", "daggebruik": "gebruik",
                 "rapport_actief": "gebruik", "rapport_inactief": "gebruik"}
     for bron, deel in koppeling.items():
         if bron == "opslagtrend" and bron not in d:
@@ -1005,10 +1038,11 @@ def weekoverzicht(d, adv, wachtrij, week, klok, volledig):
                "licenties": {**{k: _waarde(_bekend(d, "samenvatting"), k) for k in ("licensed", "basic", "room", "pending")},
                              "pakket": {k: _waarde(_bekend(d, "pakket"), k) for k in ("periode", "hosts")}},
                "apps": {"aantal": _waarde(apps_d, "aantal"), "eigen": _waarde(apps_d, "eigen"),
-                        "gemaakte_apps": _waarde(_bekend(d, "gemaakt"), "aantal"),
-                        "aanvragen": _waarde(_bekend(d, "aanvragen"), "aantal"),
-                        "geblokkeerd": _waarde(_bekend(d, "geblokkeerd"), "aantal"),
-                        "goedgekeurd": _waarde(_bekend(d, "goedgekeurd"), "aantal"),
+                        "onbekende_rechten": _waarde(apps_d, "onbekende_rechten"),
+                        "gemaakte_apps": _waarde(_bekend(d, "gemaakt"), "aantal", "niet beschikbaar"),
+                        "aanvragen": _waarde(_bekend(d, "aanvragen"), "aantal", "niet beschikbaar"),
+                        "geblokkeerd": _waarde(_bekend(d, "geblokkeerd"), "aantal", "niet beschikbaar"),
+                        "goedgekeurd": _waarde(_bekend(d, "goedgekeurd"), "aantal", "niet beschikbaar"),
                         "met_schrijfrechten": [{"naam": x["naam"], "rechten": x["rechten"], "schrijf": x["schrijf"]}
                                                 for x in (apps_d.get("met_schrijfrechten", []) if apps_d else [])[:6]],
                         "rechten_veranderd": _waarde(_bekend(d, "app_rechten"), "overzicht", "eerste scan of appdetail ontbreekt")},
@@ -1234,7 +1268,7 @@ def ronde(r, w, staat, klok, gesprekken=0, forceer=False):
                 r.nood("Zoom-wijzigingscontrole twee rondes na elkaar niet gelezen", "claude-code")
         else:
             nieuw["wijziging_fouten"] = 0
-    basis = basis_van(d)
+    basis = basis_van(d, oud.get("basis"))
     if all(_bekend(d, k) is not None for k in ("account", "security", "user", "locks", "apps", "logboek")):
         vorige = oud.get("basis")
         if not vorige:
@@ -1282,7 +1316,7 @@ def lees_wijziging(ik, klok, oude_basis):
                                                            {"from": maand, "to": vandaag, "page_size": 300},
                                                            "operation_logs")), "beveiliging", fouten)
     def app_lijst():
-        rows = l.lijst("/marketplace/apps", {"type": "account_added", "page_size": 300}, "apps")
+        rows = l.lijst("/marketplace/apps", {"type": "account_added", "page_size": 100}, "apps")
         details = {}
         vorig = oude_basis.get("apps") or {}
         for row in rows:
@@ -1291,7 +1325,7 @@ def lees_wijziging(ik, klok, oude_basis):
                 raise Z.AccountFout(reden="onleesbaar")
             code = _ident(appid)
             if code in vorig:
-                details[appid] = {"scopes": []}
+                details[appid] = {"app_scopes": []}
             else:
                 details[appid] = l.vraag(f"/marketplace/apps/{appid}")
         antwoord = apps(rows, details)
@@ -1299,6 +1333,10 @@ def lees_wijziging(ik, klok, oude_basis):
             if x["code"] in vorig:
                 x["rechten"] = vorig[x["code"]]["rechten"]
                 x["schrijf"] = vorig[x["code"]]["schrijf"]
+        if antwoord.get("stand") == "ok":
+            antwoord["onbekende_rechten"] = sum(x["rechten"] is None for x in antwoord["overzicht"])
+            antwoord["met_schrijfrechten"] = [x for x in antwoord["overzicht"]
+                                              if x["schrijf"] is not None and x["schrijf"] >= 5]
         return antwoord
     _deel(l, d, "apps", app_lijst, "apps", fouten)
     return d, fouten, l.vragen

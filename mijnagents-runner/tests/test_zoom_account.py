@@ -391,9 +391,8 @@ def gemeten_antwoorden():
         "/accounts/me/billing/invoices": {"invoices": []},
         "/marketplace/apps": {"apps": [{"app_id": "abcdef", "app_name": "Voorbeeld Planner",
                                          "app_status": "PUBLISHED"}]},
-        "/marketplace/apps/abcdef": {"app_scopes": [{"scope_name": "zoomapp:inmeeting"},
-                                                           {"scope_name": "meeting:write"},
-                                                           {"scope_name": "imchat:bot"}]},
+        # Gemeten vorm (22-10): app_scopes als lijst tekstregels.
+        "/marketplace/apps/abcdef": {"app_scopes": ["zoomapp:inmeeting", "meeting:write", "imchat:bot"]},
     }
 
 
@@ -484,19 +483,11 @@ def test_a38_witte_lijst_bewaakt_elk_uitgaand_soort():
 
 
 def test_a08_a24_onvolledig_detail_wordt_nooit_nul_en_verse_opname_telt_niet():
-    try:
-        ZA.apps([{"app_id": "abcdef", "app_status": "PUBLISHED", "app_name": "Verzonnen Agenda"}], {"abcdef": {}})
-    except Z.AccountFout:
-        pass
-    else:
-        raise AssertionError("rechten zonder scopes zijn onbekend")
-    try:
-        ZA.apps([{"app_id": "abcdef", "app_status": "PUBLISHED", "app_name": "Verzonnen Agenda"}],
-                {"abcdef": {"app_scopes": [{"scope_name": "View and manage your meetings"}]}})
-    except Z.AccountFout:
-        pass
-    else:
-        raise AssertionError("een leesbare omschrijving is geen bewijs van nul schrijfrechten")
+    rows = [{"app_id": "abcdef", "app_status": "PUBLISHED", "app_name": "Verzonnen Agenda"}]
+    for detail in ({}, {"app_scopes": [{"scope_name": "View and manage your meetings"}]}):
+        a = ZA.apps(rows, {"abcdef": detail})
+        assert a["stand"] == "ok" and a["aantal"] == 1 and a["onbekende_rechten"] == 1
+        assert a["overzicht"][0]["rechten"] is None and a["overzicht"][0]["schrijf"] is None
     assert ZA.rollen([{"name": "Owner"}])["stand"].startswith("onbekend")
     assert ZA.beheerlogboek([{"category_type": "Role"}])["stand"].startswith("onbekend")
     assert ZA.opnames([{"duration": 30, "recording_files": [{"file_type": "MP4"}]}], KLOK)["stand"].startswith("onbekend")
@@ -884,8 +875,11 @@ def test_za4_publieke_scopes_in_gemeten_week():
     rechten = [regel for regel in fixture.read_text().splitlines() if regel and not regel.startswith("#")]
     assert len(rechten) == len(set(rechten)) == 56
     assert "h323_device:read:list_devices:admin" in rechten
-    detail = {"app_scopes": [{"scope_name": recht} for recht in rechten]}
+    # Gemeten vorm (22-10): app_scopes is een lijst tekstregels; de dict-vorm blijft ook leesbaar.
+    detail = {"app_scopes": list(rechten)}
     assert ZA._rechten_detail(detail) == (56, 0)
+    assert ZA._rechten_detail({"app_scopes": [{"scope_name": recht} for recht in rechten]}) == (56, 0)
+    assert ZA._rechten_detail({"app_scopes": ["meeting:write:meeting:admin", "user:read:user:admin"]}) == (2, 1)
     assert ZA._fout(Z.GeenRecht("h323_device:read:list_devices:admin")) == \
         "geen recht h323_device:read:list_devices:admin"
     assert ZA._fout(Z.GeenRecht("download")) == "geen recht download"
@@ -1216,6 +1210,158 @@ def test_za8_rechtenalarm_sluit_pas_na_geslaagde_herlezing_van_de_bron():
     assert melding not in noden[2], noden
     assert bewaarde_rechten == [[{"bron": "opslagtrend", "recht": recht}],
                                [{"bron": "opslagtrend", "recht": recht}], []], bewaarde_rechten
+
+
+def _za9_proefweek(*, fout_type=None, detail=None, pagineer=False, wijziging=False):
+    """Uitsluitend verzonnen API-antwoorden met de gemeten Marketplace-vorm."""
+    ant = gemeten_antwoorden()
+    ant["/marketplace/apps/abcdef"] = detail if detail is not None else {
+        "app_scopes": [{"scope_name": "meeting:read:meeting:admin"}]}
+    ant["/marketplace/apps/ghijkl"] = {"app_scopes": [{"scope_name": "user:read:user:admin"}]}
+    gevraagd = []
+
+    def lees(pad, params=None):
+        if pad == "/accounts/me/settings" and params:
+            return {"sign_in_with_two_factor_auth": "none"} if params["option"] == "security" else \
+                {"meeting_security": {"meeting_password": False}}
+        if pad == "/marketplace/apps":
+            gevraagd.append(dict(params))
+            soort = params["type"]
+            if soort == fout_type:
+                raise Z.AccountFout(404)
+            if soort != "account_added":
+                return {"apps": []}
+            if pagineer and params.get("next_page_token"):
+                return {"apps": [{"app_id": "ghijkl", "app_name": "Verzonnen Lezer",
+                                  "app_status": "PUBLISHED"}]}
+            eerste = {"apps": list(ant["/marketplace/apps"]["apps"])}
+            if pagineer:
+                eerste["apps"] += [{"app_id": f"fictief{i:03d}", "app_name": "Verzonnen App",
+                                    "app_status": "PUBLISHED"} for i in range(99)]
+                eerste["next_page_token"] = "volgende"
+            return eerste
+        if pad.startswith("/marketplace/apps/") and pad not in ant:
+            return {"app_scopes": [{"scope_name": "meeting:read:meeting:admin"}]}
+        return ant[pad]
+
+    with patch.object(Z, "lees_account", side_effect=lees), patch.object(ZA.time, "sleep", return_value=None), \
+         patch.object(Z, "PAUZE", 0):
+        d, fouten, volledig, vragen = ZA.lees_week("vaste-id", "9100000001", KLOK)
+        wijzig = ZA.lees_wijziging("vaste-id", KLOK, ZA.basis_van(d)) if wijziging else None
+    return d, fouten, volledig, vragen, gevraagd, wijzig
+
+
+def test_bouw_za9_app_scopes_gaan_voor_beschrijvende_scopes():
+    detail = {"app_scopes": [{"scope_name": "meeting:read:meeting:admin"},
+                             {"scope_name": "meeting:write:meeting:admin"}],
+              "scopes": ["View and manage your meetings"]}
+    assert ZA._rechten_detail(detail) == (2, 1)
+
+
+def test_bouw_za9_zonder_app_scopes_blijft_app_leesbaar_met_onbekende_rechten():
+    rows = [{"app_id": "fictiefa", "app_name": "Verzonnen Planner", "app_status": "PUBLISHED"}]
+    a = ZA.apps(rows, {"fictiefa": {"scopes": ["View and manage your meetings"]}})
+    assert a["stand"] == "ok" and a["aantal"] == 1 and a["onbekende_rechten"] == 1
+    assert a["overzicht"][0]["rechten"] is None and a["overzicht"][0]["schrijf"] is None
+    assert a["met_schrijfrechten"] == []
+
+
+def test_bouw_za9_ongeldige_scope_name_telt_niet_als_nul_of_als_fallback():
+    rows = [{"app_id": "fictiefb", "app_name": "Verzonnen Notities", "app_status": "PUBLISHED"}]
+    detail = {"app_scopes": [{"scope_name": "meeting:read:meeting:admin"},
+                             {"scope_name": "View and manage your meetings", "scope": "meeting:write"}]}
+    a = ZA.apps(rows, {"fictiefb": detail})
+    assert a["stand"] == "ok" and a["onbekende_rechten"] == 1
+    assert a["overzicht"][0]["rechten"] is None and a["overzicht"][0]["schrijf"] is None
+
+
+def test_bouw_za9_za10_en_weekoverzicht_onderscheiden_onbekend_open_goed():
+    d = proefstand()
+    onbekend = {"code": "aaaaaaaaaaaaaaaa", "naam": "externe app", "gepubliceerd": True,
+                "rechten": None, "schrijf": None}
+    d["apps"] = {"stand": "ok", "aantal": 1, "eigen": 0, "overzicht": [onbekend],
+                 "met_schrijfrechten": [], "onbekende_rechten": 1}
+    advies = lambda: next(a for a in ZA.adviezen(d) if a["code"] == "ZA-10")
+    assert advies()["toestand"] == "onbekend"
+    w = ZA.weekoverzicht(d, [], [], ZA.week_van(KLOK), KLOK, True)["inhoud"]
+    assert w["apps"]["aantal"] == 1 and w["apps"]["onbekende_rechten"] == 1
+    zwaar = {"code": "bbbbbbbbbbbbbbbb", "naam": "externe app", "gepubliceerd": True,
+             "rechten": 6, "schrijf": 5}
+    d["apps"]["overzicht"].append(zwaar)
+    d["apps"]["met_schrijfrechten"] = [zwaar]
+    d["apps"]["aantal"] = 2
+    assert advies()["toestand"] == "open"
+    assert "Minstens 1 app" in advies()["reden"] and "bij 1 app zijn de rechten onbekend" in advies()["reden"]
+    d["apps"]["overzicht"] = [{**onbekend, "rechten": 1, "schrijf": 0}]
+    d["apps"]["met_schrijfrechten"] = []
+    d["apps"]["aantal"] = 1
+    d["apps"]["onbekende_rechten"] = 0
+    assert advies()["toestand"] == "goed"
+
+
+def test_bouw_za9_onbekende_rechten_zijn_geen_gemeten_rechtenwijziging():
+    code = "aaaaaaaaaaaaaaaa"
+    vorige = {"apps": {code: {"naam": "externe app", "gepubliceerd": True,
+                              "rechten": 4, "schrijf": 1}}}
+    nu = {"overzicht": [{"code": code, "naam": "externe app", "gepubliceerd": True,
+                         "rechten": None, "schrijf": None}]}
+    assert ZA.apprechten_veranderd(vorige, nu)["overzicht"] == []
+
+
+def test_bouw_za9_laatst_bekende_rechten_blijven_vergelijkbaar_na_onbekende_week():
+    rows = [{"app_id": "fictiefc", "app_name": "Verzonnen Kalender", "app_status": "PUBLISHED"}]
+    d = proefstand()
+    d["apps"] = ZA.apps(rows, {"fictiefc": {"app_scopes": [
+        {"scope_name": "meeting:read"}, {"scope_name": "meeting:write"}]}})
+    eerste = ZA.basis_van(d)
+    d["apps"] = ZA.apps(rows, {"fictiefc": {"scopes": ["View and manage your meetings"]}})
+    assert ZA.apprechten_veranderd(eerste, d["apps"])["overzicht"] == []
+    tussen = ZA.basis_van(d, eerste)
+    code = d["apps"]["overzicht"][0]["code"]
+    assert tussen["apps"][code]["rechten"] == 2 and tussen["apps"][code]["schrijf"] == 1
+    d["apps"] = ZA.apps(rows, {"fictiefc": {"app_scopes": [
+        {"scope_name": "meeting:read"}, {"scope_name": "meeting:write"},
+        {"scope_name": "user:write"}]}})
+    gewijzigd = ZA.apprechten_veranderd(tussen, d["apps"])["overzicht"]
+    assert gewijzigd == [{"naam": "externe app", "rechten_van": 2, "rechten_naar": 3,
+                          "schrijf_van": 1, "schrijf_naar": 2}]
+
+
+def test_bouw_za9_marketplace_pagineert_met_honderd_in_beide_scans():
+    d, fouten, volledig, _, gevraagd, wijzig = _za9_proefweek(pagineer=True, wijziging=True)
+    assert volledig and d["apps"]["aantal"] == 101, fouten
+    assert wijzig[0]["apps"]["aantal"] == 101
+    assert all(p["page_size"] == 100 for p in gevraagd), gevraagd
+    toegevoegd = [p for p in gevraagd if p["type"] == "account_added"]
+    assert [p.get("next_page_token") for p in toegevoegd] == [None, "volgende", None, "volgende"]
+
+
+def test_bouw_za9_elke_hulplijst_mag_falen_zonder_onvolledige_week():
+    namen = {"account_created": "gemaakt", "active_requests": "aanvragen",
+             "restricted_apps": "geblokkeerd", "approved_apps": "goedgekeurd"}
+    for soort, naam in namen.items():
+        d, fouten, volledig, _, _, _ = _za9_proefweek(fout_type=soort)
+        assert volledig and d["apps"]["stand"] == "ok", (soort, fouten)
+        assert d[naam] == {"stand": "onbekend: niet beschikbaar"}, (soort, d[naam])
+        w = ZA.weekoverzicht(d, ZA.adviezen(d), [], ZA.week_van(KLOK), KLOK, volledig)["inhoud"]
+        assert w["delen"]["apps"] == "ok" and w["apps"]["aantal"] == 1
+        assert w["apps"]["gemaakte_apps" if naam == "gemaakt" else naam].startswith("onbekend")
+
+
+def test_bouw_za9_gemeten_week_met_beschrijvingen_en_gemaakt_404_is_volledig():
+    detail = {"app_scopes": [{"scope_name": "meeting:read:meeting:admin"},
+                             {"scope_name": "meeting:write:meeting:admin"}],
+              "scopes": ["View and manage your meetings"]}
+    d, fouten, volledig, vragen, gevraagd, _ = _za9_proefweek(fout_type="account_created", detail=detail)
+    assert volledig and vragen >= 20, fouten
+    assert {naam for _, naam, _ in fouten} == {"facturen", "gemaakt"}
+    assert d["apps"]["stand"] == "ok" and d["apps"]["onbekende_rechten"] == 0
+    assert d["apps"]["overzicht"][0]["rechten"] == 2 and d["apps"]["overzicht"][0]["schrijf"] == 1
+    assert next(a for a in ZA.adviezen(d) if a["code"] == "ZA-10")["toestand"] == "goed"
+    assert all(p["page_size"] == 100 for p in gevraagd)
+    w = ZA.weekoverzicht(d, ZA.adviezen(d), [], ZA.week_van(KLOK), KLOK, volledig)["inhoud"]
+    assert w["scan"] == "volledig" and w["delen"]["apps"] == "ok"
+    assert w["apps"]["onbekende_rechten"] == 0 and w["apps"]["gemaakte_apps"] == "onbekend: niet beschikbaar"
 
 
 if __name__ == "__main__":
