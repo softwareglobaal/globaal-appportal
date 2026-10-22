@@ -1,5 +1,16 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.23 (22-10-2026): een rit eindigt nooit na het begin van de afspraak waarvoor ik rijd. Is de volgende
+afspraak vast (zorg, klant, Lara, met gasten of van iemand anders) en de vorige een eigen verschuifbare afspraak,
+dan plan ik het vertrek op tijd en zet ik op de vorige afspraak een VR-vraag ("vertrek om HH:MM bij <vorige> voor
+<volgende>; korter maken of de volgende verzetten?") zonder privétitels naar het bord; zijn beide vast, dan volgt de
+stabiele nood "TE KRAP: kies welke afspraak schuift". Na inkorten van de vorige afspraak vervalt de VR zodra de ritten
+via een tussenstop aansluiten. Een gemaskeerde patiëntnaam met sterretjes (uit Naam, Voornaam
+en Achternaam, ook los of zonder middelste naam) telt als Mehdi zodra de zichtbare beginletters in volgorde bij het
+profiel passen; een eigen zorgvraagitem verdwijnt (wordt op Opgelost gezet) zodra de zorgafspraak aan het privé-item
+met `agendawacht_zorg` gekoppeld is. Bestaande herinneringen die Mehdi of Claude zette blijven naast de vertrekmelding
+staan; een herinnering van 0 minuten schrijf ik nooit. Grendels: FR-206 t/m FR-209.
+
 Aanvulling v8.22 (22-10-2026): bij een dubbele zorgafspraak is het gemerkte of door mij verhuisde privé-item de bron;
 het werkitem van een collega blijft onaangeraakt als schaduw en krijgt geen rit. Mehdi krijgt één vaste verwijdervraag,
 maar alleen hij beslist. Een gedeeld huisartsplatform telt pas met een passende profielplaats of praktijknaam;

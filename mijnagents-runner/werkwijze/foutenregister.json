@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.44",
+ "versie": "3.45",
  "datum": "22-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -1084,11 +1084,11 @@
    "waarom_niet_gezien": "'TE KRAP' stond alleen in het logboek, niet als signaal. De controle keek of er een rit was, niet hoe lang hij duurde.",
    "oorzaak": "Bij te weinig tijd werd het vertrek op het einde van de vorige afspraak gezet, en de aankomst bleef het begin van de volgende.",
    "soort_oorzaak": "code",
-   "oplossing": "De rit toont de echte rijtijd en dus de late aankomst. 'Te krap: je komt te laat' komt als signaal en nood op het bord, met de vraag wie verschuift.",
+   "oplossing": "De rit toont de echte rijtijd en eindigt uiterlijk op het begin van de volgende afspraak. Als twee vaste afspraken botsen, volgt een stabiele nood op het bord met de vraag welke afspraak verschuift.",
    "grendel": {
-    "soort": "code",
-    "waar": "agenda_wacht.py",
-    "tekst": "aankomst = vorige_einde + timedelta(minutes=rijden)"
+    "soort": "test",
+    "waar": "tests/test_planregels.py",
+    "tekst": "test_te_krap_beide_vast_geeft_nood"
    },
    "controle": [
     "rit_nul_minuten"
@@ -4080,6 +4080,62 @@
    "soort_oorzaak": "code",
    "oplossing": "Tel een menselijke rit op het grensuur mee, schrijf geen tweede rit en blokkeer elke patch of verhuisactie voor een schaduwitem.",
    "grendel": {"soort": "test", "waar": "tests/test_agenda_dubbel_huisarts.py", "tekst": "test_handmatige_rit_onderdrukt_agentrit_over_zorgcluster"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-206",
+   "datum": "22-10-2026",
+   "gevonden_door": "Mehdi, Antigravity-ronde 17",
+   "fout": "Een ketenrit werd bij een te krappe overgang na de start van de volgende afspraak gepland.",
+   "gevolg": "Mehdi zag in zijn agenda dat hij eerst ter plaatse moest zijn en pas daarna rijden.",
+   "waarom_niet_gezien": "De oude TE KRAP-route schoof de aankomst door naar het einde van de vorige afspraak plus de rijtijd.",
+   "oorzaak": "aankomst werd na start gezet en er werd geen onderscheid gemaakt tussen een eigen verschuifbare vorige afspraak en twee vaste afspraken.",
+   "soort_oorzaak": "code",
+   "oplossing": "Een rit eindigt nooit na het begin van de afspraak waarvoor hij rijdt. Bij een eigen verschuifbare vorige afspraak en een vaste volgende afspraak komt een VR-vraag op de vorige afspraak zonder privétitels naar het bord; zijn beide vast, dan komt de stabiele nood 'TE KRAP: kies welke afspraak schuift'.",
+   "grendel": {"soort": "test", "waar": "tests/test_planregels.py", "tekst": "test_rit_eindigt_nooit_na_begin_afspraak"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-207",
+   "datum": "22-10-2026",
+   "gevonden_door": "Mehdi, Antigravity-ronde 17",
+   "fout": "Een gemaskeerde patiëntnaam met sterretjes uit drie velden (Naam, Voornaam, Achternaam) werd niet als Mehdi herkend.",
+   "gevolg": "De agent maakte ten onrechte een hele-dag-VR 'andere patiënt of patiënt niet te lezen'.",
+   "waarom_niet_gezien": "zorg_herken las alleen Patiënt/Patient en _eigen_patient eiste exact evenveel woorden als de profielnaam.",
+   "oorzaak": "De velden Naam, Voornaam en Achternaam ontbraken in zorg_herken en een ontbrekend middelste woord brak de vergelijking.",
+   "soort_oorzaak": "code",
+   "oplossing": "Lees ook Naam, Voornaam en Achternaam in zorg_herken en laat een gemaskeerde naam passen zodra de zichtbare beginletters in volgorde overeenkomen met een profielpatiënt.",
+   "grendel": {"soort": "test", "waar": "tests/test_planregels.py", "tekst": "test_gemaskeerde_patient_drie_velden_telt_als_mehdi"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-208",
+   "datum": "22-10-2026",
+   "gevonden_door": "Mehdi, Antigravity-ronde 17",
+   "fout": "Een eigen hele-dag-VR-item ('VR Agendawacht: zorgafspraak uit mail ...') bleef openstaan nadat de zorgafspraak gekoppeld was aan het privé-item met agendawacht_zorg.",
+   "gevolg": "Mehdi bleef een verouderde vraag in zijn privé-agenda zien terwijl de zorgafspraak al gekoppeld stond.",
+   "waarom_niet_gezien": "mail_meldingen kende de status 'gezet' niet als opgeloste reden en keek niet naar het agendawacht_zorg-merk op het gekoppelde privé-item.",
+   "oorzaak": "De afrondlus in mail_meldingen en zorg_afspraken_zetten sloot eigen mailmeldingen niet af op basis van agendawacht_zorg of status 'gezet'.",
+   "soort_oorzaak": "code",
+   "oplossing": "Rond eigen vraagitems met het merk van de agent automatisch af zodra de zorgafspraak gekoppeld of gezet is op een privé-item met agendawacht_zorg; raak items zonder eigen merk nooit aan.",
+   "grendel": {"soort": "test", "waar": "tests/test_planregels.py", "tekst": "test_eigen_zorgvraag_verdwijnt_na_koppeling"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-209",
+   "datum": "22-10-2026",
+   "gevonden_door": "Mehdi, Antigravity-ronde 17",
+   "fout": "De ritstap en _patch vervingen bestaande herinneringen van Mehdi of Claude op de afspraak zelf door één vertrekpop-up of popup 0.",
+   "gevolg": "Bestaande herinneringen (zoals 1440 en 30 minuten) op een zorgafspraak verdwenen.",
+   "waarom_niet_gezien": "reistijd_zetten schreef onvoorwaardelijk de vertrekmelding over de bestaande overrides heen en _patch bewaakte bestaande herinneringen niet.",
+   "oorzaak": "Geen controle op bestaande overrides in reistijd_zetten en _patch.",
+   "soort_oorzaak": "code",
+   "oplossing": "Laat bestaande herinneringen die Mehdi of Claude zette naast de vertrekmelding staan in _patch en reistijd_zetten, en schrijf nooit een pop-up van 0 minuten.",
+   "grendel": {"soort": "test", "waar": "tests/test_planregels.py", "tekst": "test_patch_laat_bestaande_herinneringen_staan"},
    "controle": [],
    "status": "opgelost"
   }

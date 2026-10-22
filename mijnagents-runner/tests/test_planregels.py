@@ -113,6 +113,7 @@ class Planregels(unittest.TestCase):
         stapel.enter_context(patch.object(W, "_patch", schrijver.patch))
         stapel.enter_context(patch.object(W, "_event", schrijver.event))
         stapel.enter_context(patch.object(W.agenda, "_toegang", lambda: "proef"))
+        stapel.enter_context(patch.object(W, "mag_schrijven", lambda _kal: True))
         stapel.enter_context(patch.object(W, "_cache_laden", lambda: {}))
         stapel.enter_context(patch.object(W, "_cache_bewaren", lambda _cache: None))
         stapel.enter_context(patch.object(W.projectadressen, "index", lambda: {}))
@@ -323,6 +324,8 @@ class Planregels(unittest.TestCase):
             self.assertEqual(len(schrijver.patches), aantal, schrijver.patches[aantal:])
 
     def test_tussenafspraak_na_vertrek_geeft_te_krap_zonder_ritoverlap(self):
+        # Aangepast voor F1 (22-10-2026): een rit eindigt nooit na het begin van de afspraak waarvoor hij rijdt;
+        # bij twee vaste afspraken (Lara en klant) eindigt de rit op het begin van B en komt er een TE KRAP-nood.
         a = afspraak("a", "!! [HA-KB] proef A", "12:30", "13:00", locatie=PLAATSEN[0])
         b = afspraak("b", "!! [HA-KB] proef B", "14:15", "15:00", locatie=PLAATSEN[1])
         overleg = afspraak("overleg", "[LA-IN] taak", "13:10", "13:40", kalender=next(
@@ -338,10 +341,182 @@ class Planregels(unittest.TestCase):
             _gemaakt, _al, _geen, fouten, regels = self.rit_zetten(items)
         self.assertEqual(fouten, 0)
         heen_b = next(x for x in items if "Reistijd voor: " + b["titel"] in x.get("omschrijving", ""))
-        self.assertTrue(any("TE KRAP" in regel for regel in regels), regels)
-        self.assertGreaterEqual(heen_b["start"], overleg["einde"])
+        self.assertTrue(any("TE KRAP: kies welke afspraak schuift" in regel for regel in regels), regels)
+        self.assertEqual(heen_b["start"], tijd("13:30"))
         self.assertEqual(heen_b["_merk"]["agendawacht_vertrek"], heen_b["start"])
-        self.assertGreater(heen_b["einde"], b["start"])
+        self.assertEqual(heen_b["einde"], b["start"])
+
+    def test_rit_eindigt_nooit_na_begin_afspraak(self):
+        werf = afspraak("werf", "!! [HA-KB] WB 2607 - werfbezoek", "09:30", "11:30", locatie=PLAATSEN[0])
+        zorg = afspraak("zorg", "!! [PRIVE] Huisarts Dr. Proef", "11:20", "11:40",
+                        kalender=W.PRIVE_AGENDA, locatie=PLAATSEN[1])
+        items = [werf, zorg]
+        self.p2(items)
+        with patch.object(W, "rijtijd_min", lambda van, naar, _v: (10 if van == (1, 1) and naar == (2, 2) else 20, "proef")), \
+                patch.object(W, "BUFFER_MIN", 5):
+            _gemaakt, _al, _geen, fouten, _regels = self.rit_zetten(items)
+        self.assertEqual(fouten, 0)
+        heen_zorg = next(x for x in items if "Reistijd voor: " + zorg["titel"] in x.get("omschrijving", ""))
+        self.assertLessEqual(heen_zorg["einde"], zorg["start"], msg="test_rit_eindigt_nooit_na_begin_afspraak")
+        self.assertEqual((heen_zorg["start"], heen_zorg["einde"]), (tijd("11:10"), tijd("11:20")))
+
+    def test_te_krap_eigen_vorige_krijgt_vr_vertrektijd(self):
+        vorige = afspraak("vorige", "!! [HA-IN] WB werfbezoek", "09:30", "11:30", locatie=PLAATSEN[0])
+        volgende = afspraak("volgende", "!! [PRIVE] Huisarts Dr. Proef", "11:20", "11:40",
+                            kalender=W.PRIVE_AGENDA, locatie=PLAATSEN[1])
+        items = [vorige, volgende]
+        schrijver = self.p2(items)
+        with patch.object(W, "rijtijd_min", lambda van, naar, _v: (10 if van == (1, 1) and naar == (2, 2) else 20, "proef")), \
+                patch.object(W, "BUFFER_MIN", 5):
+            _gemaakt, _al, _geen, fouten, regels = self.rit_zetten(items)
+            self.assertEqual(fouten, 0)
+            self.assertFalse(any("Huisarts Dr. Proef" in r for r in regels), regels)
+            self.assertFalse(any("TE KRAP" in r for r in regels), regels)
+            self.assertEqual(W.vragen_in_agenda(items, nu=NU), (1, 0))
+        self.assertTrue(vorige["titel"].startswith("VR "), msg="test_te_krap_eigen_vorige_krijgt_vr_vertrektijd")
+        self.assertIn("vertrek om 11:10 bij !! [HA-IN] WB werfbezoek voor (privé); korter maken of de volgende verzetten?",
+                      vorige["omschrijving"], msg="test_te_krap_eigen_vorige_krijgt_vr_vertrektijd")
+        self.assertNotIn("Huisarts Dr. Proef", vorige["omschrijving"])
+        # Het gemeten vervolg: dezelfde werf wordt ingekort en er komt een eigen apotheekstop tussen.
+        vorige["einde"] = tijd("10:45")
+        schrijver.events[vorige["id"]]["end"] = {"dateTime": vorige["einde"]}
+        apotheek = afspraak("apotheek", "!! [PRIVE] Apotheek Proef", "10:55", "11:05",
+                            kalender=W.PRIVE_AGENDA, locatie=PLAATSEN[2])
+        items.append(apotheek)
+        schrijver.events[apotheek["id"]] = google_event(apotheek)
+        with patch.object(W, "rijtijd_min", lambda van, naar, _v: (10 if van in ((1, 1), (3, 3)) else 20, "proef")), \
+                patch.object(W, "BUFFER_MIN", 5):
+            _gemaakt, _al, _geen, fouten, regels = self.rit_zetten(items)
+            self.assertEqual(fouten, 0)
+            self.assertFalse(any("TE KRAP" in regel for regel in regels), regels)
+            self.assertFalse(any("Apotheek Proef" in regel or "Huisarts Dr. Proef" in regel for regel in regels), regels)
+            self.assertEqual(W.vragen_in_agenda(items, nu=NU), (0, 1))
+        heen_apotheek = next(x for x in items if "Reistijd voor: " + apotheek["titel"] in x.get("omschrijving", ""))
+        heen_zorg = next(x for x in items if "Reistijd voor: " + volgende["titel"] in x.get("omschrijving", ""))
+        self.assertEqual((heen_apotheek["start"], heen_apotheek["einde"]), (vorige["einde"], apotheek["start"]))
+        self.assertEqual((heen_zorg["start"], heen_zorg["einde"]), (apotheek["einde"], volgende["start"]))
+        self.assertEqual(heen_zorg["_merk"]["agendawacht_vertrek"], tijd("11:10"))
+        self.assertFalse(vorige["titel"].startswith("VR "))
+
+    def test_te_krap_beide_vast_geeft_nood(self):
+        lara_kal = next(k for k, v in W.KALENDERS.items() if v == "Lara")
+        vast1 = afspraak("vast1", "!! [HA-KB] 2601 - Klant Alfa", "09:30", "11:30", locatie=PLAATSEN[0])
+        vast2 = afspraak("vast2", "!! [LA] Schoolvoorbeeld", "11:20", "11:40",
+                         kalender=lara_kal, locatie=PLAATSEN[1])
+        items = [vast1, vast2]
+        self.p2(items)
+        with patch.object(W, "rijtijd_min", lambda van, naar, _v: (10 if van == (1, 1) and naar == (2, 2) else 20, "proef")), \
+                patch.object(W, "BUFFER_MIN", 5):
+            _gemaakt, _al, _geen, fouten, regels = self.rit_zetten(items)
+        self.assertEqual(fouten, 0)
+        heen = next(x for x in items if "Reistijd voor: " + vast2["titel"] in x.get("omschrijving", ""))
+        self.assertEqual(heen["einde"], vast2["start"])
+        self.assertEqual(W.te_krap_noden(regels),
+                         [{"tekst": "TE KRAP: kies welke afspraak schuift", "wie": "mehdi"}],
+                         msg="test_te_krap_beide_vast_geeft_nood")
+        bevindingen = D.dagcontrole(items, DAG)
+        self.assertTrue(any(b["soort"] == "lara_botsing" for b in bevindingen), bevindingen)
+
+    def test_patch_laat_bestaande_herinneringen_staan(self):
+        bestaand = [{"method": "popup", "minutes": 1440}, {"method": "popup", "minutes": 30}]
+        vertrek = {"method": "popup", "minutes": 25}
+        zorg = afspraak("zorg", "!! [PRIVE] Huisarts Dr. Proef", "11:20", "11:40",
+                        kalender=W.PRIVE_AGENDA, locatie=PLAATSEN[0],
+                        _reminders={"useDefault": False, "overrides": copy.deepcopy(bestaand)})
+        items = [zorg]
+        echte_patch = W._patch
+        self.p2(items)
+        gepatcht = []
+        with patch.object(W, "_patch", echte_patch), patch("urllib.request.urlopen",
+                          lambda req, timeout=30: gepatcht.append(json.loads(req.data.decode())) or None), \
+                patch.object(W, "mag_schrijven", lambda _k: True):
+            _gemaakt, _al, _geen, fouten, _regels = self.rit_zetten(items)
+            self.assertEqual(fouten, 0)
+            self.assertEqual(zorg["_reminders"]["overrides"], bestaand + [vertrek],
+                             msg="test_patch_laat_bestaande_herinneringen_staan")
+            W._patch(zorg, {"reminders": {"useDefault": False, "overrides": [vertrek]}}, "tok")
+            W._patch(zorg, {"reminders": {"useDefault": False, "overrides": []}}, "tok")
+            los = afspraak("los", "!! [HA-KB] proef", "14:00", "15:00", _reminders={})
+            W._patch(los, {"reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 0}]}}, "tok")
+        self.assertEqual(gepatcht[0]["reminders"]["overrides"], bestaand + [vertrek],
+                         msg="test_patch_laat_bestaande_herinneringen_staan")
+        self.assertEqual(gepatcht[1]["reminders"]["overrides"], bestaand + [vertrek])
+        self.assertEqual(gepatcht[2]["reminders"]["overrides"], bestaand + [vertrek])
+        self.assertEqual(gepatcht[3]["reminders"]["overrides"], [])
+
+    def test_gemaskeerde_patient_drie_velden_telt_als_mehdi(self):
+        import mail_afspraken as MA  # noqa: PLC0415
+        profiel = {"id": "huisarts-proef", "naam": "Huisartspraktijk Proef", "soort": "huisarts",
+                   "duur_minuten": 20, "patienten": ["Jan Pieter Jansens"],
+                   "behandelaars": {"Dr. Proef": "Huisarts"}}
+        k_drie = {"onderwerp": "Bevestiging van uw afspraak",
+                  "tekst": ("Uw afspraak is bevestigd.\nDatum: maandag 26/10/2026\nTijd: 11:20\n"
+                            "Bij: Dr. Proef\nLocatie: Proefstraat 1, 0000 Teststad\n"
+                            "Naam: Jan*** Pie*** Jan***\nVoornaam: Jan***\nAchternaam: Jan***\n")}
+        z_drie = MA.zorg_herken(k_drie, profiel)
+        self.assertTrue(z_drie and z_drie["mehdi"], msg="test_gemaskeerde_patient_drie_velden_telt_als_mehdi")
+        self.assertEqual(z_drie["patient"], "Jan*** Pie*** Jan***")
+        k_los = {"onderwerp": "Bevestiging van uw afspraak",
+                 "tekst": ("Uw afspraak is bevestigd.\nDatum: maandag 26/10/2026\nTijd: 11:20\n"
+                           "Bij: Dr. Proef\nVoornaam: Jan***\nAchternaam: Jan***\n")}
+        z_los = MA.zorg_herken(k_los, profiel)
+        self.assertTrue(z_los and z_los["mehdi"], msg="test_gemaskeerde_patient_drie_velden_telt_als_mehdi")
+        k_ander = {"onderwerp": "Bevestiging van uw afspraak",
+                   "tekst": ("Uw afspraak is bevestigd.\nDatum: maandag 26/10/2026\nTijd: 11:20\n"
+                             "Bij: Dr. Proef\nNaam: Ali*** Pie*** Jan***\nVoornaam: Ali***\nAchternaam: Jan***\n")}
+        z_ander = MA.zorg_herken(k_ander, profiel)
+        self.assertFalse(z_ander["mehdi"])
+        k_andere_achternaam = {"onderwerp": "Bevestiging van uw afspraak",
+                              "tekst": ("Datum: maandag 26/10/2026\nTijd: 11:20\nBij: Dr. Proef\n"
+                                        "Voornaam: Jan***\nAchternaam: Eva***\n")}
+        z_andere_achternaam = MA.zorg_herken(k_andere_achternaam, profiel)
+        self.assertFalse(z_andere_achternaam["mehdi"])
+        k_onmaskerd_verschil = {"onderwerp": "Bevestiging van uw afspraak",
+                               "tekst": ("Datum: maandag 26/10/2026\nTijd: 11:20\nBij: Dr. Proef\n"
+                                         "Naam: Jan*** Piet Jansens\n")}
+        z_onmaskerd_verschil = MA.zorg_herken(k_onmaskerd_verschil, profiel)
+        self.assertFalse(z_onmaskerd_verschil["mehdi"])
+
+    def test_eigen_zorgvraag_verdwijnt_na_koppeling(self):
+        import mail_afspraken as MA  # noqa: PLC0415
+        sleutel = f"zorg|huisarts-proef|{tijd('11:20')}"
+        zorg_rij = {"sleutel": sleutel, "soort": "zorg", "start": tijd("11:20"), "einde": tijd("11:40"),
+                    "geannuleerd": 0, "ics_uid": "", "locatie": PLAATSEN[0],
+                    "titel": "Huisarts Dr. Proef", "bron_ontvangen": "2026-10-19T08:00:00+02:00",
+                    "bron_mailbox": "proef@voorbeeld.test", "bron_onderwerp": "Afspraak",
+                    "bron_afzender": "noreply@voorbeeld.test", "bron_message_id": "<zorg1@proef>",
+                    "zorg": {"praktijk": "huisarts-proef", "gebeurtenis": "bevestiging",
+                             "patient": "Jan*** Pie*** Jan***", "mehdi": False, "behandelaar": "Dr. Proef"}}
+        k = MA.sleutel_kort(zorg_rij)
+        prive_item = afspraak("zorg1", "!! [PRIVE] Huisarts Dr. Proef", "11:20", "11:40",
+                              kalender=W.PRIVE_AGENDA, locatie=PLAATSEN[0],
+                              _merk={MA.ZORGMERK: sleutel})
+        eigen_vr = {"id": "vr-eigen", "kalender": W.PRIVE_AGENDA,
+                    "titel": "VR Agendawacht: zorgafspraak uit mail (Huisarts), andere patiënt of patiënt niet te lezen",
+                    "start": DAG, "einde": "2026-10-23", "hele_dag": True,
+                    "omschrijving": "Agendawacht vraagt: voor wie is dit?", "maker": W.PRIVE_AGENDA,
+                    "deelnemers": [], "_agendagasten": [],
+                    "_merk": {W.MAILMERK: k}}
+        vreemd_vr = {"id": "vr-vreemd", "kalender": W.PRIVE_AGENDA,
+                     "titel": "VR Agendawacht: handmatig vraagitem zonder merk",
+                     "start": DAG, "einde": "2026-10-23", "hele_dag": True,
+                     "omschrijving": "Handmatig", "_merk": {}}
+        items = [prive_item, eigen_vr, vreemd_vr]
+        res = MA.vergelijk([zorg_rij], items, nu=NU)
+        self.assertEqual(res[0]["status"], "gekoppeld", msg="test_eigen_zorgvraag_verdwijnt_na_koppeling")
+        gepatcht = []
+        with patch("urllib.request.urlopen",
+                   lambda req, timeout=30: gepatcht.append((req.full_url, json.loads(req.data.decode()))) or None), \
+                patch.object(W, "mag_schrijven", lambda _kal: True):
+            regels = W.mail_meldingen(res, items, "proef", nu=NU)
+        self.assertTrue(any("op opgelost gezet" in r for r in regels), regels)
+        self.assertTrue(eigen_vr["titel"].startswith("Opgelost: "),
+                        msg="test_eigen_zorgvraag_verdwijnt_na_koppeling")
+        self.assertEqual(eigen_vr["_merk"][W.MAILMERK], f"opgelost:{k}")
+        self.assertEqual(vreemd_vr["titel"], "VR Agendawacht: handmatig vraagitem zonder merk")
+        self.assertEqual(len(gepatcht), 1)
+        self.assertIn("/events/vr-eigen?", gepatcht[0][0])
+        self.assertTrue(gepatcht[0][1]["summary"].startswith("Opgelost: "))
 
     def test_intern_overleg_tijdens_ketenrit_houdt_vertrek_en_geeft_geen_te_krap(self):
         # A49, overleg 9e: een intern overleg mag tijdens het rijden (mandaat Mehdi 23-09-2026)

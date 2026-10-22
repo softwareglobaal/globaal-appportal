@@ -382,7 +382,7 @@ def _zorg_tijden(tekst):
 
 def _platform_tijd(tekst):
     datum = _mailveld(tekst, "Datum") or _mailveld(tekst, "Afspraakdatum") or tekst
-    tijd = _mailveld(tekst, "Tijdstip")
+    tijd = _mailveld(tekst, "Tijdstip") or _mailveld(tekst, "Tijd")
     m_tijd = re.fullmatch(r"(\d{1,2}):(\d{2})", tijd)
     m_datum = re.search(r"\b(\d{1,2})[/.](\d{1,2})[/.](\d{4})\b", datum)
     m_woorden = re.search(r"\b(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\b", datum)
@@ -401,17 +401,23 @@ def _platform_tijd(tekst):
 
 
 def _eigen_patient(patient, profiel):
-    eigen = {_naam_plat(n) for n in profiel.get("patienten") or []}
+    eigen = {_naam_plat(n) for n in profiel.get("patienten") or [] if _naam_plat(n)}
     plat = _naam_plat(patient)
-    if plat in eigen:
+    if plat and plat in eigen:
         return True
-    if "*" not in (patient or ""):
+    ruw_delen = [d for d in re.split(r"\s+", (patient or "").strip()) if d]
+    delen = [(re.sub(r"[^a-z]", "", _naam_plat(d)), "*" in d) for d in ruw_delen]
+    delen = [(d, masker) for d, masker in delen if d]
+    if len(delen) < 2 or any(len(d) < 2 for d, _ in delen):
         return False
-    delen = [re.sub(r"[^a-z]", "", _naam_plat(d)) for d in patient.split()]
-    if len(delen) < 2 or any(len(d) < 2 for d in delen):
-        return False
-    return any(len(naam.split()) == len(delen) and all(vol.startswith(stuk) for vol, stuk in zip(naam.split(), delen))
-               for naam in eigen)
+    for naam in eigen:
+        woorden = naam.split()
+        if len(woorden) < len(delen):
+            continue
+        it = iter(woorden)
+        if all(any(vol.startswith(stuk) if masker else vol == stuk for vol in it) for stuk, masker in delen):
+            return True
+    return False
 
 
 def _link_einde(links, start):
@@ -506,10 +512,18 @@ def zorg_herken(k, profiel):
     plaats = _mailveld(ruw, "Locatie") or plaats
     if not zorg_locatie_is_adres(plaats):
         plaats = ""
-    patient_veld = _mailveld(ruw, "Patiënt") or _mailveld(ruw, "Patient")
+    patient_veld = _mailveld(ruw, "Patiënt") or _mailveld(ruw, "Patient") or _mailveld(ruw, "Naam")
+    voornaam_veld = _mailveld(ruw, "Voornaam")
+    achternaam_veld = _mailveld(ruw, "Achternaam") or _mailveld(ruw, "Familienaam")
+    voor_achter = f"{voornaam_veld} {achternaam_veld}".strip() if (voornaam_veld and achternaam_veld) else ""
+    patient_kandidaten = [v for v in (patient_veld, voor_achter) if v]
     m = re.search(r"Pati[eë]nt:\s*(.+?)\s+(?:Uw therapeut|Wanneer|Waar|$)", tekst)
-    if patient_veld or m:
-        patient = patient_veld or m.group(1).strip()
+    if patient_kandidaten:
+        patient = patient_kandidaten[0]
+        mehdi = all(_eigen_patient(v, profiel) for v in patient_kandidaten)
+    elif m:
+        patient = m.group(1).strip()
+        mehdi = bool(patient) and _eigen_patient(patient, profiel)
     else:
         m = re.search(r"\b(?:Beste|Dear|Geachte)\s+((?:(?:Dhr|Mevr|Mr|Mrs|Ms|Mw)\.?\s+)?(?:[A-Z][\w'-]+\s?){1,5})", tekst)
         delen = (m.group(1).split() if m else [])
@@ -518,6 +532,7 @@ def zorg_herken(k, profiel):
         while delen and _AANSPREKING.match(delen[0]):
             delen.pop(0)
         patient = " ".join(d.strip(",.") for d in delen)
+        mehdi = bool(patient) and _eigen_patient(patient, profiel)
     behandelaar = _mailveld(ruw, "Bij") or next((n for n in (profiel.get("behandelaars") or {}) if _naam_plat(n) in _naam_plat(alles)), "")
     if not behandelaar:
         m = (re.search(r"(?:therapeut|therapist)\s*:\s*([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+){1,3})", tekst)
@@ -529,7 +544,7 @@ def zorg_herken(k, profiel):
     if not patient:
         problemen.append("patiënt niet te lezen")
     return {"praktijk": profiel["id"], "gebeurtenis": gebeurtenis, "patient": patient,
-            "mehdi": bool(patient) and _eigen_patient(patient, profiel), "behandelaar": behandelaar, "start": start,
+            "mehdi": mehdi, "behandelaar": behandelaar, "start": start,
             "einde": einde, "locatie": _plaats_netjes(plaats), "oude_start": oude_start,
             "duur_geschat": duur_geschat,
             "ics_uid": (ev or {}).get("uid", ""), "recurrence_id": (ev or {}).get("recurrence_id", ""), "problemen": problemen}
@@ -626,6 +641,14 @@ def _bewaar_zorg(c, a):
         c.execute("INSERT OR IGNORE INTO bron(mailbox,message_id,sleutel,map,imap_uid,ontvangen,afzender,onderwerp,gezien) "
                   "VALUES(?,?,?,?,?,?,?,?,?)", (a["bron_mailbox"], a["bron_message_id"], al["sleutel"], a.get("map", ""), a.get("imap_uid"),
                                                 a["bron_ontvangen"], a["bron_afzender"], a["bron_onderwerp"], nu_iso))
+        bestaand = c.execute("SELECT * FROM afspraak WHERE sleutel=?", (al["sleutel"],)).fetchone()
+        oud_al = _zorg_json(dict(bestaand)) if bestaand else {}
+        if bestaand and z.get("mehdi") and not oud_al.get("mehdi"):
+            oud_al["mehdi"] = True
+            if z.get("patient"):
+                oud_al["patient"] = z["patient"]
+            c.execute("UPDATE afspraak SET zorg=? WHERE sleutel=?", (json.dumps(oud_al, ensure_ascii=False), al["sleutel"]))
+            return 1
         return 0
     eigen_patient = _naam_plat(z.get("patient") or "")
 
@@ -944,9 +967,11 @@ def _zorg_status(a, items, nu, vorig_google=""):
         oud_venster = start < nu - timedelta(days=14)
         return {"status": "voorbij", "google": "",
                 "detail": "historisch, ouder dan het leesvenster (niet vergeleken)" if oud_venster else "historisch: niet in de agenda gevonden"}
-    if not z.get("mehdi"):
-        return {"status": "zorg_open", "google": "", "detail": f"andere patiënt of patiënt niet te lezen ({z.get('patient') or '?'})"}
     eigen = [x for x in kand if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]]
+    prive_gemerkt = [x for x in prive_bron if (x.get("_merk") or {}).get(ZORGMERK) == a["sleutel"]]
+    is_mehdi = bool(z.get("mehdi")) or (bool(z.get("patient")) and _eigen_patient(z.get("patient"), profiel))
+    if not is_mehdi and not (eigen or prive_gemerkt):
+        return {"status": "zorg_open", "google": "", "detail": f"andere patiënt of patiënt niet te lezen ({z.get('patient') or '?'})"}
     if conflict:
         # een zorgitem van een andere afspraak of uitnodiging op dit uur: ook als er een oud eigen item is, nooit verzetten
         # naar dat bezette uur of stil koppelen, maar een vraag (Codex A35, ronde 6)
