@@ -15,6 +15,36 @@ import bord
 import werfregister
 
 
+def _relatief(pad, projectmap):
+    pad = pad or ""
+    return pad[len(projectmap):].casefold() if projectmap and pad.casefold().startswith(projectmap.casefold() + "/") else pad.casefold()
+
+
+def bevindingen_uit_rijen(bord_rijen):
+    """Bezoeken waarvoor Mehdi op het bord 'verslag van bevindingen' koos (2309, 21-10-2026). Drie sleutels, zodat de keuze
+    een mapverhuis overleeft (driehoeksoverleg 22-10, K8/C5): volledig pad, pad binnen de projectmap en vast bezoek-ID."""
+    uit = set()
+    for r in bord_rijen:
+        if not (isinstance(r.get("keuzes"), dict) and r["keuzes"].get("verslagtype") == "verslag_bevindingen"):
+            continue
+        if r.get("bezoekmap"):
+            uit |= {"pad:" + r["bezoekmap"].casefold(), "rel:" + _relatief(r["bezoekmap"], r.get("projectmap") or "")}
+        bid = r["registratie"].get("bezoek_id") if isinstance(r.get("registratie"), dict) else None
+        if bid:
+            uit.add("id:" + bid)
+    return uit
+
+
+def is_bevindingen(bezoek, projectmap, bevindingen, bezoek_id=None):
+    if not bevindingen:
+        return False
+    sleutels = {"pad:" + bezoek["map"].casefold(), "rel:" + _relatief(bezoek["map"], projectmap)}
+    bezoek_id = bezoek_id or (bezoek.get("registratie") or {}).get("bezoek_id")
+    if bezoek_id:
+        sleutels.add("id:" + bezoek_id)
+    return bool(sleutels & set(bevindingen))
+
+
 def koppel_voor_nummering(bezoeken, dossier, projectmap, werfstart, bord_rijen, bevindingen=()):
     """Koppel het app-ID vóór de definitieve N-nummering op het bord.
 
@@ -30,15 +60,6 @@ def koppel_voor_nummering(bezoeken, dossier, projectmap, werfstart, bord_rijen, 
     app = overzicht.get("bezoeken") or []
     pb = wb = vb = 0
     for bezoek in sorted(bezoeken, key=lambda b: (b["datum"], b["map"])):
-        soort = "plaatsbezoek" if werfstart and bezoek["datum"] < werfstart else "werfbezoek"
-        if bezoek["map"].casefold() in bevindingen:
-            # verslag van bevindingen: geen werfbezoek, telt niet mee in de werfverslagnummers
-            soort = "overig"
-            vb += 1; kandidaat = f"VB{vb}"
-        elif soort == "plaatsbezoek":
-            pb += 1; kandidaat = f"PB{pb}"
-        else:
-            wb += 1; kandidaat = str(wb)
         relatief = bezoek["map"][len(projectmap):].casefold() if bezoek["map"].startswith(projectmap + "/") else bezoek["map"].casefold()
         oud = [r.get("registratie") for r in bord_rijen
                if r.get("datum") == bezoek["datum"] and isinstance(r.get("registratie"), dict)
@@ -49,6 +70,15 @@ def koppel_voor_nummering(bezoeken, dossier, projectmap, werfstart, bord_rijen, 
         ids = {r["bezoek_id"] for r in oud}
         if len(ids) > 1:
             raise werfregister.RegisterFout("bordrijen na verhuis verwijzen naar verschillende werfapp-bezoeken")
+        soort = "plaatsbezoek" if werfstart and bezoek["datum"] < werfstart else "werfbezoek"
+        if is_bevindingen(bezoek, projectmap, bevindingen, next(iter(ids), None)):
+            # verslag van bevindingen: geen werfbezoek, telt niet mee in de werfverslagnummers
+            soort = "overig"
+            vb += 1; kandidaat = f"VB{vb}"
+        elif soort == "plaatsbezoek":
+            pb += 1; kandidaat = f"PB{pb}"
+        else:
+            wb += 1; kandidaat = str(wb)
         if ids:
             bezoek["registratie"] = dict(oud[0], bron="werfapp")
             continue

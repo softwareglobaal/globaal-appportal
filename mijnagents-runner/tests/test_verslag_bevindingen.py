@@ -100,10 +100,117 @@ class Nummering(unittest.TestCase):
             return {"bezoek": {"bezoek_id": "vb-1", "project_ref": "h-architects:9999", "status": "onzeker", "revisie": 1}}
 
         bezoeken = [{"map": MAP + "/20260603", "datum": "2026-06-03"}]
+        rijen = [{"bezoekmap": MAP + "/20260603", "keuzes": {"verslagtype": "verslag_bevindingen"}}]
         with patch.object(werfregister, "call", side_effect=api):
-            werfregistratie.koppel_voor_nummering(bezoeken, "9999", MAP, "", [], bevindingen={(MAP + "/20260603").casefold()})
+            werfregistratie.koppel_voor_nummering(bezoeken, "9999", MAP, "", [], bevindingen=V.bevindingenmappen(rijen))
         self.assertEqual(geschreven[0]["bezoektype"], "overig")
         self.assertEqual(bezoeken[0]["registratie"]["bezoek_id"], "vb-1")
+
+    # driehoeksoverleg 22-10-2026 (K8, K9, C5, G6, G8): verhuis, vast bezoek-ID, twee VB's
+    def test_keuze_overleeft_verhuis_van_de_projectmap_met_spaties(self):
+        oud, nieuw = "/Work All/Fase 4 wachten/9999 Proef straat 1", "/Work All/Fase 5 loopt/9999 Proef straat 1"
+        rel = "/_00. Communication/2026-06-03 bezoek klant"
+        rijen = [{"projectmap": oud, "bezoekmap": oud + rel, "keuzes": {"verslagtype": "verslag_bevindingen"}}]
+        bezoeken = [{"map": nieuw + rel, "datum": "2026-06-03"}]
+        V.nummer_bezoeken(bezoeken, "", V.bevindingenmappen(rijen), nieuw)
+        self.assertEqual(bezoeken[0]["nr_label"], "VB1")
+
+    def test_keuze_volgt_het_vaste_bezoek_id(self):
+        rijen = [{"bezoekmap": "/elders/oude map", "keuzes": {"verslagtype": "verslag_bevindingen"},
+                  "registratie": {"bezoek_id": "vast-7"}}]
+        bezoeken = [{"map": MAP + "/hernoemd", "datum": "2026-06-03", "registratie": {"bezoek_id": "vast-7"}}]
+        V.nummer_bezoeken(bezoeken, "", V.bevindingenmappen(rijen), MAP)
+        self.assertEqual(bezoeken[0]["soort_bezoek"], "bevindingen")
+
+    def test_twee_verslagen_van_bevindingen_tellen_door(self):
+        rijen = [{"bezoekmap": MAP + "/a", "keuzes": {"verslagtype": "verslag_bevindingen"}},
+                 {"bezoekmap": MAP + "/c", "keuzes": {"verslagtype": "verslag_bevindingen"}}]
+        bezoeken = [{"map": MAP + "/a", "datum": "2026-06-03"}, {"map": MAP + "/b", "datum": "2026-07-01"},
+                    {"map": MAP + "/c", "datum": "2026-08-01"}]
+        V.nummer_bezoeken(bezoeken, "", V.bevindingenmappen(rijen), MAP)
+        self.assertEqual([b["nr_label"] for b in bezoeken], ["VB1", "1", "VB2"])
+        v = vb.uit_werfproef(dict(proef_verslag(), bezoek="VB2"))
+        self.assertEqual(v["referentie"], "9999-VB2")
+        self.assertIn("na te kijken", vb.uit_werfproef(dict(proef_verslag(), bezoek="3"))["referentie"])
+
+    def test_registratie_herkent_bevindingen_via_bestaande_bordregistratie(self):
+        """Een bezoek dat al als werfbezoek geregistreerd was, houdt zijn ID maar telt niet meer als werfbezoek 1."""
+        rij = {"datum": "2026-06-03", "bezoekmap": MAP + "/20260603", "keuzes": {"verslagtype": "verslag_bevindingen"},
+               "registratie": {"bezoek_id": "oud-1", "project_ref": "h-architects:9999"}}
+        bezoeken = [{"map": MAP + "/20260603", "datum": "2026-06-03"}, {"map": MAP + "/20260910", "datum": "2026-09-10"}]
+        aangemaakt = []
+
+        def api(pad, payload=None):
+            if pad.startswith("/bezoeken?"):
+                return {"bezoeken": [], "meer": False}
+            aangemaakt.append(payload)
+            return {"bezoek": {"bezoek_id": "nieuw-2", "project_ref": "h-architects:9999"}}
+
+        with patch.object(werfregister, "call", side_effect=api):
+            werfregistratie.koppel_voor_nummering(bezoeken, "9999", MAP, "", [rij], bevindingen=V.bevindingenmappen([rij]))
+        self.assertEqual(bezoeken[0]["registratie"]["bezoek_id"], "oud-1")
+        self.assertEqual(aangemaakt[0]["bezoektype"], "werfbezoek")   # het tweede bezoek is werfbezoek 1
+
+
+class Raming(unittest.TestCase):
+    def test_twee_totalen_en_pm(self):
+        v = {"raming": [{"nr": "R1", "van": 100, "tot": 200}, {"nr": "R3a", "van": 50, "tot": 80},
+                        {"nr": "R3b", "van": 700, "tot": 900, "variant": True, "vervangt": "R3a"},
+                        {"nr": "R9", "post": "onvoorzien", "tekst": "p.m."}]}
+        self.assertEqual(vb.raming_totalen(v), [("Totaal", 150, 280), ("Totaal met R3b in plaats van R3a", 800, 1100)])
+        md = vb.naar_markdown(dict(vb.leeg("9999", "x"), raming=v["raming"]))
+        self.assertIn("p.m.", md)
+        self.assertIn("Totaal met R3b in plaats van R3a", md)
+
+
+class Schrijver(unittest.TestCase):
+    """De grendel kijkt naar de actuele keuze, niet alleen naar de oude proef (C6); --herlayout leest het JSON (C7)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import werfverslag_proef as P
+        cls.P = P
+
+    class Ag:
+        def __init__(self):
+            self.logs = []
+
+        def log(self, *a):
+            self.logs.append(a)
+
+    def rij(self, **extra):
+        r = {"id": 1, "dossier": "9999", "datum": "2026-06-03", "bezoekmap": MAP + "/20260603", "adres": "Proefstraat 1",
+             "keuzes": {"verslagtype": "verslag_bevindingen"}, "bronnen": {"nr_label": "1", "soort_bezoek": "werfbezoek"},
+             "proef_info": {"verslagtype": "vaststellingsverslag", "werfapp": {"id": 41, "nummer": "9999-1"}},
+             "verslag_md": "# Werfverslag 1 voor project 9999", "proef_pad": "/x.docx"}
+        r.update(extra)
+        return r
+
+    def test_werfapp_brug_weigert_bij_keuze_en_toont_oud_concept(self):
+        with patch.object(self.P.werfapp, "concept", side_effect=AssertionError("mag niet naar de werfapp")):
+            uit = self.P.naar_werfapp(self.Ag(), "9999", 1, self.rij(), {"bezoek": "1"}, [], "/x.docx")
+        self.assertIn("overgeslagen", uit)
+        self.assertEqual(uit["oud"]["id"], 41)
+
+    def test_doorzetten_naar_werfapp_weigert_bij_keuze(self):
+        with patch.object(self.P, "_rij", return_value=self.rij()):
+            with self.assertRaisesRegex(RuntimeError, "verslag van bevindingen"):
+                self.P.werfapp_uit_proef(self.Ag(), "9999", 1)
+
+    def test_herlayout_leest_het_gegevensbestand_en_overschrijft_niets(self):
+        geschreven, bewaard = [], []
+        gegevens = vb.leeg("9999", "Proefstraat 1")
+        gegevens["referentie"] = "9999-VB1"
+        ag = self.Ag()
+        with patch.object(self.P, "_rij", return_value=self.rij()), \
+             patch.object(self.P.bronnen, "download", return_value=__import__("json").dumps(gegevens).encode()), \
+             patch.object(self.P.bronnen, "upload", side_effect=lambda pad, data: geschreven.append(pad) or pad), \
+             patch.object(self.P, "lees_bezoekmap", return_value=([], [], [])), \
+             patch.object(self.P, "_bewaar", side_effect=lambda *a, **k: bewaard.append(k)):
+            pad = self.P.herlayout(ag, "9999", 1)
+        self.assertTrue(pad.endswith("9999 Verslag van bevindingen (concept).docx"))
+        self.assertEqual(bewaard[0]["proef_info"]["verslagtype"], vb.SOORT)
+        self.assertTrue(any("(gegevens).json" in str(x) for x in ag.logs[-1]))
 
 
 if __name__ == "__main__":
