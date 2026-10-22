@@ -927,7 +927,7 @@ GEWONE_REGELS = [
     "- transcript: privégesprek, 25 min",
     "Toe te wijzen: privégesprek, 25 min; privégesprek, duur onbekend",
     "privégesprek · 40 min · voor mehdi",
-    "Zoom 20-10: 1 gesprekken (0 met Fathom, 1 alleen in Zoom), 40 min; 0 chatgesprekken",
+    "Zoom 20-10: 1 gesprekken (0 met Fathom, 1 alleen in Zoom), 40 min",
     "Zoom 2026-10-19: 6 berichten in 2 gesprek(ken) (1 privé), 2 meeting(s), 75 min",
     "Mailwacht prive: 3 mails gelezen",
     "2026-10-20T10:00 Fathom: Jan Klant · Dakkapel nakijken",

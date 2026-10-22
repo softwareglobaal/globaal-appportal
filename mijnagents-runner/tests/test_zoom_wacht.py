@@ -565,7 +565,7 @@ def test_t05_t11_een_dag_zoals_twintig_oktober():
     assert len(w.vangnetmappen()) == 2, w.vangnetmappen()
     it, inhoud = w.dagregel("2026-10-20")
     minuten = sum(s["minuten"] for s in sessies)
-    assert it["titel"] == f"Zoom 20-10: 16 gesprekken (14 met Fathom, 2 alleen in Zoom), {minuten} min; 0 chatgesprekken", it["titel"]
+    assert it["titel"] == f"Zoom 20-10: 16 gesprekken (14 met Fathom, 2 alleen in Zoom), {minuten} min", it["titel"]
     assert inhoud["telling"] == "volledig" and inhoud["stand"] == "definitief", inhoud
     assert (inhoud["gesprekken"], inhoud["met_fathom"], inhoud["alleen_zoom_tekst"]) == (16, 14, 2), inhoud
     assert it["sleutel"] == "" and it["voor"] == "mehdi" and it["van"] == "zoom-wacht", it
@@ -1955,7 +1955,7 @@ def test_zoo06_een_gewoon_woord_als_prive_onderwerp_verminkt_niets():
         w.zoom.opname(s, soorten=("MP4",), status="processing")
         assert w.ronde(NU) is None
         it, inhoud = w.dagregel("2026-10-20")
-        assert it["titel"] == "Zoom 20-10: 1 gesprekken (0 met Fathom, 1 alleen in Zoom), 20 min; 0 chatgesprekken", (onderwerp, it["titel"])
+        assert it["titel"] == "Zoom 20-10: 1 gesprekken (0 met Fathom, 1 alleen in Zoom), 20 min", (onderwerp, it["titel"])
         assert inhoud["stand"] == "voorlopig: opname in verwerking", (onderwerp, inhoud["stand"])
         assert all("(privé)" not in t for t in w.bord.noden()), (onderwerp, w.bord.noden())
     w = Wereld()
@@ -1970,7 +1970,7 @@ def test_zoo06_een_gewoon_woord_als_prive_onderwerp_verminkt_niets():
     w.zoom.chat = [({"type": "1:1", "peer_contact_email": "iemand@elders.test", "name": ""},
                     [{"date_time": "2026-10-20T08:00:00Z", "sender": "info@h-invest.test"}])]
     assert w.ronde(NU) is None
-    assert w.dagregel("2026-10-20")[0]["titel"] == "Zoom 20-10: 0 gesprekken (0 met Fathom, 0 alleen in Zoom), 0 min; 1 chatgesprekken", \
+    assert w.dagregel("2026-10-20")[0]["titel"] == "Zoom 20-10: 0 gesprekken (0 met Fathom, 0 alleen in Zoom), 0 min; minstens 1 chatgesprekken", \
         w.dagregel("2026-10-20")[0]["titel"]
     assert w.bord.rij("zoom:chat:iemand@elders.test:2026-10-20")["prive"] == 1
 
@@ -2364,7 +2364,7 @@ def test_eigen1_chat_altijd_met_de_app_van_de_stack():
         assert sorted({d for d, _ in chat}) == ["messages", "sessions"] and {k for _, k in chat} == {"Bearer tok-stack"}, chat
         rij = w.bord.rij(f"zoom:chat:{TEAM_ADRES}:2026-10-20")
         assert rij and rij["thema"].startswith("Zoom-chat: 2 bericht(en), 1 van Mehdi"), rij
-        assert w.dagregel("2026-10-20")[1]["chat"] == {"berichten": 2, "gesprekken": 1, "prive": 0, "telling": "volledig"}, \
+        assert w.dagregel("2026-10-20")[1]["chat"] == {"berichten_gezien": 2, "gesprekken": 1, "prive_gezien": 0, "telling": "ondergrens"}, \
             w.dagregel("2026-10-20")[1]
         assert not [t for t in w.bord.noden() if t.startswith("Zoom-chat niet gelezen")], w.bord.noden()
         assert any(k.get("Authorization") == "Bearer tok-lees" for _, k in w.zoom.gevraagd), "de rest leest met de leesapp"
@@ -2403,7 +2403,7 @@ def test_chat_venster_met_datum_en_tijd():
     for dag, n in (("2026-10-18", 1), ("2026-10-19", 2), ("2026-10-20", 1)):
         rij = w.bord.rij(f"zoom:chat:{TEAM_ADRES}:{dag}")
         assert rij and rij["thema"].startswith(f"Zoom-chat: {n} bericht(en)"), (dag, rij)
-        assert w.dagregel(dag)[1]["chat"]["berichten"] == n, (dag, w.dagregel(dag)[1])
+        assert w.dagregel(dag)[1]["chat"]["berichten_gezien"] == n, (dag, w.dagregel(dag)[1])
     gevraagd = [dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(u).query)) for u, _ in w.zoom.gevraagd
                 if urllib.parse.urlsplit(u).path.endswith("/messages")]
     assert gevraagd and all(re.fullmatch(ZOOM_DT, q.get("from", "")) and re.fullmatch(ZOOM_DT, q.get("to", "")) for q in gevraagd), gevraagd
@@ -2431,6 +2431,139 @@ def chattabel_onleesbaar(w):
     bord.db_lees = lees
 
 
+def _rz13_chat(identiteit="kanaal-zeta", dag="2026-10-20"):
+    """Een verzonnen, leesbaar kanaal met een bericht op de gekozen dag."""
+    return ({"type": "group", "channel_id": identiteit, "name": "Proefkanaal Zeta"},
+            [{"date_time": f"{dag}T09:00:00Z", "sender": "proef@kantoor.test"}])
+
+
+@bord_nodig
+def test_rz13_a_404_zonder_rijen_geeft_nooit_zekere_chat():
+    w = Wereld()
+    w.zoom.chat = [({**_rz13_chat()[0], "weg": True}, [])]
+    assert w.ronde(NU) is None
+    for dag in ("2026-10-18", "2026-10-20"):
+        it, inhoud = w.dagregel(dag)
+        assert inhoud["chat"]["telling"] == "ondergrens" and inhoud["chat"]["gesprekken"] == 0
+        assert "chatgesprek" not in it["titel"] and "volledig" not in json.dumps(inhoud["chat"]), (dag, it, inhoud["chat"])
+
+
+@bord_nodig
+def test_rz13_b_lege_leesbare_dag_geeft_geen_zekere_nul():
+    w = Wereld()
+    assert w.ronde(NU) is None
+    it, inhoud = w.dagregel("2026-10-20")
+    assert inhoud["chat"]["telling"] == "ondergrens" and inhoud["chat"]["gesprekken"] == 0, inhoud["chat"]
+    assert "berichten_gezien" in inhoud["chat"] and "prive_gezien" in inhoud["chat"], inhoud["chat"]
+    assert "chatgesprek" not in it["titel"] and "volledig" not in json.dumps(inhoud["chat"]), it
+
+
+@bord_nodig
+def test_rz13_c_onleesbare_tabel_bewaart_laatst_gezien_zonder_revisie():
+    zonder_vorige = Wereld()
+    chattabel_onleesbaar(zonder_vorige)
+    assert zonder_vorige.ronde(NU) is None
+    assert zonder_vorige.dagregel("2026-10-20")[1]["chat"]["telling"] == "onbekend"
+    w = Wereld()
+    w.zoom.chat = [_rz13_chat()]
+    assert w.ronde(NU) is None
+    it, inhoud = w.dagregel("2026-10-20")
+    w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
+    legacy = dict(inhoud, chat={"berichten": 1, "gesprekken": 1, "prive": 0, "telling": "volledig"})
+    with sqlite3.connect(w.bord.pad) as c:
+        c.execute("UPDATE klaarzet SET inhoud=? WHERE id=?", (json.dumps(legacy), it["id"]))
+    chattabel_onleesbaar(w)
+    assert w.ronde(NU + timedelta(minutes=10)) is None
+    gestuurd = _dag_gestuurd(w, "2026-10-20")
+    assert gestuurd and not gestuurd[0].get("revisie"), gestuurd
+    chat = gestuurd[0]["inhoud"]["chat"]
+    assert chat["telling"] == "laatst gezien" and chat["gesprekken"] == inhoud["chat"]["gesprekken"] == 1, chat
+    assert chat["berichten_gezien"] == 1 and chat["prive_gezien"] == 0 and "volledig" not in json.dumps(chat), chat
+    assert gestuurd[0]["titel"].endswith("; minstens 1 chatgesprekken"), gestuurd[0]
+    assert w.bord.item(it["uniek"])["status"] == "opgepakt" and not w.bord.sql("SELECT * FROM klaarzet_revisie"), gestuurd
+
+
+@bord_nodig
+def test_rz13_d_alleen_andere_chat_aantallen_herzien():
+    w = Wereld()
+    w.zoom.chat = [_rz13_chat()]
+    assert w.ronde(NU) is None
+    it, _ = w.dagregel("2026-10-20")
+    w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
+    w.zoom.chat = []
+    assert w.ronde(NU + timedelta(minutes=10)) is None
+    assert not _dag_gestuurd(w, "2026-10-20")[0].get("revisie")
+    w.zoom.chat = [_rz13_chat("kanaal-omega")]
+    assert w.ronde(NU + timedelta(minutes=20)) is None
+    assert _dag_gestuurd(w, "2026-10-20")[0].get("revisie") is True
+    assert w.dagregel("2026-10-20")[0]["titel"].endswith("; minstens 2 chatgesprekken")
+
+    w = Wereld()
+    w.zoom.chat = [_rz13_chat()]
+    assert w.ronde(NU) is None
+    it, _ = w.dagregel("2026-10-20")
+    w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
+    w.bord.call("/api/gesprekken/koppel", {"koppelingen": [{"uniek": "zoom:chat:kanaal-zeta:2026-10-20",
+                                                   "dubbel_van": "buiten:gegevenscorrectie"}]})
+    w.zoom.chat = []
+    assert w.ronde(NU + timedelta(minutes=10)) is None
+    gestuurd = _dag_gestuurd(w, "2026-10-20")[0]
+    assert gestuurd.get("revisie") is True and gestuurd["inhoud"]["chat"]["gesprekken"] == 0, gestuurd
+    assert "chatgesprek" not in gestuurd["titel"] and "chatgesprek" not in w.bord.item(it["uniek"])["titel"]
+
+
+@bord_nodig
+def test_rz13_e_oude_nultitel_krijgt_eenmalig_revisie():
+    for oude_chatstaart in ("0 chatgesprekken", "minstens 0 chatgesprekken"):
+        w = Wereld()
+        assert w.ronde(NU) is None
+        it, _ = w.dagregel("2026-10-20")
+        w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
+        with sqlite3.connect(w.bord.pad) as c:
+            c.execute("UPDATE klaarzet SET titel=? WHERE id=?", (f"Zoom 20-10: 0 gesprekken, 0 min; {oude_chatstaart}", it["id"]))
+        assert w.ronde(NU + timedelta(minutes=10)) is None
+        gestuurd = _dag_gestuurd(w, "2026-10-20")[0]
+        assert gestuurd.get("revisie") is True and "chatgesprek" not in gestuurd["titel"], gestuurd
+        assert len(w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-20'")) == 1
+        w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
+        assert w.ronde(NU + timedelta(minutes=20)) is None
+        assert not _dag_gestuurd(w, "2026-10-20")[0].get("revisie")
+        assert len(w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-20'")) == 1
+
+
+@bord_nodig
+def test_rz13_f_chat_titels_en_inhoud_blijven_ondergrens():
+    w = Wereld()
+    alle_items = []
+    for minuut, chats in ((0, []), (10, [_rz13_chat()]), (20, [({**_rz13_chat()[0], "weg": True}, [])]),
+                          (30, [])):
+        w.zoom.chat = chats
+        assert w.ronde(NU + timedelta(minutes=minuut)) is None
+        alle_items.extend(i for p in w.bord.posts("/api/klaarzet") for i in p["items"])
+    chattabel_onleesbaar(w)
+    assert w.ronde(NU + timedelta(minutes=40)) is None
+    alle_items.extend(i for p in w.bord.posts("/api/klaarzet") for i in p["items"])
+    assert alle_items and any(it["inhoud"]["chat"]["telling"] == "laatst gezien" for it in alle_items
+                             if it["uniek"].startswith("zoom:dag:"))
+    for it in alle_items:
+        if not it["uniek"].startswith("zoom:dag:"):
+            continue
+        chat = it["inhoud"]["chat"]
+        assert chat["telling"] in ("ondergrens", "onbekend", "laatst gezien"), it
+        assert "volledig" not in json.dumps(chat) and not re.search(r"(?<!\d)(?:minstens\s+)?0 chatgesprek", it["titel"]), it
+
+
+@bord_nodig
+def test_rz13_berichtenaantal_zonder_thema_is_onbekend():
+    w = Wereld()
+    w.bord.call("/api/gesprekken", {"rijen": [{"uniek": "zoom:chat:kanaal-zeta:2026-10-20", "datum": "2026-10-20",
+                                            "thema": "Zoom-chat: berichtenaantal onbekend", "bron": "zoom"}]})
+    assert w.ronde(NU) is None
+    it, inhoud = w.dagregel("2026-10-20")
+    assert inhoud["chat"]["gesprekken"] == 1 and inhoud["chat"]["berichten_gezien"] is None, inhoud["chat"]
+    assert it["titel"].endswith("; minstens 1 chatgesprekken"), it["titel"]
+
+
 @bord_nodig
 def test_rz9_01_een_chatgesprek_met_404_maakt_de_chat_een_ondergrens():
     """RZ9-01 (Codex, 22-10-2026): een 404 op de berichten van een chatgesprek werd overgeslagen en de chat bleef ok,
@@ -2447,11 +2580,11 @@ def test_rz9_01_een_chatgesprek_met_404_maakt_de_chat_een_ondergrens():
     assert w.ronde(NU) is None
     reden = "1 chatgesprek(ken) niet leesbaar"
     it, inhoud = w.dagregel("2026-10-20")
-    assert inhoud["chat"] == {"berichten": 3, "gesprekken": 2, "prive": 0, "telling": "ondergrens", "onvolledig": [reden]}, inhoud["chat"]
+    assert inhoud["chat"] == {"berichten_gezien": 3, "gesprekken": 2, "prive_gezien": 0, "telling": "ondergrens", "redenen": [reden]}, inhoud["chat"]
     assert it["titel"].endswith("; minstens 2 chatgesprekken"), it["titel"]
     assert inhoud["bronnen"]["chat"] == "ok", "de chatbron gaf antwoord; de telling is de ondergrens"
     stil, stil_inhoud = w.dagregel("2026-10-18")
-    assert stil_inhoud["chat"]["telling"] == "ondergrens" and stil["titel"].endswith("; minstens 0 chatgesprekken"), stil["titel"]
+    assert stil_inhoud["chat"]["telling"] == "ondergrens" and "chatgesprek" not in stil["titel"], stil["titel"]
     assert f"chat ondergrens: {reden}" in _bronregel(w), _bronregel(w)
     verslag = json.dumps(w.bord.sql("SELECT onderwerp, tekst, detail FROM logboek WHERE naam='zoom-wacht'"), ensure_ascii=False)
     assert "Proefkanaal Zeta" not in verslag and "kanaal-zeta" not in verslag, "het werkverslag noemt het gesprek niet"
@@ -2460,8 +2593,8 @@ def test_rz9_01_een_chatgesprek_met_404_maakt_de_chat_een_ondergrens():
 @bord_nodig
 def test_rz9_01_elk_chatgesprek_404_is_een_ondergrens_nooit_volledig_0():
     """RZ9-01: geeft elk berichtenverzoek een 404, dan zei de dagregel '0 chatgesprekken' alsof dat zeker was. Sinds RZ10
-    komt het cijfer uit de gesprekkentabel en is de chat een ondergrens met de reden: zonder eerdere rijen 'minstens 0'
-    (test_rz10_03 toetst het met rijen). Onbekend is ze alleen als de gesprekkentabel niet te lezen is."""
+    komt het cijfer uit de gesprekkentabel en is de chat een ondergrens met de reden; zonder eerdere rijen ontbreekt
+    het chatdeel in de titel (test_rz10_03 toetst het met rijen). Onbekend is ze bij een onleesbare tabel."""
     w = Wereld()
     w.zoom.chat = [({"type": "1:1", "peer_contact_email": "zeta@elders.test", "name": "Proefpersoon Zeta", "weg": True}, []),
                    ({"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta", "weg": True}, [])]
@@ -2469,9 +2602,9 @@ def test_rz9_01_elk_chatgesprek_404_is_een_ondergrens_nooit_volledig_0():
     reden = "2 chatgesprek(ken) niet leesbaar"
     for dag in ("2026-10-18", "2026-10-20"):
         it, inhoud = w.dagregel(dag)
-        assert inhoud["chat"] == {"berichten": 0, "gesprekken": 0, "prive": 0, "telling": "ondergrens", "onvolledig": [reden]}, \
+        assert inhoud["chat"] == {"berichten_gezien": 0, "gesprekken": 0, "prive_gezien": 0, "telling": "ondergrens", "redenen": [reden]}, \
             (dag, inhoud["chat"])
-        assert it["titel"].endswith("; minstens 0 chatgesprekken") and inhoud["bronnen"]["chat"] == "ok", (dag, it["titel"])
+        assert "chatgesprek" not in it["titel"] and inhoud["bronnen"]["chat"] == "ok", (dag, it["titel"])
     assert f"chat ondergrens: {reden}" in _bronregel(w), _bronregel(w)
 
 
@@ -2479,13 +2612,12 @@ def test_rz9_01_elk_chatgesprek_404_is_een_ondergrens_nooit_volledig_0():
 def test_rz9_02_een_chatcorrectie_na_het_oppakken_gaat_met_revisie():
     """RZ9-02 (Codex, 22-10-2026): de chat hoorde niet bij de kern van de dagregel. Kreeg Mehdi '0 chatgesprekken' (zoals
     op 19 en 20-10 door het chatvenster zonder tijd) en telde een latere ronde er 2, dan bleef de opgepakte regel op 0.
-    Nu horen het aantal chatgesprekken en de chatstand bij de kern: een stijging of een andere stand herziet de regel.
-    Sinds RZ10 komt het cijfer uit de gesprekkentabel en daalt het niet; een onbekende chat (de gesprekkentabel niet
-    gelezen) herziet niets en laat het chatdeel staan dat Mehdi kreeg."""
+    Alleen het aantal chatgesprekken hoort bij de kern: een stijging herziet de regel, een andere stand niet.
+    Een onleesbare gesprekkentabel herziet niets en laat het vorige chatdeel als laatst gezien staan."""
     w = Wereld()
     assert w.ronde(NU) is None
     it, inhoud = w.dagregel("2026-10-20")
-    assert inhoud["chat"]["gesprekken"] == 0 and it["titel"].endswith("; 0 chatgesprekken"), it["titel"]
+    assert inhoud["chat"]["gesprekken"] == 0 and "chatgesprek" not in it["titel"], it["titel"]
     w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
     kanaal = {"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta"}
     w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
@@ -2496,7 +2628,7 @@ def test_rz9_02_een_chatcorrectie_na_het_oppakken_gaat_met_revisie():
     gestuurd = _dag_gestuurd(w, "2026-10-20")
     assert gestuurd and gestuurd[0].get("revisie") is True, gestuurd
     na = w.bord.item("zoom:dag:2026-10-20")
-    assert na["status"] == "klaar" and json.loads(na["inhoud"])["chat"]["gesprekken"] == 2 and na["titel"].endswith("; 2 chatgesprekken"), na
+    assert na["status"] == "klaar" and json.loads(na["inhoud"])["chat"]["gesprekken"] == 2 and na["titel"].endswith("; minstens 2 chatgesprekken"), na
     assert len(w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-20'")) == 1
     # 2. hetzelfde aantal, nu als ondergrens (het kanaal geeft een 404, zijn rij telt mee): alleen een andere stand
     # stuurt geen herziening (besluit van de regie, 22-10-2026: anders kan een wisselende 404 Mehdi telkens storen)
@@ -2506,15 +2638,19 @@ def test_rz9_02_een_chatcorrectie_na_het_oppakken_gaat_met_revisie():
     gestuurd = _dag_gestuurd(w, "2026-10-20")
     assert gestuurd and gestuurd[0]["inhoud"]["chat"]["telling"] == "ondergrens" and not gestuurd[0].get("revisie"), gestuurd
     na = w.bord.item("zoom:dag:2026-10-20")
-    assert na["status"] == "opgepakt" and na["titel"].endswith("; 2 chatgesprekken"), na
+    assert na["status"] == "opgepakt" and na["titel"].endswith("; minstens 2 chatgesprekken"), na
     assert len(w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-20'")) == 1
     # 3. de chat is onbekend (de gesprekkentabel niet gelezen): geen herziening, de regel blijft zoals Mehdi ze kreeg
     chattabel_onleesbaar(w)
     assert w.ronde(NU + timedelta(minutes=30)) is None
     gestuurd = _dag_gestuurd(w, "2026-10-20")
-    assert gestuurd and gestuurd[0]["inhoud"]["chat"] == json.loads(na["inhoud"])["chat"] and not gestuurd[0].get("revisie"), gestuurd
+    assert gestuurd, "de ronde bouwt de dagregel opnieuw op"
+    chat_nu, chat_oud = gestuurd[0]["inhoud"]["chat"], json.loads(na["inhoud"])["chat"]
+    assert chat_nu["telling"] == "laatst gezien" and not gestuurd[0].get("revisie"), gestuurd
+    assert all(chat_nu[k] == chat_oud[k] for k in ("berichten_gezien", "gesprekken", "prive_gezien")), (chat_nu, chat_oud)
+    assert "gesprekkentabel niet gelezen" in chat_nu["redenen"], chat_nu
     blijft = w.bord.item("zoom:dag:2026-10-20")
-    assert blijft["status"] == "opgepakt" and blijft["titel"].endswith("; 2 chatgesprekken"), blijft
+    assert blijft["status"] == "opgepakt" and blijft["titel"].endswith("; minstens 2 chatgesprekken"), blijft
     assert len(w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-20'")) == 1
     assert "chat onbekend: 1 chatgesprek(ken) niet leesbaar, gesprekkentabel niet gelezen" in _bronregel(w), _bronregel(w)
 
@@ -2541,10 +2677,10 @@ def test_rz9_03_eerder_opgeslagen_chatrijen_van_een_404_tellen_mee():
     assert w.ronde(NU + timedelta(minutes=10)) is None
     for dag, gesprekken, berichten in (("2026-10-19", 1, 1), ("2026-10-20", 2, 3)):
         chat = w.dagregel(dag)[1]["chat"]
-        assert (chat["gesprekken"], chat["berichten"]) == (gesprekken, berichten), (dag, chat)
+        assert (chat["gesprekken"], chat["berichten_gezien"]) == (gesprekken, berichten), (dag, chat)
         assert chat.get("telling") == "ondergrens", (dag, chat)
         uit = R.gesprekken_lees(dag, dag, soort="chat")
-        assert uit["chats"] == {"aantal": chat["gesprekken"], "prive": chat["prive"]}, (dag, uit, chat)
+        assert uit["chats"] == {"aantal": chat["gesprekken"], "prive": chat["prive_gezien"]}, (dag, uit, chat)
     assert {u: w.bord.rij(u) for u in voor} == voor, "niets verwijderd of herschreven"
     assert not [r for p in w.bord.posts("/api/gesprekken") for r in p["rijen"] if r["uniek"].startswith("zoom:chat:kanaal-zeta")]
     assert "chat ondergrens: 1 chatgesprek(ken) niet leesbaar" in _bronregel(w), _bronregel(w)
@@ -2562,9 +2698,9 @@ def test_rz10_01_een_sessie_zonder_bestemming_is_een_ondergrens():
     reden = "2 chatgesprek(ken) zonder bestemming"
     for dag in ("2026-10-18", "2026-10-20"):
         it, inhoud = w.dagregel(dag)
-        assert inhoud["chat"] == {"berichten": 0, "gesprekken": 0, "prive": 0, "telling": "ondergrens", "onvolledig": [reden]}, \
+        assert inhoud["chat"] == {"berichten_gezien": 0, "gesprekken": 0, "prive_gezien": 0, "telling": "ondergrens", "redenen": [reden]}, \
             (dag, inhoud["chat"])
-        assert it["titel"].endswith("; minstens 0 chatgesprekken"), it["titel"]
+        assert "chatgesprek" not in it["titel"], it["titel"]
     assert f"chat ondergrens: {reden}" in _bronregel(w), _bronregel(w)
     verslag = json.dumps(w.bord.sql("SELECT onderwerp, tekst, detail FROM logboek WHERE naam='zoom-wacht'"), ensure_ascii=False)
     assert "Proefpersoon Zeta" not in verslag and "Proefkanaal Zeta" not in verslag, "het werkverslag noemt het gesprek niet"
@@ -2581,14 +2717,14 @@ def test_rz10_01_een_gesprek_dat_uit_de_sessielijst_verdwijnt_telt_mee():
                      {"date_time": "2026-10-20T09:10:00Z", "sender": TEAM_ADRES}])]
     assert w.ronde(NU) is None
     it, inhoud = w.dagregel("2026-10-20")
-    assert inhoud["chat"] == {"berichten": 2, "gesprekken": 1, "prive": 0, "telling": "volledig"}, inhoud["chat"]
+    assert inhoud["chat"] == {"berichten_gezien": 2, "gesprekken": 1, "prive_gezien": 0, "telling": "ondergrens"}, inhoud["chat"]
     w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
     w.zoom.chat = []
     assert w.ronde(NU + timedelta(minutes=10)) is None
     gestuurd = _dag_gestuurd(w, "2026-10-20")
     assert gestuurd and gestuurd[0]["inhoud"]["chat"] == inhoud["chat"] and not gestuurd[0].get("revisie"), gestuurd
     blijft = w.bord.item("zoom:dag:2026-10-20")
-    assert blijft["status"] == "opgepakt" and blijft["titel"].endswith("; 1 chatgesprekken"), blijft
+    assert blijft["status"] == "opgepakt" and blijft["titel"].endswith("; minstens 1 chatgesprekken"), blijft
     assert not w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-20'")
 
 
@@ -2610,16 +2746,16 @@ def test_rz10_03_elk_chatgesprek_404_telt_de_rijen_uit_de_tabel():
     assert w.ronde(NU + timedelta(minutes=10)) is None
     for dag, gesprekken, berichten in (("2026-10-19", 2, 2), ("2026-10-20", 1, 1)):
         it, inhoud = w.dagregel(dag)
-        assert inhoud["chat"] == {"berichten": berichten, "gesprekken": gesprekken, "prive": 0, "telling": "ondergrens",
-                                  "onvolledig": ["2 chatgesprek(ken) niet leesbaar"]}, (dag, inhoud["chat"])
+        assert inhoud["chat"] == {"berichten_gezien": berichten, "gesprekken": gesprekken, "prive_gezien": 0, "telling": "ondergrens",
+                                  "redenen": ["2 chatgesprek(ken) niet leesbaar"]}, (dag, inhoud["chat"])
         assert it["titel"].endswith(f"; minstens {gesprekken} chatgesprekken"), it["titel"]
         assert R.gesprekken_lees(dag, dag, soort="chat")["chats"]["aantal"] == gesprekken, dag
     # de sessielijst zelf niet te lezen: dezelfde ondergrens uit de tabel, met de reden
     w.zoom.fout = {f"/chat/users/{IK['id']}/sessions"}
     assert w.ronde(NU + timedelta(minutes=20)) is None
     it, inhoud = w.dagregel("2026-10-19")
-    assert inhoud["chat"] == {"berichten": 2, "gesprekken": 2, "prive": 0, "telling": "ondergrens",
-                              "onvolledig": ["chat niet gelezen (fout: HTTP 500)"]}, inhoud["chat"]
+    assert inhoud["chat"] == {"berichten_gezien": 2, "gesprekken": 2, "prive_gezien": 0, "telling": "ondergrens",
+                              "redenen": ["chat niet gelezen (fout: HTTP 500)"]}, inhoud["chat"]
     assert it["titel"].endswith("; minstens 2 chatgesprekken"), it["titel"]
 
 
@@ -2635,7 +2771,7 @@ def test_rz10_02_een_revisie_om_de_meetings_houdt_het_chatdeel_als_de_chat_onbek
                     [{"date_time": "2026-10-20T09:00:00Z", "sender": "info@h-invest.test"}])]
     assert w.ronde(NU) is None
     it, inhoud = w.dagregel("2026-10-20")
-    assert inhoud["chat"]["gesprekken"] == 2 and inhoud["gesprekken"] == 0 and it["titel"].endswith("; 2 chatgesprekken"), it["titel"]
+    assert inhoud["chat"]["gesprekken"] == 2 and inhoud["gesprekken"] == 0 and it["titel"].endswith("; minstens 2 chatgesprekken"), it["titel"]
     w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
     # een meeting erbij op die dag; Zoom geeft geen enkel chatgesprek (404) en de gesprekkentabel is voor de chat onleesbaar
     w.zoom.sessie("m2", bxl("2026-10-20 15:00"), 20)
@@ -2645,9 +2781,12 @@ def test_rz10_02_een_revisie_om_de_meetings_houdt_het_chatdeel_als_de_chat_onbek
     assert w.ronde(NU + timedelta(minutes=10)) is None
     gestuurd = _dag_gestuurd(w, "2026-10-20")
     assert gestuurd and gestuurd[0].get("revisie") is True and gestuurd[0]["inhoud"]["gesprekken"] == 1, gestuurd
-    assert gestuurd[0]["inhoud"]["chat"] == inhoud["chat"], gestuurd[0]["inhoud"]["chat"]
+    chat_nu = gestuurd[0]["inhoud"]["chat"]
+    assert chat_nu["telling"] == "laatst gezien" and \
+        all(chat_nu[k] == inhoud["chat"][k] for k in ("berichten_gezien", "gesprekken", "prive_gezien")), chat_nu
+    assert "gesprekkentabel niet gelezen" in chat_nu["redenen"], chat_nu
     na = w.bord.item("zoom:dag:2026-10-20")
-    assert na["titel"].endswith("; 2 chatgesprekken") and json.loads(na["inhoud"])["chat"] == inhoud["chat"], na
+    assert na["titel"].endswith("; minstens 2 chatgesprekken") and json.loads(na["inhoud"])["chat"]["gesprekken"] == inhoud["chat"]["gesprekken"], na
 
 
 @bord_nodig
@@ -2679,8 +2818,8 @@ def test_rz10_dagregel_en_de_regisseur_tellen_dezelfde_chatgesprekken():
         dag = (datetime(2026, 10, 14) + timedelta(days=i)).date().isoformat()
         chat = w.dagregel(dag)[1]["chat"]
         uit = R.gesprekken_lees(dag, dag, soort="chat")["chats"]
-        assert uit == {"aantal": chat["gesprekken"], "prive": chat["prive"]}, (dag, uit, chat)
-        assert (chat["gesprekken"], chat["prive"], chat["telling"]) == (*verwacht.get(dag, (0, 0)), "volledig"), (dag, chat)
+        assert uit == {"aantal": chat["gesprekken"], "prive": chat["prive_gezien"]}, (dag, uit, chat)
+        assert (chat["gesprekken"], chat["prive_gezien"], chat["telling"]) == (*verwacht.get(dag, (0, 0)), "ondergrens"), (dag, chat)
 
 
 def test_eigen2_zoom_weigert_een_leestoken_met_een_verboden_recht():

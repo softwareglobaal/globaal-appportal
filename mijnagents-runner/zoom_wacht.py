@@ -23,7 +23,7 @@ Ontwerp regie-zoom v1.2 (Z3 tot Z9, met 13.2 en 13.5). In de gesprekkenketen na 
 4. De gesprekkentabel (Z7): per sessie een rij zoom:meeting:<uuid> (bron zoom, link altijd leeg). De koppeling op de
    Fathom-rijen gaat via /api/gesprekken/koppel en telt pas als bord.db_lees ze teruggeeft (L32).
 5. Per afgelopen Brusselse dag een dagregel zoom:dag:<dag> voor Mehdi, met lege sleutel (Z8). Verandert de kern na het
-   oppakken (ook het aantal chatgesprekken of de chatstand, RZ9-02), dan met revisie, tot zes dagen terug; nooit naar
+   oppakken (ook het aantal bewezen chatgesprekken, RZ13), dan met revisie, tot zes dagen terug; nooit naar
    onbekend en, als een bron faalde, nooit naar een lagere telling (ZOO-01, ZOO-05). Zag alleen Fathom een gesprek, dan
    is die dag een ondergrens (ZOO-09). Het chatcijfer komt uit de gesprekkentabel na het schrijven (RZ10, chat_tellen).
 
@@ -31,9 +31,10 @@ De koppeling met Zoom is koppelingen/zoom.py (een koppeling, Z1). De alleen-leze
 met zoom_leesapp.py --zet; zonder die app, of als haar sleutels geen token geven (ZOO-10), lees ik met de app van de
 stack en is de telling een ondergrens ("minstens N"), met een nood voor Mehdi; zo ook als het token van de leesapp een
 recht heeft dat ze nooit mag hebben (13.6: zoom.py weigert het). De chat lees ik altijd met de app van de stack: de
-leesapp krijgt het recht op chatberichten bewust niet (EIGEN-1). De chattelling heeft een bron, de gesprekkentabel, en
-een eigen stand (RZ10): volledig als ik de sessielijst en elk gesprek erin las, anders een ondergrens, en onbekend alleen
-als de gesprekkentabel niet te lezen was. Onbekend is nooit 0 (L29, L38). Elke ronde gaat door
+leesapp krijgt het recht op chatberichten bewust niet (EIGEN-1). Het chatcijfer is altijd een ondergrens uit de
+gesprekkentabel (RZ13), ook als de sessielijst deze ronde leesbaar was. Zonder bewezen chatrij verdwijnt het chatdeel
+uit de titel. Is de gesprekkentabel onleesbaar, dan is de chat onbekend; een eerder chatdeel blijft als "laatst gezien"
+staan. Onbekend is nooit een zekere nul (L29, L38). Elke ronde gaat door
 de gedeelde ronde (N12). Is de Zoom-gebruiker niet de eigenaar van de vaste vergaderruimte (de pmi is niet het meest
 voorkomende nummer in Mehdi's eigen Fathom-opnames), dan schrijf ik niets, ook niet met --koppel-sinds: alleen een nood
 voor Mehdi en een hartslag die zegt dat er niets geschreven is (RZ4-02).
@@ -85,7 +86,7 @@ RAPPORT_SOORTEN = ("past", "pastOne", "pastJoined")
 ZOOM_BRONNEN = ("rapport", "vaste vergaderruimte", "gepland", "opnames", "laatste sessie")
 PMR_THEMA = "Zoom-gesprek in de vaste vergaderruimte"
 # De kern van een dagregel: verandert die na het oppakken, dan gaat de regel met revisie opnieuw naar Mehdi (Z8). De chat
-# hoort er ook bij, met het aantal chatgesprekken en de chatstand (RZ9-02, chat_kern en kern_anders).
+# hoort er ook bij, uitsluitend met het aantal bewezen chatgesprekken (RZ13, chat_kern en kern_anders).
 KERN = ("gesprekken", "met_fathom", "alleen_zoom_tekst", "opname_zonder_tekst", "telling", "stand")
 # Het begin van het thema van een chatrij (chat_rijen schrijft het, chat_tellen leest er het aantal berichten uit)
 CHAT_THEMA = re.compile(r"Zoom-chat: (\d+) bericht\(en\)")
@@ -562,9 +563,10 @@ def chat_tellen(w):
     dubbel_van buiten:..., en privé is de kolom prive of afdeling prive (RZ3-01). Het aantal berichten komt uit het thema.
     Een rij wordt nooit verwijderd of leeggemaakt, dus het cijfer van een dag daalt niet door een slechtere ronde: een
     gesprek dat Zoom nu niet geeft of dat uit de sessielijst verdween, telt met zijn rijen van eerdere rondes mee.
-    De stand: volledig als deze ronde de sessielijst en elk gesprek erin las; anders een ondergrens met de redenen van
-    lezen; onbekend alleen als de gesprekkentabel niet te lezen was, nooit 0. Zet w['chat_dag'] en w['chat_stand']."""
-    dagtel = defaultdict(lambda: {"berichten": 0, "gesprekken": 0, "prive": 0})
+    Elke leesbare telling is een ondergrens van geziene rijen, met de leesredenen als informatie. Een rij zonder
+    herkenbaar berichtenaantal maakt berichten_gezien onbekend in plaats van nul. Alleen een onleesbare gesprekkentabel
+    maakt de chat onbekend. Zet w['chat_dag'] en w['chat_stand']."""
+    dagtel = defaultdict(lambda: {"berichten_gezien": 0, "gesprekken": 0, "prive_gezien": 0})
     try:
         rijen = bord.db_lees("SELECT uniek, datum, thema, prive, COALESCE(afdeling, '') AS afdeling, "
                              "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE datum BETWEEN ? AND ? "
@@ -576,11 +578,14 @@ def chat_tellen(w):
         if not r["uniek"].startswith("zoom:chat:") or r["dubbel_van"].startswith("buiten:"):
             continue
         m, c = CHAT_THEMA.match(r["thema"] or ""), dagtel[r["datum"]]
-        c["berichten"] += int(m.group(1)) if m else 0
+        if m and c["berichten_gezien"] is not None:
+            c["berichten_gezien"] += int(m.group(1))
+        elif not m:
+            c["berichten_gezien"] = None
         c["gesprekken"] += 1
-        c["prive"] += 1 if r["prive"] or str(r["afdeling"]).strip().casefold() in ("prive", "privé") else 0
+        c["prive_gezien"] += 1 if r["prive"] or str(r["afdeling"]).strip().casefold() in ("prive", "privé") else 0
     w["chat_dag"] = dict(dagtel)
-    w["chat_stand"] = {"telling": "ondergrens" if w["chat_redenen"] else "volledig", "redenen": list(w["chat_redenen"])}
+    w["chat_stand"] = {"telling": "ondergrens", "redenen": list(w["chat_redenen"])}
 
 
 # ---------------------------------------------------------------- fathom ---
@@ -1275,15 +1280,16 @@ def dag_inhoud(dag, w, info, tel, redenen):
     if tel != "volledig":
         bronnen["onvolledig"] = redenen
     chat, stand = None, w.get("chat_stand")
-    if stand and stand["telling"] != "onbekend":
-        # RZ10: het cijfer uit de gesprekkentabel na het schrijven (chat_tellen), met de stand van deze ronde. Een
-        # ondergrens geldt voor elke dag van het venster: een gesprek dat ik niet las, kan op elke dag berichten hebben.
-        # Zonder stand (niet geteld) of met een onleesbare gesprekkentabel is de chat onbekend, nooit 0.
+    if stand and stand["telling"] == "onbekend":
+        chat = {"telling": "onbekend", "redenen": list(stand["redenen"])}
+    elif stand:
+        # RZ13: elk cijfer komt uit geziene rijen van de gesprekkentabel. De redenen melden wat deze ronde niet las;
+        # ook zonder redenen is het cijfer een ondergrens. Zonder getelde tabel is de chat onbekend, nooit zeker nul.
         c = w["chat_dag"].get(dag) or {}
-        chat = {"berichten": c.get("berichten", 0), "gesprekken": c.get("gesprekken", 0), "prive": c.get("prive", 0),
-                "telling": stand["telling"]}
-        if stand["telling"] != "volledig":
-            chat["onvolledig"] = list(stand["redenen"])
+        chat = {"berichten_gezien": c.get("berichten_gezien", 0), "gesprekken": c.get("gesprekken", 0),
+                "prive_gezien": c.get("prive_gezien", 0), "telling": "ondergrens"}
+        if stand["redenen"]:
+            chat["redenen"] = list(stand["redenen"])
     if tel == "onbekend":
         return {"datum": dag, "stand": "voorlopig: geen bron leesbaar", "telling": tel, "bronnen": bronnen,
                 "gesprekken": None, "minuten": None, "met_fathom": None, "alleen_zoom_tekst": None, "opname_zonder_tekst": None,
@@ -1315,10 +1321,12 @@ def dag_titel(inhoud):
     dag = inhoud["datum"]
     kort = f"{dag[8:10]}-{dag[5:7]}"
     chat = inhoud["chat"]
-    if chat is None:
+    if chat is None or chat.get("telling") == "onbekend":
         staart = "; chat onbekend"
+    elif chat.get("gesprekken", 0) > 0:
+        staart = f"; minstens {chat['gesprekken']} chatgesprekken"
     else:
-        staart = f"; {'minstens ' if chat.get('telling') == 'ondergrens' else ''}{chat['gesprekken']} chatgesprekken"
+        staart = ""
     if inhoud["telling"] == "onbekend":
         return f"Zoom {kort}: gesprekken onbekend (geen bron leesbaar)" + staart
     n, mf = inhoud["gesprekken"], inhoud["met_fathom"]
@@ -1348,18 +1356,33 @@ def lager(oud_inhoud, inhoud):
 
 
 def chat_kern(chat):
-    """RZ9-02: de chat in de kern van een dagregel is het aantal chatgesprekken; None is een onbekende chat. De stand
-    (volledig of ondergrens) hoort er bewust niet bij: een gesprek dat de ene ronde wel en de andere niet leesbaar is,
-    zou anders bij hetzelfde aantal telkens een herziening naar Mehdi sturen (besluit van de regie, 22-10-2026)."""
-    return chat.get("gesprekken") if isinstance(chat, dict) else None
+    """RZ13: alleen het aantal bewezen chatgesprekken hoort bij de kern. Onbekend heeft geen nieuw aantal; een
+    veranderde stand of leesreden stuurt bij hetzelfde aantal geen herziening naar Mehdi."""
+    return chat.get("gesprekken") if isinstance(chat, dict) and chat.get("telling") != "onbekend" else None
 
 
 def kern_anders(oud_inhoud, inhoud):
     """Verandert de kern van een dagregel (Z8): KERN, of het aantal chatgesprekken (RZ9-02; tot dan bleef een
     opgepakte regel met '0 chatgesprekken' staan als een latere ronde er 2 telde). Het chatcijfer komt uit de
-    gesprekkentabel en daalt niet (RZ10), dus voor de chat is geen grendel tegen een daling nodig; een onbekende chat nam
-    in dagregels al het chatdeel over dat de regel had."""
+    gesprekkentabel. Een daling kan door een gegevenscorrectie met buiten: en wordt ook herzien."""
     return any(oud_inhoud.get(k) != inhoud[k] for k in KERN) or chat_kern(oud_inhoud.get("chat")) != chat_kern(inhoud["chat"])
+
+
+def oude_nul_chattitel(titel):
+    """RZ13 X3: een oude opgepakte titel met een zekere of minimale nul moet eenmalig rechtgezet worden."""
+    return bool(re.search(r"(?<!\d)(?:minstens\s+)?0 chatgesprekken\b", titel or ""))
+
+
+def chat_laatst_gezien(chat, redenen):
+    """Behoud de vorige bewezen aantallen bij een onleesbare tabel, met een eerlijke stand en veldnamen."""
+    oud = dict(chat)
+    if "berichten" in oud:
+        oud["berichten_gezien"] = oud.pop("berichten")
+    if "prive" in oud:
+        oud["prive_gezien"] = oud.pop("prive")
+    oud["telling"] = "laatst gezien"
+    oud["redenen"] = list(dict.fromkeys(list(oud.pop("onvolledig", []) or []) + list(oud.get("redenen") or []) + list(redenen)))
+    return oud
 
 
 def dagregels(w, info, klok, tel, redenen):
@@ -1370,9 +1393,10 @@ def dagregels(w, info, klok, tel, redenen):
     - een ondergrens daalt niet (ZOO-01): faalde deze ronde een Zoom-bron, dan gaat een opgepakte regel niet terug naar
       Mehdi met een lagere telling (van volledig naar minstens, of minder gesprekken). Wat een bron deze ronde niet gaf,
       is onbekend, niet weg.
-    De chat hoort bij de kern (RZ9-02); haar cijfer komt uit de gesprekkentabel en daalt niet (RZ10). Is de chat deze
-    ronde onbekend (de gesprekkentabel niet gelezen), dan blijft het chatdeel staan dat de regel al had, ook als ze om de
-    meetings herzien wordt (RZ10-02).
+    Alleen het aantal chatgesprekken hoort bij de kern (RZ13); een daling door buiten: is een gegevenscorrectie. Is de
+    gesprekkentabel onleesbaar, dan blijft het vorige chatdeel met stand 'laatst gezien' staan, zonder herziening daarom.
+    Een oude opgepakte titel met '0 chatgesprekken' of 'minstens 0 chatgesprekken' wordt eenmalig herzien zodra de
+    gesprekkentabel weer leesbaar is (RZ13 X3).
     De overgang van een opgepakte regel in de oude vorm naar de nieuwe gaat bewust met herziening, een keer: de oude
     getallen telden alleen geplande meetings (1 tegen 16 op 20-10), en met de oude vorm op het bord zegt De Regisseur
     'onbekend' voor die dag (ZOO-05). Geeft (items, regels voor het werkverslag)."""
@@ -1386,8 +1410,9 @@ def dagregels(w, info, klok, tel, redenen):
         inhoud = dag_inhoud(d, w, info, tel, redenen)
         oud = next(iter(klaarzet_lezen(uniek=f"zoom:dag:{d}")), None)
         oud_inhoud = _inhoud(oud) if oud else {}
-        if inhoud["chat"] is None and isinstance(oud_inhoud.get("chat"), dict):
-            inhoud["chat"] = oud_inhoud["chat"]          # RZ10-02: onbekend overschrijft nooit een bekend chatdeel
+        if inhoud["chat"] is None or inhoud["chat"].get("telling") == "onbekend":
+            if isinstance(oud_inhoud.get("chat"), dict) and isinstance(oud_inhoud["chat"].get("gesprekken"), int):
+                inhoud["chat"] = chat_laatst_gezien(oud_inhoud["chat"], (w.get("chat_stand") or {}).get("redenen", []))
         it = {"voor": "mehdi", "soort": "zoom", "sleutel": "", "titel": dag_titel(inhoud), "uniek": f"zoom:dag:{d}", "inhoud": inhoud}
         oud_tel = oude_telling(oud_inhoud)
         if oud and tel == "onbekend" and oud_tel in ("volledig", "ondergrens", "oude vorm"):
@@ -1397,13 +1422,17 @@ def dagregels(w, info, klok, tel, redenen):
         if opgepakt and bron_faalde and oud_tel in ("volledig", "ondergrens") and lager(oud_inhoud, inhoud):
             notities.append((d, "dagregel niet herzien naar een lagere telling: deze ronde faalde een Zoom-bron"))
             continue
-        if opgepakt and kern_anders(oud_inhoud, inhoud):
+        formaat_oud = bool(opgepakt and (w.get("chat_stand") or {}).get("telling") == "ondergrens"
+                          and oude_nul_chattitel(oud.get("titel")))
+        if opgepakt and (kern_anders(oud_inhoud, inhoud) or formaat_oud):
             if (vandaag - date.fromisoformat(d)).days > TERUGBLIK:
                 notities.append((d, "dagregel niet herzien: ouder dan zes dagen"))
                 continue
             it["revisie"] = True
             if oud_tel == "oude vorm":
                 notities.append((d, "dagregel van de oude vorm naar de nieuwe telling, eenmalig met herziening"))
+            elif formaat_oud:
+                notities.append((d, "oude chattitel met nul eenmalig herzien naar de ondergrens"))
         items.append(it)
     return items, notities
 
@@ -1577,12 +1606,11 @@ def _tel(uit):
 
 
 def chat_verslag(w):
-    """De chat in de bronregel van het werkverslag, zonder namen (RZ10): niets als ze volledig is, anders haar stand met
-    de redenen. Een ronde die alleen leest, telt de chat niet (chat_tellen komt na het schrijven)."""
+    """De stand van de chat in de bronregel, zonder namen (RZ13). Een ronde die alleen leest, telt de chat niet."""
     stand = w.get("chat_stand")
     if stand is None:
         return "; chat niet geteld" + (f" ({', '.join(w['chat_redenen'])})" if w["chat_redenen"] else "")
-    return "" if stand["telling"] == "volledig" else f"; chat {stand['telling']}: {', '.join(stand['redenen'])}"
+    return f"; chat {stand['telling']}" + (f": {', '.join(stand['redenen'])}" if stand["redenen"] else "")
 
 
 def leesapp_stand():
