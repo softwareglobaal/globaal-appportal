@@ -927,6 +927,22 @@ def bezoeksleutel(nummer, bezoek):
     return f"{nummer}:{bezoek['datum']}:{taakdoel(bezoek)}"
 
 
+# ------------------------------------------------- werfapp-bereik ---
+BEREIK_COMMANDO = ("cd ~/appportal && docker compose exec -T app-werfverslag flask --app app.main werfbezoek-service bereik "
+                   "--service werf_schrijver --service dashboard --toevoegen h-architects:{nummer}")
+
+
+def buiten_bereik_nood(nummer, fout):
+    """De werfapp kent het dossier niet in het bereik van de servicesleutel (403 project_buiten_bereik; 22-10-2026, dossier 2513
+    dat via de agenda gevolgd werd). Dat bereik is een bewuste witte lijst (werfapp-contract 9.1) die de agent niet zelf mag
+    verbreden: zonder bereik geen nummering en geen fotokoppeling. De nood zet het ene beheercommando klaar; alle andere
+    registerfouten blijven een gewone logregel."""
+    if "project_buiten_bereik" not in str(fout):
+        return None
+    return {"tekst": f"Dossier {nummer} staat niet in het werfapp-bereik van de servicesleutel; nummering en fotokoppeling wachten "
+                     f"tot het bereik verbreed is: {BEREIK_COMMANDO.format(nummer=nummer)}", "wie": "claude-code"}
+
+
 # ------------------------------------------------------------- de ronde ---
 def verwerk(nummer, droog=False):
     ag.log(str(nummer), "bron", f"dossier {nummer}: projectmap zoeken")
@@ -973,12 +989,14 @@ def verwerk(nummer, droog=False):
     except Exception:  # noqa: BLE001
         alle_rijen = []
     bevindingen = bevindingenmappen(alle_rijen)
+    bereik_nood = None
     if not droog and bezoeken:
         try:
             bezoeken = vooraf_koppelen(bezoeken, str(nummer), projectmap, werfstart, alle_rijen,
                                        **({"bevindingen": bevindingen} if bevindingen else {}))
         except werfregister.RegisterFout as ex:
             ag.log(str(nummer), "fout", f"werfapp-identiteit vóór nummering niet bevestigd: {ex}")
+            bereik_nood = buiten_bereik_nood(nummer, ex)
             for b in bezoeken:
                 if not b.get("registratie"):
                     b["registratie_blokkade"] = True
@@ -995,6 +1013,8 @@ def verwerk(nummer, droog=False):
     rijen, alle_taken, noden, dubbels, fotowerk, gesloten_ids = [], [
         t for t in terugkijk_taken if not any(o.get("uniek") == t["uniek"] for o in open_taken["agenda-wacht"])
     ], [], [], [], set()
+    if bereik_nood:
+        noden.append(bereik_nood)
     # verhuisde projectmap: de rij van het oude pad gaat mee naar het nieuwe, maar alleen als het oude pad echt weg
     # is; staat de bezoekmap op beide plaatsen, dan is het een kopie en beslist Mehdi welke geldt
     verhuisd = verhuisde_rijen(bezoeken, projectmap, alle_rijen)

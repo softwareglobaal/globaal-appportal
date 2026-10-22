@@ -98,5 +98,9 @@ de rechten op de Mac voor de foto-lus (Full Disk Access voor python3), en het me
 Open beslissingen: het tokenplafond per bezoek (advies ja), en bij de opleveringen de keuze automatische overgang
 of tweede rondgang.
 
+Nieuw dossier via de agenda (sinds 22-10-2026): de werfapp kent per servicesleutel een vaste lijst dossiers. Komt er
+een dossier bij dat de sleutel nog niet kent, dan zet de voorbereider een nood klaar voor Claude met het ene
+beheercommando (werfbezoek-service bereik --toevoegen); tot dan blijven nummering en fotokoppeling voor dat dossier wachten.
+
 Waar dit document verder leeft: repo globaal-appportal, mijnagents-runner/docs, en Dropbox
 `01. H-A WORK/_0 Claude reorganisatie/Sjablonen werfverslagen/`.
