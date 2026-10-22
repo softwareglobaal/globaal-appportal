@@ -1,8 +1,10 @@
-"""Tegel Facturatie (Joan) (appfacturatie.<domein>) in Authentik, met eigen proxy-provider (forward-auth).
+"""Tegel Facturatie (facturatie.<domein>) in Authentik, met eigen proxy-provider (forward-auth).
 
 Shaniel, 22-10-2026: de facturatie-app van Joan (joanhds/APP-Facturatie) op de VM. Authentik is de enige
 aanmelding; de app neemt de naam over uit X-authentik-username en bepaalt zelf de rechten (users.json).
-Toegang = groep app-facturatie of admin. Niet te verwarren met de tegel Facturatie (Cockpit, add-facturatie-app.py).
+Toegang = groep app-facturatie of admin. Vervangt de tegel van de Facturatie Cockpit (slug facturatie,
+provider facturatie-proxy, nooit gebruikt): die wordt hier verwijderd, want twee providers op hetzelfde
+domein botsen in de outpost. De groep facturatie blijft bestaan maar geeft geen toegang meer.
 
 Draaien:  sh scripts/ak-exec.sh scripts/add-appfacturatie-app.py
 Idempotent. Joan wordt alleen toegevoegd als er precies een gebruiker op "joan" past; anders staan de
@@ -17,9 +19,15 @@ from authentik.policies.models import PolicyBinding
 from authentik.providers.proxy.models import ProxyProvider
 
 BASE = os.environ.get("BASE_DOMAIN", "globaal.be")
-SLUG, NAME, SUB = "app-facturatie", "Facturatie (Joan)", "appfacturatie"
+SLUG, NAME, SUB = "app-facturatie", "Facturatie", "facturatie"
 ROLES = ["admin", "app-facturatie"]
 ZOEK = "joan"
+
+oud = Application.objects.filter(slug="facturatie").first()
+if oud:
+    oud.delete()
+    print("OUDE TEGEL facturatie (Cockpit) verwijderd")
+ProxyProvider.objects.filter(name="facturatie-proxy").delete()
 
 auth_flow = Flow.objects.get(slug="default-provider-authorization-implicit-consent")
 inval_flow = Flow.objects.filter(slug="default-provider-invalidation-flow").first()

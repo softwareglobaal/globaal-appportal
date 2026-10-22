@@ -4,10 +4,16 @@ server {
     server_name facturatie.${BASE_DOMAIN};
     include /etc/nginx/snippets/ssl.conf;
 
-    client_max_body_size 250m;
-    proxy_read_timeout 600s;
-    send_timeout 600s;
-
-    set $app_upstream http://172.17.0.1:8765;
+    # Facturatie-app van Joan (repo joanhds/APP-Facturatie, tak live): facturen, rappels, betalingen
+    # en HA Contracten onder /ha. Sinds 22-10-2026; daarvoor stond hier de Facturatie Cockpit (:8765),
+    # die nooit gebruikt werd.
+    # Host-dienst facturatie-web op 172.17.0.1:8430. Authentik is de enige aanmelding: de app
+    # gelooft X-authentik-username alleen van nginx (FACTURATIE_PROXY in /etc/facturatie/facturatie.env)
+    # en zoekt de naam op in haar eigen users.json. Toegang = groep app-facturatie of admin
+    # (scripts/add-appfacturatie-app.py).
+    # Contracten opladen; een contract laten lezen (Claude-CLI) duurt.
+    client_max_body_size 50m;
+    proxy_read_timeout 300s;
+    set $app_upstream http://172.17.0.1:8430;
     include /etc/nginx/snippets/forward-auth.conf;
 }
