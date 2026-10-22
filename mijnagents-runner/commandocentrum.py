@@ -30,13 +30,10 @@ import posixpath
 import re
 import sys
 import urllib.parse
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
-try:
-    from zoneinfo import ZoneInfo
-    TZ = ZoneInfo("Europe/Brussels")
-except Exception:  # noqa: BLE001
-    TZ = timezone(timedelta(hours=2))
+TZ = ZoneInfo("Europe/Brussels")
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
@@ -173,34 +170,64 @@ def taak_bron_gewijzigd(oud_item, nieuwe_inhoud):
             oude_inhoud = {}
     if not isinstance(oude_inhoud, dict):
         return True
-    velden = ("datum", "adres", "dossier", "van_tijd", "tot_tijd", "bezoekmap", "doelmap",
-              "plaud_doelmap", "mapnummer")
-    return (any(oude_inhoud.get(k) != nieuwe_inhoud.get(k) for k in velden)
-            or bool(oude_inhoud.get("firma") and nieuwe_inhoud.get("firma")
-                    and oude_inhoud["firma"] != nieuwe_inhoud["firma"]))
+    velden = ("datum", "adres", "dossier", "firma", "start", "einde", "van_tijd", "tot_tijd",
+              "bezoekmap", "doelmap", "plaud_doelmap", "mapnummer")
+    return any(oude_inhoud.get(k) != nieuwe_inhoud.get(k) for k in velden)
 
 
-def taak_voor_nieuwe_ronde(taak, oude_taak, bord_item, bron_aanwezig, gemeten_ts=""):
-    """Hergebruik open taken; heropen alleen na een nieuwe bronmeting na de afvinkronde."""
+def _taakbesluit(taak, oude_taak, bord_item, bron_aanwezig, gemeten_ts="", nu=None):
+    """Geef de taak of de reden waarom een ontbrekende bron niet meer heropent."""
     if not oude_taak:
-        return taak
+        return taak, None
     basis = taak["uniek"]
     oud_uniek = oude_taak.get("uniek") or basis
     if not bord_item or bord_item.get("status") == "klaar":
         taak["uniek"] = oud_uniek
-        return taak
+        return taak, None
+    bron_gewijzigd = taak_bron_gewijzigd(bord_item, taak["inhoud"])
     if (bron_aanwezig and bord_item.get("status") == "opgepakt" and bord_item.get("opgepakt_door") == taak["voor"]
-            and not taak_bron_gewijzigd(bord_item, taak["inhoud"])):
-        return None
-    afgevinkt = _tijd(bord_item.get("opgepakt_ts"))
-    gemeten = _tijd(gemeten_ts)
-    wachtduur = timedelta(minutes=WACHTRONDE_MIN[taak["voor"]])
-    if bron_aanwezig or not afgevinkt or not gemeten or gemeten < afgevinkt + wachtduur:
-        return None
-    match = re.fullmatch(re.escape(basis) + r":([2-9][0-9]*)", oud_uniek)
+            and not bron_gewijzigd):
+        return None, None
+    if not bron_gewijzigd:
+        afgevinkt = _tijd(bord_item.get("opgepakt_ts"))
+        gemeten = _tijd(gemeten_ts)
+        wachtduur = timedelta(minutes=WACHTRONDE_MIN[taak["voor"]])
+        if bron_aanwezig or not gemeten:
+            return None, None
+        if not afgevinkt:
+            return None, "tijdstip"
+        if gemeten < afgevinkt + wachtduur:
+            return None, None
+    match = re.fullmatch(re.escape(basis) + r":([1-9][0-9]*)", oud_uniek)
+    if oud_uniek != basis and not match:
+        return None, "sleutel" if not bron_aanwezig else None
     nummer = int(match.group(1)) + 1 if match else 2
+    if nummer > 4:
+        return None, "limiet" if not bron_aanwezig else None
+    if nummer > 2:
+        # Oudere rijen hebben nog geen heropend_ts. Het bordtijdstip is dan de
+        # beste bron; opgepakt_ts is een voorzichtige terugval voor oude taken.
+        tijdstippen = (oude_taak.get("heropend_ts"), bord_item.get("ts"), bord_item.get("opgepakt_ts"))
+        laatst = next((tijd for waarde in tijdstippen if (tijd := _tijd(waarde))), None)
+        if not laatst:
+            return None, "tijdstip" if not bron_aanwezig else None
+        if laatst.astimezone(TZ).date() >= (nu or datetime.now(TZ)).astimezone(TZ).date():
+            return None, None
     taak["uniek"] = f"{basis}:{nummer}"
-    return taak
+    return taak, None
+
+
+def taak_voor_nieuwe_ronde(taak, oude_taak, bord_item, bron_aanwezig, gemeten_ts="", nu=None):
+    """Hergebruik open taken; heropen hoogstens eenmaal per Brusselse dag en driemaal in totaal."""
+    return _taakbesluit(taak, oude_taak, bord_item, bron_aanwezig, gemeten_ts, nu)[0]
+
+
+def heropennood(dossier, bron, blokkade):
+    if blokkade == "limiet":
+        return f"{dossier}: {bron} blijft ontbreken na 3 pogingen; kijk het na"
+    if blokkade == "tijdstip":
+        return f"{dossier}: {bron} blijft ontbreken; tijdstip van de vorige taak onbekend; kijk het na"
+    return f"{dossier}: {bron} blijft ontbreken; taaknummer van de laatste heropening onbekend; kijk het na"
 
 
 def gepauzeerde_taak(oude_taak, bord_item, reden):
@@ -349,32 +376,42 @@ def main():
                             "titel": f"iPhone-foto's van {rij['datum']} binnen {STRAAL_M} m van {rij['adres']} ({s['label'].lower()}) naar {inhoud_foto['doelmap']}"[:300],
                             "inhoud": inhoud_foto, "verwijzing": inhoud_foto["doelmap"],
                             "uniek": f"cc:{uniek}:icloud-wacht"}
-                    taak = taak_voor_nieuwe_ronde(taak, oude_taken.get("icloud-wacht"), bord_taken.get("icloud-wacht"),
-                                                  (pk.get("fotos_iphone") or 0) > 0, pk.get("gemeten_ts"))
+                    taak, blokkade = _taakbesluit(taak, oude_taken.get("icloud-wacht"), bord_taken.get("icloud-wacht"),
+                                                  (pk.get("fotos_iphone") or 0) > 0, pk.get("gemeten_ts"), nu)
                     if taak:
                         nieuwe.append(taak)
+                    elif blokkade:
+                        noden.append({"tekst": heropennood(inhoud_foto["mapnummer"], "iPhone-fotolevering", blokkade),
+                                      "wie": "mehdi"})
                 if plaud_nodig:
                     taak = {"voor": "plaud-wacht", "soort": "taak", "sleutel": inhoud_plaud["dossier"],
                             "titel": f"Plaud-opname van {rij['datum']} ({rij['adres']}, {s['label'].lower()}): transcript in {inhoud_plaud['plaud_doelmap']}"[:300],
                             "inhoud": inhoud_plaud, "verwijzing": inhoud_plaud["plaud_doelmap"],
                             "uniek": f"cc:{uniek}:plaud-wacht"}
-                    taak = taak_voor_nieuwe_ronde(taak, oude_taken.get("plaud-wacht"), bord_taken.get("plaud-wacht"),
-                                                  (pk.get("transcripten") or 0) > 0, pk.get("gemeten_ts"))
+                    taak, blokkade = _taakbesluit(taak, oude_taken.get("plaud-wacht"), bord_taken.get("plaud-wacht"),
+                                                  (pk.get("transcripten") or 0) > 0, pk.get("gemeten_ts"), nu)
                     if taak:
                         nieuwe.append(taak)
+                    elif blokkade:
+                        noden.append({"tekst": heropennood(inhoud_plaud["mapnummer"], "Plaud-opname", blokkade),
+                                      "wie": "mehdi"})
                 if nieuwe:
                     taken += nieuwe  # dezelfde uniek werkt een open taak bij; :2 herstelt een gesloten taak
                     ontbrekend = [t for t in nieuwe if t["voor"] not in oude_taken or
                                   t["uniek"] != oude_taken[t["voor"]].get("uniek")]
                     if ontbrekend and not a.droog:
                         bewaar(uniek, taken=(oud.get("taken") or []) +
-                               [{"voor": t["voor"], "uniek": t["uniek"], "titel": t["titel"]} for t in ontbrekend],
+                               [{"voor": t["voor"], "uniek": t["uniek"], "titel": t["titel"],
+                                 **({"heropend_ts": nu.isoformat()} if re.search(r":[2-9][0-9]*$", t["uniek"]) else {})}
+                                for t in ontbrekend],
                                stand="verzamelen" if stand in ("gepland", "voorbereid") else stand)
                 vol = bool(oud.get("dossiermap") and (pk.get("fotos_iphone") or 0) > 0
                            and (pk.get("transcripten") or 0) > 0
                            and not any(t["voor"] == "icloud-wacht" for t in nieuwe)
                            and (bord_taken.get("icloud-wacht") or {}).get("status") == "opgepakt"
-                           and (bord_taken.get("icloud-wacht") or {}).get("opgepakt_door") == "icloud-wacht")
+                           and (bord_taken.get("icloud-wacht") or {}).get("opgepakt_door") == "icloud-wacht"
+                           and not taak_bron_gewijzigd(bord_taken["icloud-wacht"], inhoud_foto)
+                           and not taak_bron_gewijzigd(bord_taken.get("plaud-wacht") or {}, inhoud_plaud))
                 if voorbij and vol and not oud.get("impuls_verslag_ts") and not oud.get("proef_pad"):
                     impulsen.append({"voor": s["agent"], "soort": "impuls", "sleutel": rij["dossier"] or uniek,
                                      "titel": f"verslag {s['label'].lower()} {rij['datum']} {rij['dossier'] or rij['klant']}: pakket is vol"[:300],

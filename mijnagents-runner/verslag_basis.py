@@ -466,6 +466,58 @@ def taken_dicht(rij, nu, lees):
     return True, "wachttaken volledig afgehandeld"
 
 
+class TaakstatusLeesfout(RuntimeError):
+    """De huidige status van een wachttaak is onbekend door een bordleesfout."""
+
+
+def _open_wachttaken(rij, lees, *, overdracht_ts=None, toegestane_taken=None, leesfout_doorgeven=False):
+    """Geef de open taken met sleutel en reden, eventueel begrensd tot de overdracht."""
+    taken = rij.get("taken") or []
+    volgorde = list(dict.fromkeys(taak.get("voor") for taak in taken
+                                  if taak.get("voor") in ("icloud-wacht", "plaud-wacht")))
+    per_wacht = {}
+    for taak in reversed(taken):
+        wacht = taak.get("voor")
+        if wacht not in ("icloud-wacht", "plaud-wacht") or wacht in per_wacht:
+            continue
+        uniek = taak.get("uniek")
+        if toegestane_taken is not None and uniek not in toegestane_taken:
+            continue
+        if not uniek:
+            per_wacht[wacht] = (uniek, "wachttaak zonder sleutel")
+            continue
+        try:
+            antwoord = lees(uniek)
+            items = antwoord.get("items", []) if isinstance(antwoord, dict) else antwoord
+            item = next((it for it in items or [] if it.get("uniek") == uniek), None)
+        except Exception as e:  # noqa: BLE001
+            if leesfout_doorgeven:
+                raise TaakstatusLeesfout(uniek) from e
+            if overdracht_ts is None:
+                per_wacht[wacht] = (uniek, "taakstatus niet leesbaar")
+            continue
+        if overdracht_ts is not None:
+            taak_ts = _tijd((item or {}).get("ts"))
+            if not taak_ts or taak_ts > overdracht_ts:
+                continue
+        if not item or item.get("status") != "opgepakt":
+            reden = "iCloud-wachttaak nog open" if wacht == "icloud-wacht" else "Plaud-wachttaak nog open"
+        elif wacht == "icloud-wacht" and item.get("opgepakt_door") != "icloud-wacht":
+            reden = "iCloud-levering niet bevestigd"
+        else:
+            reden = None
+        per_wacht[wacht] = (uniek, reden)
+    return [per_wacht[wacht] for wacht in volgorde
+            if wacht in per_wacht and per_wacht[wacht][1]]
+
+
+def open_wachttaak(rij, lees, *, overdracht_ts=None, toegestane_taken=None):
+    """Geef alleen een reden voor een wachttaak die bij deze overdracht meetelt."""
+    open_taken = _open_wachttaken(rij, lees, overdracht_ts=overdracht_ts,
+                                 toegestane_taken=toegestane_taken, leesfout_doorgeven=overdracht_ts is not None)
+    return open_taken[0][1] if open_taken else None
+
+
 def _transcript_tekst(data, naam):
     tekst = wp.docx_tekst(data) if naam.lower().endswith(".docx") else data.decode("utf-8", "replace")
     regels = tekst.splitlines()
@@ -612,7 +664,14 @@ def schrijf_pakket(plan, inbox, download, download_kop, nu):
         with open(os.path.join(tmp, "Transcript.docx"), "xb") as f:
             f.write(doc_data.getvalue())
         foto_tijden = [(e, _opnametijd(download_kop(e["path_display"], 131072))) for e in plan["fotos"]]
-        foto_tijden.sort(key=lambda x: (x[1] is None, x[1] or ""))
+        datum = plan["meta"]["bezoekdatum"].casefold()
+        def foto_volgorde(foto):
+            e, opnametijd = foto
+            mapnaam = os.path.basename(os.path.dirname(e["path_display"])).casefold()
+            groep = (0, "") if mapnaam == datum + " iphone" else \
+                    (1, mapnaam) if mapnaam == datum or mapnaam.startswith(datum + " ") else (2, "")
+            return groep, opnametijd is None, opnametijd or "", e.get("path_lower") or e["path_display"].casefold()
+        foto_tijden.sort(key=foto_volgorde)
         for i, (e, opnametijd) in enumerate(foto_tijden, 1):
             stam, ext = os.path.splitext(e["name"])
             doel = f"{i:03d}_{_veilig(stam)}{ext.lower()}"
@@ -1131,11 +1190,17 @@ class VerslagAgent:
                             self.ag.log(onderwerp, "schrijf", f"pakket klaargezet voor het dashboard: {uitslag['pad']} "
                                         f"({uitslag['fotos']} foto's, {uitslag['bijlagen']} bijlagen); laden en verwerken doet een mens in barstenscheurenv2")
                         if uitslag["uitkomst"] in ("klaargezet", "al klaargezet"):
-                            if not inv["fotos_iphone"]:
-                                uitslag["waarschuwing"] = f"{mapnr}: pakket klaargezet zonder iPhone-foto's; controleer de fotolevering"
-                            elif reden.startswith("bezoek meer dan 6 uur voorbij;"):
-                                uitslag["waarschuwing"] = (f"{mapnr}: pakket klaargezet na zes uur terwijl "
-                                                         f"{reden.split('; ', 1)[1]}; controleer of alle bronnen volledig zijn")
+                            uitslag["fotos_iphone_bij_overdracht"] = len(inv["fotos_iphone"])
+                            if uitslag["uitkomst"] == "klaargezet":
+                                open_taken = _open_wachttaken(rij, self._lees_taakstatus)
+                            else:
+                                # Een al bestaand pakket is eerder geschreven; latere taken tellen niet mee.
+                                grens = _tijd(uitslag.get("ts"))
+                                open_taken = (_open_wachttaken(rij, self._lees_taakstatus, overdracht_ts=grens)
+                                              if grens else [])
+                            uitslag["open_wachttaak_bij_overdracht"] = bool(open_taken)
+                            uitslag["open_wachttaak_reden_bij_overdracht"] = open_taken[0][1] if open_taken else None
+                            uitslag["open_wachttaken_bij_overdracht"] = [uniek for uniek, _ in open_taken]
                         if plan["overgeslagen"]:
                             self._nood("overgeslagen uit pakket: " + ", ".join(os.path.basename(x["dropbox"] or "") for x in plan["overgeslagen"]))
         except Exception as e:  # noqa: BLE001
@@ -1144,8 +1209,38 @@ class VerslagAgent:
         for k in ("overdracht", "kandidaat", "dossierkeuze", "bijlagen_na_overdracht", "versiegrens"):
             if k not in pk and k in oud:
                 pk[k] = oud[k]
+        overdracht = dict(pk.get("overdracht") or {})
+        if overdracht:
+            bij_overdracht = overdracht.get("fotos_iphone_bij_overdracht")
+            if bij_overdracht is None:
+                bij_overdracht = (0 if "zonder iPhone-foto's" in (overdracht.get("waarschuwing") or "")
+                                  else len(inv["fotos_iphone"]))
+            try:
+                if "open_wachttaak_bij_overdracht" in overdracht:
+                    open_reden = (open_wachttaak(rij, self._lees_taakstatus,
+                                                 toegestane_taken=set(overdracht.get("open_wachttaken_bij_overdracht") or []))
+                                  if overdracht["open_wachttaak_bij_overdracht"] else None)
+                else:
+                    grens = _tijd(overdracht.get("ts"))
+                    open_reden = open_wachttaak(rij, self._lees_taakstatus, overdracht_ts=grens) if grens else None
+            except TaakstatusLeesfout:
+                pass  # Onbekend: bewaar de waarschuwing tot een volgende leesbare ronde.
+            else:
+                if not bij_overdracht:
+                    waarschuwing = f"{mapnr}: pakket klaargezet zonder iPhone-foto's; controleer de fotolevering"
+                elif open_reden:
+                    waarschuwing = (f"{mapnr}: pakket klaargezet na zes uur terwijl {open_reden}; "
+                                   "controleer of alle bronnen volledig zijn")
+                else:
+                    waarschuwing = None
+                if waarschuwing:
+                    overdracht["waarschuwing"] = waarschuwing
+                elif overdracht.pop("waarschuwing", None):
+                    self.ag.log(onderwerp, "bevinding", "pakketwaarschuwing gewist: bronnen volledig en geen open wachttaken")
+            pk["overdracht"] = overdracht
         vergelijk = lambda d: {k: v for k, v in d.items() if k != "gemeten_ts"}
-        if vergelijk(pk) != vergelijk(oud):
+        laatste_meting = _tijd(oud.get("gemeten_ts"))
+        if vergelijk(pk) != vergelijk(oud) or not laatste_meting or nu - laatste_meting >= timedelta(hours=1):
             self._bewaar_pakket(rij, pk)
         waarschuwing = (pk.get("overdracht") or {}).get("waarschuwing")
         if waarschuwing_nood:
@@ -1258,12 +1353,32 @@ class VerslagAgent:
                             dicht, reden = taken_dicht(rij, nu, self._lees_taakstatus)
                             regel["taken_dicht"] = dicht
                             laatst = _tijd(inv["laatst_gewijzigd"])
-                            kandidaat = _tijd(((rij.get("pakket") or {}).get("kandidaat") or {}).get("ts"))
-                            regel["zou_overdragen"] = bool(bruikbaar(rij, inv, nu) and dicht and kandidaat and laatst and
-                                                           now_aware(nu) - kandidaat >= timedelta(minutes=RUST_MIN) and
-                                                           now_aware(nu) - laatst >= timedelta(minutes=RUST_MIN) and
-                                                           ((rij.get("pakket") or {}).get("overdracht") or {}).get("invoerhash") != plan["invoerhash"])
-                            regel["reden"] = "klaar voor overdracht" if regel["zou_overdragen"] else reden
+                            pakket = rij.get("pakket") or {}
+                            overdracht = pakket.get("overdracht") or {}
+                            kandidaat_info = pakket.get("kandidaat") or {}
+                            kandidaat = _tijd(kandidaat_info.get("ts")) if kandidaat_info.get("hash") == plan["invoerhash"] else None
+                            if overdracht.get("invoerhash") == plan["invoerhash"]:
+                                regel["reden"] = f"al overgedragen als {overdracht.get('naam') or plan['naam']}"
+                            elif not dicht:
+                                regel["reden"] = reden
+                            elif not kandidaat:
+                                regel["reden"] = "eerste ronde zet de kandidaat"
+                            elif not laatst:
+                                regel["reden"] = "laatste wijziging onbekend"
+                            else:
+                                rust_tot = max(kandidaat, laatst) + timedelta(minutes=RUST_MIN)
+                                utc = lambda t: t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                                if nu < rust_tot:
+                                    regel["reden"] = (f"rust loopt tot {utc(rust_tot)} (kandidaat sinds {utc(kandidaat)}, "
+                                                      f"laatste wijziging {utc(laatst)})")
+                                elif not bruikbaar(rij, inv, nu) or not plan["transcripten"] or not plan["fotos"]:
+                                    regel["reden"] = "foto en transcript nog niet bruikbaar"
+                                elif len(inv["fotos"]) > vs.pakketcontract()["max_fotos"] or \
+                                        plan["totaal_bytes"] > vs.pakketcontract()["max_totaal_mb"] * 1_000_000:
+                                    regel["reden"] = "pakket boven de foto- of totaalgrens"
+                                else:
+                                    regel["zou_overdragen"] = True
+                                    regel["reden"] = "klaar voor overdracht"
             except Exception as e:  # noqa: BLE001
                 regel["nood"] = f"droge controle mislukt ({type(e).__name__})"
             print(json.dumps(regel, ensure_ascii=False))
