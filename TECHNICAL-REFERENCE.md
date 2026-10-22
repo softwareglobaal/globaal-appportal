@@ -3114,16 +3114,23 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   de testfabriek `create_app()` zonder databank antwoordt op `/healthz` met `ok`.
 - **Uitrol**: `COMPOSE_FILE` in `~/appportal/.env` krijgt `:docker-compose.regie.yml`. De eerste uitrol doet één
   script uit de eigen repo (`deploy/eerste-uitrol.sh`: migratie 197, rolwachtwoord, env-namen, build, `/healthz`,
-  `nginx -t`, registratie in Authentik, groepslid, cron), zonder een geheim te tonen. Vóór er iets binnenkomt, kijkt
-  het beide checkouts na (`~/appportal` en `~/appportal/regie`): elke niet vastgelegde wijziging, gevolgd of niet,
-  stopt het; alleen de twee bestanden die op de VM bewust lokaal gewijzigd zijn (`docker-compose.override.yml` en
-  `nginx/templates/49-elevaitnv.conf.template`), drie paden van andere apps die deze repo niet volgt en niet negeert
-  (`mijnagents-runner/werfverslag_dashboard.py`, de kopie van `globaal-werfverslag/deploy.sh`; de bind mounts
-  `werfverslag-data/` en `locatie-data/`, waarvan de SQLite-WAL-bestanden niet onder `*.db` vallen) en de checkouts van
-  andere repo's op het hoogste niveau worden genoemd en ongemoeid gelaten, de eerste twee groepen alleen bij exact die
-  naam. Het stopt ook als een checkout niet op `main` staat, niet kan vooruitspoelen, of als main een van die twee
-  lokale bestanden wijzigt of iets op een van die drie paden zet. Een regel hier in `.gitignore` zou de eerste uitrol
-  niet helpen: die kijkt na met de `.gitignore` die op de VM staat, vóór de merge. Daarna rolt
+  `nginx -t`, registratie in Authentik, groepslid, cron), zonder een geheim te tonen. Stap 1 bewaakt, vóór er iets
+  binnenkomt, dat geen lokaal werk naar productie gaat en niets op de VM overschreven wordt (meting van de VM op
+  22-10-2026: de twee bekende lokale bestanden en 87 ongevolgde paden van andere apps, zoals nginx-templates die niet
+  in git staan, datamappen, oude `.sql`-bestanden, `websites/` en venvs; de VM stond op `origin/main`). (1) Een gevolgde
+  wijziging in `~/appportal` (gewijzigd, weg, hernoemd, klaargezet, conflict) stopt het, behalve ` M` op
+  `docker-compose.override.yml` en `nginx/templates/49-elevaitnv.conf.template` (bewust lokaal gewijzigd, genoemd en
+  ongemoeid gelaten); wijzigt main een van die twee, dan stopt het. (2) Ongevolgde paden mogen: een pull voegt ze
+  nooit aan git toe. Alleen het aantal komt op het scherm, de volledige lijst (alleen namen) in
+  `~/eerste-uitrol-regie-status.log` (600). Zet main iets op of onder een ongevolgd of genegeerd pad, dan stopt het
+  met de botsingen (git overschrijft een genegeerd bestand bij een merge zonder te waarschuwen). (3) De commits van
+  HEAD tot `origin/main` worden getoond; een andere migratie dan 197 stopt altijd, en een bestand buiten wat deze PR
+  wijzigt (de regiebestanden hierboven, `apps.yaml`, `TECHNICAL-REFERENCE.md`, `scripts/test_regie_infra.py`,
+  `.github/workflows/regiebord-grendels.yml` en `.gitignore`; in `docker-compose.yml` en
+  `nginx/snippets/forward-auth.conf` alleen toegevoegde regels over regie) stopt het met de bestandsnamen, tenzij de
+  uitvoerder na het lezen opnieuw draait met `--ook-andere-wijzigingen`. (4) `~/appportal/regie` moet helemaal schoon
+  zijn en op `main` staan. (5) Daarna alleen `git merge --ff-only` van de nagekeken commit. Grendel in globaal-regie:
+  `tests/test_eerste_uitrol.py`, op een nep-VM met de echte meting en, met `REGIE_APPPORTAL`, met deze PR. Daarna rolt
   `regie/deploy-stack.sh` (cron elke 2 minuten, logboek `~/deploy-regie.log`) elke nieuwe commit op main van
   globaal-regie uit: een push naar main daar is productie, zoals bij prive. Het haalt alleen `main` binnen, alleen met
   `--ff-only` en alleen uit een schone checkout, bouwt alleen als HEAD veranderde, doet een starttoets en `/healthz`,
