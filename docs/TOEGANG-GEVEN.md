@@ -58,6 +58,7 @@ Twee wegen, ze doen hetzelfde:
 | medewerkers (organisatie) | `organisatie` of `hr` |
 | monday | `monday` |
 | pipedrive (MCP via Claude) | per naam, geen groep: alleen mehdi (`scripts/set-pipedrive-mcp-toegang.py`) |
+| pipedrive (kloon van de backup, pipedrive.globaal.be) | `pipedrive-kloon` (of admin/manager) |
 | post (Postbus) | `postbus` (en daarnaast per mailbox in `mailboxen.yaml`) |
 | projecten | `projecten` (kijken) of `projecten-editors` (bewerken) |
 | renovision | `renovision` |

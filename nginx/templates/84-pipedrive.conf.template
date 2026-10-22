@@ -1,0 +1,23 @@
+# Pipedrive-kloon — pipedrive.globaal.be
+# De nachtelijke Pipedrive-backup van de vijf firma's in de Pipedrive-kloon (firma kiezen linksboven); elke nacht
+# opnieuw ingelezen, Pipedrive zelf blijft de bron. Code en compose: ~/pipedrive-kloon (eigen project, container
+# pipedrive-kloon op appportal_appnet, zie deploy/LEESMIJ.md daar). Bevat persoonsgegevens van klanten.
+# Forward-auth (Authentik) beschermt alles, ook /api: groep admin, manager of pipedrive-kloon
+# (scripts/add-pipedrive-kloon-app.py).
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name pipedrive.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Privé: niet indexeren.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # Bijlagen toevoegen in de kloon; zonder dit laat nginx maar 1 MB door.
+    client_max_body_size 50m;
+
+    # Docker-DNS + variabele proxy_pass (zoals 64-sales): een nieuwe container vraagt geen herlading.
+    set $app_upstream http://pipedrive-kloon:8800;
+    include /etc/nginx/snippets/forward-auth.conf;
+}
