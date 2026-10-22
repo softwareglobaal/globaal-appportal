@@ -67,6 +67,7 @@ except ImportError:
 K = {"X-Agents-Token": "proef"}
 TELLER = itertools.count(1)
 UTC = timezone.utc
+ZOOM_DT = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"   # de vorm die de chat-API van Zoom in from en to leest
 PMI = "9100000001"
 IK = {"id": "mehdi-id", "email": "info@h-invest.test", "pmi": PMI}
 ZAAD = open(os.path.join(RUNNER, "werkwijze", "zoom-wacht.md"), encoding="utf-8").read()
@@ -207,7 +208,12 @@ class NepZoom:
             for s, berichten in self.chat:
                 if (q.get("to_contact") and q["to_contact"] == s.get("peer_contact_email")) or \
                         (q.get("to_channel") and q["to_channel"] == s.get("channel_id")):
-                    return {"messages": berichten}
+                    van, tot = q.get("from", ""), q.get("to", "")
+                    if not (re.fullmatch(ZOOM_DT, van) and re.fullmatch(ZOOM_DT, tot)):
+                        # zoals Zoom (gemeten 22-10-2026): from en to zonder tijd worden genegeerd, alleen de laatste dag
+                        laatste = max((b["date_time"][:10] for b in berichten), default="")
+                        return {"messages": [b for b in berichten if b["date_time"][:10] == laatste]}
+                    return {"messages": [b for b in berichten if van <= b["date_time"] <= tot]}
             return {"messages": []}
         if pad.startswith("/meetings/"):
             return self.meetings.get(pad.split("/")[2])
@@ -2372,6 +2378,27 @@ def test_eigen1_chat_altijd_met_de_app_van_de_stack():
     finally:
         herstel()
         Z.vastzetten(None)
+
+
+@bord_nodig
+def test_chat_venster_met_datum_en_tijd():
+    """Live gemeten 22-10-2026: met from en to als datum zonder tijd negeert Zoom het venster en geeft /messages alleen
+    de laatste dag. De dagregels van 19 en 20-10 zeiden zo '0 chatgesprekken', terwijl Zoom met datum en tijd er 30 en 36
+    berichten gaf. Nu vraagt De Zoomwacht het venster in UTC met tijd, en telt elke dag van het venster."""
+    w = Wereld()
+    w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
+                    [{"date_time": "2026-10-18T09:00:00Z", "sender": "info@h-invest.test"},
+                     {"date_time": "2026-10-19T09:00:00Z", "sender": "info@h-invest.test"},
+                     {"date_time": "2026-10-19T09:05:00Z", "sender": TEAM_ADRES},
+                     {"date_time": "2026-10-20T10:00:00Z", "sender": TEAM_ADRES}])]
+    assert w.ronde(NU) is None
+    for dag, n in (("2026-10-18", 1), ("2026-10-19", 2), ("2026-10-20", 1)):
+        rij = w.bord.rij(f"zoom:chat:{TEAM_ADRES}:{dag}")
+        assert rij and rij["thema"].startswith(f"Zoom-chat: {n} bericht(en)"), (dag, rij)
+        assert w.dagregel(dag)[1]["chat"]["berichten"] == n, (dag, w.dagregel(dag)[1])
+    gevraagd = [dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(u).query)) for u, _ in w.zoom.gevraagd
+                if urllib.parse.urlsplit(u).path.endswith("/messages")]
+    assert gevraagd and all(re.fullmatch(ZOOM_DT, q.get("from", "")) and re.fullmatch(ZOOM_DT, q.get("to", "")) for q in gevraagd), gevraagd
 
 
 def test_eigen2_zoom_weigert_een_leestoken_met_een_verboden_recht():

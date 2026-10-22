@@ -125,6 +125,11 @@ def dag_van(t):
     return brussel(t).date().isoformat()
 
 
+def zoom_tijd(t):
+    """Een tijdstip zoals de chat-API van Zoom het in from en to verwacht: UTC, met tijd en Z."""
+    return t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def dag_grenzen(dag):
     """Begin en einde van een Brusselse dag, in UTC."""
     d = date.fromisoformat(dag)
@@ -471,10 +476,13 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
     naam van een privé-1:1 gaat naar het masker van het bord.
     Altijd met de app van de stack, nooit met de leesapp (EIGEN-1, 13.6): de leesapp krijgt het recht op chatberichten
     bewust niet, en zoom.py weigert /messages met de leesapp."""
-    sessies = _lijst(f"/chat/users/{ik['id']}/sessions", {"from": van_dag, "to": tot_dag, "page_size": 50}, "sessions", "stack")
+    # Zoom leest from en to van de chat alleen als datum met tijd in UTC: met alleen een datum negeert hij ze en geeft
+    # /messages enkel de laatste dag terug (gemeten 22-10-2026: voor 20-10 36 berichten met tijd, 0 zonder).
+    venster = {"from": zoom_tijd(dag_grenzen(van_dag)[0]), "to": zoom_tijd(dag_grenzen(tot_dag)[0] - timedelta(seconds=1))}
+    sessies = _lijst(f"/chat/users/{ik['id']}/sessions", dict(venster, page_size=50), "sessions", "stack")
     rijen, dagtel = [], defaultdict(lambda: {"berichten": 0, "gesprekken": 0, "prive": 0})
     for s in sessies:
-        p = {"from": van_dag, "to": tot_dag, "page_size": 50}
+        p = dict(venster, page_size=50)
         een_op_een = s.get("type") == "1:1"
         if een_op_een:
             p["to_contact"] = s.get("peer_contact_email", "")

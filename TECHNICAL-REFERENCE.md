@@ -2940,7 +2940,8 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   leestoken met een verboden recht (write, update, delete en de lijst "Nooit aanvinken" in
   `rechten-zoomwacht-lezen.md`) wordt geweigerd en nooit gebruikt. Daar hoort sinds RZ3-04 (22-10-2026) ook het
   Zoom-transcript bij (`cloud_recording:read:meeting_transcript:admin`, `TOT_MEHDI_BESLIST`): geweigerd tot Mehdi over
-  dat recht beslist; tot dan gaf het alleen een melding. Chatberichten alleen met de stack. Weigert Zoom een download
+  dat recht beslist; tot dan gaf het alleen een melding. Chatberichten alleen met de stack, met `from` en `to` als
+  UTC-tijd met tijd en Z (`zoom_tijd`); met alleen een datum negeert Zoom het venster (gemeten 22-10-2026). Weigert Zoom een download
   (401, 403, of 400 met code 4711), dan is dat `GeenRecht` met het recht dat Zoom noemt (anders `download`), plus de
   HTTP-code en de code van Zoom.
 - **Identiteit in `zoom_wacht.py`** (RZ6-01): de ronde schrijft alleen met een bewezen Zoom-gebruiker. Bewezen is een
