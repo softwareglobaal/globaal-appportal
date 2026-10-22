@@ -872,6 +872,13 @@ services:
     build: ./angela-site/app
     image: appportal-items
     restart: unless-stopped
+    # Contactformulier van angela.sr: SMTP_HOST, SMTP_PORT, SMTP_USER en SMTP_PASS
+    # van info@angela.sr (Datasur). Een eigen bestand, zodat de gedeelde .env met
+    # de wachtwoorden van andere apps er niet aan hoeft (keuze Angela). Ontbreekt
+    # het, dan start de site gewoon en meldt het formulier dat versturen niet lukt.
+    env_file:
+      - path: ./.env.angela-site
+        required: false
     environment:
       BASE_DOMAIN: ${BASE_DOMAIN}
       ITEMS_ROLE: verkoop
