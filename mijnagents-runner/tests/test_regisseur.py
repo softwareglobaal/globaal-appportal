@@ -569,7 +569,8 @@ def test_t40_gesprekken_tellen_privé_en_bronnen():
         w.item("zoom-wacht", "mehdi", "zoom", "Zoom 20-10", {"telling": "ondergrens", "gesprekken": 16, "met_fathom": 14},
                uniek="zoom:dag:2026-10-20")
         uit = R.gesprekken_lees("2026-10-20", "2026-10-21")
-        assert uit["aantal"] == 3 and uit["dubbels"] == 1 and uit["chats"] == {"aantal": 2, "prive": 1}, uit
+        assert uit["aantal"] == 3 and uit["dubbels"] == 1 and uit["chats"] == {"gezien": 2, "prive_gezien": 1,
+                                                                            "telling": "ondergrens"}, uit
         prive = [g for g in uit["gesprekken"] if g.get("prive")]
         assert prive == [{"datum": "2026-10-21", "start": "10:00", "minuten": 30, "bron": "fathom", "prive": True}], prive
         tekst = json.dumps(uit, ensure_ascii=False)
@@ -581,6 +582,17 @@ def test_t40_gesprekken_tellen_privé_en_bronnen():
         assert mail["mail_per_dag"] == {"2026-10-20": 1, "2026-10-21": 2} and "gesprekken" not in mail, mail
         jan = R.gesprekken_lees("2026-10-21", "2026-10-21", persoon="jan")
         assert [g["uniek"] for g in jan["gesprekken"]] == ["fathom:1"] and jan["prive_in_deze_periode"] == 1, jan
+
+
+def test_rz15_regisseur_chat_is_altijd_ondergrens_ook_bij_nul():
+    with Wereld("rz15-chat", datetime(2026, 10, 22, 7, 30, tzinfo=UTC)) as w:
+        leeg = R.gesprekken_lees("2026-10-21", "2026-10-21", soort="chat")
+        assert leeg["chats"] == {"gezien": 0, "prive_gezien": 0, "telling": "ondergrens"}, leeg
+        w.gesprek("zoom:chat:proef", "2026-10-21", "08:00", bron="zoom", afdeling="prive")
+        gevuld = R.gesprekken_lees("2026-10-21", "2026-10-21", soort="chat")
+        assert gevuld["chats"] == {"gezien": 1, "prive_gezien": 1, "telling": "ondergrens"}, gevuld
+        tekst = next(t["description"] for t in R.TOOLS if t["name"] == "gesprekken")
+        assert "ondergrens" in tekst and "0 betekent geen gezien" in tekst, tekst
 
 
 def test_t40_bas02_privé_geldt_voor_de_hele_sessie():
@@ -648,9 +660,10 @@ def test_rz3_01_afdeling_prive_is_prive_bij_de_regisseur():
             uit = R.transcript_lees(uniek, "werf")
             assert uit.get("prive") is True and "uitingen" not in uit, (kenmerk, uit)
         assert R.transcript_lees("fathom:78", "werf").get("treffers") == 1, "een zakelijk gesprek blijft leesbaar"
-        # de Zoom-chats: alleen een aantal, en een chat met afdeling prive telt als privé
+        # de Zoom-chats: alleen geziene aantallen, en een chat met afdeling prive telt als privé
         w.gesprek("zoom:chat:9", "2026-10-21", "08:00", bron="zoom", afdeling="prive")
-        assert R.gesprekken_lees("2026-10-21", "2026-10-21")["chats"] == {"aantal": 1, "prive": 1}
+        assert R.gesprekken_lees("2026-10-21", "2026-10-21")["chats"] == {"gezien": 1, "prive_gezien": 1,
+                                                                          "telling": "ondergrens"}
         # een klaargezet item met inhoud.afdeling prive en prive false: titel '(privé)'
         w.item("fathom-wacht", "dagbundelaar", "verslag", "2026-10-21 10:00 Fathom: Proefpersoon Zeta, Proefonderwerp Omega",
                {"prive": False, "afdeling": "prive", "thema": "Proefonderwerp Omega"})

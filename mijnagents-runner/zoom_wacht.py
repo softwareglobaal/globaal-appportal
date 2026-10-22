@@ -1323,6 +1323,9 @@ def dag_titel(inhoud):
     chat = inhoud["chat"]
     if chat is None or chat.get("telling") == "onbekend":
         staart = "; chat onbekend"
+    elif chat.get("telling") == "laatst gezien":
+        n = chat.get("gesprekken")
+        staart = f"; chat laatst gezien: minstens {n} chatgesprekken" if isinstance(n, int) and n > 0 else "; chat onbekend"
     elif chat.get("gesprekken", 0) > 0:
         staart = f"; minstens {chat['gesprekken']} chatgesprekken"
     else:
@@ -1356,9 +1359,10 @@ def lager(oud_inhoud, inhoud):
 
 
 def chat_kern(chat):
-    """RZ13: alleen het aantal bewezen chatgesprekken hoort bij de kern. Onbekend heeft geen nieuw aantal; een
-    veranderde stand of leesreden stuurt bij hetzelfde aantal geen herziening naar Mehdi."""
-    return chat.get("gesprekken") if isinstance(chat, dict) and chat.get("telling") != "onbekend" else None
+    """RZ13/RZ15: alleen een positief bewezen chataantal hoort bij de kern. Nul en onbekend doen allebei geen
+    aantalsbewering; een veranderde stand of leesreden stuurt dan geen herziening naar Mehdi."""
+    n = chat.get("gesprekken") if isinstance(chat, dict) and chat.get("telling") != "onbekend" else None
+    return n or None
 
 
 def kern_anders(oud_inhoud, inhoud):
@@ -1371,6 +1375,14 @@ def kern_anders(oud_inhoud, inhoud):
 def oude_nul_chattitel(titel):
     """RZ13 X3: een oude opgepakte titel met een zekere of minimale nul moet eenmalig rechtgezet worden."""
     return bool(re.search(r"(?<!\d)(?:minstens\s+)?0 chatgesprekken\b", titel or ""))
+
+
+def oude_chatvorm(titel, inhoud):
+    """RZ15: ook een vaste chatstaart of de oude stand 'volledig' krijgt eenmalig een eerlijke ondergrenstitel."""
+    chat = inhoud.get("chat")
+    return (oude_nul_chattitel(titel)
+            or bool(re.search(r";\s*(?!minstens\b)\d+ chatgesprekken\b", titel or ""))
+            or isinstance(chat, dict) and chat.get("telling") == "volledig")
 
 
 def chat_laatst_gezien(chat, redenen):
@@ -1395,8 +1407,8 @@ def dagregels(w, info, klok, tel, redenen):
       is onbekend, niet weg.
     Alleen het aantal chatgesprekken hoort bij de kern (RZ13); een daling door buiten: is een gegevenscorrectie. Is de
     gesprekkentabel onleesbaar, dan blijft het vorige chatdeel met stand 'laatst gezien' staan, zonder herziening daarom.
-    Een oude opgepakte titel met '0 chatgesprekken' of 'minstens 0 chatgesprekken' wordt eenmalig herzien zodra de
-    gesprekkentabel weer leesbaar is (RZ13 X3).
+    Een oude opgepakte titel met een zekere nul of een vaste chatstaart, of oude chatinhoud met 'volledig', wordt
+    eenmalig herzien zodra de gesprekkentabel weer leesbaar is (RZ13 X3, RZ15).
     De overgang van een opgepakte regel in de oude vorm naar de nieuwe gaat bewust met herziening, een keer: de oude
     getallen telden alleen geplande meetings (1 tegen 16 op 20-10), en met de oude vorm op het bord zegt De Regisseur
     'onbekend' voor die dag (ZOO-05). Geeft (items, regels voor het werkverslag)."""
@@ -1423,7 +1435,7 @@ def dagregels(w, info, klok, tel, redenen):
             notities.append((d, "dagregel niet herzien naar een lagere telling: deze ronde faalde een Zoom-bron"))
             continue
         formaat_oud = bool(opgepakt and (w.get("chat_stand") or {}).get("telling") == "ondergrens"
-                          and oude_nul_chattitel(oud.get("titel")))
+                          and oude_chatvorm(oud.get("titel"), oud_inhoud))
         if opgepakt and (kern_anders(oud_inhoud, inhoud) or formaat_oud):
             if (vandaag - date.fromisoformat(d)).days > TERUGBLIK:
                 notities.append((d, "dagregel niet herzien: ouder dan zes dagen"))
@@ -1432,7 +1444,7 @@ def dagregels(w, info, klok, tel, redenen):
             if oud_tel == "oude vorm":
                 notities.append((d, "dagregel van de oude vorm naar de nieuwe telling, eenmalig met herziening"))
             elif formaat_oud:
-                notities.append((d, "oude chattitel met nul eenmalig herzien naar de ondergrens"))
+                notities.append((d, "oude chatvorm eenmalig herzien naar de ondergrens"))
         items.append(it)
     return items, notities
 

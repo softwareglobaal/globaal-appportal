@@ -2942,10 +2942,13 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   en in het werkverslag, zonder namen: "N chatgesprek(ken) niet leesbaar" bij een 404, "N chatgesprek(ken) zonder
   bestemming", of "chat niet gelezen (...)" als de sessielijst faalde. Alleen wanneer `gesprek_log` niet te lezen was,
   is de chatstand `onbekend`. Een eerder chatdeel blijft dan met de stand `laatst gezien` staan, ook bij een herziening
-  om de meetings; onleesbaarheid zelf stuurt geen herziening. Alleen een ander aantal chatgesprekken hoort bij de kern
-  (`kern_anders`), inclusief een daling na een `buiten:` gegevenscorrectie. Een opgepakte dagregel met een oude titel
-  "0 chatgesprekken" of "minstens 0 chatgesprekken" krijgt eenmalig een herziening naar de nieuwe titel zodra de
-  gesprekkentabel leesbaar is (X3).
+  om de meetings; de titel zegt dan "chat laatst gezien: minstens N chatgesprekken" bij N > 0, anders "chat onbekend".
+  Onleesbaarheid zelf stuurt geen herziening. De chatkern (`kern_anders`) vergelijkt positieve aantallen en behandelt
+  onbekend en nul gelijk; een stijging vanaf nul of daling naar nul na een `buiten:` gegevenscorrectie geeft wel revisie.
+  Een opgepakte dagregel met een oude zekere nultitel, een chatstaart zonder "minstens" of `chat.telling` `volledig`
+  krijgt eenmalig een herziening zodra de gesprekkentabel leesbaar is en de dag binnen `TERUGBLIK` valt (X3, RZ15).
+  Oude dagregels in de vorm van vóór 22-10 buiten het venster blijven als geschiedenis staan zonder migratie; De
+  Regisseur telt uit `gesprek_log` en De Dagbundelaar kopieert alleen de dagtitel.
 - **Zoom-profielen** (`koppelingen/zoom.py`): `stack` is de Server-to-Server-app van de stack (`ZOOM_ACCOUNT_ID`,
   `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`), `lees` de alleen-lezende app "Zoomwacht lezen" (`ZOOM_LEES_CLIENT_ID`,
   `ZOOM_LEES_CLIENT_SECRET`, zo nodig `ZOOM_LEES_ACCOUNT_ID`). Zonder leesapp leest het profiel `lees` met de stack.

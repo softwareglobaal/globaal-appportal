@@ -220,7 +220,8 @@ TOOLS = [
     {"name": "voorstellen", "description": "De voorstellen op het bord (standaard de open), optioneel van een agent. Van de parameters alleen de lengte.",
      "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}, "status": {"type": "string"}}}},
     {"name": "gesprekken", "description": "De gesprekkentabel (Fathom, Zoom, Plaud) tussen twee Brusselse datums, alleen de gesprekken die tellen; "
-                                          "dubbels als aantal, Zoom-chats apart, mail alleen als aantal per dag (bron mail). Met de laatste lezing "
+                                          "dubbels als aantal, Zoom-chats apart als ondergrens van geziene gesprekken: 0 betekent geen gezien, "
+                                          "zonder uitspraak over niet geziene chats; mail alleen als aantal per dag (bron mail). Met de laatste lezing "
                                           "per bron en de Zoom-telling uit de dagregel. Een privégesprek geeft alleen datum, start en minuten.",
      "input_schema": {"type": "object", "properties": {"van": {"type": "string", "description": "JJJJ-MM-DD"}, "tot": {"type": "string"},
                                                        "bron": {"type": "string"}, "persoon": {"type": "string"},
@@ -702,7 +703,8 @@ def gesprekken_lees(van=None, tot=None, bron=None, persoon=None, soort=None):
     """De gesprekkentabel tussen twee Brusselse datums (R4, M3, M5, L9, J10).
     - Standaard bron fathom, zoom en plaud, alleen de rijen die tellen (dubbel_van leeg); dubbels als aantal. Een rij met
       dubbel_van buiten:... telt niet voor Mehdi en komt nergens in (J10).
-    - Zoom-chats apart, alleen als aantal. Mail alleen met bron mail, en dan alleen aantallen per dag.
+    - Zoom-chats apart als ondergrens van geziene gesprekken: nul betekent geen gezien. Mail alleen met bron mail, en
+      dan alleen aantallen per dag.
     - Een privérij geeft alleen datum, start, minuten, bron en prive: niet met wie (M3). Privé is de OF over alle rijen
       van dezelfde sessie, dubbels inbegrepen (M1, BAS-02): een Fathom-rij die zelf niet privé is, met een Zoom-dubbel die
       het wel is, geeft ook alleen dat. Met persoon wordt alleen in de niet-privérijen gezocht; de privérijen van die
@@ -765,7 +767,8 @@ def gesprekken_lees(van=None, tot=None, bron=None, persoon=None, soort=None):
         if persoon:
             uit["prive_in_deze_periode"] = prive_buiten_zoek
     if soort != "gesprek":
-        uit["chats"] = {"aantal": len(chats), "prive": sum(1 for r in chats if _rij_prive(r))}
+        uit["chats"] = {"gezien": len(chats), "prive_gezien": sum(1 for r in chats if _rij_prive(r)),
+                        "telling": "ondergrens"}
     return uit
 
 
