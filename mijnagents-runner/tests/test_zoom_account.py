@@ -1495,6 +1495,58 @@ def test_bouw_za11_eerste_scan_wordt_weekbasis_voor_hermeting():
          "schrijf_van": 6, "schrijf_naar": 6}]
 
 
+def test_bouw_za14_onbekende_weekbasis_gebruikt_eerste_later_gemeten_rechten():
+    rows = [{"app_id": "fictiefc", "app_name": "Verzonnen Kalender", "app_status": "PUBLISHED"}]
+    standen = []
+    for detail in ({"scopes": ["View and manage your meetings"]},
+                   {"app_scopes": ["openid", "profile"]},
+                   {"app_scopes": ["openid", "profile", "meeting:write:meeting:admin"]}):
+        d = proefstand()
+        d["apps"] = ZA.apps(rows, {"fictiefc": detail})
+        standen.append((d, [], True, 24))
+    assert [x[0]["apps"]["overzicht"][0]["rechten"] for x in standen] == [None, 2, 3]
+    assert [x[0]["apps"]["overzicht"][0]["schrijf"] for x in standen] == [None, 0, 1]
+
+    class Agent:
+        def __init__(self, naam):
+            pass
+        def log(self, *_):
+            pass
+    class R:
+        werkwijze = "## Accountscan\nACCOUNTSCAN: aan\n"
+        agent = Agent("zoom-wacht")
+        def nood(self, *_):
+            pass
+        def bron(self, *_):
+            pass
+    overzichten = []
+    def schrijf(_agent, item):
+        if item["inhoud"].get("soort") == "weekoverzicht":
+            overzichten.append(item["inhoud"]["apps"])
+        return True
+    staat = {}
+    with patch.object(Z, "leesapp", return_value=True), patch.object(Z, "leesapp_fout", return_value=""), \
+         patch.object(Z, "leesapp_verboden", return_value=[]), \
+         patch.object(ZA, "lees_week", side_effect=standen), \
+         patch.object(ZA, "adviezen", return_value=[]), \
+         patch.object(ZA, "voorstellen_lezen", return_value=[]), \
+         patch.object(ZA, "_schrijf_item", side_effect=schrijf), \
+         patch.object(ZA.bord, "Agent", Agent):
+        w = {"identiteit_ok": True, "ik": {"id": "vaste-id", "pmi": "9100000001"}}
+        for uur in range(3):
+            ZA.ronde(R(), w, staat, KLOK + timedelta(hours=uur), forceer=True)
+
+    code = next(iter(staat["account"]["rechten_weekbasis"]["apps"]))
+    assert staat["account"]["rechten_weekbasis"]["apps"][code]["rechten"] is None
+    assert staat["account"]["rechten_weekbasis"]["apps"][code]["schrijf"] is None
+    assert len(overzichten) == 3
+    assert [x["onbekende_vergelijkingen"] for x in overzichten] == [1, 1, 0]
+    assert all(x["rechten_veranderd"].startswith("onbekend") for x in overzichten[:2])
+    assert overzichten[2]["rechten_veranderd"] == [
+        {"naam": "externe app", "rechten_van": 2, "rechten_naar": 3,
+         "schrijf_van": 0, "schrijf_naar": 1}]
+
+
 def test_bouw_za9_marketplace_pagineert_met_honderd_in_beide_scans():
     d, fouten, volledig, _, gevraagd, wijzig = _za9_proefweek(pagineer=True, wijziging=True)
     assert volledig and d["apps"]["aantal"] == 101, fouten

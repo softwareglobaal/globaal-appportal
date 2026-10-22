@@ -957,7 +957,11 @@ def apprechten_veranderd(vorige_basis, huidige_apps, laatste_bewijs=None):
                 "onbekende_vergelijkingen": len(huidige_lijst)}
     nu = {x["code"]: x for x in huidige_lijst}
     vorig = dict(vorig) if isinstance(vorig, dict) else {}
-    vorig.update({code: bewijs[code] for code in bewijs.keys() - vorig.keys()})
+    for code, meting in bewijs.items():
+        oud = vorig.get(code)
+        if code not in vorig or isinstance(oud, dict) and any(
+                _tel(oud.get(k)) is None for k in ("rechten", "schrijf")):
+            vorig[code] = meting
     veranderd = []
     # Nieuwe en verdwenen apps hebben geen meting aan beide kanten van de vergelijking.
     onbekend = len(vorig.keys() ^ nu.keys())
