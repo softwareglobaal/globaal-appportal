@@ -9,13 +9,24 @@ is de bedoeling. Nooit in een chat.
     zoom_leesapp.py                    alleen toetsen, niets schrijven
     zoom_leesapp.py --zet --vervang    bestaande sleutels vervangen (na een extra recht in Zoom, of een foute sleutel)
 
-Schrijven, alleen met --zet: eerst haalt het met de drie nieuwe waarden een token, in het geheugen. Komt er geen, dan
-schrijft het niets ("niets geschreven: geen token met deze sleutels"): een foute sleutel in .env liet De Zoomwacht met
-de leesapp lezen zonder token (ZOO-10). Komt er wel een, dan ZOOM_LEES_CLIENT_ID en ZOOM_LEES_CLIENT_SECRET in
-~/appportal/.env, alleen als ze er nog niet staan (met --vervang ook dan; staat er een andere waarde, dan zegt het
-dat). De Account ID vergelijkt het stil met ZOOM_ACCOUNT_ID van de stack; alleen bij een verschil komt
-ZOOM_LEES_ACCOUNT_ID erbij. Het bestand wordt atomisch vervangen (tijdelijk bestand ernaast, rechten 600,
-os.replace); de andere regels blijven zoals ze waren. Er wordt nooit een waarde afgedrukt.
+Schrijven, alleen met --zet, en pas na drie toetsen met de drie nieuwe waarden in het geheugen (RZ4-02, 22-10-2026: tot
+dan stonden de sleutels al in .env voor de eigenaar gecontroleerd was). Faalt er een, dan schrijft het niets, is de
+exitcode niet nul en zegt de laatste regel waarom ("niets geschreven: ..."):
+1. een token. Komt er geen, dan "geen token met deze sleutels": een foute sleutel in .env liet De Zoomwacht met de
+   leesapp lezen zonder token (ZOO-10);
+2. de rechten: een verboden recht wordt geweigerd (zie hieronder), voor er een vraag naar Zoom gaat;
+3. de eigenaar: de host van het meest voorkomende nummer in Mehdi's eigen Fathom-opnames (/meetings/<nummer>) moet
+   /users/me van de nieuwe app zijn, beide gelezen met het token van de nieuwe sleutels (profiel nieuw van zoom.py,
+   nooit een sleutel uit .env en nooit de app van de stack). En die gebruiker moet de eigenaar van de app van de stack
+   zijn (/users/me met het profiel stack, gemeten: Mehdi): het anker van ZOO-08, ook hier (tegenproef op RZ4-02,
+   22-10-2026: is dat nummer de ruimte van een collega en de nieuwe app van die collega, dan klopten de eerste twee en
+   stonden zijn sleutels in .env). Anders "de eigenaar van de nieuwe app is niet de host van het eigen Fathom-nummer",
+   "de eigenaar van de nieuwe app is niet de eigenaar van de app van de stack", of "eigenaar niet te controleren" met
+   de reden.
+Pas dan ZOOM_LEES_CLIENT_ID en ZOOM_LEES_CLIENT_SECRET in ~/appportal/.env, alleen als ze er nog niet staan (met
+--vervang ook dan; staat er een andere waarde, dan zegt het dat). De Account ID vergelijkt het stil met ZOOM_ACCOUNT_ID
+van de stack; alleen bij een verschil komt ZOOM_LEES_ACCOUNT_ID erbij. Het bestand wordt atomisch vervangen (tijdelijk
+bestand ernaast, rechten 600, os.replace); de andere regels blijven zoals ze waren. Er wordt nooit een waarde afgedrukt.
 
 Een verboden recht (13.6, rechten-zoomwacht-lezen.md, Nooit aanvinken: elk recht met write, update of delete, de
 sleutels om als gebruiker te starten, de bediening van een ruimte, chatberichten, AI-samenvattingen en archieven): dan
@@ -159,9 +170,55 @@ def vragen():
     return waarden
 
 
+def eigenaar_nieuwe_app():
+    """RZ4-02: is de nieuwe app van Mehdi? Drie gebruikers moeten dezelfde zijn: de host van het meest voorkomende
+    eigen Fathom-nummer (/meetings/<nummer>) en /users/me van de nieuwe app, beide gelezen met het token van de nieuwe
+    sleutels in het geheugen (profiel nieuw; zoom.nieuw_token staat dan al), en /users/me van de app van de stack, het
+    anker van ZOO-08 (gemeten: Mehdi). Geeft None als dat klopt, anders de reden. Drukt nooit een id af.
+    Tegenproef op RZ4-02 (22-10-2026): tot dan vergeleek ik alleen de host met de nieuwe app. Was het meest voorkomende
+    nummer de ruimte van een collega (het geval van ZOO-08) en de nieuwe app van die collega, dan klopte dat, en stonden
+    zijn sleutels in .env; zonder ZOOM_MEHDI_USER las De Zoomwacht daarna zijn gesprekken. De stack lees ik alleen als
+    host en nieuwe app al gelijk zijn, en alleen /users/me."""
+    nummer = eigen_nummer()
+    if not nummer:
+        return "eigenaar niet te controleren: geen eigen opnames in het Fathom-archief"
+    Z.vastzetten(None)
+    Z.nummer_erbij(nummer)
+    try:
+        return _eigenaar_vergelijken(nummer)
+    finally:
+        Z.vastzetten(None)
+
+
+def _eigenaar_vergelijken(nummer):
+    """Binnen het venster van eigenaar_nieuwe_app (vastzetten(None), het nummer erbij): de drie gebruikers lezen en
+    vergelijken. Geeft None of de reden."""
+    try:
+        host = str((Z.lees(f"/meetings/{nummer}", profiel=Z.NIEUW) or {}).get("host_id") or "")
+        eigenaar = str((Z.lees("/users/me", profiel=Z.NIEUW) or {}).get("id") or "")
+    except Z.ZoomFout as e:
+        return f"eigenaar niet te controleren ({e})"
+    if not host:
+        return "eigenaar niet te controleren: Zoom gaf geen host voor het eigen Fathom-nummer"
+    if not eigenaar:
+        return "eigenaar niet te controleren: de nieuwe app gaf geen eigen gebruiker"
+    if host != eigenaar:
+        return "de eigenaar van de nieuwe app is niet de host van het eigen Fathom-nummer"
+    try:
+        stack = str((Z.lees("/users/me", profiel="stack") or {}).get("id") or "")
+    except Z.ZoomFout as e:
+        return f"eigenaar niet te controleren: eigenaar van de app van de stack onbekend ({e})"
+    if not stack:
+        return "eigenaar niet te controleren: eigenaar van de app van de stack onbekend"
+    if eigenaar != stack:
+        return "de eigenaar van de nieuwe app is niet de eigenaar van de app van de stack"
+    return None
+
+
 def zetten(vervang=False):
-    """De drie waarden vragen, eerst een token halen in het geheugen, en pas dan schrijven (ZOO-10). Geeft False als
-    er geen token kwam: dan staat er niets nieuws in .env, en is de laatste regel 'niets geschreven: ...'."""
+    """De drie waarden vragen en pas schrijven na drie toetsen in het geheugen: een token (ZOO-10), geen verboden recht
+    (13.6) en de eigenaar (RZ4-02). Geeft False als een toets faalt: dan staat er niets nieuws in .env, en is de laatste
+    regel 'niets geschreven: <reden>'."""
     w = vragen()
     try:
         d = Z.token_halen(w["client"], w["geheim"], w["account"])
@@ -176,6 +233,19 @@ def zetten(vervang=False):
         print(f"geweigerd: de app heeft een recht dat ze nooit mag hebben ({MARKETPLACE})")
         print("niets geschreven: verboden recht " + ", ".join(fout) + wacht_op_mehdi(fout))
         return False
+    # RZ4-02: de eigenaar met het nieuwe token, in het geheugen, voor er iets in .env komt
+    try:
+        Z.nieuw_token(d)
+        reden = eigenaar_nieuwe_app()
+    except Z.ZoomFout as e:
+        reden = f"eigenaar niet te controleren ({e})"
+    finally:
+        Z.nieuw_vergeten()
+    if reden:
+        print("eigenaar van de nieuwe app: niet zeker")
+        print(f"niets geschreven: {reden}")
+        return False
+    print("eigenaar van de nieuwe app: de host van het eigen Fathom-nummer en de eigenaar van de app van de stack")
     nieuw = {"ZOOM_LEES_CLIENT_ID": w["client"], "ZOOM_LEES_CLIENT_SECRET": w["geheim"]}
     if w["account"] != Z._sleutel("ZOOM_ACCOUNT_ID"):
         nieuw["ZOOM_LEES_ACCOUNT_ID"] = w["account"]

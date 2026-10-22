@@ -1,6 +1,6 @@
 # Werkwijze van De Zoomwacht (Privé · Communicatie)
 
-Versie 2 (21-10-2026, telt elk Zoom-gesprek, koppelt aan Fathom, vangnet en dagregel per afgelopen dag; eerder Versie 1 van 10-09-2026)
+Versie 2.1 (22-10-2026, RZ4-02 en RZ4-04: met een Zoom-gebruiker die niet de eigenaar van de vaste vergaderruimte is, schrijf ik niets, alleen een nood; zoom_leesapp.py bewaart sleutels pas na de controle van de eigenaar; De Dagbundelaar is de laatste stap van de ochtendketen; eerder Versie 2 van 21-10-2026: telt elk Zoom-gesprek, koppelt aan Fathom, vangnet en dagregel per afgelopen dag; eerder Versie 1 van 10-09-2026)
 
 ## Mandaat
 
@@ -35,7 +35,9 @@ van de vaste vergaderruimte en de opnames; mijn telling is dan een ondergrens ("
 
 1. Twee keer per dag, in de gesprekkenketen na De Fathomwacht: 07:00 en 13:00 UTC, dat is 09:00 en 15:00 in Brussel
    tot en met 24-10-2026 en 08:00 en 14:00 vanaf 25-10-2026. De keten loopt onder een slot, zodat Fathom altijd eerst
-   klaar is; De Dagbundelaar wacht op hetzelfde slot.
+   klaar is; in de ochtendketen van een werkdag draait De Dagbundelaar na mij, als laatste stap van dezelfde keten.
+   Is de Zoom-gebruiker waarmee ik lees niet de eigenaar van Mehdi's vaste vergaderruimte, dan schrijf ik die ronde
+   niets: geen rij, geen koppeling, geen vangnet, geen dagregel en geen stand. Ik meld dan alleen een nood voor Mehdi.
 2. Ik lees de sessies van de laatste zeven dagen uit alle bronnen en voeg ze samen op uuid. Een sessie die ik eerder
    zag, blijft meetellen, ook als geen bron ze nog geeft: wat een bron vandaag niet geeft, is onbekend, niet weg. Een
    sessie met minder dan twee mensen is "alleen Mehdi in de ruimte": geen gesprek, alleen een teller. Staat er van zo'n
@@ -118,7 +120,8 @@ van de vaste vergaderruimte en de opnames; mijn telling is dan een ondergrens ("
 
 - De alleen-lezende Zoom-app "Zoomwacht lezen" (Mehdi, ongeveer tien minuten): de stappen staan in het ontwerp
   regie-zoom, punt 8.1. Daarna zoom_leesapp.py met --zet op de VM; dat script schrijft alleen sleutels die een token
-  geven, en toetst de rechten, de eigenaar van de vaste vergaderruimte en het downloadrecht. Tot dan is mijn telling
+  geven, geen verboden recht hebben en waarvan de eigenaar de host van de vaste vergaderruimte en de eigenaar van de
+  app van de stack is, en toetst daarna de rechten, de vaste vergaderruimte en het downloadrecht. Tot dan is mijn telling
   een ondergrens en meld ik dat als nood. Geven de sleutels later geen token meer, dan lees ik weer met de app van de
   stack en meld ik dat ook.
 - De tabel Betrokken personen met de e-mailadressen van de collega's: zonder adres is een collega voor mij onbekend en

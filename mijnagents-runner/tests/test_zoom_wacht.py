@@ -5,8 +5,9 @@ bevroor bij het oppakken, de gesprekkentabel telde elk gesprek met Fathom twee k
 zoom_wacht.py. Deze test legt vast wat het ontwerp belooft, met de T-nummers van hoofdstuk 6 en 13.5: T05 tot T30,
 T95, T96, T101, T102, T104, T106 en de K5-regressie bij T23. Daarna de bevindingen van de tegenlezing (ZOO-01 tot
 ZOO-10, 21-10-2026), van de bouwcontrole (RZ2-05, met EIGEN-1 tot EIGEN-3 uit 13.6, 22-10-2026) en van de
-herstelcontrole (RZ3-04, 22-10-2026: het Zoom-transcript geweigerd tot Mehdi beslist): elk eerst als falende test op de
-code van toen, dan hersteld in de bron.
+herstelcontrole (RZ3-04, 22-10-2026: het Zoom-transcript geweigerd tot Mehdi beslist) en van de tweede herstelcontrole
+(RZ4-02, 22-10-2026: de leesapp schrijft pas na de eigenaarscontrole, De Zoomwacht schrijft niets met een vreemde
+gebruiker): elk eerst als falende test op de code van toen, dan hersteld in de bron.
 
 Geen netwerk en geen sleutels. Nagebootst: de Zoom-API op het laagste niveau (zoom._vraag en het token), de Fathom-API,
 een tijdelijk Fathom-archief en een tijdelijke zoom-data, en de klok (zoom_wacht.nu). Het bord is het echte bord
@@ -296,6 +297,7 @@ ECHTE_DB_LEES = bord.db_lees
 # De echte tokenweg van zoom.py, voor de toetsen met twee apps (EIGEN-1, EIGEN-2): Wereld vervangt _toegang.
 ECHTE_TOEGANG, ECHTE_RECHTEN = Z._toegang, Z.rechten
 ECHTE_DOWNLOAD = Z.download          # RZ3-04: de proefdownload langs de echte download() met haar grendels
+ECHTE_LEES = Z.lees                  # RZ4-02: de eigenaarscontrole van de leesapp langs de echte lees() met haar grendels
 
 
 class Wereld:
@@ -888,7 +890,49 @@ def test_t21_de_gebruiker_is_niet_de_eigenaar_van_de_ruimte():
         w.fathom_opname(str(620 + i), None, nummer=PMI, start=bxl("2026-10-20 12:00") + timedelta(hours=i))
     assert w.ronde(NU) is None
     assert w.bord.noden().get("De Zoom-gebruiker van de leesapp is niet de eigenaar van de vaste vergaderruimte") == "mehdi"
-    assert w.dagregel("2026-10-20")[1]["telling"] != "volledig"
+    # RZ4-02: tot 22-10-2026 schreef de ronde dan toch een dagregel (een ondergrens); nu schrijft ze niets
+    assert w.dagregel("2026-10-20")[0] is None, "met een vreemde Zoom-gebruiker geen dagregel"
+
+
+@bord_nodig
+def test_rz4_02_zoomwacht_schrijft_niets_als_de_identiteit_niet_klopt():
+    """RZ4-02 (Codex RZ4-herstelcontrole, 22-10-2026): is de Zoom-gebruiker van de leesapp niet de eigenaar van de vaste
+    vergaderruimte (identiteit_ok onwaar), dan meldde De Zoomwacht het verschil maar schreef ze toch de gesprekken, de
+    koppelingen, de dagregels en de Zoom-tekst van een vreemde gebruiker weg. Nu schrijft ze niets: geen rij, geen
+    koppeling, geen klaarzet, geen vangnetmap, geen download en geen staat, ook niet met --koppel-sinds. Alleen de nood
+    voor Mehdi en een hartslag die zegt dat er niets geschreven is."""
+    ander = "9100000099"
+    w = Wereld(ik=dict(IK, pmi=ander))
+    # een oude rij met een joinlink, die --koppel-sinds anders zou koppelen en leegmaken
+    w.bord.call("/api/gesprekken", {"rijen": [{"uniek": "zoom:meeting:oud-rz4", "datum": "2026-09-26", "start": "10:00", "minuten": 30,
+                                               "personen": "Proefpersoon Zeta, Mehdi", "afdeling": "unabo", "thema": "Proefonderwerp Omega",
+                                               "prive": False, "zekerheid": "middel", "waarom": "oud",
+                                               "link": "https://us06web.zoom.us/j/8300000001", "opgenomen_door": "Mehdi", "bron": "zoom"}]})
+    w.fathom_opname("830", None, nummer="8300000001", start=bxl("2026-09-26 10:00") + timedelta(seconds=50), einde=bxl("2026-09-26 10:29"))
+    # in de ruimte van de vreemde gebruiker: een sessie met Fathom (koppeling) en een zonder (vangnet)
+    s1 = w.zoom.sessie("rz4-a", bxl("2026-10-20 09:00"), 20, nummer=ander)
+    w.zoom.opname(s1)
+    w.fathom_opname("820", s1)
+    w.zoom.opname(w.zoom.sessie("rz4-b", bxl("2026-10-20 11:00"), 30, nummer=ander))
+    # het eigen Fathom-account zit meestal in een ander nummer: de identiteit klopt niet
+    for i in range(3):
+        w.fathom_opname(str(821 + i), None, nummer=PMI, start=bxl("2026-10-20 13:00") + timedelta(hours=i))
+    w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
+                    [{"date_time": "2026-10-20T08:00:00Z", "sender": "info@h-invest.test"},
+                     {"date_time": "2026-10-20T08:05:00Z", "sender": TEAM_ADRES}])]
+    voor = w.bord.sql("SELECT * FROM gesprek_log ORDER BY uniek")
+    assert w.ronde(NU, "--koppel-sinds", "2026-09-07") is None
+    for pad in ("/api/gesprekken", "/api/gesprekken/koppel", "/api/klaarzet"):
+        assert not w.bord.posts(pad), (pad, w.bord.posts(pad))
+    assert w.bord.sql("SELECT * FROM gesprek_log ORDER BY uniek") == voor, "een rij of koppeling veranderde"
+    assert not w.bord.sql("SELECT uniek FROM klaarzet WHERE van='zoom-wacht'"), "klaarzet met een vreemde gebruiker"
+    assert not w.vangnetmappen() and not w.zoom.downloads_gevraagd() and not os.path.exists(ZW.STAAT)
+    assert not w.bord.sql("SELECT tekst FROM logboek WHERE naam='zoom-wacht' AND stap='schrijf'")
+    assert w.bord.noden().get("De Zoom-gebruiker van de leesapp is niet de eigenaar van de vaste vergaderruimte") == "mehdi", \
+        w.bord.noden()
+    st = w.bord.status()
+    assert st["status"] == "waakt" and st["detail"] == ("niets geschreven: de Zoom-gebruiker van de leesapp is niet de eigenaar "
+                                                        "van de vaste vergaderruimte"), st
 
 
 # ----------------------------------------------------------------------------------------------- dagregel ---
@@ -959,7 +1003,13 @@ def test_t25_bron_en_zaad():
     assert any("ander Fathom-account" in p for p in beslist), "13.1: de opnames van een ander account staan bij Wat Mehdi beslist"
     assert "\N{EM DASH}" not in ZAAD and "\N{EN DASH}" not in ZAAD and not bord.HTML.search(ZAAD), "N9 en NA44"
     assert "```" not in ZAAD and "~~~" not in ZAAD and len(ZAAD) >= 500
-    assert ZAAD.splitlines()[2].startswith("Versie 2 ("), ZAAD.splitlines()[2]
+    assert ZAAD.splitlines()[2].startswith("Versie 2.1 ("), ZAAD.splitlines()[2]
+    # RZ4-02 en RZ4-04 (22-10-2026): het zaad zegt wat de code doet bij een vreemde Zoom-gebruiker, wanneer de leesapp
+    # sleutels bewaart, en dat De Dagbundelaar de laatste stap van de ochtendketen is (geen eigen wachttijd meer)
+    zaad = " ".join(ZAAD.split())
+    assert "schrijf ik die ronde niets" in zaad and "nood voor Mehdi" in zaad, "RZ4-02: Zoomwacht"
+    assert "eigenaar van de app van de stack" in zaad, "RZ4-02: leesapp"
+    assert "laatste stap van dezelfde keten" in zaad and "wacht op hetzelfde slot" not in zaad, "RZ4-04"
     import controle_agenten as CA  # noqa: PLC0415
     assert CA.n2_grenzen_in_werkwijze({"werkwijze": ZAAD}, None)[0] and CA.n9_stijl({"werkwijze": ZAAD}, None)[0]
     assert not CA.GEHEIM.search(ZAAD), "N8"
@@ -1406,6 +1456,11 @@ def test_t106_leesapp_schrijft_atomisch_met_600_en_toont_geen_waarde():
     ZL.ENV = env
     ZL.getpass.getpass = lambda vraag: geheim[vraag]
     Z.token_halen = lambda cid, geheim_, account: {"access_token": "proef", "scope": ""}     # ZOO-10: eerst een token
+    # RZ4-02: dan de eigenaar, met het nieuwe token: de host van het eigen Fathom-nummer is /users/me van de nieuwe app
+    ZL.eigen_nummer = lambda: PMI
+    Z.lees = lambda pad, params=None, profiel="lees": {f"/meetings/{PMI}": {"host_id": "host-xyz-77"},
+                                                        "/users/me": {"id": "host-xyz-77"},
+                                                        "/users/host-xyz-77": {"id": "host-xyz-77", "pmi": int(PMI)}}[pad]
     os.replace = lambda a, b: (vervangen.append((a, b)), echt_replace(a, b))[1]
     Z._BESTANDEN, Z._LEES_BESTANDEN = (env,), (env,)
     for k in [k for k in os.environ if k.startswith("ZOOM_")]:
@@ -1433,10 +1488,6 @@ def test_t106_leesapp_schrijft_atomisch_met_600_en_toont_geen_waarde():
         # toetsen: alleen namen, ja of nee; J17 schrijft ZOOM_MEHDI_USER zelf, met --zet en alleen als de host de
         # eigenaar van de app van de stack is (ZOO-08)
         Z.rechten = lambda profiel="lees": set(ZL.KERN) - {"report:read:user:admin"}
-        ZL.eigen_nummer = lambda: PMI
-        Z.lees = lambda pad, params=None, profiel="lees": {f"/meetings/{PMI}": {"host_id": "host-xyz-77"},
-                                                            "/users/me": {"id": "host-xyz-77"},
-                                                            "/users/host-xyz-77": {"id": "host-xyz-77", "pmi": int(PMI)}}[pad]
         Z.opnames = lambda van, tot, profiel="lees": [{"bestanden": [{"id": "f1", "soort": "TRANSCRIPT", "status": "completed", "start": "x"}]}]
         Z.download = lambda bid, profiel="lees", max_bytes=0: b"WEBVTT"
         with redirect_stdout(uit):
@@ -1744,6 +1795,9 @@ def test_zoo10_een_foute_sleutel_noemt_vervang():
         ZL.getpass.getpass = lambda vraag: {"Account ID: ": "stack-account-1234", "Client ID: ": "lees-client-445566",
                                             "Client Secret: ": "het-juiste-geheim"}[vraag]
         Z.token_halen = lambda cid, geheim, account: {"access_token": "x", "scope": ""}
+        # RZ4-02: de eigenaar van de nieuwe app klopt, zodat --zet aan het schrijven toekomt
+        ZL.eigen_nummer = lambda: PMI
+        Z.lees = lambda pad, params=None, profiel="lees": {f"/meetings/{PMI}": {"host_id": "mehdi-id"}, "/users/me": {"id": "mehdi-id"}}[pad]
         uit = io.StringIO()
         with redirect_stdout(uit):
             assert ZL.main(["--zet"]) == 1
@@ -1852,11 +1906,14 @@ def test_zoo06_een_gewoon_woord_als_prive_onderwerp_verminkt_niets():
     assert w.bord.rij("zoom:chat:iemand@elders.test:2026-10-20")["prive"] == 1
 
 
-def _zoo08_zoom(host, eigenaar):
-    """Zoom voor de toets van de leesapp: de host van het eigen Fathom-nummer en de eigenaar van de stack-app (/users/me)."""
+def _zoo08_zoom(host, eigenaar, nieuw=None):
+    """Zoom voor de toets van de leesapp: de host van het eigen Fathom-nummer, de eigenaar van de stack-app (/users/me)
+    en de eigenaar van de nieuwe app bij --zet (/users/me met het profiel nieuw, RZ4-02; standaard dezelfde)."""
     def lees(pad, params=None, profiel="lees"):
         if pad == "/users/me" and profiel == "stack":
             return {"id": eigenaar}
+        if pad == "/users/me" and profiel == Z.NIEUW:
+            return {"id": nieuw or eigenaar}
         if pad == f"/meetings/{PMI}":
             return {"host_id": host}
         if pad.startswith("/users/"):
@@ -1887,12 +1944,23 @@ def test_zoo08_leesapp_kiest_de_gebruiker_alleen_met_zet_en_alleen_de_eigenaar()
             assert ZL.main([]) == 1
         assert open(env, encoding="utf-8").read() == voor, "de toets zonder --zet schreef in .env"
         assert uit.getvalue().strip().splitlines()[-1] == "ontbreekt: ZOOM_MEHDI_USER (alleen met --zet)", uit.getvalue()
-        # 2. de host is een collega: ook met --zet niets, en 'gebruiker niet zeker'
-        _zoo08_zoom("collega-id", "mehdi-id")
+        # 2. de host is een collega, en de nieuwe app ook. Met --zet stopt het sinds de tegenproef op RZ4-02 al in
+        # zetten(): de eigenaar van de nieuwe app is niet die van de app van de stack (het anker van ZOO-08). Niets
+        # geschreven, ook geen ZOOM_MEHDI_USER.
+        _zoo08_zoom("collega-id", "mehdi-id", nieuw="collega-id")
+        voor = open(env, encoding="utf-8").read()
         uit = io.StringIO()
         with redirect_stdout(uit):
             assert ZL.main(["--zet"]) == 1
-        assert "ZOOM_MEHDI_USER" not in open(env, encoding="utf-8").read()
+        assert open(env, encoding="utf-8").read() == voor and "ZOOM_MEHDI_USER" not in voor
+        assert uit.getvalue().strip().splitlines()[-1] == \
+            "niets geschreven: de eigenaar van de nieuwe app is niet de eigenaar van de app van de stack", uit.getvalue()
+        assert "collega-id" not in uit.getvalue() and "mehdi-id" not in uit.getvalue()
+        # de eigen toets van ZOO-08 (gebruiker_zetten), met de sleutels al in .env: ook zij schrijft niets
+        uit = io.StringIO()
+        with redirect_stdout(uit):
+            assert ZL.main([]) == 1
+        assert open(env, encoding="utf-8").read() == voor
         assert "gebruiker niet zeker" in uit.getvalue().strip().splitlines()[-1], uit.getvalue()
         assert "collega-id" not in uit.getvalue() and "mehdi-id" not in uit.getvalue()
         # 3. de host is de eigenaar: met --zet geschreven, en klaar
@@ -1918,6 +1986,131 @@ def test_zoo08_users_me_mag_voor_de_vaste_gebruiker_gezet_is():
         assert not Z.toegestaan("/users/me"), "na het vastzetten alleen nog de vaste gebruiker"
     finally:
         os.environ.pop("ZOOM_MEHDI_USER", None)
+        Z.vastzetten(None)
+
+
+def test_rz4_02_leesapp_schrijft_pas_na_de_eigenaarscontrole():
+    """RZ4-02 (Codex RZ4-herstelcontrole, 22-10-2026): --zet bewaarde de sleutels in .env voor de eigenaar gecontroleerd
+    was; pas de toets daarna keek naar de host van het eigen Fathom-nummer. Nu in deze volgorde, alles met de ingevoerde
+    waarden in het geheugen (profiel nieuw van zoom.py: nooit een sleutel uit .env en nooit de app van de stack): een
+    token, de rechten (een verboden recht: geweigerd, zonder een vraag aan Zoom), dan de eigenaar (de host van het meest
+    voorkomende eigen Fathom-nummer is /users/me van de nieuwe app). Pas als dat klopt, schrijft het, atomisch met
+    rechten 600. Anders schrijft het niets, is de exitcode niet nul en zegt de laatste regel waarom. Nooit een id of een
+    sleutel op het scherm."""
+    ZL, env, herstel = _leesapp_proef(["AGENTS_X=1", "ZOOM_ACCOUNT_ID=stack-account-1234", "ZOOM_CLIENT_ID=stack-client",
+                                       "ZOOM_CLIENT_SECRET=stack-geheim", "ZOOM_LEES_CLIENT_ID=oud-client-778899",
+                                       "ZOOM_LEES_CLIENT_SECRET=oud-geheim-778899"])
+    os.chmod(env, 0o644)
+    nieuw = {"Account ID: ": "stack-account-1234", "Client ID: ": "nieuw-client-445566", "Client Secret: ": "nieuw-geheim-112233"}
+    # wie /users/me is, per token: de oude leesapp in .env en de stack zijn van Mehdi, de nieuwe app van een collega
+    eigenaar = {"tok-oud": "mehdi-id", "tok-stack": "mehdi-id", "tok-nieuw": "collega-id"}
+    host = {"id": "mehdi-id"}
+    rechten = {"tok-nieuw": " ".join(sorted(KERN_PROEF))}
+    gevraagd = []
+
+    def vraag(url, koppen, max_bytes=0):
+        tok = koppen.get("Authorization", "")[len("Bearer "):]
+        pad = urllib.parse.urlsplit(url).path[len("/v2"):]
+        gevraagd.append((pad, tok))
+        if pad == "/users/me" and eigenaar[tok] is None:
+            return 500, "", b"{}"
+        if pad == "/users/me":
+            return 200, "", json.dumps({"id": eigenaar[tok]}).encode()
+        if pad == f"/meetings/{PMI}" and host["id"] is None:
+            return 400, "", json.dumps({"code": 4711, "message": "Invalid access token, does not contain scopes:"
+                                                                 "[meeting:read:meeting:admin]."}).encode()
+        if pad == f"/meetings/{PMI}":
+            return 200, "", json.dumps({"host_id": host["id"]}).encode()
+        raise AssertionError("onverwachte vraag " + pad)
+
+    def token(cid, geheim, account):
+        tok = {"nieuw-client-445566": "tok-nieuw", "oud-client-778899": "tok-oud"}.get(cid, "tok-stack")
+        return {"access_token": tok, "scope": rechten.get(tok, " ".join(sorted(KERN_PROEF)))}
+
+    def zet():
+        """--zet --vervang zoals Mehdi het draait; geeft (exitcode, schermuitvoer)."""
+        gevraagd.clear()
+        Z._tokens.clear()
+        uit = io.StringIO()
+        with redirect_stdout(uit), redirect_stderr(uit):
+            code = ZL.main(["--zet", "--vervang"])
+        return code, uit.getvalue()
+    try:
+        Z._toegang, Z.lees, Z._vraag, Z.token_halen = ECHTE_TOEGANG, ECHTE_LEES, vraag, token
+        ZL.getpass.getpass = lambda v: nieuw[v]
+        ZL.eigen_nummer = lambda: PMI
+        voor = open(env, encoding="utf-8").read()
+
+        def niets_geschreven(uit, reden):
+            assert uit.strip().splitlines()[-1] == f"niets geschreven: {reden}", uit
+            assert open(env, encoding="utf-8").read() == voor, "er werd toch iets in .env geschreven"
+            assert stat.S_IMODE(os.stat(env).st_mode) == 0o644, "het bestand werd vervangen"
+            assert "nieuw" not in Z._tokens, "het token van de nieuwe sleutels blijft niet in het geheugen"
+            for waarde in ("mehdi-id", "collega-id", "nieuw-client", "nieuw-geheim", "oud-geheim", "stack-account"):
+                assert waarde not in uit, f"een waarde werd afgedrukt: {waarde}"
+        # 0. het profiel nieuw zonder token leest niets: geen sleutel uit .env, geen terugval op de stack
+        Z.vastzetten(None)
+        try:
+            Z.lees("/users/me", profiel="nieuw")
+            raise AssertionError("lees() met het profiel nieuw zonder token las toch")
+        except Z.ZoomFout:
+            pass
+        assert gevraagd == [], gevraagd
+        # 1. de nieuwe app is van een collega: niets geschreven, ook al is de oude leesapp in .env van Mehdi
+        code, uit = zet()
+        assert code == 1, uit
+        niets_geschreven(uit, "de eigenaar van de nieuwe app is niet de host van het eigen Fathom-nummer")
+        assert {t for _, t in gevraagd} == {"tok-nieuw"}, f"de controle las niet met het nieuwe token: {gevraagd}"
+        assert {p for p, _ in gevraagd} == {f"/meetings/{PMI}", "/users/me"}, gevraagd
+        # 1b. tegenproef op RZ4-02 (22-10-2026), het geval van ZOO-08: het meest voorkomende eigen Fathom-nummer is de
+        # ruimte van een collega en de nieuwe app is van die collega. Host en nieuwe app zijn dan gelijk, en tot hier
+        # schreef --zet de sleutels. Het anker is de eigenaar van de app van de stack (gemeten: Mehdi); die is anders.
+        host["id"], eigenaar["tok-nieuw"] = "collega-id", "collega-id"
+        code, uit = zet()
+        assert code == 1, uit
+        niets_geschreven(uit, "de eigenaar van de nieuwe app is niet de eigenaar van de app van de stack")
+        assert [p for p, t in gevraagd if t == "tok-stack"] == ["/users/me"], f"met de stack alleen /users/me: {gevraagd}"
+        assert {t for _, t in gevraagd} == {"tok-nieuw", "tok-stack"}, gevraagd
+        # 1c. de eigenaar van de app van de stack is niet te lezen: niet te controleren, niets geschreven
+        host["id"], eigenaar["tok-nieuw"], eigenaar["tok-stack"] = "mehdi-id", "mehdi-id", None
+        code, uit = zet()
+        assert code == 1, uit
+        niets_geschreven(uit, "eigenaar niet te controleren: eigenaar van de app van de stack onbekend (HTTP 500)")
+        eigenaar["tok-stack"], eigenaar["tok-nieuw"] = "mehdi-id", "collega-id"
+        # 2. geen eigen Fathom-nummer: de eigenaar is niet te controleren, dus niets geschreven en niets gevraagd
+        ZL.eigen_nummer = lambda: ""
+        code, uit = zet()
+        assert code == 1 and gevraagd == [], (code, gevraagd)
+        niets_geschreven(uit, "eigenaar niet te controleren: geen eigen opnames in het Fathom-archief")
+        ZL.eigen_nummer = lambda: PMI
+        # 3. de nieuwe app mag de meeting niet lezen: niet te controleren, niets geschreven
+        eigenaar["tok-nieuw"], host["id"] = "mehdi-id", None
+        code, uit = zet()
+        assert code == 1, uit
+        niets_geschreven(uit, "eigenaar niet te controleren (geen recht: meeting:read:meeting:admin)")
+        # 4. een verboden recht: geweigerd voor er iets naar Zoom gaat
+        host["id"], rechten["tok-nieuw"] = "mehdi-id", " ".join(sorted(KERN_PROEF)) + " meeting:write:meeting:admin"
+        code, uit = zet()
+        assert code == 1 and gevraagd == [], (code, gevraagd)
+        niets_geschreven(uit, "verboden recht meeting:write:meeting:admin")
+        # 5. de nieuwe app is van Mehdi en hij is de host: dan pas geschreven, atomisch met rechten 600
+        rechten["tok-nieuw"] = " ".join(sorted(KERN_PROEF))
+        gevraagd.clear()
+        Z._tokens.clear()
+        uit = io.StringIO()
+        with redirect_stdout(uit), redirect_stderr(uit):
+            assert ZL.zetten(vervang=True) is True, uit.getvalue()
+        assert [p for p, t in gevraagd if t == "tok-stack"] == ["/users/me"], gevraagd
+        assert {p for p, t in gevraagd if t == "tok-nieuw"} == {f"/meetings/{PMI}", "/users/me"}, gevraagd
+        assert open(env, encoding="utf-8").read().splitlines() == [
+            "AGENTS_X=1", "ZOOM_ACCOUNT_ID=stack-account-1234", "ZOOM_CLIENT_ID=stack-client", "ZOOM_CLIENT_SECRET=stack-geheim",
+            "ZOOM_LEES_CLIENT_ID=nieuw-client-445566", "ZOOM_LEES_CLIENT_SECRET=nieuw-geheim-112233"]
+        assert stat.S_IMODE(os.stat(env).st_mode) == 0o600, oct(os.stat(env).st_mode)
+        assert "nieuw" not in Z._tokens
+        for waarde in ("mehdi-id", "nieuw-client", "nieuw-geheim"):
+            assert waarde not in uit.getvalue(), f"een waarde werd afgedrukt: {waarde}"
+    finally:
+        herstel()
         Z.vastzetten(None)
 
 

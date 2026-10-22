@@ -31,7 +31,9 @@ met zoom_leesapp.py --zet; zonder die app, of als haar sleutels geen token geven
 stack en is de telling een ondergrens ("minstens N"), met een nood voor Mehdi; zo ook als het token van de leesapp een
 recht heeft dat ze nooit mag hebben (13.6: zoom.py weigert het). De chat lees ik altijd met de app van de stack: de
 leesapp krijgt het recht op chatberichten bewust niet (EIGEN-1). Onbekend is nooit 0 (L29, L38). Elke ronde gaat door
-de gedeelde ronde (N12).
+de gedeelde ronde (N12). Is de Zoom-gebruiker niet de eigenaar van de vaste vergaderruimte (de pmi is niet het meest
+voorkomende nummer in Mehdi's eigen Fathom-opnames), dan schrijf ik niets, ook niet met --koppel-sinds: alleen een nood
+voor Mehdi en een hartslag die zegt dat er niets geschreven is (RZ4-02).
 
     zoom_wacht.py                              een ronde
     zoom_wacht.py --droog                      alleen lezen; een rapport per dag zonder namen of onderwerpen
@@ -82,6 +84,8 @@ PMR_THEMA = "Zoom-gesprek in de vaste vergaderruimte"
 # De kern van een dagregel: verandert die na het oppakken, dan gaat de regel met revisie opnieuw naar Mehdi (Z8).
 KERN = ("gesprekken", "met_fathom", "alleen_zoom_tekst", "opname_zonder_tekst", "telling", "stand")
 VERVALLEN = "vervallen: Fathom heeft het gesprek"
+# RZ4-02: de nood als de Zoom-gebruiker niet de eigenaar van de vaste vergaderruimte is; dan schrijf ik niets
+IDENTITEIT_NOOD = "De Zoom-gebruiker van de leesapp is niet de eigenaar van de vaste vergaderruimte"
 GEWICHT_KOPPELING, GEWICHT_EIGEN = 10 ** 9, 10 ** 6
 # De vaste woorden van mijn titels, standen en noden. Een weergavenaam die zo'n woord is, maskeer ik niet (ZOO-06).
 VASTE_WOORDEN = frozenset(("zoom", "gesprek", "gesprekken", "chat", "chatgesprekken", "opname", "opnames", "meeting", "fathom",
@@ -1346,7 +1350,12 @@ def werk(r, a, klok):
         # EIGEN-1: de chat leest altijd met de app van de stack
         r.nood(f"Zoom-chat niet gelezen: de app van de stack mist het recht {w['bronnen']['chat'][len('geen recht: '):]}", "mehdi")
     if not w["identiteit_ok"]:
-        r.nood("De Zoom-gebruiker van de leesapp is niet de eigenaar van de vaste vergaderruimte", "mehdi")
+        # RZ4-02 (22-10-2026): tot dan meldde ik het verschil en schreef ik toch de gesprekken, de koppelingen, de
+        # dagregels en de Zoom-tekst van die vreemde gebruiker weg. Nu schrijf ik niets: geen rij, geen koppeling, geen
+        # klaarzet, geen vangnetmap, geen download, geen staat en geen --koppel-sinds. Alleen de nood en de hartslag.
+        r.nood(IDENTITEIT_NOOD, "mehdi")
+        r.detail = "niets geschreven: de Zoom-gebruiker van de leesapp is niet de eigenaar van de vaste vergaderruimte"
+        return
 
     wens = koppel_wensen(k)
     gestuurd, gehouden = 0, set()

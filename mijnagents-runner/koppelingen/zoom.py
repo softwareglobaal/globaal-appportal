@@ -10,6 +10,9 @@ Twee profielen (ontwerp regie-zoom v1.2, Z1), elk met een eigen token en vervalt
   (zoom_leesapp.py --zet zet ze). Zonder die sleutels leest lees() met de app van de stack, en ook als ze er staan maar
   geen token geven (ZOO-10): dan onthoudt leesapp_fout() waarom, zodat De Zoomwacht een nood voor Mehdi zet. Een foute
   sleutel maakt de telling zo een ondergrens, geen onbekend en geen gebroken keten.
+- nieuw: alleen voor zoom_leesapp.py --zet (RZ4-02, 22-10-2026). Het token van de net ingevoerde sleutels, alleen in het
+  geheugen (nieuw_token), zodat de eigenaar van de nieuwe app gecontroleerd is voor er iets in .env komt. Dit profiel
+  leest nooit een sleutel uit een bestand en valt nooit terug op de app van de stack: zonder token is het ZoomFout.
 
 Nooit een sleutel in de code. Schrijven kan geen van beide apps: een instelling in Zoom veranderen blijft een
 handeling van Mehdi. Een ontbrekend recht is een toestand (GeenRecht met de naam van het recht), geen crash en geen
@@ -50,6 +53,8 @@ _MAX_SPRONGEN = 5
 # ZOO-10: waarom de leesapp deze ronde geen token gaf (leeg: wel een token, of niet gevraagd), en welke verboden rechten
 # haar token had (13.6). Een nieuwe ronde wist het.
 _LEESAPP = {"fout": "", "verboden": []}
+# RZ4-02: het profiel van net ingevoerde sleutels van de leesapp, alleen in het geheugen (nieuw_token)
+NIEUW = "nieuw"
 # 13.6 (rechten-zoomwacht-lezen.md, Nooit aanvinken): rechten die de leesapp nooit mag hebben. Elk recht dat schrijft,
 # verandert of wist; een sleutel om als gebruiker een meeting te starten; de bediening van een ruimte; de inhoud van
 # chatberichten, AI-samenvattingen en archieven. De app van de stack valt hier niet onder: die is gedeeld en kan meer.
@@ -145,7 +150,9 @@ def leesapp_verboden():
 def _token_voor(profiel):
     """Het token voor een vraag. lees zonder sleutels leest met de app van de stack; geven de sleutels van de leesapp
     geen token, of een token met een verboden recht, dan ook, en leesapp_fout() zegt waarom. Een keer per ronde: daarna
-    vraagt lees() geen token meer met sleutels die net faalden."""
+    vraagt lees() geen token meer met sleutels die net faalden. Het profiel nieuw valt nooit terug (RZ4-02)."""
+    if profiel == NIEUW:
+        return _toegang(NIEUW)
     if profiel == "lees" and leesapp() and not _LEESAPP["fout"]:
         try:
             return _toegang("lees")
@@ -173,10 +180,33 @@ def token_halen(cid, geheim, account):
     return d
 
 
+def nieuw_token(antwoord):
+    """RZ4-02: het tokenantwoord van net ingevoerde sleutels (uit token_halen) als profiel nieuw, alleen in het geheugen.
+    zoom_leesapp.py --zet controleert er met lees(..., profiel='nieuw') de eigenaar van de nieuwe app mee, voor er iets
+    in .env komt. Een token met een verboden recht wordt niet bewaard (VerbodenRecht, 13.6). Geeft de rechten (alleen
+    namen); nieuw_vergeten() wist het token weer."""
+    if not isinstance(antwoord, dict) or not antwoord.get("access_token"):
+        raise ZoomFout("geen token (antwoord zonder token)")
+    namen = set((antwoord.get("scope") or "").split())
+    if verboden(namen):
+        raise VerbodenRecht(verboden(namen))
+    _tokens[NIEUW] = {"waarde": antwoord["access_token"], "tot": time.time() + int(antwoord.get("expires_in", 3600)) - 120,
+                      "rechten": namen}
+    return set(namen)
+
+
+def nieuw_vergeten():
+    """RZ4-02: het token van de nieuwe sleutels uit het geheugen, na de controle, gelukt of niet."""
+    _tokens.pop(NIEUW, None)
+
+
 def _toegang(profiel="stack"):
     t = _tokens.get(profiel)
     if t and t["waarde"] and time.time() < t["tot"]:
         return t["waarde"]
+    if profiel == NIEUW:
+        # RZ4-02: alleen het token uit nieuw_token, nooit een sleutel uit een bestand en nooit de stack
+        raise ZoomFout("geen token voor de nieuwe sleutels")
     if profiel == "lees":
         if not leesapp():
             raise ZoomFout("leesapp niet ingesteld")
