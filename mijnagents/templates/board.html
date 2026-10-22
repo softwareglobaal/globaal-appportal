@@ -53,6 +53,18 @@
   .vst .van{font-size:12px;color:var(--zacht)}
   .vst .knoppen{display:flex;gap:8px}
   .vst form{margin:0}
+  .voorstel-lezen{margin-top:9px;border:1px solid var(--rand);border-radius:8px}
+  .voorstel-lezen summary{cursor:pointer;color:var(--accent);font-weight:600;padding:6px 10px}
+  .voorstel-inhoud{border-top:1px solid var(--rand);padding:3px 10px 12px;font-size:13px}
+  .leesvelden{margin:0}
+  .leesrij{margin-top:10px;min-width:0}
+  .leesrij:not(.lang){display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .leesrij dt{font-weight:600;color:var(--zacht)}
+  .leesrij dd{margin:0;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+  .leesvak{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;
+           overflow:auto;background:#0c0e12;border:1px solid var(--rand);border-radius:6px;
+           padding:9px;margin:5px 0 0;color:var(--tekst)}
+  .leesmelding{color:var(--stil);font-size:12px;margin:5px 0 0}
   button{font:inherit;border:1px solid var(--rand);background:#212734;
          color:var(--tekst);padding:6px 14px;border-radius:8px;cursor:pointer}
   button.ja{border-color:#1f6f43;background:#123326}
@@ -86,6 +98,15 @@
 </nav>
 <main>
 
+  {% macro parameter(p, altijd_vak=False) %}
+  <div class="leesrij{{ ' lang' if p['lang'] or altijd_vak else '' }}">
+    <dt>{{ p['naam'] }}</dt>
+    <dd>{% if p['lang'] or altijd_vak %}<pre class="leesvak">{{ p['tekst'] }}</pre>{% else %}{{ p['tekst'] }}{% endif %}
+      {% if p['afgekapt'] %}<div class="leesmelding">Tekst afgekapt na 60.000 tekens.</div>{% endif %}
+    </dd>
+  </div>
+  {% endmacro %}
+
   {% if voorstellen %}
   <section class="voorstellen">
     <h2>Voorstellen die op je wachten ({{ voorstellen|length }})</h2>
@@ -97,6 +118,35 @@
         <div class="van">{{ v['label'] or v['naam'] }}{% if v['reden'] %} · {{ v['reden'] }}{% endif %}</div>
         {% set nc = nummerconflicten.get(v['id']) %}
         {% if nc %}<div class="nummerconflict" style="color:var(--fout);margin-top:4px">Nummer {{ nc['nummer'] }} staat ook in voorstel {{ nc['anderen']|join(', ') }} voor een andere deal. Goedkeuren kan pas als er nog maar één voorstel met dit nummer open staat.</div>{% endif %}
+        {% if mag_beslissen %}
+        {% set d = voorstel_details[v['id']] %}
+        <details class="voorstel-lezen">
+          <summary>Lees</summary>
+          <div class="voorstel-inhoud">
+            <dl class="leesvelden">
+              <div class="leesrij lang"><dt>Doel</dt><dd>{{ v['doel'] or 'Niet opgegeven' }}</dd></div>
+              <div class="leesrij lang"><dt>Reden</dt><dd>{{ v['reden'] or 'Niet opgegeven' }}</dd></div>
+              {% if d['is_werkwijze'] %}
+                {{ parameter(d['agent']) }}
+                {{ parameter(d['mandaat']) }}
+                <div class="leesrij lang">
+                  <dt>Verschillen met huidige werkwijze</dt>
+                  <dd>
+                    {% if d['verschil'] %}<pre class="leesvak">{{ d['verschil'] }}</pre>{% else %}{{ d['verschil_melding'] }}{% endif %}
+                    {% if d['huidig_afgekapt'] %}<div class="leesmelding">Huidige werkwijze afgekapt na 60.000 tekens voor deze vergelijking.</div>{% endif %}
+                    {% if d['werkwijze']['afgekapt'] %}<div class="leesmelding">Vergelijking gebruikt alleen de eerste 60.000 tekens van het voorstel.</div>{% endif %}
+                    {% if d['invoer_afgekapt'] %}<div class="leesmelding">Vergelijking gebruikt alleen de eerste 5.000 regels per werkwijze.</div>{% endif %}
+                    {% if d['verschil_afgekapt'] %}<div class="leesmelding">Verschil afgekapt na 400 regels.</div>{% endif %}
+                  </dd>
+                </div>
+                {{ parameter(d['werkwijze'], True) }}
+              {% endif %}
+              {% for p in d['parameters'] %}{{ parameter(p) }}{% endfor %}
+            </dl>
+            {% if d['melding'] %}<p class="leesmelding">{{ d['melding'] }}</p>{% endif %}
+          </div>
+        </details>
+        {% endif %}
       </div>
       {% if mag_beslissen %}
       <div class="knoppen">
@@ -179,6 +229,6 @@
   {% endfor %}
 
 </main>
-<footer>Op dit bord staat alleen werkstatus, nooit inhoud.</footer>
+<footer>De volledige voorstelinhoud is alleen zichtbaar voor beheer.</footer>
 </body>
 </html>

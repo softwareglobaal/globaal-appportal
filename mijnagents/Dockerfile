@@ -18,6 +18,8 @@ RUN python3 test_naamstructuur.py
 # Grendel op de nummerreservering (WP2b): een open of goedgekeurd dealtitel-voorstel houdt zijn nummer vast;
 # akkoord op een betwist nummer wordt geweigerd. Zie test_nummerreservering.py.
 RUN python3 test_nummerreservering.py
+# BORD1: beheer leest de volledige voorstelinhoud en het verschil met de huidige werkwijze vóór een besluit.
+RUN python3 test_voorstel_lezen.py
 # Grendel op revisies (nacontrole Plaud v1.1): een opgepakt item met een nieuwe beoordeling wordt een zichtbare
 # revisie met herstelstatus, nooit stil genegeerd. Zie test_klaarzet_revisie.py.
 RUN python3 test_klaarzet_revisie.py

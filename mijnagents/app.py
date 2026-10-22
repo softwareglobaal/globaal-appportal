@@ -11,10 +11,11 @@ voegt een rij toe; dit bord leest de rijen. Een agent toevoegen kost dus geen
 code-wijziging en geen herbouw.
 
 Zichtbaarheidsregel (net als de agents-tegel, want de groep `agents` bevat ook
-mensen buiten het beheer): op het bord staat ALLEEN werkstatus, nooit inhoud.
-Geen klantnamen, geen bedragen, geen dossierinhoud. Tellingen en neutrale
-taakomschrijvingen zijn de grens.
+mensen buiten het beheer): gewone kijkers zien actie en reden, geen parameters.
+Alleen beheer kan een voorstel openklappen om de volledige inhoud te lezen.
 """
+import difflib
+import itertools
 import json
 import re
 import os
@@ -387,6 +388,89 @@ def api_nood():
     return jsonify(nood=[dict(r) for r in rijen])
 
 
+# Een voorstel kan een complete werkwijze bevatten. De browser krijgt daarvan maximaal
+# 60.000 tekens per veld en 400 diffregels, met een zichtbare melding bij afkappen.
+VOORSTEL_TEKST_MAX = 60_000
+VOORSTEL_DIFF_REGELS_MAX = 400
+VOORSTEL_DIFF_INVOER_REGELS_MAX = 5_000
+VOORSTEL_JSON_MAX = 1_000_000
+VOORSTEL_PARAMETERS_MAX = 100
+
+
+def _voorstel_tekst(waarde):
+    tekst = waarde if isinstance(waarde, str) else json.dumps(waarde, ensure_ascii=False, indent=2)
+    return tekst[:VOORSTEL_TEKST_MAX], len(tekst) > VOORSTEL_TEKST_MAX
+
+
+def _voorstel_waarde(naam, waarde):
+    tekst, afgekapt = _voorstel_tekst(waarde)
+    return {"naam": str(naam)[:200], "tekst": tekst,
+            "lang": isinstance(waarde, (dict, list)) or "\n" in tekst or len(tekst) > 120,
+            "afgekapt": afgekapt}
+
+
+def _voorstel_leesgegevens(voorstel, conn):
+    """Maak veilige platte tekst voor het beheer. Jinja escapt alle velden bij het tonen."""
+    uit = {"is_werkwijze": False, "parameters": [], "melding": ""}
+    ruw = voorstel["parameters"] or ""
+    if not ruw:
+        return uit
+    if len(ruw) > VOORSTEL_JSON_MAX:
+        uit["parameters"] = [_voorstel_waarde("Parameters", ruw)]
+        uit["melding"] = "Parameters zijn te groot om volledig te verwerken; alleen het begin wordt getoond."
+        return uit
+    try:
+        parameters = json.loads(ruw)
+    except (ValueError, RecursionError):
+        uit["parameters"] = [_voorstel_waarde("Parameters", ruw)]
+        uit["melding"] = "Parameters zijn geen geldige JSON; de opgeslagen tekst wordt getoond."
+        return uit
+    if not isinstance(parameters, dict):
+        uit["parameters"] = [_voorstel_waarde("Parameters", parameters)]
+        return uit
+
+    if voorstel["runbook"] == "werkwijze-bijwerken":
+        uit["is_werkwijze"] = True
+        uit["agent"] = _voorstel_waarde("Agent", parameters.get("agent", "Niet opgegeven"))
+        uit["mandaat"] = _voorstel_waarde("Mandaat", parameters.get("mandaat", "Niet opgegeven"))
+        uit["werkwijze"] = _voorstel_waarde("Voorgestelde werkwijze", parameters.get("werkwijze", "Niet opgegeven"))
+        agent = parameters.get("agent")
+        huidig = (conn.execute("SELECT werkwijze FROM agent WHERE naam=?", (agent,)).fetchone()
+                  if isinstance(agent, str) else None)
+        huidige_tekst = huidig["werkwijze"] if huidig else ""
+        nieuwe_tekst = parameters.get("werkwijze")
+        if not huidige_tekst:
+            uit["verschil_melding"] = "Geen huidige werkwijze op het bord voor deze agent."
+        elif not isinstance(nieuwe_tekst, str):
+            uit["verschil_melding"] = "Geen tekstuele werkwijze in het voorstel; een verschil is niet beschikbaar."
+        else:
+            oud, oud_afgekapt = _voorstel_tekst(huidige_tekst)
+            nieuw = uit["werkwijze"]["tekst"]
+            oude_regels, nieuwe_regels = oud.splitlines(), nieuw.splitlines()
+            uit["invoer_afgekapt"] = (len(oude_regels) > VOORSTEL_DIFF_INVOER_REGELS_MAX
+                                      or len(nieuwe_regels) > VOORSTEL_DIFF_INVOER_REGELS_MAX)
+            regels = difflib.unified_diff(oude_regels[:VOORSTEL_DIFF_INVOER_REGELS_MAX],
+                                         nieuwe_regels[:VOORSTEL_DIFF_INVOER_REGELS_MAX],
+                                         fromfile="Huidige werkwijze op het bord",
+                                         tofile="Voorgestelde werkwijze", n=3, lineterm="")
+            verschil = list(itertools.islice(regels, VOORSTEL_DIFF_REGELS_MAX + 1))
+            uit["verschil"] = "\n".join(verschil[:VOORSTEL_DIFF_REGELS_MAX])
+            uit["verschil_melding"] = (("Geen verschillen in de eerste 5.000 regels."
+                                         if uit["invoer_afgekapt"] else "Geen verschillen met de huidige werkwijze.")
+                                        if not verschil else "")
+            uit["verschil_afgekapt"] = len(verschil) > VOORSTEL_DIFF_REGELS_MAX
+            uit["huidig_afgekapt"] = oud_afgekapt
+        overig = [(naam, waarde) for naam, waarde in parameters.items()
+                  if naam not in {"agent", "mandaat", "werkwijze"}]
+    else:
+        overig = list(parameters.items())
+    uit["parameters"] = [_voorstel_waarde(naam, waarde)
+                         for naam, waarde in overig[:VOORSTEL_PARAMETERS_MAX]]
+    if len(overig) > VOORSTEL_PARAMETERS_MAX:
+        uit["melding"] = f"Alleen de eerste {VOORSTEL_PARAMETERS_MAX} parameters worden getoond."
+    return uit
+
+
 # ------------------------------------------------------------------- routes ---
 @app.route("/naamstructuur")
 def naamstructuur_pagina():
@@ -438,6 +522,7 @@ def naamstructuur_pagina():
 
 @app.route("/")
 def bord():
+    beheer = mag_beslissen()
     ks = kaarten()
     afd = {r["naam"]: dict(r) for r in db().execute("SELECT * FROM afdeling").fetchall()}
     groepering = {}
@@ -452,12 +537,14 @@ def bord():
         "SELECT v.*, a.label FROM voorstel v LEFT JOIN agent a ON a.naam=v.naam "
         "WHERE v.status='open' ORDER BY v.id DESC"
     ).fetchall()
+    voorstel_details = ({v["id"]: _voorstel_leesgegevens(v, db()) for v in open_voorstellen}
+                        if beheer else {})
     return render_template(
         "board.html", app_naam=APP_NAAM, groepen=groepering, aantal=len(ks),
-        voorstellen=open_voorstellen, mag_beslissen=mag_beslissen(),
+        voorstellen=open_voorstellen, voorstel_details=voorstel_details, mag_beslissen=beheer,
         nummerconflicten=nummerconflicten_op_bord(db()),
         gebruiker=gebruiker(),
-        gesprekken=gesprekken_voor("regisseur", 12) if mag_beslissen() else [],
+        gesprekken=gesprekken_voor("regisseur", 12) if beheer else [],
         regisseur_html=md, afdelingen=afdelingen,
     )
 
