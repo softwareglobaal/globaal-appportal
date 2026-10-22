@@ -21,6 +21,11 @@ RUN python3 test_nummerreservering.py
 # Grendel op revisies (nacontrole Plaud v1.1): een opgepakt item met een nieuwe beoordeling wordt een zichtbare
 # revisie met herstelstatus, nooit stil genegeerd. Zie test_klaarzet_revisie.py.
 RUN python3 test_klaarzet_revisie.py
+# Grendel op de gesprekkentabel (ontwerp regie-zoom v1.2, Z10, Z11, M6): de koppelkolommen sessie en dubbel_van komen
+# er ook bij een oude databank en bij twee werkers tegelijk, een upsert zonder die sleutels wist geen koppeling, koppelen
+# maakt nooit een rij en weigert wat niet telt, en een andere afzender overschrijft geen klaargezet item.
+# Zie test_gesprekken_api.py.
+RUN python3 test_gesprekken_api.py
 # Grendel op de FelixArchief-pagina (felix.<domein>, Shelton): alleen /felix op dat domein, alleen felix of beheer,
 # geen dubbele aanvragen, opslaan alleen op een klik bij een klare zoektocht met projectnummer. Zie test_felix.py.
 RUN python3 test_felix.py
