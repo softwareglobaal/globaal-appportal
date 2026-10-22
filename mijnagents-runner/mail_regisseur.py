@@ -13,7 +13,11 @@ van (hoog eerst, dan wat het langst wacht) en:
   - stuur Mehdi twee keer per dag een update over het systeem, om 08:00 en 17:00, ook in het weekend (Mehdi,
     20-10-2026: "ik wil update 2 keer per dag ... de systeem en niet elke individuele mails ... we focusen nu op mch,
     mehdichegini@hotmail.com, melodie"): per postvak van de focus wat binnenkwam, wat belangrijk was, wat openstaat en
-    of de wacht werkt, uit /api/mail/stand. Die update vervangt het 08:00-signaal van vroeger.
+    of de wacht werkt, uit /api/mail/stand. Die update vervangt het 08:00-signaal van vroeger. Mehdi bereikt ze via
+    De Bode, in de stand ochtend-avond (keuze 1 van Mehdi, 21-10-2026): die van 08:00 als naam in de regel Gebundeld
+    van het ochtendbericht, die van 17:00 bovenaan de avondbundel. Die stand volgt sinds RZ3-02 (22-10-2026) uit de
+    regel `BUNDELEN: ochtend-avond` in de werkwijze van De Bode op het bord, met een klik van Mehdi; zonder die regel
+    is ze uit, en gaat elke update los, zoals elk signaal.
 Ik lees geen mail zelf, verstuur niets en beantwoord niets.
 
     mail_regisseur.py            een ronde, als het een van mijn momenten is
