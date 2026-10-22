@@ -887,6 +887,10 @@ def test_za4_publieke_scopes_in_gemeten_week():
     assert ZA._rechten_detail(detail) == (56, 0)
     assert ZA._rechten_detail({"app_scopes": [{"scope_name": recht} for recht in rechten]}) == (56, 0)
     assert ZA._rechten_detail({"app_scopes": ["meeting:write:meeting:admin", "user:read:user:admin"]}) == (2, 1)
+    # Gemeten op 22-10: OpenID-rechten naast Zoom-rechten; bekend en niet schrijvend.
+    assert ZA._rechten_detail({"app_scopes": ["openid", "profile", "email", "meeting:write:meeting:admin"]}) == (4, 1)
+    for vreemd in (["openid"], {"scope_name": "openid"}, None, 7):
+        _weigert(lambda vreemd=vreemd: ZA._rechten_detail({"app_scopes": [{"scope_name": vreemd}]}))
     assert ZA._fout(Z.GeenRecht("h323_device:read:list_devices:admin")) == \
         "geen recht h323_device:read:list_devices:admin"
     assert ZA._fout(Z.GeenRecht("download")) == "geen recht download"

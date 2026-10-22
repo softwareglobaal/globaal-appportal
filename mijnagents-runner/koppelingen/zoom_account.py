@@ -21,6 +21,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 SECTIES = ("beveiliging", "opnames", "ai", "licenties", "apps", "gebruik")
 ERNST = {"hoog": 0, "middel": 1, "laag": 2}
 SCOPE_PATROON = re.compile(r"[a-z_][a-z0-9_]*(?::[a-z0-9_]+){1,3}")
+OPENID_RECHTEN = {"openid", "profile", "email"}
 NOOD_OPSLAG_VOL = "Zoom-cloudopslag vol: het vangnet kan geen Zoom-tekst meer halen"
 NOOD_PAKKET = "Zoom-pakket veranderd: het dashboard opnieuw meten"
 KLIKPADEN = {
@@ -337,7 +338,13 @@ def _rechten_detail(d):
     for rij in d["app_scopes"]:
         # Gemeten op 22-10: app_scopes is een lijst rechtennamen als tekst; een dict met scope_name kan ook.
         code = rij.get("scope_name") if isinstance(rij, dict) else rij
-        if not isinstance(code, str) or not SCOPE_PATROON.fullmatch(code):
+        # Gemeten op 22-10: twee apps vragen de standaard OpenID-rechten; die lezen alleen het eigen profiel.
+        if not isinstance(code, str):
+            raise Z.AccountFout(reden="onleesbaar")
+        if code in OPENID_RECHTEN:
+            gevonden.add(code)
+            continue
+        if not SCOPE_PATROON.fullmatch(code):
             raise Z.AccountFout(reden="onleesbaar")
         gevonden.add(code)
     return len(gevonden), sum(bool(re.search(r":(?:write|update|delete)(?::|$)", s)) for s in gevonden)
