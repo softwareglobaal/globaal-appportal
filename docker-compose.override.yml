@@ -169,6 +169,9 @@ services:
       GOOGLE_CALENDAR_KEY: ${GOOGLE_CALENDAR_KEY:-}
       VERLOF_KALENDERS: ${VERLOF_KALENDERS:-}
       VERLOF_JAAR: ${VERLOF_JAAR:-2026}
+      # Payrun haalt de teambeloning op bij het sales-dashboard (GET /api/v1/commissie).
+      SALES_API_URL: ${SALES_API_URL:-}
+      SALES_API_TOKEN: ${SALES_API_TOKEN:-}
     volumes:
       # Het gegenereerde dashboard: VM-only, nooit in git.
       - hr-data:/data
@@ -513,6 +516,16 @@ services:
       DATAFORSEO_PASSWORD: ${DATAFORSEO_PASSWORD:-}
       # Token voor de agent-API (/api/v1). Leeg = API uit.
       SALES_AGENT_TOKEN: ${SALES_AGENT_TOKEN:-}
+      # Herinrichting (spec §17): Monday-bord Projects-EE en de koppeling met
+      # facturatiecontrole. Zelfde valkuil als Google Ads: wat hier niet staat,
+      # bereikt de app nooit.
+      MONDAY_API_TOKEN: ${MONDAY_API_TOKEN:-}
+      KOPPELING_TOKEN: ${KOPPELING_TOKEN:-}
+      FACTURATIE_URL: ${FACTURATIE_URL:-}
+      # Meetings per deal (spec §17b): leest de agenda's, schrijft er niet in.
+      GOOGLE_AGENDA_CLIENT_ID: ${GOOGLE_AGENDA_CLIENT_ID:-}
+      GOOGLE_AGENDA_CLIENT_SECRET: ${GOOGLE_AGENDA_CLIENT_SECRET:-}
+      GOOGLE_AGENDA_REFRESH_TOKEN: ${GOOGLE_AGENDA_REFRESH_TOKEN:-}
       # Wie mag schrijven (notities/sync/analyse); besluit 2026-07-14:
       # joey en shelton volledige toegang. De middleware blijft staan
       # voor toekomstige kijk-accounts.
@@ -865,8 +878,10 @@ services:
       PORT: "8770"
       ITEMS_DB_URL: ${ITEMS_DB_URL:-}
       ITEMS_UPLOAD_DIR: /data/fotos
-      CONTACT_TELEFOON: ${CONTACT_TELEFOON:-}
-      WHATSAPP_NUMMER: ${WHATSAPP_NUMMER:-}
+      # Eigen variabelen: app-items (beheer) leest CONTACT_TELEFOON en
+      # WHATSAPP_NUMMER, en die blijven daar leeg. Het nummer staat in .env.
+      CONTACT_TELEFOON: ${ITEMS_VERKOOP_TELEFOON:-}
+      WHATSAPP_NUMMER: ${ITEMS_VERKOOP_WHATSAPP:-}
       MUNT_SYMBOOL: ${MUNT_SYMBOOL:-}
       MUNT_CODE: ${MUNT_CODE:-}
     ports:
@@ -1095,6 +1110,10 @@ services:
       GOOGLE_CALENDAR_KEY: ${GOOGLE_CALENDAR_KEY:-}
       CONTRACTEN_KALENDERS: ${CONTRACTEN_KALENDERS:-}
       OFFERTE_IMAP_WACHTWOORD: ${CONTRACTEN_OFFERTE_IMAP_PW:-}
+      ONEMAIL_WACHTWOORD_LIGHT: ${CONTRACTEN_MAIL_LIGHT_PW:-}   # D48 mailexport, gezet met scripts/mailboxen_naar_server.sh
+      ONEMAIL_WACHTWOORD_STANDAARD: ${CONTRACTEN_MAIL_STANDAARD_PW:-}   # D48 mailexport, gezet met scripts/mailboxen_naar_server.sh
+      ONEMAIL_WACHTWOORD_MCH: ${CONTRACTEN_MAIL_MCH_PW:-}   # D48 mailexport, gezet met scripts/mailboxen_naar_server.sh
+      ONEMAIL_WACHTWOORD_INFO: ${CONTRACTEN_MAIL_INFO_PW:-}   # D48 mailexport, gezet met scripts/mailboxen_naar_server.sh
       # Plaud-transcriptie (dev.plaud.ai); zetten via
       # scripts/contracten-plaud-sleutel.sh
       PLAUD_CLIENT_ID: ${PLAUD_CLIENT_ID:-}
@@ -1170,6 +1189,25 @@ services:
       start_interval: 5s
     volumes:
       - /home/ubuntu/facturatiecontrole/site:/fc:ro
+    networks: [appnet]
+
+  # Kostenplaat HDS (kostenplaat.globaal.be). Statische dashboards uit het
+  # project hds-kosten van Angela, geen GitHub-repo: ze bevatten de nettolonen
+  # van 28 collega's. Bestanden in ~/kostenplaat/site, bijgewerkt met
+  # deploy/deploy.sh vanaf haar Mac. Geen poort naar buiten; alleen bereikbaar
+  # via nginx met forward-auth, groep "kostenplaat" (mehdi, siyan, angela).
+  app-kostenplaat:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - /home/ubuntu/kostenplaat/site:/usr/share/nginx/html:ro
+      - /home/ubuntu/kostenplaat/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/Kostenplaat-overzicht.html"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks: [appnet]
 
 volumes:
