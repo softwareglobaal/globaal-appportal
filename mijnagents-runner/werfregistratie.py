@@ -15,7 +15,7 @@ import bord
 import werfregister
 
 
-def koppel_voor_nummering(bezoeken, dossier, projectmap, werfstart, bord_rijen):
+def koppel_voor_nummering(bezoeken, dossier, projectmap, werfstart, bord_rijen, bevindingen=()):
     """Koppel het app-ID vóór de definitieve N-nummering op het bord.
 
     Eerst een bestaand bord-ID bij hetzelfde relatieve bezoekpad (ook na een faseverhuis),
@@ -28,10 +28,14 @@ def koppel_voor_nummering(bezoeken, dossier, projectmap, werfstart, bord_rijen):
     if overzicht.get("meer"):
         raise werfregister.RegisterFout("werfapp-bezoeklijst is onvolledig; geen nieuwe bezoek-ID's aangemaakt")
     app = overzicht.get("bezoeken") or []
-    pb = wb = 0
+    pb = wb = vb = 0
     for bezoek in sorted(bezoeken, key=lambda b: (b["datum"], b["map"])):
         soort = "plaatsbezoek" if werfstart and bezoek["datum"] < werfstart else "werfbezoek"
-        if soort == "plaatsbezoek":
+        if bezoek["map"].casefold() in bevindingen:
+            # verslag van bevindingen: geen werfbezoek, telt niet mee in de werfverslagnummers
+            soort = "overig"
+            vb += 1; kandidaat = f"VB{vb}"
+        elif soort == "plaatsbezoek":
             pb += 1; kandidaat = f"PB{pb}"
         else:
             wb += 1; kandidaat = str(wb)

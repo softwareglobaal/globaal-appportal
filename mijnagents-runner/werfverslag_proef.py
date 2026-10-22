@@ -53,6 +53,7 @@ import werfapp  # noqa: E402
 import werfnamen  # noqa: E402
 import sjabloon_werfverslag as sjab  # noqa: E402
 import sjabloon_oplevering as pv  # noqa: E402
+import sjabloon_bevindingen as vb  # noqa: E402
 from naslag.naslag import naslag_voor_punten, register as naslag_register  # noqa: E402
 
 OPDRACHT = contextvars.ContextVar("werfverslag_opdracht", default=None)
@@ -263,8 +264,10 @@ GEGEVENS_SCHEMA = {
     "input_schema": {
         "type": "object",
         "properties": {
-            "verslagtype_voorstel": {"type": "string", "enum": ["werfverslag", "vaststellingsverslag", "opleveringsverslag"],
-                                     "description": "werfverslag bij lopende werken; vaststellingsverslag bij schade of geschil; opleveringsverslag bij oplevering"},
+            "verslagtype_voorstel": {"type": "string", "enum": ["werfverslag", "vaststellingsverslag", "verslag_bevindingen", "opleveringsverslag"],
+                                     "description": "werfverslag bij lopende werken; vaststellingsverslag bij schade of geschil tijdens een eigen werf; "
+                                                    "verslag_bevindingen bij gebreken na werken van derden, op vraag van de bouwheer of zijn advocaat; "
+                                                    "opleveringsverslag bij oplevering"},
             "situatie": {"type": "string", "description": "de situatie op de werf in 5 tot 10 zinnen, alleen uit de bronnen"},
             "onderdelen": {"type": "array", "description": "vaststellingen per bouwonderdeel, kort", "items": {"type": "object", "properties": {
                 "onderdeel": {"type": "string"},
@@ -326,7 +329,7 @@ VERSLAG_SCHEMA = {
                     "fotos": {"type": "array", "items": {"type": "string"}, "description": "bijschriften: 'dia 14' voor een pptx-dia, of een bestandsnaam uit de bezoekmap"},
                 }, "required": ["titel", "datum", "vlag", "tekst_nl", "tekst_en", "verantwoordelijke", "bron", "fotos"]}},
             }, "required": ["naam", "punten"]}},
-            "raming": {"type": "array", "description": "alleen bij een vaststellingsverslag; bedragen alleen uit de bronnen", "items": {"type": "object", "properties": {
+            "raming": {"type": "array", "description": "alleen bij een vaststellingsverslag of verslag van bevindingen; bedragen alleen uit de bronnen", "items": {"type": "object", "properties": {
                 "onderdeel": {"type": "string"}, "herstelling": {"type": "string"}, "raming": {"type": "string"}},
                 "required": ["onderdeel", "herstelling", "raming"]}},
             "acties": {"type": "array", "items": {"type": "object", "properties": {
@@ -353,6 +356,9 @@ Regels:
   vermeld je ook het tijdstip in de opname. Vaste kantoorpunten krijgen als herkomst 'vast punt kantoor'.
 - Geen juridische conclusies (wie aansprakelijk is): beschrijf vaststellingen; verwijs voor de rest naar de raadsman.
 - Bij een vaststellingsverslag (schade, geschil) komt er een tabel raming van de herstelkosten per onderdeel.
+- Bij een verslag van bevindingen (gebreken na werken van derden, geen werfverslag): ook een raming; geen actiepunten,
+  geen volgend werfbezoek en geen akkoord (leeg laten). Zet in bron per punt waar het vandaan komt: eigen vaststelling
+  ter plaatse (foto of opname), verklaring van de bouwheer (transcript met tijdstip) of een stuk (bestandsnaam).
 - Bij een werfverslag voor lopende werken komen de doorlopende punten (omgevingsloket, werfbezoeken, orde en netheid,
   facturatie, veiligheidscoördinatie, EPB) er automatisch bij; jij schrijft ze niet.
 - Nederlands, zakelijk, geen emoji, geen kastlijntjes (gewoon koppelteken). Engels alleen als de keuzes dat vragen.
@@ -742,6 +748,8 @@ def proef(ag, dossier, volgnr):
                [{"naam": f["naam"], "pad": f["pad"], "soort": "foto", "grootte": f["grootte"]} for f in fotos] + \
                [{"naam": o, "soort": "opname"} for o in opnames]
     verslagtype = keuzes.get("verslagtype") or gegevens.get("verslagtype_voorstel") or "werfverslag"
+    if (rij.get("bronnen") or {}).get("soort_bezoek") == "bevindingen":
+        verslagtype = vb.SOORT   # het bezoek is als verslag van bevindingen genummerd (VB1): nooit een werfverslag
     if verslagtype in pv.SOORTEN:
         # proces-verbaal van oplevering: het sjabloon met de gekende gegevens ingevuld, zonder Claude; Mehdi vult de rondgang in
         v = pv.leeg(verslagtype, dossier, rij.get("adres", ""))
@@ -767,7 +775,8 @@ def proef(ag, dossier, volgnr):
     vandaag = date.today().isoformat()
     nr_label, soort_bezoek = bezoeknummer(rij, volgnr)
     kop = (f"Dossier {dossier}, {rij.get('adres','')}. {soort_bezoek.capitalize()} {nr_label} op {rij['datum']}; verslagnummer {dossier}-{nr_label}"
-           + (" (plaatsbezoek vóór de werfstart: geen werfverslagnummer, titel 'Verslag plaatsbezoek')" if soort_bezoek == "plaatsbezoek" else "") + ". "
+           + (" (plaatsbezoek vóór de werfstart: geen werfverslagnummer, titel 'Verslag plaatsbezoek')" if soort_bezoek == "plaatsbezoek" else "")
+           + (" (verslag van bevindingen: geen werfverslag en geen werfverslagnummer)" if verslagtype == vb.SOORT else "") + ". "
            f"Verslagtype: {verslagtype}. Taal: {'Nederlands en Engels' if taal == 'nl+en' else 'alleen Nederlands (tekst_en en status_en leeg laten)'}. "
            f"Datum van opmaak: {vandaag}. Opnames: {', '.join(opnames) or 'geen'}.")
     if eigen:
@@ -818,7 +827,7 @@ def proef(ag, dossier, volgnr):
                "adres": rij.get("adres", ""), "datum": rij["datum"], "opgemaakt": vandaag,
                "verslagtype": verslagtype, "bronnen_kort": f"{len(teksten)} document(en), {len(fotos)} foto's en {len(opnames)} opname(s) in de bezoekmap",
                "status_nl": uit.get("status_nl", ""), "status_en": uit.get("status_en", "") if taal == "nl+en" else "",
-               "aanwezigen": uit.get("aanwezigen", []), "raming": uit.get("raming", []) if verslagtype == "vaststellingsverslag" else [],
+               "aanwezigen": uit.get("aanwezigen", []), "raming": uit.get("raming", []) if verslagtype in ("vaststellingsverslag", vb.SOORT) else [],
                "acties": uit.get("acties", []), "volgend": uit.get("volgend", ""), "akkoord": uit.get("akkoord", [])}
     verslag["categorieen"] = _nummer_punten(uit, nr_label, doorlopend=(verslagtype == "werfverslag" and keuzes.get("doorlopend", "ja") != "nee"))
     zonder_bron = _bronpoort(verslag, teksten, fotos)
@@ -828,9 +837,14 @@ def proef(ag, dossier, volgnr):
             for p in cat["punten"]:
                 p["tekst_en"] = ""
     beelden = _fotos_verzamelen(teksten, fotos, verslag)
-    docx = sjab.naar_docx(verslag, beelden)
-    md = sjab.naar_markdown(verslag)
-    naam = f"{dossier}-{verslag['bezoek']} {'verslag plaatsbezoek' if verslag['soort_bezoek'] == 'plaatsbezoek' else 'werfverslag'} (concept)"
+    bevindingen = vb.uit_werfproef(verslag) if verslagtype == vb.SOORT else None
+    if bevindingen:
+        docx, md = vb.naar_docx(bevindingen, beelden), vb.naar_markdown(bevindingen)
+        naam = f"{dossier} {vb.TITEL} (concept)"
+    else:
+        docx = sjab.naar_docx(verslag, beelden)
+        md = sjab.naar_markdown(verslag)
+        naam = f"{dossier}-{verslag['bezoek']} {'verslag plaatsbezoek' if verslag['soort_bezoek'] == 'plaatsbezoek' else 'werfverslag'} (concept)"
     pad_md = bronnen.upload(f"{rij['bezoekmap']}/{naam}.md", md.encode("utf8"))
     pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
     telling = sjab.telling_open(md)
@@ -845,6 +859,12 @@ def proef(ag, dossier, volgnr):
             "fotos_niet_geplaatst": verslag["fotos_niet_geplaatst"], "zonder_bron": zonder_bron,
             "naslagmeldingen": naslagmeldingen, "tokens": {"voorbereiding": {"in": voorbereide_tokens.get("tokens_in", 0), "uit": voorbereide_tokens.get("tokens_uit", 0)}, "proef_pogingen": pogingen},
             "_verwerking": getattr(usage, "verwerking", {})}
+    if bevindingen:
+        # geen werfverslag: geen concept in de werfapp en dus geen werfverslagnummer; de gegevens blijven voor --herlayout
+        info.update(bevindingen=bevindingen, werfapp={"overgeslagen": "verslag van bevindingen: geen werfverslag, geen werfverslagnummer"})
+        _bewaar(rij, dossier, volgnr, gegevens=gegevens, bijlagen=bijlagen,
+                verslag_md=md, proef_pad=pad_docx, proef_ts=vandaag, proef_info=info)
+        return pad_docx, md
     # Eerst de betaalde proef op de bordrij bewaren, dan pas de brug: wat de brug ook doet, de proef en haar markdown
     # (de invoer voor --naar-werfapp) zijn er (CX4-4).
     _bewaar(rij, dossier, volgnr, gegevens=gegevens, bijlagen=bijlagen,
@@ -902,6 +922,8 @@ def werfapp_uit_proef(ag, dossier, volgnr):
     md = rij.get("verslag_md") or ""
     if not md.strip() or not rij.get("proef_pad"):
         raise RuntimeError("geen bewaarde proef (verslag_md) om door te zetten; eerst Maak concept")
+    if (rij.get("proef_info") or {}).get("verslagtype") == vb.SOORT or (rij.get("bronnen") or {}).get("soort_bezoek") == "bevindingen":
+        raise RuntimeError("verslag van bevindingen: geen werfverslag, gaat niet naar de werfapp en krijgt geen werfverslagnummer")
     v = sjab.van_markdown(md)
     if str(v.get("dossier") or "") != str(dossier):
         raise RuntimeError("de bewaarde proef hoort niet bij dit dossier")
@@ -926,6 +948,19 @@ def herlayout(ag, dossier, volgnr):
     md = rij.get("verslag_md") or ""
     if not md.strip():
         raise RuntimeError("geen bewaarde proef (verslag_md) om opnieuw op te maken")
+    info = rij.get("proef_info") or {}
+    if info.get("verslagtype") == vb.SOORT:
+        if not info.get("bevindingen"):
+            raise RuntimeError("verslag van bevindingen zonder bewaarde gegevens; opnieuw Maak concept")
+        teksten, fotos, _ = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(bronkeuze(rij) == "eigen"))
+        bv = info["bevindingen"]
+        beelden = _fotos_verzamelen(teksten, fotos, vb.als_werfverslag(bv))
+        docx = vb.naar_docx(bv, beelden)
+        pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{dossier} {vb.TITEL} (concept).docx", docx)
+        info.update({"fotos": len(beelden), "docx_kb": len(docx) // 1024, "layout": "HA-master"})
+        ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak verslag van bevindingen: {os.path.basename(pad_docx)} ({len(docx)//1024} kB), zonder Claude")
+        _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info)
+        return pad_docx
     v = sjab.van_markdown(md)
     v.setdefault("datum", rij["datum"]); v.setdefault("adres", rij.get("adres", "")); v.setdefault("opgemaakt", date.today().isoformat())
     keuzes = rij.get("keuzes") or {}

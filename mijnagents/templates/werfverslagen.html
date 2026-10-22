@@ -44,7 +44,7 @@ Werfverslag voorbereider verifieert (controle) en start niets dat tokens kost. J
   <tr><th>Nr</th><th>Bezoek</th><th>Bronnen</th><th>Stand</th><th>Wat nog nodig is</th><th></th></tr>
   {% for b in d.bezoeken %}
   <tr>
-    <td><strong>{{ d.dossier }}-{{ b.bronnen.nr_label or b.volgnr }}</strong>{% if b.bronnen.soort_bezoek == 'plaatsbezoek' %}<br><span class="stil">plaatsbezoek</span>{% endif %}</td>
+    <td><strong>{{ d.dossier }}-{{ b.bronnen.nr_label or b.volgnr }}</strong>{% if b.bronnen.soort_bezoek == 'plaatsbezoek' %}<br><span class="stil">plaatsbezoek</span>{% elif b.bronnen.soort_bezoek == 'bevindingen' %}<br><span class="stil">verslag van bevindingen</span>{% endif %}</td>
     <td>{{ b.datum or '—' }}<br><span class="stil">{{ b.bronnen.bron_map or b.stand }}</span></td>
     <td class="stil">{{ b.bronnen.fotos or 0 }} foto's · {{ b.bronnen.opnames|length }} opname(s) · {{ b.bronnen.transcripten|length }} transcript(en) · {{ (b.bronnen.notities|length) + (b.bronnen.verslagen|length) }} document(en)</td>
     <td>

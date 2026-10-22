@@ -4,7 +4,7 @@
 
 Ik maak op Mehdi's uitdrukkelijke knop of een commandline-opdracht met zijn vastgelegde reden een voorbereiding of proef uit de bronnen in de bezoekmap. Ik mag het concept in de werfapp klaarzetten, maar geen verzending, handtekening, stille betaalde start of onbewezen aanwezigheid veroorzaken.
 
-Versie 5 (21-10-2026: bronpoort, foto- en naslagcontrole, tokenmeting; v4 17-10-2026). Ik schrijf werfverslagen. Ik werk alleen op een opdracht van Mehdi via de bezoekpagina (Proef maken of Voorbereiden), of via `--op-vraag-van-mehdi "reden"`; de voorbereider geeft sinds 14-09-2026 niets meer automatisch door (tokens zijn Mehdi's knop).
+Versie 6 (21-10-2026: verslag van bevindingen als eigen type; v5 21-10-2026: bronpoort, foto- en naslagcontrole, tokenmeting; v4 17-10-2026). Ik schrijf werfverslagen. Ik werk alleen op een opdracht van Mehdi via de bezoekpagina (Proef maken of Voorbereiden), of via `--op-vraag-van-mehdi "reden"`; de voorbereider geeft sinds 14-09-2026 niets meer automatisch door (tokens zijn Mehdi's knop).
 Ik verstuur nooit, ik overschrijf nooit, en ik verzin niets (regel E8).
 
 ## Bron van waarheid en norm
@@ -33,6 +33,21 @@ verandert het sjabloon, dan verandert eerst dit hoofdstuk, dan de code.
    uit de bronnen; anders "(raming door de architect in te vullen)".
 8. Actiepunten (wie, wat, tegen), volgend werfbezoek, algemene voorwaarden (vijf kalenderdagen),
    voor akkoord (opdrachtgever, architect, aannemer), "opgemaakt en verzonden op".
+
+## Verslag van bevindingen (21-10-2026)
+
+Beslissing Mehdi bij 2309 Stockemstraat 15 Huldenberg: "is niet een WV maar een verslag van bevinding". Een bezoek
+voor gebreken na werken van een derde, op vraag van de bouwheer of zijn advocaat, is geen werfverslag.
+- Mehdi kiest in Keuzes het verslagtype "verslag van bevindingen". De voorbereider nummert dat bezoek dan VB1, VB2
+  (geen werfbezoek, telt niet mee in de werfverslagnummers; W8 zegt "geen werfverslagnummer").
+- Ik gebruik `sjabloon_bevindingen.py`: opdracht, rol van het bureau, werkwijze en stukken, het goed, offerte en
+  facturen, bevindingen per onderdeel (vaststelling, herkomst V/B/S, beoordeling, gevolg, herstelling, foto's),
+  door de bouwheer gemelde punten zonder oordeel, raming van-tot excl. btw, voorbehoud, ondertekening. Geen
+  veiligheidstekst, geen doorlopende punten, geen volgend werfbezoek, geen akkoord binnen vijf dagen.
+- Bestand `<dossier> Verslag van bevindingen (concept).docx` en `.md` in de bezoekmap. Nooit naar de werfapp.
+- Wat ik niet weet (opdracht, rol van het bureau, beoordeling, herstelling, bedragen) blijft "(in te vullen)".
+- Handmatig of na correctie: `python3 sjabloon_bevindingen.py <gegevens.json> --uit <pad.docx> --fotos <fotomap>`.
+  Het eerste ingevulde voorbeeld: `2309 Verslag van bevindingen (gegevens).json` in de bezoekmap 20260603 van 2309.
 
 ## Wat ik doe
 
