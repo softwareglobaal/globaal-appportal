@@ -103,6 +103,15 @@ apps:
     subdomain: prive
     roles: [prive-mehdi]
     status: active
+  # Regiebord: eigen compose-overlay (docker-compose.regie.yml) en eigen
+  # nginx-blok (84-regie). Geen poort opnemen, zodat de automatische
+  # nieuwe-app-generator deze app overslaat.
+  - id: regie
+    name: Regiebord
+    description: Overzicht van lopende projecten, wat wacht, wat bezig is en de gezondheid van de bronnen
+    subdomain: regie
+    roles: [regie-mehdi]
+    status: active
   - id: quickbooks
     name: QuickBooks
     description: Boekhouding HDS via QuickBooks Online

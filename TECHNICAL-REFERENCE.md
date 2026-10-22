@@ -3031,3 +3031,41 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   `test_bode_regie.py` en `test_uitrol_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is `test_geen_echte_namen.py`:
   die faalt als een van de genoemde testbestanden een woord bevat waarvan de sha256 op een vaste lijst staat (echte
   namen, privéonderwerpen en adressen, alleen als hash bewaard; de repo is publiek). Testgegevens zijn altijd verzonnen.
+
+### 14.17 Regiebord: `regie.globaal.be` *(in opbouw, 22-10-2026)*
+
+Ontwerp regiebord v0.2 en v0.4 (`~/dev/samenwerking-codex/regiebord/`, met de bouwopdracht F1-bord). Een overzicht
+voor één eigenaar, gsm eerst: lopende projecten, wat wacht en wat bezig is in zes aandachtskolommen met de
+onveranderde bronfase op elke kaart, "Dit eerst" uit het ochtendbericht van De Regisseur, brongezondheid en
+verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt niets uit. Flask met gunicorn, eigen repo
+`softwareglobaal/globaal-regie` naar het patroon van globaal-prive, op de VM uitgecheckt in `~/appportal/regie`.
+
+- **In deze repo**: overlay `docker-compose.regie.yml` (service `app-regie`, image `appportal-regie`, interne poort
+  3042, `appnet`, healthcheck `/healthz`, geen hostpoort en geen volume), vhost `84-regie.conf.template`, migratie
+  `197-regie.sql` en de tegel `regie` in `apps.yaml` (groep `regie-mehdi`, bewust zonder `poort`, zodat
+  `apps-bijwerken.sh` de app overslaat). De migratie maakt de LOGIN-rol `regie` zonder wachtwoord in git, het schema
+  `regie` met die rol als eigenaar, `REVOKE ALL ... FROM PUBLIC` en `search_path = regie`, en geeft geen rechten op
+  andere schema's. De tabellen staan in de eigen repo en worden bij de start toegepast door `app/migreer.py` onder de
+  rol `regie` (transactie per bestand, databaseslot, checksum).
+- **Toegang**: forward-auth op de hele host; de app toetst zelf nog eens `REGIE_GROUPS`. Eén uitzondering:
+  `location = /api/mac` voor de Mac-brug, die geen browsersessie heeft: alleen POST, hoogstens 256k, 30 verzoeken per
+  minuut per adres (burst 10) en alle `X-authentik-*`-headers geleegd. De app eist daar `X-Regie-Token`
+  (hmac-vergelijking met `REGIE_MAC_TOKEN`). `/healthz` blijft achter de forward-auth; de healthcheck toetst binnen
+  de container.
+- **Bronnen, alleen lezen**: `MIJNAGENTS_URL` (`/api/klaarzet` met `soort=ochtendbericht` en `status=alle`,
+  `/api/nood`, `/api/overzicht`) en `HA_PROJECTEN_URL` (`/api/projecten`), over het interne netwerk met
+  `X-Agents-Token` uit `REGIE_AGENTS_TOKEN`. Dat token kan ook schrijven; het bord doet daarom uitsluitend GET,
+  vastgezet met een test in de eigen repo. Een bron die niet antwoordt, wordt "onbekend", nooit 0 of leeg. Het bord
+  schrijft alleen in zijn eigen schema.
+- **Mac-brug**: een launchd-agent op de Mac post elke minuut alleen een vaste lijst metadatavelden per chat (geen
+  vraag, samenvatting, antwoord of voorleestekst), de laatste planmeting in procent en de laatste driehoek-runs (titel,
+  uitkomst, datum). De app weigert of knipt verboden velden weg, ook als de Mac ze toch stuurt.
+- **Sleutels** (hier alleen namen, waarden in `~/appportal/.env`): `REGIE_DB_URL`, `REGIE_SECRET_KEY`,
+  `REGIE_AGENTS_TOKEN` (dezelfde waarde als `AGENTS_TOKEN` in `mijnagents-data/.env`) en `REGIE_MAC_TOKEN`;
+  optioneel `REGIE_GROUPS` (standaard de groep van de tegel). Op de Mac staat het brugtoken in
+  `~/.config/regiebord/token` (600).
+- **Uitrol**: `COMPOSE_FILE` in `~/appportal/.env` krijgt `:docker-compose.regie.yml`. De eerste uitrol doet één
+  script uit de eigen repo (`deploy/eerste-uitrol.sh`: migratie 197, rolwachtwoord, env-namen, build, `/healthz`,
+  `nginx -t`, registratie in Authentik, groepslid, cron), zonder een geheim te tonen. Daarna rolt
+  `regie/deploy-stack.sh` (cron elke 2 minuten, logboek `~/deploy-regie.log`) elke nieuwe commit op main uit, met
+  starttoets en `/healthz`, en valt bij falen terug op `appportal-regie:vorige`.

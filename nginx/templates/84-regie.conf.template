@@ -1,0 +1,45 @@
+# Regiebord - regie.globaal.be
+# Een overzicht voor de eigenaar: lopende projecten, wat op hem wacht, wat bezig is, brongezondheid en verbruik.
+# Eigen repo softwareglobaal/globaal-regie, uitgecheckt in ./regie (docker-compose.regie.yml, migratie 197-regie.sql).
+# Het bord leest zijn bronnen alleen en stuurt zelf niets uit.
+
+# Rem op de enige ingang zonder Authentik: de Mac-brug post elke minuut, dit laat ruim marge.
+limit_req_zone $binary_remote_addr zone=regie_mac_zone:1m rate=30r/m;
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name regie.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # Persoonlijk werkoverzicht: niet indexeren.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # Forward-auth (embedded outpost) beschermt de hele app; identiteit en
+    # groepen gaan als X-authentik-* headers naar de Flask-app, die daar zelf
+    # nog eens REGIE_GROUPS tegen aftoetst.
+    set $app_upstream http://app-regie:3042;
+
+    # De momentopname van de Mac-brug: de brug heeft geen browsersessie, dus
+    # deze ene POST passeert de forward-auth en de app controleert zelf het
+    # token (X-Regie-Token tegen REGIE_MAC_TOKEN). Alleen POST, een kleine
+    # body, en de identiteitsheaders worden hard geleegd, zodat niemand zich
+    # via deze weg als lid van de groep voordoet.
+    location = /api/mac {
+        limit_except POST { deny all; }
+        limit_req zone=regie_mac_zone burst=10 nodelay;
+        client_max_body_size 256k;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_set_header X-authentik-email "";
+        proxy_set_header X-authentik-name "";
+        proxy_set_header X-authentik-uid "";
+        proxy_pass $app_upstream;
+    }
+
+    include /etc/nginx/snippets/forward-auth.conf;
+}
