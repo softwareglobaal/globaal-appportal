@@ -1,6 +1,7 @@
 # Grendels op het regiebord (regie.globaal.be, TECHNICAL-REFERENCE 14.17): de enige ingang buiten Authentik
-# (POST /api/mac met geleegde identiteitsheaders en 256k), geen hostpoort voor app-regie, alleen de groep regie-mehdi,
-# de rol zonder wachtwoord in 197, en de checkout ./regie plus het Mac-token in de gevolgde .gitignore.
+# (POST /api/mac met geleegde identiteitsheaders en 256k), het proxygeheim alleen na de forward-auth, de exacte
+# sleutels en omgeving van app-regie, alleen de groep regie-mehdi, de exacte SQL van 197, en de checkout ./regie plus
+# het Mac-token echt genegeerd via de gevolgde .gitignore. docker-compose.yml hoort erbij voor de nginx-omgeving.
 # Los van regie-grendels.yml: dat bewaakt De Regisseur en De Bode in mijnagents.
 name: regiebord-grendels
 
@@ -9,6 +10,7 @@ on:
     paths:
       - ".gitignore"
       - "apps.yaml"
+      - "docker-compose.yml"
       - "docker-compose.regie.yml"
       - "nginx/templates/*-regie.conf.template"
       - "nginx/snippets/forward-auth.conf"
@@ -21,6 +23,7 @@ on:
     paths:
       - ".gitignore"
       - "apps.yaml"
+      - "docker-compose.yml"
       - "docker-compose.regie.yml"
       - "nginx/templates/*-regie.conf.template"
       - "nginx/snippets/forward-auth.conf"

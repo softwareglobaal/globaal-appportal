@@ -3049,8 +3049,8 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   rol `regie` (transactie per bestand, databaseslot, checksum).
 - **Toegang**: forward-auth op de hele host; de app toetst zelf nog eens `REGIE_GROUPS`. Eén uitzondering:
   `location = /api/mac` voor de Mac-brug, die geen browsersessie heeft: alleen POST, hoogstens 256k, 30 verzoeken per
-  minuut per adres (burst 10) en de vijf identiteitsheaders (`X-authentik-username`, `-groups`, `-email`, `-name`,
-  `-uid`) geleegd. Andere `X-authentik-*`-headers van de client geeft nginx door, zoals op elke route met
+  minuut per adres (burst 10), de vijf identiteitsheaders (`X-authentik-username`, `-groups`, `-email`, `-name`,
+  `-uid`) en het proxygeheim `X-Regie-Proxy-Geheim` geleegd. Andere `X-authentik-*`-headers van de client geeft nginx door, zoals op elke route met
   forward-auth; de app leest daarom alleen `username` en `groups`. De app eist op `/api/mac` `X-Regie-Token`
   (hmac-vergelijking met `REGIE_MAC_TOKEN`). `/healthz` blijft achter de forward-auth; de healthcheck toetst binnen
   de container.
@@ -3058,32 +3058,57 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   uit `forward-auth.conf` heeft eigen `add_header`-regels en erft in nginx 1.27 niets. Voor de pagina's moet de app
   ze zelf zetten (`_na_verzoek` in `app/__init__.py` van globaal-regie): `X-Robots-Tag` doet ze al, `nosniff` is
   daar nog een open punt.
-- **Bekende zwakte, besluit open**: zoals prive en mijnagents vertrouwt `app-regie` de `X-authentik-*`-headers
-  zonder proxygeheim. Een andere container in `appnet` kan `http://app-regie:3042` dus rechtstreeks aanspreken,
-  buiten nginx en Authentik om. Dichtzetten kan naar het patroon van `42-btw` (een `REGIE_PROXY_GEHEIM` per host in
-  een `map`, `proxy_set_header` in de forward-auth-locatie, hmac-toets in `app/auth.py`); dat raakt ook de app en
-  `forward-auth.conf` en is nog niet beslist.
-- **Grendels**: `scripts/test_regie_infra.py` in `.github/workflows/regiebord-grendels.yml` zet vast dat
-  `/api/mac` de enige eigen locatie is (alleen POST, 256k, de vijf identiteitsheaders geleegd, geen `auth_request`),
-  dat `app-regie` geen hostpoort, volume of ander netwerk dan `appnet` heeft en de sleutels alleen als naam,
-  dat de tegel alleen `regie-mehdi` opent en geen poort heeft, dat 197 geen wachtwoord bevat, en dat `/regie/` en
-  `/regie-mac-token` in de gevolgde `.gitignore` staan. `.git/info/exclude` op de VM (gezet door de eerste uitrol)
-  is alleen een tweede laag: die zit niet in versiebeheer en verdwijnt bij een nieuwe kloon.
+- **Proxygeheim** (besluit bij de review van 22-10-2026, patroon van `42-btw`): zonder geheim vertrouwt de app de
+  `X-authentik-*`-headers van wie haar ook bereikt. Elke container in `appnet` en elk proces op de host kan
+  `http://app-regie:3042` rechtstreeks aanspreken, buiten nginx en Authentik om; nagespeeld op globaal-regie
+  `2dc826f`: zonder headers 403, met vervalste `X-authentik-username` en `X-authentik-groups: regie-mehdi` voorbij
+  de groepscontrole. Daarom zet nginx `X-Regie-Proxy-Geheim`: `map $host $regie_proxy_geheim` in `84-regie` (alleen
+  voor `regie.<domain>`, standaard leeg), de kop in `location /` van `forward-auth.conf` (dus alleen na een
+  geslaagde forward-auth; voor elke andere host leeg en dus niet verstuurd) en geleegd op `/api/mac`. De naam
+  `REGIE_PROXY_GEHEIM` staat bij nginx in `docker-compose.yml` (niet in de overlay: de template staat er altijd, en
+  envsubst vult alleen gedefinieerde namen in) en bij `app-regie` in de overlay. **Nog te doen in globaal-regie**,
+  pas dan is de zwakte dicht: `app/auth.py` vergelijkt de kop met `REGIE_PROXY_GEHEIM` (`hmac.compare_digest`) en
+  weigert als een van beide leeg is, met dezelfde testmodus-grendel als de groepscontrole (`/healthz` en
+  `POST /api/mac` blijven daarbuiten, `/api/mac` heeft zijn eigen token); `deploy/regie_env.py` maakt
+  `REGIE_PROXY_GEHEIM` willekeurig aan in `~/appportal/.env`. **Uitrol van deze wijziging**: nginx opnieuw maken
+  (`docker compose up -d nginx`, zoals `deploy.sh`, `apps-bijwerken.sh` en de eerste uitrol doen), niet alleen
+  herstarten: een `restart` houdt de oude omgeving, envsubst laat `${REGIE_PROXY_GEHEIM}` dan staan en nginx start
+  niet.
+- **Grendels**: `scripts/test_regie_infra.py` in `.github/workflows/regiebord-grendels.yml` werkt met lijsten in
+  plaats van verboden: wat erbij komt, valt op en moet in dezelfde review in de test. Vast staan de vhost opdracht
+  per opdracht (`/api/mac` als enige eigen locatie: alleen POST, 256k, burst 10, de vijf identiteitsheaders en het
+  proxygeheim elk één keer en leeg, geen `auth_request`; alleen de includes `ssl.conf` en `forward-auth.conf`), het
+  proxygeheim alleen in `location /` van `forward-auth.conf`, elke `${NAAM}` van de template in de omgeving van
+  nginx, de sleutels van `app-regie` (`build`, `image`, `restart`, `environment`, `healthcheck`, `networks`; dus geen
+  hostpoort, volume, `env_file`, `secrets`, `pid` of `user`) en zijn volledige omgeving (geheimen alleen als
+  `${NAAM:-}`), de tegel alleen voor `regie-mehdi` en zonder poort, de SQL van 197 woord voor woord, en dat
+  `/regie/` en `/regie-mac-token` echt genegeerd worden via de gevolgde `.gitignore` (ook een `!`-regel valt op).
+  De workflow zelf mag geen `continue-on-error` of `if` hebben. 56 mutaties getoetst, alle gevangen.
+  `.git/info/exclude` op de VM (gezet door de eerste uitrol) is alleen een tweede laag: die zit niet in versiebeheer
+  en verdwijnt bij een nieuwe kloon.
 - **Bronnen, alleen lezen**: `MIJNAGENTS_URL` (`/api/klaarzet` met `soort=ochtendbericht` en `status=alle`,
-  `/api/nood`, `/api/overzicht`) en `HA_PROJECTEN_URL` (`/api/projecten`), over het interne netwerk met
-  `X-Agents-Token` uit `REGIE_AGENTS_TOKEN`. Dat token kan ook schrijven; het bord doet daarom uitsluitend GET,
-  vastgezet met een test in de eigen repo. Een bron die niet antwoordt, wordt "onbekend", nooit 0 of leeg. Het bord
-  schrijft alleen in zijn eigen schema.
+  `/api/nood`, `/api/overzicht`) met `X-Agents-Token` uit `REGIE_AGENTS_TOKEN`, en `HA_PROJECTEN_URL`
+  (`/api/projecten`) met `X-Agents-Token` uit `REGIE_HA_PROJECTEN_TOKEN`, beide over het interne netwerk. De twee
+  tokens staan los van elkaar: ha-projecten toetst tegen zijn eigen `AGENTS_TOKEN` in `~/ha-projecten/.env`, en die
+  waarde staat in `~/appportal/.env` al als `HA_PROJECTEN_TOKEN` (voor `app-locatie`); de overlay geeft die naam door,
+  zodat een rotatie bij ha-projecten maar op één plaats landt. **Nog te doen in globaal-regie**: `app/bord.py`
+  gebruikt nu voor beide bronnen `REGIE_AGENTS_TOKEN` en hoort voor ha-projecten `REGIE_HA_PROJECTEN_TOKEN` te
+  lezen; zolang de twee waarden op de VM verschillen, staat ha-projecten op "onbekend". De tokens kunnen ook
+  schrijven; het bord doet daarom uitsluitend GET, vastgezet met een test in de eigen repo. Een bron die niet
+  antwoordt, wordt "onbekend", nooit 0 of leeg. Het bord schrijft alleen in zijn eigen schema.
 - **Mac-brug**: een launchd-agent op de Mac post elke minuut alleen een vaste lijst metadatavelden per chat (geen
   vraag, samenvatting, antwoord of voorleestekst), de laatste planmeting in procent en de laatste driehoek-runs (titel,
   uitkomst, datum). De app weigert of knipt verboden velden weg, ook als de Mac ze toch stuurt.
 - **Sleutels** (hier alleen namen, waarden in `~/appportal/.env`): `REGIE_DB_URL`, `REGIE_SECRET_KEY`,
-  `REGIE_AGENTS_TOKEN` (dezelfde waarde als `AGENTS_TOKEN` in `mijnagents-data/.env`) en `REGIE_MAC_TOKEN`;
-  optioneel `REGIE_GROUPS` (standaard de groep van de tegel). Op de VM staat het brugtoken ook in
-  `~/appportal/regie-mac-token` (600, genegeerd door `.gitignore`), op de Mac in `~/.config/regiebord/token` (600).
-  `REGIE_DB_URL` staat in de overlay als `${REGIE_DB_URL:-}`, zoals bij prive; een `:?` zou bij een ontbrekende
-  waarde elk `docker compose`-commando van de stack stilleggen. Open punt in globaal-regie: `/healthz` antwoordt nu
-  nog `ok` als `REGIE_DB_URL` leeg is, terwijl het bord dan 500 geeft; de app hoort dan 503 te geven.
+  `REGIE_PROXY_GEHEIM` (ook bij nginx), `REGIE_AGENTS_TOKEN` (dezelfde waarde als `AGENTS_TOKEN` in
+  `mijnagents-data/.env`) en `REGIE_MAC_TOKEN`; `REGIE_HA_PROJECTEN_TOKEN` komt uit de bestaande
+  `HA_PROJECTEN_TOKEN`; optioneel `REGIE_GROUPS` (standaard de groep van de tegel). Op de VM staat het brugtoken ook
+  in `~/appportal/regie-mac-token` (600, genegeerd door `.gitignore`), op de Mac in `~/.config/regiebord/token`
+  (600). `REGIE_DB_URL` staat in de overlay als `${REGIE_DB_URL:-}`, zoals bij prive; een `:?` zou bij een
+  ontbrekende waarde elk `docker compose`-commando van de stack stilleggen. Is `REGIE_DB_URL` leeg, dan start
+  `app-regie` niet: `app/wsgi.py` stopt bij het laden (gunicorn `--preload`), de healthcheck blijft rood, en
+  `deploy-stack.sh` (starttoets `from app.wsgi import app`) zet `appportal-regie:vorige` terug als die er is. Alleen
+  de testfabriek `create_app()` zonder databank antwoordt op `/healthz` met `ok`.
 - **Uitrol**: `COMPOSE_FILE` in `~/appportal/.env` krijgt `:docker-compose.regie.yml`. De eerste uitrol doet één
   script uit de eigen repo (`deploy/eerste-uitrol.sh`: migratie 197, rolwachtwoord, env-namen, build, `/healthz`,
   `nginx -t`, registratie in Authentik, groepslid, cron), zonder een geheim te tonen. Daarna rolt
