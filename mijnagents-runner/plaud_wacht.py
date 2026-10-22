@@ -274,7 +274,8 @@ def _dossierkopie(payload):
     salesmap = bronnen.zoek_salesmap(re.sub(r"^\s*\d{4}\s+", "", payload["deal_titel"]), payload["projectnummer"])
     if not salesmap:
         raise RuntimeError("geen salesmap voor dit dossier")
-    r = zoektaak.lever(f"{salesmap}/0 Plaud", payload["plaud_id"], payload["tekst"], bronnen, naam=payload["naam"])
+    r = zoektaak.lever(f"{salesmap}/0 Plaud", payload["plaud_id"], payload["tekst"], bronnen, naam=payload["naam"],
+                       meld=lambda tekst: ag.log(f"opname {payload['plaud_id']}", "bevinding", tekst))
     if r["uitkomst"] == "conflict":
         raise RuntimeError(r["reden"])
     return {"bevestigd": True, "pad": r["pad"], "uitkomst": r["uitkomst"], "transcript_hash": r.get("transcript_hash")}
@@ -282,7 +283,8 @@ def _dossierkopie(payload):
 
 def _bezoekmap(payload):
     r = zoektaak.lever(payload["bezoekmap"], payload["plaud_id"], payload["tekst"], bronnen,
-                       naam=payload.get("naam", "transcript.txt"), scan_alle=payload.get("scan_alle", False))
+                       naam=payload.get("naam", "transcript.txt"), scan_alle=payload.get("scan_alle", False),
+                       meld=lambda tekst: ag.log(f"taak {payload['taak_id']}", "bevinding", tekst))
     if r["uitkomst"] == "conflict":
         raise RuntimeError(r["reden"])
     bord.opgepakt(payload["taak_id"], NAAM)        # pas na de bevestigde levering (id en transcriptversie)

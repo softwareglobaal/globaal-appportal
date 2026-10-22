@@ -97,8 +97,8 @@ def main():
             dag = (d.get("datum") or d.get("start") or it.get("sleutel") or "")[:10]
             if it.get("soort") in ("dagplan", "dagbundel", "signaal", "oproep", "zoom-tekst", "ochtendbericht"):
                 continue  # zoom-tekst is voor De Regisseur, het ochtendbericht voor De Bode (I2, Z14)
-            if it.get("soort") == "taak" and str(it.get("uniek") or "").startswith("cc:"):
-                continue  # de wachten en het Commandocentrum sluiten deze taak na eigen broncontrole
+            if str(it.get("uniek") or "").startswith("cc:"):
+                continue  # het Commandocentrum en de wachten sluiten hun eigen items (taken en impulsen)
             if "mail-regisseur" in (it.get("van"), it.get("voor")):
                 continue  # mail volgt De Mailregisseur op; tot 19-10-2026 haalde ik hier elke nacht opvolgpunten weg (37 stuks)
             if it.get("soort") == "locatie" or it.get("van") == "locatie-wacht":

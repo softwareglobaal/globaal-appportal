@@ -899,6 +899,17 @@ def test_ha_projectnummer_gelijk_werfpostcode_blijft_agendabewijs():
     assert w.klaar[0]["inhoud"]["projectnummer"] == "2640" and w.klaar[0]["voor"] == "h-architects"
 
 
+def test_ha_en_firmaloze_afspraak_houden_nummer_dat_ook_postcode_is():
+    for firma in ("HA", None):
+        inhoud = {"titel": "Fictief werfbezoek", "start": "2026-10-08T11:00:00+02:00",
+                  "einde": "2026-10-08T12:00:00+02:00", "nummer": "2640",
+                  "locatie": "Proefstraat 1, 2640 Proefgem"}
+        if firma:
+            inhoud["firma"] = firma
+        agenda = [{"soort": "afspraak", "titel": "Fictief werfbezoek", "inhoud": json.dumps(inhoud)}]
+        assert P.context_op("2026-10-08T09:05:00Z", 40, agenda)[0][0]["nummer"] == "2640", firma
+
+
 def test_tkn_plaud_payload_en_handmatig_bestaand_transcript():
     taak = tkn_taak()
     opname = {"plaud_id": ID1, "start_brussel": "2026-10-08T09:05:00+02:00", "duur_minuten": 40}
@@ -940,6 +951,28 @@ def test_tkn_plaud_payload_en_handmatig_bestaand_transcript():
     except RuntimeError as ex:
         assert "doelmap bestaat niet" in str(ex)
     assert not w3.uploads and not w3.opgepakt
+
+
+def test_te_grote_bestaande_docx_geeft_onbekende_kop_en_log_zonder_taakfout():
+    w = Wereld()
+    groot = f"{TKN_PLAUD}/2026-10-08 handmatig transcript.docx"
+    w.bestanden[groot] = b"synthetische docx"
+    download = P.bronnen.download
+
+    def begrensd(pad, maximum=25_000_000):
+        if pad == groot:
+            raise RuntimeError("downloadgrens overschreden")
+        return download(pad, maximum)
+
+    P.bronnen.download = begrensd
+    try:
+        resultaat = P._bezoekmap({"bezoekmap": TKN_PLAUD, "plaud_id": ID1, "tekst": "nieuw transcript",
+                                 "naam": TKN_NAAM, "scan_alle": True, "taak_id": 701})
+    finally:
+        P.bronnen.download = download
+    assert resultaat["uitkomst"] == "geleverd" and w.opgepakt == [701]
+    assert w.uploads == [f"{TKN_PLAUD}/{TKN_NAAM}"]
+    assert any("kop onbekend" in tekst and "niet als geleverd" in tekst for _, tekst in w.logs)
 
 
 def test_scan_alle_gebruikt_dezelfde_transcriptnaamregel_als_de_verslagagent():

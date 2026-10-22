@@ -411,6 +411,27 @@ def pakket_bronnen():
 
 
 class Pakket(unittest.TestCase):
+    def test_fotomappen_gaan_voor_opnametijd_en_volgorde_verandert_de_hash_niet(self):
+        db, _, _ = pakket_bronnen()
+        db.bestand(f"{FOTOS}/{DATUM} drone/DRONE.jpg", jpg("2026:10:21 07:00:00"))
+        db.bestand(f"{FOTOS}/{DATUM} camera/CAMERA.jpg", jpg("2026:10:21 06:00:00"))
+        db.bestand(f"{FOTOS}/LOS.jpg", jpg("2026:10:21 05:00:00"))
+        inv = V.deel_in(db.lijst(MAP, True), MAP, DATUM, SOORT, CONTRACT)
+        self.assertEqual(len(inv["fotos"]), 5)
+        self.assertIn("LOS.jpg", [e["name"] for e in inv["overig"]])
+        plan = V.pakket_plan(rij(), inv, SOORT, CONTRACT)
+        anders = V.pakket_plan(rij(), {**inv, "fotos": list(reversed(inv["fotos"]))}, SOORT, CONTRACT)
+        self.assertEqual(plan["invoerhash"], anders["invoerhash"])
+        with tempfile.TemporaryDirectory(prefix="barsten-fotovolgorde-") as inbox:
+            nu = datetime(2026, 10, 21, 13, tzinfo=timezone.utc)
+            gemaakt = V.schrijf_pakket(plan, inbox, db.download, db.download_kop, nu)
+            manifest = json.loads((Path(gemaakt["pad"]) / "manifest.json").read_text())
+            fotos = [b for b in manifest["bronnen"] if b["rol"] == "foto"]
+            self.assertEqual([b["dropbox"].rsplit("/", 1)[-1] for b in fotos],
+                             ["A_vroeg.jpg", "Z_laat.jpg", "B_zonder.jpg", "CAMERA.jpg", "DRONE.jpg"])
+            self.assertEqual(V.schrijf_pakket(anders, inbox, db.download, db.download_kop, nu)["uitkomst"],
+                             "al klaargezet")
+
     def test_plan_scheidt_invoer_en_bijlagen_en_houdt_meta_exact(self):
         db, inv, plan = pakket_bronnen()
         self.assertEqual(plan["naam"], "47035_2026-10-21")
@@ -682,6 +703,140 @@ class Rondes(unittest.TestCase):
         self.assertTrue(any("nieuwe mail of document" in tekst for _, _, tekst in self.log.regels))
         self.assertFalse(self.db.uploads)
 
+    def test_handmatig_volledig_zonder_wachttaken_krijgt_geen_blijvende_nood(self):
+        r = self.board.rijen["afspraak:bs77"]
+        r["taken"] = []
+        Klok.huidig = datetime(2026, 10, 21, 15, 0, tzinfo=timezone.utc)
+        self.agent.ronde()
+        Klok.huidig = datetime(2026, 10, 21, 16, 3, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertEqual(len(self.pakketten), 1)
+        for minuut in (13, 23):
+            Klok.huidig = datetime(2026, 10, 21, 16, minuut, tzinfo=timezone.utc)
+            self.agent.ronde()
+            self.assertNotIn("waarschuwing", r["pakket"]["overdracht"])
+            self.assertFalse(any("pakket klaargezet" in n["tekst"] for n in
+                                 self.log.hartslagen[-1][1].get("nood", [])))
+
+    def test_losse_jpg_na_overdracht_is_overig_en_geeft_geen_nieuwe_versie(self):
+        r = self.board.rijen["afspraak:bs77"]
+        r["taken"] = []
+        Klok.huidig = datetime(2026, 10, 21, 15, 0, tzinfo=timezone.utc)
+        self.agent.ronde()
+        Klok.huidig = datetime(2026, 10, 21, 16, 3, tzinfo=timezone.utc)
+        self.agent.ronde()
+        eerste_hash = r["pakket"]["overdracht"]["invoerhash"]
+        self.db.bestand(f"{FOTOS}/klantfoto.jpg", b"fictieve klantfoto",
+                        gewijzigd="2026-10-21T16:10:00Z")
+        Klok.huidig = datetime(2026, 10, 21, 17, 20, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertEqual(len(self.pakketten), 1)
+        self.assertEqual(r["pakket"]["overdracht"]["invoerhash"], eerste_hash)
+        self.assertEqual(r["pakket"]["fotos"], 1)
+        self.assertIn("klantfoto.jpg", [e["name"] for e in self.agent._inventaris[r["uniek"]]["overig"]])
+
+    def test_late_open_icloudtaak_geeft_geen_waarschuwing(self):
+        r = self.board.rijen["afspraak:bs77"]
+        r["taken"] = []
+        Klok.huidig = datetime(2026, 10, 21, 15, 0, tzinfo=timezone.utc)
+        self.agent.ronde()
+        Klok.huidig = datetime(2026, 10, 21, 16, 3, tzinfo=timezone.utc)
+        self.agent.ronde()
+        overdracht = r["pakket"]["overdracht"]
+        self.assertFalse(overdracht["open_wachttaak_bij_overdracht"])
+        self.assertIsNone(overdracht["open_wachttaak_reden_bij_overdracht"])
+        r["taken"] = [{"voor": "icloud-wacht", "uniek": "cc:bs77:icloud-wacht"}]
+        self.board.taken["cc:bs77:icloud-wacht"].update(status="klaar", ts="2026-10-21T16:10:00Z")
+        Klok.huidig = datetime(2026, 10, 21, 16, 13, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertNotIn("waarschuwing", r["pakket"]["overdracht"])
+        self.assertFalse(any("pakket klaargezet" in n["tekst"] for n in
+                             self.log.hartslagen[-1][1].get("nood", [])))
+
+    def test_legacy_overdracht_negeert_late_taak_met_of_zonder_ts(self):
+        r = self.board.rijen["afspraak:bs77"]
+        r["taken"] = []
+        Klok.huidig = datetime(2026, 10, 21, 15, 0, tzinfo=timezone.utc)
+        self.agent.ronde()
+        Klok.huidig = datetime(2026, 10, 21, 16, 3, tzinfo=timezone.utc)
+        self.agent.ronde()
+        overdracht = r["pakket"]["overdracht"]
+        for veld in ("open_wachttaak_bij_overdracht", "open_wachttaak_reden_bij_overdracht",
+                     "open_wachttaken_bij_overdracht"):
+            overdracht.pop(veld)
+        r["taken"] = [{"voor": "icloud-wacht", "uniek": "cc:bs77:icloud-wacht"}]
+        self.board.taken["cc:bs77:icloud-wacht"].update(status="klaar", ts="2026-10-21T16:10:00Z")
+        for minuut, met_ts in ((13, True), (23, False)):
+            r["pakket"]["overdracht"]["waarschuwing"] = "oude waarschuwing over open wachttaak"
+            if not met_ts:
+                self.board.taken["cc:bs77:icloud-wacht"].pop("ts")
+            Klok.huidig = datetime(2026, 10, 21, 16, minuut, tzinfo=timezone.utc)
+            self.agent.ronde()
+            self.assertNotIn("waarschuwing", r["pakket"]["overdracht"])
+        self.assertEqual(len(self.pakketten), 1)
+
+    def test_late_fototaak_met_nieuwe_foto_geeft_nieuwe_versie(self):
+        r = self.board.rijen["afspraak:bs77"]
+        r["taken"] = []
+        Klok.huidig = datetime(2026, 10, 21, 15, 0, tzinfo=timezone.utc)
+        self.agent.ronde()
+        Klok.huidig = datetime(2026, 10, 21, 16, 3, tzinfo=timezone.utc)
+        self.agent.ronde()
+        eerste_hash = r["pakket"]["overdracht"]["invoerhash"]
+        r["taken"] = [{"voor": "icloud-wacht", "uniek": "cc:bs77:icloud-wacht"}]
+        self.board.taken["cc:bs77:icloud-wacht"].update(status="klaar", ts="2026-10-21T16:10:00Z")
+        self.db.bestand(f"{FOTOS}/{DATUM} iPhone/IMG_002.jpg", b"nieuwe fictieve foto",
+                        gewijzigd="2026-10-21T16:10:00Z")
+        Klok.huidig = datetime(2026, 10, 21, 16, 20, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertEqual(len(self.pakketten), 1)
+        self.assertNotIn("waarschuwing", r["pakket"]["overdracht"])
+        self.board.taken["cc:bs77:icloud-wacht"].update(status="opgepakt", opgepakt_door="icloud-wacht")
+        Klok.huidig = datetime(2026, 10, 21, 17, 30, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertEqual(len(self.pakketten), 2)
+        self.assertNotEqual(r["pakket"]["overdracht"]["invoerhash"], eerste_hash)
+        self.assertEqual(len(self.pakketten[-1]["fotos"]), 2)
+        self.assertFalse(r["pakket"]["overdracht"]["open_wachttaak_bij_overdracht"])
+
+    def test_oude_handmatige_waarschuwing_verdwijnt_en_wordt_een_keer_gelogd(self):
+        r = self.board.rijen["afspraak:bs77"]
+        r["taken"] = []
+        Klok.huidig = datetime(2026, 10, 21, 15, 0, tzinfo=timezone.utc)
+        self.agent.ronde()
+        Klok.huidig = datetime(2026, 10, 21, 16, 3, tzinfo=timezone.utc)
+        self.agent.ronde()
+        r["pakket"]["overdracht"].pop("fotos_iphone_bij_overdracht")  # pakket van vóór de herstelronde
+        r["pakket"]["overdracht"]["waarschuwing"] = (
+            "47035: pakket klaargezet na zes uur terwijl iCloud-wachttaak nog niet klaargezet; "
+            "controleer of alle bronnen volledig zijn")
+        Klok.huidig = datetime(2026, 10, 21, 16, 33, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertNotIn("waarschuwing", r["pakket"]["overdracht"])
+        self.assertFalse(any("pakket klaargezet" in n["tekst"] for n in
+                             self.log.hartslagen[-1][1].get("nood", [])))
+        gewist = [tekst for _, _, tekst in self.log.regels if "pakketwaarschuwing gewist" in tekst]
+        self.assertEqual(len(gewist), 1)
+        Klok.huidig = datetime(2026, 10, 21, 16, 43, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertEqual(len([tekst for _, _, tekst in self.log.regels if "pakketwaarschuwing gewist" in tekst]), 1)
+
+    def test_gemeten_ts_wordt_zonder_bronwijziging_na_een_uur_bewaard(self):
+        Klok.huidig = datetime(2026, 10, 21, 10, 0, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.board.taken["cc:bs77:plaud-wacht"]["status"] = "opgepakt"
+        Klok.huidig = datetime(2026, 10, 21, 11, 3, tzinfo=timezone.utc)
+        self.agent.ronde()
+        aantal = len(self.board.bewaard)
+        eerste = self.board.rijen["afspraak:bs77"]["pakket"]["gemeten_ts"]
+        Klok.huidig = datetime(2026, 10, 21, 11, 59, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertEqual(len(self.board.bewaard), aantal)
+        Klok.huidig = datetime(2026, 10, 21, 12, 4, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertEqual(len(self.board.bewaard), aantal + 1)
+        self.assertGreater(self.board.rijen["afspraak:bs77"]["pakket"]["gemeten_ts"], eerste)
+
     def test_dronefoto_en_transcript_wachten_op_iphone_of_zes_uur(self):
         foto = f"{FOTOS}/{DATUM} iPhone/IMG_001.jpg"
         for opslag in (self.db.bestanden, self.db.gewijzigd, self.db.revisies):
@@ -701,6 +856,26 @@ class Rondes(unittest.TestCase):
         self.assertEqual([e["name"] for e in self.pakketten[0]["fotos"]], ["DRONE_001.jpg"])
         self.assertTrue(any("zonder iPhone-foto's" in n["tekst"] for n in
                             (self.log.hartslagen[-1][1].get("nood") or [])))
+
+    def test_open_plaudtaak_na_zes_uur_geeft_waarschuwing_tot_afhandeling(self):
+        Klok.huidig = datetime(2026, 10, 21, 10, 0, tzinfo=timezone.utc)
+        self.agent.ronde()
+        Klok.huidig = datetime(2026, 10, 21, 15, 3, tzinfo=timezone.utc)
+        self.agent.ronde()
+        overdracht = self.board.rijen["afspraak:bs77"]["pakket"]["overdracht"]
+        self.assertIn("Plaud-wachttaak nog open", overdracht["waarschuwing"])
+        self.assertTrue(overdracht["open_wachttaak_bij_overdracht"])
+        self.assertEqual(overdracht["open_wachttaak_reden_bij_overdracht"], "Plaud-wachttaak nog open")
+        self.assertEqual(overdracht["open_wachttaken_bij_overdracht"], ["cc:bs77:plaud-wacht"])
+        self.board.taken["cc:bs77:plaud-wacht"]["status"] = "opgepakt"
+        self.board.rijen["afspraak:bs77"]["taken"].append(
+            {"voor": "plaud-wacht", "uniek": "cc:bs77:plaud-wacht:2"})
+        self.board.taken["cc:bs77:plaud-wacht:2"] = {
+            "uniek": "cc:bs77:plaud-wacht:2", "status": "klaar", "ts": "2026-10-21T15:10:00Z"}
+        Klok.huidig = datetime(2026, 10, 21, 15, 13, tzinfo=timezone.utc)
+        self.agent.ronde()
+        self.assertNotIn("waarschuwing", self.board.rijen["afspraak:bs77"]["pakket"]["overdracht"])
+        self.assertEqual(len([tekst for _, _, tekst in self.log.regels if "pakketwaarschuwing gewist" in tekst]), 1)
 
     def test_waarschuwing_zonder_iphone_blijft_tot_volledige_nieuwe_versie(self):
         foto = f"{FOTOS}/{DATUM} iPhone/IMG_001.jpg"
@@ -799,6 +974,15 @@ class Rondes(unittest.TestCase):
         self.assertIn("iCloud-wachttaak nog open", waarschuwing)
         self.assertTrue(any(n["tekst"] == waarschuwing for n in
                             (self.log.hartslagen[-1][1].get("nood") or [])))
+        overdracht = self.board.rijen["afspraak:bs77"]["pakket"]["overdracht"]
+        for veld in ("open_wachttaak_bij_overdracht", "open_wachttaak_reden_bij_overdracht",
+                     "open_wachttaken_bij_overdracht"):
+            overdracht.pop(veld)
+        self.board.taken["cc:bs77:icloud-wacht"]["ts"] = "2026-10-21T14:00:00Z"
+        Klok.huidig = datetime(2026, 10, 21, 15, 23, tzinfo=timezone.utc)
+        self.agent.ronde()
+        waarschuwing = self.board.rijen["afspraak:bs77"]["pakket"]["overdracht"]["waarschuwing"]
+        self.assertIn("iCloud-wachttaak nog open", waarschuwing)
 
     def test_agentkeuze_blijft_na_overdracht_of_late_stand_vast(self):
         basisrij = self.board.rijen["afspraak:bs77"]
@@ -908,6 +1092,34 @@ class Rondes(unittest.TestCase):
         self.assertFalse(self.board.bewaard)
         self.assertFalse(self.board.opgepakt)
         self.assertFalse(self.log.hartslagen)
+
+    def test_droog_noemt_kandidaat_rust_gereed_en_bestaande_overdracht(self):
+        self.board.rijen["afspraak:bs77"]["taken"] = []
+        Klok.huidig = datetime(2026, 10, 21, 15, 0, tzinfo=timezone.utc)
+
+        def reden():
+            uitvoer = io.StringIO()
+            with contextlib.redirect_stdout(uitvoer):
+                self.agent.droog()
+            return json.loads(uitvoer.getvalue().splitlines()[0])
+
+        eerste = reden()
+        self.assertTrue(eerste["taken_dicht"])
+        self.assertEqual(eerste["reden"], "eerste ronde zet de kandidaat")
+        pakket = self.board.rijen["afspraak:bs77"].setdefault("pakket", {})
+        pakket["kandidaat"] = {"hash": eerste["invoerhash"], "ts": "2026-10-21T14:30:00Z"}
+        rust = reden()
+        self.assertEqual(rust["reden"], ("rust loopt tot 2026-10-21T15:30:00Z "
+                                         "(kandidaat sinds 2026-10-21T14:30:00Z, "
+                                         "laatste wijziging 2026-10-21T08:30:00Z)"))
+        Klok.huidig = datetime(2026, 10, 21, 15, 31, tzinfo=timezone.utc)
+        klaar = reden()
+        self.assertTrue(klaar["zou_overdragen"])
+        self.assertEqual(klaar["reden"], "klaar voor overdracht")
+        pakket["overdracht"] = {"naam": "47035_2026-10-21", "invoerhash": eerste["invoerhash"]}
+        overgedragen = reden()
+        self.assertFalse(overgedragen["zou_overdragen"])
+        self.assertEqual(overgedragen["reden"], "al overgedragen als 47035_2026-10-21")
 
 
 class Model:

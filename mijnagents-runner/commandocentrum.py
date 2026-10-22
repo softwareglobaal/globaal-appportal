@@ -173,11 +173,9 @@ def taak_bron_gewijzigd(oud_item, nieuwe_inhoud):
             oude_inhoud = {}
     if not isinstance(oude_inhoud, dict):
         return True
-    velden = ("datum", "adres", "dossier", "van_tijd", "tot_tijd", "bezoekmap", "doelmap",
-              "plaud_doelmap", "mapnummer")
-    return (any(oude_inhoud.get(k) != nieuwe_inhoud.get(k) for k in velden)
-            or bool(oude_inhoud.get("firma") and nieuwe_inhoud.get("firma")
-                    and oude_inhoud["firma"] != nieuwe_inhoud["firma"]))
+    velden = ("datum", "adres", "dossier", "firma", "start", "einde", "van_tijd", "tot_tijd",
+              "bezoekmap", "doelmap", "plaud_doelmap", "mapnummer")
+    return any(oude_inhoud.get(k) != nieuwe_inhoud.get(k) for k in velden)
 
 
 def taak_voor_nieuwe_ronde(taak, oude_taak, bord_item, bron_aanwezig, gemeten_ts=""):
@@ -189,9 +187,15 @@ def taak_voor_nieuwe_ronde(taak, oude_taak, bord_item, bron_aanwezig, gemeten_ts
     if not bord_item or bord_item.get("status") == "klaar":
         taak["uniek"] = oud_uniek
         return taak
+    bron_gewijzigd = taak_bron_gewijzigd(bord_item, taak["inhoud"])
     if (bron_aanwezig and bord_item.get("status") == "opgepakt" and bord_item.get("opgepakt_door") == taak["voor"]
-            and not taak_bron_gewijzigd(bord_item, taak["inhoud"])):
+            and not bron_gewijzigd):
         return None
+    if bron_gewijzigd:
+        match = re.fullmatch(re.escape(basis) + r":([2-9][0-9]*)", oud_uniek)
+        nummer = int(match.group(1)) + 1 if match else 2
+        taak["uniek"] = f"{basis}:{nummer}"
+        return taak
     afgevinkt = _tijd(bord_item.get("opgepakt_ts"))
     gemeten = _tijd(gemeten_ts)
     wachtduur = timedelta(minutes=WACHTRONDE_MIN[taak["voor"]])

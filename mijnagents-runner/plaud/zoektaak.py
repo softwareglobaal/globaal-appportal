@@ -233,16 +233,20 @@ def _docx_kop(data):
     return _kop("\n".join(regels[:10]))
 
 
-def _bestaande_kop(dropbox, pad, naam, koplengte):
+def _bestaande_kop(dropbox, pad, naam, koplengte, meld=None):
     if naam.casefold().endswith(".docx"):
         try:
             return _docx_kop(dropbox.download(pad))
+        except RuntimeError:
+            if meld:
+                meld(f"bestaand transcript {naam}: kop onbekend (download niet mogelijk); niet als geleverd geteld")
+            return {}
         except (KeyError, ValueError, zipfile.BadZipFile, ElementTree.ParseError):
             return {}
     return _kop(dropbox.download_kop(pad, koplengte).decode("utf-8", "replace"))
 
 
-def lever(bezoekmap, plaud_id, tekst, dropbox, naam="transcript.txt", scan_alle=False):
+def lever(bezoekmap, plaud_id, tekst, dropbox, naam="transcript.txt", scan_alle=False, meld=None):
     """Zet het transcript in de map en bevestig id én transcriptversie (nacontrole v1.1, P2-9).
 
     Bovenaan het bestand: `plaud_id:` en `transcript_hash:`. Uitkomst:
@@ -276,7 +280,7 @@ def lever(bezoekmap, plaud_id, tekst, dropbox, naam="transcript.txt", scan_alle=
         kandidaat = (is_bezoektranscript(bestaand, scan_datum) if scan_alle
                      else bestaand.casefold().endswith(".txt") and bestaand.casefold().startswith(stam.casefold()))
         if e.get(".tag") == "file" and kandidaat:
-            k = _bestaande_kop(dropbox, e["path_display"], bestaand, koplengte)
+            k = _bestaande_kop(dropbox, e["path_display"], bestaand, koplengte, meld)
             if k.get("plaud_id") != plaud_id:
                 if scan_alle:
                     if bestaand.casefold() == naam.casefold():

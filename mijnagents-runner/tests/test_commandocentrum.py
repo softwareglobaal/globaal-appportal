@@ -101,6 +101,18 @@ class Taakinhoud(unittest.TestCase):
         nieuw = CC.taak_voor_nieuwe_ronde(taak.copy(), oud, bord_item, False, "2026-10-21T13:46:00+02:00")
         self.assertEqual(nieuw["uniek"], taak["uniek"] + ":2")
 
+    def test_gewijzigd_venster_firma_of_doelmap_wacht_niet_op_bronpoort(self):
+        basis = "cc:afspraak:bs1:icloud-wacht"
+        oud_inhoud = {"van_tijd": "2026-10-21T08:00:00+02:00", "firma": "UNAB", "doelmap": MAP + "/oud"}
+        bord_item = {"status": "opgepakt", "opgepakt_door": "icloud-wacht",
+                     "opgepakt_ts": "2026-10-21T13:16:00+02:00", "inhoud": oud_inhoud}
+        for wijziging in ({"van_tijd": "2026-10-21T08:30:00+02:00"}, {"firma": "TKNB"},
+                          {"firma": ""}, {"doelmap": MAP + "/nieuw"}):
+            with self.subTest(wijziging=wijziging):
+                taak = {"voor": "icloud-wacht", "uniek": basis, "inhoud": {**oud_inhoud, **wijziging}}
+                nieuw = CC.taak_voor_nieuwe_ronde(taak, {"uniek": basis}, bord_item, False, "")
+                self.assertEqual(nieuw["uniek"], basis + ":2")
+
 
 class NepAgent:
     def __init__(self):
@@ -303,6 +315,10 @@ class DagbundelaarTaken(unittest.TestCase):
              "soort": "taak", "status": "klaar", "sleutel": "47035", "titel": "Gewone taak", "inhoud": inhoud},
             {"id": 3, "uniek": "afspraak:test", "van": "agenda-wacht", "voor": "tkn", "soort": "afspraak",
              "status": "klaar", "sleutel": "47035", "titel": "Fictief bezoek", "inhoud": inhoud},
+            {"id": 4, "uniek": "cc:afspraak:bs1:voorbereiding", "van": "commandocentrum", "voor": "tkn",
+             "soort": "impuls", "status": "klaar", "sleutel": "47035", "titel": "Voorbereiding", "inhoud": inhoud},
+            {"id": 5, "uniek": "cc:afspraak:bs1:verslag", "van": "commandocentrum", "voor": "tkn",
+             "soort": "impuls", "status": "klaar", "sleutel": "47035", "titel": "Verslag", "inhoud": inhoud},
         ]
         afgevinkt = []
         with patch.object(dag, "ag", agent), patch.object(dag.bord, "call", return_value={"items": items}), \
@@ -312,6 +328,8 @@ class DagbundelaarTaken(unittest.TestCase):
         self.assertEqual(afgevinkt, [(2, dag.NAAM), (3, dag.NAAM)])
         inhoud_bundel = "\n".join(it["inhoud"] for groep in agent.gestuurd for it in groep)
         self.assertNotIn("Fototaak", inhoud_bundel)
+        self.assertNotIn("Voorbereiding", inhoud_bundel)
+        self.assertNotIn("Verslag", inhoud_bundel)
         self.assertIn("Gewone taak", inhoud_bundel)
 
 
