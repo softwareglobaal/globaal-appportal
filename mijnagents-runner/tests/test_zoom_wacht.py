@@ -208,6 +208,8 @@ class NepZoom:
             for s, berichten in self.chat:
                 if (q.get("to_contact") and q["to_contact"] == s.get("peer_contact_email")) or \
                         (q.get("to_channel") and q["to_channel"] == s.get("channel_id")):
+                    if s.get("weg"):
+                        return None                 # 404: Zoom kent dit gesprek niet meer
                     van, tot = q.get("from", ""), q.get("to", "")
                     if not (re.fullmatch(ZOOM_DT, van) and re.fullmatch(ZOOM_DT, tot)):
                         # zoals Zoom (gemeten 22-10-2026): from en to zonder tijd worden genegeerd, alleen de laatste dag
@@ -2384,14 +2386,18 @@ def test_eigen1_chat_altijd_met_de_app_van_de_stack():
 def test_chat_venster_met_datum_en_tijd():
     """Live gemeten 22-10-2026: met from en to als datum zonder tijd negeert Zoom het venster en geeft /messages alleen
     de laatste dag. De dagregels van 19 en 20-10 zeiden zo '0 chatgesprekken', terwijl Zoom met datum en tijd er 30 en 36
-    berichten gaf. Nu vraagt De Zoomwacht het venster in UTC met tijd, en telt elke dag van het venster."""
+    berichten gaf. Nu vraagt De Zoomwacht het venster in UTC met tijd, en telt elke dag van het venster. Een gesprek dat
+    Zoom niet meer kent (404) maakt de chat niet onbekend: de rest telt, het aantal staat in het werkverslag."""
     w = Wereld()
     w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
                     [{"date_time": "2026-10-18T09:00:00Z", "sender": "info@h-invest.test"},
                      {"date_time": "2026-10-19T09:00:00Z", "sender": "info@h-invest.test"},
                      {"date_time": "2026-10-19T09:05:00Z", "sender": TEAM_ADRES},
-                     {"date_time": "2026-10-20T10:00:00Z", "sender": TEAM_ADRES}])]
+                     {"date_time": "2026-10-20T10:00:00Z", "sender": TEAM_ADRES}]),
+                   ({"type": "group", "channel_id": "kanaal-weg", "name": "Oud proefkanaal", "weg": True}, [])]
     assert w.ronde(NU) is None
+    bron = w.bord.sql("SELECT tekst FROM logboek WHERE naam='zoom-wacht' AND stap='bron' ORDER BY id DESC LIMIT 1")[0]["tekst"]
+    assert "chat: 1 gesprek(ken) kent Zoom niet meer" in bron, bron
     for dag, n in (("2026-10-18", 1), ("2026-10-19", 2), ("2026-10-20", 1)):
         rij = w.bord.rij(f"zoom:chat:{TEAM_ADRES}:{dag}")
         assert rij and rij["thema"].startswith(f"Zoom-chat: {n} bericht(en)"), (dag, rij)

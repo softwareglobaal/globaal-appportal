@@ -480,7 +480,7 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
     # /messages enkel de laatste dag terug (gemeten 22-10-2026: voor 20-10 36 berichten met tijd, 0 zonder).
     venster = {"from": zoom_tijd(dag_grenzen(van_dag)[0]), "to": zoom_tijd(dag_grenzen(tot_dag)[0] - timedelta(seconds=1))}
     sessies = _lijst(f"/chat/users/{ik['id']}/sessions", dict(venster, page_size=50), "sessions", "stack")
-    rijen, dagtel = [], defaultdict(lambda: {"berichten": 0, "gesprekken": 0, "prive": 0})
+    rijen, dagtel, niet_leesbaar = [], defaultdict(lambda: {"berichten": 0, "gesprekken": 0, "prive": 0}), 0
     for s in sessies:
         p = dict(venster, page_size=50)
         een_op_een = s.get("type") == "1:1"
@@ -490,7 +490,12 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
             p["to_channel"] = s.get("channel_id", "")
         if not (p.get("to_contact") or p.get("to_channel")):
             continue
-        berichten = _lijst(f"/chat/users/{ik['id']}/messages", p, "messages", "stack")
+        berichten = Z.lees_alles(f"/chat/users/{ik['id']}/messages", p, "messages", "stack")
+        if berichten is None:
+            # Zoom kent dit gesprek niet meer (404: kanaal verlaten of contact weg). Live 22-10-2026 maakte zo een enkel
+            # oud gesprek de hele chat onbekend; nu telt de rest, en het aantal staat in het werkverslag.
+            niet_leesbaar += 1
+            continue
         if not berichten:
             continue
         naam = s.get("name") or ("gesprek" if een_op_een else "kanaal")
@@ -532,7 +537,7 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
             dagtel[dag]["berichten"] += len(lijst)
             dagtel[dag]["gesprekken"] += 1
             dagtel[dag]["prive"] += 1 if prive else 0
-    return rijen, dagtel
+    return rijen, dagtel, niet_leesbaar
 
 
 # ---------------------------------------------------------------- fathom ---
@@ -1008,10 +1013,10 @@ def lezen(a, klok, staat, personen, domeinen):
     eerste = (date.fromisoformat(vandaag) - timedelta(days=a.inhaal)).isoformat()
     van, _ = dag_grenzen(eerste)
     w = zoom_lezen(van, klok, staat, klok)
-    w.update(vandaag=vandaag, eerste=eerste, chat=[], chat_dag={})
+    w.update(vandaag=vandaag, eerste=eerste, chat=[], chat_dag={}, chat_niet=0)
     if w["ik"]:
         try:
-            w["chat"], w["chat_dag"] = chat_rijen(w["ik"], eerste, (date.fromisoformat(vandaag) + timedelta(days=1)).isoformat(),
+            w["chat"], w["chat_dag"], w["chat_niet"] = chat_rijen(w["ik"], eerste, (date.fromisoformat(vandaag) + timedelta(days=1)).isoformat(),
                                                   personen, domeinen)
             w["bronnen"]["chat"] = "ok"
         except Exception as e:  # noqa: BLE001
@@ -1470,7 +1475,9 @@ def werk(r, a, klok):
     ok = sum(1 for b in ZOOM_BRONNEN if w["bronnen"][b] == "ok")
     ag.log("Zoom", "bron", f"venster {w['eerste']} tot {w['vandaag']}: {len(info)} sessies uit {ok} van {len(ZOOM_BRONNEN)} bronnen; "
            f"leesapp {leesapp_stand()}; Fathom: {sum(1 for o in w['fathom'] if o['archief'])} opnames in het archief, "
-           f"{len(w['onleesbaar'])} onleesbaar, API {w['bronnen']['fathom-api']}", json.dumps(w["bronnen"], ensure_ascii=False))
+           f"{len(w['onleesbaar'])} onleesbaar, API {w['bronnen']['fathom-api']}"
+           + (f"; chat: {w['chat_niet']} gesprek(ken) kent Zoom niet meer" if w["chat_niet"] else ""),
+           json.dumps(w["bronnen"], ensure_ascii=False))
     ag.log("Zoom", "bevinding", f"{gekoppeld} met Fathom, {vangnet} in het vangnet, {wachten} wachten of onbekend, "
            f"{len(k['gezien'])} alleen via Fathom gezien, {alleen} alleen Mehdi; telling {tel}")
     if schrijven:
