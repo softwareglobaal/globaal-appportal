@@ -56,6 +56,10 @@ BEZOEK_ANKERS = ("site reports", "werfverslagen", "werf updates", "site visits",
 FOTO_EXT = (".heic", ".jpg", ".jpeg", ".png", ".webp")
 OPNAME_EXT = (".mp3", ".m4a", ".wav", ".mp4", ".mov")
 VERSLAG_PAT = re.compile(r"werf ?(verslag|update|rapport)|site ?report|verslag", re.I)
+# Een verslag van een derde met de partij vooraan na de datum ("2026-08-22 Aannemer - Eindverslag en oplevering
+# van de werken.pdf", 2416): geen bezoek van Mehdi en geen H-A-verslag (22-10-2026).
+DERDE_AUTEUR_RE = re.compile(r"^\s*20\d{2}[-_. ]?\d{2}[-_. ]?\d{2}\s+(?:\d{4}\s+)?"
+                             r"(?:aannemer|onderaannemer|leverancier|bouwheer|klant|buren?)\b", re.I)
 TRANSCRIPT_PAT = re.compile(r"transcri|00 verslag", re.I)
 DATUM_PAT = re.compile(r"(20\d{2})[-_. ]?(\d{2})[-_. ]?(\d{2})")
 MOMENT_VORM_RE = re.compile(r"^(20\d{2}-\d{2}-\d{2}) (\d{2})(\d{2}) HARC (\d{4,6}) - ")
@@ -310,7 +314,7 @@ def bezoeken_in(projectmap, nummer=None):
                                                   for deel in pad.split("/")):
                 continue
             if VERSLAG_PAT.search(naam) and laag.endswith((".docx", ".pdf", ".md")) and datum_uit(naam) \
-                    and any(a in pad.lower() for a in BEZOEK_ANKERS):
+                    and not DERDE_AUTEUR_RE.match(naam) and any(a in pad.lower() for a in BEZOEK_ANKERS):
                 losse.append({"pad": pad, "datum": datum_uit(naam)})
             continue
         eigenaar["bestanden"] += 1
@@ -329,7 +333,7 @@ def bezoeken_in(projectmap, nummer=None):
         elif TRANSCRIPT_PAT.search(naam) and laag.endswith((".md", ".txt", ".docx")) and not re.search(r"niet getranscribeerd|geen opname|00 fotos", laag):
             eigenaar["transcripten"].append(naam)
             eigenaar["transcript_bestanden"].append(pad)
-        elif VERSLAG_PAT.search(naam) and laag.endswith((".docx", ".pdf", ".md")):
+        elif VERSLAG_PAT.search(naam) and laag.endswith((".docx", ".pdf", ".md")) and not DERDE_AUTEUR_RE.match(naam):
             eigenaar["verslagen"].append(naam)
         elif laag.endswith((".docx", ".pdf", ".md", ".txt", ".xlsx", ".pptx")):
             eigenaar["notities"].append(naam)
