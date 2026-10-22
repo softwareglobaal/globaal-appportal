@@ -12,11 +12,13 @@ Gebruik: icloud_wacht.py [--dag JJJJ-MM-DD] | icloud_wacht.py --taken
   --taken: de foto-taken van de Werfverslag voorbereider uitvoeren (klaarzet soort taak, voor icloud-wacht):
   foto's van de bezoekdag binnen de straal van het werfadres exporteren naar <bezoekmap>/fotos/ in Dropbox.
 """
+import hashlib
 import json
 import os
 import re
 import sqlite3
 import sys
+import tempfile
 import uuid
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -36,6 +38,10 @@ LIB = os.path.expanduser("~/Pictures/Photos Library.photoslibrary/originals")
 ADRESSEN = os.path.expanduser("~/.config/mijnagents/adressen.json")
 STRAAL_M = int(os.environ.get("FOTO_STRAAL_M", "300"))
 VOOR_MIN, NA_MIN = 30, 90  # venster rond de afspraak waarin foto's bij het bezoek horen
+SELECTIE_RUST_MIN = 45
+# Hetzelfde vangnet als verslag_basis.ZONDER_TAKEN_UUR; de geïsoleerde Mac-starter kan de VM-module niet importeren.
+ZONDER_TAKEN_UUR = 6
+SELECTIE_STAAT = os.path.expanduser("~/.config/mijnagents/icloud_selecties")
 DAG = None
 for i, a in enumerate(sys.argv):
     if a == "--dag" and i + 1 < len(sys.argv):
@@ -62,7 +68,12 @@ def bord(pad, payload):
 
 def hartslag(status, taak="", detail=""):
     try:
-        bord("/agent-status", {"naam": NAAM, "status": status, "taak": taak, "detail": detail})
+        versie = Path(__file__).with_name("VERSIE").read_text(encoding="utf-8").strip() or "onbekend"
+    except OSError:
+        versie = "onbekend"
+    try:
+        bord("/agent-status", {"naam": NAAM, "status": status, "taak": taak,
+                               "detail": f"VERSIE {versie}" + (f"; {detail}" if detail else "")})
     except Exception as e:  # noqa: BLE001
         print("hartslag mislukt:", e, file=sys.stderr)
 
@@ -72,14 +83,25 @@ def fotos_van(dag):
     van = d0.timestamp() - APPLE_EPOCH
     tot = (d0 + timedelta(days=1)).timestamp() - APPLE_EPOCH
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
-    rijen = con.execute(
-        "SELECT ZUUID, ZFILENAME, ZDATECREATED, ZLATITUDE, ZLONGITUDE, ZKIND FROM ZASSET "
-        "WHERE ZDATECREATED >= ? AND ZDATECREATED < ? AND ZTRASHEDSTATE = 0 ORDER BY ZDATECREATED", (van, tot)).fetchall()
-    con.close()
+    basis = ("SELECT a.ZUUID, a.ZFILENAME, a.ZDATECREATED, a.ZLATITUDE, a.ZLONGITUDE, a.ZKIND "
+             "FROM ZASSET a WHERE a.ZDATECREATED >= ? AND a.ZDATECREATED < ? "
+             "AND a.ZTRASHEDSTATE = 0 ORDER BY a.ZDATECREATED")
+    try:
+        try:
+            rijen = con.execute(
+                "SELECT a.ZUUID, a.ZFILENAME, a.ZDATECREATED, a.ZLATITUDE, a.ZLONGITUDE, a.ZKIND, "
+                "aa.ZORIGINALFILENAME FROM ZASSET a LEFT JOIN ZADDITIONALASSETATTRIBUTES aa ON aa.ZASSET = a.Z_PK "
+                "WHERE a.ZDATECREATED >= ? AND a.ZDATECREATED < ? AND a.ZTRASHEDSTATE = 0 "
+                "ORDER BY a.ZDATECREATED", (van, tot)).fetchall()
+        except sqlite3.OperationalError:
+            rijen = [(*rij, None) for rij in con.execute(basis, (van, tot)).fetchall()]
+    finally:
+        con.close()
     uit = []
-    for uuid, naam, t, lat, lon, kind in rijen:
+    for uuid, naam, t, lat, lon, kind, origineel in rijen:
         gps = lat is not None and lon is not None and lat > -180 and lon > -180
-        uit.append({"uuid": uuid, "bestand": naam, "tijd": datetime.fromtimestamp(t + APPLE_EPOCH).strftime("%H:%M"),
+        uit.append({"uuid": uuid, "bestand": naam, "origineel": origineel,
+                    "tijd": datetime.fromtimestamp(t + APPLE_EPOCH).strftime("%H:%M"),
                     "vastgelegd_utc": datetime.fromtimestamp(t + APPLE_EPOCH, timezone.utc).isoformat(),
                     "lat": round(lat, 5) if gps else None, "lon": round(lon, 5) if gps else None, "video": kind == 1})
     return uit
@@ -328,6 +350,106 @@ def exporteer_naar(fotos, doel):
     return klaar
 
 
+def exporteer_jpg_naar(fotos, doel):
+    """TKN-foto's als JPG in de bestaande fotomap; lever nooit video of HEIC af.
+
+    Een bestaande niet-lege doelnaam is al geleverd. Alle bewerkingen gebeuren in
+    een eigen tijdelijke map, zodat een mislukte omzetting geen halve JPG achterlaat.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    os.makedirs(doel, exist_ok=True)
+    klaar = 0
+    geziene_doelen = set()
+    beeld_ext = {".heic", ".heif", ".jpg", ".jpeg", ".png"}
+    for f in fotos:
+        f["geexporteerd"] = False
+        f.pop("export_fout", None)
+        origineel = os.path.basename(str(f.get("origineel") or ""))
+        stam = os.path.splitext(origineel)[0] or f"{str(f.get('tijd') or '').replace(':', '')} {str(f.get('uuid') or '')[:8]}"
+        # Een Photos-naam mag nooit een pad of een gereserveerde doelnaam leveren.
+        if stam in ("", ".", "..") or "/" in stam or "\\" in stam:
+            f["export_fout"] = "bestandsnaam_ongeldig"
+            continue
+        f["export"] = stam + ".jpg"
+        uit = os.path.join(doel, f["export"])
+        if uit.casefold() in geziene_doelen:
+            f["export_fout"] = "bestandsnaam_dubbel"
+            continue
+        geziene_doelen.add(uit.casefold())
+        if os.path.lexists(uit):
+            if not os.path.islink(uit) and os.path.isfile(uit) and os.path.getsize(uit) > 0:
+                f["geexporteerd"] = True
+                klaar += 1
+            else:
+                f["export_fout"] = "doelbestand_ongeldig"
+            continue
+
+        ext_echt = os.path.splitext(str(f.get("bestand") or ""))[1]
+        ext = ext_echt.lower()
+        uid = str(f.get("uuid") or "")
+        # De echte extensie uit Photos: op een hoofdlettergevoelig bestandssysteem vindt '.heic' geen '.HEIC'.
+        bron = os.path.join(LIB, uid[:1], uid + ext_echt) if uid and ext in beeld_ext else ""
+        with tempfile.TemporaryDirectory(prefix="icloud-jpg-") as tmp:
+            if not bron or not os.path.isfile(bron) or os.path.getsize(bron) == 0:
+                if not uid or '"' in uid or "\\" in uid:
+                    f["export_fout"] = "photos_bron_ongeldig"
+                    continue
+                script = (f'tell application "Photos" to export {{media item id "{uid}"}} '
+                          f'to POSIX file "{tmp}" as alias with using originals')
+                try:
+                    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=300)
+                except (OSError, subprocess.TimeoutExpired):
+                    f["export_fout"] = "photos_export_mislukt"
+                    continue
+                if r.returncode != 0:
+                    f["export_fout"] = "photos_export_mislukt"
+                    continue
+                kandidaten = [os.path.join(tmp, naam) for naam in os.listdir(tmp)
+                              if os.path.splitext(naam)[1].lower() in beeld_ext
+                              and os.path.isfile(os.path.join(tmp, naam))
+                              and os.path.getsize(os.path.join(tmp, naam)) > 0]
+                if not kandidaten:
+                    f["export_fout"] = "photos_export_mislukt"
+                    continue
+                gewenste_stammen = {stam.casefold(), os.path.splitext(str(f.get("bestand") or ""))[0].casefold()}
+                bron = sorted(kandidaten, key=lambda p: (
+                    os.path.splitext(os.path.basename(p))[0].casefold() not in gewenste_stammen,
+                    -os.path.getsize(p), os.path.basename(p)))[0]
+
+            conversie = os.path.join(tmp, "conversie")
+            os.mkdir(conversie)
+            tijdelijk_jpg = os.path.join(conversie, "uitvoer.jpg")
+            if os.path.splitext(bron)[1].lower() in (".jpg", ".jpeg"):
+                shutil.copy2(bron, tijdelijk_jpg)
+            else:
+                try:
+                    r = subprocess.run(["sips", "-s", "format", "jpeg", "-s", "formatOptions", "90",
+                                        bron, "--out", tijdelijk_jpg], capture_output=True, text=True, timeout=300)
+                except (OSError, subprocess.TimeoutExpired):
+                    f["export_fout"] = "omzetting_mislukt"
+                    continue
+                if r.returncode != 0:
+                    f["export_fout"] = "omzetting_mislukt"
+                    continue
+            if not os.path.isfile(tijdelijk_jpg) or os.path.getsize(tijdelijk_jpg) == 0:
+                f["export_fout"] = "omzetting_mislukt"
+                continue
+            if os.path.lexists(uit):
+                if not os.path.islink(uit) and os.path.isfile(uit) and os.path.getsize(uit) > 0:
+                    f["geexporteerd"] = True
+                    klaar += 1
+                else:
+                    f["export_fout"] = "doelbestand_ongeldig"
+                continue
+            shutil.move(tijdelijk_jpg, uit)
+            f["geexporteerd"] = True
+            klaar += 1
+    return klaar
+
+
 def jpeg_kopieen(doel, max_px=1800):
     """Naast elke HEIC een JPEG (sips, max 1800 px): Word en de bezoekpagina kunnen geen HEIC tonen; het origineel blijft."""
     import subprocess
@@ -359,7 +481,7 @@ def _tijd_met_zone(value):
 
 def taakvenster(d):
     """Alleen expliciete tijden, ook bij E4; zonder venster blijft de taak open."""
-    start, einde = _tijd_met_zone(d.get("start")), _tijd_met_zone(d.get("einde"))
+    start, einde = _tijd_met_zone(d.get("start") or d.get("van_tijd")), _tijd_met_zone(d.get("einde") or d.get("tot_tijd"))
     e4 = d.get("reden") == "E4, geen afspraak"
     if einde <= start or einde - start > timedelta(days=1, minutes=75 if e4 else 0):
         raise ValueError("bezoekvenster_ongeldig")
@@ -373,6 +495,8 @@ def taakvenster(d):
 
 def taakdoel(d):
     """Bind identiteit en schrijflocatie aan één H-Architects-bezoek."""
+    if str(d.get("project_ref") or "").startswith("tkn:"):
+        return _tkn_doel(d)
     dossier = str(d.get("dossier", ""))
     if not re.fullmatch(r"[0-9]{4}", dossier) or d.get("project_ref") != "h-architects:" + dossier:
         raise ValueError("projectidentiteit_ontbreekt")
@@ -399,6 +523,61 @@ def taakdoel(d):
     return str(doel)
 
 
+def _tkn_doel(d):
+    """Alleen de ene bestaande, eigen fotomap onder een TKN-project is een doel."""
+    import unicodedata
+    nummer = d.get("mapnummer")
+    if not isinstance(nummer, str) or not re.fullmatch(r"[0-9]{4,6}", nummer) or d.get("project_ref") != "tkn:" + nummer:
+        raise ValueError("projectidentiteit_ontbreekt")
+    if not re.fullmatch(r"verslagopdracht:\d+", str(d.get("bezoek_ref") or "")):
+        raise ValueError("bronregistratie_ontbreekt")
+    project = d.get("projectmap")
+    if not isinstance(project, str):
+        raise ValueError("bezoekmap_ontbreekt")
+    pp = PurePosixPath(project)
+    delen = pp.parts
+    if ("\x00" in project or pp.as_posix() != project or not pp.is_absolute() or ".." in delen or len(delen) != 6
+            or delen[1:4] != ("Work", "TKN BURO WORK", "1 Projects")
+            or not re.fullmatch(r"[0-9]{4}", delen[4])
+            or not re.match(r"^" + re.escape(nummer) + r"(?:_| )", delen[5])):
+        raise ValueError("bezoekmap_buiten_project")
+    datum = d.get("datum")
+    try:
+        if not isinstance(datum, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", datum):
+            raise ValueError
+        datetime.fromisoformat(datum)
+    except ValueError:
+        raise ValueError("taakgegevens_ongeldig") from None
+    root = Path(DROPBOX_LOKAAL).resolve()
+    projectpad = root.joinpath(*delen[1:]).resolve()
+    if root not in projectpad.parents:
+        raise ValueError("bezoekmap_buiten_project")
+    if not projectpad.is_dir():
+        raise ValueError("fotomap_ontbreekt")
+
+    def is_fotomap(naam):
+        # Dezelfde herkenning als verslagsoorten.submap_sleutel('fotos'), zonder
+        # import van runner-modules: de geïsoleerde Mac-starter draait met -I.
+        plat = "".join(c for c in unicodedata.normalize("NFKD", naam) if not unicodedata.combining(c)).lower()
+        return re.match(r"^1 ?foto", " ".join(re.findall(r"[a-z0-9]+", plat))) is not None
+
+    fotomappen = [p for p in projectpad.iterdir() if p.is_dir() and is_fotomap(p.name)]
+    if len(fotomappen) != 1:
+        raise ValueError("fotomap_ontbreekt")
+    verklaard = d.get("doelmap")
+    if not isinstance(verklaard, str):
+        raise ValueError("bezoekmap_ontbreekt")
+    dp = PurePosixPath(verklaard)
+    if "\x00" in verklaard or verklaard != project + "/" + fotomappen[0].name + "/" + datum + " iPhone" or \
+            ".." in dp.parts or dp.parts != delen + (fotomappen[0].name, datum + " iPhone"):
+        raise ValueError("bezoekmap_buiten_project")
+    fotomap = fotomappen[0].resolve()
+    doel = (fotomap / (datum + " iPhone")).resolve()
+    if fotomap.parent != projectpad or fotomap not in doel.parents or projectpad not in doel.parents:
+        raise ValueError("bezoekmap_buiten_project")
+    return str(doel)
+
+
 def selecteer(fotos, start, einde, c, straal):
     """Selectie op [start, einde) en GPS; onbekende tijd/GPS blijft onbeslist."""
     binnen, onbeslist = [], 0
@@ -417,6 +596,44 @@ def selecteer(fotos, start, einde, c, straal):
         if afstand_m(lat, lon, c[0], c[1]) <= straal:
             binnen.append(f)
     return binnen, onbeslist
+
+
+def selectie_stabiel(it, d, fotos, nu):
+    """Bewaar alleen een hash en het begin van de huidige, ongewijzigde selectie op de Mac.
+
+    Een nieuwe foto reset de klok, ook wanneer de zesuursgrens al is verstreken.
+    Een eerste meting na die grens mag wel meteen sluiten.
+    """
+    sleutel = it.get("id")
+    if type(sleutel) is not int or sleutel <= 0:
+        raise ValueError("taakidentiteit_ongeldig")
+    inhoud = json.dumps({"taak": d, "fotos": sorted((str(f.get("uuid")), str(f.get("vastgelegd_utc"))) for f in fotos)},
+                        ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    selectiehash = hashlib.sha256(inhoud.encode("utf-8")).hexdigest()
+    pad = Path(SELECTIE_STAAT) / f"{sleutel}.json"
+    eerder_gemeten = pad.exists()
+    try:
+        oud = json.loads(pad.read_text(encoding="utf-8"))
+        eerste = _tijd_met_zone(oud.get("eerste_meting"))
+    except (OSError, ValueError, AttributeError, TypeError):
+        oud, eerste = {}, None
+    einde_bezoek = _tijd_met_zone(d.get("tot_tijd"))
+    na_vangnet = nu >= einde_bezoek + timedelta(hours=ZONDER_TAKEN_UUR)
+    if oud.get("selectiehash") == selectiehash and eerste and eerste <= nu:
+        return nu - eerste >= timedelta(minutes=SELECTIE_RUST_MIN) or na_vangnet
+    pad.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    tijdelijk_pad = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=pad.parent, prefix=".selectie-",
+                                         suffix=".json", delete=False) as tijdelijk:
+            tijdelijk_pad = tijdelijk.name
+            os.chmod(tijdelijk_pad, 0o600)
+            json.dump({"selectiehash": selectiehash, "eerste_meting": nu.isoformat()}, tijdelijk)
+        os.replace(tijdelijk_pad, pad)
+    finally:
+        if tijdelijk_pad and os.path.exists(tijdelijk_pad):
+            os.unlink(tijdelijk_pad)
+    return not eerder_gemeten and na_vangnet
 
 
 def taken():
@@ -440,6 +657,7 @@ def taken():
             d = json.loads(d) if isinstance(d, str) else d
             if not isinstance(d, dict):
                 raise ValueError("taakgegevens_ongeldig")
+            tkn = str(d.get("project_ref") or "").startswith("tkn:")
             start, einde = taakvenster(d)
             doel = taakdoel(d)
             straal = d.get("straal_m", min(STRAAL_M, 300))
@@ -447,9 +665,12 @@ def taken():
                 raise ValueError("fotostraal_ongeldig")
             if not isinstance(d.get("adres"), str) or not d["adres"].strip():
                 raise ValueError("werfadres_ontbreekt")
+            if tkn:
+                _tijd_met_zone(d.get("tot_tijd"))
         except ValueError as exc:
             codes = {"bezoekvenster_ontbreekt", "bezoekvenster_ongeldig", "bezoekvenster_tijdzone_ontbreekt", "bezoekvenster_andere_dag",
-                     "projectidentiteit_ontbreekt", "bronregistratie_ontbreekt", "bezoekmap_ontbreekt", "bezoekmap_buiten_project", "fotostraal_ongeldig", "werfadres_ontbreekt"}
+                     "projectidentiteit_ontbreekt", "bronregistratie_ontbreekt", "bezoekmap_ontbreekt", "bezoekmap_buiten_project",
+                     "fotomap_ontbreekt", "fotostraal_ongeldig", "werfadres_ontbreekt"}
             blokkeer(it, str(exc) if str(exc) in codes else "taakgegevens_ongeldig")
             continue
         c = (d.get("lat"), d.get("lon")) if isinstance(d.get("lat"), (int, float)) and isinstance(d.get("lon"), (int, float)) else coord(d["adres"])
@@ -462,33 +683,49 @@ def taken():
         while dag <= laatste_dag:
             fotos.extend(fotos_van(dag.isoformat()))
             dag += timedelta(days=1)
+        if tkn:
+            fotos = [f for f in fotos if not f.get("video") and not re.match(
+                r"(?i)^(?:screenshot|screen shot|schermafbeelding)(?:[\s_.-]|$)",
+                os.path.basename(str(f.get("origineel") or f.get("bestand") or "")))]
         binnen, onbeslist = selecteer(fotos, start, einde, c, straal)
         if not binnen:
             blokkeer(it, "fotoselectie_onbeslist" if onbeslist else "fotoselectie_leeg")
             continue
-        n = exporteer_naar(binnen, doel)
-        volledig = type(n) is int and n == len(binnen) and not onbeslist
+        n = exporteer_jpg_naar(binnen, doel) if tkn else exporteer_naar(binnen, doel)
+        volledig = type(n) is int and n == len(binnen) and (tkn or not onbeslist)
         if type(n) is not int or not 0 <= n <= len(binnen):
             blokkeer(it, "exportresultaat_ongeldig")
             continue
+        stabiel = selectie_stabiel(it, d, binnen, datetime.now(timezone.utc)) if tkn and volledig else True
         md = ["# Fotoaanvoer " + ("volledig" if volledig else "onvolledig"), "",
-              f"Bezoek {d['bezoek_id']}; {n} van {len(binnen)} geselecteerde foto's geleverd; {onbeslist} foto's niet toewijsbaar.",
-              f"Venster: {d['start']} tot {d['einde']}; vaste straal {straal} m. Geen automatische verruiming.",
-              f"Reden venster: {d.get('reden') or 'H-A-afspraak van de Agendawacht'}.", "",
+              f"Bezoek {d.get('bezoek_id') or d.get('bezoek_ref')}; {n} van {len(binnen)} geselecteerde foto's geleverd; {onbeslist} foto's niet toewijsbaar.",
+              f"Venster: {d.get('start') or d.get('van_tijd')} tot {d.get('einde') or d.get('tot_tijd')}; vaste straal {straal} m. Geen automatische verruiming.",
+              f"Reden venster: {d.get('reden') or ('TKN-afspraak van de Agendawacht' if tkn else 'H-A-afspraak van de Agendawacht')}.", "",
               "## Geleverde foto's en opnametijden"]
         md.extend(f"- {f['vastgelegd_utc']} | {f.get('export') or f.get('bestand')}" for f in binnen if f.get("geexporteerd"))
-        manifest = os.path.join(doel, "00 fotos.md")
-        if os.path.exists(manifest):
-            stempel = datetime.now(ZoneInfo("Europe/Brussels")).strftime("%Y%m%dT%H%M%S%f")
-            manifest = os.path.join(doel, f"00 fotos {stempel}.md")
-        with open(manifest, "x", encoding="utf-8") as f:
-            f.write("\n".join(md) + "\n")
+        if not tkn:
+            manifest = os.path.join(doel, "00 fotos.md")
+            if os.path.exists(manifest):
+                stempel = datetime.now(ZoneInfo("Europe/Brussels")).strftime("%Y%m%dT%H%M%S%f")
+                manifest = os.path.join(doel, f"00 fotos {stempel}.md")
+            with open(manifest, "x", encoding="utf-8") as f:
+                f.write("\n".join(md) + "\n")
+        elif volledig and stabiel:
+            manifest = os.path.join(doel, "00 fotos.md")
+            if not os.path.exists(manifest):
+                with open(manifest, "x", encoding="utf-8") as f:
+                    f.write("\n".join(md) + "\n")
         regels.append({"naam": NAAM, "onderwerp": "fotoaanvoer", "stap": "schrijf",
                        "tekst": f"{n} van {len(binnen)} geselecteerde foto's geleverd; {onbeslist} onbeslist"})
         if not volledig:
-            blokkeer(it, "fotoselectie_onbeslist" if onbeslist else "fotolevering_gedeeltelijk")
+            blokkeer(it, ("omzetting_mislukt" if tkn and any(f.get("export_fout") == "omzetting_mislukt" for f in binnen)
+                          else "fotoselectie_onbeslist" if onbeslist and not tkn else "fotolevering_gedeeltelijk"))
             continue
-        jpeg_kopieen(doel)
+        if tkn and not stabiel:
+            blokkeer(it, "fotoselectie_wacht_op_stabiliteit")
+            continue
+        if not tkn:
+            jpeg_kopieen(doel)
         taak_opgepakt(it["id"])
         gedaan += 1
     if regels:

@@ -1,0 +1,15 @@
+{
+  "versie": 1,
+  "naam_pakket": "^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$",
+  "naam_bestand": "^[A-Za-z0-9][A-Za-z0-9._-]{0,150}$",
+  "wortel": ["Transcript.docx", "meta.json", "manifest.json", "photos", "bijlagen", "plan.jpg", "plan.jpeg", "plan.png"],
+  "foto_ext": [".heic", ".heif", ".jpg", ".jpeg", ".png", ".webp"],
+  "bijlage_ext": [".pdf", ".md", ".txt", ".eml", ".msg", ".docx", ".xlsx", ".pptx"],
+  "meta_sleutels": ["dossier", "projectnr", "adres", "building", "bezoekdatum", "klant", "bron"],
+  "bron_sleutels": ["dossiermap", "verslagopdracht", "agendanummer", "agenda_titel"],
+  "meta_max_bytes": 65536,
+  "manifest_max_bytes": 1048576,
+  "max_fotos": 300,
+  "max_bestand_mb": 80,
+  "max_totaal_mb": 2850
+}

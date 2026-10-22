@@ -7,7 +7,11 @@ dossiers in Dropbox staan, hoe de bezoekmap heet en welke hoofdstukken het versl
 
 Een nieuwe verslagsoort toevoegen = een blok in SOORTEN + een dunne runner (zie verslag_basis.py).
 """
+import json
+import os
 import re
+import unicodedata
+from functools import lru_cache
 
 SOORTEN = {
     "werfverslag": {
@@ -80,7 +84,18 @@ SOORTEN = {
         "firmas": ("UNABO", "TKN", "ENERGIE", "UB", "UNAB", "TK", "TKNB", "EE", "ENEF"),
         "codes": ("BS", "STA", "ST"),
         "trefwoorden": ("barsten", "scheur", "stabiliteit", "bs "),
-        "basismappen": ["/Work All/03. Enstaco WORK/7. STA (Stabiliteit)"],
+        "basismappen": ["/Work/TKN BURO WORK/1 Projects"],
+        "jaarmappen": True,
+        "overslaan": r"(?i)^(0[. ]|_|\.)|mapstructuur|sjabloon|archive",
+        "bezoekmap_is_dossiermap": True,
+        "submappen": {"fotos": "1. Foto's", "plaud": "2. plaud", "documenten": "3.Documents", "mail": "4.Email"},
+        "vereiste_submappen": ["fotos", "plaud"],
+        "fotodatummap": "{datum} iPhone",
+        "transcriptnaam": "{datum} Plaud transcript.txt",
+        "fotoformaat": "jpg",
+        "fotovenster_min": (30, 180),
+        "fototaak_na_min": 15,
+        "bronnen_max_tekens": 200000,
         "communicatiemap": "_00. Communication",
         "bezoeknaam": "bezoek klant - barsten en scheuren",
         "eigen_keten": False,
@@ -97,6 +112,66 @@ SOORTEN = {
         "slot": "Dit verslag geeft de vaststellingen van het plaatsbezoek weer; een definitief oordeel vraagt de aanbevolen onderzoeken.",
     },
 }
+
+
+def plat(t):
+    t = str(t or "").replace("’", "'").replace("‘", "'")
+    t = "".join(c for c in unicodedata.normalize("NFKD", t) if not unicodedata.combining(c)).lower()
+    return " ".join(re.findall(r"[a-z0-9]+", t))
+
+
+def straat_nummer(adres):
+    straat = str(adres or "").split(",", 1)[0]
+    straat = re.sub(r"(?i)\s*(?:bus|bte|bt)\s*\d+[a-z]?\s*$", "", straat)
+    straat = re.sub(r"(?i)\s*/\s*\d+[a-z]?\s*$", "", straat)
+    straat = plat(straat)
+    return straat if re.fullmatch(r"[a-z][a-z0-9 ]* \d{1,4}(?: ?[a-z])?", straat) else ""
+
+
+def busnummer(adres):
+    tekst = str(adres or "")
+    voor_komma = tekst.split(",", 1)[0]
+    match = re.search(r"(?i)\b\d{1,4}[a-z]?\s*/\s*(\d+[a-z]?)\b", voor_komma)
+    if not match:
+        match = re.search(r"(?i)\b(?:bus|bte|bt)\s*(\d+[a-z]?)\b", tekst)
+    if not match:
+        return ""
+    waarde = match.group(1).lower()
+    cijfers = re.match(r"\d+", waarde).group()
+    return str(int(cijfers)) + waarde[len(cijfers):]
+
+
+def mapnummer(naam):
+    m = re.match(r"^\s*(\d{4,6})(?=[_ ])", str(naam or ""))
+    return m.group(1) if m else ""
+
+
+def submap_sleutel(naam):
+    p = plat(naam)
+    for patroon, sleutel in ((r"^1 ?foto", "fotos"), (r"^2 ?plaud", "plaud"),
+                            (r"^3 ?doc", "documenten"), (r"^4 ?e ?mail", "mail")):
+        if re.match(patroon, p):
+            return sleutel
+    return None
+
+
+def tkn_pad(pad, basis):
+    if not isinstance(pad, str) or not isinstance(basis, str) or "\x00" in pad:
+        return ""
+    if not pad.startswith(basis + "/") or pad.endswith("/"):
+        return ""
+    delen = pad[len(basis) + 1:].split("/")
+    if len(delen) != 2 or any(not d or d == ".." for d in delen):
+        return ""
+    if not re.fullmatch(r"\d{4}", delen[0]):
+        return ""
+    return mapnummer(delen[1])
+
+
+@lru_cache(maxsize=1)
+def pakketcontract():
+    with open(os.path.join(os.path.dirname(__file__), "pakketcontract.json"), encoding="utf-8") as f:
+        return json.load(f)
 
 ONLINE_SOORTEN = ("KO", "PO", "IN", "LO", "AO", "XO", "B2B")
 

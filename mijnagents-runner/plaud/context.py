@@ -9,6 +9,7 @@ Afspraken tellen alleen als ze het opnametijdstip overlappen. Dezelfde dag op ee
 bevestiging.
 """
 import json
+import re
 from datetime import datetime, timedelta, timezone
 
 try:
@@ -57,8 +58,15 @@ def afspraken_op(items, start_utc, duur_minuten):
         if not a or not b:
             continue
         if a < e + MARGE and b > s - MARGE:
+            nummer = str(inhoud.get("nummer") or "")
+            # Bij TKN kan een postcode ten onrechte als agendanummer zijn ingevuld.
+            # H-A gebruikt ook viercijferige projectnummers die met de postcode
+            # van de werf kunnen samenvallen; het agenda-item blijft dan bewijs.
+            postcodes = re.findall(r",\s*(\d{4})\b", str(inhoud.get("locatie") or ""))
+            if inhoud.get("firma") != "HARC" and len(nummer) == 4 and nummer in postcodes:
+                nummer = ""
             uit.append({"titel": inhoud.get("titel") or it.get("titel", ""), "start": inhoud.get("start"), "einde": inhoud.get("einde"),
-                        "firma": inhoud.get("firma") or "", "nummer": inhoud.get("nummer") or "", "agenda": inhoud.get("agenda") or ""})
+                        "firma": inhoud.get("firma") or "", "nummer": nummer, "agenda": inhoud.get("agenda") or ""})
     return uit
 
 

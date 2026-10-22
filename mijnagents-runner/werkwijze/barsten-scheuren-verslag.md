@@ -1,5 +1,69 @@
 # Werkwijze van Barsten en scheuren verslag (UNABO / TKN-Buro)
 
+## Versie 3 (22-10-2026; versie 2 van 21-10-2026)
+
+De TKN-projectmap is voor deze dienst tegelijk **dossiermap en bezoekmap**:
+`/Work/TKN BURO WORK/1 Projects/<jaar>/<mapnummer>_...`. Ik maak geen nieuwe bezoekmap.
+Ik zoek in het bezoekjaar, het vorige jaar en het lopende jaar. Alleen een map voor barsten en
+scheuren met een nummer van vier tot zes cijfers komt in aanmerking. Het agendanummer helpt,
+maar straat én huisnummer bevestigen de keuze; een viercijferig nummer in het adres kan een
+postcode zijn. Bij strijd tussen nummer en adres, meerdere kandidaten of alleen een `STA`-map
+vraag ik om de juiste map op de pagina Commandocentrum. Ik gok niet op een klantnaam.
+De bus hoort bij het adres: `bus 2`, `bte 2`, `bt 2` en `23/2` betekenen dezelfde
+bus. Verschillende bussen blijven een conflict; bij een bus aan één kant moet
+het agendanummer de map bevestigen. Een onbekend agendanummer van vijf of zes
+cijfers mag een adrestreffer met een ander mapnummer niet overrulen. Zonder
+postcode moet ook de gemeente in het adresdeel van de mapnaam kloppen.
+Het **mapnummer** komt uit de gekozen map. Een agendanummer dat gelijk is aan de postcode
+van het bezoekadres telt niet als projectbewijs voor de Plaudwacht.
+
+Ik lees de aanwezige submappen en gebruik hun werkelijke namen. Het sjabloon is `1. Foto's`,
+`2. plaud`, `3.Documents` en `4.Email`; ontbreken de foto- of Plaud-submap, dan meld ik dat
+en maak ik ze niet zelf. Ik tel foto's alleen in een gedateerde map onder de fotosubmap;
+`<datum> iPhone` telt apart als `fotos_iphone`, zodat dronefoto's de iPhone-aanvoer niet
+afsluiten. Een HEIC met een JPEG-kopie telt één keer. Rechtstreeks in de Plaud-submap telt
+een gedateerd transcript, geen samenvatting of concept. Documenten en mailbijlagen tel ik
+in hun eigen submap. De pakketstand vermeldt deze tellingen en de werkelijke submapnamen.
+
+Het Commandocentrum geeft Plaud een taak vanaf agenda-einde plus 60 minuten zolang een
+transcript ontbreekt. De iCloud-wacht krijgt pas een taak na haar fotovenster plus 15 minuten
+zolang `fotos_iphone` nul is. Dat venster loopt van agenda-start min 30 minuten tot
+agenda-einde plus 180 minuten, begrensd tot 00:00–23:59:59 op de bezoekdag in Brusselse tijd;
+de straal blijft 300 meter. Foto's gaan naar `1. Foto's/<datum> iPhone` (of de werkelijk
+aanwezige fotosubmap), het transcript naar de werkelijk aanwezige Plaud-submap. Open taken
+volgen gewijzigde agendagegevens; bij onbruikbare tijden pauzeren ze met lege doelpaden.
+Alleen de wachten vinken hun taak af na een volledige levering. De iCloud-wacht
+laat een TKN-taak open tot de fotoselectie in twee rondes met minstens 45 minuten
+ertussen gelijk bleef, of tot zes uur na het bezoek. Een opnieuw nodige,
+al afgehandelde taak krijgt pas na een volgende wachtronde en een nieuwe meting
+zonder bron een nieuw volgnummer. De dagbundelaar laat de open wachttaken met
+`cc:`-sleutel met rust.
+
+Een compleet pakket gaat **zonder taalmodel of tokens** naar `/home/ubuntu/bs-inbox`.
+`koppelingen/pakketcontract.json` versie 1 begrenst namen, bestandstypen en omvang. Het
+pakket bevat `Transcript.docx`, `photos/`, `bijlagen/`, `meta.json` en `manifest.json`;
+het manifest legt Dropbox-pad, revisie of hash vast. `meta.json` koppelt de dossiermap,
+bezoekopdracht, het agendanummer en de agendatitel aan het pakket.
+Ik wacht minstens 60 minuten na een stabiele kandidaat én na de laatste bronwijziging.
+Open wachttaken en ontbrekende iPhone-foto's houden de overdracht tegen; na zes uur voorbij
+het bezoek mag een pakket zonder iPhone-foto's door, met een melding. Zijn er dan al enkele
+iPhone-foto's terwijl de fototaak nog open is, dan meldt de overdracht dat de levering
+mogelijk onvolledig is; die waarschuwing blijft zichtbaar bij iedere ronde tot
+een volledige nieuwe pakketversie klaarstaat. Een identieke invoer
+levert geen dubbele versie op. Bij nieuwe invoer komt
+een nieuwe map, maximaal vijf versies; bij de grens vraag ik om een beslissing. Bestaande
+bronbestanden en afgeronde pakketten verplaats, hernoem, verwijder of overschrijf ik nooit.
+Een mens laadt en verwerkt het pakket in **barstenscheurenv2**; ik start die verwerking niet.
+
+Een proef met Claude kost tokens en start alleen na de knop **Proef maken** op het
+Commandocentrum. Die proef is geen automatische overdracht of verzending. De iCloud-wacht
+draait op Mehdi's Mac via de vaste root-eigen
+`/Library/Application Support/iCloudWacht/iCloudWacht.app`, met eigen Full Disk Access en
+Photos Automation. De Mac-uitrol volgt pas op geslaagde grendels en een bewuste controle;
+de VM kan de Foto's-bibliotheek niet lezen.
+
+De versie 1 hieronder beschrijft de vroegere Enstaco-map en blijft als historie staan.
+
 Versie 1 (16-09-2026). Ik maak het stabiliteitsverslag over barsten en scheuren na een plaatsbezoek.
 Ik zoek niet achter data: Het Commandocentrum stuurt mij vooraf op pad en laat na het bezoek de
 wachten de bezoekmap vullen. Mijn motor is `verslag_basis.py`; mijn soort staat in
@@ -52,3 +116,4 @@ opnames zelf ophalen, inhoud van het verslag op het bord zetten (alleen tellinge
 | # | Wat | Oorzaak | Wat we deden / wie beslist |
 |---|---|---|---|
 | 1 | (nog leeg) | | |
+| 2 | 21-10-2026: een barstenbezoek liep nog via de oude map en kreeg geen bruikbaar bronpakket. | De oude werkwijze wees naar Enstaco en een nieuwe bezoekmap; het TKN-dossier gebruikt zijn bestaande submappen. | Versie 2 legt de TKN-map, herkenning, taken en tokenvrije inbox vast; bij twijfel kiest Mehdi de map op Commandocentrum. |

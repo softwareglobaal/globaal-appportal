@@ -281,7 +281,8 @@ def _dossierkopie(payload):
 
 
 def _bezoekmap(payload):
-    r = zoektaak.lever(payload["bezoekmap"], payload["plaud_id"], payload["tekst"], bronnen)
+    r = zoektaak.lever(payload["bezoekmap"], payload["plaud_id"], payload["tekst"], bronnen,
+                       naam=payload.get("naam", "transcript.txt"), scan_alle=payload.get("scan_alle", False))
     if r["uitkomst"] == "conflict":
         raise RuntimeError(r["reden"])
     bord.opgepakt(payload["taak_id"], NAAM)        # pas na de bevestigde levering (id en transcriptversie)
@@ -331,8 +332,12 @@ def opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort):
     # (nacontrole v1.1, P1-2). Een afgewezen levering laat de taak open; de reden staat in het logboek.
     if b["kopie_toegestaan"]:
         for t in taken:
+            inhoud = zoektaak.inhoud_van(t)
+            payload = {"plaud_id": pid, "taak_id": t["id"], "bezoekmap": inhoud["bezoekmap"].rstrip("/"), "tekst": tekst}
+            if inhoud.get("plaud_doelmap"):
+                payload.update(bezoekmap=inhoud["plaud_doelmap"].rstrip("/"), naam=inhoud["transcriptnaam"], scan_alle=True)
             uit.append({"sleutel": f"bezoekmap:{t['id']}", "soort": "bezoekmap",
-                        "payload": {"plaud_id": pid, "taak_id": t["id"], "bezoekmap": zoektaak.inhoud_van(t)["bezoekmap"].rstrip("/"), "tekst": tekst}})
+                        "payload": payload})
     else:
         for t in taken:
             ag.log(f"taak {t['id']}", "besluit", "transcript niet geleverd: geen zakelijke bestemming toegestaan ("

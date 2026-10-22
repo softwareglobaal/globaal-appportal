@@ -1,0 +1,112 @@
+# Barsten en scheuren: pakketoverdracht, Commandocentrum, Plaud en iCloud.
+# Alle proeven gebruiken fictieve invoer; de Mac-starter wordt ook echt uitgevoerd.
+name: verslag-grendels
+
+on:
+  push:
+    paths:
+      - mijnagents-runner/verslag_basis.py
+      - mijnagents-runner/barsten_scheuren_verslag.py
+      - mijnagents-runner/commandocentrum.py
+      - mijnagents-runner/koppelingen/verslagsoorten.py
+      - mijnagents-runner/koppelingen/bronnen.py
+      - mijnagents-runner/koppelingen/pakketcontract.json
+      - mijnagents-runner/plaud/zoektaak.py
+      - mijnagents-runner/plaud/context.py
+      - mijnagents-runner/plaud_wacht.py
+      - mijnagents-runner/mac/icloud_wacht.py
+      - mijnagents-runner/mac/uitrol_icloud_wacht.sh
+      - mijnagents-runner/mac/starter/**
+      - mijnagents-runner/tests/test_verslag_barsten.py
+      - mijnagents-runner/tests/test_commandocentrum.py
+      - mijnagents-runner/tests/test_plaud_wacht.py
+      - mijnagents-runner/tests/test_plaud_dossier.py
+      - mijnagents-runner/tests/test_dossierbewijs_zeker.py
+      - mijnagents-runner/tests/test_twee_letters.py
+      - mijnagents-runner/tests/test_icloud_status.py
+      - mijnagents-runner/tests/test_icloud_starter.py
+      - .github/workflows/verslag-grendels.yml
+  pull_request:
+    paths:
+      - mijnagents-runner/verslag_basis.py
+      - mijnagents-runner/barsten_scheuren_verslag.py
+      - mijnagents-runner/commandocentrum.py
+      - mijnagents-runner/koppelingen/verslagsoorten.py
+      - mijnagents-runner/koppelingen/bronnen.py
+      - mijnagents-runner/koppelingen/pakketcontract.json
+      - mijnagents-runner/plaud/zoektaak.py
+      - mijnagents-runner/plaud/context.py
+      - mijnagents-runner/plaud_wacht.py
+      - mijnagents-runner/mac/icloud_wacht.py
+      - mijnagents-runner/mac/uitrol_icloud_wacht.sh
+      - mijnagents-runner/mac/starter/**
+      - mijnagents-runner/tests/test_verslag_barsten.py
+      - mijnagents-runner/tests/test_commandocentrum.py
+      - mijnagents-runner/tests/test_plaud_wacht.py
+      - mijnagents-runner/tests/test_plaud_dossier.py
+      - mijnagents-runner/tests/test_dossierbewijs_zeker.py
+      - mijnagents-runner/tests/test_twee_letters.py
+      - mijnagents-runner/tests/test_icloud_status.py
+      - mijnagents-runner/tests/test_icloud_starter.py
+      - .github/workflows/verslag-grendels.yml
+
+jobs:
+  vm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Echte document- en beeldafhankelijkheden
+        run: python3 -m pip install 'python-docx==1.2.0' 'pillow>=12,<13' 'pypdf==6.14.2'
+      - run: python3 -B mijnagents-runner/tests/test_verslag_barsten.py
+      - run: python3 -B mijnagents-runner/tests/test_commandocentrum.py
+      - run: python3 -B mijnagents-runner/tests/test_plaud_wacht.py
+      - run: python3 -B mijnagents-runner/tests/test_plaud_dossier.py
+      - run: python3 -B mijnagents-runner/tests/test_dossierbewijs_zeker.py
+      - run: python3 -B mijnagents-runner/tests/test_twee_letters.py
+
+  mac39:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - run: python3 -B mijnagents-runner/tests/test_icloud_status.py
+      - name: Mac-script blijft leesbaar voor Python 3.9
+        run: |
+          python3 -B - <<'PY'
+          import ast
+          from pathlib import Path
+          bron = Path('mijnagents-runner/mac/icloud_wacht.py')
+          ast.parse(bron.read_text(encoding='utf-8'), filename=str(bron), feature_version=(3, 9))
+          PY
+      - name: Mac-uitrolscript heeft geldige zsh-syntaxis
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh
+          zsh -n mijnagents-runner/mac/uitrol_icloud_wacht.sh
+
+  starter:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bouw en teken de productiestarter met geharde runtime
+        run: |
+          plutil -lint mijnagents-runner/mac/starter/Info.plist
+          plutil -lint mijnagents-runner/mac/starter/Entitlements.plist
+          mkdir -p "$RUNNER_TEMP/iCloudWacht.app/Contents/MacOS"
+          cc -O2 -Wall -Werror -Wl,-sectcreate,__RESTRICT,__restrict,/dev/null -o "$RUNNER_TEMP/iCloudWacht.app/Contents/MacOS/icloudwacht" mijnagents-runner/mac/starter/icloudwacht.c
+          cp mijnagents-runner/mac/starter/Info.plist "$RUNNER_TEMP/iCloudWacht.app/Contents/Info.plist"
+          codesign -s - --force --options runtime --entitlements mijnagents-runner/mac/starter/Entitlements.plist --identifier be.globaal.icloudwacht "$RUNNER_TEMP/iCloudWacht.app"
+          codesign --verify --strict "$RUNNER_TEMP/iCloudWacht.app"
+      - name: Vaste root-eigen Python 3.9 is aanwezig
+        run: |
+          test -x /Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9
+          /Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9 --version
+      - name: Gedrag van de ongewijzigde productiestarter
+        env:
+          ICLOUD_STARTER_BIN: ${{ runner.temp }}/iCloudWacht.app/Contents/MacOS/icloudwacht
+        run: /usr/bin/python3 -B mijnagents-runner/tests/test_icloud_starter.py

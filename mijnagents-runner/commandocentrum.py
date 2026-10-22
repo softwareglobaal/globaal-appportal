@@ -9,7 +9,9 @@ veiligheidscoördinatie, plaatsbeschrijving, barsten en scheuren) en stuurt op h
                                      aanmaken, dossierkennis klaarleggen (agenda, adres, deal);
   2. na het bezoek (einde + 1 u)  -> taken voor de wachten: iCloud-wacht (foto's van die dag binnen 300 m van het
                                      adres, naar <bezoekmap>/fotos), Plaudwacht (opname en transcript, naar de
-                                     bezoekmap);
+                                     bezoekmap). Voor barsten en scheuren gaat Plaud na +1 uur; de iPhone-fototaak
+                                     volgt na het fotovenster (agenda -30/+180 minuten) plus 15 minuten. Die taken
+                                     wijzen naar de werkelijke TKN-submappen en volgen latere agendawijzigingen;
   3. zodra het pakket vol is      -> impuls `verslag` naar de verslagagent: hij meldt "klaar voor verslag";
                                      de proef zelf start pas op Mehdi's knop (tokens).
 
@@ -24,9 +26,11 @@ Gebruik:
 import argparse
 import json
 import os
+import posixpath
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+import urllib.parse
+from datetime import date, datetime, timedelta, timezone
 
 try:
     from zoneinfo import ZoneInfo
@@ -45,6 +49,7 @@ TERUG_DAGEN = int(os.environ.get("CC_TERUG_DAGEN", "21"))
 VOORUIT_DAGEN = int(os.environ.get("CC_VOORUIT_DAGEN", "21"))
 NA_BEZOEK_MIN = int(os.environ.get("CC_NA_BEZOEK_MIN", "60"))     # taken voor de wachten pas een uur na het einde
 STRAAL_M = 300
+WACHTRONDE_MIN = {"icloud-wacht": 30, "plaud-wacht": 60}
 
 ag = bord.Agent(NAAM)
 
@@ -96,6 +101,127 @@ def pakket_vol(pk):
     return bool(pk.get("bezoekmap")) and (pk.get("fotos") or 0) > 0 and (pk.get("transcripten") or 0) > 0
 
 
+def taakinhoud(rij, oud, s, soort):
+    """Inhoud voor (iCloud, Plaud), zonder bijwerkingen; None bij een onbruikbaar TKN-bezoek.
+
+    Andere verslagsoorten behouden hun oorspronkelijke zeven velden en veldvolgorde. Het TKN-venster ligt
+    op de lokale bezoekdag en sluit de andere kalenderdag uit, ook wanneer de agenda laat eindigt.
+    """
+    basis = {"dossier": rij["dossier"] or rij["klant"], "datum": rij["datum"], "adres": rij["adres"],
+             "bezoekmap": oud.get("bezoekmap") or "", "van_tijd": rij["start"], "tot_tijd": rij["einde"],
+             "verslagsoort": soort}
+    if not s.get("submappen"):
+        return basis.copy(), basis.copy()
+
+    dossiermap = oud.get("dossiermap") or ""
+    mapnr = vs.tkn_pad(dossiermap, (s.get("basismappen") or [""])[0]) if dossiermap else ""
+    start, einde = _tijd(rij.get("start")), _tijd(rij.get("einde"))
+    try:
+        bezoekdag = date.fromisoformat(rij["datum"])
+    except (TypeError, ValueError):
+        return None
+    if (not mapnr or not oud.get("id") or "T" not in str(rij.get("start") or "")
+            or "T" not in str(rij.get("einde") or "") or not start or not einde):
+        return None
+    start, einde = start.astimezone(TZ), einde.astimezone(TZ)
+    if einde <= start or start.date() != bezoekdag or einde.date() < bezoekdag:
+        return None
+    dag_start = datetime.combine(bezoekdag, datetime.min.time(), TZ)
+    dag_einde = dag_start.replace(hour=23, minute=59, second=59)
+    van = max(dag_start, start - timedelta(minutes=s.get("fotovenster_min", (30, 180))[0]))
+    tot = min(dag_einde, einde + timedelta(minutes=s.get("fotovenster_min", (30, 180))[1]))
+    if tot <= van:
+        return None
+    pk = oud.get("pakket") or {}
+    submappen = s["submappen"].copy()
+    submappen.update({k: v for k, v in (pk.get("submappen") or {}).items() if v})
+    fotomap, plaudmap = submappen.get("fotos"), submappen.get("plaud")
+    if not fotomap or not plaudmap:
+        return None
+    dossier = str(rij.get("dossier") or "")
+    postcodes = re.findall(r",\s*(\d{4})\b", str(rij.get("adres") or ""))
+    dossier_is_postcode = len(dossier) == 4 and dossier in postcodes
+    basis.update({"dossier": dossier if re.fullmatch(r"[0-9]{4,6}", dossier) and not dossier_is_postcode else mapnr,
+                  "mapnummer": mapnr, "projectmap": dossiermap, "bezoekmap": dossiermap,
+                  "firma": rij.get("firma") or "",
+                  "start": van.isoformat(), "einde": tot.isoformat(),
+                  "reden": "barsten en scheuren: agendavenster -30/+180 min, vaste straal 300 m",
+                  "doelmap": posixpath.join(dossiermap, fotomap, s["fotodatummap"].format(datum=rij["datum"])),
+                  "plaud_doelmap": posixpath.join(dossiermap, plaudmap),
+                  "transcriptnaam": s["transcriptnaam"].format(datum=rij["datum"]),
+                  "fotoformaat": s["fotoformaat"], "project_ref": f"tkn:{mapnr}",
+                  "bezoek_ref": f"verslagopdracht:{oud['id']}", "straal_m": STRAAL_M})
+    return basis.copy(), basis.copy()
+
+
+def bordtaak(uniek):
+    """Lees ook een afgehandelde taak; alleen de status klaar verbergt een vroegere opdracht."""
+    if not uniek:
+        return None
+    pad = "/api/klaarzet?" + urllib.parse.urlencode({"uniek": uniek, "status": "alle"})
+    return next((it for it in bord.call(pad).get("items", [])
+                 if it.get("uniek") == uniek and it.get("van") == NAAM), None)
+
+
+def taak_bron_gewijzigd(oud_item, nieuwe_inhoud):
+    """Een afgeronde levering vraagt alleen een nieuwe taak na een echte bronwijziging."""
+    oude_inhoud = oud_item.get("inhoud") or {}
+    if isinstance(oude_inhoud, str):
+        try:
+            oude_inhoud = json.loads(oude_inhoud)
+        except ValueError:
+            oude_inhoud = {}
+    if not isinstance(oude_inhoud, dict):
+        return True
+    velden = ("datum", "adres", "dossier", "van_tijd", "tot_tijd", "bezoekmap", "doelmap",
+              "plaud_doelmap", "mapnummer")
+    return (any(oude_inhoud.get(k) != nieuwe_inhoud.get(k) for k in velden)
+            or bool(oude_inhoud.get("firma") and nieuwe_inhoud.get("firma")
+                    and oude_inhoud["firma"] != nieuwe_inhoud["firma"]))
+
+
+def taak_voor_nieuwe_ronde(taak, oude_taak, bord_item, bron_aanwezig, gemeten_ts=""):
+    """Hergebruik open taken; heropen alleen na een nieuwe bronmeting na de afvinkronde."""
+    if not oude_taak:
+        return taak
+    basis = taak["uniek"]
+    oud_uniek = oude_taak.get("uniek") or basis
+    if not bord_item or bord_item.get("status") == "klaar":
+        taak["uniek"] = oud_uniek
+        return taak
+    if (bron_aanwezig and bord_item.get("status") == "opgepakt" and bord_item.get("opgepakt_door") == taak["voor"]
+            and not taak_bron_gewijzigd(bord_item, taak["inhoud"])):
+        return None
+    afgevinkt = _tijd(bord_item.get("opgepakt_ts"))
+    gemeten = _tijd(gemeten_ts)
+    wachtduur = timedelta(minutes=WACHTRONDE_MIN[taak["voor"]])
+    if bron_aanwezig or not afgevinkt or not gemeten or gemeten < afgevinkt + wachtduur:
+        return None
+    match = re.fullmatch(re.escape(basis) + r":([2-9][0-9]*)", oud_uniek)
+    nummer = int(match.group(1)) + 1 if match else 2
+    taak["uniek"] = f"{basis}:{nummer}"
+    return taak
+
+
+def gepauzeerde_taak(oude_taak, bord_item, reden):
+    """Houd een TKN-taak open, maar maak het oude doel onbruikbaar zolang de agenda geen opdracht toelaat."""
+    if not bord_item or bord_item.get("status") != "klaar":
+        return None
+    inhoud = bord_item.get("inhoud") or {}
+    if isinstance(inhoud, str):
+        try:
+            inhoud = json.loads(inhoud)
+        except ValueError:
+            inhoud = {}
+    if not isinstance(inhoud, dict):
+        inhoud = {}
+    inhoud = {**inhoud, "bezoekmap": "", "projectmap": "", "doelmap": "", "plaud_doelmap": "",
+              "pauze_reden": reden}
+    return {"voor": oude_taak["voor"], "soort": "taak", "sleutel": bord_item.get("sleutel") or "",
+            "titel": bord_item.get("titel") or oude_taak.get("titel") or "Wacht op geldig bezoek",
+            "inhoud": inhoud, "verwijzing": "", "uniek": oude_taak["uniek"]}
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--droog", action="store_true")
@@ -124,6 +250,9 @@ def main():
                    "dossier": d.get("nummer") or "", "klant": klant, "adres": d.get("locatie") or "",
                    "datum": d.get("datum"), "start": d.get("start") or "", "einde": d.get("einde") or "",
                    "titel": d.get("titel") or "", "agenda": d.get("agenda") or "", "deal_id": d.get("deal_id") or ""}
+            if s.get("submappen"):
+                # De map ligt bij TKN, maar de agendacode bepaalt de zakelijke firma van de opname.
+                rij["firma"] = d.get("firma") or ""
             oud = bestaand.get(uniek)
             if not oud:
                 nieuw.append(rij)
@@ -137,7 +266,7 @@ def main():
             else:
                 # agenda kan veranderd zijn (adres, titel, klant): de rij volgt de agenda
                 bord.call("/api/verslagopdracht", {"rijen": [rij]}) if not a.droog else None
-            einde = _tijd(oud.get("einde") or d.get("einde") or "")
+            einde = _tijd(rij["einde"] if s.get("submappen") else (oud.get("einde") or d.get("einde") or ""))
             voorbij = bool(einde and nu >= einde + timedelta(minutes=NA_BEZOEK_MIN))
             pk = oud.get("pakket") or {}
             stand = oud.get("stand") or "gepland"
@@ -157,21 +286,20 @@ def main():
             bezoekmap = oud.get("bezoekmap") or ""
             if voorbij and s["eigen_keten"] and stand in ("gepland", "voorbereid") and not a.droog:
                 bewaar(uniek, stand="werfverslagketen")   # verder op de pagina Werfverslagen
-            if voorbij and not s["eigen_keten"]:
+            if voorbij and not s["eigen_keten"] and not s.get("submappen"):
                 bestaande_taken = {t.get("voor") for t in (oud.get("taken") or [])}
                 if bezoekmap:
                     nieuwe = []
+                    inhoud_icloud, inhoud_plaud = taakinhoud(rij, oud, s, soort)
                     if not pk.get("fotos") and "icloud-wacht" not in bestaande_taken:
                         nieuwe.append({"voor": "icloud-wacht", "soort": "taak", "sleutel": rij["dossier"] or uniek,
                                        "titel": f"Foto's van {rij['datum']} binnen {STRAAL_M} m van {rij['adres']} ({s['label'].lower()}) naar de bezoekmap"[:300],
-                                       "inhoud": {"dossier": rij["dossier"] or rij["klant"], "datum": rij["datum"], "adres": rij["adres"],
-                                                  "bezoekmap": bezoekmap, "van_tijd": rij["start"], "tot_tijd": rij["einde"], "verslagsoort": soort},
+                                       "inhoud": inhoud_icloud,
                                        "verwijzing": bezoekmap, "uniek": f"cc:{uniek}:icloud-wacht"})
                     if not pk.get("transcripten") and "plaud-wacht" not in bestaande_taken:
                         nieuwe.append({"voor": "plaud-wacht", "soort": "taak", "sleutel": rij["dossier"] or uniek,
                                        "titel": f"Plaud-opname van {rij['datum']} ({rij['adres']}, {s['label'].lower()}): transcript in de bezoekmap"[:300],
-                                       "inhoud": {"dossier": rij["dossier"] or rij["klant"], "datum": rij["datum"], "adres": rij["adres"],
-                                                  "bezoekmap": bezoekmap, "van_tijd": rij["start"], "tot_tijd": rij["einde"], "verslagsoort": soort},
+                                       "inhoud": inhoud_plaud,
                                        "verwijzing": bezoekmap, "uniek": f"cc:{uniek}:plaud-wacht"})
                     if nieuwe:
                         taken += nieuwe
@@ -191,6 +319,71 @@ def main():
                         bewaar(uniek, impuls_verslag_ts=nu.isoformat(), stand="pakket klaar")
                     klaar += 1
                 elif pakket_vol(pk) and stand == "verzamelen" and not a.droog:
+                    bewaar(uniek, stand="pakket klaar")
+            if s.get("submappen") and not s["eigen_keten"]:
+                inhoud = taakinhoud(rij, oud, s, soort)
+                oude_taken = {t.get("voor"): t for t in (oud.get("taken") or []) if t.get("voor") in ("icloud-wacht", "plaud-wacht")}
+                bord_taken = {wacht: bordtaak(taak.get("uniek")) for wacht, taak in oude_taken.items()}
+                foto_nodig = bool(inhoud and nu >= _tijd(inhoud[0]["einde"]) + timedelta(minutes=s["fototaak_na_min"]))
+                plaud_nodig = bool(inhoud and voorbij)
+                # Een telling kan een gedeeltelijke levering zijn. De wachten ronden zelf af:
+                # iCloud schrijft eerst 00 fotos.md, Plaud bevestigt de juiste opname.
+                if not inhoud:
+                    for wacht, oude_taak in oude_taken.items():
+                        gepauzeerd = gepauzeerde_taak(oude_taak, bord_taken[wacht], "dossiermap of agendatijden onbruikbaar")
+                        if gepauzeerd:
+                            taken.append(gepauzeerd)
+                    if voorbij or oude_taken:
+                        noden.append({"tekst": f"{rij['datum']} barsten en scheuren: dossiermap of agendatijden onbruikbaar; "
+                                               "geen taken voor de wachten", "wie": "mehdi"})
+                    continue
+                inhoud_foto, inhoud_plaud = inhoud
+                nieuwe = []
+                for wacht, nodig in (("icloud-wacht", foto_nodig), ("plaud-wacht", plaud_nodig)):
+                    if not nodig and wacht in oude_taken:
+                        gepauzeerd = gepauzeerde_taak(oude_taken[wacht], bord_taken[wacht], "agendavenster nog niet verstreken")
+                        if gepauzeerd:
+                            nieuwe.append(gepauzeerd)
+                if foto_nodig:
+                    taak = {"voor": "icloud-wacht", "soort": "taak", "sleutel": inhoud_foto["dossier"],
+                            "titel": f"iPhone-foto's van {rij['datum']} binnen {STRAAL_M} m van {rij['adres']} ({s['label'].lower()}) naar {inhoud_foto['doelmap']}"[:300],
+                            "inhoud": inhoud_foto, "verwijzing": inhoud_foto["doelmap"],
+                            "uniek": f"cc:{uniek}:icloud-wacht"}
+                    taak = taak_voor_nieuwe_ronde(taak, oude_taken.get("icloud-wacht"), bord_taken.get("icloud-wacht"),
+                                                  (pk.get("fotos_iphone") or 0) > 0, pk.get("gemeten_ts"))
+                    if taak:
+                        nieuwe.append(taak)
+                if plaud_nodig:
+                    taak = {"voor": "plaud-wacht", "soort": "taak", "sleutel": inhoud_plaud["dossier"],
+                            "titel": f"Plaud-opname van {rij['datum']} ({rij['adres']}, {s['label'].lower()}): transcript in {inhoud_plaud['plaud_doelmap']}"[:300],
+                            "inhoud": inhoud_plaud, "verwijzing": inhoud_plaud["plaud_doelmap"],
+                            "uniek": f"cc:{uniek}:plaud-wacht"}
+                    taak = taak_voor_nieuwe_ronde(taak, oude_taken.get("plaud-wacht"), bord_taken.get("plaud-wacht"),
+                                                  (pk.get("transcripten") or 0) > 0, pk.get("gemeten_ts"))
+                    if taak:
+                        nieuwe.append(taak)
+                if nieuwe:
+                    taken += nieuwe  # dezelfde uniek werkt een open taak bij; :2 herstelt een gesloten taak
+                    ontbrekend = [t for t in nieuwe if t["voor"] not in oude_taken or
+                                  t["uniek"] != oude_taken[t["voor"]].get("uniek")]
+                    if ontbrekend and not a.droog:
+                        bewaar(uniek, taken=(oud.get("taken") or []) +
+                               [{"voor": t["voor"], "uniek": t["uniek"], "titel": t["titel"]} for t in ontbrekend],
+                               stand="verzamelen" if stand in ("gepland", "voorbereid") else stand)
+                vol = bool(oud.get("dossiermap") and (pk.get("fotos_iphone") or 0) > 0
+                           and (pk.get("transcripten") or 0) > 0
+                           and not any(t["voor"] == "icloud-wacht" for t in nieuwe)
+                           and (bord_taken.get("icloud-wacht") or {}).get("status") == "opgepakt"
+                           and (bord_taken.get("icloud-wacht") or {}).get("opgepakt_door") == "icloud-wacht")
+                if voorbij and vol and not oud.get("impuls_verslag_ts") and not oud.get("proef_pad"):
+                    impulsen.append({"voor": s["agent"], "soort": "impuls", "sleutel": rij["dossier"] or uniek,
+                                     "titel": f"verslag {s['label'].lower()} {rij['datum']} {rij['dossier'] or rij['klant']}: pakket is vol"[:300],
+                                     "inhoud": {"fase": "verslag", "uniek": uniek, **rij, "bezoekmap": oud.get("dossiermap"), "pakket": pk},
+                                     "verwijzing": oud.get("dossiermap"), "uniek": f"cc:{uniek}:verslag"})
+                    if not a.droog:
+                        bewaar(uniek, impuls_verslag_ts=nu.isoformat(), stand="pakket klaar")
+                    klaar += 1
+                elif vol and stand == "verzamelen" and not a.droog:
                     bewaar(uniek, stand="pakket klaar")
         if a.droog:
             print(json.dumps({"nieuw": nieuw, "impulsen": impulsen, "taken": taken, "noden": noden}, ensure_ascii=False, indent=1))
