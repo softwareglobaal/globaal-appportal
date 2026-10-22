@@ -3039,6 +3039,110 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   release 1: `~/dev/samenwerking-codex/regie-zoom/uitrolstappen-release1.md`.
 - **Grendels**: workflow `regie-grendels.yml`, job bord (`mijnagents/test_gesprekken_api.py`) en job runners
   (`test_bord_lees.py`, `test_zoom_wacht.py`, `test_dagbundelaar.py`, `test_keten.py`, `test_regisseur.py`,
-  `test_bode_regie.py` en `test_uitrol_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is `test_geen_echte_namen.py`:
-  die faalt als een van de genoemde testbestanden een woord bevat waarvan de sha256 op een vaste lijst staat (echte
-  namen, privéonderwerpen en adressen, alleen als hash bewaard; de repo is publiek). Testgegevens zijn altijd verzonnen.
+  `test_bode_regie.py` en `test_uitrol_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is
+  `test_geen_echte_namen.py`: die faalt als een van de genoemde testbestanden een woord bevat waarvan de sha256 op een
+  vaste lijst staat (echte namen, privéonderwerpen en adressen, alleen als hash bewaard; de repo is publiek).
+  Testgegevens zijn altijd verzonnen.
+
+### 14.17 Regiebord: `regie.globaal.be` *(in opbouw, 22-10-2026)*
+
+Ontwerp regiebord v0.2 en v0.4 (`~/dev/samenwerking-codex/regiebord/`, met de bouwopdracht F1-bord). Een overzicht
+voor één eigenaar, gsm eerst: lopende projecten, wat wacht en wat bezig is in zes aandachtskolommen met de
+onveranderde bronfase op elke kaart, "Dit eerst" uit het ochtendbericht van De Regisseur, brongezondheid en
+verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt niets uit. Flask met gunicorn, eigen repo
+`softwareglobaal/globaal-regie` naar het patroon van globaal-prive, op de VM uitgecheckt in `~/appportal/regie`.
+
+- **In deze repo**: overlay `docker-compose.regie.yml` (service `app-regie`, image `appportal-regie`, interne poort
+  3042, `appnet`, healthcheck `/healthz`, geen hostpoort en geen volume), vhost `84-regie.conf.template`, migratie
+  `197-regie.sql` en de tegel `regie` in `apps.yaml` (groep `regie-mehdi`, bewust zonder `poort`, zodat
+  `apps-bijwerken.sh` de app overslaat). De migratie maakt de LOGIN-rol `regie` zonder wachtwoord in git, het schema
+  `regie` met die rol als eigenaar, `REVOKE ALL ... FROM PUBLIC` en `search_path = regie`, en geeft geen rechten op
+  andere schema's. De tabellen staan in de eigen repo en worden bij de start toegepast door `app/migreer.py` onder de
+  rol `regie` (transactie per bestand, databaseslot, checksum).
+- **Toegang**: forward-auth op de hele host; de app toetst zelf nog eens `REGIE_GROUPS`. Eén uitzondering:
+  `location = /api/mac` voor de Mac-brug, die geen browsersessie heeft: alleen POST, hoogstens 256k, 30 verzoeken per
+  minuut per adres (burst 10), de vijf identiteitsheaders (`X-authentik-username`, `-groups`, `-email`, `-name`,
+  `-uid`) geleegd en het proxygeheim `X-Regie-Proxy-Geheim` gezet. Andere `X-authentik-*`-headers van de client geeft
+  nginx door, zoals op elke route met forward-auth; de app leest daarom alleen `username` en `groups`. De app eist op
+  `/api/mac` het proxygeheim en `X-Regie-Token` (hmac-vergelijking met `REGIE_MAC_TOKEN`). `/healthz` blijft achter de
+  forward-auth; de healthcheck toetst binnen de container, en het is de enige route die de app zonder proxygeheim
+  beantwoordt.
+- **Koppen**: `X-Robots-Tag` en `nosniff` op serverniveau in `84-regie` bereiken alleen `/api/mac`; de `location /`
+  uit `forward-auth.conf` heeft eigen `add_header`-regels en erft in nginx 1.27 niets. Voor de pagina's moet de app
+  ze zelf zetten (`_na_verzoek` in `app/__init__.py` van globaal-regie), en dat doet ze voor beide.
+- **Proxygeheim** (besluit bij de review van 22-10-2026, patroon van `42-btw`): zonder geheim vertrouwt de app de
+  `X-authentik-*`-headers van wie haar ook bereikt. Elke container in `appnet` en elk proces op de host kan
+  `http://app-regie:3042` rechtstreeks aanspreken, buiten nginx en Authentik om; nagespeeld op globaal-regie `2dc826f`:
+  zonder headers 403, met vervalste `X-authentik-username` en `X-authentik-groups: regie-mehdi` voorbij de
+  groepscontrole. Daarom zet nginx `X-Regie-Proxy-Geheim`: `map $host $regie_proxy_geheim` in `84-regie` (alleen voor
+  `regie.<domain>`, standaard leeg), de kop in `location /` van `forward-auth.conf` (dus alleen na een geslaagde
+  forward-auth; voor elke andere host leeg en dus niet verstuurd) en op `/api/mac` (review X1: ook die ingang is buiten
+  nginx om dicht; de app toetst er daarnaast het Mac-token, en een geheim dat alleen naar de app gaat, maakt die ingang
+  niet ruimer). De naam `REGIE_PROXY_GEHEIM` staat bij nginx in `docker-compose.yml` (niet in de overlay: de template
+  staat er altijd, en envsubst vult alleen gedefinieerde namen in) en bij `app-regie` in de overlay. **In
+  globaal-regie** (reviewronde 4, 22-10-2026, `baa77d3`): `app/auth.py` vergelijkt de kop op elke route behalve
+  `/healthz` met `REGIE_PROXY_GEHEIM` (`hmac.compare_digest`) en weigert als een van beide leeg is; alleen de proeven en
+  de lokale debugserver komen zonder ingesteld geheim binnen, gunicorn nooit. `deploy/regie_env.py` maakt het geheim
+  willekeurig aan in `~/appportal/.env` (64 hextekens, nooit getoond, idempotent), en de eerste uitrol kijkt in
+  `app-regie` en in een proefcontainer van nginx na dat het er is (alleen de lengte) en dat vervalste
+  `X-authentik-*`-koppen zonder geheim een 403 krijgen. **Uitrol van deze wijziging**: nginx opnieuw maken (`docker
+  compose up -d nginx`, zoals `deploy.sh`, `apps-bijwerken.sh` en de eerste uitrol doen), niet alleen herstarten: een
+  `restart` houdt de oude omgeving, envsubst laat `${REGIE_PROXY_GEHEIM}` dan staan en nginx start niet.
+- **Grendels**: `scripts/test_regie_infra.py` in `.github/workflows/regiebord-grendels.yml` werkt met lijsten in plaats
+  van verboden: wat erbij komt, valt op en moet in dezelfde review in de test. Vast staan de vhost opdracht per opdracht
+  (`/api/mac` als enige eigen locatie: alleen POST, 256k, burst 10, de vijf identiteitsheaders elk één keer en leeg, het
+  proxygeheim één keer en gezet, geen `auth_request`; alleen de includes `ssl.conf` en `forward-auth.conf`), het
+  proxygeheim verder alleen in `location /` van `forward-auth.conf`, elke `${NAAM}` van de template in de omgeving van
+  nginx, de sleutels van `app-regie` (`build`, `image`, `restart`, `environment`, `healthcheck`, `networks`; dus geen
+  hostpoort, volume, `env_file`, `secrets`, `pid` of `user`) en zijn volledige omgeving (geheimen alleen als
+  `${NAAM:-}`), de tegel alleen voor `regie-mehdi` en zonder poort, de SQL van 197 woord voor woord, en dat `/regie/` en
+  `/regie-mac-token` echt genegeerd worden via de gevolgde `.gitignore` (ook een `!`-regel valt op). De workflow zelf
+  mag geen `continue-on-error` of `if` hebben. 56 mutaties getoetst, alle gevangen; bij reviewronde 4 ook een leeg proxygeheim op `/api/mac` (drie tests rood). `.git/info/exclude` op de VM (gezet
+  door de eerste uitrol) is alleen een tweede laag: die zit niet in versiebeheer en verdwijnt bij een nieuwe kloon.
+- **Bronnen, alleen lezen**: `MIJNAGENTS_URL` (`/api/klaarzet` met `soort=ochtendbericht` en `status=alle`,
+  `/api/nood`, `/api/overzicht`) met `X-Agents-Token` uit `REGIE_AGENTS_TOKEN`, en `HA_PROJECTEN_URL`
+  (`/api/projecten`) met `X-Agents-Token` uit `REGIE_HA_PROJECTEN_TOKEN`, beide over het interne netwerk. De twee
+  tokens staan los van elkaar: ha-projecten toetst tegen zijn eigen `AGENTS_TOKEN` in `~/ha-projecten/.env`, en die
+  waarde staat in `~/appportal/.env` al als `HA_PROJECTEN_TOKEN` (voor `app-locatie`); de overlay geeft die naam door,
+  zodat een rotatie bij ha-projecten maar op één plaats landt. **In globaal-regie** (reviewronde 4): `app/bord.py`
+  leest per bron haar eigen naam (`REGIE_AGENTS_TOKEN` voor mijnagents, `REGIE_HA_PROJECTEN_TOKEN` voor
+  ha-projecten), met een proef op twee verschillende tokens; de eerste uitrol stopt zonder iets te wijzigen als
+  `HA_PROJECTEN_TOKEN` in `.env` ontbreekt. De tokens kunnen ook
+  schrijven; het bord doet daarom uitsluitend GET, vastgezet met een test in de eigen repo. Een bron die niet
+  antwoordt, wordt "onbekend", nooit 0 of leeg. Het bord schrijft alleen in zijn eigen schema.
+- **Mac-brug**: een launchd-agent op de Mac post elke minuut alleen een vaste lijst metadatavelden per chat (geen
+  vraag, samenvatting, antwoord of voorleestekst), de laatste planmeting in procent en de laatste driehoek-runs (titel,
+  uitkomst, datum). De app weigert of knipt verboden velden weg, ook als de Mac ze toch stuurt.
+- **Sleutels** (hier alleen namen, waarden in `~/appportal/.env`): `REGIE_DB_URL`, `REGIE_SECRET_KEY`,
+  `REGIE_PROXY_GEHEIM` (ook bij nginx), `REGIE_AGENTS_TOKEN` (dezelfde waarde als `AGENTS_TOKEN` in
+  `mijnagents-data/.env`) en `REGIE_MAC_TOKEN`; `REGIE_HA_PROJECTEN_TOKEN` komt uit de bestaande
+  `HA_PROJECTEN_TOKEN`; optioneel `REGIE_GROUPS` (standaard de groep van de tegel). Op de VM staat het brugtoken ook
+  in `~/appportal/regie-mac-token` (600, genegeerd door `.gitignore`), op de Mac in `~/.config/regiebord/token`
+  (600). `REGIE_DB_URL` staat in de overlay als `${REGIE_DB_URL:-}`, zoals bij prive; een `:?` zou bij een
+  ontbrekende waarde elk `docker compose`-commando van de stack stilleggen. Is `REGIE_DB_URL` leeg, dan start
+  `app-regie` niet: `app/wsgi.py` stopt bij het laden (gunicorn `--preload`), de healthcheck blijft rood, en
+  `deploy-stack.sh` (starttoets `from app.wsgi import app`) zet `appportal-regie:vorige` terug als die er is. Alleen
+  de testfabriek `create_app()` zonder databank antwoordt op `/healthz` met `ok`.
+- **Uitrol**: `COMPOSE_FILE` in `~/appportal/.env` krijgt `:docker-compose.regie.yml`. De eerste uitrol doet één
+  script uit de eigen repo (`deploy/eerste-uitrol.sh`: migratie 197, rolwachtwoord, env-namen, build, `/healthz`,
+  `nginx -t`, registratie in Authentik, groepslid, cron), zonder een geheim te tonen. Stap 1 bewaakt, vóór er iets
+  binnenkomt, dat geen lokaal werk naar productie gaat en niets op de VM overschreven wordt (meting van de VM op
+  22-10-2026: de twee bekende lokale bestanden en 87 ongevolgde paden van andere apps, zoals nginx-templates die niet
+  in git staan, datamappen, oude `.sql`-bestanden, `websites/` en venvs; de VM stond op `origin/main`). (1) Een gevolgde
+  wijziging in `~/appportal` (gewijzigd, weg, hernoemd, klaargezet, conflict) stopt het, behalve ` M` op
+  `docker-compose.override.yml` en `nginx/templates/49-elevaitnv.conf.template` (bewust lokaal gewijzigd, genoemd en
+  ongemoeid gelaten); wijzigt main een van die twee, dan stopt het. (2) Ongevolgde paden mogen: een pull voegt ze
+  nooit aan git toe. Alleen het aantal komt op het scherm, de volledige lijst (alleen namen) in
+  `~/eerste-uitrol-regie-status.log` (600). Zet main iets op of onder een ongevolgd of genegeerd pad, dan stopt het
+  met de botsingen (git overschrijft een genegeerd bestand bij een merge zonder te waarschuwen). (3) De commits van
+  HEAD tot `origin/main` worden getoond; een andere migratie dan 197 stopt altijd, en een bestand buiten wat deze PR
+  wijzigt (de regiebestanden hierboven, `apps.yaml`, `TECHNICAL-REFERENCE.md`, `scripts/test_regie_infra.py`,
+  `.github/workflows/regiebord-grendels.yml` en `.gitignore`; in `docker-compose.yml` en
+  `nginx/snippets/forward-auth.conf` alleen toegevoegde regels over regie) stopt het met de bestandsnamen, tenzij de
+  uitvoerder na het lezen opnieuw draait met `--ook-andere-wijzigingen`. (4) `~/appportal/regie` moet helemaal schoon
+  zijn en op `main` staan. (5) Daarna alleen `git merge --ff-only` van de nagekeken commit. Grendel in globaal-regie:
+  `tests/test_eerste_uitrol.py`, op een nep-VM met de echte meting en, met `REGIE_APPPORTAL`, met deze PR. Daarna rolt
+  `regie/deploy-stack.sh` (cron elke 2 minuten, logboek `~/deploy-regie.log`) elke nieuwe commit op main van
+  globaal-regie uit: een push naar main daar is productie, zoals bij prive. Het haalt alleen `main` binnen, alleen met
+  `--ff-only` en alleen uit een schone checkout, bouwt alleen als HEAD veranderde, doet een starttoets en `/healthz`,
+  en valt bij falen terug op `appportal-regie:vorige`.

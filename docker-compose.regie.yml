@@ -1,0 +1,49 @@
+# Regiebord (regie.globaal.be). Additieve overlay zoals docker-compose.prive.yml,
+# zodat docker-compose.override.yml niet geraakt wordt. Op de VM staat dit
+# bestand in COMPOSE_FILE (~/appportal/.env). Eigen repo
+# softwareglobaal/globaal-regie, uitgecheckt in ./regie met auto-deploy via
+# regie/deploy-stack.sh en cron. Alleen de Authentik-groep uit REGIE_GROUPS komt
+# binnen; de app toetst dat zelf nog eens. Schema en rol: migratie 197-regie.sql.
+#
+# Het bord leest zijn bronnen alleen (GET) over het interne netwerk en schrijft
+# uitsluitend in zijn eigen schema. Geen volume: alles staat in de database.
+# Sleutels staan alleen in ~/appportal/.env; hier enkel de namen.
+services:
+  app-regie:
+    build:
+      context: ./regie
+      dockerfile: app/Dockerfile
+    image: appportal-regie
+    restart: unless-stopped
+    environment:
+      PORT: "3042"
+      REGIE_DB_URL: ${REGIE_DB_URL:-}
+      REGIE_GROUPS: ${REGIE_GROUPS:-regie-mehdi}
+      REGIE_SECRET_KEY: ${REGIE_SECRET_KEY:-}
+      # Proxygeheim (X-Regie-Proxy-Geheim): nginx zet het na de forward-auth en
+      # op /api/mac (84-regie.conf.template); de app eist het op elke route
+      # behalve /healthz. Dezelfde naam staat bij nginx in docker-compose.yml;
+      # leeg = de app laat niemand binnen. Aangemaakt door de eerste uitrol.
+      REGIE_PROXY_GEHEIM: ${REGIE_PROXY_GEHEIM:-}
+      # Token voor mijnagents (X-Agents-Token), dezelfde waarde als AGENTS_TOKEN
+      # in mijnagents-data/.env. Het token kan ook schrijven, daarom doet het
+      # bord naar de bronnen alleen GET (grendel in de repo globaal-regie).
+      REGIE_AGENTS_TOKEN: ${REGIE_AGENTS_TOKEN:-}
+      # Token voor ha-projecten (X-Agents-Token). Dat toetst tegen zijn eigen
+      # AGENTS_TOKEN in ~/ha-projecten/.env, los van mijnagents; in .env staat
+      # die waarde al als HA_PROJECTEN_TOKEN (voor app-locatie). Eén naam voor
+      # beide, zodat een rotatie bij ha-projecten maar op één plaats landt.
+      REGIE_HA_PROJECTEN_TOKEN: ${HA_PROJECTEN_TOKEN:-}
+      # Token van de Mac-brug (X-Regie-Token op POST /api/mac).
+      REGIE_MAC_TOKEN: ${REGIE_MAC_TOKEN:-}
+      MIJNAGENTS_URL: http://app-mijnagents:3022
+      HA_PROJECTEN_URL: http://app-ha-projecten:3140
+      BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3042/healthz', timeout=5)"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    networks: [appnet]

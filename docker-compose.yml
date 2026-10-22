@@ -430,6 +430,11 @@ services:
       # Kopregel X-BTW-Proxy-Geheim naar btw.<domain> (zie 42-btw.conf.template);
       # waarde alleen in .env op de VM, gelijk aan BTW_AUTHENTIK_GEHEIM van de app.
       BTW_PROXY_GEHEIM: ${BTW_PROXY_GEHEIM:-}
+      # Kopregel X-Regie-Proxy-Geheim naar regie.<domain> (zie 84-regie.conf.template);
+      # waarde alleen in .env op de VM, dezelfde als REGIE_PROXY_GEHEIM van app-regie.
+      # Hier en niet in docker-compose.regie.yml: de template staat er altijd, en
+      # envsubst vult alleen gedefinieerde namen in.
+      REGIE_PROXY_GEHEIM: ${REGIE_PROXY_GEHEIM:-}
     # Lets the nginx container reach host services (the real OMV app on :5000).
     extra_hosts:
       - "host.docker.internal:host-gateway"
