@@ -1,6 +1,6 @@
 # De Agentnorm
 
-Versie 1.13, 22-10-2026 (RZ3-01 en RZ3-02: privé is ook een gesprek met afdeling prive, bij elke agent en lezer, en de stand van BUNDELEN staat als vaste regel in de werkwijze van De Bode, niet meer in de code; v1.12 dezelfde dag, RZ2-01: een privégesprek draagt ook in het klaarzet-item, de bundel van De Dagbundelaar en de export van het bord geen naam of onderwerp, bij De Fathomwacht en De Plaudwacht; v1.11 21-10-2026 BAS-01: het werkverslag draagt geen privé, van een privégesprek staat er alleen wanneer en hoe lang, en De Regisseur filtert wat hij leest; bij een omschakeling van BUNDELEN verdwijnt niets; v1.10 dezelfde dag, ontwerp regie-zoom v1.2, G2 en L7: De Regisseur en De Zoomwacht lezen hun regels niet meer als leeg bij onbekend; een signaal voor Mehdi komt op een vast moment, het ochtendbericht of de avondbundel; een nood voor Mehdi bereikt hem in het ochtendbericht; een agent aanspreken met "Naam, vraag"; de ronde neemt noden van voor de ronde mee en sluit ook bij een stopsignaal af; db_lees is de enige leesweg naar de databank van het bord; v1.9 16-10-2026 NA08 en NA09 in de code: zonder regelboek geen ronde, en de generator controleert eerst en geeft de cron pas na een gecontroleerde eerste ronde; v1.8 16-10-2026 hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
+Versie 1.14, 22-10-2026 (RZ4-03, RZ4-05 en RZ4-07: De Bode telt een bericht pas als gelezen als het verstuurd is of in een bundel zit, ook onder de eerste pagina van het bord; een agent met geplande taken past zijn grenzen toe voor de taakloper; de werkwijzen van De Bode, De Regisseur en De Zoomwacht gaan alleen als voorstel naar het bord; v1.13 dezelfde dag, RZ3-01 en RZ3-02: privé is ook een gesprek met afdeling prive, bij elke agent en lezer, en de stand van BUNDELEN staat als vaste regel in de werkwijze van De Bode, niet meer in de code; v1.12 dezelfde dag, RZ2-01: een privégesprek draagt ook in het klaarzet-item, de bundel van De Dagbundelaar en de export van het bord geen naam of onderwerp, bij De Fathomwacht en De Plaudwacht; v1.11 21-10-2026 BAS-01: het werkverslag draagt geen privé, van een privégesprek staat er alleen wanneer en hoe lang, en De Regisseur filtert wat hij leest; bij een omschakeling van BUNDELEN verdwijnt niets; v1.10 dezelfde dag, ontwerp regie-zoom v1.2, G2 en L7: De Regisseur en De Zoomwacht lezen hun regels niet meer als leeg bij onbekend; een signaal voor Mehdi komt op een vast moment, het ochtendbericht of de avondbundel; een nood voor Mehdi bereikt hem in het ochtendbericht; een agent aanspreken met "Naam, vraag"; de ronde neemt noden van voor de ronde mee en sluit ook bij een stopsignaal af; db_lees is de enige leesweg naar de databank van het bord; v1.9 16-10-2026 NA08 en NA09 in de code: zonder regelboek geen ronde, en de generator controleert eerst en geeft de cron pas na een gecontroleerde eerste ronde; v1.8 16-10-2026 hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
 
 Elke agent wordt hieraan getoetst. Niet door iemand die vindt dat het goed zit,
 maar door `controle_agenten.py`, dat meet en een exitcode teruggeeft.
@@ -168,6 +168,11 @@ Een werkwijze die alleen gelezen wordt, is decoratie. `bord.grenzen(r.werkwijze)
 de punten onder "## Wat ik nooit doe" en "## Wat Mehdi beslist", zodat de code de
 grenzen van het bord toepast en geen kopie bijhoudt. Het sjabloon toont het: zonder
 die grenzen in de vaste vorm (hoofdstuk 8) doet het geen werk en meldt het een nood.
+Een agent die geplande taken uitvoert, kijkt zijn grenzen na voor de taakloper, niet
+erna (RZ4-05, 22-10-2026): De Regisseur voert zonder beide grenssecties, met een lege
+of een onleesbare werkwijze geen enkele geplande taak uit (geen agent-ronde, geen
+poging); een ronde meldt de nood, alleen lezend. Tot dan liep `taken_uitvoeren` eerst,
+zoals het ontwerp het voorschreef, en gold de alleen-lezenstand niet voor zijn taken.
 
 `r.nood()` haalt een aantal vooraan uit de tekst weg en weigert dubbels, zodat
 dezelfde nood morgen dezelfde nood is (N10). Het aantal zet je in `r.detail`.
@@ -238,7 +243,13 @@ schrijfwijze ook) is de stand `uit`, de terugval: dan gaat elk signaal los, zoal
 21-10-2026. Omschakelen of terugdraaien is dus een werkwijze op het bord, geen commit; dan
 hoort deze tabel mee te veranderen. Bij een omschakeling verdwijnt niets: terug naar `uit`
 stuurt De Bode eerst wat al gebundeld was als een slotbundel (in de stille uren om 07:00),
-en naar `ochtend-avond` begint de eerste bundel na het laatste bericht dat los wegging.
+en naar `ochtend-avond` begint de eerste bundel na het laatste bericht dat los wegging,
+en nooit na een bericht dat nog niet weg is (RZ4-03, 22-10-2026, werkwijze 2.9). De
+leesstand van De Bode schuift pas over een bericht als het verstuurd is of in een bundel
+zit; wat in geen bundel past, gaat los. Wat onder een volle pagina van het bord valt, haalt
+De Bode op met `tot_id`, voor de leesstand en voor de lopende bundel. Lukt dat niet, dan
+blijft de leesstand staan, zegt het volgende vaste moment "onbekend of meer" en schuift de
+bundel niet op, met een nood. Tot dan kon een signaal zo stil verdwijnen.
 
 **Een nood voor Mehdi bereikt hem in het ochtendbericht, als punt of onder Verder.**
 De Regisseur neemt elke ochtend de open noden met `wie: mehdi` mee: als punt (samen,
@@ -359,7 +370,10 @@ Zo doet de generator het sinds v1.9 (`tests/test_nieuwe_agent.py`, in de CI):
   ze zet: de goedgekeurde tekst in `werkwijze/<naam>.md` (hij waarschuwt als daar een
   andere tekst staat), `werkwijze_naar_bord.py <naam>`, dan `--zet`. Zelf hervat hij nooit: een
   kaart zonder werkwijze is niet vanzelf de zijne, en het bord toont te weinig om
-  dat te herkennen (Codex NA13 en NA20).
+  dat te herkennen (Codex NA13 en NA20). De werkwijzen van De Bode, De Regisseur en
+  De Zoomwacht zet `--zet` nooit (RZ4-07, 22-10-2026): `werkwijze_naar_bord.py <naam>
+  --voorstel` zet het zaad als voorstel met het runbook werkwijze-bijwerken op het bord,
+  en het geldt pas na de klik van Mehdi.
 - **`--eerste-ronde`** weigert een runner die nog het skelet is, draait de runner
   een keer en toetst de agent met `controle_agenten.py`. Hartslag en gemelde kennis
   moeten van die ronde zijn, niet van een eerdere (Codex NA14), en de ronde moet op

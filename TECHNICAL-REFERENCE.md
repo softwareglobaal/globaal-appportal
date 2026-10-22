@@ -2886,38 +2886,56 @@ voor deze interne APIvelden.
 ### 14.16 Regie en Zoom: gesprekkenketen, De Zoomwacht, De Regisseur en De Bode (22-10-2026)
 
 Ontwerp regie-zoom v1.2 (`~/dev/samenwerking-codex/regie-zoom/ontwerp-v1.md`, hoofdstuk 13 gaat voor), met de
-bouwcontrole RZ2 en de herstelcontrole RZ3 van Codex (met tegenproef) verwerkt. Geen Postgres-migratie: alles staat in het bord (`mijnagents.db`) en in
+bouwcontrole RZ2 en de herstelcontroles RZ3 en RZ4 van Codex (elk met tegenproef) verwerkt; RZ4 is release 1 volgens de
+ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt apart). Geen Postgres-migratie: alles staat in het bord (`mijnagents.db`) en in
 `mijnagents-data/` op de VM. Sleutels staan alleen in `~/appportal/.env` of `mijnagents-data/.env`; hier alleen namen.
 
 - **Gesprekkenketen** (`mijnagents-runner/keten.py`): De Fathomwacht en daarna De Zoomwacht, elk met een eigen
   time-out (2700 en 1200 s; eerst SIGTERM, na 30 s SIGKILL, exit 124). Schrijft atomisch `mijnagents-data/keten.json`:
-  `keten_id`, `start`, `einde`, per stap `exit` en `einde`, en `geslaagd` (alleen als beide stappen met exit 0
-  eindigden). Alleen keten.py schrijft dat bestand, een ronde die De Regisseur start niet. Kon De Fathomwacht Fathom niet
-  lezen (geen of een foute sleutel), dan eindigt ze niet op 0 en is de keten niet geslaagd (RZ2-02).
-- **Planning** (`mijnagents-runner/planning/gesprekken.cron`): keten.py om 07:00 en 13:00 UTC onder
-  `/usr/bin/flock -w 1800 /tmp/gesprekken.lock`; De Dagbundelaar op werkdagen om 07:05 UTC binnen hetzelfde slot
-  (`flock -w 5400 -E 75`): krijgt hij het niet, dan start hij niet en staat dat in `dagbundelaar.log` (RZ2-03). 5400 s
-  is langer dan de keten kan duren: 2700 + 1200 s time-out plus 2 x 30 s nadruk is 3960 s, plus 600 s marge (RZ3-03;
-  tot 22-10-2026 3600 s; `tests/test_keten.py` rekent het na; wie een time-out in `keten.py` verhoogt, verhoogt ook
-  deze wachttijd). Een ronde met de hand van fathom-wacht, zoom-wacht of dagbundelaar via De Regisseur gaat door
-  hetzelfde slot (`flock -n -E 75`; exit 75 is "de keten loopt", geen mislukte ronde). Zetten op de VM:
-  `python3 mijnagents-runner/planning/gesprekken_cron_zetten.py` (toont het blok), daarna met `--zet`. Het zetscript
-  aanvaardt maar twee vormen (RZ3-02): precies de drie oude losse regels, elk een keer en zonder blok, of precies een
-  beheerd blok zonder oude regel. Elke andere vorm (twee of een van de drie, een dubbele, een blok met een oude regel,
-  twee blokken, een andere tijd) weigert het met exit 2, zonder iets te zetten; de melding noemt alleen de regels van de
-  gesprekkenrunners, met elke toewijzing (`NAAM=waarde`) als `<waarde>`. `--zet` zet bovendien alleen als
+  `keten_id`, `start`, `einde`, per stap `exit` en `einde`, en `geslaagd` (alleen als De Fathomwacht en De Zoomwacht met
+  exit 0 eindigden). Alleen keten.py schrijft dat bestand, een ronde die De Regisseur start niet. Kon De Fathomwacht
+  Fathom niet lezen (geen of een foute sleutel), dan eindigt ze niet op 0 en is de keten niet geslaagd (RZ2-02).
+  **De Dagbundelaar is de laatste stap van de ochtendketen** (RZ4-04): in de keten die start binnen het eerste geplande
+  uur (07:00 UTC uit de planning) op een werkdag in Brussel, na Fathom en Zoom, ook als een van die faalde, met een
+  eigen time-out van 900 s en logboek `dagbundelaar.log`; zijn stap staat in keten.json (`stappen.dagbundelaar`) maar
+  telt niet voor `geslaagd`. Een latere keten op dezelfde werkdag (13:00 UTC) haalt hem in als de vorige keten niet van
+  vandaag is (de ochtendketen startte niet) of hem niet met exit 0 draaide; zonder leesbare vorige keten niet. Een
+  tweede ronde op een dag is veilig: hij zet klaar op een vaste uniek. De langste keten duurt 2700 + 1200 + 900 s plus
+  3 x 30 s nadruk = 4890 s (`tests/test_keten.py` rekent het na). De Regisseur leest zijn stap: exit 0 in de keten van
+  vandaag is klaar voor het ochtendbericht (`koppelingen/ochtend.py`), een andere exit staat onder wat ontbreekt.
+- **Planning** (`mijnagents-runner/planning/gesprekken.cron`): alleen keten.py, om 07:00 en 13:00 UTC onder
+  `/usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock`; krijgt de keten het slot niet binnen 1800 s, dan start ze niet
+  en schrijft de regel dat in `keten.log` ("slot ... na 1800 s niet vrij: keten niet gestart"). De Dagbundelaar heeft
+  geen eigen regel meer (RZ4-04; tot dan 07:05 UTC met `flock -w 5400`, en dan kon hij voor de keten lopen of
+  afhaken). Een ronde met de hand van fathom-wacht, zoom-wacht of dagbundelaar via De Regisseur gaat door hetzelfde
+  slot (`flock -n -E 75`; exit 75 is "de keten loopt", geen mislukte ronde, met "probeer na" 85 minuten na de start).
+  Zetten op de VM: `python3 mijnagents-runner/planning/gesprekken_cron_zetten.py` (toont het blok), daarna met `--zet`.
+  Het zetscript aanvaardt maar twee vormen (RZ3-02): precies de drie oude losse regels, elk een keer en zonder blok, of
+  precies een beheerd blok zonder oude regel. Elke andere vorm (twee of een van de drie, een dubbele, een blok met een
+  oude regel, twee blokken, een andere tijd) weigert het met exit 2, zonder iets te zetten; de melding noemt alleen de
+  regels van de gesprekkenrunners, met elke toewijzing (`NAAM=waarde`) als `<waarde>`. Een bestaand blok vervangt het
+  alleen als zijn inhoud precies het huidige blok uit gesprekken.cron is of het vorige uit de branch (`VORIG_BLOK`, met
+  de regel van De Dagbundelaar van 5400 s); anders "onbekende inhoud in het beheerde blok", exit 2, met de regels van
+  het blok zonder geheimen (RZ4-06; tot dan verving het alles tussen de merktekens). `--zet` zet bovendien alleen als
   `mijnagents-data/.built` gelijk is aan `git rev-parse HEAD:mijnagents` (wat `mijnagents/deploy.sh` na een geslaagde
-  build schrijft); anders "geweigerd: bord nog niet herbouwd", exit 2. Het leest terug na het zetten. `flock -E` vraagt
-  util-linux 2.25 of nieuwer.
+  routetoets schrijft); anders "geweigerd: bord nog niet herbouwd", exit 2. Het leest terug na het zetten. `flock -E`
+  vraagt util-linux 2.25 of nieuwer.
 - **De Zoomwacht** (`zoom_wacht.py`, in de keten na De Fathomwacht): telt elk Zoom-gesprek, koppelt het aan Fathom en
   zet per Brusselse dag een dagregel `zoom:dag:<dag>` klaar. Mist Fathom een gesprek, dan bewaart ze de Zoom-tekst als
   vangnet in `mijnagents-data/zoom-data/<map>/` (transcript.vtt en transcript.json in de vorm van Fathom); elke
   vangnettekst is privé (13.5 X1). `--koppel-sinds JJJJ-MM-DD` koppelt oude rijen met een joinlink aan Fathom en maakt
   de link daarna leeg. Een rij uit het dubbele uur van 25-10-2026 (02:00 tot 03:00 Brussel) koppelt alleen op de
-  UTC-start bij Zoom of op een opname die alleen bij haar kan horen; anders houdt ze haar link (RZ2-05).
+  UTC-start bij Zoom of op een opname die alleen bij haar kan horen; anders houdt ze haar link (RZ2-05). Is de
+  Zoom-gebruiker van de leesapp niet de eigenaar van de vaste vergaderruimte (`identiteit_ok` onwaar), dan schrijft de
+  ronde niets: geen rij, geen koppeling, geen vangnet of download, geen klaarzet, geen staat en geen `--koppel-sinds`;
+  alleen de nood "De Zoom-gebruiker van de leesapp is niet de eigenaar van de vaste vergaderruimte" voor Mehdi en de
+  hartslag "waakt" met "niets geschreven: ..." (RZ4-02; tot dan schreef ze na de nood gewoon door).
 - **Zoom-profielen** (`koppelingen/zoom.py`): `stack` is de Server-to-Server-app van de stack (`ZOOM_ACCOUNT_ID`,
   `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`), `lees` de alleen-lezende app "Zoomwacht lezen" (`ZOOM_LEES_CLIENT_ID`,
   `ZOOM_LEES_CLIENT_SECRET`, zo nodig `ZOOM_LEES_ACCOUNT_ID`). Zonder leesapp leest het profiel `lees` met de stack.
+  Het profiel `nieuw` is alleen voor `zoom_leesapp.py --zet` (RZ4-02): het token van de net ingevoerde sleutels, alleen
+  in het geheugen (`nieuw_token`, `nieuw_vergeten`); het leest nooit een sleutel uit een bestand en valt nooit terug op
+  de stack.
   Alleen GET, alleen onder de vaste gebruiker (`ZOOM_MEHDI_USER`), `/past_meetings/` en zijn eigen nummers. Een
   leestoken met een verboden recht (write, update, delete en de lijst "Nooit aanvinken" in
   `rechten-zoomwacht-lezen.md`) wordt geweigerd en nooit gebruikt. Daar hoort sinds RZ3-04 (22-10-2026) ook het
@@ -2925,8 +2943,14 @@ bouwcontrole RZ2 en de herstelcontrole RZ3 van Codex (met tegenproef) verwerkt. 
   dat recht beslist; tot dan gaf het alleen een melding. Chatberichten alleen met de stack. Weigert Zoom een download
   (401, 403, of 400 met code 4711), dan is dat `GeenRecht` met het recht dat Zoom noemt (anders `download`), plus de
   HTTP-code en de code van Zoom.
-- **`zoom_leesapp.py`**: zet en toetst de leesapp. Mehdi plakt de drie waarden met `--zet`; het script schrijft de
-  sleutels `ZOOM_LEES_*` atomisch met rechten 600 en drukt nooit een waarde af. Exit 0 alleen als de kern (tien
+- **`zoom_leesapp.py`**: zet en toetst de leesapp. Mehdi plakt de drie waarden met `--zet`; het script controleert eerst
+  alles in het geheugen en schrijft pas daarna (RZ4-02): een token met de nieuwe sleutels, geen verboden recht (voor er
+  een vraag naar Zoom gaat), en de eigenaar: de host van het meest voorkomende eigen Fathom-nummer (`/meetings/<nummer>`)
+  en `/users/me` van de nieuwe app (beide met het profiel `nieuw`) moeten dezelfde zijn als `/users/me` van de app van
+  de stack, het anker van ZOO-08 (tegenproef op RZ4-02: zonder dat anker werd de app van een collega bewaard als dat
+  nummer zijn ruimte was). Klopt een van de drie niet, dan schrijft het niets, is de exitcode 1 en zegt de laatste
+  regel "niets geschreven: <reden>". Anders schrijft het de sleutels `ZOOM_LEES_*` atomisch met rechten 600; het drukt
+  nooit een waarde of id af. Exit 0 alleen als de kern (tien
   rechten) er is en de toetsen slagen; de advieslijst telt niet mee. `ZOOM_MEHDI_USER` schrijft het alleen als de
   gebruiker zeker is. Een app met het transcriptrecht weigert het ("dat recht blijft geweigerd tot Mehdi erover
   beslist"). De proefdownload meet welk recht Zoom noemt: het transcriptrecht geeft "download van het transcript vraagt
@@ -2946,16 +2970,23 @@ bouwcontrole RZ2 en de herstelcontrole RZ3 van Codex (met tegenproef) verwerkt. 
   Een fout geeft `bord.BordOnbekend`, nooit een lege lijst. Schrijven gaat altijd via de API van het bord.
 - **Ochtendbericht en avondbundel** (`bode.py`, stand ochtend-avond, keuze 1 van Mehdi): de stand staat niet in de
   code maar als vaste regel `BUNDELEN: ochtend-avond` in de werkwijze van De Bode op het bord, onder de kop "De stand
-  van BUNDELEN" (RZ3-02, werkwijze 2.8, `stand_bundelen`). Zonder die regel, in een andere vorm, of met een tweede
-  vermelding van de stand in welke schrijfwijze ook (kleine letters, spaties, entiteiten, onzichtbare tekens) is de
-  stand `uit`; omschakelen is een werkwijze met een klik van Mehdi, geen commit. De Regisseur zet het
+  van BUNDELEN" (RZ3-02, werkwijze 2.8 en later, `stand_bundelen`). Zonder die regel, in een andere vorm, of met een
+  tweede vermelding van de stand in welke schrijfwijze ook (kleine letters, spaties, entiteiten, onzichtbare tekens) is
+  de stand `uit`; omschakelen is een werkwijze met een klik van Mehdi, geen commit. De Regisseur zet het
   ochtendbericht klaar (`ochtendbericht:<datum>`, hoogstens vijf beslissingen) zodra keten.json van vandaag geslaagd
-  is en, op werkdagen, De Dagbundelaar na het einde van die keten klaar was; anders om 10:30 Brussel, met wat
-  ontbreekt onder Onbekend. De Bode stuurt het als eigen bericht; staat er om 11:00 geen, dan een terugval met de
-  aantallen. Rond 17:00 (bij de mailupdate van 17:00, anders vanaf 17:30) volgt de avondbundel. In de stand `uit` gaat
-  alles los, eerst met een slotbundel van wat al gebundeld was. Elk vast moment loopt door het verzendspoor
-  `mijnagents-data/bode-verzonden.jsonl` (bezig, verzonden of mislukt; FR-193): wat er bezig of verzonden staat, gaat
-  nooit een tweede keer, en "bezig" wordt een nood "aflevering onzeker".
+  is en, op werkdagen, De Dagbundelaar klaar is: zijn stap in die keten met exit 0, of een afgeronde ronde na het einde
+  van die keten (RZ4-04); anders om 10:30 Brussel, met wat ontbreekt onder Onbekend. De Bode stuurt het als eigen
+  bericht; staat er om 11:00 geen, dan een terugval met de aantallen. Rond 17:00 (bij de mailupdate van 17:00, anders
+  vanaf 17:30) volgt de avondbundel. In de stand `uit` gaat alles los, eerst met een slotbundel van wat al gebundeld
+  was. Elk vast moment loopt door het verzendspoor `mijnagents-data/bode-verzonden.jsonl` (bezig, verzonden of
+  mislukt; FR-193): wat er bezig of verzonden staat, gaat nooit een tweede keer, en "bezig" wordt een nood "aflevering
+  onzeker". **Leesstand en bundel** (RZ4-03, werkwijze 2.9, FR-197): `laatste_id` schuift pas over een item als het
+  verstuurd is of in een bundel zit (`melding_groep`, `in_bundel`, `staat['gebundeld']`); wat in geen bundel valt, gaat
+  los. Bij de overgang naar ochtend-avond begint de bundel nooit na een item dat nog niet weg is (`bundel_begin`), ook
+  als dat ouder is dan 24 uur. `aanvullen` bladert met `tot_id` terug (pagina's van 500, hoogstens 4) tot `laatste_id`
+  en tot het begin van de lopende bundel (`bundel_vanaf`). Lukt dat niet (een fout, of een bord dat `tot_id` negeert),
+  dan blijft de leesstand staan (alleen een alarm gaat), zegt het vaste moment "Gebundeld: onbekend of meer" of "er kan
+  meer zijn", schuift `bundel_vanaf` niet op en wacht een slotbundel, met een nood voor claude-code.
 - **Privé** (RZ2-01): het klaarzet-item van een privégesprek van De Fathomwacht of De Plaudwacht draagt alleen datum,
   start, minuten, privé en een verwijzing met "(privé)"; De Dagbundelaar zet er "privégesprek, N min" van, en
   `bord_export.py` maakt van elke regel met PRIVÉ "(privé)" in klaargezet/, werkverslag/ en dagverslagen/. Privé is
@@ -2967,8 +2998,30 @@ bouwcontrole RZ2 en de herstelcontrole RZ3 van Codex (met tegenproef) verwerkt. 
   `is_prive` in `bord_export.py` (inhoud.afdeling). De export maakt ook "(privé)" van een regel met de titel of de
   verwijzing van een privé-item (`prive_kenmerken`, minstens twaalf tekens) en van de oude Fathom-bevinding
   " · prive · ". Exportbestanden buiten het venster van veertien dagen worden niet herschreven of gewist.
+  Sinds RZ4-01 (deel release 1, FR-194) herkent de export prive en privé in elke schrijfwijze, als woord in
+  hoofdletters of als eigen veld na " · " of " | " (`PRIVE_WOORD`, `PRIVE_VELD`, `prive_markering`), en gaan van een
+  oude Zoom-dagregel met de lijst `werk` alleen de aantallen mee (`zonder_zoomnamen`). De centrale privémodule, De
+  Levenscoach, De Ontwikkelaar en de oude exportbestanden horen bij het privacyproject na release 1.
+- **De Regisseur: grenzen voor de taakloper** (RZ4-05, FR-199): `main` leest eerst de eigen werkwijze en past
+  `bord.grenzen` toe (`taken_tegenhouden`). Zonder beide grenssecties, met een lege of een onleesbare werkwijze loopt
+  geen enkele geplande taak (geen agent-ronde, geen poging, geen model); een ronde meldt `NOOD_GRENZEN` alleen lezend,
+  daarna zegt de losse hartslag hoeveel taken wachten. Tot 22-10-2026 liep `taken_uitvoeren` eerst, zoals het ontwerp
+  (R7) het voorschreef; het ontwerp is aangepast (13.7). De taakloper krijgt de klok van `nu_utc()` mee.
+- **Uitrol en "uitrol geslaagd"** (RZ4-07, besluiten X1 en X3 van de ontwerpronde RZ5, FR-201): `mijnagents/deploy.sh`
+  (cron, elke 2 minuten) schrijft `mijnagents-data/.built` pas na een routetoets op de nieuw gestarte container:
+  `curl -fsS --max-time 5` op `http://127.0.0.1:3022/gezondheid` (moet `"ok": true` geven, met of zonder spatie; die
+  route leest alleen) en daarna `/`
+  (HTTP-succes), tot 6 pogingen met 5 s pauze. Faalt de toets, dan geen markering, een regel "mijnagents NIET als
+  gebouwd gemarkeerd (...): routetoets ... faalde" in het deploylogboek en exit 1; de volgende tik bouwt en toetst
+  opnieuw. Een uitrol van het bord is dus geslaagd als `.built` gelijk is aan `git rev-parse HEAD:mijnagents`: dan
+  draait de nieuwe container en antwoorden die routes. Op de host moet `curl` staan. `werkwijze_naar_bord.py --zet`
+  weigert de werkwijzen van `bode`, `regisseur` en `zoom-wacht` (exit 2, `ALLEEN_VIA_VOORSTEL`); `werkwijze_naar_bord.py
+  <naam> --voorstel` zet hun zaad als voorstel met het runbook `werkwijze-bijwerken` op het bord (van De Regisseur, met
+  de agent, de volledige tekst en het mandaat als parameters; het runbook zet het mandaat van de kaart mee als het
+  voorstel het draagt), en het geldt pas na de klik van Mehdi. Volgorde van de uitrol van
+  release 1: `~/dev/samenwerking-codex/regie-zoom/uitrolstappen-release1.md`.
 - **Grendels**: workflow `regie-grendels.yml`, job bord (`mijnagents/test_gesprekken_api.py`) en job runners
-  (`test_bord_lees.py`, `test_zoom_wacht.py`, `test_dagbundelaar.py`, `test_keten.py`, `test_regisseur.py` en
-  `test_bode_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is `test_geen_echte_namen.py`:
+  (`test_bord_lees.py`, `test_zoom_wacht.py`, `test_dagbundelaar.py`, `test_keten.py`, `test_regisseur.py`,
+  `test_bode_regie.py` en `test_uitrol_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is `test_geen_echte_namen.py`:
   die faalt als een van de genoemde testbestanden een woord bevat waarvan de sha256 op een vaste lijst staat (echte
   namen, privéonderwerpen en adressen, alleen als hash bewaard; de repo is publiek). Testgegevens zijn altijd verzonnen.

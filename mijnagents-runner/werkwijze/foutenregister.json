@@ -1,6 +1,6 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.42",
+ "versie": "3.43",
  "datum": "22-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
@@ -377,6 +377,20 @@
     "FR-181",
     "FR-182",
     "FR-183"
+   ]
+  },
+  {
+   "id": "L40",
+   "les": "Een herstelling is pas dicht als de tegenproef de hele weg volgt: tot het bericht bij Mehdi, tot de sleutel in .env, tot de cronregel die echt start. Drie van de zeven punten van RZ4 waren na de eerste herstelling half dicht, telkens omdat de proef stopte bij de eerste stap die klopte. Schrijf eerst de proef van het volledige scenario, dan pas de herstelling.",
+   "uit": [
+    "FR-194",
+    "FR-195",
+    "FR-196",
+    "FR-197",
+    "FR-198",
+    "FR-199",
+    "FR-200",
+    "FR-201"
    ]
   }
  ],
@@ -3898,6 +3912,118 @@
    "soort_oorzaak": "code",
    "oplossing": "Een eigen verzendspoor (bode-verzonden.jsonl): voor het versturen een 'bezig'-record, na aanvaarding 'verzonden', weigeren alle kanalen 'mislukt'. Een moment met 'bezig' of 'verzonden' gaat nooit opnieuw; 'bezig' wordt een nood 'aflevering onzeker'. Zonder schrijfbaar of leesbaar spoor geen vast moment. Het spoor wordt opgeruimd zoals de stand.",
    "grendel": {"soort": "test", "waar": "tests/test_bode_regie.py", "tekst": "hetzelfde ochtendbericht opnieuw verstuurd"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-194",
+   "datum": "22-10-2026",
+   "gevonden_door": "Codex-herstelcontrole RZ4 (RZ4-01), deel release 1 volgens de ontwerpronde RZ5",
+   "fout": "Het exportmasker van het bord herkende alleen 'PRIVÉ' in hoofdletters. Een titel of regel met ' · Prive' of ' | Prive | ', en de lijst werk van oude Zoom-dagregels, gingen voluit naar de export in Dropbox.",
+   "gevolg": "Namen en onderwerpen van privégesprekken konden in klaargezet/ en werkverslag/ van de export staan.",
+   "waarom_niet_gezien": "De herkenning stond in vijf kopieën met elk een eigen schrijfwijze; de toetsen gebruikten alleen de hoofdletters.",
+   "oorzaak": "Een privéwoord in een vaste schrijfwijze, en oude dagregels die nog werkgesprekken met namen droegen.",
+   "soort_oorzaak": "code",
+   "oplossing": "bord_export.py herkent prive en privé in elke schrijfwijze als woord of als eigen veld, en van een oude Zoom-dagregel gaan alleen de aantallen mee. De centrale privémodule en De Levenscoach horen bij het privacyproject.",
+   "grendel": {"soort": "test", "waar": "tests/test_bord_lees.py", "tekst": "werk: 2 stuks (namen en onderwerpen niet in de export)"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-195",
+   "datum": "22-10-2026",
+   "gevonden_door": "Codex-herstelcontrole RZ4 (RZ4-02) en de tegenproef van Claude op de eerste herstelling",
+   "fout": "zoom_leesapp.py --zet schreef de sleutels van de leesapp in .env voor de eigenaar gecontroleerd was. Na de eerste herstelling vergeleek het alleen de host van het eigen Fathom-nummer met de nieuwe app, zodat de app van een collega werd bewaard als dat nummer zijn ruimte was.",
+   "gevolg": "Zonder vaste gebruiker las De Zoomwacht daarna de gesprekken van die collega.",
+   "waarom_niet_gezien": "De eigenaarscontrole zat in de toets na het schrijven, en het anker van ZOO-08 (de eigenaar van de app van de stack) gold alleen daar.",
+   "oorzaak": "Schrijven voor controleren, en een controle die twee waarden uit dezelfde bron vergeleek.",
+   "soort_oorzaak": "code",
+   "oplossing": "Eerst een token, dan de verboden rechten, dan de eigenaar met het nieuwe token in het geheugen: de host van het eigen Fathom-nummer, /users/me van de nieuwe app en /users/me van de app van de stack moeten dezelfde zijn. Pas dan wordt geschreven, atomisch met rechten 600; anders niets, met de reden op de laatste regel.",
+   "grendel": {"soort": "test", "waar": "tests/test_zoom_wacht.py", "tekst": "de eigenaar van de nieuwe app is niet de eigenaar van de app van de stack"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-196",
+   "datum": "22-10-2026",
+   "gevonden_door": "Codex-herstelcontrole RZ4 (RZ4-02)",
+   "fout": "Was de Zoom-gebruiker van de leesapp niet de eigenaar van de vaste vergaderruimte, dan zette De Zoomwacht een nood en schreef ze daarna toch rijen, koppelingen, vangnet, dagregels en haar stand.",
+   "gevolg": "Gesprekken van een ander konden in de gesprekkentabel en het vangnet belanden.",
+   "waarom_niet_gezien": "De toets T21 legde zelfs een dagregel vast bij een vreemde gebruiker.",
+   "oorzaak": "De identiteitscontrole leidde alleen tot een nood, niet tot stoppen.",
+   "soort_oorzaak": "code",
+   "oplossing": "Bij een vreemde gebruiker stopt de ronde voor elke schrijfstap: alleen de nood voor Mehdi en een hartslag 'niets geschreven'.",
+   "grendel": {"soort": "test", "waar": "tests/test_zoom_wacht.py", "tekst": "niets geschreven: de Zoom-gebruiker van de leesapp is niet de eigenaar"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-197",
+   "datum": "22-10-2026",
+   "gevonden_door": "Codex-herstelcontrole RZ4 (RZ4-03) en de tegenproef van Claude op de eerste herstelling",
+   "fout": "De Bode telde items als gelezen die nooit verstuurd werden: bij de omschakeling naar de bundelstand een onverstuurd item ouder dan 24 uur, een item onder een volle pagina van het bord, en een item in de lopende bundel dat na veel andere items onder de pagina viel.",
+   "gevolg": "Een signaal bereikte Mehdi nooit, zonder melding.",
+   "waarom_niet_gezien": "De leesstand en de bundel werden elk apart afgeleid, en alleen uit de eerste pagina van het bord.",
+   "oorzaak": "laatste_id schoof over items die in geen bundel zaten of niet gelezen waren.",
+   "soort_oorzaak": "code",
+   "oplossing": "De leesstand schuift pas over een item als het verstuurd is of in een bundel zit; de bundel begint nooit na een item dat nog niet weg is; De Bode bladert met tot_id terug voor de leesstand en de lopende bundel. Lukt dat niet, dan blijft de stand staan, zegt het vaste moment 'onbekend of meer' en schuift de bundel niet op, met een nood.",
+   "grendel": {"soort": "test", "waar": "tests/test_bode_regie.py", "tekst": "Gebundeld: onbekend of meer; alles op het bord"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-198",
+   "datum": "22-10-2026",
+   "gevonden_door": "Codex-herstelcontrole RZ4 (RZ4-04) en de tegenproef van Claude op de eerste herstelling",
+   "fout": "De Dagbundelaar wachtte met een eigen cronregel op het slot van de gesprekkenketen en kon zo voor de keten lopen of afhaken. Na de eerste herstelling draaide hij die dag nergens als de ochtendketen het slot niet kreeg.",
+   "gevolg": "Een dagverslag zonder de gesprekken van die ochtend, of geen dagverslag.",
+   "waarom_niet_gezien": "De test rekende alleen de duur van de keten, niet de 1800 s die de keten zelf op het slot kan wachten; en een keten die niet startte, liet geen spoor na.",
+   "oorzaak": "Twee cronregels op een slot zonder vaste volgorde, en geen inhaalregel.",
+   "soort_oorzaak": "code",
+   "oplossing": "De Dagbundelaar is de laatste stap van de ochtendketen in keten.py, met een eigen time-out en zijn stap in keten.json; een latere keten op dezelfde werkdag haalt hem in als de vorige keten niet van vandaag is of hem niet met exit 0 draaide. De ketenregel zet een keten die het slot niet kreeg in keten.log, en De Regisseur zegt 'probeer na' met 85 minuten.",
+   "grendel": {"soort": "test", "waar": "tests/test_keten.py", "tekst": "dagbundelaar: inhaalronde"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-199",
+   "datum": "22-10-2026",
+   "gevonden_door": "Codex-herstelcontrole RZ4 (RZ4-05), besluit X3 van de ontwerpronde RZ5",
+   "fout": "De Regisseur voerde geplande taken uit voor hij zijn grenzen op het bord nakeek.",
+   "gevolg": "Zonder goedgekeurde werkwijze startten toch agent-rondes.",
+   "waarom_niet_gezien": "Het ontwerp zelf schreef die volgorde voor (R7, eerst taken_uitvoeren).",
+   "oorzaak": "Een ontwerpfout, door de code getrouw uitgevoerd.",
+   "soort_oorzaak": "ontwerp",
+   "oplossing": "main leest eerst de eigen werkwijze en past bord.grenzen toe; zonder beide grenssecties, met een lege of onleesbare werkwijze loopt geen geplande taak, en een ronde meldt de nood. Het ontwerp is aangepast (13.7).",
+   "grendel": {"soort": "test", "waar": "tests/test_regisseur.py", "tekst": "1 geplande taak wacht: geen grenzen op het bord"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-200",
+   "datum": "22-10-2026",
+   "gevonden_door": "Codex-herstelcontrole RZ4 (RZ4-06)",
+   "fout": "Het zetscript van de planning verving alles tussen de merktekens, ook een opdracht die er niet van ons was.",
+   "gevolg": "Een onbekende cronregel kon stil verdwijnen.",
+   "waarom_niet_gezien": "Het blok gold als volledig beheerd; de inhoud werd niet vergeleken.",
+   "oorzaak": "Geen vergelijking met een bekende vorm voor het vervangen.",
+   "soort_oorzaak": "code",
+   "oplossing": "Het blok wordt alleen vervangen als zijn inhoud precies het huidige of het vorige blok is; anders weigert het script met de gevonden regels, zonder geheimen.",
+   "grendel": {"soort": "test", "waar": "tests/test_dagbundelaar.py", "tekst": "onbekende inhoud in het beheerde blok"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-201",
+   "datum": "22-10-2026",
+   "gevonden_door": "Codex-herstelcontrole RZ4 (RZ4-07), besluiten X1 en X3 van de ontwerpronde RZ5",
+   "fout": "deploy.sh markeerde het bord als gebouwd zonder te kijken of de routes werkten, en werkwijze_naar_bord.py --zet zette de werkwijzen van De Bode, De Regisseur en De Zoomwacht zonder de afgesproken klik.",
+   "gevolg": "Een kapotte bordversie gold als geslaagd, en BUNDELEN kon aan zonder Mehdi.",
+   "waarom_niet_gezien": "'Uitrol geslaagd' was nergens vastgelegd, en het zetgereedschap kende geen uitzondering.",
+   "oorzaak": "Een uitrolgrendel die alleen op de build keek, en een voorstelroute zonder gereedschap.",
+   "soort_oorzaak": "code",
+   "oplossing": "deploy.sh schrijft .built pas na een routetoets op 127.0.0.1:3022 (/gezondheid met ok true en de bordpagina), anders een logregel en exit 1. werkwijze_naar_bord.py weigert --zet voor de drie regie-agents en zet hun zaad met --voorstel als voorstel met het runbook werkwijze-bijwerken; het runbook zet het mandaat van de kaart mee als het voorstel het draagt.",
+   "grendel": {"soort": "test", "waar": "tests/test_uitrol_regie.py", "tekst": "NIET als gebouwd gemarkeerd"},
    "controle": [],
    "status": "opgelost"
   }
