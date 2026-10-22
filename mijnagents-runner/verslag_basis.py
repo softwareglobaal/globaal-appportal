@@ -17,17 +17,21 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 sys.path.insert(0, os.path.join(HIER, "plaud"))
 import bord  # noqa: E402
+import bordstand  # noqa: E402
 import bronnen  # noqa: E402
 import zoektaak as pz  # noqa: E402
 import verslagsoorten as vs  # noqa: E402
@@ -200,6 +204,30 @@ def _tijd(waarde):
         return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
     except (ValueError, TypeError):
         return None
+
+
+def _hhmm(waarde):
+    if not re.match(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", str(waarde or "")):
+        return None
+    tijdstip = _tijd(waarde)
+    return tijdstip.astimezone(ZoneInfo("Europe/Brussels")).strftime("%H:%M") if tijdstip else None
+
+
+def _datum(waarde):
+    if not isinstance(waarde, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", waarde):
+        return None
+    try:
+        date.fromisoformat(waarde)
+    except ValueError:
+        return None
+    return waarde
+
+
+def _kort(waarde, maximum):
+    if waarde is None:
+        return None
+    veilig = str(waarde).encode("utf-8", errors="replace").decode("utf-8")
+    return veilig[:maximum] or None
 
 
 def kies_dossiermap(rij, mappen, s):
@@ -516,6 +544,281 @@ def open_wachttaak(rij, lees, *, overdracht_ts=None, toegestane_taken=None):
     open_taken = _open_wachttaken(rij, lees, overdracht_ts=overdracht_ts,
                                  toegestane_taken=toegestane_taken, leesfout_doorgeven=overdracht_ts is not None)
     return open_taken[0][1] if open_taken else None
+
+
+def _taak_open(rij, voor, lees):
+    """Lees de jongste taak voor één wacht; None betekent onbekend of niet aanwezig."""
+    try:
+        taak = next((t for t in reversed(rij.get("taken") or []) if t.get("voor") == voor), None)
+        if taak is None:
+            return None
+        uniek = taak["uniek"]
+        antwoord = lees(uniek)
+        items = antwoord.get("items", []) if isinstance(antwoord, dict) else antwoord
+        item = next((it for it in items or [] if it.get("uniek") == uniek), None)
+        if not item or item.get("status") != "opgepakt":
+            return True
+        return voor == "icloud-wacht" and item.get("opgepakt_door") != "icloud-wacht"
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def ketenregel(rij, inv, nu, lees, s, wachten, contract):
+    """Publieke stand van één barstenbezoek, uitsluitend uit toegestane velden."""
+    pk = rij.get("pakket") or {}
+    ov = pk.get("overdracht") or {}
+    kd = pk.get("kandidaat") or {}
+    n, ni, o, t, m, d = (int(pk.get(k) or 0) for k in
+                         ("fotos", "fotos_iphone", "opnames", "transcripten", "mails", "documenten"))
+    einde = _tijd(rij.get("einde"))
+    nu = now_aware(nu)
+    voorbij = nu > einde if einde else str(rij.get("datum") or "") < nu.astimezone(timezone.utc).date().isoformat()
+    ruim_voorbij = nu > einde + timedelta(hours=2) if einde else voorbij
+    laat = nu > einde + timedelta(hours=ZONDER_TAKEN_UUR) if einde else voorbij
+    datum = _datum(rij.get("datum"))
+    start_uur = _hhmm(rij.get("start"))
+    mapnr = vs.mapnummer(os.path.basename(rij["dossiermap"])) if rij.get("dossiermap") else None
+    limiet = contract["max_uitleg"]
+
+    def schakel(stand, aantal, uitleg):
+        return {"stand": stand, "aantal": aantal, "uitleg": _kort(uitleg, limiet) or ""}
+
+    def wachtstand(naam):
+        return (wachten.get(naam) or {}).get("stand")
+
+    ddmm = date.fromisoformat(datum).strftime("%d-%m-%Y") if datum else "onbekende datum"
+    agenda = schakel("ok", None, f"afspraak in de agenda op {ddmm}" +
+                     (f" om {start_uur}" if start_uur else ""))
+
+    if not rij.get("dossiermap"):
+        map_schakel = schakel("ontbreekt" if voorbij else "bezig", None,
+                              "dossiermap niet gevonden; zet het pad op de pagina Commandocentrum" if voorbij
+                              else "dossiermap nog niet gevonden")
+    elif inv is None:
+        map_schakel = schakel("ontbreekt", None,
+                              f"map {mapnr}: 1. Foto's of 2. plaud ontbreekt, of de map is niet leesbaar")
+    elif pk.get("ontbrekende_submappen"):
+        namen = [s["submappen"][k] for k in pk["ontbrekende_submappen"] if k in s["submappen"]]
+        map_schakel = schakel("ok", None, f"map {mapnr} gevonden; ontbreekt: {', '.join(namen)}")
+    else:
+        map_schakel = schakel("ok", None, f"map {mapnr} gevonden")
+
+    if not voorbij:
+        foto = schakel("nog_niet", n, "bezoek nog niet voorbij")
+        plaud = schakel("nog_niet", t, "bezoek nog niet voorbij")
+    else:
+        if ni > 0:
+            foto = schakel("ok", n, f"{n} foto's, waarvan {ni} van de iPhone")
+        elif _taak_open(rij, "icloud-wacht", lees) is True:
+            if wachtstand("icloud-wacht") == "storing":
+                foto = schakel("ontbreekt", n, f"{n} foto's, geen van de iPhone; iCloud-wacht in storing, staat je Mac aan?")
+            elif laat:
+                foto = schakel("ontbreekt", n, f"{n} foto's, geen van de iPhone; iCloud-wacht leverde na 6 uur niets, staat je Mac aan?")
+            else:
+                foto = schakel("bezig", n, "iCloud-wacht levert de iPhone-foto's nog")
+        elif n > 0:
+            foto = schakel("ok", n, f"{n} foto's, geen van de iPhone")
+        elif ruim_voorbij:
+            foto = schakel("ontbreekt", n, "nog geen foto's in 1. Foto's")
+        else:
+            foto = schakel("bezig", n, "foto's worden verwacht")
+        if o > 0:
+            foto["uitleg"] = (foto["uitleg"] + f"; {o} video('s)")[:limiet]
+
+        if t > 0:
+            plaud = schakel("ok", t, f"{t} transcript(en) in 2. plaud")
+        elif _taak_open(rij, "plaud-wacht", lees) is True:
+            if wachtstand("plaud-wacht") == "storing":
+                plaud = schakel("ontbreekt", t, "Plaudwacht in storing; nog geen transcript")
+            elif laat:
+                plaud = schakel("ontbreekt", t, "Plaudwacht leverde na 6 uur geen transcript")
+            else:
+                plaud = schakel("bezig", t, "Plaudwacht levert het transcript nog")
+        elif ruim_voorbij:
+            plaud = schakel("ontbreekt", t, "nog geen transcript in 2. plaud")
+        else:
+            plaud = schakel("bezig", t, "transcript wordt verwacht")
+
+    mail_tekst = f"{m} mail(s) in 4.Email, {d} document(en) in 3.Documents"
+    if int(pk.get("bijlagen_na_overdracht") or 0) > 0:
+        mail_tekst += f"; {int(pk['bijlagen_na_overdracht'])} nieuw na het pakket"
+    mail = schakel("ok" if m > 0 else "geen", m, mail_tekst)
+
+    huidige_hash = kd.get("hash")
+    if inv is not None and all(k in inv for k in ("fotos", "transcripten", "mails", "documenten")):
+        try:
+            huidige_hash = pakket_plan(rij, inv, s, vs.pakketcontract())["invoerhash"]
+        except (TypeError, ValueError, UnicodeError):
+            pass  # De gemeten rij blijft zichtbaar; de ronde logt een mislukte pakketplanning.
+
+    if pk.get("versiegrens"):
+        pakket = schakel("ontbreekt", None,
+                         "5 versies in de inbox; nieuwe invoer wacht tot jij zegt welke oude weg mogen")
+    elif pk.get("grens"):
+        pakket = schakel("ontbreekt", None, f"te groot voor het dashboard: {pk['grens']}")
+    elif huidige_hash and huidige_hash != ov.get("invoerhash") and n > 0 and t > 0:
+        try:
+            dicht, reden = taken_dicht(rij, nu, lees)
+            if not dicht:
+                pass
+            elif inv is not None and not bruikbaar(rij, inv, nu):
+                reden = "wacht op de iPhone-foto's, hoogstens 6 uur na het bezoek"
+            else:
+                reden = f"rusttijd van {RUST_MIN} minuten"
+        except Exception:  # noqa: BLE001
+            reden = "taakstatus niet leesbaar"
+        voorvoegsel = ("nieuwe versie in voorbereiding: " if ov.get("uitkomst") in ("klaargezet", "al klaargezet")
+                       else "in voorbereiding: ")
+        pakket = schakel("bezig", None, voorvoegsel + reden)
+    elif ov.get("uitkomst") in ("klaargezet", "al klaargezet"):
+        tijdstip = _tijd(ov.get("ts"))
+        uitleg = ("klaargezet op " + tijdstip.astimezone(ZoneInfo("Europe/Brussels")).strftime("%d-%m-%Y %H:%M")
+                  if tijdstip else "klaargezet")
+        pakket = schakel("ok", None, uitleg)
+    elif not voorbij:
+        pakket = schakel("nog_niet", None, "bezoek nog niet voorbij")
+    elif n > 0 and t > 0:
+        pakket = schakel("bezig", None, "pakket wordt klaargezet")
+    else:
+        ontbreekt = [naam for aanwezig, naam in ((n > 0, "foto's"), (t > 0, "het transcript")) if not aanwezig]
+        pakket = schakel("nog_niet", None, "wacht op " + " en ".join(ontbreekt))
+
+    return {"id": int(rij["id"]), "datum": datum, "start": start_uur, "einde": _hhmm(rij.get("einde")),
+            "mapnummer": _kort(mapnr, contract["max_kort"]),
+            "agendanummer": _kort(rij.get("dossier"), contract["max_kort"]),
+            "adres": _kort(rij.get("adres"), contract["max_tekst"]),
+            "stand": _kort(rij.get("stand"), contract["max_kort"]),
+            "pakketnaam": (_kort(ov.get("naam"), contract["max_tekst"])
+                           if ov.get("uitkomst") in ("klaargezet", "al klaargezet") else None),
+            "melding": _kort((f"te groot voor het dashboard: {pk['grens']}" if pk.get("grens") else
+                              ov.get("waarschuwing")), contract["max_tekst"]),
+            "schakels": {"agenda": agenda, "map": map_schakel, "foto": foto, "plaud": plaud,
+                         "mail": mail, "pakket": pakket}}
+
+
+_VERSIE_NAAM = re.compile(r"(?:^|[\s_\-(])v(\d{1,3}(?:\.\d{1,3}){0,2})(?=$|[\s_\-).])", re.I)
+
+
+def documentenlijst(entries, contract, nu, fout=None):
+    """Tel de kennisbank; toon nooit namen van goedgekeurde voorbeeldverslagen."""
+    uit = {"gemeten": now_aware(nu).isoformat(timespec="seconds"), "map_gevonden": entries is not None,
+           "fout": _kort(fout, contract["max_tekst"]) if fout else None,
+           "los": 0, "andere": 0, "soorten": {}}
+    if entries is None:
+        return uit
+    uit["fout"] = None
+    soorten = contract["soorten"]
+    groepen = {sleutel: {} for sleutel in soorten}
+    for sleutel in soorten:
+        uit["soorten"][sleutel] = {"aantal": 0, "laatst": None, "documenten": []}
+    prefix = contract["documentenmap"].lower().rstrip("/") + "/"
+    op_map = {naam.lower(): sleutel for sleutel, naam in soorten.items()}
+    for entry in entries:
+        if type(entry.get("size")) is not int:
+            continue
+        naam = entry.get("name") or ""
+        if not isinstance(naam, str) or naam.startswith((".", "~$", "Icon")):
+            continue
+        pad = entry.get("path_lower") or ""
+        if not isinstance(pad, str) or not pad.startswith(prefix):
+            continue
+        rel = pad[len(prefix):]
+        if "/" not in rel:
+            uit["los"] += 1
+            continue
+        sleutel = op_map.get(rel.split("/", 1)[0])
+        if sleutel is None:
+            uit["andere"] += 1
+            continue
+        soort = uit["soorten"][sleutel]
+        soort["aantal"] += 1
+        gewijzigd_raw = entry.get("client_modified") or entry.get("server_modified") or ""
+        gewijzigd = _datum(gewijzigd_raw[:10]) if isinstance(gewijzigd_raw, str) else None
+        if gewijzigd and (soort["laatst"] is None or gewijzigd > soort["laatst"]):
+            soort["laatst"] = gewijzigd
+        if sleutel not in contract["namen_tonen"]:
+            continue
+        naamstam = os.path.splitext(naam)[0]
+        gevonden = _VERSIE_NAAM.search(naamstam)
+        versie = gevonden.group(1) if gevonden else None
+        stam = _VERSIE_NAAM.sub(" ", naamstam, count=1) if gevonden else naamstam
+        stam = re.sub(r"\s+", " ", stam.replace("_", " ").replace("-", " ")).strip(" -_()").casefold()
+        groepen[sleutel].setdefault(stam, []).append((naam, versie, gewijzigd))
+    for sleutel, stammen in groepen.items():
+        for bestanden in stammen.values():
+            beste = max(bestanden, key=lambda b: (b[1] is not None,
+                                                   tuple(int(n) for n in b[1].split(".")) if b[1] else (),
+                                                   b[2] or "", b[0]))
+            uit["soorten"][sleutel]["documenten"].append(
+                {"naam": _kort(beste[0], contract["max_tekst"]), "versie": beste[1],
+                 "gewijzigd": beste[2], "vervangen": len(bestanden) - 1})
+        uit["soorten"][sleutel]["documenten"].sort(key=lambda d: d["naam"].casefold())
+        uit["soorten"][sleutel]["documenten"] = uit["soorten"][sleutel]["documenten"][:contract["max_documenten_per_soort"]]
+    return uit
+
+
+def ketenstand(regels, wachten, documenten, nu, commit, contract):
+    """Beperk de dossierlijst tot de nieuwste bezoeken vóór het coderen."""
+    gesorteerd = sorted(regels, key=lambda r: (r.get("datum") or "", r["id"]), reverse=True)
+    maximum = contract["max_dossiers"]
+    return {"schema": contract["schema"], "versie": contract["versie"],
+            "geschreven": now_aware(nu).isoformat(timespec="seconds"),
+            "agent": {"naam": "barsten-scheuren-verslag", "commit": commit[:40], "ronde_min": 10},
+            "wachten": wachten, "dossiers": gesorteerd[:maximum],
+            "weggelaten": len(gesorteerd) - min(len(gesorteerd), maximum), "documenten": documenten}
+
+
+def passend(stand, contract):
+    """Maak compacte JSON en laat zo nodig de oudste dossiers vallen."""
+    def codeer():
+        return json.dumps(stand, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+    data = codeer()
+    while len(data) > contract["max_bytes"] and stand["dossiers"]:
+        stand["dossiers"].pop()
+        stand["weggelaten"] += 1
+        data = codeer()
+    if len(data) > contract["max_bytes"]:
+        for soort in stand["documenten"]["soorten"].values():
+            soort["documenten"] = []
+        data = codeer()
+    if len(data) > contract["max_bytes"]:
+        raise ValueError("ketenstand te groot")
+    return data
+
+
+def schrijf_ketenstand(inbox, stand, contract):
+    """Schrijf de gedeelde stand atomair met leesrecht voor het dashboard."""
+    data = passend(stand, contract)
+    if not os.path.isdir(inbox):
+        raise PermissionError(f"inbox {inbox} bestaat niet")
+    toestand = os.stat(inbox)
+    if toestand.st_uid != os.getuid() or not os.access(inbox, os.W_OK):
+        raise PermissionError(f"inbox {inbox} niet schrijfbaar voor eigenaar")
+    for naam in os.listdir(inbox):
+        if not re.fullmatch(r"\.ketenstand\.[A-Za-z0-9_]+\.tmp", naam):
+            continue
+        pad = os.path.join(inbox, naam)
+        try:
+            rest = os.lstat(pad)
+            if stat.S_ISREG(rest.st_mode) and rest.st_uid == os.getuid() and \
+                    time.time() - rest.st_mtime > TMP_OUD_UUR * 3600:
+                os.unlink(pad)
+        except FileNotFoundError:
+            continue
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(prefix=".ketenstand.", suffix=".tmp", dir=inbox)
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, os.path.join(inbox, contract["bestand"]))
+        tmp = None
+    finally:
+        if tmp is not None and os.path.lexists(tmp):
+            os.unlink(tmp)
 
 
 def _transcript_tekst(data, naam):
@@ -1158,9 +1461,13 @@ class VerslagAgent:
             if not inv["fotos"]:
                 self._nood(f"{rij['datum']} {mapnr}: nog geen foto's in {inv['submappen'].get('fotos') or self.s['submappen']['fotos']}/{rij['datum']} ...")
         try:
-            plan = pakket_plan(rij, inv, self.s, vs.pakketcontract())
+            pakketregels = vs.pakketcontract()
+            plan = pakket_plan(rij, inv, self.s, pakketregels)
             overdracht = oud.get("overdracht") or {}
             if overdracht.get("invoerhash") == plan["invoerhash"]:
+                kandidaat = oud.get("kandidaat") or {}
+                pk["kandidaat"] = (kandidaat if kandidaat.get("hash") == plan["invoerhash"] else
+                                   {"hash": plan["invoerhash"], "ts": nu.isoformat()})
                 if overdracht.get("bijlagenhash") != plan["bijlagenhash"]:
                     nieuw_aantal = _bijlagen_na_overdracht(plan, overdracht)
                     if pk.get("bijlagen_na_overdracht") != nieuw_aantal and oud.get("bijlagen_na_overdracht") != nieuw_aantal:
@@ -1173,8 +1480,12 @@ class VerslagAgent:
                 sinds = _tijd(kandidaat.get("ts"))
                 laatst = _tijd(inv.get("laatst_gewijzigd"))
                 dicht, reden = taken_dicht(rij, nu, self._lees_taakstatus)
-                if len(inv["fotos"]) > vs.pakketcontract()["max_fotos"] or \
-                        plan["totaal_bytes"] > vs.pakketcontract()["max_totaal_mb"] * 1_000_000:
+                if len(inv["fotos"]) > pakketregels["max_fotos"]:
+                    pk["grens"] = f"{len(inv['fotos'])} foto's, maximum {pakketregels['max_fotos']}"
+                elif plan["totaal_bytes"] > pakketregels["max_totaal_mb"] * 1_000_000:
+                    pk["grens"] = (f"geschat pakket {plan['totaal_bytes'] / 1_000_000:.1f} MB, "
+                                   f"maximum {pakketregels['max_totaal_mb']} MB")
+                if pk.get("grens"):
                     self._nood(f"{mapnr}: pakket boven de foto- of totaalgrens; handmatig nakijken")
                 elif bruikbaar(rij, inv, nu) and plan["transcripten"] and plan["fotos"] and dicht and \
                         sinds and laatst and nu - sinds >= timedelta(minutes=RUST_MIN) and \
@@ -1252,7 +1563,7 @@ class VerslagAgent:
             self._noden.insert(0, {"tekst": waarschuwing, "wie": "mehdi"})
 
     # ------------------------------------------------------------- ronde ---
-    def ronde(self):
+    def ronde(self, ketenstand_toestaan=True):
         self._noden = []
         self._mapcache = {}
         self._opbouwcache = {}
@@ -1304,6 +1615,53 @@ class VerslagAgent:
                                         capture_output=True, text=True, timeout=5, check=True).stdout.strip()
             except Exception:
                 commit = "onbekend"
+            if self.soort == "barsten-scheuren" and ketenstand_toestaan:
+                try:
+                    nu = datetime.now(timezone.utc)
+                    contract = vs.ketenstandcontract()
+                    wachten = {}
+                    for naam in contract["wachten"]:
+                        if naam == "barsten-scheuren-verslag":
+                            wachten[naam] = {"stand": "werkt", "ts": nu.isoformat(timespec="seconds")}
+                            continue
+                        try:
+                            bord_stand = bordstand.stand(naam)
+                            status = bord_stand.get("status")
+                            wachten[naam] = {"stand": ("storing" if status == "fout" else
+                                                         "onbekend" if status is None else "werkt"),
+                                             "ts": _kort(bord_stand.get("ts"), 40)}
+                        except Exception:  # noqa: BLE001
+                            wachten[naam] = {"stand": "onbekend", "ts": None}
+                    regels = []
+                    mislukte_regels = 0
+                    for r in self.rijen():
+                        try:
+                            regels.append(ketenregel(r, self._inventaris.get(r["uniek"]), nu,
+                                                    self._lees_taakstatus, self.s, wachten, contract))
+                        except Exception as e:  # noqa: BLE001
+                            mislukte_regels += 1
+                            self.ag.log("ketenstand", "fout", f"rij {r.get('id')}: ketenregel mislukt ({type(e).__name__})")
+                            onbekend = {"stand": "geen", "aantal": None, "uitleg": "niet te bepalen"}
+                            regels.append({"id": int(r["id"]), "datum": _datum(r.get("datum")),
+                                           "start": None, "einde": None, "mapnummer": None,
+                                           "agendanummer": None,
+                                           "adres": _kort(r.get("adres"), contract["max_tekst"]),
+                                           "stand": _kort(r.get("stand"), contract["max_kort"]),
+                                           "pakketnaam": None, "melding": None,
+                                           "schakels": {k: dict(onbekend) for k in contract["schakels"]}})
+                    if mislukte_regels:
+                        self._noden.insert(0, {"tekst": f"ketenstand: {mislukte_regels} bezoek(en) niet te bepalen",
+                                               "wie": "mehdi"})
+                    try:
+                        entries = bronnen.lijst(contract["documentenmap"], recursief=True)
+                        documenten = documentenlijst(entries, contract, nu)
+                    except Exception as e:  # noqa: BLE001
+                        documenten = documentenlijst(None, contract, nu,
+                                                      fout=f"niet leesbaar ({type(e).__name__})")
+                    schrijf_ketenstand(BS_INBOX, ketenstand(regels, wachten, documenten, nu, commit, contract), contract)
+                except Exception as e:  # noqa: BLE001
+                    self.ag.log("ketenstand", "fout", f"{type(e).__name__}: {str(e)[:200]}")
+                    self._nood(f"ketenstand voor het dashboard niet geschreven ({type(e).__name__})")
             self.ag.log_verstuur()
             self.ag.hartslag("klaar" if (n_i or n_o) else "waakt", taak=f"{n_i} impuls(en), {n_o} proef/proeven; {gemeten} pakket(ten) gemeten",
                              detail=f"impulsen van het Commandocentrum; proef alleen op de knop; commit {commit}", nood=self._noden[:6])
@@ -1398,4 +1756,4 @@ class VerslagAgent:
             self.proef(rij, f"{rij['datum']} {rij.get('dossier') or rij.get('klant')}")
             self.ag.log_verstuur()
             return
-        self.ronde()
+        self.ronde(ketenstand_toestaan=not a.meet)

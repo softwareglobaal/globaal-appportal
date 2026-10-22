@@ -173,6 +173,12 @@ def pakketcontract():
     with open(os.path.join(os.path.dirname(__file__), "pakketcontract.json"), encoding="utf-8") as f:
         return json.load(f)
 
+
+@lru_cache(maxsize=1)
+def ketenstandcontract():
+    with open(os.path.join(os.path.dirname(__file__), "ketenstandcontract.json"), encoding="utf-8") as f:
+        return json.load(f)
+
 ONLINE_SOORTEN = ("KO", "PO", "IN", "LO", "AO", "XO", "B2B")
 
 

@@ -35,8 +35,10 @@ PLAUD = f"{MAP}/2. Plaud"
 DOCUMENTEN = f"{MAP}/3.Documents"
 MAIL = f"{MAP}/4.Email"
 CONTRACT_HASH = "5cf96524a337fc36456166ab12bbf5303e16c6a2b59aedbf6747151e3f319509"
+KETEN_HASH = "70622ea65a339550f8358e42d78fb192ac01ed7cc1dde5b3ef4271f1d2c2acd5"
 SOORT = V.vs.SOORTEN["barsten-scheuren"]
 CONTRACT = V.vs.pakketcontract()
+KETEN_CONTRACT = V.vs.ketenstandcontract()
 
 
 def rij(**wijzig):
@@ -645,6 +647,266 @@ class Klok(datetime):
         return cls.huidig.astimezone(tz) if tz else cls.huidig.replace(tzinfo=None)
 
 
+class Ketenstand(unittest.TestCase):
+    DRIE_UUR = datetime(2026, 10, 21, 11, 0, tzinfo=timezone.utc)
+    ZEVEN_UUR = datetime(2026, 10, 21, 15, 0, tzinfo=timezone.utc)
+
+    def regel(self, bezoek=None, nu=None, inv=None, lees=None, wachten=None):
+        bezoek = bezoek or rij(pakket={})
+        inv = {"fotos": [], "fotos_iphone": [], "transcripten": []} if inv is None else inv
+        return V.ketenregel(bezoek, inv, nu or self.DRIE_UUR,
+                            lees or (lambda uniek: {"items": []}), SOORT, wachten or {}, KETEN_CONTRACT)
+
+    def test_contract_hash_en_tijden(self):
+        self.assertEqual(hashlib.sha256((RUNNER / "koppelingen/ketenstandcontract.json").read_bytes()).hexdigest(),
+                         KETEN_HASH)
+        self.assertEqual(V._hhmm("2026-10-21T08:00:00Z"), "10:00")
+        self.assertEqual(V._hhmm("2026-10-21T08:00:00"), "10:00")
+        self.assertIsNone(V._hhmm("ongeldig"))
+        self.assertIsNone(V._hhmm("2026-10-21"))
+
+    def test_bezoek_vóór_en_na_einde_en_videos(self):
+        toekomst = rij(dossiermap="", pakket={"kandidaat": {"hash": "nieuw"},
+                                               "overdracht": {"invoerhash": "oud"}})
+        voor = self.regel(toekomst, datetime(2026, 10, 21, 7, 0, tzinfo=timezone.utc))
+        self.assertEqual([voor["schakels"][k]["stand"] for k in ("foto", "plaud", "pakket")],
+                         ["nog_niet"] * 3)
+        self.assertEqual(voor["schakels"]["pakket"]["uitleg"], "bezoek nog niet voorbij")
+        self.assertEqual(voor["schakels"]["map"]["stand"], "bezig")
+        self.assertEqual(self.regel()["schakels"]["foto"]["stand"], "ontbreekt")
+        met_video = self.regel(rij(pakket={"opnames": 2}))
+        self.assertEqual(met_video["schakels"]["plaud"]["stand"], "ontbreekt")
+        self.assertIn("2 video", met_video["schakels"]["foto"]["uitleg"])
+        self.assertEqual(met_video["schakels"]["plaud"]["aantal"], 0)
+        self.assertEqual(met_video["schakels"]["mail"],
+                         {"stand": "geen", "aantal": 0,
+                          "uitleg": "0 mail(s) in 4.Email, 0 document(en) in 3.Documents"})
+        self.assertEqual(self.regel(rij(pakket={"fotos": 73, "fotos_iphone": 73}))["schakels"]["foto"],
+                         {"stand": "ok", "aantal": 73,
+                          "uitleg": "73 foto's, waarvan 73 van de iPhone"})
+        self.assertEqual(self.regel(rij(pakket={"transcripten": 1}))["schakels"]["plaud"]["stand"], "ok")
+
+    def test_wachttaken_storing_zes_uur_en_leesfout(self):
+        foto = rij(taken=[{"voor": "icloud-wacht", "uniek": "oud"},
+                          {"voor": "icloud-wacht", "uniek": "nieuw"}])
+        lees = lambda uniek: {"items": [{"uniek": uniek, "status": "klaar"}]}
+        self.assertTrue(V._taak_open(foto, "icloud-wacht", lees))
+        self.assertIsNone(V._taak_open(foto, "plaud-wacht", lees))
+        self.assertEqual(self.regel(foto, lees=lees, wachten={"icloud-wacht": {"stand": "werkt"}})
+                         ["schakels"]["foto"]["stand"], "bezig")
+        storing = self.regel(foto, lees=lees, wachten={"icloud-wacht": {"stand": "storing"}})
+        self.assertEqual(storing["schakels"]["foto"]["stand"], "ontbreekt")
+        self.assertIn("storing", storing["schakels"]["foto"]["uitleg"])
+        laat = self.regel(foto, self.ZEVEN_UUR, lees=lees, wachten={"icloud-wacht": {"stand": "werkt"}})
+        self.assertEqual(laat["schakels"]["foto"]["stand"], "ontbreekt")
+        self.assertIn("6 uur", laat["schakels"]["foto"]["uitleg"])
+        plaud = rij(taken=[{"voor": "plaud-wacht", "uniek": "p"}])
+        p = self.regel(plaud, lees=lees, wachten={"plaud-wacht": {"stand": "storing"}})
+        self.assertEqual(p["schakels"]["plaud"]["stand"], "ontbreekt")
+        self.assertIsNone(V._taak_open(foto, "icloud-wacht", lambda uniek: 1 / 0))
+        self.regel(foto, lees=lambda uniek: 1 / 0)
+
+    def test_pakketgrens_kandidaat_melding_en_reden(self):
+        klaar = self.regel(rij(pakket={"fotos": 1, "transcripten": 1,
+                                       "kandidaat": {"hash": "zelfde"},
+                                       "overdracht": {"uitkomst": "klaargezet", "naam": "47035_2026-10-21",
+                                                      "invoerhash": "zelfde", "ts": "2026-10-21T08:30:00Z",
+                                                      "waarschuwing": "controleer fotolevering"}}))
+        self.assertEqual(klaar["schakels"]["pakket"]["stand"], "ok")
+        self.assertEqual(klaar["pakketnaam"], "47035_2026-10-21")
+        self.assertIn("10:30", klaar["schakels"]["pakket"]["uitleg"])
+        self.assertEqual(klaar["melding"], "controleer fotolevering")
+        self.assertIsNone(self.regel()["melding"])
+        grens = self.regel(rij(pakket={"versiegrens": True}))
+        self.assertEqual(grens["schakels"]["pakket"]["stand"], "ontbreekt")
+        wacht = self.regel(rij(pakket={"fotos": 1, "transcripten": 1,
+                                       "kandidaat": {"hash": "nieuw"},
+                                       "overdracht": {"invoerhash": "oud", "uitkomst": "klaargezet"}}))
+        self.assertEqual(wacht["schakels"]["pakket"]["stand"], "bezig")
+        self.assertIn("iCloud-wachttaak nog niet klaargezet", wacht["schakels"]["pakket"]["uitleg"])
+        geen_fotos = self.regel(rij(pakket={"transcripten": 1, "kandidaat": {"hash": "nieuw"},
+                                           "overdracht": {"invoerhash": "oud"}}))
+        self.assertEqual(geen_fotos["schakels"]["pakket"]["stand"], "nog_niet")
+        self.assertEqual(geen_fotos["schakels"]["pakket"]["uitleg"], "wacht op foto's")
+        geen_transcript = self.regel(rij(pakket={"fotos": 1}))
+        self.assertEqual(geen_transcript["schakels"]["pakket"]["uitleg"], "wacht op het transcript")
+        self.assertEqual(self.regel()["schakels"]["pakket"]["uitleg"], "wacht op foto's en het transcript")
+        te_groot = self.regel(rij(pakket={"fotos": 3, "transcripten": 1,
+                                         "grens": "3 foto's, maximum 2"}))
+        self.assertEqual(te_groot["schakels"]["pakket"],
+                         {"stand": "ontbreekt", "aantal": None,
+                          "uitleg": "te groot voor het dashboard: 3 foto's, maximum 2"})
+        self.assertEqual(te_groot["melding"], te_groot["schakels"]["pakket"]["uitleg"])
+
+    def test_ketenregel_vergelijkt_met_huidige_invoer_en_niet_bewaarde_kandidaat(self):
+        db = Dropbox()
+        vul_basis(db)
+        inventaris = lambda: V.deel_in(db.lijst(MAP, recursief=True), MAP, DATUM, SOORT, CONTRACT)
+        plan = V.pakket_plan(rij(), inventaris(), SOORT, CONTRACT)
+        pakket = {"fotos": 1, "fotos_iphone": 1, "transcripten": 1,
+                  "kandidaat": {"hash": "tijdelijke-foto"},
+                  "overdracht": {"invoerhash": plan["invoerhash"], "uitkomst": "klaargezet",
+                                 "ts": "2026-10-21T10:00:00Z"}}
+        self.assertEqual(self.regel(rij(pakket=pakket), inv=inventaris())["schakels"]["pakket"]["stand"], "ok")
+        pakket["kandidaat"]["hash"] = plan["invoerhash"]
+        db.bestand(f"{FOTOS}/{DATUM} iPhone/IMG_999.jpg", b"nieuwe fictieve foto")
+        self.assertEqual(self.regel(rij(pakket=pakket), inv=inventaris())["schakels"]["pakket"]["stand"], "bezig")
+
+    def test_privacy_van_hele_json(self):
+        geheimen = ["KLANT_GEHEIM", "TITEL_GEHEIM", "AGENDA_GEHEIM", "DEAL_GEHEIM",
+                    "PAD_GEHEIM", "HASH_GEHEIM"]
+        bezoek = rij(klant=geheimen[0], titel=geheimen[1], agenda=geheimen[2], deal_id=geheimen[3],
+                     dossiermap=f"{BASIS}/2026/47035_PAD_GEHEIM",
+                     pakket={"fotos": 1, "transcripten": 1, "kandidaat": {"hash": geheimen[5]},
+                             "overdracht": {"invoerhash": "oud"}})
+        stand = V.ketenstand([self.regel(bezoek)], {}, V.documentenlijst(None, KETEN_CONTRACT, self.DRIE_UUR),
+                             self.DRIE_UUR, "test", KETEN_CONTRACT)
+        data = json.dumps(stand, ensure_ascii=False)
+        for geheim in geheimen:
+            self.assertNotIn(geheim, data)
+        self.assertIn(ADRES, data)
+
+    @staticmethod
+    def document(naam, submap=None, gewijzigd="2026-10-21T09:00:00Z"):
+        basis = KETEN_CONTRACT["documentenmap"]
+        pad = f"{basis}/{submap}/{naam}" if submap else f"{basis}/{naam}"
+        return {"name": naam, "path_display": pad, "path_lower": pad.lower(), "size": 10,
+                "server_modified": gewijzigd}
+
+    def test_documenten_per_soort_versies_en_privacy(self):
+        soorten = KETEN_CONTRACT["soorten"]
+        vast = soorten["vaste_teksten"]
+        entries = [self.document("Voorbehoud v1.2.docx", vast),
+                   self.document("Voorbehoud v1.10.docx", vast),
+                   self.document("Slotzinnen v2.0.docx", vast),
+                   self.document("Checklist V2.pdf", soorten["checklist"]),
+                   self.document("verslag 2026.pdf", soorten["sjabloon"]),
+                   self.document("los.pdf"), self.document("andere.pdf", "Onbekende map"),
+                   self.document(".verborgen.docx", vast), self.document("~$tijdelijk.docx", vast),
+                   self.document("Icon verborgen", vast)]
+        for i in range(3):
+            entries.append(self.document(f"KLANTVERSLAG_{i}.pdf", soorten["voorbeeldverslagen"]))
+        entries.append({"name": "Map", "path_lower": f"{KETEN_CONTRACT['documentenmap']}/{vast}".lower()})
+        uit = V.documentenlijst(entries, KETEN_CONTRACT, self.DRIE_UUR)
+        self.assertEqual(set(uit["soorten"]), set(soorten))
+        self.assertEqual((uit["los"], uit["andere"]), (1, 1))
+        self.assertEqual(uit["soorten"]["vaste_teksten"]["aantal"], 3)
+        docs = uit["soorten"]["vaste_teksten"]["documenten"]
+        self.assertEqual(len(docs), 2)
+        voorbehoud = next(d for d in docs if d["naam"].startswith("Voorbehoud"))
+        self.assertEqual((voorbehoud["versie"], voorbehoud["vervangen"]), ("1.10", 1))
+        self.assertEqual(uit["soorten"]["checklist"]["documenten"][0]["versie"], "2")
+        self.assertIsNone(uit["soorten"]["sjabloon"]["documenten"][0]["versie"])
+        self.assertEqual(uit["soorten"]["voorbeeldverslagen"]["aantal"], 3)
+        self.assertEqual(uit["soorten"]["voorbeeldverslagen"]["documenten"], [])
+        self.assertNotIn("KLANTVERSLAG", json.dumps(uit))
+        ontbreekt = V.documentenlijst(None, KETEN_CONTRACT, self.DRIE_UUR, fout="niet leesbaar")
+        self.assertFalse(ontbreekt["map_gevonden"])
+        self.assertEqual(ontbreekt["fout"], "niet leesbaar")
+        veel = [self.document(f"Stam {i:02d}.pdf", vast) for i in range(30)]
+        self.assertEqual(V.documentenlijst(veel, KETEN_CONTRACT, self.DRIE_UUR)
+                         ["soorten"]["vaste_teksten"]["aantal"], 30)
+        self.assertEqual(len(V.documentenlijst(veel, KETEN_CONTRACT, self.DRIE_UUR)
+                             ["soorten"]["vaste_teksten"]["documenten"]), 20)
+
+    def grote_stand(self, teken="x"):
+        regels = []
+        for i in range(100):
+            regel = self.regel(rij(id=i, adres=teken * 200,
+                                   pakket={"fotos": 1, "fotos_iphone": 1, "transcripten": 1,
+                                           "mails": 1, "documenten": 1}))
+            regel.update(mapnummer=teken * 40, agendanummer=teken * 40, stand=teken * 40,
+                         pakketnaam=teken * 200, melding=teken * 200)
+            for schakel in regel["schakels"].values():
+                schakel["uitleg"] = teken * 160
+            regels.append(regel)
+        documenten = V.documentenlijst([], KETEN_CONTRACT, self.DRIE_UUR)
+        for sleutel in KETEN_CONTRACT["namen_tonen"]:
+            documenten["soorten"][sleutel]["documenten"] = [
+                {"naam": f"{i:02d}" + teken * 198, "versie": "999.999.999",
+                 "gewijzigd": "2026-10-21", "vervangen": 1} for i in range(20)]
+        wachten = {naam: {"stand": "storing", "ts": "x" * 40} for naam in KETEN_CONTRACT["wachten"]}
+        return V.ketenstand(regels, wachten, documenten, self.DRIE_UUR, "a" * 40, KETEN_CONTRACT)
+
+    def test_maximum_nieuwste_honderd_en_inkorten(self):
+        self.assertLess(len(V.passend(self.grote_stand(), KETEN_CONTRACT)), KETEN_CONTRACT["max_bytes"])
+        regels = [{"id": i, "datum": DATUM} for i in range(250)]
+        stand = V.ketenstand(regels, {}, {}, self.DRIE_UUR, "test", KETEN_CONTRACT)
+        self.assertEqual(len(stand["dossiers"]), 100)
+        self.assertEqual(stand["weggelaten"], 150)
+        self.assertEqual([r["id"] for r in stand["dossiers"]], list(range(249, 149, -1)))
+        euro = self.grote_stand("€")
+        data = V.passend(euro, KETEN_CONTRACT)
+        self.assertLessEqual(len(data), KETEN_CONTRACT["max_bytes"])
+        self.assertGreater(euro["weggelaten"], 0)
+        self.assertEqual(euro["dossiers"][0]["id"], 99)
+
+    def test_losse_surrogaat_in_adres_blokkeert_json_niet(self):
+        regels = [self.regel(rij(id=78, adres="Proef\ud83dlaan 2")),
+                  self.regel(rij(id=79, adres="Geldigeweg 3"))]
+        stand = V.ketenstand(regels, {}, V.documentenlijst([], KETEN_CONTRACT, self.DRIE_UUR),
+                             self.DRIE_UUR, "test", KETEN_CONTRACT)
+        with tempfile.TemporaryDirectory() as inbox:
+            V.schrijf_ketenstand(inbox, stand, KETEN_CONTRACT)
+            geschreven = json.loads(Path(inbox, ".ketenstand.json").read_text(encoding="utf-8"))
+        self.assertEqual([r["id"] for r in geschreven["dossiers"]], [79, 78])
+        self.assertEqual(geschreven["dossiers"][1]["adres"], "Proef?laan 2")
+        self.assertEqual(geschreven["dossiers"][0]["adres"], "Geldigeweg 3")
+
+    def test_atomisch_schrijven_rechten_restanten_en_fouten(self):
+        with tempfile.TemporaryDirectory() as inbox:
+            stand = V.ketenstand([], {}, V.documentenlijst(None, KETEN_CONTRACT, self.DRIE_UUR),
+                                 self.DRIE_UUR, "test", KETEN_CONTRACT)
+            oud = Path(inbox, ".ketenstand.oud1.tmp")
+            oud.write_bytes(b"oud")
+            os.utime(oud, (self.DRIE_UUR.timestamp() - 3 * 3600, self.DRIE_UUR.timestamp() - 3 * 3600))
+            vers = Path(inbox, ".ketenstand.vers1.tmp")
+            vers.write_bytes(b"vers")
+            anders = Path(inbox, "ander.txt")
+            anders.write_bytes(b"blijft")
+            V.schrijf_ketenstand(inbox, stand, KETEN_CONTRACT)
+            doel = Path(inbox, ".ketenstand.json")
+            self.assertEqual(doel.read_bytes(), V.passend(stand, KETEN_CONTRACT))
+            self.assertEqual(stat.S_IMODE(doel.stat().st_mode), 0o644)
+            self.assertFalse(oud.exists())
+            self.assertTrue(vers.exists())
+            self.assertTrue(anders.exists())
+            self.assertEqual(sorted(p.name for p in Path(inbox).glob(".ketenstand.*.tmp")), [vers.name])
+            vooraf = doel.read_bytes()
+            met_grens = {**KETEN_CONTRACT, "max_bytes": 100}
+            with self.assertRaisesRegex(ValueError, "ketenstand te groot"):
+                V.schrijf_ketenstand(inbox, stand, met_grens)
+            self.assertEqual(doel.read_bytes(), vooraf)
+            with patch.object(V.os, "replace", side_effect=OSError("nep")):
+                with self.assertRaises(OSError):
+                    V.schrijf_ketenstand(inbox, stand, KETEN_CONTRACT)
+            self.assertEqual(sorted(p.name for p in Path(inbox).glob(".ketenstand.*.tmp")), [vers.name])
+            doel.unlink()
+            ander_doel = Path(inbox, "symlink-doel")
+            ander_doel.write_bytes(b"onaangeroerd")
+            doel.symlink_to(ander_doel)
+            V.schrijf_ketenstand(inbox, stand, KETEN_CONTRACT)
+            self.assertFalse(doel.is_symlink())
+            self.assertEqual(ander_doel.read_bytes(), b"onaangeroerd")
+
+    def test_pakketopruiming_negeert_ketenstand(self):
+        with tempfile.TemporaryDirectory() as inbox:
+            Path(inbox, ".ketenstand.json").write_bytes(b"stand")
+            tmp = Path(inbox, ".ketenstand.abc.tmp")
+            tmp.write_bytes(b"restant")
+            os.utime(tmp, (self.DRIE_UUR.timestamp() - 3 * 3600,
+                           self.DRIE_UUR.timestamp() - 3 * 3600))
+            for i in range(1, 6):
+                naam = "47035_2026-10-21" + (f"-{i}" if i > 1 else "")
+                map_pad = Path(inbox, naam)
+                map_pad.mkdir()
+                (map_pad / "manifest.json").write_text('{"invoerhash":"oud"}', encoding="utf-8")
+            plan = {"naam": "47035_2026-10-21", "invoerhash": "nieuw"}
+            self.assertEqual(V.schrijf_pakket(plan, inbox, None, None, self.DRIE_UUR)["uitkomst"], "grens")
+            self.assertEqual(Path(inbox, ".ketenstand.json").read_bytes(), b"stand")
+            self.assertEqual(tmp.read_bytes(), b"restant")
+
+
 class Rondes(unittest.TestCase):
     def setUp(self):
         self.db = Dropbox()
@@ -673,12 +935,87 @@ class Rondes(unittest.TestCase):
                    patch.object(V.bord, "klaargezet_voor", lambda *a, **kw: []),
                    patch.object(V.bord, "opgepakt", self.board.pak),
                    patch.object(V, "schrijf_pakket", schrijver),
+                   patch.object(V, "schrijf_ketenstand", lambda *a: None),
+                   patch.object(V.bordstand, "stand", return_value=None),
                    patch.object(V, "datetime", Klok),
                    patch.object(V.wp, "_client", side_effect=AssertionError("ronde mag Claude niet aanroepen")),
                    patch.object(V.subprocess, "run", return_value=SimpleNamespace(stdout="test\n"))]
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
+
+    def test_ronde_schrijft_ketenstand_en_bordstoring(self):
+        geschreven = []
+        documentenmap = KETEN_CONTRACT["documentenmap"]
+        self.db.bestand(f"{documentenmap}/Verkeerd gespeld/tekst.pdf", b"fictieve tekst")
+        Klok.huidig = datetime(2026, 10, 21, 11, 0, tzinfo=timezone.utc)
+        with patch.object(V.bordstand, "stand", side_effect=lambda naam: {"status": "fout" if naam == "icloud-wacht" else
+                                                                            "waakt", "ts": "2026-10-21T10:00:00Z"}), \
+             patch.object(V, "schrijf_ketenstand", side_effect=lambda inbox, stand, contract:
+                          geschreven.append((inbox, stand, contract))):
+            self.agent.ronde()
+        self.assertEqual(len(geschreven), 1)
+        inbox, stand, contract = geschreven[0]
+        self.assertEqual(inbox, V.BS_INBOX)
+        self.assertIs(contract, KETEN_CONTRACT)
+        self.assertEqual(stand["wachten"]["icloud-wacht"]["stand"], "storing")
+        self.assertEqual(stand["wachten"]["barsten-scheuren-verslag"]["stand"], "werkt")
+        self.assertEqual(len(stand["dossiers"]), 1)
+        self.assertEqual(stand["dossiers"][0]["schakels"]["foto"]["stand"], "ok")
+        self.assertTrue(stand["documenten"]["map_gevonden"])
+        self.assertEqual(stand["documenten"]["andere"], 1)
+
+    def test_mislukte_ketenstand_geeft_nood_en_hartslag(self):
+        Klok.huidig = datetime(2026, 10, 21, 11, 0, tzinfo=timezone.utc)
+        with patch.object(V, "schrijf_ketenstand", side_effect=OSError("nep")):
+            self.agent.ronde()
+        self.assertTrue(any("ketenstand voor het dashboard niet geschreven (OSError)" in n["tekst"]
+                            for n in self.log.hartslagen[-1][1]["nood"]))
+        self.assertEqual(self.log.hartslagen[-1][0], "waakt")
+        self.assertTrue(any(stap == "fout" and onderwerp == "ketenstand" for onderwerp, stap, _ in self.log.regels))
+
+    def test_kapotte_rij_en_documentenfout_laten_overige_stand_staan(self):
+        slecht = rij(id=78, uniek="afspraak:kapot", pakket={"fotos": "ongeldig"})
+        self.board.rijen[slecht["uniek"]] = slecht
+        gelezen = []
+        def lijst(pad, recursief=False):
+            if pad == KETEN_CONTRACT["documentenmap"]:
+                raise OSError("Dropbox tijdelijk niet leesbaar")
+            return self.db.lijst(pad, recursief=recursief)
+
+        Klok.huidig = datetime(2026, 10, 21, 11, 0, tzinfo=timezone.utc)
+        with patch.object(self.agent, "_ronde_dossiermap", return_value=None), \
+             patch.object(V.bronnen, "lijst", side_effect=lijst), \
+             patch.object(V, "schrijf_ketenstand", side_effect=lambda inbox, stand, contract: gelezen.append(stand)):
+            self.agent.ronde()
+        self.assertEqual(len(gelezen[0]["dossiers"]), 2)
+        fallback = next(r for r in gelezen[0]["dossiers"] if r["id"] == 78)
+        self.assertEqual(set(fallback), set(KETEN_CONTRACT["dossier_sleutels"]))
+        self.assertEqual(set(fallback["schakels"]), set(KETEN_CONTRACT["schakels"]))
+        self.assertTrue(all(s["stand"] == "geen" for s in fallback["schakels"].values()))
+        self.assertEqual(gelezen[0]["documenten"]["fout"], "niet leesbaar (OSError)")
+        self.assertEqual(self.log.hartslagen[-1][0], "waakt")
+        fouten = [tekst for onderwerp, stap, tekst in self.log.regels
+                  if onderwerp == "ketenstand" and stap == "fout" and "ketenregel" in tekst]
+        self.assertEqual(fouten, ["rij 78: ketenregel mislukt (ValueError)"])
+        noden = [n["tekst"] for n in self.log.hartslagen[-1][1]["nood"]]
+        self.assertEqual(noden.count("ketenstand: 1 bezoek(en) niet te bepalen"), 1)
+
+    def test_andere_verslagsoort_schrijft_geen_ketenstand(self):
+        andere = V.VerslagAgent("veiligheidscoordinatie")
+        andere.ag = Log()
+        with patch.object(andere, "rijen", return_value=[]), \
+             patch.object(andere, "impulsen", return_value=0), \
+             patch.object(andere, "opdrachten", return_value=0), \
+             patch.object(V, "schrijf_ketenstand", side_effect=AssertionError("alleen barsten")):
+            andere.ronde()
+        self.assertEqual(andere.ag.hartslagen[-1][0], "waakt")
+
+    def test_meet_modus_schrijft_geen_ketenstand(self):
+        with patch.object(sys, "argv", ["verslag_basis.py", "--meet"]), \
+             patch.object(V, "schrijf_ketenstand", side_effect=AssertionError("meet is geen gewone ronde")):
+            self.agent.main()
+        self.assertEqual(self.log.hartslagen[-1][0], "waakt")
 
     def test_kandidaat_rust_open_taak_en_latere_mail(self):
         Klok.huidig = datetime(2026, 10, 21, 10, 0, tzinfo=timezone.utc)
@@ -702,6 +1039,33 @@ class Rondes(unittest.TestCase):
         self.assertEqual(self.board.rijen["afspraak:bs77"]["pakket"]["bijlagen_na_overdracht"], 1)
         self.assertTrue(any("nieuwe mail of document" in tekst for _, _, tekst in self.log.regels))
         self.assertFalse(self.db.uploads)
+
+    def test_foto_erbij_en_weer_weg_herstelt_klaar_pakket(self):
+        r = self.board.rijen["afspraak:bs77"]
+        r["taken"] = []
+        geschreven = []
+        with patch.object(V, "schrijf_ketenstand", side_effect=lambda inbox, stand, contract: geschreven.append(stand)):
+            Klok.huidig = datetime(2026, 10, 21, 15, 0, tzinfo=timezone.utc)
+            self.agent.ronde()
+            Klok.huidig = datetime(2026, 10, 21, 16, 3, tzinfo=timezone.utc)
+            self.agent.ronde()
+            overdracht_hash = r["pakket"]["overdracht"]["invoerhash"]
+            extra = f"{FOTOS}/{DATUM} iPhone/IMG_999.jpg"
+            self.db.bestand(extra, b"tijdelijke fictieve foto", gewijzigd="2026-10-21T16:10:00Z")
+            Klok.huidig = datetime(2026, 10, 21, 16, 11, tzinfo=timezone.utc)
+            self.agent.ronde()
+            self.assertEqual(geschreven[-1]["dossiers"][0]["schakels"]["pakket"]["stand"], "bezig")
+            self.assertNotEqual(r["pakket"]["kandidaat"]["hash"], overdracht_hash)
+            self.db.bestanden.pop(extra)
+            self.db.gewijzigd.pop(extra)
+            self.db.revisies.pop(extra)
+            Klok.huidig = datetime(2026, 10, 21, 16, 12, tzinfo=timezone.utc)
+            self.agent.ronde()
+        pakket = geschreven[-1]["dossiers"][0]["schakels"]["pakket"]
+        self.assertEqual(pakket["stand"], "ok")
+        self.assertTrue(pakket["uitleg"].startswith("klaargezet op "))
+        self.assertEqual(r["pakket"]["kandidaat"]["hash"], overdracht_hash)
+        self.assertEqual(len(self.pakketten), 1)
 
     def test_handmatig_volledig_zonder_wachttaken_krijgt_geen_blijvende_nood(self):
         r = self.board.rijen["afspraak:bs77"]
@@ -1066,11 +1430,18 @@ class Rondes(unittest.TestCase):
         self.agent.ronde()
         Klok.huidig = datetime(2026, 10, 21, 11, 3, tzinfo=timezone.utc)
         for aanpassing in ({"max_fotos": 0}, {"max_totaal_mb": 0}):
-            with self.subTest(grens=aanpassing), patch.object(V.vs, "pakketcontract", return_value={**CONTRACT, **aanpassing}):
+            geschreven = []
+            with self.subTest(grens=aanpassing), \
+                 patch.object(V.vs, "pakketcontract", return_value={**CONTRACT, **aanpassing}), \
+                 patch.object(V, "schrijf_ketenstand", side_effect=lambda inbox, stand, contract: geschreven.append(stand)):
                 self.agent.ronde()
                 self.assertFalse(self.pakketten)
                 noden = self.log.hartslagen[-1][1].get("nood") or []
                 self.assertTrue(any("boven de foto- of totaalgrens" in n["tekst"] for n in noden))
+                pakket = geschreven[-1]["dossiers"][0]
+                self.assertEqual(pakket["schakels"]["pakket"]["stand"], "ontbreekt")
+                self.assertTrue(pakket["schakels"]["pakket"]["uitleg"].startswith("te groot voor het dashboard: "))
+                self.assertEqual(pakket["melding"], pakket["schakels"]["pakket"]["uitleg"])
 
     def test_taakstatus_zes_uur_en_fout_in_een_rij(self):
         r = self.board.rijen["afspraak:bs77"]
@@ -1115,6 +1486,7 @@ class Rondes(unittest.TestCase):
              patch.object(self.agent, "opdrachten", side_effect=AssertionError("droog verwerkt geen opdrachten")), \
              patch.object(self.agent, "bewaar", side_effect=AssertionError("droog bewaart niets")), \
              patch.object(V, "schrijf_pakket", side_effect=AssertionError("droog schrijft geen pakket")), \
+             patch.object(V, "schrijf_ketenstand", side_effect=AssertionError("droog schrijft geen ketenstand")), \
              patch.object(self.log, "log", side_effect=AssertionError("droog logt niets")), \
              patch.object(self.log, "log_verstuur", side_effect=AssertionError("droog verstuurt geen log")), \
              patch.object(self.log, "hartslag", side_effect=AssertionError("droog stuurt geen hartslag")), \

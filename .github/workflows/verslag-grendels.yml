@@ -11,6 +11,7 @@ on:
       - mijnagents-runner/koppelingen/verslagsoorten.py
       - mijnagents-runner/koppelingen/bronnen.py
       - mijnagents-runner/koppelingen/pakketcontract.json
+      - mijnagents-runner/koppelingen/ketenstandcontract.json
       - mijnagents-runner/plaud/zoektaak.py
       - mijnagents-runner/plaud/context.py
       - mijnagents-runner/plaud_wacht.py
@@ -34,6 +35,7 @@ on:
       - mijnagents-runner/koppelingen/verslagsoorten.py
       - mijnagents-runner/koppelingen/bronnen.py
       - mijnagents-runner/koppelingen/pakketcontract.json
+      - mijnagents-runner/koppelingen/ketenstandcontract.json
       - mijnagents-runner/plaud/zoektaak.py
       - mijnagents-runner/plaud/context.py
       - mijnagents-runner/plaud_wacht.py
