@@ -24,7 +24,8 @@ import os
 import re
 import urllib.error
 import urllib.request
-from datetime import date
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import organisatie
 
@@ -32,13 +33,19 @@ APPPORTAL_ENV = os.path.expanduser("~/appportal/.env")
 AGENTS_ENV = os.path.expanduser("~/appportal/mijnagents-data/.env")
 # Kostenrem (Shaniel, 01-10-2026: "door een klein foutje heel veel geld"). Alleen
 # sjabloonberichten kosten geld; Meta kent voor WhatsApp geen bestedingsplafond. Daarom
-# telt de code ze per dag en stopt bij WA_SJABLOON_MAX_PER_DAG (standaard 10); daarna
+# telt de code ze per Brusselse dag en stopt bij WA_SJABLOON_MAX_PER_DAG (standaard 10); daarna
 # valt De Bode terug op Telegram tot de volgende dag. Vrije tekst binnen het venster is gratis.
+# Van dat plafond blijven er WA_SJABLOON_RESERVE (standaard 2) vrij voor de vaste momenten van De Bode, het
+# ochtendbericht en de avondbundel: die sturen met voorrang (B7, ontwerp regie-zoom v1.2).
 TELLER = os.path.expanduser("~/appportal/mijnagents-data/wa_sjablonen.json")
 MAX_SJABLONEN_STANDAARD = 10
+RESERVE_STANDAARD = 2
+# De VM draait op UTC: met date.today() begon de teller in de zomer om 02:00 Brussel (B7).
+BRUSSEL = ZoneInfo("Europe/Brussels")
 TIMEOUT = 20
 MAX_TEKST = 3900            # Meta laat 4096 tekens toe per tekstbericht
 MAX_PARAM = 900             # een sjabloonparameter: geen regeleinden, samen onder 1024
+STANDAARD_KOP = "je agents"  # de eerste sjabloonparameter als de afzender geen eigen kop meegeeft
 
 
 class NietBeschikbaar(RuntimeError):
@@ -130,18 +137,25 @@ def _post(ins, body):
         raise RuntimeError(f"Meta weigerde het bericht ({detail})") from None
 
 
-def plat(tekst):
-    """Een sjabloonparameter mag geen regeleinden of tabs bevatten (Meta-fout 132018)."""
+def plat(tekst, max_tekens=MAX_PARAM):
+    """Een sjabloonparameter mag geen regeleinden of tabs bevatten (Meta-fout 132018). max_tekens None: niet afknippen,
+    zodat een afzender kan meten of zijn tekst past (De Bode, de regel Gebundeld)."""
     delen = [d.strip(" -") for d in re.split(r"[\r\n\t]+", tekst or "") if d.strip(" -")]
-    return re.sub(r" {4,}", "   ", " · ".join(delen))[:MAX_PARAM]
+    uit = re.sub(r" {4,}", "   ", " · ".join(delen))
+    return uit if max_tekens is None else uit[:max_tekens]
+
+
+def vandaag():
+    """De Brusselse datum, als JJJJ-MM-DD: de dag waarop de kostenrem telt (B7)."""
+    return datetime.now(BRUSSEL).date().isoformat()
 
 
 def sjablonen_vandaag():
-    """Hoeveel sjabloonberichten er vandaag al vertrokken (0 als de teller van gisteren is)."""
+    """Hoeveel sjabloonberichten er vandaag (Brussel) al vertrokken (0 als de teller van gisteren is)."""
     try:
         with open(TELLER, encoding="utf-8") as f:
             t = json.load(f)
-        return int(t.get("n", 0)) if t.get("datum") == date.today().isoformat() else 0
+        return int(t.get("n", 0)) if t.get("datum") == vandaag() else 0
     except (OSError, ValueError):
         return 0
 
@@ -150,7 +164,7 @@ def _tel_sjabloon():
     n = sjablonen_vandaag() + 1
     try:
         with open(TELLER, "w", encoding="utf-8") as f:
-            json.dump({"datum": date.today().isoformat(), "n": n}, f)
+            json.dump({"datum": vandaag(), "n": n}, f)
     except OSError as e:
         # zonder teller geen rem: dan liever geen betaald bericht
         raise NietBeschikbaar(f"sjabloonteller niet schrijfbaar ({e.strerror}); geen betaald bericht") from None
@@ -164,14 +178,27 @@ def max_sjablonen():
         return MAX_SJABLONEN_STANDAARD
 
 
-def stuur(tekst, kop="je agents"):
-    """Naar Mehdi. Binnen het venster vrije tekst, daarbuiten het sjabloon. Geeft het kanaal terug."""
+def reserve():
+    """Hoeveel sjabloonberichten onder het plafond vrij blijven voor berichten met voorrang (WA_SJABLOON_RESERVE)."""
+    try:
+        return max(0, int(_env().get("WA_SJABLOON_RESERVE", RESERVE_STANDAARD)))
+    except ValueError:
+        return RESERVE_STANDAARD
+
+
+def stuur(tekst, kop=STANDAARD_KOP, voorrang=False):
+    """Naar Mehdi. Binnen het venster vrije tekst, daarbuiten het sjabloon. Geeft het kanaal terug.
+    kop: de eerste sjabloonparameter; een eigen kop (het ochtendbericht) staat in vrije tekst als eerste regel.
+    voorrang: buiten het venster stopt een gewoon bericht bij het plafond min de reserve, een bericht met voorrang pas
+    bij het plafond (B7). Binnen het venster telt er niets: vrije tekst is gratis."""
     ins = instellingen()
     if not (ins["heeft_token"] and ins["pnid"] and ins["mehdi"]):
         raise NietBeschikbaar("WhatsApp niet ingesteld: META_WA_TOKEN, afzendnummer of Mehdi's nummer ontbreekt")
     open_, _ = venster(ins)
     naar = ins["mehdi"].lstrip("+")
     if open_:
+        if kop and kop != STANDAARD_KOP and not tekst.lstrip().startswith(kop):
+            tekst = f"{kop}\n\n{tekst}"
         for stuk in [tekst[i:i + MAX_TEKST] for i in range(0, len(tekst), MAX_TEKST)] or [""]:
             _post(ins, {"messaging_product": "whatsapp", "recipient_type": "individual", "to": naar,
                         "type": "text", "text": {"body": stuk, "preview_url": False}})
@@ -181,6 +208,10 @@ def stuur(tekst, kop="je agents"):
         if sjablonen_vandaag() >= plafond:
             raise NietBeschikbaar(f"dagplafond bereikt: {plafond} betaalde sjabloonberichten vandaag "
                                   "(WA_SJABLOON_MAX_PER_DAG); morgen weer via WhatsApp")
+        if not voorrang and sjablonen_vandaag() >= plafond - reserve():
+            raise NietBeschikbaar(f"dagplafond bereikt voor gewone berichten: {max(0, plafond - reserve())} van "
+                                  f"{plafond} betaalde sjabloonberichten vandaag, de rest blijft voor de vaste "
+                                  "momenten (WA_SJABLOON_RESERVE); morgen weer via WhatsApp")
         _tel_sjabloon()   # voor het versturen: een fout na de aanvraag telt beter mee dan niet
         _post(ins, {"messaging_product": "whatsapp", "to": naar, "type": "template",
                     "template": {"name": ins["sjabloon"], "language": {"code": ins["taal"]},
