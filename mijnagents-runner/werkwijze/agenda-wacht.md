@@ -1,5 +1,9 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.25 (22-10-2026): beslissing van Mehdi. Een dubbele zorgafspraak die een collega op de werkagenda zette,
+en een eigen melding van de agent die op Opgelost staat, mogen weg, telkens na Mehdi's akkoord voor dat geval
+(master 5.17). Ik leg het voor; Claude verwijdert na de ja. Zonder ja blijft alles staan.
+
 Aanvulling v8.24 (22-10-2026): een gemaskeerde patiëntnaam telt alleen als eigen wanneer minstens twee naamdelen
 gemaskeerd zijn, elk zichtbaar deel minstens drie letters vóór het sterretje toont, en alle delen in volgorde bij
 precies één profielpatiënt passen. Bij twijfel volgt een vraag. De vertrekmelding op een afspraak krijgt een eigen

@@ -1,11 +1,14 @@
 {
- "versie": "5.16",
+ "versie": "5.17",
  "datum": "2026-10-19",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "annulering": "Een expliciete afzegging in Google of de afspraakomschrijving wordt met het vaste agentnummer gemeld: afgezegd, niet vertrekken. Vlak voor de vijfminutenoproep wordt de afspraak opnieuw gelezen; bij onleesbare agenda geen vertrekoproep maar eenmaal een waarschuwing vanaf het vaste agentnummer. Een mislukte afzegmelding blijft open voor herkansing. Een annuleerlink of een voorwaardelijke zin op zichzelf is geen afzegging; een latere expliciete bevestiging heft een afzegzin op.",
  "thuisafspraak": "Herfstlaan 65, 3010 Leuven is Mehdi's thuis: geen reis van thuis naar thuis, geen buitenconflict of vertrekoproep. Bij Catalin geldt de bekende koppeling met Harmoniebouw; een deal met invulnaam Voornaam Achternaam is geen bewijs voor een klanttitel. Als Mehdi naast de activiteit een naam of inhoudswoord invoerde, mag een andere persoon uit een adresdeal zijn titel niet overschrijven. Bij onvoldoende zekerheid vraagt de agent Mehdi.",
  "duur_ter_plaatse": {
-  "trefwoorden": ["barst", "scheur"],
+  "trefwoorden": [
+   "barst",
+   "scheur"
+  ],
   "minuten": 120,
   "regel": "Voor barsten en scheuren voorziet Mehdi ter plaatse altijd twee uur. De agent verlengt een toekomstige eigen werkafspraak zonder gasten of reeks als het verlengde stuk vrij is. Een eigen gemerkte rit rekent hij daarna opnieuw. Bij een botsing vraagt hij het via VR; zonder titel- of schrijfrecht meldt hij het in het werkverslag. Een gemerkte afspraak die Mehdi weer inkort, blijft bewust kort en krijgt geen nieuwe vraag."
  },
@@ -867,6 +870,10 @@
   {
    "datum": "2026-10-18",
    "wat": "Mehdi: \"voor Catalin mocht je al die mails sturen ... in de toekomst moeten mails die op Catalin wachten altijd naar hem doorgestuurd worden. Ja, ter plaatse dus, online niet.\" Voor agendagasten betekent dit: Catalin krijgt eenmaal een uitnodiging voor een eigen afspraak ter plaatse met fysiek adres; online, intern, zonder adres en reeksen blijven zonder mail."
+  },
+  {
+   "datum": "2026-10-22",
+   "wat": "Mehdi (\"y\" op de vraag: mag de agent een dubbele afspraak van een collega, en zijn eigen opgeloste meldingen, verwijderen na jouw akkoord?): ja. Een dubbele zorgafspraak die een collega op de werkagenda zette, en een eigen melding of vraagitem van de agent dat op Opgelost staat, mogen weg, telkens na Mehdi's akkoord voor dat geval. De agent legt het voor (nood met de vraag); Claude voert het uit na de ja. Zonder ja blijft alles staan."
   }
  ],
  "bron_afkortingen": {

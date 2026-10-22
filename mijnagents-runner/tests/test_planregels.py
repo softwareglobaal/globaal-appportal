@@ -136,7 +136,7 @@ class Planregels(unittest.TestCase):
     def test_master_en_werkwijze(self):
         master = json.loads((HIER / "werkwijze" / "agenda-taken.json").read_text())
         werkwijze = (HIER / "werkwijze" / "agenda-wacht.md").read_text()
-        self.assertEqual(master["versie"], "5.16")
+        self.assertGreaterEqual(tuple(int(x) for x in master["versie"].split(".")), (5, 16))  # geen vaste versie
         self.assertEqual(master["duur_ter_plaatse"]["trefwoorden"], ["barst", "scheur"])
         self.assertEqual(master["duur_ter_plaatse"]["minuten"], 120)
         self.assertTrue(any("barsten en scheuren voorzie ter plaatse altijd 2 uur" in b["wat"]
