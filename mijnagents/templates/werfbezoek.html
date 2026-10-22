@@ -146,7 +146,7 @@
 <form method="post" action="{{ url_for('werfbezoek_keuzes', dossier=b.dossier, volgnr=b.volgnr) }}">
   <input type="hidden" name="rij_id" value="{{ b.id }}"><input type="hidden" name="revisie" value="{{ b.formulier_revisie }}">
   {% set k = b.keuzes %}
-  <div class="rij" style="grid-template-columns:1fr 1fr 1fr 1fr">
+  <div class="rij" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr">
     <div class="veld"><label>Verslagtype {% if g.verslagtype_voorstel %}<span class="stil">(voorstel schrijver: {{ g.verslagtype_voorstel }})</span>{% endif %}</label>
       <select name="verslagtype">
         <option value="" {{ 'selected' if not k.verslagtype }}>volg het voorstel van de schrijver</option>
@@ -157,6 +157,8 @@
       </select></div>
     <div class="veld"><label>Bronnen</label>
       <select name="bronnen"><option value="eigen" {{ 'selected' if k.bronnen!='alles' }}>alleen mijn eigen opname en foto's van het bezoek</option><option value="alles" {{ 'selected' if k.bronnen=='alles' }}>alles in de bezoekmap, ook documenten van derden</option></select></div>
+    <div class="veld"><label>Naslag Buildwise (toelichting bij de punten, met bron)</label>
+      <select name="naslag"><option value="ja" {{ 'selected' if k.naslag!='nee' }}>ja, citeren met TV-nummer en pagina</option><option value="nee" {{ 'selected' if k.naslag=='nee' }}>nee, alleen eigen vaststellingen</option></select></div>
     <div class="veld"><label>Taal</label>
       <select name="taal"><option value="nl" {{ 'selected' if k.taal!='nl+en' }}>Nederlands</option><option value="nl+en" {{ 'selected' if k.taal=='nl+en' }}>Nederlands en Engels (zoals Archisnapper)</option></select></div>
     <div class="veld"><label>Doorlopende punten (omgevingsloket, werfbezoeken, netheid, facturatie, veiligheid, EPB)</label>
@@ -202,6 +204,9 @@
 {% endif %}
 <div class="melding"><strong>Word-concept:</strong> <code>{{ b.proef_pad }}</code><br>
   <span class="stil">Gemaakt op {{ b.proef_ts }}{% if b.proef_info %} · {{ b.proef_info.verslagtype }} · {{ b.proef_info.punten }} punten · {{ b.proef_info.fotos }} foto's · {{ b.proef_info.docx_kb }} kB{% if b.proef_info.open %} · nog {{ b.proef_info.open.in_te_vullen }} in te vullen, {{ b.proef_info.open.na_te_kijken }} na te kijken, {{ b.proef_info.open.raming_open }} ramingen{% endif %}{% endif %}. Dezelfde tekst staat ernaast als .md. Jij legt er je laag overheen en verstuurt; de agents versturen nooit.</span></div>
+{% if (b.proef_info or {}).get('fotos_niet_geplaatst') %}<div class="melding"><strong>Foto's niet geplaatst ({{ b.proef_info.fotos_niet_geplaatst|length }}):</strong><ul>{% for f in b.proef_info.fotos_niet_geplaatst %}<li>{{ f.naam }}: {{ f.reden }}</li>{% endfor %}</ul></div>{% endif %}
+{% if (b.proef_info or {}).get('zonder_bron') %}<div class="melding"><strong>Punten zonder bron ({{ b.proef_info.zonder_bron|length }}):</strong> {{ b.proef_info.zonder_bron|join(', ') }}</div>{% endif %}
+{% if (b.proef_info or {}).get('naslagmeldingen') %}<div class="melding"><strong>Naslag na te kijken:</strong><ul>{% for m in b.proef_info.naslagmeldingen %}<li>{{ m }}</li>{% endfor %}</ul></div>{% endif %}
 <div class="verslag">{{ verslag_html|safe }}</div>
 {% else %}
 <p class="stil">Nog geen concept. Klik <em>Maak concept</em> (pas eventueel eerst je keuzes aan): Werfverslag schrijver zet het verslag als concept in de werfapp, waar je naleest en zelf verstuurt, en de Word-versie in de bezoekmap.</p>

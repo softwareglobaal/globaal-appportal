@@ -899,16 +899,16 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
 
 def stand_van(controles):
     s = {x["code"]: x["stand"] for x in controles}
-    bronnen_ok = all(s.get(k) not in (None, "ontbreekt", "fout") for k in ("W2", "W3", "W4", "W5", "W6", "W12")) and s.get("W1") in ("ok", "let_op")
+    bronnen_ok = all(s.get(k) == "ok" for k in ("W2", "W3", "W4", "W5", "W6", "W12", "WERFSTART")) and s.get("W1") in ("ok", "let_op")
     if s.get("W7") == "ok":
         return "verslag aanwezig" if bronnen_ok else "verslag aanwezig, bronnen onvolledig"
     return "klaar voor verslag" if bronnen_ok else "te verzamelen"
 
 
 def ontbrekende_posten(controles):
-    nodig = ("W1", "W2", "W3", "W4", "W5", "W6", "W12")
+    nodig = ("W1", "W2", "W3", "W4", "W5", "W6", "W12", "WERFSTART")
     return [f"{x['code']} {x['naam']}" for x in controles
-            if x["code"] in nodig and (x["stand"] in ("ontbreekt", "fout") or (x["code"] == "W1" and x["stand"] not in ("ok", "let_op")))]
+            if x["code"] in nodig and x["stand"] not in (("ok", "let_op") if x["code"] == "W1" else ("ok",))]
 
 
 def bezoeksleutel(nummer, bezoek):
@@ -1042,6 +1042,9 @@ def verwerk(nummer, droog=False):
                                          **({"verzamelmap": b["map"]} if doel != b["map"] else {})},
                               "verwijzing": doel, "uniek": uniek})
         alle_taken += [t for t in taakrijen if not any(o.get("uniek") == t["uniek"] for o in open_taken.get(t["voor"], []))]
+        if not werfstart:
+            controles.append({"code": "WERFSTART", "naam": "werfstart", "stand": "onbekend",
+                              "toelichting": "werfstart ontbreekt; bezoektype en verslagnummer na te kijken"})
         ontbrekend = ontbrekende_posten(controles)
         if ontbrekend:
             controles.append({"code": "NODIG", "naam": "Nog te verzamelen", "stand": "let_op", "toelichting": ", ".join(ontbrekend)})

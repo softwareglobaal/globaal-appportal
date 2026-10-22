@@ -1,0 +1,3001 @@
+[
+  {
+    "sleutel": "TV274",
+    "titel": "Referentiesdetails voor ETICS met pleisternieuwbouw",
+    "map": "tv",
+    "bestand": "31000_nl_unprotected_TVN_274 Referentiesdetails voor ETICS met pleisternieuwbouw.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "buitenbepleistering, ETICS"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "RECAP17",
+    "titel": "ETICS 20 aandacht  spunten bij de uitvoering",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_TV_RECAP_17 ETICS 20 aandacht  spunten bij de uitvoering.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "buitenbepleistering, ETICS"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "DIGEST1",
+    "titel": "Verluchting van sanitaire afvoerinstallaties in gebouwen",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_1 Verluchting van sanitaire afvoerinstallaties in gebouwen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "riolering binnen"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "DIGEST10_1",
+    "titel": "Condensatieketels. Voordelen en werking",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_10_1 Condensatieketels. Voordelen en werking.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "DIGEST10_2",
+    "titel": "Condensatieketels. Een nieuwe verwarmingsinstallatie",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_10_2 Condensatieketels. Een nieuwe verwarmingsinstallatie.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "DIGEST10_3",
+    "titel": "Condensatieketels. Een bestaande verwarmingsketel vervangen",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_10_3 Condensatieketels. Een bestaande verwarmingsketel vervangen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "DIGEST13",
+    "titel": "Injectie van metselwerk tegen opstijgend vocht",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_13 Injectie van metselwerk tegen opstijgend vocht.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "DIGEST14",
+    "titel": "Een binnenbepleistering schilderen volgens de regels van de kunst",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_14 Een binnenbepleistering schilderen volgens de regels van de kunst.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "DIGEST15",
+    "titel": "Doorvoeringen doorheen brandwerende wanden afdichten zodat ze brandwerend blijven",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_15 Doorvoeringen doorheen brandwerende wanden afdichten zodat ze brandwerend blijven.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "DIGEST16",
+    "titel": "Afvalwater afvoeren",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_16 Afvalwater afvoeren.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "DIGEST2",
+    "titel": "Een dekvloer kiezen",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_2 Een dekvloer kiezen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "dekvloeren"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "DIGEST4",
+    "titel": "Uitvoering van binnenbepleisteringen met fabriekspleister",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_4 Uitvoering van binnenbepleisteringen met fabriekspleister.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "binnenbepleistering"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "DIGEST5",
+    "titel": "Ventilatie van woningen - Inleiding",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_5 Ventilatie van woningen - Inleiding.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "ventilatie"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "DIGEST6",
+    "titel": "Ventilatie van woningen - Natuurlijke toevoer",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_6 Ventilatie van woningen - Natuurlijke toevoer.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "ventilatie"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "DIGEST7",
+    "titel": "Ventilatie van woningen - Natuurlijke afvoer",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_7 Ventilatie van woningen - Natuurlijke afvoer.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "ventilatie"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "DIGEST9",
+    "titel": "Geslaagde veiligheidsbeglazing",
+    "map": "tv",
+    "bestand": "31200_nl_unprotected_WTCB_Digest_nr_9 Geslaagde veiligheidsbeglazing.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "MERGE_TECH_VOORLICHTING_144",
+    "titel": "Merge Tech Voorlichting 144",
+    "map": "tv",
+    "bestand": "Merge Tech Voorlichting 144.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV112",
+    "titel": "Leidraad voor de goede uitvoering van schilderwerken. 1ste deel-Woordenschat van de schilder",
+    "map": "tv",
+    "bestand": "TVN_112 Leidraad voor de goede uitvoering van schilderwerken. 1ste deel-Woordenschat van de schilder.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "schilderwerk"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV115",
+    "titel": "Pressiometerproeven en exploitatie van hun resultaten",
+    "map": "tv",
+    "bestand": "TVN_115 Pressiometerproeven en exploitatie van hun resultaten.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV116",
+    "titel": "Bekistingswoordenlijst",
+    "map": "tv",
+    "bestand": "TVN_116 Bekistingswoordenlijst.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV123",
+    "titel": "Glijbekistingen",
+    "map": "tv",
+    "bestand": "TVN_123 Glijbekistingen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV124",
+    "titel": "Kitvoegen tussen gevelelementen. Ontwerp en aanbrengen",
+    "map": "tv",
+    "bestand": "TVN_124 Kitvoegen tussen gevelelementen. Ontwerp en aanbrengen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "buitenschrijnwerk"
+    ],
+    "werfpunten": [
+      "rolluiken, kitvoegen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV125",
+    "titel": "Bepaling van afmetingen in het bouwbedrijf. Praktische leidraad",
+    "map": "tv",
+    "bestand": "TVN_125 Bepaling van afmetingen in het bouwbedrijf. Praktische leidraad.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV127",
+    "titel": "Toelaatbare maatafwijkingen",
+    "map": "tv",
+    "bestand": "TVN_127 Toelaatbare maatafwijkingen.pdf",
+    "jaar": 1979,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw",
+      "oplevering"
+    ],
+    "werfpunten": [
+      "beton, wapening",
+      "toleranties, vlakheid"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV129",
+    "titel": "Diepfunderings- en onderbouwprocedes",
+    "map": "tv",
+    "bestand": "TVN_129 Diepfunderings- en onderbouwprocedes.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV132",
+    "titel": "Toelaatbare vervormingen ingebouwen",
+    "map": "tv",
+    "bestand": "TVN_132 Toelaatbare vervormingen ingebouwen.pdf",
+    "jaar": 1980,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "draagvloeren, vervormingen"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV143",
+    "titel": "Rolluiken voor woningen",
+    "map": "tv",
+    "bestand": "TVN_143 Rolluiken voor woningen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "buitenschrijnwerk"
+    ],
+    "werfpunten": [
+      "rolluiken, kitvoegen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV144",
+    "titel": "Slooptechnieken voor betonkonstrukties. Inventaris van de procedes",
+    "map": "tv",
+    "bestand": "TVN_144 Slooptechnieken voor betonkonstrukties. Inventaris van de procedes.pdf",
+    "jaar": 1982,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "afbraak"
+    ],
+    "werfpunten": [
+      "sloop beton, procedés"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV145",
+    "titel": "Aanbevelingen voor het gebruik van verzinkt stalen buizen voor de distributie van sanitair warm en koud water",
+    "map": "tv",
+    "bestand": "TVN_145 Aanbevelingen voor het gebruik van verzinkt stalen buizen voor de distributie van sanitair warm en koud water.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "sanitair leidingwerk"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV146",
+    "titel": "Verticale buitenbekledingen van dunne natuursteenplaten",
+    "map": "tv",
+    "bestand": "TVN_146 Verticale buitenbekledingen van dunne natuursteenplaten.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV147",
+    "titel": "Funderingen van huizen",
+    "map": "tv",
+    "bestand": "TVN_147 Funderingen van huizen.pdf",
+    "jaar": 1983,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "funderingen, grondonderzoek"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV148",
+    "titel": "Het lijmen van steen en marmer",
+    "map": "tv",
+    "bestand": "TVN_148 Het lijmen van steen en marmer.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV150",
+    "titel": "Bedrijfsrendement van centrale verwarmingsketels voor eengezinswoningen",
+    "map": "tv",
+    "bestand": "TVN_150 Bedrijfsrendement van centrale verwarmingsketels voor eengezinswoningen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV153",
+    "titel": "Vochthuishouding in gebouwen",
+    "map": "tv",
+    "bestand": "TVN_153 Vochthuishouding in gebouwen.pdf",
+    "jaar": 1984,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV155",
+    "titel": "Raming van de nettoenergiebehoeften voor de verwarming van gebouwen",
+    "map": "tv",
+    "bestand": "TVN_155 Raming van de nettoenergiebehoeften voor de verwarming van gebouwen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV163.1",
+    "titel": "Gesteente en mineralen. De doornikse steen",
+    "map": "tv",
+    "bestand": "TVN_163.1 Gesteente en mineralen. De doornikse steen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV163.2",
+    "titel": "De steen van vinalmont",
+    "map": "tv",
+    "bestand": "TVN_163.2 De steen van vinalmont.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV164",
+    "titel": "Eenheden ‑ grootheden ‑symbolen. Toepassing op de bouwnijverheid",
+    "map": "tv",
+    "bestand": "TVN_164 Eenheden ‑ grootheden ‑symbolen. Toepassing op de bouwnijverheid.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV165",
+    "titel": "Leidraad voor de goede uitvoering van soepele vloerbedekkingen",
+    "map": "tv",
+    "bestand": "TVN_165 Leidraad voor de goede uitvoering van soepele vloerbedekkingen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "hars, beton, soepel, textiel"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV168",
+    "titel": "Soepele vloerbedekkingen. Lexicon",
+    "map": "tv",
+    "bestand": "TVN_168Soepele vloerbedekkingen. Lexicon.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV170",
+    "titel": "Warmteafgifte en dimensionering van vloerverwarmingsinstallaties",
+    "map": "tv",
+    "bestand": "TVN_170 Warmteafgifte en dimensionering van vloerverwarmingsinstallaties.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV174",
+    "titel": "Elementaire begrippen over warmtetransmissie",
+    "map": "tv",
+    "bestand": "TVN_174 Elementaire begrippen over warmtetransmissie.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV175",
+    "titel": "Daken met pannen in gebakken aarde. Opbouw. Uitvoering",
+    "map": "tv",
+    "bestand": "TVN_175 Daken met pannen in gebakken aarde. Opbouw. Uitvoering.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV177",
+    "titel": "Woordenlijst van de dekvloerlegger",
+    "map": "tv",
+    "bestand": "TVN_177 Woordenlijst van de dekvloerlegger.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "dekvloeren"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV178",
+    "titel": "Thermische isolatie van gevels",
+    "map": "tv",
+    "bestand": "TVN_178 Thermische isolatie van gevels.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV179",
+    "titel": "Harde vloerbedekkingen op de verwarmde vloer",
+    "map": "tv",
+    "bestand": "TVN_179 Harde vloerbedekkingen op de verwarmde vloer.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV180",
+    "titel": "Curatieve houtbescherming in gebouwen",
+    "map": "tv",
+    "bestand": "TVN_180 Curatieve houtbescherming in gebouwen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV181",
+    "titel": "Vereenvoudigde berekeningsmethode voor een vloerverwarmingssysteem",
+    "map": "tv",
+    "bestand": "TVN_181 Vereenvoudigde berekeningsmethode voor een vloerverwarmingssysteem.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV182",
+    "titel": "Vlekken op witte kalksteen en kalkhoudend marmer",
+    "map": "tv",
+    "bestand": "TVN_182 Vlekken op witte kalksteen en kalkhoudend marmer.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV186",
+    "titel": "Daken met tegelpannen opbouw en uitvoering",
+    "map": "tv",
+    "bestand": "TVN_186 Daken met tegelpannen opbouw en uitvoering.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV187",
+    "titel": "Dampkappen en keukenventilatie",
+    "map": "tv",
+    "bestand": "TVN_187 Dampkappen en keukenventilatie.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "ventilatie"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV189",
+    "titel": "Dekvloeren",
+    "map": "tv",
+    "bestand": "TVN_189 Dekvloeren.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "dekvloeren"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV193",
+    "titel": "Dekvloeren Deel2; uitvoering",
+    "map": "tv",
+    "bestand": "TVN_193 Dekvloeren Deel2; uitvoering.pdf",
+    "jaar": 1994,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "dekvloeren"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV194",
+    "titel": "Handleiding voor de plaatsing van soepele muurbekledingen",
+    "map": "tv",
+    "bestand": "TVN_194 Handleiding voor de plaatsing van soepele muurbekledingen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV195",
+    "titel": "Daken met natuurleien. Opbouw en uitvoering",
+    "map": "tv",
+    "bestand": "TVN_195 Daken met natuurleien. Opbouw en uitvoering.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "pannen, leien"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV196",
+    "titel": "Balkons",
+    "map": "tv",
+    "bestand": "TVN_196 Balkons.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV197",
+    "titel": "Gevelreiniging (vervangt de TV 121)",
+    "map": "tv",
+    "bestand": "TVN_197 Gevelreiniging (vervangt de TV 121).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV121"
+    ],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV198",
+    "titel": "Houten trappen",
+    "map": "tv",
+    "bestand": "TVN_198 Houten trappen.pdf",
+    "jaar": 1995,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "trappen"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV202",
+    "titel": "Daken met betonpannen opbouw en uitvoering",
+    "map": "tv",
+    "bestand": "TVN_202 Daken met betonpannen opbouw en uitvoering.pdf",
+    "jaar": 1996,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "pannen, leien"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV206",
+    "titel": "Mecanische inbraakbeveiliging van schrijnwerk en beglazing",
+    "map": "tv",
+    "bestand": "TVN_206 Mecanische inbraakbeveiliging van schrijnwerk en beglazing.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "buitenschrijnwerk"
+    ],
+    "werfpunten": [
+      "beglazing"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV207",
+    "titel": "Kunststofbuissystemen voor de distributie van warm en koud water onder druk in gebouwen",
+    "map": "tv",
+    "bestand": "TVN_207 Kunststofbuissystemen voor de distributie van warm en koud water onder druk in gebouwen.pdf",
+    "jaar": 1998,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "sanitair leidingwerk"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV209",
+    "titel": "Buitenbepleisteringen",
+    "map": "tv",
+    "bestand": "TVN_209 Buitenbepleisteringen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV211",
+    "titel": "Voorkomen en bestrijden van radon in woningen",
+    "map": "tv",
+    "bestand": "TVN_211 Voorkomen en bestrijden van radon in woningen.pdf",
+    "jaar": 1999,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "radon"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV212",
+    "titel": "Leidraad voor de installatie van zonneboilers",
+    "map": "tv",
+    "bestand": "TVN_212 Leidraad voor de installatie van zonneboilers.pdf",
+    "jaar": 1999,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "verwarming"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV213",
+    "titel": "Binnenvloeren van natuursteen",
+    "map": "tv",
+    "bestand": "TVN_213 Binnenvloeren van natuursteen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "vloertegels, muurtegels"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV214",
+    "titel": "Glas en glasproducten, functies van beglazing",
+    "map": "tv",
+    "bestand": "TVN_214 Glas en glasproducten, functies van beglazing.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "buitenschrijnwerk"
+    ],
+    "werfpunten": [
+      "beglazing"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV219",
+    "titel": "Dakbedekkingen met leien. Dakdetails, opbouw en uitvoering",
+    "map": "tv",
+    "bestand": "TVN_219 Dakbedekkingen met leien. Dakdetails, opbouw en uitvoering.pdf",
+    "jaar": 2001,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "pannen, leien"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV220",
+    "titel": "Belgische blauwe hardsteen of 'petit granit'uit het Tournaisiaanse geologische tijdperk (vervangt TV 156)",
+    "map": "tv",
+    "bestand": "TVN_220 Belgische blauwe hardsteen of 'petit granit'uit het Tournaisiaanse geologische tijdperk (vervangt TV 156).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV156"
+    ],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV221",
+    "titel": "Plaatsing van glas in sponningen (De TV 214 en 221 vervangen de TV 110 en 113)",
+    "map": "tv",
+    "bestand": "TVN_221 Plaatsing van glas in sponningen (De TV 214 en 221 vervangen de TV 110 en 113).pdf",
+    "jaar": 2001,
+    "uitgever": "WTCB",
+    "vervangt": [
+      "TV110",
+      "TV113"
+    ],
+    "fases": [
+      "buitenschrijnwerk"
+    ],
+    "werfpunten": [
+      "beglazing"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV222",
+    "titel": "Dimensionering van schrijnwerk onder windbelasting",
+    "map": "tv",
+    "bestand": "TVN_222 Dimensionering van schrijnwerk onder windbelasting.pdf",
+    "jaar": 2001,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "buitenschrijnwerk"
+    ],
+    "werfpunten": [
+      "beglazing"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV223",
+    "titel": "Draagvloeren in niet-industriele gebouwen",
+    "map": "tv",
+    "bestand": "TVN_223 Draagvloeren in niet-industriele gebouwen.pdf",
+    "jaar": 2002,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "draagvloeren, vervormingen"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV224",
+    "titel": "Waterwerende oppervlaktebehandeling (vervangt TV 140)",
+    "map": "tv",
+    "bestand": "TVN_224 Waterwerende oppervlaktebehandeling (vervangt TV 140).pdf",
+    "jaar": 2002,
+    "uitgever": "WTCB",
+    "vervangt": [
+      "TV140"
+    ],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "hydrofobering, reiniging"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV225",
+    "titel": "Daken met golfplaten van vezelcement; materiaalopbouw- uitvoering",
+    "map": "tv",
+    "bestand": "TVN_225 Daken met golfplaten van vezelcement; materiaalopbouw- uitvoering.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV226",
+    "titel": "Onderhoud van brandwerende deuren",
+    "map": "tv",
+    "bestand": "TVN_226 Onderhoud van brandwerende deuren.pdf",
+    "jaar": 2002,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "brand"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV227",
+    "titel": "Muurbetegelingen",
+    "map": "tv",
+    "bestand": "TVN_227 Muurbetegelingen.pdf",
+    "jaar": 2003,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "vloertegels, muurtegels"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV229",
+    "titel": "Groendaken",
+    "map": "tv",
+    "bestand": "TVN_229 Groendaken.pdf",
+    "jaar": 2006,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "plat dak"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV230",
+    "titel": "Verhoogde vloeren",
+    "map": "tv",
+    "bestand": "TVN_230 Verhoogde vloeren.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "lichte wanden, plafonds, verhoogde vloeren"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV231",
+    "titel": "Herstelling en bescherming van beton (gebouwen en burgerlijke bouwkunde)",
+    "map": "tv",
+    "bestand": "TVN_231 Herstelling en bescherming van beton (gebouwen en burgerlijke bouwkunde).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV232",
+    "titel": "Verlaagde plafonds",
+    "map": "tv",
+    "bestand": "TVN_232 Verlaagde plafonds.pdf",
+    "jaar": 2007,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "lichte wanden, plafonds, verhoogde vloeren"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV233",
+    "titel": "Lichte binnenwanden",
+    "map": "tv",
+    "bestand": "TVN_233 Lichte binnenwanden.pdf",
+    "jaar": 2007,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "lichte wanden, plafonds, verhoogde vloeren"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV234",
+    "titel": "Plaatsing van branwerende deuren (vervangt TV 185)",
+    "map": "tv",
+    "bestand": "TVN_234 Plaatsing van branwerende deuren (vervangt TV 185).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV185"
+    ],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "brand"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV235",
+    "titel": "Condensatieketels",
+    "map": "tv",
+    "bestand": "TVN_235 Condensatieketels.pdf",
+    "jaar": 2008,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "verwarming"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV236",
+    "titel": "Ontwerp en uitvoering van staalplaat-betonvloeren",
+    "map": "tv",
+    "bestand": "TVN_236 Ontwerp en uitvoering van staalplaat-betonvloeren.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "draagvloeren, vervormingen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV237",
+    "titel": "Keramische binnenvloerbetegelingen",
+    "map": "tv",
+    "bestand": "TVN_237 Keramische binnenvloerbetegelingen.pdf",
+    "jaar": 2009,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "vloertegels, muurtegels"
+    ],
+    "licentie": "buildwise",
+    "status": "verouderd"
+  },
+  {
+    "sleutel": "TV238",
+    "titel": "De applicatie van opzwellende verfsystemen op stalen constructies",
+    "map": "tv",
+    "bestand": "TVN_238 De applicatie van opzwellende verfsystemen op stalen constructies.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "brand"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV239",
+    "titel": "Mechanische bevestiging van de isolatie en de afdichting op geprofileerde staalplaten",
+    "map": "tv",
+    "bestand": "TVN_239 Mechanische bevestiging van de isolatie en de afdichting op geprofileerde staalplaten.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV240",
+    "titel": "Pannendaken",
+    "map": "tv",
+    "bestand": "TVN_240 Pannendaken.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "pannen, leien"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV240_ADD1",
+    "titel": "Dakpannen uit gebakken aarde",
+    "map": "tv",
+    "bestand": "TVN_240_Add1 Dakpannen uit gebakken aarde.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "pannen, leien"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV240_ADD2",
+    "titel": "Betonpannen",
+    "map": "tv",
+    "bestand": "TVN_240_Add2 Betonpannen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "pannen, leien"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV241",
+    "titel": "Plaatsing van elastische vloerbekledingen",
+    "map": "tv",
+    "bestand": "TVN_241 Plaatsing van elastische vloerbekledingen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "hars, beton, soepel, textiel"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV242",
+    "titel": "Bijzondere bouwwerken uit glas Deel 1; structurele toepassingen",
+    "map": "tv",
+    "bestand": "TVN_242 Bijzondere bouwwerken uit glas Deel 1; structurele toepassingen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV243",
+    "titel": "Gevelbekledingen uit hout en plaatmaterialen op basis van hout",
+    "map": "tv",
+    "bestand": "TVN_243 Gevelbekledingen uit hout en plaatmaterialen op basis van hout.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "houten gevelbekleding"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV244",
+    "titel": "Aansluitingsdetails bij platte daken; algemene principes (vervangt de TV 191) Uitgave Februari 2021",
+    "map": "tv",
+    "bestand": "TVN_244 Aansluitingsdetails bij platte daken; algemene principes (vervangt de TV 191) Uitgave Februari 2021.pdf",
+    "jaar": 2021,
+    "uitgever": "WTCB",
+    "vervangt": [
+      "TV191"
+    ],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "plat dak"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV245",
+    "titel": "Aanbevelingen voor het gebruik van koperen buizen voor de distributie van santitair koud en warm water (vervangt de TV 154)",
+    "map": "tv",
+    "bestand": "TVN_245 Aanbevelingen voor het gebruik van koperen buizen voor de distributie van santitair koud en warm water (vervangt de TV 154).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV154"
+    ],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "sanitair leidingwerk"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV246",
+    "titel": "Na-isolatie van spouwmuren door het opvullen van de luchtspouw",
+    "map": "tv",
+    "bestand": "TVN_246 Na-isolatie van spouwmuren door het opvullen van de luchtspouw.pdf",
+    "jaar": 2012,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "spouwisolatie, na-isolatie"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV247",
+    "titel": "Ontwerp en uitvoering van vloeistofdichte betonconstructies",
+    "map": "tv",
+    "bestand": "TVN_247 Ontwerp en uitvoering van vloeistofdichte betonconstructies.pdf",
+    "jaar": 2012,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "kelder, waterdichting"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV248",
+    "titel": "Gelijmde wapening voor de versterking van betonconstructies",
+    "map": "tv",
+    "bestand": "TVN_248 Gelijmde wapening voor de versterking van betonconstructies.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV249",
+    "titel": "Leidraad voor de goede uitvoering van schilderwerken (herziening van de TV 159)",
+    "map": "tv",
+    "bestand": "TVN_249 Leidraad voor de goede uitvoering van schilderwerken (herziening van de TV 159).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV159"
+    ],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "schilderwerk"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV250",
+    "titel": "Referentiedetails voor ingegraven constructies",
+    "map": "tv",
+    "bestand": "TVN_250 Referentiedetails voor ingegraven constructies.pdf",
+    "jaar": 2014,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "kelder, waterdichting"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV251",
+    "titel": "Thermische isolatie van hellende daken",
+    "map": "tv",
+    "bestand": "TVN_251 Thermische isolatie van hellende daken.pdf",
+    "jaar": 2014,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "hellend dak, isolatie"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV252",
+    "titel": "Vocht in gebouwen Bijzonderheden van opstijgend vocht (vervangt de TV 210)",
+    "map": "tv",
+    "bestand": "TVN_252 Vocht in gebouwen Bijzonderheden van opstijgend vocht (vervangt de TV 210).pdf",
+    "jaar": 2014,
+    "uitgever": "WTCB",
+    "vervangt": [
+      "TV210"
+    ],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "opstijgend vocht"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV253",
+    "titel": "Parkeerdaken Deel 1; belastingen, ontwerpprincipes en samenstelling",
+    "map": "tv",
+    "bestand": "TVN_253 Parkeerdaken Deel 1; belastingen, ontwerpprincipes en samenstelling.pdf",
+    "jaar": 2014,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "plat dak"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV255",
+    "titel": "Luchtdichtheid van gebouwen",
+    "map": "tv",
+    "bestand": "TVN_255 Luchtdichtheid van gebouwen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "luchtdichtheid"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV256",
+    "titel": "Ontwerp en uitvoering van industriegebouwen in overeenstemming met de brandveiligheidseisen",
+    "map": "tv",
+    "bestand": "TVN_256 Ontwerp en uitvoering van industriegebouwen in overeenstemming met de brandveiligheidseisen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV257",
+    "titel": "Bepleisteringen op buitenoisolatie (ETICS) vervangt gedeeltelijk de TV 209",
+    "map": "tv",
+    "bestand": "TVN_257 Bepleisteringen op buitenoisolatie (ETICS) vervangt gedeeltelijk de TV 209.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV209"
+    ],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "buitenbepleistering, ETICS"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV258",
+    "titel": "Praktische gids voor de basisventilatiesystemen voor woongebouwen (vervangt de TV's 192 en 203)",
+    "map": "tv",
+    "bestand": "TVN_258 Praktische gids voor de basisventilatiesystemen voor woongebouwen (vervangt de TV's 192 en 203).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV192",
+      "TV203"
+    ],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "ventilatie"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV258.1",
+    "titel": "Ontwerpvoorbeeld van een ventilatiesysteem in een woning (Aanvulling 1 bij de TV 258)",
+    "map": "tv",
+    "bestand": "TVN_258.1 Ontwerpvoorbeeld van een ventilatiesysteem in een woning (Aanvulling 1 bij de TV 258).pdf",
+    "jaar": 2024,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "ventilatie"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV259",
+    "titel": "Ondiepe geothermie. Ontwerp en uitvoering van bodemenergiesystemen met U-vormige bodemwarmtewisselaars",
+    "map": "tv",
+    "bestand": "TVN_259 Ondiepe geothermie. Ontwerp en uitvoering van bodemenergiesystemen met U-vormige bodemwarmtewisselaars.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV260",
+    "titel": "Detaillering van de betonwapening (vervangt de TV 217)",
+    "map": "tv",
+    "bestand": "TVN_260 Detaillering van de betonwapening (vervangt de TV 217).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV217"
+    ],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "beton, wapening"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV261",
+    "titel": "Bijzondere bouwwerken uit glas Deel2; niet-structurele toepassingen (uitstalramen, deuren en gehelen uit gehard glas)",
+    "map": "tv",
+    "bestand": "TVN_261 Bijzondere bouwwerken uit glas Deel2; niet-structurele toepassingen (uitstalramen, deuren en gehelen uit gehard glas).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV262",
+    "titel": "Leidraad voor de uitvoering van textiele vloerbekledingen",
+    "map": "tv",
+    "bestand": "TVN_262 Leidraad voor de uitvoering van textiele vloerbekledingen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "hars, beton, soepel, textiel"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV263",
+    "titel": "Montage van zonnepanelen op hellende daken",
+    "map": "tv",
+    "bestand": "TVN_263 Montage van zonnepanelen op hellende daken.pdf",
+    "jaar": 2017,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "zonnepanelen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV264",
+    "titel": "Referentiedetails voor spouwmuren",
+    "map": "tv",
+    "bestand": "TVN_264 Referentiedetails voor spouwmuren.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "metselwerk, voegen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV265",
+    "titel": "Installaties voor de afvoer van afvalwater in gebouwen (herziening van TV 200)",
+    "map": "tv",
+    "bestand": "TVN_265 Installaties voor de afvoer van afvalwater in gebouwen (herziening van TV 200).pdf",
+    "jaar": 2018,
+    "uitgever": "WTCB",
+    "vervangt": [
+      "TV200"
+    ],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "riolering binnen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV266",
+    "titel": "Metalen dakbekledingen en gevelbekledingen met staande naden en roefnaden. Geactualiseerde uitgave 2022",
+    "map": "tv",
+    "bestand": "TVN_266 Metalen dakbekledingen en gevelbekledingen met staande naden en roefnaden. Geactualiseerde uitgave 2022.pdf",
+    "jaar": 2022,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "metalen daken"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV267",
+    "titel": "Betonvloeren voor binnentoepassingen ( herziening van TV 204)",
+    "map": "tv",
+    "bestand": "TVN_267 Betonvloeren voor binnentoepassingen ( herziening van TV 204).pdf",
+    "jaar": 2019,
+    "uitgever": "WTCB",
+    "vervangt": [
+      "TV204"
+    ],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "hars, beton, soepel, textiel"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV268",
+    "titel": "Zichtbeton",
+    "map": "tv",
+    "bestand": "TVN_268 Zichtbeton.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV269",
+    "titel": "Houten vloerbedekkingen; plankenvloeren, parketten en houfineervloeren Deel1;materialen, terminologie en eisen",
+    "map": "tv",
+    "bestand": "TVN_269 Houten vloerbedekkingen; plankenvloeren, parketten en houfineervloeren Deel1;materialen, terminologie en eisen.pdf",
+    "jaar": 2019,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "houten vloeren, parket"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV270",
+    "titel": "Installaties voor hemelwaterafvoer onder vrij verval voor gebouwen. Ontwerp en dimensionering",
+    "map": "tv",
+    "bestand": "TVN_270 Installaties voor hemelwaterafvoer onder vrij verval voor gebouwen. Ontwerp en dimensionering.pdf",
+    "jaar": 2019,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "hemelwaterafvoer"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV271",
+    "titel": "Uitvoering van metselwerk",
+    "map": "tv",
+    "bestand": "TVN_271 Uitvoering van metselwerk.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "metselwerk, voegen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV272",
+    "titel": "Houten vloerbedekkingen; plankenvloer, parketten en houtfineervloeren Deel 2; uitvoering (vervangt de TV 218)",
+    "map": "tv",
+    "bestand": "TVN_272 Houten vloerbedekkingen; plankenvloer, parketten en houtfineervloeren Deel 2; uitvoering (vervangt de TV 218).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV218"
+    ],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "houten vloeren, parket"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV273",
+    "titel": "Installatie van vloerverwarmingssystemen met warm water",
+    "map": "tv",
+    "bestand": "TVN_273 Installatie van vloerverwarmingssystemen met warm water.pdf",
+    "jaar": 2020,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "verwarming"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV274_REFERENTIEDETAILS_VOOR",
+    "titel": "Referentiedetails voor",
+    "map": "tv",
+    "bestand": "TVN_274 Referentiedetails voor.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "buitenbepleistering, ETICS"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV275",
+    "titel": "Bijzondere bouwwerken uit glas Deel 3; niet-structurele toepassingen (glazen binnenwanden)",
+    "map": "tv",
+    "bestand": "TVN_275 Bijzondere bouwwerken uit glas Deel 3; niet-structurele toepassingen (glazen binnenwanden).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV276",
+    "titel": "Leidraad voor de goede uitvoering van terrassen en garage-inritten op de volle grond",
+    "map": "tv",
+    "bestand": "TVN_276 Leidraad voor de goede uitvoering van terrassen en garage-inritten op de volle grond.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV277",
+    "titel": "Leidraad voor de goede uitvoering van harsgebonden vloeren (vervangt de TV 216)",
+    "map": "tv",
+    "bestand": "TVN_277 Leidraad voor de goede uitvoering van harsgebonden vloeren (vervangt de TV 216).pdf",
+    "jaar": 2021,
+    "uitgever": "WTCB",
+    "vervangt": [
+      "TV216"
+    ],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "hars, beton, soepel, textiel"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV278",
+    "titel": "Verwarmingsinstallaties met warm water; aanbevelingen om afzettingen en corrosie te voorkomen",
+    "map": "tv",
+    "bestand": "TVN_278 Verwarmingsinstallaties met warm water; aanbevelingen om afzettingen en corrosie te voorkomen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "verwarming"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV279",
+    "titel": "Harde bekledingen op buitenisolatie (ETICS met harde bekledingen)",
+    "map": "tv",
+    "bestand": "TVN_279 Harde bekledingen op buitenisolatie (ETICS met harde bekledingen).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "buitenbepleistering, ETICS"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV280",
+    "titel": "Het platte dak Herziening van de TV 215",
+    "map": "tv",
+    "bestand": "TVN_280 Het platte dak Herziening van de TV 215.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV215"
+    ],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "plat dak"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV281",
+    "titel": "Akoestische isolatie tussen woningen",
+    "map": "tv",
+    "bestand": "TVN_281 Akoestische isolatie tussen woningen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV282",
+    "titel": "Brandveiligheid van gevels Ontwerp en uitvoering van gordijngevels (staal en aluminium)",
+    "map": "tv",
+    "bestand": "TVN_282 Brandveiligheid van gevels Ontwerp en uitvoering van gordijngevels (staal en aluminium).pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV283",
+    "titel": "Plaatsen van buitenschrijnwerk  Deel1 algemene aspecten (Vervangt de TV 188)",
+    "map": "tv",
+    "bestand": "TVN_283 Plaatsen van buitenschrijnwerk  Deel1 algemene aspecten (Vervangt de TV 188).pdf",
+    "jaar": 2022,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV188"
+    ],
+    "fases": [
+      "buitenschrijnwerk"
+    ],
+    "werfpunten": [
+      "plaatsing ramen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV284",
+    "titel": "Binnenbepleisteringen ( Vervangt de TV's 199 en 201)",
+    "map": "tv",
+    "bestand": "TVN_284 Binnenbepleisteringen ( Vervangt de TV's 199 en 201).pdf",
+    "jaar": 2022,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV199",
+      "TV201"
+    ],
+    "fases": [
+      "afwerking"
+    ],
+    "werfpunten": [
+      "binnenbepleistering"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV285",
+    "titel": "Uitvoeringen van betonconstructies",
+    "map": "tv",
+    "bestand": "TVN_285 Uitvoeringen van betonconstructies.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "beton, wapening"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV286",
+    "titel": "Plaatsen van buitenschrijnwerk Deel 2 houten ramen in spouwmuurconstructies",
+    "map": "tv",
+    "bestand": "TVN_286 Plaatsen van buitenschrijnwerk Deel 2 houten ramen in spouwmuurconstructies.pdf",
+    "jaar": 2023,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "buitenschrijnwerk"
+    ],
+    "werfpunten": [
+      "plaatsing ramen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV287",
+    "titel": "Stabiliteit van werkterreinen voor funderingsmachines en ontwerp van tijdelijke werkplatformen",
+    "map": "tv",
+    "bestand": "TVN_287 Stabiliteit van werkterreinen voor funderingsmachines en ontwerp van tijdelijke werkplatformen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "funderingen, grondonderzoek"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV288",
+    "titel": "Plaatsen van buitenschrijnwerk Deel 3 vensters uit aluminium en pvc in spouwmuurconstructies",
+    "map": "tv",
+    "bestand": "TVN_288 Plaatsen van buitenschrijnwerk Deel 3 vensters uit aluminium en pvc in spouwmuurconstructies.pdf",
+    "jaar": 2023,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "buitenschrijnwerk"
+    ],
+    "werfpunten": [
+      "plaatsing ramen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV289",
+    "titel": "Buitenbepleisteringen op metselwerk en beton (Vervangt gedeeltelijk TV 209)",
+    "map": "tv",
+    "bestand": "TVN_289 Buitenbepleisteringen op metselwerk en beton (Vervangt gedeeltelijk TV 209).pdf",
+    "jaar": 2023,
+    "uitgever": "Buildwise",
+    "vervangt": [
+      "TV209"
+    ],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "buitenbepleistering, ETICS"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV290",
+    "titel": "Referentiedetails voor buitenbepleisteringen op metselwerk en beton",
+    "map": "tv",
+    "bestand": "TVN_290 Referentiedetails voor buitenbepleisteringen op metselwerk en beton.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "buitenbepleistering, ETICS"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV291",
+    "titel": "Eengezinswoningen met houten skelet",
+    "map": "tv",
+    "bestand": "TVN_291Eengezinswoningen met houten skelet.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "TV292",
+    "titel": "Tijdelijke bemalingen op werven",
+    "map": "tv",
+    "bestand": "TVN_292 Tijdelijke bemalingen op werven.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "afbraak",
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "bemaling"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV293",
+    "titel": "Brandveilig afdichten van doorvoeringen in brandwerende wanden",
+    "map": "tv",
+    "bestand": "TVN_293 Brandveilig afdichten van doorvoeringen in brandwerende wanden.pdf",
+    "jaar": 2024,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "brand"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV294",
+    "titel": "Renovatiedetails voor hellende daken volgens het sarkingprocede",
+    "map": "tv",
+    "bestand": "TVN_294 Renovatiedetails voor hellende daken volgens het sarkingprocede.pdf",
+    "jaar": 2025,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "hellend dak, isolatie"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV295",
+    "titel": "Referentiedetails voor ETICS- Renovatie",
+    "map": "tv",
+    "bestand": "TVN_295 Referentiedetails voor ETICS- Renovatie.pdf",
+    "jaar": 2025,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "buitenbepleistering, ETICS"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV296",
+    "titel": "Gevelreiniging",
+    "map": "tv",
+    "bestand": "TVN_296 Gevelreiniging.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "gevel"
+    ],
+    "werfpunten": [
+      "hydrofobering, reiniging"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "TV297",
+    "titel": "Opvoegen van metselwerk",
+    "map": "tv",
+    "bestand": "TVN_297 Opvoegen van metselwerk.pdf",
+    "jaar": 2025,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "metselwerk, voegen"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "WTCB_R6",
+    "titel": "PROBE Stap-voor-stap-renovatie van kantoorgebouwen",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_6 PROBE Stap-voor-stap-renovatie van kantoorgebouwen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R7",
+    "titel": "Warmteoverdracht door wanden in contact met de grond",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_7 Warmteoverdracht door wanden in contact met de grond.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R8",
+    "titel": "Projectportaalsites, elektronisch documentbeheer",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_8 Projectportaalsites, elektronisch documentbeheer.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R9",
+    "titel": "Initiele thermische prestaties van dunne reflecterende producten",
+    "map": "dimensionering",
+    "bestand": "31300_nl_unprotected_WTCB_Rapport_9 Initiele thermische prestaties van dunne reflecterende producten.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R10",
+    "titel": "Veiligheid bij de uitvoering van geprefabriceerde betonconstructies",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_10 Veiligheid bij de uitvoering van geprefabriceerde betonconstructies.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R11",
+    "titel": "Toepassing van de Eurocodes op het ontwerp van buitenschrijnwerk",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_11 Toepassing van de Eurocodes op het ontwerp van buitenschrijnwerk.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R13",
+    "titel": "Fysisch en mechanisch gedrag van hout-betonvloeren",
+    "map": "dimensionering",
+    "bestand": "31300_nl_unprotected_WTCB_Rapport_13 Fysisch en mechanisch gedrag van hout-betonvloeren.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R14",
+    "titel": "Ontwerp en dimensionering van cv-installaties met warm water",
+    "map": "dimensionering",
+    "bestand": "31300_nl_unprotected_WTCB_Rapport_14 Ontwerp en dimensionering van cv-installaties met warm water.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R15",
+    "titel": "Drukverliezen en dimensionering van luchtdistributienetwerken",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_15 Drukverliezen en dimensionering van luchtdistributienetwerken.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R16",
+    "titel": "Berekening van verstijvers voor uitstalramen",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_16 Berekening van verstijvers voor uitstalramen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R17",
+    "titel": "Keuze voor duurzame bouwmaterialen",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_17 Keuze voor duurzame bouwmaterialen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "WTCB_R18",
+    "titel": "Dimensionering van vloerverwarmingssystemen met warmwaterbuizen",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_18 Dimensionering van vloerverwarmingssystemen met warmwaterbuizen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "verwarming"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "WTCB_R20",
+    "titel": "Richtlijnen toepassing Eurocode 7 in Belgie (NBN EN 1997-1 ANB)",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_20 Richtlijnen toepassing Eurocode 7 in Belgie (NBN EN 1997-1 ANB).pdf",
+    "jaar": 2020,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "ruwbouw"
+    ],
+    "werfpunten": [
+      "funderingen, grondonderzoek"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "WTCB_R21",
+    "titel": "Installaties voor hemelwaterafvoer onder vrij verval",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_21 Installaties voor hemelwaterafvoer onder vrij verval.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "dak"
+    ],
+    "werfpunten": [
+      "hemelwaterafvoer"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "WTCB_R22",
+    "titel": "CV met warm water, dimensionering gesloten expansievaten",
+    "map": "dimensionering",
+    "bestand": "WTCB_Rapport_22 CV met warm water, dimensionering gesloten expansievaten.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "DIMENSIONERINGSMETHODE_23_CROW_CUR_RAPPORT_231_2022_HANDBOEK_DIEPWANDEN",
+    "titel": "dimensioneringsmethode 23 CROW-CUR Rapport 231;2022 Handboek Diepwanden",
+    "map": "dimensionering",
+    "bestand": "dimensioneringsmethode_23 CROW-CUR Rapport 231;2022 Handboek Diepwanden.pdf",
+    "jaar": 2022,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "DIMENSIONERINGSMETHODE_24_SANITAIRWARMWATERPRODUCTIE_IN_EENGEZINSWONINGEN",
+    "titel": "dimensioneringsmethode 24 Sanitairwarmwaterproductie in eengezinswoningen",
+    "map": "dimensionering",
+    "bestand": "dimensioneringsmethode_24 Sanitairwarmwaterproductie in eengezinswoningen.pdf",
+    "jaar": null,
+    "uitgever": "Buildwise",
+    "vervangt": [],
+    "fases": [],
+    "werfpunten": [],
+    "licentie": "buildwise",
+    "status": "ongekend"
+  },
+  {
+    "sleutel": "MEETSTAAT_1",
+    "titel": "Het opstellen van de meetstaat",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_1 Het opstellen van de meetstaat.pdf",
+    "jaar": 1980,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_1",
+    "titel": "Algemeenheden, gemeenschappelijke clausules",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_1 Algemeenheden, gemeenschappelijke clausules.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_3",
+    "titel": "Grondwerk",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_3 Grondwerk.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_4",
+    "titel": "Diepfunderingen",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_4 Diepfunderingen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_5",
+    "titel": "Ter plaatse gestort beton",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_5 Ter plaatse gestort beton.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_6_7",
+    "titel": "Systeemvloeren en -daken",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_6_7 Systeemvloeren en -daken.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_6_7_VOORAF_VERVAARDIGD_BETONWERK_EN_KUNSTSTEEN",
+    "titel": "Vooraf vervaardigd betonwerk en kunststeen",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_6_7 Vooraf vervaardigd betonwerk en kunststeen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_8",
+    "titel": "Metselwerk",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_8 Metselwerk.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_12",
+    "titel": "Rioleringen",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_12 Rioleringen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_13",
+    "titel": "Timmerwerk in hout",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_13 Timmerwerk in hout.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_14_15",
+    "titel": "Schrijnwerk in hout",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_14_15 Schrijnwerk in hout.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_16",
+    "titel": "Metaalbouw",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_16 Metaalbouw.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_18",
+    "titel": "Dakbedekkingen",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_18 Dakbedekkingen.pdf",
+    "jaar": 1984,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_20_21",
+    "titel": "Sanitaire leidingen",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_20_21 Sanitaire leidingen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_20_21_SANITAIRE_TOESTELLEN_EN_WATERKRANEN",
+    "titel": "Sanitaire toestellen en waterkranen",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_20_21 Sanitaire toestellen en waterkranen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_23",
+    "titel": "Elektrische installaties",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_23 Elektrische installaties.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_24",
+    "titel": "Elektromechanische installaties",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_24 Elektromechanische installaties.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_27_1",
+    "titel": "Binnenbekleding 1 Tegelwerken",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_27_1 Binnenbekleding 1 Tegelwerken.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_27_2",
+    "titel": "Binnenbekleding 2 Bepleistering",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_27_2 Binnenbekleding 2 Bepleistering.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_27_3",
+    "titel": "Binnenbekleding 3 Soepele bekledingen",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_27_3 Binnenbekleding 3 Soepele bekledingen.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_29",
+    "titel": "Beglazing",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_29 Beglazing.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "MEETSTAAT_2_30",
+    "titel": "Schilderwerk",
+    "map": "meetstaten",
+    "bestand": "Meetstaat_2_30 Schilderwerk.pdf",
+    "jaar": null,
+    "uitgever": "WTCB",
+    "vervangt": [],
+    "fases": [
+      "alle fasen"
+    ],
+    "werfpunten": [
+      "meetstaat en hoeveelheden"
+    ],
+    "licentie": "buildwise",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "VLARIO_VADEMECUM_UPDATE_2021",
+    "titel": "vademecum update 2021",
+    "map": "keuring",
+    "bestand": "vademecum-update-2021.pdf",
+    "jaar": 2021,
+    "uitgever": "VLARIO",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "privewaterafvoer, keuring"
+    ],
+    "licentie": "vlario",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "VLARIO_VERDUIDELIJKING_SCHEMAS_MB_KEURING_01_04_2022",
+    "titel": "Verduidelijking schemas MB Keuring 01 04 2022",
+    "map": "keuring",
+    "bestand": "Verduidelijking-schemas-MB-Keuring-01-04-2022.pdf",
+    "jaar": 2022,
+    "uitgever": "VLARIO",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "privewaterafvoer, keuring"
+    ],
+    "licentie": "vlario",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "VLARIO_OVERZICHTSDOCUMENT_KEURING_PRIVEWATERAFVOER_VOOR_ONTWERPERS",
+    "titel": "Overzichtsdocument keuring privewaterafvoer voor ontwerpers",
+    "map": "keuring",
+    "bestand": "Overzichtsdocument-keuring-privewaterafvoer-voor ontwerpers.pdf",
+    "jaar": null,
+    "uitgever": "VLARIO",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "privewaterafvoer, keuring"
+    ],
+    "licentie": "vlario",
+    "status": "geldig"
+  },
+  {
+    "sleutel": "VLARIO_FOLDER_KEURING_PRIVEWATERAFVOER_2021_1",
+    "titel": "Folder keuring privewaterafvoer 2021 1",
+    "map": "keuring",
+    "bestand": "Folder-keuring-privewaterafvoer-2021-1.pdf",
+    "jaar": 2021,
+    "uitgever": "VLARIO",
+    "vervangt": [],
+    "fases": [
+      "technieken"
+    ],
+    "werfpunten": [
+      "privewaterafvoer, keuring"
+    ],
+    "licentie": "vlario",
+    "status": "geldig"
+  }
+]

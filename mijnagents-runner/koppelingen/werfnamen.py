@@ -27,3 +27,13 @@ def eigen_transcript(naam):
     """Een eigen transcript (niet het verslag of het fotomanifest), in een van de naamvormen hierboven."""
     n = naam.strip()
     return eigen_tekst(n) and "transcript" in n.lower()
+
+
+def vertrouwde_transcriptkop(tekst):
+    """Een generieke transcript.txt is alleen eigen met Plaud-id of skill-herkomst in de kop."""
+    kop = "\n".join(str(tekst).splitlines()[:8])
+    return bool(re.search(r"(?im)^\s*plaud_id\s*:\s*[\w-]{8,}\s*$", kop)
+                or (re.search(r"(?im)^\s*dossier\s*:\s*\d{4}\s*$", kop)
+                    and re.search(r"(?im)^\s*bezoekmap\s*:\s*/\S+", kop))
+                or re.search(r"(?im)^\s*(?:bron|gemaakt door)\s*:\s*.*(?:werfverslag.skill|skill werfverslag|plaud)", kop)
+                or re.search(r"(?im)^\s*#\s*(?:werfverslag.skill|skill werfverslag)", kop))

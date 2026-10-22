@@ -219,16 +219,27 @@ def naar_markdown(v):
             r.append(kop)
             r.append("")
             r.append(p.get("tekst_nl", ""))
+            if p.get("bron"):
+                r.append("")
+                r.append(f"Herkomst: {p['bron']}")
             if p.get("tekst_en"):
                 r.append("")
                 r.append(f"*{p['tekst_en']}*")
             if p.get("verantwoordelijke"):
                 r.append("")
                 r.append(f"Verantwoordelijke: {p['verantwoordelijke']}")
+            if p.get("naslag"):
+                r.append("")
+                r.append(f"Naslag: {p['naslag']}")
             if p.get("fotos"):
                 r.append("")
                 r.append("Foto's: " + ", ".join(p["fotos"]))
             r.append("")
+    if v.get("fotos_niet_geplaatst"):
+        r.append("## Foto's niet geplaatst")
+        for fout in v["fotos_niet_geplaatst"]:
+            r.append(f"- {fout['naam']}: {fout['reden']}")
+        r.append("")
     if v.get("raming"):
         r.append("## Raming van de herstelkosten")
         r.append("| Onderdeel | Herstelling | Raming |\n|---|---|---|")
@@ -270,7 +281,7 @@ def _tabel_rijen(regels):
 
 def van_markdown(md):
     """Spiegel van naar_markdown: de verslagstructuur terug uit de bewaarde markdown (zonder Claude)."""
-    v = {"categorieen": [], "aanwezigen": [], "raming": [], "acties": [], "akkoord": [], "status_nl": "", "status_en": "", "volgend": ""}
+    v = {"categorieen": [], "aanwezigen": [], "raming": [], "acties": [], "akkoord": [], "status_nl": "", "status_en": "", "volgend": "", "fotos_niet_geplaatst": []}
     regels = md.splitlines()
     m = re.match(r"# (Werfverslag|Verslag plaatsbezoek) (\S+) voor project (\d{4}) (.*)", regels[0] if regels else "")
     if m:
@@ -309,18 +320,27 @@ def van_markdown(md):
         m = re.match(r"\*\*(\S+) (.*?)\*\* - ([^-]+?)(?: - (OK|Belangrijk|Dringend))?\s*$", rg)
         if m and cat is not None:
             punt = {"nummer": m.group(1), "titel": m.group(2), "datum": datum_iso(m.group(3)), "vlag": VLAG_TERUG.get((m.group(4) or "").lower(), ""),
-                    "tekst_nl": "", "tekst_en": "", "verantwoordelijke": "", "fotos": []}
+                    "tekst_nl": "", "tekst_en": "", "verantwoordelijke": "", "naslag": "", "bron": "", "fotos": []}
             cat["punten"].append(punt); continue
         if punt is None or not rg.strip():
             continue
         if rg.startswith("Verantwoordelijke: "):
             punt["verantwoordelijke"] = rg[len("Verantwoordelijke: "):].strip()
+        elif rg.startswith("Herkomst: "):
+            punt["bron"] = rg[len("Herkomst: "):].strip()
+            punt["doorlopend"] = punt["bron"] == "vast punt kantoor"
+        elif rg.startswith("Naslag: "):
+            punt["naslag"] = rg[len("Naslag: "):].strip()
         elif rg.startswith("Foto's: "):
             punt["fotos"] = [x.strip() for x in rg[len("Foto's: "):].split(",") if x.strip()]
         elif rg.startswith("*") and rg.endswith("*") and punt["tekst_nl"]:
             punt["tekst_en"] = rg.strip("*")
         else:
             punt["tekst_nl"] = (punt["tekst_nl"] + " " + rg.strip()).strip()
+    for rg in secties.get("Foto's niet geplaatst", []):
+        m = re.match(r"- (.*?): (.*)", rg)
+        if m:
+            v["fotos_niet_geplaatst"].append({"naam": m.group(1), "reden": m.group(2)})
     for cellen in _tabel_rijen([r for r in secties.get("Raming van de herstelkosten", []) if r.startswith("|")])[1:]:
         if len(cellen) >= 3:
             v["raming"].append(dict(zip(("onderdeel", "herstelling", "raming"), cellen)))
@@ -486,6 +506,10 @@ def naar_docx(v, fotos=None, master=MASTER):
             if nrs:
                 tekst = tekst.rstrip() + (" " if tekst.strip() else "") + "(" + ("foto " if len(nrs) == 1 else "foto's ") + ", ".join(str(x) for x in nrs) + ")"
             alinea(tekst, na=2)
+            if pt.get("bron"):
+                q = alinea(na=2)
+                r = q.add_run("Herkomst: "); r.bold = True; r.font.size = Pt(9)
+                q.add_run(pt["bron"])
             if pt.get("tekst_en"):
                 alinea(pt["tekst_en"], cursief=True, na=2)
             if pt.get("verantwoordelijke"):
@@ -494,6 +518,10 @@ def naar_docx(v, fotos=None, master=MASTER):
                 r = q.add_run(pt["verantwoordelijke"]); r.font.size = Pt(9)
             else:
                 alinea(na=4)
+            if pt.get("naslag"):
+                q = alinea(na=4)
+                r = q.add_run("Naslag: "); r.font.size = Pt(9); r.font.color.rgb = BLAUW_LABEL; r.bold = True
+                r = q.add_run(pt["naslag"]); r.font.size = Pt(9)
     k = 4
     if v.get("raming"):
         h1(f"{k}. Raming van de herstelkosten"); k += 1
@@ -524,8 +552,9 @@ def naar_docx(v, fotos=None, master=MASTER):
             p.paragraph_format.space_after = Pt(0)
             try:
                 p.add_run().add_picture(io.BytesIO(fotos[b]), height=Cm(10.6))
-            except Exception:  # noqa: BLE001
+            except Exception as ex:  # noqa: BLE001
                 p.add_run(f"(foto {b} niet leesbaar)")
+                v.setdefault("fotos_niet_geplaatst", []).append({"naam": b, "reden": f"plaatsing in Word: {type(ex).__name__}"})
             q = alinea(na=10)
             r = q.add_run(f"Foto {i}"); r.bold = True; r.font.size = Pt(9)
             tijd = f"{b[:2]}:{b[2:4]}" if b[:4].isdigit() else b
