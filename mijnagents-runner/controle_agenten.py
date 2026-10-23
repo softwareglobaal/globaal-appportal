@@ -35,6 +35,8 @@ GEHEIM = re.compile(r"(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za
                     r"|\b(wachtwoord|password|api[_-]?key|token|secret)\s*[=:]\s*[\"']?[A-Za-z0-9/_+-]{12,})",
                     re.I)
 VERPLICHTE_VELDEN = ("rol", "cadans", "mandaat", "mag", "grenzen")
+STATUS_RONDE = re.compile(r"(?:^|; )ronde-id:([0-9a-f]{32})$")
+KENNIS_RONDE = re.compile(r"^ronde-id-([0-9a-f]{32}): 0 tekens, e3b0c442$", re.M)
 
 
 def _tekst(rij, veld):
@@ -46,7 +48,12 @@ def _zaadpad(naam):
 
 
 def _runnerpad(naam):
-    return os.path.join(RUNNER, naam.replace("-", "_") + ".py")
+    bestand = naam.replace("-", "_") + ".py"
+    direct = os.path.join(RUNNER, bestand)
+    if os.path.isfile(direct):
+        return direct
+    mac = os.path.join(RUNNER, "mac", bestand)
+    return mac if os.path.isfile(mac) else direct
 
 
 def _genormaliseerd(s):
@@ -104,6 +111,20 @@ def n4_kennis_gemeld(rij, con):
     d = _ouderdom_dagen(_tekst(rij, "kennis_ts"))
     if d is None:
         return False, "nooit kennis gemeld"
+    if _tekst(rij, "cadans") == "op verzoek":
+        if rij["naam"] != "whatsapp-wacht":
+            return True, "kennis gemeld bij laatste ronde op verzoek"
+        try:
+            status = con.execute("select status, detail from status where naam=?", (rij["naam"],)).fetchone()
+        except sqlite3.Error:
+            return False, "laatste ronde op verzoek is niet controleerbaar"
+        if not status or status[0] not in ("klaar", "waakt"):
+            return False, "laatste ronde op verzoek is niet geslaagd"
+        status_ids = STATUS_RONDE.findall(status[1] or "")
+        kennis_ids = KENNIS_RONDE.findall(_tekst(rij, "kennis"))
+        if len(status_ids) != 1 or len(kennis_ids) != 1 or status_ids[0] != kennis_ids[0]:
+            return False, "kennis hoort niet bewezen bij de laatste ronde op verzoek"
+        return True, "kennis hoort bij de laatste ronde op verzoek"
     if d > 7:
         return False, f"laatst {d:.0f} dagen geleden"
     return True, f"{d:.1f} dagen geleden"
@@ -229,6 +250,8 @@ def n11_hartslag(rij, con):
         return False, f"staat op fout sinds {uren:.0f} uur: {taak[:60]}"
     if status == "actief" and uren > 3:
         return False, f"staat al {uren:.0f} uur op actief, ronde vastgelopen: {taak[:60]}"
+    if _tekst(rij, "cadans") == "op verzoek" and status in ("klaar", "waakt"):
+        return True, f"laatste ronde op verzoek: {status}"
     if uren > grens:
         waar = _tekst(rij, "draait_op") or "?"
         # Bewust niet het woord "stil": De Bode leest dat in een signaaltitel als
