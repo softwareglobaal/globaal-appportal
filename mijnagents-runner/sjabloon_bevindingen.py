@@ -21,6 +21,7 @@ Opbouw (identiek in Word en in markdown):
 
 Herkomst per bevinding: V = eigen vaststelling ter plaatse, B = verklaring van de bouwheer, S = blijkt uit stukken.
 """
+import copy
 import io
 import json
 import os
@@ -31,6 +32,7 @@ from datetime import date
 HIER = os.path.dirname(os.path.abspath(__file__))
 if HIER not in sys.path:
     sys.path.insert(0, HIER)
+import schrijfregels  # noqa: E402
 import sjabloon_werfverslag as sj  # noqa: E402
 
 SOORT = "verslag_bevindingen"
@@ -163,6 +165,8 @@ def _fotoverwijzing(b, nummer):
 
 # ------------------------------------------------------------------ markdown ---
 def naar_markdown(v):
+    v = copy.deepcopy(v)
+    schrijfregels.wacht(v)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     r = [f"# {TITEL}: {v['dossier']} {v['adres']}", "",
          f"**CONCEPT** - opgemaakt op {v['opgemaakt']}. Na te kijken en aan te vullen door Mehdi Chegini vóór verzending.", "",
          "| | |", "|---|---|",
@@ -233,6 +237,8 @@ def naar_markdown(v):
 # ---------------------------------------------------------------------- docx ---
 def naar_docx(v, fotos=None, master=sj.MASTER):
     """Word in de huisstijl van de contractmasters (zoals het werfverslag). fotos: dict bestandsnaam -> bytes."""
+    v = copy.deepcopy(v)
+    schrijfregels.wacht(v)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     from docx import Document
     from docx.enum.text import WD_BREAK
     from docx.shared import Cm, Pt, RGBColor

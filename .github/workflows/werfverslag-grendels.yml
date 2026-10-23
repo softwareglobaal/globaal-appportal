@@ -21,6 +21,7 @@ jobs:
       - run: python mijnagents/test_werfbezoek.py
       - run: python mijnagents-runner/tests/test_werfverslag_nummer.py
       - run: python mijnagents-runner/tests/test_werfverslag_bereik.py
+      - run: python mijnagents-runner/tests/test_schrijfregels.py
       - run: python mijnagents-runner/tests/test_icloud_status.py
       - run: python mijnagents-runner/tests/test_werf_fotoproducent.py
       - run: python mijnagents-runner/tests/test_werf_cli_11.py

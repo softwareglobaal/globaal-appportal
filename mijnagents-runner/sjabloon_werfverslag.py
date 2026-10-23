@@ -18,10 +18,13 @@ Opbouw (identiek in Word en in markdown):
 `naar_markdown(v)` en `van_markdown(md)` zijn elkaars spiegel, zodat een nieuwe lay-out zonder Claude
 (dus zonder tokens) uit de bewaarde markdown kan worden gemaakt (`--herlayout`).
 """
+import copy
 import io
 import os
 import re
 from datetime import date
+
+import schrijfregels
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 MASTER = os.path.join(HIER, "sjabloon_HA_master.docx")
@@ -182,6 +185,8 @@ def titel_van(v):
 
 # ------------------------------------------------------------------ markdown ---
 def naar_markdown(v):
+    v = copy.deepcopy(v)
+    schrijfregels.wacht(v)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     r = []
     nr, n = v["dossier"], v["bezoek"]
     r.append(f"# {titel_van(v)} voor project {nr} {v['adres']}")
@@ -403,6 +408,8 @@ def _voettekst(doc, tekst):
 
 def naar_docx(v, fotos=None, master=MASTER):
     """Word in de huisstijl van de contractmasters. fotos: dict bijschrift -> bytes (jpg/png)."""
+    v = copy.deepcopy(v)
+    schrijfregels.wacht(v)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Cm, Pt, RGBColor

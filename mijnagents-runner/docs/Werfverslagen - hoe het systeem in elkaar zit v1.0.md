@@ -76,6 +76,11 @@ proces-verbalen: voorlopige en definitieve oplevering.
 projecten en 302 contacten staan erin, met de nummering per project. De schrijver zet zijn proef ook daar als
 concept; daar kijk je na, en van daaruit wordt verstuurd (mail nog in te stellen). Werkt ook op de iPhone.
 
+**e. De schrijfregels** (23-10-2026). Vijf regels die in elk verslag gelden en die de code afdwingt: niets over het
+eigen bureau, nooit de deontologie of de Orde, geen oordeel over collega's, geen opnameverwijzing in de tekst, geen
+juridische kwalificatie. Zie "Werfverslagen - schrijfregels v1.0". De bezoekpagina biedt sindsdien het concept als Word
+en als PDF met één klik.
+
 **d. De naslag Buildwise** (nieuw, 21-10-2026). De 189 pdf's uit je kennisbank staan op de server, omgezet naar
 doorzoekbare tekst met paginanummers. Bij elk punt dat jij vaststelde zoekt de schrijver de passende Technische
 Voorlichting en zet die als toelichting erbij: "TV 283, Buildwise 2022, p. 41". Regels: alleen toelichting bij wat

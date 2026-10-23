@@ -2985,6 +2985,30 @@ def werfbezoek_pagina(dossier, volgnr):
                            verslag_html=md(b.get("verslag_md") or "") if b.get("verslag_md") else "", tab=request.args.get("tab", ""))
 
 
+@app.route("/werfverslag/<dossier>/<int:volgnr>/bestand/<soort>")
+def werfbezoek_bestand(dossier, volgnr, soort):
+    """Word, PDF of tekst van de proef downloaden (23-10-2026): de schrijver zet een kopie in
+    mijnagents-data/werfbezoek/<rij-id>/; proef_info.bestanden zegt welke namen. Alleen die namen worden geserveerd."""
+    if not mag_beslissen():
+        abort(403)
+    if soort not in ("docx", "pdf", "md"):
+        abort(404)
+    conn = db()
+    _werfbezoek_tabel(conn)
+    try:
+        r = _werf_dict(_werf_huidige(conn, dossier, volgnr, request.args.get("rij_id")))
+    except werfwerk.Conflict as exc:
+        return _werf_fout(exc)
+    naam = ((r.get("proef_info") or {}).get("bestanden") or {}).get(soort)
+    if not naam or "/" in naam or naam.startswith("."):
+        abort(404)
+    map_ = os.path.join(os.path.dirname(DB_PAD), "werfbezoek", str(r["id"]))
+    if not os.path.exists(os.path.join(map_, naam)):
+        abort(404)
+    from flask import send_from_directory
+    return send_from_directory(map_, naam, as_attachment=True, download_name=naam)
+
+
 @app.route("/werfverslag/<dossier>/<int:volgnr>/keuzes", methods=["POST"])
 def werfbezoek_keuzes(dossier, volgnr):
     """Keuzes van Mehdi (zoals Keuzes in het contractsysteem): verslagtype, taal, doorlopende punten,

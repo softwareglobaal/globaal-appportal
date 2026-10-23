@@ -185,5 +185,23 @@ with A.app.app_context():
     n = A.db().execute("SELECT COUNT(*) FROM voorstel WHERE naam='ontwikkelaar'").fetchone()[0]
 check("een voorstel zonder parameters (alleen een signaal) blijft zoals vroeger", n == 2, f"{n}")
 
+# 23-10-2026: Word en PDF van de proef met één klik, alleen de namen uit proef_info.bestanden, alleen uit de map van die rij
+leeg_db()
+c.post("/api/werfbezoek", json={"rijen": [rij(OUD)]}, headers=K)
+rid = rijen_db()[0]["id"]
+c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_pad", "proef_ts", "proef_info"], proef_pad="/x/2145-1 werfverslag (concept).docx",
+                                               proef_ts="2026-10-23", proef_info={"verslagtype": "werfverslag", "bestanden": {
+                                                   "docx": "2145-1 werfverslag (concept).docx", "pdf": "2145-1 werfverslag (concept).pdf"}})]}, headers=K)
+bm = os.path.join(os.path.dirname(A.DB_PAD), "werfbezoek", str(rid)); os.makedirs(bm, exist_ok=True)
+open(os.path.join(bm, "2145-1 werfverslag (concept).pdf"), "wb").write(b"%PDF-proef")
+open(os.path.join(bm, "geheim.txt"), "w").write("niet serveren")
+pag = c.get("/werfverslag/2145/1", headers=BEHEER).get_data(as_text=True)
+check("bezoekpagina toont de knoppen Word en PDF", "Word downloaden" in pag and "PDF downloaden" in pag)
+r = c.get(f"/werfverslag/2145/1/bestand/pdf?rij_id={rid}", headers=BEHEER)
+check("PDF wordt als download geserveerd", r.status_code == 200 and r.data == b"%PDF-proef" and "attachment" in r.headers.get("Content-Disposition", ""), r.status_code)
+check("Word ontbreekt op schijf: 404, geen fout", c.get(f"/werfverslag/2145/1/bestand/docx?rij_id={rid}", headers=BEHEER).status_code == 404)
+check("ander bestand in de map is niet bereikbaar", c.get(f"/werfverslag/2145/1/bestand/txt?rij_id={rid}", headers=BEHEER).status_code == 404)
+check("zonder beheerrecht: 403", c.get(f"/werfverslag/2145/1/bestand/pdf?rij_id={rid}").status_code in (401, 403))
+
 print(f"\n{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
