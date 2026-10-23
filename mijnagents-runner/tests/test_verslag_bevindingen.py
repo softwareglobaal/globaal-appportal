@@ -152,6 +152,23 @@ class Nummering(unittest.TestCase):
         self.assertEqual(aangemaakt[0]["bezoektype"], "werfbezoek")   # het tweede bezoek is werfbezoek 1
 
 
+class Fotos(unittest.TestCase):
+    def test_iphone_foto_staat_rechtop_in_word(self):
+        """PDF van 2309 (23-10-2026): een rechtopstaande foto met EXIF-oriëntatie 6 stond 90 graden gedraaid."""
+        from PIL import Image
+        buf = io.BytesIO()
+        exif = Image.Exif()
+        exif[0x0112] = 6
+        Image.new("RGB", (40, 30), "white").save(buf, format="JPEG", exif=exif)
+        recht = Image.open(io.BytesIO(sj.beeld_rechtop(buf.getvalue())))
+        self.assertEqual(recht.size, (30, 40))
+        self.assertIn(recht.getexif().get(0x0112, 1), (1, None))
+        zonder = io.BytesIO()
+        Image.new("RGB", (40, 30), "white").save(zonder, format="JPEG")
+        self.assertEqual(sj.beeld_rechtop(zonder.getvalue()), zonder.getvalue())
+        self.assertEqual(sj.beeld_rechtop(b"geen beeld"), b"geen beeld")
+
+
 class Raming(unittest.TestCase):
     def test_twee_totalen_en_pm(self):
         v = {"raming": [{"nr": "R1", "van": 100, "tot": 200}, {"nr": "R3a", "van": 50, "tot": 80},

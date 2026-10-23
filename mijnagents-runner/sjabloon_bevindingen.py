@@ -392,7 +392,7 @@ def naar_docx(v, fotos=None, master=sj.MASTER):
         for i, (f, bij) in enumerate(fotolijst, 1):
             p = doc.add_paragraph(); p.paragraph_format.keep_with_next = True; p.paragraph_format.space_after = Pt(0)
             try:
-                p.add_run().add_picture(io.BytesIO(fotos[f]), height=Cm(10.6))
+                p.add_run().add_picture(io.BytesIO(sj.beeld_rechtop(fotos[f])), height=Cm(10.6))
             except Exception as ex:  # noqa: BLE001
                 p.add_run(f"(foto {f} niet leesbaar: {type(ex).__name__})")
             q = alinea(na=10)
