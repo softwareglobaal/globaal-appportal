@@ -111,6 +111,48 @@ SOORTEN = {
         ],
         "slot": "Dit verslag geeft de vaststellingen van het plaatsbezoek weer; een definitief oordeel vraagt de aanbevolen onderzoeken.",
     },
+    "aankoopkeuring": {
+        "label": "Aankoopkeuring",
+        "agent": "aankoopkeuring-verslag",
+        "afdeling": "unabo",
+        "firmas": ("UNABO", "TKN", "ENERGIE", "UB", "UNAB", "TK", "TKNB", "EE", "ENEF"),
+        "codes": ("AK", "AB"),
+        "trefwoorden": ("aankoopkeuring", "aankoopbegeleiding", "aankoopadvies", "bouwkundige keuring"),
+        "basismappen": ["/Work All/02. UNABO/01. U-WORK/09. U-AANKOOPKEURING",
+                        "/Work All/02. UNABO/01. U-WORK/01. U-GENERAL"],
+        "communicatiemap": "_00. Communication",
+        "bezoeknaam": "bezoek klant - aankoopkeuring",
+        "eigen_keten": False,
+        "schrijfprofiel": "aankoopkeuring",
+        "verslagtitel": "Technisch en stedenbouwkundig aankoopkeuringsverslag",
+        "hoofdstukken": [
+            ("Algemeen en opdrachtkader",
+             "opdrachtgever, kandidaat-koper, adres, datum en uur, aanwezigen, weersomstandigheden, "
+             "visuele en niet-destructieve aard van de opname"),
+            ("Niet-beoordeelde en ontoegankelijke delen",
+             "verplicht overzicht van elk bouwdeel of elke ruimte die tijdens het bezoek niet zichtbaar, "
+             "afgesloten of niet inspecteerbaar was, met de reden"),
+            ("Bouwkundige en stabiliteitsstaat (K0-K3 en UN)",
+             "per bouwdeel (dak, gevels, buitenschrijnwerk, kelder en vocht, structuur en scheurvorming, "
+             "binnenafwerking, technieken): scheid zichtbare waarneming, bronfeit (zoals DOV-bodemgevoeligheid "
+             "met peildatum) en ernstcode K0, K1, K2, K3 of UN (nader onderzoek vereist), met foto"),
+            ("Stedenbouwkundige plan- en luchtfotovergelijking",
+             "vergelijking van voorgelegde vergunde plannen, kadaster en luchtfoto-tijdreis met de zichtbare "
+             "toestand ter plaatse; gebruik uitsluitend de uitkomst 'visueel conform voorgelegd plan', "
+             "'zichtbare afwijking t.o.v. voorgelegd plan (code UN)' of 'niet te beoordelen (vergunde plannen ontbreken)'"),
+            ("Doorlichting verplichte attesten en omgeving",
+             "synthese van voorgelegde stukken (EPC en renovatieplicht, asbestattest, elektrische keuring AREI, "
+             "stedenbouwkundig uittreksel, overstromingsgevoeligheid P/G-score) met bron- en datumvermelding; "
+             "ontbrekende stukken expliciet als 'onbekend / op te vragen'"),
+            ("Prioriteitenmatrix (zonder herstelbedragen)",
+             "samenvatting van de bevindingen zonder eurobedragen, opgedeeld in: (A) Directe actie vereist "
+             "(K3 en wettelijke verplichtingen uit attesten), (B) Actie op termijn (K2), en "
+             "(C) Nader gespecialiseerd of stedenbouwkundig onderzoek vereist (UN)"),
+        ],
+        "slot": ("Dit verslag betreft een visuele en niet-destructieve momentopname ter ondersteuning van de "
+                 "kandidaat-koper, bevat geen kostenramingen of juridische garanties, en vervangt geen wettelijk "
+                 "verplichte keuringen of stedenbouwkundige beslissingen van de vergunningverlenende overheid."),
+    },
 }
 
 

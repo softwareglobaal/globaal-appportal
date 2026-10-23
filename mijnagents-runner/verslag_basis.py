@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.join(HIER, "plaud"))
 import bord  # noqa: E402
 import bordstand  # noqa: E402
 import bronnen  # noqa: E402
+import schrijfregels  # noqa: E402
 import zoektaak as pz  # noqa: E402
 import verslagsoorten as vs  # noqa: E402
 import werfverslag_proef as wp  # noqa: E402  (leest bezoekmappen, bundelt bronnen, Claude-client, sleutel uit ~/agents/.env)
@@ -79,6 +80,13 @@ VERSLAG_SCHEMA = {
 
 def _systeem(s):
     hoofdstukken = "\n".join(f"{i}. {t}: {oms}" for i, (t, oms) in enumerate(s["hoofdstukken"], 1))
+    extra = ""
+    if s.get("schrijfprofiel") == "aankoopkeuring":
+        extra = """
+- Gebruik bij elk bouwdeel in het veld 'vlag' uitsluitend een van de codes: K0 (kosmetisch), K1 (lichte schade zonder functieverlies), K2 (ernstige schade op korte termijn), K3 (kritieke schade met vervolgschade) of UN (nader onderzoek vereist).
+- Scheid bij elke bevinding de zichtbare waarneming, het bronfeit (met bron en datum) en het technisch oordeel.
+- Noem NOOIT herstelkosten, prijsramingen, richtprijzen of bedragen in euro (schrijfregel S6).
+- Doe NOOIT een uitspraak over verjaring ("verjaard"), geef geen garantie op regularisatie ("gegarandeerd regulariseerbaar", "zeker vergund") en schrijf nooit dat het pand "vrij van verborgen gebreken" of "volledig onderzocht" is (schrijfregel S7)."""
     return f"""Je schrijft voor Mehdi Chegini (architect, {s['afdeling'].upper()}) het concept van een {s['label'].lower()}-verslag
 na een bezoek ter plaatse. Je krijgt de bronnen uit de bezoekmap: transcript van de opname, notities, foto's (namen), documenten.
 
@@ -89,7 +97,7 @@ Regels:
 - Onzekere lezing uit het transcript krijgt "(na te kijken)". Sprekers zonder naam heten "spreker N".
 - Geen juridische conclusies over aansprakelijkheid; beschrijf vaststellingen en verwijs naar de bevoegde partij.
 - Externen noem je met firmanaam; personen alleen als ze in de bronnen met naam en rol staan.
-- Nederlands, zakelijk, geen emoji, geen kastlijntjes (gewoon koppelteken).
+- Nederlands, zakelijk, geen emoji, geen kastlijntjes (gewoon koppelteken).{extra}
 
 Hoofdstukken van dit verslagtype, in deze volgorde (allemaal opnemen; een hoofdstuk zonder inhoud krijgt de tekst "geen"):
 {hoofdstukken}
@@ -98,6 +106,8 @@ Vaste slotzin (niet herschrijven): {s.get('slot', '')}"""
 
 
 def _md(v, s, rij):
+    v = json.loads(json.dumps(v))
+    schrijfregels.wacht(v, profiel=s.get("schrijfprofiel"))
     r = [f"# {v.get('titel') or s.get('verslagtitel', s['label'])}", "",
          f"CONCEPT, opgemaakt {date.today().isoformat()} door {s['agent']} (Mehdi Agents). Mehdi legt er zijn laag over; niets is verstuurd.", "",
          f"- Dossier: {rij.get('_projectnummer') or rij.get('dossier') or '(in te vullen)'}", f"- Adres: {rij.get('adres') or '(in te vullen)'}",
@@ -134,6 +144,8 @@ def _md(v, s, rij):
 
 def _docx(v, s, rij, beelden):
     """Eenvoudig Word-document (python-docx, geen master): titel, gegevens, hoofdstukken met punten, foto's erbij."""
+    v = json.loads(json.dumps(v))
+    schrijfregels.wacht(v, profiel=s.get("schrijfprofiel"))
     from docx import Document
     from docx.shared import Cm, Pt
     doc = Document()
@@ -1107,8 +1119,9 @@ class VerslagAgent:
                     continue   # 0. Archive, 0. Structure, ...
                 kandidaten.append((naam, e.get("path_display")))
         if nummer:
+            kaal_nr = re.sub(r"(?i)^ak[-_ ]*", "", nummer)
             for naam, pad in kandidaten:
-                if re.match(rf"^\s*{re.escape(nummer)}\b", naam):
+                if re.match(rf"(?i)^\s*(?:ak[-_ ]*)?{re.escape(kaal_nr)}\b", naam):
                     return pad, "projectnummer vooraan de mapnaam"
         beste, score, hoe = None, 0, ""
         for naam, pad in kandidaten:
@@ -1367,6 +1380,10 @@ class VerslagAgent:
                                             messages=[{"role": "user", "content": kop + "\n\n## BRONNEN\n" + bundel}],
                                             tools=[VERSLAG_SCHEMA], tool_choice={"type": "tool", "name": "verslag"})
         v = wp._tool(resp)
+        ingrepen = schrijfregels.wacht(v, profiel=self.s.get("schrijfprofiel"))
+        if ingrepen:
+            self.ag.log(onderwerp, "schrijf", "schrijfregels toegepast: " + ", ".join(f"{k} x{n}" for k, n in schrijfregels.samenvatting(ingrepen).items()),
+                        [f"{r}: {z[:140]}" for r, z in ingrepen[:12]])
         afgekapt = resp.stop_reason == "max_tokens"
         beelden = {}
         gevraagd = {n for h in v.get("hoofdstukken") or [] for p in h.get("punten") or [] for n in (p.get("fotos") or [])}
