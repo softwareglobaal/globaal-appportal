@@ -53,7 +53,9 @@ import werfapp  # noqa: E402
 import werfnamen  # noqa: E402
 import sjabloon_werfverslag as sjab  # noqa: E402
 import sjabloon_oplevering as pv  # noqa: E402
+import schrijfregels  # noqa: E402
 import sjabloon_bevindingen as vb  # noqa: E402
+import verslag_pdf  # noqa: E402
 from naslag.naslag import naslag_voor_punten, register as naslag_register  # noqa: E402
 
 OPDRACHT = contextvars.ContextVar("werfverslag_opdracht", default=None)
@@ -364,6 +366,13 @@ Regels:
 - Nederlands, zakelijk, geen emoji, geen kastlijntjes (gewoon koppelteken). Engels alleen als de keuzes dat vragen.
 - Naslag van Buildwise en NBN is auteursrechtelijk beschermd: citeer kort met bron (TV-nummer, uitgever, jaar, pagina), kopieer geen alinea's, stuur geen pdf door; vermeld bij een TV ouder dan 2010 dat een opvolger na te kijken is.
 - Naslag is alleen toelichting bij wat ter plaatse is vastgesteld (opname en foto's): het veld naslag verwijst naar de regel waaraan de vaststelling getoetst wordt. Nooit een vaststelling, gebrek, eis of maat toevoegen die niet uit de eigen bronnen komt, ook niet als de naslag dat suggereert.
+- Schrijfregels van het kantoor (S1-S5, schrijfregels.py; een grendel schrapt wat ertegen ingaat):
+  S1 niets over de architect of het bureau zelf (aanwezigheid, eerdere bezoeken, opdrachtomvang, verplichtingen); het
+  hoofdstuk "Rol van H-Architects" blijft "(in te vullen)" voor Mehdi. S2 nooit verwijzen naar de deontologie, het
+  reglement of de Orde van Architecten, en nooit oordelen dat iets daartegen ingaat. S3 geen oordeel over een
+  collega-architect of ander bureau. S4 in de tekst van het verslag nooit naar de opname verwijzen: geen
+  "(opname 00:22:30)", geen zin dat de architect zijn vaststellingen insprak; het tijdstip hoort alleen in het veld
+  bron. S5 geen juridische kwalificatie (aansprakelijk, wanprestatie, in gebreke).
 - Volg de keuzes van Mehdi (verslagtype, taal, aanwezigen, categorieën) als die gegeven zijn; ze winnen van je eigen inschatting."""
 
 
@@ -487,6 +496,47 @@ def kop_voorbereiding(dossier, rij, volgnr, fotos, opnames, eigen=False):
     return (f"Dossier {dossier}, {rij.get('adres','')}. {soort_bezoek.capitalize()} {nr} op {rij['datum']}; verslagnummer {dossier}-{nr}. "
             f"Bezoekmap: {rij['bezoekmap']}. Foto's in de map: {len(fotos)}; opnames: {len(opnames)}."
             + (EIGEN_REGEL if eigen else ""))
+
+
+LOKAAL = os.environ.get("WERF_BESTANDEN", os.path.expanduser("~/appportal/mijnagents-data/werfbezoek"))
+
+
+def voettekst_van(dossier, verslag, bevindingen):
+    if bevindingen:
+        return f"{dossier} | {vb.TITEL}"
+    soort = "Verslag plaatsbezoek" if verslag.get("soort_bezoek") == "plaatsbezoek" else "Werfverslag"
+    return f"{dossier} | {soort} {verslag.get('bezoek', '')}".rstrip()
+
+
+def _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, fotolijst, voettekst):
+    """Dezelfde proef als Word, tekst en PDF naast het bord (mijnagents-data/werfbezoek/<rij-id>/), zodat de bezoekpagina
+    ze als download kan aanbieden (23-10-2026: Mehdi wil Word en PDF met één klik, zoals in het contractendashboard).
+    De bezoekmap in Dropbox blijft de bron; dit is een kopie. Mislukt de PDF (weasyprint ontbreekt), dan blijven Word en
+    tekst staan en meldt het logboek het."""
+    uit = {}
+    try:
+        map_ = os.path.join(LOKAAL, str(rij["id"]))
+        os.makedirs(map_, exist_ok=True)
+        for oud in os.listdir(map_):
+            if oud.endswith((".docx", ".md", ".pdf")):
+                os.remove(os.path.join(map_, oud))
+        with open(os.path.join(map_, naam + ".docx"), "wb") as f:
+            f.write(docx)
+        with open(os.path.join(map_, naam + ".md"), "w", encoding="utf8") as f:
+            f.write(md)
+        uit = {"docx": naam + ".docx", "md": naam + ".md"}
+        try:
+            pdf = verslag_pdf.naar_pdf(md, voettekst, fotolijst)
+            with open(os.path.join(map_, naam + ".pdf"), "wb") as f:
+                f.write(pdf)
+            uit["pdf"] = naam + ".pdf"
+            uit["pdf_kb"] = len(pdf) // 1024
+        except Exception as e:  # noqa: BLE001
+            ag.log(f"{dossier}-{volgnr}", "fout", f"PDF niet gemaakt ({type(e).__name__}: {str(e)[:120]}); Word en tekst staan er wel")
+            uit["pdf_fout"] = f"{type(e).__name__}"
+    except OSError as e:
+        ag.log(f"{dossier}-{volgnr}", "fout", f"lokale kopie voor de bezoekpagina niet geschreven: {e.strerror or e}")
+    return uit
 
 
 def _bewaar(rij, dossier, volgnr, **velden):
@@ -837,16 +887,23 @@ def proef(ag, dossier, volgnr):
             for p in cat["punten"]:
                 p["tekst_en"] = ""
     beelden = _fotos_verzamelen(teksten, fotos, verslag)
+    ingrepen = schrijfregels.wacht(verslag)   # S1-S5: wat de schrijver toch schreef, komt niet in het concept
+    if ingrepen:
+        ag.log(f"{dossier}-{volgnr}", "schrijf", "schrijfregels toegepast: " + ", ".join(f"{k} x{n}" for k, n in schrijfregels.samenvatting(ingrepen).items()),
+               {"geschrapt": [z for _, z in ingrepen if z != "opnameverwijzing"][:20]})
     bevindingen = vb.uit_werfproef(verslag) if verslagtype == vb.SOORT else None
     if bevindingen:
         docx, md = vb.naar_docx(bevindingen, beelden), vb.naar_markdown(bevindingen)
         naam = f"{dossier} {vb.TITEL} (concept)"
+        pdf_fotos = [(bijschrift, beelden[f]) for f, bijschrift in vb._fotonummers(bevindingen, beelden)[1]]
     else:
         docx = sjab.naar_docx(verslag, beelden)
         md = sjab.naar_markdown(verslag)
         naam = f"{dossier}-{verslag['bezoek']} {'verslag plaatsbezoek' if verslag['soort_bezoek'] == 'plaatsbezoek' else 'werfverslag'} (concept)"
+        pdf_fotos = verslag_pdf.fotolijst_werfverslag(verslag, beelden)
     pad_md = bronnen.upload(f"{rij['bezoekmap']}/{naam}.md", md.encode("utf8"))
     pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
+    bestanden = _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, pdf_fotos, voettekst_van(dossier, verslag, bevindingen))
     telling = sjab.telling_open(md)
     n_punten = sum(len(c["punten"]) for c in verslag["categorieen"])
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"proef gezet: {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {n_punten} punten, "
@@ -858,6 +915,7 @@ def proef(ag, dossier, volgnr):
             "dekking": gegevens["dekking"], "beeldanalyse": "niet uitgevoerd", "hergebruikt": bool(getattr(usage, "hergebruikt", False)),
             "fotos_niet_geplaatst": verslag["fotos_niet_geplaatst"], "zonder_bron": zonder_bron,
             "naslagmeldingen": naslagmeldingen, "tokens": {"voorbereiding": {"in": voorbereide_tokens.get("tokens_in", 0), "uit": voorbereide_tokens.get("tokens_uit", 0)}, "proef_pogingen": pogingen},
+            "schrijfregels": schrijfregels.samenvatting(ingrepen), "bestanden": bestanden,
             "_verwerking": getattr(usage, "verwerking", {})}
     if bevindingen:
         # geen werfverslag: geen concept in de werfapp en dus geen werfverslagnummer; de gegevens blijven voor --herlayout
@@ -958,6 +1016,8 @@ def herlayout(ag, dossier, volgnr):
         docx = vb.naar_docx(bv, beelden)
         pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{dossier} {vb.TITEL} (concept).docx", docx)
         info.update({"fotos": len(beelden), "docx_kb": len(docx) // 1024, "layout": "HA-master"})
+        info["bestanden"] = _lokaal_bewaren(ag, rij, dossier, volgnr, f"{dossier} {vb.TITEL} (concept)", docx, vb.naar_markdown(bv),
+                                            [(bijschrift, beelden[f]) for f, bijschrift in vb._fotonummers(bv, beelden)[1]], f"{dossier} | {vb.TITEL}")
         ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak verslag van bevindingen: {os.path.basename(pad_docx)} ({len(docx)//1024} kB), zonder Claude")
         _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info)
         return pad_docx
@@ -971,6 +1031,8 @@ def herlayout(ag, dossier, volgnr):
     pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
     info = rij.get("proef_info") or {}
     info.update({"fotos": len(beelden), "docx_kb": len(docx) // 1024, "layout": "HA-master"})
+    info["bestanden"] = _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, sjab.naar_markdown(v), verslag_pdf.fotolijst_werfverslag(v, beelden),
+                                        voettekst_van(dossier, v, None))
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak (huisstijl contractmaster): {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {len(beelden)} foto's), zonder Claude")
     _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info)
     return pad_docx
