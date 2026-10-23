@@ -101,6 +101,23 @@ class FotoProducent(unittest.TestCase):
     def fotos(self):
         return [t for t in self.gepubliceerd if t["voor"] == "icloud-wacht"]
 
+    def test_bordstoring_slaat_het_dossier_over(self):
+        """Driehoeksoverleg 22-10-2026 (C5): zonder bordrijen geen nummering, registratie of taken, anders wordt een
+        verslag van bevindingen stil weer werfbezoek 1."""
+        echt = self.v.bord.call
+
+        def stuk(pad, payload=None):
+            if payload is None and pad.startswith("/api/werfbezoek?dossier="):
+                raise OSError("bord niet bereikbaar")
+            return echt(pad, payload)
+
+        self.v.bord.call = stuk
+        rijen, noden, dubbels = self.v.verwerk("9999")
+        self.assertEqual((rijen, dubbels), ([], []))
+        self.assertIn("bord niet leesbaar", noden[0]["tekst"])
+        self.assertFalse(self.gepubliceerd)
+        self.assertFalse([e for e in self.events if e[0] in ("bordopslaan", "registratie")])
+
     def test_opslaan_en_vaste_registratie_voor_fototaak(self):
         self.v.verwerk("9999")
         self.assertEqual(len(self.fotos()), 1)
