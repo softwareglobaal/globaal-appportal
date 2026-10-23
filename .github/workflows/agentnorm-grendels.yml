@@ -23,3 +23,4 @@ jobs:
       - run: python3 -m pip install "markdown==3.11.1"
       - run: python3 mijnagents-runner/tests/test_agentnorm.py
       - run: python3 mijnagents-runner/tests/test_nieuwe_agent.py
+      - run: python3 mijnagents-runner/tests/test_whatsapp_wacht.py

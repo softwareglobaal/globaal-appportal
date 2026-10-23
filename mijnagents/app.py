@@ -328,6 +328,15 @@ def leeftijd_min(ts):
         return None
 
 
+def toestand_met_cadans(naam, cadans, status, leeftijd):
+    """Een afgeronde ronde op verzoek veroudert niet; fouten en lopend werk wel."""
+    toestand = status if status in STILTE_MIN else "waakt"
+    if cadans == "op verzoek" and status in ("klaar", "waakt"):
+        return toestand
+    drempel = STILTE_PER_AGENT.get(naam, STILTE_MIN.get(toestand, 150))
+    return "stil" if leeftijd is not None and leeftijd > drempel else toestand
+
+
 def _lijst(val):
     try:
         v = json.loads(val or "[]")
@@ -361,10 +370,7 @@ def kaarten():
             toestand, taak, detail, ts, leeftijd = "onbekend", "", "", None, None
         else:
             leeftijd = leeftijd_min(s["ts"])
-            toestand = s["status"] if s["status"] in STILTE_MIN else "waakt"
-            drempel = STILTE_PER_AGENT.get(a["naam"], STILTE_MIN.get(toestand, 150))
-            if leeftijd is not None and leeftijd > drempel:
-                toestand = "stil"
+            toestand = toestand_met_cadans(a["naam"], a["cadans"], s["status"], leeftijd)
             taak, detail, ts = s["taak"], s["detail"], s["ts"]
         uit.append(
             {
@@ -1661,9 +1667,7 @@ def _kantoor_gegevens():
         a["toestand"], a["taak"], a["detail"] = "onbekend", "", ""
         if s:
             leeftijd = leeftijd_min(s["ts"])
-            t = s["status"] if s["status"] in STILTE_MIN else "waakt"
-            drempel = STILTE_PER_AGENT.get(a["naam"], STILTE_MIN.get(t, 150))
-            a["toestand"] = "stil" if (leeftijd is not None and leeftijd > drempel) else t
+            a["toestand"] = toestand_met_cadans(a["naam"], a["cadans"], s["status"], leeftijd)
             a["taak"], a["detail"] = s["taak"] or "", (s["detail"] or "")[:90]
         a["prop"] = next((p for k, p in PROPS if k in a["naam"]), "laptop")
         a["kleur"] = sum(ord(c) for c in a["naam"]) % 6
@@ -1741,9 +1745,7 @@ def organogram():
         a["toestand"] = "onbekend"
         if s:
             leeftijd = leeftijd_min(s["ts"])
-            t = s["status"] if s["status"] in STILTE_MIN else "waakt"
-            drempel = STILTE_PER_AGENT.get(a["naam"], STILTE_MIN.get(t, 150))
-            a["toestand"] = "stil" if (leeftijd is not None and leeftijd > drempel) else t
+            a["toestand"] = toestand_met_cadans(a["naam"], a["cadans"], s["status"], leeftijd)
     klaar = conn.execute("SELECT voor, COUNT(*) n FROM klaarzet WHERE status='klaar' GROUP BY voor").fetchall()
     return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents,
                            klaar={r["voor"]: r["n"] for r in klaar}, mag_beslissen=mag_beslissen())

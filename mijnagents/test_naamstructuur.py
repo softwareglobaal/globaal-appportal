@@ -80,4 +80,39 @@ with A.app.app_context():
     A.db().execute("UPDATE status SET ts=? WHERE naam='verzonnen-andere-agent'", (oud,))
     A.db().commit()
 controleer_hartslagweergaven("stil")
+
+# Een agent die alleen op verzoek draait mag na een afgeronde ronde niet morgen
+# als stil alarm verschijnen. Een fout of vastgelopen actieve ronde blijft zichtbaar.
+naam = "op-verzoek-proef"
+assert client.post("/api/agent", json={"naam": naam, "label": "Agent op verzoek", "type": "prive"},
+                   headers={"X-Agents-Token": "verzonnen-testtoken"}).status_code == 200
+with A.app.app_context():
+    oud = (datetime.now(timezone.utc) - timedelta(days=9)).isoformat()
+    A.db().execute("UPDATE agent SET cadans='op verzoek' WHERE naam=?", (naam,))
+    A.db().execute("INSERT INTO status(naam,status,ts) VALUES(?,?,?)", (naam, "klaar", oud))
+    A.db().commit()
+
+
+def controleer_op_verzoek(verwacht):
+    with A.app.test_request_context(headers=BEHEER):
+        kaart = next(k for k in A.kaarten() if k["naam"] == naam)
+        assert kaart["toestand"] == verwacht, ("kaarten", kaart)
+    kantoor = {k["naam"]: k["toestand"] for k in client.get("/api/kantoor", headers=BEHEER).get_json()["agents"]}
+    assert kantoor[naam] == verwacht, ("kantoor", kantoor[naam])
+    for url in ("/kantoor", "/organogram"):
+        html = client.get(url, headers=BEHEER).get_data(as_text=True)
+        kaart = re.search(r'<a\b[^>]*href="/agent/' + re.escape(naam) + r'"[^>]*>(.*?)</a>', html, re.S)
+        assert kaart is not None and "var(--" + verwacht + ")" in kaart[1], (url, verwacht)
+
+
+controleer_op_verzoek("klaar")
+with A.app.app_context():
+    A.db().execute("UPDATE status SET status='waakt' WHERE naam=?", (naam,))
+    A.db().commit()
+controleer_op_verzoek("waakt")
+for fout_status in ("fout", "actief"):
+    with A.app.app_context():
+        A.db().execute("UPDATE status SET status=? WHERE naam=?", (fout_status, naam))
+        A.db().commit()
+    controleer_op_verzoek("stil")
 print("Naamstructuur: beheergrens, escaping, paginering en gelijke hartslagweergaven geslaagd")
