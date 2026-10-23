@@ -254,7 +254,9 @@ class Planregels(unittest.TestCase):
         oude_lezing = copy.deepcopy(items)
         oude_rit = next(x for x in oude_lezing if x.get("id") == heen_b["id"])
         oude_rit["_merk"]["agendawacht_vertrek"] = tijd("13:00")
-        goed, weg = W._nakijken([bel_b], tok="proef", ritten=oude_lezing)
+        # _nakijken filtert afspraken van voor vandaag; deze proefdatum moet vast blijven.
+        with patch.object(W, "nu_lokaal", lambda: datetime.fromisoformat(f"{DAG}T09:00:00+02:00")):
+            goed, weg = W._nakijken([bel_b], tok="proef", ritten=oude_lezing)
         self.assertEqual((weg, goed[0]["tijd"]), (0, tijd("13:10")))
         oud_aantal = len(schrijver.patches)
         self.assertEqual(self.rit_zetten(items)[0], 0)
