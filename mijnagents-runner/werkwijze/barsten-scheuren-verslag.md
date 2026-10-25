@@ -3,7 +3,7 @@
 ## Versie 3.1 (22-10-2026; versie 3 van 22-10-2026)
 
 De TKN-projectmap is voor deze dienst tegelijk **dossiermap en bezoekmap**:
-`/Work/TKN BURO WORK/1 Projects/<jaar>/<mapnummer>_...`. Ik maak geen nieuwe bezoekmap.
+`/Work/TKN BURO WORK/1 Projects/{jaar}/{mapnummer}_...`. Ik maak geen nieuwe bezoekmap.
 Ik zoek in het bezoekjaar, het vorige jaar en het lopende jaar. Alleen een map voor barsten en
 scheuren met een nummer van vier tot zes cijfers komt in aanmerking. Het agendanummer helpt,
 maar straat én huisnummer bevestigen de keuze; een viercijferig nummer in het adres kan een
@@ -20,7 +20,7 @@ van het bezoekadres telt niet als projectbewijs voor de Plaudwacht.
 Ik lees de aanwezige submappen en gebruik hun werkelijke namen. Het sjabloon is `1. Foto's`,
 `2. plaud`, `3.Documents` en `4.Email`; ontbreken de foto- of Plaud-submap, dan meld ik dat
 en maak ik ze niet zelf. Ik tel foto's alleen in een gedateerde map onder de fotosubmap;
-`<datum> iPhone` telt apart als `fotos_iphone`, zodat dronefoto's de iPhone-aanvoer niet
+`{datum} iPhone` telt apart als `fotos_iphone`, zodat dronefoto's de iPhone-aanvoer niet
 afsluiten. Een HEIC met een JPEG-kopie telt één keer. Rechtstreeks in de Plaud-submap telt
 een gedateerd transcript, geen samenvatting of concept. Documenten en mailbijlagen tel ik
 in hun eigen submap. De pakketstand vermeldt deze tellingen en de werkelijke submapnamen.
@@ -28,8 +28,8 @@ in hun eigen submap. De pakketstand vermeldt deze tellingen en de werkelijke sub
 Het Commandocentrum geeft Plaud een taak vanaf agenda-einde plus 60 minuten zolang een
 transcript ontbreekt. De iCloud-wacht krijgt pas een taak na haar fotovenster plus 15 minuten
 zolang `fotos_iphone` nul is. Dat venster loopt van agenda-start min 30 minuten tot
-agenda-einde plus 180 minuten, begrensd tot 00:00–23:59:59 op de bezoekdag in Brusselse tijd;
-de straal blijft 300 meter. Foto's gaan naar `1. Foto's/<datum> iPhone` (of de werkelijk
+agenda-einde plus 180 minuten, begrensd tot 00:00 tot 23:59:59 op de bezoekdag in Brusselse tijd;
+de straal blijft 300 meter. Foto's gaan naar `1. Foto's/{datum} iPhone` (of de werkelijk
 aanwezige fotosubmap), het transcript naar de werkelijk aanwezige Plaud-submap. Open taken
 volgen gewijzigde agendagegevens; bij onbruikbare tijden pauzeren ze met lege doelpaden.
 Alleen de wachten vinken hun taak af na een volledige levering. De iCloud-wacht
@@ -84,12 +84,12 @@ pijplijn niet; ik zet het dossier er klaar voor.
 
 - **Impuls `voorbereiding`**: dossiermap zoeken in `03. Enstaco WORK/7. STA (Stabiliteit)` (nummer
   vooraan, dan straat en huisnummer, dan klantnaam); bezoekmap
-  `<dossiermap>/_00. Communication/<datum> bezoek klant - barsten en scheuren` met `00 bezoek.md`.
-  Geen dossiermap (vaak: de agenda zegt alleen `BS <klant>`): nood voor Mehdi, hij zet het pad op de
+  `{dossiermap}/_00. Communication/{datum} bezoek klant - barsten en scheuren` met `00 bezoek.md`.
+  Geen dossiermap (vaak: de agenda zegt alleen `BS {klant}`): nood voor Mehdi, hij zet het pad op de
   pagina.
 - **Elke ronde**: pakket meten (foto's, opnames, transcripten, documenten) en melden.
 - **Impuls `verslag`**: "klaar voor verslag, wacht op de knop".
-- **Opdracht `proef <id>`** (alleen van de knop, `van=bord:...`): de proef schrijven én het dossier
+- **Opdracht `proef {id}`** (alleen van de knop, `van=bord:...`): de proef schrijven én het dossier
   klaarzetten voor de pijplijn.
 
 ## De proef en de pijplijn
@@ -98,24 +98,37 @@ pijplijn niet; ik zet het dossier er klaar voor.
    het gebouw en zijn omgeving; vaststellingen (elke barst: plaats, richting, breedte, patroon,
    ouderdom, foto); mogelijke oorzaken (checklist: zetting, uitdroging, thermisch, overbelasting, vocht,
    trillingen, bomen, werken naast de deur); aanbevolen onderzoek en maatregelen; conclusie en
-   voorbehoud. Markdown en Word (`Stabiliteitsverslag barsten en scheuren <dossier> <datum> (concept)`)
+   voorbehoud. Markdown en Word (`Stabiliteitsverslag barsten en scheuren {dossier} {datum} (concept)`)
    in de bezoekmap.
-2. Pijplijn-dossier in `~/barsten_en_scheuren/dossiers/<dossier>_<datum>/` (env `BS_DOSSIERS_DIR`):
+2. Pijplijn-dossier in `~/barsten_en_scheuren/dossiers/{dossier}_{datum}/` (env `BS_DOSSIERS_DIR`):
    `Transcript.docx` (uit transcript.txt en 00 verslag.md), `photos/001_...jpg` in volgorde,
    `meta.json` (adres, projectnummer; Lambert72 x/y leeg). Op het BS-dashboard vult Mehdi x/y in en
    start hij de generatie (DOV-data, captions, RAPPORT.docx).
 
 ## Nog te leren (roadmap)
 
-- Het bouwplan (`plan.<ext>`) mee in de bezoekmap krijgen: uit de dossiermap of van de klant.
+- Het bouwplan (`plan.{ext}`) mee in de bezoekmap krijgen: uit de dossiermap of van de klant.
 - x/y (Lambert72) automatisch uit het adres (geocoder plus omzetting), zodat de pijplijn zonder
   handeling kan starten.
 - Als de pijplijn rechtstreeks op de bezoekmap kan werken, valt de kopie weg.
 
 ## Wat ik nooit doe
 
-Bestanden verplaatsen of hernoemen, een verslag versturen, een proef starten zonder de knop, foto's of
-opnames zelf ophalen, inhoud van het verslag op het bord zetten (alleen tellingen).
+- nooit bestaande bronbestanden of afgeronde pakketten verplaatsen, hernoemen, verwijderen of overschrijven
+- nooit iets in Dropbox schrijven of zelf een fotosubmap of Plaud-submap aanmaken
+- nooit een proef met het taalmodel starten zonder een klik op de knop Proef maken op het Commandocentrum
+- nooit een verslag versturen of de verwerking in barstenscheurenv2 zelf starten
+- nooit foto's of opnames zelf ophalen; dat doen de iCloud-wacht en de Plaudwacht
+- nooit inhoud van het verslag op het bord zetten, alleen tellingen
+- nooit een dossiermap kiezen op een klantnaam alleen
+
+## Wat Mehdi beslist
+
+- welke dossiermap bij een bezoek hoort wanneer nummer en adres niet eenduidig overeenkomen, op de pagina Commandocentrum
+- wanneer de knop Proef maken wordt ingedrukt
+- of een pakket dat met een waarschuwing over open wachttaken is klaargezet volledig genoeg is om te laden
+- het laden en verwerken van het pakket in barstenscheurenv2 en de vrijgave van het verslag
+- wat er gebeurt wanneer een bezoek de grens van vijf pakketversies bereikt
 
 ## Waar het vastliep
 
