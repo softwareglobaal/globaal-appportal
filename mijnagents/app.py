@@ -3245,7 +3245,7 @@ def commandocentrum_pagina():
     lopend = [r for r in eigen if r not in komend and not r.get("proef_pad")]
     proef = [r for r in eigen if r.get("proef_pad")]
     agents_namen = ["commandocentrum", "werfverslag-voorbereider", "werfverslag-schrijver", "veiligheidscoordinatie-verslag",
-                    "plaatsbeschrijving-verslag", "barsten-scheuren-verslag", "icloud-wacht", "plaud-wacht", "agenda-wacht"]
+                    "plaatsbeschrijving-verslag", "barsten-scheuren-verslag", "aankoopkeuring-verslag", "icloud-wacht", "plaud-wacht", "agenda-wacht"]
     st = {r["naam"]: dict(r) for r in conn.execute(
         f"SELECT * FROM status WHERE naam IN ({','.join('?' * len(agents_namen))})", agents_namen).fetchall()}
     labels = {r["naam"]: r["label"] for r in conn.execute("SELECT naam, label FROM agent").fetchall()}
@@ -3253,7 +3253,7 @@ def commandocentrum_pagina():
         f"SELECT naam, tekst, wie, ts FROM nood WHERE open=1 AND naam IN ({','.join('?' * len(agents_namen))}) ORDER BY id", agents_namen).fetchall()]
     logboek = [dict(r) for r in conn.execute(
         "SELECT naam, onderwerp, stap, tekst, ts FROM logboek WHERE naam IN ('commandocentrum','veiligheidscoordinatie-verslag',"
-        "'plaatsbeschrijving-verslag','barsten-scheuren-verslag') ORDER BY id DESC LIMIT 25").fetchall()]
+        "'plaatsbeschrijving-verslag','barsten-scheuren-verslag','aankoopkeuring-verslag') ORDER BY id DESC LIMIT 25").fetchall()]
     gesloten = conn.execute("SELECT COUNT(*) FROM verslagopdracht WHERE open=0").fetchone()[0]
     return render_template("commandocentrum.html", app_naam=APP_NAAM, komend=komend, lopend=lopend, proef=proef, werf=werf, status=st,
                            labels=labels, agents_namen=agents_namen, noden=noden, logboek=logboek, gesloten=gesloten, gebruiker=gebruiker())

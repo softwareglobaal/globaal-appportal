@@ -14,6 +14,11 @@ S4  Geen verwijzing naar de opname in de tekst: geen "(opname 00:22:30)", geen "
     Tijdstippen blijven in de brongegevens (het veld bron) voor de controle, nooit in het verslag.
 S5  Geen juridische kwalificatie (aansprakelijk, in gebreke, contractbreuk, wanprestatie): vaststellen en beschrijven,
     de rest is voor de raadsman. (Bestond al; staat hier zodat de grendel ze samen toetst.)
+S6  (Profiel aankoopkeuring, beslissing Mehdi 23-10-2026) Geen herstelkosten, prijsramingen, kostenbandbreedtes of
+    onderhandelingsbedragen in euro in het keuringsverslag.
+S7  (Profiel aankoopkeuring, driehoeksoverleg 23-10-2026 3-0) Geen uitspraak over verjaring ("verjaard"),
+    geen garantie op regularisatie ("gegarandeerd regulariseerbaar", "zeker vergund") en geen garantie dat het pand
+    "vrij van verborgen gebreken" of "volledig onderzocht" is.
 
 Werking: `toepassen(tekst)` schrapt opnameverwijzingen en vervangt een verboden zin door een zichtbare markering met
 het regelnummer, zodat Mehdi ziet dat er iets geschrapt is en de schrijver het niet stil laat staan. `wacht(verslag)`
@@ -39,6 +44,18 @@ VERBODEN = [
     ("S3", re.compile(r"\b(vorige|eerdere|andere|collega)[- ]architect\b[^.]{0,80}\b(niet|nooit|slecht|nalatig|fout)", re.I)),
     ("S5", re.compile(r"\b(aansprakelijk|wanprestatie|contractbreuk|contractuele\s+fout|in\s+gebreke\s+gesteld\s+worden|schuldig)\b", re.I)),
 ]
+
+VERBODEN_PROFIEL = {
+    "aankoopkeuring": [
+        ("S6", re.compile(r"(?:€\s*\d|\b\d[\d.,\s]*\s*(?:euro|eur)\b)", re.I)),
+        ("S6", re.compile(r"\b(?:herstelkost(?:en)?|kostenraming|richtprijs|prijsbandbreedte|onderhandelingsbedrag)\b[^.]{0,60}\b\d", re.I)),
+        ("S7", re.compile(r"\b(?:stedenbouwkundig\s+|bouwmisdrijf\s+|overtreding\s+)?verjaard\b", re.I)),
+        ("S7", re.compile(r"\b(?:gegarandeerd|zeker|zonder\s+probleem|probleemloos)\s+(?:regulariseerbaar|te\s+regulariseren|vergund)\b", re.I)),
+        ("S7", re.compile(r"\b(?:vrij\s+van|geen\s+enkele?|zonder)\s+verborgen\s+gebrek(?:en)?\b", re.I)),
+        ("S7", re.compile(r"\bvolledig\s+(?:en\s+uitputtend\s+)?onderzocht\b", re.I)),
+        ("S7", re.compile(r"\bverkoper\s+(?:was\s+|is\s+)?te\s+kwader\s+trouw\b", re.I)),
+    ],
+}
 
 # Verwijzingen naar de opname: "(opname 00:22:30)", "(opname 00:22:30-00:23:16)", "opname 00:11:49 tot 00:12:10",
 # "(transcript 12:30)", "volgens de opname", "sprak zijn vaststellingen in".
@@ -70,11 +87,16 @@ def _opname_weg(tekst):
     return re.sub(r"[ \t]{2,}", " ", tekst).strip(), n
 
 
-def controleer(tekst):
+def _regels(profiel=None):
+    return VERBODEN + (VERBODEN_PROFIEL.get(profiel) or [])
+
+
+def controleer(tekst, profiel=None):
     """Alle overtredingen in een tekst: [(regel, zin)]. Opnameverwijzingen tellen als S4."""
     uit = []
+    regels = _regels(profiel)
     for zin in _ZIN.findall(tekst or ""):
-        for regel, p in VERBODEN:
+        for regel, p in regels:
             if p.search(zin):
                 uit.append((regel, zin.strip()))
                 break
@@ -84,7 +106,7 @@ def controleer(tekst):
     return uit
 
 
-def toepassen(tekst):
+def toepassen(tekst, profiel=None):
     """Past de regels toe op één tekst: (nieuwe tekst, [(regel, geschrapte zin of verwijzing)])."""
     if not tekst or not isinstance(tekst, str):
         return tekst, []
@@ -92,8 +114,9 @@ def toepassen(tekst):
     tekst, n = _opname_weg(tekst)
     ingrepen += [("S4", "opnameverwijzing")] * n
     delen = []
+    regels = _regels(profiel)
     for zin in _ZIN.findall(tekst):
-        for regel, p in VERBODEN:
+        for regel, p in regels:
             if p.search(zin):
                 ingrepen.append((regel, zin.strip()))
                 delen.append(MARKERING.format(regel=regel) + " ")
@@ -103,7 +126,7 @@ def toepassen(tekst):
     return "".join(delen).strip(), ingrepen
 
 
-def wacht(verslag):
+def wacht(verslag, profiel=None):
     """Past de regels toe op elk tekstveld van een verslag-dict, ter plaatse; geeft [(regel, zin)] terug."""
     ingrepen = []
 
@@ -111,7 +134,7 @@ def wacht(verslag):
         if isinstance(x, dict):
             for k, v in x.items():
                 if isinstance(v, str):
-                    nieuw, ing = toepassen(v)
+                    nieuw, ing = toepassen(v, profiel=profiel)
                     if ing:
                         x[k] = nieuw
                         ingrepen.extend(ing)
@@ -120,7 +143,7 @@ def wacht(verslag):
         elif isinstance(x, list):
             for i, v in enumerate(x):
                 if isinstance(v, str):
-                    nieuw, ing = toepassen(v)
+                    nieuw, ing = toepassen(v, profiel=profiel)
                     if ing:
                         x[i] = nieuw
                         ingrepen.extend(ing)

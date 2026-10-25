@@ -57,6 +57,9 @@ goed = ("De zinken dorpel vóór de drie raamelementen is niet vlak. Het afschot
         "dakgoot. Roofconcept was niet aanwezig en werd niet gehoord. Het bezoek van 3 juni 2026 vond plaats op vraag van de bouwheren.")
 t, ing = S.toepassen(goed)
 check("gewone vaststellingen blijven intact", t == goed and not ing, (t, ing))
+# S6/S7 alleen met het profiel aankoopkeuring (volledig getoetst in test_aankoopkeuring.py)
+check("S6 raakt een gewoon verslag niet", not S.controleer("De offerte bedraagt 4.500 EUR."))
+check("S6 geldt in het profiel aankoopkeuring", any(r == "S6" for r, _ in S.controleer("De offerte bedraagt 4.500 EUR.", "aankoopkeuring")))
 check("controleer meldt zonder te wijzigen", S.controleer("Dit is tegen de deontologie (opname 00:01:00).") and len(S.controleer(goed)) == 0)
 
 # de sjablonen passen de regels toe op elk tekstveld

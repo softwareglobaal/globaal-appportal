@@ -78,7 +78,8 @@ concept; daar kijk je na, en van daaruit wordt verstuurd (mail nog in te stellen
 
 **e. De schrijfregels** (23-10-2026). Vijf regels die in elk verslag gelden en die de code afdwingt: niets over het
 eigen bureau, nooit de deontologie of de Orde, geen oordeel over collega's, geen opnameverwijzing in de tekst, geen
-juridische kwalificatie. Zie "Werfverslagen - schrijfregels v1.0". De bezoekpagina biedt sindsdien het concept als Word
+juridische kwalificatie. Een keuringsverslag bij aankoop krijgt er twee bij (S6 geen bedragen, S7 geen garanties of
+verjaring). Zie "Werfverslagen - schrijfregels v1.0". De bezoekpagina biedt sindsdien het concept als Word
 en als PDF met één klik.
 
 **d. De naslag Buildwise** (nieuw, 21-10-2026). De 189 pdf's uit je kennisbank staan op de server, omgezet naar
