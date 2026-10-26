@@ -521,5 +521,15 @@ for tekst, verwacht in [("Er blijft water staan in de goot. (opname 00:22:30). D
     t26, _ = S.toepassen(tekst, "aankoopkeuring")
     check(f"verwijzing tussen haakjes na een punt: '{tekst[:35]}'", t26 == verwacht, repr(t26))
 
+# Zevenentwintigste review 26-10-2026: een zin tussen haakjes die met 'opname' begint maar geen verwijzing is, blijft
+for tekst in ["Diagonale barst boven de keukendeur, 0,5 mm breed. (Opname van de bestaande toestand door expert Claes op 3.3.2025: barst niet vermeld.)",
+              "Haarscheur in de gemene muur. (opname plaatsbeschrijving 3.3.2025, foto 14)",
+              "De keuring vond plaats op 12.10.2026. (Opname visueel en niet-destructief; de kruipruimte en de zolder waren niet toegankelijk.)",
+              "Meterstanden genoteerd. (Opname meterstanden: water 123 m³, elektriciteit 4.567 kWh.)",
+              "De luidsprekers hangen. (audio-installatie nog aan te sluiten)"]:
+    for profiel in (None, "aankoopkeuring"):
+        t27, ing27 = S.toepassen(tekst, profiel)
+        check(f"haakjestekst die geen opnameverwijzing is, blijft: '{tekst[-35:]}' {profiel}", t27 == tekst and not ing27, (t27, ing27))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

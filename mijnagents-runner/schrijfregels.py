@@ -75,8 +75,10 @@ _TIJDSTIP = r"\d{1,2}:\d{2}(?::\d{2})?"
 OPNAME_LOS = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?(?:opname|transcript|audio|recording)\s+(?:van\s+|at\s+)?"
                         + _TIJDSTIP + r"(?:\s*(?:-|–|tot|to)\s*" + _TIJDSTIP + r")?\s*[.!?](?=\s|$)", re.I)
 # "(opname 00:22:30)." als eigen zin na een punt: ook weg samen met de punt (26e review)
+# zo streng als OPNAME: alleen "(opname)" zonder meer, of een verwijzing met een tijdstip; "(Opname van de bestaande
+# toestand ...)" of "(Opname visueel en niet-destructief; ...)" is gewone tekst en blijft (27e review)
 OPNAME_LOS_HAAKJES = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*\(\s*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?"
-                                r"(?:opname|geluidsopname|transcript|audio|recording)\b[^)]*\)\s*[.!?]?(?=\s|$)", re.I)
+                                r"(?:opname|geluidsopname|transcript|audio|recording)(?:\s*|\b[^)]*" + _TIJDSTIP + r"[^)]*)\)\s*[.!?]?(?=\s|$)", re.I)
 OPNAME = [
     re.compile(r"\s*\((?:opname|transcript|audio|geluidsopname)[^)]*\d{1,2}:\d{2}[^)]*\)", re.I),
     re.compile(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|transcript|audio)\s+(?:van\s+)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?", re.I),
