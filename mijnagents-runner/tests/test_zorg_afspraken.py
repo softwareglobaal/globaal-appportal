@@ -617,7 +617,8 @@ check("F7 zonder behandelaar aan beide kanten: twee rijen, de rij zonder patiën
       len(_f7g) == 2 and sum(bool(MA._zorg_json(a).get("patient")) for a in _f7g) == 1, _wie(_f7g))
 
 # zoals op de VM (25-10-2026): de herinnering heeft een eigen gemaskeerde naam in 'Naam', maar Voornaam en Achternaam
-# passen niet samen, dus zorg_herken zet mehdi False; _zorg_status rekent haar toch als Mehdi. Dezelfde regel koppelt.
+# passen niet samen, dus zorg_herken zet mehdi False. Een gemaskeerde naam die alleen op een profielnaam lijkt, kan een
+# gezinslid zijn (Codex-controle fase 1, ronde 2): niet samenvoegen, het blijft een vraag.
 _VM7 = "Naam: Jan*** Pie***\nVoornaam: Jan***\nAchternaam: Xyz***\n"
 _f7v_her = _huis("25/01/2027", "11:20", "<f7v-her@huis>", naam=_VM7, soort=_HER, datum=_LAAT)
 _z7v = (MA.uit_kandidaat(_f7v_her, MA.zorgprofielen()) or [{}])[0].get("zorg") or {}
@@ -629,8 +630,8 @@ _ronde_met([_huis("25/01/2027", "11:20", "<f7v-bev@huis>"), _f7v_her])
 _f7v = _uur("2027-01-25T11:20")
 _f7v_s = MA.vergelijk(_f7v, [dict(_f7_blok, id="f7v-blok", start="2027-01-25T11:20:00+01:00",
                                   einde="2027-01-25T11:40:00+01:00", _merk={MA.ZORGMERK: _f7v_sleutel})], nu)
-check("F7 VM-vorm: een rij, dezelfde sleutel, het gezette blok is gekoppeld zonder vraag",
-      len(_f7v) == 1 and _f7v[0]["sleutel"] == _f7v_sleutel and [a["status"] for a in _f7v_s] == ["gekoppeld"],
+check("F7 VM-vorm: zonder zekere Mehdi in de mail geen samenvoeging: twee rijen, de eerste blijft zonder patiënt",
+      len(_f7v) == 2 and any(a["sleutel"] == _f7v_sleutel and not MA._zorg_json(a).get("patient") for a in _f7v),
       _wie(_f7v) + str([(a["status"], a["detail"]) for a in _f7v_s]))
 
 

@@ -649,15 +649,6 @@ def _patientloze_tweeling(r, a, z):
     return bool(b_oud) and b_oud == b_nieuw
 
 
-def _profiel_van(c, pid):
-    """Het zorgprofiel van een praktijk, gelezen langs de open verbinding; leeg als het er niet is of niet te lezen."""
-    try:
-        rij = c.execute("SELECT profiel FROM zorgpraktijk WHERE id=?", (pid,)).fetchone()
-        return json.loads(rij["profiel"]) if rij else {}
-    except (sqlite3.Error, ValueError, TypeError):
-        return {}
-
-
 def _bewaar_zorg(c, a):
     """Een zorgafspraak heeft een duurzame identiteit: de eerste sleutel blijft. Een herinnering, dezelfde mail via de
     tweede mailbox of een nieuwe ronde voegt alleen een bron toe en vult wat ontbrak; een verplaatsing (tekst met oude
@@ -715,13 +706,13 @@ def _bewaar_zorg(c, a):
             if zelfde_patient(r) and any(h.get("van") == a["start"] for h in _zorg_json(dict(r)).get("historie") or []):
                 doel, alias = r, True
                 break
-    if doel is None and a.get("start") and z.get("gebeurtenis") in ("bevestiging", "herinnering") and (
-            z.get("mehdi") is True or (z.get("patient") and _eigen_patient(z["patient"], _profiel_van(c, pid)))):
-        # F7 (26-10-2026): dezelfde boeking kwam eerst zonder leesbare patiënt binnen (een Mya-bevestiging) en nu voor
-        # Mehdi (de herinnering), met dezelfde regel als _zorg_status: het mehdi-veld, of de patiënt is een eigen patiënt
-        # van het profiel (op de VM had de herinnering mehdi False en toch een eigen gemaskeerde naam). Precies een zo'n
-        # rij op dat begin bij deze praktijk, met dezelfde behandelaar: dezelfde afspraak, de update hieronder vult de
-        # patiënt. Nooit voor een annulering, verplaatsing of aanvraag: de A01-grendel hierboven blijft daarvoor gelden.
+    if doel is None and a.get("start") and z.get("mehdi") is True and z.get("gebeurtenis") in ("bevestiging", "herinnering"):
+        # F7 (26-10-2026): dezelfde boeking kwam eerst zonder leesbare patiënt binnen (een Mya-bevestiging) en nu zeker
+        # voor Mehdi (de herinnering: zorg_herken zette mehdi, dus elk naamveld past). Een gemaskeerde naam die alleen op
+        # een profielnaam lijkt, is geen bewijs: dat kan een gezinslid zijn (Codex-controle fase 1, ronde 2); dan blijft
+        # het een vraag. Precies een rij op dat begin bij deze praktijk, met dezelfde behandelaar: dezelfde afspraak, de
+        # update hieronder vult patiënt en Mehdi. Nooit voor een annulering, verplaatsing of aanvraag: de A01-grendel
+        # hierboven blijft daarvoor gelden.
         tweeling = [r for r in c.execute("SELECT * FROM afspraak WHERE soort='zorg' AND start=? AND sleutel LIKE ?",
                                          (a["start"], like)).fetchall() if _patientloze_tweeling(r, a, z)]
         if len(tweeling) == 1:

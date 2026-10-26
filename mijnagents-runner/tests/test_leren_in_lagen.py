@@ -385,6 +385,15 @@ try:
                   str(stand))
     finally:
         WC.markdown = _oud_md
+    with tempfile.TemporaryDirectory() as d:
+        wm = Path(d) / "weekconsolidatie"
+        (wm / "2026-W43.json.tmp").mkdir(parents=True)         # de laatste stap faalt: hier kan geen bestand komen
+        (Path(d) / "regels-vooraf.json").write_text('{"week": "2026-W42"}')
+        rc = _draai(d, ["--ronde"], _geslaagd)
+        check("weeknood (Codex fase 1, ronde 2): faalt de laatste stap, dan blijven de weekregels van vorige week gelden",
+              rc == 1 and not (wm / "2026-W43.json").exists()
+              and json.loads((Path(d) / "regels-vooraf.json").read_text()) == {"week": "2026-W42"}
+              and json.loads((wm / "laatste.json").read_text())["ok"] is False)
 finally:
     for k, v in _patch_w.items():
         setattr(W, k, v)
