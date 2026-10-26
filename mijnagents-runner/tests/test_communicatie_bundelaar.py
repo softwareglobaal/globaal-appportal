@@ -188,6 +188,23 @@ def test_bekend_voor_mail_alleen_uit_de_laatste_negentig_dagen():
     assert list(personen(dagen["2026-07-01"])) == ["Klant Omega"], "het oude item zelf telt wel"
 
 
+def test_prive_via_onbekend_kanaal_maakt_geen_bekende():
+    """Controle 5: een privérij van een onbekend kanaal sluit de naam ook uit voor mail."""
+    rijen = [rij("fathom:80", "Mehdi, Proefgeheim Sigma", 20, datum="2026-10-10"),
+             rij("whatsapp:81", "Proefgeheim Sigma", 0, prive=1, datum="2026-10-11"),
+             rij("mail:<t1@voorbeeld.test>", "Proefgeheim Sigma")]
+    _, gezet, dagen, _ = ronde(rijen=rijen)
+    assert "Sigma" not in json.dumps(gezet) and dagen[DAG]["overige_mail"] == 1
+
+
+def test_werkverslag_venster_en_oudere_dagen_apart():
+    """Controle 5: herzieningen van oudere dagen tellen niet mee onder het zevendaagse bereik."""
+    rijen = [rij("fathom:90", "Mehdi, Klant Omega", 10), rij("fathom:91", "Mehdi, Klant Omega", 10, datum="2026-10-01")]
+    r, _, _, _ = ronde(rijen=rijen, eerder=["2026-10-01"])
+    assert r.detail.startswith("2026-10-19 tot 2026-10-25: 1 dagen met contact, 1 contacten waarvan 0 privé"), r.detail
+    assert "1 oudere dagen herzien" in r.detail and "Omega" not in r.detail
+
+
 def test_wie_ooit_prive_was_is_geen_bekende_voor_mail():
     """Codex CB10: oud gewoon gesprek, recent privégesprek en recente mail van dezelfde persoon: geen naam."""
     rijen = [rij("fathom:40", "Mehdi, Proefgeheim Sigma", 20, datum="2026-09-01"),
@@ -292,9 +309,12 @@ def test_vreemde_met_voornaam_van_collega_is_geen_collega():
 
 def test_terug_lezen_geeft_nood_als_het_bord_anders_is():
     r, gezet, _, _ = ronde(terug=lambda its: [its[0]["uniek"]])
-    assert ("Een dagitem staat niet zo op het bord", "claude-code") in r.noden
+    assert ("Een dagitem staat niet zo op het bord of werd opgepakt", "claude-code") in r.noden
     gelezen = []
     assert C.terug_lezen(gezet[:1], lees=lambda u: gelezen.append(u) or [dict(gezet[0], status="klaar")]) == []
+    assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], status="opgepakt")]) == [gezet[0]["uniek"]]
+    assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], uniek="communicatie:dag:anders", status="klaar")]) == \
+        [gezet[0]["uniek"]]
     assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], inhoud="{}", status="klaar")]) == [gezet[0]["uniek"]]
     assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], voor="h-architects", status="klaar")]) == [gezet[0]["uniek"]]
     assert gelezen == [gezet[0]["uniek"]]

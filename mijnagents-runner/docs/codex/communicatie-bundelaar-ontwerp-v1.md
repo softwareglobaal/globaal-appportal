@@ -132,3 +132,18 @@ punt 4.7: de oorzaak is het venster zelf, niet het geval. Nieuw ontwerp: de runn
 | CB18 dubbel van de nacht ervoor | hoog | hele tabel gelezen: de keten van dubbels en sessies is altijd volledig |
 | CB19 bekend buiten negentig dagen | middel | bekendheid voor mail alleen uit gesprekken vanaf vandaag min negentig dagen |
 | CB04 opgepakt item | middel | nieuw veld `vervang` in `/api/klaarzet` (mijnagents/app.py): ook een opgepakt item volgt de bron, zonder kopie in klaarzet_revisie; test in mijnagents/test_klaarzet_revisie.py |
+
+## Verwerking controle 5 (26-10-2026) en stopregel
+
+| punt | ernst | verwerking |
+|---|---|---|
+| privé via onbekend kanaal | hoog | elke privérij, van elk kanaal behalve mail, maakt iemand privé voor mail |
+| collega in een privégesprek | hoog | open, beslissing van Mehdi: een collega blijft bij naam in zijn werkcontacten (mail, video, chat), ook als hij ook in een privégesprek zat; het privégesprek zelf blijft naamloos |
+| De Levenscoach bewaart een oude spiegel | hoog | open, vervolg buiten deze agent: na een privécorrectie past de spiegel niet mee aan (levenscoach.py) |
+| De Levenscoach leest de nieuwste 500 items | middel | open, vervolg buiten deze agent |
+| vervang voor elk item | middel | alleen voor soort communicatie van communicatie-bundelaar; test in mijnagents/test_klaarzet_revisie.py |
+| werkverslag | middel | venster en oudere herzieningen apart; test |
+| teruglezing | middel | ook uniek en status klaar; test; de test staat nu in regie-grendels.yml |
+
+Stopregel (werkafspraken punt 4.7): vijf rondes, elke ronde minder punten binnen deze agent; wat openblijft, is een
+beslissing van Mehdi of werk in De Levenscoach. Geen zesde ronde op deze runner voor Mehdi beslist.

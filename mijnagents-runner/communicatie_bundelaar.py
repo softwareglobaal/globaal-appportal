@@ -175,13 +175,15 @@ def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
             continue
         k = kanaal(r.get("uniek"))
         prive = prive_groep(r)
-        if k in ("video", "chat", "ter plaatse"):
+        if k != "mail":
             # Ook de namen van een dubbel: een privé Zoom-dubbel naast een Fathom-rij noemt dezelfde mensen (Codex CB14).
+            # Een privérij van elk kanaal, ook een onbekend, maakt iemand privé (controle 5); bekend maakt alleen een
+            # gesprek met mensen (video, chat, ter plaatse), geen kanaalnaam.
             for n in namen(r.get("personen")):
                 soort, wie = p.persoon(n)
                 if soort == "naam" and prive:
                     ooit_prive.add(wie.casefold())
-                elif soort == "naam" and (r.get("datum") or "") >= bekend_vanaf:
+                elif soort == "naam" and k in ("video", "chat", "ter plaatse") and (r.get("datum") or "") >= bekend_vanaf:
                     bekend.add(wie.casefold())
         if dubbel:
             opgevallen["telt_niet"] += in_dagen   # telregel Z10: een dubbel telt niet, de rij waarnaar hij wijst wel
@@ -285,7 +287,10 @@ def terug_lezen(gezet, lees=None):
     fout = []
     for it in ag.maskeer(gezet):
         terug = lees(it["uniek"])
-        if not any(all(t.get(k) == it[k] for k in ("voor", "soort", "sleutel", "titel", "inhoud")) for t in terug):
+        # Status klaar: met vervang zet het bord een gewijzigd item altijd terug op klaar; staat het op opgepakt, dan
+        # pakte iemand het op en hoort dat gemeld (Codex CB09, controle 5).
+        if not any(all(t.get(k) == it[k] for k in ("uniek", "voor", "soort", "sleutel", "titel", "inhoud"))
+                   and t.get("status") == "klaar" for t in terug):
             fout.append(it["uniek"])
     return fout
 
@@ -321,13 +326,21 @@ def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=
     te_zetten = items(dagen)
     uit = (zet or ag.klaarzet)(te_zetten)
     if (terug or terug_lezen)(te_zetten):
-        r.nood("Een dagitem staat niet zo op het bord", wie="claude-code")
-    contacten = sum(d["contacten"] for d in dagen.values())
-    prive = sum(c["aantal"] for d in dagen.values() for c in d["prive_per_kanaal"].values())
-    r.detail = (f"{eerste} tot {laatste}: {sum(1 for d in dagen.values() if d['contacten'])} dagen met contact, {contacten} contacten waarvan {prive} privé, "
-                f"kanalen {', '.join(sorted(opgevallen['kanalen'])) or 'geen'}; {opgevallen['telt_niet']} rijen telden "
-                f"niet (dubbel); klaargezet {uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt")
+        r.nood("Een dagitem staat niet zo op het bord of werd opgepakt", wie="claude-code")
+    r.detail = werkverslag(dagen, eerste, laatste, opgevallen, uit)
     return dagen
+
+
+def werkverslag(dagen, eerste, laatste, opgevallen, uit):
+    """Alleen aantallen. Het venster en de oudere dagen die ik herzag, apart (Codex, controle 5)."""
+    venster_dagen = [d for dag, d in dagen.items() if eerste <= dag <= laatste]
+    contacten = sum(d["contacten"] for d in venster_dagen)
+    prive = sum(c["aantal"] for d in venster_dagen for c in d["prive_per_kanaal"].values())
+    ouder = len(dagen) - len(venster_dagen)
+    return (f"{eerste} tot {laatste}: {sum(1 for d in venster_dagen if d['contacten'])} dagen met contact, {contacten} "
+            f"contacten waarvan {prive} privé, kanalen {', '.join(sorted(opgevallen['kanalen'])) or 'geen'}; "
+            f"{opgevallen['telt_niet']} rijen telden niet (dubbel); {ouder} oudere dagen herzien; klaargezet "
+            f"{uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt")
 
 
 def droog(zaad=False):

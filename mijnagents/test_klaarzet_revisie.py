@@ -74,5 +74,12 @@ check("vervang: opgepakt item volgt de bron en staat weer op klaar", it["status"
       and r.get("bijgewerkt") == 1, (r, it))
 rev = C.get("/api/klaarzet/revisies?uniek=communicatie:dag:proef", headers=K).get_json()["revisies"]
 check("vervang: geen kopie van de oude inhoud", rev == [], rev)
+zet("h-architects", False, revisie=False, uniek="agenda:vervang")
+kid = lees("agenda:vervang")["id"]
+C.post(f"/api/klaarzet/{kid}/opgepakt", json={"door": "x"}, headers=K)
+it = {"van": "plaud-wacht", "voor": "mehdi", "soort": "transcript", "sleutel": "2531", "titel": "anders", "uniek": "agenda:vervang",
+      "vervang": True, "inhoud": {"x": 1}}
+C.post("/api/klaarzet", json={"items": [it]}, headers=K)
+check("vervang geldt alleen voor de dagitems van De Communicatiebundelaar", lees("agenda:vervang")["status"] == "opgepakt")
 print(f"{fout} fout")
 sys.exit(1 if fout else 0)

@@ -602,9 +602,11 @@ def api_klaarzet():
             herzien += 1
             zakelijk_herzien += 0 if oud["voor"] == "mehdi" else 1
             continue
-        if oud and anders and oud["status"] != "klaar" and it.get("vervang"):
+        if oud and anders and oud["status"] != "klaar" and it.get("vervang") and it["soort"] == "communicatie" \
+                and it["van"] == "communicatie-bundelaar":
             # De Communicatiebundelaar (Codex CB04 en CB12, 26-10-2026): ook een opgepakt item volgt de bron, zonder kopie
-            # in klaarzet_revisie, want de oude inhoud kan een naam dragen die intussen privé werd.
+            # in klaarzet_revisie, want de oude inhoud kan een naam dragen die intussen privé werd. Alleen voor haar
+            # dagitems: bij een ander item wist het de oppakhistorie zonder spoor (controle 5).
             conn.execute("UPDATE klaarzet SET voor=?, titel=?, inhoud=?, verwijzing=?, sleutel=?, status='klaar', opgepakt_door='', "
                          "opgepakt_ts='' WHERE id=?",
                          (it["voor"], it["titel"][:300], inhoud[:60000], (it.get("verwijzing") or "")[:500],
