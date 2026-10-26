@@ -438,6 +438,21 @@ def test_herlayout_en_werfapp_met_ingreep_laten_de_bewaarde_markdown_staan(runti
         assert not [w for w in runtime.writes[voor:] if "verslag_md" in w[1]["rijen"][0]], route.__name__
 
 
+def test_bron_over_twee_regels_blijft_een_regel_herkomst(runtime):
+    """Bevestigingsronde 21: een bron met een regelovergang breekt de regel Herkomst niet; na teruglezen blijft de
+    vaststelling schoon en de volledige bron bewaard."""
+    sj = runtime.p.sjab
+    v = {"dossier": "9999", "bezoek": "2", "soort_bezoek": "werfbezoek", "adres": "Proefstraat 1", "datum": "2026-10-14",
+         "opgemaakt": "2026-10-15", "verslagtype": "werfverslag", "status_nl": "Ruwbouw", "aanwezigen": [], "acties": [], "akkoord": [],
+         "volgend": "", "categorieen": [{"naam": "Ruwbouw", "punten": [{"nummer": "2.1", "titel": "Latei", "tekst_nl": "De latei ontbreekt.",
+                                                                       "bron": "transcript.txt (00:12:00)\n00 fotos.md", "fotos": []}]}]}
+    md = sj.naar_markdown(v)
+    regel = next(r for r in md.splitlines() if r.startswith("Herkomst: "))
+    assert "00 fotos.md" in regel and "<!-- bron:" in regel and "00:12" not in regel.split("<!--")[0]
+    punt = sj.van_markdown(md)["categorieen"][0]["punten"][0]
+    assert punt["tekst_nl"] == "De latei ontbreekt." and "00:12:00" in punt["bron"] and "00 fotos.md" in punt["bron"]
+
+
 def test_oude_proef_naar_de_werfapp_gaat_gefilterd(runtime):
     p, rij = runtime.p, runtime.rij
     rij.update(verslag_md=_oude_proef(p), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})

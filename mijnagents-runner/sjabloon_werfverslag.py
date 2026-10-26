@@ -168,8 +168,9 @@ def herkomst(bron):
     """De herkomst zoals het verslag ze toont (schrijfregel S4): nooit het tijdstip of een verwijzing naar de opname, dat
     blijft in het veld bron van de gegevens. Een code V, B of S als de schrijver die zelf geeft; anders de bron zonder
     tijdstip. De code wordt niet uit de bestandsnaam geraden: een foto van de bouwheer of een verklaring in het eigen
-    transcript is geen "eigen vaststelling", en een onjuiste V is erger dan een bestandsnaam (17e en 18e review)."""
-    b = (bron or "").strip()
+    transcript is geen "eigen vaststelling", en een onjuiste V is erger dan een bestandsnaam (17e en 18e review).
+    Altijd één regel, zoals de bronnoot: anders breekt de regel Herkomst en komt de noot in de tekst van het punt."""
+    b = re.sub(r"\s*\n\s*", " / ", (bron or "").strip())
     code = re.match(r"[VBS](?:\s*[+,/]\s*[VBS])*(?![\w.])", b)
     if not b or b == "vast punt kantoor":
         return b
