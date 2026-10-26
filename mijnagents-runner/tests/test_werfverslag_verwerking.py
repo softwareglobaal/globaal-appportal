@@ -420,6 +420,22 @@ def test_herlayout_van_een_proces_verbaal_geeft_een_duidelijke_melding(runtime):
         p.herlayout(Agent(), "9999", 1)
 
 
+def test_herlayout_en_werfapp_met_ingreep_verliezen_geen_regels(runtime):
+    """Bevestigingsronde 26-10-2026: grijpt de grendel in bij een oude proef, dan blijft een status of volgend werfbezoek
+    over meer regels volledig in de bewaarde markdown (productie schreef verslag_md hier nooit terug)."""
+    p, rij = runtime.p, runtime.rij
+    oud = _oude_proef(p)
+    oud = oud.replace("Ruwbouw", "Ruwbouw loopt.\nDe dakwerken starten volgende week.\nDe stelling blijft staan tot eind november.", 1)
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
+    p.bronnen.upload = lambda pad, data: pad
+    for route in (p.herlayout, p.werfapp_uit_proef):
+        rij.update(verslag_md=oud, proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})
+        route(Agent(), "9999", 1)
+        laatste = [w[1]["rijen"][0] for w in runtime.writes if "verslag_md" in w[1]["rijen"][0]][-1]["verslag_md"]
+        assert "De dakwerken starten volgende week." in laatste and "eind november" in laatste, route.__name__
+        assert "opname" not in laatste and "eerder niet geweest" not in laatste and "De latei ontbreekt" in laatste, route.__name__
+
+
 def test_oude_proef_naar_de_werfapp_gaat_gefilterd(runtime):
     p, rij = runtime.p, runtime.rij
     rij.update(verslag_md=_oude_proef(p), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})

@@ -429,5 +429,17 @@ terug = sj.van_markdown(sj.naar_markdown(pl))["categorieen"][0]["punten"][0]["te
 check("van_markdown houdt de regels van een punt apart", terug == pl["categorieen"][0]["punten"][0]["tekst_nl"], repr(terug))
 check("na het teruglezen grijpt de grendel niet in op een schone lijst", not S.wacht({"t": terug}), S.wacht({"t": terug}))
 
+# Bevestigingsronde 26-10-2026: grendel_in_md werkt regel per regel op de bewaarde markdown, verliesvrij
+vgp_zin = next(z for z in sj.VASTE_TEKSTEN if "niet aansprakelijk" in z)
+mdg = ("## Status werf\nRuwbouw loopt.\nDe dakwerken starten volgende week (opname 00:10:00).\n\n## Rol van H-Architects\n"
+       "**1.1 Veiligheid** - 1 oktober 2026\n\n" + vgp_zin + "\n\nHerkomst: V <!-- bron: transcript.txt 00:12:00 -->\n\n"
+       "| Wie | Wat | Tegen |\n|---|---|---|\n| Aannemer | De aannemer is aansprakelijk. | 21-10 |\n\n## Volgend werfbezoek\nDinsdag.\nSleutel bij de buren.")
+uit = sj.grendel_in_md(mdg)
+check("grendel_in_md: alle regels blijven, opname weg, vaste tekst en verborgen bron ongemoeid, tabel per cel",
+      "Ruwbouw loopt.\nDe dakwerken starten volgende week." in uit and "00:10" not in uit and vgp_zin in uit
+      and "<!-- bron: transcript.txt 00:12:00 -->" in uit and "## Rol van H-Architects" in uit
+      and "| Aannemer | " + S.MARKERING.format(regel="S5") + " | 21-10 |" in uit and "Sleutel bij de buren." in uit
+      and uit.count("\n") == mdg.count("\n"), uit)
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

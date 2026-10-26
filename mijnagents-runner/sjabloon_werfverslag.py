@@ -211,6 +211,33 @@ def herkomst_omzetten(md):
     return "\n".join(regel(r) for r in (md or "").split("\n"))
 
 
+def grendel_in_md(md):
+    """De schrijfregels regel per regel op een bewaarde markdown, zonder de omweg via van_markdown (die houdt van een
+    status of een volgend werfbezoek over meer regels alleen de eerste regel over). Koppen, tabelscheidingen en de regel
+    Herkomst blijven onaangeroerd; in een tabel per cel; de vaste kantoorteksten zijn vrij."""
+    regels = (md or "").split("\n")
+    stukken, plaats = [], []
+    for i, r in enumerate(regels):
+        s = r.strip()
+        if not s or s.startswith("#") or s.startswith("Herkomst: ") or re.fullmatch(r"\|?[\s:|-]+\|?", s):
+            continue
+        if s.startswith("|"):
+            cellen = r.split("|")
+            for j in range(1, len(cellen) - 1):
+                stukken.append(cellen[j]); plaats.append((i, j))
+        else:
+            stukken.append(r); plaats.append((i, None))
+    schrijfregels.wacht(stukken, vast=VASTE_TEKSTEN)
+    for (i, j), nieuw in zip(plaats, stukken):
+        if j is None:
+            regels[i] = nieuw
+        else:
+            cellen = regels[i].split("|")
+            cellen[j] = " " + nieuw.strip() + " " if nieuw.strip() else " "
+            regels[i] = "|".join(cellen)
+    return "\n".join(regels)
+
+
 def toont_ruwe_bron(md):
     """Een oude proef toont nog 'Herkomst: transcript.txt 00:12:00' (van vóór de V/B/S-weergave): Herlayout herschrijft
     dan de bewaarde markdown, zodat de bezoekpagina hetzelfde toont als Word en de PDF."""
