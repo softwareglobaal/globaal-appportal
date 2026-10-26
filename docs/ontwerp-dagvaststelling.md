@@ -126,6 +126,8 @@ die dag). Alleen bij een andere hash komt een nieuwe versie. Zo komt een Mac die
   Message-ID in twee postvakken telt een keer; de mailnood blijft gelijk als de uren of andere postvakken wisselen.
   Faalt het hele lezen, dan blijven open mailnoden open; is dat onbekend, dan breekt de ronde als laatste stap.
   Een vervangen kopie tijdens het lezen verandert de telling niet; een eigen map heet "een eigen map".
+  De dekking van een kopie geldt per dag (begindatum en tijdstip van maken, in mail_telling); de reden in het
+  dagbestand is vast, uren en fouttype staan in het logboek (lenzen van 26-10-2026, punten 4, 5, 7, 8 en 9).
 - Zoom-stand onbekend of ondergrens staat zo in het overzicht.
 - Privacy: geen privénaam in het klaarzet-item; wel in het bestand.
 - Revisie: zelfde inhoud schrijft niets; andere inhoud geeft versie 2 en bewaart versie 1.

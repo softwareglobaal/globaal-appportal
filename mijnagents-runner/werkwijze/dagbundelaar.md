@@ -43,11 +43,15 @@ datagedreven verzamelaar van Mehdi's logboek-laag. Ik doe twee dingen:
    WhatsApp, telefoon, mail per postvak. Een bron die niet gelezen kon worden of
    onvolledig is, staat er zo; nooit als nul. Hotmail lees ik uit de kopie die de
    server elk uur maakt (62 dagen binnen, twee jaar verzonden), in een lezing:
-   ouderdom, begindatum en koppen uit dezelfde versie. Een kopie ouder dan drie uur,
-   of een dag van voor haar begindatum, is onvolledig. In de reden noem ik een eigen
-   map nooit bij naam, want die kan een klantnaam dragen.
+   ouderdom, begindatum en koppen uit dezelfde versie. Een kopie ouder dan drie uur
+   is onvolledig; per dag ook een dag van voor haar begindatum, of een dag die nog
+   niet om was toen ze gemaakt werd. De reden in het dagbestand is vast (de uren en
+   het fouttype staan in mijn werkverslag), anders kreeg elke dag elke nacht een
+   nieuwe versie. Een eigen map noem ik nooit bij naam, want die kan een klantnaam
+   dragen.
    **Mailnoden**: een nood per postvak en vaste soort, zonder getal; de uren staan in
-   mijn werkverslag. Kon ik geen enkel postvak lezen, dan meld ik dat, en laat ik de
+   mijn werkverslag. Een dag buiten de dekking van een kopie die zegt vanaf wanneer,
+   is zo ontworpen en geeft geen nood. Kon ik geen enkel postvak lezen, dan meld ik dat, en laat ik de
    mailnoden die al open stonden open: ik zag die postvakken niet.
 5. **Vastleggen**: per dag een bestand in `dagboek/JJJJ/JJJJ-MM-DD.md`, dat naar
    Dropbox gaat (`Data uit Mehdi/Dagboek`), en een item voor Mehdi op het bord met

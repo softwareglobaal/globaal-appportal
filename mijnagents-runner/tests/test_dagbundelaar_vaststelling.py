@@ -680,24 +680,32 @@ def test_o26_mail_kopie_vers_oud_en_venster():
         try:
             ruim = {"INBOX": "2026-09-01", "Sent": "2024-10-01"}
             uit = {}
-            for naam, uren, vanaf in (("oud", 150, ruim), ("vers", 0, ruim), ("kort", 0, {"INBOX": DAG, "Sent": "2024-10-01"}),
-                                      ("zonder", 0, None)):
+            for naam, uren, vanaf in (("oud", 150, ruim), ("ouder", 174, ruim), ("vers", 0, ruim),
+                                      ("kort", 0, {"INBOX": DAG, "Sent": "2024-10-01"}), ("zonder", 0, None)):
                 _kopie(pad, uren, vanaf)
                 o, u, _ = D._lees_mail([DAG])
                 uit[naam] = (o["proef@hotmail.test"], u["proef@hotmail.test"])
         finally:
             herstel()
     o, u = uit["oud"]
-    assert o["onvolledig"] == u["onvolledig"] == ["kopie 150 uur oud"], (o, u)
+    # lens 26-10 (4): de reden is vast, want ze telt mee in de hash van het dagbestand; de uren staan in het detail
+    assert o["onvolledig"] == u["onvolledig"] == ["kopie ouder dan 3 uur"], (o, u)
+    assert o["details"] == u["details"] == ["kopie 150 uur oud"], (o, u)
     assert o["soorten"] == u["soorten"] == ["kopie niet vers"], (o, u)
+    assert uit["ouder"][0]["onvolledig"] == o["onvolledig"] and uit["ouder"][0]["details"] == ["kopie 174 uur oud"]
     o, u = uit["vers"]
     assert not o["onvolledig"] and not u["onvolledig"] and len(o["berichten"]) == len(u["berichten"]) == 1, (o, u)
+    assert o["dekking"]["vanaf"] == "2026-09-01" and u["dekking"]["vanaf"] == "2024-10-01", (o, u)
+    m = D.V.mail_telling(DAG, {"h": o}, {"h": u})
+    assert not m["onvolledig"] and m["binnen"] == m["verzonden"] == 1, m
     o, u = uit["kort"]
-    assert o["onvolledig"] == [f"kopie van INBOX begint pas op {DAG}"] and o["soorten"] == ["kopie dekt de dagen niet"], o
-    assert not u["onvolledig"], "verzonden dekt twee jaar"
+    assert not o["onvolledig"] and o["dekking"]["vanaf"] == DAG, "de dekking toetst mail_telling per dag"
+    m = D.V.mail_telling(DAG, {"h": o}, {"h": u})["postvakken"]["h"]
+    assert m["onvolledig"] == ["kopie dekt deze dag niet"], m
     o, u = uit["zonder"]
-    assert o["onvolledig"] == ["kopie van INBOX begint op een onbekende dag"], o
-    assert u["onvolledig"] == ["kopie van Sent begint op een onbekende dag"], u
+    assert o["onvolledig"] == ["kopie van INBOX zegt niet vanaf wanneer"], o
+    assert u["onvolledig"] == ["kopie van Sent zegt niet vanaf wanneer"], u
+    assert o["soorten"] == ["kopie zegt niet vanaf wanneer"] and o["dekking"]["vanaf"] == "", o
     assert not any("Mac" in r for x in uit.values() for p in x for r in p["onvolledig"])
 
 
@@ -809,7 +817,7 @@ def test_c2_kopie_uit_een_lezing():
     assert not o["onvolledig"] and not u["onvolledig"] and len(o["berichten"]) == len(u["berichten"]) == 1, (o, u)
     o2, u2 = o2["proef@hotmail.test"], u2["proef@hotmail.test"]
     assert o2["onvolledig"] == u2["onvolledig"] == ["kopie onleesbaar"], (o2, u2)
-    assert o2["soorten"] == ["kopie niet vers"] and not o2["berichten"], o2
+    assert o2["soorten"] == ["kopie onleesbaar"] and not o2["berichten"], o2
     assert lezingen == [True, False], lezingen
 
 
@@ -836,9 +844,10 @@ def test_c3_geen_eigen_mapnaam_in_de_reden():
     finally:
         herstel()
     o = o["info@proef.test"]
-    assert o["onvolledig"] == ["INBOX niet leesbaar (ConnectionError)", "een eigen map niet leesbaar (TimeoutError)",
+    assert o["onvolledig"] == ["INBOX niet leesbaar", "een eigen map niet leesbaar",
                                f"een eigen map: meer dan {D.PLAFOND} berichten"], o
-    assert not any("Klant" in r for r in o["onvolledig"]), o
+    assert o["details"] == ["INBOX: ConnectionError", "een eigen map: TimeoutError"], o
+    assert not any("Klant" in r for r in o["onvolledig"] + o["details"]), o
 
 
 def test_k5_hotmailkopie_dekt_de_nachtelijke_inhaal():
@@ -854,6 +863,58 @@ def test_k5_hotmailkopie_dekt_de_nachtelijke_inhaal():
         sinds = (oudste - timedelta(days=1)).isoformat()                                  # zoals _lees_mail
         assert vanaf <= sinds, (nacht, vanaf, sinds)
 
+
+def test_lens5_9_dekking_per_dag():
+    """Lenzen 26-10-2026 (5 en 9): de dekking van een kopie geldt per dag. Een dag na de begindatum is gedekt, ook als
+    een andere dag van dezelfde ronde dat niet is; de kopie zoekt op UTC-datum, dus de dag ervoor moet erin staan. Een
+    kopie gemaakt voor het einde van de Brusselse dag mist het laatste stuk van die dag, stil; ook dat is onvolledig."""
+    V = D.V
+
+    def postvak(vanaf, gemaakt):
+        return {"h": {"berichten": [], "onvolledig": [], "dekking": {"vanaf": vanaf, "gemaakt": gemaakt}}}
+
+    nacht = "2026-10-22T23:25:00+00:00"                      # 01:25 in Brussel (zomeruur), na het einde van 22-10
+    assert not V.mail_telling("2026-10-22", postvak("2026-10-20", nacht), {})["onvolledig"]
+    assert not V.mail_telling("2026-10-21", postvak("2026-10-20", nacht), {})["onvolledig"]
+    assert V.mail_telling("2026-10-20", postvak("2026-10-20", nacht), {})["postvakken"]["h"]["onvolledig"] == [
+        "kopie dekt deze dag niet"]
+    vroeg = "2026-10-22T21:30:00+00:00"                      # 23:30 in Brussel: het laatste half uur van 22-10 ontbreekt
+    assert V.mail_telling("2026-10-22", postvak("2026-10-01", vroeg), {})["postvakken"]["h"]["onvolledig"] == [
+        "kopie van voor het einde van de dag"]
+    assert not V.mail_telling("2026-10-21", postvak("2026-10-01", vroeg), {})["onvolledig"]
+    winter = "2026-10-26T23:25:00+00:00"                     # 00:25 in Brussel na de nacht van 26-10 (winteruur)
+    assert not V.mail_telling("2026-10-26", postvak("2026-08-25", winter), {})["onvolledig"]
+    assert not V.mail_telling("2026-10-26", {"h": {"berichten": [], "onvolledig": []}}, {})["onvolledig"], "geen kopie"
+
+
+def test_lens4_8_oude_kopie_geeft_geen_nieuwe_versies_en_dekking_geen_nood():
+    """Lenzen 26-10-2026 (4 en 8): blijft een kopie oud (bv. een verlopen token), dan krijgt een dag geen nieuwe versie
+    per nacht, want de reden in het dagbestand is vast; de uren staan in het logboek. Een dag buiten de dekking van een
+    kopie die zegt vanaf wanneer, is zo ontworpen: onvolledig in het dagbestand, maar geen nood die niemand kan oplossen."""
+    hot = "proef@hotmail.test"
+
+    def oud(uren):
+        def lees(dagen_):
+            p = {"berichten": [], "onvolledig": ["kopie ouder dan 3 uur"], "soorten": ["kopie niet vers"],
+                 "details": [f"kopie {uren} uur oud"]}
+            return {hot: json.loads(json.dumps(p))}, {hot: json.loads(json.dumps(p))}, {hot}
+        return lees
+
+    def buiten(dagen_):
+        p = {"berichten": [], "onvolledig": [], "dekking": {"vanaf": "2026-11-01", "gemaakt": "2026-11-09T23:25:00+00:00"}}
+        return {hot: json.loads(json.dumps(p))}, {hot: json.loads(json.dumps(p))}, {hot}
+
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        log = []
+        _, d1 = ronde(w, mail=oud(150))
+        _, d2 = ronde(w, mail=oud(174), logboek=log)
+        r3, _ = ronde(w, mail=buiten)
+        tekst = lees(os.path.join(m, "dagboek", DAG[:4], f"{DAG}.md"))
+    assert "1 nieuw of herzien" in d1 and "0 nieuw of herzien" in d2, (d1, d2)
+    assert ("mail", "bron", f"{hot} ontvangen onvolledig: kopie ouder dan 3 uur (kopie 174 uur oud)") in log, log
+    assert "kopie dekt deze dag niet" in tekst, tekst
+    assert not [n for n in r3.noden if n.startswith("Mail")], r3.noden
 
 if __name__ == "__main__":
     import traceback

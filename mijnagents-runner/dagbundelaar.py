@@ -590,11 +590,14 @@ def _lees_mail(dagen):
              for a in c["postvakken"] + list(c.get("antwoord_vanuit") or [])}
     ontvangen, verzonden = {}, {}
 
-    def mis(waar, soort, reden):
-        # Overleg 26-10-2026 (K2): de soort is vast en geeft de nood (N10); de reden, met getallen, gaat naar het dagbestand
-        # en het logboek
+    def mis(waar, soort, reden, detail=""):
+        # Overleg 26-10-2026 (K2): de soort is vast en geeft de nood (N10). De reden gaat naar het dagbestand en telt mee
+        # in zijn hash, dus ook die is vast; wat wisselt (uren, fouttype) staat alleen in het detail, voor het logboek.
+        # Anders kreeg elke dag van het venster elke nacht een nieuwe versie zolang een kopie oud bleef (lens 26-10).
         waar["onvolledig"].append(reden)
         waar.setdefault("soorten", []).append(soort)
+        if detail:
+            waar.setdefault("details", []).append(detail)
 
     vast = {"inbox", *(v.lower() for v in PV.VERZONDEN)}
 
@@ -606,7 +609,7 @@ def _lees_mail(dagen):
         try:
             deel = PV.koppen(adres, m, sinds=sinds, plafond=PLAFOND, inhoud=foto)
         except Exception as e:  # noqa: BLE001
-            mis(waar, "map niet leesbaar", f"{naam(m)} niet leesbaar ({type(e).__name__})")
+            mis(waar, "map niet leesbaar", f"{naam(m)} niet leesbaar", f"{naam(m)}: {type(e).__name__}")
             return None
         if len(deel) >= PLAFOND:
             mis(waar, "te veel berichten", f"{naam(m)}: meer dan {PLAFOND} berichten")
@@ -629,22 +632,28 @@ def _lees_mail(dagen):
             if foto is None:
                 for x in (o, u):
                     if x is not None:
-                        mis(x, "kopie niet vers", "kopie onleesbaar")
+                        mis(x, "kopie onleesbaar", "kopie onleesbaar")
                 continue
             oud = PV.bron_uren_oud(mb, inhoud=foto)
-            if oud is None or oud > PV.BRON_VERS_UREN:
-                reden = "kopie " + ("zonder tijdstip" if oud is None else f"{oud:.0f} uur oud")
-                for x in (o, u):
-                    if x is not None:
-                        mis(x, "kopie niet vers", reden)
-            # Overleg 26-10-2026 (X2): ook een verse kopie dekt maar een venster (hotmail_server.BINNEN_DAGEN). Een dag
-            # daarvoor stond er niet in en telde stil nul; zegt de kopie niet vanaf wanneer, dan is het onbekend.
+            for x in (o, u):
+                if x is None:
+                    continue
+                if oud is None:
+                    mis(x, "kopie niet vers", "kopie zonder tijdstip")
+                elif oud > PV.BRON_VERS_UREN:
+                    mis(x, "kopie niet vers", f"kopie ouder dan {PV.BRON_VERS_UREN} uur", f"kopie {oud:.0f} uur oud")
+            # Overleg 26-10-2026 (X2): ook een verse kopie dekt maar een venster (hotmail_server.BINNEN_DAGEN), en ze loopt
+            # tot ze gemaakt werd. Dat toetst mail_telling per dag (lens 26-10: per groep kreeg ook een gedekte dag
+            # onvolledig). Zegt de kopie niet vanaf wanneer, dan is het voor elke dag onbekend: dat is een nood.
             vanaf = PV.bron_vanaf(mb, inhoud=foto)
             for x, mappen in ((o, PV.mappen_van(adres) if o is not None else []), (u, ["Sent"])):
-                for m in mappen:
-                    if not vanaf.get(m) or vanaf[m] > sinds:
-                        mis(x, "kopie dekt de dagen niet", f"kopie van {naam(m)} begint "
-                            + (f"pas op {vanaf[m]}" if vanaf.get(m) else "op een onbekende dag"))
+                if x is None:
+                    continue
+                zonder = [m for m in mappen if not vanaf.get(m)]
+                for m in zonder:
+                    mis(x, "kopie zegt niet vanaf wanneer", f"kopie van {naam(m)} zegt niet vanaf wanneer")
+                x["dekking"] = {"vanaf": max(vanaf[m] for m in mappen) if mappen and not zonder else "",
+                                "gemaakt": str(foto.get("gemaakt") or "")}
         if o is not None:
             for m in PV.mappen_van(adres):
                 deel = lees(adres, m, o, foto)
@@ -653,7 +662,7 @@ def _lees_mail(dagen):
         try:
             bestaand = PV.mapnamen(mb)
         except Exception as e:  # noqa: BLE001
-            mis(u, "mappenlijst niet leesbaar", f"mappenlijst niet leesbaar ({type(e).__name__})")
+            mis(u, "mappenlijst niet leesbaar", "mappenlijst niet leesbaar", f"mappenlijst: {type(e).__name__}")
             continue
         gelezen = False
         for m in PV.VERZONDEN:
@@ -742,7 +751,8 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         for richting, x in (("ontvangen", ontvangen), ("verzonden", verzonden)):
             for adres, p in sorted(x.items()):
                 if p.get("onvolledig"):
-                    ag.log("mail", "bron", f"{adres} {richting} onvolledig: " + "; ".join(p["onvolledig"]))
+                    ag.log("mail", "bron", f"{adres} {richting} onvolledig: " + "; ".join(p["onvolledig"])
+                           + (f" ({'; '.join(p['details'])})" if p.get("details") else ""))
     r.bron("kanaalstand", json.dumps(kanalen, sort_keys=True))
     try:
         staat = json.loads(_lees(STAAT) or "{}")
