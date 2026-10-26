@@ -280,6 +280,14 @@ def main():
             # nachtronde haalt de dag in, en de nood zegt het.
             ag.log(f"dag {DAG}", "fout", f"dagvaststelling mislukt: {type(e).__name__}: {str(e)[:200]}")
             r.nood("Dagvaststelling mislukt in de ochtendronde, zie werkverslag", wie="claude-code")
+            # Codex-controle mailnood 2 (C1): deze ronde maakte de vaststelling niet af en sluit dus geen noden die ze
+            # niet kon nakijken; wat open stond, blijft open (zoals noden_bij_breuk). Weet het bord niet wat open staat,
+            # dan breekt de ronde toch, zodat het bord niets sluit; de bundels zijn dan al gemaakt.
+            bestaand = ag.open_noden()
+            if bestaand is None:
+                raise
+            for n in bestaand:
+                r.nood(n["tekst"], wie=n["wie"])
         r.detail = "; ".join(d for d in delen if d)
 
 
@@ -792,7 +800,8 @@ def vastleggen(r, dagen, zoom_gelezen=None):
             over = [f"versie {versie}, gemaakt {nu.astimezone(V.BRUSSEL):%d-%m-%Y %H:%M}",
                     f"agenda: {v['agenda']['stand']}", f"Zoom: {v['zoom']['stand']}",
                     "locatie: " + (locatiestand if bezoeken is not None else f"niet gelezen ({lf})"),
-                    "mail: " + ("alleen de mappen die de mailwachten lezen" if mail is not None else f"niet gelezen ({mailfout})"),
+                    # het fouttype staat in het logboek (Codex-controle mailnood 2)
+                    "mail: " + ("alleen de mappen die de mailwachten lezen" if mail is not None else "niet gelezen"),
                     f"WhatsApp: {kanalen_dag['whatsapp']}", f"telefoon: {kanalen_dag['telefoon']}"]
             if oud is not None:
                 over.append("herzien: " + (", ".join(V.wijzigingen(oud, concept)) or "opmaak"))

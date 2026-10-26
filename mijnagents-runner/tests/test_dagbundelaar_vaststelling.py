@@ -652,6 +652,53 @@ def test_g3_zoom_van_de_ochtendketen():
             D.ag.__dict__.pop("ronde", None)
 
 
+def test_c1_ochtend_sluit_geen_noden_als_de_vaststelling_faalt():
+    """Codex-controle mailnood 2 (C1): in de ochtendketen vangt main een mislukte vaststelling op en de ronde eindigt
+    gewoon. Dan blijven de noden die open stonden open, naast "Dagvaststelling mislukt"; weet het bord niet wat open
+    staat, dan breekt de ronde, zodat het bord niets sluit."""
+    gemeld = []
+
+    class R:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def nood(self, t, wie="mehdi"):
+            gemeld.append(t)
+
+    def faal(r, dagen, zoom_gelezen=None):
+        raise RuntimeError("mail niet gelezen en de open mailnoden op het bord onbekend")
+
+    hot = f"{D.MAILNOOD}: mehdichegini@hotmail.com (kopie niet vers)"
+    oud = (D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen)
+    D.NACHT, D.DAG_GEGEVEN = False, True
+    D.lees_nacht = lambda: {"start": NU.isoformat(), "einde": NU.isoformat(),
+                            "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}}
+    D.vastleggen = faal
+    D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+    D.ag.ronde = lambda taak, **k: R()
+    D.ag.log = lambda *a, **k: None
+    try:
+        D.ag.open_noden = lambda: [{"tekst": hot, "wie": "claude-code"}]
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            D.main()
+        assert hot in gemeld and "Dagvaststelling mislukt in de ochtendronde, zie werkverslag" in gemeld, gemeld
+        D.ag.open_noden = lambda: None
+        try:
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                D.main()
+            gebroken = False
+        except RuntimeError:
+            gebroken = True
+        assert gebroken, "bord onbekend: de ronde breekt, zodat noden_bij_breuk niets sluit"
+    finally:
+        D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen = oud
+        for naam in ("ronde", "log", "open_noden"):
+            D.ag.__dict__.pop(naam, None)
+
+
 def _kopie(pad, uren, vanaf):
     d = {"gemaakt": (datetime.now(timezone.utc) - timedelta(hours=uren)).isoformat(), "berichten": [
         {"map": "INBOX", "datum": f"{DAG}T08:00:00+00:00", "message_id": "<h1@x>", "van": "k@klant.test"},
