@@ -131,14 +131,17 @@ def _opname_weg(tekst):
     markering = MARKERING.format(regel="S4")
 
     def weg(staart):
-        # de zin valt weg, de regelovergang erna blijft (lijstpunten en alinea's plakken niet aan elkaar)
-        if "\n" in staart:
-            nieuw = staart[staart.index("\n"):]
-            if delen:
-                delen[-1] = delen[-1].rstrip(" \t")
-                if delen[-1].endswith("\n"):
-                    nieuw = nieuw[1:]
-            delen.append(nieuw)
+        # de zin valt weg; tussen wat ervoor en erna staat blijft de grootste regelafstand van de twee (lijstpunten en
+        # alinea's plakken niet aan elkaar, en er komt geen lege regel bij)
+        na = staart.count("\n")
+        if not na:
+            return
+        voor = 0
+        if delen:
+            delen[-1] = delen[-1].rstrip(" \t")
+            voor = len(delen[-1]) - len(delen[-1].rstrip("\n"))
+        if na > voor:
+            delen.append("\n" * (na - voor))
 
     legende = False
     stukken = _ZIN.findall(tekst)

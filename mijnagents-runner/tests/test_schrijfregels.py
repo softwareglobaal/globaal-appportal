@@ -410,5 +410,13 @@ for combi in _it.product(LAAG, repeat=3):
                 break
 check("mengtest regels zonder leesteken: elke regel blijft zoals hij alleen zou blijven", not verlies, verlies[:2])
 
+# Twaalfde review 26-10-2026: weggevallen opnameregels laten geen lege regel achter
+SP, LG = "De architect sprak zijn vaststellingen ter plaatse in.", "Een tijdstip tussen haakjes verwijst naar de opname."
+for tekst, verwacht in [(f"A.\n{SP}\n{LG}\nB.", "A.\nB."), (f"A.\n\n{SP}\n\nB.", "A.\n\nB."), (f"A. {SP}\n- B.", "A.\n- B."),
+                        (f"- De dorpel ligt 3 cm te laag.\n- {SP}\n- {LG}\n- De voeg is open.", "- De dorpel ligt 3 cm te laag.\n- De voeg is open."),
+                        (f"{SP}\n{LG}\nB.", "B.")]:
+    t12, _ = S.toepassen(tekst)
+    check(f"regelafstand na weggevallen opnameregels: {tekst[:20]!r}", t12 == verwacht, repr(t12))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
