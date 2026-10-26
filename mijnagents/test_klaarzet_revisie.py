@@ -58,5 +58,28 @@ C.post(f"/api/klaarzet/{kid}/opgepakt", json={"door": "x"}, headers=K)
 r = zet("mehdi", True, revisie=False, uniek="agenda:proef")
 it = lees("agenda:proef")
 check("zonder revisie-vlag blijft een opgepakt item ongewijzigd", it["status"] == "opgepakt" and it["voor"] == "h-architects" and r.get("herzien") == 0, (r, it))
+# vervang (De Communicatiebundelaar, Codex CB04 en CB12): ook een opgepakt item volgt de bron, zonder revisiekopie
+def dagitem(inhoud):
+    return C.post("/api/klaarzet", json={"items": [{"van": "communicatie-bundelaar", "voor": "mehdi", "soort": "communicatie",
+                  "sleutel": "2026-10-25", "titel": "Communicatie proef", "uniek": "communicatie:dag:proef", "vervang": True,
+                  "inhoud": inhoud}]}, headers=K).get_json()
+
+
+dagitem({"personen": [{"naam": "Proefpersoon Zeta"}]})
+kid = lees("communicatie:dag:proef")["id"]
+C.post(f"/api/klaarzet/{kid}/opgepakt", json={"door": "x"}, headers=K)
+r = dagitem({"personen": []})
+it = lees("communicatie:dag:proef")
+check("vervang: opgepakt item volgt de bron en staat weer op klaar", it["status"] == "klaar" and "Zeta" not in it["inhoud"]
+      and r.get("bijgewerkt") == 1, (r, it))
+rev = C.get("/api/klaarzet/revisies?uniek=communicatie:dag:proef", headers=K).get_json()["revisies"]
+check("vervang: geen kopie van de oude inhoud", rev == [], rev)
+zet("h-architects", False, revisie=False, uniek="agenda:vervang")
+kid = lees("agenda:vervang")["id"]
+C.post(f"/api/klaarzet/{kid}/opgepakt", json={"door": "x"}, headers=K)
+it = {"van": "plaud-wacht", "voor": "mehdi", "soort": "transcript", "sleutel": "2531", "titel": "anders", "uniek": "agenda:vervang",
+      "vervang": True, "inhoud": {"x": 1}}
+C.post("/api/klaarzet", json={"items": [it]}, headers=K)
+check("vervang geldt alleen voor de dagitems van De Communicatiebundelaar", lees("agenda:vervang")["status"] == "opgepakt")
 print(f"{fout} fout")
 sys.exit(1 if fout else 0)

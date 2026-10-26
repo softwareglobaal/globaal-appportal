@@ -126,9 +126,11 @@ def bundelen():
         except ValueError:
             d = {}
         dag = (d.get("datum") or d.get("start") or it.get("sleutel") or "")[:10]
-        if it.get("soort") in ("dagplan", "dagbundel", "signaal", "oproep", "zoom-tekst", "ochtendbericht", "dagvaststelling"):
+        if it.get("soort") in ("dagplan", "dagbundel", "signaal", "oproep", "zoom-tekst", "ochtendbericht", "dagvaststelling",
+                               "communicatie"):
             continue  # zoom-tekst is voor De Regisseur, het ochtendbericht voor De Bode (I2, Z14); de dagvaststelling is van
-            # mij en blijft klaar voor Mehdi: nooit bundelen, nooit oppakken (Codex D2)
+            # mij en blijft klaar voor Mehdi: nooit bundelen, nooit oppakken (Codex D2); de communicatie van De
+            # Communicatiebundelaar is voor De Levenscoach: geen dossier, en nooit oppakken (CB02, CB04)
         if str(it.get("uniek") or "").startswith("cc:"):
             continue  # het Commandocentrum en de wachten sluiten hun eigen items (taken en impulsen)
         if "mail-regisseur" in (it.get("van"), it.get("voor")):
