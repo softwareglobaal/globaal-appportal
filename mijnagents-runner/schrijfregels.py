@@ -141,6 +141,23 @@ def _is_s4(kern):
     return _s4_begin(kern) is not None
 
 
+def _loopt_door(zin, volgende):
+    """Loopt een S4-zin over een harde regelovergang door naar de volgende regel (die met een kleine letter begint)?
+    Ja als de opnamezin pas samen herkenbaar is en in deze regel begint ('volgens de\nopname'), als de volgende regel de
+    opnamewoorden voortzet ('verwijst naar\nde opname van het plaatsbezoek'), of als deze regel alleen meta-woorden heeft
+    ('De architect\nsprak zijn vaststellingen in'). Een opsomming ('de goot lekt\nde architect sprak ...') loopt niet door."""
+    samen = (zin + volgende).lstrip()
+    if not _is_s4(zin.strip()) and _begint_in(_s4_begin(samen), zin):
+        return True
+    if _is_s4(zin.strip()) and re.search(r"\b(?:opname|geluidsopname|transcript|tijdstip|haakjes|recording)\b", volgende, re.I):
+        return True
+    return bool(_woorden_in(zin) and not _is_s4(zin.strip()) and _alleen_meta(zin) and _is_s4(samen))
+
+
+def _woorden_in(tekst):
+    return re.findall(r"[^\W\d_]{2,}", tekst)
+
+
 def _begint_in(begin, zin):
     """De S4-zin begint in deze regel (niet pas in de volgende)."""
     return begin is not None and begin < len(zin.strip())
@@ -180,8 +197,7 @@ def _opname_weg(tekst):
         # een harde regelovergang midden in een opnamezin: de regel eindigt zonder leesteken, de volgende begint klein,
         # en pas samen is het een S4-zin; dan worden ze samen beoordeeld
         while (i < len(stukken) and "\n" in zin and not zin.strip().endswith((".", "!", "?", ";", ":"))
-               and stukken[i].lstrip()[:1].islower() and not _is_s4(zin.strip())
-               and _begint_in(_s4_begin((zin + stukken[i]).lstrip()), zin)):
+               and stukken[i].lstrip()[:1].islower() and _loopt_door(zin, stukken[i])):
             zin += stukken[i]
             i += 1
         kern = zin.strip()

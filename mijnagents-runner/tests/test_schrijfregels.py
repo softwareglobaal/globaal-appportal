@@ -475,5 +475,14 @@ for tekst in ["De architect sprak zijn vaststellingen ter plaatse in.", "De arch
               "The architect dictated his findings at 10:15."]:
     check(f"zuivere opnamezin valt weg: '{tekst[:35]}'", S.toepassen(tekst)[0] == "", S.toepassen(tekst))
 
+# Tweeëntwintigste review 26-10-2026: een opnamezin over een harde regelovergang op andere plekken
+for tekst, verwacht in [
+        ("Het onderzoek was visueel. Elk tijdstip tussen haakjes verwijst naar\nde opname van het plaatsbezoek.", "Het onderzoek was visueel."),
+        ("Een tijdstip tussen haakjes verwijst\nnaar de opname van het bezoek op 3 juni.", S.MARKERING.format(regel="S4")),
+        ("De goot lekt. De architect\nsprak zijn vaststellingen ter plaatse in. De dorpel ligt te laag.", "De goot lekt. De dorpel ligt te laag."),
+        ("de goot lekt\nde architect sprak zijn vaststellingen in", "de goot lekt")]:
+    t22, _ = S.toepassen(tekst)
+    check(f"harde regelovergang in een opnamezin: '{tekst[:35]}'", t22 == verwacht and not any(r == "S4" for r, _ in S.controleer(t22)), repr(t22))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
