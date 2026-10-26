@@ -203,7 +203,7 @@ def naar_markdown(v, fotos=None):
         r.extend([alinea, ""])
     kop("Offerte, facturen en uitvoering")
     r.extend(["| Post | Bron | Bedrag excl. btw | Opmerking |", "|---|---|---|---|"])
-    r.extend(f"| {p.get('post', '')} | {p.get('bron', '')} | {euro(p.get('bedrag', ''))} | {p.get('opmerking', '')} |" for p in v.get("posten", []))
+    r.extend(f"| {p.get('post', '')} | {schrijfregels.bron_zichtbaar(p.get('bron'))} | {euro(p.get('bedrag', ''))} | {p.get('opmerking', '')} |" for p in v.get("posten", []))
     r.append("")
     for alinea in v.get("posten_toelichting", []):
         r.extend([alinea, ""])
@@ -219,7 +219,8 @@ def naar_markdown(v, fotos=None):
             if b.get("dias"):
                 r.extend([f"*Fotodossier van de bouwheer:* {b['dias']}", ""])
     kop("Door de bouwheer gemelde punten, niet ter plaatse vastgesteld")
-    r.extend(f"- {g['punt']}" + (f" ({g['bron']})" if g.get("bron") else "") for g in v.get("gemeld", []))
+    r.extend(f"- {g['punt']}" + (f" ({schrijfregels.bron_zichtbaar(g['bron'])})" if schrijfregels.bron_zichtbaar(g.get("bron")) else "")
+             for g in v.get("gemeld", []))
     r.append("")
     kop("Herstelling en raming")
     r.extend(["| Nr | Herstelling | Bij | Raming excl. btw |", "|---|---|---|---|"])
@@ -338,7 +339,8 @@ def naar_docx(v, fotos=None, master=sj.MASTER):
         alinea(t, na=4)
     hoofdstuk("Offerte, facturen en uitvoering")
     tabel(["Post", "Bron", "Bedrag excl. btw", "Opmerking"],
-          [[x.get("post", ""), x.get("bron", ""), euro(x.get("bedrag", "")), x.get("opmerking", "")] for x in v.get("posten", [])], [4.6, 2.4, 2.4, 7])
+          [[x.get("post", ""), schrijfregels.bron_zichtbaar(x.get("bron")), euro(x.get("bedrag", "")), x.get("opmerking", "")]
+           for x in v.get("posten", [])], [4.6, 2.4, 2.4, 7])
     for t in v.get("posten_toelichting", []):
         alinea(t, na=4)
     hoofdstuk("Bevindingen")
@@ -361,7 +363,7 @@ def naar_docx(v, fotos=None, master=sj.MASTER):
     alinea("Deze punten staan in de stukken van de bouwheer of werden mondeling gemeld. Ze werden tijdens het plaatsbezoek niet "
            "vastgesteld en worden hier zonder oordeel vermeld.", cursief=True, grootte=9.5, na=4)
     for g in v.get("gemeld", []):
-        alinea("- " + g["punt"] + (f" ({g['bron']})" if g.get("bron") else ""), na=2)
+        alinea("- " + g["punt"] + (f" ({schrijfregels.bron_zichtbaar(g['bron'])})" if schrijfregels.bron_zichtbaar(g.get("bron")) else ""), na=2)
     hoofdstuk("Herstelling en raming")
     rijen = [[x.get("nr", ""), _ramingpost(x), x.get("bij", ""), _ramingbedrag(x)] for x in v.get("raming", [])]
     van, tot = raming_totaal(v)

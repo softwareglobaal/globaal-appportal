@@ -217,7 +217,7 @@ for zin, verwacht in [("De architect sprak zijn vaststellingen ter plaatse in, h
                       ("De architect sprak zijn vaststellingen ter plaatse in; het kader is 2 cm uit het lood.", S.MARKERING.format(regel="S4")),
                       ("De architect sprak zijn vaststellingen ter plaatse in; de opname en het transcript zitten in de bezoekmap.",
                        S.MARKERING.format(regel="S4")),
-                      ("De dorpel is 3 cm te laag; het tijdstip tussen haakjes verwijst naar de opname.", "De dorpel is 3 cm te laag."),
+                      ("De dorpel is 3 cm te laag; het tijdstip tussen haakjes verwijst naar de opname.", S.MARKERING.format(regel="S4")),
                       ("Volgens de opname bestaande toestand is de muur 30 cm dik.", "Volgens de opname bestaande toestand is de muur 30 cm dik."),
                       ("Uit de opname van de landmeter blijkt dat de perceelgrens 20 cm verschuift.",
                        "Uit de opname van de landmeter blijkt dat de perceelgrens 20 cm verschuift.")]:
@@ -288,8 +288,8 @@ check("S5 ook het meervoud ingebrekestellingen", any(r == "S5" for r, _ in S.con
 for tekst, verwacht in [
         ("Mehdi Chegini bezocht het goed op 3 juni 2026 en sprak zijn vaststellingen ter plaatse in tijdens een rondgang van 45 minuten. "
          "Een tijdstip tussen haakjes verwijst naar de opname. Het onderzoek was visueel.", S.MARKERING.format(regel="S4") + " Het onderzoek was visueel."),
-        ("Noot: een tijdstip tussen haakjes verwijst naar de opname.", ""),
-        ("De goot lekt. Een tijdstip tussen haakjes verwijst naar de opname; de dorpel ligt te laag.", "De goot lekt. De dorpel ligt te laag."),
+        ("Noot: een tijdstip tussen haakjes verwijst naar de opname.", S.MARKERING.format(regel="S4")),
+        ("De goot lekt. Een tijdstip tussen haakjes verwijst naar de opname; de dorpel ligt te laag.", "De goot lekt. " + S.MARKERING.format(regel="S4")),
         ("Wie schildert de plafonds? De architect sprak zijn vaststellingen ter plaatse in.", "Wie schildert de plafonds?"),
         ("De goot lekt aan de achtergevel! Een tijdstip tussen haakjes verwijst naar de opname.", "De goot lekt aan de achtergevel!"),
         ("Volgens de opname van de plaatsgesteldheid vóór de werken was de barst er al.", "Volgens de opname van de plaatsgesteldheid vóór de werken was de barst er al."),
@@ -340,7 +340,7 @@ check(f"mengtest met regelovergangen: {2 * len(POOL) ** 3} combinaties heel", no
 # legende wordt opnieuw getoetst, en de tijdstippen waar de legende naar verwijst gaan mee
 for tekst, verwacht in [
         ("Volgens de opname is de scheur 1 mm breed; een tijdstip tussen haakjes verwijst naar de opname.", S.MARKERING.format(regel="S4")),
-        ("De dakgoot boven de keuken lekt (00:12:30); het tijdstip verwijst naar de opname.", "De dakgoot boven de keuken lekt."),
+        ("De dakgoot boven de keuken lekt (00:12:30); het tijdstip verwijst naar de opname.", S.MARKERING.format(regel="S4")),
         ("De aannemer kwam aan (10:15). De goot lekt.", "De aannemer kwam aan (10:15). De goot lekt."),
         ("De aannemer is aansprakelijk.\n- De goot lekt.", S.MARKERING.format(regel="S5") + "\n- De goot lekt.")]:
     t8, _ = S.toepassen(tekst)
@@ -354,6 +354,28 @@ for combi in _it.product(POOL + ["Volgens de opname is de goot nat; een tijdstip
             if een != twee or ing2:
                 niet_idempotent.append((scheiding.join(combi), een, twee))
 check("de grendel is idempotent: een tweede doorgang verandert niets en meldt niets", not niet_idempotent, niet_idempotent[:2])
+
+# Negende review 26-10-2026: een legendezin valt weg als hij alleen over de opname gaat, anders zichtbaar gemarkeerd (geen
+# brokstukken als "Mm:ss)"); een harde regelovergang midden in een zin breekt de zin niet; de bron in het verslag van
+# bevindingen toont geen opname of tijdstip
+for tekst, verwacht in [
+        ("Visueel onderzoek op 3 juni 2026. Een tijdstip tussen haakjes (uu:mm:ss) verwijst naar de opname van het plaatsbezoek.",
+         "Visueel onderzoek op 3 juni 2026."),
+        ("Een tijdstip tussen haakjes verwijst naar de opname; zo kan Mehdi elke vaststelling in de opname terugvinden.", ""),
+        ("Een tijdstip tussen haakjes (uu:mm:ss) geeft het moment in de opname van het plaatsbezoek aan.", ""),
+        ("De architect nam 42 foto's en sprak zijn vaststellingen\nter plaatse in. Volgens de\nopname is de dorpel 3 cm te laag.", S.MARKERING.format(regel="S4")),
+        ("Een tijdstip tussen\nhaakjes verwijst naar de opname.", ""),
+        ("Ruwbouw loopt.\nDe dakwerken starten volgende week.", "Ruwbouw loopt.\nDe dakwerken starten volgende week.")]:
+    t9, _ = S.toepassen(tekst)
+    check(f"S4 negende review: '{tekst[:35]}'", t9 == verwacht and S.toepassen(t9)[0] == t9, repr(t9))
+for bron, verwacht in [("opname 00:31:10", ""), ("factuur 2026-114, zie opname 00:12:05", "factuur 2026-114"),
+                       ("transcript.txt 00:12:00-00:12:40", ""), ("offerte Peeters 2026-03", "offerte Peeters 2026-03")]:
+    check(f"bron_zichtbaar '{bron}'", S.bron_zichtbaar(bron) == verwacht, S.bron_zichtbaar(bron))
+vg = vb.leeg("2309", "Stockemstraat 15")
+vg["gemeld"] = [{"punt": "Bij hevige regen loopt water binnen langs het dakraam.", "bron": "opname 00:31:10"}]
+vg["posten"] = [{"post": "Dakraam plaatsen", "bron": "factuur 2026-114, zie opname 00:12:05", "bedrag": "", "opmerking": ""}]
+mdg = vb.naar_markdown(vg)
+check("bevindingen: gemeld en posten tonen geen opname of tijdstip", "00:31" not in mdg and "00:12" not in mdg and "factuur 2026-114" in mdg, mdg[-500:])
 
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

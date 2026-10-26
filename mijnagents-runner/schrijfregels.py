@@ -71,18 +71,21 @@ OPNAME = [
 # Alleen als de zin daarna echt doorloopt (kleine letter of cijfer, ook onder re.I); "BV." van een firma is een zinseinde.
 _AFK = r"(?:(?<=\bexcl)|(?<=\bincl)|(?<=\bca)|(?<=\bnr)|(?<=\bresp)|(?<=\bvb)|(?<=\bgew))\.(?=\s+(?-i:[a-z0-9(€]))"
 _T = r"(?:[^.;:\n]|(?<=\d)[.:](?=\d)|" + _AFK + ")"
-_Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
+# Een regelovergang midden in een zin (de volgende regel begint met een kleine letter: "sprak zijn vaststellingen\nter
+# plaatse in") breekt de zin niet; een hoofdletter, een lijstteken of een lege regel begint een nieuwe zin.
+_Z = r"(?:[^.!?\n]|\n(?=[ \t]*(?-i:[a-zà-ÿ]))|(?<=\d)\.(?=\d)|" + _AFK + ")"
 # Zinnen die alleen over de opname gaan: ze vallen weg (S4). Wat na "sprak zijn vaststellingen in:" volgt, is de
 # vaststelling zelf en blijft staan. De geschrapte zin staat in de ingrepen, dus in het logboek.
 # S4 per zin (een zin stopt aan . ! ? of een nieuwe regel, niet aan de punt van 4.500 of de dubbelpunt van 10:15), zodat
 # een patroon nooit in een buurzin of in een markering bijt. Elke weggevallen of gemarkeerde zin staat in het logboek.
 # - "De architect sprak zijn vaststellingen in (om 10:15)." zegt alleen dat er ingesproken werd: valt weg. Staat er meer
 #   in de zin, dan wordt hij zichtbaar gemarkeerd.
-# - "Een tijdstip tussen haakjes verwijst naar de opname." valt weg; een vaststelling in dezelfde zin vóór een puntkomma
-#   of dubbelpunt blijft ("De dorpel is 3 cm te laag; het tijdstip ... opname." wordt "De dorpel is 3 cm te laag.").
+# - "Een tijdstip tussen haakjes verwijst naar de opname." (de legende) valt weg; staat er in dezelfde zin ook een
+#   vaststelling, dan wordt hij zichtbaar gemarkeerd.
 # - "Volgens de opname is de dorpel 3 cm te laag." draagt een vaststelling: zichtbaar gemarkeerd. "De opname van de
 #   bestaande toestand" (of van de plaatsgesteldheid, door een expert) is een opmeting, geen geluidsopname.
 SPRAK = re.compile(r"\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b", re.I)
+_OVER_OPNAME = re.compile(r"\b(?:opname|geluidsopname|transcript|tijdstip|tijdstippen|haakjes)\b", re.I)
 _TIJD = re.compile(r"\d{1,2}[:.u]\d{2}(?:[:.]\d{2})?", re.I)
 _VULWOORD = re.compile(r"\b(?:om|tussen|van|vanaf|tot|en|rond|omstreeks|ter|plaatse|de|het|opname|geluidsopname)\b", re.I)
 _OPMETING = (r"(?!\s+(?:(?:van|door)\s+)?(?:de\s+|het\s+|een\s+)?(?:bestaande\s+(?:toestand|situatie)|plaatsgesteldheid|"
@@ -137,18 +140,15 @@ def _opname_weg(tekst):
             else:
                 weg(staart)
             continue
-        m = next((m for p in OPNAME_ZINNEN for m in [p.search(kern)] if m), None)
-        if m:
+        if any(p.search(kern) for p in OPNAME_ZINNEN):
             ingrepen.append(("S4", kern))
             legende = True
-            voor, na = kern[:m.start()].strip().rstrip(";:,").strip(), kern[m.end():].strip().lstrip(";:,").strip()
-            over = (voor + " " + na).strip() if voor else na[:1].upper() + na[1:]
-            if OPNAME_VOLGENS.search(over) or SPRAK.search(over):
-                delen.append(kop + markering + staart)
-            elif len(_woorden(over)) >= 2:
-                delen.append(kop + over + ("" if over.endswith((".", "!", "?")) else ".") + staart)
-            else:
+            # elk zinsdeel (tussen ; of ": ") gaat over de opname of het tijdstip: de zin valt weg; anders zichtbaar gemarkeerd
+            delen_zin = re.split(r";|:\s", kern)
+            if all(_OVER_OPNAME.search(d) and not OPNAME_VOLGENS.search(d) for d in delen_zin):
                 weg(staart)
+            else:
+                delen.append(kop + markering + staart)
             continue
         if OPNAME_VOLGENS.search(kern):
             ingrepen.append(("S4", kern))
@@ -162,6 +162,17 @@ def _opname_weg(tekst):
     tekst = re.sub(r"[ \t]+([,.;:)])", r"\1", tekst)
     tekst = re.sub(r"\(\s*\)", "", tekst)
     return re.sub(r"[ \t]{2,}", " ", tekst).strip(), ingrepen
+
+
+def bron_zichtbaar(bron):
+    """De bron zoals ze in een verslag mag staan: zonder opname, transcript of tijdstip (S4). Het volledige veld bron blijft in
+    de gegevens; dit is alleen voor de weergave ("factuur 2026-114, zie opname 00:12:05" wordt "factuur 2026-114")."""
+    b = str(bron or "")
+    b = re.sub(r"(?:zie\s+)?(?:de\s+)?\S*(?:opname|transcript|audio)\S*(?:\s+(?:van\s+)?\d{1,2}:\d{2}(?::\d{2})?"
+               r"(?:\s*(?:-|–|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?)?", "", b, flags=re.I)
+    b = re.sub(r"\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|–|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?", "", b)
+    b = re.sub(r"\(\s*\)", "", b)
+    return re.sub(r"\s{2,}", " ", b).strip(" ,;:-")
 
 
 def _regels(profiel=None):
