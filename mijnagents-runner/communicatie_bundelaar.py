@@ -169,9 +169,9 @@ def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
                  "contacten": 0, "kanalen": defaultdict(int)} for d in dagen_lijst}
     tellen = []
     for r in rijen:
-        dubbel = str(r.get("dubbel_van") or "")
+        dubbel, in_dagen = str(r.get("dubbel_van") or ""), (r.get("datum") or "") in dagen
         if dubbel.startswith("buiten:"):
-            opgevallen["telt_niet"] += 1   # hoort niet bij Mehdi's gesprek: telt niet en maakt niemand bekend of privé
+            opgevallen["telt_niet"] += in_dagen   # hoort niet bij Mehdi's gesprek: telt niet en maakt niemand bekend of privé
             continue
         k = kanaal(r.get("uniek"))
         prive = prive_groep(r)
@@ -184,12 +184,12 @@ def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
                 elif soort == "naam" and (r.get("datum") or "") >= bekend_vanaf:
                     bekend.add(wie.casefold())
         if dubbel:
-            opgevallen["telt_niet"] += 1   # telregel Z10: een dubbel telt niet, de rij waarnaar hij wijst wel
+            opgevallen["telt_niet"] += in_dagen   # telregel Z10: een dubbel telt niet, de rij waarnaar hij wijst wel
             continue
         if k is None:
-            opgevallen["onbekend_kanaal"] += 1
+            opgevallen["onbekend_kanaal"] += in_dagen
             k = "overig"   # telt mee als aantal, zonder namen: wie weet wat dit kanaal in personen zet (Codex CB16)
-        if (r.get("datum") or "") in dagen:
+        if in_dagen:
             tellen.append((r, k, prive))
     # Wie ooit in een privégesprek zat, is voor mail geen bekende, ook niet als hij ook in een gewoon gesprek zat: anders
     # staat zijn naam op de dag van een privégesprek (Codex CB10). Een collega uit kern blijft wel bekend: zijn mail is werk.
