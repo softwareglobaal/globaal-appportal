@@ -158,6 +158,29 @@ FASE_PUNTEN = {
                    "Restpunten opvolgen tot afgewerkt; uitgevoerde werken bevestigen", "Definitieve oplevering: apart proces-verbaal"],
 }
 
+# Vaste kantoorteksten: tekst van Mehdi zelf, die de grendel nooit schrapt (zoals de VGP-zin "De architect is niet
+# aansprakelijk ...", die anders als S5 zou tellen).
+VASTE_TEKSTEN = frozenset([t for p in VASTE_PUNTEN for t in (p["nl"], p["en"])] + [t for ts in FASE_PUNTEN.values() for t in ts]
+                          + [VAST_VEILIGHEID, VAST_TIENJARIG, VAST_VOORWAARDEN])
+
+
+def herkomst(bron):
+    """De herkomst zoals het verslag ze toont (schrijfregel S4): V (eigen vaststelling ter plaatse: opname, eigen foto's
+    en notities), B (verklaring van de bouwheer) of S (blijkt uit de stukken), of 'vast punt kantoor'. Nooit de naam of
+    het tijdstip van de opname: dat blijft in het veld bron van de gegevens, voor de controle."""
+    b = (bron or "").strip()
+    code = re.match(r"[VBS](?:\s*[+,/]\s*[VBS])*(?![\w.])", b)
+    if not b or b == "vast punt kantoor":
+        return b
+    if code:
+        return code.group(0)
+    if re.search(r"bouwheer|verklaring|mondeling", b, re.I):
+        return "B"
+    if re.search(r"transcript|opname|audio|\d{1,2}:\d{2}|\.(?:jpe?g|png|heic)\b|\b00 (?:verslag|fotos)\.md\b", b, re.I):
+        return "V"
+    return "S"
+
+
 VLAG = {"ok": "OK", "belangrijk": "Belangrijk", "dringend": "Dringend", "": ""}
 VLAG_TERUG = {v.lower(): k for k, v in VLAG.items() if v}
 
@@ -186,7 +209,7 @@ def titel_van(v):
 # ------------------------------------------------------------------ markdown ---
 def naar_markdown(v):
     v = copy.deepcopy(v)
-    schrijfregels.wacht(v)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
+    schrijfregels.wacht(v, vast=VASTE_TEKSTEN)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     r = []
     nr, n = v["dossier"], v["bezoek"]
     r.append(f"# {titel_van(v)} voor project {nr} {v['adres']}")
@@ -226,7 +249,7 @@ def naar_markdown(v):
             r.append(p.get("tekst_nl", ""))
             if p.get("bron"):
                 r.append("")
-                r.append(f"Herkomst: {p['bron']}")
+                r.append(f"Herkomst: {herkomst(p['bron'])}")
             if p.get("tekst_en"):
                 r.append("")
                 r.append(f"*{p['tekst_en']}*")
@@ -407,9 +430,10 @@ def _voettekst(doc, tekst):
 
 
 def naar_docx(v, fotos=None, master=MASTER):
-    """Word in de huisstijl van de contractmasters. fotos: dict bijschrift -> bytes (jpg/png)."""
-    v = copy.deepcopy(v)
-    schrijfregels.wacht(v)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
+    """Word in de huisstijl van de contractmasters. fotos: dict bijschrift -> bytes (jpg/png). Een foto die niet in Word
+    past, komt in fotos_niet_geplaatst van het verslag van de aanroeper (melding, md en logboek)."""
+    aanroeper, v = v, copy.deepcopy(v)
+    schrijfregels.wacht(v, vast=VASTE_TEKSTEN)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Cm, Pt, RGBColor
@@ -516,7 +540,7 @@ def naar_docx(v, fotos=None, master=MASTER):
             if pt.get("bron"):
                 q = alinea(na=2)
                 r = q.add_run("Herkomst: "); r.bold = True; r.font.size = Pt(9)
-                q.add_run(pt["bron"])
+                q.add_run(herkomst(pt["bron"]))
             if pt.get("tekst_en"):
                 alinea(pt["tekst_en"], cursief=True, na=2)
             if pt.get("verantwoordelijke"):
@@ -561,7 +585,7 @@ def naar_docx(v, fotos=None, master=MASTER):
                 p.add_run().add_picture(io.BytesIO(fotos[b]), height=Cm(10.6))
             except Exception as ex:  # noqa: BLE001
                 p.add_run(f"(foto {b} niet leesbaar)")
-                v.setdefault("fotos_niet_geplaatst", []).append({"naam": b, "reden": f"plaatsing in Word: {type(ex).__name__}"})
+                aanroeper.setdefault("fotos_niet_geplaatst", []).append({"naam": b, "reden": f"plaatsing in Word: {type(ex).__name__}"})
             q = alinea(na=10)
             r = q.add_run(f"Foto {i}"); r.bold = True; r.font.size = Pt(9)
             tijd = f"{b[:2]}:{b[2:4]}" if b[:4].isdigit() else b

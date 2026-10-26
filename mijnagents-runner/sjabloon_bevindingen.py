@@ -48,6 +48,7 @@ VOORBEHOUD = (
     "gebreken. Dat is de taak van de raadsman van de bouwheer en, desgevallend, van een gerechtsdeskundige.\n"
     "De raming is een indicatieve orde van grootte, exclusief btw, en vervangt geen offerte van een herstelaannemer.\n"
     "Toestanden of herstellingen van na het plaatsbezoek zijn niet in dit verslag verwerkt.")
+VAST = sj.VASTE_TEKSTEN | {VOORBEHOUD}   # vaste kantoorteksten: de grendel schrapt ze nooit
 
 
 def leeg(nr="<nr>", adres="<adres van het goed>"):
@@ -130,7 +131,9 @@ def uit_werfproef(verslag):
             if p.get("doorlopend"):
                 continue   # vaste werfpunten horen niet in een verslag van bevindingen
             i += 1
-            bevindingen.append({"nr": f"B{i}", "titel": p.get("titel", ""), "herkomst": p.get("bron") or "(na te kijken)",
+            # herkomst V, B of S in het verslag (S4); de bron met het opnametijdstip blijft in de gegevens
+            bevindingen.append({"nr": f"B{i}", "titel": p.get("titel", ""), "herkomst": sj.herkomst(p.get("bron")) or "(na te kijken)",
+                                "bron": p.get("bron", ""),
                                 "vaststelling": p.get("tekst_nl", ""), "beoordeling": open_, "herstel": open_,
                                 "fotos": list(p.get("fotos", []))})
         if bevindingen:
@@ -164,9 +167,11 @@ def _fotoverwijzing(b, nummer):
 
 
 # ------------------------------------------------------------------ markdown ---
-def naar_markdown(v):
+def naar_markdown(v, fotos=None):
+    """fotos (dict naam -> bytes): alleen die foto's krijgen een nummer, zoals in Word en in de fotobijlage van de PDF.
+    Zonder fotos krijgt elke genoemde foto een nummer."""
     v = copy.deepcopy(v)
-    schrijfregels.wacht(v)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
+    schrijfregels.wacht(v, vast=VAST)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     r = [f"# {TITEL}: {v['dossier']} {v['adres']}", "",
          f"**CONCEPT** - opgemaakt op {v['opgemaakt']}. Na te kijken en aan te vullen door Mehdi Chegini vóór verzending.", "",
          "| | |", "|---|---|",
@@ -174,7 +179,7 @@ def naar_markdown(v):
          f"| Adres van het goed | {v['adres']} |", f"| Datum plaatsbezoek | {sj.datum_nl(v['datum'])} |",
          f"| Verslagtype | {TITEL.lower()} (geen werfverslag) |",
          f"| Opgemaakt door | {sj.FIRMA['naam']}, {sj.FIRMA['adres']}, {sj.FIRMA['btw']} |", ""]
-    nummer, _ = _fotonummers(v)
+    nummer, _ = _fotonummers(v, fotos)
     k = 0
 
     def kop(t):
@@ -238,7 +243,7 @@ def naar_markdown(v):
 def naar_docx(v, fotos=None, master=sj.MASTER):
     """Word in de huisstijl van de contractmasters (zoals het werfverslag). fotos: dict bestandsnaam -> bytes."""
     v = copy.deepcopy(v)
-    schrijfregels.wacht(v)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
+    schrijfregels.wacht(v, vast=VAST)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     from docx import Document
     from docx.enum.text import WD_BREAK
     from docx.shared import Cm, Pt, RGBColor

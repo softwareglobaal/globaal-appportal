@@ -6,7 +6,8 @@ in het contractendashboard. De omzetting gebeurt met weasyprint op de server (ru
 onze eigen markdown gebouwd (koppen, tabellen, lijsten, vet en cursief), zonder externe markdown-bibliotheek.
 
 Huisstijl: Aptos (of de dichtstbijzijnde sans), hoofdstukken blauw 365F91, tussenkoppen 4F81BD, voettekst
-"<nr> | <Titel> Pagina X". Foto's: achteraan, elk één keer, halve pagina hoog, dus twee per pagina.
+"<nr> | <Titel> Pagina X". Foto's: achteraan, elk één keer, bijna halve pagina hoog, dus twee per pagina, ook op de
+pagina met de kop.
 """
 import base64
 import html
@@ -28,8 +29,9 @@ th, td { border: 0.5pt solid #BFBFBF; padding: 3pt 5pt; vertical-align: top; tex
 th { background: #EAF0F7; color: __H1__; }
 ul { margin: 0 0 6pt 0; padding-left: 16pt; }
 .concept { color: #B45309; font-weight: bold; }
-.foto { page-break-inside: avoid; height: 12.2cm; margin-bottom: 0.4cm; }
-.foto img { max-height: 11.2cm; max-width: 100%; display: block; margin: 0 auto; }
+/* Twee fotoblokken plus de kop "Foto's" passen binnen de bruikbare hoogte (29,7 - 2 - 2,2 = 25,5 cm). */
+.foto { page-break-inside: avoid; height: 11.4cm; margin-bottom: 0.3cm; }
+.foto img { max-height: 10.4cm; max-width: 100%; display: block; margin: 0 auto; }
 .foto p { font-size: 9pt; color: __GRIJS__; margin: 2pt 0 0 0; text-align: center; }
 .fotopagina { page-break-before: always; }
 """

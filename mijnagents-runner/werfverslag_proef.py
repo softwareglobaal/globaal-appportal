@@ -498,7 +498,22 @@ def kop_voorbereiding(dossier, rij, volgnr, fotos, opnames, eigen=False):
             + (EIGEN_REGEL if eigen else ""))
 
 
-LOKAAL = os.environ.get("WERF_BESTANDEN", os.path.expanduser("~/appportal/mijnagents-data/werfbezoek"))
+def lokale_map():
+    """Waar de downloads van de bezoekpagina staan. Pas bij gebruik gelezen, zodat een test (of een tweede omgeving)
+    WERF_BESTANDEN op een tijdelijke map kan zetten en nooit in de echte data-map schrijft."""
+    return os.environ.get("WERF_BESTANDEN") or os.path.expanduser("~/appportal/mijnagents-data/werfbezoek")
+
+
+def _grendel(ag, dossier, volgnr, v, info=None):
+    """Schrijfregels S1-S5 op een verslag-dict, ter plaatse, met de vaste kantoorteksten vrij; de ingrepen in het logboek
+    (met de geschrapte zinnen) en de telling in proef_info voor de bezoekpagina. Voor de proef, herlayout en naar werfapp."""
+    ingrepen = schrijfregels.wacht(v, vast=vb.VAST)
+    if ingrepen:
+        ag.log(f"{dossier}-{volgnr}", "schrijf", "schrijfregels toegepast: " + ", ".join(f"{k} x{n}" for k, n in schrijfregels.samenvatting(ingrepen).items()),
+               {"geschrapt": [z for _, z in ingrepen if z != "opnameverwijzing"][:20]})
+        if info is not None:
+            info["schrijfregels"] = schrijfregels.samenvatting(ingrepen)
+    return ingrepen
 
 
 def voettekst_van(dossier, verslag, bevindingen):
@@ -515,7 +530,7 @@ def _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, fotolijst, voettek
     tekst staan en meldt het logboek het."""
     uit = {}
     try:
-        map_ = os.path.join(LOKAAL, str(rij["id"]))
+        map_ = os.path.join(lokale_map(), str(rij["id"]))
         os.makedirs(map_, exist_ok=True)
         for oud in os.listdir(map_):
             if oud.endswith((".docx", ".md", ".pdf")):
@@ -887,13 +902,11 @@ def proef(ag, dossier, volgnr):
             for p in cat["punten"]:
                 p["tekst_en"] = ""
     beelden = _fotos_verzamelen(teksten, fotos, verslag)
-    ingrepen = schrijfregels.wacht(verslag)   # S1-S5: wat de schrijver toch schreef, komt niet in het concept
-    if ingrepen:
-        ag.log(f"{dossier}-{volgnr}", "schrijf", "schrijfregels toegepast: " + ", ".join(f"{k} x{n}" for k, n in schrijfregels.samenvatting(ingrepen).items()),
-               {"geschrapt": [z for _, z in ingrepen if z != "opnameverwijzing"][:20]})
+    ingrepen = _grendel(ag, dossier, volgnr, verslag)   # S1-S5: wat de schrijver toch schreef, komt niet in het concept
     bevindingen = vb.uit_werfproef(verslag) if verslagtype == vb.SOORT else None
     if bevindingen:
-        docx, md = vb.naar_docx(bevindingen, beelden), vb.naar_markdown(bevindingen)
+        # md met dezelfde fotonummers als Word en de fotobijlage van de PDF: alleen de foto's die er echt in staan
+        docx, md = vb.naar_docx(bevindingen, beelden), vb.naar_markdown(bevindingen, beelden)
         naam = f"{dossier} {vb.TITEL} (concept)"
         pdf_fotos = [(bijschrift, beelden[f]) for f, bijschrift in vb._fotonummers(bevindingen, beelden)[1]]
     else:
@@ -992,11 +1005,14 @@ def werfapp_uit_proef(ag, dossier, volgnr):
         for p in cat["punten"]:
             if p.get("titel") in vaste and str(p.get("nummer", "")).startswith("1."):
                 p["doorlopend"] = True   # de markdown bewaart de vlag niet; de titel en het nummer 1.x wel
+    info = dict(rij.get("proef_info") or {})
+    # een proef van vóór de grendel kan nog opnameverwijzingen of S1-zinnen bevatten: die gaan niet naar de werfapp
+    nieuw = {"verslag_md": sjab.naar_markdown(dict(v, opgemaakt=v.get("opgemaakt") or date.today().isoformat()))} \
+        if _grendel(ag, dossier, volgnr, v, info) else {}
     _, fotos, _ = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(bronkeuze(rij) == "eigen"))
     werf = naar_werfapp(ag, dossier, volgnr, rij, v, fotos, rij["proef_pad"], bronnen=(rij.get("proef_info") or {}).get("bronnen") or [])
-    info = dict(rij.get("proef_info") or {})
     info["werfapp"] = werf
-    _bewaar(rij, dossier, volgnr, proef_info=info)
+    _bewaar(rij, dossier, volgnr, proef_info=info, **nieuw)
     return werf
 
 
@@ -1012,27 +1028,34 @@ def herlayout(ag, dossier, volgnr):
             raise RuntimeError("verslag van bevindingen zonder bewaarde gegevens; opnieuw Maak concept")
         teksten, fotos, _ = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(bronkeuze(rij) == "eigen"))
         bv = info["bevindingen"]
+        for b in (b for o in bv.get("onderdelen", []) for b in o.get("bevindingen", [])):
+            if not b.get("bron") and re.search(r"\d{1,2}:\d{2}", str(b.get("herkomst") or "")):
+                b["bron"], b["herkomst"] = b["herkomst"], sjab.herkomst(b["herkomst"])   # proef van vóór 26-10-2026: S4
+        _grendel(ag, dossier, volgnr, bv, info)   # ook de bewaarde gegevens: wat op de bezoekpagina staat, is gefilterd
         beelden = _fotos_verzamelen(teksten, fotos, vb.als_werfverslag(bv))
-        docx = vb.naar_docx(bv, beelden)
+        docx, md = vb.naar_docx(bv, beelden), vb.naar_markdown(bv, beelden)
         pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{dossier} {vb.TITEL} (concept).docx", docx)
         info.update({"fotos": len(beelden), "docx_kb": len(docx) // 1024, "layout": "HA-master"})
-        info["bestanden"] = _lokaal_bewaren(ag, rij, dossier, volgnr, f"{dossier} {vb.TITEL} (concept)", docx, vb.naar_markdown(bv),
+        info["bestanden"] = _lokaal_bewaren(ag, rij, dossier, volgnr, f"{dossier} {vb.TITEL} (concept)", docx, md,
                                             [(bijschrift, beelden[f]) for f, bijschrift in vb._fotonummers(bv, beelden)[1]], f"{dossier} | {vb.TITEL}")
         ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak verslag van bevindingen: {os.path.basename(pad_docx)} ({len(docx)//1024} kB), zonder Claude")
-        _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info)
+        _bewaar(rij, dossier, volgnr, verslag_md=md, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info)
         return pad_docx
     v = sjab.van_markdown(md)
     v.setdefault("datum", rij["datum"]); v.setdefault("adres", rij.get("adres", "")); v.setdefault("opgemaakt", date.today().isoformat())
     keuzes = rij.get("keuzes") or {}
+    info = rij.get("proef_info") or {}
+    ingrepen = _grendel(ag, dossier, volgnr, v, info)   # een oude proef: de ingrepen in het logboek en op de bezoekpagina
     teksten, fotos, opnames = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(bronkeuze(rij) == "eigen"))
     beelden = _fotos_verzamelen(teksten, fotos, v)
     docx = sjab.naar_docx(v, beelden)
+    md = sjab.naar_markdown(v)   # na naar_docx: met de foto's die niet in Word pasten
     naam = f"{dossier}-{v.get('bezoek') or bezoeknummer(rij, volgnr)[0]} {'verslag plaatsbezoek' if v.get('soort_bezoek') == 'plaatsbezoek' else 'werfverslag'} (concept)"
     pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
-    info = rij.get("proef_info") or {}
     info.update({"fotos": len(beelden), "docx_kb": len(docx) // 1024, "layout": "HA-master"})
-    info["bestanden"] = _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, sjab.naar_markdown(v), verslag_pdf.fotolijst_werfverslag(v, beelden),
+    info["bestanden"] = _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, verslag_pdf.fotolijst_werfverslag(v, beelden),
                                         voettekst_van(dossier, v, None))
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak (huisstijl contractmaster): {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {len(beelden)} foto's), zonder Claude")
-    _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info)
+    # de bewaarde tekst alleen herschrijven als de grendel ingreep (anders blijft de markdown van Mehdi zoals ze was)
+    _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info, **({"verslag_md": md} if ingrepen else {}))
     return pad_docx

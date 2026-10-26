@@ -46,7 +46,10 @@ def gegevens(waarde="Proef BV"):
 
 
 @pytest.fixture
-def runtime(monkeypatch):
+def runtime(monkeypatch, tmp_path):
+    # nooit in de echte data-map (op de VM het productievolume van de bezoekpagina): downloads en home in een tijdelijke map
+    monkeypatch.setenv("WERF_BESTANDEN", str(tmp_path / "werfbezoek"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.syspath_prepend(str(HIER))
     monkeypatch.syspath_prepend(str(HIER / "koppelingen"))
     bord = ModuleType("bord")
@@ -325,6 +328,60 @@ def test_bestaande_proef_naar_de_werfapp_zonder_claude(runtime):
     assert kw["bronnen"] == []   # een bestaande proef: de bronlijst stond niet in de markdown
     info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
     assert info["punten"] == 2 and info["werfapp"]["nummer"] == "9999-2"
+
+
+def test_downloads_naar_werf_bestanden_gelezen_bij_gebruik(runtime, monkeypatch, tmp_path):
+    p = runtime.p
+    later = tmp_path / "later gezet"
+    monkeypatch.setenv("WERF_BESTANDEN", str(later))
+    assert p.lokale_map() == str(later)   # pas bij gebruik gelezen, niet bij de import van de module
+    p.lees_bezoekmap = lambda *args, **kwargs: ([{"naam": "transcript.txt", "pad": "/proef/transcript.txt", "tekst": "eigen"}], [], [])
+    p.vraag_verslag = lambda *args, **kwargs: ({"status_nl": "x", "status_en": "", "aanwezigen": [], "categorieen": [], "raming": [],
+                                                 "acties": [], "volgend": "", "akkoord": []}, SimpleNamespace(input_tokens=1, output_tokens=1))
+    monkeypatch.setattr(p.sjab, "naar_markdown", lambda *args: "# Concept")
+    monkeypatch.setattr(p.sjab, "naar_docx", lambda *args: b"word")
+    p.bronnen.upload = lambda pad, data: pad
+    p.proef(Agent(), "9999", 1)
+    assert {"9999-1 werfverslag (concept).docx", "9999-1 werfverslag (concept).md"} <= set(os.listdir(later / "47"))
+
+
+def _oude_proef(p):
+    """Een proef van vóór de grendel: de bewaarde markdown met een opnameverwijzing, een S1-zin en het opnametijdstip."""
+    schoon = {"dossier": "9999", "bezoek": "2", "soort_bezoek": "werfbezoek", "adres": "Proefstraat 1", "datum": "2026-10-14",
+              "opgemaakt": "2026-10-15", "verslagtype": "werfverslag", "status_nl": "Ruwbouw", "aanwezigen": [], "acties": [], "akkoord": [],
+              "volgend": "", "categorieen": [{"naam": "Ruwbouw", "punten": [{"nummer": "2.1", "titel": "Latei", "tekst_nl": "De latei ontbreekt.",
+                                                                              "vlag": "dringend", "bron": "transcript.txt 00:12:00", "fotos": []}]}]}
+    md = p.sjab.naar_markdown(schoon)
+    assert "Herkomst: V" in md
+    return md.replace("De latei ontbreekt.", "De latei ontbreekt (opname 00:12:00). De architect is eerder niet geweest.")
+
+
+def test_herlayout_van_een_oude_proef_past_de_grendel_toe_en_logt(runtime):
+    p, rij = runtime.p, runtime.rij
+    rij.update(verslag_md=_oude_proef(p), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
+    p.bronnen.upload = lambda pad, data: pad
+    ag = Agent()
+    p.herlayout(ag, "9999", 1)
+    assert any("schrijfregels toegepast" in str(a) for a in ag.logs)
+    laatste = [w[1]["rijen"][0] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert laatste["proef_info"]["schrijfregels"] == {"S4": 1, "S1": 1}
+    assert "De latei ontbreekt." in laatste["verslag_md"]
+    assert "opname" not in laatste["verslag_md"] and "eerder niet geweest" not in laatste["verslag_md"]
+
+
+def test_oude_proef_naar_de_werfapp_gaat_gefilterd(runtime):
+    p, rij = runtime.p, runtime.rij
+    rij.update(verslag_md=_oude_proef(p), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
+    ag = Agent()
+    p.werfapp_uit_proef(ag, "9999", 1)
+    (v, _), = runtime.werf.concepten
+    tekst = v["categorieen"][0]["punten"][0]["tekst_nl"]
+    assert tekst.startswith("De latei ontbreekt.") and "opname" not in tekst and "eerder niet geweest" not in tekst
+    assert any("schrijfregels toegepast" in str(a) for a in ag.logs)
+    laatste = [w[1]["rijen"][0] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert laatste["proef_info"]["schrijfregels"] == {"S4": 1, "S1": 1} and "opname" not in laatste["verslag_md"]
 
 
 def test_eigen_tekst_alleen_de_naamvormen_van_mehdis_eigen_hulpmiddelen(runtime):

@@ -124,12 +124,16 @@ def test_fotofout_word_en_zichtbare_markdown(monkeypatch):
     verslag["categorieen"][0]["punten"][0]["nummer"] = "1.1"
     basis = {"dossier": "9999", "bezoek": "1", "adres": "Teststraat", "datum": "2026-10-21", "opgemaakt": "2026-10-21", **verslag}
     md = S.naar_markdown(basis)
-    assert "Foto's niet geplaatst" in md and "Herkomst: foto.jpg" in md
+    # herkomst in het verslag alleen als V, B of S (schrijfregel S4); de bestandsnaam blijft in het veld bron
+    assert "Foto's niet geplaatst" in md and "Herkomst: V" in md and "Herkomst: foto.jpg" not in md
+    assert basis["categorieen"][0]["punten"][0]["bron"] == "foto.jpg"
     terug = S.van_markdown(md)
-    assert terug["categorieen"][0]["punten"][0]["bron"] == "foto.jpg"
+    assert terug["categorieen"][0]["punten"][0]["bron"] == "V"
     assert terug["fotos_niet_geplaatst"] == verslag["fotos_niet_geplaatst"]
+    # naar_docx werkt op een kopie (grendel), maar de plaatsingsfout komt in het verslag van de aanroeper (V2/V8/V13)
     S.naar_docx(basis, {"foto.jpg": b"geen afbeelding"})
     assert any("plaatsing in Word" in f["reden"] for f in basis["fotos_niet_geplaatst"])
+    assert "plaatsing in Word" in S.naar_markdown(basis)
 
 
 def test_tokenbudget_standaard_uit(monkeypatch):
