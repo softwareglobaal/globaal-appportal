@@ -231,7 +231,21 @@ def test_onbekend_kanaal_nood_zonder_getal():
     teksten = [t for t, _ in r.noden]
     assert teksten == ["Rij met een onbekend kanaal in de gesprekkentabel"], teksten
     assert not any(ch.isdigit() for t in teksten for ch in t), "N10: geen getal in een nood"
-    assert dagen[DAG]["contacten"] == 1
+    assert dagen[DAG]["contacten"] == 2 and dagen[DAG]["kanalen"] == {"overig": 1, "video": 1}
+    assert list(personen(dagen[DAG])) == ["Klant Omega"] and personen(dagen[DAG])["Klant Omega"] == \
+        {"video": {"aantal": 1, "minuten": 5}}, "een onbekend kanaal telt mee, zonder namen (CB16)"
+
+
+def test_prive_dubbel_en_mail_op_dezelfde_dag():
+    """Codex CB14: de naam uit een privé Zoom-dubbel mag niet via een mail van dezelfde dag als persoon verschijnen,
+    ook niet als hij eerder in een gewoon gesprek zat."""
+    rijen = [rij("fathom:50", "Mehdi, Proefgeheim Sigma", 20, datum="2026-09-15"),
+             rij("fathom:51", "Mehdi, Klant Omega", 25),
+             rij("zoom:meeting:f6", "Mehdi, Klant Omega, Proefgeheim Sigma", 25, prive=1, dubbel_van="fathom:51"),
+             rij("mail:<w1@voorbeeld.test>", "Proefgeheim Sigma")]
+    _, gezet, dagen, _ = ronde(rijen=rijen)
+    assert "Sigma" not in json.dumps(gezet) and "Omega" not in json.dumps(gezet)
+    assert dagen[DAG]["overige_mail"] == 1 and dagen[DAG]["prive_per_kanaal"] == {"video": {"aantal": 1, "minuten": 25}}
 
 
 def test_groepschat_alleen_aantal():
@@ -254,11 +268,13 @@ def test_vreemde_met_voornaam_van_collega_is_geen_collega():
 
 def test_terug_lezen_geeft_nood_als_het_bord_anders_is():
     r, gezet, _, _ = ronde(terug=lambda its: [its[0]["uniek"]])
-    assert ("Een klaargezet item staat niet zo op het bord", "claude-code") in r.noden
+    assert ("Een dagitem staat niet zo op het bord of werd opgepakt", "claude-code") in r.noden
     gelezen = []
-    assert C.terug_lezen(gezet[:1], lees=lambda u: gelezen.append(u) or [dict(gezet[0])]) == []
-    assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], inhoud="{}")]) == [gezet[0]["uniek"]]
-    assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], voor="h-architects")]) == [gezet[0]["uniek"]]
+    assert C.terug_lezen(gezet[:1], lees=lambda u: gelezen.append(u) or [dict(gezet[0], status="klaar")]) == []
+    assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], status="opgepakt")]) == [gezet[0]["uniek"]], \
+        "een opgepakt item volgt de bron niet meer (CB04)"
+    assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], inhoud="{}", status="klaar")]) == [gezet[0]["uniek"]]
+    assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], voor="h-architects", status="klaar")]) == [gezet[0]["uniek"]]
     assert gelezen == [gezet[0]["uniek"]]
 
 

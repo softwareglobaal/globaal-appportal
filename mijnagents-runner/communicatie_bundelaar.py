@@ -166,19 +166,24 @@ def bundel(rijen, dagen_lijst, collegas):
                  "contacten": 0, "kanalen": defaultdict(int)} for d in dagen_lijst}
     tellen = []
     for r in rijen:
-        if r.get("dubbel_van"):
-            opgevallen["telt_niet"] += 1   # telregel Z10: een dubbel of buiten:<reden> telt niet
+        dubbel = str(r.get("dubbel_van") or "")
+        if dubbel.startswith("buiten:"):
+            opgevallen["telt_niet"] += 1   # hoort niet bij Mehdi's gesprek: telt niet en maakt niemand bekend of privé
             continue
         k = kanaal(r.get("uniek"))
-        if k is None:
-            opgevallen["onbekend_kanaal"] += 1
-            continue
         prive = prive_groep(r)
-        if k not in ("mail", "groepschat"):
+        if k in ("video", "chat", "ter plaatse"):
+            # Ook de namen van een dubbel: een privé Zoom-dubbel naast een Fathom-rij noemt dezelfde mensen (Codex CB14).
             for n in namen(r.get("personen")):
                 soort, wie = p.persoon(n)
                 if soort == "naam":
                     (ooit_prive if prive else bekend).add(wie.casefold())
+        if dubbel:
+            opgevallen["telt_niet"] += 1   # telregel Z10: een dubbel telt niet, de rij waarnaar hij wijst wel
+            continue
+        if k is None:
+            opgevallen["onbekend_kanaal"] += 1
+            k = "overig"   # telt mee als aantal, zonder namen: wie weet wat dit kanaal in personen zet (Codex CB16)
         if (r.get("datum") or "") in dagen:
             tellen.append((r, k, prive))
     # Wie ooit in een privégesprek zat, is voor mail geen bekende, ook niet als hij ook in een gewoon gesprek zat: anders
@@ -193,8 +198,8 @@ def bundel(rijen, dagen_lijst, collegas):
         if prive:
             _tel(d["prive_per_kanaal"], k, minuten)   # alleen een aantal: geen naam, ook niet van de andere deelnemers
             continue
-        if k == "groepschat":
-            continue   # de naam is die van het kanaal, geen mens: alleen het aantal in kanalen
+        if k in ("groepschat", "overig"):
+            continue   # de naam is die van een kanaal of onbekend van soort: alleen het aantal in kanalen
         gezien = set()
         for n in namen(r.get("personen")):
             soort, wie = p.persoon(n)
@@ -276,7 +281,10 @@ def terug_lezen(gezet, lees=None):
     fout = []
     for it in ag.maskeer(gezet):
         terug = lees(it["uniek"])
-        if not any(all(t.get(k) == it[k] for k in ("voor", "soort", "sleutel", "titel", "inhoud")) for t in terug):
+        # Ook de status: een opgepakt item werkt het bord niet meer bij, dus een latere privécorrectie zou er niet in
+        # komen (Codex CB04, controle 3). Zolang niemand het oppakt, staat het op klaar.
+        if not any(all(t.get(k) == it[k] for k in ("voor", "soort", "sleutel", "titel", "inhoud")) and t.get("status") == "klaar"
+                   for t in terug):
             fout.append(it["uniek"])
     return fout
 
@@ -313,7 +321,7 @@ def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=
     te_zetten = items(dagen)
     uit = (zet or ag.klaarzet)(te_zetten)
     if (terug or terug_lezen)(te_zetten):
-        r.nood("Een klaargezet item staat niet zo op het bord", wie="claude-code")
+        r.nood("Een dagitem staat niet zo op het bord of werd opgepakt", wie="claude-code")
     contacten = sum(d["contacten"] for d in dagen.values())
     prive = sum(c["aantal"] for d in dagen.values() for c in d["prive_per_kanaal"].values())
     r.detail = (f"{eerste} tot {laatste}: {sum(1 for d in dagen.values() if d['contacten'])} dagen met contact, {contacten} contacten waarvan {prive} privé, "

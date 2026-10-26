@@ -28,8 +28,9 @@ Regisseur, RZ3-01). Fathom zonder Zoom-sessie: 581 van 693.
 
 ## Fase 3. Keuzes van Mehdi (26-10-2026, in de chat)
 
-1. Mail per persoon alleen voor bekende mensen: een collega uit kern (`organisatie.herken`) of iemand die in het
-   venster ook in een Zoom-, Fathom- of Plaudrij voorkomt. De rest is een aantal "overige mail".
+1. Mail per persoon alleen voor bekende mensen: een collega uit kern of iemand die ook in een Zoom-, Fathom- of
+   Plaudrij voorkomt. Mehdi's keuze noemde geen termijn; de techniek neemt de laatste negentig dagen (`BEKEND_DAGEN`),
+   anders blijft een vaste klant die deze week alleen mailde overige mail. Een andere termijn is Mehdi's keuze. De rest is een aantal "overige mail".
 2. Uitvoer: een klaarzet-item per dag voor Mehdi (soort `communicatie`). De Levenscoach (`voor=mehdi`) en De
    Dagbundelaar lezen het vanzelf mee. Werkverslag met alleen aantallen.
 3. Kanaal: Zoom-meeting en Fathom zijn `video`, Zoom-chat is `chat`, mail is `mail`, Plaud is `ter plaatse`. Een
@@ -109,3 +110,12 @@ Bewust open: wie begon, toon, weekpatronen (werkwijze v1 punt 2). Daar is geen m
 | CB11 correctie na zeven dagen | hoog | elke dag waarvoor ik al een item zette (`SQL_EERDER` op klaarzet), wordt elke ronde mee herzien; test `test_oudere_dag_met_item_wordt_herzien` |
 | CB12 oude inhoud in klaarzet_revisie | middel | geen revisie meer: niemand pakt het item op, dus het bord werkt het bij zonder kopie; test bewaakt dat De Levenscoach niets oppakt |
 | CB13 cron en bordtekst | middel | live stap: werkwijze v2 op het bord, teruggelezen, eerste ronde en `controle_agenten.py`; cron na Mehdi's ja |
+
+## Verwerking controle 3 (26-10-2026)
+
+| punt | ernst | verwerking |
+|---|---|---|
+| CB14 privé dubbel en mail | hoog | namen van dubbels (niet buiten:) tellen mee voor bekend en ooit privé; test `test_prive_dubbel_en_mail_op_dezelfde_dag` |
+| CB15 termijn voor bekend | middel | geen zevendaagse keuze van Mehdi: zijn optie noemde geen termijn. Negentig dagen staat nu uitdrukkelijk bij keuze 1 en in de werkwijze; een andere termijn is zijn beslissing |
+| CB16 onbekend kanaal | middel | telt als kanaal `overig`, zonder namen, met nood |
+| CB04 opgepakt | middel | de teruglezing eist status klaar; een opgepakt dagitem geeft een nood. Niemand pakt het vandaag op (tests op De Dagbundelaar en De Levenscoach) |
