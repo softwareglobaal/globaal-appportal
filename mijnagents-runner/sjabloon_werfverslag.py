@@ -212,30 +212,43 @@ def herkomst_omzetten(md):
 
 
 def grendel_in_md(md):
-    """De schrijfregels regel per regel op een bewaarde markdown, zonder de omweg via van_markdown (die houdt van een
-    status of een volgend werfbezoek over meer regels alleen de eerste regel over). Koppen, tabelscheidingen en de regel
-    Herkomst blijven onaangeroerd; in een tabel per cel; de vaste kantoorteksten zijn vrij."""
+    """De schrijfregels op een bewaarde markdown, zonder de omweg via van_markdown (die houdt van een status of een volgend
+    werfbezoek over meer regels alleen de eerste regel over). Per blok aaneensluitende tekstregels, zodat een opnamezin over
+    twee regels gezien wordt; koppen, puntkoppen (alleen de titel wordt getoetst), tabelscheidingen en de regel Herkomst
+    blijven staan; een tabel per cel; de vaste kantoorteksten zijn vrij."""
     regels = (md or "").split("\n")
-    stukken, plaats = [], []
-    for i, r in enumerate(regels):
+    uit, blok = [], []
+
+    def toets(tekst):
+        stuk = [tekst]
+        schrijfregels.wacht(stuk, vast=VASTE_TEKSTEN)
+        return stuk[0]
+
+    def sluit():
+        if blok:
+            uit.extend(toets("\n".join(blok)).split("\n"))
+            blok.clear()
+
+    for r in regels:
         s = r.strip()
-        if not s or s.startswith("#") or s.startswith("Herkomst: ") or re.fullmatch(r"\|?[\s:|-]+\|?", s):
-            continue
-        if s.startswith("|"):
+        kop = re.match(r"(\*\*\S+ )(.*?)(\*\* - .*)$", s)
+        if kop:
+            sluit()
+            uit.append(kop.group(1) + toets(kop.group(2)) + kop.group(3))
+        elif not s or s.startswith("#") or s.startswith("Herkomst: ") or re.fullmatch(r"\|?[\s:|-]+\|?", s):
+            sluit()
+            uit.append(r)
+        elif s.startswith("|"):
+            sluit()
             cellen = r.split("|")
             for j in range(1, len(cellen) - 1):
-                stukken.append(cellen[j]); plaats.append((i, j))
+                nieuw = toets(cellen[j]).strip()
+                cellen[j] = " " + nieuw + " " if nieuw else " "
+            uit.append("|".join(cellen))
         else:
-            stukken.append(r); plaats.append((i, None))
-    schrijfregels.wacht(stukken, vast=VASTE_TEKSTEN)
-    for (i, j), nieuw in zip(plaats, stukken):
-        if j is None:
-            regels[i] = nieuw
-        else:
-            cellen = regels[i].split("|")
-            cellen[j] = " " + nieuw.strip() + " " if nieuw.strip() else " "
-            regels[i] = "|".join(cellen)
-    return "\n".join(regels)
+            blok.append(r)
+    sluit()
+    return "\n".join(uit)
 
 
 def toont_ruwe_bron(md):

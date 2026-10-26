@@ -441,5 +441,28 @@ check("grendel_in_md: alle regels blijven, opname weg, vaste tekst en verborgen 
       and "| Aannemer | " + S.MARKERING.format(regel="S5") + " | 21-10 |" in uit and "Sleutel bij de buren." in uit
       and uit.count("\n") == mdg.count("\n"), uit)
 
+# Zestiende review 26-10-2026
+t16, _ = S.toepassen("De dorpel ligt 3 cm te laag en de architect sprak zijn vaststellingen ter plaatse in.")
+check("ingesproken-zin met een vaststelling ervoor: zichtbaar gemarkeerd, niet stil weg", t16 == S.MARKERING.format(regel="S4"), t16)
+for zin, regel in [("The contractor is liable for the moisture damage.", "S5"), ("The contractor is in default.", "S5"),
+                   ("According to the recording the sill is 3 cm too low.", "S4"), ("The architect has not visited the site before.", "S1"),
+                   ("This is against the rules of the Order of Architects.", "S2"), ("The previous architect never checked the works.", "S3")]:
+    check(f"Engels {regel}: '{zin[:40]}'", any(r == regel for r, _ in S.controleer(zin)), S.controleer(zin))
+t16, _ = S.toepassen("The sill is too low (recording 00:12:00).")
+check("Engels: opnametijdstip weg, vaststelling blijft", t16 == "The sill is too low.", t16)
+check("Engels: gewone tekst blijft", not S.controleer("The ten-year liability insurance must be in the file. The gutter leaks."))
+twee = dict(w, categorieen=[{"naam": "Vocht", "punten": [{"nummer": "3.1", "titel": "Vocht", "datum": "2026-10-01", "fotos": [],
+          "tekst_nl": "De aannemer is aansprakelijk voor de vochtschade (opname 00:12:00).",
+          "tekst_en": "The contractor is liable for the moisture damage (recording 00:12:00)."}]}])
+md2 = sj.naar_markdown(twee)
+check("tweetalig werfverslag: ook het Engels gaat door de grendel", "liable" not in md2 and "00:12" not in md2.split("<!--")[0], md2[-300:])
+oud_md = ("## Waarnemingen\n### Dak\n**2.1 Latei** - 14 oktober 2026\n\nDe latei ontbreekt.\n\n"
+          "**2.2 Aannemer in gebreke voor de goot** - 14 oktober 2026 - Belangrijk\n\nDe architect sprak zijn vaststellingen\nter plaatse in.\nDe goot lekt.")
+uit = sj.grendel_in_md(oud_md)
+punten = sj.van_markdown("# x\n\n" + uit)["categorieen"][0]["punten"] if "### Dak" in uit else []
+check("grendel_in_md: een puntkop blijft een puntkop (alleen de titel gemarkeerd), opnamezin over twee regels weg",
+      "**2.2 " + S.MARKERING.format(regel="S5") + "** - 14 oktober 2026 - Belangrijk" in uit and "sprak" not in uit and "ter plaatse in" not in uit
+      and "De goot lekt." in uit and len(punten) == 2, (uit, len(punten)))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

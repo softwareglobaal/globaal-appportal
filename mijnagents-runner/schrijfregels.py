@@ -45,6 +45,13 @@ VERBODEN = [
     ("S1", re.compile(r"\b(hoogstens|maximaal|slechts|maar)\s+(één|een|1)\s+(controle)?bezoek", re.I)),
     ("S3", re.compile(r"\b(vorige|eerdere|andere|collega)[- ]architect\b[^.]{0,80}\b(niet|nooit|slecht|nalatig|fout)", re.I)),
     ("S5", re.compile(r"\b(aansprakelijk|wanprestatie|contractbreuk|contractuele\s+fout|in\s+gebreke|ingebrekestelling\w*|schuldig)\b", re.I)),
+    # dezelfde regels in het Engels, voor de Engelse tekst van een tweetalig verslag (nl+en)
+    ("S2", re.compile(r"\b(?:order|chamber)\s+of\s+architects\b", re.I)),
+    ("S3", re.compile(r"\b(?:previous|former|other)\s+architect\b[^.]{0,80}\b(?:not|never|poorly|negligent|failed)\b", re.I)),
+    ("S1", re.compile(r"\b(?:no|not)\s+(?:previous|prior|earlier)\s+(?:site\s+)?(?:visits?|inspections?)\b", re.I)),
+    ("S1", re.compile(r"\b(?:architect|office|h-architects)\b[^.]{0,60}\b(?:not|never)\s+(?:been|visited|present|attended|checked|inspected|supervised)\b", re.I)),
+    ("S1", re.compile(r"\b(?:only|at\s+most|a\s+maximum\s+of)\s+(?:one|1)\s+(?:site\s+)?visit\b", re.I)),
+    ("S5", re.compile(r"\b(?:liable|in\s+default|breach\s+of\s+contract|at\s+fault|negligen(?:t|ce)|culpable)\b", re.I)),
 ]
 
 VERBODEN_PROFIEL = {
@@ -65,6 +72,9 @@ OPNAME = [
     re.compile(r"\s*\((?:opname|transcript|audio|geluidsopname)[^)]*\d{1,2}:\d{2}[^)]*\)", re.I),
     re.compile(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|transcript|audio)\s+(?:van\s+)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?", re.I),
     re.compile(r"\s*\((?:opname|transcript)\)", re.I),
+    re.compile(r"\s*\((?:recording|audio)[^)]*\d{1,2}:\d{2}[^)]*\)", re.I),
+    re.compile(r",?\s*(?:see\s+)?(?:the\s+)?recording\s+(?:at\s+)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|to)\s*\d{1,2}:\d{2}(?::\d{2})?)?", re.I),
+    re.compile(r"\s*\(recording\)", re.I),
 ]
 # Een zin loopt tot een punt, uitroep- of vraagteken; de punt in 4.500 of 1.250.000 (tussen twee cijfers) knipt niet.
 # Zo ook de punt van een afkorting midden in een zin ("€ 3.200 excl. btw").
@@ -85,18 +95,26 @@ _Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
 #   vaststelling, dan wordt hij zichtbaar gemarkeerd.
 # - "Volgens de opname is de dorpel 3 cm te laag." draagt een vaststelling: zichtbaar gemarkeerd. "De opname van de
 #   bestaande toestand" (of van de plaatsgesteldheid, door een expert) is een opmeting, geen geluidsopname.
-SPRAK = re.compile(r"\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b", re.I)
-_OVER_OPNAME = re.compile(r"\b(?:opname|geluidsopname|transcript|tijdstip|tijdstippen|haakjes)\b", re.I)
+SPRAK = re.compile(r"\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b"
+                   r"|\b(?:recorded|dictated)\s+(?:his|her|the)\s+(?:findings|observations)\b", re.I)
+# "De architect ... sprak zijn vaststellingen in" gaat over de architect zelf; staat er iets anders vóór (een vaststelling:
+# "De dorpel ligt te laag en ..."), dan valt de zin niet stil weg maar wordt hij gemarkeerd
+_OVER_ARCHITECT = re.compile(r"\s*(?:[-*•]\s+|\d+[.)]\s+)?(?:de\s+|the\s+)?(?:architect|mehdi|ik|wij|we|i)\b", re.I)
+_OVER_OPNAME = re.compile(r"\b(?:opname|geluidsopname|transcript|tijdstip|tijdstippen|haakjes|recording|timestamps?|brackets)\b", re.I)
 _TIJD = re.compile(r"\d{1,2}[:.u]\d{2}(?:[:.]\d{2})?", re.I)
-_VULWOORD = re.compile(r"\b(?:om|tussen|van|vanaf|tot|en|rond|omstreeks|ter|plaatse|de|het|opname|geluidsopname)\b", re.I)
+_VULWOORD = re.compile(r"\b(?:om|tussen|van|vanaf|tot|en|rond|omstreeks|ter|plaatse|de|het|opname|geluidsopname|"
+                       r"at|between|and|from|to|on|site|the|recording)\b", re.I)
 _OPMETING = (r"(?!\s+(?:(?:van|door)\s+)?(?:de\s+|het\s+|een\s+)?(?:bestaande\s+(?:toestand|situatie)|plaatsgesteldheid|"
              r"plaatsbeschrijving|aanpalende|landmeter|terrein|opmeting|\w*expert|\w*verslaggever)\b)")
 OPNAME_ZINNEN = [
     re.compile(_T + r"*\b(?:een\s+)?tijdstip\s+tussen\s+haakjes\b" + _T + r"*\.?", re.I),
     re.compile(_T + r"*\bverwijst\s+naar\s+(?:die|de)\s+opname\b" + _OPMETING + _T + r"*\.?", re.I),
+    re.compile(_T + r"*\b(?:a\s+)?time(?:stamp)?s?\s+(?:in|between)\s+brackets\b" + _T + r"*\.?", re.I),
+    re.compile(_T + r"*\brefers?\s+to\s+the\s+recording\b" + _T + r"*\.?", re.I),
 ]
 # een geluidsopname is altijd een opname, nooit een opmeting: de uitzondering hangt alleen achter "opname"
-OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname\b" + _OPMETING + r"|geluidsopname\b)", re.I)
+OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname\b" + _OPMETING + r"|geluidsopname\b)"
+                            r"|\b(?:according\s+to|from)\s+the\s+(?:audio\s+)?recording\b", re.I)
 
 # Een markering is een eigen "zin": zo versmelt ze bij een tweede doorgang niet met de zin erna (idempotent).
 _MARK = re.compile(re.escape(MARKERING).replace(r"\{regel\}", r"S\d") + r"\s*")
@@ -166,7 +184,8 @@ def _opname_weg(tekst):
         if m:
             ingrepen.append(("S4", kern))
             rest = _VULWOORD.sub("", _TIJD.sub("", kern[m.end():]))
-            if _woorden(rest) or re.search(r"[;:](?!\d)", kern[:m.start()]):
+            voor = kern[:m.start()]
+            if _woorden(rest) or re.search(r"[;:](?!\d)", voor) or (_woorden(voor) and not _OVER_ARCHITECT.match(voor)):
                 delen.append(kop + markering + staart)
             else:
                 weg(staart)
