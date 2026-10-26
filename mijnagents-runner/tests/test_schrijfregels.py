@@ -499,5 +499,12 @@ for a in range(1, len(woorden)):
             lek.append(tekst)
 check("elke plaatsing van twee harde regelovergangen in de ingesproken-zin wordt gevangen", not lek, lek[:3])
 
+# Vierentwintigste review 26-10-2026: een opnameverwijzing na een harde regelovergang midden in de zin
+for tekst, verwacht in [("Diagonale barst van 0,3 mm boven het raam, zie\nopname 00:12:05.", "Diagonale barst van 0,3 mm boven het raam."),
+                        ("Barst in het kader, zie\nopname 00:12:05. De goot lekt.", "Barst in het kader. De goot lekt."),
+                        ("Scheur 2 mm breed,\nopname 00:11:49 tot 00:12:10.", "Scheur 2 mm breed.")]:
+    t24, _ = S.toepassen(tekst, "aankoopkeuring")
+    check(f"opnameverwijzing na een regelovergang: '{tekst[:30]}'", t24.replace("\n", " ").replace("  ", " ") == verwacht, repr(t24))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

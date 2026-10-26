@@ -70,8 +70,10 @@ VERBODEN_PROFIEL = {
 # "(transcript 12:30)", "volgens de opname", "sprak zijn vaststellingen in".
 # "Zie opname 00:12:05." als eigen zin: weg samen met de punt, zodat er geen ".." of losse punt overblijft
 _TIJDSTIP = r"\d{1,2}:\d{2}(?::\d{2})?"
-OPNAME_LOS = re.compile(r"(?:^|(?<=[.!?]))[ \t]*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?(?:opname|transcript|audio|recording)\s+(?:van\s+|at\s+)?"
-                        + _TIJDSTIP + r"(?:\s*(?:-|–|tot|to)\s*" + _TIJDSTIP + r")?\s*[.!?](?=\s|$)", re.I | re.M)
+# alleen aan een echt zinsbegin (begin van de tekst, of na . ! ?), niet aan elk regelbegin: 'raam, zie\nopname 00:12.'
+# is het einde van een zin (24e review)
+OPNAME_LOS = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?(?:opname|transcript|audio|recording)\s+(?:van\s+|at\s+)?"
+                        + _TIJDSTIP + r"(?:\s*(?:-|–|tot|to)\s*" + _TIJDSTIP + r")?\s*[.!?](?=\s|$)", re.I)
 OPNAME = [
     re.compile(r"\s*\((?:opname|transcript|audio|geluidsopname)[^)]*\d{1,2}:\d{2}[^)]*\)", re.I),
     re.compile(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|transcript|audio)\s+(?:van\s+)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?", re.I),
