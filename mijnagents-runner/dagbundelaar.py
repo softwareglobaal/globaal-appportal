@@ -531,11 +531,19 @@ def lees_locatie(dag, afspraken):
         reden = reden or f"dagboek {stand or 'zonder stand'}"
     except Exception as e:  # noqa: BLE001
         reden = type(e).__name__
+    # Dezelfde toetsregel als De Locatiewacht, met dezelfde projectnummers: faalde maak() voor de index geladen was, dan
+    # las een projectnummer als huisnummer en werd een intern overleg 'niet gelezen' (Codex, 26-10-2026). De index van
+    # maak() als die er is; de tegel alleen opnieuw vragen als maak() het nog niet probeerde, nooit na een mislukking.
+    try:
+        per_nummer = LW.INDEX_POGING["per_nummer"]
+        if per_nummer is None and not LW.INDEX_POGING["mislukt"]:
+            per_nummer = LW.projectindex()[1]
+    except Exception:  # noqa: BLE001  de tegel zelf onbereikbaar: dan zonder index, liever 'onbekend' dan niets
+        per_nummer = None
     per_id = {}
     for a in afspraken:
         info = W.lees_titel(a.get("titel") or "")
-        loc = (a.get("locatie") or "").strip()
-        if info["buiten"] or info["soort"] in W.BUITEN_SOORTEN or (loc and not LW.online(loc)):
+        if LW.te_toetsen(a, info, per_nummer):
             per_id[a.get("id")] = {"uitkomst": "onbekend", "tekst": f"locatie niet gelezen ({reden})"}
     return per_id, None, "", reden
 
