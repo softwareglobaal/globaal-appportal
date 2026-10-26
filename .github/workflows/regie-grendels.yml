@@ -46,6 +46,7 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_zoom_account.py
       - run: python3 mijnagents-runner/tests/test_uitvoerder_signaal.py
       - run: python3 mijnagents-runner/tests/test_dagbundelaar.py
+      - run: python3 mijnagents-runner/tests/test_communicatie_bundelaar.py
       - run: python3 mijnagents-runner/tests/test_dagvaststelling.py
       - run: python3 mijnagents-runner/tests/test_dagbundelaar_vaststelling.py
       - run: python3 mijnagents-runner/tests/test_keten.py
