@@ -284,5 +284,36 @@ for tekst, verwacht in [("De architect sprak zijn vaststellingen in tussen 00:00
     check(f"S4 ingesproken-zin zonder brokstukken: '{tekst[38:70]}'", t5 == verwacht and not S.controleer(t5), t5)
 check("S5 ook het meervoud ingebrekestellingen", any(r == "S5" for r, _ in S.controleer("De bouwheer stuurde twee ingebrekestellingen naar de aannemer.")))
 
+# Zesde review 26-10-2026: S4 per zin; een markering of een buurzin wordt nooit aangetast
+for tekst, verwacht in [
+        ("Mehdi Chegini bezocht het goed op 3 juni 2026 en sprak zijn vaststellingen ter plaatse in tijdens een rondgang van 45 minuten. "
+         "Een tijdstip tussen haakjes verwijst naar de opname. Het onderzoek was visueel.", S.MARKERING.format(regel="S4") + " Het onderzoek was visueel."),
+        ("Noot: een tijdstip tussen haakjes verwijst naar de opname.", ""),
+        ("De goot lekt. Een tijdstip tussen haakjes verwijst naar de opname; de dorpel ligt te laag.", "De goot lekt. De dorpel ligt te laag."),
+        ("Wie schildert de plafonds? De architect sprak zijn vaststellingen ter plaatse in.", "Wie schildert de plafonds?"),
+        ("De goot lekt aan de achtergevel! Een tijdstip tussen haakjes verwijst naar de opname.", "De goot lekt aan de achtergevel!"),
+        ("Volgens de opname van de plaatsgesteldheid vóór de werken was de barst er al.", "Volgens de opname van de plaatsgesteldheid vóór de werken was de barst er al."),
+        ("Blijkens de opname door de verzekeringsexpert is de schade beperkt.", "Blijkens de opname door de verzekeringsexpert is de schade beperkt."),
+        ("Er blijft water staan (opname 00:22:30-00:23:16).\nRegel twee blijft.", "Er blijft water staan.\nRegel twee blijft.")]:
+    t6, _ = S.toepassen(tekst)
+    check(f"S4 per zin: '{tekst[:40]}'", t6 == verwacht, t6)
+    check(f"S4 geen gebroken markering: '{tekst[:30]}'", t6.count("(geschrapt:") == t6.count("kantoor)"), t6)
+
+# Mengtest: elke combinatie van drie lastige zinnen geeft hele markeringen, geen tijdstip en geen brokstuk van een tijdstip
+import itertools as _it  # noqa: E402
+POOL = ["De goot lekt.", "Wie schildert de plafonds?", "De dorpel ligt 2 cm te laag!", "Peeters BV.", "Het kost € 4.500 excl. btw.",
+        "De architect sprak zijn vaststellingen in om 10:15.", "De architect sprak zijn vaststellingen in, de kil is open.",
+        "Een tijdstip tussen haakjes verwijst naar de opname.", "Noot: dit verwijst naar de opname.",
+        "Volgens de opname is de muur nat.", "Er blijft water staan (opname 00:22:30).", "De opname van de bestaande toestand klopt.",
+        "De architect is eerder niet geweest.", "De aannemer is aansprakelijk."]
+kapot = []
+for combi in _it.product(POOL, repeat=3):
+    tekst = " ".join(combi)
+    uit, _ = S.toepassen(tekst)
+    if (uit.count("(geschrapt:") != uit.count("kantoor)") or re.search(r"\d{1,2}:\d{2}", uit) or re.search(r"(?:^|\s)\d{1,2}\.\s", uit)
+            or any(r == "S4" for r, _ in S.controleer(uit))):
+        kapot.append((tekst, uit))
+check(f"mengtest: {len(POOL) ** 3} combinaties zonder gebroken markering of tijdstip", not kapot, kapot[:3])
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

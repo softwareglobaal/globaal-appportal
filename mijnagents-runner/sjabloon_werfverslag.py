@@ -198,6 +198,19 @@ def _bron_uit(regel):
     return (m.group(2) if m else regel).strip()
 
 
+def herkomst_omzetten(md):
+    """Zet in een bewaarde markdown elke regel 'Herkomst: <ruwe bron>' om naar V/B/S met de bron erachter verborgen, en
+    laat de rest letterlijk staan (van_markdown en naar_markdown zijn niet volledig verliesvrij: meerregelige velden)."""
+    def regel(r):
+        if not r.startswith("Herkomst: "):
+            return r
+        zicht = r[len("Herkomst: "):].strip()
+        if "<!--" in zicht or zicht == herkomst(zicht):
+            return r
+        return "Herkomst: " + herkomst(zicht) + _bron_noot(zicht)
+    return "\n".join(regel(r) for r in (md or "").split("\n"))
+
+
 def toont_ruwe_bron(md):
     """Een oude proef toont nog 'Herkomst: transcript.txt 00:12:00' (van vóór de V/B/S-weergave): Herlayout herschrijft
     dan de bewaarde markdown, zodat de bezoekpagina hetzelfde toont als Word en de PDF."""

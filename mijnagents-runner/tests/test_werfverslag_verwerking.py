@@ -394,6 +394,24 @@ def test_herlayout_bevindingen_zet_een_ruwe_herkomst_om_maar_laat_na_te_kijken_s
     assert "12m30s" not in laatste["verslag_md"] and "(na te kijken)" in laatste["verslag_md"]
 
 
+def test_herlayout_zet_alleen_de_herkomstregels_om_en_laat_de_rest_letterlijk(runtime):
+    """Zesde review 26-10-2026: van_markdown is niet verliesvrij (tweede regels, tabelcellen); een proef zonder verboden
+    tekst maar met 'Herkomst: transcript.txt 00:12:00' krijgt alleen die regels omgezet."""
+    p, rij = runtime.p, runtime.rij
+    schoon = {"dossier": "9999", "bezoek": "2", "soort_bezoek": "werfbezoek", "adres": "Proefstraat 1", "datum": "2026-10-14",
+              "opgemaakt": "2026-10-15", "verslagtype": "werfverslag", "status_nl": "Ruwbouw loopt.", "aanwezigen": [], "acties": [],
+              "akkoord": [], "volgend": "", "categorieen": [{"naam": "Ruwbouw", "punten": [{"nummer": "2.1", "titel": "Latei",
+              "tekst_nl": "De latei ontbreekt.", "vlag": "dringend", "bron": "V", "fotos": []}]}]}
+    oud = p.sjab.naar_markdown(schoon).replace("Herkomst: V", "Herkomst: transcript.txt 00:12:00").replace(
+        "Ruwbouw loopt.", "Ruwbouw loopt.\nDe dakwerken starten volgende week.")
+    rij.update(verslag_md=oud, proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
+    p.bronnen.upload = lambda pad, data: pad
+    p.herlayout(Agent(), "9999", 1)
+    laatste = [w[1]["rijen"][0] for w in runtime.writes if "verslag_md" in w[1]["rijen"][0]][-1]["verslag_md"]
+    assert laatste == oud.replace("Herkomst: transcript.txt 00:12:00", "Herkomst: V <!-- bron: transcript.txt 00:12:00 -->")
+
+
 def test_oude_proef_naar_de_werfapp_gaat_gefilterd(runtime):
     p, rij = runtime.p, runtime.rij
     rij.update(verslag_md=_oude_proef(p), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})

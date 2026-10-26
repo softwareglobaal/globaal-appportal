@@ -74,58 +74,66 @@ _T = r"(?:[^.;:\n]|(?<=\d)[.:](?=\d)|" + _AFK + ")"
 _Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
 # Zinnen die alleen over de opname gaan: ze vallen weg (S4). Wat na "sprak zijn vaststellingen in:" volgt, is de
 # vaststelling zelf en blijft staan. De geschrapte zin staat in de ingrepen, dus in het logboek.
-# "De architect sprak zijn vaststellingen in (om 10:15)." valt weg: de zin zegt alleen dat er ingesproken werd. Staat er
-# meer in de zin (een vaststelling, een puntkomma ervoor), dan wordt hij zichtbaar gemarkeerd (S4); de volledige zin staat
-# in de ingrepen, dus in het logboek. Een zin stopt aan een punt of een nieuwe regel, niet aan de punt of dubbelpunt van
-# een tijdstip.
-_ZT = r"(?:[^.\n]|(?<=\d)[.:](?=\d))"
-SPRAK = re.compile(r"(?P<voor>" + _ZT + r"*?)\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b"
-                   r"(?P<rest>" + _ZT + r"*)\.?", re.I)
+# S4 per zin (een zin stopt aan . ! ? of een nieuwe regel, niet aan de punt van 4.500 of de dubbelpunt van 10:15), zodat
+# een patroon nooit in een buurzin of in een markering bijt. Elke weggevallen of gemarkeerde zin staat in het logboek.
+# - "De architect sprak zijn vaststellingen in (om 10:15)." zegt alleen dat er ingesproken werd: valt weg. Staat er meer
+#   in de zin, dan wordt hij zichtbaar gemarkeerd.
+# - "Een tijdstip tussen haakjes verwijst naar de opname." valt weg; een vaststelling in dezelfde zin vóór een puntkomma
+#   of dubbelpunt blijft ("De dorpel is 3 cm te laag; het tijdstip ... opname." wordt "De dorpel is 3 cm te laag.").
+# - "Volgens de opname is de dorpel 3 cm te laag." draagt een vaststelling: zichtbaar gemarkeerd. "De opname van de
+#   bestaande toestand" (of van de plaatsgesteldheid, door een expert) is een opmeting, geen geluidsopname.
+SPRAK = re.compile(r"\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b", re.I)
 _TIJD = re.compile(r"\d{1,2}[:.u]\d{2}(?:[:.]\d{2})?", re.I)
 _VULWOORD = re.compile(r"\b(?:om|tussen|van|vanaf|tot|en|rond|omstreeks|ter|plaatse|de|het|opname|geluidsopname)\b", re.I)
 OPNAME_ZINNEN = [
     re.compile(_T + r"*\b(?:een\s+)?tijdstip\s+tussen\s+haakjes\b" + _T + r"*\.?", re.I),
     re.compile(_T + r"*\bverwijst\s+naar\s+(?:die|de)\s+opname\b" + _T + r"*\.?", re.I),
 ]
-# "Volgens de opname is de dorpel 3 cm te laag." draagt een vaststelling: de zin wordt zichtbaar vervangen door de
-# markering S4, en staat volledig in het logboek. "De opname van de bestaande toestand" is een opmeting, geen opname.
-OPNAME_VOLGENS = re.compile(_Z + r"*?\b(?:volgens|blijkens|uit)\s+de\s+(?:opname|geluidsopname)\b(?!\s+(?:van\s+)?(?:de\s+|het\s+)?(?:bestaande\s+(?:toestand|situatie)|landmeter|terrein|opmeting)\b)"
-                            + _Z + r"*[.!?]?", re.I)
+OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname|geluidsopname)\b(?!\s+(?:(?:van|door)\s+)?(?:de\s+|het\s+|een\s+)?"
+                            r"(?:bestaande\s+(?:toestand|situatie)|plaatsgesteldheid|plaatsbeschrijving|aanpalende|landmeter|"
+                            r"terrein|opmeting|\w*expert)\b)", re.I)
 
 _ZIN = re.compile(_Z + r"+[.!?]?\s*")
 
 
+def _woorden(tekst):
+    return re.findall(r"[^\W\d_]{2,}", tekst)
+
+
 def _opname_weg(tekst):
-    """Haalt opnameverwijzingen weg: (tekst, [(S4, geschrapte zin of 'opnameverwijzing')])."""
+    """Haalt opnameverwijzingen weg, per zin: (tekst, [(S4, geschrapte zin of 'opnameverwijzing')])."""
     ingrepen = []
-
-    def zin_weg(m):
-        ingrepen.append(("S4", m.group(0).strip()))
-        return ""
-
-    def zin_gemarkeerd(m):
-        ingrepen.append(("S4", m.group(0).strip()))
-        voor = m.group(0)[:len(m.group(0)) - len(m.group(0).lstrip())]
-        return voor + MARKERING.format(regel="S4")
-
-    def sprak(m):
-        zin = m.group(0)
-        ingrepen.append(("S4", zin.strip()))
-        rest = re.sub(r"\W", "", _VULWOORD.sub("", _TIJD.sub("", m.group("rest"))))
-        if not rest and not re.search(r"[;:](?!\d)", m.group("voor")):
-            return ""
-        return zin[:len(zin) - len(zin.lstrip())] + MARKERING.format(regel="S4")
-
-    tekst = SPRAK.sub(sprak, tekst)
-    for p in OPNAME_ZINNEN:
-        tekst = p.sub(zin_weg, tekst)
-    tekst = OPNAME_VOLGENS.sub(zin_gemarkeerd, tekst)
+    delen = []
+    markering = MARKERING.format(regel="S4")
+    for zin in _ZIN.findall(tekst):
+        kern = zin.strip()
+        kop, staart = zin[:len(zin) - len(zin.lstrip())], zin[len(zin.rstrip()):]
+        m = SPRAK.search(kern)
+        if m:
+            ingrepen.append(("S4", kern))
+            rest = _VULWOORD.sub("", _TIJD.sub("", kern[m.end():]))
+            if _woorden(rest) or re.search(r"[;:](?!\d)", kern[:m.start()]):
+                delen.append(kop + markering + staart)
+            continue
+        m = next((m for p in OPNAME_ZINNEN for m in [p.search(kern)] if m), None)
+        if m:
+            ingrepen.append(("S4", kern))
+            voor, na = kern[:m.start()].strip().rstrip(";:,").strip(), kern[m.end():].strip().lstrip(";:,").strip()
+            over = (voor + " " + na).strip() if voor else na[:1].upper() + na[1:]
+            if len(_woorden(over)) >= 2:
+                delen.append(kop + over + ("" if over.endswith((".", "!", "?")) else ".") + staart)
+            continue
+        if OPNAME_VOLGENS.search(kern):
+            ingrepen.append(("S4", kern))
+            delen.append(kop + markering + staart)
+            continue
+        delen.append(zin)
+    tekst = "".join(delen)
     for p in OPNAME:
         tekst, k = p.subn("", tekst)
         ingrepen += [("S4", "opnameverwijzing")] * k
-    tekst = re.sub(r"\s+([,.;:)])", r"\1", tekst)
+    tekst = re.sub(r"[ \t]+([,.;:)])", r"\1", tekst)
     tekst = re.sub(r"\(\s*\)", "", tekst)
-    tekst = re.sub(r";\s*$", ".", tekst.strip())
     return re.sub(r"[ \t]{2,}", " ", tekst).strip(), ingrepen
 
 
