@@ -506,5 +506,11 @@ for tekst, verwacht in [("Diagonale barst van 0,3 mm boven het raam, zie\nopname
     t24, _ = S.toepassen(tekst, "aankoopkeuring")
     check(f"opnameverwijzing na een regelovergang: '{tekst[:30]}'", t24.replace("\n", " ").replace("  ", " ") == verwacht, repr(t24))
 
+# Vijfentwintigste review 26-10-2026: een bestandsnaam die met V, B of S begint, is geen herkomstcode
+for b in ["V - Vergunningsbesluit.pdf p. 2", "B-plan stabiliteit.pdf blad 3", "S 1015.jpg", "V-plan.dwg", "B&W besluit.pdf", "S/plan.pdf"]:
+    check(f"geen code uit een bestandsnaam: '{b}'", sj.herkomst(b) not in ("V", "B", "S"), sj.herkomst(b))
+for b in ["V", "B", "S", "V + B", "V/S"]:
+    check(f"een volledige code blijft: '{b}'", sj.herkomst(b) == b, sj.herkomst(b))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

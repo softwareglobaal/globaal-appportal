@@ -171,11 +171,10 @@ def herkomst(bron):
     transcript is geen "eigen vaststelling", en een onjuiste V is erger dan een bestandsnaam (17e en 18e review).
     Altijd één regel, zoals de bronnoot: anders breekt de regel Herkomst en komt de noot in de tekst van het punt."""
     b = re.sub(r"\s*\n\s*", " / ", (bron or "").strip())
-    code = re.match(r"[VBS](?:\s*[+,/]\s*[VBS])*(?![\w.])", b)
     if not b or b == "vast punt kantoor":
         return b
-    if code:
-        return code.group(0)
+    if re.fullmatch(r"[VBS](?:\s*[+,/]\s*[VBS])*", b):
+        return b   # alleen een veld dat helemaal een code is: 'V - Vergunningsbesluit.pdf' is een bestandsnaam (25e review)
     if re.search(r"\bbouwhe(?:er|ren)\b|\bmondeling\b", b, re.I) and not re.search(r"\.\w{2,4}\b", b):
         return "B"   # de schrijver zegt zelf dat het een verklaring is (geen bestand met 'bouwheer' in de naam)
     zonder = re.sub(r"\s*\((?:opname|transcript)?[^)]*\d{1,2}:\d{2}[^)]*\)|(?:,?\s*(?:zie\s+)?(?:de\s+)?(?:opname|geluidsopname|audio)\s*)?"
