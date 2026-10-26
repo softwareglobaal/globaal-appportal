@@ -77,3 +77,17 @@ Bewust open: wie begon, toon, weekpatronen (werkwijze v1 punt 2). Daar is geen m
   prive: {kanaal: {aantal, minuten}}, overige_mail, onbekende_deelnemers}}`. Geen dag met nul rijen: geen item.
 - Werkverslag (`r.detail`): alleen aantallen. Noden zonder getal.
 - Gedeelde ronde: `with ag.ronde("communicatie bundelen") as r:` in het runnerbestand; grenzen via `bord.grenzen`.
+
+## Verwerking ontwerplezing Codex (26-10-2026)
+
+| punt | ernst | verwerking |
+|---|---|---|
+| CB01 privé per gesprek | hoog | privé is de OF over de rijen van een gesprek (dubbel_van en sessie), zoals `regisseur._prive_sessies`; lezing tot en met vandaag; test `test_prive_geldt_voor_het_hele_gesprek` |
+| CB02 sleutel prive en De Dagbundelaar | hoog | veld `prive_per_kanaal`; De Dagbundelaar slaat soort `communicatie` over (geen dossier, geen toewijsvraag) |
+| CB03 volgorde | hoog | cron 06:35 (voor De Levenscoach 06:45) en 13:35 (na de keten van 13:00); de weekspiegel ziet de bijgewerkte week |
+| CB04 opgepakt item blijft oud | hoog | niemand pakt het item op (De Dagbundelaar slaat het over, De Levenscoach leest alleen), dus het volgt de bron; elke dag van het venster krijgt een item, ook zonder contact |
+| CB05 werkwijze op het bord | hoog | werkwijze v2 gaat met `werkwijze_naar_bord.py --zet` op het bord voor de eerste ronde |
+| CB06 groepschat | middel | Zoom-chat zonder adres in de sleutel is `groepschat`: alleen een aantal, maakt niemand bekend |
+| CB07 voornaam | middel | eigen herkenning: exacte naam of adres, of een losse voornaam die maar een collega draagt; Mehdi alleen als "Mehdi", "Mehdi Chegini" of zijn kernrij |
+| CB08 kern | middel | kern leeg: nood en niets klaargezet; de nood "minder dan twee kanalen" is weg |
+| CB09 controleerbaar | middel | elk item wordt teruggelezen op uniek; `--droog --zaad` toont de items; het privélek in `/dagen` van het bord is een ander onderdeel en staat als vervolg |

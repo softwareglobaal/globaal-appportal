@@ -95,8 +95,10 @@ def main():
             except ValueError:
                 d = {}
             dag = (d.get("datum") or d.get("start") or it.get("sleutel") or "")[:10]
-            if it.get("soort") in ("dagplan", "dagbundel", "signaal", "oproep", "zoom-tekst", "ochtendbericht"):
-                continue  # zoom-tekst is voor De Regisseur, het ochtendbericht voor De Bode (I2, Z14)
+            if it.get("soort") in ("dagplan", "dagbundel", "signaal", "oproep", "zoom-tekst", "ochtendbericht", "communicatie"):
+                # zoom-tekst is voor De Regisseur, het ochtendbericht voor De Bode (I2, Z14); de communicatie van De
+                # Communicatiebundelaar is voor De Levenscoach: geen dossier, dus anders een onterechte toewijsvraag (CB02)
+                continue
             if str(it.get("uniek") or "").startswith("cc:"):
                 continue  # het Commandocentrum en de wachten sluiten hun eigen items (taken en impulsen)
             if "mail-regisseur" in (it.get("van"), it.get("voor")):

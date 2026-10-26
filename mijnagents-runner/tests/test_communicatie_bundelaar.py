@@ -10,7 +10,10 @@ Deze test legt de keuzes van Mehdi en de grenzen vast:
 - mail per persoon alleen voor een collega of iemand uit een gesprek (keuze 1); een firma of een adres is overige mail;
 - kanaal uit het voorvoegsel (keuze 3); minuten alleen bij video en ter plaatse, een rij zonder minuten is zonder duur;
 - Mehdi en onbekende sprekers zijn geen persoon;
-- onleesbare tabel: nood en niets klaargezet; kern onleesbaar, minder dan twee kanalen of een onbekend kanaal: nood;
+- onleesbare tabel of kern onleesbaar: nood en niets klaargezet; een onbekend kanaal: nood;
+- een groepschat is alleen een aantal (CB06); een vreemde met de voornaam van een collega is geen collega (CB07);
+- elke dag van het venster krijgt een item, ook zonder contact (CB04); elk item wordt teruggelezen (CB09);
+- De Dagbundelaar slaat de soort communicatie over (CB02);
 - de runner leest geen inhoudskolommen, gaat door de gedeelde ronde, en de werkwijze geeft grenzen;
 - geen sleutel prive bovenaan de inhoud (De Dagbundelaar zou het hele item als privégesprek lezen).
 
@@ -35,14 +38,6 @@ COLLEGAS = [
     {"naam": "Proefpersoon Zeta", "voornaam": "Zeta", "email": "zeta@voorbeeld.test"},
     {"naam": "Mehdi Proef", "voornaam": "Mehdi", "email": "mehdi@voorbeeld.test"},
 ]
-
-
-def herken(tekst):
-    t = (tekst or "").strip().lower()
-    for p in COLLEGAS:
-        if t in (p["naam"].lower(), p["email"]) or t.split()[0] == p["voornaam"].lower():
-            return p
-    return None
 
 
 def rij(uniek, personen, minuten=0, prive=0, afdeling="", dubbel_van="", datum=DAG, sessie=""):
@@ -79,15 +74,15 @@ class NepRonde:
         self.noden.append((tekst, wie))
 
 
-def ronde(rijen=RIJEN, collegas=lambda: COLLEGAS, lees=None, werkwijze=None):
+def ronde(rijen=RIJEN, collegas=lambda: COLLEGAS, lees=None, werkwijze=None, terug=lambda its: []):
     r, gezet = NepRonde(werkwijze), []
     gelezen = []
 
     def lezen(sql, args):
         gelezen.append((sql, args))
         return [x for x in rijen if args[0] <= x["datum"] <= args[1]]
-    dagen = C.werk(r, vandaag=VANDAAG, lees=lees or lezen, collegas=collegas, herken=herken,
-                   zet=lambda its: gezet.extend(its) or {"nieuw": len(its)})
+    dagen = C.werk(r, vandaag=VANDAAG, lees=lees or lezen, collegas=collegas,
+                   zet=lambda its: gezet.extend(its) or {"nieuw": len(its)}, terug=terug)
     return r, gezet, dagen, gelezen
 
 
@@ -147,8 +142,9 @@ def test_mehdi_en_onbekende_sprekers_geen_persoon():
 
 def test_item_zonder_namen_in_titel_en_zonder_prive_sleutel():
     _, gezet, dagen, _ = ronde()
-    assert [it["uniek"] for it in gezet] == [f"communicatie:dag:{DAG}"]
-    it = gezet[0]
+    assert [it["uniek"] for it in gezet] == [f"communicatie:dag:2026-10-{d}" for d in range(19, 26)]
+    assert gezet[0]["titel"] == "Communicatie 2026-10-19: geen contact in de gesprekkentabel"
+    it = gezet[-1]
     assert it["voor"] == "mehdi" and it["soort"] == "communicatie" and it["sleutel"] == DAG
     assert "Zeta" not in it["titel"] and "Omega" not in it["titel"], it["titel"]
     assert "prive" not in json.loads(it["inhoud"]), "De Dagbundelaar leest een sleutel prive als privégesprek"
@@ -182,14 +178,50 @@ def test_onleesbare_tabel_nood_en_niets_klaargezet():
     assert ("Gesprekkentabel niet leesbaar", "claude-code") in r.noden
 
 
-def test_kern_onleesbaar_en_te_weinig_kanalen_en_onbekend_kanaal_nood():
-    r, _, _, _ = ronde(rijen=[rij("fathom:1", "Mehdi, Klant Omega", 5), rij("whatsapp:1", "Klant Omega")],
-                       collegas=lambda: [])
+def test_kern_onleesbaar_nood_en_niets_klaargezet():
+    r, gezet, dagen, _ = ronde(collegas=lambda: [])
+    assert dagen is None and gezet == [] and r.noden == [("Collega's uit kern niet leesbaar", "claude-code")]
+
+
+def test_onbekend_kanaal_nood_zonder_getal():
+    r, _, dagen, _ = ronde(rijen=[rij("fathom:1", "Mehdi, Klant Omega", 5), rij("whatsapp:1", "Klant Omega")])
     teksten = [t for t, _ in r.noden]
-    assert "Collega's uit kern niet leesbaar, namen niet samengevoegd" in teksten
-    assert "Minder dan twee kanalen leverden rijen in de laatste zeven dagen" in teksten
-    assert "Rij met een onbekend kanaal in de gesprekkentabel" in teksten
+    assert teksten == ["Rij met een onbekend kanaal in de gesprekkentabel"], teksten
     assert not any(ch.isdigit() for t in teksten for ch in t), "N10: geen getal in een nood"
+    assert dagen[DAG]["contacten"] == 1
+
+
+def test_groepschat_alleen_aantal():
+    rijen = [rij("zoom:chat:kanaal-proef-123:2026-10-25", "Proefkanaal Delta", 0),
+             rij("mail:<y1@voorbeeld.test>", "Proefkanaal Delta")]
+    _, _, dagen, _ = ronde(rijen=rijen)
+    d = dagen[DAG]
+    assert d["personen"] == [] and d["kanalen"] == {"groepschat": 1, "mail": 1}
+    assert d["overige_mail"] == 1, "een kanaalnaam maakt een mailafzender niet bekend"
+
+
+def test_vreemde_met_voornaam_van_collega_is_geen_collega():
+    rijen = [rij("fathom:1", "Mehdi, Zeta Vreemdeling", 10), rij("fathom:2", "Mehdi Chegini, Zeta", 5),
+             rij("mail:<y2@voorbeeld.test>", "Mehdi Vreemd")]
+    _, _, dagen, _ = ronde(rijen=rijen)
+    p = personen(dagen[DAG])
+    assert set(p) == {"Zeta Vreemdeling", "Proefpersoon Zeta"}, p
+    assert dagen[DAG]["overige_mail"] == 1, "alleen Mehdi en Mehdi Chegini zijn Mehdi, niet elke Mehdi"
+
+
+def test_terug_lezen_geeft_nood_als_het_bord_anders_is():
+    r, gezet, _, _ = ronde(terug=lambda its: [its[0]["uniek"]])
+    assert ("Een klaargezet item staat niet zo op het bord", "claude-code") in r.noden
+    gelezen = []
+    assert C.terug_lezen(gezet[:1], lees=lambda u: gelezen.append(u) or [dict(gezet[0])]) == []
+    assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], inhoud="{}")]) == [gezet[0]["uniek"]]
+    assert gelezen == [gezet[0]["uniek"]]
+
+
+def test_dagbundelaar_slaat_communicatie_over():
+    bron = open(os.path.join(RUNNER, "dagbundelaar.py"), encoding="utf-8").read()
+    regel = next(r for r in bron.splitlines() if '"zoom-tekst", "ochtendbericht"' in r)
+    assert '"communicatie"' in regel, regel
 
 
 def test_zonder_grenzen_geen_werk():

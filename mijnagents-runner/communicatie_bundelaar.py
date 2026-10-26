@@ -23,6 +23,7 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -48,12 +49,18 @@ SQL = ("SELECT uniek, datum, minuten, personen, prive, COALESCE(afdeling, '') AS
        "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE datum BETWEEN ? AND ?")
 
 HAAKJES = re.compile(r"\s*\([^)]*\)?")
+MEHDI = ("mehdi", "mehdi chegini")   # zoals de bronnen hem schrijven, naast zijn rij in kern
 ONBEKEND = re.compile(r"^(speaker|spreker|deelnemer|externe?|onbekend|unknown)\b", re.I)
 
 
 def kanaal(uniek):
+    """Een Zoom-chat zonder adres in de sleutel (zoom:chat:<sleutel>:<dag>) is een kanaal met meer mensen: de naam in
+    personen is dan de kanaalnaam, geen mens (Codex CB06). Die heet groepschat en is alleen een aantal."""
+    uniek = uniek or ""
+    if uniek.startswith("zoom:chat:") and "@" not in uniek:
+        return "groepschat"
     for voor, k in KANALEN:
-        if (uniek or "").startswith(voor):
+        if uniek.startswith(voor):
             return k
     return None
 
@@ -73,26 +80,33 @@ def namen(personen):
             yield n
 
 
-def is_mehdi(naam, collega):
-    if collega and str(collega.get("voornaam") or "").casefold() == "mehdi":
-        return True
-    return naam.split()[0].casefold() == "mehdi"
-
-
 class Personen:
-    """Een naam wordt een persoon: een collega krijgt zijn naam uit kern (dan zijn "Voornaam (Afdeling)" en "Voornaam"
-    een persoon), een ander zijn naam zoals de bron hem gaf, samengevoegd zonder hoofdletterverschil."""
+    """Een naam wordt een persoon. Een collega uit kern krijgt zijn kernnaam, maar alleen op een exacte naam of een exact
+    adres, of op een losse voornaam die maar een collega draagt: zo zijn "Voornaam (Afdeling)" en "Voornaam" een
+    persoon, en wordt een vreemde met dezelfde voornaam en een achternaam geen collega (Codex CB07). Een ander houdt
+    zijn naam zoals de bron hem gaf, samengevoegd zonder hoofdletterverschil."""
 
-    def __init__(self, herken):
-        self.herken = herken
+    def __init__(self, collegas):
+        self.exact, voornamen = {}, defaultdict(list)
+        for c in collegas:
+            for sleutel in (c.get("naam"), c.get("email")):
+                if sleutel:
+                    self.exact[sleutel.strip().casefold()] = c
+            if c.get("voornaam"):
+                voornamen[c["voornaam"].strip().casefold()].append(c)
+        self.voornaam = {v: lijst[0] for v, lijst in voornamen.items() if len(lijst) == 1}
         self._cache = {}
+
+    def collega(self, naam):
+        t = naam.strip().casefold()
+        return self.exact.get(t) or (self.voornaam.get(t) if " " not in t else None)
 
     def persoon(self, naam):
         """(soort, weergavenaam), soort is mehdi, onbekend, adres, collega of naam. Een adres dat geen collega is, voeg
         ik niet samen met een naam uit een gesprek: voor mail is het overige mail."""
         if naam not in self._cache:
-            c = self.herken(naam)
-            if is_mehdi(naam, c):
+            c = self.collega(naam)
+            if (c and str(c.get("voornaam") or "").strip().casefold() == "mehdi") or naam.casefold() in MEHDI:
                 uit = ("mehdi", "")
             elif c:
                 uit = ("collega", c["naam"])
@@ -106,10 +120,11 @@ class Personen:
         return self._cache[naam]
 
 
-def bundel(rijen, eerste, laatste, herken):
-    """Rijen uit gesprek_log naar {dag: inhoud}, plus wat er opviel. Alleen dagen in [eerste, laatste] met een rij die
-    telt krijgen een inhoud; de oudere rijen dienen alleen om te weten wie bekend is voor mail."""
-    p = Personen(herken)
+def bundel(rijen, eerste, laatste, collegas):
+    """Rijen uit gesprek_log naar {dag: inhoud}, plus wat er opviel. Elke dag in [eerste, laatste] krijgt een inhoud, ook
+    een zonder contact: zo volgt een item dat eerder contacten toonde de bron, als een koppeling of privécorrectie ze
+    weghaalt (Codex CB04). De oudere rijen dienen alleen om te weten wie bekend is voor mail."""
+    p = Personen(collegas)
     opgevallen = {"onbekend_kanaal": 0, "telt_niet": 0, "kanalen": set()}
     bekend = set()   # personen uit gesprekken die geen privé zijn, en collega's
     # Privé is de OF over alle rijen van een gesprek, dubbels inbegrepen (De Regisseur, _prive_sessies, M1 en BAS-02):
@@ -131,17 +146,20 @@ def bundel(rijen, eerste, laatste, herken):
             opgevallen["onbekend_kanaal"] += 1
             continue
         prive = is_prive(r) or r.get("uniek") in prive_uniek or (r.get("sessie") or "") in prive_sessies - {""}
-        if not prive and k != "mail":
+        if not prive and k not in ("mail", "groepschat"):
             for n in namen(r.get("personen")):
                 soort, wie = p.persoon(n)
                 if soort in ("collega", "naam"):
                     bekend.add(wie.casefold())
         if eerste <= (r.get("datum") or "") <= laatste:
             tellen.append((r, k, prive))
-    dagen = {}
+    dagen, dag = {}, date.fromisoformat(eerste)
+    while dag.isoformat() <= laatste:
+        dagen[dag.isoformat()] = {"datum": dag.isoformat(), "personen": {}, "prive_per_kanaal": {}, "overige_mail": 0,
+                                  "onbekende_deelnemers": 0, "contacten": 0, "kanalen": defaultdict(int)}
+        dag += timedelta(days=1)
     for r, k, prive in tellen:
-        d = dagen.setdefault(r["datum"], {"datum": r["datum"], "personen": {}, "prive_per_kanaal": {}, "overige_mail": 0,
-                                          "onbekende_deelnemers": 0, "contacten": 0, "kanalen": defaultdict(int)})
+        d = dagen[r["datum"]]
         d["contacten"] += 1
         d["kanalen"][k] += 1
         opgevallen["kanalen"].add(k)
@@ -149,6 +167,8 @@ def bundel(rijen, eerste, laatste, herken):
         if prive:
             _tel(d["prive_per_kanaal"], k, minuten)   # alleen een aantal: geen naam, ook niet van de andere deelnemers
             continue
+        if k == "groepschat":
+            continue   # de naam is die van het kanaal, geen mens: alleen het aantal in kanalen
         gezien = set()
         for n in namen(r.get("personen")):
             soort, wie = p.persoon(n)
@@ -187,7 +207,9 @@ def _tel(per_kanaal, k, minuten):
 
 
 def titel(inhoud):
-    """Zonder namen: de titel komt in het dagverslag van De Dagbundelaar."""
+    """Zonder namen: een titel staat op plekken waar privé niet mag (lijst van de bak, werkverslag)."""
+    if not inhoud["contacten"]:
+        return f"Communicatie {inhoud['datum']}: geen contact in de gesprekkentabel"
     kanalen = ", ".join(inhoud["kanalen"])
     return (f"Communicatie {inhoud['datum']}: {inhoud['contacten']} contacten, {len(inhoud['personen'])} personen"
             + (f", privé {sum(c['aantal'] for c in inhoud['prive_per_kanaal'].values())}" if inhoud["prive_per_kanaal"] else "")
@@ -195,8 +217,8 @@ def titel(inhoud):
 
 
 def items(dagen):
-    """Geen sleutel prive bovenaan de inhoud: De Dagbundelaar leest die als een privégesprek en toont dan alleen
-    'privégesprek, duur onbekend' (dagbundelaar.py, prive)."""
+    """Geen sleutel prive bovenaan de inhoud: wie de inhoud leest, zou die als een privégesprek kunnen nemen
+    (zoals dagbundelaar.py, prive, Codex CB02)."""
     return [{"voor": "mehdi", "soort": "communicatie", "sleutel": dag, "uniek": f"communicatie:dag:{dag}",
              "titel": titel(inhoud), "inhoud": json.dumps(inhoud, ensure_ascii=False, separators=(",", ":"))}
             for dag, inhoud in sorted(dagen.items())]
@@ -209,7 +231,20 @@ def venster(vandaag=None):
         (laatste - timedelta(days=BEKEND_DAGEN - 1)).isoformat(), vandaag.isoformat()
 
 
-def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, herken=organisatie.herken, zet=None):
+def terug_lezen(gezet, lees=None):
+    """Elk item terug van het bord, op uniek, en vergelijken met wat ik zette (na het masker van het bord). Geeft de
+    unieke sleutels die ontbreken of anders zijn (Codex CB09)."""
+    lees = lees or (lambda uniek: bord.call("/api/klaarzet?" + urllib.parse.urlencode({"uniek": uniek, "status": "alle"}))
+                    .get("items") or [])
+    fout = []
+    for it in ag.maskeer(gezet):
+        terug = lees(it["uniek"])
+        if not any(t.get("inhoud") == it["inhoud"] and t.get("titel") == it["titel"] for t in terug):
+            fout.append(it["uniek"])
+    return fout
+
+
+def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=None, terug=None):
     nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
     if not nooit or not mehdi_beslist:
         # N2: zonder grenzen geen werk. De vaste vorm staat in bord.grenzen.
@@ -225,18 +260,23 @@ def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, herk
         r.nood("Gesprekkentabel niet leesbaar", wie="claude-code")
         r.detail = f"gesprekkentabel niet gelezen, niets klaargezet ({eerste} tot {laatste})"
         return None
-    if not collegas():
-        r.nood("Collega's uit kern niet leesbaar, namen niet samengevoegd", wie="claude-code")
-    dagen, opgevallen = bundel(rijen, eerste, laatste, herken)
+    lijst = collegas()
+    if not lijst:
+        # Zonder kern weet ik niet wie een collega is: namen zouden uit elkaar vallen en mail van een collega zou
+        # overige mail worden. Dan geen uitkomst per persoon (Codex CB08).
+        r.nood("Collega's uit kern niet leesbaar", wie="claude-code")
+        r.detail = f"kern niet gelezen, niets klaargezet ({eerste} tot {laatste})"
+        return None
+    dagen, opgevallen = bundel(rijen, eerste, laatste, lijst)
     if opgevallen["onbekend_kanaal"]:
         r.nood("Rij met een onbekend kanaal in de gesprekkentabel", wie="claude-code")
-    if len(opgevallen["kanalen"]) < 2:
-        r.nood("Minder dan twee kanalen leverden rijen in de laatste zeven dagen", wie="claude-code")
     te_zetten = items(dagen)
-    uit = (zet or ag.klaarzet)(te_zetten) if te_zetten else {}
+    uit = (zet or ag.klaarzet)(te_zetten)
+    if (terug or terug_lezen)(te_zetten):
+        r.nood("Een klaargezet item staat niet zo op het bord", wie="claude-code")
     contacten = sum(d["contacten"] for d in dagen.values())
     prive = sum(c["aantal"] for d in dagen.values() for c in d["prive_per_kanaal"].values())
-    r.detail = (f"{eerste} tot {laatste}: {len(dagen)} dagen, {contacten} contacten waarvan {prive} privé, "
+    r.detail = (f"{eerste} tot {laatste}: {sum(1 for d in dagen.values() if d['contacten'])} dagen met contact, {contacten} contacten waarvan {prive} privé, "
                 f"kanalen {', '.join(sorted(opgevallen['kanalen'])) or 'geen'}; {opgevallen['telt_niet']} rijen telden "
                 f"niet (dubbel); klaargezet {uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt")
     return dagen
@@ -258,7 +298,7 @@ def droog(zaad=False):
         print(f"(droog) werkwijze niet gelezen: {e}")
         return
     gezet = []
-    werk(d, zet=lambda its: gezet.extend(its) or {})
+    werk(d, zet=lambda its: gezet.extend(its) or {}, terug=lambda its: [])
     for it in gezet:
         print(it["titel"])
         print(json.dumps(json.loads(it["inhoud"]), ensure_ascii=False, indent=1))

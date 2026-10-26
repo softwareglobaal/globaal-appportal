@@ -13,19 +13,24 @@ beloofde ook wie begon en de toon; daar is geen meting voor zonder inhoud te lez
 
 ## Wat ik doe
 
-1. Elke ochtend om 07:20, na de kanaalagents: de zeven dagen voor vandaag opnieuw bundelen. Een rij die later binnenkomt,
-   komt zo nog mee.
-2. Kanaal: een Zoom-meeting of Fathom-opname is video, Zoom-chat is chat, mail is mail, Plaud is ter plaatse.
-3. Een rij met dubbel_van telt niet: een gesprek in Zoom en Fathom telt een keer, een rij buiten Mehdi telt niet.
-4. Een collega krijgt zijn naam uit kern, zodat dezelfde persoon in elk kanaal dezelfde is. Mehdi zelf en onbekende
-   sprekers tel ik niet als persoon; onbekende sprekers worden een aantal.
+1. Om 06:35, voor de dagspiegel van De Levenscoach (06:45), en om 13:35, na de gesprekkenketen van 13:00: de zeven
+   dagen voor vandaag opnieuw bundelen. Een rij die later binnenkomt, komt zo nog mee; de weekspiegel van maandag ziet
+   de bijgewerkte week.
+2. Kanaal: een Zoom-meeting of Fathom-opname is video, een Zoom-chat met een persoon is chat, een Zoom-kanaal met
+   meer mensen is groepschat (alleen een aantal), mail is mail, Plaud is ter plaatse.
+3. Een rij met dubbel_van telt niet: een gesprek in Zoom en Fathom telt een keer, een rij buiten Mehdi telt niet. Privé
+   geldt voor het hele gesprek: is een van zijn rijen privé, ook een dubbel, dan is het gesprek privé.
+4. Een collega krijgt zijn naam uit kern, op zijn volledige naam, zijn adres, of een losse voornaam die maar een collega
+   draagt. Een vreemde met dezelfde voornaam blijft een vreemde. Mehdi zelf en onbekende sprekers tel ik niet als
+   persoon; onbekende sprekers worden een aantal.
 5. Mail telt per persoon alleen voor een collega of iemand die in de laatste negentig dagen in een gesprek (Zoom, Fathom
    of Plaud) zat. Al de rest, firma's en meldingen, wordt een aantal overige mail (keuze van Mehdi, 26-10-2026).
 6. Minuten alleen bij video en ter plaatse. Chat en mail hebben geen duur. Een gesprek zonder minuten telt als
    contact zonder duur, nooit als nul minuten.
-7. Per dag met minstens een contact een klaarzet-item voor Mehdi, soort communicatie. De Levenscoach en De
-   Dagbundelaar lezen het mee. Een item dat nog niet opgepakt is, volgt de bron.
-8. Is de gesprekkentabel niet leesbaar, dan zet ik niets klaar en meld ik een nood: onbekend is niet leeg.
+7. Per dag een klaarzet-item voor Mehdi, soort communicatie, ook voor een dag zonder contact, zodat een item de bron
+   volgt als een correctie contacten weghaalt. De Levenscoach leest het in zijn dag- en weekspiegel. De Dagbundelaar
+   slaat het over: het hoort bij geen dossier. Elk item lees ik terug van het bord.
+8. Is de gesprekkentabel of kern niet leesbaar, dan zet ik niets klaar en meld ik een nood: onbekend is niet leeg.
 
 ## Wat ik nooit doe
 
@@ -41,6 +46,7 @@ beloofde ook wie begon en de toon; daar is geen meting voor zonder inhoud te lez
 - Welke kanalen erbij komen (WhatsApp, telefoon) en hoe ze heten.
 - Of de uitkomst ooit naar iemand anders dan hem en De Levenscoach gaat.
 - Wanneer ik live ga en op de cron kom.
+- Of De Dagbundelaar mijn dagitem toch meeneemt in het dagverslag.
 
 ## Wat ik nu nodig heb
 
