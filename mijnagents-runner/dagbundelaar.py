@@ -49,7 +49,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
-import dagvaststelling as V  # noqa: E402  de dagvaststelling, pure functies (ontwerp dagvaststelling v1.5)
+import dagvaststelling as V  # noqa: E402  de dagvaststelling, pure functies (ontwerp dagvaststelling v1.7)
 import locatiecontext as LC  # noqa: E402  dagboek voor precies de dag, met startgrens (opdracht v1.4)
 
 NAAM = "dagbundelaar"
@@ -72,7 +72,7 @@ ONTVANGST = os.path.join(DATA, "dagboek-ontvangst.txt")       # sha256 van de ko
 NACHTVENSTER = 14                                             # zoveel dagen herberekent de nachtronde (D10, E5)
 KANAAL_UREN = 26                                              # een wacht die langer zweeg, levert niet meer
 KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht"}
-ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel in de staat: dagen waarvoor De Zoomwacht faalde
+ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel van v1.6 in de staat; wordt opgeruimd
 
 
 def bundelen():
@@ -376,32 +376,69 @@ def lees_agenda(dagen):
     return per_dag, ongelezen, W.is_prive
 
 
+MARGE_S = 1800                                                # zoveel voor en na een afspraak telt een meting mee
+
+
+STIL_KMU = 3                                                  # zo traag is een meetpunt een stilstand
+STOP_S = 600                                                  # zo lang bij de plek is een stop, ook zonder stilstand
+
+
+def oordeel_uit_metingen(a, plek, punten, straal):
+    """Het oordeel over een afspraak ter plaatse uit de ruwe meetpunten (dagvaststelling v1.7, Codex G2 en J1), niet uit de
+    afgeleide indeling van het dagboek. plek: {'lat', 'lon'} van De Locatiewacht. In het venster van de afspraak (met
+    MARGE_S ervoor en erna): een gemeten stop binnen `straal` meter (minstens twee punten van hoogstens STIL_KMU km/u, of
+    punten bij de plek over minstens STOP_S seconden) is een aanwijzing; voorbijrijden of alleen metingen elders is niet
+    gezien; geen meting is onbekend. Gemeten op 22-10-2026: de auto reed om 13:19 voorbij project 2616 (een punt op 1 km/u
+    op 261 m, de rest rijdend, drie minuten); in Ternat en bij het ophalen stond ze minutenlang op 0 km/u binnen 40 m."""
+    van, tot = (t.timestamp() for t in V.afspraak_venster(a))
+    venster = [p for p in punten if van - MARGE_S <= p[0] <= tot + MARGE_S]
+    if not venster:
+        return {"uitkomst": "onbekend", "tekst": "auto zonder meting op dat uur"}
+    bij = [p for p in venster if LW_afstand(plek["lat"], plek["lon"], p[1], p[2]) <= straal]
+    stil = [p for p in bij if len(p) > 3 and p[3] is not None and p[3] <= STIL_KMU]
+    if len(stil) >= 2 or (bij and bij[-1][0] - bij[0][0] >= STOP_S):
+        return {"uitkomst": "doorgegaan", "tekst": f"auto gestopt bij de plek {V.uur_van(bij[0][0])} tot {V.uur_van(bij[-1][0])}"}
+    if bij:
+        return {"uitkomst": "niet_gezien", "tekst": f"auto reed voorbij de plek {V.uur_van(bij[0][0])}, geen stop gemeten"}
+    return {"uitkomst": "niet_gezien", "tekst": f"auto gemeten elders, {V.uur_van(venster[0][0])} tot {V.uur_van(venster[-1][0])}"}
+
+
+def LW_afstand(lat1, lon1, lat2, lon2):
+    import locatie_wacht as LW
+    return LW.afstand_m(lat1, lon1, lat2, lon2)
+
+
 def lees_locatie(dag, afspraken):
-    """De uitkomst per afspraak ter plaatse, de bezoeken zonder afspraak en de stand van het dagboek, van De Locatiewacht
-    (alleen lezen), met dezelfde afsprakenlijst als de vaststelling (F4). Lukt dat niet, of is het dagboek niet
-    afgesloten of voorlopig, dan krijgt elke afspraak ter plaatse 'onbekend' en zijn de bezoeken None."""
+    """Per afspraak ter plaatse het oordeel uit de ruwe meetpunten (oordeel_uit_metingen), met de plek die De
+    Locatiewacht voor die afspraak bepaalt en dezelfde afsprakenlijst als de vaststelling (F4); de bezoeken zonder afspraak
+    alleen als er een echte meting in valt; en de stand van het dagboek. Zonder geldige meting die dag, of als het dagboek
+    niet afgesloten of voorlopig is of niet te lezen, krijgt elke afspraak ter plaatse 'onbekend' en zijn de bezoeken
+    None."""
     import agenda_wacht as W
     import locatie_wacht as LW
     reden = ""
     try:
         d = LW.maak(dag, afspraken=afspraken)
         stand = str(d.get("status") or "")
-        if stand in ("afgesloten", "voorlopig") and not int(d.get("geldig") or 0):
+        punten = d.get("meetpunten") or []
+        if stand in ("afgesloten", "voorlopig") and not punten:
             stand, reden = "", "geen meting die dag"            # G2: afgesloten zegt alleen dat de tijd verstreek
         if stand in ("afgesloten", "voorlopig"):
-            # G2: 'niet gezien' geldt alleen als er op dat uur (met 30 minuten marge) een echte meting is; een afgeleid
-            # parkeerstuk is geen meting
-            vensters = {a.get("id"): (V.afspraak_venster(a)[0].timestamp() - 1800, V.afspraak_venster(a)[1].timestamp() + 1800)
-                        for a in afspraken}
-            tijden = d.get("meettijden") or []
+            per_dag = {a.get("id"): a for a in afspraken}
+            per_id = {}
             for aid, u in d["per_id"].items():
-                van, tot = vensters.get(aid, (None, None))
-                if u.get("uitkomst") == "niet_gezien" and (van is None or not any(van <= t <= tot for t in tijden)):
-                    d["per_id"][aid] = {"uitkomst": "onbekend", "tekst": "auto zonder meting op dat uur"}
+                a = per_dag.get(aid)
+                if u.get("lat") is not None and u.get("lon") is not None and a is not None:
+                    per_id[aid] = oordeel_uit_metingen(a, u, punten, LW.AFSPRAAK_M)
+                else:
+                    per_id[aid] = {"uitkomst": "zonder_adres" if u.get("uitkomst") == "zonder_adres" else "onbekend",
+                                   "tekst": u.get("tekst") or "plek onbekend"}
+            # een bezoek telt alleen met een echte meting erin (aankomen of vertrekken); een afgeleid stuk niet
             bezoeken = [{"van": LW.uur(v["van"]), "tot": LW.uur(v["tot"]), "minuten": v.get("minuten"), "waar": v.get("waar"),
                          "soort": soort} for soort, lijst in (("project", d["werf"]), ("twijfel", d["twijfel"]),
-                                                              ("elders", d["elders"])) for v in lijst]
-            return d["per_id"], sorted(bezoeken, key=lambda b: b["van"]), stand, ""
+                                                              ("elders", d["elders"])) for v in lijst
+                        if any(v["van"] - 300 <= p[0] <= v["tot"] + 300 for p in punten)]
+            return per_id, sorted(bezoeken, key=lambda b: b["van"]), stand, ""
         reden = reden or f"dagboek {stand or 'zonder stand'}"
     except Exception as e:  # noqa: BLE001
         reden = type(e).__name__
@@ -511,28 +548,31 @@ def _telling(t):
 
 
 def zoomstand(inhoud):
-    """(gesprekken, chat) uit de Zoom-dagregel van De Zoomwacht. Gesprekken zijn alleen volledig als de telling volledig is
-    en elke bron van de ronde die de regel schreef 'ok' was (G3: een regel zonder bronnen is hoogstens een ondergrens); de
-    chat heeft haar eigen telling (meestal een ondergrens)."""
+    """(gesprekken, chat) uit de Zoom-dagregel van De Zoomwacht (dagvaststelling v1.7, Codex G3 en J2). De dagregel is het
+    bewijs: De Zoomwacht schrijft ze alleen voor een afgelopen dag, met de bronstanden van de ronde die ze schreef
+    (zoom_wacht.dag_inhoud), en verlaagt een opgepakte regel nooit tijdens een ronde met uitval (ZOO-01). Gesprekken zijn
+    dus volledig als de telling volledig is, de stand definitief en elke bron 'ok': dan schreef een volledige ronde na
+    het einde van de dag ze. Anders een ondergrens of onbekend. De chat heeft haar eigen telling (meestal ondergrens)."""
     try:
         d = json.loads(inhoud or "{}") or {}
     except ValueError:
         return "onbekend", "onbekend"
     stand = _telling(d.get("telling"))
     bronnen = d.get("bronnen")
-    if stand == "volledig" and not (isinstance(bronnen, dict) and bronnen and all(v == "ok" for v in bronnen.values())):
+    if stand == "volledig" and not (isinstance(bronnen, dict) and bronnen and all(v == "ok" for v in bronnen.values())
+                                    and d.get("stand") == "definitief"):
         stand = "ondergrens"
     chat = d.get("chat")
     return stand, (_telling(chat.get("telling")) if isinstance(chat, dict) else "onbekend")
 
 
 def vastleggen(r, dagen, zoom_gelezen=None):
-    """De dagvaststelling van elke dag in `dagen` (ontwerp dagvaststelling v1.5). Leest agenda, locatie, gesprekkentabel,
+    """De dagvaststelling van elke dag in `dagen` (ontwerp dagvaststelling v1.7). Leest agenda, locatie, gesprekkentabel,
     Zoom-dagregels, mail en de hartslag van de WhatsApp-wacht en de Belwacht; schrijft per dag het bestand (de vorige
     versie blijft in versies/, nooit overschreven), de staat en het klaarzet-item voor Mehdi, en leest bestand en item
     letterlijk terug (F8). zoom_gelezen: slaagde (True) of faalde (False) De Zoomwacht in deze keten, of liep ze niet mee
-    (None). Een dag die gisteren was toen ze faalde, blijft hoogstens een ondergrens tot een geslaagde Zoomwacht hem in haar
-    venster opnieuw las (F9, G3). Geeft het detail."""
+    (None); alleen voor het werkverslag. De Zoom-stand van een dag komt uit zijn dagregel (zoomstand, G3). Geeft het
+    detail."""
     nu = datetime.now(timezone.utc)
     eerste, laatste = min(dagen), max(dagen)
     gisteren = V.gisteren(nu)
@@ -567,20 +607,9 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         staat = json.loads(_lees(STAAT) or "{}")
     except ValueError:
         staat = {}
-    # G3: een dag waarvoor De Zoomwacht faalde, blijft een ondergrens tot zijn dagregel daarna herschreven is door een
-    # ronde waarin elke bron ok was (de regel verschilt van wat er stond bij de fout, en zoomstand zegt volledig). Een
-    # geslaagde exit alleen bewijst dat niet: bij een gedeeltelijke uitval verlaagt De Zoomwacht een regel nooit.
-    onzeker = staat.get(ZOOM_ONZEKER)
-    onzeker = dict(onzeker) if isinstance(onzeker, dict) else {}
-    if zoom_gelezen is False and gisteren not in onzeker:
-        onzeker[gisteren] = _sha(dagregels.get(gisteren, ""))
-    for d, bij_fout in list(onzeker.items()):
-        if d in dagregels and _sha(dagregels[d]) != bij_fout and zoom[d][0] == "volledig":
-            del onzeker[d]
-        elif d in zoom and zoom[d][0] == "volledig":
-            zoom[d] = ("ondergrens", zoom[d][1])
-    staat[ZOOM_ONZEKER] = onzeker
-    _schrijf(STAAT, json.dumps(staat, ensure_ascii=False, indent=1, sort_keys=True))
+    staat.pop(ZOOM_ONZEKER, None)                      # v1.6 hield hier vlaggen per keten bij; de dagregel volstaat
+    if zoom_gelezen is False:
+        ag.log("zoom", "bron", "De Zoomwacht faalde in deze keten; de stand per dag komt uit de dagregels")
     bewijs, nieuw, fouten, locatiefout = ontvangst(), [], [], set()
     for dag in sorted(dagen):
         afspraken = per_dag.get(dag, [])

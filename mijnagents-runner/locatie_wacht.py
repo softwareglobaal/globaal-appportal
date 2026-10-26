@@ -249,11 +249,13 @@ def vergelijk_agenda(dag, verblijven, index, wcache, per_id=None, afspraken=None
                 v["afspraak"] = a["titel"]
             if per_id is not None:
                 per_id[a.get("id")] = {"uitkomst": "doorgegaan", "tekst": f"{wie} ter plaatse "
-                                       f"{uur(min(v['van'] for v in treffers))}-{uur(max(v['tot'] for v in treffers))}"}
+                                       f"{uur(min(v['van'] for v in treffers))}-{uur(max(v['tot'] for v in treffers))}",
+                                       "lat": lat, "lon": lon, "herkomst": herkomst}
         else:
             niet_gezien.append(f"{a['start'][11:16]} {a['titel']} · plek uit {herkomst}")
             if per_id is not None:
-                per_id[a.get("id")] = {"uitkomst": "niet_gezien", "tekst": f"plek uit {herkomst}"}
+                per_id[a.get("id")] = {"uitkomst": "niet_gezien", "tekst": f"plek uit {herkomst}",
+                                       "lat": lat, "lon": lon, "herkomst": herkomst}
     return doorgegaan, niet_gezien, zonder_adres, overig
 
 
@@ -263,17 +265,19 @@ def lijn(v):
     return f"- {uur(v['van'])}-{uur(v['tot'])} ({duur(v['minuten'])}) {v['waar']}{zeker}{link}"
 
 
-def meettijden(dagboek):
-    """De tijden (epoch, oplopend) van de geldige meetpunten van de dag, van alle sporen (Codex G2, dagvaststelling). De
-    indeling van het dagboek leidt een parkeerstuk af en kan het samenvoegen met een later bezoek; alleen een echte meting
-    bewijst waar de auto op een uur was."""
+def meetpunten(dagboek):
+    """De geldige meetpunten van de dag als (epoch, lat, lon, snelheid of None), oplopend, van alle sporen (Codex G2 en J1, dagvaststelling
+    v1.7). De indeling van het dagboek leidt een parkeerstuk af en kan het samenvoegen met een later bezoek; alleen een
+    echte meting bewijst waar de auto op een uur was."""
     uit = []
     for p in dagboek.get("punten") or []:
-        if not isinstance(p, dict) or not p.get("geldig") or not p.get("tijd"):
+        if not isinstance(p, dict) or not p.get("geldig") or not p.get("tijd") or p.get("lat") is None or p.get("lon") is None:
             continue
         try:
-            uit.append(datetime.fromisoformat(str(p["tijd"])).timestamp())
-        except ValueError:
+            snelheid = p.get("snelheid")
+            uit.append((datetime.fromisoformat(str(p["tijd"])).timestamp(), float(p["lat"]), float(p["lon"]),
+                        float(snelheid) if isinstance(snelheid, (int, float)) and not isinstance(snelheid, bool) else None))
+        except (TypeError, ValueError):
             continue
     return sorted(uit)
 
@@ -323,8 +327,8 @@ def maak(dag, afspraken=None):
             "verblijven": verblijven, "doorgegaan": doorgegaan, "niet_gezien": niet_gezien,
             "zonder_adres": zonder_adres, "overig": overig, "werf": werf, "twijfel": twijfel, "elders": elders,
             "per_id": per_id,
-            # G2 (dagvaststelling): wanneer de tracker echt mat, en hoeveel geldige punten de dag had
-            "meettijden": meettijden(db),
+            # G2 en J1 (dagvaststelling): de echte meetpunten, en hoeveel geldige punten de dag had
+            "meetpunten": meetpunten(db),
             "geldig": sum(int(sp.get("geldig") or 0) for sp in (db.get("sporen") or {}).values()),
             "context": ctx, "wcache": wcache if wcache != wcache_voor else None,
             "projecten": sorted({"%s %s" % (v["project"].get("firma"), v["project"].get("nummer"))

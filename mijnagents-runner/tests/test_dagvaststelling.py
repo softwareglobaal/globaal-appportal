@@ -91,6 +91,8 @@ def test_bewijs():
     collega = rij("zoom:meeting:3", "14:28", 5, "Mehdi, Ruben (H-AI & ICT)")
     b = V.bewijs(buiten, [collega], {"uitkomst": "niet_gezien"})
     eis(b["uitkomst"] == "geen spoor" and "Ging dit door?" in b["grond"], f"Zoom met collega tijdens plaatsbezoek ({b})")
+    b = V.bewijs(buiten, [], {"uitkomst": "niet_gezien", "tekst": "auto reed voorbij de plek 13:19, geen stop gemeten"})
+    eis(b["uitkomst"] == "geen spoor" and "auto reed voorbij de plek 13:19" in b["grond"], f"de reden van de locatie ({b})")
     b = V.bewijs(buiten, [], {"uitkomst": "onbekend"})
     eis(b["uitkomst"] == "geen spoor" and "locatie niet gelezen" in b["grond"], f"locatie onbekend ({b})")
     b = V.bewijs(online, [])
@@ -113,6 +115,8 @@ def test_bewijs():
         ["uitkomst"] == "geen spoor", "een plaatsnaam is geen persoon")
     eis(V.bewijs(a, [rij("zoom:meeting:8", "10:31", 9, "Mehdi, Lotte Verhaegen (UNABO)")])["uitkomst"] == "bevestigd",
         "dezelfde volle naam, met afdeling tussen haakjes")
+    eis(V.bewijs(afspraak("c", "12:00", "13:00", "Mehdi: [HA-KO] 2605 - Celine Dupont"),
+                 [rij("fathom:c", "12:02", 35, "Céline Dupont, Afspraken")])["uitkomst"] == "bevestigd", "accenten tellen niet")
     gast = afspraak("g", "10:30", "11:00", "Mehdi: [UNABO-PO] online kennismaking", deelnemers=["lotte.verhaegen@voorbeeld.be"])
     eis(V.bewijs(gast, [met])["uitkomst"] == "bevestigd", "een gast van buiten op zijn e-mailadres")
     robertis = afspraak("r", "14:15", "15:15", "!! Mehdi: [UB-KB] PL 3846 - Nicolas De Robertis, Oude Brusselstraat 23, 1740 Ternat - ST")

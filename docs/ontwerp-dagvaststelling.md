@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 1.6, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 1.7, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -253,3 +253,34 @@ kopie) en teruglezen.
 Gezien bij de droge proef, buiten deze opdracht: De Locatiewacht toetst een afspraak met een projectnummer aan de plek van
 het project, ook als de titel een ander adres noemt (22-10: vooroverleg 2616 op het stadskantoor van Leuven). De
 vaststelling zegt dan 'auto niet gezien op de plek' met de vraag of het doorging; ze bevestigt niets ten onrechte.
+
+## Herziening in v1.7 (stopregel na ronde 7, docs/codex/dagvaststelling-bouw-r7.md)
+
+G2 en G3 daalden twee rondes niet. Dus geen bijlapwerk meer, maar een ander ontwerp voor beide.
+
+**Locatie (G2, J1, F4, D6): het oordeel komt uit ruwe meetpunten, niet uit de indeling.** De indeling van het dagboek
+leidt parkeerstukken af en kan ze samenvoegen met een later bezoek; daarop steunde zowel 'doorgegaan' als 'niet gezien'.
+Nu neemt de vaststelling van De Locatiewacht alleen de plek van de afspraak (lat, lon), en oordeelt zelf op de geldige
+meetpunten (`locatie_wacht.meetpunten`: tijd, plek, snelheid) in het venster van de afspraak met 30 minuten marge:
+
+| meting in het venster | uitkomst |
+|---|---|
+| geen | onbekend: auto zonder meting op dat uur |
+| een gemeten stop binnen 300 m: minstens twee punten van hoogstens 3 km/u, of punten bij de plek over minstens tien minuten | aanwijzing: auto gestopt bij de plek |
+| punten binnen 300 m maar geen stop | niet gezien: auto reed voorbij de plek |
+| alleen punten elders | niet gezien: auto gemeten elders |
+
+Gemeten op 22-10-2026: om 13:19 reed de auto voorbij project 2616 (een punt op 1 km/u op 261 m, de rest rijdend, drie
+minuten); in Ternat en bij het ophalen stond ze minutenlang op 0 km/u binnen 40 m. Een bezoek zonder afspraak telt alleen
+met een echte meting erin. Zonder geldige meting die dag is de locatie niet gelezen.
+
+**Zoom (G3, J2, F9): de dagregel is het bewijs, zonder vlaggen per keten.** De Zoomwacht schrijft een dagregel alleen voor
+een afgelopen dag, met de bronstanden van de ronde die ze schreef (`zoom_wacht.dag_inhoud`, bronnen uit die ronde, telling
+volledig alleen als elke Zoom-bron ok was), en verlaagt een opgepakte regel nooit tijdens een ronde met uitval (ZOO-01).
+Een regel met telling volledig, stand definitief en elke bron ok is dus geschreven door een volledige ronde na het einde
+van de dag: de Zoom-sessies van een afgelopen dag veranderen niet meer. Een latere ronde met uitval maakt die regel niet
+fout; ze laat hem staan. De vlaggen per keten (v1.6) en de vingerafdruk vervallen, en daarmee J2. Is er geen regel (de
+Zoomwacht faalde in de nacht), dan is Zoom onbekend; de ochtendketen schrijft de regel en de ochtendronde herberekent
+gisteren.
+
+Verder: namen zonder accenten vergelijken; de uitleg van een aanwijzing noemt hoogstens drie gesprekken, op volgorde.

@@ -1,5 +1,5 @@
 """De dagvaststelling van De Dagbundelaar: een vast overzicht van een Brusselse dag (ontwerp docs/ontwerp-dagvaststelling.md
-v1.5, opdracht van Mehdi 26-10-2026). Wat gepland stond en wat er echt gebeurde, wat er gebeurde zonder gepland te zijn,
+v1.7, opdracht van Mehdi 26-10-2026). Wat gepland stond en wat er echt gebeurde, wat er gebeurde zonder gepland te zijn,
 en de communicatie langs mail, Zoom, WhatsApp en telefoon.
 
 Pure functies: de runner (dagbundelaar.py) haalt de bronnen op en geeft ze als gewone lijsten door. Geen netwerk, geen
@@ -19,6 +19,7 @@ Een bron die onbekend of onvolledig is, staat er zo; nooit als nul.
 """
 import hashlib
 import re
+import unicodedata
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -58,6 +59,10 @@ def venster(nu, dagen):
 def _tijd(iso):
     t = datetime.fromisoformat(str(iso))
     return t if t.tzinfo else t.replace(tzinfo=BRUSSEL)
+
+
+def uur_van(epoch):
+    return datetime.fromtimestamp(epoch, BRUSSEL).strftime("%H:%M")
 
 
 def brusselse_dag(iso):
@@ -121,6 +126,8 @@ def naamdelen(tekst):
     """De naamdelen van een naam (minstens drie letters), zonder Mehdi, firma's, soortwoorden en partikels. Een
     e-mailadres geeft zijn lokale deel ('jan.peeters@x.be' wordt 'jan peeters')."""
     tekst = re.sub(r"([\w.+-]+)@[\w.-]+", lambda m: m.group(1).replace(".", " ").replace("_", " "), str(tekst or ""))
+    # zonder accenten: 'Céline' en 'Celine' zijn dezelfde naam
+    tekst = "".join(c for c in unicodedata.normalize("NFKD", tekst) if not unicodedata.combining(c))
     return {w for w in (x.casefold() for x in re.findall(r"[^\W\d_]{3,}", tekst)) if w not in STOP and w not in PARTIKELS}
 
 
@@ -189,7 +196,7 @@ def bewijs(a, gesprekken, locatie=None):
     Geeft {'uitkomst', 'grond', 'gesprekken': [uniek]}; alleen die gesprekken horen bij de afspraak (E3)."""
     venster_a = afspraak_venster(a)
     wie = personen_van_afspraak(a)
-    op_uur = [g for g in gesprekken if overlapt(venster_a, gesprek_venster(g))]
+    op_uur = sorted((g for g in gesprekken if overlapt(venster_a, gesprek_venster(g))), key=lambda g: gesprek_venster(g)[0])
     met_persoon = [g for g in op_uur if zelfde_persoon(wie, g.get("personen"))]
     if met_persoon:
         return {"uitkomst": "bevestigd", "grond": "; ".join(gesprek_tekst(g) for g in met_persoon),
@@ -201,8 +208,9 @@ def bewijs(a, gesprekken, locatie=None):
                 "gesprekken": []}
     if op_uur and not ter_plaatse:
         return {"uitkomst": "aanwijzing", "grond": "op dat uur een gesprek zonder persoon van de afspraak: "
-                + "; ".join(gesprek_tekst(g) for g in op_uur), "gesprekken": []}
-    grond = {"niet_gezien": "auto niet gezien op de plek",
+                + "; ".join(gesprek_tekst(g) for g in op_uur[:3]) + (f" en {len(op_uur) - 3} meer" if len(op_uur) > 3 else ""),
+                "gesprekken": []}
+    grond = {"niet_gezien": locatie.get("tekst") or "auto niet gezien op de plek",
              "zonder_adres": "geen bruikbaar adres om de locatie te toetsen",
              "onbekend": locatie.get("tekst") or "locatie niet gelezen"}.get(locatie.get("uitkomst"),
                                                                         "geen gesprek, oproep of locatie")
