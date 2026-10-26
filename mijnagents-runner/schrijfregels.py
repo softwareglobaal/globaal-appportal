@@ -32,9 +32,30 @@ import re
 
 MARKERING = "(geschrapt: schrijfregel {regel}, zie de schrijfregels van het kantoor)"
 
-# Het eigen bureau als onderwerp (S1), en een stuk zin zonder nieuwe bijzin ervoor.
-EIGEN = r"\b(?:(?:de\s+)?architect|het\s+bureau|ons\s+(?:bureau|kantoor)|h-architects|ondergetekende|wij|we)\b"
-BIJZIN = r"(?:(?!\b(?:dat|die|wie|of|toen|terwijl|omdat|want)\b)[^.,;:]){0,60}?"
+# S1 zonder onderwerp ("niet eerder ter plaatse") geldt niet voor een zin die met een derde begint: "De landmeter is
+# eerder niet gekomen" is een vaststelling over iemand anders. Twijfel blijft S1: een zin over het eigen bureau mag nooit
+# door (Mehdi, 23-10-2026), een ten onrechte geschrapte zin staat zichtbaar gemarkeerd.
+_DERDE = (r"(?:de|het|een|onze|uw)\s+(?:[\w-]+[- ])?(?:on)?(?:aannemer|landmeter|veiligheidsco[öo]rdinator|"
+          r"verslaggever|ramenplaatser|dakwerker|dakdekker|keurder|ingenieur|bouwheer|bouwheren|eigenaar|huurder|"
+          r"buur|buren|loodgieter|elektricien|installateur|schrijnwerker|tegelzetter|plafonneerder|metser|"
+          r"studiebureau|nutsmaatschappij|brandweer|gemeente|leverancier|fabrikant|controleorganisme|"
+          r"verzekeraar|expert|syndicus|notaris)s?\b")
+_EIGEN = re.compile(r"\b(?:architect(?:en)?(?:bureau|kantoor)?|bureau|h-architects|ondergetekende|wij|we|ik|ons|onze|mehdi|chegini)\b", re.I)
+_DERDE_BEGIN = re.compile(r"\s*" + _DERDE, re.I)
+_DERDE_BEZOEK = re.compile(r"\b(?:hoogstens|maximaal|slechts|maar)\s+(?:één|een|1)\s+(?:controle)?bezoek\w*\s+(?:van|door)\s+" + _DERDE, re.I)
+_VASTSTELLING = re.compile(r"\s*(?:de\s+)?architect\s+(?:stelt|stelde|merkt|merkte)\s+(?:vast|op),?\s+dat\s+(" + _DERDE + r".*)", re.I | re.S)
+
+
+def DERDE(zin):
+    """Een zin zonder onderwerp ("niet eerder ter plaatse") over een derde: hij begint met die derde en noemt het eigen
+    bureau nergens, of het ene bezoek is dat van een derde ("slechts één bezoek van de keurder")."""
+    return bool((_DERDE_BEGIN.match(zin) and not _EIGEN.search(zin)) or _DERDE_BEZOEK.search(zin))
+
+
+def VASTSTELLING_OVER_DERDE(zin):
+    """"De architect stelt vast dat de dakwerker niet aanwezig was": de rest van de zin gaat over de derde."""
+    m = _VASTSTELLING.match(zin)
+    return bool(m and not _EIGEN.search(m.group(1)))
 
 # (regel, patroon) op zinsniveau; hoofdletterongevoelig. Een zin die matcht, wordt in zijn geheel vervangen.
 VERBODEN = [
@@ -42,13 +63,12 @@ VERBODEN = [
     ("S2", re.compile(r"\borde\s+van\s+(de\s+)?architect", re.I)),
     ("S2", re.compile(r"\b(reglement|plichtenleer)\s+van\s+(de\s+)?(orde|architect)", re.I)),
     ("S3", re.compile(r"\b(vorige|eerdere|andere|collega)[- ]architect\b[^.]{0,80}\b(niet|nooit|slecht|nalatig|fout)", re.I)),
-    # S1 alleen over het eigen bureau: de zin noemt de architect, het bureau of de eigen opdracht als onderwerp, in dezelfde
-    # bijzin (een "dat ..." over de dakwerker of de landmeter is een gewone vaststelling over derden).
-    ("S1", re.compile(EIGEN + BIJZIN + r"\b(niet|nooit|geen)\s+(?:\w+\s+){0,2}?(bezoek|bezocht|geweest|gekomen|langsgekomen|aanwezig|gecontroleerd|opgevolgd|ter\s+plaatse)", re.I)),
-    ("S1", re.compile(r"\b(geen|niet)\s+(eerder|vroeger|voordien|tevoren)\s+\w*\s*(bezoek|controle|tussenkomst)\w*\s+(van|door)\s+" + EIGEN, re.I)),
-    ("S1", re.compile(EIGEN + BIJZIN + r"\b(verzuim|nalatig|tekortgeschoten|in\s+gebreke|zijn\s+plicht|haar\s+plicht)", re.I)),
-    ("S1", re.compile(r"(?:" + EIGEN + r"|\b(?:de|onze|deze)\s+opdracht\b)[^.]{0,80}\b(hoogstens|maximaal|slechts|maar)\s+(één|een|1)\s+(controle)?bezoek", re.I)),
-    ("S1", re.compile(r"\b(hoogstens|maximaal|slechts|maar)\s+(één|een|1)\s+(controle)?bezoek\w*\s+(van|door)\s+" + EIGEN, re.I)),
+    ("S1", re.compile(r"\b(geen|niet)\s+(eerder|vroeger|voordien|tevoren)\s+\w*\s*(bezoek|bezocht|geweest|gekomen|aanwezig|gecontroleerd|opgevolgd|ter plaatse)", re.I), DERDE),
+    ("S1", re.compile(r"\b(eerder|vroeger|voordien|tevoren)\s+(geen|niet)\s+\w*\s*(bezoek|bezocht|geweest|gekomen|aanwezig|gecontroleerd|opgevolgd|ter plaatse)", re.I), DERDE),
+    ("S1", re.compile(r"\b(blijkt|bleek)\s+geen\s+(eerder|vroeger)\s+\w*\s*(bezoek|controle|tussenkomst)", re.I), DERDE),
+    ("S1", re.compile(r"\b(de\s+)?(architect|het\s+bureau|h-architects)\b[^.]{0,60}\b(niet|nooit)\s+(geweest|gekomen|aanwezig|langsgekomen|bezocht|gecontroleerd|opgevolgd)", re.I), VASTSTELLING_OVER_DERDE),
+    ("S1", re.compile(r"\b(architect|bureau)\b[^.]{0,40}\b(verzuim|nalatig|tekortgeschoten|in gebreke|zijn plicht|haar plicht)", re.I)),
+    ("S1", re.compile(r"\b(hoogstens|maximaal|slechts|maar)\s+(één|een|1)\s+(controle)?bezoek", re.I), DERDE),
     ("S3", re.compile(r"\b(vorige|eerdere|andere|collega)[- ]architect\b[^.]{0,80}\b(niet|nooit|slecht|nalatig|fout)", re.I)),
     ("S5", re.compile(r"\b(aansprakelijk|wanprestatie|contractbreuk|contractuele\s+fout|in\s+gebreke|ingebrekestelling|schuldig)\b", re.I)),
 ]
@@ -57,7 +77,7 @@ VERBODEN_PROFIEL = {
     "aankoopkeuring": [
         ("S6", re.compile(r"(?:€\s*\d|\b\d[\d.,\s]*\s*(?:euro|eur)\b)", re.I)),
         ("S6", re.compile(r"\b(?:herstelkost(?:en)?|kostenraming|richtprijs|prijsbandbreedte|onderhandelingsbedrag)\b[^.]{0,60}\b\d", re.I)),
-        ("S7", re.compile(r"\b(?:stedenbouwkundig\s+|bouwmisdrijf\s+|overtreding\s+)?(?:verjaard|verjaring\w*)\b", re.I)),
+        ("S7", re.compile(r"\b(?:stedenbouwkundig\s+|bouwmisdrijf\s+|overtreding\s+)?(?:verjaard(?:e)?|verjaring\w*|verja(?:a)?r(?:t|en)?)\b", re.I)),
         ("S7", re.compile(r"\b(?:gegarandeerd|zeker|zonder\s+probleem|probleemloos)\s+(?:regulariseerbaar|te\s+regulariseren|vergund)\b", re.I)),
         ("S7", re.compile(r"\b(?:vrij\s+van|geen\s+enkele?|zonder)\s+verborgen\s+gebrek(?:en)?\b", re.I)),
         ("S7", re.compile(r"\bvolledig\s+(?:en\s+uitputtend\s+)?onderzocht\b", re.I)),
@@ -73,18 +93,20 @@ OPNAME = [
     re.compile(r"\s*\((?:opname|transcript)\)", re.I),
 ]
 # Een zin loopt tot een punt, uitroep- of vraagteken; de punt in 4.500 of 1.250.000 (tussen twee cijfers) knipt niet.
-_T = r"(?:[^.]|(?<=\d)\.(?=\d))"
-_Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d))"
+# Zo ook de punt van een afkorting midden in een zin ("€ 3.200 excl. btw").
+_AFK = r"(?:(?<=excl)|(?<=incl)|(?<=\bca)|(?<=\bbv)|(?<=\bnr)|(?<=resp)|(?<=\bvb)|(?<=\bgew))\.(?=\s+[a-z0-9(€])"
+_T = r"(?:[^.;:]|(?<=\d)[.:](?=\d)|" + _AFK + ")"
+_Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
 # Zinnen die alleen over de opname gaan: ze vallen weg (S4). Wat na "sprak zijn vaststellingen in:" volgt, is de
 # vaststelling zelf en blijft staan. De geschrapte zin staat in de ingrepen, dus in het logboek.
 OPNAME_ZINNEN = [
-    re.compile(r"[^.:;]*\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b[^.:;]*(?:[.;]|:\s*(\w)?|$)", re.I),
+    re.compile(r"[^.:;]*\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b[^.:;,]*(?:[.;]|[:,]\s*(\w)?|$)", re.I),
     re.compile(_T + r"*\b(?:een\s+)?tijdstip\s+tussen\s+haakjes\b" + _T + r"*\.?", re.I),
     re.compile(_T + r"*\bverwijst\s+naar\s+(?:die|de)\s+opname\b" + _T + r"*\.?", re.I),
 ]
 # "Volgens de opname is de dorpel 3 cm te laag." draagt een vaststelling: de zin wordt zichtbaar vervangen door de
 # markering S4, en staat volledig in het logboek. "De opname van de bestaande toestand" is een opmeting, geen opname.
-OPNAME_VOLGENS = re.compile(_Z + r"*?\b(?:volgens|blijkens|uit)\s+de\s+(?:opname|geluidsopname)\b(?!\s+van\s+de\s+bestaande\s+toestand)"
+OPNAME_VOLGENS = re.compile(_Z + r"*?\b(?:volgens|blijkens|uit)\s+de\s+(?:opname|geluidsopname)\b(?!\s+(?:van\s+)?(?:de\s+|het\s+)?(?:bestaande\s+(?:toestand|situatie)|landmeter|terrein|opmeting))"
                             + _Z + r"*[.!?]?", re.I)
 
 _ZIN = re.compile(_Z + r"+[.!?]?\s*")
@@ -115,6 +137,7 @@ def _opname_weg(tekst):
         ingrepen += [("S4", "opnameverwijzing")] * k
     tekst = re.sub(r"\s+([,.;:)])", r"\1", tekst)
     tekst = re.sub(r"\(\s*\)", "", tekst)
+    tekst = re.sub(r";\s*$", ".", tekst.strip())
     return re.sub(r"[ \t]{2,}", " ", tekst).strip(), ingrepen
 
 
@@ -122,14 +145,19 @@ def _regels(profiel=None):
     return VERBODEN + (VERBODEN_PROFIEL.get(profiel) or [])
 
 
+def _treft(regel, zin):
+    """(regel, patroon) of (regel, patroon, uitzondering): de uitzondering is een functie op de zin (DERDE)."""
+    return regel[1].search(zin) and not (len(regel) > 2 and regel[2](zin))
+
+
 def controleer(tekst, profiel=None):
     """Alle overtredingen in een tekst: [(regel, zin)]. Opnameverwijzingen tellen als S4."""
     uit = []
     regels = _regels(profiel)
     for zin in _ZIN.findall(tekst or ""):
-        for regel, p in regels:
-            if p.search(zin):
-                uit.append((regel, zin.strip()))
+        for r in regels:
+            if _treft(r, zin):
+                uit.append((r[0], zin.strip()))
                 break
     for p in OPNAME + OPNAME_ZINNEN + [OPNAME_VOLGENS]:
         for m in p.finditer(tekst or ""):
@@ -137,18 +165,22 @@ def controleer(tekst, profiel=None):
     return uit
 
 
-def toepassen(tekst, profiel=None):
-    """Past de regels toe op één tekst: (nieuwe tekst, [(regel, geschrapte zin of verwijzing)])."""
+def toepassen(tekst, profiel=None, vast=frozenset()):
+    """Past de regels toe op één tekst: (nieuwe tekst, [(regel, geschrapte zin of verwijzing)]).
+    vast: zinnen die letterlijk vaste kantoortekst zijn en blijven staan (zie wacht)."""
     if not tekst or not isinstance(tekst, str):
         return tekst, []
     tekst, ingrepen = _opname_weg(tekst)
     delen = []
     regels = _regels(profiel)
     for zin in _ZIN.findall(tekst):
-        for regel, p in regels:
-            if p.search(zin):
-                ingrepen.append((regel, zin.strip()))
-                delen.append(MARKERING.format(regel=regel) + " ")
+        if zin.strip() in vast:
+            delen.append(zin)
+            continue
+        for r in regels:
+            if _treft(r, zin):
+                ingrepen.append((r[0], zin.strip()))
+                delen.append(MARKERING.format(regel=r[0]) + " ")
                 break
         else:
             delen.append(zin)
@@ -158,18 +190,23 @@ def toepassen(tekst, profiel=None):
 def wacht(verslag, profiel=None, vast=()):
     """Past de regels toe op elk tekstveld van een verslag-dict, ter plaatse; geeft [(regel, zin)] terug.
     vast: de vaste kantoorteksten van het sjabloon (doorlopende punten, voorbehoud). Dat is tekst van Mehdi zelf; een veld
-    dat er letterlijk een van is, blijft onaangeroerd (de VGP-zin "De architect is niet aansprakelijk ..." is geen S5)."""
+    of een zin die er letterlijk een van is, blijft onaangeroerd (de VGP-zin "De architect is niet aansprakelijk ..." is
+    geen S5), ook in een oudere bewoording van het punt rond dezelfde zin.
+    Het veld bron blijft ook staan: daar hoort het opnametijdstip, voor de controle (S4)."""
     ingrepen = []
-    vast = {t.strip() for t in vast if isinstance(t, str)}
+    vast_velden = {t.strip() for t in vast if isinstance(t, str)}
+    vast_zinnen = frozenset(z.strip() for t in vast_velden for z in _ZIN.findall(t) if z.strip())
 
     def een(tekst):
-        if tekst.strip() in vast:
+        if tekst.strip() in vast_velden:
             return tekst, []
-        return toepassen(tekst, profiel=profiel)
+        return toepassen(tekst, profiel=profiel, vast=vast_zinnen)
 
     def loop(x):
         if isinstance(x, dict):
             for k, v in x.items():
+                if k == "bron":
+                    continue
                 if isinstance(v, str):
                     nieuw, ing = een(v)
                     if ing:

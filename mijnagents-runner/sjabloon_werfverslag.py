@@ -174,11 +174,38 @@ def herkomst(bron):
         return b
     if code:
         return code.group(0)
-    if re.search(r"bouwheer|verklaring|mondeling", b, re.I):
+    # Een "verklaring" alleen als die van de bouwheer is: een EPB-startverklaring of prestatieverklaring is een stuk (S).
+    if re.search(r"\bbouwhe(?:er|ren)\b|\bmondeling\b", b, re.I):
         return "B"
     if re.search(r"transcript|opname|audio|\d{1,2}:\d{2}|\.(?:jpe?g|png|heic)\b|\b00 (?:verslag|fotos)\.md\b", b, re.I):
         return "V"
     return "S"
+
+
+# verslag_md is bij een werfverslag de enige plek waar de bron per punt (bestand en opnametijdstip) bewaard blijft. Het
+# verslag toont alleen V, B of S; de volledige bron staat erachter als HTML-commentaar, onzichtbaar op de bezoekpagina,
+# in Word en in de PDF, en van_markdown leest ze terug (Herlayout verliest zo niets).
+def _bron_noot(bron):
+    b = (bron or "").strip()
+    if not b or b == herkomst(b):
+        return ""
+    return " <!-- bron: " + b.replace("--", "- -") + " -->"
+
+
+def _bron_uit(regel):
+    m = re.match(r"(.*?)\s*<!-- bron: (.*?) -->\s*$", regel)
+    return (m.group(2) if m else regel).strip()
+
+
+def toont_ruwe_bron(md):
+    """Een oude proef toont nog 'Herkomst: transcript.txt 00:12:00' (van vóór de V/B/S-weergave): Herlayout herschrijft
+    dan de bewaarde markdown, zodat de bezoekpagina hetzelfde toont als Word en de PDF."""
+    for regel in (md or "").splitlines():
+        if regel.startswith("Herkomst: "):
+            zicht = re.sub(r"\s*<!--.*?-->\s*$", "", regel[len("Herkomst: "):]).strip()
+            if zicht and zicht != herkomst(zicht):
+                return True
+    return False
 
 
 VLAG = {"ok": "OK", "belangrijk": "Belangrijk", "dringend": "Dringend", "": ""}
@@ -249,7 +276,7 @@ def naar_markdown(v):
             r.append(p.get("tekst_nl", ""))
             if p.get("bron"):
                 r.append("")
-                r.append(f"Herkomst: {herkomst(p['bron'])}")
+                r.append(f"Herkomst: {herkomst(p['bron'])}" + _bron_noot(p["bron"]))
             if p.get("tekst_en"):
                 r.append("")
                 r.append(f"*{p['tekst_en']}*")
@@ -355,7 +382,7 @@ def van_markdown(md):
         if rg.startswith("Verantwoordelijke: "):
             punt["verantwoordelijke"] = rg[len("Verantwoordelijke: "):].strip()
         elif rg.startswith("Herkomst: "):
-            punt["bron"] = rg[len("Herkomst: "):].strip()
+            punt["bron"] = _bron_uit(rg[len("Herkomst: "):])
             punt["doorlopend"] = punt["bron"] == "vast punt kantoor"
         elif rg.startswith("Naslag: "):
             punt["naslag"] = rg[len("Naslag: "):].strip()

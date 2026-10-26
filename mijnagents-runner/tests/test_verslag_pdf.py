@@ -55,5 +55,8 @@ for n in (1, 2, 3, 4, 5):
 pdf = PdfReader(io.BytesIO(verslag_pdf.naar_pdf(MD, "9999 | Werfverslag 3", [])))
 check("zonder foto's alleen de tekstpagina", len(pdf.pages) == 1, f"kreeg {len(pdf.pages)}")
 
+h = verslag_pdf.md_naar_html("Er blijft water staan.\n\nHerkomst: V <!-- bron: transcript.txt 00:22:30 -->\n")
+check("de bewaarde bron achter Herkomst komt niet in de PDF", "Herkomst: V" in h and "00:22" not in h and "bron:" not in h, h)
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -128,7 +128,7 @@ def test_fotofout_word_en_zichtbare_markdown(monkeypatch):
     assert "Foto's niet geplaatst" in md and "Herkomst: V" in md and "Herkomst: foto.jpg" not in md
     assert basis["categorieen"][0]["punten"][0]["bron"] == "foto.jpg"
     terug = S.van_markdown(md)
-    assert terug["categorieen"][0]["punten"][0]["bron"] == "V"
+    assert terug["categorieen"][0]["punten"][0]["bron"] == "foto.jpg"   # de bron blijft bewaard achter de V
     assert terug["fotos_niet_geplaatst"] == verslag["fotos_niet_geplaatst"]
     # naar_docx werkt op een kopie (grendel), maar de plaatsingsfout komt in het verslag van de aanroeper (V2/V8/V13)
     S.naar_docx(basis, {"foto.jpg": b"geen afbeelding"})

@@ -131,7 +131,11 @@ for zin in ("De aannemer is in gebreke gebleven.", "De aannemer werd in gebreke 
 wb = dict(w, categorieen=[{"naam": "Ramen", "punten": [{"nummer": "3.1", "titel": "Dorpel", "datum": "2026-10-01", "tekst_nl": "Er blijft water staan.",
                                                        "bron": "transcript.txt 00:22:30-00:23:16", "fotos": []}]}])
 mdh = sj.naar_markdown(wb)
-check("V11 werfverslag: Herkomst V zonder opnametijdstip", "Herkomst: V" in mdh and "00:22" not in mdh and "transcript" not in mdh, mdh[-900:])
+import re as _re  # noqa: E402
+zichtbaar = _re.sub(r"\s*<!--.*?-->", "", mdh)
+check("V11 werfverslag: Herkomst V zonder opnametijdstip in de zichtbare tekst", "Herkomst: V" in zichtbaar and "00:22" not in zichtbaar and "transcript" not in zichtbaar, mdh[-900:])
+check("V11 werfverslag: de bron blijft bewaard achter de V en komt terug bij van_markdown",
+      sj.van_markdown(mdh)["categorieen"][0]["punten"][0]["bron"] == "transcript.txt 00:22:30-00:23:16", mdh[-400:])
 xml = zipfile.ZipFile(io.BytesIO(sj.naar_docx(wb))).read("word/document.xml").decode("utf8")
 check("V11 werfverslag Word zonder opnametijdstip", "00:22" not in xml and "transcript.txt" not in xml)
 check("V11 bron in de gegevens ongewijzigd", wb["categorieen"][0]["punten"][0]["bron"] == "transcript.txt 00:22:30-00:23:16")
@@ -172,6 +176,52 @@ for lijn in doc.splitlines():
         else:
             check(f"document {regel} Goed blijft: '{m.group(2)[:40]}'", (uit, ing) == (m.group(2), []), (uit, ing))
 check("document heeft voorbeelden voor elke regel", n_voorbeelden >= 14, n_voorbeelden)
+
+# Tweede review 26-10-2026: S1 gaat voor volledigheid (een zin over het eigen bureau mag nooit door), met alleen een
+# smalle uitzondering voor een zin over een derde; het gedrag voor aankoopkeuring en barsten blijft dat van productie.
+for zin in ["De architect was op dat moment niet aanwezig.", "De architect was toen niet aanwezig.", "Het bureau was die dag niet aanwezig.",
+            "De architect heeft die wapening niet gecontroleerd.",
+            "De architect heeft, ondanks herhaalde vraag van de bouwheer, de werken niet opgevolgd.",
+            "De architect heeft, volgens de bouwheer, zijn plicht verzuimd.", "De werf werd voordien niet bezocht door de architect.",
+            "De architect werd pas na de werken aangesteld, hij was voordien niet ter plaatse.", "Mehdi Chegini was niet eerder ter plaatse.",
+            "Het architectenbureau is niet eerder langsgekomen.", "Ik ben hier niet eerder geweest.",
+            "De architectenovereenkomst voorziet slechts één controlebezoek.", "Het ereloon dekt maar één bezoek.",
+            "De aannemer zegt dat de architect niet eerder ter plaatse was.", "De bouwheer meldt dat het bureau voordien niet geweest is."]:
+    check(f"S1 blijft voor het eigen bureau: '{zin[:40]}'", any(r == "S1" for r, _ in S.controleer(zin)), S.controleer(zin))
+for zin in ["De veiligheidscoördinator is nog niet eerder langsgekomen op de werf.", "De EPB-verslaggever is niet eerder ter plaatse geweest.",
+            "De ramenplaatser was vroeger niet aanwezig bij de werfvergadering.", "De landmeter is eerder niet gekomen.",
+            "De architect stelt vast dat de dakwerker niet aanwezig was.", "Er is slechts één bezoek van de keurder voorzien.",
+            "Bij het bezoek van de architect was geen aannemer aanwezig.",
+            "Indien de architect niet ter plaatse is, legt de aannemer de wapening fotografisch vast.",
+            "Volgens de architect is er geen dampscherm aanwezig.", "Wij hebben de kelder niet bezocht wegens wateroverlast.",
+            "Ondergetekende heeft het platte dak niet gecontroleerd wegens het ontbreken van een veilige toegang.",
+            "We konden de kruipruimte niet bezoeken: het luik was dichtgeschroefd.", "We zien geen ventilatie aanwezig in de badkamer."]:
+    check(f"S1 laat staan: '{zin[:40]}'", not S.controleer(zin) and not S.controleer(zin, "aankoopkeuring"), S.controleer(zin))
+for zin in ["De raming bedraagt € 3.200 excl. btw (3.872 incl. btw).", "Herstel kost € 3.200 excl. btw, of 3.872 incl. btw."]:
+    t6, _ = S.toepassen(zin, "aankoopkeuring")
+    check(f"S6 geen restbedrag na een afkorting: '{zin[:30]}'", "3.872" not in t6 and "200" not in t6, t6)
+for zin in ["De herstelkosten worden geraamd op 4500 tot 6000.", "Richtprijs: 8000 per woning."]:
+    check(f"S6 kostenraming zonder euro: '{zin[:30]}'", any(r == "S6" for r, _ in S.controleer(zin, "aankoopkeuring")), S.controleer(zin, "aankoopkeuring"))
+for zin in ["Het bouwmisdrijf verjaart na tien jaar.", "De overtreding kan niet meer verjaren.", "De verjaarde overtreding vraagt geen regularisatie."]:
+    check(f"S7 elke vorm van verjaren: '{zin[:30]}'", any(r == "S7" for r, _ in S.controleer(zin, "aankoopkeuring")), S.controleer(zin, "aankoopkeuring"))
+check("S7 een verjaardag is geen verjaring", not S.controleer("De verjaardag van de bouwheer viel op het bezoek.", "aankoopkeuring"))
+for zin, verwacht in [("De architect sprak zijn vaststellingen ter plaatse in, het kader is 2 cm uit het lood.", "Het kader is 2 cm uit het lood."),
+                      ("De dorpel is 3 cm te laag; het tijdstip tussen haakjes verwijst naar de opname.", "De dorpel is 3 cm te laag."),
+                      ("Volgens de opname bestaande toestand is de muur 30 cm dik.", "Volgens de opname bestaande toestand is de muur 30 cm dik."),
+                      ("Uit de opname van de landmeter blijkt dat de perceelgrens 20 cm verschuift.",
+                       "Uit de opname van de landmeter blijkt dat de perceelgrens 20 cm verschuift.")]:
+    t4, _ = S.toepassen(zin)
+    check(f"S4 vaststelling blijft: '{zin[:40]}'", t4 == verwacht, t4)
+# Vaste kantoortekst per zin: ook een oudere bewoording van het punt rond dezelfde VGP-zin blijft staan; het veld bron ook.
+vgp = "De architect is niet aansprakelijk voor slecht verankerde stellingen of het niet naleven van het VGP; werfinspecties zijn momentopnames."
+oud = {"punten": [{"tekst_nl": "Werfinspecties: helmen en nagelverwijdering zijn verplicht. " + vgp, "bron": "transcript.txt (opname 00:22:30)"}]}
+check("vaste zin blijft in een oudere bewoording en de bron blijft heel",
+      not S.wacht(oud, vast=["Andere bewoording van het punt. " + vgp]) and vgp in oud["punten"][0]["tekst_nl"]
+      and "00:22:30" in oud["punten"][0]["bron"], oud)
+check("een eigen S5-zin van de schrijver gaat nog altijd weg", S.wacht({"t": "De aannemer is aansprakelijk."}, vast=[vgp]))
+for b, code in [("EPB startverklaring.pdf", "S"), ("Prestatieverklaring PIR-isolatie.pdf", "S"), ("verklaring bouwheer", "B"),
+                ("mondeling", "B"), ("transcript.txt 00:22:30", "V"), ("Lastenboek.pdf", "S")]:
+    check(f"herkomst '{b}' is {code}", sj.herkomst(b) == code, sj.herkomst(b))
 
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -19,7 +19,9 @@ bureau bleek, noemde de beperking van de eigen opdracht, en verwees bij elke vas
 **S1. Niets over de architect of het bureau zelf.** Geen zin over de eigen aanwezigheid, eerdere bezoeken,
 opdrachtomvang, verplichtingen, fouten of verzuim. Het hoofdstuk "Rol van H-Architects in dit dossier" vult alleen
 Mehdi in; de agent laat het op "(in te vullen)". Dit geldt alleen voor het eigen bureau: wat een derde (landmeter,
-veiligheidscoördinator, dakwerker) wel of niet deed, is een gewone vaststelling.
+veiligheidscoördinator, dakwerker) wel of niet deed, is een gewone vaststelling. Bij twijfel schrapt de grendel: een zin
+die het eigen bureau noemt, gaat altijd weg, ook als een derde hem vertelt ("De aannemer zegt dat de architect niet
+eerder ter plaatse was"). Een ten onrechte geschrapte zin zie je aan de markering en zet je zelf terug.
 
 - Fout: "Uit de voorgelegde stukken blijkt geen eerder bezoek van het bureau aan de werken."
 - Fout: "De opdracht is beperkt tot de vergunning, met hoogstens één controlebezoek."
@@ -42,7 +44,9 @@ of nalatig was.
 vaststellingen insprak of dat een tijdstip naar de opname verwijst. Het tijdstip blijft in de brongegevens (het veld
 bron op de bezoekpagina), voor de controle, nooit in het verslag. Herkomst wordt in het verslag alleen aangeduid als
 V (eigen vaststelling ter plaatse), B (verklaring van de bouwheer) of S (blijkt uit de stukken), ook in de regel
-"Herkomst" van een werfverslag.
+"Herkomst" van een werfverslag. De volledige bron (bestand en tijdstip) blijft daar onzichtbaar achter bewaard, zodat
+een nieuwe opmaak niets verliest; een EPB-startverklaring of prestatieverklaring is een stuk (S), geen verklaring van
+de bouwheer.
 
 Wat de grendel doet: een tijdstip tussen haakjes valt weg en de zin blijft. Een zin met een vaststelling "volgens de
 opname ..." wordt zichtbaar vervangen door "(geschrapt: schrijfregel S4, ...)". Een zin die alleen over de opname

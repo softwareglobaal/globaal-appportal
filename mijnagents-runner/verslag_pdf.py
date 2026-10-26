@@ -53,6 +53,7 @@ def _inline(t):
 def md_naar_html(md):
     """Onze eigen markdown (uit sjabloon_werfverslag en sjabloon_bevindingen) naar HTML."""
     uit, lijst, tabel, alinea = [], [], [], []
+    md = re.sub(r"[ \t]*<!--.*?-->", "", md or "", flags=re.S)   # de bron achter "Herkomst: V" hoort niet in de PDF
 
     def sluit_alinea():
         if alinea:

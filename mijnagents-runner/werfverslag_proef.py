@@ -1041,6 +1041,7 @@ def herlayout(ag, dossier, volgnr):
         ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak verslag van bevindingen: {os.path.basename(pad_docx)} ({len(docx)//1024} kB), zonder Claude")
         _bewaar(rij, dossier, volgnr, verslag_md=md, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info)
         return pad_docx
+    ruwe_bron = sjab.toont_ruwe_bron(md)
     v = sjab.van_markdown(md)
     v.setdefault("datum", rij["datum"]); v.setdefault("adres", rij.get("adres", "")); v.setdefault("opgemaakt", date.today().isoformat())
     keuzes = rij.get("keuzes") or {}
@@ -1056,6 +1057,8 @@ def herlayout(ag, dossier, volgnr):
     info["bestanden"] = _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, verslag_pdf.fotolijst_werfverslag(v, beelden),
                                         voettekst_van(dossier, v, None))
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak (huisstijl contractmaster): {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {len(beelden)} foto's), zonder Claude")
-    # de bewaarde tekst alleen herschrijven als de grendel ingreep (anders blijft de markdown van Mehdi zoals ze was)
-    _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info, **({"verslag_md": md} if ingrepen else {}))
+    # de bewaarde tekst alleen herschrijven als de grendel ingreep of de herkomst nog een ruwe bron toonde (anders blijft de
+    # markdown van Mehdi zoals ze was); de bron zelf blijft erin bewaard, achter de V/B/S
+    _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info,
+            **({"verslag_md": md} if ingrepen or ruwe_bron else {}))
     return pad_docx
