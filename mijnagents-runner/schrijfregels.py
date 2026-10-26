@@ -74,6 +74,9 @@ _TIJDSTIP = r"\d{1,2}:\d{2}(?::\d{2})?"
 # is het einde van een zin (24e review)
 OPNAME_LOS = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?(?:opname|transcript|audio|recording)\s+(?:van\s+|at\s+)?"
                         + _TIJDSTIP + r"(?:\s*(?:-|–|tot|to)\s*" + _TIJDSTIP + r")?\s*[.!?](?=\s|$)", re.I)
+# "(opname 00:22:30)." als eigen zin na een punt: ook weg samen met de punt (26e review)
+OPNAME_LOS_HAAKJES = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*\(\s*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?"
+                                r"(?:opname|geluidsopname|transcript|audio|recording)\b[^)]*\)\s*[.!?]?(?=\s|$)", re.I)
 OPNAME = [
     re.compile(r"\s*\((?:opname|transcript|audio|geluidsopname)[^)]*\d{1,2}:\d{2}[^)]*\)", re.I),
     re.compile(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|transcript|audio)\s+(?:van\s+)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?", re.I),
@@ -235,7 +238,7 @@ def _opname_weg(tekst):
             continue
         delen.append(zin)
     tekst = "".join(delen)
-    for p in [OPNAME_LOS] + OPNAME + ([_KAAL_TIJDSTIP] if legende else []):
+    for p in [OPNAME_LOS, OPNAME_LOS_HAAKJES] + OPNAME + ([_KAAL_TIJDSTIP] if legende else []):
         tekst, k = p.subn("", tekst)
         ingrepen += [("S4", "opnameverwijzing")] * k
     tekst = re.sub(r"[ \t]+([,.;:)])", r"\1", tekst)

@@ -512,5 +512,14 @@ for b in ["V - Vergunningsbesluit.pdf p. 2", "B-plan stabiliteit.pdf blad 3", "S
 for b in ["V", "B", "S", "V + B", "V/S"]:
     check(f"een volledige code blijft: '{b}'", sj.herkomst(b) == b, sj.herkomst(b))
 
+# Zesentwintigste review 26-10-2026: een verwijzing tussen haakjes als eigen zin na een punt
+for tekst, verwacht in [("Er blijft water staan in de goot. (opname 00:22:30). De goot hangt door.", "Er blijft water staan in de goot. De goot hangt door."),
+                        ("De schoorsteen vertoont scheuren aan de bovenzijde! (opname 00:31:10).", "De schoorsteen vertoont scheuren aan de bovenzijde!"),
+                        ("Lekt de goot? (transcript 00:12).", "Lekt de goot?"), ("(opname 00:22:30). De goot hangt door.", "De goot hangt door."),
+                        ("De goot lekt. (zie opname 00:12:05). De dorpel ligt te laag.", "De goot lekt. De dorpel ligt te laag."),
+                        ("De goot lekt (opname 00:12:05).", "De goot lekt.")]:
+    t26, _ = S.toepassen(tekst, "aankoopkeuring")
+    check(f"verwijzing tussen haakjes na een punt: '{tekst[:35]}'", t26 == verwacht, repr(t26))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
