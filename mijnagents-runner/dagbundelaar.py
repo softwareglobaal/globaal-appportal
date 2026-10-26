@@ -56,7 +56,7 @@ NAAM = "dagbundelaar"
 ag = bord.Agent(NAAM)
 DAG = None
 VENSTER = None
-NACHT = "--nacht" in sys.argv          # alleen de dagvaststelling, geen bundels (cron 23:30 UTC, planning/dagvaststelling.cron)
+NACHT = "--nacht" in sys.argv          # alleen de dagvaststelling, geen bundels (keten.py --nacht, planning/gesprekken.cron)
 for i, a in enumerate(sys.argv):
     if a == "--dag" and i + 1 < len(sys.argv):
         DAG = sys.argv[i + 1]
@@ -216,19 +216,36 @@ def bundelen():
 
 def main():
     """Een ronde door de gedeelde doorgang (N12). Ochtend (keten.py, werkdagen): bundels en de dagvaststelling van
-    gisteren. Nacht (--nacht, elke dag): alleen de dagvaststelling, over NACHTVENSTER dagen. De taaknaam van de nacht
-    (ochtend.NACHTTAAK) geeft het ochtendbericht nooit vrij (Codex D1)."""
+    gisteren. Nacht (--nacht, elke dag, als stap van keten.py --nacht na De Zoomwacht): alleen de dagvaststelling, over
+    NACHTVENSTER dagen. De taaknaam van de nacht (ochtend.NACHTTAAK) geeft het ochtendbericht nooit vrij (Codex D1)."""
     import ochtend
     with ag.ronde(ochtend.NACHTTAAK if NACHT else "bundels en dagvaststelling") as r:
-        delen = []
-        if not NACHT:
+        delen, nu = [], datetime.now(timezone.utc)
+        nacht = lees_nacht()
+        zoom_nacht_ok = True
+        if NACHT:
+            # F9: de nachtketen (keten.py --nacht) schrijft nacht.json voor ze mij start, met de exit van De Zoomwacht
+            begin = ochtend.tijdstip(nacht.get("start"))
+            zoom = (nacht.get("stappen") or {}).get("zoom-wacht") or {}
+            if begin is None or nacht.get("einde") or nu - begin > timedelta(hours=3):
+                zoom_nacht_ok = False
+                r.nood("Nachtronde buiten de nachtketen: De Zoomwacht liep niet vooraf", wie="claude-code")
+            elif zoom.get("exit") != 0:
+                zoom_nacht_ok = False
+                r.nood("De Zoomwacht faalde in de nachtketen: de Zoom-gesprekken van gisteravond kunnen ontbreken",
+                       wie="claude-code")
+        else:
             uit = bundelen()
             for n in uit["nood"]:
                 r.nood(n["tekst"], wie=n["wie"])
             delen.append(uit["detail"])
-        dagen = [DAG] if DAG_GEGEVEN else V.venster(datetime.now(timezone.utc), VENSTER or (NACHTVENSTER if NACHT else 1))
+            begin = ochtend.tijdstip(nacht.get("start"))
+            if begin is None or nu - begin > timedelta(hours=NACHT_UREN):
+                # F9: een bezet slot of een cron die niet liep, zegt keten.log; hier wordt het een nood
+                r.nood("De nachtketen van de dagvaststelling liep niet, zie keten.log", wie="claude-code")
+        dagen = [DAG] if DAG_GEGEVEN else V.venster(nu, VENSTER or (NACHTVENSTER if NACHT else 1))
         try:
-            delen.append(vastleggen(r, dagen))
+            delen.append(vastleggen(r, dagen, zoom_nacht_ok=zoom_nacht_ok))
         except Exception as e:  # noqa: BLE001
             if NACHT:
                 raise
@@ -240,6 +257,18 @@ def main():
 
 
 # ------------------------------------------------------------------------------------------- dagvaststelling ---
+NACHTBESTAND = os.path.join(DATA, "nacht.json")               # keten.py --nacht: start, einde, stappen met exit
+NACHT_UREN = 30                                               # zo oud mag de laatste nachtketen overdag zijn
+
+
+def lees_nacht():
+    try:
+        d = json.loads(_lees(NACHTBESTAND) or "{}")
+    except ValueError:
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
 def _schrijf(pad, tekst):
     """Atomisch: een lezer (de Mac-sync) ziet altijd een heel bestand."""
     os.makedirs(os.path.dirname(pad), exist_ok=True)
@@ -267,7 +296,7 @@ def dagpad(dag):
 
 def ontvangst():
     """De Mac-sync van Data uit Mehdi schrijft na de rsync per bestand de sha256 van de kopie in Dropbox (regels
-    'sha256  ./<jaar>/<dag>.md'). Geeft {dag: sha256}; leeg als er nog geen bewijs is."""
+    'sha256  ./JJJJ/JJJJ-MM-DD.md'). Geeft {dag: sha256}; leeg als er nog geen bewijs is."""
     uit = {}
     for regel in (_lees(ONTVANGST) or "").splitlines():
         delen = regel.split()
@@ -291,16 +320,26 @@ def kanaalstand(rij, nu):
     return f"stil sinds {ts.astimezone(V.BRUSSEL):%d-%m %H:%M}"
 
 
+def kanaal_van_dag(stand, kanaal, dag, gedekt):
+    """F5: een aangesloten wacht bewijst alleen de dagen die ze zelf als gelezen meldt: een rij dekking:<kanaal>:<dag>
+    (bron dekking) in de gesprekkentabel. Een dag zonder die rij is onbekend, nooit nul."""
+    if stand != "aangesloten":
+        return stand
+    return "aangesloten" if (kanaal, dag) in gedekt else "onbekend voor deze dag"
+
+
 def lees_agenda(dagen):
     """Alle afspraken van de dagen, met de archiefagenda's (Codex E2), per Brusselse dag; en welke agenda's niet gelezen
-    werden (ook 'archief'). Alleen lezen. Ritten, hele dagen, feestdagen en geannuleerde vallen weg; dubbels een keer."""
+    werden (ook 'archief'; een privé-agenda zonder haar naam, F1). Alleen lezen. Ritten, hele dagen, feestdagen en
+    geannuleerde vallen weg; dubbels een keer."""
     import agenda_wacht as W
     vandaag = datetime.now(timezone.utc).date()
     van = (date.fromisoformat(min(dagen)) - vandaag).days - 1
     tot = (date.fromisoformat(max(dagen)) - vandaag).days + 2
     ruw = W.afspraken(van, tot, alleen_lezen=True)
     archief = W.archief_afspraken(van, tot, alleen_lezen=True)
-    ongelezen = {W.KALENDERS.get(x["kalender"], x["kalender"]) for x in ruw if x.get("fout")}
+    ongelezen = {"een privé-agenda" if x["kalender"] in W.PRIVE_KALENDERS else W.KALENDERS.get(x["kalender"], x["kalender"])
+                 for x in ruw if x.get("fout")}
     if W.ARCHIEF_FOUT:
         ongelezen.add("archief")
     ag.prive(W.prive_teksten(ruw + archief))       # het masker van het bord, als vangnet bovenop de eigen privéregel
@@ -321,26 +360,34 @@ def lees_agenda(dagen):
 
 
 def lees_locatie(dag, afspraken):
-    """De uitkomst per afspraak ter plaatse en de bezoeken zonder afspraak, van De Locatiewacht (alleen lezen). Lukt dat
-    niet, dan krijgt elke afspraak ter plaatse 'onbekend' en zijn de bezoeken None."""
+    """De uitkomst per afspraak ter plaatse, de bezoeken zonder afspraak en de stand van het dagboek, van De Locatiewacht
+    (alleen lezen), met dezelfde afsprakenlijst als de vaststelling (F4). Lukt dat niet, of is het dagboek niet
+    afgesloten of voorlopig, dan krijgt elke afspraak ter plaatse 'onbekend' en zijn de bezoeken None."""
     import agenda_wacht as W
     import locatie_wacht as LW
+    reden = ""
     try:
-        d = LW.maak(dag)
-        bezoeken = [{"van": LW.uur(v["van"]), "tot": LW.uur(v["tot"]), "minuten": v.get("minuten"), "waar": v.get("waar")}
-                    for v in d["werf"] + d["twijfel"] + d["elders"]]
-        return d["per_id"], sorted(bezoeken, key=lambda b: b["van"]), ""
+        d = LW.maak(dag, afspraken=afspraken)
+        stand = str(d.get("status") or "")
+        if stand in ("afgesloten", "voorlopig"):
+            bezoeken = [{"van": LW.uur(v["van"]), "tot": LW.uur(v["tot"]), "minuten": v.get("minuten"), "waar": v.get("waar"),
+                         "soort": soort} for soort, lijst in (("project", d["werf"]), ("twijfel", d["twijfel"]),
+                                                              ("elders", d["elders"])) for v in lijst]
+            return d["per_id"], sorted(bezoeken, key=lambda b: b["van"]), stand, ""
+        reden = f"dagboek {stand or 'zonder stand'}"
     except Exception as e:  # noqa: BLE001
-        per_id = {}
-        for a in afspraken:
-            info = W.lees_titel(a.get("titel") or "")
-            loc = (a.get("locatie") or "").strip()
-            if info["buiten"] or info["soort"] in W.BUITEN_SOORTEN or (loc and not LW.online(loc)):
-                per_id[a.get("id")] = {"uitkomst": "onbekend"}
-        return per_id, None, f"{type(e).__name__}"
+        reden = type(e).__name__
+    per_id = {}
+    for a in afspraken:
+        info = W.lees_titel(a.get("titel") or "")
+        loc = (a.get("locatie") or "").strip()
+        if info["buiten"] or info["soort"] in W.BUITEN_SOORTEN or (loc and not LW.online(loc)):
+            per_id[a.get("id")] = {"uitkomst": "onbekend"}
+    return per_id, None, "", reden
 
 
 SYSTEEMPYTHON = "/usr/bin/python3"
+PLAFOND = 2000                                                # zoveel koppen per map; meer is niet volledig gelezen
 
 
 def lees_mail(dagen):
@@ -365,57 +412,64 @@ def lees_mail(dagen):
 
 
 def _lees_mail(dagen):
-    """Rechtstreeks uit de mappen (Codex E4): zo is de leesdekking van deze ronde gekend. Alleen koppen, nooit inhoud."""
+    """Rechtstreeks uit de mappen (Codex E4): zo is de leesdekking van deze ronde gekend. Alleen koppen, nooit inhoud.
+    Ontvangen: de postvakken van de mailwachten, in de mappen die zij lezen. Verzonden: die postvakken en ook de adressen
+    waaruit ze antwoorden (antwoord_vanuit, F7). Privé is een postvak van een wacht van firma PRIV of afdeling privé (F1)."""
     import postvak as PV
     sinds = (date.fromisoformat(min(dagen)) - timedelta(days=1)).isoformat()
-    ontvangen, verzonden, prive = {}, {}, set()
-    for naam, cfg in PV.wachten().items():
-        if not isinstance(cfg, dict) or "postvakken" not in cfg:
+    cfgs = [c for c in PV.wachten().values() if isinstance(c, dict) and "postvakken" in c]
+    postvakken = list(dict.fromkeys(a for c in cfgs for a in c["postvakken"]))
+    afzenders = [a for a in dict.fromkeys(a for c in cfgs for a in c.get("antwoord_vanuit") or []) if a not in postvakken]
+    prive = {a for c in cfgs if c.get("firma") == "PRIV" or str(c.get("afdeling") or "").startswith("prive")
+             for a in c["postvakken"]}
+    ontvangen, verzonden = {}, {}
+
+    def lees(adres, m, waar):
+        try:
+            deel = PV.koppen(adres, m, sinds=sinds, plafond=PLAFOND)
+        except Exception as e:  # noqa: BLE001
+            waar["onvolledig"].append(f"{m} niet leesbaar ({type(e).__name__})")
+            return None
+        if len(deel) >= PLAFOND:
+            waar["onvolledig"].append(f"{m}: meer dan {PLAFOND} berichten")
+        return deel
+
+    for adres in postvakken + afzenders:
+        u = verzonden.setdefault(adres, {"berichten": [], "onvolledig": []})
+        o = ontvangen.setdefault(adres, {"berichten": [], "onvolledig": []}) if adres in postvakken else None
+        mb = PV.postvak(adres)
+        if not mb:
+            (o or u)["onvolledig"].append("niet in de postbus")
             continue
-        for adres in cfg["postvakken"]:
-            if cfg.get("firma") == "PRIV":
-                prive.add(adres)
-            o = ontvangen.setdefault(adres, {"berichten": [], "onvolledig": []})
-            u = verzonden.setdefault(adres, {"berichten": [], "onvolledig": []})
-            mb = PV.postvak(adres)
-            if not mb:
-                o["onvolledig"].append("niet in de postbus")
-                continue
-            if mb.get("bron"):
-                oud = PV.bron_uren_oud(mb)
-                if oud is None or oud > PV.BRON_VERS_UREN:
-                    reden = "kopie van de Mac " + ("onleesbaar" if oud is None else f"{oud:.0f} uur oud")
-                    o["onvolledig"].append(reden)
+        if mb.get("bron"):
+            oud = PV.bron_uren_oud(mb)
+            if oud is None or oud > PV.BRON_VERS_UREN:
+                reden = "kopie van de Mac " + ("onleesbaar" if oud is None else f"{oud:.0f} uur oud")
+                for x in (o, u):
+                    if x is not None:
+                        x["onvolledig"].append(reden)
+        if o is not None:
             for m in PV.mappen_van(adres):
-                try:
-                    deel = PV.koppen(adres, m, sinds=sinds, plafond=2000)
-                except Exception as e:  # noqa: BLE001
-                    o["onvolledig"].append(f"{m} niet leesbaar ({type(e).__name__})")
-                    continue
-                if len(deel) >= 2000:
-                    o["onvolledig"].append(f"{m}: meer dan 2000 berichten")
+                deel = lees(adres, m, o)
                 # een kopie van eigen verzonden mail (Gmail: Alle e-mail) is geen ontvangen mail
-                o["berichten"] += [b for b in deel if (b.get("van") or "").lower() != adres.lower()]
-            try:
-                bestaand = PV.mapnamen(mb)
-            except Exception as e:  # noqa: BLE001
-                u["onvolledig"].append(f"mappenlijst niet leesbaar ({type(e).__name__})")
+                o["berichten"] += [b for b in deel or [] if (b.get("van") or "").lower() != adres.lower()]
+        try:
+            bestaand = PV.mapnamen(mb)
+        except Exception as e:  # noqa: BLE001
+            u["onvolledig"].append(f"mappenlijst niet leesbaar ({type(e).__name__})")
+            continue
+        gelezen = False
+        for m in PV.VERZONDEN:
+            if (mb.get("mappen") and m not in mb["mappen"]) or (bestaand is not None and m.lower() not in bestaand):
                 continue
-            gelezen = False
-            for m in PV.VERZONDEN:
-                if (mb.get("mappen") and m not in mb["mappen"]) or (bestaand is not None and m.lower() not in bestaand):
-                    continue
-                if bestaand is None and m != "Sent":
-                    continue        # een kopie van de Mac kent alleen INBOX en Sent
-                try:
-                    u["berichten"] += PV.koppen(adres, m, sinds=sinds, plafond=2000)
-                    gelezen = True
-                except Exception as e:  # noqa: BLE001
-                    u["onvolledig"].append(f"{m} niet leesbaar ({type(e).__name__})")
-            if not gelezen:
-                u["onvolledig"].append("geen map Verzonden leesbaar")
-            if mb.get("bron") and o["onvolledig"]:
-                u["onvolledig"] += [x for x in o["onvolledig"] if x.startswith("kopie van de Mac")]
+            if bestaand is None and m != "Sent":
+                continue        # een kopie van de Mac kent alleen INBOX en Sent
+            deel = lees(adres, m, u)
+            if deel is not None:
+                u["berichten"] += deel
+                gelezen = True
+        if not gelezen:
+            u["onvolledig"].append("geen map Verzonden leesbaar")
     return ontvangen, verzonden, prive
 
 
@@ -428,17 +482,24 @@ def zoomstand(inhoud):
     return "volledig" if t == "volledig" else ("ondergrens" if t.startswith(("ondergrens", "minstens")) else "onbekend")
 
 
-def vastleggen(r, dagen):
+def vastleggen(r, dagen, zoom_nacht_ok=True):
     """De dagvaststelling van elke dag in `dagen` (ontwerp dagvaststelling v1.2). Leest agenda, locatie, gesprekkentabel,
-    Zoom-dagregels, mail en de hartslag van de WhatsApp-wacht en de Belwacht; schrijft per dag het bestand (met de vorige
-    versie in versies/), het klaarzet-item voor Mehdi en de staat, en leest bestand en item terug. Geeft het detail."""
+    Zoom-dagregels, mail en de hartslag van de WhatsApp-wacht en de Belwacht; schrijft per dag het bestand (de vorige
+    versie blijft in versies/, nooit overschreven), de staat en het klaarzet-item voor Mehdi, en leest bestand en item
+    letterlijk terug (F8). zoom_nacht_ok: faalde De Zoomwacht in deze nachtketen, dan is Zoom van gisteren hoogstens een
+    ondergrens (F9). Geeft het detail."""
     nu = datetime.now(timezone.utc)
     eerste, laatste = min(dagen), max(dagen)
     per_dag, ongelezen, prive_afspraak = lees_agenda(dagen)
     rijen = bord.db_lees("SELECT uniek, datum, start, minuten, personen, afdeling, thema, prive, bron, "
                          "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE datum BETWEEN ? AND ?", (eerste, laatste))
+    gedekt = {(x["uniek"].split(":")[1], x["datum"]) for x in rijen
+              if str(x["uniek"]).startswith("dekking:") and str(x["uniek"]).count(":") >= 2}
     zoom = {x["uniek"][9:]: zoomstand(x["inhoud"]) for x in bord.db_lees(
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{laatste}"))}
+    gisteren = V.gisteren(nu)
+    if not zoom_nacht_ok and zoom.get(gisteren) == "volledig":
+        zoom[gisteren] = "ondergrens"
     gezien_door_wachten = bord.db_lees("SELECT postvak, message_id, datum, soort FROM mailbericht WHERE dag BETWEEN ? AND ? "
                                        "AND COALESCE(message_id, '') != ''", (eerste, laatste))
     soorten = {x["message_id"]: x["soort"] for x in gezien_door_wachten}
@@ -465,54 +526,58 @@ def vastleggen(r, dagen):
     bewijs, nieuw, fouten, locatiefout = ontvangst(), [], [], set()
     for dag in sorted(dagen):
         afspraken = per_dag.get(dag, [])
-        per_id, bezoeken, lf = lees_locatie(dag, afspraken)
+        per_id, bezoeken, locatiestand, lf = lees_locatie(dag, afspraken)
         if lf:
             locatiefout.add(lf)
         mail = None if ontvangen is None else V.mail_telling(dag, ontvangen, verzonden, soorten)
-        v = V.vaststellen(dag, afspraken, ongelezen, rijen, per_id, bezoeken, zoom.get(dag, "onbekend"), mail, kanalen,
-                          prive_afspraak)
+        kanalen_dag = {k: kanaal_van_dag(s, k, dag, gedekt) for k, s in kanalen.items()}
+        v = V.vaststellen(dag, afspraken, ongelezen, rijen, per_id, bezoeken, zoom.get(dag, "onbekend"), mail, kanalen_dag,
+                          prive_afspraak, locatiestand)
         oud = _lees(dagpad(dag))
-        vorige = staat.get(dag) or {}
         # Het masker van het bord al voor het schrijven: bord, bestand en Dropbox dragen dezelfde tekst (E6)
         concept = ag.maskeer(V.tekst(v, prive_postvakken))
         if oud is not None and V.inhoud_hash(oud) == V.inhoud_hash(concept):
             tekst = oud                                   # niets veranderd: de vastgelegde versie blijft
         else:
-            basis = int(vorige.get("versie") or (1 if oud is not None else 0))
+            # F8: de versie volgt het bestand zelf; de staat is alleen een kopie
+            basis = V.versie_van(oud) or int((staat.get(dag) or {}).get("versie") or 0) or (1 if oud is not None else 0)
             versie = basis + 1
             if oud is not None:
-                _schrijf(os.path.join(DAGBOEK, dag[:4], "versies", f"{dag} v{basis}.md"), oud)
+                archief = os.path.join(DAGBOEK, dag[:4], "versies", f"{dag} v{basis}.md")
+                if _lees(archief) not in (None, oud):
+                    archief = archief[:-3] + f" ({nu:%Y%m%dT%H%M%S}).md"     # een bewaarde versie nooit overschrijven
+                if _lees(archief) != oud:
+                    _schrijf(archief, oud)
             over = [f"versie {versie}, gemaakt {nu.astimezone(V.BRUSSEL):%d-%m-%Y %H:%M}",
                     f"agenda: {v['agenda']['stand']}", f"Zoom: {v['zoom']['stand']}",
-                    "locatie: " + ("gelezen" if bezoeken is not None else f"niet gelezen ({lf})"),
+                    "locatie: " + (locatiestand if bezoeken is not None else f"niet gelezen ({lf})"),
                     "mail: " + ("alleen de mappen die de mailwachten lezen" if mail is not None else f"niet gelezen ({mailfout})"),
-                    f"WhatsApp: {kanalen['whatsapp']}", f"telefoon: {kanalen['telefoon']}"]
+                    f"WhatsApp: {kanalen_dag['whatsapp']}", f"telefoon: {kanalen_dag['telefoon']}"]
             if oud is not None:
                 over.append("herzien: " + (", ".join(V.wijzigingen(oud, concept)) or "opmaak"))
             tekst = ag.maskeer(V.tekst(v, prive_postvakken, over))
             _schrijf(dagpad(dag), tekst)
             staat[dag] = {"versie": versie, "hash": V.inhoud_hash(tekst), "ts": nu.isoformat()}
+            _schrijf(STAAT, json.dumps(staat, ensure_ascii=False, indent=1, sort_keys=True))
             nieuw.append(f"{dag} v{versie}")
             ag.log(f"dag {dag}", "schrijf", f"vaststelling versie {versie}"
                    + (": " + ", ".join(V.wijzigingen(oud, tekst)) if oud is not None else ""))
-        titel = f"Dag {dag} vastgesteld" + (f" (versie {staat.get(dag, {}).get('versie')})"
-                                           if int(staat.get(dag, {}).get("versie") or 1) > 1 else "")
+        versie = V.versie_van(tekst) or 1
+        titel = f"Dag {dag} vastgesteld" + (f" (versie {versie})" if versie > 1 else "")
         ag.klaarzet([{"voor": "mehdi", "soort": "dagvaststelling", "sleutel": dag, "titel": titel,
                       "uniek": f"vaststelling:{dag}", "inhoud": tekst, "revisie": True}])
-        # Teruglezen (E6): het bestand en het item tonen dezelfde vaste inhoud als wat ik net maakte.
+        # Teruglezen (E6, F8): het bestand en het item tonen letterlijk de tekst die ik net vastlegde.
         terug = (bord.call("/api/klaarzet?" + urllib.parse.urlencode(
             {"uniek": f"vaststelling:{dag}", "status": "alle", "n": 5})) or {}).get("items") or []
         op_bord = next((x.get("inhoud") for x in terug if x.get("uniek") == f"vaststelling:{dag}"), None)
         if _lees(dagpad(dag)) != tekst:
             fouten.append(f"{dag}: bestand")
-        if op_bord is None or V.inhoud_hash(op_bord) != V.inhoud_hash(tekst):
+        if op_bord != tekst:
             fouten.append(f"{dag}: bord")
-    _schrijf(STAAT, json.dumps(staat, ensure_ascii=False, indent=1, sort_keys=True))
     if fouten:
         ag.log("teruglezen", "fout", "; ".join(fouten))
         raise RuntimeError("dagvaststelling niet teruggelezen: " + "; ".join(fouten[:5]))
     # Dropbox (D9, E6): een dag van eergisteren of ouder zonder ontvangstbewijs met dezelfde sha256 staat er niet.
-    gisteren = V.gisteren(nu)
     open_ = [d for d in dagen if d < gisteren and bewijs.get(d) != _sha(_lees(dagpad(d)) or "")]
     if open_:
         r.nood("Dagboek nog niet bevestigd in Dropbox: de sync van Data uit Mehdi op de Mac haalt het niet op", wie="mehdi")
@@ -530,6 +595,7 @@ def vastleggen(r, dagen):
                wie="claude-code")
     return (f"{len(dagen)} dag(en) vastgesteld, {len(nieuw)} nieuw of herzien"
             + (f" ({', '.join(nieuw[:4])})" if nieuw else "") + f"; Dropbox open: {len(open_)}")
+
 
 if __name__ == "__main__":
     if "--mailkoppen" in sys.argv:

@@ -210,14 +210,16 @@ def verblijven_van(dagboek):
     return uit
 
 
-def vergelijk_agenda(dag, verblijven, index, wcache, per_id=None):
+def vergelijk_agenda(dag, verblijven, index, wcache, per_id=None, afspraken=None):
     """(doorgegaan, niet_gezien, zonder_adres, niet_te_toetsen). Te toetsen is een afspraak
     buiten (!!, een buitensoort of een buitendienst in de titel) of met een fysiek adres.
     Online, intern en reistijd tellen alleen mee in het aantal. De auto ter plaatse is een
     aanwijzing dat de afspraak doorging, geen bewijs dat Mehdi er was.
     per_id (een dict): krijgt per getoetste afspraak {'uitkomst', 'tekst'}, voor de dagvaststelling van De Dagbundelaar
-    (ontwerp dagvaststelling v1.2). Een afspraak die er niet in staat, is niet ter plaatse."""
-    alle = W.afspraken_dag(dag) if agenda.beschikbaar() else []
+    (ontwerp dagvaststelling v1.2). Een afspraak die er niet in staat, is niet ter plaatse.
+    afspraken: de lijst die De Dagbundelaar al las (met archiefagenda's, zonder annuleringen), zodat beide naar dezelfde
+    afspraken kijken (Codex F4); zonder die lijst lees ik de agenda zelf, zoals voordien."""
+    alle = afspraken if afspraken is not None else (W.afspraken_dag(dag) if agenda.beschikbaar() else [])
     doorgegaan, niet_gezien, zonder_adres, overig = [], [], [], 0
     for a in alle:
         if a.get("fout") or a.get("hele_dag") or "T" not in a.get("start", ""):
@@ -261,8 +263,8 @@ def lijn(v):
     return f"- {uur(v['van'])}-{uur(v['tot'])} ({duur(v['minuten'])}) {v['waar']}{zeker}{link}"
 
 
-def maak(dag):
-    """Het dagboek van een dag met de vergelijking, zonder iets weg te schrijven."""
+def maak(dag, afspraken=None):
+    """Het dagboek van een dag met de vergelijking, zonder iets weg te schrijven. afspraken: zie vergelijk_agenda."""
     if not BB.dag_toegestaan(dag):
         raise ValueError(f"{dag} valt voor de start van de meetreeks ({BB.eerste_dag()}); niets op te vragen")
     wcache = W._cache_laden()
@@ -272,7 +274,7 @@ def maak(dag):
     verblijven = verblijven_van(db)
     per_id = {}
     doorgegaan, niet_gezien, zonder_adres, overig = vergelijk_agenda(dag, verblijven, (per_sleutel, per_nummer), wcache,
-                                                                     per_id=per_id)
+                                                                     per_id=per_id, afspraken=afspraken)
     zonder = [v for v in verblijven if not v.get("afspraak") and v.get("zekerheid") != "niet_mehdi"]
     werf = [v for v in zonder if v.get("project") and v.get("zekerheid") in ("waarschijnlijk", "bevestigd")]
     twijfel = [v for v in zonder if v.get("zekerheid") == "onzeker"]

@@ -55,6 +55,12 @@ VORIG_BLOK = (
     "if [ $? -eq 75 ]; then echo \"$(date -u -Iseconds) slot /tmp/gesprekken.lock na 5400 s niet vrij: De Dagbundelaar "
     "niet gestart\" >> /home/ubuntu/agents/dagbundelaar.log; fi",
 )
+# Het blok van voor de nachtketen (Codex F9, 26-10-2026), letterlijk zoals het tot dan op de VM stond: de regel met de
+# tijden en de ochtend- en middagketen. Het nieuwe blok voegt de nachtketen toe.
+BLOK_VOOR_NACHT = (
+    '# 07:00 UTC is 09:00 Brussel tot en met 24-10-2026, vanaf 25-10 08:00; 13:00 UTC is 15:00, vanaf 25-10 14:00.',
+    '0 7,13 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/keten.py >> /home/ubuntu/agents/keten.log 2>&1; if [ $? -eq 75 ]; then echo "$(date -u -Iseconds) slot /tmp/gesprekken.lock na 1800 s niet vrij: keten niet gestart" >> /home/ubuntu/agents/keten.log; fi',
+)
 TIJDVELD = re.compile(r"[0-9*/,\-]+")
 # De checkout op de VM (~/appportal) en het merkteken van deploy.sh; een proef zet ze op een tijdelijke map.
 REPO = os.path.dirname(os.path.dirname(HIER))
@@ -160,7 +166,7 @@ def samenvoegen(huidig, regels):
         weiger(f"het beheerde blok staat er {blokken} keer")
     if blokken and oud:
         weiger(f"het beheerde blok staat er al, en er staan nog {len(oud)} oude regel(s) naast")
-    if blokken and [r.rstrip() for r in inhoud] not in (blok(regels)[1:-1], list(VORIG_BLOK)):
+    if blokken and [r.rstrip() for r in inhoud] not in (blok(regels)[1:-1], list(VORIG_BLOK), list(BLOK_VOOR_NACHT)):
         # RZ4-06: nooit stil een opdracht vervangen die er niet van ons is
         weiger("onbekende inhoud in het beheerde blok (" + " | ".join(blok_getoond(inhoud) or ["leeg"]) + ")")
     if not blokken and sorted(oud) != sorted(OUDE_REGELS):

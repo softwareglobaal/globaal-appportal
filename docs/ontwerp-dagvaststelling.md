@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 1.2, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 1.3, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -201,3 +201,21 @@ Bestanden: `koppelingen/dagvaststelling.py` (nieuw), `dagbundelaar.py`, `koppeli
 `locatie_wacht.py` (uitkomst per afspraak-id), `planning/dagvaststelling.cron` (nieuw), `planning/mac/data_uit_mehdi_sync.sh`,
 `werkwijze/dagbundelaar.md` (versie 3), tests `test_dagvaststelling.py`, `test_dagbundelaar_vaststelling.py` (nieuw),
 `test_dagbundelaar.py`, `test_locatielezers.py`, `test_regisseur.py`.
+
+## Wijzigingen in v1.3 (antwoord op ronde 3, docs/codex/dagvaststelling-bouw-r3.md)
+
+| punt | antwoord in de code |
+|---|---|
+| F1 | een ongelezen privé-agenda heet 'een privé-agenda' (`lees_agenda`); een postvak van een wacht van firma PRIV of afdeling privé (mch@ en hotmail) toont geen ontvangers |
+| F2 | bij naam alleen een werkproject (werf: waarschijnlijk of bevestigd); een twijfelgeval wordt 'projectbezoek, project onzeker', een ander verblijf 'verblijf zonder afspraak (plek in het locatielogboek)' |
+| F3 | een afspraak is bevestigd alleen als een naam uit de afspraak en een gesprekspersoon minstens twee naamdelen delen (voornaam en familienaam; partikels en Mehdi tellen niet); tegenproef met twee personen met dezelfde voornaam en met een plaatsnaam in de tests |
+| F4 | `locatie_wacht.maak(dag, afspraken=...)` vergelijkt met dezelfde gefilterde lijst (met archief, zonder annuleringen); de stand van het dagboek (afgesloten, voorlopig) staat in het overzicht; een andere stand of een fout is 'niet gelezen' |
+| F5 | Zoom-stand onbekend geeft 'Zoom-chat: onbekend' en elk Zoom-getal als 'minstens'; WhatsApp en telefoon per dag: een aangesloten wacht bewijst alleen de dagen met een rij `dekking:<kanaal>:<dag>` (bron dekking, contract voor fase 2), anders 'onbekend voor deze dag', nooit nul |
+| F6 | een Zoom-gesprek met een samenvallende Plaud-opname telt een keer en als gesprek met opname |
+| F7 | verzonden post ook van de adressen in antwoord_vanuit; een map op het plafond (2000) is onvolledig, ook bij verzonden |
+| F8 | de versie volgt het bestand zelf (`versie_van`), de staat wordt per dag meteen geschreven, een bewaarde versie wordt nooit overschreven (anders een naam met tijdstempel), bord en bestand worden letterlijk teruggelezen |
+| F9 | de nachtregel staat in het beheerde blok van `planning/gesprekken.cron` als `keten.py --nacht` (zetscript kent het blok van voor de nacht als vorige vorm); de nachtketen schrijft `nacht.json`, nooit `keten.json`; `ochtend.ketenstart` slaat de nachtregel over; een bezet slot staat in keten.log, een mislukte Zoomwacht en een nachtketen die niet liep worden een nood van De Dagbundelaar |
+| F10 | de Mac-sync eindigt met exit 1 en 'fout' in het logboek bij een mislukte rsync of een mislukt ontvangstbewijs |
+
+Droge proef op de VM met v1.3 (22, 24 en 25-10-2026, schrijven naar /tmp): werkt; mail 10 binnen en 14 verzonden op 22-10
+over acht adressen; gewone verblijven zonder plek; hotmail onvolledig (Mac-kopie 144 uur oud).

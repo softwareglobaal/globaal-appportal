@@ -97,7 +97,9 @@ def ketenstart(cron_tekst):
     niet is de regel met fathom_wacht.py (R8). None als het niet te lezen is; dan is het startmoment onbekend."""
     if not isinstance(cron_tekst, str):
         return None
-    regels = [r.strip() for r in cron_tekst.splitlines() if r.strip() and not r.strip().startswith("#")]
+    # de nachtketen (keten.py --nacht, dagvaststelling) is niet de start van de gesprekkenketen (Codex F9)
+    regels = [r.strip() for r in cron_tekst.splitlines() if r.strip() and not r.strip().startswith("#")
+              and "keten.py --nacht" not in r]
     for script in ("keten.py", "fathom_wacht.py"):
         for regel in regels:
             if script not in regel:

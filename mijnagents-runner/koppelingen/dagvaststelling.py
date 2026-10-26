@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 BRUSSEL = ZoneInfo("Europe/Brussels")
 MARGE = timedelta(minutes=15)          # een gesprek dat zo dicht bij een afspraak ligt, hoort er mogelijk bij
 MIN_GESPREK = 2                        # kortere oproepen of sessies zijn geen ongepland gesprek
+MAX_NAAR = 5                           # zoveel ontvangers per postvak staan er bij naam; de rest als aantal
 PLAUD_SAMEN = 0.5                      # zoveel van een Plaud-opname valt in een Zoom- of Fathom-gesprek: een dubbel
 # Woorden die in titels en namen staan maar geen persoon aanwijzen: Mehdi zelf, firma's, soorten afspraken.
 STOP = {"mehdi", "chegini", "zoom", "meeting", "impromptu", "fathom", "overleg", "intern", "interne", "bespreking",
@@ -112,26 +113,39 @@ def is_prive(g):
                 or str(g.get("bron") or "") in ("whatsapp", "telefoon"))
 
 
+PARTIKELS = {"de", "den", "der", "van", "von", "la", "le", "du", "del", "da", "di", "ten", "ter", "het", "en"}
+MIN_GEDEELD = 2                        # zoveel naamdelen deelt een persoon van de afspraak met een gesprekspersoon (F3)
+
+
 def naamdelen(tekst):
-    """Naamdelen van minstens vier letters, zonder Mehdi, firma's en soortwoorden. Een e-mailadres geeft zijn lokale deel."""
-    tekst = re.sub(r"([\w.+-]+)@[\w.-]+", lambda m: m.group(1).replace(".", " "), str(tekst or ""))
-    return {w for w in (x.casefold() for x in re.findall(r"[^\W\d_]{4,}", tekst)) if w not in STOP}
+    """De naamdelen van een naam (minstens drie letters), zonder Mehdi, firma's, soortwoorden en partikels. Een
+    e-mailadres geeft zijn lokale deel ('jan.peeters@x.be' wordt 'jan peeters')."""
+    tekst = re.sub(r"([\w.+-]+)@[\w.-]+", lambda m: m.group(1).replace(".", " ").replace("_", " "), str(tekst or ""))
+    return {w for w in (x.casefold() for x in re.findall(r"[^\W\d_]{3,}", tekst)) if w not in STOP and w not in PARTIKELS}
+
+
+def namen(tekst):
+    """De afzonderlijke namen in een tekst, elk als verzameling naamdelen: de stukken tussen komma's, streepjes en haakjes.
+    Wat tussen haakjes staat (een afdeling, '(H-AI & ICT)') telt niet."""
+    zonder = re.sub(r"\([^)]*\)|\[[^\]]*\]", ",", str(tekst or ""))
+    return [d for d in (naamdelen(x) for x in re.split(r"[,;/]|\s[-\u2013]\s|:", zonder)) if d]
 
 
 def personen_van_afspraak(a):
-    """E3: wie de afspraak aanwijst. De runner geeft `_personen` (de klant uit de titelconventie en de gasten van buiten);
-    zonder dat het stuk na de code tussen haken, nooit wat ervoor staat ('Mehdi: Catalin: [HA-KB] ...' is de eigenaar)."""
-    if a.get("_personen") is not None:
-        uit = set()
-        for p in a["_personen"]:
-            uit |= naamdelen(p)
-        return uit
+    """E3 en F3: de namen die de afspraak aanwijst: het stuk na de code tussen haken en de gasten van buiten, nooit wat
+    voor de code staat ('Mehdi: Catalin: [HA-KB] ...' is de eigenaar van de agenda). Een lijst van namen."""
     titel = str(a.get("titel") or "")
     rest = titel.split("]", 1)[1] if "]" in titel else titel.split(":")[-1]
-    uit = naamdelen(rest)
+    uit = namen(rest)
     for d in a.get("deelnemers") or []:
-        uit |= naamdelen(d)
+        uit += namen(d)
     return uit
+
+
+def zelfde_persoon(afspraak_namen, personen):
+    """F3: alleen aantoonbaar dezelfde persoon: een naam van de afspraak en een gesprekspersoon delen minstens
+    MIN_GEDEELD naamdelen (voornaam en familienaam). Een gedeelde voornaam of een plaatsnaam alleen volstaat niet."""
+    return any(len(a & g) >= MIN_GEDEELD for a in afspraak_namen for g in namen(personen))
 
 
 def bron_label(g):
@@ -150,11 +164,20 @@ def gesprek_tekst(g):
 
 
 def gesprekken_van_dag(dag, rijen):
-    """De leidende gesprekken en oproepen van de dag, zonder Plaud-dubbels van een Zoom- of Fathom-gesprek."""
-    praat = [g for g in rijen if str(g.get("datum") or "")[:10] == dag and is_leidend(g) and soort(g) in ("gesprek", "oproep")]
+    """De leidende gesprekken en oproepen van de dag, zonder Plaud-dubbels van een Zoom- of Fathom-gesprek. Een Zoom-rij
+    met zo'n Plaud-dubbel krijgt 'opname': 'plaud' (F6): het gesprek telt een keer, en wel als gesprek met opname."""
+    praat = [dict(g) for g in rijen if str(g.get("datum") or "")[:10] == dag and is_leidend(g)
+             and soort(g) in ("gesprek", "oproep")]
     vast = [g for g in praat if g.get("bron") in ("zoom", "fathom")]
-    return [g for g in praat if g.get("bron") != "plaud"
-            or not any(_samen(gesprek_venster(g), gesprek_venster(z)) >= PLAUD_SAMEN for z in vast)]
+    uit = []
+    for g in praat:
+        if g.get("bron") == "plaud":
+            z = next((z for z in vast if _samen(gesprek_venster(g), gesprek_venster(z)) >= PLAUD_SAMEN), None)
+            if z is not None:
+                z["opname"] = "plaud"
+                continue
+        uit.append(g)
+    return uit
 
 
 # ------------------------------------------------------------------------------------------------- bewijs ---
@@ -166,7 +189,7 @@ def bewijs(a, gesprekken, locatie=None):
     venster_a = afspraak_venster(a)
     wie = personen_van_afspraak(a)
     op_uur = [g for g in gesprekken if overlapt(venster_a, gesprek_venster(g))]
-    met_persoon = [g for g in op_uur if wie and wie & naamdelen(g.get("personen"))]
+    met_persoon = [g for g in op_uur if zelfde_persoon(wie, g.get("personen"))]
     if met_persoon:
         return {"uitkomst": "bevestigd", "grond": "; ".join(gesprek_tekst(g) for g in met_persoon),
                 "gesprekken": [g["uniek"] for g in met_persoon]}
@@ -186,17 +209,20 @@ def bewijs(a, gesprekken, locatie=None):
 
 # ------------------------------------------------------------------------------------------- vaststelling ---
 def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken, zoomstand, mail, kanalen,
-                prive_afspraak):
+                prive_afspraak, locatiestand=""):
     """De vaststelling van een dag als gewone gegevens.
 
     afspraken: de afspraken van die dag, met de archiefagenda's (zonder fout, hele dag of rit); ongelezen: de agenda's die
     niet gelezen konden worden (ook 'archief'), of None als de agenda helemaal niet gelezen werd.
     gesprekken: rijen uit de gesprekkentabel voor die datum (alle; hier worden de leidende gekozen).
     locatie_per_id: {afspraak-id: uitkomst} voor elke afspraak ter plaatse ({'uitkomst': 'onbekend'} als de locatie niet
-    gelezen werd). bezoeken: projectbezoeken en verblijven zonder afspraak, of None (locatie niet gelezen).
+    gelezen werd). bezoeken: projectbezoeken en verblijven zonder afspraak ({'van', 'tot', 'minuten', 'waar', 'soort'}
+    met soort project, twijfel of elders), of None (locatie niet gelezen); locatiestand: de stand van het dagboek
+    (afgesloten, voorlopig, ...).
     zoomstand: 'volledig', 'ondergrens' of 'onbekend'. mail: van mail_telling, of None. kanalen: {'whatsapp': stand,
-    'telefoon': stand} met stand 'aangesloten', 'niet aangesloten' of 'stil sinds ...' (D2: de hartslag van de wacht,
-    niet het bestaan van rijen). prive_afspraak: functie afspraak -> bool (agenda_wacht.is_prive)."""
+    'telefoon': stand} voor deze dag, met stand 'aangesloten', 'niet aangesloten' of een andere tekst ('stil sinds ...',
+    'onbekend voor deze dag'): D2 en F5, de hartslag van de wacht en haar dekking van die dag, niet het bestaan van rijen.
+    prive_afspraak: functie afspraak -> bool (agenda_wacht.is_prive)."""
     praat = gesprekken_van_dag(dag, gesprekken)
     agenda_stand = "onbekend" if ongelezen is None else ("onvolledig" if ongelezen else "volledig")
     gepland, gebruikt = [], set()
@@ -212,16 +238,17 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
     # Een Zoom-gesprek met een Fathom-opname staat in de tabel als leidende Fathom-rij (de Zoom-rij is dubbel_van):
     # daarom een totaal over Zoom, Fathom en Plaud, elk gesprek een keer, en geen aparte telling per bron als 'Zoom'.
     vergaderd = [g for g in praat if g.get("bron") in ("zoom", "fathom", "plaud")]
+    met_opname = [g for g in vergaderd if g.get("bron") in ("fathom", "plaud") or g.get("opname")]
     gesprekken = {"aantal": len(vergaderd), "minuten": sum(int(g.get("minuten") or 0) for g in vergaderd),
-                  "alleen_zoom": len([g for g in vergaderd if g.get("bron") == "zoom"]),
-                  "met_opname": len([g for g in vergaderd if g.get("bron") in ("fathom", "plaud")])}
+                  "alleen_zoom": len(vergaderd) - len(met_opname), "met_opname": len(met_opname)}
     kanalen = kanalen or {}
     wa = [g for g in leidend if g.get("bron") == "whatsapp"]
     tel = [g for g in praat if g.get("bron") == "telefoon"]
     return {
         "dag": dag,
         "agenda": {"stand": agenda_stand, "ongelezen": sorted(ongelezen or []), "afspraken": gepland},
-        "niet_gepland": {"voorbehoud": agenda_stand != "volledig", "gesprekken": ongepland, "bezoeken": bezoeken},
+        "niet_gepland": {"voorbehoud": agenda_stand != "volledig", "gesprekken": ongepland, "bezoeken": bezoeken,
+                         "locatiestand": locatiestand},
         "gesprekken": gesprekken,
         "zoom": {"stand": zoomstand or "onbekend",
                  "chats": len([g for g in leidend if str(g.get("uniek")).startswith("zoom:chat:")])},
@@ -310,29 +337,40 @@ def tekst(v, prive_postvakken=(), over=None):
     if ng["bezoeken"] is None:
         r.append("- locatie: niet gelezen")
     else:
+        if ng.get("locatiestand") and ng["locatiestand"] != "afgesloten":
+            r.append(f"- locatie {ng['locatiestand']}: bezoeken kunnen nog veranderen")
         for b in ng["bezoeken"]:
-            r.append(f"- {b.get('van')} tot {b.get('tot')} ({b.get('minuten')} min) {b.get('waar')}")
+            r.append(f"- {b.get('van')} tot {b.get('tot')} ({b.get('minuten')} min) {_plek(b)}")
     if not ng["gesprekken"] and ng["bezoeken"] == []:
         r.append("- niets gevonden")
     r += ["", "## Communicatie", ""]
     z, g = v["zoom"], v["gesprekken"]
-    stand = {"volledig": "", "ondergrens": " (minstens)", "onbekend": " (Zoom-stand onbekend)"}.get(z["stand"], f" ({z['stand']})")
-    r.append(f"- gesprekken in Zoom, Fathom en Plaud: {g['aantal']}, {g['minuten']} min ({g['met_opname']} met opname, "
-             f"{g['alleen_zoom']} alleen in Zoom){stand}")
-    r.append(f"- Zoom-chat: {z['chats']} chatgesprek(ken){stand}")
+    # F5: een Zoom-stand die niet volledig is, maakt elk getal van Zoom een ondergrens; zonder stand is de chat onbekend
+    minstens = "" if z["stand"] == "volledig" else "minstens "
+    stand = {"volledig": "", "ondergrens": "", "onbekend": " (Zoom-stand onbekend)"}.get(z["stand"], f" ({z['stand']})")
+    r.append(f"- gesprekken in Zoom, Fathom en Plaud: {minstens}{g['aantal']}, {g['minuten']} min ({g['met_opname']} met "
+             f"opname, {g['alleen_zoom']} alleen in Zoom){stand}")
+    if z["stand"] == "onbekend" and not z["chats"]:
+        r.append("- Zoom-chat: onbekend (Zoom-stand onbekend)")
+    else:
+        r.append(f"- Zoom-chat: {minstens}{z['chats']} chatgesprek(ken){stand}")
     w = v["whatsapp"]
     if w["stand"] == "niet aangesloten":
         r.append("- WhatsApp: nog niet aangesloten")
+    elif w["stand"] != "aangesloten" and not (w["gesprekken"] or w["oproepen"]):
+        r.append(f"- WhatsApp: onbekend ({w['stand']})")
     else:
-        extra = "" if w["stand"] == "aangesloten" else f" ({w['stand']}, onvolledig)"
-        r.append(f"- WhatsApp: {w['berichten']} berichten in {w['gesprekken']} gesprekken, {w['oproepen']} oproepen, "
+        pre, extra = ("", "") if w["stand"] == "aangesloten" else ("minstens ", f" ({w['stand']})")
+        r.append(f"- WhatsApp: {pre}{w['berichten']} berichten in {w['gesprekken']} gesprekken, {w['oproepen']} oproepen, "
                  f"{w['minuten']} min{extra}")
     t = v["telefoon"]
     if t["stand"] == "niet aangesloten":
         r.append("- telefoon: nog niet aangesloten")
+    elif t["stand"] != "aangesloten" and not t["oproepen"]:
+        r.append(f"- telefoon: onbekend ({t['stand']})")
     else:
-        extra = "" if t["stand"] == "aangesloten" else f" ({t['stand']}, onvolledig)"
-        r.append(f"- telefoon: {t['oproepen']} oproepen, {t['minuten']} min{extra}")
+        pre, extra = ("", "") if t["stand"] == "aangesloten" else ("minstens ", f" ({t['stand']})")
+        r.append(f"- telefoon: {pre}{t['oproepen']} oproepen, {t['minuten']} min{extra}")
     if v["mail"] is None:
         r.append("- mail: niet gelezen")
     else:
@@ -345,11 +383,31 @@ def tekst(v, prive_postvakken=(), over=None):
             if p["onvolledig"]:
                 regel += " (onvolledig: " + "; ".join(p["onvolledig"]) + ")"
             if p["naar"] and postvak not in prive_postvakken:
-                regel += "; naar " + ", ".join(dict.fromkeys(p["naar"]))
+                naar = list(dict.fromkeys(p["naar"]))
+                regel += "; naar " + ", ".join(naar[:MAX_NAAR]) + (f" en {len(naar) - MAX_NAAR} meer" if len(naar) > MAX_NAAR else "")
             r.append(regel)
     r += ["", "## Over deze vaststelling", ""]
     r += [f"- {x}" for x in over or []]
     return "\n".join(r).rstrip() + "\n"
+
+
+def _plek(b):
+    """F2: alleen een bevestigd of waarschijnlijk werkproject bij naam; een twijfelgeval of een andere plek niet (die kan
+    privé zijn). De plek zelf staat in het locatielogboek."""
+    if b.get("soort") == "project":
+        return str(b.get("waar") or "projectbezoek")
+    if b.get("soort") == "twijfel":
+        return "projectbezoek, project onzeker (kies op het locatiedashboard)"
+    return "verblijf zonder afspraak (plek in het locatielogboek)"
+
+
+def versie_van(t):
+    """Het versienummer uit het blok 'Over deze vaststelling' van een bestand, of None (F8: de versie volgt het bestand)."""
+    t = t or ""
+    if "\n## Over deze vaststelling" not in t:
+        return None
+    m = re.search(r"^- versie (\d+),", t.split("\n## Over deze vaststelling", 1)[1], re.M)
+    return int(m.group(1)) if m else None
 
 
 def kern(t):

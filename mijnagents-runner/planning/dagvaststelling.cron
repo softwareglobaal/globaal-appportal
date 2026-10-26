@@ -1,9 +1,0 @@
-# De nachtronde van De Dagbundelaar: de dagvaststelling (ontwerp docs/ontwerp-dagvaststelling.md v1.2).
-# 23:30 UTC is 00:30 Brussel in de winter en 01:30 in de zomer: altijd na middernacht, en gisteren is de dag die net
-# eindigde. Binnen het slot van de gesprekkenketen (/tmp/gesprekken.lock, hoogstens 1800 s wachten): eerst De Zoomwacht
-# (time-out 1200 s, SIGTERM en na 30 s SIGKILL zoals keten.py), zodat de gesprekken van de avond erin zitten; faalt ze,
-# dan toch de vaststelling, met de Zoom-stand zoals de dagregel ze geeft. Daarna De Dagbundelaar --nacht (time-out
-# 1800 s): alleen de dagvaststelling over veertien dagen, geen bundels; zijn taak 'dagvaststelling' geeft het
-# ochtendbericht nooit vrij (koppelingen/ochtend.py, NACHTTAAK). Geen % in een cronregel.
-# Op de VM zetten (na Mehdi's ja): crontab -l > /tmp/ct && cat deze regel >> /tmp/ct && crontab /tmp/ct
-30 23 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock /bin/sh -c '/usr/bin/timeout -k 30 1200 /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/zoom_wacht.py >> /home/ubuntu/agents/zoom_wacht.log 2>&1; /usr/bin/timeout -k 30 1800 /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/dagbundelaar.py --nacht >> /home/ubuntu/agents/dagbundelaar.log 2>&1'

@@ -102,12 +102,24 @@ def test_bewijs():
     met_catalin = rij("zoom:meeting:4", "13:05", 20, "Mehdi, Catalin (Architecture)")
     eis(V.bewijs(eigenaar, [met_catalin], {"uitkomst": "niet_gezien"})["uitkomst"] == "geen spoor",
         "een Zoom met de eigenaar van de agenda bevestigt de klantafspraak niet")
-    # E3: met _personen (klant en gasten uit de runner) telt alleen dat
-    a = afspraak("k", "10:30", "11:00", "Mehdi: [UNABO-PO] Lotte Verhaegen", personen=["Lotte Verhaegen"])
+    a = afspraak("k", "10:30", "11:00", "Mehdi: [UNABO-PO] Lotte Verhaegen")
     eis(V.bewijs(a, [rij("zoom:meeting:5", "10:31", 9, "Mehdi")])["gesprekken"] == [], "Mehdi alleen is geen persoon")
-    eis(V.bewijs(a, [met])["uitkomst"] == "bevestigd", "de klant bevestigt")
-    leeg = afspraak("l", "10:30", "11:00", "Mehdi: [EL-IN] intern overleg", personen=[])
+    leeg = afspraak("l", "10:30", "11:00", "Mehdi: [EL-IN] intern overleg")
     eis(V.bewijs(leeg, [met])["uitkomst"] == "aanwijzing", "zonder personen hoogstens een aanwijzing")
+    # F3 (tegenproef van Codex): twee verschillende personen met dezelfde voornaam, of alleen een plaatsnaam, bevestigen niet
+    eis(V.bewijs(a, [rij("zoom:meeting:6", "10:31", 9, "Mehdi, Lotte Peeters")])["uitkomst"] == "aanwijzing",
+        "dezelfde voornaam, andere familienaam")
+    eis(V.bewijs(buiten, [rij("telefoon:7", "14:20", 6, "Garage Ternat", bron="telefoon")], {"uitkomst": "niet_gezien"})
+        ["uitkomst"] == "geen spoor", "een plaatsnaam is geen persoon")
+    eis(V.bewijs(a, [rij("zoom:meeting:8", "10:31", 9, "Mehdi, Lotte Verhaegen (UNABO)")])["uitkomst"] == "bevestigd",
+        "dezelfde volle naam, met afdeling tussen haakjes")
+    gast = afspraak("g", "10:30", "11:00", "Mehdi: [UNABO-PO] online kennismaking", deelnemers=["lotte.verhaegen@voorbeeld.be"])
+    eis(V.bewijs(gast, [met])["uitkomst"] == "bevestigd", "een gast van buiten op zijn e-mailadres")
+    robertis = afspraak("r", "14:15", "15:15", "!! Mehdi: [UB-KB] PL 3846 - Nicolas De Robertis, Oude Brusselstraat 23, 1740 Ternat - ST")
+    eis(V.bewijs(robertis, [rij("telefoon:9", "14:20", 6, "Nicolas De Robertis", bron="telefoon")], {"uitkomst": "niet_gezien"})
+        ["uitkomst"] == "bevestigd", "een naam met partikel")
+    eis(V.bewijs(robertis, [rij("telefoon:10", "14:20", 6, "Nicolas", bron="telefoon")], {"uitkomst": "niet_gezien"})
+        ["uitkomst"] == "geen spoor", "alleen een voornaam bevestigt niet")
 
 
 def test_dubbels_en_niet_gepland():
@@ -124,7 +136,8 @@ def test_dubbels_en_niet_gepland():
     v = vast(rijen=rijen)
     g = v["gesprekken"]
     eis(g["aantal"] == 4 and g["minuten"] == 76, f"leidende gesprekken van de dag, elk een keer ({g})")
-    eis(g["alleen_zoom"] == 2 and g["met_opname"] == 2, f"Fathom met dubbel_van en Plaud-dubbel tellen niet ({g})")
+    # F6: de Zoom-rij met een samenvallende Plaud-opname telt een keer, als gesprek met opname
+    eis(g["alleen_zoom"] == 1 and g["met_opname"] == 3, f"Fathom met dubbel_van telt niet, Plaud-dubbel geeft opname ({g})")
     eis(v["zoom"]["chats"] == 1, "een chatgesprek")
     namen = [g["uniek"] for g in v["niet_gepland"]["gesprekken"]]
     eis(namen == ["zoom:meeting:a", "fathom:2", "plaud:2"],
@@ -145,14 +158,19 @@ def test_agenda_en_standen():
     t = V.tekst(v)
     eis("agenda niet gelezen: onbekend" in t and "locatie: niet gelezen" in t and "mail: niet gelezen" in t,
         "niets gelezen is onbekend, geen nul")
-    eis("Zoom-stand onbekend" in t, "Zoom onbekend staat erbij")
+    eis("Zoom-stand onbekend" in t and "Zoom-chat: onbekend" in t and "0 chatgesprek" not in t, f"F5: Zoom onbekend\n{t}")
     eis("WhatsApp: nog niet aangesloten" in t and "telefoon: nog niet aangesloten" in t, "zonder kanaalstand: niet aangesloten")
-    eis("(minstens)" in V.tekst(vast(rijen=[rij("zoom:meeting:a", "09:00", 20, "Ruben")], zoom="ondergrens")), "ondergrens")
+    t = V.tekst(vast(rijen=[rij("zoom:meeting:a", "09:00", 20, "Ruben")], zoom="ondergrens"))
+    eis("Zoom en Fathom en Plaud" not in t and "gesprekken in Zoom, Fathom en Plaud: minstens 1, 20 min" in t
+        and "Zoom-chat: minstens 0" in t, f"ondergrens\n{t}")
     # D2: rijen zonder aangesloten wacht tellen niet als aangesloten; een stille wacht is onvolledig
     wa = [rij("whatsapp:abc:2026-10-22", "08:01", 0, "Broer Ali", bron="whatsapp", thema="14 berichten (5 van Mehdi)")]
     eis("WhatsApp: nog niet aangesloten" in V.tekst(vast(rijen=wa, kanalen={"whatsapp": "niet aangesloten"})), "rijen alleen")
     t = V.tekst(vast(rijen=wa, kanalen={"whatsapp": "stil sinds 2026-10-20 09:00"}))
-    eis("14 berichten in 1 gesprekken" in t and "stil sinds 2026-10-20 09:00, onvolledig" in t, f"stille wacht\n{t}")
+    eis("WhatsApp: minstens 14 berichten in 1 gesprekken" in t and "(stil sinds 2026-10-20 09:00)" in t, f"stille wacht\n{t}")
+    t = V.tekst(vast(kanalen={"whatsapp": "onbekend voor deze dag", "telefoon": "stil sinds 25-10 08:00"}))
+    eis("WhatsApp: onbekend (onbekend voor deze dag)" in t and "telefoon: onbekend (stil sinds 25-10 08:00)" in t,
+        f"F5: zonder dekking van de dag geen nul\n{t}")
 
 
 def test_mail():
@@ -179,6 +197,9 @@ def test_mail():
     eis("kopie van de Mac 150 uur oud" in t, "oude Mac-kopie")
     eis("Vriend" not in t, "privépostvak: geen ontvanger")
     eis("Pieter Claes" in t, "zakelijke ontvanger staat erbij")
+    veel = {"info@h-architects.be": {"berichten": [k(f"{DAG}T10:0{i}:00+02:00", f"<v{i}@x>", f"klant{i}@x.be") for i in range(8)]}}
+    t = V.tekst(vast(mail=V.mail_telling(DAG, {}, veel)))
+    eis("klant4@x.be en 3 meer" in t and "klant5@x.be" not in t, f"hoogstens vijf ontvangers bij naam\n{t}")
 
 
 def test_privacy():
@@ -197,6 +218,22 @@ def test_privacy():
     namen = [g["uniek"] for g in v["niet_gepland"]["gesprekken"]]
     eis("whatsapp-oproep:1" in namen and "telefoon:1" in namen and not any(n.startswith("whatsapp:") for n in namen),
         f"oproepen zijn gesprekken, chats niet ({namen})")
+
+
+def test_plekken_en_versie():
+    """F2: alleen een werkproject bij naam; een twijfelgeval of een andere plek (kan privé zijn) niet. F8: de versie volgt
+    het bestand."""
+    b = [{"van": "10:44", "tot": "11:13", "minuten": 29, "waar": "Diestsesteenweg 12, 3010 Leuven", "soort": "elders"},
+         {"van": "11:15", "tot": "11:33", "minuten": 18, "waar": "een van: HARC 2197, HARC 2201", "soort": "twijfel"},
+         {"van": "12:00", "tot": "12:40", "minuten": 40, "waar": "Tante Mie, Kerkstraat 1"},
+         {"van": "14:31", "tot": "16:07", "minuten": 96, "waar": "project HARC 3846, Dorpstraat 1", "soort": "project"}]
+    t = V.tekst(V.vaststellen(DAG, [], set(), [], {}, b, "volledig", V.mail_telling(DAG, {}, {}), None, is_prive, "voorlopig"))
+    for weg in ("Diestsesteenweg", "HARC 2201", "Tante Mie", "Kerkstraat"):
+        eis(weg not in t, f"F2: {weg} staat er niet")
+    eis("project HARC 3846, Dorpstraat 1" in t and "verblijf zonder afspraak (plek in het locatielogboek)" in t, t)
+    eis("locatie voorlopig: bezoeken kunnen nog veranderen" in t, "voorlopig dagboek")
+    eis(V.versie_van(V.tekst(vast(), over=["versie 7, gemaakt 01:00"])) == 7, "versie uit het bestand")
+    eis(V.versie_van("# Dag\n- versie 3, gemaakt") is None, "zonder blok geen versie")
 
 
 def test_hash_en_wijzigingen():
@@ -222,7 +259,7 @@ def test_goud_22_10():
     zoom = [("10:24", 6), ("11:53", 3), ("13:12", 7), ("13:19", 16), ("13:35", 25), ("14:10", 13), ("14:27", 5),
             ("16:54", 5), ("17:02", 3), ("17:06", 18), ("17:24", 1), ("17:32", 25), ("17:57", 7), ("18:05", 3)]
     rijen = [rij(f"zoom:meeting:{i}", s, m, "Mehdi, Ruben (H-AI & ICT)") for i, (s, m) in enumerate(zoom)]
-    v = vast(afs, rijen, loc, [{"van": "11:15", "tot": "11:33", "minuten": 18, "waar": "project HARC 2197"}])
+    v = vast(afs, rijen, loc, [{"van": "11:15", "tot": "11:33", "minuten": 18, "waar": "project HARC 2197", "soort": "project"}])
     uit = {x["id"]: x["uitkomst"] for x in v["agenda"]["afspraken"]}
     eis(uit == {"leuven": "geen spoor", "ternat": "aanwijzing", "lara": "geen spoor", "ai": "geen spoor"}, f"goud: {uit}")
     eis(v["gesprekken"]["aantal"] == 14 and v["gesprekken"]["minuten"] == 137, f"goud: 14 gesprekken, 137 min ({v['gesprekken']})")
