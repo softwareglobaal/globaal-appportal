@@ -257,5 +257,21 @@ try:
 except ImportError as e:
     check("python-docx beschikbaar voor de Word-toets", False, repr(e))
 
+# Vierde review 26-10-2026
+for tekst, blijft in [("De ramen worden geplaatst door Schrijnwerkerij Peeters BV. Volgens de opname zijn de dorpels 2 cm te laag.",
+                       "De ramen worden geplaatst door Schrijnwerkerij Peeters BV."),
+                      ("Stellingbouw Claes BV.\nHet tijdstip tussen haakjes verwijst naar de opname.", "Stellingbouw Claes BV."),
+                      ("De werf wordt opgevolgd door Bouwbedrijf Janssens bv. Dit verwijst naar de opname.", "Bouwbedrijf Janssens bv."),
+                      ("Volgens de opname plaatst Peeters BV. De dorpels zijn 2 cm te laag.", "De dorpels zijn 2 cm te laag."),
+                      ("Peeters bv. 2 ramen zijn beschadigd en de leverancier is aansprakelijk.", "Peeters bv.")]:
+    t5, _ = S.toepassen(tekst)
+    check(f"firmanaam met BV blijft een eigen zin: '{blijft[:35]}'", blijft in t5, t5)
+t5, ing5 = S.toepassen("De architect kwam om 14:30 aan en sprak zijn vaststellingen ter plaatse in. De goot lekt.")
+check("S4 een kloktijd breekt de ingesproken-zin niet af", t5 == "De goot lekt." and "14:" not in t5, (t5, ing5))
+for zin in ["Volgens de opname van het terreinbezoek is de dorpel 3 cm te laag.",
+            "Uit de opname van het terreinbezoek blijkt dat de stelling niet verankerd is."]:
+    check(f"S4 'terreinbezoek' is geen opmeting: '{zin[:40]}'", any(r == "S4" for r, _ in S.controleer(zin)), S.controleer(zin))
+check("S4 'opname van het terrein' blijft een opmeting", not S.controleer("Volgens de opname van het terrein ligt de tuin 40 cm lager."))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

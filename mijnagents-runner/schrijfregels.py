@@ -68,14 +68,15 @@ OPNAME = [
 ]
 # Een zin loopt tot een punt, uitroep- of vraagteken; de punt in 4.500 of 1.250.000 (tussen twee cijfers) knipt niet.
 # Zo ook de punt van een afkorting midden in een zin ("€ 3.200 excl. btw").
-_AFK = r"(?:(?<=excl)|(?<=incl)|(?<=\bca)|(?<=\bbv)|(?<=\bnr)|(?<=resp)|(?<=\bvb)|(?<=\bgew))\.(?=\s+[a-z0-9(€])"
-_T = r"(?:[^.;:]|(?<=\d)[.:](?=\d)|" + _AFK + ")"
+# Alleen als de zin daarna echt doorloopt (kleine letter of cijfer, ook onder re.I); "BV." van een firma is een zinseinde.
+_AFK = r"(?:(?<=\bexcl)|(?<=\bincl)|(?<=\bca)|(?<=\bnr)|(?<=\bresp)|(?<=\bvb)|(?<=\bgew))\.(?=\s+(?-i:[a-z0-9(€]))"
+_T = r"(?:[^.;:\n]|(?<=\d)[.:](?=\d)|" + _AFK + ")"
 _Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
 # Zinnen die alleen over de opname gaan: ze vallen weg (S4). Wat na "sprak zijn vaststellingen in:" volgt, is de
 # vaststelling zelf en blijft staan. De geschrapte zin staat in de ingrepen, dus in het logboek.
 # "De architect sprak zijn vaststellingen in." valt weg. Volgt er na een dubbelpunt of puntkomma een gewone vaststelling,
 # dan blijft die staan; na een komma, of als de rest weer over de opname gaat, wordt de zin zichtbaar gemarkeerd (S4).
-SPRAK = re.compile(r"[^.:;]*\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b[^.:;,]*"
+SPRAK = re.compile(r"(?:[^.:;\n]|(?<=\d)[.:](?=\d))*\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b[^.:;,]*"
                    r"(?:(?P<sep>[:;,])(?P<rest>(?:[^.]|(?<=\d)\.(?=\d))*))?\.?", re.I)
 _OVER_OPNAME = re.compile(r"\b(?:opname|geluidsopname|transcript|audio|ingesproken|insprak|sprak)\w*", re.I)
 OPNAME_ZINNEN = [
@@ -84,7 +85,7 @@ OPNAME_ZINNEN = [
 ]
 # "Volgens de opname is de dorpel 3 cm te laag." draagt een vaststelling: de zin wordt zichtbaar vervangen door de
 # markering S4, en staat volledig in het logboek. "De opname van de bestaande toestand" is een opmeting, geen opname.
-OPNAME_VOLGENS = re.compile(_Z + r"*?\b(?:volgens|blijkens|uit)\s+de\s+(?:opname|geluidsopname)\b(?!\s+(?:van\s+)?(?:de\s+|het\s+)?(?:bestaande\s+(?:toestand|situatie)|landmeter|terrein|opmeting))"
+OPNAME_VOLGENS = re.compile(_Z + r"*?\b(?:volgens|blijkens|uit)\s+de\s+(?:opname|geluidsopname)\b(?!\s+(?:van\s+)?(?:de\s+|het\s+)?(?:bestaande\s+(?:toestand|situatie)|landmeter|terrein|opmeting)\b)"
                             + _Z + r"*[.!?]?", re.I)
 
 _ZIN = re.compile(_Z + r"+[.!?]?\s*")

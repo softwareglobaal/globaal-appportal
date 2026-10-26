@@ -373,6 +373,26 @@ def test_herlayout_van_een_oude_proef_past_de_grendel_toe_en_logt(runtime):
     assert "opname" not in laatste["verslag_md"] and "eerder niet geweest" not in laatste["verslag_md"]
 
 
+def test_herlayout_bevindingen_zet_een_ruwe_herkomst_om_maar_laat_na_te_kijken_staan(runtime):
+    """Vierde review 26-10-2026: '(na te kijken)' is geen bron en mag geen 'blijkt uit de stukken' worden."""
+    p, rij = runtime.p, runtime.rij
+    bv = p.vb.leeg("9999", "Proefstraat 1")
+    bv["onderdelen"] = [{"naam": "Dak", "bevindingen": [
+        {"nr": "B1", "titel": "Goot", "herkomst": "transcript.txt 12m30s", "vaststelling": "De goot lekt.", "fotos": []},
+        {"nr": "B2", "titel": "Kil", "herkomst": "(na te kijken)", "vaststelling": "De kil is open.", "fotos": []},
+        {"nr": "B3", "titel": "Dorpel", "herkomst": "V", "vaststelling": "De dorpel is niet vlak.", "fotos": []}]}]
+    rij.update(verslag_md="# oud", proef_pad="/proef/bezoek/9999 verslag.docx", proef_info={"verslagtype": p.vb.SOORT, "bevindingen": bv})
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
+    p.bronnen.upload = lambda pad, data: pad
+    p.herlayout(Agent(), "9999", 1)
+    laatste = [w[1]["rijen"][0] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    b1, b2, b3 = laatste["proef_info"]["bevindingen"]["onderdelen"][0]["bevindingen"]
+    assert (b1["herkomst"], b1["bron"]) == ("V", "transcript.txt 12m30s")
+    assert b2["herkomst"] == "(na te kijken)" and not b2.get("bron")
+    assert b3["herkomst"] == "V" and not b3.get("bron")
+    assert "12m30s" not in laatste["verslag_md"] and "(na te kijken)" in laatste["verslag_md"]
+
+
 def test_oude_proef_naar_de_werfapp_gaat_gefilterd(runtime):
     p, rij = runtime.p, runtime.rij
     rij.update(verslag_md=_oude_proef(p), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})

@@ -1031,7 +1031,8 @@ def herlayout(ag, dossier, volgnr):
         for b in (b for o in bv.get("onderdelen", []) for b in o.get("bevindingen", [])):
             h = str(b.get("herkomst") or "").strip()
             # proef van vóór 26-10-2026: de herkomst was de ruwe bron (bestand, tijdstip); die wordt bron, de herkomst V/B/S (S4)
-            if not b.get("bron") and h and not re.fullmatch(r"[VBS](\s*[+,/]\s*[VBS])*", h) and h not in vb.HERKOMST.values():
+            if (not b.get("bron") and h and not h.startswith("(") and not re.fullmatch(r"[VBS](\s*[+,/]\s*[VBS])*", h)
+                    and h not in vb.HERKOMST.values()):   # "(na te kijken)": geen bron, blijft zo
                 b["bron"], b["herkomst"] = h, sjab.herkomst(h)
         _grendel(ag, dossier, volgnr, bv, info)   # ook de bewaarde gegevens: wat op de bezoekpagina staat, is gefilterd
         beelden = _fotos_verzamelen(teksten, fotos, vb.als_werfverslag(bv))
