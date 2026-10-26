@@ -51,7 +51,12 @@ datagedreven verzamelaar van Mehdi's logboek-laag. Ik doe twee dingen:
    dragen.
    **Mailnoden**: een nood per postvak en vaste soort, zonder getal; de uren staan in
    mijn werkverslag. Een dag buiten de dekking van een kopie die zegt vanaf wanneer,
-   is zo ontworpen en geeft geen nood. Kon ik geen enkel postvak lezen, dan meld ik dat, en laat ik de
+   is zo ontworpen en geeft geen nood.
+   **Noden in het algemeen**: een nood gaat over wat nu niet werkt; wat er op een dag
+   ontbrak, staat in het dagbestand van die dag. Een ronde sluit alleen de noden die
+   ze zelf nakeek: de nacht niet die van de bundels, de ochtend niet die van oudere
+   dagen, een ronde met de hand geen enkele. Weet ik niet welke noden open staan, dan
+   sluit ik er geen. Kon ik geen enkel postvak lezen, dan meld ik dat, en laat ik de
    mailnoden die al open stonden open: ik zag die postvakken niet.
 5. **Vastleggen**: per dag een bestand in `dagboek/JJJJ/JJJJ-MM-DD.md`, dat naar
    Dropbox gaat (`Data uit Mehdi/Dagboek`), en een item voor Mehdi op het bord met
